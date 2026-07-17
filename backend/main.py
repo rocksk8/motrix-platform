@@ -7,6 +7,7 @@ import logging
 from datetime import datetime
 
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
@@ -103,6 +104,30 @@ async def security_headers(request: Request, call_next):
     response.headers.setdefault("Referrer-Policy", "same-origin")
     response.headers.setdefault("X-XSS-Protection", "1; mode=block")
     return response
+
+
+# ── Exception handlers ────────────────────────────────────────────────────────
+# HTTPException is handled by FastAPI's built-in handler (exact type match wins).
+# RequestValidationError → 422 with a clean Chinese message (no field-level details exposed).
+# Exception → 500 with full traceback in server log, generic message to client.
+
+@app.exception_handler(RequestValidationError)
+async def _validation_handler(request: Request, exc: RequestValidationError):
+    logger.warning("Validation error %s %s: %s", request.method, request.url.path, exc.errors())
+    return JSONResponse(status_code=422, content={"detail": "請求格式錯誤，請確認欄位是否完整"})
+
+
+@app.exception_handler(Exception)
+async def _unhandled_handler(request: Request, exc: Exception):
+    logger.error(
+        "Unhandled %s at %s %s",
+        type(exc).__name__, request.method, request.url.path,
+        exc_info=True,
+    )
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "伺服器發生內部錯誤，請聯絡管理員"},
+    )
 
 
 # ── Startup ───────────────────────────────────────────────────────────────────
