@@ -181,7 +181,8 @@ def list_quotations(
     )
     params = []
     if user["role"] not in ("superadmin", "admin"):
-        sql += " AND sales_person=?"; params.append(user["display_name"])
+        sql += " AND (sales_person_id=? OR (sales_person_id IS NULL AND sales_person=?))"
+        params.extend([user["id"], user["display_name"]])
     if status:
         sql += " AND status=?"; params.append(status)
     if customer:
@@ -245,6 +246,12 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
     deal_tag, settle_status = quote_hot_fields(q)
     conn = get_db()
 
+    sp_name = (q.get("salesPerson") or "").strip()
+    sp_row = conn.execute(
+        "SELECT id FROM users WHERE display_name=? AND active=1 LIMIT 1", (sp_name,)
+    ).fetchone() if sp_name else None
+    sp_id = sp_row["id"] if sp_row else None
+
     # Ensure quote_seq row exists for peek helper
     conn.execute(
         "INSERT INTO quote_seq (month, seq) VALUES (?, 0) ON CONFLICT(month) DO NOTHING",
@@ -260,15 +267,15 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
             INSERT INTO quotations
               (quote_no, status, customer_name, project_name,
                total, pretax, direct_margin_pct, net_margin_pct,
-               sales_person, quote_date, valid_days, data_json,
+               sales_person, sales_person_id, quote_date, valid_days, data_json,
                created_at, updated_at, created_by, deal_tag, settle_status)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """, (
             no, body.status,
             q.get("customerName"), q.get("projectName"),
             tot.get("total", 0), tot.get("pretax", 0),
             tot.get("directMarginPct", 0), tot.get("netMarginPct", 0),
-            q.get("salesPerson"), q.get("quoteDate"), q.get("validDays", 30),
+            q.get("salesPerson"), sp_id, q.get("quoteDate"), q.get("validDays", 30),
             json.dumps(q, ensure_ascii=False),
             now, now, body.created_by, deal_tag, settle_status,
         ))
@@ -370,6 +377,13 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
     deal_tag, settle_status = quote_hot_fields(q)
 
     conn = get_db()
+
+    sp_name = (q.get("salesPerson") or "").strip()
+    sp_row = conn.execute(
+        "SELECT id FROM users WHERE display_name=? AND active=1 LIMIT 1", (sp_name,)
+    ).fetchone() if sp_name else None
+    sp_id = sp_row["id"] if sp_row else None
+
     existing = conn.execute("SELECT id, status FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
     if not existing:
         conn.close()
@@ -381,7 +395,7 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
         UPDATE quotations SET
           status=?, customer_name=?, project_name=?,
           total=?, pretax=?, direct_margin_pct=?, net_margin_pct=?,
-          sales_person=?, quote_date=?, valid_days=?,
+          sales_person=?, sales_person_id=?, quote_date=?, valid_days=?,
           data_json=?, updated_at=?, deal_tag=?, settle_status=?
         WHERE quote_no=?
     """, (
@@ -389,7 +403,7 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
         q.get("customerName"), q.get("projectName"),
         tot.get("total", 0), tot.get("pretax", 0),
         tot.get("directMarginPct", 0), tot.get("netMarginPct", 0),
-        q.get("salesPerson"), q.get("quoteDate"), q.get("validDays", 30),
+        q.get("salesPerson"), sp_id, q.get("quoteDate"), q.get("validDays", 30),
         json.dumps(q, ensure_ascii=False), now, deal_tag, settle_status,
         quote_no,
     ))

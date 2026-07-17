@@ -28,6 +28,7 @@
       currentUploadLog: null,
       toastMsg: '',
       _toastTimer: null,
+      _ptCache: {},
       isMobileView: window.innerWidth <= 767,
       pendingFiles: [],
       pendingFileNames: [],
@@ -149,6 +150,25 @@
 
       photoUrl(path) {
         if (!path) return ''
+        const now = Math.floor(Date.now() / 1000)
+        const cached = this._ptCache[path]
+        if (cached && cached.exp > now) {
+          return `${API}/api/uploads/${path}?pt=${cached.pt}`
+        }
+        if (!this._ptCache[path + '_fetching']) {
+          this._ptCache[path + '_fetching'] = true
+          fetch(`${API}/api/photo-token?path=${encodeURIComponent(path)}`, {
+            headers: { 'Authorization': 'Bearer ' + this.session.token }
+          }).then(r => r.ok ? r.json() : null).then(d => {
+            if (d && d.token) {
+              this._ptCache = {
+                ...this._ptCache,
+                [path]: { pt: d.token, exp: now + (d.ttl || 3600) - 60 },
+                [path + '_fetching']: false,
+              }
+            }
+          }).catch(() => { this._ptCache[path + '_fetching'] = false })
+        }
         return `${API}/api/uploads/${path}?token=${this.session.token}`
       },
 

@@ -1,6 +1,10 @@
 """Projects, project logs, action item approvals, photo upload/serving."""
+import hashlib
+import hmac
 import json
 import os
+import secrets
+import time
 import uuid
 from datetime import datetime
 from typing import Optional, List
@@ -11,6 +15,30 @@ from fastapi.responses import FileResponse
 from db import get_db
 from helpers import _require_user, _tok, _audit
 from photos import _process_project_photo, _PHOTO_UPLOAD_BASE
+
+# Per-process secret — short-lived photo tokens; regenerates on restart which is acceptable.
+_PHOTO_SECRET = secrets.token_bytes(32)
+_PHOTO_TOKEN_TTL = 3600  # seconds
+
+
+def _make_photo_token(path: str, ttl: int = _PHOTO_TOKEN_TTL) -> str:
+    expires = int(time.time()) + ttl
+    msg = f"{path}:{expires}".encode()
+    sig = hmac.new(_PHOTO_SECRET, msg, hashlib.sha256).hexdigest()
+    return f"{expires}.{sig}"
+
+
+def _verify_photo_token(path: str, token: str) -> bool:
+    try:
+        expires_str, sig = token.split(".", 1)
+        expires = int(expires_str)
+    except (ValueError, AttributeError):
+        return False
+    if time.time() > expires:
+        return False
+    msg = f"{path}:{expires}".encode()
+    expected = hmac.new(_PHOTO_SECRET, msg, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(expected, sig)
 
 router = APIRouter()
 
@@ -382,13 +410,30 @@ def delete_project_photo(
     return {"ok": True}
 
 
-@router.get("/api/uploads/{file_path:path}")
-def serve_upload(file_path: str, authorization: str = Header(None), token: str = Query(None)):
-    if not authorization and token:
-        authorization = f"Bearer {token}"
+@router.get("/api/photo-token")
+def get_photo_token(path: str = Query(...), authorization: str = Header(None)):
+    """Return a short-lived signed token for accessing a specific upload path via ?pt=."""
     _require_user(authorization)
-    safe  = os.path.normpath(file_path).lstrip('/\\')
-    full  = os.path.join(os.path.dirname(__file__), '..', '..', 'uploads', safe)
+    safe = os.path.normpath(path).lstrip('/\\')
+    return {"token": _make_photo_token(safe), "ttl": _PHOTO_TOKEN_TTL}
+
+
+@router.get("/api/uploads/{file_path:path}")
+def serve_upload(
+    file_path: str,
+    authorization: str = Header(None),
+    token: str = Query(None),
+    pt: str = Query(None),
+):
+    safe = os.path.normpath(file_path).lstrip('/\\')
+    if pt:
+        if not _verify_photo_token(safe, pt):
+            raise HTTPException(403, "照片連結已過期或無效，請重新載入")
+    else:
+        if not authorization and token:
+            authorization = f"Bearer {token}"
+        _require_user(authorization)
+    full = os.path.join(os.path.dirname(__file__), '..', '..', 'uploads', safe)
     if not os.path.isfile(full):
         raise HTTPException(404, "檔案不存在")
     return FileResponse(full)

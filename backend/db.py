@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 DB_PATH = os.path.join(os.path.dirname(__file__), "motrix_erp.db")
 
 # Increment this whenever a new _mNNN function is added to _MIGRATIONS.
-CURRENT_VERSION = 9
+CURRENT_VERSION = 10
 
 
 def get_db():
@@ -473,6 +473,29 @@ def _m009_migrate_legacy_visits(conn):
     conn.commit()
 
 
+def _m010_sales_person_id(conn):
+    """Add sales_person_id FK column to quotations; best-effort backfill from display_name."""
+    if not _col_exists(conn, "quotations", "sales_person_id"):
+        conn.execute(
+            "ALTER TABLE quotations ADD COLUMN sales_person_id INTEGER REFERENCES users(id)"
+        )
+    try:
+        conn.execute("""
+            UPDATE quotations SET sales_person_id = (
+                SELECT id FROM users
+                WHERE display_name = quotations.sales_person AND active = 1
+                LIMIT 1
+            )
+            WHERE sales_person_id IS NULL AND sales_person != '' AND sales_person IS NOT NULL
+        """)
+    except Exception as e:
+        logger.warning("m010 backfill failed: %s", e)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_quotations_sales_person_id ON quotations(sales_person_id)"
+    )
+    conn.commit()
+
+
 # Ordered list — index+1 is the migration version number.
 _MIGRATIONS = [
     _m001_export_columns,        # v1
@@ -484,6 +507,7 @@ _MIGRATIONS = [
     _m007_fix_legacy_display_names,  # v7
     _m008_fix_legacy_owner_names,    # v8
     _m009_migrate_legacy_visits,     # v9
+    _m010_sales_person_id,           # v10
 ]
 
 

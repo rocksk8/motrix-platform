@@ -1,7 +1,7 @@
 # MOTRIX ERP — 開發快速參考
 
 > 允碩整合集創（統編 60575481）｜ Tel: 04-3602-2818 ｜ info@miactw.com  
-> 文件版本：**2026-07-17d**（安全強化 P0/P1：登入暴力保護 + 全域 Exception Handler + PDF 路徑可設定 + Sessions 定期清理 + 備份排程移工作排程器）
+> 文件版本：**2026-07-17f**（安全強化 P2 收尾：前端照片改用短效 signed token `?pt=`）
 
 ---
 
@@ -125,9 +125,7 @@ superadmin > admin > sales > engineer > viewer
 |----------|------|
 | `engineer` | 預設無 `financial_view`，不可看金額／財務 |
 | 模組例 | `project_manage` · `project_approve_eng` · `project_approve_biz` · `financial_view` |
-| 報價列表過濾 | 非 admin+ 僅見 `sales_person = 自己 display_name` |
-
-> 已知限制：業務歸屬用顯示名稱，改名會影響歷史過濾（後續可改 `sales_person_id`）。
+| 報價列表過濾 | 非 admin+ 用 `sales_person_id=自己id OR (sales_person_id IS NULL AND sales_person=display_name)` |
 
 ---
 
@@ -139,7 +137,8 @@ superadmin > admin > sales > engineer > viewer
 quotations      -- 熱路徑欄位 + data_json 完整物件
   quote_no PK, status, deal_tag, settle_status,
   customer_name, project_name, total, pretax,
-  direct_margin_pct, net_margin_pct, sales_person,
+  direct_margin_pct, net_margin_pct,
+  sales_person (顯示名稱，歷史相容), sales_person_id FK→users.id,
   quote_date, valid_days, data_json, created_at, updated_at, ...
 
 users           -- + must_change_password, unlock_password_hash
@@ -150,7 +149,7 @@ system_settings, audit_log, notifications
 quote_seq       -- 月序 MQ-YYYYMM-NNN
 ```
 
-**索引**：`deal_tag` · `settle_status` · `sales_person`
+**索引**：`deal_tag` · `settle_status` · `sales_person` · `sales_person_id`
 
 ### 4.2 data_json 與熱路徑同步
 
@@ -345,7 +344,8 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
 | PATCH | /customers/{id}/visits · /suppliers/{id}/visits | 可樂觀鎖 |
 | GET | /company/tax/{id} · /company/search | GCIS Proxy |
 | CRUD | /projects · logs · photos | |
-| GET | /uploads/{path}?token= | 照片（img 用 query token） |
+| GET | /photo-token?path= | 取得 1h signed token（避免 session token 進 URL） |
+| GET | /uploads/{path}?pt= | 照片（優先 `?pt=` signed token；fallback `?token=` session） |
 | GET | /dashboard/stats · /monthly | |
 | GET | /devices · /receivables | |
 | GET | /reports/financial · /excel · /pdf | admin+ |
@@ -391,6 +391,8 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
 
 Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `backup.alert`
 
+**audit_log 保留**：每次每日備份完成後執行 `_prune_audit_log(keep_days=730)`，自動刪除 2 年前舊紀錄（先備後刪，雲端 JSON 永久保存）。
+
 **還原優先序**：本機 `db_backups` 整庫 → 雲端 `motrix_erp.db` → JSON 重建（最後手段）
 
 ---
@@ -427,10 +429,6 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 
 | 優先 | 項目 |
 |------|------|
-| 中 | 業務歸屬改 `sales_person_id`（勿綁 display_name） |
-| 中 | 照片 URL 改短時效 signed URL（避免長效 token 進 query） |
-| 中 | GCIS proxy 加 httpx timeout（外部 API 掛時 worker 卡死） |
-| 低 | audit_log 保留策略（目前無限增長） |
 | 低 | 區網 HTTPS／反向代理 |
 | 低 | 關鍵 API 自動化測試 |
 | 低 | 文件拆 `CHANGELOG.md` 與本速查分離（本檔已精簡 changelog） |
@@ -438,6 +436,16 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 ---
 
 ## 12. 變更摘要（精簡）
+
+### 2026-07-17f — 前端照片改用短效 signed token
+
+- **`projects.js` + `projects.html`（inline）**：`photoUrl()` 改為 lazy signed-token 模式；初次呼叫先回傳 `?token=` session fallback，同時背景 fetch `GET /api/photo-token?path=`；取回後替換 `_ptCache`，Alpine 響應式重繪，`<img>` 改用 `?pt=`；token 快取至到期前 60 秒再重取；session token 不再出現在照片 URL log 中
+
+### 2026-07-17e — 安全強化 P2（外部顧問第二輪收尾）
+
+- **audit_log 保留策略**：`archive._prune_audit_log(keep_days=730)` 每日備份完成後自動刪除 2 年前舊紀錄；先備後刪，雲端 JSON 不受影響
+- **照片 signed token**：`routers/projects.py` 新增 `_PHOTO_SECRET`（per-process HMAC-SHA256）、`_make_photo_token` / `_verify_photo_token`；新端點 `GET /api/photo-token?path=` 回傳 1h 短效 token；`serve_upload` 新增 `?pt=` 參數，驗證通過免 session，過期回 403；原 `?token=` 相容保留
+- **sales_person_id FK**：DB migration v10 新增 `quotations.sales_person_id INTEGER REFERENCES users(id)` + 索引；best-effort 回填 display_name 對應；`create/update` 同步寫入；列表非 admin 過濾改 `sales_person_id=自己id OR (NULL AND display_name 相符)` 雙層相容
 
 ### 2026-07-17d — 安全強化 P0/P1（外部顧問第二輪）
 
@@ -505,7 +513,7 @@ MOTRIX-ERP/
 ├── backup_alerts/               ← 備份警示（執行期產生）
 ├── backend/
 │   ├── main.py                  ← wiring
-│   ├── db.py                    ← schema + 9 個 migrations（CURRENT_VERSION）
+│   ├── db.py                    ← schema + 10 個 migrations（CURRENT_VERSION=10）
 │   ├── helpers/                 ← 套件（拆自原 helpers.py）
 │   │   ├── __init__.py          ← re-export 全部符號（向後相容）
 │   │   ├── auth.py              ← 密碼、session、弱密碼政策

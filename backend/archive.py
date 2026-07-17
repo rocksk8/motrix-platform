@@ -5,7 +5,7 @@ import shutil
 import sqlite3
 import threading
 import logging
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 
 from db import get_db, DB_PATH
 from helpers import _cleanup_sessions
@@ -189,6 +189,21 @@ def _snapshot_sqlite(also_to_cloud: bool = True):
         return None
 
 
+def _prune_audit_log(keep_days: int = 730) -> None:
+    """Delete audit_log rows older than keep_days. Daily backup exports first, so nothing is lost."""
+    try:
+        cutoff = (datetime.now() - timedelta(days=keep_days)).isoformat()
+        conn = get_db()
+        cur = conn.execute("DELETE FROM audit_log WHERE at < ?", (cutoff,))
+        deleted = cur.rowcount
+        conn.commit()
+        conn.close()
+        if deleted:
+            logger.info("audit_log pruned: %d rows older than %d days removed", deleted, keep_days)
+    except Exception:
+        logger.exception("_prune_audit_log failed")
+
+
 def _prune_local_db_backups(keep_days: int = 30) -> None:
     try:
         if not os.path.isdir(_LOCAL_DB_BACKUP):
@@ -316,6 +331,7 @@ def _daily_backup():
         logger.info("Daily backup completed: %s", day_dir)
         _system_audit("backup.daily_ok", today_label, summary)
         _clear_backup_alert_if_healthy()
+        _prune_audit_log(keep_days=730)
     except Exception as e:
         logger.exception("_daily_backup failed")
         _write_backup_alert(f"每日雲端 JSON 備份失敗: {e}", level="ERROR")
