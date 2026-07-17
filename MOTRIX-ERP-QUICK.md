@@ -1,7 +1,7 @@
 # MOTRIX ERP — 開發快速參考
 
 > 允碩整合集創（統編 60575481）｜ Tel: 04-3602-2818 ｜ info@miactw.com  
-> 文件版本：**2026-07-17c**（架構優化：Schema migration 版本管理 + helpers 套件拆分 + CORS 限縮 + Edge 路徑可設定 + 報價單英文公司名稱更新）
+> 文件版本：**2026-07-17d**（安全強化 P0/P1：登入暴力保護 + 全域 Exception Handler + PDF 路徑可設定 + Sessions 定期清理 + 備份排程移工作排程器）
 
 ---
 
@@ -57,12 +57,13 @@
 | 模組 | 職責 |
 |------|------|
 | `db.py` | 連線、`init_db()`、PRAGMA WAL、熱路徑欄位／索引 |
-| `helpers.py` | 密碼、session、audit、notify、settings、弱密碼標記、`save_quotation_json()` |
+| `helpers/` | 密碼、session、audit、notify、settings、弱密碼標記、`save_quotation_json()` |
 | `archive.py` | 即時／每日／週備份、本機 SQLite 快照、備份警示 |
-| `pdf_gen.py` | Edge Headless PDF |
+| `backup_job.py` | 獨立備份腳本（Windows 工作排程器呼叫，不依賴 server） |
+| `pdf_gen.py` | Edge Headless PDF；輸出路徑讀 `system_settings["pdf_base_path"]` |
 | `photos.py` | 專案照片水印 |
 | `routers/*` | 業務 API |
-| `main.py` | CORS、middleware、startup、static |
+| `main.py` | CORS、middleware、全域 Exception Handler、startup、static |
 
 ### 前端
 
@@ -370,6 +371,15 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
   backup_alerts\YYYY-MM-DD.log
 ```
 
+### 排程架構（雙層）
+
+| 層 | 機制 | 觸發時間 | 說明 |
+|----|------|---------|------|
+| **主**（可靠） | Windows 工作排程器 | 每日 02:00 | `backup_job.py`；server crash 也跑；開機後補執行（StartWhenAvailable） |
+| **冗餘** | `threading.Timer` | 每 2h 日備；每 6h 週備 | server 在線時提供即時觸發；crash 後消失（主層覆蓋此風險） |
+
+`.done` marker 確保同日/週不重複備份。設定：`setup_backup_task.ps1`（初次部署執行一次）。
+
 ### 行為
 
 | 條件 | 行為 |
@@ -377,7 +387,7 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
 | G: 正常 | 即時 JSON + 每日 JSON + 雲端 DB 副本 + 本機快照 |
 | G: 未掛載 | **不再靜默**：寫 `BACKUP_ALERT.txt` + audit `backup.alert`；**仍做本機 SQLite 快照** |
 | 恢復正常 | 清除 sticky 警示檔 |
-| 排程 | 啟動 + 每 2h 日備；每 6h 週備 |
+| Server crash | Task Scheduler 仍在 02:00 執行本機快照 |
 
 Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `backup.alert`
 
@@ -419,7 +429,8 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 |------|------|
 | 中 | 業務歸屬改 `sales_person_id`（勿綁 display_name） |
 | 中 | 照片 URL 改短時效 signed URL（避免長效 token 進 query） |
-| 中 | `quotation-form` 殘餘顯示亂碼（對照 `.recovered` 修 UTF-8） |
+| 中 | GCIS proxy 加 httpx timeout（外部 API 掛時 worker 卡死） |
+| 低 | audit_log 保留策略（目前無限增長） |
 | 低 | 區網 HTTPS／反向代理 |
 | 低 | 關鍵 API 自動化測試 |
 | 低 | 文件拆 `CHANGELOG.md` 與本速查分離（本檔已精簡 changelog） |
@@ -427,6 +438,14 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 ---
 
 ## 12. 變更摘要（精簡）
+
+### 2026-07-17d — 安全強化 P0/P1（外部顧問第二輪）
+
+- **登入暴力破解保護**：`routers/auth.py` per-IP rate limiting；5 次失敗鎖 15 分鐘；HTTP 429 含倒數秒數；成功登入清除計數
+- **全域 Exception Handler**：`main.py` 新增 `@app.exception_handler(Exception)` → 500 + 中文提示，full traceback 寫 ERROR log 不外洩；`RequestValidationError` → 422 + 中文提示
+- **PDF 路徑可設定**：`pdf_gen.py` 移除硬碼 Desktop 路徑，改 `_get_pdf_base()` 讀 `system_settings["pdf_base_path"]`，空值 fallback 專案內 `報價單PDF/`；新增 `GET/PATCH /api/settings/pdf-base-path`
+- **Sessions 定期清理**：`archive._schedule_daily` 每次執行後呼叫 `_cleanup_sessions()`，過期 session 每 2h 清理，不再依賴 server 重啟
+- **備份排程移工作排程器**：`backup_job.py` 獨立腳本；`setup_backup_task.ps1` 一鍵設定；每日 02:00 自動執行，開機補跑；server crash 備份仍正常
 
 ### 2026-07-17c — 架構優化（外部顧問建議 P0/P1）
 
@@ -496,8 +515,11 @@ MOTRIX-ERP/
 │   │   ├── dates.py             ← _add_months、_warranty_expiry
 │   │   └── startup.py           ← 啟動檢查、Edge 路徑解析
 │   ├── archive.py · pdf_gen.py · photos.py
+│   ├── backup_job.py            ← 獨立備份腳本（Task Scheduler 呼叫）
+│   ├── setup_backup_task.ps1    ← 工作排程器設定（初次部署執行一次）
 │   ├── motrix_erp.db
 │   ├── db_backups/YYYY-MM-DD/   ← 本機整庫快照
+│   ├── logs/backup_job.log      ← 獨立備份執行 log
 │   ├── .initial_admin_credentials.txt  ← 僅新裝，用後刪
 │   └── routers/                 ← auth, quotations, customers, ...
 ├── frontend/
