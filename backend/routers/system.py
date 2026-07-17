@@ -268,3 +268,25 @@ def set_edge_path_setting(body: dict = Body(...), authorization: str = Header(No
     _audit(_tok(authorization), "settings.edge_path.update", "settings", "edge_path",
            path or "（清空，使用自動偵測）")
     return {"ok": True}
+
+
+# ── PDF base path setting ─────────────────────────────────────────────────────
+
+@router.get("/api/settings/pdf-base-path")
+def get_pdf_base_path_setting(authorization: str = Header(None)):
+    _require_user(authorization, require_superadmin=True)
+    from pdf_gen import _PDF_BASE_DEFAULT, _get_pdf_base
+    configured = (_get_setting("pdf_base_path") or "").strip()
+    return {"configured": configured, "resolved": _get_pdf_base(), "default": _PDF_BASE_DEFAULT}
+
+
+@router.patch("/api/settings/pdf-base-path")
+def set_pdf_base_path_setting(body: dict = Body(...), authorization: str = Header(None)):
+    _require_user(authorization, require_superadmin=True)
+    path = (body.get("path") or "").strip()
+    if path and not os.path.isdir(path):
+        raise HTTPException(400, f"目錄不存在：{path}")
+    _set_setting("pdf_base_path", path)
+    _audit(_tok(authorization), "settings.pdf_base_path.update", "settings", "pdf_base_path",
+           path or "（清空，使用預設路徑）")
+    return {"ok": True}

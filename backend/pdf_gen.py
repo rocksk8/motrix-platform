@@ -8,11 +8,19 @@ import logging
 from datetime import datetime, date
 
 from db import get_db
-from helpers import _get_edge_path
+from helpers import _get_edge_path, _get_setting
 
 logger = logging.getLogger(__name__)
 
-_PDF_BASE = r"C:\Users\hichan\Desktop\MOTRIX-ERP\報價單PDF"
+_PDF_BASE_DEFAULT = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "報價單PDF",
+)
+
+
+def _get_pdf_base() -> str:
+    configured = (_get_setting("pdf_base_path") or "").strip()
+    return configured if configured else _PDF_BASE_DEFAULT
 
 
 def _build_quote_html(q: dict, tot: dict, internal: bool = False,
@@ -668,7 +676,7 @@ def _generate_quotation_pdf(quote_no: str, actor: str = '', action_type: str = '
                                          notice_text="本案報價未成立，此份文件僅供存查備存使用，請勿對外提供或引用")
 
         today   = date.today().strftime('%Y%m%d')
-        out_dir = os.path.join(_PDF_BASE, date.today().isoformat())
+        out_dir = os.path.join(_get_pdf_base(), date.today().isoformat())
         os.makedirs(out_dir, exist_ok=True)
 
         # build filename: MQ-202507-001_已簽核_20260716_Jeff.pdf

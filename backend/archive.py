@@ -8,6 +8,7 @@ import logging
 from datetime import datetime, date
 
 from db import get_db, DB_PATH
+from helpers import _cleanup_sessions
 
 logger = logging.getLogger(__name__)
 
@@ -322,6 +323,10 @@ def _daily_backup():
 
 def _schedule_daily():
     _daily_backup()
+    try:
+        _cleanup_sessions()
+    except Exception:
+        logger.exception("_cleanup_sessions failed in daily schedule")
     t = threading.Timer(2 * 3600, _schedule_daily)
     t.daemon = True
     t.start()
