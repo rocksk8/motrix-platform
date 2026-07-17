@@ -1,11 +1,14 @@
 """Auth + User management endpoints."""
 import json
+import logging
 import secrets
 import sqlite3
+import threading
+import time
 from datetime import datetime, timedelta
 from typing import Optional, List
 
-from fastapi import APIRouter, HTTPException, Header
+from fastapi import APIRouter, HTTPException, Header, Request
 from pydantic import BaseModel
 
 from db import get_db
@@ -14,7 +17,55 @@ from helpers import (
     _SUPERADMIN_MODULES, is_weak_password, MIN_PASSWORD_LEN,
 )
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
+
+# ── Login rate limiting (per source IP) ───────────────────────────────────────
+
+_LOGIN_MAX_FAILS = 5       # consecutive failures before lockout
+_LOGIN_LOCKOUT_S = 900     # 15 minutes
+
+_rl_lock = threading.Lock()
+# ip -> {"fails": int, "locked_until": float (epoch)}
+_rl_state: dict = {}
+
+
+def _client_ip(request: Request) -> str:
+    xff = request.headers.get("X-Forwarded-For", "")
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def _rl_check(ip: str) -> None:
+    """Raise 429 if IP is currently locked out."""
+    now = time.monotonic()
+    with _rl_lock:
+        state = _rl_state.get(ip)
+        if not state:
+            return
+        if now < state["locked_until"]:
+            wait = int(state["locked_until"] - now)
+            raise HTTPException(429, f"登入嘗試次數過多，請於 {wait} 秒後再試")
+        if state["locked_until"] > 0:
+            del _rl_state[ip]
+
+
+def _rl_fail(ip: str, username: str) -> None:
+    now = time.monotonic()
+    with _rl_lock:
+        state = _rl_state.setdefault(ip, {"fails": 0, "locked_until": 0.0})
+        state["fails"] += 1
+        if state["fails"] >= _LOGIN_MAX_FAILS:
+            state["locked_until"] = now + _LOGIN_LOCKOUT_S
+            state["fails"] = 0
+            logger.warning("Login lockout: IP=%s username=%s locked for %ds", ip, username, _LOGIN_LOCKOUT_S)
+
+
+def _rl_clear(ip: str) -> None:
+    with _rl_lock:
+        _rl_state.pop(ip, None)
 
 
 # ── Models ────────────────────────────────────────────────────────────────────
@@ -57,7 +108,9 @@ def ping():
 
 
 @router.post("/api/auth/login")
-def auth_login(body: LoginIn):
+def auth_login(body: LoginIn, request: Request):
+    ip = _client_ip(request)
+    _rl_check(ip)
     conn = get_db()
     row = conn.execute(
         "SELECT id, username, display_name, role, modules, password_hash, "
@@ -67,6 +120,7 @@ def auth_login(body: LoginIn):
     ).fetchone()
     if not row or not _verify_pw(body.password, row["password_hash"]):
         conn.close()
+        _rl_fail(ip, body.username.strip())
         raise HTTPException(401, "帳號或密碼錯誤")
     must_change = bool(row["must_change_password"])
     # Legacy weak password still works once, but forces rotation
@@ -88,6 +142,7 @@ def auth_login(body: LoginIn):
     )
     conn.commit()
     conn.close()
+    _rl_clear(ip)
     _audit(token, 'auth.login', 'user', row['username'], row['display_name'] or row['username'],
            {'mustChangePassword': must_change})
     return {
