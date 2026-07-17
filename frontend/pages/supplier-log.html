@@ -1,0 +1,769 @@
+﻿<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="../static/favicon.png">
+  <title>供應商日誌 — MOTRIX 營運管理系統</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600&display=swap" rel="stylesheet">
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    [x-cloak] { display: none !important; }
+
+    /* ── Layout ── */
+    .log-wrap {
+      margin-left: var(--sidebar-w);
+      margin-top: var(--topbar-h);
+      height: calc(100vh - var(--topbar-h));
+      display: flex;
+      overflow: hidden;
+    }
+
+    /* ── Left Sidebar ── */
+    .log-sidebar {
+      width: 288px;
+      flex-shrink: 0;
+      border-right: 1px solid var(--border-light);
+      overflow-y: auto;
+      background: #FAFAF8;
+      display: flex;
+      flex-direction: column;
+    }
+    .cust-card {
+      padding: 20px 20px 16px;
+      border-bottom: 1px solid var(--border-light);
+    }
+    .cust-card__av {
+      width: 46px; height: 46px; border-radius: 10px;
+      background: #4B5563; color: var(--white);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px; font-weight: 700; margin-bottom: 12px;
+    }
+    .cust-card__name { font-size: 15px; font-weight: 700; color: var(--text-primary); line-height: 1.3; }
+    .cust-card__sub  { font-size: 11px; color: var(--text-dim); font-family: Inter, sans-serif; margin-top: 2px; }
+    .cust-card__row  {
+      display: flex; align-items: flex-start; gap: 7px; margin-top: 8px;
+      font-size: 12px; color: var(--text-secondary); font-family: var(--font-zh);
+    }
+    .cust-card__row svg { flex-shrink: 0; margin-top: 1px; }
+    .cust-back {
+      display: inline-flex; align-items: center; gap: 4px;
+      margin-top: 14px; font-size: 11px; color: var(--text-dim);
+      text-decoration: none; transition: color .12s;
+    }
+    .cust-back:hover { color: var(--accent); }
+
+    /* ── Stats ── */
+    .stats-grid {
+      display: grid; grid-template-columns: 1fr 1fr;
+      border-bottom: 1px solid var(--border-light);
+    }
+    .stat-cell {
+      padding: 14px 16px; border-right: 1px solid var(--border-light);
+      background: #FAFAF8;
+    }
+    .stat-cell:nth-child(2n) { border-right: none; }
+    .stat-cell:nth-child(n+3) { border-top: 1px solid var(--border-light); }
+    .stat-cell__val { font-size: 22px; font-weight: 700; font-family: Inter, sans-serif; color: var(--text-primary); line-height: 1.2; }
+    .stat-cell__lbl { font-size: 10px; color: var(--text-dim); font-family: Inter, sans-serif; letter-spacing: .06em; margin-top: 3px; }
+
+    /* ── Filter Tabs ── */
+    .filter-area { padding: 14px 14px 10px; flex: 1; }
+    .filter-sec-title {
+      font-size: 10px; font-family: Inter, sans-serif; letter-spacing: .1em;
+      text-transform: uppercase; color: var(--text-dim); font-weight: 600;
+      margin-bottom: 8px;
+    }
+    .ftab {
+      display: flex; align-items: center; gap: 8px;
+      width: 100%; padding: 6px 9px; border-radius: 7px;
+      font-size: 12px; font-family: var(--font-zh);
+      border: none; background: none; cursor: pointer;
+      color: var(--text-secondary); text-align: left; transition: all .12s;
+      margin-bottom: 2px;
+    }
+    .ftab:hover { background: #F0EEE9; color: var(--text-primary); }
+    .ftab.active { background: var(--black); color: #fff; }
+    .ftab__dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .ftab__cnt { margin-left: auto; font-family: Inter, sans-serif; font-size: 11px; font-weight: 600; padding: 1px 6px; border-radius: 99px; background: rgba(0,0,0,.07); }
+    .ftab.active .ftab__cnt { background: rgba(255,255,255,.18); }
+
+    /* ── Main ── */
+    .log-main {
+      flex: 1; display: flex; flex-direction: column; overflow: hidden; background: #fff;
+    }
+    .log-topbar {
+      padding: 14px 24px; border-bottom: 1px solid var(--border-light);
+      display: flex; align-items: center; gap: 12px; flex-shrink: 0;
+      background: #fff; z-index: 10;
+    }
+    .log-search-wrap { position: relative; flex: 1; max-width: 320px; }
+    .log-search {
+      width: 100%; padding: 7px 11px 7px 34px;
+      border: 1px solid var(--border-light); border-radius: var(--radius);
+      font-size: 13px; font-family: var(--font-zh); outline: none;
+      background: #FAFAF8; box-sizing: border-box;
+    }
+    .log-search:focus { border-color: var(--accent); background: #fff; box-shadow: 0 0 0 3px rgba(37,99,235,.08); }
+    .log-search-icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--text-dim); pointer-events: none; }
+    .log-sort {
+      padding: 6px 10px; font-size: 11px; font-family: var(--font-zh);
+      border: 1px solid var(--border-light); border-radius: var(--radius);
+      background: #fff; color: var(--text-secondary); cursor: pointer; outline: none;
+    }
+    .btn-new {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 8px 16px; border-radius: var(--radius);
+      font-size: 12px; font-family: var(--font-zh); font-weight: 600;
+      cursor: pointer; border: none; background: var(--accent); color: #fff;
+      transition: background .12s; white-space: nowrap;
+    }
+    .btn-new:hover { background: #1D4ED8; }
+
+    /* ── Timeline ── */
+    .timeline-scroll { flex: 1; overflow-y: auto; padding: 24px 28px 40px; }
+    .tl-empty { text-align: center; padding: 80px 20px; color: var(--text-dim); }
+    .tl-empty__icon { font-size: 36px; margin-bottom: 12px; opacity: .3; }
+
+    .tl-entry { display: flex; gap: 14px; margin-bottom: 20px; }
+    .tl-left { width: 74px; flex-shrink: 0; text-align: right; padding-top: 2px; }
+    .tl-date { font-size: 12px; font-weight: 700; font-family: Inter, sans-serif; color: var(--text-primary); }
+    .tl-dow  { font-size: 10px; color: var(--text-dim); font-family: Inter, sans-serif; margin-top: 1px; }
+
+    .tl-spine { display: flex; flex-direction: column; align-items: center; flex-shrink: 0; width: 20px; }
+    .tl-dot {
+      width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; margin-top: 3px;
+      border: 2px solid #fff; box-shadow: 0 0 0 2px currentColor; background: currentColor;
+    }
+    .tl-line { width: 2px; flex: 1; background: var(--border-light); margin-top: 5px; min-height: 16px; border-radius: 1px; }
+
+    .tl-card {
+      flex: 1; background: #fff; border: 1px solid var(--border-light);
+      border-radius: 12px; padding: 14px 18px;
+      transition: box-shadow .15s, border-color .15s;
+    }
+    .tl-card:hover { box-shadow: 0 3px 12px rgba(0,0,0,.08); border-color: #C8C4BC; }
+
+    .tl-card__header { display: flex; align-items: center; gap: 7px; margin-bottom: 10px; flex-wrap: wrap; min-height: 24px; }
+    .tl-badge {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 2px 9px; border-radius: 5px;
+      font-size: 11px; font-family: Inter, sans-serif; font-weight: 600;
+    }
+    .tl-badge svg { flex-shrink: 0; }
+
+    .tl-person {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 2px 8px 2px 3px; border-radius: 99px;
+      font-size: 11px; font-family: var(--font-zh); background: #F0EEE9; color: var(--text-secondary);
+    }
+    .tl-person__av {
+      width: 19px; height: 19px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 10px; font-weight: 700; color: #fff; flex-shrink: 0;
+    }
+
+    .tl-meta { margin-left: auto; font-size: 10px; color: var(--text-dim); font-family: Inter, sans-serif; white-space: nowrap; }
+    .tl-content { font-size: 13px; line-height: 1.75; color: var(--text-primary); white-space: pre-wrap; word-break: break-word; }
+    .tl-followup {
+      margin-top: 10px; padding: 9px 13px;
+      background: #FFFBEB; border-left: 3px solid #FCD34D;
+      border-radius: 0 8px 8px 0; font-size: 12px; color: #78350F; line-height: 1.65;
+    }
+    .tl-followup__hd { font-size: 9px; font-family: Inter, sans-serif; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #B45309; margin-bottom: 3px; }
+    .tl-note { margin-top: 8px; padding: 7px 11px; background: #F8F7F4; border-radius: 7px; font-size: 11px; color: var(--text-dim); font-style: italic; line-height: 1.6; }
+
+    .tl-actions { display: flex; gap: 6px; margin-top: 10px; }
+    .tl-act { padding: 4px 10px; border-radius: 5px; font-size: 11px; font-family: var(--font-zh); border: 1px solid var(--border-light); background: #fff; cursor: pointer; color: var(--text-secondary); transition: all .12s; }
+    .tl-act:hover { background: #F0EEE9; }
+    .tl-act.del:hover { background: var(--danger-light); border-color: var(--danger); color: var(--danger); }
+    .tl-act-spacer { flex: 1; }
+
+    /* Type color system */
+    .b-visit  { background: #DBEAFE; color: #1E40AF; }
+    .b-call   { background: #DCFCE7; color: #15803D; }
+    .b-video  { background: #EDE9FE; color: #5B21B6; }
+    .b-email  { background: #FEF3C7; color: #92400E; }
+    .b-other  { background: #F3F4F6; color: #4B5563; }
+    .d-visit  { color: #2563EB; }
+    .d-call   { color: #15803D; }
+    .d-video  { color: #7C3AED; }
+    .d-email  { color: #D97706; }
+    .d-other  { color: #9CA3AF; }
+    .av-visit { background: #2563EB; }
+    .av-call  { background: #15803D; }
+    .av-video { background: #7C3AED; }
+    .av-email { background: #D97706; }
+    .av-other { background: #6B7280; }
+
+    /* ── Modal ── */
+    .modal-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,.48);
+      z-index: 200; display: flex; align-items: center; justify-content: center; padding: 24px;
+    }
+    .modal-box {
+      background: #fff; border-radius: var(--radius-lg);
+      width: 100%; max-width: 660px; max-height: 90vh;
+      overflow-y: auto; box-shadow: var(--shadow-lg); flex-shrink: 0;
+    }
+    .modal-head {
+      display: flex; align-items: center; padding: 18px 22px;
+      border-bottom: 1px solid var(--border-light); gap: 10px; position: sticky; top: 0; background: #fff; z-index: 1;
+    }
+    .modal-head__title { font-size: 14px; font-weight: 600; flex: 1; }
+    .modal-close { width: 28px; height: 28px; border-radius: 4px; border: none; background: #F0EEE9; cursor: pointer; font-size: 17px; color: var(--text-secondary); display: flex; align-items: center; justify-content: center; transition: all .12s; }
+    .modal-close:hover { background: #FEF2F2; color: var(--danger); }
+    .modal-body { padding: 22px; }
+    .modal-foot { padding: 14px 22px; border-top: 1px solid var(--border-light); display: flex; justify-content: flex-end; gap: 8px; position: sticky; bottom: 0; background: #fff; }
+
+    .fg { margin-bottom: 18px; }
+    .fl { font-size: 10px; font-family: Inter, sans-serif; letter-spacing: .08em; text-transform: uppercase; color: var(--text-dim); font-weight: 600; margin-bottom: 6px; }
+    .fl .req { color: var(--danger); }
+    .fi, .fs, .fta {
+      width: 100%; padding: 8px 11px; border: 1px solid var(--border-light);
+      border-radius: var(--radius); font-size: 13px; font-family: var(--font-zh);
+      color: var(--text-primary); background: #fff; outline: none; box-sizing: border-box;
+      transition: border-color .12s, box-shadow .12s;
+    }
+    .fi:focus, .fs:focus, .fta:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(37,99,235,.08); }
+    .fta { resize: vertical; min-height: 80px; line-height: 1.65; }
+
+    /* ── Attendee Picker ── */
+    .att-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+    .att-chip {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 5px 11px 5px 4px; border-radius: 99px;
+      border: 1.5px solid var(--border-light); background: #fff;
+      cursor: pointer; transition: all .12s;
+      font-size: 12px; font-family: var(--font-zh); color: var(--text-secondary);
+      user-select: none;
+    }
+    .att-chip:hover { border-color: var(--accent); background: var(--accent-light); color: var(--accent); }
+    .att-chip.on  { border-color: var(--accent); background: var(--accent); color: #fff; }
+    .att-chip__av {
+      width: 24px; height: 24px; border-radius: 50%;
+      background: #E5E7EB; color: var(--text-secondary);
+      font-size: 11px; font-weight: 700;
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .att-chip.on .att-chip__av { background: rgba(255,255,255,.28); color: #fff; }
+    .att-chip__check { font-size: 12px; margin-left: 1px; }
+
+    /* ── Btn ── */
+    .btn-g { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: var(--radius); font-size: 12px; font-family: var(--font-zh); font-weight: 500; cursor: pointer; border: 1px solid var(--border-light); background: #fff; color: var(--text-secondary); transition: all .12s; }
+    .btn-g:hover { border-color: #C8C4BC; background: #FAFAF8; }
+    .btn-p { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: var(--radius); font-size: 12px; font-family: var(--font-zh); font-weight: 600; cursor: pointer; border: none; background: var(--accent); color: #fff; transition: background .12s; }
+    .btn-p:hover { background: #1D4ED8; }
+    .btn-p:disabled { opacity: .6; cursor: not-allowed; }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body x-data="supplierLogPage()" x-init="init()" x-cloak>
+
+    <header id="app-topbar" class="topbar"></header>
+<div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar" id="app-sidebar"></aside>
+
+  <!-- ══ Main ══ -->
+  <div class="log-wrap">
+
+    <!-- ── Left Sidebar ── -->
+    <div class="log-sidebar">
+
+      <!-- Supplier card -->
+      <div class="cust-card">
+        <template x-if="!supplier">
+          <div style="color:var(--text-dim);font-size:13px">載入中...</div>
+        </template>
+        <template x-if="supplier">
+          <div>
+            <div class="cust-card__av" x-text="(supplier.name||'?')[0]"></div>
+            <div class="cust-card__name" x-text="supplier.name"></div>
+            <div class="cust-card__sub" x-text="supplier.taxId ? '統編 ' + supplier.taxId : '(無統一編號)'"></div>
+            <template x-if="supplier.category">
+              <div class="cust-card__row">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0H5m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 8v-5a1 1 0 011-1h4a1 1 0 011 1v5m-6 0h6"/></svg>
+                <span x-text="supplier.category"></span>
+              </div>
+            </template>
+            <template x-if="supplier.phone">
+              <div class="cust-card__row">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21L8.5 10.5S9.5 13.5 13.5 15.5l1.113-1.724a1 1 0 011.21-.502l4.493 1.498A1 1 0 0121 15.72V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>
+                <span x-text="supplier.phone"></span>
+              </div>
+            </template>
+            <template x-if="supplier.paymentTerms">
+              <div class="cust-card__row">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"/></svg>
+                <span x-text="supplier.paymentTerms"></span>
+              </div>
+            </template>
+            <a href="suppliers.html" class="cust-back">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+              返回供應商管理
+            </a>
+          </div>
+        </template>
+      </div>
+
+      <!-- Stats -->
+      <div class="stats-grid">
+        <div class="stat-cell">
+          <div class="stat-cell__val" x-text="visits.length"></div>
+          <div class="stat-cell__lbl">紀錄總數</div>
+        </div>
+        <div class="stat-cell">
+          <div class="stat-cell__val" x-text="totalPeople"></div>
+          <div class="stat-cell__lbl">出勤人次</div>
+        </div>
+        <div class="stat-cell">
+          <div class="stat-cell__val" x-text="totalVisitDays"></div>
+          <div class="stat-cell__lbl">往來天數</div>
+        </div>
+        <div class="stat-cell">
+          <div class="stat-cell__val" style="font-size:13px;padding-top:2px" x-text="lastContactDate"></div>
+          <div class="stat-cell__lbl">最後聯繫</div>
+        </div>
+      </div>
+
+      <!-- Filter -->
+      <div class="filter-area">
+        <div class="filter-sec-title">類型篩選</div>
+        <button class="ftab" :class="{active: filterType===''}" @click="filterType=''">
+          <span class="ftab__dot" style="background:#6B7280"></span>
+          全部紀錄
+          <span class="ftab__cnt" x-text="visits.length"></span>
+        </button>
+        <template x-for="tp in visitTypes" :key="tp.key">
+          <button class="ftab" :class="{active: filterType===tp.key}" @click="filterType=tp.key">
+            <span class="ftab__dot" :style="'background:' + tp.color"></span>
+            <span x-text="tp.label"></span>
+            <span class="ftab__cnt" x-text="visits.filter(v=>(v.type||'電話聯繫')===tp.key).length"></span>
+          </button>
+        </template>
+      </div>
+    </div>
+
+    <!-- ── Main Timeline ── -->
+    <div class="log-main">
+
+      <!-- Topbar -->
+      <div class="log-topbar">
+        <div class="log-search-wrap">
+          <svg class="log-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+          <input class="log-search" type="text" placeholder="搜尋紀錄內容、人員..." x-model="search">
+        </div>
+        <select class="log-sort" x-model="sortDir">
+          <option value="desc">最新優先</option>
+          <option value="asc">最舊優先</option>
+        </select>
+        <div style="flex:1"></div>
+        <span style="font-size:11px;color:var(--text-dim);font-family:Inter,sans-serif" x-text="filtered.length + ' 筆'"></span>
+        <button class="btn-new" @click="openCreate()">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 4v16m8-8H4"/></svg>
+          新增紀錄
+        </button>
+      </div>
+
+      <!-- Timeline scroll -->
+      <div class="timeline-scroll">
+
+        <!-- Empty -->
+        <template x-if="!loading && filtered.length === 0">
+          <div class="tl-empty">
+            <div class="tl-empty__icon">📋</div>
+            <div style="font-size:14px;font-weight:600;color:var(--text-secondary);margin-bottom:6px">
+              <template x-if="search || filterType">
+                <span>沒有符合的紀錄</span>
+              </template>
+              <template x-if="!search && !filterType">
+                <span>尚無往來紀錄</span>
+              </template>
+            </div>
+            <div style="font-size:12px;color:var(--text-dim)" x-show="!search && !filterType">點擊「新增紀錄」開始記錄供應商往來</div>
+          </div>
+        </template>
+
+        <!-- Loading -->
+        <template x-if="loading">
+          <div class="tl-empty">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin .8s linear infinite;color:var(--accent)"><path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke-dasharray="60" stroke-dashoffset="20"/></svg>
+            <div style="margin-top:12px;font-size:12px;color:var(--text-dim)">載入中...</div>
+          </div>
+        </template>
+
+        <!-- Entries -->
+        <template x-for="(v, vi) in filtered" :key="v.id">
+          <div class="tl-entry">
+
+            <!-- Date -->
+            <div class="tl-left">
+              <div class="tl-date" x-text="(v.date||'').slice(0,10)"></div>
+              <div class="tl-dow" x-text="dowLabel(v.date)"></div>
+            </div>
+
+            <!-- Spine -->
+            <div class="tl-spine">
+              <div class="tl-dot" :class="dotCls(v.type)"></div>
+              <div class="tl-line" x-show="vi < filtered.length - 1"></div>
+            </div>
+
+            <!-- Card -->
+            <div class="tl-card">
+              <!-- Header -->
+              <div class="tl-card__header">
+                <span class="tl-badge" :class="badgeCls(v.type)">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" x-html="typeIcon(v.type)"></svg>
+                  <span x-text="v.type || '電話聯繫'"></span>
+                </span>
+
+                <!-- Attendees -->
+                <template x-for="person in (v.attendees || [])" :key="person">
+                  <span class="tl-person">
+                    <span class="tl-person__av" :class="avCls(v.type)" x-text="(person||'?')[0]"></span>
+                    <span x-text="person"></span>
+                  </span>
+                </template>
+
+                <span class="tl-meta" x-show="v.createdBy" x-text="'記錄：' + v.createdBy"></span>
+              </div>
+
+              <!-- Content -->
+              <div class="tl-content" x-text="v.content || ''"></div>
+
+              <!-- Follow-up -->
+              <template x-if="v.contactNotes && v.contactNotes.trim()">
+                <div class="tl-followup">
+                  <div class="tl-followup__hd">聯繫事項 / 待辦追蹤</div>
+                  <div x-text="v.contactNotes"></div>
+                </div>
+              </template>
+
+              <!-- Note -->
+              <template x-if="v.note && v.note.trim()">
+                <div class="tl-note" x-text="'備注：' + v.note"></div>
+              </template>
+
+              <!-- Actions -->
+              <div class="tl-actions">
+                <button class="tl-act" @click="openEdit(v)">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:2px"><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                  編輯
+                </button>
+                <button class="tl-act del" @click="deleteRecord(v)">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:2px"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                  刪除
+                </button>
+                <span class="tl-act-spacer"></span>
+                <span style="font-size:10px;color:var(--text-dim);font-family:Inter,sans-serif;align-self:center"
+                      x-show="v.createdAt" x-text="(v.createdAt||'').slice(0,16).replace('T',' ')"></span>
+              </div>
+            </div>
+          </div>
+        </template>
+
+      </div><!-- /timeline-scroll -->
+    </div><!-- /log-main -->
+  </div><!-- /log-wrap -->
+
+
+  <!-- ══ New / Edit Modal ══ -->
+  <div class="modal-overlay" x-show="showModal" x-transition style="display:none" @click.self="closeModal()">
+    <div class="modal-box">
+      <div class="modal-head">
+        <span class="modal-head__title" x-text="editingId ? '編輯往來紀錄' : '新增往來紀錄'"></span>
+        <button class="modal-close" @click="closeModal()">×</button>
+      </div>
+      <div class="modal-body">
+
+        <!-- Row 1: Date + Type -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+          <div class="fg">
+            <div class="fl">日期 <span class="req">*</span></div>
+            <input class="fi" type="date" x-model="form.date">
+          </div>
+          <div class="fg">
+            <div class="fl">聯繫類型</div>
+            <select class="fs" x-model="form.type">
+              <option value="電話聯繫">📞 電話聯繫</option>
+              <option value="現場拜訪">🏢 現場拜訪</option>
+              <option value="視訊會議">💻 視訊會議</option>
+              <option value="電子郵件">📧 電子郵件</option>
+              <option value="其他">📌 其他</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Attendees -->
+        <div class="fg">
+          <div class="fl">
+            前往/聯繫人員
+            <span style="font-weight:400;text-transform:none;letter-spacing:0;margin-left:4px;font-size:10px" x-text="form.attendees.length ? '（已選 ' + form.attendees.length + ' 人）' : ''"></span>
+          </div>
+          <div class="att-grid">
+            <template x-if="users.length === 0">
+              <div style="font-size:12px;color:var(--text-dim)">載入使用者中...</div>
+            </template>
+            <template x-for="u in users" :key="u.username">
+              <button class="att-chip" :class="{on: form.attendees.includes(u.displayName)}"
+                      type="button" @click="toggleAttendee(u.displayName)">
+                <span class="att-chip__av" x-text="(u.displayName||'?')[0]"></span>
+                <span x-text="u.displayName || u.username"></span>
+                <span class="att-chip__check" x-show="form.attendees.includes(u.displayName)">✓</span>
+              </button>
+            </template>
+          </div>
+        </div>
+
+        <!-- Content -->
+        <div class="fg">
+          <div class="fl">工作內容 / 往來摘要 <span class="req">*</span></div>
+          <textarea class="fta" rows="4" placeholder="說明本次往來的具體內容，如：詢價、報價確認、交期協調、品質問題處理..." x-model="form.content"></textarea>
+        </div>
+
+        <!-- Follow-up -->
+        <div class="fg">
+          <div class="fl">聯繫事項 / 待辦追蹤</div>
+          <textarea class="fta" rows="3" placeholder="需後續跟進的事項、供應商承諾事項、預計下次聯繫時間..." x-model="form.contactNotes"></textarea>
+        </div>
+
+        <!-- Note -->
+        <div class="fg" style="margin-bottom:0">
+          <div class="fl">內部備注</div>
+          <textarea class="fta" rows="2" placeholder="內部說明，不對外顯示..." x-model="form.note"></textarea>
+        </div>
+
+      </div>
+      <div class="modal-foot">
+        <template x-if="formError">
+          <span style="font-size:12px;color:var(--danger);margin-right:auto;align-self:center" x-text="formError"></span>
+        </template>
+        <button class="btn-g" @click="closeModal()">取消</button>
+        <button class="btn-p" @click="saveRecord()" :disabled="saving">
+          <svg x-show="saving" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin .7s linear infinite"><path d="M21 12a9 9 0 11-18 0"/></svg>
+          <span x-text="saving ? '儲存中...' : (editingId ? '更新紀錄' : '新增紀錄')"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  const API = '/api'
+
+  function supplierLogPage() {
+    return {
+      session: {},
+      supplier: null,
+      visits: [],
+      users: [],
+      search: '',
+      filterType: '',
+      sortDir: 'desc',
+      loading: true,
+      showModal: false,
+      editingId: null,
+      saving: false,
+      formError: '',
+      form: { date: '', type: '電話聯繫', attendees: [], content: '', contactNotes: '', note: '' },
+
+      visitTypes: [
+        { key: '電話聯繫', label: '電話聯繫', color: '#15803D' },
+        { key: '現場拜訪', label: '現場拜訪', color: '#2563EB' },
+        { key: '視訊會議', label: '視訊會議', color: '#7C3AED' },
+        { key: '電子郵件', label: '電子郵件', color: '#D97706' },
+        { key: '其他',     label: '其他',     color: '#9CA3AF' },
+      ],
+
+      async init() {
+        const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
+        if (!s.token) { location.href = 'login.html'; return }
+        this.session = s
+        const params = new URLSearchParams(location.search)
+        const sid = params.get('id')
+        if (!sid) { location.href = 'suppliers.html'; return }
+        await Promise.all([this.loadSupplier(sid), this.loadUsers()])
+        this.loading = false
+      },
+
+      async loadSupplier(sid) {
+        try {
+          const r = await fetch(`${API}/suppliers`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+          if (!r.ok) return
+          const list = await r.json()
+          this.supplier = list.find(s => String(s.id) === String(sid)) || null
+          if (!this.supplier) { location.href = 'suppliers.html'; return }
+          document.title = this.supplier.name + ' 日誌 — MOTRIX 營運管理系統'
+          this.visits = this.supplier.visits || []
+        } catch {}
+      },
+
+      async loadUsers() {
+        try {
+          const r = await fetch(`${API}/users`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+          if (r.ok) {
+            const list = await r.json()
+            this.users = list.filter(u => u.active !== false && u.displayName)
+          }
+        } catch {}
+      },
+
+      get filtered() {
+        let list = this.visits
+        if (this.filterType) list = list.filter(v => (v.type || '電話聯繫') === this.filterType)
+        const q = (this.search || '').trim().toLowerCase()
+        if (q) list = list.filter(v =>
+          (v.content || '').toLowerCase().includes(q) ||
+          (v.contactNotes || '').toLowerCase().includes(q) ||
+          (v.note || '').toLowerCase().includes(q) ||
+          (v.attendees || []).some(a => a.toLowerCase().includes(q))
+        )
+        const dir = this.sortDir === 'asc' ? 1 : -1
+        return [...list].sort((a, b) => {
+          const da = a.date || ''
+          const db = b.date || ''
+          return da > db ? dir : da < db ? -dir : 0
+        })
+      },
+
+      get totalPeople() {
+        return this.visits.reduce((s, v) => s + (v.attendees?.length || 0), 0)
+      },
+      get totalVisitDays() {
+        const days = new Set(this.visits.map(v => v.date || '').filter(Boolean))
+        return days.size
+      },
+      get lastContactDate() {
+        const dates = this.visits.map(v => v.date || '').filter(Boolean).sort()
+        return dates.length ? dates[dates.length - 1] : '—'
+      },
+
+      // Style helpers
+      badgeCls(type) {
+        return { '現場拜訪': 'b-visit', '電話聯繫': 'b-call', '視訊會議': 'b-video', '電子郵件': 'b-email' }[type] || 'b-other'
+      },
+      dotCls(type) {
+        return { '現場拜訪': 'd-visit', '電話聯繫': 'd-call', '視訊會議': 'd-video', '電子郵件': 'd-email' }[type] || 'd-other'
+      },
+      avCls(type) {
+        return { '現場拜訪': 'av-visit', '電話聯繫': 'av-call', '視訊會議': 'av-video', '電子郵件': 'av-email' }[type] || 'av-other'
+      },
+      typeIcon(type) {
+        const icons = {
+          '現場拜訪': '<path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>',
+          '電話聯繫': '<path d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21L8.5 10.5S9.5 13.5 13.5 15.5l1.113-1.724a1 1 0 011.21-.502l4.493 1.498A1 1 0 0121 15.72V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/>',
+          '視訊會議': '<rect x="2" y="7" width="15" height="10" rx="2"/><path d="M17 9l5-2v10l-5-2"/>',
+          '電子郵件': '<path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>',
+        }
+        return icons[type] || '<circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/>'
+      },
+      dowLabel(d) {
+        if (!d) return ''
+        const days = ['日', '一', '二', '三', '四', '五', '六']
+        try { return '週' + days[new Date(d).getDay()] }
+        catch { return '' }
+      },
+
+      // Modal
+      openCreate() {
+        this.editingId = null
+        this.formError = ''
+        this.form = {
+          date: new Date().toISOString().slice(0, 10),
+          type: '電話聯繫',
+          attendees: this.session.displayName ? [this.session.displayName] : [],
+          content: '',
+          contactNotes: '',
+          note: '',
+        }
+        this.showModal = true
+      },
+
+      openEdit(v) {
+        this.editingId = v.id
+        this.formError = ''
+        this.form = {
+          date: v.date || '',
+          type: v.type || '電話聯繫',
+          attendees: v.attendees ? [...v.attendees] : [],
+          content: v.content || '',
+          contactNotes: v.contactNotes || '',
+          note: v.note || '',
+          _orig: v,
+        }
+        this.showModal = true
+      },
+
+      closeModal() { this.showModal = false; this.editingId = null },
+
+      toggleAttendee(name) {
+        const idx = this.form.attendees.indexOf(name)
+        if (idx === -1) this.form.attendees.push(name)
+        else this.form.attendees.splice(idx, 1)
+      },
+
+      async saveRecord() {
+        this.formError = ''
+        if (!this.form.date) { this.formError = '請填寫日期'; return }
+        if (!this.form.content.trim()) { this.formError = '請填寫工作內容'; return }
+        this.saving = true
+
+        const entry = {
+          id: this.editingId || Date.now(),
+          date: this.form.date,
+          type: this.form.type || '電話聯繫',
+          attendees: [...this.form.attendees],
+          content: this.form.content.trim(),
+          contactNotes: this.form.contactNotes.trim(),
+          note: this.form.note.trim(),
+          createdAt: this.form._orig?.createdAt || new Date().toISOString(),
+          createdBy: this.form._orig?.createdBy || (this.session.displayName || ''),
+          updatedAt: this.editingId ? new Date().toISOString() : undefined,
+          updatedBy: this.editingId ? (this.session.displayName || '') : undefined,
+        }
+
+        if (this.editingId) {
+          const idx = this.visits.findIndex(v => v.id === this.editingId)
+          if (idx !== -1) this.visits[idx] = entry
+        } else {
+          this.visits.push(entry)
+        }
+
+        await this.persist()
+        this.saving = false
+        this.closeModal()
+      },
+
+      async deleteRecord(v) {
+        const label = (v.date || '') + (v.type ? ' · ' + v.type : '')
+        if (!confirm(`確認刪除此往來紀錄？\n${label}\n此操作無法復原。`)) return
+        const idx = this.visits.findIndex(x => x.id === v.id)
+        if (idx !== -1) this.visits.splice(idx, 1)
+        await this.persist()
+      },
+
+      async persist() {
+        if (!this.supplier) return
+        try {
+          await fetch(`${API}/suppliers/${this.supplier.id}/visits`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+            body: JSON.stringify({ visits: this.visits })
+          })
+        } catch {}
+      },
+
+      logout() {
+        fetch('/api/auth/logout', { method:'POST', headers:{ Authorization:'Bearer '+(this.session.token||'') } }).catch(()=>{})
+        localStorage.removeItem('motrix_session'); location.href = 'login.html'
+      },
+    }
+  }
+  </script>
+  <script src="../static/notif.js"></script>
+  <script src="../static/sidebar.js"></script>
+</body>
+</html>

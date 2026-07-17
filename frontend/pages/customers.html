@@ -1,0 +1,1239 @@
+﻿<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="../static/favicon.png">
+  <title>客戶管理 — MOTRIX 營運管理系統</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600&display=swap" rel="stylesheet">
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    .page-main {
+      margin-left: var(--sidebar-w);
+      margin-top: var(--topbar-h);
+      padding: 28px 32px;
+      min-height: calc(100vh - var(--topbar-h));
+      background: var(--white);
+    }
+    /* 搜尋列 */
+    .search-bar {
+      display: flex; gap: 10px; align-items: center;
+      margin-bottom: 20px;
+    }
+    .search-input {
+      flex: 1; max-width: 320px;
+      padding: 8px 12px 8px 36px;
+      border: 1px solid var(--border-light);
+      border-radius: var(--radius);
+      font-size: 13px;
+      font-family: var(--font-zh);
+      background: #fff;
+      outline: none;
+      position: relative;
+    }
+    .search-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(37,99,235,.08); }
+    .search-wrap { position: relative; flex: 0 0 320px; }
+    .search-icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--text-dim); pointer-events: none; }
+    /* Table */
+    .data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .data-table th {
+      padding: 10px 12px; text-align: left;
+      font-size: 10px; font-family: Inter, sans-serif;
+      letter-spacing: .08em; text-transform: uppercase;
+      color: var(--text-dim); font-weight: 500;
+      background: #FAFAF8; border-bottom: 1px solid var(--border-light);
+      white-space: nowrap;
+    }
+    .data-table td { padding: 11px 12px; border-bottom: 1px solid #F0EEE9; vertical-align: middle; }
+    .data-table tr:last-child td { border-bottom: none; }
+    .data-table tr:hover td { background: #FDFCFA; }
+    .data-table tr:hover .row-actions { opacity: 1; }
+    .row-actions { opacity: 0; display: flex; gap: 6px; transition: opacity .12s; }
+    /* Buttons */
+    .btn { display:inline-flex; align-items:center; gap:6px; padding:8px 16px; border-radius:var(--radius); font-size:12px; font-family:var(--font-zh); cursor:pointer; border:none; transition:all .12s; font-weight:500; }
+    .btn-primary  { background:var(--accent);  color:#fff; }
+    .btn-primary:hover { background:#1D4ED8; }
+    .btn-ghost    { background:#fff; color:var(--text-secondary); border:1px solid var(--border-light); }
+    .btn-ghost:hover { border-color:#C8C4BC; }
+    .btn-danger   { background:var(--danger-light); color:var(--danger); border:1px solid #FECACA; }
+    .btn-danger:hover { background:#FEE2E2; }
+    .btn-sm { padding:5px 11px; font-size:11px; }
+    /* Modal */
+    .modal-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,.45);
+      z-index: 200; display: flex; align-items: flex-start; justify-content: center;
+      padding: 40px 24px; overflow-y: auto;
+    }
+    .modal-box {
+      background: #fff; border-radius: var(--radius-lg);
+      width: 100%; max-width: 680px;
+      box-shadow: var(--shadow-lg); flex-shrink: 0;
+    }
+    .modal-head {
+      display: flex; align-items: center; padding: 16px 22px;
+      border-bottom: 1px solid var(--border-light); gap: 10px;
+    }
+    .modal-head__title { font-size: 14px; font-weight: 600; flex: 1; }
+    .modal-close {
+      width: 28px; height: 28px; border-radius: 4px; border: none;
+      background: #F0EEE9; cursor: pointer; font-size: 16px;
+      color: var(--text-secondary); display: flex; align-items: center; justify-content: center;
+    }
+    .modal-close:hover { background: #FEF2F2; color: var(--danger); }
+    .modal-body { padding: 22px; }
+    .modal-foot { padding: 14px 22px; border-top: 1px solid var(--border-light); display: flex; justify-content: flex-end; gap: 8px; }
+    /* Form */
+    .form-section { margin-bottom: 22px; }
+    .form-section-title {
+      font-size: 10px; font-family: Inter, sans-serif;
+      letter-spacing: .1em; text-transform: uppercase;
+      color: var(--text-dim); font-weight: 600;
+      margin-bottom: 12px; padding-bottom: 8px;
+      border-bottom: 1px solid var(--border-light);
+    }
+    .form-grid { display: grid; gap: 12px; }
+    .form-grid-2 { grid-template-columns: 1fr 1fr; }
+    .form-grid-3 { grid-template-columns: 1fr 1fr 1fr; }
+    .form-group { display: flex; flex-direction: column; gap: 4px; }
+    .form-label { font-size: 10px; font-family: Inter, sans-serif; letter-spacing: .08em; text-transform: uppercase; color: var(--text-dim); font-weight: 500; }
+    .form-label .req { color: var(--danger); }
+    .form-input, .form-select, .form-textarea {
+      padding: 8px 11px; border: 1px solid var(--border-light);
+      border-radius: var(--radius); font-size: 13px;
+      font-family: var(--font-zh); color: var(--text-primary);
+      background: #fff; outline: none;
+      transition: border-color .12s, box-shadow .12s;
+    }
+    .form-input:focus, .form-select:focus, .form-textarea:focus {
+      border-color: var(--accent); box-shadow: 0 0 0 3px rgba(37,99,235,.08);
+    }
+    .form-textarea { resize: vertical; min-height: 64px; line-height: 1.6; }
+    .form-hint { font-size: 10px; color: var(--text-dim); margin-top: 2px; }
+    /* Detail pane */
+    .detail-pane {
+      position: fixed; right: 0; top: var(--topbar-h);
+      width: 360px; height: calc(100vh - var(--topbar-h));
+      background: #fff; border-left: 1px solid var(--border-light);
+      box-shadow: var(--shadow-lg); z-index: 100;
+      display: flex; flex-direction: column;
+      transform: translateX(100%);
+      transition: transform .22s ease;
+    }
+    .detail-pane.open { transform: translateX(0); }
+    .detail-head {
+      padding: 16px 20px; border-bottom: 1px solid var(--border-light);
+      display: flex; align-items: center; gap: 10px;
+    }
+    .detail-body { flex: 1; overflow-y: auto; padding: 16px 20px; }
+    .detail-close {
+      margin-left: auto; width: 28px; height: 28px;
+      border-radius: 4px; border: none; background: #F0EEE9;
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+    }
+    .detail-close:hover { background: var(--danger-light); color: var(--danger); }
+    .detail-row { display: flex; gap: 8px; margin-bottom: 10px; font-size: 12px; }
+    .detail-label { color: var(--text-dim); min-width: 80px; flex-shrink: 0; }
+    .detail-val { color: var(--text-primary); font-weight: 500; flex: 1; word-break: break-all; }
+    .detail-divider { border: none; border-top: 1px solid var(--border-light); margin: 14px 0; }
+    /* Tags */
+    .tag {
+      display: inline-flex; padding: 2px 8px; border-radius: 3px;
+      font-size: 11px; font-family: Inter, sans-serif;
+    }
+    .tag-active  { background: var(--success-light); color: var(--success); }
+    .tag-inactive{ background: #F3F4F6; color: #6B7280; }
+    .tag-vip     { background: #FEF3C7; color: #92400E; }
+    /* Empty state */
+    .empty-state { text-align: center; padding: 60px 20px; color: var(--text-dim); }
+    .empty-icon  { font-size: 40px; margin-bottom: 12px; opacity: .4; }
+    /* Contacts table */
+    .contacts-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .contacts-table th { padding: 6px 8px; background: #FAFAF8; border-bottom: 1px solid var(--border-light); text-align: left; font-size: 10px; color: var(--text-dim); font-family: Inter, sans-serif; }
+    .contacts-table td { padding: 7px 8px; border-bottom: 1px solid #F0EEE9; }
+    .contacts-table tr:last-child td { border-bottom: none; }
+    .add-contact-btn { width: 100%; margin-top: 6px; padding: 6px; border: 1px dashed var(--border-light); border-radius: var(--radius); background: #FAFAF8; color: var(--text-dim); font-size: 12px; cursor: pointer; transition: all .12s; text-align: center; }
+    .add-contact-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-light); }
+    /* Visit records */
+    .visit-card { background: #FAFAF8; border: 1px solid var(--border-light); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
+    .visit-field { margin-bottom: 6px; }
+    .visit-label { font-size: 9px; font-family: Inter,sans-serif; letter-spacing: .08em; text-transform: uppercase; color: var(--text-dim); font-weight: 600; margin-bottom: 3px; }
+    .visit-input { width: 100%; padding: 5px 8px; border: 1px solid var(--border-light); border-radius: 5px; font-size: 12px; font-family: var(--font-zh); color: var(--text-primary); background: #fff; outline: none; box-sizing: border-box; }
+    .visit-input:focus { border-color: var(--accent); }
+    .visit-textarea { width: 100%; padding: 5px 8px; border: 1px solid var(--border-light); border-radius: 5px; font-size: 12px; font-family: var(--font-zh); color: var(--text-primary); background: #fff; outline: none; resize: vertical; min-height: 44px; line-height: 1.5; box-sizing: border-box; }
+    .visit-textarea:focus { border-color: var(--accent); }
+    .visit-save-status { font-size: 10px; font-family: Inter,sans-serif; transition: opacity .3s; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  
+  /* -- Mobile RWD -- */
+  @media (max-width:767px) {
+    .detail-pane { width:100% !important; left:0 !important; right:0; }
+  }
+  </style>
+</head>
+
+<body x-data="customersPage()" x-init="init()">
+
+    <header id="app-topbar" class="topbar"></header>
+<div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+  <!-- SIDEBAR -->
+
+  <aside class="sidebar" id="app-sidebar"></aside>
+
+  <!-- MAIN -->
+  <div class="page-main" :class="{'pr-96': !!selectedId}" style="transition:padding-right .22s">
+
+    <!-- 頁頭 -->
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:20px">
+      <div>
+        <div style="font-size:11px;color:var(--text-dim);margin-bottom:4px">業務管理</div>
+        <h1 style="font-size:20px;font-weight:700">客戶管理</h1>
+        <p style="font-size:12px;color:var(--text-secondary);margin-top:4px" x-text="`共 ${filtered.length} 筆客戶資料`"></p>
+      </div>
+      <button class="btn btn-primary" @click="openCreate()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v16m8-8H4"/></svg>
+        新增客戶
+      </button>
+    </div>
+
+    <!-- 搜尋 + 篩選 -->
+    <div class="search-bar">
+      <div class="search-wrap">
+        <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+        <input class="search-input" type="text" x-model="search" placeholder="搜尋公司名稱、簡稱、統編、聯絡人…">
+      </div>
+      <select class="form-select" x-model="filterType" style="width:130px;font-size:12px">
+        <option value="">全部客戶</option>
+        <option value="一般">一般客戶</option>
+        <option value="VIP">VIP 客戶</option>
+        <option value="潛在">潛在客戶</option>
+        <option value="停用">已停用</option>
+      </select>
+      <select class="form-select" x-model="filterIndustry" style="width:130px;font-size:12px">
+        <option value="">全部產業</option>
+        <option>製造業</option>
+        <option>科技業</option>
+        <option>流通業</option>
+        <option>服務業</option>
+        <option>建設業</option>
+        <option>其他</option>
+      </select>
+      <input type="file" x-ref="importFile" accept=".xlsx,.xls,.csv" style="display:none" @change="handleImport($event)">
+      <div style="margin-left:auto;display:flex;gap:6px">
+        <button class="btn btn-ghost" @click="$refs.importFile.click()" style="font-size:11px">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+          匯入 Excel
+        </button>
+        <button class="btn btn-ghost" @click="exportExcel()" :disabled="!customers.length" style="font-size:11px">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+          匯出 Excel
+        </button>
+      </div>
+    </div>
+
+    <!-- 列表 -->
+    <div class="panel" style="padding:0;overflow:hidden">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th style="width:32px"></th>
+            <th>公司名稱</th>
+            <th>內部簡稱</th>
+            <th>統一編號</th>
+            <th>主要聯絡人</th>
+            <th>電話</th>
+            <th>產業</th>
+            <th>負責業務</th>
+            <th>累計報價</th>
+            <th>最後往來</th>
+            <th>狀態</th>
+            <th style="width:120px"></th>
+          </tr>
+        </thead>
+        <tbody>
+          <template x-for="c in filtered" :key="c.id">
+            <tr @click="selectCustomer(c)" style="cursor:pointer">
+              <td>
+                <div style="width:30px;height:30px;border-radius:50%;background:var(--black);color:var(--white);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700"
+                     x-text="(c.name||'?')[0]"></div>
+              </td>
+              <td>
+                <div style="font-weight:500" x-text="c.name"></div>
+                <div style="font-size:11px;color:var(--text-dim)" x-text="c.nameEn || ''"></div>
+              </td>
+              <td>
+                <template x-if="(c.tags&&c.tags.length) || c.alias">
+                  <div style="display:flex;flex-wrap:wrap;gap:3px">
+                    <template x-for="t in (c.tags&&c.tags.length ? c.tags : (c.alias?[c.alias]:[]))" :key="t">
+                      <span x-text="t" style="font-size:10px;background:#EFF6FF;color:#1D4ED8;padding:1px 6px;border-radius:3px;white-space:nowrap;font-family:var(--font-zh)"></span>
+                    </template>
+                  </div>
+                </template>
+                <span x-show="!(c.tags&&c.tags.length) && !c.alias" style="color:var(--text-dim)">—</span>
+              </td>
+              <td style="font-family:Inter,sans-serif;font-size:12px" x-text="c.taxId || '—'"></td>
+              <td>
+                <div x-text="c.contacts?.[0]?.name || '—'"></div>
+                <div style="font-size:11px;color:var(--text-dim)" x-text="c.contacts?.[0]?.title || ''"></div>
+              </td>
+              <td style="font-size:12px" x-text="c.contacts?.[0]?.phone || c.phone || '—'"></td>
+              <td>
+                <span style="font-size:12px;padding:2px 8px;border-radius:3px;background:#F3F4F6;color:#4B5563"
+                      x-text="c.industry || '—'"></span>
+              </td>
+              <td style="font-size:12px" x-text="c.ownerName || '—'"></td>
+              <td style="font-family:Inter,sans-serif;font-size:12px;text-align:right"
+                  x-text="c.quoteCount ? c.quoteCount + ' 份' : '—'"></td>
+              <td style="font-size:11px;color:var(--text-dim)" x-text="c.lastContact || '—'"></td>
+              <td>
+                <span class="tag"
+                      :class="c.type==='VIP' ? 'tag-vip' : c.active ? 'tag-active' : 'tag-inactive'"
+                      x-text="c.type==='VIP' ? '⭐ VIP' : c.active ? '往來中' : '停用'"></span>
+              </td>
+              <td>
+                <div class="row-actions">
+                  <button class="btn btn-ghost btn-sm" @click.stop="openEdit(c)">編輯</button>
+                  <a :href="'quotations.html?customer=' + c.id" class="btn btn-ghost btn-sm" @click.stop style="text-decoration:none">報價</a>
+                  <a :href="'customer-log.html?id=' + c.id" class="btn btn-ghost btn-sm" @click.stop style="text-decoration:none;display:inline-flex;align-items:center;gap:3px">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+                    日誌
+                  </a>
+                </div>
+              </td>
+            </tr>
+          </template>
+          <tr x-show="filtered.length === 0">
+            <td colspan="12" class="empty-state">
+              <div class="empty-icon">🏢</div>
+              <div>尚無客戶資料</div>
+              <button class="btn btn-primary" @click="openCreate()" style="margin-top:12px">新增第一筆客戶</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ══ 右側詳細面板 ══ -->
+  <div class="detail-pane" :class="{open: !!selectedId}">
+    <template x-if="selectedCustomer">
+      <div style="display:contents">
+        <div class="detail-head">
+          <div>
+            <div style="font-weight:600;font-size:14px" x-text="selectedCustomer.name"></div>
+            <div style="font-size:11px;color:var(--text-dim);margin-top:2px" x-text="selectedCustomer.taxId ? '統編 ' + selectedCustomer.taxId : ''"></div>
+          </div>
+          <button class="detail-close" @click="selectedId=null">×</button>
+        </div>
+        <div class="detail-body">
+
+          <!-- 基本 -->
+          <div style="font-size:10px;font-family:Inter,sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);font-weight:600;margin-bottom:10px">基本資訊</div>
+          <div class="detail-row"><span class="detail-label">公司名稱</span><span class="detail-val" x-text="selectedCustomer.name"></span></div>
+          <div class="detail-row" x-show="selectedCustomer.nameEn"><span class="detail-label">英文名稱</span><span class="detail-val" x-text="selectedCustomer.nameEn"></span></div>
+          <div class="detail-row" x-show="(selectedCustomer.tags&&selectedCustomer.tags.length) || selectedCustomer.alias">
+            <span class="detail-label">內部標籤</span>
+            <div style="display:flex;flex-wrap:wrap;gap:4px">
+              <template x-for="t in (selectedCustomer.tags&&selectedCustomer.tags.length ? selectedCustomer.tags : (selectedCustomer.alias?[selectedCustomer.alias]:[]))" :key="t">
+                <span x-text="t" style="font-size:11px;background:#EFF6FF;color:#1D4ED8;padding:2px 8px;border-radius:3px;font-family:var(--font-zh)"></span>
+              </template>
+            </div>
+          </div>
+          <div class="detail-row"><span class="detail-label">統一編號</span><span class="detail-val" x-text="selectedCustomer.taxId || '—'"></span></div>
+          <div class="detail-row"><span class="detail-label">產業別</span><span class="detail-val" x-text="selectedCustomer.industry || '—'"></span></div>
+          <div class="detail-row"><span class="detail-label">客戶類型</span><span class="detail-val" x-text="selectedCustomer.type || '一般'"></span></div>
+          <div class="detail-row"><span class="detail-label">負責業務</span><span class="detail-val" x-text="selectedCustomer.ownerName || '—'"></span></div>
+
+          <hr class="detail-divider">
+          <div style="font-size:10px;font-family:Inter,sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);font-weight:600;margin-bottom:10px">聯絡資訊</div>
+          <div class="detail-row"><span class="detail-label">公司電話</span><span class="detail-val" x-text="selectedCustomer.phone || '—'"></span></div>
+          <div class="detail-row"><span class="detail-label">傳真</span><span class="detail-val" x-text="selectedCustomer.fax || '—'"></span></div>
+          <div class="detail-row"><span class="detail-label">官方 Email</span><span class="detail-val" x-text="selectedCustomer.email || '—'"></span></div>
+          <div class="detail-row"><span class="detail-label">網站</span><span class="detail-val" x-text="selectedCustomer.website || '—'"></span></div>
+          <div class="detail-row"><span class="detail-label">發票地址</span><span class="detail-val" x-text="selectedCustomer.invoiceAddress || '—'"></span></div>
+          <div class="detail-row"><span class="detail-label">送貨地址</span><span class="detail-val" x-text="selectedCustomer.deliveryAddress || '—'"></span></div>
+
+          <template x-if="selectedCustomer.contacts?.length > 0">
+            <div>
+              <hr class="detail-divider">
+              <div style="font-size:10px;font-family:Inter,sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);font-weight:600;margin-bottom:10px">聯絡人</div>
+              <table class="contacts-table">
+                <thead><tr><th>姓名</th><th>職稱</th><th>電話</th><th>Email</th></tr></thead>
+                <tbody>
+                  <template x-for="ct in selectedCustomer.contacts" :key="ct.id">
+                    <tr>
+                      <td x-text="ct.name"></td>
+                      <td style="color:var(--text-dim)" x-text="ct.title || '—'"></td>
+                      <td x-text="ct.phone || '—'"></td>
+                      <td style="font-size:11px" x-text="ct.email || '—'"></td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+          </template>
+
+          <template x-if="selectedCustomer.notes">
+            <div>
+              <hr class="detail-divider">
+              <div style="font-size:10px;font-family:Inter,sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);font-weight:600;margin-bottom:6px">備註</div>
+              <div style="font-size:12px;color:var(--text-secondary);line-height:1.7" x-text="selectedCustomer.notes"></div>
+            </div>
+          </template>
+
+          <!-- 拜訪紀錄 (摘要) -->
+          <hr class="detail-divider">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+            <div style="font-size:10px;font-family:Inter,sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);font-weight:600">
+              拜訪紀錄
+              <span style="font-weight:400;text-transform:none;letter-spacing:0;margin-left:4px;color:var(--text-dim)"
+                    x-text="(selectedCustomer.visits||[]).length ? '共 ' + (selectedCustomer.visits||[]).length + ' 筆' : ''"></span>
+            </div>
+            <a :href="'customer-log.html?id=' + selectedCustomer.id"
+               style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--accent);text-decoration:none;font-family:var(--font-zh)">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+              管理日誌
+            </a>
+          </div>
+          <template x-if="(selectedCustomer.visits||[]).length === 0">
+            <a :href="'customer-log.html?id=' + selectedCustomer.id"
+               style="display:block;text-align:center;padding:16px;border:1px dashed var(--border-light);border-radius:8px;font-size:12px;color:var(--text-dim);text-decoration:none;transition:all .12s"
+               @mouseenter="$el.style.borderColor='var(--accent)';$el.style.color='var(--accent)'"
+               @mouseleave="$el.style.borderColor='var(--border-light)';$el.style.color='var(--text-dim)'">
+              尚無拜訪紀錄 · 點此開始記錄
+            </a>
+          </template>
+          <template x-for="(v, $vi) in (selectedCustomer.visits||[]).slice().sort((a,b)=>(b.date||b.visitDate||'')>(a.date||a.visitDate||'')?1:-1).slice(0,3)" :key="v.id ?? (v.visitDate||v.date||'') + '_' + $vi">
+            <div style="padding:9px 11px;border:1px solid var(--border-light);border-radius:7px;margin-bottom:6px;font-size:12px;line-height:1.5">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
+                <span style="font-weight:600;color:var(--text-primary);font-family:Inter,sans-serif" x-text="(v.date||v.visitDate||'').slice(0,10)"></span>
+                <span style="font-size:10px;padding:1px 7px;border-radius:3px;background:#DBEAFE;color:#1E40AF" x-text="v.type||'現場拜訪'"></span>
+              </div>
+              <div style="color:var(--text-secondary);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden" x-text="v.content||''"></div>
+              <template x-if="v.attendees?.length || v.visitPeople">
+                <div style="margin-top:4px;font-size:10px;color:var(--text-dim)"
+                     x-text="'人員：' + (v.attendees?.join('、') || v.visitPeople || '')"></div>
+              </template>
+            </div>
+          </template>
+          <template x-if="(selectedCustomer.visits||[]).length > 3">
+            <a :href="'customer-log.html?id=' + selectedCustomer.id"
+               style="display:block;text-align:center;font-size:11px;color:var(--accent);text-decoration:none;padding:6px 0">
+              查看全部 <span x-text="(selectedCustomer.visits||[]).length"></span> 筆紀錄 →
+            </a>
+          </template>
+
+          <hr class="detail-divider">
+          <div style="display:flex;gap:8px;margin-top:4px">
+            <button class="btn btn-ghost btn-sm" style="flex:1" @click="openEdit(selectedCustomer)">編輯資料</button>
+            <a :href="'customer-log.html?id=' + selectedCustomer.id"
+               class="btn btn-ghost btn-sm" style="flex:1;text-decoration:none;justify-content:center">客戶日誌</a>
+            <a :href="'quotations.html?customer=' + selectedCustomer.id"
+               class="btn btn-primary btn-sm" style="flex:1;text-decoration:none;justify-content:center">查看報價單</a>
+          </div>
+          <div style="margin-top:6px">
+            <button class="btn btn-ghost btn-sm" style="width:100%;color:#7C3AED;border-color:#DDD6FE" @click="copyToSupplier(selectedCustomer)">
+              ↔ 複製至供應商管理
+            </button>
+          </div>
+        </div>
+      </div>
+    </template>
+  </div>
+
+  <!-- ══ 匯入結果 Modal ══ -->
+  <div class="modal-overlay" x-show="showImportModal" x-transition style="display:none">
+    <div class="modal-box" style="max-width:460px">
+      <div class="modal-head">
+        <span class="modal-head__title">匯入 Excel</span>
+        <button class="modal-close" @click="showImportModal=false" :disabled="importing">×</button>
+      </div>
+      <div class="modal-body" style="padding:28px 24px">
+        <template x-if="importing">
+          <div style="text-align:center;padding:20px 0">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#2563EB" stroke-width="2" style="animation:spin .8s linear infinite;margin-bottom:12px"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>
+            <div style="font-size:13px;color:var(--text-secondary)">匯入中，請稍候…</div>
+          </div>
+        </template>
+        <template x-if="!importing && importResults">
+          <div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px">
+              <div style="text-align:center;padding:14px;background:#F0FDF4;border-radius:var(--radius)">
+                <div style="font-size:28px;font-weight:700;color:#15803D;font-family:Inter,sans-serif" x-text="importResults.created"></div>
+                <div style="font-size:11px;color:#15803D;margin-top:4px">新增</div>
+              </div>
+              <div style="text-align:center;padding:14px;background:#EFF6FF;border-radius:var(--radius)">
+                <div style="font-size:28px;font-weight:700;color:#1D4ED8;font-family:Inter,sans-serif" x-text="importResults.updated"></div>
+                <div style="font-size:11px;color:#1D4ED8;margin-top:4px">更新</div>
+              </div>
+              <div style="text-align:center;padding:14px;background:#FEF2F2;border-radius:var(--radius)">
+                <div style="font-size:28px;font-weight:700;color:#DC2626;font-family:Inter,sans-serif" x-text="importResults.failed"></div>
+                <div style="font-size:11px;color:#DC2626;margin-top:4px">失敗</div>
+              </div>
+            </div>
+            <template x-if="importResults.errors.length > 0">
+              <div>
+                <div style="font-size:11px;font-weight:600;color:var(--text-secondary);margin-bottom:6px">錯誤明細</div>
+                <div style="max-height:150px;overflow-y:auto;background:#FEF2F2;border-radius:var(--radius);padding:10px 12px">
+                  <template x-for="(e, ei) in importResults.errors" :key="ei">
+                    <div style="font-size:11px;color:#DC2626;margin-bottom:4px;font-family:var(--font-zh)" x-text="e"></div>
+                  </template>
+                </div>
+              </div>
+            </template>
+          </div>
+        </template>
+      </div>
+      <div class="modal-foot">
+        <div style="font-size:11px;color:var(--text-dim);flex:1">
+          支援格式：.xlsx / .xls / .csv<br>
+          必填欄位：<strong>公司名稱</strong>；統編相符則自動更新
+        </div>
+        <button class="btn btn-primary" @click="showImportModal=false" :disabled="importing">確認</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ 新增 / 編輯 Modal ══ -->
+  <div class="modal-overlay" x-show="showModal" x-transition style="display:none" @click.self="closeModal()">
+    <div class="modal-box">
+      <div class="modal-head">
+        <span class="modal-head__title" x-text="editingId ? '編輯客戶' : '新增客戶'"></span>
+        <button class="modal-close" @click="closeModal()">×</button>
+      </div>
+      <div class="modal-body" @input="isDirty = true" @change="isDirty = true">
+
+        <!-- 基本資訊 -->
+        <div class="form-section">
+          <div class="form-section-title">基本資訊</div>
+
+          <!-- 政府資料快查 -->
+          <div style="background:#F8F7F4;border:1px solid var(--border-light);border-radius:var(--radius);padding:14px 16px;margin-bottom:14px">
+            <div style="font-size:10px;font-family:Inter,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);font-weight:600;margin-bottom:12px">
+              政府登記資料查詢
+              <span style="font-weight:400;text-transform:none;letter-spacing:0;margin-left:6px;color:var(--text-dim)">— 查到後自動帶入欄位，仍可手動修改</span>
+            </div>
+
+            <div style="display:flex;gap:6px;align-items:flex-end">
+              <div style="flex:1;max-width:280px">
+                <div style="font-size:10px;color:var(--text-dim);margin-bottom:5px;font-family:Inter,sans-serif">統一編號查詢</div>
+                <input class="form-input" type="text" x-model="taxIdSearch"
+                       placeholder="輸入 8 碼統編" maxlength="8"
+                       style="font-family:Inter,sans-serif;letter-spacing:.08em;width:100%"
+                       @keydown.enter.prevent="lookupByTaxId()"
+                       @input="if(taxIdSearch.replace(/\D/g,'').length===8){ taxIdSearch=taxIdSearch.replace(/\D/g,''); lookupByTaxId() }">
+                <div style="font-size:10px;color:var(--text-dim);margin-top:4px">輸滿 8 碼自動查，或按查詢</div>
+              </div>
+              <button class="btn btn-ghost btn-sm" @click="lookupByTaxId()"
+                      :disabled="lookingUp || taxIdSearch.replace(/\D/g,'').length < 8"
+                      style="flex-shrink:0">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                     :style="lookingUp ? 'animation:spin .6s linear infinite' : ''">
+                  <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+                </svg>
+                查詢
+              </button>
+            </div>
+
+            <!-- 查詢結果訊息 -->
+            <div x-show="lookupMsg" style="margin-top:10px;padding:7px 10px;border-radius:4px;font-size:12px;display:flex;align-items:center;gap:6px"
+                 :style="lookupOk ? 'background:#F0FDF4;color:#15803D' : 'background:#FEF2F2;color:#DC2626'">
+              <span x-text="lookupOk ? '✓' : '✗'"></span>
+              <span x-text="lookupMsg"></span>
+            </div>
+          </div>
+
+          <div class="form-grid form-grid-2" style="margin-bottom:12px">
+            <div class="form-group">
+              <label class="form-label">公司名稱 <span class="req">*</span></label>
+              <input class="form-input" type="text" x-model="form.name" placeholder="全名（中）">
+            </div>
+            <div class="form-group">
+              <label class="form-label">英文名稱</label>
+              <input class="form-input" type="text" x-model="form.nameEn" placeholder="Company Name (EN)">
+            </div>
+          </div>
+
+          <!-- 內部標籤 -->
+          <div class="form-group" style="margin-bottom:12px">
+            <label class="form-label">內部標籤</label>
+            <div style="display:flex;flex-wrap:wrap;gap:5px;padding:6px 8px;border:1px solid var(--border-light);border-radius:var(--radius);min-height:36px;background:#fff;cursor:text;align-items:center"
+                 @click="$refs.tagInputC.focus()">
+              <template x-for="(tag, ti) in (form.tags||[])" :key="ti">
+                <span style="background:#DBEAFE;color:#1E40AF;padding:2px 8px;border-radius:4px;font-size:12px;display:inline-flex;align-items:center;gap:4px;font-family:var(--font-zh)">
+                  <span x-text="tag"></span>
+                  <button type="button" @click.stop="form.tags.splice(ti,1)"
+                          style="background:none;border:none;cursor:pointer;color:#1E40AF;padding:0;font-size:14px;line-height:1;opacity:.7">×</button>
+                </span>
+              </template>
+              <input x-ref="tagInputC" type="text" x-model="tagInput"
+                     :placeholder="(form.tags||[]).length ? '' : '點選下方標籤，或輸入後 Enter 新增…'"
+                     style="border:none;outline:none;font-size:12px;font-family:var(--font-zh);min-width:100px;flex:1;padding:2px 4px;background:transparent"
+                     @keydown.enter.prevent="addTagFromInput()"
+                     @keydown.backspace="if(!tagInput && (form.tags||[]).length) form.tags.pop()">
+            </div>
+            <!-- 預設標籤快選 -->
+            <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px;align-items:center">
+              <template x-for="preset in tagPresets" :key="preset">
+                <button type="button" @click="toggleTag(preset)"
+                        :style="(form.tags||[]).includes(preset)
+                          ? 'background:#DBEAFE;color:#1E40AF;border-color:#93C5FD;font-weight:600'
+                          : 'background:#F3F4F6;color:#4B5563;border-color:transparent'"
+                        style="padding:3px 10px;border-radius:4px;font-size:11px;font-family:var(--font-zh);cursor:pointer;border:1px solid;transition:all .12s;display:inline-flex;align-items:center;gap:3px">
+                  <span x-show="(form.tags||[]).includes(preset)" style="font-size:10px;margin-right:1px">✓</span>
+                  <span x-text="preset"></span>
+                </button>
+              </template>
+              <span x-show="tagPresets.length===0" style="font-size:11px;color:var(--text-dim)">（尚無預設標籤）</span>
+              <button type="button" @click="showAddPreset=!showAddPreset"
+                      :style="showAddPreset ? 'border-color:var(--accent);color:var(--accent)' : ''"
+                      style="padding:3px 10px;border-radius:4px;font-size:11px;font-family:var(--font-zh);cursor:pointer;border:1px dashed var(--border-light);background:transparent;color:var(--text-dim);transition:all .12s;margin-left:2px">
+                ⚙ 管理標籤
+              </button>
+            </div>
+            <!-- 標籤管理面板 -->
+            <div x-show="showAddPreset" style="margin-top:8px;padding:12px;background:#F8F7F4;border:1px solid var(--border-light);border-radius:var(--radius)">
+              <div style="font-size:10px;font-family:Inter,sans-serif;color:var(--text-dim);font-weight:600;letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px">管理預設標籤</div>
+              <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px">
+                <template x-for="(preset, pi) in tagPresets" :key="preset">
+                  <span style="background:#fff;border:1px solid var(--border-light);padding:3px 8px;border-radius:4px;font-size:12px;display:inline-flex;align-items:center;gap:5px;font-family:var(--font-zh)">
+                    <span x-text="preset"></span>
+                    <button type="button" @click="removePreset(pi)"
+                            style="background:none;border:none;cursor:pointer;color:var(--danger);padding:0;font-size:14px;line-height:1;opacity:.8">×</button>
+                  </span>
+                </template>
+                <span x-show="tagPresets.length===0" style="font-size:11px;color:var(--text-dim)">尚無預設標籤，請在下方新增</span>
+              </div>
+              <div style="display:flex;gap:6px">
+                <input type="text" x-model="newPreset" placeholder="輸入新標籤名稱…"
+                       style="flex:1;padding:6px 10px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;font-family:var(--font-zh);outline:none"
+                       @keydown.enter.prevent="addPreset()">
+                <button type="button" class="btn btn-ghost btn-sm" @click="addPreset()">新增</button>
+              </div>
+            </div>
+          </div>
+          <div class="form-grid form-grid-3" style="margin-bottom:12px">
+            <div class="form-group">
+              <label class="form-label">統一編號</label>
+              <input class="form-input" type="text" x-model="form.taxId" placeholder="00000000" maxlength="8"
+                     style="font-family:Inter,sans-serif;letter-spacing:.06em">
+            </div>
+            <div class="form-group">
+              <label class="form-label">產業別</label>
+              <select class="form-select" x-model="form.industry">
+                <option value="">請選擇</option>
+                <option>製造業</option><option>科技業</option><option>流通業</option>
+                <option>服務業</option><option>建設業</option><option>其他</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">客戶類型</label>
+              <select class="form-select" x-model="form.type">
+                <option value="一般">一般客戶</option>
+                <option value="VIP">VIP 客戶</option>
+                <option value="潛在">潛在客戶</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-grid form-grid-2">
+            <div class="form-group">
+              <label class="form-label">負責業務</label>
+              <select class="form-select" x-model="form.ownerName">
+                <template x-for="u in salesUsers" :key="u.username">
+                  <option :value="u.displayName" x-text="u.displayName"></option>
+                </template>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">付款條件</label>
+              <select class="form-select" x-model="form.paymentMethod">
+                <option>月結 30 天</option>
+                <option>月結 60 天</option>
+                <option>貨到付款</option>
+                <option>預付</option>
+                <option>分期（依報價）</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- 聯絡資訊 -->
+        <div class="form-section">
+          <div class="form-section-title">聯絡資訊</div>
+          <div class="form-grid form-grid-2" style="margin-bottom:12px">
+            <div class="form-group">
+              <label class="form-label">公司電話</label>
+              <input class="form-input" type="text" x-model="form.phone" placeholder="04-XXXX-XXXX">
+            </div>
+            <div class="form-group">
+              <label class="form-label">傳真</label>
+              <input class="form-input" type="text" x-model="form.fax" placeholder="04-XXXX-XXXX">
+            </div>
+          </div>
+          <div class="form-grid form-grid-2" style="margin-bottom:12px">
+            <div class="form-group">
+              <label class="form-label">公司 Email</label>
+              <input class="form-input" type="email" x-model="form.email" placeholder="info@company.com">
+            </div>
+            <div class="form-group">
+              <label class="form-label">官方網站</label>
+              <input class="form-input" type="url" x-model="form.website" placeholder="https://...">
+            </div>
+          </div>
+          <div class="form-group" style="margin-bottom:12px">
+            <label class="form-label">發票地址</label>
+            <input class="form-input" type="text" x-model="form.invoiceAddress" placeholder="縣市區路段號樓">
+          </div>
+          <div class="form-group">
+            <label class="form-label">送貨地址 <span style="color:var(--text-dim);font-weight:400">（若與發票地址不同）</span></label>
+            <input class="form-input" type="text" x-model="form.deliveryAddress" placeholder="縣市區路段號樓">
+          </div>
+        </div>
+
+        <!-- 聯絡人 -->
+        <div class="form-section">
+          <div class="form-section-title" style="display:flex;justify-content:space-between;align-items:center">
+            聯絡人
+            <button class="btn btn-ghost btn-sm" @click="addContact()">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v16m8-8H4"/></svg>
+              新增聯絡人
+            </button>
+          </div>
+          <template x-for="(ct, idx) in form.contacts" :key="ct.id">
+            <div style="background:#FAFAF8;border:1px solid var(--border-light);border-radius:var(--radius);padding:12px;margin-bottom:10px">
+              <div style="display:flex;align-items:center;margin-bottom:10px">
+                <span style="font-size:11px;color:var(--text-dim);font-family:Inter,sans-serif" x-text="'聯絡人 ' + (idx+1)"></span>
+                <button class="btn btn-danger btn-sm" style="margin-left:auto;padding:3px 8px" @click="form.contacts.splice(idx,1)">移除</button>
+              </div>
+              <div class="form-grid form-grid-2" style="gap:10px">
+                <div class="form-group">
+                  <label class="form-label">姓名</label>
+                  <input class="form-input" type="text" x-model="ct.name" placeholder="姓名">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">職稱</label>
+                  <input class="form-input" type="text" x-model="ct.title" placeholder="職稱">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">電話 / 分機</label>
+                  <input class="form-input" type="text" x-model="ct.phone" placeholder="04-XXXX / 分機">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Email</label>
+                  <input class="form-input" type="email" x-model="ct.email" placeholder="xxx@company.com">
+                </div>
+              </div>
+            </div>
+          </template>
+        </div>
+
+        <!-- 備註 -->
+        <div class="form-group">
+          <label class="form-label">備註 / 特殊條件</label>
+          <textarea class="form-textarea" rows="3" x-model="form.notes" placeholder="付款習慣、往來注意事項…"></textarea>
+        </div>
+
+        <div class="form-hint" style="color:var(--danger);margin-top:6px" x-show="formError" x-text="formError"></div>
+      </div>
+      <div class="modal-foot">
+        <template x-if="editingId">
+          <button class="btn btn-danger" @click="deleteCustomer()" style="margin-right:auto">刪除</button>
+        </template>
+        <div style="display:flex;gap:8px;margin-left:auto">
+          <button class="btn btn-ghost" @click="closeModal()">取消</button>
+          <button class="btn btn-primary" @click="saveCustomer()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 13l4 4L19 7"/></svg>
+            <span x-text="editingId ? '儲存變更' : '建立客戶'"></span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  const API  = '/api'
+
+  /* 帶 timeout 的 fetch（相容舊版瀏覽器）*/
+  async function fetchT(url, opts = {}, ms = 10000) {
+    const ctrl  = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), ms)
+    try {
+      const r = await fetch(url, { ...opts, signal: ctrl.signal })
+      clearTimeout(timer)
+      return r
+    } catch(e) { clearTimeout(timer); throw e }
+  }
+
+  function customersPage() {
+    return {
+      session: {},
+      backendOnline: false,
+      customers: [],
+      search: '',
+      filterType: '',
+      filterIndustry: '',
+      showModal: false,
+      isDirty: false,
+      editingId: null,
+      selectedId: null,
+      formError: '',
+      salesUsers: [],
+      form: {},
+      // 統編 / 公司名查詢
+      taxIdSearch: '',
+      nameSearch: '',
+      suggestions: [],
+      showSuggest: false,
+      lookingUp: false,
+      lookupTarget: '',   // 'taxId' | 'name'
+      lookupMsg: '',
+      lookupOk: false,
+      _nameDebounce: null,
+      tagInput: '',
+      tagPresets: [],
+      showAddPreset: false,
+      newPreset: '',
+      showImportModal: false,
+      importing: false,
+      importResults: null,
+
+      /* ── 統編查詢（走後端 Proxy，避免 CORS）── */
+      async lookupByTaxId() {
+        const id = this.taxIdSearch.replace(/\D/g, '')
+        if (!/^\d{8}$/.test(id)) { this.lookupMsg = '請輸入完整 8 碼統編'; this.lookupOk = false; return }
+        this.lookingUp = true; this.lookupTarget = 'taxId'; this.lookupMsg = ''; this.lookupOk = false
+        this.suggestions = []; this.showSuggest = false
+        try {
+          const r = await fetchT(`${API}/company/tax/${id}`,
+            { headers: { Authorization: 'Bearer ' + this.session.token } }, 12000)
+          if (r.ok) {
+            const d = await r.json()
+            this.applyGovDataNorm(d)
+          } else if (r.status === 404) {
+            this.lookupMsg = '查無此統編登記資料，請手動輸入'; this.lookupOk = false
+          } else if (r.status === 401) {
+            this.logout()
+          } else {
+            this.lookupMsg = '政府資料庫查詢失敗，請稍後再試或手動輸入'; this.lookupOk = false
+          }
+        } catch(e) {
+          this.lookupMsg = '查詢逾時，請確認網路連線'; this.lookupOk = false
+        }
+        this.lookingUp = false
+      },
+
+      /* ── 公司名稱模糊查詢 ── */
+      debounceNameSearch() {
+        clearTimeout(this._nameDebounce)
+        this._nameDebounce = setTimeout(() => {
+          if (this.nameSearch.trim().length >= 2) this.lookupByName()
+        }, 650)
+      },
+
+      async lookupByName() {
+        const kw = this.nameSearch.trim()
+        if (!kw || kw.length < 2) { this.suggestions = []; this.showSuggest = false; return }
+        this.lookingUp = true; this.lookupTarget = 'name'; this.lookupMsg = ''; this.showSuggest = false
+        try {
+          const r = await fetchT(`${API}/company/search?q=${encodeURIComponent(kw)}`,
+            { headers: { Authorization: 'Bearer ' + this.session.token } }, 15000)
+          if (r.ok) {
+            const rows = await r.json()
+            if (rows.length > 0) {
+              this.suggestions = rows.map(d => ({ ...d, id: d.taxId || String(Math.random()), _norm: true }))
+              this.showSuggest = true
+              this.lookupMsg = `找到 ${rows.length} 筆，點選帶入`
+              this.lookupOk = true
+            } else {
+              this.suggestions = []; this.showSuggest = false
+              this.lookupMsg = '查無相符公司，請試試更短的關鍵字或直接輸入'; this.lookupOk = false
+            }
+          } else if (r.status === 401) {
+            this.logout()
+          } else {
+            this.lookupMsg = '政府資料庫查詢失敗，請稍後再試'; this.lookupOk = false
+          }
+        } catch(e) {
+          this.lookupMsg = '查詢逾時，請確認網路連線'; this.lookupOk = false
+        }
+        this.lookingUp = false
+      },
+
+      /* 帶入已正規化的資料（後端 Proxy 格式：{name, taxId, findbizUrl}）*/
+      applyGovDataNorm(d) {
+        const name = d.name || ''
+        this.form.name   = name
+        this.form.taxId  = d.taxId || ''
+        this.taxIdSearch = this.form.taxId
+        if (!this.form.industry && name) {
+          if (/科技|電子|半導體|軟體|資訊|網路/.test(name)) this.form.industry = '科技業'
+          else if (/製造|機械|模具|五金|鑄造|精密/.test(name)) this.form.industry = '製造業'
+          else if (/建設|開發|營造|建築/.test(name)) this.form.industry = '建設業'
+          else if (/流通|物流|倉儲|貿易|進出口/.test(name)) this.form.industry = '流通業'
+        }
+        this.lookupMsg = `已帶入：${name}`
+        this.lookupOk  = true
+      },
+
+      applySuggestion(s) {
+        this.applyGovDataNorm(s)
+        this.showSuggest = false
+        this.nameSearch  = ''
+      },
+
+      exportExcel() {
+        const rows = this.customers.map(c => ({
+          '公司名稱': c.name||'', '英文名稱': c.nameEn||'', '統一編號': c.taxId||'',
+          '電話': c.phone||'', '傳真': c.fax||'', 'Email': c.email||'', '網站': c.website||'',
+          '地址': c.invoiceAddress||'', '送貨地址': c.deliveryAddress||'',
+          '產業別': c.industry||'', '客戶類型': c.type||'一般', '負責業務': c.ownerName||'',
+          '付款條件': c.paymentMethod||'',
+          '內部標籤': (c.tags||[]).join(',') || (c.alias||''),
+          '主要聯絡人': c.contacts?.[0]?.name||'', '聯絡人職稱': c.contacts?.[0]?.title||'',
+          '聯絡人電話': c.contacts?.[0]?.phone||'', '聯絡人Email': c.contacts?.[0]?.email||'',
+          '備註': c.notes||''
+        }))
+        const ws = XLSX.utils.json_to_sheet(rows)
+        ws['!cols'] = [20,16,10,14,14,22,22,24,22,10,10,10,14,18,10,10,14,22,20].map(w=>({wch:w}))
+        const wb = XLSX.utils.book_new()
+        XLSX.utils.book_append_sheet(wb, ws, '客戶')
+        XLSX.writeFile(wb, `MOTRIX_客戶_${new Date().toISOString().slice(0,10)}.xlsx`)
+      },
+
+      async handleImport(event) {
+        const file = event.target.files[0]
+        if (!file) return
+        event.target.value = ''
+        this.importing = true; this.showImportModal = true; this.importResults = null
+        const results = { created: 0, updated: 0, failed: 0, errors: [] }
+        try {
+          const wb = XLSX.read(await file.arrayBuffer())
+          const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '' })
+          for (let i = 0; i < rows.length; i++) {
+            try {
+              const obj = this._parseCustomerRow(rows[i])
+              if (!obj.name) { results.failed++; results.errors.push(`第 ${i+2} 行：公司名稱不可空白`); continue }
+              const match = this.customers.find(c => (obj.taxId && c.taxId && c.taxId===obj.taxId) || c.name===obj.name)
+              const { name, taxId, phone, ...dataFields } = obj
+              const body = { name, tax_id: taxId||'', phone: phone||'', data: dataFields }
+              const r = await fetch(match ? `${API}/customers/${match.id}` : `${API}/customers`, {
+                method: match ? 'PUT' : 'POST',
+                headers: { 'Content-Type':'application/json', Authorization:`Bearer ${this.session.token}` },
+                body: JSON.stringify(body)
+              })
+              if (r.ok) { match ? results.updated++ : results.created++ }
+              else { results.failed++; results.errors.push(`${obj.name}：${match?'更新':'新增'}失敗 (${r.status})`) }
+            } catch(e) { results.failed++; results.errors.push(`第 ${i+2} 行：${e.message}`) }
+          }
+          const res = await fetch(`${API}/customers`, { headers: { Authorization:`Bearer ${this.session.token}` } })
+          if (res.ok) this.customers = await res.json()
+        } catch(e) { results.failed++; results.errors.push('檔案解析失敗：' + e.message) }
+        this.importResults = results; this.importing = false
+      },
+
+      _parseCustomerRow(row) {
+        const n = {}
+        for (const [k, v] of Object.entries(row)) n[k.trim()] = String(v ?? '').trim()
+        const tags = n['內部標籤'] ? n['內部標籤'].split(/[,，、]/).map(t=>t.trim()).filter(Boolean) : []
+        const ct = {}
+        if (n['主要聯絡人']) { ct.id=Date.now(); ct.name=n['主要聯絡人']; ct.title=n['聯絡人職稱']||''; ct.phone=n['聯絡人電話']||''; ct.email=n['聯絡人Email']||n['聯絡人email']||'' }
+        return {
+          name: n['公司名稱']||n['名稱']||'', nameEn: n['英文名稱']||'',
+          taxId: (n['統一編號']||n['統編']||'').replace(/\D/g,''),
+          phone: n['電話']||'', fax: n['傳真']||'', email: n['Email']||n['email']||'',
+          website: n['網站']||'', invoiceAddress: n['地址']||n['發票地址']||'',
+          deliveryAddress: n['送貨地址']||'', industry: n['產業別']||'',
+          type: n['客戶類型']||'一般', ownerName: n['負責業務']||'',
+          paymentMethod: n['付款條件']||'', notes: n['備註']||'',
+          tags, contacts: ct.name ? [ct] : [], active: true
+        }
+      },
+
+      loadTagPresets() {
+        try { this.tagPresets = JSON.parse(localStorage.getItem('motrix_tag_presets') || '[]') } catch { this.tagPresets = [] }
+      },
+      saveTagPresets() {
+        localStorage.setItem('motrix_tag_presets', JSON.stringify(this.tagPresets))
+      },
+      toggleTag(tag) {
+        if (!Array.isArray(this.form.tags)) this.form.tags = []
+        const idx = this.form.tags.indexOf(tag)
+        if (idx >= 0) this.form.tags.splice(idx, 1)
+        else this.form.tags.push(tag)
+      },
+      addTagFromInput() {
+        const t = this.tagInput.trim()
+        if (!Array.isArray(this.form.tags)) this.form.tags = []
+        if (t && !this.form.tags.includes(t)) this.form.tags.push(t)
+        this.tagInput = ''
+      },
+      addPreset() {
+        const t = this.newPreset.trim()
+        if (t && !this.tagPresets.includes(t)) { this.tagPresets.push(t); this.saveTagPresets() }
+        this.newPreset = ''
+      },
+      removePreset(pi) {
+        this.tagPresets.splice(pi, 1); this.saveTagPresets()
+      },
+
+      get filtered() {
+        let list = this.customers
+        const q  = this.search.toLowerCase().trim()
+        if (q) list = list.filter(c =>
+          (c.name||'').toLowerCase().includes(q) ||
+          (c.taxId||'').includes(q) ||
+          (c.alias||'').toLowerCase().includes(q) ||
+          (c.tags||[]).some(t => t.toLowerCase().includes(q)) ||
+          (c.contacts||[]).some(ct => (ct.name||'').toLowerCase().includes(q))
+        )
+        if (this.filterType) list = list.filter(c => c.type === this.filterType || (!c.active && this.filterType === '停用'))
+        if (this.filterIndustry) list = list.filter(c => c.industry === this.filterIndustry)
+        return list
+      },
+
+      get selectedCustomer() {
+        return this.customers.find(c => c.id === this.selectedId) || null
+      },
+
+      selectCustomer(c) { this.selectedId = c.id },
+
+      blankForm() {
+        /* 優先用 API 拉回的 salesUsers 找自己的顯示名稱，避免 session 快取過時 */
+        const me = this.salesUsers.find(u => u.username === this.session.username)
+        return {
+          name:'', nameEn:'', tags:[], taxId:'', industry:'', type:'一般',
+          ownerName: me?.displayName || this.session.displayName || '',
+          paymentMethod:'月結 30 天',
+          phone:'', fax:'', email:'', website:'',
+          invoiceAddress:'', deliveryAddress:'',
+          contacts:[], notes:'', active: true
+        }
+      },
+
+      openCreate() {
+        this.editingId     = null
+        this.form          = this.blankForm()
+        this.formError     = ''
+        this.isDirty       = false
+        this.taxIdSearch   = ''
+        this.nameSearch    = ''
+        this.lookupMsg     = ''
+        this.suggestions   = []
+        this.tagInput      = ''
+        this.newPreset     = ''
+        this.showAddPreset = false
+        this.loadTagPresets()
+        this.showModal     = true
+      },
+
+      openEdit(c) {
+        this.editingId   = c.id
+        this.form        = JSON.parse(JSON.stringify(c))
+        if (!this.form.contacts) this.form.contacts = []
+        // 舊 alias 字串遷移至 tags 陣列
+        if (!Array.isArray(this.form.tags)) {
+          this.form.tags = this.form.alias ? [this.form.alias] : []
+        }
+        delete this.form.alias
+        this.formError     = ''
+        this.isDirty       = false
+        this.taxIdSearch   = c.taxId || ''
+        this.nameSearch    = ''
+        this.lookupMsg     = ''
+        this.suggestions   = []
+        this.tagInput      = ''
+        this.newPreset     = ''
+        this.showAddPreset = false
+        this.loadTagPresets()
+        this.showModal     = true
+      },
+
+      closeModal() {
+        if (this.isDirty && !confirm('有尚未儲存的內容，確定要關閉？\n\n按「取消」可繼續編輯。')) return
+        this.isDirty   = false
+        this.showModal = false
+        this.editingId = null
+        this.formError = ''
+      },
+
+      addContact() {
+        this.form.contacts.push({ id: Date.now(), name:'', title:'', phone:'', email:'' })
+      },
+
+      async saveCustomer() {
+        this.formError = ''
+        if (!this.form.name.trim()) { this.formError = '請填寫公司名稱'; return }
+        if (!this.backendOnline) { this.formError = '後端伺服器離線，無法儲存'; return }
+        const savingId = this.editingId
+        const now      = new Date().toLocaleDateString('zh-TW')
+        const { name, taxId, phone, id, createdAt, updatedAt, quoteCount, lastContact, ...dataFields } = this.form
+        const body = { name: (name||'').trim(), tax_id: taxId||'', phone: phone||'', data: dataFields }
+        try {
+          if (savingId) {
+            const r = await fetch(`${API}/customers/${savingId}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${this.session.token}` },
+              body: JSON.stringify(body)
+            })
+            if (!r.ok) throw new Error(await r.text())
+            const idx = this.customers.findIndex(c => c.id === savingId)
+            if (idx >= 0) this.customers[idx] = { ...this.customers[idx], ...this.form, updatedAt: now }
+          } else {
+            const r = await fetch(`${API}/customers`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${this.session.token}` },
+              body: JSON.stringify(body)
+            })
+            if (!r.ok) throw new Error(await r.text())
+            const { id: dbId } = await r.json()
+            this.customers.unshift({ ...this.form, id: dbId, createdAt: now, updatedAt: now, quoteCount: 0, lastContact: now })
+          }
+          this.isDirty = false
+          this.closeModal()
+          this.toast(savingId ? '客戶資料已更新' : '客戶已建立')
+        } catch(e) {
+          this.formError = '儲存失敗：' + (e.message || '請重試')
+        }
+      },
+
+      async deleteCustomer() {
+        if (!confirm(`確定刪除「${this.form.name}」？`)) return
+        if (!this.backendOnline) { alert('後端伺服器離線，無法刪除'); return }
+        const idToDelete = this.editingId
+        try {
+          const r = await fetch(`${API}/customers/${idToDelete}`, {
+            method: 'DELETE',
+            headers: { Authorization: `Bearer ${this.session.token}` }
+          })
+          if (!r.ok) throw new Error(await r.text())
+          this.customers = this.customers.filter(c => c.id !== idToDelete)
+          if (this.selectedId === idToDelete) this.selectedId = null
+          this.isDirty = false
+          this.closeModal()
+          this.toast('客戶已刪除')
+        } catch(e) {
+          alert('刪除失敗：' + (e.message || '請重試'))
+        }
+      },
+
+      async copyToSupplier(c) {
+        if (!c || !this.backendOnline) { alert('後端伺服器離線'); return }
+        try {
+          const rs = await fetch(`${API}/suppliers`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+          if (!rs.ok) throw new Error()
+          const suppliers = await rs.json()
+          let existingId = null
+          const found = c.taxId
+            ? suppliers.find(s => s.taxId === c.taxId)
+            : suppliers.find(s => s.name === c.name)
+          if (found) {
+            if (!confirm(`供應商管理中已存在「${found.name}」（統編：${found.taxId || '無'}），是否覆蓋更新資料？`)) return
+            existingId = found.id
+          }
+          const body = {
+            name: c.name,
+            tax_id: c.taxId || '',
+            phone: c.phone || '',
+            data: {
+              nameEn: c.nameEn || '',
+              tags: c.tags || [],
+              fax: c.fax || '',
+              email: c.email || '',
+              website: c.website || '',
+              address: c.invoiceAddress || c.deliveryAddress || '',
+              contacts: (c.contacts || []).map(ct => ({
+                id: ct.id || String(Date.now()), name: ct.name || '',
+                title: ct.title || '', phone: ct.phone || '',
+                email: ct.email || '', line: '', note: ct.note || ''
+              })),
+              notes: c.notes || '',
+              active: true
+            }
+          }
+          const method = existingId ? 'PUT' : 'POST'
+          const url = existingId ? `${API}/suppliers/${existingId}` : `${API}/suppliers`
+          const r = await fetch(url, {
+            method,
+            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+            body: JSON.stringify(body)
+          })
+          if (r.ok) {
+            this.toast(existingId ? '✓ 已更新至供應商管理' : '✓ 已複製至供應商管理')
+          } else {
+            alert('操作失敗，請重試')
+          }
+        } catch(e) { alert('連線失敗') }
+      },
+
+      logout() {
+        fetch('/api/auth/logout', { method:'POST', headers:{ Authorization:'Bearer '+(this.session.token||'') } }).catch(()=>{})
+        localStorage.removeItem('motrix_session'); window.location.href = 'login.html'
+      },
+
+      toast(msg) {
+        const el = document.createElement('div')
+        el.textContent = msg
+        el.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#0A0A0A;color:#F5F4F0;padding:8px 18px;border-radius:6px;font-size:12px;z-index:999;font-family:Inter,sans-serif;box-shadow:0 4px 12px rgba(0,0,0,.2)'
+        document.body.appendChild(el)
+        setTimeout(() => el.remove(), 2500)
+      },
+
+      async init() {
+        const s = localStorage.getItem('motrix_session')
+        if (!s) { window.location.href = 'login.html'; return }
+        try { this.session = JSON.parse(s) } catch(e) { window.location.href = 'login.html'; return }
+        this.loadTagPresets()
+
+        // 載入業務帳號
+        try {
+          const ur = await fetch(`${API}/users`, {
+            headers: { 'Authorization': `Bearer ${this.session.token}` }
+          })
+          if (ur.status === 401) { this.logout(); return }
+          if (ur.ok) {
+            const users = await ur.json()
+            this.salesUsers = users.filter(u => u.active)
+            this.backendOnline = true
+            const me = users.find(u => u.username === this.session.username)
+            if (me && me.displayName && me.displayName !== this.session.displayName) {
+              this.session.displayName = me.displayName
+              try {
+                const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
+                s.displayName = me.displayName
+                localStorage.setItem('motrix_session', JSON.stringify(s))
+              } catch {}
+            }
+          }
+        } catch(e) {}
+
+        // 載入客戶資料（後端為唯一來源）
+        try {
+          const res = await fetch(`${API}/customers`, {
+            headers: { Authorization: `Bearer ${this.session.token}` }
+          })
+          if (res.status === 401) { this.logout(); return }
+          if (res.ok) this.customers = await res.json()
+        } catch(e) {}
+
+        // 離開頁面前警告（未儲存資料保護）
+        window.addEventListener('beforeunload', e => {
+          if (this.isDirty) { e.preventDefault(); e.returnValue = '' }
+        })
+        document.addEventListener('click', e => {
+          if (!this.isDirty) return
+          const link = e.target.closest('a[href]')
+          if (!link) return
+          const href = link.getAttribute('href') || ''
+          if (!href || href.startsWith('#') || href.startsWith('javascript:') || href.startsWith('mailto:')) return
+          if (!confirm('有尚未儲存的內容，確定要離開此頁面？\n\n按「取消」可繼續編輯。')) e.preventDefault()
+        }, true)
+      }
+    }
+  }
+  </script>
+  <script src="../static/notif.js"></script>
+  <script src="../static/sidebar.js"></script>
+</body>
+</html>

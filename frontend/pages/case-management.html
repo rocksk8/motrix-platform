@@ -1,0 +1,1617 @@
+﻿<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="../static/favicon.png">
+  <title>案件管理 — MOTRIX 營運管理系統</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600&display=swap" rel="stylesheet">
+  <script src="../js/case-management.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    [x-cloak] { display: none !important; }
+
+    .cm-layout { display:flex; height:calc(100vh - var(--topbar-h)); overflow:hidden; }
+
+    /* ── Left panel ── */
+    .cm-list { width:300px; min-width:300px; border-right:1px solid var(--border-light); display:flex; flex-direction:column; background:#FAFAF9; overflow:hidden; }
+    .cm-list__head { padding:14px 14px 0; background:#fff; border-bottom:1px solid var(--border-light); }
+    .cm-list__title-row { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+    .cm-list__title { font-size:13px; font-weight:700; color:var(--text-primary); font-family:var(--font-zh); }
+    .cm-list__count { font-size:10px; font-family:Inter,sans-serif; font-weight:600; background:#EEECEA; color:var(--text-secondary); padding:2px 8px; border-radius:10px; }
+    .cm-list__search { position:relative; margin-bottom:10px; }
+    .cm-list__search-icon { position:absolute; left:9px; top:50%; transform:translateY(-50%); color:var(--text-dim); pointer-events:none; }
+    .cm-list__search-input { width:100%; padding:7px 10px 7px 32px; font-size:12px; border:1px solid var(--border-light); border-radius:6px; font-family:var(--font-zh); background:#F9FAFB; outline:none; transition:border-color .12s; box-sizing:border-box; }
+    .cm-list__search-input:focus { border-color:var(--accent); background:#fff; box-shadow:0 0 0 3px rgba(37,99,235,.08); }
+    .cm-list__tabs { display:flex; padding:0 2px; }
+    .cm-list__tab { font-size:11px; font-family:var(--font-zh); padding:6px 12px; border:none; background:none; color:var(--text-dim); cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px; transition:all .1s; }
+    .cm-list__tab.active { color:var(--accent); border-bottom-color:var(--accent); font-weight:600; }
+    .cm-list__body { flex:1; overflow-y:auto; padding:4px 0; }
+    .cm-list__body::-webkit-scrollbar { width:4px; }
+    .cm-list__body::-webkit-scrollbar-thumb { background:var(--border-light); border-radius:2px; }
+
+    .cm-card { padding:11px 14px; border-bottom:1px solid #F0EFEB; cursor:pointer; transition:background .1s; }
+    .cm-card:hover { background:#F5F4F0; }
+    .cm-card.selected { background:#EEF2FF; border-left:3px solid var(--accent); padding-left:11px; }
+    .cm-card__head { display:flex; align-items:center; justify-content:space-between; margin-bottom:4px; }
+    .cm-card__no { font-size:11px; font-family:Inter,sans-serif; font-weight:700; color:var(--text-primary); letter-spacing:.02em; }
+    .cm-card__tag { font-size:9px; padding:2px 6px; border-radius:4px; font-weight:600; font-family:var(--font-zh); }
+    .cm-card__tag--active { background:#DCFCE7; color:#15803D; }
+    .cm-card__tag--closed { background:#F3F4F6; color:#374151; }
+    .cm-card__customer { font-size:12px; color:var(--text-primary); font-family:var(--font-zh); font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-bottom:5px; }
+    .cm-card__footer { display:flex; align-items:center; justify-content:space-between; }
+    .cm-card__amount { font-size:11px; font-family:Inter,sans-serif; font-weight:600; color:var(--text-secondary); }
+    .cm-card__date { font-size:10px; color:var(--text-dim); font-family:Inter,sans-serif; }
+    .cm-empty { padding:40px 20px; text-align:center; color:var(--text-dim); font-size:13px; font-family:var(--font-zh); }
+
+    /* ── Right panel ── */
+    .cm-detail { flex:1; display:flex; flex-direction:column; overflow:hidden; background:#fff; }
+    .cm-placeholder { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; }
+    .cm-placeholder__text { font-size:13px; font-family:var(--font-zh); color:var(--text-dim); }
+    .cm-placeholder__sub { font-size:11px; color:var(--text-dim); font-family:Inter,sans-serif; }
+
+    /* Header */
+    .cm-header { background:#fff; border-bottom:1px solid var(--border-light); flex-shrink:0; }
+    .cm-header__main { display:flex; align-items:center; gap:10px; padding:14px 20px 8px; flex-wrap:wrap; }
+    .cm-header__back { display:inline-flex; align-items:center; gap:3px; padding:4px 8px; border:1px solid var(--border-light); border-radius:5px; font-size:11px; color:var(--text-dim); text-decoration:none; background:#FAFAF9; transition:all .12s; flex-shrink:0; }
+    .cm-header__back:hover { border-color:#9CA3AF; color:var(--text-secondary); }
+    .cm-header__no { font-size:15px; font-weight:700; font-family:Inter,sans-serif; color:var(--text-primary); letter-spacing:-.01em; flex-shrink:0; }
+    .cm-header__customer { font-size:13px; color:var(--text-secondary); font-family:var(--font-zh); flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .cm-header__actions { display:flex; align-items:center; gap:6px; flex-shrink:0; margin-left:auto; }
+
+    .tag-active { display:inline-flex; align-items:center; padding:3px 10px; border-radius:5px; font-size:11px; font-weight:600; font-family:var(--font-zh); background:#DCFCE7; color:#15803D; border:1px solid #86EFAC; }
+    .tag-closed { display:inline-flex; align-items:center; gap:4px; padding:3px 10px; border-radius:5px; font-size:11px; font-weight:600; font-family:var(--font-zh); background:#F5F3FF; color:#6D28D9; border:1px solid #C4B5FD; }
+
+    /* KPI pills */
+    .cm-kpi { display:flex; align-items:center; gap:8px; padding:4px 20px 12px; flex-wrap:wrap; }
+    .cm-kpi__pill { display:inline-flex; flex-direction:column; padding:6px 12px; background:#F9FAFB; border:1px solid var(--border-light); border-radius:8px; min-width:86px; }
+    .cm-kpi__val { font-size:13px; font-weight:700; font-family:Inter,sans-serif; color:var(--text-primary); line-height:1; }
+    .cm-kpi__lbl { font-size:9px; color:var(--text-dim); font-family:Inter,sans-serif; letter-spacing:.06em; text-transform:uppercase; margin-top:3px; }
+    .cm-kpi__pill.success .cm-kpi__val { color:var(--success); }
+    .cm-kpi__pill.accent  .cm-kpi__val { color:var(--accent); }
+    .cm-kpi__pill.warning .cm-kpi__val { color:var(--warning); }
+    .cm-kpi__pill.danger  .cm-kpi__val { color:var(--danger); }
+
+    /* Meta */
+    .cm-meta { display:flex; align-items:center; gap:16px; padding:0 20px 10px; font-size:11px; color:var(--text-dim); font-family:Inter,sans-serif; flex-wrap:wrap; }
+    .cm-meta__lbl { color:var(--text-dim); }
+    .cm-meta__val { color:var(--text-secondary); font-weight:500; margin-left:4px; }
+
+    /* Log */
+    .cm-log { border-top:1px solid var(--border-light); background:#FAFAF8; padding:8px 20px 10px; font-size:11px; font-family:Inter,sans-serif; }
+    .cm-log__row { display:flex; align-items:center; gap:8px; padding:3px 0; border-bottom:1px solid #EEE; }
+    .cm-log__row:last-child { border-bottom:none; }
+
+    /* Tabs */
+    .cm-tabs { display:flex; padding:0 20px; border-bottom:1px solid var(--border-light); background:#fff; flex-shrink:0; }
+    .cm-tab { font-size:12px; font-family:var(--font-zh); padding:9px 14px; border:none; background:none; color:var(--text-dim); cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px; white-space:nowrap; transition:color .1s; }
+    .cm-tab:hover { color:var(--text-primary); }
+    .cm-tab.active { color:var(--accent); border-bottom-color:var(--accent); font-weight:600; }
+
+    /* Tab body */
+    .cm-body { flex:1; overflow-y:auto; padding:20px; background:#FAFAF9; }
+    .cm-body::-webkit-scrollbar { width:4px; }
+    .cm-body::-webkit-scrollbar-thumb { background:var(--border-light); border-radius:2px; }
+
+    .cm-section-title { display:flex; align-items:center; gap:10px; font-size:11px; font-weight:700; font-family:Inter,sans-serif; color:var(--text-dim); text-transform:uppercase; letter-spacing:.08em; margin-bottom:14px; }
+    .cm-section-title::after { content:''; flex:1; height:1px; background:var(--border-light); }
+    .cm-subtabs { display:flex; margin:-20px -20px 0; padding:0 20px; background:#F7F6F3; border-bottom:1px solid var(--border-light); flex-shrink:0; }
+
+    /* Progress */
+    .prog { background:#EEECEA; border-radius:99px; height:6px; overflow:hidden; }
+    .prog__fill { height:100%; border-radius:99px; transition:width .3s; }
+    .prog__fill--blue { background:linear-gradient(90deg,var(--accent),#818CF8); }
+    .prog__fill--green { background:linear-gradient(90deg,var(--success),#22C55E); }
+
+    /* Stage cards */
+    .stage-card { border:1px solid var(--border-light); border-radius:10px; margin-bottom:10px; background:#fff; box-shadow:0 1px 2px rgba(0,0,0,.04); overflow:hidden; transition:box-shadow .15s; }
+    .stage-card:hover { box-shadow:0 2px 8px rgba(0,0,0,.08); }
+    .stage-card--done { border-color:#86EFAC; }
+    .stage-card__head { display:flex; align-items:center; gap:8px; padding:10px 12px; border-bottom:1px solid #F0EFEB; background:#FAFAF9; }
+    .stage-card--done .stage-card__head { background:#F0FDF4; border-color:#BBF7D0; }
+    .stage-card__body { padding:10px 12px; background:#fff; }
+    .visit-row { display:grid; grid-template-columns:122px 50px 1fr 22px; gap:6px; align-items:start; margin-bottom:5px; }
+
+    /* Payment */
+    .pay-kpi-row { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:18px; }
+    .pay-kpi { background:#fff; border:1px solid var(--border-light); border-radius:8px; padding:12px 14px; }
+    .pay-kpi__lbl { font-size:10px; color:var(--text-dim); font-family:Inter,sans-serif; text-transform:uppercase; letter-spacing:.06em; margin-bottom:5px; }
+    .pay-kpi__val { font-size:16px; font-weight:700; font-family:Inter,sans-serif; color:var(--text-primary); }
+    .pay-kpi__val--success { color:var(--success); }
+    .pay-kpi__val--danger { color:var(--danger); }
+    .pay-item { border:1.5px solid var(--border-light); border-radius:10px; padding:12px 14px; margin-bottom:10px; background:#fff; transition:border-color .12s,background .12s; }
+    .pay-item--received { background:#F0FDF4; border-color:#86EFAC; }
+
+    /* Material */
+    .mat-card { background:#fff; border:1px solid var(--border-light); border-radius:8px; margin-bottom:8px; overflow:hidden; }
+    .mat-card__head { display:flex; align-items:center; gap:8px; padding:9px 12px; background:#FAFAF9; border-bottom:1px solid var(--border-light); }
+    .mat-card__body { padding:8px 12px; }
+    .mat-tag { font-size:10px; padding:2px 7px; border-radius:99px; font-family:Inter,sans-serif; font-weight:600; flex-shrink:0; }
+    .mat-tag--arrived { background:#DCFCE7; color:#15803D; }
+    .mat-tag--ordered { background:#DBEAFE; color:#1D4ED8; }
+    .mat-tag--pending { background:#FEF3C7; color:#92400E; }
+
+    /* Device */
+    .dev-card { background:#fff; border:1px solid var(--border-light); border-radius:8px; padding:12px 14px; margin-bottom:10px; }
+    .dev-row { display:flex; align-items:center; gap:8px; font-size:12px; font-family:Inter,sans-serif; padding:3px 0; }
+    .dev-row__lbl { color:var(--text-dim); width:38px; font-size:11px; flex-shrink:0; }
+
+    /* Warranty */
+    .w-badge { font-size:10px; padding:2px 7px; border-radius:99px; font-weight:600; font-family:Inter,sans-serif; }
+    .w-badge--active   { background:#DCFCE7; color:#15803D; }
+    .w-badge--expiring { background:#FEF3C7; color:#92400E; }
+    .w-badge--expired  { background:#FEE2E2; color:#DC2626; }
+
+    /* Buttons */
+    .btn-save { padding:7px 16px; background:var(--text-primary); color:var(--white); border:none; border-radius:7px; font-size:12px; font-weight:600; font-family:var(--font-zh); cursor:pointer; transition:opacity .15s; }
+    .btn-save:hover { opacity:.85; }
+    .btn-save:disabled { opacity:.4; cursor:default; }
+    .btn-close-case { padding:5px 11px; background:#F5F3FF; color:#6D28D9; border:1px solid #C4B5FD; border-radius:6px; font-size:11px; font-weight:600; font-family:var(--font-zh); cursor:pointer; transition:all .12s; }
+    .btn-close-case:hover { background:#EDE9FE; }
+    .btn-add { display:inline-flex; align-items:center; gap:5px; padding:6px 12px; border:1px dashed var(--border-light); border-radius:6px; background:none; color:var(--text-dim); font-size:11px; font-family:var(--font-zh); cursor:pointer; transition:all .12s; }
+    .btn-add:hover { border-color:#9CA3AF; color:var(--text-secondary); }
+    .btn-del { padding:2px 6px; border:none; background:none; color:#D1D5DB; font-size:14px; cursor:pointer; border-radius:4px; line-height:1; }
+    .btn-del:hover { background:#FEE2E2; color:var(--danger); }
+    .btn-del:disabled { opacity:.25; cursor:default; }
+
+    /* Save indicator */
+    .save-dot { width:7px; height:7px; border-radius:50%; background:#D1D5DB; flex-shrink:0; transition:background .2s; }
+    .save-dot.dirty { background:var(--warning); }
+    .save-dot.saved { background:var(--success); }
+    .save-dot.error { background:var(--danger); }
+    .save-label { font-size:11px; font-family:Inter,sans-serif; color:var(--text-dim); }
+    .save-label.dirty { color:var(--warning); }
+    .save-label.saved { color:var(--success); }
+    .save-label.error { color:var(--danger); }
+
+    /* Field inputs */
+    .fi { width:100%; padding:6px 10px; font-size:12px; border:1px solid var(--border-light); border-radius:6px; font-family:var(--font-zh); background:#fff; outline:none; transition:border-color .12s; box-sizing:border-box; }
+    .fi:focus { border-color:#9CA3AF; }
+    .fi--sm { padding:4px 7px; font-size:11px; }
+    .fi--mono { font-family:'Courier New',monospace; }
+    .fi-label { font-size:10px; color:var(--text-dim); font-family:Inter,sans-serif; margin-bottom:3px; display:block; }
+    .fi-group { margin-bottom:12px; }
+  
+  /* -- Mobile RWD -- */
+  .mob-back-cm { display:none; }
+  @media (max-width:767px) {
+    .cm-layout { flex-direction:column; height:auto; min-height:calc(100vh - var(--topbar-h)); overflow:visible; }
+    .cm-list { width:100%; min-width:0; max-height:44vh; border-right:none; border-bottom:1px solid var(--border-light); }
+    .cm-detail { min-height:54vh; }
+    .cm-list.mob-hidden  { display:none !important; }
+    .cm-detail.mob-hidden { display:none !important; }
+    .mob-back-cm { display:inline-flex !important; }
+  }
+  </style>
+</head>
+
+<body x-data="app()" x-init="init()" x-cloak>
+
+  <header id="app-topbar" class="topbar"></header>
+<div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+<div class="app-shell">
+
+  <aside class="sidebar" id="app-sidebar"></aside>
+
+  <main class="main" style="padding:0;overflow:hidden">
+    <div class="cm-layout">
+
+      <!-- ── 左側：案件列表 ── -->
+      <div class="cm-list" :class="{'mob-hidden': selected && isMobileView}">
+        <div class="cm-list__head">
+          <div class="cm-list__title-row">
+            <span class="cm-list__title">案件管理</span>
+            <span class="cm-list__count" x-text="filteredCases.length + ' 件'"></span>
+          </div>
+          <div class="cm-list__search">
+            <svg class="cm-list__search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+            <input class="cm-list__search-input" type="text" placeholder="搜尋單號或客戶..."
+                   x-model="search" @input="filterCases()">
+          </div>
+          <div class="cm-list__tabs">
+            <button class="cm-list__tab" :class="{active: listTab==='all'}"    @click="listTab='all';    filterCases()">全部</button>
+            <button class="cm-list__tab" :class="{active: listTab==='已成案'}" @click="listTab='已成案'; filterCases()">已成案</button>
+            <button class="cm-list__tab" :class="{active: listTab==='已結案'}" @click="listTab='已結案'; filterCases()">已結案</button>
+          </div>
+        </div>
+
+        <div class="cm-list__body">
+          <template x-if="loading">
+            <div class="cm-empty" style="display:flex;flex-direction:column;align-items:center;gap:8px">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:.3"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+              載入中...
+            </div>
+          </template>
+          <template x-if="!loading && filteredCases.length === 0">
+            <div class="cm-empty" style="display:flex;flex-direction:column;align-items:center;gap:8px">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" style="opacity:.25"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg>
+              沒有符合的案件
+            </div>
+          </template>
+          <template x-for="c in filteredCases" :key="c.quote_no">
+            <div class="cm-card" :class="{selected: selected && selected.quote_no === c.quote_no}"
+                 @click="selectCase(c.quote_no)">
+              <div class="cm-card__head">
+                <span class="cm-card__no" x-text="c.quote_no"></span>
+                <span class="cm-card__tag" :class="c.deal_tag==='已結案' ? 'cm-card__tag--closed' : 'cm-card__tag--active'"
+                      x-text="c.deal_tag"></span>
+              </div>
+              <div class="cm-card__customer" x-text="c.customer_name || '(未填客戶)'"></div>
+              <div class="cm-card__footer">
+                <span class="cm-card__amount" x-text="'NT$ ' + (c.total||0).toLocaleString()"></span>
+                <span class="cm-card__date" x-text="(c.quote_date || c.created_at || '').slice(0,10)"></span>
+              </div>
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <!-- ── 右側：案件詳情 ── -->
+      <div class="cm-detail" :class="{'mob-hidden': !selected && isMobileView}">
+
+        <!-- Placeholder -->
+        <template x-if="!selected">
+          <div class="cm-placeholder">
+            <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" style="opacity:.15"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg>
+            <div class="cm-placeholder__text">從左側選擇案件開始作業</div>
+            <div class="cm-placeholder__sub" x-text="'目前共 ' + cases.length + ' 件已成案 / 已結案'"></div>
+          </div>
+        </template>
+
+        <!-- Detail panel -->
+        <template x-if="selected">
+          <div style="display:flex;flex-direction:column;height:100%;overflow:hidden">
+
+            <!-- Header -->
+            <div class="cm-header">
+              <!-- Row 1: identity + actions -->
+              <div class="cm-header__main">
+                <button class="mob-back-cm" @click="selected=null" style="display:none;align-items:center;gap:5px;background:none;border:none;cursor:pointer;font-size:13px;color:var(--accent);padding:0 8px 0 0;font-family:var(--font-zh);flex-shrink:0"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>列表</button>
+                
+                <a :href="'quotation-form.html?id=' + selected.quote_no" class="cm-header__back" title="開啟原始報價單">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6M10 14L21 3M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/></svg>
+                  報價單
+                </a>
+                <span class="cm-header__no" x-text="selected.quote_no"></span>
+                <span class="cm-header__customer" x-text="selected.customer_name || '(未填客戶)'"></span>
+
+                <template x-if="cr.dealTag === '已成案'">
+                  <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+                    <span class="tag-active">已成案</span>
+                    <button class="btn-close-case" @click="closeCaseAction()">完結案</button>
+                  </div>
+                </template>
+                <template x-if="cr.dealTag === '已結案'">
+                  <span class="tag-closed" style="flex-shrink:0">
+                    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+                    已結案
+                  </span>
+                </template>
+
+                <div class="cm-header__actions">
+                  <!-- 專案按鈕：有權限者顯示，管理員可建立/跳轉專案 -->
+                  <button
+                    x-show="['superadmin','admin','engineer'].includes(session.role)||(session.modules||[]).some(m=>m.startsWith('project_'))"
+                    @click="goToProject()"
+                    :title="linkedProjectId ? '前往關聯專案' : (canManageProject() ? '建立並前往專案管理' : '前往專案管理')"
+                    style="display:inline-flex;align-items:center;gap:4px;padding:5px 11px;border-radius:5px;border:1px solid #C4B5FD;background:#F5F3FF;color:#7C3AED;font-size:11px;font-family:var(--font-zh);font-weight:500;cursor:pointer;transition:all .12s;"
+                    onmouseover="this.style.background='#EDE9FE'" onmouseout="this.style.background='#F5F3FF'">
+                    <svg viewBox="0 0 20 20" fill="currentColor" style="width:13px;height:13px;"><path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clip-rule="evenodd"/></svg>
+                    <span x-text="linkedProjectId ? '前往專案 ▶' : (canManageProject() ? '建立專案' : '專案管理')"></span>
+                  </button>
+                  <div style="display:flex;align-items:center;gap:5px">
+                    <div class="save-dot" :class="saveStatus"></div>
+                    <span class="save-label" :class="saveStatus" x-text="saveMsg"></span>
+                  </div>
+                  <button class="btn-save" @click="saveCaseRecord()" :disabled="saving">
+                    <span x-show="!saving">儲存</span>
+                    <span x-show="saving">儲存中...</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Row 2: KPI pills -->
+              <div class="cm-kpi">
+                <div class="cm-kpi__pill" x-show="canSeeFinancial()">
+                  <span class="cm-kpi__val" x-text="'NT$ ' + (totalWithTax()||0).toLocaleString()"></span>
+                  <span class="cm-kpi__lbl">合約金額</span>
+                </div>
+                <div class="cm-kpi__pill" :class="receivedPct()===100 ? 'success' : receivedPct()>0 ? 'accent' : ''" x-show="canSeeFinancial()">
+                  <span class="cm-kpi__val" x-text="'NT$ ' + receivedTotal().toLocaleString()"></span>
+                  <span class="cm-kpi__lbl">已收款（<span x-text="receivedPct()"></span>%）</span>
+                </div>
+                <div class="cm-kpi__pill" :class="outstandingTotal()>0 ? 'danger' : 'success'" x-show="canSeeFinancial()">
+                  <span class="cm-kpi__val" x-text="'NT$ ' + outstandingTotal().toLocaleString()"></span>
+                  <span class="cm-kpi__lbl">未收款</span>
+                </div>
+                <div class="cm-kpi__pill" :class="caseProgressPct()===100 ? 'success' : caseProgressPct()>0 ? 'accent' : ''">
+                  <span class="cm-kpi__val" x-text="caseProgressPct() + '%'"></span>
+                  <span class="cm-kpi__lbl">執行進度</span>
+                </div>
+                <div class="cm-kpi__pill"
+                     :class="(cr.caseRecord?.materials||[]).length===0 ? '' : (cr.caseRecord?.materials||[]).filter(m=>!m.arrived).length===0 ? 'success' : 'warning'">
+                  <span class="cm-kpi__val"
+                        x-text="(cr.caseRecord?.materials||[]).filter(m=>m.arrived).length + ' / ' + (cr.caseRecord?.materials||[]).length"></span>
+                  <span class="cm-kpi__lbl">叫料到料</span>
+                </div>
+              </div>
+
+              <!-- Row 3: meta + log toggle -->
+              <div class="cm-meta">
+                <span><span class="cm-meta__lbl">報價日期</span><span class="cm-meta__val" x-text="(selected.quote_date||selected.created_at||'').slice(0,10)||'—'"></span></span>
+                <span><span class="cm-meta__lbl">負責業務</span><span class="cm-meta__val" x-text="selected.sales_person||'—'"></span></span>
+                <span><span class="cm-meta__lbl">施工階段</span><span class="cm-meta__val"
+                      x-text="(cr.caseRecord?.stages||[]).filter(s=>s.done).length + ' / ' + (cr.caseRecord?.stages||[]).length + ' 完成'"></span></span>
+                <button @click="showLog=!showLog"
+                        style="margin-left:auto;font-size:10px;font-family:Inter,sans-serif;background:none;border:none;cursor:pointer;color:var(--text-dim);padding:0;text-decoration:underline;flex-shrink:0"
+                        x-text="showLog ? '收起操作紀錄' : '操作紀錄 ▸'"></button>
+              </div>
+
+              <!-- Collapsible log -->
+              <template x-if="showLog">
+                <div class="cm-log">
+                  <template x-if="!(selected.data?.statusLog?.length)">
+                    <span style="color:var(--text-dim);font-size:11px">尚無操作紀錄</span>
+                  </template>
+                  <template x-for="(log, li) in (selected.data?.statusLog || []).slice().reverse()" :key="li">
+                    <div class="cm-log__row">
+                      <span style="color:var(--text-dim);min-width:110px;flex-shrink:0" x-text="(log.at||'').slice(0,16).replace('T',' ')"></span>
+                      <span style="color:var(--text-secondary);min-width:52px" x-text="log.user||'—'"></span>
+                      <span style="color:var(--text-dim)" x-text="(log.from||'—') + ' →'"></span>
+                      <span style="font-weight:600;color:var(--text-primary)" x-text="log.to||'—'"></span>
+                    </div>
+                  </template>
+                </div>
+              </template>
+            </div>
+
+            <!-- Tabs -->
+            <div class="cm-tabs">
+              <button class="cm-tab" :class="{active: activeTab==='biz'}"  @click="activeTab='biz'">商務</button>
+              <button class="cm-tab" :class="{active: activeTab==='exec'}" @click="activeTab='exec'">執行</button>
+              <button class="cm-tab" x-show="canSeeFinancial()" :class="{active: activeTab==='fin'}" @click="activeTab='fin'">財務</button>
+            </div>
+
+            <!-- Tab content -->
+            <div class="cm-body">
+
+              <!-- ══ 商務 Tab ══ -->
+              <div x-show="activeTab==='biz'">
+
+                <div class="cm-section-title">合約資訊</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+                  <div class="fi-group">
+                    <label class="fi-label">交貨 / 安裝地址</label>
+                    <input class="fi" type="text" placeholder="地址" x-model="cr.caseRecord.contract.deliveryAddress" @input="setDirty()">
+                  </div>
+                  <div class="fi-group">
+                    <label class="fi-label">交貨條件</label>
+                    <input class="fi" type="text" placeholder="交期、運費、安裝條件..." x-model="cr.caseRecord.contract.deliveryTerms" @input="setDirty()">
+                  </div>
+                  <div class="fi-group">
+                    <label class="fi-label">現場聯絡人</label>
+                    <input class="fi" type="text" placeholder="姓名" x-model="cr.caseRecord.contract.contactPerson" @input="setDirty()">
+                  </div>
+                  <div class="fi-group">
+                    <label class="fi-label">聯絡電話</label>
+                    <input class="fi" type="text" placeholder="電話" x-model="cr.caseRecord.contract.contactPhone" @input="setDirty()">
+                  </div>
+                </div>
+                <div class="fi-group" style="margin-bottom:18px">
+                  <label class="fi-label">合約備注</label>
+                  <textarea class="fi" rows="2" placeholder="合約特殊條款、注意事項..." x-model="cr.caseRecord.contract.contractNote" @input="setDirty()" style="resize:vertical;line-height:1.6"></textarea>
+                </div>
+
+                <div class="cm-section-title">人員角色</div>
+                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px">
+                  <div class="fi-group">
+                    <label class="fi-label">填單人</label>
+                    <select class="fi" x-model="cr.caseRecord.roles.filler" @change="setDirty()">
+                      <option value="">— 選擇 —</option>
+                      <template x-for="u in selectableUsers" :key="u.username">
+                        <option :value="u.display_name" x-text="u.display_name"></option>
+                      </template>
+                    </select>
+                  </div>
+                  <div class="fi-group">
+                    <label class="fi-label">業務負責</label>
+                    <select class="fi" x-model="cr.caseRecord.roles.sales" @change="setDirty()">
+                      <option value="">— 選擇 —</option>
+                      <template x-for="u in selectableUsers" :key="u.username">
+                        <option :value="u.display_name" x-text="u.display_name"></option>
+                      </template>
+                    </select>
+                  </div>
+                  <div class="fi-group">
+                    <label class="fi-label">執行負責</label>
+                    <select class="fi" x-model="cr.caseRecord.roles.executor" @change="setDirty()">
+                      <option value="">— 選擇 —</option>
+                      <template x-for="u in selectableUsers" :key="u.username">
+                        <option :value="u.display_name" x-text="u.display_name"></option>
+                      </template>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="cm-section-title">收款管理</div>
+                <div class="pay-kpi-row">
+                  <div class="pay-kpi">
+                    <div class="pay-kpi__lbl">合約總額（含稅）</div>
+                    <div class="pay-kpi__val" x-text="'NT$ ' + totalWithTax().toLocaleString()"></div>
+                    <div style="font-size:10px;color:var(--text-dim);margin-top:4px;font-family:Inter,sans-serif"
+                         x-text="'未稅 NT$ ' + totalPretax().toLocaleString()"></div>
+                  </div>
+                  <div class="pay-kpi">
+                    <div class="pay-kpi__lbl">已收款</div>
+                    <div class="pay-kpi__val pay-kpi__val--success" x-text="'NT$ ' + receivedTotal().toLocaleString()"></div>
+                    <div style="font-size:10px;color:var(--success);margin-top:4px;font-family:Inter,sans-serif" x-text="receivedPct() + '%'"></div>
+                  </div>
+                  <div class="pay-kpi">
+                    <div class="pay-kpi__lbl">未收款</div>
+                    <div class="pay-kpi__val" :class="outstandingTotal()>0 ? 'pay-kpi__val--danger' : 'pay-kpi__val--success'"
+                         x-text="'NT$ ' + outstandingTotal().toLocaleString()"></div>
+                    <div style="font-size:10px;margin-top:4px;font-family:Inter,sans-serif"
+                         :style="outstandingTotal()>0 ? 'color:var(--danger)' : 'color:var(--success)'"
+                         x-text="outstandingPct() + '%'"></div>
+                  </div>
+                  <div class="pay-kpi">
+                    <div class="pay-kpi__lbl">收款進度</div>
+                    <div style="margin:8px 0 4px"><div class="prog"><div class="prog__fill prog__fill--green" :style="'width:' + Math.min(receivedPct(),100) + '%'"></div></div></div>
+                    <div style="font-size:11px;font-family:Inter,sans-serif;color:var(--text-secondary)" x-text="receivedPct() + '% 已收'"></div>
+                  </div>
+                </div>
+
+                <template x-if="feeTotal() > 0">
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:-6px;margin-bottom:14px">
+                    <div class="pay-kpi">
+                      <div class="pay-kpi__lbl">手續費 / 扣款合計</div>
+                      <div class="pay-kpi__val pay-kpi__val--danger" x-text="'NT$ ' + feeTotal().toLocaleString()"></div>
+                    </div>
+                    <div class="pay-kpi">
+                      <div class="pay-kpi__lbl">實際淨收</div>
+                      <div class="pay-kpi__val pay-kpi__val--success" x-text="'NT$ ' + netReceivedTotal().toLocaleString()"></div>
+                    </div>
+                  </div>
+                </template>
+
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+                  <span class="cm-section-title" style="margin-bottom:0">款項明細</span>
+                  <span style="font-size:11px;font-family:Inter,sans-serif;padding:2px 8px;border-radius:4px;font-weight:600;flex-shrink:0"
+                        :style="totalEnteredPct()===100 ? 'background:#DCFCE7;color:#15803D' : 'background:#FEF2F2;color:#DC2626'"
+                        x-text="'合計 ' + totalEnteredPct() + '%' + (totalEnteredPct()===100 ? ' ✓' : '（須為 100%）')"></span>
+                  <button x-show="paymentItems().length > 1"
+                          @click="balanceLastPayment()"
+                          style="margin-left:auto;font-size:11px;padding:3px 10px;border-radius:4px;border:1px solid var(--border-light);background:#fff;color:var(--text-secondary);cursor:pointer;font-family:Inter,sans-serif;line-height:1.4;white-space:nowrap">
+                    平衡尾款
+                  </button>
+                </div>
+
+                <template x-for="(item, idx) in (cr.caseRecord?.payment?.items || [])" :key="item.id">
+                  <div class="pay-item" :class="item.received ? 'pay-item--received' : ''">
+                    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+                      <span style="font-size:11px;font-weight:700;color:var(--text-dim);font-family:Inter,sans-serif;width:16px;flex-shrink:0" x-text="idx+1"></span>
+                      <select class="fi" x-model="item.type" @change="setDirty()"
+                              style="width:90px;flex-shrink:0;padding:5px 6px;font-size:12px">
+                        <option>訂金款</option><option>交貨款</option><option>驗收款</option><option>進度款</option><option>其他</option>
+                      </select>
+                      <div style="position:relative;width:72px;flex-shrink:0">
+                        <input class="fi" type="number" min="0" max="100" step="0.01"
+                               x-model.number="item.pct" @input="onPctChange(idx)"
+                               style="padding-right:20px;text-align:right;font-size:13px;font-family:Inter,sans-serif;font-weight:700">
+                        <span style="position:absolute;right:7px;top:50%;transform:translateY(-50%);font-size:10px;color:var(--text-dim);pointer-events:none">%</span>
+                      </div>
+                      <div style="flex:1;display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">
+                        <div>
+                          <div style="font-size:9px;color:var(--text-dim);font-family:Inter,sans-serif;margin-bottom:2px">含稅</div>
+                          <div style="position:relative">
+                            <span style="position:absolute;left:6px;top:50%;transform:translateY(-50%);font-size:10px;color:var(--text-dim);pointer-events:none;font-family:Inter,sans-serif">NT$</span>
+                            <input class="fi" type="number" min="0" step="1"
+                                   :value="itemAmountWithTax(idx)"
+                                   @change="onAmountWithTaxChange(idx, +$event.target.value)"
+                                   style="padding-left:30px;text-align:right;font-size:12px;font-weight:700;font-family:Inter,sans-serif;color:var(--text-primary);width:100%">
+                          </div>
+                        </div>
+                        <div>
+                          <div style="font-size:9px;color:var(--text-dim);font-family:Inter,sans-serif;margin-bottom:2px">未稅</div>
+                          <div style="position:relative">
+                            <span style="position:absolute;left:6px;top:50%;transform:translateY(-50%);font-size:10px;color:var(--text-dim);pointer-events:none;font-family:Inter,sans-serif">NT$</span>
+                            <input class="fi" type="number" min="0" step="1"
+                                   :value="itemAmountPretax(idx)"
+                                   @change="onAmountPretaxChange(idx, +$event.target.value)"
+                                   style="padding-left:30px;text-align:right;font-size:12px;font-family:Inter,sans-serif;color:var(--text-secondary);width:100%">
+                          </div>
+                        </div>
+                        <div style="text-align:right">
+                          <div style="font-size:9px;color:var(--text-dim);font-family:Inter,sans-serif;margin-bottom:1px">稅額</div>
+                          <div style="font-size:12px;font-family:Inter,sans-serif;color:var(--text-dim)" x-text="'NT$ ' + itemAmountTax(idx).toLocaleString()"></div>
+                        </div>
+                      </div>
+                      <label style="display:flex;align-items:center;gap:5px;padding:5px 10px;border-radius:6px;cursor:pointer;flex-shrink:0;transition:background .12s"
+                             :style="item.received ? 'background:#DCFCE7' : 'background:#F3F4F6'">
+                        <input type="checkbox" x-model="item.received" @change="setDirty()" style="accent-color:var(--success)">
+                        <span style="font-size:11px;font-weight:600;font-family:var(--font-zh)"
+                              :style="item.received ? 'color:var(--success)' : 'color:#9CA3AF'"
+                              x-text="item.received ? '已收款' : '未收'"></span>
+                      </label>
+                      <button class="btn-del" @click="removePaymentItem(idx)" style="flex-shrink:0"
+                              :disabled="(cr.caseRecord?.payment?.items?.length||0)<=1">×</button>
+                    </div>
+
+                    <div style="display:grid;grid-template-columns:136px 140px 1fr;gap:8px">
+                      <div>
+                        <span class="fi-label">收款日期</span>
+                        <input class="fi fi--sm" type="date" x-model="item.receivedAt" @change="setDirty()">
+                      </div>
+                      <div>
+                        <span class="fi-label">發票號碼</span>
+                        <input class="fi fi--sm fi--mono" type="text" placeholder="AB-12345678"
+                               x-model="item.invoiceNo" @input="setDirty()">
+                      </div>
+                      <div>
+                        <span class="fi-label">備注</span>
+                        <input class="fi fi--sm" type="text" placeholder="收款備注..." x-model="item.note" @input="setDirty()">
+                      </div>
+                    </div>
+
+                    <template x-if="item.received">
+                      <div style="display:grid;grid-template-columns:140px 140px 1fr;gap:8px;margin-top:8px;padding-top:8px;border-top:1px dashed var(--border-light)">
+                        <div>
+                          <span class="fi-label">實收金額（含稅）</span>
+                          <div style="position:relative">
+                            <span style="position:absolute;left:6px;top:50%;transform:translateY(-50%);font-size:10px;color:var(--text-dim);font-family:Inter,sans-serif">NT$</span>
+                            <input class="fi fi--sm" type="number" min="0"
+                                   :placeholder="itemAmountWithTax(idx)"
+                                   x-model.number="item.actualAmount"
+                                   @input="setDirty()"
+                                   style="padding-left:30px;font-family:Inter,sans-serif">
+                          </div>
+                        </div>
+                        <div>
+                          <span class="fi-label">手續費 / 扣款</span>
+                          <div style="position:relative">
+                            <span style="position:absolute;left:6px;top:50%;transform:translateY(-50%);font-size:10px;color:var(--text-dim);font-family:Inter,sans-serif">NT$</span>
+                            <input class="fi fi--sm" type="number" min="0" placeholder="0"
+                                   x-model.number="item.feeAmount"
+                                   @input="setDirty()"
+                                   style="padding-left:30px;font-family:Inter,sans-serif">
+                          </div>
+                        </div>
+                        <div>
+                          <span class="fi-label">扣款說明</span>
+                          <input class="fi fi--sm" type="text" placeholder="扣款原因..."
+                                 x-model="item.feeNote" @input="setDirty()">
+                        </div>
+                      </div>
+                    </template>
+
+                    <template x-if="idx === 0">
+                      <div style="font-size:10px;color:#C2410C;margin-top:6px;font-family:Inter,sans-serif">↩ 第一筆自動吸收四捨五入差額，確保各期合計 100%</div>
+                    </template>
+                  </div>
+                </template>
+
+                <button class="btn-add" @click="addPaymentItem()">
+                  <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 4v16m8-8H4"/></svg>
+                  新增款項
+                </button>
+
+                <div class="fi-group" style="margin-top:14px">
+                  <label class="fi-label">付款備注</label>
+                  <input class="fi" type="text" placeholder="付款條件、特殊約定..."
+                         x-model="cr.caseRecord.payment.note" @input="setDirty()">
+                </div>
+
+              </div><!-- /biz -->
+
+              <!-- ══ 執行 Tab ══ -->
+              <div x-show="activeTab==='exec'" style="padding:0">
+
+                <!-- 執行子 Tab -->
+                <div class="cm-subtabs">
+                  <button class="cm-tab" :class="{active: execSubTab==='progress'}"  @click="execSubTab='progress'">執行進度</button>
+                  <button class="cm-tab" :class="{active: execSubTab==='materials'}" @click="execSubTab='materials'">叫料管控</button>
+                  <button class="cm-tab" :class="{active: execSubTab==='devices'}"   @click="execSubTab='devices'">設備登錄</button>
+                  <button class="cm-tab" :class="{active: execSubTab==='warranty'}"  @click="execSubTab='warranty'">保固備注</button>
+                </div>
+
+                <div style="padding:20px">
+
+              <!-- ── 執行進度 ── -->
+              <div x-show="execSubTab==='progress'">
+                <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px">
+                  <div style="flex:1">
+                    <div class="prog">
+                      <div class="prog__fill prog__fill--blue" :style="'width:' + caseProgressPct() + '%'"></div>
+                    </div>
+                  </div>
+                  <span style="font-size:14px;font-weight:700;font-family:Inter,sans-serif;color:var(--accent);min-width:42px;text-align:right" x-text="caseProgressPct() + '%'"></span>
+                </div>
+
+                <template x-for="(st, idx) in (cr.caseRecord?.stages || [])" :key="st.id">
+                  <div class="stage-card" :class="st.done ? 'stage-card--done' : ''"
+                       draggable="true"
+                       @dragstart="dragStart(idx)"
+                       @dragover="dragOver($event, idx)"
+                       @dragend="dragEnd()"
+                       :style="dragFromIdx === idx ? 'opacity:.4' : ''">
+
+                    <div class="stage-card__head">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:#C9C7C1;flex-shrink:0;cursor:grab">
+                        <path d="M8 6h.01M8 12h.01M8 18h.01M16 6h.01M16 12h.01M16 18h.01"/>
+                      </svg>
+                      <input type="checkbox" x-model="st.done"
+                             @change="st.done ? (st.doneAt = st.doneAt || new Date().toISOString().slice(0,10)) : (st.doneAt=''); setDirty()"
+                             style="width:15px;height:15px;flex-shrink:0;accent-color:var(--success)">
+                      <input type="text" x-model="st.label" @input="setDirty()"
+                             style="flex:1;border:none;outline:none;font-size:13px;font-weight:600;font-family:var(--font-zh);background:transparent"
+                             :style="st.done ? 'text-decoration:line-through;color:#9CA3AF' : 'color:var(--text-primary)'">
+                      <template x-if="st.done">
+                        <input type="date" x-model="st.doneAt" @change="setDirty()"
+                               style="font-size:11px;border:1px solid #86EFAC;border-radius:5px;padding:3px 6px;background:#F0FDF4;color:#15803D;font-family:Inter,sans-serif;outline:none">
+                      </template>
+                      <span style="font-size:10px;padding:2px 7px;border-radius:4px;font-weight:600;font-family:Inter,sans-serif;flex-shrink:0;white-space:nowrap"
+                            :style="st.done ? 'background:#DCFCE7;color:#15803D' : 'background:#F3F4F6;color:#9CA3AF'"
+                            x-text="st.done ? '完成' : '待辦'"></span>
+                      <button class="btn-del" @click="removeStage(idx)" style="flex-shrink:0">×</button>
+                    </div>
+
+                    <div class="stage-card__body">
+                      <div class="visit-row" style="font-size:10px;color:var(--text-dim);font-family:Inter,sans-serif;padding-bottom:5px;border-bottom:1px solid #F0EFEB;margin-bottom:6px;align-items:center">
+                        <span>前往日期</span>
+                        <span style="text-align:center">人次</span>
+                        <span>工作內容 / 備注</span>
+                        <span></span>
+                      </div>
+
+                      <template x-for="(v, vi) in (st.visits || [])" :key="v.id">
+                        <div class="visit-row">
+                          <input type="date" x-model="v.visitDate" @change="setDirty()" class="fi fi--sm">
+                          <input type="number" min="1" max="99" x-model.number="v.visitPeople" @input="setDirty()"
+                                 placeholder="人" class="fi fi--sm" style="text-align:center;font-family:Inter,sans-serif">
+                          <textarea x-model="v.note" @input="setDirty()"
+                                    placeholder="工作內容、施工項目、備注..." class="fi fi--sm" rows="1"
+                                    style="resize:vertical;line-height:1.5;min-height:30px"></textarea>
+                          <button class="btn-del" @click="removeVisit(idx, vi)" style="margin-top:2px">×</button>
+                        </div>
+                      </template>
+
+                      <template x-if="(st.visits || []).length >= 2">
+                        <div style="display:flex;gap:12px;padding:5px 0 2px;border-top:1px dashed #E5E7EB;margin-top:4px">
+                          <span style="font-size:10px;color:var(--text-dim);font-family:Inter,sans-serif">合計</span>
+                          <span style="font-size:11px;font-weight:700;font-family:Inter,sans-serif;color:var(--text-primary)" x-text="stageTotalVisits(st) + ' 次出勤'"></span>
+                          <span style="font-size:11px;font-weight:700;font-family:Inter,sans-serif;color:var(--accent)" x-text="stageTotalPeople(st) + ' 人次'"></span>
+                        </div>
+                      </template>
+
+                      <button class="btn-add" style="margin-top:6px" @click="addVisit(idx)">
+                        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 4v16m8-8H4"/></svg>
+                        新增記錄
+                      </button>
+                    </div>
+                  </div>
+                </template>
+
+                <button class="btn-add" @click="addStage()">
+                  <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 4v16m8-8H4"/></svg>
+                  新增階段
+                </button>
+              </div>
+
+              <!-- ── 叫料管控 ── -->
+              <div x-show="execSubTab==='materials'">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+                  <span class="cm-section-title" style="margin-bottom:0">叫料清單</span>
+                  <div style="display:flex;gap:8px">
+                    <button class="btn-add" @click="showImportPanel=!showImportPanel" style="padding:5px 10px">
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+                      從報價單匯入
+                    </button>
+                    <template x-if="(cr.caseRecord?.materials||[]).some(m=>m.arrived)">
+                      <button class="btn-add" @click="syncMaterialsToDevices()" style="padding:5px 10px;background:#EEF2FF;border-color:#C7D2FE;color:#4338CA">
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 4v5h5M20 20v-5h-5M4 9a9 9 0 0114.5-5.5M20 15a9 9 0 01-14.5 5.5"/></svg>
+                        同步至設備登錄
+                      </button>
+                    </template>
+                  </div>
+                </div>
+
+                <template x-if="showImportPanel">
+                  <div style="background:#F8F7F4;border:1px solid var(--border-light);border-radius:10px;padding:12px 14px;margin-bottom:14px">
+                    <div style="font-size:11px;font-weight:600;font-family:var(--font-zh);color:var(--text-secondary);margin-bottom:10px">報價單品項（點擊加入叫料清單）</div>
+                    <template x-if="!(selected?.data?.items?.length)">
+                      <div style="font-size:12px;color:var(--text-dim);padding:8px 0">此報價單沒有品項明細</div>
+                    </template>
+                    <template x-for="(qi, qi_idx) in (selected?.data?.items || [])" :key="qi_idx">
+                      <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #EEE">
+                        <div style="flex:1;min-width:0">
+                          <div style="font-size:12px;font-weight:600;font-family:var(--font-zh);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" x-text="qi.description || '(無品名)'"></div>
+                          <div style="font-size:10px;color:var(--text-dim);font-family:Inter,sans-serif" x-text="qi.brand || ''"></div>
+                        </div>
+                        <span style="font-size:11px;color:var(--text-dim);font-family:Inter,sans-serif;white-space:nowrap" x-text="(qi.qty||1) + ' ' + (qi.unit||'台')"></span>
+                        <button class="btn-add" @click="addMaterialFromQuote(qi)" style="padding:3px 8px;font-size:11px;flex-shrink:0">加入</button>
+                      </div>
+                    </template>
+                    <div style="margin-top:10px;display:flex;justify-content:space-between">
+                      <button class="btn-add" @click="importAllFromQuote()" style="padding:4px 10px;font-size:11px">全部匯入</button>
+                      <button class="btn-add" @click="showImportPanel=false" style="padding:4px 10px;font-size:11px">關閉</button>
+                    </div>
+                  </div>
+                </template>
+
+                <template x-for="(mat, idx) in (cr.caseRecord?.materials || [])" :key="mat.id">
+                  <div class="mat-card">
+                    <div class="mat-card__head">
+                      <input class="fi" type="text" placeholder="品名" x-model="mat.name" @input="setDirty()" style="flex:1;min-width:0">
+                      <input class="fi" type="text" placeholder="廠牌/型號" x-model="mat.model" @input="setDirty()" style="width:110px;font-size:11px;flex-shrink:0">
+                      <input class="fi" type="number" placeholder="數量" x-model.number="mat.qty" min="1" @input="setDirty()" style="width:52px;flex-shrink:0">
+                      <input class="fi" type="text" placeholder="單位" x-model="mat.unit" @input="setDirty()" style="width:44px;font-size:12px;flex-shrink:0">
+                      <span class="mat-tag" :class="mat.arrived ? 'mat-tag--arrived' : mat.ordered ? 'mat-tag--ordered' : 'mat-tag--pending'"
+                            x-text="mat.arrived ? '到料' : mat.ordered ? '叫料中' : '待叫料'"></span>
+                      <button class="btn-del" @click="removeMaterial(idx)">×</button>
+                    </div>
+                    <div class="mat-card__body">
+                      <div style="display:flex;gap:16px;margin-bottom:6px">
+                        <label style="display:flex;align-items:center;gap:5px;font-size:12px;font-family:var(--font-zh);cursor:pointer">
+                          <input type="checkbox" x-model="mat.ordered" @change="setDirty()">已叫料
+                        </label>
+                        <label style="display:flex;align-items:center;gap:5px;font-size:12px;font-family:var(--font-zh);cursor:pointer">
+                          <input type="checkbox" x-model="mat.arrived" @change="onMaterialArrived(mat)">已到料
+                        </label>
+                        <template x-if="mat.arrived">
+                          <span style="font-size:11px;color:var(--text-dim);font-family:Inter,sans-serif;margin-left:auto" x-text="'共 ' + (mat.qty||1) + ' ' + (mat.unit||'台')"></span>
+                        </template>
+                      </div>
+                      <template x-if="mat.arrived">
+                        <div style="border-top:1px solid var(--border-light);padding-top:8px;margin-top:2px">
+                          <div style="font-size:10px;font-family:Inter,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);font-weight:600;margin-bottom:6px">設備序號 / MAC</div>
+                          <template x-for="(md, mi) in (mat.devices || [])" :key="md.id">
+                            <div style="display:grid;grid-template-columns:auto 1fr 1fr;gap:6px;align-items:center;margin-bottom:4px">
+                              <span style="font-size:11px;color:var(--text-dim);font-family:Inter,sans-serif;min-width:18px" x-text="'#'+(mi+1)"></span>
+                              <input class="fi fi--sm fi--mono" type="text" placeholder="SN 序號" x-model="md.sn" @input="autoSyncDevice(mat, mi)">
+                              <input class="fi fi--sm fi--mono" type="text" placeholder="MAC 位址" x-model="md.mac" @input="autoSyncDevice(mat, mi)">
+                            </div>
+                          </template>
+                        </div>
+                      </template>
+                      <input class="fi fi--sm" type="text" placeholder="備注" x-model="mat.note" @input="setDirty()" style="width:100%;margin-top:6px">
+                    </div>
+                  </div>
+                </template>
+
+                <button class="btn-add" @click="addMaterial()">
+                  <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 4v16m8-8H4"/></svg>
+                  新增品項
+                </button>
+              </div>
+
+              <!-- ── 設備登錄 ── -->
+              <div x-show="execSubTab==='devices'">
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+                  <span class="cm-section-title" style="margin-bottom:0">設備 SN / MAC 記錄</span>
+                  <template x-if="(cr.caseRecord?.devices||[]).length > 0">
+                    <div style="display:flex;align-items:center;gap:6px;padding:6px 10px;background:#EEF2FF;border:1px solid #C7D2FE;border-radius:7px;flex-wrap:wrap">
+                      <span style="font-size:11px;font-weight:600;color:#4338CA;font-family:var(--font-zh);white-space:nowrap">一鍵同步保固</span>
+                      <input type="date" x-model="_syncWarrantyDate" class="fi fi--sm" style="width:138px;flex-shrink:0">
+                      <select x-model.number="_syncWarrantyMonths" class="fi fi--sm" style="width:96px;flex-shrink:0">
+                        <option value="3">3 月</option>
+                        <option value="6">6 月</option>
+                        <option value="12">12 月（1 年）</option>
+                        <option value="24">24 月（2 年）</option>
+                        <option value="36">36 月（3 年）</option>
+                        <option value="48">48 月（4 年）</option>
+                        <option value="60">60 月（5 年）</option>
+                      </select>
+                      <button @click="syncAllWarranty()" :disabled="!_syncWarrantyDate"
+                              style="padding:4px 10px;background:#4338CA;color:#fff;border:none;border-radius:5px;font-size:11px;font-family:var(--font-zh);font-weight:600;cursor:pointer;white-space:nowrap;opacity:1"
+                              :style="!_syncWarrantyDate ? 'opacity:.4;cursor:default' : ''">
+                        套用全部設備
+                      </button>
+                    </div>
+                  </template>
+                </div>
+
+                <template x-for="(dev, idx) in (cr.caseRecord?.devices || [])" :key="dev.id">
+                  <div class="dev-card">
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+                      <input class="fi" type="text" placeholder="設備名稱" x-model="dev.name" @input="setDirty()" style="flex:1;font-weight:600">
+                      <template x-if="dev.warrantyStart">
+                        <span class="w-badge" :class="'w-badge--' + warrantyStatus(dev.warrantyStart, dev.warrantyMonths)"
+                              x-text="warrantyStatusLabel(dev.warrantyStart, dev.warrantyMonths)"></span>
+                      </template>
+                      <button class="btn-del" @click="removeDevice(idx)">×</button>
+                    </div>
+                    <div class="dev-row">
+                      <span class="dev-row__lbl">SN</span>
+                      <input class="fi fi--sm fi--mono" type="text" placeholder="序號" x-model="dev.sn" @input="setDirty()">
+                    </div>
+                    <div class="dev-row">
+                      <span class="dev-row__lbl">MAC</span>
+                      <input class="fi fi--sm fi--mono" type="text" placeholder="MAC 位址" x-model="dev.mac" @input="setDirty()">
+                    </div>
+                    <div class="dev-row">
+                      <span class="dev-row__lbl">位置</span>
+                      <input class="fi fi--sm" type="text" placeholder="安裝位置" x-model="dev.location" @input="setDirty()">
+                    </div>
+                    <div class="dev-row" style="margin-top:4px">
+                      <span class="dev-row__lbl">保固</span>
+                      <input class="fi fi--sm" type="date" x-model="dev.warrantyStart" @change="setDirty()" style="flex:none;width:auto">
+                      <select class="fi fi--sm" x-model.number="dev.warrantyMonths" @change="setDirty()" style="flex:none;width:96px;margin-left:6px">
+                        <option value="3">3 月</option>
+                        <option value="6">6 月</option>
+                        <option value="12">12 月（1 年）</option>
+                        <option value="24">24 月（2 年）</option>
+                        <option value="36">36 月（3 年）</option>
+                        <option value="48">48 月（4 年）</option>
+                        <option value="60">60 月（5 年）</option>
+                      </select>
+                      <template x-if="dev.warrantyStart">
+                        <span style="font-size:11px;margin-left:8px;font-family:Inter,sans-serif"
+                              :style="warrantyStatus(dev.warrantyStart,dev.warrantyMonths)==='expired' ? 'color:var(--danger)' : warrantyStatus(dev.warrantyStart,dev.warrantyMonths)==='expiring' ? 'color:var(--warning)' : 'color:var(--success)'"
+                              x-text="'到期：' + warrantyExpiry(dev.warrantyStart, dev.warrantyMonths)"></span>
+                      </template>
+                    </div>
+                    <div class="dev-row" style="margin-top:3px">
+                      <span class="dev-row__lbl">備注</span>
+                      <input class="fi fi--sm" type="text" placeholder="設備備注" x-model="dev.note" @input="setDirty()">
+                    </div>
+                  </div>
+                </template>
+
+                <button class="btn-add" @click="addDevice()">
+                  <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 4v16m8-8H4"/></svg>
+                  新增設備
+                </button>
+              </div>
+
+              <!-- ── 保固備注 ── -->
+              <div x-show="execSubTab==='warranty'">
+                <template x-if="cr.dealTag === '已結案'">
+                  <div style="background:#F5F3FF;border:1px solid #C4B5FD;border-radius:10px;padding:14px 18px;margin-bottom:18px">
+                    <div style="font-size:12px;font-weight:700;color:#6D28D9;font-family:var(--font-zh);margin-bottom:8px">已結案 — 保固追蹤中</div>
+                    <template x-for="dev in (cr.caseRecord?.devices||[]).filter(d => d.warrantyStart)" :key="dev.id">
+                      <div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid #EDE9FE;font-size:12px">
+                        <span style="flex:1;font-weight:500;font-family:var(--font-zh)" x-text="dev.name || '(未命名設備)'"></span>
+                        <span style="font-family:Inter,sans-serif;color:var(--text-dim);font-size:11px" x-text="warrantyExpiry(dev.warrantyStart, dev.warrantyMonths)"></span>
+                        <span class="w-badge" :class="'w-badge--' + warrantyStatus(dev.warrantyStart, dev.warrantyMonths)"
+                              x-text="warrantyStatusLabel(dev.warrantyStart, dev.warrantyMonths)"></span>
+                      </div>
+                    </template>
+                    <template x-if="(cr.caseRecord?.devices||[]).filter(d => d.warrantyStart).length === 0">
+                      <div style="font-size:11px;color:#8B5CF6;font-family:var(--font-zh)">尚無設備保固資料，請至「設備登錄」頁填寫</div>
+                    </template>
+                  </div>
+                </template>
+
+                <div class="fi-group">
+                  <label class="fi-label">整體保固條件備注</label>
+                  <textarea class="fi" placeholder="整體保固條件說明、特殊約定事項..."
+                            x-model="cr.caseRecord.warrantyNote" @input="setDirty()"
+                            style="resize:vertical;min-height:80px;line-height:1.6"></textarea>
+                </div>
+
+                <div class="fi-group">
+                  <label class="fi-label">案件執行備注</label>
+                  <textarea class="fi" placeholder="案件執行備注、注意事項、重要紀錄..."
+                            x-model="cr.caseRecord.notes" @input="setDirty()"
+                            style="resize:vertical;min-height:120px;line-height:1.6"></textarea>
+                </div>
+
+                <div style="display:flex;justify-content:flex-end;margin-top:4px">
+                  <button class="btn-save" @click="saveCaseRecord()" :disabled="saving">
+                    <span x-show="!saving">儲存備注</span>
+                    <span x-show="saving">儲存中...</span>
+                  </button>
+                </div>
+              </div>
+
+                </div><!-- /exec inner padding -->
+              </div><!-- /exec -->
+
+              <!-- ══ 財務 Tab ══ -->
+              <div x-show="activeTab==='fin' && canSeeFinancial()">
+
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px">
+                  <span class="cm-section-title" style="margin-bottom:0">精算結果</span>
+                  <template x-if="caseSettleStatus()">
+                    <span style="font-size:11px;padding:2px 8px;border-radius:4px;font-weight:600;font-family:Inter,sans-serif"
+                          :style="caseSettleStatus()==='finalized' ? 'background:#DCFCE7;color:#15803D' : 'background:#FEF3C7;color:#92400E'"
+                          x-text="caseSettleStatus()==='finalized' ? '已定稿' : '草稿'"></span>
+                  </template>
+                  <a :href="'settlement.html?no=' + (selected?.quote_no||'')"
+                     style="margin-left:auto;font-size:12px;padding:5px 12px;background:#EEF2FF;color:#4338CA;border:1px solid #C7D2FE;border-radius:6px;text-decoration:none;font-family:var(--font-zh);font-weight:500">
+                    前往精算頁面 ▶
+                  </a>
+                </div>
+
+                <template x-if="!caseSettlement()">
+                  <div style="text-align:center;padding:48px 20px;color:var(--text-dim);font-family:var(--font-zh);font-size:13px">
+                    尚無精算資料，請前往精算頁面建立
+                  </div>
+                </template>
+
+                <template x-if="caseSettlement()">
+                  <div>
+                    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px">
+                      <div class="cm-kpi__pill">
+                        <span class="cm-kpi__val" x-text="caseSettleFmt(caseSettleSummary().revenue)"></span>
+                        <span class="cm-kpi__lbl">含稅收入</span>
+                      </div>
+                      <div class="cm-kpi__pill" :class="(caseSettleSummary().directMarginPct||0) >= 0 ? 'success' : 'danger'">
+                        <span class="cm-kpi__val" x-text="((caseSettleSummary().directMarginPct)||0).toFixed(1) + '%'"></span>
+                        <span class="cm-kpi__lbl">直接毛利率</span>
+                      </div>
+                      <div class="cm-kpi__pill" :class="(caseSettleSummary().netMarginPct||0) >= 0 ? 'success' : 'danger'">
+                        <span class="cm-kpi__val" x-text="((caseSettleSummary().netMarginPct)||0).toFixed(1) + '%'"></span>
+                        <span class="cm-kpi__lbl">淨利率</span>
+                      </div>
+                    </div>
+
+                    <template x-if="caseSettleItems().length > 0">
+                      <div>
+                        <div class="cm-section-title">成本明細</div>
+                        <template x-for="(item, i) in caseSettleItems()" :key="i">
+                          <div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid #F0EFEB;font-size:12px">
+                            <span style="flex:1;font-family:var(--font-zh)" x-text="item.desc"></span>
+                            <span style="font-family:Inter,sans-serif;font-weight:600" x-text="caseSettleFmt(item.amount)"></span>
+                          </div>
+                        </template>
+                      </div>
+                    </template>
+
+                    <template x-if="caseSettleExtras().length > 0">
+                      <div style="margin-top:14px">
+                        <div class="cm-section-title">其他項目</div>
+                        <template x-for="(item, i) in caseSettleExtras()" :key="i">
+                          <div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid #F0EFEB;font-size:12px">
+                            <span style="flex:1;font-family:var(--font-zh)" x-text="item.desc"></span>
+                            <span style="font-family:Inter,sans-serif;font-weight:600" x-text="caseSettleFmt(item.amount)"></span>
+                          </div>
+                        </template>
+                      </div>
+                    </template>
+
+                    <template x-if="caseSettleMemo()">
+                      <div style="margin-top:14px;background:#F9FAFB;border-radius:8px;padding:12px 14px">
+                        <div style="font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-dim);font-family:Inter,sans-serif;margin-bottom:6px">備注</div>
+                        <div style="font-size:13px;font-family:var(--font-zh);line-height:1.6;white-space:pre-wrap" x-text="caseSettleMemo()"></div>
+                      </div>
+                    </template>
+                  </div>
+                </template>
+
+              </div><!-- /fin -->
+
+            </div><!-- /cm-body -->
+          </div>
+        </template>
+
+      </div><!-- /cm-detail -->
+    </div><!-- /cm-layout -->
+  </main>
+</div>
+
+<script>
+/* case-management.js を外部ファイルとして読み込み済み（head内） */
+void 0
+</script>
+<script id="_inline_stub_noop">
+function __noop_stub() {
+  return {
+      isMobileView: window.innerWidth <= 767,
+    session: {},
+    loading: true,
+    cases: [],
+    filteredCases: [],
+    listTab: 'all',
+    search: '',
+    selected: null,
+    activeTab: 'progress',
+    cr: { dealTag: '已成案', caseRecord: null },
+    dirty: false,
+    saving: false,
+    saveStatus: '',
+    saveMsg: '',
+    _autoSaveTimer: null,
+    dragFromIdx: null,
+    showImportPanel: false,
+    showLog: false,
+    _allDonePrompted: false,
+    _syncWarrantyDate: '',
+    _syncWarrantyMonths: 12,
+    linkedProjectId: null,
+    showCreateProjectModal: false,
+    newProjectName: '',
+    creatingProject: false,
+
+    canSeeFinancial() {
+      const m = this.session.modules || []
+      return m.includes('financial_view') || ['superadmin','admin','sales'].includes(this.session.role)
+    },
+
+    canManageProject() {
+      const m = this.session.modules || []
+      return m.includes('project_manage') || ['superadmin','admin'].includes(this.session.role)
+    },
+
+    async init() {
+      window.addEventListener('resize', () => { this.isMobileView = window.innerWidth <= 767 })
+      const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
+      if (!s.token) { location.href = 'login.html'; return }
+      this.session = s
+      try {
+        const r = await fetch('/api/auth/me', { headers: { Authorization: 'Bearer ' + s.token } })
+        if (!r.ok) { location.href = 'login.html'; return }
+        const me = await r.json()
+        this.session.displayName = me.display_name
+      } catch {}
+      await this.loadCases()
+      const _qp = new URLSearchParams(location.search).get('q')
+      if (_qp) {
+        const _found = this.filteredCases.find(c => c.quote_no === _qp)
+        if (_found) await this.selectCase(_found.quote_no)
+      }
+    },
+
+    async loadCases() {
+      this.loading = true
+      try {
+        const s = this.session
+        const r = await fetch('/api/quotations?deal_tag=%E5%B7%B2%E6%88%90%E6%A1%88,%E5%B7%B2%E7%B5%90%E6%A1%88&limit=500', {
+          headers: { Authorization: 'Bearer ' + s.token }
+        })
+        if (r.ok) {
+          const data = await r.json()
+          this.cases = data.items || []
+        }
+      } catch {}
+      this.loading = false
+      this.filterCases()
+    },
+
+    filterCases() {
+      let list = this.cases
+      if (this.listTab !== 'all') list = list.filter(c => c.deal_tag === this.listTab)
+      if (this.search.trim()) {
+        const q = this.search.trim().toLowerCase()
+        list = list.filter(c =>
+          (c.quote_no || '').toLowerCase().includes(q) ||
+          (c.customer_name || '').toLowerCase().includes(q)
+        )
+      }
+      this.filteredCases = list
+    },
+
+    async selectCase(quoteNo) {
+      try {
+        const r = await fetch('/api/quotations/' + quoteNo, {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (!r.ok) return
+        const data = await r.json()
+        this.selected = data
+        this.cr.dealTag = data.data?.dealTag || data.deal_tag || '已成案'
+        this.cr.caseRecord = data.data?.caseRecord || null
+        this.ensureCaseRecord()
+        this.dirty = false
+        this.saveStatus = ''
+        this.saveMsg = ''
+        this.activeTab = 'progress'
+        this.showLog = false
+        this.showImportPanel = false
+        this._allDonePrompted = false
+        this._syncWarrantyDate = ''
+        this._syncWarrantyMonths = 12
+        this.linkedProjectId = null
+        // 背景查詢是否已有關聯專案
+        this._checkLinkedProject(quoteNo)
+      } catch {}
+    },
+
+    async _checkLinkedProject(quoteNo) {
+      try {
+        const r = await fetch(`/api/projects?case_no=${encodeURIComponent(quoteNo)}`, {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (!r.ok) return
+        const d = await r.json()
+        this.linkedProjectId = d.items?.length > 0 ? d.items[0].id : null
+      } catch {}
+    },
+
+    async goToProject() {
+      if (!this.selected) return
+      if (this.linkedProjectId) {
+        location.href = `projects.html?id=${this.linkedProjectId}`
+        return
+      }
+      // 非管理員直接導到專案列表過濾此案件
+      if (!this.canManageProject()) {
+        location.href = `projects.html?caseNo=${this.selected.quote_no}`
+        return
+      }
+      // 管理員：預填名稱後開啟建立 Modal
+      this.newProjectName = this.selected.project_name || this.selected.customer_name || ''
+      this.showCreateProjectModal = true
+    },
+
+    async createProjectFromCase() {
+      if (!this.newProjectName.trim() || !this.selected) return
+      this.creatingProject = true
+      try {
+        const r = await fetch('/api/projects', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify({
+            name: this.newProjectName.trim(),
+            status: '進行中',
+            description: `由案件 ${this.selected.quote_no} 轉入`,
+            linked_cases: [this.selected.quote_no],
+          })
+        })
+        if (!r.ok) { alert('建立失敗：' + (await r.json()).detail); return }
+        const d = await r.json()
+        this.showCreateProjectModal = false
+        location.href = `projects.html?id=${d.id}`
+      } catch(e) {
+        alert('發生錯誤：' + e.message)
+      } finally {
+        this.creatingProject = false
+      }
+    },
+
+    ensureCaseRecord() {
+      if (!this.cr.caseRecord) {
+        this.cr.caseRecord = {
+          stages: [
+            { id: 1, label: '訂單確認', done: false, doneAt: '', visits: [] },
+            { id: 2, label: '叫料出貨', done: false, doneAt: '', visits: [] },
+            { id: 3, label: '施工安裝', done: false, doneAt: '', visits: [] },
+            { id: 4, label: '客戶驗收', done: false, doneAt: '', visits: [] },
+            { id: 5, label: '尾款結清', done: false, doneAt: '', visits: [] },
+          ],
+          payment: { items: [
+            { id: 1, type: '訂金款', pct: 30, received: false, receivedAt: '', invoiceNo: '', note: '' },
+            { id: 2, type: '交貨款', pct: 30, received: false, receivedAt: '', invoiceNo: '', note: '' },
+            { id: 3, type: '驗收款', pct: 40, received: false, receivedAt: '', invoiceNo: '', note: '' },
+          ], note: '' },
+          materials: [], devices: [], warrantyNote: '', notes: '',
+        }
+      }
+      if (!this.cr.caseRecord.stages)    this.cr.caseRecord.stages    = []
+      if (!this.cr.caseRecord.materials) this.cr.caseRecord.materials = []
+      if (!this.cr.caseRecord.devices)   this.cr.caseRecord.devices   = []
+
+      this.cr.caseRecord.materials.forEach(mat => {
+        if (!mat.devices) mat.devices = []
+        if (!mat.model)   mat.model   = ''
+        if (!mat.unit)    mat.unit    = '台'
+      })
+
+      this.cr.caseRecord.stages.forEach(st => {
+        if (!st.visits) {
+          st.visits = (st.visitDate || st.note)
+            ? [{ id: Date.now() + Math.random(), visitDate: st.visitDate || '', visitPeople: st.visitPeople || '', note: st.note || '' }]
+            : []
+          delete st.visitDate; delete st.visitPeople; delete st.note
+        }
+      })
+
+      if (!this.cr.caseRecord.payment) {
+        this.cr.caseRecord.payment = { items: [
+          { id: 1, type: '訂金款', pct: 30, amount: null, received: false, receivedAt: '', invoiceNo: '', note: '' },
+          { id: 2, type: '交貨款', pct: 30, amount: null, received: false, receivedAt: '', invoiceNo: '', note: '' },
+          { id: 3, type: '驗收款', pct: 40, amount: null, received: false, receivedAt: '', invoiceNo: '', note: '' },
+        ], note: '' }
+      } else if (!this.cr.caseRecord.payment.items) {
+        this.cr.caseRecord.payment = { items: [
+          { id: 1, type: '訂金款', pct: 30, amount: null, received: false, receivedAt: '', invoiceNo: '', note: '' },
+          { id: 2, type: '交貨款', pct: 30, amount: null, received: false, receivedAt: '', invoiceNo: '', note: '' },
+          { id: 3, type: '驗收款', pct: 40, amount: null, received: false, receivedAt: '', invoiceNo: '', note: '' },
+        ], note: this.cr.caseRecord.payment.note || '' }
+      }
+    },
+
+    paymentItems() { return this.cr.caseRecord?.payment?.items || [] },
+
+    totalWithTax()  { return this.selected?.total    || 0 },
+    totalPretax()   { return this.selected?.pretax   || 0 },
+    totalTax()      { return this.totalWithTax() - this.totalPretax() },
+
+    totalEnteredPct() {
+      return this.paymentItems().reduce((s, p) => s + (+p.pct || 0), 0)
+    },
+
+    itemAmountWithTax(idx) {
+      const items = this.paymentItems()
+      if (items[idx]?.amount != null) return items[idx].amount
+      return Math.round(this.totalWithTax() * (+items[idx]?.pct || 0) / 100)
+    },
+
+    itemAmountPretax(idx) {
+      const items  = this.paymentItems()
+      const total  = this.totalWithTax()
+      const pretax = this.totalPretax()
+      if (items[idx]?.amount != null && total > 0)
+        return Math.round(items[idx].amount * pretax / total)
+      return Math.round(pretax * (+items[idx]?.pct || 0) / 100)
+    },
+
+    itemAmountTax(idx) { return this.itemAmountWithTax(idx) - this.itemAmountPretax(idx) },
+
+    _setItemAmount(items, idx, withTax) {
+      // 規範值：直接存含稅整數，pct 作為百分比 input 顯示用
+      const total = this.totalWithTax()
+      items[idx].amount = Math.round(withTax)
+      items[idx].pct    = total > 0 ? Math.round(withTax / total * 10000) / 100 : 0
+    },
+
+    _syncLast(items) {
+      // 讓最後一筆含稅 = 合約總額 − Σ其他，確保合計精確
+      const total   = this.totalWithTax()
+      const lastIdx = items.length - 1
+      const othersAmount = items.reduce((s, p, i) => i === lastIdx ? s : s + (p.amount ?? Math.round(total * (+p.pct || 0) / 100)), 0)
+      this._setItemAmount(items, lastIdx, Math.max(0, total - othersAmount))
+    },
+
+    onPctChange(idx) {
+      const items   = this.paymentItems()
+      const total   = this.totalWithTax()
+      const lastIdx = items.length - 1
+      if (items.length > 1 && idx !== lastIdx) {
+        // cap：非尾款項目的 pct 不超過 100 − 其他非尾款加總
+        const othersExclLast = items.reduce((s, p, i) => (i === idx || i === lastIdx) ? s : s + (+p.pct || 0), 0)
+        if ((+items[idx].pct || 0) > Math.max(0, 100 - othersExclLast))
+          items[idx].pct = Math.max(0, 100 - othersExclLast)
+        items[idx].amount = Math.round(total * (+items[idx].pct || 0) / 100)
+        this._syncLast(items)
+      } else {
+        const othersSum = items.reduce((s, p, i) => i === idx ? s : s + (+p.pct || 0), 0)
+        if ((+items[idx].pct || 0) > Math.max(0, 100 - othersSum))
+          items[idx].pct = Math.max(0, 100 - othersSum)
+        items[idx].amount = Math.round(total * (+items[idx].pct || 0) / 100)
+      }
+      this.setDirty()
+    },
+
+    onAmountWithTaxChange(idx, val) {
+      const total = this.totalWithTax()
+      if (!total || !isFinite(val) || val < 0) return
+      const items   = this.paymentItems()
+      const lastIdx = items.length - 1
+      // 計算本項能用的最大含稅（其他非尾款已佔的部分之外）
+      const othersTaken = items.reduce((s, p, i) => (i === idx || i === lastIdx) ? s
+        : s + (p.amount ?? Math.round(total * (+p.pct || 0) / 100)), 0)
+      const capped = Math.min(Math.round(val), Math.max(0, total - othersTaken))
+      this._setItemAmount(items, idx, capped)
+      if (items.length > 1 && idx !== lastIdx) this._syncLast(items)
+      this.setDirty()
+    },
+
+    onAmountPretaxChange(idx, val) {
+      const pretax = this.totalPretax()
+      const total  = this.totalWithTax()
+      if (!pretax || !isFinite(val) || val < 0) return
+      // 未稅 → 換算含稅後，同 onAmountWithTaxChange 邏輯
+      const withTax = Math.round(val * total / pretax)
+      const items   = this.paymentItems()
+      const lastIdx = items.length - 1
+      const othersTaken = items.reduce((s, p, i) => (i === idx || i === lastIdx) ? s
+        : s + (p.amount ?? Math.round(total * (+p.pct || 0) / 100)), 0)
+      const capped = Math.min(withTax, Math.max(0, total - othersTaken))
+      this._setItemAmount(items, idx, capped)
+      if (items.length > 1 && idx !== lastIdx) this._syncLast(items)
+      this.setDirty()
+    },
+
+    balanceLastPayment() {
+      const items = this.paymentItems()
+      if (items.length < 2) return
+      this._syncLast(items)
+      this.setDirty()
+    },
+
+    receivedTotal() {
+      return this.paymentItems().reduce((s, p, i) => p.received ? s + this.itemAmountWithTax(i) : s, 0)
+    },
+    receivedPct() {
+      return this.paymentItems().reduce((s, p) => p.received ? s + (+p.pct || 0) : s, 0)
+    },
+    outstandingTotal() { return Math.max(0, this.totalWithTax() - this.receivedTotal()) },
+    outstandingPct()   { return Math.max(0, 100 - this.receivedPct()) },
+
+    addPaymentItem() {
+      const items = this.cr.caseRecord.payment.items
+      items.push({ id: Date.now(), type: '進度款', pct: 0, received: false, receivedAt: '', invoiceNo: '', note: '' })
+      this.setDirty()
+    },
+    removePaymentItem(idx) {
+      if (this.cr.caseRecord.payment.items.length <= 1) return
+      this.cr.caseRecord.payment.items.splice(idx, 1)
+      if (this.cr.caseRecord.payment.items.length === 1) {
+        this.cr.caseRecord.payment.items[0].pct = 100
+      }
+      this.setDirty()
+    },
+
+    setDirty() {
+      this.dirty = true
+      this.saveStatus = 'dirty'
+      this.saveMsg = '未儲存'
+      clearTimeout(this._autoSaveTimer)
+      this._autoSaveTimer = setTimeout(() => this.saveCaseRecord(), 1500)
+      this._checkAllStagesDone()
+    },
+
+    _checkAllStagesDone() {
+      if (this.cr.dealTag !== '已成案') return
+      const stages = this.cr.caseRecord?.stages || []
+      if (!stages.length) return
+      if (!stages.every(s => s.done)) { this._allDonePrompted = false; return }
+      if (this._allDonePrompted) return
+      this._allDonePrompted = true
+      setTimeout(() => {
+        if (confirm('所有執行進度已完成！\n\n是否現在完結案件並進入保固追蹤期？\n（可稍後再按右上角「完結案」按鈕）')) {
+          this.closeCaseAction()
+        }
+      }, 300)
+    },
+
+    async saveCaseRecord() {
+      if (!this.selected) return
+      this.saving = true
+      try {
+        const r = await fetch('/api/quotations/' + this.selected.quote_no + '/case-record', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify({ case_record: this.cr.caseRecord })
+        })
+        if (r.ok) {
+          this.dirty = false
+          this.saveStatus = 'saved'
+          this.saveMsg = '已儲存'
+          setTimeout(() => { if (!this.dirty) { this.saveStatus = ''; this.saveMsg = '' } }, 2000)
+        } else {
+          this.saveStatus = 'error'
+          this.saveMsg = '儲存失敗'
+        }
+      } catch {
+        this.saveStatus = 'error'
+        this.saveMsg = '網路錯誤'
+      }
+      this.saving = false
+    },
+
+    async closeCaseAction() {
+      if (!confirm('確認完結案件？\n\n完結後此案件將進入「已結案」狀態並開始保固追蹤期。\n此操作無法復原，請確認所有款項與設備資料已填寫完畢。')) return
+      clearTimeout(this._autoSaveTimer)
+      await this.saveCaseRecord()
+      const entry = { at: new Date().toISOString(), user: this.session.displayName || '', from: '已成案', to: '已結案' }
+      await this.updateDealTag('已結案', entry)
+      if (this.cr.dealTag === '已結案') {
+        setTimeout(() => { location.href = 'warranty.html' }, 800)
+      }
+    },
+
+    async updateDealTag(tag, logEntry) {
+      if (!this.selected) return
+      try {
+        const body = { deal_tag: tag }
+        if (logEntry) body.log_entry = logEntry
+        const r = await fetch('/api/quotations/' + this.selected.quote_no + '/deal-tag', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify(body)
+        })
+        if (r.ok) {
+          this.cr.dealTag = tag
+          this.selected.deal_tag = tag
+          if (!this.selected.data)             this.selected.data = {}
+          if (!this.selected.data.statusLog)   this.selected.data.statusLog = []
+          if (logEntry) this.selected.data.statusLog.push(logEntry)
+          const idx = this.cases.findIndex(c => c.quote_no === this.selected.quote_no)
+          if (idx !== -1) this.cases[idx].deal_tag = tag
+          this.filterCases()
+        }
+      } catch {}
+    },
+
+    caseProgressPct() {
+      const stages = this.cr.caseRecord?.stages || []
+      if (!stages.length) return 0
+      return Math.round(stages.filter(s => s.done).length / stages.length * 100)
+    },
+
+    addStage() {
+      this.ensureCaseRecord()
+      this.cr.caseRecord.stages.push({ id: Date.now(), label: '新階段', done: false, doneAt: '', visits: [] })
+      this.setDirty()
+    },
+    removeStage(idx)  { this.cr.caseRecord.stages.splice(idx, 1); this.setDirty() },
+    addVisit(stageIdx) {
+      const st = this.cr.caseRecord.stages[stageIdx]
+      if (!st.visits) st.visits = []
+      st.visits.push({ id: Date.now(), visitDate: '', visitPeople: '', note: '' })
+      this.setDirty()
+    },
+    removeVisit(stageIdx, visitIdx) {
+      const st = this.cr.caseRecord.stages[stageIdx]
+      if (st.visits) st.visits.splice(visitIdx, 1)
+      this.setDirty()
+    },
+    stageTotalVisits(st) { return (st.visits || []).filter(v => v.visitDate || v.note).length },
+    stageTotalPeople(st) { return (st.visits || []).reduce((s, v) => s + (+v.visitPeople || 0), 0) },
+
+    dragStart(idx) { this.dragFromIdx = idx },
+    dragOver(e, idx) {
+      e.preventDefault()
+      if (this.dragFromIdx === null || this.dragFromIdx === idx) return
+      const stages = this.cr.caseRecord.stages
+      const moved  = stages.splice(this.dragFromIdx, 1)[0]
+      stages.splice(idx, 0, moved)
+      this.dragFromIdx = idx
+    },
+    dragEnd() { this.dragFromIdx = null; this.setDirty() },
+
+    addMaterial() {
+      this.ensureCaseRecord()
+      this.cr.caseRecord.materials.push({ id: Date.now(), name: '', model: '', qty: 1, unit: '台', ordered: false, arrived: false, devices: [], note: '' })
+      this.setDirty()
+    },
+    removeMaterial(idx) { this.cr.caseRecord.materials.splice(idx, 1); this.setDirty() },
+    addMaterialFromQuote(qi) {
+      this.ensureCaseRecord()
+      this.cr.caseRecord.materials.push({
+        id: Date.now() + Math.random(),
+        name: qi.description || '', model: qi.brand || '',
+        qty: qi.qty || 1, unit: qi.unit || '台',
+        ordered: false, arrived: false, devices: [], note: ''
+      })
+      this.setDirty()
+    },
+    importAllFromQuote() {
+      const items = this.selected?.data?.items || []
+      items.forEach(qi => this.addMaterialFromQuote(qi))
+      this.showImportPanel = false
+    },
+    onMaterialArrived(mat) {
+      if (mat.arrived) {
+        const need = mat.qty || 1
+        if (!mat.devices) mat.devices = []
+        while (mat.devices.length < need) mat.devices.push({ id: Date.now() + Math.random(), sn: '', mac: '' })
+        if (mat.devices.length > need) mat.devices.splice(need)
+      }
+      this.setDirty()
+    },
+    syncMaterialsToDevices() {
+      this.ensureCaseRecord()
+      const mats     = (this.cr.caseRecord.materials || []).filter(m => m.arrived)
+      const existing = this.cr.caseRecord.devices
+      mats.forEach(mat => {
+        (mat.devices || []).forEach((md, mi) => {
+          let dev = existing.find(d => d._matId === mat.id && d._devIdx === mi)
+          if (!dev) {
+            const label = mat.name + ((mat.qty || 1) > 1 ? ` #${mi + 1}` : '')
+            dev = { id: Date.now() + Math.random(), name: label, sn: md.sn || '', mac: md.mac || '', location: '', warrantyStart: '', warrantyMonths: 12, note: '', _matId: mat.id, _devIdx: mi }
+            existing.push(dev)
+          } else {
+            if (md.sn)  dev.sn  = md.sn
+            if (md.mac) dev.mac = md.mac
+            if (!dev.name) dev.name = mat.name
+          }
+        })
+      })
+      this.activeTab = 'devices'
+      this.setDirty()
+    },
+    autoSyncDevice(mat, mi) {
+      const md = mat.devices && mat.devices[mi]
+      if (!md) { this.setDirty(); return }
+      this.ensureCaseRecord()
+      const devs = this.cr.caseRecord.devices
+      let dev = devs.find(d => d._matId === mat.id && d._devIdx === mi)
+      if (!dev) {
+        const label = mat.name + ((mat.qty || 1) > 1 ? ` #${mi + 1}` : '')
+        dev = { id: Date.now() + Math.random(), name: label, sn: md.sn || '', mac: md.mac || '', location: '', warrantyStart: '', warrantyMonths: 12, note: '', _matId: mat.id, _devIdx: mi }
+        devs.push(dev)
+      } else {
+        dev.sn  = md.sn  !== undefined ? md.sn  : dev.sn
+        dev.mac = md.mac !== undefined ? md.mac : dev.mac
+        if (!dev.name) dev.name = mat.name
+      }
+      this.setDirty()
+    },
+    addDevice() {
+      this.ensureCaseRecord()
+      this.cr.caseRecord.devices.push({ id: Date.now(), name: '', sn: '', mac: '', location: '', warrantyStart: '', warrantyMonths: 12, note: '' })
+      this.setDirty()
+    },
+    removeDevice(idx) { this.cr.caseRecord.devices.splice(idx, 1); this.setDirty() },
+    syncAllWarranty() {
+      if (!this._syncWarrantyDate) return
+      const devs = this.cr.caseRecord?.devices || []
+      devs.forEach(d => {
+        d.warrantyStart   = this._syncWarrantyDate
+        d.warrantyMonths  = this._syncWarrantyMonths
+      })
+      this.setDirty()
+    },
+
+    warrantyExpiry(start, months) {
+      if (!start || !months) return ''
+      const d = new Date(start)
+      d.setMonth(d.getMonth() + (+months))
+      return d.toLocaleDateString('zh-TW')
+    },
+    warrantyStatus(start, months) {
+      if (!start || !months) return 'active'
+      const expiry = new Date(start)
+      expiry.setMonth(expiry.getMonth() + (+months))
+      const daysLeft = Math.round((expiry - new Date()) / 86400000)
+      if (daysLeft < 0)  return 'expired'
+      if (daysLeft < 90) return 'expiring'
+      return 'active'
+    },
+    warrantyStatusLabel(start, months) {
+      const s = this.warrantyStatus(start, months)
+      if (s === 'expired')  return '已過保'
+      if (s === 'expiring') return '即將到期'
+      return '保固中'
+    },
+
+    logout() {
+      fetch('/api/auth/logout', { method: 'POST', headers: { Authorization: 'Bearer ' + (this.session.token || '') } }).catch(() => {})
+      localStorage.removeItem('motrix_session'); location.href = 'login.html'
+    },
+  }
+}
+</script>
+  <script src="../static/notif.js"></script>
+
+  <!-- ── 建立專案 Modal ── -->
+  <div x-show="showCreateProjectModal" x-cloak
+       style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:300;display:flex;align-items:center;justify-content:center;padding:24px;"
+       @click.self="showCreateProjectModal=false">
+    <div style="background:#fff;border-radius:12px;width:100%;max-width:440px;box-shadow:0 20px 40px rgba(0,0,0,.15);overflow:hidden;">
+      <div style="display:flex;align-items:center;padding:14px 18px;border-bottom:1px solid #F0EFEB;gap:8px;">
+        <svg viewBox="0 0 20 20" fill="none" stroke="#7C3AED" stroke-width="1.8" style="width:18px;height:18px;"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+        <span style="font-size:14px;font-weight:600;font-family:var(--font-zh);flex:1;">建立專案並關聯此案件</span>
+        <button @click="showCreateProjectModal=false" style="background:#F0EEE9;border:none;border-radius:4px;width:26px;height:26px;cursor:pointer;font-size:16px;color:#6B7280;">×</button>
+      </div>
+      <div style="padding:18px;">
+        <div style="font-size:11px;color:var(--text-dim);font-family:Inter,sans-serif;margin-bottom:12px;">
+          案件 <strong x-text="selected?.quote_no"></strong> 將自動關聯至新專案
+        </div>
+        <div style="margin-bottom:12px;">
+          <label style="display:block;font-size:10px;font-family:Inter,sans-serif;text-transform:uppercase;letter-spacing:.08em;color:var(--text-dim);font-weight:500;margin-bottom:5px;">專案名稱 <span style="color:var(--danger)">*</span></label>
+          <input type="text"
+            x-model="newProjectName"
+            @keydown.enter="createProjectFromCase()"
+            style="width:100%;padding:9px 11px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:var(--font-zh);outline:none;box-sizing:border-box;"
+            placeholder="輸入專案名稱..."
+            x-ref="projectNameInput"
+            @focus="$el.select()">
+        </div>
+        <div style="font-size:11px;color:var(--text-dim);font-family:var(--font-zh);">
+          初始狀態：<strong style="color:#15803D;">進行中</strong>
+          （可在專案管理頁面調整）
+        </div>
+      </div>
+      <div style="padding:12px 18px;border-top:1px solid #F0EFEB;display:flex;justify-content:flex-end;gap:8px;">
+        <button @click="showCreateProjectModal=false"
+          style="padding:7px 14px;border-radius:var(--radius);border:1px solid var(--border-light);background:#fff;font-size:12px;font-family:var(--font-zh);cursor:pointer;color:var(--text-secondary);">
+          取消
+        </button>
+        <button @click="createProjectFromCase()"
+          :disabled="!newProjectName.trim() || creatingProject"
+          style="padding:7px 14px;border-radius:var(--radius);border:none;background:var(--accent);color:#fff;font-size:12px;font-family:var(--font-zh);cursor:pointer;font-weight:500;opacity:1;"
+          :style="(!newProjectName.trim() || creatingProject) && 'opacity:.5;cursor:not-allowed'">
+          <span x-text="creatingProject ? '建立中...' : '建立並前往'"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+  <script src="../static/sidebar.js"></script>
+</body>
+</html>

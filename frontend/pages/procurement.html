@@ -1,0 +1,216 @@
+﻿<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="../static/favicon.png">
+  <title>採購管理 — MOTRIX 營運管理系統</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600&display=swap" rel="stylesheet">
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    [x-cloak]{display:none!important}
+    .page-main{margin-left:var(--sidebar-w);margin-top:var(--topbar-h);padding:28px 32px;min-height:calc(100vh - var(--topbar-h));background:var(--white)}
+    .stat-strip{display:flex;gap:12px;margin-bottom:22px;flex-wrap:wrap}
+    .stat-pill{display:flex;flex-direction:column;padding:14px 18px;border:1px solid var(--border-light);border-radius:var(--radius-lg);background:#fff;min-width:110px;flex:1;max-width:180px}
+    .stat-pill__val{font-size:22px;font-weight:700;font-family:Inter,sans-serif;line-height:1;color:var(--text-primary)}
+    .stat-pill__lbl{font-size:10px;color:var(--text-dim);font-family:Inter,sans-serif;letter-spacing:.06em;margin-top:4px;text-transform:uppercase}
+    .stat-pill.warn .stat-pill__val{color:#D97706}
+    .stat-pill.success .stat-pill__val{color:var(--success)}
+    .toolbar{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+    .search-wrap{position:relative;flex:0 0 280px}
+    .search-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text-dim);pointer-events:none}
+    .search-input{width:100%;padding:8px 11px 8px 34px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;background:#fff;outline:none;box-sizing:border-box}
+    .search-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(37,99,235,.08)}
+    .tab-bar{display:flex;gap:2px;margin-bottom:16px;border-bottom:1px solid var(--border-light)}
+    .tab{padding:7px 16px;font-size:12px;font-family:var(--font-zh);cursor:pointer;border:none;background:none;color:var(--text-secondary);border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .1s}
+    .tab:hover{color:var(--text-primary)}
+    .tab.on{color:var(--accent);border-bottom-color:var(--accent);font-weight:600}
+    .tab__cnt{font-family:Inter,sans-serif;font-size:10px;font-weight:600;margin-left:4px;padding:1px 5px;border-radius:8px;background:#F0EEE9}
+    .tab.on .tab__cnt{background:var(--accent-light);color:var(--accent)}
+    .panel{background:#fff;border:1px solid var(--border-light);border-radius:var(--radius-lg);overflow:hidden}
+    .data-table{width:100%;border-collapse:collapse;font-size:13px}
+    .data-table th{padding:10px 14px;text-align:left;font-size:10px;font-family:Inter,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);font-weight:500;background:#FAFAF8;border-bottom:1px solid var(--border-light);white-space:nowrap}
+    .data-table td{padding:11px 14px;border-bottom:1px solid #F0EEE9;vertical-align:middle}
+    .data-table tr:last-child td{border-bottom:none}
+    .data-table tr:hover td{background:#FDFCFA}
+    .rb{display:inline-flex;align-items:center;padding:2px 9px;border-radius:4px;font-size:11px;font-weight:600}
+    .rb-pending{background:#FEF3C7;color:#92400E}
+    .rb-ordered{background:#DBEAFE;color:#1E40AF}
+    .rb-arrived{background:var(--success-light);color:var(--success)}
+    .rb-case{background:#EEF2FF;color:#4338CA}
+    .rb-closed{background:#F3F4F6;color:#374151}
+    .empty-state{text-align:center;padding:48px;color:var(--text-dim);font-size:13px}
+    .loading-text{text-align:center;padding:40px;color:var(--text-dim);font-size:13px}
+  </style>
+</head>
+<body x-data="app()" x-init="init()" x-cloak>
+
+  <header id="app-topbar" class="topbar"></header>
+<div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+<div class="app-shell">
+
+  <aside class="sidebar" id="app-sidebar"></aside>
+
+  <main class="page-main">
+
+    <div class="stat-strip">
+      <div class="stat-pill">
+        <div class="stat-pill__val" x-text="items.length">—</div>
+        <div class="stat-pill__lbl">叫料項目</div>
+      </div>
+      <div class="stat-pill warn">
+        <div class="stat-pill__val" x-text="items.filter(m=>m.status==='pending').length">—</div>
+        <div class="stat-pill__lbl">待採購</div>
+      </div>
+      <div class="stat-pill" style="--val-color:#1E40AF">
+        <div class="stat-pill__val" style="color:#1E40AF" x-text="items.filter(m=>m.status==='ordered').length">—</div>
+        <div class="stat-pill__lbl">已下單待料</div>
+      </div>
+      <div class="stat-pill success">
+        <div class="stat-pill__val" x-text="items.filter(m=>m.status==='arrived').length">—</div>
+        <div class="stat-pill__lbl">已到料</div>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <div class="search-wrap">
+        <span class="search-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg></span>
+        <input class="search-input" type="search" placeholder="搜尋品名 / 型號 / 案件號 / 客戶…" x-model="search">
+      </div>
+      <div style="margin-left:auto;font-size:12px;color:var(--text-dim)" x-text="filtered.length + ' 筆'"></div>
+    </div>
+
+    <div class="tab-bar">
+      <button class="tab" :class="tab==='all' && 'on'" @click="tab='all'">
+        全部 <span class="tab__cnt" x-text="items.length"></span>
+      </button>
+      <button class="tab" :class="tab==='pending' && 'on'" @click="tab='pending'">
+        待採購 <span class="tab__cnt" x-text="items.filter(m=>m.status==='pending').length"></span>
+      </button>
+      <button class="tab" :class="tab==='ordered' && 'on'" @click="tab='ordered'">
+        待到料 <span class="tab__cnt" x-text="items.filter(m=>m.status==='ordered').length"></span>
+      </button>
+      <button class="tab" :class="tab==='arrived' && 'on'" @click="tab='arrived'">
+        已到料 <span class="tab__cnt" x-text="items.filter(m=>m.status==='arrived').length"></span>
+      </button>
+    </div>
+
+    <div class="panel">
+      <div class="loading-text" x-show="loading">載入中…</div>
+      <template x-if="!loading">
+        <div>
+          <table class="data-table" x-show="filtered.length > 0">
+            <thead>
+              <tr>
+                <th>品名</th>
+                <th>廠牌/型號</th>
+                <th style="text-align:right">數量</th>
+                <th>單位</th>
+                <th>到料狀態</th>
+                <th>案件號</th>
+                <th>客戶</th>
+                <th>案件狀態</th>
+                <th>備注</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="(m, idx) in filtered" :key="m.quoteNo + '_' + m.matId">
+                <tr>
+                  <td style="font-size:12px;font-weight:500" x-text="m.name || '—'"></td>
+                  <td style="font-size:12px;color:var(--text-secondary)" x-text="m.model || '—'"></td>
+                  <td style="text-align:right;font-family:Inter,sans-serif;font-size:13px;font-weight:600" x-text="m.qty"></td>
+                  <td style="font-size:12px;color:var(--text-dim)" x-text="m.unit"></td>
+                  <td>
+                    <span class="rb" :class="m.status==='arrived' ? 'rb-arrived' : m.status==='ordered' ? 'rb-ordered' : 'rb-pending'"
+                          x-text="m.status==='arrived' ? '已到料' : m.status==='ordered' ? '已下單' : '待採購'"></span>
+                  </td>
+                  <td>
+                    <a :href="'case-management.html?q=' + m.quoteNo"
+                       style="font-family:Inter,sans-serif;font-size:12px;font-weight:600;color:var(--accent);text-decoration:none"
+                       x-text="m.quoteNo"></a>
+                  </td>
+                  <td style="font-size:12px" x-text="m.customer || '—'"></td>
+                  <td>
+                    <span class="rb" :class="m.dealTag==='已結案'?'rb-closed':'rb-case'" x-text="m.dealTag || '—'"></span>
+                  </td>
+                  <td style="font-size:11px;color:var(--text-dim);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" x-text="m.note || '—'"></td>
+                  <td>
+                    <a :href="'case-management.html?q=' + m.quoteNo"
+                       style="display:inline-flex;align-items:center;gap:3px;padding:4px 8px;border-radius:var(--radius);font-size:11px;font-family:var(--font-zh);font-weight:500;background:#EEF2FF;color:#4338CA;border:1px solid #C7D2FE;text-decoration:none">
+                      叫料管控 →
+                    </a>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+          <div class="empty-state" x-show="filtered.length === 0">
+            <div style="font-size:32px;margin-bottom:10px">🗂</div>
+            <div x-show="items.length === 0">尚無叫料資料，請至案件管理的叫料管控頁面新增</div>
+            <div x-show="items.length > 0 && filtered.length === 0">無符合條件的叫料項目</div>
+          </div>
+        </div>
+      </template>
+    </div>
+
+  </main>
+</div>
+
+<script>
+const API = '/api'
+function app() {
+  return {
+    session: {},
+    loading: true,
+    items: [],
+    search: '',
+    tab: 'all',
+
+    get filtered() {
+      let list = this.items
+      if (this.tab !== 'all') list = list.filter(m => m.status === this.tab)
+      const q = this.search.trim().toLowerCase()
+      if (q) list = list.filter(m =>
+        (m.name||'').toLowerCase().includes(q) ||
+        (m.model||'').toLowerCase().includes(q) ||
+        (m.quoteNo||'').toLowerCase().includes(q) ||
+        (m.customer||'').toLowerCase().includes(q)
+      )
+      return list
+    },
+
+    async init() {
+      const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
+      if (!s.token) { location.href = 'login.html'; return }
+      this.session = s
+      try {
+        const r = await fetch(`${API}/auth/me`, { headers: { Authorization: 'Bearer ' + s.token } })
+        if (!r.ok) { location.href = 'login.html'; return }
+        const me = await r.json(); this.session.displayName = me.display_name
+      } catch {}
+      await this.load()
+    },
+
+    async load() {
+      this.loading = true
+      try {
+        const r = await fetch(`${API}/materials-summary`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (r.ok) { const d = await r.json(); this.items = d.items || [] }
+      } catch {}
+      this.loading = false
+    },
+
+    logout() {
+      fetch(`${API}/auth/logout`, { method:'POST', headers:{ Authorization:'Bearer '+(this.session.token||'') } }).catch(()=>{})
+      localStorage.removeItem('motrix_session'); location.href = 'login.html'
+    }
+  }
+}
+</script>
+  <script src="../static/notif.js"></script>
+  <script src="../static/sidebar.js"></script>
+</body>
+</html>

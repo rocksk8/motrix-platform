@@ -1,0 +1,461 @@
+﻿<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="../static/favicon.png">
+  <title>工作日誌 — MOTRIX 營運管理系統</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600&display=swap" rel="stylesheet">
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    [x-cloak] { display:none !important; }
+
+    .wl-main {
+      margin-left: var(--sidebar-w);
+      margin-top: var(--topbar-h);
+      padding: 28px 32px;
+      min-height: calc(100vh - var(--topbar-h));
+      background: var(--white);
+    }
+
+    /* ── Toolbar ── */
+    .wl-toolbar {
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+    .wl-date-nav {
+      display: flex; align-items: center; gap: 6px;
+    }
+    .wl-date-nav button {
+      width: 30px; height: 30px; border: 1px solid var(--border-light);
+      border-radius: var(--radius); background: #fff; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--text-secondary); transition: background .1s;
+    }
+    .wl-date-nav button:hover { background: #F5F4F0; }
+    .wl-date-input {
+      padding: 6px 10px; border: 1px solid var(--border-light);
+      border-radius: var(--radius); font-size: 13px; font-family: Inter, sans-serif;
+      color: var(--text-primary); background: #fff; outline: none;
+    }
+    .wl-date-input:focus { border-color: var(--accent); }
+    .wl-today-btn {
+      padding: 6px 12px; border: 1px solid var(--border-light); border-radius: var(--radius);
+      background: #fff; font-size: 12px; color: var(--text-secondary); cursor: pointer;
+      font-family: var(--font-zh); transition: all .1s;
+    }
+    .wl-today-btn:hover { background: #F0EEE9; }
+
+    /* ── Filter by user ── */
+    .wl-filter-user {
+      padding: 6px 10px; border: 1px solid var(--border-light); border-radius: var(--radius);
+      font-size: 13px; font-family: var(--font-zh); color: var(--text-primary);
+      background: #fff; outline: none; min-width: 140px;
+    }
+    .wl-filter-user:focus { border-color: var(--accent); }
+
+    /* ── Summary row ── */
+    .wl-summary {
+      display: flex; gap: 16px; align-items: center; flex-wrap: wrap;
+      padding: 12px 16px; background: #F9F8F6; border-radius: var(--radius);
+      border: 1px solid var(--border-light); margin-bottom: 18px;
+      font-size: 12px; color: var(--text-secondary);
+    }
+    .wl-summary strong { color: var(--text-primary); font-weight: 700; font-family: Inter, sans-serif; }
+
+    /* ── Table ── */
+    .wl-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .wl-table {
+      width: 100%; border-collapse: collapse; font-size: 13px;
+    }
+    .wl-table th {
+      padding: 9px 14px; text-align: left; font-size: 11px; font-weight: 600;
+      color: var(--text-dim); text-transform: uppercase; letter-spacing: .06em;
+      border-bottom: 1px solid var(--border-light); background: #FAFAF9;
+    }
+    .wl-table td {
+      padding: 12px 14px; border-bottom: 1px solid #F0EFEB; vertical-align: top;
+    }
+    .wl-table tr:last-child td { border-bottom: none; }
+    .wl-table tr:hover td { background: #FAFAF9; }
+    .wl-user-tag {
+      display: inline-flex; align-items: center; gap: 6px;
+    }
+    .wl-avatar {
+      width: 28px; height: 28px; border-radius: 50%; background: var(--accent);
+      color: #fff; font-size: 11px; font-weight: 700; display: flex;
+      align-items: center; justify-content: center; flex-shrink: 0;
+      font-family: Inter, sans-serif;
+    }
+    .wl-uname { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+    .wl-hours-badge {
+      display: inline-block; padding: 2px 8px; border-radius: 4px;
+      font-size: 11px; font-weight: 600; font-family: Inter, sans-serif;
+      background: #DBEAFE; color: #1D4ED8;
+    }
+    .wl-content { font-size: 13px; color: var(--text-primary); line-height: 1.6; white-space: pre-wrap; }
+    .wl-actions { display: flex; gap: 6px; }
+    .wl-empty {
+      text-align: center; padding: 56px 20px;
+      color: var(--text-dim); font-size: 13px; font-family: var(--font-zh);
+    }
+    .wl-empty svg { opacity: .2; display: block; margin: 0 auto 12px; }
+
+    /* ── Modal ── */
+    .wl-modal-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,.45);
+      z-index: 999; display: flex; align-items: center; justify-content: center;
+      padding: 16px;
+    }
+    .wl-modal {
+      background: #fff; border-radius: 12px; width: 100%; max-width: 520px;
+      box-shadow: 0 16px 48px rgba(0,0,0,.22); overflow: hidden;
+    }
+    .wl-modal-head {
+      padding: 16px 20px; border-bottom: 1px solid var(--border-light);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .wl-modal-title { font-size: 15px; font-weight: 700; color: var(--text-primary); }
+    .wl-modal-body { padding: 20px; display: flex; flex-direction: column; gap: 14px; }
+    .wl-modal-foot {
+      padding: 14px 20px; border-top: 1px solid var(--border-light);
+      display: flex; gap: 8px; justify-content: flex-end;
+    }
+    .wl-field label {
+      display: block; font-size: 11px; font-weight: 600; color: var(--text-dim);
+      text-transform: uppercase; letter-spacing: .06em; margin-bottom: 5px;
+    }
+    .wl-field input, .wl-field select, .wl-field textarea {
+      width: 100%; padding: 8px 10px; border: 1px solid var(--border-light);
+      border-radius: var(--radius); font-size: 13px; font-family: var(--font-zh);
+      color: var(--text-primary); background: #fff; outline: none;
+      box-sizing: border-box; transition: border-color .12s;
+    }
+    .wl-field input:focus, .wl-field select:focus, .wl-field textarea:focus {
+      border-color: var(--accent); box-shadow: 0 0 0 3px rgba(37,99,235,.07);
+    }
+    .wl-field textarea { resize: vertical; min-height: 90px; }
+    .wl-field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+    /* Mobile */
+    @media (max-width: 767px) {
+      .wl-main { margin-left: 0; padding: 14px 12px; }
+      .wl-modal-overlay { align-items: flex-end; padding: 0; }
+      .wl-modal { border-radius: 16px 16px 0 0; max-height: 92vh; overflow-y: auto; }
+      .wl-field-row { grid-template-columns: 1fr; }
+      .wl-table th:nth-child(4), .wl-table td:nth-child(4) { display: none; }
+    }
+  </style>
+</head>
+<body x-data="workLogApp()" x-init="init()" x-cloak>
+
+    <header id="app-topbar" class="topbar"></header>
+<div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+  <aside class="sidebar" id="app-sidebar"></aside>
+
+  <!-- MAIN -->
+  <main class="wl-main">
+
+    <div class="page-header">
+      <div>
+        <div class="page-header__title">工作日誌</div>
+        <div class="page-header__sub" x-text="'出勤記錄 · ' + viewDate"></div>
+      </div>
+      <button class="btn btn--primary" @click="openNew()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+        新增日誌
+      </button>
+    </div>
+
+    <!-- 工具列：日期導航 + 用戶篩選 -->
+    <div class="wl-toolbar">
+      <div class="wl-date-nav">
+        <button @click="shiftDay(-1)" title="前一天">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+        <input type="date" class="wl-date-input" x-model="viewDate" @change="load()">
+        <button @click="shiftDay(1)" title="後一天">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+        </button>
+      </div>
+      <button class="wl-today-btn" @click="goToday()">今天</button>
+      <select class="wl-filter-user" x-model="filterUserId" @change="load()">
+        <option value="">全部人員</option>
+        <template x-for="u in users" :key="u.id">
+          <option :value="u.id" x-text="u.display_name || u.username"></option>
+        </template>
+      </select>
+    </div>
+
+    <!-- 當日摘要 -->
+    <div class="wl-summary" x-show="logs.length > 0">
+      <span>當日紀錄 <strong x-text="logs.length"></strong> 筆</span>
+      <span>·</span>
+      <span>出勤人員 <strong x-text="uniqueUsers"></strong> 人</span>
+      <span>·</span>
+      <span>合計工時 <strong x-text="totalHours + ' 小時'"></strong></span>
+    </div>
+
+    <!-- 日誌表格 -->
+    <div class="wl-table-wrap">
+      <template x-if="loading">
+        <div class="wl-empty">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+          載入中…
+        </div>
+      </template>
+      <template x-if="!loading && logs.length === 0">
+        <div class="wl-empty">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+          <div>本日尚無工作日誌</div>
+          <div style="margin-top:6px;font-size:12px">點擊右上角「新增日誌」開始記錄</div>
+        </div>
+      </template>
+      <table class="wl-table" x-show="!loading && logs.length > 0">
+        <thead>
+          <tr>
+            <th style="width:160px">出勤人員</th>
+            <th style="width:80px">工時</th>
+            <th>工作內容</th>
+            <th style="width:110px">建立時間</th>
+            <th style="width:80px"></th>
+          </tr>
+        </thead>
+        <tbody>
+          <template x-for="row in logs" :key="row.id">
+            <tr>
+              <td>
+                <div class="wl-user-tag">
+                  <div class="wl-avatar" x-text="(row.display_name||row.username||'?')[0]"></div>
+                  <div>
+                    <div class="wl-uname" x-text="row.display_name || row.username"></div>
+                  </div>
+                </div>
+              </td>
+              <td>
+                <span class="wl-hours-badge" x-text="row.hours + ' h'"></span>
+              </td>
+              <td>
+                <div class="wl-content" x-text="row.content"></div>
+              </td>
+              <td style="font-size:11px;color:var(--text-dim);font-family:Inter,sans-serif"
+                  x-text="(row.created_at||'').slice(0,16).replace('T',' ')"></td>
+              <td>
+                <div class="wl-actions">
+                  <button class="btn btn--sm" @click="openEdit(row)" title="編輯">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                  </button>
+                  <button class="btn btn--sm btn--danger-ghost" @click="del(row)" title="刪除">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6m5 0V4h4v2"/></svg>
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
+
+  </main>
+
+  <!-- 新增 / 編輯 Modal -->
+  <div class="wl-modal-overlay" x-show="showModal" @click.self="showModal=false">
+    <div class="wl-modal" @click.stop>
+      <div class="wl-modal-head">
+        <div class="wl-modal-title" x-text="editId ? '編輯日誌' : '新增工作日誌'"></div>
+        <button @click="showModal=false" style="background:none;border:none;cursor:pointer;color:var(--text-dim);padding:4px">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="wl-modal-body">
+        <div class="wl-field-row">
+          <!-- 日期 -->
+          <div class="wl-field">
+            <label>日期</label>
+            <input type="date" x-model="form.log_date">
+          </div>
+          <!-- 工時 -->
+          <div class="wl-field">
+            <label>工時（小時）</label>
+            <input type="number" step="0.5" min="0.5" max="24" x-model.number="form.hours" placeholder="8">
+          </div>
+        </div>
+        <!-- 出勤人員 -->
+        <div class="wl-field">
+          <label>出勤人員</label>
+          <select x-model="form.user_id">
+            <option value="" x-text="usersLoaded ? (users.length ? '請選擇人員…' : '（無可用人員）') : '載入人員中…'"></option>
+            <template x-for="u in users" :key="u.id">
+              <option :value="String(u.id)" x-text="(u.display_name || u.username) + (u.role === 'superadmin' ? ' (管理員)' : u.role === 'admin' ? ' (主管)' : '')"></option>
+            </template>
+          </select>
+        </div>
+        <!-- 工作內容 -->
+        <div class="wl-field">
+          <label>工作內容</label>
+          <textarea x-model="form.content" placeholder="描述今日工作項目、進度或備注…" rows="4"></textarea>
+        </div>
+      </div>
+      <div class="wl-modal-foot">
+        <button class="btn" @click="showModal=false">取消</button>
+        <button class="btn btn--primary" @click="save()" :disabled="saving">
+          <span x-text="saving ? '儲存中…' : (editId ? '儲存變更' : '新增日誌')"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  const API = '/api'
+
+  function workLogApp() {
+    return {
+      session:      {},
+      logs:         [],
+      users:        [],
+      usersLoaded:  false,
+      loading:      false,
+      viewDate:     '',
+      filterUserId: '',
+      showModal:    false,
+      saving:       false,
+      editId:       null,
+      form: { log_date: '', user_id: '', hours: 8, content: '' },
+
+      get totalHours() {
+        return this.logs.reduce((s, r) => s + (r.hours || 0), 0)
+      },
+      get uniqueUsers() {
+        return new Set(this.logs.map(r => r.user_id)).size
+      },
+
+      async init() {
+        const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
+        if (!s.token) { location.href = 'login.html'; return }
+        this.session = s
+        this.viewDate = new Date().toISOString().slice(0, 10)
+        await Promise.all([this.loadUsers(), this.load()])
+      },
+
+      async loadUsers() {
+        try {
+          const r = await fetch(`${API}/users/selectable`, {
+            headers: { Authorization: 'Bearer ' + this.session.token }
+          })
+          if (r.ok) {
+            this.users = await r.json()
+          } else {
+            console.error('loadUsers failed', r.status, await r.text().catch(() => ''))
+          }
+        } catch(e) {
+          console.error('loadUsers error', e)
+        }
+        this.usersLoaded = true
+      },
+
+      async load() {
+        this.loading = true
+        const params = new URLSearchParams({ date: this.viewDate })
+        if (this.filterUserId) params.set('user_id', this.filterUserId)
+        try {
+          const r = await fetch(`${API}/work-logs?${params}`, {
+            headers: { Authorization: 'Bearer ' + this.session.token }
+          })
+          if (r.status === 401) { this.logout(); return }
+          if (r.ok) this.logs = await r.json()
+        } catch {}
+        this.loading = false
+      },
+
+      shiftDay(delta) {
+        const d = new Date(this.viewDate)
+        d.setDate(d.getDate() + delta)
+        this.viewDate = d.toISOString().slice(0, 10)
+        this.load()
+      },
+
+      goToday() {
+        this.viewDate = new Date().toISOString().slice(0, 10)
+        this.load()
+      },
+
+      openNew() {
+        this.editId = null
+        this.form = {
+          log_date: this.viewDate,
+          user_id:  this.session.userId ? String(this.session.userId) : '',
+          hours:    8,
+          content:  ''
+        }
+        this.showModal = true
+      },
+
+      openEdit(row) {
+        this.editId = row.id
+        this.form = {
+          log_date: row.log_date,
+          user_id:  String(row.user_id),
+          hours:    row.hours,
+          content:  row.content
+        }
+        this.showModal = true
+      },
+
+      async save() {
+        if (!this.form.user_id) { alert('請選擇出勤人員'); return }
+        const uid = parseInt(this.form.user_id)
+        if (!uid) { alert('請選擇出勤人員'); return }
+        if (!this.form.content.trim()) { alert('請填寫工作內容'); return }
+        if (!this.form.log_date) { alert('請選擇日期'); return }
+        this.saving = true
+        const url  = this.editId ? `${API}/work-logs/${this.editId}` : `${API}/work-logs`
+        const meth = this.editId ? 'PUT' : 'POST'
+        try {
+          const r = await fetch(url, {
+            method: meth,
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer ' + this.session.token
+            },
+            body: JSON.stringify({ ...this.form, user_id: uid, hours: parseFloat(this.form.hours) || 8 })
+          })
+          if (r.ok) {
+            this.showModal = false
+            await this.load()
+          } else {
+            const d = await r.json().catch(() => ({}))
+            alert('儲存失敗：' + (d.detail || r.status))
+          }
+        } catch(e) { alert('網路錯誤') }
+        this.saving = false
+      },
+
+      async del(row) {
+        const name = row.display_name || row.username
+        if (!confirm(`確定刪除 ${name} 的日誌？`)) return
+        try {
+          const r = await fetch(`${API}/work-logs/${row.id}`, {
+            method: 'DELETE',
+            headers: { Authorization: 'Bearer ' + this.session.token }
+          })
+          if (r.ok) await this.load()
+          else alert('刪除失敗')
+        } catch { alert('網路錯誤') }
+      },
+
+      logout() {
+        const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
+        if (s.token) fetch('/api/auth/logout', { method:'POST', headers:{ Authorization:'Bearer '+s.token } }).catch(()=>{})
+        localStorage.removeItem('motrix_session')
+        location.href = 'login.html'
+      }
+    }
+  }
+  </script>
+
+  <script src="../static/notif.js" onerror="window.notifStore=function(){return{init(){},toggle(){},open:false,unread:0,items:[],actionLabel:function(a){return a},actionColor:function(){return'#666'},formatTime:function(t){return t}}}"></script>
+  <script src="../static/sidebar.js"></script>
+</body>
+</html>

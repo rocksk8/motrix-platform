@@ -1,0 +1,595 @@
+﻿<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="../static/favicon.png">
+  <title>使用者管理 — MOTRIX 營運管理系統</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600&display=swap" rel="stylesheet">
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    .users-main {
+      margin-left: var(--sidebar-w);
+      margin-top: var(--topbar-h);
+      padding: 28px 32px;
+      min-height: calc(100vh - var(--topbar-h));
+      background: var(--white);
+    }
+    /* Modal */
+    .modal-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,.45);
+      z-index: 200;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .modal-box {
+      background: #fff;
+      border-radius: var(--radius-lg);
+      width: 100%;
+      max-width: 480px;
+      box-shadow: var(--shadow-lg);
+      overflow: hidden;
+    }
+    .modal-head {
+      display: flex;
+      align-items: center;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border-light);
+      gap: 10px;
+    }
+    .modal-head__title { font-size: 14px; font-weight: 600; flex: 1; }
+    .modal-close {
+      width: 28px; height: 28px;
+      border-radius: 4px;
+      border: none;
+      background: #F0EEE9;
+      cursor: pointer;
+      font-size: 16px;
+      color: var(--text-secondary);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .modal-close:hover { background: #FEF2F2; color: var(--danger); }
+    .modal-body { padding: 20px; }
+    .modal-foot { padding: 14px 20px; border-top: 1px solid var(--border-light); display: flex; justify-content: flex-end; gap: 8px; }
+    /* Form */
+    .form-group { margin-bottom: 14px; }
+    .form-label {
+      display: block;
+      font-size: 10px;
+      font-family: Inter, sans-serif;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      font-weight: 500;
+      margin-bottom: 5px;
+    }
+    .form-label .req { color: var(--danger); }
+    .form-input, .form-select {
+      width: 100%;
+      padding: 9px 11px;
+      border: 1px solid var(--border-light);
+      border-radius: var(--radius);
+      font-size: 13px;
+      font-family: var(--font-zh);
+      color: var(--text-primary);
+      background: #fff;
+      outline: none;
+      transition: border-color .12s, box-shadow .12s;
+    }
+    .form-input:focus, .form-select:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(37,99,235,.08);
+    }
+    .form-hint { font-size: 10px; color: var(--text-dim); margin-top: 3px; }
+    .form-hint.error { color: var(--danger); }
+    /* Buttons */
+    .btn { display:inline-flex; align-items:center; gap:6px; padding:8px 16px; border-radius:var(--radius); font-size:12px; font-family:var(--font-zh); cursor:pointer; border:none; transition:all .12s; font-weight:500; }
+    .btn-primary  { background:var(--accent);  color:#fff; }
+    .btn-primary:hover { background:#1D4ED8; }
+    .btn-danger   { background:var(--danger-light);  color:var(--danger); border:1px solid #FECACA; }
+    .btn-danger:hover { background:#FEE2E2; }
+    .btn-ghost    { background:#fff; color:var(--text-secondary); border:1px solid var(--border-light); }
+    .btn-ghost:hover { border-color:#C8C4BC; }
+    .btn-sm { padding:5px 11px; font-size:11px; }
+    /* Table */
+    .data-table { width:100%; border-collapse:collapse; font-size:13px; }
+    .data-table th {
+      padding:10px 12px; text-align:left;
+      font-size:10px; font-family:Inter,sans-serif;
+      letter-spacing:.08em; text-transform:uppercase;
+      color:var(--text-dim); font-weight:500;
+      background:#FAFAF8; border-bottom:1px solid var(--border-light);
+    }
+    .data-table td { padding:12px 12px; border-bottom:1px solid #F0EEE9; vertical-align:middle; }
+    .data-table tr:last-child td { border-bottom:none; }
+    .data-table tr:hover td { background:#FDFCFA; }
+    /* Role badge */
+    .role-badge {
+      display:inline-flex; align-items:center; gap:4px;
+      padding:3px 9px; border-radius:12px;
+      font-size:11px; font-weight:500; font-family:Inter,sans-serif;
+    }
+    .role-superadmin { background:#FEF3C7; color:#92400E; }
+    .role-admin      { background:#EFF6FF; color:#1D4ED8; }
+    .role-sales      { background:#F0FDF4; color:#15803D; }
+    .role-engineer   { background:#F5F3FF; color:#7C3AED; }
+    .role-viewer     { background:#F3F4F6; color:#4B5563; }
+    /* Status toggle */
+    .status-toggle {
+      position:relative; display:inline-flex;
+      width:38px; height:21px; cursor:pointer;
+    }
+    .status-toggle input { opacity:0; width:0; height:0; }
+    .slider {
+      position:absolute; inset:0;
+      background:#D1D5DB; border-radius:21px;
+      transition:.2s;
+    }
+    .slider::before {
+      content:''; position:absolute;
+      width:15px; height:15px; border-radius:50%;
+      background:#fff; left:3px; top:3px;
+      transition:.2s;
+      box-shadow: 0 1px 3px rgba(0,0,0,.2);
+    }
+    input:checked + .slider { background:var(--success); }
+    input:checked + .slider::before { transform:translateX(17px); }
+    /* Access level display */
+    .access-row { display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-top:4px; }
+    .access-chip {
+      padding:2px 7px; border-radius:3px; font-size:10px;
+      font-family:Inter,sans-serif;
+      background:#F0EEE9; color:var(--text-secondary);
+    }
+    .access-chip.on { background:var(--accent-light); color:var(--accent); }
+  </style>
+</head>
+
+<body x-data="usersPage()" x-init="init()">
+
+    <header id="app-topbar" class="topbar"></header>
+<div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+  <!-- SIDEBAR -->
+
+  <aside class="sidebar" id="app-sidebar"></aside>
+
+  <!-- MAIN -->
+  <div class="users-main">
+    <!-- 頁頭 -->
+    <div class="page-header" style="margin-bottom:24px">
+      <div>
+        <div style="font-size:11px;color:var(--text-dim);margin-bottom:4px">系統設定</div>
+        <h1 style="font-size:20px;font-weight:700">使用者管理</h1>
+        <p style="font-size:12px;color:var(--text-secondary);margin-top:4px">管理系統帳號、角色與存取權限</p>
+      </div>
+      <button class="btn btn-primary" @click="openCreate()" x-show="isSuperAdmin">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v16m8-8H4"/></svg>
+        新增使用者
+      </button>
+    </div>
+
+    <!-- 超管提示 -->
+    <div x-show="!isSuperAdmin"
+         style="background:#FEF3C7;border:1px solid #FDE68A;border-radius:8px;padding:14px 18px;margin-bottom:20px;font-size:12px;color:#92400E">
+      ⚠ 僅超級管理員可新增或編輯使用者帳號
+    </div>
+
+    <!-- 統計 -->
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px">
+      <div class="panel" style="padding:16px">
+        <div style="font-size:11px;color:var(--text-dim);font-family:Inter,sans-serif;letter-spacing:.06em">總帳號數</div>
+        <div style="font-size:28px;font-weight:700;font-family:Inter,sans-serif;margin-top:4px" x-text="users.length"></div>
+      </div>
+      <div class="panel" style="padding:16px">
+        <div style="font-size:11px;color:var(--text-dim);font-family:Inter,sans-serif;letter-spacing:.06em">啟用中</div>
+        <div style="font-size:28px;font-weight:700;font-family:Inter,sans-serif;margin-top:4px;color:var(--success)" x-text="users.filter(u=>u.active).length"></div>
+      </div>
+      <div class="panel" style="padding:16px">
+        <div style="font-size:11px;color:var(--text-dim);font-family:Inter,sans-serif;letter-spacing:.06em">管理員</div>
+        <div style="font-size:28px;font-weight:700;font-family:Inter,sans-serif;margin-top:4px;color:var(--accent)" x-text="users.filter(u=>u.role==='superadmin'||u.role==='admin').length"></div>
+      </div>
+      <div class="panel" style="padding:16px">
+        <div style="font-size:11px;color:var(--text-dim);font-family:Inter,sans-serif;letter-spacing:.06em">業務/檢視</div>
+        <div style="font-size:28px;font-weight:700;font-family:Inter,sans-serif;margin-top:4px" x-text="users.filter(u=>u.role==='sales'||u.role==='viewer').length"></div>
+      </div>
+    </div>
+
+    <!-- 使用者列表 -->
+    <div class="panel" style="padding:0;overflow:hidden">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>帳號</th>
+            <th>顯示名稱</th>
+            <th>E-mail</th>
+            <th>角色</th>
+            <th>存取模組</th>
+            <th>建立時間</th>
+            <th>狀態</th>
+            <th style="width:120px">操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <template x-for="user in users" :key="user.id">
+            <tr>
+              <td>
+                <div style="display:flex;align-items:center;gap:8px">
+                  <div style="width:30px;height:30px;border-radius:50%;background:var(--black);color:var(--white);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0"
+                       x-text="(user.displayName||user.username)[0].toUpperCase()"></div>
+                  <span style="font-family:Inter,sans-serif;font-size:13px;font-weight:500" x-text="user.username"></span>
+                  <template x-if="user.username === session.username">
+                    <span style="font-size:9px;background:var(--accent-light);color:var(--accent);padding:1px 6px;border-radius:3px;font-family:Inter,sans-serif">我</span>
+                  </template>
+                </div>
+              </td>
+              <td x-text="user.displayName || '—'"></td>
+              <td style="font-size:12px;color:var(--text-secondary)" x-text="user.email || '—'"></td>
+              <td>
+                <span class="role-badge"
+                  :class="{'role-superadmin':user.role==='superadmin','role-admin':user.role==='admin','role-sales':user.role==='sales','role-engineer':user.role==='engineer','role-viewer':user.role==='viewer'}"
+                  x-text="roleLabel(user.role)"></span>
+              </td>
+              <td>
+                <div class="access-row">
+                  <template x-for="mod in allModules" :key="mod.key">
+                    <span class="access-chip"
+                          :class="{on: hasAccess(user, mod.key)}"
+                          x-text="mod.label"></span>
+                  </template>
+                </div>
+              </td>
+              <td style="font-size:11px;color:var(--text-dim);font-family:Inter,sans-serif">
+                <span x-text="formatDate(user.createdAt)"></span>
+              </td>
+              <td>
+                <label class="status-toggle" :title="user.active ? '點擊停用' : '點擊啟用'"
+                       @click.prevent="toggleActive(user)"
+                       x-show="isSuperAdmin && user.username !== 'jeff'">
+                  <input type="checkbox" :checked="user.active" @change="toggleActive(user)">
+                  <span class="slider"></span>
+                </label>
+                <span x-show="!isSuperAdmin || user.username === 'jeff'"
+                      :style="user.active ? 'color:var(--success)' : 'color:var(--text-dim)'"
+                      style="font-size:12px"
+                      x-text="user.active ? '啟用' : '停用'"></span>
+              </td>
+              <td>
+                <div style="display:flex;gap:6px">
+                  <button class="btn btn-ghost btn-sm" @click="openEdit(user)"
+                          :disabled="!isSuperAdmin">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                    編輯
+                  </button>
+                  <button class="btn btn-danger btn-sm"
+                          @click="deleteUser(user)"
+                          x-show="isSuperAdmin && user.username !== 'jeff' && user.username !== session.username">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ══ 新增/編輯 Modal ══ -->
+  <div class="modal-overlay" x-show="showModal" x-transition style="display:none">
+    <div class="modal-box">
+      <div class="modal-head">
+        <span class="modal-head__title" x-text="editingId ? '編輯使用者' : '新增使用者'"></span>
+        <button class="modal-close" @click="closeModal()">×</button>
+      </div>
+      <div class="modal-body">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="form-group">
+            <label class="form-label">帳號 <span class="req">*</span></label>
+            <input class="form-input" type="text" x-model="form.username"
+                   :disabled="!!editingId" :placeholder="editingId ? '' : 'username'"
+                   :style="editingId ? 'opacity:.6;cursor:not-allowed' : ''">
+            <div class="form-hint">登入用，英數字，不可更改</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">顯示名稱 <span class="req">*</span></label>
+            <input class="form-input" type="text" x-model="form.displayName" placeholder="中文姓名或職稱">
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="form-group">
+            <label class="form-label">E-mail <span style="color:var(--text-dim);font-size:9px">（自動帶入報價單）</span></label>
+            <input class="form-input" type="email" x-model="form.email" placeholder="xxx@miactw.com">
+          </div>
+          <div class="form-group">
+            <label class="form-label">電話 <span style="color:var(--text-dim);font-size:9px">（自動帶入報價單）</span></label>
+            <input class="form-input" type="text" x-model="form.phone" placeholder="04-3602-2818">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">角色 <span class="req">*</span></label>
+          <select class="form-select" x-model="form.role" @change="applyRoleDefaults()">
+            <option value="superadmin">超級管理員（所有權限）</option>
+            <option value="admin">管理員（不含系統設定）</option>
+            <option value="sales">業務（報價/客戶/財務）</option>
+            <option value="engineer">工程師（專案/設備，不看金額）</option>
+            <option value="viewer">檢視者（唯讀）</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">存取模組</label>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
+            <template x-for="mod in allModules" :key="mod.key">
+              <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:12px;padding:5px 10px;border:1px solid var(--border-light);border-radius:4px;background:#fff"
+                     :style="form.modules.includes(mod.key) ? 'border-color:var(--accent);background:var(--accent-light);color:var(--accent)' : ''">
+                <input type="checkbox" style="display:none"
+                       :checked="form.modules.includes(mod.key)"
+                       @change="toggleModule(mod.key)">
+                <span x-text="form.modules.includes(mod.key) ? '✓ ' : ''"></span>
+                <span x-text="mod.label"></span>
+              </label>
+            </template>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label" x-text="editingId ? '新密碼（留空不更改）' : '密碼 *'"></label>
+          <input class="form-input" type="password" x-model="form.password"
+                 :placeholder="editingId ? '留空則不修改密碼' : '設定密碼（至少 6 碼）'">
+          <div class="form-hint error" x-show="formError" x-text="formError"></div>
+        </div>
+        <template x-if="form.password">
+          <div class="form-group">
+            <label class="form-label">確認密碼 <span class="req">*</span></label>
+            <input class="form-input" type="password" x-model="form.confirmPassword" placeholder="再輸入一次">
+          </div>
+        </template>
+        <!-- 解鎖密碼：僅編輯超級管理員時顯示 -->
+        <template x-if="form.role === 'superadmin' && editingId">
+          <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border-light)">
+            <div style="font-size:10px;font-weight:600;color:var(--text-dim);letter-spacing:.08em;text-transform:uppercase;margin-bottom:10px;display:flex;align-items:center;gap:6px">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+              解鎖密碼
+              <span style="font-weight:400;font-size:9px;color:var(--text-dim);text-transform:none;letter-spacing:0">（報價單審核後解鎖編輯用，預設 miac@60575481）</span>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+              <div class="form-group" style="margin-bottom:0">
+                <label class="form-label">新解鎖密碼 <span style="color:var(--text-dim);text-transform:none;letter-spacing:0;font-size:9px">（留空不更改）</span></label>
+                <input class="form-input" type="password" x-model="form.unlockPassword" placeholder="留空則不修改">
+              </div>
+              <div class="form-group" style="margin-bottom:0">
+                <label class="form-label">確認解鎖密碼</label>
+                <input class="form-input" type="password" x-model="form.confirmUnlockPassword" placeholder="再輸入一次">
+              </div>
+            </div>
+          </div>
+        </template>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-ghost" @click="closeModal()">取消</button>
+        <button class="btn btn-primary" @click="saveUser()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 13l4 4L19 7"/></svg>
+          <span x-text="editingId ? '儲存變更' : '建立帳號'"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  const ROLE_MODULES = {
+    superadmin: ['dashboard','quotation','customer','sales','procurement','inventory','equipment','finance','settings','project_manage','project_approve_eng','project_approve_biz','financial_view'],
+    admin:      ['dashboard','quotation','customer','sales','procurement','inventory','equipment','finance','project_manage','project_approve_eng','project_approve_biz','financial_view'],
+    sales:      ['dashboard','quotation','customer','financial_view','project_approve_biz'],
+    engineer:   ['dashboard','project_manage','project_approve_eng','equipment'],
+    viewer:     ['dashboard'],
+  }
+
+  function usersPage() {
+    return {
+      session:   {},
+      users:     [],
+      showModal: false,
+      editingId: null,
+      formError: '',
+      form: { username:'', displayName:'', email:'', phone:'', role:'sales', password:'', confirmPassword:'', modules:[], unlockPassword:'', confirmUnlockPassword:'' },
+      allModules: [
+        {key:'dashboard',            label:'儀表板',       group:'基本'},
+        {key:'quotation',            label:'報價單',       group:'業務'},
+        {key:'customer',             label:'客戶',         group:'業務'},
+        {key:'sales',                label:'銷售',         group:'業務'},
+        {key:'financial_view',       label:'財務（金額可視）', group:'財務'},
+        {key:'finance',              label:'應收帳款',     group:'財務'},
+        {key:'procurement',          label:'採購',         group:'採購'},
+        {key:'inventory',            label:'庫存',         group:'採購'},
+        {key:'equipment',            label:'設備',         group:'設備'},
+        {key:'project_manage',       label:'專案管理',     group:'專案'},
+        {key:'project_approve_eng',  label:'工程主管確認', group:'專案'},
+        {key:'project_approve_biz',  label:'業務確認',     group:'專案'},
+        {key:'settings',             label:'系統設定',     group:'系統'},
+      ],
+
+      get isSuperAdmin() { return this.session.role === 'superadmin' },
+
+      _headers() {
+        return {
+          'Content-Type':  'application/json',
+          'Authorization': 'Bearer ' + (this.session.token || '')
+        }
+      },
+
+      roleLabel(r) {
+        return {superadmin:'超級管理員', admin:'管理員', sales:'業務', engineer:'工程師', viewer:'檢視者'}[r] || r
+      },
+
+      hasAccess(user, mod) {
+        return (user.modules || ROLE_MODULES[user.role] || []).includes(mod)
+      },
+
+      formatDate(iso) {
+        if (!iso) return '—'
+        return new Date(iso).toLocaleDateString('zh-TW', {year:'numeric',month:'2-digit',day:'2-digit'})
+      },
+
+      applyRoleDefaults() {
+        this.form.modules = [...(ROLE_MODULES[this.form.role] || [])]
+      },
+
+      toggleModule(key) {
+        const idx = this.form.modules.indexOf(key)
+        if (idx >= 0) this.form.modules.splice(idx, 1)
+        else           this.form.modules.push(key)
+      },
+
+      openCreate() {
+        this.editingId = null
+        this.form = { username:'', displayName:'', email:'', phone:'', role:'sales',
+                      password:'', confirmPassword:'', modules: [...ROLE_MODULES.sales],
+                      unlockPassword:'', confirmUnlockPassword:'' }
+        this.formError = ''
+        this.showModal = true
+      },
+
+      openEdit(user) {
+        if (!this.isSuperAdmin) return
+        this.editingId = user.id
+        this.form = {
+          username:               user.username,
+          displayName:            user.displayName || '',
+          email:                  user.email || '',
+          phone:                  user.phone || '',
+          role:                   user.role,
+          password:               '',
+          confirmPassword:        '',
+          modules:                [...(user.modules || ROLE_MODULES[user.role] || [])],
+          unlockPassword:         '',
+          confirmUnlockPassword:  '',
+        }
+        this.formError = ''
+        this.showModal = true
+      },
+
+      closeModal() {
+        this.showModal = false; this.editingId = null; this.formError = ''
+      },
+
+      async saveUser() {
+        this.formError = ''
+        if (!this.form.displayName)              { this.formError = '請填寫顯示名稱'; return }
+        if (!this.editingId && !this.form.username) { this.formError = '請填寫帳號'; return }
+        if (!this.editingId && !this.form.password) { this.formError = '請設定密碼'; return }
+        if (this.form.password && this.form.password.length < 6) { this.formError = '密碼至少 6 碼'; return }
+        if (this.form.password && this.form.password !== this.form.confirmPassword) {
+          this.formError = '兩次密碼不一致'; return
+        }
+        if (this.form.unlockPassword) {
+          if (this.form.unlockPassword.length < 6) { this.formError = '解鎖密碼至少 6 碼'; return }
+          if (this.form.unlockPassword !== this.form.confirmUnlockPassword) {
+            this.formError = '解鎖密碼與確認密碼不一致'; return
+          }
+        }
+
+        const payload = {
+          display_name: this.form.displayName,
+          email:        this.form.email,
+          phone:        this.form.phone,
+          role:         this.form.role,
+          modules:      this.form.modules,
+        }
+        if (this.form.password) payload.password = this.form.password
+
+        let res
+        if (this.editingId) {
+          res = await fetch(`/api/users/${this.editingId}`, {
+            method: 'PUT', headers: this._headers(), body: JSON.stringify(payload)
+          })
+        } else {
+          payload.username = this.form.username.trim()
+          res = await fetch('/api/users', {
+            method: 'POST', headers: this._headers(), body: JSON.stringify(payload)
+          })
+        }
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}))
+          this.formError = err.detail || '操作失敗'; return
+        }
+        if (this.editingId && this.form.unlockPassword) {
+          const ur = await fetch(`/api/users/${this.editingId}/unlock-password`, {
+            method: 'PATCH', headers: this._headers(),
+            body: JSON.stringify({ unlock_password: this.form.unlockPassword })
+          })
+          if (!ur.ok) {
+            const ue = await ur.json().catch(() => ({}))
+            this.formError = ue.detail || '解鎖密碼設定失敗'; return
+          }
+        }
+        await this.loadUsers()
+        this.closeModal()
+        this.toast(this.editingId ? '已儲存變更' : '帳號已建立')
+      },
+
+      async toggleActive(user) {
+        if (!this.isSuperAdmin || user.username === 'jeff') return
+        await fetch(`/api/users/${user.id}/active`, {
+          method: 'PATCH', headers: this._headers()
+        })
+        await this.loadUsers()
+      },
+
+      async deleteUser(user) {
+        if (!this.isSuperAdmin) return
+        if (user.username === 'jeff') { alert('不可刪除超級管理員帳號'); return }
+        if (!confirm(`確定要刪除帳號「${user.username}」？此操作無法復原。`)) return
+        const res = await fetch(`/api/users/${user.id}`, {
+          method: 'DELETE', headers: this._headers()
+        })
+        if (!res.ok) { alert((await res.json().catch(()=>({}))).detail || '刪除失敗'); return }
+        await this.loadUsers()
+        this.toast('帳號已刪除')
+      },
+
+      async loadUsers() {
+        const res = await fetch('/api/users', { headers: this._headers() })
+        if (res.ok) this.users = await res.json()
+      },
+
+      logout() {
+        fetch('/api/auth/logout', { method:'POST', headers: this._headers() }).catch(()=>{})
+        localStorage.removeItem('motrix_session')
+        window.location.href = 'login.html'
+      },
+
+      toast(msg) {
+        const el = document.createElement('div')
+        el.textContent = msg
+        el.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#0A0A0A;color:#F5F4F0;padding:8px 18px;border-radius:6px;font-size:12px;z-index:999;font-family:Inter,sans-serif;box-shadow:0 4px 12px rgba(0,0,0,.2)'
+        document.body.appendChild(el)
+        setTimeout(() => el.remove(), 2500)
+      },
+
+      async init() {
+        const s = localStorage.getItem('motrix_session')
+        if (!s) { window.location.href = 'login.html'; return }
+        try {
+          this.session = JSON.parse(s)
+          if (!this.session.token) { window.location.href = 'login.html'; return }
+        } catch(e) { window.location.href = 'login.html'; return }
+
+        const res = await fetch('/api/auth/me', {
+          headers: {'Authorization': 'Bearer ' + this.session.token}
+        })
+        if (!res.ok) {
+          localStorage.removeItem('motrix_session')
+          window.location.href = 'login.html'; return
+        }
+        await this.loadUsers()
+      }
+    }
+  }
+  </script>
+  <script src="../static/notif.js"></script>
+  <script src="../static/sidebar.js"></script>
+</body>
+</html>

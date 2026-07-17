@@ -1,0 +1,40 @@
+# Secrets & local credentials
+backend/.initial_admin_credentials.txt
+**/.env
+**/.env.*
+
+# Database & local backups
+backend/motrix_erp.db
+backend/motrix_erp.db-*
+backend/db_backups/
+backup_alerts/
+backend/logs/
+motrix_erp.db
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Uploads / exports (optional local data)
+uploads/
+報價單PDF/
+exports/
+backend/export_archive/
+
+# Runtime / error logs
+backend/start_err.txt
+
+# Root-level debug/temp files (generated during development)
+/*.txt
+/*.py
+/_*.js
+
+# OS / editor
+Thumbs.db
+Desktop.ini
+.DS_Store
+*.bak
+*.bak2
+*.recovered

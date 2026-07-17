@@ -1,0 +1,365 @@
+"""Auth + User management endpoints."""
+import json
+import secrets
+import sqlite3
+from datetime import datetime, timedelta
+from typing import Optional, List
+
+from fastapi import APIRouter, HTTPException, Header
+from pydantic import BaseModel
+
+from db import get_db
+from helpers import (
+    _hash_pw, _verify_pw, _require_user, _tok, _audit,
+    _SUPERADMIN_MODULES, is_weak_password, MIN_PASSWORD_LEN,
+)
+
+router = APIRouter()
+
+
+# ── Models ────────────────────────────────────────────────────────────────────
+
+class LoginIn(BaseModel):
+    username: str
+    password: str
+
+
+class ChangePasswordIn(BaseModel):
+    current_password: str
+    new_password: str
+
+
+class VerifyUnlockIn(BaseModel):
+    password: str
+    ref: str = ''
+
+
+class SetUnlockPasswordIn(BaseModel):
+    unlock_password: str
+
+
+class UserIn(BaseModel):
+    username:     Optional[str]       = None
+    display_name: Optional[str]       = None
+    email:        Optional[str]       = None
+    phone:        Optional[str]       = None
+    role:         Optional[str]       = None
+    modules:      Optional[List[str]] = None
+    password:     Optional[str]       = None
+    active:       Optional[bool]      = None
+
+
+# ── Auth ──────────────────────────────────────────────────────────────────────
+
+@router.get("/api/ping")
+def ping():
+    return {"ok": True, "time": datetime.now().isoformat()}
+
+
+@router.post("/api/auth/login")
+def auth_login(body: LoginIn):
+    conn = get_db()
+    row = conn.execute(
+        "SELECT id, username, display_name, role, modules, password_hash, "
+        "COALESCE(must_change_password, 0) AS must_change_password "
+        "FROM users WHERE username=? AND active=1",
+        (body.username.strip(),)
+    ).fetchone()
+    if not row or not _verify_pw(body.password, row["password_hash"]):
+        conn.close()
+        raise HTTPException(401, "帳號或密碼錯誤")
+    must_change = bool(row["must_change_password"])
+    # Legacy weak password still works once, but forces rotation
+    if is_weak_password(body.password):
+        must_change = True
+        conn.execute(
+            "UPDATE users SET must_change_password=1 WHERE id=?",
+            (row["id"],),
+        )
+    if ":" not in row["password_hash"]:
+        conn.execute("UPDATE users SET password_hash=? WHERE id=?",
+                     (_hash_pw(body.password), row["id"]))
+    token      = secrets.token_hex(32)
+    now        = datetime.now().isoformat()
+    expires_at = (datetime.now() + timedelta(days=30)).isoformat()
+    conn.execute(
+        "INSERT INTO sessions (token, user_id, username, created_at, expires_at) VALUES (?,?,?,?,?)",
+        (token, row["id"], row["username"], now, expires_at)
+    )
+    conn.commit()
+    conn.close()
+    _audit(token, 'auth.login', 'user', row['username'], row['display_name'] or row['username'],
+           {'mustChangePassword': must_change})
+    return {
+        "token":              token,
+        "userId":             row["id"],
+        "username":           row["username"],
+        "displayName":        row["display_name"],
+        "role":               row["role"],
+        "modules":            json.loads(row["modules"] or "[]"),
+        "loginAt":            now,
+        "mustChangePassword": must_change,
+    }
+
+
+@router.post("/api/auth/logout")
+def auth_logout(authorization: str = Header(None)):
+    _audit(_tok(authorization), 'auth.logout', 'user', '', '登出')
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization[7:]
+        conn = get_db()
+        conn.execute("DELETE FROM sessions WHERE token=?", (token,))
+        conn.commit()
+        conn.close()
+    return {"ok": True}
+
+
+@router.get("/api/auth/me")
+def auth_me(authorization: str = Header(None)):
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(401, "未登入")
+    token = authorization[7:]
+    conn = get_db()
+    row = conn.execute("""
+        SELECT u.id, u.username, u.display_name, u.role, u.modules,
+               COALESCE(u.must_change_password, 0) AS must_change_password
+        FROM sessions s JOIN users u ON s.user_id = u.id
+        WHERE s.token=? AND u.active=1
+    """, (token,)).fetchone()
+    conn.close()
+    if not row:
+        raise HTTPException(401, "Session 已過期，請重新登入")
+    return {
+        "userId":             row["id"],
+        "username":           row["username"],
+        "displayName":        row["display_name"],
+        "role":               row["role"],
+        "modules":            json.loads(row["modules"] or "[]"),
+        "mustChangePassword": bool(row["must_change_password"]),
+    }
+
+
+@router.patch("/api/auth/change-password")
+def change_password(body: ChangePasswordIn, authorization: str = Header(None)):
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(401, "未登入")
+    token = authorization[7:]
+    conn = get_db()
+    try:
+        now = datetime.now().isoformat()
+        row = conn.execute("""
+            SELECT u.id, u.password_hash
+            FROM sessions s JOIN users u ON s.user_id = u.id
+            WHERE s.token=? AND u.active=1
+              AND (s.expires_at IS NULL OR s.expires_at > ?)
+        """, (token, now)).fetchone()
+        if not row:
+            raise HTTPException(401, "Session 已過期，請重新登入")
+        if not _verify_pw(body.current_password, row["password_hash"]):
+            raise HTTPException(400, "目前密碼不正確")
+        if len(body.new_password) < MIN_PASSWORD_LEN:
+            raise HTTPException(400, f"新密碼至少需要 {MIN_PASSWORD_LEN} 碼")
+        if is_weak_password(body.new_password):
+            raise HTTPException(400, "新密碼過於簡單或為已知弱密碼，請改用更強的密碼")
+        if body.new_password == body.current_password:
+            raise HTTPException(400, "新密碼不可與目前密碼相同")
+        new_hash = _hash_pw(body.new_password)
+        conn.execute(
+            "UPDATE users SET password_hash=?, must_change_password=0 WHERE id=?",
+            (new_hash, row["id"]),
+        )
+        conn.execute("DELETE FROM sessions WHERE user_id=? AND token!=?", (row["id"], token))
+        conn.commit()
+    finally:
+        conn.close()
+    _audit(token, 'auth.change_password', 'user', '', '修改密碼')
+    return {"ok": True, "mustChangePassword": False}
+
+
+# ── User Management ───────────────────────────────────────────────────────────
+
+@router.get("/api/users")
+def list_users(authorization: str = Header(None)):
+    _require_user(authorization)
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT id, username, display_name, role, email, phone, modules, active, created_at FROM users ORDER BY id"
+    ).fetchall()
+    conn.close()
+    result = []
+    for r in rows:
+        d = dict(r)
+        d["displayName"] = d.pop("display_name")
+        d["createdAt"]   = d.pop("created_at")
+        d["modules"]     = json.loads(d["modules"] or "[]")
+        result.append(d)
+    return result
+
+
+@router.post("/api/users", status_code=201)
+def create_user(body: UserIn, authorization: str = Header(None)):
+    _require_user(authorization, require_superadmin=True)
+    if not body.username or not body.password:
+        raise HTTPException(400, "缺少帳號或密碼")
+    if len(body.password) < MIN_PASSWORD_LEN:
+        raise HTTPException(400, f"密碼至少 {MIN_PASSWORD_LEN} 碼")
+    if is_weak_password(body.password):
+        raise HTTPException(400, "密碼過於簡單或為已知弱密碼，請改用更強的密碼")
+    now = datetime.now().isoformat()
+    conn = get_db()
+    try:
+        conn.execute("""
+            INSERT INTO users (username, password_hash, display_name, role, email, phone, modules, active,
+                               created_at, must_change_password)
+            VALUES (?,?,?,?,?,?,?,1,?,1)
+        """, (
+            body.username.strip(),
+            _hash_pw(body.password),
+            body.display_name or '',
+            body.role or 'viewer',
+            body.email or '',
+            body.phone or '',
+            json.dumps(body.modules or [], ensure_ascii=False),
+            now,
+        ))
+        conn.commit()
+        user_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+    except sqlite3.IntegrityError:
+        conn.close()
+        raise HTTPException(409, "帳號已存在")
+    conn.close()
+    _audit(_tok(authorization), 'user.create', 'user', body.username, body.display_name or body.username)
+    return {"id": user_id, "created_at": now, "mustChangePassword": True}
+
+
+@router.put("/api/users/{user_id}")
+def update_user(user_id: int, body: UserIn, authorization: str = Header(None)):
+    _require_user(authorization, require_superadmin=True)
+    conn = get_db()
+    if not conn.execute("SELECT id FROM users WHERE id=?", (user_id,)).fetchone():
+        conn.close()
+        raise HTTPException(404, "使用者不存在")
+    sets, params = [], []
+    if body.display_name is not None: sets.append("display_name=?"); params.append(body.display_name)
+    if body.role         is not None: sets.append("role=?");         params.append(body.role)
+    if body.email        is not None: sets.append("email=?");        params.append(body.email)
+    if body.phone        is not None: sets.append("phone=?");        params.append(body.phone)
+    if body.modules      is not None: sets.append("modules=?");      params.append(json.dumps(body.modules, ensure_ascii=False))
+    if body.password:
+        if len(body.password) < MIN_PASSWORD_LEN:
+            conn.close()
+            raise HTTPException(400, f"密碼至少 {MIN_PASSWORD_LEN} 碼")
+        if is_weak_password(body.password):
+            conn.close()
+            raise HTTPException(400, "密碼過於簡單或為已知弱密碼，請改用更強的密碼")
+        sets.append("password_hash=?")
+        params.append(_hash_pw(body.password))
+        sets.append("must_change_password=?")
+        params.append(1)
+    if sets:
+        params.append(user_id)
+        conn.execute(f"UPDATE users SET {', '.join(sets)} WHERE id=?", params)
+        conn.commit()
+    conn.close()
+    _audit(_tok(authorization), 'user.update', 'user', str(user_id), body.display_name or str(user_id))
+    return {"ok": True}
+
+
+@router.delete("/api/users/{user_id}")
+def delete_user(user_id: int, authorization: str = Header(None)):
+    _require_user(authorization, require_superadmin=True)
+    conn = get_db()
+    row = conn.execute("SELECT username, display_name FROM users WHERE id=?", (user_id,)).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(404, "使用者不存在")
+    if row["username"] == "jeff":
+        conn.close()
+        raise HTTPException(400, "不可刪除超級管理員帳號")
+    uname  = row["username"]
+    ulabel = row["display_name"] or uname
+    conn.execute("DELETE FROM users WHERE id=?", (user_id,))
+    conn.execute("DELETE FROM sessions WHERE user_id=?", (user_id,))
+    conn.commit()
+    conn.close()
+    _audit(_tok(authorization), 'user.delete', 'user', str(user_id), ulabel)
+    return {"ok": True}
+
+
+@router.patch("/api/users/{user_id}/active")
+def toggle_user_active(user_id: int, authorization: str = Header(None)):
+    _require_user(authorization, require_superadmin=True)
+    conn = get_db()
+    row = conn.execute("SELECT username, display_name, active FROM users WHERE id=?", (user_id,)).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(404, "使用者不存在")
+    if row["username"] == "jeff":
+        conn.close()
+        raise HTTPException(400, "不可停用超級管理員帳號")
+    new_active = 0 if row["active"] else 1
+    conn.execute("UPDATE users SET active=? WHERE id=?", (new_active, user_id))
+    conn.commit()
+    conn.close()
+    ulabel = row["display_name"] or row["username"]
+    _audit(_tok(authorization), 'user.active', 'user', str(user_id),
+           f"{ulabel}（{'啟用' if new_active else '停用'}帳號）", {'active': bool(new_active)})
+    return {"ok": True, "active": bool(new_active)}
+
+
+@router.get("/api/users/selectable")
+def users_selectable(authorization: str = Header(None)):
+    _require_user(authorization)
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT id, username, display_name, role FROM users WHERE active=1 ORDER BY display_name"
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+# ── Unlock password ───────────────────────────────────────────────────────────
+
+@router.post("/api/auth/verify-unlock")
+def verify_unlock(body: VerifyUnlockIn, authorization: str = Header(None)):
+    user = _require_user(authorization, require_superadmin=True)
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT unlock_password_hash FROM users WHERE id=?", (user['id'],)
+        ).fetchone()
+    finally:
+        conn.close()
+    stored = (row['unlock_password_hash'] or '') if row else ''
+    if not stored:
+        raise HTTPException(500, "尚未設定解鎖密碼，請至使用者管理設定")
+    if not _verify_pw(body.password, stored):
+        raise HTTPException(403, "解鎖密碼不正確")
+    _audit(_tok(authorization), 'quotation.unlock', 'quotation', body.ref, body.ref,
+           {'unlocked_by': user['display_name']})
+    return {"ok": True}
+
+
+@router.patch("/api/users/{user_id}/unlock-password")
+def set_unlock_password(user_id: int, body: SetUnlockPasswordIn, authorization: str = Header(None)):
+    _require_user(authorization, require_superadmin=True)
+    if len(body.unlock_password) < MIN_PASSWORD_LEN:
+        raise HTTPException(400, f"解鎖密碼至少 {MIN_PASSWORD_LEN} 碼")
+    if is_weak_password(body.unlock_password):
+        raise HTTPException(400, "解鎖密碼過於簡單或為已知弱密碼，請改用更強的密碼")
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT role FROM users WHERE id=?", (user_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, "使用者不存在")
+        if row['role'] != 'superadmin':
+            raise HTTPException(400, "僅超級管理員帳號可設定解鎖密碼")
+        conn.execute(
+            "UPDATE users SET unlock_password_hash=? WHERE id=?",
+            (_hash_pw(body.unlock_password), user_id)
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    _audit(_tok(authorization), 'user.set_unlock_password', 'user', str(user_id), str(user_id))
+    return {"ok": True}

@@ -1,0 +1,282 @@
+﻿<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="../static/favicon.png">
+  <title>登入 — MOTRIX 營運管理系統</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600&display=swap" rel="stylesheet">
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Noto Sans TC', 'Inter', system-ui, sans-serif;
+      background: #0A0A0A;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #F5F4F0;
+    }
+    .login-wrap {
+      width: 100%;
+      max-width: 420px;
+      padding: 20px;
+    }
+    .logo-area {
+      text-align: center;
+      margin-bottom: 36px;
+    }
+    .logo-area img {
+      height: 38px;
+      filter: brightness(0) invert(1);
+      margin-bottom: 10px;
+    }
+    .logo-fallback {
+      font-family: Inter, sans-serif;
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: .12em;
+      color: #F5F4F0;
+      margin-bottom: 6px;
+    }
+    .logo-sub {
+      font-size: 11px;
+      color: #555;
+      letter-spacing: .08em;
+      font-family: Inter, sans-serif;
+    }
+    .card {
+      background: #111;
+      border: 1px solid #222;
+      border-radius: 12px;
+      padding: 32px;
+    }
+    .card-title {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+    .card-sub {
+      font-size: 12px;
+      color: #666;
+      margin-bottom: 28px;
+    }
+    .form-group { margin-bottom: 18px; }
+    .form-label {
+      display: block;
+      font-size: 11px;
+      font-family: Inter, sans-serif;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: #666;
+      font-weight: 500;
+      margin-bottom: 6px;
+    }
+    .form-input {
+      width: 100%;
+      padding: 11px 14px;
+      background: #1A1A1A;
+      border: 1px solid #2A2A2A;
+      border-radius: 7px;
+      color: #F5F4F0;
+      font-size: 14px;
+      font-family: 'Noto Sans TC', 'Inter', sans-serif;
+      outline: none;
+      transition: border-color .15s, box-shadow .15s;
+    }
+    .form-input:focus {
+      border-color: #2563EB;
+      box-shadow: 0 0 0 3px rgba(37,99,235,.15);
+    }
+    .form-input::placeholder { color: #444; }
+    .form-input.error { border-color: #DC2626; }
+    .error-msg {
+      font-size: 12px;
+      color: #F87171;
+      margin-top: 6px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .btn-login {
+      width: 100%;
+      padding: 12px;
+      background: #2563EB;
+      color: #fff;
+      border: none;
+      border-radius: 7px;
+      font-size: 14px;
+      font-family: 'Noto Sans TC', sans-serif;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background .12s;
+      margin-top: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .btn-login:hover { background: #1D4ED8; }
+    .btn-login:disabled { opacity: .5; cursor: not-allowed; }
+    .divider {
+      border: none;
+      border-top: 1px solid #1E1E1E;
+      margin: 22px 0;
+    }
+    .footer-note {
+      text-align: center;
+      font-size: 11px;
+      color: #444;
+      line-height: 1.7;
+    }
+    .spinner {
+      width: 14px; height: 14px;
+      border: 2px solid rgba(255,255,255,.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin .6s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .eye-btn {
+      position: absolute;
+      right: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      color: #555;
+      cursor: pointer;
+      padding: 4px;
+      display: flex;
+      align-items: center;
+    }
+    .eye-btn:hover { color: #888; }
+    .pw-wrap { position: relative; }
+  </style>
+</head>
+<body x-data="loginPage()">
+
+  <div class="login-wrap">
+    <div class="logo-area">
+      <img src="../static/logo.png" alt="MOTRIX"
+           onerror="this.style.display='none'; this.nextElementSibling.style.display='block'">
+      <div class="logo-fallback" style="display:none">MOTRIX</div>
+      <div class="logo-sub">SYNERGY INTEGRATION ERP</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">登入系統</div>
+      <div class="card-sub">允碩整合集創 · 內部管理平台</div>
+
+      <form @submit.prevent="login()">
+        <div class="form-group">
+          <label class="form-label">帳號</label>
+          <input class="form-input" :class="{error: error}"
+                 type="text" x-model="username"
+                 placeholder="輸入帳號" autocomplete="username" autofocus>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">密碼</label>
+          <div class="pw-wrap">
+            <input class="form-input" :class="{error: error}"
+                   :type="showPw ? 'text' : 'password'"
+                   x-model="password"
+                   placeholder="輸入密碼" autocomplete="current-password"
+                   style="padding-right:42px">
+            <button type="button" class="eye-btn" @click="showPw=!showPw">
+              <template x-if="!showPw">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+              </template>
+              <template x-if="showPw">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"/></svg>
+              </template>
+            </button>
+          </div>
+          <div class="error-msg" x-show="error">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01"/></svg>
+            <span x-text="error"></span>
+          </div>
+        </div>
+
+        <button type="submit" class="btn-login" :disabled="loading">
+          <template x-if="loading">
+            <div class="spinner"></div>
+          </template>
+          <template x-if="!loading">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"/></svg>
+          </template>
+          <span x-text="loading ? '驗證中…' : '登入'"></span>
+        </button>
+      </form>
+
+      <hr class="divider">
+      <div class="footer-note">
+        如需開立帳號或重設密碼，請聯繫系統管理員<br>
+        <span style="color:#333">MOTRIX 營運管理系統 v1.0 · 允碩整合集創</span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  function loginPage() {
+    return {
+      username: '',
+      password: '',
+      showPw:   false,
+      loading:  false,
+      error:    '',
+
+      async login() {
+        this.error = ''
+        if (!this.username || !this.password) {
+          this.error = '請輸入帳號與密碼'; return
+        }
+        this.loading = true
+        try {
+          const res = await fetch('/api/auth/login', {
+            method:  'POST',
+            headers: {'Content-Type': 'application/json'},
+            body:    JSON.stringify({ username: this.username.trim(), password: this.password })
+          })
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}))
+            this.error   = err.detail || '帳號或密碼錯誤'
+            this.loading = false; return
+          }
+          const data = await res.json()
+          localStorage.setItem('motrix_session', JSON.stringify({
+            token:       data.token,
+            userId:      data.userId,
+            username:    data.username,
+            displayName: data.displayName,
+            role:        data.role,
+            modules:     data.modules,
+            loginAt:     data.loginAt,
+          }))
+          window.location.href = '../index.html'
+        } catch(e) {
+          this.error   = '連線失敗，請確認伺服器是否啟動'
+          this.loading = false
+        }
+      },
+
+      async init() {
+        const s = localStorage.getItem('motrix_session')
+        if (!s) return
+        try {
+          const session = JSON.parse(s)
+          if (!session.token) return
+          const res = await fetch('/api/auth/me', {
+            headers: {'Authorization': 'Bearer ' + session.token}
+          })
+          if (res.ok) window.location.href = '../index.html'
+          else         localStorage.removeItem('motrix_session')
+        } catch(e) {}
+      }
+    }
+  }
+  </script>
+</body>
+</html>

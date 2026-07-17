@@ -1,0 +1,442 @@
+﻿<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="../static/favicon.png">
+  <title>應收帳款 — MOTRIX 營運管理系統</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600&display=swap" rel="stylesheet">
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    [x-cloak]{display:none!important}
+    .page-main{margin-left:var(--sidebar-w);margin-top:var(--topbar-h);padding:28px 32px;min-height:calc(100vh - var(--topbar-h));background:var(--white)}
+
+    .stat-strip{display:flex;gap:12px;margin-bottom:22px;flex-wrap:wrap}
+    .stat-pill{display:flex;flex-direction:column;padding:14px 18px;border:1px solid var(--border-light);border-radius:var(--radius-lg);background:#fff;min-width:130px;flex:1;max-width:200px}
+    .stat-pill__val{font-size:22px;font-weight:700;font-family:Inter,sans-serif;line-height:1;color:var(--text-primary)}
+    .stat-pill__lbl{font-size:10px;color:var(--text-dim);font-family:Inter,sans-serif;letter-spacing:.06em;margin-top:4px;text-transform:uppercase}
+    .stat-pill.accent .stat-pill__val{color:var(--accent)}
+    .stat-pill.danger  .stat-pill__val{color:var(--danger)}
+    .stat-pill.success .stat-pill__val{color:var(--success)}
+    .stat-pill.warn    .stat-pill__val{color:#D97706}
+
+    .alert-bar{display:flex;align-items:center;gap:10px;padding:10px 16px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:var(--radius-lg);margin-bottom:18px;font-size:12px;font-family:var(--font-zh);color:#92400E}
+    .alert-bar svg{flex-shrink:0;color:#D97706}
+
+    .toolbar{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+    .search-wrap{position:relative;flex:0 0 280px}
+    .search-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text-dim);pointer-events:none}
+    .search-input{width:100%;padding:8px 11px 8px 34px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:var(--font-zh);background:#fff;outline:none;box-sizing:border-box}
+    .search-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(37,99,235,.08)}
+
+    .tab-bar{display:flex;gap:2px;margin-bottom:16px;border-bottom:1px solid var(--border-light)}
+    .tab{padding:7px 16px;font-size:12px;font-family:var(--font-zh);cursor:pointer;border:none;background:none;color:var(--text-secondary);border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .1s}
+    .tab:hover{color:var(--text-primary)}
+    .tab.on{color:var(--accent);border-bottom-color:var(--accent);font-weight:600}
+    .tab__cnt{font-family:Inter,sans-serif;font-size:10px;font-weight:600;margin-left:4px;padding:1px 5px;border-radius:8px;background:#F0EEE9}
+    .tab.on .tab__cnt{background:var(--accent-light);color:var(--accent)}
+
+    .panel{background:#fff;border:1px solid var(--border-light);border-radius:var(--radius-lg);overflow:hidden}
+    .data-table{width:100%;border-collapse:collapse;font-size:13px}
+    .data-table th{padding:10px 14px;text-align:left;font-size:10px;font-family:Inter,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);font-weight:500;background:#FAFAF8;border-bottom:1px solid var(--border-light);white-space:nowrap}
+    .data-table td{padding:11px 14px;border-bottom:1px solid #F0EEE9;vertical-align:middle}
+    .data-table tr:last-child td{border-bottom:none}
+    .data-table tr:hover td{background:#FDFCFA}
+    .data-table tr.uninvoiced-row td{background:#FFFBEB}
+    .mono{font-family:Inter,sans-serif;font-size:11px;letter-spacing:.03em}
+
+    .rb{display:inline-flex;align-items:center;padding:2px 9px;border-radius:4px;font-size:11px;font-weight:600;gap:4px}
+    .rb-received{background:var(--success-light);color:var(--success)}
+    .rb-pending{background:#FEF3C7;color:#92400E}
+    .rb-case{background:#EEF2FF;color:#4338CA}
+    .rb-closed{background:#F3F4F6;color:#374151}
+    .rb-invoiced{background:#ECFDF5;color:#065F46}
+    .rb-uninvoiced{background:#FEF3C7;color:#92400E}
+
+    .action-btn{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:var(--radius);font-size:11px;font-family:var(--font-zh);font-weight:500;cursor:pointer;border:1px solid;transition:all .12s}
+    .action-btn.receive{background:#F0FDF4;border-color:#86EFAC;color:#15803D}
+    .action-btn.receive:hover{background:#DCFCE7}
+    .action-btn.unreceive{background:#F9FAFB;border-color:#D1D5DB;color:#6B7280}
+    .action-btn.unreceive:hover{background:#F3F4F6}
+    .action-btn.invoice{background:#FFF7ED;border-color:#FED7AA;color:#C2410C}
+    .action-btn.invoice:hover{background:#FFEDD5}
+
+    .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;display:flex;align-items:center;justify-content:center}
+    .modal-box{background:#fff;border-radius:12px;padding:28px 32px;width:400px;box-shadow:0 20px 60px rgba(0,0,0,.2)}
+    .modal-title{font-size:15px;font-weight:700;font-family:var(--font-zh);color:var(--text-primary);margin-bottom:16px}
+    .field-row{margin-bottom:14px}
+    .field-label{font-size:11px;font-family:var(--font-zh);color:var(--text-secondary);margin-bottom:4px;font-weight:500}
+    .field-input{width:100%;padding:7px 10px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:var(--font-zh);outline:none;box-sizing:border-box}
+    .field-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(37,99,235,.08)}
+    .modal-footer{display:flex;justify-content:flex-end;gap:8px;margin-top:20px}
+
+    .empty-state{text-align:center;padding:48px;color:var(--text-dim);font-family:var(--font-zh);font-size:13px}
+    .loading-text{text-align:center;padding:40px;color:var(--text-dim);font-size:13px}
+
+    .summary-bar{display:flex;gap:24px;padding:10px 14px;background:#FAFAF8;border-top:1px solid var(--border-light);font-size:12px;font-family:var(--font-zh);color:var(--text-secondary)}
+    .summary-bar strong{color:var(--text-primary);font-family:Inter,sans-serif}
+  </style>
+</head>
+<body x-data="app()" x-init="init()" x-cloak>
+
+  <header id="app-topbar" class="topbar"></header>
+<div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+<div class="app-shell">
+
+  <aside class="sidebar" id="app-sidebar"></aside>
+
+  <main class="page-main">
+
+    <!-- 統計條 -->
+    <div class="stat-strip">
+      <div class="stat-pill">
+        <div class="stat-pill__val" x-text="fmtM(meta.totalAmount)">—</div>
+        <div class="stat-pill__lbl">總應收金額</div>
+      </div>
+      <div class="stat-pill success">
+        <div class="stat-pill__val" x-text="fmtM(meta.receivedAmount)">—</div>
+        <div class="stat-pill__lbl">已收款</div>
+      </div>
+      <div class="stat-pill danger">
+        <div class="stat-pill__val" x-text="fmtM(meta.unreceived)">—</div>
+        <div class="stat-pill__lbl">未收款</div>
+      </div>
+      <div class="stat-pill accent">
+        <div class="stat-pill__val" x-text="caseSet.size">—</div>
+        <div class="stat-pill__lbl">涉及案件數</div>
+      </div>
+      <div class="stat-pill warn">
+        <div class="stat-pill__val" x-text="meta.uninvoicedCount || 0">—</div>
+        <div class="stat-pill__lbl">發票未開立</div>
+      </div>
+    </div>
+
+    <!-- 發票未開立警示 -->
+    <div class="alert-bar" x-show="meta.uninvoicedCount > 0">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+      <span>共 <strong x-text="meta.uninvoicedCount"></strong> 筆款項尚未登錄發票號碼，請至下方列表補填。</span>
+    </div>
+
+    <!-- 工具列 -->
+    <div class="toolbar">
+      <div class="search-wrap">
+        <span class="search-icon">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+        </span>
+        <input class="search-input" type="search" placeholder="搜尋案件號 / 客戶 / 款項…" x-model="search">
+      </div>
+      <div style="margin-left:auto;font-size:12px;color:var(--text-dim)" x-text="'共 ' + filtered.length + ' 筆'"></div>
+    </div>
+
+    <!-- Tab -->
+    <div class="tab-bar">
+      <button class="tab" :class="tab==='all' && 'on'" @click="tab='all'">
+        全部 <span class="tab__cnt" x-text="items.length"></span>
+      </button>
+      <button class="tab" :class="tab==='unreceived' && 'on'" @click="tab='unreceived'">
+        未收款 <span class="tab__cnt" x-text="items.filter(i=>!i.received).length"></span>
+      </button>
+      <button class="tab" :class="tab==='received' && 'on'" @click="tab='received'">
+        已收款 <span class="tab__cnt" x-text="items.filter(i=>i.received).length"></span>
+      </button>
+      <button class="tab" :class="tab==='uninvoiced' && 'on'" @click="tab='uninvoiced'">
+        未開發票 <span class="tab__cnt" x-text="items.filter(i=>!i.invoiceNo).length"></span>
+      </button>
+    </div>
+
+    <!-- 表格 -->
+    <div class="panel">
+      <div class="loading-text" x-show="loading">載入中…</div>
+      <template x-if="!loading">
+        <div>
+          <table class="data-table" x-show="filtered.length > 0">
+            <thead>
+              <tr>
+                <th>案件號</th>
+                <th>客戶</th>
+                <th>案件狀態</th>
+                <th>款項名稱</th>
+                <th style="text-align:right">應收金額</th>
+                <th style="text-align:right">比例</th>
+                <th>收款狀態</th>
+                <th>收款時間</th>
+                <th>發票號碼</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="item in filtered" :key="item.quoteNo + '_' + item.idx">
+                <tr :class="!item.invoiceNo && 'uninvoiced-row'">
+                  <td>
+                    <a :href="'case-management.html?q=' + item.quoteNo"
+                       style="font-family:Inter,sans-serif;font-size:12px;font-weight:600;color:var(--accent);text-decoration:none"
+                       x-text="item.quoteNo"></a>
+                  </td>
+                  <td style="font-family:var(--font-zh);font-size:12px" x-text="item.customer"></td>
+                  <td>
+                    <span class="rb" :class="item.dealTag==='已結案' ? 'rb-closed' : 'rb-case'" x-text="item.dealTag"></span>
+                  </td>
+                  <td style="font-family:var(--font-zh);font-size:12px" x-text="item.label"></td>
+                  <td style="text-align:right;font-family:Inter,sans-serif;font-size:13px;font-weight:600" x-text="'NT$ ' + item.amount.toLocaleString()"></td>
+                  <td style="text-align:right;font-family:Inter,sans-serif;font-size:12px;color:var(--text-dim)" x-text="item.pct ? item.pct + '%' : '—'"></td>
+                  <td>
+                    <span class="rb" :class="item.received ? 'rb-received' : 'rb-pending'" x-text="item.received ? '已收款' : '待收款'"></span>
+                  </td>
+                  <td style="font-family:Inter,sans-serif;font-size:11px;color:var(--text-dim)"
+                      x-text="item.receivedAt ? item.receivedAt.slice(0,10) + (item.receivedBy ? ' · ' + item.receivedBy : '') : '—'"></td>
+                  <td>
+                    <template x-if="item.invoiceNo">
+                      <span class="rb rb-invoiced" style="cursor:pointer" @click="openInvoiceModal(item)" x-text="item.invoiceNo"></span>
+                    </template>
+                    <template x-if="!item.invoiceNo">
+                      <button class="action-btn invoice" @click="openInvoiceModal(item)">
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+                        登錄發票
+                      </button>
+                    </template>
+                  </td>
+                  <td>
+                    <template x-if="!item.received">
+                      <button class="action-btn receive" @click="openReceiveModal(item)">
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+                        標記收款
+                      </button>
+                    </template>
+                    <template x-if="item.received">
+                      <button class="action-btn unreceive" @click="toggleReceived(item, false)">
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 18L18 6M6 6l12 12"/></svg>
+                        取消收款
+                      </button>
+                    </template>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+
+          <!-- 彙總列 -->
+          <div class="summary-bar" x-show="filtered.length > 0">
+            <span>篩選結果合計：
+              <strong x-text="'NT$ ' + filtered.reduce((s,i)=>s+i.amount,0).toLocaleString()"></strong>
+            </span>
+            <span>已收：
+              <strong style="color:var(--success)" x-text="'NT$ ' + filtered.filter(i=>i.received).reduce((s,i)=>s+i.amount,0).toLocaleString()"></strong>
+            </span>
+            <span>未收：
+              <strong style="color:var(--danger)" x-text="'NT$ ' + filtered.filter(i=>!i.received).reduce((s,i)=>s+i.amount,0).toLocaleString()"></strong>
+            </span>
+            <span>未開票：
+              <strong style="color:#D97706" x-text="filtered.filter(i=>!i.invoiceNo).length + ' 筆'"></strong>
+            </span>
+          </div>
+
+          <div class="empty-state" x-show="filtered.length === 0">
+            <div style="font-size:32px;margin-bottom:10px">💳</div>
+            <div>尚無符合條件的款項紀錄</div>
+            <div x-show="items.length===0" style="font-size:11px;margin-top:8px;color:var(--text-dim)">請至案件管理設定款項後，資料將自動同步至此</div>
+          </div>
+        </div>
+      </template>
+    </div>
+
+  </main>
+</div>
+
+<!-- 收款 Modal -->
+<div class="modal-overlay" x-show="modal.show" @click.self="modal.show=false">
+  <div class="modal-box" @click.stop>
+    <div class="modal-title">標記收款確認</div>
+    <div style="font-size:13px;color:var(--text-secondary);margin-bottom:16px;font-family:var(--font-zh)">
+      <span x-text="modal.item?.quoteNo"></span> ·
+      <span x-text="modal.item?.label"></span> ·
+      <strong x-text="'NT$ ' + (modal.item?.amount||0).toLocaleString()"></strong>
+    </div>
+    <div class="field-row">
+      <div class="field-label">收款日期</div>
+      <input class="field-input" type="date" x-model="modal.date">
+    </div>
+    <div class="field-row">
+      <div class="field-label">備注（選填）</div>
+      <input class="field-input" type="text" placeholder="例：匯款轉入、票期兌現…" x-model="modal.note">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" @click="modal.show=false">取消</button>
+      <button class="btn btn-primary" @click="confirmReceived()" :disabled="!modal.date">確認收款</button>
+    </div>
+  </div>
+</div>
+
+<!-- 發票 Modal -->
+<div class="modal-overlay" x-show="invoiceModal.show" @click.self="invoiceModal.show=false">
+  <div class="modal-box" @click.stop>
+    <div class="modal-title">登錄發票號碼</div>
+    <div style="font-size:13px;color:var(--text-secondary);margin-bottom:16px;font-family:var(--font-zh)">
+      <span x-text="invoiceModal.item?.quoteNo"></span> ·
+      <span x-text="invoiceModal.item?.label"></span> ·
+      <strong x-text="'NT$ ' + (invoiceModal.item?.amount||0).toLocaleString()"></strong>
+    </div>
+    <div class="field-row">
+      <div class="field-label">統一發票號碼</div>
+      <input class="field-input" type="text" placeholder="AB-12345678" x-model="invoiceModal.no"
+             @keydown.enter="confirmInvoice()">
+    </div>
+    <div style="font-size:11px;color:var(--text-dim);font-family:var(--font-zh);margin-top:-8px">留空並儲存可清除發票號碼</div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" @click="invoiceModal.show=false">取消</button>
+      <button class="btn btn-primary" @click="confirmInvoice()">儲存</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = '/api'
+
+function app() {
+  return {
+    session: {},
+    loading: true,
+    items: [],
+    meta: { totalAmount: 0, receivedAmount: 0, unreceived: 0, uninvoicedCount: 0 },
+    tab: 'all',
+    search: '',
+    modal: { show: false, item: null, date: '', note: '' },
+    invoiceModal: { show: false, item: null, no: '' },
+
+    get caseSet() {
+      return new Set(this.items.map(i => i.quoteNo))
+    },
+
+    get filtered() {
+      let list = this.items
+      if (this.tab === 'unreceived')  list = list.filter(i => !i.received)
+      if (this.tab === 'received')    list = list.filter(i =>  i.received)
+      if (this.tab === 'uninvoiced')  list = list.filter(i => !i.invoiceNo)
+      const q = this.search.trim().toLowerCase()
+      if (q) list = list.filter(i =>
+        (i.quoteNo||'').toLowerCase().includes(q) ||
+        (i.customer||'').toLowerCase().includes(q) ||
+        (i.label||'').toLowerCase().includes(q) ||
+        (i.invoiceNo||'').toLowerCase().includes(q)
+      )
+      return list
+    },
+
+    fmtM(n) {
+      if (!n) return '—'
+      if (n >= 1000000) return 'NT$ ' + (n/1000000).toFixed(2) + 'M'
+      if (n >= 1000)    return 'NT$ ' + Math.round(n/1000) + 'K'
+      return 'NT$ ' + (n||0).toLocaleString()
+    },
+
+    async init() {
+      const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
+      if (!s.token) { location.href = 'login.html'; return }
+      this.session = s
+      try {
+        const r = await fetch(`${API}/auth/me`, { headers: { Authorization: 'Bearer ' + s.token } })
+        if (!r.ok) { location.href = 'login.html'; return }
+        const me = await r.json()
+        this.session.displayName = me.display_name
+      } catch {}
+      await this.load()
+    },
+
+    async load() {
+      this.loading = true
+      try {
+        const r = await fetch(`${API}/receivables`, {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (r.ok) {
+          const d = await r.json()
+          this.items = d.items || []
+          this.meta = {
+            totalAmount:     d.totalAmount     || 0,
+            receivedAmount:  d.receivedAmount  || 0,
+            unreceived:      d.unreceived      || 0,
+            uninvoicedCount: d.uninvoicedCount || 0,
+          }
+        }
+      } catch {}
+      this.loading = false
+    },
+
+    openReceiveModal(item) {
+      this.modal = {
+        show: true,
+        item,
+        date: new Date().toISOString().slice(0, 10),
+        note: ''
+      }
+    },
+
+    async confirmReceived() {
+      const item = this.modal.item
+      if (!item || !this.modal.date) return
+      const ok = await this.patchPayment(item, { received: true, receivedAt: this.modal.date, receivedBy: this.session.displayName || this.session.username || '' })
+      if (ok) {
+        item.received   = true
+        item.receivedAt = this.modal.date
+        item.receivedBy = this.session.displayName || this.session.username || ''
+        this.recalcMeta()
+        this.modal.show = false
+      }
+    },
+
+    async toggleReceived(item, received) {
+      if (!confirm(received ? '標記此款項為已收？' : '取消此款項的收款紀錄？')) return
+      const ok = await this.patchPayment(item, { received, receivedAt: '', receivedBy: '' })
+      if (ok) {
+        item.received   = received
+        item.receivedAt = ''
+        item.receivedBy = ''
+        this.recalcMeta()
+      }
+    },
+
+    openInvoiceModal(item) {
+      this.invoiceModal = { show: true, item, no: item.invoiceNo || '' }
+    },
+
+    async confirmInvoice() {
+      const item = this.invoiceModal.item
+      if (!item) return
+      const ok = await this.patchPayment(item, { invoiceNo: this.invoiceModal.no.trim() })
+      if (ok) {
+        item.invoiceNo = this.invoiceModal.no.trim()
+        this.recalcMeta()
+        this.invoiceModal.show = false
+      }
+    },
+
+    async patchPayment(item, body) {
+      try {
+        const r = await fetch(`${API}/quotations/${item.quoteNo}/payment/${item.idx}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify(body)
+        })
+        return r.ok
+      } catch { return false }
+    },
+
+    recalcMeta() {
+      const total    = this.items.reduce((s, i) => s + i.amount, 0)
+      const received = this.items.filter(i => i.received).reduce((s, i) => s + i.amount, 0)
+      const uninv    = this.items.filter(i => !i.invoiceNo).length
+      this.meta = { totalAmount: total, receivedAmount: received, unreceived: total - received, uninvoicedCount: uninv }
+    },
+
+    logout() {
+      fetch(`${API}/auth/logout`, { method:'POST', headers:{ Authorization:'Bearer '+(this.session.token||'') } }).catch(()=>{})
+      localStorage.removeItem('motrix_session'); location.href = 'login.html'
+    }
+  }
+}
+</script>
+  <script src="../static/notif.js"></script>
+  <script src="../static/sidebar.js"></script>
+</body>
+</html>

@@ -1,0 +1,258 @@
+﻿<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="../static/favicon.png">
+  <title>料號主檔 — MOTRIX 營運管理系統</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600&display=swap" rel="stylesheet">
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    [x-cloak]{display:none!important}
+    .page-main{margin-left:var(--sidebar-w);margin-top:var(--topbar-h);padding:28px 32px;min-height:calc(100vh - var(--topbar-h));background:var(--white)}
+    .toolbar{display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap}
+    .search-wrap{position:relative;flex:0 0 280px}
+    .search-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text-dim);pointer-events:none}
+    .search-input{width:100%;padding:8px 11px 8px 34px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;background:#fff;outline:none;box-sizing:border-box}
+    .search-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(37,99,235,.08)}
+    .panel{background:#fff;border:1px solid var(--border-light);border-radius:var(--radius-lg);overflow:hidden}
+    .data-table{width:100%;border-collapse:collapse;font-size:13px}
+    .data-table th{padding:10px 14px;text-align:left;font-size:10px;font-family:Inter,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);font-weight:500;background:#FAFAF8;border-bottom:1px solid var(--border-light);white-space:nowrap}
+    .data-table td{padding:11px 14px;border-bottom:1px solid #F0EEE9;vertical-align:middle}
+    .data-table tr:last-child td{border-bottom:none}
+    .data-table tr:hover td{background:#FDFCFA}
+    .action-btn{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:var(--radius);font-size:11px;font-weight:500;cursor:pointer;border:1px solid;transition:all .12s}
+    .action-btn.edit{background:#EEF2FF;border-color:#C7D2FE;color:#4338CA}
+    .action-btn.edit:hover{background:#E0E7FF}
+    .action-btn.del{background:#FEF2F2;border-color:#FECACA;color:#DC2626}
+    .action-btn.del:hover{background:#FEE2E2}
+    .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;display:flex;align-items:center;justify-content:center}
+    .modal-box{background:#fff;border-radius:12px;padding:28px 32px;width:480px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.2)}
+    .modal-title{font-size:15px;font-weight:700;font-family:var(--font-zh);color:var(--text-primary);margin-bottom:20px}
+    .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .field-row{margin-bottom:0}
+    .field-label{font-size:11px;color:var(--text-secondary);margin-bottom:4px;font-weight:500;font-family:var(--font-zh)}
+    .field-input{width:100%;padding:7px 10px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:var(--font-zh);outline:none;box-sizing:border-box}
+    .field-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(37,99,235,.08)}
+    .modal-footer{display:flex;justify-content:flex-end;gap:8px;margin-top:20px}
+    .empty-state{text-align:center;padding:48px;color:var(--text-dim);font-size:13px}
+    .loading-text{text-align:center;padding:40px;color:var(--text-dim);font-size:13px}
+  </style>
+</head>
+<body x-data="app()" x-init="init()" x-cloak>
+
+  <header id="app-topbar" class="topbar"></header>
+<div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+<div class="app-shell">
+
+  <aside class="sidebar" id="app-sidebar"></aside>
+
+  <main class="page-main">
+
+    <div class="toolbar">
+      <div class="search-wrap">
+        <span class="search-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg></span>
+        <input class="search-input" type="search" placeholder="搜尋料號 / 品名 / 廠牌…" x-model="search">
+      </div>
+      <select style="padding:7px 10px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;font-family:var(--font-zh);outline:none" x-model="filterCat">
+        <option value="">全部類別</option>
+        <template x-for="c in categories" :key="c"><option :value="c" x-text="c"></option></template>
+      </select>
+      <div style="margin-left:auto;font-size:12px;color:var(--text-dim)" x-text="filtered.length + ' 項料號'"></div>
+      <button class="btn btn-primary" @click="openModal(null)">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+        新增料號
+      </button>
+    </div>
+
+    <div class="panel">
+      <div class="loading-text" x-show="loading">載入中…</div>
+      <template x-if="!loading">
+        <div>
+          <table class="data-table" x-show="filtered.length > 0">
+            <thead>
+              <tr>
+                <th>料號</th>
+                <th>品名</th>
+                <th>廠牌/型號</th>
+                <th>類別</th>
+                <th>單位</th>
+                <th style="text-align:right">成本</th>
+                <th style="text-align:right">定價</th>
+                <th>備注</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="p in filtered" :key="p.id">
+                <tr>
+                  <td><span style="font-family:Inter,sans-serif;font-size:12px;font-weight:600;color:var(--accent)" x-text="p.part_no"></span></td>
+                  <td style="font-size:12px" x-text="p.name"></td>
+                  <td style="font-size:12px;color:var(--text-secondary)" x-text="p.brand || '—'"></td>
+                  <td>
+                    <span x-show="p.category" style="font-size:11px;padding:2px 8px;border-radius:4px;background:#F0EEE9;color:var(--text-secondary)" x-text="p.category"></span>
+                    <span x-show="!p.category" style="color:var(--text-dim)">—</span>
+                  </td>
+                  <td style="font-size:12px;color:var(--text-dim)" x-text="p.unit || '台'"></td>
+                  <td style="text-align:right;font-family:Inter,sans-serif;font-size:12px" x-text="p.cost ? 'NT$ ' + Math.round(p.cost).toLocaleString() : '—'"></td>
+                  <td style="text-align:right;font-family:Inter,sans-serif;font-size:12px;font-weight:600" x-text="p.list_price ? 'NT$ ' + Math.round(p.list_price).toLocaleString() : '—'"></td>
+                  <td style="font-size:11px;color:var(--text-dim);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" x-text="p.note || '—'"></td>
+                  <td style="white-space:nowrap">
+                    <button class="action-btn edit" @click.stop="openModal(p)">編輯</button>
+                    <button class="action-btn del" @click.stop="deletePart(p)" style="margin-left:4px">刪除</button>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+          <div class="empty-state" x-show="filtered.length === 0">
+            <div style="font-size:32px;margin-bottom:10px">📦</div>
+            <div x-show="items.length === 0">尚未建立任何料號，點擊「新增料號」開始建立</div>
+            <div x-show="items.length > 0 && filtered.length === 0">無符合搜尋條件的料號</div>
+          </div>
+        </div>
+      </template>
+    </div>
+
+  </main>
+</div>
+
+<!-- 新增/編輯 Modal -->
+<div class="modal-overlay" x-show="modal.show" @click.self="modal.show=false">
+  <div class="modal-box" @click.stop>
+    <div class="modal-title" x-text="modal.id ? '編輯料號' : '新增料號'"></div>
+    <div class="form-grid">
+      <div class="field-row">
+        <div class="field-label">料號 <span style="color:var(--danger)">*</span></div>
+        <input class="field-input" type="text" placeholder="EX-U6-PRO" x-model="modal.partNo" :disabled="!!modal.id">
+      </div>
+      <div class="field-row">
+        <div class="field-label">類別</div>
+        <input class="field-input" type="text" placeholder="網路設備 / 伺服器…" x-model="modal.category">
+      </div>
+      <div class="field-row" style="grid-column:1/-1">
+        <div class="field-label">品名 <span style="color:var(--danger)">*</span></div>
+        <input class="field-input" type="text" placeholder="品名說明" x-model="modal.name">
+      </div>
+      <div class="field-row" style="grid-column:1/-1">
+        <div class="field-label">廠牌 / 型號</div>
+        <input class="field-input" type="text" placeholder="Ubiquiti / U6-Pro" x-model="modal.brand">
+      </div>
+      <div class="field-row">
+        <div class="field-label">單位</div>
+        <input class="field-input" type="text" placeholder="台 / 套 / 個…" x-model="modal.unit">
+      </div>
+      <div class="field-row">
+        <div class="field-label">成本（未稅）</div>
+        <input class="field-input" type="number" placeholder="0" x-model.number="modal.cost">
+      </div>
+      <div class="field-row" style="grid-column:1/-1">
+        <div class="field-label">定價（含稅）</div>
+        <input class="field-input" type="number" placeholder="0" x-model.number="modal.listPrice">
+      </div>
+      <div class="field-row" style="grid-column:1/-1">
+        <div class="field-label">備注</div>
+        <input class="field-input" type="text" placeholder="選填" x-model="modal.note">
+      </div>
+    </div>
+    <div x-show="modal.error" style="color:var(--danger);font-size:12px;margin-top:8px" x-text="modal.error"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" @click="modal.show=false">取消</button>
+      <button class="btn btn-primary" @click="savePart()" :disabled="modal.saving">
+        <span x-text="modal.saving ? '儲存中…' : '儲存'"></span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = '/api'
+function app() {
+  return {
+    session: {},
+    loading: true,
+    items: [],
+    search: '',
+    filterCat: '',
+    modal: { show: false, id: null, partNo: '', name: '', brand: '', unit: '台', cost: 0, listPrice: 0, category: '', note: '', saving: false, error: '' },
+
+    get categories() {
+      return [...new Set(this.items.map(p => p.category).filter(Boolean))].sort()
+    },
+    get filtered() {
+      let list = this.items
+      if (this.filterCat) list = list.filter(p => p.category === this.filterCat)
+      const q = this.search.trim().toLowerCase()
+      if (q) list = list.filter(p =>
+        (p.part_no||'').toLowerCase().includes(q) ||
+        (p.name||'').toLowerCase().includes(q) ||
+        (p.brand||'').toLowerCase().includes(q)
+      )
+      return list
+    },
+
+    async init() {
+      const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
+      if (!s.token) { location.href = 'login.html'; return }
+      this.session = s
+      try {
+        const r = await fetch(`${API}/auth/me`, { headers: { Authorization: 'Bearer ' + s.token } })
+        if (!r.ok) { location.href = 'login.html'; return }
+        const me = await r.json(); this.session.displayName = me.display_name
+      } catch {}
+      await this.load()
+    },
+
+    async load() {
+      this.loading = true
+      try {
+        const r = await fetch(`${API}/parts`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (r.ok) { const d = await r.json(); this.items = d.items || [] }
+      } catch {}
+      this.loading = false
+    },
+
+    openModal(part) {
+      if (part) {
+        this.modal = { show: true, id: part.id, partNo: part.part_no, name: part.name, brand: part.brand || '', unit: part.unit || '台', cost: part.cost || 0, listPrice: part.list_price || 0, category: part.category || '', note: part.note || '', saving: false, error: '' }
+      } else {
+        this.modal = { show: true, id: null, partNo: '', name: '', brand: '', unit: '台', cost: 0, listPrice: 0, category: '', note: '', saving: false, error: '' }
+      }
+    },
+
+    async savePart() {
+      if (!this.modal.partNo.trim()) { this.modal.error = '料號不得為空'; return }
+      if (!this.modal.name.trim())   { this.modal.error = '品名不得為空'; return }
+      this.modal.saving = true; this.modal.error = ''
+      const body = { partNo: this.modal.partNo, name: this.modal.name, brand: this.modal.brand, unit: this.modal.unit, cost: this.modal.cost, listPrice: this.modal.listPrice, category: this.modal.category, note: this.modal.note }
+      const url  = this.modal.id ? `${API}/parts/${this.modal.id}` : `${API}/parts`
+      const meth = this.modal.id ? 'PUT' : 'POST'
+      try {
+        const r = await fetch(url, { method: meth, headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token }, body: JSON.stringify(body) })
+        if (r.ok) { await this.load(); this.modal.show = false }
+        else { const e = await r.json(); this.modal.error = e.detail || '儲存失敗' }
+      } catch { this.modal.error = '網路錯誤' }
+      this.modal.saving = false
+    },
+
+    async deletePart(part) {
+      if (!confirm(`確認刪除料號「${part.part_no}」？`)) return
+      try {
+        const r = await fetch(`${API}/parts/${part.id}`, { method: 'DELETE', headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (r.ok) await this.load()
+      } catch {}
+    },
+
+    logout() {
+      fetch(`${API}/auth/logout`, { method:'POST', headers:{ Authorization:'Bearer '+(this.session.token||'') } }).catch(()=>{})
+      localStorage.removeItem('motrix_session'); location.href = 'login.html'
+    }
+  }
+}
+</script>
+  <script src="../static/notif.js"></script>
+  <script src="../static/sidebar.js"></script>
+</body>
+</html>

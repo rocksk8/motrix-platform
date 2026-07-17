@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="../static/favicon.png">
+  <title>營運報表 — MOTRIX 營運管理系統</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600&display=swap" rel="stylesheet">
+  <script src="../js/reports.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    [x-cloak]{display:none!important}
+    .page-main{margin-left:var(--sidebar-w);margin-top:var(--topbar-h);padding:28px 32px;min-height:calc(100vh - var(--topbar-h));background:var(--white)}
+
+    .period-bar{display:flex;align-items:center;gap:10px;margin-bottom:20px;flex-wrap:wrap}
+    .period-type-btn{padding:5px 14px;border-radius:var(--radius);border:1px solid var(--border-light);font-size:12px;font-family:var(--font-zh);cursor:pointer;background:#fff;color:var(--text-secondary);transition:all .1s}
+    .period-type-btn.on{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+    .period-nav{display:flex;align-items:center;gap:6px}
+    .period-nav button{width:28px;height:28px;border:1px solid var(--border-light);border-radius:var(--radius);background:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--text-secondary)}
+    .period-nav button:hover{background:#F0EEE9}
+    .period-label{font-size:14px;font-weight:600;font-family:var(--font-zh);color:var(--text-primary);min-width:90px;text-align:center}
+    .export-wrap{margin-left:auto;display:flex;gap:8px}
+    .btn-export{display:inline-flex;align-items:center;gap:5px;padding:6px 14px;border-radius:var(--radius);border:1px solid;font-size:12px;font-family:var(--font-zh);font-weight:500;cursor:pointer;transition:all .12s}
+    .btn-export.excel{background:#F0FDF4;border-color:#86EFAC;color:#15803D}
+    .btn-export.excel:hover{background:#DCFCE7}
+    .btn-export.pdf{background:#FEF2F2;border-color:#FCA5A5;color:#DC2626}
+    .btn-export.pdf:hover{background:#FEE2E2}
+    .btn-export:disabled{opacity:.5;cursor:not-allowed}
+    .btn-load{padding:6px 16px;border-radius:var(--radius);border:1px solid var(--accent);background:var(--accent);color:#fff;font-size:12px;font-family:var(--font-zh);font-weight:600;cursor:pointer}
+    .btn-load:hover{opacity:.88}
+
+    .kpi-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(155px,1fr));gap:12px;margin-bottom:22px}
+    .kpi-card{background:#fff;border:1px solid var(--border-light);border-radius:var(--radius-lg);padding:14px 18px}
+    .kpi-card__lbl{font-size:10px;color:var(--text-dim);font-family:Inter,sans-serif;letter-spacing:.06em;text-transform:uppercase;margin-bottom:5px}
+    .kpi-card__val{font-size:20px;font-weight:700;font-family:Inter,sans-serif;line-height:1;color:var(--text-primary)}
+    .kpi-card__sub{font-size:10px;color:var(--text-dim);margin-top:4px;font-family:Inter,sans-serif}
+    .kpi-card.green .kpi-card__val{color:var(--success)}
+    .kpi-card.red   .kpi-card__val{color:var(--danger)}
+    .kpi-card.blue  .kpi-card__val{color:var(--accent)}
+    .kpi-card.orange .kpi-card__val{color:#D97706}
+    .kpi-card.purple .kpi-card__val{color:#7C3AED}
+
+    .tab-bar{display:flex;gap:2px;margin-bottom:16px;border-bottom:1px solid var(--border-light)}
+    .tab{padding:7px 16px;font-size:12px;font-family:var(--font-zh);cursor:pointer;border:none;background:none;color:var(--text-secondary);border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .1s}
+    .tab:hover{color:var(--text-primary)}
+    .tab.on{color:var(--accent);border-bottom-color:var(--accent);font-weight:600}
+    .tab__cnt{font-family:Inter,sans-serif;font-size:10px;font-weight:600;margin-left:4px;padding:1px 5px;border-radius:8px;background:#F0EEE9}
+    .tab.on .tab__cnt{background:var(--accent-light);color:var(--accent)}
+
+    .panel{background:#fff;border:1px solid var(--border-light);border-radius:var(--radius-lg);overflow:hidden}
+    .data-table{width:100%;border-collapse:collapse;font-size:13px}
+    .data-table th{padding:10px 14px;text-align:left;font-size:10px;font-family:Inter,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);font-weight:500;background:#FAFAF8;border-bottom:1px solid var(--border-light);white-space:nowrap}
+    .data-table td{padding:10px 14px;border-bottom:1px solid #F0EEE9;vertical-align:middle}
+    .data-table tr:last-child td{border-bottom:none}
+    .data-table tr:hover td{background:#FDFCFA}
+    .data-table .sum-row td{background:#111827!important;color:#fff;font-weight:600;border-bottom:none}
+    .data-table tr.in-period td{background:#EFF6FF}
+    .mono{font-family:Inter,sans-serif;font-size:11px}
+    .r{text-align:right}.c{text-align:center}
+    .green-txt{color:var(--success);font-weight:600}
+    .red-txt{color:var(--danger);font-weight:600}
+    .orange-txt{color:#D97706;font-weight:600}
+    .rb{display:inline-flex;align-items:center;padding:2px 9px;border-radius:4px;font-size:11px;font-weight:600}
+    .rb-active{background:#DCFCE7;color:#15803D}
+    .rb-closed{background:#F3F4F6;color:#374151}
+    .rb-fin{background:#EDE9FE;color:#7C3AED}
+
+    .link-btn{background:none;border:none;color:var(--accent);font-size:11px;cursor:pointer;text-decoration:underline;padding:0;font-family:var(--font-zh)}
+    .link-btn:hover{opacity:.75}
+
+    .empty-state{text-align:center;padding:48px;color:var(--text-dim);font-family:var(--font-zh);font-size:13px}
+    .loading-text{text-align:center;padding:40px;color:var(--text-dim);font-size:13px}
+    .error-bar{background:#FEF2F2;border:1px solid #FCA5A5;border-radius:var(--radius-lg);padding:12px 16px;color:#DC2626;font-family:var(--font-zh);font-size:13px;margin-bottom:16px}
+
+    .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:300;display:flex;align-items:center;justify-content:center;padding:24px}
+    .modal-box{background:#fff;border-radius:12px;width:100%;max-width:620px;max-height:90vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.2)}
+    .modal-hd{display:flex;align-items:center;justify-content:space-between;padding:18px 24px;border-bottom:1px solid var(--border-light)}
+    .modal-title{font-size:15px;font-weight:700;font-family:var(--font-zh);color:var(--text-primary)}
+    .modal-close{background:none;border:none;font-size:18px;cursor:pointer;color:var(--text-dim);line-height:1;padding:0 4px}
+    .modal-body{padding:20px 24px}
+    .stl-meta{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+    .stl-kpi{border:1px solid var(--border-light);border-radius:var(--radius);padding:10px 14px;background:#FAFAF8}
+    .stl-kpi__lbl{font-size:10px;color:var(--text-dim);font-family:Inter,sans-serif;letter-spacing:.06em;text-transform:uppercase;margin-bottom:3px}
+    .stl-kpi__val{font-size:16px;font-weight:700;font-family:Inter,sans-serif;color:var(--text-primary)}
+    .stl-section{font-size:11px;font-weight:600;color:var(--text-secondary);font-family:Inter,sans-serif;letter-spacing:.08em;text-transform:uppercase;margin:14px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--border-light)}
+    .stl-table{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:10px}
+    .stl-table th{padding:7px 10px;text-align:left;font-size:10px;font-family:Inter,sans-serif;letter-spacing:.06em;text-transform:uppercase;color:var(--text-dim);background:#FAFAF8;border-bottom:1px solid var(--border-light)}
+    .stl-table td{padding:7px 10px;border-bottom:1px solid #F0EEE9;vertical-align:middle;font-family:var(--font-zh)}
+    .stl-table tr:last-child td{border-bottom:none}
+  </style>
+</head>
+<body x-data="reportsApp()" x-init="init()" x-cloak>
+
+  <header id="app-topbar" class="topbar"></header>
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+  <div class="app-shell">
+    <aside class="sidebar" id="app-sidebar"></aside>
+
+    <main class="page-main">
+
+      <!-- Period bar -->
+      <div class="period-bar">
+        <button class="period-type-btn" :class="{on: periodType==='month'}" @click="switchType('month')">月報</button>
+        <button class="period-type-btn" :class="{on: periodType==='quarter'}" @click="switchType('quarter')">季報</button>
+
+        <div class="period-nav">
+          <button @click="prevPeriod()">&#8592;</button>
+          <span class="period-label" x-text="periodLabel || periodParam"></span>
+          <button @click="nextPeriod()">&#8594;</button>
+        </div>
+
+        <template x-if="periodType==='month'">
+          <div style="display:flex;gap:6px;align-items:center">
+            <select x-model.number="year" @change="loadData()" style="padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;background:#fff">
+              <template x-for="y in [2024,2025,2026,2027]" :key="y"><option :value="y" x-text="y"></option></template>
+            </select>
+            <select x-model.number="month" @change="loadData()" style="padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;background:#fff">
+              <template x-for="m in [1,2,3,4,5,6,7,8,9,10,11,12]" :key="m"><option :value="m" x-text="m + ' 月'"></option></template>
+            </select>
+          </div>
+        </template>
+        <template x-if="periodType==='quarter'">
+          <div style="display:flex;gap:6px;align-items:center">
+            <select x-model.number="year" @change="loadData()" style="padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;background:#fff">
+              <template x-for="y in [2024,2025,2026,2027]" :key="y"><option :value="y" x-text="y"></option></template>
+            </select>
+            <select x-model.number="quarter" @change="loadData()" style="padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;background:#fff">
+              <option :value="1">Q1</option><option :value="2">Q2</option>
+              <option :value="3">Q3</option><option :value="4">Q4</option>
+            </select>
+          </div>
+        </template>
+
+        <div class="export-wrap">
+          <button class="btn-export excel" @click="exportFile('excel')" :disabled="exporting || !data">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            <span x-text="exporting && exportType==='excel' ? '產製中…' : '匯出 Excel'"></span>
+          </button>
+          <button class="btn-export pdf" @click="exportFile('pdf')" :disabled="exporting || !data">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            <span x-text="exporting && exportType==='pdf' ? '產製中…' : '匯出 PDF'"></span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Error -->
+      <div x-show="error" class="error-bar" x-text="error"></div>
+
+      <!-- Loading -->
+      <div x-show="loading" class="loading-text">載入中…</div>
+
+      <template x-if="!loading && data">
+        <div>
+          <!-- KPI 摘要 -->
+          <div class="kpi-grid">
+            <div class="kpi-card">
+              <div class="kpi-card__lbl">總應收金額</div>
+              <div class="kpi-card__val" x-text="fmt(summary.totalReceivable)"></div>
+            </div>
+            <div class="kpi-card green">
+              <div class="kpi-card__lbl">已收款（帳面）</div>
+              <div class="kpi-card__val" x-text="fmt(summary.totalCollected)"></div>
+              <div class="kpi-card__sub" x-text="'收款率 ' + pct(summary.collectionRate)"></div>
+            </div>
+            <div class="kpi-card red">
+              <div class="kpi-card__lbl">未收款</div>
+              <div class="kpi-card__val" x-text="fmt(summary.totalOutstanding)"></div>
+            </div>
+            <div class="kpi-card orange">
+              <div class="kpi-card__lbl">手續費合計</div>
+              <div class="kpi-card__val" x-text="fmt(summary.totalFee)"></div>
+            </div>
+            <div class="kpi-card green">
+              <div class="kpi-card__lbl">實收淨額</div>
+              <div class="kpi-card__val" x-text="fmt(summary.netCollected)"></div>
+            </div>
+            <div class="kpi-card blue">
+              <div class="kpi-card__lbl">本期收款</div>
+              <div class="kpi-card__val" x-text="fmt(summary.periodReceived)"></div>
+              <div class="kpi-card__sub" x-text="'淨 ' + fmt(summary.periodNet)"></div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-card__lbl">合約總案數</div>
+              <div class="kpi-card__val" x-text="summary.totalCases"></div>
+              <div class="kpi-card__sub" x-text="'進行 ' + summary.activeCases + '　結案 ' + summary.closedCases"></div>
+            </div>
+            <div class="kpi-card blue">
+              <div class="kpi-card__lbl">本期新成案</div>
+              <div class="kpi-card__val" x-text="summary.periodCases"></div>
+            </div>
+            <div class="kpi-card orange">
+              <div class="kpi-card__lbl">保固到期預警</div>
+              <div class="kpi-card__val" x-text="summary.warrantyAlerts"></div>
+              <div class="kpi-card__sub">90 天內</div>
+            </div>
+            <div class="kpi-card purple">
+              <div class="kpi-card__lbl">精算實際毛利</div>
+              <div class="kpi-card__val" x-text="fmt(summary.totalActualGrossProfit)"></div>
+              <div class="kpi-card__sub" x-text="'已精算 ' + summary.settledCases + ' 件'"></div>
+            </div>
+            <div class="kpi-card purple">
+              <div class="kpi-card__lbl">精算覆蓋率</div>
+              <div class="kpi-card__val" x-text="pct(summary.settleCoverage)"></div>
+              <div class="kpi-card__sub" x-text="summary.closedCases + ' 件中 ' + summary.settledCases + ' 件完成'"></div>
+            </div>
+          </div>
+
+          <!-- Tabs -->
+          <div class="tab-bar">
+            <button class="tab" :class="{on:activeTab==='recv'}" @click="activeTab='recv'">
+              本期收款<span class="tab__cnt" x-text="periodItems.length"></span>
+            </button>
+            <button class="tab" :class="{on:activeTab==='out'}" @click="activeTab='out'">
+              未收款<span class="tab__cnt" x-text="outstanding.length"></span>
+            </button>
+            <button class="tab" :class="{on:activeTab==='cases'}" @click="activeTab='cases'">
+              案件清單<span class="tab__cnt" x-text="casesAll.length"></span>
+            </button>
+            <button class="tab" :class="{on:activeTab==='sales'}" @click="activeTab='sales'">
+              業務員績效<span class="tab__cnt" x-text="salesPerf.length"></span>
+            </button>
+            <button class="tab" :class="{on:activeTab==='margin'}" @click="activeTab='margin'">
+              毛利分析<span class="tab__cnt" x-text="marginCases.length"></span>
+            </button>
+            <button class="tab" :class="{on:activeTab==='warr'}" @click="activeTab='warr'">
+              保固預警<span class="tab__cnt" x-text="warranty.length"></span>
+            </button>
+          </div>
+
+          <!-- 本期收款 -->
+          <div x-show="activeTab==='recv'" class="panel">
+            <template x-if="periodItems.length === 0">
+              <div class="empty-state">本期無收款紀錄</div>
+            </template>
+            <template x-if="periodItems.length > 0">
+              <table class="data-table">
+                <thead><tr>
+                  <th>案件號</th><th>客戶</th><th>專案名稱</th><th>業務員</th>
+                  <th>款項類型</th><th class="r">應收金額</th><th class="c">收款日</th>
+                  <th class="r">實收金額</th><th class="r">手續費</th><th class="r">實收淨額</th>
+                  <th>發票號碼</th><th>備注</th>
+                </tr></thead>
+                <tbody>
+                  <template x-for="it in periodItems" :key="it.quoteNo + '-' + it.idx">
+                    <tr>
+                      <td class="mono" x-text="it.quoteNo"></td>
+                      <td x-text="it.customer"></td>
+                      <td x-text="it.project"></td>
+                      <td x-text="it.salesPerson"></td>
+                      <td class="c" x-text="it.type"></td>
+                      <td class="r mono" x-text="fmt(it.amount)"></td>
+                      <td class="c mono" x-text="it.receivedAt"></td>
+                      <td class="r mono" x-text="fmt(it.actualAmount !== null ? it.actualAmount : it.amount)"></td>
+                      <td class="r mono red-txt" x-text="it.feeAmount ? fmt(it.feeAmount) : '—'"></td>
+                      <td class="r mono green-txt" x-text="fmt(it.netAmount)"></td>
+                      <td x-text="it.invoiceNo || '—'"></td>
+                      <td x-text="it.note || ''"></td>
+                    </tr>
+                  </template>
+                  <tr class="sum-row">
+                    <td colspan="5">合計（<span x-text="periodItems.length"></span> 筆）</td>
+                    <td class="r" x-text="fmt(periodItems.reduce((s,i)=>s+i.amount,0))"></td>
+                    <td></td>
+                    <td class="r" x-text="fmt(periodItems.reduce((s,i)=>s+(i.actualAmount!==null?i.actualAmount:i.amount),0))"></td>
+                    <td class="r" x-text="fmt(periodItems.reduce((s,i)=>s+(i.feeAmount||0),0))"></td>
+                    <td class="r" x-text="fmt(summary.periodNet)"></td>
+                    <td colspan="2"></td>
+                  </tr>
+                </tbody>
+              </table>
+            </template>
+          </div>
+
+          <!-- 未收款 -->
+          <div x-show="activeTab==='out'" class="panel">
+            <template x-if="outstanding.length === 0">
+              <div class="empty-state">目前無未收款項目</div>
+            </template>
+            <template x-if="outstanding.length > 0">
+              <table class="data-table">
+                <thead><tr>
+                  <th>案件號</th><th>客戶</th><th>專案名稱</th><th>業務員</th>
+                  <th class="c">案件進度</th><th>款項類型</th>
+                  <th class="r">應收金額</th><th class="c">比例</th><th class="c">報價日期</th>
+                </tr></thead>
+                <tbody>
+                  <template x-for="it in outstanding" :key="it.quoteNo + '-' + it.idx">
+                    <tr>
+                      <td class="mono" x-text="it.quoteNo"></td>
+                      <td x-text="it.customer"></td>
+                      <td x-text="it.project"></td>
+                      <td x-text="it.salesPerson"></td>
+                      <td class="c"><span class="rb" :class="it.dealTag==='已結案'?'rb-closed':'rb-active'" x-text="it.dealTag"></span></td>
+                      <td x-text="it.type"></td>
+                      <td class="r mono red-txt" x-text="fmt(it.amount)"></td>
+                      <td class="c mono" x-text="(it.pct||0).toFixed(1) + '%'"></td>
+                      <td class="c mono" x-text="it.quoteDate"></td>
+                    </tr>
+                  </template>
+                  <tr class="sum-row">
+                    <td colspan="6">合計未收</td>
+                    <td class="r" x-text="fmt(outstanding.reduce((s,i)=>s+i.amount,0))"></td>
+                    <td colspan="2"></td>
+                  </tr>
+                </tbody>
+              </table>
+            </template>
+          </div>
+
+          <!-- 案件清單 -->
+          <div x-show="activeTab==='cases'" class="panel">
+            <template x-if="casesAll.length === 0">
+              <div class="empty-state">尚無成案資料</div>
+            </template>
+            <template x-if="casesAll.length > 0">
+              <table class="data-table">
+                <thead><tr>
+                  <th>案件號</th><th>客戶</th><th>專案名稱</th><th>業務員</th>
+                  <th class="c">報價日</th><th class="c">進度</th>
+                  <th class="r">合約金額</th><th class="r">預估毛利率</th>
+                  <th class="r">已收款</th><th class="r">收款率</th>
+                  <th class="c">實際毛利率</th><th class="c">精算</th>
+                </tr></thead>
+                <tbody>
+                  <template x-for="c in casesAll" :key="c.quoteNo">
+                    <tr :class="c.inPeriod ? 'in-period' : ''">
+                      <td class="mono" x-text="c.quoteNo"></td>
+                      <td x-text="c.customer"></td>
+                      <td x-text="c.project"></td>
+                      <td x-text="c.salesPerson"></td>
+                      <td class="c mono" x-text="c.quoteDate"></td>
+                      <td class="c"><span class="rb" :class="c.dealTag==='已結案'?'rb-closed':'rb-active'" x-text="c.dealTag"></span></td>
+                      <td class="r mono" x-text="fmt(c.total)"></td>
+                      <td class="r mono" x-text="(c.netMarginPct||0).toFixed(1) + '%'"></td>
+                      <td class="r mono" x-text="fmt(c.receivedAmount)"></td>
+                      <td class="r mono" :class="c.collectionRate>=80?'green-txt':c.collectionRate>=50?'orange-txt':'red-txt'" x-text="c.collectionRate.toFixed(1) + '%'"></td>
+                      <td class="c mono" :class="c.actualMarginPct!==null?(c.actualMarginPct>=(c.netMarginPct||0)?'green-txt':'red-txt'):''" x-text="c.actualMarginPct!==null ? c.actualMarginPct.toFixed(1)+'%' : '—'"></td>
+                      <td class="c">
+                        <template x-if="stlCanOpen(c)">
+                          <button class="link-btn" @click="openSettlement(c.quoteNo)">精算</button>
+                        </template>
+                        <template x-if="!stlCanOpen(c)">
+                          <span style="color:var(--text-dim);font-size:11px">—</span>
+                        </template>
+                      </td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </template>
+          </div>
+
+          <!-- 業務員績效 -->
+          <div x-show="activeTab==='sales'" class="panel">
+            <template x-if="salesPerf.length === 0">
+              <div class="empty-state">尚無業務員績效資料</div>
+            </template>
+            <template x-if="salesPerf.length > 0">
+              <table class="data-table">
+                <thead><tr>
+                  <th>業務員</th><th class="r">案件數</th><th class="r">合約總額</th>
+                  <th class="r">已收款</th><th class="r">收款率</th>
+                  <th class="r">平均預估毛利率</th><th class="r">平均實際毛利率</th>
+                  <th class="r">精算件數</th>
+                </tr></thead>
+                <tbody>
+                  <template x-for="sp in salesPerf" :key="sp.salesPerson">
+                    <tr>
+                      <td x-text="sp.salesPerson"></td>
+                      <td class="r mono" x-text="sp.caseCount"></td>
+                      <td class="r mono" x-text="fmt(sp.totalAmount)"></td>
+                      <td class="r mono" x-text="fmt(sp.receivedAmount)"></td>
+                      <td class="r mono" x-text="sp.collectionRate.toFixed(1) + '%'"></td>
+                      <td class="r mono" x-text="sp.avgMarginPct.toFixed(1) + '%'"></td>
+                      <td class="r mono" :class="sp.avgActualMarginPct!==null?(sp.avgActualMarginPct>=sp.avgMarginPct?'green-txt':'red-txt'):''" x-text="sp.avgActualMarginPct!==null ? sp.avgActualMarginPct.toFixed(1)+'%' : '—'"></td>
+                      <td class="r mono" x-text="sp.settledCount"></td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </template>
+          </div>
+
+          <!-- 毛利分析 -->
+          <div x-show="activeTab==='margin'" class="panel">
+            <template x-if="marginCases.length === 0">
+              <div class="empty-state">目前尚無已完成精算之案件</div>
+            </template>
+            <template x-if="marginCases.length > 0">
+              <table class="data-table">
+                <thead><tr>
+                  <th>案件號</th><th>客戶</th><th>專案名稱</th><th>業務員</th>
+                  <th class="c">進度</th><th class="r">報價稅前</th>
+                  <th class="r">預估毛利率</th><th class="r">實際毛利率</th>
+                  <th class="r">差異</th><th class="r">實際毛利</th><th class="c">精算狀態</th>
+                </tr></thead>
+                <tbody>
+                  <template x-for="mc in marginCases" :key="mc.quoteNo">
+                    <tr>
+                      <td class="mono" x-text="mc.quoteNo"></td>
+                      <td x-text="mc.customer"></td>
+                      <td x-text="mc.project"></td>
+                      <td x-text="mc.salesPerson"></td>
+                      <td class="c"><span class="rb" :class="mc.dealTag==='已結案'?'rb-closed':'rb-active'" x-text="mc.dealTag"></span></td>
+                      <td class="r mono" x-text="fmt(mc.pretax)"></td>
+                      <td class="r mono" x-text="(mc.netMarginPct||0).toFixed(1) + '%'"></td>
+                      <td class="r mono" :class="mc.actualMarginPct>=(mc.netMarginPct||0)?'green-txt':'red-txt'" x-text="(mc.actualMarginPct||0).toFixed(1) + '%'"></td>
+                      <td class="r mono" :class="((mc.actualMarginPct||0)-(mc.netMarginPct||0))>=0?'green-txt':'red-txt'" x-text="(((mc.actualMarginPct||0)-(mc.netMarginPct||0))>=0?'+':'') + ((mc.actualMarginPct||0)-(mc.netMarginPct||0)).toFixed(1) + 'pp'"></td>
+                      <td class="r mono" x-text="fmt(mc.grossProfit)"></td>
+                      <td class="c"><span class="rb rb-fin" x-text="mc.settleStatus==='finalized'?'已結算':'草稿'"></span></td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </template>
+          </div>
+
+          <!-- 保固預警 -->
+          <div x-show="activeTab==='warr'" class="panel">
+            <template x-if="warranty.length === 0">
+              <div class="empty-state">目前 90 天內無保固到期設備</div>
+            </template>
+            <template x-if="warranty.length > 0">
+              <table class="data-table">
+                <thead><tr>
+                  <th>案件號</th><th>客戶</th><th>專案名稱</th><th>設備名稱</th>
+                  <th>序號 SN</th><th class="c">到期日</th><th class="r">剩餘天數</th>
+                </tr></thead>
+                <tbody>
+                  <template x-for="w in warranty" :key="w.quoteNo + w.sn">
+                    <tr>
+                      <td class="mono" x-text="w.quoteNo"></td>
+                      <td x-text="w.customer"></td>
+                      <td x-text="w.project"></td>
+                      <td x-text="w.device"></td>
+                      <td class="mono" x-text="w.sn"></td>
+                      <td class="c mono" x-text="w.expiry"></td>
+                      <td class="r mono" :class="w.daysLeft<0?'red-txt':w.daysLeft<=30?'orange-txt':''" x-text="w.daysLeft + ' 天'"></td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </template>
+          </div>
+
+        </div>
+      </template>
+
+      <!-- 未載入 -->
+      <template x-if="!loading && !data && !error">
+        <div class="empty-state" style="margin-top:40px">
+          <p style="margin-bottom:12px;font-size:28px">📊</p>
+          <p>點擊下方按鈕載入本期報表</p>
+          <button class="btn-load" @click="loadData()" style="margin-top:16px">載入報表</button>
+        </div>
+      </template>
+
+    </main>
+  </div>
+
+  <!-- Settlement Modal -->
+  <div x-show="settlementModal" class="modal-overlay" @click.self="closeSettlement()">
+    <div class="modal-box">
+      <div class="modal-hd">
+        <div class="modal-title" x-text="'精算詳情 — ' + (settlement ? settlement.quoteNo : '')"></div>
+        <button class="modal-close" @click="closeSettlement()">&#10005;</button>
+      </div>
+      <div class="modal-body">
+        <div x-show="settlementLoading" class="loading-text">載入精算資料中…</div>
+        <template x-if="!settlementLoading && settlement">
+          <div>
+            <div x-text="(settlement.customerName||'') + '　' + (settlement.projectName||'')" style="font-size:13px;color:var(--text-secondary);margin-bottom:14px;font-family:var(--font-zh)"></div>
+            <div class="stl-meta">
+              <div class="stl-kpi">
+                <div class="stl-kpi__lbl">精算毛利</div>
+                <div class="stl-kpi__val green-txt" x-text="stlFmt(stlSummary().grossProfit)"></div>
+              </div>
+              <div class="stl-kpi">
+                <div class="stl-kpi__lbl">實際毛利率</div>
+                <div class="stl-kpi__val" x-text="(stlSummary().grossMarginPct||0).toFixed(1) + '%'"></div>
+              </div>
+              <div class="stl-kpi">
+                <div class="stl-kpi__lbl">總成本</div>
+                <div class="stl-kpi__val" x-text="stlFmt(stlSummary().totalCost)"></div>
+              </div>
+              <div class="stl-kpi">
+                <div class="stl-kpi__lbl">精算狀態</div>
+                <div class="stl-kpi__val" x-text="stlStatus()==='finalized' ? '已結算' : '草稿'"></div>
+              </div>
+            </div>
+            <template x-if="stlItems().length > 0">
+              <div>
+                <div class="stl-section">成本明細</div>
+                <table class="stl-table">
+                  <thead><tr><th>項目</th><th>類別</th><th style="text-align:right">金額</th><th>備注</th></tr></thead>
+                  <tbody>
+                    <template x-for="it in stlItems()" :key="it.name">
+                      <tr>
+                        <td x-text="it.name"></td>
+                        <td x-text="it.category||''"></td>
+                        <td style="text-align:right;font-family:Inter,sans-serif" x-text="stlFmt(it.amount)"></td>
+                        <td x-text="it.note||''"></td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+              </div>
+            </template>
+            <template x-if="stlMemo()">
+              <div>
+                <div class="stl-section">備注</div>
+                <p style="font-size:13px;color:var(--text-secondary);font-family:var(--font-zh)" x-text="stlMemo()"></p>
+              </div>
+            </template>
+            <div style="font-size:11px;color:var(--text-dim);margin-top:16px;font-family:Inter,sans-serif" x-text="stlFinAt() ? '結算時間：' + stlFinAt() + '　由 ' + stlFinBy() + ' 結算' : ''"></div>
+          </div>
+        </template>
+      </div>
+    </div>
+  </div>
+
+  <script src="../static/sidebar.js"></script>
+  <script src="../static/notif.js"></script>
+</body>
+</html>

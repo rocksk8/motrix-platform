@@ -1,0 +1,366 @@
+﻿<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="../static/favicon.png">
+  <title>保固追蹤 — MOTRIX 營運管理系統</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600&display=swap" rel="stylesheet">
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    [x-cloak]{display:none!important}
+    .page-main{margin-left:var(--sidebar-w);margin-top:var(--topbar-h);padding:28px 32px;min-height:calc(100vh - var(--topbar-h));background:var(--white)}
+
+    .stat-strip{display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap}
+    .stat-pill{display:flex;align-items:center;gap:8px;padding:10px 16px;border:1px solid var(--border-light);border-radius:var(--radius-lg);background:#fff;min-width:110px}
+    .stat-pill__val{font-size:20px;font-weight:700;font-family:Inter,sans-serif;line-height:1}
+    .stat-pill__lbl{font-size:10px;color:var(--text-dim);font-family:Inter,sans-serif;letter-spacing:.06em;margin-top:2px}
+
+    .filter-bar{display:flex;align-items:center;gap:10px;margin-bottom:18px;flex-wrap:wrap}
+    .search-wrap{position:relative;flex:0 0 300px}
+    .search-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text-dim);pointer-events:none}
+    .search-input{width:100%;padding:8px 11px 8px 34px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:var(--font-zh);background:#fff;outline:none;box-sizing:border-box}
+    .search-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(37,99,235,.08)}
+
+    .tab-bar{display:flex;gap:4px;margin-bottom:18px;border-bottom:1px solid var(--border-light);padding-bottom:0}
+    .tab{padding:7px 14px;font-size:12px;font-family:var(--font-zh);cursor:pointer;border:none;background:none;color:var(--text-secondary);border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .12s}
+    .tab:hover{color:var(--text-primary)}
+    .tab.on{color:var(--accent);border-bottom-color:var(--accent);font-weight:600}
+    .tab__cnt{font-family:Inter,sans-serif;font-size:10px;font-weight:600;margin-left:4px;padding:1px 5px;border-radius:8px;background:#F0EEE9}
+    .tab.on .tab__cnt{background:var(--accent-light);color:var(--accent)}
+
+    .wb{display:inline-flex;align-items:center;padding:2px 8px;border-radius:4px;font-size:11px;font-family:Inter,sans-serif;font-weight:600}
+    .wb-expired{background:var(--danger-light);color:var(--danger)}
+    .wb-soon{background:var(--warning-light);color:var(--warning)}
+    .wb-ok{background:var(--success-light);color:var(--success)}
+    .wb-none{background:#F3F4F6;color:#6B7280}
+
+    .dt{display:inline-flex;padding:2px 7px;border-radius:3px;font-size:10px;font-family:Inter,sans-serif;font-weight:600}
+    .dt-active{background:#DBEAFE;color:#1D4ED8}
+    .dt-closed{background:#F0EEE9;color:#6B7280}
+    .dt-none{background:#F3F4F6;color:#9CA3AF}
+
+    /* accordion */
+    .cust-card{border:1px solid var(--border-light);border-radius:var(--radius-lg);margin-bottom:12px;overflow:hidden;background:#fff}
+    .cust-header{display:flex;align-items:center;gap:10px;padding:13px 18px;cursor:pointer;user-select:none;transition:background .1s}
+    .cust-header:hover{background:#FAFAF8}
+    .cust-chevron{transition:transform .2s;color:var(--text-dim);flex-shrink:0}
+    .cust-chevron.open{transform:rotate(90deg)}
+    .cust-name{font-weight:600;font-size:14px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .cust-meta{display:flex;align-items:center;gap:8px;flex-shrink:0}
+    .cust-count{font-family:Inter,sans-serif;font-size:11px;color:var(--text-dim)}
+
+    .cases-wrap{border-top:1px solid var(--border-light);padding:12px 16px;display:flex;flex-direction:column;gap:10px;background:#FAFAF8}
+    .case-block{border:1px solid var(--border-light);border-radius:var(--radius);background:#fff;overflow:hidden}
+    .case-header{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid #F0EEE9;flex-wrap:wrap}
+    .case-qno{font-family:Inter,sans-serif;font-size:11px;font-weight:600;color:var(--accent);flex-shrink:0}
+    .case-name{font-size:12px;color:var(--text-secondary);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .case-count{font-family:Inter,sans-serif;font-size:10px;color:var(--text-dim);flex-shrink:0}
+
+    .dev-table{width:100%;border-collapse:collapse;font-size:12px}
+    .dev-table th{padding:7px 12px;text-align:left;font-size:10px;font-family:Inter,sans-serif;letter-spacing:.07em;text-transform:uppercase;color:var(--text-dim);font-weight:500;background:#FAFAF8;border-bottom:1px solid #F0EEE9;white-space:nowrap}
+    .dev-table td{padding:9px 12px;border-bottom:1px solid #F0EEE9;vertical-align:middle;color:var(--text-primary)}
+    .dev-table tr:last-child td{border-bottom:none}
+    .mono{font-family:Inter,sans-serif;font-size:11px;letter-spacing:.03em}
+
+    .empty{text-align:center;padding:60px 20px;color:var(--text-dim)}
+    @keyframes spin{to{transform:rotate(360deg)}}
+  
+  /* -- Mobile RWD -- */
+  @media (max-width:767px) {
+    .stat-strip { flex-wrap:wrap; gap:8px; }
+    .stat-pill  { flex:1; min-width:calc(50% - 8px); }
+    .filter-bar { flex-direction:column; align-items:stretch; gap:8px; }
+    .search-wrap { width:100%; }
+  }
+  </style>
+</head>
+<body x-data="warrantyPage()" x-init="init()" x-cloak>
+
+    <header id="app-topbar" class="topbar"></header>
+<div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar" id="app-sidebar"></aside>
+
+  <!-- MAIN -->
+  <div class="page-main">
+
+    <!-- Page header -->
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:20px">
+      <div>
+        <div style="font-size:11px;color:var(--text-dim);margin-bottom:4px">設備管理</div>
+        <h1 style="font-size:20px;font-weight:700">保固追蹤</h1>
+        <p style="font-size:12px;color:var(--text-secondary);margin-top:4px">依客戶 → 案件分組，監控設備保固狀態</p>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="topbar__btn" style="font-size:11px" @click="expandAll()">展開全部</button>
+        <button class="topbar__btn" style="font-size:11px" @click="collapseAll()">收合全部</button>
+      </div>
+    </div>
+
+    <!-- Stats strip -->
+    <div class="stat-strip">
+      <div class="stat-pill">
+        <div>
+          <div class="stat-pill__val" x-text="devices.length"></div>
+          <div class="stat-pill__lbl">設備總數</div>
+        </div>
+      </div>
+      <div class="stat-pill">
+        <div>
+          <div class="stat-pill__val" style="color:var(--danger)" x-text="stats.expired"></div>
+          <div class="stat-pill__lbl">保固已過期</div>
+        </div>
+      </div>
+      <div class="stat-pill">
+        <div>
+          <div class="stat-pill__val" style="color:var(--warning)" x-text="stats.soon"></div>
+          <div class="stat-pill__lbl">30 天內到期</div>
+        </div>
+      </div>
+      <div class="stat-pill">
+        <div>
+          <div class="stat-pill__val" style="color:var(--success)" x-text="stats.ok"></div>
+          <div class="stat-pill__lbl">保固中</div>
+        </div>
+      </div>
+      <div class="stat-pill">
+        <div>
+          <div class="stat-pill__val" x-text="stats.none"></div>
+          <div class="stat-pill__lbl">無保固紀錄</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Filter bar -->
+    <div class="filter-bar">
+      <div class="search-wrap">
+        <svg class="search-icon" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <input class="search-input" type="text" placeholder="搜尋設備名稱、SN、客戶…" x-model.debounce.300="search">
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tab-bar">
+      <button class="tab" :class="{on: statusTab===''}" @click="statusTab=''">
+        全部 <span class="tab__cnt" x-text="devices.length"></span>
+      </button>
+      <button class="tab" :class="{on: statusTab==='expired'}" @click="statusTab='expired'">
+        已過期 <span class="tab__cnt" x-text="stats.expired"></span>
+      </button>
+      <button class="tab" :class="{on: statusTab==='soon'}" @click="statusTab='soon'">
+        即將到期 <span class="tab__cnt" x-text="stats.soon"></span>
+      </button>
+      <button class="tab" :class="{on: statusTab==='ok'}" @click="statusTab='ok'">
+        保固中 <span class="tab__cnt" x-text="stats.ok"></span>
+      </button>
+      <button class="tab" :class="{on: statusTab==='none'}" @click="statusTab='none'">
+        無紀錄 <span class="tab__cnt" x-text="stats.none"></span>
+      </button>
+    </div>
+
+    <!-- Loading -->
+    <div x-show="loading" style="text-align:center;padding:60px 20px;color:var(--text-dim)">
+      <svg style="animation:spin 1s linear infinite;display:inline" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+    </div>
+
+    <!-- Empty -->
+    <div x-show="!loading && grouped.length===0" class="empty">
+      <svg width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="margin:0 auto 12px;display:block;opacity:.3"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+      <div>查無設備保固資料</div>
+    </div>
+
+    <!-- Grouped accordion -->
+    <div x-show="!loading">
+      <template x-for="group in grouped" :key="group.customer">
+        <div class="cust-card">
+          <!-- Customer header -->
+          <div class="cust-header" @click="toggle(group.customer)">
+            <svg class="cust-chevron" :class="{open: !!expanded[group.customer]}" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>
+            <span class="cust-name" x-text="group.customer || '（未知客戶）'"></span>
+            <div class="cust-meta">
+              <span x-show="group.expiredCnt > 0" class="wb wb-expired" x-text="'過期 ' + group.expiredCnt"></span>
+              <span x-show="group.soonCnt > 0" class="wb wb-soon" x-text="'即將到期 ' + group.soonCnt"></span>
+              <span class="cust-count" x-text="group.totalDevices + ' 台設備'"></span>
+            </div>
+          </div>
+          <!-- Cases (when expanded) -->
+          <div x-show="!!expanded[group.customer]" class="cases-wrap">
+            <template x-for="c in group.cases" :key="c.quoteNo">
+              <div class="case-block">
+                <div class="case-header">
+                  <span class="case-qno" x-text="c.quoteNo"></span>
+                  <span class="case-name" x-text="c.projectName || '（無案件名稱）'"></span>
+                  <span :class="'dt ' + (c.dealTag==='已成案' ? 'dt-active' : c.dealTag==='已結案' ? 'dt-closed' : 'dt-none')" x-text="c.dealTag || '—'"></span>
+                  <span class="case-count" x-text="c.devices.length + ' 台'"></span>
+                </div>
+                <table class="dev-table">
+                  <thead>
+                    <tr>
+                      <th>設備名稱</th>
+                      <th>序號 / MAC</th>
+                      <th>安裝地點</th>
+                      <th>保固起</th>
+                      <th>到期日</th>
+                      <th>狀態</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <template x-for="(d, di) in c.devices" :key="d.sn || d.mac || d.name + '_' + di">
+                      <tr>
+                        <td x-text="d.name || '—'"></td>
+                        <td><span class="mono" x-text="d.sn || d.mac || '—'"></span></td>
+                        <td x-text="d.location || '—'"></td>
+                        <td class="mono" x-text="d.warrantyStart || '—'"></td>
+                        <td class="mono" x-text="d.expiryDate || '—'"></td>
+                        <td>
+                          <span :class="'wb wb-' + wbKey(d)" x-text="wbLabel(d)"></span>
+                        </td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+              </div>
+            </template>
+          </div>
+        </div>
+      </template>
+    </div>
+
+  </div>
+
+  <script>
+  function warrantyPage() {
+    return {
+      session: {},
+      devices: [],
+      loading: true,
+      search: '',
+      statusTab: '',
+      expanded: {},
+
+      async init() {
+        const s = JSON.parse(localStorage.getItem('motrix_session') || 'null')
+        if (!s?.token) { location.href = '../index.html'; return }
+        this.session = s
+        await this.load()
+        // auto-expand customers that have urgent items
+        const g = this.grouped
+        const auto = {}
+        for (const grp of g) {
+          if (grp.expiredCnt > 0 || grp.soonCnt > 0) auto[grp.customer] = true
+        }
+        if (Object.keys(auto).length === 0 && g.length > 0) {
+          // no urgent — expand first customer
+          auto[g[0].customer] = true
+        }
+        this.expanded = auto
+      },
+
+      async load() {
+        this.loading = true
+        try {
+          const r = await fetch('/api/devices?deal_tag=%E5%B7%B2%E7%B5%90%E6%A1%88', {
+            headers: { Authorization: 'Bearer ' + this.session.token }
+          })
+          if (r.status === 401) { this.logout(); return }
+          const data = await r.json()
+          this.devices = data.items || []
+        } catch {
+          this.devices = []
+        } finally {
+          this.loading = false
+        }
+      },
+
+      get stats() {
+        const out = { expired: 0, soon: 0, ok: 0, none: 0 }
+        for (const d of this.devices) out[this.wbKey(d)]++
+        return out
+      },
+
+      get filtered() {
+        let list = this.devices
+        if (this.statusTab) list = list.filter(d => this.wbKey(d) === this.statusTab)
+        const q = this.search.trim().toLowerCase()
+        if (q) list = list.filter(d =>
+          ['name','sn','mac','customer','location','quoteNo','projectName']
+            .some(k => (d[k] || '').toLowerCase().includes(q))
+        )
+        return list
+      },
+
+      get grouped() {
+        const custMap = {}
+        for (const d of this.filtered) {
+          const cust = d.customer || ''
+          if (!custMap[cust]) custMap[cust] = {}
+          const qno = d.quoteNo || '—'
+          if (!custMap[cust][qno]) {
+            custMap[cust][qno] = {
+              quoteNo: qno,
+              projectName: d.projectName || '',
+              dealTag: d.dealTag || '',
+              devices: []
+            }
+          }
+          custMap[cust][qno].devices.push(d)
+        }
+        return Object.entries(custMap).map(([customer, cases]) => {
+          const allDev = Object.values(cases).flatMap(c => c.devices)
+          const expiredCnt = allDev.filter(d => d.daysLeft !== null && d.daysLeft !== undefined && d.daysLeft < 0).length
+          const soonCnt    = allDev.filter(d => d.daysLeft !== null && d.daysLeft !== undefined && d.daysLeft >= 0 && d.daysLeft <= 30).length
+          return {
+            customer,
+            cases: Object.values(cases),
+            totalDevices: allDev.length,
+            expiredCnt,
+            soonCnt,
+            _worst: expiredCnt > 0 ? 0 : soonCnt > 0 ? 1 : allDev.some(d => (d.daysLeft ?? null) > 30) ? 2 : 3
+          }
+        }).sort((a, b) => a._worst - b._worst || a.customer.localeCompare(b.customer, 'zh-Hant'))
+      },
+
+      toggle(customer) {
+        this.expanded = { ...this.expanded, [customer]: !this.expanded[customer] }
+      },
+      expandAll() {
+        const e = {}
+        for (const g of this.grouped) e[g.customer] = true
+        this.expanded = e
+      },
+      collapseAll() { this.expanded = {} },
+
+      wbKey(d) {
+        const dl = d.daysLeft
+        if (dl === null || dl === undefined) return 'none'
+        if (dl < 0)   return 'expired'
+        if (dl <= 30) return 'soon'
+        return 'ok'
+      },
+      wbLabel(d) {
+        const dl = d.daysLeft
+        if (dl === null || dl === undefined) return '無紀錄'
+        if (dl < 0)   return '已過期 ' + Math.abs(dl) + ' 天'
+        if (dl <= 30) return dl + ' 天後到期'
+        return '保固中'
+      },
+
+      logout() {
+        fetch('/api/auth/logout', {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        }).finally(() => {
+          localStorage.removeItem('motrix_session')
+          location.href = '../index.html'
+        })
+      }
+    }
+  }
+  </script>
+  <script src="../static/notif.js"></script>
+  <script src="../static/sidebar.js"></script>
+</body>
+</html>
