@@ -66,8 +66,12 @@ async def auth_middleware(request: Request, call_next):
     path = request.url.path
     if not path.startswith("/api/") or path in _PUBLIC_API_PATHS:
         return await call_next(request)
-    # uploads with a signed photo token are validated by the route handler itself
-    if path.startswith("/api/uploads/") and request.query_params.get("pt"):
+    # uploads auth is handled by the route handler:
+    #   ?pt=  → HMAC signed token (P2)
+    #   ?token= → session token forwarded as Bearer by route handler (img src pattern)
+    if path.startswith("/api/uploads/") and (
+        request.query_params.get("pt") or request.query_params.get("token")
+    ):
         return await call_next(request)
     auth_header = request.headers.get("Authorization", "")
     if not auth_header.startswith("Bearer "):
