@@ -100,6 +100,7 @@ function app() {
     },
 
     async selectCase(quoteNo) {
+      clearTimeout(this._autoSaveTimer)
       try {
         const r = await fetch('/api/quotations/' + quoteNo, {
           headers: { Authorization: 'Bearer ' + this.session.token }

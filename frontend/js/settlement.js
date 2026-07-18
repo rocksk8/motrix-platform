@@ -253,11 +253,15 @@ function settlementPage() {
           this.showFinalizeModal = false
           this.toast('精算已完結')
         } else {
-          this.settlement.status = 'draft'
+          this.settlement.status      = 'draft'
+          this.settlement.finalizedAt = ''
+          this.settlement.finalizedBy = ''
           this.toast('完結失敗')
         }
       } catch(e) {
-        this.settlement.status = 'draft'
+        this.settlement.status      = 'draft'
+        this.settlement.finalizedAt = ''
+        this.settlement.finalizedBy = ''
         this.toast('完結失敗：' + e.message)
       } finally { this.saving = false }
     },

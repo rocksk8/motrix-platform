@@ -228,12 +228,11 @@
         this.apiSave(this.isNewRecord).then(ok => {
           if (ok) {
             this.isNewRecord = false
+            this.isDirty = false
+            this.lastSaved = new Date().toLocaleTimeString('zh-TW', {hour:'2-digit', minute:'2-digit'})
             sessionStorage.removeItem('motrix_new_quote_no')
           }
         })
-        this.isDirty = false
-        const now = new Date()
-        this.lastSaved = now.toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'})
       },
 
       get _isAdmin() {
@@ -371,6 +370,7 @@
         }
         if (newTag === '已成案') {
           if (!confirm(`確認將報價單標記為「已成案」？\n\n確認後案件進度將鎖定，僅能透過「案件管理」頁面完結案件。\n此操作將記錄操作紀錄。`)) {
+            this.$nextTick(() => { this.q.dealTag = this.q.dealTag })
             return
           }
           this.ensureCaseRecord()
@@ -659,6 +659,9 @@
       async submitQuote() {
         if (!this.q.customerName) { alert('請填寫客戶名稱'); return }
         if (!this.q.projectName)  { alert('請填寫案件名稱'); return }
+        const items = this.q.items || []
+        if (!items.length) { alert('請至少新增一個品項'); return }
+        if (items.some(it => !(it.description || '').trim())) { alert('有品項未填寫品名，請確認後再送審'); return }
         const reasons = this.approvalReasons.length > 0
           ? [...this.approvalReasons]
           : ['標準報價單送出']
@@ -792,6 +795,23 @@
       navCancel() {
         this.showNavModal = false
         this.pendingNav = null
+      },
+
+      async cancelUnlock() {
+        this.unlocked = false
+        clearTimeout(this.autoSaveTimer)
+        this.isDirty = false
+        if (this.q.quoteNo) {
+          try {
+            const res = await fetch(`${this.API}/quotations/${this.q.quoteNo}`, {
+              headers: { Authorization: 'Bearer ' + this.session.token }
+            })
+            if (res.ok) {
+              const row = await res.json()
+              Object.assign(this.q, row.data || {})
+            }
+          } catch (_) {}
+        }
       },
 
       async doUnlock() {

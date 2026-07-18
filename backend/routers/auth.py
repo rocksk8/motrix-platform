@@ -180,6 +180,7 @@ def auth_me(authorization: str = Header(None)):
                COALESCE(u.must_change_password, 0) AS must_change_password
         FROM sessions s JOIN users u ON s.user_id = u.id
         WHERE s.token=? AND u.active=1
+          AND (s.expires_at IS NULL OR s.expires_at > datetime('now'))
     """, (token,)).fetchone()
     conn.close()
     if not row:

@@ -322,6 +322,8 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
     edit_rev = None
     if is_unlock_edit:
         editor = _require_user(authorization)
+        if editor["role"] != "superadmin":
+            raise HTTPException(403, "解鎖編輯需要超級管理員權限")
         history = q.get("editHistory") or []
         if not isinstance(history, list):
             history = []
@@ -393,6 +395,10 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
     if existing["status"] == "已拒絕":
         conn.close()
         raise HTTPException(403, "已拒絕結案的報價單不可修改")
+    _LOCKED = ("待審核", "簽核中", "已送出", "已成案", "已結案")
+    if existing["status"] in _LOCKED and not is_unlock_edit:
+        conn.close()
+        raise HTTPException(403, f"報價單狀態為「{existing['status']}」，請透過正式流程操作或解鎖後修改")
     conn.execute("""
         UPDATE quotations SET
           status=?, customer_name=?, project_name=?,
@@ -428,8 +434,15 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
     return {"quote_no": quote_no, "updated_at": now, "status": new_status}
 
 
+_STATUS_PATCH_WHITELIST = {"草稿", "待審核", "已送出", "已取消", "已拒絕"}
+
 @router.patch("/api/quotations/{quote_no}/status")
 def update_status(quote_no: str, body: QuotationStatusUpdate, authorization: str = Header(None)):
+    user = _require_user(authorization)
+    if user["role"] != "superadmin":
+        raise HTTPException(403, "僅超級管理員可直接變更報價單狀態")
+    if body.status not in _STATUS_PATCH_WHITELIST:
+        raise HTTPException(400, f"不支援的狀態值：{body.status}")
     conn = get_db()
     row = conn.execute("SELECT customer_name FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
     if not row:
@@ -467,6 +480,10 @@ def update_deal_tag(quote_no: str, body: QuotationDealTagUpdate, authorization: 
     cname = row['customer_name'] or ''
     d = json.loads(row["data_json"] or "{}")
     old_tag = d.get("dealTag", "")
+    # 已結案不可逆轉（僅 superadmin 可例外覆寫）
+    if old_tag == "已結案" and user["role"] != "superadmin":
+        conn.close()
+        raise HTTPException(403, "案件已結案，僅超級管理員可變更案件進度")
     d["dealTag"] = body.deal_tag or ''
     if body.log_entry:
         if "statusLog" not in d or not isinstance(d["statusLog"], list):
@@ -637,6 +654,10 @@ def update_settlement(quote_no: str, body: SettlementIn, authorization: str = He
         conn.close()
         raise HTTPException(404, f"報價單 {quote_no} 不存在")
     data = json.loads(row["data_json"] or "{}")
+    existing_settlement = data.get("settlement") or {}
+    if existing_settlement.get("status") == "finalized" and user["role"] != "superadmin":
+        conn.close()
+        raise HTTPException(403, "精算已完結，僅超級管理員可重新修改")
     data["settlement"] = body.settlement
 
     # append edit history entry for settlement saves
