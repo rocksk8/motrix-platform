@@ -114,7 +114,9 @@ def list_audit_log(
     q:      str = None,
     authorization: str = Header(None),
 ):
-    _require_user(authorization)
+    user = _require_user(authorization)
+    if user["role"] not in ("superadmin", "admin"):
+        raise HTTPException(403, "稽核記錄僅管理員以上可查閱")
     conn = get_db()
     where, params = [], []
     if action:
@@ -190,12 +192,15 @@ def create_work_log(body: dict = Body(...), authorization: str = Header(None)):
 
 @router.put("/api/work-logs/{wid}")
 def update_work_log(wid: int, body: dict = Body(...), authorization: str = Header(None)):
-    _require_user(authorization)
+    u = _require_user(authorization)
     conn = get_db()
     row = conn.execute("SELECT * FROM work_logs WHERE id=?", (wid,)).fetchone()
     if not row:
         conn.close()
         raise HTTPException(404, "找不到日誌")
+    if u["role"] not in ("superadmin", "admin") and u["id"] != row["user_id"]:
+        conn.close()
+        raise HTTPException(403, "只能修改自己的工作日誌")
     sets, params = [], []
     for field in ("log_date", "user_id", "content", "hours"):
         if field in body:
@@ -213,8 +218,15 @@ def update_work_log(wid: int, body: dict = Body(...), authorization: str = Heade
 
 @router.delete("/api/work-logs/{wid}")
 def delete_work_log(wid: int, authorization: str = Header(None)):
-    _require_user(authorization)
+    u = _require_user(authorization)
     conn = get_db()
+    row = conn.execute("SELECT user_id FROM work_logs WHERE id=?", (wid,)).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(404, "找不到日誌")
+    if u["role"] not in ("superadmin", "admin") and u["id"] != row["user_id"]:
+        conn.close()
+        raise HTTPException(403, "只能刪除自己的工作日誌")
     conn.execute("DELETE FROM work_logs WHERE id=?", (wid,))
     conn.commit()
     conn.close()

@@ -142,10 +142,17 @@
         animation: { duration: 800, easing: 'easeInOutQuart' }
       }
     })
-    new Chart(document.getElementById('sparkQuote'),      sparkCfg(accent,  [820,950,1100,1340,1510,1680,1860]))
-    new Chart(document.getElementById('sparkReceivable'), sparkCfg(success, [520,610,780,730,840,920,980]))
-    new Chart(document.getElementById('sparkStock'),      sparkCfg(warning, [18,22,19,25,21,27,23]))
-    new Chart(document.getElementById('sparkWarranty'),   sparkCfg(danger,  [1,2,1,3,2,4,3]))
+    // sparkQuote: real monthly amounts (last 7 months); others: current value flat line
+    const _mSlice = (monthly || []).slice(-7)
+    const _pad    = Array(Math.max(0, 7 - _mSlice.length)).fill(0)
+    const sparkQuoteData = [..._pad, ..._mSlice.map(m => m.amount)]
+    const rv      = (stats.receivableSummary || {})
+    const devTot  = (stats.deviceSummary     || {}).total || 0
+    const warnCnt = (stats.warrantyWarnings  || []).length
+    new Chart(document.getElementById('sparkQuote'),      sparkCfg(accent,  sparkQuoteData))
+    new Chart(document.getElementById('sparkReceivable'), sparkCfg(success, Array(7).fill(rv.total || 0)))
+    new Chart(document.getElementById('sparkStock'),      sparkCfg(warning, Array(7).fill(devTot)))
+    new Chart(document.getElementById('sparkWarranty'),   sparkCfg(danger,  Array(7).fill(warnCnt)))
 
     /* ── 銷售趨勢折線面積圖 ── */
     const revCtx = document.getElementById('chartRevenue').getContext('2d')

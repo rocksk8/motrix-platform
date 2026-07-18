@@ -28,6 +28,14 @@ def _archive_ok() -> bool:
     return os.path.isdir(_ARCHIVE_BASE)
 
 
+def _atomic_json_write(path: str, data) -> None:
+    """Write JSON atomically: write to .tmp then os.replace() to avoid corrupt files on crash."""
+    tmp = path + '.tmp'
+    with open(tmp, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    os.replace(tmp, path)
+
+
 def _system_audit(action: str, target_label: str = "", detail: dict = None) -> None:
     """Write audit_log as system (no session token)."""
     try:
@@ -239,8 +247,7 @@ def _backup_quotation(quote_no: str):
     if _archive_ok():
         try:
             path = os.path.join(_REALTIME_DIR, "報價單", f"{quote_no}.json")
-            with open(path, 'w', encoding='utf-8') as f:
-                json.dump(payload, f, ensure_ascii=False, indent=2)
+            _atomic_json_write(path, payload)
             return
         except Exception as e:
             logger.exception("_backup_quotation G: write failed for %s", quote_no)
@@ -251,8 +258,7 @@ def _backup_quotation(quote_no: str):
         local_dir = os.path.join(_LOCAL_DB_BACKUP, "quotation_instant")
         os.makedirs(local_dir, exist_ok=True)
         path = os.path.join(local_dir, f"{quote_no}.json")
-        with open(path, 'w', encoding='utf-8') as f:
-            json.dump(payload, f, ensure_ascii=False, indent=2)
+        _atomic_json_write(path, payload)
     except Exception as e:
         logger.exception("_backup_quotation local fallback failed for %s", quote_no)
         _write_backup_alert(f"即時備份報價單失敗（本機）{quote_no}: {e}")
@@ -271,8 +277,7 @@ def _backup_customers():
             "data": [dict(r) for r in rows],
         }
         path = os.path.join(_REALTIME_DIR, "客戶", "clients.json")
-        with open(path, 'w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
+        _atomic_json_write(path, data)
     except Exception as e:
         logger.exception("_backup_customers failed")
         _write_backup_alert(f"即時備份客戶失敗: {e}")
@@ -292,8 +297,7 @@ def _backup_suppliers():
         }
         os.makedirs(os.path.join(_REALTIME_DIR, "供應商"), exist_ok=True)
         path = os.path.join(_REALTIME_DIR, "供應商", "suppliers.json")
-        with open(path, 'w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
+        _atomic_json_write(path, data)
     except Exception as e:
         logger.exception("_backup_suppliers failed")
         _write_backup_alert(f"即時備份供應商失敗: {e}")
@@ -333,17 +337,17 @@ def _daily_backup():
         for fname, sql in tables.items():
             try:
                 rows = [dict(r) for r in conn.execute(sql).fetchall()]
-                with open(os.path.join(day_dir, f"{fname}.json"), 'w', encoding='utf-8') as f:
-                    json.dump({"exported_at": now, "count": len(rows), "data": rows},
-                              f, ensure_ascii=False, indent=2)
+                _atomic_json_write(
+                    os.path.join(day_dir, f"{fname}.json"),
+                    {"exported_at": now, "count": len(rows), "data": rows},
+                )
                 summary[fname] = len(rows)
             except Exception:
                 logger.exception("daily_backup table %s failed", fname)
                 summary[fname] = "error"
 
         conn.close()
-        with open(os.path.join(day_dir, '彙總.json'), 'w', encoding='utf-8') as f:
-            json.dump(summary, f, ensure_ascii=False, indent=2)
+        _atomic_json_write(os.path.join(day_dir, '彙總.json'), summary)
         open(marker, 'w').close()
         logger.info("Daily backup completed: %s", day_dir)
         _system_audit("backup.daily_ok", today_label, summary)
@@ -381,19 +385,19 @@ def _weekly_backup():
         cs   = [dict(r) for r in conn.execute("SELECT * FROM customers ORDER BY id").fetchall()]
         conn.close()
         now  = datetime.now().isoformat()
-        with open(os.path.join(week_dir, '報價單_全部.json'), 'w', encoding='utf-8') as f:
-            json.dump({"exported_at": now, "count": len(qs), "data": qs}, f, ensure_ascii=False, indent=2)
+        _atomic_json_write(os.path.join(week_dir, '報價單_全部.json'),
+                           {"exported_at": now, "count": len(qs), "data": qs})
         by_status: dict = {}
         for q in qs:
             s = (q.get('status') or '草稿').replace('/', '-')
             by_status.setdefault(s, []).append(q)
         for status, items in by_status.items():
-            with open(os.path.join(week_dir, f'報價單_{status}.json'), 'w', encoding='utf-8') as f:
-                json.dump({"exported_at": now, "status": status, "count": len(items), "data": items}, f, ensure_ascii=False, indent=2)
-        with open(os.path.join(week_dir, '客戶.json'), 'w', encoding='utf-8') as f:
-            json.dump({"exported_at": now, "count": len(cs), "data": cs}, f, ensure_ascii=False, indent=2)
-        with open(os.path.join(week_dir, '彙總.json'), 'w', encoding='utf-8') as f:
-            json.dump({"week": week_label, "exported_at": now, "quotations": len(qs), "customers": len(cs)}, f, ensure_ascii=False, indent=2)
+            _atomic_json_write(os.path.join(week_dir, f'報價單_{status}.json'),
+                               {"exported_at": now, "status": status, "count": len(items), "data": items})
+        _atomic_json_write(os.path.join(week_dir, '客戶.json'),
+                           {"exported_at": now, "count": len(cs), "data": cs})
+        _atomic_json_write(os.path.join(week_dir, '彙總.json'),
+                           {"week": week_label, "exported_at": now, "quotations": len(qs), "customers": len(cs)})
         open(marker, 'w').close()
         _system_audit("backup.weekly_ok", week_label, {"quotations": len(qs), "customers": len(cs)})
     except Exception as e:
