@@ -65,8 +65,11 @@ function notifStore() {
         const d = await r.json()
         this.unread = d.unread || 0
         const pending = (d.items || []).filter(i => !i.is_read && i.type === 'approval_request')
-        if (pending.length > 0 && !this._popupShown) {
+        // Banner 每個 browser session（tab）最多顯示一次，避免每換頁都彈出
+        const ssKey = 'motrix_approval_banner_shown'
+        if (pending.length > 0 && !this._popupShown && !sessionStorage.getItem(ssKey)) {
           this._popupShown = true
+          sessionStorage.setItem(ssKey, '1')
           setTimeout(() => this._showApprovalBanner(pending.length, queueHref), 900)
         }
       } catch(e) {}
@@ -86,6 +89,8 @@ function notifStore() {
         headers: { Authorization: 'Bearer ' + this._sess.token }
       }).catch(() => {})
       this.unread = 0
+      // 清除 session flag，讓下一批新簽核通知能再次顯示
+      sessionStorage.removeItem('motrix_approval_banner_shown')
     },
 
     actionLabel(action) {

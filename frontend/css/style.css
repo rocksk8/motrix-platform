@@ -1,6 +1,9 @@
 /* ─── MOTRIX ERP — 共用樣式 ─── */
 /* 與官網設計語言一致：#0A0A0A 深色 / #F5F4F0 奶白 */
 
+/* Alpine.js x-cloak: 在 Alpine 初始化前隱藏元素，防止 Modal 閃現 */
+[x-cloak] { display: none !important; }
+
 :root {
   --black:   #0A0A0A;
   --white:   #F5F4F0;
