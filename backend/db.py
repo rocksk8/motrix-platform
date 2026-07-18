@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 DB_PATH = os.path.join(os.path.dirname(__file__), "motrix_erp.db")
 
 # Increment this whenever a new _mNNN function is added to _MIGRATIONS.
-CURRENT_VERSION = 10
+CURRENT_VERSION = 11
 
 
 def get_db():
@@ -496,6 +496,16 @@ def _m010_sales_person_id(conn):
     conn.commit()
 
 
+def _m011_login_rate_limit(conn):
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS login_rate_limit (
+            ip           TEXT PRIMARY KEY,
+            locked_until TEXT NOT NULL
+        )
+    """)
+    conn.commit()
+
+
 # Ordered list — index+1 is the migration version number.
 _MIGRATIONS = [
     _m001_export_columns,        # v1
@@ -508,6 +518,7 @@ _MIGRATIONS = [
     _m008_fix_legacy_owner_names,    # v8
     _m009_migrate_legacy_visits,     # v9
     _m010_sales_person_id,           # v10
+    _m011_login_rate_limit,          # v11
 ]
 
 

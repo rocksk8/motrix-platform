@@ -148,22 +148,41 @@ function notifStore() {
         'z-index:99999;font-family:Inter,sans-serif;max-width:300px',
         'animation:notif-slide-in .25s ease',
       ].join(';')
-      el.innerHTML = `
-        <div style="display:flex;align-items:flex-start;gap:10px">
-          <div style="color:#4F46E5;flex-shrink:0;margin-top:1px">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 10-12 0v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
-            </svg>
-          </div>
-          <div style="flex:1">
-            <div style="font-size:13px;font-weight:600;color:#3730A3;margin-bottom:4px">待簽核通知</div>
-            <div style="font-size:12px;color:#4338CA;line-height:1.5">您有 <b>${count}</b> 份報價單等待您簽核</div>
-            <a href="${href}" style="display:inline-block;margin-top:8px;font-size:11px;color:#fff;background:#6366F1;padding:4px 12px;border-radius:5px;text-decoration:none;font-weight:600">前往簽核 →</a>
-          </div>
-          <button onclick="document.getElementById('approval-notif-banner').remove()"
-                  style="border:none;background:none;cursor:pointer;color:#9CA3AF;font-size:20px;line-height:1;padding:0;flex-shrink:0;margin-top:-2px">×</button>
-        </div>
-      `
+      // Build banner DOM without innerHTML to avoid XSS from count/href
+      const row = document.createElement('div')
+      row.style.cssText = 'display:flex;align-items:flex-start;gap:10px'
+
+      const icon = document.createElement('div')
+      icon.style.cssText = 'color:#4F46E5;flex-shrink:0;margin-top:1px'
+      icon.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 10-12 0v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>'
+
+      const body = document.createElement('div')
+      body.style.cssText = 'flex:1'
+
+      const title = document.createElement('div')
+      title.style.cssText = 'font-size:13px;font-weight:600;color:#3730A3;margin-bottom:4px'
+      title.textContent = '待簽核通知'
+
+      const msg = document.createElement('div')
+      msg.style.cssText = 'font-size:12px;color:#4338CA;line-height:1.5'
+      const b = document.createElement('b')
+      b.textContent = String(Number(count))
+      msg.append('您有 ', b, ' 份報價單等待您簽核')
+
+      const link = document.createElement('a')
+      link.href = href
+      link.style.cssText = 'display:inline-block;margin-top:8px;font-size:11px;color:#fff;background:#6366F1;padding:4px 12px;border-radius:5px;text-decoration:none;font-weight:600'
+      link.textContent = '前往簽核 →'
+
+      body.append(title, msg, link)
+
+      const closeBtn = document.createElement('button')
+      closeBtn.style.cssText = 'border:none;background:none;cursor:pointer;color:#9CA3AF;font-size:20px;line-height:1;padding:0;flex-shrink:0;margin-top:-2px'
+      closeBtn.textContent = '×'
+      closeBtn.addEventListener('click', () => el.remove())
+
+      row.append(icon, body, closeBtn)
+      el.appendChild(row)
       if (!document.querySelector('#notif-kf')) {
         const s = document.createElement('style')
         s.id = 'notif-kf'

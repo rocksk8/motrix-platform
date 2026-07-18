@@ -1823,6 +1823,8 @@
       showSubmitModal: false,
       submitNote: '',
       submitNoteError: false,
+      submitting: false,
+      _prevDealTag: '',
 
       q: {
         quoteNo: '',
@@ -2021,11 +2023,12 @@
 
       autoSave() {
         this.apiSave(this.isNewRecord).then(ok => {
-          if (ok) this.isNewRecord = false
+          if (ok) {
+            this.isNewRecord = false
+            this.isDirty = false
+            this.lastSaved = new Date().toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'})
+          }
         })
-        this.isDirty = false
-        const now = new Date()
-        this.lastSaved = now.toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'})
       },
 
       _allCombined() {
@@ -2158,23 +2161,36 @@
       },
 
       onDealTagChange(newTag) {
+        const oldTag = this._prevDealTag || ''
+        // Guard: downgrading from 已成案 requires admin+
+        if (oldTag === '已成案' && newTag !== '已成案') {
+          const role = this.session?.role || ''
+          if (!['admin', 'superadmin'].includes(role)) {
+            this.$nextTick(() => { this.q.dealTag = oldTag })
+            alert('已成案狀態只有管理員以上才可降級')
+            return
+          }
+          if (!confirm(`確認將「已成案」降回「${newTag}」？此操作將記錄操作紀錄。`)) {
+            this.$nextTick(() => { this.q.dealTag = oldTag })
+            return
+          }
+        }
         if (newTag === '已成案') {
           if (!confirm(`確認將報價單標記為「已成案」？\n\n確認後案件進度將鎖定，僅能透過「案件管理」頁面完結案件。\n此操作將記錄操作紀錄。`)) {
-            // Alpine will re-render with q.dealTag unchanged since we didn't update it
+            this.$nextTick(() => { this.q.dealTag = oldTag })
             return
           }
           this.ensureCaseRecord()
         }
-        const oldTag = this.q.dealTag || ''
         this.q.dealTag = newTag
+        this._prevDealTag = newTag
         this.isDirty = true
         if (this.q.status === '已送出') {
           this.saveDraft().then(() => {
-            // also record log entry via deal-tag endpoint
             const entry = { at: new Date().toISOString(), user: this.session?.displayName || '', from: oldTag, to: newTag }
             fetch(`/api/quotations/${this.q.quoteNo}/deal-tag`, {
               method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (this.session?.token || '') },
               body: JSON.stringify({ deal_tag: newTag, log_entry: entry })
             }).catch(() => {})
           })
@@ -2665,10 +2681,15 @@ window.addEventListener('load', function () {
       },
 
       async confirmSubmit() {
+        if (this.submitting) return
         if (this.isSalesPersonChanged && !this.submitNote.trim()) {
           this.submitNoteError = true
           return
         }
+        if (!this.q.items || !this.q.items.some(it => (it.description || '').trim())) {
+          alert('請至少填寫一項品項說明'); return
+        }
+        this.submitting = true
         this.showSubmitModal = false
         const reasons = this.approvalReasons.length > 0
           ? [...this.approvalReasons]
@@ -2695,15 +2716,19 @@ window.addEventListener('load', function () {
             delegateNote: this.submitNote.trim(),
           } : {})
         }
-        await this.apiSave(this.isNewRecord)
-        this.isNewRecord = false
-        this.isDirty = false
-        this.submitNote = ''
-        const msg = document.createElement('div')
-        msg.textContent = '✓ 已送出審核申請，等待主管簽核'
-        msg.style.cssText = 'position:fixed;bottom:32px;left:50%;transform:translateX(-50%);background:#0A0A0A;color:#F5F4F0;padding:10px 22px;border-radius:8px;font-size:13px;z-index:99999;font-family:Inter,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.3)'
-        document.body.appendChild(msg)
-        setTimeout(() => { msg.style.opacity='0'; msg.style.transition='opacity .4s'; setTimeout(() => msg.remove(), 400) }, 2800)
+        try {
+          await this.apiSave(this.isNewRecord)
+          this.isNewRecord = false
+          this.isDirty = false
+          this.submitNote = ''
+          const msg = document.createElement('div')
+          msg.textContent = '✓ 已送出審核申請，等待主管簽核'
+          msg.style.cssText = 'position:fixed;bottom:32px;left:50%;transform:translateX(-50%);background:#0A0A0A;color:#F5F4F0;padding:10px 22px;border-radius:8px;font-size:13px;z-index:99999;font-family:Inter,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.3)'
+          document.body.appendChild(msg)
+          setTimeout(() => { msg.style.opacity='0'; msg.style.transition='opacity .4s'; setTimeout(() => msg.remove(), 400) }, 2800)
+        } finally {
+          this.submitting = false
+        }
       },
 
       async copyToNew() {
@@ -2821,6 +2846,12 @@ window.addEventListener('load', function () {
         }
       },
 
+      cancelUnlock() {
+        this.showUnlockModal = false
+        this.unlockPwd = ''
+        this.unlockError = ''
+      },
+
       get isSalesPersonChanged() {
         if (!this.q.salesPersonUsername) return false
         return this.q.salesPersonUsername !== this.session.username
@@ -2927,6 +2958,7 @@ window.addEventListener('load', function () {
               const row = await res.json()
               Object.assign(this.q, row.data)
               this.q.quoteNo = editNo
+              this._prevDealTag = this.q.dealTag || ''
               // 舊報價單若 salesPerson 是過期硬編碼預設值，改用當前登入者
               const _OLD = ['Corbin Chang', 'corbin chang', '']
               if (_OLD.includes((this.q.salesPerson || '').trim()) && this._me) {

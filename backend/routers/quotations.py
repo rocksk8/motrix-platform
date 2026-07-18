@@ -429,8 +429,14 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
             daemon=True
         ).start()
     else:
+        appr = q.get("approval") or {}
+        extra = {}
+        if appr.get("delegateSubmitter"):
+            extra["delegateSubmitter"] = appr["delegateSubmitter"]
+        if appr.get("delegateNote"):
+            extra["delegateNote"] = appr["delegateNote"]
         _audit(_tok(authorization), 'quotation.update', 'quotation', quote_no,
-               f"{quote_no}（{q.get('customerName','')}）")
+               f"{quote_no}（{q.get('customerName','')}）", extra or None)
     return {"quote_no": quote_no, "updated_at": now, "status": new_status}
 
 
@@ -480,6 +486,10 @@ def update_deal_tag(quote_no: str, body: QuotationDealTagUpdate, authorization: 
     cname = row['customer_name'] or ''
     d = json.loads(row["data_json"] or "{}")
     old_tag = d.get("dealTag", "")
+    # 已成案 → 降級 限管理員以上
+    if old_tag == "已成案" and body.deal_tag != "已成案" and user["role"] not in ("superadmin", "admin"):
+        conn.close()
+        raise HTTPException(403, "已成案狀態只有管理員以上才可降級")
     # 已結案不可逆轉（僅 superadmin 可例外覆寫）
     if old_tag == "已結案" and user["role"] != "superadmin":
         conn.close()
@@ -581,9 +591,12 @@ def record_export(quote_no: str, mode: str = "external", authorization: str = He
 def mark_payment(no: str, idx: int, body: dict, authorization: str = Header(None)):
     conn = get_db()
     try:
-        row = conn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (no,)).fetchone()
+        row = conn.execute("SELECT data_json, updated_at FROM quotations WHERE quote_no=?", (no,)).fetchone()
         if not row:
             raise HTTPException(404, "報價單不存在")
+        expected_ua = body.pop("_expectedUpdatedAt", None)
+        if expected_ua and row["updated_at"] != expected_ua:
+            raise HTTPException(409, "報價單已被其他人修改，請重新載入後再操作")
         data = json.loads(row["data_json"] or "{}")
         cr   = data.setdefault("caseRecord", {})
         pay  = cr.setdefault("payment", {})

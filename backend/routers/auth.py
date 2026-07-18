@@ -27,7 +27,7 @@ _LOGIN_MAX_FAILS = 5       # consecutive failures before lockout
 _LOGIN_LOCKOUT_S = 900     # 15 minutes
 
 _rl_lock = threading.Lock()
-# ip -> {"fails": int, "locked_until": float (epoch)}
+# ip -> {"fails": int, "locked_until": float (monotonic epoch)}
 _rl_state: dict = {}
 
 
@@ -36,6 +36,60 @@ def _client_ip(request: Request) -> str:
     if xff:
         return xff.split(",")[0].strip()
     return request.client.host if request.client else "unknown"
+
+
+def _rl_db_write(ip: str, locked_until_mono: float) -> None:
+    delta = locked_until_mono - time.monotonic()
+    wall_until = datetime.now() + timedelta(seconds=max(delta, 0))
+    try:
+        conn = get_db()
+        conn.execute(
+            "INSERT INTO login_rate_limit (ip, locked_until) VALUES (?, ?) "
+            "ON CONFLICT(ip) DO UPDATE SET locked_until=excluded.locked_until",
+            (ip, wall_until.isoformat()),
+        )
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
+
+def _rl_db_clear(ip: str) -> None:
+    try:
+        conn = get_db()
+        conn.execute("DELETE FROM login_rate_limit WHERE ip=?", (ip,))
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
+
+def init_rate_limiting() -> None:
+    """Reload persisted IP lockouts from DB into memory on startup."""
+    try:
+        conn = get_db()
+        rows = conn.execute("SELECT ip, locked_until FROM login_rate_limit").fetchall()
+        conn.close()
+        now_wall = datetime.now()
+        now_mono = time.monotonic()
+        with _rl_lock:
+            for row in rows:
+                try:
+                    wall_until = datetime.fromisoformat(row["locked_until"])
+                    if wall_until > now_wall:
+                        delta = (wall_until - now_wall).total_seconds()
+                        _rl_state[row["ip"]] = {"fails": 0, "locked_until": now_mono + delta}
+                except Exception:
+                    pass
+        try:
+            conn2 = get_db()
+            conn2.execute("DELETE FROM login_rate_limit WHERE locked_until <= ?", (now_wall.isoformat(),))
+            conn2.commit()
+            conn2.close()
+        except Exception:
+            pass
+    except Exception:
+        logger.warning("init_rate_limiting: could not load from DB")
 
 
 def _rl_check(ip: str) -> None:
@@ -54,18 +108,23 @@ def _rl_check(ip: str) -> None:
 
 def _rl_fail(ip: str, username: str) -> None:
     now = time.monotonic()
+    lockout_until = 0.0
     with _rl_lock:
         state = _rl_state.setdefault(ip, {"fails": 0, "locked_until": 0.0})
         state["fails"] += 1
         if state["fails"] >= _LOGIN_MAX_FAILS:
             state["locked_until"] = now + _LOGIN_LOCKOUT_S
+            lockout_until = state["locked_until"]
             state["fails"] = 0
             logger.warning("Login lockout: IP=%s username=%s locked for %ds", ip, username, _LOGIN_LOCKOUT_S)
+    if lockout_until:
+        _rl_db_write(ip, lockout_until)
 
 
 def _rl_clear(ip: str) -> None:
     with _rl_lock:
         _rl_state.pop(ip, None)
+    _rl_db_clear(ip)
 
 
 # ── Models ────────────────────────────────────────────────────────────────────

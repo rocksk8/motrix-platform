@@ -141,7 +141,7 @@
         this.loading = true
         this.loadErr = false
         try {
-          const r = await fetch(`${API}/quotations?limit=500`, {
+          const r = await fetch(`${API}/quotations?limit=2000`, {
             headers: { Authorization: 'Bearer ' + this.session.token }
           })
           this.backendOnline = true          // 有收到 HTTP 回應 = 後端在線

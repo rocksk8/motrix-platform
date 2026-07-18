@@ -147,6 +147,7 @@ _cleanup_sessions()
 _ensure_archive_dirs()
 _schedule_daily()
 _schedule_weekly()
+auth.init_rate_limiting()
 
 
 # ── Routers ───────────────────────────────────────────────────────────────────

@@ -225,20 +225,37 @@ def _prune_local_db_backups(keep_days: int = 30) -> None:
 
 
 def _backup_quotation(quote_no: str):
-    if not _archive_ok():
-        return
     try:
         conn = get_db()
         row  = conn.execute("SELECT * FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
         conn.close()
         if not row:
             return
-        path = os.path.join(_REALTIME_DIR, "報價單", f"{quote_no}.json")
-        with open(path, 'w', encoding='utf-8') as f:
-            json.dump(dict(row), f, ensure_ascii=False, indent=2)
+        payload = dict(row)
     except Exception as e:
-        logger.exception("_backup_quotation failed for %s", quote_no)
-        _write_backup_alert(f"即時備份報價單失敗 {quote_no}: {e}")
+        logger.exception("_backup_quotation failed reading DB for %s", quote_no)
+        return
+
+    if _archive_ok():
+        try:
+            path = os.path.join(_REALTIME_DIR, "報價單", f"{quote_no}.json")
+            with open(path, 'w', encoding='utf-8') as f:
+                json.dump(payload, f, ensure_ascii=False, indent=2)
+            return
+        except Exception as e:
+            logger.exception("_backup_quotation G: write failed for %s", quote_no)
+            _write_backup_alert(f"即時備份報價單失敗（G:）{quote_no}: {e}")
+
+    # G: unavailable — write to local instant-backup dir
+    try:
+        local_dir = os.path.join(_LOCAL_DB_BACKUP, "quotation_instant")
+        os.makedirs(local_dir, exist_ok=True)
+        path = os.path.join(local_dir, f"{quote_no}.json")
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump(payload, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logger.exception("_backup_quotation local fallback failed for %s", quote_no)
+        _write_backup_alert(f"即時備份報價單失敗（本機）{quote_no}: {e}")
 
 
 def _backup_customers():
