@@ -48,24 +48,26 @@
 
       canApprove(item) {
         if (!item) return false
-        const steps = item.steps || []
-        if (steps.length > 0) {
-          const cur = item.currentStep ?? 0
-          if (cur >= steps.length) return false
-          return steps[cur].username === this.session.username
+        const tiers = item.tiers || []
+        if (tiers.length > 0) {
+          const ct = item.currentTier ?? 0
+          if (ct >= tiers.length) return false
+          const approvers = tiers[ct].approvers || []
+          return approvers.some(a => a.username === this.session.username && a.status !== 'approved')
         }
-        // No steps: superadmin, not self
+        // No tiers: superadmin, not self
         return this.session.role === 'superadmin' && item.requestedBy !== this.session.username
       },
 
       waitingForText(item) {
         if (!item) return ''
-        const steps = item.steps || []
-        if (steps.length > 0) {
-          const cur = item.currentStep ?? 0
-          if (cur < steps.length) {
-            const who = steps[cur].displayName || steps[cur].username
-            return `等待 ${who} 簽核（步驟 ${cur + 1}/${steps.length}）`
+        const tiers = item.tiers || []
+        if (tiers.length > 0) {
+          const ct = item.currentTier ?? 0
+          if (ct < tiers.length) {
+            const pending = (tiers[ct].approvers || []).filter(a => a.status !== 'approved')
+            const names = pending.map(a => a.displayName || a.username).join('、')
+            return names ? `等待 ${names} 簽核（第 ${ct + 1} 層 / 共 ${tiers.length} 層）` : ''
           }
         }
         return ''
@@ -73,14 +75,15 @@
 
       async doApprove() {
         if (!this.selected) return
-        const item = this.selected
-        const steps = item.steps || []
-        const isMultiStep = steps.length > 0
-        const isLastStep  = isMultiStep && (item.currentStep ?? 0) === steps.length - 1
-        const willFinish  = !isMultiStep || isLastStep
+        const item       = this.selected
+        const tiers      = item.tiers || []
+        const isMultiTier = tiers.length > 0
+        const ct          = item.currentTier ?? 0
+        const isLastTier  = isMultiTier && ct === tiers.length - 1
+        const willFinish  = !isMultiTier || isLastTier
         const confirmMsg  = willFinish
           ? `確認簽核通過 ${item.quoteNo}？\n\n客戶：${item.customer}\n金額：NT$ ${(item.total||0).toLocaleString()}\n\n簽核後報價單狀態將更新為「已送出」。`
-          : `確認完成第 ${(item.currentStep ?? 0) + 1} 步驟簽核（共 ${steps.length} 步）？\n\n${item.quoteNo}｜${item.customer}`
+          : `確認完成第 ${ct + 1} 層簽核（共 ${tiers.length} 層）？\n\n${item.quoteNo}｜${item.customer}`
         if (!confirm(confirmMsg)) return
         this.actioning = true
         try {

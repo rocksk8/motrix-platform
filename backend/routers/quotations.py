@@ -669,7 +669,7 @@ def get_approval_queue(authorization: str = Header(None)):
         SELECT quote_no, customer_name, project_name, total, quote_date, sales_person,
                json_extract(data_json,'$.approval') as approval_json
         FROM quotations
-        WHERE status='待審核'
+        WHERE status IN ('待審核','簽核中')
         ORDER BY id DESC
     """).fetchall()
     conn.close()
