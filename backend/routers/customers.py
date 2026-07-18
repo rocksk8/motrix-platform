@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Header
 from pydantic import BaseModel
 
 from db import get_db
-from helpers import _tok, _audit
+from helpers import _require_user, _tok, _audit
 from archive import _backup_customers
 
 router = APIRouter()
@@ -22,7 +22,8 @@ class CustomerIn(BaseModel):
 
 
 @router.get("/api/customers")
-def list_customers():
+def list_customers(authorization: str = Header(None)):
+    _require_user(authorization)
     conn = get_db()
     rows = conn.execute(
         "SELECT id, name, tax_id, phone, data_json, created_at, updated_at FROM customers ORDER BY name"
@@ -41,7 +42,8 @@ def list_customers():
 
 
 @router.get("/api/customers/{cid}")
-def get_customer(cid: int):
+def get_customer(cid: int, authorization: str = Header(None)):
+    _require_user(authorization)
     conn = get_db()
     row  = conn.execute(
         "SELECT id, name, tax_id, phone, data_json, created_at, updated_at FROM customers WHERE id=?", (cid,)

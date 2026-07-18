@@ -330,10 +330,12 @@ def dashboard_monthly(authorization: str = Header(None)):
 
 @router.get("/api/devices")
 def list_devices(
-    customer: Optional[str] = None,
-    search:   Optional[str] = None,
-    deal_tag: Optional[str] = None,
+    customer:      Optional[str] = None,
+    search:        Optional[str] = None,
+    deal_tag:      Optional[str] = None,
+    authorization: str           = Header(None),
 ):
+    _require_user(authorization)
     conn = get_db()
     sql = """
         SELECT quote_no, customer_name, project_name,
@@ -480,7 +482,8 @@ def list_receivables(status: Optional[str] = None, authorization: str = Header(N
 # ── Sales Orders & Materials ──────────────────────────────────────────────────
 
 @router.get("/api/sales-orders")
-def list_sales_orders():
+def list_sales_orders(authorization: str = Header(None)):
+    _require_user(authorization)
     conn = get_db()
     rows = conn.execute("""
         SELECT quote_no, customer_name, project_name, total, quote_date, sales_person,
@@ -537,9 +540,11 @@ def list_sales_orders():
 
 @router.get("/api/materials-summary")
 def list_materials_summary(
-    status:   Optional[str] = None,
-    customer: Optional[str] = None,
+    status:        Optional[str] = None,
+    customer:      Optional[str] = None,
+    authorization: str           = Header(None),
 ):
+    _require_user(authorization)
     conn = get_db()
     rows = conn.execute("""
         SELECT quote_no, customer_name,

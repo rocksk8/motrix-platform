@@ -384,7 +384,7 @@
             const entry = { at: new Date().toISOString(), user: this.session?.displayName || '', from: oldTag, to: newTag }
             fetch(`/api/quotations/${this.q.quoteNo}/deal-tag`, {
               method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
               body: JSON.stringify({ deal_tag: newTag, log_entry: entry })
             }).catch(() => {})
           })

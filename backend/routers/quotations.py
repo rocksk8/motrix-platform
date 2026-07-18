@@ -140,9 +140,10 @@ def _peek_next_no(conn, month: str) -> str:
 
 
 @router.get("/api/next-quote-no")
-def next_quote_no():
+def next_quote_no(authorization: str = Header(None)):
     """Peek-only: returns the next available number without reserving it.
     The number is not guaranteed until the quotation is actually saved."""
+    _require_user(authorization)
     month = datetime.now().strftime("%Y%m")
     conn  = get_db()
     conn.execute(
@@ -225,7 +226,8 @@ def list_quotations(
 
 
 @router.get("/api/quotations/{quote_no}")
-def get_quotation(quote_no: str):
+def get_quotation(quote_no: str, authorization: str = Header(None)):
+    _require_user(authorization)
     conn = get_db()
     row  = conn.execute("SELECT * FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
     conn.close()
@@ -487,11 +489,15 @@ def update_deal_tag(quote_no: str, body: QuotationDealTagUpdate, authorization: 
 
 @router.delete("/api/quotations/{quote_no}")
 def delete_quotation(quote_no: str, authorization: str = Header(None)):
+    _require_user(authorization)
     conn = get_db()
-    row = conn.execute("SELECT customer_name FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+    row = conn.execute("SELECT customer_name, status FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
     if not row:
         conn.close()
         raise HTTPException(404, f"報價單 {quote_no} 不存在")
+    if row["status"] != "草稿":
+        conn.close()
+        raise HTTPException(403, f"只有草稿狀態的報價單可以刪除（目前狀態：{row['status']}）")
     cname = row['customer_name'] or ''
     conn.execute("DELETE FROM quotations WHERE quote_no=?", (quote_no,))
     conn.commit()
