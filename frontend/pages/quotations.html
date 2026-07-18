@@ -149,7 +149,7 @@
                   <div style="display:flex;align-items:center;justify-content:space-between">
                     <div class="queue-item__no" x-text="item.quoteNo"></div>
                     <span class="queue-badge" :class="canApproveQueue(item) ? 'queue-badge--mine' : 'queue-badge--wait'"
-                          x-text="canApproveQueue(item) ? '待您簽核' : (item.steps.length > 0 ? '步驟 '+(item.currentStep+1)+'/'+item.steps.length : '待審核')"></span>
+                          x-text="canApproveQueue(item) ? '待您簽核' : (item.tierCount > 0 ? '第 '+(item.currentTier+1)+'/'+item.tierCount+' 層' : '待審核')"></span>
                   </div>
                   <div class="queue-item__name" x-text="item.customer || item.projectName || '—'"></div>
                   <div class="queue-item__meta">
@@ -205,14 +205,14 @@
                   </div>
                   <!-- Status line -->
                   <div style="margin-top:10px;font-size:12px;color:var(--text-secondary)">
-                    <template x-if="selectedQueue.steps.length > 0 && selectedQueue.currentStep < selectedQueue.steps.length">
+                    <template x-if="selectedQueue.tierCount > 0 && selectedQueue.currentTier < selectedQueue.tierCount">
                       <span>
                         等待
-                        <b x-text="selectedQueue.steps[selectedQueue.currentStep]?.displayName || selectedQueue.steps[selectedQueue.currentStep]?.username"></b>
-                        簽核（步驟 <span x-text="selectedQueue.currentStep + 1"></span>/<span x-text="selectedQueue.steps.length"></span>）
+                        <b x-text="(selectedQueue.tiers[selectedQueue.currentTier]?.approvers||[]).map(a=>a.displayName||a.username).join('、')"></b>
+                        簽核（第 <span x-text="selectedQueue.currentTier + 1"></span>/<span x-text="selectedQueue.tierCount"></span> 層）
                       </span>
                     </template>
-                    <template x-if="selectedQueue.steps.length === 0">
+                    <template x-if="selectedQueue.tierCount === 0">
                       <span>任一超級管理員可簽核</span>
                     </template>
                   </div>
@@ -235,27 +235,27 @@
                   </div>
 
                   <!-- Step timeline -->
-                  <template x-if="selectedQueue.steps.length > 0">
+                  <template x-if="selectedQueue.tierCount > 0">
                     <div>
-                      <div style="font-size:11px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px;font-family:Inter,sans-serif">簽核步驟</div>
+                      <div style="font-size:11px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px;font-family:Inter,sans-serif">簽核層級</div>
                       <div class="step-timeline">
-                        <template x-for="(step, idx) in selectedQueue.steps" :key="idx">
+                        <template x-for="(tier, idx) in selectedQueue.tiers" :key="idx">
                           <div class="step-row">
                             <div class="step-dot-col">
                               <div class="step-dot"
-                                   :class="step.status==='approved' ? 'done' : idx===selectedQueue.currentStep ? 'current' : 'pending'">
-                                <template x-if="step.status==='approved'">
+                                   :class="(tier.approvers||[]).every(a=>a.status==='approved') ? 'done' : idx===selectedQueue.currentTier ? 'current' : 'pending'">
+                                <template x-if="(tier.approvers||[]).every(a=>a.status==='approved')">
                                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>
                                 </template>
-                                <template x-if="step.status!=='approved'">
+                                <template x-if="!(tier.approvers||[]).every(a=>a.status==='approved')">
                                   <span x-text="idx+1"></span>
                                 </template>
                               </div>
-                              <div class="step-connector" :class="{done: step.status==='approved'}" x-show="idx < selectedQueue.steps.length - 1"></div>
+                              <div class="step-connector" :class="{done:(tier.approvers||[]).every(a=>a.status==='approved')}" x-show="idx < selectedQueue.tiers.length - 1"></div>
                             </div>
                             <div class="step-info">
-                              <div class="step-name" x-text="step.displayName || step.username"></div>
-                              <div class="step-time" x-text="step.status==='approved' ? '✓ ' + fmtDateFull(step.approvedAt) : (idx===selectedQueue.currentStep ? '等待中…' : '待輪到')"></div>
+                              <div class="step-name" x-text="(tier.approvers||[]).map(a=>a.displayName||a.username).join('、')"></div>
+                              <div class="step-time" x-text="(tier.approvers||[]).every(a=>a.status==='approved') ? '✓ ' + fmtDateFull((tier.approvers||[]).find(a=>a.approvedAt)?.approvedAt) : (idx===selectedQueue.currentTier ? '等待中…' : '待輪到')"></div>
                             </div>
                           </div>
                         </template>
@@ -619,7 +619,7 @@
         this.loading = true
         this.loadErr = false
         try {
-          const r = await fetch(`${API}/quotations?limit=500`, {
+          const r = await fetch(`${API}/quotations?limit=2000`, {
             headers: { Authorization: 'Bearer ' + this.session.token }
           })
           this.backendOnline = true          // 有收到 HTTP 回應 = 後端在線
@@ -743,7 +743,6 @@
 
       switchView(v) {
         this.view = v
-        history.replaceState(null, '', v === 'queue' ? '?view=queue' : '?')
         if (v === 'queue') this.loadQueue()
       },
 
@@ -776,21 +775,21 @@
 
       canApproveQueue(item) {
         if (!item) return false
-        const steps = item.steps || []
-        if (steps.length > 0) {
-          const cur = item.currentStep ?? 0
-          if (cur >= steps.length) return false
-          return steps[cur].username === this.session.username
+        const tiers = item.tiers || []
+        if (tiers.length > 0) {
+          const cur = item.currentTier ?? 0
+          if (cur >= tiers.length) return false
+          return (tiers[cur].approvers || []).some(a => a.username === this.session.username)
         }
         return this.session.role === 'superadmin' && item.requestedBy !== this.session.username
       },
 
       canRejectQueue(item) {
         if (!item) return false
-        const steps = item.steps || []
-        if (steps.length > 0) {
-          const cur = item.currentStep ?? 0
-          if (cur < steps.length && steps[cur].username === this.session.username) return true
+        const tiers = item.tiers || []
+        if (tiers.length > 0) {
+          const cur = item.currentTier ?? 0
+          if (cur < tiers.length && (tiers[cur].approvers || []).some(a => a.username === this.session.username)) return true
           return this.session.role === 'superadmin'
         }
         return this.session.role === 'superadmin'
@@ -875,9 +874,10 @@
         if (!s) { window.location.href = 'login.html'; return }
         try { this.session = JSON.parse(s) } catch { window.location.href = 'login.html'; return }
 
-        // Check ?view= param
+        // Check ?view= param (one-shot: read then clear so it doesn't stick on back-navigation)
         const param = new URLSearchParams(window.location.search).get('view')
         if (param === 'queue') this.view = 'queue'
+        if (window.location.search) history.replaceState(null, '', window.location.pathname)
 
         const ok = await this.loadQuotes()
         if (!ok || this.quotes.length === 0) {
