@@ -29,7 +29,7 @@
 function notifStore() {
   const isPages = window.location.pathname.includes('/pages/')
   const auditHref = isPages ? 'audit-log.html' : 'pages/audit-log.html'
-  const queueHref = isPages ? 'quotations.html?view=queue' : 'pages/quotations.html?view=queue'
+  const queueHref = isPages ? 'approval-queue.html' : 'pages/approval-queue.html'
   return {
     open:   false,
     items:  [],
@@ -42,7 +42,7 @@ function notifStore() {
       this._sess = JSON.parse(localStorage.getItem('motrix_session') || '{}')
       if (!this._sess.token) return
       if (this._sess.mustChangePassword) return
-      await Promise.all([this._fetchAuditLog(), this._fetchNotifications()])
+      await Promise.all([this._fetchAuditLog(), this._fetchNotifications(), this._fetchApprovalCount(), this._fetchDailyTaskCount(), this._fetchModuleCounts()])
     },
 
     async _fetchAuditLog() {
@@ -63,9 +63,12 @@ function notifStore() {
         })
         if (!r.ok) return
         const d = await r.json()
-        this.unread = d.unread || 0
-        const pending = (d.items || []).filter(i => !i.is_read && i.type === 'approval_request')
+        const items = d.items || []
+        // 鈴鐺 badge 只計非簽核類通知（簽核類由 sidebar badge 獨立顯示）
+        this.unread = items.filter(i => !i.is_read && i.type !== 'approval_request').length
+
         // Banner 每個 browser session（tab）最多顯示一次，避免每換頁都彈出
+        const pending = items.filter(i => !i.is_read && i.type === 'approval_request')
         const ssKey = 'motrix_approval_banner_shown'
         if (pending.length > 0 && !this._popupShown && !sessionStorage.getItem(ssKey)) {
           this._popupShown = true
@@ -73,6 +76,99 @@ function notifStore() {
           setTimeout(() => this._showApprovalBanner(pending.length, queueHref), 900)
         }
       } catch(e) {}
+    },
+
+    async _fetchModuleCounts() {
+      try {
+        var seen = {}
+        try { seen = JSON.parse(localStorage.getItem('motrix_module_seen') || '{}') } catch (_e) {}
+        if (!Object.keys(seen).length) return
+        var r = await fetch('/api/audit-log/module-counts', {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + this._sess.token, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ modules: seen })
+        })
+        if (!r.ok) return
+        var d = await r.json()
+        var modBadge = {
+          dev_crm:    'sb-mod-dev-crm',
+          quotation:  'sb-mod-quotation',
+          case_manage:'sb-mod-case',
+          projects:   'sb-mod-projects',
+          customer:   'sb-mod-customer',
+          procurement:'sb-mod-procurement',
+          equipment:  'sb-mod-equipment',
+          finance:    'sb-mod-finance',
+          work_log:   'sb-mod-worklog',
+          daily_task: 'sb-mod-daily-task',
+        }
+        for (var k in d) {
+          var bid = modBadge[k]
+          if (!bid) continue
+          var el = document.getElementById(bid)
+          if (!el) continue
+          var cnt = d[k] || 0
+          if (cnt > 0) {
+            el.textContent = cnt > 9 ? '9+' : String(cnt)
+            el.style.display = 'inline-block'
+          } else {
+            el.style.display = 'none'
+          }
+        }
+      } catch(_e) {}
+    },
+
+    async _fetchApprovalCount() {
+      try {
+        const r = await fetch('/api/approval-queue/count', {
+          headers: { Authorization: 'Bearer ' + this._sess.token }
+        })
+        if (!r.ok) return
+        const d = await r.json()
+        this._updateApprovalBadge(d.count || 0)
+      } catch(e) {}
+    },
+
+    _updateApprovalBadge(count) {
+      const badge = document.getElementById('sb-approval-badge')
+      if (!badge) return
+      if (count > 0) {
+        badge.textContent = count > 9 ? '9+' : String(count)
+        badge.style.display = 'inline-block'
+      } else {
+        badge.style.display = 'none'
+      }
+    },
+
+    async _fetchDailyTaskCount() {
+      try {
+        const me = this._sess.username
+        if (!me) return
+        const today = new Date().toISOString().slice(0, 10)
+        const r = await fetch('/api/daily-tasks?date=' + today + '&username=' + encodeURIComponent(me), {
+          headers: { Authorization: 'Bearer ' + this._sess.token }
+        })
+        if (!r.ok) return
+        const d = await r.json()
+        let pending = 0
+        for (const t of (d.items || [])) {
+          if (!(t.assigned_to || []).includes(me)) continue
+          const myComp = (t.completions || []).find(function(c) { return c.username === me })
+          if (!myComp || !myComp.completed) pending++
+        }
+        this._updateDTBadge(pending)
+      } catch(e) {}
+    },
+
+    _updateDTBadge(count) {
+      const badge = document.getElementById('sb-dt-badge')
+      if (!badge) return
+      if (count > 0) {
+        badge.textContent = count > 9 ? '9+' : String(count)
+        badge.style.display = 'inline-block'
+      } else {
+        badge.style.display = 'none'
+      }
     },
 
     toggle() {
@@ -116,6 +212,11 @@ function notifStore() {
         'user.create':             '新增使用者',
         'user.update':             '更新使用者',
         'settings.approval_flow.update': '簽核設定更新',
+        'daily_task.create':       '新增工作事項',
+        'daily_task.update':       '更新工作事項',
+        'daily_task.delete':       '刪除工作事項',
+        'daily_task.complete':     '完成工作回報',
+        'daily_task.uncomplete':   '取消工作回報',
       }
       return map[action] || action
     },

@@ -1,6 +1,7 @@
 """System: approval-flow settings, notifications, audit log, work logs."""
 import json
 import os
+import secrets
 from datetime import datetime
 from typing import Optional, List
 
@@ -9,6 +10,7 @@ from pydantic import BaseModel
 
 from db import get_db
 from helpers import _require_user, _tok, _audit, _get_setting, _set_setting, _get_edge_path
+from helpers.quotations import _steps_to_tiers
 
 router = APIRouter()
 
@@ -28,17 +30,32 @@ class ApprovalFlowSettings(BaseModel):
     tiers: List[ApprovalFlowTier] = []
 
 
+class _SalespersonTarget(BaseModel):
+    name:    str   = ''
+    revenue: float = 0
+    cases:   int   = 0
+
+class _AnnualTarget(BaseModel):
+    revenue:         float = 0
+    newCases:        int   = 0
+    collectionAmount: float = 0
+    collectionRate:  float = 0
+    avgNetMarginPct: float = 0
+    grossProfit:     float = 0
+
+class OperatingTargetsBody(BaseModel):
+    year:        int
+    annual:      _AnnualTarget          = _AnnualTarget()
+    salesperson: List[_SalespersonTarget] = []
+
+
 def _normalize_flow(raw: dict) -> dict:
-    """Convert old {steps:[]} format to new {tiers:[]} format."""
+    """Convert old {steps:[]} format to new {tiers:[]} format (settings read path).
+    NOTE: _active_tiers() in quotations.py handles the active-approval read path separately
+    because it must preserve existing status/approvedAt fields."""
     if raw.get("tiers"):
         return raw
-    old_steps = raw.get("steps") or []
-    return {
-        "tiers": [
-            {"order": i, "approvers": [{"userId": s.get("userId", 0), "username": s["username"], "displayName": s.get("displayName", s["username"])}]}
-            for i, s in enumerate(old_steps)
-        ]
-    }
+    return {"tiers": _steps_to_tiers(raw.get("steps") or [])}
 
 
 # ── Approval flow settings ────────────────────────────────────────────────────
@@ -58,6 +75,24 @@ def set_approval_flow_settings(body: ApprovalFlowSettings, authorization: str = 
     _set_setting("approval_flow", value)
     _audit(_tok(authorization), "settings.approval_flow.update", "settings", "approval_flow",
            "簽核流程設定", {"tierCount": len(body.tiers), "approverCount": total_approvers})
+    return {"ok": True}
+
+
+# ── Operating targets ─────────────────────────────────────────────────────────
+
+@router.get("/api/settings/operating-targets")
+def get_operating_targets(authorization: str = Header(None)):
+    _require_user(authorization)
+    return _get_setting("operating_targets") or {}
+
+
+@router.put("/api/settings/operating-targets")
+def put_operating_targets(body: OperatingTargetsBody, authorization: str = Header(None)):
+    user = _require_user(authorization, require_superadmin=True)
+    _set_setting("operating_targets", body.model_dump())
+    _audit(_tok(authorization), "settings.operating_targets.update", "settings",
+           "operating_targets", f"{body.year} 年度目標",
+           {"year": body.year, "changedBy": user.get("display_name") or user["username"]})
     return {"ok": True}
 
 
@@ -106,6 +141,47 @@ def mark_all_notifications_read(authorization: str = Header(None)):
 
 # ── Audit log ─────────────────────────────────────────────────────────────────
 
+_MODULE_ACTION_PREFIXES: dict = {
+    "dev_crm":    ("dev_case.", "dev_log."),
+    "quotation":  ("quotation.",),
+    "case_manage": ("deal_tag.",),
+    "customer":   ("customer.",),
+    "procurement": ("supplier.", "part.", "vendor."),
+    "equipment":  ("device.", "warranty."),
+    "finance":    ("payment.", "sales_order.", "settlement."),
+    "work_log":   ("work_log.",),
+    "daily_task": ("daily_task.",),
+    "projects":   ("project.",),
+}
+
+
+@router.post("/api/audit-log/module-counts")
+def audit_module_counts(body: dict = Body(...), authorization: str = Header(None)):
+    """Return per-module count of audit_log entries after given timestamps, excluding the caller's own actions."""
+    user = _require_user(authorization)
+    modules_since = (body.get("modules") or {}) if isinstance(body, dict) else {}
+    if not isinstance(modules_since, dict) or not modules_since:
+        return {}
+    conn = get_db()
+    result = {}
+    try:
+        for mod_key, since_ts in modules_since.items():
+            prefixes = _MODULE_ACTION_PREFIXES.get(mod_key)
+            if not prefixes or not since_ts:
+                result[mod_key] = 0
+                continue
+            conds = " OR ".join("action LIKE ?" for _ in prefixes)
+            params = [p + "%" for p in prefixes] + [since_ts, user["username"]]
+            count = conn.execute(
+                f"SELECT COUNT(*) FROM audit_log WHERE ({conds}) AND at > ? AND username != ?",
+                params,
+            ).fetchone()[0]
+            result[mod_key] = count
+    finally:
+        conn.close()
+    return result
+
+
 @router.get("/api/audit-log")
 def list_audit_log(
     limit:  int = 100,
@@ -139,16 +215,17 @@ def list_audit_log(
 
 @router.get("/api/work-logs")
 def list_work_logs(
-    date:    Optional[str] = None,
-    month:   Optional[str] = None,
-    user_id: Optional[int] = None,
+    date:     Optional[str] = None,
+    month:    Optional[str] = None,
+    user_id:  Optional[int] = None,
+    case_no:  Optional[str] = None,
     authorization: str = Header(None),
 ):
     _require_user(authorization)
     conn = get_db()
     sql = """
         SELECT w.id, w.log_date, w.user_id, w.content, w.hours, w.created_at,
-               u.display_name, u.username
+               w.case_no, u.display_name, u.username
         FROM work_logs w
         LEFT JOIN users u ON u.id = w.user_id
         WHERE 1=1
@@ -163,6 +240,9 @@ def list_work_logs(
     if user_id:
         sql += " AND w.user_id = ?"
         params.append(user_id)
+    if case_no:
+        sql += " AND w.case_no = ?"
+        params.append(case_no)
     sql += " ORDER BY w.log_date DESC, w.id DESC"
     rows = conn.execute(sql, params).fetchall()
     conn.close()
@@ -176,13 +256,15 @@ def create_work_log(body: dict = Body(...), authorization: str = Header(None)):
     user_id  = body.get("user_id")
     content  = body.get("content", "").strip()
     hours    = float(body.get("hours", 8.0))
+    case_no  = (body.get("case_no") or "").strip()
     if not log_date or not user_id or not content:
         raise HTTPException(400, "log_date / user_id / content 必填")
     now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     conn = get_db()
     cur = conn.execute(
-        "INSERT INTO work_logs (log_date, user_id, content, hours, created_at, created_by) VALUES (?,?,?,?,?,?)",
-        (log_date, user_id, content, hours, now, u["id"])
+        "INSERT INTO work_logs (log_date, user_id, content, hours, created_at, created_by, case_no) "
+        "VALUES (?,?,?,?,?,?,?)",
+        (log_date, user_id, content, hours, now, u["id"], case_no)
     )
     conn.commit()
     new_id = cur.lastrowid
@@ -202,7 +284,7 @@ def update_work_log(wid: int, body: dict = Body(...), authorization: str = Heade
         conn.close()
         raise HTTPException(403, "只能修改自己的工作日誌")
     sets, params = [], []
-    for field in ("log_date", "user_id", "content", "hours"):
+    for field in ("log_date", "user_id", "content", "hours", "case_no"):
         if field in body:
             sets.append(f"{field}=?")
             params.append(body[field])
@@ -302,3 +384,176 @@ def set_pdf_base_path_setting(body: dict = Body(...), authorization: str = Heade
     _audit(_tok(authorization), "settings.pdf_base_path.update", "settings", "pdf_base_path",
            path or "（清空，使用預設路徑）")
     return {"ok": True}
+
+
+# ── Email notification settings ───────────────────────────────────────────────
+
+_EMAIL_DEFAULTS = {
+    "enabled":       False,
+    "smtp_host":     "smtp.gmail.com",
+    "smtp_port":     587,
+    "smtp_user":     "",
+    "smtp_password": "",
+    "from_name":     "MOTRIX營運系統",
+    "base_url":      "http://172.16.11.211:666",
+}
+
+_MASKED = "••••••••"
+
+
+@router.get("/api/settings/email-notify")
+def get_email_notify(authorization: str = Header(None)):
+    _require_user(authorization, require_superadmin=True)
+    cfg = _get_setting("email_notify", {}) or {}
+    safe = {**_EMAIL_DEFAULTS, **cfg}
+    safe.pop("admin_emails", None)
+    safe["smtp_password"] = _MASKED if cfg.get("smtp_password") else ""
+    # Show which admin/superadmin users will receive admin notifications
+    from helpers.email_notify import _admin_emails
+    safe["admin_email_preview"] = _admin_emails()
+    return safe
+
+
+@router.put("/api/settings/email-notify")
+def set_email_notify(body: dict = Body(...), authorization: str = Header(None)):
+    _require_user(authorization, require_superadmin=True)
+    current = _get_setting("email_notify", {}) or {}
+    data = {k: body[k] for k in _EMAIL_DEFAULTS if k in body}
+    data = {**_EMAIL_DEFAULTS, **data}
+    if data.get("smtp_password") in ("", _MASKED):
+        data["smtp_password"] = current.get("smtp_password", "")
+    _set_setting("email_notify", data)
+    _audit(_tok(authorization), "settings.email_notify.update", "settings",
+           "email_notify", "Email 通知設定")
+    return {"ok": True}
+
+
+@router.post("/api/settings/email-notify/test")
+def test_email_notify(authorization: str = Header(None)):
+    user = _require_user(authorization, require_superadmin=True)
+    from helpers.email_notify import _send_raising, _admin_emails
+    to = _admin_emails()
+    if not to:
+        raise HTTPException(400, "找不到可發送對象：請至「使用者管理」為 admin 或 superadmin 帳號填寫 Email")
+    html = (
+        "<div style='font-family:Arial,sans-serif;padding:24px'>"
+        "<h2 style='color:#1a1a1a'>MOTRIX營運系統 — Email 通知測試</h2>"
+        "<p>此為測試郵件，SMTP 設定正常。</p>"
+        f"<p style='color:#888;font-size:12px'>由 {user.get('display_name') or user['username']} 觸發</p>"
+        "</div>"
+    )
+    try:
+        _send_raising(to, "[MOTRIX] 測試通知", html)
+    except RuntimeError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(502, f"SMTP 連線失敗：{e}")
+    return {"ok": True, "sent_to": to}
+
+
+# ── Custom roles ───────────────────────────────────────────────────────────────
+
+_VALID_BASE_ROLES = {"superadmin", "admin", "sales", "engineer", "viewer"}
+
+
+@router.get("/api/settings/custom-roles")
+def get_custom_roles(authorization: str = Header(None)):
+    _require_user(authorization)
+    return {"items": _get_setting("custom_roles", []) or []}
+
+
+@router.post("/api/settings/custom-roles", status_code=201)
+def create_custom_role(body: dict = Body(...), authorization: str = Header(None)):
+    _require_user(authorization, require_superadmin=True)
+    name = (body.get("name") or "").strip()
+    if not name:
+        raise HTTPException(400, "角色名稱不得為空")
+    base_role = body.get("baseRole", "viewer")
+    if base_role not in _VALID_BASE_ROLES:
+        raise HTTPException(400, "無效的基礎角色")
+    roles = _get_setting("custom_roles", []) or []
+    if any(r["name"] == name for r in roles):
+        raise HTTPException(409, "角色名稱已存在")
+    new_role = {
+        "id":       secrets.token_hex(4),
+        "name":     name,
+        "baseRole": base_role,
+        "modules":  body.get("modules", []),
+    }
+    roles.append(new_role)
+    _set_setting("custom_roles", roles)
+    _audit(_tok(authorization), "settings.custom_role.create", "settings", new_role["id"], name)
+    return new_role
+
+
+@router.put("/api/settings/custom-roles/{rid}")
+def update_custom_role(rid: str, body: dict = Body(...), authorization: str = Header(None)):
+    _require_user(authorization, require_superadmin=True)
+    roles = _get_setting("custom_roles", []) or []
+    idx = next((i for i, r in enumerate(roles) if r["id"] == rid), None)
+    if idx is None:
+        raise HTTPException(404, "找不到此自訂角色")
+    name = (body.get("name") or "").strip()
+    if not name:
+        raise HTTPException(400, "角色名稱不得為空")
+    base_role = body.get("baseRole", "viewer")
+    if base_role not in _VALID_BASE_ROLES:
+        raise HTTPException(400, "無效的基礎角色")
+    if any(r["name"] == name and r["id"] != rid for r in roles):
+        raise HTTPException(409, "角色名稱已存在")
+    roles[idx]["name"]     = name
+    roles[idx]["baseRole"] = base_role
+    roles[idx]["modules"]  = body.get("modules", [])
+    _set_setting("custom_roles", roles)
+    _audit(_tok(authorization), "settings.custom_role.update", "settings", rid, name)
+    return roles[idx]
+
+
+@router.delete("/api/settings/custom-roles/{rid}", status_code=204)
+def delete_custom_role(rid: str, authorization: str = Header(None)):
+    _require_user(authorization, require_superadmin=True)
+    roles = _get_setting("custom_roles", []) or []
+    new_roles = [r for r in roles if r["id"] != rid]
+    if len(new_roles) == len(roles):
+        raise HTTPException(404, "找不到此自訂角色")
+    _set_setting("custom_roles", new_roles)
+    _audit(_tok(authorization), "settings.custom_role.delete", "settings", rid, rid)
+
+
+# ── Role Labels ────────────────────────────────────────────────────────────────
+
+_DEFAULT_ROLE_LABELS = {
+    "superadmin": "超級管理員",
+    "admin":      "管理員",
+    "sales":      "業務",
+    "engineer":   "工程師",
+    "viewer":     "檢視者",
+}
+
+
+@router.get("/api/settings/role-labels")
+def get_role_labels(authorization: str = Header(None)):
+    _require_user(authorization)
+    stored = _get_setting("role_labels") or {}
+    return {**_DEFAULT_ROLE_LABELS, **stored}
+
+
+class RoleLabelsBody(BaseModel):
+    superadmin: str = "超級管理員"
+    admin:      str = "管理員"
+    sales:      str = "業務"
+    engineer:   str = "工程師"
+    viewer:     str = "檢視者"
+
+
+@router.put("/api/settings/role-labels")
+def put_role_labels(body: RoleLabelsBody, authorization: str = Header(None)):
+    _require_user(authorization, require_superadmin=True)
+    labels = {k: v.strip() for k, v in body.dict().items()}
+    for k, v in labels.items():
+        if not v:
+            raise HTTPException(422, f"角色名稱不可空白：{k}")
+    _set_setting("role_labels", labels)
+    _audit(_tok(authorization), "settings.role_labels.update", "settings",
+           "role_labels", json.dumps(labels, ensure_ascii=False))
+    return labels
