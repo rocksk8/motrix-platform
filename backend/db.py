@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 DB_PATH = os.path.join(os.path.dirname(__file__), "motrix_erp.db")
 
 # Increment this whenever a new _mNNN function is added to _MIGRATIONS.
-CURRENT_VERSION = 11
+CURRENT_VERSION = 25
 
 
 def get_db():
@@ -157,15 +157,16 @@ def init_db():
         );
 
         CREATE TABLE IF NOT EXISTS projects (
-            id           INTEGER PRIMARY KEY AUTOINCREMENT,
-            code         TEXT    UNIQUE NOT NULL DEFAULT '',
-            name         TEXT    NOT NULL,
-            status       TEXT    NOT NULL DEFAULT '規劃中',
-            description  TEXT    DEFAULT '',
-            linked_cases TEXT    DEFAULT '[]',
-            created_at   TEXT    NOT NULL,
-            created_by   TEXT    DEFAULT '',
-            data_json    TEXT    NOT NULL DEFAULT '{}'
+            id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            code              TEXT    UNIQUE NOT NULL DEFAULT '',
+            name              TEXT    NOT NULL,
+            status            TEXT    NOT NULL DEFAULT '規劃中',
+            description       TEXT    DEFAULT '',
+            linked_cases      TEXT    DEFAULT '[]',
+            created_at        TEXT    NOT NULL,
+            created_by        TEXT    DEFAULT '',
+            data_json         TEXT    NOT NULL DEFAULT '{}',
+            assigned_user_ids TEXT    DEFAULT '[]'
         );
 
         CREATE TABLE IF NOT EXISTS project_logs (
@@ -245,6 +246,80 @@ def init_db():
             month TEXT PRIMARY KEY,
             seq   INTEGER DEFAULT 0
         );
+
+        CREATE TABLE IF NOT EXISTS vendor_contractors (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            name         TEXT    NOT NULL,
+            tax_id       TEXT    DEFAULT '',
+            contact_name TEXT    DEFAULT '',
+            phone        TEXT    DEFAULT '',
+            email        TEXT    DEFAULT '',
+            address      TEXT    DEFAULT '',
+            data_json    TEXT    NOT NULL DEFAULT '{}',
+            active       INTEGER NOT NULL DEFAULT 1,
+            created_at   TEXT,
+            updated_at   TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS contractor_dispatches (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            quote_no      TEXT    NOT NULL,
+            vendor_id     INTEGER NOT NULL,
+            dispatch_date TEXT    DEFAULT '',
+            scope         TEXT    DEFAULT '',
+            items_json    TEXT    DEFAULT '[]',
+            total_amount  REAL    DEFAULT 0,
+            status        TEXT    DEFAULT 'draft',
+            notes         TEXT    DEFAULT '',
+            created_by    TEXT    DEFAULT '',
+            created_at    TEXT,
+            updated_at    TEXT,
+            FOREIGN KEY (vendor_id) REFERENCES vendor_contractors(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_dispatches_quote_no
+            ON contractor_dispatches(quote_no);
+        CREATE INDEX IF NOT EXISTS idx_dispatches_vendor
+            ON contractor_dispatches(vendor_id);
+
+        CREATE TABLE IF NOT EXISTS daily_tasks (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            task_date           TEXT    NOT NULL,
+            title               TEXT    NOT NULL DEFAULT '',
+            description         TEXT    DEFAULT '',
+            category            TEXT    DEFAULT '',
+            priority            TEXT    NOT NULL DEFAULT '一般',
+            assigned_to         TEXT    NOT NULL DEFAULT '[]',
+            created_by          TEXT    NOT NULL DEFAULT '',
+            created_at          TEXT    NOT NULL DEFAULT '',
+            updated_at          TEXT    NOT NULL DEFAULT '',
+            is_deleted          INTEGER NOT NULL DEFAULT 0,
+            recurrence_type     TEXT    NOT NULL DEFAULT 'once',
+            recurrence_days     TEXT    NOT NULL DEFAULT '[]',
+            recurrence_end_date TEXT    NOT NULL DEFAULT '',
+            supervisors         TEXT    NOT NULL DEFAULT '[]'
+        );
+
+        CREATE TABLE IF NOT EXISTS daily_task_completions (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            task_id         INTEGER NOT NULL REFERENCES daily_tasks(id),
+            username        TEXT    NOT NULL,
+            occurrence_date TEXT    NOT NULL DEFAULT '',
+            completed       INTEGER NOT NULL DEFAULT 0,
+            report          TEXT    DEFAULT '',
+            completed_at    TEXT    DEFAULT '',
+            UNIQUE(task_id, occurrence_date, username)
+        );
+
+        CREATE TABLE IF NOT EXISTS module_versions (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            module     TEXT    NOT NULL,
+            version    TEXT    NOT NULL DEFAULT '',
+            updated_at TEXT    NOT NULL,
+            content    TEXT    NOT NULL DEFAULT '',
+            updated_by TEXT    NOT NULL DEFAULT ''
+        );
+        CREATE INDEX IF NOT EXISTS idx_mv_module
+            ON module_versions(module, updated_at);
     """)
     _run_migrations(conn)
     _seed_setting(conn, "edge_path", "")
@@ -506,6 +581,257 @@ def _m011_login_rate_limit(conn):
     conn.commit()
 
 
+def _m012_project_assigned_users(conn):
+    try:
+        conn.execute("ALTER TABLE projects ADD COLUMN assigned_user_ids TEXT DEFAULT '[]'")
+    except Exception:
+        pass
+    conn.commit()
+
+
+def _m013_daily_tasks(conn):
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS daily_tasks (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            task_date    TEXT    NOT NULL,
+            title        TEXT    NOT NULL DEFAULT '',
+            description  TEXT    DEFAULT '',
+            category     TEXT    DEFAULT '',
+            priority     TEXT    NOT NULL DEFAULT '一般',
+            assigned_to  TEXT    NOT NULL DEFAULT '[]',
+            created_by   TEXT    NOT NULL DEFAULT '',
+            created_at   TEXT    NOT NULL DEFAULT '',
+            updated_at   TEXT    NOT NULL DEFAULT '',
+            is_deleted   INTEGER NOT NULL DEFAULT 0
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS daily_task_completions (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            task_id      INTEGER NOT NULL REFERENCES daily_tasks(id),
+            username     TEXT    NOT NULL,
+            completed    INTEGER NOT NULL DEFAULT 0,
+            report       TEXT    DEFAULT '',
+            completed_at TEXT    DEFAULT '',
+            UNIQUE(task_id, username)
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_daily_tasks_date ON daily_tasks(task_date)"
+    )
+    conn.commit()
+
+
+def _m014_weekly_recurrence(conn):
+    """Add recurrence columns to daily_tasks; rebuild daily_task_completions with occurrence_date."""
+    for col_def in [
+        "recurrence_type     TEXT NOT NULL DEFAULT 'once'",
+        "recurrence_days     TEXT NOT NULL DEFAULT '[]'",
+        "recurrence_end_date TEXT NOT NULL DEFAULT ''",
+    ]:
+        try:
+            conn.execute(f"ALTER TABLE daily_tasks ADD COLUMN {col_def}")
+        except Exception:
+            pass
+    # Rebuild daily_task_completions with new UNIQUE(task_id, occurrence_date, username)
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS _dtc_v14 (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            task_id         INTEGER NOT NULL REFERENCES daily_tasks(id),
+            username        TEXT    NOT NULL,
+            occurrence_date TEXT    NOT NULL DEFAULT '',
+            completed       INTEGER NOT NULL DEFAULT 0,
+            report          TEXT    DEFAULT '',
+            completed_at    TEXT    DEFAULT '',
+            UNIQUE(task_id, occurrence_date, username)
+        );
+        INSERT OR IGNORE INTO _dtc_v14
+            (id, task_id, username, occurrence_date, completed, report, completed_at)
+        SELECT c.id, c.task_id, c.username,
+               COALESCE(t.task_date, ''),
+               c.completed, c.report, c.completed_at
+        FROM daily_task_completions c
+        LEFT JOIN daily_tasks t ON t.id = c.task_id;
+        DROP TABLE daily_task_completions;
+        ALTER TABLE _dtc_v14 RENAME TO daily_task_completions;
+        CREATE INDEX IF NOT EXISTS idx_daily_tasks_date
+            ON daily_tasks(task_date);
+    """)
+    conn.commit()
+
+
+def _m015_daily_task_password(conn):
+    """Add daily_task_pw_hash to users for daily-task admin-view unlock."""
+    try:
+        conn.execute("ALTER TABLE users ADD COLUMN daily_task_pw_hash TEXT NOT NULL DEFAULT ''")
+    except Exception:
+        pass
+    conn.commit()
+
+
+def _m016_daily_task_supervisors(conn):
+    """Add supervisors column to daily_tasks for per-task notification targets."""
+    try:
+        conn.execute("ALTER TABLE daily_tasks ADD COLUMN supervisors TEXT NOT NULL DEFAULT '[]'")
+    except Exception:
+        pass
+    conn.commit()
+
+
+def _m017_session_last_active(conn):
+    """Add last_active column to sessions for idle-timeout enforcement."""
+    try:
+        conn.execute("ALTER TABLE sessions ADD COLUMN last_active TEXT")
+    except Exception:
+        pass
+    conn.commit()
+
+
+def _m019_daily_task_case_no(conn):
+    """Add case_no to daily_tasks — loose FK to quotations.quote_no."""
+    try:
+        conn.execute("ALTER TABLE daily_tasks ADD COLUMN case_no TEXT NOT NULL DEFAULT ''")
+        conn.commit()
+    except Exception:
+        pass
+
+
+def _m022_vendor_contractors(conn):
+    """Create vendor_contractors and contractor_dispatches tables."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS vendor_contractors (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            name         TEXT    NOT NULL,
+            tax_id       TEXT    DEFAULT '',
+            contact_name TEXT    DEFAULT '',
+            phone        TEXT    DEFAULT '',
+            email        TEXT    DEFAULT '',
+            address      TEXT    DEFAULT '',
+            data_json    TEXT    NOT NULL DEFAULT '{}',
+            active       INTEGER NOT NULL DEFAULT 1,
+            created_at   TEXT,
+            updated_at   TEXT
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS contractor_dispatches (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            quote_no      TEXT    NOT NULL,
+            vendor_id     INTEGER NOT NULL,
+            dispatch_date TEXT    DEFAULT '',
+            scope         TEXT    DEFAULT '',
+            items_json    TEXT    DEFAULT '[]',
+            total_amount  REAL    DEFAULT 0,
+            status        TEXT    DEFAULT 'draft',
+            notes         TEXT    DEFAULT '',
+            created_by    TEXT    DEFAULT '',
+            created_at    TEXT,
+            updated_at    TEXT,
+            FOREIGN KEY (vendor_id) REFERENCES vendor_contractors(id)
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_dispatches_quote_no ON contractor_dispatches(quote_no)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_dispatches_vendor ON contractor_dispatches(vendor_id)"
+    )
+    conn.commit()
+
+
+def _m023_dispatch_tax_rate(conn):
+    """Add tax_rate column to contractor_dispatches (default 5%)."""
+    try:
+        conn.execute(
+            "ALTER TABLE contractor_dispatches ADD COLUMN tax_rate REAL DEFAULT 0.05"
+        )
+        conn.commit()
+    except Exception:
+        pass
+
+
+def _m024_entity_codes(conn):
+    """Add sequential code field (C/S/V-YYYYMM-NNN) to customers, suppliers, vendor_contractors."""
+    for table in ('customers', 'suppliers', 'vendor_contractors'):
+        if not _col_exists(conn, table, 'code'):
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN code TEXT NOT NULL DEFAULT ''")
+
+    for table, prefix in [('customers', 'C'), ('suppliers', 'S'), ('vendor_contractors', 'V')]:
+        rows = conn.execute(
+            f"SELECT id, created_at FROM {table} WHERE code='' ORDER BY created_at ASC, id ASC"
+        ).fetchall()
+        counters: dict = {}
+        for row in rows:
+            ca = row['created_at'] or ''
+            if len(ca) >= 7 and ca[4] == '-':
+                month = ca[:4] + ca[5:7]
+            else:
+                month = datetime.now().strftime('%Y%m')
+            counters[month] = counters.get(month, 0) + 1
+            code = f"{prefix}-{month}-{counters[month]:03d}"
+            conn.execute(f"UPDATE {table} SET code=? WHERE id=?", (code, row['id']))
+
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_customers_code "
+        "ON customers(code) WHERE code != ''"
+    )
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_suppliers_code "
+        "ON suppliers(code) WHERE code != ''"
+    )
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_vendor_contractors_code "
+        "ON vendor_contractors(code) WHERE code != ''"
+    )
+    conn.commit()
+
+
+def _m021_completion_edit_count(conn):
+    """Add report_edit_count to daily_task_completions — incremented on each report edit."""
+    try:
+        conn.execute(
+            "ALTER TABLE daily_task_completions ADD COLUMN report_edit_count INTEGER NOT NULL DEFAULT 0"
+        )
+        conn.commit()
+    except Exception:
+        pass
+
+
+def _m020_daily_task_edit_log(conn):
+    """Create daily_task_edit_log for tracking field-level changes on task edits."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS daily_task_edit_log (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            task_id      INTEGER NOT NULL,
+            changed_by   TEXT    NOT NULL,
+            changed_at   TEXT    NOT NULL,
+            changes_json TEXT    NOT NULL DEFAULT '[]'
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_dtel_task ON daily_task_edit_log(task_id, changed_at)"
+    )
+    conn.commit()
+
+
+def _m018_module_versions(conn):
+    """Create module_versions table for per-module changelog tracking."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS module_versions (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            module     TEXT    NOT NULL,
+            version    TEXT    NOT NULL DEFAULT '',
+            updated_at TEXT    NOT NULL,
+            content    TEXT    NOT NULL DEFAULT '',
+            updated_by TEXT    NOT NULL DEFAULT ''
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_mv_module ON module_versions(module, updated_at)"
+    )
+    conn.commit()
+
+
 # Ordered list — index+1 is the migration version number.
 _MIGRATIONS = [
     _m001_export_columns,        # v1
@@ -519,7 +845,52 @@ _MIGRATIONS = [
     _m009_migrate_legacy_visits,     # v9
     _m010_sales_person_id,           # v10
     _m011_login_rate_limit,          # v11
+    _m012_project_assigned_users,    # v12
+    _m013_daily_tasks,               # v13
+    _m014_weekly_recurrence,         # v14
+    _m015_daily_task_password,       # v15
+    _m016_daily_task_supervisors,    # v16
+    _m017_session_last_active,       # v17
+    _m018_module_versions,           # v18
+    _m019_daily_task_case_no,        # v19
+    _m020_daily_task_edit_log,       # v20
+    _m021_completion_edit_count,     # v21
+    _m022_vendor_contractors,        # v22
+    _m023_dispatch_tax_rate,         # v23
+    _m024_entity_codes,              # v24
+    _m025_dispatch_acceptance,       # v25
 ]
+
+
+def _m025_dispatch_acceptance(conn):
+    """Add accepted_at / accepted_by to contractor_dispatches for acceptance flow node."""
+    for col, defn in [("accepted_at", "TEXT NOT NULL DEFAULT ''"),
+                      ("accepted_by", "TEXT NOT NULL DEFAULT ''")]:
+        if not _col_exists(conn, "contractor_dispatches", col):
+            conn.execute(f"ALTER TABLE contractor_dispatches ADD COLUMN {col} {defn}")
+    conn.commit()
+
+
+# ── Entity code helper ────────────────────────────────────────────────────────
+
+def next_entity_code(conn, table: str, prefix: str) -> str:
+    """Return next available code like C-202507-001 for entity tables.
+    table and prefix must be trusted internal constants (not user input).
+    """
+    month = datetime.now().strftime("%Y%m")
+    pattern = f"{prefix}-{month}-???"
+    row_max = conn.execute(
+        f"SELECT COALESCE(MAX(CAST(SUBSTR(code, 10, 3) AS INTEGER)), 0) AS mx "
+        f"FROM {table} WHERE code GLOB ? AND LENGTH(code) = 12",
+        (pattern,),
+    ).fetchone()
+    next_seq = (row_max["mx"] if row_max else 0) + 1
+    while conn.execute(
+        f"SELECT 1 FROM {table} WHERE code=?",
+        (f"{prefix}-{month}-{next_seq:03d}",),
+    ).fetchone():
+        next_seq += 1
+    return f"{prefix}-{month}-{next_seq:03d}"
 
 
 # ── Settings seed ─────────────────────────────────────────────────────────────

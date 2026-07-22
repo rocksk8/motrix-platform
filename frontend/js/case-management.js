@@ -9,7 +9,6 @@ function app() {
     search: '',
     selected: null,
     activeTab: 'biz',
-    execSubTab: 'progress',
     cr: { dealTag: '已成案', caseRecord: null },
     dirty: false,
     saving: false,
@@ -17,16 +16,39 @@ function app() {
     saveMsg: '',
     _autoSaveTimer: null,
     dragFromIdx: null,
-    showImportPanel: false,
+    showImportModal: false,
+    importMode: 'materials',
+    importSelectedItems: {},
     showLog: false,
     _allDonePrompted: false,
     _syncWarrantyDate: '',
     _syncWarrantyMonths: 12,
+    _openDevGroups: {},
     linkedProjectId: null,
     showCreateProjectModal: false,
     newProjectName: '',
     creatingProject: false,
     selectableUsers: [],
+
+    caseTasks: [],
+    caseTasksLoading: false,
+    caseTasksOpen: true,
+
+    // ── 今日相關任務 回報 ──
+    caseTaskEditing: { taskId: null, text: '' },
+    caseTaskEditSubmitting: false,
+    caseTaskEditLogs: {},
+    caseTaskLogsOpen: {},
+
+    // ── 承攬商派發 ──
+    vendors: [],
+    dispatches: [],
+    dispatchesLoading: false,
+    showDispatchModal: false,
+    editDispatchId: null,
+    dispatchSaving: false,
+    dispatchForm: {},
+    dispatchMsg: '',
 
     canSeeFinancial() {
       const m = this.session.modules || []
@@ -62,6 +84,7 @@ function app() {
         if (ru.ok) this.selectableUsers = await ru.json()
       } catch {}
       await this.loadCases()
+      this.loadVendors()
       const _qp = new URLSearchParams(location.search).get('q')
       if (_qp) {
         const _found = this.filteredCases.find(c => c.quote_no === _qp)
@@ -87,7 +110,13 @@ function app() {
 
     filterCases() {
       let list = this.cases
-      if (this.listTab !== 'all') list = list.filter(c => c.deal_tag === this.listTab)
+      if (this.listTab === '待精算') {
+        list = list.filter(c => c.settle_status === 'draft')
+      } else if (this.listTab === 'all') {
+        list = list.filter(c => c.deal_tag !== '已結案')
+      } else {
+        list = list.filter(c => c.deal_tag === this.listTab)
+      }
       if (this.search.trim()) {
         const q = this.search.trim().toLowerCase()
         list = list.filter(c =>
@@ -115,16 +144,32 @@ function app() {
         this.saveStatus = ''
         this.saveMsg = ''
         this.activeTab = 'biz'
-        this.execSubTab = 'progress'
         this.showLog = false
-        this.showImportPanel = false
+        this.showImportModal = false
         this._allDonePrompted = false
         this._syncWarrantyDate = ''
         this._syncWarrantyMonths = 12
+        this._openDevGroups = {}
         this.linkedProjectId = null
+        this.caseTasks = []
         // 背景查詢是否已有關聯專案
         this._checkLinkedProject(quoteNo)
+        this._loadCaseTasks(quoteNo)
+        this.loadDispatches(quoteNo)
       } catch {}
+    },
+
+    async _loadCaseTasks(quoteNo) {
+      if (!quoteNo) return
+      this.caseTasksLoading = true
+      try {
+        const today = new Date().toISOString().slice(0, 10)
+        const r = await fetch(`/api/daily-tasks?date=${today}&case_no=${encodeURIComponent(quoteNo)}`, {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (r.ok) this.caseTasks = (await r.json()).items || []
+      } catch {}
+      this.caseTasksLoading = false
     },
 
     async _checkLinkedProject(quoteNo) {
@@ -504,10 +549,53 @@ function app() {
       })
       this.setDirty()
     },
-    importAllFromQuote() {
-      const items = this.selected?.data?.items || []
-      items.forEach(qi => this.addMaterialFromQuote(qi))
-      this.showImportPanel = false
+    quoteItemsForImport() {
+      return (this.selected?.data?.items || []).filter(
+        i => i.type !== 'header' && (i.description || '').trim()
+      )
+    },
+    openImportModal(mode) {
+      this.importMode = mode
+      const items = this.quoteItemsForImport()
+      if (!items.length) { alert('報價單無可匯入的品項'); return }
+      const sel = {}
+      items.forEach(function(_, i) { sel[i] = true })
+      this.importSelectedItems = sel
+      this.showImportModal = true
+    },
+    toggleImportItem(idx) {
+      this.importSelectedItems = Object.assign({}, this.importSelectedItems, { [idx]: !this.importSelectedItems[idx] })
+    },
+    selectAllImportItems(val) {
+      const sel = {}
+      this.quoteItemsForImport().forEach(function(_, i) { sel[i] = val })
+      this.importSelectedItems = sel
+    },
+    doImport() {
+      const items = this.quoteItemsForImport()
+      const selected = items.filter(function(_, i) { return this.importSelectedItems[i] }, this)
+      if (!selected.length) { alert('請至少選擇一個品項'); return }
+      if (this.importMode === 'materials') {
+        selected.forEach(qi => this.addMaterialFromQuote(qi))
+      } else {
+        this.ensureCaseRecord()
+        const base = Date.now()
+        selected.forEach((item, ii) => {
+          const groupId = 'grp_' + (base + ii).toString(36) + Math.random().toString(36).slice(2, 5)
+          const qty = Math.min(Math.round(item.qty) || 1, 50)
+          for (let i = 0; i < qty; i++) {
+            this.cr.caseRecord.devices.push({
+              id: base + Math.random(),
+              name: item.description + (qty > 1 ? ` #${i + 1}` : ''),
+              sn: '', mac: '', location: '', warrantyStart: '', warrantyMonths: 12, note: '',
+              _groupId: groupId, _groupName: item.description, _groupIdx: i + 1, _groupTotal: qty
+            })
+          }
+          this._openDevGroups = Object.assign({}, this._openDevGroups, { [groupId]: true })
+        })
+        this.setDirty()
+      }
+      this.showImportModal = false
     },
     onMaterialArrived(mat) {
       if (mat.arrived) {
@@ -536,8 +624,7 @@ function app() {
           }
         })
       })
-      this.activeTab = 'exec'
-      this.execSubTab = 'devices'
+      this.activeTab = 'devices'
       this.setDirty()
     },
     autoSyncDevice(mat, mi) {
@@ -563,6 +650,49 @@ function app() {
       this.setDirty()
     },
     removeDevice(idx) { this.cr.caseRecord.devices.splice(idx, 1); this.setDirty() },
+    removeDeviceByObj(dev) {
+      const devs = this.cr.caseRecord.devices
+      const idx = devs.findIndex(d => d.id === dev.id)
+      if (idx !== -1) { devs.splice(idx, 1); this.setDirty() }
+    },
+    removeDeviceGroup(groupId) {
+      if (!confirm('確定要刪除整個設備群組？')) return
+      this.cr.caseRecord.devices = this.cr.caseRecord.devices.filter(d => d._groupId !== groupId)
+      this.setDirty()
+    },
+    toggleDevGroup(groupId) {
+      this._openDevGroups = { ...this._openDevGroups, [groupId]: !this._openDevGroups[groupId] }
+    },
+    deviceDisplayList() {
+      const devices = this.cr.caseRecord?.devices || []
+      const seenGroups = {}
+      const groupOrder = []
+      const groups = {}
+      const ungrouped = []
+      devices.forEach((dev, gi) => {
+        if (dev._groupId) {
+          if (!seenGroups[dev._groupId]) {
+            seenGroups[dev._groupId] = true
+            groupOrder.push(dev._groupId)
+            groups[dev._groupId] = {
+              id: 'group_' + dev._groupId,
+              type: 'group',
+              groupId: dev._groupId,
+              groupName: dev._groupName || dev.name,
+              groupTotal: dev._groupTotal || 0,
+              devices: []
+            }
+          }
+          groups[dev._groupId].devices.push(dev)
+        } else {
+          ungrouped.push({ id: 'dev_' + dev.id, type: 'device', dev, idx: gi })
+        }
+      })
+      const result = []
+      groupOrder.forEach(gid => result.push(groups[gid]))
+      ungrouped.forEach(u => result.push(u))
+      return result
+    },
     syncAllWarranty() {
       if (!this._syncWarrantyDate) return
       const devs = this.cr.caseRecord?.devices || []
@@ -593,6 +723,247 @@ function app() {
       if (s === 'expired')  return '已過保'
       if (s === 'expiring') return '即將到期'
       return '保固中'
+    },
+
+    // ── 承攬商派發 methods ──────────────────────────────────────────────────────
+
+    async loadVendors() {
+      try {
+        const r = await fetch('/api/vendor-contractors/selectable', {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (r.ok) this.vendors = await r.json()
+      } catch {}
+    },
+
+    async loadDispatches(quoteNo) {
+      if (!quoteNo) return
+      this.dispatchesLoading = true
+      this.dispatches = []
+      try {
+        const r = await fetch(`/api/contractor-dispatches?quote_no=${encodeURIComponent(quoteNo)}`, {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (r.ok) this.dispatches = await r.json()
+      } catch {}
+      this.dispatchesLoading = false
+    },
+
+    dispatchTotalCost() {
+      return this.dispatches.reduce((s, d) => s + (d.totalAmount || 0), 0)
+    },
+
+    _blankDispatchForm() {
+      const today = new Date().toISOString().slice(0, 10)
+      return {
+        quote_no: this.selected?.quote_no || '',
+        vendor_id: '',
+        dispatch_date: today,
+        scope: '',
+        notes: '',
+        status: this._quoteStatusToDispatch(this.selected?.status || ''),
+        tax_rate: 0.05,
+        items: []
+      }
+    },
+
+    openNewDispatch() {
+      this.editDispatchId = null
+      this.dispatchForm = this._blankDispatchForm()
+      this.dispatchMsg = ''
+      this.showDispatchModal = true
+    },
+
+    openEditDispatch(d) {
+      this.editDispatchId = d.id
+      this.dispatchForm = {
+        quote_no: d.quoteNo,
+        vendor_id: d.vendorId,
+        dispatch_date: d.dispatchDate || '',
+        scope: d.scope || '',
+        notes: d.notes || '',
+        status: d.status || 'draft',
+        tax_rate: d.taxRate !== undefined ? d.taxRate : 0.05,
+        items: JSON.parse(JSON.stringify(d.items || []))
+      }
+      this.dispatchMsg = ''
+      this.showDispatchModal = true
+    },
+
+    addDispatchItem() {
+      this.dispatchForm.items.push({
+        id: Date.now() + Math.random(),
+        description: '', qty: 1, unit: '式', unitPrice: '', amount: 0, note: ''
+      })
+    },
+
+    removeDispatchItem(idx) {
+      this.dispatchForm.items.splice(idx, 1)
+      this._recalcDispatchTotal()
+    },
+
+    onDispatchItemPrice(idx) {
+      const it = this.dispatchForm.items[idx]
+      if (!it) return
+      it.amount = Math.round((+it.qty || 0) * (+it.unitPrice || 0))
+      this._recalcDispatchTotal()
+    },
+
+    _recalcDispatchTotal() {
+      this.dispatchForm._total = this.dispatchForm.items.reduce((s, it) => s + (+it.amount || 0), 0)
+    },
+
+    async saveDispatch() {
+      if (!this.dispatchForm.vendor_id) { this.dispatchMsg = '請選擇承攬商'; return }
+      this.dispatchSaving = true; this.dispatchMsg = ''
+      const body = {
+        quote_no: this.dispatchForm.quote_no,
+        vendor_id: Number(this.dispatchForm.vendor_id),
+        dispatch_date: this.dispatchForm.dispatch_date || '',
+        scope: this.dispatchForm.scope || '',
+        notes: this.dispatchForm.notes || '',
+        status: this.dispatchForm.status || 'draft',
+        tax_rate: parseFloat(this.dispatchForm.tax_rate) || 0,
+        items_json: this.dispatchForm.items || []
+      }
+      const method = this.editDispatchId ? 'PUT' : 'POST'
+      const url    = this.editDispatchId
+        ? `/api/contractor-dispatches/${this.editDispatchId}`
+        : '/api/contractor-dispatches'
+      try {
+        const r = await fetch(url, {
+          method,
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify(body)
+        })
+        if (!r.ok) { this.dispatchMsg = (await r.json()).detail || '儲存失敗'; this.dispatchSaving = false; return }
+        this.showDispatchModal = false
+        await this.loadDispatches(this.selected?.quote_no)
+      } catch(e) { this.dispatchMsg = '網路錯誤：' + e.message }
+      this.dispatchSaving = false
+    },
+
+    async deleteDispatch(d) {
+      if (!confirm(`確定刪除派發給「${d.vendorName}」的紀錄？`)) return
+      try {
+        const r = await fetch(`/api/contractor-dispatches/${d.id}`, {
+          method: 'DELETE',
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (r.ok) await this.loadDispatches(this.selected?.quote_no)
+        else alert((await r.json()).detail || '刪除失敗')
+      } catch {}
+    },
+
+    async importDispatchToQuote(d) {
+      if (!d.items || d.items.length === 0) { alert('此派發紀錄沒有報價品項'); return }
+      if (!confirm(`確定將「${d.vendorName}」共 ${d.items.length} 筆品項匯入至報價單？\n（報價單必須處於草稿狀態）`)) return
+      try {
+        const r = await fetch(`/api/contractor-dispatches/${d.id}/import-to-quote`, {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        const data = await r.json()
+        if (r.ok) alert(`✓ 已成功匯入 ${data.imported} 筆品項至報價單`)
+        else alert(data.detail || '匯入失敗')
+      } catch(e) { alert('網路錯誤：' + e.message) }
+    },
+
+    // ── 今日相關任務 回報 helpers ──────────────────────────────────────────────
+    _caseMyComp(t) {
+      return (t.completions || []).find(c => c.username === this.session.username)
+    },
+
+    _caseTaskStartEdit(t) {
+      const comp = this._caseMyComp(t)
+      this.caseTaskEditing = { taskId: t.id, text: comp?.report || '' }
+    },
+
+    async _caseTaskSubmitReport(taskId) {
+      const text = this.caseTaskEditing.text.trim()
+      if (!text) { alert('請填寫回報內容'); return }
+      this.caseTaskEditSubmitting = true
+      try {
+        const today = new Date().toISOString().slice(0, 10)
+        const r = await fetch(`/api/daily-tasks/${taskId}/complete`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify({ completed: true, report: text, occurrence_date: today })
+        })
+        if (!r.ok) { const e = await r.json().catch(() => ({})); alert(e.detail || '送出失敗'); return }
+        this.caseTaskEditing = { taskId: null, text: '' }
+        await this._loadCaseTasks(this.selected?.quote_no)
+      } catch(e) { alert('網路錯誤：' + e.message) }
+      this.caseTaskEditSubmitting = false
+    },
+
+    async _caseTaskToggleLog(taskId) {
+      this.caseTaskLogsOpen = { ...this.caseTaskLogsOpen, [taskId]: !this.caseTaskLogsOpen[taskId] }
+      if (this.caseTaskLogsOpen[taskId] && !this.caseTaskEditLogs[taskId]) {
+        try {
+          const r = await fetch(`/api/daily-tasks/${taskId}/edit-log`, {
+            headers: { Authorization: 'Bearer ' + this.session.token }
+          })
+          if (r.ok) {
+            const d = await r.json()
+            this.caseTaskEditLogs = { ...this.caseTaskEditLogs, [taskId]: d.items || [] }
+          } else {
+            this.caseTaskEditLogs = { ...this.caseTaskEditLogs, [taskId]: [] }
+          }
+        } catch {
+          this.caseTaskEditLogs = { ...this.caseTaskEditLogs, [taskId]: [] }
+        }
+      }
+    },
+
+    _quoteStatusToDispatch(s) {
+      return { '草稿': 'draft', '待審核': 'draft', '已核准': 'confirmed', '已結案': 'completed', '已取消': 'cancelled' }[s] || 'draft'
+    },
+
+    _dispatchSubtotal() {
+      return (this.dispatchForm.items || []).reduce((s, it) => s + (+it.amount || 0), 0)
+    },
+
+    _dispatchTaxAmount() {
+      return Math.round(this._dispatchSubtotal() * (+(this.dispatchForm.tax_rate) || 0))
+    },
+
+    _dispatchTotalWithTax() {
+      return this._dispatchSubtotal() + this._dispatchTaxAmount()
+    },
+
+    _dispatchStatusLabel(s) {
+      return { draft: '草稿', sent: '已送出', confirmed: '已確認', pending_acceptance: '待驗收', accepted: '已驗收', completed: '完工', cancelled: '已取消' }[s] || s
+    },
+
+    _dispatchStatusClass(s) {
+      return { draft: 'badge--draft', sent: 'badge--pending', confirmed: 'badge--approved', pending_acceptance: 'badge--signing', accepted: 'badge--running', completed: 'badge--settled', cancelled: 'badge--danger' }[s] || ''
+    },
+
+    async markPendingAcceptance(d) {
+      if (!confirm(`確定將「${d.vendorName}」標記為待驗收？`)) return
+      try {
+        const r = await fetch(`/api/contractor-dispatches/${d.id}/accept`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify({ action: 'pending_acceptance' })
+        })
+        if (!r.ok) { alert((await r.json()).detail || '操作失敗'); return }
+        await this.loadDispatches(this.selected?.quote_no)
+      } catch (e) { alert('網路錯誤：' + e.message) }
+    },
+
+    async acceptDispatch(d) {
+      if (!confirm(`確定驗收「${d.vendorName}」的工程？\n驗收後將記錄您的姓名與時間。`)) return
+      try {
+        const r = await fetch(`/api/contractor-dispatches/${d.id}/accept`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify({ action: 'accepted' })
+        })
+        if (!r.ok) { alert((await r.json()).detail || '操作失敗'); return }
+        await this.loadDispatches(this.selected?.quote_no)
+      } catch (e) { alert('網路錯誤：' + e.message) }
     },
 
     logout() {
