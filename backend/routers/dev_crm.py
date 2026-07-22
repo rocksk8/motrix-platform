@@ -57,6 +57,22 @@ def _is_admin(user: dict) -> bool:
     return user["role"] in ("superadmin", "admin")
 
 
+def _can_access_case(user: dict, row) -> bool:
+    """Non-admin users can only access cases they created or are assigned to."""
+    if _is_admin(user):
+        return True
+    uid = user["id"]
+    try:
+        sp = json.loads(row["sales_persons"] or "[]")
+    except Exception:
+        sp = []
+    try:
+        pl = json.loads(row["planners"] or "[]")
+    except Exception:
+        pl = []
+    return row["created_by"] == uid or uid in sp or uid in pl
+
+
 # ── Customer visit sync ──────────────────────────────────────────────────────
 
 def _sync_customer_visit(conn, case_id: int, log_id: int, action: str, log_data: dict = None):
@@ -210,6 +226,8 @@ def list_dev_cases(
             f"SELECT * FROM dev_cases {where} ORDER BY updated_at DESC",
             params,
         ).fetchall()
+        if not _is_admin(user):
+            rows = [r for r in rows if _can_access_case(user, r)]
         return [_case_row(r, umap) for r in rows]
     finally:
         conn.close()
@@ -260,6 +278,8 @@ def get_dev_case(case_id: int, authorization: str = Header("")):
         row = conn.execute("SELECT * FROM dev_cases WHERE id=?", (case_id,)).fetchone()
         if not row:
             raise HTTPException(404, "案件不存在")
+        if not _can_access_case(user, row):
+            raise HTTPException(403, "無權限查看此案件")
         return _case_row(row, _user_map(conn))
     finally:
         conn.close()
@@ -274,6 +294,8 @@ def update_dev_case(case_id: int, body: DevCaseIn, authorization: str = Header("
         row = conn.execute("SELECT * FROM dev_cases WHERE id=?", (case_id,)).fetchone()
         if not row:
             raise HTTPException(404, "案件不存在")
+        if not _can_access_case(user, row):
+            raise HTTPException(403, "無權限修改此案件")
         conn.execute("""
             UPDATE dev_cases
                SET case_name=?, customer_name=?, customer_id=?,
@@ -329,6 +351,8 @@ def update_dev_case_status(
         row = conn.execute("SELECT * FROM dev_cases WHERE id=?", (case_id,)).fetchone()
         if not row:
             raise HTTPException(404, "案件不存在")
+        if not _can_access_case(user, row):
+            raise HTTPException(403, "無權限修改此案件")
         conn.execute(
             "UPDATE dev_cases SET status=?, updated_at=? WHERE id=?",
             (body.status, now, case_id),
@@ -353,6 +377,8 @@ def mark_converted(
         row = conn.execute("SELECT * FROM dev_cases WHERE id=?", (case_id,)).fetchone()
         if not row:
             raise HTTPException(404, "案件不存在")
+        if not _can_access_case(user, row):
+            raise HTTPException(403, "無權限修改此案件")
         conn.execute(
             "UPDATE dev_cases SET converted_quote_no=?, status='成案', updated_at=? WHERE id=?",
             (body.quote_no.strip(), now, case_id),
@@ -386,11 +412,14 @@ def list_pending_logs(authorization: str = Header("")):
 
 @router.get("/dev-cases/{case_id}/logs")
 def list_dev_logs(case_id: int, authorization: str = Header("")):
-    _require_dev(authorization)
+    user = _require_dev(authorization)
     conn = get_db()
     try:
-        if not conn.execute("SELECT id FROM dev_cases WHERE id=?", (case_id,)).fetchone():
+        case_row = conn.execute("SELECT * FROM dev_cases WHERE id=?", (case_id,)).fetchone()
+        if not case_row:
             raise HTTPException(404, "案件不存在")
+        if not _can_access_case(user, case_row):
+            raise HTTPException(403, "無權限查看此案件")
         umap = _user_map(conn)
         rows = conn.execute(
             "SELECT * FROM dev_logs WHERE case_id=? ORDER BY log_date DESC, id DESC",
@@ -407,8 +436,11 @@ def create_dev_log(case_id: int, body: DevLogIn, authorization: str = Header("")
     now = _TW_NOW()
     conn = get_db()
     try:
-        if not conn.execute("SELECT id FROM dev_cases WHERE id=?", (case_id,)).fetchone():
+        case_row_chk = conn.execute("SELECT * FROM dev_cases WHERE id=?", (case_id,)).fetchone()
+        if not case_row_chk:
             raise HTTPException(404, "案件不存在")
+        if not _can_access_case(user, case_row_chk):
+            raise HTTPException(403, "無權限在此案件新增記錄")
         needs_approval = 1 if body.log_by != user["id"] else 0
         cur = conn.execute("""
             INSERT INTO dev_logs
