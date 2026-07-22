@@ -1,7 +1,7 @@
 # MOTRIX ERP — 開發快速參考
 
 > 允碩整合集創（統編 60575481）｜ Tel: 04-3602-2818 ｜ info@miactw.com  
-> 文件版本：**2026-07-22j**（承攬商驗收流程節點）
+> 文件版本：**2026-07-22k**（全面更新：死碼清除 + 驗收流程 + Git Flow）
 
 ---
 
@@ -71,7 +71,7 @@
 
 | 模組 | 職責 |
 |------|------|
-| `db.py` | 連線、`init_db()`、PRAGMA WAL、熱路徑欄位／索引；Migration v11 |
+| `db.py` | 連線、`init_db()`、PRAGMA WAL、熱路徑欄位／索引；**CURRENT_VERSION=25**（25 個 migrations） |
 | `helpers/` | 密碼、session、audit、notify、settings、弱密碼標記、`save_quotation_json()` |
 | `archive.py` | 即時／每日／週備份；本機 SQLite 快照；**原子 JSON 寫入**（`_atomic_json_write`）；G: fallback |
 | `backup_job.py` | 獨立備份腳本（Windows 工作排程器，不依賴 server） |
@@ -84,15 +84,17 @@
 
 | 路徑 | 說明 |
 |------|------|
-| `frontend/js/*.js` | 各頁 Alpine 元件（Phase 3 已外置） |
-| `frontend/pages/quotation-form.html` | ⚠️ Alpine function **inline**（非載入 `quotation-form.js`） |
-| `frontend/pages/settlement.html` | ⚠️ Alpine function **inline**（非載入 `settlement.js`） |
-| `frontend/static/sidebar.js` | Topbar + Sidebar 注入；**強制改密導向** |
+| `frontend/js/case-management.js` | 案件管理 Alpine 元件（唯一有效的外置 JS） |
+| `frontend/js/reports.js` | 營運報表 Alpine 元件（唯一有效的外置 JS） |
+| `frontend/pages/quotation-form.html` | ⚠️ Alpine function **inline**（邏輯在 `<script>` 內，勿找外置 JS） |
+| `frontend/pages/settlement.html` | ⚠️ Alpine function **inline**（邏輯在 `<script>` 內，勿找外置 JS） |
+| `frontend/pages/*.html` | 其餘頁面 Alpine 亦均為 inline，**無對應外置 .js** |
+| `frontend/static/sidebar.js` | Topbar + Sidebar 注入；**強制改密導向**；離開警示 `bindNavGuard()` |
 | `frontend/static/notif.js` | 通知 Bell；所有動態內容用 **DOM API**（無 innerHTML） |
 | `frontend/css/style.css` | CSS 變數：`--sidebar-w` `--topbar-h` `--accent` |
 
-> **重要**：`quotation-form.js` 與 `settlement.js` 為**死碼**（不被載入），
-> 邏輯修改一律在 `.html` 的 inline `<script>` 內進行。
+> **重要**：`frontend/js/` 目錄**僅存 2 個有效檔案**（case-management.js / reports.js），
+> 其餘 21 個死碼 JS 已於 2026-07-22 清除。勿在此目錄新增非必要的 JS 檔案。
 
 ---
 
@@ -167,13 +169,20 @@ quotations      -- 熱路徑欄位 + data_json 完整物件
   sales_person (顯示名稱，歷史相容), sales_person_id FK→users.id,
   quote_date, valid_days, data_json, created_at, updated_at, ...
 
-users           -- + must_change_password, unlock_password_hash
-sessions        -- token, expires_at
-customers / suppliers  -- 主欄 + data_json（contacts, visits, tags）
+users           -- + must_change_password, unlock_password_hash, daily_task_pw_hash
+sessions        -- token, expires_at, last_active
+customers       -- code(C-YYYYMM-NNN) + 主欄 + data_json（contacts, visits, tags）
+suppliers       -- code(S-YYYYMM-NNN) + 主欄 + data_json
 parts, projects, project_logs
 system_settings, audit_log, notifications
 quote_seq       -- 月序 MQ-YYYYMM-NNN
 login_rate_limit -- ip PK, locked_until（服務重啟後維持鎖定）
+module_versions  -- 模組版本紀錄（同步自 version_manifest.json）
+daily_tasks / daily_task_completions / daily_task_edit_log
+
+vendor_contractors   -- code(V-YYYYMM-NNN), name, tax_id, contact, data_json(visits/tags/category)
+contractor_dispatches -- quote_no, vendor_id, status, items_json, total_amount, tax_rate,
+                         accepted_at, accepted_by（DB v25）
 ```
 
 **索引**：`deal_tag` · `settle_status` · `sales_person` · `sales_person_id`
@@ -197,6 +206,7 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
 | `PATCH .../case-record` | `_expectedUpdatedAt` | 不符 → **409** |
 | `PATCH .../customers/{id}/visits` | `expectedUpdatedAt` | 不符 → **409** |
 | `PATCH .../suppliers/{id}/visits` | 同上 | 不符 → **409** |
+| `PATCH .../vendor-contractors/{id}/visits` | `expectedUpdatedAt` | 不符 → **409** |
 | `PATCH .../payment/{idx}` | `_expectedUpdatedAt` | 不符 → **409** |
 
 回傳皆含 `updated_at`，前端可回寫後再送。
@@ -298,6 +308,25 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
 - 確認事項兩階段：`project_approve_eng` → `project_approve_biz`
 - 照片：Pillow 水印 + GPS EXIF → `uploads/projects/...`
 
+### §5.7 · 承攬商派發狀態機
+
+```
+草稿(draft) → 已送出(sent) → 已確認(confirmed)
+                                   ↓
+                              待驗收(pending_acceptance)   ← 快速按鈕：「待驗收」
+                                   ↓
+                              已驗收(accepted)             ← 快速按鈕：「✓ 確認驗收」
+                                   ↓                         記錄 accepted_by + accepted_at
+                              完工(completed)
+
+任意非終態 → 已取消(cancelled)
+```
+
+- 狀態轉換：`PATCH /api/contractor-dispatches/{id}/accept`（`action=pending_acceptance` 或 `action=accepted`）
+- 流程違規（如跳過待驗收直接已驗收）→ **409**
+- 已驗收後：卡片底部顯示綠色橫條，含驗收人姓名 + 時間
+- 狀態亦可透過 Modal 下拉直接設定（彈性操作，不走 `/accept` endpoint）
+
 ---
 
 ## §6 · Sidebar 結構
@@ -377,7 +406,7 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
 | GET | /settings/role-labels | 各角色層顯示名稱（需認證） |
 | PUT | /settings/role-labels | 更新角色顯示名稱（superadmin only） |
 
-### §7.4 · 承攬商管理（DB v22）
+### §7.4 · 承攬商管理（DB v22–v25）
 
 | Method | Path | 說明 |
 |--------|------|------|
@@ -476,15 +505,30 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 
 | 優先 | 項目 |
 |------|------|
-| 低 | 區網 HTTPS／反向代理 |
+| 🔴 | 區網 HTTPS／反向代理（Nginx + mkcert，Bearer Token 目前區網明文） |
+| ✅ | ~~死碼 JS 清除~~（21 個死碼 .js 已刪，`frontend/js/` 僅剩 2 個有效檔） |
 | ✅ | ~~關鍵 API 自動化測試~~（48 tests 全通過，`backend/tests/test_core.py`） |
 | ✅ | ~~文件拆 `CHANGELOG.md` 與本速查分離~~（已完成，見根目錄 `CHANGELOG.md`） |
+| ✅ | ~~Git Flow 分支規則~~（`develop` 分支 + `GITFLOW.md` 規範已建立） |
+| 低 | SQLite → PostgreSQL（資料量 > 1 GB 或同時連線數 > 5 時評估） |
 
 ---
 
 ## §12 · 變更摘要（最新兩版）
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
+
+### 2026-07-22k — 文件全面更新（本次 session 整合）
+
+- **§2 前端表**：更新為 `js/` 目錄僅剩 2 個有效檔說明；移除已刪除的 `quotation-form.js` / `settlement.js` 死碼警告
+- **§4.1 資料表**：補入 `vendor_contractors` / `contractor_dispatches`（含 accepted_at/by）；修正 `db.py` 版本標示 v11 → v25；補入 `module_versions` / `daily_task*` 等表
+- **§4.3 樂觀鎖**：補入承攜商往來紀錄端點
+- **§5.7**：新增承攬商派發狀態機說明
+- **§7.4**：標題更新為 `DB v22–v25`
+- **§11**：標記 ✅ 死碼清除 / ✅ Git Flow；補入 HTTPS 為 🔴 高優先；新增 SQLite 擴展建議
+- **§13**：目錄結構全面更新（CURRENT_VERSION=25、GITFLOW.md、版本 manifest、tests/、刪除死碼、承攬商頁面）
+- **Git Flow**：`develop` 分支建立 + `GITFLOW.md` 規範文件
+- **死碼清除**：21 個死碼 JS 正式 git commit 刪除（commit `fbbbbda`）
 
 ### 2026-07-22j — 承攬商驗收流程節點
 
@@ -737,12 +781,13 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 ```
 MOTRIX-ERP/
 ├── MOTRIX-ERP-QUICK.md          ← 本文件
-├── SECURITY_AUDIT_2026-07-18.md ← P0–P3 完整審查報告（歸檔）
+├── GITFLOW.md                   ← Git Flow 分支規則（develop 分支 + commit 規範）
 ├── .gitignore
 ├── backup_alerts/               ← 備份警示（執行期產生）
 ├── backend/
 │   ├── main.py                  ← wiring；startup 呼叫 auth.init_rate_limiting()
-│   ├── db.py                    ← schema + 22 個 migrations（CURRENT_VERSION=22）
+│   ├── db.py                    ← schema + 25 個 migrations（CURRENT_VERSION=25）
+│   ├── version_manifest.json    ← 模組版本紀錄（重啟後同步至 DB module_versions）
 │   ├── helpers/                 ← 套件（拆自原 helpers.py）
 │   │   ├── __init__.py          ← re-export 全部符號（向後相容）
 │   │   ├── auth.py              ← 密碼、session、弱密碼政策
@@ -750,6 +795,7 @@ MOTRIX-ERP/
 │   │   ├── audit.py             ← audit log + 通知
 │   │   ├── quotations.py        ← SQL 常數、save_quotation_json
 │   │   ├── dates.py             ← _add_months、_warranty_expiry
+│   │   ├── email_notify.py      ← Email 通知（月報、逾期、保固、備份告警）
 │   │   └── startup.py           ← 啟動檢查、Edge 路徑解析
 │   ├── archive.py               ← 備份；_atomic_json_write()；G: fallback
 │   ├── pdf_gen.py · photos.py
@@ -760,17 +806,29 @@ MOTRIX-ERP/
 │   │   ├── YYYY-MM-DD/          ← 本機整庫 SQLite 快照（保留 30 天）
 │   │   └── quotation_instant/   ← G: 不可用時即時報價單 JSON fallback
 │   ├── logs/backup_job.log
+│   ├── tests/test_core.py       ← 48 自動化測試（全通過）
 │   ├── .initial_admin_credentials.txt  ← 僅新裝，用後刪
-│   └── routers/                 ← auth, quotations, customers, system, ...
-│       └── vendor_contractors.py ← 承攬商 + 派發 CRUD + import-to-quote
+│   └── routers/
+│       ├── auth.py · quotations.py · customers.py · suppliers.py
+│       ├── parts.py · projects.py · dashboard.py · system.py · reports.py
+│       ├── daily_tasks.py · warranty.py
+│       └── vendor_contractors.py  ← 承攬商 + 派發 CRUD + accept + import-to-quote
 ├── frontend/
-│   ├── index.html · css/ · js/ · pages/ · static/
-│   │   ├── js/quotation-form.js   ← ⚠️ 死碼（未載入）
-│   │   ├── js/settlement.js       ← ⚠️ 死碼（未載入）
-│   │   ├── pages/quotation-form.html  ← Alpine inline（真正的 quotationForm()）
-│   │   ├── pages/settlement.html      ← Alpine inline（真正的 settlementPage()）
-│   │   ├── pages/vendor-contractors.html ← 承攬商管理（雙欄；vendorContractorsPage()）
-│   │   └── static/logo.png        ← MOTRIX 白字去背 PNG
+│   ├── index.html               ← 儀表板（Alpine inline）
+│   ├── css/style.css
+│   ├── js/
+│   │   ├── case-management.js   ← ✅ 有效（案件管理 Alpine 元件）
+│   │   └── reports.js           ← ✅ 有效（營運報表 Alpine 元件）
+│   ├── pages/
+│   │   ├── quotation-form.html  ← Alpine inline（真正的 quotationForm()）
+│   │   ├── settlement.html      ← Alpine inline（真正的 settlementPage()）
+│   │   ├── case-management.html ← 含承攬商派發 + 驗收流程 Tab
+│   │   ├── vendor-contractors.html ← 承攬商管理（雙欄；vendorContractorsPage()）
+│   │   └── *.html               ← 其餘頁面均 Alpine inline，無對應外置 JS
+│   └── static/
+│       ├── sidebar.js           ← Topbar + Sidebar + 離開警示
+│       ├── notif.js             ← 通知 Bell + daily_task badge
+│       └── logo.png             ← MOTRIX 白字去背 PNG
 ├── uploads/projects/
 └── 報價單PDF/
 ```
