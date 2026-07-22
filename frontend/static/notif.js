@@ -91,28 +91,30 @@ function notifStore() {
         if (!r.ok) return
         var d = await r.json()
         var modBadge = {
-          dev_crm:    'sb-mod-dev-crm',
-          quotation:  'sb-mod-quotation',
-          case_manage:'sb-mod-case',
-          projects:   'sb-mod-projects',
-          customer:   'sb-mod-customer',
-          procurement:'sb-mod-procurement',
-          equipment:  'sb-mod-equipment',
-          finance:    'sb-mod-finance',
-          work_log:   'sb-mod-worklog',
-          daily_task: 'sb-mod-daily-task',
+          dev_crm:    ['sb-mod-dev-crm'],
+          quotation:  ['sb-mod-quotation'],
+          case_manage:['sb-mod-case'],
+          projects:   ['sb-mod-projects'],
+          customer:   ['sb-mod-customer'],
+          procurement:['sb-mod-suppliers', 'sb-mod-vendor', 'sb-mod-parts', 'sb-mod-procurement'],
+          equipment:  ['sb-mod-equipment', 'sb-mod-warranty'],
+          finance:    ['sb-mod-finance', 'sb-mod-sales-orders'],
+          work_log:   ['sb-mod-worklog'],
+          daily_task: ['sb-mod-daily-task'],
         }
         for (var k in d) {
-          var bid = modBadge[k]
-          if (!bid) continue
-          var el = document.getElementById(bid)
-          if (!el) continue
+          var bids = modBadge[k]
+          if (!bids) continue
           var cnt = d[k] || 0
-          if (cnt > 0) {
-            el.textContent = cnt > 9 ? '9+' : String(cnt)
-            el.style.display = 'inline-block'
-          } else {
-            el.style.display = 'none'
+          for (var bi = 0; bi < bids.length; bi++) {
+            var el = document.getElementById(bids[bi])
+            if (!el) continue
+            if (cnt > 0) {
+              el.textContent = cnt > 9 ? '9+' : String(cnt)
+              el.style.display = 'inline-block'
+            } else {
+              el.style.display = 'none'
+            }
           }
         }
       } catch(_e) {}
