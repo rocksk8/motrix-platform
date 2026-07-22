@@ -832,6 +832,15 @@ def _m018_module_versions(conn):
     conn.commit()
 
 
+def _m025_dispatch_acceptance(conn):
+    """Add accepted_at / accepted_by to contractor_dispatches for acceptance flow node."""
+    for col, defn in [("accepted_at", "TEXT NOT NULL DEFAULT ''"),
+                      ("accepted_by", "TEXT NOT NULL DEFAULT ''")]:
+        if not _col_exists(conn, "contractor_dispatches", col):
+            conn.execute(f"ALTER TABLE contractor_dispatches ADD COLUMN {col} {defn}")
+    conn.commit()
+
+
 # Ordered list — index+1 is the migration version number.
 _MIGRATIONS = [
     _m001_export_columns,        # v1
@@ -860,15 +869,6 @@ _MIGRATIONS = [
     _m024_entity_codes,              # v24
     _m025_dispatch_acceptance,       # v25
 ]
-
-
-def _m025_dispatch_acceptance(conn):
-    """Add accepted_at / accepted_by to contractor_dispatches for acceptance flow node."""
-    for col, defn in [("accepted_at", "TEXT NOT NULL DEFAULT ''"),
-                      ("accepted_by", "TEXT NOT NULL DEFAULT ''")]:
-        if not _col_exists(conn, "contractor_dispatches", col):
-            conn.execute(f"ALTER TABLE contractor_dispatches ADD COLUMN {col} {defn}")
-    conn.commit()
 
 
 # ── Entity code helper ────────────────────────────────────────────────────────
