@@ -7,7 +7,8 @@ from fastapi import APIRouter, HTTPException, Header
 from pydantic import BaseModel
 
 from db import get_db
-from helpers import _require_user, _tok, _audit, notify_module_activity
+import threading
+from helpers import _require_user, _tok, _audit, notify_module_activity, notify_dev_case_delete_request
 
 router = APIRouter()
 
@@ -32,6 +33,15 @@ class DevCaseStatusIn(BaseModel):
 
 class DevCaseConvertIn(BaseModel):
     quote_no: str
+
+
+class DevCaseDeleteRequestIn(BaseModel):
+    reason: Optional[str] = ''
+
+
+class DevCaseDeleteApproveIn(BaseModel):
+    approve: bool
+    reject_reason: Optional[str] = ''
 
 
 class DevLogIn(BaseModel):
@@ -178,6 +188,10 @@ def _case_row(row, umap: dict) -> dict:
         "createdBy": row["created_by"],
         "createdAt": row["created_at"],
         "updatedAt": row["updated_at"],
+        "pendingDelete": bool(row["pending_delete"] if "pending_delete" in row.keys() else 0),
+        "deleteRequestedBy": row["delete_requested_by"] if "delete_requested_by" in row.keys() else "",
+        "deleteRequestedAt": row["delete_requested_at"] if "delete_requested_at" in row.keys() else "",
+        "deleteReason": row["delete_reason"] if "delete_reason" in row.keys() else "",
     }
 
 
@@ -214,20 +228,38 @@ def list_dev_cases(
     conn = get_db()
     try:
         umap = _user_map(conn)
-        clauses, params = [], []
+        clauses, params = ["is_deleted = 0"], []
         if status:
             clauses.append("status = ?")
             params.append(status)
         if q:
             clauses.append("(case_name LIKE ? OR customer_name LIKE ?)")
             params += [f"%{q}%", f"%{q}%"]
-        where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
+        where = "WHERE " + " AND ".join(clauses)
         rows = conn.execute(
             f"SELECT * FROM dev_cases {where} ORDER BY updated_at DESC",
             params,
         ).fetchall()
         if not _is_admin(user):
             rows = [r for r in rows if _can_access_case(user, r)]
+        return [_case_row(r, umap) for r in rows]
+    finally:
+        conn.close()
+
+
+@router.get("/dev-cases/pending-deletes")
+def list_pending_dev_deletes(authorization: str = Header("")):
+    """最高管理者查看所有待審核刪除申請。"""
+    user = _require_dev(authorization)
+    if user["role"] != "superadmin":
+        raise HTTPException(403, "僅最高管理者可查看刪除申請清單")
+    conn = get_db()
+    try:
+        umap = _user_map(conn)
+        rows = conn.execute(
+            "SELECT * FROM dev_cases WHERE pending_delete=1 AND is_deleted=0"
+            " ORDER BY delete_requested_at DESC"
+        ).fetchall()
         return [_case_row(r, umap) for r in rows]
     finally:
         conn.close()
@@ -320,20 +352,112 @@ def update_dev_case(case_id: int, body: DevCaseIn, authorization: str = Header("
         conn.close()
 
 
-@router.delete("/dev-cases/{case_id}", status_code=204)
-def delete_dev_case(case_id: int, authorization: str = Header("")):
+@router.post("/dev-cases/{case_id}/request-delete", status_code=200)
+def request_dev_case_delete(case_id: int, body: DevCaseDeleteRequestIn,
+                            authorization: str = Header("")):
+    """Admin+ 申請刪除案件 → 送交最高管理者審核。"""
     user = _require_dev(authorization)
     if not _is_admin(user):
-        raise HTTPException(403, "僅管理員可刪除案件")
+        raise HTTPException(403, "僅管理員可申請刪除案件")
+    now = _TW_NOW()
     conn = get_db()
     try:
-        row = conn.execute("SELECT case_name FROM dev_cases WHERE id=?", (case_id,)).fetchone()
+        row = conn.execute(
+            "SELECT * FROM dev_cases WHERE id=? AND is_deleted=0", (case_id,)
+        ).fetchone()
         if not row:
             raise HTTPException(404, "案件不存在")
-        conn.execute("DELETE FROM dev_cases WHERE id=?", (case_id,))
+        if row["pending_delete"]:
+            raise HTTPException(409, "此案件已有待審核的刪除申請")
+        requester_display = user.get("display_name") or user["username"]
+        conn.execute(
+            "UPDATE dev_cases SET pending_delete=1, delete_requested_by=?,"
+            " delete_requested_at=?, delete_reason=? WHERE id=?",
+            (requester_display, now, body.reason or '', case_id),
+        )
         conn.commit()
-        _audit(_tok(authorization), "dev_case.delete", "dev_case",
+        _audit(_tok(authorization), "dev_case.delete_request", "dev_case",
                str(case_id), row["case_name"])
+        threading.Thread(
+            target=notify_dev_case_delete_request,
+            args=(case_id, row["case_name"], requester_display, body.reason or ''),
+            daemon=True,
+        ).start()
+        return {"ok": True}
+    finally:
+        conn.close()
+
+
+@router.post("/dev-cases/{case_id}/cancel-delete", status_code=200)
+def cancel_dev_case_delete(case_id: int, authorization: str = Header("")):
+    """管理員取消自己發出的刪除申請。"""
+    user = _require_dev(authorization)
+    if not _is_admin(user):
+        raise HTTPException(403, "僅管理員可取消刪除申請")
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT * FROM dev_cases WHERE id=? AND is_deleted=0", (case_id,)
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, "案件不存在")
+        if not row["pending_delete"]:
+            raise HTTPException(409, "此案件無待審核的刪除申請")
+        requester_display = user.get("display_name") or user["username"]
+        if user["role"] != "superadmin" and row["delete_requested_by"] != requester_display:
+            raise HTTPException(403, "只能取消自己發出的刪除申請")
+        conn.execute(
+            "UPDATE dev_cases SET pending_delete=0, delete_requested_by='',"
+            " delete_requested_at='', delete_reason='' WHERE id=?",
+            (case_id,),
+        )
+        conn.commit()
+        _audit(_tok(authorization), "dev_case.delete_cancel", "dev_case",
+               str(case_id), row["case_name"])
+        return {"ok": True}
+    finally:
+        conn.close()
+
+
+@router.post("/dev-cases/{case_id}/approve-delete", status_code=200)
+def approve_dev_case_delete(case_id: int, body: DevCaseDeleteApproveIn,
+                             authorization: str = Header("")):
+    """最高管理者審核刪除申請 — approve=True 執行軟刪除；False 退回。"""
+    user = _require_dev(authorization)
+    if user["role"] != "superadmin":
+        raise HTTPException(403, "僅最高管理者可審核刪除申請")
+    now = _TW_NOW()
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT * FROM dev_cases WHERE id=? AND is_deleted=0", (case_id,)
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, "案件不存在")
+        if not row["pending_delete"]:
+            raise HTTPException(409, "此案件無待審核的刪除申請")
+        if body.approve:
+            snapshot = json.dumps(dict(row), ensure_ascii=False)
+            approver_display = user.get("display_name") or user["username"]
+            conn.execute(
+                "UPDATE dev_cases SET is_deleted=1, deleted_at=?, deleted_by=?,"
+                " deleted_snapshot=?, pending_delete=0 WHERE id=?",
+                (now, approver_display, snapshot, case_id),
+            )
+            conn.commit()
+            _audit(_tok(authorization), "dev_case.delete", "dev_case",
+                   str(case_id), row["case_name"])
+            return {"ok": True, "deleted": True}
+        else:
+            conn.execute(
+                "UPDATE dev_cases SET pending_delete=0, delete_requested_by='',"
+                " delete_requested_at='', delete_reason='' WHERE id=?",
+                (case_id,),
+            )
+            conn.commit()
+            _audit(_tok(authorization), "dev_case.delete_reject", "dev_case",
+                   str(case_id), row["case_name"])
+            return {"ok": True, "deleted": False}
     finally:
         conn.close()
 

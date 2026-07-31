@@ -14,17 +14,30 @@ from fastapi.responses import FileResponse
 
 from db import get_db
 from helpers import _require_user, _tok, _audit
-from photos import _process_project_photo, _PHOTO_UPLOAD_BASE
+from photos import _process_project_photo, _PHOTO_UPLOAD_BASE, _photo_root
 
-# Per-process secret — short-lived photo tokens; regenerates on restart which is acceptable.
-_PHOTO_SECRET = secrets.token_bytes(32)
 _PHOTO_TOKEN_TTL = 3600  # seconds
+_PHOTO_SECRET_CACHE: bytes | None = None
+
+
+def _get_photo_secret() -> bytes:
+    """Return persistent HMAC key stored in system_settings; generate once if absent."""
+    global _PHOTO_SECRET_CACHE
+    if _PHOTO_SECRET_CACHE is not None:
+        return _PHOTO_SECRET_CACHE
+    from helpers import _get_setting, _set_setting
+    stored = _get_setting("photo_secret")
+    if not stored:
+        stored = secrets.token_hex(32)
+        _set_setting("photo_secret", stored)
+    _PHOTO_SECRET_CACHE = bytes.fromhex(stored)
+    return _PHOTO_SECRET_CACHE
 
 
 def _make_photo_token(path: str, ttl: int = _PHOTO_TOKEN_TTL) -> str:
     expires = int(time.time()) + ttl
     msg = f"{path}:{expires}".encode()
-    sig = hmac.new(_PHOTO_SECRET, msg, hashlib.sha256).hexdigest()
+    sig = hmac.new(_get_photo_secret(), msg, hashlib.sha256).hexdigest()
     return f"{expires}.{sig}"
 
 
@@ -37,7 +50,7 @@ def _verify_photo_token(path: str, token: str) -> bool:
     if time.time() > expires:
         return False
     msg = f"{path}:{expires}".encode()
-    expected = hmac.new(_PHOTO_SECRET, msg, hashlib.sha256).hexdigest()
+    expected = hmac.new(_get_photo_secret(), msg, hashlib.sha256).hexdigest()
     return hmac.compare_digest(expected, sig)
 
 router = APIRouter()
@@ -60,23 +73,30 @@ def list_projects(
     case_no: Optional[str] = None,
     authorization: str = Header(None),
 ):
-    _require_user(authorization)
+    user     = _require_user(authorization)
+    is_admin = user['role'] in ('superadmin', 'admin')
+    uid      = user['id']
     conn = get_db()
     rows = conn.execute("SELECT * FROM projects ORDER BY id DESC").fetchall()
     conn.close()
     result = []
     for r in rows:
-        d      = dict(r)
-        linked = json.loads(d.get('linked_cases') or '[]')
-        extra  = json.loads(d.get('data_json')    or '{}')
+        d        = dict(r)
+        linked   = json.loads(d.get('linked_cases')      or '[]')
+        extra    = json.loads(d.get('data_json')         or '{}')
+        assigned = json.loads(d.get('assigned_user_ids') or '[]')
+        # 非 admin：只看到已被分配到的專案
+        if not is_admin and uid not in assigned:
+            continue
         if status  and d['status'] != status:               continue
         if case_no and case_no not in linked:               continue
         if q:
             ql = q.lower()
             if not (ql in d.get('name','').lower() or ql in d.get('code','').lower()):
                 continue
-        d['linked_cases'] = linked
-        d['data_json']    = extra
+        d['linked_cases']      = linked
+        d['data_json']         = extra
+        d['assigned_user_ids'] = assigned
         result.append(d)
     return {"items": result}
 
@@ -118,8 +138,9 @@ def get_project(project_id: int, authorization: str = Header(None)):
     if not row:
         raise HTTPException(404, "專案不存在")
     d = dict(row)
-    d['linked_cases'] = json.loads(d.get('linked_cases') or '[]')
-    d['data_json']    = json.loads(d.get('data_json')    or '{}')
+    d['linked_cases']      = json.loads(d.get('linked_cases')      or '[]')
+    d['data_json']         = json.loads(d.get('data_json')         or '{}')
+    d['assigned_user_ids'] = json.loads(d.get('assigned_user_ids') or '[]')
     return d
 
 
@@ -159,6 +180,25 @@ def update_project_status(project_id: int, body: dict = Body(...), authorization
     conn.commit()
     conn.close()
     _audit(_tok(authorization), 'project.status', 'project', row['code'], f"{row['name']} → {new_status}")
+    return {"ok": True}
+
+
+@router.patch("/api/projects/{project_id}/assigned-users")
+def update_project_assigned_users(project_id: int, body: dict = Body(...), authorization: str = Header(None)):
+    user = _require_user(authorization)
+    if user['role'] not in ('superadmin', 'admin'):
+        raise HTTPException(403, "僅管理員可設定成員分配")
+    user_ids = [int(uid) for uid in (body.get('user_ids') or []) if uid]
+    conn = get_db()
+    row = conn.execute("SELECT code, name FROM projects WHERE id=?", (project_id,)).fetchone()
+    if not row:
+        conn.close(); raise HTTPException(404, "專案不存在")
+    conn.execute("UPDATE projects SET assigned_user_ids=? WHERE id=?",
+                 (json.dumps(user_ids, ensure_ascii=False), project_id))
+    conn.commit()
+    conn.close()
+    _audit(_tok(authorization), 'project.assign', 'project', row['code'],
+           f"{row['name']} 分配 {len(user_ids)} 位成員")
     return {"ok": True}
 
 
@@ -348,7 +388,8 @@ async def upload_project_photos(
 
     existing = json.loads(row['photos'] or '[]')
     today    = datetime.now().strftime('%Y-%m-%d')
-    save_dir = os.path.join(_PHOTO_UPLOAD_BASE, str(project_id), today)
+    base_dir, url_prefix = _photo_root()
+    save_dir = os.path.join(base_dir, str(project_id), today)
     os.makedirs(save_dir, exist_ok=True)
 
     new_photos = []
@@ -362,7 +403,7 @@ async def upload_project_photos(
         new_photos.append({
             "id":          uuid.uuid4().hex[:8],
             "filename":    fname,
-            "path":        f"projects/{project_id}/{today}/{fname}",
+            "path":        f"{url_prefix}/{project_id}/{today}/{fname}",
             "gps":         gps_str,
             "watermark":   wm_str,
             "uploaded_by": user['display_name'],

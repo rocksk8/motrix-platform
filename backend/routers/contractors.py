@@ -75,6 +75,40 @@ def _stamp_id_card(data_uri: str) -> str:
     encoded = base64.b64encode(buf.getvalue()).decode()
     return f"data:image/jpeg;base64,{encoded}"
 
+
+def _stamp_passbook(data_uri: str) -> str:
+    """在銀行存簿影本底部加用途說明橫幅後回傳 data URI（JPEG）。"""
+    if not data_uri or not data_uri.startswith("data:image/"):
+        return data_uri
+    _, b64 = data_uri.split(",", 1)
+    img = Image.open(io.BytesIO(base64.b64decode(b64))).convert("RGBA")
+    w, h = img.size
+    MAX_W = 1800
+    if w > MAX_W:
+        ratio = MAX_W / w
+        img = img.resize((MAX_W, int(h * ratio)), Image.LANCZOS)
+        w, h = img.size
+
+    overlay = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(overlay)
+    banner_h = max(28, int(h * 0.055))
+    draw.rectangle([0, h - banner_h, w, h], fill=(0, 80, 160, 210))
+    b_size = max(10, int(banner_h * 0.50))
+    try:
+        b_font = ImageFont.truetype(_FONT_PATH, b_size)
+    except Exception:
+        b_font = ImageFont.load_default()
+    draw.text((w // 2, h - banner_h // 2),
+              "本影本依法留存，僅供勞務報酬匯款核對使用，不得挪作其他用途",
+              font=b_font, fill=(255, 255, 255, 255), anchor="mm")
+
+    result = Image.alpha_composite(img, overlay).convert("RGB")
+    buf = io.BytesIO()
+    result.save(buf, format="JPEG", quality=88)
+    encoded = base64.b64encode(buf.getvalue()).decode()
+    return f"data:image/jpeg;base64,{encoded}"
+
+
 router = APIRouter()
 
 _LIST_COLS = (
@@ -83,7 +117,8 @@ _LIST_COLS = (
     "bank_code, bank_name, bank_branch, bank_account_name, bank_account_number, "
     "notes, active, created_at, updated_at, "
     "(CASE WHEN (id_card_image != '' AND id_card_image IS NOT NULL) OR "
-    "(id_card_image_back != '' AND id_card_image_back IS NOT NULL) THEN 1 ELSE 0 END) AS has_id_card"
+    "(id_card_image_back != '' AND id_card_image_back IS NOT NULL) THEN 1 ELSE 0 END) AS has_id_card, "
+    "(CASE WHEN bank_passbook_image != '' AND bank_passbook_image IS NOT NULL THEN 1 ELSE 0 END) AS has_passbook"
 )
 
 
@@ -108,14 +143,15 @@ def _row_to_dict(row) -> dict:
     d = dict(row)
     d['has_union_insurance'] = bool(d.get('has_union_insurance', 0))
     d['active'] = bool(d.get('active', 1))
-    d['has_id_card'] = bool(d.get('has_id_card', 0))
+    d['has_id_card']   = bool(d.get('has_id_card', 0))
+    d['has_passbook']  = bool(d.get('has_passbook', 0))
     return d
 
 
 @router.get("/api/contractors")
 def list_contractors(q: Optional[str] = None, active_only: bool = True,
                      authorization: str = Header(None)):
-    _require_user(authorization, require_superadmin=True)
+    _require_user(authorization, require_superadmin=True, module='contractor_list')
     conn = get_db()
     sql = f"SELECT {_LIST_COLS} FROM contractors"
     params = []
@@ -135,7 +171,7 @@ def list_contractors(q: Optional[str] = None, active_only: bool = True,
 
 @router.post("/api/contractors", status_code=201)
 def create_contractor(body: ContractorIn, authorization: str = Header(None)):
-    user = _require_user(authorization, require_superadmin=True)
+    user = _require_user(authorization, require_superadmin=True, module='contractor_list')
     now = datetime.now().isoformat()
     conn = get_db()
     cur = conn.execute("""
@@ -161,7 +197,7 @@ def create_contractor(body: ContractorIn, authorization: str = Header(None)):
 
 @router.get("/api/contractors/{cid}")
 def get_contractor(cid: int, authorization: str = Header(None)):
-    _require_user(authorization, require_superadmin=True)
+    _require_user(authorization, require_superadmin=True, module='contractor_list')
     conn = get_db()
     row = conn.execute("SELECT * FROM contractors WHERE id=?", (cid,)).fetchone()
     conn.close()
@@ -172,7 +208,7 @@ def get_contractor(cid: int, authorization: str = Header(None)):
 
 @router.put("/api/contractors/{cid}")
 def update_contractor(cid: int, body: ContractorIn, authorization: str = Header(None)):
-    _require_user(authorization, require_superadmin=True)
+    _require_user(authorization, require_superadmin=True, module='contractor_list')
     now = datetime.now().isoformat()
     conn = get_db()
     res = conn.execute("""
@@ -217,17 +253,18 @@ def toggle_contractor_active(cid: int, authorization: str = Header(None)):
 
 @router.get("/api/contractors/{cid}/id-card")
 def get_id_card(cid: int, authorization: str = Header(None)):
-    _require_user(authorization, require_superadmin=True)
+    _require_user(authorization, require_superadmin=True, module='contractor_list')
     conn = get_db()
     row = conn.execute(
-        "SELECT id_card_image, id_card_image_back FROM contractors WHERE id=?", (cid,)
+        "SELECT id_card_image, id_card_image_back, bank_passbook_image FROM contractors WHERE id=?", (cid,)
     ).fetchone()
     conn.close()
     if not row:
         raise HTTPException(404, "找不到此外包人員")
-    front = row["id_card_image"] or ""
-    back  = row["id_card_image_back"] or ""
-    return {"image_front": front, "image_back": back, "image_data": front}
+    front    = row["id_card_image"] or ""
+    back     = row["id_card_image_back"] or ""
+    passbook = row["bank_passbook_image"] or ""
+    return {"image_front": front, "image_back": back, "image_data": front, "bank_passbook": passbook}
 
 
 @router.put("/api/contractors/{cid}/id-card")
@@ -235,29 +272,34 @@ def upload_id_card(cid: int, body: dict = Body(...), authorization: str = Header
     _require_user(authorization, require_superadmin=True)
     image_front = body.get("image_front", body.get("image_data", ""))
     image_back  = body.get("image_back", "")
-    for img in (image_front, image_back):
+    passbook    = body.get("bank_passbook", "")
+    for img in (image_front, image_back, passbook):
         if img and not img.startswith("data:image/"):
             raise HTTPException(400, "無效的圖片格式，需為 data URI")
-    # 伺服器端加浮水印
+    # 身分證加法律浮水印；存簿加輕量用途說明浮水印
     if image_front:
         try: image_front = _stamp_id_card(image_front)
         except Exception: pass
     if image_back:
         try: image_back = _stamp_id_card(image_back)
         except Exception: pass
+    if passbook:
+        try: passbook = _stamp_passbook(passbook)
+        except Exception: pass
     now = datetime.now().isoformat()
     conn = get_db()
     res = conn.execute(
-        "UPDATE contractors SET id_card_image=?, id_card_image_back=?, updated_at=? WHERE id=?",
-        (image_front, image_back, now, cid)
+        "UPDATE contractors SET id_card_image=?, id_card_image_back=?, bank_passbook_image=?, updated_at=? WHERE id=?",
+        (image_front, image_back, passbook, now, cid)
     )
     conn.commit()
     conn.close()
     if res.rowcount == 0:
         raise HTTPException(404, "找不到此外包人員")
     parts = []
-    if image_front: parts.append("正面")
-    if image_back:  parts.append("反面")
-    label = f"上傳身分證影本（{'、'.join(parts)}）" if parts else "移除身分證影本"
+    if image_front: parts.append("身分證正面")
+    if image_back:  parts.append("身分證反面")
+    if passbook:    parts.append("銀行存簿")
+    label = f"上傳影本（{'、'.join(parts)}）" if parts else "移除影本"
     _audit(_tok(authorization), 'contractor.id_card.update', 'contractor', str(cid), label)
     return {"ok": True, "updated_at": now}

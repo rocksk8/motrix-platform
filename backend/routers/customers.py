@@ -7,7 +7,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Header
 from pydantic import BaseModel
 
-from db import get_db
+from db import get_db, next_entity_code
 from helpers import _require_user, _tok, _audit
 from archive import _backup_customers
 
@@ -26,14 +26,15 @@ def list_customers(authorization: str = Header(None)):
     _require_user(authorization)
     conn = get_db()
     rows = conn.execute(
-        "SELECT id, name, tax_id, phone, data_json, created_at, updated_at FROM customers ORDER BY name"
+        "SELECT id, code, name, tax_id, phone, data_json, created_at, updated_at FROM customers ORDER BY name"
     ).fetchall()
     conn.close()
     result = []
     for row in rows:
         d = json.loads(row["data_json"] or "{}")
         result.append({
-            "id": row["id"], "name": row["name"],
+            "id": row["id"], "code": row["code"] or "",
+            "name": row["name"],
             "taxId": row["tax_id"], "phone": row["phone"],
             "createdAt": row["created_at"], "updatedAt": row["updated_at"],
             **d
@@ -46,19 +47,21 @@ def get_customer(cid: int, authorization: str = Header(None)):
     _require_user(authorization)
     conn = get_db()
     row  = conn.execute(
-        "SELECT id, name, tax_id, phone, data_json, created_at, updated_at FROM customers WHERE id=?", (cid,)
+        "SELECT id, code, name, tax_id, phone, data_json, created_at, updated_at FROM customers WHERE id=?", (cid,)
     ).fetchone()
     conn.close()
     if not row:
         raise HTTPException(404, "客戶不存在")
     d = json.loads(row["data_json"] or "{}")
-    return {"id": row["id"], "name": row["name"],
+    return {"id": row["id"], "code": row["code"] or "",
+            "name": row["name"],
             "taxId": row["tax_id"], "phone": row["phone"],
             "createdAt": row["created_at"], "updatedAt": row["updated_at"], **d}
 
 
 @router.post("/api/customers")
 def create_customer(body: CustomerIn, authorization: str = Header(None)):
+    _require_user(authorization)
     now = datetime.now().isoformat()
     conn = get_db()
     try:
@@ -69,17 +72,21 @@ def create_customer(body: CustomerIn, authorization: str = Header(None)):
         )
         conn.commit()
         cid = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        code = next_entity_code(conn, 'customers', 'C')
+        conn.execute("UPDATE customers SET code=? WHERE id=?", (code, cid))
+        conn.commit()
     except Exception as e:
         conn.close()
         raise HTTPException(409, f"建立失敗：{e}")
     conn.close()
     threading.Thread(target=_backup_customers, daemon=True).start()
     _audit(_tok(authorization), 'customer.create', 'customer', body.name, body.name)
-    return {"id": cid, "name": body.name}
+    return {"id": cid, "name": body.name, "code": code}
 
 
 @router.put("/api/customers/{cid}")
 def update_customer(cid: int, body: CustomerIn, authorization: str = Header(None)):
+    _require_user(authorization)
     now = datetime.now().isoformat()
     conn = get_db()
     if not conn.execute("SELECT id FROM customers WHERE id=?", (cid,)).fetchone():
@@ -99,6 +106,7 @@ def update_customer(cid: int, body: CustomerIn, authorization: str = Header(None
 
 @router.patch("/api/customers/{cid}/visits")
 def update_customer_visits(cid: int, body: dict, authorization: str = Header(None)):
+    _require_user(authorization)
     conn = get_db()
     row = conn.execute(
         "SELECT name, data_json, updated_at FROM customers WHERE id=?", (cid,)
@@ -130,6 +138,7 @@ def update_customer_visits(cid: int, body: dict, authorization: str = Header(Non
 
 @router.delete("/api/customers/{cid}")
 def delete_customer(cid: int, authorization: str = Header(None)):
+    _require_user(authorization)
     conn = get_db()
     row = conn.execute("SELECT name FROM customers WHERE id=?", (cid,)).fetchone()
     if not row:

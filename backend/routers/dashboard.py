@@ -1,5 +1,6 @@
 """Dashboard stats, monthly chart, devices, receivables, GCIS lookup, sales orders, materials."""
 import json
+import logging
 import urllib.request
 import urllib.parse
 from datetime import datetime, date
@@ -11,18 +12,33 @@ from db import get_db
 from helpers import _require_user, _warranty_expiry
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
+_GCIS_UA = "Mozilla/5.0 (compatible; MOTRIX-ERP/1.0)"
 
 # ── GCIS helpers ──────────────────────────────────────────────────────────────
 
-def _gcis_get(url: str) -> list:
+_GCIS_OK   = "ok"
+_GCIS_NONE = "not_found"
+_GCIS_ERR  = "network_error"
+
+def _gcis_get(url: str) -> tuple:
+    """Returns (data_list, status) where status is _GCIS_OK / _GCIS_NONE / _GCIS_ERR."""
     try:
-        req = urllib.request.Request(url, headers={"Accept": "application/json"})
+        req = urllib.request.Request(
+            url, headers={"Accept": "application/json", "User-Agent": _GCIS_UA}
+        )
         with urllib.request.urlopen(req, timeout=10) as r:
-            data = json.loads(r.read().decode("utf-8"))
-            return data if isinstance(data, list) else []
-    except Exception:
-        return []
+            raw = r.read()
+            if not raw or not raw.strip():
+                return [], _GCIS_NONE
+            data = json.loads(raw.decode("utf-8"))
+            if isinstance(data, list) and data:
+                return data, _GCIS_OK
+            return [], _GCIS_NONE
+    except Exception as exc:
+        logger.warning("GCIS lookup failed: %s %s", type(exc).__name__, exc)
+        return [], _GCIS_ERR
 
 
 def _normalize(d: dict) -> dict:
@@ -47,11 +63,15 @@ def server_now():
 def lookup_by_tax(tax_id: str):
     if not tax_id.isdigit() or len(tax_id) != 8:
         raise HTTPException(400, "統一編號須為 8 位數字")
-    flt  = urllib.parse.quote(f"Business_Accounting_NO eq {tax_id}")
-    data = _gcis_get(f"{GCIS_COMPANY}?$format=json&$filter={flt}&$skip=0&$top=1")
+    flt = urllib.parse.quote(f"Business_Accounting_NO eq {tax_id}")
+    data, st = _gcis_get(f"{GCIS_COMPANY}?$format=json&$filter={flt}&$skip=0&$top=1")
     if not data:
-        data = _gcis_get(f"{GCIS_BUSINESS}?$format=json&$filter={flt}&$skip=0&$top=1")
+        data, st2 = _gcis_get(f"{GCIS_BUSINESS}?$format=json&$filter={flt}&$skip=0&$top=1")
+        if st == _GCIS_ERR or st2 == _GCIS_ERR:
+            st = _GCIS_ERR
     if not data:
+        if st == _GCIS_ERR:
+            raise HTTPException(503, "政府資料庫暫時無法連線，請確認伺服器網路或稍後再試")
         raise HTTPException(404, "查無此統一編號")
     return _normalize(data[0])
 
@@ -60,10 +80,12 @@ def lookup_by_tax(tax_id: str):
 def search_by_name(q: str = Query(..., min_length=2)):
     q_safe = q.replace("'", "''")
     flt_c  = urllib.parse.quote(f"Company_Name like '%{q_safe}%'", safe='')
-    data   = _gcis_get(f"{GCIS_COMPANY}?$format=json&$filter={flt_c}&$skip=0&$top=15")
+    data, st = _gcis_get(f"{GCIS_COMPANY}?$format=json&$filter={flt_c}&$skip=0&$top=15")
     if not data:
         flt_b = urllib.parse.quote(f"Business_Name like '%{q_safe}%'", safe='')
-        data  = _gcis_get(f"{GCIS_BUSINESS}?$format=json&$filter={flt_b}&$skip=0&$top=15")
+        data, st = _gcis_get(f"{GCIS_BUSINESS}?$format=json&$filter={flt_b}&$skip=0&$top=15")
+    if st == _GCIS_ERR and not data:
+        raise HTTPException(503, "政府資料庫暫時無法連線，請確認伺服器網路或稍後再試")
     return [_normalize(d) for d in data]
 
 
@@ -96,14 +118,26 @@ def dashboard_stats(authorization: str = Header(None)):
     active_count  = sum(1 for r in rows if r["deal_tag"] == "已成案")
     closed_count  = sum(1 for r in rows if r["deal_tag"] == "已結案")
 
+    my_username = u["username"]
+    waiting_for_me_count = 0
     pending_list = []
     for r in rows:
-        if r["status"] != "待審核":
-            continue
         try:
             appr = json.loads(r["approval_json"] or "{}")
         except Exception:
             appr = {}
+
+        if r["status"] in ("待審核", "簽核中") and can_quotation:
+            tiers   = appr.get("tiers") or []
+            cur_idx = appr.get("currentTier") or 0
+            if 0 <= cur_idx < len(tiers):
+                tier_approvers = tiers[cur_idx].get("approvers") or []
+                if any(a.get("username") == my_username and a.get("status") != "approved"
+                       for a in tier_approvers):
+                    waiting_for_me_count += 1
+
+        if r["status"] != "待審核":
+            continue
         pending_list.append({
             "quoteNo":     r["quote_no"],
             "customer":    r["customer_name"] or "",
@@ -259,6 +293,7 @@ def dashboard_stats(authorization: str = Header(None)):
     return {
         "totalQuotes":       total_count,
         "pendingQuotes":     pending_count if can_quotation else 0,
+        "waitingForMe":      waiting_for_me_count,
         "sentQuotes":        sent_count,
         "activeCases":       active_count,
         "closedCases":       closed_count,
@@ -536,6 +571,100 @@ def list_sales_orders(authorization: str = Header(None)):
             "stagesCount":    len(stages),
         })
     return {"items": items, "total": len(items)}
+
+
+@router.get("/api/dashboard/funnel")
+def dashboard_funnel(authorization: str = Header(None)):
+    """銷售漏斗：Win Rate + 待追蹤報價（已送出>14天未回應 / 有效期快到期）"""
+    u = _require_user(authorization)
+    role = u["role"]
+    mods = json.loads(u.get("modules") or "[]") if isinstance(u.get("modules"), str) else (u.get("modules") or [])
+    can_quotation = role in ("superadmin", "admin", "sales") or "quotation" in mods
+
+    if not can_quotation:
+        return {"funnel": {}, "followUpQuotes": [], "expiringQuotes": []}
+
+    conn = get_db()
+    rows = conn.execute("""
+        SELECT quote_no, status, customer_name, total, quote_date, sales_person,
+               COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') AS deal_tag,
+               json_extract(data_json,'$.validDays') AS valid_days
+        FROM quotations
+        WHERE status NOT IN ('草稿')
+        ORDER BY quote_date DESC
+    """).fetchall()
+    conn.close()
+
+    today = date.today()
+    total_submitted = 0
+    won_count = 0
+    lost_count = 0
+    pending_response = 0
+    follow_up_quotes = []
+    expiring_quotes = []
+    seen_expiring = set()
+
+    for r in rows:
+        deal_tag = r["deal_tag"] or ""
+        status   = r["status"]
+        total_submitted += 1
+
+        if deal_tag in ("已成案", "已結案"):
+            won_count += 1
+        elif deal_tag == "未成案":
+            lost_count += 1
+        elif status == "已送出" and not deal_tag:
+            pending_response += 1
+            qdate_str = (r["quote_date"] or "")[:10]
+            try:
+                qdate = date.fromisoformat(qdate_str)
+                days_since = (today - qdate).days
+            except Exception:
+                days_since = 0
+            try:
+                valid_days = int(r["valid_days"] or 30)
+            except Exception:
+                valid_days = 30
+            valid_days_left = valid_days - days_since
+
+            if days_since >= 14:
+                follow_up_quotes.append({
+                    "quoteNo":       r["quote_no"],
+                    "customer":      r["customer_name"] or "",
+                    "total":         r["total"] or 0,
+                    "salesPerson":   r["sales_person"] or "",
+                    "quoteDate":     r["quote_date"] or "",
+                    "daysSinceSent": days_since,
+                    "validDaysLeft": valid_days_left,
+                })
+            if 0 < valid_days_left <= 3 and r["quote_no"] not in seen_expiring:
+                seen_expiring.add(r["quote_no"])
+                expiring_quotes.append({
+                    "quoteNo":      r["quote_no"],
+                    "customer":     r["customer_name"] or "",
+                    "total":        r["total"] or 0,
+                    "salesPerson":  r["sales_person"] or "",
+                    "quoteDate":    r["quote_date"] or "",
+                    "validDaysLeft": valid_days_left,
+                })
+
+    decided  = won_count + lost_count
+    win_rate = round(won_count / decided * 100, 1) if decided > 0 else None
+
+    follow_up_quotes.sort(key=lambda x: x["daysSinceSent"], reverse=True)
+    expiring_quotes.sort(key=lambda x: x["validDaysLeft"])
+
+    return {
+        "funnel": {
+            "totalSubmitted":  total_submitted,
+            "won":             won_count,
+            "lost":            lost_count,
+            "pendingResponse": pending_response,
+            "winRate":         win_rate,
+        },
+        "followUpQuotes": follow_up_quotes[:10],
+        "expiringQuotes": expiring_quotes[:5],
+    }
 
 
 @router.get("/api/materials-summary")

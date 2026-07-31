@@ -8,28 +8,15 @@ echo   MOTRIX ERP - Restart Server
 echo ======================================
 echo.
 
-echo [1/4] Killing all Python processes on port 666...
-for /f "tokens=5" %%p in ('netstat -ano ^| findstr ":666 "') do (
-    echo   Kill PID %%p
-    taskkill /F /PID %%p >nul 2>&1
-)
-timeout /t 1 /nobreak >nul
+echo [1/4] Stopping server on port 666...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$conn = Get-NetTCPConnection -LocalPort 666 -State Listen -ErrorAction SilentlyContinue; if ($conn) { $p = $conn.OwningProcess; Write-Host '  Kill PID' $p '(listening)'; Stop-Process -Id $p -Force -ErrorAction SilentlyContinue; $wmi = Get-WmiObject Win32_Process -Filter ('ProcessId=' + $p) -ErrorAction SilentlyContinue; if ($wmi -and $wmi.ParentProcessId -gt 4) { Write-Host '  Kill parent PID' $wmi.ParentProcessId; Stop-Process -Id $wmi.ParentProcessId -Force -ErrorAction SilentlyContinue } } else { Write-Host '  Port 666 not in use.' }"
 
-echo [2/4] Force-kill any remaining uvicorn / python holding port 666...
-taskkill /F /IM uvicorn.exe >nul 2>&1
-for /f "tokens=5" %%p in ('netstat -ano ^| findstr ":666 "') do (
-    taskkill /F /PID %%p >nul 2>&1
-)
+echo [2/4] Kill remaining uvicorn / multiprocessing workers...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-WmiObject Win32_Process | Where-Object { $_.CommandLine -like '*uvicorn*main:app*' -or $_.CommandLine -like '*spawn_main*parent_pid*' } | ForEach-Object { Write-Host '  Kill PID' $_.ProcessId; Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"
 timeout /t 2 /nobreak >nul
 
 echo [3/4] Verify port 666 is free...
-netstat -ano | findstr ":666 " | findstr "LISTENING" >nul 2>&1
-if %ERRORLEVEL% EQU 0 (
-    echo   WARNING: port 666 still occupied, waiting extra 3s...
-    timeout /t 3 /nobreak >nul
-) else (
-    echo   Port 666 is free.
-)
+powershell -NoProfile -Command "if (Get-NetTCPConnection -LocalPort 666 -State Listen -ErrorAction SilentlyContinue) { Write-Host '  WARNING: port still occupied, waiting 3s...'; Start-Sleep 3 } else { Write-Host '  Port 666 is free.' }"
 
 echo.
 echo [4/4] Starting new server (port 666)...
@@ -44,9 +31,6 @@ echo.
 echo   Ctrl+C to stop
 echo ======================================
 echo.
-
-if not exist "logs" mkdir "logs"
-echo [%date% %time%] Manual restart >> "logs\server.log"
 
 uvicorn main:app --port 666 --host 0.0.0.0 --log-level info
 pause

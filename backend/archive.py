@@ -12,12 +12,12 @@ from helpers import _cleanup_sessions
 
 logger = logging.getLogger(__name__)
 
-_ARCHIVE_BASE = r"G:\我的雲端硬碟\系統存檔"
+_ARCHIVE_BASE = r"H:\我的雲端硬碟\系統存檔"
 _REALTIME_DIR = os.path.join(_ARCHIVE_BASE, "即時備份")
 _WEEKLY_DIR   = os.path.join(_ARCHIVE_BASE, "週備份")
 _DAILY_DIR    = os.path.join(_ARCHIVE_BASE, "每日備份")
 
-# Local always-on paths (independent of G: mount)
+# Local always-on paths (independent of H: mount)
 _BACKEND_DIR      = os.path.dirname(os.path.abspath(__file__))
 _PROJECT_ROOT     = os.path.dirname(_BACKEND_DIR)
 _LOCAL_DB_BACKUP  = os.path.join(_BACKEND_DIR, "db_backups")
@@ -67,6 +67,7 @@ def _write_backup_alert(reason: str, level: str = "WARN") -> None:
     - project folder backup_alerts/BACKUP_ALERT.txt (overwritten)
     - dated log line under backup_alerts/YYYY-MM-DD.log
     - audit_log (throttled once per day for same reason key)
+    - Email to admin/superadmin when level=="ERROR" (throttled daily)
     """
     try:
         os.makedirs(_ALERT_DIR, exist_ok=True)
@@ -77,7 +78,7 @@ def _write_backup_alert(reason: str, level: str = "WARN") -> None:
             f"原因: {reason}\n"
             f"\n"
             f"請確認：\n"
-            f"1. Google 雲端硬碟是否已掛載為 G: 且可存取「我的雲端硬碟\\系統存檔」\n"
+            f"1. Google 雲端硬碟是否已掛載為 H: 且可存取「我的雲端硬碟\\系統存檔」\n"
             f"2. 本機 SQLite 快照是否仍存在於 backend\\db_backups\\\n"
             f"3. 處理完成後可刪除本檔；系統會在問題持續時再次寫入\n"
         )
@@ -110,9 +111,41 @@ def _write_backup_alert(reason: str, level: str = "WARN") -> None:
                 f.write(reason_key + "\n")
             open(throttle, "a").close()
 
+            # Email alert for ERROR-level failures (throttled via same daily marker)
+            if level == "ERROR":
+                _send_backup_error_email(reason, now)
+
         logger.warning("BACKUP ALERT: %s", reason)
     except Exception:
         logger.exception("_write_backup_alert failed")
+
+
+def _send_backup_error_email(reason: str, ts: str) -> None:
+    """Send async email to all admin/superadmin on ERROR-level backup failure."""
+    try:
+        from helpers.email_notify import _admin_emails, _async_send
+        to = _admin_emails()
+        if not to:
+            return
+        html = (
+            "<div style='font-family:Arial,sans-serif;padding:24px;max-width:600px'>"
+            "<h2 style='color:#DC2626'>⚠ MOTRIX ERP — 備份嚴重錯誤</h2>"
+            f"<p style='color:#374151'>發生時間：{ts}</p>"
+            "<div style='background:#FEE2E2;border:1px solid #FCA5A5;border-radius:6px;"
+            "padding:12px 16px;margin:12px 0'>"
+            f"<strong>錯誤原因：</strong><br>{reason}</div>"
+            "<p style='color:#374151'>請儘速確認：</p>"
+            "<ol style='color:#374151'>"
+            "<li>Google 雲端硬碟是否已掛載為 H:（可存取「我的雲端硬碟/系統存檔」）</li>"
+            "<li>本機 SQLite 快照（<code>backend/db_backups/</code>）是否仍存在</li>"
+            "<li>伺服器磁碟空間是否不足</li>"
+            "</ol>"
+            "<p style='color:#6B7280;font-size:12px'>此訊息每日每類錯誤最多寄送一次。</p>"
+            "</div>"
+        )
+        _async_send(to, "[MOTRIX] ⚠ 備份嚴重錯誤警示", html)
+    except Exception:
+        logger.exception("_send_backup_error_email failed")
 
 
 def _clear_backup_alert_if_healthy() -> None:
@@ -250,10 +283,10 @@ def _backup_quotation(quote_no: str):
             _atomic_json_write(path, payload)
             return
         except Exception as e:
-            logger.exception("_backup_quotation G: write failed for %s", quote_no)
-            _write_backup_alert(f"即時備份報價單失敗（G:）{quote_no}: {e}")
+            logger.exception("_backup_quotation H: write failed for %s", quote_no)
+            _write_backup_alert(f"即時備份報價單失敗（H:）{quote_no}: {e}")
 
-    # G: unavailable — write to local instant-backup dir
+    # H: unavailable — write to local instant-backup dir
     try:
         local_dir = os.path.join(_LOCAL_DB_BACKUP, "quotation_instant")
         os.makedirs(local_dir, exist_ok=True)
@@ -304,7 +337,7 @@ def _backup_suppliers():
 
 
 def _daily_backup():
-    # Always snapshot SQLite locally first (independent of G:)
+    # Always snapshot SQLite locally first (independent of H:)
     _snapshot_sqlite(also_to_cloud=True)
 
     if not _archive_ok():
@@ -332,6 +365,7 @@ def _daily_backup():
             "專案":       "SELECT * FROM projects ORDER BY id",
             "稽核紀錄":   "SELECT * FROM audit_log ORDER BY id",
             "通知":       "SELECT * FROM notifications ORDER BY id",
+            "模組版本":   "SELECT * FROM module_versions ORDER BY id",
         }
         summary: dict = {"date": today_label, "exported_at": now}
         for fname, sql in tables.items():

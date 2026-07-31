@@ -154,6 +154,16 @@ _MODULE_ACTION_PREFIXES: dict = {
     "projects":   ("project.",),
 }
 
+# Actions that should NOT contribute to the module badge (e.g. deletion meta-events)
+_MODULE_EXCLUDE_ACTIONS: dict = {
+    "dev_crm": (
+        "dev_case.delete",
+        "dev_case.delete_request",
+        "dev_case.delete_cancel",
+        "dev_case.delete_reject",
+    ),
+}
+
 
 @router.post("/api/audit-log/module-counts")
 def audit_module_counts(body: dict = Body(...), authorization: str = Header(None)):
@@ -172,10 +182,17 @@ def audit_module_counts(body: dict = Body(...), authorization: str = Header(None
                 continue
             conds = " OR ".join("action LIKE ?" for _ in prefixes)
             params = [p + "%" for p in prefixes] + [since_ts, user["username"]]
-            count = conn.execute(
-                f"SELECT COUNT(*) FROM audit_log WHERE ({conds}) AND at > ? AND username != ?",
-                params,
-            ).fetchone()[0]
+            excl = _MODULE_EXCLUDE_ACTIONS.get(mod_key, ())
+            if excl:
+                excl_ph = ", ".join("?" for _ in excl)
+                sql = (f"SELECT COUNT(*) FROM audit_log "
+                       f"WHERE ({conds}) AND at > ? AND username != ? "
+                       f"AND action NOT IN ({excl_ph})")
+                params = params + list(excl)
+            else:
+                sql = (f"SELECT COUNT(*) FROM audit_log "
+                       f"WHERE ({conds}) AND at > ? AND username != ?")
+            count = conn.execute(sql, params).fetchone()[0]
             result[mod_key] = count
     finally:
         conn.close()

@@ -4,11 +4,27 @@ from datetime import datetime
 
 from db import get_db
 
-# Prefer real columns; fall back to data_json for rows not yet re-saved.
+# Prefer real columns; fall back to data_json for rows not yet re-saved (pre-v6 backward compat).
+# IMPORTANT: never use bare `SELECT deal_tag` — always use SQL_DEAL_TAG to correctly read pre-v6 rows.
 SQL_DEAL_TAG = "COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '')"
 SQL_SETTLE_STATUS = (
     "COALESCE(NULLIF(settle_status,''), json_extract(data_json,'$.settlement.status'), '')"
 )
+
+
+def _steps_to_tiers(steps: list) -> list:
+    """Convert old single-approver steps list to modern tiers list (no status fields)."""
+    return [
+        {
+            "order": i,
+            "approvers": [{
+                "userId":      s.get("userId", 0),
+                "username":    s.get("username", ""),
+                "displayName": s.get("displayName", s.get("username", "")),
+            }],
+        }
+        for i, s in enumerate(steps)
+    ]
 
 
 def quote_hot_fields(q: dict) -> tuple:

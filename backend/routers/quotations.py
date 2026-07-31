@@ -1,5 +1,6 @@
 """Quotation CRUD, approval workflow, deal-tag, export endpoints."""
 import json
+import logging
 import sqlite3
 import threading
 from collections import defaultdict
@@ -7,14 +8,18 @@ from datetime import datetime
 from typing import Optional
 from urllib.parse import quote as urlquote
 
-from fastapi import APIRouter, HTTPException, Header
+logger = logging.getLogger(__name__)
+
+from fastapi import APIRouter, Body, HTTPException, Header
 from fastapi.responses import Response
 from pydantic import BaseModel
 
 from db import get_db
 from helpers import (
     _require_user, _tok, _audit, _notify, _get_setting,
-    quote_hot_fields, save_quotation_json, SQL_DEAL_TAG, SQL_SETTLE_STATUS,
+    quote_hot_fields, save_quotation_json, _steps_to_tiers, SQL_DEAL_TAG, SQL_SETTLE_STATUS,
+    notify_approval_request, notify_next_tier, notify_approved,
+    notify_returned, notify_resubmit_requester, notify_settlement_finalized,
 )
 from archive import _backup_quotation
 from pdf_gen import _generate_quotation_pdf, generate_pdf_bytes
@@ -40,8 +45,7 @@ def _setting_to_active_tiers(setting: dict) -> list:
     """Convert settings format (tiers or old steps) → list of active tier dicts with status fields."""
     tiers = setting.get("tiers") or []
     if not tiers:
-        steps = setting.get("steps") or []
-        tiers = [{"order": i, "approvers": [s]} for i, s in enumerate(steps)]
+        tiers = _steps_to_tiers(setting.get("steps") or [])
     return [
         {
             "order": t.get("order", i),
@@ -62,7 +66,9 @@ def _setting_to_active_tiers(setting: dict) -> list:
 
 
 def _active_tiers(appr: dict) -> list:
-    """Read tiers from active approval object (backward-compat: old steps → single-approver tiers)."""
+    """Read tiers from active approval object (backward-compat: old steps → single-approver tiers).
+    NOTE: parallel backward-compat logic exists in system.py _normalize_flow() for the
+    settings read path — keep both in sync when modifying tiers structure."""
     tiers = appr.get("tiers") or []
     if tiers:
         return tiers
@@ -177,7 +183,8 @@ def list_quotations(
         "created_at, updated_at, "
         "COALESCE(json_array_length(json_extract(data_json, '$.editHistory')), 0) as edit_count, "
         "json_extract(data_json, '$.editHistory') as edit_history_json, "
-        f"{SQL_SETTLE_STATUS} as settle_status "
+        f"{SQL_SETTLE_STATUS} as settle_status, "
+        "json_extract(data_json, '$.caseRecord.stages') as stages_json "
         "FROM quotations WHERE 1=1"
     )
     params = []
@@ -205,7 +212,8 @@ def list_quotations(
     items = []
     for r in rows:
         row = dict(r)
-        eh_json = row.pop("edit_history_json", None)
+        eh_json     = row.pop("edit_history_json", None)
+        stages_json = row.pop("stages_json", None)
         edit_last = None
         if eh_json:
             try:
@@ -221,6 +229,16 @@ def list_quotations(
             except Exception:
                 pass
         row["edit_last"] = edit_last
+        current_stage = None
+        if stages_json:
+            try:
+                for s in json.loads(stages_json):
+                    if not s.get("done"):
+                        current_stage = s.get("label") or s.get("name")
+                        break
+            except Exception:
+                pass
+        row["current_stage"] = current_stage
         items.append(row)
     return {"total": count, "items": items}
 
@@ -350,32 +368,82 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
     # ── 待審核：build approval tiers from settings ─────────────────────────────
     if new_status == "待審核":
         appr = q.get("approval") or {}
-        is_new_submission = not appr.get("requestedAt") or is_unlock_edit
+        if is_unlock_edit:
+            is_new_submission = True
+        else:
+            # Frontend pre-sets requestedAt before sending, so we cannot rely on
+            # appr.get("requestedAt") to detect first-time submissions.
+            # Instead, compare against the status currently stored in the DB.
+            _chk = get_db()
+            _old = _chk.execute(
+                "SELECT status FROM quotations WHERE quote_no=?", (quote_no,)
+            ).fetchone()
+            _chk.close()
+            _old_status = (_old["status"] if _old else "草稿")
+            is_new_submission = _old_status not in ("待審核", "簽核中")
         if not appr.get("tiers") and not appr.get("steps"):
             flow_setting = _get_setting("approval_flow", {"tiers": []}) or {}
             active_tiers = _setting_to_active_tiers(flow_setting)
+            logger.warning("approval tiers load — quote=%r is_new=%r flow_tiers=%d active_tiers=%d",
+                           quote_no, is_new_submission, len(flow_setting.get("tiers") or []), len(active_tiers))
             if active_tiers:
                 appr["tiers"]       = active_tiers
                 appr["currentTier"] = 0
+        else:
+            logger.warning("approval tiers already present — quote=%r tiers_count=%d",
+                           quote_no, len(appr.get("tiers") or appr.get("steps") or []))
         q["approval"] = appr
         if is_new_submission:
-            tiers = _active_tiers(appr)
-            cname = q.get("customerName") or ""
-            label = "（解鎖改版）" if appr.get("isEditApproval") else ""
-            msg   = f"報價單 {quote_no}{label}（{cname}）需要您簽核"
-            if tiers:
-                for a in tiers[0].get("approvers", []):
-                    _notify(a["username"], "approval_request", quote_no, quote_no, msg)
+            tiers        = _active_tiers(appr)
+            cname        = q.get("customerName") or ""
+            is_revision  = bool(q.get("returnInfo"))
+            if appr.get("isEditApproval"):
+                label = "（解鎖改版）"
+            elif is_revision:
+                label = "（退回改版）"
             else:
+                label = ""
+            requester = appr.get("requestedBy") or ""
+
+            ct_idx       = appr.get("currentTier", 0)
+            _appr_names  = []   # usernames — for email lookup
+            _appr_labels = []   # display names — for requester confirmation copy
+            if tiers and ct_idx < len(tiers):
+                pending = [a for a in (tiers[ct_idx].get("approvers") or [])
+                           if a.get("status") != "approved"]
+                if ct_idx == 0:
+                    msg = f"報價單 {quote_no}{label}（{cname}）需要您簽核"
+                    for a in pending:
+                        _notify(a["username"], "approval_request", quote_no, quote_no, msg)
+                        _appr_names.append(a["username"])
+                        _appr_labels.append(a.get("displayName") or a["username"])
+                    notify_approval_request(quote_no, cname, _appr_names)
+                else:
+                    msg = (f"報價單 {quote_no}{label}（{cname}）"
+                           f"輪到您簽核（第 {ct_idx + 1} 層 / 共 {len(tiers)} 層）")
+                    for a in pending:
+                        _notify(a["username"], "approval_request", quote_no, quote_no, msg)
+                        _appr_names.append(a["username"])
+                        _appr_labels.append(a.get("displayName") or a["username"])
+                    notify_next_tier(quote_no, cname, ct_idx + 1, len(tiers), _appr_names)
+            elif not tiers:
+                msg = f"報價單 {quote_no}{label}（{cname}）需要您簽核"
                 _conn = get_db()
                 admins = _conn.execute(
                     "SELECT username FROM users WHERE role='superadmin' AND active=1"
                 ).fetchall()
                 _conn.close()
-                requester = appr.get("requestedBy") or ""
                 for adm in admins:
                     if adm["username"] != requester:
                         _notify(adm["username"], "approval_request", quote_no, quote_no, msg)
+                        _appr_names.append(adm["username"])
+                        _appr_labels.append(adm["username"])
+                notify_approval_request(quote_no, cname, _appr_names)
+
+            # If this is a resubmission after rejection, also send confirmation to requester
+            if is_revision and requester:
+                orig_no = (q.get("returnInfo") or {}).get("originalQuoteNo") or quote_no
+                notify_resubmit_requester(quote_no, orig_no, cname, requester, _appr_labels)
 
     tot = q.get("tot", {})
     deal_tag, settle_status = quote_hot_fields(q)
@@ -450,10 +518,26 @@ def update_status(quote_no: str, body: QuotationStatusUpdate, authorization: str
     if body.status not in _STATUS_PATCH_WHITELIST:
         raise HTTPException(400, f"不支援的狀態值：{body.status}")
     conn = get_db()
-    row = conn.execute("SELECT customer_name FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+    row = conn.execute(
+        "SELECT customer_name, status, data_json FROM quotations WHERE quote_no=?", (quote_no,)
+    ).fetchone()
     if not row:
         conn.close()
         raise HTTPException(404, f"報價單 {quote_no} 不存在")
+    # Block bypass: cannot force 已送出 while approval tiers are still pending
+    if body.status == "已送出" and row["status"] in ("待審核", "簽核中"):
+        _d    = json.loads(row["data_json"] or "{}")
+        _appr = _d.get("approval") or {}
+        _tiers = _active_tiers(_appr)
+        if _tiers:
+            _ct = _current_tier_idx(_appr)
+            if _ct < len(_tiers):
+                conn.close()
+                raise HTTPException(
+                    403,
+                    f"此報價單尚有 {len(_tiers) - _ct} 層待完成的簽核，"
+                    "請透過正式簽核流程完成審核，不可直接強制送出"
+                )
     cname = row['customer_name'] or ''
     conn.execute("UPDATE quotations SET status=?, updated_at=? WHERE quote_no=?",
                  (body.status, datetime.now().isoformat(), quote_no))
@@ -470,6 +554,42 @@ def update_status(quote_no: str, body: QuotationStatusUpdate, authorization: str
             actor_name = ""
         threading.Thread(target=_generate_quotation_pdf, args=(quote_no, actor_name, '已簽核'), daemon=True).start()
     return {"ok": True}
+
+
+@router.post("/api/quotations/{quote_no}/recall")
+def recall_quotation(quote_no: str, authorization: str = Header(None)):
+    """申請人將「待審核」或「簽核中」的報價單收回草稿，清除簽核進度。"""
+    user = _require_user(authorization)
+    conn = get_db()
+    row = conn.execute(
+        "SELECT status, data_json, customer_name FROM quotations WHERE quote_no=?", (quote_no,)
+    ).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(404, f"報價單 {quote_no} 不存在")
+    if row["status"] not in ("待審核", "簽核中"):
+        conn.close()
+        raise HTTPException(400, f"只有「待審核」或「簽核中」的報價單可以收回（目前狀態：{row['status']}）")
+    q = json.loads(row["data_json"])
+    appr = q.get("approval") or {}
+    if appr.get("requestedBy") != user["username"]:
+        conn.close()
+        raise HTTPException(403, "只有原送審申請人可以收回報價單")
+    cname = row["customer_name"] or q.get("customerName") or ""
+    q.pop("approval", None)
+    q["status"] = "草稿"
+    now = datetime.now().isoformat()
+    deal_tag, settle_status = quote_hot_fields(q)
+    conn.execute(
+        "UPDATE quotations SET status='草稿', data_json=?, updated_at=?, deal_tag=?, settle_status=? "
+        "WHERE quote_no=?",
+        (json.dumps(q, ensure_ascii=False), now, deal_tag, settle_status, quote_no),
+    )
+    conn.commit()
+    conn.close()
+    _audit(_tok(authorization), "quotation.recall", "quotation", quote_no,
+           f"{quote_no}（{cname}）已由申請人收回草稿")
+    return {"quote_no": quote_no, "status": "草稿"}
 
 
 @router.patch("/api/quotations/{quote_no}/deal-tag")
@@ -535,6 +655,7 @@ def delete_quotation(quote_no: str, authorization: str = Header(None)):
 
 @router.patch("/api/quotations/{quote_no}/case-record")
 def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str = Header(None)):
+    _require_user(authorization)
     conn = get_db()
     row = conn.execute(
         "SELECT id, customer_name, project_name, data_json, updated_at FROM quotations WHERE quote_no=?",
@@ -589,6 +710,7 @@ def record_export(quote_no: str, mode: str = "external", authorization: str = He
 
 @router.patch("/api/quotations/{no}/payment/{idx}")
 def mark_payment(no: str, idx: int, body: dict, authorization: str = Header(None)):
+    _require_user(authorization)
     conn = get_db()
     try:
         row = conn.execute("SELECT data_json, updated_at FROM quotations WHERE quote_no=?", (no,)).fetchone()
@@ -696,6 +818,11 @@ def update_settlement(quote_no: str, body: SettlementIn, authorization: str = He
     _audit(_tok(authorization), 'quotation.settlement', 'quotation', quote_no,
            f"{quote_no}（{cname}）成本精算{'完結' if is_finalized else '更新'}",
            {"rev": settle_rev})
+    if is_finalized:
+        notify_settlement_finalized(
+            quote_no, cname,
+            user.get("display_name") or user["username"],
+        )
     return {"ok": True, "updated_at": now}
 
 
@@ -761,6 +888,33 @@ def get_approval_queue(authorization: str = Header(None)):
     return {"queue": queue, "total": len(items)}
 
 
+@router.get("/api/approval-queue/count")
+def get_approval_queue_count(authorization: str = Header(None)):
+    """輕量端點：回傳目前輪到當前用戶簽核的報價單數量。"""
+    u = _require_user(authorization)
+    my_username = u["username"]
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT json_extract(data_json,'$.approval') as approval_json "
+        "FROM quotations WHERE status IN ('待審核','簽核中')"
+    ).fetchall()
+    conn.close()
+    count = 0
+    for r in rows:
+        try:
+            appr    = json.loads(r["approval_json"] or "{}")
+            tiers   = _active_tiers(appr)
+            ct_idx  = _current_tier_idx(appr)
+            if tiers and ct_idx < len(tiers):
+                approvers = tiers[ct_idx].get("approvers") or []
+                if any(a.get("username") == my_username and a.get("status") != "approved"
+                       for a in approvers):
+                    count += 1
+        except Exception:
+            pass
+    return {"count": count}
+
+
 @router.post("/api/quotations/{quote_no}/approve")
 def approve_quotation(quote_no: str, body: ApprovalActionBody, authorization: str = Header(None)):
     user = _require_user(authorization)
@@ -786,17 +940,30 @@ def approve_quotation(quote_no: str, body: ApprovalActionBody, authorization: st
         tier      = tiers[ct_idx]
         approvers = tier.get("approvers") or []
 
-        # find this user in current tier
-        my_entry = next(
-            (a for a in approvers if a["username"] == user["username"] and a.get("status") != "approved"),
-            None
-        )
-        if not my_entry:
+        # sequential order within tier: must be a member first
+        is_in_tier = any(a["username"] == user["username"] for a in approvers)
+        if not is_in_tier:
             pending_names = "、".join(
                 a.get("displayName") or a["username"] for a in approvers if a.get("status") != "approved"
             ) or "（無待簽核人員）"
             conn.close()
             raise HTTPException(403, f"此層需由以下人員簽核：{pending_names}")
+
+        # enforce sequential order: only the first unapproved approver may sign
+        first_pending = next(
+            (a for a in approvers if a.get("status") != "approved"),
+            None
+        )
+        if not first_pending:
+            conn.close()
+            raise HTTPException(400, "此層所有簽核人員已完成")
+
+        if first_pending["username"] != user["username"]:
+            next_name = first_pending.get("displayName") or first_pending["username"]
+            conn.close()
+            raise HTTPException(403, f"請等待 {next_name} 先完成簽核（簽核順序固定）")
+
+        my_entry = first_pending
 
         my_entry["status"]     = "approved"
         my_entry["approvedAt"] = now
@@ -807,9 +974,12 @@ def approve_quotation(quote_no: str, body: ApprovalActionBody, authorization: st
             all_done = (ct_idx + 1) >= len(tiers)
             if not all_done:
                 next_tier = tiers[ct_idx + 1]
+                _next_names = []
                 for na in next_tier.get("approvers") or []:
                     _notify(na["username"], "approval_request", quote_no, quote_no,
                             f"報價單 {quote_no}（{cname}）輪到您簽核（第 {ct_idx + 2} 層 / 共 {len(tiers)} 層）")
+                    _next_names.append(na["username"])
+                notify_next_tier(quote_no, cname, ct_idx + 2, len(tiers), _next_names)
         else:
             all_done = False
 
@@ -819,13 +989,25 @@ def approve_quotation(quote_no: str, body: ApprovalActionBody, authorization: st
         appr.pop("currentStep", None)
         detail_status = f"第 {ct_idx + 1} 層 {my_entry.get('displayName', user['username'])} 已簽核"
     else:
-        # no configured tiers — fallback: any superadmin
+        # no tiers on this quotation — check global settings first
         if user["role"] != "superadmin":
             conn.close()
             raise HTTPException(403, "僅超級管理員可執行此操作")
         if appr.get("requestedBy") == user["username"]:
             conn.close()
             raise HTTPException(403, "申請人不得自行審核")
+        # If global approval_flow has tiers configured, block the no-tier fallback.
+        # This prevents a quotation submitted before flow was set (tiers missing)
+        # from being approved without going through the flow.
+        _global_flow   = _get_setting("approval_flow", {"tiers": []}) or {}
+        _global_tiers  = _setting_to_active_tiers(_global_flow)
+        if _global_tiers:
+            conn.close()
+            raise HTTPException(
+                403,
+                "系統已設定簽核流程，此報價單缺少簽核層資料。"
+                "請請申請人收回並重新送審，以套用最新簽核設定"
+            )
         all_done      = True
         detail_status = "超級管理員簽核"
 
@@ -838,6 +1020,7 @@ def approve_quotation(quote_no: str, body: ApprovalActionBody, authorization: st
         save_quotation_json(conn, quote_no, d, status="已送出", updated_at=now)
         approver_name = appr.get("approvedByDisplay") or user.get("display_name") or user.get("username") or ""
         threading.Thread(target=_generate_quotation_pdf, args=(quote_no, approver_name, '簽核'), daemon=True).start()
+        notify_approved(quote_no, cname, approver_name, appr.get("requestedBy") or "")
         detail_status = "已送出"
     else:
         d["approval"] = appr
@@ -889,13 +1072,34 @@ def reject_quotation(quote_no: str, body: ApprovalActionBody, authorization: str
     # Append to statusLog
     if not isinstance(d.get("statusLog"), list):
         d["statusLog"] = []
+    _from_status = d.get("status") or "待審核"
     d["statusLog"].append({
         "at":   now,
         "user": user.get("display_name") or user["username"],
-        "from": "待審核",
+        "from": _from_status,
         "to":   f"草稿（退回，改為 {new_no}）",
         "note": note,
     })
+    # Snapshot items/summary for submitter reference after return
+    d["returnInfo"] = {
+        "returnedBy":        user["username"],
+        "returnedByDisplay": user.get("display_name") or user["username"],
+        "returnedAt":        now,
+        "note":              note,
+        "originalQuoteNo":   quote_no,
+        "previousItems": [
+            {
+                "type":        i.get("type", "item"),
+                "description": i.get("description", ""),
+                "brand":       i.get("brand", ""),
+                "qty":         i.get("qty", 0),
+                "unit":        i.get("unit", ""),
+                "unitPrice":   i.get("unitPrice", 0),
+            }
+            for i in (d.get("items") or [])
+            if i.get("description", "").strip() or i.get("type") == "header"
+        ],
+    }
     # Update quoteNo and status in data_json too
     d["quoteNo"] = new_no
     d["status"]  = "草稿"
@@ -911,6 +1115,7 @@ def reject_quotation(quote_no: str, body: ApprovalActionBody, authorization: str
     if requester:
         _notify(requester, "approval_returned", new_no, new_no,
                 f"報價單 {new_no}（原 {quote_no}，{cname}）已退回修改，請確認後重新送審")
+        notify_returned(quote_no, new_no, cname, note, requester)
     conn.close()
     _audit(_tok(authorization), "quotation.return", "quotation", new_no,
            f"{new_no}（原 {quote_no}，{cname}）", {"note": note, "previous_no": quote_no})
@@ -976,6 +1181,140 @@ def reject_final_quotation(quote_no: str, body: ApprovalActionBody, authorizatio
     conn.close()
     _audit(_tok(authorization), "quotation.reject_final", "quotation", quote_no,
            f"{quote_no}（{cname}）", {"note": note})
+    return {"ok": True}
+
+
+# ── Case updates (activity feed / comment board) ─────────────────────────────
+
+@router.get("/api/quotations/{quote_no}/updates")
+def list_case_updates(quote_no: str, authorization: str = Header(None)):
+    """Return merged activity feed: manual comments + work_logs + daily_task completions."""
+    _require_user(authorization)
+    conn = get_db()
+    row = conn.execute("SELECT quote_no FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(404, "報價單不存在")
+    user = _require_user(authorization)
+
+    dn_map = {r["username"]: (r["display_name"] or r["username"])
+              for r in conn.execute("SELECT username, display_name FROM users").fetchall()}
+    results = []
+
+    # 1. Manual comments
+    for c in conn.execute(
+        "SELECT id, author, content, type, created_at FROM case_updates "
+        "WHERE quote_no=? ORDER BY created_at DESC", (quote_no,)
+    ).fetchall():
+        results.append({
+            "id": c["id"],
+            "source": "comment",
+            "author": c["author"],
+            "authorDisplay": dn_map.get(c["author"], c["author"]),
+            "content": c["content"],
+            "created_at": c["created_at"],
+            "canDelete": (user["username"] == c["author"]
+                          or user["role"] in ("superadmin", "admin")),
+        })
+
+    # 2. Work logs tagged with this case
+    for w in conn.execute(
+        "SELECT w.id, w.log_date, w.content, w.hours, w.created_at, "
+        "u.username, u.display_name "
+        "FROM work_logs w LEFT JOIN users u ON u.id=w.user_id "
+        "WHERE w.case_no=?", (quote_no,)
+    ).fetchall():
+        results.append({
+            "id": f"wl_{w['id']}",
+            "source": "work_log",
+            "author": w["username"] or "",
+            "authorDisplay": w["display_name"] or w["username"] or "未知",
+            "content": w["content"],
+            "logDate": w["log_date"],
+            "hours": w["hours"],
+            "created_at": w["created_at"],
+            "canDelete": False,
+        })
+
+    # 3. Daily task completions for tasks linked to this case
+    for dt in conn.execute(
+        "SELECT t.id AS task_id, t.title, t.task_date, "
+        "c.username, c.report, c.completed_at, c.occurrence_date "
+        "FROM daily_tasks t "
+        "JOIN daily_task_completions c ON c.task_id=t.id "
+        "WHERE t.case_no=? AND c.completed=1 AND t.is_deleted=0", (quote_no,)
+    ).fetchall():
+        results.append({
+            "id": f"dt_{dt['task_id']}_{dt['username']}_{dt['occurrence_date']}",
+            "source": "daily_task",
+            "author": dt["username"],
+            "authorDisplay": dn_map.get(dt["username"], dt["username"]),
+            "content": dt["report"] or f"完成工作事項：{dt['title']}",
+            "taskTitle": dt["title"],
+            "occurrenceDate": dt["occurrence_date"],
+            "created_at": dt["completed_at"] or "",
+            "canDelete": False,
+        })
+
+    conn.close()
+    results.sort(key=lambda x: (x.get("created_at") or ""), reverse=True)
+    return results
+
+
+@router.post("/api/quotations/{quote_no}/updates", status_code=201)
+def post_case_update(quote_no: str, body: dict = Body(...), authorization: str = Header(None)):
+    user = _require_user(authorization)
+    content = (body.get("content") or "").strip()
+    if not content:
+        raise HTTPException(400, "內容不得為空")
+    conn = get_db()
+    if not conn.execute("SELECT 1 FROM quotations WHERE quote_no=?", (quote_no,)).fetchone():
+        conn.close()
+        raise HTTPException(404, "報價單不存在")
+    now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    cur = conn.execute(
+        "INSERT INTO case_updates (quote_no, author, content, type, created_at) "
+        "VALUES (?,?,?,?,?)",
+        (quote_no, user["username"], content, "comment", now),
+    )
+    new_id = cur.lastrowid
+    conn.commit()
+    conn.close()
+    dn_row = None
+    try:
+        c2 = get_db()
+        dn_row = c2.execute("SELECT display_name FROM users WHERE username=?",
+                            (user["username"],)).fetchone()
+        c2.close()
+    except Exception:
+        pass
+    return {
+        "id": new_id,
+        "source": "comment",
+        "author": user["username"],
+        "authorDisplay": (dn_row["display_name"] if dn_row else None) or user["username"],
+        "content": content,
+        "created_at": now,
+        "canDelete": True,
+    }
+
+
+@router.delete("/api/quotations/{quote_no}/updates/{uid}")
+def delete_case_update(quote_no: str, uid: int, authorization: str = Header(None)):
+    user = _require_user(authorization)
+    conn = get_db()
+    row = conn.execute(
+        "SELECT id, author FROM case_updates WHERE id=? AND quote_no=?", (uid, quote_no)
+    ).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(404, "留言不存在")
+    if user["role"] not in ("superadmin", "admin") and user["username"] != row["author"]:
+        conn.close()
+        raise HTTPException(403, "只能刪除自己的留言")
+    conn.execute("DELETE FROM case_updates WHERE id=?", (uid,))
+    conn.commit()
+    conn.close()
     return {"ok": True}
 
 

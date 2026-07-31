@@ -3,19 +3,59 @@ import sqlite3
 import os
 import re
 import json
+import shutil
+import time
 import logging
+import threading
+import contextvars
 from datetime import datetime, date
 
 logger = logging.getLogger(__name__)
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "motrix_erp.db")
+DB_PATH      = os.path.join(os.path.dirname(__file__), "motrix_erp.db")
+DEMO_DB_PATH = os.path.join(os.path.dirname(__file__), "motrix_erp_demo.db")
+
+# Anything that writes files to disk (not just SQL rows) must check
+# is_demo_mode() and redirect into one of these instead of the real shared
+# folders — reset_demo_db() wipes them on every demo login. Without this,
+# demo-created files would leak permanently into real storage, and could even
+# collide with real filenames (project photos keyed by project id, PDFs keyed
+# by quote_no/slip_no — both restart from 1 in the freshly-reset demo DB).
+DEMO_PROJECT_PHOTOS_DIR  = os.path.join(os.path.dirname(__file__), "..", "uploads", "_demo_projects")
+DEMO_PDF_ARCHIVE_DIR     = os.path.join(os.path.dirname(__file__), "_demo_pdf_archive")
+DEMO_PAYSLIP_ARCHIVE_DIR = os.path.join(os.path.dirname(__file__), "_demo_payslip_archive")
+DEMO_SHIPPING_PDF_ARCHIVE_DIR = os.path.join(os.path.dirname(__file__), "_demo_shipping_pdf_archive")
 
 # Increment this whenever a new _mNNN function is added to _MIGRATIONS.
-CURRENT_VERSION = 25
+# v32/v33 (switch_guide tables + specs_json column) were initially missing
+# from this checkout — reconstructed 2026-08-01 by reverse-engineering the
+# actual schema off a production DB backup (see _m032_switch_guide docstring).
+CURRENT_VERSION = 34
+
+# Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
+# execution model) whenever the current request is authenticated as the 'demo'
+# account, so get_db() transparently redirects ALL queries — including the
+# session/user lookups in _require_user()/_audit() — to the isolated demo DB.
+_demo_mode: contextvars.ContextVar = contextvars.ContextVar("motrix_demo_mode", default=False)
+
+# Serialises the whole reset-demo-db-then-seed-session sequence in
+# routers/auth.py's login handler. Without this, two demo logins arriving at
+# nearly the same moment (double-click, two people demoing at once) both wipe
+# and re-seed the SAME shared demo DB concurrently, colliding on the fresh
+# 'demo' user INSERT (UNIQUE violation) or on VACUUM/DELETE (database locked).
+demo_reset_lock = threading.Lock()
 
 
-def get_db():
-    conn = sqlite3.connect(DB_PATH, timeout=30)
+def set_demo_mode(flag: bool) -> None:
+    _demo_mode.set(flag)
+
+
+def is_demo_mode() -> bool:
+    return _demo_mode.get()
+
+
+def _connect(path: str):
+    conn = sqlite3.connect(path, timeout=30)
     conn.row_factory = sqlite3.Row
     try:
         conn.execute("PRAGMA journal_mode=WAL")
@@ -26,10 +66,64 @@ def get_db():
     return conn
 
 
+def get_db():
+    return _connect(DEMO_DB_PATH if _demo_mode.get() else DB_PATH)
+
+
+def get_demo_db():
+    """Always connects to the demo DB regardless of the current context — used
+    by the login/logout handlers to seed/clean up the demo session before the
+    request-scoped demo-mode flag would otherwise apply."""
+    return _connect(DEMO_DB_PATH)
+
+
+def _wipe_dir(path: str) -> None:
+    for attempt in range(3):
+        try:
+            if os.path.isdir(path):
+                shutil.rmtree(path)
+            break
+        except Exception:
+            if attempt == 2:
+                logger.warning("reset_demo_db: failed to clear %s", path)
+            else:
+                time.sleep(0.2)
+    os.makedirs(path, exist_ok=True)
+
+
+def reset_demo_db() -> None:
+    """Wipe every row from every table in the demo DB, then every demo-only
+    file-storage directory, back to a fresh, empty state. Called on every
+    'demo' account login so each client demo starts clean.
+
+    Uses SQL DELETE (same connection, no filesystem deletion of the .db/-wal/
+    -shm files) specifically to avoid Windows file-lock races — a fresh SQLite
+    WAL file can be briefly held by antivirus/indexer scanning right after the
+    server creates it, and os.remove() on a locked file raises PermissionError
+    that isn't recoverable mid-login.
+    """
+    if os.path.exists(DEMO_DB_PATH):
+        conn = _connect(DEMO_DB_PATH)
+        try:
+            tables = [r["name"] for r in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+            ).fetchall()]
+            conn.execute("PRAGMA foreign_keys=OFF")
+            for t in tables:
+                conn.execute(f"DELETE FROM {t}")
+            conn.commit()
+            conn.execute("VACUUM")
+        finally:
+            conn.close()
+    init_db(DEMO_DB_PATH)
+    for d in (DEMO_PROJECT_PHOTOS_DIR, DEMO_PDF_ARCHIVE_DIR, DEMO_PAYSLIP_ARCHIVE_DIR, DEMO_SHIPPING_PDF_ARCHIVE_DIR):
+        _wipe_dir(d)
+
+
 # ── Schema init ───────────────────────────────────────────────────────────────
 
-def init_db():
-    conn = get_db()
+def init_db(path: str = None):
+    conn = _connect(path or DB_PATH)
     # Base tables — new installs get all columns from the start.
     # Existing installs: CREATE TABLE IF NOT EXISTS is a no-op; missing columns
     # are added by _run_migrations() below.
@@ -832,12 +926,383 @@ def _m018_module_versions(conn):
     conn.commit()
 
 
+def _m027_dev_crm(conn):
+    """Create dev_cases and dev_logs tables for pre-quotation CRM module."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS dev_cases (
+            id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+            case_name          TEXT    NOT NULL DEFAULT '',
+            customer_name      TEXT    NOT NULL DEFAULT '',
+            customer_id        INTEGER REFERENCES customers(id) ON DELETE SET NULL,
+            status             TEXT    NOT NULL DEFAULT '洽談中',
+            sales_persons      TEXT    NOT NULL DEFAULT '[]',
+            planners           TEXT    NOT NULL DEFAULT '[]',
+            converted_quote_no TEXT    NOT NULL DEFAULT '',
+            created_by         INTEGER REFERENCES users(id),
+            created_at         TEXT    NOT NULL,
+            updated_at         TEXT    NOT NULL
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS dev_logs (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            case_id         INTEGER NOT NULL REFERENCES dev_cases(id) ON DELETE CASCADE,
+            log_date        TEXT    NOT NULL,
+            log_by          INTEGER NOT NULL REFERENCES users(id),
+            channel         TEXT    NOT NULL DEFAULT '',
+            content         TEXT    NOT NULL DEFAULT '',
+            next_action     TEXT    NOT NULL DEFAULT '',
+            status_snapshot TEXT    NOT NULL DEFAULT '',
+            needs_approval  INTEGER NOT NULL DEFAULT 0,
+            approved_by     INTEGER REFERENCES users(id),
+            approved_at     TEXT    NOT NULL DEFAULT '',
+            created_by      INTEGER REFERENCES users(id),
+            created_at      TEXT    NOT NULL
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_dev_cases_status ON dev_cases(status)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_dev_logs_case ON dev_logs(case_id, log_date)")
+    conn.commit()
+
+
+def _m026_case_updates_work_log_case(conn):
+    """Add case_updates table for case activity feed; add case_no to work_logs."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS case_updates (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            quote_no   TEXT    NOT NULL,
+            author     TEXT    NOT NULL,
+            content    TEXT    NOT NULL,
+            type       TEXT    NOT NULL DEFAULT 'comment',
+            created_at TEXT    NOT NULL DEFAULT (datetime('now','localtime'))
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_case_updates_quote_no "
+        "ON case_updates(quote_no, created_at)"
+    )
+    if not _col_exists(conn, "work_logs", "case_no"):
+        conn.execute("ALTER TABLE work_logs ADD COLUMN case_no TEXT NOT NULL DEFAULT ''")
+    conn.commit()
+
+
 def _m025_dispatch_acceptance(conn):
     """Add accepted_at / accepted_by to contractor_dispatches for acceptance flow node."""
     for col, defn in [("accepted_at", "TEXT NOT NULL DEFAULT ''"),
                       ("accepted_by", "TEXT NOT NULL DEFAULT ''")]:
         if not _col_exists(conn, "contractor_dispatches", col):
             conn.execute(f"ALTER TABLE contractor_dispatches ADD COLUMN {col} {defn}")
+    conn.commit()
+
+
+def _m029_contractor_passbook(conn):
+    """Add bank_passbook_image column to contractors."""
+    if not _col_exists(conn, "contractors", "bank_passbook_image"):
+        conn.execute("ALTER TABLE contractors ADD COLUMN bank_passbook_image TEXT DEFAULT ''")
+    conn.commit()
+
+
+def _m028_dev_cases_soft_delete(conn):
+    """Add soft-delete + pending-delete columns to dev_cases."""
+    for col, defn in [
+        ("is_deleted",            "INTEGER NOT NULL DEFAULT 0"),
+        ("deleted_at",            "TEXT    NOT NULL DEFAULT ''"),
+        ("deleted_by",            "TEXT    NOT NULL DEFAULT ''"),
+        ("deleted_snapshot",      "TEXT    NOT NULL DEFAULT ''"),
+        ("pending_delete",        "INTEGER NOT NULL DEFAULT 0"),
+        ("delete_requested_by",   "TEXT    NOT NULL DEFAULT ''"),
+        ("delete_requested_at",   "TEXT    NOT NULL DEFAULT ''"),
+        ("delete_reason",         "TEXT    NOT NULL DEFAULT ''"),
+    ]:
+        if not _col_exists(conn, "dev_cases", col):
+            conn.execute(f"ALTER TABLE dev_cases ADD COLUMN {col} {defn}")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_dev_cases_is_deleted ON dev_cases(is_deleted)"
+    )
+    conn.commit()
+
+
+def _m030_env_guide(conn):
+    """Create env_guide_* tables (場域選型導覽): environments, tiered equipment
+    recommendations, and vendor links — ported from the standalone 場域選型導覽.html
+    reference tool into an admin-editable ERP module."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS env_guide_environments (
+            code       TEXT PRIMARY KEY,
+            name       TEXT NOT NULL DEFAULT '',
+            group_name TEXT NOT NULL DEFAULT '',
+            temp_gate  TEXT NOT NULL DEFAULT '',
+            ip_gate    TEXT NOT NULL DEFAULT '',
+            cert_gate  TEXT NOT NULL DEFAULT '',
+            trap_note  TEXT NOT NULL DEFAULT '',
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            updated_at TEXT NOT NULL DEFAULT ''
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS env_guide_recommendations (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            env_code    TEXT NOT NULL REFERENCES env_guide_environments(code) ON DELETE CASCADE,
+            layer       TEXT NOT NULL DEFAULT '',
+            position    TEXT NOT NULL DEFAULT '',
+            tier1       TEXT NOT NULL DEFAULT '',
+            tier2       TEXT NOT NULL DEFAULT '',
+            tier3       TEXT NOT NULL DEFAULT '',
+            custom_note TEXT NOT NULL DEFAULT '',
+            trap_note   TEXT NOT NULL DEFAULT '',
+            sort_order  INTEGER NOT NULL DEFAULT 0,
+            updated_at  TEXT NOT NULL DEFAULT ''
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS env_guide_links (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            keyword    TEXT NOT NULL DEFAULT '',
+            url        TEXT NOT NULL DEFAULT '',
+            label      TEXT NOT NULL DEFAULT '',
+            sort_order INTEGER NOT NULL DEFAULT 0
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_env_guide_rec_env ON env_guide_recommendations(env_code)"
+    )
+
+    # One-time seed from the original standalone tool's dataset. Only runs while
+    # the table is empty so later admin edits are never clobbered by a re-run.
+    if conn.execute("SELECT 1 FROM env_guide_environments LIMIT 1").fetchone():
+        conn.commit()
+        return
+
+    from env_guide_seed import ENV_JSON, REC_JSON, LINKS_JSON
+    now = datetime.now().isoformat()
+    for i, e in enumerate(json.loads(ENV_JSON)):
+        conn.execute(
+            "INSERT INTO env_guide_environments "
+            "(code, name, group_name, temp_gate, ip_gate, cert_gate, trap_note, sort_order, updated_at) "
+            "VALUES (?,?,?,?,?,?,?,?,?)",
+            (e[0], e[1], e[2], e[3], e[4], e[5], e[6], i, now),
+        )
+    for i, r in enumerate(json.loads(REC_JSON)):
+        conn.execute(
+            "INSERT INTO env_guide_recommendations "
+            "(env_code, layer, position, tier1, tier2, tier3, custom_note, trap_note, sort_order, updated_at) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], i, now),
+        )
+    for i, l in enumerate(json.loads(LINKS_JSON)):
+        conn.execute(
+            "INSERT INTO env_guide_links (keyword, url, label, sort_order) VALUES (?,?,?,?)",
+            (l[0], l[1], l[2], i),
+        )
+    conn.commit()
+
+
+def _m031_netarch_guide(conn):
+    """Create netarch_* tables (網路架構選型導覽): 技術族系 → 世代/規格 → 產品連結.
+    Unlike env_guide (情境×分層×三級), this category's shape is family→generation
+    timeline, so it gets its own purpose-fit tables rather than being force-fit
+    into the env_guide schema."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS netarch_families (
+            code       TEXT PRIMARY KEY,
+            name       TEXT NOT NULL DEFAULT '',
+            description TEXT NOT NULL DEFAULT '',
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            updated_at TEXT NOT NULL DEFAULT ''
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS netarch_generations (
+            id               INTEGER PRIMARY KEY AUTOINCREMENT,
+            family_code      TEXT NOT NULL REFERENCES netarch_families(code) ON DELETE CASCADE,
+            gen_name         TEXT NOT NULL DEFAULT '',
+            key_specs        TEXT NOT NULL DEFAULT '',
+            upgrade_note     TEXT NOT NULL DEFAULT '',
+            typical_scenario TEXT NOT NULL DEFAULT '',
+            tags             TEXT NOT NULL DEFAULT '',
+            price_range      TEXT NOT NULL DEFAULT '',
+            dependency_note  TEXT NOT NULL DEFAULT '',
+            watch_note       TEXT NOT NULL DEFAULT '',
+            sort_order       INTEGER NOT NULL DEFAULT 0,
+            updated_at       TEXT NOT NULL DEFAULT ''
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS netarch_products (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            generation_id INTEGER NOT NULL REFERENCES netarch_generations(id) ON DELETE CASCADE,
+            brand         TEXT NOT NULL DEFAULT '',
+            model         TEXT NOT NULL DEFAULT '',
+            url           TEXT NOT NULL DEFAULT '',
+            label         TEXT NOT NULL DEFAULT '',
+            price_note    TEXT NOT NULL DEFAULT '',
+            sort_order    INTEGER NOT NULL DEFAULT 0
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_netarch_gen_family ON netarch_generations(family_code)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_netarch_prod_gen ON netarch_products(generation_id)")
+
+    if conn.execute("SELECT 1 FROM netarch_families LIMIT 1").fetchone():
+        conn.commit()
+        return
+
+    from netarch_guide_seed import FAMILIES_JSON, GENERATIONS_JSON, PRODUCTS_JSON
+    now = datetime.now().isoformat()
+    for i, f in enumerate(json.loads(FAMILIES_JSON)):
+        conn.execute(
+            "INSERT INTO netarch_families (code, name, description, sort_order, updated_at) VALUES (?,?,?,?,?)",
+            (f[0], f[1], f[2], i, now),
+        )
+    gen_id_map = {}
+    for i, g in enumerate(json.loads(GENERATIONS_JSON)):
+        cur = conn.execute(
+            "INSERT INTO netarch_generations "
+            "(family_code, gen_name, key_specs, upgrade_note, typical_scenario, tags, price_range, dependency_note, watch_note, sort_order, updated_at) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            (g[0], g[1], g[2], g[3], g[4], g[5], g[6], g[7], g[8], i, now),
+        )
+        gen_id_map[(g[0], g[1])] = cur.lastrowid
+    for i, p in enumerate(json.loads(PRODUCTS_JSON)):
+        gen_id = gen_id_map.get((p[0], p[1]))
+        if gen_id is None:
+            continue
+        conn.execute(
+            "INSERT INTO netarch_products (generation_id, brand, model, url, label, price_note, sort_order) "
+            "VALUES (?,?,?,?,?,?,?)",
+            (gen_id, p[2], p[3], p[4], p[5], p[6], i),
+        )
+    conn.commit()
+
+
+def _m032_switch_guide(conn):
+    """Create switch_* tables (交換器選型導覽): 產品分類 × 行業情境矩陣式交叉,
+    第三個選型導覽類別, 見 routers/switch_guide.py 與 switch_guide_seed.py。
+    Reconstructed 2026-08-01 from the production DB backup's actual schema —
+    this migration's code was missing from this checkout even though the
+    router/seed/frontend files for the feature were already present (see
+    CURRENT_VERSION note above); schema verified to match the live backup
+    table-for-table before writing this."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS switch_scenarios (
+            code       TEXT PRIMARY KEY,
+            name       TEXT NOT NULL DEFAULT '',
+            description TEXT NOT NULL DEFAULT '',
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            updated_at TEXT NOT NULL DEFAULT ''
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS switch_categories (
+            code            TEXT PRIMARY KEY,
+            name            TEXT NOT NULL DEFAULT '',
+            key_specs       TEXT NOT NULL DEFAULT '',
+            tags            TEXT NOT NULL DEFAULT '',
+            price_range     TEXT NOT NULL DEFAULT '',
+            dependency_note TEXT NOT NULL DEFAULT '',
+            watch_note      TEXT NOT NULL DEFAULT '',
+            sort_order      INTEGER NOT NULL DEFAULT 0,
+            updated_at      TEXT NOT NULL DEFAULT ''
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS switch_fit (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            scenario_code TEXT NOT NULL REFERENCES switch_scenarios(code) ON DELETE CASCADE,
+            category_code TEXT NOT NULL REFERENCES switch_categories(code) ON DELETE CASCADE,
+            fit_level     TEXT NOT NULL DEFAULT '',
+            fit_note      TEXT NOT NULL DEFAULT '',
+            sort_order    INTEGER NOT NULL DEFAULT 0,
+            updated_at    TEXT NOT NULL DEFAULT ''
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS switch_products (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            category_code TEXT NOT NULL REFERENCES switch_categories(code) ON DELETE CASCADE,
+            brand         TEXT NOT NULL DEFAULT '',
+            model         TEXT NOT NULL DEFAULT '',
+            url           TEXT NOT NULL DEFAULT '',
+            label         TEXT NOT NULL DEFAULT '',
+            price_note    TEXT NOT NULL DEFAULT '',
+            sort_order    INTEGER NOT NULL DEFAULT 0
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_switch_fit_scenario ON switch_fit(scenario_code)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_switch_fit_category ON switch_fit(category_code)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_switch_prod_category ON switch_products(category_code)")
+
+    if conn.execute("SELECT 1 FROM switch_scenarios LIMIT 1").fetchone():
+        conn.commit()
+        return
+
+    from switch_guide_seed import SCENARIOS_JSON, CATEGORIES_JSON, FIT_JSON, PRODUCTS_JSON
+    now = datetime.now().isoformat()
+    for i, s in enumerate(json.loads(SCENARIOS_JSON)):
+        conn.execute(
+            "INSERT INTO switch_scenarios (code, name, description, sort_order, updated_at) VALUES (?,?,?,?,?)",
+            (s[0], s[1], s[2], i, now),
+        )
+    for i, c in enumerate(json.loads(CATEGORIES_JSON)):
+        conn.execute(
+            "INSERT INTO switch_categories "
+            "(code, name, key_specs, tags, price_range, dependency_note, watch_note, sort_order, updated_at) "
+            "VALUES (?,?,?,?,?,?,?,?,?)",
+            (c[0], c[1], c[2], c[3], c[4], c[5], c[6], i, now),
+        )
+    for i, f in enumerate(json.loads(FIT_JSON)):
+        conn.execute(
+            "INSERT INTO switch_fit (scenario_code, category_code, fit_level, fit_note, sort_order, updated_at) "
+            "VALUES (?,?,?,?,?,?)",
+            (f[0], f[1], f[2], f[3], i, now),
+        )
+    for i, p in enumerate(json.loads(PRODUCTS_JSON)):
+        conn.execute(
+            "INSERT INTO switch_products (category_code, brand, model, url, label, price_note, sort_order) "
+            "VALUES (?,?,?,?,?,?,?)",
+            (p[0], p[1], p[2], p[3], p[4], p[5], i),
+        )
+    conn.commit()
+
+
+def _m033_switch_products_specs(conn):
+    """Add switch_products.specs_json (結構化規格欄位, [[label, value], ...]),
+    reconstructed alongside _m032_switch_guide — see that function's docstring."""
+    if not _col_exists(conn, "switch_products", "specs_json"):
+        conn.execute("ALTER TABLE switch_products ADD COLUMN specs_json TEXT NOT NULL DEFAULT '[]'")
+    conn.commit()
+
+
+def _m034_shipping_notes(conn):
+    """Create shipping_notes table (出貨單／回簽單), scoped per quote_no.
+    Independent approval flow lives in system_settings key 'shipping_approval_flow',
+    separate from quotations' 'approval_flow' — see routers/shipping_notes.py."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS shipping_notes (
+            id               INTEGER PRIMARY KEY AUTOINCREMENT,
+            note_no          TEXT    UNIQUE NOT NULL,
+            quote_no         TEXT    NOT NULL,
+            status           TEXT    NOT NULL DEFAULT '草稿',
+            ship_date        TEXT    DEFAULT '',
+            customer_name    TEXT    DEFAULT '',
+            project_name     TEXT    DEFAULT '',
+            recipient        TEXT    DEFAULT '',
+            delivery_address TEXT    DEFAULT '',
+            items_json       TEXT    NOT NULL DEFAULT '[]',
+            notes            TEXT    DEFAULT '',
+            data_json        TEXT    NOT NULL DEFAULT '{}',
+            is_signed        INTEGER NOT NULL DEFAULT 0,
+            signed_by        TEXT    DEFAULT '',
+            signed_at        TEXT    DEFAULT '',
+            signed_log       TEXT    NOT NULL DEFAULT '[]',
+            export_count     INTEGER DEFAULT 0,
+            export_log       TEXT    DEFAULT '[]',
+            created_by       TEXT    DEFAULT '',
+            created_at       TEXT,
+            updated_at       TEXT
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_shipping_notes_quote_no ON shipping_notes(quote_no)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_shipping_notes_status ON shipping_notes(status)")
     conn.commit()
 
 
@@ -867,26 +1332,38 @@ _MIGRATIONS = [
     _m022_vendor_contractors,        # v22
     _m023_dispatch_tax_rate,         # v23
     _m024_entity_codes,              # v24
-    _m025_dispatch_acceptance,       # v25
+    _m025_dispatch_acceptance,        # v25
+    _m026_case_updates_work_log_case,       # v26
+    _m027_dev_crm,                          # v27
+    _m028_dev_cases_soft_delete,            # v28
+    _m029_contractor_passbook,              # v29
+    _m030_env_guide,                         # v30
+    _m031_netarch_guide,                     # v31
+    _m032_switch_guide,                       # v32
+    _m033_switch_products_specs,              # v33
+    _m034_shipping_notes,                     # v34
 ]
 
 
 # ── Entity code helper ────────────────────────────────────────────────────────
 
-def next_entity_code(conn, table: str, prefix: str) -> str:
-    """Return next available code like C-202507-001 for entity tables.
-    table and prefix must be trusted internal constants (not user input).
+def next_entity_code(conn, table: str, prefix: str, code_col: str = "code") -> str:
+    """Return next available code like C-202507-001 (or DN-202508-001 for a
+    multi-char prefix) for entity tables. table/prefix/code_col must be
+    trusted internal constants (not user input).
     """
     month = datetime.now().strftime("%Y%m")
     pattern = f"{prefix}-{month}-???"
+    code_len = len(prefix) + 11   # prefix '-' YYYYMM '-' NNN
+    seq_start = len(prefix) + 9    # 1-based SUBSTR offset of the NNN part
     row_max = conn.execute(
-        f"SELECT COALESCE(MAX(CAST(SUBSTR(code, 10, 3) AS INTEGER)), 0) AS mx "
-        f"FROM {table} WHERE code GLOB ? AND LENGTH(code) = 12",
+        f"SELECT COALESCE(MAX(CAST(SUBSTR({code_col}, {seq_start}, 3) AS INTEGER)), 0) AS mx "
+        f"FROM {table} WHERE {code_col} GLOB ? AND LENGTH({code_col}) = {code_len}",
         (pattern,),
     ).fetchone()
     next_seq = (row_max["mx"] if row_max else 0) + 1
     while conn.execute(
-        f"SELECT 1 FROM {table} WHERE code=?",
+        f"SELECT 1 FROM {table} WHERE {code_col}=?",
         (f"{prefix}-{month}-{next_seq:03d}",),
     ).fetchone():
         next_seq += 1

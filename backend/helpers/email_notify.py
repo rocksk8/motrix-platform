@@ -252,7 +252,8 @@ def notify_resubmit_requester(new_quote_no: str, original_quote_no: str,
 
 
 def notify_daily_task_assigned(task_id: int, title: str, task_date: str,
-                               assignee_usernames: list) -> None:
+                               assignee_usernames: list,
+                               description: str = '') -> None:
     """工作事項指派 → 通知被指派人"""
     to = _lookup_emails(assignee_usernames)
     if not to:
@@ -260,14 +261,36 @@ def notify_daily_task_assigned(task_id: int, title: str, task_date: str,
                        assignee_usernames, task_id)
         return
     task_page = f"{_base_url()}/pages/daily-tasks.html"
+    rows = [("執行日期", task_date), ("工作事項", title)]
+    if description and description.strip():
+        rows.append(("工作說明", description.strip()))
     html = _build_html(
         "工作事項指派通知", "請於期限內完成", "#2F6FD6",
-        [("執行日期", task_date), ("工作事項", title)],
-        "", task_page,
+        rows, "", task_page,
         intro="您好，系統已為您安排以下工作事項，請於指定日期完成並回報執行狀況。",
         button_text="前往工作事項",
     )
     _async_send(to, f"【MOTRIX】工作事項指派通知 — {title}（{task_date}）", html)
+
+
+def notify_dev_case_delete_request(case_id: int, case_name: str,
+                                   requester_display: str, reason: str = '') -> None:
+    """業務開發案件刪除申請 → 通知所有最高管理者審核"""
+    to = _superadmin_emails()
+    if not to:
+        logger.warning("notify_dev_case_delete_request: 無最高管理者 email（case_id=%d）", case_id)
+        return
+    crm_page = f"{_base_url()}/pages/dev-crm.html"
+    rows = [("案件名稱", case_name), ("申請人", requester_display)]
+    if reason and reason.strip():
+        rows.append(("刪除原因", reason.strip()))
+    html = _build_html(
+        "業務開發案件刪除申請", "請盡速審核", "#DC2626",
+        rows, "", crm_page,
+        intro=f"{requester_display} 申請刪除業務開發案件，請最高管理者登入系統審核。",
+        button_text="前往審核",
+    )
+    _async_send(to, f"【MOTRIX】業務開發案件刪除申請 — {case_name}", html)
 
 
 def notify_daily_task_completed(task_id: int, title: str, task_date: str,

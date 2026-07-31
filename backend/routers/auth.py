@@ -1,6 +1,7 @@
 """Auth + User management endpoints."""
 import json
 import logging
+import os
 import secrets
 import sqlite3
 import threading
@@ -11,10 +12,10 @@ from typing import Optional, List
 from fastapi import APIRouter, HTTPException, Header, Request
 from pydantic import BaseModel
 
-from db import get_db
+from db import get_db, get_demo_db, reset_demo_db, demo_reset_lock
 from helpers import (
     _hash_pw, _verify_pw, _require_user, _tok, _audit,
-    _SUPERADMIN_MODULES, is_weak_password, MIN_PASSWORD_LEN,
+    _SUPERADMIN_MODULES, is_weak_password, MIN_PASSWORD_LEN, DEMO_TOKEN_PREFIX,
 )
 
 logger = logging.getLogger(__name__)
@@ -148,6 +149,14 @@ class SetUnlockPasswordIn(BaseModel):
     unlock_password: str
 
 
+class VerifyDailyTaskUnlockIn(BaseModel):
+    password: str
+
+
+class SetDailyTaskPasswordIn(BaseModel):
+    daily_task_password: str
+
+
 class UserIn(BaseModel):
     username:     Optional[str]       = None
     display_name: Optional[str]       = None
@@ -164,6 +173,20 @@ class UserIn(BaseModel):
 @router.get("/api/ping")
 def ping():
     return {"ok": True, "time": datetime.now().isoformat()}
+
+
+@router.get("/api/system/version")
+def system_version():
+    """Latest overall system version (newest entry in version_manifest.json).
+    Public — used by the login page footer, which has no session token yet."""
+    manifest_path = os.path.join(os.path.dirname(__file__), "..", "version_manifest.json")
+    try:
+        with open(manifest_path, encoding="utf-8") as f:
+            entries = json.load(f)
+        latest = entries[0] if entries else {}
+    except Exception:
+        latest = {}
+    return {"version": latest.get("version", ""), "date": latest.get("date", "")}
 
 
 @router.post("/api/auth/login")
@@ -192,12 +215,60 @@ def auth_login(body: LoginIn, request: Request):
     if ":" not in row["password_hash"]:
         conn.execute("UPDATE users SET password_hash=? WHERE id=?",
                      (_hash_pw(body.password), row["id"]))
+    now = datetime.now().isoformat()
+
+    if row["username"] == "demo":
+        # Showcase account: never touches real data. Reset the isolated demo DB
+        # to a fresh, fully-migrated, completely empty state and issue a
+        # prefixed token whose session/user row lives ONLY in that demo DB —
+        # auth_middleware detects the prefix and routes every subsequent
+        # request (including _require_user()/_audit() lookups) there too.
+        conn.commit()
+        conn.close()
+        token      = DEMO_TOKEN_PREFIX + secrets.token_hex(32)
+        expires_at = (datetime.now() + timedelta(days=1)).isoformat()
+        # Serialise reset+seed: two demo logins arriving at nearly the same
+        # moment must not both wipe/re-seed the shared demo DB concurrently
+        # (races on the fresh 'demo' user INSERT / VACUUM otherwise).
+        with demo_reset_lock:
+            reset_demo_db()
+            dconn = get_demo_db()
+            dconn.execute(
+                "INSERT INTO users (username, password_hash, display_name, role, modules, "
+                "active, created_at, must_change_password) VALUES ('demo',?,?,?,?,1,?,0)",
+                (row["password_hash"], row["display_name"], row["role"], row["modules"], now),
+            )
+            demo_user_id = dconn.execute("SELECT last_insert_rowid()").fetchone()[0]
+            dconn.execute(
+                "INSERT INTO sessions (token, user_id, username, created_at, expires_at, last_active) "
+                "VALUES (?,?,?,?,?,?)",
+                (token, demo_user_id, "demo", now, expires_at, now),
+            )
+            dconn.execute(
+                "INSERT INTO audit_log (at,user_id,username,display_name,action,target_type,target_id,target_label,detail) "
+                "VALUES (?,?,?,?,?,?,?,?,?)",
+                (now, demo_user_id, "demo", row["display_name"], "auth.login", "user", "demo",
+                 row["display_name"], json.dumps({"mustChangePassword": False}, ensure_ascii=False)),
+            )
+            dconn.commit()
+            dconn.close()
+        _rl_clear(ip)
+        return {
+            "token":              token,
+            "userId":             demo_user_id,
+            "username":           "demo",
+            "displayName":        row["display_name"],
+            "role":               row["role"],
+            "modules":            json.loads(row["modules"] or "[]"),
+            "loginAt":            now,
+            "mustChangePassword": False,
+        }
+
     token      = secrets.token_hex(32)
-    now        = datetime.now().isoformat()
     expires_at = (datetime.now() + timedelta(days=30)).isoformat()
     conn.execute(
-        "INSERT INTO sessions (token, user_id, username, created_at, expires_at) VALUES (?,?,?,?,?)",
-        (token, row["id"], row["username"], now, expires_at)
+        "INSERT INTO sessions (token, user_id, username, created_at, expires_at, last_active) VALUES (?,?,?,?,?,?)",
+        (token, row["id"], row["username"], now, expires_at, now)
     )
     conn.commit()
     conn.close()
@@ -218,9 +289,17 @@ def auth_login(body: LoginIn, request: Request):
 
 @router.post("/api/auth/logout")
 def auth_logout(authorization: str = Header(None)):
-    _audit(_tok(authorization), 'auth.logout', 'user', '', '登出')
+    token = _tok(authorization)
+    if token.startswith(DEMO_TOKEN_PREFIX):
+        # _audit() looks the token up in the real sessions table, which a demo
+        # token never touches — skip it rather than log a meaningless miss.
+        dconn = get_demo_db()
+        dconn.execute("DELETE FROM sessions WHERE token=?", (token,))
+        dconn.commit()
+        dconn.close()
+        return {"ok": True}
+    _audit(token, 'auth.logout', 'user', '', '登出')
     if authorization and authorization.startswith("Bearer "):
-        token = authorization[7:]
         conn = get_db()
         conn.execute("DELETE FROM sessions WHERE token=?", (token,))
         conn.commit()
@@ -478,3 +557,51 @@ def set_unlock_password(user_id: int, body: SetUnlockPasswordIn, authorization: 
         conn.close()
     _audit(_tok(authorization), 'user.set_unlock_password', 'user', str(user_id), str(user_id))
     return {"ok": True}
+
+
+# ── Daily-task admin-view unlock ──────────────────────────────────────────────
+
+@router.post("/api/auth/verify-daily-task-unlock")
+def verify_daily_task_unlock(body: VerifyDailyTaskUnlockIn, authorization: str = Header(None)):
+    user = _require_user(authorization, require_superadmin=True)
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT daily_task_pw_hash FROM users WHERE id=?", (user['id'],)
+        ).fetchone()
+    finally:
+        conn.close()
+    stored = (row['daily_task_pw_hash'] or '') if row else ''
+    if not stored:
+        raise HTTPException(428, "尚未設定每日工作事項密碼，請至使用者管理設定")
+    if not _verify_pw(body.password, stored):
+        raise HTTPException(403, "密碼不正確")
+    _audit(_tok(authorization), 'daily_task.admin_unlock', 'daily_task', 'admin_view', 'admin_view')
+    return {"ok": True}
+
+
+@router.patch("/api/users/{user_id}/daily-task-password")
+def set_daily_task_password(user_id: int, body: SetDailyTaskPasswordIn,
+                             authorization: str = Header(None)):
+    _require_user(authorization, require_superadmin=True)
+    if len(body.daily_task_password) < MIN_PASSWORD_LEN:
+        raise HTTPException(400, f"密碼至少 {MIN_PASSWORD_LEN} 碼")
+    if is_weak_password(body.daily_task_password):
+        raise HTTPException(400, "密碼過於簡單，請改用更強的密碼")
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT role FROM users WHERE id=?", (user_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, "使用者不存在")
+        if row['role'] != 'superadmin':
+            raise HTTPException(400, "僅超級管理員帳號可設定每日工作事項密碼")
+        conn.execute(
+            "UPDATE users SET daily_task_pw_hash=? WHERE id=?",
+            (_hash_pw(body.daily_task_password), user_id)
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    _audit(_tok(authorization), 'user.set_daily_task_password', 'user', str(user_id), str(user_id))
+    return {"ok": True}
+

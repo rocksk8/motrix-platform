@@ -17,6 +17,7 @@ from .auth import (
     _LEGACY_WEAK_PASSWORDS,
     _CREDENTIALS_FILE,
     MIN_PASSWORD_LEN,
+    DEMO_TOKEN_PREFIX,
     is_weak_password,
     _write_initial_credentials,
     _require_user,
@@ -41,11 +42,13 @@ from .email_notify import (
     notify_monthly_report,
     notify_range_task_deadline,
     notify_module_activity,
+    notify_dev_case_delete_request,
 )
 from .startup import (
     _EDGE_CANDIDATES,
     _get_edge_path,
     init_default_admin,
+    init_demo_account,
     flag_weak_passwords,
     init_unlock_passwords,
     _cleanup_sessions,
@@ -55,7 +58,7 @@ from .startup import (
 __all__ = [
     # auth
     "_SUPERADMIN_MODULES", "_hash", "_hash_pw", "_verify_pw",
-    "_LEGACY_WEAK_PASSWORDS", "_CREDENTIALS_FILE", "MIN_PASSWORD_LEN",
+    "_LEGACY_WEAK_PASSWORDS", "_CREDENTIALS_FILE", "MIN_PASSWORD_LEN", "DEMO_TOKEN_PREFIX",
     "is_weak_password", "_write_initial_credentials", "_require_user", "_tok",
     # settings
     "_get_setting", "_set_setting",
@@ -70,9 +73,9 @@ __all__ = [
     "notify_returned", "notify_resubmit_requester", "notify_settlement_finalized",
     "notify_daily_task_assigned", "notify_daily_task_completed", "notify_daily_task_overdue",
     "notify_daily_task_edited", "notify_warranty_expiry", "notify_monthly_report",
-    "notify_range_task_deadline",
+    "notify_range_task_deadline", "notify_dev_case_delete_request",
     # startup
     "_EDGE_CANDIDATES", "_get_edge_path",
-    "init_default_admin", "flag_weak_passwords", "init_unlock_passwords",
+    "init_default_admin", "init_demo_account", "flag_weak_passwords", "init_unlock_passwords",
     "_cleanup_sessions", "_sync_module_versions",
 ]

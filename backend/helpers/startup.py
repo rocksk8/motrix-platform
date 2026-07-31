@@ -80,6 +80,31 @@ def init_default_admin() -> None:
         conn.close()
 
 
+def init_demo_account() -> None:
+    """Ensure the 'demo' showcase account exists in the real DB (gatekeeper row
+    used only to authenticate the login POST). All actual browsing after login
+    happens against the isolated demo DB — see db.reset_demo_db() /
+    routers/auth.py auth_login()."""
+    conn = get_db()
+    try:
+        if not conn.execute("SELECT id FROM users WHERE username='demo'").fetchone():
+            conn.execute(
+                "INSERT INTO users "
+                "(username, password_hash, display_name, role, modules, active, "
+                "created_at, must_change_password) "
+                "VALUES ('demo', ?, '展示帳號', 'superadmin', ?, 1, ?, 0)",
+                (
+                    _hash_pw("60575481"),
+                    json.dumps(_SUPERADMIN_MODULES),
+                    datetime.now().isoformat(),
+                ),
+            )
+            conn.commit()
+            logger.info("已建立展示帳號（demo），密碼 60575481")
+    finally:
+        conn.close()
+
+
 def flag_weak_passwords() -> None:
     """Mark accounts still using known weak/legacy passwords for forced rotation.
 
@@ -208,5 +233,90 @@ def _cleanup_sessions() -> None:
         conn.commit()
     except Exception:
         logger.exception("_cleanup_sessions failed")
+    finally:
+        conn.close()
+
+
+def _version_to_updated_at(date_str: str, version: str, time_str: str = "") -> str:
+    """Convert manifest date/time/version fields to an ISO datetime string.
+
+    Priority:
+      1. Explicit ``time`` field (HH:MM or HH:MM:SS) — most accurate.
+      2. Version suffix letter (a→01:00, b→02:00, …) — ordering fallback.
+      3. Midnight (T00:00:00) — last resort for no-suffix versions.
+    """
+    import re as _re
+    if len(date_str) != 10:      # already a full datetime string
+        return date_str
+    if time_str:
+        t = time_str.strip()
+        if t.count(":") == 1:
+            t += ":00"
+        return f"{date_str}T{t}"
+    m = _re.search(r'([a-z])$', version)
+    if m:
+        hour = ord(m.group(1)) - ord('a') + 1
+        return f"{date_str}T{hour:02d}:00:00"
+    return date_str + "T00:00:00"
+
+
+def _sync_module_versions() -> None:
+    """Upsert version_manifest.json entries into module_versions table.
+
+    Key rules:
+    - (module, version) is the natural unique key.
+    - First run: inserts all historical records.
+    - Subsequent runs: INSERT OR IGNORE skips existing rows, then UPDATE
+      corrects updated_at / content for system-synced rows so manifest
+      edits (e.g. adding a "time" field) take effect on next restart.
+    - User-created entries (updated_by != 'system') are never modified.
+    """
+    manifest_path = os.path.join(os.path.dirname(__file__), "..", "version_manifest.json")
+    if not os.path.exists(manifest_path):
+        return
+    try:
+        with open(manifest_path, encoding="utf-8") as f:
+            entries = json.load(f)
+    except Exception:
+        logger.exception("_sync_module_versions: failed to load version_manifest.json")
+        return
+
+    conn = get_db()
+    try:
+        inserted = updated = 0
+        for e in entries:
+            module   = (e.get("module")  or "").strip()
+            version  = (e.get("version") or "").strip()
+            content  = (e.get("content") or "").strip()
+            date_str = (e.get("date") or e.get("updated_at") or "").strip()
+            time_str = (e.get("time") or "").strip()
+            if not module or not version:
+                continue
+
+            updated_at = _version_to_updated_at(date_str, version, time_str)
+
+            cur = conn.execute(
+                "INSERT OR IGNORE INTO module_versions "
+                "(module, version, updated_at, content, updated_by) VALUES (?,?,?,?,?)",
+                (module, version, updated_at, content, "system"),
+            )
+            inserted += cur.rowcount
+
+            # Sync: update timestamp / content on existing system-synced rows
+            rv = conn.execute(
+                "UPDATE module_versions SET updated_at=?, content=? "
+                "WHERE module=? AND version=? AND updated_by='system' "
+                "  AND (updated_at!=? OR content!=?)",
+                (updated_at, content, module, version, updated_at, content),
+            )
+            updated += rv.rowcount
+
+        conn.commit()
+        if inserted:
+            logger.info("_sync_module_versions: inserted %d new entries from manifest", inserted)
+        if updated:
+            logger.info("_sync_module_versions: synced %d existing rows from manifest", updated)
+    except Exception:
+        logger.exception("_sync_module_versions failed")
     finally:
         conn.close()

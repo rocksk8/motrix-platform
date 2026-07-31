@@ -32,6 +32,11 @@ _LEGACY_WEAK_PASSWORDS = (
 _CREDENTIALS_FILE = os.path.join(os.path.dirname(__file__), "..", ".initial_admin_credentials.txt")
 MIN_PASSWORD_LEN = 8
 
+# Session tokens issued to the 'demo' showcase account are prefixed so
+# auth_middleware can flip db.set_demo_mode(True) BEFORE looking the session up
+# (the session itself only exists in the isolated demo DB, not the real one).
+DEMO_TOKEN_PREFIX = "DEMO_"
+
 
 # ── Hashing ───────────────────────────────────────────────────────────────────
 
@@ -90,7 +95,12 @@ def _write_initial_credentials(username: str, password: str) -> str:
 
 # ── Session helpers ───────────────────────────────────────────────────────────
 
-def _require_user(authorization: str, require_superadmin: bool = False) -> dict:
+def _require_user(authorization: str, require_superadmin: bool = False, module: str = None) -> dict:
+    """Validate session and check role/module permissions.
+
+    module: if provided alongside require_superadmin=True, superadmin OR users
+            with that module key in their modules list are permitted.
+    """
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(401, "未登入")
     token = authorization[7:]
@@ -108,7 +118,12 @@ def _require_user(authorization: str, require_superadmin: bool = False) -> dict:
     if not row:
         raise HTTPException(401, "Session 已過期，請重新登入")
     if require_superadmin and row["role"] != "superadmin":
-        raise HTTPException(403, "僅超級管理員可執行此操作")
+        if module:
+            user_mods = json.loads(row["modules"] or "[]")
+            if module not in user_mods:
+                raise HTTPException(403, "僅超級管理員或具授權模組的使用者可執行此操作")
+        else:
+            raise HTTPException(403, "僅超級管理員可執行此操作")
     return dict(row)
 
 

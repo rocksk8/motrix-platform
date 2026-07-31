@@ -1,11 +1,14 @@
 """Financial report generation — Excel & PDF (admin+ only)."""
 import io
 import json
+import logging
 import os
 import subprocess
 import tempfile
+import threading
+import time
 from calendar import monthrange
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Optional
 from urllib.parse import quote as _url_quote
 
@@ -17,11 +20,31 @@ from fastapi import APIRouter, Header, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
 from db import get_db
-from helpers import _require_user, _warranty_expiry, _get_edge_path
+from helpers import _require_user, _warranty_expiry, _get_edge_path, _get_setting, _set_setting
+
+_log = logging.getLogger(__name__)
 
 router = APIRouter()
 
 _COMPANY  = "允碩整合集創"
+
+# Per-user export rate limit — keyed by (user_id, fmt) so Excel / PDF are independent
+_EXCEL_COOLDOWN = 5   # seconds — fast generation, just prevent double-clicks
+_PDF_COOLDOWN   = 30  # seconds — Edge headless is resource-intensive
+_export_times: dict = {}
+_export_lock = threading.Lock()
+
+
+def _check_export_rate(user_id: int, fmt: str) -> None:
+    """Raise 429 if this user exported this format within the cooldown window."""
+    cooldown = _PDF_COOLDOWN if fmt == "pdf" else _EXCEL_COOLDOWN
+    with _export_lock:
+        key = (user_id, fmt)
+        last = _export_times.get(key, 0.0)
+        wait = cooldown - (time.monotonic() - last)
+        if wait > 0:
+            raise HTTPException(429, f"請等待 {int(wait) + 1} 秒後再次匯出")
+        _export_times[key] = time.monotonic()
 _COMPANY2 = "統一編號 60575481 ｜ Tel: 04-3602-2818 ｜ info@miactw.com"
 
 
@@ -31,6 +54,12 @@ def _parse_period(period: str):
     today = date.today()
     if not period:
         period = f"{today.year}-{today.month:02d}"
+    # Annual: bare 4-digit year
+    if period.isdigit() and len(period) == 4:
+        yr = int(period)
+        d0 = date(yr, 1, 1)
+        d1 = date(yr, 12, 31)
+        return f"{yr} 年度", d0.isoformat(), d1.isoformat()
     if "Q" in period.upper():
         yr, q = period.upper().split("-Q")
         yr, q = int(yr), int(q)
@@ -56,8 +85,10 @@ def _collect(period_start: str, period_end: str) -> dict:
                total, pretax, quote_date, sales_person,
                net_margin_pct, direct_margin_pct,
                COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') AS deal_tag,
-               json_extract(data_json,'$.caseRecord')         AS cr_json,
-               json_extract(data_json,'$.settlement.summary') AS settle_json,
+               json_extract(data_json,'$.caseRecord')                  AS cr_json,
+               json_extract(data_json,'$.settlement.summary')          AS settle_json,
+               json_extract(data_json,'$.settlement.settlementDate')   AS settle_date,
+               json_extract(data_json,'$.settlement.finalizedBy')      AS settle_by,
                COALESCE(NULLIF(settle_status,''), json_extract(data_json,'$.settlement.status'), '') AS settle_status
         FROM quotations
         WHERE COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') IN ('已成案','已結案')
@@ -115,7 +146,7 @@ def _collect(period_start: str, period_end: str) -> dict:
                 elif not rcvd:
                     outstanding.append(item)
                 if rcvd:
-                    recv_amt += amt
+                    recv_amt += (aa if aa is not None else amt)
 
         settle = {}
         if row["settle_json"]:
@@ -138,8 +169,13 @@ def _collect(period_start: str, period_end: str) -> dict:
             "receivedAmount": recv_amt,
             "collectionRate": round(recv_amt / total * 100, 1) if total > 0 else 0,
             "settleStatus":   row["settle_status"] or "",
-            "actualMarginPct": float(settle.get("grossMarginPct") or 0) if settle else None,
-            "grossProfit":     int(settle.get("grossProfit") or 0) if settle else None,
+            # Use netMarginPct / netProfit so the comparison with quotation net_margin_pct is apples-to-apples.
+            # Fallback to gross fields for legacy settlements saved before netProfit was recorded.
+            "actualMarginPct": float(settle.get("netMarginPct") or settle.get("grossMarginPct") or 0) if settle else None,
+            "grossProfit":     int(settle.get("netProfit") or settle.get("grossProfit") or 0) if settle else None,
+            "settleSummary":   settle if settle else None,
+            "settleDate":      row["settle_date"] or "",
+            "settleBy":        row["settle_by"]   or "",
             "inPeriod":       period_start <= qdate[:10] <= period_end,
         }
         cases_all.append(case)
@@ -150,16 +186,18 @@ def _collect(period_start: str, period_end: str) -> dict:
     sm: dict = {}
     for c in cases_all:
         k = c["salesPerson"] or "（未指定）"
-        sm.setdefault(k, {"salesPerson": k, "cases": 0, "total": 0, "received": 0, "mSum": 0, "mCnt": 0, "amSum": 0, "amCnt": 0})
+        sm.setdefault(k, {"salesPerson": k, "cases": 0, "total": 0, "received": 0,
+                          "mRevSum": 0.0, "mProfitSum": 0.0,
+                          "amRevSum": 0.0, "amProfitSum": 0.0, "amCnt": 0})
         sm[k]["cases"]    += 1
         sm[k]["total"]    += c["total"]
         sm[k]["received"] += c["receivedAmount"]
-        if c["netMarginPct"]:
-            sm[k]["mSum"] += c["netMarginPct"]
-            sm[k]["mCnt"] += 1
+        sm[k]["mRevSum"]    += c["pretax"]
+        sm[k]["mProfitSum"] += c["pretax"] * (c["netMarginPct"] or 0) / 100
         if c["actualMarginPct"] is not None and c["settleStatus"] == "finalized":
-            sm[k]["amSum"] += c["actualMarginPct"]
-            sm[k]["amCnt"] += 1
+            sm[k]["amCnt"]       += 1
+            sm[k]["amRevSum"]    += c["pretax"]
+            sm[k]["amProfitSum"] += c["pretax"] * c["actualMarginPct"] / 100
     sales = []
     for v in sm.values():
         sales.append({
@@ -168,8 +206,8 @@ def _collect(period_start: str, period_end: str) -> dict:
             "totalAmount":        v["total"],
             "receivedAmount":     v["received"],
             "collectionRate":     round(v["received"] / v["total"] * 100, 1) if v["total"] > 0 else 0,
-            "avgMarginPct":       round(v["mSum"] / v["mCnt"], 1) if v["mCnt"] > 0 else 0,
-            "avgActualMarginPct": round(v["amSum"] / v["amCnt"], 1) if v["amCnt"] > 0 else None,
+            "avgMarginPct":       round(v["mProfitSum"] / v["mRevSum"] * 100, 1) if v["mRevSum"] > 0 else 0,
+            "avgActualMarginPct": round(v["amProfitSum"] / v["amRevSum"] * 100, 1) if v["amRevSum"] > 0 else None,
             "settledCount":       v["amCnt"],
         })
     sales.sort(key=lambda x: x["totalAmount"], reverse=True)
@@ -205,6 +243,30 @@ def _collect(period_start: str, period_end: str) -> dict:
             pass
     warr.sort(key=lambda x: x["daysLeft"])
 
+    # settle overdue: 已結案但未完成精算的案件
+    conn3 = get_db()
+    ov_rows = conn3.execute("""
+        SELECT quote_no, customer_name, project_name, sales_person, updated_at
+        FROM quotations
+        WHERE COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') = '已結案'
+          AND COALESCE(NULLIF(settle_status,''), json_extract(data_json,'$.settlement.status'), '') != 'finalized'
+        ORDER BY updated_at ASC
+    """).fetchall()
+    conn3.close()
+    settle_overdue = [
+        {
+            "quoteNo":     r["quote_no"],
+            "customer":    r["customer_name"] or "",
+            "project":     r["project_name"]  or "",
+            "salesPerson": r["sales_person"]  or "",
+            "closedAt":    (r["updated_at"]   or "")[:10],
+        }
+        for r in ov_rows
+    ]
+
+    # backlog: 進行中案件的剩餘應收金額
+    backlog = sum(c["total"] - c["receivedAmount"] for c in cases_all if c["dealTag"] == "已成案")
+
     # totals
     tr   = sum(i["amount"] for i in all_items)
     tc   = sum(i["amount"] for i in all_items if i["received"])
@@ -236,6 +298,8 @@ def _collect(period_start: str, period_end: str) -> dict:
             "settledCases":           _settled,
             "totalActualGrossProfit": _act_gp,
             "settleCoverage":         round(_settled / _closed * 100, 1) if _closed > 0 else 0,
+            "backlog":                int(backlog),
+            "settleOverdueCount":     len(settle_overdue),
         },
         "periodItems":    period_items,
         "outstanding":    outstanding,
@@ -243,8 +307,85 @@ def _collect(period_start: str, period_end: str) -> dict:
         "casesAll":       cases_all,
         "casesPeriod":    cases_period,
         "salesPerf":      sales,
-        "marginCases":    [c for c in cases_all if c["actualMarginPct"] is not None],
+        "marginCases":    [c for c in cases_all if c["actualMarginPct"] is not None and c["settleStatus"] == "finalized"],
         "warranty":       warr[:30],
+        "settleOverdue":  settle_overdue,
+    }
+
+
+# ── Achievement computation ───────────────────────────────────────────────────
+
+def _compute_achievement(year: int, targets: dict, cases_all: list) -> dict:
+    """Compute YTD metrics vs annual targets for a given year."""
+    if not targets or targets.get("year") != year:
+        return {"year": year, "hasTargets": False}
+
+    ann    = targets.get("annual") or {}
+    yr_str = str(year)
+    today  = date.today()
+
+    if today.year > year:
+        frac = 1.0
+    elif today.year < year:
+        frac = 0.0
+    else:
+        yday  = today.timetuple().tm_yday
+        total = 366 if (year % 4 == 0 and (year % 100 != 0 or year % 400 == 0)) else 365
+        frac  = round(yday / total, 3)
+
+    ytd          = [c for c in cases_all if (c["quoteDate"] or "").startswith(yr_str)]
+    ytd_cases    = len(ytd)
+    ytd_revenue  = sum(c["total"] for c in ytd)
+    ytd_coll     = sum(c["receivedAmount"] for c in ytd)
+    ytd_col_rate = round(ytd_coll / ytd_revenue * 100, 1) if ytd_revenue > 0 else 0.0
+
+    fin_ytd    = [c for c in ytd if c["settleStatus"] == "finalized" and c["grossProfit"] is not None]
+    ytd_gp     = sum(c["grossProfit"] for c in fin_ytd)
+    mps        = [c["actualMarginPct"] for c in fin_ytd if c["actualMarginPct"] is not None]
+    ytd_margin = round(sum(mps) / len(mps), 1) if mps else 0.0
+
+    def _rate(actual, target):
+        return round(actual / target * 100, 1) if (target and target != 0) else None
+
+    def _pro(target):
+        return round(target * frac) if target else 0
+
+    t_rev  = ann.get("revenue")          or 0
+    t_cs   = ann.get("newCases")         or 0
+    t_colA = ann.get("collectionAmount") or 0
+    t_colR = ann.get("collectionRate")   or 0
+    t_mgn  = ann.get("avgNetMarginPct")  or 0
+    t_gp   = ann.get("grossProfit")      or 0
+
+    sp_acv = []
+    for sp_t in (targets.get("salesperson") or []):
+        sn   = sp_t.get("name") or ""
+        sy_c = [c for c in ytd if c["salesPerson"] == sn]
+        sy_r = sum(c["total"] for c in sy_c)
+        sp_acv.append({
+            "name":          sn,
+            "targetRevenue": sp_t.get("revenue") or 0,
+            "targetCases":   sp_t.get("cases")   or 0,
+            "ytdRevenue":    sy_r,
+            "ytdCases":      len(sy_c),
+            "revenueRate":   _rate(sy_r, sp_t.get("revenue") or 0),
+            "caseRate":      _rate(len(sy_c), sp_t.get("cases") or 0),
+        })
+
+    return {
+        "year":         year,
+        "hasTargets":   True,
+        "daysFraction": frac,
+        "prorataLabel": f"年度已過 {int(frac * 100)}%，按比例預期進度",
+        "annual": {
+            "revenue":      {"actual": ytd_revenue, "target": t_rev,  "rate": _rate(ytd_revenue, t_rev),  "prorata": _pro(t_rev)},
+            "newCases":     {"actual": ytd_cases,   "target": t_cs,   "rate": _rate(ytd_cases, t_cs),     "prorata": int(_pro(t_cs))},
+            "collectionAmt":{"actual": ytd_coll,    "target": t_colA, "rate": _rate(ytd_coll, t_colA),    "prorata": _pro(t_colA)},
+            "collectionRate":{"actual":ytd_col_rate,"target": t_colR, "rate": _rate(ytd_col_rate, t_colR),"prorata": None},
+            "avgMarginPct": {"actual": ytd_margin,  "target": t_mgn,  "rate": _rate(ytd_margin, t_mgn),   "prorata": None},
+            "grossProfit":  {"actual": ytd_gp,      "target": t_gp,   "rate": _rate(ytd_gp, t_gp),        "prorata": _pro(t_gp)},
+        },
+        "salesperson": sp_acv,
     }
 
 
@@ -386,11 +527,13 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
     r += 1
 
     case_rows = [
-        ("合約總案數",   s["totalCases"],    ""),
-        ("進行中案件",   s["activeCases"],   ""),
-        ("已結案件",     s["closedCases"],   ""),
-        ("本期新成案",   s["periodCases"],   ""),
-        ("保固到期預警", s["warrantyAlerts"], "90天內"),
+        ("合約總案數",          s["totalCases"],          ""),
+        ("進行中案件",          s["activeCases"],          ""),
+        ("已結案件",            s["closedCases"],          ""),
+        ("本期新成案",          s["periodCases"],          ""),
+        ("在製訂單 (Backlog)",  _fmt(s["backlog"]),        "進行中案件未收款合計"),
+        ("保固到期預警",        s["warrantyAlerts"],       "90天內"),
+        ("已結案未精算",        f"{s['settleOverdueCount']} 件", "待補精算" if s["settleOverdueCount"] > 0 else "無"),
     ]
     for label, val, note in case_rows:
         _set_row(ws1, r, [label, val, note, ""],
@@ -399,10 +542,142 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
                  aligns=[al("left"), al("right"), al("left"), al("left")],
                  height=18)
         ws1.cell(row=r, column=1).font = mk(bold=True, size=9, color=C_GRAY)
-        ws1.cell(row=r, column=2).font = mk(bold=True, size=12, color=C_DARK)
+        vc = C_RED if label == "已結案未精算" and s["settleOverdueCount"] > 0 else C_BLUE if label == "在製訂單 (Backlog)" else C_DARK
+        ws1.cell(row=r, column=2).font = mk(bold=True, size=12, color=vc)
         r += 1
 
-    # ── Sheet 2: 本期收款明細 ────────────────────────────────────────────────
+    # ── Sheet 2: 目標達成率 ──────────────────────────────────────────────────────
+    acv      = data.get("achievement") or {}
+    acv_year = acv.get("year") or int(gen_at[:4])
+
+    ws_acv = wb.create_sheet("目標達成率")
+    ws_acv.sheet_view.showGridLines = False
+    ws_acv.column_dimensions["A"].width = 22
+    ws_acv.column_dimensions["B"].width = 18
+    ws_acv.column_dimensions["C"].width = 18
+    ws_acv.column_dimensions["D"].width = 12
+    ws_acv.column_dimensions["E"].width = 18
+    ws_acv.column_dimensions["F"].width = 14
+
+    ws_acv.merge_cells("A1:F1")
+    c = ws_acv["A1"]
+    c.value = f"{_COMPANY} — {acv_year} 年度目標達成率"
+    c.font  = mk(bold=True, size=14, color=C_WHITE)
+    c.fill  = fill("7C3AED")
+    c.alignment = al("center")
+    ws_acv.row_dimensions[1].height = 32
+
+    ws_acv.merge_cells("A2:F2")
+    c = ws_acv["A2"]
+    c.value = acv.get("prorataLabel", "尚未設定年度目標") if acv.get("hasTargets") else "尚未設定年度目標"
+    c.font  = mk(size=9, color="9CA3AF")
+    c.fill  = fill(C_DARK)
+    c.alignment = al("center")
+    ws_acv.row_dimensions[2].height = 16
+
+    ws_acv.row_dimensions[3].height = 8
+
+    if not acv.get("hasTargets"):
+        ws_acv.merge_cells("A4:F4")
+        msg = ws_acv["A4"]
+        msg.value = "請於系統設定中配置年度目標後，本頁將自動顯示各指標達成率分析。"
+        msg.font  = mk(size=10, color=C_GRAY, italic=True)
+        msg.alignment = al("center")
+    else:
+        ann = acv.get("annual", {})
+
+        ws_acv.merge_cells("A4:F4")
+        c = ws_acv["A4"]
+        c.value = "年度指標達成率"
+        c.font  = mk(bold=True, size=10, color=C_WHITE)
+        c.fill  = fill("7C3AED")
+        c.alignment = al("left")
+        ws_acv.row_dimensions[4].height = 20
+
+        _set_row(ws_acv, 5,
+                 ["指標", "年度目標", "YTD 實績", "達成率", "按時間比例目標", "狀態"],
+                 font=mk(bold=True, size=9, color=C_WHITE),
+                 fill=fill("374151"), border=BD,
+                 aligns=[al("left"), al("right"), al("right"), al("right"), al("right"), al("center")],
+                 height=20)
+
+        def _acv_xl_row(ws, ri, label, val_fn, actual, target, rate, prorata_val):
+            pro_s  = val_fn(prorata_val) if prorata_val is not None else "—"
+            rate_s = f"{rate:.1f}%" if rate is not None else "—"
+            if rate is None:
+                rc, st, bg = C_GRAY,   "無目標", C_WHITE
+            elif rate >= 95:
+                rc, st, bg = C_GREEN,  "達標 ✓", C_LGREEN
+            elif rate >= 80:
+                rc, st, bg = C_ORANGE, "追趕中", C_LYELLOW
+            else:
+                rc, st, bg = C_RED,    "落後 ✗", C_LRED
+            _set_row(ws, ri, [label, val_fn(target), val_fn(actual), rate_s, pro_s, st],
+                     font=mk(size=9), fill=fill(bg), border=BD,
+                     aligns=[al("left"), al("right"), al("right"), al("right"), al("right"), al("center")],
+                     height=18)
+            ws.cell(row=ri, column=4).font = mk(bold=True, size=9, color=rc)
+            ws.cell(row=ri, column=6).font = mk(bold=True, size=9, color=rc)
+
+        def _xl_m(n): return _fmt(n)
+        def _xl_p(n): return f"{n or 0:.1f}%"
+        def _xl_c(n): return f"{int(n or 0)} 件"
+
+        ri      = 6
+        rev_d   = ann.get("revenue",       {})
+        cas_d   = ann.get("newCases",      {})
+        colA_d  = ann.get("collectionAmt", {})
+        colR_d  = ann.get("collectionRate",{})
+        mgn_d   = ann.get("avgMarginPct",  {})
+        gp_d    = ann.get("grossProfit",   {})
+
+        _acv_xl_row(ws_acv, ri,   "年度合約總額", _xl_m, rev_d.get("actual",0),  rev_d.get("target",0),  rev_d.get("rate"),  rev_d.get("prorata"))
+        _acv_xl_row(ws_acv, ri+1, "年度新成案數", _xl_c, cas_d.get("actual",0),  cas_d.get("target",0),  cas_d.get("rate"),  cas_d.get("prorata"))
+        _acv_xl_row(ws_acv, ri+2, "年度收款金額", _xl_m, colA_d.get("actual",0), colA_d.get("target",0), colA_d.get("rate"), colA_d.get("prorata"))
+        _acv_xl_row(ws_acv, ri+3, "收款率",       _xl_p, colR_d.get("actual",0), colR_d.get("target",0), colR_d.get("rate"), None)
+        _acv_xl_row(ws_acv, ri+4, "平均淨毛利率", _xl_p, mgn_d.get("actual",0),  mgn_d.get("target",0),  mgn_d.get("rate"),  None)
+        _acv_xl_row(ws_acv, ri+5, "年度實際毛利", _xl_m, gp_d.get("actual",0),   gp_d.get("target",0),   gp_d.get("rate"),   gp_d.get("prorata"))
+        ri += 7
+
+        sp_acv = acv.get("salesperson") or []
+        if sp_acv:
+            ws_acv.merge_cells(f"A{ri}:F{ri}")
+            c = ws_acv.cell(row=ri, column=1, value="業務員目標達成率")
+            c.font  = mk(bold=True, size=10, color=C_WHITE)
+            c.fill  = fill(C_BLUE)
+            c.alignment = al("left")
+            ws_acv.row_dimensions[ri].height = 20
+            ri += 1
+
+            _set_row(ws_acv, ri,
+                     ["業務員", "配額目標（元）", "YTD 合約（元）", "合約達成率", "案件配額", "案件達成率"],
+                     font=mk(bold=True, size=9, color=C_WHITE),
+                     fill=fill("374151"), border=BD,
+                     aligns=[al("left"), al("right"), al("right"), al("right"), al("right"), al("right")],
+                     height=20)
+            ri += 1
+
+            for sp in sp_acv:
+                rv  = sp.get("revenueRate")
+                cs  = sp.get("caseRate")
+                rv_c = C_GREEN if (rv is not None and rv >= 95) else C_ORANGE if (rv is not None and rv >= 80) else C_RED if rv is not None else C_GRAY
+                cs_c = C_GREEN if (cs is not None and cs >= 95) else C_ORANGE if (cs is not None and cs >= 80) else C_RED if cs is not None else C_GRAY
+                bg   = C_LGREEN if (rv is not None and rv >= 95) else C_LYELLOW if (rv is not None and rv >= 80) else C_LRED if rv is not None else C_WHITE
+                _set_row(ws_acv, ri,
+                         [sp["name"], sp["targetRevenue"], sp["ytdRevenue"],
+                          f"{rv:.1f}%" if rv is not None else "—",
+                          f"{int(sp['targetCases'] or 0)} 件",
+                          f"{cs:.1f}%" if cs is not None else "—"],
+                         font=mk(size=9), fill=fill(bg), border=BD,
+                         aligns=[al("left"), al("right"), al("right"), al("right"), al("right"), al("right")],
+                         height=18)
+                for ci in [2, 3]:
+                    ws_acv.cell(row=ri, column=ci).number_format = '#,##0'
+                ws_acv.cell(row=ri, column=4).font = mk(bold=True, size=9, color=rv_c)
+                ws_acv.cell(row=ri, column=6).font = mk(bold=True, size=9, color=cs_c)
+                ri += 1
+
+    # ── Sheet 3: 本期收款明細 ────────────────────────────────────────────────
     ws2 = wb.create_sheet("本期收款明細")
     ws2.sheet_view.showGridLines = False
 
@@ -469,7 +744,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
     for ci in [6, 8, 9, 10]:
         ws2.cell(row=sr, column=ci).number_format = '#,##0'
 
-    # ── Sheet 3: 未收款清單 ──────────────────────────────────────────────────
+    # ── Sheet 4: 未收款清單 ──────────────────────────────────────────────────
     ws3 = wb.create_sheet("未收款清單")
     ws3.sheet_view.showGridLines = False
 
@@ -510,7 +785,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
              aligns=[al("left")] + [al("right")] * 8, height=20)
     ws3.cell(row=sr3, column=7).number_format = '#,##0'
 
-    # ── Sheet 4: 案件清單 ────────────────────────────────────────────────────
+    # ── Sheet 5: 案件清單 ────────────────────────────────────────────────────
     ws4 = wb.create_sheet("案件清單")
     ws4.sheet_view.showGridLines = False
 
@@ -569,10 +844,10 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
                 color=C_GREEN if am >= (net or 0) else C_RED
             )
 
-    # ── Sheet 5: 業務員績效 ──────────────────────────────────────────────────
+    # ── Sheet 6: 業務員績效 ──────────────────────────────────────────────────
     ws5 = wb.create_sheet("業務員績效")
     ws5.sheet_view.showGridLines = False
-    hdrs5 = ["業務員","案件數","合約總額","已收款","收款率(%)","平均預估毛利率","平均實際毛利率","精算件數"]
+    hdrs5 = ["業務員","案件數","合約總額","已收款","收款率(%)","預估毛利率","實際毛利率","精算件數"]
     cols5 = [16, 9, 16, 16, 11, 14, 14, 9]
     for i, (h, w) in enumerate(zip(hdrs5, cols5), 1):
         ws5.column_dimensions[get_column_letter(i)].width = w
@@ -629,59 +904,126 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
     for ci in [3, 4]:
         ws5.cell(row=sr5, column=ci).number_format = '#,##0'
 
-    # ── Sheet 6: 毛利分析 ────────────────────────────────────────────────────
+    # ── Sheet 7: 毛利分析 ────────────────────────────────────────────────────
     ws6 = wb.create_sheet("毛利分析")
     ws6.sheet_view.showGridLines = False
-    hdrs6 = ["案件號","客戶","專案名稱","業務員","案件進度",
-             "報價稅前","預估毛利率","實際毛利率","差異(pp)","實際毛利","精算狀態"]
-    cols6 = [13, 18, 18, 10, 9, 13, 11, 11, 9, 13, 9]
+    # 原始預估 / 實際精算 完整對照欄位
+    hdrs6 = [
+        "案件號","客戶","專案名稱","業務員","案件進度","報價稅前",
+        # 原始預估
+        "原始成本","原始毛利率","原始淨利率","原始預估淨利",
+        # 實際精算
+        "品項成本","額外支出","實際總成本","真實毛利率","真實淨利率","真實淨利",
+        # 差異
+        "差異(pp)","差異金額",
+        # 精算資訊
+        "精算狀態","精算日期","完結人",
+    ]
+    cols6 = [13,18,18,10,9,13, 13,11,11,13, 13,11,13,11,11,13, 9,13, 9,11,10]
     for i, (h, w) in enumerate(zip(hdrs6, cols6), 1):
         ws6.column_dimensions[get_column_letter(i)].width = w
 
     ws6.merge_cells(f"A1:{get_column_letter(len(hdrs6))}1")
     c = ws6["A1"]
-    c.value = "毛利分析（已精算案件）"
+    c.value = "毛利分析 — 精算利潤對照（已完結案件）"
     c.font  = mk(bold=True, size=12, color=C_WHITE)
     c.fill  = fill("7C3AED")
     c.alignment = al("center")
     ws6.row_dimensions[1].height = 24
 
-    _set_row(ws6, 2, hdrs6,
+    # 群組標頭列 (row 2)
+    grp_labels = [
+        (1,6,"基本資訊","374151"), (7,10,"原始報價預估","475569"),
+        (11,16,"實際成本精算","92400E"), (17,18,"差異","7C3AED"),
+        (19,21,"精算資訊","374151"),
+    ]
+    for sc, ec, lbl, clr in grp_labels:
+        if sc == ec:
+            ws6.cell(row=2, column=sc).value = lbl
+        else:
+            ws6.merge_cells(start_row=2, start_column=sc, end_row=2, end_column=ec)
+            ws6.cell(row=2, column=sc).value = lbl
+        for col in range(sc, ec+1):
+            ws6.cell(row=2, column=col).font      = mk(bold=True, size=9, color=C_WHITE)
+            ws6.cell(row=2, column=col).fill      = fill(clr)
+            ws6.cell(row=2, column=col).alignment = al("center")
+    ws6.row_dimensions[2].height = 16
+
+    _set_row(ws6, 3, hdrs6,
              font=mk(bold=True, size=9, color=C_WHITE),
              fill=fill("374151"), border=BD,
              aligns=[al("center")], height=20)
 
-    for r_i, mc in enumerate(data["marginCases"], 3):
+    for r_i, mc in enumerate(data["marginCases"], 4):
+        s   = mc.get("settleSummary") or {}
         net = mc["netMarginPct"] or 0
         act = mc["actualMarginPct"] or 0
-        diff = round(act - net, 1)
+        diff    = round(act - net, 1)
+        act_gp  = mc["grossProfit"] or 0
+        est_gp  = int((mc["pretax"] or 0) * net / 100)
+        gp_diff = act_gp - est_gp
         bg = C_LGREEN if diff >= 0 else C_LRED
+        orig_cost     = int(s.get("origTotalCost", 0) or 0)
+        orig_margin   = float(s.get("origMarginPct", 0) or 0)
+        orig_net_pct  = float(s.get("origNetMarginPct", 0) or 0)
+        orig_net_prof = int(s.get("origNetProfit", 0) or 0)
+        item_cost     = int(s.get("itemActualTotal", 0) or 0)
+        extra_cost    = int(s.get("extraTotal", 0) or 0)
+        total_cost    = int(s.get("totalActualCost", 0) or 0)
+        gross_pct     = float(s.get("grossMarginPct", 0) or 0)
+        net_pct       = float(s.get("netMarginPct", 0) or 0)
+        net_prof      = int(s.get("netProfit", 0) or 0)
         _set_row(ws6, r_i,
                  [mc["quoteNo"], mc["customer"], mc["project"], mc["salesPerson"],
                   mc["dealTag"], mc["pretax"],
-                  f"{net:.1f}%", f"{act:.1f}%",
-                  f"{'+' if diff >= 0 else ''}{diff:.1f}",
-                  mc["grossProfit"] or 0,
-                  mc["settleStatus"] or ""],
+                  orig_cost, f"{orig_margin:.1f}%", f"{orig_net_pct:.1f}%", orig_net_prof,
+                  item_cost, extra_cost, total_cost,
+                  f"{gross_pct:.1f}%", f"{net_pct:.1f}%", net_prof,
+                  f"{'+' if diff >= 0 else ''}{diff:.1f}", gp_diff,
+                  mc["settleStatus"] or "", mc.get("settleDate",""), mc.get("settleBy","")],
                  font=mk(size=9), fill=fill(bg), border=BD,
-                 aligns=[al("left"), al("left"), al("left"), al("left"), al("center"),
-                         al("right"), al("right"), al("right"), al("right"),
-                         al("right"), al("center")],
+                 aligns=[al("left"),al("left"),al("left"),al("left"),al("center"),
+                         al("right"),al("right"),al("right"),al("right"),al("right"),
+                         al("right"),al("right"),al("right"),al("right"),al("right"),al("right"),
+                         al("right"),al("right"),
+                         al("center"),al("center"),al("left")],
                  height=18)
-        ws6.cell(row=r_i, column=6).number_format = '#,##0'
-        ws6.cell(row=r_i, column=10).number_format = '#,##0'
-        ws6.cell(row=r_i, column=9).font = mk(
-            bold=True, size=9, color=C_GREEN if diff >= 0 else C_RED
-        )
-        ws6.cell(row=r_i, column=8).font = mk(
-            bold=True, size=9, color=C_GREEN if act >= net else C_RED
-        )
+        for col in [6,7,10,11,12,13,16,18]:
+            ws6.cell(row=r_i, column=col).number_format = '#,##0'
+        ws6.cell(row=r_i, column=18).number_format = '+#,##0;-#,##0;0'
+        ws6.cell(row=r_i, column=17).font = mk(bold=True, size=9, color=C_GREEN if diff >= 0 else C_RED)
+        ws6.cell(row=r_i, column=15).font = mk(bold=True, size=9, color=C_GREEN if net_pct >= net else C_RED)
+        ws6.cell(row=r_i, column=18).font = mk(bold=True, size=9, color=C_GREEN if gp_diff >= 0 else C_RED)
 
-    if not data["marginCases"]:
-        ws6.cell(row=3, column=1).value = "（目前尚無已完成精算之案件）"
-        ws6.cell(row=3, column=1).font = mk(size=9, color=C_GRAY, italic=True)
+    if data["marginCases"]:
+        sr6 = len(data["marginCases"]) + 4
+        tot_pretax    = sum(mc["pretax"] or 0 for mc in data["marginCases"])
+        tot_orig_cost = sum(int((mc.get("settleSummary") or {}).get("origTotalCost",0) or 0) for mc in data["marginCases"])
+        tot_orig_np   = sum(int((mc.get("settleSummary") or {}).get("origNetProfit",0) or 0) for mc in data["marginCases"])
+        tot_item      = sum(int((mc.get("settleSummary") or {}).get("itemActualTotal",0) or 0) for mc in data["marginCases"])
+        tot_extra     = sum(int((mc.get("settleSummary") or {}).get("extraTotal",0) or 0) for mc in data["marginCases"])
+        tot_total     = sum(int((mc.get("settleSummary") or {}).get("totalActualCost",0) or 0) for mc in data["marginCases"])
+        tot_net_prof  = sum(int((mc.get("settleSummary") or {}).get("netProfit",0) or 0) for mc in data["marginCases"])
+        tot_est       = sum(int((mc["pretax"] or 0) * (mc["netMarginPct"] or 0) / 100) for mc in data["marginCases"])
+        tot_act       = sum(mc["grossProfit"] or 0 for mc in data["marginCases"])
+        _set_row(ws6, sr6,
+                 ["合計","","","","", tot_pretax,
+                  tot_orig_cost,"","", tot_orig_np,
+                  tot_item, tot_extra, tot_total,"","", tot_net_prof,
+                  "", tot_act - tot_est,
+                  "","",""],
+                 font=mk(bold=True, size=9, color=C_WHITE),
+                 fill=fill("111827"), border=BD,
+                 aligns=[al("center")] + [al("right")] * 20,
+                 height=20)
+        for col in [6,7,10,11,12,13,16,18]:
+            ws6.cell(row=sr6, column=col).number_format = '#,##0'
+        ws6.cell(row=sr6, column=18).number_format = '+#,##0;-#,##0;0'
+    else:
+        ws6.cell(row=4, column=1).value = "（目前尚無已完成精算之案件）"
+        ws6.cell(row=4, column=1).font = mk(size=9, color=C_GRAY, italic=True)
 
-    # ── Sheet 7: 保固到期預警 ────────────────────────────────────────────────
+    # ── Sheet 8: 保固到期預警 ────────────────────────────────────────────────
     ws7 = wb.create_sheet("保固到期預警")
     ws7.sheet_view.showGridLines = False
     hdrs7 = ["案件號","客戶","專案名稱","設備名稱","序號SN","MAC","到期日","剩餘天數","狀態"]
@@ -726,6 +1068,100 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
         ws7.cell(row=3, column=1).value = "目前 90 天內無保固到期設備"
         ws7.cell(row=3, column=1).font  = mk(size=9, color=C_GREEN, italic=True)
 
+    # ── Sheet 8: 已結案未精算 ────────────────────────────────────────────────
+    so_list = data.get("settleOverdue") or []
+    ws8 = wb.create_sheet("已結案未精算")
+    ws8.sheet_view.showGridLines = False
+
+    hdrs8 = ["案件號","客戶","專案名稱","業務員","更新日期（結案參考）"]
+    cols8 = [13, 18, 22, 12, 18]
+    for i, (h, w) in enumerate(zip(hdrs8, cols8), 1):
+        ws8.column_dimensions[get_column_letter(i)].width = w
+
+    ws8.merge_cells(f"A1:{get_column_letter(len(hdrs8))}1")
+    c = ws8["A1"]
+    c.value = f"已結案未完成精算（共 {len(so_list)} 件）"
+    c.font  = mk(bold=True, size=12, color=C_WHITE)
+    c.fill  = fill(C_ORANGE)
+    c.alignment = al("center")
+    ws8.row_dimensions[1].height = 24
+
+    _set_row(ws8, 2, hdrs8,
+             font=mk(bold=True, size=9, color=C_WHITE),
+             fill=fill("374151"), border=BD,
+             aligns=[al("center")], height=20)
+
+    for r_i, ov in enumerate(so_list, 3):
+        _set_row(ws8, r_i,
+                 [ov["quoteNo"], ov["customer"], ov["project"],
+                  ov["salesPerson"], ov["closedAt"]],
+                 font=mk(size=9), fill=fill(C_LYELLOW), border=BD,
+                 aligns=[al("left"), al("left"), al("left"), al("left"), al("center")],
+                 height=18)
+
+    if not so_list:
+        ws8.cell(row=3, column=1).value = "所有已結案件均已完成精算"
+        ws8.cell(row=3, column=1).font  = mk(size=9, color=C_GREEN, italic=True)
+
+    # ── Sheet 9: 帳齡分析 ────────────────────────────────────────────────────
+    ar = data.get("arAging") or {}
+    ar_bands = ar.get("bands") or []
+    ar_total = ar.get("total") or {}
+
+    ws9 = wb.create_sheet("帳齡分析")
+    ws9.sheet_view.showGridLines = False
+
+    hdrs9 = ["帳齡區間","案件號","客戶","專案名稱","業務員","進度","款項","應收金額","佔比","報價日","超期天數"]
+    cols9 = [11, 13, 16, 20, 10, 9, 10, 14, 8, 11, 9]
+    for i, (h, w) in enumerate(zip(hdrs9, cols9), 1):
+        ws9.column_dimensions[get_column_letter(i)].width = w
+
+    ws9.merge_cells(f"A1:{get_column_letter(len(hdrs9))}1")
+    c = ws9["A1"]
+    c.value = f"應收帳款帳齡分析（截至 {ar.get('asOf','')}，合計未收 NT$ {ar_total.get('amount',0):,}）"
+    c.font  = mk(bold=True, size=12, color=C_WHITE)
+    c.fill  = fill(C_RED)
+    c.alignment = al("center")
+    ws9.row_dimensions[1].height = 24
+
+    _set_row(ws9, 2, hdrs9,
+             font=mk(bold=True, size=9, color=C_WHITE),
+             fill=fill("374151"), border=BD,
+             aligns=[al("center")], height=20)
+
+    ar_r = 3
+    for band in ar_bands:
+        bkey = band.get("key", "")
+        bg_band = C_LRED if bkey == "90+" else C_LYELLOW if bkey == "61-90" else C_LBLUE if bkey == "31-60" else C_LGREEN
+        for it in band.get("items") or []:
+            days = it["daysElapsed"]
+            _set_row(ws9, ar_r,
+                     [band["label"], it["quoteNo"], it["customer"], it["project"],
+                      it["salesPerson"], it["dealTag"], it["type"],
+                      it["amount"], f"{it['pct']:.1f}%", it["quoteDate"], days],
+                     font=mk(size=9), fill=fill(bg_band), border=BD,
+                     aligns=[al("center"), al("left"), al("left"), al("left"),
+                             al("left"), al("center"), al("center"),
+                             al("right"), al("right"), al("center"), al("right")],
+                     height=18)
+            ws9.cell(row=ar_r, column=8).number_format = '#,##0'
+            days_cell = ws9.cell(row=ar_r, column=11)
+            days_cell.font = mk(bold=True, size=9,
+                                color=C_RED if days > 90 else C_ORANGE if days > 60 else C_DARK)
+            ar_r += 1
+
+    if ar_r == 3:
+        ws9.cell(row=3, column=1).value = "目前無未收款應收帳款"
+        ws9.cell(row=3, column=1).font  = mk(size=9, color=C_GREEN, italic=True)
+    else:
+        _set_row(ws9, ar_r,
+                 ["合計", "", "", "", "", "", "",
+                  ar_total.get("amount", 0), "", "", ""],
+                 font=mk(bold=True, size=9, color=C_WHITE),
+                 fill=fill(C_DARK), border=BD,
+                 aligns=[al("left")] + [al("right")] * 10, height=20)
+        ws9.cell(row=ar_r, column=8).number_format = '#,##0'
+
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
@@ -734,8 +1170,63 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
 
 # ── PDF HTML builder ──────────────────────────────────────────────────────────
 
+def _pdf_settle_overdue(so_list: list, tbl_hdr) -> str:
+    if not so_list:
+        return ""
+    import html as _h
+    rows = "".join(
+        f"<tr><td>{_h.escape(ov['quoteNo'])}</td><td>{_h.escape(ov['customer'])}</td>"
+        f"<td>{_h.escape(ov['project'])}</td><td>{_h.escape(ov['salesPerson'])}</td>"
+        f"<td class='c'>{_h.escape(ov['closedAt'])}</td></tr>"
+        for ov in so_list
+    )
+    return (
+        "<div class='page-break'></div>"
+        f"<div class='section-title' style='background:#D97706'>已結案未精算（共 {len(so_list)} 件，待補精算）</div>"
+        f"<table><thead>{tbl_hdr('案件號','客戶','專案名稱','業務員','更新日期（結案參考）')}</thead><tbody>{rows}</tbody></table>"
+    )
+
+
+def _pdf_ar_aging(ar: dict, tbl_hdr, fmt) -> str:
+    if not ar:
+        return ""
+    bands     = ar.get("bands") or []
+    total_amt = (ar.get("total") or {}).get("amount", 0)
+    as_of     = ar.get("asOf", "")
+    import html as _h
+    rows = ""
+    for band in bands:
+        for it in band.get("items") or []:
+            d = it["daysElapsed"]
+            color = "red" if d > 90 else "orange" if d > 60 else ""
+            color_style = f' style="color:#DC2626;font-weight:700"' if d > 90 else f' style="color:#D97706"' if d > 60 else ''
+            rows += (
+                f"<tr><td class='c'>{_h.escape(band['label'])}</td>"
+                f"<td>{_h.escape(it['quoteNo'])}</td><td>{_h.escape(it['customer'])}</td>"
+                f"<td>{_h.escape(it['project'])}</td><td>{_h.escape(it['salesPerson'])}</td>"
+                f"<td class='c'>{_h.escape(it['dealTag'])}</td><td>{_h.escape(it['type'])}</td>"
+                f"<td class='r'>NT$ {it['amount']:,}</td>"
+                f"<td class='r'>{it['pct']:.1f}%</td>"
+                f"<td class='c'>{_h.escape(it['quoteDate'])}</td>"
+                f"<td class='r'{color_style}><b>{d} 天</b></td></tr>"
+            )
+    if not rows:
+        return ""
+    return (
+        "<div class='page-break'></div>"
+        f"<div class='section-title' style='background:#DC2626'>應收帳款帳齡分析（截至 {as_of}，合計 NT$ {total_amt:,}）</div>"
+        f"<table><thead>{tbl_hdr('帳齡區間','案件號','客戶','專案','業務員','進度','款項','應收金額','佔比','報價日','超期天數')}</thead>"
+        f"<tbody>{rows}</tbody>"
+        f"<tr class='sum-row'><td colspan='7'>合計</td><td class='r'>NT$ {total_amt:,}</td><td colspan='3'></td></tr>"
+        "</table>"
+    )
+
+
 def _build_report_html(data: dict, period_label: str, gen_at: str) -> str:
     s = data["summary"]
+
+    import html as _html_mod
+    def esc(v): return _html_mod.escape(str(v or ''))
 
     def tbl_hdr(*cols):
         return "<tr>" + "".join(f"<th>{c}</th>" for c in cols) + "</tr>"
@@ -756,24 +1247,24 @@ def _build_report_html(data: dict, period_label: str, gen_at: str) -> str:
         aa  = it["actualAmount"]
         aa_v = aa if aa is not None else it["amount"]
         pi_rows += (
-            f"<tr><td>{it['quoteNo']}</td><td>{it['customer']}</td>"
-            f"<td>{it['project']}</td><td>{it['salesPerson']}</td>"
-            f"<td class='c'>{it['type']}</td>"
+            f"<tr><td>{esc(it['quoteNo'])}</td><td>{esc(it['customer'])}</td>"
+            f"<td>{esc(it['project'])}</td><td>{esc(it['salesPerson'])}</td>"
+            f"<td class='c'>{esc(it['type'])}</td>"
             f"<td class='r'>NT$ {it['amount']:,}</td>"
-            f"<td class='c'>{it['receivedAt']}</td>"
+            f"<td class='c'>{esc(it['receivedAt'])}</td>"
             f"<td class='r'>NT$ {aa_v:,}</td>"
             "<td class='r fee'>" + (f"NT$ {int(it['feeAmount']):,}" if it['feeAmount'] else "—") + "</td>"
             f"<td class='r net'>NT$ {int(it['netAmount'] or aa_v):,}</td>"
-            f"<td>{it['invoiceNo'] or '—'}</td></tr>"
+            f"<td>{esc(it['invoiceNo'] or '—')}</td></tr>"
         )
 
     # outstanding rows
     os_rows = ""
     for it in data["outstanding"]:
         os_rows += (
-            f"<tr><td>{it['quoteNo']}</td><td>{it['customer']}</td>"
-            f"<td>{it['project']}</td><td>{it['salesPerson']}</td>"
-            f"<td class='c'>{it['dealTag']}</td><td class='c'>{it['type']}</td>"
+            f"<tr><td>{esc(it['quoteNo'])}</td><td>{esc(it['customer'])}</td>"
+            f"<td>{esc(it['project'])}</td><td>{esc(it['salesPerson'])}</td>"
+            f"<td class='c'>{esc(it['dealTag'])}</td><td class='c'>{esc(it['type'])}</td>"
             f"<td class='r red'>NT$ {it['amount']:,}</td>"
             f"<td class='c'>{it['pct']:.1f}%</td></tr>"
         )
@@ -785,9 +1276,9 @@ def _build_report_html(data: dict, period_label: str, gen_at: str) -> str:
         diff = round((am or 0) - (c["netMarginPct"] or 0), 1) if am is not None else None
         in_p_cls = ' class="in-period"' if c["inPeriod"] else ""
         case_rows += (
-            f"<tr{in_p_cls}><td>{c['quoteNo']}</td><td>{c['customer']}</td>"
-            f"<td>{c['project']}</td><td>{c['salesPerson']}</td>"
-            f"<td class='c'>{c['quoteDate']}</td><td class='c tag'>{c['dealTag']}</td>"
+            f"<tr{in_p_cls}><td>{esc(c['quoteNo'])}</td><td>{esc(c['customer'])}</td>"
+            f"<td>{esc(c['project'])}</td><td>{esc(c['salesPerson'])}</td>"
+            f"<td class='c'>{esc(c['quoteDate'])}</td><td class='c tag'>{esc(c['dealTag'])}</td>"
             f"<td class='r'>NT$ {c['total']:,}</td>"
             f"<td class='r'>{c['netMarginPct']:.1f}%</td>"
             "<td class='r " + ("green" if c["collectionRate"] >= 80 else "orange") + f"'>{c['collectionRate']:.1f}%</td>"
@@ -802,7 +1293,7 @@ def _build_report_html(data: dict, period_label: str, gen_at: str) -> str:
         am_cls = "green" if (am is not None and am >= est) else ("red" if am is not None else "")
         am_str = f"{am:.1f}%" if am is not None else "—"
         sp_rows += (
-            f"<tr><td>{sp['salesPerson']}</td><td class='r'>{sp['caseCount']}</td>"
+            f"<tr><td>{esc(sp['salesPerson'])}</td><td class='r'>{sp['caseCount']}</td>"
             f"<td class='r'>NT$ {sp['totalAmount']:,}</td>"
             f"<td class='r'>NT$ {sp['receivedAmount']:,}</td>"
             f"<td class='r'>{sp['collectionRate']:.1f}%</td>"
@@ -811,16 +1302,190 @@ def _build_report_html(data: dict, period_label: str, gen_at: str) -> str:
             f"<td class='r'>{sp['settledCount']}</td></tr>"
         )
 
+    # margin analysis rows (summary table)
+    mg_rows = ""
+    # per-case profit breakdown blocks (利潤分析明細)
+    mg_detail_blocks = ""
+    for mc in data["marginCases"]:
+        net    = mc["netMarginPct"] or 0
+        act    = mc["actualMarginPct"] or 0
+        diff   = round(act - net, 1)
+        est_gp = int((mc["pretax"] or 0) * net / 100)
+        act_gp = mc["grossProfit"] or 0
+        gp_diff = act_gp - est_gp
+        diff_cls = "green" if diff >= 0 else "red"
+        act_cls  = "green" if act >= net else "red"
+        diff_sign = "+" if diff >= 0 else ""
+        gpd_sign  = "+" if gp_diff >= 0 else ""
+        mg_rows += (
+            f"<tr>"
+            f"<td>{esc(mc['quoteNo'])}</td><td>{esc(mc['customer'])}</td>"
+            f"<td>{esc(mc['project'])}</td><td>{esc(mc['salesPerson'])}</td>"
+            f"<td class='c'>{esc(mc['dealTag'])}</td>"
+            f"<td class='r'>{net:.1f}%</td>"
+            f"<td class='r'>NT$ {est_gp:,}</td>"
+            f"<td class='r {act_cls}'><b>{act:.1f}%</b></td>"
+            f"<td class='r'>NT$ {act_gp:,}</td>"
+            f"<td class='r {diff_cls}'><b>{diff_sign}{diff:.1f}pp</b></td>"
+            f"<td class='r {diff_cls}'><b>{gpd_sign}NT$ {abs(gp_diff):,}</b></td>"
+            f"<td class='c'>{esc(mc['settleStatus'] or '—')}</td>"
+            f"</tr>"
+        )
+    if data["marginCases"]:
+        tot_est = sum(int((mc["pretax"] or 0) * (mc["netMarginPct"] or 0) / 100) for mc in data["marginCases"])
+        tot_act = sum(mc["grossProfit"] or 0 for mc in data["marginCases"])
+        tot_diff = tot_act - tot_est
+        td_cls = "green" if tot_diff >= 0 else "red"
+        td_sign = "+" if tot_diff >= 0 else ""
+        mg_rows += (
+            f"<tr class='sum-row'>"
+            f"<td colspan='6'>合計（{len(data['marginCases'])} 件）</td>"
+            f"<td class='r'>NT$ {tot_est:,}</td><td></td>"
+            f"<td class='r'>NT$ {tot_act:,}</td><td></td>"
+            f"<td class='r'>{td_sign}NT$ {abs(tot_diff):,}</td><td></td>"
+            f"</tr>"
+        )
+
+    # per-case profit detail blocks for PDF
+    for mc in data["marginCases"]:
+        s = mc.get("settleSummary") or {}
+        net = mc["netMarginPct"] or 0
+        act = mc["actualMarginPct"] or 0
+        diff_ppts = round(act - net, 1)
+        prof_diff = int(s.get("profitDiff", 0) or 0)
+        diff_clr  = "#15803D" if prof_diff >= 0 else "#DC2626"
+        diff_sign = "+" if prof_diff >= 0 else ""
+        settle_date = mc.get("settleDate","") or ""
+        settle_by   = mc.get("settleBy","")   or ""
+        def _fn(v): return f"NT$ {int(v or 0):,}"
+        mg_detail_blocks += f"""
+<div style="page-break-inside:avoid;margin-bottom:20px;border:1px solid #E5E7EB;border-radius:6px;overflow:hidden">
+  <div style="background:#F3F4F6;padding:7px 12px;display:flex;justify-content:space-between;align-items:center">
+    <span style="font-weight:700;font-size:10pt">{esc(mc['quoteNo'])}　{esc(mc['customer'])}　{esc(mc['project'])}</span>
+    <span style="font-size:9pt;color:#6B7280">{esc(mc['salesPerson'])}{"　精算日："+esc(settle_date) if settle_date else ""}{"　完結人："+esc(settle_by) if settle_by else ""}</span>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:0">
+    <table style="width:100%;border-right:1px solid #E5E7EB">
+      <thead><tr><th colspan="2" style="background:#F9FAFB;color:#374151;text-align:center;padding:5px;font-size:9pt">原始報價預估</th></tr></thead>
+      <tbody>
+        <tr><td>報價稅前收入</td><td class="r">{_fn(s.get("quotedPretax"))}</td></tr>
+        <tr><td>原始成本（料件）</td><td class="r">{_fn(s.get("origTotalCost"))}</td></tr>
+        <tr><td class="bold">原始直接毛利</td><td class="r bold">{_fn(s.get("origDirectProfit"))}</td></tr>
+        <tr><td>原始毛利率</td><td class="r">{float(s.get("origMarginPct") or 0):.1f}%</td></tr>
+        <tr class="sub"><td>管銷分攤（10%）</td><td class="r red">− {_fn(s.get("origAdminCost"))}</td></tr>
+        <tr class="sub"><td>公益捐款（1%）</td><td class="r red">− {_fn(s.get("origCharity"))}</td></tr>
+        <tr class="bold-row"><td>原始預估淨利</td><td class="r">{_fn(s.get("origNetProfit"))}</td></tr>
+        <tr><td>原始預估淨利率</td><td class="r">{float(s.get("origNetMarginPct") or 0):.1f}%</td></tr>
+      </tbody>
+    </table>
+    <table style="width:100%">
+      <thead><tr><th colspan="2" style="background:#FFFBEB;color:#92400E;text-align:center;padding:5px;font-size:9pt">實際成本精算</th></tr></thead>
+      <tbody>
+        <tr><td>報價稅前收入</td><td class="r">{_fn(s.get("quotedPretax"))}</td></tr>
+        <tr><td>品項實際成本</td><td class="r orange">{_fn(s.get("itemActualTotal"))}</td></tr>
+        <tr><td>額外支出</td><td class="r orange">{_fn(s.get("extraTotal"))}</td></tr>
+        <tr class="bold-row"><td>實際總成本</td><td class="r orange bold">{_fn(s.get("totalActualCost"))}</td></tr>
+        <tr><td>真實毛利</td><td class="r {'green' if int(s.get('grossProfit',0) or 0)>=0 else 'red'}">{_fn(s.get("grossProfit"))}</td></tr>
+        <tr><td>真實毛利率</td><td class="r">{float(s.get("grossMarginPct") or 0):.1f}%</td></tr>
+        <tr class="sub"><td>管銷分攤（10%）</td><td class="r red">− {_fn(s.get("adminCost"))}</td></tr>
+        <tr class="sub"><td>公益捐款（1%）</td><td class="r red">− {_fn(s.get("charityDonation"))}</td></tr>
+        <tr class="bold-row"><td>真實淨利</td><td class="r {'green' if int(s.get('netProfit',0) or 0)>=0 else 'red'}">{_fn(s.get("netProfit"))}</td></tr>
+        <tr><td>真實淨利率</td><td class="r" style="color:{'#15803D' if float(s.get('netMarginPct',0) or 0)>=20 else '#B45309' if float(s.get('netMarginPct',0) or 0)>=0 else '#DC2626'};font-weight:700">{float(s.get("netMarginPct") or 0):.1f}%</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div style="background:{'#F0FDF4' if prof_diff>=0 else '#FFF1F2'};border-top:1px solid {'#86EFAC' if prof_diff>=0 else '#FECACA'};padding:6px 12px;font-size:9pt;color:{diff_clr};font-weight:600">
+    {'真實淨利比原始預估高' if prof_diff>=0 else '真實淨利比原始預估低'} NT$ {abs(prof_diff):,}（{'+' if diff_ppts>=0 else ''}{diff_ppts:.1f} ppts）
+  </div>
+</div>"""
+
     # warranty rows
     ww_rows = ""
     for w in data["warranty"]:
         dl = w["daysLeft"]
         cls = "red" if dl < 0 else "orange" if dl <= 30 else ""
         ww_rows += (
-            f"<tr><td>{w['quoteNo']}</td><td>{w['customer']}</td>"
-            f"<td>{w['device']}</td><td>{w['sn']}</td>"
-            f"<td class='c'>{w['expiry']}</td>"
+            f"<tr><td>{esc(w['quoteNo'])}</td><td>{esc(w['customer'])}</td>"
+            f"<td>{esc(w['device'])}</td><td>{esc(w['sn'])}</td>"
+            f"<td class='c'>{esc(w['expiry'])}</td>"
             f"<td class='r {cls}'>{dl} 天</td></tr>"
+        )
+
+    # ── Pre-compute achievement section for PDF ───────────────────────────────
+    _acv  = data.get("achievement") or {}
+    _tgts = data.get("targets")     or {}
+    _acv_year = _acv.get("year") or int(gen_at[:4])
+
+    def _pdf_acv_card(label, actual_s, target_s, rate, prorata_s=None):
+        if rate is None:
+            rc, st, bar = "#6B7280", "無目標", 0
+        elif rate >= 95:
+            rc, st, bar = "#15803D", f"{rate:.1f}% ✓", min(rate, 100)
+        elif rate >= 80:
+            rc, st, bar = "#D97706", f"{rate:.1f}% △", min(rate, 100)
+        else:
+            rc, st, bar = "#DC2626", f"{rate:.1f}% ✗", min(rate, 100)
+        pro_html = f'<div style="font-size:7pt;color:#6B7280;margin-top:2px">按時 {prorata_s}</div>' if prorata_s else ''
+        return (
+            f'<div class="acv-card">'
+            f'<div class="acv-lbl">{label}</div>'
+            f'<div style="display:flex;align-items:baseline;gap:5px;margin-bottom:5px">'
+            f'<span style="font-size:12pt;font-weight:700">{actual_s}</span>'
+            f'<span style="color:#9CA3AF;font-size:8pt"> / {target_s}</span></div>'
+            f'<div style="height:5px;background:#F0F0F0;border-radius:3px;margin-bottom:5px;overflow:hidden">'
+            f'<div style="height:100%;width:{bar:.0f}%;background:{rc};border-radius:3px"></div></div>'
+            f'<div style="font-weight:700;color:{rc};font-size:10pt">{st}</div>'
+            f'{pro_html}</div>'
+        )
+
+    if _acv.get("hasTargets"):
+        _ann     = _acv.get("annual", {})
+        _rev_d   = _ann.get("revenue",       {})
+        _cas_d   = _ann.get("newCases",      {})
+        _colA_d  = _ann.get("collectionAmt", {})
+        _colR_d  = _ann.get("collectionRate",{})
+        _mgn_d   = _ann.get("avgMarginPct",  {})
+        _gp_d    = _ann.get("grossProfit",   {})
+
+        _acv_cards = (
+            _pdf_acv_card("年度合約總額",  fmt(_rev_d.get("actual",0)),  fmt(_rev_d.get("target",0)),  _rev_d.get("rate"),  fmt(_rev_d.get("prorata",0)) if _rev_d.get("prorata") else None)
+          + _pdf_acv_card("年度新成案數",  f"{_cas_d.get('actual',0)} 件",  f"{_cas_d.get('target',0)} 件",  _cas_d.get("rate"), f"{_cas_d.get('prorata',0)} 件" if _cas_d.get("prorata") else None)
+          + _pdf_acv_card("年度收款金額",  fmt(_colA_d.get("actual",0)), fmt(_colA_d.get("target",0)), _colA_d.get("rate"), fmt(_colA_d.get("prorata",0)) if _colA_d.get("prorata") else None)
+          + _pdf_acv_card("收款率目標",    f"{_colR_d.get('actual',0):.1f}%", f"{_colR_d.get('target',0):.0f}%", _colR_d.get("rate"))
+          + _pdf_acv_card("平均淨毛利率",  f"{_mgn_d.get('actual',0):.1f}%",  f"{_mgn_d.get('target',0):.0f}%",  _mgn_d.get("rate"))
+          + _pdf_acv_card("年度實際毛利",  fmt(_gp_d.get("actual",0)),   fmt(_gp_d.get("target",0)),   _gp_d.get("rate"),   fmt(_gp_d.get("prorata",0)) if _gp_d.get("prorata") else None)
+        )
+
+        _sp_rows_html = ""
+        for _sp in (_acv.get("salesperson") or []):
+            _rv  = _sp.get("revenueRate")
+            _rv_c = "#15803D" if (_rv is not None and _rv >= 95) else "#D97706" if (_rv is not None and _rv >= 80) else "#DC2626" if _rv is not None else "#6B7280"
+            _rv_s = f"{_rv:.1f}%" if _rv is not None else "—"
+            _sp_rows_html += (
+                f"<tr><td>{esc(_sp['name'])}</td>"
+                f"<td class='r'>NT$ {_sp['targetRevenue']:,}</td>"
+                f"<td class='r'>NT$ {_sp['ytdRevenue']:,}</td>"
+                f"<td class='r' style='font-weight:700;color:{_rv_c}'>{_rv_s}</td>"
+                f"<td class='r'>{int(_sp['targetCases'] or 0)} 件</td>"
+                f"<td class='r'>{_sp['ytdCases']} 件</td></tr>"
+            )
+        _sp_section = (
+            f"<div class='section-title' style='background:#2563EB'>業務員目標達成率</div>"
+            f"<table><thead><tr><th>業務員</th><th class='r'>配額目標</th><th class='r'>YTD 合約</th>"
+            f"<th class='r'>達成率</th><th class='r'>案件配額</th><th class='r'>YTD 案件</th></tr></thead>"
+            f"<tbody>{_sp_rows_html}</tbody></table>"
+        ) if _sp_rows_html else ""
+
+        acv_html = (
+            f"<div class='page-break'></div>"
+            f"<div class='section-title' style='background:#7C3AED'>{_acv_year} 年度目標達成率 — {_acv.get('prorataLabel','')}</div>"
+            f"<div style='display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0'>{_acv_cards}</div>"
+            f"{_sp_section}"
+        )
+    else:
+        acv_html = (
+            f"<div class='section-title' style='background:#7C3AED'>{_acv_year} 年度目標達成率</div>"
+            f"<p style='color:#6B7280;font-size:9pt;padding:8px 0;font-style:italic'>尚未設定 {_acv_year} 年度目標，請於系統設定中配置。</p>"
         )
 
     html = f"""<!DOCTYPE html>
@@ -839,6 +1504,8 @@ h1{{font-size:16pt;color:#fff;background:#111827;padding:10px 16px;margin-bottom
 .kpi-label{{font-size:7.5pt;color:#6B7280;margin-bottom:3px}}
 .kpi-val{{font-size:14pt;font-weight:700}}
 .kpi-sub{{font-size:7pt;color:#6B7280;margin-top:2px}}
+.acv-card{{border:1px solid #E5E7EB;border-radius:6px;padding:10px 12px;background:#FAFAFA}}
+.acv-lbl{{font-size:7.5pt;color:#6B7280;margin-bottom:4px}}
 .green{{color:#15803D}}.red{{color:#DC2626}}.orange{{color:#D97706}}.blue{{color:#2563EB}}
 table{{width:100%;border-collapse:collapse;margin:0 0 12px;font-size:8pt}}
 th{{background:#374151;color:#fff;padding:5px 7px;text-align:left;font-size:7.5pt;white-space:nowrap}}
@@ -870,7 +1537,11 @@ tr.in-period{{background:#EFF6FF}}
   <div class="kpi"><div class="kpi-label">保固到期預警</div><div class="kpi-val orange">{s["warrantyAlerts"]}</div><div class="kpi-sub">90 天內到期</div></div>
   <div class="kpi"><div class="kpi-label">精算實際毛利合計</div><div class="kpi-val" style="color:#7C3AED">{fmt(s["totalActualGrossProfit"])}</div><div class="kpi-sub">已精算 {s["settledCases"]} 件</div></div>
   <div class="kpi"><div class="kpi-label">精算覆蓋率</div><div class="kpi-val" style="color:#7C3AED">{s["settleCoverage"]}%</div><div class="kpi-sub">已結案 {s["closedCases"]} 件中 {s["settledCases"]} 件完成精算</div></div>
+  <div class="kpi"><div class="kpi-label">在製訂單 (Backlog)</div><div class="kpi-val blue">{fmt(s["backlog"])}</div><div class="kpi-sub">進行中案件未收款合計</div></div>
+  {'<div class="kpi"><div class="kpi-label">已結案未精算</div><div class="kpi-val red">' + str(s["settleOverdueCount"]) + ' 件</div><div class="kpi-sub">待補精算</div></div>' if s["settleOverdueCount"] > 0 else ""}
 </div>
+
+{acv_html}
 
 <!-- 本期收款 -->
 <div class="page-break"></div>
@@ -911,9 +1582,14 @@ tr.in-period{{background:#EFF6FF}}
 <!-- 業務員績效 -->
 <div class="section-title" style="background:#2563EB">業務員績效</div>
 <table>
-<thead>{tbl_hdr("業務員","案件數","合約總額","已收款","收款率","平均預估毛利率","平均實際毛利率","精算件數")}</thead>
+<thead>{tbl_hdr("業務員","案件數","合約總額","已收款","收款率","預估毛利率(加權)","實際毛利率(精算)","精算件數")}</thead>
 <tbody>{sp_rows}</tbody>
 </table>
+
+<!-- 毛利分析 -->
+<div class="page-break"></div>
+<div class="section-title" style="background:#7C3AED">毛利分析（已精算案件，共 {len(data["marginCases"])} 件）</div>
+{'<table><thead>' + tbl_hdr("案件號","客戶","專案","業務員","進度","預估毛利率","預估毛利","實際毛利率","實際毛利","差異(pp)","差異金額","精算狀態") + '</thead><tbody>' + mg_rows + '</tbody></table><h3 style="margin:20px 0 10px;font-size:10pt;color:#6D28D9;border-bottom:1px solid #DDD6FE;padding-bottom:4px">各案件利潤分析明細</h3>' + mg_detail_blocks if data["marginCases"] else '<p style="color:#6B7280;font-size:9pt;padding:8px 0;font-style:italic">目前尚無已完成精算之案件。</p>'}
 
 <!-- 保固預警 -->
 <div class="page-break"></div>
@@ -922,6 +1598,12 @@ tr.in-period{{background:#EFF6FF}}
 <thead>{tbl_hdr("案件號","客戶","設備名稱","序號 SN","到期日","剩餘天數")}</thead>
 <tbody>{ww_rows or '<tr><td colspan="6" class="c" style="color:#6B7280;padding:10px">目前 90 天內無保固到期設備</td></tr>'}</tbody>
 </table>
+
+<!-- 已結案未精算 -->
+{_pdf_settle_overdue(data.get("settleOverdue") or [], tbl_hdr)}
+
+<!-- 帳齡分析 -->
+{_pdf_ar_aging(data.get("arAging") or {}, tbl_hdr, fmt)}
 
 <div class="footer">{_COMPANY} — 此報表由 MOTRIX ERP 系統自動產製，僅供內部管理參考 ｜ {gen_at}</div>
 </body></html>"""
@@ -959,6 +1641,14 @@ def _html_to_pdf(html: str) -> bytes:
 
 # ── API endpoints ─────────────────────────────────────────────────────────────
 
+def _augment_with_targets(data: dict, d0: str) -> dict:
+    year    = int(d0[:4])
+    targets = _get_setting("operating_targets") or {}
+    data["targets"]     = targets
+    data["achievement"] = _compute_achievement(year, targets, data["casesAll"])
+    return data
+
+
 @router.get("/api/reports/financial")
 def report_json(
     period: Optional[str] = Query(None),
@@ -968,7 +1658,7 @@ def report_json(
     if u["role"] not in ("superadmin", "admin"):
         raise HTTPException(403, "僅管理員以上可存取報表")
     label, d0, d1 = _parse_period(period)
-    data = _collect(d0, d1)
+    data = _augment_with_targets(_collect(d0, d1), d0)
     return {"period": period, "periodLabel": label, "dateStart": d0, "dateEnd": d1, **data}
 
 
@@ -980,8 +1670,10 @@ def report_excel(
     u = _require_user(authorization)
     if u["role"] not in ("superadmin", "admin"):
         raise HTTPException(403, "僅管理員以上可存取報表")
+    _check_export_rate(u["id"], "excel")
     label, d0, d1 = _parse_period(period)
-    data   = _collect(d0, d1)
+    data   = _augment_with_targets(_collect(d0, d1), d0)
+    data["arAging"] = _compute_ar_aging()
     gen_at = datetime.now().strftime("%Y-%m-%d %H:%M")
     xlsx   = _build_excel(data, label, gen_at)
     safe   = label.replace(" ", "").replace("年", "Y").replace("月", "M").replace("第", "Q").replace("季", "")
@@ -1001,8 +1693,10 @@ def report_pdf(
     u = _require_user(authorization)
     if u["role"] not in ("superadmin", "admin"):
         raise HTTPException(403, "僅管理員以上可存取報表")
+    _check_export_rate(u["id"], "pdf")
     label, d0, d1 = _parse_period(period)
-    data   = _collect(d0, d1)
+    data   = _augment_with_targets(_collect(d0, d1), d0)
+    data["arAging"] = _compute_ar_aging()
     gen_at = datetime.now().strftime("%Y-%m-%d %H:%M")
     try:
         pdf_bytes = _html_to_pdf(_build_report_html(data, label, gen_at))
@@ -1015,3 +1709,415 @@ def report_pdf(
         media_type="application/pdf",
         headers={"Content-Disposition": f"attachment; filename*=UTF-8''{_url_quote(fname)}"},
     )
+
+
+# ── AR Aging（應收帳款帳齡分析）────────────────────────────────────────────────
+
+def _compute_ar_aging() -> dict:
+    """帳齡計算 — 供 API endpoint 及 Excel/PDF 匯出共用。"""
+    today = date.today()
+    conn = get_db()
+    rows = conn.execute("""
+        SELECT quote_no, customer_name, project_name, sales_person,
+               total, quote_date,
+               COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') AS deal_tag,
+               json_extract(data_json,'$.caseRecord') AS cr_json
+        FROM quotations
+        WHERE COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') IN ('已成案','已結案')
+        ORDER BY quote_date ASC
+    """).fetchall()
+    conn.close()
+
+    bands: dict = {"0-30": [], "31-60": [], "61-90": [], "90+": []}
+
+    for row in rows:
+        cr = {}
+        if row["cr_json"]:
+            try:
+                cr = json.loads(row["cr_json"])
+            except Exception:
+                pass
+
+        total = row["total"] or 0
+        pay   = (cr.get("payment") or {}).get("items", [])
+        if not pay:
+            continue
+
+        try:
+            anchor = date.fromisoformat((row["quote_date"] or "")[:10])
+        except Exception:
+            anchor = today
+
+        others = sum(round(total * (p.get("pct") or 0) / 100) for p in pay[1:])
+
+        for idx, pi in enumerate(pay):
+            if pi.get("received"):
+                continue
+            amt  = int(total - others) if idx == 0 else round(total * (pi.get("pct") or 0) / 100)
+            days = (today - anchor).days
+
+            band = "90+" if days > 90 else "61-90" if days > 60 else "31-60" if days > 30 else "0-30"
+            bands[band].append({
+                "quoteNo":     row["quote_no"],
+                "customer":    row["customer_name"] or "",
+                "project":     row["project_name"]  or "",
+                "salesPerson": row["sales_person"]  or "",
+                "dealTag":     row["deal_tag"]       or "",
+                "type":        pi.get("type", f"第{idx+1}期"),
+                "pct":         pi.get("pct") or 0,
+                "amount":      amt,
+                "quoteDate":   row["quote_date"] or "",
+                "daysElapsed": days,
+            })
+
+    result_bands = []
+    for key, label in [("0-30", "0–30 天"), ("31-60", "31–60 天"), ("61-90", "61–90 天"), ("90+", "90+ 天")]:
+        items = bands[key]
+        result_bands.append({
+            "label":  label,
+            "key":    key,
+            "count":  len(items),
+            "amount": sum(i["amount"] for i in items),
+            "items":  items,
+        })
+
+    return {
+        "asOf":  today.isoformat(),
+        "note":  "帳齡以案件報價日為基準計算，不含已收款項目",
+        "bands": result_bands,
+        "total": {
+            "count":  sum(b["count"]  for b in result_bands),
+            "amount": sum(b["amount"] for b in result_bands),
+        },
+    }
+
+
+@router.get("/api/reports/ar-aging")
+def get_ar_aging(authorization: str = Header(None)):
+    """
+    應收帳款帳齡分析：以案件成案日為基準，將未收款項目分為 0-30/31-60/61-90/90+ 天四個區間。
+    注意：無顯式到期日時以報價日計算帳齡，為管理用途的近似值。
+    """
+    u = _require_user(authorization)
+    if u["role"] not in ("superadmin", "admin"):
+        raise HTTPException(403, "財務報告僅管理員以上可查閱")
+    return _compute_ar_aging()
+
+
+# ── Customer transaction history ───────────────────────────────────────────────
+
+@router.get("/api/reports/customer-history")
+def customer_history(authorization: str = Header(None)):
+    """全時期客戶交易歷史彙整：每位客戶的報價/成案/收款聚合視圖。"""
+    u = _require_user(authorization)
+    if u["role"] not in ("superadmin", "admin"):
+        raise HTTPException(403, "財務報告僅管理員以上可查閱")
+
+    conn = get_db()
+    rows = conn.execute("""
+        SELECT quote_no, customer_name, project_name, status, total, quote_date,
+               sales_person, net_margin_pct,
+               COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') AS deal_tag,
+               json_extract(data_json,'$.caseRecord')   AS cr_json,
+               json_extract(data_json,'$.settlement')   AS settle_json
+        FROM quotations
+        WHERE status NOT IN ('草稿')
+        ORDER BY quote_date DESC
+    """).fetchall()
+    conn.close()
+
+    _WON = ("已成案", "已結案")
+
+    by_cust: dict = {}
+    for row in rows:
+        cust = (row["customer_name"] or "").strip() or "（未填）"
+        if cust not in by_cust:
+            by_cust[cust] = {"txns": [], "sp_cnt": {}}
+
+        total = row["total"] or 0
+        cr = {}
+        if row["cr_json"]:
+            try:
+                cr = json.loads(row["cr_json"])
+            except Exception:
+                pass
+        pay = (cr.get("payment") or {}).get("items", [])
+        collected = 0
+        if pay:
+            others = sum(round(total * (p.get("pct") or 0) / 100) for p in pay[1:])
+            for idx, p in enumerate(pay):
+                amt = int(total - others) if idx == 0 else round(total * (p.get("pct") or 0) / 100)
+                if p.get("received"):
+                    collected += amt
+
+        settle_status = ""
+        if row["settle_json"]:
+            try:
+                settle_status = json.loads(row["settle_json"]).get("status") or ""
+            except Exception:
+                pass
+
+        deal_tag = row["deal_tag"] or ""
+        sp = row["sales_person"] or ""
+
+        by_cust[cust]["txns"].append({
+            "quoteNo":      row["quote_no"],
+            "status":       row["status"] or "",
+            "dealTag":      deal_tag,
+            "quoteDate":    (row["quote_date"] or "")[:10],
+            "total":        total,
+            "collectedAmount": collected,
+            "salesPerson":  sp,
+            "projectName":  row["project_name"] or "",
+            "netMarginPct": row["net_margin_pct"],
+            "settleStatus": settle_status,
+        })
+        if sp:
+            by_cust[cust]["sp_cnt"][sp] = by_cust[cust]["sp_cnt"].get(sp, 0) + 1
+
+    customers = []
+    for cust, data in by_cust.items():
+        txns  = data["txns"]
+        won   = [t for t in txns if t["dealTag"] in _WON]
+        lost  = [t for t in txns if t["dealTag"] == "未成案"]
+        decided = len(won) + len(lost)
+        won_amount  = sum(t["total"] for t in won)
+        total_coll  = sum(t["collectedAmount"] for t in txns)
+        last_act    = max((t["quoteDate"] for t in txns if t["quoteDate"]), default="")
+        sc          = data["sp_cnt"]
+        main_sp     = max(sc, key=sc.get) if sc else ""
+
+        customers.append({
+            "customer":        cust,
+            "quoteCount":      len(txns),
+            "wonCount":        len(won),
+            "lostCount":       len(lost),
+            "pendingCount":    len(txns) - len(won) - len(lost),
+            "winRate":         round(len(won) / decided * 100, 1) if decided > 0 else None,
+            "totalWonAmount":  won_amount,
+            "collectedAmount": total_coll,
+            "collectionRate":  round(total_coll / won_amount * 100, 1) if won_amount > 0 else 0,
+            "lastActivity":    last_act,
+            "salesPerson":     main_sp,
+            "transactions":    txns,
+        })
+
+    customers.sort(key=lambda x: x["totalWonAmount"], reverse=True)
+    return {"customers": customers, "total": len(customers)}
+
+
+# ── Monthly report email scheduler ────────────────────────────────────────────
+
+def _prev_month_str(ref: date = None) -> str:
+    """Return 'YYYY-MM' for the month before ref (default: today)."""
+    if ref is None:
+        ref = date.today()
+    return f"{ref.year - 1}-12" if ref.month == 1 else f"{ref.year}-{ref.month - 1:02d}"
+
+
+def _send_monthly_report_for(period_str: str) -> None:
+    """Generate Excel + PDF for period_str ('YYYY-MM') and email to superadmins.
+    The emailed report is scoped to ONLY the target month's data (not cumulative)."""
+    from helpers.email_notify import notify_monthly_report
+    try:
+        label, d0, d1 = _parse_period(period_str)
+        data   = _augment_with_targets(_collect(d0, d1), d0)
+        gen_at = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+        # Scope to this month only: use casesPeriod as the case list,
+        # and filter outstanding / allItems to those same cases.
+        period_case_nos = {c["quoteNo"] for c in data["casesPeriod"]}
+        mail_data = dict(data)
+        mail_data["casesAll"]    = data["casesPeriod"]
+        mail_data["outstanding"] = [i for i in data["outstanding"]
+                                    if i["quoteNo"] in period_case_nos]
+        mail_data["allItems"]    = [i for i in data["allItems"]
+                                    if i["quoteNo"] in period_case_nos]
+        # Recompute period-scoped summary totals
+        p_items  = mail_data["allItems"]
+        p_recv   = [i for i in p_items if i["received"]]
+        p_tr     = sum(i["amount"] for i in p_items)
+        p_tc     = sum(i["amount"] for i in p_recv)
+        p_fee    = sum(i["feeAmount"] or 0 for i in p_recv)
+        p_act    = sum((i["actualAmount"] if i["actualAmount"] is not None else i["amount"])
+                       for i in p_recv)
+        mail_data["summary"] = dict(data["summary"])
+        mail_data["summary"].update({
+            "totalReceivable":  p_tr,
+            "totalCollected":   p_tc,
+            "totalOutstanding": p_tr - p_tc,
+            "totalFee":         p_fee,
+            "netCollected":     p_act - p_fee,
+            "collectionRate":   round(p_tc / p_tr * 100, 1) if p_tr > 0 else 0,
+            "totalCases":       len(data["casesPeriod"]),
+            "activeCases":      sum(1 for c in data["casesPeriod"] if c["dealTag"] == "已成案"),
+            "closedCases":      sum(1 for c in data["casesPeriod"] if c["dealTag"] == "已結案"),
+        })
+        mail_data["salesPerf"]   = [
+            s for s in data["salesPerf"]
+            if any(c["salesPerson"] == s["salesPerson"] for c in data["casesPeriod"])
+        ]
+        mail_data["marginCases"] = [c for c in data["casesPeriod"]
+                                    if c.get("actualMarginPct") is not None and c.get("settleStatus") == "finalized"]
+
+        try:
+            excel_bytes = _build_excel(mail_data, label, gen_at)
+        except Exception as exc:
+            _log.warning("月報 Excel 產製失敗（%s）: %s", period_str, exc)
+            excel_bytes = None
+
+        try:
+            pdf_bytes = _html_to_pdf(_build_report_html(mail_data, label, gen_at))
+        except Exception as exc:
+            _log.warning("月報 PDF 產製失敗（%s）: %s", period_str, exc)
+            pdf_bytes = None
+
+        notify_monthly_report(label, period_str, excel_bytes, pdf_bytes)
+        _log.info("月報已寄送：%s（含 %d 件本月案件）", period_str, len(data["casesPeriod"]))
+    except Exception as exc:
+        _log.warning("_send_monthly_report_for 失敗（%s）: %s", period_str, exc)
+
+
+def _catchup_monthly_reports() -> None:
+    """Process all months from (last_sent + 1) through previous month in order."""
+    prev = _prev_month_str()
+    last_sent = _get_setting("monthly_report_last_sent") or ""
+
+    if not last_sent:
+        # First-ever run — only send previous month (avoid spamming all historical data)
+        _send_monthly_report_for(prev)
+        _set_setting("monthly_report_last_sent", prev)
+        _log.info("月報初次執行，已寄送 %s", prev)
+        return
+
+    if last_sent >= prev:
+        return  # already up to date
+
+    # Advance month by month
+    try:
+        yr, mo = map(int, last_sent.split("-"))
+    except ValueError:
+        _send_monthly_report_for(prev)
+        _set_setting("monthly_report_last_sent", prev)
+        return
+
+    while True:
+        mo += 1
+        if mo > 12:
+            mo = 1
+            yr += 1
+        current = f"{yr}-{mo:02d}"
+        _send_monthly_report_for(current)
+        _set_setting("monthly_report_last_sent", current)
+        if current >= prev:
+            break
+
+    _log.info("月報補寄完成，最後寄送 %s", prev)
+
+
+def schedule_monthly_report() -> None:
+    """Call once on server startup.
+    Immediately runs catch-up for any missed months, then repeats on the 1st
+    of each month at 08:00 local time."""
+
+    # Always run catch-up on startup
+    threading.Thread(target=_catchup_monthly_reports, daemon=True).start()
+
+    def _next_1st_08() -> float:
+        now = datetime.now()
+        if now.month == 12:
+            nxt = now.replace(year=now.year + 1, month=1, day=1,
+                              hour=8, minute=0, second=0, microsecond=0)
+        else:
+            nxt = now.replace(month=now.month + 1, day=1,
+                              hour=8, minute=0, second=0, microsecond=0)
+        return max((nxt - now).total_seconds(), 1.0)
+
+    def _monthly_loop():
+        # Run catch-up (handles the case where months were skipped during the wait)
+        _catchup_monthly_reports()
+        t = threading.Timer(_next_1st_08(), _monthly_loop)
+        t.daemon = True
+        t.start()
+
+    t = threading.Timer(_next_1st_08(), _monthly_loop)
+    t.daemon = True
+    t.start()
+    _log.info("月報排程已啟動，下次寄送時間：%.0f 秒後（每月 1 日 08:00）", _next_1st_08())
+
+
+# ── Monthly trend endpoint ─────────────────────────────────────────────────────
+
+@router.get("/api/reports/monthly-trend")
+def monthly_trend(months: int = 12, authorization: str = Header(None)):
+    """近 N 月 MoM 趨勢：新成案件數、合約金額、實收金額、收入加權平均毛利率。"""
+    u = _require_user(authorization)
+    if u["role"] not in ("superadmin", "admin"):
+        raise HTTPException(403, "財務報告僅管理員以上可查閱")
+
+    months = min(max(months, 1), 36)
+    today  = date.today()
+
+    month_list = []
+    for i in range(months - 1, -1, -1):
+        total_m = today.year * 12 + today.month - 1 - i
+        py, pm  = total_m // 12, total_m % 12 + 1
+        key     = f"{py}-{pm:02d}"
+        label   = f"{pm}月" if py == today.year else f"{pm}/{str(py)[2:]}"
+        month_list.append({"key": key, "label": label})
+
+    month_map = {
+        m["key"]: {"newCases": 0, "revenue": 0, "mRevSum": 0.0, "mProfitSum": 0.0, "collected": 0}
+        for m in month_list
+    }
+
+    conn = get_db()
+    rows = conn.execute("""
+        SELECT total, pretax, quote_date, net_margin_pct,
+               json_extract(data_json,'$.caseRecord') AS cr_json
+        FROM quotations
+        WHERE COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') IN ('已成案','已結案')
+    """).fetchall()
+    conn.close()
+
+    for row in rows:
+        total  = row["total"]  or 0
+        pretax = row["pretax"] or 0
+        nm     = float(row["net_margin_pct"] or 0)
+        qk     = (row["quote_date"] or "")[:7]
+
+        if qk in month_map:
+            month_map[qk]["newCases"]   += 1
+            month_map[qk]["revenue"]    += total
+            month_map[qk]["mRevSum"]    += pretax
+            month_map[qk]["mProfitSum"] += pretax * nm / 100
+
+        cr = {}
+        if row["cr_json"]:
+            try: cr = json.loads(row["cr_json"])
+            except Exception: pass
+        pay = (cr.get("payment") or {}).get("items", [])
+        if pay:
+            others = sum(round(total * (p.get("pct") or 0) / 100) for p in pay[1:])
+            for idx, pi in enumerate(pay):
+                if not pi.get("received"):
+                    continue
+                amt = int(total - others) if idx == 0 else round(total * (pi.get("pct") or 0) / 100)
+                aa  = pi.get("actualAmount")
+                rat = (pi.get("receivedAt") or "")[:7]
+                if rat in month_map:
+                    month_map[rat]["collected"] += int(aa if aa is not None else amt)
+
+    result = []
+    for m in month_list:
+        md      = month_map[m["key"]]
+        rev_sum = md["mRevSum"]
+        result.append({
+            "key":          m["key"],
+            "label":        m["label"],
+            "newCases":     md["newCases"],
+            "revenue":      md["revenue"],
+            "collected":    md["collected"],
+            "avgMarginPct": round(md["mProfitSum"] / rev_sum * 100, 1) if rev_sum > 0 else None,
+        })
+    return result

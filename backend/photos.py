@@ -10,6 +10,16 @@ logger = logging.getLogger(__name__)
 _PHOTO_UPLOAD_BASE = os.path.join(os.path.dirname(__file__), "..", "uploads", "projects")
 
 
+def _photo_root():
+    """(abs_base_dir, url_prefix) — swapped to the isolated, demo-reset folder
+    (db.DEMO_PROJECT_PHOTOS_DIR) for the 'demo' showcase account, so uploaded
+    photos never land in the real uploads/projects/ tree."""
+    from db import is_demo_mode, DEMO_PROJECT_PHOTOS_DIR
+    if is_demo_mode():
+        return DEMO_PROJECT_PHOTOS_DIR, "_demo_projects"
+    return _PHOTO_UPLOAD_BASE, "projects"
+
+
 def _gps_to_decimal(dms) -> Optional[float]:
     try:
         d, m, s = float(dms[0]), float(dms[1]), float(dms[2])

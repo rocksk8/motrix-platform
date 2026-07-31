@@ -7,7 +7,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Header
 from pydantic import BaseModel
 
-from db import get_db
+from db import get_db, next_entity_code
 from helpers import _require_user, _tok, _audit
 from archive import _backup_suppliers
 
@@ -28,14 +28,15 @@ def list_suppliers(authorization: str = Header(None)):
         return []
     conn = get_db()
     rows = conn.execute(
-        "SELECT id, name, tax_id, phone, data_json, created_at, updated_at FROM suppliers ORDER BY name"
+        "SELECT id, code, name, tax_id, phone, data_json, created_at, updated_at FROM suppliers ORDER BY name"
     ).fetchall()
     conn.close()
     result = []
     for row in rows:
         d = json.loads(row["data_json"] or "{}")
         result.append({
-            "id": row["id"], "name": row["name"],
+            "id": row["id"], "code": row["code"] or "",
+            "name": row["name"],
             "taxId": row["tax_id"], "phone": row["phone"],
             "createdAt": row["created_at"], "updatedAt": row["updated_at"],
             **d
@@ -56,13 +57,16 @@ def create_supplier(body: SupplierIn, authorization: str = Header(None)):
         )
         conn.commit()
         sid = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        code = next_entity_code(conn, 'suppliers', 'S')
+        conn.execute("UPDATE suppliers SET code=? WHERE id=?", (code, sid))
+        conn.commit()
     except Exception as e:
         conn.close()
         raise HTTPException(409, f"建立失敗：{e}")
     conn.close()
     threading.Thread(target=_backup_suppliers, daemon=True).start()
     _audit(_tok(authorization), 'supplier.create', 'supplier', body.name, body.name)
-    return {"id": sid, "name": body.name}
+    return {"id": sid, "name": body.name, "code": code}
 
 
 @router.put("/api/suppliers/{sid}")

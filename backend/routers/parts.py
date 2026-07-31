@@ -6,7 +6,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Header, Body
 
 from db import get_db
-from helpers import _tok, _audit
+from helpers import _require_user, _tok, _audit
 
 router = APIRouter()
 
@@ -31,6 +31,7 @@ def list_parts(q: Optional[str] = None, category: Optional[str] = None):
 
 @router.post("/api/parts", status_code=201)
 def create_part(body: dict = Body(...), authorization: str = Header(None)):
+    _require_user(authorization)
     conn = get_db()
     now = datetime.now().isoformat()
     part_no = (body.get("partNo") or body.get("part_no") or "").strip()
@@ -61,6 +62,7 @@ def create_part(body: dict = Body(...), authorization: str = Header(None)):
 
 @router.put("/api/parts/{part_id}")
 def update_part(part_id: int, body: dict = Body(...), authorization: str = Header(None)):
+    _require_user(authorization)
     conn = get_db()
     row = conn.execute("SELECT part_no, name FROM parts WHERE id=?", (part_id,)).fetchone()
     if not row:
@@ -89,6 +91,7 @@ def update_part(part_id: int, body: dict = Body(...), authorization: str = Heade
 
 @router.delete("/api/parts/{part_id}")
 def delete_part(part_id: int, authorization: str = Header(None)):
+    _require_user(authorization)
     conn = get_db()
     row = conn.execute("SELECT part_no, name FROM parts WHERE id=?", (part_id,)).fetchone()
     if not row:

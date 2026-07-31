@@ -10,7 +10,7 @@ from fastapi import APIRouter, HTTPException, Header
 from fastapi.responses import Response
 from pydantic import BaseModel
 
-from db import get_db
+from db import get_db, is_demo_mode, DEMO_PAYSLIP_ARCHIVE_DIR
 from helpers import _require_user, _tok, _audit, _get_setting
 
 router = APIRouter()
@@ -20,7 +20,10 @@ _ARCHIVE_DIR = os.path.join(os.path.dirname(__file__), "..", "export_archive")
 os.makedirs(_ARCHIVE_DIR, exist_ok=True)
 
 def _archive_path(slip_no: str, idx: int) -> str:
-    return os.path.join(_ARCHIVE_DIR, f"{slip_no}_{idx}.pdf")
+    # demo 帳號：存至隔離目錄（reset_demo_db() 每次登入清空），不進真實存檔
+    archive_dir = DEMO_PAYSLIP_ARCHIVE_DIR if is_demo_mode() else _ARCHIVE_DIR
+    os.makedirs(archive_dir, exist_ok=True)
+    return os.path.join(archive_dir, f"{slip_no}_{idx}.pdf")
 
 
 # ── 稅務計算 ──────────────────────────────────────────────────────────────────
@@ -114,13 +117,13 @@ class PayslipIn(BaseModel):
 
 @router.get("/api/tax-rules")
 def get_tax_rules(authorization: str = Header(None)):
-    _require_user(authorization, require_superadmin=True)
+    _require_user(authorization, require_superadmin=True, module='payslip')
     return _get_tax_rules()
 
 
 @router.get("/api/next-slip-no")
 def next_slip_no(authorization: str = Header(None)):
-    _require_user(authorization, require_superadmin=True)
+    _require_user(authorization, require_superadmin=True, module='payslip')
     month = datetime.now().strftime("%Y%m")
     conn  = get_db()
     conn.execute("INSERT INTO payslip_seq (month, seq) VALUES (?, 0) ON CONFLICT(month) DO NOTHING",
@@ -135,7 +138,7 @@ def next_slip_no(authorization: str = Header(None)):
 def list_payslips(month: Optional[str] = None, contractor_id: Optional[int] = None,
                   limit: int = 100, offset: int = 0,
                   authorization: str = Header(None)):
-    _require_user(authorization, require_superadmin=True)
+    _require_user(authorization, require_superadmin=True, module='payslip')
     conn = get_db()
     sql = ("SELECT id, slip_no, contractor_id, contractor_name, income_type, "
            "gross_amount, tax_withheld, nhi_supplement, net_amount, "
@@ -164,7 +167,7 @@ def list_payslips(month: Optional[str] = None, contractor_id: Optional[int] = No
 
 @router.post("/api/payslips", status_code=201)
 def create_payslip(body: PayslipIn, authorization: str = Header(None)):
-    user  = _require_user(authorization, require_superadmin=True)
+    user  = _require_user(authorization, require_superadmin=True, module='payslip')
     now   = datetime.now().isoformat()
     month = datetime.now().strftime("%Y%m")
     d     = body.data
@@ -229,7 +232,7 @@ def create_payslip(body: PayslipIn, authorization: str = Header(None)):
 
 @router.get("/api/payslips/{slip_no}")
 def get_payslip(slip_no: str, authorization: str = Header(None)):
-    _require_user(authorization, require_superadmin=True)
+    _require_user(authorization, require_superadmin=True, module='payslip')
     conn = get_db()
     row = conn.execute("SELECT * FROM payslips WHERE slip_no=?", (slip_no,)).fetchone()
     conn.close()
@@ -242,7 +245,7 @@ def get_payslip(slip_no: str, authorization: str = Header(None)):
 
 @router.put("/api/payslips/{slip_no}")
 def update_payslip(slip_no: str, body: PayslipIn, authorization: str = Header(None)):
-    _require_user(authorization, require_superadmin=True)
+    _require_user(authorization, require_superadmin=True, module='payslip')
     now   = datetime.now().isoformat()
     d     = body.data
     rules = _get_tax_rules()
@@ -301,7 +304,7 @@ def delete_payslip(slip_no: str, authorization: str = Header(None)):
 
 @router.post("/api/payslips/{slip_no}/export")
 def record_export(slip_no: str, authorization: str = Header(None)):
-    user = _require_user(authorization, require_superadmin=True)
+    user = _require_user(authorization, require_superadmin=True, module='payslip')
     conn = get_db()
     row = conn.execute("SELECT export_log, export_count FROM payslips WHERE slip_no=?",
                        (slip_no,)).fetchone()
@@ -340,7 +343,7 @@ def record_export(slip_no: str, authorization: str = Header(None)):
 @router.post("/api/payslips/{slip_no}/archive/{orig_idx}/record")
 def record_archive_download(slip_no: str, orig_idx: int, authorization: str = Header(None)):
     """記錄「調閱存檔」動作（不產生新 PDF，不覆寫舊存檔，計次）。"""
-    user = _require_user(authorization, require_superadmin=True)
+    user = _require_user(authorization, require_superadmin=True, module='payslip')
     conn = get_db()
     row = conn.execute("SELECT export_log, export_count FROM payslips WHERE slip_no=?",
                        (slip_no,)).fetchone()
@@ -365,7 +368,7 @@ def record_archive_download(slip_no: str, orig_idx: int, authorization: str = He
 
 @router.get("/api/payslips/{slip_no}/archive/{idx}")
 def get_archive_pdf(slip_no: str, idx: int, authorization: str = Header(None)):
-    _require_user(authorization, require_superadmin=True)
+    _require_user(authorization, require_superadmin=True, module='payslip')
     path = _archive_path(slip_no, idx)
     if os.path.exists(path):
         with open(path, "rb") as f:
@@ -388,7 +391,7 @@ def get_archive_pdf(slip_no: str, idx: int, authorization: str = Header(None)):
 
 @router.get("/api/payslips/{slip_no}/pdf-download")
 def pdf_download(slip_no: str, authorization: str = Header(None)):
-    _require_user(authorization, require_superadmin=True)
+    _require_user(authorization, require_superadmin=True, module='payslip')
     from pdf_gen import generate_payslip_pdf_bytes
     try:
         pdf_bytes = generate_payslip_pdf_bytes(slip_no)
