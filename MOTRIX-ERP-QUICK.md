@@ -1,7 +1,7 @@
 # MOTRIX ERP — 開發快速參考
 
 > 允碩整合集創（統編 60575481）｜ Tel: 04-3602-2818 ｜ info@miactw.com  
-> 文件版本：**2026-08-01f**（新增多機同步須知與跨機核對流程，見 §0／§14）
+> 文件版本：**2026-08-01h**（出貨單預覽 Modal 調整：移除下載選項、PDF 加浮水印警告橫幅，見 §5.8）
 
 ---
 
@@ -467,10 +467,12 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
 
 - 一個案件（`quote_no`）可對應多張出貨單（分批出貨）；分頁對所有能開案件管理的人可見，**新增/編輯/送審/簽核/匯出 PDF/勾選回簽等操作限 admin+**（與承攬商分頁一致：分頁可見、寫入操作後端擋權限）
 - 品項純出貨用途，**不含金額欄位**；可從報價單一鍵匯入品項（前端純轉換，去除 cost/margin/unitPrice/amount），或手動新增/編輯，支援段落標題列（`type:'header'`）
-- **簽核流程獨立於報價單**：`system_settings.shipping_approval_flow`（不與報價單 `approval_flow` 共用），設定頁 `shipping-approval-settings.html`；tiers 依序簽核，自簽規則同報價單（有設定流程時申請人可自簽，無流程時僅 superadmin 可簽且禁止申請人自簽）
+- **簽核流程獨立於報價單**：`system_settings.shipping_approval_flow`（不與報價單 `approval_flow` 共用），設定頁 `shipping-approval-settings.html`；tiers 依序簽核，有設定流程時申請人可自簽；**無流程時僅 superadmin 可簽（含自簽）**——與報價單「無流程時禁止申請人自簽」的規則刻意不同（2026-08-01g 調整，見 §12）
 - 全部簽核完成 → 狀態 `已核准`，背景觸發 PDF 存檔（`pdf_gen.py _generate_shipping_pdf`）
 - **已回簽**：`已核准` 狀態才可切換；`signed-toggle` 為嚴格 toggle（已回簽不可重複標記，需先取消），每次切換完整記錄至 `signed_log`（誰、何時、動作、備註），案件管理 UI 可展開查看完整歷程
 - PDF 匯出與報價單同一套機制：`GET .../pdf-download` 產生 bytes（不記錄），`POST .../export` 另外累計 `export_count`/`export_log`
+- **預覽**：`GET .../pdf-download` 無狀態限制，任何狀態皆可預覽（案件管理 UI「預覽」按鈕，iframe+blob 顯示，不呼叫 `/export`）；預覽 Modal **不提供下載選項**（避免與已核准後的正式匯出/記錄流程混淆），要下載仍須回到列表上已核准狀態的「下載 PDF」按鈕；非已核准狀態下 PDF 本身（`pdf_gen.py _build_shipping_html`）會帶浮水印＋警告橫幅（比照報價單預覽稿樣式，文案「出貨單預覽稿／尚未正式核准」），已核准後乾淨無浮水印
+- **收件人聯絡人快選**：新增/編輯 Modal 內若案件所屬客戶（`quotations.data_json.customerId`，或退而用 `customer_name` 比對客戶清單）有登記聯絡人，顯示「選聯絡人」下拉快選；點選僅覆寫欄位值，收件人欄位本身仍可自由輸入
 - 刪除僅限 `草稿` 狀態（保留已進入簽核/已回簽的歷程）
 - Demo 模式 PDF 隔離目錄：`backend/_demo_shipping_pdf_archive`
 
@@ -738,6 +740,22 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 ## §12 · 變更摘要（最新兩版）
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
+
+### 2026-08-01h — 出貨單預覽 Modal 調整（移除下載選項／PDF 加浮水印警告橫幅）
+
+- **背景**：上一版（2026-08-01g）新增的出貨單預覽功能，Modal 內在已核准狀態下會顯示「下載 PDF」按鈕；使用者回饋預覽視窗不應該有下載選項，且希望比照報價單既有預覽（`quotation-form.html`）的做法，在還沒正式核准前的內容加上背景提示，避免被誤認成正式文件
+- **`case-management.html`**：移除預覽 Modal footer 的「下載 PDF」按鈕，只留「關閉」；已核准狀態下列表上原本的「下載 PDF」按鈕（記錄 export_count 的正式匯出流程）不受影響，仍在原位置
+- **`backend/pdf_gen.py` `_build_shipping_html()`**：出貨單預覽用的是後端 Edge headless 產生的真正 PDF（不像報價單預覽是前端 HTML 模擬稿），因此浮水印／警告橫幅改為直接刻進 PDF 產生的 HTML 模板本身，`status != '已核准'` 時顯示：3×4 格線平鋪浮水印（「出貨單預覽稿」／「尚未正式核准」，半透明紅字，樣式比照 `quotation-form.html` `.pdf-watermark`/`.pdf-wm-item`）＋藍底警告橫幅（「⚠ 此為出貨單預覽稿（目前狀態：XXX），尚未正式核准，請勿對外提供或引用」）；已核准後兩者皆不顯示，維持正式文件版面乾淨
+- 前端 `previewShippingPdf()`/`closeShippingPreview()` 邏輯不變（浮水印是 PDF 內容本身的一部分，iframe 顯示即自動帶有，無需額外前端程式碼）
+- 已用 demo 帳號驗證：草稿狀態預覽可見浮水印平鋪與藍色警告橫幅、Modal 內僅「關閉」無下載按鈕；送出並自簽核准後再次預覽，PDF 版面乾淨無浮水印/橫幅，Modal 內同樣僅「關閉」；列表上已核准狀態的「下載 PDF」按鈕（Modal 外）維持正常，點擊後 export_count 正確累加為 1
+
+### 2026-08-01g — 出貨單三項調整（收件人聯絡人快選／預覽／超級管理員自簽）
+
+- **背景**：出貨單功能（2026-08-01d 新增）上線後，現場使用發現三個缺口：收件人要手動重打客戶聯絡人資訊、送審前無法先看格式只能等已核准才能下載、以及超級管理員在沒設定簽核流程時連自己送的單都不能簽（`申請人不得自行審核` 擋自己），三者皆為開發機（`hichan` 帳號）調整，正式機部屬包已於本次工作前先行手動同步過一版
+- **`backend/routers/shipping_notes.py`**：`approve_shipping_note()` 無 tiers（superadmin fallback）分支移除 `requestedBy == user.username` 的自簽檢查，僅保留 `role != superadmin` 限制；有 tiers 分支本來就未擋自簽、`reject_shipping_note()` 也本來就未擋，故只需改這一處
+- **收件人聯絡人快選**（`case-management.js`/`.html`）：新增 `_loadShippingContactOptions()`，依 `this.selected.data.customerId`（報價單 `data_json` 內若曾用客戶選單建檔即存在）取客戶聯絡人，取不到時退而用 `customer_name` 比對 `/api/customers` 全列表；開新增/編輯 Modal 時自動載入，收件人欄位旁新增「選聯絡人」下拉，點選僅覆寫欄位值，輸入框本身仍可自由編輯（無聯絡人資料時不顯示按鈕，不影響原本手動輸入流程）
+- **預覽功能**（`case-management.js`/`.html`）：新增 `previewShippingPdf()`/`closeShippingPreview()`，重用既有 `GET .../pdf-download` 端點（該端點本無狀態限制），以 iframe+blob 顯示於新 Modal，純預覽不呼叫 `/export`、不影響 `export_count`；已核准狀態下 Modal 內另提供「下載 PDF」按鈕直接呼叫既有 `downloadShippingPdf()`，沿用原本記錄匯出次數的邏輯，未重複實作
+- 已用 demo 帳號（隔離空白 db）建立測試客戶+聯絡人、關聯報價單、出貨單完整驗證：收件人「選聯絡人」下拉正確顯示客戶聯絡人並可點選帶入（仍可手動修改）；草稿與已核准狀態皆可點「預覽」正確顯示 PDF，已核准狀態下預覽 Modal 內「下載 PDF」按鈕正確出現；以 superadmin 建立並送出出貨單（未設定 `shipping_approval_flow`）後自行點簽核，確認不再出現「申請人不得自行審核」錯誤，直接核准成功
 
 ### 2026-08-01f — 新增多機同步須知與跨機核對流程（文件化）
 

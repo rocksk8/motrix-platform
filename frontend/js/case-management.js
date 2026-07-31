@@ -71,6 +71,12 @@ function app() {
     shippingForm: {},
     shippingMsg: '',
     _shippingLogOpen: {},
+    shippingContactOptions: [],
+    showShippingContactPicker: false,
+    shippingPreviewModal: false,
+    shippingPreviewBlobUrl: '',
+    shippingPreviewFetching: false,
+    shippingPreviewNote: null,
 
     canSeeFinancial() {
       const m = this.session.modules || []
@@ -185,6 +191,9 @@ function app() {
         this.shippingNotes = []
         this.showShippingModal = false
         this._shippingLogOpen = {}
+        this.shippingContactOptions = []
+        this.showShippingContactPicker = false
+        this.closeShippingPreview()
         // 背景查詢是否已有關聯專案
         this._checkLinkedProject(quoteNo)
         this._loadCaseTasks(quoteNo)
@@ -1180,10 +1189,45 @@ function app() {
       }
     },
 
+    async _loadShippingContactOptions() {
+      this.shippingContactOptions = []
+      try {
+        let customer = null
+        const customerId = this.selected?.data?.customerId
+        if (customerId) {
+          const r = await fetch(`/api/customers/${customerId}`, {
+            headers: { Authorization: 'Bearer ' + this.session.token }
+          })
+          if (r.ok) customer = await r.json()
+        } else {
+          const targetName = (this.selected?.customer_name || '').trim()
+          if (targetName) {
+            const r = await fetch('/api/customers', {
+              headers: { Authorization: 'Bearer ' + this.session.token }
+            })
+            if (r.ok) {
+              const all = await r.json()
+              customer = all.find(c => c.name && c.name.trim() === targetName) || null
+            }
+          }
+        }
+        this.shippingContactOptions = (customer?.contacts || [])
+          .filter(ct => ct.name || ct.phone || ct.email)
+          .map(ct => ({ name: ct.name || '', _display: [ct.name, ct.title].filter(Boolean).join(' · ') }))
+      } catch {}
+    },
+
+    applyShippingContact(ct) {
+      this.shippingForm.recipient = ct.name
+      this.showShippingContactPicker = false
+    },
+
     openNewShippingNote() {
       this.editShippingNoteNo = null
       this.shippingForm = this._blankShippingForm()
       this.shippingMsg = ''
+      this.showShippingContactPicker = false
+      this._loadShippingContactOptions()
       this.showShippingModal = true
     },
 
@@ -1204,6 +1248,8 @@ function app() {
           items: JSON.parse(JSON.stringify(d.items || []))
         }
         this.shippingMsg = ''
+        this.showShippingContactPicker = false
+        this._loadShippingContactOptions()
         this.showShippingModal = true
       } catch (e) { alert('網路錯誤：' + e.message) }
     },
@@ -1359,6 +1405,28 @@ function app() {
         document.body.removeChild(a)
         setTimeout(() => URL.revokeObjectURL(url), 1000)
       } catch (e) { alert('下載失敗：' + e.message) }
+    },
+
+    async previewShippingPdf(n) {
+      this.shippingPreviewFetching = true
+      try {
+        const r = await fetch(`/api/shipping-notes/${n.noteNo}/pdf-download`, {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || 'PDF 產生失敗'); this.shippingPreviewFetching = false; return }
+        const blob = await r.blob()
+        this.shippingPreviewBlobUrl = URL.createObjectURL(blob)
+        this.shippingPreviewNote = n
+        this.shippingPreviewModal = true
+      } catch (e) { alert('預覽失敗：' + e.message) }
+      this.shippingPreviewFetching = false
+    },
+
+    closeShippingPreview() {
+      if (this.shippingPreviewBlobUrl) URL.revokeObjectURL(this.shippingPreviewBlobUrl)
+      this.shippingPreviewBlobUrl = ''
+      this.shippingPreviewModal = false
+      this.shippingPreviewNote = null
     },
 
     _shippingStatusLabel(s) {

@@ -335,9 +335,6 @@ def approve_shipping_note(note_no: str, body: dict = Body(default={}), authoriza
         if user["role"] != "superadmin":
             conn.close()
             raise HTTPException(403, "僅超級管理員可執行此操作")
-        if appr.get("requestedBy") == user["username"]:
-            conn.close()
-            raise HTTPException(403, "申請人不得自行審核")
         _global_flow  = _get_setting("shipping_approval_flow", {"tiers": []}) or {}
         _global_tiers = _setting_to_active_tiers(_global_flow)
         if _global_tiers:

@@ -840,6 +840,18 @@ def _build_shipping_html(n: dict) -> str:
         f'<div class="term-block">{esc(notes)}</div></div>'
     ) if notes else ''
 
+    is_final = n.get('status') == '已核准'
+    watermark_html = '' if is_final else (
+        '<div class="wm">' + ''.join(
+            '<div class="wm-item"><b>出貨單預覽稿</b><small>尚未正式核准</small></div>'
+            for _ in range(12)
+        ) + '</div>'
+    )
+    banner_html = '' if is_final else (
+        f'<div class="preview-banner">⚠ 此為出貨單預覽稿（目前狀態：{esc(n.get("status") or "草稿")}），'
+        f'尚未正式核准，請勿對外提供或引用</div>'
+    )
+
     return (
         '<!DOCTYPE html>\n'
         '<html lang="zh-Hant">\n'
@@ -849,7 +861,14 @@ def _build_shipping_html(n: dict) -> str:
         '<style>\n'
         '  *{box-sizing:border-box;margin:0;padding:0}\n'
         '  body{font-family:"Microsoft JhengHei","PMingLiU",serif;font-size:13px;color:#0A0A0A;line-height:1.6;background:#fff}\n'
-        '  #root{padding:24px 32px}\n'
+        '  #root{padding:24px 32px;position:relative}\n'
+        '  .wm{position:absolute;inset:0;pointer-events:none;z-index:5;overflow:hidden;display:grid;'
+        'grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(4,1fr);align-items:center;justify-items:center;box-sizing:border-box}\n'
+        '  .wm-item{transform:rotate(-28deg);white-space:nowrap;user-select:none;text-align:center;line-height:1.5}\n'
+        '  .wm-item b{display:block;font-size:19px;font-weight:900;letter-spacing:.14em;color:rgba(185,28,28,.09)}\n'
+        '  .wm-item small{display:block;font-size:10px;font-weight:700;letter-spacing:.07em;color:rgba(185,28,28,.07)}\n'
+        '  .preview-banner{margin-bottom:12px;padding:7px 12px;background:#EFF6FF;border:1px solid #BFDBFE;'
+        'border-radius:5px;font-size:11px;color:#1E40AF;letter-spacing:.02em}\n'
         '  @page{size:A4;margin:0 13mm 12mm 13mm;'
         '@bottom-left{content:none}@bottom-right{content:none}'
         '@bottom-center{content:counter(page);font-family:Arial,sans-serif;font-size:9px;color:#aaa}}\n'
@@ -888,6 +907,7 @@ def _build_shipping_html(n: dict) -> str:
         '</head>\n'
         '<body>\n'
         '<div id="root">\n'
+        f'{watermark_html}\n'
         '<div class="accent-bar"></div>\n'
         '<div class="header">\n'
         '  <div>\n'
@@ -904,6 +924,7 @@ def _build_shipping_html(n: dict) -> str:
         f'  <div><span>出貨日期：</span>{esc(n.get("shipDate",""))}</div>\n'
         f'  <div><span>關聯報價單：</span>{esc(n.get("quoteNo",""))}</div>\n'
         '</div>\n'
+        f'{banner_html}\n'
         '<div class="boxes">\n'
         '  <div class="box">\n'
         '    <div class="box-title">一、客戶資訊</div>\n'
