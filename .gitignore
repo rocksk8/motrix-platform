@@ -6,10 +6,18 @@ backend/.initial_admin_credentials.txt
 # Database & local backups
 backend/motrix_erp.db
 backend/motrix_erp.db-*
+backend/motrix_erp_demo.db
+backend/motrix_erp_demo.db-*
+backend/motrix.db
 backend/db_backups/
 backup_alerts/
 backend/logs/
+backend/server.log
+server.log
 motrix_erp.db
+
+# Deployment-specific config (per-machine, not app code)
+backend/heartbeat_config.json
 
 # Python
 __pycache__/
