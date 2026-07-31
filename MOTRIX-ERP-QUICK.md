@@ -1,7 +1,7 @@
 # MOTRIX ERP — 開發快速參考
 
 > 允碩整合集創（統編 60575481）｜ Tel: 04-3602-2818 ｜ info@miactw.com  
-> 文件版本：**2026-07-22k**（全面更新：死碼清除 + 驗收流程 + Git Flow）
+> 文件版本：**2026-08-01f**（新增多機同步須知與跨機核對流程，見 §0／§14）
 
 ---
 
@@ -9,14 +9,38 @@
      ║  目錄（§ 段落快速跳轉）                   ║
      ╚══════════════════════════════════════════╝
 
-  §1  啟動與位址           §8  備份與還原
-  §2  系統架構總覽          §9  前端規範
-  §3  安全                 §10 成本公式
-  §4  資料模型             §11 已知限制
-  §5  核心業務流程          §12 變更摘要
-  §6  Sidebar 結構         §13 目錄結構
+  §0  多機同步須知（必讀）  §8  備份與還原
+  §1  啟動與位址           §9  前端規範
+  §2  系統架構總覽          §10 成本公式
+  §3  安全                 §11 已知限制
+  §4  資料模型             §12 變更摘要
+  §5  核心業務流程          §13 目錄結構
+  §6  Sidebar 結構         §14 跨機核對與拉檔流程
   §7  API 速查
 -->
+
+---
+
+## §0 · 多機同步須知（每次工作階段開始必讀）
+
+本專案有兩台實體機器，**目前完全靠人工複製檔案同步，沒有任何自動化機制**，過去已多次發生「正式機做了什麼，開發機這裡不知道」的落差（見下方已知落差紀錄）。每次在此專案開始工作時，**先依路徑判斷目前是哪一台機器並明確告知使用者**（例如「目前偵測到是開發機／hichan 帳號」），不要默默假設。
+
+| 項目 | 開發／備份機（多數時候是這台） | 正式機 |
+|------|------|------|
+| 帳號 | `hichan` | `Motrix`（AutoAdminLogon，開機自動登入） |
+| 專案路徑 | `C:\Users\hichan\Desktop\MOTRIX-ERP` | `C:\Users\Motrix\Desktop\V9.0` |
+| 用途 | 開發、測試、備份 db 存放處 | 客戶實際在用 |
+| 排程工作 | 無 | `MOTRIX ERP Server Autostart` / `Daily Backup` / `Heartbeat` 三個 Windows 工作排程器（見 §1.1／§1.2） |
+
+**若判斷目前是正式機**：改用更保守的操作方式——**不啟動測試用 server、不寫入測試資料、不做實驗性操作**；任何資料庫/程式碼變更都要假設影響真實客戶資料，修改前務必先跟使用者確認。（本文件開發機章節中提到的「用瀏覽器實測」「建立測試出貨單」等做法，都是在開發機上做的，正式機不可比照辦理。）
+
+**已知落差紀錄**（每次跨機核對後於此累積更新，核對流程見 §14）：
+
+| 日期 | 落差內容 | 狀態 |
+|------|---------|------|
+| 2026-08-01 | `backend/db.py` 少了正式機已在跑的 2 個 migration（v32/v33，交換器選型導覽 switch_guide 表結構） | ✅ 已補回（用正式機 db 實際 schema 反推重建，見 §12 2026-08-01e） |
+| 2026-08-01 | `backend/setup_autostart_task.ps1`、`backend/setup_heartbeat_task.ps1` 兩個部署排程設定腳本，正式機有（§1.1／§1.2 有描述其行為）、這台開發機完全沒有檔案 | ⏳ 待處理——下次能接觸正式機時依 §14 流程拉回 |
+| 2026-08-01 | 已知程式碼未 commit 進 git（`git log` 停在較舊的提交，工作區有大量未 commit 變更）；正式機的程式碼版本與 git 歷史的對應關係目前不明 | ⏳ 待處理，非緊急（見 §14 說明） |
 
 ---
 
@@ -35,6 +59,33 @@
   db.py ← helpers/ ← archive.py / pdf_gen.py / photos.py
                    ← routers/*.py ← main.py（wiring only）
 ```
+
+### §1.1 · 正式環境自動啟動與監控（2026-08-01）
+
+正式機（`Motrix` 帳號，AutoAdminLogon 開機自動登入）以三個 Windows 排程工作維持常駐：
+
+| 排程工作 | 觸發 | 動作 | 說明 |
+|---------|------|------|------|
+| `MOTRIX ERP Server Autostart` | 登入時 +90 秒延遲 | `autostart_hidden.vbs` → `backend\autostart.bat` | 90 秒延遲避開 GoogleDriveFS（同樣登入時啟動）掛載 H: 的搶跑窗口；`autostart.bat` 內建 **crash-restart 迴圈**（uvicorn 意外中止 5 秒後自動重啟，寫入 `logs\server.log`） |
+| `MOTRIX ERP Daily Backup` | 每日 02:00 | `backup_job.py` | 見 §8.2 |
+| `MOTRIX ERP Heartbeat` | 註冊後立即開始，每 5 分鐘重複（不綁登入） | `heartbeat_job.py` | 見 §1.2 |
+
+`autostart.bat` 開頭 `chcp 65001` + `set PYTHONUTF8=1`：避免中文訊息寫入 log 時因主控台預設編碼（Big5/cp950）產生亂碼。**`.bat`/`.ps1` 檔若含中文註解務必存成 CRLF 換行**——LF-only 換行曾在此機器上讓 cmd.exe 的批次檔解析器直接報「命令語法不正確」而整個腳本失效（且不會有任何 log 紀錄，外觀上排程工作仍顯示執行成功）。
+
+手動重啟（`restart.bat`）會一併殺掉 autostart 的 crash-restart 迴圈（比對 commandline 含 `autostart.bat`/`autostart_hidden.vbs`），避免迴圈在手動重啟的同時把 port 666 搶回去。
+
+### §1.2 · 心跳監控（dead man's switch，2026-08-01）
+
+`backend/heartbeat_job.py`（獨立腳本，不 import app，ERP 服務掛了也照樣執行）：
+
+```
+每 5 分鐘：
+  GET http://127.0.0.1:666/api/ping
+    成功 → 讀 heartbeat_config.json 的 ping_url → GET 該網址（打卡）
+    失敗 → GET {ping_url}/fail（立即通知，不等逾時）；不執行打卡
+```
+
+打卡對象為 [healthchecks.io](https://healthchecks.io)（Period 10 分鐘／Grace 10 分鐘），由該服務判斷逾時（本機或整台主機斷線都會使打卡中斷）並寄信通知 superadmin 信箱。`heartbeat_config.json` 的 `ping_url` 為空時，腳本只做本機健康檢查、略過對外打卡（不會報錯）。日誌：`logs/heartbeat_job.log`。
 
 **新增功能規則**
 
@@ -71,7 +122,7 @@
 
 | 模組 | 職責 |
 |------|------|
-| `db.py` | 連線、`init_db()`、PRAGMA WAL、熱路徑欄位／索引；**CURRENT_VERSION=25**（25 個 migrations） |
+| `db.py` | 連線、`init_db()`、PRAGMA WAL、熱路徑欄位／索引；**CURRENT_VERSION=34**（34 個 migrations；v32/v33 為交換器選型導覽 `switch_guide` 表結構，2026-08-01 由正式機備份 db 實際結構還原重建，詳見 db.py `_m032_switch_guide` 註解） |
 | `helpers/` | 密碼、session、audit、notify、settings、弱密碼標記、`save_quotation_json()` |
 | `archive.py` | 即時／每日／週備份；本機 SQLite 快照；**原子 JSON 寫入**（`_atomic_json_write`）；G: fallback |
 | `backup_job.py` | 獨立備份腳本（Windows 工作排程器，不依賴 server） |
@@ -89,8 +140,8 @@
 | `frontend/pages/quotation-form.html` | ⚠️ Alpine function **inline**（邏輯在 `<script>` 內，勿找外置 JS） |
 | `frontend/pages/settlement.html` | ⚠️ Alpine function **inline**（邏輯在 `<script>` 內，勿找外置 JS） |
 | `frontend/pages/*.html` | 其餘頁面 Alpine 亦均為 inline，**無對應外置 .js** |
-| `frontend/static/sidebar.js` | Topbar + Sidebar 注入；**強制改密導向**；離開警示 `bindNavGuard()` |
-| `frontend/static/notif.js` | 通知 Bell；所有動態內容用 **DOM API**（無 innerHTML） |
+| `frontend/static/sidebar.js` | Topbar + Sidebar 注入；**強制改密導向**；離開警示 `bindNavGuard()`；`_FILE_MODULE` 頁面→模組對應；`build()` 自動更新 `localStorage.motrix_module_seen` 清除當頁 badge |
+| `frontend/static/notif.js` | 通知 Bell + 側邊欄模組 badge（`_fetchModuleCounts()`）；所有動態內容用 **DOM API**（無 innerHTML） |
 | `frontend/css/style.css` | CSS 變數：`--sidebar-w` `--topbar-h` `--accent` |
 
 > **重要**：`frontend/js/` 目錄**僅存 2 個有效檔案**（case-management.js / reports.js），
@@ -152,8 +203,30 @@ superadmin > admin > sales > engineer > viewer
 | 報價列表過濾 | 非 admin+ 用 `sales_person_id=自己id OR (sales_person_id IS NULL AND sales_person=display_name)` |
 | **稽核記錄** | `GET /api/audit-log` 限 **admin+**；viewer/sales/engineer 呼叫回 403 |
 | **工作日誌** | `PUT/DELETE /api/work-logs/{id}`：非 admin 只能修改/刪除**自己**的日誌 |
+| **業務開發 CRM** | 非 admin 只能查看自己建立、或列於 `sales_persons`/`planners` 欄位的案件（`_can_access_case()` helper）；admin+ 無限制 |
 | **自訂角色** | superadmin 可建立自訂角色（名稱 + 基礎角色層 + 模組清單）；儲存於 `system_settings`；使用者 Modal 快速套用 chips 顯示 |
 | **角色名稱** | superadmin 可在「角色名稱設定」自訂各層顯示名稱（`GET/PUT /api/settings/role-labels`）；DB 內 `role` 欄位仍儲存系統名稱 |
+
+### §3.5 · Demo 展示帳號（隔離空白資料庫）
+
+給客戶展示用；帳號 `demo` / 密碼 `60575481`，role=superadmin（所有模組全開，頁面/效果完整可見）。
+
+```
+db.py:      DB_PATH（正式）+ DEMO_DB_PATH（motrix_erp_demo.db，獨立檔案，同一套 schema/migrations）
+            contextvars 依 request 切換 get_db() 指向哪個檔案（背景排程/備份執行緒 contextvar 預設 False，永遠打正式庫）
+routers/auth.py auth_login()：
+  帳號名為 demo → reset_demo_db()（整檔刪除 + 重新 init_db，回到全空白）
+             → 核發 DEMO_ 前綴 token，session/user 只寫入 demo db（不進正式 sessions 表）
+main.py auth_middleware：token.startswith('DEMO_') → set_demo_mode(True)，
+             此後本次 request 內所有 get_db()（含 _require_user()/_audit()）都自動轉向 demo db
+```
+
+- **每次登入 demo 帳號＝整個 demo db 重置為全新空白**（客戶怎麼操作、寫入什麼測試資料，下次登入一律清空，正式庫完全不受影響）
+- 正式庫 `users` 表僅存一筆 `demo` 守門帳號（`init_demo_account()`，供登入時驗證密碼用），實際瀏覽/操作全在隔離 db 進行
+- 新增任何會直接 `sqlite3.connect(db.DB_PATH, ...)` 而非透過 `get_db()` 的程式碼，會繞過此隔離機制 — 一律使用 `get_db()`
+- **檔案儲存也要隔離**：專案照片（`photos.py _photo_root()`）、勞報單 PDF 存檔（`payslips.py _archive_path()`）、報價單里程碑自動匯出 PDF（`pdf_gen.py _get_pdf_base()`）三處是直接寫實體檔案，不經過 `get_db()`；已改為 `is_demo_mode()` 時導向 `uploads/_demo_projects`／`backend/_demo_pdf_archive`／`backend/_demo_payslip_archive`，`reset_demo_db()` 一併清空。**新增任何寫檔案到磁碟的功能，都要檢查 `is_demo_mode()` 並比照辦理**，否則 demo 帳號會把檔案寫進正式共用目錄，且 project_id/slip_no/quote_no 在 demo db 都從 1 重新編號，可能撞名蓋掉正式檔案
+- `reset_demo_db()` 用 SQL `DELETE`+`VACUUM`（同一連線內完成），不刪 `.db/-wal/-shm` 檔案本身 — 避免 Windows 掃毒/索引服務短暫鎖住剛建立的 WAL 檔案導致 `os.remove()` 失敗
+- `db.demo_reset_lock`（`threading.Lock`）包住整個「reset + 建立 demo 使用者/session」流程 — 兩個 demo 登入同時到達會搶跑同一個共用 db，造成 `IntegrityError`/database-is-locked；已用併發壓力測試驗證修正
 
 ---
 
@@ -162,6 +235,19 @@ superadmin > admin > sales > engineer > viewer
 ### §4.1 · 主要資料表
 
 ```sql
+dev_cases       -- 業務開發案件主檔（DB v27）
+  id, case_name, customer_name, customer_id FK→customers(nullable),
+  status('洽談中'|'成案'|'未成案'), sales_persons JSON([user_id,...]),
+  planners JSON([user_id,...]), converted_quote_no,
+  created_by FK→users, created_at, updated_at
+
+dev_logs        -- 開發記錄（DB v27）
+  id, case_id FK→dev_cases, log_date, log_by FK→users,
+  channel('電話'|'Line'|'Email'|'面訪'|'視訊'|'其他'),
+  content, next_action, status_snapshot,
+  needs_approval(0|1), approved_by FK→users, approved_at,
+  created_by FK→users, created_at
+
 quotations      -- 熱路徑欄位 + data_json 完整物件
   quote_no PK, status, deal_tag, settle_status,
   customer_name, project_name, total, pretax,
@@ -183,6 +269,39 @@ daily_tasks / daily_task_completions / daily_task_edit_log
 vendor_contractors   -- code(V-YYYYMM-NNN), name, tax_id, contact, data_json(visits/tags/category)
 contractor_dispatches -- quote_no, vendor_id, status, items_json, total_amount, tax_rate,
                          accepted_at, accepted_by（DB v25）
+case_updates         -- id, quote_no, author(username), content, type('comment'), created_at（DB v26）
+work_logs            -- + case_no TEXT DEFAULT ''（DB v26）
+
+env_guide_environments   -- 場域選型導覽－場域主檔（DB v30）
+  code PK（A1/B3/全部…), name, group_name, temp_gate, ip_gate, cert_gate, trap_note,
+  sort_order, updated_at
+env_guide_recommendations -- 場域選型導覽－分層三級建議（DB v30）
+  id, env_code FK→env_guide_environments(code) ON DELETE CASCADE,
+  layer, position, tier1, tier2, tier3, custom_note, trap_note, sort_order, updated_at
+env_guide_links          -- 場域選型導覽－原廠/代理商產品連結（DB v30）
+  id, keyword, url, label, sort_order
+
+netarch_families         -- 網路架構選型導覽－技術族系（DB v31）
+  code PK（WIFI/CELLULAR…), name, description, sort_order, updated_at
+netarch_generations      -- 網路架構選型導覽－世代/規格（DB v31）
+  id, family_code FK→netarch_families(code) ON DELETE CASCADE,
+  gen_name, key_specs, upgrade_note, typical_scenario, tags, price_range,
+  dependency_note, watch_note, sort_order, updated_at
+netarch_products         -- 網路架構選型導覽－產品連結（DB v31）
+  id, generation_id FK→netarch_generations(id) ON DELETE CASCADE,
+  brand, model, url, label, price_note, sort_order
+
+switch_scenarios / switch_categories / switch_fit / switch_products
+                          -- 交換器選型導覽（DB v32/v33）：情境×分類矩陣式交叉，選型資料庫第三個類別
+                          -- switch_products.specs_json（v33 追加）：[[label,value],...] 結構化規格
+
+shipping_notes           -- 出貨單／回簽單（DB v34，案件管理子項目，quote_no 一對多）
+  id, note_no PK（DN-YYYYMM-NNN，next_entity_code 泛化生成）, quote_no,
+  status('草稿'|'待審核'|'簽核中'|'已核准'), ship_date, customer_name, project_name（建立時快照，可獨立編輯）,
+  recipient, delivery_address, items_json（[{description,brand,qty,unit,notes}]，無金額欄位）,
+  notes, data_json（approval{tiers,currentTier,requestedBy...}，結構仿報價單但獨立實作）,
+  is_signed, signed_by, signed_at, signed_log（完整回簽/取消回簽歷程 JSON）,
+  export_count, export_log（仿 quotations.export_log）, created_by, created_at, updated_at
 ```
 
 **索引**：`deal_tag` · `settle_status` · `sales_person` · `sales_person_id`
@@ -287,13 +406,24 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
 - 無流程（預設超管）：**禁止申請人自簽**
 - 代理送審：`approval.delegateSubmitter` + `delegateNote` 同步寫入 audit_log
 
-### §5.4 · 案件管理三主 Tab
+### §5.4 · 案件管理 Tab 結構
 
 | Tab | 內容 |
 |-----|------|
-| 商務 | 合約資訊 + 收款管理（%／含稅／未稅雙向） |
-| 執行 | 進度 / 叫料 / 設備 / 保固備注 |
+| 案件資訊 | 合約資訊 + 人員角色 + 收款管理（%／含稅／未稅雙向） |
+| 執行進度 | 進度 / 叫料 / 設備 / 保固備注 |
+| 承攬商 | 派發記錄 + 驗收流程 |
+| **動態** | 案件留言板（手動留言 + work_log 同步 + daily_task 完成回報） |
 | 財務 | KPI + 精算結果（需 `canSeeFinancial`） |
+
+### §5.4b · 動態 Tab（案件留言板）
+
+- **資料來源（合併排序，newest-first）**
+  1. `case_updates` 表：手動留言（任何角色均可發布；發文者或 admin+ 可刪）
+  2. `work_logs`（`case_no=此報價單號`）：工作日誌自動同步為只讀卡片
+  3. `daily_task_completions JOIN daily_tasks`（`case_no=此報價單號`）：完成回報只讀卡片
+- **API**：`GET/POST /api/quotations/{no}/updates`、`DELETE /api/quotations/{no}/updates/{id}`
+- 切換案件時自動重置；點擊「動態」Tab 時 `loadCaseUpdates()` lazy fetch
 
 ### §5.5 · 成本精算 settlement
 
@@ -327,18 +457,37 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
 - 已驗收後：卡片底部顯示綠色橫條，含驗收人姓名 + 時間
 - 狀態亦可透過 Modal 下拉直接設定（彈性操作，不走 `/accept` endpoint）
 
+### §5.8 · 出貨單（案件管理子項目，2026-08-01）
+
+```
+草稿 → 待審核 → 簽核中 → 已核准
+  ↑______________________|（退回，清空 approval，回草稿）
+已核准 ⇄ 已回簽（is_signed toggle，獨立於狀態機，僅已核准可切換）
+```
+
+- 一個案件（`quote_no`）可對應多張出貨單（分批出貨）；分頁對所有能開案件管理的人可見，**新增/編輯/送審/簽核/匯出 PDF/勾選回簽等操作限 admin+**（與承攬商分頁一致：分頁可見、寫入操作後端擋權限）
+- 品項純出貨用途，**不含金額欄位**；可從報價單一鍵匯入品項（前端純轉換，去除 cost/margin/unitPrice/amount），或手動新增/編輯，支援段落標題列（`type:'header'`）
+- **簽核流程獨立於報價單**：`system_settings.shipping_approval_flow`（不與報價單 `approval_flow` 共用），設定頁 `shipping-approval-settings.html`；tiers 依序簽核，自簽規則同報價單（有設定流程時申請人可自簽，無流程時僅 superadmin 可簽且禁止申請人自簽）
+- 全部簽核完成 → 狀態 `已核准`，背景觸發 PDF 存檔（`pdf_gen.py _generate_shipping_pdf`）
+- **已回簽**：`已核准` 狀態才可切換；`signed-toggle` 為嚴格 toggle（已回簽不可重複標記，需先取消），每次切換完整記錄至 `signed_log`（誰、何時、動作、備註），案件管理 UI 可展開查看完整歷程
+- PDF 匯出與報價單同一套機制：`GET .../pdf-download` 產生 bytes（不記錄），`POST .../export` 另外累計 `export_count`/`export_log`
+- 刪除僅限 `草稿` 狀態（保留已進入簽核/已回簽的歷程）
+- Demo 模式 PDF 隔離目錄：`backend/_demo_shipping_pdf_archive`
+
 ---
 
 ## §6 · Sidebar 結構
 
 ```
 主選單     儀表板
-業務       報價單（含簽核佇列 ?view=queue） / 案件管理 / 專案管理
+業務       **業務開發**（dev-crm.html, dev_crm 模組旗標或 admin+）
+           報價單（含簽核佇列 ?view=queue） / **場域選型導覽**（env-guide.html, env_guide 模組旗標或 admin+）/
+           **網路架構選型導覽**（netarch-guide.html, netarch_guide 模組旗標或 admin+）/ 案件管理 / 專案管理
 廠商與採購 客戶 / 供應商 / **承攬商** / 料號 / 採購
 設備       設備登載 / 保固追蹤
 財務       應收帳款 / 營運報表（admin+ 或含 reports 模組）
 工作       工作日誌（非 viewer 或含 work_log 模組） / 每日工作事項（非 viewer 或含 daily_task 模組）
-系統       使用者 / 簽核設定（superadmin）/ 歷史紀錄
+系統       使用者 / 簽核設定（superadmin）/ 出貨單簽核設定（superadmin）/ 歷史紀錄
 ```
 
 - 簽核佇列不在 sidebar，在報價單內 tab
@@ -346,6 +495,10 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
 - `reports`：`admin+` 或含 `reports` 模組的使用者可見
 - `work_log` / `daily_task`：非 viewer 或明確帶對應模組者可見（相容既有帳號）
 - `承攬商管理`：`admin+`（`cPr` 旗標，同採購）可見；`vendor-contractors.html`
+- **模組通知 badge**：所有模組 nav 項目（含子項）均有藍色 `sb-mod-*` badge，由 `_fetchModuleCounts()` 根據 `motrix_module_seen` 顯示其他人的更新計數；廠商採購/設備/財務各組同步顯示同一模組計數
+- **場域選型導覽**：`env-guide.html`；檢視 `env_guide` 模組旗標或 admin+（`cEnvG` 旗標）；編輯（新增/修改/刪除場域、建議、連結）與 Excel 匯出入另需 `env_guide_edit` 模組旗標或 superadmin；`users.html` 可分別授予兩者；**無** 模組通知 badge（資料變動頻率低，未接 `_fetchModuleCounts()`）
+- **網路架構選型導覽**：`netarch-guide.html`；檢視 `netarch_guide` 模組旗標或 admin+（`cNetG` 旗標）；編輯需 `netarch_guide_edit` 或 superadmin；瀏覽邏輯與場域選型導覽不同——**先選技術族系方塊，再看世代橫向對照卡片**（非矩陣/篩選），選型資料庫第二個上線的類別，詳見根目錄 `SELECTION-DB-INDEX.md`
+- **出貨單簽核設定**：`shipping-approval-settings.html`；superadmin 限定；獨立於報價單「簽核設定」（`system_settings.shipping_approval_flow`，不同 key），UI 為 `approval-settings.html` 的複製版本；出貨單本身不是獨立 sidebar 項目，掛在「案件管理」頁面內的「出貨單」分頁，沿用 `case_manage`/`cCM`/`sb-mod-case`
 
 ---
 
@@ -380,6 +533,9 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
 | GET/PUT | /quotations/{no}/settlement | 精算；finalized 後非 superadmin 不可改 |
 | GET | /quotations/{no}/pdf-download | Edge PDF |
 | POST | /quotations/{no}/export | 記錄匯出人/時間 |
+| GET | /quotations/{no}/updates | 動態 Tab 合併 feed（comments+work_logs+daily_tasks） |
+| POST | /quotations/{no}/updates | 發布手動留言 |
+| DELETE | /quotations/{no}/updates/{id} | 刪除留言（發文者或 admin+）|
 | GET | /approval-queue | 認證必填 |
 | POST | /quotations/{no}/approve \| reject | 並行層簽核 |
 
@@ -406,6 +562,20 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
 | GET | /settings/role-labels | 各角色層顯示名稱（需認證） |
 | PUT | /settings/role-labels | 更新角色顯示名稱（superadmin only） |
 
+### §7.5 · 業務開發 CRM（DB v27）
+
+| Method | Path | 說明 |
+|--------|------|------|
+| GET | /dev-cases | 案件列表（`?q=` 搜尋、`?status=` 篩選；需 dev_crm 模組或 admin+；**非 admin 僅回傳自己建立或指派的案件**） |
+| POST | /dev-cases | 新建案件 |
+| GET/PUT/DELETE | /dev-cases/{id} | 單筆操作（DELETE admin+） |
+| PATCH | /dev-cases/{id}/status | 變更狀態（洽談中/成案/未成案） |
+| PATCH | /dev-cases/{id}/convert | 連結報價單號（`{quote_no}`，同時設 status=成案） |
+| GET/POST | /dev-cases/{id}/logs | 記錄列表 / 新增記錄（log_by≠填單人 → needs_approval=1） |
+| PUT/DELETE | /dev-logs/{id} | 編輯／刪除（發文者或 admin+） |
+| PATCH | /dev-logs/{id}/approve | 審核記錄（admin+ only） |
+| GET | /dev-logs/pending | 待審記錄列表（admin+ only） |
+
 ### §7.4 · 承攬商管理（DB v22–v25）
 
 | Method | Path | 說明 |
@@ -423,6 +593,57 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
 | PATCH | /contractor-dispatches/{id}/accept | 驗收流程：`action=pending_acceptance`（draft/sent/confirmed→待驗收）或 `action=accepted`（待驗收→已驗收，記錄 accepted_by/accepted_at）；違規轉換 → 409 |
 | POST | /contractor-dispatches/{id}/import-to-quote | 回推品項至報價單 `items[]`（報價單非草稿 → 409） |
 
+### §7.6 · 場域選型導覽（DB v30）
+
+無人自動化載具部署場域／設備選型參考資料，原為獨立單機工具（場域選型導覽.html），2026-07-30 整合進 ERP 並資料庫化。
+
+| Method | Path | 說明 |
+|--------|------|------|
+| GET | /env-guide/environments | 場域列表（需認證即可，無角色限制） |
+| POST/PUT/DELETE | /env-guide/environments[/{code}] | 新增／修改／刪除場域；superadmin 或 `env_guide_edit` 模組 |
+| GET | /env-guide/recommendations | 分層建議列表（需認證） |
+| POST/PUT/DELETE | /env-guide/recommendations[/{id}] | 同上權限 |
+| GET | /env-guide/links | 原廠／代理商連結列表（需認證） |
+| POST/PUT/DELETE | /env-guide/links[/{id}] | 同上權限 |
+
+- 前端 `frontend/pages/env-guide.html`：瀏覽模式分「簡易／進階」兩個子模式（`browseMode`，預設 simple）——**簡易**是場域方塊＋分層卡片（跟網路架構選型導覽同一套介面，Alpine 直接讀 `envRows`/`recRows`/`linkRows`）；**進階**是原單機工具的矩陣／卡片／表格／搜尋／篩選／抽屜 UI（vanilla JS，`window.EnvGuideTool.boot()` 由 Alpine `loadEnvGuideData()` 餵資料）；管理模式為新增的 CRUD 後台（Alpine + modal）
+- 配色：`.envg` CSS 變數對應 MOTRIX 系統色票（`--accent`/`--text-*`/`--border-light` 等），`data-th="light"`為預設（＝系統配色），`data-th="dark"`為原工具深色調備用切換
+- **Excel 匯出／匯入**：僅 `session.role==='superadmin'` 可見按鈕（UI 層限制，比其他模組的 `env_guide_edit` 更嚴格）；匯出 3 個工作表（環境/建議/連結）；匯入以場域代碼／建議與連結 ID 比對，相符則 PUT 更新、否則 POST 新增（沿用既有單筆 CRUD API，無專用批次 endpoint，做法比照 `customers.html` 匯入慣例）
+- 種子資料：`backend/env_guide_seed.py`（JSON 字串常數，`_m030_env_guide` 一次性寫入，僅在表為空時執行，之後編輯一律走上述 API 不會被 migration 覆蓋）
+
+### §7.7 · 網路架構選型導覽（DB v31）
+
+選型資料庫第二個上線的類別，資料形狀是「技術族系→世代→產品」而非場域選型導覽的「情境×分層×三級」，見 `SELECTION-DB-INDEX.md`。
+
+| Method | Path | 說明 |
+|--------|------|------|
+| GET | /netarch-guide/families | 技術族系列表（需認證） |
+| POST/PUT/DELETE | /netarch-guide/families[/{code}] | superadmin 或 `netarch_guide_edit` |
+| GET | /netarch-guide/generations | 世代/規格列表（需認證） |
+| POST/PUT/DELETE | /netarch-guide/generations[/{id}] | 同上權限 |
+| GET | /netarch-guide/products | 產品連結列表（需認證） |
+| POST/PUT/DELETE | /netarch-guide/products[/{id}] | 同上權限 |
+
+- 種子資料：`backend/netarch_guide_seed.py`（同樣僅在表為空時寫入一次）
+- 前端 `frontend/pages/netarch-guide.html`：管理模式沿用場域選型導覽的淺色系統配色與 CRUD 慣例；瀏覽模式是新設計的「族系方塊→世代對照卡片」簡化 UI，未使用矩陣/篩選/搜尋那套
+
+### §7.8 · 出貨單（DB v34）
+
+| Method | Path | 說明 |
+|--------|------|------|
+| GET | /shipping-notes?quote_no= | 依案件列出出貨單摘要（需登入，不含完整品項） |
+| GET | /shipping-notes/{note_no} | 完整明細（含 items/approval/signed_log/export_log） |
+| POST | /shipping-notes | 建立草稿（admin+）；`note_no` 由 `next_entity_code(...,'DN',code_col='note_no')` 產生 |
+| PUT | /shipping-notes/{note_no} | 更新（admin+；非草稿 409） |
+| DELETE | /shipping-notes/{note_no} | 刪除（admin+；非草稿 409） |
+| POST | /shipping-notes/{note_no}/submit | 送出審核（admin+；產生 tiers 快照，狀態→待審核） |
+| POST | /shipping-notes/{note_no}/approve | 簽核（當層簽核人依序；無流程時僅 superadmin 且禁止申請人自簽） |
+| POST | /shipping-notes/{note_no}/reject | 退回草稿（當層成員或 superadmin；簡化版，不改版號） |
+| GET | /shipping-notes/{note_no}/pdf-download | Edge PDF（不記錄匯出） |
+| POST | /shipping-notes/{note_no}/export | 記錄匯出人/時間/次數（`export_count`/`export_log`） |
+| POST | /shipping-notes/{note_no}/signed-toggle | `{action:'sign'|'unsign', note?}`；已核准才可切換，嚴格 toggle（409 若狀態不符） |
+| GET/PUT | /shipping-notes/settings/approval-flow | 出貨單專屬簽核流程設定（PUT 限 superadmin），獨立於報價單 `approval_flow` |
+
 ---
 
 ## §8 · 備份與還原
@@ -430,8 +651,8 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
 ### §8.1 · 路徑
 
 ```
-雲端（需 G: 掛載）
-  G:\我的雲端硬碟\系統存檔\
+雲端（需 H: 掛載）
+  H:\我的雲端硬碟\系統存檔\
     即時備份\報價單|客戶|供應商\
     每日備份\YYYY-MM-DD\  （JSON 七表 + motrix_erp.db）
     週備份\YYYY-WNN\
@@ -497,7 +718,7 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 公益捐款 = 直接毛利 × 1%
 ```
 
-`FORM_VERSION`：模板版號常數（如 V1.1），與單筆資料無關；改版型時手動遞增。
+`FORM_VERSION`：模板版號常數（如 V1.1），與單筆資料無關；**quotation-form.html 或其邏輯任何改動都須遞增**——小改版（欄位微調/樣式/文案）+0.1，大改版（版型結構/新增區塊/流程變更）+1。
 
 ---
 
@@ -517,6 +738,162 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 ## §12 · 變更摘要（最新兩版）
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
+
+### 2026-08-01f — 新增多機同步須知與跨機核對流程（文件化）
+
+- **背景**：本次開發過程接連發現開發機與正式機的落差（db.py migration 遺失、部署腳本檔案遺失），確認目前完全靠人工複製、沒有任何比對機制；使用者要求先把「開機先確認身分＋核對差異」的協議寫進文件，自動化推送機制明確列為後續才做
+- **新增 §0（多機同步須知，移到文件最前面）**：機器身分對照表（`hichan` 開發機 vs `Motrix` 正式機，含路徑/用途/排程工作差異）；協議文字要求每次工作先判斷並告知目前是哪台機器，正式機須改用保守操作方式（不啟動測試 server、不寫測試資料）；已知落差紀錄表（累積式，先填入本次發現的 3 筆）
+- **新增 §14（跨機核對與拉檔流程）**：核對優先順序清單（db.py migrations 優先用正式機 db 實際 schema 反推 → routers/helpers → 前端 → 部署腳本 → version_manifest.json）；拉檔案回開發機的具體步驟（db 檔案不直接覆蓋、先另存比對；純檔案有差異人工判斷不自動覆蓋）；明確列出「之後才考慮」的自動化方向（PowerShell Remoting／Robocopy）但註明這次不做
+
+### 2026-08-01e — 補回失蹤的 v32/v33 migration（交換器選型導覽）
+
+- **背景**：開發出貨單時發現本機備份 db 的 `schema_version` 比本地程式碼超前 2 個 migration（見 2026-08-01d 條目）。進一步比對後確認：`backend/routers/switch_guide.py`／`switch_guide_seed.py`／`frontend/pages/switch-guide.html`（交換器選型導覽，選型資料庫第三個類別）三個檔案其實已存在於本機（未 commit），`main.py` 也早已註冊該路由，**唯獨 `db.py` 的對應 migration 遺失**——這正是缺的 v32/v33
+- **佐證**：`switch_guide_seed.py` 檔頭 docstring 直接寫著「migration `_m032_switch_guide`」；備份 db 的 `switch_products` 表 SQL 定義可見 `specs_json` 欄位是後補的 `ALTER TABLE`（獨立於原始 `CREATE TABLE` 語句），對應 v33；seed 資料筆數（5 情境／4 分類／20 適配度組合）與備份 db 完全一致（`switch_products` 備份 db 有 40 筆，seed 僅 6 筆——差額為之後透過 API 手動新增，非種子資料遺漏）
+- **修法**：`db.py` 新增 `_m032_switch_guide`（建 4 張表 + 索引 + 種子資料，比照 `_m031_netarch_guide` 的 idempotent 寫法）與 `_m033_switch_products_specs`（`ALTER TABLE` 補 `specs_json` 欄位），取代原本的 2 個空白佔位 migration；已用全新空白 db 驗證 `init_db()` 跑完後種子資料筆數與 schema 完全比照備份 db（既有 `motrix_erp.db`／`motrix_erp_demo.db` 因 `schema_version` 已是 34 不受影響，此修正主要讓**未來全新安裝／重建環境**時能正確產生完整功能，不再依賴「剛好複製到一份已含這些表的 db 備份」)
+
+### 2026-08-01d — 新增出貨單功能（案件管理子項目）
+
+- **背景**：現場出貨需要純品項（不含金額）的出貨單供客戶簽收，帶回辦公室留存作為交貨憑證；系統原本完全沒有回簽/簽收追蹤機制，本次全新設計
+- **`backend/db.py`**：新增 `shipping_notes` 表；⚠️ 開發過程發現本機備份 db 的 `schema_version` 已是 33，比本地程式碼定義的 v31 超前 2 個未知 migration（母機複製過來的落差）——新 migration 改編號為 **v34**，並插入 2 個空白佔位 migration（`_m032_placeholder_unreconciled`/`_m033_placeholder_unreconciled`）保留版號位置，待日後對齊正式機程式碼再回填；`next_entity_code()` 泛化支援多字元 prefix（`DN`）與自訂 `code_col`（`note_no`），對既有 `C`/`S`/`V` 一字元呼叫端完全回溯相容（已重新測試三者建立流程）
+- **`backend/routers/shipping_notes.py`**（新檔）：CRUD、獨立簽核流程（`草稿→待審核→簽核中→已核准`，`system_settings.shipping_approval_flow` 與報價單簽核設定分開）、PDF 下載/匯出紀錄、`signed-toggle`（已回簽切換，含完整歷程 `signed_log`）；寫入類操作限 admin+，比照承攬商分頁「分頁可見、操作分權限」的既有慣例
+- **`backend/pdf_gen.py`**：新增 `_build_shipping_html`/`generate_shipping_pdf_bytes`/`_generate_shipping_pdf`，品項表無金額欄位、雙簽名欄（客戶簽收／本公司出貨），demo 模式獨立歸檔至 `_demo_shipping_pdf_archive`
+- **前端**：`case-management.html`/`js/case-management.js` 新增「出貨單」分頁（品項可一鍵從報價單匯入並自動去除金額欄位）；新增 `shipping-approval-settings.html`（複製既有簽核設定頁樣式）；`sidebar.js` 系統區段新增對應導覽項
+- 已用 Chrome 瀏覽器走完整流程驗證：建立出貨單 → 匯入品項 → 送出審核 → 簽核 → 已核准狀態下載 PDF → 標記已回簽 → 展開查看回簽歷程，各狀態截圖確認正確；並確認非 admin 角色看得到分頁但看不到任何操作按鈕
+
+### 2026-08-01c — 修復月報 PDF 產製失敗（變數覆蓋 bug）
+
+- **`backend/routers/reports.py` `_build_report_html()`**：精算明細區塊 `for mc in data["marginCases"]: s = mc.get("settleSummary") or {}` 覆蓋了函式開頭的 `s = data["summary"]`（Python 無區塊作用域，迴圈跑完後 `s` 仍是最後一筆精算摘要）；後段 KPI 區塊讀 `s["totalReceivable"]` 因此 `KeyError`。僅在當月有「已完結（finalized）精算」案件時才會觸發（清單為空則不進迴圈、不會覆蓋），因此先前未被發現
+- **修法**：迴圈內變數改名為 `ss`，不再覆蓋外層 `s`；`_build_excel()` 有相同命名寫法但外層 `s[...]` 讀取都在覆蓋之前完成，實際未受影響，未修改
+- 已用 2026-07 實際資料（1 筆已完結精算案件）重現原始錯誤並驗證修復；補寄一次含正確 PDF 附件的 2026-07 月報給 superadmin
+
+### 2026-08-01a／b — 正式環境部署穩定性強化 + 心跳監控機制
+
+> 背景：系統於 2026-07-31 完成從舊機器（`hichan` 帳號、G: 雲端碟）遷移至正式環境機器（`Motrix` 帳號、AutoAdminLogon、H: 雲端碟），詳見根目錄 `AUTOLOGON-FIX.md`。以下為遷移後的穩定性檢查與修正，詳見 §1.1／§1.2
+
+- **開機競態**：`setup_autostart_task.ps1` 登入觸發器加 90 秒延遲（`$trigger.Delay = "PT90S"`），避開與 GoogleDriveFS（同樣登入時啟動）搶跑掛載 H: 導致每次開機誤報 `BACKUP_ALERT` 的窗口
+- **無 crash 自動重啟**：`autostart.bat` 改為 crash-restart 迴圈（uvicorn 意外中止 5 秒後自動重啟）；`restart.bat` 同步補殺該迴圈的 process，避免手動重啟時兩邊搶 port 666
+- **log 中文亂碼**：`autostart.bat` 加 `chcp 65001` + `set PYTHONUTF8=1`；⚠️ 過程中發現 **`.bat`/`.ps1` 若含中文註解且存成 LF-only 換行，cmd.exe 批次檔解析器會直接失效**（報「命令語法不正確」，且排程工作仍顯示執行成功、無任何 log），已確認改存 CRLF 後解決——之後修改 `.bat`/`.ps1` 務必確認換行格式
+- **archive.py 殘留舊碟符**：3 處 log/alert 文字寫死的舊機器碟符 `G:` 改為現行 `H:`（功能早已正確使用 H:，僅文字訊息不一致）
+- **殘留檔案清理**：刪除根目錄與 `backend/` 下各一個 0-byte 廢棄 `motrix_erp.db`／`motrix.db`（非正式庫，正式庫為 `backend/motrix_erp.db`）
+- **新增心跳監控**（`backend/heartbeat_job.py` + `heartbeat_config.json` + `setup_heartbeat_task.ps1`）：獨立於 uvicorn 的 dead-man's-switch 機制，每 5 分鐘檢查本機 `/api/ping`，正常才對 [healthchecks.io](https://healthchecks.io) 打卡，本機無回應直接打 `/fail` 立即告警；本機或整台主機斷線都會使打卡中斷，由該服務逾時（Period 10 分鐘／Grace 10 分鐘）寄信通知 superadmin 信箱；已實測（含刻意中斷驗證告警確實觸發）
+
+### 2026-07-28a — 系統字體全面改為 LINE Seed TW_OTF（自架字型）
+
+- **`frontend/fonts/`**（新增目錄）：`LINESeedTW-Thin.otf` / `-Regular.otf` / `-Bold.otf` / `-ExtraBold.otf`（自 Windows 已安裝字型複製而來），由 `main.py` 既有的 `StaticFiles(FRONTEND_DIR)` 掛載自動於 `/fonts/*.otf` 提供，區網各台電腦免個別安裝字型即可顯示一致
+- **`frontend/css/style.css`**：新增 4 組 `@font-face`（`font-family: 'LINE Seed TW_OTF'`，依字重對應 100–900）；`--font-en` / `--font-zh` 統一改為 `'LINE Seed TW_OTF', system-ui, sans-serif`（原為 Google Fonts CDN 的 Inter / Noto Sans TC）
+- **全站 34 個頁面 + `js/*.js` + `static/*.js`**：移除 `<link>` 引入的 Google Fonts（`fonts.googleapis.com` / `fonts.gstatic.com`，含 Inter / Noto Sans TC / Noto Serif TC）；所有內嵌 `font-family: Inter, sans-serif` 等硬編碼樣式改為 `LINE Seed TW_OTF`（quotation-form.html 報價單 PDF 樣式的 `Noto Serif TC` 亦一併替換）
+- ⚠️ **批次取代衍生修正**：`static/sidebar.js`（8 處）、`static/notif.js`、`index.html`、`pages/sales-orders.html`、`pages/quotation-form.html`（`style.cssText = '...'` / Alpine `:style="'...'"` 動態綁定）等以單引號 JS 字串組字串的位置，取代後字型名稱誤帶入的單引號會提前截斷字串——已改為 CSS 允許的**不加引號**寫法（`font-family:LINE Seed TW_OTF, sans-serif`）修正；修正後以 `node --check` 驗證 4 個獨立 .js 檔、並對全站所有 HTML 內嵌 `<script>` 區塊逐一 `new Function()` 語法驗證，全數通過
+- 已用 `curl` 確認 `/fonts/LINESeedTW-Regular.otf` 回應 200（5.2MB），CSS 變數正確解析
+
+### 2026-07-24e — Demo 展示帳號（隔離空白資料庫，登入即重置）
+
+- **`backend/db.py`**：新增 `DEMO_DB_PATH`（`motrix_erp_demo.db`，獨立檔案但同一套 schema/migrations）；`get_db()` 改為透過 `contextvars.ContextVar` 判斷本次 request 是否為 demo 模式，動態連向正式庫或 demo 庫；新增 `get_demo_db()`（無視 context，永遠連 demo 庫，供登入/登出流程使用）、`is_demo_mode()`、`set_demo_mode(flag)`；`init_db()` 新增 `path` 參數支援對非預設路徑初始化；新增 `DEMO_PROJECT_PHOTOS_DIR` / `DEMO_PDF_ARCHIVE_DIR` / `DEMO_PAYSLIP_ARCHIVE_DIR` 三個檔案隔離目錄常數、`demo_reset_lock`（`threading.Lock`）
+- **`backend/db.py reset_demo_db()`**：改為 SQL `DELETE FROM` 每張表 + `VACUUM`（同一連線內完成，不刪 `.db/-wal/-shm` 檔案），避免 Windows 掃毒/索引服務短暫鎖住剛建立的 WAL 檔案造成 `os.remove()` 失敗中斷登入；並清空三個 demo 檔案目錄
+- **`backend/helpers/startup.py`**：新增 `init_demo_account()`（正式庫建立 `demo` 守門帳號，密碼 `60575481`，role=superadmin，僅供登入驗證用）
+- **`backend/helpers/auth.py`**：新增 `DEMO_TOKEN_PREFIX = "DEMO_"` 常數
+- **`backend/main.py`**：啟動時額外 `init_db(DEMO_DB_PATH)` + `init_demo_account()`；`auth_middleware` 依 token 是否有 `DEMO_` 前綴呼叫 `set_demo_mode()`，此後本次 request 內所有 `get_db()`（含 `_require_user()`/`_audit()`）自動轉向 demo db
+- **`backend/routers/auth.py`**：`auth_login()` 偵測 `username=='demo'` → 在 `demo_reset_lock` 內依序執行 `reset_demo_db()` 清空 → 建立 demo 使用者/session/audit → 核發 `DEMO_` 前綴 token（鎖確保兩個同時到達的 demo 登入不會搶跑同一個共用 db）；`auth_logout()` 依前綴分流刪除對應 db 的 session
+- **`backend/photos.py`**：新增 `_photo_root()`，`is_demo_mode()` 時回傳 `DEMO_PROJECT_PHOTOS_DIR`；**`backend/routers/projects.py`** 上傳照片改用此函式（原本硬寫死 `uploads/projects/`，demo 帳號上傳會直接落入正式目錄且 project_id 從 1 重新編號可能撞名）
+- **`backend/routers/payslips.py`**：`_archive_path()` 改為 `is_demo_mode()` 時導向 `DEMO_PAYSLIP_ARCHIVE_DIR`（原本硬寫死 `backend/export_archive/`）
+- **`backend/pdf_gen.py`**：`_get_pdf_base()` 改為 `is_demo_mode()` 時導向 `DEMO_PDF_ARCHIVE_DIR`，完全略過真實設定的 `pdf_base_path`（原本可能是公司共用網路磁碟，demo 帳號觸發報價單里程碑自動匯出會把檔案寫進真實共用資料夾）
+- 已用獨立測試環境（複製 backend+frontend、不同 port）反覆驗證：demo 登入回傳空白清單/儀表板、可正常寫入測試資料、寫入僅存在於 demo db 與 demo 專屬目錄、重新登入即整庫+整目錄清空、正式庫與正式檔案目錄全程未被寫入或讀取；並用 15 次連續 + 3 輪 20～25 併發登入壓力測試，確認 `demo_reset_lock` 修正了併發登入互相搶跑導致的 500 錯誤
+
+### 2026-07-24d — 外包名冊 DB migration 修正 + 設備拖曳 UX 重新設計（2026-07-24 01:42）
+
+- **`backend/db.py`**：`CURRENT_VERSION = 28 → 29`（前版新增 `_m029_contractor_passbook` 後未更新版本號，致 migration 未執行、`bank_passbook_image` 欄位不存在，`_LIST_COLS` 計算欄失敗、API 500、前端清單空白）
+- **`frontend/js/case-management.js`**：設備拖曳全面重構 — 自訂 ghost（克隆卡片 + 旋轉 1.5deg + 縮放 1.04× + 陰影 + `setDragImage`，下 tick 移除，取代瀏覽器預設截圖）；timestamp 計時替代 `setTimeout`（`dragover` 持續比對 `Date.now() - _devHoverStart > 900ms`，不受 `dragLeave` 中斷）；`_devInsertBeforeId` 追蹤插入線位置（上半插入前 / 下半插入後）；自動捲動 `.cm-detail__body`；群組 `dragover/drop` 移至 `.dev-group-header`；`devDropAtEnd()` 末端投放；新增 `_devNextId()` helper；新增狀態 `_devInsertBeforeId` / `_devHoverGroupId` / `_devHoverStart`
+- **`frontend/pages/case-management.html`**：CSS 新增 `.dev-card--insert-before`（藍色頂線插入提示）/ `.dev-card--group-target`（紫框合併預覽）/ `.dev-drop-end-zone` + `--active`（末端投放區）；`.dev-group` 去除 drag 事件改至 `.dev-group-header`；`:class` 綁定更新為新 class 名稱；末端投放 `<div class="dev-drop-end-zone" x-show="_devDragId">` 插入在 template loop 之後
+
+### 2026-07-24c — 外包名冊銀行存簿影本 + 勞報單 PDF 附件（2026-07-24 18:00）
+
+- **`backend/db.py`**：DB migration v29（`_m029_contractor_passbook`）為 `contractors` 新增 `bank_passbook_image TEXT DEFAULT ''` 欄位
+- **`backend/routers/contractors.py`**：新增 `_stamp_passbook()`（藍底「本影本依法留存，僅供勞務報酬匯款核對使用」橫幅浮水印）；`_LIST_COLS` 新增 `has_passbook` 計算欄位；`GET /id-card` 回傳 `bank_passbook`；`PUT /id-card` 接收 `bank_passbook` 並套用 `_stamp_passbook()`
+- **`backend/pdf_gen.py`**：`_build_payslip_html()` 新增 `passbook_section`（換頁，含受領人/帳號/勞報單號資訊表格 + 存簿圖片）；`generate_payslip_pdf_bytes()` 從 `contractors` 讀取 `bank_passbook_image` 注入 `d["_bank_passbook"]`
+- **`frontend/pages/contractors.html`**：modal 新增「銀行存簿影本」上傳區塊（拖放 / 點擊選取 / 移除；未儲存 / 已上傳狀態提示）；detail-pane 顯示 `has_passbook` 指示器及「產出勞報單 PDF 時將自動附入」說明；`save()` 含 `bank_passbook` 欄位
+
+### 2026-07-24b — 勞務模組權限開放 + 歷史紀錄全模組覆蓋
+
+- **`backend/helpers/auth.py`**：`_require_user` 新增 `module: str = None` 參數；`require_superadmin=True` 時若提供 `module` 則允許 superadmin 或具該模組授權的使用者通過，否則仍限 superadmin
+- **`backend/routers/contractors.py`**：`list_contractors` / `create_contractor` / `get_contractor` / `update_contractor` / `get_id_card` 改用 `module='contractor_list'`；`toggle_contractor_active` / `upload_id_card` 維持 superadmin-only
+- **`backend/routers/payslips.py`**：除 `delete_payslip` 外所有端點（10 個）改用 `module='payslip'`；刪除維持 superadmin-only
+- **`frontend/pages/contractors.html` / `payslips.html` / `payslip-form.html`**：存取檢查由 `role !== 'superadmin'` 改為 `role !== 'superadmin' && !modules.includes(key)`
+- **`frontend/static/sidebar.js`**：新增 `cCon`（contractor_list）/ `cPay`（payslip）模組旗標；勞務管理 section 改為 `cCon || cPay` 可見；外包名冊改用 `cCon`、勞報單改用 `cPay` 個別控制
+- **`frontend/pages/users.html`**：`allModules` 新增 `contractor_list`（外包名冊）/ `payslip`（勞報單）兩個「勞務」群組項目
+- **`frontend/pages/audit-log.html`**：篩選器新增 業務開發 / 供應商 / 承攬商管理 / 專案管理 / 每日工作事項 / 外包名冊 / 勞報單 / 系統 optgroup 共 60+ 選項；`actionLabel()` 映射表從 22 條擴充至 70+ 條（含報價單撤回/否決/退回、所有 dev_case/dev_log/vendor/project/daily_task/contractor/payslip/settings 動作）；`badgeBg` / `badgeFg` / `dotBg` / `dotIcon` 全面補入新分組色彩與圖示
+
+### 2026-07-24a — 設備拖曳群組 + Sidebar 勞務管理區段 + PDF CSP 修正
+
+- **`frontend/js/case-management.js`**：新增 `_devDragId` / `_devDragOverId` 狀態；新增八個方法：`devDragStart()` / `devDragEnd()` / `devDragOver()` / `devDragLeave()` / `devDropOnDevice()` / `devDropOnGroup()` / `_devReindex()` / `devUngroupDevice()`
+- **`frontend/pages/case-management.html`**：設備登錄 dev-card 加 `draggable="true"` 及六個拖曳事件；新增 `.dev-card--dragging` / `.dev-card--drop-over` / `.dev-group--drop-over` / `.dev-drag-handle` / `.btn-ungroup` CSS；群組內每個 dev-card 顯示「移出」按鈕；群組 header 接受 drop（加入群組）；非群組 dev-card 顯示拖曳提示（tooltip: 拖至另一設備合併、拖至群組加入）
+- **`frontend/static/sidebar.js`**：新增 `contl`（外包人員）/ `paysl`（支付錢包）兩個圖示 key；新增「勞務管理」section（superadmin 可見），放在財務與工作內容之間；外包名冊 / 勞報單從 `系統` 區段移出、改掛此新區段
+- **`backend/main.py`**：CSP 新增 `frame-src 'self' blob:` 指令，解決勞報單預覽 PDF 在 iframe 被瀏覽器封鎖的問題（原 `default-src 'self'` fallback 未涵蓋 `blob:` scheme）
+
+### 2026-07-23b — 非 admin 使用者隱藏 badge 與通知鈴鐺
+
+- **`frontend/static/sidebar.js` `buildTopbar()`**：Bell HTML 以 `if (ad)` 條件包覆，非 admin/superadmin 使用者完全不渲染通知鈴鐺按鈕
+- **`frontend/static/notif.js` `_fetchModuleCounts()`**：加入 role guard（`role !== 'superadmin' && role !== 'admin'` → early return），非特權帳號不呼叫 module-counts API 也不更新任何 badge
+
+### 2026-07-23a — Sidebar badge 修正 + 日曆視圖同步 + 「有更新」高亮
+
+- **`backend/routers/system.py`**：新增 `_MODULE_EXCLUDE_ACTIONS` dict；`audit_module_counts` 對 `dev_crm` 模組排除 `dev_case.delete / delete_request / delete_cancel / delete_reject` 動作，避免刪除申請操作觸發不必要的 badge 計數
+- **`frontend/static/sidebar.js`**：`build()` 在覆寫 `motrix_module_seen[curMod]` 之前先將舊值存入 `localStorage.motrix_module_prev_seen`（以模組 key 為索引），供各模組頁面讀取並比對「上次造訪後的更新項目」
+- **`frontend/pages/daily-tasks.html`**（日曆視圖同步）：日曆右側任務詳情（`dt-report-card`）新增工作說明顯示；superadmin 可在日曆視圖直接刪除任務（使用獨立的 `calConfirmDelete` / `deleteCalTask()` 方法，不共用清單視圖的 `confirmDelete`）；任務卡片（週排程/區間/單次）新增「有更新」黃色標籤與黃色邊框（`isNewTask(t)` helper 比對 `_prevSeenDT`，僅 admin+ 可見）
+  - ⚠️ 日曆視圖右側 `dt-report-card` 與清單視圖 `dt-detail` 功能必須同步：工作說明顯示、superadmin 刪除按鈕均需兩處維護
+- **`frontend/pages/dev-crm.html`**：案件卡片新增「有更新」黃色邊框與標籤（`_prevSeen` 與 `c.updatedAt` 比對，admin+ 可見）；待刪除審核案件顯示橙色「待刪除審核」badge
+
+### 2026-07-22r — 每日工作事項刪除 + Email 工作說明 + 業務開發軟刪除
+
+- **`frontend/pages/daily-tasks.html`**：刪除按鈕移除 `dtUnlocked &&` 條件（superadmin 不需先進入解鎖模式即可刪除），刪除仍留下 audit log 記錄
+- **`backend/helpers/email_notify.py`**：`notify_daily_task_assigned` 新增 `description` 參數，非空時在信件中加入「工作說明」列；新增 `notify_dev_case_delete_request()` 函式（寄送刪除申請通知給所有 superadmin）
+- **`backend/routers/daily_tasks.py`**：`create_daily_task` / `update_daily_task` 帶入 `body.description` 給 `notify_daily_task_assigned`
+- **`frontend/static/sidebar.js`**：`build()` 在 `buildSidebar()` 後立即隱藏當前模組所有 badge 元素（`_clearModBadge(_curMod)`），防止 `_fetchModuleCounts()` async 結果覆蓋清除動作；admin+ 使用者在 `build()` 時為所有 `_MOD_BADGES` key 填入 7 天前時間戳（解決未造訪模組因 `motrix_module_seen` 無對應 key 而 badge 不顯示的問題）
+- **`backend/db.py`**：DB migration v28（`_m028_dev_cases_soft_delete`）為 `dev_cases` 新增 8 欄：`is_deleted` / `deleted_at` / `deleted_by` / `deleted_snapshot` / `pending_delete` / `delete_requested_by` / `delete_requested_at` / `delete_reason` + `idx_dev_cases_is_deleted` 索引
+- **`backend/routers/dev_crm.py`**：移除舊 hard-delete 端點；新增 4 個端點（須在 `GET /dev-cases/{case_id}` 之前註冊以避免路由衝突）：
+  - `POST /dev-cases/{id}/request-delete`（admin+，設 pending_delete=1，觸發 Email）
+  - `POST /dev-cases/{id}/cancel-delete`（申請人可取消，superadmin 可取消任意）
+  - `POST /dev-cases/{id}/approve-delete`（superadmin only，approve=True→軟刪除+快照，False→拒絕清除旗標）
+  - `GET /dev-cases/pending-deletes`（superadmin only，回傳 pending_delete=1 清單）⚠️ 此路由必須在 `GET /dev-cases/{case_id}` 之前註冊
+- **`frontend/pages/dev-crm.html`**：刪除改為「申請刪除」Modal（輸入原因）→ 待審核 badge + superadmin 審核 Modal 流程；`requestDeleteCase()` / `cancelDeleteRequest()` / `approveDeleteCase(approve)` 三個新方法
+
+### 2026-07-22q — 精算利潤分析全面整合（案件管理/營運報表/Excel/PDF）
+
+- **案件管理財務 Tab**：完整呈現「四、利潤分析」— 原始報價預估 vs 實際成本精算雙欄對照表（報價稅前收入、原始/實際成本、直接毛利、毛利率、管銷分攤10%、公益1%、淨利、淨利率）+ 差異色塊 + 成本品項列表（廠牌/實際金額/備注）+ 額外支出列表（類別/說明/金額/備注）+ 精算備注
+- **營運報表精算 Modal**：同步改寫為雙欄對照表完整版，與案件管理財務 Tab 內容等高；完結資訊列顯示精算日期/完結人/完結時間；差異色塊/成本品項表/額外支出表均完整呈現
+- **Excel 毛利分析 Sheet**：由 12 欄擴充至 21 欄：群組標題列（基本資訊6欄/原始報價預估4欄/實際成本精算6欄/差異2欄/精算資訊3欄），資料欄含原始成本/直接毛利率/淨利率/淨利、品項成本/額外支出/實際總成本/真實毛利率/淨利率/淨利、差異pp/差異金額、精算日期/完結人
+- **PDF 毛利分析段落**：彙總表後新增各案件「利潤分析明細」，每案一卡（標題列含案件號/客戶/專案/業務員/精算日/完結人，雙欄對照表，差異說明色塊）
+
+### 2026-07-22p — 案件管理財務 Tab 精算結果全面重構
+
+- **`case-management.html` 財務 Tab**：① 修正欄位名稱錯誤（`revenue`→`quotedTotal`、`directMarginPct`→`grossMarginPct`、`item.desc`→`origDescription`、`item.amount`→`actualTotalCost`、`ex.desc`→`description`）；② 新增完結資訊列（精算日期、完結人、完結時間）；③ KPI 改為 2×2 四格：含稅/稅前收入、實際總成本、真實毛利+毛利率、淨利率+淨利金額；④ 新增「與原始報價差異」色塊（正/負差異綠/紅對應）；⑤ 成本品項顯示廠牌並加品項合計行；⑥ 額外支出顯示類別 chip 並加合計行
+
+### 2026-07-22o — 業務開發 CRM 存取權限控制
+
+- **`backend/routers/dev_crm.py`**：新增 `_can_access_case(user, row)` helper；非 admin 使用者僅能看到自己建立（`created_by`）、或列於 `sales_persons`（業務人員 JSON 陣列）或 `planners`（規劃人員 JSON 陣列）的案件；套用於 GET list（Python 層過濾，SQL 仍拉全部再篩）、GET/{id}、PUT、PATCH status、PATCH convert、GET/{id}/logs、POST/{id}/logs 共七個端點（越權回 HTTP 403）；admin/superadmin 不受限制查看所有案件
+
+### 2026-07-22n — 側邊欄模組通知數字點 + 模組活動 Email
+
+- **`backend/routers/system.py`**：新增 `POST /api/audit-log/module-counts` 端點，接受 `{modules: {模組key: ISO時間戳}}` 回傳各模組自 last-seen 後其他人的操作計數（排除呼叫者自身）；`_MODULE_ACTION_PREFIXES` 對應 10 個模組 key 至 `audit_log.action` 前綴
+- **`backend/helpers/email_notify.py`**：新增 `notify_module_activity(module_label, action_label, actor, item_label, page_path)`，非阻塞 daemon thread 寄信給所有 admin/superadmin，業務開發新增案件/記錄時觸發
+- **`backend/routers/dev_crm.py`**：create_dev_log / update_dev_log / delete_dev_log 補上 `_audit()` 呼叫（原缺失）；create_dev_case / create_dev_log 補 `notify_module_activity()`
+- **`frontend/static/sidebar.js`**：`ni()` 加第六個選用參數 `badgeId`（藍色 `sb-mod-*` badge）；`_FILE_MODULE` 映射表（19 頁面 → 模組 key）；`build()` 載入時自動更新 `localStorage.motrix_module_seen` 清除當頁 badge；所有模組導覽項目（含供應商/承攬商/料號/採購/保固追蹤/銷售訂單等子項）均加 badge span
+- **`frontend/static/notif.js`**：新增 `_fetchModuleCounts()`，讀取 `motrix_module_seen` 後 POST API 並更新 badge；`modBadge` 採陣列結構，單一模組計數可同步更新多個 badge 元素（procurement 4 個、equipment 2 個、finance 2 個）；`init()` 加入此方法的 `Promise.all`
+
+### 2026-07-22m — 業務開發 CRM 模組（全新）
+
+- **DB migration v27**：新增 `dev_cases`（案件主檔）與 `dev_logs`（開發記錄）兩張表
+- **`backend/routers/dev_crm.py`**（新建）：
+  - 案件 CRUD：`GET/POST/PUT/DELETE /dev-cases` + `PATCH status` + `PATCH convert`（連結報價單號）
+  - 記錄 CRUD：`GET/POST /dev-cases/{id}/logs` + `PUT/DELETE /dev-logs/{id}` + `PATCH approve` + `GET /dev-logs/pending`
+  - 權限：`dev_crm` 模組旗標或 admin+；代他人填寫自動標記 `needs_approval=1` 送 admin+ 審核
+- **`frontend/pages/dev-crm.html`**（新建）：雙欄佈局（左欄案件清單含狀態篩選 chip + 搜尋；右欄案件詳情 + 開發記錄時間線）；成案後「轉建報價單」按鈕（預填客戶/案件名開啟報價單表單，可連結單號）；admin+ 顯示待審橫幅 + 待審 Modal
+- **`sidebar.js`**：業務區段新增「業務開發」（第一項，`cDev` 旗標 = `dev_crm` 模組或 admin+）
+- **`users.html`**：`allModules` 新增 `dev_crm`（業務開發 CRM）
+
+### 2026-07-22l — 三大功能：案件資訊重命名 + 動態 Tab + 區間任務
+
+- **案件管理「商務」Tab 改名為「案件資訊」**
+- **動態 Tab（案件留言板）**：DB v26 新增 `case_updates` 表；`work_logs` 新增 `case_no` 欄位；API `GET/POST /api/quotations/{no}/updates` + `DELETE …/{id}`；動態 Tab 整合三來源（手動留言 / work_log / daily_task 完成回報），依時間降序；手動留言可由發文者或 admin+ 刪除
+- **每日工作事項 — 區間任務（`recurrence_type=range`）**：開始日（`task_date`）~ 截止日（`recurrence_end_date`），在日期範圍內每天顯示；各指派人完成一次即完成整個區間任務；`_check_range_task_deadline()` 每日執行：截止前三天 + 截止當日，對未完成的各指派人寄送 email（指派人 + 主管）；email 模板 `notify_range_task_deadline()`；guard key `range_notif.{id}.{username}.{3d|deadline}` 防重複
 
 ### 2026-07-22k — 文件全面更新（本次 session 整合）
 
@@ -672,6 +1049,7 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
   - 右側：點擊日期載入當日所有任務，顯示人員 chips（完成率色點）、搜尋輸入、任務清單 + 回報詳情
   - 月份切換同步重載兩個月資料；與「回報彙整」模式互斥
   - **Bug fix**：`calMonthDays()` 改用 `getFullYear/Month/Date` 本地時間，修正 `toISOString()` UTC 偏移在 UTC+8 環境差一天的問題
+  - ⚠️ **維護原則**：日曆視圖右側任務詳情（`dt-report-card`）與清單視圖（`dt-detail`）功能須同步：包含工作說明顯示、superadmin 刪除按鈕。日曆視圖使用獨立的 `calConfirmDelete`/`deleteCalTask()` 而非 `confirmDelete`/`deleteTask()`
 
 ### 2026-07-21n — 角色管理全面升級
 
@@ -786,7 +1164,7 @@ MOTRIX-ERP/
 ├── backup_alerts/               ← 備份警示（執行期產生）
 ├── backend/
 │   ├── main.py                  ← wiring；startup 呼叫 auth.init_rate_limiting()
-│   ├── db.py                    ← schema + 25 個 migrations（CURRENT_VERSION=25）
+│   ├── db.py                    ← schema + 34 個 migrations（CURRENT_VERSION=34，見 §2）
 │   ├── version_manifest.json    ← 模組版本紀錄（重啟後同步至 DB module_versions）
 │   ├── helpers/                 ← 套件（拆自原 helpers.py）
 │   │   ├── __init__.py          ← re-export 全部符號（向後相容）
@@ -797,22 +1175,29 @@ MOTRIX-ERP/
 │   │   ├── dates.py             ← _add_months、_warranty_expiry
 │   │   ├── email_notify.py      ← Email 通知（月報、逾期、保固、備份告警）
 │   │   └── startup.py           ← 啟動檢查、Edge 路徑解析
-│   ├── archive.py               ← 備份；_atomic_json_write()；G: fallback
+│   ├── archive.py               ← 備份；_atomic_json_write()；H: fallback
 │   ├── pdf_gen.py · photos.py
 │   ├── backup_job.py            ← 獨立備份腳本（Task Scheduler 呼叫）
 │   ├── setup_backup_task.ps1    ← 工作排程器設定（初次部署執行一次）
+│   ├── autostart.bat            ← 正式環境登入自動啟動；crash-restart 迴圈（見 §1.1）
+│   ├── autostart_hidden.vbs     ← 供 Task Scheduler 隱藏視窗呼叫 autostart.bat
+│   ├── setup_autostart_task.ps1 ← 「MOTRIX ERP Server Autostart」排程設定（初次部署執行一次）
+│   ├── heartbeat_job.py         ← 心跳監控腳本（見 §1.2），Task Scheduler 每 5 分鐘呼叫
+│   ├── heartbeat_config.json    ← 心跳打卡網址設定（healthchecks.io ping_url）
+│   ├── setup_heartbeat_task.ps1 ← 「MOTRIX ERP Heartbeat」排程設定（初次部署執行一次）
 │   ├── motrix_erp.db
 │   ├── db_backups/
 │   │   ├── YYYY-MM-DD/          ← 本機整庫 SQLite 快照（保留 30 天）
-│   │   └── quotation_instant/   ← G: 不可用時即時報價單 JSON fallback
-│   ├── logs/backup_job.log
+│   │   └── quotation_instant/   ← H: 不可用時即時報價單 JSON fallback
+│   ├── logs/backup_job.log · heartbeat_job.log
 │   ├── tests/test_core.py       ← 48 自動化測試（全通過）
-│   ├── .initial_admin_credentials.txt  ← 僅新裝，用後刪
 │   └── routers/
 │       ├── auth.py · quotations.py · customers.py · suppliers.py
 │       ├── parts.py · projects.py · dashboard.py · system.py · reports.py
 │       ├── daily_tasks.py · warranty.py
-│       └── vendor_contractors.py  ← 承攬商 + 派發 CRUD + accept + import-to-quote
+│       ├── vendor_contractors.py  ← 承攬商 + 派發 CRUD + accept + import-to-quote
+│       ├── dev_crm.py             ← 業務開發 CRM（dev_cases + dev_logs）
+│       └── shipping_notes.py      ← 出貨單 CRUD + 獨立簽核流程 + PDF + 回簽 toggle
 ├── frontend/
 │   ├── index.html               ← 儀表板（Alpine inline）
 │   ├── css/style.css
@@ -820,20 +1205,50 @@ MOTRIX-ERP/
 │   │   ├── case-management.js   ← ✅ 有效（案件管理 Alpine 元件）
 │   │   └── reports.js           ← ✅ 有效（營運報表 Alpine 元件）
 │   ├── pages/
+│   │   ├── dev-crm.html         ← 業務開發 CRM（雙欄；devCrmPage() Alpine inline）
 │   │   ├── quotation-form.html  ← Alpine inline（真正的 quotationForm()）
 │   │   ├── settlement.html      ← Alpine inline（真正的 settlementPage()）
-│   │   ├── case-management.html ← 含承攬商派發 + 驗收流程 Tab
+│   │   ├── case-management.html ← 含承攬商派發 + 驗收流程 Tab + 出貨單 Tab
 │   │   ├── vendor-contractors.html ← 承攬商管理（雙欄；vendorContractorsPage()）
+│   │   ├── shipping-approval-settings.html ← 出貨單專屬簽核設定（複製 approval-settings.html）
 │   │   └── *.html               ← 其餘頁面均 Alpine inline，無對應外置 JS
 │   └── static/
-│       ├── sidebar.js           ← Topbar + Sidebar + 離開警示
-│       ├── notif.js             ← 通知 Bell + daily_task badge
+│       ├── sidebar.js           ← Topbar + Sidebar + 離開警示 + _FILE_MODULE + sb-mod-* badge
+│       ├── notif.js             ← 通知 Bell + daily_task badge + 模組活動 badge (_fetchModuleCounts)
 │       └── logo.png             ← MOTRIX 白字去背 PNG
 ├── uploads/projects/
 └── 報價單PDF/
 ```
 
 ---
+
+## §14 · 跨機核對與拉檔流程
+
+> 背景與已知落差見 §0。目前完全靠人工複製，本章節是「核對時該看什麼、怎麼拉檔案」的清單，**不是自動化機制**——自動化推送是明確列為之後才考慮的項目（見章末）。
+
+### §14.1 · 核對優先順序
+
+依 2026-08-01 這次核對的實際經驗排序，越上面代表越容易漂移、越該優先看：
+
+1. **`backend/db.py`（migrations）**——優先用「正式機 db 的 `sqlite_master` 實際結構」反推，不要只比對程式碼本身（程式碼可能也漏東西，這次 v32/v33 就是實例：功能檔案都在，唯獨 migration 遺失）
+2. **`backend/routers/*.py`、`backend/helpers/*.py`**——新功能程式碼
+3. **`frontend/pages/*.html`、`frontend/js/*.js`、`frontend/static/*.js`**
+4. **`backend/*.ps1`**（部署/排程腳本，如 `setup_autostart_task.ps1`／`setup_heartbeat_task.ps1`）
+5. **`backend/version_manifest.json`**——比對兩邊「最新一筆」的日期，誰比較新代表誰的紀錄比較完整
+
+### §14.2 · 從正式機拉檔案回來的具體步驟
+
+- **資料庫檔案**（`motrix_erp.db`）複製回來時**不要直接覆蓋**開發機正在用的檔案：先另存成 `motrix_erp_prod_YYYYMMDD.db` 之類的名稱，只用來讀取比對 schema/資料（例如 `PRAGMA table_info` / `sqlite_master`），確認要保留的內容後再手動決定是否取代開發機的檔案
+- **純程式碼／文件檔案**：正式機有、這裡沒有的，直接複製過來；兩邊都有但內容不同的，人工比對（可用 PowerShell `Compare-Object` 或 `git diff --no-index`）決定保留哪一版，**不要自動二選一覆蓋**
+- 核對完成後，依 §12 下方「維護規則」慣例補一筆 `version_manifest.json` + §12 摘要，並更新 §0 的「已知落差紀錄」表（狀態改為已補回，或新增剛發現的落差）
+
+### §14.3 · 之後才考慮的方向（這次不做）
+
+手動核對流程先跑順、雙方都清楚哪些檔案該比對之後，才評估是否要半自動化：
+
+- PowerShell Remoting（`Invoke-Command`/`New-PSSession`）——需先在正式機開放 WinRM，涉及帳密/防火牆設定
+- Robocopy 鏡像同步（排除 db/uploads/logs）+ 遠端觸發 `restart.bat`
+- 都需要先解決「這台開發機的程式碼本身還沒完整 commit 進 git」的問題（見 §0 已知落差第三筆），否則自動化推送的來源本身就不可靠
 
 ---
 
