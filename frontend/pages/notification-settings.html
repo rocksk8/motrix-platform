@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="../static/favicon.png">
+  <title>通知設定 — MOTRIX 營運管理系統</title>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    .ns-main {
+      margin-left: var(--sidebar-w);
+      margin-top: var(--topbar-h);
+      padding: 32px 36px;
+      min-height: calc(100vh - var(--topbar-h));
+      background: var(--white);
+    }
+    .ns-title { font-size: 20px; font-weight: 700; color: var(--text-main); }
+    .ns-subtitle { font-size: 13px; color: var(--text-secondary); margin-top: 4px; }
+    .ns-card {
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      max-width: 720px;
+      margin-top: 24px;
+    }
+    .ns-card-head {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border-light);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .ns-card-head-title { font-size: 14px; font-weight: 700; color: var(--text-main); flex: 1; }
+    .ns-card-body { padding: 20px 24px; }
+    .ns-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+    .ns-row.full { grid-template-columns: 1fr; }
+    .ns-field label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      margin-bottom: 6px;
+    }
+    .ns-field input[type="text"],
+    .ns-field input[type="number"],
+    .ns-field input[type="password"],
+    .ns-field input[type="email"] {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 13px;
+      color: var(--text-main);
+      background: var(--white);
+      box-sizing: border-box;
+    }
+    .ns-field input:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(47,111,214,.12);
+    }
+    .ns-toggle {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 16px;
+      background: #F8F7F4;
+      border-radius: 8px;
+      margin-bottom: 20px;
+    }
+    .ns-toggle label { font-size: 14px; font-weight: 600; color: var(--text-main); cursor: pointer; }
+    .ns-desc {
+      font-size: 13px;
+      color: var(--text-secondary);
+      background: #F8F7F4;
+      border-radius: 7px;
+      padding: 12px 14px;
+      border-left: 3px solid var(--accent);
+      margin-bottom: 20px;
+      line-height: 1.6;
+    }
+    .ns-email-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      background: #EAF2FF;
+      color: #2F6FD6;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      margin: 3px;
+    }
+    .ns-email-tag button {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: #2F6FD6;
+      font-size: 14px;
+      line-height: 1;
+      padding: 0;
+    }
+    .ns-email-input-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .ns-email-input-row input {
+      flex: 1;
+      padding: 8px 10px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 13px;
+    }
+    .ns-email-tags-wrap {
+      min-height: 36px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 8px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 2px;
+      background: var(--white);
+    }
+    .ns-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 24px;
+      padding-top: 20px;
+      border-top: 1px solid var(--border-light);
+    }
+    .ns-hint {
+      font-size: 12px;
+      color: var(--text-dim);
+      margin-top: 20px;
+      line-height: 1.7;
+    }
+    .ns-hint a { color: var(--accent); }
+    .ns-event-list { font-size: 13px; color: var(--text-secondary); line-height: 1.9; }
+    .ns-event-list li::marker { color: var(--accent); }
+    .ns-check-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 9px 0;
+      border-bottom: 1px solid var(--border-light);
+    }
+    .ns-check-row:last-child { border-bottom: none; }
+    .ns-check-badge {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 10px;
+      flex-shrink: 0;
+      white-space: nowrap;
+    }
+  </style>
+</head>
+<body x-data="notifSettingsPage()" x-init="init()" x-cloak>
+  <header id="app-topbar" class="topbar"></header>
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+  <aside class="sidebar" id="app-sidebar"></aside>
+  <main class="ns-main">
+    <div style="margin-bottom:28px">
+      <div class="ns-title">通知設定</div>
+      <div class="ns-subtitle">設定 Gmail SMTP，系統將在簽核、退回、精算完結時自動寄送 Email 通知</div>
+    </div>
+
+    <!-- 通知事件說明 -->
+    <div class="ns-card">
+      <div class="ns-card-head">
+        <div class="ns-card-head-title">自動通知事件</div>
+      </div>
+      <div class="ns-card-body">
+        <ul class="ns-event-list">
+          <li>新報價單送審 → 通知<strong>當層簽核人</strong>（取自使用者 Email 欄位）</li>
+          <li>前層通過，進入下一層 → 通知<strong>下一層簽核人</strong></li>
+          <li>全員簽核完成 → 通知<strong>申請人 + 管理員 Email 清單</strong></li>
+          <li>報價單退回修改 → 通知<strong>申請人</strong></li>
+          <li>成本精算完結 → 通知<strong>管理員 Email 清單</strong></li>
+        </ul>
+        <div class="ns-hint">
+          簽核人的 Email 請至「使用者管理」頁面填寫各帳號的 Email 欄位。<br>
+          管理員通知清單（下方設定）用於「全員通過」和「精算完結」事件。
+        </div>
+      </div>
+    </div>
+
+    <!-- 設定狀態 checklist -->
+    <div class="ns-card">
+      <div class="ns-card-head">
+        <div class="ns-card-head-title">設定狀態</div>
+        <span x-show="allReady" style="font-size:12px;color:#16A34A;font-weight:600">● 已就緒</span>
+        <span x-show="!allReady" style="font-size:12px;color:#D97706;font-weight:600"
+              x-text="'尚有 ' + (checks.length - readyCount) + ' 項待完成'"></span>
+      </div>
+      <div class="ns-card-body" style="padding-top:8px;padding-bottom:8px">
+        <template x-for="c in checks" :key="c.label">
+          <div class="ns-check-row">
+            <div :style="c.ok ? 'color:#15803D' : 'color:#9CA3AF'" style="flex-shrink:0;margin-top:1px">
+              <template x-if="c.ok">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              </template>
+              <template x-if="!c.ok">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              </template>
+            </div>
+            <div style="flex:1">
+              <div style="font-size:13px;font-weight:500"
+                   :style="c.ok ? 'color:var(--text-main)' : 'color:var(--text-secondary)'"
+                   x-text="c.label"></div>
+              <div x-show="!c.ok" x-text="c.hint"
+                   style="font-size:11px;color:#D97706;margin-top:2px"></div>
+            </div>
+            <span class="ns-check-badge"
+                  :style="c.ok ? 'background:#D1FAE5;color:#065F46' : 'background:#FEF3C7;color:#92400E'"
+                  x-text="c.ok ? '完成' : '待設定'"></span>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- SMTP 設定 -->
+    <div class="ns-card">
+      <div class="ns-card-head">
+        <div class="ns-card-head-title">Gmail SMTP 設定</div>
+        <span x-show="saved" x-transition style="font-size:12px;color:#16A34A;font-weight:600">已儲存</span>
+      </div>
+      <div class="ns-card-body">
+
+        <!-- 啟用開關 -->
+        <div class="ns-toggle">
+          <input type="checkbox" id="chk-enabled" x-model="cfg.enabled" style="width:16px;height:16px;cursor:pointer">
+          <label for="chk-enabled">啟用 Email 通知</label>
+          <span x-show="!cfg.enabled" style="font-size:12px;color:var(--text-dim)">(目前關閉)</span>
+          <span x-show="cfg.enabled" style="font-size:12px;color:#16A34A;font-weight:600">(已啟用)</span>
+        </div>
+
+        <div class="ns-desc">
+          請使用 Gmail <strong>應用程式密碼</strong>（App Password），而非 Google 帳號的登入密碼。<br>
+          取得方式：Google 帳戶 → 安全性 → 兩步驟驗證 → 應用程式密碼
+        </div>
+
+        <div class="ns-row">
+          <div class="ns-field">
+            <label>寄件人 Email（Gmail 帳號）</label>
+            <input type="text" x-model="cfg.smtp_user" placeholder="your@gmail.com">
+          </div>
+          <div class="ns-field">
+            <label>應用程式密碼（App Password）</label>
+            <input type="password" x-model="cfg.smtp_password" placeholder="16 碼應用程式密碼">
+          </div>
+        </div>
+
+        <div class="ns-row">
+          <div class="ns-field">
+            <label>SMTP 主機</label>
+            <input type="text" x-model="cfg.smtp_host" placeholder="smtp.gmail.com">
+          </div>
+          <div class="ns-field">
+            <label>SMTP 連接埠</label>
+            <input type="number" x-model.number="cfg.smtp_port" placeholder="587">
+          </div>
+        </div>
+
+        <div class="ns-row">
+          <div class="ns-field">
+            <label>寄件人顯示名稱</label>
+            <input type="text" x-model="cfg.from_name" placeholder="MOTRIX ERP">
+          </div>
+          <div class="ns-field">
+            <label>系統網址（信件中的連結前綴）</label>
+            <input type="text" x-model="cfg.base_url" placeholder="http://172.16.11.211:666">
+          </div>
+        </div>
+
+        <!-- 管理員收件人（自動從使用者管理讀取） -->
+        <div class="ns-field" style="margin-bottom:16px">
+          <label>管理員通知對象（全員通過、精算完結）</label>
+          <div class="ns-email-tags-wrap">
+            <template x-if="cfg.admin_email_preview && cfg.admin_email_preview.length">
+              <template x-for="email in cfg.admin_email_preview" :key="email">
+                <span class="ns-email-tag" style="background:#EAF7EF;color:#15803D">
+                  <span x-text="email"></span>
+                </span>
+              </template>
+            </template>
+            <template x-if="!cfg.admin_email_preview || !cfg.admin_email_preview.length">
+              <span style="font-size:12px;color:var(--text-dim);padding:4px 2px">
+                尚未設定（請至「使用者管理」為 admin / superadmin 帳號填寫 Email）
+              </span>
+            </template>
+          </div>
+          <div style="font-size:12px;color:var(--text-dim);margin-top:6px">
+            自動讀取角色為 <strong>admin</strong> 或 <strong>superadmin</strong> 且已填寫 Email 的使用者，無需手動維護
+          </div>
+        </div>
+
+        <div class="ns-actions">
+          <button class="btn btn-primary" @click="save()" :disabled="saving">
+            <span x-show="!saving">儲存設定</span>
+            <span x-show="saving">儲存中…</span>
+          </button>
+          <button class="btn btn-secondary" @click="testEmail()" :disabled="testing || !cfg.enabled">
+            <span x-show="!testing">寄送測試信</span>
+            <span x-show="testing">寄送中…</span>
+          </button>
+        </div>
+
+        <div x-show="msg" x-text="msg" x-transition
+             :style="isError ? 'color:#DC2626' : 'color:#16A34A'"
+             style="font-size:13px;margin-top:12px;font-weight:600"></div>
+      </div>
+    </div>
+
+  </main>
+  <script src="../static/notif.js"></script>
+  <script src="../static/sidebar.js"></script>
+  <script>
+    function notifSettingsPage() {
+      return {
+        cfg: {
+          enabled: false,
+          smtp_host: 'smtp.gmail.com',
+          smtp_port: 587,
+          smtp_user: '',
+          smtp_password: '',
+          from_name: 'MOTRIX ERP',
+          base_url: 'http://172.16.11.211:666',
+          admin_email_preview: [],
+        },
+        saving: false,
+        testing: false,
+        saved: false,
+        msg: '',
+        isError: false,
+
+        get checks() {
+          return [
+            {
+              label: 'Email 通知已啟用',
+              ok: !!this.cfg.enabled,
+              hint: '請開啟「啟用 Email 通知」開關後儲存',
+            },
+            {
+              label: 'Gmail 寄件帳號',
+              ok: !!(this.cfg.smtp_user && this.cfg.smtp_user.trim()),
+              hint: '請填寫 Gmail 帳號（例：your@gmail.com）',
+            },
+            {
+              label: '應用程式密碼（App Password）',
+              ok: !!(this.cfg.smtp_password && this.cfg.smtp_password.trim()),
+              hint: '請填寫 16 碼 App Password（Google 帳戶 → 安全性 → 兩步驟驗證）',
+            },
+            {
+              label: '管理員收件人 Email',
+              ok: !!(this.cfg.admin_email_preview && this.cfg.admin_email_preview.length > 0),
+              hint: '請至「使用者管理」為 admin 或 superadmin 帳號填寫 Email 欄位',
+            },
+          ]
+        },
+        get readyCount() { return this.checks.filter(c => c.ok).length },
+        get allReady() { return this.readyCount === this.checks.length },
+
+        async init() {
+          const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
+          if (!s.token) { location.replace('login.html'); return }
+          const r = await fetch('/api/settings/email-notify', {
+            headers: { Authorization: 'Bearer ' + s.token }
+          })
+          if (r.ok) {
+            const data = await r.json()
+            this.cfg = { ...this.cfg, ...data }
+            if (!Array.isArray(this.cfg.admin_email_preview)) this.cfg.admin_email_preview = []
+          }
+        },
+
+        async save() {
+          this.saving = true; this.msg = ''
+          const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
+          const { admin_email_preview: _preview, ...payload } = this.cfg
+          const r = await fetch('/api/settings/email-notify', {
+            method: 'PUT',
+            headers: { Authorization: 'Bearer ' + s.token, 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          })
+          this.saving = false
+          if (r.ok) {
+            this.msg = '設定已儲存'; this.isError = false
+            this.saved = true; setTimeout(() => this.saved = false, 3000)
+          } else {
+            const d = await r.json().catch(() => ({}))
+            this.msg = d.detail || '儲存失敗'; this.isError = true
+          }
+          setTimeout(() => this.msg = '', 4000)
+        },
+
+        async testEmail() {
+          this.testing = true; this.msg = ''
+          const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
+          const r = await fetch('/api/settings/email-notify/test', {
+            method: 'POST',
+            headers: { Authorization: 'Bearer ' + s.token },
+          })
+          this.testing = false
+          const d = await r.json().catch(() => ({}))
+          if (r.ok) {
+            this.msg = '測試信已寄出，請至管理員信箱確認'; this.isError = false
+          } else {
+            this.msg = d.detail || '寄送失敗，請確認 SMTP 設定'; this.isError = true
+          }
+          setTimeout(() => this.msg = '', 6000)
+        },
+      }
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,1190 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="../static/favicon.png">
+  <title>業務開發 - MOTRIX 營運管理系統</title>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    /* ── Button system ── */
+    .btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 7px 16px; border-radius: var(--radius);
+      font-size: 12px; font-family: var(--font-zh); font-weight: 500;
+      cursor: pointer; border: 1px solid transparent;
+      transition: background .12s, border-color .12s, opacity .12s;
+      white-space: nowrap; text-decoration: none; line-height: 1.4;
+    }
+    .btn:disabled { opacity: .45; cursor: not-allowed; }
+    .btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .btn-primary:hover:not(:disabled) { background: #1D4ED8; border-color: #1D4ED8; }
+    .btn-ghost { background: #fff; color: var(--text-secondary); border-color: var(--border-light); }
+    .btn-ghost:hover:not(:disabled) { background: #F5F4F0; }
+    .btn-success { background: #059669; color: #fff; border-color: #059669; }
+    .btn-success:hover:not(:disabled) { background: #047857; border-color: #047857; }
+    .btn-danger  { background: #DC2626; color: #fff; border-color: #DC2626; }
+    .btn-danger:hover:not(:disabled) { background: #B91C1C; border-color: #B91C1C; }
+    .btn-ghost-danger { background: #fff; color: #DC2626; border-color: #FCA5A5; }
+    .btn-ghost-danger:hover:not(:disabled) { background: #FEF2F2; border-color: #DC2626; }
+    .btn-sm   { padding: 5px 12px; font-size: 11px; }
+    .btn-icon { padding: 4px 10px; font-size: 15px; line-height: 1; }
+
+    /* ── prefix dc- (dev-crm) to avoid conflict with style.css ── */
+    .dc-layout {
+      display: flex;
+      height: calc(100vh - var(--topbar-h));
+      overflow: hidden;
+    }
+
+    /* ── Left panel ── */
+    .dc-list {
+      width: 300px; min-width: 260px;
+      border-right: 1px solid var(--border-light);
+      display: flex; flex-direction: column;
+      background: #FAFAF9; overflow: hidden;
+    }
+    .dc-list__head {
+      padding: 14px 14px 10px;
+      background: #fff;
+      border-bottom: 1px solid var(--border-light);
+    }
+    .dc-list__title-row {
+      display: flex; align-items: center;
+      justify-content: space-between; margin-bottom: 10px;
+    }
+    .dc-list__title {
+      font-size: 13px; font-weight: 700;
+      color: var(--text-primary); font-family: var(--font-zh);
+    }
+    .dc-search {
+      width: 100%; font-size: 12px; padding: 6px 10px;
+      border: 1px solid var(--border-light); border-radius: 6px;
+      outline: none; background: #F9FAFB;
+      margin-bottom: 8px; box-sizing: border-box;
+      font-family: var(--font-zh); transition: border-color .12s;
+    }
+    .dc-search:focus { border-color: var(--accent); background: #fff; }
+    .dc-chips { display: flex; gap: 5px; flex-wrap: wrap; }
+    .dc-chip {
+      font-size: 11px; padding: 3px 10px; border-radius: 12px;
+      border: 1px solid var(--border-light); cursor: pointer;
+      background: #fff; color: var(--text-secondary); transition: all .15s;
+      font-family: var(--font-zh); white-space: nowrap;
+    }
+    .dc-chip.on           { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .dc-chip.talk         { border-color: #D97706; color: #D97706; }
+    .dc-chip.talk.on      { background: #D97706; color: #fff; }
+    .dc-chip.won          { border-color: #059669; color: #059669; }
+    .dc-chip.won.on       { background: #059669; color: #fff; }
+    .dc-chip.lost         { border-color: #DC2626; color: #DC2626; }
+    .dc-chip.lost.on      { background: #DC2626; color: #fff; }
+
+    .dc-list__body { flex: 1; overflow-y: auto; padding: 6px; }
+    .dc-list__body::-webkit-scrollbar { width: 4px; }
+    .dc-list__body::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 2px; }
+
+    .dc-case-card {
+      padding: 11px 13px; border-radius: 8px;
+      border: 1px solid var(--border-light); background: #fff;
+      cursor: pointer; margin-bottom: 6px; border-left: 3px solid transparent;
+      transition: border-color .12s, background .1s;
+    }
+    .dc-case-card:hover { background: #F5F4F0; }
+    .dc-case-card.selected { background: #EEF2FF; border-left-color: var(--accent); border-color: #BFDBFE; }
+    .dc-case-card__name {
+      font-size: 13px; font-weight: 600; color: var(--text-primary);
+      margin-bottom: 2px; white-space: nowrap;
+      overflow: hidden; text-overflow: ellipsis; font-family: var(--font-zh);
+    }
+    .dc-case-card__sub {
+      font-size: 11px; color: var(--text-dim); white-space: nowrap;
+      overflow: hidden; text-overflow: ellipsis; margin-bottom: 6px;
+    }
+    .dc-case-card__foot { display: flex; align-items: center; gap: 6px; }
+
+    /* status badge */
+    .dc-badge {
+      font-size: 10px; font-weight: 600; font-family: var(--font-zh);
+      padding: 2px 8px; border-radius: 10px;
+    }
+    .dc-badge--talk { background: #FEF3C7; color: #92400E; }
+    .dc-badge--won  { background: #D1FAE5; color: #065F46; }
+    .dc-badge--lost { background: #FEE2E2; color: #991B1B; }
+
+    /* ── Right panel ── */
+    .dc-right {
+      flex: 1; overflow-y: auto;
+      display: flex; flex-direction: column; background: #fff;
+    }
+    .dc-empty {
+      flex: 1; display: flex; align-items: center;
+      justify-content: center; flex-direction: column;
+      gap: 10px; color: var(--text-dim); padding: 40px;
+    }
+    .dc-empty svg { width: 48px; height: 48px; opacity: .25; }
+    .dc-empty p { font-size: 13px; font-family: var(--font-zh); }
+
+    /* Detail header */
+    .dc-detail-head {
+      padding: 16px 22px 12px; border-bottom: 1px solid var(--border-light);
+      background: #fff; position: sticky; top: 0; z-index: 10;
+      box-shadow: 0 1px 3px rgba(0,0,0,.04);
+    }
+    .dc-detail-title {
+      font-size: 17px; font-weight: 700;
+      color: var(--text-primary); margin: 0 0 6px;
+      font-family: var(--font-zh);
+    }
+    .dc-detail-meta {
+      display: flex; align-items: center;
+      gap: 10px; flex-wrap: wrap;
+      font-size: 11px; color: var(--text-dim);
+      font-family: 'LINE Seed TW_OTF', sans-serif;
+    }
+    .dc-detail-actions {
+      display: flex; gap: 7px; margin-top: 12px; flex-wrap: wrap;
+    }
+
+    /* info grid */
+    .dc-info-grid {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 14px; padding: 16px 22px;
+      border-bottom: 1px solid var(--border-light);
+      background: #FAFAF9;
+    }
+    .dc-info-lbl {
+      font-size: 10px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .07em; color: var(--text-dim);
+      font-family: 'LINE Seed TW_OTF', sans-serif; display: block; margin-bottom: 4px;
+    }
+    .dc-info-val { font-size: 12px; color: var(--text-primary); font-family: var(--font-zh); }
+    .dc-person-chips { display: flex; gap: 4px; flex-wrap: wrap; }
+    .dc-person-chip {
+      font-size: 11px; padding: 2px 9px; border-radius: 10px;
+      background: var(--accent-light); color: var(--accent); font-weight: 500;
+    }
+    .dc-converted-link {
+      font-size: 11px; padding: 3px 10px; border-radius: 7px;
+      background: #EFF6FF; color: #1D4ED8; font-weight: 600;
+      text-decoration: none; display: inline-flex; align-items: center; gap: 4px;
+    }
+    .dc-converted-link:hover { background: #DBEAFE; }
+
+    /* logs section */
+    .dc-logs { padding: 0 22px 28px; }
+    .dc-logs__head {
+      display: flex; align-items: center;
+      justify-content: space-between; padding: 16px 0 12px;
+    }
+    .dc-logs__title { font-size: 13px; font-weight: 700; color: var(--text-primary); font-family: var(--font-zh); margin: 0; }
+
+    /* log form */
+    .dc-log-form {
+      background: #F0F6FF; border: 1px solid #BFDBFE;
+      border-radius: 10px; padding: 16px; margin-bottom: 16px;
+    }
+    .dc-log-form h4 {
+      font-size: 12px; font-weight: 700; color: var(--accent);
+      margin: 0 0 12px; font-family: var(--font-zh);
+    }
+    .dc-form-row {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;
+    }
+    .dc-form-row.full { grid-template-columns: 1fr; }
+    .dc-form-row.triple { grid-template-columns: 1fr 1fr 1fr; }
+    .dc-lbl {
+      font-size: 11px; font-weight: 600; color: var(--text-secondary);
+      margin-bottom: 4px; display: block; font-family: var(--font-zh);
+    }
+    .dc-input, .dc-select, .dc-textarea {
+      width: 100%; font-size: 12px; padding: 7px 10px;
+      border: 1px solid var(--border-light); border-radius: 6px;
+      outline: none; background: #fff; color: var(--text-primary);
+      box-sizing: border-box; font-family: var(--font-zh);
+      transition: border-color .12s;
+    }
+    .dc-input:focus, .dc-select:focus, .dc-textarea:focus {
+      border-color: var(--accent); box-shadow: 0 0 0 3px rgba(37,99,235,.08);
+    }
+    .dc-textarea { min-height: 72px; resize: vertical; }
+
+    /* log cards */
+    .dc-log-card {
+      border: 1px solid var(--border-light); border-radius: 10px;
+      padding: 14px 16px; margin-bottom: 10px; background: #fff;
+    }
+    .dc-log-card.needs-approval { border-color: #F97316; background: #FFFBF5; }
+    .dc-log-card__head {
+      display: flex; align-items: center; gap: 7px;
+      margin-bottom: 8px; flex-wrap: wrap;
+    }
+    .dc-log-date {
+      font-size: 11px; font-weight: 700; font-family: 'LINE Seed TW_OTF', sans-serif;
+      color: var(--text-secondary);
+    }
+    .dc-channel {
+      font-size: 10px; font-weight: 600; padding: 2px 8px;
+      border-radius: 10px; background: #EEF2FF; color: #3730A3;
+    }
+    .dc-log-card__content {
+      font-size: 12px; color: var(--text-primary);
+      white-space: pre-wrap; margin-bottom: 6px;
+      line-height: 1.65; font-family: var(--font-zh);
+    }
+    .dc-log-card__next {
+      font-size: 11px; color: #059669; background: #ECFDF5;
+      padding: 5px 10px; border-radius: 6px; margin-bottom: 8px;
+      font-family: var(--font-zh);
+    }
+    .dc-log-card__next::before { content: '→ 下一步：'; font-weight: 700; }
+    .dc-log-card__foot {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 11px; color: var(--text-dim);
+      border-top: 1px solid var(--border-light);
+      padding-top: 8px; margin-top: 8px;
+      font-family: 'LINE Seed TW_OTF', sans-serif;
+    }
+    .dc-log-card__actions { margin-left: auto; display: flex; gap: 5px; }
+    .dc-approved { font-size: 10px; padding: 2px 8px; border-radius: 10px; background: #D1FAE5; color: #065F46; font-weight: 600; }
+    .dc-pending  { font-size: 10px; padding: 2px 8px; border-radius: 10px; background: #FEF3C7; color: #92400E; font-weight: 600; }
+    .dc-pending-banner {
+      background: #FFF7ED; border-bottom: 1px solid #FED7AA;
+      margin: -14px -16px 12px; padding: 8px 14px;
+      border-radius: 10px 10px 0 0;
+      display: flex; align-items: center; justify-content: space-between;
+      font-size: 12px; color: #9A3412; font-family: var(--font-zh);
+    }
+
+    /* modal */
+    .dc-modal-bg {
+      position: fixed; inset: 0; background: rgba(0,0,0,.38);
+      z-index: 300; display: flex; align-items: center;
+      justify-content: center; padding: 20px;
+    }
+    .dc-modal {
+      background: #fff; border-radius: 12px;
+      width: 100%; max-width: 560px; max-height: 90vh;
+      overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,.22);
+    }
+    .dc-modal-head {
+      padding: 18px 22px 14px; border-bottom: 1px solid var(--border-light);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .dc-modal-head h3 {
+      font-size: 15px; font-weight: 700; margin: 0;
+      color: var(--text-primary); font-family: var(--font-zh);
+    }
+    .dc-modal-body { padding: 18px 22px; }
+    .dc-modal-foot {
+      padding: 14px 22px; border-top: 1px solid var(--border-light);
+      display: flex; justify-content: flex-end; gap: 8px;
+    }
+    .dc-form-group { margin-bottom: 14px; }
+    .dc-form-group > label {
+      font-size: 12px; font-weight: 600; color: var(--text-secondary);
+      display: block; margin-bottom: 5px; font-family: var(--font-zh);
+    }
+    .dc-form-group .hint { font-size: 11px; color: var(--text-dim); margin-top: 4px; }
+    .dc-user-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+    .dc-user-check {
+      font-size: 11px; padding: 4px 12px; border-radius: 12px;
+      border: 1px solid var(--border-light); cursor: pointer;
+      user-select: none; transition: all .15s; font-family: var(--font-zh);
+      background: #fff; color: var(--text-secondary);
+    }
+    .dc-user-check.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .dc-error {
+      font-size: 12px; color: var(--danger); background: var(--danger-light);
+      padding: 8px 12px; border-radius: 6px; margin-top: 6px;
+    }
+
+    /* pending admin bar */
+    .dc-admin-bar {
+      background: var(--orange-light); border-bottom: 1px solid #FED7AA;
+      padding: 7px 14px; font-size: 11px; color: #9A3412;
+      display: flex; align-items: center; gap: 7px; cursor: pointer;
+      font-family: var(--font-zh);
+    }
+    .dc-admin-bar:hover { background: #FEE2C2; }
+
+    /* toast */
+    .dc-toast {
+      position: fixed; bottom: 24px; left: 50%;
+      transform: translateX(-50%);
+      background: #1E293B; color: #fff; font-size: 12px;
+      padding: 10px 22px; border-radius: 8px; z-index: 999;
+      box-shadow: 0 4px 16px rgba(0,0,0,.22);
+      pointer-events: none; white-space: nowrap;
+      font-family: var(--font-zh);
+    }
+
+    @media (max-width: 767px) {
+      .dc-list { width: 100%; position: fixed; top: var(--topbar-h); left: 0; z-index: 50; display: none; }
+      .dc-list.show { display: flex; height: calc(100vh - var(--topbar-h)); }
+      .dc-info-grid { grid-template-columns: 1fr; }
+      .dc-form-row, .dc-form-row.triple { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<header id="app-topbar" class="topbar"></header>
+<div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+<div class="app-shell">
+  <aside class="sidebar" id="app-sidebar"></aside>
+
+  <main class="main" style="padding:0;overflow:hidden">
+  <div x-data="devCrmPage()" x-init="init()" class="dc-layout">
+
+    <!-- ── 左欄：案件列表 ── -->
+    <div class="dc-list" :class="{'show': mobileListOpen}">
+      <div class="dc-list__head">
+        <div class="dc-list__title-row">
+          <span class="dc-list__title">業務開發</span>
+          <button class="btn btn-primary btn-sm" @click="openNewCase()">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+            新增案件
+          </button>
+        </div>
+        <input class="dc-search" type="text" placeholder="搜尋案件或客戶…"
+               x-model.debounce.400ms="searchQ" @input="loadCases()">
+        <div class="dc-chips">
+          <span class="dc-chip" :class="{on: filterStatus===''}" @click="filterStatus='';loadCases()">
+            全部 <b x-text="cases.length"></b>
+          </span>
+          <span class="dc-chip talk" :class="{on: filterStatus==='洽談中'}" @click="filterStatus='洽談中';loadCases()">洽談中</span>
+          <span class="dc-chip won"  :class="{on: filterStatus==='成案'}"   @click="filterStatus='成案';loadCases()">成案</span>
+          <span class="dc-chip lost" :class="{on: filterStatus==='未成案'}" @click="filterStatus='未成案';loadCases()">未成案</span>
+        </div>
+      </div>
+
+      <!-- admin 待審提示 -->
+      <div class="dc-admin-bar" x-show="isAdmin && pendingCount > 0"
+           @click="showPendingModal=true; loadPendingLogs()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+        <span x-text="pendingCount + ' 筆記錄待審核'"></span>
+        <span style="margin-left:auto;text-decoration:underline">查看 →</span>
+      </div>
+
+      <div class="dc-list__body">
+        <div x-show="casesLoading" style="text-align:center;padding:30px;font-size:12px;color:var(--text-dim)">載入中…</div>
+        <div x-show="!casesLoading && cases.length === 0"
+             style="text-align:center;padding:30px;font-size:12px;color:var(--text-dim)">無符合案件</div>
+
+        <template x-for="c in cases" :key="c.id">
+          <div class="dc-case-card" :class="{selected: selectedCase && selectedCase.id === c.id}"
+               :style="isAdmin && _prevSeen && c.updatedAt > _prevSeen ? 'border-left:3px solid #D97706;background:#FFFBEB' : ''"
+               @click="selectCase(c)">
+            <template x-if="isAdmin && _prevSeen && c.updatedAt > _prevSeen">
+              <span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;background:#FEF3C7;color:#92400E;border:1px solid #FDE68A;display:inline-block;margin-bottom:3px">有更新</span>
+            </template>
+            <div class="dc-case-card__name" x-text="c.caseName"></div>
+            <div class="dc-case-card__sub" x-text="c.customerName || '（未指定客戶）'"></div>
+            <div class="dc-case-card__foot">
+              <span class="dc-badge"
+                :class="c.status==='成案'?'dc-badge--won':c.status==='未成案'?'dc-badge--lost':'dc-badge--talk'"
+                x-text="c.status"></span>
+              <template x-if="c.pendingDelete">
+                <span style="font-size:9px;padding:2px 6px;border-radius:5px;background:#FEF3C7;color:#92400E;border:1px solid #FDE68A;font-weight:700;margin-left:4px">待刪除審核</span>
+              </template>
+              <span style="font-size:10px;color:var(--text-dim);margin-left:auto;font-family:LINE Seed TW_OTF, sans-serif"
+                    x-text="c.updatedAt ? c.updatedAt.slice(0,10) : ''"></span>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- ── 右欄：案件詳情 ── -->
+    <div class="dc-right">
+
+      <!-- empty -->
+      <div class="dc-empty" x-show="!selectedCase">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/>
+          <circle cx="9" cy="7" r="4"/>
+          <path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/>
+        </svg>
+        <p>從左側選取案件，或新增第一筆業務開發案件</p>
+      </div>
+
+      <template x-if="selectedCase">
+        <div>
+          <!-- detail header -->
+          <div class="dc-detail-head">
+            <div style="display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap">
+              <div style="flex:1;min-width:0">
+                <h2 class="dc-detail-title" x-text="selectedCase.caseName"></h2>
+                <div class="dc-detail-meta">
+                  <span class="dc-badge"
+                    :class="selectedCase.status==='成案'?'dc-badge--won':selectedCase.status==='未成案'?'dc-badge--lost':'dc-badge--talk'"
+                    x-text="selectedCase.status"></span>
+                  <span x-show="selectedCase.customerName" x-text="selectedCase.customerName"></span>
+                  <span x-show="selectedCase.customerName" style="color:var(--border-light)">|</span>
+                  <span x-text="'建立：' + (selectedCase.createdAt||'').slice(0,10)"></span>
+                  <a x-show="selectedCase.convertedQuoteNo"
+                     :href="'quotation-form.html?no=' + selectedCase.convertedQuoteNo"
+                     class="dc-converted-link" target="_blank">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414A1 1 0 0119 9.414V19a2 2 0 01-2 2z"/></svg>
+                    <span x-text="selectedCase.convertedQuoteNo"></span>
+                  </a>
+                </div>
+              </div>
+            </div>
+            <div class="dc-detail-actions">
+              <button class="btn btn-ghost btn-sm" @click="openEditCase()">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                編輯案件
+              </button>
+              <template x-if="selectedCase.status === '洽談中'">
+                <div style="display:flex;gap:6px">
+                  <button class="btn btn-success btn-sm" @click="changeStatus('成案')">設為成案</button>
+                  <button class="btn btn-danger btn-sm"  @click="changeStatus('未成案')">設為未成案</button>
+                </div>
+              </template>
+              <template x-if="selectedCase.status === '成案' && !selectedCase.convertedQuoteNo">
+                <button class="btn btn-primary btn-sm" @click="openConvertModal()">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414A1 1 0 0119 9.414V19a2 2 0 01-2 2z"/></svg>
+                  轉建報價單
+                </button>
+              </template>
+              <template x-if="selectedCase.status !== '洽談中'">
+                <button class="btn btn-ghost btn-sm" @click="changeStatus('洽談中')">重回洽談中</button>
+              </template>
+              <!-- 刪除申請流程 -->
+              <template x-if="isAdmin && !selectedCase.pendingDelete">
+                <button class="btn btn-ghost-danger btn-sm" @click="showDeleteModal=true;deleteReason=''">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
+                  申請刪除
+                </button>
+              </template>
+              <template x-if="isAdmin && selectedCase.pendingDelete">
+                <div style="display:flex;gap:6px;align-items:center">
+                  <span style="font-size:10px;padding:3px 8px;border-radius:6px;background:#FEF3C7;color:#92400E;border:1px solid #FDE68A;font-weight:600">待審核刪除</span>
+                  <template x-if="session.role === 'superadmin'">
+                    <button class="btn btn-sm" style="background:#DC2626;color:#fff;border-color:#DC2626" @click="showApproveDeleteModal=true">審核刪除申請</button>
+                  </template>
+                  <template x-if="session.role !== 'superadmin'">
+                    <button class="btn btn-ghost btn-sm" @click="cancelDeleteRequest()">取消申請</button>
+                  </template>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <!-- info grid -->
+          <div class="dc-info-grid">
+            <div>
+              <span class="dc-info-lbl">業務開發</span>
+              <div class="dc-person-chips">
+                <template x-for="name in selectedCase.salesPersonNames" :key="name">
+                  <span class="dc-person-chip" x-text="name"></span>
+                </template>
+                <span x-show="!selectedCase.salesPersonNames.length" class="dc-info-val" style="color:var(--text-dim)">未指定</span>
+              </div>
+            </div>
+            <div>
+              <span class="dc-info-lbl">專案規劃</span>
+              <div class="dc-person-chips">
+                <template x-for="name in selectedCase.plannerNames" :key="name">
+                  <span class="dc-person-chip" x-text="name"></span>
+                </template>
+                <span x-show="!selectedCase.plannerNames.length" class="dc-info-val" style="color:var(--text-dim)">未指定</span>
+              </div>
+            </div>
+            <div x-show="selectedCase.customerName">
+              <span class="dc-info-lbl">客戶</span>
+              <span class="dc-info-val" x-text="selectedCase.customerName"></span>
+            </div>
+            <div>
+              <span class="dc-info-lbl">最後更新</span>
+              <span class="dc-info-val" x-text="selectedCase.updatedAt ? selectedCase.updatedAt.slice(0,16) : '—'"></span>
+            </div>
+          </div>
+
+          <!-- dev logs -->
+          <div class="dc-logs">
+            <div class="dc-logs__head">
+              <h3 class="dc-logs__title">
+                開發記錄
+                <span style="font-size:11px;font-weight:400;color:var(--text-dim)"
+                  x-text="devLogs.length ? '（' + devLogs.length + ' 筆）' : ''"></span>
+              </h3>
+              <button class="btn btn-primary btn-sm"
+                x-show="!showLogForm" @click="openLogForm()">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+                新增記錄
+              </button>
+            </div>
+
+            <!-- log form -->
+            <div class="dc-log-form" x-show="showLogForm">
+              <h4 x-text="editingLogId ? '編輯記錄' : '新增開發記錄'"></h4>
+              <div class="dc-form-row triple">
+                <div>
+                  <span class="dc-lbl">記錄日期 <span style="color:var(--danger)">*</span></span>
+                  <input class="dc-input" type="date" x-model="logForm.log_date">
+                </div>
+                <div>
+                  <span class="dc-lbl">記錄人 <span style="color:var(--danger)">*</span></span>
+                  <select class="dc-select" x-model.number="logForm.log_by">
+                    <template x-for="u in activeUsers" :key="u.id">
+                      <option :value="u.id" x-text="u.displayName"></option>
+                    </template>
+                  </select>
+                </div>
+                <div>
+                  <span class="dc-lbl">通路</span>
+                  <select class="dc-select" x-model="logForm.channel">
+                    <option value="">請選擇</option>
+                    <option>電話</option><option>Line</option>
+                    <option>Email</option><option>面訪</option>
+                    <option>視訊</option><option>其他</option>
+                  </select>
+                </div>
+              </div>
+              <div class="dc-form-row full">
+                <div>
+                  <span class="dc-lbl">記錄內容（洽談重點、客戶需求、決策）<span style="color:var(--danger)">*</span></span>
+                  <textarea class="dc-textarea" rows="4" x-model="logForm.content"
+                    placeholder="本次洽談主要內容…"></textarea>
+                </div>
+              </div>
+              <div class="dc-form-row">
+                <div>
+                  <span class="dc-lbl">下一步行動</span>
+                  <textarea class="dc-textarea" rows="2" x-model="logForm.next_action"
+                    placeholder="待辦事項、後續跟進計畫…"></textarea>
+                </div>
+                <div>
+                  <span class="dc-lbl">案件狀態快照（選填）</span>
+                  <select class="dc-select" x-model="logForm.status_snapshot">
+                    <option value="">不記錄</option>
+                    <option>洽談中</option><option>成案</option><option>未成案</option>
+                  </select>
+                </div>
+              </div>
+              <div x-show="logForm.log_by && logForm.log_by !== session.userId"
+                   style="font-size:11px;color:#D97706;margin-bottom:10px;font-family:var(--font-zh)">
+                ⚠ 代他人填寫，儲存後需主管審核
+              </div>
+              <div style="display:flex;gap:8px;justify-content:flex-end">
+                <button class="btn btn-ghost btn-sm" @click="cancelLogForm()">取消</button>
+                <button class="btn btn-primary btn-sm" @click="saveLog()" :disabled="logSaving">
+                  <span x-show="!logSaving">儲存記錄</span>
+                  <span x-show="logSaving">儲存中…</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- log list -->
+            <div x-show="logsLoading" style="text-align:center;padding:24px;font-size:12px;color:var(--text-dim)">載入中…</div>
+            <div x-show="!logsLoading && devLogs.length === 0 && !showLogForm"
+                 style="text-align:center;padding:32px;font-size:12px;color:var(--text-dim)">
+              尚無開發記錄，點擊「新增記錄」開始追蹤
+            </div>
+
+            <template x-for="log in devLogs" :key="log.id">
+              <div class="dc-log-card" :class="{'needs-approval': log.needsApproval}">
+                <div class="dc-pending-banner"
+                     x-show="log.needsApproval && isAdmin">
+                  <span>此記錄由他人代填，待審核</span>
+                  <button class="btn btn-success btn-sm" @click="approveLog(log)">核准</button>
+                </div>
+                <div class="dc-log-card__head">
+                  <span class="dc-log-date" x-text="log.logDate"></span>
+                  <span class="dc-channel" x-show="log.channel" x-text="log.channel"></span>
+                  <span style="font-size:10px;background:#F3F4F6;color:#374151;padding:2px 7px;border-radius:8px;font-weight:600"
+                    x-show="log.statusSnapshot" x-text="log.statusSnapshot"></span>
+                  <span class="dc-pending" x-show="log.needsApproval && !isAdmin">待審核</span>
+                  <span class="dc-approved" x-show="!log.needsApproval && log.approvedAt">已審核</span>
+                </div>
+                <div class="dc-log-card__content" x-text="log.content"></div>
+                <div class="dc-log-card__next" x-show="log.nextAction" x-text="log.nextAction"></div>
+                <div class="dc-log-card__foot">
+                  <span x-text="log.logByName"></span>
+                  <span style="color:var(--border-light)">·</span>
+                  <span x-text="log.createdAt ? log.createdAt.slice(0,16) : ''"></span>
+                  <div class="dc-log-card__actions">
+                    <button class="btn btn-ghost btn-sm"
+                      x-show="log.createdById === session.userId || isAdmin"
+                      @click="openEditLog(log)">編輯</button>
+                    <button class="btn btn-ghost-danger btn-sm"
+                      x-show="log.createdById === session.userId || isAdmin"
+                      @click="deleteLog(log)">刪除</button>
+                  </div>
+                </div>
+              </div>
+            </template>
+          </div><!-- /dc-logs -->
+        </div>
+      </template>
+    </div><!-- /dc-right -->
+
+    <!-- ── Modal：新增/編輯案件 ── -->
+    <div class="dc-modal-bg" x-show="showCaseModal" x-cloak @click.self="showCaseModal=false">
+      <div class="dc-modal">
+        <div class="dc-modal-head">
+          <h3 x-text="editingCaseId ? '編輯案件' : '新增業務開發案件'"></h3>
+          <button class="btn btn-ghost btn-icon" @click="showCaseModal=false">✕</button>
+        </div>
+        <div class="dc-modal-body">
+          <div class="dc-form-group">
+            <label>案件名稱 <span style="color:var(--danger)">*</span></label>
+            <input class="dc-input" type="text" x-model="caseForm.case_name"
+              placeholder="例：XX公司辦公室弱電整合">
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div class="dc-form-group">
+              <label>客戶名稱</label>
+              <input class="dc-input" type="text" x-model="caseForm.customer_name"
+                placeholder="自由輸入或選擇" list="dc-customer-list">
+              <datalist id="dc-customer-list">
+                <template x-for="c in customers" :key="c.id">
+                  <option :value="c.name"></option>
+                </template>
+              </datalist>
+              <div class="hint">與客戶管理名單比對後自動連結</div>
+            </div>
+            <div class="dc-form-group">
+              <label>案件狀態</label>
+              <select class="dc-select" x-model="caseForm.status">
+                <option>洽談中</option><option>成案</option><option>未成案</option>
+              </select>
+            </div>
+          </div>
+          <div class="dc-form-group">
+            <label>業務開發（可多選）</label>
+            <div class="dc-user-list">
+              <template x-for="u in activeUsers" :key="u.id">
+                <span class="dc-user-check"
+                  :class="{on: caseForm.sales_persons.includes(u.id)}"
+                  @click="togglePerson('sales_persons', u.id)"
+                  x-text="u.displayName"></span>
+              </template>
+            </div>
+          </div>
+          <div class="dc-form-group">
+            <label>專案規劃（可多選）</label>
+            <div class="dc-user-list">
+              <template x-for="u in activeUsers" :key="u.id">
+                <span class="dc-user-check"
+                  :class="{on: caseForm.planners.includes(u.id)}"
+                  @click="togglePerson('planners', u.id)"
+                  x-text="u.displayName"></span>
+              </template>
+            </div>
+          </div>
+          <div class="dc-error" x-show="caseError" x-text="caseError"></div>
+        </div>
+        <div class="dc-modal-foot">
+          <button class="btn btn-ghost" @click="showCaseModal=false">取消</button>
+          <button class="btn btn-primary" @click="saveCase()" :disabled="caseSaving">
+            <span x-show="!caseSaving" x-text="editingCaseId ? '儲存變更' : '建立案件'"></span>
+            <span x-show="caseSaving">儲存中…</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Modal：待審記錄（admin） ── -->
+    <div class="dc-modal-bg" x-show="showPendingModal" x-cloak @click.self="showPendingModal=false">
+      <div class="dc-modal">
+        <div class="dc-modal-head">
+          <h3>待審核記錄</h3>
+          <button class="btn btn-ghost btn-icon" @click="showPendingModal=false">✕</button>
+        </div>
+        <div class="dc-modal-body" style="padding:16px 22px">
+          <div x-show="pendingLogs.length === 0"
+               style="text-align:center;padding:24px;font-size:12px;color:var(--text-dim)">無待審記錄</div>
+          <template x-for="log in pendingLogs" :key="log.id">
+            <div class="dc-log-card needs-approval" style="margin-bottom:10px">
+              <div class="dc-log-card__head">
+                <span class="dc-log-date" x-text="log.logDate"></span>
+                <span class="dc-channel" x-show="log.channel" x-text="log.channel"></span>
+                <span style="font-size:11px;color:var(--text-dim);margin-left:auto"
+                  x-text="'記錄人：' + log.logByName"></span>
+              </div>
+              <div class="dc-log-card__content" x-text="log.content"></div>
+              <div class="dc-log-card__next" x-show="log.nextAction" x-text="log.nextAction"></div>
+              <div style="display:flex;justify-content:flex-end;margin-top:10px">
+                <button class="btn btn-success btn-sm" @click="approveLogFromModal(log)">核准此記錄</button>
+              </div>
+            </div>
+          </template>
+        </div>
+        <div class="dc-modal-foot">
+          <button class="btn btn-ghost" @click="showPendingModal=false">關閉</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Modal：轉建報價單 ── -->
+    <div class="dc-modal-bg" x-show="showConvertModal" x-cloak @click.self="showConvertModal=false">
+      <div class="dc-modal" style="max-width:420px">
+        <div class="dc-modal-head">
+          <h3>轉建報價單</h3>
+          <button class="btn btn-ghost btn-icon" @click="showConvertModal=false">✕</button>
+        </div>
+        <div class="dc-modal-body">
+          <p style="font-size:13px;color:var(--text-secondary);margin:0 0 14px;font-family:var(--font-zh)">
+            系統將開啟報價單表單，並預填以下資訊。
+          </p>
+          <div style="background:#F8FAFF;border:1px solid var(--border-light);border-radius:8px;padding:12px 14px;font-size:12px;margin-bottom:14px;font-family:var(--font-zh)">
+            <div style="margin-bottom:5px"><b>客戶名稱：</b><span x-text="selectedCase && selectedCase.customerName || '（未填）'"></span></div>
+            <div><b>案件名稱：</b><span x-text="selectedCase && selectedCase.caseName"></span></div>
+          </div>
+          <div style="font-size:12px;color:var(--text-secondary);margin-bottom:6px;font-family:var(--font-zh)">
+            報價單建立後，可輸入單號完成連結（選填）：
+          </div>
+          <input class="dc-input" type="text" x-model="convertQuoteNo"
+            placeholder="MQ-YYYYMM-NNN（留空可後續補填）">
+        </div>
+        <div class="dc-modal-foot">
+          <button class="btn btn-ghost" @click="showConvertModal=false">取消</button>
+          <button class="btn btn-primary" @click="doConvert()">開啟報價單表單</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Modal：申請刪除案件 ── -->
+    <div class="dc-modal-bg" x-show="showDeleteModal" x-cloak @click.self="showDeleteModal=false">
+      <div class="dc-modal" style="max-width:440px">
+        <div class="dc-modal-head">
+          <h3>申請刪除案件</h3>
+          <button class="btn btn-ghost btn-icon" @click="showDeleteModal=false">✕</button>
+        </div>
+        <div class="dc-modal-body">
+          <div style="background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;padding:12px 14px;font-size:12px;color:#991B1B;margin-bottom:14px;font-family:var(--font-zh)">
+            <b>注意：</b>刪除申請將送交最高管理者審核，審核通過後案件資料將於系統備存後移除。
+          </div>
+          <div style="font-size:12px;color:var(--text-primary);margin-bottom:6px;font-family:var(--font-zh)">
+            案件：<b x-text="selectedCase && selectedCase.caseName"></b>
+          </div>
+          <label style="display:block;font-size:11px;color:var(--text-secondary);margin-bottom:4px;font-family:var(--font-zh)">刪除原因（選填）</label>
+          <textarea class="dc-input" x-model="deleteReason" rows="3"
+            style="resize:vertical;min-height:60px"
+            placeholder="請說明申請刪除的原因…"></textarea>
+        </div>
+        <div class="dc-modal-foot">
+          <button class="btn btn-ghost" @click="showDeleteModal=false">取消</button>
+          <button class="btn btn-danger" @click="requestDeleteCase()">送出申請</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Modal：審核刪除申請（superadmin） ── -->
+    <div class="dc-modal-bg" x-show="showApproveDeleteModal" x-cloak @click.self="showApproveDeleteModal=false">
+      <div class="dc-modal" style="max-width:480px">
+        <div class="dc-modal-head">
+          <h3>審核刪除申請</h3>
+          <button class="btn btn-ghost btn-icon" @click="showApproveDeleteModal=false">✕</button>
+        </div>
+        <div class="dc-modal-body">
+          <div style="background:#FEF3C7;border:1px solid #FDE68A;border-radius:8px;padding:12px 14px;font-size:12px;color:#92400E;margin-bottom:14px;font-family:var(--font-zh)">
+            <b>申請人：</b><span x-text="selectedCase && selectedCase.deleteRequestedBy"></span><br>
+            <b>申請時間：</b><span x-text="selectedCase && (selectedCase.deleteRequestedAt||'').slice(0,16).replace('T',' ')"></span><br>
+            <template x-if="selectedCase && selectedCase.deleteReason">
+              <div><b>申請原因：</b><span x-text="selectedCase.deleteReason"></span></div>
+            </template>
+          </div>
+          <div style="background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;padding:12px 14px;font-size:12px;color:#991B1B;margin-bottom:14px;font-family:var(--font-zh)">
+            <b>案件：</b><span x-text="selectedCase && selectedCase.caseName"></span><br>
+            <span>批准後，案件及所有開發記錄將軟刪除並備存，無法復原。</span>
+          </div>
+        </div>
+        <div class="dc-modal-foot">
+          <button class="btn btn-ghost" @click="showApproveDeleteModal=false">取消</button>
+          <button class="btn btn-ghost" style="color:#D97706;border-color:#FDE68A" @click="approveDeleteCase(false)">退回申請</button>
+          <button class="btn btn-danger" @click="approveDeleteCase(true)">批准刪除</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- toast -->
+    <div class="dc-toast" x-show="toast" x-transition x-text="toast"></div>
+
+  </div><!-- /x-data -->
+  </main>
+</div><!-- /app-shell -->
+
+<script src="../static/notif.js"></script>
+<script src="../static/sidebar.js"></script>
+<script>
+function devCrmPage() {
+  return {
+    session: {},
+    token: '',
+    isAdmin: false,
+    _prevSeen: null,
+
+    cases: [],
+    casesLoading: false,
+    searchQ: '',
+    filterStatus: '',
+
+    selectedCase: null,
+
+    devLogs: [],
+    logsLoading: false,
+    showLogForm: false,
+    editingLogId: null,
+    logForm: { log_date: '', log_by: 0, channel: '', content: '', next_action: '', status_snapshot: '' },
+    logSaving: false,
+
+    pendingCount: 0,
+    pendingLogs: [],
+    showPendingModal: false,
+
+    showCaseModal: false,
+    editingCaseId: null,
+    caseForm: { case_name: '', customer_name: '', customer_id: null, status: '洽談中', sales_persons: [], planners: [] },
+    caseSaving: false,
+    caseError: '',
+
+    showConvertModal: false,
+    convertQuoteNo: '',
+
+    showDeleteModal: false,
+    deleteReason: '',
+    showApproveDeleteModal: false,
+
+    activeUsers: [],
+    customers: [],
+    mobileListOpen: false,
+    toast: '',
+
+    _h() {
+      return { 'Authorization': 'Bearer ' + this.token, 'Content-Type': 'application/json' }
+    },
+
+    async init() {
+      const raw = localStorage.getItem('motrix_session')
+      if (!raw) { location.href = 'login.html'; return }
+      this.session = JSON.parse(raw)
+      this.token = this.session.token || ''
+      const role = this.session.role || ''
+      const mods = Array.isArray(this.session.modules) ? this.session.modules : []
+      this.isAdmin = role === 'superadmin' || role === 'admin'
+      if (!this.isAdmin && !mods.includes('dev_crm')) {
+        location.href = '../index.html'; return
+      }
+      try {
+        const prev = JSON.parse(localStorage.getItem('motrix_module_prev_seen') || '{}')
+        this._prevSeen = prev['dev_crm'] || null
+      } catch (_e) {}
+      await Promise.all([this.loadCases(), this.loadUsers(), this.loadCustomers()])
+      if (this.isAdmin) this.loadPendingCount()
+    },
+
+    async loadCases() {
+      this.casesLoading = true
+      try {
+        const p = new URLSearchParams()
+        if (this.filterStatus) p.set('status', this.filterStatus)
+        if (this.searchQ.trim()) p.set('q', this.searchQ.trim())
+        const r = await fetch('/api/dev-cases?' + p, { headers: this._h() })
+        if (r.ok) this.cases = await r.json()
+      } finally {
+        this.casesLoading = false
+      }
+    },
+
+    async loadUsers() {
+      const r = await fetch('/api/users', { headers: this._h() })
+      if (r.ok) {
+        const d = await r.json()
+        const list = d.users || d
+        this.activeUsers = list
+          .filter(u => u.active)
+          .map(u => ({ id: u.id, displayName: u.displayName || u.display_name || u.username }))
+      }
+    },
+
+    async loadCustomers() {
+      const r = await fetch('/api/customers', { headers: this._h() })
+      if (r.ok) {
+        const d = await r.json()
+        this.customers = d.customers || d || []
+      }
+    },
+
+    async selectCase(c) {
+      this.selectedCase = c
+      this.showLogForm = false
+      this.editingLogId = null
+      this.mobileListOpen = false
+      await this.loadLogs(c.id)
+    },
+
+    async loadLogs(caseId) {
+      this.logsLoading = true
+      try {
+        const r = await fetch('/api/dev-cases/' + caseId + '/logs', { headers: this._h() })
+        if (r.ok) this.devLogs = await r.json()
+      } finally {
+        this.logsLoading = false
+      }
+    },
+
+    async loadPendingCount() {
+      const r = await fetch('/api/dev-logs/pending', { headers: this._h() })
+      if (r.ok) { const d = await r.json(); this.pendingCount = d.length }
+    },
+
+    async loadPendingLogs() {
+      const r = await fetch('/api/dev-logs/pending', { headers: this._h() })
+      if (r.ok) this.pendingLogs = await r.json()
+    },
+
+    // ── Case modal ──
+    openNewCase() {
+      this.editingCaseId = null
+      this.caseForm = { case_name: '', customer_name: '', customer_id: null, status: '洽談中', sales_persons: [], planners: [] }
+      this.caseError = ''
+      this.showCaseModal = true
+    },
+
+    openEditCase() {
+      if (!this.selectedCase) return
+      const c = this.selectedCase
+      this.editingCaseId = c.id
+      this.caseForm = {
+        case_name: c.caseName, customer_name: c.customerName,
+        customer_id: c.customerId, status: c.status,
+        sales_persons: [...(c.salesPersonIds || [])],
+        planners: [...(c.plannerIds || [])],
+      }
+      this.caseError = ''
+      this.showCaseModal = true
+    },
+
+    togglePerson(field, uid) {
+      const arr = this.caseForm[field]
+      const idx = arr.indexOf(uid)
+      if (idx >= 0) arr.splice(idx, 1)
+      else arr.push(uid)
+    },
+
+    async saveCase() {
+      if (!this.caseForm.case_name.trim()) { this.caseError = '請填寫案件名稱'; return }
+      this.caseSaving = true; this.caseError = ''
+      try {
+        const matched = this.customers.find(c => c.name === this.caseForm.customer_name.trim())
+        const body = { ...this.caseForm, customer_id: matched ? matched.id : null }
+        const url = this.editingCaseId ? '/api/dev-cases/' + this.editingCaseId : '/api/dev-cases'
+        const r = await fetch(url, {
+          method: this.editingCaseId ? 'PUT' : 'POST',
+          headers: this._h(), body: JSON.stringify(body),
+        })
+        if (!r.ok) { const d = await r.json(); this.caseError = d.detail || '儲存失敗'; return }
+        const saved = await r.json()
+        if (this.editingCaseId) {
+          const idx = this.cases.findIndex(c => c.id === this.editingCaseId)
+          if (idx >= 0) this.cases.splice(idx, 1, saved)
+          this.selectedCase = saved
+        } else {
+          this.cases.unshift(saved)
+          await this.selectCase(saved)
+        }
+        this.showCaseModal = false
+        this._toast('案件已儲存')
+      } finally { this.caseSaving = false }
+    },
+
+    async changeStatus(status) {
+      if (!this.selectedCase) return
+      const r = await fetch('/api/dev-cases/' + this.selectedCase.id + '/status', {
+        method: 'PATCH', headers: this._h(), body: JSON.stringify({ status }),
+      })
+      if (r.ok) {
+        const updated = await r.json()
+        this.selectedCase = updated
+        const idx = this.cases.findIndex(c => c.id === updated.id)
+        if (idx >= 0) this.cases.splice(idx, 1, updated)
+        this._toast('狀態已更新：' + status)
+      }
+    },
+
+    async requestDeleteCase() {
+      if (!this.selectedCase) return
+      const r = await fetch('/api/dev-cases/' + this.selectedCase.id + '/request-delete', {
+        method: 'POST', headers: this._h(),
+        body: JSON.stringify({ reason: this.deleteReason || '' }),
+      })
+      if (r.ok) {
+        this.showDeleteModal = false
+        const updated = await r.json().catch(() => null)
+        // Reload the case to get updated pendingDelete flag
+        await this.loadCases()
+        const fresh = this.cases.find(c => c.id === this.selectedCase.id)
+        if (fresh) this.selectedCase = fresh
+        this._toast('刪除申請已送出，等待最高管理者審核')
+      } else {
+        const d = await r.json().catch(() => ({}))
+        this._toast('申請失敗：' + (d.detail || r.status))
+      }
+    },
+
+    async cancelDeleteRequest() {
+      if (!this.selectedCase) return
+      const r = await fetch('/api/dev-cases/' + this.selectedCase.id + '/cancel-delete', {
+        method: 'POST', headers: this._h(), body: '{}',
+      })
+      if (r.ok) {
+        await this.loadCases()
+        const fresh = this.cases.find(c => c.id === this.selectedCase.id)
+        if (fresh) this.selectedCase = fresh
+        this._toast('刪除申請已取消')
+      }
+    },
+
+    async approveDeleteCase(approve) {
+      if (!this.selectedCase) return
+      const r = await fetch('/api/dev-cases/' + this.selectedCase.id + '/approve-delete', {
+        method: 'POST', headers: this._h(),
+        body: JSON.stringify({ approve }),
+      })
+      if (r.ok) {
+        const d = await r.json()
+        this.showApproveDeleteModal = false
+        if (d.deleted) {
+          this.cases = this.cases.filter(c => c.id !== this.selectedCase.id)
+          this.selectedCase = null
+          this.devLogs = []
+          this._toast('案件已刪除並備存')
+        } else {
+          await this.loadCases()
+          const fresh = this.cases.find(c => c.id === this.selectedCase.id)
+          if (fresh) this.selectedCase = fresh
+          this._toast('刪除申請已退回')
+        }
+      }
+    },
+
+    // ── Log form ──
+    openLogForm() {
+      this.editingLogId = null
+      this.logForm = {
+        log_date: new Date().toISOString().slice(0, 10),
+        log_by: this.session.userId || 0,
+        channel: '', content: '', next_action: '', status_snapshot: '',
+      }
+      this.showLogForm = true
+    },
+
+    openEditLog(log) {
+      this.editingLogId = log.id
+      this.logForm = {
+        log_date: log.logDate || '', log_by: log.logById || 0,
+        channel: log.channel || '', content: log.content || '',
+        next_action: log.nextAction || '', status_snapshot: log.statusSnapshot || '',
+      }
+      this.showLogForm = true
+    },
+
+    cancelLogForm() {
+      this.showLogForm = false
+      this.editingLogId = null
+    },
+
+    async saveLog() {
+      if (!this.logForm.log_date) { this._toast('請填寫記錄日期'); return }
+      if (!this.logForm.content.trim()) { this._toast('請填寫記錄內容'); return }
+      this.logSaving = true
+      try {
+        const url = this.editingLogId
+          ? '/api/dev-logs/' + this.editingLogId
+          : '/api/dev-cases/' + this.selectedCase.id + '/logs'
+        const r = await fetch(url, {
+          method: this.editingLogId ? 'PUT' : 'POST',
+          headers: this._h(), body: JSON.stringify(this.logForm),
+        })
+        if (!r.ok) { const d = await r.json(); this._toast(d.detail || '儲存失敗'); return }
+        const saved = await r.json()
+        if (this.editingLogId) {
+          const idx = this.devLogs.findIndex(l => l.id === this.editingLogId)
+          if (idx >= 0) this.devLogs.splice(idx, 1, saved)
+        } else {
+          this.devLogs.unshift(saved)
+        }
+        this.showLogForm = false
+        this.editingLogId = null
+        if (saved.needsApproval) {
+          this.pendingCount++
+          this._toast('記錄已建立（代他人填寫，已送主管審核）')
+        } else {
+          this._toast('記錄已儲存')
+        }
+      } finally { this.logSaving = false }
+    },
+
+    async deleteLog(log) {
+      if (!confirm('確定要刪除此筆記錄？')) return
+      const r = await fetch('/api/dev-logs/' + log.id, { method: 'DELETE', headers: this._h() })
+      if (r.ok) { this.devLogs = this.devLogs.filter(l => l.id !== log.id); this._toast('記錄已刪除') }
+    },
+
+    async approveLog(log) {
+      const r = await fetch('/api/dev-logs/' + log.id + '/approve', { method: 'PATCH', headers: this._h() })
+      if (r.ok) {
+        const updated = await r.json()
+        const idx = this.devLogs.findIndex(l => l.id === log.id)
+        if (idx >= 0) this.devLogs.splice(idx, 1, updated)
+        this.pendingCount = Math.max(0, this.pendingCount - 1)
+        this._toast('已審核通過')
+      }
+    },
+
+    async approveLogFromModal(log) {
+      const r = await fetch('/api/dev-logs/' + log.id + '/approve', { method: 'PATCH', headers: this._h() })
+      if (r.ok) {
+        this.pendingLogs = this.pendingLogs.filter(l => l.id !== log.id)
+        this.pendingCount = Math.max(0, this.pendingCount - 1)
+        if (this.selectedCase) await this.loadLogs(this.selectedCase.id)
+        this._toast('已審核通過')
+      }
+    },
+
+    // ── Convert to quote ──
+    openConvertModal() {
+      this.convertQuoteNo = ''
+      this.showConvertModal = true
+    },
+
+    doConvert() {
+      if (!this.selectedCase) return
+      const c = this.selectedCase
+      const p = new URLSearchParams()
+      if (c.customerName) p.set('customer', c.customerName)
+      p.set('project', c.caseName)
+      window.open('quotation-form.html?' + p.toString(), '_blank')
+      if (this.convertQuoteNo.trim()) this.markConverted(this.convertQuoteNo.trim())
+      this.showConvertModal = false
+    },
+
+    async markConverted(quoteNo) {
+      const r = await fetch('/api/dev-cases/' + this.selectedCase.id + '/convert', {
+        method: 'PATCH', headers: this._h(), body: JSON.stringify({ quote_no: quoteNo }),
+      })
+      if (r.ok) {
+        const updated = await r.json()
+        this.selectedCase = updated
+        const idx = this.cases.findIndex(c => c.id === updated.id)
+        if (idx >= 0) this.cases.splice(idx, 1, updated)
+        this._toast('已連結至報價單 ' + quoteNo)
+      }
+    },
+
+    _toast(msg, ms = 2800) {
+      this.toast = msg
+      setTimeout(() => { this.toast = '' }, ms)
+    },
+  }
+}
+</script>
+</body>
+</html>

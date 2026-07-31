@@ -1,0 +1,3363 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="../static/favicon.png">
+  <title>每日工作事項 — MOTRIX 營運管理系統</title>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    [x-cloak] { display: none !important; }
+
+    .dt-wrap {
+      display: flex;
+      flex-direction: column;
+      height: calc(100vh - var(--topbar-h));
+      margin-left: var(--sidebar-w);
+      margin-top: var(--topbar-h);
+    }
+
+    /* ── Top bar ── */
+    .dt-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 20px;
+      background: var(--white);
+      border-bottom: 1px solid var(--border-light);
+      flex-shrink: 0;
+    }
+    .dt-bar-title { font-size: 14px; font-weight: 700; color: var(--text-primary); white-space: nowrap; }
+    .dt-bar-sep   { width: 1px; height: 20px; background: var(--border-light); margin: 0 2px; }
+    .dt-month-nav { display: flex; align-items: center; gap: 4px; }
+    .dt-month-btn {
+      background: none; border: 1px solid var(--border-light); border-radius: var(--radius);
+      cursor: pointer; width: 26px; height: 26px; display: flex; align-items: center;
+      justify-content: center; color: var(--text-secondary); font-size: 14px; flex-shrink: 0;
+    }
+    .dt-month-btn:hover { background: #F5F4F0; }
+    .dt-month-label {
+      font-size: 13px; font-weight: 700; color: var(--text-primary);
+      min-width: 88px; text-align: center; white-space: nowrap;
+    }
+    .dt-spacer { flex: 1; }
+    .dt-unlock-badge {
+      display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600;
+      color: #15803D; background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 20px; padding: 3px 10px;
+    }
+
+    /* ── Base button ── */
+    .btn { display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:var(--radius);font-size:12px;font-family:var(--font-zh);cursor:pointer;border:1px solid transparent;transition:all .12s;font-weight:500;white-space:nowrap;line-height:1.4 }
+    .btn-sm { padding:4px 10px;font-size:11px }
+    .btn-ghost { background:#fff;color:var(--text-secondary);border-color:var(--border-light) }
+    .btn-ghost:hover { background:#F5F4F0;color:var(--text-primary);border-color:#C8C4BC }
+    .btn-primary { background:var(--accent);color:#fff;border-color:var(--accent);font-weight:600 }
+    .btn-primary:hover { background:#1D4ED8;border-color:#1D4ED8 }
+    .btn-primary:disabled,.btn-ghost:disabled { opacity:.4;cursor:default }
+
+    /* ── Top bar action buttons ── */
+    .dt-bar-act { display:inline-flex;align-items:center;gap:6px;padding:5px 13px;border-radius:6px;font-size:12px;font-weight:500;cursor:pointer;border:1px solid transparent;font-family:var(--font-zh);transition:all .12s;white-space:nowrap;line-height:1.4 }
+    .dt-bar-act-report { background:#F5F3FF;color:#7C3AED;border-color:#DDD6FE }
+    .dt-bar-act-report:hover { background:#EDE9FE;border-color:#C4B5FD }
+    .dt-bar-act-report.on { background:#7C3AED;color:#fff;border-color:#7C3AED }
+    .dt-bar-act-report.on:hover { background:#6D28D9 }
+    .dt-bar-act-lock { background:#FEF3C7;color:#92400E;border-color:#FDE68A }
+    .dt-bar-act-lock:hover { background:#FDE68A;border-color:#F59E0B }
+    .dt-bar-act-add { background:var(--accent);color:#fff;border-color:var(--accent);font-weight:600 }
+    .dt-bar-act-add:hover { background:#1D4ED8;border-color:#1D4ED8 }
+
+    /* ── 回報彙整 toolbar ── */
+    .dt-report-person-row { display:flex;gap:4px;flex-wrap:wrap;margin-top:4px }
+    .dt-rp-chip { display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;font-size:10px;font-weight:600;cursor:pointer;border:1px solid var(--border-light);background:#fff;color:var(--text-secondary);font-family:var(--font-zh);transition:all .12s;white-space:nowrap }
+    .dt-rp-chip:hover { border-color:var(--accent);color:var(--accent) }
+    .dt-rp-chip.on { background:var(--accent);color:#fff;border-color:var(--accent) }
+    .dt-rp-chip-dot { width:6px;height:6px;border-radius:50%;flex-shrink:0 }
+    .dt-report-today-btn { padding:3px 9px;border-radius:4px;font-size:10px;font-weight:600;cursor:pointer;border:1px solid var(--border-light);background:#fff;color:var(--text-secondary);font-family:LINE Seed TW_OTF, sans-serif;transition:all .12s }
+    .dt-report-today-btn:hover { background:#F0EEE9;border-color:#C8C4BC }
+
+    /* ── Body ── */
+    .dt-body { display: flex; flex: 1; min-height: 0; overflow: hidden; }
+
+    /* ── Left panel ── */
+    .dt-left {
+      width: 310px; flex-shrink: 0; border-right: 1px solid var(--border-light);
+      display: flex; flex-direction: column; background: #F5F4F0;
+    }
+    .dt-left-controls {
+      padding: 10px 12px; border-bottom: 1px solid var(--border-light); background: var(--white);
+      flex-shrink: 0; display: flex; flex-direction: column; gap: 7px;
+    }
+    .dt-search-wrap { position: relative; }
+    .dt-search-icon {
+      position: absolute; left: 9px; top: 50%; transform: translateY(-50%);
+      color: var(--text-dim); pointer-events: none;
+    }
+    .dt-search {
+      width: 100%; padding: 7px 10px 7px 30px; border: 1px solid var(--border-light);
+      border-radius: var(--radius); font-size: 12px; font-family: var(--font-zh);
+      background: #FAFAF8; outline: none; box-sizing: border-box; color: var(--text-primary);
+    }
+    .dt-search:focus { border-color: var(--accent); background: #fff; box-shadow: 0 0 0 3px rgba(37,99,235,.06); }
+    .dt-filter-select {
+      width: 100%; padding: 6px 9px; border: 1px solid var(--border-light); border-radius: var(--radius);
+      font-size: 12px; font-family: var(--font-zh); background: #fff; color: var(--text-primary); outline: none;
+    }
+
+    /* ── Task list ── */
+    .dt-left-list { flex: 1; overflow-y: auto; }
+
+    /* Section header (常駐任務 / 單次任務) */
+    .dt-section-head {
+      display: flex; align-items: center; gap: 6px; padding: 7px 12px 6px;
+      background: #EDECE8; border-bottom: 1px solid var(--border-light); cursor: pointer;
+      user-select: none; flex-shrink: 0;
+    }
+    .dt-section-head:hover { background: #E6E4DF; }
+    .dt-section-head-label {
+      font-size: 10px; font-weight: 700; color: var(--text-secondary);
+      text-transform: uppercase; letter-spacing: .05em; font-family: 'LINE Seed TW_OTF', sans-serif; flex: 1;
+    }
+    .dt-section-count {
+      font-size: 9px; font-weight: 700; padding: 1px 6px; border-radius: 10px;
+      background: rgba(0,0,0,.08); color: var(--text-secondary);
+    }
+    .dt-section-chevron {
+      font-size: 10px; color: var(--text-dim); transition: transform .15s;
+    }
+    .dt-section-chevron.open { transform: rotate(90deg); }
+
+    /* Date group header */
+    .dt-date-header {
+      padding: 5px 12px 4px; font-size: 10px; font-weight: 700; color: var(--text-dim);
+      text-transform: uppercase; letter-spacing: .04em; font-family: 'LINE Seed TW_OTF', sans-serif;
+      background: #ECEAE6; display: flex; align-items: center; gap: 6px;
+      border-bottom: 1px solid #E0DDD8;
+    }
+    .dt-date-header-wd {
+      font-size: 9px; font-weight: 600; padding: 1px 5px; border-radius: 3px; font-family: 'LINE Seed TW_OTF', sans-serif;
+    }
+    .dt-date-divider { border-bottom: 1px solid #ECEAE5; }
+
+    /* Task card */
+    .dt-card {
+      padding: 9px 12px 8px; cursor: pointer; border-bottom: 1px solid #ECEAE5;
+      transition: background .1s; border-left: 3px solid transparent; background: var(--white);
+    }
+    .dt-card:hover { background: #F9F8F5; }
+    .dt-card.active { background: #EFF6FF; border-left-color: var(--accent); }
+    .dt-card.recurring-card { background: #FEFCE8; }
+    .dt-card.recurring-card:hover { background: #FEF9C3; }
+    .dt-card.recurring-card.active { background: #EFF6FF; border-left-color: var(--accent); }
+    .dt-card.range-card { background: #ECFDF5; border-left-color: #6EE7B7; }
+    .dt-card.range-card:hover { background: #D1FAE5; }
+    .dt-card.range-card.active { background: #EFF6FF; border-left-color: var(--accent); }
+    .dt-range-badge {
+      font-size: 9px; color: #065F46; background: #D1FAE5; border: 1px solid #6EE7B7;
+      padding: 1px 5px; border-radius: 3px; font-weight: 600; font-family: 'LINE Seed TW_OTF', sans-serif; white-space: nowrap;
+    }
+
+    .dt-card-row1 { display: flex; align-items: center; gap: 5px; margin-bottom: 4px; }
+    .dt-priority-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+    .dt-card-title { font-size: 12px; font-weight: 600; color: var(--text-primary); line-height: 1.35; flex: 1; }
+    .dt-card-foot { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+    .dt-pbadge {
+      font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 3px;
+      font-family: 'LINE Seed TW_OTF', sans-serif; white-space: nowrap;
+    }
+    .dt-cat-tag { font-size: 9px; color: var(--text-dim); max-width: 70px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .dt-prog { font-size: 9px; color: var(--text-dim); margin-left: auto; font-family: 'LINE Seed TW_OTF', sans-serif; font-weight: 600; white-space: nowrap; }
+    .dt-prog.all-done { color: #15803D; }
+    .dt-recur-badge {
+      font-size: 9px; color: #6D28D9; background: #EDE9FE; border: 1px solid #C4B5FD;
+      padding: 1px 5px; border-radius: 3px; font-weight: 600; font-family: 'LINE Seed TW_OTF', sans-serif;
+    }
+    /* Assignee names row */
+    .dt-assignees-row {
+      display: flex; align-items: center; gap: 4px; margin-top: 4px; flex-wrap: wrap;
+    }
+    .dt-assignee-chip {
+      display: inline-flex; align-items: center; gap: 3px;
+      font-size: 9px; color: var(--text-secondary); font-family: 'LINE Seed TW_OTF', sans-serif;
+      background: #F0EEE9; border-radius: 10px; padding: 1px 6px;
+    }
+    .dt-assignee-av {
+      width: 13px; height: 13px; border-radius: 50%; color: #fff;
+      font-size: 7px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center;
+    }
+
+    /* Weekly occurrence selector strip */
+    .dt-occ-strip {
+      display: flex; gap: 3px; padding: 6px 12px; border-bottom: 1px solid var(--border-light);
+      background: #FAFAF8; flex-wrap: wrap; align-items: center;
+    }
+    .dt-occ-chip {
+      padding: 2px 8px; border-radius: 10px; font-size: 10px; font-family: 'LINE Seed TW_OTF', sans-serif;
+      cursor: pointer; border: 1px solid var(--border-light); background: #fff; color: var(--text-secondary);
+      transition: all .12s;
+    }
+    .dt-occ-chip:hover { border-color: var(--accent); color: var(--accent); }
+    .dt-occ-chip.sel { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .dt-occ-chip.done { background: #DCFCE7; border-color: #BBF7D0; color: #15803D; }
+    .dt-occ-chip.done.sel { background: #15803D; color: #fff; border-color: #15803D; }
+    .dt-occ-label { font-size: 10px; color: var(--text-dim); }
+
+    /* ── Right panel ── */
+    .dt-right { flex: 1; overflow-y: auto; background: var(--white); }
+    .dt-placeholder {
+      height: 100%; display: flex; align-items: center; justify-content: center;
+      flex-direction: column; gap: 10px; color: var(--text-dim); font-size: 13px;
+    }
+
+    /* Task detail */
+    .dt-detail { padding: 24px 28px 40px; max-width: 800px; }
+    .dt-detail-top {
+      display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 14px;
+    }
+    .dt-detail-title { font-size: 20px; font-weight: 700; color: var(--text-primary); line-height: 1.3; }
+    .dt-actions { display: flex; gap: 6px; flex-shrink: 0; margin-top: 3px; }
+    .dt-meta-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+    .dt-meta-chip {
+      display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--text-secondary);
+      padding: 2px 8px; border-radius: 3px; background: #F3F4F6; border: 1px solid var(--border-light);
+    }
+    .dt-desc-box {
+      font-size: 13px; color: var(--text-primary); background: #FAFAF8; border: 1px solid var(--border-light);
+      border-radius: var(--radius); padding: 12px 14px; line-height: 1.75; white-space: pre-wrap; margin-bottom: 22px;
+    }
+    .dt-divider { border: none; border-top: 1px solid var(--border-light); margin: 20px 0; }
+    .dt-sec-label {
+      font-size: 10px; font-weight: 700; color: var(--text-dim); text-transform: uppercase;
+      letter-spacing: .06em; font-family: 'LINE Seed TW_OTF', sans-serif; margin-bottom: 12px;
+      display: flex; align-items: center; gap: 6px;
+    }
+
+    /* ── Assignee card grid ── */
+    .ag-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; margin-bottom: 20px;
+    }
+    .ag-card {
+      border: 1px solid var(--border-light); border-radius: 8px; padding: 12px;
+      display: flex; flex-direction: column; gap: 6px; transition: box-shadow .12s;
+    }
+    .ag-card.done  { border-color: #BBF7D0; background: #F0FDF4; }
+    .ag-card.pending { border-color: #FDE68A; background: #FFFBEB; }
+    .ag-card-top { display: flex; align-items: center; gap: 8px; }
+    .ag-avatar {
+      width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center;
+      justify-content: center; font-size: 13px; font-weight: 700; color: #fff; flex-shrink: 0;
+    }
+    .ag-name { font-size: 12px; font-weight: 600; color: var(--text-primary); line-height: 1.3; }
+    .ag-status-done {
+      display: inline-flex; align-items: center; gap: 3px; font-size: 9px; font-weight: 700;
+      color: #15803D; background: #DCFCE7; border: 1px solid #BBF7D0; border-radius: 20px; padding: 1px 6px;
+    }
+    .ag-status-wait {
+      display: inline-flex; align-items: center; gap: 3px; font-size: 9px; font-weight: 700;
+      color: #92400E; background: #FEF3C7; border: 1px solid #FDE68A; border-radius: 20px; padding: 1px 6px;
+    }
+    .ag-time  { font-size: 9px; color: var(--text-dim); font-family: 'LINE Seed TW_OTF', sans-serif; }
+    .ag-report { font-size: 11px; color: var(--text-secondary); background: rgba(0,0,0,.04); border-radius: 4px; padding: 5px 7px; line-height: 1.55; white-space: pre-wrap; }
+    .ag-report.ag-report-pending { color: var(--text-dim); font-style: italic; background: transparent; border: 1px dashed var(--border-light); }
+
+    /* My completion form */
+    .dt-complete-form {
+      margin-top: 20px; padding: 16px 18px; background: #F0FDF4;
+      border: 1px solid #BBF7D0; border-radius: var(--radius);
+    }
+    .dt-complete-title { font-size: 12px; font-weight: 700; color: #15803D; margin-bottom: 10px; display: flex; align-items: center; gap: 5px; }
+    .dt-report-input {
+      width: 100%; min-height: 80px; border: 1px solid #BBF7D0; border-radius: 5px; padding: 8px 10px;
+      font-size: 13px; font-family: 'LINE Seed TW_OTF', sans-serif; resize: vertical; background: #fff;
+      box-sizing: border-box; color: var(--text-primary);
+    }
+    .dt-report-input:focus { outline: none; border-color: #15803D; box-shadow: 0 0 0 3px rgba(21,128,61,.1); }
+    .dt-done-notice {
+      margin-top: 16px; padding: 10px 14px; background: #F0FDF4; border: 1px solid #BBF7D0;
+      border-radius: var(--radius); font-size: 12px; color: #15803D; display: flex; align-items: center; gap: 6px;
+    }
+
+    /* ── Modal ── */
+    .dt-modal-wrap {
+      position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 500;
+      display: flex; align-items: flex-start; justify-content: center; padding: 32px 20px; overflow-y: auto;
+    }
+    .dt-modal {
+      background: #fff; border-radius: 10px; width: 100%; max-width: 580px;
+      box-shadow: 0 16px 48px rgba(0,0,0,.18); flex-shrink: 0;
+    }
+    .dt-modal-head {
+      padding: 16px 20px; border-bottom: 1px solid var(--border-light);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .dt-modal-title  { font-size: 14px; font-weight: 700; color: var(--text-primary); }
+    .dt-modal-body   { padding: 18px 20px; display: flex; flex-direction: column; gap: 14px; }
+    .dt-modal-foot   { padding: 12px 20px; border-top: 1px solid var(--border-light); display: flex; justify-content: flex-end; gap: 8px; }
+    .dt-modal-close  {
+      width: 28px; height: 28px; border-radius: 4px; border: none; background: #F0EEE9;
+      cursor: pointer; font-size: 16px; color: var(--text-secondary); display: flex; align-items: center; justify-content: center;
+    }
+    .dt-modal-close:hover { background: #FEF2F2; color: var(--danger); }
+    .dt-field { display: flex; flex-direction: column; gap: 4px; }
+    .dt-field-label { font-size: 10px; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: .06em; font-family: 'LINE Seed TW_OTF', sans-serif; }
+    .dt-field-label .req { color: var(--danger); }
+    .dt-input {
+      padding: 8px 11px; border: 1px solid var(--border-light); border-radius: var(--radius);
+      font-size: 13px; font-family: var(--font-zh); color: var(--text-primary); background: #fff; outline: none;
+      transition: border-color .12s, box-shadow .12s;
+    }
+    .dt-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(37,99,235,.08); }
+    .dt-section-hd {
+      font-size: 10px; font-weight: 700; color: var(--text-dim); text-transform: uppercase;
+      letter-spacing: .06em; font-family: 'LINE Seed TW_OTF', sans-serif; padding-bottom: 8px;
+      border-bottom: 1px solid var(--border-light); margin-bottom: 4px;
+    }
+
+    /* User card grid (modal) */
+    .usr-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+      gap: 8px; max-height: 220px; overflow-y: auto; padding: 2px;
+    }
+    .usr-card {
+      border: 1.5px solid var(--border-light); border-radius: 8px; padding: 10px 6px 8px;
+      cursor: pointer; text-align: center; transition: border-color .13s, background .13s;
+      position: relative; background: #fff; user-select: none;
+    }
+    .usr-card:hover { border-color: #93C5FD; background: #EFF6FF; }
+    .usr-card.sel   { border-color: var(--accent); background: var(--accent-light); }
+    .usr-card-av    {
+      width: 36px; height: 36px; border-radius: 50%; background: var(--accent); color: #fff;
+      font-size: 14px; font-weight: 700; display: flex; align-items: center; justify-content: center; margin: 0 auto 6px;
+    }
+    .usr-card-name  { font-size: 11px; font-weight: 600; color: var(--text-primary); line-height: 1.3; word-break: break-all; }
+    .usr-card-role  { font-size: 9px; color: var(--text-dim); margin-top: 2px; }
+    .usr-card-chk   {
+      position: absolute; top: 4px; right: 4px; width: 16px; height: 16px;
+      background: var(--accent); border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    }
+
+    /* Recurrence day buttons */
+    .recur-day-btn {
+      width: 32px; height: 32px; border-radius: 50%; font-size: 12px; cursor: pointer;
+      transition: all .15s; border: 1px solid var(--border-light); background: #fff; color: var(--text-primary);
+      display: flex; align-items: center; justify-content: center;
+    }
+
+    /* Unlock modal */
+    .dt-unlock-modal {
+      background: #fff; border-radius: 10px; width: 100%; max-width: 420px;
+      box-shadow: 0 16px 48px rgba(0,0,0,.18);
+    }
+    .dt-unlock-head { padding: 16px 20px; border-bottom: 1px solid var(--border-light); display: flex; align-items: center; gap: 10px; }
+    .dt-lock-icon {
+      width: 34px; height: 34px; background: #FEF3C7; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+
+    /* ── Report view ── */
+    .dt-report-view {
+      flex: 1; overflow: hidden; background: #F5F4F0; padding: 14px 20px 0;
+      display: flex; flex-direction: column;
+    }
+    .dt-report-topbar { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+    .dt-report-nav-row { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+    .dt-report-date-nav { display: flex; align-items: center; gap: 4px; }
+    .dt-report-date-label {
+      font-size: 14px; font-weight: 700; color: var(--text-primary);
+      min-width: 110px; text-align: center;
+    }
+    .dt-report-select {
+      font-size: 12px; font-family: 'LINE Seed TW_OTF', sans-serif; color: var(--text-primary);
+      border: 1px solid var(--border-light); border-radius: 5px;
+      padding: 3px 6px; background: #fff; cursor: pointer;
+    }
+    .dt-report-select:focus { outline: none; border-color: #7C3AED; }
+    .dt-report-stats {
+      margin-left: auto; display: flex; gap: 6px; align-items: center;
+    }
+    .dt-report-stat { font-size: 11px; font-weight: 600; padding: 2px 9px; border-radius: 10px; }
+    .dt-report-stat.green { background: #DCFCE7; color: #15803D; }
+    .dt-report-stat.yellow { background: #FEF9C3; color: #854D0E; }
+    .dt-report-stat.gray { background: #F3F4F6; color: #6B7280; }
+    .dt-report-search-row { display: flex; align-items: center; gap: 7px; }
+    .dt-report-search {
+      flex: 1; font-size: 12px; font-family: 'LINE Seed TW_OTF', sans-serif;
+      border: 1px solid var(--border-light); border-radius: 5px;
+      padding: 5px 10px 5px 30px; background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239CA3AF' stroke-width='2'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.35-4.35'/%3E%3C/svg%3E") no-repeat 10px center;
+    }
+    .dt-report-search:focus { outline: none; border-color: #7C3AED; }
+    .dt-report-search-hint { font-size: 11px; color: var(--text-dim); white-space: nowrap; }
+
+    /* Split panel */
+    .dt-report-split {
+      display: flex; gap: 12px; flex: 1; overflow: hidden; padding-bottom: 16px;
+    }
+    .dt-report-list {
+      width: 256px; flex-shrink: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 5px;
+    }
+    .dt-report-list-item {
+      padding: 9px 12px; background: #fff; border-radius: 7px;
+      border: 1px solid var(--border-light); cursor: pointer; transition: border-color .12s, background .12s;
+    }
+    .dt-report-list-item:hover { border-color: #C4B5FD; background: #FDFCFF; }
+    .dt-report-list-item.active { border-color: #7C3AED; background: #F5F3FF; }
+    .dt-report-list-title { font-size: 12px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px; }
+    .dt-report-list-sub { display: flex; align-items: center; gap: 5px; }
+    .dt-report-list-prog {
+      font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 8px;
+    }
+
+    /* Detail panel */
+    .dt-report-detail {
+      flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 0;
+    }
+    .dt-report-detail-empty {
+      flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      color: var(--text-dim); gap: 10px;
+    }
+    .dt-report-card {
+      background: #fff; border-radius: 8px; border: 1px solid var(--border-light);
+      margin-bottom: 10px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,.04);
+    }
+    .dt-report-card-head {
+      padding: 10px 16px; border-bottom: 1px solid var(--border-light);
+      background: #FAFAF8; display: flex; align-items: center; gap: 8px;
+    }
+    .dt-report-card-title {
+      font-size: 13px; font-weight: 700; color: var(--text-primary); flex: 1;
+    }
+    .dt-report-card-prog {
+      font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 10px;
+      font-family: 'LINE Seed TW_OTF', sans-serif; white-space: nowrap;
+    }
+    .dt-report-card-recur {
+      font-size: 9px; color: #6D28D9; background: #EDE9FE;
+      border: 1px solid #C4B5FD; padding: 1px 6px; border-radius: 3px;
+      font-weight: 600; font-family: 'LINE Seed TW_OTF', sans-serif;
+    }
+    .dt-report-persons { padding: 0; }
+    .dt-report-person {
+      padding: 11px 14px 11px 14px; border-bottom: 1px solid #F0EEE9;
+    }
+    .dt-report-person:last-child { border-bottom: none; }
+    .dt-report-person.done { background: #FAFFFC; }
+    .dt-report-person.pending { background: #FFFDF7; }
+    .dt-report-person.mine { box-shadow: inset 3px 0 0 #7C3AED; }
+    .dt-report-person-hd { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
+    .dt-report-av {
+      width: 26px; height: 26px; border-radius: 50%; color: #fff;
+      font-size: 10px; font-weight: 700; display: flex; align-items: center;
+      justify-content: center; flex-shrink: 0;
+    }
+    .dt-report-name { font-size: 13px; font-weight: 700; color: var(--text-primary); flex: 1; }
+    .dt-report-time { font-size: 10px; color: var(--text-dim); font-family: 'LINE Seed TW_OTF', sans-serif; }
+    /* Report text — always shown, indented under name */
+    .dt-report-body { margin-left: 34px; }
+    .dt-report-text {
+      font-size: 12px; color: var(--text-primary); background: #F5F4F0;
+      border-left: 3px solid #86EFAC; padding: 7px 11px;
+      border-radius: 0 4px 4px 0; line-height: 1.65; white-space: pre-wrap;
+    }
+    .dt-report-text.pending-text {
+      border-left-color: #E5E7EB; color: var(--text-dim); font-style: italic;
+    }
+
+    /* ── Tab bar ── */
+    .dt-tab-bar {
+      position: sticky; top: 0; z-index: 10;
+      display: flex; align-items: center; gap: 0;
+      border-bottom: 2px solid var(--border-light);
+      background: var(--white); padding: 0 20px; flex-shrink: 0;
+    }
+    .dt-tab-btn {
+      padding: 10px 16px; font-size: 12px; font-weight: 600;
+      color: var(--text-secondary); background: none; border: none; cursor: pointer;
+      border-bottom: 2px solid transparent; margin-bottom: -2px;
+      transition: color .12s, border-color .12s; font-family: var(--font-zh);
+      display: inline-flex; align-items: center; gap: 5px;
+    }
+    .dt-tab-btn:hover { color: var(--text-primary); }
+    .dt-tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .dt-tab-count {
+      font-size: 9px; font-weight: 700; padding: 1px 6px; border-radius: 10px;
+      background: #E0E7FF; color: var(--accent); font-family: 'LINE Seed TW_OTF', sans-serif;
+    }
+    .dt-tab-spacer { flex: 1; }
+
+    /* ── History list ── */
+    .dt-hist-wrap { padding: 16px 20px 32px; }
+    .dt-hist-item {
+      border: 1px solid var(--border-light); border-radius: 6px; margin-bottom: 8px; overflow: hidden;
+    }
+    .dt-hist-head {
+      display: flex; align-items: center; gap: 8px; padding: 9px 12px;
+      cursor: pointer; background: #FAFAF8; user-select: none;
+    }
+    .dt-hist-head:hover { background: #F0EEE9; }
+    .dt-hist-date { font-size: 12px; font-weight: 700; color: var(--text-primary); font-family: 'LINE Seed TW_OTF', sans-serif; white-space: nowrap; }
+    .dt-hist-wd { font-size: 9px; padding: 1px 5px; border-radius: 3px; color: #fff; font-family: 'LINE Seed TW_OTF', sans-serif; white-space: nowrap; flex-shrink: 0; }
+    .dt-hist-chips { display: flex; gap: 4px; flex-wrap: wrap; flex: 1; min-width: 0; }
+    .dt-hist-chip-done {
+      font-size: 9px; padding: 1px 6px; border-radius: 10px;
+      background: #DCFCE7; color: #15803D; border: 1px solid #BBF7D0;
+      font-weight: 600; white-space: nowrap; font-family: 'LINE Seed TW_OTF', sans-serif;
+    }
+    .dt-hist-chip-wait {
+      font-size: 9px; padding: 1px 6px; border-radius: 10px;
+      background: #FEF3C7; color: #92400E; border: 1px solid #FDE68A;
+      font-weight: 600; white-space: nowrap; font-family: 'LINE Seed TW_OTF', sans-serif;
+    }
+    .dt-hist-badge {
+      font-size: 9px; font-weight: 700; padding: 2px 8px; border-radius: 10px;
+      white-space: nowrap; flex-shrink: 0; font-family: 'LINE Seed TW_OTF', sans-serif;
+    }
+    .dt-hist-chevron { font-size: 9px; color: var(--text-dim); flex-shrink: 0; }
+    .dt-hist-body {
+      padding: 10px 12px; border-top: 1px solid var(--border-light);
+      background: #fff; display: flex; flex-direction: column; gap: 10px;
+    }
+    .dt-hist-person { display: flex; flex-direction: column; gap: 4px; }
+    .dt-hist-person-row { display: flex; align-items: center; gap: 7px; }
+    .dt-hist-av {
+      width: 22px; height: 22px; border-radius: 50%; color: #fff;
+      font-size: 9px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .dt-hist-report {
+      background: #F5F4F0; border-radius: 4px; padding: 6px 9px;
+      font-size: 11px; color: var(--text-secondary); line-height: 1.55; white-space: pre-wrap;
+    }
+
+    /* Completion rate badge on card */
+    .dt-rate-badge {
+      font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 3px;
+      font-family: 'LINE Seed TW_OTF', sans-serif; white-space: nowrap;
+    }
+
+    /* Toast */
+    .dt-toast {
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+      background: #0A0A0A; color: #F5F4F0; padding: 8px 18px; border-radius: 6px;
+      font-size: 12px; z-index: 999; font-family: 'LINE Seed TW_OTF', sans-serif;
+      box-shadow: 0 4px 12px rgba(0,0,0,.2); pointer-events: none;
+    }
+
+    /* ── Calendar mode ── */
+    .dt-bar-act-cal { background:#EFF6FF;color:#1D4ED8;border-color:#BFDBFE }
+    .dt-bar-act-cal:hover { background:#DBEAFE;border-color:#93C5FD }
+    .dt-bar-act-cal.on { background:#1D4ED8;color:#fff;border-color:#1D4ED8 }
+    .dt-bar-act-cal.on:hover { background:#1E40AF }
+
+    .dt-cal-body { display:flex;flex:1;min-height:0;overflow:hidden }
+    .dt-cal-left { width:310px;flex-shrink:0;overflow-y:auto;border-right:1px solid var(--border-light);background:#F5F4F0;padding:12px 10px;display:flex;flex-direction:column;gap:12px }
+    .dt-cal-right { flex:1;overflow:hidden;display:flex;flex-direction:column }
+
+    .dt-cal-card { background:#fff;border-radius:8px;border:1px solid var(--border-light);overflow:hidden }
+    .dt-cal-card-hd { padding:8px 12px;text-align:center;border-bottom:1px solid var(--border-light);background:#FAFAF8 }
+    .dt-cal-card-title { font-size:12px;font-weight:700;color:var(--text-primary);font-family:LINE Seed TW_OTF, sans-serif }
+    .dt-cal-wdays { display:grid;grid-template-columns:repeat(7,1fr);padding:4px 4px 0 }
+    .dt-cal-wday { text-align:center;font-size:9px;font-weight:700;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;padding:3px 0 }
+    .dt-cal-wday.sat { color:#7C3AED }
+    .dt-cal-wday.sun { color:#DC2626 }
+
+    .dt-cal-grid { display:grid;grid-template-columns:repeat(7,1fr);padding:3px;gap:2px }
+    .dt-cal-cell {
+      display:flex;flex-direction:column;align-items:center;padding:4px 1px 3px;
+      border-radius:5px;cursor:pointer;transition:background .1s;
+      min-height:42px;border:1.5px solid transparent;
+    }
+    .dt-cal-cell:hover { background:#EFF6FF }
+    .dt-cal-cell.out { opacity:.2;pointer-events:none }
+    .dt-cal-cell.st-done { background:#F0FDF4 }
+    .dt-cal-cell.st-done:hover { background:#DCFCE7 }
+    .dt-cal-cell.st-partial { background:#FFFBEB }
+    .dt-cal-cell.st-partial:hover { background:#FEF3C7 }
+    .dt-cal-cell.st-none { background:#FFF5F5 }
+    .dt-cal-cell.st-none:hover { background:#FEE2E2 }
+    .dt-cal-cell.sel { border-color:var(--accent) !important;background:#EFF6FF !important }
+    .dt-cal-day-num {
+      font-size:11px;font-weight:600;color:var(--text-primary);
+      width:20px;height:20px;display:flex;align-items:center;justify-content:center;border-radius:50%;flex-shrink:0
+    }
+    .dt-cal-cell.today-cell .dt-cal-day-num { background:var(--accent);color:#fff }
+    .dt-cal-cell.out .dt-cal-day-num { color:var(--text-dim) }
+    .dt-cal-dot-row { display:flex;align-items:center;gap:2px;margin-top:2px;flex-shrink:0 }
+    .dt-cal-dot { width:5px;height:5px;border-radius:50%;flex-shrink:0 }
+    .dt-cal-dot.g { background:#15803D }
+    .dt-cal-dot.y { background:#D97706 }
+    .dt-cal-dot.r { background:#DC2626 }
+    .dt-cal-prog { font-size:7px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif }
+    .dt-cal-prog.g { color:#15803D }
+    .dt-cal-prog.y { color:#D97706 }
+    .dt-cal-prog.r { color:#DC2626 }
+
+    .dt-cal-legend { display:flex;gap:10px;align-items:center;padding:2px 4px;font-size:9px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif }
+    .dt-cal-legend-item { display:flex;align-items:center;gap:3px }
+    .dt-cal-legend-dot { width:7px;height:7px;border-radius:50%;flex-shrink:0 }
+
+    .dt-cal-right-hd { padding:10px 16px;border-bottom:1px solid var(--border-light);background:#FAFAF8;flex-shrink:0;display:flex;flex-direction:column;gap:6px }
+    .dt-cal-right-title { font-size:13px;font-weight:700;color:var(--text-primary) }
+    .dt-cal-placeholder { flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--text-dim);gap:10px }
+
+    /* ── Calendar dashboard (no date selected) ── */
+    .dt-cal-dash { padding:12px 16px;overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:14px }
+    .dt-cal-dash-sec { display:flex;flex-direction:column;gap:6px }
+    .dt-cal-dash-sec-hd { display:flex;align-items:center;gap:7px;padding:2px 0;border-bottom:1px solid var(--border-light);margin-bottom:4px }
+    .dt-cal-dash-title { font-size:10px;font-weight:700;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.05em;font-family:LINE Seed TW_OTF, sans-serif;flex:1 }
+    .dt-cal-dash-cnt { font-size:9px;font-weight:700;padding:1px 7px;border-radius:10px;font-family:LINE Seed TW_OTF, sans-serif;white-space:nowrap }
+    .dt-cal-dash-task { background:#fff;border:1px solid var(--border-light);border-radius:7px;padding:9px 12px;cursor:pointer;transition:border-color .12s,background .12s }
+    .dt-cal-dash-task:hover { border-color:#93C5FD;background:#EFF6FF }
+    .dt-cal-dash-task-title { font-size:12px;font-weight:600;color:var(--text-primary);margin-bottom:5px }
+    .dt-cal-dash-task-persons { display:flex;gap:4px;flex-wrap:wrap }
+    .dt-cal-dash-person-chip { display:inline-flex;align-items:center;gap:3px;font-size:9px;border-radius:10px;padding:1px 7px;font-family:LINE Seed TW_OTF, sans-serif;font-weight:600;white-space:nowrap }
+    .dt-cal-dash-person-chip.pending { background:#FEF3C7;color:#92400E;border:1px solid #FDE68A }
+    .dt-cal-dash-person-chip.done { background:#DCFCE7;color:#15803D;border:1px solid #BBF7D0 }
+    .dt-cal-dash-date { display:flex;align-items:center;gap:7px;padding:7px 12px;background:#fff;border:1px solid var(--border-light);border-radius:7px;cursor:pointer;transition:border-color .12s,background .12s }
+    .dt-cal-dash-date:hover { border-color:#93C5FD;background:#EFF6FF }
+    .dt-cal-dash-date-str { font-size:12px;font-weight:700;color:var(--text-primary);font-family:LINE Seed TW_OTF, sans-serif;min-width:44px }
+    .dt-cal-dash-date-wd { font-size:9px;padding:1px 5px;border-radius:3px;color:#fff;font-family:LINE Seed TW_OTF, sans-serif;white-space:nowrap }
+    .dt-cal-dash-date-prog { font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;font-family:LINE Seed TW_OTF, sans-serif;white-space:nowrap }
+    .dt-cal-dash-done-grid { display:flex;flex-wrap:wrap;gap:5px }
+    .dt-cal-dash-done-chip { display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:700;padding:3px 9px;border-radius:10px;background:#F0FDF4;border:1px solid #BBF7D0;color:#15803D;cursor:pointer;font-family:LINE Seed TW_OTF, sans-serif;transition:background .12s }
+    .dt-cal-dash-done-chip:hover { background:#DCFCE7 }
+
+    /* ── Left panel stat strip ── */
+    .dt-stat-strip { display:flex; border-bottom:1px solid var(--border-light); background:var(--white); flex-shrink:0 }
+    .dt-stat-cell { flex:1; padding:8px 4px; text-align:center; border-right:1px solid var(--border-light) }
+    .dt-stat-cell:last-child { border-right:none }
+    .dt-stat-cell__val { display:block; font-size:16px; font-weight:700; font-family:LINE Seed TW_OTF, sans-serif; color:var(--text-primary); line-height:1.2 }
+    .dt-stat-cell__lbl { display:block; font-size:9px; color:var(--text-dim); margin-top:1px; font-family:LINE Seed TW_OTF, sans-serif }
+    .dt-stat-cell.warn .dt-stat-cell__val { color:#D97706 }
+    .dt-stat-cell.good .dt-stat-cell__val { color:#15803D }
+
+    /* ── History period toolbar ── */
+    .dt-hp-toolbar { display:flex; align-items:center; gap:5px; padding:8px 12px; border-bottom:1px solid var(--border-light); background:#FAFAF8; flex-shrink:0; flex-wrap:wrap }
+    .dt-hp-mode { display:flex; border:1px solid var(--border-light); border-radius:4px; overflow:hidden; flex-shrink:0 }
+    .dt-hp-mode-btn { padding:3px 11px; font-size:11px; font-weight:600; cursor:pointer; border:none; background:#fff; color:var(--text-secondary); font-family:LINE Seed TW_OTF, sans-serif; line-height:1.5 }
+    .dt-hp-mode-btn.on { background:var(--accent); color:#fff }
+    .dt-hp-nav { display:flex; align-items:center; gap:3px }
+    .dt-hp-nav-btn { width:22px; height:22px; border:1px solid var(--border-light); border-radius:4px; background:#fff; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:12px; color:var(--text-secondary); flex-shrink:0 }
+    .dt-hp-nav-btn:hover { background:#F0EEE9 }
+    .dt-hp-nav-label { font-size:11px; font-weight:700; color:var(--text-primary); min-width:108px; text-align:center; font-family:LINE Seed TW_OTF, sans-serif; white-space:nowrap }
+    .dt-hp-stat { margin-left:auto; font-size:10px; color:var(--text-dim); font-family:LINE Seed TW_OTF, sans-serif; white-space:nowrap }
+    .dt-hp-csv { font-size:10px; padding:2px 8px; border-radius:4px; border:1px solid var(--border-light); background:#fff; cursor:pointer; color:var(--text-secondary); font-family:LINE Seed TW_OTF, sans-serif; flex-shrink:0; line-height:1.5 }
+    .dt-hp-csv:hover { background:#F0EEE9 }
+
+    /* ── History week band header ── */
+    .dt-hb-head { display:flex; align-items:center; gap:5px; padding:4px 12px; background:#EDECE8; border-bottom:1px solid var(--border-light) }
+    .dt-hb-label { font-size:9px; font-weight:700; color:var(--text-secondary); font-family:LINE Seed TW_OTF, sans-serif; text-transform:uppercase; letter-spacing:.05em }
+    .dt-hb-range { font-size:9px; color:var(--text-dim); font-family:LINE Seed TW_OTF, sans-serif }
+    .dt-hb-cnt   { margin-left:auto; font-size:9px; color:var(--text-dim); font-family:LINE Seed TW_OTF, sans-serif }
+
+    /* ── History occurrence row ── */
+    .dt-hocc { border-bottom:1px solid #F0EEE9 }
+    .dt-hocc-hd { display:flex; align-items:center; gap:6px; padding:7px 12px; cursor:pointer; transition:background .1s; user-select:none }
+    .dt-hocc-hd:hover { background:#FDFCFA }
+    .dt-hocc-hd.all-done { background:#FBFFF9 }
+    .dt-hocc-hd.no-task { opacity:.42; cursor:default; pointer-events:none }
+    .dt-hocc-date { font-size:11px; font-weight:700; color:var(--text-primary); min-width:36px; font-family:LINE Seed TW_OTF, sans-serif; flex-shrink:0 }
+    .dt-hocc-wd   { font-size:9px; font-weight:700; padding:1px 5px; border-radius:3px; color:#fff; font-family:LINE Seed TW_OTF, sans-serif; flex-shrink:0 }
+    .dt-hocc-chips { display:flex; gap:3px; flex:1; min-width:0; flex-wrap:wrap }
+    .dt-hocc-chip-d { font-size:9px; padding:1px 6px; border-radius:10px; background:#DCFCE7; color:#15803D; border:1px solid #BBF7D0; font-weight:600; font-family:LINE Seed TW_OTF, sans-serif; white-space:nowrap }
+    .dt-hocc-chip-w { font-size:9px; padding:1px 6px; border-radius:10px; background:#FEF3C7; color:#92400E; border:1px solid #FDE68A; font-weight:600; font-family:LINE Seed TW_OTF, sans-serif; white-space:nowrap }
+    .dt-hocc-prog { font-size:9px; font-weight:700; padding:2px 7px; border-radius:8px; white-space:nowrap; font-family:LINE Seed TW_OTF, sans-serif; margin-left:auto; flex-shrink:0 }
+    .dt-hocc-prog.g { background:#DCFCE7; color:#15803D }
+    .dt-hocc-prog.y { background:#FEF3C7; color:#92400E }
+    .dt-hocc-prog.r { background:#FEF2F2; color:#DC2626 }
+    .dt-hocc-chev { font-size:8px; color:var(--text-dim); flex-shrink:0; margin-left:2px; transition:transform .15s }
+    .dt-hocc-chev.open { transform:rotate(180deg) }
+    .dt-hocc-body { padding:8px 12px 10px 56px; background:#F9F8F5; border-top:1px solid #F0EEE9 }
+    .dt-hocc-person { display:flex; align-items:flex-start; gap:6px; margin-bottom:9px }
+    .dt-hocc-person:last-child { margin-bottom:0 }
+    .dt-hocc-person-meta { display:flex; align-items:center; gap:5px; min-width:88px; flex-shrink:0 }
+  </style>
+</head>
+<body x-data="app()" x-init="init()" x-cloak>
+
+<header id="app-topbar" class="topbar"></header>
+<div class="sidebar-overlay" id="sidebar-overlay"></div>
+<aside class="sidebar" id="app-sidebar"></aside>
+
+<div class="dt-wrap">
+
+  <!-- ── Top bar ── -->
+  <div class="dt-bar">
+    <div class="dt-bar-title">每日工作事項</div>
+    <div class="dt-bar-sep"></div>
+    <div class="dt-month-nav">
+      <button class="dt-month-btn" @click="prevMonth()">&#8592;</button>
+      <div class="dt-month-label" x-text="yearMonthDisplay()"></div>
+      <button class="dt-month-btn" @click="nextMonth()">&#8594;</button>
+    </div>
+    <div class="dt-spacer"></div>
+
+    <!-- 日曆視圖 toggle -->
+    <button class="dt-bar-act dt-bar-act-cal" :class="{on: calMode}" @click="toggleCalMode()">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+      <span x-text="calMode ? '← 關閉日曆' : '日曆視圖'"></span>
+    </button>
+
+    <!-- 回報彙整 toggle -->
+    <button class="dt-bar-act dt-bar-act-report" :class="{on: reportMode}" @click="toggleReportMode()">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+      <span x-text="reportMode ? '← 返回列表' : '回報彙整'"></span>
+    </button>
+
+    <template x-if="session?.role === 'superadmin'">
+      <div style="display:flex;align-items:center;gap:6px;margin-left:4px">
+        <div class="dt-bar-sep"></div>
+        <template x-if="!dtUnlocked">
+          <button class="dt-bar-act dt-bar-act-lock" @click="showUnlock=true">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+            解鎖管理視角
+          </button>
+        </template>
+        <template x-if="dtUnlocked">
+          <span class="dt-unlock-badge">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+            管理視角已解鎖
+          </span>
+        </template>
+        <template x-if="dtUnlocked">
+          <button class="dt-bar-act dt-bar-act-add" @click="openCreate()">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+            新增工作事項
+          </button>
+        </template>
+      </div>
+    </template>
+  </div>
+
+  <!-- ══ 回報彙整視圖 ══ -->
+  <div x-show="reportMode" class="dt-report-view" x-cloak>
+
+    <!-- Top bar -->
+    <div class="dt-report-topbar">
+      <!-- Row 1: date navigation + today + year/month selects + stats -->
+      <div class="dt-report-nav-row">
+        <div class="dt-report-date-nav">
+          <button class="dt-month-btn" @click="prevReportDay()">&#8592;</button>
+          <div class="dt-report-date-label" x-text="reportDate.slice(5) + '　' + weekdayLabel(reportDate)"></div>
+          <button class="dt-month-btn" @click="nextReportDay()">&#8594;</button>
+        </div>
+        <button class="dt-report-today-btn" @click="goReportToday()">今日</button>
+        <select class="dt-report-select" @change="setReportYear(+$event.target.value)">
+          <template x-for="y in reportYearOptions()" :key="y">
+            <option :value="y" :selected="y === +reportDate.slice(0,4)" x-text="y + ' 年'"></option>
+          </template>
+        </select>
+        <select class="dt-report-select" @change="setReportMonth(+$event.target.value)">
+          <template x-for="m in [1,2,3,4,5,6,7,8,9,10,11,12]" :key="m">
+            <option :value="m" :selected="m === +reportDate.slice(5,7)" x-text="m + ' 月'"></option>
+          </template>
+        </select>
+        <div class="dt-report-stats" x-show="!reportLoading && reportData.length > 0">
+          <span class="dt-report-stat gray" x-text="reportData.length + ' 項'"></span>
+          <span class="dt-report-stat"
+                :class="reportAllDone() ? 'green' : reportDonePersons() > 0 ? 'yellow' : 'gray'"
+                x-text="reportDonePersons() + '/' + reportTotalPersons() + ' 人完成'"></span>
+        </div>
+      </div>
+
+      <!-- Row 2: person filter chips -->
+      <div class="dt-report-person-row" x-show="!reportLoading && reportPersons().length > 0">
+        <button class="dt-rp-chip" :class="{on: !reportFilterPerson}" @click="reportFilterPerson = ''">
+          全部
+          <span x-show="reportData.length > 0"
+                style="font-size:9px;opacity:.75;margin-left:2px"
+                x-text="'(' + reportData.length + ')'"></span>
+        </button>
+        <template x-for="p in reportPersons()" :key="p.username">
+          <button class="dt-rp-chip" :class="{on: reportFilterPerson === p.username}"
+                  @click="reportFilterPerson = (reportFilterPerson === p.username ? '' : p.username)">
+            <span class="dt-rp-chip-dot"
+                  :style="`background:${p.done === p.total ? '#15803D' : p.done > 0 ? '#D97706' : '#DC2626'}`"></span>
+            <span x-text="p.displayName"></span>
+            <span style="font-size:9px;opacity:.75" x-text="'(' + p.done + '/' + p.total + ')'"></span>
+          </button>
+        </template>
+      </div>
+
+      <!-- Row 3: content search -->
+      <div class="dt-report-search-row">
+        <input type="search" class="dt-report-search" x-model="reportSearch"
+               placeholder="搜尋工作事項名稱或回報內容…">
+        <template x-if="(reportSearch || reportFilterPerson) && filteredReportData().length === 0 && !reportLoading">
+          <span class="dt-report-search-hint">無符合結果</span>
+        </template>
+        <template x-if="(reportSearch || reportFilterPerson) && filteredReportData().length > 0 && filteredReportData().length < reportData.length">
+          <span class="dt-report-search-hint" x-text="filteredReportData().length + ' 項符合'"></span>
+        </template>
+      </div>
+    </div>
+
+    <!-- Loading -->
+    <div x-show="reportLoading" style="padding:24px;text-align:center;color:var(--text-dim);font-size:12px">載入中…</div>
+
+    <!-- Empty (no tasks for this date) -->
+    <template x-if="!reportLoading && reportData.length === 0">
+      <div style="padding:40px;text-align:center;color:var(--text-dim)">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" style="display:block;margin:0 auto 10px;opacity:.3"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        <div style="font-size:13px">當日無工作事項</div>
+      </div>
+    </template>
+
+    <!-- Empty state (when search yields nothing or no tasks) -->
+    <template x-if="!reportLoading && reportData.length > 0 && filteredReportData().length === 0">
+      <div style="padding:28px;text-align:center;color:var(--text-dim);font-size:13px">
+        搜尋「<span x-text="reportSearch"></span>」無結果
+      </div>
+    </template>
+
+    <!-- Split panel: task list (left) + detail (right) -->
+    <div class="dt-report-split" x-show="!reportLoading && filteredReportData().length > 0">
+
+      <!-- Left: task list -->
+      <div class="dt-report-list">
+        <template x-for="task in filteredReportData()" :key="task.id + '_' + (task.occurrence_date||task.task_date)">
+          <div class="dt-report-list-item"
+               :class="reportSelected === task.id ? 'active' : ''"
+               @click="reportSelected=task.id; calEditTaskId=null; calEditReport=''">
+            <div class="dt-report-list-title" x-text="task.title"></div>
+            <div class="dt-report-list-sub">
+              <template x-if="task.recurrence_type === 'weekly'">
+                <span class="dt-report-card-recur">每週</span>
+              </template>
+              <template x-if="task.recurrence_type === 'range'">
+                <span class="dt-report-card-recur" style="background:#DCFCE7;color:#15803D" x-text="'區間 ~' + (task.recurrence_end_date || '')"></span>
+              </template>
+              <span class="dt-report-list-prog"
+                    :style="completionCountRaw(task).done === completionCountRaw(task).total && completionCountRaw(task).total > 0
+                      ? 'background:#DCFCE7;color:#15803D'
+                      : completionCountRaw(task).done > 0
+                        ? 'background:#FEF3C7;color:#92400E'
+                        : 'background:#FEF2F2;color:#DC2626'"
+                    x-text="completionCountRaw(task).done + '/' + completionCountRaw(task).total"></span>
+              <template x-if="task.category">
+                <span style="font-size:10px;color:var(--text-dim)" x-text="task.category"></span>
+              </template>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <!-- Right: detail (pick a task or show all when none selected) -->
+      <div class="dt-report-detail">
+
+        <!-- No task selected hint -->
+        <template x-if="!reportSelected">
+          <div class="dt-report-detail-empty">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" opacity=".3"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            <span>← 選擇工作事項以查看回報內容</span>
+          </div>
+        </template>
+
+        <!-- Selected task detail -->
+        <template x-if="reportSelected && reportSelectedTask()">
+          <div class="dt-report-card" style="margin-bottom:0">
+            <!-- Card header -->
+            <div class="dt-report-card-head">
+              <div class="dt-priority-dot" :style="`background:${pc(reportSelectedTask().priority).color}`"></div>
+              <span class="dt-report-card-title" x-text="reportSelectedTask().title"></span>
+              <template x-if="reportSelectedTask().recurrence_type === 'weekly'">
+                <span class="dt-report-card-recur" x-text="reportSelectedTask().recurrence_label || '每週'"></span>
+              </template>
+              <span class="dt-report-card-prog"
+                    :style="completionCountRaw(reportSelectedTask()).done === completionCountRaw(reportSelectedTask()).total && completionCountRaw(reportSelectedTask()).total > 0
+                      ? 'background:#DCFCE7;color:#15803D'
+                      : completionCountRaw(reportSelectedTask()).done > 0
+                        ? 'background:#FEF3C7;color:#92400E'
+                        : 'background:#FEF2F2;color:#DC2626'"
+                    x-text="completionCountRaw(reportSelectedTask()).done + '/' + completionCountRaw(reportSelectedTask()).total + ' 已完成'"></span>
+              <!-- superadmin 刪除按鈕 -->
+              <template x-if="session?.role === 'superadmin' && !calConfirmDelete">
+                <button class="btn btn-sm" style="background:#FEF2F2;color:#DC2626;border:1px solid #FECACA;margin-left:auto"
+                        @click="calConfirmDelete=true">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>刪除
+                </button>
+              </template>
+              <template x-if="session?.role === 'superadmin' && calConfirmDelete">
+                <div style="display:flex;gap:4px;align-items:center;margin-left:auto">
+                  <span style="font-size:10px;color:#DC2626">確定刪除？</span>
+                  <button class="btn btn-sm" style="background:#DC2626;color:#fff;border-color:#DC2626" @click="deleteCalTask()">刪除</button>
+                  <button class="btn btn-sm btn-ghost" @click="calConfirmDelete=false">取消</button>
+                </div>
+              </template>
+            </div>
+
+            <!-- Description -->
+            <template x-if="reportSelectedTask().description">
+              <div class="dt-desc-box" style="margin:8px 0 10px" x-text="reportSelectedTask().description"></div>
+            </template>
+
+            <!-- Per-person rows -->
+            <div class="dt-report-persons">
+              <template x-for="a in (reportSelectedTask().assignees || [])" :key="a.username">
+                <div class="dt-report-person"
+                     :class="(reportGetComp(reportSelectedTask(), a.username)?.completed ? 'done' : 'pending') + (a.username === session?.username ? ' mine' : '')">
+                  <!-- Person header -->
+                  <div class="dt-report-person-hd">
+                    <div class="dt-report-av"
+                         :style="`background:${reportGetComp(reportSelectedTask(), a.username)?.completed ? '#15803D' : '#9CA3AF'}`"
+                         x-text="(a.displayName||a.username).slice(0,1)"></div>
+                    <span class="dt-report-name" x-text="a.displayName || a.username"></span>
+                    <template x-if="reportGetComp(reportSelectedTask(), a.username)?.completed">
+                      <span class="ag-status-done" style="margin-left:auto">
+                        <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+                        已完成
+                      </span>
+                      <template x-if="reportGetComp(reportSelectedTask(), a.username)?.editCount > 0">
+                        <span style="font-size:8px;font-weight:700;padding:1px 5px;border-radius:3px;background:#FEF3C7;color:#92400E;border:1px solid #FDE68A;white-space:nowrap"
+                              :title="'已修改 ' + reportGetComp(reportSelectedTask(), a.username)?.editCount + ' 次'">已修改</span>
+                      </template>
+                      <span class="dt-report-time" x-text="fmtDT(reportGetComp(reportSelectedTask(), a.username)?.completedAt)"></span>
+                    </template>
+                    <template x-if="!reportGetComp(reportSelectedTask(), a.username)?.completed">
+                      <span class="ag-status-wait" style="margin-left:auto">
+                        <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                        尚未回報
+                      </span>
+                    </template>
+                  </div>
+                  <!-- Report text — always shown, indented under name -->
+                  <div class="dt-report-body">
+                    <div class="dt-report-text"
+                         :class="!reportGetComp(reportSelectedTask(), a.username)?.completed ? 'pending-text' : ''"
+                         x-text="reportGetComp(reportSelectedTask(), a.username)?.report
+                           || (reportGetComp(reportSelectedTask(), a.username)?.completed ? '（未填寫回報內容）' : '尚未提交回報')">
+                    </div>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </div>
+        </template>
+
+      </div><!-- .dt-report-detail -->
+    </div><!-- .dt-report-split -->
+
+  </div>
+
+  <!-- ══ 日曆視圖 ══ -->
+  <div class="dt-cal-body" x-show="calMode && !reportMode" x-cloak>
+
+    <!-- Left: two-month calendar -->
+    <div class="dt-cal-left">
+      <div x-show="calLoading" style="text-align:center;padding:24px;font-size:12px;color:var(--text-dim)">載入中…</div>
+      <template x-if="!calLoading">
+        <div style="display:flex;flex-direction:column;gap:12px">
+
+          <!-- Legend -->
+          <div class="dt-cal-legend">
+            <span class="dt-cal-legend-item"><span class="dt-cal-legend-dot" style="background:#15803D"></span>全部完成</span>
+            <span class="dt-cal-legend-item"><span class="dt-cal-legend-dot" style="background:#D97706"></span>部分完成</span>
+            <span class="dt-cal-legend-item"><span class="dt-cal-legend-dot" style="background:#DC2626"></span>未完成</span>
+          </div>
+
+          <!-- Previous month -->
+          <div class="dt-cal-card">
+            <div class="dt-cal-card-hd">
+              <span class="dt-cal-card-title" x-text="calPrevMonthYear().year + ' 年 ' + calPrevMonthYear().month + ' 月'"></span>
+            </div>
+            <div class="dt-cal-wdays">
+              <span class="dt-cal-wday">一</span><span class="dt-cal-wday">二</span><span class="dt-cal-wday">三</span>
+              <span class="dt-cal-wday">四</span><span class="dt-cal-wday">五</span>
+              <span class="dt-cal-wday sat">六</span><span class="dt-cal-wday sun">日</span>
+            </div>
+            <div class="dt-cal-grid">
+              <template x-for="cell in calMonthDays(calPrevMonthYear().year, calPrevMonthYear().month)" :key="'p'+cell.date">
+                <div class="dt-cal-cell"
+                     :class="[
+                       !cell.inMonth ? 'out' : '',
+                       cell.isToday  ? 'today-cell' : '',
+                       cell.date === calSelDate ? 'sel'
+                         : !cell.inMonth ? ''
+                         : calDayStatus(cell.date) === 'done'    ? 'st-done'
+                         : calDayStatus(cell.date) === 'partial' ? 'st-partial'
+                         : calDayStatus(cell.date) === 'none'    ? 'st-none' : ''
+                     ]"
+                     @click="if(cell.inMonth) selectCalDay(cell.date)">
+                  <span class="dt-cal-day-num" x-text="cell.day"></span>
+                  <template x-if="cell.inMonth && calData[cell.date] && calData[cell.date].total > 0">
+                    <div class="dt-cal-dot-row">
+                      <span class="dt-cal-dot"
+                            :class="calDayStatus(cell.date)==='done'?'g':calDayStatus(cell.date)==='partial'?'y':'r'"></span>
+                      <span class="dt-cal-prog"
+                            :class="calDayStatus(cell.date)==='done'?'g':calDayStatus(cell.date)==='partial'?'y':'r'"
+                            x-text="calData[cell.date].done+'/'+calData[cell.date].total"></span>
+                    </div>
+                  </template>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <!-- Current month -->
+          <div class="dt-cal-card">
+            <div class="dt-cal-card-hd">
+              <span class="dt-cal-card-title" x-text="viewYear + ' 年 ' + viewMonth + ' 月'"></span>
+            </div>
+            <div class="dt-cal-wdays">
+              <span class="dt-cal-wday">一</span><span class="dt-cal-wday">二</span><span class="dt-cal-wday">三</span>
+              <span class="dt-cal-wday">四</span><span class="dt-cal-wday">五</span>
+              <span class="dt-cal-wday sat">六</span><span class="dt-cal-wday sun">日</span>
+            </div>
+            <div class="dt-cal-grid">
+              <template x-for="cell in calMonthDays(viewYear, viewMonth)" :key="'c'+cell.date">
+                <div class="dt-cal-cell"
+                     :class="[
+                       !cell.inMonth ? 'out' : '',
+                       cell.isToday  ? 'today-cell' : '',
+                       cell.date === calSelDate ? 'sel'
+                         : !cell.inMonth ? ''
+                         : calDayStatus(cell.date) === 'done'    ? 'st-done'
+                         : calDayStatus(cell.date) === 'partial' ? 'st-partial'
+                         : calDayStatus(cell.date) === 'none'    ? 'st-none' : ''
+                     ]"
+                     @click="if(cell.inMonth) selectCalDay(cell.date)">
+                  <span class="dt-cal-day-num" x-text="cell.day"></span>
+                  <template x-if="cell.inMonth && calData[cell.date] && calData[cell.date].total > 0">
+                    <div class="dt-cal-dot-row">
+                      <span class="dt-cal-dot"
+                            :class="calDayStatus(cell.date)==='done'?'g':calDayStatus(cell.date)==='partial'?'y':'r'"></span>
+                      <span class="dt-cal-prog"
+                            :class="calDayStatus(cell.date)==='done'?'g':calDayStatus(cell.date)==='partial'?'y':'r'"
+                            x-text="calData[cell.date].done+'/'+calData[cell.date].total"></span>
+                    </div>
+                  </template>
+                </div>
+              </template>
+            </div>
+          </div>
+
+        </div>
+      </template>
+    </div>
+
+    <!-- Right: selected day detail -->
+    <div class="dt-cal-right">
+
+      <!-- Dashboard (no date selected) -->
+      <template x-if="!calSelDate">
+        <div class="dt-cal-dash">
+
+          <!-- Loading -->
+          <div x-show="calDashLoading || calLoading" style="padding:24px;text-align:center;color:var(--text-dim);font-size:12px">載入中…</div>
+
+          <template x-if="!calDashLoading && !calLoading">
+            <div style="display:flex;flex-direction:column;gap:14px">
+
+              <!-- ① 今日未完成事項 -->
+              <div class="dt-cal-dash-sec">
+                <div class="dt-cal-dash-sec-hd">
+                  <span class="dt-cal-dash-title">今日未完成事項</span>
+                  <span style="font-size:10px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif"
+                        x-text="calDashTodayStr().slice(5).replace('-','/') + '　' + weekdayLabel(calDashTodayStr())"></span>
+                  <template x-if="calDashPendingTasks().length > 0">
+                    <span class="dt-cal-dash-cnt" style="background:#FEF3C7;color:#92400E"
+                          x-text="calDashPendingTasks().length + ' 項未完成'"></span>
+                  </template>
+                  <template x-if="calDashPendingTasks().length === 0 && calDashData.length > 0">
+                    <span class="dt-cal-dash-cnt" style="background:#DCFCE7;color:#15803D">全部完成 ✓</span>
+                  </template>
+                </div>
+
+                <!-- 今日無事項 -->
+                <template x-if="calDashData.length === 0">
+                  <div style="font-size:12px;color:var(--text-dim);padding:6px 2px">今日無工作事項</div>
+                </template>
+
+                <!-- 今日未完成任務列表 -->
+                <template x-for="task in calDashPendingTasks()" :key="task.id">
+                  <div class="dt-cal-dash-task" @click="selectCalDayTask(calDashTodayStr(), task.id)">
+                    <div style="display:flex;align-items:center;gap:5px;margin-bottom:5px">
+                      <div class="dt-cal-dash-task-title" style="margin-bottom:0" x-text="task.title"></div>
+                      <template x-if="!(task.assigned_to||[]).includes(session?.username) && (task.supervisors||[]).includes(session?.username)">
+                        <span style="font-size:8px;font-weight:700;padding:1px 5px;border-radius:3px;background:#EDE9FE;color:#5B21B6;border:1px solid #C4B5FD;font-family:LINE Seed TW_OTF, sans-serif;white-space:nowrap;flex-shrink:0">主管</span>
+                      </template>
+                    </div>
+                    <div class="dt-cal-dash-task-persons">
+                      <template x-for="a in (task.assignees || [])" :key="a.username">
+                        <span class="dt-cal-dash-person-chip"
+                              :class="(task.completions||[]).find(c=>c.username===a.username&&c.completed) ? 'done' : 'pending'"
+                              x-text="a.displayName || a.username"></span>
+                      </template>
+                    </div>
+                  </div>
+                </template>
+
+                <!-- 今日已全完成 hint -->
+                <template x-if="calDashData.length > 0 && calDashPendingTasks().length === 0">
+                  <div style="font-size:12px;color:#15803D;padding:6px 2px">🎉 今日所有事項皆已回報完成</div>
+                </template>
+              </div>
+
+              <!-- ② 本期未完成日（以週分組） -->
+              <template x-if="calPeriodPendingDates().length > 0">
+                <div class="dt-cal-dash-sec">
+                  <div class="dt-cal-dash-sec-hd">
+                    <span class="dt-cal-dash-title">本期未完成日</span>
+                    <span class="dt-cal-dash-cnt" style="background:#FEF3C7;color:#92400E"
+                          x-text="calPeriodPendingDates().length + ' 天'"></span>
+                  </div>
+                  <template x-for="week in calPeriodPendingByWeek()" :key="week.mondayStr">
+                    <div>
+                      <!-- Week band header -->
+                      <div style="display:flex;align-items:center;gap:5px;padding:5px 2px 3px;margin-top:4px">
+                        <span style="font-size:9px;font-weight:700;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;background:#EDECE8;border-radius:3px;padding:1px 5px">週</span>
+                        <span style="font-size:10px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif"
+                              x-text="week.weekRange"></span>
+                        <span style="margin-left:auto;font-size:9px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif"
+                              x-text="week.dates.length + ' 天未完成'"></span>
+                      </div>
+                      <!-- Dates in this week -->
+                      <template x-for="d in week.dates" :key="d.date">
+                        <div class="dt-cal-dash-date" @click="selectCalDay(d.date)">
+                          <span class="dt-cal-dash-date-str" x-text="d.date.slice(5).replace('-','/')"></span>
+                          <span class="dt-cal-dash-date-wd"
+                                :style="`background:${weekdayColor(d.date)}`"
+                                x-text="weekdayLabel(d.date).slice(1)"></span>
+                          <span style="flex:1"></span>
+                          <span class="dt-cal-dash-date-prog"
+                                :style="d.done > 0 ? 'background:#FEF3C7;color:#92400E' : 'background:#FEF2F2;color:#DC2626'"
+                                x-text="d.done + '/' + d.total + ' 完成'"></span>
+                        </div>
+                      </template>
+                    </div>
+                  </template>
+                </div>
+              </template>
+
+              <!-- ③ 本期已完成日 -->
+              <template x-if="calPeriodDoneDates().length > 0">
+                <div class="dt-cal-dash-sec">
+                  <div class="dt-cal-dash-sec-hd">
+                    <span class="dt-cal-dash-title">本期已完成日</span>
+                    <span class="dt-cal-dash-cnt" style="background:#DCFCE7;color:#15803D"
+                          x-text="calPeriodDoneDates().length + ' 天'"></span>
+                  </div>
+                  <div class="dt-cal-dash-done-grid">
+                    <template x-for="d in calPeriodDoneDates()" :key="d.date">
+                      <span class="dt-cal-dash-done-chip" @click="selectCalDay(d.date)"
+                            x-text="d.date.slice(5).replace('-','/')"></span>
+                    </template>
+                  </div>
+                </div>
+              </template>
+
+              <!-- 本期無任何記錄 -->
+              <template x-if="calPeriodPendingDates().length === 0 && calPeriodDoneDates().length === 0 && calDashData.length === 0">
+                <div style="text-align:center;padding:32px 0;color:var(--text-dim);font-size:13px">本期無工作事項記錄</div>
+              </template>
+
+            </div>
+          </template>
+        </div>
+      </template>
+
+      <template x-if="calSelDate">
+        <div style="display:flex;flex-direction:column;height:100%;overflow:hidden">
+
+          <!-- Day header -->
+          <div class="dt-cal-right-hd">
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+              <span class="dt-cal-right-title" x-text="calSelDate + '　' + weekdayLabel(calSelDate)"></span>
+              <template x-if="!reportLoading && reportData.length > 0">
+                <span class="dt-report-stat gray" x-text="reportData.length + ' 項'"></span>
+                <span class="dt-report-stat"
+                      :class="reportAllDone() ? 'green' : reportDonePersons() > 0 ? 'yellow' : 'gray'"
+                      x-text="reportDonePersons() + '/' + reportTotalPersons() + ' 人完成'"></span>
+              </template>
+            </div>
+            <!-- Person chips -->
+            <div class="dt-report-person-row" x-show="!reportLoading && reportPersons().length > 0">
+              <button class="dt-rp-chip" :class="{on:!reportFilterPerson}" @click="reportFilterPerson=''">全部</button>
+              <template x-for="p in reportPersons()" :key="p.username">
+                <button class="dt-rp-chip" :class="{on:reportFilterPerson===p.username}"
+                        @click="reportFilterPerson=(reportFilterPerson===p.username?'':p.username)">
+                  <span class="dt-rp-chip-dot"
+                        :style="`background:${p.done===p.total?'#15803D':p.done>0?'#D97706':'#DC2626'}`"></span>
+                  <span x-text="p.displayName"></span>
+                  <span style="font-size:9px;opacity:.75" x-text="'('+p.done+'/'+p.total+')'"></span>
+                </button>
+              </template>
+            </div>
+            <!-- Search -->
+            <div class="dt-report-search-row">
+              <input type="search" class="dt-report-search" x-model="reportSearch"
+                     placeholder="搜尋工作事項名稱或回報內容…">
+            </div>
+          </div>
+
+          <!-- Loading -->
+          <div x-show="reportLoading" style="padding:24px;text-align:center;color:var(--text-dim);font-size:12px">載入中…</div>
+
+          <!-- Empty -->
+          <template x-if="!reportLoading && reportData.length === 0">
+            <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--text-dim)">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" style="opacity:.3;margin-bottom:10px"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+              <div style="font-size:13px">當日無工作事項</div>
+            </div>
+          </template>
+
+          <!-- Task split panel -->
+          <div class="dt-report-split" x-show="!reportLoading && filteredReportData().length > 0">
+
+            <!-- Task list (left) — grouped by type -->
+            <div class="dt-report-list">
+              <template x-for="group in calGroupedReport()" :key="group.type">
+                <div>
+                  <!-- Section header -->
+                  <div style="display:flex;align-items:center;gap:5px;padding:6px 8px 4px;margin-top:2px">
+                    <span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;font-family:LINE Seed TW_OTF, sans-serif"
+                          :style="`color:${group.color}`" x-text="group.label"></span>
+                    <span style="font-size:9px;font-weight:700;padding:1px 6px;border-radius:8px;font-family:LINE Seed TW_OTF, sans-serif"
+                          :style="`background:${group.bg};color:${group.color}`"
+                          x-text="group.items.length + ' 項'"></span>
+                  </div>
+                  <!-- Items -->
+                  <template x-for="task in group.items" :key="task.id+'_'+(task.occurrence_date||task.task_date)">
+                    <div class="dt-report-list-item"
+                         :class="{active:reportSelected===task.id}"
+                         :style="reportSelected===task.id ? '' : `border-left:3px solid ${group.color}20`"
+                         @click="reportSelected=task.id; calEditReport=''; calConfirmDelete=false; calEditTaskId=(task.assignees||[]).some(a=>a.username===session?.username)&&!reportGetComp(task,session?.username)?.completed?task.id:null">
+                      <div class="dt-report-list-title" x-text="task.title"></div>
+                      <div class="dt-report-list-sub">
+                        <template x-if="group.type==='weekly'">
+                          <span class="dt-report-card-recur" x-text="task.recurrence_label||'每週'"></span>
+                        </template>
+                        <template x-if="group.type==='range'">
+                          <span class="dt-range-badge"
+                                x-text="'~ ' + (task.recurrence_end_date||'').slice(5).replace('-','/')"></span>
+                        </template>
+                        <span class="dt-report-list-prog"
+                              :style="completionCountRaw(task).done===completionCountRaw(task).total&&completionCountRaw(task).total>0
+                                ?'background:#DCFCE7;color:#15803D'
+                                :completionCountRaw(task).done>0
+                                  ?'background:#FEF3C7;color:#92400E'
+                                  :'background:#FEF2F2;color:#DC2626'"
+                              x-text="completionCountRaw(task).done+'/'+completionCountRaw(task).total"></span>
+                        <template x-if="task.category">
+                          <span style="font-size:10px;color:var(--text-dim)" x-text="task.category"></span>
+                        </template>
+                      </div>
+                    </div>
+                  </template>
+                </div>
+              </template>
+            </div>
+
+            <!-- Task detail (right) -->
+            <div class="dt-report-detail">
+              <template x-if="!reportSelected">
+                <div class="dt-report-detail-empty">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" opacity=".3"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                  <span>← 選擇工作事項以查看回報內容</span>
+                </div>
+              </template>
+              <template x-if="reportSelected && reportSelectedTask()">
+                <div class="dt-report-card" style="margin-bottom:0">
+                  <div class="dt-report-card-head">
+                    <div class="dt-priority-dot" :style="`background:${pc(reportSelectedTask().priority).color}`"></div>
+                    <span class="dt-report-card-title" x-text="reportSelectedTask().title"></span>
+                    <template x-if="reportSelectedTask().recurrence_type==='weekly'">
+                      <span class="dt-report-card-recur" x-text="reportSelectedTask().recurrence_label||'每週'"></span>
+                    </template>
+                    <template x-if="reportSelectedTask().recurrence_type==='range'">
+                      <span class="dt-range-badge"
+                            x-text="'區間任務 ~ ' + (reportSelectedTask().recurrence_end_date||'').slice(5).replace('-','/')"></span>
+                    </template>
+                    <span class="dt-report-card-prog"
+                          :style="completionCountRaw(reportSelectedTask()).done===completionCountRaw(reportSelectedTask()).total&&completionCountRaw(reportSelectedTask()).total>0
+                            ?'background:#DCFCE7;color:#15803D'
+                            :completionCountRaw(reportSelectedTask()).done>0
+                              ?'background:#FEF3C7;color:#92400E'
+                              :'background:#FEF2F2;color:#DC2626'"
+                          x-text="completionCountRaw(reportSelectedTask()).done+'/'+completionCountRaw(reportSelectedTask()).total+' 已完成'"></span>
+                    <!-- superadmin 刪除按鈕（日曆視圖） -->
+                    <template x-if="session?.role === 'superadmin' && !calConfirmDelete">
+                      <button class="btn btn-sm" style="background:#FEF2F2;color:#DC2626;border:1px solid #FECACA;margin-left:auto"
+                              @click="calConfirmDelete=true">
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>刪除
+                      </button>
+                    </template>
+                    <template x-if="session?.role === 'superadmin' && calConfirmDelete">
+                      <div style="display:flex;gap:4px;align-items:center;margin-left:auto">
+                        <span style="font-size:10px;color:#DC2626">確定刪除？</span>
+                        <button class="btn btn-sm" style="background:#DC2626;color:#fff;border-color:#DC2626" @click="deleteCalTask()">刪除</button>
+                        <button class="btn btn-sm btn-ghost" @click="calConfirmDelete=false">取消</button>
+                      </div>
+                    </template>
+                  </div>
+                  <!-- Description -->
+                  <template x-if="reportSelectedTask().description">
+                    <div class="dt-desc-box" style="margin:8px 0 10px" x-text="reportSelectedTask().description"></div>
+                  </template>
+                  <div class="dt-report-persons">
+                    <template x-for="a in (reportSelectedTask().assignees||[])" :key="a.username">
+                      <div class="dt-report-person"
+                           :class="(reportGetComp(reportSelectedTask(),a.username)?.completed?'done':'pending')+(a.username===session?.username?' mine':'')">
+                        <div class="dt-report-person-hd">
+                          <div class="dt-report-av"
+                               :style="`background:${reportGetComp(reportSelectedTask(),a.username)?.completed?'#15803D':'#9CA3AF'}`"
+                               x-text="(a.displayName||a.username).slice(0,1)"></div>
+                          <span class="dt-report-name" x-text="a.displayName||a.username"></span>
+                          <template x-if="reportGetComp(reportSelectedTask(),a.username)?.completed">
+                            <span class="ag-status-done" style="margin-left:auto">
+                              <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>已完成
+                            </span>
+                            <template x-if="reportGetComp(reportSelectedTask(),a.username)?.editCount > 0">
+                              <span style="font-size:8px;font-weight:700;padding:1px 5px;border-radius:3px;background:#FEF3C7;color:#92400E;border:1px solid #FDE68A;white-space:nowrap"
+                                    :title="'已修改 ' + reportGetComp(reportSelectedTask(),a.username)?.editCount + ' 次'">已修改</span>
+                            </template>
+                            <span class="dt-report-time" x-text="fmtDT(reportGetComp(reportSelectedTask(),a.username)?.completedAt)"></span>
+                          </template>
+                          <template x-if="!reportGetComp(reportSelectedTask(),a.username)?.completed">
+                            <span class="ag-status-wait" style="margin-left:auto">
+                              <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>尚未回報
+                            </span>
+                          </template>
+                        </div>
+                        <div class="dt-report-body">
+                          <!-- Text view: hidden for own row while editing -->
+                          <div x-show="!(a.username===session?.username && calEditTaskId===reportSelected)">
+                            <div class="dt-report-text"
+                                 :class="!reportGetComp(reportSelectedTask(),a.username)?.completed?'pending-text':''"
+                                 x-text="reportGetComp(reportSelectedTask(),a.username)?.report
+                                   ||(reportGetComp(reportSelectedTask(),a.username)?.completed?'（未填寫回報內容）':'尚未提交回報')">
+                            </div>
+                            <!-- Edit button: own row, already submitted -->
+                            <button x-show="a.username===session?.username && reportGetComp(reportSelectedTask(),a.username)?.completed"
+                                    class="btn btn-sm btn-ghost" style="margin-top:5px;font-size:10px"
+                                    @click="calEditTaskId=reportSelected; calEditReport=reportGetComp(reportSelectedTask(),a.username)?.report||''">
+                              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                              修改回報
+                            </button>
+                            <!-- Submit button: own row, not yet submitted -->
+                            <button x-show="a.username===session?.username && !reportGetComp(reportSelectedTask(),a.username)?.completed"
+                                    class="btn btn-sm btn-ghost" style="margin-top:5px;font-size:10px;color:#15803D;border-color:#BBF7D0;background:#F0FDF4"
+                                    @click="calEditTaskId=reportSelected; calEditReport=''">
+                              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                              提交回報
+                            </button>
+                          </div>
+                          <!-- Inline edit/submit form: own row while editing -->
+                          <div x-show="a.username===session?.username && calEditTaskId===reportSelected" style="margin-top:4px">
+                            <!-- Show original text with strikethrough when editing existing report -->
+                            <div x-show="reportGetComp(reportSelectedTask(),a.username)?.report" style="margin-bottom:6px">
+                              <div style="font-size:10px;color:var(--text-dim);margin-bottom:3px;font-weight:600">修改前：</div>
+                              <div style="font-size:11px;color:#9CA3AF;padding:6px 8px;background:#F5F4F0;border-radius:5px;border:1px solid var(--border-light);line-height:1.5;white-space:pre-wrap;text-decoration:line-through"
+                                   x-text="reportGetComp(reportSelectedTask(),a.username)?.report||''"></div>
+                            </div>
+                            <textarea class="dt-report-input" x-model="calEditReport" rows="3"
+                                      placeholder="請填寫工作完成情形、實際執行內容、遭遇問題或備注…"
+                                      style="font-size:11px"></textarea>
+                            <div style="display:flex;gap:6px;margin-top:6px">
+                              <button class="btn btn-sm"
+                                      style="background:#15803D;color:#fff;border-color:#15803D;font-size:10px"
+                                      @click="calSubmitReport(reportSelected, calSelDate||reportDate, calEditReport)"
+                                      :disabled="calEditSubmitting || !calEditReport.trim()">
+                                <span x-text="calEditSubmitting ? '送出中…' : '確認'"></span>
+                              </button>
+                              <button class="btn btn-sm btn-ghost" style="font-size:10px"
+                                      @click="calEditTaskId=null; calEditReport=''">取消</button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </template>
+                  </div>
+                </div>
+              </template>
+            </div>
+
+          </div><!-- .dt-report-split -->
+        </div>
+      </template>
+    </div><!-- .dt-cal-right -->
+
+  </div><!-- .dt-cal-body -->
+
+  <!-- ── Body ── -->
+  <div class="dt-body" x-show="!reportMode && !calMode">
+
+    <!-- ── Left panel ── -->
+    <div class="dt-left">
+      <div class="dt-left-controls">
+        <div class="dt-search-wrap">
+          <svg class="dt-search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" class="dt-search" x-model="searchQ" placeholder="搜尋工作事項…">
+        </div>
+        <template x-if="session?.role === 'superadmin' && dtUnlocked && users.length > 0">
+          <select x-model="filterUser" @change="loadTasks()" class="dt-filter-select">
+            <option value="">全部人員</option>
+            <template x-for="u in users" :key="u.username">
+              <option :value="u.username" x-text="u.display_name || u.username"></option>
+            </template>
+          </select>
+        </template>
+      </div>
+
+      <!-- Stat strip -->
+      <div class="dt-stat-strip" x-show="!loading">
+        <div class="dt-stat-cell">
+          <span class="dt-stat-cell__val" x-text="leftStats().todayTotal"></span>
+          <span class="dt-stat-cell__lbl">今日任務</span>
+        </div>
+        <div class="dt-stat-cell" :class="leftStats().todayPending > 0 ? 'warn' : 'good'">
+          <span class="dt-stat-cell__val" x-text="leftStats().todayPending"></span>
+          <span class="dt-stat-cell__lbl">今日待辦</span>
+        </div>
+        <div class="dt-stat-cell" :class="leftStats().rate >= 80 ? 'good' : leftStats().rate >= 50 ? '' : 'warn'">
+          <span class="dt-stat-cell__val" x-text="leftStats().rate + '%'"></span>
+          <span class="dt-stat-cell__lbl">本月完成率</span>
+        </div>
+      </div>
+
+      <div class="dt-left-list">
+        <div x-show="loading" style="padding:24px;text-align:center;color:var(--text-dim);font-size:12px">載入中…</div>
+
+        <template x-if="!loading">
+          <div>
+
+            <!-- ══ 常駐任務（週排程）section ══ -->
+            <template x-if="filteredWeeklyTasks().length > 0">
+              <div>
+                <div class="dt-section-head" @click="weeklyOpen = !weeklyOpen">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:#7C3AED;flex-shrink:0"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                  <span class="dt-section-head-label" style="color:#7C3AED">常駐任務</span>
+                  <span class="dt-section-count" x-text="filteredWeeklyTasks().length + ' 項'"></span>
+                  <span class="dt-section-chevron" :class="{open: weeklyOpen}">&#9654;</span>
+                </div>
+
+                <div x-show="weeklyOpen">
+                  <template x-for="t in filteredWeeklyTasks()" :key="t.id">
+                    <div class="dt-card recurring-card"
+                         :class="{active: selected?.id === t.id}"
+                         :style="isNewTask(t) ? 'border-left:3px solid #D97706' : ''"
+                         @click="selectWeeklyTask(t)">
+                      <div class="dt-card-row1">
+                        <div class="dt-priority-dot" :style="`background:${pc(t.priority).color}`"></div>
+                        <div class="dt-card-title" x-text="t.title"></div>
+                        <template x-if="isNewTask(t)">
+                          <span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;background:#FEF3C7;color:#92400E;border:1px solid #FDE68A;flex-shrink:0">有更新</span>
+                        </template>
+                      </div>
+                      <div class="dt-card-foot">
+                        <span class="dt-recur-badge" x-text="t.recurrence_label || '每週'"></span>
+                        <template x-if="t.category">
+                          <span class="dt-cat-tag" x-text="t.category"></span>
+                        </template>
+                        <template x-if="!(t.assigned_to||[]).includes(session?.username) && (t.supervisors||[]).includes(session?.username)">
+                          <span style="font-size:9px;font-weight:700;padding:1px 6px;border-radius:3px;background:#EDE9FE;color:#5B21B6;border:1px solid #C4B5FD;font-family:LINE Seed TW_OTF, sans-serif">主管</span>
+                        </template>
+                        <template x-if="weeklyTodayOcc(t.id)">
+                          <span class="dt-prog"
+                                :class="{'all-done': completionCountRaw(weeklyTodayOcc(t.id)).done === completionCountRaw(weeklyTodayOcc(t.id)).total && completionCountRaw(weeklyTodayOcc(t.id)).total > 0}">
+                            今日 <span x-text="completionCountRaw(weeklyTodayOcc(t.id)).done"></span>/<span x-text="completionCountRaw(weeklyTodayOcc(t.id)).total"></span>
+                          </span>
+                        </template>
+                        <template x-if="monthRate(t.id)">
+                          <span class="dt-rate-badge"
+                                :style="monthRate(t.id).done === monthRate(t.id).total ? 'background:#DCFCE7;color:#15803D' : 'background:#F3F4F6;color:#6B7280'"
+                                x-text="'本月 ' + monthRate(t.id).done + '/' + monthRate(t.id).total"></span>
+                        </template>
+                      </div>
+                      <template x-if="(t.assignees || []).length > 0">
+                        <div class="dt-assignees-row">
+                          <template x-for="a in (t.assignees || []).slice(0,4)" :key="a.username">
+                            <span class="dt-assignee-chip">
+                              <span class="dt-assignee-av" :style="`background:${avatarColor(a.username)}`" x-text="(a.displayName||a.username).slice(0,1)"></span>
+                              <span x-text="a.displayName || a.username"></span>
+                            </span>
+                          </template>
+                          <template x-if="(t.assignees||[]).length > 4">
+                            <span class="dt-assignee-chip">+<span x-text="(t.assignees||[]).length - 4"></span></span>
+                          </template>
+                        </div>
+                      </template>
+                    </div>
+                  </template>
+                </div>
+              </div>
+            </template>
+
+            <!-- ══ 區間任務 section ══ -->
+            <template x-if="filteredRangeTasks().length > 0">
+              <div>
+                <div class="dt-section-head" @click="rangeOpen = !rangeOpen">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:#059669;flex-shrink:0"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+                  <span class="dt-section-head-label" style="color:#059669">區間任務</span>
+                  <span class="dt-section-count" x-text="filteredRangeTasks().length + ' 項'"></span>
+                  <span class="dt-section-chevron" :class="{open: rangeOpen}">&#9654;</span>
+                </div>
+                <div x-show="rangeOpen">
+                  <template x-for="t in filteredRangeTasks()" :key="t.id">
+                    <div class="dt-card range-card"
+                         :class="{active: selected?.id === t.id}"
+                         :style="isNewTask(t) ? 'border-left:3px solid #D97706' : ''"
+                         @click="selectTask(t)">
+                      <div class="dt-card-row1">
+                        <div class="dt-priority-dot" :style="`background:${pc(t.priority).color}`"></div>
+                        <template x-if="isNewTask(t)">
+                          <span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;background:#FEF3C7;color:#92400E;border:1px solid #FDE68A;flex-shrink:0;order:1">有更新</span>
+                        </template>
+                        <div class="dt-card-title" x-text="t.title"></div>
+                      </div>
+                      <div class="dt-card-foot">
+                        <span class="dt-range-badge"
+                          x-text="'區間任務 ~ ' + (t.recurrence_end_date ? t.recurrence_end_date.slice(5).replace('-','/') : '?')"></span>
+                        <template x-if="t.category">
+                          <span class="dt-cat-tag" x-text="t.category"></span>
+                        </template>
+                        <template x-if="t.case_no">
+                          <span class="dt-cat-tag" style="background:#EFF6FF;color:#2563EB" x-text="t.case_no"></span>
+                        </template>
+                        <template x-if="!(t.assigned_to||[]).includes(session?.username) && (t.supervisors||[]).includes(session?.username)">
+                          <span style="font-size:9px;font-weight:700;padding:1px 6px;border-radius:3px;background:#EDE9FE;color:#5B21B6;border:1px solid #C4B5FD;font-family:LINE Seed TW_OTF, sans-serif">主管</span>
+                        </template>
+                        <span class="dt-prog"
+                              :class="{'all-done': completionCountRaw(t).done === completionCountRaw(t).total && completionCountRaw(t).total > 0}"
+                              x-text="completionCountRaw(t).done + '/' + completionCountRaw(t).total + ' 完成'"></span>
+                      </div>
+                      <template x-if="(t.assignees || []).length > 0">
+                        <div class="dt-assignees-row">
+                          <template x-for="a in (t.assignees || []).slice(0,4)" :key="a.username">
+                            <span class="dt-assignee-chip">
+                              <span class="dt-assignee-av" :style="`background:${avatarColor(a.username)}`" x-text="(a.displayName||a.username).slice(0,1)"></span>
+                              <span x-text="a.displayName || a.username"></span>
+                            </span>
+                          </template>
+                          <template x-if="(t.assignees||[]).length > 4">
+                            <span class="dt-assignee-chip">+<span x-text="(t.assignees||[]).length - 4"></span></span>
+                          </template>
+                        </div>
+                      </template>
+                    </div>
+                  </template>
+                </div>
+              </div>
+            </template>
+
+            <!-- ══ 單次任務 section ══ -->
+            <template x-if="filteredOneTimeTasks().length > 0">
+              <div>
+                <div class="dt-section-head" @click="onceOpen = !onceOpen">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:#2563EB;flex-shrink:0"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                  <span class="dt-section-head-label">單次任務</span>
+                  <span class="dt-section-count" x-text="filteredOneTimeTasks().length + ' 項'"></span>
+                  <span class="dt-section-chevron" :class="{open: onceOpen}">&#9654;</span>
+                </div>
+                <div x-show="onceOpen">
+                  <template x-for="group in groupedOneTime()" :key="group.date">
+                    <div class="dt-date-divider">
+                      <div class="dt-date-header">
+                        <span x-text="group.date"></span>
+                        <span class="dt-date-header-wd"
+                              :style="`background:${weekdayColor(group.date)};color:#fff`"
+                              x-text="weekdayLabel(group.date)"></span>
+                      </div>
+                      <template x-for="t in group.items" :key="t.id + '_' + t.occurrence_date">
+                        <div class="dt-card"
+                             :class="{active: isSelected(t)}"
+                             :style="isNewTask(t) ? 'border-left:3px solid #D97706;background:#FFFBEB' : ''"
+                             @click="selectTask(t)">
+                          <div class="dt-card-row1">
+                            <div class="dt-priority-dot" :style="`background:${pc(t.priority).color}`"></div>
+                            <div class="dt-card-title" x-text="t.title"></div>
+                            <template x-if="isNewTask(t)">
+                              <span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;background:#FEF3C7;color:#92400E;border:1px solid #FDE68A;flex-shrink:0">有更新</span>
+                            </template>
+                          </div>
+                          <div class="dt-card-foot">
+                            <span class="dt-pbadge"
+                                  :style="`background:${pc(t.priority).bg};color:${pc(t.priority).color};border:1px solid ${pc(t.priority).border}`"
+                                  x-text="t.priority"></span>
+                            <template x-if="t.category">
+                              <span class="dt-cat-tag" x-text="t.category"></span>
+                            </template>
+                            <template x-if="t.case_no">
+                              <span class="dt-cat-tag" style="background:#EFF6FF;color:#2563EB;border-color:#BFDBFE" x-text="t.case_no"></span>
+                            </template>
+                            <template x-if="!(t.assigned_to||[]).includes(session?.username) && (t.supervisors||[]).includes(session?.username)">
+                              <span style="font-size:9px;font-weight:700;padding:1px 6px;border-radius:3px;background:#EDE9FE;color:#5B21B6;border:1px solid #C4B5FD;font-family:LINE Seed TW_OTF, sans-serif">主管</span>
+                            </template>
+                            <span class="dt-prog"
+                                  :class="{'all-done': completionCountRaw(t).done === completionCountRaw(t).total && completionCountRaw(t).total > 0}"
+                                  x-text="completionCountRaw(t).done + '/' + completionCountRaw(t).total + ' 完成'"></span>
+                          </div>
+                          <template x-if="(t.assignees || []).length > 0">
+                            <div class="dt-assignees-row">
+                              <template x-for="a in (t.assignees || []).slice(0,4)" :key="a.username">
+                                <span class="dt-assignee-chip">
+                                  <span class="dt-assignee-av" :style="`background:${avatarColor(a.username)}`" x-text="(a.displayName||a.username).slice(0,1)"></span>
+                                  <span x-text="a.displayName || a.username"></span>
+                                </span>
+                              </template>
+                              <template x-if="(t.assignees||[]).length > 4">
+                                <span class="dt-assignee-chip">+<span x-text="(t.assignees||[]).length - 4"></span></span>
+                              </template>
+                            </div>
+                          </template>
+                        </div>
+                      </template>
+                    </div>
+                  </template>
+                </div>
+              </div>
+            </template>
+
+            <!-- Empty state -->
+            <template x-if="filteredWeeklyTasks().length === 0 && filteredOneTimeTasks().length === 0 && !loading">
+              <div style="padding:32px 14px;text-align:center;color:var(--text-dim)">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" style="display:block;margin:0 auto 8px;opacity:.4"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+                <div style="font-size:12px">本月無工作事項</div>
+              </div>
+            </template>
+
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- ── Right panel ── -->
+    <div class="dt-right">
+
+      <!-- Placeholder -->
+      <div x-show="!selected" class="dt-placeholder">
+        <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" style="opacity:.25"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+        <div style="font-size:13px">選擇左側工作事項以查看詳情</div>
+      </div>
+
+      <!-- Task detail -->
+      <template x-if="selected">
+        <div>
+
+          <!-- Weekly occurrence selector strip -->
+          <template x-if="selected.recurrence_type === 'weekly' && weeklyOccurrences.length > 1">
+            <div class="dt-occ-strip">
+              <span class="dt-occ-label">選擇日期：</span>
+              <template x-for="occ in weeklyOccurrences" :key="occ.date">
+                <button class="dt-occ-chip"
+                        :class="{sel: selectedOccDate === occ.date, done: occ.done}"
+                        @click="switchOccurrence(occ.date)"
+                        x-text="occ.label"></button>
+              </template>
+            </div>
+          </template>
+
+          <!-- Tab bar -->
+          <div class="dt-tab-bar">
+            <button class="dt-tab-btn" :class="{active: activeTab==='detail'}" @click="setTab('detail')">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+              本次紀錄
+            </button>
+            <button class="dt-tab-btn" :class="{active: activeTab==='history'}" @click="setTab('history')">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              歷史紀錄
+              <template x-if="history.total > 0">
+                <span class="dt-tab-count" x-text="history.total + ' 筆'"></span>
+              </template>
+            </button>
+            <div class="dt-tab-spacer"></div>
+            <template x-if="activeTab === 'history'">
+              <button class="btn btn-ghost btn-sm" @click="exportHistory()" style="font-size:11px;margin:4px 0">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                匯出 CSV
+              </button>
+            </template>
+          </div>
+
+          <!-- Detail tab -->
+          <div x-show="activeTab === 'detail'">
+          <div class="dt-detail">
+            <!-- Header -->
+            <div class="dt-detail-top">
+              <h2 class="dt-detail-title" x-text="selected.title"></h2>
+              <template x-if="session?.role === 'superadmin'">
+                <div class="dt-actions">
+                  <button class="btn btn-ghost btn-sm" @click="openEdit()">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                    編輯
+                  </button>
+                  <template x-if="!confirmDelete">
+                    <button class="btn btn-sm" style="background:#FEF2F2;color:#DC2626;border:1px solid #FECACA"
+                            @click="confirmDelete=true">
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
+                      刪除
+                    </button>
+                  </template>
+                  <template x-if="confirmDelete">
+                    <div style="display:flex;gap:4px;align-items:center">
+                      <span style="font-size:11px;color:#DC2626">確定刪除？</span>
+                      <button class="btn btn-sm" style="background:#DC2626;color:#fff;border-color:#DC2626" @click="deleteTask()">刪除</button>
+                      <button class="btn btn-sm btn-ghost" @click="confirmDelete=false">取消</button>
+                    </div>
+                  </template>
+                </div>
+              </template>
+            </div>
+
+            <!-- Metadata -->
+            <div class="dt-meta-row">
+              <span class="dt-pbadge"
+                    :style="`background:${pc(selected.priority).bg};color:${pc(selected.priority).color};border:1px solid ${pc(selected.priority).border};font-size:11px;padding:2px 8px`"
+                    x-text="selected.priority"></span>
+              <template x-if="selected.category">
+                <span class="dt-meta-chip" x-text="selected.category"></span>
+              </template>
+              <template x-if="selected.recurrence_type === 'weekly'">
+                <span class="dt-recur-badge" style="font-size:10px;padding:2px 8px" x-text="'↻ ' + (selected.recurrence_label || '每週')"></span>
+              </template>
+              <template x-if="selected.recurrence_type === 'range'">
+                <span class="dt-recur-badge" style="font-size:10px;padding:2px 8px;background:#DCFCE7;color:#15803D;border-color:#86EFAC"
+                      x-text="'📅 ' + selected.task_date + ' ~ ' + (selected.recurrence_end_date || '')"></span>
+              </template>
+              <span class="dt-meta-chip">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                <span x-text="selectedOccDate || selected.occurrence_date || selected.task_date"></span>
+                <template x-if="selected.recurrence_type === 'weekly'">
+                  <span x-text="weekdayLabel(selectedOccDate || selected.occurrence_date)" style="color:var(--text-dim)"></span>
+                </template>
+              </span>
+              <span class="dt-meta-chip">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                <span x-text="selected.created_by || '—'"></span>
+                <span style="color:var(--text-dim)">建立</span>
+              </span>
+            </div>
+
+            <template x-if="selected.description">
+              <div class="dt-desc-box" x-text="selected.description"></div>
+            </template>
+
+            <hr class="dt-divider">
+
+            <!-- Supervisors -->
+            <template x-if="(selected.supervisors_info || []).length > 0">
+              <div style="margin-bottom:18px">
+                <div class="dt-sec-label">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#7C3AED" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                  <span style="color:#7C3AED">負責主管</span>
+                  <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-dim)">（完成 &amp; 逾期通知收件人）</span>
+                </div>
+                <div style="display:flex;flex-wrap:wrap;gap:7px">
+                  <template x-for="s in (selected.supervisors_info || [])" :key="s.username">
+                    <div style="display:inline-flex;align-items:center;gap:7px;padding:5px 10px 5px 5px;border:1px solid #C4B5FD;border-radius:20px;background:#F5F3FF">
+                      <div style="width:24px;height:24px;border-radius:50%;background:#7C3AED;color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0"
+                           x-text="(s.displayName||s.username).slice(0,1)"></div>
+                      <span style="font-size:11px;font-weight:600;color:#5B21B6" x-text="s.displayName || s.username"></span>
+                    </div>
+                  </template>
+                </div>
+              </div>
+            </template>
+            <template x-if="(selected.supervisors_info || []).length === 0">
+              <div style="margin-bottom:18px">
+                <div class="dt-sec-label" style="margin-bottom:4px">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#7C3AED" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                  <span style="color:#7C3AED">負責主管</span>
+                </div>
+                <span style="font-size:11px;color:var(--text-dim)">未指定（預設通知全體管理員）</span>
+              </div>
+            </template>
+
+            <!-- Assignees -->
+            <div class="dt-sec-label">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+              指派對象
+              <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-dim)">
+                （<span x-text="currentCompletions().done"></span>/<span x-text="currentCompletions().total"></span> 完成）
+              </span>
+            </div>
+
+            <template x-if="(selected.assignees || []).length === 0">
+              <p style="font-size:12px;color:var(--text-dim);margin-bottom:16px">未指派任何人員</p>
+            </template>
+
+            <div class="ag-grid">
+              <template x-for="a in (selected.assignees || [])" :key="a.username">
+                <div class="ag-card" :class="getCompletion(a.username)?.completed ? 'done' : 'pending'">
+                  <div class="ag-card-top">
+                    <div class="ag-avatar"
+                         :style="`background:${getCompletion(a.username)?.completed ? '#15803D' : '#9CA3AF'}`"
+                         x-text="(a.displayName||a.username).slice(0,1)"></div>
+                    <div style="flex:1;min-width:0">
+                      <div class="ag-name" x-text="a.displayName || a.username"></div>
+                      <div style="margin-top:3px">
+                        <template x-if="getCompletion(a.username)?.completed">
+                          <span class="ag-status-done">
+                            <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+                            已完成
+                          </span>
+                        </template>
+                        <template x-if="getCompletion(a.username)?.editCount > 0">
+                          <span style="font-size:8px;font-weight:700;padding:1px 5px;border-radius:3px;background:#FEF3C7;color:#92400E;border:1px solid #FDE68A;margin-left:3px;white-space:nowrap"
+                                :title="'已修改 ' + getCompletion(a.username)?.editCount + ' 次'">已修改</span>
+                        </template>
+                        <template x-if="!getCompletion(a.username)?.completed">
+                          <span class="ag-status-wait">
+                            <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                            待完成
+                          </span>
+                        </template>
+                      </div>
+                    </div>
+                  </div>
+                  <!-- Completion time — always show if done -->
+                  <template x-if="getCompletion(a.username)?.completed">
+                    <div class="ag-time" x-text="fmtDT(getCompletion(a.username)?.completedAt)"></div>
+                  </template>
+                  <!-- Report text — visible to the person, unlocked superadmin, or task supervisor -->
+                  <template x-if="a.username === session?.username || (session?.role === 'superadmin' && dtUnlocked) || (selected.supervisors || []).includes(session?.username)">
+                    <div class="ag-report"
+                         :class="!getCompletion(a.username)?.completed ? 'ag-report-pending' : ''"
+                         x-text="getCompletion(a.username)?.report
+                           || (getCompletion(a.username)?.completed ? '（未填寫回報內容）' : '尚未提交回報')">
+                    </div>
+                  </template>
+                </div>
+              </template>
+            </div>
+
+            <!-- My completion form -->
+            <template x-if="isAssignedToMe() && !myCompletion()?.completed">
+              <div class="dt-complete-form">
+                <div class="dt-complete-title">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                  回報完成工作
+                </div>
+                <textarea class="dt-report-input" x-model="myReport"
+                          placeholder="請填寫工作完成情形、實際執行內容、遭遇問題或備注…" rows="4"></textarea>
+                <div style="margin-top:8px;display:flex;align-items:center;gap:10px">
+                  <button class="btn btn-sm"
+                          style="background:#15803D;color:#fff;border-color:#15803D"
+                          @click="submitCompletion()"
+                          :disabled="submittingReport || !myReport.trim()">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                    <span x-text="submittingReport ? '送出中…' : '確認完成並通知主管'"></span>
+                  </button>
+                  <span style="font-size:11px;color:var(--text-dim)">* 回報後將自動通知主管</span>
+                </div>
+              </div>
+            </template>
+
+            <template x-if="isAssignedToMe() && myCompletion()?.completed">
+              <div>
+                <div class="dt-done-notice">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                  您已完成此工作事項的回報
+                  <span style="color:#15803D;font-weight:400;margin-left:4px" x-text="fmtDT(myCompletion()?.completedAt)"></span>
+                  <template x-if="myCompletion()?.editCount > 0">
+                    <span style="font-size:9px;font-weight:700;padding:1px 6px;border-radius:3px;background:#FEF3C7;color:#92400E;border:1px solid #FDE68A;margin-left:6px"
+                          :title="'已修改 ' + myCompletion()?.editCount + ' 次'">已修改</span>
+                  </template>
+                </div>
+                <!-- Old report — readable when not editing, strikethrough when editing -->
+                <div x-show="myCompletion()?.report && !editingMyReport"
+                     style="font-size:11px;color:var(--text-secondary);padding:7px 10px;margin-top:6px;background:#F5F4F0;border-radius:6px;border:1px solid var(--border-light);line-height:1.6;white-space:pre-wrap"
+                     x-text="myCompletion()?.report"></div>
+                <div x-show="myCompletion()?.report && editingMyReport" style="margin-top:8px">
+                  <div style="font-size:10px;color:var(--text-dim);margin-bottom:3px;font-weight:600">修改前：</div>
+                  <div style="font-size:11px;color:#9CA3AF;padding:7px 10px;background:#F5F4F0;border-radius:6px;border:1px solid var(--border-light);line-height:1.6;white-space:pre-wrap;text-decoration:line-through"
+                       x-text="myCompletion()?.report"></div>
+                </div>
+                <template x-if="!editingMyReport">
+                  <button class="btn btn-sm btn-ghost" style="margin-top:6px;font-size:10px"
+                          @click="editingMyReport=true; myReport=myCompletion()?.report||''">
+                    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                    修改回報
+                  </button>
+                </template>
+                <template x-if="editingMyReport">
+                  <div class="dt-complete-form" style="margin-top:8px">
+                    <div class="dt-complete-title">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                      修改回報內容
+                    </div>
+                    <textarea class="dt-report-input" x-model="myReport"
+                              placeholder="請填寫工作完成情形、實際執行內容、遭遇問題或備注…" rows="4"></textarea>
+                    <div style="margin-top:8px;display:flex;align-items:center;gap:10px">
+                      <button class="btn btn-sm"
+                              style="background:#15803D;color:#fff;border-color:#15803D"
+                              @click="submitCompletion()"
+                              :disabled="submittingReport || !myReport.trim()">
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                        <span x-text="submittingReport ? '送出中…' : '確認修改'"></span>
+                      </button>
+                      <button class="btn btn-sm btn-ghost" @click="editingMyReport=false; myReport=''">取消</button>
+                    </div>
+                  </div>
+                </template>
+              </div>
+            </template>
+
+            <!-- Supervisor notice — shown when current user is supervisor but not an assignee -->
+            <template x-if="!isAssignedToMe() && (selected.supervisors || []).includes(session?.username)">
+              <div style="display:flex;align-items:center;gap:8px;padding:10px 14px;border-radius:8px;background:#F5F3FF;border:1px solid #C4B5FD;margin-top:8px">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7C3AED" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                <span style="font-size:11px;font-weight:600;color:#5B21B6">您為此工作事項的負責主管，可查看所有人員的回報情況</span>
+              </div>
+            </template>
+
+            <!-- Edit log — visible to superadmin, supervisors, and assignees -->
+            <div style="margin-top:20px">
+              <hr class="dt-divider" style="margin-bottom:14px">
+              <div class="dt-sec-label" style="margin-bottom:10px">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                編輯紀錄
+              </div>
+              <div x-show="editLogLoading" style="font-size:11px;color:var(--text-dim);padding:4px 0">載入中…</div>
+              <div x-show="!editLogLoading && editLog.length===0"
+                   style="font-size:11px;color:var(--text-dim);font-style:italic;padding:4px 0">尚無編輯紀錄</div>
+              <template x-for="entry in editLog" :key="entry.id">
+                <div style="border:1px solid var(--border-light);border-radius:8px;padding:10px 13px;margin-bottom:8px;background:#FAFAF8">
+                  <div style="display:flex;align-items:center;gap:6px;margin-bottom:7px;flex-wrap:wrap">
+                    <div style="width:22px;height:22px;border-radius:50%;background:#7C3AED;color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0"
+                         x-text="(entry.changedByDisplay||entry.changedBy).slice(0,1)"></div>
+                    <span style="font-size:12px;font-weight:600;color:var(--text-primary)" x-text="entry.changedByDisplay || entry.changedBy"></span>
+                    <span style="font-size:10px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif" x-text="fmtDT(entry.changedAt)"></span>
+                  </div>
+                  <template x-if="entry.changes && entry.changes.length > 0">
+                    <ul style="margin:0;padding-left:16px;list-style:disc">
+                      <template x-for="c in entry.changes" :key="c.field">
+                        <li style="font-size:11px;color:var(--text-secondary);margin-bottom:3px;line-height:1.5">
+                          <span style="font-weight:600;color:var(--text-primary)" x-text="c.label"></span>：
+                          <span style="text-decoration:line-through;color:var(--text-dim)" x-text="c.old"></span>
+                          <span style="color:var(--text-dim);margin:0 3px">→</span>
+                          <span style="font-weight:600;color:#15803D" x-text="c.new"></span>
+                        </li>
+                      </template>
+                    </ul>
+                  </template>
+                  <template x-if="!entry.changes || entry.changes.length === 0">
+                    <div style="font-size:11px;color:var(--text-dim);font-style:italic">（無欄位變更）</div>
+                  </template>
+                </div>
+              </template>
+            </div>
+
+          </div><!-- .dt-detail -->
+          </div><!-- detail tab -->
+
+          <!-- History tab -->
+          <div x-show="activeTab === 'history'">
+
+            <!-- Period toolbar -->
+            <div class="dt-hp-toolbar">
+              <div class="dt-hp-mode">
+                <button class="dt-hp-mode-btn" :class="{on: histMode==='month'}" @click="setHistMode('month')">月</button>
+                <button class="dt-hp-mode-btn" :class="{on: histMode==='week'}"  @click="setHistMode('week')">週</button>
+              </div>
+              <div class="dt-hp-nav">
+                <button class="dt-hp-nav-btn" @click="prevHistPeriod()">&#8592;</button>
+                <div class="dt-hp-nav-label" x-text="histPeriodLabel()"></div>
+                <button class="dt-hp-nav-btn" @click="nextHistPeriod()">&#8594;</button>
+              </div>
+              <span class="dt-hp-stat" x-show="!history.loading"
+                    x-text="histFilteredItems().length + ' 筆 · ' + histDonePersons() + '/' + histTotalPersons() + ' 人次'"></span>
+              <span class="dt-hp-stat" x-show="history.loading">載入中…</span>
+              <button class="dt-hp-csv" x-show="history.total > 0" @click="exportHistory()">&#8595; CSV</button>
+            </div>
+
+            <!-- Loading -->
+            <div x-show="history.loading" style="padding:32px;text-align:center;color:var(--text-dim);font-size:12px">載入中…</div>
+
+            <!-- Month view -->
+            <template x-if="!history.loading && histMode === 'month'">
+              <div>
+                <template x-if="histFilteredItems().length === 0">
+                  <div style="padding:28px;text-align:center;color:var(--text-dim);font-size:12px"
+                       x-text="history.items.length === 0 ? '尚無歷史紀錄' : '本月無歷史紀錄'"></div>
+                </template>
+                <template x-if="histFilteredItems().length > 0">
+                  <div>
+                    <template x-for="band in histBands()" :key="band.weekKey">
+                      <div>
+                        <div class="dt-hb-head">
+                          <span class="dt-hb-label" x-text="band.label"></span>
+                          <span class="dt-hb-range" x-text="band.range"></span>
+                          <span class="dt-hb-cnt" x-text="band.items.length + ' 次'"></span>
+                        </div>
+                        <template x-for="occ in band.items" :key="occ.occurrence_date">
+                          <div class="dt-hocc">
+                            <div class="dt-hocc-hd" :class="occ.all_done ? 'all-done' : ''"
+                                 @click="historyExpanded[occ.occurrence_date] = !historyExpanded[occ.occurrence_date]">
+                              <span class="dt-hocc-date" x-text="occ.occurrence_date.slice(5).replace('-','/')"></span>
+                              <span class="dt-hocc-wd" :style="`background:${weekdayColor(occ.occurrence_date)}`" x-text="occ.weekday"></span>
+                              <div class="dt-hocc-chips">
+                                <template x-for="c in (occ.completions||[])" :key="c.username">
+                                  <span :class="c.completed ? 'dt-hocc-chip-d' : 'dt-hocc-chip-w'"
+                                        x-text="(c.displayName||c.username) + (c.completed ? ' ✓' : ' ✗')"></span>
+                                </template>
+                              </div>
+                              <span class="dt-hocc-prog" :class="occ.all_done ? 'g' : occ.done_count > 0 ? 'y' : 'r'"
+                                    x-text="occ.all_done ? '全部完成' : (occ.done_count + '/' + occ.total)"></span>
+                              <span class="dt-hocc-chev" :class="{open: historyExpanded[occ.occurrence_date]}">&#9660;</span>
+                            </div>
+                            <div x-show="historyExpanded[occ.occurrence_date]" class="dt-hocc-body">
+                              <template x-for="c in (occ.completions||[])" :key="c.username">
+                                <div class="dt-hocc-person">
+                                  <div class="dt-hocc-person-meta">
+                                    <div class="dt-hist-av" :style="`background:${c.completed ? '#15803D' : '#9CA3AF'}`"
+                                         x-text="(c.displayName||c.username).slice(0,1)"></div>
+                                    <span style="font-size:11px;font-weight:600;color:var(--text-primary)" x-text="c.displayName||c.username"></span>
+                                  </div>
+                                  <div style="flex:1;min-width:0">
+                                    <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
+                                      <span :class="c.completed ? 'ag-status-done' : 'ag-status-wait'" style="font-size:9px">
+                                        <span x-text="c.completed ? '已完成' : '未完成'"></span>
+                                      </span>
+                                      <span x-show="c.completedAt" style="font-size:9px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif" x-text="fmtDT(c.completedAt)"></span>
+                                    </div>
+                                    <div x-show="c.report" class="dt-hist-report" x-text="c.report"></div>
+                                    <div x-show="!c.report && c.completed" style="font-size:10px;color:var(--text-dim);font-style:italic">（未填寫回報）</div>
+                                    <div x-show="!c.completed" style="font-size:10px;color:var(--text-dim);font-style:italic">尚未提交回報</div>
+                                  </div>
+                                </div>
+                              </template>
+                            </div>
+                          </div>
+                        </template>
+                      </div>
+                    </template>
+                  </div>
+                </template>
+              </div>
+            </template>
+
+            <!-- Week view -->
+            <template x-if="!history.loading && histMode === 'week'">
+              <div>
+                <template x-for="day in histWeekDays()" :key="day.date">
+                  <div class="dt-hocc">
+                    <div class="dt-hocc-hd"
+                         :class="{'no-task': !day.occ, 'all-done': day.occ && day.occ.all_done}"
+                         @click="if(day.occ) historyExpanded[day.date] = !historyExpanded[day.date]">
+                      <span class="dt-hocc-date" x-text="day.date.slice(5).replace('-','/')"></span>
+                      <span class="dt-hocc-wd" :style="`background:${weekdayColor(day.date)}`" x-text="day.weekday"></span>
+                      <div class="dt-hocc-chips" x-show="day.occ">
+                        <template x-for="c in (day.occ ? day.occ.completions : [])" :key="c.username">
+                          <span :class="c.completed ? 'dt-hocc-chip-d' : 'dt-hocc-chip-w'"
+                                x-text="(c.displayName||c.username) + (c.completed ? ' ✓' : ' ✗')"></span>
+                        </template>
+                      </div>
+                      <span style="flex:1;font-size:10px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif" x-show="!day.occ">— 無任務</span>
+                      <span class="dt-hocc-prog" x-show="day.occ"
+                            :class="day.occ && day.occ.all_done ? 'g' : day.occ && day.occ.done_count > 0 ? 'y' : 'r'"
+                            x-text="day.occ ? (day.occ.all_done ? '全部完成' : day.occ.done_count + '/' + day.occ.total) : ''"></span>
+                      <span class="dt-hocc-chev" x-show="day.occ" :class="{open: historyExpanded[day.date]}">&#9660;</span>
+                    </div>
+                    <div x-show="day.occ && historyExpanded[day.date]" class="dt-hocc-body">
+                      <template x-for="c in (day.occ ? day.occ.completions : [])" :key="c.username">
+                        <div class="dt-hocc-person">
+                          <div class="dt-hocc-person-meta">
+                            <div class="dt-hist-av" :style="`background:${c.completed ? '#15803D' : '#9CA3AF'}`"
+                                 x-text="(c.displayName||c.username).slice(0,1)"></div>
+                            <span style="font-size:11px;font-weight:600;color:var(--text-primary)" x-text="c.displayName||c.username"></span>
+                          </div>
+                          <div style="flex:1;min-width:0">
+                            <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
+                              <span :class="c.completed ? 'ag-status-done' : 'ag-status-wait'" style="font-size:9px">
+                                <span x-text="c.completed ? '已完成' : '未完成'"></span>
+                              </span>
+                              <span x-show="c.completedAt" style="font-size:9px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif" x-text="fmtDT(c.completedAt)"></span>
+                            </div>
+                            <div x-show="c.report" class="dt-hist-report" x-text="c.report"></div>
+                            <div x-show="!c.report && c.completed" style="font-size:10px;color:var(--text-dim);font-style:italic">（未填寫回報）</div>
+                            <div x-show="!c.completed" style="font-size:10px;color:var(--text-dim);font-style:italic">尚未提交回報</div>
+                          </div>
+                        </div>
+                      </template>
+                    </div>
+                  </div>
+                </template>
+              </div>
+            </template>
+
+          </div><!-- history tab -->
+
+        </div>
+      </template>
+    </div><!-- .dt-right -->
+
+  </div><!-- .dt-body / x-show="!reportMode" -->
+</div><!-- .dt-wrap -->
+
+<!-- ══ Unlock Modal ══ -->
+<div x-show="showUnlock" x-cloak class="dt-modal-wrap"
+     @click.self="showUnlock=false" @keydown.escape.window="showUnlock=false">
+  <div class="dt-unlock-modal">
+    <div class="dt-unlock-head">
+      <div class="dt-lock-icon">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#92400E" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+      </div>
+      <div>
+        <div style="font-size:14px;font-weight:700;color:var(--text-primary)">解鎖管理視角</div>
+        <div style="font-size:11px;color:var(--text-secondary);margin-top:2px">輸入每日工作事項密碼以查看全體人員工作事項</div>
+      </div>
+    </div>
+    <div style="padding:18px 20px;display:flex;flex-direction:column;gap:12px">
+      <div class="dt-field">
+        <label class="dt-field-label">管理密碼 <span class="req">*</span></label>
+        <input type="password" class="dt-input" x-model="unlockPw" placeholder="請輸入每日工作事項密碼"
+               @keydown.enter="tryUnlock()" x-ref="unlockInput">
+      </div>
+      <div style="font-size:11px;color:var(--text-dim);background:#FAFAF8;border-radius:5px;padding:8px 10px;line-height:1.6">
+        &#9432; 尚未設定密碼？請至 <strong>使用者管理</strong> &#8594; 編輯您的帳號 &#8594; 設定「每日工作事項密碼」。
+      </div>
+    </div>
+    <div class="dt-modal-foot">
+      <button class="btn btn-ghost btn-sm" @click="showUnlock=false;unlockPw=''">取消</button>
+      <button class="btn btn-primary btn-sm" @click="tryUnlock()" :disabled="unlocking || !unlockPw.trim()">
+        <span x-text="unlocking ? '驗證中…' : '解鎖'"></span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ Create / Edit Modal ══ -->
+<div x-show="showModal" x-cloak class="dt-modal-wrap"
+     @click.self="showModal=false" @keydown.escape.window="showModal=false">
+  <div class="dt-modal">
+    <div class="dt-modal-head">
+      <div class="dt-modal-title" x-text="editingId ? '編輯工作事項' : '新增工作事項'"></div>
+      <button class="dt-modal-close" @click="showModal=false">&#215;</button>
+    </div>
+    <div class="dt-modal-body">
+
+      <div class="dt-section-hd">工作資訊</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="dt-field">
+          <label class="dt-field-label">日期 <span class="req">*</span></label>
+          <input type="date" x-model="form.task_date" class="dt-input">
+        </div>
+        <div class="dt-field">
+          <label class="dt-field-label">優先級</label>
+          <select x-model="form.priority" class="dt-input">
+            <option value="一般">一般</option>
+            <option value="重要">重要</option>
+            <option value="緊急">緊急</option>
+          </select>
+        </div>
+      </div>
+      <div class="dt-field">
+        <label class="dt-field-label">工作事項標題 <span class="req">*</span></label>
+        <input type="text" x-model="form.title" placeholder="例：每日設備巡檢、資訊系統維護…" class="dt-input">
+      </div>
+      <div class="dt-field">
+        <label class="dt-field-label">分類 / 類型</label>
+        <input type="text" x-model="form.category" placeholder="例：資訊維護、客服、巡檢、安全…" class="dt-input">
+      </div>
+      <div class="dt-field">
+        <label class="dt-field-label">關聯案件（選填）</label>
+        <select x-model="form.case_no" class="dt-input">
+          <option value="">— 不關聯案件 —</option>
+          <template x-for="c in activeCases" :key="c.quoteNo">
+            <option :value="c.quoteNo" x-text="c.quoteNo + '　' + c.customer + (c.projectName ? '　' + c.projectName : '')"></option>
+          </template>
+        </select>
+      </div>
+      <div class="dt-field">
+        <label class="dt-field-label">工作說明</label>
+        <textarea x-model="form.description" placeholder="詳細描述工作內容、目標、注意事項或驗收標準…"
+                  rows="3" class="dt-input" style="resize:vertical;min-height:64px"></textarea>
+      </div>
+
+      <!-- 排程設定 -->
+      <div>
+        <div class="dt-section-hd" style="margin-bottom:10px">排程設定</div>
+        <div style="display:flex;gap:16px;margin-bottom:10px">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;font-family:var(--font-zh)">
+            <input type="radio" x-model="form.recurrence_type" value="once"> 單次執行
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;font-family:var(--font-zh)">
+            <input type="radio" x-model="form.recurrence_type" value="weekly"> 每週常駐任務
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;font-family:var(--font-zh)">
+            <input type="radio" x-model="form.recurrence_type" value="range"> 區間任務
+          </label>
+        </div>
+        <div x-show="form.recurrence_type === 'weekly'"
+             style="padding:12px;background:#F5F4F0;border-radius:var(--radius);border:1px solid var(--border-light)">
+          <div style="font-size:11px;color:var(--text-secondary);margin-bottom:8px">選擇每週重複的星期幾（可複選）</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+            <template x-for="(lbl, idx) in ['一','二','三','四','五','六','日']" :key="idx">
+              <button type="button" @click="toggleWeekday(idx)" class="recur-day-btn"
+                      :style="hasWeekday(idx) ? 'background:var(--accent);color:#fff;border-color:var(--accent)' : ''"
+                      x-text="lbl"></button>
+            </template>
+          </div>
+          <div style="font-size:11px;color:#7C3AED;background:#F5F3FF;border:1px solid #C4B5FD;border-radius:5px;padding:6px 9px;margin-bottom:8px">
+            &#9432; 常駐任務在左側只顯示一次（折疊於「常駐任務」區），不逐日展開排列。
+          </div>
+          <div class="dt-field">
+            <label class="dt-field-label">結束日期（留空表示永久重複）</label>
+            <input type="date" x-model="form.recurrence_end_date" class="dt-input" style="width:auto;display:inline-block">
+          </div>
+        </div>
+        <div x-show="form.recurrence_type === 'range'"
+             style="padding:12px;background:#F0FDF4;border-radius:var(--radius);border:1px solid #86EFAC">
+          <div style="font-size:11px;color:#15803D;margin-bottom:10px">
+            &#9432; 區間任務在指定日期範圍內每天都會出現，每位指派人只需在區間內完成一次即可。截止前三天及截止當天會自動寄送提醒通知。
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div class="dt-field">
+              <label class="dt-field-label">開始日期 <span style="color:#DC2626">*</span></label>
+              <input type="date" x-model="form.task_date" class="dt-input" style="width:100%">
+            </div>
+            <div class="dt-field">
+              <label class="dt-field-label">截止日期 <span style="color:#DC2626">*</span></label>
+              <input type="date" x-model="form.recurrence_end_date" class="dt-input" style="width:100%"
+                     :min="form.task_date">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 指派對象 -->
+      <div>
+        <div class="dt-section-hd" style="margin-bottom:4px">
+          指派對象
+          <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-dim);font-size:9px">— 儲存後立即通知被指派人（含 Email）</span>
+        </div>
+        <div class="usr-grid">
+          <template x-for="u in users" :key="u.username">
+            <div class="usr-card" :class="{sel: form.assigned_to.includes(u.username)}"
+                 @click="toggleAssignee(u.username)">
+              <div class="usr-card-av" x-text="(u.display_name||u.username).slice(0,1)"></div>
+              <div class="usr-card-name" x-text="u.display_name || u.username"></div>
+              <div class="usr-card-role" x-text="roleCn(u.role)"></div>
+              <template x-if="form.assigned_to.includes(u.username)">
+                <div class="usr-card-chk">
+                  <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+                </div>
+              </template>
+            </div>
+          </template>
+        </div>
+        <div style="margin-top:6px;font-size:11px;color:var(--text-dim)">
+          已選 <strong style="color:var(--accent)" x-text="form.assigned_to.length"></strong> 位人員
+        </div>
+      </div>
+
+      <!-- 負責主管（通知對象） -->
+      <div>
+        <div class="dt-section-hd" style="margin-bottom:4px">
+          負責主管
+          <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-dim);font-size:9px">— 完成回報 &amp; 逾期未完成通知的收件人；留空則通知所有管理員</span>
+        </div>
+        <div class="usr-grid">
+          <template x-for="u in users" :key="u.username">
+            <div class="usr-card"
+                 :class="{sel: form.supervisors.includes(u.username)}"
+                 :style="form.supervisors.includes(u.username) ? 'border-color:#7C3AED;background:#F5F3FF' : ''"
+                 @click="toggleSupervisor(u.username)">
+              <div class="usr-card-av"
+                   :style="`background:${form.supervisors.includes(u.username) ? '#7C3AED' : '#9CA3AF'}`"
+                   x-text="(u.display_name||u.username).slice(0,1)"></div>
+              <div class="usr-card-name" x-text="u.display_name || u.username"></div>
+              <div class="usr-card-role" x-text="roleCn(u.role)"></div>
+              <template x-if="form.supervisors.includes(u.username)">
+                <div class="usr-card-chk" style="background:#7C3AED">
+                  <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+                </div>
+              </template>
+            </div>
+          </template>
+        </div>
+        <div style="margin-top:6px;font-size:11px;color:var(--text-dim)">
+          已選 <strong style="color:#7C3AED" x-text="form.supervisors.length"></strong> 位主管
+          <template x-if="form.supervisors.length === 0">
+            <span>（預設通知全體管理員）</span>
+          </template>
+        </div>
+      </div>
+
+    </div>
+    <div class="dt-modal-foot">
+      <button class="btn btn-ghost btn-sm" @click="showModal=false">取消</button>
+      <button class="btn btn-primary btn-sm" @click="saveForm()" :disabled="savingForm">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+        <span x-text="savingForm ? '儲存中…' : (editingId ? '更新事項' : '建立並派發')"></span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<script src="../static/notif.js"></script>
+<script src="../static/sidebar.js"></script>
+<script>
+const API = '/api'
+
+const _AV_COLORS = ['#2563EB','#7C3AED','#DB2777','#D97706','#16A34A','#0891B2','#DC2626','#9333EA']
+function _avatarColor(u) {
+  let h = 0
+  for (let i = 0; i < u.length; i++) h = (h * 31 + u.charCodeAt(i)) | 0
+  return _AV_COLORS[Math.abs(h) % _AV_COLORS.length]
+}
+
+function app() {
+  return {
+    session:           null,
+    users:             [],
+    tasks:             [],
+    selected:          null,
+    selectedOccDate:   '',
+    weeklyOccurrences: [],
+    loading:           false,
+    viewYear:          new Date().getFullYear(),
+    viewMonth:         new Date().getMonth() + 1,
+    filterUser:        '',
+    searchQ:           '',
+    myReport:          '',
+    submittingReport:  false,
+    editingMyReport:   false,
+    confirmDelete:     false,
+    calConfirmDelete:  false,
+
+    calEditTaskId:     null,
+    calEditReport:     '',
+    calEditSubmitting: false,
+
+    _prevSeenDT:    null,
+    dtUnlocked:     false,
+    showUnlock:     false,
+    unlockPw:       '',
+    unlocking:      false,
+    pendingUrlUser: '',
+
+    weeklyOpen: true,
+    rangeOpen:  true,
+    onceOpen:   true,
+
+    // History tab
+    activeTab:       'detail',
+    history:         { items: [], total: 0, page: 1, loading: false, hasMore: false },
+    historyExpanded: {},
+
+    // Edit log
+    editLog:        [],
+    editLogLoading: false,
+    histMode:        'month',
+    histYear:        new Date().getFullYear(),
+    histMonth:       new Date().getMonth() + 1,
+    histWeekStart:   '',
+
+    // Calendar view
+    calMode:        false,
+    calData:        {},
+    calLoading:     false,
+    calSelDate:     '',
+    calDashData:    [],
+    calDashLoading: false,
+
+    // Report summary view
+    reportMode:         false,
+    reportDate:         new Date().toISOString().slice(0,10),
+    reportData:         [],
+    reportLoading:      false,
+    reportSelected:     null,
+    reportSearch:       '',
+    reportFilterPerson: '',
+
+    activeCases: [],
+
+    showModal:  false,
+    editingId:  null,
+    form: {
+      task_date:'', title:'', description:'', category:'', priority:'一般',
+      assigned_to:[], supervisors:[], recurrence_type:'once', recurrence_days:[], recurrence_end_date:'',
+      case_no: ''
+    },
+    savingForm: false,
+
+    async init() {
+      const raw = localStorage.getItem('motrix_session')
+      this.session = raw ? JSON.parse(raw) : {}
+      if (!this.session?.token) { window.location.href = 'login.html'; return }
+      try {
+        const prev = JSON.parse(localStorage.getItem('motrix_module_prev_seen') || '{}')
+        this._prevSeenDT = prev['daily_task'] || null
+      } catch (_e) {}
+
+      if (this.session.role === 'superadmin') {
+        if (sessionStorage.getItem('dt_unlocked') === '1') {
+          this.dtUnlocked = true
+          await this.loadUsers()
+        }
+        const uParam = new URLSearchParams(window.location.search).get('username')
+        if (uParam) {
+          this.pendingUrlUser = uParam
+          if (!this.dtUnlocked) {
+            this.showUnlock = true
+            this.$nextTick(() => { if (this.$refs.unlockInput) this.$refs.unlockInput.focus() })
+          } else {
+            this.filterUser = uParam
+          }
+        }
+      }
+      await this.loadTasks()
+      this.loadActiveCases()
+      // 桌機版預設開啟日曆視圖
+      if (window.innerWidth >= 768) {
+        this.calMode = true
+        this.loadCalendarData()
+      }
+    },
+
+    async loadActiveCases() {
+      try {
+        const r = await fetch(`${API}/sales-orders`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (r.ok) {
+          const d = await r.json()
+          this.activeCases = (d.items || []).filter(c => c.dealTag === '已成案')
+        }
+      } catch(e) {}
+    },
+
+    async loadUsers() {
+      try {
+        const r = await fetch(`${API}/users`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (r.ok) {
+          const d = await r.json()
+          this.users = (d.users || d || []).filter(u => u.active !== 0)
+        }
+      } catch(e) {}
+    },
+
+    yearMonthStr()     { return `${this.viewYear}-${String(this.viewMonth).padStart(2,'0')}` },
+    yearMonthDisplay() { return `${this.viewYear}年${this.viewMonth}月` },
+
+    prevMonth() {
+      this.viewMonth--
+      if (this.viewMonth < 1) { this.viewMonth = 12; this.viewYear-- }
+      this.selected = null; this.selectedOccDate = ''
+      if (this.calMode) { this.calSelDate = ''; this.reportData = []; this.loadCalendarData() }
+      else this.loadTasks()
+    },
+    nextMonth() {
+      this.viewMonth++
+      if (this.viewMonth > 12) { this.viewMonth = 1; this.viewYear++ }
+      this.selected = null; this.selectedOccDate = ''
+      if (this.calMode) { this.calSelDate = ''; this.reportData = []; this.loadCalendarData() }
+      else this.loadTasks()
+    },
+
+    weekdayLabel(d) {
+      if (!d) return ''
+      return '週' + ['日','一','二','三','四','五','六'][new Date(d+'T00:00:00').getDay()]
+    },
+    weekdayColor(d) {
+      if (!d) return '#9CA3AF'
+      const day = new Date(d+'T00:00:00').getDay()
+      return day === 0 ? '#DC2626' : day === 6 ? '#7C3AED' : '#2563EB'
+    },
+
+    async loadTasks() {
+      this.loading = true
+      try {
+        const p = new URLSearchParams({ year_month: this.yearMonthStr() })
+        if (this.session.role === 'superadmin') {
+          if (this.dtUnlocked && this.filterUser) p.set('username', this.filterUser)
+          else if (!this.dtUnlocked)              p.set('username', this.session.username)
+        }
+        const r = await fetch(`${API}/daily-tasks?${p}`, {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (r.ok) this.tasks = (await r.json()).items || []
+      } finally { this.loading = false }
+
+      if (this.selected) {
+        const found = this.tasks.find(
+          t => t.id === this.selected.id && t.occurrence_date === this.selected.occurrence_date
+        )
+        if (found) this._setSelected(found)
+        else { this.selected = null; this.selectedOccDate = '' }
+      }
+    },
+
+    // ── List helpers ──────────────────────────────────────────────────────────
+
+    filteredWeeklyTasks() {
+      const q    = this.searchQ.trim().toLowerCase()
+      const seen = new Set()
+      const res  = []
+      const todayStr = new Date().toISOString().slice(0,10)
+      const inMonth  = todayStr.startsWith(this.yearMonthStr())
+
+      for (const t of this.tasks) {
+        if (t.recurrence_type !== 'weekly') continue
+        if (q && !(t.title||'').toLowerCase().includes(q) && !(t.category||'').toLowerCase().includes(q)) continue
+        if (seen.has(t.id)) continue
+        seen.add(t.id)
+        let rep = t
+        if (inMonth) {
+          const todayOcc = this.tasks.find(x => x.id === t.id && x.occurrence_date === todayStr)
+          if (todayOcc) rep = todayOcc
+        }
+        res.push(rep)
+      }
+      return res
+    },
+
+    calGroupedReport() {
+      const data = this.filteredReportData()
+      const groups = [
+        { type: 'weekly', label: '常駐任務', color: '#7C3AED', bg: '#F5F3FF', items: data.filter(t => t.recurrence_type === 'weekly') },
+        { type: 'range',  label: '區間任務', color: '#059669', bg: '#ECFDF5', items: data.filter(t => t.recurrence_type === 'range') },
+        { type: 'once',   label: '單次任務', color: '#2563EB', bg: '#EFF6FF', items: data.filter(t => t.recurrence_type !== 'weekly' && t.recurrence_type !== 'range') },
+      ]
+      return groups.filter(g => g.items.length > 0)
+    },
+
+    filteredRangeTasks() {
+      const q = this.searchQ.trim().toLowerCase()
+      const seen = new Set()
+      const res = []
+      for (const t of this.tasks) {
+        if (t.recurrence_type !== 'range') continue
+        if (q && !(t.title||'').toLowerCase().includes(q) && !(t.category||'').toLowerCase().includes(q)) continue
+        if (seen.has(t.id)) continue
+        seen.add(t.id)
+        res.push(t)
+      }
+      return res
+    },
+
+    filteredOneTimeTasks() {
+      const q = this.searchQ.trim().toLowerCase()
+      return this.tasks.filter(t =>
+        t.recurrence_type !== 'weekly' &&
+        t.recurrence_type !== 'range' &&
+        (!q || (t.title||'').toLowerCase().includes(q) || (t.category||'').toLowerCase().includes(q))
+      )
+    },
+
+    groupedOneTime() {
+      const groups = {}
+      for (const t of this.filteredOneTimeTasks()) {
+        const key = t.occurrence_date || t.task_date
+        if (!groups[key]) groups[key] = []
+        groups[key].push(t)
+      }
+      return Object.entries(groups)
+        .sort((a, b) => b[0].localeCompare(a[0]))
+        .map(([date, items]) => ({ date, items }))
+    },
+
+    weeklyTodayOcc(taskId) {
+      const todayStr = new Date().toISOString().slice(0,10)
+      if (!todayStr.startsWith(this.yearMonthStr())) return null
+      return this.tasks.find(t => t.id === taskId && t.occurrence_date === todayStr) || null
+    },
+
+    // ── Selection ─────────────────────────────────────────────────────────────
+
+    selectTask(t) {
+      this._setSelected(t)
+      this.confirmDelete = false
+      this.myReport = ''
+      this.editingMyReport = false
+    },
+
+    selectWeeklyTask(t) {
+      this._setSelected(t)
+      this.confirmDelete = false
+      this.myReport = ''
+      this.editingMyReport = false
+    },
+
+    _setSelected(t) {
+      const taskChanged = !this.selected || this.selected.id !== t.id
+      if (taskChanged) {
+        this.activeTab       = 'detail'
+        this.history         = { items: [], total: 0, page: 1, loading: false, hasMore: false }
+        this.historyExpanded = {}
+        this.editLog         = []
+        this.loadEditLog(t.id)
+      }
+      this.selected        = t
+      this.selectedOccDate = t.occurrence_date || t.task_date
+
+      if (t.recurrence_type === 'weekly') {
+        const allOccs = this.tasks
+          .filter(x => x.id === t.id)
+          .sort((a, b) => a.occurrence_date.localeCompare(b.occurrence_date))
+        this.weeklyOccurrences = allOccs.map(x => {
+          const allDone = (x.assignees || []).length > 0 &&
+            (x.assignees || []).every(a => (x.completions || []).some(c => c.username === a.username && c.completed))
+          const d = new Date(x.occurrence_date + 'T00:00:00')
+          const label = `${d.getMonth()+1}/${d.getDate()}（${this.weekdayLabel(x.occurrence_date).slice(1)}）`
+          return { date: x.occurrence_date, label, done: allDone }
+        })
+      } else {
+        this.weeklyOccurrences = []
+      }
+    },
+
+    switchOccurrence(occDate) {
+      if (!this.selected) return
+      const occ = this.tasks.find(t => t.id === this.selected.id && t.occurrence_date === occDate)
+      if (occ) {
+        this.selected        = occ
+        this.selectedOccDate = occDate
+        this.myReport        = ''
+        this.editingMyReport = false
+      }
+    },
+
+    isSelected(t) {
+      return this.selected?.id === t.id && this.selected?.occurrence_date === t.occurrence_date
+    },
+
+    // ── Completion helpers ─────────────────────────────────────────────────────
+
+    currentCompletions() {
+      if (!this.selected) return { done: 0, total: 0 }
+      const total = (this.selected.assignees || []).length
+      const done  = (this.selected.completions || []).filter(x => x.completed).length
+      return { done, total }
+    },
+
+    completionCountRaw(t) {
+      if (!t) return { done: 0, total: 0 }
+      const total = (t.assignees || []).length
+      const done  = (t.completions || []).filter(c => c.completed).length
+      return { done, total }
+    },
+
+    getCompletion(username) {
+      return (this.selected?.completions || []).find(c => c.username === username) || null
+    },
+
+    isAssignedToMe() {
+      return !!(this.selected && this.session && (this.selected.assigned_to || []).includes(this.session.username))
+    },
+
+    myCompletion() {
+      if (!this.selected || !this.session) return null
+      return (this.selected.completions || []).find(c => c.username === this.session.username) || null
+    },
+
+    async submitCompletion() {
+      if (!this.selected) return
+      if (!this.myReport.trim()) { alert('請填寫回報內容'); return }
+      this.submittingReport = true
+      try {
+        const r = await fetch(`${API}/daily-tasks/${this.selected.id}/complete`, {
+          method: 'PATCH',
+          headers: { 'Content-Type':'application/json', Authorization:'Bearer '+this.session.token },
+          body: JSON.stringify({
+            completed: true,
+            report: this.myReport.trim(),
+            occurrence_date: this.selectedOccDate
+          })
+        })
+        if (!r.ok) {
+          const e = await r.json().catch(()=>({}))
+          alert('送出失敗：' + (e.detail || '未知錯誤')); return
+        }
+        this.toast(this.editingMyReport ? '回報已更新，主管將收到 Email 通知' : '已回報完成，主管將收到 Email 通知')
+        await this.loadTasks()
+        this.myReport = ''
+        this.editingMyReport = false
+      } finally { this.submittingReport = false }
+    },
+
+    async calSubmitReport(taskId, occDate, text) {
+      if (!text?.trim()) { alert('請填寫回報內容'); return }
+      this.calEditSubmitting = true
+      try {
+        const r = await fetch(`${API}/daily-tasks/${taskId}/complete`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify({ completed: true, report: text.trim(), occurrence_date: occDate })
+        })
+        if (!r.ok) { const e = await r.json().catch(()=>({})); throw new Error(e.detail || '回報失敗') }
+        this.toast('回報已更新')
+        this.calEditTaskId = null
+        this.calEditReport = ''
+        await this.loadReportData()
+      } catch(e) { alert('修改失敗：' + (e.message || '未知錯誤')) }
+      finally { this.calEditSubmitting = false }
+    },
+
+    async tryUnlock() {
+      if (!this.unlockPw.trim()) { alert('請輸入密碼'); return }
+      this.unlocking = true
+      try {
+        const r = await fetch(`${API}/auth/verify-daily-task-unlock`, {
+          method: 'POST',
+          headers: { 'Content-Type':'application/json', Authorization:'Bearer '+this.session.token },
+          body: JSON.stringify({ password: this.unlockPw.trim() })
+        })
+        if (r.status === 428) {
+          const e = await r.json().catch(()=>({}))
+          alert('⚠ ' + (e.detail || '尚未設定密碼') + '\n\n請至「使用者管理」→ 編輯您的帳號 → 設定「每日工作事項密碼」後再試。')
+          return
+        }
+        if (!r.ok) {
+          const e = await r.json().catch(()=>({}))
+          alert(e.detail || '密碼不正確'); return
+        }
+        this.dtUnlocked = true
+        sessionStorage.setItem('dt_unlocked', '1')
+        this.showUnlock = false
+        this.unlockPw   = ''
+        if (this.pendingUrlUser) { this.filterUser = this.pendingUrlUser; this.pendingUrlUser = '' }
+        await this.loadUsers()
+        await this.loadTasks()
+        this.toast('管理視角已解鎖')
+      } finally { this.unlocking = false }
+    },
+
+    openCreate() {
+      this.editingId = null
+      this.form = {
+        task_date: new Date().toISOString().slice(0,10), title:'', description:'', category:'',
+        priority:'一般', assigned_to:[], supervisors:[],
+        recurrence_type:'once', recurrence_days:[], recurrence_end_date:'',
+        case_no: ''
+      }
+      if (this.users.length === 0) this.loadUsers()
+      this.showModal = true
+    },
+
+    openEdit() {
+      if (!this.selected) return
+      this.editingId = this.selected.id
+      this.form = {
+        task_date:           this.selected.task_date,
+        title:               this.selected.title,
+        description:         this.selected.description || '',
+        category:            this.selected.category || '',
+        priority:            this.selected.priority || '一般',
+        assigned_to:         [...(this.selected.assigned_to || [])],
+        supervisors:         [...(this.selected.supervisors || [])],
+        recurrence_type:     this.selected.recurrence_type || 'once',
+        recurrence_days:     [...(this.selected.recurrence_days || [])],
+        recurrence_end_date: this.selected.recurrence_end_date || '',
+        case_no:             this.selected.case_no || ''
+      }
+      if (this.users.length === 0) this.loadUsers()
+      this.showModal = true
+    },
+
+    toggleAssignee(u) {
+      const i = this.form.assigned_to.indexOf(u)
+      if (i >= 0) this.form.assigned_to.splice(i,1)
+      else         this.form.assigned_to.push(u)
+    },
+    toggleSupervisor(u) {
+      const i = this.form.supervisors.indexOf(u)
+      if (i >= 0) this.form.supervisors.splice(i,1)
+      else         this.form.supervisors.push(u)
+    },
+    toggleWeekday(idx) {
+      const i = this.form.recurrence_days.indexOf(idx)
+      if (i >= 0) this.form.recurrence_days.splice(i,1)
+      else         this.form.recurrence_days.push(idx)
+    },
+    hasWeekday(idx) { return this.form.recurrence_days.includes(idx) },
+
+    async saveForm() {
+      if (!this.form.title.trim()) { alert('請填寫工作事項標題'); return }
+      if (!this.form.task_date)    { alert('請選擇日期'); return }
+      if (this.form.recurrence_type === 'weekly' && this.form.recurrence_days.length === 0) {
+        alert('每週排程請至少選擇一個星期幾'); return
+      }
+      this.savingForm = true
+      try {
+        const url = this.editingId ? `${API}/daily-tasks/${this.editingId}` : `${API}/daily-tasks`
+        const r = await fetch(url, {
+          method: this.editingId ? 'PUT' : 'POST',
+          headers: { 'Content-Type':'application/json', Authorization:'Bearer '+this.session.token },
+          body: JSON.stringify(this.form)
+        })
+        if (!r.ok) {
+          const e = await r.json().catch(()=>({}))
+          alert('儲存失敗：' + (e.detail || '未知錯誤')); return
+        }
+        const savedId = this.editingId
+        this.showModal = false
+        this.toast(this.editingId ? '工作事項已更新' : '工作事項已建立並派發通知')
+        await this.loadTasks()
+        if (savedId) this.loadEditLog(savedId)
+      } finally { this.savingForm = false }
+    },
+
+    async loadEditLog(taskId) {
+      this.editLogLoading = true
+      try {
+        const r = await fetch(`${API}/daily-tasks/${taskId}/edit-log`, {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (r.ok) this.editLog = (await r.json()).items || []
+        else       this.editLog = []
+      } catch { this.editLog = [] }
+      finally   { this.editLogLoading = false }
+    },
+
+    async deleteTask() {
+      if (!this.selected) return
+      const r = await fetch(`${API}/daily-tasks/${this.selected.id}`, {
+        method: 'DELETE',
+        headers: { Authorization: 'Bearer ' + this.session.token }
+      })
+      if (!r.ok) {
+        const e = await r.json().catch(()=>({}))
+        alert('刪除失敗：' + (e.detail || '未知錯誤')); return
+      }
+      this.confirmDelete = false
+      this.selected = null; this.selectedOccDate = ''
+      this.toast('工作事項已刪除')
+      await this.loadTasks()
+    },
+
+    async deleteCalTask() {
+      const task = this.reportSelectedTask()
+      if (!task) return
+      this.selected = task
+      await this.deleteTask()
+      this.calConfirmDelete = false
+      this.reportSelected = null
+    },
+
+    isNewTask(t) {
+      if (!this._prevSeenDT) return false
+      const role = this.session?.role
+      if (role !== 'superadmin' && role !== 'admin') return false
+      const ut = t.updated_at || t.updatedAt || ''
+      return ut > this._prevSeenDT
+    },
+
+    pc(p) {
+      return ({
+        '緊急': { bg:'#FEF2F2', color:'#DC2626', border:'#FECACA' },
+        '重要': { bg:'#FEF3C7', color:'#D97706', border:'#FDE68A' },
+        '一般': { bg:'#EFF6FF', color:'#2563EB', border:'#BFDBFE' },
+      })[p] || { bg:'#F3F4F6', color:'#6B7280', border:'#E5E7EB' }
+    },
+    avatarColor(u) { return _avatarColor(u) },
+    roleCn(r) {
+      return {superadmin:'超管', admin:'管理員', sales:'業務', engineer:'工程師', viewer:'檢視'}[r] || r
+    },
+    fmtDT(s) {
+      if (!s) return ''
+      try {
+        const d = new Date(s)
+        return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`
+      } catch { return s }
+    },
+    toast(msg) {
+      const el = document.createElement('div')
+      el.className = 'dt-toast'; el.textContent = msg
+      document.body.appendChild(el)
+      setTimeout(() => el.remove(), 2800)
+    },
+
+    // ── History tab ───────────────────────────────────────────────────────────
+
+    setTab(tab) {
+      this.activeTab = tab
+      if (tab === 'history' && this.selected && !this.history.items.length && !this.history.loading) {
+        const today = new Date()
+        this.histYear  = today.getFullYear()
+        this.histMonth = today.getMonth() + 1
+        if (!this.histWeekStart) this.histWeekStart = this._thisWeekMonday()
+        this.loadHistoryAll()
+      }
+    },
+
+    async loadHistoryAll() {
+      if (!this.selected) return
+      const taskId = this.selected.id
+      this.history = { items: [], total: 0, page: 1, loading: true, hasMore: false }
+      this.historyExpanded = {}
+      try {
+        const r = await fetch(`${API}/daily-tasks/${taskId}/history?page=1&per_page=500`, {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (!r.ok) { this.toast('無法載入歷史紀錄'); return }
+        const d = await r.json()
+        this.history.items = d.occurrences || []
+        this.history.total = d.total_occurrences || 0
+      } catch(e) {
+        this.toast('載入歷史失敗')
+      } finally {
+        this.history.loading = false
+      }
+    },
+
+    // ── History period helpers ─────────────────────────────────────────────────
+
+    setHistMode(m) {
+      this.histMode = m
+      if (m === 'week' && !this.histWeekStart) this.histWeekStart = this._thisWeekMonday()
+      this.historyExpanded = {}
+    },
+
+    prevHistPeriod() {
+      if (this.histMode === 'month') {
+        if (--this.histMonth < 1) { this.histMonth = 12; this.histYear-- }
+      } else {
+        const d = new Date(this.histWeekStart + 'T00:00:00')
+        d.setDate(d.getDate() - 7)
+        this.histWeekStart = d.toISOString().slice(0, 10)
+      }
+      this.historyExpanded = {}
+    },
+
+    nextHistPeriod() {
+      if (this.histMode === 'month') {
+        if (++this.histMonth > 12) { this.histMonth = 1; this.histYear++ }
+      } else {
+        const d = new Date(this.histWeekStart + 'T00:00:00')
+        d.setDate(d.getDate() + 7)
+        this.histWeekStart = d.toISOString().slice(0, 10)
+      }
+      this.historyExpanded = {}
+    },
+
+    histPeriodLabel() {
+      if (this.histMode === 'month') return this.histYear + '年' + this.histMonth + '月'
+      if (!this.histWeekStart) return ''
+      const s = new Date(this.histWeekStart + 'T00:00:00')
+      const e = new Date(this.histWeekStart + 'T00:00:00')
+      e.setDate(e.getDate() + 6)
+      return (s.getMonth()+1)+'/'+s.getDate()+' – '+(e.getMonth()+1)+'/'+e.getDate()
+    },
+
+    histFilteredItems() {
+      if (this.histMode === 'month') {
+        const prefix = this.histYear + '-' + String(this.histMonth).padStart(2, '0')
+        return this.history.items.filter(x => (x.occurrence_date || '').startsWith(prefix))
+      }
+      if (!this.histWeekStart) return []
+      const end = new Date(this.histWeekStart + 'T00:00:00')
+      end.setDate(end.getDate() + 6)
+      const endStr = end.toISOString().slice(0, 10)
+      return this.history.items.filter(x => x.occurrence_date >= this.histWeekStart && x.occurrence_date <= endStr)
+    },
+
+    histDonePersons()  { return this.histFilteredItems().reduce((s, t) => s + (t.done_count || 0), 0) },
+    histTotalPersons() { return this.histFilteredItems().reduce((s, t) => s + (t.total || 0), 0) },
+
+    histBands() {
+      const items = this.histFilteredItems()
+      if (!items.length) return []
+      const bands = {}
+      for (const occ of items) {
+        const wk = this._occWeekKey(occ.occurrence_date)
+        if (!bands[wk]) bands[wk] = { weekKey: wk, label: this._weekLabel(wk), range: this._weekRange(wk), items: [] }
+        bands[wk].items.push(occ)
+      }
+      return Object.values(bands).sort((a, b) => b.weekKey.localeCompare(a.weekKey))
+    },
+
+    histWeekDays() {
+      if (!this.histWeekStart) return []
+      const WD = ['週一','週二','週三','週四','週五','週六','週日']
+      return Array.from({ length: 7 }, (_, i) => {
+        const d = new Date(this.histWeekStart + 'T00:00:00')
+        d.setDate(d.getDate() + i)
+        const dateStr = d.toISOString().slice(0, 10)
+        const wdIdx = d.getDay() === 0 ? 6 : d.getDay() - 1
+        return { date: dateStr, weekday: WD[wdIdx], occ: this.history.items.find(x => x.occurrence_date === dateStr) || null }
+      })
+    },
+
+    _occWeekKey(dateStr) {
+      const d = new Date(dateStr + 'T00:00:00')
+      const day = d.getDay()
+      d.setDate(d.getDate() - (day === 0 ? 6 : day - 1))
+      return d.toISOString().slice(0, 10)
+    },
+    _weekLabel(mondayStr) {
+      const d = new Date(mondayStr + 'T00:00:00')
+      const start = new Date(d.getFullYear(), 0, 1)
+      return '第' + Math.ceil(((d - start) / 864e5 + start.getDay() + 1) / 7) + '週'
+    },
+    _weekRange(mondayStr) {
+      const s = new Date(mondayStr + 'T00:00:00')
+      const e = new Date(mondayStr + 'T00:00:00')
+      e.setDate(e.getDate() + 6)
+      return (s.getMonth()+1)+'/'+s.getDate()+' – '+(e.getMonth()+1)+'/'+e.getDate()
+    },
+    _thisWeekMonday() {
+      const today = new Date()
+      today.setDate(today.getDate() - (today.getDay() === 0 ? 6 : today.getDay() - 1))
+      return today.toISOString().slice(0, 10)
+    },
+
+    // ── Left panel stat helpers ────────────────────────────────────────────────
+
+    leftStats() {
+      const today = new Date().toISOString().slice(0, 10)
+      const me = this.session?.username
+      if (!me) return { todayTotal: 0, todayPending: 0, rate: 0 }
+      const myTasks = this.tasks.filter(t => (t.assigned_to || []).includes(me))
+      const todayMine = myTasks.filter(t => (t.occurrence_date || t.task_date) === today)
+      const todayPending = todayMine.filter(t => {
+        const c = (t.completions || []).find(x => x.username === me)
+        return !c || !c.completed
+      }).length
+      const done = myTasks.filter(t => {
+        const c = (t.completions || []).find(x => x.username === me)
+        return c && c.completed
+      }).length
+      return { todayTotal: todayMine.length, todayPending, rate: myTasks.length > 0 ? Math.round(done / myTasks.length * 100) : 0 }
+    },
+
+    exportHistory() {
+      if (!this.selected) return
+      fetch(`${API}/daily-tasks/${this.selected.id}/history/export`, {
+        headers: { Authorization: 'Bearer ' + this.session.token }
+      })
+        .then(r => {
+          if (!r.ok) { this.toast('匯出失敗'); return null }
+          return r.blob()
+        })
+        .then(blob => {
+          if (!blob) return
+          const url = URL.createObjectURL(blob)
+          const a = document.createElement('a')
+          a.href = url
+          a.download = `task_${this.selected.id}_history.csv`
+          a.click()
+          setTimeout(() => URL.revokeObjectURL(url), 2000)
+        })
+        .catch(() => this.toast('匯出失敗'))
+    },
+
+    // ── Report summary view ───────────────────────────────────────────────────
+
+    toggleReportMode() {
+      this.calMode    = false
+      this.reportMode = !this.reportMode
+      if (this.reportMode) { this.reportSearch = ''; this.reportFilterPerson = ''; this.loadReportData() }
+    },
+
+    goReportToday() {
+      this.reportDate = new Date().toISOString().slice(0, 10)
+      this.reportSearch = ''; this.reportFilterPerson = ''
+      this.loadReportData()
+    },
+
+    prevReportDay() {
+      const d = new Date(this.reportDate + 'T00:00:00')
+      d.setDate(d.getDate() - 1)
+      this.reportDate = d.toISOString().slice(0, 10)
+      this.reportSearch = ''; this.reportFilterPerson = ''
+      this.loadReportData()
+    },
+
+    nextReportDay() {
+      const d = new Date(this.reportDate + 'T00:00:00')
+      d.setDate(d.getDate() + 1)
+      this.reportDate = d.toISOString().slice(0, 10)
+      this.reportSearch = ''; this.reportFilterPerson = ''
+      this.loadReportData()
+    },
+
+    async loadReportData() {
+      this.reportLoading  = true
+      this.reportData     = []
+      this.reportSelected = null
+      try {
+        const p = new URLSearchParams({ date: this.reportDate })
+        if (this.session.role === 'superadmin') {
+          if (this.dtUnlocked && this.filterUser) p.set('username', this.filterUser)
+          else if (!this.dtUnlocked)              p.set('username', this.session.username)
+          // unlocked + no filter → all users (no param)
+        } else {
+          // Non-superadmin always sees only own assigned tasks
+          p.set('username', this.session.username)
+        }
+        const r = await fetch(`${API}/daily-tasks?${p}`, {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (r.ok) {
+          this.reportData = (await r.json()).items || []
+          // Auto-select first task with pending assignees for quick manager scan
+          const pending = this.reportData.find(t => {
+            const c = this.completionCountRaw(t); return c.done < c.total
+          })
+          this.reportSelected = (pending || this.reportData[0])?.id || null
+        }
+      } finally {
+        this.reportLoading = false
+      }
+    },
+
+    reportGetComp(task, username) {
+      return (task.completions || []).find(c => c.username === username) || null
+    },
+
+    reportSelectedTask() {
+      return this.reportData.find(t => t.id === this.reportSelected) || null
+    },
+
+    filteredReportData() {
+      let data = this.reportData
+      if (this.reportFilterPerson) {
+        data = data.filter(t => (t.assignees || []).some(a => a.username === this.reportFilterPerson))
+      }
+      const q = (this.reportSearch || '').toLowerCase().trim()
+      if (!q) return data
+      return data.filter(t => {
+        if (t.title.toLowerCase().includes(q)) return true
+        if ((t.category || '').toLowerCase().includes(q)) return true
+        return (t.completions || []).some(c => c.report && c.report.toLowerCase().includes(q))
+      })
+    },
+
+    reportPersons() {
+      const seen = new Set()
+      const persons = []
+      for (const task of this.reportData) {
+        for (const a of (task.assignees || [])) {
+          if (seen.has(a.username)) continue
+          seen.add(a.username)
+          let done = 0, total = 0
+          for (const t of this.reportData) {
+            if ((t.assignees || []).some(x => x.username === a.username)) {
+              total++
+              const comp = (t.completions || []).find(c => c.username === a.username)
+              if (comp && comp.completed) done++
+            }
+          }
+          persons.push({ username: a.username, displayName: a.displayName || a.username, done, total })
+        }
+      }
+      return persons
+    },
+
+    reportTotalPersons() {
+      return this.reportData.reduce((s, t) => s + (t.assignees || []).length, 0)
+    },
+
+    reportDonePersons() {
+      return this.reportData.reduce((s, t) =>
+        s + (t.completions || []).filter(c => c.completed).length, 0)
+    },
+
+    reportAllDone() {
+      const total = this.reportTotalPersons()
+      return total > 0 && this.reportDonePersons() === total
+    },
+
+    reportYearOptions() {
+      const cur = new Date().getFullYear()
+      return [cur - 2, cur - 1, cur, cur + 1]
+    },
+
+    setReportYear(y) {
+      const m   = this.reportDate.slice(5, 7)
+      const d   = parseInt(this.reportDate.slice(8, 10))
+      const max = new Date(y, parseInt(m), 0).getDate()
+      this.reportDate = `${y}-${m}-${String(Math.min(d, max)).padStart(2, '0')}`
+      this.reportFilterPerson = ''
+      this.loadReportData()
+    },
+
+    setReportMonth(m) {
+      const y   = this.reportDate.slice(0, 4)
+      const d   = parseInt(this.reportDate.slice(8, 10))
+      const max = new Date(parseInt(y), m, 0).getDate()
+      this.reportDate = `${y}-${String(m).padStart(2, '0')}-${String(Math.min(d, max)).padStart(2, '0')}`
+      this.reportFilterPerson = ''
+      this.loadReportData()
+    },
+
+    // Monthly completion rate for 常駐任務 card badge
+    monthRate(taskId) {
+      const today = new Date().toISOString().slice(0,10)
+      const occs  = this.tasks.filter(t => t.id === taskId && (t.occurrence_date || '') <= today)
+      if (!occs.length) return null
+      const done = occs.filter(o => {
+        const total = (o.assignees || []).length
+        if (!total) return false
+        return (o.completions || []).filter(c => c.completed).length === total
+      }).length
+      return { done, total: occs.length }
+    },
+
+    // ── Calendar view ─────────────────────────────────────────────────────────
+
+    toggleCalMode() {
+      this.calMode = !this.calMode
+      if (this.calMode) {
+        this.reportMode    = false
+        this.calSelDate    = ''
+        this.reportData    = []
+        this.reportSelected = null
+        this.loadCalendarData()
+      }
+    },
+
+    async loadCalendarData() {
+      this.calLoading = true
+      this.calDashLoading = true
+      this.calData = {}
+      this.calDashData = []
+      try {
+        const [py, pm] = this._prevMonthOf(this.viewYear, this.viewMonth)
+        const prevStr = `${py}-${String(pm).padStart(2,'0')}`
+        const currStr = this.yearMonthStr()
+        const _ld = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+        const todayStr = _ld(new Date())
+        const _buildP = (params) => {
+          const p = new URLSearchParams(params)
+          if (this.session.role === 'superadmin') {
+            if (this.dtUnlocked && this.filterUser) p.set('username', this.filterUser)
+            else if (!this.dtUnlocked) p.set('username', this.session.username)
+          } else {
+            p.set('username', this.session.username)
+          }
+          return p
+        }
+        const hdrs = { Authorization: 'Bearer ' + this.session.token }
+        const [r1, r2, r3] = await Promise.all([
+          fetch(`${API}/daily-tasks?${_buildP({ year_month: prevStr })}`, { headers: hdrs }),
+          fetch(`${API}/daily-tasks?${_buildP({ year_month: currStr })}`, { headers: hdrs }),
+          fetch(`${API}/daily-tasks?${_buildP({ date: todayStr })}`,      { headers: hdrs })
+        ])
+        const all = []
+        if (r1.ok) all.push(...((await r1.json()).items || []))
+        if (r2.ok) all.push(...((await r2.json()).items || []))
+        const agg = {}
+        for (const t of all) {
+          const d = t.occurrence_date || t.task_date
+          if (!d) continue
+          if (!agg[d]) agg[d] = { total: 0, done: 0 }
+          agg[d].total += (t.assignees || []).length
+          agg[d].done  += (t.completions || []).filter(c => c.completed).length
+        }
+        this.calData = agg
+        if (r3.ok) this.calDashData = (await r3.json()).items || []
+      } catch(e) {}
+      finally { this.calLoading = false; this.calDashLoading = false }
+    },
+
+    calMonthDays(year, month) {
+      const _ld = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+      const now = new Date()
+      const todayStr = _ld(now)
+      const first    = new Date(year, month - 1, 1)
+      const daysInM  = new Date(year, month, 0).getDate()
+      const startDow = first.getDay()
+      const startPad = startDow === 0 ? 6 : startDow - 1
+      const cells    = []
+      for (let i = startPad; i > 0; i--) {
+        const d = new Date(year, month - 1, 1 - i)
+        cells.push({ date: _ld(d), day: d.getDate(), inMonth: false, isToday: false })
+      }
+      for (let i = 1; i <= daysInM; i++) {
+        const s = `${year}-${String(month).padStart(2,'0')}-${String(i).padStart(2,'0')}`
+        cells.push({ date: s, day: i, inMonth: true, isToday: s === todayStr })
+      }
+      let nxt = 1
+      while (cells.length < 42) {
+        const d = new Date(year, month, nxt++)
+        cells.push({ date: _ld(d), day: d.getDate(), inMonth: false, isToday: false })
+      }
+      return cells
+    },
+
+    calDayStatus(date) {
+      const d = this.calData[date]
+      if (!d || d.total === 0) return 'empty'
+      if (d.done === d.total) return 'done'
+      if (d.done > 0) return 'partial'
+      return 'none'
+    },
+
+    calPrevMonthYear() {
+      const [y, m] = this._prevMonthOf(this.viewYear, this.viewMonth)
+      return { year: y, month: m }
+    },
+
+    calDashTodayStr() {
+      const d = new Date()
+      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+    },
+
+    calDashPendingTasks() {
+      return this.calDashData.filter(t => {
+        const cnt = this.completionCountRaw(t)
+        return cnt.done < cnt.total
+      })
+    },
+
+    calPeriodPendingDates() {
+      return Object.entries(this.calData)
+        .filter(([, v]) => v.total > 0 && v.done < v.total)
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([date, v]) => ({ date, total: v.total, done: v.done }))
+    },
+
+    calPeriodPendingByWeek() {
+      const weeks = {}
+      for (const d of this.calPeriodPendingDates()) {
+        const mon = this._weekMondayOf(d.date)
+        if (!weeks[mon]) weeks[mon] = { mondayStr: mon, weekRange: this._calWeekRangeStr(mon), dates: [] }
+        weeks[mon].dates.push(d)
+      }
+      return Object.values(weeks).sort((a, b) => a.mondayStr.localeCompare(b.mondayStr))
+    },
+
+    _weekMondayOf(dateStr) {
+      const d = new Date(dateStr + 'T00:00:00')
+      const diff = d.getDay() === 0 ? -6 : 1 - d.getDay()
+      d.setDate(d.getDate() + diff)
+      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+    },
+
+    _calWeekRangeStr(mondayStr) {
+      const s = new Date(mondayStr + 'T00:00:00')
+      const e = new Date(mondayStr + 'T00:00:00')
+      e.setDate(e.getDate() + 6)
+      return (s.getMonth()+1) + '/' + s.getDate() + '（一）– ' + (e.getMonth()+1) + '/' + e.getDate() + '（日）'
+    },
+
+    calPeriodDoneDates() {
+      return Object.entries(this.calData)
+        .filter(([, v]) => v.total > 0 && v.done === v.total)
+        .sort((a, b) => b[0].localeCompare(a[0]))
+        .map(([date, v]) => ({ date, total: v.total, done: v.done }))
+    },
+
+    _prevMonthOf(y, m) {
+      return m === 1 ? [y - 1, 12] : [y, m - 1]
+    },
+
+    async selectCalDay(date) {
+      this.calSelDate         = date
+      this.reportDate         = date
+      this.reportSearch       = ''
+      this.reportFilterPerson = ''
+      this.reportSelected     = null
+      this.calEditTaskId      = null
+      this.calEditReport      = ''
+      await this.loadReportData()
+    },
+
+    async selectCalDayTask(date, taskId) {
+      await this.selectCalDay(date)
+      if (!taskId) return
+      this.reportSelected = taskId
+      const task = this.reportData.find(t => t.id === taskId)
+      if (!task) return
+      const isAssigned = (task.assigned_to || []).includes(this.session?.username)
+      const myComp = this.reportGetComp(task, this.session?.username)
+      if (isAssigned && !myComp?.completed) {
+        this.calEditTaskId = taskId
+        this.calEditReport = ''
+      }
+    },
+  }
+}
+</script>
+</body>
+</html>
