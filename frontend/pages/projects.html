@@ -1,41 +1,63 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="../static/favicon.png">
   <title>專案管理 — MOTRIX 營運管理系統</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600&display=swap" rel="stylesheet">
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
   <link rel="stylesheet" href="../css/style.css">
   <style>
     [x-cloak] { display:none !important; }
 
+    /* ── Layout ── */
     .pj-layout { display:flex; height:calc(100vh - var(--topbar-h)); overflow:hidden; }
 
-    /* ── Left list ── */
+    /* ── Left list panel ── */
     .pj-list { width:300px; min-width:300px; border-right:1px solid var(--border-light); display:flex; flex-direction:column; background:#FAFAF9; overflow:hidden; }
-    .pj-list__head { padding:14px 14px 0; background:#fff; border-bottom:1px solid var(--border-light); }
-    .pj-list__title-row { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+    .pj-list__head { background:#fff; border-bottom:1px solid var(--border-light); flex-shrink:0; }
+
+    .pj-list__title-row { display:flex; align-items:center; gap:6px; padding:12px 14px 8px; }
     .pj-list__title { font-size:13px; font-weight:700; color:var(--text-primary); font-family:var(--font-zh); }
-    .pj-list__tabs { display:flex; padding:0 2px; overflow-x:auto; }
-    .pj-list__tab { font-size:11px; font-family:var(--font-zh); padding:5px 10px; border:none; background:none; color:var(--text-dim); cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px; white-space:nowrap; transition:all .1s; }
-    .pj-list__tab.active { color:var(--accent); border-bottom-color:var(--accent); font-weight:600; }
-    .pj-list__body { flex:1; overflow-y:auto; padding:4px 0; }
+    .pj-list__count { font-size:11px; font-family:LINE Seed TW_OTF, sans-serif; font-weight:600; color:var(--text-dim); background:#F0EEE9; padding:2px 7px; border-radius:10px; }
+    .pj-list__count[x-text="'0 個'"] { display:none; }
+
+    .pj-search { padding:0 10px 8px; }
+    .pj-search-input { width:100%; padding:7px 10px 7px 30px; font-size:12px; border:1px solid var(--border-light); border-radius:6px; font-family:var(--font-zh); background:#F9FAFB; outline:none; box-sizing:border-box; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='13' height='13' fill='none' stroke='%239CA3AF' stroke-width='2' viewBox='0 0 24 24'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.35-4.35'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:9px center; }
+    .pj-search-input:focus { border-color:var(--accent); background-color:#fff; }
+
+    /* Status filter pills — wrap, no scroll */
+    .pj-filter-pills { display:flex; flex-wrap:wrap; gap:4px; padding:0 10px 10px; }
+    .pj-pill { padding:3px 9px; border-radius:12px; font-size:11px; font-family:var(--font-zh); cursor:pointer; border:1px solid var(--border-light); background:#F9FAFB; color:var(--text-dim); transition:all .1s; white-space:nowrap; }
+    .pj-pill:hover { border-color:#C8C4BC; color:var(--text-primary); }
+    .pj-pill.active { background:var(--accent); color:#fff; border-color:var(--accent); font-weight:600; }
+
+    /* Project cards */
+    .pj-list__body { flex:1; overflow-y:auto; }
     .pj-list__body::-webkit-scrollbar { width:4px; }
     .pj-list__body::-webkit-scrollbar-thumb { background:var(--border-light); border-radius:2px; }
-    .pj-search { padding:10px 14px; }
-    .pj-search-input { width:100%; padding:7px 10px; font-size:12px; border:1px solid var(--border-light); border-radius:6px; font-family:var(--font-zh); background:#F9FAFB; outline:none; box-sizing:border-box; }
-    .pj-search-input:focus { border-color:var(--accent); background:#fff; }
 
-    .pj-card { padding:11px 14px; border-bottom:1px solid #F0EFEB; cursor:pointer; transition:background .1s; }
+    .pj-card { padding:11px 14px 11px 13px; border-bottom:1px solid #F0EFEB; cursor:pointer; transition:background .1s; border-left:3px solid transparent; }
     .pj-card:hover { background:#F5F4F0; }
-    .pj-card.selected { background:#EEF2FF; border-left:3px solid var(--accent); padding-left:11px; }
+    .pj-card.selected { background:#EEF2FF; border-left-color:var(--accent) !important; }
+
+    /* Status-coded left border via :has() — no JS needed */
+    .pj-card:has(.st-planning)   { border-left-color:#93C5FD; }
+    .pj-card:has(.st-inprogress) { border-left-color:#4ADE80; }
+    .pj-card:has(.st-paused)     { border-left-color:#FCD34D; }
+    .pj-card:has(.st-reviewing)  { border-left-color:#C4B5FD; }
+    .pj-card:has(.st-done)       { border-left-color:#6EE7B7; }
+    .pj-card:has(.st-closed)     { border-left-color:#D1D5DB; }
+    .pj-card:has(.st-cancelled)  { border-left-color:#FCA5A5; }
+
     .pj-card__head { display:flex; align-items:center; justify-content:space-between; margin-bottom:3px; }
-    .pj-card__code { font-size:11px; font-family:Inter,sans-serif; font-weight:700; color:var(--accent); }
-    .pj-card__name { font-size:12px; color:var(--text-primary); font-family:var(--font-zh); font-weight:500; margin-bottom:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-    .pj-card__foot { display:flex; align-items:center; gap:6px; }
-    .pj-empty { padding:40px 20px; text-align:center; color:var(--text-dim); font-size:13px; font-family:var(--font-zh); }
+    .pj-card__code { font-size:10px; font-family:LINE Seed TW_OTF, sans-serif; font-weight:700; color:var(--text-dim); letter-spacing:.04em; }
+    .pj-card__name { font-size:13px; color:var(--text-primary); font-family:var(--font-zh); font-weight:500; margin-bottom:5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .pj-card__foot { display:flex; align-items:center; gap:8px; }
+    .pj-card__meta { font-size:10px; color:var(--text-dim); font-family:LINE Seed TW_OTF, sans-serif; }
+
+    .pj-empty { padding:48px 20px; text-align:center; color:var(--text-dim); font-size:13px; font-family:var(--font-zh); display:flex; flex-direction:column; align-items:center; gap:8px; }
+    .pj-empty svg { opacity:.2; }
 
     /* Status badges */
     .status-badge { font-size:9px; padding:2px 7px; border-radius:4px; font-weight:600; font-family:var(--font-zh); white-space:nowrap; }
@@ -49,70 +71,90 @@
 
     /* ── Right detail ── */
     .pj-detail { flex:1; display:flex; flex-direction:column; overflow:hidden; background:#fff; }
-    .pj-placeholder { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; color:var(--text-dim); }
-    .pj-placeholder svg { width:48px; height:48px; opacity:.3; }
+    .pj-placeholder { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; color:var(--text-dim); }
+    .pj-placeholder svg { width:52px; height:52px; opacity:.2; }
+    .pj-placeholder__title { font-size:13px; font-family:var(--font-zh); color:var(--text-dim); }
+    .pj-placeholder__sub { font-size:11px; font-family:var(--font-zh); color:var(--text-dim); opacity:.7; }
 
-    /* Detail header */
-    .pj-header { background:#fff; border-bottom:1px solid var(--border-light); flex-shrink:0; padding:14px 20px 10px; }
-    .pj-header__top { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:8px; }
-    .pj-header__code { font-size:11px; font-family:Inter,sans-serif; font-weight:700; color:var(--text-dim); }
-    .pj-header__name { font-size:16px; font-weight:700; font-family:var(--font-zh); color:var(--text-primary); flex:1; }
-    .pj-header__actions { display:flex; align-items:center; gap:6px; margin-left:auto; }
+    /* Detail header — 4-row hierarchy */
+    .pj-header { background:#fff; border-bottom:1px solid var(--border-light); flex-shrink:0; padding:12px 20px 12px; }
+    .pj-header__row1 { display:flex; align-items:center; gap:8px; margin-bottom:6px; flex-wrap:wrap; }
+    .pj-header__code { font-size:10px; font-family:LINE Seed TW_OTF, sans-serif; font-weight:700; color:var(--text-dim); letter-spacing:.06em; }
+    .pj-header__name { font-size:18px; font-weight:700; font-family:var(--font-zh); color:var(--text-primary); margin:0 0 4px; line-height:1.3; }
+    .pj-header__desc { font-size:12px; color:var(--text-secondary); font-family:var(--font-zh); line-height:1.55; margin-bottom:6px; }
+    .pj-header__meta { font-size:11px; color:var(--text-dim); font-family:LINE Seed TW_OTF, sans-serif; display:flex; align-items:center; gap:4px; flex-wrap:wrap; }
+    .pj-case-link { color:var(--accent); font-weight:600; text-decoration:none; font-size:11px; }
+    .pj-case-link:hover { text-decoration:underline; }
+    .pj-header__spacer { flex:1; }
+    .pj-header__actions { display:flex; align-items:center; gap:6px; }
+
+    /* Status clickable badge / popover */
+    .pj-status-btn { cursor:pointer; border:none; font-family:var(--font-zh); font-size:9px; font-weight:600; padding:3px 8px; border-radius:4px; display:inline-flex; align-items:center; gap:3px; transition:opacity .1s; }
+    .pj-status-btn:hover { opacity:.8; }
+    .status-popover { position:absolute; top:calc(100% + 5px); left:0; background:#fff; border:1px solid var(--border-light); border-radius:8px; box-shadow:0 6px 20px rgba(0,0,0,.12); z-index:80; min-width:110px; padding:4px; }
+    .status-pop-item { display:block; width:100%; text-align:left; padding:7px 12px; font-size:12px; font-family:var(--font-zh); border:none; background:none; cursor:pointer; border-radius:5px; transition:background .1s; color:var(--text-primary); }
+    .status-pop-item:hover { background:#F5F4F0; }
+    .status-pop-item.active { font-weight:700; color:var(--accent); background:var(--accent-light); }
 
     /* Tabs */
     .pj-tabs { display:flex; border-bottom:1px solid var(--border-light); padding:0 20px; background:#fff; flex-shrink:0; }
-    .pj-tab { font-size:12px; font-family:var(--font-zh); padding:8px 14px; border:none; background:none; color:var(--text-dim); cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px; transition:all .1s; }
+    .pj-tab { font-size:12px; font-family:var(--font-zh); padding:9px 14px; border:none; background:none; color:var(--text-dim); cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px; transition:all .1s; display:flex; align-items:center; gap:6px; }
     .pj-tab.active { color:var(--accent); border-bottom-color:var(--accent); font-weight:600; }
+    .pj-tab-count { font-size:10px; font-family:LINE Seed TW_OTF, sans-serif; font-weight:700; background:var(--accent); color:#fff; padding:1px 6px; border-radius:10px; line-height:1.5; }
+    .pj-tab:not(.active) .pj-tab-count { background:#E5E7EB; color:#6B7280; }
 
     /* Detail body */
     .pj-body { flex:1; overflow-y:auto; padding:20px; }
     .pj-body::-webkit-scrollbar { width:5px; }
     .pj-body::-webkit-scrollbar-thumb { background:var(--border-light); border-radius:3px; }
 
-    /* Info section */
-    .info-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:20px; }
-    .info-field label { font-size:10px; font-family:Inter,sans-serif; text-transform:uppercase; letter-spacing:.08em; color:var(--text-dim); font-weight:500; display:block; margin-bottom:4px; }
-    .info-field .val { font-size:13px; font-family:var(--font-zh); color:var(--text-primary); }
-    .info-field input, .info-field textarea, .info-field select {
-      width:100%; padding:8px 10px; border:1px solid var(--border-light); border-radius:var(--radius); font-size:13px; font-family:var(--font-zh); outline:none; background:#fff; box-sizing:border-box; transition:border-color .12s;
-    }
-    .info-field input:focus, .info-field textarea:focus, .info-field select:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(37,99,235,.07); }
-    .info-field textarea { resize:vertical; min-height:70px; }
-    .info-full { grid-column:1/-1; }
+    /* Log toolbar */
+    .log-toolbar { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
+    .log-toolbar__title { font-size:13px; font-weight:600; font-family:var(--font-zh); color:var(--text-primary); display:flex; align-items:center; gap:6px; }
+    .log-toolbar__count { font-size:11px; color:var(--text-dim); font-family:LINE Seed TW_OTF, sans-serif; font-weight:400; }
 
-    /* Linked cases */
-    .linked-case-tag { display:inline-flex; align-items:center; gap:4px; padding:3px 8px 3px 10px; background:#EFF6FF; color:#1D4ED8; border:1px solid #BFDBFE; border-radius:5px; font-size:12px; font-family:Inter,sans-serif; font-weight:600; margin:3px; }
-    .linked-case-tag .rm { background:none; border:none; cursor:pointer; color:#93C5FD; font-size:13px; padding:0 0 0 3px; line-height:1; }
-    .linked-case-tag .rm:hover { color:#EF4444; }
-    .add-case-row { display:flex; gap:6px; margin-top:6px; }
-    .add-case-input { flex:1; padding:6px 10px; border:1px solid var(--border-light); border-radius:5px; font-size:12px; font-family:Inter,sans-serif; outline:none; }
-    .add-case-input:focus { border-color:var(--accent); }
-
-    /* Log timeline */
-    .log-entry { border:1px solid var(--border-light); border-radius:10px; margin-bottom:14px; overflow:hidden; }
-    .log-entry__head { display:flex; align-items:center; gap:10px; padding:12px 16px; background:#FAFAF9; cursor:pointer; border-bottom:1px solid transparent; transition:background .1s; }
+    /* Log timeline cards */
+    .log-entry { border:1px solid var(--border-light); border-radius:10px; margin-bottom:12px; overflow:hidden; transition:border-color .1s; }
+    .log-entry:hover { border-color:#C8C4BC; }
+    .log-entry__head { display:flex; align-items:center; gap:10px; padding:12px 16px; background:#FAFAF9; cursor:pointer; transition:background .1s; }
     .log-entry__head:hover { background:#F5F4F0; }
-    .log-entry.open .log-entry__head { border-bottom-color:var(--border-light); background:#fff; }
-    .log-date { font-size:13px; font-family:Inter,sans-serif; font-weight:700; color:var(--text-primary); }
-    .log-by { font-size:11px; color:var(--text-dim); font-family:var(--font-zh); }
-    .log-chevron { margin-left:auto; color:var(--text-dim); transition:transform .2s; }
-    .log-entry.open .log-chevron { transform:rotate(180deg); }
-    .log-stats { display:flex; gap:8px; margin-left:auto; margin-right:10px; }
-    .log-stat { font-size:10px; padding:2px 7px; border-radius:4px; font-family:var(--font-zh); }
-    .log-stat.items { background:#FEF3C7; color:#92400E; }
-    .log-stat.photos { background:#EDE9FE; color:#6D28D9; }
-    .log-body { padding:16px; }
+    .log-entry.open .log-entry__head { background:#fff; border-bottom:1px solid var(--border-light); }
+    .log-entry.open { border-color:#C8C4BC; }
 
-    /* Work content */
-    .section-label { font-size:10px; font-family:Inter,sans-serif; text-transform:uppercase; letter-spacing:.08em; color:var(--text-dim); font-weight:600; margin-bottom:6px; margin-top:14px; }
-    .section-label:first-child { margin-top:0; }
-    .work-content { font-size:13px; font-family:var(--font-zh); color:var(--text-primary); line-height:1.7; white-space:pre-wrap; background:#F9FAFB; border-radius:6px; padding:10px 12px; }
+    .log-date-icon { width:32px; height:32px; border-radius:7px; background:#EFF6FF; display:flex; flex-direction:column; align-items:center; justify-content:center; flex-shrink:0; }
+    .log-date-icon__m { font-size:8px; font-family:LINE Seed TW_OTF, sans-serif; font-weight:700; color:#1D4ED8; line-height:1; letter-spacing:.05em; text-transform:uppercase; }
+    .log-date-icon__d { font-size:14px; font-family:LINE Seed TW_OTF, sans-serif; font-weight:800; color:#1D4ED8; line-height:1; }
+
+    .log-entry__info { flex:1; min-width:0; }
+    .log-date { font-size:13px; font-family:LINE Seed TW_OTF, sans-serif; font-weight:700; color:var(--text-primary); }
+    .log-by { font-size:11px; color:var(--text-dim); font-family:var(--font-zh); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:1px; }
+    .log-preview { font-size:11px; color:var(--text-dim); font-family:var(--font-zh); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:2px; }
+
+    .log-chips { display:flex; gap:5px; align-items:center; flex-shrink:0; }
+    .log-chip { font-size:10px; padding:2px 7px; border-radius:4px; font-family:var(--font-zh); font-weight:500; white-space:nowrap; }
+    .log-chip.items-done { background:#DCFCE7; color:#15803D; }
+    .log-chip.items-pending { background:#FEF3C7; color:#92400E; }
+    .log-chip.photos { background:#EDE9FE; color:#6D28D9; }
+
+    .log-chevron { color:var(--text-dim); transition:transform .2s; flex-shrink:0; }
+    .log-entry.open .log-chevron { transform:rotate(180deg); }
+
+    /* Log body sections */
+    .log-body { padding:16px 18px; }
+    .log-section { margin-bottom:14px; }
+    .log-section:last-child { margin-bottom:0; }
+    .section-label { font-size:10px; font-family:LINE Seed TW_OTF, sans-serif; text-transform:uppercase; letter-spacing:.08em; color:var(--text-dim); font-weight:600; margin-bottom:7px; display:flex; align-items:center; gap:8px; }
+    .section-label::after { content:''; flex:1; height:1px; background:var(--border-light); }
+    .work-content { font-size:13px; font-family:var(--font-zh); color:var(--text-primary); line-height:1.75; white-space:pre-wrap; }
     .work-content-edit { width:100%; min-height:80px; padding:9px 11px; border:1px solid var(--border-light); border-radius:6px; font-size:13px; font-family:var(--font-zh); resize:vertical; outline:none; box-sizing:border-box; }
     .work-content-edit:focus { border-color:var(--accent); }
 
+    /* Log action footer */
+    .log-actions { display:flex; gap:8px; padding-top:12px; margin-top:12px; border-top:1px solid var(--border-light); }
+
     /* Attendees */
     .attendee-chips { display:flex; flex-wrap:wrap; gap:5px; align-items:center; }
-    .attendee-chip { display:inline-flex; align-items:center; gap:4px; padding:3px 8px; background:#F0FDF4; color:#15803D; border-radius:5px; font-size:12px; font-family:var(--font-zh); }
+    .attendee-chip { display:inline-flex; align-items:center; gap:4px; padding:3px 9px; background:#F0FDF4; color:#15803D; border-radius:20px; font-size:12px; font-family:var(--font-zh); border:1px solid #BBF7D0; }
     .attendee-chip .rm { background:none; border:none; cursor:pointer; color:#86EFAC; font-size:12px; padding:0; }
     .attendee-chip .rm:hover { color:#DC2626; }
     .attendee-add { display:flex; gap:6px; margin-top:6px; }
@@ -120,48 +162,69 @@
     .attendee-select:focus { border-color:var(--accent); }
 
     /* Action items */
-    .action-item { display:flex; align-items:flex-start; gap:10px; padding:9px 12px; border:1px solid var(--border-light); border-radius:7px; margin-bottom:6px; }
+    .action-item { display:flex; align-items:flex-start; gap:10px; padding:9px 12px; border:1px solid var(--border-light); border-radius:7px; margin-bottom:6px; background:#fff; transition:background .1s; }
     .action-item.done-item { background:#F0FDF4; border-color:#BBF7D0; }
     .action-item.stage1-item { background:#FFFBEB; border-color:#FDE68A; }
     .action-item__text { flex:1; font-size:13px; font-family:var(--font-zh); color:var(--text-primary); line-height:1.5; }
     .action-item.done-item .action-item__text { color:var(--text-dim); text-decoration:line-through; }
-    .action-item__meta { font-size:10px; color:var(--text-dim); font-family:Inter,sans-serif; margin-top:3px; }
+    .action-item__meta { font-size:10px; color:var(--text-dim); font-family:LINE Seed TW_OTF, sans-serif; margin-top:3px; }
     .action-item__btns { display:flex; gap:4px; flex-shrink:0; }
     .approve-btn { font-size:10px; padding:3px 8px; border-radius:4px; border:1px solid; cursor:pointer; font-family:var(--font-zh); transition:all .1s; white-space:nowrap; }
     .approve-btn.eng { background:#FFFBEB; color:#92400E; border-color:#FDE68A; }
     .approve-btn.eng:hover { background:#FEF3C7; }
     .approve-btn.biz { background:#EFF6FF; color:#1D4ED8; border-color:#BFDBFE; }
     .approve-btn.biz:hover { background:#DBEAFE; }
-    .approve-btn:disabled { opacity:.4; cursor:not-allowed; }
     .action-status { font-size:9px; padding:2px 6px; border-radius:4px; font-weight:600; white-space:nowrap; }
     .as-pending   { background:#F3F4F6; color:#6B7280; }
     .as-stage1    { background:#FEF3C7; color:#92400E; }
     .as-done      { background:#DCFCE7; color:#15803D; }
 
     /* Material usage */
-    .mat-row { display:flex; align-items:center; gap:8px; padding:7px 10px; border:1px solid var(--border-light); border-radius:6px; margin-bottom:5px; font-size:12px; font-family:var(--font-zh); }
+    .mat-row { display:flex; align-items:center; gap:8px; padding:7px 10px; border:1px solid var(--border-light); border-radius:6px; margin-bottom:5px; font-size:12px; font-family:var(--font-zh); background:#FAFAF9; }
     .mat-row__name { flex:1; }
-    .mat-row__qty  { width:60px; padding:3px 6px; border:1px solid var(--border-light); border-radius:4px; font-size:12px; text-align:right; outline:none; }
 
     /* Photo gallery */
-    .photo-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(140px, 1fr)); gap:8px; }
+    .photo-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(120px, 1fr)); gap:8px; }
     .photo-thumb { position:relative; aspect-ratio:4/3; border-radius:7px; overflow:hidden; background:#F0EFEB; cursor:pointer; border:1px solid var(--border-light); }
     .photo-thumb img { width:100%; height:100%; object-fit:cover; display:block; }
     .photo-thumb:hover .photo-overlay { opacity:1; }
     .photo-overlay { position:absolute; inset:0; background:rgba(0,0,0,.45); display:flex; align-items:center; justify-content:center; gap:8px; opacity:0; transition:opacity .15s; }
     .photo-overlay button { width:28px; height:28px; border-radius:50%; border:none; background:rgba(255,255,255,.9); color:#374151; cursor:pointer; font-size:13px; display:flex; align-items:center; justify-content:center; }
     .photo-overlay button.del { color:#DC2626; }
-    .photo-gps { position:absolute; bottom:4px; left:4px; background:rgba(0,0,0,.6); color:#fff; font-size:9px; padding:2px 5px; border-radius:3px; font-family:Inter,sans-serif; }
-    .photo-upload-area { border:2px dashed var(--border-light); border-radius:8px; padding:20px; text-align:center; cursor:pointer; color:var(--text-dim); font-size:12px; font-family:var(--font-zh); transition:border-color .15s; }
-    .photo-upload-area:hover { border-color:var(--accent); color:var(--accent); }
+    .photo-gps { position:absolute; bottom:4px; left:4px; background:rgba(0,0,0,.6); color:#fff; font-size:9px; padding:2px 5px; border-radius:3px; font-family:LINE Seed TW_OTF, sans-serif; }
+    .photo-upload-area { border:2px dashed var(--border-light); border-radius:8px; padding:16px; text-align:center; cursor:pointer; color:var(--text-dim); font-size:12px; font-family:var(--font-zh); transition:all .15s; margin-top:8px; }
+    .photo-upload-area:hover { border-color:var(--accent); color:var(--accent); background:#F5F9FF; }
 
     /* Photo lightbox */
-    .lightbox { position:fixed; inset:0; background:rgba(0,0,0,.85); z-index:999; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:10px; }
+    .lightbox { position:fixed; inset:0; background:rgba(0,0,0,.88); z-index:999; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:10px; }
     .lightbox img { max-width:90vw; max-height:80vh; border-radius:8px; object-fit:contain; }
-    .lightbox__meta { font-size:11px; color:rgba(255,255,255,.7); font-family:Inter,sans-serif; text-align:center; }
-    .lightbox__close { position:absolute; top:16px; right:20px; background:none; border:none; color:#fff; font-size:28px; cursor:pointer; line-height:1; }
+    .lightbox__meta { font-size:11px; color:rgba(255,255,255,.7); font-family:LINE Seed TW_OTF, sans-serif; text-align:center; }
+    .lightbox__close { position:absolute; top:16px; right:20px; background:rgba(255,255,255,.15); border:none; color:#fff; width:36px; height:36px; border-radius:50%; cursor:pointer; font-size:20px; display:flex; align-items:center; justify-content:center; transition:background .1s; }
+    .lightbox__close:hover { background:rgba(255,255,255,.25); }
 
-    /* New log / item form */
+    /* Info section */
+    .info-card { background:#FAFAF9; border:1px solid var(--border-light); border-radius:10px; padding:16px; margin-bottom:14px; }
+    .info-card__title { font-size:10px; font-family:LINE Seed TW_OTF, sans-serif; text-transform:uppercase; letter-spacing:.1em; color:var(--text-dim); font-weight:600; margin-bottom:14px; display:flex; align-items:center; gap:6px; }
+    .info-card__title::after { content:''; flex:1; height:1px; background:var(--border-light); }
+    .info-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .info-field label { font-size:10px; font-family:LINE Seed TW_OTF, sans-serif; text-transform:uppercase; letter-spacing:.08em; color:var(--text-dim); font-weight:500; display:block; margin-bottom:4px; }
+    .info-field .val { font-size:13px; font-family:var(--font-zh); color:var(--text-primary); padding:6px 0; }
+    .info-field input, .info-field textarea, .info-field select {
+      width:100%; padding:8px 10px; border:1px solid var(--border-light); border-radius:var(--radius); font-size:13px; font-family:var(--font-zh); outline:none; background:#fff; box-sizing:border-box; transition:border-color .12s;
+    }
+    .info-field input:focus, .info-field textarea:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(37,99,235,.07); }
+    .info-field textarea { resize:vertical; min-height:70px; }
+    .info-full { grid-column:1/-1; }
+
+    /* Linked cases */
+    .linked-case-tag { display:inline-flex; align-items:center; gap:4px; padding:3px 8px 3px 10px; background:#EFF6FF; color:#1D4ED8; border:1px solid #BFDBFE; border-radius:5px; font-size:12px; font-family:LINE Seed TW_OTF, sans-serif; font-weight:600; margin:3px; }
+    .linked-case-tag .rm { background:none; border:none; cursor:pointer; color:#93C5FD; font-size:13px; padding:0 0 0 3px; line-height:1; }
+    .linked-case-tag .rm:hover { color:#EF4444; }
+    .add-case-row { display:flex; gap:6px; margin-top:8px; }
+    .add-case-input { flex:1; padding:6px 10px; border:1px solid var(--border-light); border-radius:5px; font-size:12px; font-family:LINE Seed TW_OTF, sans-serif; outline:none; }
+    .add-case-input:focus { border-color:var(--accent); }
+
+    /* New log / action item forms */
     .action-new { display:flex; gap:6px; margin-top:6px; }
     .action-new input { flex:1; padding:7px 10px; border:1px solid var(--border-light); border-radius:5px; font-size:12px; font-family:var(--font-zh); outline:none; }
     .action-new input:focus { border-color:var(--accent); }
@@ -188,14 +251,14 @@
     .modal-body { padding:18px; }
     .modal-foot { padding:12px 18px; border-top:1px solid var(--border-light); display:flex; justify-content:flex-end; gap:8px; }
     .form-row { margin-bottom:12px; }
-    .form-label { display:block; font-size:10px; font-family:Inter,sans-serif; letter-spacing:.08em; text-transform:uppercase; color:var(--text-dim); font-weight:500; margin-bottom:4px; }
+    .form-label { display:block; font-size:10px; font-family:LINE Seed TW_OTF, sans-serif; letter-spacing:.08em; text-transform:uppercase; color:var(--text-dim); font-weight:500; margin-bottom:4px; }
     .form-input, .form-select, .form-textarea {
       width:100%; padding:8px 10px; border:1px solid var(--border-light); border-radius:var(--radius); font-size:13px; font-family:var(--font-zh); background:#fff; outline:none; box-sizing:border-box; transition:border-color .12s;
     }
     .form-input:focus,.form-select:focus,.form-textarea:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(37,99,235,.07); }
     .form-textarea { resize:vertical; min-height:80px; }
 
-    /* Status selector chips */
+    /* Status chips (create modal) */
     .status-chips { display:flex; flex-wrap:wrap; gap:6px; }
     .status-chip { padding:5px 12px; border-radius:20px; font-size:11px; font-family:var(--font-zh); cursor:pointer; border:1px solid var(--border-light); background:#F9FAFB; color:var(--text-dim); transition:all .1s; }
     .status-chip.active { border-color:var(--accent); background:var(--accent-light); color:var(--accent); font-weight:600; }
@@ -204,60 +267,71 @@
     .toast { position:fixed; bottom:24px; right:24px; z-index:9999; background:#1F2937; color:#fff; padding:10px 18px; border-radius:8px; font-size:13px; font-family:var(--font-zh); box-shadow:0 4px 16px rgba(0,0,0,.25); transform:translateY(0); transition:all .25s; }
     .toast.hidden { transform:translateY(20px); opacity:0; pointer-events:none; }
 
-    /* ── Mobile ── */
-    .mob-back { display:none; align-items:center; gap:5px; background:none; border:none; cursor:pointer; color:var(--accent); font-size:12px; font-family:var(--font-zh); padding:0; margin-right:6px; line-height:1; }
+    /* Mobile */
+    .mob-back { display:none; align-items:center; gap:5px; background:none; border:none; cursor:pointer; color:var(--accent); font-size:12px; font-family:var(--font-zh); padding:0; margin-right:2px; line-height:1; }
     @media (max-width:767px) {
       .pj-layout { flex-direction:column; height:auto; min-height:calc(100vh - var(--topbar-h)); }
-      .pj-list { width:100%; min-width:0; border-right:none; border-bottom:1px solid var(--border-light); max-height:40vh; flex-shrink:0; }
+      .pj-list { width:100%; min-width:0; border-right:none; border-bottom:1px solid var(--border-light); max-height:42vh; flex-shrink:0; }
       .pj-list.mob-hidden { display:none !important; }
       .pj-detail { flex:1; min-height:0; }
       .pj-detail.mob-hidden { display:none !important; }
       .mob-back { display:inline-flex; }
       .photo-grid { grid-template-columns:repeat(auto-fill,minmax(90px,1fr)); gap:6px; }
-      .photo-upload-area { padding:14px; }
       .modal-overlay { padding:8px; align-items:flex-end; }
       .modal-box { max-width:100% !important; border-radius:16px 16px 0 0; }
       .modal-body { max-height:72vh; overflow-y:auto; }
       .pj-body { padding:12px; }
-      .pj-header { padding:10px 12px 8px; }
-      .pj-header__name { font-size:14px; }
-      .log-body { padding:10px 12px; }
+      .pj-header { padding:10px 14px 10px; }
+      .pj-header__name { font-size:15px; }
+      .log-body { padding:12px 14px; }
+      .info-grid { grid-template-columns:1fr; }
     }
   </style>
 </head>
 <body x-data="projectsPage()" x-init="init()" x-cloak>
 
-    <header id="app-topbar" class="topbar"></header>
-<div class="sidebar-overlay" id="sidebar-overlay"></div>
-
-  <!-- Sidebar -->
+  <header id="app-topbar" class="topbar"></header>
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
   <aside class="sidebar" id="app-sidebar"></aside>
 
-  <!-- Main layout -->
   <div class="pj-layout" style="margin-left:var(--sidebar-w);margin-top:var(--topbar-h);">
 
-    <!-- Left: Project list -->
+    <!-- ══ LEFT: Project List ══ -->
     <div class="pj-list" :class="{'mob-hidden': selected && isMobileView}">
       <div class="pj-list__head">
+
+        <!-- Title row -->
         <div class="pj-list__title-row">
           <span class="pj-list__title">專案管理</span>
+          <span class="pj-list__count" x-text="filteredProjects.length + ' 個'"></span>
+          <div style="flex:1"></div>
           <button class="btn btn-primary btn-sm" @click="openCreateProject()" x-show="canManage()">
-            <svg viewBox="0 0 20 20" fill="currentColor" style="width:12px;height:12px"><path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd"/></svg>
+            <svg viewBox="0 0 20 20" fill="currentColor" style="width:11px;height:11px"><path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd"/></svg>
             新增
           </button>
         </div>
+
+        <!-- Search -->
         <div class="pj-search">
-          <input class="pj-search-input" type="text" placeholder="搜尋專案..." x-model="searchQ">
+          <input class="pj-search-input" type="text" placeholder="搜尋專案名稱或代號…" x-model="searchQ">
         </div>
-        <div class="pj-list__tabs">
+
+        <!-- Status filter pills (wrapping, no scroll) -->
+        <div class="pj-filter-pills">
           <template x-for="s in ['全部','規劃中','進行中','暫停','驗收中','完工','結案','取消']" :key="s">
-            <button class="pj-list__tab" :class="{active: filterStatus===s}" @click="filterStatus=s" x-text="s"></button>
+            <button class="pj-pill" :class="{active: filterStatus===s}" @click="filterStatus=s" x-text="s"></button>
           </template>
         </div>
+
       </div>
+
+      <!-- Card list -->
       <div class="pj-list__body">
         <template x-if="filteredProjects.length===0">
-          <div class="pj-empty">尚無符合的專案</div>
+          <div class="pj-empty">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+            <span>尚無符合的專案</span>
+          </div>
         </template>
         <template x-for="p in filteredProjects" :key="p.id">
           <div class="pj-card" :class="{selected: selected?.id===p.id}" @click="selectProject(p)">
@@ -267,65 +341,102 @@
             </div>
             <div class="pj-card__name" x-text="p.name"></div>
             <div class="pj-card__foot">
-              <span style="font-size:10px;color:var(--text-dim);font-family:Inter,sans-serif;" x-text="(p.linked_cases||[]).length + ' 個案件'"></span>
-              <span style="font-size:10px;color:var(--text-dim);font-family:Inter,sans-serif;margin-left:auto;" x-text="fmtDate(p.created_at)"></span>
+              <span class="pj-card__meta" x-text="(p.linked_cases||[]).length + ' 個案件'"></span>
+              <span class="pj-card__meta" style="margin-left:auto;" x-text="fmtDate(p.created_at)"></span>
             </div>
           </div>
         </template>
       </div>
     </div>
 
-    <!-- Right: Detail -->
+    <!-- ══ RIGHT: Detail ══ -->
     <div class="pj-detail" :class="{'mob-hidden': !selected && isMobileView}">
+
       <!-- Placeholder -->
       <template x-if="!selected">
         <div class="pj-placeholder">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
-          <span style="font-size:13px;font-family:var(--font-zh);">選擇專案以查看詳情</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.1"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg>
+          <span class="pj-placeholder__title">選擇專案以查看詳情</span>
+          <span class="pj-placeholder__sub">左側列表點擊任一專案開始</span>
         </div>
       </template>
 
       <!-- Detail content -->
       <template x-if="selected">
         <div style="display:flex;flex-direction:column;height:100%;overflow:hidden;">
+
           <!-- Header -->
           <div class="pj-header">
-            <div class="pj-header__top">
-              <button class="mob-back" @click="selected=null;logs=[];openLogs=[]">← 列表</button>
+
+            <!-- Row 1: code · status · spacer · actions -->
+            <div class="pj-header__row1">
+              <button class="mob-back" @click="selected=null;logs=[];openLogs=[]">
+                <svg viewBox="0 0 20 20" fill="currentColor" style="width:12px;height:12px"><path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                列表
+              </button>
               <span class="pj-header__code" x-text="selected.code"></span>
-              <span class="status-badge" :class="statusClass(selected.status)" x-text="selected.status" style="font-size:11px;padding:3px 9px;"></span>
-              <h2 class="pj-header__name" x-text="selected.name"></h2>
-              <div class="pj-header__actions">
-                <!-- Status change dropdown -->
+
+              <!-- Status — clickable popover for managers, static badge for others -->
+              <div x-data="{statusOpen:false}" style="position:relative">
                 <template x-if="canManage()">
-                  <select style="padding:5px 8px;border:1px solid var(--border-light);border-radius:5px;font-size:11px;font-family:var(--font-zh);outline:none;"
-                    @change="changeStatus($event.target.value); $event.target.value=''">
-                    <option value="">變更狀態...</option>
-                    <template x-for="s in ['規劃中','進行中','暫停','驗收中','完工','結案','取消']" :key="s">
-                      <option :value="s" x-text="s"></option>
-                    </template>
-                  </select>
+                  <button class="pj-status-btn" :class="statusClass(selected.status)"
+                          @click="statusOpen=!statusOpen">
+                    <span x-text="selected.status"></span>
+                    <svg viewBox="0 0 20 20" fill="currentColor" style="width:9px;height:9px;opacity:.7"><path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
+                  </button>
                 </template>
-                <button class="btn btn-ghost btn-sm" @click="openEditProject()" x-show="canManage()">編輯</button>
-                <button class="btn btn-danger-ghost btn-sm" @click="deleteProject()" x-show="canManage() && (selected.status==='規劃中'||selected.status==='取消')">刪除</button>
+                <template x-if="!canManage()">
+                  <span class="status-badge" :class="statusClass(selected.status)" x-text="selected.status" style="font-size:11px;padding:3px 9px;"></span>
+                </template>
+                <div class="status-popover" x-show="statusOpen" x-cloak @click.away="statusOpen=false">
+                  <template x-for="s in ['規劃中','進行中','暫停','驗收中','完工','結案','取消']" :key="s">
+                    <button class="status-pop-item" :class="{active: selected.status===s}"
+                            @click="changeStatus(s); statusOpen=false" x-text="s"></button>
+                  </template>
+                </div>
+              </div>
+
+              <div class="pj-header__spacer"></div>
+
+              <div class="pj-header__actions">
+                <button class="btn btn-ghost btn-sm" @click="openEditProject()" x-show="canManage()">
+                  <svg viewBox="0 0 20 20" fill="currentColor" style="width:11px;height:11px"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/></svg>
+                  編輯
+                </button>
+                <button class="btn btn-danger-ghost btn-sm" @click="deleteProject()"
+                        x-show="canManage() && (selected.status==='規劃中'||selected.status==='取消')">刪除</button>
               </div>
             </div>
-            <div style="font-size:12px;color:var(--text-dim);font-family:var(--font-zh);" x-show="selected.description" x-text="selected.description"></div>
-            <div style="font-size:11px;color:var(--text-dim);font-family:Inter,sans-serif;margin-top:4px;">
-              建立：<span x-text="selected.created_by"></span> ·
+
+            <!-- Row 2: Project name -->
+            <h2 class="pj-header__name" x-text="selected.name"></h2>
+
+            <!-- Row 3: Description -->
+            <div class="pj-header__desc" x-show="selected.description" x-text="selected.description"></div>
+
+            <!-- Row 4: Metadata -->
+            <div class="pj-header__meta">
+              <svg viewBox="0 0 20 20" fill="currentColor" style="width:11px;height:11px;opacity:.5"><path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd"/></svg>
+              <span x-text="selected.created_by"></span>
+              <span style="opacity:.4">·</span>
               <span x-text="fmtDate(selected.created_at)"></span>
-              <span x-show="(selected.linked_cases||[]).length">
-                · 關聯案件：
-                <template x-for="qno in (selected.linked_cases||[])" :key="qno">
-                  <a :href="'case-management.html?q='+qno" style="color:var(--accent);font-weight:600;margin-right:4px;" x-text="qno"></a>
-                </template>
-              </span>
+              <template x-if="(selected.linked_cases||[]).length">
+                <span style="display:contents">
+                  <span style="opacity:.4">· 關聯案件</span>
+                  <template x-for="qno in (selected.linked_cases||[])" :key="qno">
+                    <a :href="'case-management.html?q='+qno" class="pj-case-link" x-text="qno"></a>
+                  </template>
+                </span>
+              </template>
             </div>
           </div>
 
           <!-- Tabs -->
           <div class="pj-tabs">
-            <button class="pj-tab" :class="{active:tab==='logs'}" @click="tab='logs'">工作日誌</button>
+            <button class="pj-tab" :class="{active:tab==='logs'}" @click="tab='logs'">
+              工作日誌
+              <span class="pj-tab-count" x-show="logs.length" x-text="logs.length"></span>
+            </button>
             <button class="pj-tab" :class="{active:tab==='info'}" @click="tab='info'">專案資訊</button>
           </div>
 
@@ -335,43 +446,73 @@
             <!-- ── 工作日誌 tab ── -->
             <template x-if="tab==='logs'">
               <div>
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
-                  <span style="font-size:13px;font-weight:600;font-family:var(--font-zh);">共 <span x-text="logs.length"></span> 筆日誌</span>
+                <div class="log-toolbar">
+                  <span class="log-toolbar__title">
+                    工作日誌
+                    <span class="log-toolbar__count" x-text="logs.length + ' 筆'"></span>
+                  </span>
                   <button class="btn btn-primary btn-sm" @click="openNewLog()" x-show="canManage()">
-                    <svg viewBox="0 0 20 20" fill="currentColor" style="width:12px;height:12px"><path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd"/></svg>
+                    <svg viewBox="0 0 20 20" fill="currentColor" style="width:11px;height:11px"><path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd"/></svg>
                     新增日誌
                   </button>
                 </div>
 
                 <template x-if="logs.length===0">
-                  <div style="text-align:center;color:var(--text-dim);font-size:13px;font-family:var(--font-zh);padding:40px;">尚無工作日誌</div>
+                  <div style="text-align:center;color:var(--text-dim);font-size:13px;font-family:var(--font-zh);padding:52px 20px;display:flex;flex-direction:column;align-items:center;gap:8px;">
+                    <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" style="opacity:.2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+                    <span>尚無工作日誌</span>
+                    <span style="font-size:11px;opacity:.6">點擊「新增日誌」記錄今日工作進度</span>
+                  </div>
                 </template>
 
                 <template x-for="log in logs" :key="log.id">
                   <div class="log-entry" :class="{open: openLogs.includes(log.id)}">
+
+                    <!-- Log card header -->
                     <div class="log-entry__head" @click="toggleLog(log.id)">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="width:16px;height:16px;color:var(--accent);flex-shrink:0;"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
-                      <span class="log-date" x-text="log.log_date"></span>
-                      <span class="log-by" x-text="log.created_by"></span>
-                      <div class="log-stats">
-                        <span class="log-stat items" x-show="(log.action_items||[]).length">
-                          <span x-text="(log.action_items||[]).filter(i=>i.status==='done').length"></span>/<span x-text="(log.action_items||[]).length"></span> 確認
-                        </span>
-                        <span class="log-stat photos" x-show="(log.photos||[]).length">
-                          <span x-text="(log.photos||[]).length"></span> 張
-                        </span>
+                      <!-- Date icon block -->
+                      <div class="log-date-icon">
+                        <span class="log-date-icon__m" x-text="(log.log_date||'').slice(5,7) ? ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt((log.log_date||'').slice(5,7))-1] : ''"></span>
+                        <span class="log-date-icon__d" x-text="(log.log_date||'').slice(8,10)"></span>
                       </div>
-                      <svg class="log-chevron" viewBox="0 0 20 20" fill="currentColor" style="width:16px;height:16px;"><path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
+
+                      <!-- Info -->
+                      <div class="log-entry__info">
+                        <div class="log-date" x-text="log.log_date"></div>
+                        <div class="log-by" x-text="log.created_by" x-show="log.created_by"></div>
+                        <div class="log-preview" x-show="!openLogs.includes(log.id) && log.work_content"
+                             x-text="log.work_content.slice(0,60) + (log.work_content.length>60?'…':'')"></div>
+                      </div>
+
+                      <!-- Stats chips -->
+                      <div class="log-chips">
+                        <template x-if="(log.action_items||[]).length">
+                          <span class="log-chip"
+                                :class="(log.action_items||[]).every(i=>i.status==='done') ? 'items-done' : 'items-pending'"
+                                x-text="(log.action_items||[]).filter(i=>i.status==='done').length + '/' + (log.action_items||[]).length + ' 項'"></span>
+                        </template>
+                        <template x-if="(log.photos||[]).length">
+                          <span class="log-chip photos" x-text="(log.photos||[]).length + ' 張'"></span>
+                        </template>
+                      </div>
+
+                      <svg class="log-chevron" viewBox="0 0 20 20" fill="currentColor" style="width:15px;height:15px;">
+                        <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                      </svg>
                     </div>
 
+                    <!-- Log body (expanded) -->
                     <div class="log-body" x-show="openLogs.includes(log.id)" x-transition>
+
                       <!-- Work content -->
-                      <div class="section-label">工作內容</div>
-                      <div class="work-content" x-text="log.work_content || '（未填寫）'"></div>
+                      <div class="log-section">
+                        <div class="section-label">工作內容</div>
+                        <div class="work-content" x-text="log.work_content || '（未填寫）'"></div>
+                      </div>
 
                       <!-- Attendees -->
                       <template x-if="(log.attendees||[]).length">
-                        <div>
+                        <div class="log-section">
                           <div class="section-label">出勤人員</div>
                           <div class="attendee-chips">
                             <template x-for="a in log.attendees" :key="a">
@@ -383,7 +524,7 @@
 
                       <!-- Action items -->
                       <template x-if="(log.action_items||[]).length">
-                        <div>
+                        <div class="log-section">
                           <div class="section-label">確認事項 / 待辦</div>
                           <template x-for="item in log.action_items" :key="item.id">
                             <div class="action-item"
@@ -393,7 +534,7 @@
                                 <div class="action-item__meta" x-show="item.stage1_approver">
                                   工程確認：<span x-text="item.stage1_approver"></span> <span x-text="fmtDateTime(item.stage1_at)"></span>
                                   <template x-if="item.stage2_approver">
-                                    ｜業務確認：<span x-text="item.stage2_approver"></span> <span x-text="fmtDateTime(item.stage2_at)"></span>
+                                    <span>｜業務確認：<span x-text="item.stage2_approver"></span> <span x-text="fmtDateTime(item.stage2_at)"></span></span>
                                   </template>
                                 </div>
                               </div>
@@ -413,45 +554,48 @@
 
                       <!-- Material usage -->
                       <template x-if="(log.materials_used||[]).length">
-                        <div>
+                        <div class="log-section">
                           <div class="section-label">物料使用紀錄</div>
                           <template x-for="m in log.materials_used" :key="m.id||m.name">
                             <div class="mat-row">
                               <span class="mat-row__name" x-text="m.name"></span>
                               <span style="font-size:11px;color:var(--text-dim);" x-text="m.unit||''"></span>
-                              <span style="font-size:12px;font-weight:600;font-family:Inter,sans-serif;" x-text="m.qty"></span>
+                              <span style="font-size:12px;font-weight:600;font-family:LINE Seed TW_OTF, sans-serif;" x-text="m.qty"></span>
                             </div>
                           </template>
                         </div>
                       </template>
 
                       <!-- Photos -->
-                      <div>
-                        <div class="section-label">施工照片（<span x-text="(log.photos||[]).length"></span> 張）</div>
+                      <div class="log-section">
+                        <div class="section-label">施工照片<span style="font-weight:400;text-transform:none;letter-spacing:0;margin-left:4px;opacity:.7" x-text="(log.photos||[]).length ? '（' + (log.photos||[]).length + ' 張）' : ''"></span></div>
                         <div class="photo-grid" x-show="(log.photos||[]).length">
                           <template x-for="ph in log.photos" :key="ph.id">
                             <div class="photo-thumb">
-                              <img :src="photoUrl(ph.path)" loading="lazy" @error="$el.src='data:image/svg+xml,<svg/>'">
+                              <img :src="photoUrl(ph.path)" loading="lazy" @error="if(!$el._retried){$el._retried=true;clearPhotoCache(ph.path)}">
                               <div class="photo-overlay">
-                                <button @click.stop="lightboxPhoto=ph" title="查看">🔍</button>
-                                <button class="del" @click.stop="deletePhoto(log, ph)" title="刪除" x-show="canManage()">✕</button>
+                                <button @click.stop="lightboxPhoto=ph" title="查看">
+                                  <svg viewBox="0 0 20 20" fill="currentColor" style="width:12px;height:12px"><path d="M10 12a2 2 0 100-4 2 2 0 000 4z"/><path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd"/></svg>
+                                </button>
+                                <button class="del" @click.stop="deletePhoto(log, ph)" title="刪除" x-show="canManage()">
+                                  <svg viewBox="0 0 20 20" fill="currentColor" style="width:12px;height:12px"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+                                </button>
                               </div>
                               <span class="photo-gps" x-show="ph.gps" x-text="'📍 '+ph.gps.substring(0,12)+'...'"></span>
                             </div>
                           </template>
                         </div>
                         <!-- Upload area -->
-                        <div class="photo-upload-area" x-show="canManage()" @click="triggerPhotoUpload(log)"
-                          style="margin-top:8px;">
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:24px;height:24px;margin:0 auto 6px;display:block;"><path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-                          點擊或拖曳上傳照片（支援多張，自動加水印）
+                        <div class="photo-upload-area" x-show="canManage()" @click="triggerPhotoUpload(log)">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:22px;height:22px;margin:0 auto 6px;display:block;opacity:.5;"><path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                          點擊上傳照片（支援多張，自動加水印）
                         </div>
                         <input type="file" accept="image/*" multiple style="display:none" :ref="'photoInput_'+log.id"
                           @change="handlePhotoUpload($event, log)">
                       </div>
 
                       <!-- Log actions -->
-                      <div style="display:flex;gap:8px;margin-top:16px;padding-top:12px;border-top:1px solid var(--border-light);" x-show="canManage()">
+                      <div class="log-actions" x-show="canManage()">
                         <button class="btn btn-ghost btn-sm" @click="openEditLog(log)">編輯日誌</button>
                         <button class="btn btn-danger-ghost btn-sm" @click="deleteLog(log)" x-show="session.role==='superadmin'||session.role==='admin'">刪除</button>
                       </div>
@@ -464,70 +608,115 @@
             <!-- ── 專案資訊 tab ── -->
             <template x-if="tab==='info'">
               <div>
-                <div class="info-grid">
-                  <div class="info-field">
-                    <label>開始日期</label>
-                    <template x-if="canManage()">
-                      <input type="date" x-model="infoEdit.startDate" @change="saveInfo()">
-                    </template>
-                    <template x-if="!canManage()">
-                      <div class="val" x-text="selected.data_json?.startDate||'—'"></div>
-                    </template>
-                  </div>
-                  <div class="info-field">
-                    <label>預計完工</label>
-                    <template x-if="canManage()">
-                      <input type="date" x-model="infoEdit.endDate" @change="saveInfo()">
-                    </template>
-                    <template x-if="!canManage()">
-                      <div class="val" x-text="selected.data_json?.endDate||'—'"></div>
-                    </template>
-                  </div>
-                  <div class="info-field">
-                    <label>施工地點</label>
-                    <template x-if="canManage()">
-                      <input type="text" x-model="infoEdit.location" @change="saveInfo()" placeholder="地址或描述">
-                    </template>
-                    <template x-if="!canManage()">
-                      <div class="val" x-text="selected.data_json?.location||'—'"></div>
-                    </template>
-                  </div>
-                  <div class="info-field">
-                    <label>業主聯絡人</label>
-                    <template x-if="canManage()">
-                      <input type="text" x-model="infoEdit.clientContact" @change="saveInfo()" placeholder="姓名 / 電話">
-                    </template>
-                    <template x-if="!canManage()">
-                      <div class="val" x-text="selected.data_json?.clientContact||'—'"></div>
-                    </template>
-                  </div>
-                  <div class="info-field info-full">
-                    <label>備註</label>
-                    <template x-if="canManage()">
-                      <textarea x-model="infoEdit.notes" @change="saveInfo()" placeholder="其他說明..."></textarea>
-                    </template>
-                    <template x-if="!canManage()">
-                      <div class="val" x-text="selected.data_json?.notes||'—'" style="white-space:pre-wrap;"></div>
-                    </template>
-                  </div>
-                  <!-- Linked cases -->
-                  <div class="info-field info-full">
-                    <label>關聯案件</label>
-                    <div style="flex-wrap:wrap;display:flex;">
-                      <template x-for="qno in (selected.linked_cases||[])" :key="qno">
-                        <span class="linked-case-tag">
-                          <span x-text="qno"></span>
-                          <button class="rm" @click="unlinkCase(qno)" x-show="canManage()">×</button>
-                        </span>
+                <!-- Basic info card -->
+                <div class="info-card">
+                  <div class="info-card__title">時程資訊</div>
+                  <div class="info-grid">
+                    <div class="info-field">
+                      <label>開始日期</label>
+                      <template x-if="canManage()">
+                        <input type="date" x-model="infoEdit.startDate" @change="saveInfo()">
+                      </template>
+                      <template x-if="!canManage()">
+                        <div class="val" x-text="selected.data_json?.startDate||'—'"></div>
                       </template>
                     </div>
-                    <div class="add-case-row" x-show="canManage()">
-                      <input class="add-case-input" type="text" placeholder="輸入報價單號 MQ-..." x-model="newCaseNo"
-                        @keydown.enter="linkCase()">
-                      <button class="btn btn-ghost btn-sm" @click="linkCase()">關聯</button>
+                    <div class="info-field">
+                      <label>預計完工</label>
+                      <template x-if="canManage()">
+                        <input type="date" x-model="infoEdit.endDate" @change="saveInfo()">
+                      </template>
+                      <template x-if="!canManage()">
+                        <div class="val" x-text="selected.data_json?.endDate||'—'"></div>
+                      </template>
+                    </div>
+                    <div class="info-field">
+                      <label>施工地點</label>
+                      <template x-if="canManage()">
+                        <input type="text" x-model="infoEdit.location" @change="saveInfo()" placeholder="地址或描述">
+                      </template>
+                      <template x-if="!canManage()">
+                        <div class="val" x-text="selected.data_json?.location||'—'"></div>
+                      </template>
+                    </div>
+                    <div class="info-field">
+                      <label>業主聯絡人</label>
+                      <template x-if="canManage()">
+                        <input type="text" x-model="infoEdit.clientContact" @change="saveInfo()" placeholder="姓名 / 電話">
+                      </template>
+                      <template x-if="!canManage()">
+                        <div class="val" x-text="selected.data_json?.clientContact||'—'"></div>
+                      </template>
+                    </div>
+                    <div class="info-field info-full">
+                      <label>備註</label>
+                      <template x-if="canManage()">
+                        <textarea x-model="infoEdit.notes" @change="saveInfo()" placeholder="其他說明…"></textarea>
+                      </template>
+                      <template x-if="!canManage()">
+                        <div class="val" x-text="selected.data_json?.notes||'—'" style="white-space:pre-wrap;"></div>
+                      </template>
                     </div>
                   </div>
                 </div>
+
+                <!-- Linked cases card -->
+                <div class="info-card">
+                  <div class="info-card__title">關聯案件</div>
+                  <div style="display:flex;flex-wrap:wrap;min-height:24px;">
+                    <template x-if="!(selected.linked_cases||[]).length">
+                      <span style="font-size:12px;color:var(--text-dim);font-family:var(--font-zh);">尚未關聯任何案件</span>
+                    </template>
+                    <template x-for="qno in (selected.linked_cases||[])" :key="qno">
+                      <span class="linked-case-tag">
+                        <span x-text="qno"></span>
+                        <button class="rm" @click="unlinkCase(qno)" x-show="canManage()">×</button>
+                      </span>
+                    </template>
+                  </div>
+                  <div class="add-case-row" x-show="canManage()">
+                    <input class="add-case-input" type="text" placeholder="輸入報價單號 MQ-…" x-model="newCaseNo"
+                      @keydown.enter="linkCase()">
+                    <button class="btn btn-ghost btn-sm" @click="linkCase()">關聯</button>
+                  </div>
+                </div>
+
+                <!-- Member Assignment — admin/superadmin only -->
+                <template x-if="isAdmin()">
+                  <div class="info-card">
+                    <div class="info-card__title">
+                      成員分配
+                      <span style="font-size:10px;font-weight:400;color:var(--text-dim);text-transform:none;letter-spacing:0">· 未分配成員時，僅管理員可見此專案</span>
+                    </div>
+                    <template x-if="assignableUsers.length===0">
+                      <div style="font-size:12px;color:var(--text-dim);font-family:var(--font-zh);margin-bottom:10px;">
+                        目前無具備專案相關模組的非管理員使用者
+                      </div>
+                    </template>
+                    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">
+                      <template x-for="u in assignableUsers" :key="u.id">
+                        <label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;padding:5px 11px;border:1px solid var(--border-light);border-radius:6px;font-size:12px;font-family:var(--font-zh);transition:all .12s;"
+                               :style="assignedUserIds.includes(u.id) ? 'border-color:var(--accent);background:var(--accent-light);color:var(--accent)' : 'background:#fff;color:var(--text-primary)'">
+                          <input type="checkbox" style="display:none"
+                                 :checked="assignedUserIds.includes(u.id)"
+                                 @change="toggleAssignment(u.id)">
+                          <svg x-show="assignedUserIds.includes(u.id)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:10px;height:10px;flex-shrink:0"><path d="M5 13l4 4L19 7"/></svg>
+                          <span x-text="u.displayName || u.username"></span>
+                          <span style="font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;opacity:.5" x-text="u.username"></span>
+                        </label>
+                      </template>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:10px">
+                      <button class="btn btn-primary btn-sm" @click="saveAssignment()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:11px;height:11px"><path d="M5 13l4 4L19 7"/></svg>
+                        儲存分配
+                      </button>
+                      <span x-show="assignedUserIds.length===0" style="font-size:11px;color:var(--text-dim);font-family:var(--font-zh);">目前無分配成員</span>
+                      <span x-show="assignedUserIds.length>0" style="font-size:11px;color:var(--success);font-family:var(--font-zh);" x-text="'已分配 '+assignedUserIds.length+' 位成員'"></span>
+                    </div>
+                  </div>
+                </template>
+
               </div>
             </template>
 
@@ -559,7 +748,7 @@
         </div>
         <div class="form-row">
           <label class="form-label">描述說明</label>
-          <textarea class="form-textarea" x-model="pForm.description" placeholder="簡述專案背景或目標..."></textarea>
+          <textarea class="form-textarea" x-model="pForm.description" placeholder="簡述專案背景或目標…"></textarea>
         </div>
       </div>
       <div class="modal-foot">
@@ -583,7 +772,7 @@
         </div>
         <div class="form-row">
           <label class="form-label">工作內容</label>
-          <textarea class="form-textarea" x-model="lForm.work_content" placeholder="描述今日施工或推進的工作..."></textarea>
+          <textarea class="form-textarea" x-model="lForm.work_content" placeholder="描述今日施工或推進的工作…"></textarea>
         </div>
         <!-- Attendees -->
         <div class="form-row">
@@ -598,7 +787,7 @@
           </div>
           <div class="attendee-add">
             <select class="attendee-select" x-model="newAttendee">
-              <option value="">選擇系統使用者...</option>
+              <option value="">選擇系統使用者…</option>
               <template x-for="u in allUsers" :key="u.username">
                 <option :value="u.displayName" x-text="u.displayName + ' (' + u.username + ')'"></option>
               </template>
@@ -606,7 +795,7 @@
             <button class="btn btn-ghost btn-sm" @click="addAttendee()">加入</button>
           </div>
           <div class="attendee-add" style="margin-top:4px;">
-            <input type="text" class="attendee-select" placeholder="或輸入外部人員姓名..." x-model="newAttendeeText"
+            <input type="text" class="attendee-select" placeholder="或輸入外部人員姓名…" x-model="newAttendeeText"
               @keydown.enter="addAttendeeText()">
             <button class="btn btn-ghost btn-sm" @click="addAttendeeText()">加入</button>
           </div>
@@ -622,7 +811,7 @@
             </div>
           </template>
           <div class="action-new">
-            <input type="text" x-model="newItemText" placeholder="輸入確認事項後按 Enter..."
+            <input type="text" x-model="newItemText" placeholder="輸入確認事項後按 Enter…"
               @keydown.enter="addActionItem()">
             <button class="btn btn-ghost btn-sm" @click="addActionItem()">新增</button>
           </div>
@@ -650,7 +839,7 @@
           <div x-show="editLogPhotos.length" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;">
             <template x-for="(ph,phi) in editLogPhotos" :key="ph.id||phi">
               <div style="position:relative;width:72px;height:72px;border-radius:6px;overflow:hidden;border:1px solid var(--border-light);">
-                <img :src="photoUrl(ph.path)" style="width:100%;height:100%;object-fit:cover;" loading="lazy">
+                <img :src="photoUrl(ph.path)" style="width:100%;height:100%;object-fit:cover;" loading="lazy" @error="if(!$el._retried){$el._retried=true;clearPhotoCache(ph.path)}">
                 <button @click="removeExistingPhoto(ph,phi)" title="刪除" style="position:absolute;top:2px;right:2px;width:18px;height:18px;border-radius:50%;background:rgba(220,38,38,.85);color:#fff;border:none;cursor:pointer;font-size:11px;line-height:1;display:flex;align-items:center;justify-content:center;">×</button>
               </div>
             </template>
@@ -671,7 +860,7 @@
             <span x-text="pendingFileNames.length ? '已選 '+pendingFileNames.length+' 張（點擊繼續追加）' : '選擇照片 / 拍照（手機可直接拍攝）'"></span>
             <input type="file" accept="image/*" multiple style="display:none" @change="handlePendingFiles($event)">
           </label>
-          <div style="font-size:10px;color:var(--text-dim);margin-top:4px;font-family:Inter,sans-serif;">儲存時自動上傳並加日期時間水印；手機可直接開相機</div>
+          <div style="font-size:10px;color:var(--text-dim);margin-top:4px;font-family:LINE Seed TW_OTF, sans-serif;">儲存時自動上傳並加日期時間水印</div>
         </div>
       </div>
       <div class="modal-foot">
@@ -684,16 +873,19 @@
   <!-- Lightbox -->
   <div class="lightbox" x-show="lightboxPhoto" x-cloak @click="lightboxPhoto=null">
     <button class="lightbox__close" @click.stop="lightboxPhoto=null">×</button>
-    <img :src="photoUrl(lightboxPhoto?.path)" @click.stop>
+    <img :src="photoUrl(lightboxPhoto?.path)" @click.stop @error="if(!$el._retried){$el._retried=true;clearPhotoCache(lightboxPhoto?.path)}">
     <div class="lightbox__meta" x-text="lightboxPhoto?.watermark"></div>
   </div>
 
-  <!-- Hidden file inputs (per-log, created dynamically) -->
+  <!-- Hidden file input (per-log quick upload) -->
   <input type="file" id="photo-upload-input" accept="image/*" multiple style="display:none"
     @change="handlePhotoUpload($event, currentUploadLog)">
 
   <!-- Toast -->
   <div class="toast" :class="{hidden:!toastMsg}" x-text="toastMsg"></div>
+
+  <script src="../static/notif.js"></script>
+  <script src="../static/sidebar.js"></script>
 
   <script>
   const API = ''
@@ -722,6 +914,9 @@
       lForm: { log_date:'', work_content:'', attendees:[], action_items:[], materials_used:[] },
       newAttendee: '', newAttendeeText: '', newItemText: '',
 
+      assignedUserIds: [],
+      assignmentChanged: false,
+
       lightboxPhoto: null,
       currentUploadLog: null,
       toastMsg: '',
@@ -735,9 +930,19 @@
       get filteredProjects() {
         const q = this.searchQ.toLowerCase()
         return this.projects.filter(p => {
+          if (this.filterStatus === '全部' && p.status === '完工') return false
           if (this.filterStatus !== '全部' && p.status !== this.filterStatus) return false
           if (q && !p.name.toLowerCase().includes(q) && !p.code.toLowerCase().includes(q)) return false
           return true
+        })
+      },
+
+      // 可被分配的使用者：非 admin/superadmin，且持有任一專案模組
+      get assignableUsers() {
+        return this.allUsers.filter(u => {
+          if (u.role === 'superadmin' || u.role === 'admin') return false
+          const m = u.modules || []
+          return m.includes('project_manage') || m.includes('project_approve_eng') || m.includes('project_approve_biz')
         })
       },
 
@@ -778,6 +983,29 @@
         return m.includes('project_manage') || this.session.role === 'superadmin' || this.session.role === 'admin'
       },
 
+      isAdmin() {
+        return this.session.role === 'superadmin' || this.session.role === 'admin'
+      },
+
+      toggleAssignment(uid) {
+        const idx = this.assignedUserIds.indexOf(uid)
+        if (idx >= 0) this.assignedUserIds.splice(idx, 1)
+        else          this.assignedUserIds.push(uid)
+        this.assignmentChanged = true
+      },
+
+      async saveAssignment() {
+        if (!this.selected) return
+        const r = await fetch(`${API}/api/projects/${this.selected.id}/assigned-users`, {
+          method: 'PATCH', headers: this._h(),
+          body: JSON.stringify({ user_ids: this.assignedUserIds })
+        })
+        if (!r.ok) { this.toast('儲存分配失敗'); return }
+        this.selected.assigned_user_ids = [...this.assignedUserIds]
+        this.assignmentChanged = false
+        this.toast('成員分配已儲存')
+      },
+
       canApproveEng() {
         const m = this.session.modules || []
         return m.includes('project_approve_eng') || this.session.role === 'superadmin'
@@ -807,6 +1035,8 @@
         this.tab = 'logs'
         this.openLogs = []
         this.infoEdit = { ...p.data_json }
+        this.assignedUserIds = [...(p.assigned_user_ids || [])]
+        this.assignmentChanged = false
         await this.loadLogs()
       },
 
@@ -868,6 +1098,13 @@
           }).catch(() => { this._ptCache[path + '_fetching'] = false })
         }
         return `${API}/api/uploads/${path}?token=${this.session.token}`
+      },
+      clearPhotoCache(path) {
+        if (!path) return
+        const c = { ...this._ptCache }
+        delete c[path]
+        delete c[path + '_fetching']
+        this._ptCache = c
       },
 
       // ── Project CRUD ──
@@ -1029,7 +1266,7 @@
         const d = await r.json()
         const logId = this.editingLogId || d.id
         if (this.pendingFiles.length && logId) {
-          this.toast('照片上傳中...')
+          this.toast('照片上傳中…')
           const fd = new FormData()
           for (const f of this.pendingFiles) fd.append('files', f)
           const pr = await fetch(`${API}/api/projects/${this.selected.id}/logs/${logId}/photos`, {
@@ -1104,7 +1341,7 @@
         if (!files || !files.length) return
         const fd = new FormData()
         for (const f of files) fd.append('files', f)
-        this.toast('上傳中，加水印處理...')
+        this.toast('上傳中，加水印處理…')
         const r = await fetch(`${API}/api/projects/${this.selected.id}/logs/${log.id}/photos`, {
           method:'POST',
           headers:{ 'Authorization':'Bearer '+this.session.token },
@@ -1136,6 +1373,5 @@
     }
   }
   </script>
-  <script src="../static/sidebar.js"></script>
 </body>
 </html>

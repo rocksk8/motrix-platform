@@ -80,6 +80,8 @@ function notifStore() {
 
     async _fetchModuleCounts() {
       try {
+        const _role = this._sess?.role || ''
+        if (_role !== 'superadmin' && _role !== 'admin') return
         var seen = {}
         try { seen = JSON.parse(localStorage.getItem('motrix_module_seen') || '{}') } catch (_e) {}
         if (!Object.keys(seen).length) return
@@ -253,7 +255,7 @@ function notifStore() {
         'background:#EEF2FF;border:1.5px solid #6366F1',
         'border-radius:10px;padding:14px 18px',
         'box-shadow:0 6px 24px rgba(99,102,241,.22)',
-        'z-index:99999;font-family:Inter,sans-serif;max-width:300px',
+        'z-index:99999;font-family:LINE Seed TW_OTF, sans-serif;max-width:300px',
         'animation:notif-slide-in .25s ease',
       ].join(';')
       // Build banner DOM without innerHTML to avoid XSS from count/href

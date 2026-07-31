@@ -1,11 +1,10 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="../static/favicon.png">
   <title>料號主檔 — MOTRIX 營運管理系統</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600&display=swap" rel="stylesheet">
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
   <link rel="stylesheet" href="../css/style.css">
   <style>
@@ -18,7 +17,7 @@
     .search-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(37,99,235,.08)}
     .panel{background:#fff;border:1px solid var(--border-light);border-radius:var(--radius-lg);overflow:hidden}
     .data-table{width:100%;border-collapse:collapse;font-size:13px}
-    .data-table th{padding:10px 14px;text-align:left;font-size:10px;font-family:Inter,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);font-weight:500;background:#FAFAF8;border-bottom:1px solid var(--border-light);white-space:nowrap}
+    .data-table th{padding:10px 14px;text-align:left;font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);font-weight:500;background:#FAFAF8;border-bottom:1px solid var(--border-light);white-space:nowrap}
     .data-table td{padding:11px 14px;border-bottom:1px solid #F0EEE9;vertical-align:middle}
     .data-table tr:last-child td{border-bottom:none}
     .data-table tr:hover td{background:#FDFCFA}
@@ -71,6 +70,7 @@
       <div class="loading-text" x-show="loading">載入中…</div>
       <template x-if="!loading">
         <div>
+          <div class="table-scroll">
           <table class="data-table" x-show="filtered.length > 0">
             <thead>
               <tr>
@@ -88,7 +88,7 @@
             <tbody>
               <template x-for="p in filtered" :key="p.id">
                 <tr>
-                  <td><span style="font-family:Inter,sans-serif;font-size:12px;font-weight:600;color:var(--accent)" x-text="p.part_no"></span></td>
+                  <td><span style="font-family:LINE Seed TW_OTF, sans-serif;font-size:12px;font-weight:600;color:var(--accent)" x-text="p.part_no"></span></td>
                   <td style="font-size:12px" x-text="p.name"></td>
                   <td style="font-size:12px;color:var(--text-secondary)" x-text="p.brand || '—'"></td>
                   <td>
@@ -96,8 +96,8 @@
                     <span x-show="!p.category" style="color:var(--text-dim)">—</span>
                   </td>
                   <td style="font-size:12px;color:var(--text-dim)" x-text="p.unit || '台'"></td>
-                  <td style="text-align:right;font-family:Inter,sans-serif;font-size:12px" x-text="p.cost ? 'NT$ ' + Math.round(p.cost).toLocaleString() : '—'"></td>
-                  <td style="text-align:right;font-family:Inter,sans-serif;font-size:12px;font-weight:600" x-text="p.list_price ? 'NT$ ' + Math.round(p.list_price).toLocaleString() : '—'"></td>
+                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-size:12px" x-text="p.cost ? 'NT$ ' + Math.round(p.cost).toLocaleString() : '—'"></td>
+                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-size:12px;font-weight:600" x-text="p.list_price ? 'NT$ ' + Math.round(p.list_price).toLocaleString() : '—'"></td>
                   <td style="font-size:11px;color:var(--text-dim);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" x-text="p.note || '—'"></td>
                   <td style="white-space:nowrap">
                     <button class="action-btn edit" @click.stop="openModal(p)">編輯</button>
@@ -107,6 +107,7 @@
               </template>
             </tbody>
           </table>
+          </div>
           <div class="empty-state" x-show="filtered.length === 0">
             <div style="font-size:32px;margin-bottom:10px">📦</div>
             <div x-show="items.length === 0">尚未建立任何料號，點擊「新增料號」開始建立</div>

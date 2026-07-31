@@ -24,6 +24,12 @@ function app() {
     _syncWarrantyDate: '',
     _syncWarrantyMonths: 12,
     _openDevGroups: {},
+    _devDragId: null,        // device.id being dragged
+    _devDragOverId: null,    // current hover target string ('dev_X' | 'group_X')
+    _devInsertBeforeId: null,// where to show insert line ('dev_X' | 'end' | null)
+    _devHoverGroupId: null,  // group ID when hovering group header → add-to-group mode
+    _devHoverStart: 0,       // timestamp when we entered _devDragOverId
+    _devGroupTarget: null,   // 'dev_X' confirmed for grouping after 900ms hover
     linkedProjectId: null,
     showCreateProjectModal: false,
     newProjectName: '',
@@ -40,6 +46,12 @@ function app() {
     caseTaskEditLogs: {},
     caseTaskLogsOpen: {},
 
+    // ── 動態 Tab ──
+    caseUpdates: [],
+    updatesLoading: false,
+    newComment: '',
+    postingComment: false,
+
     // ── 承攬商派發 ──
     vendors: [],
     dispatches: [],
@@ -49,6 +61,16 @@ function app() {
     dispatchSaving: false,
     dispatchForm: {},
     dispatchMsg: '',
+
+    // ── 出貨單 ──
+    shippingNotes: [],
+    shippingNotesLoading: false,
+    showShippingModal: false,
+    editShippingNoteNo: null,
+    shippingSaving: false,
+    shippingForm: {},
+    shippingMsg: '',
+    _shippingLogOpen: {},
 
     canSeeFinancial() {
       const m = this.session.modules || []
@@ -150,8 +172,19 @@ function app() {
         this._syncWarrantyDate = ''
         this._syncWarrantyMonths = 12
         this._openDevGroups = {}
+        this._devDragId = null
+        this._devDragOverId = null
+        this._devInsertBeforeId = null
+        this._devHoverGroupId = null
+        this._devGroupTarget = null
+        this._devHoverStart = 0
         this.linkedProjectId = null
         this.caseTasks = []
+        this.caseUpdates = []
+        this.newComment = ''
+        this.shippingNotes = []
+        this.showShippingModal = false
+        this._shippingLogOpen = {}
         // 背景查詢是否已有關聯專案
         this._checkLinkedProject(quoteNo)
         this._loadCaseTasks(quoteNo)
@@ -663,6 +696,196 @@ function app() {
     toggleDevGroup(groupId) {
       this._openDevGroups = { ...this._openDevGroups, [groupId]: !this._openDevGroups[groupId] }
     },
+
+    // ── 設備拖曳（自訂 ghost + insertion line + timestamp 計時，不依賴 setTimeout）──
+    devDragStart(e, dev) {
+      this._devDragId = dev.id
+      e.dataTransfer.effectAllowed = 'move'
+      // 自訂 ghost：克隆 → 定位至畫面外 → setDragImage → 下一 tick 移除
+      const card = e.currentTarget
+      const ghost = card.cloneNode(true)
+      ghost.style.cssText = [
+        'position:fixed','left:-9999px','top:0',
+        `width:${card.offsetWidth}px`,
+        'opacity:.88','pointer-events:none',
+        'transform:rotate(1.5deg) scale(1.04)',
+        'box-shadow:0 12px 32px rgba(0,0,0,.22)',
+        'border-radius:8px','background:#fff',
+        'border:1px solid #C7D2FE','z-index:9999'
+      ].join(';')
+      document.body.appendChild(ghost)
+      e.dataTransfer.setDragImage(ghost, e.offsetX + 8, e.offsetY + 8)
+      setTimeout(() => ghost.remove(), 0)
+      this._devDragOverId = null
+      this._devInsertBeforeId = null
+      this._devHoverGroupId = null
+      this._devGroupTarget = null
+      this._devHoverStart = 0
+    },
+
+    devDragEnd() {
+      this._devDragId = null
+      this._devDragOverId = null
+      this._devInsertBeforeId = null
+      this._devHoverGroupId = null
+      this._devGroupTarget = null
+      this._devHoverStart = 0
+    },
+
+    devDragOver(e, targetId) {
+      if (!this._devDragId) return
+      const devs = this.cr.caseRecord?.devices || []
+      const dragged = devs.find(d => d.id === this._devDragId)
+      if (!dragged) return
+      if (targetId === 'dev_' + String(dragged.id)) return
+      e.preventDefault()
+      e.dataTransfer.dropEffect = 'move'
+      // 自動捲動設備 Tab 容器
+      const scrollEl = document.querySelector('.cm-detail__body')
+      if (scrollEl) {
+        const ZONE = 70, SPD = 10, r = scrollEl.getBoundingClientRect()
+        if (e.clientY < r.top + ZONE)      scrollEl.scrollTop -= SPD
+        else if (e.clientY > r.bottom - ZONE) scrollEl.scrollTop += SPD
+      }
+      // 進入新目標：重置計時與狀態
+      if (targetId !== this._devDragOverId) {
+        this._devDragOverId = targetId
+        this._devHoverStart = Date.now()
+        this._devGroupTarget = null
+        this._devInsertBeforeId = null
+        this._devHoverGroupId = null
+      }
+      // 群組標頭 → add-to-group 模式（不顯示插入線）
+      if (targetId.startsWith('group_')) {
+        this._devHoverGroupId = targetId.slice(6)
+        this._devInsertBeforeId = null
+        return
+      }
+      this._devHoverGroupId = null
+      // 設備卡片：900ms 後轉合併模式；否則以上/下半決定插入位置
+      if (targetId.startsWith('dev_')) {
+        if (!this._devGroupTarget && Date.now() - this._devHoverStart > 900)
+          this._devGroupTarget = targetId
+        if (this._devGroupTarget === targetId) { this._devInsertBeforeId = null; return }
+        const rect = e.currentTarget.getBoundingClientRect()
+        this._devInsertBeforeId = e.clientY < rect.top + rect.height / 2
+          ? targetId
+          : this._devNextId(parseInt(targetId.slice(4)))
+      } else {
+        this._devInsertBeforeId = 'end'
+      }
+    },
+
+    devDragLeave(e) {
+      if (e.relatedTarget && e.currentTarget.contains(e.relatedTarget)) return
+      this._devDragOverId = null
+      this._devHoverGroupId = null
+      this._devGroupTarget = null
+      this._devInsertBeforeId = 'end'
+      this._devHoverStart = 0
+    },
+
+    // 取得 devId 在顯示順序中的「下一張」device（跳過自身），回傳 'dev_X' 或 'end'
+    _devNextId(devId) {
+      const list = this.deviceDisplayList()
+      let found = false
+      for (const entry of list) {
+        if (entry.type === 'group') {
+          for (const d of entry.devices) {
+            if (found && d.id !== this._devDragId) return 'dev_' + d.id
+            if (d.id === devId) found = true
+          }
+        } else if (entry.type === 'device') {
+          if (found && entry.dev.id !== this._devDragId) return 'dev_' + entry.dev.id
+          if (entry.dev.id === devId) found = true
+        }
+      }
+      return 'end'
+    },
+
+    devDropOnDevice(e, targetDev) {
+      e.preventDefault()
+      const devs = this.cr.caseRecord.devices
+      const dragged = devs.find(d => d.id === this._devDragId)
+      if (!dragged || dragged.id === targetDev.id) { this.devDragEnd(); return }
+      if (this._devGroupTarget === 'dev_' + targetDev.id) {
+        // ── 合併成群組 ──
+        const oldGid = dragged._groupId || ''
+        if (targetDev._groupId) {
+          dragged._groupId = targetDev._groupId; dragged._groupName = targetDev._groupName
+          if (oldGid && oldGid !== targetDev._groupId) this._devReindex(devs, oldGid)
+          this._devReindex(devs, targetDev._groupId)
+        } else {
+          const gid = 'grp_' + Date.now().toString(36)
+          const gName = (targetDev.name || dragged.name || '設備群組').slice(0, 30)
+          if (oldGid) { dragged._groupId = ''; this._devReindex(devs, oldGid) }
+          targetDev._groupId = gid; targetDev._groupName = gName
+          dragged._groupId   = gid; dragged._groupName   = gName
+          this._devReindex(devs, gid)
+          this._openDevGroups = { ...this._openDevGroups, [gid]: true }
+        }
+      } else {
+        // ── 排序：依 _devInsertBeforeId 插入 ──
+        const insertId = this._devInsertBeforeId
+        const fromIdx = devs.indexOf(dragged)
+        devs.splice(fromIdx, 1)
+        if (!insertId || insertId === 'end') {
+          devs.push(dragged)
+        } else {
+          const tid = parseInt(insertId.slice(4))
+          const toIdx = devs.findIndex(d => d.id === tid)
+          if (toIdx === -1) devs.push(dragged); else devs.splice(toIdx, 0, dragged)
+        }
+      }
+      this.cr.caseRecord.devices = [...devs]
+      this.devDragEnd()
+      this.setDirty()
+    },
+
+    devDropOnGroup(e, groupId, groupName) {
+      e.preventDefault()
+      const devs = this.cr.caseRecord.devices
+      const dragged = devs.find(d => d.id === this._devDragId)
+      if (!dragged || dragged._groupId === groupId) { this.devDragEnd(); return }
+      const oldGid = dragged._groupId || ''
+      dragged._groupId = groupId; dragged._groupName = groupName
+      if (oldGid) this._devReindex(devs, oldGid)
+      this._devReindex(devs, groupId)
+      this.cr.caseRecord.devices = [...devs]
+      this.devDragEnd()
+      this.setDirty()
+    },
+
+    devDropAtEnd(e) {
+      e.preventDefault()
+      const devs = this.cr.caseRecord.devices
+      const dragged = devs.find(d => d.id === this._devDragId)
+      if (!dragged) { this.devDragEnd(); return }
+      const fromIdx = devs.indexOf(dragged)
+      devs.splice(fromIdx, 1)
+      devs.push(dragged)
+      this.cr.caseRecord.devices = [...devs]
+      this.devDragEnd()
+      this.setDirty()
+    },
+    _devReindex(devs, groupId) {
+      const members = devs.filter(d => d._groupId === groupId)
+      if (members.length <= 1) {
+        if (members[0]) { members[0]._groupId = ''; members[0]._groupName = ''; members[0]._groupIdx = 0; members[0]._groupTotal = 0 }
+      } else {
+        members.forEach((d, i) => { d._groupIdx = i + 1; d._groupTotal = members.length })
+      }
+    },
+    devUngroupDevice(dev) {
+      if (!dev._groupId) return
+      const groupId = dev._groupId
+      const devs = this.cr.caseRecord.devices
+      dev._groupId = ''; dev._groupName = ''; dev._groupIdx = 0; dev._groupTotal = 0
+      this._devReindex(devs, groupId)
+      this.cr.caseRecord.devices = [...devs]
+      this.setDirty()
+    },
+
     deviceDisplayList() {
       const devices = this.cr.caseRecord?.devices || []
       const seenGroups = {}
@@ -726,6 +949,67 @@ function app() {
     },
 
     // ── 承攬商派發 methods ──────────────────────────────────────────────────────
+
+    // ── 動態 Tab ──────────────────────────────────────────────────────────────
+
+    async loadCaseUpdates(quoteNo) {
+      if (!quoteNo) return
+      this.updatesLoading = true
+      this.caseUpdates = []
+      try {
+        const r = await fetch(`/api/quotations/${encodeURIComponent(quoteNo)}/updates`, {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (r.ok) this.caseUpdates = await r.json()
+      } catch {}
+      this.updatesLoading = false
+    },
+
+    async postComment() {
+      const content = this.newComment.trim()
+      if (!content || this.postingComment) return
+      this.postingComment = true
+      try {
+        const r = await fetch(`/api/quotations/${encodeURIComponent(this.selected.quote_no)}/updates`, {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + this.session.token, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content })
+        })
+        if (r.ok) {
+          const item = await r.json()
+          this.caseUpdates.unshift(item)
+          this.newComment = ''
+        }
+      } catch {}
+      this.postingComment = false
+    },
+
+    async deleteUpdate(uid) {
+      if (!confirm('確定刪除這則更新？')) return
+      try {
+        const r = await fetch(`/api/quotations/${encodeURIComponent(this.selected.quote_no)}/updates/${uid}`, {
+          method: 'DELETE',
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (r.ok) this.caseUpdates = this.caseUpdates.filter(x => x.id !== uid)
+      } catch {}
+    },
+
+    fmtFeedTime(ts) {
+      if (!ts) return ''
+      try {
+        const d = new Date(ts.replace(' ', 'T'))
+        const now = new Date()
+        const diff = Math.floor((now - d) / 1000)
+        if (diff < 60) return '剛剛'
+        if (diff < 3600) return Math.floor(diff / 60) + ' 分鐘前'
+        if (diff < 86400) return Math.floor(diff / 3600) + ' 小時前'
+        if (diff < 86400 * 3) return Math.floor(diff / 86400) + ' 天前'
+        return ts.slice(0, 10)
+      } catch { return ts.slice(0, 10) }
+    },
+
+    // ── 承攬商 ──────────────────────────────────────────────────────────────
 
     async loadVendors() {
       try {
@@ -867,6 +1151,222 @@ function app() {
         if (r.ok) alert(`✓ 已成功匯入 ${data.imported} 筆品項至報價單`)
         else alert(data.detail || '匯入失敗')
       } catch(e) { alert('網路錯誤：' + e.message) }
+    },
+
+    // ── 出貨單 ────────────────────────────────────────────────────────────────
+
+    async loadShippingNotes(quoteNo) {
+      if (!quoteNo) return
+      this.shippingNotesLoading = true
+      this.shippingNotes = []
+      try {
+        const r = await fetch(`/api/shipping-notes?quote_no=${encodeURIComponent(quoteNo)}`, {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (r.ok) this.shippingNotes = await r.json()
+      } catch {}
+      this.shippingNotesLoading = false
+    },
+
+    _blankShippingForm() {
+      const today = new Date().toISOString().slice(0, 10)
+      return {
+        quote_no: this.selected?.quote_no || '',
+        ship_date: today,
+        recipient: '',
+        delivery_address: '',
+        notes: '',
+        items: []
+      }
+    },
+
+    openNewShippingNote() {
+      this.editShippingNoteNo = null
+      this.shippingForm = this._blankShippingForm()
+      this.shippingMsg = ''
+      this.showShippingModal = true
+    },
+
+    async openEditShippingNote(n) {
+      try {
+        const r = await fetch(`/api/shipping-notes/${n.noteNo}`, {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (!r.ok) { alert('讀取出貨單失敗'); return }
+        const d = await r.json()
+        this.editShippingNoteNo = d.noteNo
+        this.shippingForm = {
+          quote_no: d.quoteNo,
+          ship_date: d.shipDate || '',
+          recipient: d.recipient || '',
+          delivery_address: d.deliveryAddress || '',
+          notes: d.notes || '',
+          items: JSON.parse(JSON.stringify(d.items || []))
+        }
+        this.shippingMsg = ''
+        this.showShippingModal = true
+      } catch (e) { alert('網路錯誤：' + e.message) }
+    },
+
+    importItemsFromQuote() {
+      const srcItems = this.selected?.data?.items || []
+      if (srcItems.length === 0) { alert('此案件的報價單沒有品項可匯入'); return }
+      for (const it of srcItems) {
+        if (it.type === 'header') {
+          this.shippingForm.items.push({
+            id: Date.now() + Math.random(), type: 'header', description: it.description || ''
+          })
+        } else {
+          this.shippingForm.items.push({
+            id: Date.now() + Math.random(),
+            description: it.description || '', brand: it.brand || '',
+            qty: it.qty || 1, unit: it.unit || '台', notes: ''
+          })
+        }
+      }
+    },
+
+    addShippingItem() {
+      this.shippingForm.items.push({
+        id: Date.now() + Math.random(), description: '', brand: '', qty: 1, unit: '台', notes: ''
+      })
+    },
+
+    addShippingHeader() {
+      this.shippingForm.items.push({
+        id: Date.now() + Math.random(), type: 'header', description: ''
+      })
+    },
+
+    removeShippingItem(idx) {
+      this.shippingForm.items.splice(idx, 1)
+    },
+
+    async saveShippingNote() {
+      this.shippingSaving = true; this.shippingMsg = ''
+      const body = {
+        quote_no: this.shippingForm.quote_no,
+        ship_date: this.shippingForm.ship_date || '',
+        recipient: this.shippingForm.recipient || '',
+        delivery_address: this.shippingForm.delivery_address || '',
+        notes: this.shippingForm.notes || '',
+        items: this.shippingForm.items || []
+      }
+      const method = this.editShippingNoteNo ? 'PUT' : 'POST'
+      const url    = this.editShippingNoteNo
+        ? `/api/shipping-notes/${this.editShippingNoteNo}`
+        : '/api/shipping-notes'
+      try {
+        const r = await fetch(url, {
+          method,
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify(body)
+        })
+        if (!r.ok) { this.shippingMsg = (await r.json()).detail || '儲存失敗'; this.shippingSaving = false; return }
+        this.showShippingModal = false
+        await this.loadShippingNotes(this.selected?.quote_no)
+      } catch (e) { this.shippingMsg = '網路錯誤：' + e.message }
+      this.shippingSaving = false
+    },
+
+    async deleteShippingNote(n) {
+      if (!confirm(`確定刪除出貨單「${n.noteNo}」？`)) return
+      try {
+        const r = await fetch(`/api/shipping-notes/${n.noteNo}`, {
+          method: 'DELETE',
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (r.ok) await this.loadShippingNotes(this.selected?.quote_no)
+        else alert((await r.json()).detail || '刪除失敗')
+      } catch (e) { alert('網路錯誤：' + e.message) }
+    },
+
+    async submitShippingNote(n) {
+      if (!confirm(`確定送出出貨單「${n.noteNo}」進行簽核？`)) return
+      try {
+        const r = await fetch(`/api/shipping-notes/${n.noteNo}/submit`, {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (!r.ok) { alert((await r.json()).detail || '送出失敗'); return }
+        await this.loadShippingNotes(this.selected?.quote_no)
+      } catch (e) { alert('網路錯誤：' + e.message) }
+    },
+
+    async approveShippingNote(n) {
+      if (!confirm(`確定簽核出貨單「${n.noteNo}」？`)) return
+      try {
+        const r = await fetch(`/api/shipping-notes/${n.noteNo}/approve`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify({})
+        })
+        if (!r.ok) { alert((await r.json()).detail || '簽核失敗'); return }
+        await this.loadShippingNotes(this.selected?.quote_no)
+      } catch (e) { alert('網路錯誤：' + e.message) }
+    },
+
+    async rejectShippingNote(n) {
+      const note = prompt(`退回出貨單「${n.noteNo}」，可填寫退回原因（選填）：`)
+      if (note === null) return
+      try {
+        const r = await fetch(`/api/shipping-notes/${n.noteNo}/reject`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify({ note })
+        })
+        if (!r.ok) { alert((await r.json()).detail || '退回失敗'); return }
+        await this.loadShippingNotes(this.selected?.quote_no)
+      } catch (e) { alert('網路錯誤：' + e.message) }
+    },
+
+    async toggleSigned(n, action) {
+      const msg = action === 'sign'
+        ? `確定標記出貨單「${n.noteNo}」已回簽？`
+        : `確定取消出貨單「${n.noteNo}」的已回簽標記？`
+      if (!confirm(msg)) return
+      const note = action === 'sign' ? (prompt('備註（選填，例如簽收人姓名或方式）：') || '') : ''
+      try {
+        const r = await fetch(`/api/shipping-notes/${n.noteNo}/signed-toggle`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify({ action, note })
+        })
+        if (!r.ok) { alert((await r.json()).detail || '操作失敗'); return }
+        await this.loadShippingNotes(this.selected?.quote_no)
+      } catch (e) { alert('網路錯誤：' + e.message) }
+    },
+
+    async downloadShippingPdf(n) {
+      try {
+        // 記錄匯出（fire-and-forget，不阻塞 PDF 下載）
+        fetch(`/api/shipping-notes/${n.noteNo}/export?mode=external`, {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        }).catch(() => {})
+
+        const r = await fetch(`/api/shipping-notes/${n.noteNo}/pdf-download`, {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || 'PDF 產生失敗'); return }
+        const blob = await r.blob()
+        const url  = URL.createObjectURL(blob)
+        const a    = document.createElement('a')
+        a.href     = url
+        a.download = `${n.noteNo}.pdf`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        setTimeout(() => URL.revokeObjectURL(url), 1000)
+      } catch (e) { alert('下載失敗：' + e.message) }
+    },
+
+    _shippingStatusLabel(s) {
+      return { '草稿': '草稿', '待審核': '待審核', '簽核中': '簽核中', '已核准': '已核准' }[s] || s
+    },
+
+    _shippingStatusClass(s) {
+      return { '草稿': 'badge--draft', '待審核': 'badge--pending', '簽核中': 'badge--signing', '已核准': 'badge--approved' }[s] || ''
     },
 
     // ── 今日相關任務 回報 helpers ──────────────────────────────────────────────

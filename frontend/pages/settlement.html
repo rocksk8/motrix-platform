@@ -1,11 +1,10 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="../static/favicon.png">
   <title>成本精算 — MOTRIX 營運管理系統</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600&display=swap" rel="stylesheet">
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
   <link rel="stylesheet" href="../css/style.css">
   <style>
@@ -42,7 +41,7 @@
     .badge {
       display: inline-flex; align-items: center; gap: 4px;
       padding: 3px 9px; border-radius: 4px;
-      font-size: 11px; font-weight: 600; font-family: Inter, sans-serif;
+      font-size: 11px; font-weight: 600; font-family: 'LINE Seed TW_OTF', sans-serif;
     }
     .badge-draft     { background:#F3F4F6; color:#374151; border:1px solid #E5E7EB; }
     .badge-finalized { background:#F0FDF4; color:#15803D; border:1px solid #86EFAC; }
@@ -82,7 +81,7 @@
     .stl-table tr:last-child td { border-bottom: none; }
     .stl-table tr:hover td { background: #FAFAF9; }
 
-    .stl-orig  { color: var(--text-secondary); font-family: Inter, sans-serif; font-size: 11px; }
+    .stl-orig  { color: var(--text-secondary); font-family: 'LINE Seed TW_OTF', sans-serif; font-size: 11px; }
     .stl-input {
       width: 100%; padding: 6px 8px;
       border: 1px solid var(--border-light); border-radius: 5px;
@@ -91,7 +90,7 @@
       transition: border-color .12s;
     }
     .stl-input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(37,99,235,.08); }
-    .stl-input.num { text-align: right; font-family: Inter, sans-serif; }
+    .stl-input.num { text-align: right; font-family: 'LINE Seed TW_OTF', sans-serif; }
 
     .stl-input[readonly], .stl-input:disabled {
       background: #F8F7F5; color: var(--text-dim); cursor: default;
@@ -119,8 +118,8 @@
       padding: 16px 18px;
     }
     .stl-kpi__label { font-size: 11px; color: var(--text-secondary); margin-bottom: 6px; }
-    .stl-kpi__value { font-size: 20px; font-weight: 700; font-family: Inter, sans-serif; color: var(--text-primary); }
-    .stl-kpi__sub   { font-size: 10px; color: var(--text-dim); margin-top: 3px; font-family: Inter, sans-serif; }
+    .stl-kpi__value { font-size: 20px; font-weight: 700; font-family: 'LINE Seed TW_OTF', sans-serif; color: var(--text-primary); }
+    .stl-kpi__sub   { font-size: 10px; color: var(--text-dim); margin-top: 3px; font-family: 'LINE Seed TW_OTF', sans-serif; }
     .stl-kpi.highlight-green { border-color: #86EFAC; background: #F0FDF4; }
     .stl-kpi.highlight-green .stl-kpi__value { color: #15803D; }
     .stl-kpi.highlight-red   { border-color: #FECACA; background: #FFF1F2; }
@@ -149,7 +148,7 @@
 
     /* ── 額外品項 category badge ── */
     .cat-badge {
-      font-size: 10px; padding: 2px 7px; border-radius: 3px; font-family: Inter, sans-serif;
+      font-size: 10px; padding: 2px 7px; border-radius: 3px; font-family: 'LINE Seed TW_OTF', sans-serif;
       font-weight: 600; white-space: nowrap;
     }
     .cat-工時       { background:#EDE9FE; color:#6D28D9; }
@@ -193,7 +192,7 @@
       返回報價單
     </a>
     <span style="color:var(--border-light)">|</span>
-    <span style="font-size:14px;font-weight:700;color:var(--text-primary);font-family:Inter,sans-serif" x-text="quoteNo"></span>
+    <span style="font-size:14px;font-weight:700;color:var(--text-primary);font-family:LINE Seed TW_OTF, sans-serif" x-text="quoteNo"></span>
     <span style="font-size:12px;color:var(--text-dim)" x-text="customerName + (projectName ? ' · ' + projectName : '')"></span>
     <template x-if="settlement.status === 'finalized'">
       <span class="badge badge-finalized">
@@ -333,18 +332,18 @@
             <tbody>
               <template x-for="(item, idx) in settlement.items" :key="item.id">
                 <tr>
-                  <td style="text-align:center;color:var(--text-dim);font-size:11px;font-family:Inter,sans-serif" x-text="idx+1"></td>
+                  <td style="text-align:center;color:var(--text-dim);font-size:11px;font-family:LINE Seed TW_OTF, sans-serif" x-text="idx+1"></td>
                   <td>
                     <div style="font-size:12px;font-weight:500;color:var(--text-primary)" x-text="item.origDescription || '（無品名）'"></div>
                   </td>
                   <td class="stl-orig" x-text="item.origBrand || '—'"></td>
 
                   <!-- 原始報價欄 -->
-                  <td class="col-orig" style="border-left:2px solid #E5E7EB;text-align:right;font-family:Inter,sans-serif">
+                  <td class="col-orig" style="border-left:2px solid #E5E7EB;text-align:right;font-family:LINE Seed TW_OTF, sans-serif">
                     <span x-text="item.origQty"></span>
                     <span style="font-size:10px;color:var(--text-dim)" x-text="item.origUnit"></span>
                   </td>
-                  <td class="col-orig" style="text-align:right;font-family:Inter,sans-serif">
+                  <td class="col-orig" style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif">
                     <span x-text="'NT$ ' + fmt(item.origAmount)"></span>
                   </td>
 
@@ -369,12 +368,12 @@
                              style="width:80px">
                     </div>
                   </td>
-                  <td class="col-actual" style="text-align:right;font-family:Inter,sans-serif;font-weight:600">
+                  <td class="col-actual" style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-weight:600">
                     <span x-text="item.actualTotalCost > 0 ? 'NT$ ' + fmt(item.actualTotalCost) : '—'"></span>
                   </td>
 
                   <!-- 差異欄 -->
-                  <td style="text-align:right;font-family:Inter,sans-serif;font-size:11px">
+                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-size:11px">
                     <template x-if="item.actualTotalCost > 0">
                       <div>
                         <span :class="item.origAmount - item.actualTotalCost >= 0 ? 'diff-pos' : 'diff-neg'"
@@ -399,10 +398,10 @@
             <tfoot>
               <tr style="background:#F8F7F5;font-weight:600">
                 <td colspan="4" style="border-top:1.5px solid var(--border-light);padding:10px 10px;text-align:right;font-size:11px;color:var(--text-secondary)">原始報價品項小計</td>
-                <td style="border-top:1.5px solid var(--border-light);text-align:right;font-family:Inter,sans-serif;font-size:12px" x-text="'NT$ ' + fmt(summary.origItemTotal)"></td>
+                <td style="border-top:1.5px solid var(--border-light);text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-size:12px" x-text="'NT$ ' + fmt(summary.origItemTotal)"></td>
                 <td colspan="2" style="border-top:1.5px solid var(--border-light);text-align:right;font-size:11px;color:var(--text-secondary)">實際成本小計</td>
-                <td style="border-top:1.5px solid var(--border-light);text-align:right;font-family:Inter,sans-serif;font-size:12px;color:#92400E" x-text="'NT$ ' + fmt(summary.itemActualTotal)"></td>
-                <td colspan="2" style="border-top:1.5px solid var(--border-light);text-align:right;font-family:Inter,sans-serif;font-size:11px">
+                <td style="border-top:1.5px solid var(--border-light);text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-size:12px;color:#92400E" x-text="'NT$ ' + fmt(summary.itemActualTotal)"></td>
+                <td colspan="2" style="border-top:1.5px solid var(--border-light);text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-size:11px">
                   <span :class="summary.origItemTotal - summary.itemActualTotal >= 0 ? 'diff-pos' : 'diff-neg'"
                         x-text="(summary.origItemTotal - summary.itemActualTotal >= 0 ? '+' : '') + fmt(summary.origItemTotal - summary.itemActualTotal)"></span>
                 </td>
@@ -460,7 +459,7 @@
                 <tbody>
                   <template x-for="(ex, idx) in settlement.extraItems" :key="ex.id">
                     <tr>
-                      <td style="text-align:center;color:var(--text-dim);font-size:11px;font-family:Inter,sans-serif" x-text="idx+1"></td>
+                      <td style="text-align:center;color:var(--text-dim);font-size:11px;font-family:LINE Seed TW_OTF, sans-serif" x-text="idx+1"></td>
                       <td>
                         <select class="stl-input" x-model="ex.category"
                                 :disabled="settlement.status === 'finalized'"
@@ -497,7 +496,7 @@
                                :disabled="settlement.status === 'finalized'"
                                @input="calcExtraCost(ex); calcSummary()">
                       </td>
-                      <td style="text-align:right;font-family:Inter,sans-serif;font-weight:600;color:#92400E">
+                      <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-weight:600;color:#92400E">
                         <span x-text="ex.totalCost > 0 ? fmt(ex.totalCost) : '—'"></span>
                       </td>
                       <td>
@@ -522,7 +521,7 @@
                 <tfoot>
                   <tr style="background:#FEF9C3;font-weight:600">
                     <td colspan="6" style="border-top:1.5px solid #FDE68A;padding:10px;text-align:right;font-size:11px;color:#92400E">額外支出小計</td>
-                    <td style="border-top:1.5px solid #FDE68A;text-align:right;font-family:Inter,sans-serif;color:#92400E" x-text="'NT$ ' + fmt(summary.extraTotal)"></td>
+                    <td style="border-top:1.5px solid #FDE68A;text-align:right;font-family:LINE Seed TW_OTF, sans-serif;color:#92400E" x-text="'NT$ ' + fmt(summary.extraTotal)"></td>
                     <td colspan="2" style="border-top:1.5px solid #FDE68A"></td>
                   </tr>
                 </tfoot>
@@ -566,40 +565,40 @@
               <table style="width:100%;font-size:12px">
                 <tr>
                   <td style="padding:5px 0;color:var(--text-secondary)">報價稅前收入</td>
-                  <td style="text-align:right;font-family:Inter,sans-serif" x-text="'NT$ ' + fmt(summary.quotedPretax)"></td>
+                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif" x-text="'NT$ ' + fmt(summary.quotedPretax)"></td>
                 </tr>
                 <tr>
                   <td style="padding:5px 0;color:var(--text-secondary)">原始成本（料件）</td>
-                  <td style="text-align:right;font-family:Inter,sans-serif" x-text="'NT$ ' + fmt(summary.origTotalCost)"></td>
+                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif" x-text="'NT$ ' + fmt(summary.origTotalCost)"></td>
                 </tr>
                 <tr>
                   <td style="padding:5px 0;color:var(--text-secondary)">原始直接毛利</td>
-                  <td style="text-align:right;font-family:Inter,sans-serif;font-weight:600"
+                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-weight:600"
                       :style="summary.origDirectProfit >= 0 ? 'color:#15803D' : 'color:#DC2626'"
                       x-text="'NT$ ' + fmt(summary.origDirectProfit)"></td>
                 </tr>
                 <tr>
                   <td style="padding:5px 0;color:var(--text-secondary)">原始毛利率</td>
-                  <td style="text-align:right;font-family:Inter,sans-serif"
+                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif"
                       x-text="summary.origMarginPct.toFixed(1) + '%'"></td>
                 </tr>
                 <tr style="border-top:1px solid var(--border-light)">
                   <td style="padding:5px 0;color:var(--text-secondary)">管銷分攤（10%）</td>
-                  <td style="text-align:right;font-family:Inter,sans-serif;color:#DC2626" x-text="'− NT$ ' + fmt(summary.origAdminCost)"></td>
+                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;color:#DC2626" x-text="'− NT$ ' + fmt(summary.origAdminCost)"></td>
                 </tr>
                 <tr>
                   <td style="padding:5px 0;color:var(--text-secondary)">公益捐款（1%）</td>
-                  <td style="text-align:right;font-family:Inter,sans-serif;color:#DC2626" x-text="'− NT$ ' + fmt(summary.origCharity)"></td>
+                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;color:#DC2626" x-text="'− NT$ ' + fmt(summary.origCharity)"></td>
                 </tr>
                 <tr style="border-top:1.5px solid var(--border-light)">
                   <td style="padding:5px 0;font-weight:700">原始預估淨利</td>
-                  <td style="text-align:right;font-family:Inter,sans-serif;font-weight:700"
+                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-weight:700"
                       :style="summary.origNetProfit >= 0 ? 'color:#15803D' : 'color:#DC2626'"
                       x-text="'NT$ ' + fmt(summary.origNetProfit)"></td>
                 </tr>
                 <tr>
                   <td style="padding:5px 0;font-weight:600;color:var(--text-secondary)">原始預估淨利率</td>
-                  <td style="text-align:right;font-family:Inter,sans-serif;font-weight:600"
+                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-weight:600"
                       :style="summary.origNetMarginPct >= 20 ? 'color:#15803D' : summary.origNetMarginPct >= 0 ? 'color:#B45309' : 'color:#DC2626'"
                       x-text="summary.origNetMarginPct.toFixed(1) + '%'"></td>
                 </tr>
@@ -611,48 +610,48 @@
               <table style="width:100%;font-size:12px">
                 <tr>
                   <td style="padding:5px 0;color:var(--text-secondary)">報價稅前收入</td>
-                  <td style="text-align:right;font-family:Inter,sans-serif" x-text="'NT$ ' + fmt(summary.quotedPretax)"></td>
+                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif" x-text="'NT$ ' + fmt(summary.quotedPretax)"></td>
                 </tr>
                 <tr>
                   <td style="padding:5px 0;color:var(--text-secondary)">品項實際成本</td>
-                  <td style="text-align:right;font-family:Inter,sans-serif;color:#92400E" x-text="'NT$ ' + fmt(summary.itemActualTotal)"></td>
+                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;color:#92400E" x-text="'NT$ ' + fmt(summary.itemActualTotal)"></td>
                 </tr>
                 <tr>
                   <td style="padding:5px 0;color:var(--text-secondary)">額外支出</td>
-                  <td style="text-align:right;font-family:Inter,sans-serif;color:#92400E" x-text="'NT$ ' + fmt(summary.extraTotal)"></td>
+                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;color:#92400E" x-text="'NT$ ' + fmt(summary.extraTotal)"></td>
                 </tr>
                 <tr style="border-top:1px solid #FDE68A">
                   <td style="padding:5px 0;font-weight:600">實際總成本</td>
-                  <td style="text-align:right;font-family:Inter,sans-serif;font-weight:700;color:#92400E" x-text="'NT$ ' + fmt(summary.totalActualCost)"></td>
+                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-weight:700;color:#92400E" x-text="'NT$ ' + fmt(summary.totalActualCost)"></td>
                 </tr>
                 <tr>
                   <td style="padding:5px 0;color:var(--text-secondary)">真實毛利</td>
-                  <td style="text-align:right;font-family:Inter,sans-serif"
+                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif"
                       :style="summary.grossProfit >= 0 ? 'color:#15803D' : 'color:#DC2626'"
                       x-text="'NT$ ' + fmt(summary.grossProfit)"></td>
                 </tr>
                 <tr>
                   <td style="padding:5px 0;color:var(--text-secondary)">真實毛利率</td>
-                  <td style="text-align:right;font-family:Inter,sans-serif"
+                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif"
                       x-text="summary.grossMarginPct.toFixed(1) + '%'"></td>
                 </tr>
                 <tr style="border-top:1px solid #FDE68A">
                   <td style="padding:5px 0;color:var(--text-secondary)">管銷分攤（10%）</td>
-                  <td style="text-align:right;font-family:Inter,sans-serif;color:#DC2626" x-text="'− NT$ ' + fmt(summary.adminCost)"></td>
+                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;color:#DC2626" x-text="'− NT$ ' + fmt(summary.adminCost)"></td>
                 </tr>
                 <tr>
                   <td style="padding:5px 0;color:var(--text-secondary)">公益捐款（1%）</td>
-                  <td style="text-align:right;font-family:Inter,sans-serif;color:#DC2626" x-text="'− NT$ ' + fmt(summary.charityDonation)"></td>
+                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;color:#DC2626" x-text="'− NT$ ' + fmt(summary.charityDonation)"></td>
                 </tr>
                 <tr style="border-top:1.5px solid #FDE68A">
                   <td style="padding:5px 0;font-weight:700">真實淨利</td>
-                  <td style="text-align:right;font-family:Inter,sans-serif;font-weight:700"
+                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-weight:700"
                       :style="summary.netProfit >= 0 ? 'color:#15803D' : 'color:#DC2626'"
                       x-text="'NT$ ' + fmt(summary.netProfit)"></td>
                 </tr>
                 <tr>
                   <td style="padding:5px 0;font-weight:600;color:var(--text-secondary)">真實淨利率</td>
-                  <td style="text-align:right;font-family:Inter,sans-serif;font-weight:700"
+                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-weight:700"
                       :style="summary.netMarginPct >= 20 ? 'color:#15803D' : summary.netMarginPct >= 0 ? 'color:#B45309' : 'color:#DC2626'"
                       x-text="summary.netMarginPct.toFixed(1) + '%'"></td>
                 </tr>
@@ -714,11 +713,12 @@
   </template>
 </div>
 
+<script src="../static/notif.js"></script>
 <script src="../static/sidebar.js"></script>
 <script>
+const API = '/api'
 function settlementPage() {
   return {
-    API: '',
     session: null,
     quoteNo: '',
     customerName: '',
@@ -778,7 +778,7 @@ function settlementPage() {
       }
 
       try {
-        const res = await fetch(`${this.API}/api/quotations/${this.quoteNo}/settlement`, {
+        const res = await fetch(`${API}/quotations/${this.quoteNo}/settlement`, {
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
         if (res.status === 401) { location.href = 'login.html'; return }
@@ -944,7 +944,7 @@ function settlementPage() {
       this.saving = true
       try {
         this.calcSummary()
-        const res = await fetch(`${this.API}/api/quotations/${this.quoteNo}/settlement`, {
+        const res = await fetch(`${API}/quotations/${this.quoteNo}/settlement`, {
           method:  'PUT',
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
           body:    JSON.stringify({ settlement: this.buildPayload() }),
@@ -962,7 +962,7 @@ function settlementPage() {
       this.settlement.finalizedBy = this.session.displayName || this.session.username || ''
       try {
         this.calcSummary()
-        const res = await fetch(`${this.API}/api/quotations/${this.quoteNo}/settlement`, {
+        const res = await fetch(`${API}/quotations/${this.quoteNo}/settlement`, {
           method:  'PUT',
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
           body:    JSON.stringify({ settlement: this.buildPayload() }),

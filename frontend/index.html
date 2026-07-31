@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
@@ -21,9 +21,6 @@
   })()
   </script>
 
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@300;400;500;600&display=swap" rel="stylesheet">
 
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -88,6 +85,7 @@
       gap: 14px;
       margin-bottom: 20px;
     }
+    .kpi-grid--5 { grid-template-columns: repeat(5, 1fr); }
     .kpi-card {
       background: #fff;
       border: 1px solid var(--border-light);
@@ -298,6 +296,13 @@
       .chart-row-main { grid-template-columns: 1fr; }
       .chart-row-sub  { grid-template-columns: 1fr 1fr; }
     }
+    @media (max-width:767px) {
+      .chart-row-sub    { grid-template-columns: 1fr !important; }
+      .chart-row-bottom { grid-template-columns: 1fr !important; }
+    }
+    @media (max-width:479px) {
+      .kpi-grid { grid-template-columns: 1fr !important; }
+    }
   </style>
 </head>
 
@@ -331,6 +336,35 @@
       </div>
     </div>
 
+    <!-- ─── ONBOARDING 引導條（系統無資料時顯示） ─── -->
+    <div x-show="!loading && !onboardingDismissed && stats.totalQuotes === 0 && stats.activeCases === 0"
+         style="background:linear-gradient(135deg,#EFF6FF,#F0FDF4);border:1px solid #BFDBFE;border-radius:var(--radius-lg);padding:16px 20px;margin-bottom:16px;display:flex;gap:16px;align-items:flex-start">
+      <div style="flex-shrink:0;width:36px;height:36px;background:#2563EB;border-radius:8px;display:flex;align-items:center;justify-content:center">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+      </div>
+      <div style="flex:1">
+        <div style="font-size:14px;font-weight:600;color:var(--text-primary);margin-bottom:4px" x-text="'歡迎，' + (session.display_name || session.username) + '！MOTRIX ERP 已就緒'"></div>
+        <div style="font-size:12px;color:var(--text-secondary);margin-bottom:12px">系統目前尚無資料，建議從以下步驟開始：</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <a href="pages/customers.html" style="display:inline-flex;align-items:center;gap:5px;padding:6px 12px;background:#fff;border:1px solid #BFDBFE;border-radius:6px;font-size:12px;font-weight:500;color:#1D4ED8;text-decoration:none">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+            1. 建立客戶資料
+          </a>
+          <a href="pages/quotation-form.html" style="display:inline-flex;align-items:center;gap:5px;padding:6px 12px;background:#fff;border:1px solid #BFDBFE;border-radius:6px;font-size:12px;font-weight:500;color:#1D4ED8;text-decoration:none">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+            2. 開立第一張報價單
+          </a>
+          <a href="pages/approval-settings.html" x-show="session.role === 'superadmin' || session.role === 'admin'" style="display:inline-flex;align-items:center;gap:5px;padding:6px 12px;background:#fff;border:1px solid #BFDBFE;border-radius:6px;font-size:12px;font-weight:500;color:#1D4ED8;text-decoration:none">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            3. 設定簽核流程
+          </a>
+        </div>
+      </div>
+      <button @click="dismissOnboarding()" style="flex-shrink:0;border:none;background:none;cursor:pointer;padding:4px;color:var(--text-dim);line-height:1;opacity:.5" @mouseenter="$el.style.opacity='1'" @mouseleave="$el.style.opacity='.5'" title="關閉">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+
     <!-- ─── ALERT BANNERS（保固到期） ─── -->
     <template x-for="w in stats.warrantyWarnings.filter(w => w.daysLeft < 0)" :key="w.quoteNo + w.name">
       <div style="background:var(--danger-light);border-left:3px solid var(--danger);border-radius:var(--radius);padding:11px 16px;margin-bottom:8px;display:flex;gap:12px;align-items:center">
@@ -339,7 +373,7 @@
           <strong x-text="w.name"></strong>
           <span style="color:var(--text-dim)" x-text="' · ' + w.customer + ' · ' + w.quoteNo"></span>
         </div>
-        <span style="font-size:11px;font-weight:700;color:var(--danger);font-family:Inter,sans-serif">保固已過期</span>
+        <span style="font-size:11px;font-weight:700;color:var(--danger);font-family:LINE Seed TW_OTF, sans-serif">保固已過期</span>
       </div>
     </template>
     <template x-for="w in stats.warrantyWarnings.filter(w => w.daysLeft >= 0 && w.daysLeft <= 30)" :key="w.quoteNo + w.name">
@@ -349,13 +383,78 @@
           <strong x-text="w.name"></strong>
           <span style="color:var(--text-dim)" x-text="' · ' + w.customer + '（' + w.expiryDate + '到期）'"></span>
         </div>
-        <span style="font-size:11px;font-weight:700;color:var(--warning);font-family:Inter,sans-serif" x-text="w.daysLeft + ' 天'"></span>
+        <span style="font-size:11px;font-weight:700;color:var(--warning);font-family:LINE Seed TW_OTF, sans-serif" x-text="w.daysLeft + ' 天'"></span>
       </div>
     </template>
     <div x-show="!loading && !stats.warrantyWarnings?.length && !stats.pendingQuotes" style="margin-bottom:8px"></div>
 
+    <!-- ─── QUOTE FOLLOW-UP ALERTS（有效期快到期） ─── -->
+    <template x-for="q in expiringQuotes" :key="'exp-'+q.quoteNo">
+      <div style="background:var(--danger-light);border-left:3px solid var(--danger);border-radius:var(--radius);padding:10px 16px;margin-bottom:8px;display:flex;gap:12px;align-items:center">
+        <span style="font-size:13px">🔴</span>
+        <div style="flex:1;font-size:12px">
+          報價有效期快到期 — <strong x-text="q.customer || q.quoteNo"></strong>
+          <span style="color:var(--text-dim)" x-text="' · ' + q.quoteNo"></span>
+        </div>
+        <span style="font-family:LINE Seed TW_OTF, sans-serif;font-size:11px;font-weight:700;color:var(--danger)" x-text="'剩 ' + q.validDaysLeft + ' 天'"></span>
+        <button @click="location.href='pages/quotation-form.html?id='+q.quoteNo"
+                style="font-size:11px;padding:3px 10px;border-radius:4px;background:var(--danger);color:#fff;border:none;cursor:pointer;font-family:var(--font-zh)">前往更新</button>
+      </div>
+    </template>
+
+    <!-- ─── 待追蹤報價（超14天未回應） ─── -->
+    <div x-show="followUpQuotes.length > 0 && canQuotation"
+         style="background:#FFF7ED;border-left:3px solid var(--warning);border-radius:var(--radius);padding:12px 16px;margin-bottom:12px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <div style="font-size:12px;font-weight:600;color:#92400E;display:flex;align-items:center;gap:6px">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          待追蹤報價
+          <span style="background:#FDE68A;color:#92400E;font-size:10px;padding:1px 7px;border-radius:10px;font-weight:700" x-text="followUpQuotes.length + ' 份'"></span>
+          <span style="font-size:11px;font-weight:400;color:#B45309">發出超過 14 天尚未確認結果</span>
+        </div>
+        <a href="pages/quotations.html" style="font-size:11px;color:var(--warning);text-decoration:none;font-weight:500">查看全部 →</a>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:5px">
+        <template x-for="q in followUpQuotes.slice(0,4)" :key="'fu-'+q.quoteNo">
+          <div style="display:flex;align-items:center;gap:10px;font-size:11px;cursor:pointer;padding:5px 6px;border-radius:4px;transition:background .1s"
+               @mouseenter="$el.style.background='#FEF3C7'" @mouseleave="$el.style.background=''"
+               @click="location.href='pages/quotation-form.html?id='+q.quoteNo">
+            <span style="width:6px;height:6px;border-radius:50%;background:var(--warning);flex-shrink:0"></span>
+            <span style="flex:1;font-weight:500;color:var(--text-primary)" x-text="q.customer || '—'"></span>
+            <span style="font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-dim);font-size:10px" x-text="q.quoteNo"></span>
+            <span style="font-family:LINE Seed TW_OTF, sans-serif;font-weight:700;color:var(--warning)" x-text="q.daysSinceSent + ' 天未回應'"></span>
+            <span style="font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-secondary);font-size:10px" x-text="'NT$ ' + Math.round(q.total).toLocaleString()"></span>
+          </div>
+        </template>
+        <div x-show="followUpQuotes.length > 4"
+             style="font-size:10px;color:var(--text-dim);padding:2px 6px"
+             x-text="'… 還有 ' + (followUpQuotes.length - 4) + ' 份報價，點擊「查看全部」前往'"></div>
+      </div>
+    </div>
+
     <!-- ─── KPI CARDS ─── -->
-    <div class="kpi-grid" style="margin-top:12px">
+    <div class="kpi-grid" :class="canQuotation ? 'kpi-grid--5' : ''" style="margin-top:12px">
+
+      <!-- 等我簽核 -->
+      <div class="kpi-card" x-show="canQuotation"
+           style="cursor:pointer"
+           :style="stats.waitingForMe > 0 ? 'border-color:var(--warning);box-shadow:0 0 0 1px var(--warning)' : ''"
+           @click="location.href='pages/approval-queue.html'">
+        <div class="kpi-card__label">等我簽核</div>
+        <div class="kpi-card__row">
+          <div class="kpi-card__val"
+               :class="stats.waitingForMe > 0 ? 'kpi-card__val--warning' : ''"
+               x-text="loading ? '…' : (stats.waitingForMe || 0)"></div>
+          <span class="kpi-card__delta"
+                :class="stats.waitingForMe > 0 ? 'kpi-card__delta--warn' : 'kpi-card__delta--up'"
+                x-text="stats.waitingForMe > 0 ? '待您核准' : '無待辦'"></span>
+        </div>
+        <div class="kpi-card__sub"
+             :style="stats.waitingForMe > 0 ? 'color:var(--warning);font-weight:600' : ''">
+          <span x-text="stats.waitingForMe > 0 ? '點擊前往簽核佇列' : '目前無待審報價單'"></span>
+        </div>
+        <canvas class="kpi-card__spark" id="sparkApproval"></canvas>
+      </div>
 
       <!-- 報價單總數 -->
       <div class="kpi-card" style="cursor:pointer" @click="location.href='pages/quotations.html'">
@@ -412,6 +511,46 @@
         <canvas class="kpi-card__spark" id="sparkWarranty"></canvas>
       </div>
 
+    </div>
+
+    <!-- ─── 銷售漏斗 Win Rate 條 ─── -->
+    <div x-show="canQuotation && funnel.totalSubmitted > 0"
+         style="background:#fff;border:1px solid var(--border-light);border-radius:var(--radius-lg);padding:14px 20px;margin-bottom:16px;display:flex;align-items:center;gap:20px;flex-wrap:wrap;box-shadow:var(--shadow-sm)">
+      <div style="flex-shrink:0">
+        <div style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.07em;font-family:LINE Seed TW_OTF, sans-serif;margin-bottom:4px">成案率 Win Rate</div>
+        <div style="font-size:26px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;line-height:1"
+             :style="(funnel.winRate||0)>=60?'color:var(--success)':(funnel.winRate||0)>=40?'color:var(--warning)':'color:var(--danger)'"
+             x-text="funnel.winRate!==null ? funnel.winRate+'%' : '—'"></div>
+      </div>
+      <div style="width:1px;height:40px;background:var(--border-light);flex-shrink:0"></div>
+      <div style="display:flex;gap:24px;flex-shrink:0">
+        <div style="text-align:center">
+          <div style="font-size:20px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;color:var(--success)" x-text="funnel.won||0"></div>
+          <div style="font-size:10px;color:var(--text-dim);margin-top:2px">已成案</div>
+        </div>
+        <div style="text-align:center">
+          <div style="font-size:20px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;color:var(--warning)" x-text="funnel.pendingResponse||0"></div>
+          <div style="font-size:10px;color:var(--text-dim);margin-top:2px">客戶評估中</div>
+        </div>
+        <div style="text-align:center">
+          <div style="font-size:20px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;color:var(--danger)" x-text="funnel.lost||0"></div>
+          <div style="font-size:10px;color:var(--text-dim);margin-top:2px">未成案</div>
+        </div>
+      </div>
+      <div style="flex:1;min-width:160px">
+        <div style="font-size:9px;color:var(--text-dim);margin-bottom:5px;font-family:LINE Seed TW_OTF, sans-serif">報價漏斗分布</div>
+        <div style="height:8px;background:#F0EEE9;border-radius:4px;overflow:hidden;display:flex">
+          <div :style="'background:var(--success);width:'+Math.round((funnel.won||0)/funnel.totalSubmitted*100)+'%;transition:width .6s'"></div>
+          <div :style="'background:var(--warning);opacity:.75;width:'+Math.round((funnel.pendingResponse||0)/funnel.totalSubmitted*100)+'%;transition:width .6s'"></div>
+          <div :style="'background:var(--danger);width:'+Math.round((funnel.lost||0)/funnel.totalSubmitted*100)+'%;transition:width .6s'"></div>
+        </div>
+        <div style="display:flex;gap:12px;margin-top:5px;font-size:9px;color:var(--text-dim)">
+          <span><span style="color:var(--success)">■</span> 成案</span>
+          <span><span style="color:var(--warning)">■</span> 評估中</span>
+          <span><span style="color:var(--danger)">■</span> 未成案</span>
+          <span style="margin-left:auto;font-family:LINE Seed TW_OTF, sans-serif" x-text="'共 '+funnel.totalSubmitted+' 份已送出'"></span>
+        </div>
+      </div>
     </div>
 
     <!-- ─── 主圖表行：折線 + 應收圓環（finance only）─── -->
@@ -484,7 +623,7 @@
             <div class="chart-card__title">待收款項</div>
             <div class="chart-card__sub">已成案 · 未收款</div>
           </div>
-          <a href="pages/case-management.html" style="font-size:11px;color:var(--accent);text-decoration:none;font-family:Inter,sans-serif">前往案件 →</a>
+          <a href="pages/case-management.html" style="font-size:11px;color:var(--accent);text-decoration:none;font-family:LINE Seed TW_OTF, sans-serif">前往案件 →</a>
         </div>
         <div class="pay-timeline" style="position:relative">
           <div class="pay-timeline__line"></div>
@@ -548,7 +687,7 @@
         </div>
         <!-- 保固即將到期 mini list -->
         <div style="border-top:1px solid var(--border-light);padding:10px 16px">
-          <div style="font-size:10px;font-family:Inter,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);margin-bottom:8px">保固到期警示</div>
+          <div style="font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);margin-bottom:8px">保固到期警示</div>
           <div style="display:flex;flex-direction:column;gap:6px">
             <template x-if="!(stats.warrantyWarnings?.length)">
               <div style="font-size:11px;color:var(--text-dim)">目前無保固警示</div>
@@ -557,7 +696,7 @@
               <div style="display:flex;align-items:center;gap:8px;font-size:11px">
                 <div :style="'width:6px;height:6px;border-radius:50%;flex-shrink:0;background:' + (w.daysLeft < 0 ? 'var(--danger)' : 'var(--warning)')"></div>
                 <span style="flex:1" x-text="w.name + ' · ' + w.customer"></span>
-                <span :style="'font-family:Inter,sans-serif;font-weight:600;color:' + (w.daysLeft < 0 ? 'var(--danger)' : 'var(--warning)')"
+                <span :style="'font-family:LINE Seed TW_OTF, sans-serif;font-weight:600;color:' + (w.daysLeft < 0 ? 'var(--danger)' : 'var(--warning)')"
                       x-text="w.daysLeft < 0 ? '已過期' : w.daysLeft + ' 天'"></span>
               </div>
             </template>
@@ -600,21 +739,21 @@
           <canvas id="chartMarginComparison"></canvas>
         </div>
         <!-- 彙總列 -->
-        <div style="border-top:1px solid var(--border-light);padding:12px 20px;display:flex;gap:36px;background:#FAFAF9">
+        <div style="border-top:1px solid var(--border-light);padding:12px 20px;display:flex;gap:24px;flex-wrap:wrap;background:#FAFAF9">
           <div>
-            <div style="font-size:10px;color:var(--text-dim);font-family:Inter,sans-serif;letter-spacing:.06em;text-transform:uppercase;margin-bottom:3px">精算報價稅前收入</div>
-            <div style="font-size:14px;font-weight:700;font-family:Inter,sans-serif;color:var(--text-primary)"
+            <div style="font-size:10px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.06em;text-transform:uppercase;margin-bottom:3px">精算報價稅前收入</div>
+            <div style="font-size:14px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-primary)"
                  x-text="stats.settledSummary?.totalQuotedPretax ? 'NT$ ' + Math.round(stats.settledSummary.totalQuotedPretax).toLocaleString() : '—'">—</div>
           </div>
           <div>
-            <div style="font-size:10px;color:var(--text-dim);font-family:Inter,sans-serif;letter-spacing:.06em;text-transform:uppercase;margin-bottom:3px">實際毛利合計</div>
-            <div style="font-size:14px;font-weight:700;font-family:Inter,sans-serif"
+            <div style="font-size:10px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.06em;text-transform:uppercase;margin-bottom:3px">實際毛利合計</div>
+            <div style="font-size:14px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif"
                  :style="(stats.settledSummary?.totalGrossProfit || 0) >= 0 ? 'color:var(--success)' : 'color:var(--danger)'"
                  x-text="stats.settledSummary?.totalGrossProfit != null ? 'NT$ ' + Math.round(stats.settledSummary.totalGrossProfit).toLocaleString() : '—'">—</div>
           </div>
           <div>
-            <div style="font-size:10px;color:var(--text-dim);font-family:Inter,sans-serif;letter-spacing:.06em;text-transform:uppercase;margin-bottom:3px">平均實際毛利率</div>
-            <div style="font-size:14px;font-weight:700;font-family:Inter,sans-serif"
+            <div style="font-size:10px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.06em;text-transform:uppercase;margin-bottom:3px">平均實際毛利率</div>
+            <div style="font-size:14px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif"
                  :style="(stats.settledSummary?.avgActualMarginPct || 0) >= 35 ? 'color:var(--success)' : (stats.settledSummary?.avgActualMarginPct || 0) >= 25 ? 'color:var(--warning)' : 'color:var(--danger)'"
                  x-text="stats.settledSummary?.avgActualMarginPct != null ? stats.settledSummary.avgActualMarginPct.toFixed(1) + '%' : '—'">—</div>
           </div>
@@ -624,12 +763,12 @@
           <table style="width:100%;border-collapse:collapse;font-size:12px">
             <thead>
               <tr style="background:#F8F7F5">
-                <th style="padding:9px 16px;text-align:left;font-size:10px;font-family:Inter,sans-serif;letter-spacing:.07em;text-transform:uppercase;color:var(--text-dim);font-weight:500;border-bottom:1px solid var(--border-light);white-space:nowrap">客戶 / 案件</th>
-                <th style="padding:9px 12px;text-align:left;font-size:10px;font-family:Inter,sans-serif;letter-spacing:.07em;text-transform:uppercase;color:var(--text-dim);font-weight:500;border-bottom:1px solid var(--border-light);white-space:nowrap">報價單</th>
-                <th style="padding:9px 12px;text-align:right;font-size:10px;font-family:Inter,sans-serif;letter-spacing:.07em;text-transform:uppercase;color:var(--text-dim);font-weight:500;border-bottom:1px solid var(--border-light);white-space:nowrap">稅前收入</th>
-                <th style="padding:9px 12px;text-align:center;font-size:10px;font-family:Inter,sans-serif;letter-spacing:.07em;text-transform:uppercase;color:var(--text-dim);font-weight:500;border-bottom:1px solid var(--border-light);white-space:nowrap">預估 → 實際毛利率</th>
-                <th style="padding:9px 12px;text-align:right;font-size:10px;font-family:Inter,sans-serif;letter-spacing:.07em;text-transform:uppercase;color:var(--text-dim);font-weight:500;border-bottom:1px solid var(--border-light);white-space:nowrap">實際毛利</th>
-                <th style="padding:9px 16px;text-align:right;font-size:10px;font-family:Inter,sans-serif;letter-spacing:.07em;text-transform:uppercase;color:var(--text-dim);font-weight:500;border-bottom:1px solid var(--border-light);white-space:nowrap">差異</th>
+                <th style="padding:9px 16px;text-align:left;font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.07em;text-transform:uppercase;color:var(--text-dim);font-weight:500;border-bottom:1px solid var(--border-light);white-space:nowrap">客戶 / 案件</th>
+                <th style="padding:9px 12px;text-align:left;font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.07em;text-transform:uppercase;color:var(--text-dim);font-weight:500;border-bottom:1px solid var(--border-light);white-space:nowrap">報價單</th>
+                <th style="padding:9px 12px;text-align:right;font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.07em;text-transform:uppercase;color:var(--text-dim);font-weight:500;border-bottom:1px solid var(--border-light);white-space:nowrap">稅前收入</th>
+                <th style="padding:9px 12px;text-align:center;font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.07em;text-transform:uppercase;color:var(--text-dim);font-weight:500;border-bottom:1px solid var(--border-light);white-space:nowrap">預估 → 實際毛利率</th>
+                <th style="padding:9px 12px;text-align:right;font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.07em;text-transform:uppercase;color:var(--text-dim);font-weight:500;border-bottom:1px solid var(--border-light);white-space:nowrap">實際毛利</th>
+                <th style="padding:9px 16px;text-align:right;font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.07em;text-transform:uppercase;color:var(--text-dim);font-weight:500;border-bottom:1px solid var(--border-light);white-space:nowrap">差異</th>
               </tr>
             </thead>
             <tbody>
@@ -641,12 +780,12 @@
                     <div style="font-size:11px;color:var(--text-secondary);margin-top:2px" x-show="m.projectName" x-text="m.projectName"></div>
                   </td>
                   <td style="padding:10px 12px">
-                    <span style="font-family:Inter,sans-serif;font-size:11px;color:var(--accent)" x-text="m.quoteNo"></span>
+                    <span style="font-family:LINE Seed TW_OTF, sans-serif;font-size:11px;color:var(--accent)" x-text="m.quoteNo"></span>
                   </td>
-                  <td style="padding:10px 12px;text-align:right;font-family:Inter,sans-serif;font-size:12px;font-weight:500;color:var(--text-primary)"
+                  <td style="padding:10px 12px;text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-size:12px;font-weight:500;color:var(--text-primary)"
                       x-text="m.quotedPretax ? 'NT$ ' + Math.round(m.quotedPretax).toLocaleString() : '—'"></td>
                   <td style="padding:10px 12px;text-align:center">
-                    <div style="display:inline-flex;align-items:center;gap:6px;font-family:Inter,sans-serif;font-size:12px">
+                    <div style="display:inline-flex;align-items:center;gap:6px;font-family:LINE Seed TW_OTF, sans-serif;font-size:12px">
                       <span style="color:var(--text-secondary)" x-text="m.estimatedMarginPct.toFixed(1) + '%'"></span>
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                            :style="m.actualMarginPct >= m.estimatedMarginPct ? 'color:var(--success)' : 'color:var(--danger)'">
@@ -658,10 +797,10 @@
                             x-text="m.actualMarginPct.toFixed(1) + '%'"></span>
                     </div>
                   </td>
-                  <td style="padding:10px 12px;text-align:right;font-family:Inter,sans-serif;font-size:12px;font-weight:600"
+                  <td style="padding:10px 12px;text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-size:12px;font-weight:600"
                       :style="(m.grossProfit || 0) >= 0 ? 'color:var(--success)' : 'color:var(--danger)'"
                       x-text="m.grossProfit != null ? 'NT$ ' + Math.round(m.grossProfit).toLocaleString() : '—'"></td>
-                  <td style="padding:10px 16px;text-align:right;font-family:Inter,sans-serif;font-size:12px;font-weight:600">
+                  <td style="padding:10px 16px;text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-size:12px;font-weight:600">
                     <span :style="(m.profitDiff || 0) >= 0 ? 'color:var(--success)' : 'color:var(--danger)'"
                           x-text="m.profitDiff != null ? ((m.profitDiff >= 0 ? '+' : '') + 'NT$ ' + Math.round(m.profitDiff).toLocaleString()) : '—'"></span>
                   </td>
@@ -684,8 +823,9 @@
             <span class="panel__count" :style="stats.pendingQuotes ? 'background:var(--warning-light);color:var(--warning)' : ''"
                   x-text="(stats.pendingList?.length || 0) + ' 筆'"></span>
           </div>
-          <a href="pages/quotations.html?status=待審核" class="panel__action">前往審核 →</a>
+          <a href="pages/approval-queue.html" class="panel__action">前往審核 →</a>
         </div>
+        <div class="table-scroll">
         <table class="data-table">
           <thead>
             <tr><th>報價單號</th><th>客戶</th><th style="text-align:right">金額</th><th>審核原因</th><th>申請人</th></tr>
@@ -693,7 +833,7 @@
           <tbody>
             <template x-for="q in (stats.pendingList || [])" :key="q.quoteNo">
               <tr style="cursor:pointer" @click="location.href='pages/quotation-form.html?id='+q.quoteNo">
-                <td><span style="font-family:Inter,sans-serif;font-size:11px" x-text="q.quoteNo"></span></td>
+                <td><span style="font-family:LINE Seed TW_OTF, sans-serif;font-size:11px" x-text="q.quoteNo"></span></td>
                 <td x-text="q.customer || '—'"></td>
                 <td class="num" x-text="fmtAmountFull(q.total)"></td>
                 <td>
@@ -709,6 +849,7 @@
             </tr>
           </tbody>
         </table>
+        </div>
       </div>
 
       <!-- 應收款項（finance only）-->
@@ -720,6 +861,7 @@
           </div>
           <a href="pages/case-management.html" class="panel__action">前往案件 →</a>
         </div>
+        <div class="table-scroll">
         <table class="data-table">
           <thead>
             <tr><th>客戶</th><th>案件</th><th>款項</th><th style="text-align:right">金額</th></tr>
@@ -728,7 +870,7 @@
             <template x-for="p in (stats.paymentItems || [])" :key="p.quoteNo + p.label">
               <tr style="cursor:pointer" @click="location.href='pages/case-management.html?q='+p.quoteNo">
                 <td style="font-size:12px" x-text="p.customer || '—'"></td>
-                <td><span style="font-family:Inter,sans-serif;font-size:11px;color:var(--accent)" x-text="p.quoteNo"></span></td>
+                <td><span style="font-family:LINE Seed TW_OTF, sans-serif;font-size:11px;color:var(--accent)" x-text="p.quoteNo"></span></td>
                 <td>
                   <span style="font-size:11px;padding:2px 7px;border-radius:3px;background:#F0EEE9;color:var(--text-secondary)" x-text="p.label || '款項'"></span>
                 </td>
@@ -740,12 +882,13 @@
             </tr>
           </tbody>
         </table>
+        </div>
       </div>
 
     </div>
 
     <div style="padding-top:8px;border-top:1px solid var(--border-light);display:flex;justify-content:space-between">
-      <span style="font-size:10px;color:var(--text-dim);font-family:Inter,sans-serif">MOTRIX SYNERGY INTEGRATION — ERP v1.0 — 允碩整合集創股份有限公司</span>
+      <span style="font-size:10px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif">MOTRIX SYNERGY INTEGRATION — ERP v1.0 — 允碩整合集創股份有限公司</span>
       <span style="font-size:10px;color:var(--text-dim)">統一編號 60575481</span>
     </div>
 
@@ -760,8 +903,9 @@
       today: '',
       now: '',
       session: {},
+      onboardingDismissed: false,
       stats: {
-        totalQuotes: 0, pendingQuotes: 0, sentQuotes: 0,
+        totalQuotes: 0, pendingQuotes: 0, sentQuotes: 0, waitingForMe: 0,
         activeCases: 0, closedCases: 0, customerCount: 0,
         pendingList: [], paymentItems: [], warrantyWarnings: [],
         marginTop5: [], deviceSummary: {}, receivableSummary: {},
@@ -769,6 +913,9 @@
       },
       monthly: [],
       loading: true,
+      funnel: { won:0, lost:0, pendingResponse:0, winRate:null, totalSubmitted:0 },
+      followUpQuotes: [],
+      expiringQuotes: [],
 
       get canFinance() {
         const r = this.session.role; const m = this.session.modules || []
@@ -806,10 +953,17 @@
         this.today = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} 週${days[d.getDay()]}`
         this.now   = this.today + ' ' + d.toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'})
 
+        this.onboardingDismissed = !!localStorage.getItem('motrix_onboarding_banner_dismissed')
         await this.loadStats()
         this.monthly = await this.loadMonthly()
+        this.loadFunnel()
         this.loading = false
         this.$nextTick(() => initCharts(this.monthly, this.stats))
+      },
+
+      dismissOnboarding() {
+        localStorage.setItem('motrix_onboarding_banner_dismissed', '1')
+        this.onboardingDismissed = true
       },
 
       async loadStats() {
@@ -829,6 +983,20 @@
           if (r.ok) { const d = await r.json(); return d.items || [] }
         } catch {}
         return []
+      },
+
+      async loadFunnel() {
+        try {
+          const r = await fetch(`${API}/dashboard/funnel`, {
+            headers: { Authorization: 'Bearer ' + this.session.token }
+          })
+          if (r.ok) {
+            const d = await r.json()
+            this.funnel         = d.funnel         || {}
+            this.followUpQuotes = d.followUpQuotes || []
+            this.expiringQuotes = d.expiringQuotes || []
+          }
+        } catch {}
       },
 
       fmtAmount(n) {
@@ -866,7 +1034,7 @@
 
   /* ── Chart.js 設定 ── */
   function initCharts(monthly, stats) {
-    Chart.defaults.font.family = "Inter, 'Noto Sans TC', sans-serif"
+    Chart.defaults.font.family = "'LINE Seed TW_OTF', sans-serif"
     Chart.defaults.color = '#9A9A9A'
 
     const cream  = '#F5F4F0'

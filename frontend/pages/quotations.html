@@ -1,18 +1,21 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="../static/favicon.png">
   <title>報價單管理 — MOTRIX 營運管理系統</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@300;400;500;600&display=swap" rel="stylesheet">
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
   <link rel="stylesheet" href="../css/style.css">
   <style>
     .filter-tabs { display:flex; gap:2px; background:#F0EEE9; padding:3px; border-radius:8px; margin-bottom:20px; }
     .filter-tab  { padding:6px 14px; border-radius:6px; font-size:12px; cursor:pointer; transition:all .12s; border:none; background:transparent; color:var(--text-secondary); font-family:var(--font-zh); }
     .filter-tab.active { background:#fff; color:var(--text-primary); font-weight:600; box-shadow:var(--shadow-sm); }
-    .search-bar { display:flex; gap:10px; margin-bottom:16px; }
+    .search-bar { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px; }
+    .search-bar .search-input { min-width:140px; }
+    .filter-tabs { overflow-x:auto; -webkit-overflow-scrolling:touch; white-space:nowrap; }
+    .filter-tab  { white-space:nowrap; }
+    .summary-row { flex-wrap:wrap; gap:16px; }
     .search-input { flex:1; padding:8px 14px; border:1px solid var(--border-light); border-radius:var(--radius); font-size:13px; font-family:var(--font-zh); background:#fff; outline:none; color:var(--text-primary); }
     .search-input:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(37,99,235,.08); }
     .action-btn { display:inline-flex; align-items:center; gap:6px; padding:7px 14px; border-radius:var(--radius); font-size:12px; font-family:var(--font-zh); cursor:pointer; border:none; transition:all .12s; }
@@ -35,47 +38,6 @@
     .view-switch { display:flex; gap:2px; background:#F0EEE9; padding:3px; border-radius:8px; margin-bottom:20px; width:fit-content; }
     .view-switch__btn { padding:6px 16px; border-radius:6px; font-size:12px; cursor:pointer; border:none; background:transparent; color:var(--text-secondary); font-family:var(--font-zh); transition:all .12s; display:flex; align-items:center; gap:5px; }
     .view-switch__btn.active { background:#fff; color:var(--text-primary); font-weight:600; box-shadow:var(--shadow-sm); }
-    /* Queue split */
-    .queue-wrap { display:flex; gap:16px; height:calc(100vh - 260px); min-height:480px; }
-    .queue-left { width:340px; flex-shrink:0; display:flex; flex-direction:column; border:1px solid var(--border-light); border-radius:var(--radius-lg); overflow:hidden; background:#fff; }
-    .queue-left-head { padding:12px 16px; border-bottom:1px solid var(--border-light); font-size:13px; font-weight:600; color:var(--text-primary); display:flex; align-items:center; justify-content:space-between; flex-shrink:0; }
-    .queue-list { flex:1; overflow-y:auto; }
-    .queue-item { padding:12px 16px; border-bottom:1px solid var(--border-light); cursor:pointer; transition:background .1s; }
-    .queue-item:hover { background:#F8F7F4; }
-    .queue-item.selected { background:#EEF2FF; }
-    .queue-item__no { font-family:Inter,sans-serif; font-size:12px; font-weight:700; color:var(--accent); }
-    .queue-item__name { font-size:12px; color:var(--text-primary); font-weight:500; margin-top:2px; }
-    .queue-item__meta { font-size:11px; color:var(--text-dim); margin-top:3px; display:flex; align-items:center; gap:6px; }
-    .queue-badge { font-size:9px; font-weight:700; padding:1px 6px; border-radius:8px; font-family:Inter,sans-serif; }
-    .queue-badge--mine { background:#EEF2FF; color:#4338CA; }
-    .queue-badge--wait { background:#F3F4F6; color:#6B7280; }
-    .queue-right { flex:1; display:flex; flex-direction:column; border:1px solid var(--border-light); border-radius:var(--radius-lg); overflow:hidden; background:#fff; }
-    .queue-right-head { padding:14px 20px; border-bottom:1px solid var(--border-light); flex-shrink:0; }
-    .queue-right-body { flex:1; overflow-y:auto; padding:20px; }
-    .queue-empty { display:flex; align-items:center; justify-content:center; height:100%; flex-direction:column; gap:8px; color:var(--text-dim); }
-    /* Step timeline */
-    .step-timeline { display:flex; flex-direction:column; gap:0; margin:16px 0; }
-    .step-row { display:flex; align-items:flex-start; gap:12px; }
-    .step-dot-col { display:flex; flex-direction:column; align-items:center; width:24px; flex-shrink:0; }
-    .step-dot { width:22px; height:22px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:700; font-family:Inter,sans-serif; flex-shrink:0; }
-    .step-dot.done { background:#16A34A; color:#fff; }
-    .step-dot.current { background:#6366F1; color:#fff; box-shadow:0 0 0 3px rgba(99,102,241,.2); }
-    .step-dot.pending { background:#E5E7EB; color:#9CA3AF; }
-    .step-connector { width:2px; flex:1; min-height:12px; background:#E5E7EB; margin:2px 0; }
-    .step-connector.done { background:#16A34A; }
-    .step-info { padding-bottom:16px; flex:1; }
-    .step-name { font-size:12px; font-weight:600; color:var(--text-primary); }
-    .step-time { font-size:10px; color:var(--text-dim); margin-top:2px; font-family:Inter,sans-serif; }
-  
-  /* -- Mobile RWD -- */
-  @media (max-width:767px) {
-    .queue-wrap { flex-direction:column; height:auto !important; min-height:auto !important; gap:0; }
-    .queue-left { width:100% !important; max-height:40vh; border-right:none; border-bottom:1px solid var(--border-light); border-radius:var(--radius-lg) var(--radius-lg) 0 0; }
-    .queue-right { border-radius:0 0 var(--radius-lg) var(--radius-lg); }
-    .queue-left.mob-hidden  { display:none !important; }
-    .queue-right.mob-hidden { display:none !important; }
-    .mob-back-q { display:inline-flex !important; }
-  }
   </style>
 </head>
 <body x-data="quotationList()" x-init="init()">
@@ -94,7 +56,7 @@
         <div class="page-header__sub" x-text="'MQ 系列 · 共 ' + quotes.length + ' 筆紀錄'"></div>
       </div>
       <div style="display:flex;gap:8px;align-items:center">
-        <span style="font-size:11px;padding:3px 8px;border-radius:4px;font-family:Inter,sans-serif"
+        <span style="font-size:11px;padding:3px 8px;border-radius:4px;font-family:LINE Seed TW_OTF, sans-serif"
               :style="backendOnline ? 'background:#F0FDF4;color:#15803D' : 'background:#FEF2F2;color:#DC2626'"
               x-text="backendOnline ? '● DB 已連線' : '○ 後端離線'"></span>
         <a href="quotation-form.html" class="action-btn action-btn--primary" style="text-decoration:none">
@@ -112,176 +74,19 @@
 
     <!-- View switcher -->
     <div class="view-switch">
-      <button class="view-switch__btn" :class="{active: view==='list'}" @click="switchView('list')">
+      <div class="view-switch__btn active">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414A1 1 0 0119 9.414V19a2 2 0 01-2 2z"/></svg>
         報價單列表
-      </button>
-      <button class="view-switch__btn" :class="{active: view==='queue'}" @click="switchView('queue')">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
-        簽核佇列
-        <span x-show="queueTotal > 0" x-text="queueTotal > 9 ? '9+' : queueTotal"
-              style="background:#6366F1;color:#fff;font-size:9px;padding:1px 6px;border-radius:8px;font-family:Inter,sans-serif;font-weight:700;min-width:16px;text-align:center"></span>
-      </button>
+      </div>
+      <a href="approval-queue.html" class="view-switch__btn" style="text-decoration:none">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        前往簽核佇列
+        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="opacity:.5"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3"/></svg>
+      </a>
     </div>
 
-    <!-- ═══ 簽核佇列 VIEW ═══ -->
-    <template x-if="view==='queue'">
-      <div>
-        <div class="queue-wrap">
-          <!-- Left: list -->
-          <div class="queue-left" :class="{'mob-hidden': selectedQueue && isMobileView}">
-            <div class="queue-left-head">
-              <span>待簽核報價單</span>
-              <span style="font-size:11px;color:var(--text-dim);font-family:Inter,sans-serif" x-text="queueTotal + ' 份'"></span>
-            </div>
-            <div class="queue-list">
-              <template x-if="queueLoading">
-                <div style="padding:24px;text-align:center;font-size:12px;color:var(--text-dim)">載入中…</div>
-              </template>
-              <template x-if="!queueLoading && queueItems.length === 0">
-                <div style="padding:32px 16px;text-align:center;font-size:12px;color:var(--text-dim)">
-                  <div style="font-size:28px;opacity:.25;margin-bottom:6px">✓</div>
-                  目前沒有待審核報價單
-                </div>
-              </template>
-              <template x-for="item in queueItems" :key="item.quoteNo">
-                <div class="queue-item" :class="{selected: selectedQueue?.quoteNo===item.quoteNo}" @click="selectedQueue=item">
-                  <div style="display:flex;align-items:center;justify-content:space-between">
-                    <div class="queue-item__no" x-text="item.quoteNo"></div>
-                    <span class="queue-badge" :class="canApproveQueue(item) ? 'queue-badge--mine' : 'queue-badge--wait'"
-                          x-text="canApproveQueue(item) ? '待您簽核' : (item.tierCount > 0 ? '第 '+(item.currentTier+1)+'/'+item.tierCount+' 層' : '待審核')"></span>
-                  </div>
-                  <div class="queue-item__name" x-text="item.customer || item.projectName || '—'"></div>
-                  <div class="queue-item__meta">
-                    <span x-text="'申請人：' + (item.requestedByDisplay || item.requestedBy)"></span>
-                    <span x-text="fmtDate(item.requestedAt)"></span>
-                  </div>
-                </div>
-              </template>
-            </div>
-          </div>
-
-          <!-- Right: detail -->
-          <div class="queue-right" :class="{'mob-hidden': !selectedQueue && isMobileView}">
-            <template x-if="!selectedQueue">
-              <div class="queue-empty">
-                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" style="opacity:.2"><path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
-                <span style="font-size:13px">選擇左側報價單查看詳情</span>
-              </div>
-            </template>
-            <template x-if="selectedQueue">
-              <div style="display:flex;flex-direction:column;height:100%">
-                <div class="queue-right-head">
-          <button @click="selectedQueue=null" class="mob-back-q" style="display:none;align-items:center;gap:5px;background:none;border:none;cursor:pointer;font-size:13px;color:var(--accent);padding:0;font-family:var(--font-zh)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>列表</button>
-          
-                  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
-                    <div>
-                      <div style="font-size:15px;font-weight:700;color:var(--text-primary)" x-text="selectedQueue.quoteNo"></div>
-                      <div style="font-size:12px;color:var(--text-secondary);margin-top:3px" x-text="(selectedQueue.customer || '') + (selectedQueue.projectName ? ' · '+selectedQueue.projectName : '')"></div>
-                    </div>
-                    <div style="display:flex;gap:8px;flex-wrap:wrap">
-                      <a :href="'quotation-form.html?id=' + selectedQueue.quoteNo"
-                         style="display:inline-flex;align-items:center;gap:5px;padding:6px 14px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;color:var(--text-secondary);text-decoration:none;font-family:var(--font-zh)">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
-                        查看報價單
-                      </a>
-                      <template x-if="canApproveQueue(selectedQueue)">
-                        <button @click="doQueueApprove()"
-                                :disabled="queueActing"
-                                style="display:inline-flex;align-items:center;gap:5px;padding:6px 14px;border:none;border-radius:var(--radius);font-size:12px;color:#fff;background:#16A34A;cursor:pointer;font-family:var(--font-zh)">
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 13l4 4L19 7"/></svg>
-                          <span x-text="queueActing ? '處理中…' : '簽核通過'"></span>
-                        </button>
-                      </template>
-                      <template x-if="canRejectQueue(selectedQueue)">
-                        <button @click="doQueueReject()"
-                                :disabled="queueActing"
-                                style="display:inline-flex;align-items:center;gap:5px;padding:6px 14px;border:1px solid #FCA5A5;border-radius:var(--radius);font-size:12px;color:#DC2626;background:#fff;cursor:pointer;font-family:var(--font-zh)">
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
-                          退回草稿
-                        </button>
-                      </template>
-                    </div>
-                  </div>
-                  <!-- Status line -->
-                  <div style="margin-top:10px;font-size:12px;color:var(--text-secondary)">
-                    <template x-if="selectedQueue.tierCount > 0 && selectedQueue.currentTier < selectedQueue.tierCount">
-                      <span>
-                        等待
-                        <b x-text="(selectedQueue.tiers[selectedQueue.currentTier]?.approvers||[]).map(a=>a.displayName||a.username).join('、')"></b>
-                        簽核（第 <span x-text="selectedQueue.currentTier + 1"></span>/<span x-text="selectedQueue.tierCount"></span> 層）
-                      </span>
-                    </template>
-                    <template x-if="selectedQueue.tierCount === 0">
-                      <span>任一超級管理員可簽核</span>
-                    </template>
-                  </div>
-                </div>
-                <div class="queue-right-body">
-                  <!-- Meta info -->
-                  <div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:20px">
-                    <div>
-                      <div style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em;font-family:Inter,sans-serif">申請人</div>
-                      <div style="font-size:13px;font-weight:600;margin-top:3px" x-text="selectedQueue.requestedByDisplay || selectedQueue.requestedBy"></div>
-                    </div>
-                    <div>
-                      <div style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em;font-family:Inter,sans-serif">申請時間</div>
-                      <div style="font-size:13px;font-weight:600;margin-top:3px;font-family:Inter,sans-serif" x-text="fmtDateFull(selectedQueue.requestedAt)"></div>
-                    </div>
-                    <div>
-                      <div style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em;font-family:Inter,sans-serif">金額</div>
-                      <div style="font-size:13px;font-weight:600;margin-top:3px;font-family:Inter,sans-serif" x-text="selectedQueue.total > 0 ? 'NT$ '+Math.round(selectedQueue.total).toLocaleString() : '—'"></div>
-                    </div>
-                  </div>
-
-                  <!-- Step timeline -->
-                  <template x-if="selectedQueue.tierCount > 0">
-                    <div>
-                      <div style="font-size:11px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px;font-family:Inter,sans-serif">簽核層級</div>
-                      <div class="step-timeline">
-                        <template x-for="(tier, idx) in selectedQueue.tiers" :key="idx">
-                          <div class="step-row">
-                            <div class="step-dot-col">
-                              <div class="step-dot"
-                                   :class="(tier.approvers||[]).every(a=>a.status==='approved') ? 'done' : idx===selectedQueue.currentTier ? 'current' : 'pending'">
-                                <template x-if="(tier.approvers||[]).every(a=>a.status==='approved')">
-                                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>
-                                </template>
-                                <template x-if="!(tier.approvers||[]).every(a=>a.status==='approved')">
-                                  <span x-text="idx+1"></span>
-                                </template>
-                              </div>
-                              <div class="step-connector" :class="{done:(tier.approvers||[]).every(a=>a.status==='approved')}" x-show="idx < selectedQueue.tiers.length - 1"></div>
-                            </div>
-                            <div class="step-info">
-                              <div class="step-name" x-text="(tier.approvers||[]).map(a=>a.displayName||a.username).join('、')"></div>
-                              <div class="step-time" x-text="(tier.approvers||[]).every(a=>a.status==='approved') ? '✓ ' + fmtDateFull((tier.approvers||[]).find(a=>a.approvedAt)?.approvedAt) : (idx===selectedQueue.currentTier ? '等待中…' : '待輪到')"></div>
-                            </div>
-                          </div>
-                        </template>
-                      </div>
-                    </div>
-                  </template>
-
-                  <!-- Reject note form -->
-                  <template x-if="canRejectQueue(selectedQueue)">
-                    <div style="margin-top:16px;padding:12px;background:#FFF5F5;border:1px solid #FCA5A5;border-radius:7px">
-                      <div style="font-size:11px;font-weight:600;color:#DC2626;margin-bottom:6px">退回備註（選填）</div>
-                      <textarea x-model="queueRejectNote" rows="2"
-                        placeholder="說明退回原因…"
-                        style="width:100%;box-sizing:border-box;border:1px solid #FCA5A5;border-radius:5px;padding:6px 10px;font-size:12px;font-family:var(--font-zh);resize:none;outline:none;background:#fff;color:var(--text-primary)"></textarea>
-                    </div>
-                  </template>
-                </div>
-              </div>
-            </template>
-          </div>
-        </div>
-      </div>
-    </template>
-
-    <!-- ═══ 報價單列表 VIEW ═══ -->
-    <div x-show="view==='list'">
+    <!-- ═══ 報價單列表 ═══ -->
+    <div>
 
     <!-- 快速摘要（動態） -->
     <div class="summary-row">
@@ -345,6 +150,7 @@
 
     <!-- 報價單列表 -->
     <div class="panel">
+      <div class="table-scroll">
       <table class="data-table">
         <thead>
           <tr>
@@ -365,11 +171,16 @@
           <template x-for="q in filtered" :key="q.quote_no">
             <tr>
               <td>
-                <a :href="'quotation-form.html?id=' + q.quote_no"
-                   style="font-family:Inter,sans-serif;font-size:12px;font-weight:600;color:var(--accent);text-decoration:none"
-                   x-text="q.quote_no"></a>
+                <div style="display:flex;align-items:center;gap:6px">
+                  <a :href="'quotation-form.html?id=' + q.quote_no"
+                     style="font-family:LINE Seed TW_OTF, sans-serif;font-size:12px;font-weight:600;color:var(--accent);text-decoration:none"
+                     x-text="q.quote_no"></a>
+                  <template x-if="/\-R\d+$/.test(q.quote_no)">
+                    <span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;background:#FED7AA;color:#7C2D12;letter-spacing:.03em;flex-shrink:0">改版</span>
+                  </template>
+                </div>
                 <template x-if="q.edit_count > 0">
-                  <div style="display:inline-flex;align-items:center;gap:4px;margin-top:3px;padding:2px 6px;border-radius:3px;background:#FEF3C7;border:1px solid #FDE68A;font-size:10px;font-family:Inter,sans-serif;color:#92400E;max-width:220px;overflow:hidden">
+                  <div style="display:inline-flex;align-items:center;gap:4px;margin-top:3px;padding:2px 6px;border-radius:3px;background:#FEF3C7;border:1px solid #FDE68A;font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;color:#92400E;max-width:220px;overflow:hidden">
                     <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="#92400E" stroke-width="2.5" style="flex-shrink:0"><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
                     <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1"
                           x-text="q.edit_last ? (q.edit_last.byDisplay + ' · ' + fmtEditAt(q.edit_last.at)) : '已修改 ' + q.edit_count + ' 次'"></span>
@@ -387,7 +198,7 @@
                 <span :style="q.direct_margin_pct < 30 ? 'color:var(--danger);font-weight:600' : q.direct_margin_pct < 35 ? 'color:var(--warning);font-weight:600' : 'color:var(--success);font-weight:600'"
                       x-text="q.direct_margin_pct ? q.direct_margin_pct.toFixed(1) + '%' : '—'"></span>
               </td>
-              <td style="font-family:Inter,sans-serif;font-size:11px">
+              <td style="font-family:LINE Seed TW_OTF, sans-serif;font-size:11px">
                 <span x-text="(q.valid_days || 30) + ' 天'"></span>
                 <span x-show="q.valid_days > 30" style="color:var(--danger);font-size:9px;font-weight:600;display:block">需審核</span>
               </td>
@@ -417,7 +228,7 @@
                   </select>
                 </template>
               </td>
-              <td style="font-family:Inter,sans-serif;font-size:11px;color:var(--text-dim)" x-text="(q.quote_date || q.created_at || '').slice(0,10)"></td>
+              <td style="font-family:LINE Seed TW_OTF, sans-serif;font-size:11px;color:var(--text-dim)" x-text="(q.quote_date || q.created_at || '').slice(0,10)"></td>
               <td>
                 <div class="row-actions">
                   <a :href="'quotation-form.html?id=' + q.quote_no" class="icon-btn" title="編輯">
@@ -454,9 +265,10 @@
           </tr>
         </tbody>
       </table>
+      </div>
     </div>
 
-    <div style="margin-top:12px;font-size:11px;color:var(--text-dim);font-family:Inter,sans-serif"
+    <div style="margin-top:12px;font-size:11px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif"
          x-text="'共 ' + filtered.length + ' 筆 · 顯示 ' + filtered.length + ' / ' + quotes.length + ' 筆'"></div>
 
     </div><!-- end view==='list' -->
@@ -521,19 +333,12 @@
       filterSales: '',
       filterMonth: '',
       filterDealTag: '',
-      view: 'list',           // 'list' | 'queue'
-      queueItems: [],
-      queueTotal: 0,
-      queueLoading: false,
-      selectedQueue: null,
-      queueActing: false,
-      queueRejectNote: '',
       dealTagLostModal: false,
       dealTagLostInfo: null,
       dealTagLostReason: '',
 
       tabs: [
-        { key: 'all',    label: '全部'  },
+        { key: 'all',    label: '全部(不含未成案)'  },
         { key: '草稿',   label: '草稿'  },
         { key: '待審核', label: '待審核' },
         { key: '已核准', label: '已核准' },
@@ -541,6 +346,7 @@
         { key: '已確認', label: '已確認' },
         { key: '已結案', label: '已結案', isDealTag: true },
         { key: '已取消', label: '已取消' },
+        { key: '未成案', label: '未成案', isDealTag: true },
       ],
 
       get canDelete() {
@@ -548,7 +354,7 @@
       },
 
       tabCount(key) {
-        if (key === 'all') return this.quotes.length
+        if (key === 'all') return this.quotes.filter(q => (q.deal_tag || '') !== '未成案' && (q.deal_tag || '') !== '已結案').length
         const tab = this.tabs.find(t => t.key === key)
         if (tab && tab.isDealTag) return this.quotes.filter(q => q.deal_tag === key).length
         return this.quotes.filter(q => q.status === key).length
@@ -583,7 +389,7 @@
         return this.quotes.filter(q => {
           let matchTab
           if (this.activeTab === 'all') {
-            matchTab = true
+            matchTab = (q.deal_tag || '') !== '未成案' && (q.deal_tag || '') !== '已結案'
           } else {
             const tab = this.tabs.find(t => t.key === this.activeTab)
             matchTab = tab && tab.isDealTag
@@ -736,114 +542,9 @@
       toast(msg, bg = '#0A0A0A') {
         const el = document.createElement('div')
         el.textContent = msg
-        el.style.cssText = `position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:${bg};color:#F5F4F0;padding:8px 18px;border-radius:6px;font-size:12px;z-index:9999;font-family:Inter,sans-serif`
+        el.style.cssText = `position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:${bg};color:#F5F4F0;padding:8px 18px;border-radius:6px;font-size:12px;z-index:9999;font-family:LINE Seed TW_OTF, sans-serif`
         document.body.appendChild(el)
         setTimeout(() => el.remove(), 2500)
-      },
-
-      switchView(v) {
-        this.view = v
-        if (v === 'queue') this.loadQueue()
-      },
-
-      async loadQueue() {
-        this.queueLoading = true
-        this.selectedQueue = null
-        try {
-          const r = await fetch(`${API}/approval-queue`, {
-            headers: { Authorization: 'Bearer ' + this.session.token }
-          })
-          if (!r.ok) return
-          const d = await r.json()
-          // Flatten: all individual items from all groups
-          const all = []
-          for (const g of (d.queue || [])) {
-            for (const item of (g.items || [])) all.push(item)
-          }
-          // Sort: mine first, then by requestedAt
-          all.sort((a, b) => {
-            const aMine = this.canApproveQueue(a) ? 0 : 1
-            const bMine = this.canApproveQueue(b) ? 0 : 1
-            if (aMine !== bMine) return aMine - bMine
-            return (a.requestedAt || '').localeCompare(b.requestedAt || '')
-          })
-          this.queueItems = all
-          this.queueTotal = d.total || all.length
-        } catch(e) {}
-        this.queueLoading = false
-      },
-
-      canApproveQueue(item) {
-        if (!item) return false
-        const tiers = item.tiers || []
-        if (tiers.length > 0) {
-          const cur = item.currentTier ?? 0
-          if (cur >= tiers.length) return false
-          return (tiers[cur].approvers || []).some(a => a.username === this.session.username)
-        }
-        return this.session.role === 'superadmin' && item.requestedBy !== this.session.username
-      },
-
-      canRejectQueue(item) {
-        if (!item) return false
-        const tiers = item.tiers || []
-        if (tiers.length > 0) {
-          const cur = item.currentTier ?? 0
-          if (cur < tiers.length && (tiers[cur].approvers || []).some(a => a.username === this.session.username)) return true
-          return this.session.role === 'superadmin'
-        }
-        return this.session.role === 'superadmin'
-      },
-
-      async doQueueApprove() {
-        if (!this.selectedQueue || this.queueActing) return
-        this.queueActing = true
-        try {
-          const r = await fetch(`${API}/quotations/${this.selectedQueue.quoteNo}/approve`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
-            body: JSON.stringify({ approvedByDisplay: this.session.displayName })
-          })
-          if (!r.ok) {
-            const e = await r.json().catch(() => ({}))
-            this.toast('簽核失敗：' + (e.detail || r.status), '#DC2626')
-            return
-          }
-          const d = await r.json()
-          if (d.allDone) {
-            this.toast('✓ 報價單已完成所有簽核，狀態更新為已送出', '#15803D')
-          } else {
-            this.toast('✓ 步驟已完成，轉交下一位簽核人', '#2563EB')
-          }
-          await this.loadQueue()
-        } catch(e) {
-          this.toast('網路錯誤：' + e.message, '#DC2626')
-        }
-        this.queueActing = false
-      },
-
-      async doQueueReject() {
-        if (!this.selectedQueue || this.queueActing) return
-        if (!confirm(`確定將報價單 ${this.selectedQueue.quoteNo} 退回草稿？`)) return
-        this.queueActing = true
-        try {
-          const r = await fetch(`${API}/quotations/${this.selectedQueue.quoteNo}/reject`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
-            body: JSON.stringify({ note: this.queueRejectNote })
-          })
-          if (!r.ok) {
-            const e = await r.json().catch(() => ({}))
-            this.toast('退回失敗：' + (e.detail || r.status), '#DC2626')
-            return
-          }
-          this.toast('報價單已退回草稿')
-          this.queueRejectNote = ''
-          await this.loadQueue()
-        } catch(e) {
-          this.toast('網路錯誤：' + e.message, '#DC2626')
-        }
-        this.queueActing = false
       },
 
       fmtDate(iso) {
@@ -886,7 +587,6 @@
           this.retrying = false
           await this.loadQuotes()
         }
-        if (this.view === 'queue') await this.loadQueue()
       }
     }
   }

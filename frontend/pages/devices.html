@@ -1,11 +1,10 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="../static/favicon.png">
   <title>設備登載 — MOTRIX 營運管理系統</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600&display=swap" rel="stylesheet">
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
   <link rel="stylesheet" href="../css/style.css">
   <style>
@@ -15,8 +14,8 @@
     /* stats strip */
     .stat-strip{display:flex;gap:12px;margin-bottom:20px}
     .stat-pill{display:flex;align-items:center;gap:8px;padding:10px 16px;border:1px solid var(--border-light);border-radius:var(--radius-lg);background:#fff;min-width:110px}
-    .stat-pill__val{font-size:20px;font-weight:700;font-family:Inter,sans-serif;line-height:1}
-    .stat-pill__lbl{font-size:10px;color:var(--text-dim);font-family:Inter,sans-serif;letter-spacing:.06em;margin-top:2px}
+    .stat-pill__val{font-size:20px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;line-height:1}
+    .stat-pill__lbl{font-size:10px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.06em;margin-top:2px}
 
     /* filter bar */
     .filter-bar{display:flex;align-items:center;gap:10px;margin-bottom:18px;flex-wrap:wrap}
@@ -31,27 +30,27 @@
     .tab{padding:7px 14px;font-size:12px;font-family:var(--font-zh);cursor:pointer;border:none;background:none;color:var(--text-secondary);border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .12s}
     .tab:hover{color:var(--text-primary)}
     .tab.on{color:var(--accent);border-bottom-color:var(--accent);font-weight:600}
-    .tab__cnt{font-family:Inter,sans-serif;font-size:10px;font-weight:600;margin-left:4px;padding:1px 5px;border-radius:8px;background:#F0EEE9}
+    .tab__cnt{font-family:LINE Seed TW_OTF, sans-serif;font-size:10px;font-weight:600;margin-left:4px;padding:1px 5px;border-radius:8px;background:#F0EEE9}
     .tab.on .tab__cnt{background:var(--accent-light);color:var(--accent)}
 
     /* table */
     .panel{background:#fff;border:1px solid var(--border-light);border-radius:var(--radius-lg);overflow:hidden}
     .data-table{width:100%;border-collapse:collapse;font-size:13px}
-    .data-table th{padding:10px 14px;text-align:left;font-size:10px;font-family:Inter,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);font-weight:500;background:#FAFAF8;border-bottom:1px solid var(--border-light);white-space:nowrap}
+    .data-table th{padding:10px 14px;text-align:left;font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);font-weight:500;background:#FAFAF8;border-bottom:1px solid var(--border-light);white-space:nowrap}
     .data-table td{padding:11px 14px;border-bottom:1px solid #F0EEE9;vertical-align:middle;color:var(--text-primary)}
     .data-table tr:last-child td{border-bottom:none}
     .data-table tr:hover td{background:#FDFCFA;cursor:pointer}
-    .mono{font-family:Inter,sans-serif;font-size:11px;letter-spacing:.03em}
+    .mono{font-family:LINE Seed TW_OTF, sans-serif;font-size:11px;letter-spacing:.03em}
 
     /* warranty badge */
-    .wb{display:inline-flex;align-items:center;padding:2px 8px;border-radius:4px;font-size:11px;font-family:Inter,sans-serif;font-weight:600;gap:4px}
+    .wb{display:inline-flex;align-items:center;padding:2px 8px;border-radius:4px;font-size:11px;font-family:LINE Seed TW_OTF, sans-serif;font-weight:600;gap:4px}
     .wb-expired{background:var(--danger-light);color:var(--danger)}
     .wb-soon{background:var(--warning-light);color:var(--warning)}
     .wb-ok{background:var(--success-light);color:var(--success)}
     .wb-none{background:#F3F4F6;color:#6B7280}
 
     /* deal tag badge */
-    .dt{display:inline-flex;padding:2px 7px;border-radius:3px;font-size:10px;font-family:Inter,sans-serif;font-weight:600}
+    .dt{display:inline-flex;padding:2px 7px;border-radius:3px;font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;font-weight:600}
     .dt-active{background:#DBEAFE;color:#1D4ED8}
     .dt-closed{background:#F0EEE9;color:#6B7280}
     .dt-none{background:#F3F4F6;color:#9CA3AF}
@@ -65,7 +64,7 @@
     .detail-close:hover{background:var(--danger-light);color:var(--danger)}
     .d-row{display:flex;gap:8px;margin-bottom:10px;font-size:12px}
     .d-lbl{color:var(--text-dim);min-width:72px;flex-shrink:0}
-    .d-val{color:var(--text-primary);font-weight:500;word-break:break-all;font-family:Inter,sans-serif}
+    .d-val{color:var(--text-primary);font-weight:500;word-break:break-all;font-family:LINE Seed TW_OTF, sans-serif}
     .d-divider{border:none;border-top:1px solid var(--border-light);margin:14px 0}
 
     /* empty */
@@ -147,7 +146,7 @@
         <option value="ok">保固中</option>
         <option value="none">無紀錄</option>
       </select>
-      <span style="font-size:11px;color:var(--text-dim);margin-left:auto;font-family:Inter,sans-serif" x-text="filtered.length + ' 台'"></span>
+      <span style="font-size:11px;color:var(--text-dim);margin-left:auto;font-family:LINE Seed TW_OTF, sans-serif" x-text="filtered.length + ' 台'"></span>
     </div>
 
     <!-- Tabs -->
@@ -191,6 +190,7 @@
           </div>
         </template>
         <template x-if="filtered.length > 0">
+          <div class="table-scroll">
           <table class="data-table">
             <thead>
               <tr>
@@ -217,12 +217,12 @@
                   <td style="font-size:12px" x-text="d.customer || '—'"></td>
                   <td>
                     <a :href="'case-management.html?q=' + d.quoteNo"
-                       style="font-size:11px;font-family:Inter,sans-serif;color:var(--accent);text-decoration:none"
+                       style="font-size:11px;font-family:LINE Seed TW_OTF, sans-serif;color:var(--accent);text-decoration:none"
                        x-text="d.quoteNo" @click.stop></a>
                   </td>
                   <td style="font-size:12px" x-text="d.location || '—'"></td>
-                  <td style="font-size:11px;font-family:Inter,sans-serif" x-text="(d.warrantyStart||'').slice(0,10) || '—'"></td>
-                  <td style="font-size:11px;font-family:Inter,sans-serif" x-text="d.expiryDate || '—'"></td>
+                  <td style="font-size:11px;font-family:LINE Seed TW_OTF, sans-serif" x-text="(d.warrantyStart||'').slice(0,10) || '—'"></td>
+                  <td style="font-size:11px;font-family:LINE Seed TW_OTF, sans-serif" x-text="d.expiryDate || '—'"></td>
                   <td>
                     <span class="wb" :class="wbCls(d)">
                       <span x-text="wbLabel(d)"></span>
@@ -232,6 +232,7 @@
               </template>
             </tbody>
           </table>
+          </div>
         </template>
       </div>
     </template>
@@ -250,7 +251,7 @@
         </div>
         <div class="detail-body">
 
-          <div style="font-size:10px;font-family:Inter,sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);font-weight:600;margin-bottom:10px">設備資訊</div>
+          <div style="font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);font-weight:600;margin-bottom:10px">設備資訊</div>
 
           <div class="d-row"><span class="d-lbl">設備名稱</span><span class="d-val" x-text="selected.name || '—'"></span></div>
           <div class="d-row"><span class="d-lbl">SN 序號</span><span class="d-val" x-text="selected.sn || '—'"></span></div>
@@ -261,7 +262,7 @@
           </template>
 
           <hr class="d-divider">
-          <div style="font-size:10px;font-family:Inter,sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);font-weight:600;margin-bottom:10px">保固資訊</div>
+          <div style="font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);font-weight:600;margin-bottom:10px">保固資訊</div>
 
           <div class="d-row"><span class="d-lbl">保固起始</span><span class="d-val" x-text="(selected.warrantyStart||'').slice(0,10) || '—'"></span></div>
           <div class="d-row"><span class="d-lbl">保固月數</span><span class="d-val" x-text="(selected.warrantyMonths || 12) + ' 個月'"></span></div>
@@ -275,13 +276,13 @@
           </div>
 
           <hr class="d-divider">
-          <div style="font-size:10px;font-family:Inter,sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);font-weight:600;margin-bottom:10px">案件資訊</div>
+          <div style="font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);font-weight:600;margin-bottom:10px">案件資訊</div>
 
           <div class="d-row"><span class="d-lbl">客戶</span><span class="d-val" style="font-family:var(--font-zh)" x-text="selected.customer || '—'"></span></div>
           <div class="d-row">
             <span class="d-lbl">報價單</span>
             <a :href="'case-management.html?q=' + selected.quoteNo"
-               style="font-family:Inter,sans-serif;color:var(--accent);text-decoration:none;font-size:12px"
+               style="font-family:LINE Seed TW_OTF, sans-serif;color:var(--accent);text-decoration:none;font-size:12px"
                x-text="selected.quoteNo"></a>
           </div>
           <div class="d-row">

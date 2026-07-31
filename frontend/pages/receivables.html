@@ -1,11 +1,10 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="../static/favicon.png">
   <title>應收帳款 — MOTRIX 營運管理系統</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600&display=swap" rel="stylesheet">
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
   <link rel="stylesheet" href="../css/style.css">
   <style>
@@ -14,8 +13,8 @@
 
     .stat-strip{display:flex;gap:12px;margin-bottom:22px;flex-wrap:wrap}
     .stat-pill{display:flex;flex-direction:column;padding:14px 18px;border:1px solid var(--border-light);border-radius:var(--radius-lg);background:#fff;min-width:130px;flex:1;max-width:200px}
-    .stat-pill__val{font-size:22px;font-weight:700;font-family:Inter,sans-serif;line-height:1;color:var(--text-primary)}
-    .stat-pill__lbl{font-size:10px;color:var(--text-dim);font-family:Inter,sans-serif;letter-spacing:.06em;margin-top:4px;text-transform:uppercase}
+    .stat-pill__val{font-size:22px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;line-height:1;color:var(--text-primary)}
+    .stat-pill__lbl{font-size:10px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.06em;margin-top:4px;text-transform:uppercase}
     .stat-pill.accent .stat-pill__val{color:var(--accent)}
     .stat-pill.danger  .stat-pill__val{color:var(--danger)}
     .stat-pill.success .stat-pill__val{color:var(--success)}
@@ -34,17 +33,17 @@
     .tab{padding:7px 16px;font-size:12px;font-family:var(--font-zh);cursor:pointer;border:none;background:none;color:var(--text-secondary);border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .1s}
     .tab:hover{color:var(--text-primary)}
     .tab.on{color:var(--accent);border-bottom-color:var(--accent);font-weight:600}
-    .tab__cnt{font-family:Inter,sans-serif;font-size:10px;font-weight:600;margin-left:4px;padding:1px 5px;border-radius:8px;background:#F0EEE9}
+    .tab__cnt{font-family:LINE Seed TW_OTF, sans-serif;font-size:10px;font-weight:600;margin-left:4px;padding:1px 5px;border-radius:8px;background:#F0EEE9}
     .tab.on .tab__cnt{background:var(--accent-light);color:var(--accent)}
 
     .panel{background:#fff;border:1px solid var(--border-light);border-radius:var(--radius-lg);overflow:hidden}
     .data-table{width:100%;border-collapse:collapse;font-size:13px}
-    .data-table th{padding:10px 14px;text-align:left;font-size:10px;font-family:Inter,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);font-weight:500;background:#FAFAF8;border-bottom:1px solid var(--border-light);white-space:nowrap}
+    .data-table th{padding:10px 14px;text-align:left;font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);font-weight:500;background:#FAFAF8;border-bottom:1px solid var(--border-light);white-space:nowrap}
     .data-table td{padding:11px 14px;border-bottom:1px solid #F0EEE9;vertical-align:middle}
     .data-table tr:last-child td{border-bottom:none}
     .data-table tr:hover td{background:#FDFCFA}
     .data-table tr.uninvoiced-row td{background:#FFFBEB}
-    .mono{font-family:Inter,sans-serif;font-size:11px;letter-spacing:.03em}
+    .mono{font-family:LINE Seed TW_OTF, sans-serif;font-size:11px;letter-spacing:.03em}
 
     .rb{display:inline-flex;align-items:center;padding:2px 9px;border-radius:4px;font-size:11px;font-weight:600;gap:4px}
     .rb-received{background:var(--success-light);color:var(--success)}
@@ -75,7 +74,7 @@
     .loading-text{text-align:center;padding:40px;color:var(--text-dim);font-size:13px}
 
     .summary-bar{display:flex;gap:24px;padding:10px 14px;background:#FAFAF8;border-top:1px solid var(--border-light);font-size:12px;font-family:var(--font-zh);color:var(--text-secondary)}
-    .summary-bar strong{color:var(--text-primary);font-family:Inter,sans-serif}
+    .summary-bar strong{color:var(--text-primary);font-family:LINE Seed TW_OTF, sans-serif}
   </style>
 </head>
 <body x-data="app()" x-init="init()" x-cloak>
@@ -151,6 +150,7 @@
       <div class="loading-text" x-show="loading">載入中…</div>
       <template x-if="!loading">
         <div>
+          <div class="table-scroll">
           <table class="data-table" x-show="filtered.length > 0">
             <thead>
               <tr>
@@ -171,7 +171,7 @@
                 <tr :class="!item.invoiceNo && 'uninvoiced-row'">
                   <td>
                     <a :href="'case-management.html?q=' + item.quoteNo"
-                       style="font-family:Inter,sans-serif;font-size:12px;font-weight:600;color:var(--accent);text-decoration:none"
+                       style="font-family:LINE Seed TW_OTF, sans-serif;font-size:12px;font-weight:600;color:var(--accent);text-decoration:none"
                        x-text="item.quoteNo"></a>
                   </td>
                   <td style="font-family:var(--font-zh);font-size:12px" x-text="item.customer"></td>
@@ -179,12 +179,12 @@
                     <span class="rb" :class="item.dealTag==='已結案' ? 'rb-closed' : 'rb-case'" x-text="item.dealTag"></span>
                   </td>
                   <td style="font-family:var(--font-zh);font-size:12px" x-text="item.label"></td>
-                  <td style="text-align:right;font-family:Inter,sans-serif;font-size:13px;font-weight:600" x-text="'NT$ ' + item.amount.toLocaleString()"></td>
-                  <td style="text-align:right;font-family:Inter,sans-serif;font-size:12px;color:var(--text-dim)" x-text="item.pct ? item.pct + '%' : '—'"></td>
+                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-size:13px;font-weight:600" x-text="'NT$ ' + item.amount.toLocaleString()"></td>
+                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-size:12px;color:var(--text-dim)" x-text="item.pct ? item.pct + '%' : '—'"></td>
                   <td>
                     <span class="rb" :class="item.received ? 'rb-received' : 'rb-pending'" x-text="item.received ? '已收款' : '待收款'"></span>
                   </td>
-                  <td style="font-family:Inter,sans-serif;font-size:11px;color:var(--text-dim)"
+                  <td style="font-family:LINE Seed TW_OTF, sans-serif;font-size:11px;color:var(--text-dim)"
                       x-text="item.receivedAt ? item.receivedAt.slice(0,10) + (item.receivedBy ? ' · ' + item.receivedBy : '') : '—'"></td>
                   <td>
                     <template x-if="item.invoiceNo">
@@ -215,6 +215,7 @@
               </template>
             </tbody>
           </table>
+          </div>
 
           <!-- 彙總列 -->
           <div class="summary-bar" x-show="filtered.length > 0">

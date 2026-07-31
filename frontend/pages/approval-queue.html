@@ -1,11 +1,10 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="../static/favicon.png">
   <title>簽核佇列 — MOTRIX 營運管理系統</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600&display=swap" rel="stylesheet">
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
   <link rel="stylesheet" href="../css/style.css">
   <style>
@@ -41,7 +40,7 @@
       font-size: 11px;
       color: var(--text-secondary);
       margin-top: 3px;
-      font-family: Inter, sans-serif;
+      font-family: 'LINE Seed TW_OTF', sans-serif;
     }
     .aq-group {
       border-bottom: 1px solid var(--border);
@@ -65,7 +64,7 @@
       color: #4338CA;
       font-size: 10px;
       font-weight: 700;
-      font-family: Inter, sans-serif;
+      font-family: 'LINE Seed TW_OTF', sans-serif;
       padding: 2px 7px;
       border-radius: 10px;
     }
@@ -78,11 +77,14 @@
     .aq-item:last-child { border-bottom: none; }
     .aq-item:hover { background: #F5F3FF; }
     .aq-item.active { background: #EEF2FF; border-left: 3px solid #6366F1; padding-left: 15px; }
+    .aq-item.mine-turn { border-left: 3px solid #DC2626; background: #FFF7ED; padding-left: 15px; }
+    .aq-item.mine-turn:hover { background: #FEF3C7; }
+    .aq-item.mine-turn.active { background: #FEF3C7; border-left-color: #DC2626; }
     .aq-item-quote {
       font-size: 12px;
       font-weight: 700;
       color: var(--text-main);
-      font-family: Inter, sans-serif;
+      font-family: 'LINE Seed TW_OTF', sans-serif;
     }
     .aq-item-customer {
       font-size: 11px;
@@ -101,12 +103,12 @@
     .aq-item-time {
       font-size: 10px;
       color: var(--text-dim);
-      font-family: Inter, sans-serif;
+      font-family: 'LINE Seed TW_OTF', sans-serif;
     }
     .aq-item-amount {
       font-size: 10px;
       color: var(--text-secondary);
-      font-family: Inter, sans-serif;
+      font-family: 'LINE Seed TW_OTF', sans-serif;
       margin-left: auto;
     }
     /* Right panel */
@@ -147,7 +149,7 @@
       font-size: 18px;
       font-weight: 700;
       color: var(--text-main);
-      font-family: Inter, sans-serif;
+      font-family: 'LINE Seed TW_OTF', sans-serif;
     }
     .aq-detail-customer {
       font-size: 14px;
@@ -172,6 +174,12 @@
       border: 1px solid #DC2626;
     }
     .btn-reject:hover { background: #B91C1C; border-color: #B91C1C; }
+    .btn-reject-final {
+      background: #1C1917;
+      color: #fff;
+      border: 1px solid #1C1917;
+    }
+    .btn-reject-final:hover { background: #000; border-color: #000; }
     .aq-section {
       margin-bottom: 22px;
     }
@@ -276,11 +284,11 @@
     /* Step progress */
     .aq-step-badge {
       display: inline-flex; align-items: center; gap: 4px;
-      font-size: 10px; font-family: Inter, sans-serif; font-weight: 600;
+      font-size: 10px; font-family: 'LINE Seed TW_OTF', sans-serif; font-weight: 600;
       padding: 2px 7px; border-radius: 10px;
     }
     .aq-step-badge.waiting  { background: #EEF2FF; color: #4338CA; }
-    .aq-step-badge.my-turn  { background: #D1FAE5; color: #065F46; }
+    .aq-step-badge.my-turn  { background: #FEE2E2; color: #B91C1C; }
     .aq-steps-timeline { display: flex; flex-direction: column; gap: 0; }
     .aq-step-row {
       display: flex; align-items: center; gap: 10px;
@@ -291,7 +299,7 @@
     .aq-step-circle {
       width: 24px; height: 24px; border-radius: 50%;
       display: flex; align-items: center; justify-content: center;
-      font-size: 10px; font-weight: 700; font-family: Inter, sans-serif;
+      font-size: 10px; font-weight: 700; font-family: 'LINE Seed TW_OTF', sans-serif;
       flex-shrink: 0;
     }
     .aq-step-circle.done    { background: #D1FAE5; color: #065F46; }
@@ -300,7 +308,7 @@
     .aq-step-label { font-size: 13px; color: var(--text-main); font-weight: 500; flex: 1; }
     .aq-step-sublabel { font-size: 11px; color: var(--text-dim); margin-top: 1px; }
     .aq-step-status {
-      font-size: 10px; font-weight: 600; font-family: Inter, sans-serif;
+      font-size: 10px; font-weight: 600; font-family: 'LINE Seed TW_OTF', sans-serif;
       padding: 2px 8px; border-radius: 8px;
     }
     .aq-step-status.done    { background: #D1FAE5; color: #065F46; }
@@ -335,6 +343,12 @@
         <div class="aq-left-title">待簽核佇列</div>
         <div class="aq-left-sub" x-text="totalPending > 0 ? '共 ' + totalPending + ' 件待審核，依申請人排列' : '目前沒有待審核項目'"></div>
       </div>
+      <div x-show="!loading && myPendingCount > 0"
+           style="background:#FEF2F2;border-bottom:1px solid #FECACA;padding:8px 18px;display:flex;align-items:center;gap:8px">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#DC2626" stroke-width="2.5" style="flex-shrink:0"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        <span style="font-size:12px;font-weight:600;color:#B91C1C;font-family:var(--font-zh)"
+              x-text="'有 ' + myPendingCount + ' 件報價單正在等待您簽核'"></span>
+      </div>
 
       <div x-show="loading" style="padding:24px;text-align:center;font-size:13px;color:var(--text-dim)">載入中…</div>
 
@@ -352,14 +366,17 @@
           </div>
           <template x-for="item in group.items" :key="item.quoteNo">
             <div class="aq-item"
-                 :class="selected?.quoteNo === item.quoteNo ? 'active' : ''"
+                 :class="{
+                   'active': selected?.quoteNo === item.quoteNo,
+                   'mine-turn': canApprove(item)
+                 }"
                  @click="selectItem(item)">
               <div style="display:flex;align-items:center;gap:6px">
                 <div class="aq-item-quote" x-text="item.quoteNo"></div>
-                <template x-if="(item.steps||[]).length > 0">
+                <template x-if="(item.tiers||[]).length > 0">
                   <span class="aq-step-badge"
-                        :class="item.nextApprover === session.username ? 'my-turn' : 'waiting'"
-                        x-text="'步驟 ' + (item.currentStep+1) + '/' + item.steps.length"></span>
+                        :class="canApprove(item) ? 'my-turn' : 'waiting'"
+                        x-text="'第 ' + ((item.currentTier??0)+1) + '/' + item.tierCount + ' 層'"></span>
                 </template>
               </div>
               <div class="aq-item-customer" x-text="item.customer + (item.projectName ? '｜' + item.projectName : '')"></div>
@@ -392,14 +409,14 @@
             <div class="aq-detail-customer" x-text="(selected?.customer || '') + (selected?.projectName ? '　' + selected.projectName : '')"></div>
           </div>
           <div class="aq-detail-actions">
-            <a :href="'quotation-form.html?q=' + (selected?.quoteNo||'')" target="_blank"
+            <a :href="'quotation-form.html?id=' + (selected?.quoteNo||'')" target="_blank"
                style="font-size:12px;color:var(--accent);text-decoration:none;padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius);display:inline-flex;align-items:center;gap:5px">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3"/></svg>
               開啟報價單
             </a>
             <!-- Can approve: my turn in steps, OR (no steps + superadmin + not self) -->
             <template x-if="canApprove(selected)">
-              <div style="display:flex;gap:8px">
+              <div style="display:flex;gap:8px;flex-wrap:wrap">
                 <button class="btn btn-approve btn-sm" @click="doApprove()" :disabled="actioning">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                   確認簽核
@@ -408,16 +425,24 @@
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                   退回草稿
                 </button>
+                <button class="btn btn-reject-final btn-sm" @click="openRejectFinalModal()" :disabled="actioning">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
+                  拒絕結案
+                </button>
               </div>
             </template>
             <!-- Superadmin can always reject, even if not their turn -->
             <template x-if="!canApprove(selected) && session.role === 'superadmin' && selected?.requestedBy !== session.username">
-              <div style="display:flex;gap:8px;align-items:center">
+              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
                 <span style="font-size:11px;color:#6B7280;padding:5px 9px;background:#F3F4F6;border-radius:5px;white-space:nowrap"
                       x-text="waitingForText(selected)"></span>
                 <button class="btn btn-reject btn-sm" @click="openRejectModal()" :disabled="actioning">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                   退回草稿
+                </button>
+                <button class="btn btn-reject-final btn-sm" @click="openRejectFinalModal()" :disabled="actioning">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
+                  拒絕結案
                 </button>
               </div>
             </template>
@@ -425,7 +450,7 @@
             <template x-if="!canApprove(selected) && session.role === 'superadmin' && selected?.requestedBy === session.username">
               <div class="aq-self-warning">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
-                <span x-text="(selected?.steps||[]).length > 0 ? waitingForText(selected) : '您為此申請的申請人，須由他人簽核'"></span>
+                <span x-text="(selected?.tiers||[]).length > 0 ? waitingForText(selected) : '您為此申請的申請人，須由他人簽核'"></span>
               </div>
             </template>
             <!-- Non-superadmin, not in flow -->
@@ -452,11 +477,11 @@
             </div>
             <div class="aq-info-row">
               <span class="aq-info-label">報價金額</span>
-              <span class="aq-info-value" style="font-family:Inter,sans-serif" x-text="'NT$ ' + (selected?.total||0).toLocaleString()"></span>
+              <span class="aq-info-value" style="font-family:LINE Seed TW_OTF, sans-serif" x-text="'NT$ ' + (selected?.total||0).toLocaleString()"></span>
             </div>
             <div class="aq-info-row">
               <span class="aq-info-label">報價日期</span>
-              <span class="aq-info-value" style="font-family:Inter,sans-serif" x-text="selected?.quoteDate || '—'"></span>
+              <span class="aq-info-value" style="font-family:LINE Seed TW_OTF, sans-serif" x-text="selected?.quoteDate || '—'"></span>
             </div>
             <div class="aq-info-row">
               <span class="aq-info-label">業務人員</span>
@@ -468,7 +493,7 @@
             </div>
             <div class="aq-info-row" style="grid-column:1/-1">
               <span class="aq-info-label">申請時間</span>
-              <span class="aq-info-value" style="font-family:Inter,sans-serif"
+              <span class="aq-info-value" style="font-family:LINE Seed TW_OTF, sans-serif"
                     x-text="selected?.requestedAt ? new Date(selected.requestedAt).toLocaleString('zh-TW') : '—'"></span>
             </div>
           </div>
@@ -487,32 +512,57 @@
           </div>
         </div>
 
-        <!-- Step progress (only shown when steps configured) -->
-        <div class="aq-section" x-show="(selected?.steps||[]).length > 0">
+        <!-- Tier progress (only shown when tiers configured) -->
+        <div class="aq-section" x-show="(selected?.tiers||[]).length > 0">
           <div class="aq-section-title">簽核進度</div>
           <div class="aq-steps-timeline">
-            <template x-for="(step, idx) in (selected?.steps||[])" :key="idx">
+            <template x-for="(tier, idx) in (selected?.tiers||[])" :key="idx">
               <div class="aq-step-row">
                 <div class="aq-step-circle"
-                     :class="step.status === 'approved' ? 'done' : (idx === (selected?.currentStep ?? 0) ? 'current' : 'pending')">
-                  <template x-if="step.status === 'approved'">
+                     :class="idx < (selected?.currentTier ?? 0) ? 'done' : (idx === (selected?.currentTier ?? 0) ? 'current' : 'pending')">
+                  <template x-if="idx < (selected?.currentTier ?? 0)">
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>
                   </template>
-                  <template x-if="step.status !== 'approved'">
+                  <template x-if="idx >= (selected?.currentTier ?? 0)">
                     <span x-text="idx + 1"></span>
                   </template>
                 </div>
                 <div style="flex:1">
-                  <div class="aq-step-label" x-text="step.displayName"></div>
-                  <div class="aq-step-sublabel"
-                       x-text="step.status === 'approved' ? '已簽核　' + new Date(step.approvedAt).toLocaleString('zh-TW') : (idx === (selected?.currentStep ?? 0) ? '等待簽核中' : '尚未輪到')"></div>
+                  <template x-for="a in (tier.approvers||[])" :key="a.username">
+                    <div style="margin-bottom:2px">
+                      <div class="aq-step-label" x-text="a.displayName || a.username"></div>
+                      <div class="aq-step-sublabel"
+                           x-text="approverSublabel(tier, idx, a, selected?.currentTier ?? 0)"></div>
+                    </div>
+                  </template>
                 </div>
                 <span class="aq-step-status"
-                      :class="step.status === 'approved' ? 'done' : (idx === (selected?.currentStep ?? 0) ? 'current' : 'pending')"
-                      x-text="step.status === 'approved' ? '已完成' : (idx === (selected?.currentStep ?? 0) ? '待簽核' : '未到')"></span>
+                      :class="idx < (selected?.currentTier ?? 0) ? 'done' : (idx === (selected?.currentTier ?? 0) ? 'current' : 'pending')"
+                      x-text="idx < (selected?.currentTier ?? 0) ? '已完成' : (idx === (selected?.currentTier ?? 0) ? '待簽核' : '未到')"></span>
               </div>
             </template>
           </div>
+        </div>
+
+        <!-- Bottom action bar: show when canApprove and there's content to scroll past -->
+        <div x-show="canApprove(selected)" style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border-light);display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+          <button class="btn btn-approve" @click="doApprove()" :disabled="actioning" style="min-width:110px">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            <span x-show="!actioning">確認簽核</span>
+            <span x-show="actioning">處理中…</span>
+          </button>
+          <button class="btn btn-reject" @click="openRejectModal()" :disabled="actioning" style="min-width:90px">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            退回草稿
+          </button>
+          <button class="btn btn-reject-final" @click="openRejectFinalModal()" :disabled="actioning" style="min-width:90px">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
+            拒絕結案
+          </button>
+          <span style="font-size:12px;color:var(--text-dim)">
+            <span x-text="'第 ' + ((selected?.currentTier ?? 0) + 1) + '/' + (selected?.tierCount || 1) + ' 層'"></span>
+            簽核確認後無法撤回
+          </span>
         </div>
 
       </div><!-- /detail -->
@@ -534,6 +584,28 @@
     </div>
   </div>
 
+  <!-- Reject-final modal -->
+  <div class="reject-modal-overlay" x-show="rejectFinalModalOpen" @click.self="rejectFinalModalOpen=false">
+    <div class="reject-modal" style="border-top:4px solid #1C1917">
+      <h3 style="color:#1C1917">拒絕結案</h3>
+      <div style="background:#FEF2F2;border:1px solid #FECACA;border-radius:7px;padding:10px 13px;margin-bottom:14px;font-size:12px;color:#B91C1C;line-height:1.6">
+        ⚠ 此操作<strong>不可逆</strong>。報價單將永久鎖定為「已拒絕」狀態，申請人無法再修改或重送。
+      </div>
+      <p style="font-size:12px;color:var(--text-secondary);margin-bottom:8px">
+        拒絕原因 <span style="color:#DC2626">*</span>（申請人將收到通知）
+      </p>
+      <textarea x-model="rejectFinalNote" placeholder="請填寫拒絕原因（必填）"
+                style="border-color:#FECACA"></textarea>
+      <div class="reject-modal-footer">
+        <button class="btn btn-ghost btn-sm" @click="rejectFinalModalOpen=false">取消</button>
+        <button class="btn btn-reject-final btn-sm" @click="doRejectFinal()"
+                :disabled="actioning || !rejectFinalNote.trim()">
+          確認永久拒絕
+        </button>
+      </div>
+    </div>
+  </div>
+
   <script>
     const API = ''
 
@@ -548,6 +620,14 @@
         actioning: false,
         rejectModalOpen: false,
         rejectNote: '',
+        rejectFinalModalOpen: false,
+        rejectFinalNote: '',
+
+        get myPendingCount() {
+          return this.queue.flatMap(g => g.items).filter(item =>
+            (item.currentApprovers || []).some(a => a.username === this.session.username && a.status !== 'approved')
+          ).length
+        },
 
         async init() {
       window.addEventListener('resize', () => { this.isMobileView = window.innerWidth <= 767 })
@@ -585,39 +665,53 @@
 
         canApprove(item) {
           if (!item) return false
-          const steps = item.steps || []
-          if (steps.length > 0) {
-            const cur = item.currentStep ?? 0
-            if (cur >= steps.length) return false
-            return steps[cur].username === this.session.username
+          const tiers = item.tiers || []
+          if (tiers.length > 0) {
+            const cur = item.currentTier ?? 0
+            if (cur >= tiers.length) return false
+            const approvers = tiers[cur].approvers || []
+            // sequential within tier: only the first unapproved approver may act
+            const firstPending = approvers.find(a => a.status !== 'approved')
+            return firstPending?.username === this.session.username
           }
-          // No steps: superadmin, not self
+          // No tiers: superadmin, not self
           return this.session.role === 'superadmin' && item.requestedBy !== this.session.username
         },
 
         waitingForText(item) {
           if (!item) return ''
-          const steps = item.steps || []
-          if (steps.length > 0) {
-            const cur = item.currentStep ?? 0
-            if (cur < steps.length) {
-              const who = steps[cur].displayName || steps[cur].username
-              return `等待 ${who} 簽核（步驟 ${cur + 1}/${steps.length}）`
+          const tiers = item.tiers || []
+          if (tiers.length > 0) {
+            const cur = item.currentTier ?? 0
+            if (cur < tiers.length) {
+              const firstPending = (tiers[cur].approvers || []).find(a => a.status !== 'approved')
+              if (firstPending) {
+                const name = firstPending.displayName || firstPending.username
+                return `等待 ${name} 簽核（第 ${cur + 1}/${tiers.length} 層）`
+              }
             }
           }
           return ''
         },
 
+        approverSublabel(tier, tierIdx, a, currentTier) {
+          if (a.status === 'approved') return '已簽核　' + new Date(a.approvedAt).toLocaleString('zh-TW')
+          if (tierIdx < currentTier) return '已完成'
+          if (tierIdx > currentTier) return '尚未輪到'
+          const firstPending = (tier.approvers || []).find(ap => ap.status !== 'approved')
+          return firstPending?.username === a.username ? '等待簽核中' : '等待前一位完成'
+        },
+
         async doApprove() {
           if (!this.selected) return
           const item = this.selected
-          const steps = item.steps || []
-          const isMultiStep = steps.length > 0
-          const isLastStep  = isMultiStep && (item.currentStep ?? 0) === steps.length - 1
-          const willFinish  = !isMultiStep || isLastStep
+          const tiers = item.tiers || []
+          const isMultiTier = tiers.length > 0
+          const isLastTier  = isMultiTier && (item.currentTier ?? 0) === tiers.length - 1
+          const willFinish  = !isMultiTier || isLastTier
           const confirmMsg  = willFinish
             ? `確認簽核通過 ${item.quoteNo}？\n\n客戶：${item.customer}\n金額：NT$ ${(item.total||0).toLocaleString()}\n\n簽核後報價單狀態將更新為「已送出」。`
-            : `確認完成第 ${(item.currentStep ?? 0) + 1} 步驟簽核（共 ${steps.length} 步）？\n\n${item.quoteNo}｜${item.customer}`
+            : `確認完成第 ${(item.currentTier ?? 0) + 1} 層簽核（共 ${tiers.length} 層）？\n\n${item.quoteNo}｜${item.customer}`
           if (!confirm(confirmMsg)) return
           this.actioning = true
           try {
@@ -636,7 +730,7 @@
               this._toast('✓ 簽核完成，報價單已送出', '#15803D')
               this.selected = null
             } else {
-              this._toast('✓ 此步驟已簽核，等待下一位簽核人', '#4338CA')
+              this._toast('✓ 此層已簽核，等待下一層簽核人', '#4338CA')
               // Keep selection but refresh so steps update
             }
             await this.loadQueue()
@@ -650,6 +744,37 @@
         openRejectModal() {
           this.rejectNote = ''
           this.rejectModalOpen = true
+        },
+
+        openRejectFinalModal() {
+          this.rejectFinalNote = ''
+          this.rejectFinalModalOpen = true
+        },
+
+        async doRejectFinal() {
+          if (!this.selected || !this.rejectFinalNote.trim()) return
+          const item = this.selected
+          this.actioning = true
+          try {
+            const r = await fetch(`${API}/api/quotations/${encodeURIComponent(item.quoteNo)}/reject-final`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+              body: JSON.stringify({ note: this.rejectFinalNote })
+            })
+            if (!r.ok) {
+              const err = await r.json().catch(() => ({}))
+              alert('拒絕失敗：' + (err.detail || r.status))
+              return
+            }
+            this.rejectFinalModalOpen = false
+            this._toast('✗ 已永久拒絕結案', '#1C1917')
+            this.selected = null
+            await this.loadQueue()
+          } catch (e) {
+            alert('網路錯誤：' + e.message)
+          } finally {
+            this.actioning = false
+          }
         },
 
         async doReject() {
@@ -686,13 +811,14 @@
         _toast(msg, bg = '#0A0A0A') {
           const el = document.createElement('div')
           el.textContent = msg
-          el.style.cssText = `position:fixed;bottom:32px;left:50%;transform:translateX(-50%);background:${bg};color:#fff;padding:10px 22px;border-radius:8px;font-size:13px;z-index:99999;font-family:Inter,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.3)`
+          el.style.cssText = `position:fixed;bottom:32px;left:50%;transform:translateX(-50%);background:${bg};color:#fff;padding:10px 22px;border-radius:8px;font-size:13px;z-index:99999;font-family:LINE Seed TW_OTF, sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.3)`
           document.body.appendChild(el)
           setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'opacity .4s'; setTimeout(() => el.remove(), 400) }, 2400)
         },
       }
     }
   </script>
+  <script src="../static/notif.js"></script>
   <script src="../static/sidebar.js"></script>
 </body>
 </html>

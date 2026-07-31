@@ -1,11 +1,10 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="../static/favicon.png">
   <title>使用者管理 — MOTRIX 營運管理系統</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600&display=swap" rel="stylesheet">
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
   <link rel="stylesheet" href="../css/style.css">
   <style>
@@ -60,7 +59,7 @@
     .form-label {
       display: block;
       font-size: 10px;
-      font-family: Inter, sans-serif;
+      font-family: 'LINE Seed TW_OTF', sans-serif;
       letter-spacing: .08em;
       text-transform: uppercase;
       color: var(--text-dim);
@@ -99,7 +98,7 @@
     .data-table { width:100%; border-collapse:collapse; font-size:13px; }
     .data-table th {
       padding:10px 12px; text-align:left;
-      font-size:10px; font-family:Inter,sans-serif;
+      font-size:10px; font-family:LINE Seed TW_OTF, sans-serif;
       letter-spacing:.08em; text-transform:uppercase;
       color:var(--text-dim); font-weight:500;
       background:#FAFAF8; border-bottom:1px solid var(--border-light);
@@ -111,7 +110,7 @@
     .role-badge {
       display:inline-flex; align-items:center; gap:4px;
       padding:3px 9px; border-radius:12px;
-      font-size:11px; font-weight:500; font-family:Inter,sans-serif;
+      font-size:11px; font-weight:500; font-family:LINE Seed TW_OTF, sans-serif;
     }
     .role-superadmin { background:#FEF3C7; color:#92400E; }
     .role-admin      { background:#EFF6FF; color:#1D4ED8; }
@@ -142,10 +141,25 @@
     .access-row { display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-top:4px; }
     .access-chip {
       padding:2px 7px; border-radius:3px; font-size:10px;
-      font-family:Inter,sans-serif;
+      font-family:LINE Seed TW_OTF, sans-serif;
       background:#F0EEE9; color:var(--text-secondary);
     }
     .access-chip.on { background:var(--accent-light); color:var(--accent); }
+    /* Preset quick-select chips */
+    .preset-chip {
+      display:inline-flex; align-items:center; padding:4px 11px;
+      border:1px solid var(--border-light); border-radius:20px;
+      font-size:11px; font-family:var(--font-zh); background:#fff;
+      cursor:pointer; color:var(--text-secondary); transition:all .12s;
+      white-space:nowrap; line-height:1.4;
+    }
+    .preset-chip:hover { border-color:var(--accent); color:var(--accent); background:var(--accent-light); }
+    .preset-chip.active { border-color:var(--accent); background:var(--accent-light); color:var(--accent); font-weight:600; }
+    .preset-chip--custom { border-style:dashed; }
+    .preset-chip--custom.active { border-style:solid; }
+    /* Custom role cards */
+    .cr-card { display:flex; align-items:center; gap:8px; padding:9px 0; border-bottom:1px solid var(--border-light); }
+    .cr-card:last-child { border-bottom:none; }
   </style>
 </head>
 
@@ -182,25 +196,116 @@
     <!-- 統計 -->
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px">
       <div class="panel" style="padding:16px">
-        <div style="font-size:11px;color:var(--text-dim);font-family:Inter,sans-serif;letter-spacing:.06em">總帳號數</div>
-        <div style="font-size:28px;font-weight:700;font-family:Inter,sans-serif;margin-top:4px" x-text="users.length"></div>
+        <div style="font-size:11px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.06em">總帳號數</div>
+        <div style="font-size:28px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;margin-top:4px" x-text="users.length"></div>
       </div>
       <div class="panel" style="padding:16px">
-        <div style="font-size:11px;color:var(--text-dim);font-family:Inter,sans-serif;letter-spacing:.06em">啟用中</div>
-        <div style="font-size:28px;font-weight:700;font-family:Inter,sans-serif;margin-top:4px;color:var(--success)" x-text="users.filter(u=>u.active).length"></div>
+        <div style="font-size:11px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.06em">啟用中</div>
+        <div style="font-size:28px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;margin-top:4px;color:var(--success)" x-text="users.filter(u=>u.active).length"></div>
       </div>
       <div class="panel" style="padding:16px">
-        <div style="font-size:11px;color:var(--text-dim);font-family:Inter,sans-serif;letter-spacing:.06em">管理員</div>
-        <div style="font-size:28px;font-weight:700;font-family:Inter,sans-serif;margin-top:4px;color:var(--accent)" x-text="users.filter(u=>u.role==='superadmin'||u.role==='admin').length"></div>
+        <div style="font-size:11px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.06em">管理員</div>
+        <div style="font-size:28px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;margin-top:4px;color:var(--accent)" x-text="users.filter(u=>u.role==='superadmin'||u.role==='admin').length"></div>
       </div>
       <div class="panel" style="padding:16px">
-        <div style="font-size:11px;color:var(--text-dim);font-family:Inter,sans-serif;letter-spacing:.06em">業務/檢視</div>
-        <div style="font-size:28px;font-weight:700;font-family:Inter,sans-serif;margin-top:4px" x-text="users.filter(u=>u.role==='sales'||u.role==='viewer').length"></div>
+        <div style="font-size:11px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.06em">業務/檢視</div>
+        <div style="font-size:28px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;margin-top:4px" x-text="users.filter(u=>u.role==='sales'||u.role==='viewer').length"></div>
+      </div>
+    </div>
+
+    <!-- 自訂角色管理 -->
+    <div x-show="isSuperAdmin" style="margin-bottom:16px">
+      <div class="panel" style="padding:0;overflow:hidden">
+        <div style="display:flex;align-items:center;gap:8px;padding:12px 16px;cursor:pointer;border-bottom:1px solid var(--border-light)"
+             @click="customRoleMgrOpen=!customRoleMgrOpen">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 2v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87m-4-12a4 4 0 010 7.75"/></svg>
+          <span style="font-size:13px;font-weight:600">自訂角色管理</span>
+          <span style="font-size:11px;color:var(--text-dim)">快速選取中的自訂選項</span>
+          <span style="margin-left:auto;font-size:11px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif" x-text="customRoles.length + ' 個'"></span>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               :style="customRoleMgrOpen ? 'transform:rotate(180deg)' : ''" style="transition:.2s;color:var(--text-dim)">
+            <path d="M6 9l6 6 6-6"/>
+          </svg>
+        </div>
+        <div x-show="customRoleMgrOpen" style="padding:12px 16px">
+          <div x-show="customRoles.length === 0" style="font-size:12px;color:var(--text-dim);padding:6px 0">
+            尚無自訂角色。點擊下方按鈕建立第一個自訂角色預設。
+          </div>
+          <template x-for="cr in customRoles" :key="cr.id">
+            <div class="cr-card">
+              <span style="font-size:13px;font-weight:600;min-width:80px" x-text="cr.name"></span>
+              <span class="role-badge"
+                    :class="{'role-superadmin':cr.baseRole==='superadmin','role-admin':cr.baseRole==='admin','role-sales':cr.baseRole==='sales','role-engineer':cr.baseRole==='engineer','role-viewer':cr.baseRole==='viewer'}"
+                    x-text="roleLabel(cr.baseRole)"></span>
+              <span style="font-size:11px;color:var(--text-dim)" x-text="(cr.modules||[]).length + ' 個模組'"></span>
+              <div style="margin-left:auto;display:flex;gap:6px">
+                <button class="btn btn-ghost btn-sm" @click="openCrEdit(cr)">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                  編輯
+                </button>
+                <button class="btn btn-danger btn-sm" @click="deleteCr(cr)">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                </button>
+              </div>
+            </div>
+          </template>
+          <button class="btn btn-ghost btn-sm" @click="openCrCreate()" style="margin-top:10px;gap:4px">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v16m8-8H4"/></svg>
+            新增自訂角色
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 角色名稱設定 -->
+    <div x-show="isSuperAdmin" style="margin-bottom:16px">
+      <div class="panel" style="padding:0;overflow:hidden">
+        <div style="display:flex;align-items:center;gap:8px;padding:12px 16px;cursor:pointer"
+             :style="roleLabelsMgrOpen ? 'border-bottom:1px solid var(--border-light)' : ''"
+             @click="roleLabelsMgrOpen=!roleLabelsMgrOpen">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 7h10M7 12h10M7 17h6"/></svg>
+          <span style="font-size:13px;font-weight:600">角色名稱設定</span>
+          <span style="font-size:11px;color:var(--text-dim)">自訂各角色層級的顯示名稱</span>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               :style="roleLabelsMgrOpen ? 'transform:rotate(180deg)' : ''" style="transition:.2s;color:var(--text-dim);margin-left:auto">
+            <path d="M6 9l6 6 6-6"/>
+          </svg>
+        </div>
+        <div x-show="roleLabelsMgrOpen" style="padding:14px 16px">
+          <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:12px">
+            <div>
+              <div style="font-size:10px;color:var(--text-dim);margin-bottom:4px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.05em">superadmin</div>
+              <input class="form-input" type="text" x-model="rlForm.superadmin" placeholder="超級管理員" style="font-size:12px;padding:7px 9px">
+            </div>
+            <div>
+              <div style="font-size:10px;color:var(--text-dim);margin-bottom:4px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.05em">admin</div>
+              <input class="form-input" type="text" x-model="rlForm.admin" placeholder="管理員" style="font-size:12px;padding:7px 9px">
+            </div>
+            <div>
+              <div style="font-size:10px;color:var(--text-dim);margin-bottom:4px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.05em">sales</div>
+              <input class="form-input" type="text" x-model="rlForm.sales" placeholder="業務" style="font-size:12px;padding:7px 9px">
+            </div>
+            <div>
+              <div style="font-size:10px;color:var(--text-dim);margin-bottom:4px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.05em">engineer</div>
+              <input class="form-input" type="text" x-model="rlForm.engineer" placeholder="工程師" style="font-size:12px;padding:7px 9px">
+            </div>
+            <div>
+              <div style="font-size:10px;color:var(--text-dim);margin-bottom:4px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.05em">viewer</div>
+              <input class="form-input" type="text" x-model="rlForm.viewer" placeholder="檢視者" style="font-size:12px;padding:7px 9px">
+            </div>
+          </div>
+          <div style="font-size:11px;color:var(--text-dim);margin-bottom:10px">變更後，使用者列表、角色選單及快速套用 chips 均會即時反映新名稱。</div>
+          <div style="display:flex;justify-content:flex-end;gap:8px">
+            <button class="btn btn-ghost btn-sm" @click="rlForm={...roleLabels};roleLabelsMgrOpen=false">取消</button>
+            <button class="btn btn-primary btn-sm" @click="saveRoleLabels()">儲存名稱</button>
+          </div>
+        </div>
       </div>
     </div>
 
     <!-- 使用者列表 -->
     <div class="panel" style="padding:0;overflow:hidden">
+      <div class="table-scroll">
       <table class="data-table">
         <thead>
           <tr>
@@ -211,7 +316,7 @@
             <th>存取模組</th>
             <th>建立時間</th>
             <th>狀態</th>
-            <th style="width:120px">操作</th>
+            <th style="width:180px">操作</th>
           </tr>
         </thead>
         <tbody>
@@ -221,9 +326,9 @@
                 <div style="display:flex;align-items:center;gap:8px">
                   <div style="width:30px;height:30px;border-radius:50%;background:var(--black);color:var(--white);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0"
                        x-text="(user.displayName||user.username)[0].toUpperCase()"></div>
-                  <span style="font-family:Inter,sans-serif;font-size:13px;font-weight:500" x-text="user.username"></span>
+                  <span style="font-family:LINE Seed TW_OTF, sans-serif;font-size:13px;font-weight:500" x-text="user.username"></span>
                   <template x-if="user.username === session.username">
-                    <span style="font-size:9px;background:var(--accent-light);color:var(--accent);padding:1px 6px;border-radius:3px;font-family:Inter,sans-serif">我</span>
+                    <span style="font-size:9px;background:var(--accent-light);color:var(--accent);padding:1px 6px;border-radius:3px;font-family:LINE Seed TW_OTF, sans-serif">我</span>
                   </template>
                 </div>
               </td>
@@ -243,7 +348,7 @@
                   </template>
                 </div>
               </td>
-              <td style="font-size:11px;color:var(--text-dim);font-family:Inter,sans-serif">
+              <td style="font-size:11px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif">
                 <span x-text="formatDate(user.createdAt)"></span>
               </td>
               <td>
@@ -259,11 +364,19 @@
                       x-text="user.active ? '啟用' : '停用'"></span>
               </td>
               <td>
-                <div style="display:flex;gap:6px">
+                <div style="display:flex;gap:6px;flex-wrap:wrap">
                   <button class="btn btn-ghost btn-sm" @click="openEdit(user)"
                           :disabled="!isSuperAdmin">
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
                     編輯
+                  </button>
+                  <button class="btn btn-ghost btn-sm"
+                          x-show="isSuperAdmin"
+                          @click="window.location.href='daily-tasks.html?username='+user.username"
+                          title="查看此使用者的每日工作事項"
+                          style="color:#7C3AED;border-color:#C4B5FD;background:#F5F3FF">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+                    工作事項
                   </button>
                   <button class="btn btn-danger btn-sm"
                           @click="deleteUser(user)"
@@ -276,6 +389,7 @@
           </template>
         </tbody>
       </table>
+      </div>
     </div>
   </div>
 
@@ -310,19 +424,40 @@
             <input class="form-input" type="text" x-model="form.phone" placeholder="04-3602-2818">
           </div>
         </div>
+        <!-- 快速套用 -->
         <div class="form-group">
-          <label class="form-label">角色 <span class="req">*</span></label>
-          <select class="form-select" x-model="form.role" @change="applyRoleDefaults()">
-            <option value="superadmin">超級管理員（所有權限）</option>
-            <option value="admin">管理員（不含系統設定）</option>
-            <option value="sales">業務（報價/客戶/財務）</option>
-            <option value="engineer">工程師（專案/設備，不看金額）</option>
-            <option value="viewer">檢視者（唯讀）</option>
+          <label class="form-label">角色快速套用 <span class="req">*</span></label>
+          <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:5px;align-items:center">
+            <template x-for="sp in systemPresets" :key="sp.key">
+              <button type="button" class="preset-chip"
+                      :class="{active: activePresetKey === 'sys:' + sp.key}"
+                      @click="applyPreset(sp.key)"
+                      x-text="sp.label"></button>
+            </template>
+            <span x-show="customRoles.length > 0"
+                  style="width:1px;background:var(--border-light);height:20px;margin:0 3px;flex-shrink:0"></span>
+            <template x-for="cr in customRoles" :key="cr.id">
+              <button type="button" class="preset-chip preset-chip--custom"
+                      :class="{active: activePresetKey === 'cr:' + cr.id}"
+                      @click="applyCustomRole(cr)"
+                      x-text="cr.name"></button>
+            </template>
+          </div>
+        </div>
+        <!-- 角色層級 -->
+        <div class="form-group">
+          <label class="form-label">角色層級（系統功能基礎）</label>
+          <select class="form-select" x-model="form.role" style="font-size:12px">
+            <option value="superadmin" x-text="(roleLabels.superadmin||'超級管理員') + '（所有系統功能）'"></option>
+            <option value="admin" x-text="(roleLabels.admin||'管理員') + '（不含系統設定）'"></option>
+            <option value="sales" x-text="roleLabels.sales||'業務'"></option>
+            <option value="engineer" x-text="roleLabels.engineer||'工程師'"></option>
+            <option value="viewer" x-text="(roleLabels.viewer||'檢視者') + '（唯讀）'"></option>
           </select>
         </div>
         <div class="form-group">
           <label class="form-label">存取模組</label>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
             <template x-for="mod in allModules" :key="mod.key">
               <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:12px;padding:5px 10px;border:1px solid var(--border-light);border-radius:4px;background:#fff"
                      :style="form.modules.includes(mod.key) ? 'border-color:var(--accent);background:var(--accent-light);color:var(--accent)' : ''">
@@ -367,6 +502,29 @@
             </div>
           </div>
         </template>
+        <!-- 每日工作事項密碼：僅編輯超級管理員時顯示 -->
+        <template x-if="form.role === 'superadmin' && editingId">
+          <div style="margin-top:12px;padding-top:14px;border-top:1px solid var(--border-light)">
+            <div style="font-size:10px;font-weight:600;color:#7C3AED;letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px;display:flex;align-items:center;gap:6px">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+              每日工作事項密碼
+              <span style="font-weight:400;font-size:9px;color:var(--text-dim);text-transform:none;letter-spacing:0">（解鎖管理視角所需密碼）</span>
+            </div>
+            <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;background:#F5F3FF;border:1px solid #C4B5FD;border-radius:4px;padding:6px 9px">
+              ⓘ 在「每日工作事項」頁面，超管需輸入此密碼才能解鎖查看全體人員工作事項。
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+              <div class="form-group" style="margin-bottom:0">
+                <label class="form-label">工作事項密碼 <span style="color:var(--text-dim);text-transform:none;letter-spacing:0;font-size:9px">（留空不更改）</span></label>
+                <input class="form-input" type="password" x-model="form.dtPassword" placeholder="留空則不修改">
+              </div>
+              <div class="form-group" style="margin-bottom:0">
+                <label class="form-label">確認工作事項密碼</label>
+                <input class="form-input" type="password" x-model="form.confirmDtPassword" placeholder="再輸入一次">
+              </div>
+            </div>
+          </div>
+        </template>
       </div>
       <div class="modal-foot">
         <button class="btn btn-ghost" @click="closeModal()">取消</button>
@@ -378,12 +536,68 @@
     </div>
   </div>
 
+  <!-- ══ 自訂角色 Modal ══ -->
+  <div class="modal-overlay" x-show="showCrModal" x-transition style="display:none">
+    <div class="modal-box" style="max-width:460px">
+      <div class="modal-head">
+        <span class="modal-head__title" x-text="crForm.editId ? '編輯自訂角色' : '建立自訂角色'"></span>
+        <button class="modal-close" @click="closeCrModal()">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">角色名稱 <span class="req">*</span></label>
+          <input class="form-input" type="text" x-model="crForm.name" placeholder="例：業務主管、工程組長、客服專員">
+          <div class="form-hint">此名稱將出現在使用者 Modal 的快速選取列</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">基礎角色層級</label>
+          <select class="form-select" x-model="crForm.baseRole" @change="applyCrBaseRole()" style="font-size:12px">
+            <option value="superadmin" x-text="(roleLabels.superadmin||'超級管理員') + '（所有系統功能）'"></option>
+            <option value="admin" x-text="(roleLabels.admin||'管理員') + '（不含系統設定）'"></option>
+            <option value="sales" x-text="roleLabels.sales||'業務'"></option>
+            <option value="engineer" x-text="roleLabels.engineer||'工程師'"></option>
+            <option value="viewer" x-text="(roleLabels.viewer||'檢視者') + '（唯讀）'"></option>
+          </select>
+          <div class="form-hint">決定側欄系統功能（使用者管理、設定等）的存取層級</div>
+        </div>
+        <div class="form-group">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px">
+            <label class="form-label" style="margin-bottom:0">存取模組</label>
+            <button type="button" @click="applyCrBaseRole()"
+                    style="font-size:10px;color:var(--accent);background:none;border:1px solid var(--accent);border-radius:4px;cursor:pointer;padding:2px 8px;font-family:var(--font-zh)">
+              套用基礎角色預設
+            </button>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <template x-for="mod in allModules" :key="mod.key">
+              <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:12px;padding:5px 10px;border:1px solid var(--border-light);border-radius:4px;background:#fff"
+                     :style="crForm.modules.includes(mod.key) ? 'border-color:var(--accent);background:var(--accent-light);color:var(--accent)' : ''">
+                <input type="checkbox" style="display:none"
+                       :checked="crForm.modules.includes(mod.key)"
+                       @change="toggleCrModule(mod.key)">
+                <span x-text="crForm.modules.includes(mod.key) ? '✓ ' : ''"></span>
+                <span x-text="mod.label"></span>
+              </label>
+            </template>
+          </div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-ghost" @click="closeCrModal()">取消</button>
+        <button class="btn btn-primary" @click="saveCr()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 13l4 4L19 7"/></svg>
+          <span x-text="crForm.editId ? '儲存變更' : '建立角色'"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+
   <script>
   const ROLE_MODULES = {
-    superadmin: ['dashboard','quotation','customer','sales','procurement','inventory','equipment','finance','settings','project_manage','project_approve_eng','project_approve_biz','financial_view'],
-    admin:      ['dashboard','quotation','customer','sales','procurement','inventory','equipment','finance','project_manage','project_approve_eng','project_approve_biz','financial_view'],
-    sales:      ['dashboard','quotation','customer','financial_view','project_approve_biz'],
-    engineer:   ['dashboard','project_manage','project_approve_eng','equipment'],
+    superadmin: ['dashboard','quotation','case_manage','customer','sales','procurement','inventory','equipment','finance','reports','settings','project_manage','project_approve_eng','project_approve_biz','financial_view','work_log','daily_task','env_guide','netarch_guide'],
+    admin:      ['dashboard','quotation','case_manage','customer','sales','procurement','inventory','equipment','finance','reports','project_manage','project_approve_eng','project_approve_biz','financial_view','work_log','daily_task','env_guide','netarch_guide'],
+    sales:      ['dashboard','quotation','case_manage','customer','financial_view','project_approve_biz','work_log','daily_task'],
+    engineer:   ['dashboard','case_manage','project_manage','project_approve_eng','equipment','work_log','daily_task'],
     viewer:     ['dashboard'],
   }
 
@@ -391,24 +605,49 @@
     return {
       session:   {},
       users:     [],
+      customRoles:       [],
+      customRoleMgrOpen: false,
+      roleLabels: {superadmin:'超級管理員', admin:'管理員', sales:'業務', engineer:'工程師', viewer:'檢視者'},
+      roleLabelsMgrOpen: false,
+      rlForm: {superadmin:'超級管理員', admin:'管理員', sales:'業務', engineer:'工程師', viewer:'檢視者'},
       showModal: false,
       editingId: null,
       formError: '',
-      form: { username:'', displayName:'', email:'', phone:'', role:'sales', password:'', confirmPassword:'', modules:[], unlockPassword:'', confirmUnlockPassword:'' },
+      showCrModal: false,
+      crForm: { editId: null, name: '', baseRole: 'sales', modules: [] },
+      form: { username:'', displayName:'', email:'', phone:'', role:'sales', password:'', confirmPassword:'', modules:[], unlockPassword:'', confirmUnlockPassword:'', dtPassword:'', confirmDtPassword:'' },
+      get systemPresets() {
+        return [
+          {key:'superadmin', label: this.roleLabels.superadmin || '超級管理員'},
+          {key:'admin',      label: this.roleLabels.admin      || '管理員'},
+          {key:'sales',      label: this.roleLabels.sales      || '業務'},
+          {key:'engineer',   label: this.roleLabels.engineer   || '工程師'},
+          {key:'viewer',     label: this.roleLabels.viewer     || '檢視者'},
+        ]
+      },
       allModules: [
-        {key:'dashboard',            label:'儀表板',       group:'基本'},
-        {key:'quotation',            label:'報價單',       group:'業務'},
-        {key:'customer',             label:'客戶',         group:'業務'},
-        {key:'sales',                label:'銷售',         group:'業務'},
-        {key:'financial_view',       label:'財務（金額可視）', group:'財務'},
-        {key:'finance',              label:'應收帳款',     group:'財務'},
-        {key:'procurement',          label:'採購',         group:'採購'},
-        {key:'inventory',            label:'庫存',         group:'採購'},
-        {key:'equipment',            label:'設備',         group:'設備'},
-        {key:'project_manage',       label:'專案管理',     group:'專案'},
-        {key:'project_approve_eng',  label:'工程主管確認', group:'專案'},
-        {key:'project_approve_biz',  label:'業務確認',     group:'專案'},
-        {key:'settings',             label:'系統設定',     group:'系統'},
+        {key:'dashboard',            label:'儀表板',           group:'基本'},
+        {key:'dev_crm',              label:'業務開發 CRM',     group:'業務'},
+        {key:'quotation',            label:'報價單／簽核佇列', group:'業務'},
+        {key:'case_manage',          label:'案件管理',         group:'業務'},
+        {key:'customer',             label:'客戶管理',         group:'業務'},
+        {key:'financial_view',       label:'財務金額可視',     group:'財務'},
+        {key:'finance',              label:'應收帳款／銷售訂單', group:'財務'},
+        {key:'reports',              label:'營運報表',         group:'財務'},
+        {key:'procurement',          label:'供應商／料號／採購', group:'採購'},
+        {key:'equipment',            label:'設備登載／保固',   group:'設備'},
+        {key:'project_manage',       label:'專案管理',         group:'專案'},
+        {key:'project_approve_eng',  label:'工程主管確認',     group:'專案'},
+        {key:'project_approve_biz',  label:'業務確認',         group:'專案'},
+        {key:'work_log',             label:'工作日誌',         group:'工作'},
+        {key:'daily_task',           label:'每日工作事項',     group:'工作'},
+        {key:'contractor_list',      label:'外包名冊',         group:'勞務'},
+        {key:'payslip',              label:'勞報單',           group:'勞務'},
+        {key:'env_guide',            label:'場域選型導覽－檢視', group:'業務'},
+        {key:'env_guide_edit',       label:'場域選型導覽－新增修改刪除', group:'業務'},
+        {key:'netarch_guide',        label:'網路架構選型導覽－檢視', group:'業務'},
+        {key:'netarch_guide_edit',   label:'網路架構選型導覽－新增修改刪除', group:'業務'},
+        {key:'settings',             label:'系統設定',         group:'系統'},
       ],
 
       get isSuperAdmin() { return this.session.role === 'superadmin' },
@@ -421,11 +660,12 @@
       },
 
       roleLabel(r) {
-        return {superadmin:'超級管理員', admin:'管理員', sales:'業務', engineer:'工程師', viewer:'檢視者'}[r] || r
+        return this.roleLabels[r] || r
       },
 
       hasAccess(user, mod) {
-        return (user.modules || ROLE_MODULES[user.role] || []).includes(mod)
+        const mods = (user.modules && user.modules.length > 0) ? user.modules : (ROLE_MODULES[user.role] || [])
+        return mods.includes(mod)
       },
 
       formatDate(iso) {
@@ -437,17 +677,116 @@
         this.form.modules = [...(ROLE_MODULES[this.form.role] || [])]
       },
 
+      applyPreset(key) {
+        this.form.role    = key
+        this.form.modules = [...(ROLE_MODULES[key] || [])]
+      },
+
+      applyCustomRole(cr) {
+        this.form.role    = cr.baseRole
+        this.form.modules = [...(cr.modules || [])]
+      },
+
+      get activePresetKey() {
+        const sorted = [...this.form.modules].sort().join(',')
+        for (const [k, mods] of Object.entries(ROLE_MODULES)) {
+          if (this.form.role === k && [...mods].sort().join(',') === sorted) return 'sys:' + k
+        }
+        for (const cr of this.customRoles) {
+          if (this.form.role === cr.baseRole && [...(cr.modules||[])].sort().join(',') === sorted) return 'cr:' + cr.id
+        }
+        return null
+      },
+
       toggleModule(key) {
         const idx = this.form.modules.indexOf(key)
         if (idx >= 0) this.form.modules.splice(idx, 1)
         else           this.form.modules.push(key)
       },
 
+      // ── Custom role management ──────────────────────────────────────────────
+
+      async loadCustomRoles() {
+        const r = await fetch('/api/settings/custom-roles', { headers: this._headers() })
+        if (r.ok) this.customRoles = (await r.json()).items || []
+      },
+
+      async loadRoleLabels() {
+        const r = await fetch('/api/settings/role-labels', { headers: this._headers() })
+        if (r.ok) {
+          this.roleLabels = await r.json()
+          this.rlForm = {...this.roleLabels}
+        }
+      },
+
+      async saveRoleLabels() {
+        const body = {}
+        for (const k of Object.keys(this.rlForm)) body[k] = (this.rlForm[k] || '').trim()
+        if (Object.values(body).some(v => !v)) { this.toast('角色名稱不可空白'); return }
+        const r = await fetch('/api/settings/role-labels', {
+          method: 'PUT', headers: this._headers(), body: JSON.stringify(body)
+        })
+        if (!r.ok) { this.toast((await r.json().catch(()=>({}))).detail || '儲存失敗'); return }
+        this.roleLabels = await r.json()
+        this.rlForm = {...this.roleLabels}
+        this.roleLabelsMgrOpen = false
+        this.toast('角色名稱已儲存')
+      },
+
+      openCrCreate() {
+        this.crForm = { editId: null, name: '', baseRole: 'sales', modules: [...ROLE_MODULES.sales] }
+        this.showCrModal = true
+      },
+
+      openCrEdit(cr) {
+        this.crForm = { editId: cr.id, name: cr.name, baseRole: cr.baseRole, modules: [...(cr.modules || [])] }
+        this.showCrModal = true
+      },
+
+      closeCrModal() { this.showCrModal = false },
+
+      applyCrBaseRole() {
+        this.crForm.modules = [...(ROLE_MODULES[this.crForm.baseRole] || [])]
+      },
+
+      toggleCrModule(key) {
+        const idx = this.crForm.modules.indexOf(key)
+        if (idx >= 0) this.crForm.modules.splice(idx, 1)
+        else           this.crForm.modules.push(key)
+      },
+
+      async saveCr() {
+        const name = (this.crForm.name || '').trim()
+        if (!name) { this.toast('請輸入角色名稱'); return }
+        const body = { name, baseRole: this.crForm.baseRole, modules: this.crForm.modules }
+        const url  = this.crForm.editId
+          ? '/api/settings/custom-roles/' + this.crForm.editId
+          : '/api/settings/custom-roles'
+        const r = await fetch(url, {
+          method: this.crForm.editId ? 'PUT' : 'POST',
+          headers: this._headers(), body: JSON.stringify(body)
+        })
+        if (!r.ok) { this.toast((await r.json().catch(() => ({}))).detail || '儲存失敗'); return }
+        await this.loadCustomRoles()
+        this.closeCrModal()
+        this.toast(this.crForm.editId ? '角色已更新' : '角色已建立')
+      },
+
+      async deleteCr(cr) {
+        if (!confirm(`確定要刪除自訂角色「${cr.name}」？\n已套用此角色的使用者帳號不受影響。`)) return
+        const r = await fetch('/api/settings/custom-roles/' + cr.id, {
+          method: 'DELETE', headers: this._headers()
+        })
+        if (!r.ok) { this.toast((await r.json().catch(() => ({}))).detail || '刪除失敗'); return }
+        await this.loadCustomRoles()
+        this.toast('角色已刪除')
+      },
+
       openCreate() {
         this.editingId = null
         this.form = { username:'', displayName:'', email:'', phone:'', role:'sales',
                       password:'', confirmPassword:'', modules: [...ROLE_MODULES.sales],
-                      unlockPassword:'', confirmUnlockPassword:'' }
+                      unlockPassword:'', confirmUnlockPassword:'', dtPassword:'', confirmDtPassword:'' }
         this.formError = ''
         this.showModal = true
       },
@@ -463,9 +802,11 @@
           role:                   user.role,
           password:               '',
           confirmPassword:        '',
-          modules:                [...(user.modules || ROLE_MODULES[user.role] || [])],
+          modules:                [...((user.modules && user.modules.length > 0) ? user.modules : (ROLE_MODULES[user.role] || []))],
           unlockPassword:         '',
           confirmUnlockPassword:  '',
+          dtPassword:             '',
+          confirmDtPassword:      '',
         }
         this.formError = ''
         this.showModal = true
@@ -488,6 +829,12 @@
           if (this.form.unlockPassword.length < 6) { this.formError = '解鎖密碼至少 6 碼'; return }
           if (this.form.unlockPassword !== this.form.confirmUnlockPassword) {
             this.formError = '解鎖密碼與確認密碼不一致'; return
+          }
+        }
+        if (this.form.dtPassword) {
+          if (this.form.dtPassword.length < 6) { this.formError = '每日工作事項密碼至少 6 碼'; return }
+          if (this.form.dtPassword !== this.form.confirmDtPassword) {
+            this.formError = '每日工作事項密碼與確認密碼不一致'; return
           }
         }
 
@@ -523,6 +870,16 @@
           if (!ur.ok) {
             const ue = await ur.json().catch(() => ({}))
             this.formError = ue.detail || '解鎖密碼設定失敗'; return
+          }
+        }
+        if (this.editingId && this.form.dtPassword) {
+          const dr = await fetch(`/api/users/${this.editingId}/daily-task-password`, {
+            method: 'PATCH', headers: this._headers(),
+            body: JSON.stringify({ daily_task_password: this.form.dtPassword })
+          })
+          if (!dr.ok) {
+            const de = await dr.json().catch(() => ({}))
+            this.formError = de.detail || '每日工作事項密碼設定失敗'; return
           }
         }
         await this.loadUsers()
@@ -564,7 +921,7 @@
       toast(msg) {
         const el = document.createElement('div')
         el.textContent = msg
-        el.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#0A0A0A;color:#F5F4F0;padding:8px 18px;border-radius:6px;font-size:12px;z-index:999;font-family:Inter,sans-serif;box-shadow:0 4px 12px rgba(0,0,0,.2)'
+        el.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#0A0A0A;color:#F5F4F0;padding:8px 18px;border-radius:6px;font-size:12px;z-index:999;font-family:LINE Seed TW_OTF, sans-serif;box-shadow:0 4px 12px rgba(0,0,0,.2)'
         document.body.appendChild(el)
         setTimeout(() => el.remove(), 2500)
       },
@@ -584,7 +941,7 @@
           localStorage.removeItem('motrix_session')
           window.location.href = 'login.html'; return
         }
-        await this.loadUsers()
+        await Promise.all([this.loadUsers(), this.loadCustomRoles(), this.loadRoleLabels()])
       }
     }
   }

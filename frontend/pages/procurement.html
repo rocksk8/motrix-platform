@@ -1,11 +1,10 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="../static/favicon.png">
   <title>採購管理 — MOTRIX 營運管理系統</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600&display=swap" rel="stylesheet">
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
   <link rel="stylesheet" href="../css/style.css">
   <style>
@@ -13,8 +12,8 @@
     .page-main{margin-left:var(--sidebar-w);margin-top:var(--topbar-h);padding:28px 32px;min-height:calc(100vh - var(--topbar-h));background:var(--white)}
     .stat-strip{display:flex;gap:12px;margin-bottom:22px;flex-wrap:wrap}
     .stat-pill{display:flex;flex-direction:column;padding:14px 18px;border:1px solid var(--border-light);border-radius:var(--radius-lg);background:#fff;min-width:110px;flex:1;max-width:180px}
-    .stat-pill__val{font-size:22px;font-weight:700;font-family:Inter,sans-serif;line-height:1;color:var(--text-primary)}
-    .stat-pill__lbl{font-size:10px;color:var(--text-dim);font-family:Inter,sans-serif;letter-spacing:.06em;margin-top:4px;text-transform:uppercase}
+    .stat-pill__val{font-size:22px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;line-height:1;color:var(--text-primary)}
+    .stat-pill__lbl{font-size:10px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.06em;margin-top:4px;text-transform:uppercase}
     .stat-pill.warn .stat-pill__val{color:#D97706}
     .stat-pill.success .stat-pill__val{color:var(--success)}
     .toolbar{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap}
@@ -26,11 +25,11 @@
     .tab{padding:7px 16px;font-size:12px;font-family:var(--font-zh);cursor:pointer;border:none;background:none;color:var(--text-secondary);border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .1s}
     .tab:hover{color:var(--text-primary)}
     .tab.on{color:var(--accent);border-bottom-color:var(--accent);font-weight:600}
-    .tab__cnt{font-family:Inter,sans-serif;font-size:10px;font-weight:600;margin-left:4px;padding:1px 5px;border-radius:8px;background:#F0EEE9}
+    .tab__cnt{font-family:LINE Seed TW_OTF, sans-serif;font-size:10px;font-weight:600;margin-left:4px;padding:1px 5px;border-radius:8px;background:#F0EEE9}
     .tab.on .tab__cnt{background:var(--accent-light);color:var(--accent)}
     .panel{background:#fff;border:1px solid var(--border-light);border-radius:var(--radius-lg);overflow:hidden}
     .data-table{width:100%;border-collapse:collapse;font-size:13px}
-    .data-table th{padding:10px 14px;text-align:left;font-size:10px;font-family:Inter,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);font-weight:500;background:#FAFAF8;border-bottom:1px solid var(--border-light);white-space:nowrap}
+    .data-table th{padding:10px 14px;text-align:left;font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);font-weight:500;background:#FAFAF8;border-bottom:1px solid var(--border-light);white-space:nowrap}
     .data-table td{padding:11px 14px;border-bottom:1px solid #F0EEE9;vertical-align:middle}
     .data-table tr:last-child td{border-bottom:none}
     .data-table tr:hover td{background:#FDFCFA}
@@ -101,6 +100,7 @@
       <div class="loading-text" x-show="loading">載入中…</div>
       <template x-if="!loading">
         <div>
+          <div class="table-scroll">
           <table class="data-table" x-show="filtered.length > 0">
             <thead>
               <tr>
@@ -121,7 +121,7 @@
                 <tr>
                   <td style="font-size:12px;font-weight:500" x-text="m.name || '—'"></td>
                   <td style="font-size:12px;color:var(--text-secondary)" x-text="m.model || '—'"></td>
-                  <td style="text-align:right;font-family:Inter,sans-serif;font-size:13px;font-weight:600" x-text="m.qty"></td>
+                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-size:13px;font-weight:600" x-text="m.qty"></td>
                   <td style="font-size:12px;color:var(--text-dim)" x-text="m.unit"></td>
                   <td>
                     <span class="rb" :class="m.status==='arrived' ? 'rb-arrived' : m.status==='ordered' ? 'rb-ordered' : 'rb-pending'"
@@ -129,7 +129,7 @@
                   </td>
                   <td>
                     <a :href="'case-management.html?q=' + m.quoteNo"
-                       style="font-family:Inter,sans-serif;font-size:12px;font-weight:600;color:var(--accent);text-decoration:none"
+                       style="font-family:LINE Seed TW_OTF, sans-serif;font-size:12px;font-weight:600;color:var(--accent);text-decoration:none"
                        x-text="m.quoteNo"></a>
                   </td>
                   <td style="font-size:12px" x-text="m.customer || '—'"></td>
@@ -147,6 +147,7 @@
               </template>
             </tbody>
           </table>
+          </div>
           <div class="empty-state" x-show="filtered.length === 0">
             <div style="font-size:32px;margin-bottom:10px">🗂</div>
             <div x-show="items.length === 0">尚無叫料資料，請至案件管理的叫料管控頁面新增</div>

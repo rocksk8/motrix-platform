@@ -5,44 +5,73 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>外包名冊 — MOTRIX ERP</title>
   <link rel="icon" type="image/png" href="../static/favicon.png">
-  <link rel="stylesheet" href="../css/style.css">
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css">
   <style>
-    .page-wrap{padding:calc(var(--topbar-h) + 20px) 28px 40px calc(var(--sidebar-w) + 28px)}
-    .card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;margin-top:16px}
-    .con-card{background:#fff;border:1px solid var(--border);border-radius:10px;padding:16px 18px;cursor:pointer;transition:box-shadow .15s}
-    .con-card:hover{box-shadow:0 2px 12px rgba(0,0,0,.09)}
-    .con-card.inactive{opacity:.5}
-    .con-name{font-size:14px;font-weight:600;color:var(--text-main);margin-bottom:4px}
-    .con-meta{font-size:12px;color:var(--text-secondary);line-height:1.7}
-    .con-tag{display:inline-block;font-size:10px;border:1px solid var(--border);border-radius:4px;padding:1px 6px;margin-right:4px;color:var(--text-dim)}
-    .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:200;display:flex;align-items:center;justify-content:center}
-    .modal{background:#fff;border-radius:12px;width:560px;max-width:95vw;max-height:90vh;overflow-y:auto;padding:28px 28px 24px}
-    .modal h2{font-size:16px;font-weight:700;margin-bottom:20px}
-    .form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
-    .form-row.full{grid-template-columns:1fr}
-    .form-group label{display:block;font-size:12px;font-weight:500;color:var(--text-secondary);margin-bottom:4px}
-    .form-group input,.form-group select,.form-group textarea{width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit;outline:none}
-    .form-group input:focus,.form-group select:focus,.form-group textarea:focus{border-color:var(--accent)}
-    .section-label{font-size:11px;font-weight:600;color:var(--text-dim);letter-spacing:.06em;text-transform:uppercase;border-bottom:1px solid var(--border-light);padding-bottom:4px;margin:16px 0 10px}
-    .btn-row{display:flex;justify-content:flex-end;gap:10px;margin-top:20px}
-    .search-bar{display:flex;gap:10px;align-items:center}
-    .empty{text-align:center;padding:60px 0;color:var(--text-dim);font-size:14px}
-    /* ID card upload */
-    .id-card-drop{border:2px dashed var(--border-light);border-radius:var(--radius-lg);
-                  padding:28px;text-align:center;color:var(--text-dim);font-size:13px;
-                  transition:border-color .15s,background .15s;cursor:pointer}
+    [x-cloak]{display:none!important}
+    .page-main{margin-left:var(--sidebar-w);margin-top:var(--topbar-h);padding:28px 32px;min-height:calc(100vh - var(--topbar-h));background:var(--white);transition:padding-right .22s}
+    .search-bar{display:flex;gap:10px;align-items:center;margin-bottom:20px}
+    .search-wrap{position:relative;flex:0 0 320px}
+    .search-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text-dim);pointer-events:none}
+    .search-input{width:100%;padding:8px 12px 8px 36px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:var(--font-zh);background:#fff;outline:none;box-sizing:border-box}
+    .search-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(37,99,235,.08)}
+    .data-table{width:100%;border-collapse:collapse;font-size:13px}
+    .data-table th{padding:10px 12px;text-align:left;font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);font-weight:500;background:#FAFAF8;border-bottom:1px solid var(--border-light);white-space:nowrap}
+    .data-table td{padding:11px 12px;border-bottom:1px solid #F0EEE9;vertical-align:middle}
+    .data-table tr:last-child td{border-bottom:none}
+    .data-table tr:hover td{background:#FDFCFA}
+    .data-table tr:hover .row-actions{opacity:1}
+    .row-actions{opacity:0;display:flex;gap:6px;transition:opacity .12s}
+    .btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:var(--radius);font-size:12px;font-family:var(--font-zh);cursor:pointer;border:none;transition:all .12s;font-weight:500}
+    .btn-primary{background:var(--accent);color:#fff}
+    .btn-primary:hover{background:#1D4ED8}
+    .btn-ghost{background:#fff;color:var(--text-secondary);border:1px solid var(--border-light)}
+    .btn-ghost:hover{border-color:#C8C4BC}
+    .btn-danger{background:var(--danger-light);color:var(--danger);border:1px solid #FECACA}
+    .btn-danger:hover{background:#FEE2E2}
+    .btn-sm{padding:5px 11px;font-size:11px}
+    .btn:disabled,.btn-primary:disabled{opacity:.55;cursor:not-allowed}
+    .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;display:flex;align-items:flex-start;justify-content:center;padding:40px 24px;overflow-y:auto}
+    .modal-box{background:#fff;border-radius:var(--radius-lg);width:100%;max-width:640px;box-shadow:var(--shadow-lg);flex-shrink:0}
+    .modal-head{display:flex;align-items:center;padding:16px 22px;border-bottom:1px solid var(--border-light);gap:10px}
+    .modal-head__title{font-size:14px;font-weight:600;flex:1}
+    .modal-close{width:28px;height:28px;border-radius:4px;border:none;background:#F0EEE9;cursor:pointer;font-size:16px;color:var(--text-secondary);display:flex;align-items:center;justify-content:center}
+    .modal-close:hover{background:var(--danger-light);color:var(--danger)}
+    .modal-body{padding:20px 22px;max-height:calc(100vh - 180px);overflow-y:auto}
+    .modal-foot{display:flex;align-items:center;padding:14px 22px;border-top:1px solid var(--border-light);gap:8px;justify-content:flex-end}
+    .form-section{margin-bottom:20px;padding-bottom:20px;border-bottom:1px solid var(--border-light)}
+    .form-section:last-child{border-bottom:none;margin-bottom:0;padding-bottom:0}
+    .form-section-title{font-size:11px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);font-weight:600;margin-bottom:14px}
+    .form-group{display:flex;flex-direction:column;gap:5px}
+    .form-label{font-size:12px;font-weight:500;color:var(--text-secondary)}
+    .form-input,.form-select,.form-textarea{padding:8px 11px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:var(--font-zh);color:var(--text-primary);background:#fff;outline:none;transition:border-color .12s,box-shadow .12s}
+    .form-input:focus,.form-select:focus,.form-textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(37,99,235,.08)}
+    .form-textarea{resize:vertical;min-height:64px;line-height:1.6}
+    .form-grid-2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
+    .detail-pane{position:fixed;right:0;top:var(--topbar-h);width:380px;height:calc(100vh - var(--topbar-h));background:#fff;border-left:1px solid var(--border-light);box-shadow:var(--shadow-lg);z-index:100;display:flex;flex-direction:column;transform:translateX(100%);transition:transform .22s ease}
+    .detail-pane.open{transform:translateX(0)}
+    .detail-head{padding:16px 20px;border-bottom:1px solid var(--border-light);display:flex;align-items:center;gap:10px}
+    .detail-body{flex:1;overflow-y:auto;padding:16px 20px}
+    .detail-body::-webkit-scrollbar{width:4px}
+    .detail-body::-webkit-scrollbar-thumb{background:var(--border-light);border-radius:2px}
+    .detail-close{margin-left:auto;width:28px;height:28px;border-radius:4px;border:none;background:#F0EEE9;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px}
+    .detail-close:hover{background:var(--danger-light);color:var(--danger)}
+    .detail-row{display:flex;gap:8px;margin-bottom:10px;font-size:12px}
+    .detail-label{color:var(--text-dim);min-width:68px;flex-shrink:0}
+    .detail-val{color:var(--text-primary);font-weight:500;flex:1;word-break:break-all}
+    .detail-divider{border:none;border-top:1px solid var(--border-light);margin:14px 0}
+    .detail-sec{font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);font-weight:600;margin-bottom:10px}
+    .tag{display:inline-flex;padding:2px 8px;border-radius:3px;font-size:11px;font-family:LINE Seed TW_OTF, sans-serif}
+    .tag-active{background:var(--success-light);color:var(--success)}
+    .tag-inactive{background:#F3F4F6;color:#6B7280}
+    .empty-state{text-align:center;padding:60px 20px;color:var(--text-dim)}
+    .empty-icon{font-size:40px;margin-bottom:12px;opacity:.4}
+    .id-card-drop{border:2px dashed var(--border-light);border-radius:var(--radius-lg);padding:20px;text-align:center;color:var(--text-dim);font-size:13px;transition:border-color .15s,background .15s;cursor:pointer}
     .id-card-drop:hover{border-color:var(--accent);background:var(--accent-light)}
-    .id-card-preview{position:relative;border:1px solid var(--border-light);
-                     border-radius:var(--radius-lg);overflow:hidden;background:#f8f8f6}
-    .id-card-preview img{width:100%;max-height:200px;object-fit:contain;display:block}
-    .id-card-remove{position:absolute;top:6px;right:6px;background:rgba(220,38,38,.9);
-                    color:#fff;border:none;border-radius:4px;padding:3px 10px;
-                    font-size:11px;cursor:pointer;font-family:inherit}
+    .id-card-preview{position:relative;border:1px solid var(--border-light);border-radius:var(--radius-lg);overflow:hidden;background:#f8f8f6}
+    .id-card-preview img{width:100%;max-height:180px;object-fit:contain;display:block}
+    .id-card-remove{position:absolute;top:6px;right:6px;background:rgba(220,38,38,.9);color:#fff;border:none;border-radius:4px;padding:3px 10px;font-size:11px;cursor:pointer;font-family:inherit}
     .id-card-remove:hover{background:var(--danger)}
-    .badge-id{display:inline-block;font-size:9px;padding:1px 5px;border-radius:3px;
-              background:var(--accent-light);color:var(--accent);border:1px solid #bfdbfe;
-              margin-left:4px;vertical-align:middle}
   </style>
 </head>
 <body x-data="contractorsPage()" x-init="init()">
@@ -50,208 +79,373 @@
 <div class="sidebar-overlay" id="sidebar-overlay"></div>
 <aside class="sidebar" id="app-sidebar"></aside>
 
-<div class="page-wrap">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+<div class="page-main" :style="selectedId ? 'padding-right:400px' : ''">
+
+  <!-- 頁頭 -->
+  <div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:20px">
     <div>
-      <h1 style="font-size:18px;font-weight:700;color:var(--text-main)">外包名冊</h1>
-      <p style="font-size:12px;color:var(--text-dim);margin-top:2px">勞報單乙方（受領報酬人）資料庫</p>
+      <div style="font-size:11px;color:var(--text-dim);margin-bottom:4px">勞務管理</div>
+      <h1 style="font-size:20px;font-weight:700">外包名冊</h1>
+      <p style="font-size:12px;color:var(--text-secondary);margin-top:4px" x-text="`共 ${contractors.length} 位外包人員`"></p>
     </div>
-    <button class="action-btn action-btn--primary" @click="openNew()">＋ 新增人員</button>
+    <button class="btn btn-primary" @click="openNew()">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v16m8-8H4"/></svg>
+      新增人員
+    </button>
   </div>
 
-  <div class="search-bar" style="margin-bottom:16px">
-    <input class="form-input" style="max-width:260px" type="text" placeholder="搜尋姓名…" x-model="searchQ" @input="load()">
-    <label style="font-size:13px;color:var(--text-secondary);cursor:pointer">
-      <input type="checkbox" x-model="showInactive" @change="load()"> 顯示停用人員
+  <!-- 搜尋 -->
+  <div class="search-bar">
+    <div class="search-wrap">
+      <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+      <input class="search-input" type="text" x-model="searchQ" @input.debounce.300ms="load()" placeholder="搜尋姓名、身分證號碼…">
+    </div>
+    <label style="font-size:13px;color:var(--text-secondary);cursor:pointer;white-space:nowrap;display:flex;align-items:center;gap:5px">
+      <input type="checkbox" x-model="showInactive" @change="load()"> 顯示停用
     </label>
   </div>
 
-  <div x-show="loading" style="text-align:center;padding:40px;color:var(--text-dim)">載入中…</div>
-
-  <div x-show="!loading && contractors.length === 0" class="empty">
-    尚無外包人員資料，點擊右上角「新增人員」開始建立名冊。
-  </div>
-
-  <div class="card-grid" x-show="!loading">
-    <template x-for="c in contractors" :key="c.id">
-      <div class="con-card" :class="c.active ? '' : 'inactive'" @click="openEdit(c)">
-        <div class="con-name">
-          <span x-text="c.name"></span>
-          <span class="badge-id" x-show="c.has_id_card">ID</span>
-        </div>
-        <div class="con-meta">
-          <div x-text="c.id_number" x-show="c.id_number"></div>
-          <div x-text="c.phone" x-show="c.phone"></div>
-          <div x-text="c.email" x-show="c.email"></div>
-          <div style="margin-top:4px">
-            <span class="con-tag" x-text="c.nationality"></span>
-            <span class="con-tag" x-show="c.has_union_insurance">職業工會</span>
-            <span class="con-tag" x-show="c.bank_account_number" x-text="(c.bank_name || '') + ' ' + (c.bank_account_number || '')"></span>
-            <span class="con-tag" style="color:var(--danger)" x-show="!c.active">已停用</span>
-          </div>
-        </div>
-      </div>
-    </template>
+  <!-- 列表 -->
+  <div class="panel" style="padding:0;overflow:hidden">
+    <div class="table-scroll" x-show="!loading">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th style="width:32px"></th>
+            <th>姓名</th>
+            <th>證件號碼</th>
+            <th>電話</th>
+            <th>Email</th>
+            <th>國籍</th>
+            <th>狀態</th>
+            <th style="width:80px"></th>
+          </tr>
+        </thead>
+        <tbody>
+          <template x-for="c in contractors" :key="c.id">
+            <tr @click="selectContractor(c)" style="cursor:pointer">
+              <td>
+                <div style="width:30px;height:30px;border-radius:50%;background:#059669;color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700"
+                     x-text="(c.name||'?')[0]"></div>
+              </td>
+              <td>
+                <div style="font-weight:500" x-text="c.name"></div>
+                <div style="display:flex;align-items:center;gap:4px;margin-top:1px">
+                  <span x-show="c.has_id_card"
+                        style="font-size:9px;font-family:LINE Seed TW_OTF, sans-serif;background:#ECFDF5;color:#059669;padding:1px 5px;border-radius:3px;letter-spacing:.04em;font-weight:600">ID ✓</span>
+                  <span x-show="c.has_union_insurance" style="font-size:11px;color:var(--text-dim)">職業工會</span>
+                </div>
+              </td>
+              <td style="font-family:LINE Seed TW_OTF, sans-serif;font-size:12px" x-text="c.id_number || '—'"></td>
+              <td x-text="c.phone || '—'"></td>
+              <td style="font-size:12px" x-text="c.email || '—'"></td>
+              <td x-text="c.nationality || '—'"></td>
+              <td>
+                <span class="tag" :class="c.active ? 'tag-active' : 'tag-inactive'"
+                      x-text="c.active ? '往來中' : '停用'"></span>
+              </td>
+              <td>
+                <div class="row-actions">
+                  <button class="btn btn-ghost btn-sm" @click.stop="openEdit(c)">編輯</button>
+                </div>
+              </td>
+            </tr>
+          </template>
+          <tr x-show="!loading && contractors.length === 0">
+            <td colspan="8">
+              <div class="empty-state">
+                <div class="empty-icon">👷</div>
+                <div>尚無外包人員資料</div>
+                <button class="btn btn-primary" @click="openNew()" style="margin-top:12px">新增第一位外包人員</button>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div x-show="loading" style="text-align:center;padding:60px;color:var(--text-dim)">載入中…</div>
   </div>
 </div>
 
-<!-- Modal -->
+<!-- ══ 右側詳細面板 ══ -->
+<div class="detail-pane" :class="{open: !!selectedId}">
+  <template x-if="selectedContractor">
+    <div style="display:contents">
+      <div class="detail-head">
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:600;font-size:14px" x-text="selectedContractor.name"></div>
+          <div style="display:flex;align-items:center;gap:6px;margin-top:3px;flex-wrap:wrap">
+            <span class="tag" :class="selectedContractor.active ? 'tag-active' : 'tag-inactive'"
+                  x-text="selectedContractor.active ? '往來中' : '停用'"></span>
+            <span x-show="selectedContractor.has_id_card"
+                  style="font-size:10px;background:#ECFDF5;color:#059669;padding:1px 7px;border-radius:3px;font-weight:600">ID ✓</span>
+          </div>
+        </div>
+        <button class="detail-close" @click="selectedId=null;selectedContractor=null">×</button>
+      </div>
+      <div class="detail-body">
+
+        <div class="detail-sec">基本資料</div>
+        <div class="detail-row" x-show="selectedContractor.id_number">
+          <span class="detail-label">證件號碼</span>
+          <span class="detail-val" style="font-family:LINE Seed TW_OTF, monospace" x-text="selectedContractor.id_number"></span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">國籍</span>
+          <span class="detail-val" x-text="selectedContractor.nationality || '—'"></span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">職業工會</span>
+          <span class="detail-val" x-text="selectedContractor.has_union_insurance ? '✓ 已投保' : '未投保'"></span>
+        </div>
+        <div class="detail-row" x-show="selectedContractor.phone">
+          <span class="detail-label">電話</span>
+          <span class="detail-val" x-text="selectedContractor.phone"></span>
+        </div>
+        <div class="detail-row" x-show="selectedContractor.email">
+          <span class="detail-label">Email</span>
+          <span class="detail-val" x-text="selectedContractor.email"></span>
+        </div>
+        <div class="detail-row" x-show="selectedContractor.address">
+          <span class="detail-label">地址</span>
+          <span class="detail-val" x-text="selectedContractor.address"></span>
+        </div>
+
+        <template x-if="selectedContractor.bank_account_number">
+          <div>
+            <hr class="detail-divider">
+            <div class="detail-sec">匯款帳戶</div>
+            <div class="detail-row" x-show="selectedContractor.bank_code || selectedContractor.bank_name">
+              <span class="detail-label">銀行</span>
+              <span class="detail-val" x-text="[selectedContractor.bank_code, selectedContractor.bank_name, selectedContractor.bank_branch].filter(Boolean).join(' ')"></span>
+            </div>
+            <div class="detail-row" x-show="selectedContractor.bank_account_name">
+              <span class="detail-label">戶名</span>
+              <span class="detail-val" x-text="selectedContractor.bank_account_name"></span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">帳號</span>
+              <span class="detail-val" style="font-family:LINE Seed TW_OTF, monospace" x-text="selectedContractor.bank_account_number"></span>
+            </div>
+          </div>
+        </template>
+
+        <template x-if="selectedContractor.notes">
+          <div>
+            <hr class="detail-divider">
+            <div class="detail-sec">備注</div>
+            <div style="font-size:12px;color:var(--text-secondary);line-height:1.7" x-text="selectedContractor.notes"></div>
+          </div>
+        </template>
+
+        <template x-if="selectedContractor.has_passbook">
+          <div>
+            <hr class="detail-divider">
+            <div class="detail-sec">銀行存簿</div>
+            <div style="font-size:12px;color:var(--success);display:flex;align-items:center;gap:5px">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+              存簿影本已上傳
+            </div>
+            <div style="font-size:11px;color:var(--text-dim);margin-top:3px">產出勞報單 PDF 時將自動附入</div>
+          </div>
+        </template>
+
+        <hr class="detail-divider">
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-ghost btn-sm" style="flex:1" @click="openEdit(selectedContractor)">編輯資料</button>
+          <button class="btn btn-ghost btn-sm" style="flex:1"
+                  :class="selectedContractor.active ? 'btn-danger' : ''"
+                  @click="toggleActiveFromPane()"
+                  x-text="selectedContractor.active ? '停用' : '重新啟用'"></button>
+        </div>
+      </div>
+    </div>
+  </template>
+</div>
+
+<!-- ══ Modal（新增 / 編輯）══ -->
 <div class="modal-overlay" x-show="showModal" x-cloak @click.self="showModal=false">
-  <div class="modal" @click.stop>
-    <h2 x-text="editId ? '編輯人員' : '新增人員'"></h2>
+  <div class="modal-box" @click.stop>
+    <div class="modal-head">
+      <span class="modal-head__title" x-text="editId ? '編輯人員資料' : '新增外包人員'"></span>
+      <button class="modal-close" @click="showModal=false">×</button>
+    </div>
+    <div class="modal-body">
 
-    <div class="section-label">基本資料</div>
-    <div class="form-row">
-      <div class="form-group">
-        <label>姓名 <span style="color:var(--danger)">*</span></label>
-        <input type="text" x-model="form.name" placeholder="請輸入姓名">
+      <div class="form-section">
+        <div class="form-section-title">基本資料</div>
+        <div class="form-grid-2">
+          <div class="form-group">
+            <label class="form-label">姓名 <span style="color:var(--danger)">*</span></label>
+            <input class="form-input" type="text" x-model="form.name" placeholder="請輸入姓名">
+          </div>
+          <div class="form-group">
+            <label class="form-label">證件號碼</label>
+            <input class="form-input" type="text" x-model="form.id_number" placeholder="身分證 / 居留證">
+          </div>
+        </div>
+        <div class="form-grid-2">
+          <div class="form-group">
+            <label class="form-label">國籍</label>
+            <select class="form-select" x-model="form.nationality">
+              <option>本國籍</option>
+              <option>外國籍（滿183天）</option>
+              <option>外國籍（未滿183天）</option>
+            </select>
+          </div>
+          <div class="form-group" style="justify-content:flex-end">
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;padding-top:4px">
+              <input type="checkbox" x-model="form.has_union_insurance"> 已投保職業工會
+            </label>
+          </div>
+        </div>
+        <div class="form-grid-2">
+          <div class="form-group">
+            <label class="form-label">電話</label>
+            <input class="form-input" type="text" x-model="form.phone" placeholder="04-XXXX-XXXX">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Email</label>
+            <input class="form-input" type="email" x-model="form.email">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">通訊地址</label>
+          <input class="form-input" type="text" x-model="form.address">
+        </div>
       </div>
-      <div class="form-group">
-        <label>證件號碼</label>
-        <input type="text" x-model="form.id_number" placeholder="身分證 / 居留證">
-      </div>
-    </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label>國籍</label>
-        <select x-model="form.nationality">
-          <option>本國籍</option>
-          <option>外國籍（滿183天）</option>
-          <option>外國籍（未滿183天）</option>
-        </select>
-      </div>
-      <div class="form-group" style="display:flex;align-items:center;gap:8px;padding-top:20px">
-        <input type="checkbox" id="union" x-model="form.has_union_insurance" style="width:auto">
-        <label for="union" style="margin:0;font-size:13px;color:var(--text-main);cursor:pointer">已投保職業工會</label>
-      </div>
-    </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label>電話</label>
-        <input type="text" x-model="form.phone" placeholder="04-XXXX-XXXX">
-      </div>
-      <div class="form-group">
-        <label>Email</label>
-        <input type="email" x-model="form.email">
-      </div>
-    </div>
-    <div class="form-row full">
-      <div class="form-group">
-        <label>通訊地址</label>
-        <input type="text" x-model="form.address">
-      </div>
-    </div>
 
-    <div class="section-label">匯款帳戶</div>
-    <div class="form-row">
-      <div class="form-group">
-        <label>銀行代碼</label>
-        <input type="text" x-model="form.bank_code" placeholder="如 812">
+      <div class="form-section">
+        <div class="form-section-title">匯款帳戶</div>
+        <div class="form-grid-2">
+          <div class="form-group">
+            <label class="form-label">銀行代碼</label>
+            <input class="form-input" type="text" x-model="form.bank_code" placeholder="如 812">
+          </div>
+          <div class="form-group">
+            <label class="form-label">銀行名稱</label>
+            <input class="form-input" type="text" x-model="form.bank_name" placeholder="如 台新銀行">
+          </div>
+        </div>
+        <div class="form-grid-2">
+          <div class="form-group">
+            <label class="form-label">分行</label>
+            <input class="form-input" type="text" x-model="form.bank_branch">
+          </div>
+          <div class="form-group">
+            <label class="form-label">戶名</label>
+            <input class="form-input" type="text" x-model="form.bank_account_name">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">帳號</label>
+          <input class="form-input" type="text" x-model="form.bank_account_number">
+        </div>
       </div>
-      <div class="form-group">
-        <label>銀行名稱</label>
-        <input type="text" x-model="form.bank_name" placeholder="如 台新銀行">
-      </div>
-    </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label>分行</label>
-        <input type="text" x-model="form.bank_branch">
-      </div>
-      <div class="form-group">
-        <label>戶名</label>
-        <input type="text" x-model="form.bank_account_name">
-      </div>
-    </div>
-    <div class="form-row full">
-      <div class="form-group">
-        <label>帳號</label>
-        <input type="text" x-model="form.bank_account_number">
-      </div>
-    </div>
 
-    <div class="section-label">身分證影本</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-      <!-- 正面 -->
-      <div>
-        <div style="font-size:12px;font-weight:500;color:var(--text-secondary);margin-bottom:6px">正面</div>
-        <div x-show="!idCardFrontPreview && !idCardFront" class="id-card-drop"
-             @click="$refs.idCardInputFront.click()"
-             @dragover.prevent @drop.prevent="handleIdCardDrop($event,'front')">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
-               style="margin:0 auto 6px;display:block;opacity:.4">
-            <rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/>
-            <circle cx="8" cy="14.5" r="1.5"/><path d="M13 13h5M13 16h3"/>
+      <div class="form-section">
+        <div class="form-section-title">身分證影本</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+          <!-- 正面 -->
+          <div>
+            <div style="font-size:12px;font-weight:500;color:var(--text-secondary);margin-bottom:7px">正面</div>
+            <div x-show="!idCardFrontPreview && !idCardFront" class="id-card-drop"
+                 @click="$refs.idCardInputFront.click()"
+                 @dragover.prevent @drop.prevent="handleIdCardDrop($event,'front')">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin:0 auto 6px;display:block;opacity:.4">
+                <rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/>
+                <circle cx="8" cy="14.5" r="1.5"/><path d="M13 13h5M13 16h3"/>
+              </svg>
+              點擊或拖曳上傳<br><span style="font-size:11px">JPG / PNG / WEBP &lt; 3 MB</span>
+            </div>
+            <div x-show="idCardFrontPreview || idCardFront" class="id-card-preview">
+              <img :src="idCardFrontPreview || idCardFront" alt="身分證正面">
+              <button class="id-card-remove" @click.stop="removeIdCard('front')">✕</button>
+            </div>
+            <input type="file" x-ref="idCardInputFront" accept="image/*" style="display:none" @change="handleIdCardFile($event,'front')">
+            <div x-show="idCardFrontPreview || idCardFront" style="margin-top:6px;display:flex;align-items:center;gap:8px">
+              <label class="btn btn-ghost btn-sm" style="cursor:pointer">
+                重新上傳<input type="file" accept="image/*" style="display:none" @change="handleIdCardFile($event,'front')">
+              </label>
+              <span style="font-size:11px">
+                <span x-show="idCardFrontPreview" style="color:var(--warning)">● 未儲存</span>
+                <span x-show="!idCardFrontPreview && idCardFront" style="color:var(--success)">● 已上傳</span>
+              </span>
+            </div>
+          </div>
+          <!-- 反面 -->
+          <div>
+            <div style="font-size:12px;font-weight:500;color:var(--text-secondary);margin-bottom:7px">反面</div>
+            <div x-show="!idCardBackPreview && !idCardBack" class="id-card-drop"
+                 @click="$refs.idCardInputBack.click()"
+                 @dragover.prevent @drop.prevent="handleIdCardDrop($event,'back')">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin:0 auto 6px;display:block;opacity:.4">
+                <rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/>
+                <circle cx="8" cy="14.5" r="1.5"/><path d="M13 13h5M13 16h3"/>
+              </svg>
+              點擊或拖曳上傳<br><span style="font-size:11px">JPG / PNG / WEBP &lt; 3 MB</span>
+            </div>
+            <div x-show="idCardBackPreview || idCardBack" class="id-card-preview">
+              <img :src="idCardBackPreview || idCardBack" alt="身分證反面">
+              <button class="id-card-remove" @click.stop="removeIdCard('back')">✕</button>
+            </div>
+            <input type="file" x-ref="idCardInputBack" accept="image/*" style="display:none" @change="handleIdCardFile($event,'back')">
+            <div x-show="idCardBackPreview || idCardBack" style="margin-top:6px;display:flex;align-items:center;gap:8px">
+              <label class="btn btn-ghost btn-sm" style="cursor:pointer">
+                重新上傳<input type="file" accept="image/*" style="display:none" @change="handleIdCardFile($event,'back')">
+              </label>
+              <span style="font-size:11px">
+                <span x-show="idCardBackPreview" style="color:var(--warning)">● 未儲存</span>
+                <span x-show="!idCardBackPreview && idCardBack" style="color:var(--success)">● 已上傳</span>
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-section">
+        <div class="form-section-title">銀行存簿影本</div>
+        <div x-show="!bankPassbookPreview && !bankPassbook" class="id-card-drop"
+             @click="$refs.passbookInput.click()"
+             @dragover.prevent @drop.prevent="handleIdCardDrop($event,'passbook')">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin:0 auto 6px;display:block;opacity:.4">
+            <rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 4v5M16 4v5"/>
           </svg>
-          點擊或拖曳上傳<br>
+          點擊或拖曳上傳存摺封面（含帳號頁）<br>
           <span style="font-size:11px">JPG / PNG / WEBP &lt; 3 MB</span>
         </div>
-        <div x-show="idCardFrontPreview || idCardFront" class="id-card-preview">
-          <img :src="idCardFrontPreview || idCardFront" alt="身分證正面">
-          <button class="id-card-remove" @click.stop="removeIdCard('front')">✕</button>
+        <div x-show="bankPassbookPreview || bankPassbook" class="id-card-preview">
+          <img :src="bankPassbookPreview || bankPassbook" alt="銀行存簿">
+          <button class="id-card-remove" @click.stop="removeIdCard('passbook')">✕</button>
         </div>
-        <input type="file" x-ref="idCardInputFront" accept="image/*" style="display:none"
-               @change="handleIdCardFile($event,'front')">
-        <div x-show="idCardFrontPreview || idCardFront"
-             style="margin-top:6px;display:flex;align-items:center;gap:8px">
-          <label class="action-btn" style="cursor:pointer;font-size:12px">
-            重新上傳<input type="file" accept="image/*" style="display:none" @change="handleIdCardFile($event,'front')">
+        <input type="file" x-ref="passbookInput" accept="image/*" style="display:none" @change="handleIdCardFile($event,'passbook')">
+        <div x-show="bankPassbookPreview || bankPassbook" style="margin-top:6px;display:flex;align-items:center;gap:8px">
+          <label class="btn btn-ghost btn-sm" style="cursor:pointer">
+            重新上傳<input type="file" accept="image/*" style="display:none" @change="handleIdCardFile($event,'passbook')">
           </label>
           <span style="font-size:11px">
-            <span x-show="idCardFrontPreview" style="color:var(--warning)">● 未儲存</span>
-            <span x-show="!idCardFrontPreview && idCardFront" style="color:var(--success)">● 已上傳</span>
+            <span x-show="bankPassbookPreview" style="color:var(--warning)">● 未儲存</span>
+            <span x-show="!bankPassbookPreview && bankPassbook" style="color:var(--success)">● 已上傳</span>
           </span>
         </div>
       </div>
-      <!-- 反面 -->
-      <div>
-        <div style="font-size:12px;font-weight:500;color:var(--text-secondary);margin-bottom:6px">反面</div>
-        <div x-show="!idCardBackPreview && !idCardBack" class="id-card-drop"
-             @click="$refs.idCardInputBack.click()"
-             @dragover.prevent @drop.prevent="handleIdCardDrop($event,'back')">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
-               style="margin:0 auto 6px;display:block;opacity:.4">
-            <rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/>
-            <circle cx="8" cy="14.5" r="1.5"/><path d="M13 13h5M13 16h3"/>
-          </svg>
-          點擊或拖曳上傳<br>
-          <span style="font-size:11px">JPG / PNG / WEBP &lt; 3 MB</span>
-        </div>
-        <div x-show="idCardBackPreview || idCardBack" class="id-card-preview">
-          <img :src="idCardBackPreview || idCardBack" alt="身分證反面">
-          <button class="id-card-remove" @click.stop="removeIdCard('back')">✕</button>
-        </div>
-        <input type="file" x-ref="idCardInputBack" accept="image/*" style="display:none"
-               @change="handleIdCardFile($event,'back')">
-        <div x-show="idCardBackPreview || idCardBack"
-             style="margin-top:6px;display:flex;align-items:center;gap:8px">
-          <label class="action-btn" style="cursor:pointer;font-size:12px">
-            重新上傳<input type="file" accept="image/*" style="display:none" @change="handleIdCardFile($event,'back')">
-          </label>
-          <span style="font-size:11px">
-            <span x-show="idCardBackPreview" style="color:var(--warning)">● 未儲存</span>
-            <span x-show="!idCardBackPreview && idCardBack" style="color:var(--success)">● 已上傳</span>
-          </span>
+
+      <div class="form-section">
+        <div class="form-section-title">備注</div>
+        <div class="form-group">
+          <textarea class="form-textarea" x-model="form.notes" rows="2"></textarea>
         </div>
       </div>
+
+      <div x-show="errMsg" style="color:var(--danger);font-size:13px;padding:0 0 4px" x-text="errMsg"></div>
     </div>
-
-    <div class="section-label">備注</div>
-    <div class="form-row full">
-      <div class="form-group">
-        <textarea x-model="form.notes" rows="2" style="resize:vertical"></textarea>
-      </div>
-    </div>
-
-    <div x-show="errMsg" style="color:var(--danger);font-size:13px;margin-top:8px" x-text="errMsg"></div>
-
-    <div class="btn-row">
-      <button class="action-btn" x-show="editId"
-              :style="activeTarget ? 'color:var(--danger)' : ''"
+    <div class="modal-foot">
+      <button x-show="editId" class="btn" style="margin-right:auto"
+              :class="activeTarget ? 'btn-danger' : 'btn-ghost'"
               @click="toggleActive()"
-              x-text="activeTarget ? '停用' : '啟用'"></button>
-      <button class="action-btn" @click="showModal=false">取消</button>
-      <button class="action-btn action-btn--primary" @click="save()" :disabled="saving">
+              x-text="activeTarget ? '停用此人員' : '重新啟用'"></button>
+      <button class="btn btn-ghost" @click="showModal=false">取消</button>
+      <button class="btn btn-primary" @click="save()" :disabled="saving">
         <span x-text="saving ? '儲存中…' : '儲存'"></span>
       </button>
     </div>
@@ -275,17 +469,22 @@ function contractorsPage() {
     saving: false,
     errMsg: '',
     form: {},
-    idCardFront: '',        // saved in DB (正面)
-    idCardFrontPreview: null, // null=unchanged, ''=remove, base64=new
-    idCardBack: '',         // saved in DB (反面)
+    idCardFront: '',
+    idCardFrontPreview: null,
+    idCardBack: '',
     idCardBackPreview: null,
+    bankPassbook: '',
+    bankPassbookPreview: null,
+    selectedId: null,
+    selectedContractor: null,
 
     async init() {
       const s = localStorage.getItem('motrix_session')
       if (!s) { window.location.href = 'login.html'; return }
       this.session = JSON.parse(s)
-      if (this.session.role !== 'superadmin') {
-        alert('此頁面僅限最高權限使用者存取'); window.history.back(); return
+      const mods = this.session.modules || []
+      if (this.session.role !== 'superadmin' && !mods.includes('contractor_list')) {
+        alert('此頁面僅限最高權限使用者或具有「外包名冊」模組授權的使用者存取'); window.history.back(); return
       }
       await this.load()
     },
@@ -298,9 +497,21 @@ function contractorsPage() {
         const r = await fetch(`${API}/contractors?${params}`, {
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
-        if (r.ok) this.contractors = await r.json()
+        if (r.ok) {
+          this.contractors = await r.json()
+          if (this.selectedId) {
+            const fresh = this.contractors.find(c => c.id === this.selectedId)
+            if (fresh) this.selectedContractor = { ...fresh }
+            else { this.selectedId = null; this.selectedContractor = null }
+          }
+        }
       } catch(e) {}
       this.loading = false
+    },
+
+    selectContractor(c) {
+      this.selectedId = c.id
+      this.selectedContractor = { ...c }
     },
 
     _blank() {
@@ -317,6 +528,7 @@ function contractorsPage() {
       this.form = this._blank()
       this.idCardFront = ''; this.idCardFrontPreview = null
       this.idCardBack  = ''; this.idCardBackPreview  = null
+      this.bankPassbook = ''; this.bankPassbookPreview = null
       this.errMsg = ''
       this.showModal = true
     },
@@ -327,6 +539,7 @@ function contractorsPage() {
       this.form = { ...c }
       this.idCardFront = ''; this.idCardFrontPreview = null
       this.idCardBack  = ''; this.idCardBackPreview  = null
+      this.bankPassbook = ''; this.bankPassbookPreview = null
       this.errMsg = ''
       this.showModal = true
       try {
@@ -335,8 +548,9 @@ function contractorsPage() {
         })
         if (r.ok) {
           const d = await r.json()
-          this.idCardFront = d.image_front || ''
-          this.idCardBack  = d.image_back  || ''
+          this.idCardFront  = d.image_front  || ''
+          this.idCardBack   = d.image_back   || ''
+          this.bankPassbook = d.bank_passbook || ''
         }
       } catch(e) {}
     },
@@ -347,8 +561,9 @@ function contractorsPage() {
       if (file.size > 3 * 1024 * 1024) { this.errMsg = '圖片過大（限 3 MB）'; return }
       const reader = new FileReader()
       reader.onload = (ev) => {
-        if (which === 'front') this.idCardFrontPreview = ev.target.result
-        else                   this.idCardBackPreview  = ev.target.result
+        if (which === 'front')    this.idCardFrontPreview    = ev.target.result
+        else if (which === 'back') this.idCardBackPreview    = ev.target.result
+        else                       this.bankPassbookPreview  = ev.target.result
       }
       reader.readAsDataURL(file)
       e.target.value = ''
@@ -360,15 +575,17 @@ function contractorsPage() {
       if (file.size > 3 * 1024 * 1024) { this.errMsg = '圖片過大（限 3 MB）'; return }
       const reader = new FileReader()
       reader.onload = (ev) => {
-        if (which === 'front') this.idCardFrontPreview = ev.target.result
-        else                   this.idCardBackPreview  = ev.target.result
+        if (which === 'front')    this.idCardFrontPreview    = ev.target.result
+        else if (which === 'back') this.idCardBackPreview    = ev.target.result
+        else                       this.bankPassbookPreview  = ev.target.result
       }
       reader.readAsDataURL(file)
     },
 
     removeIdCard(which) {
-      if (which === 'front') { this.idCardFrontPreview = ''; this.idCardFront = '' }
-      else                   { this.idCardBackPreview  = ''; this.idCardBack  = '' }
+      if (which === 'front')    { this.idCardFrontPreview = '';    this.idCardFront   = '' }
+      else if (which === 'back') { this.idCardBackPreview  = '';   this.idCardBack    = '' }
+      else                       { this.bankPassbookPreview = '';  this.bankPassbook  = '' }
     },
 
     async save() {
@@ -386,16 +603,17 @@ function contractorsPage() {
         if (!r.ok) { this.errMsg = await r.text(); this.saving = false; return }
         const d = await r.json()
         const targetId = this.editId || d.id
-        // Upload ID card if either side changed (null=unchanged, ''=remove, base64=new)
-        const frontChanged = this.idCardFrontPreview !== null
-        const backChanged  = this.idCardBackPreview  !== null
-        if ((frontChanged || backChanged) && targetId) {
+        const frontChanged    = this.idCardFrontPreview    !== null
+        const backChanged     = this.idCardBackPreview     !== null
+        const passbookChanged = this.bankPassbookPreview   !== null
+        if ((frontChanged || backChanged || passbookChanged) && targetId) {
           await fetch(`${API}/contractors/${targetId}/id-card`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
             body: JSON.stringify({
-              image_front: frontChanged ? this.idCardFrontPreview : this.idCardFront,
-              image_back:  backChanged  ? this.idCardBackPreview  : this.idCardBack
+              image_front:   frontChanged    ? this.idCardFrontPreview   : this.idCardFront,
+              image_back:    backChanged     ? this.idCardBackPreview    : this.idCardBack,
+              bank_passbook: passbookChanged ? this.bankPassbookPreview  : this.bankPassbook
             })
           })
         }
@@ -418,6 +636,18 @@ function contractorsPage() {
         this.showModal = false
         await this.load()
       }
+    },
+
+    async toggleActiveFromPane() {
+      if (!this.selectedId || !this.selectedContractor) return
+      const c = this.selectedContractor
+      const action = c.active ? '停用' : '啟用'
+      if (!confirm(`確定要${action}「${c.name}」？`)) return
+      const r = await fetch(`${API}/contractors/${this.selectedId}/active`, {
+        method: 'PATCH',
+        headers: { Authorization: 'Bearer ' + this.session.token }
+      })
+      if (r.ok) await this.load()
     }
   }
 }

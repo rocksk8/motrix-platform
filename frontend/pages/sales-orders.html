@@ -1,11 +1,10 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="../static/favicon.png">
   <title>銷售訂單 — MOTRIX 營運管理系統</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600&display=swap" rel="stylesheet">
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
   <link rel="stylesheet" href="../css/style.css">
   <style>
@@ -13,8 +12,8 @@
     .page-main{margin-left:var(--sidebar-w);margin-top:var(--topbar-h);padding:28px 32px;min-height:calc(100vh - var(--topbar-h));background:var(--white)}
     .stat-strip{display:flex;gap:12px;margin-bottom:22px;flex-wrap:wrap}
     .stat-pill{display:flex;flex-direction:column;padding:14px 18px;border:1px solid var(--border-light);border-radius:var(--radius-lg);background:#fff;min-width:130px;flex:1;max-width:200px}
-    .stat-pill__val{font-size:22px;font-weight:700;font-family:Inter,sans-serif;line-height:1;color:var(--text-primary)}
-    .stat-pill__lbl{font-size:10px;color:var(--text-dim);font-family:Inter,sans-serif;letter-spacing:.06em;margin-top:4px;text-transform:uppercase}
+    .stat-pill__val{font-size:22px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;line-height:1;color:var(--text-primary)}
+    .stat-pill__lbl{font-size:10px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.06em;margin-top:4px;text-transform:uppercase}
     .stat-pill.accent .stat-pill__val{color:var(--accent)}
     .stat-pill.success .stat-pill__val{color:var(--success)}
     .toolbar{display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap}
@@ -24,7 +23,7 @@
     .search-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(37,99,235,.08)}
     .panel{background:#fff;border:1px solid var(--border-light);border-radius:var(--radius-lg);overflow:hidden}
     .data-table{width:100%;border-collapse:collapse;font-size:13px}
-    .data-table th{padding:10px 14px;text-align:left;font-size:10px;font-family:Inter,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);font-weight:500;background:#FAFAF8;border-bottom:1px solid var(--border-light);white-space:nowrap}
+    .data-table th{padding:10px 14px;text-align:left;font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);font-weight:500;background:#FAFAF8;border-bottom:1px solid var(--border-light);white-space:nowrap}
     .data-table td{padding:11px 14px;border-bottom:1px solid #F0EEE9;vertical-align:middle}
     .data-table tr:last-child td{border-bottom:none}
     .data-table tr:hover td{background:#FDFCFA;cursor:pointer}
@@ -84,6 +83,7 @@
       <div class="loading-text" x-show="loading">載入中…</div>
       <template x-if="!loading">
         <div>
+          <div class="table-scroll">
           <table class="data-table" x-show="filtered.length > 0">
             <thead>
               <tr>
@@ -101,14 +101,14 @@
             <tbody>
               <template x-for="o in filtered" :key="o.quoteNo">
                 <tr @click="location.href='case-management.html?q='+o.quoteNo">
-                  <td><span style="font-family:Inter,sans-serif;font-size:12px;font-weight:600;color:var(--accent)" x-text="o.quoteNo"></span></td>
+                  <td><span style="font-family:LINE Seed TW_OTF, sans-serif;font-size:12px;font-weight:600;color:var(--accent)" x-text="o.quoteNo"></span></td>
                   <td style="font-size:12px" x-text="o.customer || '—'"></td>
                   <td style="font-size:12px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" x-text="o.projectName || '—'"></td>
                   <td><span class="rb" :class="o.dealTag==='已結案'?'rb-closed':'rb-case'" x-text="o.dealTag"></span></td>
-                  <td style="text-align:right;font-family:Inter,sans-serif;font-size:13px;font-weight:600" x-text="'NT$ ' + Math.round(o.total||0).toLocaleString()"></td>
+                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-size:13px;font-weight:600" x-text="'NT$ ' + Math.round(o.total||0).toLocaleString()"></td>
                   <td style="text-align:right">
                     <span x-show="o.netMarginPct != null"
-                          :style="'font-family:Inter,sans-serif;font-size:12px;font-weight:600;color:' + (o.netMarginPct >= 40 ? 'var(--success)' : o.netMarginPct >= 30 ? 'var(--warning)' : 'var(--danger)')"
+                          :style="'font-family:LINE Seed TW_OTF, sans-serif;font-size:12px;font-weight:600;color:' + (o.netMarginPct >= 40 ? 'var(--success)' : o.netMarginPct >= 30 ? 'var(--warning)' : 'var(--danger)')"
                           x-text="(o.netMarginPct||0).toFixed(1) + '%'"></span>
                     <span x-show="o.netMarginPct == null" style="color:var(--text-dim);font-size:11px">—</span>
                   </td>
@@ -117,10 +117,10 @@
                       <div class="progress-bar" style="flex:1">
                         <div class="progress-bar__fill" :style="'width:' + (o.progressPct||0) + '%'"></div>
                       </div>
-                      <span style="font-family:Inter,sans-serif;font-size:11px;color:var(--text-dim);flex-shrink:0" x-text="(o.progressPct||0) + '%'"></span>
+                      <span style="font-family:LINE Seed TW_OTF, sans-serif;font-size:11px;color:var(--text-dim);flex-shrink:0" x-text="(o.progressPct||0) + '%'"></span>
                     </div>
                   </td>
-                  <td style="font-family:Inter,sans-serif;font-size:11px;color:var(--text-dim)" x-text="o.quoteDate"></td>
+                  <td style="font-family:LINE Seed TW_OTF, sans-serif;font-size:11px;color:var(--text-dim)" x-text="o.quoteDate"></td>
                   <td @click.stop>
                     <a :href="'case-management.html?q=' + o.quoteNo"
                        style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:var(--radius);font-size:11px;font-family:var(--font-zh);font-weight:500;background:#EEF2FF;color:#4338CA;border:1px solid #C7D2FE;text-decoration:none">
@@ -131,6 +131,7 @@
               </template>
             </tbody>
           </table>
+          </div>
           <div class="empty-state" x-show="filtered.length === 0">
             <div style="font-size:32px;margin-bottom:10px">📋</div>
             <div>尚無銷售訂單</div>

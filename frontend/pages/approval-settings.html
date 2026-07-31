@@ -1,11 +1,10 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="../static/favicon.png">
   <title>簽核設定 — MOTRIX 營運管理系統</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600&display=swap" rel="stylesheet">
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
   <link rel="stylesheet" href="../css/style.css">
   <style>
@@ -66,14 +65,14 @@
       width: 28px; height: 28px; border-radius: 50%;
       background: var(--accent); color: #fff;
       display: flex; align-items: center; justify-content: center;
-      font-size: 12px; font-weight: 700; font-family: Inter, sans-serif;
+      font-size: 12px; font-weight: 700; font-family: 'LINE Seed TW_OTF', sans-serif;
       flex-shrink: 0;
     }
     .as-step-info { flex: 1; min-width: 0; }
     .as-step-name { font-size: 13px; font-weight: 600; color: var(--text-main); }
     .as-step-role {
       font-size: 11px; color: var(--text-dim); margin-top: 2px;
-      font-family: Inter, sans-serif;
+      font-family: 'LINE Seed TW_OTF', sans-serif;
     }
     .as-step-actions { display: flex; gap: 4px; flex-shrink: 0; }
     .as-step-btn {
@@ -114,7 +113,7 @@
     /* Role badge */
     .role-badge {
       display: inline-block; padding: 1px 7px; border-radius: 10px;
-      font-size: 10px; font-weight: 700; font-family: Inter, sans-serif;
+      font-size: 10px; font-weight: 700; font-family: 'LINE Seed TW_OTF', sans-serif;
     }
     .role-superadmin { background: #FEE2E2; color: #991B1B; }
     .role-admin      { background: #FEF3C7; color: #92400E; }
@@ -167,7 +166,7 @@
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--accent)"><path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
         <div class="as-card-head-title">簽核順序</div>
         <span x-show="steps.length > 0"
-              style="font-size:11px;color:var(--text-dim);font-family:Inter,sans-serif"
+              style="font-size:11px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif"
               x-text="steps.length + ' 個步驟'"></span>
       </div>
       <div class="as-card-body">
@@ -205,7 +204,7 @@
                 <div class="as-step-info">
                   <div class="as-step-name" x-text="step.displayName"></div>
                   <div class="as-step-role">
-                    <span x-text="step.username" style="font-family:Inter,sans-serif"></span>
+                    <span x-text="step.username" style="font-family:LINE Seed TW_OTF, sans-serif"></span>
                     <span class="role-badge" :class="'role-' + step.role" x-text="roleLabel(step.role)" style="margin-left:5px"></span>
                   </div>
                 </div>
@@ -281,7 +280,7 @@
   </main>
 
   <script>
-    const API = ''
+    const API = '/api'
 
     function approvalSettingsApp() {
       return {
@@ -312,14 +311,16 @@
 
         async loadFlow() {
           try {
-            const r = await fetch(`${API}/api/settings/approval-flow`, {
+            const r = await fetch(`${API}/settings/approval-flow`, {
               headers: { Authorization: 'Bearer ' + this.session.token }
             })
             if (r.status === 401) { location.href = 'login.html'; return }
             const d = await r.json()
-            const rawSteps = d.steps || []
-            // Merge with user data (to get role/current displayName)
-            this.steps = rawSteps.map(s => ({ ...s, _id: ++this._idCounter }))
+            // API returns { tiers: [{order, approvers:[{userId,username,displayName}]}] }
+            const tiers = d.tiers || []
+            this.steps = tiers.flatMap(tier =>
+              (tier.approvers || []).map(a => ({ ...a, _id: ++this._idCounter }))
+            )
           } catch (e) {
             console.error('loadFlow', e)
           }
@@ -327,7 +328,7 @@
 
         async loadUsers() {
           try {
-            const r = await fetch(`${API}/api/users`, {
+            const r = await fetch(`${API}/users`, {
               headers: { Authorization: 'Bearer ' + this.session.token }
             })
             if (r.status === 401) { location.href = 'login.html'; return }
@@ -387,13 +388,16 @@
           this.saving = true
           try {
             const payload = {
-              steps: this.steps.map(s => ({
-                userId:      s.userId,
-                username:    s.username,
-                displayName: s.displayName,
+              tiers: this.steps.map((s, i) => ({
+                order: i,
+                approvers: [{
+                  userId:      s.userId,
+                  username:    s.username,
+                  displayName: s.displayName,
+                }]
               }))
             }
-            const r = await fetch(`${API}/api/settings/approval-flow`, {
+            const r = await fetch(`${API}/settings/approval-flow`, {
               method: 'PUT',
               headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
               body: JSON.stringify(payload)
@@ -425,13 +429,14 @@
         _toast(msg, bg = '#0A0A0A') {
           const el = document.createElement('div')
           el.textContent = msg
-          el.style.cssText = `position:fixed;bottom:32px;left:50%;transform:translateX(-50%);background:${bg};color:#fff;padding:10px 22px;border-radius:8px;font-size:13px;z-index:99999;font-family:Inter,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.3)`
+          el.style.cssText = `position:fixed;bottom:32px;left:50%;transform:translateX(-50%);background:${bg};color:#fff;padding:10px 22px;border-radius:8px;font-size:13px;z-index:99999;font-family:LINE Seed TW_OTF, sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.3)`
           document.body.appendChild(el)
           setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'opacity .4s'; setTimeout(() => el.remove(), 400) }, 2400)
         },
       }
     }
   </script>
+  <script src="../static/notif.js"></script>
   <script src="../static/sidebar.js"></script>
 </body>
 </html>

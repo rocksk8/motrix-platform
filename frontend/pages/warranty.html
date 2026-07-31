@@ -1,11 +1,10 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="../static/favicon.png">
   <title>保固追蹤 — MOTRIX 營運管理系統</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600&display=swap" rel="stylesheet">
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
   <link rel="stylesheet" href="../css/style.css">
   <style>
@@ -14,8 +13,8 @@
 
     .stat-strip{display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap}
     .stat-pill{display:flex;align-items:center;gap:8px;padding:10px 16px;border:1px solid var(--border-light);border-radius:var(--radius-lg);background:#fff;min-width:110px}
-    .stat-pill__val{font-size:20px;font-weight:700;font-family:Inter,sans-serif;line-height:1}
-    .stat-pill__lbl{font-size:10px;color:var(--text-dim);font-family:Inter,sans-serif;letter-spacing:.06em;margin-top:2px}
+    .stat-pill__val{font-size:20px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;line-height:1}
+    .stat-pill__lbl{font-size:10px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.06em;margin-top:2px}
 
     .filter-bar{display:flex;align-items:center;gap:10px;margin-bottom:18px;flex-wrap:wrap}
     .search-wrap{position:relative;flex:0 0 300px}
@@ -27,16 +26,16 @@
     .tab{padding:7px 14px;font-size:12px;font-family:var(--font-zh);cursor:pointer;border:none;background:none;color:var(--text-secondary);border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .12s}
     .tab:hover{color:var(--text-primary)}
     .tab.on{color:var(--accent);border-bottom-color:var(--accent);font-weight:600}
-    .tab__cnt{font-family:Inter,sans-serif;font-size:10px;font-weight:600;margin-left:4px;padding:1px 5px;border-radius:8px;background:#F0EEE9}
+    .tab__cnt{font-family:LINE Seed TW_OTF, sans-serif;font-size:10px;font-weight:600;margin-left:4px;padding:1px 5px;border-radius:8px;background:#F0EEE9}
     .tab.on .tab__cnt{background:var(--accent-light);color:var(--accent)}
 
-    .wb{display:inline-flex;align-items:center;padding:2px 8px;border-radius:4px;font-size:11px;font-family:Inter,sans-serif;font-weight:600}
+    .wb{display:inline-flex;align-items:center;padding:2px 8px;border-radius:4px;font-size:11px;font-family:LINE Seed TW_OTF, sans-serif;font-weight:600}
     .wb-expired{background:var(--danger-light);color:var(--danger)}
     .wb-soon{background:var(--warning-light);color:var(--warning)}
     .wb-ok{background:var(--success-light);color:var(--success)}
     .wb-none{background:#F3F4F6;color:#6B7280}
 
-    .dt{display:inline-flex;padding:2px 7px;border-radius:3px;font-size:10px;font-family:Inter,sans-serif;font-weight:600}
+    .dt{display:inline-flex;padding:2px 7px;border-radius:3px;font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;font-weight:600}
     .dt-active{background:#DBEAFE;color:#1D4ED8}
     .dt-closed{background:#F0EEE9;color:#6B7280}
     .dt-none{background:#F3F4F6;color:#9CA3AF}
@@ -49,20 +48,21 @@
     .cust-chevron.open{transform:rotate(90deg)}
     .cust-name{font-weight:600;font-size:14px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .cust-meta{display:flex;align-items:center;gap:8px;flex-shrink:0}
-    .cust-count{font-family:Inter,sans-serif;font-size:11px;color:var(--text-dim)}
+    .cust-count{font-family:LINE Seed TW_OTF, sans-serif;font-size:11px;color:var(--text-dim)}
 
     .cases-wrap{border-top:1px solid var(--border-light);padding:12px 16px;display:flex;flex-direction:column;gap:10px;background:#FAFAF8}
     .case-block{border:1px solid var(--border-light);border-radius:var(--radius);background:#fff;overflow:hidden}
+    @media(max-width:767px){.case-block{overflow-x:auto;-webkit-overflow-scrolling:touch}.dev-table{min-width:460px}}
     .case-header{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid #F0EEE9;flex-wrap:wrap}
-    .case-qno{font-family:Inter,sans-serif;font-size:11px;font-weight:600;color:var(--accent);flex-shrink:0}
+    .case-qno{font-family:LINE Seed TW_OTF, sans-serif;font-size:11px;font-weight:600;color:var(--accent);flex-shrink:0}
     .case-name{font-size:12px;color:var(--text-secondary);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-    .case-count{font-family:Inter,sans-serif;font-size:10px;color:var(--text-dim);flex-shrink:0}
+    .case-count{font-family:LINE Seed TW_OTF, sans-serif;font-size:10px;color:var(--text-dim);flex-shrink:0}
 
     .dev-table{width:100%;border-collapse:collapse;font-size:12px}
-    .dev-table th{padding:7px 12px;text-align:left;font-size:10px;font-family:Inter,sans-serif;letter-spacing:.07em;text-transform:uppercase;color:var(--text-dim);font-weight:500;background:#FAFAF8;border-bottom:1px solid #F0EEE9;white-space:nowrap}
+    .dev-table th{padding:7px 12px;text-align:left;font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.07em;text-transform:uppercase;color:var(--text-dim);font-weight:500;background:#FAFAF8;border-bottom:1px solid #F0EEE9;white-space:nowrap}
     .dev-table td{padding:9px 12px;border-bottom:1px solid #F0EEE9;vertical-align:middle;color:var(--text-primary)}
     .dev-table tr:last-child td{border-bottom:none}
-    .mono{font-family:Inter,sans-serif;font-size:11px;letter-spacing:.03em}
+    .mono{font-family:LINE Seed TW_OTF, sans-serif;font-size:11px;letter-spacing:.03em}
 
     .empty{text-align:center;padding:60px 20px;color:var(--text-dim)}
     @keyframes spin{to{transform:rotate(360deg)}}
@@ -92,7 +92,7 @@
       <div>
         <div style="font-size:11px;color:var(--text-dim);margin-bottom:4px">設備管理</div>
         <h1 style="font-size:20px;font-weight:700">保固追蹤</h1>
-        <p style="font-size:12px;color:var(--text-secondary);margin-top:4px">依客戶 → 案件分組，監控設備保固狀態</p>
+        <p style="font-size:12px;color:var(--text-secondary);margin-top:4px">依客戶 → 案件分組，監控設備保固狀態（含已成案 / 已結案）</p>
       </div>
       <div style="display:flex;gap:8px">
         <button class="topbar__btn" style="font-size:11px" @click="expandAll()">展開全部</button>
@@ -262,7 +262,7 @@
       async load() {
         this.loading = true
         try {
-          const r = await fetch('/api/devices?deal_tag=%E5%B7%B2%E7%B5%90%E6%A1%88', {
+          const r = await fetch('/api/devices', {
             headers: { Authorization: 'Bearer ' + this.session.token }
           })
           if (r.status === 401) { this.logout(); return }

@@ -1,11 +1,10 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="../static/favicon.png">
   <title>歷史紀錄 — MOTRIX 營運管理系統</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600&display=swap" rel="stylesheet">
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
   <link rel="stylesheet" href="../css/style.css">
   <style>
@@ -53,10 +52,10 @@
       display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
     }
     .tl-user { font-weight: 500; color: var(--text-secondary); }
-    .tl-time { font-family: Inter, sans-serif; }
+    .tl-time { font-family: 'LINE Seed TW_OTF', sans-serif; }
     .badge-action {
       display: inline-block; padding: 1px 7px; border-radius: 10px;
-      font-size: 10px; font-weight: 700; font-family: Inter, sans-serif;
+      font-size: 10px; font-weight: 700; font-family: 'LINE Seed TW_OTF', sans-serif;
     }
     .pager {
       display: flex; gap: 6px; align-items: center; justify-content: center;
@@ -69,7 +68,7 @@
     }
     .pager button:hover { background: var(--bg); }
     .pager button:disabled { opacity: .4; cursor: default; }
-    .pager-info { font-size: 12px; color: var(--text-dim); font-family: Inter, sans-serif; }
+    .pager-info { font-size: 12px; color: var(--text-dim); font-family: 'LINE Seed TW_OTF', sans-serif; }
     .immutable-note {
       display: flex; align-items: center; gap: 8px;
       background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: var(--radius);
@@ -108,7 +107,11 @@
           <option value="quotation.create">新增報價單</option>
           <option value="quotation.submit">送出審核</option>
           <option value="quotation.approve">簽核通過</option>
+          <option value="quotation.return">退回重審</option>
+          <option value="quotation.reject_final">最終否決</option>
           <option value="quotation.update">更新報價單</option>
+          <option value="quotation.recall">撤回報價單</option>
+          <option value="quotation.unlock_edit">解鎖編輯</option>
           <option value="quotation.delete">刪除報價單</option>
           <option value="quotation.export_pdf">匯出 PDF</option>
           <option value="deal_tag.change">案件進度</option>
@@ -116,20 +119,79 @@
         </optgroup>
         <optgroup label="案件管理">
           <option value="case.update">案件資料更新</option>
+          <option value="payment.mark">收款標記</option>
+        </optgroup>
+        <optgroup label="業務開發">
+          <option value="dev_case.create">新增開發案件</option>
+          <option value="dev_case.update">更新開發案件</option>
+          <option value="dev_case.status">案件狀態變更</option>
+          <option value="dev_case.convert">轉換報價單</option>
+          <option value="dev_case.delete_request">申請刪除</option>
+          <option value="dev_case.delete_cancel">取消刪除申請</option>
+          <option value="dev_case.delete">核准刪除</option>
+          <option value="dev_case.delete_reject">否決刪除申請</option>
+          <option value="dev_log.create">新增開發紀錄</option>
+          <option value="dev_log.update">更新開發紀錄</option>
+          <option value="dev_log.delete">刪除開發紀錄</option>
+          <option value="dev_log.approve">審核開發紀錄</option>
+        </optgroup>
+        <optgroup label="客戶管理">
+          <option value="customer.create">新增客戶</option>
+          <option value="customer.update">更新客戶</option>
+          <option value="customer.delete">刪除客戶</option>
+          <option value="customer.visit.update">拜訪紀錄更新</option>
+        </optgroup>
+        <optgroup label="供應商">
+          <option value="supplier.create">新增供應商</option>
+          <option value="supplier.update">更新供應商</option>
+          <option value="supplier.delete">刪除供應商</option>
+          <option value="supplier.visit.update">拜訪紀錄更新</option>
+        </optgroup>
+        <optgroup label="承攬商管理">
+          <option value="vendor.create">新增承攬商</option>
+          <option value="vendor.update">更新承攬商</option>
+          <option value="vendor.activate">啟用承攬商</option>
+          <option value="vendor.deactivate">停用承攬商</option>
+          <option value="vendor.delete">刪除承攬商</option>
+          <option value="vendor.visit.update">拜訪紀錄更新</option>
+          <option value="vendor.dispatch.create">新增派工</option>
+          <option value="vendor.dispatch.update">更新派工</option>
+          <option value="vendor.dispatch.delete">刪除派工</option>
+          <option value="vendor.dispatch.pending_acceptance">派工待確認</option>
+          <option value="vendor.dispatch.accepted">派工已接受</option>
+          <option value="vendor.dispatch.import">匯入派工</option>
         </optgroup>
         <optgroup label="料號主檔">
           <option value="part.create">新增料號</option>
           <option value="part.update">更新料號</option>
           <option value="part.delete">刪除料號</option>
         </optgroup>
-        <optgroup label="客戶">
-          <option value="customer.create">新增客戶</option>
-          <option value="customer.update">更新客戶</option>
-          <option value="customer.delete">刪除客戶</option>
-          <option value="customer.visit.update">拜訪紀錄更新</option>
+        <optgroup label="專案管理">
+          <option value="project.create">新增專案</option>
+          <option value="project.update">更新專案</option>
+          <option value="project.status">專案狀態變更</option>
+          <option value="project.assign">指派人員</option>
+          <option value="project.delete">刪除專案</option>
+          <option value="project.log.create">新增工程紀錄</option>
         </optgroup>
-        <optgroup label="財務">
-          <option value="payment.mark">收款標記</option>
+        <optgroup label="每日工作事項">
+          <option value="daily_task.create">新增工作事項</option>
+          <option value="daily_task.update">更新工作事項</option>
+          <option value="daily_task.delete">刪除工作事項</option>
+          <option value="daily_task.complete">標記完成</option>
+          <option value="daily_task.uncomplete">取消完成</option>
+        </optgroup>
+        <optgroup label="外包名冊">
+          <option value="contractor.create">新增外包人員</option>
+          <option value="contractor.update">更新外包人員</option>
+          <option value="contractor.activate">啟用外包人員</option>
+          <option value="contractor.deactivate">停用外包人員</option>
+          <option value="contractor.id_card.update">更新身分證影本</option>
+        </optgroup>
+        <optgroup label="勞報單">
+          <option value="payslip.create">新增勞報單</option>
+          <option value="payslip.update">更新勞報單</option>
+          <option value="payslip.delete">刪除勞報單</option>
         </optgroup>
         <optgroup label="系統">
           <option value="auth.login">使用者登入</option>
@@ -139,9 +201,19 @@
           <option value="user.update">更新使用者</option>
           <option value="user.delete">刪除使用者</option>
           <option value="user.active">啟用／停用帳號</option>
+          <option value="user.set_unlock_password">設定報價解鎖密碼</option>
+          <option value="user.set_daily_task_password">設定任務解鎖密碼</option>
+          <option value="quotation.unlock">報價單解鎖密碼</option>
+          <option value="daily_task.admin_unlock">每日任務管理解鎖</option>
+          <option value="settings.approval_flow.update">審核流程設定</option>
+          <option value="settings.operating_targets.update">營運目標設定</option>
+          <option value="settings.company_profile.update">公司資料設定</option>
+          <option value="settings.edge_path.update">邊緣路徑設定</option>
+          <option value="settings.pdf_base_path.update">PDF 路徑設定</option>
+          <option value="settings.email_notify.update">Email 通知設定</option>
         </optgroup>
       </select>
-      <span style="font-size:12px;color:var(--text-dim);margin-left:auto;font-family:Inter,sans-serif" x-text="`第 ${page} 頁 / 共 ${Math.max(1,Math.ceil(total/perPage))} 頁`"></span>
+      <span style="font-size:12px;color:var(--text-dim);margin-left:auto;font-family:LINE Seed TW_OTF, sans-serif" x-text="`第 ${page} 頁 / 共 ${Math.max(1,Math.ceil(total/perPage))} 頁`"></span>
     </div>
 
     <!-- 時間線 -->
@@ -234,100 +306,228 @@
 
       actionLabel(action) {
         const map = {
-          'auth.login':            '登入',
-          'auth.logout':           '登出',
-          'auth.change_password':  '修改密碼',
-          'quotation.create':      '新增報價單',
-          'quotation.submit':      '送出審核',
-          'quotation.approve':     '簽核通過',
-          'quotation.update':      '更新報價單',
-          'quotation.delete':      '刪除報價單',
-          'quotation.status_change':'狀態變更',
-          'quotation.export_pdf':  '匯出 PDF',
-          'quotation.settlement':  '成本精算',
-          'deal_tag.change':       '案件進度',
-          'case.update':           '案件資料更新',
-          'part.create':           '新增料號',
-          'part.update':           '更新料號',
-          'part.delete':           '刪除料號',
-          'customer.create':       '新增客戶',
-          'customer.update':       '更新客戶',
-          'customer.delete':       '刪除客戶',
-          'customer.visit.update': '拜訪紀錄',
-          'payment.mark':          '收款標記',
-          'user.create':           '新增使用者',
-          'user.update':           '更新使用者',
-          'user.delete':           '刪除使用者',
-          'user.active':           '帳號啟停',
+          // 認證
+          'auth.login':                      '登入',
+          'auth.logout':                     '登出',
+          'auth.change_password':            '修改密碼',
+          // 報價單
+          'quotation.create':                '新增報價單',
+          'quotation.submit':                '送出審核',
+          'quotation.approve':               '簽核通過',
+          'quotation.return':                '退回重審',
+          'quotation.reject_final':          '最終否決',
+          'quotation.update':                '更新報價單',
+          'quotation.recall':                '撤回報價單',
+          'quotation.unlock_edit':           '解鎖編輯',
+          'quotation.unlock':                '報價解鎖密碼',
+          'quotation.delete':                '刪除報價單',
+          'quotation.status_change':         '狀態變更',
+          'quotation.export_pdf':            '匯出 PDF',
+          'quotation.settlement':            '成本精算',
+          'deal_tag.change':                 '案件進度',
+          // 案件管理
+          'case.update':                     '案件資料更新',
+          'payment.mark':                    '收款標記',
+          // 業務開發
+          'dev_case.create':                 '新增開發案件',
+          'dev_case.update':                 '更新開發案件',
+          'dev_case.status':                 '案件狀態變更',
+          'dev_case.convert':                '轉換報價單',
+          'dev_case.delete_request':         '申請刪除',
+          'dev_case.delete_cancel':          '取消刪除申請',
+          'dev_case.delete':                 '核准刪除',
+          'dev_case.delete_reject':          '否決刪除申請',
+          'dev_log.create':                  '新增開發紀錄',
+          'dev_log.update':                  '更新開發紀錄',
+          'dev_log.delete':                  '刪除開發紀錄',
+          'dev_log.approve':                 '審核開發紀錄',
+          // 客戶
+          'customer.create':                 '新增客戶',
+          'customer.update':                 '更新客戶',
+          'customer.delete':                 '刪除客戶',
+          'customer.visit.update':           '拜訪紀錄',
+          // 供應商
+          'supplier.create':                 '新增供應商',
+          'supplier.update':                 '更新供應商',
+          'supplier.delete':                 '刪除供應商',
+          'supplier.visit.update':           '拜訪紀錄',
+          // 承攬商
+          'vendor.create':                   '新增承攬商',
+          'vendor.update':                   '更新承攬商',
+          'vendor.activate':                 '啟用承攬商',
+          'vendor.deactivate':               '停用承攬商',
+          'vendor.delete':                   '刪除承攬商',
+          'vendor.visit.update':             '拜訪紀錄',
+          'vendor.dispatch.create':          '新增派工',
+          'vendor.dispatch.update':          '更新派工',
+          'vendor.dispatch.delete':          '刪除派工',
+          'vendor.dispatch.pending_acceptance': '派工待確認',
+          'vendor.dispatch.accepted':        '派工已接受',
+          'vendor.dispatch.import':          '匯入派工',
+          // 料號
+          'part.create':                     '新增料號',
+          'part.update':                     '更新料號',
+          'part.delete':                     '刪除料號',
+          // 專案
+          'project.create':                  '新增專案',
+          'project.update':                  '更新專案',
+          'project.status':                  '專案狀態變更',
+          'project.assign':                  '指派人員',
+          'project.delete':                  '刪除專案',
+          'project.log.create':              '新增工程紀錄',
+          // 每日工作事項
+          'daily_task.create':               '新增工作事項',
+          'daily_task.update':               '更新工作事項',
+          'daily_task.delete':               '刪除工作事項',
+          'daily_task.complete':             '標記完成',
+          'daily_task.uncomplete':           '取消完成',
+          'daily_task.admin_unlock':         '任務管理解鎖',
+          // 外包名冊
+          'contractor.create':               '新增外包人員',
+          'contractor.update':               '更新外包人員',
+          'contractor.activate':             '啟用外包人員',
+          'contractor.deactivate':           '停用外包人員',
+          'contractor.id_card.update':       '更新身分證影本',
+          // 勞報單
+          'payslip.create':                  '新增勞報單',
+          'payslip.update':                  '更新勞報單',
+          'payslip.delete':                  '刪除勞報單',
+          // 使用者管理
+          'user.create':                     '新增使用者',
+          'user.update':                     '更新使用者',
+          'user.delete':                     '刪除使用者',
+          'user.active':                     '帳號啟停',
+          'user.set_unlock_password':        '設定報價解鎖密碼',
+          'user.set_daily_task_password':    '設定任務解鎖密碼',
+          // 系統設定
+          'settings.approval_flow.update':   '審核流程設定',
+          'settings.operating_targets.update':'營運目標設定',
+          'settings.company_profile.update': '公司資料設定',
+          'settings.edge_path.update':       '邊緣路徑設定',
+          'settings.pdf_base_path.update':   'PDF 路徑設定',
+          'settings.email_notify.update':    'Email 通知設定',
         }
         return map[action] || action
       },
 
       badgeBg(action) {
-        if (action.includes('delete'))              return '#fee2e2'
+        if (action.includes('delete') && !action.includes('delete_cancel') && !action.includes('delete_reject')) return '#fee2e2'
         if (action === 'part.delete')               return '#fef3c7'
         if (action === 'user.active')               return '#fff7ed'
         if (action === 'auth.logout')               return '#f1f5f9'
-        if (action === 'quotation.approve')         return '#dcfce7'
+        if (action === 'quotation.approve' || action === 'dev_log.approve') return '#dcfce7'
+        if (action === 'quotation.return' || action === 'quotation.reject_final') return '#fef3c7'
         if (action === 'quotation.submit' || action === 'quotation.create') return '#dbeafe'
         if (action === 'auth.login')                return '#f3f4f6'
         if (action === 'payment.mark')              return '#fef3c7'
         if (action === 'case.update')               return '#f0fdf4'
         if (action.startsWith('part.'))             return '#fefce8'
         if (action === 'customer.visit.update')     return '#fdf4ff'
-        if (action.includes('customer'))            return '#f5f3ff'
+        if (action.startsWith('customer.'))         return '#f5f3ff'
+        if (action.startsWith('supplier.'))         return '#fdf4ff'
+        if (action.startsWith('vendor.dispatch.'))  return '#fff7ed'
+        if (action.startsWith('vendor.'))           return '#ffedd5'
+        if (action.startsWith('dev_case.') || action.startsWith('dev_log.')) return '#eef2ff'
+        if (action.startsWith('project.'))          return '#ecfeff'
+        if (action.startsWith('daily_task.'))       return '#f0fdf4'
+        if (action.startsWith('contractor.'))       return '#fff1f2'
+        if (action.startsWith('payslip.'))          return '#fefce8'
+        if (action.startsWith('settings.'))         return '#f1f5f9'
+        if (action.startsWith('user.'))             return '#f0f9ff'
         return '#eff6ff'
       },
 
       badgeFg(action) {
-        if (action.includes('delete'))              return '#b91c1c'
+        if (action.includes('delete') && !action.includes('delete_cancel') && !action.includes('delete_reject')) return '#b91c1c'
         if (action === 'part.delete')               return '#92400e'
         if (action === 'user.active')               return '#c2410c'
         if (action === 'auth.logout')               return '#64748b'
-        if (action === 'quotation.approve')         return '#15803d'
+        if (action === 'quotation.approve' || action === 'dev_log.approve') return '#15803d'
+        if (action === 'quotation.return' || action === 'quotation.reject_final') return '#b45309'
         if (action === 'quotation.submit' || action === 'quotation.create') return '#1d4ed8'
         if (action === 'auth.login')                return '#6b7280'
         if (action === 'payment.mark')              return '#92400e'
         if (action === 'case.update')               return '#166534'
         if (action.startsWith('part.'))             return '#854d0e'
         if (action === 'customer.visit.update')     return '#9333ea'
-        if (action.includes('customer'))            return '#7c3aed'
+        if (action.startsWith('customer.'))         return '#7c3aed'
+        if (action.startsWith('supplier.'))         return '#7e22ce'
+        if (action.startsWith('vendor.dispatch.'))  return '#c2410c'
+        if (action.startsWith('vendor.'))           return '#ea580c'
+        if (action.startsWith('dev_case.') || action.startsWith('dev_log.')) return '#4338ca'
+        if (action.startsWith('project.'))          return '#0e7490'
+        if (action.startsWith('daily_task.'))       return '#15803d'
+        if (action.startsWith('contractor.'))       return '#be123c'
+        if (action.startsWith('payslip.'))          return '#854d0e'
+        if (action.startsWith('settings.'))         return '#475569'
+        if (action.startsWith('user.'))             return '#0369a1'
         return '#1d4ed8'
       },
 
       dotBg(action) {
-        if (action.includes('delete'))              return '#fee2e2'
+        if (action.includes('delete') && !action.includes('delete_cancel') && !action.includes('delete_reject')) return '#fee2e2'
         if (action === 'part.delete')               return '#fef3c7'
         if (action === 'user.active')               return '#fff7ed'
         if (action === 'auth.logout')               return '#f1f5f9'
-        if (action === 'quotation.approve')         return '#dcfce7'
+        if (action === 'quotation.approve' || action === 'dev_log.approve') return '#dcfce7'
+        if (action === 'quotation.return' || action === 'quotation.reject_final') return '#fef3c7'
         if (action === 'payment.mark')              return '#fef3c7'
         if (action === 'case.update')               return '#f0fdf4'
         if (action.startsWith('part.'))             return '#fefce8'
         if (action === 'customer.visit.update')     return '#fdf4ff'
-        if (action.includes('customer'))            return '#f5f3ff'
+        if (action.startsWith('customer.'))         return '#f5f3ff'
+        if (action.startsWith('supplier.'))         return '#fdf4ff'
+        if (action.startsWith('vendor.'))           return '#ffedd5'
+        if (action.startsWith('dev_case.') || action.startsWith('dev_log.')) return '#eef2ff'
+        if (action.startsWith('project.'))          return '#ecfeff'
+        if (action.startsWith('daily_task.'))       return '#f0fdf4'
+        if (action.startsWith('contractor.'))       return '#fff1f2'
+        if (action.startsWith('payslip.'))          return '#fefce8'
+        if (action.startsWith('settings.'))         return '#f1f5f9'
         if (action === 'auth.login')                return '#f3f4f6'
         return '#dbeafe'
       },
 
       dotIcon(action) {
         if (action === 'part.delete')               return '🗃'
-        if (action.includes('delete'))              return '🗑'
+        if (action.includes('delete') && !action.includes('delete_cancel') && !action.includes('delete_reject')) return '🗑'
         if (action === 'user.active')               return '🔓'
         if (action === 'auth.logout')               return '🚪'
-        if (action === 'quotation.approve')         return '✅'
+        if (action === 'quotation.approve' || action === 'dev_log.approve') return '✅'
+        if (action === 'quotation.return')          return '↩️'
+        if (action === 'quotation.reject_final')    return '🚫'
         if (action === 'quotation.submit')          return '📤'
+        if (action === 'quotation.recall')          return '↩️'
         if (action === 'quotation.export_pdf')      return '📄'
         if (action === 'quotation.settlement')      return '🧮'
+        if (action === 'quotation.unlock_edit')     return '🔓'
         if (action === 'payment.mark')              return '💰'
         if (action === 'case.update')               return '🗂'
         if (action.startsWith('part.'))             return '🔩'
         if (action === 'customer.visit.update')     return '📋'
-        if (action.includes('customer'))            return '👤'
+        if (action.startsWith('customer.'))         return '👤'
+        if (action === 'supplier.visit.update')     return '📋'
+        if (action.startsWith('supplier.'))         return '🏢'
+        if (action.startsWith('vendor.dispatch.'))  return '🚚'
+        if (action.startsWith('vendor.'))           return '🤝'
+        if (action === 'dev_case.convert')          return '🔄'
+        if (action.startsWith('dev_case.'))         return '💼'
+        if (action === 'dev_log.approve')           return '✅'
+        if (action.startsWith('dev_log.'))          return '📓'
+        if (action === 'project.log.create')        return '🔧'
+        if (action.startsWith('project.'))          return '📐'
+        if (action === 'daily_task.complete')       return '✔️'
+        if (action === 'daily_task.uncomplete')     return '↩️'
+        if (action === 'daily_task.admin_unlock')   return '🔓'
+        if (action.startsWith('daily_task.'))       return '📅'
+        if (action === 'contractor.id_card.update') return '🪪'
+        if (action.startsWith('contractor.'))       return '👷'
+        if (action.startsWith('payslip.'))          return '🧾'
+        if (action.startsWith('settings.'))         return '⚙️'
         if (action === 'auth.login')                return '🔑'
         if (action === 'auth.change_password')      return '🔐'
         if (action === 'deal_tag.change')           return '🏷'
-        if (action.includes('user.'))               return '👥'
+        if (action.startsWith('user.'))             return '👥'
         return '📝'
       },
 

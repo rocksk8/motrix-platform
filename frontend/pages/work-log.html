@@ -1,11 +1,10 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="../static/favicon.png">
   <title>工作日誌 — MOTRIX 營運管理系統</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600&display=swap" rel="stylesheet">
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
   <link rel="stylesheet" href="../css/style.css">
   <style>
@@ -36,7 +35,7 @@
     .wl-date-nav button:hover { background: #F5F4F0; }
     .wl-date-input {
       padding: 6px 10px; border: 1px solid var(--border-light);
-      border-radius: var(--radius); font-size: 13px; font-family: Inter, sans-serif;
+      border-radius: var(--radius); font-size: 13px; font-family: 'LINE Seed TW_OTF', sans-serif;
       color: var(--text-primary); background: #fff; outline: none;
     }
     .wl-date-input:focus { border-color: var(--accent); }
@@ -62,7 +61,7 @@
       border: 1px solid var(--border-light); margin-bottom: 18px;
       font-size: 12px; color: var(--text-secondary);
     }
-    .wl-summary strong { color: var(--text-primary); font-weight: 700; font-family: Inter, sans-serif; }
+    .wl-summary strong { color: var(--text-primary); font-weight: 700; font-family: 'LINE Seed TW_OTF', sans-serif; }
 
     /* ── Table ── */
     .wl-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
@@ -86,12 +85,12 @@
       width: 28px; height: 28px; border-radius: 50%; background: var(--accent);
       color: #fff; font-size: 11px; font-weight: 700; display: flex;
       align-items: center; justify-content: center; flex-shrink: 0;
-      font-family: Inter, sans-serif;
+      font-family: 'LINE Seed TW_OTF', sans-serif;
     }
     .wl-uname { font-size: 13px; font-weight: 600; color: var(--text-primary); }
     .wl-hours-badge {
       display: inline-block; padding: 2px 8px; border-radius: 4px;
-      font-size: 11px; font-weight: 600; font-family: Inter, sans-serif;
+      font-size: 11px; font-weight: 600; font-family: 'LINE Seed TW_OTF', sans-serif;
       background: #DBEAFE; color: #1D4ED8;
     }
     .wl-content { font-size: 13px; color: var(--text-primary); line-height: 1.6; white-space: pre-wrap; }
@@ -240,7 +239,7 @@
               <td>
                 <div class="wl-content" x-text="row.content"></div>
               </td>
-              <td style="font-size:11px;color:var(--text-dim);font-family:Inter,sans-serif"
+              <td style="font-size:11px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif"
                   x-text="(row.created_at||'').slice(0,16).replace('T',' ')"></td>
               <td>
                 <div class="wl-actions">

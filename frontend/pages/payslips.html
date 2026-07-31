@@ -5,50 +5,71 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>勞報單 — MOTRIX ERP</title>
   <link rel="icon" type="image/png" href="../static/favicon.png">
-  <link rel="stylesheet" href="../css/style.css">
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css">
   <style>
-    .page-wrap{padding:calc(var(--topbar-h) + 20px) 28px 40px calc(var(--sidebar-w) + 28px)}
-    .filter-bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px}
-    table.list{width:100%;border-collapse:collapse;font-size:13px}
-    table.list th{background:var(--bg-secondary);font-size:11px;font-weight:600;color:var(--text-dim);
-                  padding:8px 12px;border-bottom:2px solid var(--border);text-align:left;white-space:nowrap}
-    table.list td{padding:10px 12px;border-bottom:1px solid var(--border-light);vertical-align:middle}
-    table.list tr:hover td{background:var(--bg-hover)}
-    .badge{display:inline-block;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:600;border:1px solid}
-    .badge--draft{color:#888;border-color:#ccc;background:#f5f5f5}
-    .badge--exported{color:#0a7c3e;border-color:#b7e4cb;background:#eafaf1}
-    .itype{display:inline-block;font-size:10px;padding:1px 6px;border-radius:4px;border:1px solid var(--border);color:var(--text-dim)}
-    .amt{font-family:Inter,monospace;text-align:right}
-    .empty{text-align:center;padding:60px 0;color:var(--text-dim);font-size:14px}
-    .action-icon{background:none;border:none;cursor:pointer;color:var(--accent);font-size:13px;padding:3px 8px}
-    .action-icon:hover{text-decoration:underline}
-    .exp-count{display:inline-block;font-size:10px;padding:1px 6px;border-radius:10px;
-               border:1px solid var(--border-light);background:#f5f5f5;color:var(--text-dim);
-               font-family:Inter,monospace;margin-left:4px;cursor:pointer;transition:background .12s}
-    .exp-count:hover{background:#e8f0fe;border-color:#93c5fd;color:var(--accent)}
+    [x-cloak]{display:none!important}
+    .page-main{margin-left:var(--sidebar-w);margin-top:var(--topbar-h);padding:28px 32px;min-height:calc(100vh - var(--topbar-h));background:var(--white);transition:padding-right .22s}
+    .search-bar{display:flex;gap:10px;align-items:center;margin-bottom:20px;flex-wrap:wrap}
+    .search-wrap{position:relative;flex:0 0 280px}
+    .search-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text-dim);pointer-events:none}
+    .search-input{width:100%;padding:8px 12px 8px 36px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:var(--font-zh);background:#fff;outline:none;box-sizing:border-box}
+    .search-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(37,99,235,.08)}
+    .data-table{width:100%;border-collapse:collapse;font-size:13px}
+    .data-table th{padding:10px 12px;text-align:left;font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);font-weight:500;background:#FAFAF8;border-bottom:1px solid var(--border-light);white-space:nowrap}
+    .data-table th.amt,.data-table td.amt{text-align:right;font-family:LINE Seed TW_OTF, monospace}
+    .data-table td{padding:11px 12px;border-bottom:1px solid #F0EEE9;vertical-align:middle}
+    .data-table tr:last-child td{border-bottom:none}
+    .data-table tr:hover td{background:#FDFCFA}
+    .data-table tr:hover .row-actions{opacity:1}
+    .row-actions{opacity:0;display:flex;gap:6px;transition:opacity .12s}
+    .btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:var(--radius);font-size:12px;font-family:var(--font-zh);cursor:pointer;border:none;transition:all .12s;font-weight:500;text-decoration:none}
+    .btn-primary{background:var(--accent);color:#fff}
+    .btn-primary:hover{background:#1D4ED8}
+    .btn-ghost{background:#fff;color:var(--text-secondary);border:1px solid var(--border-light)}
+    .btn-ghost:hover{border-color:#C8C4BC}
+    .btn-danger{background:var(--danger-light);color:var(--danger);border:1px solid #FECACA}
+    .btn-danger:hover{background:#FEE2E2}
+    .btn-sm{padding:5px 11px;font-size:11px}
+    .btn:disabled,.btn-primary:disabled{opacity:.55;cursor:not-allowed}
+    .tag{display:inline-flex;padding:2px 8px;border-radius:3px;font-size:11px;font-family:LINE Seed TW_OTF, sans-serif}
+    .tag-exported{background:#ECFDF5;color:#059669}
+    .tag-draft{background:#F3F4F6;color:#6B7280}
+    .itype{display:inline-flex;padding:1px 7px;border-radius:3px;font-size:11px;font-family:LINE Seed TW_OTF, sans-serif;background:#EFF6FF;color:#2563EB}
+    .exp-chip{display:inline-flex;padding:1px 7px;border-radius:10px;font-size:10px;font-family:LINE Seed TW_OTF, monospace;background:#F0EEE9;color:var(--text-dim);border:1px solid var(--border-light);cursor:pointer;margin-left:4px}
+    .exp-chip:hover{background:#e8f0fe;border-color:#93c5fd;color:var(--accent)}
+    .detail-pane{position:fixed;right:0;top:var(--topbar-h);width:380px;height:calc(100vh - var(--topbar-h));background:#fff;border-left:1px solid var(--border-light);box-shadow:var(--shadow-lg);z-index:100;display:flex;flex-direction:column;transform:translateX(100%);transition:transform .22s ease}
+    .detail-pane.open{transform:translateX(0)}
+    .detail-head{padding:16px 20px;border-bottom:1px solid var(--border-light);display:flex;align-items:center;gap:10px}
+    .detail-body{flex:1;overflow-y:auto;padding:16px 20px}
+    .detail-body::-webkit-scrollbar{width:4px}
+    .detail-body::-webkit-scrollbar-thumb{background:var(--border-light);border-radius:2px}
+    .detail-close{margin-left:auto;width:28px;height:28px;border-radius:4px;border:none;background:#F0EEE9;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px}
+    .detail-close:hover{background:var(--danger-light);color:var(--danger)}
+    .detail-row{display:flex;gap:8px;margin-bottom:10px;font-size:12px}
+    .detail-label{color:var(--text-dim);min-width:72px;flex-shrink:0}
+    .detail-val{color:var(--text-primary);font-weight:500;flex:1;word-break:break-all}
+    .detail-divider{border:none;border-top:1px solid var(--border-light);margin:14px 0}
+    .detail-sec{font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);font-weight:600;margin-bottom:10px}
+    .amount-row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;font-size:12px;border-bottom:1px solid #F9F8F6}
+    .amount-row:last-child{border-bottom:none}
+    .amount-row--total{font-size:13px;font-weight:700;color:var(--text-primary)}
+    .empty-state{text-align:center;padding:60px 20px;color:var(--text-dim)}
+    .empty-icon{font-size:40px;margin-bottom:12px;opacity:.4}
     /* PDF Preview Modal */
-    .pv-overlay{position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:300;
-                display:flex;align-items:center;justify-content:center;padding:16px}
-    .pv-modal{background:#fff;border-radius:12px;width:min(900px,96vw);height:90vh;
-              display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.4)}
-    .pv-head{display:flex;justify-content:space-between;align-items:center;
-             padding:14px 20px;border-bottom:1px solid var(--border-light);flex-shrink:0}
+    .pv-overlay{position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:300;display:flex;align-items:center;justify-content:center;padding:16px}
+    .pv-modal{background:#fff;border-radius:12px;width:min(900px,96vw);height:90vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.4)}
+    .pv-head{display:flex;justify-content:space-between;align-items:center;padding:14px 20px;border-bottom:1px solid var(--border-light);flex-shrink:0}
     .pv-title{font-size:14px;font-weight:700;color:var(--text-primary)}
-    .pv-sub{font-size:11px;color:var(--text-dim);margin-top:2px;font-family:Inter,monospace}
-    .pv-close{background:none;border:none;cursor:pointer;color:var(--text-dim);
-              font-size:22px;line-height:1;padding:2px 8px;border-radius:4px;font-family:inherit}
+    .pv-sub{font-size:11px;color:var(--text-dim);margin-top:2px;font-family:LINE Seed TW_OTF, monospace}
+    .pv-close{background:none;border:none;cursor:pointer;color:var(--text-dim);font-size:22px;line-height:1;padding:2px 8px;border-radius:4px;font-family:inherit}
     .pv-close:hover{background:var(--border-light);color:var(--text-primary)}
     .pv-body{flex:1;overflow:hidden;background:#525659;position:relative}
-    .pv-spinner{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;
-                justify-content:center;color:#ddd;font-size:13px;gap:10px}
+    .pv-spinner{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#ddd;font-size:13px;gap:10px}
     .pv-spinner svg{animation:spin 1.2s linear infinite}
     @keyframes spin{to{transform:rotate(360deg)}}
     .pv-iframe{width:100%;height:100%;border:none;display:block}
-    .pv-foot{display:flex;justify-content:space-between;align-items:center;
-             padding:12px 20px;border-top:1px solid var(--border-light);flex-shrink:0}
-    .export-hist{font-size:11px;color:var(--text-dim)}
-    .export-hist strong{color:var(--text-secondary);font-weight:600}
+    .pv-foot{display:flex;justify-content:space-between;align-items:center;padding:12px 20px;border-top:1px solid var(--border-light);flex-shrink:0}
   </style>
 </head>
 <body x-data="payslipsPage()" x-init="init()">
@@ -56,81 +77,172 @@
 <div class="sidebar-overlay" id="sidebar-overlay"></div>
 <aside class="sidebar" id="app-sidebar"></aside>
 
-<div class="page-wrap">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+<div class="page-main" :style="selectedId ? 'padding-right:400px' : ''">
+
+  <!-- 頁頭 -->
+  <div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:20px">
     <div>
-      <h1 style="font-size:18px;font-weight:700;color:var(--text-main)">勞報單</h1>
-      <p style="font-size:12px;color:var(--text-dim);margin-top:2px">勞務報酬單開立記錄</p>
+      <div style="font-size:11px;color:var(--text-dim);margin-bottom:4px">勞務管理</div>
+      <h1 style="font-size:20px;font-weight:700">勞報單</h1>
+      <p style="font-size:12px;color:var(--text-secondary);margin-top:4px" x-text="`共 ${total} 筆記錄`"></p>
     </div>
-    <a href="payslip-form.html" class="action-btn action-btn--primary" style="text-decoration:none">＋ 新增勞報單</a>
+    <a href="payslip-form.html" class="btn btn-primary">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v16m8-8H4"/></svg>
+      新增勞報單
+    </a>
   </div>
 
-  <div class="filter-bar">
+  <!-- 篩選列 -->
+  <div class="search-bar">
+    <div class="search-wrap">
+      <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+      <input class="search-input" type="text" x-model="searchQ" @input.debounce.300ms="load()" placeholder="搜尋受領人…">
+    </div>
     <div>
-      <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:3px">月份</label>
-      <input class="form-input" type="month" x-model="filterMonth" @change="load()">
+      <input style="padding:8px 11px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:var(--font-zh);outline:none"
+             type="month" x-model="filterMonth" @change="load()" title="月份篩選">
     </div>
-    <div style="padding-top:18px">
-      <button class="action-btn" @click="filterMonth='';load()">清除篩選</button>
-    </div>
-    <div style="margin-left:auto;padding-top:18px;font-size:12px;color:var(--text-dim)" x-text="total + ' 筆'"></div>
+    <button class="btn btn-ghost btn-sm" @click="filterMonth='';searchQ='';load()">清除篩選</button>
   </div>
 
-  <div x-show="loading" style="text-align:center;padding:40px;color:var(--text-dim)">載入中…</div>
-  <div x-show="!loading && items.length === 0" class="empty">
-    尚無勞報單記錄。<a href="payslip-form.html" style="color:var(--accent)">新增第一張勞報單 →</a>
+  <!-- 列表 -->
+  <div class="panel" style="padding:0;overflow:hidden">
+    <div class="table-scroll" x-show="!loading">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>單號</th>
+            <th>受領人</th>
+            <th>所得類別</th>
+            <th class="amt">應付總額</th>
+            <th class="amt">實發金額</th>
+            <th>日期</th>
+            <th>狀態</th>
+            <th style="width:80px"></th>
+          </tr>
+        </thead>
+        <tbody>
+          <template x-for="p in filteredItems" :key="p.slip_no">
+            <tr @click="selectSlip(p)" style="cursor:pointer" :style="selectedId===p.slip_no ? 'background:#F0F7FF' : ''">
+              <td style="font-family:LINE Seed TW_OTF, monospace;font-size:12px" x-text="p.slip_no"></td>
+              <td>
+                <div style="display:flex;align-items:center;gap:8px">
+                  <div style="width:28px;height:28px;border-radius:50%;background:#0EA5E9;color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0"
+                       x-text="(p.contractor_name||'?')[0]"></div>
+                  <span x-text="p.contractor_name || '—'"></span>
+                </div>
+              </td>
+              <td><span class="itype" x-text="p.income_type"></span></td>
+              <td class="amt" x-text="'NT$ ' + (p.gross_amount||0).toLocaleString()"></td>
+              <td class="amt" style="font-weight:600" x-text="'NT$ ' + (p.net_amount||0).toLocaleString()"></td>
+              <td style="font-size:12px;font-family:LINE Seed TW_OTF, monospace" x-text="p.slip_date || '—'"></td>
+              <td>
+                <span class="tag" :class="p.status === '已匯出' ? 'tag-exported' : 'tag-draft'"
+                      x-text="p.status"></span>
+                <span class="exp-chip" x-show="p.export_count > 0"
+                      x-text="'×' + p.export_count"
+                      :title="'已匯出 ' + p.export_count + ' 次，點擊查看紀錄'"
+                      @click.stop="openHistory(p)"></span>
+              </td>
+              <td>
+                <div class="row-actions">
+                  <button class="btn btn-ghost btn-sm" @click.stop="previewPdf(p)">預覽</button>
+                </div>
+              </td>
+            </tr>
+          </template>
+          <tr x-show="!loading && filteredItems.length === 0">
+            <td colspan="8">
+              <div class="empty-state">
+                <div class="empty-icon">📄</div>
+                <div>尚無勞報單記錄</div>
+                <a href="payslip-form.html" class="btn btn-primary" style="margin-top:12px">新增第一張勞報單</a>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div x-show="loading" style="text-align:center;padding:60px;color:var(--text-dim)">載入中…</div>
   </div>
-
-  <table class="list" x-show="!loading && items.length > 0">
-    <thead>
-      <tr>
-        <th>單號</th>
-        <th>受領人</th>
-        <th>所得類別</th>
-        <th class="amt">應付總額</th>
-        <th class="amt">代扣所得稅</th>
-        <th class="amt">二代健保</th>
-        <th class="amt">實發金額</th>
-        <th>開單日期</th>
-        <th>狀態</th>
-        <th></th>
-      </tr>
-    </thead>
-    <tbody>
-      <template x-for="p in items" :key="p.slip_no">
-        <tr>
-          <td style="font-family:Inter,monospace;font-size:12px" x-text="p.slip_no"></td>
-          <td x-text="p.contractor_name || '—'"></td>
-          <td><span class="itype" x-text="p.income_type"></span></td>
-          <td class="amt" x-text="'NT$ ' + (p.gross_amount||0).toLocaleString()"></td>
-          <td class="amt" x-text="'NT$ ' + (p.tax_withheld||0).toLocaleString()"></td>
-          <td class="amt" x-text="'NT$ ' + (p.nhi_supplement||0).toLocaleString()"></td>
-          <td class="amt" style="font-weight:600" x-text="'NT$ ' + (p.net_amount||0).toLocaleString()"></td>
-          <td style="font-size:12px" x-text="p.slip_date || '—'"></td>
-          <td>
-            <span class="badge"
-                  :class="p.status === '已匯出' ? 'badge--exported' : 'badge--draft'"
-                  x-text="p.status"></span>
-            <span class="exp-count" x-show="p.export_count > 0"
-                  x-text="'×' + p.export_count + ' 匯出'"
-                  :title="'已匯出 ' + p.export_count + ' 次，點擊查看紀錄'"
-                  @click.stop="openHistory(p)"></span>
-          </td>
-          <td style="white-space:nowrap">
-            <a :href="'payslip-form.html?id=' + p.slip_no" class="action-icon">編輯</a>
-            <button class="action-icon" @click="previewPdf(p)">預覽 PDF</button>
-            <button class="action-icon" x-show="p.export_count > 0" @click="openHistory(p)"
-                    style="color:var(--text-secondary)">匯出歷史</button>
-            <button class="action-icon" style="color:var(--danger)" @click="del(p)"
-                    x-show="p.status !== '已匯出'">刪除</button>
-          </td>
-        </tr>
-      </template>
-    </tbody>
-  </table>
 </div>
 
-<!-- PDF 預覽 Modal -->
+<!-- ══ 右側詳細面板 ══ -->
+<div class="detail-pane" :class="{open: !!selectedId}">
+  <template x-if="selectedSlip">
+    <div style="display:contents">
+      <div class="detail-head">
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:600;font-size:14px" x-text="selectedSlip.contractor_name || '—'"></div>
+          <div style="display:flex;align-items:center;gap:6px;margin-top:3px;flex-wrap:wrap">
+            <span class="tag" :class="selectedSlip.status === '已匯出' ? 'tag-exported' : 'tag-draft'"
+                  x-text="selectedSlip.status"></span>
+            <span class="itype" x-text="selectedSlip.income_type"></span>
+          </div>
+        </div>
+        <button class="detail-close" @click="selectedId=null;selectedSlip=null">×</button>
+      </div>
+      <div class="detail-body">
+
+        <div class="detail-sec">單據資訊</div>
+        <div class="detail-row">
+          <span class="detail-label">單號</span>
+          <span class="detail-val" style="font-family:LINE Seed TW_OTF, monospace;font-size:12px" x-text="selectedSlip.slip_no"></span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">開單日期</span>
+          <span class="detail-val" style="font-family:LINE Seed TW_OTF, monospace" x-text="selectedSlip.slip_date || '—'"></span>
+        </div>
+        <div class="detail-row" x-show="selectedSlip.export_count > 0">
+          <span class="detail-label">匯出次數</span>
+          <span class="detail-val">
+            <span x-text="selectedSlip.export_count + ' 次'"></span>
+            <button class="btn btn-ghost btn-sm" @click="openHistory(selectedSlip)" style="margin-left:6px">查看紀錄</button>
+          </span>
+        </div>
+
+        <hr class="detail-divider">
+        <div class="detail-sec">金額明細</div>
+        <div style="background:#FAFAF8;border-radius:var(--radius);padding:12px 14px">
+          <div class="amount-row">
+            <span style="color:var(--text-secondary)">應付總額</span>
+            <span style="font-family:LINE Seed TW_OTF, monospace" x-text="'NT$ ' + (selectedSlip.gross_amount||0).toLocaleString()"></span>
+          </div>
+          <div class="amount-row">
+            <span style="color:var(--text-secondary)">代扣所得稅</span>
+            <span style="font-family:LINE Seed TW_OTF, monospace;color:var(--danger)" x-text="'－ NT$ ' + (selectedSlip.tax_withheld||0).toLocaleString()"></span>
+          </div>
+          <div class="amount-row">
+            <span style="color:var(--text-secondary)">二代健保</span>
+            <span style="font-family:LINE Seed TW_OTF, monospace;color:var(--danger)" x-text="'－ NT$ ' + (selectedSlip.nhi_supplement||0).toLocaleString()"></span>
+          </div>
+          <div style="border-top:1px solid var(--border-light);margin:8px 0 6px"></div>
+          <div class="amount-row amount-row--total">
+            <span>實發金額</span>
+            <span style="font-family:LINE Seed TW_OTF, monospace;color:var(--accent)" x-text="'NT$ ' + (selectedSlip.net_amount||0).toLocaleString()"></span>
+          </div>
+        </div>
+
+        <hr class="detail-divider">
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div style="display:flex;gap:8px">
+            <a :href="'payslip-form.html?id=' + selectedSlip.slip_no" class="btn btn-ghost btn-sm" style="flex:1;justify-content:center">編輯</a>
+            <button class="btn btn-primary btn-sm" style="flex:1" @click="previewPdf(selectedSlip)">預覽 PDF</button>
+          </div>
+          <div style="display:flex;gap:8px" x-show="selectedSlip.export_count > 0">
+            <button class="btn btn-ghost btn-sm" style="flex:1" @click="openHistory(selectedSlip)">匯出歷史</button>
+          </div>
+          <button x-show="selectedSlip.status !== '已匯出'"
+                  class="btn btn-danger btn-sm"
+                  style="width:100%;justify-content:center"
+                  @click="del(selectedSlip)">刪除勞報單</button>
+        </div>
+      </div>
+    </div>
+  </template>
+</div>
+
+<!-- ══ PDF 預覽 Modal ══ -->
 <div x-show="previewModal" x-cloak class="pv-overlay" @keydown.escape.window="closePreview()">
   <div class="pv-modal" @click.stop>
     <div class="pv-head">
@@ -144,8 +256,7 @@
     <div class="pv-body">
       <div class="pv-spinner" x-show="previewFetching || !previewIframeReady">
         <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#aaa" stroke-width="2">
-          <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83
-                   M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+          <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
         </svg>
         <span x-text="previewFetching ? 'PDF 產生中，請稍候…' : '載入中…'"></span>
       </div>
@@ -153,8 +264,8 @@
               @load="previewIframeReady = true"></iframe>
     </div>
     <div class="pv-foot">
-      <div x-show="!previewArchiveMode" class="export-hist">
-        <span x-show="!previewItem?.export_count" style="color:var(--text-dim)">尚未匯出</span>
+      <div x-show="!previewArchiveMode" style="font-size:11px;color:var(--text-dim)">
+        <span x-show="!previewItem?.export_count">尚未匯出</span>
         <span x-show="previewItem?.export_count > 0">
           已匯出 <strong x-text="previewItem?.export_count"></strong> 次
         </span>
@@ -162,13 +273,13 @@
       <div x-show="previewArchiveMode" style="font-size:11px;color:var(--text-dim)">
         調閱第 <strong x-text="previewArchiveIdx"></strong> 次存檔 PDF
       </div>
-      <div style="display:flex;gap:10px">
-        <button class="action-btn" @click="closePreview()">關閉</button>
-        <button x-show="!previewArchiveMode" class="action-btn action-btn--primary"
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-ghost" @click="closePreview()">關閉</button>
+        <button x-show="!previewArchiveMode" class="btn btn-primary"
                 @click="confirmExport()" :disabled="previewFetching || !previewIframeReady">
           確認匯出（下載 PDF）
         </button>
-        <button x-show="previewArchiveMode" class="action-btn action-btn--primary"
+        <button x-show="previewArchiveMode" class="btn btn-primary"
                 @click="downloadArchivePreview()" :disabled="!previewBlobUrl">
           下載此存檔
         </button>
@@ -177,7 +288,7 @@
   </div>
 </div>
 
-<!-- 匯出歷史 Modal -->
+<!-- ══ 匯出歷史 Modal ══ -->
 <div x-show="histModal" x-cloak class="pv-overlay" @keydown.escape.window="histModal=false">
   <div class="pv-modal" style="max-width:680px;height:auto;max-height:85vh" @click.stop>
     <div class="pv-head">
@@ -193,14 +304,11 @@
       <div x-show="!histLoading && histLog.length === 0"
            style="text-align:center;padding:40px;color:var(--text-dim)">尚無匯出記錄</div>
       <template x-for="(log, i) in histLog" :key="i">
-        <div style="display:grid;grid-template-columns:40px 1fr auto;align-items:center;
-                    gap:12px;padding:12px 0;border-bottom:1px solid var(--border-light)">
-          <!-- 序號圓圈：再下載用不同樣式 -->
+        <div style="display:grid;grid-template-columns:40px 1fr auto;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border-light)">
           <div :style="log.redownload_of
                 ? 'width:36px;height:36px;border-radius:50%;background:#f0f4ff;border:1px solid #c7d7ff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#4f6ef7;flex-shrink:0'
                 : 'width:36px;height:36px;border-radius:50%;background:var(--bg-secondary);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--text-secondary);flex-shrink:0'"
                x-text="log.idx || (i+1)"></div>
-          <!-- 資訊 -->
           <div>
             <div style="display:flex;align-items:center;gap:6px">
               <span style="font-size:13px;font-weight:600;color:var(--text-main)" x-text="log.by || '—'"></span>
@@ -209,15 +317,12 @@
                 調閱 #<span x-text="log.redownload_of"></span>
               </span>
             </div>
-            <div style="font-size:11px;font-family:Inter,monospace;color:var(--text-dim);margin-top:2px"
+            <div style="font-size:11px;font-family:LINE Seed TW_OTF, monospace;color:var(--text-dim);margin-top:2px"
                  x-text="(log.at||'').replace('T',' ').slice(0,19)"></div>
           </div>
-          <!-- 操作按鈕 -->
           <div style="display:flex;gap:8px;flex-shrink:0">
-            <button class="action-btn" style="font-size:12px"
-                    @click="previewArchivePdf(histItem, log, i)">預覽存檔</button>
-            <button class="action-btn action-btn--primary" style="font-size:12px"
-                    :disabled="downloading"
+            <button class="btn btn-ghost btn-sm" @click="previewArchivePdf(histItem, log, i)">預覽存檔</button>
+            <button class="btn btn-primary btn-sm" :disabled="downloading"
                     @click="downloadArchivePdf(histItem, log, i)">
               <span x-text="downloading ? '下載中…' : '下載存檔'"></span>
             </button>
@@ -229,10 +334,9 @@
       <div style="font-size:11px;color:var(--text-dim)">
         ＊「下載存檔」讀取存檔當時之 PDF；「新增匯出」以當前資料重新產生並計次
       </div>
-      <div style="display:flex;gap:10px">
-        <button class="action-btn" @click="histModal=false">關閉</button>
-        <button class="action-btn action-btn--primary"
-                @click="histModal=false; previewPdf(histItem)">新增匯出</button>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-ghost" @click="histModal=false">關閉</button>
+        <button class="btn btn-primary" @click="histModal=false; previewPdf(histItem)">新增匯出</button>
       </div>
     </div>
   </div>
@@ -249,6 +353,9 @@ function payslipsPage() {
     total: 0,
     loading: false,
     filterMonth: '',
+    searchQ: '',
+    selectedId: null,
+    selectedSlip: null,
     previewModal: false,
     previewBlobUrl: '',
     previewFetching: false,
@@ -263,12 +370,19 @@ function payslipsPage() {
     histLoading: false,
     downloading: false,
 
+    get filteredItems() {
+      if (!this.searchQ) return this.items
+      const q = this.searchQ.toLowerCase()
+      return this.items.filter(p => (p.contractor_name || '').toLowerCase().includes(q))
+    },
+
     async init() {
       const s = localStorage.getItem('motrix_session')
       if (!s) { window.location.href = 'login.html'; return }
       this.session = JSON.parse(s)
-      if (this.session.role !== 'superadmin') {
-        alert('此頁面僅限最高權限使用者存取'); window.history.back(); return
+      const mods = this.session.modules || []
+      if (this.session.role !== 'superadmin' && !mods.includes('payslip')) {
+        alert('此頁面僅限最高權限使用者或具有「勞報單」模組授權的使用者存取'); window.history.back(); return
       }
       await this.load()
     },
@@ -285,9 +399,19 @@ function payslipsPage() {
           const d = await r.json()
           this.items = d.items
           this.total = d.total
+          if (this.selectedId) {
+            const fresh = this.items.find(p => p.slip_no === this.selectedId)
+            if (fresh) this.selectedSlip = { ...fresh }
+            else { this.selectedId = null; this.selectedSlip = null }
+          }
         }
       } catch(e) {}
       this.loading = false
+    },
+
+    selectSlip(p) {
+      this.selectedId = p.slip_no
+      this.selectedSlip = { ...p }
     },
 
     async previewPdf(p) {
@@ -295,6 +419,8 @@ function payslipsPage() {
       this.previewFetching = true
       this.previewIframeReady = false
       this.previewBlobUrl = ''
+      this.previewArchiveMode = false
+      this.previewArchiveIdx = null
       this.previewModal = true
       try {
         const r = await fetch(`${API}/payslips/${p.slip_no}/pdf-download`, {
@@ -394,14 +520,12 @@ function payslipsPage() {
         a.download = `勞報單_${p.contractor_name||p.slip_no}_${p.slip_date||p.slip_no}_第${effective_idx}次.pdf`
         a.click()
         setTimeout(() => URL.revokeObjectURL(url), 2000)
-        // 記錄下載
         const rr = await fetch(`${API}/payslips/${p.slip_no}/archive/${effective_idx}/record`, {
           method: 'POST', headers: { Authorization: 'Bearer ' + this.session.token }
         })
         if (rr.ok) {
           const d = await rr.json()
           p.export_count = d.export_count
-          // 更新 histLog 顯示
           const fr = await fetch(`${API}/payslips/${p.slip_no}`, {
             headers: { Authorization: 'Bearer ' + this.session.token }
           })
@@ -453,7 +577,10 @@ function payslipsPage() {
         method: 'DELETE',
         headers: { Authorization: 'Bearer ' + this.session.token }
       })
-      if (r.ok) await this.load()
+      if (r.ok) {
+        if (this.selectedId === p.slip_no) { this.selectedId = null; this.selectedSlip = null }
+        await this.load()
+      }
       else alert('刪除失敗：' + await r.text())
     }
   }

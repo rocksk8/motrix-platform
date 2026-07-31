@@ -81,7 +81,7 @@
         + 'background:' + (on ? 'rgba(255,255,255,0.18)' : 'transparent') + ';'
         + 'color:' + (on ? '#F5F4F0' : '#666') + ';'
         + 'font-weight:' + (on ? '700' : '400') + ';'
-        + 'border:none;cursor:pointer;font-size:11px;font-family:Inter,sans-serif;'
+        + 'border:none;cursor:pointer;font-size:11px;font-family:LINE Seed TW_OTF, sans-serif;'
         + 'padding:0 7px;height:22px;line-height:22px;border-radius:3px;'
         + 'transition:background .15s,color .15s">'
         + step.label
@@ -99,14 +99,16 @@
 
     var cpHref = inPg ? 'change-password.html' : 'pages/change-password.html'
 
-    // Notification bell (Alpine scope is self-contained inside notifStore())
-    var bell =
+    // Notification bell — admin/superadmin only
+    var bell = ''
+    if (ad) {
+    bell =
       '<div x-data="notifStore()" x-init="init()" style="position:relative">'
       + '<button class="topbar__btn" @click="toggle()" style="position:relative">'
       + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 10-12 0v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>'
       + '通知'
       + '<span x-show="unread>0" x-text="unread>9?\'9+\':unread"'
-      + ' style="background:var(--danger);color:#fff;font-size:9px;padding:1px 5px;border-radius:8px;font-family:Inter,sans-serif;font-weight:700;min-width:16px;text-align:center"></span>'
+      + ' style="background:var(--danger);color:#fff;font-size:9px;padding:1px 5px;border-radius:8px;font-family:LINE Seed TW_OTF, sans-serif;font-weight:700;min-width:16px;text-align:center"></span>'
       + '</button>'
       + '<div x-show="open" @click.outside="open=false"'
       + ' style="display:none;position:absolute;top:calc(100% + 6px);right:0;width:310px;background:#fff;border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.13);z-index:999;overflow:hidden">'
@@ -116,7 +118,7 @@
       + '<div style="padding:10px 16px;border-bottom:1px solid var(--border-light)">'
       + '<div style="display:flex;justify-content:space-between;align-items:center">'
       + '<span x-text="actionLabel(item.action)" :style="`color:${actionColor(item.action)};font-size:12px;font-weight:600`"></span>'
-      + '<span x-text="formatTime(item.at)" style="font-size:10px;color:var(--text-dim);font-family:Inter,sans-serif"></span>'
+      + '<span x-text="formatTime(item.at)" style="font-size:10px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif"></span>'
       + '</div>'
       + '<div x-text="item.target_label||item.target_id" style="font-size:11px;color:var(--text-secondary);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>'
       + '<div x-text="item.display_name||item.username" style="font-size:11px;color:var(--text-dim);margin-top:1px"></div>'
@@ -127,6 +129,7 @@
       + '<a :href="auditHref" style="display:block;padding:9px 16px;text-align:center;font-size:12px;color:var(--accent);border-top:1px solid var(--border-light);text-decoration:none;font-weight:500">查看完整紀錄 →</a>'
       + '</div>'
       + '</div>'
+    } // end if (ad)
 
     el.innerHTML =
       '<button class="sidebar-toggle" id="sidebar-toggle" aria-label="選單" title="選單">'
@@ -134,12 +137,12 @@
       + '</button>'
       + '<a href="' + up + 'index.html" class="topbar__logo">'
       + '<img src="' + up + 'static/logo.png" alt="MOTRIX" style="height:26px"'
-      + ' onerror="this.replaceWith(Object.assign(document.createElement(\'span\'),{textContent:\'MOTRIX\',style:\'color:#F5F4F0;font-family:Inter,sans-serif;font-weight:700;font-size:15px;letter-spacing:.08em\'}))">'
+      + ' onerror="this.replaceWith(Object.assign(document.createElement(\'span\'),{textContent:\'MOTRIX\',style:\'color:#F5F4F0;font-family:LINE Seed TW_OTF, sans-serif;font-weight:700;font-size:15px;letter-spacing:.08em\'}))">'
       + '</a>'
       + '<div class="topbar__divider"></div>'
       + '<span class="topbar__title">Motrix 營運系統</span>'
       + '<div class="topbar__right">'
-      + '<span id="tb-display-name" style="font-size:12px;color:#888;font-family:Inter,sans-serif">' + esc(dn) + '</span>'
+      + '<span id="tb-display-name" style="font-size:12px;color:#888;font-family:LINE Seed TW_OTF, sans-serif">' + esc(dn) + '</span>'
       + buildFontCtrl()
       + bell
       + '<a href="' + cpHref + '" class="topbar__btn" style="text-decoration:none;color:#888;border-color:#333;font-size:11px">修改密碼</a>'
@@ -166,6 +169,10 @@
   var cWL  = mods.indexOf('work_log')    >= 0 || role !== 'viewer'
   var cDT  = mods.indexOf('daily_task')  >= 0 || role !== 'viewer'
   var cDev = mods.indexOf('dev_crm')     >= 0 || ad
+  var cCon = mods.indexOf('contractor_list') >= 0 || sa
+  var cPay = mods.indexOf('payslip')    >= 0 || sa
+  var cEnvG = mods.indexOf('env_guide')  >= 0 || ad
+  var cNetG = mods.indexOf('netarch_guide') >= 0 || ad
 
   var ic = {
     dash:  '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
@@ -191,6 +198,10 @@
     dtask: '<path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/>',
     ver:   '<path d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A2 2 0 013 12V7a4 4 0 014-4z"/>',
     vend:  '<path d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>',
+    contl: '<path d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0"/>',
+    paysl: '<path d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/>',
+    envg:  '<path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>',
+    netg:  '<path d="M12 20h.01M8.5 16.5a5 5 0 017 0M5 12.859a10 10 0 0114 0M1.5 9.5a15 15 0 0121 0"/>',
   }
 
   // Module → localStorage key map (used to mark current page's module as "seen")
@@ -214,9 +225,11 @@
     'sales-orders.html':       'finance',
     'work-log.html':           'work_log',
     'daily-tasks.html':        'daily_task',
+    'env-guide.html':          'env_guide',
+    'netarch-guide.html':      'netarch_guide',
   }
 
-  var _SB_BADGE_STYLE = 'display:none;background:var(--accent);color:#fff;font-size:9px;font-weight:700;font-family:Inter,sans-serif;padding:1px 5px;border-radius:8px;margin-left:auto;min-width:16px;text-align:center;line-height:1.6'
+  var _SB_BADGE_STYLE = 'display:none;background:var(--accent);color:#fff;font-size:9px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;padding:1px 5px;border-radius:8px;margin-left:auto;min-width:16px;text-align:center;line-height:1.6'
 
   function ni(href, icKey, label, activeNames, show, badgeId) {
     if (show === false) return ''
@@ -238,13 +251,15 @@
     var html = [
       sec('主選單'),
       ni(up + 'index.html',          'dash',  '儀表板',   ['index.html', ''],                       canDash),
-      sec('業務', cDev || cQ || cCM || cPj),
+      sec('業務', cDev || cQ || cCM || cPj || cEnvG || cNetG),
       ni(pg('dev-crm.html'),         'bdev',  '業務開發', ['dev-crm.html'],                          cDev, 'sb-mod-dev-crm'),
       ni(pg('quotations.html'),      'quote', '報價單',   ['quotations.html', 'quotation-form.html'], cQ,   'sb-mod-quotation'),
+      ni(pg('env-guide.html'),      'envg',  '場域選型導覽', ['env-guide.html'],                      cEnvG),
+      ni(pg('netarch-guide.html'),  'netg',  '網路架構選型導覽', ['netarch-guide.html'],               cNetG),
       (cQ ? '<a href="' + pg('approval-queue.html') + '" class="nav__item' + act(['approval-queue.html']) + '" title="簽核佇列">'
         + '<svg class="nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>'
         + '<span class="nav__label">簽核佇列</span>'
-        + '<span id="sb-approval-badge" style="display:none;background:#DC2626;color:#fff;font-size:9px;font-weight:700;font-family:Inter,sans-serif;padding:1px 5px;border-radius:8px;margin-left:auto;min-width:16px;text-align:center;line-height:1.6"></span>'
+        + '<span id="sb-approval-badge" style="display:none;background:#DC2626;color:#fff;font-size:9px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;padding:1px 5px;border-radius:8px;margin-left:auto;min-width:16px;text-align:center;line-height:1.6"></span>'
         + '</a>' : ''),
       ni(pg('case-management.html'), 'case_', '案件管理', ['case-management.html'],                   cCM,  'sb-mod-case'),
       ni(pg('projects.html'),        'proj',  '專案管理', ['projects.html'],                          cPj,  'sb-mod-projects'),
@@ -261,21 +276,23 @@
       ni(pg('receivables.html'),     'recv',  '應收帳款', ['receivables.html'],                      cFi,  'sb-mod-finance'),
       ni(pg('sales-orders.html'),    'order', '銷售訂單', ['sales-orders.html'],                     cFi,  'sb-mod-sales-orders'),
       ni(pg('reports.html'),         'rpt',   '營運報表', ['reports.html'],                          cRpt),
+      sec('勞務管理', cCon || cPay),
+      ni(pg('contractors.html'),     'contl', '外包名冊', ['contractors.html'],                      cCon),
+      ni(pg('payslips.html'),        'paysl', '勞報單',   ['payslips.html', 'payslip-form.html'],    cPay),
       sec('工作內容', cWL || cDT),
       ni(pg('work-log.html'),        'wlog',  '工作日誌',   ['work-log.html'],                         cWL,  'sb-mod-worklog'),
       (cDT ? '<a href="' + pg('daily-tasks.html') + '" class="nav__item' + act(['daily-tasks.html']) + '" title="每日工作事項">'
       + '<svg class="nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">' + ic['dtask'] + '</svg>'
       + '<span class="nav__label">每日工作事項</span>'
-      + '<span id="sb-dt-badge" style="display:none;background:#7C3AED;color:#fff;font-size:9px;font-weight:700;font-family:Inter,sans-serif;padding:1px 5px;border-radius:8px;margin-left:auto;min-width:16px;text-align:center;line-height:1.6"></span>'
-      + '<span id="sb-mod-daily-task" style="display:none;background:var(--accent);color:#fff;font-size:9px;font-weight:700;font-family:Inter,sans-serif;padding:1px 5px;border-radius:8px;margin-left:4px;min-width:16px;text-align:center;line-height:1.6"></span>'
+      + '<span id="sb-dt-badge" style="display:none;background:#7C3AED;color:#fff;font-size:9px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;padding:1px 5px;border-radius:8px;margin-left:auto;min-width:16px;text-align:center;line-height:1.6"></span>'
+      + '<span id="sb-mod-daily-task" style="display:none;background:var(--accent);color:#fff;font-size:9px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;padding:1px 5px;border-radius:8px;margin-left:4px;min-width:16px;text-align:center;line-height:1.6"></span>'
       + '</a>' : ''),
       sec('系統'),
       ni(pg('users.html'),             'users', '使用者管理', ['users.html'],             sa),
       ni(pg('approval-settings.html'),      'sett',  '簽核設定',   ['approval-settings.html'],      sa),
+      ni(pg('shipping-approval-settings.html'), 'sett', '出貨單簽核設定', ['shipping-approval-settings.html'], sa),
       ni(pg('notification-settings.html'), 'ntfy',  '通知設定',   ['notification-settings.html'],  sa),
       ni(pg('audit-log.html'),         'hist',  '歷史紀錄',   ['audit-log.html'],         ad),
-      ni(pg('contractors.html'),       'cust',  '外包名冊',   ['contractors.html'],       sa),
-      ni(pg('payslips.html'),          'hist',  '勞報單',     ['payslips.html', 'payslip-form.html'], sa),
       ni(pg('module-versions.html'),  'ver',   '版本紀錄',   ['module-versions.html'],               ad),
     ].filter(Boolean).join('')
 
@@ -371,19 +388,70 @@
     }
   }
 
+  // Module key → sidebar badge element IDs (mirrors modBadge in notif.js)
+  var _MOD_BADGES = {
+    dev_crm:     ['sb-mod-dev-crm'],
+    quotation:   ['sb-mod-quotation'],
+    case_manage: ['sb-mod-case'],
+    projects:    ['sb-mod-projects'],
+    customer:    ['sb-mod-customer'],
+    procurement: ['sb-mod-suppliers', 'sb-mod-vendor', 'sb-mod-parts', 'sb-mod-procurement'],
+    equipment:   ['sb-mod-equipment', 'sb-mod-warranty'],
+    finance:     ['sb-mod-finance', 'sb-mod-sales-orders'],
+    work_log:    ['sb-mod-worklog'],
+    daily_task:  ['sb-mod-daily-task'],
+  }
+
+  function _clearModBadge(modKey) {
+    var bids = _MOD_BADGES[modKey]
+    if (!bids) return
+    for (var i = 0; i < bids.length; i++) {
+      var el = document.getElementById(bids[i])
+      if (el) el.style.display = 'none'
+    }
+  }
+
   // ── Entry ──────────────────────────────────────────────────────────────────
   function build() {
-    // Mark current page's module as "seen" so its badge clears on next fetch
     var _curMod = _FILE_MODULE[file]
-    if (_curMod && s.token) {
+
+    // For admin+ users: ensure every known module has an entry in motrix_module_seen
+    // so _fetchModuleCounts() queries badge counts for ALL modules, not just visited ones.
+    // Unvisited modules are seeded with a 7-day lookback timestamp.
+    if (s.token && (role === 'superadmin' || role === 'admin')) {
       try {
         var _ms = JSON.parse(localStorage.getItem('motrix_module_seen') || '{}')
-        _ms[_curMod] = new Date().toISOString()
-        localStorage.setItem('motrix_module_seen', JSON.stringify(_ms))
+        var _seed = new Date(Date.now() - 7 * 86400 * 1000).toISOString()
+        var _allModKeys = Object.keys(_MOD_BADGES)
+        var _seeded = false
+        for (var _mi = 0; _mi < _allModKeys.length; _mi++) {
+          if (!_ms[_allModKeys[_mi]]) {
+            _ms[_allModKeys[_mi]] = _seed
+            _seeded = true
+          }
+        }
+        if (_seeded) localStorage.setItem('motrix_module_seen', JSON.stringify(_ms))
       } catch (_e) {}
     }
+
+    // Mark current page's module as "seen" so its badge clears on next fetch
+    if (_curMod && s.token) {
+      try {
+        var _ms2 = JSON.parse(localStorage.getItem('motrix_module_seen') || '{}')
+        // Save the PREVIOUS seen time so module pages can highlight items updated since last visit
+        var _prev = JSON.parse(localStorage.getItem('motrix_module_prev_seen') || '{}')
+        if (_ms2[_curMod]) _prev[_curMod] = _ms2[_curMod]
+        localStorage.setItem('motrix_module_prev_seen', JSON.stringify(_prev))
+        _ms2[_curMod] = new Date().toISOString()
+        localStorage.setItem('motrix_module_seen', JSON.stringify(_ms2))
+      } catch (_e) {}
+    }
+
     buildTopbar()
     buildSidebar()
+    // Defensively clear this module's badge immediately after DOM creation,
+    // so it's hidden even if _fetchModuleCounts() hasn't resolved yet.
+    if (_curMod) _clearModBadge(_curMod)
     bindMobileToggle()
     bindNavGuard()
   }

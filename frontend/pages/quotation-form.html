@@ -1,13 +1,11 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="../static/favicon.png">
   <title>報價單 - MOTRIX 營運管理系統</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Serif+TC:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.3/Sortable.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
   <link rel="stylesheet" href="../css/style.css">
   <style>
@@ -32,7 +30,7 @@
     .form-toolbar__left { display: flex; align-items: center; gap: 12px; }
     .form-toolbar__right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
     .form-quote-no {
-      font-family: Inter, sans-serif;
+      font-family: 'LINE Seed TW_OTF', sans-serif;
       font-size: 14px;
       font-weight: 700;
       color: var(--text-primary);
@@ -40,7 +38,7 @@
     }
     .save-indicator {
       font-size: 11px;
-      font-family: Inter, sans-serif;
+      font-family: 'LINE Seed TW_OTF', sans-serif;
       color: var(--text-dim);
       display: flex;
       align-items: center;
@@ -102,7 +100,7 @@
       background: var(--black);
       color: var(--white);
       border-radius: 50%;
-      font-family: Inter, sans-serif;
+      font-family: 'LINE Seed TW_OTF', sans-serif;
       font-size: 10px;
       font-weight: 700;
       display: flex; align-items: center; justify-content: center;
@@ -124,7 +122,7 @@
     .form-group { display: flex; flex-direction: column; gap: 4px; }
     .form-label {
       font-size: 10px;
-      font-family: Inter, sans-serif;
+      font-family: 'LINE Seed TW_OTF', sans-serif;
       letter-spacing: .08em;
       text-transform: uppercase;
       color: var(--text-dim);
@@ -171,7 +169,7 @@
       padding: 8px 8px;
       text-align: left;
       font-size: 9px;
-      font-family: Inter, sans-serif;
+      font-family: 'LINE Seed TW_OTF', sans-serif;
       letter-spacing: .08em;
       text-transform: uppercase;
       color: var(--text-dim);
@@ -206,7 +204,7 @@
     }
     .cell-input:hover { border-color: var(--border-light); background: #fff; }
     .cell-input:focus { border-color: var(--accent); background: #fff; box-shadow: 0 0 0 2px rgba(37,99,235,.08); }
-    .cell-input.num { text-align: right; font-family: Inter, sans-serif; }
+    .cell-input.num { text-align: right; font-family: 'LINE Seed TW_OTF', sans-serif; }
     .cell-input.internal { background: #FFF8F0; }
     .cell-input.internal:hover { background: #fff; }
     .cell-textarea {
@@ -230,7 +228,7 @@
     .cell-textarea:hover { border-color: var(--border-light); background: #fff; }
     .cell-textarea:focus { border-color: var(--accent); background: #fff; box-shadow: 0 0 0 2px rgba(37,99,235,.08); }
     .items-table td.va-top { vertical-align: top; padding-top: 7px; }
-    .cell-display { font-family: Inter, sans-serif; font-size: 12px; text-align: right; padding: 5px 7px; color: var(--text-primary); }
+    .cell-display { font-family: 'LINE Seed TW_OTF', sans-serif; font-size: 12px; text-align: right; padding: 5px 7px; color: var(--text-primary); }
     .cell-display.muted { color: var(--text-dim); }
     .margin-warn { color: var(--danger); font-weight: 600; }
     .del-btn {
@@ -246,6 +244,21 @@
     }
     tr:hover .del-btn { opacity: 1; }
     .del-btn:hover { background: var(--danger-light); color: var(--danger); }
+    /* ── 拖曳排序 ── */
+    .drag-handle { cursor: grab; color: var(--text-dim); opacity: 0; transition: opacity .1s; display:inline-flex; align-items:center; }
+    tr:hover .drag-handle { opacity: 1; }
+    .drag-handle:active { cursor: grabbing; }
+    .sortable-ghost td { background: #EFF6FF !important; opacity: .5; }
+    .sortable-chosen { box-shadow: 0 2px 16px rgba(0,0,0,.12); }
+    .is-locked .drag-handle { display: none !important; }
+    /* ── 標題行 ── */
+    tr.item-header-row td { background: #EFF6FF; border-top: 2px solid #BFDBFE; border-bottom: 1px solid #BFDBFE; }
+    tr.item-header-row:hover td { background: #E0EEFF; }
+    .cell-textarea.header-desc { font-weight: 700; font-size: 13px; color: #1D4ED8; width: 100%; }
+    tr.item-header-row td:not(:first-child):not(:last-child) { padding: 0 2px; }
+    tr.item-header-row td input,
+    tr.item-header-row td select,
+    tr.item-header-row td .cell-display { display: none !important; }
 
     /* ── 合計區 ── */
     .totals-grid {
@@ -260,8 +273,8 @@
     .total-row > * { padding: 5px 10px; font-size: 13px; border-bottom: 1px solid #F0EEE9; }
     .total-row:last-child > * { border-bottom: none; }
     .total-label { color: var(--text-secondary); }
-    .total-currency { font-family: Inter, sans-serif; color: var(--text-dim); font-size: 11px; text-align: right; }
-    .total-amount { font-family: Inter, sans-serif; text-align: right; font-variant-numeric: tabular-nums; }
+    .total-currency { font-family: 'LINE Seed TW_OTF', sans-serif; color: var(--text-dim); font-size: 11px; text-align: right; }
+    .total-amount { font-family: 'LINE Seed TW_OTF', sans-serif; text-align: right; font-variant-numeric: tabular-nums; }
     .total-row.grand > * { font-weight: 700; font-size: 14px; color: var(--text-primary); border-top: 2px solid var(--text-primary); border-bottom: none; padding-top: 10px; }
 
     /* ── 右側成本面板 ── */
@@ -273,7 +286,7 @@
     }
     .cost-panel__title {
       font-size: 10px;
-      font-family: Inter, sans-serif;
+      font-family: 'LINE Seed TW_OTF', sans-serif;
       letter-spacing: .14em;
       text-transform: uppercase;
       color: #888;
@@ -298,7 +311,7 @@
     }
     .cost-row:last-child { border-bottom: none; }
     .cost-row__label { color: #888; }
-    .cost-row__val { font-family: Inter, sans-serif; font-weight: 600; color: var(--white); }
+    .cost-row__val { font-family: 'LINE Seed TW_OTF', sans-serif; font-weight: 600; color: var(--white); }
     .cost-row__val.success { color: #4ADE80; }
     .cost-row__val.danger  { color: #F87171; }
     .cost-row__val.warning { color: #FCD34D; }
@@ -310,7 +323,7 @@
       border: 1px solid #333;
       border-radius: 4px;
       color: var(--white);
-      font-family: Inter, sans-serif;
+      font-family: 'LINE Seed TW_OTF', sans-serif;
       font-size: 12px;
       text-align: right;
       outline: none;
@@ -324,7 +337,7 @@
       text-align: center;
     }
     .net-profit__val {
-      font-family: Inter, sans-serif;
+      font-family: 'LINE Seed TW_OTF', sans-serif;
       font-size: 22px;
       font-weight: 700;
     }
@@ -389,6 +402,9 @@
     .btn-approve   { background:#15803D; color:#fff; }
     .btn-approve:hover { background:#166534; }
     .btn-sm { padding:6px 12px; font-size:11px; }
+    .status-select-admin { appearance:none; -webkit-appearance:none; cursor:pointer; padding-right:16px; border:none; background:transparent; font:inherit; color:inherit; outline:none; }
+    .status-wrap-admin { position:relative; display:inline-flex; align-items:center; }
+    .status-wrap-admin svg { position:absolute; right:3px; pointer-events:none; opacity:.7; }
 
     /* ── 快捷功能 ── */
     .toggle-btn {
@@ -463,7 +479,7 @@
       padding: 32px 36px;
       border: 1px solid #E0DDD8;
       border-radius: 4px;
-      font-family: 'Noto Serif TC', serif;
+      font-family: 'LINE Seed TW_OTF', serif;
       font-size: 13px;
       line-height: 1.6;
       position: relative;
@@ -487,7 +503,7 @@
       white-space: nowrap;
       user-select: none;
       text-align: center;
-      font-family: 'Noto Sans TC', 'Noto Serif TC', sans-serif;
+      font-family: 'LINE Seed TW_OTF', sans-serif;
       line-height: 1.5;
     }
     .pdf-wm-item b {
@@ -538,7 +554,7 @@
     }
     .pdf-meta-title {
       font-size: 9px;
-      font-family: Inter, sans-serif;
+      font-family: 'LINE Seed TW_OTF', sans-serif;
       letter-spacing: .1em;
       text-transform: uppercase;
       color: #999;
@@ -559,17 +575,17 @@
     }
     .pdf-items td { padding: 8px 10px; border-bottom: 1px solid #E8E5DF; font-size: 12px; }
     .pdf-items tr:last-child td { border-bottom: none; }
-    .pdf-items td.r { text-align: right; font-family: Inter, sans-serif; }
+    .pdf-items td.r { text-align: right; font-family: 'LINE Seed TW_OTF', sans-serif; }
     .pdf-totals { max-width: 300px; margin-left: auto; border: 1px solid #E8E5DF; border-radius: 4px; overflow: hidden; }
     .pdf-total-row { display: flex; justify-content: space-between; padding: 7px 12px; border-bottom: 1px solid #F0EEE9; font-size: 12px; }
     .pdf-total-row:last-child { border-bottom: none; font-weight: 700; font-size: 14px; background: #F8F7F4; }
-    .pdf-total-row span:last-child { font-family: Inter, sans-serif; }
+    .pdf-total-row span:last-child { font-family: 'LINE Seed TW_OTF', sans-serif; }
     .pdf-terms { margin-top: 18px; }
-    .pdf-terms-title { font-size: 10px; font-family: Inter, sans-serif; letter-spacing: .1em; text-transform: uppercase; color: #999; font-weight: 600; margin-bottom: 4px; }
+    .pdf-terms-title { font-size: 10px; font-family: 'LINE Seed TW_OTF', sans-serif; letter-spacing: .1em; text-transform: uppercase; color: #999; font-weight: 600; margin-bottom: 4px; }
     .pdf-terms-val { font-size: 11px; color: #555; line-height: 1.7; }
     .pdf-sign { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 24px; }
     .pdf-sign-box { border: 1px solid #E8E5DF; border-radius: 4px; padding: 12px; min-height: 60px; }
-    .pdf-sign-label { font-size: 10px; color: #999; font-family: Inter, sans-serif; letter-spacing: .08em; text-transform: uppercase; }
+    .pdf-sign-label { font-size: 10px; color: #999; font-family: 'LINE Seed TW_OTF', sans-serif; letter-spacing: .08em; text-transform: uppercase; }
     .pdf-footer { text-align: center; font-size: 10px; color: #999; margin-top: 20px; padding-top: 14px; border-top: 1px solid #E8E5DF; }
     /* ── 已送出唯讀鎖定 ── */
     .is-locked .cell-input,
@@ -585,7 +601,7 @@
     /* ── NT$ 前綴輸入欄 ── */
     .nt-input-group { display:flex; align-items:stretch; border:1px solid var(--border-light); border-radius:var(--radius); overflow:hidden; background:#fff; transition:border-color .12s,box-shadow .12s; }
     .nt-input-group:focus-within { border-color:var(--accent); box-shadow:0 0 0 3px rgba(37,99,235,.08); }
-    .nt-prefix { padding:0 10px; font-size:11px; color:var(--text-dim); background:#F8F7F4; border-right:1px solid var(--border-light); display:flex; align-items:center; flex-shrink:0; font-family:Inter,sans-serif; white-space:nowrap; }
+    .nt-prefix { padding:0 10px; font-size:11px; color:var(--text-dim); background:#F8F7F4; border-right:1px solid var(--border-light); display:flex; align-items:center; flex-shrink:0; font-family:LINE Seed TW_OTF, sans-serif; white-space:nowrap; }
     .nt-input-group input.form-input { border:none !important; box-shadow:none !important; border-radius:0 !important; flex:1; min-width:0; }
   </style>
 </head>
@@ -601,7 +617,7 @@
   <!-- ══ 解鎖報價單 Modal ══ -->
   <div x-show="showUnlockModal" x-cloak
        style="position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center">
-    <div style="background:#fff;border-radius:12px;width:380px;box-shadow:0 24px 64px rgba(0,0,0,.2);font-family:Inter,sans-serif;overflow:hidden"
+    <div style="background:#fff;border-radius:12px;width:380px;box-shadow:0 24px 64px rgba(0,0,0,.2);font-family:LINE Seed TW_OTF, sans-serif;overflow:hidden"
          @keydown.escape.window="showUnlockModal=false">
       <div style="display:flex;align-items:center;gap:10px;padding:16px 20px;border-bottom:1px solid #E8E5DF">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#B45309" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
@@ -614,10 +630,10 @@
           此報價單已審核完成。輸入您的個人解鎖密碼後即可修改內容，儲存後自動重新鎖定。
         </div>
         <div style="margin-bottom:4px">
-          <label style="display:block;font-size:10px;font-family:Inter,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#9CA3AF;font-weight:500;margin-bottom:5px">解鎖密碼 <span style="color:#DC2626">*</span></label>
+          <label style="display:block;font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#9CA3AF;font-weight:500;margin-bottom:5px">解鎖密碼 <span style="color:#DC2626">*</span></label>
           <input type="password" x-model="unlockPwd" @keydown.enter="doUnlock()"
                  x-ref="unlockInput"
-                 style="width:100%;padding:9px 11px;border:1px solid #E8E5DF;border-radius:6px;font-size:13px;font-family:Inter,sans-serif;outline:none;box-sizing:border-box"
+                 style="width:100%;padding:9px 11px;border:1px solid #E8E5DF;border-radius:6px;font-size:13px;font-family:LINE Seed TW_OTF, sans-serif;outline:none;box-sizing:border-box"
                  :style="unlockError ? 'border-color:#DC2626' : ''"
                  placeholder="輸入解鎖密碼">
           <div x-show="unlockError" style="color:#DC2626;font-size:11px;margin-top:5px" x-text="unlockError"></div>
@@ -625,9 +641,9 @@
       </div>
       <div style="display:flex;justify-content:flex-end;gap:8px;padding:14px 20px;border-top:1px solid #E8E5DF">
         <button @click="showUnlockModal=false"
-                style="padding:8px 16px;border-radius:6px;border:1px solid #E8E5DF;background:#fff;font-size:12px;cursor:pointer;font-family:Inter,sans-serif;color:#374151">取消</button>
+                style="padding:8px 16px;border-radius:6px;border:1px solid #E8E5DF;background:#fff;font-size:12px;cursor:pointer;font-family:LINE Seed TW_OTF, sans-serif;color:#374151">取消</button>
         <button @click="doUnlock()" :disabled="unlockLoading"
-                style="padding:8px 16px;border-radius:6px;border:none;background:#FEF3C7;color:#92400E;font-size:12px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;border:1px solid #FDE68A;display:flex;align-items:center;gap:6px">
+                style="padding:8px 16px;border-radius:6px;border:none;background:#FEF3C7;color:#92400E;font-size:12px;font-weight:600;cursor:pointer;font-family:LINE Seed TW_OTF, sans-serif;border:1px solid #FDE68A;display:flex;align-items:center;gap:6px">
           <svg x-show="!unlockLoading" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z"/></svg>
           <span x-text="unlockLoading ? '驗證中...' : '確認解鎖'"></span>
         </button>
@@ -638,20 +654,20 @@
   <!-- ══ 導航離開確認 Modal ══ -->
   <div x-show="showNavModal" x-cloak
        style="position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center">
-    <div style="background:#fff;border-radius:12px;padding:32px 36px;width:380px;box-shadow:0 24px 64px rgba(0,0,0,.2);font-family:Inter,sans-serif">
+    <div style="background:#fff;border-radius:12px;padding:32px 36px;width:380px;box-shadow:0 24px 64px rgba(0,0,0,.2);font-family:LINE Seed TW_OTF, sans-serif">
       <div style="font-size:16px;font-weight:700;color:#0A0A0A;margin-bottom:6px">離開報價單？</div>
       <div style="font-size:13px;color:#6B7280;margin-bottom:28px">目前有未儲存的變更，離開後將會消失。</div>
       <div style="display:flex;flex-direction:column;gap:10px">
         <button @click="navSave()"
-                style="padding:12px;border-radius:8px;border:none;background:#0A0A0A;color:#F5F4F0;font-size:13px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif">
+                style="padding:12px;border-radius:8px;border:none;background:#0A0A0A;color:#F5F4F0;font-size:13px;font-weight:600;cursor:pointer;font-family:LINE Seed TW_OTF, sans-serif">
           儲存草稿並離開
         </button>
         <button @click="navDiscard()"
-                style="padding:12px;border-radius:8px;border:1.5px solid #E5E7EB;background:#fff;color:#374151;font-size:13px;font-weight:500;cursor:pointer;font-family:Inter,sans-serif">
+                style="padding:12px;border-radius:8px;border:1.5px solid #E5E7EB;background:#fff;color:#374151;font-size:13px;font-weight:500;cursor:pointer;font-family:LINE Seed TW_OTF, sans-serif">
           不儲存，直接離開
         </button>
         <button @click="navCancel()"
-                style="padding:12px;border-radius:8px;border:none;background:transparent;color:#9CA3AF;font-size:13px;cursor:pointer;font-family:Inter,sans-serif">
+                style="padding:12px;border-radius:8px;border:none;background:transparent;color:#9CA3AF;font-size:13px;cursor:pointer;font-family:LINE Seed TW_OTF, sans-serif">
           取消，繼續編輯
         </button>
       </div>
@@ -662,7 +678,7 @@
   <div x-show="showSubmitModal" x-cloak
        style="position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center"
        @keydown.escape.window="showSubmitModal=false">
-    <div style="background:#fff;border-radius:12px;width:460px;max-width:94vw;box-shadow:0 24px 64px rgba(0,0,0,.22);font-family:Inter,sans-serif;overflow:hidden" @click.stop>
+    <div style="background:#fff;border-radius:12px;width:460px;max-width:94vw;box-shadow:0 24px 64px rgba(0,0,0,.22);font-family:LINE Seed TW_OTF, sans-serif;overflow:hidden" @click.stop>
       <!-- Header -->
       <div style="padding:15px 20px 13px;border-bottom:1px solid #E5E7EB;display:flex;align-items:center;gap:10px">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#4B5563" stroke-width="2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
@@ -673,7 +689,7 @@
       <div style="padding:18px 20px">
         <!-- 報價資訊 -->
         <div style="background:#F9FAFB;border:1px solid #E5E7EB;border-radius:8px;padding:11px 14px;font-size:12px;color:#374151;line-height:1.9">
-          <div><span style="color:#9CA3AF;display:inline-block;width:52px">報價單</span><strong style="font-family:Inter,sans-serif" x-text="q.quoteNo"></strong></div>
+          <div><span style="color:#9CA3AF;display:inline-block;width:52px">報價單</span><strong style="font-family:LINE Seed TW_OTF, sans-serif" x-text="q.quoteNo"></strong></div>
           <div><span style="color:#9CA3AF;display:inline-block;width:52px">客戶</span><span x-text="q.customerName"></span></div>
           <div>
             <span style="color:#9CA3AF;display:inline-block;width:52px">報價人</span>
@@ -695,7 +711,7 @@
             </label>
             <textarea x-model="submitNote" @input="if(submitNote.trim()) submitNoteError=false"
                       placeholder="請說明代理送出的原因…"
-                      style="width:100%;box-sizing:border-box;border:1.5px solid #D1D5DB;border-radius:6px;padding:8px 10px;font-size:12px;resize:vertical;min-height:68px;font-family:Inter,sans-serif;outline:none;transition:border-color .15s"
+                      style="width:100%;box-sizing:border-box;border:1.5px solid #D1D5DB;border-radius:6px;padding:8px 10px;font-size:12px;resize:vertical;min-height:68px;font-family:LINE Seed TW_OTF, sans-serif;outline:none;transition:border-color .15s"
                       :style="submitNoteError ? 'border-color:#ef4444' : ''"
                       @focus="$el.style.borderColor='#6B7280'"
                       @blur="$el.style.borderColor=submitNoteError?'#ef4444':'#D1D5DB'"></textarea>
@@ -715,9 +731,73 @@
       <!-- Footer -->
       <div style="padding:10px 20px 16px;display:flex;justify-content:flex-end;gap:8px;border-top:1px solid #F3F4F6">
         <button @click="showSubmitModal=false"
-                style="padding:7px 18px;border:1.5px solid #D1D5DB;border-radius:6px;background:#fff;font-size:13px;color:#374151;cursor:pointer;font-family:Inter,sans-serif">取消</button>
+                style="padding:7px 18px;border:1.5px solid #D1D5DB;border-radius:6px;background:#fff;font-size:13px;color:#374151;cursor:pointer;font-family:LINE Seed TW_OTF, sans-serif">取消</button>
         <button @click="confirmSubmit()"
-                style="padding:7px 18px;border:none;border-radius:6px;background:#0A0A0A;color:#F5F4F0;font-size:13px;font-weight:500;cursor:pointer;font-family:Inter,sans-serif">確認送出</button>
+                style="padding:7px 18px;border:none;border-radius:6px;background:#0A0A0A;color:#F5F4F0;font-size:13px;font-weight:500;cursor:pointer;font-family:LINE Seed TW_OTF, sans-serif">確認送出</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ 退回修改 Modal ══ -->
+  <div x-show="showRejectModal" x-cloak
+       style="position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center"
+       @keydown.escape.window="showRejectModal=false">
+    <div style="background:#fff;border-radius:12px;width:460px;max-width:94vw;box-shadow:0 24px 64px rgba(0,0,0,.22);font-family:LINE Seed TW_OTF, sans-serif;overflow:hidden" @click.stop>
+      <div style="padding:15px 20px 13px;border-bottom:1px solid #E5E7EB;display:flex;align-items:center;gap:10px">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#DC2626" stroke-width="2"><path d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"/></svg>
+        <span style="font-size:13px;font-weight:600;color:#0A0A0A">退回修改</span>
+        <button @click="showRejectModal=false" style="margin-left:auto;background:none;border:none;cursor:pointer;color:#9CA3AF;font-size:20px;line-height:1;padding:0 4px">&times;</button>
+      </div>
+      <div style="padding:18px 20px">
+        <div style="font-size:12px;color:#374151;line-height:1.7;margin-bottom:14px">
+          此報價單將退回為「草稿」狀態（單號升版），申請人收到通知後可修改並重新送審。
+        </div>
+        <div style="font-size:12px;font-weight:600;color:#374151;margin-bottom:6px">退回原因 <span style="font-weight:400;color:#9CA3AF">（必填，供申請人修改參考）</span></div>
+        <textarea x-model="rejectNote" placeholder="請說明需要修改的項目或原因…"
+                  style="width:100%;height:90px;border:1.5px solid #D1D5DB;border-radius:6px;padding:9px 10px;font-size:12px;font-family:inherit;resize:vertical;box-sizing:border-box;outline:none"
+                  :style="rejectNote.trim() ? '' : 'border-color:#FCA5A5'"
+                  @focus="$el.style.borderColor='#6366F1'" @blur="$el.style.borderColor=rejectNote.trim()?'#D1D5DB':'#FCA5A5'"></textarea>
+      </div>
+      <div style="padding:10px 20px 16px;display:flex;justify-content:flex-end;gap:8px;border-top:1px solid #F3F4F6">
+        <button @click="showRejectModal=false"
+                style="padding:7px 18px;border:1.5px solid #D1D5DB;border-radius:6px;background:#fff;font-size:13px;color:#374151;cursor:pointer;font-family:LINE Seed TW_OTF, sans-serif">取消</button>
+        <button @click="confirmReject()" :disabled="!rejectNote.trim() || rejecting"
+                style="padding:7px 18px;border:none;border-radius:6px;font-size:13px;font-weight:500;cursor:pointer;font-family:LINE Seed TW_OTF, sans-serif"
+                :style="!rejectNote.trim() || rejecting ? 'background:#FCA5A5;color:#fff;cursor:not-allowed' : 'background:#DC2626;color:#fff'">
+          <span x-text="rejecting ? '退回中…' : '確認退回'"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ 拒絕結案 Modal ══ -->
+  <div x-show="showRejectFinalModal" x-cloak
+       style="position:fixed;inset:0;z-index:10001;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center"
+       @keydown.escape.window="showRejectFinalModal=false">
+    <div style="background:#fff;border-radius:12px;width:460px;max-width:94vw;box-shadow:0 24px 64px rgba(0,0,0,.3);font-family:LINE Seed TW_OTF, sans-serif;overflow:hidden" @click.stop>
+      <div style="padding:15px 20px 13px;border-bottom:1px solid #E5E7EB;display:flex;align-items:center;gap:10px;background:#1C1917">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#FCA5A5" stroke-width="2"><path d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
+        <span style="font-size:13px;font-weight:600;color:#fff">拒絕結案（永久鎖定）</span>
+        <button @click="showRejectFinalModal=false" style="margin-left:auto;background:none;border:none;cursor:pointer;color:#9CA3AF;font-size:20px;line-height:1;padding:0 4px">&times;</button>
+      </div>
+      <div style="padding:18px 20px">
+        <div style="font-size:12px;color:#374151;line-height:1.7;margin-bottom:6px;padding:10px 12px;background:#FFF1F2;border-left:3px solid #DC2626;border-radius:4px">
+          ⚠ 此操作<b>不可撤銷</b>。報價單將永久標記為「已拒絕」，申請人無法再修改或重新送審。
+        </div>
+        <div style="font-size:12px;font-weight:600;color:#374151;margin-bottom:6px;margin-top:14px">拒絕原因 <span style="font-weight:400;color:#9CA3AF">（必填）</span></div>
+        <textarea x-model="rejectFinalNote" placeholder="請說明拒絕結案原因（申請人將收到通知）…"
+                  style="width:100%;height:90px;border:1.5px solid #D1D5DB;border-radius:6px;padding:9px 10px;font-size:12px;font-family:inherit;resize:vertical;box-sizing:border-box;outline:none"
+                  :style="rejectFinalNote.trim() ? '' : 'border-color:#FCA5A5'"
+                  @focus="$el.style.borderColor='#374151'" @blur="$el.style.borderColor=rejectFinalNote.trim()?'#D1D5DB':'#FCA5A5'"></textarea>
+      </div>
+      <div style="padding:10px 20px 16px;display:flex;justify-content:flex-end;gap:8px;border-top:1px solid #F3F4F6">
+        <button @click="showRejectFinalModal=false"
+                style="padding:7px 18px;border:1.5px solid #D1D5DB;border-radius:6px;background:#fff;font-size:13px;color:#374151;cursor:pointer;font-family:LINE Seed TW_OTF, sans-serif">取消</button>
+        <button @click="confirmRejectFinal()" :disabled="!rejectFinalNote.trim() || rejectingFinal"
+                style="padding:7px 18px;border:none;border-radius:6px;font-size:13px;font-weight:500;cursor:pointer;font-family:LINE Seed TW_OTF, sans-serif"
+                :style="!rejectFinalNote.trim() || rejectingFinal ? 'background:#9CA3AF;color:#fff;cursor:not-allowed' : 'background:#1C1917;color:#fff'">
+          <span x-text="rejectingFinal ? '處理中…' : '確認拒絕結案'"></span>
+        </button>
       </div>
     </div>
   </div>
@@ -731,11 +811,28 @@
       </a>
       <span style="color:var(--border-light)">/</span>
       <span class="form-quote-no" x-text="q.quoteNo"></span>
-      <span class="badge"
-        :class="{'badge--draft':q.status==='草稿','badge--pending':q.status==='待審核','badge--approved':q.status==='已核准','badge--sent':q.status==='已送出'}"
-        x-text="q.status"></span>
+      <template x-if="session.role === 'superadmin'">
+        <div class="status-wrap-admin badge"
+             :class="{'badge--draft':q.status==='草稿','badge--pending':q.status==='待審核','badge--approved':q.status==='已核准','badge--sent':q.status==='已送出','badge--warning':q.status==='已取消','badge--rejected':q.status==='已拒絕'}"
+             title="超級管理員可手動調整狀態">
+          <select class="status-select-admin" :value="q.status"
+                  @change="patchStatus($event.target.value, $event.target)">
+            <option value="草稿">草稿</option>
+            <option value="待審核">待審核</option>
+            <option value="已送出">已送出</option>
+            <option value="已取消">已取消</option>
+            <option value="已拒絕">已拒絕</option>
+          </select>
+          <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+        </div>
+      </template>
+      <template x-if="session.role !== 'superadmin'">
+        <span class="badge"
+          :class="{'badge--draft':q.status==='草稿','badge--pending':q.status==='待審核','badge--approved':q.status==='已核准','badge--sent':q.status==='已送出','badge--warning':q.status==='已取消','badge--rejected':q.status==='已拒絕'}"
+          x-text="q.status"></span>
+      </template>
       <template x-if="q.editHistory && q.editHistory.length > 0">
-        <span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;font-family:Inter,sans-serif;background:#FEF3C7;color:#92400E;border:1px solid #FDE68A">
+        <span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;font-family:LINE Seed TW_OTF, sans-serif;background:#FEF3C7;color:#92400E;border:1px solid #FDE68A">
           <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
           修改 <span x-text="q.editHistory.length"></span> 次
         </span>
@@ -744,7 +841,7 @@
     <div class="save-indicator">
       <div class="save-dot" :style="isDirty ? 'background:var(--warning)' : 'background:var(--success)'"></div>
       <span x-text="isDirty ? '未儲存的變更' : lastSaved ? '已儲存 ' + lastSaved : '草稿已儲存'"></span>
-      <span style="margin-left:10px;padding:2px 7px;border-radius:3px;font-size:10px;font-family:Inter,sans-serif"
+      <span style="margin-left:10px;padding:2px 7px;border-radius:3px;font-size:10px;font-family:LINE Seed TW_OTF, sans-serif"
             :style="backendOnline ? 'background:#F0FDF4;color:#15803D' : 'background:#FEF2F2;color:#DC2626'"
             :title="backendOnline ? '後端 API 正常' : '後端離線，僅 localStorage 備份'"
             x-text="backendOnline ? '● DB' : '● 離線'"></span>
@@ -774,14 +871,14 @@
         </template>
       </div>
       <template x-if="q.dealTag==='已成案'||q.dealTag==='已結案'">
-        <a href="case-management.html" style="font-size:11px;color:#15803D;text-decoration:none;display:flex;align-items:center;gap:4px;padding:4px 8px;border:1px solid #86EFAC;border-radius:4px;white-space:nowrap;font-family:Inter,sans-serif">
+        <a href="case-management.html" style="font-size:11px;color:#15803D;text-decoration:none;display:flex;align-items:center;gap:4px;padding:4px 8px;border:1px solid #86EFAC;border-radius:4px;white-space:nowrap;font-family:LINE Seed TW_OTF, sans-serif">
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg>
           案件管理
         </a>
       </template>
       <template x-if="q.dealTag==='已成案'||q.dealTag==='已結案'">
         <a :href="'settlement.html?no=' + q.quoteNo"
-           style="font-size:11px;color:#7C3AED;text-decoration:none;display:flex;align-items:center;gap:4px;padding:4px 8px;border:1px solid #C4B5FD;border-radius:4px;white-space:nowrap;font-family:Inter,sans-serif;background:#FAF5FF">
+           style="font-size:11px;color:#7C3AED;text-decoration:none;display:flex;align-items:center;gap:4px;padding:4px 8px;border:1px solid #C4B5FD;border-radius:4px;white-space:nowrap;font-family:LINE Seed TW_OTF, sans-serif;background:#FAF5FF">
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 7H6a2 2 0 00-2 2v9a2 2 0 002 2h9a2 2 0 002-2v-3m-4-9l4 4L11 17H7v-4L15 5z"/></svg>
           成本精算
         </a>
@@ -828,27 +925,45 @@
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
         匯出次數
         <span x-show="q.exportCount > 0"
-              style="background:#E5E3DE;border-radius:3px;padding:1px 5px;font-size:9px;font-family:Inter,sans-serif"
+              style="background:#E5E3DE;border-radius:3px;padding:1px 5px;font-size:9px;font-family:LINE Seed TW_OTF, sans-serif"
               x-text="q.exportCount"></span>
       </button>
-      <template x-if="q.status !== '待審核' && q.status !== '已送出'">
+      <template x-if="q.status !== '待審核' && q.status !== '簽核中' && q.status !== '已送出'">
         <button class="btn btn-sm" @click="submitQuote()"
                 :class="needsApproval ? 'btn-warning' : 'btn-primary'">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
           <span x-text="needsApproval ? '⚠ 申請送出（含特殊條件）' : '申請送出審核'"></span>
         </button>
       </template>
-      <template x-if="q.status === '待審核' && session.role === 'superadmin' && q.approval?.requestedBy !== session.username">
+      <template x-if="(q.status === '待審核' || q.status === '簽核中') && isCurrentTierApprover()">
         <button class="btn btn-approve btn-sm" @click="openPreview('external')" title="查看對外預覽後確認簽核">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
           預覽後簽核
         </button>
       </template>
-      <template x-if="q.status === '待審核' && session.role === 'superadmin' && q.approval?.requestedBy === session.username">
-        <span style="font-size:11px;color:#B45309;padding:6px 10px;background:#FEF3C7;border-radius:var(--radius);border:1px solid #FDE68A">⚠ 您為申請人，需由他人簽核</span>
+      <template x-if="(q.status === '待審核' || q.status === '簽核中') && isCurrentTierApprover()">
+        <button class="btn btn-sm" style="background:#FEF2F2;color:#DC2626;border:1px solid #FECACA;" @click="rejectQuote()">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"/></svg>
+          退回修改
+        </button>
       </template>
-      <template x-if="q.status === '待審核' && session.role !== 'superadmin'">
-        <span style="font-size:11px;color:#6B7280;padding:6px 10px;background:#F3F4F6;border-radius:var(--radius);border:1px solid #E5E7EB">⏳ 等待管理員簽核</span>
+      <template x-if="(q.status === '待審核' || q.status === '簽核中') && isCurrentTierApprover()">
+        <button class="btn btn-sm" style="background:#1C1917;color:#fff;border:1px solid #1C1917;" @click="rejectFinalQuote()">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
+          拒絕結案
+        </button>
+      </template>
+      <template x-if="(q.status === '待審核' || q.status === '簽核中') && !isCurrentTierApprover() && q.approval?.requestedBy !== session.username">
+        <span style="font-size:11px;color:#6B7280;padding:6px 10px;background:#F3F4F6;border-radius:var(--radius);border:1px solid #E5E7EB">⏳ 等待 <span x-text="pendingApproverLabel()"></span> 審核</span>
+      </template>
+      <template x-if="(q.status === '待審核' || q.status === '簽核中') && q.approval?.requestedBy === session.username && !isCurrentTierApprover()">
+        <span style="font-size:11px;color:#B45309;padding:6px 10px;background:#FEF3C7;border-radius:var(--radius);border:1px solid #FDE68A">⚠ 您為申請人，等待 <span x-text="pendingApproverLabel()"></span> 簽核</span>
+      </template>
+      <template x-if="(q.status === '待審核' || q.status === '簽核中') && q.approval?.requestedBy === session.username">
+        <button class="btn btn-sm" style="background:#FEF2F2;color:#DC2626;border:1px solid #FECACA;" @click="recallQuote()">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"/></svg>
+          收回草稿
+        </button>
       </template>
     </div>
   </div>
@@ -857,6 +972,65 @@
   <div class="form-layout">
 
     <div class="form-left" :class="{'is-locked': q.status === '已送出' && !unlocked}">
+
+      <!-- 退回改版通知橫幅：有 returnInfo 就顯示（不限於草稿狀態） -->
+      <div x-show="q.returnInfo"
+           style="background:#FFF7ED;border:1px solid #FED7AA;border-radius:8px;padding:14px 16px;margin-bottom:18px">
+        <div style="display:flex;align-items:flex-start;gap:10px">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C2410C" stroke-width="2" style="flex-shrink:0;margin-top:2px"><path d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"/></svg>
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+              <span style="font-size:12px;font-weight:700;color:#C2410C"
+                    x-text="q.status === '草稿' ? '此報價單由簽核人退回修改，請修改後重新送審' : '此為改版報價單（已重新送審）'"></span>
+              <span style="font-size:10px;font-weight:600;padding:2px 7px;border-radius:10px;background:#FED7AA;color:#7C2D12;white-space:nowrap">改版</span>
+            </div>
+            <div style="font-size:11px;color:#9A3412;line-height:1.8;flex-wrap:wrap;display:flex;gap:0 16px">
+              <span>退回人：<b x-text="q.returnInfo?.returnedByDisplay || q.returnInfo?.returnedBy || '—'"></b></span>
+              <span>時間：<b x-text="q.returnInfo?.returnedAt ? new Date(q.returnInfo.returnedAt).toLocaleString('zh-TW') : '—'"></b></span>
+              <span>原始單號：<b x-text="q.returnInfo?.originalQuoteNo || '—'"></b></span>
+            </div>
+            <template x-if="q.returnInfo?.note">
+              <div style="margin-top:6px;padding:8px 10px;background:#FEF2E7;border-radius:5px;border-left:3px solid #F97316;font-size:12px;color:#7C2D12">
+                <b>退回原因：</b><span x-text="q.returnInfo.note"></span>
+              </div>
+            </template>
+            <template x-if="q.returnInfo?.previousItems?.length">
+              <div style="margin-top:8px">
+                <button style="background:none;border:none;color:#9A3412;font-size:11px;cursor:pointer;padding:0;text-decoration:underline;font-family:inherit"
+                        @click="$refs.prevItems.style.display = $refs.prevItems.style.display === 'none' ? 'block' : 'none'">
+                  ▸ 前版品項（<span x-text="q.returnInfo.previousItems.length"></span> 項，點擊展開）
+                </button>
+                <div x-ref="prevItems" style="display:none;margin-top:6px;border:1px solid #FED7AA;border-radius:6px;overflow:hidden">
+                  <table style="width:100%;border-collapse:collapse;font-size:11px">
+                    <thead>
+                      <tr style="background:#FEF0E0;color:#7C2D12">
+                        <th style="padding:5px 8px;text-align:left;font-weight:600">品項說明</th>
+                        <th style="padding:5px 8px;text-align:left;font-weight:600;width:100px">廠牌 / 型號</th>
+                        <th style="padding:5px 8px;text-align:right;font-weight:600;width:55px">數量</th>
+                        <th style="padding:5px 8px;text-align:left;font-weight:600;width:44px">單位</th>
+                        <th style="padding:5px 8px;text-align:right;font-weight:600;width:90px">單價</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <template x-for="(item, idx) in q.returnInfo.previousItems" :key="idx">
+                        <tr :style="item.type === 'header' ? 'background:#FEF0E0' : 'border-top:1px solid #FED7AA'">
+                          <td style="padding:5px 8px;color:#1a1a1a"
+                              :style="item.type === 'header' ? 'font-weight:600;color:#7C2D12' : ''"
+                              x-text="item.description || '—'"></td>
+                          <td style="padding:5px 8px;color:#555;font-size:10px" x-text="item.brand || ''"></td>
+                          <td style="padding:5px 8px;text-align:right;color:#1a1a1a" x-text="item.type !== 'header' ? (item.qty ?? '') : ''"></td>
+                          <td style="padding:5px 8px;color:#555" x-text="item.type !== 'header' ? (item.unit || '') : ''"></td>
+                          <td style="padding:5px 8px;text-align:right;color:#1a1a1a" x-text="item.type !== 'header' && item.unitPrice != null ? Number(item.unitPrice).toLocaleString() : ''"></td>
+                        </tr>
+                      </template>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+      </div>
 
       <!-- 已送出唯讀橫幅（未解鎖） -->
       <div x-show="q.status === '已送出' && !unlocked"
@@ -991,7 +1165,7 @@
                   <div @click="selectCustomer(c)" @mouseenter="customerDropIdx=i"
                        :style="i===customerDropIdx?'background:#EFF6FF':''"
                        style="padding:7px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid #F3F4F6;display:flex;align-items:center;gap:6px">
-                    <span style="font-size:10px;padding:1px 5px;border-radius:3px;flex-shrink:0;font-family:Inter,sans-serif"
+                    <span style="font-size:10px;padding:1px 5px;border-radius:3px;flex-shrink:0;font-family:LINE Seed TW_OTF, sans-serif"
                           :style="c._type==='supplier' ? 'background:#F3E8FF;color:#7C3AED' : 'background:#DBEAFE;color:#1D4ED8'"
                           x-text="c._type==='supplier' ? '供應商' : '客戶'"></span>
                     <span x-text="c.name"></span>
@@ -999,7 +1173,7 @@
                 </template>
               </div>
             </div>
-            <div style="margin-top:3px;font-size:10px;font-family:Inter,sans-serif;display:flex;align-items:center;gap:4px">
+            <div style="margin-top:3px;font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;display:flex;align-items:center;gap:4px">
               <template x-if="q.customerId">
                 <span style="color:#16a34a;display:flex;align-items:center;gap:3px">
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg>
@@ -1027,7 +1201,7 @@
             <div style="display:flex;gap:6px;align-items:center">
               <input class="form-input" type="text" x-model="q.customerTaxId" placeholder="00000000" @change="setDirty" style="flex:1">
               <button type="button" @click="q.pdfShow.taxId=!q.pdfShow.taxId;setDirty()"
-                      style="flex-shrink:0;min-width:62px;height:38px;padding:0 12px;border-radius:6px;font-size:12px;font-family:Inter,sans-serif;font-weight:600;cursor:pointer;border:1.5px solid;transition:all .18s;white-space:nowrap"
+                      style="flex-shrink:0;min-width:62px;height:38px;padding:0 12px;border-radius:6px;font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;font-weight:600;cursor:pointer;border:1.5px solid;transition:all .18s;white-space:nowrap"
                       :style="q.pdfShow.taxId ? 'background:#F0FDF4;color:#16a34a;border-color:#86EFAC' : 'background:#F5F5F5;color:#aaa;border-color:#E5E7EB'"
                       x-text="q.pdfShow.taxId ? '顯示' : '隱藏'"></button>
             </div>
@@ -1041,7 +1215,7 @@
                     :style="showContactPicker ? 'background:#EFF6FF;border-color:#93C5FD' : 'background:#fff'">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87m-4-12a4 4 0 010 7.75"/></svg>
               選擇聯絡人
-              <span style="font-family:Inter,sans-serif;background:#DBEAFE;color:#1D4ED8;padding:1px 6px;border-radius:3px;font-size:10px;font-weight:600" x-text="contactOptions.length + ' 筆'"></span>
+              <span style="font-family:LINE Seed TW_OTF, sans-serif;background:#DBEAFE;color:#1D4ED8;padding:1px 6px;border-radius:3px;font-size:10px;font-weight:600" x-text="contactOptions.length + ' 筆'"></span>
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" :style="showContactPicker ? 'transform:rotate(180deg)' : ''" style="transition:transform .15s;flex-shrink:0"><path d="M6 9l6 6 6-6"/></svg>
             </button>
             <div x-show="showContactPicker" @click.outside="showContactPicker=false"
@@ -1053,7 +1227,7 @@
                      @mouseleave="$el.style.background=''">
                   <div style="font-size:12px;font-weight:600;color:var(--text-primary);white-space:nowrap;min-width:80px"
                        x-text="ct._display || '（公司主線）'"></div>
-                  <div style="font-size:11px;color:var(--text-dim);font-family:Inter,sans-serif;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+                  <div style="font-size:11px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
                     <span x-show="ct.phone" x-text="ct.phone"></span>
                     <span x-show="ct.email" x-text="ct.email" style="color:var(--accent)"></span>
                     <span x-show="ct.fax" x-text="'傳真 ' + ct.fax" style="color:var(--text-dim)"></span>
@@ -1070,7 +1244,7 @@
             <div style="display:flex;gap:6px;align-items:center">
               <input class="form-input" type="text" x-model="q.contactName" placeholder="姓名" @change="setDirty" style="flex:1">
               <button type="button" @click="q.pdfShow.contactName=!q.pdfShow.contactName;setDirty()"
-                      style="flex-shrink:0;min-width:62px;height:38px;padding:0 12px;border-radius:6px;font-size:12px;font-family:Inter,sans-serif;font-weight:600;cursor:pointer;border:1.5px solid;transition:all .18s;white-space:nowrap"
+                      style="flex-shrink:0;min-width:62px;height:38px;padding:0 12px;border-radius:6px;font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;font-weight:600;cursor:pointer;border:1.5px solid;transition:all .18s;white-space:nowrap"
                       :style="q.pdfShow.contactName ? 'background:#F0FDF4;color:#16a34a;border-color:#86EFAC' : 'background:#F5F5F5;color:#aaa;border-color:#E5E7EB'"
                       x-text="q.pdfShow.contactName ? '顯示' : '隱藏'"></button>
             </div>
@@ -1080,7 +1254,7 @@
             <div style="display:flex;gap:6px;align-items:center">
               <input class="form-input" type="text" x-model="q.contactPhone" placeholder="04-XXXX-XXXX" @change="setDirty" style="flex:1">
               <button type="button" @click="q.pdfShow.contactPhone=!q.pdfShow.contactPhone;setDirty()"
-                      style="flex-shrink:0;min-width:62px;height:38px;padding:0 12px;border-radius:6px;font-size:12px;font-family:Inter,sans-serif;font-weight:600;cursor:pointer;border:1.5px solid;transition:all .18s;white-space:nowrap"
+                      style="flex-shrink:0;min-width:62px;height:38px;padding:0 12px;border-radius:6px;font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;font-weight:600;cursor:pointer;border:1.5px solid;transition:all .18s;white-space:nowrap"
                       :style="q.pdfShow.contactPhone ? 'background:#F0FDF4;color:#16a34a;border-color:#86EFAC' : 'background:#F5F5F5;color:#aaa;border-color:#E5E7EB'"
                       x-text="q.pdfShow.contactPhone ? '顯示' : '隱藏'"></button>
             </div>
@@ -1092,7 +1266,7 @@
             <div style="display:flex;gap:6px;align-items:center">
               <input class="form-input" type="email" x-model="q.contactEmail" placeholder="xxx@company.com" @change="setDirty" style="flex:1">
               <button type="button" @click="q.pdfShow.contactEmail=!q.pdfShow.contactEmail;setDirty()"
-                      style="flex-shrink:0;min-width:62px;height:38px;padding:0 12px;border-radius:6px;font-size:12px;font-family:Inter,sans-serif;font-weight:600;cursor:pointer;border:1.5px solid;transition:all .18s;white-space:nowrap"
+                      style="flex-shrink:0;min-width:62px;height:38px;padding:0 12px;border-radius:6px;font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;font-weight:600;cursor:pointer;border:1.5px solid;transition:all .18s;white-space:nowrap"
                       :style="q.pdfShow.contactEmail ? 'background:#F0FDF4;color:#16a34a;border-color:#86EFAC' : 'background:#F5F5F5;color:#aaa;border-color:#E5E7EB'"
                       x-text="q.pdfShow.contactEmail ? '顯示' : '隱藏'"></button>
             </div>
@@ -1102,7 +1276,7 @@
             <div style="display:flex;gap:6px;align-items:center">
               <input class="form-input" type="text" x-model="q.contactFax" placeholder="04-XXXX-XXXX" @change="setDirty" style="flex:1">
               <button type="button" @click="q.pdfShow.contactFax=!q.pdfShow.contactFax;setDirty()"
-                      style="flex-shrink:0;min-width:62px;height:38px;padding:0 12px;border-radius:6px;font-size:12px;font-family:Inter,sans-serif;font-weight:600;cursor:pointer;border:1.5px solid;transition:all .18s;white-space:nowrap"
+                      style="flex-shrink:0;min-width:62px;height:38px;padding:0 12px;border-radius:6px;font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;font-weight:600;cursor:pointer;border:1.5px solid;transition:all .18s;white-space:nowrap"
                       :style="q.pdfShow.contactFax ? 'background:#F0FDF4;color:#16a34a;border-color:#86EFAC' : 'background:#F5F5F5;color:#aaa;border-color:#E5E7EB'"
                       x-text="q.pdfShow.contactFax ? '顯示' : '隱藏'"></button>
             </div>
@@ -1113,7 +1287,7 @@
           <div style="display:flex;gap:6px;align-items:center">
             <input class="form-input" type="text" x-model="q.deliveryAddress" placeholder="縣市區路段號" @change="setDirty" style="flex:1">
             <button type="button" @click="q.pdfShow.deliveryAddress=!q.pdfShow.deliveryAddress;setDirty()"
-                    style="flex-shrink:0;min-width:62px;height:38px;padding:0 12px;border-radius:6px;font-size:12px;font-family:Inter,sans-serif;font-weight:600;cursor:pointer;border:1.5px solid;transition:all .18s;white-space:nowrap"
+                    style="flex-shrink:0;min-width:62px;height:38px;padding:0 12px;border-radius:6px;font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;font-weight:600;cursor:pointer;border:1.5px solid;transition:all .18s;white-space:nowrap"
                     :style="q.pdfShow.deliveryAddress ? 'background:#F0FDF4;color:#16a34a;border-color:#86EFAC' : 'background:#F5F5F5;color:#aaa;border-color:#E5E7EB'"
                     x-text="q.pdfShow.deliveryAddress ? '顯示' : '隱藏'"></button>
           </div>
@@ -1155,45 +1329,68 @@
                 </template>
                 <th style="width:100px">售價<br><span style="font-size:8px;font-weight:400;opacity:.7">未稅 NT$</span></th>
                 <th style="width:100px">金額<br><span style="font-size:8px;font-weight:400;opacity:.7">未稅 NT$</span></th>
+                <template x-if="showCostCols">
+                  <th class="internal" style="width:90px">單項毛利<br><span style="font-size:8px;font-weight:400;opacity:.7">直接 NT$</span></th>
+                </template>
                 <th style="min-width:80px">備註</th>
                 <th style="width:28px"></th>
               </tr>
             </thead>
-            <tbody>
+            <tbody x-ref="itemsTbody">
               <template x-for="(item, idx) in q.items" :key="item.id">
-                <tr>
-                  <td style="text-align:center;color:var(--text-dim);font-size:11px;font-family:Inter,sans-serif" x-text="idx+1"></td>
+                <tr :class="item.type === 'header' ? 'item-header-row' : ''">
+                  <td style="text-align:center;color:var(--text-dim);font-size:11px;font-family:LINE Seed TW_OTF, sans-serif;padding:0 4px">
+                    <div style="display:flex;align-items:center;justify-content:center;gap:1px">
+                      <span class="drag-handle" title="拖曳排序">
+                        <svg width="9" height="14" viewBox="0 0 9 14" fill="currentColor">
+                          <circle cx="2.5" cy="2" r="1.5"/><circle cx="6.5" cy="2" r="1.5"/>
+                          <circle cx="2.5" cy="7" r="1.5"/><circle cx="6.5" cy="7" r="1.5"/>
+                          <circle cx="2.5" cy="12" r="1.5"/><circle cx="6.5" cy="12" r="1.5"/>
+                        </svg>
+                      </span>
+                      <span x-show="item.type !== 'header'"
+                            x-text="q.items.slice(0, idx).filter(i => i.type !== 'header').length + 1"></span>
+                    </div>
+                  </td>
                   <td class="va-top">
-                    <textarea class="cell-textarea" x-model="item.description"
-                              placeholder="品名或規格說明" rows="1"
+                    <textarea :class="item.type === 'header' ? 'cell-textarea header-desc' : 'cell-textarea'"
+                              x-model="item.description"
+                              :placeholder="item.type === 'header' ? '區段標題（如：網路設備、伺服器）' : '品名或規格說明'"
+                              rows="1"
                               @input="setDirty(); $el.style.height='auto'; $el.style.height=$el.scrollHeight+'px'"
                               x-init="$nextTick(()=>{ $el.style.height='auto'; $el.style.height=$el.scrollHeight+'px' })"></textarea>
                   </td>
                   <td class="va-top">
                     <textarea class="cell-textarea" x-model="item.brand"
+                              x-show="item.type !== 'header'"
                               placeholder="廠牌 / 型號" rows="1"
                               @input="setDirty(); $el.style.height='auto'; $el.style.height=$el.scrollHeight+'px'"
                               x-init="$nextTick(()=>{ $el.style.height='auto'; $el.style.height=$el.scrollHeight+'px' })"></textarea>
                   </td>
                   <td>
                     <input class="cell-input num" type="number" min="0" x-model.number="item.qty"
+                           x-show="item.type !== 'header'"
                            @input="calcItem(item); setDirty()">
                   </td>
                   <td>
-                    <select class="cell-input" x-model="item.unit" @change="setDirty">
+                    <select class="cell-input" x-model="item.unit" @change="setDirty"
+                            x-show="item.type !== 'header'">
                       <option>台</option><option>套</option><option>組</option>
-                      <option>式</option><option>個</option><option>根</option>
-                      <option>m</option><option>條</option><option>批</option>
+                      <option>式</option><option>個</option><option>批</option>
+                      <option>條</option><option>根</option><option>捲</option>
+                      <option>米</option><option>箱</option><option>包</option>
+                      <option>人月</option><option>人日</option><option>次</option>
+                      <option>年</option><option>月</option><option>式（整批）</option>
                     </select>
                   </td>
-                  <template x-if="showCostCols">
+                  <template x-if="showCostCols && item.type !== 'header'">
                     <td class="internal">
                       <input class="cell-input num internal" type="number" min="0"
                              x-model.number="item.cost" placeholder="0"
                              @input="if(item.unitPriceOverride && item.unitPrice > 0 && item.cost > 0) item.margin = parseFloat((1 - item.cost * 1.05 / item.unitPrice).toFixed(4)); calcItem(item); setDirty(); checkApproval()">
                     </td>
                   </template>
-                  <template x-if="showCostCols">
+                  <template x-if="showCostCols && item.type !== 'header'">
                     <td class="internal">
                       <div style="display:flex;align-items:center;gap:2px">
                         <input class="cell-input num internal" type="number" min="0" max="99.99" step="0.01"
@@ -1208,15 +1405,26 @@
                   </template>
                   <td>
                     <input class="cell-input num" type="number" min="0"
+                           x-show="item.type !== 'header'"
                            x-model.number="item.unitPrice"
                            @input="item.unitPriceOverride = true; if(item.cost > 0 && item.unitPrice > 0) item.margin = parseFloat((1 - item.cost * 1.05 / item.unitPrice).toFixed(4)); calcItem(item); setDirty(); checkApproval()"
                            :title="item.unitPriceOverride ? '手動覆寫（毛利率已反推）' : '自動計算'">
                   </td>
                   <td>
-                    <div class="cell-display" x-text="item.amount > 0 ? item.amount.toLocaleString() : ''"></div>
+                    <div class="cell-display" x-show="item.type !== 'header'"
+                         x-text="item.amount > 0 ? item.amount.toLocaleString() : ''"></div>
                   </td>
+                  <template x-if="showCostCols && item.type !== 'header'">
+                    <td class="internal">
+                      <div class="cell-display internal"
+                           :style="(item.amount - (item.qty||0)*(item.cost||0)*1.05) < 0 ? 'color:var(--danger)' : 'color:#15803D'"
+                           x-text="item.cost > 0 && item.amount > 0 ? Math.round(item.amount - (item.qty||0)*(item.cost||0)*1.05).toLocaleString() : ''">
+                      </div>
+                    </td>
+                  </template>
                   <td class="va-top">
                     <textarea class="cell-textarea" x-model="item.notes"
+                              x-show="item.type !== 'header'"
                               placeholder="備註" rows="1"
                               @input="setDirty(); $el.style.height='auto'; $el.style.height=$el.scrollHeight+'px'"
                               x-init="$nextTick(()=>{ $el.style.height='auto'; $el.style.height=$el.scrollHeight+'px' })"></textarea>
@@ -1231,10 +1439,17 @@
             </tbody>
           </table>
         </div>
-        <button class="btn btn-ghost btn-sm add-item-btn" @click="addItem()" style="margin-top:6px">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v16m8-8H4"/></svg>
-          新增品項
-        </button>
+        <div style="display:flex;gap:8px;margin-top:6px">
+          <button class="btn btn-ghost btn-sm add-item-btn" @click="addItem()">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v16m8-8H4"/></svg>
+            新增品項
+          </button>
+          <button class="btn btn-ghost btn-sm" @click="addHeader()"
+                  style="color:#1D4ED8;border-color:#BFDBFE;background:#EFF6FF">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h10"/></svg>
+            新增區段標題
+          </button>
+        </div>
       </div>
 
       <!-- 四、報價合計 -->
@@ -1364,7 +1579,7 @@
         <div class="section-title"><div class="section-num">六</div>確認簽署</div>
         <div style="max-width:50%">
           <div style="border:1px solid var(--border-light);border-radius:var(--radius);padding:16px 18px;background:#FAFAF8;min-height:90px">
-            <div style="font-size:9px;font-family:Inter,sans-serif;letter-spacing:.1em;text-transform:uppercase;color:#999;margin-bottom:10px">買方簽章 / 用印</div>
+            <div style="font-size:9px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.1em;text-transform:uppercase;color:#999;margin-bottom:10px">買方簽章 / 用印</div>
             <div style="font-size:13px;color:var(--text-primary);font-weight:500" x-text="q.customerName || '（未填客戶名稱）'"></div>
           </div>
         </div>
@@ -1408,7 +1623,7 @@
           </ul>
         </div>
         <template x-if="q.approval?.status === 'pending'">
-          <div style="margin-top:6px;color:#B45309;font-size:10px">⏳ 等待主管審核</div>
+          <div style="margin-top:6px;color:#B45309;font-size:10px">⏳ 等待 <span x-text="pendingApproverLabel()"></span> 審核</div>
         </template>
         <template x-if="q.approval?.status === 'approved'">
           <div class="approval-record__approved">
@@ -1429,7 +1644,7 @@
           INTERNAL · 成本分機
         </div>
 
-        <div style="font-size:9px;font-family:Inter,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#555;margin-bottom:8px">直接利潤</div>
+        <div style="font-size:9px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#555;margin-bottom:8px">直接利潤</div>
 
         <div class="cost-row">
           <span class="cost-row__label">銷售收入（未稅額）</span>
@@ -1455,7 +1670,7 @@
         </div>
 
         <hr class="cost-divider">
-        <div style="font-size:9px;font-family:Inter,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#555;margin-bottom:8px">間接成本</div>
+        <div style="font-size:9px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#555;margin-bottom:8px">間接成本</div>
 
         <div class="cost-row">
           <span class="cost-row__label">管銷分攤（10%，固定）</span>
@@ -1464,7 +1679,7 @@
         <div class="cost-row">
           <span class="cost-row__label" style="display:flex;align-items:center;gap:6px">
             公益捐款（直接毛利 1%）
-            <span style="font-size:9px;font-family:Inter,sans-serif;background:#1A1A1A;color:#888;padding:1px 5px;border-radius:3px;letter-spacing:.04em">不可修改</span>
+            <span style="font-size:9px;font-family:LINE Seed TW_OTF, sans-serif;background:#1A1A1A;color:#888;padding:1px 5px;border-radius:3px;letter-spacing:.04em">不可修改</span>
           </span>
           <span class="cost-row__val warning" x-text="'NT$ ' + tot.charityDonation.toLocaleString()"></span>
         </div>
@@ -1499,7 +1714,7 @@
         </div>
 
         <hr class="cost-divider">
-        <div style="font-size:9px;font-family:Inter,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#555;margin-bottom:8px">損益彙總</div>
+        <div style="font-size:9px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#555;margin-bottom:8px">損益彙總</div>
 
         <div class="cost-row">
           <span class="cost-row__label">稅後淨利</span>
@@ -1537,7 +1752,7 @@
           </div>
           <template x-for="h in [...q.editHistory].reverse()" :key="h.rev">
             <div style="display:flex;align-items:flex-start;gap:8px;padding:9px 0;border-bottom:1px solid #F0EFEB">
-              <div style="min-width:28px;height:20px;background:#F3F4F6;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#374151;font-family:Inter,sans-serif;flex-shrink:0" x-text="'#'+h.rev"></div>
+              <div style="min-width:28px;height:20px;background:#F3F4F6;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#374151;font-family:LINE Seed TW_OTF, sans-serif;flex-shrink:0" x-text="'#'+h.rev"></div>
               <div style="flex:1;min-width:0">
                 <div style="font-size:11px;font-weight:600;color:var(--text-primary)" x-text="h.type==='quote_edit' ? '報價單修改' : h.type==='settlement_finalized' ? '成本精算完結' : '成本精算草稿'"></div>
                 <div style="font-size:10px;color:var(--text-secondary);margin-top:1px" x-text="h.byDisplay || h.by"></div>
@@ -1557,12 +1772,12 @@
       <div class="modal-head">
         <div style="display:flex;border:1px solid var(--border-light);border-radius:6px;overflow:hidden;flex-shrink:0">
           <button @click="previewMode='external'"
-                  style="padding:5px 14px;font-size:11px;font-family:Inter,sans-serif;font-weight:600;border:none;cursor:pointer;transition:background .12s,color .12s"
+                  style="padding:5px 14px;font-size:11px;font-family:LINE Seed TW_OTF, sans-serif;font-weight:600;border:none;cursor:pointer;transition:background .12s,color .12s"
                   :style="previewMode==='external' ? 'background:#0A0A0A;color:#F5F4F0' : 'background:#fff;color:#4A4744'">
             對外版
           </button>
           <button @click="previewMode='internal'"
-                  style="padding:5px 14px;font-size:11px;font-family:Inter,sans-serif;font-weight:600;border:none;border-left:1px solid var(--border-light);cursor:pointer;transition:background .12s,color .12s"
+                  style="padding:5px 14px;font-size:11px;font-family:LINE Seed TW_OTF, sans-serif;font-weight:600;border:none;border-left:1px solid var(--border-light);cursor:pointer;transition:background .12s,color .12s"
                   :style="previewMode==='internal' ? 'background:#B45309;color:#fff' : 'background:#fff;color:#B45309'">
             ⚠ 內部版
           </button>
@@ -1598,12 +1813,12 @@
 
             <!-- 預覽警告橫幅 -->
             <template x-if="q.dealTag === '未成案'">
-              <div style="margin-bottom:12px;padding:7px 12px;background:#FEE2E2;border:1px solid #FCA5A5;border-radius:5px;font-size:11px;color:#991B1B;font-family:'Noto Sans TC',sans-serif;letter-spacing:.03em">
+              <div style="margin-bottom:12px;padding:7px 12px;background:#FEE2E2;border:1px solid #FCA5A5;border-radius:5px;font-size:11px;color:#991B1B;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.03em">
                 ⚠ 本案報價未成立，此份文件僅供存查備存使用，請勿對外提供或引用
               </div>
             </template>
             <template x-if="q.dealTag !== '未成案' && q.status !== '已送出' && q.status !== '已確認'">
-              <div style="margin-bottom:12px;padding:7px 12px;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:5px;font-size:11px;color:#1E40AF;font-family:'Noto Sans TC',sans-serif;letter-spacing:.03em"
+              <div style="margin-bottom:12px;padding:7px 12px;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:5px;font-size:11px;color:#1E40AF;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.03em"
                    x-text="'⚠ 此為報價單預覽稿（目前狀態：' + (q.status || '草稿') + '），尚未正式生效，請勿對外發送或引用'">
               </div>
             </template>
@@ -1626,7 +1841,7 @@
 
             <!-- 單號 / 日期 -->
             <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px;font-size:12px">
-              <div><span style="color:#999">報價編號：</span><strong style="font-family:Inter,sans-serif" x-text="q.quoteNo"></strong></div>
+              <div><span style="color:#999">報價編號：</span><strong style="font-family:LINE Seed TW_OTF, sans-serif" x-text="q.quoteNo"></strong></div>
               <div><span style="color:#999">報價日期：</span><span x-text="q.quoteDate"></span></div>
               <div><span style="color:#999">有效期限：</span><span x-text="q.validDays + ' 日內'"></span></div>
               <div><span style="color:#999">報　價　人：</span><span x-text="q.salesPerson"></span></div>
@@ -1654,7 +1869,7 @@
             </div>
 
             <!-- 品項明細 -->
-            <div style="font-size:10px;font-family:Inter,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#999;font-weight:600;margin-bottom:6px">三、項目明細</div>
+            <div style="font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#999;font-weight:600;margin-bottom:6px">三、項目明細</div>
             <table class="pdf-items">
               <thead>
                 <tr>
@@ -1683,10 +1898,10 @@
                     <td class="r" x-text="item.qty"></td>
                     <td x-text="item.unit"></td>
                     <template x-if="previewMode === 'internal'">
-                      <td class="r" style="background:#F8F6F0;font-family:Inter,sans-serif" x-text="item.cost ? item.cost.toLocaleString() : ''"></td>
+                      <td class="r" style="background:#F8F6F0;font-family:LINE Seed TW_OTF, sans-serif" x-text="item.cost ? item.cost.toLocaleString() : ''"></td>
                     </template>
                     <template x-if="previewMode === 'internal'">
-                      <td class="r" style="background:#F8F6F0;font-family:Inter,sans-serif" x-text="item.cost ? (item.margin*100).toFixed(2)+'%' : ''"></td>
+                      <td class="r" style="background:#F8F6F0;font-family:LINE Seed TW_OTF, sans-serif" x-text="item.cost ? (item.margin*100).toFixed(2)+'%' : ''"></td>
                     </template>
                     <td class="r" x-text="item.unitPrice ? item.unitPrice.toLocaleString() : ''"></td>
                     <td class="r" x-text="item.amount ? item.amount.toLocaleString() : ''"></td>
@@ -1697,7 +1912,7 @@
             </table>
 
             <!-- 四、報價合計 -->
-            <div style="font-size:10px;font-family:Inter,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#666;font-weight:600;margin-top:12px;margin-bottom:6px">四、報價合計</div>
+            <div style="font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#666;font-weight:600;margin-top:12px;margin-bottom:6px">四、報價合計</div>
             <div class="pdf-totals" style="margin-bottom:16px">
               <div class="pdf-total-row"><span>品項小計</span><span x-text="'NT$ ' + tot.subtotal.toLocaleString()"></span></div>
               <div class="pdf-total-row" x-show="q.freight > 0"><span>運費</span><span x-text="'NT$ ' + q.freight.toLocaleString()"></span></div>
@@ -1729,10 +1944,22 @@
       </div>
       <div class="modal-foot">
         <button class="btn btn-ghost btn-sm" @click="previewMode=null">關閉</button>
-        <template x-if="previewMode === 'external' && q.status === '待審核' && session.role === 'superadmin' && q.approval?.requestedBy !== session.username">
+        <template x-if="previewMode === 'external' && (q.status === '待審核' || q.status === '簽核中') && isCurrentTierApprover()">
+          <button class="btn btn-sm" style="background:#FEF2F2;color:#DC2626;border:1px solid #FECACA;" @click="previewMode=null; rejectQuote()">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"/></svg>
+            退回修改
+          </button>
+        </template>
+        <template x-if="previewMode === 'external' && (q.status === '待審核' || q.status === '簽核中') && isCurrentTierApprover()">
+          <button class="btn btn-sm" style="background:#1C1917;color:#fff;border:1px solid #1C1917;" @click="previewMode=null; rejectFinalQuote()">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
+            拒絕結案
+          </button>
+        </template>
+        <template x-if="previewMode === 'external' && (q.status === '待審核' || q.status === '簽核中') && isCurrentTierApprover()">
           <button class="btn btn-approve btn-sm" @click="approveQuote(); previewMode=null">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-            確認簽核送出
+            確認簽核
           </button>
         </template>
         <template x-if="previewMode === 'external' && (q.status === '已送出' || q.status === '已確認') && q.dealTag !== '未成案'">
@@ -1767,11 +1994,11 @@
         </template>
         <template x-for="(entry, idx) in (q.exportLog || []).slice().reverse()" :key="idx">
           <div style="display:flex;align-items:center;gap:12px;padding:10px 20px;border-bottom:1px solid #F5F4F0">
-            <div style="flex-shrink:0;width:28px;height:28px;border-radius:50%;background:#F0EEE9;display:flex;align-items:center;justify-content:center;font-size:10px;font-family:Inter,sans-serif;font-weight:600;color:#555"
+            <div style="flex-shrink:0;width:28px;height:28px;border-radius:50%;background:#F0EEE9;display:flex;align-items:center;justify-content:center;font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;font-weight:600;color:#555"
                  x-text="(q.exportLog.length - idx)"></div>
             <div style="flex:1;min-width:0">
               <div style="font-size:12px;font-weight:600;color:#111" x-text="entry.userDisplay || entry.by || '—'"></div>
-              <div style="font-size:11px;color:#888;font-family:Inter,sans-serif;margin-top:1px"
+              <div style="font-size:11px;color:#888;font-family:LINE Seed TW_OTF, sans-serif;margin-top:1px"
                    x-text="entry.at ? new Date(entry.at).toLocaleString('zh-TW', {year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'}) : '—'"></div>
             </div>
             <div style="font-size:10px;padding:2px 8px;border-radius:3px;background:#F0F9FF;color:#0369A1;font-weight:600;flex-shrink:0">PDF</div>
@@ -1789,7 +2016,8 @@
 
   <script>
   const API = '/api'
-  // ── 報價單模板版本：調整版型/設計/UI 時手動更新此值 ──
+  // ── 報價單模板版本：本頁（quotation-form.html）或其邏輯有任何改動都須遞增 ──
+  // ── 小改版（欄位微調/樣式/文案）+0.1；大改版（版型結構/新增區塊/流程變更）+1 ──
   const FORM_VERSION = 'V1.1'
 
   function quotationForm() {
@@ -1824,6 +2052,12 @@
       submitNote: '',
       submitNoteError: false,
       submitting: false,
+      showRejectModal: false,
+      rejectNote: '',
+      rejecting: false,
+      showRejectFinalModal: false,
+      rejectFinalNote: '',
+      rejectingFinal: false,
       _prevDealTag: '',
 
       q: {
@@ -1898,6 +2132,7 @@
       },
 
       calcItem(item) {
+        if (item.type === 'header') return
         if (!item.unitPriceOverride && item.cost > 0) {
           item.unitPrice = this.calcUnitPrice(item.cost, item.margin)
         }
@@ -1935,14 +2170,23 @@
       },
 
       addItem() {
-        const id = Date.now()
+        const id = crypto.randomUUID()
         this.q.items.push({ id, description:'', brand:'', qty:1, unit:'台',
           cost:null, margin:0.30, unitPrice:null, unitPriceOverride:false, amount:0, notes:'' })
         this.setDirty()
       },
 
+      addHeader() {
+        const id = crypto.randomUUID()
+        this.q.items.push({ id, type:'header', description:'' })
+        this.setDirty()
+      },
+
       removeItem(idx) {
-        if (this.q.items.length === 1) { alert('至少保留一項'); return }
+        const item = this.q.items[idx]
+        if (item.type !== 'header' && this.q.items.filter(i => i.type !== 'header').length <= 1) {
+          alert('至少保留一項品項'); return
+        }
         this.q.items.splice(idx, 1)
         this.calcTotals()
         this.setDirty()
@@ -1958,6 +2202,7 @@
         if (this.q.validDays > 30)
           reasons.push(`有效期限 ${this.q.validDays} 天（超過 30 天）`)
         this.q.items.forEach((item, i) => {
+          if (item.type === 'header') return
           if (item.cost > 0 && item.margin < 0.30)
             reasons.push(`第 ${i+1} 項毛利率 ${(item.margin*100).toFixed(2)}% 低於 30%`)
         })
@@ -1968,6 +2213,30 @@
           reasons.push(`調整營業稅額為 ${taxRate}%（標準 5%）`)
         this.approvalReasons = reasons
         this.needsApproval = reasons.length > 0
+      },
+
+      isCurrentTierApprover() {
+        const appr = this.q.approval
+        if (!appr) return false
+        if (appr.requestedBy === this.session.username) return false
+        const tiers = appr.tiers || []
+        if (!tiers.length) {
+          // no configured tiers — fallback: any superadmin except submitter
+          return this.session.role === 'superadmin'
+        }
+        const ct = appr.currentTier ?? 0
+        if (ct >= tiers.length) return false
+        // sequential within tier: only the first unapproved approver may act
+        const firstPending = (tiers[ct].approvers || []).find(a => a.status !== 'approved')
+        return firstPending?.username === this.session.username
+      },
+
+      pendingApproverLabel() {
+        const appr = this.q.approval
+        const tiers = appr?.tiers || []
+        const idx = appr?.currentTier ?? 0
+        const firstPending = (tiers[idx]?.approvers || []).find(a => a.status !== 'approved')
+        return firstPending ? (firstPending.displayName || firstPending.username) : '主管'
       },
 
       setDirty() {
@@ -2219,7 +2488,7 @@
         this.lastSaved = now.toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'})
         const msg = document.createElement('div')
         msg.textContent = wasUnlocked ? '✓ 報價單已修改儲存，重新鎖定' : '✓ 草稿已儲存'
-        msg.style.cssText = 'position:fixed;bottom:32px;left:50%;transform:translateX(-50%);background:#0A0A0A;color:#F5F4F0;padding:10px 22px;border-radius:8px;font-size:13px;z-index:99999;font-family:Inter,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.3);letter-spacing:.02em'
+        msg.style.cssText = 'position:fixed;bottom:32px;left:50%;transform:translateX(-50%);background:#0A0A0A;color:#F5F4F0;padding:10px 22px;border-radius:8px;font-size:13px;z-index:99999;font-family:LINE Seed TW_OTF, sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.3);letter-spacing:.02em'
         document.body.appendChild(msg)
         setTimeout(() => { msg.style.opacity='0'; msg.style.transition='opacity .4s'; setTimeout(() => msg.remove(), 400) }, 2200)
         await this.checkAndCreateCustomer()
@@ -2263,12 +2532,11 @@
 <head>
 <meta charset="UTF-8">
 <title></title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Serif+TC:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
   :root{--black:#0A0A0A;--white:#F5F4F0;--danger:#DC2626;--border-light:#E8E5DF}
   /* body 固定 695px = A4 可列印寬度（184mm @ 96dpi），螢幕量測值 = 印出值 */
-  body{font-family:'Noto Serif TC',serif;font-size:13px;color:#0A0A0A;line-height:1.6;background:#fff;width:695px;margin:0 auto;padding:0}
+  body{font-family:LINE Seed TW_OTF, serif;font-size:13px;color:#0A0A0A;line-height:1.6;background:#fff;width:695px;margin:0 auto;padding:0}
   @page{
     size:A4;
     margin:0 13mm 12mm 13mm;
@@ -2277,7 +2545,7 @@
     @top-right{content:none}
     @bottom-left{content:none}
     @bottom-right{content:none}
-    @bottom-center{content:counter(page);font-family:Inter,sans-serif;font-size:9px;color:#aaa}
+    @bottom-center{content:counter(page);font-family:LINE Seed TW_OTF, sans-serif;font-size:9px;color:#aaa}
   }
   @media print{
     body{width:auto;padding-top:15mm}
@@ -2287,33 +2555,33 @@
     .pdf-terms{page-break-inside:avoid}
     .pdf-sign{page-break-inside:avoid}
   }
-  .pdf-page{width:100%;margin:0;padding:0;border:none;border-radius:0;font-family:'Noto Serif TC',serif;font-size:13px;line-height:1.6}
+  .pdf-page{width:100%;margin:0;padding:0;border:none;border-radius:0;font-family:LINE Seed TW_OTF, serif;font-size:13px;line-height:1.6}
   .pdf-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px;padding-bottom:16px;border-bottom:2px solid #0A0A0A}
   .pdf-company-name{font-size:16px;font-weight:600;letter-spacing:.1em;color:#0A0A0A}
   .pdf-company-sub{font-size:10px;color:#888;margin-top:3px}
   .pdf-doc-title{font-size:22px;font-weight:700;letter-spacing:.2em;color:#0A0A0A;text-align:right}
   .pdf-meta-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:18px}
   .pdf-meta-box{background:#FAFAF8;border:1px solid #E8E5DF;border-radius:4px;padding:12px 14px}
-  .pdf-meta-title{font-size:9px;font-family:Inter,sans-serif;letter-spacing:.1em;text-transform:uppercase;color:#999;margin-bottom:8px;font-weight:600}
+  .pdf-meta-title{font-size:9px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.1em;text-transform:uppercase;color:#999;margin-bottom:8px;font-weight:600}
   .pdf-meta-row{display:flex;gap:8px;margin-bottom:3px;font-size:12px}
   .pdf-meta-label{color:#888;min-width:80px;flex-shrink:0}
   .pdf-meta-val{color:#0A0A0A;font-weight:500}
   .pdf-items{width:100%;border-collapse:collapse;margin-bottom:16px}
   .pdf-items th{background:#0A0A0A;color:#F5F4F0;padding:8px 10px;text-align:left;font-size:11px;font-weight:500}
-  .pdf-items th.r,.pdf-items td.r{text-align:right;font-family:Inter,sans-serif}
+  .pdf-items th.r,.pdf-items td.r{text-align:right;font-family:LINE Seed TW_OTF, sans-serif}
   .pdf-items td{padding:8px 10px;border-bottom:1px solid #E8E5DF;font-size:12px}
   .pdf-items tr:last-child td{border-bottom:none}
   .pdf-items tbody tr:nth-child(even) td{background:#FAFAF8}
   .pdf-totals{max-width:300px;margin-left:auto;border:1px solid #E8E5DF;border-radius:4px;overflow:hidden}
   .pdf-total-row{display:flex;justify-content:space-between;padding:7px 12px;border-bottom:1px solid #F0EEE9;font-size:12px}
   .pdf-total-row:last-child{border-bottom:none;font-weight:700;font-size:14px;background:#F8F7F4}
-  .pdf-total-row span:last-child{font-family:Inter,sans-serif}
+  .pdf-total-row span:last-child{font-family:LINE Seed TW_OTF, sans-serif}
   .pdf-terms{margin-top:18px}
-  .pdf-terms-title{font-size:10px;font-family:Inter,sans-serif;letter-spacing:.1em;text-transform:uppercase;color:#999;font-weight:600;margin-bottom:4px}
+  .pdf-terms-title{font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.1em;text-transform:uppercase;color:#999;font-weight:600;margin-bottom:4px}
   .pdf-terms-val{font-size:11px;color:#555;line-height:1.7}
   .pdf-sign{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:24px}
   .pdf-sign-box{border:1px solid #E8E5DF;border-radius:4px;padding:12px;min-height:60px;display:flex;flex-direction:column}
-  .pdf-sign-label{font-size:10px;color:#999;font-family:Inter,sans-serif;letter-spacing:.08em;text-transform:uppercase}
+  .pdf-sign-label{font-size:10px;color:#999;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.08em;text-transform:uppercase}
   .pdf-footer{text-align:center;font-size:10px;color:#999;margin-top:20px;padding-top:14px;border-top:1px solid #E8E5DF}
 </style>
 </head>
@@ -2434,10 +2702,9 @@ window.addEventListener('load',function(){
 <head>
 <meta charset="UTF-8">
 <title></title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Serif+TC:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:'Noto Serif TC',serif;font-size:13px;color:#0A0A0A;line-height:1.6;background:#fff}
+  body{font-family:LINE Seed TW_OTF, serif;font-size:13px;color:#0A0A0A;line-height:1.6;background:#fff}
   #scale-root{padding:24px 32px}
   .scale-body{display:block}
   .sign-spacer{height:32px}
@@ -2445,7 +2712,7 @@ window.addEventListener('load',function(){
     size:A4;margin:0 13mm 12mm 13mm;
     @top-left{content:none}@top-center{content:none}@top-right{content:none}
     @bottom-left{content:none}@bottom-right{content:none}
-    @bottom-center{content:counter(page);font-family:Inter,sans-serif;font-size:9px;color:#aaa}
+    @bottom-center{content:counter(page);font-family:LINE Seed TW_OTF, sans-serif;font-size:9px;color:#aaa}
   }
   @media print{
     html,body{margin:0;padding:0;background:#fff}
@@ -2462,22 +2729,22 @@ window.addEventListener('load',function(){
   .accent-bar{height:3px;background:#0A0A0A;margin-bottom:18px}
   .header{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:14px;border-bottom:1px solid #0A0A0A;margin-bottom:16px}
   .co-name{font-size:15px;font-weight:700;letter-spacing:.06em}
-  .co-sub{font-size:10px;color:#888;margin-top:3px;font-family:Inter,sans-serif;letter-spacing:.02em}
+  .co-sub{font-size:10px;color:#888;margin-top:3px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.02em}
   .doc-title{font-size:24px;font-weight:700;letter-spacing:.24em;text-align:right}
-  .doc-sub{font-size:10px;color:#888;font-family:Inter,sans-serif;margin-top:4px;letter-spacing:.12em;text-align:right}
+  .doc-sub{font-size:10px;color:#888;font-family:LINE Seed TW_OTF, sans-serif;margin-top:4px;letter-spacing:.12em;text-align:right}
   .internal-badge{font-size:9px;color:#DC2626;font-weight:700;letter-spacing:.1em;margin-top:5px;text-align:right}
   .meta{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-bottom:14px;font-size:12px;background:#FAFAF8;padding:10px 12px;border-radius:4px;border:1px solid #EDEAE4}
-  .meta span{color:#888;font-family:Inter,sans-serif;font-size:11px}
+  .meta span{color:#888;font-family:LINE Seed TW_OTF, sans-serif;font-size:11px}
   .boxes{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px}
   .box{background:#FAFAF8;border:1px solid #EDEAE4;border-radius:4px;padding:11px 13px}
-  .box-title{font-size:9px;font-family:Inter,sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#999;font-weight:600;margin-bottom:8px}
+  .box-title{font-size:9px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#999;font-weight:600;margin-bottom:8px}
   .row{display:flex;gap:6px;margin-bottom:4px;font-size:12px}
   .label{color:#888;min-width:72px;flex-shrink:0;font-size:11px}
   .val{color:#0A0A0A;font-weight:500}
-  .section-label{font-size:9px;font-family:Inter,sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#999;font-weight:600;margin-bottom:7px;display:flex;align-items:center;gap:8px}
+  .section-label{font-size:9px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#999;font-weight:600;margin-bottom:7px;display:flex;align-items:center;gap:8px}
   .section-label::after{content:'';flex:1;height:1px;background:#EDEAE4}
   table{width:100%;border-collapse:collapse;margin-bottom:14px}
-  thead th{background:#0A0A0A;color:#F5F4F0;padding:8px 9px;text-align:left;font-size:11px;font-weight:500;font-family:Inter,sans-serif;letter-spacing:.04em}
+  thead th{background:#0A0A0A;color:#F5F4F0;padding:8px 9px;text-align:left;font-size:11px;font-weight:500;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.04em}
   thead th.r{text-align:right}
   tbody td{padding:8px 9px;border-bottom:1px solid #EDEAE4;font-size:12px}
   tbody tr:last-child td{border-bottom:none}
@@ -2485,22 +2752,22 @@ window.addEventListener('load',function(){
   .totals{max-width:290px;margin-left:auto;border:1px solid #EDEAE4;border-radius:4px;overflow:hidden;margin-bottom:16px}
   .total-row{display:flex;justify-content:space-between;padding:7px 13px;border-bottom:1px solid #F0EEE9;font-size:12px}
   .total-row:last-child{border-bottom:none;font-weight:700;font-size:14px;background:#F5F4F0;border-top:1.5px solid #0A0A0A}
-  .total-row span:last-child{font-family:Inter,sans-serif}
+  .total-row span:last-child{font-family:LINE Seed TW_OTF, sans-serif}
   .terms{margin-bottom:16px}
   .terms-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
   .term-block{font-size:11px;color:#444;line-height:1.8}
-  .term-title{font-size:9px;color:#999;font-weight:600;font-family:Inter,sans-serif;letter-spacing:.1em;text-transform:uppercase;margin-bottom:4px}
+  .term-title{font-size:9px;color:#999;font-weight:600;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.1em;text-transform:uppercase;margin-bottom:4px}
   .sign{max-width:52%;margin-top:0}
   .sign-box{border:1px solid #EDEAE4;border-radius:4px;padding:16px 18px;min-height:130px;display:flex;flex-direction:column}
-  .sign-label{font-size:9px;color:#999;font-family:Inter,sans-serif;letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px}
+  .sign-label{font-size:9px;color:#999;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px}
   .sign-company{font-size:12px;color:#333;margin-bottom:0;flex:1}
-  .footer{text-align:center;font-size:10px;color:#999;margin-top:18px;padding-top:12px;border-top:1px solid #EDEAE4;font-family:Inter,sans-serif;letter-spacing:.04em}
+  .footer{text-align:center;font-size:10px;color:#999;margin-top:18px;padding-top:12px;border-top:1px solid #EDEAE4;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.04em}
   .cost-summary{background:#0A0A0A;color:#F5F4F0;border-radius:6px;padding:14px;margin-bottom:16px}
-  .cost-summary h4{font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#555;margin-bottom:10px;font-family:Inter,sans-serif}
+  .cost-summary h4{font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#555;margin-bottom:10px;font-family:LINE Seed TW_OTF, sans-serif}
   .cost-row{display:flex;justify-content:space-between;font-size:12px;padding:4px 0;border-bottom:1px solid #1A1A1A}
   .cost-row:last-child{border-bottom:none}
   .cost-label{color:#888}
-  .cost-val{font-family:Inter,sans-serif;font-weight:600}
+  .cost-val{font-family:LINE Seed TW_OTF, sans-serif;font-weight:600}
   .green{color:#4ADE80}.red{color:#F87171}.yellow{color:#FCD34D}
   @media print{body{padding:0}button{display:none}}
 </style>
@@ -2521,7 +2788,7 @@ window.addEventListener('load',function(){
 </div>
 
 <div class="meta">
-  <div><span>報價編號：</span><strong style="font-family:Inter,sans-serif">${q.quoteNo}</strong></div>
+  <div><span>報價編號：</span><strong style="font-family:LINE Seed TW_OTF, sans-serif">${q.quoteNo}</strong></div>
   <div><span>報價日期：</span>${q.quoteDate}</div>
   <div><span>有效期限：</span>${q.validDays} 日內</div>
   <div><span>報　價　人：</span>${q.salesPerson}</div>
@@ -2642,34 +2909,83 @@ window.addEventListener('load', function () {
       },
 
       async approveQuote() {
-        if (this.session.role !== 'superadmin') {
-          alert('只有超級管理員可以審核通過')
-          return
-        }
-        if (this.q.approval?.requestedBy === this.session.username) {
-          alert('您為此申請的申請人，不得自行審核\n請由其他超級管理員操作')
+        if (!this.isCurrentTierApprover()) {
+          alert('您不是目前層的簽核人員，無法執行此操作')
           return
         }
         const req = this.q.approval
-        const reqTime = req?.requestedAt ? new Date(req.requestedAt).toLocaleString('zh-TW') : ''
-        const reasonList = (req?.reasons || []).map(r => '  · ' + r).join('\n')
-        if (!confirm(`確認審核通過此報價單？\n\n申請人：${req?.requestedByDisplay || req?.requestedBy || ''}\n申請時間：${reqTime}\n\n審核原因：\n${reasonList}`)) return
-        this.q.approval = {
-          ...(this.q.approval || {}),
-          approvedBy: this.session.username,
-          approvedByDisplay: this.session.displayName || this.session.username,
-          approvedAt: new Date().toISOString(),
-          status: 'approved'
+        const reqDisplay = req?.requestedByDisplay || req?.requestedBy || ''
+        if (!confirm(`確認簽核通過此報價單？\n\n申請人：${reqDisplay}\n報價單：${this.q.quoteNo}`)) return
+        const r = await fetch(`${API}/quotations/${encodeURIComponent(this.q.quoteNo)}/approve`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify({ approvedByDisplay: this.session.displayName || this.session.username })
+        })
+        if (!r.ok) {
+          const err = await r.json().catch(() => ({ detail: '未知錯誤' }))
+          alert('簽核失敗：' + (err.detail || '未知錯誤'))
+          return
         }
-        this.q.status = '已送出'
-        this.needsApproval = false
-        this.approvalReasons = []
-        await this.saveDraft()
+        const data = await r.json()
+        await this.loadQuote()
         const msg = document.createElement('div')
-        msg.textContent = '✓ 簽核完成，報價單已送出'
-        msg.style.cssText = 'position:fixed;bottom:32px;left:50%;transform:translateX(-50%);background:#15803D;color:#fff;padding:10px 22px;border-radius:8px;font-size:13px;z-index:99999;font-family:Inter,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.3)'
+        msg.textContent = data.allDone ? '✓ 簽核完成，報價單已送出' : '✓ 本層簽核完成，等待下一層簽核'
+        msg.style.cssText = 'position:fixed;bottom:32px;left:50%;transform:translateX(-50%);background:#15803D;color:#fff;padding:10px 22px;border-radius:8px;font-size:13px;z-index:99999;font-family:LINE Seed TW_OTF, sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.3)'
         document.body.appendChild(msg)
-        setTimeout(() => { msg.style.opacity='0'; msg.style.transition='opacity .4s'; setTimeout(() => msg.remove(), 400) }, 2200)
+        setTimeout(() => { msg.style.opacity='0'; msg.style.transition='opacity .4s'; setTimeout(() => msg.remove(), 400) }, 2500)
+      },
+
+      rejectQuote() {
+        this.rejectNote = ''
+        this.showRejectModal = true
+      },
+
+      async confirmReject() {
+        if (!this.rejectNote.trim()) return
+        if (this.rejecting) return
+        this.rejecting = true
+        const r = await fetch(`${API}/quotations/${encodeURIComponent(this.q.quoteNo)}/reject`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify({ note: this.rejectNote.trim() })
+        })
+        this.rejecting = false
+        if (!r.ok) {
+          const err = await r.json().catch(() => ({ detail: '未知錯誤' }))
+          alert('退回失敗：' + (err.detail || '未知錯誤'))
+          return
+        }
+        const data = await r.json()
+        this.showRejectModal = false
+        window.location.href = `quotation-form.html?id=${encodeURIComponent(data.new_quote_no)}`
+      },
+
+      rejectFinalQuote() {
+        this.rejectFinalNote = ''
+        this.showRejectFinalModal = true
+      },
+
+      async confirmRejectFinal() {
+        if (!this.rejectFinalNote.trim() || this.rejectingFinal) return
+        this.rejectingFinal = true
+        const r = await fetch(`${API}/quotations/${encodeURIComponent(this.q.quoteNo)}/reject-final`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify({ note: this.rejectFinalNote.trim() })
+        })
+        this.rejectingFinal = false
+        if (!r.ok) {
+          const err = await r.json().catch(() => ({ detail: '未知錯誤' }))
+          alert('拒絕結案失敗：' + (err.detail || '未知錯誤'))
+          return
+        }
+        this.showRejectFinalModal = false
+        await this.loadQuote()
+        const msg = document.createElement('div')
+        msg.textContent = '✗ 報價單已永久拒絕結案'
+        msg.style.cssText = 'position:fixed;bottom:32px;left:50%;transform:translateX(-50%);background:#1C1917;color:#fff;padding:10px 22px;border-radius:8px;font-size:13px;z-index:99999;font-family:LINE Seed TW_OTF, sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.3)'
+        document.body.appendChild(msg)
+        setTimeout(() => { msg.style.opacity='0'; msg.style.transition='opacity .4s'; setTimeout(() => msg.remove(), 400) }, 3000)
       },
 
       async submitQuote() {
@@ -2723,12 +3039,79 @@ window.addEventListener('load', function () {
           this.submitNote = ''
           const msg = document.createElement('div')
           msg.textContent = '✓ 已送出審核申請，等待主管簽核'
-          msg.style.cssText = 'position:fixed;bottom:32px;left:50%;transform:translateX(-50%);background:#0A0A0A;color:#F5F4F0;padding:10px 22px;border-radius:8px;font-size:13px;z-index:99999;font-family:Inter,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.3)'
+          msg.style.cssText = 'position:fixed;bottom:32px;left:50%;transform:translateX(-50%);background:#0A0A0A;color:#F5F4F0;padding:10px 22px;border-radius:8px;font-size:13px;z-index:99999;font-family:LINE Seed TW_OTF, sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.3)'
           document.body.appendChild(msg)
           setTimeout(() => { msg.style.opacity='0'; msg.style.transition='opacity .4s'; setTimeout(() => msg.remove(), 400) }, 2800)
         } finally {
           this.submitting = false
         }
+      },
+
+      async loadQuote() {
+        const res = await fetch(`${this.API}/quotations/${encodeURIComponent(this.q.quoteNo)}`,
+          { headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (!res.ok) return
+        const row = await res.json()
+        Object.assign(this.q, row.data)
+        this.q.quoteNo = row.data.quoteNo || this.q.quoteNo
+        // Ensure all items have a unique id (old quotes may lack id field)
+        if (Array.isArray(this.q.items)) {
+          this.q.items.forEach(it => { if (!it.id) it.id = crypto.randomUUID() })
+        }
+        this.calcTotals()
+        this.checkApproval()
+      },
+
+      async patchStatus(newStatus, sel) {
+        const old = this.q.status
+        if (newStatus === old) return
+        if (!confirm(`確定將狀態改為「${newStatus}」？`)) {
+          this.$nextTick(() => { if (sel) sel.value = old })
+          return
+        }
+        try {
+          const r = await fetch(`${this.API}/quotations/${encodeURIComponent(this.q.quoteNo)}/status`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+            body: JSON.stringify({ status: newStatus })
+          })
+          if (!r.ok) {
+            const e = await r.json().catch(() => ({}))
+            alert('狀態更新失敗：' + (e.detail || r.status))
+            this.$nextTick(() => { if (sel) sel.value = old })
+            return
+          }
+          this.q.status = newStatus
+          const msg = document.createElement('div')
+          msg.textContent = `✓ 狀態已更新為「${newStatus}」`
+          msg.style.cssText = 'position:fixed;bottom:32px;left:50%;transform:translateX(-50%);background:#0A0A0A;color:#F5F4F0;padding:10px 22px;border-radius:8px;font-size:13px;z-index:99999;font-family:LINE Seed TW_OTF, sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.3)'
+          document.body.appendChild(msg)
+          setTimeout(() => { msg.style.opacity='0'; msg.style.transition='opacity .4s'; setTimeout(() => msg.remove(), 400) }, 2800)
+        } catch (e) {
+          alert('網路錯誤：' + e.message)
+          this.$nextTick(() => { if (sel) sel.value = old })
+        }
+      },
+
+      async recallQuote() {
+        if (!confirm('確定要收回此報價單並退回草稿？簽核進度將清除，可重新編輯後再送審。')) return
+        const r = await fetch(`${API}/quotations/${this.q.quoteNo}/recall`, {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (!r.ok) {
+          const err = await r.json().catch(() => ({ detail: '未知錯誤' }))
+          alert('收回失敗：' + (err.detail || '未知錯誤'))
+          return
+        }
+        this.q.status = '草稿'
+        this.q.approval = null
+        this.isDirty = false
+        const msg = document.createElement('div')
+        msg.textContent = '↩ 報價單已收回草稿'
+        msg.style.cssText = 'position:fixed;bottom:32px;left:50%;transform:translateX(-50%);background:#0A0A0A;color:#F5F4F0;padding:10px 22px;border-radius:8px;font-size:13px;z-index:99999;font-family:LINE Seed TW_OTF, sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.3)'
+        document.body.appendChild(msg)
+        setTimeout(() => { msg.style.opacity='0'; msg.style.transition='opacity .4s'; setTimeout(() => msg.remove(), 400) }, 2800)
       },
 
       async copyToNew() {
@@ -2753,7 +3136,7 @@ window.addEventListener('load', function () {
           exportLog: [],
           version: 1,
         }
-        template.items = (this.q.items || []).map(it => ({...it, id: Date.now() + Math.random()}))
+        template.items = (this.q.items || []).map(it => ({...it, id: crypto.randomUUID()}))
         sessionStorage.setItem('motrix_copy_template', JSON.stringify(template))
         window.location.href = `quotation-form.html?id=${newNo}`
       },
@@ -2870,7 +3253,7 @@ window.addEventListener('load', function () {
       toast(msg, duration = 2500) {
         const el = document.createElement('div')
         el.textContent = msg
-        el.style.cssText = 'position:fixed;bottom:32px;left:50%;transform:translateX(-50%);background:#0A0A0A;color:#F5F4F0;padding:10px 22px;border-radius:8px;font-size:13px;z-index:99999;font-family:Inter,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.3)'
+        el.style.cssText = 'position:fixed;bottom:32px;left:50%;transform:translateX(-50%);background:#0A0A0A;color:#F5F4F0;padding:10px 22px;border-radius:8px;font-size:13px;z-index:99999;font-family:LINE Seed TW_OTF, sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.3)'
         document.body.appendChild(el)
         setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'opacity .4s'; setTimeout(() => el.remove(), 400) }, duration)
       },
@@ -3003,6 +3386,32 @@ window.addEventListener('load', function () {
         window.addEventListener('resize', () => {
           if (this.previewMode) this._applyPreviewScale()
         })
+        this.$nextTick(() => this.initSortable())
+      },
+
+      initSortable() {
+        const tbody = this.$refs.itemsTbody
+        if (!tbody || typeof Sortable === 'undefined') return
+        const isLocked = () => this.q.status === '已送出' && !this.unlocked
+        this._sortable = Sortable.create(tbody, {
+          animation: 150,
+          handle: '.drag-handle',
+          ghostClass: 'sortable-ghost',
+          chosenClass: 'sortable-chosen',
+          disabled: isLocked(),
+          onEnd: (evt) => {
+            const { oldIndex, newIndex } = evt
+            if (oldIndex === newIndex) return
+            const items = [...this.q.items]
+            const [moved] = items.splice(oldIndex, 1)
+            items.splice(newIndex, 0, moved)
+            this.q.items = items
+            this.calcTotals()
+            this.setDirty()
+          }
+        })
+        this.$watch('unlocked', v => this._sortable?.option('disabled', isLocked()))
+        this.$watch('q.status', v => this._sortable?.option('disabled', isLocked()))
       },
 
       logout() {

@@ -4,6 +4,36 @@
 /* Alpine.js x-cloak: 在 Alpine 初始化前隱藏元素，防止 Modal 閃現 */
 [x-cloak] { display: none !important; }
 
+/* 自架字型：LINE Seed TW_OTF（取代 Google Fonts Inter / Noto Sans TC / Noto Serif TC） */
+@font-face {
+  font-family: 'LINE Seed TW_OTF';
+  src: url('../fonts/LINESeedTW-Thin.otf') format('opentype');
+  font-weight: 100 300;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'LINE Seed TW_OTF';
+  src: url('../fonts/LINESeedTW-Regular.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'LINE Seed TW_OTF';
+  src: url('../fonts/LINESeedTW-Bold.otf') format('opentype');
+  font-weight: 500 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'LINE Seed TW_OTF';
+  src: url('../fonts/LINESeedTW-ExtraBold.otf') format('opentype');
+  font-weight: 800 900;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   --black:   #0A0A0A;
   --white:   #F5F4F0;
@@ -38,8 +68,8 @@
   --shadow:    0 2px 8px rgba(0,0,0,.10);
   --shadow-lg: 0 8px 24px rgba(0,0,0,.12);
 
-  --font-en: 'Inter', system-ui, sans-serif;
-  --font-zh: 'Noto Sans TC', 'Inter', system-ui, sans-serif;
+  --font-en: 'LINE Seed TW_OTF', system-ui, sans-serif;
+  --font-zh: 'LINE Seed TW_OTF', system-ui, sans-serif;
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -797,13 +827,50 @@ body.sidebar-lock { overflow: hidden; }
 }
 
 /* ═══════════════════════════════════════
-   TABLET  768–1024px
+   TABLET  768–1023px  (icon-rail sidebar)
    ═══════════════════════════════════════ */
-@media (max-width: 1024px) and (min-width: 768px) {
-  :root { --sidebar-w: 190px; }
-  .three-col { grid-template-columns: 1fr 1fr !important; }
-  .main { padding: 20px 22px; }
-  .page-wrap { padding: 20px 22px; }
+@media (max-width: 1023px) and (min-width: 768px) {
+  :root { --sidebar-w: 64px; }
+
+  /* Sidebar: icon rail */
+  .sidebar { padding: 10px 0; }
+  .nav__section {
+    height: 0; font-size: 0; padding: 0;
+    border-top: 1px solid rgba(255,255,255,.08);
+    margin: 6px 10px; overflow: hidden;
+  }
+  .nav__item,
+  .nav__sub-item {
+    justify-content: center;
+    padding: 11px 0;
+    gap: 0;
+    min-height: 44px;
+  }
+  .nav__icon { width: 20px; height: 20px; }
+
+  /* Hide text labels; title attr provides tooltip */
+  .nav__label { display: none; }
+
+  /* Badge: absolute overlay in top-right corner of icon */
+  .nav__badge,
+  #sb-approval-badge {
+    position: absolute;
+    top: 4px; right: 4px;
+    margin-left: 0 !important;
+    font-size: 8px !important;
+    padding: 1px 3px;
+    min-width: 14px;
+  }
+
+  /* Topbar logo: shrink to match icon rail */
+  .topbar__logo { width: 64px; justify-content: center; padding: 0 10px; }
+  .topbar__divider,
+  .topbar__title { display: none; }
+
+  /* Content */
+  .main, .page-wrap { padding: 20px 22px; }
+  .three-col  { grid-template-columns: 1fr 1fr !important; }
+  .stats-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
 /* ═══════════════════════════════════════
@@ -898,6 +965,51 @@ body.sidebar-lock { overflow: hidden; }
   .alert-banner { padding: 10px 12px; gap: 8px; }
   .alert-item { flex-direction: column; align-items: flex-start; gap: 2px; }
   .alert-item__amount { margin-left: 0; }
+}
+
+/* ═══════════════════════════════════════
+   XS — Small phones  ≤479px
+   ═══════════════════════════════════════ */
+@media (max-width: 479px) {
+  html { font-size: 13px; }
+
+  .main, .page-wrap { padding: 10px 10px 20px; }
+
+  .stats-grid {
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
+  }
+  .stat-card { padding: 12px 12px; }
+  .stat-card__value { font-size: 18px; }
+
+  .page-header__title { font-size: 15px; }
+  .page-header { gap: 8px; margin-bottom: 12px; padding-bottom: 10px; }
+
+  .data-table { min-width: 400px; }
+  .modal-body { max-height: 78vh; }
+}
+
+/* ─── TOUCH TARGETS  ≤1023px ─── */
+@media (max-width: 1023px) {
+  .nav__item,
+  .nav__sub-item { min-height: 44px; }
+  .topbar__btn   { min-height: 36px; }
+  .btn           { min-height: 38px; }
+}
+
+/* ─── SAFE-AREA INSET (iPhone notch / Dynamic Island) ─── */
+@supports (padding: max(0px, env(safe-area-inset-bottom))) {
+  @media (max-width: 767px) {
+    .main, .page-wrap {
+      padding-bottom: max(28px, calc(14px + env(safe-area-inset-bottom)));
+    }
+    .modal-overlay {
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+    .sidebar {
+      padding-bottom: max(24px, env(safe-area-inset-bottom));
+    }
+  }
 }
 
 /* ═══════════════════════════════════════

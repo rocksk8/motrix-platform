@@ -31,9 +31,9 @@
     .calc-row:last-child{border-bottom:none}
     .calc-row.net{font-weight:700;font-size:16px;color:var(--accent);padding-top:10px;margin-top:4px}
     .calc-row .label{color:var(--text-secondary)}
-    .calc-row .val{font-family:Inter,monospace}
+    .calc-row .val{font-family:LINE Seed TW_OTF, monospace}
     .calc-note{font-size:10px;color:var(--text-dim);margin-top:2px;text-align:right}
-    .slip-no{font-family:Inter,monospace;font-size:13px;color:var(--text-dim)}
+    .slip-no{font-family:LINE Seed TW_OTF, monospace;font-size:13px;color:var(--text-dim)}
     /* Contractor picker */
     .id-card-thumb{margin-top:10px;border:1px solid var(--border-light);border-radius:var(--radius-lg);
                    overflow:hidden;background:#f8f8f6}
@@ -63,7 +63,7 @@
     .pv-head{display:flex;justify-content:space-between;align-items:center;
              padding:14px 20px;border-bottom:1px solid var(--border-light);flex-shrink:0}
     .pv-title{font-size:14px;font-weight:700;color:var(--text-primary)}
-    .pv-sub{font-size:11px;color:var(--text-dim);margin-top:2px;font-family:Inter,monospace}
+    .pv-sub{font-size:11px;color:var(--text-dim);margin-top:2px;font-family:LINE Seed TW_OTF, monospace}
     .pv-close{background:none;border:none;cursor:pointer;color:var(--text-dim);
               font-size:22px;line-height:1;padding:2px 8px;border-radius:4px;font-family:inherit}
     .pv-close:hover{background:var(--border-light);color:var(--text-primary)}
@@ -392,7 +392,7 @@
                         style="font-size:9px;padding:1px 4px;border-radius:3px;background:#e8edff;color:#4f6ef7;border:1px solid #c7d7ff"
                         x-text="'↩#' + log.redownload_of"></span>
                 </div>
-                <div style="font-family:Inter,monospace;font-size:10px;color:var(--text-dim)"
+                <div style="font-family:LINE Seed TW_OTF, monospace;font-size:10px;color:var(--text-dim)"
                      x-text="(log.at||'').replace('T',' ').slice(0,16)"></div>
               </div>
               <button style="background:none;border:1px solid var(--border);border-radius:4px;
@@ -619,8 +619,9 @@ function payslipForm() {
       const s = localStorage.getItem('motrix_session')
       if (!s) { window.location.href = 'login.html'; return }
       this.session = JSON.parse(s)
-      if (this.session.role !== 'superadmin') {
-        alert('此頁面僅限最高權限使用者存取'); window.history.back(); return
+      const mods = this.session.modules || []
+      if (this.session.role !== 'superadmin' && !mods.includes('payslip')) {
+        alert('此頁面僅限最高權限使用者或具有「勞報單」模組授權的使用者存取'); window.history.back(); return
       }
 
       // Load tax rules
