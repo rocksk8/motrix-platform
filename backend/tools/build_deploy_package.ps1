@@ -14,6 +14,12 @@
 
   執行前提：在此腳本所在的 git repo 根目錄（或其子目錄）下執行；
   git status 必須乾淨（沒有未 commit 的變更），否則中止。
+
+  【重要】這台開發機的 git repo 根目錄是整個使用者家目錄（C:\Users\hichan），
+  不是 MOTRIX-ERP 專案本身——家目錄底下永遠會有大量跟本專案無關的未追蹤個人
+  檔案。因此本腳本的「git status 必須乾淨」與「git archive 打包」都只會檢查/
+  匯出 MOTRIX-ERP 這個子目錄範圍（用 git pathspec 限定），不會管家目錄其他地方
+  乾不乾淨，也不會把其他地方的內容打包進去。
 #>
 
 [CmdletBinding()]
@@ -28,23 +34,35 @@ function Fail($msg) {
     exit 1
 }
 
-# --- 定位 repo 根目錄 ---
+# --- 定位 repo 根目錄與專案子目錄 ---
 $repoRoot = (git rev-parse --show-toplevel 2>$null)
 if (-not $repoRoot) {
     Fail "找不到 git repo（目前目錄不在任何 git 專案內）。請在 MOTRIX ERP 專案內執行本腳本。"
 }
 $repoRoot = $repoRoot -replace "/", "\"
+
+# 本腳本位於 <專案根目錄>\backend\tools\ 下，往上兩層即為專案根目錄
+# （不管專案實際被放在 git repo底下哪個路徑，都能正確算出來）
+$projectRoot = (Get-Item $PSScriptRoot).Parent.Parent.FullName
+
+# 專案根目錄相對於 repo 根目錄的路徑，轉成 git pathspec 用的正斜線格式
+if (-not $projectRoot.StartsWith($repoRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+    Fail "專案目錄 '$projectRoot' 不在 git repo '$repoRoot' 底下，無法定位 pathspec。"
+}
+$relPath = $projectRoot.Substring($repoRoot.Length).TrimStart('\') -replace '\\', '/'
+
 Set-Location $repoRoot
 
 Write-Host "======================================"
 Write-Host "  MOTRIX ERP - Build Deploy Package"
 Write-Host "======================================"
-Write-Host "Repo root: $repoRoot`n"
+Write-Host "Repo root:     $repoRoot"
+Write-Host "Project path:  $relPath （本次 git status／打包範圍只限這裡）`n"
 
-# --- Step 1: git 狀態必須乾淨 ---
-$dirty = git status --porcelain
+# --- Step 1: git 狀態必須乾淨（只看專案子目錄範圍） ---
+$dirty = git status --porcelain -- $relPath
 if ($dirty) {
-    Write-Host "目前有未 commit 的變更：" -ForegroundColor Yellow
+    Write-Host "專案目錄（$relPath）內目前有未 commit 的變更：" -ForegroundColor Yellow
     Write-Host $dirty
     Fail "請先 commit（或 stash）所有變更，再重新執行本腳本。打包內容只會包含已 commit 的版本，未 commit 的東西不會被打包，也不該被打包。"
 }
@@ -62,7 +80,7 @@ Write-Host "Commit:  $commit ($commitShort)"
 Write-Host "Branch:  $branch"
 
 # --- Step 3: 讀 version_manifest.json 最後一筆 ---
-$versionManifestPath = Join-Path $repoRoot "backend\version_manifest.json"
+$versionManifestPath = Join-Path $projectRoot "backend\version_manifest.json"
 $versionLatest = $null
 if (Test-Path $versionManifestPath) {
     try {
@@ -78,14 +96,17 @@ if (Test-Path $versionManifestPath) {
 # --- Step 4: 用 git archive 匯出乾淨快照 ---
 $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
 if (-not $OutDir) {
-    $OutDir = Join-Path $repoRoot "deploy_packages"
+    $OutDir = Join-Path $projectRoot "deploy_packages"
 }
 $pkgDir = Join-Path $OutDir "${timestamp}_${commitShort}"
 New-Item -ItemType Directory -Force -Path $pkgDir | Out-Null
 
-Write-Host "`n[1/2] git archive 匯出至 $pkgDir ..."
+Write-Host "`n[1/2] git archive 匯出至 $pkgDir （範圍限定 $relPath）..."
 $tarPath = Join-Path $pkgDir "snapshot.tar"
-git archive --format=tar -o $tarPath $commit
+# <commit>:<relPath> 是 git 的 tree-ish 語法，直接指到子目錄的 tree 物件，
+# 匯出的檔案會以 backend/、frontend/ 等開頭（不帶 Desktop/MOTRIX-ERP/ 前綴），
+# 符合 apply_update.ps1 預期的部署包結構。
+git archive --format=tar -o $tarPath "${commit}:${relPath}"
 Push-Location $pkgDir
 tar -xf $tarPath
 Remove-Item $tarPath

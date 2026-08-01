@@ -1,7 +1,7 @@
 # MOTRIX ERP — 開發快速參考
 
 > 允碩整合集創（統編 60575481）｜ Tel: 04-3602-2818 ｜ info@miactw.com  
-> 文件版本：**2026-08-01j**（合併正式機匯出的半自動更新模式：新增 §15，§14.3 更新狀態，見 §12）
+> 文件版本：**2026-08-01k**（修復 build_deploy_package.ps1 repo 範圍 bug，見 §12／§15）
 
 ---
 
@@ -743,6 +743,13 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 ## §12 · 變更摘要（最新兩版）
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
+
+### 2026-08-01k — 修復 build_deploy_package.ps1 的 repo 範圍 bug
+
+- **背景**：合併 §15 更新模式後第一次實際執行 `build_deploy_package.ps1`，在「git status 必須乾淨」這一步就失敗——追查發現腳本用 `git rev-parse --show-toplevel` 找到的 repo 根目錄其實是**整個使用者家目錄**（`C:\Users\hichan`），不是 MOTRIX-ERP 專案本身；家目錄底下有大量跟本專案無關的未追蹤個人檔案，導致這個檢查永遠不可能通過
+- **修法**：改用 `$PSScriptRoot` 往上兩層（腳本位於 `<專案根目錄>\backend\tools\` 下）算出專案根目錄，再算出它相對於 repo 根目錄的路徑（`$relPath`，正斜線格式）；`git status`／`git archive` 都改用這個 pathspec 限定範圍，只檢查/打包 MOTRIX-ERP 這個子目錄；`git archive` 改用 `<commit>:<relPath>` tree-ish 語法，讓匯出的檔案直接以 `backend/`、`frontend/` 開頭（不帶 `Desktop/MOTRIX-ERP/` 前綴），符合 `apply_update.ps1` 預期的部署包結構；`$OutDir` 預設值與讀取 `version_manifest.json` 的路徑也一併從 repo 根目錄改為專案根目錄（原本會把 `deploy_packages/` 誤建在家目錄底下）
+- 順便補上 `.gitignore` 的 `出貨單PDF/` 規則（比照既有 `報價單PDF/` 做法）——這個含真實 PDF 的資料夾原本沒被忽略，也會一直卡住 git status 乾淨檢查
+- 已用 PowerShell AST parser 對修改後的腳本做語法檢查通過；重新執行後確認範圍限定生效，正確、僅回報專案子目錄範圍內的未 commit 變更
 
 ### 2026-08-01j — 新增半自動更新模式（§15，落地 §14.3 自動化推送方向）
 

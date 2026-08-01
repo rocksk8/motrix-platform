@@ -28,6 +28,7 @@ venv/
 # Uploads / exports (optional local data)
 uploads/
 報價單PDF/
+出貨單PDF/
 exports/
 backend/export_archive/
 
