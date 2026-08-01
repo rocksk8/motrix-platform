@@ -79,14 +79,17 @@ if ($branch -ne "master") {
 Write-Host "Commit:  $commit ($commitShort)"
 Write-Host "Branch:  $branch"
 
-# --- Step 3: 讀 version_manifest.json 最後一筆 ---
+# --- Step 3: 讀 version_manifest.json 最新一筆（陣列最前面，新條目永遠插最前面） ---
 $versionManifestPath = Join-Path $projectRoot "backend\version_manifest.json"
 $versionLatest = $null
 if (Test-Path $versionManifestPath) {
     try {
-        $entries = Get-Content $versionManifestPath -Raw | ConvertFrom-Json
+        # -Encoding UTF8：這個檔案沒有 BOM，PowerShell 5.1 的 Get-Content 在繁中
+        # Windows 上預設會用系統內碼（cp950）猜編碼，讀到中文附近會亂碼進而
+        # 解析失敗，必須強制指定 UTF8 才能正確讀取。
+        $entries = Get-Content $versionManifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
         if ($entries -and $entries.Count -gt 0) {
-            $versionLatest = $entries[-1]
+            $versionLatest = $entries[0]
         }
     } catch {
         Write-Host "[WARN] 無法解析 version_manifest.json，版本標籤留空。" -ForegroundColor Yellow

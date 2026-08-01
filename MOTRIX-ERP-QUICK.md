@@ -1,7 +1,7 @@
 # MOTRIX ERP — 開發快速參考
 
 > 允碩整合集創（統編 60575481）｜ Tel: 04-3602-2818 ｜ info@miactw.com  
-> 文件版本：**2026-08-01k**（修復 build_deploy_package.ps1 repo 範圍 bug，見 §12／§15）
+> 文件版本：**2026-08-01l**（修復 build_deploy_package.ps1 編碼／索引 bug，見 §12）
 
 ---
 
@@ -743,6 +743,12 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 ## §12 · 變更摘要（最新兩版）
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
+
+### 2026-08-01l — 修復 build_deploy_package.ps1 兩個小 bug（首次實際執行才發現）
+
+- 修好 §12 2026-08-01k 那次範圍 bug 後第一次成功打包，但終端機印出 `[WARN] 無法解析 version_manifest.json，版本標籤留空`——追查是 `Get-Content` 讀取此檔（無 BOM）時沒指定 `-Encoding UTF8`，PowerShell 5.1 在繁中 Windows 上會用系統內碼猜編碼，中文字附近讀成亂碼，`ConvertFrom-Json` 因此解析失敗；已補上 `-Encoding UTF8`
+- 順便發現 `$entries[-1]`（原意「取最新一筆」）邏輯錯誤：`version_manifest.json` 的新條目永遠插在陣列最前面（index 0），`[-1]` 實際抓到的是史上最舊的那筆記錄，已改為 `$entries[0]`
+- 兩者都是非致命 bug（不影響打包本身是否成功，只影響 `deploy_manifest.json` 裡 `version_manifest_latest` 這個資訊性欄位是否正確），已重新執行腳本驗證修復後能正確帶出最新版本資訊
 
 ### 2026-08-01k — 修復 build_deploy_package.ps1 的 repo 範圍 bug
 
