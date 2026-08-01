@@ -204,6 +204,7 @@
     envg:  '<path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>',
     netg:  '<path d="M12 20h.01M8.5 16.5a5 5 0 017 0M5 12.859a10 10 0 0114 0M1.5 9.5a15 15 0 0121 0"/>',
     switchg: '<rect x="2" y="3" width="20" height="6" rx="1"/><rect x="2" y="15" width="20" height="6" rx="1"/><path d="M6 6h.01M6 18h.01"/>',
+    schema: '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v6c0 1.657 4.03 3 9 3s9-1.343 9-3V5"/><path d="M3 11v6c0 1.657 4.03 3 9 3s9-1.343 9-3v-6"/>',
   }
 
   // Module → localStorage key map (used to mark current page's module as "seen")
@@ -299,6 +300,7 @@
       ni(pg('notification-settings.html'), 'ntfy',  '通知設定',   ['notification-settings.html'],  sa),
       ni(pg('audit-log.html'),         'hist',  '歷史紀錄',   ['audit-log.html'],         ad),
       ni(pg('module-versions.html'),  'ver',   '版本紀錄',   ['module-versions.html'],               ad),
+      ni(pg('schema-status.html'),    'schema', 'Schema 狀態', ['schema-status.html'],               sa),
     ].filter(Boolean).join('')
 
     var el = document.getElementById('app-sidebar')

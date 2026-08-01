@@ -1,4 +1,5 @@
 """System: approval-flow settings, notifications, audit log, work logs."""
+import inspect
 import json
 import os
 import secrets
@@ -8,7 +9,7 @@ from typing import Optional, List
 from fastapi import APIRouter, HTTPException, Header, Body
 from pydantic import BaseModel
 
-from db import get_db
+from db import get_db, CURRENT_VERSION, _MIGRATIONS
 from helpers import _require_user, _tok, _audit, _get_setting, _set_setting, _get_edge_path
 from helpers.quotations import _steps_to_tiers
 
@@ -546,6 +547,36 @@ _DEFAULT_ROLE_LABELS = {
     "engineer":   "工程師",
     "viewer":     "檢視者",
 }
+
+
+@router.get("/api/system/schema-status")
+def get_schema_status(authorization: str = Header(None)):
+    """唯讀 schema/migration 診斷資訊：目前版本、目標版本、完整 migration 清單。
+    不提供任何觸發/操作動作——migration 已在伺服器啟動時自動套用，「重新對現有
+    db 跑一次」永遠是 no-op，沒有診斷價值；真正有意義的乾跑驗證在部署階段
+    （見 backend/tools/apply_update.ps1），不是活著的伺服器本身。"""
+    _require_user(authorization, require_superadmin=True)
+    conn = get_db()
+    row = conn.execute("SELECT version, applied_at FROM schema_version WHERE id=1").fetchone()
+    conn.close()
+    current = row["version"] if row else 0
+    applied_at = row["applied_at"] if row else ""
+    migrations = [
+        {
+            "version": i,
+            "name": fn.__name__,
+            "description": inspect.getdoc(fn) or "",
+            "applied": i <= current,
+        }
+        for i, fn in enumerate(_MIGRATIONS, start=1)
+    ]
+    return {
+        "currentVersion": current,
+        "targetVersion": CURRENT_VERSION,
+        "upToDate": current >= CURRENT_VERSION,
+        "lastAppliedAt": applied_at,
+        "migrations": migrations,
+    }
 
 
 @router.get("/api/settings/role-labels")

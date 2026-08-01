@@ -265,6 +265,53 @@ def _prune_local_db_backups(keep_days: int = 30) -> None:
         logger.exception("_prune_local_db_backups failed")
 
 
+def _prune_cloud_backups(daily_keep_days: int = 365, weekly_keep_days: int = 730) -> None:
+    """Delete dated folders under H: 每日備份／週備份 once older than the
+    retention window. Mirrors _prune_local_db_backups's safety: only ever
+    deletes a folder whose name parses cleanly as the expected date pattern
+    for that directory (YYYY-MM-DD for daily, YYYY-Wxx for weekly) — anything
+    else (unexpected file/folder name) is left untouched, never guessed at.
+    No-ops entirely if H: isn't mounted (never operates on a partial/offline
+    view of the archive)."""
+    if not _archive_ok():
+        return
+
+    cutoff_daily = date.today().toordinal() - daily_keep_days
+    try:
+        if os.path.isdir(_DAILY_DIR):
+            for name in os.listdir(_DAILY_DIR):
+                path = os.path.join(_DAILY_DIR, name)
+                if not os.path.isdir(path):
+                    continue
+                try:
+                    d = date.fromisoformat(name)
+                except ValueError:
+                    continue
+                if d.toordinal() < cutoff_daily:
+                    shutil.rmtree(path, ignore_errors=True)
+                    logger.info("Pruned old cloud daily backup dir: %s", path)
+    except Exception:
+        logger.exception("_prune_cloud_backups (daily) failed")
+
+    cutoff_weekly = date.today().toordinal() - weekly_keep_days
+    try:
+        if os.path.isdir(_WEEKLY_DIR):
+            for name in os.listdir(_WEEKLY_DIR):
+                path = os.path.join(_WEEKLY_DIR, name)
+                if not os.path.isdir(path):
+                    continue
+                try:
+                    year_str, week_str = name.split('-W')
+                    d = datetime.strptime(f"{year_str} {week_str} 1", "%Y %W %w").date()
+                except (ValueError, IndexError):
+                    continue
+                if d.toordinal() < cutoff_weekly:
+                    shutil.rmtree(path, ignore_errors=True)
+                    logger.info("Pruned old cloud weekly backup dir: %s", path)
+    except Exception:
+        logger.exception("_prune_cloud_backups (weekly) failed")
+
+
 def _backup_quotation(quote_no: str):
     try:
         conn = get_db()
@@ -387,6 +434,7 @@ def _daily_backup():
         _system_audit("backup.daily_ok", today_label, summary)
         _clear_backup_alert_if_healthy()
         _prune_audit_log(keep_days=730)
+        _prune_cloud_backups(daily_keep_days=365, weekly_keep_days=730)
     except Exception as e:
         logger.exception("_daily_backup failed")
         _write_backup_alert(f"每日雲端 JSON 備份失敗: {e}", level="ERROR")

@@ -1,7 +1,7 @@
 # MOTRIX ERP — 開發快速參考
 
 > 允碩整合集創（統編 60575481）｜ Tel: 04-3602-2818 ｜ info@miactw.com  
-> 文件版本：**2026-08-01o**（選型資料庫三模組獨立命名／權限／紀錄拆分，見 §6／§12）
+> 文件版本：**2026-08-01q**（新增 Schema／Migration 唯讀診斷頁面，見 §6／§7／§12）
 
 ---
 
@@ -494,7 +494,7 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
 設備       設備登載 / 保固追蹤
 財務       應收帳款 / 營運報表（admin+ 或含 reports 模組）
 工作       工作日誌（非 viewer 或含 work_log 模組） / 每日工作事項（非 viewer 或含 daily_task 模組）
-系統       使用者 / 簽核設定（superadmin）/ 出貨單簽核設定（superadmin）/ 歷史紀錄
+系統       使用者 / 簽核設定（superadmin）/ 出貨單簽核設定（superadmin）/ 歷史紀錄 / 版本紀錄 / Schema 狀態（superadmin）
 ```
 
 - 簽核佇列不在 sidebar，在報價單內 tab
@@ -509,6 +509,7 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
   - **交換器選型導覽**：`switch-guide.html`；檢視 `switch_guide` 模組旗標或 admin+（`cSwitchG` 旗標）；編輯需 `switch_guide_edit` 或 superadmin；選型資料庫第三個上線的類別；**2026-08-01 前完全沒有 sidebar 入口與 `users.html` 權限勾選項**（只有 superadmin 能用），本次補齊跟另外兩個一致
   - 三者在**歷史紀錄**（`audit-log.html`）與**版本紀錄**（`module-versions.html`）皆已比照其餘模組補上對應的 optgroup／actionLabel／色碼（teal 色系＋🧭 圖示，三者共用同一識別色，強調同屬一個產品線而非各自獨立模組）
 - **出貨單簽核設定**：`shipping-approval-settings.html`；superadmin 限定；獨立於報價單「簽核設定」（`system_settings.shipping_approval_flow`，不同 key），UI 為 `approval-settings.html` 的複製版本；出貨單本身不是獨立 sidebar 項目，掛在「案件管理」頁面內的「出貨單」分頁，沿用 `case_manage`/`cCM`/`sb-mod-case`
+- **Schema 狀態**（2026-08-01）：`schema-status.html`；superadmin 限定；**純唯讀**診斷頁，顯示目前 db 版本 / 目標版本、狀態（✓最新／⚠尚未同步）、最後更新時間、完整 migration 清單（v34→v1，版號＋函式名稱＋說明）；**全頁無任何操作按鈕或表單**——migration 於伺服器啟動時自動套用，此頁不提供「觸發乾跑」之類的操作（架構上沒有意義：活著的伺服器對自己已是最新版的 db 再跑一次永遠是 no-op）；資料來源 `GET /api/system/schema-status`
 
 ---
 
@@ -571,6 +572,7 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
 | PUT/DELETE | /settings/custom-roles/{rid} | 更新／刪除（superadmin only） |
 | GET | /settings/role-labels | 各角色層顯示名稱（需認證） |
 | PUT | /settings/role-labels | 更新角色顯示名稱（superadmin only） |
+| GET | /system/schema-status | Schema／migration 唯讀診斷（superadmin only）；回傳目前版本、目標版本、`upToDate`、`lastAppliedAt`、完整 migration 清單 |
 
 ### §7.5 · 業務開發 CRM（DB v27）
 
@@ -664,8 +666,8 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
 雲端（需 H: 掛載）
   H:\我的雲端硬碟\系統存檔\
     即時備份\報價單|客戶|供應商\
-    每日備份\YYYY-MM-DD\  （JSON 七表 + motrix_erp.db）
-    週備份\YYYY-WNN\
+    每日備份\YYYY-MM-DD\  （JSON 八表 + motrix_erp.db；保留 365 天，超過自動清除整個日期資料夾）
+    週備份\YYYY-WNN\      （保留 730 天，超過自動清除整個週別資料夾）
 
 本機（不依賴 G:，務必保留）
   backend\db_backups\YYYY-MM-DD\motrix_erp.db   ← SQLite Online Backup，保留 30 天
@@ -682,6 +684,8 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
 | **冗餘** | `threading.Timer` | 每 2h 日備；每 6h 週備 | server 在線時提供即時觸發 |
 
 `.done` marker 確保同日/週不重複備份。設定：`setup_backup_task.ps1`（初次部署執行一次）。
+
+**雲端備份清除**（2026-08-01 新增，`_prune_cloud_backups()`）：`每日備份`／`週備份` 原本永不清除、會無限期累積；現在 `_daily_backup()` 跑完後會呼叫，各自依保留天數（預設每日 365 天、週備份 730 天）刪除整個過期的日期/週別資料夾。安全機制比照既有 `_prune_local_db_backups()`：只刪「資料夾名稱能正確解析成日期」的項目（`YYYY-MM-DD` / `YYYY-WNN`），其他檔名一律不動；H: 未掛載時整段略過，不會誤判成「全部過期」。
 
 ### §8.3 · 行為
 
@@ -748,6 +752,19 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 ## §12 · 變更摘要（最新兩版）
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
+
+### 2026-08-01q — 新增 Schema／Migration 唯讀診斷頁面
+
+- **背景**：使用者要求做「migration 操作介面」；分析後發現「在線觸發乾跑」架構上沒有意義——migration 在每次伺服器啟動時自動套用，`apply_update.ps1` 的乾跑驗證測的是「即將部署、尚未套用」的新程式碼跑在現有 db 上會不會出錯，只有在部署當下（新舊程式碼並存）才有意義；活著的伺服器拿自己現在的程式碼對自己已是最新版的 db 再跑一次，永遠是 no-op。跟使用者確認後改成純讀取的診斷頁
+- **修法**：後端 `system.py` 新增 `GET /api/system/schema-status`（superadmin only），讀 `schema_version` 單列表取得目前版號／最後套用時間，搭配 `_MIGRATIONS` 陣列（版號＝陣列位置＋1）與 `inspect.getdoc()` 組出完整 migration 清單（函式名稱＋說明，無 docstring 則說明留空）；前端新增 `schema-status.html`，摘要卡片（目前版本 X/Y、✓最新／⚠尚未同步、最後更新時間）＋ migration 清單（新到舊），**全頁無任何按鈕或表單**；`sidebar.js` 「系統」區段新增「Schema 狀態」入口（superadmin，`schema` 圖示）
+- 已用 `ast.parse` 驗證後端語法、`node --check` 驗證前端 inline script 語法
+
+### 2026-08-01p — 雲端備份新增自動清除機制
+
+- **背景**：系統運行/資料管理建議整理時發現，H: 雲端硬碟上的「每日備份」「週備份」資料夾雖然有完整的失敗警示與 email 通知機制，卻**完全沒有清除邏輯**（本機 `db_backups/` 有 30 天清除、`audit_log` 有 730 天清除，唯獨雲端這兩個資料夾會無限期累積），長期下來可能撞到雲端硬碟容量上限
+- **修法**：`archive.py` 新增 `_prune_cloud_backups(daily_keep_days=365, weekly_keep_days=730)`，比照既有 `_prune_local_db_backups()` 的安全模式——只刪資料夾名稱能正確解析成日期格式的項目，其他一律不動；H: 未掛載時整段略過。掛在 `_daily_backup()` 最後執行
+- 保留天數依使用者指示：每日 365 天、週備份沿用既有 `audit_log` 的 730 天慣例
+- 已用一次性測試腳本在暫時目錄（非正式機真實 H: 路徑）驗證：正確清除超過保留期限的日期/週別資料夾、正確保留未過期與檔名無法解析的項目，未誤刪
 
 ### 2026-08-01o — 選型資料庫三模組獨立命名／權限／紀錄拆分
 
