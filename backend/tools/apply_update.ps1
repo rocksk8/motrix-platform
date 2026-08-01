@@ -108,6 +108,43 @@ if (Test-Path $dbPath) {
     Warn "  找不到 motrix_erp.db，略過 db 快照。"
 }
 
+# ============================================================
+# Migration 乾跑驗證 —— 新版 db.py 只在 db 快照的「副本」上跑一次，
+# 正式庫完全不碰。失敗就在這裡直接中止，不停服、不碰正式庫、
+# 不留回滾快照，把「正式庫是第一個試跑新 migration 的地方」的風險
+# 移到這一步先擋下來。
+# ============================================================
+if (Test-Path $dbPath) {
+    Info "  Migration 乾跑驗證..."
+    $dryRunDb = Join-Path $env:TEMP "motrix_erp_dryrun_$timestamp.db"
+    Copy-Item (Join-Path $dbBackupDir "motrix_erp.db") $dryRunDb -Force
+
+    $dryRunPy = Join-Path $env:TEMP "motrix_dryrun_$timestamp.py"
+    @"
+import sys
+sys.path.insert(0, r'$(Join-Path $PackagePath "backend")')
+import db
+db.init_db(r'$dryRunDb')
+print('DRYRUN_OK')
+"@ | Set-Content -Path $dryRunPy -Encoding UTF8
+
+    $dryRunOutput = & python $dryRunPy 2>&1
+    $dryRunExit = $LASTEXITCODE
+    Remove-Item $dryRunDb, $dryRunPy -Force -ErrorAction SilentlyContinue
+
+    if ($dryRunExit -ne 0 -or ($dryRunOutput -notmatch "DRYRUN_OK")) {
+        Write-Host ""
+        Write-Host "======================================" -ForegroundColor Red
+        Write-Host "  Migration 乾跑驗證失敗，中止套用（正式庫完全未被觸碰）" -ForegroundColor Red
+        Write-Host "======================================" -ForegroundColor Red
+        Write-Host ($dryRunOutput | Out-String)
+        Fail "新版本的 migration 在 db 快照副本上乾跑失敗，套用到正式庫時很可能也會出錯。請檢查上面的錯誤訊息、修好新版 db.py 的 migration 後重新打包，再重新套用。"
+    }
+    Ok "  Migration 乾跑驗證通過（新版 db.py 對照正式庫目前的 schema 乾跑一輪，未發現錯誤）。"
+} else {
+    Warn "  找不到正式庫 motrix_erp.db，略過 migration 乾跑驗證（視為全新安裝）。"
+}
+
 $rollbackRoot = Join-Path $BackendDir "rollback_snapshots"
 $rollbackDir = Join-Path $rollbackRoot $timestamp
 New-Item -ItemType Directory -Force -Path $rollbackDir | Out-Null

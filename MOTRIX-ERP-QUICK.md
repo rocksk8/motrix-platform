@@ -1,7 +1,7 @@
 # MOTRIX ERP — 開發快速參考
 
 > 允碩整合集創（統編 60575481）｜ Tel: 04-3602-2818 ｜ info@miactw.com  
-> 文件版本：**2026-08-01l**（修復 build_deploy_package.ps1 編碼／索引 bug，見 §12）
+> 文件版本：**2026-08-01n**（apply_update.ps1 新增 migration 乾跑驗證，見 §12／§15.3）
 
 ---
 
@@ -744,6 +744,21 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
 
+### 2026-08-01n — apply_update.ps1 新增 migration 乾跑驗證
+
+- **背景**：MOTRIX-ERP 拆成獨立 repo（見下方 §12 2026-08-01m 條目）後，針對「未來擴增模組/串接其他環境前該先補的風險」做過一輪反方向評估，其中一項是「正式庫是第一個試跑新 migration 的地方」——`apply_update.ps1` 套新程式碼、重啟後 `init_db()` 立刻對正式庫跑新 migration，若 migration 本身有 bug，schema 已經被改壞才被套用後健康檢查發現；「自動回滾」雖然會把 db 整檔換回套用前快照（安全），但仍會遺失套用後到偵測失敗這段時間內產生的新業務資料
+- **修法**：`apply_update.ps1` Step 1（套用前檢查）在 db 快照做完後、程式碼回滾快照之前，新增乾跑驗證：把 db 快照複製一份到系統 temp 目錄，用**新部署包裡的** `db.py`（`init_db(path)` 本來就接受任意路徑參數，只操作傳入的檔案，不會動到 `DB_PATH` 預設值）在這份副本上先跑一次；失敗（python 非 0 結束碼，或沒印出預期的 `DRYRUN_OK` 標記）就直接中止，不進入停服／複製程式碼／回滾快照等後續步驟，**正式庫全程不受觸碰**
+- 已用 PowerShell AST parser 對修改後的腳本做語法檢查通過；已用實際 db 檔案複本個別驗證成功與失敗兩種情境：對照現有正式 schema 乾跑通過會印 `DRYRUN_OK`／結束碼 0；餵一個非法的 db 檔案會正確拋出 `sqlite3.DatabaseError: file is not a database`／結束碼非 0，確認失敗偵測邏輯正確
+- 尚未在正式機做過真實套用測試（同 §15.4 既有已知限制）
+
+### 2026-08-01m — MOTRIX-ERP 拆分為獨立 git repo
+
+- **背景**：反方向風險評估（見對話紀錄）點出開發機這邊的 git repo 根目錄其實是整個使用者家目錄，MOTRIX-ERP 只是其中一個子資料夾——這是 §12 2026-08-01k/l 那兩個 `build_deploy_package.ps1` bug 的根本原因，也是繼續擴增模組/串接其他環境前優先度最高的結構性風險
+- **修法**：用 `git subtree split --prefix="Desktop/MOTRIX-ERP" -b motrix-erp-split` 保留完整 commit 歷史（40 筆，含歷史上的 `develop` 分支內容，因 `develop` 早已完全合併進 `master`，用 `master` 分割即可涵蓋全部）匯出成獨立分支，拉進臨時 repo 驗證內容與現有工作目錄一致後，把新 `.git` 直接放進 `Desktop\MOTRIX-ERP\`；家目錄那個原本的大 repo 用 `git rm -r --cached` 停止追蹤這個資料夾並補上 `.gitignore` 規則，**工作目錄檔案本身完全未變動**，只是換了誰在追蹤，家目錄過去的 commit 歷史也完全未被改寫
+- 新建 GitHub private repo `rocksk8/motrix-erp` 當新 repo 的 remote，push 完成；另建立 `develop` 分支（比照 `GITFLOW.md` 既有分支規範）並 push
+- 副作用：`build_deploy_package.ps1` 原本 `git rev-parse --show-toplevel` 找到的範圍 bug（§12 2026-08-01k 修的那個 workaround）現在不需要 workaround 也自然正確，因為 repo 根目錄本來就是 `Desktop\MOTRIX-ERP` 了；先前的修法本身無害，繼續保留
+- 已重跑 `build_deploy_package.ps1` 驗證：`Repo root` 正確顯示為 `Desktop\MOTRIX-ERP`，打包成功、`deploy_manifest.json` 內容正確
+
 ### 2026-08-01l — 修復 build_deploy_package.ps1 兩個小 bug（首次實際執行才發現）
 
 - 修好 §12 2026-08-01k 那次範圍 bug 後第一次成功打包，但終端機印出 `[WARN] 無法解析 version_manifest.json，版本標籤留空`——追查是 `Get-Content` 讀取此檔（無 BOM）時沒指定 `-Encoding UTF8`，PowerShell 5.1 在繁中 Windows 上會用系統內碼猜編碼，中文字附近讀成亂碼，`ConvertFrom-Json` 因此解析失敗；已補上 `-Encoding UTF8`
@@ -1335,12 +1350,14 @@ powershell -ExecutionPolicy Bypass -File backend\tools\apply_update.ps1 -Package
 | 階段 | 動作 |
 |------|------|
 | 身分守門 | 確認腳本執行路徑就是正式機路徑，否則中止 |
-| 套用前 | 版本比對（commit 相同視為重複套用，需 `-Force` 才強制）；記錄套用前健康狀態；**db 快照**至 `backend/db_backups/pre_update_<timestamp>/`；**程式碼回滾快照**至 `backend/rollback_snapshots/<timestamp>/`（保留最新 5 份）；印出摘要，等待操作者輸入 `y` 確認 |
+| 套用前 | 版本比對（commit 相同視為重複套用，需 `-Force` 才強制）；記錄套用前健康狀態；**db 快照**至 `backend/db_backups/pre_update_<timestamp>/`；**Migration 乾跑驗證**（2026-08-01m 新增，見下方說明）；**程式碼回滾快照**至 `backend/rollback_snapshots/<timestamp>/`（保留最新 5 份）；印出摘要，等待操作者輸入 `y` 確認 |
 | 停服 | 依 port 666 監聽者 PID／`uvicorn*main:app` commandline 逐一 kill；**不自己啟動新 uvicorn**，改讓既有 `MOTRIX ERP Server Autostart` 排程的 crash-restart 迴圈（§1.1）5 秒內自動接手重啟，避免搶 port |
 | 套用 | robocopy 把套件的 `backend/`＋`frontend/`＋根目錄文件覆蓋過去；**只加不改既有多餘檔案，絕不用 `/MIR`**，加上 `/XD`／`/XF` 排除 db／uploads／報價單PDF／logs／設定檔等，即使套件不小心含這些也不會覆蓋 |
 | 套用後 | 輪詢 `GET /api/ping` 最多 30 秒＋檢查 `logs/server.log` 新增內容有無 traceback/ERROR；成功→更新 `backend/.deployed_commit.json`；**失敗→自動回滾**（用剛才的程式碼快照復原＋重新停服讓迴圈拉起舊版＋再次確認健康），並印出 db／程式碼快照路徑供人工進一步排查 |
 
 `-Force`：版本比對沒過仍要套用時使用。`-Yes`：跳過互動確認（僅供自動化測試，正常人工執行不要加）。
+
+**Migration 乾跑驗證**（2026-08-01m）：正式庫過去是「第一個試跑新 migration 的地方」——伺服器套新程式碼重啟後 `init_db()` 立刻對正式庫跑 migration，若寫壞了，schema 已經被改壞才被套用後健康檢查發現，「自動回滾」雖然會把 db 整檔換回套用前快照（安全），但仍會遺失套用後到偵測失敗這段時間內產生的新業務資料。現在改成：db 快照做完後，先把快照複製一份到系統 temp 目錄，用**新套件裡的** `db.py`（`init_db(path)` 本來就接受任意路徑，只操作傳入的檔案）在這份副本上先跑一次；失敗就直接中止，不進入停服／複製程式碼／回滾快照等後續步驟，**正式庫全程不受觸碰**。
 
 ### §15.4 · 已知限制
 
