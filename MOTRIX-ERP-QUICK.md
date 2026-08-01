@@ -1,7 +1,7 @@
 # MOTRIX ERP — 開發快速參考
 
 > 允碩整合集創（統編 60575481）｜ Tel: 04-3602-2818 ｜ info@miactw.com  
-> 文件版本：**2026-08-01h**（出貨單預覽 Modal 調整：移除下載選項、PDF 加浮水印警告橫幅，見 §5.8）
+> 文件版本：**2026-08-01j**（合併正式機匯出的半自動更新模式：新增 §15，§14.3 更新狀態，見 §12）
 
 ---
 
@@ -16,7 +16,7 @@
   §4  資料模型             §12 變更摘要
   §5  核心業務流程          §13 目錄結構
   §6  Sidebar 結構         §14 跨機核對與拉檔流程
-  §7  API 速查
+  §7  API 速查             §15 更新模式（測試機→正式機）
 -->
 
 ---
@@ -40,7 +40,7 @@
 |------|---------|------|
 | 2026-08-01 | `backend/db.py` 少了正式機已在跑的 2 個 migration（v32/v33，交換器選型導覽 switch_guide 表結構） | ✅ 已補回（用正式機 db 實際 schema 反推重建，見 §12 2026-08-01e） |
 | 2026-08-01 | `backend/setup_autostart_task.ps1`、`backend/setup_heartbeat_task.ps1` 兩個部署排程設定腳本，正式機有（§1.1／§1.2 有描述其行為）、這台開發機完全沒有檔案 | ⏳ 待處理——下次能接觸正式機時依 §14 流程拉回 |
-| 2026-08-01 | 已知程式碼未 commit 進 git（`git log` 停在較舊的提交，工作區有大量未 commit 變更）；正式機的程式碼版本與 git 歷史的對應關係目前不明 | ⏳ 待處理，非緊急（見 §14 說明） |
+| 2026-08-01 | 已知程式碼未 commit 進 git（`git log` 停在較舊的提交，工作區有大量未 commit 變更）；正式機的程式碼版本與 git 歷史的對應關係目前不明 | ✅ 已於合併正式機更新模式匯出檔案時一併 commit（見 §12 2026-08-01j）；正式機仍無 git，日後版本比對仍需靠 §15 `deploy_manifest.json` 記的 commit 值 |
 
 ---
 
@@ -213,7 +213,9 @@ superadmin > admin > sales > engineer > viewer
 
 ```
 db.py:      DB_PATH（正式）+ DEMO_DB_PATH（motrix_erp_demo.db，獨立檔案，同一套 schema/migrations）
-            contextvars 依 request 切換 get_db() 指向哪個檔案（背景排程/備份執行緒 contextvar 預設 False，永遠打正式庫）
+            contextvars 依 request 切換 get_db() 指向哪個檔案（伺服器啟動/排程觸發的背景工作，
+            如每日逾期通知、月報寄送，不掛在任何 request 上，contextvar 本來就該是預設值 False，永遠打正式庫，
+            這是正確行為）
 routers/auth.py auth_login()：
   帳號名為 demo → reset_demo_db()（整檔刪除 + 重新 init_db，回到全空白）
              → 核發 DEMO_ 前綴 token，session/user 只寫入 demo db（不進正式 sessions 表）
@@ -225,6 +227,7 @@ main.py auth_middleware：token.startswith('DEMO_') → set_demo_mode(True)，
 - 正式庫 `users` 表僅存一筆 `demo` 守門帳號（`init_demo_account()`，供登入時驗證密碼用），實際瀏覽/操作全在隔離 db 進行
 - 新增任何會直接 `sqlite3.connect(db.DB_PATH, ...)` 而非透過 `get_db()` 的程式碼，會繞過此隔離機制 — 一律使用 `get_db()`
 - **檔案儲存也要隔離**：專案照片（`photos.py _photo_root()`）、勞報單 PDF 存檔（`payslips.py _archive_path()`）、報價單里程碑自動匯出 PDF（`pdf_gen.py _get_pdf_base()`）三處是直接寫實體檔案，不經過 `get_db()`；已改為 `is_demo_mode()` 時導向 `uploads/_demo_projects`／`backend/_demo_pdf_archive`／`backend/_demo_payslip_archive`，`reset_demo_db()` 一併清空。**新增任何寫檔案到磁碟的功能，都要檢查 `is_demo_mode()` 並比照辦理**，否則 demo 帳號會把檔案寫進正式共用目錄，且 project_id/slip_no/quote_no 在 demo db 都從 1 重新編號，可能撞名蓋掉正式檔案
+- **路由 handler 內用 `threading.Thread(...)` 起的背景工作，一律要用 `db.spawn_bg_thread()` 取代直接呼叫 `threading.Thread`**（2026-08-01i 修復，見 §12）：`contextvars.ContextVar`（`_demo_mode`）只在建立當下的 context 裡有效，一般 `threading.Thread(...).start()` 起的新執行緒拿到的是全新、空白 context，裡面的 `is_demo_mode()`/`get_db()` 會誤判成正式環境——即使觸發的 request 其實是 demo session。`spawn_bg_thread()` 用 `contextvars.copy_context()` 把呼叫當下的 context 原封不動帶進新執行緒，修正後 demo 帳號核准出貨單/報價單不會再把 PDF 寫進正式共用資料夾、每日工作事項通知也不會再誤連正式庫寄信給真實同仁。**例外**（不需要、也不該用 `spawn_bg_thread()`）：(a) 伺服器啟動/排程觸發、不掛在任何 request 上的背景工作（如 `daily_tasks.py` 的 `_startup_catchup`、`reports.py` 的 `_catchup_monthly_reports`），本來就該永遠連正式庫；(b) 只吃呼叫端已解析好的純值參數、本身不呼叫 `get_db()`/`is_demo_mode()` 的葉節點執行緒（如 `email_notify.py` 的 `_async_send()`/`_send()`）
 - `reset_demo_db()` 用 SQL `DELETE`+`VACUUM`（同一連線內完成），不刪 `.db/-wal/-shm` 檔案本身 — 避免 Windows 掃毒/索引服務短暫鎖住剛建立的 WAL 檔案導致 `os.remove()` 失敗
 - `db.demo_reset_lock`（`threading.Lock`）包住整個「reset + 建立 demo 使用者/session」流程 — 兩個 demo 登入同時到達會搶跑同一個共用 db，造成 `IntegrityError`/database-is-locked；已用併發壓力測試驗證修正
 
@@ -740,6 +743,23 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 ## §12 · 變更摘要（最新兩版）
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
+
+### 2026-08-01j — 新增半自動更新模式（§15，落地 §14.3 自動化推送方向）
+
+- **背景**：正式機今天獨立完成這項工作並匯出到 `MOTRIX-UPDATE-MODE-EXPORT_2026-08-01/`（含 README 合併說明），與開發機當天同步進行的出貨單調整／demo 隔離修復是兩條平行線，合併時才第一次讓兩邊的今日變更在同一份文件裡碰頭
+- 新增半自動「更新模式」，把 §14.3 原本列為之後才做的自動化推送方向落地成兩支腳本：`backend/tools/build_deploy_package.ps1`（開發機執行，`git status` 必須乾淨才允許打包，用 `git archive` 只匯出已 commit 內容，解決來源不可靠問題）與 `backend/tools/apply_update.ps1`（正式機執行，身分守門＋版本比對防重複套用＋套用前自動備份 db 與程式碼＋停服讓既有 autostart crash-restart 迴圈接手＋robocopy 只加不刪絕不 `/MIR`＋套用後輪詢 `/api/ping` 與檢查 `server.log`，失敗自動回滾）
+- `MOTRIX-ERP-QUICK.md` 新增 §15；§14.3 從「這次不做」更新為「已實作半自動版本」
+- 兩支腳本因含中文註解，已確認需存成 UTF-8 with BOM 才能被 PowerShell 5.1 正確解析（純 UTF-8 no-BOM 會在中文字附近誤判字串終止符），已修正並通過語法檢查
+- **版號說明**：此項工作正式機端原始標記為 `2026-08-01g`，與開發機當天已用掉的 g/h/i 衝突（見 `version_manifest.json` 該條目備註），合併時統一改標為 `2026-08-01j`，內容不變
+- 尚未在正式機做過真實套用測試（會實際停服重啟，需使用者另外確認執行時機），開發機端的 `build_deploy_package.ps1` 也尚未實地跑過（需先於開發機 commit 現有未進版控的變更）
+
+### 2026-08-01i — 修復 demo 模式背景執行緒隔離漏洞
+
+- **背景**：測試出貨單預覽功能時，用 demo 帳號核准出貨單，發現產生的 PDF 跑進了正式的 `出貨單PDF/` 資料夾，而不是應該用的 `_demo_shipping_pdf_archive` 隔離目錄。追查後發現不是單一 bug：`is_demo_mode()`/`get_db()` 靠 `contextvars.ContextVar`（`_demo_mode`）判斷目前是不是 demo session，FastAPI 對路由本身的排程機制會正確傳遞這個 context，但只要程式碼手動呼叫 `threading.Thread(...).start()`，新執行緒一律拿到全新、空白的 context，裡面的 `is_demo_mode()`/`get_db()` 就會誤判成正式環境
+- **影響範圍**：逐一檢查所有路由 handler 內用 `threading.Thread` 起的背景工作後，確認 23 處中招，遍及 `shipping_notes.py`（1）、`quotations.py`（9，PDF 產生＋即時備份）、`customers.py`（4）、`suppliers.py`（4）、`daily_tasks.py`（4，通知信）、`dev_crm.py`（1，通知信）。其中最嚴重的是每日工作事項/業務開發案件的 email 通知——demo 帳號指派/編輯/完成工作事項會讓通知函式在背景執行緒裡誤連正式 DB 查出真實使用者 email，寄送跟 demo 操作內容對不上的通知信給真實同仁
+- **不需修的**：確認只在伺服器啟動/排程情境執行、不掛在任何 request 上的背景工作（`daily_tasks.py` 的 `_startup_catchup` 與其內部呼叫、`reports.py` 的 `_catchup_monthly_reports`），本來就該永遠連正式庫，維持不動；`email_notify.py` 的 `_async_send()`/`_send()` 只吃已解析好的純值參數，不碰 `get_db()`/`is_demo_mode()`，這層巢狀執行緒不需要 context 傳遞
+- **修法**：`db.py` 新增 `spawn_bg_thread()`，用 `contextvars.copy_context()` 把呼叫當下的 context 原封不動帶進新執行緒，取代直接呼叫 `threading.Thread`；23 處呼叫點全數改用此 helper，語意不變（fire-and-forget、daemon thread），僅補上 context 傳遞
+- 已用 `python -m ast` 對 7 個改動檔案做語法檢查全數通過；已用 demo 帳號重跑核准出貨單流程，確認 PDF 正確寫入 `backend/_demo_shipping_pdf_archive/`、正式 `出貨單PDF/` 資料夾內容不受影響（修復前後各建一次同單號 `DN-202608-001` 比對，正式資料夾始終只有先前既有的那份，demo 這次新產生的檔案完全沒有混進去）；另用 demo 帳號建立一筆指派通知的每日工作事項，確認 request 正常完成、伺服器 log 無例外
 
 ### 2026-08-01h — 出貨單預覽 Modal 調整（移除下載選項／PDF 加浮水印警告橫幅）
 
@@ -1260,13 +1280,60 @@ MOTRIX-ERP/
 - **純程式碼／文件檔案**：正式機有、這裡沒有的，直接複製過來；兩邊都有但內容不同的，人工比對（可用 PowerShell `Compare-Object` 或 `git diff --no-index`）決定保留哪一版，**不要自動二選一覆蓋**
 - 核對完成後，依 §12 下方「維護規則」慣例補一筆 `version_manifest.json` + §12 摘要，並更新 §0 的「已知落差紀錄」表（狀態改為已補回，或新增剛發現的落差）
 
-### §14.3 · 之後才考慮的方向（這次不做）
+### §14.3 · 之後才考慮的方向
 
-手動核對流程先跑順、雙方都清楚哪些檔案該比對之後，才評估是否要半自動化：
+> ✅ **已實作半自動版本，見 §15**（2026-08-01j）：`build_deploy_package.ps1` + `apply_update.ps1`，方向是「開發機打包（git archive，強制先 commit）→ 人工複製 → 正式機套用（版本比對＋備份＋安全停服＋健康檢查＋失敗自動回滾）」。仍非全自動：套用前需操作者手動確認一次，兩機之間的檔案傳輸也仍是人工複製（隨身碟/網路芳鄰/雲端硬碟），沒有做 WinRM/網路直連。
 
-- PowerShell Remoting（`Invoke-Command`/`New-PSSession`）——需先在正式機開放 WinRM，涉及帳密/防火牆設定
-- Robocopy 鏡像同步（排除 db/uploads/logs）+ 遠端觸發 `restart.bat`
-- 都需要先解決「這台開發機的程式碼本身還沒完整 commit 進 git」的問題（見 §0 已知落差第三筆），否則自動化推送的來源本身就不可靠
+以下是還沒做、之後可以再評估的方向：
+
+- PowerShell Remoting（`Invoke-Command`/`New-PSSession`）取代人工複製部署包——需先在正式機開放 WinRM，涉及帳密/防火牆設定
+- 拉檔案回開發機（§14.2 方向，跟 §15 相反方向）目前仍是全人工，尚未有對應的半自動工具
+
+---
+
+## §15 · 更新模式（測試機 → 正式機，半自動，2026-08-01）
+
+> 目的：把 §14 的手動複製部署，收斂成有前後安全檢查、可重複執行的流程。**範圍只含程式碼／schema，絕不觸碰正式機業務資料**（quotations/customers 等 data_json 與熱路徑欄位一律不動）；db migration 只改表結構，不動既有資料列。觸發方式是半自動——一鍵執行，但套用前仍需操作者手動確認一次，不做無人值守全自動。
+
+### §15.1 · 兩支腳本
+
+| 腳本 | 執行位置 | 用途 |
+|------|---------|------|
+| `backend/tools/build_deploy_package.ps1` | **開發機** | 打包目前已 commit 的 `backend/`＋`frontend/`＋根目錄文件成部署包 |
+| `backend/tools/apply_update.ps1` | **正式機** | 套用部署包，含備份／安全停服／健康檢查／失敗自動回滾 |
+
+### §15.2 · 打包（開發機）
+
+```
+powershell -ExecutionPolicy Bypass -File backend\tools\build_deploy_package.ps1
+```
+
+- **強制 `git status` 乾淨**才允許打包，未 commit 的變更會被擋下——解決 §0 已知落差第 3 筆「來源不可靠」的問題：拿去正式機套用的東西，永遠等於 git 上看得到的東西
+- 用 `git archive HEAD` 匯出，只含已 commit 的內容
+- 產出 `deploy_packages/<timestamp>_<commit短碼>/`，內含 `deploy_manifest.json`（commit、分支、`version_manifest.json` 最後一筆）
+- 完成後需**手動複製**整個資料夾到正式機（隨身碟／網路芳鄰／雲端硬碟皆可，兩機間目前無直連機制）
+
+### §15.3 · 套用（正式機）
+
+```
+powershell -ExecutionPolicy Bypass -File backend\tools\apply_update.ps1 -PackagePath <複製過去的路徑>
+```
+
+| 階段 | 動作 |
+|------|------|
+| 身分守門 | 確認腳本執行路徑就是正式機路徑，否則中止 |
+| 套用前 | 版本比對（commit 相同視為重複套用，需 `-Force` 才強制）；記錄套用前健康狀態；**db 快照**至 `backend/db_backups/pre_update_<timestamp>/`；**程式碼回滾快照**至 `backend/rollback_snapshots/<timestamp>/`（保留最新 5 份）；印出摘要，等待操作者輸入 `y` 確認 |
+| 停服 | 依 port 666 監聽者 PID／`uvicorn*main:app` commandline 逐一 kill；**不自己啟動新 uvicorn**，改讓既有 `MOTRIX ERP Server Autostart` 排程的 crash-restart 迴圈（§1.1）5 秒內自動接手重啟，避免搶 port |
+| 套用 | robocopy 把套件的 `backend/`＋`frontend/`＋根目錄文件覆蓋過去；**只加不改既有多餘檔案，絕不用 `/MIR`**，加上 `/XD`／`/XF` 排除 db／uploads／報價單PDF／logs／設定檔等，即使套件不小心含這些也不會覆蓋 |
+| 套用後 | 輪詢 `GET /api/ping` 最多 30 秒＋檢查 `logs/server.log` 新增內容有無 traceback/ERROR；成功→更新 `backend/.deployed_commit.json`；**失敗→自動回滾**（用剛才的程式碼快照復原＋重新停服讓迴圈拉起舊版＋再次確認健康），並印出 db／程式碼快照路徑供人工進一步排查 |
+
+`-Force`：版本比對沒過仍要套用時使用。`-Yes`：跳過互動確認（僅供自動化測試，正常人工執行不要加）。
+
+### §15.4 · 已知限制
+
+- 兩機間的部署包傳輸仍是人工複製，沒有網路直連（WinRM 等，見 §14.3）
+- 正式機沒有 git，版本比對只能靠 `deploy_manifest.json` 記的 commit 做「是否重複套用」的相等比對，無法判斷新舊先後（先後順序由操作者自行確認）
+- `apply_update.ps1` 尚未在正式機做過真實套用測試（會實際短暫停服重啟，需另外找時間、經使用者確認後執行）；`build_deploy_package.ps1` 也尚未在開發機實地跑過，且開發機目前仍有未 commit 的變更（§0 已知落差第 3 筆），須先處理才能第一次打包成功
 
 ---
 

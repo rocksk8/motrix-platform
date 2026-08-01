@@ -14,7 +14,7 @@ from fastapi import APIRouter, Body, HTTPException, Header
 from fastapi.responses import Response
 from pydantic import BaseModel
 
-from db import get_db
+from db import get_db, spawn_bg_thread
 from helpers import (
     _require_user, _tok, _audit, _notify, _get_setting,
     quote_hot_fields, save_quotation_json, _steps_to_tiers, SQL_DEAL_TAG, SQL_SETTLE_STATUS,
@@ -321,7 +321,7 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
         )
     conn.commit()
     conn.close()
-    threading.Thread(target=_backup_quotation, args=(qno,), daemon=True).start()
+    spawn_bg_thread(_backup_quotation, args=(qno,))
     _audit(_tok(authorization), 'quotation.create', 'quotation', qno, f"{qno}（{q.get('customerName','')}）")
     return {"quote_no": qno, "created_at": now}
 
@@ -485,17 +485,13 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
     ))
     conn.commit()
     conn.close()
-    threading.Thread(target=_backup_quotation, args=(quote_no,), daemon=True).start()
+    spawn_bg_thread(_backup_quotation, args=(quote_no,))
     if is_unlock_edit:
         _audit(_tok(authorization), 'quotation.unlock_edit', 'quotation', quote_no,
                f"{quote_no}（{q.get('customerName','')}）", {"rev": edit_rev, "pendingApproval": True})
         # save PDF snapshot of this revision (includes editor name in filename)
         editor_display = (q.get("editHistory") or [{}])[-1].get("byDisplay", "")
-        threading.Thread(
-            target=_generate_quotation_pdf,
-            args=(quote_no, editor_display, '修改'),
-            daemon=True
-        ).start()
+        spawn_bg_thread(_generate_quotation_pdf, args=(quote_no, editor_display, '修改'))
     else:
         appr = q.get("approval") or {}
         extra = {}
@@ -552,7 +548,7 @@ def update_status(quote_no: str, body: QuotationStatusUpdate, authorization: str
             actor_name = actor_u.get("display_name") or actor_u.get("username") or ""
         except Exception:
             actor_name = ""
-        threading.Thread(target=_generate_quotation_pdf, args=(quote_no, actor_name, '已簽核'), daemon=True).start()
+        spawn_bg_thread(_generate_quotation_pdf, args=(quote_no, actor_name, '已簽核'))
     return {"ok": True}
 
 
@@ -630,7 +626,7 @@ def update_deal_tag(quote_no: str, body: QuotationDealTagUpdate, authorization: 
             actor_name = actor_u.get("display_name") or actor_u.get("username") or ""
         except Exception:
             actor_name = ""
-        threading.Thread(target=_generate_quotation_pdf, args=(quote_no, actor_name, '結案'), daemon=True).start()
+        spawn_bg_thread(_generate_quotation_pdf, args=(quote_no, actor_name, '結案'))
     return {"ok": True}
 
 
@@ -675,7 +671,7 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
     now = save_quotation_json(conn, quote_no, data)
     conn.commit()
     conn.close()
-    threading.Thread(target=_backup_quotation, args=(quote_no,), daemon=True).start()
+    spawn_bg_thread(_backup_quotation, args=(quote_no,))
     _audit(_tok(authorization), 'case.update', 'quotation', quote_no, label)
     return {"ok": True, "updated_at": now}
 
@@ -744,7 +740,7 @@ def mark_payment(no: str, idx: int, body: dict, authorization: str = Header(None
         conn.commit()
     finally:
         conn.close()
-    threading.Thread(target=_backup_quotation, args=(no,), daemon=True).start()
+    spawn_bg_thread(_backup_quotation, args=(no,))
     label = pits[idx].get('label', f'第{idx+1}期')
     fee   = pits[idx].get("feeAmount") or 0
     action_detail = (
@@ -814,7 +810,7 @@ def update_settlement(quote_no: str, body: SettlementIn, authorization: str = He
     conn.commit()
     conn.close()
     cname = row["customer_name"] or ""
-    threading.Thread(target=_backup_quotation, args=(quote_no,), daemon=True).start()
+    spawn_bg_thread(_backup_quotation, args=(quote_no,))
     _audit(_tok(authorization), 'quotation.settlement', 'quotation', quote_no,
            f"{quote_no}（{cname}）成本精算{'完結' if is_finalized else '更新'}",
            {"rev": settle_rev})
@@ -1019,7 +1015,7 @@ def approve_quotation(quote_no: str, body: ApprovalActionBody, authorization: st
         d["approval"] = appr
         save_quotation_json(conn, quote_no, d, status="已送出", updated_at=now)
         approver_name = appr.get("approvedByDisplay") or user.get("display_name") or user.get("username") or ""
-        threading.Thread(target=_generate_quotation_pdf, args=(quote_no, approver_name, '簽核'), daemon=True).start()
+        spawn_bg_thread(_generate_quotation_pdf, args=(quote_no, approver_name, '簽核'))
         notify_approved(quote_no, cname, approver_name, appr.get("requestedBy") or "")
         detail_status = "已送出"
     else:

@@ -14,7 +14,7 @@ from fastapi import APIRouter, HTTPException, Header
 from fastapi.responses import Response as _HTTPResponse
 from pydantic import BaseModel
 
-from db import get_db
+from db import get_db, spawn_bg_thread
 from helpers import (
     _require_user, _tok, _audit, _notify,
     notify_daily_task_assigned, notify_daily_task_completed, notify_daily_task_overdue,
@@ -437,12 +437,11 @@ def create_daily_task(body: DailyTaskIn, authorization: str = Header(None)):
         for u in body.assigned_to:
             _notify(u, "daily_task", str(task_id), body.title,
                     f"已指派工作事項給您：{body.title}（{body.task_date}）")
-        threading.Thread(
-            target=notify_daily_task_assigned,
+        spawn_bg_thread(
+            notify_daily_task_assigned,
             args=(task_id, body.title, body.task_date, body.assigned_to,
                   body.description or ''),
-            daemon=True,
-        ).start()
+        )
     return {"id": task_id, "created_at": now}
 
 
@@ -506,23 +505,21 @@ def update_daily_task(task_id: int, body: DailyTaskIn, authorization: str = Head
         for u in new_assignees:
             _notify(u, "daily_task", str(task_id), body.title,
                     f"已指派工作事項給您：{body.title}（{body.task_date}）")
-        threading.Thread(
-            target=notify_daily_task_assigned,
+        spawn_bg_thread(
+            notify_daily_task_assigned,
             args=(task_id, body.title, body.task_date, new_assignees,
                   body.description or ''),
-            daemon=True,
-        ).start()
+        )
 
     # Notify supervisors about the edit
     if changes:
         editor_display = dn_map.get(user["username"], user["username"])
         supervisors    = body.supervisors or []
-        threading.Thread(
-            target=notify_daily_task_edited,
+        spawn_bg_thread(
+            notify_daily_task_edited,
             args=(task_id, body.title, body.task_date,
                   user["username"], editor_display, changes, supervisors),
-            daemon=True,
-        ).start()
+        )
 
     return {"ok": True, "updated_at": now}
 
@@ -832,13 +829,12 @@ def complete_daily_task(task_id: int, body: TaskCompletionIn, authorization: str
            f"{row['task_date']} {row['title']} ({occ_date})", {"report": body.report or ""})
     if body.completed:
         supervisors = json.loads(row["supervisors"] or "[]")
-        threading.Thread(
-            target=notify_daily_task_completed,
+        spawn_bg_thread(
+            notify_daily_task_completed,
             args=(task_id, row["title"], occ_date,
                   user["username"], user.get("display_name") or user["username"],
                   body.report or "", supervisors, is_edit, old_report),
-            daemon=True,
-        ).start()
+        )
     return {"ok": True, "completed_at": now if body.completed else ""}
 
 

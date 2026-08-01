@@ -7,7 +7,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Header
 from pydantic import BaseModel
 
-from db import get_db, next_entity_code
+from db import get_db, next_entity_code, spawn_bg_thread
 from helpers import _require_user, _tok, _audit
 from archive import _backup_suppliers
 
@@ -64,7 +64,7 @@ def create_supplier(body: SupplierIn, authorization: str = Header(None)):
         conn.close()
         raise HTTPException(409, f"建立失敗：{e}")
     conn.close()
-    threading.Thread(target=_backup_suppliers, daemon=True).start()
+    spawn_bg_thread(_backup_suppliers)
     _audit(_tok(authorization), 'supplier.create', 'supplier', body.name, body.name)
     return {"id": sid, "name": body.name, "code": code}
 
@@ -84,7 +84,7 @@ def update_supplier(sid: int, body: SupplierIn, authorization: str = Header(None
     )
     conn.commit()
     conn.close()
-    threading.Thread(target=_backup_suppliers, daemon=True).start()
+    spawn_bg_thread(_backup_suppliers)
     _audit(_tok(authorization), 'supplier.update', 'supplier', str(sid), body.name)
     return {"ok": True}
 
@@ -101,7 +101,7 @@ def delete_supplier(sid: int, authorization: str = Header(None)):
     conn.execute("DELETE FROM suppliers WHERE id=?", (sid,))
     conn.commit()
     conn.close()
-    threading.Thread(target=_backup_suppliers, daemon=True).start()
+    spawn_bg_thread(_backup_suppliers)
     _audit(_tok(authorization), 'supplier.delete', 'supplier', str(sid), sname)
     return {"ok": True}
 
@@ -131,7 +131,7 @@ def update_supplier_visits(sid: int, body: dict, authorization: str = Header(Non
     )
     conn.commit()
     conn.close()
-    threading.Thread(target=_backup_suppliers, daemon=True).start()
+    spawn_bg_thread(_backup_suppliers)
     _audit(_tok(authorization), 'supplier.visit.update', 'supplier', str(sid),
            f"{sname}（{visit_count} 筆往來紀錄）")
     return {"ok": True, "count": visit_count, "updated_at": now}

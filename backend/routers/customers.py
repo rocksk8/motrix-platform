@@ -7,7 +7,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Header
 from pydantic import BaseModel
 
-from db import get_db, next_entity_code
+from db import get_db, next_entity_code, spawn_bg_thread
 from helpers import _require_user, _tok, _audit
 from archive import _backup_customers
 
@@ -79,7 +79,7 @@ def create_customer(body: CustomerIn, authorization: str = Header(None)):
         conn.close()
         raise HTTPException(409, f"建立失敗：{e}")
     conn.close()
-    threading.Thread(target=_backup_customers, daemon=True).start()
+    spawn_bg_thread(_backup_customers)
     _audit(_tok(authorization), 'customer.create', 'customer', body.name, body.name)
     return {"id": cid, "name": body.name, "code": code}
 
@@ -99,7 +99,7 @@ def update_customer(cid: int, body: CustomerIn, authorization: str = Header(None
     )
     conn.commit()
     conn.close()
-    threading.Thread(target=_backup_customers, daemon=True).start()
+    spawn_bg_thread(_backup_customers)
     _audit(_tok(authorization), 'customer.update', 'customer', str(cid), body.name)
     return {"ok": True}
 
@@ -130,7 +130,7 @@ def update_customer_visits(cid: int, body: dict, authorization: str = Header(Non
     )
     conn.commit()
     conn.close()
-    threading.Thread(target=_backup_customers, daemon=True).start()
+    spawn_bg_thread(_backup_customers)
     _audit(_tok(authorization), 'customer.visit.update', 'customer', str(cid),
            f"{cname}（{visit_count} 筆拜訪紀錄）")
     return {"ok": True, "updated_at": now}
@@ -148,6 +148,6 @@ def delete_customer(cid: int, authorization: str = Header(None)):
     conn.execute("DELETE FROM customers WHERE id=?", (cid,))
     conn.commit()
     conn.close()
-    threading.Thread(target=_backup_customers, daemon=True).start()
+    spawn_bg_thread(_backup_customers)
     _audit(_tok(authorization), 'customer.delete', 'customer', str(cid), cname)
     return {"ok": True}

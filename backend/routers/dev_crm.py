@@ -6,7 +6,7 @@ from typing import Optional, List
 from fastapi import APIRouter, HTTPException, Header
 from pydantic import BaseModel
 
-from db import get_db
+from db import get_db, spawn_bg_thread
 import threading
 from helpers import _require_user, _tok, _audit, notify_module_activity, notify_dev_case_delete_request
 
@@ -378,11 +378,10 @@ def request_dev_case_delete(case_id: int, body: DevCaseDeleteRequestIn,
         conn.commit()
         _audit(_tok(authorization), "dev_case.delete_request", "dev_case",
                str(case_id), row["case_name"])
-        threading.Thread(
-            target=notify_dev_case_delete_request,
+        spawn_bg_thread(
+            notify_dev_case_delete_request,
             args=(case_id, row["case_name"], requester_display, body.reason or ''),
-            daemon=True,
-        ).start()
+        )
         return {"ok": True}
     finally:
         conn.close()

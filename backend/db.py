@@ -54,6 +54,19 @@ def is_demo_mode() -> bool:
     return _demo_mode.get()
 
 
+def spawn_bg_thread(target, args=(), kwargs=None, daemon=True) -> threading.Thread:
+    """threading.Thread(...).start() 的安全版本：一般 threading.Thread 起的新執行緒
+    永遠拿到全新、空白的 contextvars context，導致裡面呼叫的 is_demo_mode()/get_db()
+    誤判成正式環境（即使觸發的 request 其實是 demo session）。這裡用
+    contextvars.copy_context() 把呼叫當下的 context（含 _demo_mode）原封不動帶進新執行緒。
+    任何在路由 handler 內起的背景工作，只要目標函式最終會碰 get_db()/is_demo_mode()，
+    一律要用這個取代直接呼叫 threading.Thread。"""
+    ctx = contextvars.copy_context()
+    t = threading.Thread(target=ctx.run, args=(target, *args), kwargs=kwargs or {}, daemon=daemon)
+    t.start()
+    return t
+
+
 def _connect(path: str):
     conn = sqlite3.connect(path, timeout=30)
     conn.row_factory = sqlite3.Row

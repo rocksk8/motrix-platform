@@ -14,7 +14,7 @@ from fastapi import APIRouter, Body, HTTPException, Header
 from fastapi.responses import Response
 from pydantic import BaseModel
 
-from db import get_db, next_entity_code
+from db import get_db, next_entity_code, spawn_bg_thread
 from helpers import _require_user, _tok, _audit, _notify, _get_setting, _set_setting
 from pdf_gen import generate_shipping_pdf_bytes, _generate_shipping_pdf
 
@@ -355,7 +355,7 @@ def approve_shipping_note(note_no: str, body: dict = Body(default={}), authoriza
         )
         conn.commit()
         approver_name = appr.get("approvedByDisplay") or user["username"]
-        threading.Thread(target=_generate_shipping_pdf, args=(note_no, approver_name, '簽核'), daemon=True).start()
+        spawn_bg_thread(_generate_shipping_pdf, args=(note_no, approver_name, '簽核'))
         requester = appr.get("requestedBy")
         if requester:
             _notify(requester, "shipping_approved", note_no, note_no, f"出貨單 {note_no}（{cname}）已核准")
