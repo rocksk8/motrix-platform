@@ -1,7 +1,7 @@
 # MOTRIX ERP — 開發快速參考
 
 > 允碩整合集創（統編 60575481）｜ Tel: 04-3602-2818 ｜ info@miactw.com  
-> 文件版本：**2026-08-01q**（新增 Schema／Migration 唯讀診斷頁面，見 §6／§7／§12）
+> 文件版本：**2026-08-02a**（修復 apply_update.ps1 首次正式機套用誤判自動回滾的問題，見 §12／§15）
 
 ---
 
@@ -753,6 +753,14 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
 
+### 2026-08-02a — 修復 apply_update.ps1 首次正式機套用觸發的誤判自動回滾
+
+- **背景**：commit `484c1b4`（含 2026-08-01q Schema 狀態頁）第一次在正式機真實套用，套用後健康檢查判定失敗（`healthy=True, log 錯誤筆數=5`）觸發自動回滾；比對回滾結果確認正式機穩定運作、沒有資料風險，但追查 `server.log` 後確認**是腳本誤判，不是新程式碼問題**
+- **根因**：Step 2 停服後沒等 port 666 真正釋放，就讓既有 `MOTRIX ERP Server Autostart` crash-restart 迴圈（§1.1）搶著重新綁定，撞到 `[Errno 10048]` 位址已被使用，重試 2 次才成功（迴圈設計上本來就會自癒）；Step 4 健康檢查掃 log tail 80 行沒有分辨這些錯誤是否已被後續成功啟動蓋過去，誤判成更新失敗
+- **修法**：`backend/tools/apply_update.ps1` ① Step 2 停服後新增主動輪詢確認 port 666 真正釋放（最長 15 秒）② Step 4 log 掃描邏輯改為只檢查 tail 範圍內「最後一次成功啟動（`Uvicorn running on`）」之後的內容，忽略重試階段已自癒的暫時性錯誤，找不到成功啟動標記時維持全範圍檢查（保守）
+- 已用 PowerShell AST parser 驗證語法通過；已用當次事故實際 log 內容重建測試樣本模擬驗證：舊邏輯判定 2 筆錯誤（會誤判失敗）、新邏輯判定 0 筆（正確判定健康），另外驗證真正在成功啟動之後發生的錯誤（如 Traceback）新邏輯仍會正確攔截，不會漏判
+- 尚未在正式機重新套用驗證（下次套用時才會是這支修正後腳本的第一次真實考驗）
+
 ### 2026-08-01q — 新增 Schema／Migration 唯讀診斷頁面
 
 - **背景**：使用者要求做「migration 操作介面」；分析後發現「在線觸發乾跑」架構上沒有意義——migration 在每次伺服器啟動時自動套用，`apply_update.ps1` 的乾跑驗證測的是「即將部署、尚未套用」的新程式碼跑在現有 db 上會不會出錯，只有在部署當下（新舊程式碼並存）才有意義；活著的伺服器拿自己現在的程式碼對自己已是最新版的 db 再跑一次，永遠是 no-op。跟使用者確認後改成純讀取的診斷頁
@@ -1386,17 +1394,19 @@ powershell -ExecutionPolicy Bypass -File backend\tools\apply_update.ps1 -Package
 | 套用前 | 版本比對（commit 相同視為重複套用，需 `-Force` 才強制）；記錄套用前健康狀態；**db 快照**至 `backend/db_backups/pre_update_<timestamp>/`；**Migration 乾跑驗證**（2026-08-01m 新增，見下方說明）；**程式碼回滾快照**至 `backend/rollback_snapshots/<timestamp>/`（保留最新 5 份）；印出摘要，等待操作者輸入 `y` 確認 |
 | 停服 | 依 port 666 監聽者 PID／`uvicorn*main:app` commandline 逐一 kill；**不自己啟動新 uvicorn**，改讓既有 `MOTRIX ERP Server Autostart` 排程的 crash-restart 迴圈（§1.1）5 秒內自動接手重啟，避免搶 port |
 | 套用 | robocopy 把套件的 `backend/`＋`frontend/`＋根目錄文件覆蓋過去；**只加不改既有多餘檔案，絕不用 `/MIR`**，加上 `/XD`／`/XF` 排除 db／uploads／報價單PDF／logs／設定檔等，即使套件不小心含這些也不會覆蓋 |
-| 套用後 | 輪詢 `GET /api/ping` 最多 30 秒＋檢查 `logs/server.log` 新增內容有無 traceback/ERROR；成功→更新 `backend/.deployed_commit.json`；**失敗→自動回滾**（用剛才的程式碼快照復原＋重新停服讓迴圈拉起舊版＋再次確認健康），並印出 db／程式碼快照路徑供人工進一步排查 |
+| 套用後 | 輪詢 `GET /api/ping` 最多 30 秒＋檢查 `logs/server.log` tail 200 行、**只看「最後一次成功啟動（`Uvicorn running on`）」之後**有無 traceback/ERROR（2026-08-02a 修正，避免把重啟迴圈重試階段已自癒的暫時性錯誤誤判成失敗，見下方說明）；成功→更新 `backend/.deployed_commit.json`；**失敗→自動回滾**（用剛才的程式碼快照復原＋重新停服讓迴圈拉起舊版＋再次確認健康），並印出 db／程式碼快照路徑供人工進一步排查 |
 
 `-Force`：版本比對沒過仍要套用時使用。`-Yes`：跳過互動確認（僅供自動化測試，正常人工執行不要加）。
 
 **Migration 乾跑驗證**（2026-08-01m）：正式庫過去是「第一個試跑新 migration 的地方」——伺服器套新程式碼重啟後 `init_db()` 立刻對正式庫跑 migration，若寫壞了，schema 已經被改壞才被套用後健康檢查發現，「自動回滾」雖然會把 db 整檔換回套用前快照（安全），但仍會遺失套用後到偵測失敗這段時間內產生的新業務資料。現在改成：db 快照做完後，先把快照複製一份到系統 temp 目錄，用**新套件裡的** `db.py`（`init_db(path)` 本來就接受任意路徑，只操作傳入的檔案）在這份副本上先跑一次；失敗就直接中止，不進入停服／複製程式碼／回滾快照等後續步驟，**正式庫全程不受觸碰**。
 
+**健康檢查誤判自動回滾修正**（2026-08-02a）：commit `484c1b4` 第一次在正式機真實套用時，Step 2 停服後沒等 port 666 真正釋放，既有 crash-restart 迴圈搶著重新綁定撞到 `[Errno 10048]` 位址已被使用，重試 2 次後自行成功（迴圈設計上本來就會自癒），但 Step 4 健康檢查掃 log tail 80 行沒有分辨這些錯誤是否已被後續成功啟動蓋過去，誤判成更新失敗觸發回滾（回滾本身正常運作，正式機沒有受到實際影響）。已修正：Step 2 停服後新增主動輪詢確認 port 真正釋放；Step 4 log 掃描只看「最後一次成功啟動」之後的內容。
+
 ### §15.4 · 已知限制
 
 - 兩機間的部署包傳輸仍是人工複製，沒有網路直連（WinRM 等，見 §14.3）
 - 正式機沒有 git，版本比對只能靠 `deploy_manifest.json` 記的 commit 做「是否重複套用」的相等比對，無法判斷新舊先後（先後順序由操作者自行確認）
-- `apply_update.ps1` 尚未在正式機做過真實套用測試（會實際短暫停服重啟，需另外找時間、經使用者確認後執行）；`build_deploy_package.ps1` 也尚未在開發機實地跑過，且開發機目前仍有未 commit 的變更（§0 已知落差第 3 筆），須先處理才能第一次打包成功
+- `apply_update.ps1` 已在正式機做過第一次真實套用測試（2026-08-02，commit `484c1b4`）：健康檢查誤判觸發自動回滾，回滾機制運作正常、正式機無實際影響，誤判根因已修復（見上方說明與 §12 2026-08-02a），但**修正後的腳本本身尚未在正式機驗證過**，下次套用時才是真正的考驗；`build_deploy_package.ps1` 已在開發機多次實際打包成功（見 §12 2026-08-01k/l/m）
 
 ---
 

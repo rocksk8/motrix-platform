@@ -186,7 +186,21 @@ Get-WmiObject Win32_Process | Where-Object {
     Info "  Kill PID $($_.ProcessId)"
     Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
 }
-Start-Sleep -Seconds 2
+
+# 等待 port 666 真正釋放，降低跟 autostart crash-restart 迴圈搶綁定的競態
+# （行程被殺掉到 OS 真的放開 socket 之間有短暫空窗，太快進到下一步常撞到
+#   [Errno 10048] 位址已被使用，迴圈會自行重試到成功，但這段等待可以減少發生機率）
+$portFreed = $false
+for ($i = 0; $i -lt 15; $i++) {
+    Start-Sleep -Seconds 1
+    $stillListening = Get-NetTCPConnection -LocalPort 666 -State Listen -ErrorAction SilentlyContinue
+    if (-not $stillListening) { $portFreed = $true; break }
+}
+if ($portFreed) {
+    Ok "  Port 666 已確認釋放。"
+} else {
+    Warn "  Port 666 等待 15 秒後仍顯示被佔用，繼續往下走（crash-restart 迴圈本身會自動重試）。"
+}
 Ok "  伺服器已停止，等待 autostart crash-restart 迴圈接手（見 §1.1，最長約 5 秒偵測到中止後重啟）。"
 
 # ============================================================
@@ -224,8 +238,23 @@ for ($i = 0; $i -lt 15; $i++) {
 $logErrors = @()
 $logPath = Join-Path $BackendDir "logs\server.log"
 if (Test-Path $logPath) {
-    $tail = Get-Content $logPath -Tail 80
-    $logErrors = $tail | Select-String -Pattern "Traceback|ERROR" -SimpleMatch:$false
+    $tail = Get-Content $logPath -Tail 200
+    # crash-restart 迴圈搶 port 666 重新綁定時，重試階段偶爾會留下 1～2 次
+    # [Errno 10048]（位址已被使用）之類的暫時性錯誤，迴圈本身會自動重試到成功；
+    # 這類「最終有成功啟動」的暫時性錯誤不該被算成這次更新失敗。只檢查
+    # tail 範圍內「最後一次成功啟動」（Uvicorn running on）之後的內容——
+    # 找不到成功啟動標記時，代表整段 tail 都還沒真正起來，維持全範圍檢查。
+    $lastStartIdx = -1
+    for ($i = $tail.Count - 1; $i -ge 0; $i--) {
+        if ($tail[$i] -like "*Uvicorn running on*") { $lastStartIdx = $i; break }
+    }
+    $scanRange = $tail
+    if ($lastStartIdx -ge 0 -and $lastStartIdx -lt ($tail.Count - 1)) {
+        $scanRange = $tail[($lastStartIdx + 1)..($tail.Count - 1)]
+    } elseif ($lastStartIdx -eq ($tail.Count - 1)) {
+        $scanRange = @()
+    }
+    $logErrors = $scanRange | Select-String -Pattern "Traceback|ERROR" -SimpleMatch:$false
 }
 
 if ($healthy -and -not $logErrors) {
