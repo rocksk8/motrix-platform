@@ -135,6 +135,38 @@
           <option value="dev_log.delete">刪除開發紀錄</option>
           <option value="dev_log.approve">審核開發紀錄</option>
         </optgroup>
+        <optgroup label="選型資料庫">
+          <option value="env_guide.environment.create">新增場域</option>
+          <option value="env_guide.environment.update">更新場域</option>
+          <option value="env_guide.environment.delete">刪除場域</option>
+          <option value="env_guide.recommendation.create">新增建議</option>
+          <option value="env_guide.recommendation.update">更新建議</option>
+          <option value="env_guide.recommendation.delete">刪除建議</option>
+          <option value="env_guide.link.create">新增連結</option>
+          <option value="env_guide.link.update">更新連結</option>
+          <option value="env_guide.link.delete">刪除連結</option>
+          <option value="netarch_guide.family.create">新增技術族系</option>
+          <option value="netarch_guide.family.update">更新技術族系</option>
+          <option value="netarch_guide.family.delete">刪除技術族系</option>
+          <option value="netarch_guide.generation.create">新增世代規格</option>
+          <option value="netarch_guide.generation.update">更新世代規格</option>
+          <option value="netarch_guide.generation.delete">刪除世代規格</option>
+          <option value="netarch_guide.product.create">新增產品連結</option>
+          <option value="netarch_guide.product.update">更新產品連結</option>
+          <option value="netarch_guide.product.delete">刪除產品連結</option>
+          <option value="switch_guide.scenario.create">新增情境</option>
+          <option value="switch_guide.scenario.update">更新情境</option>
+          <option value="switch_guide.scenario.delete">刪除情境</option>
+          <option value="switch_guide.category.create">新增分類</option>
+          <option value="switch_guide.category.update">更新分類</option>
+          <option value="switch_guide.category.delete">刪除分類</option>
+          <option value="switch_guide.fit.create">新增適配度</option>
+          <option value="switch_guide.fit.update">更新適配度</option>
+          <option value="switch_guide.fit.delete">刪除適配度</option>
+          <option value="switch_guide.product.create">新增產品</option>
+          <option value="switch_guide.product.update">更新產品</option>
+          <option value="switch_guide.product.delete">刪除產品</option>
+        </optgroup>
         <optgroup label="客戶管理">
           <option value="customer.create">新增客戶</option>
           <option value="customer.update">更新客戶</option>
@@ -341,6 +373,37 @@
           'dev_log.update':                  '更新開發紀錄',
           'dev_log.delete':                  '刪除開發紀錄',
           'dev_log.approve':                 '審核開發紀錄',
+          // 選型資料庫
+          'env_guide.environment.create':      '新增場域',
+          'env_guide.environment.update':      '更新場域',
+          'env_guide.environment.delete':      '刪除場域',
+          'env_guide.recommendation.create':   '新增建議',
+          'env_guide.recommendation.update':   '更新建議',
+          'env_guide.recommendation.delete':   '刪除建議',
+          'env_guide.link.create':             '新增連結',
+          'env_guide.link.update':             '更新連結',
+          'env_guide.link.delete':             '刪除連結',
+          'netarch_guide.family.create':       '新增技術族系',
+          'netarch_guide.family.update':       '更新技術族系',
+          'netarch_guide.family.delete':       '刪除技術族系',
+          'netarch_guide.generation.create':   '新增世代規格',
+          'netarch_guide.generation.update':   '更新世代規格',
+          'netarch_guide.generation.delete':   '刪除世代規格',
+          'netarch_guide.product.create':      '新增產品連結',
+          'netarch_guide.product.update':      '更新產品連結',
+          'netarch_guide.product.delete':      '刪除產品連結',
+          'switch_guide.scenario.create':      '新增情境',
+          'switch_guide.scenario.update':      '更新情境',
+          'switch_guide.scenario.delete':      '刪除情境',
+          'switch_guide.category.create':      '新增分類',
+          'switch_guide.category.update':      '更新分類',
+          'switch_guide.category.delete':      '刪除分類',
+          'switch_guide.fit.create':           '新增適配度',
+          'switch_guide.fit.update':           '更新適配度',
+          'switch_guide.fit.delete':           '刪除適配度',
+          'switch_guide.product.create':       '新增產品',
+          'switch_guide.product.update':       '更新產品',
+          'switch_guide.product.delete':       '刪除產品',
           // 客戶
           'customer.create':                 '新增客戶',
           'customer.update':                 '更新客戶',
@@ -434,6 +497,7 @@
         if (action.startsWith('payslip.'))          return '#fefce8'
         if (action.startsWith('settings.'))         return '#f1f5f9'
         if (action.startsWith('user.'))             return '#f0f9ff'
+        if (action.startsWith('env_guide.') || action.startsWith('netarch_guide.') || action.startsWith('switch_guide.')) return '#f0fdfa'
         return '#eff6ff'
       },
 
@@ -461,6 +525,7 @@
         if (action.startsWith('payslip.'))          return '#854d0e'
         if (action.startsWith('settings.'))         return '#475569'
         if (action.startsWith('user.'))             return '#0369a1'
+        if (action.startsWith('env_guide.') || action.startsWith('netarch_guide.') || action.startsWith('switch_guide.')) return '#0f766e'
         return '#1d4ed8'
       },
 
@@ -485,6 +550,7 @@
         if (action.startsWith('payslip.'))          return '#fefce8'
         if (action.startsWith('settings.'))         return '#f1f5f9'
         if (action === 'auth.login')                return '#f3f4f6'
+        if (action.startsWith('env_guide.') || action.startsWith('netarch_guide.') || action.startsWith('switch_guide.')) return '#f0fdfa'
         return '#dbeafe'
       },
 
@@ -528,6 +594,7 @@
         if (action === 'auth.change_password')      return '🔐'
         if (action === 'deal_tag.change')           return '🏷'
         if (action.startsWith('user.'))             return '👥'
+        if (action.startsWith('env_guide.') || action.startsWith('netarch_guide.') || action.startsWith('switch_guide.')) return '🧭'
         return '📝'
       },
 

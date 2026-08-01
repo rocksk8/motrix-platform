@@ -1,7 +1,7 @@
 # MOTRIX ERP — 開發快速參考
 
 > 允碩整合集創（統編 60575481）｜ Tel: 04-3602-2818 ｜ info@miactw.com  
-> 文件版本：**2026-08-01n**（apply_update.ps1 新增 migration 乾跑驗證，見 §12／§15.3）
+> 文件版本：**2026-08-01o**（選型資料庫三模組獨立命名／權限／紀錄拆分，見 §6／§12）
 
 ---
 
@@ -485,9 +485,11 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
 
 ```
 主選單     儀表板
-業務       **業務開發**（dev-crm.html, dev_crm 模組旗標或 admin+）
-           報價單（含簽核佇列 ?view=queue） / **場域選型導覽**（env-guide.html, env_guide 模組旗標或 admin+）/
-           **網路架構選型導覽**（netarch-guide.html, netarch_guide 模組旗標或 admin+）/ 案件管理 / 專案管理
+業務       業務開發（dev-crm.html, dev_crm 模組旗標或 admin+）/ 報價單（含簽核佇列 ?view=queue） /
+           案件管理 / 專案管理
+選型資料庫  場域選型導覽（env-guide.html, env_guide 模組旗標或 admin+）/
+           網路架構選型導覽（netarch-guide.html, netarch_guide 模組旗標或 admin+）/
+           交換器選型導覽（switch-guide.html, switch_guide 模組旗標或 admin+）
 廠商與採購 客戶 / 供應商 / **承攬商** / 料號 / 採購
 設備       設備登載 / 保固追蹤
 財務       應收帳款 / 營運報表（admin+ 或含 reports 模組）
@@ -501,8 +503,11 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
 - `work_log` / `daily_task`：非 viewer 或明確帶對應模組者可見（相容既有帳號）
 - `承攬商管理`：`admin+`（`cPr` 旗標，同採購）可見；`vendor-contractors.html`
 - **模組通知 badge**：所有模組 nav 項目（含子項）均有藍色 `sb-mod-*` badge，由 `_fetchModuleCounts()` 根據 `motrix_module_seen` 顯示其他人的更新計數；廠商採購/設備/財務各組同步顯示同一模組計數
-- **場域選型導覽**：`env-guide.html`；檢視 `env_guide` 模組旗標或 admin+（`cEnvG` 旗標）；編輯（新增/修改/刪除場域、建議、連結）與 Excel 匯出入另需 `env_guide_edit` 模組旗標或 superadmin；`users.html` 可分別授予兩者；**無** 模組通知 badge（資料變動頻率低，未接 `_fetchModuleCounts()`）
-- **網路架構選型導覽**：`netarch-guide.html`；檢視 `netarch_guide` 模組旗標或 admin+（`cNetG` 旗標）；編輯需 `netarch_guide_edit` 或 superadmin；瀏覽邏輯與場域選型導覽不同——**先選技術族系方塊，再看世代橫向對照卡片**（非矩陣/篩選），選型資料庫第二個上線的類別，詳見根目錄 `SELECTION-DB-INDEX.md`
+- **選型資料庫**（2026-08-01 獨立成頂層 sidebar 區塊，不再掛在「業務」底下；`SELECTION-DB-INDEX.md` 是這個產品線的總索引，規劃中還有監控系統／門禁系統／自動化系統三個未來類別）：
+  - **場域選型導覽**：`env-guide.html`；檢視 `env_guide` 模組旗標或 admin+（`cEnvG` 旗標）；編輯（新增/修改/刪除場域、建議、連結）與 Excel 匯出入另需 `env_guide_edit` 模組旗標或 superadmin；`users.html` 可分別授予兩者；**無** 模組通知 badge（資料變動頻率低，未接 `_fetchModuleCounts()`）
+  - **網路架構選型導覽**：`netarch-guide.html`；檢視 `netarch_guide` 模組旗標或 admin+（`cNetG` 旗標）；編輯需 `netarch_guide_edit` 或 superadmin；瀏覽邏輯與場域選型導覽不同——**先選技術族系方塊，再看世代橫向對照卡片**（非矩陣/篩選），選型資料庫第二個上線的類別
+  - **交換器選型導覽**：`switch-guide.html`；檢視 `switch_guide` 模組旗標或 admin+（`cSwitchG` 旗標）；編輯需 `switch_guide_edit` 或 superadmin；選型資料庫第三個上線的類別；**2026-08-01 前完全沒有 sidebar 入口與 `users.html` 權限勾選項**（只有 superadmin 能用），本次補齊跟另外兩個一致
+  - 三者在**歷史紀錄**（`audit-log.html`）與**版本紀錄**（`module-versions.html`）皆已比照其餘模組補上對應的 optgroup／actionLabel／色碼（teal 色系＋🧭 圖示，三者共用同一識別色，強調同屬一個產品線而非各自獨立模組）
 - **出貨單簽核設定**：`shipping-approval-settings.html`；superadmin 限定；獨立於報價單「簽核設定」（`system_settings.shipping_approval_flow`，不同 key），UI 為 `approval-settings.html` 的複製版本；出貨單本身不是獨立 sidebar 項目，掛在「案件管理」頁面內的「出貨單」分頁，沿用 `case_manage`/`cCM`/`sb-mod-case`
 
 ---
@@ -743,6 +748,17 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 ## §12 · 變更摘要（最新兩版）
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
+
+### 2026-08-01o — 選型資料庫三模組獨立命名／權限／紀錄拆分
+
+- **背景**：反方向風險評估延伸出「未來模組拆分」的討論，grep 驗證場域選型導覽／網路架構選型導覽／交換器選型導覽三模組的資料表完全沒有被核心業務表反向參照，是低耦合、可獨立處理的候選；`SELECTION-DB-INDEX.md` 內部已用「選型資料庫」自稱，且規劃中還有監控系統／門禁系統／自動化系統三個未來類別要併入。使用者要求正式給這三模組獨立名稱、與業務模組拆開，並更新相關紀錄與權限（不含拆成獨立部署服務——那是更大的改動，本次只做識別/分類/命名/權限/紀錄層面）
+- 過程中發現**交換器選型導覽（switch_guide）過去完全沒有側邊欄入口、也沒有 `users.html` 權限勾選項**（只有 superadmin 能用），使用者確認一併補齊使其跟另外兩個一致
+- **`frontend/static/sidebar.js`**：新增 `cSwitchG` 旗標與 `switchg` 圖示；側邊欄新建獨立頂層區塊「選型資料庫」（原本 env-guide/netarch-guide 夾在「業務」區塊裡，switch-guide 完全沒有項目），三個項目一起移出來集中放；`_FILE_MODULE` 補上 switch-guide.html；順便修正 `_refreshSession()` 背景刷新沒有重算 cEnvG/cNetG 的既有缺口
+- **`frontend/pages/users.html`**：`ROLE_MODULES.superadmin`/`admin` 補上 `switch_guide`；`allModules` 四筆既有 env/netarch 權限項目的 `group` 從 `'業務'` 改成 `'選型資料庫'`，新增 `switch_guide`/`switch_guide_edit` 兩筆權限項目（同組）
+- **`frontend/pages/audit-log.html`**：新增「選型資料庫」optgroup（30 個 option，對應後端已良好命名的稽核動作字串 `env_guide.*`/`netarch_guide.*`/`switch_guide.*`）、`actionLabel()` 30 筆中文標籤對應、`badgeBg()`/`badgeFg()`/`dotBg()`/`dotIcon()` 四個函式各補一條 `startsWith` 規則（三模組共用 teal 色系＋🧭 圖示，強調同屬一個產品線）
+- **`frontend/pages/module-versions.html`**：`_MOD_COLORS` 補上「場域選型導覽」「網路架構選型導覽」「交換器選型導覽」「選型資料庫」四個字串的 teal 色碼（原本落到預設灰色）
+- **不變更**既有 `version_manifest.json` 舊條目的 `module` 欄位字串（不回頭改寫歷史紀錄），也不引入斜線前綴命名慣例（`_MOD_COLORS` 是 exact-match、非階層式，改名不會帶來實質分組效果）；`backend/main.py` 的 router 掛載方式（URL 命名空間）本次不動，超出這次範圍
+- 已用 `node --check` 對三個檔案的 inline script 語法驗證通過，`audit-log.html` optgroup 開合標籤數量核對一致（13/13）
 
 ### 2026-08-01n — apply_update.ps1 新增 migration 乾跑驗證
 

@@ -173,6 +173,7 @@
   var cPay = mods.indexOf('payslip')    >= 0 || sa
   var cEnvG = mods.indexOf('env_guide')  >= 0 || ad
   var cNetG = mods.indexOf('netarch_guide') >= 0 || ad
+  var cSwitchG = mods.indexOf('switch_guide') >= 0 || ad
 
   var ic = {
     dash:  '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
@@ -202,6 +203,7 @@
     paysl: '<path d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/>',
     envg:  '<path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>',
     netg:  '<path d="M12 20h.01M8.5 16.5a5 5 0 017 0M5 12.859a10 10 0 0114 0M1.5 9.5a15 15 0 0121 0"/>',
+    switchg: '<rect x="2" y="3" width="20" height="6" rx="1"/><rect x="2" y="15" width="20" height="6" rx="1"/><path d="M6 6h.01M6 18h.01"/>',
   }
 
   // Module → localStorage key map (used to mark current page's module as "seen")
@@ -227,6 +229,7 @@
     'daily-tasks.html':        'daily_task',
     'env-guide.html':          'env_guide',
     'netarch-guide.html':      'netarch_guide',
+    'switch-guide.html':       'switch_guide',
   }
 
   var _SB_BADGE_STYLE = 'display:none;background:var(--accent);color:#fff;font-size:9px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;padding:1px 5px;border-radius:8px;margin-left:auto;min-width:16px;text-align:center;line-height:1.6'
@@ -251,11 +254,9 @@
     var html = [
       sec('主選單'),
       ni(up + 'index.html',          'dash',  '儀表板',   ['index.html', ''],                       canDash),
-      sec('業務', cDev || cQ || cCM || cPj || cEnvG || cNetG),
+      sec('業務', cDev || cQ || cCM || cPj),
       ni(pg('dev-crm.html'),         'bdev',  '業務開發', ['dev-crm.html'],                          cDev, 'sb-mod-dev-crm'),
       ni(pg('quotations.html'),      'quote', '報價單',   ['quotations.html', 'quotation-form.html'], cQ,   'sb-mod-quotation'),
-      ni(pg('env-guide.html'),      'envg',  '場域選型導覽', ['env-guide.html'],                      cEnvG),
-      ni(pg('netarch-guide.html'),  'netg',  '網路架構選型導覽', ['netarch-guide.html'],               cNetG),
       (cQ ? '<a href="' + pg('approval-queue.html') + '" class="nav__item' + act(['approval-queue.html']) + '" title="簽核佇列">'
         + '<svg class="nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>'
         + '<span class="nav__label">簽核佇列</span>'
@@ -263,6 +264,10 @@
         + '</a>' : ''),
       ni(pg('case-management.html'), 'case_', '案件管理', ['case-management.html'],                   cCM,  'sb-mod-case'),
       ni(pg('projects.html'),        'proj',  '專案管理', ['projects.html'],                          cPj,  'sb-mod-projects'),
+      sec('選型資料庫', cEnvG || cNetG || cSwitchG),
+      ni(pg('env-guide.html'),      'envg',    '場域選型導覽',     ['env-guide.html'],     cEnvG),
+      ni(pg('netarch-guide.html'),  'netg',    '網路架構選型導覽', ['netarch-guide.html'], cNetG),
+      ni(pg('switch-guide.html'),   'switchg', '交換器選型導覽',   ['switch-guide.html'],  cSwitchG),
       sec('廠商與採購', cCu || cPr),
       ni(pg('customers.html'),       'cust',  '客戶管理', ['customers.html', 'customer-log.html'],   cCu,  'sb-mod-customer'),
       ni(pg('suppliers.html'),          'supp',  '供應商管理', ['suppliers.html', 'supplier-log.html'],    cPr,  'sb-mod-suppliers'),
@@ -489,6 +494,9 @@
         cWL  = mods.indexOf('work_log')    >= 0 || role !== 'viewer'
         cDT  = mods.indexOf('daily_task')  >= 0 || role !== 'viewer'
         cDev = mods.indexOf('dev_crm')     >= 0 || ad
+        cEnvG = mods.indexOf('env_guide')  >= 0 || ad
+        cNetG = mods.indexOf('netarch_guide') >= 0 || ad
+        cSwitchG = mods.indexOf('switch_guide') >= 0 || ad
         canDash = sa || ad || mods.indexOf('finance') >= 0 || mods.indexOf('quotation') >= 0 || mods.indexOf('dashboard') >= 0
         buildSidebar()
         var dnEl = document.getElementById('tb-display-name')
