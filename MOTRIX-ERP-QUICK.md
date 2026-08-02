@@ -763,6 +763,7 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 - `main.py` 新增 `dev_crm.schedule_dev_case_stale_check()` 呼叫；`helpers/__init__.py` 補上 `notify_dev_case_stale` 的 `__all__` 項目
 - 無 DB migration（30天判斷純算 `dev_cases.updated_at`；通知防重發guard key 沿用既有 `system_settings` key-value 儲存，同 `daily_tasks.py` 的 `_get_setting`/`_set_setting` 慣例）
 - 已實機驗證（demo 帳號建立測試案件，直接改 `motrix_erp_demo.db` 的 `updated_at` 回溯35天）：年/月篩選正確排除不符月份案件、逾期彙總列與紅色卡片徽章正確顯示且「只看逾期」可切換、「全部」設為未成案後正確從計數與清單排除、後端啟動 log 確認 `Dev case stale check complete` 無錯誤
+- **已部署至正式機**（2026-08-03，commit `259ad84`，`apply_update.ps1` 套用成功、健康檢查通過、無回滾）；同時補上先前漏做的 `version_manifest.json` 條目（新條目需插在陣列最前面，供登入頁版本 footer／部署包 manifest 抓「最新版本」用）
 
 ### 2026-08-02d — 承攬商管理新增銀行帳戶欄位與存簿影本上傳
 
@@ -1442,7 +1443,7 @@ powershell -ExecutionPolicy Bypass -File backend\tools\apply_update.ps1 -Package
 
 - 兩機間的部署包傳輸仍是人工複製，沒有網路直連（WinRM 等，見 §14.3）
 - 正式機沒有 git，版本比對只能靠 `deploy_manifest.json` 記的 commit 做「是否重複套用」的相等比對，無法判斷新舊先後（先後順序由操作者自行確認）
-- `apply_update.ps1` 已在正式機做過第一次真實套用測試（2026-08-02，commit `484c1b4`）：健康檢查誤判觸發自動回滾，回滾機制運作正常、正式機無實際影響，誤判根因已修復（見上方說明與 §12 2026-08-02a），但**修正後的腳本本身尚未在正式機驗證過**，下次套用時才是真正的考驗；`build_deploy_package.ps1` 已在開發機多次實際打包成功（見 §12 2026-08-01k/l/m）
+- `apply_update.ps1` 已在正式機做過兩次真實套用：第一次（2026-08-02，commit `484c1b4`）健康檢查誤判觸發自動回滾，回滾機制運作正常、正式機無實際影響，誤判根因已修復（見上方說明與 §12 2026-08-02a）；第二次（2026-08-03，commit `259ad84`，業務開發 CRM 逾期警示功能）**套用成功、健康檢查通過、無回滾**，修正後的腳本已在正式機實地驗證過；`build_deploy_package.ps1` 已在開發機多次實際打包成功（見 §12 2026-08-01k/l/m）
 
 ---
 
