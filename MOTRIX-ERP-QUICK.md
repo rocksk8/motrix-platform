@@ -1,7 +1,7 @@
 # MOTRIX ERP — 開發快速參考
 
 > 允碩整合集創（統編 60575481）｜ Tel: 04-3602-2818 ｜ info@miactw.com  
-> 文件版本：**2026-08-02a**（修復 apply_update.ps1 首次正式機套用誤判自動回滾的問題，見 §12／§15）
+> 文件版本：**2026-08-02d**（承攬商管理新增銀行帳戶欄位與存簿影本上傳，見 §12）
 
 ---
 
@@ -572,6 +572,8 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
 | PUT/DELETE | /settings/custom-roles/{rid} | 更新／刪除（superadmin only） |
 | GET | /settings/role-labels | 各角色層顯示名稱（需認證） |
 | PUT | /settings/role-labels | 更新角色顯示名稱（superadmin only） |
+| GET | /settings/payment-terms | 報價單「付款條件」預設文字（需認證；未設定過時回傳程式內建範本） |
+| PUT | /settings/payment-terms | 更新預設文字（superadmin only） |
 | GET | /system/schema-status | Schema／migration 唯讀診斷（superadmin only）；回傳目前版本、目標版本、`upToDate`、`lastAppliedAt`、完整 migration 清單 |
 
 ### §7.5 · 業務開發 CRM（DB v27）
@@ -752,6 +754,31 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 ## §12 · 變更摘要（最新兩版）
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
+
+### 2026-08-02d — 承攬商管理新增銀行帳戶欄位與存簿影本上傳
+
+- **背景**：使用者要求「承攬商管理」（`vendor_contractors` 表）比照「外包名冊」模組（`contractors` 表，個人承攬工/勞報單用）補上銀行帳戶欄位（代碼/名稱/分行/戶名/帳號）與存簿影本上傳
+- **關鍵差異**：`contractors` 表銀行欄位是扁平 DB 欄位（有獨立 migration）；`vendor_contractors` 的擴充欄位一律走 `data_json`（`category`/`tags`/`visits`/`notes` 既有慣例）——這次比照後者，銀行欄位與存簿影本都放進 `data_json`，**不新增 DB migration**
+- **後端**（`routers/vendor_contractors.py`）：`from routers.contractors import _stamp_passbook` 直接重用既有浮水印函式；`_vendor_row()` 把 `bankPassbookImage` 從展開回應 `pop()` 掉、改回傳 `hasPassbook` 布林旗標（避免列表 API 混入大型 base64）；新增 `GET/PUT /api/vendor-contractors/{id}/passbook` 專屬端點（比照 `contractors.py` 的 `/id-card` 慣例）；`update_vendor_contractor()` 欄位保留邏輯從只保留 `visits` 擴充為連同 `bankPassbookImage` 與 5 個銀行文字欄位一併保留
+- **前端**（`vendor-contractors.html`）：編輯 Modal 新增「銀行帳戶」＋「銀行存簿影本」兩個 `form-section`（拖曳/點擊上傳、預覽、移除，CSS 複製自 `contractors.html` 的 `.id-card-drop` 系列），詳情面板新增銀行資訊顯示區塊
+- **驗證過程中發現並修正一個真實 bug**：既有 Excel 匯入更新流程（`handleImport()`/`_parseVendorRow()`）送出的 PUT payload 完全不含銀行欄位，若沒有保留邏輯，任何人匯入 Excel 更新既有承攬商就會把該筆銀行帳戶與存簿全部清空——已用模擬匯入情境的 API 呼叫實測驗證修正前會清空、修正後正確保留
+- 已用 curl 完整驗證新增/上傳存簿（含浮水印蓋印確認）/列表精簡（`hasPassbook` 旗標不含 base64）/部分更新保留欄位全流程，瀏覽器截圖確認編輯 Modal UI 正確渲染
+
+### 2026-08-02c — 案件管理／專案管理導入 Asana／PMP 概念
+
+- **背景**：使用者要求依 Asana（任務層級：指派人、到期日、依賴、看板/時間軸視圖）與 PMP/PMBOK（時程管理、里程碑、stage gate、逾期治理）概念改善「專案管理」「案件管理」兩模組；探索後確認落差——兩模組都沒有任務層級到期日/負責人、沒有量化進度視覺化、沒有甘特/看板視圖、逾期完全沒有主動通知。**關鍵設計發現**：`projects.data_json` 已有 `endDate`/`startDate`（專案資訊頁「預計完工」），案件階段本來就是 `quotations.data_json.caseRecord.stages[]`（無獨立資料表）——這次改動**完全不需要新增 DB migration**，新欄位都是 schemaless JSON blob 裡新增 key
+- **案件管理**：stage 新增 `startDate`/`dueDate`/`assignedTo`（可複選，chip 選人）/`dependsOn`（前置階段，含 `wouldCreateCycle()` 循環依賴防呆）；新增互動式甘特圖視圖（`frappe-gantt@0.6.1` CDN），可拖曳調整日期自動存回 stage，依賴箭頭依 `dependsOn` 渲染
+- **專案管理**：沿用既有 `data_json.endDate` 加列表逾期/剩餘天數 badge；詳情頁新增進度 % bar（依 `project_logs.action_items` 完成率）；新增看板視圖（`sortablejs@1.15.3`，7 欄對應 status enum，拖曳跨欄呼叫既有 `PATCH /status`）
+- **逾期提醒**：`daily_tasks.py` 新增 `_check_case_stage_deadline()`/`_check_project_deadline()`（比照既有 `_check_range_task_deadline` pattern，到期前3天/當天站內通知+email 雙軌），`email_notify.py` 新增對應兩個通知函式
+- **驗證過程中發現並修正三個問題**：① `case-management.html` 有一份被改名 `__noop_stub()` 的死碼（真正生效邏輯在外部 `frontend/js/case-management.js`，一開始寫錯位置已全部改正，順便發現並還原一個角色選單欄位名稱誤判：`selectableUsers` 來自 `/api/users/selectable`，欄位是 snake_case `display_name`）② frappe-gantt CSS 未覆蓋預設色導致圖表背景全黑（已補上淺色系覆寫）③ 看板用了 Alpine 不支援的動態 `:ref` 綁定導致 Sortable 完全沒初始化（改用 DOM 查詢 `.pj-kanban__col-body` 修正）
+- 已用後端函式直接執行驗證逾期通知正確寫入 `notifications` 表與 admin fallback 邏輯；瀏覽器截圖驗證 stage 詳細設定／甘特圖／看板拖曳／到期badge／進度bar 皆正常運作；測試資料（測試案件、測試專案）均已清除還原
+
+### 2026-08-02b — 報價單「付款條件」預設文字改由 superadmin 線上維護
+
+- **背景**：報價單「付款條件」欄位過去的預設文字是寫死在 `quotation-form.html`（新增報價單時 Alpine `q` 物件的初始值），要改預設文字得改程式碼重新部署；使用者要求改成 superadmin 可在報價單頁面直接編輯並存成新預設
+- **修法**：後端 `system.py` 新增 `GET/PUT /api/settings/payment-terms`，比照既有 `company-profile` 設定模式——存於 `system_settings` key `default_payment_terms`（`_get_setting`/`_set_setting`），GET 任何登入者可讀（未設定過時 fallback 回傳程式內建範本常數 `DEFAULT_PAYMENT_TERMS`），PUT 限 superadmin 並寫 `_audit()`。前端 `quotation-form.html`：① 「付款條件」欄位標籤旁新增「設為預設付款條件」按鈕（`session.role==='superadmin'` 才顯示），呼叫 `saveDefaultPaymentTerms()` 把目前文字 PUT 存成新預設（有 `confirm()` 二次確認，明確告知不影響已存在的舊單）② 新增報價單流程（`init()` 無 `editNo` 分支）改為呼叫 `GET /settings/payment-terms` 取得目前預設值覆蓋 `q.paymentTerms`，API 失敗或回傳空字串時維持原本寫死在程式碼裡的文字當離線 fallback
+- **範圍**：只影響「之後新增」的報價單預設值；已存在的舊報價單的 `paymentTerms` 早已各自存在 `data_json`，不受這次變更影響
+- 已用 `ast.parse` 驗證後端語法通過；前端未實機測試（待瀏覽器驗證 superadmin 按鈕顯示、儲存與新單套用預設值的完整流程）
 
 ### 2026-08-02a — 修復 apply_update.ps1 首次正式機套用觸發的誤判自動回滾
 

@@ -16,6 +16,10 @@ function app() {
     saveMsg: '',
     _autoSaveTimer: null,
     dragFromIdx: null,
+    _openStageDetail: {},
+    _newStageAssignee: {},
+    stageView: 'list',
+    _ganttInstance: null,
     showImportModal: false,
     importMode: 'materials',
     importSelectedItems: {},
@@ -178,6 +182,7 @@ function app() {
         this._syncWarrantyDate = ''
         this._syncWarrantyMonths = 12
         this._openDevGroups = {}
+        this.stageView = 'list'
         this._devDragId = null
         this._devDragOverId = null
         this._devInsertBeforeId = null
@@ -270,11 +275,11 @@ function app() {
       if (!this.cr.caseRecord) {
         this.cr.caseRecord = {
           stages: [
-            { id: 1, label: '訂單確認', done: false, doneAt: '', visits: [] },
-            { id: 2, label: '叫料出貨', done: false, doneAt: '', visits: [] },
-            { id: 3, label: '施工安裝', done: false, doneAt: '', visits: [] },
-            { id: 4, label: '客戶驗收', done: false, doneAt: '', visits: [] },
-            { id: 5, label: '尾款結清', done: false, doneAt: '', visits: [] },
+            { id: 1, label: '訂單確認', done: false, doneAt: '', visits: [], startDate:'', dueDate:'', assignedTo:[], dependsOn:[] },
+            { id: 2, label: '叫料出貨', done: false, doneAt: '', visits: [], startDate:'', dueDate:'', assignedTo:[], dependsOn:[] },
+            { id: 3, label: '施工安裝', done: false, doneAt: '', visits: [], startDate:'', dueDate:'', assignedTo:[], dependsOn:[] },
+            { id: 4, label: '客戶驗收', done: false, doneAt: '', visits: [], startDate:'', dueDate:'', assignedTo:[], dependsOn:[] },
+            { id: 5, label: '尾款結清', done: false, doneAt: '', visits: [], startDate:'', dueDate:'', assignedTo:[], dependsOn:[] },
           ],
           payment: { items: [
             { id: 1, type: '訂金款', pct: 30, received: false, receivedAt: '', invoiceNo: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' },
@@ -307,6 +312,10 @@ function app() {
             : []
           delete st.visitDate; delete st.visitPeople; delete st.note
         }
+        if (st.startDate  === undefined) st.startDate  = ''
+        if (st.dueDate    === undefined) st.dueDate    = ''
+        if (!st.assignedTo) st.assignedTo = []
+        if (!st.dependsOn)  st.dependsOn  = []
       })
 
       if (!this.cr.caseRecord.payment) {
@@ -546,10 +555,111 @@ function app() {
 
     addStage() {
       this.ensureCaseRecord()
-      this.cr.caseRecord.stages.push({ id: Date.now(), label: '新階段', done: false, doneAt: '', visits: [] })
+      this.cr.caseRecord.stages.push({ id: Date.now(), label: '新階段', done: false, doneAt: '', visits: [], startDate:'', dueDate:'', assignedTo:[], dependsOn:[] })
       this.setDirty()
     },
-    removeStage(idx)  { this.cr.caseRecord.stages.splice(idx, 1); this.setDirty() },
+    removeStage(idx)  {
+      const stages = this.cr.caseRecord.stages
+      const removedId = stages[idx]?.id
+      stages.splice(idx, 1)
+      stages.forEach(s => { if (s.dependsOn) s.dependsOn = s.dependsOn.filter(id => id !== removedId) })
+      this.setDirty()
+    },
+
+    toggleStageDetail(id) { this._openStageDetail[id] = !this._openStageDetail[id] },
+
+    stageIsOverdue(st) {
+      if (st.done || !st.dueDate) return false
+      return st.dueDate < new Date().toISOString().slice(0,10)
+    },
+
+    otherStages(stageId) {
+      return (this.cr.caseRecord?.stages || []).filter(s => s.id !== stageId)
+    },
+
+    addStageAssignee(st, username) {
+      if (!username) return
+      if (!st.assignedTo) st.assignedTo = []
+      if (!st.assignedTo.includes(username)) st.assignedTo.push(username)
+      this.setDirty()
+    },
+    removeStageAssignee(st, username) {
+      st.assignedTo = (st.assignedTo || []).filter(u => u !== username)
+      this.setDirty()
+    },
+
+    wouldCreateCycle(stageId, candidateId) {
+      // 若讓 stageId 依賴 candidateId，順著 dependsOn 追下去會不會繞回 stageId 自己
+      if (stageId === candidateId) return true
+      const byId = Object.fromEntries((this.cr.caseRecord?.stages || []).map(s => [s.id, s]))
+      const seen = new Set()
+      const dfs = (id) => {
+        if (id === stageId) return true
+        if (seen.has(id)) return false
+        seen.add(id)
+        return ((byId[id]?.dependsOn) || []).some(dfs)
+      }
+      return dfs(candidateId)
+    },
+
+    toggleStageDependency(st, candidateId) {
+      if (!st.dependsOn) st.dependsOn = []
+      const idx = st.dependsOn.indexOf(candidateId)
+      if (idx >= 0) { st.dependsOn.splice(idx, 1); this.setDirty(); return }
+      if (this.wouldCreateCycle(st.id, candidateId)) {
+        alert('這樣設定會讓階段之間互相循環依賴，請重新選擇前置階段')
+        return
+      }
+      st.dependsOn.push(candidateId)
+      this.setDirty()
+    },
+
+    switchToTimeline() {
+      this.stageView = 'timeline'
+      this.$nextTick(() => this.renderGantt())
+    },
+
+    _ganttTasks() {
+      const stages = this.cr.caseRecord?.stages || []
+      const today  = new Date().toISOString().slice(0,10)
+      const addDays = (dateStr, n) => {
+        const d = new Date(dateStr + 'T00:00:00')
+        d.setDate(d.getDate() + n)
+        return d.toISOString().slice(0,10)
+      }
+      return stages.map(st => {
+        let start = st.startDate || st.dueDate || today
+        let end   = st.dueDate   || st.startDate || addDays(start, 1)
+        if (start === end) end = addDays(start, 1)
+        return {
+          id:           String(st.id),
+          name:         st.label || '（未命名階段）',
+          start, end,
+          progress:     st.done ? 100 : 0,
+          dependencies: (st.dependsOn || []).map(String).join(','),
+          custom_class: st.done ? 'stage-done' : (this.stageIsOverdue(st) ? 'stage-overdue' : ''),
+        }
+      })
+    },
+
+    renderGantt() {
+      const el = this.$refs.ganttContainer
+      if (!el || typeof Gantt === 'undefined') return
+      const tasks = this._ganttTasks()
+      el.innerHTML = ''
+      if (!tasks.length) return
+      this._ganttInstance = new Gantt(el, tasks, {
+        view_mode: 'Day',
+        on_date_change: (task, start, end) => {
+          const st = (this.cr.caseRecord?.stages || []).find(s => String(s.id) === task.id)
+          if (!st) return
+          const fmt = d => (d instanceof Date ? d : new Date(d)).toISOString().slice(0,10)
+          st.startDate = fmt(start)
+          st.dueDate   = fmt(end)
+          this.setDirty()
+        },
+      })
+    },
     addVisit(stageIdx) {
       const st = this.cr.caseRecord.stages[stageIdx]
       if (!st.visits) st.visits = []

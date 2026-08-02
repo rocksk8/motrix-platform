@@ -4,12 +4,13 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Header
+from fastapi import APIRouter, Body, HTTPException, Header
 from pydantic import BaseModel
 
 from db import get_db, next_entity_code
 from helpers import _require_user, _tok, _audit
 from helpers.quotations import save_quotation_json
+from routers.contractors import _stamp_passbook
 
 router = APIRouter()
 
@@ -55,6 +56,9 @@ def _vendor_row(row) -> dict:
         d = json.loads(row["data_json"] or "{}")
     except Exception:
         pass
+    # 存簿影本（base64）不進一般列表/詳情回應，避免拖垮輕量 API；只回傳有無上傳的旗標，
+    # 實際影像走專屬的 GET/PUT .../passbook 端點（比照 contractors.py 的 has_passbook 慣例）
+    has_passbook = bool(d.pop("bankPassbookImage", None))
     keys = row.keys() if hasattr(row, 'keys') else []
     return {
         "id": row["id"],
@@ -68,6 +72,7 @@ def _vendor_row(row) -> dict:
         "active": bool(row["active"]),
         "createdAt": row["created_at"] or "",
         "updatedAt": row["updated_at"] or "",
+        "hasPassbook": has_passbook,
         **d
     }
 
@@ -203,8 +208,16 @@ def update_vendor_contractor(vid: int, body: VendorContractorIn, authorization: 
     except Exception:
         pass
     new_data = body.data or {}
-    if "visits" not in new_data:
-        new_data = {**new_data, "visits": existing_data.get("visits", [])}
+    # 呼叫端（如 Excel 匯入）若未帶這些 key，一律從既有資料保留，避免被覆蓋清空——
+    # 銀行帳戶/存簿是後補欄位，舊的呼叫端（匯入）本來就不知道要帶
+    _preserve_keys = (
+        "visits", "bankPassbookImage",
+        "bankCode", "bankName", "bankBranch", "bankAccountName", "bankAccountNumber",
+    )
+    for key in _preserve_keys:
+        if key not in new_data:
+            default = [] if key == "visits" else ""
+            new_data = {**new_data, key: existing_data.get(key, default)}
     conn.execute(
         "UPDATE vendor_contractors SET name=?, tax_id=?, contact_name=?, phone=?, email=?, address=?, data_json=?, updated_at=? WHERE id=?",
         (body.name.strip(), body.tax_id or '', body.contact_name or '',
@@ -235,6 +248,53 @@ def toggle_vendor_active(vid: int, authorization: str = Header(None)):
     action = 'vendor.activate' if new_active else 'vendor.deactivate'
     _audit(_tok(authorization), action, 'vendor_contractor', str(vid), row["name"])
     return {"active": bool(new_active)}
+
+
+@router.get("/api/vendor-contractors/{vid}/passbook")
+def get_vendor_passbook(vid: int, authorization: str = Header(None)):
+    _require_user(authorization)
+    conn = get_db()
+    row = conn.execute("SELECT data_json FROM vendor_contractors WHERE id=?", (vid,)).fetchone()
+    conn.close()
+    if not row:
+        raise HTTPException(404, "承攬商不存在")
+    try:
+        data = json.loads(row["data_json"] or "{}")
+    except Exception:
+        data = {}
+    return {"bank_passbook": data.get("bankPassbookImage", "")}
+
+
+@router.put("/api/vendor-contractors/{vid}/passbook")
+def upload_vendor_passbook(vid: int, body: dict = Body(...), authorization: str = Header(None)):
+    user = _require_user(authorization)
+    if user["role"] not in ("superadmin", "admin"):
+        raise HTTPException(403, "需要管理員權限")
+    passbook = body.get("bank_passbook", "")
+    if passbook and not passbook.startswith("data:image/"):
+        raise HTTPException(400, "無效的圖片格式，需為 data URI")
+    if passbook:
+        try: passbook = _stamp_passbook(passbook)
+        except Exception: pass
+    conn = get_db()
+    existing = conn.execute("SELECT data_json, name FROM vendor_contractors WHERE id=?", (vid,)).fetchone()
+    if not existing:
+        conn.close()
+        raise HTTPException(404, "承攬商不存在")
+    try:
+        data = json.loads(existing["data_json"] or "{}")
+    except Exception:
+        data = {}
+    data["bankPassbookImage"] = passbook
+    now = datetime.now().isoformat()
+    conn.execute(
+        "UPDATE vendor_contractors SET data_json=?, updated_at=? WHERE id=?",
+        (json.dumps(data, ensure_ascii=False), now, vid)
+    )
+    conn.commit()
+    conn.close()
+    _audit(_tok(authorization), 'vendor.passbook.update', 'vendor_contractor', str(vid), existing["name"])
+    return {"ok": True, "updated_at": now}
 
 
 @router.delete("/api/vendor-contractors/{vid}")

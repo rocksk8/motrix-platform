@@ -43,6 +43,8 @@ from .email_notify import (
     notify_range_task_deadline,
     notify_module_activity,
     notify_dev_case_delete_request,
+    notify_case_stage_deadline,
+    notify_project_deadline,
 )
 from .startup import (
     _EDGE_CANDIDATES,
@@ -74,6 +76,7 @@ __all__ = [
     "notify_daily_task_assigned", "notify_daily_task_completed", "notify_daily_task_overdue",
     "notify_daily_task_edited", "notify_warranty_expiry", "notify_monthly_report",
     "notify_range_task_deadline", "notify_dev_case_delete_request",
+    "notify_case_stage_deadline", "notify_project_deadline",
     # startup
     "_EDGE_CANDIDATES", "_get_edge_path",
     "init_default_admin", "init_demo_account", "flag_weak_passwords", "init_unlock_passwords",

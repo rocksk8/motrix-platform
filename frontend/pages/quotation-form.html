@@ -1550,7 +1550,14 @@
         <div class="section-title"><div class="section-num">五</div>報價條件</div>
         <div class="form-grid" style="gap:14px">
           <div class="form-group">
-            <label class="form-label">付款條件</label>
+            <label class="form-label" style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+              付款條件
+              <button x-show="session.role === 'superadmin'" type="button"
+                      class="btn btn-ghost btn-sm" @click="saveDefaultPaymentTerms()"
+                      title="將目前這段文字存為之後所有新增報價單的預設付款條件">
+                設為預設付款條件
+              </button>
+            </label>
             <textarea class="form-textarea" rows="5" x-model="q.paymentTerms" @input="setDirty" style="min-height:100px"></textarea>
           </div>
           <div class="form-grid form-grid-2" style="gap:14px">
@@ -2287,6 +2294,23 @@
         } catch(e) {
           console.warn('API 儲存失敗（後端未啟動）', e.message)
           return false
+        }
+      },
+
+      async saveDefaultPaymentTerms() {
+        const text = (this.q.paymentTerms || '').trim()
+        if (!text) { alert('付款條件內容不可空白'); return }
+        if (!confirm('確定要把目前這段文字，存為之後所有「新增報價單」的預設付款條件嗎？\n（已存在的舊報價單不受影響）')) return
+        try {
+          const res = await fetch(`${this.API}/settings/payment-terms`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+            body: JSON.stringify({ text })
+          })
+          if (!res.ok) throw new Error(await res.text())
+          this.toast('✓ 已更新為預設付款條件')
+        } catch(e) {
+          alert('儲存失敗，請確認後端伺服器是否在線')
         }
       },
 
@@ -3372,6 +3396,13 @@ window.addEventListener('load', function () {
             this.toast('無法取得報價單號，請確認後端連線')
           }
           this.isNewRecord = true
+          try {
+            const rp = await fetch(`${this.API}/settings/payment-terms`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+            if (rp.ok) {
+              const d = await rp.json()
+              if ((d.text || '').trim()) this.q.paymentTerms = d.text
+            }
+          } catch(e) {}
         }
 
         this.calcTotals()

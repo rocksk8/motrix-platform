@@ -19,6 +19,7 @@ from helpers import (
     _require_user, _tok, _audit, _notify,
     notify_daily_task_assigned, notify_daily_task_completed, notify_daily_task_overdue,
     notify_daily_task_edited, notify_warranty_expiry, notify_range_task_deadline, _warranty_expiry,
+    notify_case_stage_deadline, notify_project_deadline,
     _get_setting, _set_setting,
 )
 
@@ -965,6 +966,113 @@ def _check_range_task_deadline() -> None:
         _logger.warning("_check_range_task_deadline failed: %s", exc)
 
 
+def _check_case_stage_deadline() -> None:
+    """Notify assignees of case execution-progress stages (caseRecord.stages, stored in
+    quotations.data_json) due in 3 days or due today, if not yet marked done."""
+    today     = _date.today()
+    today_str = today.isoformat()
+    try:
+        conn = get_db()
+        users   = conn.execute("SELECT id, username, display_name FROM users").fetchall()
+        dn_map  = {u["username"]: (u["display_name"] or u["username"]) for u in users}
+        uid_map = {u["id"]: u["username"] for u in users}
+        rows = conn.execute("""
+            SELECT quote_no, customer_name, project_name, sales_person_id,
+                   json_extract(data_json, '$.caseRecord.stages') AS stages_json
+            FROM quotations
+            WHERE COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') = '已成案'
+              AND json_extract(data_json, '$.caseRecord.stages') IS NOT NULL
+        """).fetchall()
+        conn.close()
+
+        for days_ahead, notif_type in ((3, "3d"), (0, "deadline")):
+            check_date = (today + _timedelta(days=days_ahead)).isoformat()
+            for row in rows:
+                try:
+                    stages = json.loads(row["stages_json"] or "[]")
+                except Exception:
+                    continue
+                for st in stages:
+                    if st.get("done") or (st.get("dueDate") or "") != check_date:
+                        continue
+                    assignees = list(st.get("assignedTo") or [])
+                    if not assignees:
+                        fallback = uid_map.get(row["sales_person_id"])
+                        if fallback:
+                            assignees = [fallback]
+                    for username in assignees:
+                        if not username:
+                            continue
+                        guard_key = f"casestage_notif.{row['quote_no']}.{st.get('id')}.{username}.{notif_type}"
+                        if _get_setting(guard_key):
+                            continue
+                        _set_setting(guard_key, today_str)
+                        display = dn_map.get(username, username)
+                        threading.Thread(
+                            target=notify_case_stage_deadline,
+                            args=(row["quote_no"], st.get("label") or "", check_date, days_ahead,
+                                  username, display, row["customer_name"] or "", row["project_name"] or "", None),
+                            daemon=True,
+                        ).start()
+                        _notify(username, "case_stage_deadline", row["quote_no"],
+                                f"{row['quote_no']} · {st.get('label','')}",
+                                "案件執行進度「" + (st.get('label') or '') + "」" +
+                                ("今日到期" if days_ahead == 0 else f"{days_ahead} 天後到期"))
+        _logger.info("Case stage deadline check complete for %s", today_str)
+    except Exception as exc:
+        _logger.warning("_check_case_stage_deadline failed: %s", exc)
+
+
+def _check_project_deadline() -> None:
+    """Notify assigned members of projects whose expected completion date
+    (projects.data_json.endDate) is 3 days out or today, if project not yet closed.
+    Falls back to admin/superadmin when no members are assigned."""
+    today     = _date.today()
+    today_str = today.isoformat()
+    try:
+        conn = get_db()
+        users       = conn.execute("SELECT id, username, display_name, role FROM users WHERE active=1").fetchall()
+        dn_map      = {u["username"]: (u["display_name"] or u["username"]) for u in users}
+        uid_map     = {u["id"]: u["username"] for u in users}
+        admin_users = [u["username"] for u in users if u["role"] in ("admin", "superadmin")]
+        rows = conn.execute("""
+            SELECT id, code, name, status, assigned_user_ids,
+                   json_extract(data_json, '$.endDate') AS end_date
+            FROM projects
+            WHERE status NOT IN ('完工','結案','取消')
+              AND json_extract(data_json, '$.endDate') IS NOT NULL
+              AND json_extract(data_json, '$.endDate') != ''
+        """).fetchall()
+        conn.close()
+
+        for days_ahead, notif_type in ((3, "3d"), (0, "deadline")):
+            check_date = (today + _timedelta(days=days_ahead)).isoformat()
+            for row in rows:
+                if row["end_date"] != check_date:
+                    continue
+                try:
+                    assigned_ids = json.loads(row["assigned_user_ids"] or "[]")
+                except Exception:
+                    assigned_ids = []
+                usernames = [uid_map[uid] for uid in assigned_ids if uid in uid_map] or admin_users
+                for username in usernames:
+                    guard_key = f"project_notif.{row['code']}.{username}.{notif_type}"
+                    if _get_setting(guard_key):
+                        continue
+                    _set_setting(guard_key, today_str)
+                    display = dn_map.get(username, username)
+                    threading.Thread(
+                        target=notify_project_deadline,
+                        args=(row["id"], row["code"], row["name"], check_date, days_ahead, username, display),
+                        daemon=True,
+                    ).start()
+                    _notify(username, "project_deadline", row["code"], row["name"],
+                            f"專案「{row['name']}」" + ("今日到期" if days_ahead == 0 else f"{days_ahead} 天後到期"))
+        _logger.info("Project deadline check complete for %s", today_str)
+    except Exception as exc:
+        _logger.warning("_check_project_deadline failed: %s", exc)
+
+
 _WARR_THRESHOLDS = (7, 30)  # days — must be in ascending order
 
 
@@ -1032,6 +1140,8 @@ def schedule_overdue_check() -> None:
         _check_overdue_and_notify()
         _check_warranty_expiry()
         _check_range_task_deadline()
+        _check_case_stage_deadline()
+        _check_project_deadline()
 
     def _startup_catchup():
         """Process every day from (last_check + 1) through yesterday in order."""
@@ -1043,6 +1153,8 @@ def schedule_overdue_check() -> None:
             # First ever run — only process yesterday to avoid spamming historical tasks
             _check_overdue_and_notify()
             _check_warranty_expiry()
+            _check_case_stage_deadline()
+            _check_project_deadline()
             return
 
         # Advance day-by-day through any gap
@@ -1058,6 +1170,8 @@ def schedule_overdue_check() -> None:
 
         _check_warranty_expiry()
         _check_range_task_deadline()
+        _check_case_stage_deadline()
+        _check_project_deadline()
         _logger.info("Startup catch-up complete, processed up to %s", yesterday)
 
     # Always run catch-up on startup (the guard inside prevents duplicate emails)

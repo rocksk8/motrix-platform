@@ -357,6 +357,33 @@ def set_company_profile(body: CompanyProfile, authorization: str = Header(None))
     return {"ok": True}
 
 
+# ── Quotation default payment terms ───────────────────────────────────────────
+
+DEFAULT_PAYMENT_TERMS = """本專案總價款分三期給付，本報價不含運費與關稅，前述相關衍生費用由買方另行負擔。
+第一期：定金款（總價款50%），買方給付本期款項後，本專案即確認執行，賣方應開立憑證予買方。
+第二期：交貨款（總價款30%），設備運抵買方指定地點並完成硬體點交後，賣方得開立憑證請款，付款方式為賣方提交憑證之次月份25日支付。
+第三期：驗收款（總價款20%），設備安裝、系統設定及缺失改善完成，並經買方驗收合格後，賣方得開立憑證請款，付款方式為賣方提交憑證之次月份25日支付。"""
+
+
+class PaymentTermsBody(BaseModel):
+    text: str = ''
+
+
+@router.get("/api/settings/payment-terms")
+def get_default_payment_terms(authorization: str = Header(None)):
+    _require_user(authorization)
+    return {"text": _get_setting("default_payment_terms", DEFAULT_PAYMENT_TERMS)}
+
+
+@router.put("/api/settings/payment-terms")
+def set_default_payment_terms(body: PaymentTermsBody, authorization: str = Header(None)):
+    _require_user(authorization, require_superadmin=True)
+    _set_setting("default_payment_terms", body.text)
+    _audit(_tok(authorization), "settings.payment_terms.update", "settings",
+           "default_payment_terms", "報價單預設付款條件")
+    return {"ok": True}
+
+
 # ── Edge path setting ─────────────────────────────────────────────────────────
 
 @router.get("/api/settings/edge-path")

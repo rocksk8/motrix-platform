@@ -431,6 +431,81 @@ def notify_range_task_deadline(
     _async_send(to, f"【MOTRIX】區間工作事項即將到期 — {name} · {title}（{end_date}）", html)
 
 
+def notify_case_stage_deadline(
+    quote_no: str,
+    stage_label: str,
+    due_date: str,
+    days_left: int,
+    assignee_username: str,
+    assignee_display: str,
+    customer_name: str = "",
+    project_name: str = "",
+    supervisor_usernames: list = None,
+) -> None:
+    """案件執行進度階段即將到期／已逾期 → 負責人 + 主管（無則 admin）"""
+    assignee_to = _lookup_emails([assignee_username])
+    if supervisor_usernames:
+        mgr_to = _lookup_emails(supervisor_usernames)
+        if not mgr_to:
+            mgr_to = _admin_emails()
+    else:
+        mgr_to = _admin_emails()
+    to = list({*assignee_to, *mgr_to})
+    if not to:
+        return
+    case_page = f"{_base_url()}/pages/case-management.html?q={quote_no}"
+    name  = assignee_display or assignee_username
+    label = f"{customer_name}{'／' if customer_name and project_name else ''}{project_name}" or quote_no
+    if days_left <= 0:
+        badge_text, badge_color = "已逾期", "#DC2626"
+        intro = (f"{name} 負責的案件「{label}」執行進度階段「{stage_label}」"
+                 f"已於 {due_date} 到期尚未完成，請盡速確認處理狀況。")
+    else:
+        badge_text, badge_color = f"剩餘 {days_left} 天", "#D97706"
+        intro = (f"{name} 負責的案件「{label}」執行進度階段「{stage_label}」"
+                 f"將於 {due_date} 到期，尚餘 {days_left} 天，請儘早確認進度。")
+    html = _build_html(
+        "案件執行進度即將到期", badge_text, badge_color,
+        [("案件單號", quote_no), ("階段", stage_label), ("到期日期", due_date), ("負責人員", name)],
+        "", case_page,
+        intro=intro,
+        button_text="前往案件管理",
+    )
+    _async_send(to, f"【MOTRIX】案件執行進度到期提醒 — {name} · {label} · {stage_label}", html)
+
+
+def notify_project_deadline(
+    project_id: int,
+    project_code: str,
+    project_name: str,
+    end_date: str,
+    days_left: int,
+    assignee_username: str,
+    assignee_display: str,
+) -> None:
+    """專案「預計完工」日期即將到期／已逾期 → 通知被分配的成員（無分配則 admin）"""
+    assignee_to = _lookup_emails([assignee_username]) if assignee_username else []
+    to = list({*assignee_to, *(_admin_emails() if not assignee_to else [])})
+    if not to:
+        return
+    project_page = f"{_base_url()}/pages/projects.html?id={project_id}"
+    name = assignee_display or assignee_username or "（未指派成員）"
+    if days_left <= 0:
+        badge_text, badge_color = "已逾期", "#DC2626"
+        intro = f"專案「{project_name}」（{project_code}）預計完工日 {end_date} 已到期，請盡速確認進度。"
+    else:
+        badge_text, badge_color = f"剩餘 {days_left} 天", "#D97706"
+        intro = f"專案「{project_name}」（{project_code}）預計於 {end_date} 完工，尚餘 {days_left} 天，請儘早確認進度。"
+    html = _build_html(
+        "專案預計完工日即將到期", badge_text, badge_color,
+        [("專案代號", project_code), ("專案名稱", project_name), ("預計完工", end_date)],
+        "", project_page,
+        intro=intro,
+        button_text="前往專案管理",
+    )
+    _async_send(to, f"【MOTRIX】專案到期提醒 — {project_name}（{project_code}）", html)
+
+
 def notify_daily_task_edited(
     task_id: int,
     title: str,

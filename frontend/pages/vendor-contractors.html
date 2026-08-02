@@ -50,6 +50,12 @@
     .form-textarea{resize:vertical;min-height:64px;line-height:1.6}
     .form-grid{display:grid;gap:14px}
     .form-grid-2{grid-template-columns:1fr 1fr}
+    .id-card-drop{border:2px dashed var(--border-light);border-radius:var(--radius-lg);padding:20px;text-align:center;color:var(--text-dim);font-size:13px;transition:border-color .15s,background .15s;cursor:pointer}
+    .id-card-drop:hover{border-color:var(--accent);background:var(--accent-light)}
+    .id-card-preview{position:relative;border:1px solid var(--border-light);border-radius:var(--radius-lg);overflow:hidden;background:#f8f8f6}
+    .id-card-preview img{width:100%;max-height:180px;object-fit:contain;display:block}
+    .id-card-remove{position:absolute;top:6px;right:6px;background:rgba(220,38,38,.9);color:#fff;border:none;border-radius:4px;padding:3px 10px;font-size:11px;cursor:pointer;font-family:inherit}
+    .id-card-remove:hover{background:var(--danger)}
     .detail-pane{position:fixed;right:0;top:var(--topbar-h);width:380px;height:calc(100vh - var(--topbar-h));background:#fff;border-left:1px solid var(--border-light);box-shadow:var(--shadow-lg);z-index:100;display:flex;flex-direction:column;transform:translateX(100%);transition:transform .22s ease}
     .detail-pane.open{transform:translateX(0)}
     .detail-head{padding:16px 20px;border-bottom:1px solid var(--border-light);display:flex;align-items:center;gap:10px}
@@ -197,6 +203,19 @@
         <div class="detail-row" x-show="selectedVendor.phone"><span class="detail-label">電話</span><span class="detail-val" x-text="selectedVendor.phone"></span></div>
         <div class="detail-row" x-show="selectedVendor.email"><span class="detail-label">Email</span><span class="detail-val" x-text="selectedVendor.email"></span></div>
         <div class="detail-row" x-show="selectedVendor.address"><span class="detail-label">地址</span><span class="detail-val" x-text="selectedVendor.address"></span></div>
+
+        <template x-if="selectedVendor.bankName || selectedVendor.bankAccountNumber || selectedVendor.hasPassbook">
+          <div>
+            <hr class="detail-divider">
+            <div class="detail-sec">銀行帳戶</div>
+            <div class="detail-row" x-show="selectedVendor.bankCode"><span class="detail-label">銀行代碼</span><span class="detail-val" x-text="selectedVendor.bankCode"></span></div>
+            <div class="detail-row" x-show="selectedVendor.bankName"><span class="detail-label">銀行名稱</span><span class="detail-val" x-text="selectedVendor.bankName"></span></div>
+            <div class="detail-row" x-show="selectedVendor.bankBranch"><span class="detail-label">分行</span><span class="detail-val" x-text="selectedVendor.bankBranch"></span></div>
+            <div class="detail-row" x-show="selectedVendor.bankAccountName"><span class="detail-label">戶名</span><span class="detail-val" x-text="selectedVendor.bankAccountName"></span></div>
+            <div class="detail-row" x-show="selectedVendor.bankAccountNumber"><span class="detail-label">帳號</span><span class="detail-val" x-text="selectedVendor.bankAccountNumber"></span></div>
+            <div style="font-size:12px;color:var(--success);margin-top:4px" x-show="selectedVendor.hasPassbook">● 銀行存簿已上傳</div>
+          </div>
+        </template>
 
         <template x-if="selectedVendor.notes">
           <div>
@@ -372,6 +391,59 @@
           <button class="btn btn-ghost btn-sm" @click="addTag()">新增</button>
         </div>
       </div>
+      <!-- 銀行帳戶 -->
+      <div class="form-section">
+        <div class="form-section-title">銀行帳戶</div>
+        <div class="form-grid form-grid-2">
+          <div class="form-group">
+            <label class="form-label">銀行代碼</label>
+            <input class="form-input" type="text" x-model="form.bank_code" placeholder="如：700">
+          </div>
+          <div class="form-group">
+            <label class="form-label">銀行名稱</label>
+            <input class="form-input" type="text" x-model="form.bank_name" placeholder="如：中華郵政">
+          </div>
+          <div class="form-group">
+            <label class="form-label">分行</label>
+            <input class="form-input" type="text" x-model="form.bank_branch">
+          </div>
+          <div class="form-group">
+            <label class="form-label">戶名</label>
+            <input class="form-input" type="text" x-model="form.bank_account_name">
+          </div>
+          <div class="form-group" style="grid-column:span 2">
+            <label class="form-label">帳號</label>
+            <input class="form-input" type="text" x-model="form.bank_account_number">
+          </div>
+        </div>
+      </div>
+      <!-- 銀行存簿影本 -->
+      <div class="form-section">
+        <div class="form-section-title">銀行存簿影本</div>
+        <div x-show="!bankPassbookPreview && !bankPassbook" class="id-card-drop"
+             @click="$refs.passbookInput.click()"
+             @dragover.prevent @drop.prevent="handlePassbookDrop($event)">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin:0 auto 6px;display:block;opacity:.4">
+            <rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 4v5M16 4v5"/>
+          </svg>
+          點擊或拖曳上傳存摺封面（含帳號頁）<br>
+          <span style="font-size:11px">JPG / PNG / WEBP &lt; 3 MB</span>
+        </div>
+        <div x-show="bankPassbookPreview || bankPassbook" class="id-card-preview">
+          <img :src="bankPassbookPreview || bankPassbook" alt="銀行存簿">
+          <button class="id-card-remove" @click.stop="removePassbook()">✕</button>
+        </div>
+        <input type="file" x-ref="passbookInput" accept="image/*" style="display:none" @change="handlePassbookFile($event)">
+        <div x-show="bankPassbookPreview || bankPassbook" style="margin-top:6px;display:flex;align-items:center;gap:8px">
+          <label class="btn btn-ghost btn-sm" style="cursor:pointer">
+            重新上傳<input type="file" accept="image/*" style="display:none" @change="handlePassbookFile($event)">
+          </label>
+          <span style="font-size:11px">
+            <span x-show="bankPassbookPreview" style="color:var(--warning)">● 未儲存</span>
+            <span x-show="!bankPassbookPreview && bankPassbook" style="color:var(--success)">● 已上傳</span>
+          </span>
+        </div>
+      </div>
       <!-- 備注 -->
       <div class="form-section">
         <div class="form-section-title">備注</div>
@@ -474,6 +546,8 @@ function vendorContractorsPage() {
     importing: false,
     importResults: null,
     _pendingVisits: [],
+    bankPassbook: '',
+    bankPassbookPreview: null,
 
     async init() {
       const s = localStorage.getItem('motrix_session')
@@ -519,7 +593,8 @@ function vendorContractorsPage() {
 
     _blank() {
       return { name: '', tax_id: '', contact_name: '', phone: '', email: '', address: '',
-               data_notes: '', category: '', tags: [] }
+               data_notes: '', category: '', tags: [],
+               bank_code: '', bank_name: '', bank_branch: '', bank_account_name: '', bank_account_number: '' }
     },
 
     openNew() {
@@ -527,22 +602,51 @@ function vendorContractorsPage() {
       this._pendingVisits = []
       this.form = this._blank()
       this.taxIdSearch = ''; this.lookupMsg = ''; this.lookupOk = false; this.tagInput = ''
+      this.bankPassbook = ''; this.bankPassbookPreview = null
       this.errMsg = ''
       this.showModal = true
     },
 
-    openEdit(v) {
+    async openEdit(v) {
       this.editId = v.id
       this._pendingVisits = JSON.parse(JSON.stringify(v.visits || []))
       this.form = {
         name: v.name, tax_id: v.taxId || '', contact_name: v.contactName || '',
         phone: v.phone || '', email: v.email || '', address: v.address || '',
-        data_notes: v.notes || '', category: v.category || '', tags: [...(v.tags || [])]
+        data_notes: v.notes || '', category: v.category || '', tags: [...(v.tags || [])],
+        bank_code: v.bankCode || '', bank_name: v.bankName || '', bank_branch: v.bankBranch || '',
+        bank_account_name: v.bankAccountName || '', bank_account_number: v.bankAccountNumber || ''
       }
       this.taxIdSearch = v.taxId || ''; this.lookupMsg = ''; this.lookupOk = false; this.tagInput = ''
+      this.bankPassbook = ''; this.bankPassbookPreview = null
       this.errMsg = ''
       this.showModal = true
+      try {
+        const r = await fetch(`${API}/vendor-contractors/${v.id}/passbook`, {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (r.ok) this.bankPassbook = (await r.json()).bank_passbook || ''
+      } catch(e) {}
     },
+
+    handlePassbookFile(e) {
+      const file = e.target.files[0]
+      if (!file) return
+      if (file.size > 3 * 1024 * 1024) { this.errMsg = '圖片過大（限 3 MB）'; return }
+      const reader = new FileReader()
+      reader.onload = (ev) => { this.bankPassbookPreview = ev.target.result }
+      reader.readAsDataURL(file)
+      e.target.value = ''
+    },
+    handlePassbookDrop(e) {
+      const file = e.dataTransfer.files[0]
+      if (!file || !file.type.startsWith('image/')) return
+      if (file.size > 3 * 1024 * 1024) { this.errMsg = '圖片過大（限 3 MB）'; return }
+      const reader = new FileReader()
+      reader.onload = (ev) => { this.bankPassbookPreview = ev.target.result }
+      reader.readAsDataURL(file)
+    },
+    removePassbook() { this.bankPassbookPreview = ''; this.bankPassbook = '' },
 
     async lookupByTaxId() {
       const id = this.taxIdSearch.replace(/\D/g, '')
@@ -595,7 +699,12 @@ function vendorContractorsPage() {
           notes: this.form.data_notes || '',
           category: this.form.category || '',
           tags: this.form.tags || [],
-          visits: this._pendingVisits
+          visits: this._pendingVisits,
+          bankCode: this.form.bank_code || '',
+          bankName: this.form.bank_name || '',
+          bankBranch: this.form.bank_branch || '',
+          bankAccountName: this.form.bank_account_name || '',
+          bankAccountNumber: this.form.bank_account_number || ''
         }
       }
       const method = this.editId ? 'PUT' : 'POST'
@@ -607,6 +716,15 @@ function vendorContractorsPage() {
           body: JSON.stringify(body)
         })
         if (!r.ok) { this.errMsg = (await r.json()).detail || '儲存失敗'; this.saving = false; return }
+        const d = await r.json()
+        const targetId = this.editId || d.id
+        if (this.bankPassbookPreview !== null && targetId) {
+          await fetch(`${API}/vendor-contractors/${targetId}/passbook`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+            body: JSON.stringify({ bank_passbook: this.bankPassbookPreview })
+          })
+        }
         this.showModal = false
         await this.load()
         if (this.editId) {
