@@ -309,6 +309,15 @@
     }
     .dc-admin-bar:hover { background: #FEE2C2; }
 
+    /* stale-case warning bar */
+    .dc-stale-bar {
+      background: #FEF2F2; border-bottom: 1px solid #FECACA;
+      padding: 7px 14px; font-size: 11px; color: #991B1B;
+      display: flex; align-items: center; gap: 7px; cursor: pointer;
+      font-family: var(--font-zh);
+    }
+    .dc-stale-bar:hover { background: #FEE2E2; }
+
     /* toast */
     .dc-toast {
       position: fixed; bottom: 24px; left: 50%;
@@ -352,13 +361,33 @@
         <input class="dc-search" type="text" placeholder="搜尋案件或客戶…"
                x-model.debounce.400ms="searchQ" @input="loadCases()">
         <div class="dc-chips">
-          <span class="dc-chip" :class="{on: filterStatus===''}" @click="filterStatus='';loadCases()">
-            全部 <b x-text="cases.length"></b>
+          <span class="dc-chip" :class="{on: filterStatus===''}" @click="filterStatus=''">
+            全部(不含未成案) <b x-text="caseCount('')"></b>
           </span>
-          <span class="dc-chip talk" :class="{on: filterStatus==='洽談中'}" @click="filterStatus='洽談中';loadCases()">洽談中</span>
-          <span class="dc-chip won"  :class="{on: filterStatus==='成案'}"   @click="filterStatus='成案';loadCases()">成案</span>
-          <span class="dc-chip lost" :class="{on: filterStatus==='未成案'}" @click="filterStatus='未成案';loadCases()">未成案</span>
+          <span class="dc-chip talk" :class="{on: filterStatus==='洽談中'}" @click="filterStatus='洽談中'">洽談中</span>
+          <span class="dc-chip won"  :class="{on: filterStatus==='成案'}"   @click="filterStatus='成案'">成案</span>
+          <span class="dc-chip lost" :class="{on: filterStatus==='未成案'}" @click="filterStatus='未成案'">未成案</span>
         </div>
+        <div style="display:flex;gap:5px;margin-top:8px">
+          <select class="dc-select" style="flex:1;font-size:11px;padding:5px 6px" x-model="filterYear">
+            <option value="">年份</option>
+            <template x-for="y in yearOptions" :key="y"><option :value="y" x-text="y + '年'"></option></template>
+          </select>
+          <select class="dc-select" style="flex:1;font-size:11px;padding:5px 6px" x-model="filterMonth">
+            <option value="">月份</option>
+            <template x-for="m in 12" :key="m">
+              <option :value="String(m).padStart(2,'0')" x-text="m + '月'"></option>
+            </template>
+          </select>
+          <button class="btn btn-ghost btn-sm" x-show="filterYear || filterMonth" @click="filterYear='';filterMonth=''">清除</button>
+        </div>
+      </div>
+
+      <!-- 洽談中逾期警示 -->
+      <div class="dc-stale-bar" x-show="staleCount > 0" @click="staleOnly = !staleOnly">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><path d="M12 9v4M12 17h.01"/></svg>
+        <span x-text="staleCount + ' 筆案件洽談中超過30天未更新'"></span>
+        <span style="margin-left:auto;text-decoration:underline" x-text="staleOnly ? '顯示全部 →' : '只看逾期 →'"></span>
       </div>
 
       <!-- admin 待審提示 -->
@@ -371,14 +400,18 @@
 
       <div class="dc-list__body">
         <div x-show="casesLoading" style="text-align:center;padding:30px;font-size:12px;color:var(--text-dim)">載入中…</div>
-        <div x-show="!casesLoading && cases.length === 0"
+        <div x-show="!casesLoading && filteredCases.length === 0"
              style="text-align:center;padding:30px;font-size:12px;color:var(--text-dim)">無符合案件</div>
 
-        <template x-for="c in cases" :key="c.id">
+        <template x-for="c in filteredCases" :key="c.id">
           <div class="dc-case-card" :class="{selected: selectedCase && selectedCase.id === c.id}"
-               :style="isAdmin && _prevSeen && c.updatedAt > _prevSeen ? 'border-left:3px solid #D97706;background:#FFFBEB' : ''"
+               :style="isStale(c) ? 'border-left:3px solid #DC2626;background:#FEF2F2' : (isAdmin && _prevSeen && c.updatedAt > _prevSeen ? 'border-left:3px solid #D97706;background:#FFFBEB' : '')"
                @click="selectCase(c)">
-            <template x-if="isAdmin && _prevSeen && c.updatedAt > _prevSeen">
+            <template x-if="isStale(c)">
+              <span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;background:#FEE2E2;color:#991B1B;border:1px solid #FCA5A5;display:inline-block;margin-bottom:3px;margin-right:4px"
+                    x-text="'⚠ 超過' + staleDays(c) + '天未更新'"></span>
+            </template>
+            <template x-if="!isStale(c) && isAdmin && _prevSeen && c.updatedAt > _prevSeen">
               <span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;background:#FEF3C7;color:#92400E;border:1px solid #FDE68A;display:inline-block;margin-bottom:3px">有更新</span>
             </template>
             <div class="dc-case-card__name" x-text="c.caseName"></div>
@@ -825,6 +858,9 @@ function devCrmPage() {
     casesLoading: false,
     searchQ: '',
     filterStatus: '',
+    filterYear: '',
+    filterMonth: '',
+    staleOnly: false,
 
     selectedCase: null,
 
@@ -861,6 +897,44 @@ function devCrmPage() {
       return { 'Authorization': 'Bearer ' + this.token, 'Content-Type': 'application/json' }
     },
 
+    get yearOptions() {
+      return [...new Set(this.cases.map(c => (c.createdAt || '').slice(0, 4)).filter(Boolean))].sort().reverse()
+    },
+
+    get filteredCases() {
+      return this.cases.filter(c => {
+        const matchStatus = this.filterStatus ? c.status === this.filterStatus : c.status !== '未成案'
+        const matchYear   = !this.filterYear  || (c.createdAt || '').slice(0, 4) === this.filterYear
+        const matchMonth  = !this.filterMonth || (c.createdAt || '').slice(5, 7) === this.filterMonth
+        const matchStale  = !this.staleOnly   || this.isStale(c)
+        return matchStatus && matchYear && matchMonth && matchStale
+      })
+    },
+
+    get staleCount() {
+      return this.cases.filter(c => this.isStale(c)).length
+    },
+
+    caseCount(status) {
+      if (!status) return this.cases.filter(c => c.status !== '未成案').length
+      return this.cases.filter(c => c.status === status).length
+    },
+
+    isStale(c) {
+      return c.status === '洽談中' && this._daysSince(c.updatedAt) > 30
+    },
+
+    staleDays(c) {
+      return this._daysSince(c.updatedAt)
+    },
+
+    _daysSince(ts) {
+      if (!ts) return 0
+      const d = new Date(ts.replace(' ', 'T'))
+      if (isNaN(d)) return 0
+      return Math.floor((Date.now() - d.getTime()) / 86400000)
+    },
+
     async init() {
       const raw = localStorage.getItem('motrix_session')
       if (!raw) { location.href = 'login.html'; return }
@@ -884,7 +958,6 @@ function devCrmPage() {
       this.casesLoading = true
       try {
         const p = new URLSearchParams()
-        if (this.filterStatus) p.set('status', this.filterStatus)
         if (this.searchQ.trim()) p.set('q', this.searchQ.trim())
         const r = await fetch('/api/dev-cases?' + p, { headers: this._h() })
         if (r.ok) this.cases = await r.json()

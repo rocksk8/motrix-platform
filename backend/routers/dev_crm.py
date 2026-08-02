@@ -1,6 +1,7 @@
 """業務開發 CRM — 前期案件追蹤 + 開發記錄 (pre-quotation)."""
 import json
-from datetime import datetime
+import logging
+from datetime import datetime, timedelta
 from typing import Optional, List
 
 from fastapi import APIRouter, HTTPException, Header
@@ -8,9 +9,13 @@ from pydantic import BaseModel
 
 from db import get_db, spawn_bg_thread
 import threading
-from helpers import _require_user, _tok, _audit, notify_module_activity, notify_dev_case_delete_request
+from helpers import (
+    _require_user, _tok, _audit, notify_module_activity, notify_dev_case_delete_request,
+    _notify, _get_setting, _set_setting, notify_dev_case_stale,
+)
 
 router = APIRouter()
+_logger = logging.getLogger(__name__)
 
 _STATUS_OPTIONS = ["洽談中", "成案", "未成案"]
 _TW_NOW = lambda: datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -666,3 +671,95 @@ def approve_dev_log(log_id: int, authorization: str = Header("")):
         return _log_row(updated, _user_map(conn))
     finally:
         conn.close()
+
+
+# ── Stale-case notification scheduler (洽談中 > 30 days untouched) ────────────
+
+_STALE_DAYS = 30
+_STALE_RENOTIFY_INTERVAL = 14
+
+
+def _check_dev_case_stale() -> None:
+    """洽談中案件超過 30 天未更新 → 通知業務/規劃人員 + 所有 admin/superadmin，
+    之後每 14 天重複提醒直到案件狀態改變或有新開發記錄（重置 updated_at）。"""
+    now = datetime.now()
+    today_str = now.strftime("%Y-%m-%d")
+    try:
+        conn = get_db()
+        users = conn.execute(
+            "SELECT id, username, role FROM users WHERE active=1"
+        ).fetchall()
+        uid_map = {u["id"]: u["username"] for u in users}
+        admin_usernames = [u["username"] for u in users if u["role"] in ("admin", "superadmin")]
+        rows = conn.execute(
+            "SELECT id, case_name, customer_name, sales_persons, planners, created_by, updated_at "
+            "FROM dev_cases WHERE is_deleted=0 AND status='洽談中'"
+        ).fetchall()
+        conn.close()
+
+        for row in rows:
+            try:
+                updated = datetime.strptime(row["updated_at"], "%Y-%m-%d %H:%M:%S")
+            except (ValueError, TypeError):
+                continue
+            days = (now - updated).days
+            if days < _STALE_DAYS:
+                continue
+            bucket = (days - _STALE_DAYS) // _STALE_RENOTIFY_INTERVAL
+            # updated_at 併入 guard key，讓案件重新更新後再次逾期時，
+            # 能取得全新的 key 空間，不會因 bucket 數字重複而永久漏發通知
+            guard_key = f"devcase_stale.{row['id']}.{row['updated_at']}.{bucket}"
+            if _get_setting(guard_key):
+                continue
+            _set_setting(guard_key, today_str)
+
+            try:
+                sp = json.loads(row["sales_persons"] or "[]")
+            except Exception:
+                sp = []
+            try:
+                pl = json.loads(row["planners"] or "[]")
+            except Exception:
+                pl = []
+            usernames = [uid_map[uid] for uid in (sp + pl) if uid in uid_map]
+            if not usernames and row["created_by"] in uid_map:
+                usernames = [uid_map[row["created_by"]]]
+            all_usernames = list(dict.fromkeys(usernames + admin_usernames))
+
+            for username in all_usernames:
+                _notify(username, "dev_case_stale", str(row["id"]), row["case_name"],
+                        f"案件「{row['case_name']}」洽談中已 {days} 天未更新，請確認跟進進度")
+
+            threading.Thread(
+                target=notify_dev_case_stale,
+                args=(row["id"], row["case_name"], row["customer_name"] or "", days, all_usernames),
+                daemon=True,
+            ).start()
+        _logger.info("Dev case stale check complete for %s", today_str)
+    except Exception as exc:
+        _logger.warning("_check_dev_case_stale failed: %s", exc)
+
+
+def schedule_dev_case_stale_check() -> None:
+    """啟動時呼叫一次。啟動立即補跑一次，之後每天 08:00 重跑，
+    比照 daily_tasks.schedule_overdue_check() 的排程寫法。
+    排程觸發、不掛在任何 request 上的背景工作，依 §3.5 例外規則直接用
+    threading.Thread／get_db()，不使用 spawn_bg_thread()。"""
+
+    def _next_08() -> float:
+        cur = datetime.now()
+        t08 = cur.replace(hour=8, minute=0, second=0, microsecond=0)
+        if t08 <= cur:
+            t08 += timedelta(days=1)
+        return (t08 - cur).total_seconds()
+
+    def _loop():
+        _check_dev_case_stale()
+        t = threading.Timer(_next_08(), _loop)
+        t.daemon = True
+        t.start()
+
+    threading.Thread(target=_check_dev_case_stale, daemon=True).start()  # startup catch-up
+    t = threading.Timer(_next_08(), _loop)
+    t.daemon = True
+    t.start()

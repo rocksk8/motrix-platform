@@ -209,6 +209,7 @@ _schedule_weekly()
 auth.init_rate_limiting()
 daily_tasks.schedule_overdue_check()
 reports.schedule_monthly_report()
+dev_crm.schedule_dev_case_stale_check()
 _sync_module_versions()
 
 

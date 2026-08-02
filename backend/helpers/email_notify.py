@@ -506,6 +506,25 @@ def notify_project_deadline(
     _async_send(to, f"【MOTRIX】專案到期提醒 — {project_name}（{project_code}）", html)
 
 
+def notify_dev_case_stale(case_id: int, case_name: str, customer_name: str,
+                           days_since_update: int, usernames: list) -> None:
+    """業務開發案件洽談中超過 30 天未更新 → 通知業務開發/專案規劃人員 + admin/superadmin"""
+    to = _lookup_emails(usernames)
+    if not to:
+        logger.warning("notify_dev_case_stale: 無有效收件人（case_id=%d）", case_id)
+        return
+    crm_page = f"{_base_url()}/pages/dev-crm.html"
+    html = _build_html(
+        "業務開發案件逾期未跟進", f"{days_since_update} 天未更新", "#DC2626",
+        [("案件名稱", case_name), ("客戶", customer_name or "（未指定）"),
+         ("狀態", "洽談中"), ("未更新天數", f"{days_since_update} 天")],
+        "", crm_page,
+        intro=f"案件「{case_name}」仍在洽談中，已 {days_since_update} 天未新增開發記錄或更新狀態，請確認後續跟進進度。",
+        button_text="前往業務開發",
+    )
+    _async_send(to, f"【MOTRIX】業務開發案件逾期提醒 — {case_name}", html)
+
+
 def notify_daily_task_edited(
     task_id: int,
     title: str,

@@ -1,7 +1,7 @@
 # MOTRIX ERP — 開發快速參考
 
 > 允碩整合集創（統編 60575481）｜ Tel: 04-3602-2818 ｜ info@miactw.com  
-> 文件版本：**2026-08-02d**（承攬商管理新增銀行帳戶欄位與存簿影本上傳，見 §12）
+> 文件版本：**2026-08-03a**（業務開發 CRM 新增年月篩選／全部排除未成案／洽談中逾期警示，見 §12）
 
 ---
 
@@ -580,7 +580,7 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
 
 | Method | Path | 說明 |
 |--------|------|------|
-| GET | /dev-cases | 案件列表（`?q=` 搜尋、`?status=` 篩選；需 dev_crm 模組或 admin+；**非 admin 僅回傳自己建立或指派的案件**） |
+| GET | /dev-cases | 案件列表（`?q=` 搜尋、`?status=` 篩選；需 dev_crm 模組或 admin+；**非 admin 僅回傳自己建立或指派的案件**）**2026-08-03a**：`?status=` 伺服器端參數仍保留相容，但前端 `dev-crm.html` 已改為抓全量後完全前端篩選（狀態／年／月／逾期），不再送 `status` |
 | POST | /dev-cases | 新建案件 |
 | GET/PUT/DELETE | /dev-cases/{id} | 單筆操作（DELETE admin+） |
 | PATCH | /dev-cases/{id}/status | 變更狀態（洽談中/成案/未成案） |
@@ -754,6 +754,15 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 ## §12 · 變更摘要（最新兩版）
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
+
+### 2026-08-03a — 業務開發 CRM：年月篩選／全部排除未成案／洽談中逾期警示
+
+- **背景**：使用者要求三項 dev-crm.html 強化：① 案件列表年份/月份快速篩選 ② 洽談中案件超過30天未更新給予顏色警示＋通知 ③「全部」tab 排除未成案案件（比照 `quotations.html` `全部(不含未成案)` 的既有作法，2026-07-20j）
+- **前端**（`dev-crm.html`）：`filterStatus`/`status=` 的伺服器端篩選改為完全前端化（比照 `quotations.html` 的 `get filtered()` 架構）——`loadCases()` 只送 `q`，新增 `get filteredCases()` 一次套用狀態（全部排除未成案）/年/月/`staleOnly` 四個條件；chip 點擊不再觸發 `loadCases()` 重新整理。新增年/月下拉（依 `createdAt` 動態產生年份選項）、`isStale()`/`staleDays()`/`_daysSince()` 判斷洽談中且 `updatedAt` 逾30天，卡片改紅色警示樣式＋「⚠ 超過N天未更新」徽章（優先權高於既有「有更新」琥珀色標籤），並新增比照 `.dc-admin-bar` 的逾期彙總列 `.dc-stale-bar`（不限 admin 可見，點擊切換只看逾期）
+- **後端**（`dev_crm.py`）：新增 `_check_dev_case_stale()`/`schedule_dev_case_stale_check()`（比照 `daily_tasks.py` 既有到期通知 pattern，08:00 排程＋啟動立即補跑），通知對象為案件業務開發＋專案規劃人員（無指派則退回建立人）＋所有 admin/superadmin，站內通知（`_notify`）＋email（`notify_dev_case_stale`，`helpers/email_notify.py` 新增）雙軌；30天後每14天重複提醒一次；guard key 額外納入 `updated_at`，避免案件被重新更新後再次逾期時，因 bucket 數字重算重複而永久漏發通知
+- `main.py` 新增 `dev_crm.schedule_dev_case_stale_check()` 呼叫；`helpers/__init__.py` 補上 `notify_dev_case_stale` 的 `__all__` 項目
+- 無 DB migration（30天判斷純算 `dev_cases.updated_at`；通知防重發guard key 沿用既有 `system_settings` key-value 儲存，同 `daily_tasks.py` 的 `_get_setting`/`_set_setting` 慣例）
+- 已實機驗證（demo 帳號建立測試案件，直接改 `motrix_erp_demo.db` 的 `updated_at` 回溯35天）：年/月篩選正確排除不符月份案件、逾期彙總列與紅色卡片徽章正確顯示且「只看逾期」可切換、「全部」設為未成案後正確從計數與清單排除、後端啟動 log 確認 `Dev case stale check complete` 無錯誤
 
 ### 2026-08-02d — 承攬商管理新增銀行帳戶欄位與存簿影本上傳
 
