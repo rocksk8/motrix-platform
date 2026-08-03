@@ -700,14 +700,36 @@
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
             <div class="dc-form-group">
               <label>客戶名稱</label>
-              <input class="dc-input" type="text" x-model="caseForm.customer_name"
-                placeholder="自由輸入或選擇" list="dc-customer-list">
-              <datalist id="dc-customer-list">
-                <template x-for="c in customers" :key="c.id">
-                  <option :value="c.name"></option>
+              <div style="position:relative">
+                <input class="dc-input" type="text" x-model="caseForm.customer_name"
+                  placeholder="輸入或搜尋客戶…" autocomplete="off"
+                  @input="onCaseCustomerInput(); if(!caseForm.customer_name){caseForm.customer_id=null; caseCustomerHistory=[]}"
+                  @focus="if(!caseForm.customer_name) showAllCaseCustomers()"
+                  @keydown.escape="showCustomerDrop=false"
+                  @keydown.arrow-down.prevent="customerDropIdx=Math.min(customerDropIdx+1,customerSuggestions.length-1)"
+                  @keydown.arrow-up.prevent="customerDropIdx=Math.max(customerDropIdx-1,0)"
+                  @keydown.enter.prevent="customerSuggestions[customerDropIdx]&&selectCaseCustomer(customerSuggestions[customerDropIdx])">
+                <div x-show="showCustomerDrop && customerSuggestions.length" @click.outside="showCustomerDrop=false"
+                  style="position:absolute;z-index:200;left:0;right:0;top:calc(100% + 2px);background:#fff;border:1.5px solid #E5E7EB;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.10);max-height:200px;overflow-y:auto">
+                  <template x-for="(c,i) in customerSuggestions" :key="c.id">
+                    <div @click="selectCaseCustomer(c)" @mouseenter="customerDropIdx=i"
+                      :style="i===customerDropIdx?'background:#EFF6FF':''"
+                      style="padding:7px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid #F3F4F6"
+                      x-text="c.name"></div>
+                  </template>
+                </div>
+              </div>
+              <div class="hint" x-show="caseForm.customer_id" style="color:#16a34a">✓ 已連結客戶管理名單</div>
+              <div class="hint" x-show="!caseForm.customer_id && caseForm.customer_name">未連結客戶管理，儲存時將以名稱比對</div>
+              <div x-show="caseCustomerHistory.length" style="margin-top:6px;padding:8px 10px;background:#F9FAFB;border-radius:6px">
+                <div class="hint" style="font-weight:600;margin-bottom:4px">此客戶過去案件</div>
+                <template x-for="hc in caseCustomerHistory" :key="hc.id">
+                  <div style="display:flex;justify-content:space-between;gap:8px;padding:2px 0;font-size:12px;color:var(--text-primary)">
+                    <span x-text="hc.caseName" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+                    <span x-text="hc.status" style="flex-shrink:0;color:var(--text-dim)"></span>
+                  </div>
                 </template>
-              </datalist>
-              <div class="hint">與客戶管理名單比對後自動連結</div>
+              </div>
             </div>
             <div class="dc-form-group">
               <label>案件狀態</label>
@@ -883,6 +905,7 @@ function devCrmPage() {
 
     cases: [],
     casesLoading: false,
+    _loadSeq: 0,
     searchQ: '',
     filterStatus: '',
     filterYear: '',
@@ -908,6 +931,10 @@ function devCrmPage() {
     caseForm: { case_name: '', customer_name: '', customer_id: null, status: '洽談中', sales_persons: [], planners: [] },
     caseSaving: false,
     caseError: '',
+    customerSuggestions: [],
+    customerDropIdx: 0,
+    showCustomerDrop: false,
+    caseCustomerHistory: [],
 
     showConvertModal: false,
     convertQuoteNo: '',
@@ -1007,14 +1034,18 @@ function devCrmPage() {
     },
 
     async loadCases() {
+      const seq = ++this._loadSeq
       this.casesLoading = true
       try {
         const p = new URLSearchParams()
         if (this.searchQ.trim()) p.set('q', this.searchQ.trim())
         const r = await fetch('/api/dev-cases?' + p, { headers: this._h() })
-        if (r.ok) this.cases = await r.json()
+        if (r.ok) {
+          const data = await r.json()
+          if (seq === this._loadSeq) this.cases = data
+        }
       } finally {
-        this.casesLoading = false
+        if (seq === this._loadSeq) this.casesLoading = false
       }
     },
 
@@ -1070,6 +1101,9 @@ function devCrmPage() {
       this.editingCaseId = null
       this.caseForm = { case_name: '', customer_name: '', customer_id: null, status: '洽談中', sales_persons: [], planners: [] }
       this.caseError = ''
+      this.customerSuggestions = []
+      this.showCustomerDrop = false
+      this.caseCustomerHistory = []
       this.showCaseModal = true
     },
 
@@ -1084,6 +1118,9 @@ function devCrmPage() {
         planners: [...(c.plannerIds || [])],
       }
       this.caseError = ''
+      this.customerSuggestions = []
+      this.showCustomerDrop = false
+      this.caseCustomerHistory = c.customerId ? this._caseHistoryFor(c.customerId, c.id) : []
       this.showCaseModal = true
     },
 
@@ -1094,12 +1131,42 @@ function devCrmPage() {
       else arr.push(uid)
     },
 
+    _caseHistoryFor(customerId, excludeCaseId) {
+      return this.cases
+        .filter(c => c.customerId === customerId && c.id !== excludeCaseId)
+        .sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''))
+        .slice(0, 8)
+    },
+
+    onCaseCustomerInput() {
+      const kw = (this.caseForm.customer_name || '').trim().toLowerCase()
+      if (!kw) { this.showAllCaseCustomers(); return }
+      this.customerSuggestions = this.customers
+        .filter(c => c.name && c.name.toLowerCase().includes(kw)).slice(0, 20)
+      this.customerDropIdx = 0
+      this.showCustomerDrop = this.customerSuggestions.length > 0
+    },
+
+    showAllCaseCustomers() {
+      if (!this.customers.length) { this.showCustomerDrop = false; return }
+      this.customerSuggestions = this.customers.slice(0, 25)
+      this.customerDropIdx = 0
+      this.showCustomerDrop = true
+    },
+
+    selectCaseCustomer(c) {
+      this.caseForm.customer_name = c.name
+      this.caseForm.customer_id = c.id
+      this.showCustomerDrop = false
+      this.caseCustomerHistory = this._caseHistoryFor(c.id, this.editingCaseId)
+    },
+
     async saveCase() {
       if (!this.caseForm.case_name.trim()) { this.caseError = '請填寫案件名稱'; return }
       this.caseSaving = true; this.caseError = ''
       try {
         const matched = this.customers.find(c => c.name === this.caseForm.customer_name.trim())
-        const body = { ...this.caseForm, customer_id: matched ? matched.id : null }
+        const body = { ...this.caseForm, customer_id: this.caseForm.customer_id ?? (matched ? matched.id : null) }
         const url = this.editingCaseId ? '/api/dev-cases/' + this.editingCaseId : '/api/dev-cases'
         const r = await fetch(url, {
           method: this.editingCaseId ? 'PUT' : 'POST',

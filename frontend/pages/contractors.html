@@ -273,7 +273,7 @@
                  x-text="d.quoteNo"></a>
               <span class="badge" :class="'badge--' + _dStatusClass(d.status)" x-text="d.statusLabel"></span>
             </div>
-            <div style="color:var(--text-secondary)" x-text="d.vendorName ? '承攬商：' + d.vendorName : '（無承攬商，純點工）'"></div>
+            <div style="color:var(--text-secondary)" x-text="d.vendorName ? '承攬商：' + d.vendorName : '（無承攬商，個人名義案件承攬）'"></div>
             <div style="font-family:LINE Seed TW_OTF, sans-serif;font-weight:600;margin-top:3px;font-size:12px"
                  x-text="'本人金額 NT$ ' + _myDispatchAmount(d).toLocaleString()"></div>
           </div>

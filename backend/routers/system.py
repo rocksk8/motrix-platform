@@ -10,7 +10,10 @@ from fastapi import APIRouter, HTTPException, Header, Body
 from pydantic import BaseModel
 
 from db import get_db, CURRENT_VERSION, _MIGRATIONS
-from helpers import _require_user, _tok, _audit, _get_setting, _set_setting, _get_edge_path
+from helpers import (
+    _require_user, _tok, _audit, _get_setting, _set_setting, _get_edge_path,
+    _filter_live_notifications, notify_module_activity,
+)
 from helpers.quotations import _steps_to_tiers
 
 router = APIRouter()
@@ -108,6 +111,7 @@ def get_my_notifications(authorization: str = Header(None)):
         "FROM notifications WHERE username=? ORDER BY created_at DESC LIMIT 50",
         (user["username"],)
     ).fetchall()
+    rows = _filter_live_notifications(conn, rows)
     conn.close()
     items = [dict(r) for r in rows]
     unread = sum(1 for i in items if not i["is_read"])
@@ -287,6 +291,8 @@ def create_work_log(body: dict = Body(...), authorization: str = Header(None)):
     conn.commit()
     new_id = cur.lastrowid
     conn.close()
+    notify_module_activity("工作日誌", "建立", u.get("display_name") or u["username"],
+                            f"{log_date} {content[:30]}", "work-log.html")
     return {"id": new_id, "ok": True}
 
 
@@ -330,6 +336,8 @@ def delete_work_log(wid: int, authorization: str = Header(None)):
     conn.execute("DELETE FROM work_logs WHERE id=?", (wid,))
     conn.commit()
     conn.close()
+    notify_module_activity("工作日誌", "刪除", u.get("display_name") or u["username"],
+                            str(wid), "work-log.html")
     return {"ok": True}
 
 
@@ -399,13 +407,15 @@ def get_edge_path_setting(authorization: str = Header(None)):
 
 @router.patch("/api/settings/edge-path")
 def set_edge_path_setting(body: dict = Body(...), authorization: str = Header(None)):
-    _require_user(authorization, require_superadmin=True)
+    actor = _require_user(authorization, require_superadmin=True)
     path = (body.get("path") or "").strip()
     if path and not os.path.exists(path):
         raise HTTPException(400, f"路徑不存在：{path}")
     _set_setting("edge_path", path)
     _audit(_tok(authorization), "settings.edge_path.update", "settings", "edge_path",
            path or "（清空，使用自動偵測）")
+    notify_module_activity("系統設定", "變更 Edge 路徑", actor.get("display_name") or actor["username"],
+                            path or "（清空，使用自動偵測）", "notification-settings.html")
     return {"ok": True}
 
 
@@ -421,13 +431,15 @@ def get_pdf_base_path_setting(authorization: str = Header(None)):
 
 @router.patch("/api/settings/pdf-base-path")
 def set_pdf_base_path_setting(body: dict = Body(...), authorization: str = Header(None)):
-    _require_user(authorization, require_superadmin=True)
+    actor = _require_user(authorization, require_superadmin=True)
     path = (body.get("path") or "").strip()
     if path and not os.path.isdir(path):
         raise HTTPException(400, f"目錄不存在：{path}")
     _set_setting("pdf_base_path", path)
     _audit(_tok(authorization), "settings.pdf_base_path.update", "settings", "pdf_base_path",
            path or "（清空，使用預設路徑）")
+    notify_module_activity("系統設定", "變更 PDF 存檔路徑", actor.get("display_name") or actor["username"],
+                            path or "（清空，使用預設路徑）", "notification-settings.html")
     return {"ok": True}
 
 
@@ -509,7 +521,7 @@ def get_custom_roles(authorization: str = Header(None)):
 
 @router.post("/api/settings/custom-roles", status_code=201)
 def create_custom_role(body: dict = Body(...), authorization: str = Header(None)):
-    _require_user(authorization, require_superadmin=True)
+    actor = _require_user(authorization, require_superadmin=True)
     name = (body.get("name") or "").strip()
     if not name:
         raise HTTPException(400, "角色名稱不得為空")
@@ -528,6 +540,8 @@ def create_custom_role(body: dict = Body(...), authorization: str = Header(None)
     roles.append(new_role)
     _set_setting("custom_roles", roles)
     _audit(_tok(authorization), "settings.custom_role.create", "settings", new_role["id"], name)
+    notify_module_activity("系統設定", "建立自訂角色", actor.get("display_name") or actor["username"],
+                            name, "users.html")
     return new_role
 
 
@@ -556,13 +570,15 @@ def update_custom_role(rid: str, body: dict = Body(...), authorization: str = He
 
 @router.delete("/api/settings/custom-roles/{rid}", status_code=204)
 def delete_custom_role(rid: str, authorization: str = Header(None)):
-    _require_user(authorization, require_superadmin=True)
+    actor = _require_user(authorization, require_superadmin=True)
     roles = _get_setting("custom_roles", []) or []
     new_roles = [r for r in roles if r["id"] != rid]
     if len(new_roles) == len(roles):
         raise HTTPException(404, "找不到此自訂角色")
     _set_setting("custom_roles", new_roles)
     _audit(_tok(authorization), "settings.custom_role.delete", "settings", rid, rid)
+    notify_module_activity("系統設定", "刪除自訂角色", actor.get("display_name") or actor["username"],
+                            rid, "users.html")
 
 
 # ── Role Labels ────────────────────────────────────────────────────────────────

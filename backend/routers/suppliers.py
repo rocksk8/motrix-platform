@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Header
 from pydantic import BaseModel
 
 from db import get_db, next_entity_code, spawn_bg_thread
-from helpers import _require_user, _tok, _audit
+from helpers import _require_user, _tok, _audit, notify_module_activity
 from archive import _backup_suppliers
 
 router = APIRouter()
@@ -46,7 +46,7 @@ def list_suppliers(authorization: str = Header(None)):
 
 @router.post("/api/suppliers")
 def create_supplier(body: SupplierIn, authorization: str = Header(None)):
-    _require_user(authorization)
+    user = _require_user(authorization)
     now = datetime.now().isoformat()
     conn = get_db()
     try:
@@ -66,6 +66,8 @@ def create_supplier(body: SupplierIn, authorization: str = Header(None)):
     conn.close()
     spawn_bg_thread(_backup_suppliers)
     _audit(_tok(authorization), 'supplier.create', 'supplier', body.name, body.name)
+    notify_module_activity("供應商管理", "建立", user.get("display_name") or user["username"],
+                            body.name, "suppliers.html")
     return {"id": sid, "name": body.name, "code": code}
 
 
@@ -91,7 +93,7 @@ def update_supplier(sid: int, body: SupplierIn, authorization: str = Header(None
 
 @router.delete("/api/suppliers/{sid}")
 def delete_supplier(sid: int, authorization: str = Header(None)):
-    _require_user(authorization)
+    user = _require_user(authorization)
     conn = get_db()
     row = conn.execute("SELECT name FROM suppliers WHERE id=?", (sid,)).fetchone()
     if not row:
@@ -103,12 +105,14 @@ def delete_supplier(sid: int, authorization: str = Header(None)):
     conn.close()
     spawn_bg_thread(_backup_suppliers)
     _audit(_tok(authorization), 'supplier.delete', 'supplier', str(sid), sname)
+    notify_module_activity("供應商管理", "刪除", user.get("display_name") or user["username"],
+                            sname, "suppliers.html")
     return {"ok": True}
 
 
 @router.patch("/api/suppliers/{sid}/visits")
 def update_supplier_visits(sid: int, body: dict, authorization: str = Header(None)):
-    _require_user(authorization)
+    user = _require_user(authorization)
     conn = get_db()
     row = conn.execute(
         "SELECT name, data_json, updated_at FROM suppliers WHERE id=?", (sid,)
@@ -134,4 +138,6 @@ def update_supplier_visits(sid: int, body: dict, authorization: str = Header(Non
     spawn_bg_thread(_backup_suppliers)
     _audit(_tok(authorization), 'supplier.visit.update', 'supplier', str(sid),
            f"{sname}（{visit_count} 筆往來紀錄）")
+    notify_module_activity("供應商管理", "新增往來紀錄", user.get("display_name") or user["username"],
+                            sname, "suppliers.html")
     return {"ok": True, "count": visit_count, "updated_at": now}

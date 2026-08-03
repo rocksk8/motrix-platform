@@ -230,6 +230,78 @@ def notify_returned(quote_no: str, new_quote_no: str, customer: str,
     _async_send(to, f"【MOTRIX】報價單退回修改 — {quote_no}（{customer}）", html)
 
 
+def notify_shipping_submitted(note_no: str, customer: str, approver_usernames: list) -> None:
+    """出貨單送審 → 通知當層簽核人"""
+    to = _lookup_emails(approver_usernames)
+    if not to:
+        logger.warning("notify_shipping_submitted: 簽核人 %s 皆無設定 email（note_no=%r）", approver_usernames, note_no)
+        return
+    page = f"{_base_url()}/pages/shipping-notes.html?no={note_no}"
+    html = _build_html(
+        "出貨單簽核申請", "待您審核", "#2F6FD6",
+        [("出貨單號", note_no), ("客戶名稱", customer)],
+        "", page,
+        intro="您好，以下出貨單已進入簽核流程，敬請於系統中完成審核作業。",
+        button_text="前往審核出貨單",
+    )
+    _async_send(to, f"【MOTRIX】出貨單待審核 — {note_no}（{customer}）", html)
+
+
+def notify_shipping_next_tier(note_no: str, customer: str, tier_no: int,
+                              total_tiers: int, approver_usernames: list) -> None:
+    """前層通過，出貨單下一層簽核通知"""
+    to = _lookup_emails(approver_usernames)
+    if not to:
+        logger.warning("notify_shipping_next_tier: 第 %d 層簽核人 %s 皆無設定 email（note_no=%r）",
+                       tier_no, approver_usernames, note_no)
+        return
+    page = f"{_base_url()}/pages/shipping-notes.html?no={note_no}"
+    html = _build_html(
+        "出貨單簽核流程通知", "輪到您審核", "#2F6FD6",
+        [("出貨單號", note_no), ("客戶名稱", customer),
+         ("目前進度", f"第 {tier_no} 層審核（共 {total_tiers} 層）")],
+        "", page,
+        intro=f"您好，前層審核已完成，出貨單現已進入第 {tier_no} 層審核階段，敬請登入系統完成審核。",
+        button_text="前往審核出貨單",
+    )
+    _async_send(to, f"【MOTRIX】出貨單審核通知（第 {tier_no}/{total_tiers} 層）— {note_no}（{customer}）", html)
+
+
+def notify_shipping_approved(note_no: str, customer: str, approved_by: str, requester_username: str) -> None:
+    """出貨單全員簽核完成 → 通知申請人"""
+    to = _lookup_emails([requester_username])
+    if not to:
+        logger.warning("notify_shipping_approved: 申請人 %r 無設定 email（note_no=%r）", requester_username, note_no)
+        return
+    page = f"{_base_url()}/pages/shipping-notes.html?no={note_no}"
+    html = _build_html(
+        "出貨單審核完成", "已核准", "#16A34A",
+        [("出貨單號", note_no), ("客戶名稱", customer), ("核准人", approved_by)],
+        "", page,
+        intro="您好，以下出貨單已完成審核並核准。",
+        button_text="前往查看出貨單",
+    )
+    _async_send(to, f"【MOTRIX】出貨單已核准 — {note_no}（{customer}）", html)
+
+
+def notify_shipping_returned(note_no: str, customer: str, note: str, requester_username: str) -> None:
+    """出貨單退回 → 通知申請人"""
+    to = _lookup_emails([requester_username])
+    if not to:
+        logger.warning("notify_shipping_returned: 申請人 %r 無設定 email（note_no=%r）", requester_username, note_no)
+        return
+    page = f"{_base_url()}/pages/shipping-notes.html?no={note_no}"
+    html = _build_html(
+        "出貨單退回通知", "請修改後重新送審", "#DC2626",
+        [("出貨單號", note_no), ("客戶名稱", customer)],
+        "", page,
+        intro="您好，您送出的出貨單經審核後，因需要調整已退回，請參閱下方備註後完成修改並重新送審。",
+        note=note,
+        button_text="前往修改出貨單",
+    )
+    _async_send(to, f"【MOTRIX】出貨單已退回 — {note_no}（{customer}）", html)
+
+
 def notify_resubmit_requester(new_quote_no: str, original_quote_no: str,
                               customer: str, requester_username: str,
                               approver_names: list) -> None:

@@ -16,10 +16,11 @@ from pydantic import BaseModel
 
 from db import get_db, spawn_bg_thread
 from helpers import (
-    _require_user, _tok, _audit, _notify, _get_setting,
+    _require_user, _tok, _audit, _notify, _get_setting, _purge_notifications,
     quote_hot_fields, save_quotation_json, _steps_to_tiers, SQL_DEAL_TAG, SQL_SETTLE_STATUS,
     notify_approval_request, notify_next_tier, notify_approved,
     notify_returned, notify_resubmit_requester, notify_settlement_finalized,
+    notify_module_activity,
 )
 from archive import _backup_quotation
 from pdf_gen import _generate_quotation_pdf, generate_pdf_bytes
@@ -364,6 +365,8 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
     conn.close()
     spawn_bg_thread(_backup_quotation, args=(qno,))
     _audit(_tok(authorization), 'quotation.create', 'quotation', qno, f"{qno}（{q.get('customerName','')}）")
+    notify_module_activity("報價單", "建立", body.created_by or "",
+                            f"{qno}（{q.get('customerName','')}）", "quotations.html")
     return {"quote_no": qno, "created_at": now}
 
 
@@ -583,6 +586,8 @@ def update_status(quote_no: str, body: QuotationStatusUpdate, authorization: str
     action_map = {'待審核': 'quotation.submit', '已送出': 'quotation.approve'}
     action = action_map.get(body.status, 'quotation.status_change')
     _audit(_tok(authorization), action, 'quotation', quote_no, f"{quote_no}（{cname}）", {'status': body.status})
+    notify_module_activity("報價單", f"狀態變更為「{body.status}」", user.get("display_name") or user["username"],
+                            f"{quote_no}（{cname}）", "quotations.html")
     if body.status == '已送出':
         try:
             actor_u = _require_user(authorization)
@@ -626,6 +631,8 @@ def recall_quotation(quote_no: str, authorization: str = Header(None)):
     conn.close()
     _audit(_tok(authorization), "quotation.recall", "quotation", quote_no,
            f"{quote_no}（{cname}）已由申請人收回草稿")
+    notify_module_activity("報價單", "收回草稿", user.get("display_name") or user["username"],
+                            f"{quote_no}（{cname}）", "quotations.html")
     return {"quote_no": quote_no, "status": "草稿"}
 
 
@@ -661,6 +668,8 @@ def update_deal_tag(quote_no: str, body: QuotationDealTagUpdate, authorization: 
     conn.close()
     _audit(_tok(authorization), 'deal_tag.change', 'quotation', quote_no,
            f"{quote_no}（{cname}）", {'from': old_tag, 'to': body.deal_tag})
+    notify_module_activity("報價單", f"案件進度變更為「{body.deal_tag}」", user.get("display_name") or user["username"],
+                            f"{quote_no}（{cname}）", "quotations.html")
     if body.deal_tag == '已結案':
         try:
             actor_u = _require_user(authorization)
@@ -673,7 +682,7 @@ def update_deal_tag(quote_no: str, body: QuotationDealTagUpdate, authorization: 
 
 @router.delete("/api/quotations/{quote_no}")
 def delete_quotation(quote_no: str, authorization: str = Header(None)):
-    _require_user(authorization)
+    user = _require_user(authorization)
     conn = get_db()
     row = conn.execute("SELECT customer_name, status FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
     if not row:
@@ -686,7 +695,11 @@ def delete_quotation(quote_no: str, authorization: str = Header(None)):
     conn.execute("DELETE FROM quotations WHERE quote_no=?", (quote_no,))
     conn.commit()
     conn.close()
+    _purge_notifications(quote_no, ['approval_request', 'approval_returned',
+                                     'approval_rejected', 'case_stage_deadline'])
     _audit(_tok(authorization), 'quotation.delete', 'quotation', quote_no, f"{quote_no}（{cname}）")
+    notify_module_activity("報價單", "刪除", user.get("display_name") or user["username"],
+                            f"{quote_no}（{cname}）", "quotations.html")
     return {"ok": True}
 
 
@@ -747,7 +760,7 @@ def record_export(quote_no: str, mode: str = "external", authorization: str = He
 
 @router.patch("/api/quotations/{no}/payment/{idx}")
 def mark_payment(no: str, idx: int, body: dict, authorization: str = Header(None)):
-    _require_user(authorization)
+    user = _require_user(authorization)
     conn = get_db()
     try:
         row = conn.execute("SELECT data_json, updated_at FROM quotations WHERE quote_no=?", (no,)).fetchone()
@@ -789,6 +802,8 @@ def mark_payment(no: str, idx: int, body: dict, authorization: str = Header(None
         else ('標記收款' if body.get('received') else '取消收款')
     )
     _audit(_tok(authorization), 'payment.mark', 'quotation', no, f"{no} {label}（{action_detail}）")
+    notify_module_activity("報價單", action_detail, user.get("display_name") or user["username"],
+                            f"{no} {label}", "quotations.html")
     return {"ok": True, "updated_at": now}
 
 
@@ -1325,6 +1340,9 @@ def post_case_update(quote_no: str, body: dict = Body(...), authorization: str =
         c2.close()
     except Exception:
         pass
+    notify_module_activity("案件留言板", "新增留言",
+                            (dn_row["display_name"] if dn_row else None) or user["username"],
+                            f"{quote_no}：{content[:30]}", "case-management.html")
     return {
         "id": new_id,
         "source": "comment",
@@ -1352,6 +1370,8 @@ def delete_case_update(quote_no: str, uid: int, authorization: str = Header(None
     conn.execute("DELETE FROM case_updates WHERE id=?", (uid,))
     conn.commit()
     conn.close()
+    notify_module_activity("案件留言板", "刪除留言", user.get("display_name") or user["username"],
+                            quote_no, "case-management.html")
     return {"ok": True}
 
 

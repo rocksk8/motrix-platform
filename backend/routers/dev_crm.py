@@ -11,7 +11,7 @@ from db import get_db, spawn_bg_thread
 import threading
 from helpers import (
     _require_user, _tok, _audit, notify_module_activity, notify_dev_case_delete_request,
-    _notify, _get_setting, _set_setting, notify_dev_case_stale,
+    _notify, _get_setting, _set_setting, notify_dev_case_stale, _purge_notifications,
 )
 
 router = APIRouter()
@@ -418,6 +418,8 @@ def cancel_dev_case_delete(case_id: int, authorization: str = Header("")):
         conn.commit()
         _audit(_tok(authorization), "dev_case.delete_cancel", "dev_case",
                str(case_id), row["case_name"])
+        notify_module_activity("業務開發", "取消刪除申請", requester_display,
+                                row["case_name"], "dev-crm.html")
         return {"ok": True}
     finally:
         conn.close()
@@ -449,8 +451,11 @@ def approve_dev_case_delete(case_id: int, body: DevCaseDeleteApproveIn,
                 (now, approver_display, snapshot, case_id),
             )
             conn.commit()
+            _purge_notifications(str(case_id), ['dev_case_stale'])
             _audit(_tok(authorization), "dev_case.delete", "dev_case",
                    str(case_id), row["case_name"])
+            notify_module_activity("業務開發", "核准刪除", user.get("display_name") or user["username"],
+                                    row["case_name"], "dev-crm.html")
             return {"ok": True, "deleted": True}
         else:
             conn.execute(
@@ -461,6 +466,8 @@ def approve_dev_case_delete(case_id: int, body: DevCaseDeleteApproveIn,
             conn.commit()
             _audit(_tok(authorization), "dev_case.delete_reject", "dev_case",
                    str(case_id), row["case_name"])
+            notify_module_activity("業務開發", "退回刪除申請", user.get("display_name") or user["username"],
+                                    row["case_name"], "dev-crm.html")
             return {"ok": True, "deleted": False}
     finally:
         conn.close()
@@ -489,6 +496,8 @@ def update_dev_case_status(
         updated = conn.execute("SELECT * FROM dev_cases WHERE id=?", (case_id,)).fetchone()
         _audit(_tok(authorization), "dev_case.status", "dev_case",
                str(case_id), f"{row['case_name']} → {body.status}")
+        notify_module_activity("業務開發", f"狀態變更為「{body.status}」", user.get("display_name") or user["username"],
+                                row["case_name"], "dev-crm.html")
         return _case_row(updated, _user_map(conn))
     finally:
         conn.close()
@@ -515,6 +524,8 @@ def mark_converted(
         updated = conn.execute("SELECT * FROM dev_cases WHERE id=?", (case_id,)).fetchone()
         _audit(_tok(authorization), "dev_case.convert", "dev_case",
                str(case_id), f"{row['case_name']} → {body.quote_no}")
+        notify_module_activity("業務開發", "轉建報價單", user.get("display_name") or user["username"],
+                                f"{row['case_name']} → {body.quote_no}", "dev-crm.html")
         return _case_row(updated, _user_map(conn))
     finally:
         conn.close()
@@ -646,6 +657,9 @@ def delete_dev_log(log_id: int, authorization: str = Header("")):
         conn.commit()
         _audit(_tok(authorization), "dev_log.delete", "dev_log", str(log_id), "")
         _sync_customer_visit(conn, row["case_id"], log_id, "delete")
+        case_row = conn.execute("SELECT case_name FROM dev_cases WHERE id=?", (row["case_id"],)).fetchone()
+        notify_module_activity("業務開發", "刪除開發記錄", user.get("display_name") or user["username"],
+                                case_row["case_name"] if case_row else str(row["case_id"]), "dev-crm.html")
     finally:
         conn.close()
 
@@ -668,6 +682,9 @@ def approve_dev_log(log_id: int, authorization: str = Header("")):
         conn.commit()
         updated = conn.execute("SELECT * FROM dev_logs WHERE id=?", (log_id,)).fetchone()
         _audit(_tok(authorization), "dev_log.approve", "dev_log", str(log_id), "")
+        case_row = conn.execute("SELECT case_name FROM dev_cases WHERE id=?", (row["case_id"],)).fetchone()
+        notify_module_activity("業務開發", "審核通過開發記錄", user.get("display_name") or user["username"],
+                                case_row["case_name"] if case_row else str(row["case_id"]), "dev-crm.html")
         return _log_row(updated, _user_map(conn))
     finally:
         conn.close()

@@ -6,7 +6,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Header, Body
 
 from db import get_db
-from helpers import _require_user, _tok, _audit
+from helpers import _require_user, _tok, _audit, notify_module_activity
 
 router = APIRouter()
 
@@ -31,7 +31,7 @@ def list_parts(q: Optional[str] = None, category: Optional[str] = None):
 
 @router.post("/api/parts", status_code=201)
 def create_part(body: dict = Body(...), authorization: str = Header(None)):
-    _require_user(authorization)
+    user = _require_user(authorization)
     conn = get_db()
     now = datetime.now().isoformat()
     part_no = (body.get("partNo") or body.get("part_no") or "").strip()
@@ -57,6 +57,8 @@ def create_part(body: dict = Body(...), authorization: str = Header(None)):
     new_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
     conn.close()
     _audit(_tok(authorization), 'part.create', 'part', part_no, f"{part_no} {name}".strip())
+    notify_module_activity("料號管理", "建立", user.get("display_name") or user["username"],
+                            f"{part_no} {name}".strip(), "parts.html")
     return {"id": new_id, "ok": True}
 
 
@@ -91,7 +93,7 @@ def update_part(part_id: int, body: dict = Body(...), authorization: str = Heade
 
 @router.delete("/api/parts/{part_id}")
 def delete_part(part_id: int, authorization: str = Header(None)):
-    _require_user(authorization)
+    user = _require_user(authorization)
     conn = get_db()
     row = conn.execute("SELECT part_no, name FROM parts WHERE id=?", (part_id,)).fetchone()
     if not row:
@@ -101,4 +103,6 @@ def delete_part(part_id: int, authorization: str = Header(None)):
     conn.close()
     _audit(_tok(authorization), 'part.delete', 'part', row['part_no'],
            f"{row['part_no']} {row['name']}".strip())
+    notify_module_activity("料號管理", "刪除", user.get("display_name") or user["username"],
+                            f"{row['part_no']} {row['name']}".strip(), "parts.html")
     return {"ok": True}

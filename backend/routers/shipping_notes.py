@@ -15,7 +15,11 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 
 from db import get_db, next_entity_code, spawn_bg_thread
-from helpers import _require_user, _tok, _audit, _notify, _get_setting, _set_setting
+from helpers import (
+    _require_user, _tok, _audit, _notify, _get_setting, _set_setting, _purge_notifications,
+    notify_module_activity, notify_shipping_submitted, notify_shipping_next_tier,
+    notify_shipping_approved, notify_shipping_returned,
+)
 from pdf_gen import generate_shipping_pdf_bytes, _generate_shipping_pdf
 
 router = APIRouter()
@@ -175,6 +179,8 @@ def create_shipping_note(body: ShippingNoteIn, authorization: str = Header(None)
     conn.commit()
     conn.close()
     _audit(_tok(authorization), "shipping.create", "shipping_note", note_no, f"{note_no}（{customer_name}）")
+    notify_module_activity("出貨單", "建立", user.get("display_name") or user["username"],
+                            f"{note_no}（{customer_name}）", "shipping-notes.html")
     return {"note_no": note_no, "created_at": now}
 
 
@@ -219,7 +225,11 @@ def delete_shipping_note(note_no: str, authorization: str = Header(None)):
     conn.execute("DELETE FROM shipping_notes WHERE note_no=?", (note_no,))
     conn.commit()
     conn.close()
+    _purge_notifications(note_no, ['shipping_approval_request', 'shipping_approved',
+                                    'shipping_returned'])
     _audit(_tok(authorization), "shipping.delete", "shipping_note", note_no, note_no)
+    notify_module_activity("出貨單", "刪除", user.get("display_name") or user["username"],
+                            note_no, "shipping-notes.html")
     return {"ok": True}
 
 
@@ -260,9 +270,11 @@ def submit_shipping_note(note_no: str, authorization: str = Header(None)):
     }
 
     if active_tiers:
+        first_tier_usernames = []
         for a in active_tiers[0].get("approvers") or []:
             _notify(a["username"], "shipping_approval_request", note_no, note_no,
                     f"出貨單 {note_no}（{cname}）需要您簽核")
+            first_tier_usernames.append(a["username"])
 
     conn.execute(
         "UPDATE shipping_notes SET status='待審核', data_json=?, updated_at=? WHERE note_no=?",
@@ -272,6 +284,8 @@ def submit_shipping_note(note_no: str, authorization: str = Header(None)):
     conn.close()
     _audit(_tok(authorization), "shipping.submit", "shipping_note", note_no, f"{note_no}（{cname}）",
            {"tierCount": len(active_tiers)})
+    if active_tiers:
+        notify_shipping_submitted(note_no, cname, first_tier_usernames)
     return {"ok": True, "status": "待審核"}
 
 
@@ -319,6 +333,7 @@ def approve_shipping_note(note_no: str, body: dict = Body(default={}), authoriza
         first_pending["approvedAt"] = now
 
         tier_done = all(a.get("status") == "approved" for a in approvers)
+        next_tier_usernames = []
         if tier_done:
             appr["currentTier"] = ct_idx + 1
             all_done = (ct_idx + 1) >= len(tiers)
@@ -326,6 +341,8 @@ def approve_shipping_note(note_no: str, body: dict = Body(default={}), authoriza
                 for na in tiers[ct_idx + 1].get("approvers") or []:
                     _notify(na["username"], "shipping_approval_request", note_no, note_no,
                             f"出貨單 {note_no}（{cname}）輪到您簽核（第 {ct_idx + 2} 層 / 共 {len(tiers)} 層）")
+                    next_tier_usernames.append(na["username"])
+                notify_shipping_next_tier(note_no, cname, ct_idx + 2, len(tiers), next_tier_usernames)
         else:
             all_done = False
 
@@ -359,6 +376,7 @@ def approve_shipping_note(note_no: str, body: dict = Body(default={}), authoriza
         requester = appr.get("requestedBy")
         if requester:
             _notify(requester, "shipping_approved", note_no, note_no, f"出貨單 {note_no}（{cname}）已核准")
+            notify_shipping_approved(note_no, cname, approver_name, requester)
         detail_status = "已核准"
     else:
         d["approval"] = appr
@@ -418,6 +436,7 @@ def reject_shipping_note(note_no: str, body: dict = Body(default={}), authorizat
     if requester:
         msg = f"出貨單 {note_no}（{cname}）已退回，請確認後重新送審" + (f"：{note}" if note else "")
         _notify(requester, "shipping_returned", note_no, note_no, msg)
+        notify_shipping_returned(note_no, cname, note, requester)
     _audit(_tok(authorization), "shipping.reject", "shipping_note", note_no, f"{note_no}（{cname}）", {"note": note})
     return {"ok": True}
 
@@ -529,6 +548,8 @@ def toggle_signed(note_no: str, body: dict = Body(...), authorization: str = Hea
     conn.commit()
     conn.close()
     _audit(_tok(authorization), f"shipping.{action}", "shipping_note", note_no, note_no, {"note": note})
+    notify_module_activity("出貨單", "已回簽" if action == "sign" else "取消回簽",
+                            user.get("display_name") or user["username"], note_no, "shipping-notes.html")
     return {"ok": True, "is_signed": action == "sign", "signed_log": log}
 
 

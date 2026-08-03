@@ -16,10 +16,10 @@ from pydantic import BaseModel
 
 from db import get_db, spawn_bg_thread
 from helpers import (
-    _require_user, _tok, _audit, _notify,
+    _require_user, _tok, _audit, _notify, _purge_notifications,
     notify_daily_task_assigned, notify_daily_task_completed, notify_daily_task_overdue,
     notify_daily_task_edited, notify_warranty_expiry, notify_range_task_deadline, _warranty_expiry,
-    notify_case_stage_deadline, notify_project_deadline,
+    notify_case_stage_deadline, notify_project_deadline, notify_module_activity,
     _get_setting, _set_setting,
 )
 
@@ -541,8 +541,11 @@ def delete_daily_task(task_id: int, authorization: str = Header(None)):
     conn.execute("UPDATE daily_tasks SET is_deleted=1, updated_at=? WHERE id=?", (now, task_id))
     conn.commit()
     conn.close()
+    _purge_notifications(str(task_id), ['daily_task'])
     _audit(_tok(authorization), "daily_task.delete", "daily_task", str(task_id),
            f"{row['task_date']} {row['title']}")
+    notify_module_activity("工作事項", "刪除", user.get("display_name") or user["username"],
+                            f"{row['task_date']} {row['title']}", "daily-tasks.html")
     return {"ok": True}
 
 

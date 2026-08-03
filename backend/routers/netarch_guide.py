@@ -9,7 +9,7 @@ from datetime import datetime
 from fastapi import APIRouter, Body, HTTPException, Header
 
 from db import get_db
-from helpers import _require_user, _tok, _audit
+from helpers import _require_user, _tok, _audit, notify_module_activity
 
 router = APIRouter()
 
@@ -27,7 +27,7 @@ def list_families(authorization: str = Header(None)):
 
 @router.post("/api/netarch-guide/families", status_code=201)
 def create_family(body: dict = Body(...), authorization: str = Header(None)):
-    _require_user(authorization, require_superadmin=True, module=_EDIT_MODULE)
+    actor = _require_user(authorization, require_superadmin=True, module=_EDIT_MODULE)
     code = (body.get("code") or "").strip()
     if not code:
         raise HTTPException(400, "族系代碼不得為空")
@@ -44,6 +44,8 @@ def create_family(body: dict = Body(...), authorization: str = Header(None)):
     conn.commit()
     conn.close()
     _audit(_tok(authorization), 'netarch_guide.family.create', 'netarch_family', code, body.get('name', ''))
+    notify_module_activity("網路架構選型導覽", "建立技術族系", actor.get("display_name") or actor["username"],
+                            body.get('name', code), "netarch-guide.html")
     return {"code": code, "ok": True}
 
 
@@ -67,7 +69,7 @@ def update_family(code: str, body: dict = Body(...), authorization: str = Header
 
 @router.delete("/api/netarch-guide/families/{code}")
 def delete_family(code: str, authorization: str = Header(None)):
-    _require_user(authorization, require_superadmin=True, module=_EDIT_MODULE)
+    actor = _require_user(authorization, require_superadmin=True, module=_EDIT_MODULE)
     conn = get_db()
     row = conn.execute("SELECT name FROM netarch_families WHERE code=?", (code,)).fetchone()
     if not row:
@@ -77,6 +79,8 @@ def delete_family(code: str, authorization: str = Header(None)):
     conn.commit()
     conn.close()
     _audit(_tok(authorization), 'netarch_guide.family.delete', 'netarch_family', code, row['name'])
+    notify_module_activity("網路架構選型導覽", "刪除技術族系", actor.get("display_name") or actor["username"],
+                            row['name'], "netarch-guide.html")
     return {"ok": True}
 
 
@@ -91,7 +95,7 @@ def list_generations(authorization: str = Header(None)):
 
 @router.post("/api/netarch-guide/generations", status_code=201)
 def create_generation(body: dict = Body(...), authorization: str = Header(None)):
-    _require_user(authorization, require_superadmin=True, module=_EDIT_MODULE)
+    actor = _require_user(authorization, require_superadmin=True, module=_EDIT_MODULE)
     family_code = (body.get("familyCode") or "").strip()
     if not family_code:
         raise HTTPException(400, "族系代碼不得為空")
@@ -114,6 +118,8 @@ def create_generation(body: dict = Body(...), authorization: str = Header(None))
     conn.commit()
     conn.close()
     _audit(_tok(authorization), 'netarch_guide.generation.create', 'netarch_generation', str(new_id), f"{family_code} {body.get('genName','')}".strip())
+    notify_module_activity("網路架構選型導覽", "建立世代規格", actor.get("display_name") or actor["username"],
+                            f"{family_code} {body.get('genName','')}".strip(), "netarch-guide.html")
     return {"id": new_id, "ok": True}
 
 
@@ -143,7 +149,7 @@ def update_generation(gen_id: int, body: dict = Body(...), authorization: str = 
 
 @router.delete("/api/netarch-guide/generations/{gen_id}")
 def delete_generation(gen_id: int, authorization: str = Header(None)):
-    _require_user(authorization, require_superadmin=True, module=_EDIT_MODULE)
+    actor = _require_user(authorization, require_superadmin=True, module=_EDIT_MODULE)
     conn = get_db()
     row = conn.execute("SELECT family_code, gen_name FROM netarch_generations WHERE id=?", (gen_id,)).fetchone()
     if not row:
@@ -153,6 +159,8 @@ def delete_generation(gen_id: int, authorization: str = Header(None)):
     conn.commit()
     conn.close()
     _audit(_tok(authorization), 'netarch_guide.generation.delete', 'netarch_generation', str(gen_id), f"{row['family_code']} {row['gen_name']}".strip())
+    notify_module_activity("網路架構選型導覽", "刪除世代規格", actor.get("display_name") or actor["username"],
+                            f"{row['family_code']} {row['gen_name']}".strip(), "netarch-guide.html")
     return {"ok": True}
 
 
@@ -167,7 +175,7 @@ def list_products(authorization: str = Header(None)):
 
 @router.post("/api/netarch-guide/products", status_code=201)
 def create_product(body: dict = Body(...), authorization: str = Header(None)):
-    _require_user(authorization, require_superadmin=True, module=_EDIT_MODULE)
+    actor = _require_user(authorization, require_superadmin=True, module=_EDIT_MODULE)
     generation_id = body.get("generationId")
     if not generation_id:
         raise HTTPException(400, "所屬世代不得為空")
@@ -185,6 +193,8 @@ def create_product(body: dict = Body(...), authorization: str = Header(None)):
     conn.commit()
     conn.close()
     _audit(_tok(authorization), 'netarch_guide.product.create', 'netarch_product', str(new_id), f"{body.get('brand','')} {body.get('model','')}".strip())
+    notify_module_activity("網路架構選型導覽", "建立產品連結", actor.get("display_name") or actor["username"],
+                            f"{body.get('brand','')} {body.get('model','')}".strip(), "netarch-guide.html")
     return {"id": new_id, "ok": True}
 
 
@@ -208,7 +218,7 @@ def update_product(prod_id: int, body: dict = Body(...), authorization: str = He
 
 @router.delete("/api/netarch-guide/products/{prod_id}")
 def delete_product(prod_id: int, authorization: str = Header(None)):
-    _require_user(authorization, require_superadmin=True, module=_EDIT_MODULE)
+    actor = _require_user(authorization, require_superadmin=True, module=_EDIT_MODULE)
     conn = get_db()
     row = conn.execute("SELECT brand, model FROM netarch_products WHERE id=?", (prod_id,)).fetchone()
     if not row:
@@ -218,4 +228,6 @@ def delete_product(prod_id: int, authorization: str = Header(None)):
     conn.commit()
     conn.close()
     _audit(_tok(authorization), 'netarch_guide.product.delete', 'netarch_product', str(prod_id), f"{row['brand']} {row['model']}".strip())
+    notify_module_activity("網路架構選型導覽", "刪除產品連結", actor.get("display_name") or actor["username"],
+                            f"{row['brand']} {row['model']}".strip(), "netarch-guide.html")
     return {"ok": True}

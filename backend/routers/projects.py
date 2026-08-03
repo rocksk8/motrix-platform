@@ -13,7 +13,7 @@ from fastapi import APIRouter, HTTPException, Header, Body, UploadFile, File, Qu
 from fastapi.responses import FileResponse
 
 from db import get_db
-from helpers import _require_user, _tok, _audit
+from helpers import _require_user, _tok, _audit, _purge_notifications, notify_module_activity
 from photos import _process_project_photo, _PHOTO_UPLOAD_BASE, _photo_root
 
 _PHOTO_TOKEN_TTL = 3600  # seconds
@@ -126,6 +126,8 @@ def create_project(body: dict = Body(...), authorization: str = Header(None)):
     conn.commit()
     conn.close()
     _audit(_tok(authorization), 'project.create', 'project', code, name)
+    notify_module_activity("專案管理", "建立", user.get("display_name") or user["username"],
+                            f"{code} {name}", "projects.html")
     return {"id": new_id, "code": code, "ok": True}
 
 
@@ -167,7 +169,7 @@ def update_project(project_id: int, body: dict = Body(...), authorization: str =
 
 @router.patch("/api/projects/{project_id}/status")
 def update_project_status(project_id: int, body: dict = Body(...), authorization: str = Header(None)):
-    _require_user(authorization)
+    user = _require_user(authorization)
     new_status = body.get('status', '')
     valid = ['規劃中', '進行中', '暫停', '驗收中', '完工', '結案', '取消']
     if new_status not in valid:
@@ -180,6 +182,8 @@ def update_project_status(project_id: int, body: dict = Body(...), authorization
     conn.commit()
     conn.close()
     _audit(_tok(authorization), 'project.status', 'project', row['code'], f"{row['name']} → {new_status}")
+    notify_module_activity("專案管理", f"狀態變更為「{new_status}」", user.get("display_name") or user["username"],
+                            f"{row['code']} {row['name']}", "projects.html")
     return {"ok": True}
 
 
@@ -199,6 +203,8 @@ def update_project_assigned_users(project_id: int, body: dict = Body(...), autho
     conn.close()
     _audit(_tok(authorization), 'project.assign', 'project', row['code'],
            f"{row['name']} 分配 {len(user_ids)} 位成員")
+    notify_module_activity("專案管理", "設定成員分配", user.get("display_name") or user["username"],
+                            f"{row['code']} {row['name']}（{len(user_ids)} 位成員）", "projects.html")
     return {"ok": True}
 
 
@@ -217,7 +223,10 @@ def delete_project(project_id: int, authorization: str = Header(None)):
     conn.execute("DELETE FROM projects WHERE id=?", (project_id,))
     conn.commit()
     conn.close()
+    _purge_notifications(row['code'], ['project_deadline'])
     _audit(_tok(authorization), 'project.delete', 'project', row['code'], row['name'])
+    notify_module_activity("專案管理", "刪除", user.get("display_name") or user["username"],
+                            f"{row['code']} {row['name']}", "projects.html")
     return {"ok": True}
 
 
@@ -263,6 +272,8 @@ def create_project_log(project_id: int, body: dict = Body(...), authorization: s
     conn.commit()
     conn.close()
     _audit(_tok(authorization), 'project.log.create', 'project_log', str(project_id), f"PR-{project_id:04d} 日誌 {log_date}")
+    notify_module_activity("專案管理", "新增工作日誌", user.get("display_name") or user["username"],
+                            f"PR-{project_id:04d} 日誌 {log_date}", "projects.html")
     return {"id": new_id, "ok": True}
 
 
@@ -300,13 +311,16 @@ def delete_project_log(project_id: int, log_id: int, authorization: str = Header
     if user['role'] not in ('superadmin', 'admin'):
         raise HTTPException(403, "僅管理員可刪除日誌")
     conn = get_db()
-    if not conn.execute(
-        "SELECT id FROM project_logs WHERE id=? AND project_id=?", (log_id, project_id)
-    ).fetchone():
+    row = conn.execute(
+        "SELECT log_date FROM project_logs WHERE id=? AND project_id=?", (log_id, project_id)
+    ).fetchone()
+    if not row:
         conn.close(); raise HTTPException(404, "日誌不存在")
     conn.execute("DELETE FROM project_logs WHERE id=?", (log_id,))
     conn.commit()
     conn.close()
+    notify_module_activity("專案管理", "刪除工作日誌", user.get("display_name") or user["username"],
+                            f"PR-{project_id:04d} 日誌 {row['log_date']}", "projects.html")
     return {"ok": True}
 
 
@@ -366,6 +380,9 @@ def approve_action_item(
     )
     conn.commit()
     conn.close()
+    notify_module_activity("專案管理", f"確認事項第 {stage} 階段完成",
+                            user.get("display_name") or user["username"],
+                            f"PR-{project_id:04d} 日誌 #{log_id}", "projects.html")
     return {"ok": True, "items": items}
 
 
@@ -418,6 +435,8 @@ async def upload_project_photos(
     )
     conn.commit()
     conn.close()
+    notify_module_activity("專案管理", "上傳照片", user['display_name'],
+                            f"PR-{project_id:04d} 日誌 #{log_id}（{len(new_photos)} 張）", "projects.html")
     return {"ok": True, "added": len(new_photos), "photos": new_photos}
 
 
@@ -426,7 +445,7 @@ def delete_project_photo(
     project_id: int, log_id: int, photo_id: str,
     authorization: str = Header(None),
 ):
-    _require_user(authorization)
+    user = _require_user(authorization)
     conn   = get_db()
     row    = conn.execute(
         "SELECT * FROM project_logs WHERE id=? AND project_id=?", (log_id, project_id)
@@ -448,6 +467,8 @@ def delete_project_photo(
                  (json.dumps(photos, ensure_ascii=False), log_id))
     conn.commit()
     conn.close()
+    notify_module_activity("專案管理", "刪除照片", user.get("display_name") or user["username"],
+                            f"PR-{project_id:04d} 日誌 #{log_id}", "projects.html")
     return {"ok": True}
 
 

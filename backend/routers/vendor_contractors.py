@@ -8,7 +8,7 @@ from fastapi import APIRouter, Body, HTTPException, Header
 from pydantic import BaseModel
 
 from db import get_db, next_entity_code
-from helpers import _require_user, _tok, _audit
+from helpers import _require_user, _tok, _audit, notify_module_activity
 from helpers.quotations import save_quotation_json
 from routers.contractors import _stamp_passbook
 
@@ -200,6 +200,8 @@ def create_vendor_contractor(body: VendorContractorIn, authorization: str = Head
     conn.commit()
     conn.close()
     _audit(_tok(authorization), 'vendor.create', 'vendor_contractor', str(vid), body.name)
+    notify_module_activity("承攬商管理", "建立", user.get("display_name") or user["username"],
+                            body.name, "vendor-contractors.html")
     return {"id": vid, "code": code, "created_at": now}
 
 
@@ -260,6 +262,8 @@ def toggle_vendor_active(vid: int, authorization: str = Header(None)):
     conn.close()
     action = 'vendor.activate' if new_active else 'vendor.deactivate'
     _audit(_tok(authorization), action, 'vendor_contractor', str(vid), row["name"])
+    notify_module_activity("承攬商管理", "啟用" if new_active else "停用",
+                            user.get("display_name") or user["username"], row["name"], "vendor-contractors.html")
     return {"active": bool(new_active)}
 
 
@@ -331,12 +335,14 @@ def delete_vendor_contractor(vid: int, authorization: str = Header(None)):
     conn.commit()
     conn.close()
     _audit(_tok(authorization), 'vendor.delete', 'vendor_contractor', str(vid), vname)
+    notify_module_activity("承攬商管理", "刪除", user.get("display_name") or user["username"],
+                            vname, "vendor-contractors.html")
     return {"ok": True}
 
 
 @router.patch("/api/vendor-contractors/{vid}/visits")
 def update_vendor_visits(vid: int, body: dict, authorization: str = Header(None)):
-    _require_user(authorization)
+    user = _require_user(authorization)
     conn = get_db()
     row = conn.execute(
         "SELECT name, data_json, updated_at FROM vendor_contractors WHERE id=?", (vid,)
@@ -359,6 +365,8 @@ def update_vendor_visits(vid: int, body: dict, authorization: str = Header(None)
     conn.close()
     _audit(_tok(authorization), 'vendor.visit.update', 'vendor_contractor', str(vid),
            f"{row['name']}（{len(d['visits'])} 筆往來紀錄）")
+    notify_module_activity("承攬商管理", "新增往來紀錄", user.get("display_name") or user["username"],
+                            row["name"], "vendor-contractors.html")
     return {"ok": True, "count": len(d["visits"]), "updated_at": now}
 
 
@@ -429,6 +437,8 @@ def create_dispatch(body: DispatchIn, authorization: str = Header(None)):
     conn.close()
     _audit(_tok(authorization), 'vendor.dispatch.create', 'contractor_dispatch', str(did),
            f"{body.quote_no}")
+    notify_module_activity("承攬商派發", "建立", user.get("display_name") or user["username"],
+                            body.quote_no, "vendor-contractors.html")
     return {"id": did, "created_at": now, "total_amount": total}
 
 
@@ -477,6 +487,8 @@ def delete_dispatch(did: int, authorization: str = Header(None)):
     conn.commit()
     conn.close()
     _audit(_tok(authorization), 'vendor.dispatch.delete', 'contractor_dispatch', str(did), row["quote_no"])
+    notify_module_activity("承攬商派發", "刪除", user.get("display_name") or user["username"],
+                            row["quote_no"], "vendor-contractors.html")
     return {"ok": True}
 
 
@@ -525,6 +537,8 @@ def accept_dispatch(did: int, body: dict, authorization: str = Header(None)):
     conn.commit()
     conn.close()
     _audit(_tok(authorization), f'vendor.dispatch.{action}', 'contractor_dispatch', str(did), row["quote_no"])
+    notify_module_activity("承攬商派發", _STATUS_LABELS.get(action, action),
+                            user.get("display_name") or user["username"], row["quote_no"], "vendor-contractors.html")
     return {"ok": True, "status": action, "updated_at": now}
 
 
@@ -602,4 +616,6 @@ def import_dispatch_to_quote(did: int, authorization: str = Header(None)):
     conn.close()
     _audit(_tok(authorization), 'vendor.dispatch.import', 'contractor_dispatch', str(did),
            f"匯入 {len(dispatch_items)} 品項至 {qrow['quote_no']}")
+    notify_module_activity("承攬商派發", "匯入報價單品項", user.get("display_name") or user["username"],
+                            f"{vendor_name} → {qrow['quote_no']}", "vendor-contractors.html")
     return {"ok": True, "imported": len(dispatch_items), "updated_at": now}

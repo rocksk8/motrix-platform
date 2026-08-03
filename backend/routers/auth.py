@@ -16,6 +16,7 @@ from db import get_db, get_demo_db, reset_demo_db, demo_reset_lock
 from helpers import (
     _hash_pw, _verify_pw, _require_user, _tok, _audit,
     _SUPERADMIN_MODULES, is_weak_password, MIN_PASSWORD_LEN, DEMO_TOKEN_PREFIX,
+    notify_module_activity,
 )
 
 logger = logging.getLogger(__name__)
@@ -342,7 +343,7 @@ def change_password(body: ChangePasswordIn, authorization: str = Header(None)):
     try:
         now = datetime.now().isoformat()
         row = conn.execute("""
-            SELECT u.id, u.password_hash
+            SELECT u.id, u.password_hash, u.display_name, u.username
             FROM sessions s JOIN users u ON s.user_id = u.id
             WHERE s.token=? AND u.active=1
               AND (s.expires_at IS NULL OR s.expires_at > ?)
@@ -367,6 +368,8 @@ def change_password(body: ChangePasswordIn, authorization: str = Header(None)):
     finally:
         conn.close()
     _audit(token, 'auth.change_password', 'user', '', '修改密碼')
+    notify_module_activity("使用者管理", "變更密碼", row["display_name"] or row["username"],
+                            row["display_name"] or row["username"], "users.html")
     return {"ok": True, "mustChangePassword": False}
 
 
@@ -392,7 +395,7 @@ def list_users(authorization: str = Header(None)):
 
 @router.post("/api/users", status_code=201)
 def create_user(body: UserIn, authorization: str = Header(None)):
-    _require_user(authorization, require_superadmin=True)
+    actor = _require_user(authorization, require_superadmin=True)
     if not body.username or not body.password:
         raise HTTPException(400, "缺少帳號或密碼")
     if len(body.password) < MIN_PASSWORD_LEN:
@@ -423,6 +426,8 @@ def create_user(body: UserIn, authorization: str = Header(None)):
         raise HTTPException(409, "帳號已存在")
     conn.close()
     _audit(_tok(authorization), 'user.create', 'user', body.username, body.display_name or body.username)
+    notify_module_activity("使用者管理", "建立帳號", actor.get("display_name") or actor["username"],
+                            body.display_name or body.username, "users.html")
     return {"id": user_id, "created_at": now, "mustChangePassword": True}
 
 
@@ -461,7 +466,7 @@ def update_user(user_id: int, body: UserIn, authorization: str = Header(None)):
 
 @router.delete("/api/users/{user_id}")
 def delete_user(user_id: int, authorization: str = Header(None)):
-    _require_user(authorization, require_superadmin=True)
+    actor = _require_user(authorization, require_superadmin=True)
     conn = get_db()
     row = conn.execute("SELECT username, display_name FROM users WHERE id=?", (user_id,)).fetchone()
     if not row:
@@ -477,12 +482,14 @@ def delete_user(user_id: int, authorization: str = Header(None)):
     conn.commit()
     conn.close()
     _audit(_tok(authorization), 'user.delete', 'user', str(user_id), ulabel)
+    notify_module_activity("使用者管理", "刪除帳號", actor.get("display_name") or actor["username"],
+                            ulabel, "users.html")
     return {"ok": True}
 
 
 @router.patch("/api/users/{user_id}/active")
 def toggle_user_active(user_id: int, authorization: str = Header(None)):
-    _require_user(authorization, require_superadmin=True)
+    actor = _require_user(authorization, require_superadmin=True)
     conn = get_db()
     row = conn.execute("SELECT username, display_name, active FROM users WHERE id=?", (user_id,)).fetchone()
     if not row:
@@ -498,6 +505,8 @@ def toggle_user_active(user_id: int, authorization: str = Header(None)):
     ulabel = row["display_name"] or row["username"]
     _audit(_tok(authorization), 'user.active', 'user', str(user_id),
            f"{ulabel}（{'啟用' if new_active else '停用'}帳號）", {'active': bool(new_active)})
+    notify_module_activity("使用者管理", "啟用帳號" if new_active else "停用帳號",
+                            actor.get("display_name") or actor["username"], ulabel, "users.html")
     return {"ok": True, "active": bool(new_active)}
 
 
@@ -536,7 +545,7 @@ def verify_unlock(body: VerifyUnlockIn, authorization: str = Header(None)):
 
 @router.patch("/api/users/{user_id}/unlock-password")
 def set_unlock_password(user_id: int, body: SetUnlockPasswordIn, authorization: str = Header(None)):
-    _require_user(authorization, require_superadmin=True)
+    actor = _require_user(authorization, require_superadmin=True)
     if len(body.unlock_password) < MIN_PASSWORD_LEN:
         raise HTTPException(400, f"解鎖密碼至少 {MIN_PASSWORD_LEN} 碼")
     if is_weak_password(body.unlock_password):
@@ -556,6 +565,8 @@ def set_unlock_password(user_id: int, body: SetUnlockPasswordIn, authorization: 
     finally:
         conn.close()
     _audit(_tok(authorization), 'user.set_unlock_password', 'user', str(user_id), str(user_id))
+    notify_module_activity("使用者管理", "設定解鎖密碼", actor.get("display_name") or actor["username"],
+                            str(user_id), "users.html")
     return {"ok": True}
 
 
@@ -583,7 +594,7 @@ def verify_daily_task_unlock(body: VerifyDailyTaskUnlockIn, authorization: str =
 @router.patch("/api/users/{user_id}/daily-task-password")
 def set_daily_task_password(user_id: int, body: SetDailyTaskPasswordIn,
                              authorization: str = Header(None)):
-    _require_user(authorization, require_superadmin=True)
+    actor = _require_user(authorization, require_superadmin=True)
     if len(body.daily_task_password) < MIN_PASSWORD_LEN:
         raise HTTPException(400, f"密碼至少 {MIN_PASSWORD_LEN} 碼")
     if is_weak_password(body.daily_task_password):
@@ -603,5 +614,7 @@ def set_daily_task_password(user_id: int, body: SetDailyTaskPasswordIn,
     finally:
         conn.close()
     _audit(_tok(authorization), 'user.set_daily_task_password', 'user', str(user_id), str(user_id))
+    notify_module_activity("使用者管理", "設定每日工作事項密碼", actor.get("display_name") or actor["username"],
+                            str(user_id), "users.html")
     return {"ok": True}
 

@@ -9,7 +9,7 @@ from typing import Optional
 from fastapi import APIRouter, Body, HTTPException, Header
 
 from db import get_db
-from helpers import _require_user, _tok, _audit
+from helpers import _require_user, _tok, _audit, notify_module_activity
 
 router = APIRouter()
 
@@ -29,7 +29,7 @@ def list_environments(authorization: str = Header(None)):
 
 @router.post("/api/env-guide/environments", status_code=201)
 def create_environment(body: dict = Body(...), authorization: str = Header(None)):
-    _require_user(authorization, require_superadmin=True, module=_EDIT_MODULE)
+    actor = _require_user(authorization, require_superadmin=True, module=_EDIT_MODULE)
     conn = get_db()
     code = (body.get("code") or "").strip()
     if not code:
@@ -54,6 +54,8 @@ def create_environment(body: dict = Body(...), authorization: str = Header(None)
     conn.commit()
     conn.close()
     _audit(_tok(authorization), 'env_guide.environment.create', 'env_guide_environment', code, f"{code} {body.get('name','')}".strip())
+    notify_module_activity("場域選型導覽", "建立場域", actor.get("display_name") or actor["username"],
+                            f"{code} {body.get('name','')}".strip(), "env-guide.html")
     return {"code": code, "ok": True}
 
 
@@ -83,7 +85,7 @@ def update_environment(code: str, body: dict = Body(...), authorization: str = H
 
 @router.delete("/api/env-guide/environments/{code}")
 def delete_environment(code: str, authorization: str = Header(None)):
-    _require_user(authorization, require_superadmin=True, module=_EDIT_MODULE)
+    actor = _require_user(authorization, require_superadmin=True, module=_EDIT_MODULE)
     conn = get_db()
     row = conn.execute("SELECT name FROM env_guide_environments WHERE code=?", (code,)).fetchone()
     if not row:
@@ -93,6 +95,8 @@ def delete_environment(code: str, authorization: str = Header(None)):
     conn.commit()
     conn.close()
     _audit(_tok(authorization), 'env_guide.environment.delete', 'env_guide_environment', code, f"{code} {row['name']}".strip())
+    notify_module_activity("場域選型導覽", "刪除場域", actor.get("display_name") or actor["username"],
+                            f"{code} {row['name']}".strip(), "env-guide.html")
     return {"ok": True}
 
 
@@ -109,7 +113,7 @@ def list_recommendations(authorization: str = Header(None)):
 
 @router.post("/api/env-guide/recommendations", status_code=201)
 def create_recommendation(body: dict = Body(...), authorization: str = Header(None)):
-    _require_user(authorization, require_superadmin=True, module=_EDIT_MODULE)
+    actor = _require_user(authorization, require_superadmin=True, module=_EDIT_MODULE)
     conn = get_db()
     env_code = (body.get("envCode") or "").strip()
     if not env_code:
@@ -135,6 +139,8 @@ def create_recommendation(body: dict = Body(...), authorization: str = Header(No
     conn.commit()
     conn.close()
     _audit(_tok(authorization), 'env_guide.recommendation.create', 'env_guide_recommendation', str(new_id), f"{env_code} {body.get('layer','')}".strip())
+    notify_module_activity("場域選型導覽", "建立分層建議", actor.get("display_name") or actor["username"],
+                            f"{env_code} {body.get('layer','')}".strip(), "env-guide.html")
     return {"id": new_id, "ok": True}
 
 
@@ -164,7 +170,7 @@ def update_recommendation(rec_id: int, body: dict = Body(...), authorization: st
 
 @router.delete("/api/env-guide/recommendations/{rec_id}")
 def delete_recommendation(rec_id: int, authorization: str = Header(None)):
-    _require_user(authorization, require_superadmin=True, module=_EDIT_MODULE)
+    actor = _require_user(authorization, require_superadmin=True, module=_EDIT_MODULE)
     conn = get_db()
     row = conn.execute("SELECT env_code, layer FROM env_guide_recommendations WHERE id=?", (rec_id,)).fetchone()
     if not row:
@@ -174,6 +180,8 @@ def delete_recommendation(rec_id: int, authorization: str = Header(None)):
     conn.commit()
     conn.close()
     _audit(_tok(authorization), 'env_guide.recommendation.delete', 'env_guide_recommendation', str(rec_id), f"{row['env_code']} {row['layer']}".strip())
+    notify_module_activity("場域選型導覽", "刪除分層建議", actor.get("display_name") or actor["username"],
+                            f"{row['env_code']} {row['layer']}".strip(), "env-guide.html")
     return {"ok": True}
 
 
@@ -188,7 +196,7 @@ def list_links(authorization: str = Header(None)):
 
 @router.post("/api/env-guide/links", status_code=201)
 def create_link(body: dict = Body(...), authorization: str = Header(None)):
-    _require_user(authorization, require_superadmin=True, module=_EDIT_MODULE)
+    actor = _require_user(authorization, require_superadmin=True, module=_EDIT_MODULE)
     keyword = (body.get("keyword") or "").strip()
     url = (body.get("url") or "").strip()
     if not keyword or not url:
@@ -203,6 +211,8 @@ def create_link(body: dict = Body(...), authorization: str = Header(None)):
     conn.commit()
     conn.close()
     _audit(_tok(authorization), 'env_guide.link.create', 'env_guide_link', str(new_id), keyword)
+    notify_module_activity("場域選型導覽", "建立產品連結", actor.get("display_name") or actor["username"],
+                            keyword, "env-guide.html")
     return {"id": new_id, "ok": True}
 
 
@@ -230,7 +240,7 @@ def update_link(link_id: int, body: dict = Body(...), authorization: str = Heade
 
 @router.delete("/api/env-guide/links/{link_id}")
 def delete_link(link_id: int, authorization: str = Header(None)):
-    _require_user(authorization, require_superadmin=True, module=_EDIT_MODULE)
+    actor = _require_user(authorization, require_superadmin=True, module=_EDIT_MODULE)
     conn = get_db()
     row = conn.execute("SELECT keyword FROM env_guide_links WHERE id=?", (link_id,)).fetchone()
     if not row:
@@ -240,4 +250,6 @@ def delete_link(link_id: int, authorization: str = Header(None)):
     conn.commit()
     conn.close()
     _audit(_tok(authorization), 'env_guide.link.delete', 'env_guide_link', str(link_id), row['keyword'])
+    notify_module_activity("場域選型導覽", "刪除產品連結", actor.get("display_name") or actor["username"],
+                            row['keyword'], "env-guide.html")
     return {"ok": True}

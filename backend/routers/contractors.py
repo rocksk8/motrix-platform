@@ -11,7 +11,7 @@ from PIL import Image, ImageDraw, ImageFont
 from pydantic import BaseModel
 
 from db import get_db
-from helpers import _require_user, _tok, _audit
+from helpers import _require_user, _tok, _audit, notify_module_activity
 
 # 字體路徑（Windows 微軟正黑體，找不到退回預設）
 _FONT_PATH = r"C:\Windows\Fonts\msjhbd.ttc"
@@ -205,6 +205,8 @@ def create_contractor(body: ContractorIn, authorization: str = Header(None)):
     conn.commit()
     conn.close()
     _audit(_tok(authorization), 'contractor.create', 'contractor', str(cid), body.name)
+    notify_module_activity("外包名冊", "建立", user.get("display_name") or user["username"],
+                            body.name, "vendor-contractors.html")
     return {"id": cid, "created_at": now}
 
 
@@ -248,7 +250,7 @@ def update_contractor(cid: int, body: ContractorIn, authorization: str = Header(
 
 @router.patch("/api/contractors/{cid}/active")
 def toggle_contractor_active(cid: int, authorization: str = Header(None)):
-    _require_user(authorization, require_superadmin=True)
+    user = _require_user(authorization, require_superadmin=True)
     conn = get_db()
     row = conn.execute("SELECT active, name FROM contractors WHERE id=?", (cid,)).fetchone()
     if not row:
@@ -261,6 +263,8 @@ def toggle_contractor_active(cid: int, authorization: str = Header(None)):
     conn.close()
     action = 'contractor.activate' if new_active else 'contractor.deactivate'
     _audit(_tok(authorization), action, 'contractor', str(cid), row["name"])
+    notify_module_activity("外包名冊", "啟用" if new_active else "停用",
+                            user.get("display_name") or user["username"], row["name"], "vendor-contractors.html")
     return {"active": bool(new_active)}
 
 

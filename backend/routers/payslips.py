@@ -11,7 +11,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 
 from db import get_db, is_demo_mode, DEMO_PAYSLIP_ARCHIVE_DIR
-from helpers import _require_user, _tok, _audit, _get_setting
+from helpers import _require_user, _tok, _audit, _get_setting, notify_module_activity
 
 router = APIRouter()
 
@@ -227,6 +227,8 @@ def create_payslip(body: PayslipIn, authorization: str = Header(None)):
     conn.close()
     _audit(_tok(authorization), 'payslip.create', 'payslip', slip_no,
            f"{slip_no}（{d.get('contractorName', '')}）")
+    notify_module_activity("勞報單", "建立", user.get("display_name") or user["username"],
+                            f"{slip_no}（{d.get('contractorName', '')}）", "payslips.html")
     return {"slip_no": slip_no, "calc": calc, "created_at": now}
 
 
@@ -287,7 +289,7 @@ def update_payslip(slip_no: str, body: PayslipIn, authorization: str = Header(No
 
 @router.delete("/api/payslips/{slip_no}", status_code=204)
 def delete_payslip(slip_no: str, authorization: str = Header(None)):
-    _require_user(authorization, require_superadmin=True)
+    user = _require_user(authorization, require_superadmin=True)
     conn = get_db()
     row = conn.execute("SELECT status FROM payslips WHERE slip_no=?", (slip_no,)).fetchone()
     if not row:
@@ -300,6 +302,8 @@ def delete_payslip(slip_no: str, authorization: str = Header(None)):
     conn.commit()
     conn.close()
     _audit(_tok(authorization), 'payslip.delete', 'payslip', slip_no, slip_no)
+    notify_module_activity("勞報單", "刪除", user.get("display_name") or user["username"],
+                            slip_no, "payslips.html")
 
 
 @router.post("/api/payslips/{slip_no}/export")
@@ -363,6 +367,8 @@ def record_archive_download(slip_no: str, orig_idx: int, authorization: str = He
                  (new_count, json.dumps(log, ensure_ascii=False), now, slip_no))
     conn.commit()
     conn.close()
+    notify_module_activity("勞報單", "調閱存檔", user.get("display_name") or user["username"],
+                            slip_no, "payslips.html")
     return {"export_count": new_count}
 
 

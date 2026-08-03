@@ -1,7 +1,7 @@
 # MOTRIX ERP — 開發快速參考
 
 > 允碩整合集創（統編 60575481）｜ Tel: 04-3602-2818 ｜ info@miactw.com  
-> 文件版本：**2026-08-03g**（外包名冊新增「參與案件」聯動，見 §12）
+> 文件版本：**2026-08-03h**（通知清理／CRM 搜尋修復／全站 Email 通知擴充，見 §12）
 
 ---
 
@@ -783,6 +783,28 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 ## §12 · 變更摘要（最新兩版）
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
+
+### 2026-08-03h — 站內通知清理／CRM 搜尋修復／全站 Email 通知擴充
+
+- **背景**：使用者一次反映三件事——①「每次 API 都核對資料庫內容，很多刪除單據仍然顯示通知」
+  ② 業務開發搜尋框「打兩個字沒反應，要刪一個字才生效」③「所有填寫、變更、操作都需要信件通知」
+- **①通知清理（雙管齊下）**：`notifications` 表與來源記錄（報價單/出貨單/工作事項/業務開發案件）
+  原本無外鍵，`helpers/audit.py` 新增 `_filter_live_notifications()`（`GET /api/notifications/mine`
+  讀取時濾掉來源已刪除/軟刪除的孤兒通知）+ `_purge_notifications()`（來源刪除時主動清列），接線
+  `quotations.py`/`shipping_notes.py`/`daily_tasks.py`/`dev_crm.py`/`projects.py` 共 5 個刪除端點
+- **②CRM 搜尋修復**：`dev-crm.html` `loadCases()` 每次 `@input` 直接 fetch 沒有序號保護，快速輸入時
+  較舊查詢的回應可能晚於新查詢落地覆蓋畫面——新增 `_loadSeq` 序號守衛；同時客戶名稱欄位比照
+  `quotation-form.html` 客戶自動完成模式（原生 datalist 換自訂下拉），選取後立即綁定 `customer_id`
+  並顯示該客戶「過去案件」清單
+- **③全站 Email 擴充**：與使用者確認規則——跳過報價單/出貨單/承攬商等頁面自動存檔會打的 PUT 整筆
+  覆寫端點（避免編輯期間信箱轟炸），建立/刪除/狀態變更/子項目新增等離散動作全部補齊；新增約 60 處
+  `notify_module_activity()` 呼叫，涵蓋 17 個 router；`email_notify.py` 新增出貨單簽核流程專屬四函式
+  （`notify_shipping_submitted`/`notify_shipping_next_tier`/`notify_shipping_approved`/`notify_shipping_returned`，
+  此前出貨單完全沒有寄信）
+- 已用 FastAPI TestClient 對 demo 帳號跑過 quotations/daily-tasks/dev-cases/vendor-contractors/
+  shipping-notes/customers/parts 建立與刪除全流程確認不噴錯；手動插入孤兒通知列驗證過濾邏輯正確
+  （2 筆孤兒被濾掉、1 筆未知 type 正常保留）；`import main` 全模組載入無 ImportError
+- 附帶修正：外包名冊「（無承攬商，純點工）」文字改為「（無承攬商，個人名義案件承攬）」
 
 ### 2026-08-03g — 外包名冊新增「參與案件」聯動
 
