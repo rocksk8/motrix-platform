@@ -243,6 +243,47 @@ def list_quotations(
     return {"total": count, "items": items}
 
 
+@router.post("/api/quotations/case-activity")
+def case_activity(body: dict = Body(...), authorization: str = Header(None)):
+    """Return latest case_updates/work_logs/daily_task_completions activity time per quote_no
+    (for案件管理 list's「有新動態」unread indicator; these three sources don't touch quotations.updated_at)."""
+    user = _require_user(authorization)
+    quote_nos = [q for q in (body.get("quote_nos") or []) if q]
+    if not quote_nos:
+        return {}
+    conn = get_db()
+    try:
+        if user["role"] not in ("superadmin", "admin"):
+            ph = ",".join("?" * len(quote_nos))
+            allowed = conn.execute(
+                f"SELECT quote_no FROM quotations WHERE quote_no IN ({ph}) "
+                "AND (sales_person_id=? OR (sales_person_id IS NULL AND sales_person=?))",
+                quote_nos + [user["id"], user["display_name"]],
+            ).fetchall()
+            quote_nos = [r["quote_no"] for r in allowed]
+            if not quote_nos:
+                return {}
+        ph = ",".join("?" * len(quote_nos))
+        rows = conn.execute(
+            f"""
+            SELECT quote_no, MAX(ts) as latest FROM (
+                SELECT quote_no, created_at as ts FROM case_updates WHERE quote_no IN ({ph})
+                UNION ALL
+                SELECT case_no as quote_no, created_at as ts FROM work_logs WHERE case_no IN ({ph})
+                UNION ALL
+                SELECT dt.case_no as quote_no, dtc.completed_at as ts
+                FROM daily_task_completions dtc JOIN daily_tasks dt ON dt.id = dtc.task_id
+                WHERE dt.case_no IN ({ph}) AND dtc.completed_at != ''
+            )
+            GROUP BY quote_no
+            """,
+            quote_nos + quote_nos + quote_nos,
+        ).fetchall()
+        return {r["quote_no"]: r["latest"] for r in rows}
+    finally:
+        conn.close()
+
+
 @router.get("/api/quotations/{quote_no}")
 def get_quotation(quote_no: str, authorization: str = Header(None)):
     _require_user(authorization)

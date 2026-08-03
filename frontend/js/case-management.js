@@ -7,8 +7,12 @@ function app() {
     filteredCases: [],
     listTab: 'all',
     search: '',
+    unreadOnly: false,
+    readAt: null,
+    caseActivity: {},
     selected: null,
     activeTab: 'biz',
+    execSubTab: 'progress',
     cr: { dealTag: '已成案', caseRecord: null },
     dirty: false,
     saving: false,
@@ -115,6 +119,15 @@ function app() {
         const ru = await fetch('/api/users/selectable', { headers: { Authorization: 'Bearer ' + s.token } })
         if (ru.ok) this.selectableUsers = await ru.json()
       } catch {}
+      try {
+        const stored = localStorage.getItem('motrix_casemgmt_read_at')
+        if (stored) {
+          this.readAt = stored
+        } else {
+          this.readAt = new Date().toISOString()
+          localStorage.setItem('motrix_casemgmt_read_at', this.readAt)
+        }
+      } catch {}
       await this.loadCases()
       this.loadVendors()
       const _qp = new URLSearchParams(location.search).get('q')
@@ -138,6 +151,39 @@ function app() {
       } catch {}
       this.loading = false
       this.filterCases()
+      this.loadCaseActivity()
+    },
+
+    async loadCaseActivity() {
+      const quoteNos = this.cases.map(c => c.quote_no).filter(Boolean)
+      if (!quoteNos.length) { this.caseActivity = {}; return }
+      try {
+        const r = await fetch('/api/quotations/case-activity', {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + this.session.token, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ quote_nos: quoteNos }),
+        })
+        if (r.ok) this.caseActivity = await r.json()
+      } catch {}
+    },
+
+    isUnread(c) {
+      const ts = this.caseActivity[c.quote_no]
+      if (!this.readAt || !ts) return false
+      const u = new Date(ts.replace(' ', 'T'))
+      if (isNaN(u)) return false
+      return u.getTime() > new Date(this.readAt).getTime()
+    },
+
+    unreadCount() {
+      return this.cases.filter(c => this.isUnread(c)).length
+    },
+
+    markAllRead() {
+      this.readAt = new Date().toISOString()
+      try { localStorage.setItem('motrix_casemgmt_read_at', this.readAt) } catch {}
+      this.unreadOnly = false
+      this.filterCases()
     },
 
     filterCases() {
@@ -148,6 +194,9 @@ function app() {
         list = list.filter(c => c.deal_tag !== '已結案')
       } else {
         list = list.filter(c => c.deal_tag === this.listTab)
+      }
+      if (this.unreadOnly) {
+        list = list.filter(c => this.isUnread(c))
       }
       if (this.search.trim()) {
         const q = this.search.trim().toLowerCase()
@@ -176,6 +225,7 @@ function app() {
         this.saveStatus = ''
         this.saveMsg = ''
         this.activeTab = 'biz'
+        this.execSubTab = 'progress'
         this.showLog = false
         this.showImportModal = false
         this._allDonePrompted = false
@@ -776,7 +826,8 @@ function app() {
           }
         })
       })
-      this.activeTab = 'devices'
+      this.activeTab = 'exec'
+      this.execSubTab = 'devices'
       this.setDirty()
     },
     autoSyncDevice(mat, mi) {

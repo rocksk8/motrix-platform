@@ -45,6 +45,7 @@
     .cm-card__tag--stage  { background:#FEF9C3; color:#B45309; }
     .cm-card__tag--closed { background:#F3F4F6; color:#374151; }
     .cm-card__customer { font-size:12px; color:var(--text-primary); font-family:var(--font-zh); font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-bottom:5px; }
+    .cm-card__sales { font-size:10px; color:var(--text-dim); font-family:var(--font-zh); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-bottom:5px; }
     .cm-card__footer { display:flex; align-items:center; justify-content:space-between; }
     .cm-card__amount { font-size:11px; font-family:LINE Seed TW_OTF, sans-serif; font-weight:600; color:var(--text-secondary); }
     .cm-card__date { font-size:10px; color:var(--text-dim); font-family:LINE Seed TW_OTF, sans-serif; }
@@ -53,6 +54,20 @@
     .cm-list__tab-badge { display:inline-flex; align-items:center; justify-content:center; min-width:16px; padding:0 4px; height:16px; background:#E5E7EB; color:#6B7280; font-size:9px; font-weight:700; font-family:LINE Seed TW_OTF, sans-serif; border-radius:8px; margin-left:3px; line-height:1; }
     .cm-list__tab.active .cm-list__tab-badge { background:var(--accent); color:#fff; }
     .cm-list__tab-badge.orange { background:#EA580C; color:#fff; }
+
+    /* unread-activity bar */
+    .cm-unread-bar {
+      background:#FFFBEB; border-bottom:1px solid #FDE68A;
+      padding:7px 14px; font-size:11px; color:#92400E;
+      display:flex; align-items:center; gap:7px; cursor:pointer;
+      font-family:var(--font-zh);
+    }
+    .cm-unread-bar:hover { background:#FEF3C7; }
+    .cm-card__unread-tag {
+      font-size:9px; font-weight:700; padding:1px 5px; border-radius:4px;
+      background:#FEF3C7; color:#92400E; border:1px solid #FDE68A;
+      display:inline-block; margin-bottom:3px;
+    }
 
     /* ── Right panel ── */
     .cm-detail { flex:1; display:flex; flex-direction:column; overflow:hidden; background:#fff; }
@@ -105,8 +120,10 @@
     .cm-log__row:last-child { border-bottom:none; }
 
     /* Tabs */
-    .cm-tabs { display:flex; padding:0 20px; border-bottom:1px solid var(--border-light); background:#fff; flex-shrink:0; }
-    .cm-tab { font-size:12px; font-family:var(--font-zh); padding:9px 14px; border:none; background:none; color:var(--text-dim); cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px; white-space:nowrap; transition:color .1s; }
+    .cm-tabs { display:flex; padding:0 20px; border-bottom:1px solid var(--border-light); background:#fff; flex-shrink:0; overflow-x:auto; -webkit-overflow-scrolling:touch; }
+    .cm-tabs::-webkit-scrollbar { height:3px; }
+    .cm-tabs::-webkit-scrollbar-thumb { background:var(--border-light); border-radius:2px; }
+    .cm-tab { font-size:12px; font-family:var(--font-zh); padding:9px 14px; border:none; background:none; color:var(--text-dim); cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px; white-space:nowrap; flex-shrink:0; transition:color .1s; }
     .cm-tab:hover { color:var(--text-primary); }
     .cm-tab.active { color:var(--accent); border-bottom-color:var(--accent); font-weight:600; }
 
@@ -117,7 +134,9 @@
 
     .cm-section-title { display:flex; align-items:center; gap:10px; font-size:11px; font-weight:700; font-family:LINE Seed TW_OTF, sans-serif; color:var(--text-dim); text-transform:uppercase; letter-spacing:.08em; margin-bottom:14px; }
     .cm-section-title::after { content:''; flex:1; height:1px; background:var(--border-light); }
-    .cm-subtabs { display:flex; margin:-20px -20px 0; padding:0 20px; background:#F7F6F3; border-bottom:1px solid var(--border-light); flex-shrink:0; }
+    .cm-subtabs { display:flex; margin:-20px -20px 0; padding:0 20px; background:#F7F6F3; border-bottom:1px solid var(--border-light); flex-shrink:0; overflow-x:auto; -webkit-overflow-scrolling:touch; }
+    .cm-subtabs::-webkit-scrollbar { height:3px; }
+    .cm-subtabs::-webkit-scrollbar-thumb { background:var(--border-light); border-radius:2px; }
 
     /* Progress */
     .prog { background:#EEECEA; border-radius:99px; height:6px; overflow:hidden; }
@@ -334,6 +353,13 @@
           </div>
         </div>
 
+        <div class="cm-unread-bar" x-show="unreadCount() > 0" @click="unreadOnly = !unreadOnly; filterCases()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+          <span x-text="unreadCount() + ' 筆案件有新動態'"></span>
+          <span style="text-decoration:underline" x-text="unreadOnly ? '顯示全部 →' : '只看有新動態 →'"></span>
+          <button class="btn-add" style="margin-left:auto;padding:2px 10px;font-size:10px;border-style:solid" @click.stop="markAllRead()">一鍵已讀</button>
+        </div>
+
         <div class="cm-list__body">
           <template x-if="loading">
             <div class="cm-empty">
@@ -350,6 +376,7 @@
           </template>
           <template x-for="c in filteredCases" :key="c.quote_no">
             <div class="cm-card" :class="{selected: selected && selected.quote_no === c.quote_no}"
+                 :style="isUnread(c) ? 'border-left-color:#D97706' : ''"
                  @click="selectCase(c.quote_no)">
               <div class="cm-card__head">
                 <span class="cm-card__no" x-text="c.quote_no"></span>
@@ -357,7 +384,11 @@
                       :class="c.deal_tag==='已結案' ? 'cm-card__tag--closed' : (c.deal_tag==='已成案' && c.current_stage ? 'cm-card__tag--stage' : 'cm-card__tag--active')"
                       x-text="c.deal_tag==='已成案' && c.current_stage ? '待 ' + c.current_stage : c.deal_tag"></span>
               </div>
+              <template x-if="isUnread(c)">
+                <span class="cm-card__unread-tag">有新動態</span>
+              </template>
               <div class="cm-card__customer" x-text="c.customer_name || '(未填客戶)'"></div>
+              <div class="cm-card__sales" x-show="c.sales_person" x-text="'業務：' + c.sales_person"></div>
               <div class="cm-card__footer">
                 <span class="cm-card__amount" x-text="'NT$ ' + (c.total||0).toLocaleString()"></span>
                 <span class="cm-card__date" x-text="(c.quote_date || c.created_at || '').slice(0,10)"></span>
@@ -466,12 +497,6 @@
                   <span class="cm-kpi__val" x-text="caseProgressPct() + '%'"></span>
                   <span class="cm-kpi__lbl">執行進度</span>
                 </div>
-                <div class="cm-kpi__pill"
-                     :class="(cr.caseRecord?.materials||[]).length===0 ? '' : (cr.caseRecord?.materials||[]).filter(m=>!m.arrived).length===0 ? 'success' : 'warning'">
-                  <span class="cm-kpi__val"
-                        x-text="(cr.caseRecord?.materials||[]).filter(m=>m.arrived).length + ' / ' + (cr.caseRecord?.materials||[]).length"></span>
-                  <span class="cm-kpi__lbl">叫料到料</span>
-                </div>
               </div>
 
               <!-- Row 3: meta + log toggle -->
@@ -506,10 +531,7 @@
             <!-- Tabs -->
             <div class="cm-tabs">
               <button class="cm-tab" :class="{active: activeTab==='biz'}"      @click="activeTab='biz'">案件資訊</button>
-              <button class="cm-tab" :class="{active: activeTab==='progress'}"  @click="activeTab='progress'">執行進度</button>
-              <button class="cm-tab" :class="{active: activeTab==='materials'}" @click="activeTab='materials'">叫料管控</button>
-              <button class="cm-tab" :class="{active: activeTab==='devices'}"   @click="activeTab='devices'">設備登錄</button>
-              <button class="cm-tab" :class="{active: activeTab==='warranty'}"  @click="activeTab='warranty'">保固備注</button>
+              <button class="cm-tab" :class="{active: activeTab==='exec'}"     @click="activeTab='exec'">執行管理</button>
               <button class="cm-tab" :class="{active: activeTab==='dispatch'}" @click="activeTab='dispatch'">承攬商</button>
               <button class="cm-tab" :class="{active: activeTab==='shipping'}" @click="activeTab='shipping'; loadShippingNotes(selected.quote_no)">出貨單</button>
               <button class="cm-tab" :class="{active: activeTab==='feed'}" @click="activeTab='feed'; loadCaseUpdates(selected.quote_no)">動態</button>
@@ -747,8 +769,17 @@
 
               </div><!-- /biz -->
 
+              <!-- ══ 執行管理 Tab（進度／叫料／設備／保固 子分頁） ══ -->
+              <div x-show="activeTab==='exec'">
+                <div class="cm-subtabs">
+                  <button class="cm-tab" :class="{active: execSubTab==='progress'}"  @click="execSubTab='progress'">執行進度</button>
+                  <button class="cm-tab" :class="{active: execSubTab==='materials'}" @click="execSubTab='materials'">叫料管控</button>
+                  <button class="cm-tab" :class="{active: execSubTab==='devices'}"   @click="execSubTab='devices'">設備登錄</button>
+                  <button class="cm-tab" :class="{active: execSubTab==='warranty'}"  @click="execSubTab='warranty'">保固備注</button>
+                </div>
+
               <!-- ── 執行進度 ── -->
-              <div x-show="activeTab==='progress'">
+              <div x-show="execSubTab==='progress'">
                 <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px">
                   <div style="flex:1">
                     <div class="prog">
@@ -898,7 +929,7 @@
               </div>
 
               <!-- ── 叫料管控 ── -->
-              <div x-show="activeTab==='materials'">
+              <div x-show="execSubTab==='materials'">
                 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
                   <span class="cm-section-title" style="margin-bottom:0">叫料清單</span>
                   <div style="display:flex;gap:8px">
@@ -976,7 +1007,7 @@
               </div>
 
               <!-- ── 設備登錄 ── -->
-              <div x-show="activeTab==='devices'">
+              <div x-show="execSubTab==='devices'">
                 <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
                   <span class="cm-section-title" style="margin-bottom:0">設備 SN / MAC 記錄</span>
                   <template x-if="(cr.caseRecord?.devices||[]).length > 0">
@@ -1167,7 +1198,7 @@
               </div>
 
               <!-- ── 保固備注 ── -->
-              <div x-show="activeTab==='warranty'">
+              <div x-show="execSubTab==='warranty'">
                 <template x-if="cr.dealTag === '已結案'">
                   <div style="background:#F5F3FF;border:1px solid #C4B5FD;border-radius:10px;padding:14px 18px;margin-bottom:18px">
                     <div style="font-size:12px;font-weight:700;color:#6D28D9;font-family:var(--font-zh);margin-bottom:8px">已結案 — 保固追蹤中</div>
@@ -1205,7 +1236,8 @@
                     <span x-show="saving">儲存中...</span>
                   </button>
                 </div>
-              </div>
+              </div><!-- /warranty -->
+              </div><!-- /exec -->
 
               <!-- ══ 財務 Tab ══ -->
               <div x-show="activeTab==='fin' && canSeeFinancial()">
@@ -2202,6 +2234,7 @@ function __noop_stub() {
     search: '',
     selected: null,
     activeTab: 'biz',
+    execSubTab: 'progress',
     cr: { dealTag: '已成案', caseRecord: null },
     dirty: false,
     saving: false,
@@ -2303,6 +2336,7 @@ function __noop_stub() {
         this.saveStatus = ''
         this.saveMsg = ''
         this.activeTab = 'biz'
+        this.execSubTab = 'progress'
         this.showLog = false
         this.showImportModal = false
         this._allDonePrompted = false
@@ -2713,7 +2747,8 @@ function __noop_stub() {
           }
         })
       })
-      this.activeTab = 'devices'
+      this.activeTab = 'exec'
+      this.execSubTab = 'devices'
       this.setDirty()
     },
     autoSyncDevice(mat, mi) {

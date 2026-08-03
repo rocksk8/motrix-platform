@@ -40,7 +40,7 @@
 
     /* ── Left panel ── */
     .dc-list {
-      width: 300px; min-width: 260px;
+      width: 340px; min-width: 300px;
       border-right: 1px solid var(--border-light);
       display: flex; flex-direction: column;
       background: #FAFAF9; overflow: hidden;
@@ -101,6 +101,11 @@
     .dc-case-card__sub {
       font-size: 11px; color: var(--text-dim); white-space: nowrap;
       overflow: hidden; text-overflow: ellipsis; margin-bottom: 6px;
+    }
+    .dc-case-card__people {
+      font-size: 10px; color: var(--text-dim); white-space: nowrap;
+      overflow: hidden; text-overflow: ellipsis; margin-bottom: 6px;
+      font-family: var(--font-zh);
     }
     .dc-case-card__foot { display: flex; align-items: center; gap: 6px; }
 
@@ -318,6 +323,15 @@
     }
     .dc-stale-bar:hover { background: #FEE2E2; }
 
+    /* unread-case bar */
+    .dc-unread-bar {
+      background: #FFFBEB; border-bottom: 1px solid #FDE68A;
+      padding: 7px 14px; font-size: 11px; color: #92400E;
+      display: flex; align-items: center; gap: 7px; cursor: pointer;
+      font-family: var(--font-zh);
+    }
+    .dc-unread-bar:hover { background: #FEF3C7; }
+
     /* toast */
     .dc-toast {
       position: fixed; bottom: 24px; left: 50%;
@@ -383,6 +397,14 @@
         </div>
       </div>
 
+      <!-- 未讀案件提示 -->
+      <div class="dc-unread-bar" x-show="unreadCount > 0" @click="unreadOnly = !unreadOnly">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+        <span x-text="unreadCount + ' 筆案件有更新未讀'"></span>
+        <span style="text-decoration:underline" x-text="unreadOnly ? '顯示全部 →' : '只看未讀 →'"></span>
+        <button class="btn btn-ghost btn-sm" style="margin-left:auto;padding:2px 10px;font-size:10px" @click.stop="markAllRead()">一鍵已讀</button>
+      </div>
+
       <!-- 洽談中逾期警示 -->
       <div class="dc-stale-bar" x-show="staleCount > 0" @click="staleOnly = !staleOnly">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><path d="M12 9v4M12 17h.01"/></svg>
@@ -405,17 +427,22 @@
 
         <template x-for="c in filteredCases" :key="c.id">
           <div class="dc-case-card" :class="{selected: selectedCase && selectedCase.id === c.id}"
-               :style="isStale(c) ? 'border-left:3px solid #DC2626;background:#FEF2F2' : (isAdmin && _prevSeen && c.updatedAt > _prevSeen ? 'border-left:3px solid #D97706;background:#FFFBEB' : '')"
+               :style="isStale(c) ? 'border-left:3px solid #DC2626;background:#FEF2F2' : (isUnread(c) ? 'border-left:3px solid #D97706;background:#FFFBEB' : '')"
                @click="selectCase(c)">
             <template x-if="isStale(c)">
               <span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;background:#FEE2E2;color:#991B1B;border:1px solid #FCA5A5;display:inline-block;margin-bottom:3px;margin-right:4px"
                     x-text="'⚠ 超過' + staleDays(c) + '天未更新'"></span>
             </template>
-            <template x-if="!isStale(c) && isAdmin && _prevSeen && c.updatedAt > _prevSeen">
+            <template x-if="!isStale(c) && isUnread(c)">
               <span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;background:#FEF3C7;color:#92400E;border:1px solid #FDE68A;display:inline-block;margin-bottom:3px">有更新</span>
             </template>
             <div class="dc-case-card__name" x-text="c.caseName"></div>
             <div class="dc-case-card__sub" x-text="c.customerName || '（未指定客戶）'"></div>
+            <div class="dc-case-card__people" x-show="c.salesPersonNames.length || c.plannerNames.length">
+              <span x-show="c.salesPersonNames.length" x-text="'業務：' + c.salesPersonNames.join('、')"></span>
+              <span x-show="c.salesPersonNames.length && c.plannerNames.length"> ｜ </span>
+              <span x-show="c.plannerNames.length" x-text="'規劃：' + c.plannerNames.join('、')"></span>
+            </div>
             <div class="dc-case-card__foot">
               <span class="dc-badge"
                 :class="c.status==='成案'?'dc-badge--won':c.status==='未成案'?'dc-badge--lost':'dc-badge--talk'"
@@ -852,7 +879,7 @@ function devCrmPage() {
     session: {},
     token: '',
     isAdmin: false,
-    _prevSeen: null,
+    readAt: null,
 
     cases: [],
     casesLoading: false,
@@ -861,6 +888,7 @@ function devCrmPage() {
     filterYear: '',
     filterMonth: '',
     staleOnly: false,
+    unreadOnly: false,
 
     selectedCase: null,
 
@@ -907,12 +935,31 @@ function devCrmPage() {
         const matchYear   = !this.filterYear  || (c.createdAt || '').slice(0, 4) === this.filterYear
         const matchMonth  = !this.filterMonth || (c.createdAt || '').slice(5, 7) === this.filterMonth
         const matchStale  = !this.staleOnly   || this.isStale(c)
-        return matchStatus && matchYear && matchMonth && matchStale
+        const matchUnread = !this.unreadOnly  || this.isUnread(c)
+        return matchStatus && matchYear && matchMonth && matchStale && matchUnread
       })
     },
 
     get staleCount() {
       return this.cases.filter(c => this.isStale(c)).length
+    },
+
+    get unreadCount() {
+      return this.cases.filter(c => this.isUnread(c)).length
+    },
+
+    isUnread(c) {
+      if (!this.readAt || !c.updatedAt) return false
+      const u = new Date(c.updatedAt.replace(' ', 'T'))
+      if (isNaN(u)) return false
+      return u.getTime() > new Date(this.readAt).getTime()
+    },
+
+    markAllRead() {
+      this.readAt = new Date().toISOString()
+      try { localStorage.setItem('motrix_devcrm_read_at', this.readAt) } catch (_e) {}
+      this.unreadOnly = false
+      this._toast('已將目前所有案件標記為已讀')
     },
 
     caseCount(status) {
@@ -947,8 +994,13 @@ function devCrmPage() {
         location.href = '../index.html'; return
       }
       try {
-        const prev = JSON.parse(localStorage.getItem('motrix_module_prev_seen') || '{}')
-        this._prevSeen = prev['dev_crm'] || null
+        const stored = localStorage.getItem('motrix_devcrm_read_at')
+        if (stored) {
+          this.readAt = stored
+        } else {
+          this.readAt = new Date().toISOString()
+          localStorage.setItem('motrix_devcrm_read_at', this.readAt)
+        }
       } catch (_e) {}
       await Promise.all([this.loadCases(), this.loadUsers(), this.loadCustomers()])
       if (this.isAdmin) this.loadPendingCount()

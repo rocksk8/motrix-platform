@@ -1,7 +1,7 @@
 # MOTRIX ERP — 開發快速參考
 
 > 允碩整合集創（統編 60575481）｜ Tel: 04-3602-2818 ｜ info@miactw.com  
-> 文件版本：**2026-08-03a**（業務開發 CRM 新增年月篩選／全部排除未成案／洽談中逾期警示，見 §12）
+> 文件版本：**2026-08-03c**（案件管理介面優化：執行類分頁合併／手機分頁溢出修正／有新動態未讀提示／KPI 精簡／卡片新增負責業務，見 §12）
 
 ---
 
@@ -536,6 +536,7 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
 |--------|------|------|
 | GET | /next-quote-no | 認證必填 |
 | GET/POST | /quotations | 列表（角色過濾）／建立 |
+| POST | /quotations/case-activity | 案件管理列表「有新動態」提示用；body `{quote_nos:[...]}`，回傳各單號 case_updates/work_logs/daily_task_completions 三來源最新時間；非 admin 沿用 `/quotations` 同款角色過濾 |
 | GET/PUT/DELETE | /quotations/{no} | DELETE 僅草稿；PUT 鎖定狀態需解鎖 |
 | PATCH | /quotations/{no}/status | superadmin + 白名單狀態 |
 | PATCH | /quotations/{no}/deal-tag | 同步 `deal_tag`；已成案降級需 admin+；已結案需 superadmin |
@@ -754,6 +755,30 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 ## §12 · 變更摘要（最新兩版）
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
+
+### 2026-08-03c — 案件管理介面優化（5 項，依序完成）
+
+- **背景**：使用者請我針對案件管理（`case-management.html`）提供介面建議，逐項確認後「照順序開始改」。5 項如下
+1. **合併執行類分頁**：`執行進度／叫料管控／設備登錄／保固備注` 四個一級 tab 合併為一個「執行管理」+ `.cm-subtabs` 二層切換（CSS 早已定義但整份檔案沒用到，這次補上使用），一級 tab 從 9 個減到 6 個
+2. **手機版分頁溢出修正**：`.cm-tabs`/`.cm-subtabs` 補上 `overflow-x:auto` + 細捲軸樣式，避免窄螢幕分頁被裁切
+3. **案件卡片「有新動態」未讀提示**：新增 `POST /api/quotations/case-activity`（`backend/routers/quotations.py`），一次 SQL `UNION ALL` 彙整 `case_updates`/`work_logs`/`daily_task_completions JOIN daily_tasks` 三個來源（這三者都不會更新 `quotations.updated_at`，原本完全無法從既有欄位判斷有無新動態）取每案最新時間，非 admin 沿用 `/api/quotations` 同款角色過濾。前端仿照業務開發 CRM 剛做的「未讀游標＋一鍵已讀」設計（`localStorage['motrix_casemgmt_read_at']`，只能靠手動點擊「一鍵已讀」位移，不會因造訪頁面自動位移）
+4. **精簡 Header KPI**：拿掉與「叫料管控」分頁內容重複的「叫料到料」膠囊
+5. **卡片新增「負責業務」**：`sales_person` 欄位 `/api/quotations` 本來就有回傳，前端補一行顯示即可
+- **實測時抓到並修正一個真實 bug**：任務 1 一開始誤改到 `case-management.html` inline `<script>` 裡的 `function __noop_stub()`——這正是 2026-08-02c 條目已警告過的死碼陷阱（真正生效邏輯在外部 `frontend/js/case-management.js`）。瀏覽器 console 出現 `execSubTab is not defined` 才發現，已把對應狀態與方法改補到 `case-management.js` 的真正 `app()` 函式
+- 已用 demo 帳號跑完整報價單流程（建立→送出審核→簽核→已成案，過程中發現 demo 預設無簽核流程時禁止自簽，已在簽核設定加入 demo 為簽核人）建立測試案件，實機驗證 6 個一級 tab + 4 個子分頁切換、KPI 剩 4 顆、卡片顯示業務欄位；新增「動態」留言後確認未讀 badge/彙總列正確顯示、一鍵已讀正確清除、重整兩次不會自動消失、同一天內再次留言仍正確判定未讀（未重蹈 dev-crm 那次的字串比較 timestamp bug）
+- 無 DB migration
+
+### 2026-08-03b — 業務開發 CRM：一鍵已讀／只看未讀篩選／卡片加寬
+
+- **背景**：使用者反映「有更新」琥珀色提示會不斷累積、點不完。追查根因：舊機制依賴 `sidebar.js` 全域共用的 `motrix_module_seen`/`motrix_module_prev_seen`，已讀基準是「上一次頁面載入的時間點」而非「離開時間點」——同一次瀏覽中自己編輯/新增的案件，其 `updatedAt` 必定晚於本次造訪基準，下次造訪仍判定為「有更新」，且該標籤原本寫死只給 admin+ 看
+- **前端**（`dev-crm.html`）：
+  - 已讀基準改為 dev-crm 專屬、`localStorage['motrix_devcrm_read_at']` 儲存的游標，**只能靠手動點擊「一鍵已讀」才會位移**（不再因造訪頁面自動位移），從根本解決「已讀太多無法消除」；不再限定 `isAdmin`，改開放給所有能使用本模組的角色
+  - 新增 `unreadCount`／`isUnread(c)`／`markAllRead()`；左欄新增「未讀彙總列」（`.dc-unread-bar`，比照既有 `.dc-stale-bar` 樣式），顯示未讀筆數、可點擊切換「只看未讀」篩選、右側「一鍵已讀」按鈕
+  - `filteredCases` 新增 `unreadOnly` 篩選條件（與既有「只看逾期」`staleOnly` 可並存，紅色逾期樣式優先於琥珀色未讀樣式）
+  - `.dc-list` 欄寬 300px→340px；卡片新增業務開發／專案規劃人員姓名列（`salesPersonNames`／`plannerNames`，後端 `_case_row()` 本就有回傳，未改後端）
+  - **實測時發現並修正一個 bug**：`isUnread()` 一開始直接用字串比較 `c.updatedAt > readAt`，但後端時間戳為 `"2026-08-03 12:24:24"`（空格分隔）、`readAt` 為 `toISOString()` 的 `"...T..."` 格式——同一天的日期在空格與 `T` 的 ASCII 排序下，字串比較恆為「未大於」，導致當天所有更新都不會被判定為未讀（用 demo 帳號建立測試案件當場重現）。已改為 `new Date(c.updatedAt.replace(' ','T'))` 正規化後用 `getTime()` 比較（比照既有 `_daysSince()` 的正規化寫法）
+- 無 DB migration；未改動 `sidebar.js`/`notif.js`（風險侷限在 `dev-crm.html`，其他模組共用的 sidebar 數字徽章機制不受影響）
+- 已用 demo 帳號（隔離空白 db）實機驗證：建立測試案件＋開發記錄 → 未讀彙總列與琥珀色標籤正確顯示 → 「一鍵已讀」立即清空並顯示 toast → 重新整理兩次確認已讀狀態持久不會消失也不會誤判 → 再次編輯記錄後未讀正確重新出現且不會因重整頁面而自動清除（修正前的「兩次造訪後才會消失」問題不再重現）→ 「只看未讀」篩選正確運作
 
 ### 2026-08-03a — 業務開發 CRM：年月篩選／全部排除未成案／洽談中逾期警示
 
