@@ -1,7 +1,7 @@
 # MOTRIX ERP — 開發快速參考
 
 > 允碩整合集創（統編 60575481）｜ Tel: 04-3602-2818 ｜ info@miactw.com  
-> 文件版本：**2026-08-03c**（案件管理介面優化：執行類分頁合併／手機分頁溢出修正／有新動態未讀提示／KPI 精簡／卡片新增負責業務，見 §12）
+> 文件版本：**2026-08-03d**（修復 module_versions 表無限增生 bug，DB v35，正式機每日備份可望從 300+MB 縮小至 2MB 內，見 §12）
 
 ---
 
@@ -266,7 +266,8 @@ parts, projects, project_logs
 system_settings, audit_log, notifications
 quote_seq       -- 月序 MQ-YYYYMM-NNN
 login_rate_limit -- ip PK, locked_until（服務重啟後維持鎖定）
-module_versions  -- 模組版本紀錄（同步自 version_manifest.json）
+module_versions  -- 模組版本紀錄（同步自 version_manifest.json），UNIQUE(module, version)（DB v35，
+                    修復先前無此限制導致 INSERT OR IGNORE 每次重啟都重複整批插入的無限增生 bug）
 daily_tasks / daily_task_completions / daily_task_edit_log
 
 vendor_contractors   -- code(V-YYYYMM-NNN), name, tax_id, contact, data_json(visits/tags/category)
@@ -755,6 +756,45 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 ## §12 · 變更摘要（最新兩版）
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
+
+### 2026-08-03d — 修復 module_versions 表無限增生 bug（DB v35）
+
+- **背景**：使用者詢問正式機每日備份為何每次 300~400MB。用當天雲端備份的 db 副本唯讀查驗
+  （完全未觸碰正式機）發現 `module_versions.json` 匯出檔案高達 344MB，比 db 本身（301MB）
+  還大；查 db 內容發現該表實際 **626,725 列**，但只有 **143 組不同的 (module, version)**
+  （跟 `version_manifest.json` 筆數一致），平均每組重複約 4,383 次
+- **根因**：`module_versions` 表只有 `id` 主鍵，`(module, version)` 從未有 UNIQUE 限制；
+  `_sync_module_versions()`（`helpers/startup.py`）每次伺服器啟動都用 `INSERT OR IGNORE`
+  想達到「已存在就跳過」，但沒有 UNIQUE 可判斷衝突，這個 INSERT **永遠會成功**，等於每次
+  重啟都把 143 筆 manifest 內容整批當新資料插入一次；正式機的 crash-restart 自動重啟迴圈
+  （§1.1）加上歷次升級套用的重啟，長期累積出這個倍數
+- **修法**（`backend/db.py`，DB v35 `_m035_module_versions_unique_dedup`）：
+  - `module_versions` 補上 `UNIQUE(module, version)`（含全新安裝用的 inline schema，讓新裝機
+    從一開始就有此限制；SQLite 不支援 `ALTER TABLE ADD CONSTRAINT`，既有安裝走 migration
+    用「建新表→分兩段 `INSERT OR IGNORE` 搬資料（使用者手動建立的紀錄，`updated_by != 'system'`，
+    永遠優先於系統同步產生的重複列）→ 刪舊表→改名→重建索引」的既有慣例手法（比照
+    `_m014_weekly_recurrence` 已示範過的同款重建表模式）
+  - migration 內含 `VACUUM`，讓重複列騰出的磁碟空間立即釋放，不留到之後另外處理
+  - migration 具冪等性（先檢查 UNIQUE 是否已存在才動手，符合本檔案「Each migration must be
+    idempotent」慣例），全新安裝／已修復過的安裝重跑會直接略過
+  - `backend/routers/module_versions.py` 的 `POST /api/module-versions`（手動新增版本紀錄）
+    補上 `sqlite3.IntegrityError` → 409 的友善錯誤處理，避免加上 UNIQUE 後管理員手動輸入
+    重複 (module, version) 時噴 500
+- **零資料流失驗證**（用當天正式機備份 db 的副本實測，全程只在本機操作、未連線或修改正式機）：
+  - 查過正式機備份確認 **626,725 列全部 `updated_by='system'`，沒有任何使用者手動建立
+    的紀錄**——這次清理不會漏掉任何人工輸入的內容
+  - 直接用新版 `db.py` 的 `init_db(路徑)`（`apply_update.ps1` 本來就是這樣做 migration 乾跑
+    驗證）在備份副本上實測：1.02 秒內完成，db 從 301.07MB → **1.71MB**；`module_versions`
+    143 列，`COUNT(DISTINCT module||version)` 同為 143（證明真的去重）；逐筆比對 143 筆
+    manifest 內容與 db 內容，只有 1 筆歷史內容不同（`每日工作事項/2026-07-22r`，屬於
+    manifest 本身在該筆存在後又被改過內容、尚未部署同步的既有現象，不是這次遷移造成，
+    下次部署套用時 `_sync_module_versions()` 既有的 UPDATE 同步邏輯就會自動修正）
+  - 額外用 `dbstat` 虛擬表確認 301MB 的 db 裡，`module_versions` 表+索引就佔了約 312.5MB
+    （超過 99%），其餘所有業務資料表加總不到 1.5MB——確認沒有其他表存在類似異常，這次修正
+    範圍已涵蓋完整根因
+  - 也驗證了全新安裝（空 db 從零 `init_db()`）與重複執行（migration 冪等性）兩種情境皆正確
+- 無其他 DB 表受影響；本次改動已在開發機驗證完整，**尚未套用至正式機**——需依 §15 流程，
+  在正式機執行 `apply_update.ps1`（本身已有 db 快照＋migration 乾跑驗證＋失敗自動回滾）
 
 ### 2026-08-03c — 案件管理介面優化（5 項，依序完成）
 
@@ -1500,7 +1540,7 @@ powershell -ExecutionPolicy Bypass -File backend\tools\apply_update.ps1 -Package
 
 2. **本檔 §12** — 在最新版本區塊加入摘要行。
 
-> **⚠️ 伺服器重啟後**，`_sync_module_versions()` 自動將 manifest 條目同步至 DB `module_versions` 表（UPDATE 邏輯同步修改過的欄位，不影響使用者手動新增的條目）。若修改了已存在條目的 `time` 或 `content`，下次重啟即生效。
+> **⚠️ 伺服器重啟後**，`_sync_module_versions()` 自動將 manifest 條目同步至 DB `module_versions` 表（UPDATE 邏輯同步修改過的欄位，不影響使用者手動新增的條目）。若修改了已存在條目的 `time` 或 `content`，下次重啟即生效。**DB v35 起 `(module, version)` 已有 UNIQUE 限制**，`INSERT OR IGNORE` 才真正名副其實——v35 之前這個限制不存在，代表每次重啟都會把整份 manifest 重複插入一次，長期下來會讓 `module_versions` 表無限增生（正式機曾實測膨脹到 626,725 列僅 143 種組合，佔掉每日備份 300+MB 中的絕大部分），已修復並清理。
 
 ### 其他維護提醒
 

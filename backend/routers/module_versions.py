@@ -1,5 +1,6 @@
 """Module version records — per-module changelog stored in DB, synced via daily backup."""
 import json
+import sqlite3
 from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Header
@@ -72,12 +73,16 @@ def create_module_version(body: ModuleVersionBody, authorization: str = Header(N
 
     now = datetime.now().isoformat(timespec="seconds")
     conn = get_db()
-    cur = conn.execute(
-        "INSERT INTO module_versions (module, version, updated_at, content, updated_by) "
-        "VALUES (?, ?, ?, ?, ?)",
-        (body.module.strip(), body.version.strip(), now,
-         body.content.strip(), u["display_name"] or u["username"]),
-    )
+    try:
+        cur = conn.execute(
+            "INSERT INTO module_versions (module, version, updated_at, content, updated_by) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (body.module.strip(), body.version.strip(), now,
+             body.content.strip(), u["display_name"] or u["username"]),
+        )
+    except sqlite3.IntegrityError:
+        conn.close()
+        raise HTTPException(409, "此模組已有相同版本號的紀錄，請換一個版本號")
     new_id = cur.lastrowid
     conn.commit()
     conn.close()

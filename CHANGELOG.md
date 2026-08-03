@@ -5,6 +5,27 @@
 
 ---
 
+### 2026-08-03d — 修復 module_versions 表無限增生 bug（DB v35）
+
+**緣起**：使用者詢問正式機每日備份為何每次 300~400MB。查驗當天雲端備份 db 副本（唯讀，未動
+正式機）發現 `module_versions` 表實際 626,725 列，但只有 143 組不同的 `(module, version)`，
+佔掉備份 db 301MB 中超過 99% 的空間。
+
+- **根因**：`module_versions` 表 `(module, version)` 從未有 UNIQUE 限制，`_sync_module_versions()`
+  （`helpers/startup.py`）每次伺服器啟動用 `INSERT OR IGNORE` 想跳過已存在的紀錄，但沒有
+  UNIQUE 可判斷衝突，每次重啟都把 143 筆 manifest 整批重複插入一次；crash-restart 迴圈＋
+  歷次升級重啟長期累積出約 4,383 倍的重複
+- `backend/db.py`：新增 DB v35 migration，補上 `UNIQUE(module, version)` 並重建表去重
+  （優先保留使用者手動建立的紀錄），內含 `VACUUM` 釋放磁碟空間；migration 具冪等性
+- `backend/routers/module_versions.py`：手動新增版本紀錄撞到重複 (module, version) 時
+  回 409 友善錯誤，不再讓原生 IntegrityError 炸到 500
+- **零資料流失驗證**：用當天正式機備份 db 副本實測（全程未連線正式機）——確認全部 626,725
+  列皆為系統同步產生（無任何使用者手動輸入的紀錄）；用新版 `db.py` 的 `init_db()` 對備份副本
+  跑過遷移，1 秒內完成，db 從 301MB 降至 1.71MB，143 列與 143 組相符（真正去重），逐筆比對
+  manifest 內容與 db 內容全部一致（1 筆歷史內容差異屬既有現象，下次部署會自動同步修正，
+  與本次遷移無關）；並用 `dbstat` 確認 db 內其餘所有表加總不到 1.5MB，沒有其他表有類似問題
+- 尚未部署至正式機，需依 §15 流程由使用者在正式機執行 `apply_update.ps1`
+
 ### 2026-08-03c — 案件管理介面優化（5 項）
 
 **緣起**：針對案件管理介面提出的 5 點建議，使用者確認後依序落實。

@@ -30,7 +30,7 @@ DEMO_SHIPPING_PDF_ARCHIVE_DIR = os.path.join(os.path.dirname(__file__), "_demo_s
 # v32/v33 (switch_guide tables + specs_json column) were initially missing
 # from this checkout — reconstructed 2026-08-01 by reverse-engineering the
 # actual schema off a production DB backup (see _m032_switch_guide docstring).
-CURRENT_VERSION = 34
+CURRENT_VERSION = 35
 
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
 # execution model) whenever the current request is authenticated as the 'demo'
@@ -423,7 +423,8 @@ def init_db(path: str = None):
             version    TEXT    NOT NULL DEFAULT '',
             updated_at TEXT    NOT NULL,
             content    TEXT    NOT NULL DEFAULT '',
-            updated_by TEXT    NOT NULL DEFAULT ''
+            updated_by TEXT    NOT NULL DEFAULT '',
+            UNIQUE(module, version)
         );
         CREATE INDEX IF NOT EXISTS idx_mv_module
             ON module_versions(module, updated_at);
@@ -1319,6 +1320,66 @@ def _m034_shipping_notes(conn):
     conn.commit()
 
 
+def _has_unique_module_version(conn) -> bool:
+    for idx in conn.execute("PRAGMA index_list(module_versions)").fetchall():
+        if not idx["unique"]:
+            continue
+        cols = [r["name"] for r in conn.execute(f"PRAGMA index_info({idx['name']})").fetchall()]
+        if set(cols) == {"module", "version"}:
+            return True
+    return False
+
+
+def _m035_module_versions_unique_dedup(conn):
+    """Add UNIQUE(module, version) to module_versions and dedupe existing rows.
+
+    Root cause: _sync_module_versions() (helpers/startup.py) runs on every server
+    startup and relies on INSERT OR IGNORE to skip rows that already exist, but
+    without a UNIQUE constraint there was nothing to conflict on — every restart
+    re-inserted the full version_manifest.json (143 entries) as brand-new rows.
+    Confirmed on a production db backup: 626,725 rows for only 143 distinct
+    (module, version) pairs, accounting for ~270MB of a ~301MB database.
+
+    Rebuild the table (SQLite can't ALTER TABLE ADD CONSTRAINT) keeping exactly one
+    row per (module, version): rows created by a real user (updated_by != 'system',
+    see routers/module_versions.py POST endpoint) always win over system-synced
+    duplicates, so zero user-entered content can ever be lost by this cleanup.
+    """
+    if _has_unique_module_version(conn):
+        return
+    conn.executescript("""
+        CREATE TABLE module_versions_new (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            module     TEXT    NOT NULL,
+            version    TEXT    NOT NULL DEFAULT '',
+            updated_at TEXT    NOT NULL,
+            content    TEXT    NOT NULL DEFAULT '',
+            updated_by TEXT    NOT NULL DEFAULT '',
+            UNIQUE(module, version)
+        );
+
+        INSERT OR IGNORE INTO module_versions_new
+            (id, module, version, updated_at, content, updated_by)
+        SELECT id, module, version, updated_at, content, updated_by
+        FROM module_versions
+        WHERE updated_by != 'system'
+        ORDER BY id DESC;
+
+        INSERT OR IGNORE INTO module_versions_new
+            (id, module, version, updated_at, content, updated_by)
+        SELECT id, module, version, updated_at, content, updated_by
+        FROM module_versions
+        WHERE updated_by = 'system'
+        ORDER BY id DESC;
+
+        DROP TABLE module_versions;
+        ALTER TABLE module_versions_new RENAME TO module_versions;
+        CREATE INDEX IF NOT EXISTS idx_mv_module ON module_versions(module, updated_at);
+    """)
+    conn.commit()
+    conn.execute("VACUUM")
+
+
 # Ordered list — index+1 is the migration version number.
 _MIGRATIONS = [
     _m001_export_columns,        # v1
@@ -1355,6 +1416,7 @@ _MIGRATIONS = [
     _m032_switch_guide,                       # v32
     _m033_switch_products_specs,              # v33
     _m034_shipping_notes,                     # v34
+    _m035_module_versions_unique_dedup,       # v35
 ]
 
 
