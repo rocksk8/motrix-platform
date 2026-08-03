@@ -30,7 +30,7 @@ DEMO_SHIPPING_PDF_ARCHIVE_DIR = os.path.join(os.path.dirname(__file__), "_demo_s
 # v32/v33 (switch_guide tables + specs_json column) were initially missing
 # from this checkout — reconstructed 2026-08-01 by reverse-engineering the
 # actual schema off a production DB backup (see _m032_switch_guide docstring).
-CURRENT_VERSION = 35
+CURRENT_VERSION = 36
 
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
 # execution model) whenever the current request is authenticated as the 'demo'
@@ -1380,6 +1380,19 @@ def _m035_module_versions_unique_dedup(conn):
     conn.execute("VACUUM")
 
 
+def _m036_dispatch_personnel(conn):
+    """Add personnel_json to contractor_dispatches — snapshot list of contractors
+    (外包名冊) roster members assigned to this dispatch, e.g. [{"id":1,"name":"..."}].
+    Stored as a self-contained snapshot (same philosophy as items_json) rather than
+    a bare id list, so it survives even if the referenced contractors row is later
+    deleted or renamed."""
+    if not _col_exists(conn, "contractor_dispatches", "personnel_json"):
+        conn.execute(
+            "ALTER TABLE contractor_dispatches ADD COLUMN personnel_json TEXT NOT NULL DEFAULT '[]'"
+        )
+    conn.commit()
+
+
 # Ordered list — index+1 is the migration version number.
 _MIGRATIONS = [
     _m001_export_columns,        # v1
@@ -1417,6 +1430,7 @@ _MIGRATIONS = [
     _m033_switch_products_specs,              # v33
     _m034_shipping_notes,                     # v34
     _m035_module_versions_unique_dedup,       # v35
+    _m036_dispatch_personnel,                 # v36
 ]
 
 

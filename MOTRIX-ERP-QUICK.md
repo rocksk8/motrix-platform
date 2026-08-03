@@ -1,7 +1,7 @@
 # MOTRIX ERP — 開發快速參考
 
 > 允碩整合集創（統編 60575481）｜ Tel: 04-3602-2818 ｜ info@miactw.com  
-> 文件版本：**2026-08-03d**（修復 module_versions 表無限增生 bug，DB v35，正式機每日備份可望從 300+MB 縮小至 2MB 內，見 §12）
+> 文件版本：**2026-08-03e**（承攬商派發新增外包名單人員個別計費，成本同步至財務／精算，DB v36，見 §12）
 
 ---
 
@@ -272,7 +272,8 @@ daily_tasks / daily_task_completions / daily_task_edit_log
 
 vendor_contractors   -- code(V-YYYYMM-NNN), name, tax_id, contact, data_json(visits/tags/category)
 contractor_dispatches -- quote_no, vendor_id, status, items_json, total_amount, tax_rate,
-                         accepted_at, accepted_by（DB v25）
+                         accepted_at, accepted_by（DB v25），personnel_json（外包名單人員個別計費快照
+                         [{id,name,amount,note}]，DB v36，見 §5.7）
 case_updates         -- id, quote_no, author(username), content, type('comment'), created_at（DB v26）
 work_logs            -- + case_no TEXT DEFAULT ''（DB v26）
 
@@ -435,6 +436,11 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
 - 存於 `data_json.settlement`；欄位 `settle_status` = `draft` \| `finalized`
 - 每次儲存寫入 `editHistory[]`
 - `finalized` 後：非 superadmin 不可再修改；API 失敗時**完整回滾** status + finalizedAt + finalizedBy
+- **實際總成本三個來源**（2026-08-03e 起）：`itemActualTotal`（原始報價品項實際成本）+
+  `extraTotal`（額外支出，手動）+ `dispatchTotal`（承攬商派發成本，**自動即時讀取**
+  `GET /api/contractor-dispatches?quote_no=`，唯讀不可編輯，排除 `status==='cancelled'`；
+  每筆派發貢獻 = 承攬商含稅合計 `totalWithTax` + 外包名單人員金額加總 `personnelTotal`
+  不計稅）；`calcSummary()` 每次都重新抓即時派發資料，不會凍結成精算存檔當時的快照
 
 ### §5.6 · 專案
 
@@ -460,6 +466,13 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
 - 流程違規（如跳過待驗收直接已驗收）→ **409**
 - 已驗收後：卡片底部顯示綠色橫條，含驗收人姓名 + 時間
 - 狀態亦可透過 Modal 下拉直接設定（彈性操作，不走 `/accept` endpoint）
+- **外包名單人員（DB v36，2026-08-03e）**：新增派發 Modal 內可從外包名冊（`contractors` 表，
+  `GET /api/contractors/selectable`，比照 `vendor-contractors/selectable` 慣例，任何登入者可讀）
+  多選人員並各自填金額，存為 `personnel_json` 快照 `[{id,name,amount,note}]`（不隨 `contractors`
+  表後續變動連動，即使該人員之後被刪除或改名，既有派發紀錄的金額與姓名仍完整保留）；
+  `_dispatch_row()` 額外回傳 `personnelTotal`（人員金額加總）與 `grandTotal`
+  （`totalWithTax + personnelTotal`，承攬商含稅金額 + 外包人員金額不計稅）；`已取消` 的派發
+  不計入 `grandTotal` 彙總（見案件管理承攬商 tab 的「外包總成本」與 §5.5 精算 `dispatchTotal`）
 
 ### §5.8 · 出貨單（案件管理子項目，2026-08-01）
 
@@ -603,9 +616,10 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
 | DELETE | /vendor-contractors/{id} | 刪除（有派發紀錄 → 409，建議改停用） |
 | PATCH | /vendor-contractors/{id}/active | 停用／啟用切換（admin+） |
 | PATCH | /vendor-contractors/{id}/visits | 往來紀錄更新（樂觀鎖 `expectedUpdatedAt` → 409） |
-| GET | /contractor-dispatches | 派發列表（`?quote_no=` 過濾；無參數返回最新 200 筆） |
-| POST | /contractor-dispatches | 新建派發（需認證；自動計算 total_amount） |
+| GET | /contractor-dispatches | 派發列表（`?quote_no=` 過濾；無參數返回最新 200 筆；回傳含 `personnelTotal`/`grandTotal`，見 §5.7） |
+| POST | /contractor-dispatches | 新建派發（需認證；自動計算 total_amount；`personnel_json` 外包名單人員快照，見 §5.7） |
 | GET/PUT/DELETE | /contractor-dispatches/{id} | 單筆操作（DELETE admin+） |
+| GET | /contractors/selectable | 外包名冊輕量下拉（需認證，非 superadmin/`contractor_list` 亦可；供承攬商派發「外包名單人員」選擇，DB v36） |
 | PATCH | /contractor-dispatches/{id}/accept | 驗收流程：`action=pending_acceptance`（draft/sent/confirmed→待驗收）或 `action=accepted`（待驗收→已驗收，記錄 accepted_by/accepted_at）；違規轉換 → 409 |
 | POST | /contractor-dispatches/{id}/import-to-quote | 回推品項至報價單 `items[]`（報價單非草稿 → 409） |
 
@@ -756,6 +770,37 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 ## §12 · 變更摘要（最新兩版）
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
+
+### 2026-08-03e — 承攬商派發新增外包名單人員個別計費，同步至財務／精算（DB v36）
+
+- **背景**：使用者要求案件管理／承攬商派發新增「外包名單人員」，且這些人員與承攬商本身寫的金額
+  都要同步到財務／精算顯示
+- **後端**：`backend/db.py` 新增 DB v36 migration `_m036_dispatch_personnel`，
+  `contractor_dispatches` 加 `personnel_json TEXT DEFAULT '[]'`（自包含快照
+  `[{id,name,amount,note}]`，不隨 `contractors` 表後續變動連動）；`backend/routers/contractors.py`
+  新增 `GET /api/contractors/selectable`（比照 `vendor-contractors/selectable` 慣例，任何登入者
+  可讀，只回傳 id/name/phone，不含銀行/身分證等敏感欄位）；`backend/routers/vendor_contractors.py`
+  的 `DispatchIn`／`_dispatch_row()`／`create_dispatch()`／`update_dispatch()` 皆補上
+  `personnel_json` 讀寫，`_dispatch_row()` 新增計算欄位 `personnelTotal`（人員金額加總）與
+  `grandTotal`（`totalWithTax + personnelTotal`，承攬商含稅金額 + 外包人員金額**不計稅**，
+  因外包個人屬薪資性質非營業稅發票）
+- **前端**：`case-management.html`／`js` 新增派發 Modal 內「外包名單人員（可複選，個別計費）」
+  區塊（下拉選擇＋加入，仿既有 stage 負責人 `attendee-chips`/`attendee-add` 互動模式），每人一列
+  含金額輸入；Modal 底部顯示派發總成本（承攬商含稅合計 + 外包人員小計）；`settlement.html`
+  新增「三、承攬商派發成本」區塊（自動即時讀取 `GET /api/contractor-dispatches?quote_no=`，
+  唯讀，排除已取消的派發，依派發分組列出承攬商與其下外包人員金額），`calcSummary()` 新增
+  `dispatchTotal` 併入「實際總成本」計算；`case-management.html` 財務 Tab（讀取已存的精算
+  `summary`）同步補上「承攬商派發成本」列
+- **實測時發現並修正兩個問題**：① 忘記把 `CURRENT_VERSION` 從 35 同步改成 36——`_run_migrations()`
+  的版本守門是「`current >= CURRENT_VERSION` 就整個跳過」，若沒改，等正式機部署過 v35 後，
+  這次新增的 v36 migration 就會被永久跳過而不會執行；已修正並重新驗證 ② 案件管理承攬商 tab
+  原本就有的「外包總成本」彙總（`dispatchTotalCost()`）只加總 `totalAmount`（不含稅、不含人員），
+  金額本來就不對，這次一併修正為使用新的 `grandTotal` 並排除已取消派發
+- 已用瀏覽器完整走過建立承攬商（ABC工程行）與外包名冊人員（王小明）→ 新增派發（品項 NT$30,000
+  +稅 5% + 王小明 NT$15,000＝總成本 NT$46,500）→ 儲存後重新整理確認資料正確持久化 → 精算頁面
+  正確顯示「三、承攬商派發成本」分組明細與小計、「實際總成本」正確併入 → 案件管理財務 Tab
+  正確顯示已存精算結果 → 把派發狀態改為「已取消」後，承攬商 tab 外包總成本與精算頁面成本皆
+  正確歸零（確認排除已取消派發的規則生效）；全程無 console 錯誤
 
 ### 2026-08-03d — 修復 module_versions 表無限增生 bug（DB v35）
 

@@ -43,6 +43,7 @@ class DispatchIn(BaseModel):
     dispatch_date: Optional[str] = ''
     scope: Optional[str] = ''
     items_json: Optional[list] = []
+    personnel_json: Optional[list] = []
     tax_rate: Optional[float] = 0.05
     status: Optional[str] = 'draft'
     notes: Optional[str] = ''
@@ -83,12 +84,20 @@ def _dispatch_row(row) -> dict:
         items = json.loads(row["items_json"] or "[]")
     except Exception:
         pass
+    keys = row.keys()
+    personnel = []
+    if "personnel_json" in keys:
+        try:
+            personnel = json.loads(row["personnel_json"] or "[]")
+        except Exception:
+            pass
+    personnel_total = sum(float(p.get("amount", 0) or 0) for p in personnel)
     total = float(row["total_amount"] or 0)
     if not total and items:
         total = sum(float(it.get("amount", 0) or 0) for it in items)
-    keys = row.keys()
     tax_rate = float(row["tax_rate"]) if "tax_rate" in keys and row["tax_rate"] is not None else 0.05
     tax_amount = round(total * tax_rate)
+    total_with_tax = total + tax_amount
     return {
         "id": row["id"],
         "quoteNo": row["quote_no"],
@@ -100,7 +109,11 @@ def _dispatch_row(row) -> dict:
         "totalAmount": total,
         "taxRate": tax_rate,
         "taxAmount": tax_amount,
-        "totalWithTax": total + tax_amount,
+        "totalWithTax": total_with_tax,
+        "personnel": personnel,
+        "personnelTotal": personnel_total,
+        # 承攬商本身（含稅）+ 外包名單人員（不計稅，屬個人薪資性質），供財務/精算加總引用
+        "grandTotal": total_with_tax + personnel_total,
         "status": row["status"] or "draft",
         "statusLabel": _STATUS_LABELS.get(row["status"] or "draft", row["status"] or ""),
         "notes": row["notes"] or "",
@@ -392,6 +405,7 @@ def create_dispatch(body: DispatchIn, authorization: str = Header(None)):
     user = _require_user(authorization)
     now = datetime.now().isoformat()
     items = body.items_json or []
+    personnel = body.personnel_json or []
     total = sum(float(it.get("amount", 0) or 0) for it in items)
     conn = get_db()
     if not conn.execute("SELECT id FROM vendor_contractors WHERE id=?", (body.vendor_id,)).fetchone():
@@ -399,10 +413,11 @@ def create_dispatch(body: DispatchIn, authorization: str = Header(None)):
         raise HTTPException(404, "承攬商不存在")
     cur = conn.execute(
         "INSERT INTO contractor_dispatches "
-        "(quote_no, vendor_id, dispatch_date, scope, items_json, total_amount, tax_rate, status, notes, created_by, created_at, updated_at) "
-        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+        "(quote_no, vendor_id, dispatch_date, scope, items_json, personnel_json, total_amount, tax_rate, status, notes, created_by, created_at, updated_at) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (body.quote_no, body.vendor_id, body.dispatch_date or '',
-         body.scope or '', json.dumps(items, ensure_ascii=False), total,
+         body.scope or '', json.dumps(items, ensure_ascii=False),
+         json.dumps(personnel, ensure_ascii=False), total,
          body.tax_rate if body.tax_rate is not None else 0.05,
          body.status or 'draft', body.notes or '',
          user["username"], now, now)
@@ -420,6 +435,7 @@ def update_dispatch(did: int, body: DispatchIn, authorization: str = Header(None
     _require_user(authorization)
     now = datetime.now().isoformat()
     items = body.items_json or []
+    personnel = body.personnel_json or []
     total = sum(float(it.get("amount", 0) or 0) for it in items)
     conn = get_db()
     if not conn.execute("SELECT id FROM contractor_dispatches WHERE id=?", (did,)).fetchone():
@@ -427,9 +443,10 @@ def update_dispatch(did: int, body: DispatchIn, authorization: str = Header(None
         raise HTTPException(404, "派發紀錄不存在")
     conn.execute(
         "UPDATE contractor_dispatches SET vendor_id=?, dispatch_date=?, scope=?, items_json=?, "
-        "total_amount=?, tax_rate=?, status=?, notes=?, updated_at=? WHERE id=?",
+        "personnel_json=?, total_amount=?, tax_rate=?, status=?, notes=?, updated_at=? WHERE id=?",
         (body.vendor_id, body.dispatch_date or '', body.scope or '',
-         json.dumps(items, ensure_ascii=False), total,
+         json.dumps(items, ensure_ascii=False),
+         json.dumps(personnel, ensure_ascii=False), total,
          body.tax_rate if body.tax_rate is not None else 0.05,
          body.status or 'draft', body.notes or '', now, did)
     )

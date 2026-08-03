@@ -148,6 +148,19 @@ def _row_to_dict(row) -> dict:
     return d
 
 
+@router.get("/api/contractors/selectable")
+def list_contractors_selectable(authorization: str = Header(None)):
+    """輕量列表供案件管理承攬商派發的「外包名單人員」下拉使用（所有登入者皆可讀，
+    比照 vendor-contractors/selectable 的慣例——不含銀行/身分證等敏感欄位）。"""
+    _require_user(authorization)
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT id, name, phone FROM contractors WHERE active=1 ORDER BY name"
+    ).fetchall()
+    conn.close()
+    return [{"id": r["id"], "name": r["name"], "phone": r["phone"] or ""} for r in rows]
+
+
 @router.get("/api/contractors")
 def list_contractors(q: Optional[str] = None, active_only: bool = True,
                      authorization: str = Header(None)):

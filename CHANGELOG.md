@@ -5,6 +5,22 @@
 
 ---
 
+### 2026-08-03e — 承攬商派發新增外包名單人員個別計費，同步至財務／精算（DB v36）
+
+**緣起**：使用者要求案件管理／承攬商派發新增「外包名單人員」，且承攬商與人員金額都要同步到
+財務／精算顯示。
+
+- `backend/db.py` 新增 DB v36：`contractor_dispatches` 加 `personnel_json`（自包含快照
+  `[{id,name,amount,note}]`）；`backend/routers/contractors.py` 新增
+  `GET /api/contractors/selectable`（比照 `vendor-contractors/selectable`）；
+  `vendor_contractors.py` 補上讀寫與 `personnelTotal`/`grandTotal` 計算欄位
+- 前端新增派發 Modal 內「外包名單人員」多選＋個別金額欄位；`settlement.html` 新增「三、承攬商
+  派發成本」區塊（即時讀取、排除已取消），`calcSummary()` 併入 `dispatchTotal`；案件管理財務
+  Tab 同步顯示
+- 實測時發現並修正兩個問題：忘記把 `CURRENT_VERSION` 同步改成 36 導致新 migration 會被永久跳過；
+  既有的「外包總成本」彙總算法本來就沒算稅金和人員，一併修正
+- 已用瀏覽器完整驗證建立→儲存→精算顯示→已取消排除全流程，無 console 錯誤
+
 ### 2026-08-03d — 修復 module_versions 表無限增生 bug（DB v35）
 
 **緣起**：使用者詢問正式機每日備份為何每次 300~400MB。查驗當天雲端備份 db 副本（唯讀，未動

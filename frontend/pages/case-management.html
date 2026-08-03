@@ -1345,6 +1345,8 @@
                                 <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;color:#92400E" x-text="caseSettleFmt(caseSettleSummary().itemActualTotal)"></td></tr>
                             <tr><td style="padding:4px 0;color:var(--text-dim);font-family:var(--font-zh)">額外支出</td>
                                 <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;color:#92400E" x-text="caseSettleFmt(caseSettleSummary().extraTotal)"></td></tr>
+                            <tr><td style="padding:4px 0;color:var(--text-dim);font-family:var(--font-zh)">承攬商派發成本</td>
+                                <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;color:#92400E" x-text="caseSettleFmt(caseSettleSummary().dispatchTotal)"></td></tr>
                             <tr style="border-top:1px solid #FDE68A">
                                 <td style="padding:4px 0;font-weight:600;font-family:var(--font-zh)">實際總成本</td>
                                 <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-weight:700;color:#92400E"
@@ -1978,8 +1980,57 @@
         <span x-show="+(dispatchForm.tax_rate)>0" style="font-size:12px;color:var(--text-secondary)">
           稅額：NT$ <span x-text="_dispatchTaxAmount().toLocaleString()"></span>
         </span>
+        <span style="font-size:13px;font-weight:600;font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-secondary)">
+          承攬商含稅合計：NT$ <span x-text="_dispatchTotalWithTax().toLocaleString()"></span>
+        </span>
+      </div>
+
+      <!-- 外包名單人員 -->
+      <div style="font-size:11px;font-weight:600;color:var(--text-dim);letter-spacing:.06em;text-transform:uppercase;border-bottom:1px solid var(--border-light);padding-bottom:4px;margin-top:16px;margin-bottom:10px">外包名單人員（可複選，個別計費）</div>
+      <div class="attendee-chips" style="margin-bottom:6px;display:block" x-show="(dispatchForm.personnel||[]).length">
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <template x-for="(p, pi) in dispatchForm.personnel" :key="p.id">
+            <tr style="border-bottom:1px solid #F5F4F0">
+              <td style="padding:5px 0;color:var(--text-primary)" x-text="p.name"></td>
+              <td style="padding:5px 6px;width:130px">
+                <div style="position:relative">
+                  <span style="position:absolute;left:7px;top:50%;transform:translateY(-50%);font-size:10px;color:var(--text-dim)">NT$</span>
+                  <input type="number" x-model.number="p.amount" min="0" step="1"
+                         style="width:100%;padding:5px 6px 5px 30px;border:1px solid var(--border-light);border-radius:5px;font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;text-align:right;outline:none;box-sizing:border-box">
+                </div>
+              </td>
+              <td style="padding:5px 6px">
+                <input type="text" x-model="p.note" placeholder="備注（選填）"
+                       style="width:100%;padding:5px 8px;border:1px solid var(--border-light);border-radius:5px;font-size:12px;font-family:inherit;outline:none;box-sizing:border-box">
+              </td>
+              <td style="width:24px;text-align:center">
+                <button @click="removeDispatchPersonnel(pi)"
+                        style="width:22px;height:22px;border:none;background:none;cursor:pointer;color:var(--danger);font-size:14px;line-height:1">×</button>
+              </td>
+            </tr>
+          </template>
+        </table>
+      </div>
+      <div class="attendee-add">
+        <select class="attendee-select" x-model="_newDispatchPersonnelId">
+          <option value="">選擇外包名單人員…</option>
+          <template x-for="c in contractorRoster" :key="c.id">
+            <option :value="c.id" x-text="c.name + (c.phone ? ' (' + c.phone + ')' : '')"></option>
+          </template>
+        </select>
+        <button class="btn btn-ghost btn-sm" @click="addDispatchPersonnel()">加入</button>
+      </div>
+      <div x-show="contractorRoster.length===0" style="font-size:11px;color:var(--warning);margin-top:4px">
+        尚無外包名單資料。
+      </div>
+      <div style="display:flex;justify-content:flex-end;margin-top:8px" x-show="(dispatchForm.personnel||[]).length">
+        <span style="font-size:13px;font-weight:600;font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-secondary)">
+          外包人員小計：NT$ <span x-text="_dispatchPersonnelTotal().toLocaleString()"></span>
+        </span>
+      </div>
+      <div style="display:flex;justify-content:flex-end;margin-top:6px;padding-top:8px;border-top:1px solid var(--border-light)">
         <span style="font-size:14px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;color:var(--accent)">
-          含稅合計：NT$ <span x-text="_dispatchTotalWithTax().toLocaleString()"></span>
+          派發總成本：NT$ <span x-text="_dispatchGrandTotal().toLocaleString()"></span>
         </span>
       </div>
 

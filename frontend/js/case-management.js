@@ -62,6 +62,7 @@ function app() {
 
     // ── 承攬商派發 ──
     vendors: [],
+    contractorRoster: [],
     dispatches: [],
     dispatchesLoading: false,
     showDispatchModal: false,
@@ -69,6 +70,7 @@ function app() {
     dispatchSaving: false,
     dispatchForm: {},
     dispatchMsg: '',
+    _newDispatchPersonnelId: '',
 
     // ── 出貨單 ──
     shippingNotes: [],
@@ -1188,6 +1190,12 @@ function app() {
         })
         if (r.ok) this.vendors = await r.json()
       } catch {}
+      try {
+        const r2 = await fetch('/api/contractors/selectable', {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (r2.ok) this.contractorRoster = await r2.json()
+      } catch {}
     },
 
     async loadDispatches(quoteNo) {
@@ -1204,7 +1212,10 @@ function app() {
     },
 
     dispatchTotalCost() {
-      return this.dispatches.reduce((s, d) => s + (d.totalAmount || 0), 0)
+      // 承攬商含稅合計 + 外包名單人員金額（不計稅），與精算頁面「承攬商派發成本」算法一致
+      return this.dispatches
+        .filter(d => d.status !== 'cancelled')
+        .reduce((s, d) => s + (d.grandTotal || 0), 0)
     },
 
     _blankDispatchForm() {
@@ -1217,7 +1228,8 @@ function app() {
         notes: '',
         status: this._quoteStatusToDispatch(this.selected?.status || ''),
         tax_rate: 0.05,
-        items: []
+        items: [],
+        personnel: []
       }
     },
 
@@ -1225,6 +1237,7 @@ function app() {
       this.editDispatchId = null
       this.dispatchForm = this._blankDispatchForm()
       this.dispatchMsg = ''
+      this._newDispatchPersonnelId = ''
       this.showDispatchModal = true
     },
 
@@ -1238,10 +1251,30 @@ function app() {
         notes: d.notes || '',
         status: d.status || 'draft',
         tax_rate: d.taxRate !== undefined ? d.taxRate : 0.05,
-        items: JSON.parse(JSON.stringify(d.items || []))
+        items: JSON.parse(JSON.stringify(d.items || [])),
+        personnel: JSON.parse(JSON.stringify(d.personnel || []))
       }
       this.dispatchMsg = ''
+      this._newDispatchPersonnelId = ''
       this.showDispatchModal = true
+    },
+
+    addDispatchPersonnel() {
+      const cid = Number(this._newDispatchPersonnelId)
+      if (!cid) return
+      if ((this.dispatchForm.personnel || []).some(p => p.id === cid)) { this._newDispatchPersonnelId = ''; return }
+      const c = this.contractorRoster.find(x => x.id === cid)
+      if (!c) return
+      this.dispatchForm.personnel.push({ id: c.id, name: c.name, amount: 0, note: '' })
+      this._newDispatchPersonnelId = ''
+    },
+
+    removeDispatchPersonnel(idx) {
+      this.dispatchForm.personnel.splice(idx, 1)
+    },
+
+    _dispatchPersonnelTotal() {
+      return (this.dispatchForm.personnel || []).reduce((s, p) => s + (+p.amount || 0), 0)
     },
 
     addDispatchItem() {
@@ -1278,7 +1311,10 @@ function app() {
         notes: this.dispatchForm.notes || '',
         status: this.dispatchForm.status || 'draft',
         tax_rate: parseFloat(this.dispatchForm.tax_rate) || 0,
-        items_json: this.dispatchForm.items || []
+        items_json: this.dispatchForm.items || [],
+        personnel_json: (this.dispatchForm.personnel || []).map(p => ({
+          id: p.id, name: p.name, amount: +p.amount || 0, note: p.note || ''
+        }))
       }
       const method = this.editDispatchId ? 'PUT' : 'POST'
       const url    = this.editDispatchId
@@ -1659,6 +1695,10 @@ function app() {
 
     _dispatchTotalWithTax() {
       return this._dispatchSubtotal() + this._dispatchTaxAmount()
+    },
+
+    _dispatchGrandTotal() {
+      return this._dispatchTotalWithTax() + this._dispatchPersonnelTotal()
     },
 
     _dispatchStatusLabel(s) {
