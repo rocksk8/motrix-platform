@@ -299,6 +299,7 @@
       ni(pg('shipping-approval-settings.html'), 'sett', '出貨單簽核設定', ['shipping-approval-settings.html'], sa),
       ni(pg('notification-settings.html'), 'ntfy',  '通知設定',   ['notification-settings.html'],  sa),
       ni(pg('audit-log.html'),         'hist',  '歷史紀錄',   ['audit-log.html'],         ad),
+      ni(pg('shipping-export-history.html'), 'hist', '出貨單歷史紀錄', ['shipping-export-history.html'], ad),
       ni(pg('module-versions.html'),  'ver',   '版本紀錄',   ['module-versions.html'],               ad),
       ni(pg('schema-status.html'),    'schema', 'Schema 狀態', ['schema-status.html'],               sa),
     ].filter(Boolean).join('')
@@ -409,6 +410,16 @@
     daily_task:  ['sb-mod-daily-task'],
   }
 
+  // 後端 audit_log.at 存的是台灣本地時間（datetime.now().isoformat()，無時區資訊），
+  // module-counts 端點用 SQL 字串 "at > ?" 直接比較；若這裡送 UTC 字串（toISOString()
+  // 帶 'Z'），本地時間字串在字典序上幾乎恆大於 UTC 字串（差 8 小時），角標會永遠判定
+  // 「有更新」。改產生格式一致、無時區尾碼的本地時間字串。
+  function _localISOString(d) {
+    d = d || new Date()
+    var tz = d.getTimezoneOffset() * 60000
+    return new Date(d.getTime() - tz).toISOString().slice(0, -1)
+  }
+
   function _clearModBadge(modKey) {
     var bids = _MOD_BADGES[modKey]
     if (!bids) return
@@ -428,7 +439,7 @@
     if (s.token && (role === 'superadmin' || role === 'admin')) {
       try {
         var _ms = JSON.parse(localStorage.getItem('motrix_module_seen') || '{}')
-        var _seed = new Date(Date.now() - 7 * 86400 * 1000).toISOString()
+        var _seed = _localISOString(new Date(Date.now() - 7 * 86400 * 1000))
         var _allModKeys = Object.keys(_MOD_BADGES)
         var _seeded = false
         for (var _mi = 0; _mi < _allModKeys.length; _mi++) {
@@ -449,7 +460,7 @@
         var _prev = JSON.parse(localStorage.getItem('motrix_module_prev_seen') || '{}')
         if (_ms2[_curMod]) _prev[_curMod] = _ms2[_curMod]
         localStorage.setItem('motrix_module_prev_seen', JSON.stringify(_prev))
-        _ms2[_curMod] = new Date().toISOString()
+        _ms2[_curMod] = _localISOString()
         localStorage.setItem('motrix_module_seen', JSON.stringify(_ms2))
       } catch (_e) {}
     }

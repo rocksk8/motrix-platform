@@ -1,7 +1,7 @@
 # MOTRIX ERP — 開發快速參考
 
 > 允碩整合集創（統編 60575481）｜ Tel: 04-3602-2818 ｜ info@miactw.com  
-> 文件版本：**2026-08-03h**（通知清理／CRM 搜尋修復／全站 Email 通知擴充，見 §12）
+> 文件版本：**2026-08-03i**（CRM 搜尋殘留 bug／側邊欄角標時區 bug／出貨單歷史紀錄，見 §12）
 
 ---
 
@@ -783,6 +783,33 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 ## §12 · 變更摘要（最新兩版）
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
+
+### 2026-08-03i — CRM 搜尋殘留 bug／側邊欄角標時區 bug（既有潛藏問題）／出貨單歷史紀錄
+
+- **背景**：實測上一版（2026-08-03h）後，使用者回報兩個問題並提出一個新功能：業務開發搜尋仍會
+  出現不符搜尋文字的案件；業務開發／報價單側邊欄角標「仍然顯示但未有其他更新」；要求新增出貨單
+  歷史紀錄頁面
+- **CRM 搜尋殘留**：上一版只修了 `loadCases()` 的回應順序（`_loadSeq`），未發現真正主因——
+  `dev-crm.html` 搜尋框同時綁 `x-model.debounce.400ms="searchQ"` 與 `@input="loadCases()"`
+  兩個監聽器，debounce 只延遲「寫入 model」的時機，`@input` 每個按鍵立刻觸發卻讀到還沒被
+  debounce 寫入的舊值，查詢字串永遠落後輸入一拍；改為 `x-model="searchQ"`（即時寫入）+
+  `@input.debounce.400ms="loadCases()"`（延遲觸發查詢），已用瀏覽器 network 面板確認每次
+  只送出一個對應當下輸入內容的請求
+- **側邊欄角標時區 bug（既有潛藏問題，與本次或上次改動無關）**：用瀏覽器實際重現——造訪
+  `dev-crm.html` 後 `motrix_module_seen.dev_crm` 正確更新為當下時間，手動插入一筆更早的稽核
+  紀錄後角標仍誤判顯示「1」；根因是 `sidebar.js` 寫入時間戳用 `toISOString()`（UTC，帶 `Z`），
+  後端 `audit_log.at` 存台灣本地時間（無時區），`/api/audit-log/module-counts` 用 SQL 字串
+  `"at > ?"` 直接比較，本地時間字串字典序幾乎恆大於 UTC 字串（差 8 小時），角標幾乎永遠誤判為
+  「有更新」；新增 `_localISOString()` 取代兩處 `toISOString()`；同一套 bug 也連帶影響
+  `daily-tasks.html` 的 `isNewTask()`（`ut > this._prevSeenDT` 同樣是原始字串比較），格式修正後
+  一併自動修好、不用改該頁程式碼；已用「造訪前／造訪後」假稽核紀錄重現並驗證修復前後行為差異
+- **出貨單歷史紀錄**（新頁面 `frontend/pages/shipping-export-history.html`）：後端新增唯讀端點
+  `GET /api/shipping-notes/export-history`（注冊在 `/{note_no}` 之前，避免路由被吃掉），把每張
+  出貨單既有的 `export_log` 欄位（`record_shipping_export()` 早就在寫）攤平成「一次匯出＝一筆」
+  事件列表，支援 `q`（單號/客戶/專案）與 `year`/`month` 篩選，無新增欄位、無 DB migration；前端
+  比照 `audit-log.html` 版面 + `dev-crm.html` 年月下拉 pattern；`sidebar.js`「歷史紀錄」旁新增
+  入口，權限 admin+；已建測試出貨單匯出兩次（對外+對內）驗證頁面顯示、搜尋/清除篩選、單號連結
+  導向案件管理皆正確，測試資料已清除還原
 
 ### 2026-08-03h — 站內通知清理／CRM 搜尋修復／全站 Email 通知擴充
 

@@ -140,6 +140,55 @@ def list_shipping_notes(quote_no: Optional[str] = None, authorization: str = Hea
     return [_note_public(r, include_items=False) for r in rows]
 
 
+@router.get("/api/shipping-notes/export-history")
+def list_shipping_export_history(
+    q: Optional[str] = None,
+    year: Optional[str] = None,
+    month: Optional[str] = None,
+    authorization: str = Header(None),
+):
+    """出貨單歷史紀錄：把所有出貨單各自的 export_log（既有欄位，record_shipping_export()
+    每次匯出時寫入）攤平成「一次匯出＝一筆」事件列表，供專屬歷史頁面搜尋/年月篩選。"""
+    user = _require_user(authorization)
+    _require_admin(user)
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT note_no, quote_no, customer_name, project_name, ship_date, export_log "
+        "FROM shipping_notes WHERE export_count > 0"
+    ).fetchall()
+    conn.close()
+
+    kw = (q or "").strip().lower()
+    events = []
+    for row in rows:
+        note_no, quote_no = row["note_no"], row["quote_no"]
+        customer_name = row["customer_name"] or ""
+        project_name = row["project_name"] or ""
+        if kw and kw not in note_no.lower() and kw not in customer_name.lower() \
+                and kw not in project_name.lower() and kw not in (quote_no or "").lower():
+            continue
+        log = json.loads(row["export_log"] or "[]")
+        for entry in log:
+            at = entry.get("at", "")
+            if year and not at.startswith(f"{year}-"):
+                continue
+            if month and not at.startswith(f"{year or at[:4]}-{month.zfill(2)}"):
+                continue
+            events.append({
+                "noteNo": note_no,
+                "quoteNo": quote_no,
+                "customerName": customer_name,
+                "projectName": project_name,
+                "shipDate": row["ship_date"] or "",
+                "exportedAt": at,
+                "mode": entry.get("mode", "external"),
+                "exportedBy": entry.get("userDisplay") or entry.get("user") or "",
+                "count": entry.get("count", 0),
+            })
+    events.sort(key=lambda e: e["exportedAt"], reverse=True)
+    return events
+
+
 @router.get("/api/shipping-notes/{note_no}")
 def get_shipping_note(note_no: str, authorization: str = Header(None)):
     _require_user(authorization)

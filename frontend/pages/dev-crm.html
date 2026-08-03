@@ -373,7 +373,7 @@
           </button>
         </div>
         <input class="dc-search" type="text" placeholder="搜尋案件或客戶…"
-               x-model.debounce.400ms="searchQ" @input="loadCases()">
+               x-model="searchQ" @input.debounce.400ms="loadCases()">
         <div class="dc-chips">
           <span class="dc-chip" :class="{on: filterStatus===''}" @click="filterStatus=''">
             全部(不含未成案) <b x-text="caseCount('')"></b>
