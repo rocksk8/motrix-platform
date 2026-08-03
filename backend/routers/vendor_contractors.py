@@ -39,7 +39,7 @@ class VendorContractorIn(BaseModel):
 
 class DispatchIn(BaseModel):
     quote_no: str
-    vendor_id: int
+    vendor_id: Optional[int] = None
     dispatch_date: Optional[str] = ''
     scope: Optional[str] = ''
     items_json: Optional[list] = []
@@ -102,7 +102,7 @@ def _dispatch_row(row) -> dict:
         "id": row["id"],
         "quoteNo": row["quote_no"],
         "vendorId": row["vendor_id"],
-        "vendorName": row["vendor_name"] if "vendor_name" in keys else "",
+        "vendorName": (row["vendor_name"] if "vendor_name" in keys else "") or "",
         "dispatchDate": row["dispatch_date"] or "",
         "scope": row["scope"] or "",
         "items": items,
@@ -406,9 +406,11 @@ def create_dispatch(body: DispatchIn, authorization: str = Header(None)):
     now = datetime.now().isoformat()
     items = body.items_json or []
     personnel = body.personnel_json or []
+    if not body.vendor_id and not personnel:
+        raise HTTPException(400, "請至少選擇承攬商或外包名單人員其中一項")
     total = sum(float(it.get("amount", 0) or 0) for it in items)
     conn = get_db()
-    if not conn.execute("SELECT id FROM vendor_contractors WHERE id=?", (body.vendor_id,)).fetchone():
+    if body.vendor_id and not conn.execute("SELECT id FROM vendor_contractors WHERE id=?", (body.vendor_id,)).fetchone():
         conn.close()
         raise HTTPException(404, "承攬商不存在")
     cur = conn.execute(
@@ -436,11 +438,16 @@ def update_dispatch(did: int, body: DispatchIn, authorization: str = Header(None
     now = datetime.now().isoformat()
     items = body.items_json or []
     personnel = body.personnel_json or []
+    if not body.vendor_id and not personnel:
+        raise HTTPException(400, "請至少選擇承攬商或外包名單人員其中一項")
     total = sum(float(it.get("amount", 0) or 0) for it in items)
     conn = get_db()
     if not conn.execute("SELECT id FROM contractor_dispatches WHERE id=?", (did,)).fetchone():
         conn.close()
         raise HTTPException(404, "派發紀錄不存在")
+    if body.vendor_id and not conn.execute("SELECT id FROM vendor_contractors WHERE id=?", (body.vendor_id,)).fetchone():
+        conn.close()
+        raise HTTPException(404, "承攬商不存在")
     conn.execute(
         "UPDATE contractor_dispatches SET vendor_id=?, dispatch_date=?, scope=?, items_json=?, "
         "personnel_json=?, total_amount=?, tax_rate=?, status=?, notes=?, updated_at=? WHERE id=?",
@@ -550,7 +557,7 @@ def import_dispatch_to_quote(did: int, authorization: str = Header(None)):
         conn.close()
         raise HTTPException(409, f"報價單目前為「{qrow['status']}」狀態，請先在報價單頁面解鎖後再匯入")
 
-    vendor_name = drow["vendor_name"] or f"承攬商#{drow['vendor_id']}"
+    vendor_name = drow["vendor_name"] or (f"承攬商#{drow['vendor_id']}" if drow["vendor_id"] else "外包人員（點工）")
     dispatch_items = []
     try:
         dispatch_items = json.loads(drow["items_json"] or "[]")

@@ -560,10 +560,7 @@
                 </thead>
                 <tbody>
                   <template x-for="d in dispatches" :key="d.id">
-                    <template x-for="row in [
-                      { label: d.vendorName || '（未命名承攬商）', amount: d.totalWithTax, isVendor: true },
-                      ...(d.personnel || []).map(p => ({ label: '　外包人員：' + p.name, amount: p.amount, isVendor: false }))
-                    ]">
+                    <template x-for="row in _dispatchRows(d)">
                       <tr style="border-bottom:1px solid var(--border-light)">
                         <td :style="row.isVendor ? 'font-weight:600' : 'color:var(--text-secondary)'" x-text="row.label"></td>
                         <td x-text="row.isVendor ? d.statusLabel : ''" style="color:var(--text-dim);font-size:11px"></td>
@@ -918,6 +915,19 @@ function settlementPage() {
     // 承攬商含稅合計 + 外包名單人員（不計稅）＝該筆派發對「實際總成本」的貢獻
     dispatchTotal() {
       return this.dispatches.reduce((s, d) => s + (+d.grandTotal || 0), 0)
+    },
+
+    // 展開單筆派發的明細列：有承攬商就先列承攬商、外包人員接續縮排；
+    // 純點工（無承攬商）時外包人員第一筆頂替承攬商列顯示派發狀態
+    _dispatchRows(d) {
+      const personnel = (d.personnel || []).map(p => ({ label: '外包人員：' + p.name, amount: p.amount, isVendor: false }))
+      if (d.vendorId) {
+        return [
+          { label: d.vendorName || '（未命名承攬商）', amount: d.totalWithTax, isVendor: true },
+          ...personnel.map(r => ({ ...r, label: '　' + r.label }))
+        ]
+      }
+      return personnel.map((r, i) => ({ ...r, isVendor: i === 0 }))
     },
 
     calcItemCost(item) {

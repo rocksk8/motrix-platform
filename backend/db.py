@@ -30,7 +30,7 @@ DEMO_SHIPPING_PDF_ARCHIVE_DIR = os.path.join(os.path.dirname(__file__), "_demo_s
 # v32/v33 (switch_guide tables + specs_json column) were initially missing
 # from this checkout — reconstructed 2026-08-01 by reverse-engineering the
 # actual schema off a production DB backup (see _m032_switch_guide docstring).
-CURRENT_VERSION = 36
+CURRENT_VERSION = 37
 
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
 # execution model) whenever the current request is authenticated as the 'demo'
@@ -371,7 +371,7 @@ def init_db(path: str = None):
         CREATE TABLE IF NOT EXISTS contractor_dispatches (
             id            INTEGER PRIMARY KEY AUTOINCREMENT,
             quote_no      TEXT    NOT NULL,
-            vendor_id     INTEGER NOT NULL,
+            vendor_id     INTEGER,
             dispatch_date TEXT    DEFAULT '',
             scope         TEXT    DEFAULT '',
             items_json    TEXT    DEFAULT '[]',
@@ -464,6 +464,11 @@ def init_db(path: str = None):
 def _col_exists(conn, table: str, col: str) -> bool:
     rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
     return any(r["name"] == col for r in rows)
+
+
+def _col_notnull(conn, table: str, col: str) -> bool:
+    rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+    return any(r["name"] == col and r["notnull"] for r in rows)
 
 
 def _get_version(conn) -> int:
@@ -1393,6 +1398,50 @@ def _m036_dispatch_personnel(conn):
     conn.commit()
 
 
+def _m037_dispatch_vendor_optional(conn):
+    """Make contractor_dispatches.vendor_id nullable — some cases have pure
+    外包名單人員點工 (day-labor personnel) with no 承攬商 at all, so the vendor
+    can no longer be a mandatory field. SQLite can't ALTER a column's NOT NULL
+    constraint directly, so rebuild the table (same recreate-and-swap pattern as
+    _m035/_m014), copying every existing row across unchanged."""
+    if not _col_notnull(conn, "contractor_dispatches", "vendor_id"):
+        return
+    conn.executescript("""
+        CREATE TABLE contractor_dispatches_new (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            quote_no       TEXT    NOT NULL,
+            vendor_id      INTEGER,
+            dispatch_date  TEXT    DEFAULT '',
+            scope          TEXT    DEFAULT '',
+            items_json     TEXT    DEFAULT '[]',
+            personnel_json TEXT    NOT NULL DEFAULT '[]',
+            total_amount   REAL    DEFAULT 0,
+            tax_rate       REAL    DEFAULT 0.05,
+            status         TEXT    DEFAULT 'draft',
+            notes          TEXT    DEFAULT '',
+            created_by     TEXT    DEFAULT '',
+            created_at     TEXT,
+            updated_at     TEXT,
+            accepted_at    TEXT    NOT NULL DEFAULT '',
+            accepted_by    TEXT    NOT NULL DEFAULT '',
+            FOREIGN KEY (vendor_id) REFERENCES vendor_contractors(id)
+        );
+        INSERT INTO contractor_dispatches_new
+            (id, quote_no, vendor_id, dispatch_date, scope, items_json, personnel_json,
+             total_amount, tax_rate, status, notes, created_by, created_at, updated_at,
+             accepted_at, accepted_by)
+        SELECT id, quote_no, vendor_id, dispatch_date, scope, items_json, personnel_json,
+               total_amount, tax_rate, status, notes, created_by, created_at, updated_at,
+               accepted_at, accepted_by
+        FROM contractor_dispatches;
+        DROP TABLE contractor_dispatches;
+        ALTER TABLE contractor_dispatches_new RENAME TO contractor_dispatches;
+        CREATE INDEX IF NOT EXISTS idx_dispatches_quote_no ON contractor_dispatches(quote_no);
+        CREATE INDEX IF NOT EXISTS idx_dispatches_vendor ON contractor_dispatches(vendor_id);
+    """)
+    conn.commit()
+
+
 # Ordered list — index+1 is the migration version number.
 _MIGRATIONS = [
     _m001_export_columns,        # v1
@@ -1431,6 +1480,7 @@ _MIGRATIONS = [
     _m034_shipping_notes,                     # v34
     _m035_module_versions_unique_dedup,       # v35
     _m036_dispatch_personnel,                 # v36
+    _m037_dispatch_vendor_optional,            # v37
 ]
 
 

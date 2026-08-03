@@ -1,7 +1,7 @@
 # MOTRIX ERP — 開發快速參考
 
 > 允碩整合集創（統編 60575481）｜ Tel: 04-3602-2818 ｜ info@miactw.com  
-> 文件版本：**2026-08-03e**（承攬商派發新增外包名單人員個別計費，成本同步至財務／精算，DB v36，見 §12）
+> 文件版本：**2026-08-03f**（承攬商派發承攬商欄位改為選填，支援純外包名單人員點工，DB v37，見 §12）
 
 ---
 
@@ -473,6 +473,13 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
   `_dispatch_row()` 額外回傳 `personnelTotal`（人員金額加總）與 `grandTotal`
   （`totalWithTax + personnelTotal`，承攬商含稅金額 + 外包人員金額不計稅）；`已取消` 的派發
   不計入 `grandTotal` 彙總（見案件管理承攬商 tab 的「外包總成本」與 §5.5 精算 `dispatchTotal`）
+- **承攬商欄位改為選填（DB v37，2026-08-03f）**：部分案件屬純外包名單人員點工，沒有對應承攬商，
+  `vendor_id` 從 `NOT NULL` 改為可為空（SQLite 需整表重建，見 `_m037_dispatch_vendor_optional`）；
+  後端驗證改為「承攬商與外包名單人員至少擇一」，兩者皆空才擋 400；前端 Modal 拿掉必填星號、
+  預設選項改「— 無承攬商（純外包名單人員點工）—」；卡片列表標題無承攬商時顯示「外包人員（點工）」，
+  金額改用 `grandTotal` 統一顯示（含稅承攬商 + 外包人員），並新增外包人員明細表格；精算頁「三、
+  承攬商派發成本」明細列無承攬商時不再顯示佔位的「（未命名承攬商）」空列，改由外包人員第一筆
+  頂替顯示派發狀態
 
 ### §5.8 · 出貨單（案件管理子項目，2026-08-01）
 
@@ -617,7 +624,7 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
 | PATCH | /vendor-contractors/{id}/active | 停用／啟用切換（admin+） |
 | PATCH | /vendor-contractors/{id}/visits | 往來紀錄更新（樂觀鎖 `expectedUpdatedAt` → 409） |
 | GET | /contractor-dispatches | 派發列表（`?quote_no=` 過濾；無參數返回最新 200 筆；回傳含 `personnelTotal`/`grandTotal`，見 §5.7） |
-| POST | /contractor-dispatches | 新建派發（需認證；自動計算 total_amount；`personnel_json` 外包名單人員快照，見 §5.7） |
+| POST | /contractor-dispatches | 新建派發（需認證；`vendor_id` 選填，DB v37——承攬商與外包名單人員至少擇一，兩者皆空 → 400；自動計算 total_amount；`personnel_json` 外包名單人員快照，見 §5.7） |
 | GET/PUT/DELETE | /contractor-dispatches/{id} | 單筆操作（DELETE admin+） |
 | GET | /contractors/selectable | 外包名冊輕量下拉（需認證，非 superadmin/`contractor_list` 亦可；供承攬商派發「外包名單人員」選擇，DB v36） |
 | PATCH | /contractor-dispatches/{id}/accept | 驗收流程：`action=pending_acceptance`（draft/sent/confirmed→待驗收）或 `action=accepted`（待驗收→已驗收，記錄 accepted_by/accepted_at）；違規轉換 → 409 |
@@ -770,6 +777,39 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 ## §12 · 變更摘要（最新兩版）
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
+
+### 2026-08-03f — 承攬商派發改為選填，支援純外包名單人員點工（DB v37）
+
+- **背景**：使用者反映「某些案件有外包人員，就沒有承攬商，單純點工，目前系統綁死要選擇承攬商」——
+  上一版（2026-08-03e）加入的外包名單人員功能仍要求必選承攬商，無法涵蓋純點工（沒有對應承攬商）的案件
+- **DB migration**：`_m037_dispatch_vendor_optional`（v37）將 `contractor_dispatches.vendor_id` 從
+  `INTEGER NOT NULL` 改為可為空。SQLite 不支援直接 `ALTER COLUMN` 移除 NOT NULL，沿用 `_m035`/`_m014`
+  的建新表→搬資料→刪舊表→改名手法整表重建，冪等檢查用 `PRAGMA table_info` 的 `notnull` 旗標
+  （新增 `_col_notnull()` helper）；全新安裝的 inline schema 也同步拿掉 NOT NULL
+- **後端**（`backend/routers/vendor_contractors.py`）：`DispatchIn.vendor_id` 改 `Optional[int] = None`；
+  `create_dispatch()`/`update_dispatch()` 驗證改為「承攬商與外包名單人員至少擇一」，兩者皆空 → 400
+  「請至少選擇承攬商或外包名單人員其中一項」；只有 `vendor_id` 有值時才檢查承攬商是否存在；
+  `_dispatch_row()` 的 `vendorName` 補上 `or ""` 避免 LEFT JOIN 對到 NULL 時回傳 `None`；
+  `import_dispatch_to_quote()` 的 `vendor_name` fallback 原本會產生醜陋的「承攬商#None」，改為
+  「外包人員（點工）」
+- **前端 Modal**（`case-management.html`/`.js`）：承攬商欄位拿掉必填星號，預設選項改「— 無承攬商
+  （純外包名單人員點工）—」，下方補說明文字；`saveDispatch()` 的前端驗證同步比照後端邏輯；
+  `vendor_id` 送出時改為 `? Number(...) : null`
+- **前端派發卡片列表**：標題無承攬商時顯示「外包人員（點工）」（`_dispatchLabel(d)` 統一處理，
+  四處確認/提示訊息一併改用）；金額改用 `grandTotal`（含稅承攬商 + 外包人員）取代原本只算承攬商
+  部分的顯示；新增外包人員明細表格（比照品項表格樣式）；底部小計列拆成 小計／稅額／外包人員／
+  總成本 四項，品項為空時不顯示小計與稅額列
+- **精算頁面**（`settlement.html`）：新增 `_dispatchRows(d)` helper 取代原本內嵌在 template 裡的
+  陣列運算——有承攬商時承攬商列＋外包人員縮排列；純點工（無承攬商）時外包人員第一筆頂替承攬商列
+  顯示派發狀態，避免出現佔位用的「（未命名承攬商）」空列
+- **驗證**（零資料流失）：複製開發庫副本，在副本上跑新版 `db.py` 的 `init_db()`，確認 migration
+  前後 `contractor_dispatches` 列數不變、每筆資料逐欄比對無跑位、`vendor_id` notnull 旗標歸零、
+  `schema_version` 更新為 37；重跑一次 `init_db()` 確認冪等（second run 為 no-op）；瀏覽器實測：
+  開發機上跑的 uvicorn 行程（PID 1636，`hermes-agent` venv 底下啟動，非本專案文件記載的
+  `autostart.bat`/排程機制，`restart.bat` 殺不掉）force kill 後從專案目錄重新啟動，確認正式接上
+  新程式碼與 migration；建立不選承攬商、只加外包名單人員「王小明」（NT$80,000）的派發，前端驗證
+  「至少選擇承攬商或外包名單人員其中一項」正確擋下空白提交，儲存後卡片正確顯示「外包人員（點工）」
+  與明細，精算頁面「三、承攬商派發成本」正確併入 NT$80,000、不顯示空白承攬商列，全程無 console 錯誤
 
 ### 2026-08-03e — 承攬商派發新增外包名單人員個別計費，同步至財務／精算（DB v36）
 

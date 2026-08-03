@@ -1301,11 +1301,13 @@ function app() {
     },
 
     async saveDispatch() {
-      if (!this.dispatchForm.vendor_id) { this.dispatchMsg = '請選擇承攬商'; return }
+      if (!this.dispatchForm.vendor_id && !(this.dispatchForm.personnel || []).length) {
+        this.dispatchMsg = '請至少選擇承攬商或外包名單人員其中一項'; return
+      }
       this.dispatchSaving = true; this.dispatchMsg = ''
       const body = {
         quote_no: this.dispatchForm.quote_no,
-        vendor_id: Number(this.dispatchForm.vendor_id),
+        vendor_id: this.dispatchForm.vendor_id ? Number(this.dispatchForm.vendor_id) : null,
         dispatch_date: this.dispatchForm.dispatch_date || '',
         scope: this.dispatchForm.scope || '',
         notes: this.dispatchForm.notes || '',
@@ -1334,7 +1336,7 @@ function app() {
     },
 
     async deleteDispatch(d) {
-      if (!confirm(`確定刪除派發給「${d.vendorName}」的紀錄？`)) return
+      if (!confirm(`確定刪除派發給「${this._dispatchLabel(d)}」的紀錄？`)) return
       try {
         const r = await fetch(`/api/contractor-dispatches/${d.id}`, {
           method: 'DELETE',
@@ -1347,7 +1349,7 @@ function app() {
 
     async importDispatchToQuote(d) {
       if (!d.items || d.items.length === 0) { alert('此派發紀錄沒有報價品項'); return }
-      if (!confirm(`確定將「${d.vendorName}」共 ${d.items.length} 筆品項匯入至報價單？\n（報價單必須處於草稿狀態）`)) return
+      if (!confirm(`確定將「${this._dispatchLabel(d)}」共 ${d.items.length} 筆品項匯入至報價單？\n（報價單必須處於草稿狀態）`)) return
       try {
         const r = await fetch(`/api/contractor-dispatches/${d.id}/import-to-quote`, {
           method: 'POST',
@@ -1705,12 +1707,16 @@ function app() {
       return { draft: '草稿', sent: '已送出', confirmed: '已確認', pending_acceptance: '待驗收', accepted: '已驗收', completed: '完工', cancelled: '已取消' }[s] || s
     },
 
+    _dispatchLabel(d) {
+      return d.vendorName || '外包人員（點工）'
+    },
+
     _dispatchStatusClass(s) {
       return { draft: 'badge--draft', sent: 'badge--pending', confirmed: 'badge--approved', pending_acceptance: 'badge--signing', accepted: 'badge--running', completed: 'badge--settled', cancelled: 'badge--danger' }[s] || ''
     },
 
     async markPendingAcceptance(d) {
-      if (!confirm(`確定將「${d.vendorName}」標記為待驗收？`)) return
+      if (!confirm(`確定將「${this._dispatchLabel(d)}」標記為待驗收？`)) return
       try {
         const r = await fetch(`/api/contractor-dispatches/${d.id}/accept`, {
           method: 'PATCH',
@@ -1723,7 +1729,7 @@ function app() {
     },
 
     async acceptDispatch(d) {
-      if (!confirm(`確定驗收「${d.vendorName}」的工程？\n驗收後將記錄您的姓名與時間。`)) return
+      if (!confirm(`確定驗收「${this._dispatchLabel(d)}」的工程？\n驗收後將記錄您的姓名與時間。`)) return
       try {
         const r = await fetch(`/api/contractor-dispatches/${d.id}/accept`, {
           method: 'PATCH',

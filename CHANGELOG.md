@@ -5,6 +5,21 @@
 
 ---
 
+### 2026-08-03f — 承攬商派發改為選填，支援純外包名單人員點工（DB v37）
+
+**緣起**：使用者反映「某些案件有外包人員，就沒有承攬商，單純點工，目前系統綁死要選擇承攬商」——
+上一版加入的外包名單人員功能仍要求必選承攬商，無法涵蓋純點工案件。
+
+- `backend/db.py` 新增 DB v37 migration `_m037_dispatch_vendor_optional`：`contractor_dispatches
+  .vendor_id` 由 `NOT NULL` 改為可為空（SQLite 需整表重建，沿用既有建新表手法，冪等）
+- `vendor_contractors.py`：`DispatchIn.vendor_id` 改選填；驗證改為「承攬商與外包名單人員至少
+  擇一」，兩者皆空 → 400；`vendorName`/`import_dispatch_to_quote` 的 `None` fallback 一併修正
+- 前端 Modal 拿掉承攬商必填星號，新增「外包人員（點工）」統一 fallback 顯示；派發卡片列表新增
+  外包人員明細表格，金額改用 `grandTotal`（原本只算承攬商部分）；`settlement.html` 精算頁「三、
+  承攬商派發成本」無承攬商時不再顯示佔位空列
+- **零資料流失驗證**：複製開發庫副本跑新版 `db.py` 的 `init_db()`，確認 migration 前後列數不變、
+  逐欄比對無跑位、重跑一次確認冪等；瀏覽器實測建立純外包人員點工派發（無承攬商）全流程正確
+
 ### 2026-08-03e — 承攬商派發新增外包名單人員個別計費，同步至財務／精算（DB v36）
 
 **緣起**：使用者要求案件管理／承攬商派發新增「外包名單人員」，且承攬商與人員金額都要同步到

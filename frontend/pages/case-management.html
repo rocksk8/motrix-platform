@@ -1475,7 +1475,7 @@
                     <!-- Header row -->
                     <div style="display:flex;align-items:center;gap:10px;padding:12px 16px;background:#FAFAF9;border-bottom:1px solid var(--border-light)">
                       <div style="flex:1">
-                        <div style="font-size:13px;font-weight:600;color:var(--text-main)" x-text="d.vendorName"></div>
+                        <div style="font-size:13px;font-weight:600;color:var(--text-main)" x-text="d.vendorName || '外包人員（點工）'"></div>
                         <div style="font-size:11px;color:var(--text-dim);margin-top:2px">
                           <span x-show="d.dispatchDate" x-text="'派發日：' + d.dispatchDate"></span>
                           <span x-show="d.scope"> · </span>
@@ -1485,8 +1485,7 @@
                       <span :class="'badge ' + _dispatchStatusClass(d.status)" x-text="d.statusLabel"
                             style="font-size:10px;padding:2px 8px;border-radius:4px;font-weight:600"></span>
                       <div style="font-size:13px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-main)">
-                        NT$ <span x-text="((d.taxRate||0)>0?(d.totalWithTax||0):(d.totalAmount||0)).toLocaleString()"></span>
-                        <span x-show="(d.taxRate||0)>0" style="font-size:10px;font-weight:400;color:var(--text-dim);margin-left:2px">含稅</span>
+                        NT$ <span x-text="(d.grandTotal||0).toLocaleString()"></span>
                       </div>
                       <!-- 驗收快速操作 -->
                       <button x-show="d.status==='confirmed' || d.status==='sent'"
@@ -1533,12 +1532,28 @@
                         </tbody>
                       </table>
                     </div>
+                    <!-- Personnel list -->
+                    <div x-show="d.personnel && d.personnel.length > 0" style="padding:10px 16px" :style="(d.items && d.items.length>0) ? 'border-top:1px solid var(--border-light)' : ''">
+                      <div style="font-size:10px;font-weight:600;color:var(--text-dim);letter-spacing:.04em;margin-bottom:6px">外包名單人員</div>
+                      <table style="width:100%;border-collapse:collapse;font-size:11px">
+                        <tbody>
+                          <template x-for="(p, pi) in d.personnel" :key="pi">
+                            <tr style="border-bottom:1px solid #F5F4F0">
+                              <td style="padding:5px 0;font-family:var(--font-zh)" x-text="p.name"></td>
+                              <td style="padding:5px 0;color:var(--text-dim)" x-text="p.note || ''"></td>
+                              <td style="text-align:right;padding:5px 0;font-weight:600;font-family:LINE Seed TW_OTF, sans-serif"
+                                  x-text="'NT$ ' + (p.amount||0).toLocaleString()"></td>
+                            </tr>
+                          </template>
+                        </tbody>
+                      </table>
+                    </div>
                     <!-- Tax summary -->
                     <div style="display:flex;justify-content:flex-end;gap:14px;padding:5px 16px 6px;font-size:11px;font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-secondary);background:#FAFAF9;border-top:1px solid var(--border-light)">
-                      <span>小計 NT$ <span x-text="(d.totalAmount||0).toLocaleString()"></span></span>
-                      <span x-show="(d.taxRate||0)>0">稅額（<span x-text="Math.round((d.taxRate||0)*100)"></span>%）NT$ <span x-text="(d.taxAmount||0).toLocaleString()"></span></span>
-                      <span x-show="(d.taxRate||0)>0" style="font-weight:700;color:var(--text-main)">含稅合計 NT$ <span x-text="(d.totalWithTax||0).toLocaleString()"></span></span>
-                      <span x-show="!(d.taxRate>0)" style="color:var(--text-dim)">未稅</span>
+                      <span x-show="d.items && d.items.length > 0">小計 NT$ <span x-text="(d.totalAmount||0).toLocaleString()"></span></span>
+                      <span x-show="(d.taxRate||0)>0 && d.items && d.items.length > 0">稅額（<span x-text="Math.round((d.taxRate||0)*100)"></span>%）NT$ <span x-text="(d.taxAmount||0).toLocaleString()"></span></span>
+                      <span x-show="(d.personnel||[]).length > 0">外包人員 NT$ <span x-text="(d.personnelTotal||0).toLocaleString()"></span></span>
+                      <span style="font-weight:700;color:var(--text-main)">總成本 NT$ <span x-text="(d.grandTotal||0).toLocaleString()"></span></span>
                     </div>
                     <div x-show="d.notes" style="padding:6px 16px 0;font-size:11px;color:var(--text-dim)"
                          x-text="'備注：' + d.notes"></div>
@@ -1858,16 +1873,19 @@
       <!-- Basic info -->
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
         <div>
-          <label style="font-size:11px;font-weight:500;color:var(--text-secondary);display:block;margin-bottom:4px">承攬商 <span style="color:var(--danger)">*</span></label>
+          <label style="font-size:11px;font-weight:500;color:var(--text-secondary);display:block;margin-bottom:4px">承攬商</label>
           <select x-model="dispatchForm.vendor_id"
                   style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box">
-            <option value="">— 選擇承攬商 —</option>
+            <option value="">— 無承攬商（純外包名單人員點工）—</option>
             <template x-for="v in vendors" :key="v.id">
               <option :value="v.id" x-text="v.name + (v.contactName ? ' (' + v.contactName + ')' : '')"></option>
             </template>
           </select>
+          <div style="font-size:11px;color:var(--text-dim);margin-top:4px">
+            承攬商與外包名單人員至少需擇一，可只填外包人員（點工）不選承攬商
+          </div>
           <div x-show="vendors.length===0" style="font-size:11px;color:var(--warning);margin-top:4px">
-            尚無承攬商資料，請先至
+            尚無承攬商資料，如需派發給承攬商請先至
             <a href="vendor-contractors.html" style="color:var(--accent)">承攬商管理</a>
             新增。
           </div>
