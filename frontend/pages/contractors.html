@@ -250,6 +250,40 @@
           </div>
         </template>
 
+        <!-- 參與案件 -->
+        <hr class="detail-divider">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <div class="detail-sec" style="margin-bottom:0">
+            參與案件
+            <span style="font-weight:400;text-transform:none;letter-spacing:0;margin-left:4px"
+                  x-text="contractorDispatches.length ? '共 ' + contractorDispatches.length + ' 筆' : ''"></span>
+          </div>
+        </div>
+        <div x-show="dispatchesLoading" style="font-size:12px;color:var(--text-dim);text-align:center;padding:12px 0">載入中…</div>
+        <template x-if="!dispatchesLoading && contractorDispatches.length === 0">
+          <div style="text-align:center;padding:14px;border:1px dashed var(--border-light);border-radius:8px;font-size:12px;color:var(--text-dim)">
+            尚無參與派發紀錄
+          </div>
+        </template>
+        <template x-for="d in contractorDispatches.slice(0,5)" :key="d.id">
+          <div style="padding:9px 11px;border:1px solid var(--border-light);border-radius:7px;margin-bottom:6px;font-size:12px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px">
+              <a :href="'case-management.html?q=' + d.quoteNo"
+                 style="font-weight:600;color:var(--accent);text-decoration:none;font-family:LINE Seed TW_OTF, sans-serif"
+                 x-text="d.quoteNo"></a>
+              <span class="badge" :class="'badge--' + _dStatusClass(d.status)" x-text="d.statusLabel"></span>
+            </div>
+            <div style="color:var(--text-secondary)" x-text="d.vendorName ? '承攬商：' + d.vendorName : '（無承攬商，純點工）'"></div>
+            <div style="font-family:LINE Seed TW_OTF, sans-serif;font-weight:600;margin-top:3px;font-size:12px"
+                 x-text="'本人金額 NT$ ' + _myDispatchAmount(d).toLocaleString()"></div>
+          </div>
+        </template>
+        <template x-if="contractorDispatches.length > 5">
+          <div style="text-align:center;font-size:11px;color:var(--text-dim);padding:4px 0">
+            … 另有 <span x-text="contractorDispatches.length - 5"></span> 筆
+          </div>
+        </template>
+
         <hr class="detail-divider">
         <div style="display:flex;gap:8px">
           <button class="btn btn-ghost btn-sm" style="flex:1" @click="openEdit(selectedContractor)">編輯資料</button>
@@ -477,6 +511,8 @@ function contractorsPage() {
     bankPassbookPreview: null,
     selectedId: null,
     selectedContractor: null,
+    contractorDispatches: [],
+    dispatchesLoading: false,
 
     async init() {
       const s = localStorage.getItem('motrix_session')
@@ -509,9 +545,30 @@ function contractorsPage() {
       this.loading = false
     },
 
-    selectContractor(c) {
+    async selectContractor(c) {
       this.selectedId = c.id
       this.selectedContractor = { ...c }
+      this.dispatchesLoading = true
+      this.contractorDispatches = []
+      try {
+        const r = await fetch(`${API}/contractor-dispatches`, {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (r.ok) {
+          const all = await r.json()
+          this.contractorDispatches = all.filter(d => (d.personnel || []).some(p => p.id === c.id))
+        }
+      } catch(e) {}
+      this.dispatchesLoading = false
+    },
+
+    _myDispatchAmount(d) {
+      const p = (d.personnel || []).find(p => p.id === this.selectedContractor?.id)
+      return p ? (+p.amount || 0) : 0
+    },
+
+    _dStatusClass(s) {
+      return { draft: 'draft', sent: 'pending', confirmed: 'approved', pending_acceptance: 'signing', accepted: 'running', completed: 'settled', cancelled: 'danger' }[s] || 'draft'
     },
 
     _blank() {

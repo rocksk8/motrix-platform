@@ -1,7 +1,7 @@
 # MOTRIX ERP — 開發快速參考
 
 > 允碩整合集創（統編 60575481）｜ Tel: 04-3602-2818 ｜ info@miactw.com  
-> 文件版本：**2026-08-03f**（承攬商派發承攬商欄位改為選填，支援純外包名單人員點工，DB v37，見 §12）
+> 文件版本：**2026-08-03g**（外包名冊新增「參與案件」聯動，見 §12）
 
 ---
 
@@ -480,6 +480,12 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
   金額改用 `grandTotal` 統一顯示（含稅承攬商 + 外包人員），並新增外包人員明細表格；精算頁「三、
   承攬商派發成本」明細列無承攬商時不再顯示佔位的「（未命名承攬商）」空列，改由外包人員第一筆
   頂替顯示派發狀態
+- **外包名冊「參與案件」聯動（2026-08-03g）**：`contractors.html`（外包名冊）詳情面板比照
+  `vendor-contractors.html` 承攬商詳情的「派發紀錄」區塊，新增「參與案件」——選中人員時前端
+  抓 `GET /api/contractor-dispatches`（無 `quote_no` 參數，同承攬商頁一樣受限於「最新 200 筆」），
+  用 `d.personnel.some(p => p.id === c.id)` 篩出該人員實際參與的派發，逐筆顯示案號連結（導向
+  案件管理承攬商 tab）、狀態徽章、所屬承攬商（無承攬商時顯示「（無承攬商，純點工）」）與該人員
+  個人金額（`_myDispatchAmount(d)`，非整筆派發總額）
 
 ### §5.8 · 出貨單（案件管理子項目，2026-08-01）
 
@@ -777,6 +783,20 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 ## §12 · 變更摘要（最新兩版）
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
+
+### 2026-08-03g — 外包名冊新增「參與案件」聯動
+
+- **背景**：使用者要求「外包人員有參與哪些案件也要跟承攬商管理一樣聯動，方便後續知道那些外包
+  人員參與哪些案件」——承攬商管理（`vendor-contractors.html`）詳情面板本來就有「派發紀錄」區塊，
+  但外包名冊（`contractors.html`）的個人詳情面板完全沒有對應功能
+- **實作**：`contractors.html` 選中人員時比照承攬商頁作法，抓 `GET /api/contractor-dispatches`
+  全列表（無新增後端 API，沿用既有端點），前端用 `d.personnel.some(p => p.id === c.id)` 篩出
+  該人員實際參與（`personnel_json` 快照內含其 id）的派發紀錄，新增「參與案件」區塊顯示：案號
+  連結（導向案件管理承攬商 tab）、派發狀態徽章（`_dStatusClass()`，補齊承攬商頁原本缺的
+  `pending_acceptance`/`accepted` 對應）、所屬承攬商（純點工顯示「（無承攬商，純點工）」）、
+  該人員個人金額（`_myDispatchAmount(d)`，非整筆派發總額）
+- 已用瀏覽器實測：選中外包名冊人員「王小明」，正確顯示參與的 2 筆案件（含一筆純點工、一筆
+  已取消的承攬商派發），個人金額與狀態皆正確，無 console 錯誤
 
 ### 2026-08-03f — 承攬商派發改為選填，支援純外包名單人員點工（DB v37）
 
