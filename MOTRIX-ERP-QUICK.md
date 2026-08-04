@@ -1,7 +1,7 @@
 # MOTRIX ERP — 開發快速參考
 
 > 允碩整合集創（統編 60575481）｜ Tel: 04-3602-2818 ｜ info@miactw.com  
-> 文件版本：**2026-08-03i**（CRM 搜尋殘留 bug／側邊欄角標時區 bug／出貨單歷史紀錄，見 §12）
+> 文件版本：**2026-08-04**（報價單新增品項／新增區段標題按鈕失效修復，見 §12）
 
 ---
 
@@ -783,6 +783,24 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 ## §12 · 變更摘要（最新兩版）
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
+
+### 2026-08-04 — 報價單「新增品項」／「新增區段標題」按鈕失效修復
+
+- **背景**：使用者回報報價單編輯頁「新增品項」「新增區段標題」兩個按鈕點擊完全沒反應
+- **根因**：`quotation-form.html` 的 `addItem()`/`addHeader()` 皆在把新項目 push 進 `q.items`
+  之前先呼叫 `crypto.randomUUID()` 產生 id，但 `randomUUID()` 依 Web Crypto API 規範**只在安全
+  情境（HTTPS 或 `localhost`）下才存在**；本文件 §1 記載的區網存取位址
+  `http://172.16.11.211:666` 是純 HTTP 且非 `localhost`，屬非安全情境，`window.crypto.randomUUID`
+  為 `undefined`，呼叫時直接拋出 `TypeError`，函式中止在 `push` 之前——兩個按鈕共用同一根因，
+  可解釋為何會同時失效。同檔案另有 2 處相同呼叫（`loadQuote()` 補齊舊單缺漏 id、`copyToNew()`
+  複製為新單時重編 id）具同樣風險，一併修正
+- **修法**：新增 `genId()` helper，安全情境下優先用 `crypto.randomUUID()`，不存在時 fallback 為
+  手動組出的亂數字串 id（時間戳 36 進位＋亂數），檔案內 4 處呼叫點全數改用此 helper，行為對外
+  不變、id 唯一性不受影響
+- **⚠️ 尚未實機驗證**：本次受限於當下環境，開發機測試 server 未及啟動即改為優先處理部署匯出，
+  修復判斷依據為 MDN Web Crypto API 安全情境限制規範核實呼叫鏈與症狀完全吻合，但**未在瀏覽器
+  實際重現與驗證過**；下次有機會時建議在區網 IP（非 `localhost`）位址下實測「新增品項」「新增
+  區段標題」按鈕確認修復生效，若仍有問題需重新排查
 
 ### 2026-08-03i — CRM 搜尋殘留 bug／側邊欄角標時區 bug（既有潛藏問題）／出貨單歷史紀錄
 

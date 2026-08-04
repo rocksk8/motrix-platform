@@ -2176,15 +2176,22 @@
         }
       },
 
+      genId() {
+        if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+          return window.crypto.randomUUID()
+        }
+        return 'id-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10)
+      },
+
       addItem() {
-        const id = crypto.randomUUID()
+        const id = this.genId()
         this.q.items.push({ id, description:'', brand:'', qty:1, unit:'台',
           cost:null, margin:0.30, unitPrice:null, unitPriceOverride:false, amount:0, notes:'' })
         this.setDirty()
       },
 
       addHeader() {
-        const id = crypto.randomUUID()
+        const id = this.genId()
         this.q.items.push({ id, type:'header', description:'' })
         this.setDirty()
       },
@@ -3080,7 +3087,7 @@ window.addEventListener('load', function () {
         this.q.quoteNo = row.data.quoteNo || this.q.quoteNo
         // Ensure all items have a unique id (old quotes may lack id field)
         if (Array.isArray(this.q.items)) {
-          this.q.items.forEach(it => { if (!it.id) it.id = crypto.randomUUID() })
+          this.q.items.forEach(it => { if (!it.id) it.id = this.genId() })
         }
         this.calcTotals()
         this.checkApproval()
@@ -3160,7 +3167,7 @@ window.addEventListener('load', function () {
           exportLog: [],
           version: 1,
         }
-        template.items = (this.q.items || []).map(it => ({...it, id: crypto.randomUUID()}))
+        template.items = (this.q.items || []).map(it => ({...it, id: this.genId()}))
         sessionStorage.setItem('motrix_copy_template', JSON.stringify(template))
         window.location.href = `quotation-form.html?id=${newNo}`
       },
