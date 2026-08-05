@@ -132,12 +132,15 @@
     <div class="modal-title" x-text="modal.id ? '編輯料號' : '新增料號'"></div>
     <div class="form-grid">
       <div class="field-row">
-        <div class="field-label">料號 <span style="color:var(--danger)">*</span></div>
-        <input class="field-input" type="text" placeholder="EX-U6-PRO" x-model="modal.partNo" :disabled="!!modal.id">
+        <div class="field-label">料號<span x-show="!modal.id" style="color:var(--text-dim);font-weight:400"> （留空依類別自動產生）</span></div>
+        <input class="field-input" type="text" placeholder="留空自動產生，或自行輸入" x-model="modal.partNo" :disabled="!!modal.id">
       </div>
       <div class="field-row">
         <div class="field-label">類別</div>
-        <input class="field-input" type="text" placeholder="網路設備 / 伺服器…" x-model="modal.category">
+        <select class="field-input" x-model="modal.category">
+          <option value="">未分類</option>
+          <template x-for="c in categoryOptions" :key="c.name"><option :value="c.name" x-text="c.name"></option></template>
+        </select>
       </div>
       <div class="field-row" style="grid-column:1/-1">
         <div class="field-label">品名 <span style="color:var(--danger)">*</span></div>
@@ -181,6 +184,7 @@ function app() {
     session: {},
     loading: true,
     items: [],
+    categoryOptions: [],
     stockMap: {},
     search: '',
     filterCat: '',
@@ -210,7 +214,14 @@ function app() {
         if (!r.ok) { location.href = 'login.html'; return }
         const me = await r.json(); this.session.displayName = me.display_name
       } catch {}
-      await Promise.all([this.load(), this.loadStock()])
+      await Promise.all([this.load(), this.loadStock(), this.loadCategories()])
+    },
+
+    async loadCategories() {
+      try {
+        const r = await fetch(`${API}/parts/categories`)
+        if (r.ok) { const d = await r.json(); this.categoryOptions = d.items || [] }
+      } catch {}
     },
 
     async load() {
@@ -244,7 +255,8 @@ function app() {
     },
 
     async savePart() {
-      if (!this.modal.partNo.trim()) { this.modal.error = '料號不得為空'; return }
+      if (this.modal.id && !this.modal.partNo.trim()) { this.modal.error = '料號不得為空'; return }
+      if (!this.modal.id && !this.modal.partNo.trim() && !this.modal.category) { this.modal.error = '請輸入料號，或選擇類別以自動產生'; return }
       if (!this.modal.name.trim())   { this.modal.error = '品名不得為空'; return }
       this.modal.saving = true; this.modal.error = ''
       const body = { partNo: this.modal.partNo, name: this.modal.name, brand: this.modal.brand, unit: this.modal.unit, cost: this.modal.cost, listPrice: this.modal.listPrice, category: this.modal.category, note: this.modal.note }

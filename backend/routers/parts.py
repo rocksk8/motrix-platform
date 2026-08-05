@@ -10,6 +10,38 @@ from helpers import _require_user, _tok, _audit, notify_module_activity
 
 router = APIRouter()
 
+# 固定分類清單：新增分類時可在此增列（顯示順序＝清單順序）
+PART_CATEGORIES = [
+    {"name": "網通設備", "prefix": "NET"},
+    {"name": "監控設備", "prefix": "CCTV"},
+    {"name": "交換器",   "prefix": "SW"},
+    {"name": "伺服器/工控", "prefix": "SVR"},
+    {"name": "線材配件", "prefix": "CAB"},
+    {"name": "其他",     "prefix": "OTH"},
+]
+PART_CATEGORY_PREFIX = {c["name"]: c["prefix"] for c in PART_CATEGORIES}
+
+
+def _next_part_no(conn, prefix: str) -> str:
+    """回傳下一個可用料號，如 NET-001。prefix 須為內部信任常數。"""
+    rows = conn.execute(
+        "SELECT part_no FROM parts WHERE part_no LIKE ?", (f"{prefix}-%",)
+    ).fetchall()
+    mx = 0
+    for r in rows:
+        suffix = r["part_no"][len(prefix) + 1:]
+        if suffix.isdigit():
+            mx = max(mx, int(suffix))
+    n = mx + 1
+    while conn.execute("SELECT 1 FROM parts WHERE part_no=?", (f"{prefix}-{n:03d}",)).fetchone():
+        n += 1
+    return f"{prefix}-{n:03d}"
+
+
+@router.get("/api/parts/categories")
+def list_part_categories():
+    return {"items": PART_CATEGORIES}
+
 
 @router.get("/api/parts")
 def list_parts(q: Optional[str] = None, category: Optional[str] = None):
@@ -34,9 +66,13 @@ def create_part(body: dict = Body(...), authorization: str = Header(None)):
     user = _require_user(authorization)
     conn = get_db()
     now = datetime.now().isoformat()
+    category = (body.get("category") or "").strip()
     part_no = (body.get("partNo") or body.get("part_no") or "").strip()
     if not part_no:
-        raise HTTPException(400, "料號不得為空")
+        prefix = PART_CATEGORY_PREFIX.get(category)
+        if not prefix:
+            raise HTTPException(400, "請輸入料號，或選擇有對應前綴的類別以自動產生")
+        part_no = _next_part_no(conn, prefix)
     if conn.execute("SELECT id FROM parts WHERE part_no=?", (part_no,)).fetchone():
         raise HTTPException(409, "料號已存在")
     name = body.get("name", "")
@@ -49,7 +85,7 @@ def create_part(body: dict = Body(...), authorization: str = Header(None)):
         body.get("unit","台"),
         body.get("cost",0),
         body.get("listPrice") or body.get("list_price") or 0,
-        body.get("category",""),
+        category,
         body.get("note",""),
         now, now,
     ))
