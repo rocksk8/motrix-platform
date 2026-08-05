@@ -1,7 +1,7 @@
 # MOTRIX ERP — 開發快速參考
 
 > 允碩整合集創（統編 60575481）｜ Tel: 04-3602-2818 ｜ info@miactw.com  
-> 文件版本：**2026-08-05d**（報價單單位欄下拉建議／欄寬／備註欄自動隱藏／表頭對齊修復，見 §12）
+> 文件版本：**2026-08-05e**（報價單單位欄下拉建議／欄寬／備註欄自動隱藏／品項明細全面置中／數量欄自動撐寬，見 §12）
 
 ---
 
@@ -790,6 +790,33 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 ## §12 · 變更摘要（最新兩版）
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
+
+### 2026-08-05e — 品項明細數量欄破千裁字修復＋表格對齊方式改為全面置中
+
+- **背景**：接續 2026-08-05d 的表頭/資料對齊修復（當時做法是數字欄表頭改右對齊配合本來就靠右
+  的資料），使用者實測後回饋兩點：①「數量」欄位數字到千位以上（4 位數）會被欄框裁字看不全
+  ②整體希望改用更簡單一致的方案——**品項明細表格（表頭＋資料）全部欄位一律置中**，只有表格
+  外「報價合計」金額摘要維持靠右；已用 `AskUserQuestion` 向使用者確認範圍是整張表格皆置中
+  （而非僅「品名/規格說明」單一欄），使用者確認採此方案
+- **數量欄破千裁字**：`.cell-input.num`（`quotation-form.html:208`）原本文字方塊靠 `width:100%`
+  撐滿固定 60px 欄寬，4 位數以上數字加上瀏覽器原生 number 微調鈕（spinner）擠壓後顯示不全；
+  改用 CSS `field-sizing: content`（新增 `.cell-input.qty-input` class，`width:auto` 讓輸入框
+  依實際輸入的位數自動撐寬，非固定寫死大小）＋ 數量 `<th>` 改用 `min-width:44px` 取代固定
+  `width:60px`，讓 `table-layout:auto` 依欄位實際需求動態加寬整欄（同欄所有列取最大需求，符合
+  表格排版慣例）。`field-sizing` 為近代 Chromium 特性，此系統本就要求 Edge Headless 產生 PDF，
+  執行環境瀏覽器版本無虞
+- **表格全面置中**：撤銷 05d 加在數字欄 `<th>` 的 `text-align:right` inline 覆寫，改為
+  `.items-table th` 全域預設由 `text-align:left` 改成 `text-align:center`（`quotation-form.html:171`）；
+  `.cell-input`／`.cell-textarea` 新增 `text-align:center`，`.cell-input.num` 移除原本的
+  `text-align:right`，`.cell-display`（金額／單項毛利顯示）`text-align:right→center`
+  （`quotation-form.html:194-234`）；毛利率輸入框外層 flex 容器 `justify-content` 由
+  `flex-end` 改回 `center`、旁邊「需審核」提示文字同步置中。這三個類別（`cell-input`／
+  `cell-textarea`／`cell-display`）已確認只在品項明細表格內使用，不影響頁面其他區塊；
+  「報價合計」金額摘要區塊用的是完全獨立的 class/inline style，不受影響、仍維持靠右
+- **驗證**：demo 帳號測試報價單，瀏覽器實測數量欄輸入 5 位數（98765）完整顯示不裁字、欄寬隨
+  之自動加大；品項明細表頭與資料全部欄位（# / 品名規格說明 / 廠牌型號 / 數量 / 單位 / 成本單價 /
+  毛利率 / 售價 / 金額 / 單項毛利 / 備註）改為置中對齊，下方報價合計金額摘要仍維持靠右；
+  瀏覽器 console 無錯誤；FORM_VERSION V1.4 → V1.5
 
 ### 2026-08-05d — 修復報價單「單位」欄下拉建議只剩已選值的問題
 
