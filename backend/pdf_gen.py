@@ -48,11 +48,12 @@ def _build_quote_html(q: dict, tot: dict, internal: bool = False,
     ps = q.get('pdfShow') or {}
 
     items = q.get('items', [])
+    has_notes = any((it.get('notes') or '').strip() for it in items if it.get('type') != 'header')
     item_rows = ''
     real_idx = 0
     for i, item in enumerate(items):
         if item.get('type') == 'header':
-            colspan = 9 if internal else 7
+            colspan = (9 if internal else 7) - (0 if has_notes else 1)
             item_rows += (
                 f'<tr style="background:#EFF6FF">'
                 f'<td style="text-align:center;color:#93C5FD;font-size:10px">§</td>'
@@ -78,7 +79,7 @@ def _build_quote_html(q: dict, tot: dict, internal: bool = False,
                 f'<td class="r cost-cell">{f"{margin*100:.1f}%" if margin else ""}</td>'
                 f'<td class="r">{("NT$ " + f"{int(up):,}") if up else ""}</td>'
                 f'<td class="r">{("NT$ " + f"{int(amt):,}") if amt else ""}</td>'
-                f'<td>{esc(item.get("notes",""))}</td>'
+                + (f'<td>{esc(item.get("notes",""))}</td>' if has_notes else '') +
                 f'</tr>'
             )
         else:
@@ -91,7 +92,7 @@ def _build_quote_html(q: dict, tot: dict, internal: bool = False,
                 f'<td>{esc(item.get("unit",""))}</td>'
                 f'<td class="r">{("NT$ " + f"{int(up):,}") if up else ""}</td>'
                 f'<td class="r">{("NT$ " + f"{int(amt):,}") if amt else ""}</td>'
-                f'<td>{esc(item.get("notes",""))}</td>'
+                + (f'<td>{esc(item.get("notes",""))}</td>' if has_notes else '') +
                 f'</tr>'
             )
 
@@ -250,13 +251,13 @@ def _build_quote_html(q: dict, tot: dict, internal: bool = False,
         '      <th>品名 / 規格說明</th>\n'
         '      <th>廠牌 / 型號</th>\n'
         '      <th class="r" style="width:48px">數量</th>\n'
-        '      <th style="width:38px">單位</th>\n'
+        '      <th style="width:70px">單位</th>\n'
         + ('      <th class="r cost-cell" style="width:100px">單位成本</th>\n'
            '      <th class="r cost-cell" style="width:64px">毛利率</th>\n' if internal else '')
         + '      <th class="r" style="width:120px">單價（未稅額）</th>\n'
         '      <th class="r" style="width:120px">金額（未稅）</th>\n'
-        '      <th style="width:72px">備註</th>\n'
-        '    </tr>\n'
+        + ('      <th style="width:72px">備註</th>\n' if has_notes else '')
+        + '    </tr>\n'
         '  </thead>\n'
         + f'  <tbody>{item_rows}</tbody>\n'
         '</table>\n'

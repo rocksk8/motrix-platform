@@ -161,7 +161,7 @@
     /* ── 明細表格 ── */
     .items-table {
       width: 100%;
-      min-width: 1040px;
+      min-width: 1080px;
       border-collapse: collapse;
       font-size: 12px;
       margin-bottom: 10px;
@@ -1009,7 +1009,7 @@
                         <th style="padding:5px 8px;text-align:left;font-weight:600">品項說明</th>
                         <th style="padding:5px 8px;text-align:left;font-weight:600;width:100px">廠牌 / 型號</th>
                         <th style="padding:5px 8px;text-align:right;font-weight:600;width:55px">數量</th>
-                        <th style="padding:5px 8px;text-align:left;font-weight:600;width:44px">單位</th>
+                        <th style="padding:5px 8px;text-align:left;font-weight:600;width:70px">單位</th>
                         <th style="padding:5px 8px;text-align:right;font-weight:600;width:90px">單價</th>
                       </tr>
                     </thead>
@@ -1318,21 +1318,21 @@
           <table class="items-table">
             <thead>
               <tr>
-                <th style="width:32px">#</th>
+                <th style="width:32px;text-align:center">#</th>
                 <th style="min-width:180px">品名 / 規格說明</th>
                 <th style="min-width:120px">廠牌 / 型號</th>
-                <th style="width:60px">數量</th>
-                <th style="width:60px">單位</th>
+                <th style="width:60px;text-align:right">數量</th>
+                <th style="width:100px">單位</th>
                 <template x-if="showCostCols">
-                  <th class="internal" style="width:90px">成本單價<br><span style="font-size:8px;font-weight:400;opacity:.7">未稅</span></th>
+                  <th class="internal" style="width:90px;text-align:right">成本單價<br><span style="font-size:8px;font-weight:400;opacity:.7">未稅</span></th>
                 </template>
                 <template x-if="showCostCols">
-                  <th class="internal" style="width:84px">毛利率</th>
+                  <th class="internal" style="width:84px;text-align:right">毛利率</th>
                 </template>
-                <th style="width:100px">售價<br><span style="font-size:8px;font-weight:400;opacity:.7">未稅 NT$</span></th>
-                <th style="width:100px">金額<br><span style="font-size:8px;font-weight:400;opacity:.7">未稅 NT$</span></th>
+                <th style="width:100px;text-align:right">售價<br><span style="font-size:8px;font-weight:400;opacity:.7">未稅 NT$</span></th>
+                <th style="width:100px;text-align:right">金額<br><span style="font-size:8px;font-weight:400;opacity:.7">未稅 NT$</span></th>
                 <template x-if="showCostCols">
-                  <th class="internal" style="width:90px">單項毛利<br><span style="font-size:8px;font-weight:400;opacity:.7">直接 NT$</span></th>
+                  <th class="internal" style="width:90px;text-align:right">單項毛利<br><span style="font-size:8px;font-weight:400;opacity:.7">直接 NT$</span></th>
                 </template>
                 <th style="min-width:80px">備註</th>
                 <th style="width:28px"></th>
@@ -1376,6 +1376,8 @@
                   </td>
                   <td>
                     <input class="cell-input" type="text" x-model="item.unit" @change="setDirty"
+                           @focus="$el.dataset.prevUnit = item.unit; item.unit = ''"
+                           @blur="if(!item.unit) item.unit = $el.dataset.prevUnit || ''"
                            x-show="item.type !== 'header'" list="quote-unit-options" placeholder="單位">
                   </td>
                   <template x-if="showCostCols && item.type !== 'header'">
@@ -1387,7 +1389,7 @@
                   </template>
                   <template x-if="showCostCols && item.type !== 'header'">
                     <td class="internal">
-                      <div style="display:flex;align-items:center;gap:2px">
+                      <div style="display:flex;align-items:center;justify-content:flex-end;gap:2px">
                         <input class="cell-input num internal" type="number" min="0" max="99.99" step="0.01"
                                :value="parseFloat((item.margin * 100).toFixed(2))"
                                @input="item.margin = parseFloat($event.target.value) / 100; item.unitPriceOverride = false; calcItem(item); setDirty(); checkApproval()"
@@ -1395,7 +1397,7 @@
                         <span style="font-size:11px;color:var(--text-dim)">%</span>
                       </div>
                       <div x-show="item.margin < 0.30 && item.cost > 0"
-                           style="font-size:9px;color:var(--danger);font-weight:600">需審核</div>
+                           style="font-size:9px;color:var(--danger);font-weight:600;text-align:right">需審核</div>
                     </td>
                   </template>
                   <td>
@@ -1888,7 +1890,7 @@
                   <th>品名 / 規格說明</th>
                   <th>廠牌 / 型號</th>
                   <th class="r" style="width:50px">數量</th>
-                  <th style="width:40px">單位</th>
+                  <th style="width:74px">單位</th>
                   <template x-if="previewMode === 'internal'">
                     <th class="r" style="background:#1A1A1A;width:90px">成本單價</th>
                   </template>
@@ -1897,7 +1899,9 @@
                   </template>
                   <th class="r" style="width:100px">單價（未稅額）</th>
                   <th class="r" style="width:110px">金額（未稅）</th>
-                  <th style="width:80px">備註</th>
+                  <template x-if="q.items.some(i => (i.notes||'').trim())">
+                    <th style="width:80px">備註</th>
+                  </template>
                 </tr>
               </thead>
               <tbody>
@@ -1916,7 +1920,9 @@
                     </template>
                     <td class="r" x-text="item.unitPrice ? item.unitPrice.toLocaleString() : ''"></td>
                     <td class="r" x-text="item.amount ? item.amount.toLocaleString() : ''"></td>
-                    <td x-text="item.notes || ''"></td>
+                    <template x-if="q.items.some(i => (i.notes||'').trim())">
+                      <td x-text="item.notes || ''"></td>
+                    </template>
                   </tr>
                 </template>
               </tbody>
@@ -2029,7 +2035,7 @@
   const API = '/api'
   // ── 報價單模板版本：本頁（quotation-form.html）或其邏輯有任何改動都須遞增 ──
   // ── 小改版（欄位微調/樣式/文案）+0.1；大改版（版型結構/新增區塊/流程變更）+1 ──
-  const FORM_VERSION = 'V1.3'
+  const FORM_VERSION = 'V1.4'
 
   function quotationForm() {
     return {
