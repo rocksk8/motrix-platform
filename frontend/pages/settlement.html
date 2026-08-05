@@ -324,8 +324,8 @@
                 <th class="col-orig" style="border-left:2px solid #E5E7EB;width:55px">數量</th>
                 <th class="col-orig" style="width:90px">報價金額</th>
                 <th class="col-actual" style="border-left:2px solid #FDE68A;width:55px">實際數量</th>
-                <th class="col-actual" style="width:90px">實際單位成本</th>
-                <th class="col-actual" style="width:90px">實際總成本</th>
+                <th class="col-actual" style="width:104px">實際單位成本</th>
+                <th class="col-actual" style="width:100px">實際總成本</th>
                 <th></th>
                 <th></th>
               </tr>
@@ -368,9 +368,20 @@
                              @input="calcItemCost(item); calcSummary()"
                              style="width:80px">
                     </div>
+                    <select class="stl-input" x-model="item.actualCostTaxMode"
+                            :disabled="settlement.status === 'finalized'"
+                            @change="calcItemCost(item); calcSummary()"
+                            style="margin-top:3px;font-size:10px;padding:2px 4px;width:100%">
+                      <option value="pretax">未稅</option>
+                      <option value="taxed">含稅5%</option>
+                    </select>
                   </td>
                   <td class="col-actual" style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-weight:600">
                     <span x-text="item.actualTotalCost > 0 ? 'NT$ ' + fmt(item.actualTotalCost) : '—'"></span>
+                    <template x-if="item.actualCostTaxMode === 'taxed' && item.actualTotalCost > 0">
+                      <div style="font-size:9px;color:var(--text-dim);font-weight:400"
+                           x-text="'原含稅 NT$ ' + fmt(Math.round((item.actualQty||0) * (item.actualUnitCost||0)))"></div>
+                    </template>
                   </td>
 
                   <!-- 差異欄 -->
@@ -858,6 +869,7 @@ function settlementPage() {
           origCost:        it.cost        || 0,
           actualQty:       it.qty         || 0,
           actualUnitCost:  it.cost        || 0,
+          actualCostTaxMode: 'pretax',
           actualTotalCost: Math.round((it.qty || 0) * (it.cost || 0)),
           note:            '',
         }))
@@ -883,6 +895,7 @@ function settlementPage() {
                 ...oi,
                 actualQty:      si.actualQty      !== undefined ? si.actualQty      : oi.actualQty,
                 actualUnitCost: si.actualUnitCost !== undefined ? si.actualUnitCost : oi.actualUnitCost,
+                actualCostTaxMode: si.actualCostTaxMode || oi.actualCostTaxMode,
                 actualTotalCost:si.actualTotalCost|| oi.actualTotalCost,
                 note:           si.note || '',
               }
@@ -932,7 +945,9 @@ function settlementPage() {
     },
 
     calcItemCost(item) {
-      item.actualTotalCost = Math.round((item.actualQty || 0) * (item.actualUnitCost || 0))
+      const raw = Math.round((item.actualQty || 0) * (item.actualUnitCost || 0))
+      // 含稅5%：供應商發票金額已含稅，扣掉稅額換算回未稅，與報價稅前收入同一基準才能正確比毛利
+      item.actualTotalCost = item.actualCostTaxMode === 'taxed' ? Math.round(raw / 1.05) : raw
     },
 
     calcExtraCost(ex) {
@@ -1019,6 +1034,7 @@ function settlementPage() {
           origCost:       i.origCost,
           actualQty:      i.actualQty,
           actualUnitCost: i.actualUnitCost,
+          actualCostTaxMode: i.actualCostTaxMode,
           actualTotalCost:i.actualTotalCost,
           note:           i.note,
         })),
