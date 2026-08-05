@@ -98,6 +98,9 @@ def delete_part(part_id: int, authorization: str = Header(None)):
     row = conn.execute("SELECT part_no, name FROM parts WHERE id=?", (part_id,)).fetchone()
     if not row:
         raise HTTPException(404, "料號不存在")
+    if conn.execute("SELECT 1 FROM stock_items WHERE part_no=? LIMIT 1", (row["part_no"],)).fetchone():
+        conn.close()
+        raise HTTPException(409, "此料號仍有庫存紀錄，無法刪除")
     conn.execute("DELETE FROM parts WHERE id=?", (part_id,))
     conn.commit()
     conn.close()

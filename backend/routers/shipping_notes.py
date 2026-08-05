@@ -344,7 +344,8 @@ def approve_shipping_note(note_no: str, body: dict = Body(default={}), authoriza
     _require_admin(user)
     conn = get_db()
     row = conn.execute(
-        "SELECT data_json, customer_name FROM shipping_notes WHERE note_no=? AND status IN ('待審核','簽核中')",
+        "SELECT data_json, customer_name, items_json, quote_no FROM shipping_notes "
+        "WHERE note_no=? AND status IN ('待審核','簽核中')",
         (note_no,)
     ).fetchone()
     if not row:
@@ -410,6 +411,32 @@ def approve_shipping_note(note_no: str, body: dict = Body(default={}), authoriza
         detail_status = "超級管理員簽核"
 
     if all_done:
+        # 庫存扣減：品項若引用 part_no/serials，核准即視為「確認出貨」。全部序號都還在庫才放行，
+        # 否則整張核准中止（不寫入任何狀態變更），避免出現「已核准但庫存沒扣到」的半吊子狀態。
+        items = json.loads(row["items_json"] or "[]")
+        stock_ids, missing, seen = [], [], set()
+        for it in items:
+            pn   = (it.get("part_no") or "").strip()
+            sers = it.get("serials") or []
+            if not pn or not sers:
+                continue
+            for sn in sers:
+                if (pn, sn) in seen:
+                    missing.append(f"{pn} / {sn}（同一張出貨單重複引用）")
+                    continue
+                seen.add((pn, sn))
+                srow = conn.execute(
+                    "SELECT id, status FROM stock_items WHERE part_no=? AND serial_no=?", (pn, sn)
+                ).fetchone()
+                if not srow or srow["status"] != "in_stock":
+                    missing.append(f"{pn} / {sn}")
+                else:
+                    stock_ids.append(srow["id"])
+        if missing:
+            conn.close()
+            raise HTTPException(409, "以下序號已不在庫（可能已被其他出貨單或設備登載使用），無法核准："
+                                      + "、".join(missing))
+
         appr["approvedBy"]        = user["username"]
         appr["approvedByDisplay"] = user.get("display_name") or user["username"]
         appr["approvedAt"]        = now
@@ -419,6 +446,13 @@ def approve_shipping_note(note_no: str, body: dict = Body(default={}), authoriza
             "UPDATE shipping_notes SET status='已核准', data_json=?, updated_at=? WHERE note_no=?",
             (json.dumps(d, ensure_ascii=False), now, note_no)
         )
+        actor = user.get("display_name") or user["username"]
+        for sid in stock_ids:
+            conn.execute("""
+                UPDATE stock_items
+                SET status='shipped', shipping_note_no=?, quote_no=?, consumed_at=?, consumed_by=?, updated_at=?
+                WHERE id=?
+            """, (note_no, row["quote_no"], now, actor, now, sid))
         conn.commit()
         approver_name = appr.get("approvedByDisplay") or user["username"]
         spawn_bg_thread(_generate_shipping_pdf, args=(note_no, approver_name, '簽核'))

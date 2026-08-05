@@ -88,6 +88,8 @@ function app() {
     shippingPreviewBlobUrl: '',
     shippingPreviewFetching: false,
     shippingPreviewNote: null,
+    _partsOptions: null,
+    serialPicker: { show: false, itemIdx: null, partNo: '', options: [], selected: [], loading: false, error: '' },
 
     canSeeFinancial() {
       const m = this.session.modules || []
@@ -1568,6 +1570,67 @@ function app() {
 
     removeShippingItem(idx) {
       this.shippingForm.items.splice(idx, 1)
+    },
+
+    async _loadPartsOptions() {
+      if (this._partsOptions) return this._partsOptions
+      try {
+        const r = await fetch('/api/parts', { headers: { Authorization: 'Bearer ' + this.session.token } })
+        this._partsOptions = r.ok ? ((await r.json()).items || []) : []
+      } catch { this._partsOptions = [] }
+      return this._partsOptions
+    },
+
+    async openSerialPicker(idx) {
+      const it = this.shippingForm.items[idx]
+      this.serialPicker = {
+        show: true, itemIdx: idx, partNo: it.part_no || '',
+        options: [], selected: [...(it.serials || [])], loading: false, error: ''
+      }
+      await this._loadPartsOptions()
+      if (this.serialPicker.partNo) await this._loadSerialOptions()
+    },
+
+    async _loadSerialOptions() {
+      if (!this.serialPicker.partNo) { this.serialPicker.options = []; return }
+      this.serialPicker.loading = true; this.serialPicker.error = ''
+      try {
+        const r = await fetch(`/api/inventory/stock-items?part_no=${encodeURIComponent(this.serialPicker.partNo)}&status=in_stock`,
+          { headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (r.ok) { const d = await r.json(); this.serialPicker.options = d.items || [] }
+        else { this.serialPicker.error = '讀取庫存序號失敗' }
+      } catch { this.serialPicker.error = '網路錯誤' }
+      this.serialPicker.loading = false
+    },
+
+    onSerialPickerPartChange() {
+      this.serialPicker.selected = []
+      this._loadSerialOptions()
+    },
+
+    toggleSerialPick(sn) {
+      const i = this.serialPicker.selected.indexOf(sn)
+      if (i >= 0) this.serialPicker.selected.splice(i, 1)
+      else this.serialPicker.selected.push(sn)
+    },
+
+    applySerialPicker() {
+      const it = this.shippingForm.items[this.serialPicker.itemIdx]
+      if (this.serialPicker.partNo && this.serialPicker.selected.length) {
+        it.part_no = this.serialPicker.partNo
+        it.serials = [...this.serialPicker.selected]
+        it.qty = this.serialPicker.selected.length
+      } else {
+        delete it.part_no
+        delete it.serials
+      }
+      this.serialPicker.show = false
+    },
+
+    clearSerialLink(idx) {
+      const it = this.shippingForm.items[idx]
+      delete it.part_no
+      delete it.serials
     },
 
     async saveShippingNote() {

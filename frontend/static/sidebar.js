@@ -201,6 +201,7 @@
   var cFi  = mods.indexOf('finance')     >= 0 || ad
   var cCM  = mods.indexOf('case_manage') >= 0 || eng || ad
   var cEq  = mods.indexOf('equipment')   >= 0 || ad
+  var cInv = mods.indexOf('inventory')   >= 0 || ad
   var cPj  = (sa || ad || eng) || mods.some(function (m) { return m.slice(0, 8) === 'project_' })
   var cRpt = mods.indexOf('reports')     >= 0 || ad
   var cWL  = mods.indexOf('work_log')    >= 0 || role !== 'viewer'
@@ -223,6 +224,7 @@
     proj:  '<path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>',
     order: '<path d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2 9m12-9l2 9M9 21h6"/>',
     part:  '<path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10"/>',
+    inv:   '<path d="M21 8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><path d="M3.27 6.96L12 12l8.73-5.04M12 22.08V12"/>',
     proc:  '<path d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18"/>',
     supp:  '<path d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-2 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>',
     dev:   '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>',
@@ -258,6 +260,7 @@
     'supplier-log.html':       'procurement',
     'vendor-contractors.html': 'procurement',
     'parts.html':              'procurement',
+    'inventory.html':          'procurement',
     'procurement.html':        'procurement',
     'devices.html':            'equipment',
     'warranty.html':           'equipment',
@@ -311,6 +314,7 @@
       ni(pg('suppliers.html'),          'supp',  '供應商管理', ['suppliers.html', 'supplier-log.html'],    cPr,  'sb-mod-suppliers'),
       ni(pg('vendor-contractors.html'), 'vend',  '承攬商管理', ['vendor-contractors.html'],               cPr,  'sb-mod-vendor'),
       ni(pg('parts.html'),              'part',  '料號主檔',  ['parts.html'],                            cPr,  'sb-mod-parts'),
+      ni(pg('inventory.html'),          'inv',   '庫存管理',  ['inventory.html'],                        cInv, 'sb-mod-inventory'),
       ni(pg('procurement.html'),        'proc',  '採購管理',  ['procurement.html'],                      cPr,  'sb-mod-procurement'),
       sec('設備', cEq),
       ni(pg('devices.html'),         'dev',   '設備登載', ['devices.html'],  cEq,  'sb-mod-equipment'),
@@ -539,6 +543,7 @@
         cFi  = mods.indexOf('finance')     >= 0 || ad
         cCM  = mods.indexOf('case_manage') >= 0 || eng || ad
         cEq  = mods.indexOf('equipment')   >= 0 || ad
+        cInv = mods.indexOf('inventory')   >= 0 || ad
         cPj  = (sa || ad || eng) || mods.some(function (m) { return m.slice(0, 8) === 'project_' })
         cRpt = mods.indexOf('reports')     >= 0 || ad
         cWL  = mods.indexOf('work_log')    >= 0 || role !== 'viewer'

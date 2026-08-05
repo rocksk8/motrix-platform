@@ -767,9 +767,49 @@ def delete_quotation(quote_no: str, authorization: str = Header(None)):
     return {"ok": True}
 
 
+def _sync_device_stock(conn, quote_no: str, old_devices: list, new_devices: list, user: dict):
+    """設備登載 devices[] 的序號若對應到庫存序號，隨案件資料整包存檔一併同步扣/還庫存。
+
+    devices[] 沒有獨立端點（addDevice/removeDevice/onMaterialArrived/syncMaterialsToDevices 四處
+    都是純前端陣列操作，見 case-management.js），所以在這裡對新舊陣列做序號 diff，而不是新增專屬
+    端點——現有設備多半沒有對應庫存來源，找不到就略過，不擋存檔。與出貨單核准（Phase B）是各自獨
+    立的扣庫存來源，並非要求先出貨才能登載。
+    """
+    now   = datetime.now().isoformat()
+    actor = user.get("display_name") or user["username"]
+    old_by_id = {d.get("id"): d for d in old_devices if d.get("id") is not None}
+    new_by_id = {d.get("id"): d for d in new_devices if d.get("id") is not None}
+
+    for did, dev in new_by_id.items():
+        sn = (dev.get("sn") or "").strip()
+        old_sn = (old_by_id.get(did) or {}).get("sn", "").strip() if old_by_id.get(did) else ""
+        if not sn or sn == old_sn:
+            continue
+        srow = conn.execute(
+            "SELECT id FROM stock_items WHERE serial_no=? AND status='in_stock' ORDER BY id LIMIT 1", (sn,)
+        ).fetchone()
+        if srow:
+            conn.execute("""
+                UPDATE stock_items
+                SET status='installed', quote_no=?, case_device_id=?, consumed_at=?, consumed_by=?, updated_at=?
+                WHERE id=?
+            """, (quote_no, str(did), now, actor, now, srow["id"]))
+
+    for did, old_dev in old_by_id.items():
+        old_sn = (old_dev.get("sn") or "").strip()
+        new_sn = (new_by_id.get(did) or {}).get("sn", "").strip() if new_by_id.get(did) else ""
+        if not old_sn or old_sn == new_sn:
+            continue
+        conn.execute("""
+            UPDATE stock_items
+            SET status='in_stock', quote_no='', case_device_id='', consumed_at='', consumed_by='', updated_at=?
+            WHERE serial_no=? AND status='installed' AND case_device_id=?
+        """, (now, old_sn, str(did)))
+
+
 @router.patch("/api/quotations/{quote_no}/case-record")
 def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str = Header(None)):
-    _require_user(authorization)
+    user = _require_user(authorization)
     conn = get_db()
     row = conn.execute(
         "SELECT id, customer_name, project_name, data_json, updated_at FROM quotations WHERE quote_no=?",
@@ -785,7 +825,11 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
         raise HTTPException(409, "案件資料已被其他人更新，請重新載入後再存")
     label = f"{quote_no}（{row['customer_name'] or ''}{'／' if row['project_name'] else ''}{row['project_name'] or ''}）"
     data = json.loads(row["data_json"] or "{}")
+    old_devices = (data.get("caseRecord") or {}).get("devices") or []
+    new_devices = (body.case_record or {}).get("devices") or []
     data["caseRecord"] = body.case_record or {}
+    if new_devices != old_devices:
+        _sync_device_stock(conn, quote_no, old_devices, new_devices, user)
     now = save_quotation_json(conn, quote_no, data)
     conn.commit()
     conn.close()

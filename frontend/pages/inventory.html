@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="../static/favicon.png">
+  <title>庫存管理 — MOTRIX 營運管理系統</title>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
+  <style>
+    [x-cloak]{display:none!important}
+    .page-main{margin-left:var(--sidebar-w);margin-top:var(--topbar-h);padding:28px 32px;min-height:calc(100vh - var(--topbar-h));background:var(--white)}
+    .toolbar{display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap}
+    .search-wrap{position:relative;flex:0 0 280px}
+    .search-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text-dim);pointer-events:none}
+    .search-input{width:100%;padding:8px 11px 8px 34px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;background:#fff;outline:none;box-sizing:border-box}
+    .search-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(37,99,235,.08)}
+    .panel{background:#fff;border:1px solid var(--border-light);border-radius:var(--radius-lg);overflow:hidden}
+    .data-table{width:100%;border-collapse:collapse;font-size:13px}
+    .data-table th{padding:10px 14px;text-align:left;font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);font-weight:500;background:#FAFAF8;border-bottom:1px solid var(--border-light);white-space:nowrap}
+    .data-table td{padding:11px 14px;border-bottom:1px solid #F0EEE9;vertical-align:middle}
+    .data-table tr:last-child td{border-bottom:none}
+    .data-table tr:hover td{background:#FDFCFA}
+    .action-btn{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:var(--radius);font-size:11px;font-weight:500;cursor:pointer;border:1px solid;transition:all .12s}
+    .action-btn.edit{background:#EEF2FF;border-color:#C7D2FE;color:#4338CA}
+    .action-btn.edit:hover{background:#E0E7FF}
+    .action-btn.del{background:#FEF2F2;border-color:#FECACA;color:#DC2626}
+    .action-btn.del:hover{background:#FEE2E2}
+    .action-btn.ghost{background:#F0EEE9;border-color:var(--border-light);color:var(--text-secondary)}
+    .action-btn.ghost:hover{background:#E5E2DA}
+    .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;display:flex;align-items:center;justify-content:center}
+    .modal-box{background:#fff;border-radius:12px;padding:28px 32px;width:560px;max-width:95vw;max-height:88vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.2)}
+    .modal-title{font-size:15px;font-weight:700;font-family:var(--font-zh);color:var(--text-primary);margin-bottom:20px}
+    .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .field-row{margin-bottom:0}
+    .field-label{font-size:11px;color:var(--text-secondary);margin-bottom:4px;font-weight:500;font-family:var(--font-zh)}
+    .field-input{width:100%;padding:7px 10px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:var(--font-zh);outline:none;box-sizing:border-box}
+    .field-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(37,99,235,.08)}
+    .modal-footer{display:flex;justify-content:flex-end;gap:8px;margin-top:20px}
+    .empty-state{text-align:center;padding:48px;color:var(--text-dim);font-size:13px}
+    .loading-text{text-align:center;padding:40px;color:var(--text-dim);font-size:13px}
+    .stock-badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;font-family:LINE Seed TW_OTF, sans-serif}
+    .stock-badge.ok{background:#DCFCE7;color:#15803D}
+    .stock-badge.zero{background:#F0EEE9;color:var(--text-dim)}
+    .serial-row{display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:center;margin-bottom:8px}
+    .status-chip{display:inline-flex;align-items:center;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600}
+    .status-chip.in_stock{background:#DCFCE7;color:#15803D}
+    .status-chip.shipped{background:#DBEAFE;color:#1D4ED8}
+    .status-chip.installed{background:#EDE9FE;color:#6D28D9}
+    .status-chip.void{background:#F0EEE9;color:var(--text-dim)}
+    .filter-chip{padding:4px 10px;border-radius:999px;font-size:11px;border:1px solid var(--border-light);cursor:pointer;background:#fff}
+    .filter-chip.active{background:var(--accent);border-color:var(--accent);color:#fff}
+  </style>
+</head>
+<body x-data="app()" x-init="init()" x-cloak>
+
+  <header id="app-topbar" class="topbar"></header>
+<div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+<div class="app-shell">
+
+  <aside class="sidebar" id="app-sidebar"></aside>
+
+  <main class="page-main">
+
+    <div class="toolbar">
+      <div class="search-wrap">
+        <span class="search-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg></span>
+        <input class="search-input" type="search" placeholder="搜尋料號 / 品名 / 廠牌…" x-model="search">
+      </div>
+      <select style="padding:7px 10px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;font-family:var(--font-zh);outline:none" x-model="filterCat">
+        <option value="">全部類別</option>
+        <template x-for="c in categories" :key="c"><option :value="c" x-text="c"></option></template>
+      </select>
+      <div style="margin-left:auto;font-size:12px;color:var(--text-dim)" x-text="filtered.length + ' 項料號'"></div>
+      <button class="btn btn-primary" @click="openIntakeModal()">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+        進貨
+      </button>
+    </div>
+
+    <div class="panel">
+      <div class="loading-text" x-show="loading">載入中…</div>
+      <template x-if="!loading">
+        <div>
+          <div class="table-scroll">
+          <table class="data-table" x-show="filtered.length > 0">
+            <thead>
+              <tr>
+                <th>料號</th>
+                <th>品名</th>
+                <th>廠牌/型號</th>
+                <th>類別</th>
+                <th style="text-align:right">在庫</th>
+                <th style="text-align:right">已出貨</th>
+                <th style="text-align:right">已登載</th>
+                <th style="text-align:right">報廢</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="p in filtered" :key="p.part_no">
+                <tr>
+                  <td><span style="font-family:LINE Seed TW_OTF, sans-serif;font-size:12px;font-weight:600;color:var(--accent)" x-text="p.part_no"></span></td>
+                  <td style="font-size:12px" x-text="p.name || '—'"></td>
+                  <td style="font-size:12px;color:var(--text-secondary)" x-text="p.brand || '—'"></td>
+                  <td>
+                    <span x-show="p.category" style="font-size:11px;padding:2px 8px;border-radius:4px;background:#F0EEE9;color:var(--text-secondary)" x-text="p.category"></span>
+                    <span x-show="!p.category" style="color:var(--text-dim)">—</span>
+                  </td>
+                  <td style="text-align:right"><span class="stock-badge" :class="p.inStockCount > 0 ? 'ok' : 'zero'" x-text="p.inStockCount"></span></td>
+                  <td style="text-align:right;font-size:12px;color:var(--text-secondary)" x-text="p.shippedCount"></td>
+                  <td style="text-align:right;font-size:12px;color:var(--text-secondary)" x-text="p.installedCount"></td>
+                  <td style="text-align:right;font-size:12px;color:var(--text-dim)" x-text="p.voidCount"></td>
+                  <td style="white-space:nowrap">
+                    <button class="action-btn ghost" @click.stop="openDetail(p)">查看序號</button>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+          </div>
+          <div class="empty-state" x-show="filtered.length === 0">
+            <div style="font-size:32px;margin-bottom:10px">📦</div>
+            <div x-show="items.length === 0">尚無庫存料號，點擊「進貨」開始建立</div>
+            <div x-show="items.length > 0 && filtered.length === 0">無符合搜尋條件的料號</div>
+          </div>
+        </div>
+      </template>
+    </div>
+
+  </main>
+</div>
+
+<!-- 進貨 Modal -->
+<div class="modal-overlay" x-show="intake.show" @click.self="intake.show=false" x-cloak>
+  <div class="modal-box" @click.stop>
+    <div class="modal-title">進貨（建立庫存批次）</div>
+    <div class="form-grid">
+      <div class="field-row" style="grid-column:1/-1">
+        <div class="field-label">料號 <span style="color:var(--danger)">*</span></div>
+        <select class="field-input" x-model="intake.partNo" @change="onIntakePartChange()">
+          <option value="">請選擇料號</option>
+          <template x-for="pt in parts" :key="pt.part_no">
+            <option :value="pt.part_no" x-text="pt.part_no + '　' + pt.name"></option>
+          </template>
+        </select>
+      </div>
+      <div class="field-row">
+        <div class="field-label">數量</div>
+        <input class="field-input" type="number" min="1" x-model.number="intake.qty" @change="syncSerialRows()">
+      </div>
+      <div class="field-row">
+        <div class="field-label">單位成本（未稅，選填）</div>
+        <input class="field-input" type="number" placeholder="預設帶入料號成本" x-model.number="intake.cost">
+      </div>
+      <div class="field-row" style="grid-column:1/-1">
+        <div class="field-label">備注（選填）</div>
+        <input class="field-input" type="text" x-model="intake.note">
+      </div>
+    </div>
+
+    <div style="margin-top:16px;font-size:11px;color:var(--text-secondary);font-weight:600;margin-bottom:8px">序號明細（每台實體設備需輸入實際序號）</div>
+    <template x-for="(row, idx) in intake.serials" :key="idx">
+      <div class="serial-row">
+        <input class="field-input" type="text" placeholder="序號 SN" x-model="row.serial_no">
+        <input class="field-input" type="text" placeholder="MAC（選填）" x-model="row.mac">
+        <button class="action-btn del" @click="intake.serials.splice(idx,1); intake.qty=intake.serials.length" title="移除此列">✕</button>
+      </div>
+    </template>
+    <button class="action-btn ghost" @click="intake.serials.push({serial_no:'',mac:''}); intake.qty=intake.serials.length" style="margin-top:4px">+ 新增一列</button>
+
+    <div x-show="intake.error" style="color:var(--danger);font-size:12px;margin-top:12px" x-text="intake.error"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" @click="intake.show=false">取消</button>
+      <button class="btn btn-primary" @click="saveIntake()" :disabled="intake.saving">
+        <span x-text="intake.saving ? '儲存中…' : '建立批次'"></span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- 序號明細 Modal -->
+<div class="modal-overlay" x-show="detail.show" @click.self="detail.show=false" x-cloak>
+  <div class="modal-box" style="width:640px" @click.stop>
+    <div class="modal-title" x-text="detail.partNo + ' 序號明細'"></div>
+    <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">
+      <span class="filter-chip" :class="detail.filterStatus==='' ? 'active' : ''" @click="detail.filterStatus=''">全部</span>
+      <span class="filter-chip" :class="detail.filterStatus==='in_stock' ? 'active' : ''" @click="detail.filterStatus='in_stock'">在庫</span>
+      <span class="filter-chip" :class="detail.filterStatus==='shipped' ? 'active' : ''" @click="detail.filterStatus='shipped'">已出貨</span>
+      <span class="filter-chip" :class="detail.filterStatus==='installed' ? 'active' : ''" @click="detail.filterStatus='installed'">已登載</span>
+      <span class="filter-chip" :class="detail.filterStatus==='void' ? 'active' : ''" @click="detail.filterStatus='void'">報廢</span>
+    </div>
+    <div class="loading-text" x-show="detail.loading">載入中…</div>
+    <template x-if="!detail.loading">
+      <div>
+        <table class="data-table" x-show="detailFiltered.length > 0">
+          <thead><tr><th>序號</th><th>MAC</th><th>狀態</th><th>批次</th><th>關聯</th><th>操作</th></tr></thead>
+          <tbody>
+            <template x-for="it in detailFiltered" :key="it.id">
+              <tr>
+                <td style="font-size:12px;font-family:LINE Seed TW_OTF, sans-serif" x-text="it.serial_no"></td>
+                <td style="font-size:12px;color:var(--text-dim)" x-text="it.mac || '—'"></td>
+                <td><span class="status-chip" :class="it.status" x-text="statusLabel(it.status)"></span></td>
+                <td style="font-size:11px;color:var(--text-dim)" x-text="it.batch_no || '—'"></td>
+                <td style="font-size:11px;color:var(--text-dim)" x-text="it.shipping_note_no || it.quote_no || '—'"></td>
+                <td style="white-space:nowrap">
+                  <button class="action-btn ghost" x-show="it.status!=='void'" @click="adjustItem(it, 'void')">報廢</button>
+                  <button class="action-btn edit" x-show="it.status!=='in_stock'" @click="adjustItem(it, 'return_to_stock')" style="margin-left:4px">退回庫存</button>
+                  <button class="action-btn del" x-show="it.status==='in_stock'" @click="deleteItem(it)" style="margin-left:4px">刪除</button>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+        <div class="empty-state" x-show="detailFiltered.length === 0">此篩選條件下無序號紀錄</div>
+      </div>
+    </template>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" @click="detail.show=false">關閉</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = '/api'
+function app() {
+  return {
+    session: {},
+    loading: true,
+    items: [],
+    parts: [],
+    search: '',
+    filterCat: '',
+    intake: { show: false, partNo: '', qty: 1, cost: null, note: '', serials: [{serial_no:'',mac:''}], saving: false, error: '' },
+    detail: { show: false, partNo: '', items: [], loading: false, filterStatus: '' },
+
+    get categories() {
+      return [...new Set(this.items.map(p => p.category).filter(Boolean))].sort()
+    },
+    get filtered() {
+      let list = this.items
+      if (this.filterCat) list = list.filter(p => p.category === this.filterCat)
+      const q = this.search.trim().toLowerCase()
+      if (q) list = list.filter(p =>
+        (p.part_no||'').toLowerCase().includes(q) ||
+        (p.name||'').toLowerCase().includes(q) ||
+        (p.brand||'').toLowerCase().includes(q)
+      )
+      return list
+    },
+    get detailFiltered() {
+      if (!this.detail.filterStatus) return this.detail.items
+      return this.detail.items.filter(it => it.status === this.detail.filterStatus)
+    },
+
+    async init() {
+      const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
+      if (!s.token) { location.href = 'login.html'; return }
+      this.session = s
+      try {
+        const r = await fetch(`${API}/auth/me`, { headers: { Authorization: 'Bearer ' + s.token } })
+        if (!r.ok) { location.href = 'login.html'; return }
+        const me = await r.json(); this.session.displayName = me.display_name
+      } catch {}
+      await Promise.all([this.load(), this.loadParts()])
+    },
+
+    async load() {
+      this.loading = true
+      try {
+        const r = await fetch(`${API}/inventory/parts-summary`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (r.ok) { const d = await r.json(); this.items = d.items || [] }
+      } catch {}
+      this.loading = false
+    },
+
+    async loadParts() {
+      try {
+        const r = await fetch(`${API}/parts`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (r.ok) { const d = await r.json(); this.parts = d.items || [] }
+      } catch {}
+    },
+
+    statusLabel(s) {
+      return { in_stock: '在庫', shipped: '已出貨', installed: '已登載', void: '報廢' }[s] || s
+    },
+
+    openIntakeModal() {
+      this.intake = { show: true, partNo: '', qty: 1, cost: null, note: '', serials: [{serial_no:'',mac:''}], saving: false, error: '' }
+    },
+    onIntakePartChange() {
+      const pt = this.parts.find(p => p.part_no === this.intake.partNo)
+      this.intake.cost = pt ? (pt.cost || 0) : null
+    },
+    syncSerialRows() {
+      const n = Math.max(1, this.intake.qty || 1)
+      while (this.intake.serials.length < n) this.intake.serials.push({serial_no:'',mac:''})
+      while (this.intake.serials.length > n) this.intake.serials.pop()
+    },
+
+    async saveIntake() {
+      if (!this.intake.partNo) { this.intake.error = '請選擇料號'; return }
+      const serials = this.intake.serials.filter(s => s.serial_no.trim())
+      if (serials.length === 0) { this.intake.error = '至少需輸入一筆序號'; return }
+      if (serials.length !== this.intake.serials.length) { this.intake.error = '序號不得空白，請填滿或移除空白列'; return }
+      this.intake.saving = true; this.intake.error = ''
+      const body = { part_no: this.intake.partNo, serials, cost: this.intake.cost, note: this.intake.note }
+      try {
+        const r = await fetch(`${API}/inventory/batches`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token }, body: JSON.stringify(body) })
+        if (r.ok) { await this.load(); this.intake.show = false }
+        else { const e = await r.json(); this.intake.error = e.detail || '儲存失敗' }
+      } catch { this.intake.error = '網路錯誤' }
+      this.intake.saving = false
+    },
+
+    async openDetail(p) {
+      this.detail = { show: true, partNo: p.part_no, items: [], loading: true, filterStatus: '' }
+      try {
+        const r = await fetch(`${API}/inventory/stock-items?part_no=${encodeURIComponent(p.part_no)}`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (r.ok) { const d = await r.json(); this.detail.items = d.items || [] }
+      } catch {}
+      this.detail.loading = false
+    },
+
+    async adjustItem(it, action) {
+      const label = action === 'void' ? '報廢' : '退回庫存'
+      if (!confirm(`確認將序號「${it.serial_no}」設為「${label}」？`)) return
+      try {
+        const r = await fetch(`${API}/inventory/stock-items/${it.id}/adjust`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token }, body: JSON.stringify({ action }) })
+        if (r.ok) { await this.openDetail({ part_no: this.detail.partNo }); await this.load() }
+      } catch {}
+    },
+
+    async deleteItem(it) {
+      if (!confirm(`確認刪除序號「${it.serial_no}」？此動作無法復原`)) return
+      try {
+        const r = await fetch(`${API}/inventory/stock-items/${it.id}`, { method: 'DELETE', headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (r.ok) { await this.openDetail({ part_no: this.detail.partNo }); await this.load() }
+      } catch {}
+    },
+
+    logout() {
+      fetch(`${API}/auth/logout`, { method:'POST', headers:{ Authorization:'Bearer '+(this.session.token||'') } }).catch(()=>{})
+      localStorage.removeItem('motrix_session'); location.href = 'login.html'
+    }
+  }
+}
+</script>
+  <script src="../static/notif.js"></script>
+  <script src="../static/sidebar.js"></script>
+</body>
+</html>

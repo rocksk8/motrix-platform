@@ -2216,6 +2216,7 @@
             <th style="text-align:right;padding:4px 6px;font-weight:500;width:55px">數量</th>
             <th style="text-align:left;padding:4px 4px;font-weight:500;width:50px">單位</th>
             <th style="text-align:left;padding:4px 6px;font-weight:500;width:100px">備註</th>
+            <th style="text-align:left;padding:4px 6px;font-weight:500;width:100px">庫存序號</th>
             <th style="width:28px"></th>
           </tr>
         </thead>
@@ -2253,6 +2254,16 @@
                 <input type="text" x-model="it.notes" placeholder="備註"
                        style="width:100%;padding:5px 8px;border:1px solid var(--border-light);border-radius:5px;font-size:12px;font-family:inherit;outline:none;box-sizing:border-box">
               </td>
+              <template x-if="it.type!=='header'">
+                <td style="padding:4px 6px">
+                  <button type="button" @click="openSerialPicker(ii)"
+                          :title="it.part_no ? (it.part_no + '：' + it.serials.join('、')) : '選擇庫存料號/序號（選填）'"
+                          style="width:100%;padding:5px 8px;border:1px dashed var(--border-light);border-radius:5px;font-size:11px;font-family:inherit;background:#fff;cursor:pointer;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"
+                          :style="it.part_no ? 'border-style:solid;border-color:#93C5FD;background:#EFF6FF;color:#1D4ED8' : ''"
+                          x-text="it.part_no ? (it.part_no + ' ×' + (it.serials||[]).length) : '選料號'"></button>
+                </td>
+              </template>
+              <template x-if="it.type==='header'"><td></td></template>
               <td style="padding:4px 0;text-align:center">
                 <button @click="removeShippingItem(ii)"
                         style="width:22px;height:22px;border:none;background:none;cursor:pointer;color:var(--danger);font-size:14px;line-height:1">×</button>
@@ -2287,6 +2298,56 @@
       <button @click="saveShippingNote()" :disabled="shippingSaving"
               style="padding:7px 18px;border:none;border-radius:7px;font-size:13px;font-family:var(--font-zh);background:var(--accent);color:#fff;cursor:pointer;font-weight:600"
               x-text="shippingSaving ? '儲存中…' : '儲存出貨單'"></button>
+    </div>
+  </div>
+</div>
+
+<!-- ── 庫存序號挑選 Modal（出貨單品項→庫存料號連結，選填）── -->
+<div x-show="serialPicker.show" x-cloak
+     style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:420;display:flex;align-items:center;justify-content:center;padding:20px"
+     @click.self="serialPicker.show=false"
+     @keydown.escape.window="serialPicker.show=false">
+  <div style="background:#fff;border-radius:12px;width:100%;max-width:480px;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 16px 48px rgba(0,0,0,.22)">
+    <div style="padding:14px 18px;border-bottom:1px solid var(--border-light);font-size:14px;font-weight:700;font-family:var(--font-zh)">
+      選擇庫存料號 / 序號
+    </div>
+    <div style="padding:16px 18px;overflow-y:auto;flex:1">
+      <label style="font-size:11px;font-weight:500;color:var(--text-secondary);display:block;margin-bottom:4px">料號</label>
+      <select x-model="serialPicker.partNo" @change="onSerialPickerPartChange()"
+              style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;margin-bottom:12px">
+        <option value="">不連結庫存（自由文字品項）</option>
+        <template x-for="pt in (_partsOptions||[])" :key="pt.part_no">
+          <option :value="pt.part_no" x-text="pt.part_no + '　' + pt.name"></option>
+        </template>
+      </select>
+
+      <template x-if="serialPicker.partNo">
+        <div>
+          <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px" x-show="!serialPicker.loading">
+            勾選要出貨的序號（僅列出在庫）：
+          </div>
+          <div style="text-align:center;padding:16px;color:var(--text-dim);font-size:12px" x-show="serialPicker.loading">載入中…</div>
+          <div x-show="serialPicker.error" style="color:var(--danger);font-size:12px;margin-bottom:8px" x-text="serialPicker.error"></div>
+          <div x-show="!serialPicker.loading && !serialPicker.error && serialPicker.options.length===0"
+               style="text-align:center;padding:16px;color:var(--text-dim);font-size:12px">此料號目前無在庫序號</div>
+          <template x-for="opt in serialPicker.options" :key="opt.id">
+            <label style="display:flex;align-items:center;gap:8px;padding:6px 4px;border-bottom:1px solid #F5F4F0;cursor:pointer;font-size:12px">
+              <input type="checkbox" :checked="serialPicker.selected.includes(opt.serial_no)" @change="toggleSerialPick(opt.serial_no)">
+              <span x-text="opt.serial_no"></span>
+              <span x-show="opt.mac" style="color:var(--text-dim)" x-text="'MAC: ' + opt.mac"></span>
+            </label>
+          </template>
+        </div>
+      </template>
+    </div>
+    <div style="padding:12px 18px;border-top:1px solid var(--border-light);display:flex;justify-content:space-between;align-items:center;gap:10px">
+      <span style="font-size:11px;color:var(--text-dim)" x-text="serialPicker.selected.length + ' 筆已選'"></span>
+      <div style="display:flex;gap:8px">
+        <button @click="serialPicker.show=false"
+                style="padding:7px 16px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:var(--font-zh);background:#fff;cursor:pointer">取消</button>
+        <button @click="applySerialPicker()"
+                style="padding:7px 18px;border:none;border-radius:7px;font-size:13px;font-family:var(--font-zh);background:var(--accent);color:#fff;cursor:pointer;font-weight:600">套用</button>
+      </div>
     </div>
   </div>
 </div>

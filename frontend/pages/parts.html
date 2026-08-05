@@ -38,6 +38,9 @@
     .modal-footer{display:flex;justify-content:flex-end;gap:8px;margin-top:20px}
     .empty-state{text-align:center;padding:48px;color:var(--text-dim);font-size:13px}
     .loading-text{text-align:center;padding:40px;color:var(--text-dim);font-size:13px}
+    .stock-badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;font-family:LINE Seed TW_OTF, sans-serif}
+    .stock-badge.ok{background:#DCFCE7;color:#15803D}
+    .stock-badge.zero{background:#F0EEE9;color:var(--text-dim)}
   </style>
 </head>
 <body x-data="app()" x-init="init()" x-cloak>
@@ -80,6 +83,7 @@
                 <th>廠牌/型號</th>
                 <th>類別</th>
                 <th>單位</th>
+                <th style="text-align:right">在庫</th>
                 <th style="text-align:right">成本</th>
                 <th style="text-align:right">定價</th>
                 <th>備注</th>
@@ -97,6 +101,7 @@
                     <span x-show="!p.category" style="color:var(--text-dim)">—</span>
                   </td>
                   <td style="font-size:12px;color:var(--text-dim)" x-text="p.unit || '台'"></td>
+                  <td style="text-align:right"><span class="stock-badge" :class="stockCount(p.part_no) > 0 ? 'ok' : 'zero'" x-text="stockCount(p.part_no)"></span></td>
                   <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-size:12px" x-text="p.cost ? 'NT$ ' + Math.round(p.cost).toLocaleString() : '—'"></td>
                   <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-size:12px;font-weight:600" x-text="p.list_price ? 'NT$ ' + Math.round(p.list_price).toLocaleString() : '—'"></td>
                   <td style="font-size:11px;color:var(--text-dim);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" x-text="p.note || '—'"></td>
@@ -176,6 +181,7 @@ function app() {
     session: {},
     loading: true,
     items: [],
+    stockMap: {},
     search: '',
     filterCat: '',
     modal: { show: false, id: null, partNo: '', name: '', brand: '', unit: '台', cost: 0, listPrice: 0, category: '', note: '', saving: false, error: '' },
@@ -204,7 +210,7 @@ function app() {
         if (!r.ok) { location.href = 'login.html'; return }
         const me = await r.json(); this.session.displayName = me.display_name
       } catch {}
-      await this.load()
+      await Promise.all([this.load(), this.loadStock()])
     },
 
     async load() {
@@ -215,6 +221,19 @@ function app() {
       } catch {}
       this.loading = false
     },
+
+    async loadStock() {
+      try {
+        const r = await fetch(`${API}/inventory/parts-summary`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (r.ok) {
+          const d = await r.json()
+          const m = {}
+          for (const s of (d.items || [])) m[s.part_no] = s.inStockCount || 0
+          this.stockMap = m
+        }
+      } catch {}
+    },
+    stockCount(partNo) { return this.stockMap[partNo] || 0 },
 
     openModal(part) {
       if (part) {

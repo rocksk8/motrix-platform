@@ -30,7 +30,7 @@ DEMO_SHIPPING_PDF_ARCHIVE_DIR = os.path.join(os.path.dirname(__file__), "_demo_s
 # v32/v33 (switch_guide tables + specs_json column) were initially missing
 # from this checkout — reconstructed 2026-08-01 by reverse-engineering the
 # actual schema off a production DB backup (see _m032_switch_guide docstring).
-CURRENT_VERSION = 37
+CURRENT_VERSION = 38
 
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
 # execution model) whenever the current request is authenticated as the 'demo'
@@ -1442,6 +1442,41 @@ def _m037_dispatch_vendor_optional(conn):
     conn.commit()
 
 
+def _m038_inventory(conn):
+    """Create stock_items table (序號級庫存) — one row per physical unit, keyed by
+    (part_no, serial_no). No stock_batches parent table: a "batch" is just N rows
+    sharing a batch_no string created together at intake — a parent table would
+    only earn its keep if batches needed their own lifecycle (e.g. batch-level
+    approval), which nothing here requires. part_no references parts.part_no
+    without an enforced FK, matching the rest of this schema's convention of not
+    FK-constraining loosely-coupled reference columns."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS stock_items (
+            id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            part_no           TEXT    NOT NULL,
+            serial_no         TEXT    NOT NULL,
+            mac               TEXT    DEFAULT '',
+            status            TEXT    NOT NULL DEFAULT 'in_stock',
+            batch_no          TEXT    DEFAULT '',
+            cost              REAL    DEFAULT 0,
+            note              TEXT    DEFAULT '',
+            shipping_note_no  TEXT    DEFAULT '',
+            quote_no          TEXT    DEFAULT '',
+            case_device_id    TEXT    DEFAULT '',
+            consumed_at       TEXT    DEFAULT '',
+            consumed_by       TEXT    DEFAULT '',
+            created_by        TEXT    DEFAULT '',
+            created_at        TEXT,
+            updated_at        TEXT
+        )
+    """)
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_stock_items_part_serial ON stock_items(part_no, serial_no)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_stock_items_part_status ON stock_items(part_no, status)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_stock_items_batch ON stock_items(batch_no)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_stock_items_shipping_note ON stock_items(shipping_note_no)")
+    conn.commit()
+
+
 # Ordered list — index+1 is the migration version number.
 _MIGRATIONS = [
     _m001_export_columns,        # v1
@@ -1481,6 +1516,7 @@ _MIGRATIONS = [
     _m035_module_versions_unique_dedup,       # v35
     _m036_dispatch_personnel,                 # v36
     _m037_dispatch_vendor_optional,            # v37
+    _m038_inventory,                           # v38
 ]
 
 

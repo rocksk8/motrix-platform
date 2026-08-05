@@ -341,8 +341,11 @@ def _compute_achievement(year: int, targets: dict, cases_all: list) -> dict:
 
     fin_ytd    = [c for c in ytd if c["settleStatus"] == "finalized" and c["grossProfit"] is not None]
     ytd_gp     = sum(c["grossProfit"] for c in fin_ytd)
-    mps        = [c["actualMarginPct"] for c in fin_ytd if c["actualMarginPct"] is not None]
-    ytd_margin = round(sum(mps) / len(mps), 1) if mps else 0.0
+    # Revenue-weighted (by pretax) average margin — a simple mean over case count lets a single
+    # small high-margin case skew the YTD figure, especially early in the year with few finalized cases.
+    amp_rev  = sum(c["pretax"] for c in fin_ytd if c["actualMarginPct"] is not None)
+    amp_prof = sum(c["pretax"] * c["actualMarginPct"] / 100 for c in fin_ytd if c["actualMarginPct"] is not None)
+    ytd_margin = round(amp_prof / amp_rev * 100, 1) if amp_rev > 0 else 0.0
 
     def _rate(actual, target):
         return round(actual / target * 100, 1) if (target and target != 0) else None

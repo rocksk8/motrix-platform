@@ -1,7 +1,7 @@
 # MOTRIX ERP — 開發快速參考
 
 > 允碩整合集創（統編 60575481）｜ Tel: 04-3602-2818 ｜ info@miactw.com  
-> 文件版本：**2026-08-05j**（精算「品項實際成本」新增含稅5%（自動加總）選項，見 §12）
+> 文件版本：**2026-08-05m**（序號級庫存管理 Phase B／C：出貨單核准自動扣庫存＋設備登載自動扣/還庫存，見 §12）
 
 ---
 
@@ -308,6 +308,16 @@ shipping_notes           -- 出貨單／回簽單（DB v34，案件管理子項�
   notes, data_json（approval{tiers,currentTier,requestedBy...}，結構仿報價單但獨立實作）,
   is_signed, signed_by, signed_at, signed_log（完整回簽/取消回簽歷程 JSON）,
   export_count, export_log（仿 quotations.export_log）, created_by, created_at, updated_at
+
+stock_items               -- 序號級庫存（DB v38，見 §12 2026-08-05l/m）
+  id, part_no（對應 parts.part_no，不強制 FK）, serial_no（UNIQUE with part_no）, mac,
+  status('in_stock'|'shipped'|'installed'|'void'), batch_no（'PO-YYYYMM-NNN'，同批進貨共用，
+  無獨立 stock_batches 父表）, cost（進貨當下快照）, note,
+  shipping_note_no / quote_no / case_device_id（消費關聯：出貨單核准→shipped，設備登載→installed），
+  consumed_at, consumed_by, created_by, created_at, updated_at
+  routers/inventory.py：parts-summary / stock-items / batches（POST+GET+GET detail）/ adjust / delete
+  扣庫存掛勾：shipping_notes.py approve_shipping_note()（核准即扣）／
+             quotations.py update_case_record() 內 _sync_device_stock()（設備登載新增/移除序號時扣/還）
 ```
 
 **索引**：`deal_tag` · `settle_status` · `sales_person` · `sales_person_id`
@@ -524,7 +534,7 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
 選型資料庫  場域選型導覽（env-guide.html, env_guide 模組旗標或 admin+）/
            網路架構選型導覽（netarch-guide.html, netarch_guide 模組旗標或 admin+）/
            交換器選型導覽（switch-guide.html, switch_guide 模組旗標或 admin+）
-廠商與採購 客戶 / 供應商 / **承攬商** / 料號 / 採購
+廠商與採購 客戶 / 供應商 / **承攬商** / 料號 / **庫存管理**（inventory.html, inventory 模組旗標或 admin+）/ 採購
 設備       設備登載 / 保固追蹤
 財務       應收帳款 / 營運報表（admin+ 或含 reports 模組）
 工作       工作日誌（非 viewer 或含 work_log 模組） / 每日工作事項（非 viewer 或含 daily_task 模組）
@@ -790,6 +800,108 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 ## §12 · 變更摘要（最新兩版）
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
+
+### 2026-08-05m — 序號級庫存管理 Phase B／C（出貨單核准自動扣庫存＋設備登載自動扣/還庫存）
+
+- **背景**：延續 2026-08-05l 的 Phase A（資料模型＋進貨＋顯示），本次接上剩餘兩個扣庫存進出點：
+  出貨單核准（確認出貨）與設備登載，完成使用者最初要求的三個進出點全部落地
+- **Phase B — 出貨單核准自動扣庫存**：`shipping_notes.py` `approve_shipping_note()` 的 `if all_done:`
+  區塊（`conn.commit()` 前）新增庫存驗證與扣減：品項若帶有 `part_no`/`serials[]`（新增可選欄位，
+  向下相容，沒填就跟過去一樣是自由文字品項），核准前先確認所有引用序號皆為 `in_stock`——只要有一
+  個不是（已被搶用）或同一張單重複引用同一序號，整張核准直接 409 中止、不寫入任何狀態變更；全部
+  通過才在同一 transaction 內把對應 `stock_items` 更新為 `status='shipped'` 並記錄
+  `shipping_note_no`/`quote_no`/`consumed_at`/`consumed_by`。刻意選在核准（`已核准`）而非
+  `toggle_signed`／回簽掛勾，因為回簽是更晚的客戶簽收確認、且可雙向切換，用來扣庫存會讓「已核准
+  但未回簽」的出貨永遠扣不到庫存。已確認 `reject_shipping_note`／`delete_shipping_note` 都無法作用
+  於已核准的單子，故不需要額外設計自動回滾——若核准錯了，走 `POST /api/inventory/stock-items/{id}/adjust`
+  的 `return_to_stock` 人工更正
+- **Phase B 前端**：`case-management.js` 新增 `openSerialPicker`/`_loadSerialOptions`/`applySerialPicker`
+  等方法＋ `serialPicker` 狀態；`case-management.html` 出貨單品項表格新增「庫存序號」欄（未連結顯示
+  「選料號」按鈕、已連結顯示 `料號 ×N`），獨立序號挑選 modal（z-index:420，高於出貨單 modal 的 400），
+  勾選料號後即時打 `GET /api/inventory/stock-items?part_no=&status=in_stock` 只列出在庫序號
+- **Phase C — 設備登載自動扣/還庫存**：設備登載（`caseRecord.devices[]`）沒有獨立端點（`addDevice`/
+  `removeDevice`/`onMaterialArrived`/`syncMaterialsToDevices` 四處都是純前端陣列操作），因此不新增專
+  屬端點，改在既有的整包 PATCH `quotations.py` `update_case_record()` 內做新舊 devices[] 序號 diff（新
+  增 `_sync_device_stock()` helper）：新增或 SN 變更的設備 → 找對應 `status='in_stock'` 序號設為
+  `installed`（找不到就略過，不擋存檔，因為多數既有設備登載本來就沒有庫存來源）；移除或 SN 被改掉
+  的已連結項目 → 狀態退回 `in_stock`、清空 `quote_no`/`case_device_id`/`consumed_at`。與 Phase B 是各
+  自獨立的扣庫存來源（不要求先出貨才能登載），比對邏輯全程沿用同一個 request 的 `conn`／transaction，
+  與既有樂觀鎖檢查、`save_quotation_json` 走同一次 commit；devices 陣列前後完全相同時整段跳過，避免
+  每次存檔都做多餘查詢
+- **驗證**：開發機重啟服務無誤。改用 API 直測（demo session token）走完整流程：建測試料號＋3 筆庫存
+  序號（`SN-B-01`/`SN-B-02`/`SN-C-01`）→ 建測試報價單 → 出貨單引用 `SN-B-01`/`SN-B-02` → 送審→核准，
+  確認兩序號正確變 `shipped` 並記錄 `shipping_note_no`/`quote_no`；另建第二張出貨單重複引用
+  `SN-B-01`，核准正確回 409 且該單狀態未被更動；設備登載新增 `sn=SN-C-01` 的設備，確認序號變
+  `installed` 並記錄 `quote_no`/`case_device_id`；移除該設備後確認序號正確退回 `in_stock` 且關聯欄
+  位清空。瀏覽器 UI 因案件管理頁面清單僅顯示 `已成案`/`已結案` 案件、測試報價單未經完整簽核流程走
+  到位，僅完成語法檢查（`node --check`）與既有 modal pattern 比對，**未**實機點擊驗證序號挑選 modal
+  視覺呈現，下次有機會登入真實帳號操作時建議補測。以直接讀取正式機 db 檔案確認上述所有測試寫入完
+  全沒有進入 `motrix_erp.db`（含巧合撞號的 `MQ-202608-001`——正式庫裡的同號記錄經確認是 `jeff` 帳號
+  今日稍早建立的真實資料，非本次測試污染，兩者是各自獨立資料庫的月序偶然撞號）
+
+### 2026-08-05l — 新增序號級庫存管理 Phase A（資料模型／進貨／料號頁徽章／庫存管理頁）
+
+- **背景**：使用者要求在「設備項」內新增庫存功能，未來讓報價單、設備登載能透過保固追蹤頁面核銷。
+  討論確認三個設計決策：① 粒度為序號級（比照設備登載 SN/MAC 結構，非單純數量累加）② 進出點為
+  進貨手動建批次＋出貨單核准自動扣庫存＋設備登載時自動扣庫存。查證發現 `parts`（料號目錄）過去
+  純粹是價格/成本參考清單，`part_no` 完全沒有被報價單品項、出貨單品項、設備登載記錄引用過；另外
+  `frontend/pages/users.html` 的 `ROLE_MODULES` 早就預留了 `'inventory'` 模組 key（superadmin/admin
+  皆有），但 `allModules` 清單與 `sidebar.js` 都還沒接上去，像是早就為這個功能留好的位置
+- **範圍**：完整規劃分三階段（見對話中 Plan 產出，未寫入本文件），本次僅完成 **Phase A**（資料模型＋
+  進貨＋顯示），Phase B（出貨單核准自動扣庫存）／Phase C（設備登載自動扣庫存）尚未實作，`stock_items`
+  的 `shipping_note_no`/`quote_no`/`case_device_id` 欄位已預留但目前不會被任何流程寫入
+- **新表**：`db.py` `_m038_inventory`（DB v38）建立 `stock_items`（序號級單位，一列＝一台實體設備，
+  `UNIQUE(part_no, serial_no)`），無獨立 `stock_batches` 父表——批次就是同一次進貨產生的多筆
+  `stock_items` 共用一個 `batch_no`（`next_entity_code(conn,"stock_items","PO",code_col="batch_no")`
+  產生，格式 `PO-YYYYMM-NNN`）
+- **新 router**：`backend/routers/inventory.py`，`GET /api/inventory/parts-summary`（料號彙總各狀態
+  數量，餵 parts.html 徽章與庫存頁列表）、`GET /api/inventory/stock-items`（序號清單/搜尋）、
+  `POST/GET /api/inventory/batches`（+ `GET .../batches/{batch_no}`，進貨批次建立/查詢）、
+  `POST .../stock-items/{id}/adjust`（`void`/`return_to_stock`/`edit_note`）、
+  `DELETE .../stock-items/{id}`（僅 `status='in_stock'` 可刪）。讀取類 `_require_user`，異動類本檔案
+  自帶 `_require_admin(user)` 區域函式（比照 `shipping_notes.py` 既有寫法，非共用 helpers），全走
+  `get_db()` 確保 demo 帳號隔離自動生效。`main.py` 已註冊該 router
+- **進貨決策**：必須輸入實際序號才能建批次，不接受「先數量後補序號」——序號級庫存的意義就在於
+  每一台都可追蹤，允許幽靈序號會讓之後的扣庫存配對失效。前端 `intake.qty` 變動時
+  `syncSerialRows()` 自動增減序號輸入列，存檔前擋掉序號空白的列
+- **`parts.py` `delete_part()` 防呆**：刪除前檢查 `stock_items` 是否有該 `part_no` 紀錄，有則 409
+  「此料號仍有庫存紀錄，無法刪除」（過去是無關聯檢查的硬刪除）
+- **前端**：新頁 `frontend/pages/inventory.html`（比照 `parts.html` 的 Alpine 結構）——料號彙總表
+  （在庫/已出貨/已登載/報廢四欄）、「進貨」批次建立 modal、逐料號鑽入序號明細 modal（狀態篩選
+  chips + 報廢/退回庫存/刪除操作）；`parts.html` 加「在庫」徽章欄，讀 `parts-summary` 依 `part_no`
+  對應顯示
+- **Sidebar／權限接線**：`sidebar.js` 加 `cInv` 判斷式（`mods.indexOf('inventory')>=0 || ad`，兩處
+  賦值皆同步），導覽項目掛在「廠商與採購」料號主檔之後；`users.html` `allModules` 補上
+  `{key:'inventory', label:'庫存管理', group:'採購'}`（`ROLE_MODULES` 早已預留該 key，此次只是把
+  checkbox 介面接上）
+- **驗證**：開發機重啟服務，`DB migration 38/38: _m038_inventory` 正常套用，`/openapi.json` 確認 6
+  個端點皆註冊成功。瀏覽器以 **demo 帳號**（隔離空白 db，不影響正式資料）實測：`parts.html` 新增測
+  試料號 `TEST-U6-PRO` → 庫存頁「進貨」建立 2 台序號批次（`PO-202608-001`）→ 序號明細 modal 正確顯示
+  兩筆、狀態「在庫」。點擊「報廢」/「刪除」按鈕觸發瀏覽器原生 `confirm()`（比照 `parts.html`
+  `deletePart()` 既有寫法）在 CDP 自動化下會凍結分頁——改用同一 demo session token 直接呼叫 API
+  驗證：`adjust action=void` → `parts-summary` 正確反映 `voidCount`；`adjust action=return_to_stock`
+  → 狀態與關聯欄位正確清空回 `in_stock`；`DELETE` 僅在 `status='in_stock'` 成功、其餘回 409；
+  `parts.py` 刪除防呆在 `stock_items` 仍有紀錄時正確回 409。另以直接讀取正式機 db 檔案確認上述 demo
+  帳號測試寫入完全沒有進入 `motrix_erp.db`（`stock_items`/`parts` 皆 0 筆），demo 隔離機制對新 router
+  生效正常
+
+### 2026-08-05k — 營運報表「年度目標達成率」平均淨毛利率改為金額加權平均
+
+- **背景**：使用者截圖回報營運報表「年度目標達成率」圖表中「平均淨毛利率」「收款率」達成率超過
+  100%，懷疑算式有誤。查證後：達成率＝實際率÷目標率×100，屬設計上刻意行為（累積金額型指標與
+  比率型指標本就不同性質，比率型指標實際值超過目標值時達成率自然可以 >100%，`_compute_achievement()`
+  對兩者也刻意分開處理——比率型指標 `prorata` 固定回 `None`，不像金額型指標會按時間比例預估）。
+  但同時查出真正該修的問題：`avgMarginPct`「實際值」在 `_compute_achievement()` 內是把該年度已
+  精算（`finalized`）案件的毛利率做**單純算術平均**（`sum(mps)/len(mps)`），未依金額加權；年度初
+  期已精算案件數少時，單一小金額但毛利率特別高的案件會把平均值拉得不合理（實測開發機資料庫：4筆
+  已精算案件單純平均 51.5%，其中一筆稅前僅 NT$3,700 但毛利率達 89%；改金額加權後降為 34.7%，與
+  同檔案其他業務員層級 `avgMarginPct` 算法（`mProfitSum/mRevSum`）邏輯一致）
+- **修法**：`backend/routers/reports.py` `_compute_achievement()`，`ytd_margin` 計算從
+  `sum(mps)/len(mps)` 改為 `Σ(pretax×actualMarginPct)/Σ(pretax)`（稅前金額加權），與既有
+  `sales`／`marginByRep` 等既有加權平均寫法對齊
+- **驗證**：以 Python 直接讀開發機 `motrix_erp.db`（同 SQL 查詢邏輯）比對修改前後數值，加權後金
+  額明顯更貼近整體精算結果，不再被單筆小額高毛利案子拉爆；`collectionRate` 部分維持原樣（已確認
+  非計算錯誤）。尚未在瀏覽器內重新整理報表頁面實測圖表視覺變化
 
 ### 2026-08-05j — 精算「品項實際成本」新增含稅5%（自動加總）選項
 
