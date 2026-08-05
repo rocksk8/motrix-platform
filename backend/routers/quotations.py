@@ -694,13 +694,17 @@ def update_deal_tag(quote_no: str, body: QuotationDealTagUpdate, authorization: 
     if body.deal_tag in ("未成案", "已成案") and user["role"] not in ("superadmin", "admin"):
         raise HTTPException(403, "僅管理員以上可標記「未成案」或「已成案」")
     conn = get_db()
-    row = conn.execute("SELECT data_json, customer_name FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+    row = conn.execute("SELECT data_json, customer_name, status FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
     if not row:
         conn.close()
         raise HTTPException(404, f"報價單 {quote_no} 不存在")
     cname = row['customer_name'] or ''
     d = json.loads(row["data_json"] or "{}")
     old_tag = d.get("dealTag", "")
+    # 已成案 需先完成簽核（報價單狀態為「已送出」）
+    if body.deal_tag == "已成案" and row["status"] != "已送出":
+        conn.close()
+        raise HTTPException(400, "報價單需完成簽核（狀態為「已送出」）才能標記為「已成案」")
     # 已成案 → 降級 限管理員以上
     if old_tag == "已成案" and body.deal_tag != "已成案" and user["role"] not in ("superadmin", "admin"):
         conn.close()
@@ -1359,6 +1363,51 @@ def list_case_updates(quote_no: str, authorization: str = Header(None)):
             "created_at": dt["completed_at"] or "",
             "canDelete": False,
         })
+
+    # 4. Dev-CRM 開發記錄 + 案件狀態變更（業務開發轉建此報價單時才有）
+    dev_case = conn.execute(
+        "SELECT id FROM dev_cases WHERE converted_quote_no=? AND is_deleted=0", (quote_no,)
+    ).fetchone()
+    if dev_case:
+        case_id = dev_case["id"]
+        for dl in conn.execute(
+            "SELECT dl.id, dl.log_date, dl.channel, dl.content, dl.next_action, dl.created_at, "
+            "lu.username AS log_username, lu.display_name AS log_display, "
+            "cu.username AS created_username, cu.display_name AS created_display "
+            "FROM dev_logs dl "
+            "LEFT JOIN users lu ON lu.id = dl.log_by "
+            "LEFT JOIN users cu ON cu.id = dl.created_by "
+            "WHERE dl.case_id=?", (case_id,)
+        ).fetchall():
+            content = dl["content"] or ""
+            if dl["next_action"]:
+                content += f"\n→ 下一步：{dl['next_action']}"
+            results.append({
+                "id": f"dcl_{dl['id']}",
+                "source": "dev_log",
+                "author": dl["log_username"] or dl["created_username"] or "",
+                "authorDisplay": dl["log_display"] or dl["log_username"]
+                                 or dl["created_display"] or dl["created_username"] or "未知",
+                "content": content,
+                "channel": dl["channel"] or "",
+                "logDate": dl["log_date"],
+                "created_at": dl["created_at"],
+                "canDelete": False,
+            })
+        for al in conn.execute(
+            "SELECT id, username, display_name, target_label, at FROM audit_log "
+            "WHERE target_type='dev_case' AND target_id=? AND action='dev_case.status'",
+            (str(case_id),)
+        ).fetchall():
+            results.append({
+                "id": f"dcs_{al['id']}",
+                "source": "dev_case_status",
+                "author": al["username"] or "",
+                "authorDisplay": al["display_name"] or al["username"] or "未知",
+                "content": al["target_label"] or "",
+                "created_at": (al["at"] or "").replace("T", " ")[:19],
+                "canDelete": False,
+            })
 
     conn.close()
     results.sort(key=lambda x: (x.get("created_at") or ""), reverse=True)

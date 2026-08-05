@@ -491,6 +491,10 @@
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414A1 1 0 0119 9.414V19a2 2 0 01-2 2z"/></svg>
                     <span x-text="selectedCase.convertedQuoteNo"></span>
                   </a>
+                  <button x-show="selectedCase.convertedQuoteNo" class="btn btn-ghost btn-icon" style="width:20px;height:20px;padding:0"
+                          @click="openRelinkModal()" title="修改連結的報價單號">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                  </button>
                 </div>
               </div>
             </div>
@@ -832,6 +836,27 @@
       </div>
     </div>
 
+    <!-- ── Modal：修改報價單連結 ── -->
+    <div class="dc-modal-bg" x-show="showRelinkModal" x-cloak @click.self="showRelinkModal=false">
+      <div class="dc-modal" style="max-width:420px">
+        <div class="dc-modal-head">
+          <h3>修改報價單連結</h3>
+          <button class="btn btn-ghost btn-icon" @click="showRelinkModal=false">✕</button>
+        </div>
+        <div class="dc-modal-body">
+          <div style="font-size:12px;color:var(--text-secondary);margin-bottom:6px;font-family:var(--font-zh)">
+            重新輸入要連結的報價單號：
+          </div>
+          <input class="dc-input" type="text" x-model="relinkQuoteNo"
+            placeholder="MQ-YYYYMM-NNN">
+        </div>
+        <div class="dc-modal-foot">
+          <button class="btn btn-ghost" @click="showRelinkModal=false">取消</button>
+          <button class="btn btn-primary" @click="doRelink()">儲存</button>
+        </div>
+      </div>
+    </div>
+
     <!-- ── Modal：申請刪除案件 ── -->
     <div class="dc-modal-bg" x-show="showDeleteModal" x-cloak @click.self="showDeleteModal=false">
       <div class="dc-modal" style="max-width:440px">
@@ -938,6 +963,9 @@ function devCrmPage() {
 
     showConvertModal: false,
     convertQuoteNo: '',
+
+    showRelinkModal: false,
+    relinkQuoteNo: '',
 
     showDeleteModal: false,
     deleteReason: '',
@@ -1356,6 +1384,18 @@ function devCrmPage() {
       window.open('quotation-form.html?' + p.toString(), '_blank')
       if (this.convertQuoteNo.trim()) this.markConverted(this.convertQuoteNo.trim())
       this.showConvertModal = false
+    },
+
+    openRelinkModal() {
+      this.relinkQuoteNo = this.selectedCase?.convertedQuoteNo || ''
+      this.showRelinkModal = true
+    },
+
+    async doRelink() {
+      const no = this.relinkQuoteNo.trim()
+      if (!no) { this._toast('請輸入報價單號'); return }
+      await this.markConverted(no)
+      this.showRelinkModal = false
     },
 
     async markConverted(quoteNo) {

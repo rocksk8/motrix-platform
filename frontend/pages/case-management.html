@@ -283,6 +283,8 @@
   .feed-avatar--comment { background:#EEF2FF; color:var(--accent); }
   .feed-avatar--work_log { background:#FEF9C3; color:#B45309; }
   .feed-avatar--daily_task { background:#DCFCE7; color:#15803D; }
+  .feed-avatar--dev_log { background:#EFF6FF; color:#1D4ED8; }
+  .feed-avatar--dev_case_status { background:#F3E8FF; color:#7C3AED; }
   .feed-bubble { flex:1; background:#F9FAFB; border:1px solid var(--border-light); border-radius:8px; padding:10px 12px; }
   .feed-bubble--comment { background:#fff; border-color:#E0E7FF; }
   .feed-bubble__head { display:flex; align-items:center; gap:6px; margin-bottom:5px; flex-wrap:wrap; }
@@ -291,6 +293,8 @@
   .feed-badge { font-size:9px; font-weight:600; padding:1px 6px; border-radius:4px; font-family:var(--font-zh); }
   .feed-badge--work_log { background:#FEF9C3; color:#B45309; }
   .feed-badge--daily_task { background:#DCFCE7; color:#15803D; }
+  .feed-badge--dev_log { background:#EFF6FF; color:#1D4ED8; }
+  .feed-badge--dev_case_status { background:#F3E8FF; color:#7C3AED; }
   .feed-bubble__content { font-size:13px; color:var(--text-primary); font-family:var(--font-zh); line-height:1.65; white-space:pre-wrap; word-break:break-word; }
   .feed-bubble__del { margin-left:auto; background:none; border:none; cursor:pointer; color:var(--text-dim); padding:0 4px; font-size:13px; line-height:1; border-radius:3px; }
   .feed-bubble__del:hover { color:var(--danger); background:#FEF2F2; }
@@ -1726,13 +1730,16 @@
                           <span class="feed-bubble__author" x-text="item.authorDisplay"></span>
                           <template x-if="item.source !== 'comment'">
                             <span class="feed-badge" :class="'feed-badge--' + item.source"
-                                  x-text="item.source==='work_log' ? '工作日誌' : '工作事項'"></span>
+                                  x-text="item.source==='work_log' ? '工作日誌' : item.source==='daily_task' ? '工作事項' : item.source==='dev_log' ? '業務開發記錄' : '案件狀態'"></span>
                           </template>
                           <template x-if="item.source==='work_log'">
                             <span style="font-size:10px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif" x-text="item.logDate"></span>
                           </template>
                           <template x-if="item.source==='daily_task'">
                             <span style="font-size:10px;color:var(--text-dim);font-family:var(--font-zh)" x-text="'完成：' + (item.taskTitle || '')"></span>
+                          </template>
+                          <template x-if="item.source==='dev_log'">
+                            <span style="font-size:10px;color:var(--text-dim);font-family:var(--font-zh)" x-text="(item.channel || '') + (item.logDate ? '・' + item.logDate : '')"></span>
                           </template>
                           <span class="feed-bubble__time" x-text="fmtFeedTime(item.created_at)"></span>
                           <template x-if="item.canDelete">

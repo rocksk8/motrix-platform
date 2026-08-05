@@ -1,7 +1,7 @@
 # MOTRIX ERP — 開發快速參考
 
 > 允碩整合集創（統編 60575481）｜ Tel: 04-3602-2818 ｜ info@miactw.com  
-> 文件版本：**2026-08-05**（報價單簽核永久卡死：兩個共同根因修復＋正式機 4 張卡死單查證，見 §12）
+> 文件版本：**2026-08-05b**（業務開發×案件管理三項聯動：簽核閘門／連結可修改／動態同步，見 §12）
 
 ---
 
@@ -364,6 +364,7 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
 - 欄位同步：`quotations.deal_tag`
 - 日誌：`data_json.statusLog[]`；**`delegateNote` 寫入 audit_log**
 - **未成案 / 已成案**（設為）：限 admin+ 操作
+- **已成案**：報價單須先完成簽核（`status=='已送出'`）才可標記，否則 400（前後端雙重 guard，2026-08-05b）
 - **已成案 → 其他（降級）**：限 **admin+**（前後端雙重 guard）
 - **已結案 → 其他**：限 **superadmin**
 - UI revert：取消確認時用 `$nextTick` 回滾 `_prevDealTag`
@@ -428,6 +429,10 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
   1. `case_updates` 表：手動留言（任何角色均可發布；發文者或 admin+ 可刪）
   2. `work_logs`（`case_no=此報價單號`）：工作日誌自動同步為只讀卡片
   3. `daily_task_completions JOIN daily_tasks`（`case_no=此報價單號`）：完成回報只讀卡片
+  4. `dev_logs`（依 `dev_cases.converted_quote_no=此報價單號` 反查 case_id）：業務開發開發記錄
+     自動同步為只讀卡片，僅在該報價單有業務開發案件連結時出現（2026-08-05b）
+  5. `audit_log`（`target_type='dev_case' AND action='dev_case.status'`）：業務開發案件狀態變更
+     事件，同上僅連結案件時出現（2026-08-05b）
 - **API**：`GET/POST /api/quotations/{no}/updates`、`DELETE /api/quotations/{no}/updates/{id}`
 - 切換案件時自動重置；點擊「動態」Tab 時 `loadCaseUpdates()` lazy fetch
 
@@ -784,6 +789,20 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 ## §12 · 變更摘要（最新兩版）
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
+
+### 2026-08-05b — 業務開發×案件管理三項聯動（簽核閘門／連結可修改／動態同步）
+
+- **報價單「已成案」需簽核完成**：`PATCH /api/quotations/{no}/deal-tag` 新增檢查，`deal_tag` 欲
+  設為「已成案」時報價單 `status` 必須為「已送出」，否則 400；`quotation-form.html` 下拉選單同步
+  disable「已成案」選項並在 `onDealTagChange()` 前端擋一次（雙重防呆，FORM_VERSION → V1.2）
+- **業務開發案件連結報價單可修改**：原「轉建報價單」（`PATCH /api/dev-cases/{id}/convert`）僅在
+  尚未連結時才顯示、且無法回頭修改；`dev-crm.html` 新增「修改連結」鉛筆按鈕 + 對應 modal
+  （`openRelinkModal()`/`doRelink()`），沿用同一個既有端點（本來就允許覆寫，只是前端沒開放入口）
+- **業務開發進度同步至案件管理「動態」Tab**：`GET /api/quotations/{no}/updates` 新增兩個來源
+  （比照既有 work_logs／daily_task_completions 唯讀卡片模式）——① `dev_logs`（依
+  `dev_cases.converted_quote_no` 反查 case_id 後列出）② `dev_case.status` 的 `audit_log`
+  紀錄（案件狀態變更事件）；僅在該報價單有業務開發案件連結時才出現
+- 用 demo 帳號（隔離空白庫）建立測試報價單/案件/開發記錄，以 curl 驗證三項行為皆正確後才收尾
 
 ### 2026-08-05 — 報價單簽核永久卡死：兩個共同根因修復＋正式機 4 張卡死單查證
 

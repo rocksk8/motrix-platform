@@ -5,6 +5,20 @@
 
 ---
 
+### 2026-08-05b — 業務開發×案件管理三項聯動（簽核閘門／連結可修改／動態同步）
+
+- **報價單「已成案」需簽核完成**：`PATCH /api/quotations/{no}/deal-tag` 新增檢查，`deal_tag` 欲
+  設為「已成案」時報價單 `status` 必須為「已送出」，否則 400；`quotation-form.html` 下拉選單同步
+  disable「已成案」選項並在 `onDealTagChange()` 前端擋一次（雙重防呆，FORM_VERSION → V1.2）
+- **業務開發案件連結報價單可修改**：原「轉建報價單」（`PATCH /api/dev-cases/{id}/convert`）僅在
+  尚未連結時才顯示、且無法回頭修改；`dev-crm.html` 新增「修改連結」鉛筆按鈕 + 對應 modal
+  （`openRelinkModal()`/`doRelink()`），沿用同一個既有端點（本來就允許覆寫，只是前端沒開放入口）
+- **業務開發進度同步至案件管理「動態」Tab**：`GET /api/quotations/{no}/updates` 新增兩個來源
+  （比照既有 work_logs／daily_task_completions 唯讀卡片模式）——① `dev_logs`（依
+  `dev_cases.converted_quote_no` 反查 case_id 後列出）② `dev_case.status` 的 `audit_log`
+  紀錄（案件狀態變更事件）；僅在該報價單有業務開發案件連結時才出現
+- 用 demo 帳號（隔離空白庫）建立測試報價單/案件/開發記錄，以 curl 驗證三項行為皆正確後才收尾
+
 ### 2026-08-05 — 報價單簽核永久卡死：兩個共同根因修復 + 正式機 4 張卡死單查證
 
 **緣起**：使用者回報「系統預設申請人不得自己簽核，但這位申請人送出的報價單，簽核流程設定裡把
