@@ -1377,7 +1377,7 @@ def list_case_updates(quote_no: str, authorization: str = Header(None)):
             "FROM dev_logs dl "
             "LEFT JOIN users lu ON lu.id = dl.log_by "
             "LEFT JOIN users cu ON cu.id = dl.created_by "
-            "WHERE dl.case_id=?", (case_id,)
+            "WHERE dl.case_id=? AND dl.needs_approval=0", (case_id,)
         ).fetchall():
             content = dl["content"] or ""
             if dl["next_action"]:

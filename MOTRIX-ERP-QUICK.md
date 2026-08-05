@@ -429,8 +429,9 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
   1. `case_updates` 表：手動留言（任何角色均可發布；發文者或 admin+ 可刪）
   2. `work_logs`（`case_no=此報價單號`）：工作日誌自動同步為只讀卡片
   3. `daily_task_completions JOIN daily_tasks`（`case_no=此報價單號`）：完成回報只讀卡片
-  4. `dev_logs`（依 `dev_cases.converted_quote_no=此報價單號` 反查 case_id）：業務開發開發記錄
-     自動同步為只讀卡片，僅在該報價單有業務開發案件連結時出現（2026-08-05b）
+  4. `dev_logs`（依 `dev_cases.converted_quote_no=此報價單號` 反查 case_id，`needs_approval=0`）：
+     業務開發開發記錄自動同步為只讀卡片，僅在該報價單有業務開發案件連結時出現；代填記錄需先經
+     管理員審核（`PATCH /api/dev-logs/{id}/approve`）通過後才會顯示（2026-08-05b）
   5. `audit_log`（`target_type='dev_case' AND action='dev_case.status'`）：業務開發案件狀態變更
      事件，同上僅連結案件時出現（2026-08-05b）
 - **API**：`GET/POST /api/quotations/{no}/updates`、`DELETE /api/quotations/{no}/updates/{id}`
