@@ -72,6 +72,34 @@
   --font-zh: 'LINE Seed TW_OTF', system-ui, sans-serif;
 }
 
+/* ─── DARK MODE（全站色彩反轉，Topbar/Sidebar/相片/Logo 排除，見 sidebar.js motrixToggleTheme） ───
+   注意：filter 不可套在 body/html 這種「.topbar/.sidebar/Modal 等 position:fixed 元素的祖先」上，
+   否則會依 CSS 規範讓該祖先變成這些 fixed 元素的 containing block，破壞其相對 viewport 定位
+   （曾造成畫面最上方一條白邊、部分頁面 Modal 跑版）。改為只對 body 的「非 chrome」直接子元素
+   （.topbar/.sidebar/.sidebar-overlay 以外，含各頁 Modal）個別套 filter，topbar/sidebar 完全
+   不套用、不需要再用雙重反轉抵銷。
+   注意：故意不設 color-scheme:dark。大量 .fi 等 input/select 類別只設了 background 沒設 color，
+   一旦 color-scheme:dark，瀏覽器會用原生深色預設文字色（近白）覆蓋這些「作者沒指定 color」的欄位，
+   但 background 仍是作者設的 #fff，兩者疊加會出現「白字疊白底」整個看不見的嚴重 bug。invert filter
+   本身已經能把「白底深字」正確轉成「深底白字」，不需要 color-scheme 幫忙，兩者同時開反而互相打架。 */
+
+:root[data-theme="dark"] body {
+  /* body 本身故意不套 filter（見上方註解），但 body 的預設奶白背景色（--white）完全沒被反轉，
+     只要任何一層子元素背景是透明的（例如 .aq-layout/.aq-left 這種純版面用 div），奶白色就會從
+     縫隙透出來，形成一塊塊「怎麼還是白的」的區域（業務開發/簽核佇列左側欄、成本分機面板等）。
+     直接把 body 背景改成深色即可解決，不需要也不能對 body 加 filter。 */
+  background: #0A0A0A;
+}
+
+:root[data-theme="dark"] body > *:not(.topbar):not(.sidebar):not(.sidebar-overlay) {
+  filter: invert(1) hue-rotate(180deg);
+}
+
+:root[data-theme="dark"] body > *:not(.topbar):not(.sidebar):not(.sidebar-overlay) img,
+:root[data-theme="dark"] body > *:not(.topbar):not(.sidebar):not(.sidebar-overlay) video {
+  filter: invert(1) hue-rotate(180deg);
+}
+
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 html { font-size: 15px; }

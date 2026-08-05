@@ -2,6 +2,7 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="../static/favicon.png">
   <title>報價單 - MOTRIX 營運管理系統</title>
@@ -2245,12 +2246,13 @@
       isCurrentTierApprover() {
         const appr = this.q.approval
         if (!appr) return false
-        if (appr.requestedBy === this.session.username) return false
         const tiers = appr.tiers || []
         if (!tiers.length) {
-          // no configured tiers — fallback: any superadmin except submitter
+          // 無設定簽核層 — 任一超級管理員皆可簽核，含申請人本人；後端會擋下申請人自簽，
+          // 除非申請人是目前唯一在職的超級管理員（見 quotations.py approve_quotation()）
           return this.session.role === 'superadmin'
         }
+        if (appr.requestedBy === this.session.username) return false
         const ct = appr.currentTier ?? 0
         if (ct >= tiers.length) return false
         // sequential within tier: only the first unapproved approver may act

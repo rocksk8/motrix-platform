@@ -2,6 +2,7 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="../static/favicon.png">
   <title>案件管理 — MOTRIX 營運管理系統</title>
@@ -662,8 +663,11 @@
                       <span style="font-size:11px;font-weight:700;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;width:16px;flex-shrink:0" x-text="idx+1"></span>
                       <select class="fi" x-model="item.type" @change="setDirty()"
                               style="width:90px;flex-shrink:0;padding:5px 6px;font-size:12px">
-                        <option>訂金款</option><option>交貨款</option><option>驗收款</option><option>進度款</option><option>其他</option>
+                        <option>訂金款</option><option>交貨款</option><option>驗收款</option><option>進度款</option><option>完工款</option><option>收款後出貨</option><option>自訂義</option><option>其他</option>
                       </select>
+                      <input x-show="item.type==='自訂義'" class="fi" type="text" placeholder="輸入名稱..."
+                             x-model="item.customLabel" @input="setDirty()"
+                             style="width:96px;flex-shrink:0;padding:5px 6px;font-size:12px">
                       <div style="position:relative;width:72px;flex-shrink:0">
                         <input class="fi" type="number" min="0" max="100" step="0.01"
                                x-model.number="item.pct" @input="onPctChange(idx)"
@@ -724,6 +728,7 @@
                     </div>
 
                     <template x-if="item.received">
+                      <div>
                       <div style="display:grid;grid-template-columns:140px 140px 1fr;gap:8px;margin-top:8px;padding-top:8px;border-top:1px dashed var(--border-light)">
                         <div>
                           <span class="fi-label">實收金額（含稅）</span>
@@ -751,6 +756,38 @@
                           <input class="fi fi--sm" type="text" placeholder="扣款原因..."
                                  x-model="item.feeNote" @input="setDirty()">
                         </div>
+                      </div>
+
+                      <!-- 沖銷（稅額歸零）審核 -->
+                      <div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                        <template x-if="!item.writeOffStatus && !item.taxExempt && ['superadmin','admin'].includes(session.role)">
+                          <button @click="openWriteoffModal(idx,'request')"
+                                  style="font-size:11px;padding:3px 10px;border-radius:4px;border:1px solid var(--border-light);background:#fff;color:var(--text-secondary);cursor:pointer;font-family:LINE Seed TW_OTF, sans-serif">
+                            申請沖銷（無發票／免稅）
+                          </button>
+                        </template>
+                        <template x-if="item.writeOffStatus==='pending'">
+                          <span style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                            <span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:4px;background:#FEF9C3;color:#A16207">沖銷審核中</span>
+                            <span style="font-size:11px;color:var(--text-dim)" x-text="'申請人：' + item.writeOffRequestedBy + '　原因：' + item.writeOffReason"></span>
+                            <button x-show="session.role==='superadmin' || item.writeOffRequestedBy===(session.displayName||session.username)"
+                                    @click="cancelWriteoff(idx)"
+                                    style="font-size:11px;padding:2px 8px;border-radius:4px;border:1px solid var(--border-light);background:#fff;cursor:pointer">取消申請</button>
+                            <span x-show="session.role==='superadmin'" style="display:flex;gap:6px">
+                              <button @click="approveWriteoff(idx)"
+                                      style="font-size:11px;padding:2px 8px;border-radius:4px;border:1px solid #16A34A;background:#F0FDF4;color:#16A34A;cursor:pointer">核准</button>
+                              <button @click="openWriteoffModal(idx,'reject')"
+                                      style="font-size:11px;padding:2px 8px;border-radius:4px;border:1px solid #DC2626;background:#FEF2F2;color:#DC2626;cursor:pointer">駁回</button>
+                            </span>
+                          </span>
+                        </template>
+                        <template x-if="item.taxExempt">
+                          <span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:4px;background:#EDE9FE;color:#6D28D9">已沖銷（免稅）</span>
+                        </template>
+                        <template x-if="item.writeOffStatus==='rejected'">
+                          <span style="font-size:10px;color:var(--text-dim)" x-text="'沖銷申請已駁回：' + (item.writeOffRejectReason||'')"></span>
+                        </template>
+                      </div>
                       </div>
                     </template>
 
@@ -2074,6 +2111,37 @@
       <button @click="saveDispatch()" :disabled="dispatchSaving"
               style="padding:7px 18px;border:none;border-radius:7px;font-size:13px;font-family:var(--font-zh);background:var(--accent);color:#fff;cursor:pointer;font-weight:600"
               x-text="dispatchSaving ? '儲存中…' : '儲存派發紀錄'"></button>
+    </div>
+  </div>
+</div>
+
+<!-- ── 收款沖銷 申請/駁回原因 Modal ── -->
+<div x-show="writeoffModal.open" x-cloak
+     style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:400;display:flex;align-items:center;justify-content:center;padding:20px"
+     @click.self="writeoffModal.open=false"
+     @keydown.escape.window="writeoffModal.open=false">
+  <div style="background:#fff;border-radius:12px;width:100%;max-width:420px;box-shadow:0 16px 48px rgba(0,0,0,.22)">
+    <div style="display:flex;align-items:center;padding:14px 18px;border-bottom:1px solid var(--border-light);gap:10px">
+      <span style="font-size:14px;font-weight:700;flex:1;font-family:var(--font-zh)"
+            x-text="writeoffModal.mode==='reject' ? '駁回沖銷申請' : '申請款項沖銷（稅額歸零）'"></span>
+      <button @click="writeoffModal.open=false" style="width:28px;height:28px;border:none;background:#F0EEE9;border-radius:5px;cursor:pointer;font-size:16px">×</button>
+    </div>
+    <div style="padding:18px 20px">
+      <div x-show="writeoffModal.mode==='request'" style="font-size:12px;color:var(--text-secondary);margin-bottom:10px;line-height:1.6">
+        沖銷生效後，此筆收款不再計入應稅／應開發票金額，需經最高管理者核准才會生效。
+      </div>
+      <label style="font-size:11px;font-weight:500;color:var(--text-secondary);display:block;margin-bottom:4px" x-text="writeoffModal.mode==='reject' ? '駁回原因（必填）' : '沖銷原因（必填，例如：客戶為私人用戶，無需開立發票）'"></label>
+      <textarea x-model="writeoffModal.reason" rows="3"
+                style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;resize:vertical"></textarea>
+      <div x-show="writeoffModal.msg" style="color:var(--danger);font-size:12px;margin-top:6px" x-text="writeoffModal.msg"></div>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;padding:14px 18px;border-top:1px solid var(--border-light)">
+      <button @click="writeoffModal.open=false"
+              style="padding:7px 16px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:var(--font-zh);background:#fff;cursor:pointer">取消</button>
+      <button @click="submitWriteoffModal()" :disabled="!writeoffModal.reason.trim()"
+              style="padding:7px 18px;border:none;border-radius:7px;font-size:13px;font-family:var(--font-zh);color:#fff;cursor:pointer;font-weight:600"
+              :style="writeoffModal.mode==='reject' ? 'background:var(--danger)' : 'background:var(--accent)'"
+              x-text="writeoffModal.mode==='reject' ? '確認駁回' : '送出申請'"></button>
     </div>
   </div>
 </div>

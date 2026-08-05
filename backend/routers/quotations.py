@@ -211,6 +211,15 @@ class CaseRecordUpdate(BaseModel):
     case_record: dict = {}
 
 
+class WriteOffRequestIn(BaseModel):
+    reason: Optional[str] = ''
+
+
+class WriteOffApproveIn(BaseModel):
+    approve: bool
+    reject_reason: Optional[str] = ''
+
+
 class ApprovalActionBody(BaseModel):
     approvedByDisplay: Optional[str] = None
     note:              Optional[str]  = None
@@ -862,6 +871,116 @@ def mark_payment(no: str, idx: int, body: dict, authorization: str = Header(None
     return {"ok": True, "updated_at": now}
 
 
+def _load_payment_item(conn, no, idx):
+    row = conn.execute("SELECT data_json, updated_at FROM quotations WHERE quote_no=?", (no,)).fetchone()
+    if not row:
+        raise HTTPException(404, "報價單不存在")
+    data = json.loads(row["data_json"] or "{}")
+    cr   = data.setdefault("caseRecord", {})
+    pay  = cr.setdefault("payment", {})
+    pits = pay.setdefault("items", [])
+    if idx < 0 or idx >= len(pits):
+        raise HTTPException(400, "款項索引超出範圍")
+    return data, pits
+
+
+@router.post("/api/quotations/{no}/payment/{idx}/request-writeoff")
+def request_payment_writeoff(no: str, idx: int, body: WriteOffRequestIn, authorization: str = Header(None)):
+    """admin+ 申請將該筆收款的稅額沖銷（歸零），需 superadmin 審核。"""
+    user = _require_user(authorization)
+    if user["role"] not in ("superadmin", "admin"):
+        raise HTTPException(403, "僅管理員可申請沖銷")
+    conn = get_db()
+    try:
+        data, pits = _load_payment_item(conn, no, idx)
+        item = pits[idx]
+        if item.get("writeOffStatus") == "pending":
+            raise HTTPException(409, "此筆款項已有待審核的沖銷申請")
+        if item.get("taxExempt"):
+            raise HTTPException(409, "此筆款項已完成沖銷")
+        requester_display = user.get("display_name") or user["username"]
+        now = datetime.now().isoformat()
+        item["writeOffStatus"]      = "pending"
+        item["writeOffReason"]      = body.reason or ''
+        item["writeOffRequestedBy"] = requester_display
+        item["writeOffRequestedAt"] = now
+        saved_at = save_quotation_json(conn, no, data)
+        conn.commit()
+    finally:
+        conn.close()
+    spawn_bg_thread(_backup_quotation, args=(no,))
+    label = item.get('label', f'第{idx+1}期')
+    _audit(_tok(authorization), 'payment.writeoff_request', 'quotation', no, f"{no} {label} 申請沖銷")
+    notify_module_activity("報價單", "申請沖銷", requester_display, f"{no} {label}", "quotations.html")
+    return {"ok": True, "updated_at": saved_at}
+
+
+@router.post("/api/quotations/{no}/payment/{idx}/cancel-writeoff")
+def cancel_payment_writeoff(no: str, idx: int, authorization: str = Header(None)):
+    """申請人本人或 superadmin 取消待審核的沖銷申請。"""
+    user = _require_user(authorization)
+    if user["role"] not in ("superadmin", "admin"):
+        raise HTTPException(403, "僅管理員可取消沖銷申請")
+    conn = get_db()
+    try:
+        data, pits = _load_payment_item(conn, no, idx)
+        item = pits[idx]
+        if item.get("writeOffStatus") != "pending":
+            raise HTTPException(409, "此筆款項無待審核的沖銷申請")
+        requester_display = user.get("display_name") or user["username"]
+        if user["role"] != "superadmin" and item.get("writeOffRequestedBy") != requester_display:
+            raise HTTPException(403, "只能取消自己發出的沖銷申請")
+        for k in ("writeOffStatus", "writeOffReason", "writeOffRequestedBy", "writeOffRequestedAt"):
+            item.pop(k, None)
+        saved_at = save_quotation_json(conn, no, data)
+        conn.commit()
+    finally:
+        conn.close()
+    spawn_bg_thread(_backup_quotation, args=(no,))
+    label = item.get('label', f'第{idx+1}期')
+    _audit(_tok(authorization), 'payment.writeoff_cancel', 'quotation', no, f"{no} {label} 取消沖銷申請")
+    notify_module_activity("報價單", "取消沖銷申請", requester_display, f"{no} {label}", "quotations.html")
+    return {"ok": True, "updated_at": saved_at}
+
+
+@router.post("/api/quotations/{no}/payment/{idx}/approve-writeoff")
+def approve_payment_writeoff(no: str, idx: int, body: WriteOffApproveIn, authorization: str = Header(None)):
+    """superadmin 審核沖銷申請 — approve=True 生效（稅額歸零）；False 駁回。"""
+    user = _require_user(authorization)
+    if user["role"] != "superadmin":
+        raise HTTPException(403, "僅最高管理者可審核沖銷申請")
+    conn = get_db()
+    try:
+        data, pits = _load_payment_item(conn, no, idx)
+        item = pits[idx]
+        if item.get("writeOffStatus") != "pending":
+            raise HTTPException(409, "此筆款項無待審核的沖銷申請")
+        approver_display = user.get("display_name") or user["username"]
+        now = datetime.now().isoformat()
+        if body.approve:
+            item["writeOffStatus"]    = "approved"
+            item["writeOffApprovedBy"] = approver_display
+            item["writeOffApprovedAt"] = now
+            item["taxExempt"] = True
+            action_detail = "核准沖銷"
+        else:
+            item["writeOffStatus"]       = "rejected"
+            item["writeOffRejectReason"] = body.reject_reason or ''
+            item["writeOffApprovedBy"]   = approver_display
+            item["writeOffApprovedAt"]   = now
+            action_detail = "駁回沖銷申請"
+        saved_at = save_quotation_json(conn, no, data)
+        conn.commit()
+    finally:
+        conn.close()
+    spawn_bg_thread(_backup_quotation, args=(no,))
+    label = item.get('label', f'第{idx+1}期')
+    _audit(_tok(authorization), 'payment.writeoff_approve' if body.approve else 'payment.writeoff_reject',
+           'quotation', no, f"{no} {label}（{action_detail}）")
+    notify_module_activity("報價單", action_detail, approver_display, f"{no} {label}", "quotations.html")
+    return {"ok": True, "updated_at": saved_at, "approved": body.approve}
+
+
 # ── Settlement ────────────────────────────────────────────────────────────────
 
 class SettlementIn(BaseModel):
@@ -1039,10 +1158,6 @@ def approve_quotation(quote_no: str, body: ApprovalActionBody, authorization: st
     tiers = _active_tiers(appr)
     now   = datetime.now().isoformat()
 
-    if appr.get("requestedBy") == user["username"]:
-        conn.close()
-        raise HTTPException(403, "申請人不得自行審核")
-
     if tiers:
         ct_idx = _current_tier_idx(appr)
         if ct_idx >= len(tiers):
@@ -1116,6 +1231,15 @@ def approve_quotation(quote_no: str, body: ApprovalActionBody, authorization: st
                 "系統已設定簽核流程，此報價單缺少簽核層資料。"
                 "請請申請人收回並重新送審，以套用最新簽核設定"
             )
+        # 申請人不得自行審核 — 除非申請人是目前唯一在職的最高管理者（否則會永久卡死無人可簽）
+        if appr.get("requestedBy") == user["username"]:
+            other_admin = conn.execute(
+                "SELECT 1 FROM users WHERE role='superadmin' AND active=1 AND username!=? LIMIT 1",
+                (user["username"],),
+            ).fetchone()
+            if other_admin:
+                conn.close()
+                raise HTTPException(403, "申請人不得自行審核，請由其他最高管理者審核")
         all_done      = True
         detail_status = "超級管理員簽核"
 

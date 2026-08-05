@@ -19,6 +19,7 @@ function app() {
     saveStatus: '',
     saveMsg: '',
     _autoSaveTimer: null,
+    writeoffModal: { open: false, idx: null, mode: 'request', reason: '' },
     dragFromIdx: null,
     _openStageDetail: {},
     _newStageAssignee: {},
@@ -403,6 +404,7 @@ function app() {
 
     itemAmountPretax(idx) {
       const items  = this.paymentItems()
+      if (items[idx]?.taxExempt) return this.itemAmountWithTax(idx)
       const total  = this.totalWithTax()
       const pretax = this.totalPretax()
       if (items[idx]?.amount != null && total > 0)
@@ -563,6 +565,76 @@ function app() {
         this.saveMsg = '網路錯誤'
       }
       this.saving = false
+    },
+
+    openWriteoffModal(idx, mode) {
+      this.writeoffModal = { open: true, idx, mode, reason: '', msg: '' }
+    },
+
+    async _postWriteoff(idx, path, body) {
+      const quoteNo = this.selected.quote_no
+      const r = await fetch(`/api/quotations/${quoteNo}/payment/${idx}/${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+        body: JSON.stringify(body || {})
+      })
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}))
+        return { ok: false, msg: err.detail || '操作失敗' }
+      }
+      return { ok: true }
+    },
+
+    async submitWriteoffModal() {
+      const { idx, mode, reason } = this.writeoffModal
+      if (!reason.trim()) return
+      const item = this.paymentItems()[idx]
+      const me = this.session.displayName || this.session.username || ''
+      let res
+      if (mode === 'request') {
+        res = await this._postWriteoff(idx, 'request-writeoff', { reason })
+        if (res.ok) {
+          item.writeOffStatus = 'pending'
+          item.writeOffReason = reason
+          item.writeOffRequestedBy = me
+          item.writeOffRequestedAt = new Date().toISOString()
+        }
+      } else {
+        res = await this._postWriteoff(idx, 'approve-writeoff', { approve: false, reject_reason: reason })
+        if (res.ok) {
+          item.writeOffStatus = 'rejected'
+          item.writeOffRejectReason = reason
+        }
+      }
+      if (res.ok) {
+        this.writeoffModal.open = false
+      } else {
+        this.writeoffModal.msg = res.msg
+      }
+    },
+
+    async cancelWriteoff(idx) {
+      const item = this.paymentItems()[idx]
+      const res = await this._postWriteoff(idx, 'cancel-writeoff')
+      if (res.ok) {
+        for (const k of ['writeOffStatus', 'writeOffReason', 'writeOffRequestedBy', 'writeOffRequestedAt']) delete item[k]
+      } else {
+        alert(res.msg)
+      }
+    },
+
+    async approveWriteoff(idx) {
+      const item = this.paymentItems()[idx]
+      const me = this.session.displayName || this.session.username || ''
+      const res = await this._postWriteoff(idx, 'approve-writeoff', { approve: true })
+      if (res.ok) {
+        item.writeOffStatus = 'approved'
+        item.taxExempt = true
+        item.writeOffApprovedBy = me
+        item.writeOffApprovedAt = new Date().toISOString()
+      } else {
+        alert(res.msg)
+      }
     },
 
     async closeCaseAction() {

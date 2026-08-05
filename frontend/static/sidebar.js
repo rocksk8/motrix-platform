@@ -23,6 +23,12 @@
   var _initZoom = parseFloat(localStorage.getItem(FZ_KEY)) || 1.0
   document.documentElement.style.zoom = _initZoom
 
+  // ── Dark mode（立即套用，避免頁面閃爍；各頁 <head> 亦有相同邏輯的同步腳本先跑過一次）──
+  var THEME_KEY = 'motrix_theme'
+  if (localStorage.getItem(THEME_KEY) === 'dark') {
+    document.documentElement.setAttribute('data-theme', 'dark')
+  }
+
   var path = window.location.pathname
   var file = path.split('/').pop() || 'index.html'
   var inPg = path.indexOf('/pages/') >= 0
@@ -54,6 +60,36 @@
       btn.style.color       = on ? '#F5F4F0' : '#666'
       btn.style.fontWeight  = on ? '700' : '400'
     })
+  }
+
+  // ── Global dark mode toggle (used by topbar button via onclick) ───────────
+  window.motrixToggleTheme = function () {
+    var dark = document.documentElement.getAttribute('data-theme') === 'dark'
+    var next = !dark
+    if (next) {
+      document.documentElement.setAttribute('data-theme', 'dark')
+      localStorage.setItem(THEME_KEY, 'dark')
+    } else {
+      document.documentElement.removeAttribute('data-theme')
+      localStorage.removeItem(THEME_KEY)
+    }
+    var btn = document.getElementById('theme-toggle-btn')
+    if (btn) btn.innerHTML = _themeIcon(next)
+  }
+
+  function _themeIcon(isDark) {
+    // isDark: 目前已是深色模式 → 顯示太陽（點擊可切回淺色）；反之顯示月亮
+    return isDark
+      ? '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>'
+      : '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>'
+  }
+
+  function buildThemeToggle() {
+    var isDark = document.documentElement.getAttribute('data-theme') === 'dark'
+    return '<button id="theme-toggle-btn" class="topbar__btn" onclick="motrixToggleTheme()"'
+      + ' title="切換深色/淺色模式" style="padding:6px 8px">'
+      + _themeIcon(isDark)
+      + '</button>'
   }
 
   // ── Global logout (used by topbar button via onclick) ─────────────────────
@@ -144,6 +180,7 @@
       + '<div class="topbar__right">'
       + '<span id="tb-display-name" style="font-size:12px;color:#888;font-family:LINE Seed TW_OTF, sans-serif">' + esc(dn) + '</span>'
       + buildFontCtrl()
+      + buildThemeToggle()
       + bell
       + '<a href="' + cpHref + '" class="topbar__btn" style="text-decoration:none;color:#888;border-color:#333;font-size:11px">修改密碼</a>'
       + '<button class="topbar__btn" onclick="motrixLogout()" style="color:#888;border-color:#333;font-size:11px">登出</button>'
