@@ -161,6 +161,7 @@
     /* ── 明細表格 ── */
     .items-table {
       width: 100%;
+      min-width: 1040px;
       border-collapse: collapse;
       font-size: 12px;
       margin-bottom: 10px;
@@ -1374,15 +1375,8 @@
                            @input="calcItem(item); setDirty()">
                   </td>
                   <td>
-                    <select class="cell-input" x-model="item.unit" @change="setDirty"
-                            x-show="item.type !== 'header'">
-                      <option>台</option><option>套</option><option>組</option>
-                      <option>式</option><option>個</option><option>批</option>
-                      <option>條</option><option>根</option><option>捲</option>
-                      <option>米</option><option>箱</option><option>包</option>
-                      <option>人月</option><option>人日</option><option>次</option>
-                      <option>年</option><option>月</option><option>式（整批）</option>
-                    </select>
+                    <input class="cell-input" type="text" x-model="item.unit" @change="setDirty"
+                           x-show="item.type !== 'header'" list="quote-unit-options" placeholder="單位">
                   </td>
                   <template x-if="showCostCols && item.type !== 'header'">
                     <td class="internal">
@@ -1440,6 +1434,15 @@
             </tbody>
           </table>
         </div>
+        <datalist id="quote-unit-options">
+          <option value="台"></option><option value="套"></option><option value="組"></option>
+          <option value="式"></option><option value="個"></option><option value="批"></option>
+          <option value="條"></option><option value="根"></option><option value="捲"></option>
+          <option value="米"></option><option value="箱"></option><option value="包"></option>
+          <option value="人月"></option><option value="人日"></option><option value="次"></option>
+          <option value="年"></option><option value="月"></option><option value="式（整批）"></option>
+          <option value="SET"></option><option value="立"></option>
+        </datalist>
         <div style="display:flex;gap:8px;margin-top:6px">
           <button class="btn btn-ghost btn-sm add-item-btn" @click="addItem()">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v16m8-8H4"/></svg>
@@ -2026,7 +2029,7 @@
   const API = '/api'
   // ── 報價單模板版本：本頁（quotation-form.html）或其邏輯有任何改動都須遞增 ──
   // ── 小改版（欄位微調/樣式/文案）+0.1；大改版（版型結構/新增區塊/流程變更）+1 ──
-  const FORM_VERSION = 'V1.2'
+  const FORM_VERSION = 'V1.3'
 
   function quotationForm() {
     return {
