@@ -665,6 +665,7 @@
 
         canApprove(item) {
           if (!item) return false
+          if (item.requestedBy === this.session.username) return false
           const tiers = item.tiers || []
           if (tiers.length > 0) {
             const cur = item.currentTier ?? 0
@@ -675,7 +676,7 @@
             return firstPending?.username === this.session.username
           }
           // No tiers: superadmin, not self
-          return this.session.role === 'superadmin' && item.requestedBy !== this.session.username
+          return this.session.role === 'superadmin'
         },
 
         waitingForText(item) {

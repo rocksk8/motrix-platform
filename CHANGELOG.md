@@ -5,6 +5,34 @@
 
 ---
 
+### 2026-08-05 — 報價單簽核永久卡死：兩個共同根因修復 + 正式機 4 張卡死單查證
+
+**緣起**：使用者回報「系統預設申請人不得自己簽核，但這位申請人送出的報價單，簽核流程設定裡把
+這位申請人列為簽核人，導致報價單卡在簽核」，正式機當下已有報價單卡死。用使用者提供的正式機帳號
+（`jeff`，superadmin）唯讀查證，確認卡死的是 `MQ-202608-003`～`006` 四張、皆由 `jeff` 直接送審。
+
+- **Bug A**：`update_quotation()` 送審時把 `approval_flow` 設定轉成 tiers 快照，完全沒有排除
+  送審人自己；`quotation-form.html` 的 `isCurrentTierApprover()` 寫死擋掉送審人自己的按鈕，但
+  `approval-queue.html` 的 `canApprove()` 沒擋，兩頁邏輯矛盾；`approve_quotation()` 有 tiers
+  分支原本也無自簽檢查
+- **Bug B（比對正式機實際卡死單後發現、更根本的成因）**：正式機那 4 張單的 `approval` JSON
+  完全沒有 `tiers` 欄位——`quotation-form.html` 的 `confirmSubmit()` 在「新單不先存草稿、直接
+  送審」情境下打的是 `POST /api/quotations`（`create_quotation()`），但這個端點完全沒有 tiers
+  建構或通知邏輯（該邏輯只存在於 PUT 的 `update_quotation()`），於是完全繞過已設定的兩層流程
+  （`jeff→corbin`），也没有通知任何人（`corbin` 從未被告知要簽核）——任何人「新建報價單直接
+  送審」都會中招，不限於送審人與簽核人重疊的情況
+- 修法：新增共用 helper `_build_approval_tiers_and_notify()`（含 `_exclude_requester()`），
+  `create_quotation()`（`body.status=='待審核'` 時）與 `update_quotation()` 都改呼叫同一段邏輯；
+  `approve_quotation()` 補上自簽 403 防禦；`approval-queue.html` `canApprove()` 補上與
+  `quotation-form.html` 一致的判斷
+- 已用正式機唯讀查到的真實 `approval_flow` 設定（`jeff`/`corbin` 兩層）直接呼叫新 helper 驗證：
+  `jeff` 正確被排除、只剩 `corbin` 一層、`corbin` 正確收到通知；全檔語法檢查通過。全程只對正式機
+  呼叫唯讀 GET 端點，未寫入任何正式機資料
+- 附帶修正：正式機 LAN IP 全站記錄錯誤（`172.16.11.211`→`172.16.10.177`，使用者確認為固定 IP），
+  含 CORS 白名單與 email 通知連結預設值（若正式機從未手動設定過，過去簽核信件連結可能都是死連結）
+- ⚠️ 尚未在瀏覽器實機重現完整送審流程（本機無 server 可測）；正式機 4 張卡死單不手動改資料庫，
+  改為部署此修復後由 `jeff` 逐一「收回草稿」再重新送出，會走已修復的 `update_quotation()` 自動解卡
+
 ### 2026-08-04 — 報價單「新增品項」／「新增區段標題」按鈕失效修復
 
 **緣起**：使用者回報報價單編輯頁「新增品項」「新增區段標題」兩個按鈕點擊完全沒反應。
@@ -15,6 +43,20 @@
 - 新增 `genId()` helper（安全情境下用 `crypto.randomUUID()`，否則 fallback 手動產生 id），檔案
   內 4 處呼叫點（`addItem`/`addHeader`/`loadQuote`/`copyToNew`）全數改用
 - ⚠️ 尚未在瀏覽器實機驗證，下次有機會時請在非 `localhost` 位址實測確認
+
+### 2026-08-03i — CRM 搜尋殘留 bug／側邊欄角標時區 bug（既有潛藏問題）／出貨單歷史紀錄
+
+**緣起**：業務開發搜尋仍會出現不符搜尋文字的案件；業務開發／報價單側邊欄角標「仍然顯示但未有
+其他更新」；要求新增出貨單歷史紀錄頁面。
+
+- CRM 搜尋：`dev-crm.html` 搜尋框同時綁 `x-model.debounce.400ms` 與 `@input` 兩個監聽器互相打架，
+  查詢字串永遠落後輸入一拍；改為 `x-model`（即時寫入）+ `@input.debounce.400ms`（延遲觸發查詢）
+- 側邊欄角標時區 bug（既有潛藏問題）：`sidebar.js` 用 `toISOString()`（UTC）寫時間戳，後端存
+  台灣本地時間，SQL 字串比較幾乎恆判定「有更新」；新增 `_localISOString()` 取代，連帶修好
+  `daily-tasks.html` `isNewTask()` 同一套 bug
+- 新增「出貨單歷史紀錄」頁面（`shipping-export-history.html` + `GET /api/shipping-notes/export-history`），
+  攤平既有 `export_log` 為事件列表，無 DB migration
+- 已用瀏覽器實測三項修改，測試資料已清除還原
 
 ### 2026-08-03g — 外包名冊新增「參與案件」聯動
 

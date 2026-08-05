@@ -58,7 +58,7 @@ def _cfg() -> dict:
 
 
 def _base_url() -> str:
-    return (_cfg().get("base_url") or "http://172.16.11.211:666").rstrip("/")
+    return (_cfg().get("base_url") or "http://172.16.10.177:666").rstrip("/")
 
 
 def _admin_emails() -> list:

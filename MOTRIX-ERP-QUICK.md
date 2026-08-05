@@ -1,7 +1,7 @@
 # MOTRIX ERP — 開發快速參考
 
 > 允碩整合集創（統編 60575481）｜ Tel: 04-3602-2818 ｜ info@miactw.com  
-> 文件版本：**2026-08-04**（報價單新增品項／新增區段標題按鈕失效修復，見 §12）
+> 文件版本：**2026-08-05**（報價單簽核永久卡死：兩個共同根因修復＋正式機 4 張卡死單查證，見 §12）
 
 ---
 
@@ -41,6 +41,7 @@
 | 2026-08-01 | `backend/db.py` 少了正式機已在跑的 2 個 migration（v32/v33，交換器選型導覽 switch_guide 表結構） | ✅ 已補回（用正式機 db 實際 schema 反推重建，見 §12 2026-08-01e） |
 | 2026-08-01 | `backend/setup_autostart_task.ps1`、`backend/setup_heartbeat_task.ps1` 兩個部署排程設定腳本，正式機有（§1.1／§1.2 有描述其行為）、這台開發機完全沒有檔案 | ⏳ 待處理——下次能接觸正式機時依 §14 流程拉回 |
 | 2026-08-01 | 已知程式碼未 commit 進 git（`git log` 停在較舊的提交，工作區有大量未 commit 變更）；正式機的程式碼版本與 git 歷史的對應關係目前不明 | ✅ 已於合併正式機更新模式匯出檔案時一併 commit（見 §12 2026-08-01j）；正式機仍無 git，日後版本比對仍需靠 §15 `deploy_manifest.json` 記的 commit 值 |
+| 2026-08-05 | 本文件與程式碼（`main.py` CORS 白名單／`email_notify.py` 與 `system.py` 的 email base_url 預設值／`notification-settings.html` 預設值）長期記載正式機區網位址為 `172.16.11.211:666`，實際上是 `172.16.10.177:666`（使用者於本次對話中指正並確認為固定 IP，非 DHCP 動態配發；已用 `curl` 實測連線成功） | ✅ 本次一併修正上述 5 處程式碼與 §1 位址表 |
 
 ---
 
@@ -51,7 +52,7 @@
 | 開發啟動 | `backend\start.bat` |
 | 更新後重啟 | `backend\restart.bat` |
 | 本機 | http://localhost:666 |
-| 區網 | http://172.16.11.211:666 |
+| 區網 | http://172.16.10.177:666 |
 | SQLite | `backend\motrix_erp.db`（WAL 模式） |
 
 ```
@@ -783,6 +784,39 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 ## §12 · 變更摘要（最新兩版）
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
+
+### 2026-08-05 — 報價單簽核永久卡死：兩個共同根因修復＋正式機 4 張卡死單查證
+
+- **背景**：使用者回報「系統預設申請人不得自己簽核，但這位申請人送出的報價單，簽核流程設定裡
+  把這位申請人列為簽核人，導致報價單卡在簽核」；正式機當下已有報價單卡死。用使用者提供的正式機
+  帳號（`jeff`，superadmin）唯讀查證，確認卡死的是 `MQ-202608-003`～`006` 四張、皆由 `jeff`
+  直接送審；正式機 `approval_flow` 確實已配置兩層（tier0=`jeff`、tier1=`corbin`）
+- **Bug A**：`update_quotation()` 送審時把 `approval_flow` 設定轉成 tiers 快照，完全沒有排除
+  送審人自己；`quotation-form.html` 的 `isCurrentTierApprover()` 寫死擋掉送審人自己的按鈕，但
+  `approval-queue.html` 的 `canApprove()` 沒擋，兩頁邏輯矛盾；`approve_quotation()` 有 tiers
+  分支原本也無自簽檢查
+- **Bug B（比對正式機實際卡死單後發現，才是這 4 張單真正的成因）**：這 4 張單的 `approval`
+  JSON 完全沒有 `tiers` 欄位——`quotation-form.html` 的 `confirmSubmit()` 在「新單不先存草稿、
+  直接送審」情境（`isNewRecord===true`）打的是 `POST /api/quotations`（`create_quotation()`），
+  但這個端點完全沒有 tiers 建構或審核通知邏輯（該邏輯只存在於 PUT 的 `update_quotation()`），
+  於是完全繞過已設定的兩層流程，也沒通知任何人（`corbin` 從未被告知要簽核）——任何人「新建
+  報價單直接送審」都會中招，不限於送審人與簽核人重疊的情況
+- **修法**：新增共用 helper `_build_approval_tiers_and_notify()`（含 `_exclude_requester()`），
+  `create_quotation()`（`body.status=='待審核'` 時，INSERT 成功拿到最終 quote_no 後）與
+  `update_quotation()` 都改呼叫同一段邏輯（對 `update_quotation()` 是純重構、行為不變）；
+  `approve_quotation()` 有 tiers 分支補上自簽 403 防禦；`approval-queue.html` `canApprove()`
+  補上與 `quotation-form.html` 一致的判斷
+- **驗證**：已用正式機唯讀查到的真實 `approval_flow` 設定（`jeff`/`corbin` 兩層）直接呼叫新
+  helper 驗證：`jeff` 正確被排除、只剩 `corbin` 一層、`corbin` 正確收到通知；全檔語法檢查通過。
+  全程只對正式機呼叫唯讀 GET 端點（`/api/settings/approval-flow`、`/api/users`、
+  `/api/quotations`、`/api/quotations/{no}`），未寫入任何正式機資料
+- **附帶修正**：正式機 LAN IP 全站記錄錯誤（`172.16.11.211`→`172.16.10.177`，使用者確認為固定
+  IP，見 §0/§1），含 `main.py` CORS 白名單、`email_notify.py`/`system.py` 的 email base_url
+  預設值、`notification-settings.html` 預設值；若正式機從未手動設定過 `base_url`，過去簽核通知
+  信件裡的連結可能都是死連結，建議部署後至「通知設定」頁確認實際存值
+- **⚠️ 尚未在瀏覽器實機重現完整送審流程**（本機無 server 可測）；正式機 4 張卡死單不透過資料庫
+  層手動修改，改為部署此修復後由 `jeff` 逐一「收回草稿」再重新送出，會走已修復的
+  `update_quotation()` 正確重建 tiers 並通知 `corbin`，不需任何人手動改資料庫
 
 ### 2026-08-04 — 報價單「新增品項」／「新增區段標題」按鈕失效修復
 

@@ -452,7 +452,7 @@ _EMAIL_DEFAULTS = {
     "smtp_user":     "",
     "smtp_password": "",
     "from_name":     "MOTRIX營運系統",
-    "base_url":      "http://172.16.11.211:666",
+    "base_url":      "http://172.16.10.177:666",
 }
 
 _MASKED = "••••••••"

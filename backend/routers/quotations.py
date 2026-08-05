@@ -96,6 +96,99 @@ def _current_tier_idx(appr: dict) -> int:
     return ct
 
 
+def _exclude_requester(tiers: list, requester: str) -> list:
+    """Drop the requester from tier approver lists — a submitter must never end up
+    required to approve their own quotation. Tiers left with no approvers after
+    removal are dropped entirely so the flow skips straight past them."""
+    if not requester:
+        return tiers
+    result = []
+    for t in tiers:
+        approvers = [a for a in (t.get("approvers") or []) if a.get("username") != requester]
+        if approvers:
+            result.append({**t, "approvers": approvers})
+    return result
+
+
+def _build_approval_tiers_and_notify(q: dict, appr: dict, quote_no: str, is_new_submission: bool) -> dict:
+    """Attach approval tiers built from global settings (requester excluded) if not
+    already present on `appr`, then send approval-request notifications for a
+    first-time submission. Shared by create_quotation() (direct create+submit, no
+    draft step) and update_quotation() (draft → 待審核) so both submission paths
+    build tiers and notify identically."""
+    if not appr.get("tiers") and not appr.get("steps"):
+        flow_setting = _get_setting("approval_flow", {"tiers": []}) or {}
+        active_tiers = _setting_to_active_tiers(flow_setting)
+        requester_uname = appr.get("requestedBy") or ""
+        _before_ct = len(active_tiers)
+        active_tiers = _exclude_requester(active_tiers, requester_uname)
+        if len(active_tiers) != _before_ct:
+            logger.warning("approval tiers self-excluded — quote=%r requester=%r before=%d after=%d",
+                           quote_no, requester_uname, _before_ct, len(active_tiers))
+        logger.warning("approval tiers load — quote=%r is_new=%r flow_tiers=%d active_tiers=%d",
+                       quote_no, is_new_submission, len(flow_setting.get("tiers") or []), len(active_tiers))
+        if active_tiers:
+            appr["tiers"]       = active_tiers
+            appr["currentTier"] = 0
+    else:
+        logger.warning("approval tiers already present — quote=%r tiers_count=%d",
+                       quote_no, len(appr.get("tiers") or appr.get("steps") or []))
+    q["approval"] = appr
+    if is_new_submission:
+        tiers        = _active_tiers(appr)
+        cname        = q.get("customerName") or ""
+        is_revision  = bool(q.get("returnInfo"))
+        if appr.get("isEditApproval"):
+            label = "（解鎖改版）"
+        elif is_revision:
+            label = "（退回改版）"
+        else:
+            label = ""
+        requester = appr.get("requestedBy") or ""
+
+        ct_idx       = appr.get("currentTier", 0)
+        _appr_names  = []   # usernames — for email lookup
+        _appr_labels = []   # display names — for requester confirmation copy
+        if tiers and ct_idx < len(tiers):
+            pending = [a for a in (tiers[ct_idx].get("approvers") or [])
+                       if a.get("status") != "approved"]
+            if ct_idx == 0:
+                msg = f"報價單 {quote_no}{label}（{cname}）需要您簽核"
+                for a in pending:
+                    _notify(a["username"], "approval_request", quote_no, quote_no, msg)
+                    _appr_names.append(a["username"])
+                    _appr_labels.append(a.get("displayName") or a["username"])
+                notify_approval_request(quote_no, cname, _appr_names)
+            else:
+                msg = (f"報價單 {quote_no}{label}（{cname}）"
+                       f"輪到您簽核（第 {ct_idx + 1} 層 / 共 {len(tiers)} 層）")
+                for a in pending:
+                    _notify(a["username"], "approval_request", quote_no, quote_no, msg)
+                    _appr_names.append(a["username"])
+                    _appr_labels.append(a.get("displayName") or a["username"])
+                notify_next_tier(quote_no, cname, ct_idx + 1, len(tiers), _appr_names)
+        elif not tiers:
+            msg = f"報價單 {quote_no}{label}（{cname}）需要您簽核"
+            _conn = get_db()
+            admins = _conn.execute(
+                "SELECT username FROM users WHERE role='superadmin' AND active=1"
+            ).fetchall()
+            _conn.close()
+            for adm in admins:
+                if adm["username"] != requester:
+                    _notify(adm["username"], "approval_request", quote_no, quote_no, msg)
+                    _appr_names.append(adm["username"])
+                    _appr_labels.append(adm["username"])
+            notify_approval_request(quote_no, cname, _appr_names)
+
+        # If this is a resubmission after rejection, also send confirmation to requester
+        if is_revision and requester:
+            orig_no = (q.get("returnInfo") or {}).get("originalQuoteNo") or quote_no
+            notify_resubmit_requester(quote_no, orig_no, cname, requester, _appr_labels)
+
+    return appr
+
+
 # ── Models ────────────────────────────────────────────────────────────────────
 
 class QuotationIn(BaseModel):
@@ -353,6 +446,17 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
             conn.close()
             raise HTTPException(409, "報價單號衝突，請重試")
 
+    # Direct create+submit (new record sent straight to 待審核 with no draft step first)
+    # never goes through update_quotation()'s PUT path, so it needs the same tier-building
+    # + notification logic run here once the final quote_no is known, then persisted.
+    if body.status == "待審核":
+        appr = q.get("approval") or {}
+        appr = _build_approval_tiers_and_notify(q, appr, qno, is_new_submission=True)
+        conn.execute(
+            "UPDATE quotations SET data_json=? WHERE quote_no=?",
+            (json.dumps(q, ensure_ascii=False), qno)
+        )
+
     # Reserve in quote_seq so future peeks don't repeat this number
     seq_no = int(qno.split("-")[-1]) if qno.count("-") == 2 else 0
     if seq_no:
@@ -425,69 +529,7 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
             _chk.close()
             _old_status = (_old["status"] if _old else "草稿")
             is_new_submission = _old_status not in ("待審核", "簽核中")
-        if not appr.get("tiers") and not appr.get("steps"):
-            flow_setting = _get_setting("approval_flow", {"tiers": []}) or {}
-            active_tiers = _setting_to_active_tiers(flow_setting)
-            logger.warning("approval tiers load — quote=%r is_new=%r flow_tiers=%d active_tiers=%d",
-                           quote_no, is_new_submission, len(flow_setting.get("tiers") or []), len(active_tiers))
-            if active_tiers:
-                appr["tiers"]       = active_tiers
-                appr["currentTier"] = 0
-        else:
-            logger.warning("approval tiers already present — quote=%r tiers_count=%d",
-                           quote_no, len(appr.get("tiers") or appr.get("steps") or []))
-        q["approval"] = appr
-        if is_new_submission:
-            tiers        = _active_tiers(appr)
-            cname        = q.get("customerName") or ""
-            is_revision  = bool(q.get("returnInfo"))
-            if appr.get("isEditApproval"):
-                label = "（解鎖改版）"
-            elif is_revision:
-                label = "（退回改版）"
-            else:
-                label = ""
-            requester = appr.get("requestedBy") or ""
-
-            ct_idx       = appr.get("currentTier", 0)
-            _appr_names  = []   # usernames — for email lookup
-            _appr_labels = []   # display names — for requester confirmation copy
-            if tiers and ct_idx < len(tiers):
-                pending = [a for a in (tiers[ct_idx].get("approvers") or [])
-                           if a.get("status") != "approved"]
-                if ct_idx == 0:
-                    msg = f"報價單 {quote_no}{label}（{cname}）需要您簽核"
-                    for a in pending:
-                        _notify(a["username"], "approval_request", quote_no, quote_no, msg)
-                        _appr_names.append(a["username"])
-                        _appr_labels.append(a.get("displayName") or a["username"])
-                    notify_approval_request(quote_no, cname, _appr_names)
-                else:
-                    msg = (f"報價單 {quote_no}{label}（{cname}）"
-                           f"輪到您簽核（第 {ct_idx + 1} 層 / 共 {len(tiers)} 層）")
-                    for a in pending:
-                        _notify(a["username"], "approval_request", quote_no, quote_no, msg)
-                        _appr_names.append(a["username"])
-                        _appr_labels.append(a.get("displayName") or a["username"])
-                    notify_next_tier(quote_no, cname, ct_idx + 1, len(tiers), _appr_names)
-            elif not tiers:
-                msg = f"報價單 {quote_no}{label}（{cname}）需要您簽核"
-                _conn = get_db()
-                admins = _conn.execute(
-                    "SELECT username FROM users WHERE role='superadmin' AND active=1"
-                ).fetchall()
-                _conn.close()
-                for adm in admins:
-                    if adm["username"] != requester:
-                        _notify(adm["username"], "approval_request", quote_no, quote_no, msg)
-                        _appr_names.append(adm["username"])
-                        _appr_labels.append(adm["username"])
-                notify_approval_request(quote_no, cname, _appr_names)
-
-            # If this is a resubmission after rejection, also send confirmation to requester
-            if is_revision and requester:
-                orig_no = (q.get("returnInfo") or {}).get("originalQuoteNo") or quote_no
-                notify_resubmit_requester(quote_no, orig_no, cname, requester, _appr_labels)
+        appr = _build_approval_tiers_and_notify(q, appr, quote_no, is_new_submission)
 
     tot = q.get("tot", {})
     deal_tag, settle_status = quote_hot_fields(q)
@@ -984,6 +1026,10 @@ def approve_quotation(quote_no: str, body: ApprovalActionBody, authorization: st
     tiers = _active_tiers(appr)
     now   = datetime.now().isoformat()
 
+    if appr.get("requestedBy") == user["username"]:
+        conn.close()
+        raise HTTPException(403, "申請人不得自行審核")
+
     if tiers:
         ct_idx = _current_tier_idx(appr)
         if ct_idx >= len(tiers):
@@ -1045,9 +1091,6 @@ def approve_quotation(quote_no: str, body: ApprovalActionBody, authorization: st
         if user["role"] != "superadmin":
             conn.close()
             raise HTTPException(403, "僅超級管理員可執行此操作")
-        if appr.get("requestedBy") == user["username"]:
-            conn.close()
-            raise HTTPException(403, "申請人不得自行審核")
         # If global approval_flow has tiers configured, block the no-tier fallback.
         # This prevents a quotation submitted before flow was set (tiers missing)
         # from being approved without going through the flow.
