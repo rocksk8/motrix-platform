@@ -148,10 +148,38 @@
       </div>
       <div class="field-row" style="grid-column:1/-1">
         <div class="field-label">廠牌 / 型號</div>
-        <input class="field-input" type="text" list="part-brand-options" placeholder="VIGI / C540(4mm) 或 Ubiquiti / U6-Pro" x-model="modal.brand">
-        <datalist id="part-brand-options">
-          <template x-for="b in brandOptions" :key="b"><option :value="b"></option></template>
-        </datalist>
+        <div style="display:flex;gap:8px">
+          <select class="field-input" style="flex:0 0 150px" x-model="modal.brandName">
+            <option value="">選擇廠牌</option>
+            <template x-for="b in brandSelectOptions" :key="b"><option :value="b" x-text="b"></option></template>
+          </select>
+          <input class="field-input" type="text" style="flex:1" placeholder="型號，如 C540(4mm)" x-model="modal.brandModel">
+        </div>
+        <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px;align-items:center">
+          <button type="button" @click="showAddBrand=!showAddBrand"
+                  :style="showAddBrand ? 'border-color:var(--accent);color:var(--accent)' : ''"
+                  style="padding:3px 10px;border-radius:4px;font-size:11px;font-family:var(--font-zh);cursor:pointer;border:1px dashed var(--border-light);background:transparent;color:var(--text-dim);transition:all .12s">
+            ⚙ 管理廠牌
+          </button>
+        </div>
+        <div x-show="showAddBrand" style="margin-top:8px;padding:12px;background:#F8F7F4;border:1px solid var(--border-light);border-radius:var(--radius)">
+          <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px">
+            <template x-for="(b, bi) in brandPresets" :key="b">
+              <span style="background:#fff;border:1px solid var(--border-light);padding:3px 8px;border-radius:4px;font-size:12px;display:inline-flex;align-items:center;gap:5px;font-family:var(--font-zh)">
+                <span x-text="b"></span>
+                <button type="button" @click="removeBrandPreset(bi)"
+                        style="background:none;border:none;cursor:pointer;color:var(--danger);padding:0;font-size:14px;line-height:1;opacity:.8">×</button>
+              </span>
+            </template>
+            <span x-show="brandPresets.length===0" style="font-size:11px;color:var(--text-dim)">尚無預設廠牌，請在下方新增</span>
+          </div>
+          <div style="display:flex;gap:6px">
+            <input type="text" x-model="newBrandPreset" placeholder="輸入新廠牌名稱…"
+                   style="flex:1;padding:6px 10px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;font-family:var(--font-zh);outline:none"
+                   @keydown.enter.prevent="addBrandPreset()">
+            <button type="button" class="btn btn-ghost btn-sm" @click="addBrandPreset()">新增</button>
+          </div>
+        </div>
       </div>
       <div class="field-row">
         <div class="field-label">單位</div>
@@ -191,15 +219,17 @@ function app() {
     stockMap: {},
     search: '',
     filterCat: '',
-    modal: { show: false, id: null, partNo: '', name: '', brand: '', unit: '台', cost: 0, listPrice: 0, category: '', note: '', saving: false, error: '' },
+    modal: { show: false, id: null, partNo: '', name: '', brandName: '', brandModel: '', unit: '台', cost: 0, listPrice: 0, category: '', note: '', saving: false, error: '' },
+    brandPresets: [],
+    showAddBrand: false,
+    newBrandPreset: '',
 
     get categories() {
       return [...new Set(this.items.map(p => p.category).filter(Boolean))].sort()
     },
-    get brandOptions() {
-      const common = ['VIGI', 'Omada', 'UniFi', 'Peplink']
+    get brandSelectOptions() {
       const used = this.items.map(p => (p.brand || '').split('/')[0].trim()).filter(Boolean)
-      return [...new Set([...common, ...used])].sort()
+      return [...new Set([...this.brandPresets, ...used])].sort()
     },
     get filtered() {
       let list = this.items
@@ -222,7 +252,26 @@ function app() {
         if (!r.ok) { location.href = 'login.html'; return }
         const me = await r.json(); this.session.displayName = me.display_name
       } catch {}
+      this.loadBrandPresets()
       await Promise.all([this.load(), this.loadStock(), this.loadCategories()])
+    },
+
+    loadBrandPresets() {
+      try {
+        const raw = localStorage.getItem('motrix_part_brand_presets')
+        this.brandPresets = raw ? JSON.parse(raw) : ['VIGI', 'OMADA', 'UNIFI']
+      } catch { this.brandPresets = ['VIGI', 'OMADA', 'UNIFI'] }
+    },
+    saveBrandPresets() {
+      localStorage.setItem('motrix_part_brand_presets', JSON.stringify(this.brandPresets))
+    },
+    addBrandPreset() {
+      const b = this.newBrandPreset.trim()
+      if (b && !this.brandPresets.includes(b)) { this.brandPresets.push(b); this.saveBrandPresets() }
+      this.newBrandPreset = ''
+    },
+    removeBrandPreset(bi) {
+      this.brandPresets.splice(bi, 1); this.saveBrandPresets()
     },
 
     async loadCategories() {
@@ -255,10 +304,12 @@ function app() {
     stockCount(partNo) { return this.stockMap[partNo] || 0 },
 
     openModal(part) {
+      this.showAddBrand = false
       if (part) {
-        this.modal = { show: true, id: part.id, partNo: part.part_no, name: part.name, brand: part.brand || '', unit: part.unit || '台', cost: part.cost || 0, listPrice: part.list_price || 0, category: part.category || '', note: part.note || '', saving: false, error: '' }
+        const [bn, ...rest] = (part.brand || '').split('/')
+        this.modal = { show: true, id: part.id, partNo: part.part_no, name: part.name, brandName: (bn || '').trim(), brandModel: rest.join('/').trim(), unit: part.unit || '台', cost: part.cost || 0, listPrice: part.list_price || 0, category: part.category || '', note: part.note || '', saving: false, error: '' }
       } else {
-        this.modal = { show: true, id: null, partNo: '', name: '', brand: '', unit: '台', cost: 0, listPrice: 0, category: '', note: '', saving: false, error: '' }
+        this.modal = { show: true, id: null, partNo: '', name: '', brandName: '', brandModel: '', unit: '台', cost: 0, listPrice: 0, category: '', note: '', saving: false, error: '' }
       }
     },
 
@@ -267,7 +318,8 @@ function app() {
       if (!this.modal.id && !this.modal.partNo.trim() && !this.modal.category) { this.modal.error = '請輸入料號，或選擇類別以自動產生'; return }
       if (!this.modal.name.trim())   { this.modal.error = '品名不得為空'; return }
       this.modal.saving = true; this.modal.error = ''
-      const body = { partNo: this.modal.partNo, name: this.modal.name, brand: this.modal.brand, unit: this.modal.unit, cost: this.modal.cost, listPrice: this.modal.listPrice, category: this.modal.category, note: this.modal.note }
+      const brand = [this.modal.brandName, this.modal.brandModel].map(s => (s || '').trim()).filter(Boolean).join(' / ')
+      const body = { partNo: this.modal.partNo, name: this.modal.name, brand, unit: this.modal.unit, cost: this.modal.cost, listPrice: this.modal.listPrice, category: this.modal.category, note: this.modal.note }
       const url  = this.modal.id ? `${API}/parts/${this.modal.id}` : `${API}/parts`
       const meth = this.modal.id ? 'PUT' : 'POST'
       try {

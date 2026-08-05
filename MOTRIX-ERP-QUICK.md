@@ -1,7 +1,7 @@
 # MOTRIX ERP — 開發快速參考
 
 > 允碩整合集創（統編 60575481）｜ Tel: 04-3602-2818 ｜ info@miactw.com  
-> 文件版本：**2026-08-06**（料號廠牌自動完成建議＋供應商資料核對，見 §12）
+> 文件版本：**2026-08-06a**（料號廠牌欄改預設選單＋可手動增加廠牌，見 §12）
 
 ---
 
@@ -822,6 +822,25 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
   middleware 擋下回 401「未登入」，`categoryOptions` 停留在空陣列，下拉選單只剩「未分類」；補上
   `Authorization: Bearer` header 後以 curl 直接比對兩種情境（不帶 header → 401；帶 header → 正確回傳
   6 筆分類清單）確認修復生效。本次未曾複製部署包到正式機，直接在原打包內容上修正、重新打包
+
+### 2026-08-06a — 料號「廠牌」欄改為預設選單（VIGI/OMADA/UNIFI）＋可手動增加廠牌
+
+- **背景**：使用者對 05n 的自動完成（`<input>` + `datalist`）進一步要求：①「廠牌」預設顯示應為
+  VIGI、OMADA、UNIFI（一開啟就看得到，而非要先打字才觸發建議）② 廠牌清單要能手動新增
+- `parts.html`「廠牌 / 型號」欄拆成兩個子欄位（DB 仍是單一 `brand` 欄，前端組合，無 schema
+  變更）：`<select x-model="modal.brandName">`（廠牌，選項來自 `brandSelectOptions`）＋一般文字
+  input `x-model="modal.brandModel"`（型號）；儲存時把兩者 `join(' / ')` 回單一字串，沿用既有
+  「品牌 / 型號」慣例與 `brand` 欄位不變，向下相容既有資料
+- 新增 `brandPresets` 狀態（`localStorage.motrix_part_brand_presets`，預設 `['VIGI','OMADA','UNIFI']`）
+  ＋「⚙ 管理廠牌」摺疊面板，完全比照 `suppliers.html` 既有的 `tagPresets` 管理模式（chip + × 移除 +
+  輸入新增），維持風格一致而非重新發明；`brandSelectOptions` getter 併入 `brandPresets` 與既有料號
+  已使用過的廠牌（取 `/` 前半段），去重排序
+- `openModal()` 編輯既有料號時，把儲存的 `brand` 字串依第一個 `/` 拆回 `brandName`/`brandModel`
+  兩個子欄位（無 `/` 則整串落入 `brandModel`，不強制對應到某個廠牌選項，避免資料被誤改）
+- **驗證**：`node --check` 確認內嵌 script 語法正確；demo 帳號瀏覽器實測「新增料號」Modal：廠牌下拉
+  預設即顯示 VIGI/OMADA/UNIFI 三個選項（不需先打字）；點「管理廠牌」展開面板，輸入新廠牌名稱按
+  「新增」正確加入 chip 並持久化到 localStorage；選擇廠牌＋輸入型號＋儲存後，列表正確顯示組合後的
+  「廠牌 / 型號」字串；測試新增的臨時廠牌與測試料號皆已清除還原（demo db 下次登入也會自動清空）
 
 ### 2026-08-06 — 料號「廠牌」欄新增品牌自動完成建議＋供應商資料核對
 
