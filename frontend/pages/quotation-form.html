@@ -573,13 +573,13 @@
       background: var(--black);
       color: var(--white);
       padding: 8px 10px;
-      text-align: left;
+      text-align: center;
       font-size: 11px;
       font-weight: 500;
     }
-    .pdf-items td { padding: 8px 10px; border-bottom: 1px solid #E8E5DF; font-size: 12px; }
+    .pdf-items td { padding: 8px 10px; border-bottom: 1px solid #E8E5DF; font-size: 12px; text-align: center; }
     .pdf-items tr:last-child td { border-bottom: none; }
-    .pdf-items td.r { text-align: right; font-family: 'LINE Seed TW_OTF', sans-serif; }
+    .pdf-items td.r { text-align: center; font-family: 'LINE Seed TW_OTF', sans-serif; }
     .pdf-totals { max-width: 300px; margin-left: auto; border: 1px solid #E8E5DF; border-radius: 4px; overflow: hidden; }
     .pdf-total-row { display: flex; justify-content: space-between; padding: 7px 12px; border-bottom: 1px solid #F0EEE9; font-size: 12px; }
     .pdf-total-row:last-child { border-bottom: none; font-weight: 700; font-size: 14px; background: #F8F7F4; }
@@ -2038,7 +2038,7 @@
   const API = '/api'
   // ── 報價單模板版本：本頁（quotation-form.html）或其邏輯有任何改動都須遞增 ──
   // ── 小改版（欄位微調/樣式/文案）+0.1；大改版（版型結構/新增區塊/流程變更）+1 ──
-  const FORM_VERSION = 'V1.5'
+  const FORM_VERSION = 'V1.6'
 
   function quotationForm() {
     return {
@@ -2616,9 +2616,9 @@
   .pdf-meta-label{color:#888;min-width:80px;flex-shrink:0}
   .pdf-meta-val{color:#0A0A0A;font-weight:500}
   .pdf-items{width:100%;border-collapse:collapse;margin-bottom:16px}
-  .pdf-items th{background:#0A0A0A;color:#F5F4F0;padding:8px 10px;text-align:left;font-size:11px;font-weight:500}
-  .pdf-items th.r,.pdf-items td.r{text-align:right;font-family:LINE Seed TW_OTF, sans-serif}
-  .pdf-items td{padding:8px 10px;border-bottom:1px solid #E8E5DF;font-size:12px}
+  .pdf-items th{background:#0A0A0A;color:#F5F4F0;padding:8px 10px;text-align:center;font-size:11px;font-weight:500}
+  .pdf-items th.r,.pdf-items td.r{text-align:center;font-family:LINE Seed TW_OTF, sans-serif}
+  .pdf-items td{padding:8px 10px;border-bottom:1px solid #E8E5DF;font-size:12px;text-align:center}
   .pdf-items tr:last-child td{border-bottom:none}
   .pdf-items tbody tr:nth-child(even) td{background:#FAFAF8}
   .pdf-totals{max-width:300px;margin-left:auto;border:1px solid #E8E5DF;border-radius:4px;overflow:hidden}

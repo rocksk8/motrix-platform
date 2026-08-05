@@ -1,7 +1,7 @@
 # MOTRIX ERP — 開發快速參考
 
 > 允碩整合集創（統編 60575481）｜ Tel: 04-3602-2818 ｜ info@miactw.com  
-> 文件版本：**2026-08-05e**（報價單單位欄下拉建議／欄寬／備註欄自動隱藏／品項明細全面置中／數量欄自動撐寬，見 §12）
+> 文件版本：**2026-08-05f**（報價單品項明細置中對齊已同步套用至編輯頁／預覽彈窗／正式匯出 PDF，見 §12）
 
 ---
 
@@ -790,6 +790,33 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 ## §12 · 變更摘要（最新兩版）
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
+
+### 2026-08-05f — 品項明細置中對齊同步套用至預覽彈窗與正式匯出 PDF
+
+- **背景**：05e 只把「置中對齊」套用在報價單編輯頁的品項明細表格；使用者接著詢問「輸出的PDF是否
+  項目明細也有套用置中」，實際檢查發現「預覽報價單」彈窗與 `directExport()` 走後端 Edge Headless
+  產生的正式匯出 PDF 都還是舊的靠左/靠右混合對齊，三處排版不一致；已用 `AskUserQuestion` 確認
+  使用者要三處統一改為置中
+- **範圍**：品項明細渲染實際有三條路徑，缺一不可：① 編輯頁 `.items-table`（05e 已完成，作為
+  對齊基準）② 預覽彈窗＋瀏覽器列印共用同一份 Alpine 渲染的 `#pdf-preview-content` DOM，但被
+  **兩份不同的 CSS `<style>` 定義**分別套用——頁面本身內嵌 `<style>` 給螢幕預覽用
+  （`quotation-form.html:572-582`）與 `_buildPrintWin()` 組出的 iframe `<style>` 給實際列印/轉
+  PDF 用（`quotation-form.html:2619-2621`），兩份都要同步改，缺一個畫面會不一致 ③ 正式匯出 PDF
+  （`directExport()` → 後端 `/pdf-download`）：`backend/pdf_gen.py` 的 `_build_quote_html()`
+  （42-370 行）用無 class 的通用選擇器（`table`/`thead th`/`tbody td`/`td.r`，150-164 行）；
+  刻意只改這個函式，不觸碰同檔案裡各自獨立 `<style>` 的 `_build_shipping_html()`（出貨單）與
+  `_build_payslip_html()`（勞報單），因為使用者只提到報價單
+- **修法**：三處作法一致，只改 CSS、不動任何 HTML `class="r"` 標記——`th`／`td` 預設
+  `text-align:left` 改成 `center`；原本讓數量/成本單價/毛利率/售價/金額靠右的 `.r`／`th.r`／
+  `td.r` 規則，`text-align:right` 同樣改成 `center`（`font-family` 等其餘樣式不動）。「報價合計」
+  金額摘要（`.pdf-totals`／`.totals` 系列 div）是獨立於 `<table>` 之外的區塊，不受影響、自然
+  維持靠右，與編輯頁處理方式一致，不需額外排除邏輯
+- **驗證**：`python -m py_compile pdf_gen.py` 語法正確；直接呼叫 `_build_quote_html()`
+  （外部版／內部版）字串比對確認 `thead th`／`th.r`／`td.r`／`tbody td` 皆已改為
+  `text-align:center`，且 `_build_shipping_html()` 原始碼仍保留 `text-align:right`（確認未被
+  誤改）；瀏覽器實測「預覽報價單」彈窗，品項明細表頭與資料（# / 品名規格說明 / 廠牌型號 / 數量 /
+  單位 / 單價 / 金額）全部置中，下方報價合計金額摘要仍維持靠右，console 無錯誤；
+  FORM_VERSION V1.5 → V1.6
 
 ### 2026-08-05e — 品項明細數量欄破千裁字修復＋表格對齊方式改為全面置中
 
