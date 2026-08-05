@@ -374,6 +374,7 @@
                             style="margin-top:3px;font-size:10px;padding:2px 4px;width:100%">
                       <option value="pretax">未稅</option>
                       <option value="taxed">含稅5%</option>
+                      <option value="taxed_gross">含稅5%（自動加總）</option>
                     </select>
                   </td>
                   <td class="col-actual" style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-weight:600">
@@ -381,6 +382,10 @@
                     <template x-if="item.actualCostTaxMode === 'taxed' && item.actualTotalCost > 0">
                       <div style="font-size:9px;color:var(--text-dim);font-weight:400"
                            x-text="'原含稅 NT$ ' + fmt(Math.round((item.actualQty||0) * (item.actualUnitCost||0)))"></div>
+                    </template>
+                    <template x-if="item.actualCostTaxMode === 'taxed_gross' && item.actualTotalCost > 0">
+                      <div style="font-size:9px;color:var(--text-dim);font-weight:400"
+                           x-text="'原未稅 NT$ ' + fmt(Math.round((item.actualQty||0) * (item.actualUnitCost||0)))"></div>
                     </template>
                   </td>
 
@@ -946,8 +951,15 @@ function settlementPage() {
 
     calcItemCost(item) {
       const raw = Math.round((item.actualQty || 0) * (item.actualUnitCost || 0))
-      // 含稅5%：供應商發票金額已含稅，扣掉稅額換算回未稅，與報價稅前收入同一基準才能正確比毛利
-      item.actualTotalCost = item.actualCostTaxMode === 'taxed' ? Math.round(raw / 1.05) : raw
+      if (item.actualCostTaxMode === 'taxed') {
+        // 含稅5%：供應商發票金額已含稅，扣掉稅額換算回未稅，與報價稅前收入同一基準才能正確比毛利
+        item.actualTotalCost = Math.round(raw / 1.05)
+      } else if (item.actualCostTaxMode === 'taxed_gross') {
+        // 含稅5%（自動加總）：填的是未稅底價，稅金無法扣抵、屬實際支出，加總5%計入真實成本
+        item.actualTotalCost = Math.round(raw * 1.05)
+      } else {
+        item.actualTotalCost = raw
+      }
     },
 
     calcExtraCost(ex) {
