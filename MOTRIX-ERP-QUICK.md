@@ -816,6 +816,12 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
   產生 `CCTV-001`；未填分類且未填料號正確回 400「請輸入料號，或選擇有對應前綴的類別以自動產生」；
   手動指定 `partNo`（`MANUAL-001`）仍可覆蓋自動產生正常運作。以直接讀取正式機 db 檔案確認上述測試
   寫入完全沒有進入 `motrix_erp.db`（demo 隔離機制對此變更仍生效正常）
+- **修正**：使用者實測回報「類別是空的」——`parts.html` 的 `loadCategories()` 呼叫 `GET
+  /api/parts/categories` 沒帶 `Authorization` header，而 `main.py` 全域 middleware 對所有 `/api/**`
+  一律要求 Bearer token（僅 `/api/ping`／`/api/auth/login`／`/api/auth/logout` 白名單），該請求因此被
+  middleware 擋下回 401「未登入」，`categoryOptions` 停留在空陣列，下拉選單只剩「未分類」；補上
+  `Authorization: Bearer` header 後以 curl 直接比對兩種情境（不帶 header → 401；帶 header → 正確回傳
+  6 筆分類清單）確認修復生效。本次未曾複製部署包到正式機，直接在原打包內容上修正、重新打包
 
 ### 2026-08-05m — 序號級庫存管理 Phase B／C（出貨單核准自動扣庫存＋設備登載自動扣/還庫存）
 

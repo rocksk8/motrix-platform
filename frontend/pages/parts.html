@@ -219,7 +219,7 @@ function app() {
 
     async loadCategories() {
       try {
-        const r = await fetch(`${API}/parts/categories`)
+        const r = await fetch(`${API}/parts/categories`, { headers: { Authorization: 'Bearer ' + this.session.token } })
         if (r.ok) { const d = await r.json(); this.categoryOptions = d.items || [] }
       } catch {}
     },
