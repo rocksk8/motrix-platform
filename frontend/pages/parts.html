@@ -148,7 +148,10 @@
       </div>
       <div class="field-row" style="grid-column:1/-1">
         <div class="field-label">廠牌 / 型號</div>
-        <input class="field-input" type="text" placeholder="Ubiquiti / U6-Pro" x-model="modal.brand">
+        <input class="field-input" type="text" list="part-brand-options" placeholder="VIGI / C540(4mm) 或 Ubiquiti / U6-Pro" x-model="modal.brand">
+        <datalist id="part-brand-options">
+          <template x-for="b in brandOptions" :key="b"><option :value="b"></option></template>
+        </datalist>
       </div>
       <div class="field-row">
         <div class="field-label">單位</div>
@@ -192,6 +195,11 @@ function app() {
 
     get categories() {
       return [...new Set(this.items.map(p => p.category).filter(Boolean))].sort()
+    },
+    get brandOptions() {
+      const common = ['VIGI', 'Omada', 'UniFi', 'Peplink']
+      const used = this.items.map(p => (p.brand || '').split('/')[0].trim()).filter(Boolean)
+      return [...new Set([...common, ...used])].sort()
     },
     get filtered() {
       let list = this.items

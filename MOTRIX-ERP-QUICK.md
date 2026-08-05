@@ -1,7 +1,7 @@
 # MOTRIX ERP — 開發快速參考
 
 > 允碩整合集創（統編 60575481）｜ Tel: 04-3602-2818 ｜ info@miactw.com  
-> 文件版本：**2026-08-05n**（料號可依分類自動產生，見 §12）
+> 文件版本：**2026-08-06**（料號廠牌自動完成建議＋供應商資料核對，見 §12）
 
 ---
 
@@ -822,6 +822,28 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
   middleware 擋下回 401「未登入」，`categoryOptions` 停留在空陣列，下拉選單只剩「未分類」；補上
   `Authorization: Bearer` header 後以 curl 直接比對兩種情境（不帶 header → 401；帶 header → 正確回傳
   6 筆分類清單）確認修復生效。本次未曾複製部署包到正式機，直接在原打包內容上修正、重新打包
+
+### 2026-08-06 — 料號「廠牌」欄新增品牌自動完成建議＋供應商資料核對
+
+- **背景**：使用者要求新增供應商 VIGI／Omada／UniFi／Peplink（過往詢問過的品牌）「並修改料號做對應」。
+  查證發現 `motrix_erp.db` 的 `suppliers` 表已是**真實廠商資料**（21 筆有統編/聯絡人的實際公司，非測試
+  資料），且 Omada 其實已有對應廠商——`S-202607-003`「聯洲國際有限公司」（網站 omadanetworks.com/tw、
+  聯絡人 email @tp-link.com，已標「原廠」），因此改為與使用者逐項核對而非直接捏造新公司記錄
+- 用 `AskUserQuestion` 確認：① VIGI 與 Omada 同屬聯洲國際在賣 → 於該筆 `data_json.tags` 加上
+  `"VIGI"` 標籤（原 `tags` 為空陣列）② UniFi／Peplink 目前 21 筆裡無對應公司，使用者將自行在系統內
+  建立（有實際代理商資料時處理起來比我用佔位資料建立更準確）
+- 供應商資料修改前**先手動快照** `motrix_erp.db` 至 `backend/db_backups/manual/`（因是直接改真實業務
+  資料且非透過 API，無法觸發應用程式既有的 `_backup_suppliers()` 自動備份），才用 Python 直接
+  read-modify-write `data_json`，只動 `tags` 陣列與 `updated_at`，其餘欄位（統編/聯絡人/合約條件等）
+  逐一比對修改前後完全未變動
+- `parts.html`：料號「廠牌 / 型號」欄由純自由輸入文字，改為比照 `quotation-form.html` 既有的
+  `<input list>` + `<datalist>` 自動完成模式（非固定下拉，仍可自由輸入任意品牌）；建議清單新增
+  `brandOptions` getter，固定包含 `VIGI`/`Omada`/`UniFi`/`Peplink` 四個品牌，再併入目前已存在料號的
+  廠牌（取 `/` 前半段，即品牌名稱），去重排序後供自動完成使用
+- **驗證**：`node --check` 確認 `parts.html` 內嵌 script 語法正確；直接讀 db 比對 `S-202607-003` 修改
+  前後除 `tags`／`updated_at` 外所有欄位（`name`/`tax_id`/`phone`/`contacts`/`category` 等）皆逐一相符
+  未被誤動。尚未部署至正式機（無 DB migration，`parts.html` 屬前端純檔案異動，供應商資料為本機資料
+  異動，不隨程式碼部署包搬移，正式機若需要同筆修改需另行在正式機介面手動操作）
 
 ### 2026-08-05m — 序號級庫存管理 Phase B／C（出貨單核准自動扣庫存＋設備登載自動扣/還庫存）
 
