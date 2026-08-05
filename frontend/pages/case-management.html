@@ -680,7 +680,9 @@
                           <div style="position:relative">
                             <span style="position:absolute;left:6px;top:50%;transform:translateY(-50%);font-size:10px;color:var(--text-dim);pointer-events:none;font-family:LINE Seed TW_OTF, sans-serif">NT$</span>
                             <input class="fi" type="number" min="0" step="1"
-                                   :value="itemAmountWithTax(idx)"
+                                   :value="itemAmountReceivable(idx)"
+                                   :disabled="item.taxExempt"
+                                   :title="item.taxExempt ? '已沖銷免稅，金額已下修為未稅價，不可再手動編輯' : ''"
                                    @change="onAmountWithTaxChange(idx, +$event.target.value)"
                                    style="padding-left:30px;text-align:right;font-size:12px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-primary);width:100%">
                           </div>
@@ -691,6 +693,8 @@
                             <span style="position:absolute;left:6px;top:50%;transform:translateY(-50%);font-size:10px;color:var(--text-dim);pointer-events:none;font-family:LINE Seed TW_OTF, sans-serif">NT$</span>
                             <input class="fi" type="number" min="0" step="1"
                                    :value="itemAmountPretax(idx)"
+                                   :disabled="item.taxExempt"
+                                   :title="item.taxExempt ? '已沖銷免稅，稅額歸零，未稅價即實收金額' : ''"
                                    @change="onAmountPretaxChange(idx, +$event.target.value)"
                                    style="padding-left:30px;text-align:right;font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-secondary);width:100%">
                           </div>
@@ -735,7 +739,7 @@
                           <div style="position:relative">
                             <span style="position:absolute;left:6px;top:50%;transform:translateY(-50%);font-size:10px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif">NT$</span>
                             <input class="fi fi--sm" type="number" min="0"
-                                   :placeholder="itemAmountWithTax(idx)"
+                                   :placeholder="itemAmountReceivable(idx)"
                                    x-model.number="item.actualAmount"
                                    @input="setDirty()"
                                    style="padding-left:30px;font-family:LINE Seed TW_OTF, sans-serif">

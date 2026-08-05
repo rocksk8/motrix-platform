@@ -402,9 +402,9 @@ function app() {
       return Math.round(this.totalWithTax() * (+items[idx]?.pct || 0) / 100)
     },
 
+    // 未稅原價：不受沖銷影響，永遠是該筆款項依報價單稅率換算的未稅基準
     itemAmountPretax(idx) {
       const items  = this.paymentItems()
-      if (items[idx]?.taxExempt) return this.itemAmountWithTax(idx)
       const total  = this.totalWithTax()
       const pretax = this.totalPretax()
       if (items[idx]?.amount != null && total > 0)
@@ -412,7 +412,16 @@ function app() {
       return Math.round(pretax * (+items[idx]?.pct || 0) / 100)
     },
 
-    itemAmountTax(idx) { return this.itemAmountWithTax(idx) - this.itemAmountPretax(idx) },
+    itemAmountTax(idx) {
+      if (this.paymentItems()[idx]?.taxExempt) return 0
+      return this.itemAmountWithTax(idx) - this.itemAmountPretax(idx)
+    },
+
+    // 該筆款項實際應收／已收金額：已核准沖銷免稅 → 客戶只付未稅價，稅額不再收取
+    itemAmountReceivable(idx) {
+      const items = this.paymentItems()
+      return items[idx]?.taxExempt ? this.itemAmountPretax(idx) : this.itemAmountWithTax(idx)
+    },
 
     _setItemAmount(items, idx, withTax) {
       // 規範值：直接存含稅整數，pct 作為百分比 input 顯示用
@@ -487,7 +496,7 @@ function app() {
     },
 
     receivedTotal() {
-      return this.paymentItems().reduce((s, p, i) => p.received ? s + this.itemAmountWithTax(i) : s, 0)
+      return this.paymentItems().reduce((s, p, i) => p.received ? s + this.itemAmountReceivable(i) : s, 0)
     },
     receivedPct() {
       return this.paymentItems().reduce((s, p) => p.received ? s + (+p.pct || 0) : s, 0)
@@ -498,11 +507,13 @@ function app() {
     netReceivedTotal() {
       return this.paymentItems().reduce((s, p, i) => {
         if (!p.received) return s
-        const base = p.actualAmount != null ? +p.actualAmount : this.itemAmountWithTax(i)
+        const base = p.actualAmount != null ? +p.actualAmount : this.itemAmountReceivable(i)
         return s + base - (+p.feeAmount || 0)
       }, 0)
     },
-    outstandingTotal() { return Math.max(0, this.totalWithTax() - this.receivedTotal()) },
+    outstandingTotal() {
+      return Math.max(0, this.paymentItems().reduce((s, p, i) => p.received ? s : s + this.itemAmountReceivable(i), 0))
+    },
     outstandingPct()   { return Math.max(0, 100 - this.receivedPct()) },
 
     addPaymentItem() {
