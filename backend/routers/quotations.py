@@ -446,17 +446,6 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
             conn.close()
             raise HTTPException(409, "報價單號衝突，請重試")
 
-    # Direct create+submit (new record sent straight to 待審核 with no draft step first)
-    # never goes through update_quotation()'s PUT path, so it needs the same tier-building
-    # + notification logic run here once the final quote_no is known, then persisted.
-    if body.status == "待審核":
-        appr = q.get("approval") or {}
-        appr = _build_approval_tiers_and_notify(q, appr, qno, is_new_submission=True)
-        conn.execute(
-            "UPDATE quotations SET data_json=? WHERE quote_no=?",
-            (json.dumps(q, ensure_ascii=False), qno)
-        )
-
     # Reserve in quote_seq so future peeks don't repeat this number
     seq_no = int(qno.split("-")[-1]) if qno.count("-") == 2 else 0
     if seq_no:
@@ -467,6 +456,26 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
         )
     conn.commit()
     conn.close()
+
+    # Direct create+submit (new record sent straight to 待審核 with no draft step first)
+    # never goes through update_quotation()'s PUT path, so it needs the same tier-building
+    # + notification logic run here once the final quote_no is known. Must run AFTER the
+    # INSERT above is committed and its connection closed: _build_approval_tiers_and_notify()
+    # calls _notify(), which opens its own separate connection to write+commit — doing that
+    # while this function's own `conn` still held an uncommitted write transaction open
+    # self-deadlocked SQLite's single writer (each connection blocks the other until
+    # busy_timeout, silently dropping the notification) during pre-deploy testing.
+    if body.status == "待審核":
+        appr = q.get("approval") or {}
+        appr = _build_approval_tiers_and_notify(q, appr, qno, is_new_submission=True)
+        _conn2 = get_db()
+        _conn2.execute(
+            "UPDATE quotations SET data_json=? WHERE quote_no=?",
+            (json.dumps(q, ensure_ascii=False), qno)
+        )
+        _conn2.commit()
+        _conn2.close()
+
     spawn_bg_thread(_backup_quotation, args=(qno,))
     _audit(_tok(authorization), 'quotation.create', 'quotation', qno, f"{qno}（{q.get('customerName','')}）")
     notify_module_activity("報價單", "建立", body.created_by or "",
