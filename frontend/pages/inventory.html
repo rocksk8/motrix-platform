@@ -155,16 +155,21 @@
                  @focus="intake.showPartDrop=true"
                  @input="intake.showPartDrop=true; if(!intake.partSearch) intake.partNo=''">
           <div x-show="intake.showPartDrop"
-               style="position:absolute;z-index:200;left:0;right:0;top:calc(100% + 2px);background:#fff;border:1px solid var(--border-light);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.10);max-height:220px;overflow-y:auto">
-            <template x-for="pt in intakePartSuggestions" :key="pt.part_no">
-              <div @click="selectIntakePart(pt)"
-                   :style="pt.part_no===intake.partNo?'background:#EFF6FF':''"
-                   style="padding:8px 12px;cursor:pointer;font-size:12px;border-bottom:1px solid #F3F4F6">
-                <div style="font-weight:600;color:var(--accent);font-family:LINE Seed TW_OTF, sans-serif" x-text="pt.part_no"></div>
-                <div style="color:var(--text-secondary);margin-top:1px" x-text="pt.name + (pt.brand ? '　·　' + pt.brand : '') + (pt.category ? '　·　' + pt.category : '')"></div>
+               style="position:absolute;z-index:200;left:0;right:0;top:calc(100% + 2px);background:#fff;border:1px solid var(--border-light);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.10);max-height:280px;overflow-y:auto">
+            <template x-for="grp in intakePartGroups" :key="grp.brand">
+              <div>
+                <div style="position:sticky;top:0;padding:5px 12px;font-size:10px;font-weight:700;letter-spacing:.04em;color:var(--text-dim);background:#FAFAF8;font-family:LINE Seed TW_OTF, sans-serif" x-text="grp.brand"></div>
+                <template x-for="pt in grp.parts" :key="pt.part_no">
+                  <div @click="selectIntakePart(pt)"
+                       :style="pt.part_no===intake.partNo?'background:#EFF6FF':''"
+                       style="padding:8px 12px;cursor:pointer;font-size:12px;border-bottom:1px solid #F3F4F6">
+                    <div style="font-weight:600;color:var(--accent);font-family:LINE Seed TW_OTF, sans-serif" x-text="pt.part_no"></div>
+                    <div style="color:var(--text-secondary);margin-top:1px" x-text="pt.name + (pt.category ? '　·　' + pt.category : '')"></div>
+                  </div>
+                </template>
               </div>
             </template>
-            <div x-show="intakePartSuggestions.length===0" style="padding:12px;font-size:12px;color:var(--text-dim);text-align:center">查無符合的料號</div>
+            <div x-show="intakePartGroups.length===0" style="padding:12px;font-size:12px;color:var(--text-dim);text-align:center">查無符合的料號</div>
           </div>
         </div>
         <div x-show="intake.partNo" style="margin-top:5px;font-size:11px;color:#16803D;display:flex;align-items:center;gap:4px">
@@ -282,7 +287,7 @@ function app() {
     get totalStockValue() {
       return this.filtered.reduce((sum, p) => sum + (p.inStockValue || 0), 0)
     },
-    get intakePartSuggestions() {
+    get intakePartGroups() {
       const q = (this.intake.partSearch || '').trim().toLowerCase()
       let list = this.parts
       if (q) list = list.filter(p =>
@@ -291,7 +296,14 @@ function app() {
         (p.brand||'').toLowerCase().includes(q) ||
         (p.category||'').toLowerCase().includes(q)
       )
-      return list.slice(0, 50)
+      list = list.slice(0, 60)
+      const groups = {}
+      for (const p of list) {
+        const brand = (p.brand || '').split('/')[0].trim() || '未標示廠牌'
+        if (!groups[brand]) groups[brand] = []
+        groups[brand].push(p)
+      }
+      return Object.keys(groups).sort().map(brand => ({ brand, parts: groups[brand] }))
     },
 
     async init() {
