@@ -59,13 +59,13 @@
         <span class="search-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg></span>
         <input class="search-input" type="search" placeholder="搜尋料號 / 品名 / 廠牌…" x-model="search">
       </div>
-      <select style="padding:7px 10px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;font-family:var(--font-zh);outline:none" x-model="filterCat">
+      <select class="filter-select" style="padding:7px 10px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;font-family:var(--font-zh);outline:none" x-model="filterCat">
         <option value="">全部類別</option>
         <template x-for="c in categories" :key="c"><option :value="c" x-text="c"></option></template>
       </select>
       <div style="margin-left:auto;font-size:12px;color:var(--text-dim)" x-text="filtered.length + ' 項料號'"></div>
       <button class="btn btn-primary" @click="openModal(null)">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v16m8-8H4"/></svg>
         新增料號
       </button>
     </div>
@@ -127,7 +127,7 @@
 </div>
 
 <!-- 新增/編輯 Modal -->
-<div class="modal-overlay" x-show="modal.show" @click.self="modal.show=false">
+<div class="modal-overlay" x-show="modal.show" @click.self="closeModal()">
   <div class="modal-box" @click.stop>
     <div class="modal-title" x-text="modal.id ? '編輯料號' : '新增料號'"></div>
     <div class="form-grid">
@@ -200,7 +200,7 @@
     </div>
     <div x-show="modal.error" style="color:var(--danger);font-size:12px;margin-top:8px" x-text="modal.error"></div>
     <div class="modal-footer">
-      <button class="btn btn-ghost" @click="modal.show=false">取消</button>
+      <button class="btn btn-ghost" @click="closeModal()">取消</button>
       <button class="btn btn-primary" @click="savePart()" :disabled="modal.saving">
         <span x-text="modal.saving ? '儲存中…' : '儲存'"></span>
       </button>
@@ -305,12 +305,19 @@ function app() {
 
     openModal(part) {
       this.showAddBrand = false
+      window.motrixIsDirty = false
       if (part) {
         const [bn, ...rest] = (part.brand || '').split('/')
         this.modal = { show: true, id: part.id, partNo: part.part_no, name: part.name, brandName: (bn || '').trim(), brandModel: rest.join('/').trim(), unit: part.unit || '台', cost: part.cost || 0, listPrice: part.list_price || 0, category: part.category || '', note: part.note || '', saving: false, error: '' }
       } else {
         this.modal = { show: true, id: null, partNo: '', name: '', brandName: '', brandModel: '', unit: '台', cost: 0, listPrice: 0, category: '', note: '', saving: false, error: '' }
       }
+    },
+
+    closeModal() {
+      if (window.motrixIsDirty && !confirm('您有尚未儲存的輸入內容\n\n確定要放棄變更並關閉嗎？')) return
+      window.motrixIsDirty = false
+      this.modal.show = false
     },
 
     async savePart() {

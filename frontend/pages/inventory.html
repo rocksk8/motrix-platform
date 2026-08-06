@@ -69,13 +69,16 @@
         <span class="search-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg></span>
         <input class="search-input" type="search" placeholder="搜尋料號 / 品名 / 廠牌…" x-model="search">
       </div>
-      <select style="padding:7px 10px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;font-family:var(--font-zh);outline:none" x-model="filterCat">
+      <select class="filter-select" style="padding:7px 10px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;font-family:var(--font-zh);outline:none" x-model="filterCat">
         <option value="">全部類別</option>
         <template x-for="c in categories" :key="c"><option :value="c" x-text="c"></option></template>
       </select>
-      <div style="margin-left:auto;font-size:12px;color:var(--text-dim)" x-text="filtered.length + ' 項料號'"></div>
+      <div style="margin-left:auto;font-size:12px;color:var(--text-dim);display:flex;align-items:center;gap:14px">
+        <span x-text="filtered.length + ' 項料號'"></span>
+        <span>庫存總金額：<strong style="color:var(--text-primary);font-family:LINE Seed TW_OTF, sans-serif" x-text="'NT$ ' + Math.round(totalStockValue).toLocaleString()"></strong></span>
+      </div>
       <button class="btn btn-primary" @click="openIntakeModal()">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v16m8-8H4"/></svg>
         進貨
       </button>
     </div>
@@ -93,6 +96,8 @@
                 <th>廠牌/型號</th>
                 <th>類別</th>
                 <th style="text-align:right">在庫</th>
+                <th style="text-align:right">在庫金額</th>
+                <th>最近入庫</th>
                 <th style="text-align:right">已出貨</th>
                 <th style="text-align:right">已登載</th>
                 <th style="text-align:right">報廢</th>
@@ -110,6 +115,8 @@
                     <span x-show="!p.category" style="color:var(--text-dim)">—</span>
                   </td>
                   <td style="text-align:right"><span class="stock-badge" :class="p.inStockCount > 0 ? 'ok' : 'zero'" x-text="p.inStockCount"></span></td>
+                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-size:12px;color:var(--text-secondary)" x-text="p.inStockValue ? 'NT$ ' + Math.round(p.inStockValue).toLocaleString() : '—'"></td>
+                  <td style="font-size:11px;color:var(--text-dim)" x-text="fmtDateTime(p.lastInAt)"></td>
                   <td style="text-align:right;font-size:12px;color:var(--text-secondary)" x-text="p.shippedCount"></td>
                   <td style="text-align:right;font-size:12px;color:var(--text-secondary)" x-text="p.installedCount"></td>
                   <td style="text-align:right;font-size:12px;color:var(--text-dim)" x-text="p.voidCount"></td>
@@ -134,18 +141,35 @@
 </div>
 
 <!-- 進貨 Modal -->
-<div class="modal-overlay" x-show="intake.show" @click.self="intake.show=false" x-cloak>
+<div class="modal-overlay" x-show="intake.show" @click.self="closeIntakeModal()" x-cloak>
   <div class="modal-box" @click.stop>
     <div class="modal-title">進貨（建立庫存批次）</div>
     <div class="form-grid">
       <div class="field-row" style="grid-column:1/-1">
         <div class="field-label">料號 <span style="color:var(--danger)">*</span></div>
-        <select class="field-input" x-model="intake.partNo" @change="onIntakePartChange()">
-          <option value="">請選擇料號</option>
-          <template x-for="pt in parts" :key="pt.part_no">
-            <option :value="pt.part_no" x-text="pt.part_no + '　' + pt.name"></option>
-          </template>
-        </select>
+        <div class="search-wrap" style="flex:none;width:100%;position:relative" @click.outside="intake.showPartDrop=false">
+          <span class="search-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg></span>
+          <input class="search-input" type="search" style="padding-left:34px"
+                 placeholder="搜尋料號 / 品名 / 廠牌 / 類別…" autocomplete="off"
+                 x-model="intake.partSearch"
+                 @focus="intake.showPartDrop=true"
+                 @input="intake.showPartDrop=true; if(!intake.partSearch) intake.partNo=''">
+          <div x-show="intake.showPartDrop"
+               style="position:absolute;z-index:200;left:0;right:0;top:calc(100% + 2px);background:#fff;border:1px solid var(--border-light);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.10);max-height:220px;overflow-y:auto">
+            <template x-for="pt in intakePartSuggestions" :key="pt.part_no">
+              <div @click="selectIntakePart(pt)"
+                   :style="pt.part_no===intake.partNo?'background:#EFF6FF':''"
+                   style="padding:8px 12px;cursor:pointer;font-size:12px;border-bottom:1px solid #F3F4F6">
+                <div style="font-weight:600;color:var(--accent);font-family:LINE Seed TW_OTF, sans-serif" x-text="pt.part_no"></div>
+                <div style="color:var(--text-secondary);margin-top:1px" x-text="pt.name + (pt.brand ? '　·　' + pt.brand : '') + (pt.category ? '　·　' + pt.category : '')"></div>
+              </div>
+            </template>
+            <div x-show="intakePartSuggestions.length===0" style="padding:12px;font-size:12px;color:var(--text-dim);text-align:center">查無符合的料號</div>
+          </div>
+        </div>
+        <div x-show="intake.partNo" style="margin-top:5px;font-size:11px;color:#16803D;display:flex;align-items:center;gap:4px">
+          <span>✓ 已選擇：</span><span x-text="intake.partNo" style="font-weight:600;font-family:LINE Seed TW_OTF, sans-serif"></span>
+        </div>
       </div>
       <div class="field-row">
         <div class="field-label">數量</div>
@@ -173,7 +197,7 @@
 
     <div x-show="intake.error" style="color:var(--danger);font-size:12px;margin-top:12px" x-text="intake.error"></div>
     <div class="modal-footer">
-      <button class="btn btn-ghost" @click="intake.show=false">取消</button>
+      <button class="btn btn-ghost" @click="closeIntakeModal()">取消</button>
       <button class="btn btn-primary" @click="saveIntake()" :disabled="intake.saving">
         <span x-text="intake.saving ? '儲存中…' : '建立批次'"></span>
       </button>
@@ -196,7 +220,7 @@
     <template x-if="!detail.loading">
       <div>
         <table class="data-table" x-show="detailFiltered.length > 0">
-          <thead><tr><th>序號</th><th>MAC</th><th>狀態</th><th>批次</th><th>關聯</th><th>操作</th></tr></thead>
+          <thead><tr><th>序號</th><th>MAC</th><th>狀態</th><th>批次</th><th>入庫時間</th><th>關聯</th><th>操作</th></tr></thead>
           <tbody>
             <template x-for="it in detailFiltered" :key="it.id">
               <tr>
@@ -204,6 +228,7 @@
                 <td style="font-size:12px;color:var(--text-dim)" x-text="it.mac || '—'"></td>
                 <td><span class="status-chip" :class="it.status" x-text="statusLabel(it.status)"></span></td>
                 <td style="font-size:11px;color:var(--text-dim)" x-text="it.batch_no || '—'"></td>
+                <td style="font-size:11px;color:var(--text-dim)" x-text="fmtDateTime(it.created_at)"></td>
                 <td style="font-size:11px;color:var(--text-dim)" x-text="it.shipping_note_no || it.quote_no || '—'"></td>
                 <td style="white-space:nowrap">
                   <button class="action-btn ghost" x-show="it.status!=='void'" @click="adjustItem(it, 'void')">報廢</button>
@@ -233,7 +258,7 @@ function app() {
     parts: [],
     search: '',
     filterCat: '',
-    intake: { show: false, partNo: '', qty: 1, cost: null, note: '', serials: [{serial_no:'',mac:''}], saving: false, error: '' },
+    intake: { show: false, partNo: '', partSearch: '', showPartDrop: false, qty: 1, cost: null, note: '', serials: [{serial_no:'',mac:''}], saving: false, error: '' },
     detail: { show: false, partNo: '', items: [], loading: false, filterStatus: '' },
 
     get categories() {
@@ -253,6 +278,20 @@ function app() {
     get detailFiltered() {
       if (!this.detail.filterStatus) return this.detail.items
       return this.detail.items.filter(it => it.status === this.detail.filterStatus)
+    },
+    get totalStockValue() {
+      return this.filtered.reduce((sum, p) => sum + (p.inStockValue || 0), 0)
+    },
+    get intakePartSuggestions() {
+      const q = (this.intake.partSearch || '').trim().toLowerCase()
+      let list = this.parts
+      if (q) list = list.filter(p =>
+        (p.part_no||'').toLowerCase().includes(q) ||
+        (p.name||'').toLowerCase().includes(q) ||
+        (p.brand||'').toLowerCase().includes(q) ||
+        (p.category||'').toLowerCase().includes(q)
+      )
+      return list.slice(0, 50)
     },
 
     async init() {
@@ -286,9 +325,26 @@ function app() {
     statusLabel(s) {
       return { in_stock: '在庫', shipped: '已出貨', installed: '已登載', void: '報廢' }[s] || s
     },
+    fmtDateTime(iso) {
+      if (!iso) return '—'
+      return iso.slice(0,16).replace('T',' ')
+    },
 
     openIntakeModal() {
-      this.intake = { show: true, partNo: '', qty: 1, cost: null, note: '', serials: [{serial_no:'',mac:''}], saving: false, error: '' }
+      window.motrixIsDirty = false
+      this.intake = { show: true, partNo: '', partSearch: '', showPartDrop: false, qty: 1, cost: null, note: '', serials: [{serial_no:'',mac:''}], saving: false, error: '' }
+    },
+    closeIntakeModal() {
+      if (window.motrixIsDirty && !confirm('您有尚未儲存的輸入內容\n\n確定要放棄變更並關閉嗎？')) return
+      window.motrixIsDirty = false
+      this.intake.show = false
+    },
+    selectIntakePart(pt) {
+      this.intake.partNo = pt.part_no
+      this.intake.partSearch = pt.part_no + '　' + pt.name
+      this.intake.showPartDrop = false
+      window.motrixIsDirty = true
+      this.onIntakePartChange()
     },
     onIntakePartChange() {
       const pt = this.parts.find(p => p.part_no === this.intake.partNo)

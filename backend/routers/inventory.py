@@ -31,13 +31,20 @@ def parts_summary(q: Optional[str] = None, category: Optional[str] = None, autho
     conn = get_db()
     parts_rows = conn.execute("SELECT part_no, name, brand, unit, category FROM parts WHERE active=1").fetchall()
     counts = conn.execute(
-        "SELECT part_no, status, COUNT(*) AS cnt FROM stock_items GROUP BY part_no, status"
+        "SELECT part_no, status, COUNT(*) AS cnt, SUM(cost) AS cost_sum, MAX(created_at) AS last_in "
+        "FROM stock_items GROUP BY part_no, status"
     ).fetchall()
     conn.close()
 
     by_part: dict = {}
     for c in counts:
-        by_part.setdefault(c["part_no"], {}).__setitem__(c["status"], c["cnt"])
+        by_part.setdefault(c["part_no"], {})[c["status"]] = {
+            "cnt": c["cnt"], "cost_sum": c["cost_sum"] or 0, "last_in": c["last_in"] or ""
+        }
+
+    def _stats(st, status):
+        s = st.get(status, {})
+        return s.get("cnt", 0), s.get("cost_sum", 0)
 
     result = []
     for p in parts_rows:
@@ -47,11 +54,17 @@ def parts_summary(q: Optional[str] = None, category: Optional[str] = None, autho
         if category and d.get("category", "") != category:
             continue
         st = by_part.get(d["part_no"], {})
+        in_cnt, in_value = _stats(st, "in_stock")
+        shipped_cnt, _ = _stats(st, "shipped")
+        installed_cnt, _ = _stats(st, "installed")
+        void_cnt, _ = _stats(st, "void")
         d.update({
-            "inStockCount":   st.get("in_stock", 0),
-            "shippedCount":   st.get("shipped", 0),
-            "installedCount": st.get("installed", 0),
-            "voidCount":      st.get("void", 0),
+            "inStockCount":   in_cnt,
+            "inStockValue":   in_value,
+            "shippedCount":   shipped_cnt,
+            "installedCount": installed_cnt,
+            "voidCount":      void_cnt,
+            "lastInAt":       st.get("in_stock", {}).get("last_in", ""),
         })
         result.append(d)
     # 也列出僅存在庫存、目前不在 parts 目錄的料號（避免資料孤兒不可見）
@@ -59,12 +72,18 @@ def parts_summary(q: Optional[str] = None, category: Optional[str] = None, autho
     orphan_parts = {c["part_no"] for c in counts if c["part_no"] not in known}
     for pn in orphan_parts:
         st = by_part.get(pn, {})
+        in_cnt, in_value = _stats(st, "in_stock")
+        shipped_cnt, _ = _stats(st, "shipped")
+        installed_cnt, _ = _stats(st, "installed")
+        void_cnt, _ = _stats(st, "void")
         result.append({
             "part_no": pn, "name": "", "brand": "", "unit": "", "category": "",
-            "inStockCount":   st.get("in_stock", 0),
-            "shippedCount":   st.get("shipped", 0),
-            "installedCount": st.get("installed", 0),
-            "voidCount":      st.get("void", 0),
+            "inStockCount":   in_cnt,
+            "inStockValue":   in_value,
+            "shippedCount":   shipped_cnt,
+            "installedCount": installed_cnt,
+            "voidCount":      void_cnt,
+            "lastInAt":       st.get("in_stock", {}).get("last_in", ""),
         })
     return {"items": result}
 
