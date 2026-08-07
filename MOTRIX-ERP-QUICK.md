@@ -708,6 +708,9 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
 
 ## §8 · 備份與還原
 
+> 整台正式機硬體故障時的完整重建流程，見獨立文件 [`DR-SOP.md`](DR-SOP.md)（2026-08-07 新增）。
+> 這裡的 §8.1–§8.4 是日常備份機制；DR-SOP.md 是「機器掛了怎麼辦」的實際操作步驟。
+
 ### §8.1 · 路徑
 
 ```
