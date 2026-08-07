@@ -784,18 +784,27 @@ def delete_quotation(quote_no: str, authorization: str = Header(None)):
     return {"ok": True}
 
 
-def _sync_device_stock(conn, quote_no: str, old_devices: list, new_devices: list, user: dict):
+def _sync_device_stock(conn, quote_no: str, old_devices: list, new_devices: list, user: dict) -> list:
     """設備登載 devices[] 的序號若對應到庫存序號，隨案件資料整包存檔一併同步扣/還庫存。
 
     devices[] 沒有獨立端點（addDevice/removeDevice/onMaterialArrived/syncMaterialsToDevices 四處
     都是純前端陣列操作，見 case-management.js），所以在這裡對新舊陣列做序號 diff，而不是新增專屬
-    端點——現有設備多半沒有對應庫存來源，找不到就略過，不擋存檔。與出貨單核准（Phase B）是各自獨
-    立的扣庫存來源，並非要求先出貨才能登載。
+    端點——現有設備多半沒有對應庫存來源，序號在 stock_items 裡完全找不到就略過，不擋存檔。與出貨單
+    核准（Phase B）是各自獨立的扣庫存來源，並非要求先出貨才能登載。
+
+    但序號如果「有」對應到 stock_items、只是狀態不是 in_stock（例如已經被出貨單核准扣成
+    shipped、或已經被別的案件登載成 installed）——這不是「這序號沒有庫存來源」，而是這序號已經
+    被別處認領了。這種情況不能比照「完全找不到」一樣悄悄放過，否則案件記錄顯示已登載、庫存系統
+    卻卡在別的狀態，兩邊會無聲分岔且沒有人知道。這裡不擋存檔（維持原本「不擋」的設計），但會把
+    這些衝突收集起來回傳給呼叫端，由 API 回應告知前端。
+
+    回傳：衝突清單 [{sn, deviceId, stockStatus}]。
     """
     now   = datetime.now().isoformat()
     actor = user.get("display_name") or user["username"]
     old_by_id = {d.get("id"): d for d in old_devices if d.get("id") is not None}
     new_by_id = {d.get("id"): d for d in new_devices if d.get("id") is not None}
+    conflicts = []
 
     for did, dev in new_by_id.items():
         sn = (dev.get("sn") or "").strip()
@@ -803,14 +812,18 @@ def _sync_device_stock(conn, quote_no: str, old_devices: list, new_devices: list
         if not sn or sn == old_sn:
             continue
         srow = conn.execute(
-            "SELECT id FROM stock_items WHERE serial_no=? AND status='in_stock' ORDER BY id LIMIT 1", (sn,)
+            "SELECT id, status FROM stock_items WHERE serial_no=? ORDER BY id LIMIT 1", (sn,)
         ).fetchone()
-        if srow:
-            conn.execute("""
-                UPDATE stock_items
-                SET status='installed', quote_no=?, case_device_id=?, consumed_at=?, consumed_by=?, updated_at=?
-                WHERE id=?
-            """, (quote_no, str(did), now, actor, now, srow["id"]))
+        if not srow:
+            continue  # 序號不在庫存系統裡追蹤，維持原本不擋存檔的行為
+        if srow["status"] != "in_stock":
+            conflicts.append({"sn": sn, "deviceId": str(did), "stockStatus": srow["status"]})
+            continue
+        conn.execute("""
+            UPDATE stock_items
+            SET status='installed', quote_no=?, case_device_id=?, consumed_at=?, consumed_by=?, updated_at=?
+            WHERE id=?
+        """, (quote_no, str(did), now, actor, now, srow["id"]))
 
     for did, old_dev in old_by_id.items():
         old_sn = (old_dev.get("sn") or "").strip()
@@ -822,6 +835,8 @@ def _sync_device_stock(conn, quote_no: str, old_devices: list, new_devices: list
             SET status='in_stock', quote_no='', case_device_id='', consumed_at='', consumed_by='', updated_at=?
             WHERE serial_no=? AND status='installed' AND case_device_id=?
         """, (now, old_sn, str(did)))
+
+    return conflicts
 
 
 @router.patch("/api/quotations/{quote_no}/case-record")
@@ -845,14 +860,15 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
     old_devices = (data.get("caseRecord") or {}).get("devices") or []
     new_devices = (body.case_record or {}).get("devices") or []
     data["caseRecord"] = body.case_record or {}
+    stock_conflicts = []
     if new_devices != old_devices:
-        _sync_device_stock(conn, quote_no, old_devices, new_devices, user)
+        stock_conflicts = _sync_device_stock(conn, quote_no, old_devices, new_devices, user)
     now = save_quotation_json(conn, quote_no, data)
     conn.commit()
     conn.close()
     spawn_bg_thread(_backup_quotation, args=(quote_no,))
     _audit(_tok(authorization), 'case.update', 'quotation', quote_no, label)
-    return {"ok": True, "updated_at": now}
+    return {"ok": True, "updated_at": now, "stockConflicts": stock_conflicts}
 
 
 @router.post("/api/quotations/{quote_no}/export")

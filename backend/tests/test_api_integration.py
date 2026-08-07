@@ -260,3 +260,81 @@ def test_put_quotation_cannot_smuggle_deal_tag_change(client, make_user):
     assert stored.get("dealTag", "") == "", "PUT let a smuggled dealTag through into data_json"
     assert stored.get("settlement", {}).get("status", "") == "", \
         "PUT let a smuggled settlement.status through into data_json"
+
+
+# ── case-record device/stock sync (regression for silent shipped-serial skip) ─
+
+def _make_stock_item(part_no, serial_no, status="in_stock"):
+    import db
+    conn = db.get_db()
+    try:
+        conn.execute(
+            "INSERT INTO stock_items (part_no, serial_no, status, created_at, updated_at) "
+            "VALUES (?,?,?,?,?)",
+            (part_no, serial_no, status, "2026-01-01T00:00:00", "2026-01-01T00:00:00"),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def test_device_install_flips_in_stock_serial_to_installed(client, make_user):
+    username, password = make_user(role="admin")
+    token = _login(client, username, password)
+    _make_quotation("MQ-TEST-005")
+    _make_stock_item("NET-001", "SN-AVAILABLE")
+
+    r = client.patch(
+        "/api/quotations/MQ-TEST-005/case-record", headers=_auth(token),
+        json={"case_record": {"devices": [{"id": 1, "sn": "SN-AVAILABLE"}]}},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["stockConflicts"] == []
+
+    import db
+    conn = db.get_db()
+    row = conn.execute("SELECT status, quote_no FROM stock_items WHERE serial_no='SN-AVAILABLE'").fetchone()
+    conn.close()
+    assert row["status"] == "installed"
+    assert row["quote_no"] == "MQ-TEST-005"
+
+
+def test_device_install_reports_conflict_for_already_shipped_serial(client, make_user):
+    """Regression: a serial that's already 'shipped' elsewhere must not be silently
+    skipped as if it were untracked — the case-record save should surface the
+    conflict, and stock_items must NOT be flipped to 'installed' underneath it."""
+    username, password = make_user(role="admin")
+    token = _login(client, username, password)
+    _make_quotation("MQ-TEST-006")
+    _make_stock_item("NET-002", "SN-ALREADY-SHIPPED", status="shipped")
+
+    r = client.patch(
+        "/api/quotations/MQ-TEST-006/case-record", headers=_auth(token),
+        json={"case_record": {"devices": [{"id": 1, "sn": "SN-ALREADY-SHIPPED"}]}},
+    )
+    assert r.status_code == 200, r.text
+    conflicts = r.json()["stockConflicts"]
+    assert len(conflicts) == 1
+    assert conflicts[0]["sn"] == "SN-ALREADY-SHIPPED"
+    assert conflicts[0]["stockStatus"] == "shipped"
+
+    import db
+    conn = db.get_db()
+    row = conn.execute("SELECT status FROM stock_items WHERE serial_no='SN-ALREADY-SHIPPED'").fetchone()
+    conn.close()
+    assert row["status"] == "shipped", "conflicting serial must not be silently flipped to installed"
+
+
+def test_device_install_skips_untracked_serial_without_conflict(client, make_user):
+    """A serial with no stock_items record at all is the common case (most devices
+    aren't stock-tracked) — must stay a silent no-op, not a conflict."""
+    username, password = make_user(role="admin")
+    token = _login(client, username, password)
+    _make_quotation("MQ-TEST-007")
+
+    r = client.patch(
+        "/api/quotations/MQ-TEST-007/case-record", headers=_auth(token),
+        json={"case_record": {"devices": [{"id": 1, "sn": "SN-NEVER-TRACKED"}]}},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["stockConflicts"] == []

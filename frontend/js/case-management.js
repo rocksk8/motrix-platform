@@ -566,9 +566,18 @@ function app() {
         })
         if (r.ok) {
           this.dirty = false
-          this.saveStatus = 'saved'
-          this.saveMsg = '已儲存'
-          setTimeout(() => { if (!this.dirty) { this.saveStatus = ''; this.saveMsg = '' } }, 2000)
+          const res = await r.json().catch(() => ({}))
+          const conflicts = res.stockConflicts || []
+          if (conflicts.length) {
+            // 序號已登載到案件，但庫存系統裡這些序號其實卡在別的狀態（已出貨/已安裝於
+            // 別案件等）——不擋存檔，但要讓使用者看到，不然庫存跟案件記錄會無聲分岔
+            this.saveStatus = 'dirty'
+            this.saveMsg = `已儲存，但 ${conflicts.length} 個序號庫存狀態衝突（${conflicts.map(c => c.sn + ':' + c.stockStatus).join('、')}）`
+          } else {
+            this.saveStatus = 'saved'
+            this.saveMsg = '已儲存'
+            setTimeout(() => { if (!this.dirty) { this.saveStatus = ''; this.saveMsg = '' } }, 2000)
+          }
         } else {
           this.saveStatus = 'error'
           this.saveMsg = '儲存失敗'
