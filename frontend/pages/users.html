@@ -458,16 +458,32 @@
         </div>
         <div class="form-group">
           <label class="form-label">存取模組</label>
-          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
-            <template x-for="mod in allModules" :key="mod.key">
-              <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:12px;padding:5px 10px;border:1px solid var(--border-light);border-radius:4px;background:#fff"
-                     :style="form.modules.includes(mod.key) ? 'border-color:var(--accent);background:var(--accent-light);color:var(--accent)' : ''">
-                <input type="checkbox" style="display:none"
-                       :checked="form.modules.includes(mod.key)"
-                       @change="toggleModule(mod.key)">
-                <span x-text="form.modules.includes(mod.key) ? '✓ ' : ''"></span>
-                <span x-text="mod.label"></span>
-              </label>
+          <div style="margin-top:6px;border:1px solid var(--border-light);border-radius:6px;overflow:hidden">
+            <template x-for="(grp, grpIdx) in moduleGroups" :key="grp.group">
+              <div :style="grpIdx > 0 ? 'border-top:1px solid var(--border-light)' : ''">
+                <div @click="toggleModGroup(grp.group)"
+                     style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;cursor:pointer;background:var(--bg-secondary,#fafafa);font-size:12px;font-weight:600">
+                  <span style="display:flex;align-items:center;gap:6px">
+                    <span x-text="_modGroupOpen[grp.group] ? '▾' : '▸'" style="color:var(--text-dim);width:10px;display:inline-block"></span>
+                    <span x-text="grp.group"></span>
+                  </span>
+                  <span style="font-size:11px;color:var(--text-dim);font-weight:400"
+                        x-text="modGroupSelectedCount(grp.mods) + ' / ' + grp.mods.length"></span>
+                </div>
+                <div x-show="_modGroupOpen[grp.group]" x-cloak
+                     style="display:flex;gap:6px;flex-wrap:wrap;padding:8px 10px">
+                  <template x-for="mod in grp.mods" :key="mod.key">
+                    <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:12px;padding:5px 10px;border:1px solid var(--border-light);border-radius:4px;background:#fff"
+                           :style="form.modules.includes(mod.key) ? 'border-color:var(--accent);background:var(--accent-light);color:var(--accent)' : ''">
+                      <input type="checkbox" style="display:none"
+                             :checked="form.modules.includes(mod.key)"
+                             @change="toggleModule(mod.key)">
+                      <span x-text="form.modules.includes(mod.key) ? '✓ ' : ''"></span>
+                      <span x-text="mod.label"></span>
+                    </label>
+                  </template>
+                </div>
+              </div>
             </template>
           </div>
         </div>
@@ -569,16 +585,32 @@
               套用基礎角色預設
             </button>
           </div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap">
-            <template x-for="mod in allModules" :key="mod.key">
-              <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:12px;padding:5px 10px;border:1px solid var(--border-light);border-radius:4px;background:#fff"
-                     :style="crForm.modules.includes(mod.key) ? 'border-color:var(--accent);background:var(--accent-light);color:var(--accent)' : ''">
-                <input type="checkbox" style="display:none"
-                       :checked="crForm.modules.includes(mod.key)"
-                       @change="toggleCrModule(mod.key)">
-                <span x-text="crForm.modules.includes(mod.key) ? '✓ ' : ''"></span>
-                <span x-text="mod.label"></span>
-              </label>
+          <div style="border:1px solid var(--border-light);border-radius:6px;overflow:hidden">
+            <template x-for="(grp, grpIdx) in moduleGroups" :key="grp.group">
+              <div :style="grpIdx > 0 ? 'border-top:1px solid var(--border-light)' : ''">
+                <div @click="toggleCrModGroup(grp.group)"
+                     style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;cursor:pointer;background:var(--bg-secondary,#fafafa);font-size:12px;font-weight:600">
+                  <span style="display:flex;align-items:center;gap:6px">
+                    <span x-text="_crModGroupOpen[grp.group] ? '▾' : '▸'" style="color:var(--text-dim);width:10px;display:inline-block"></span>
+                    <span x-text="grp.group"></span>
+                  </span>
+                  <span style="font-size:11px;color:var(--text-dim);font-weight:400"
+                        x-text="crModGroupSelectedCount(grp.mods) + ' / ' + grp.mods.length"></span>
+                </div>
+                <div x-show="_crModGroupOpen[grp.group]" x-cloak
+                     style="display:flex;gap:6px;flex-wrap:wrap;padding:8px 10px">
+                  <template x-for="mod in grp.mods" :key="mod.key">
+                    <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:12px;padding:5px 10px;border:1px solid var(--border-light);border-radius:4px;background:#fff"
+                           :style="crForm.modules.includes(mod.key) ? 'border-color:var(--accent);background:var(--accent-light);color:var(--accent)' : ''">
+                      <input type="checkbox" style="display:none"
+                             :checked="crForm.modules.includes(mod.key)"
+                             @change="toggleCrModule(mod.key)">
+                      <span x-text="crForm.modules.includes(mod.key) ? '✓ ' : ''"></span>
+                      <span x-text="mod.label"></span>
+                    </label>
+                  </template>
+                </div>
+              </div>
             </template>
           </div>
         </div>
@@ -614,8 +646,10 @@
       showModal: false,
       editingId: null,
       formError: '',
+      _modGroupOpen: {},    // 存取模組手風琴展開狀態（編輯使用者 Modal）
       showCrModal: false,
       crForm: { editId: null, name: '', baseRole: 'sales', modules: [] },
+      _crModGroupOpen: {},  // 存取模組手風琴展開狀態（自訂角色 Modal）
       form: { username:'', displayName:'', email:'', phone:'', role:'sales', password:'', confirmPassword:'', modules:[], unlockPassword:'', confirmUnlockPassword:'', dtPassword:'', confirmDtPassword:'' },
       get systemPresets() {
         return [
@@ -656,6 +690,25 @@
 
       get isSuperAdmin() { return this.session.role === 'superadmin' },
 
+      // 存取模組依大項（group）分組——原本 25 個 chip 攤平一次全顯示，改成
+      // 手風琴分組後只需展開有在意的大項，減少一次要掃過的數量
+      get moduleGroups() {
+        const order = [], map = {}
+        for (const m of this.allModules) {
+          if (!map[m.group]) { map[m.group] = []; order.push(m.group) }
+          map[m.group].push(m)
+        }
+        return order.map(g => ({ group: g, mods: map[g] }))
+      },
+
+      _initGroupOpenState(selectedMods) {
+        const open = {}
+        for (const { group, mods } of this.moduleGroups) {
+          open[group] = mods.some(m => selectedMods.includes(m.key))
+        }
+        return open
+      },
+
       _headers() {
         return {
           'Content-Type':  'application/json',
@@ -679,16 +732,19 @@
 
       applyRoleDefaults() {
         this.form.modules = [...(ROLE_MODULES[this.form.role] || [])]
+        this._modGroupOpen = this._initGroupOpenState(this.form.modules)
       },
 
       applyPreset(key) {
         this.form.role    = key
         this.form.modules = [...(ROLE_MODULES[key] || [])]
+        this._modGroupOpen = this._initGroupOpenState(this.form.modules)
       },
 
       applyCustomRole(cr) {
         this.form.role    = cr.baseRole
         this.form.modules = [...(cr.modules || [])]
+        this._modGroupOpen = this._initGroupOpenState(this.form.modules)
       },
 
       get activePresetKey() {
@@ -706,6 +762,22 @@
         const idx = this.form.modules.indexOf(key)
         if (idx >= 0) this.form.modules.splice(idx, 1)
         else           this.form.modules.push(key)
+      },
+
+      toggleModGroup(group) {
+        this._modGroupOpen[group] = !this._modGroupOpen[group]
+      },
+
+      toggleCrModGroup(group) {
+        this._crModGroupOpen[group] = !this._crModGroupOpen[group]
+      },
+
+      modGroupSelectedCount(mods) {
+        return mods.filter(m => this.form.modules.includes(m.key)).length
+      },
+
+      crModGroupSelectedCount(mods) {
+        return mods.filter(m => this.crForm.modules.includes(m.key)).length
       },
 
       // ── Custom role management ──────────────────────────────────────────────
@@ -739,11 +811,13 @@
 
       openCrCreate() {
         this.crForm = { editId: null, name: '', baseRole: 'sales', modules: [...ROLE_MODULES.sales] }
+        this._crModGroupOpen = this._initGroupOpenState(this.crForm.modules)
         this.showCrModal = true
       },
 
       openCrEdit(cr) {
         this.crForm = { editId: cr.id, name: cr.name, baseRole: cr.baseRole, modules: [...(cr.modules || [])] }
+        this._crModGroupOpen = this._initGroupOpenState(this.crForm.modules)
         this.showCrModal = true
       },
 
@@ -751,6 +825,7 @@
 
       applyCrBaseRole() {
         this.crForm.modules = [...(ROLE_MODULES[this.crForm.baseRole] || [])]
+        this._crModGroupOpen = this._initGroupOpenState(this.crForm.modules)
       },
 
       toggleCrModule(key) {
@@ -792,6 +867,7 @@
                       password:'', confirmPassword:'', modules: [...ROLE_MODULES.sales],
                       unlockPassword:'', confirmUnlockPassword:'', dtPassword:'', confirmDtPassword:'' }
         this.formError = ''
+        this._modGroupOpen = this._initGroupOpenState(this.form.modules)
         this.showModal = true
       },
 
@@ -813,6 +889,7 @@
           confirmDtPassword:      '',
         }
         this.formError = ''
+        this._modGroupOpen = this._initGroupOpenState(this.form.modules)
         this.showModal = true
       },
 
