@@ -1,4 +1,4 @@
-# MOTRIX ERP — Windows 工作排程器每日備份設定
+﻿# MOTRIX ERP — Windows 工作排程器每日備份設定
 # 執行：powershell -ExecutionPolicy Bypass -File setup_backup_task.ps1
 
 $TaskName = "MOTRIX ERP Daily Backup"
