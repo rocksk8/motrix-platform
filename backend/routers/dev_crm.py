@@ -508,16 +508,22 @@ def mark_converted(
             raise HTTPException(404, "案件不存在")
         if not _can_access_case(user, row):
             raise HTTPException(403, "無權限修改此案件")
+        quote_no = body.quote_no.strip()
+        # quotations 跟 dev_cases 之間沒有 FK 約束，寫入前先確認單號真的存在——
+        # 否則之後這張報價單被刪掉（或單號打錯字從沒對應過任何單），
+        # converted_quote_no 就是一個從一開始就沒有意義的懸空參照。
+        if not conn.execute("SELECT 1 FROM quotations WHERE quote_no=?", (quote_no,)).fetchone():
+            raise HTTPException(400, f"報價單 {quote_no} 不存在，無法連結")
         conn.execute(
             "UPDATE dev_cases SET converted_quote_no=?, status='成案', updated_at=? WHERE id=?",
-            (body.quote_no.strip(), now, case_id),
+            (quote_no, now, case_id),
         )
         conn.commit()
         updated = conn.execute("SELECT * FROM dev_cases WHERE id=?", (case_id,)).fetchone()
         _audit(_tok(authorization), "dev_case.convert", "dev_case",
-               str(case_id), f"{row['case_name']} → {body.quote_no}")
+               str(case_id), f"{row['case_name']} → {quote_no}")
         notify_module_activity("業務開發", "轉建報價單", user.get("display_name") or user["username"],
-                                f"{row['case_name']} → {body.quote_no}", "dev-crm.html")
+                                f"{row['case_name']} → {quote_no}", "dev-crm.html")
         return _case_row(updated, _user_map(conn))
     finally:
         conn.close()

@@ -2869,7 +2869,13 @@ window.addEventListener('load',function(){
       async loadQuote() {
         const res = await fetch(`${this.API}/quotations/${encodeURIComponent(this.q.quoteNo)}`,
           { headers: { Authorization: 'Bearer ' + this.session.token } })
-        if (!res.ok) return
+        if (!res.ok) {
+          if (res.status === 401) { this.logout(); return }
+          this.toast(res.status === 404
+            ? '找不到此報價單，可能已被刪除或單號有誤'
+            : '報價單載入失敗，請確認後端伺服器連線')
+          return
+        }
         const row = await res.json()
         Object.assign(this.q, row.data)
         this.q.quoteNo = row.data.quoteNo || this.q.quoteNo

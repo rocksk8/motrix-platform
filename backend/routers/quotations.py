@@ -781,11 +781,26 @@ def delete_quotation(quote_no: str, authorization: str = Header(None)):
         raise HTTPException(403, f"只有草稿狀態的報價單可以刪除（目前狀態：{row['status']}）")
     cname = row['customer_name'] or ''
     conn.execute("DELETE FROM quotations WHERE quote_no=?", (quote_no,))
+    # dev_cases 跟 quotations 之間沒有 FK——刪除前先找出所有轉建連結指到這張單的
+    # 業務開發案件，清空連結並退回「洽談中」，避免懸空參照（converted_quote_no
+    # 指向一張已經不存在的報價單）
+    orphaned = conn.execute(
+        "SELECT id, case_name FROM dev_cases WHERE converted_quote_no=?", (quote_no,)
+    ).fetchall()
+    if orphaned:
+        conn.execute(
+            "UPDATE dev_cases SET converted_quote_no='', status='洽談中', updated_at=? "
+            "WHERE converted_quote_no=?",
+            (datetime.now().isoformat(), quote_no),
+        )
     conn.commit()
     conn.close()
     _purge_notifications(quote_no, ['approval_request', 'approval_returned',
                                      'approval_rejected', 'case_stage_deadline'])
     _audit(_tok(authorization), 'quotation.delete', 'quotation', quote_no, f"{quote_no}（{cname}）")
+    for c in orphaned:
+        _audit(_tok(authorization), 'dev_case.unlink_deleted_quote', 'dev_case', str(c['id']),
+               f"{c['case_name']}：連結的報價單 {quote_no} 已刪除，自動解除連結")
     notify_module_activity("報價單", "刪除", user.get("display_name") or user["username"],
                             f"{quote_no}（{cname}）", "quotations.html")
     return {"ok": True}

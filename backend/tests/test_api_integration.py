@@ -607,3 +607,52 @@ def test_put_quotation_without_expected_updated_at_still_works(client, make_user
         },
     )
     assert r.status_code == 200, r.text
+
+
+# ── dev_case ↔ quotation link integrity (#7 low risk) ────────────────────────
+
+def test_mark_converted_rejects_nonexistent_quote_no(client, make_user):
+    username, password = make_user(role="admin")
+    token = _login(client, username, password)
+    r = client.post("/api/dev-cases", headers=_auth(token),
+                     json={"case_name": "測試連結案件", "customer_name": "", "status": "洽談中"})
+    case_id = r.json()["id"]
+
+    r = client.patch(f"/api/dev-cases/{case_id}/convert", headers=_auth(token),
+                      json={"quote_no": "MQ-NOT-EXIST-001"})
+    assert r.status_code == 400, r.text
+
+
+def test_mark_converted_accepts_existing_quote_no(client, make_user):
+    username, password = make_user(role="admin")
+    token = _login(client, username, password)
+    _make_quotation("MQ-TEST-020")
+    r = client.post("/api/dev-cases", headers=_auth(token),
+                     json={"case_name": "測試連結案件2", "customer_name": "", "status": "洽談中"})
+    case_id = r.json()["id"]
+
+    r = client.patch(f"/api/dev-cases/{case_id}/convert", headers=_auth(token),
+                      json={"quote_no": "MQ-TEST-020"})
+    assert r.status_code == 200, r.text
+    assert r.json()["convertedQuoteNo"] == "MQ-TEST-020"
+    assert r.json()["status"] == "成案"
+
+
+def test_delete_quotation_clears_orphaned_dev_case_link(client, make_user):
+    username, password = make_user(role="superadmin")
+    token = _login(client, username, password)
+    _make_quotation("MQ-TEST-021", status="草稿")
+    r = client.post("/api/dev-cases", headers=_auth(token),
+                     json={"case_name": "測試孤兒連結案件", "customer_name": "", "status": "洽談中"})
+    case_id = r.json()["id"]
+    r = client.patch(f"/api/dev-cases/{case_id}/convert", headers=_auth(token),
+                      json={"quote_no": "MQ-TEST-021"})
+    assert r.status_code == 200, r.text
+
+    r = client.delete("/api/quotations/MQ-TEST-021", headers=_auth(token))
+    assert r.status_code == 200, r.text
+
+    r = client.get(f"/api/dev-cases/{case_id}", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert r.json()["convertedQuoteNo"] == ""
+    assert r.json()["status"] == "洽談中"
