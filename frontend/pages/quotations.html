@@ -548,23 +548,6 @@
         setTimeout(() => el.remove(), 2500)
       },
 
-      fmtDate(iso) {
-        if (!iso) return ''
-        const d = new Date(iso)
-        const now = new Date()
-        const diff = (now - d) / 1000
-        if (diff < 3600)  return Math.floor(diff / 60) + ' 分鐘前'
-        if (diff < 86400) return Math.floor(diff / 3600) + ' 小時前'
-        return d.toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' })
-      },
-
-      fmtDateFull(iso) {
-        if (!iso) return ''
-        const d = new Date(iso)
-        return d.toLocaleDateString('zh-TW', { year: 'numeric', month: '2-digit', day: '2-digit' }) + ' ' +
-               d.toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })
-      },
-
       logout() {
         fetch('/api/auth/logout', { method:'POST', headers:{ Authorization:'Bearer '+(this.session.token||'') } }).catch(()=>{})
         localStorage.removeItem('motrix_session'); window.location.href = 'login.html'

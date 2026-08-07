@@ -1627,12 +1627,6 @@ function app() {
       this.serialPicker.show = false
     },
 
-    clearSerialLink(idx) {
-      const it = this.shippingForm.items[idx]
-      delete it.part_no
-      delete it.serials
-    },
-
     async saveShippingNote() {
       this.shippingSaving = true; this.shippingMsg = ''
       const body = {
@@ -1847,10 +1841,6 @@ function app() {
 
     _dispatchGrandTotal() {
       return this._dispatchTotalWithTax() + this._dispatchPersonnelTotal()
-    },
-
-    _dispatchStatusLabel(s) {
-      return { draft: '草稿', sent: '已送出', confirmed: '已確認', pending_acceptance: '待驗收', accepted: '已驗收', completed: '完工', cancelled: '已取消' }[s] || s
     },
 
     _dispatchLabel(d) {

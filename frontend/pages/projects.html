@@ -1053,11 +1053,6 @@
         return { 'Content-Type':'application/json', 'Authorization':'Bearer '+this.session.token }
       },
 
-      canSee(mod) {
-        const m = this.session.modules || []
-        return m.includes(mod) || this.session.role === 'superadmin'
-      },
-
       canManage() {
         const m = this.session.modules || []
         return m.includes('project_manage') || this.session.role === 'superadmin' || this.session.role === 'admin'

@@ -252,24 +252,6 @@ def list_dev_cases(
         conn.close()
 
 
-@router.get("/dev-cases/pending-deletes")
-def list_pending_dev_deletes(authorization: str = Header("")):
-    """最高管理者查看所有待審核刪除申請。"""
-    user = _require_dev(authorization)
-    if user["role"] != "superadmin":
-        raise HTTPException(403, "僅最高管理者可查看刪除申請清單")
-    conn = get_db()
-    try:
-        umap = _user_map(conn)
-        rows = conn.execute(
-            "SELECT * FROM dev_cases WHERE pending_delete=1 AND is_deleted=0"
-            " ORDER BY delete_requested_at DESC"
-        ).fetchall()
-        return [_case_row(r, umap) for r in rows]
-    finally:
-        conn.close()
-
-
 @router.post("/dev-cases", status_code=201)
 def create_dev_case(body: DevCaseIn, authorization: str = Header("")):
     user = _require_dev(authorization)

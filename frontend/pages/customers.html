@@ -792,16 +792,12 @@
       formError: '',
       salesUsers: [],
       form: {},
-      // 統編 / 公司名查詢
+      // 統編查詢
       taxIdSearch: '',
-      nameSearch: '',
-      suggestions: [],
-      showSuggest: false,
       lookingUp: false,
-      lookupTarget: '',   // 'taxId' | 'name'
+      lookupTarget: '',   // 'taxId'
       lookupMsg: '',
       lookupOk: false,
-      _nameDebounce: null,
       tagInput: '',
       tagPresets: [],
       showAddPreset: false,
@@ -815,7 +811,6 @@
         const id = this.taxIdSearch.replace(/\D/g, '')
         if (!/^\d{8}$/.test(id)) { this.lookupMsg = '請輸入完整 8 碼統編'; this.lookupOk = false; return }
         this.lookingUp = true; this.lookupTarget = 'taxId'; this.lookupMsg = ''; this.lookupOk = false
-        this.suggestions = []; this.showSuggest = false
         try {
           const r = await fetchT(`${API}/company/tax/${id}`,
             { headers: { Authorization: 'Bearer ' + this.session.token } }, 12000)
@@ -837,43 +832,6 @@
         this.lookingUp = false
       },
 
-      /* ── 公司名稱模糊查詢 ── */
-      debounceNameSearch() {
-        clearTimeout(this._nameDebounce)
-        this._nameDebounce = setTimeout(() => {
-          if (this.nameSearch.trim().length >= 2) this.lookupByName()
-        }, 650)
-      },
-
-      async lookupByName() {
-        const kw = this.nameSearch.trim()
-        if (!kw || kw.length < 2) { this.suggestions = []; this.showSuggest = false; return }
-        this.lookingUp = true; this.lookupTarget = 'name'; this.lookupMsg = ''; this.showSuggest = false
-        try {
-          const r = await fetchT(`${API}/company/search?q=${encodeURIComponent(kw)}`,
-            { headers: { Authorization: 'Bearer ' + this.session.token } }, 15000)
-          if (r.ok) {
-            const rows = await r.json()
-            if (rows.length > 0) {
-              this.suggestions = rows.map(d => ({ ...d, id: d.taxId || String(Math.random()), _norm: true }))
-              this.showSuggest = true
-              this.lookupMsg = `找到 ${rows.length} 筆，點選帶入`
-              this.lookupOk = true
-            } else {
-              this.suggestions = []; this.showSuggest = false
-              this.lookupMsg = '查無相符公司，請試試更短的關鍵字或直接輸入'; this.lookupOk = false
-            }
-          } else if (r.status === 401) {
-            this.logout()
-          } else {
-            this.lookupMsg = '政府資料庫查詢失敗，請稍後再試'; this.lookupOk = false
-          }
-        } catch(e) {
-          this.lookupMsg = '查詢逾時，請確認網路連線'; this.lookupOk = false
-        }
-        this.lookingUp = false
-      },
-
       /* 帶入已正規化的資料（後端 Proxy 格式：{name, taxId, findbizUrl}）*/
       applyGovDataNorm(d) {
         const name = d.name || ''
@@ -888,12 +846,6 @@
         }
         this.lookupMsg = `已帶入：${name}`
         this.lookupOk  = true
-      },
-
-      applySuggestion(s) {
-        this.applyGovDataNorm(s)
-        this.showSuggest = false
-        this.nameSearch  = ''
       },
 
       exportExcel() {
@@ -1032,9 +984,7 @@
         this.formError     = ''
         this.isDirty       = false
         this.taxIdSearch   = ''
-        this.nameSearch    = ''
         this.lookupMsg     = ''
-        this.suggestions   = []
         this.tagInput      = ''
         this.newPreset     = ''
         this.showAddPreset = false
@@ -1054,9 +1004,7 @@
         this.formError     = ''
         this.isDirty       = false
         this.taxIdSearch   = c.taxId || ''
-        this.nameSearch    = ''
         this.lookupMsg     = ''
-        this.suggestions   = []
         this.tagInput      = ''
         this.newPreset     = ''
         this.showAddPreset = false
