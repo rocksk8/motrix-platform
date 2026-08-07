@@ -167,3 +167,96 @@ def test_uploads_normal_path_not_blocked(client, make_user):
         headers=_auth(token),
     )
     assert r.status_code == 404
+
+
+# ── deal-tag state machine (regression for §5.2 state-diagram bypass) ───────
+
+def _make_quotation(quote_no, deal_tag="", status="草稿"):
+    import db
+    conn = db.get_db()
+    try:
+        # dealTag must be mirrored into data_json too — update_deal_tag() reads
+        # old_tag from data_json (the hot `deal_tag` column is the derived copy),
+        # so a fixture that only sets the column would misrepresent real rows.
+        data_json = json.dumps({"dealTag": deal_tag})
+        conn.execute(
+            "INSERT INTO quotations (quote_no, status, customer_name, project_name, "
+            "data_json, created_at, updated_at, deal_tag) VALUES (?,?,?,?,?,?,?,?)",
+            (quote_no, status, "測試客戶", "測試專案", data_json,
+             "2026-01-01T00:00:00", "2026-01-01T00:00:00", deal_tag),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def test_deal_tag_cannot_jump_straight_to_closed(client, make_user):
+    username, password = make_user(role="superadmin")
+    token = _login(client, username, password)
+    _make_quotation("MQ-TEST-001", deal_tag="")
+
+    r = client.patch(
+        "/api/quotations/MQ-TEST-001/deal-tag", headers=_auth(token),
+        json={"deal_tag": "已結案"},
+    )
+    assert r.status_code == 400, r.text
+
+
+def test_deal_tag_cannot_reach_closed_from_provided(client, make_user):
+    username, password = make_user(role="superadmin")
+    token = _login(client, username, password)
+    _make_quotation("MQ-TEST-002", deal_tag="已提供")
+
+    r = client.patch(
+        "/api/quotations/MQ-TEST-002/deal-tag", headers=_auth(token),
+        json={"deal_tag": "已結案"},
+    )
+    assert r.status_code == 400, r.text
+
+
+def test_deal_tag_closed_allowed_from_won(client, make_user):
+    username, password = make_user(role="superadmin")
+    token = _login(client, username, password)
+    _make_quotation("MQ-TEST-003", deal_tag="已成案")
+
+    r = client.patch(
+        "/api/quotations/MQ-TEST-003/deal-tag", headers=_auth(token),
+        json={"deal_tag": "已結案"},
+    )
+    assert r.status_code == 200, r.text
+
+
+def test_put_quotation_cannot_smuggle_deal_tag_change(client, make_user):
+    """PUT is the generic content-save endpoint for an editable (unlocked) quotation;
+    it must not let a client-supplied dealTag/settlement.status bypass the state-machine
+    guards that live in PATCH /deal-tag and PATCH /settlement."""
+    username, password = make_user(role="superadmin")
+    token = _login(client, username, password)
+    _make_quotation("MQ-TEST-004", deal_tag="", status="草稿")
+
+    r = client.put(
+        "/api/quotations/MQ-TEST-004", headers=_auth(token),
+        json={
+            "status": "草稿",
+            "data": {
+                "customerName": "測試客戶", "projectName": "測試專案",
+                "dealTag": "已成案",  # smuggled — should be ignored, not written
+                "settlement": {"status": "finalized"},
+                "tot": {}, "items": [],
+            },
+        },
+    )
+    assert r.status_code == 200, r.text
+
+    import db
+    conn = db.get_db()
+    row = conn.execute(
+        "SELECT deal_tag, settle_status, data_json FROM quotations WHERE quote_no='MQ-TEST-004'"
+    ).fetchone()
+    conn.close()
+    assert row["deal_tag"] == "", "PUT let a smuggled dealTag through the hot column"
+    assert row["settle_status"] == "", "PUT let a smuggled settlement.status through the hot column"
+    stored = json.loads(row["data_json"])
+    assert stored.get("dealTag", "") == "", "PUT let a smuggled dealTag through into data_json"
+    assert stored.get("settlement", {}).get("status", "") == "", \
+        "PUT let a smuggled settlement.status through into data_json"

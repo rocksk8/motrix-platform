@@ -550,7 +550,6 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
         appr = _build_approval_tiers_and_notify(q, appr, quote_no, is_new_submission)
 
     tot = q.get("tot", {})
-    deal_tag, settle_status = quote_hot_fields(q)
 
     conn = get_db()
 
@@ -560,7 +559,9 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
     ).fetchone() if sp_name else None
     sp_id = sp_row["id"] if sp_row else None
 
-    existing = conn.execute("SELECT id, status FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+    existing = conn.execute(
+        "SELECT id, status, deal_tag, settle_status FROM quotations WHERE quote_no=?", (quote_no,)
+    ).fetchone()
     if not existing:
         conn.close()
         raise HTTPException(404, f"報價單 {quote_no} 不存在")
@@ -571,6 +572,17 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
     if existing["status"] in _LOCKED and not is_unlock_edit:
         conn.close()
         raise HTTPException(403, f"報價單狀態為「{existing['status']}」，請透過正式流程操作或解鎖後修改")
+    # dealTag／settlement.status 只能透過各自的專用端點（PATCH /deal-tag、
+    # PATCH /settlement）異動，兩邊都有完整的狀態機檢查（已成案需先簽核完成、
+    # 已成案降級需 admin+、已結案不可逆轉等）。這支端點是編輯報價單「內容」用
+    # 的通用存檔，client 送來的 body 完全可能挾帶跟現況不同的 dealTag/
+    # settlement.status（不論是前端沒清乾淨的舊資料、還是刻意構造的請求），
+    # 若不在這裡攔截，等於讓這支端點繞過另外兩支端點的所有規則。一律強制沿用
+    # 資料庫現有值，忽略 client 送來的異動。
+    deal_tag, settle_status = existing["deal_tag"] or "", existing["settle_status"] or ""
+    q["dealTag"] = deal_tag
+    if isinstance(q.get("settlement"), dict):
+        q["settlement"]["status"] = settle_status
     conn.execute("""
         UPDATE quotations SET
           status=?, customer_name=?, project_name=?,
@@ -714,6 +726,11 @@ def update_deal_tag(quote_no: str, body: QuotationDealTagUpdate, authorization: 
     if body.deal_tag == "已成案" and row["status"] != "已送出":
         conn.close()
         raise HTTPException(400, "報價單需完成簽核（狀態為「已送出」）才能標記為「已成案」")
+    # 已結案只能從「已成案」進入（§5.2 狀態圖：已結案僅案件管理「完結案」，
+    # 不可從未提供/已提供/未成案直接跳過去），避免繞過已成案那一步的簽核前置
+    if body.deal_tag == "已結案" and old_tag != "已成案":
+        conn.close()
+        raise HTTPException(400, "案件須先標記為「已成案」才能結案")
     # 已成案 → 降級 限管理員以上
     if old_tag == "已成案" and body.deal_tag != "已成案" and user["role"] not in ("superadmin", "admin"):
         conn.close()
