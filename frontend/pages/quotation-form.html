@@ -2024,6 +2024,8 @@
       showCostCols: true,
       isDirty: false,
       lastSaved: null,
+      _lastUpdatedAt: null,   // 樂觀鎖：loadQuote() 讀入、apiSave() 送出比對、成功後更新
+      _saveConflict: false,  // apiSave() 收到 409 時設 true，saveDraft() 據此提示使用者
       previewMode: null,
       needsApproval: false,
       approvalReasons: [],
@@ -2273,15 +2275,25 @@
       },
 
       async apiSave(isNew) {
-        const payload = { quote_no: this.q.quoteNo, status: this.q.status, data: { ...this.q, tot: this.tot }, created_by: this.session?.username }
+        const data = { ...this.q, tot: this.tot }
+        if (!isNew) data._expectedUpdatedAt = this._lastUpdatedAt
+        const payload = { quote_no: this.q.quoteNo, status: this.q.status, data, created_by: this.session?.username }
         try {
           const method = isNew ? 'POST' : 'PUT'
           const url    = isNew ? `${this.API}/quotations` : `${this.API}/quotations/${this.q.quoteNo}`
           const res    = await fetch(url, { method, headers:{'Content-Type':'application/json', Authorization:'Bearer '+this.session.token}, body: JSON.stringify(payload) })
+          if (res.status === 409) {
+            // 樂觀鎖衝突：另一個 session 已經存過檔，這次存檔不生效——不要覆蓋使用者
+            // 正在編輯的內容，只標記出來讓 saveDraft() 之類的呼叫端決定怎麼提示
+            this._saveConflict = true
+            return false
+          }
           if (!res.ok) throw new Error(await res.text())
+          const d = await res.json()
+          this._lastUpdatedAt = d.updated_at || d.created_at || this._lastUpdatedAt
+          this._saveConflict = false
           if (isNew) {
             // Backend may assign a different number if provisional was taken concurrently
-            const d = await res.json()
             if (d.quote_no && d.quote_no !== this.q.quoteNo) {
               this.q.quoteNo = d.quote_no
               history.replaceState(null, '', '?id=' + d.quote_no)
@@ -2507,7 +2519,14 @@
         if (wasUnlocked) this.q._isUnlockEdit = true
         const ok = await this.apiSave(wasNew).catch(() => false)
         delete this.q._isUnlockEdit
-        if (!ok) { alert('儲存失敗，請確認後端伺服器是否在線'); return }
+        if (!ok) {
+          if (this._saveConflict) {
+            alert('這張報價單已被其他人更新，為避免覆蓋對方的修改，這次儲存未生效。請重新載入頁面後再繼續編輯。')
+          } else {
+            alert('儲存失敗，請確認後端伺服器是否在線')
+          }
+          return
+        }
         this.isDirty = false
         if (this.unlocked) this.unlocked = false
         const now = new Date()
@@ -2827,7 +2846,13 @@ window.addEventListener('load',function(){
           } : {})
         }
         try {
-          await this.apiSave(this.isNewRecord)
+          const ok = await this.apiSave(this.isNewRecord)
+          if (!ok) {
+            alert(this._saveConflict
+              ? '這張報價單已被其他人更新，為避免覆蓋對方的修改，送審未生效。請重新載入頁面後再試一次。'
+              : '送出審核失敗，請確認後端伺服器是否在線')
+            return
+          }
           this.isNewRecord = false
           this.isDirty = false
           this.submitNote = ''
@@ -2848,6 +2873,7 @@ window.addEventListener('load',function(){
         const row = await res.json()
         Object.assign(this.q, row.data)
         this.q.quoteNo = row.data.quoteNo || this.q.quoteNo
+        this._lastUpdatedAt = row.updated_at || null
         // Ensure all items have a unique id (old quotes may lack id field)
         if (Array.isArray(this.q.items)) {
           this.q.items.forEach(it => { if (!it.id) it.id = this.genId() })

@@ -1346,7 +1346,8 @@ function app() {
         status: d.status || 'draft',
         tax_rate: d.taxRate !== undefined ? d.taxRate : 0.05,
         items: JSON.parse(JSON.stringify(d.items || [])),
-        personnel: JSON.parse(JSON.stringify(d.personnel || []))
+        personnel: JSON.parse(JSON.stringify(d.personnel || [])),
+        _expectedUpdatedAt: d.updatedAt || ''
       }
       this.dispatchMsg = ''
       this._newDispatchPersonnelId = ''
@@ -1412,6 +1413,7 @@ function app() {
           id: p.id, name: p.name, amount: +p.amount || 0, note: p.note || ''
         }))
       }
+      if (this.editDispatchId) body.expectedUpdatedAt = this.dispatchForm._expectedUpdatedAt || ''
       const method = this.editDispatchId ? 'PUT' : 'POST'
       const url    = this.editDispatchId
         ? `/api/contractor-dispatches/${this.editDispatchId}`

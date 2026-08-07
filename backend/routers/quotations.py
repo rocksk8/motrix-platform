@@ -499,6 +499,7 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
 
     # consume unlock-edit flag before any processing
     is_unlock_edit = bool(q.pop("_isUnlockEdit", False))
+    expected_updated_at = q.pop("_expectedUpdatedAt", None)
 
     new_status = body.status or q.get("status", "草稿")
 
@@ -560,7 +561,7 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
     sp_id = sp_row["id"] if sp_row else None
 
     existing = conn.execute(
-        "SELECT id, status, deal_tag, settle_status FROM quotations WHERE quote_no=?", (quote_no,)
+        "SELECT id, status, deal_tag, settle_status, updated_at FROM quotations WHERE quote_no=?", (quote_no,)
     ).fetchone()
     if not existing:
         conn.close()
@@ -568,6 +569,12 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
     if existing["status"] == "已拒絕":
         conn.close()
         raise HTTPException(403, "已拒絕結案的報價單不可修改")
+    # 樂觀鎖（選填）：草稿階段沒有狀態鎖保護，兩人同時編輯同一張草稿會後寫覆蓋
+    # 前寫且完全沒有提示。自動存檔（autoSave）跟手動存檔共用這支端點，衝突時
+    # 一律回 409，讓呼叫端自行決定要不要提示使用者或重新載入。
+    if expected_updated_at and existing["updated_at"] and expected_updated_at != existing["updated_at"]:
+        conn.close()
+        raise HTTPException(409, "報價單已被其他人更新，請重新載入後再存")
     _LOCKED = ("待審核", "簽核中", "已送出", "已成案", "已結案")
     if existing["status"] in _LOCKED and not is_unlock_edit:
         conn.close()

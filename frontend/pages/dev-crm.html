@@ -1145,6 +1145,7 @@ function devCrmPage() {
         customer_id: c.customerId, status: c.status,
         sales_persons: [...(c.salesPersonIds || [])],
         planners: [...(c.plannerIds || [])],
+        expectedUpdatedAt: c.updatedAt,
       }
       this.caseError = ''
       this.customerSuggestions = []

@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from typing import Optional, List
 
 from fastapi import APIRouter, HTTPException, Header
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, ConfigDict
 
 from db import get_db, spawn_bg_thread
 import threading
@@ -24,12 +24,18 @@ _TW_NOW = lambda: datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 # ── Pydantic models ──────────────────────────────────────────────────────────
 
 class DevCaseIn(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     case_name: str
     customer_name: Optional[str] = ''
     customer_id: Optional[int] = None
     status: Optional[str] = '洽談中'
     sales_persons: Optional[List[int]] = []
     planners: Optional[List[int]] = []
+    # 樂觀鎖（選填，見 update_dev_case）——比照 customers.py/suppliers.py/
+    # vendor_contractors.py 的 expectedUpdatedAt 慣例，camelCase 對外、
+    # snake_case 對內
+    expected_updated_at: Optional[str] = Field(None, alias="expectedUpdatedAt")
 
 
 class DevCaseStatusIn(BaseModel):
@@ -315,6 +321,10 @@ def update_dev_case(case_id: int, body: DevCaseIn, authorization: str = Header("
             raise HTTPException(404, "案件不存在")
         if not _can_access_case(user, row):
             raise HTTPException(403, "無權限修改此案件")
+        # 樂觀鎖：業務開發案件可能有多位業務/企劃同時有編輯權（見 §3.4 sales_persons/
+        # planners），沒有鎖的話兩人同時存檔會後寫覆蓋前寫且完全沒有提示
+        if body.expected_updated_at and row["updated_at"] and body.expected_updated_at != row["updated_at"]:
+            raise HTTPException(409, "案件資料已被其他人更新，請重新載入後再存")
         conn.execute("""
             UPDATE dev_cases
                SET case_name=?, customer_name=?, customer_id=?,

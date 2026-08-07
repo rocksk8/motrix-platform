@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Body, HTTPException, Header
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, ConfigDict
 
 from db import get_db, next_entity_code
 from helpers import _require_user, _tok, _audit, notify_module_activity
@@ -38,6 +38,8 @@ class VendorContractorIn(BaseModel):
 
 
 class DispatchIn(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     quote_no: str
     vendor_id: Optional[int] = None
     dispatch_date: Optional[str] = ''
@@ -47,6 +49,9 @@ class DispatchIn(BaseModel):
     tax_rate: Optional[float] = 0.05
     status: Optional[str] = 'draft'
     notes: Optional[str] = ''
+    # 樂觀鎖（選填，見 update_dispatch）——比照 customers.py 等的
+    # expectedUpdatedAt 慣例
+    expected_updated_at: Optional[str] = Field(None, alias="expectedUpdatedAt")
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -452,9 +457,13 @@ def update_dispatch(did: int, body: DispatchIn, authorization: str = Header(None
         raise HTTPException(400, "請至少選擇承攬商或外包名單人員其中一項")
     total = sum(float(it.get("amount", 0) or 0) for it in items)
     conn = get_db()
-    if not conn.execute("SELECT id FROM contractor_dispatches WHERE id=?", (did,)).fetchone():
+    existing = conn.execute("SELECT updated_at FROM contractor_dispatches WHERE id=?", (did,)).fetchone()
+    if not existing:
         conn.close()
         raise HTTPException(404, "派發紀錄不存在")
+    if body.expected_updated_at and existing["updated_at"] and body.expected_updated_at != existing["updated_at"]:
+        conn.close()
+        raise HTTPException(409, "派發紀錄已被其他人更新，請重新載入後再存")
     if body.vendor_id and not conn.execute("SELECT id FROM vendor_contractors WHERE id=?", (body.vendor_id,)).fetchone():
         conn.close()
         raise HTTPException(404, "承攬商不存在")

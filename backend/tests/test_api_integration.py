@@ -456,3 +456,154 @@ def test_revoke_approval_blocked_when_signed(client, make_user):
         json={},
     )
     assert r.status_code == 409, r.text
+
+
+# ── dev_cases optimistic lock (#6 medium risk — was previously missing) ─────
+
+def test_dev_case_update_conflict_returns_409(client, make_user):
+    username, password = make_user(role="admin")
+    token = _login(client, username, password)
+
+    r = client.post(
+        "/api/dev-cases", headers=_auth(token),
+        json={"case_name": "測試開發案件", "customer_name": "", "status": "洽談中"},
+    )
+    assert r.status_code == 201, r.text
+    case = r.json()
+    case_id = case["id"]
+
+    r = client.put(
+        f"/api/dev-cases/{case_id}", headers=_auth(token),
+        json={
+            "case_name": "改過的案件名稱", "customer_name": "", "status": "洽談中",
+            "expectedUpdatedAt": "2000-01-01T00:00:00.000000",
+        },
+    )
+    assert r.status_code == 409, r.text
+
+    r = client.put(
+        f"/api/dev-cases/{case_id}", headers=_auth(token),
+        json={
+            "case_name": "改過的案件名稱", "customer_name": "", "status": "洽談中",
+            "expectedUpdatedAt": case["updatedAt"],
+        },
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["caseName"] == "改過的案件名稱"
+
+
+def test_dev_case_update_without_expected_updated_at_still_works(client, make_user):
+    """Optional lock — omitting it must not break existing callers."""
+    username, password = make_user(role="admin")
+    token = _login(client, username, password)
+
+    r = client.post(
+        "/api/dev-cases", headers=_auth(token),
+        json={"case_name": "無鎖測試案件", "customer_name": "", "status": "洽談中"},
+    )
+    case_id = r.json()["id"]
+
+    r = client.put(
+        f"/api/dev-cases/{case_id}", headers=_auth(token),
+        json={"case_name": "更新後", "customer_name": "", "status": "洽談中"},
+    )
+    assert r.status_code == 200, r.text
+
+
+# ── contractor-dispatches optimistic lock (#6 medium risk) ──────────────────
+
+def test_contractor_dispatch_update_conflict_returns_409(client, make_user):
+    username, password = make_user(role="admin")
+    token = _login(client, username, password)
+    _make_quotation("MQ-TEST-011")
+
+    r = client.post(
+        "/api/contractor-dispatches", headers=_auth(token),
+        json={
+            "quote_no": "MQ-TEST-011",
+            "personnel_json": [{"id": 1, "name": "測試工班", "amount": 1000, "note": ""}],
+        },
+    )
+    assert r.status_code == 201, r.text
+    dispatch = r.json()
+    did = dispatch["id"]
+
+    r = client.put(
+        f"/api/contractor-dispatches/{did}", headers=_auth(token),
+        json={
+            "quote_no": "MQ-TEST-011",
+            "personnel_json": [{"id": 1, "name": "測試工班", "amount": 2000, "note": ""}],
+            "expectedUpdatedAt": "2000-01-01T00:00:00.000000",
+        },
+    )
+    assert r.status_code == 409, r.text
+
+    r = client.put(
+        f"/api/contractor-dispatches/{did}", headers=_auth(token),
+        json={
+            "quote_no": "MQ-TEST-011",
+            "personnel_json": [{"id": 1, "name": "測試工班", "amount": 2000, "note": ""}],
+            # created_at == updated_at at creation time (both set to `now` in the INSERT)
+            "expectedUpdatedAt": dispatch["created_at"],
+        },
+    )
+    assert r.status_code == 200, r.text
+
+
+# ── quotation draft PUT optimistic lock (#6 medium risk) ─────────────────────
+
+def test_put_quotation_conflict_returns_409(client, make_user):
+    username, password = make_user(role="admin")
+    token = _login(client, username, password)
+    _make_quotation("MQ-TEST-012", status="草稿")
+
+    r = client.put(
+        "/api/quotations/MQ-TEST-012", headers=_auth(token),
+        json={
+            "status": "草稿",
+            "data": {
+                "customerName": "改過的客戶名稱", "projectName": "測試專案",
+                "tot": {}, "items": [],
+                "_expectedUpdatedAt": "2000-01-01T00:00:00.000000",
+            },
+        },
+    )
+    assert r.status_code == 409, r.text
+
+
+def test_put_quotation_succeeds_with_correct_expected_updated_at(client, make_user):
+    username, password = make_user(role="admin")
+    token = _login(client, username, password)
+    _make_quotation("MQ-TEST-013", status="草稿")
+
+    conn_row = client.get("/api/quotations/MQ-TEST-013", headers=_auth(token)).json()
+    current_updated_at = conn_row["updated_at"]
+
+    r = client.put(
+        "/api/quotations/MQ-TEST-013", headers=_auth(token),
+        json={
+            "status": "草稿",
+            "data": {
+                "customerName": "改過的客戶名稱", "projectName": "測試專案",
+                "tot": {}, "items": [],
+                "_expectedUpdatedAt": current_updated_at,
+            },
+        },
+    )
+    assert r.status_code == 200, r.text
+
+
+def test_put_quotation_without_expected_updated_at_still_works(client, make_user):
+    """Optional lock — omitting it must not break existing callers (e.g. new-record saves)."""
+    username, password = make_user(role="admin")
+    token = _login(client, username, password)
+    _make_quotation("MQ-TEST-014", status="草稿")
+
+    r = client.put(
+        "/api/quotations/MQ-TEST-014", headers=_auth(token),
+        json={
+            "status": "草稿",
+            "data": {"customerName": "改過的客戶名稱", "projectName": "測試專案", "tot": {}, "items": []},
+        },
+    )
+    assert r.status_code == 200, r.text
