@@ -230,9 +230,25 @@ def adjust_stock_item(item_id: int, body: dict = Body(...), authorization: str =
     note = body.get("note") or ""
 
     if action == "void":
-        conn.execute("UPDATE stock_items SET status='void', note=?, updated_at=? WHERE id=?",
-                     (note or row["note"], now, item_id))
+        if row["status"] == "void":
+            conn.close()
+            raise HTTPException(409, "此序號已經是報廢狀態")
+        # 報廢是終態，不會再回到任何案件/出貨單/報價單——一併清掉關聯欄位，
+        # 否則報廢後的序號仍掛在原案件的設備清單上，造成兩邊資料分岔卻無人發現
+        # （return_to_stock 分支本來就有清這幾欄，這裡原本沒有，是不一致的地方）
+        conn.execute("""
+            UPDATE stock_items
+            SET status='void', shipping_note_no='', quote_no='', case_device_id='',
+                consumed_at='', consumed_by='', note=?, updated_at=?
+            WHERE id=?
+        """, (note or row["note"], now, item_id))
     elif action == "return_to_stock":
+        if row["status"] == "in_stock":
+            conn.close()
+            raise HTTPException(409, "此序號已經在庫，不需要歸還")
+        if row["status"] == "void":
+            conn.close()
+            raise HTTPException(409, "此序號已報廢，報廢是終態，無法直接歸還庫存")
         conn.execute("""
             UPDATE stock_items
             SET status='in_stock', shipping_note_no='', quote_no='', case_device_id='',

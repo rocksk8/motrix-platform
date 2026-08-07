@@ -338,3 +338,56 @@ def test_device_install_skips_untracked_serial_without_conflict(client, make_use
     )
     assert r.status_code == 200, r.text
     assert r.json()["stockConflicts"] == []
+
+
+# ── inventory adjust: void/return_to_stock state-machine guards ─────────────
+
+def test_void_is_terminal_and_clears_linkage_fields(client, make_user):
+    username, password = make_user(role="admin")
+    token = _login(client, username, password)
+    import db
+    conn = db.get_db()
+    conn.execute(
+        "INSERT INTO stock_items (part_no, serial_no, status, quote_no, case_device_id, "
+        "created_at, updated_at) VALUES (?,?,?,?,?,?,?)",
+        ("NET-003", "SN-TO-VOID", "installed", "MQ-TEST-008", "7",
+         "2026-01-01T00:00:00", "2026-01-01T00:00:00"),
+    )
+    item_id = conn.execute("SELECT id FROM stock_items WHERE serial_no='SN-TO-VOID'").fetchone()["id"]
+    conn.commit()
+    conn.close()
+
+    r = client.post(f"/api/inventory/stock-items/{item_id}/adjust", headers=_auth(token),
+                     json={"action": "void"})
+    assert r.status_code == 200, r.text
+
+    conn = db.get_db()
+    row = conn.execute("SELECT status, quote_no, case_device_id FROM stock_items WHERE id=?", (item_id,)).fetchone()
+    conn.close()
+    assert row["status"] == "void"
+    assert row["quote_no"] == "", "void must clear stale quote_no linkage"
+    assert row["case_device_id"] == "", "void must clear stale case_device_id linkage"
+
+    # already void — re-voiding should be rejected, not silently accepted
+    r2 = client.post(f"/api/inventory/stock-items/{item_id}/adjust", headers=_auth(token),
+                      json={"action": "void"})
+    assert r2.status_code == 409, r2.text
+
+    # void is terminal — cannot return_to_stock from it
+    r3 = client.post(f"/api/inventory/stock-items/{item_id}/adjust", headers=_auth(token),
+                      json={"action": "return_to_stock"})
+    assert r3.status_code == 409, r3.text
+
+
+def test_return_to_stock_rejects_already_in_stock(client, make_user):
+    username, password = make_user(role="admin")
+    token = _login(client, username, password)
+    _make_stock_item("NET-004", "SN-ALREADY-IN-STOCK", status="in_stock")
+    import db
+    conn = db.get_db()
+    item_id = conn.execute("SELECT id FROM stock_items WHERE serial_no='SN-ALREADY-IN-STOCK'").fetchone()["id"]
+    conn.close()
+
+    r = client.post(f"/api/inventory/stock-items/{item_id}/adjust", headers=_auth(token),
+                     json={"action": "return_to_stock"})
+    assert r.status_code == 409, r.text

@@ -222,7 +222,7 @@
                 <td style="font-size:11px;color:var(--text-dim)" x-text="it.shipping_note_no || it.quote_no || '—'"></td>
                 <td style="white-space:nowrap">
                   <button class="action-btn ghost" x-show="it.status!=='void'" @click="adjustItem(it, 'void')">報廢</button>
-                  <button class="action-btn edit" x-show="it.status!=='in_stock'" @click="adjustItem(it, 'return_to_stock')" style="margin-left:4px">退回庫存</button>
+                  <button class="action-btn edit" x-show="it.status!=='in_stock' && it.status!=='void'" @click="adjustItem(it, 'return_to_stock')" style="margin-left:4px">退回庫存</button>
                   <button class="action-btn del" x-show="it.status==='in_stock'" @click="deleteItem(it)" style="margin-left:4px">刪除</button>
                 </td>
               </tr>
