@@ -656,3 +656,68 @@ def test_delete_quotation_clears_orphaned_dev_case_link(client, make_user):
     assert r.status_code == 200, r.text
     assert r.json()["convertedQuoteNo"] == ""
     assert r.json()["status"] == "洽談中"
+
+
+# ── parts.py 409/leak fixes (#8 low risk) ────────────────────────────────────
+
+def test_create_part_duplicate_explicit_part_no_returns_409(client, make_user):
+    username, password = make_user(role="admin")
+    token = _login(client, username, password)
+    r = client.post("/api/parts", headers=_auth(token),
+                     json={"partNo": "TEST-DUP-001", "name": "第一次"})
+    assert r.status_code == 201, r.text
+    r = client.post("/api/parts", headers=_auth(token),
+                     json={"partNo": "TEST-DUP-001", "name": "第二次"})
+    assert r.status_code == 409, r.text
+
+
+def test_create_part_missing_category_returns_400_not_500(client, make_user):
+    """Regression for the conn.close() leak on this specific error path — a
+    follow-up request on the same test session must still work afterward."""
+    username, password = make_user(role="admin")
+    token = _login(client, username, password)
+    r = client.post("/api/parts", headers=_auth(token), json={"name": "無料號無分類"})
+    assert r.status_code == 400, r.text
+    r = client.post("/api/parts", headers=_auth(token),
+                     json={"partNo": "TEST-AFTER-LEAK-001", "name": "驗證連線沒洩漏"})
+    assert r.status_code == 201, r.text
+
+
+def test_create_part_toctou_race_returns_409_not_500(client, make_user, monkeypatch):
+    """Simulates the concurrency race: the pre-INSERT existence check is made to lie
+    (report "not found" even though the row already exists), so the only thing that
+    can produce the 409 is the `except sqlite3.IntegrityError` branch around the
+    INSERT itself — proving that branch actually works, not just the pre-check.
+
+    sqlite3.Connection is a C-level immutable type (can't monkeypatch its `execute`
+    directly), so this wraps the connection object returned by get_db() instead —
+    intercepting just the specific existence-check SQL and proxying everything else
+    (commit, other queries) straight through to the real connection.
+    """
+    username, password = make_user(role="admin")
+    token = _login(client, username, password)
+    r = client.post("/api/parts", headers=_auth(token),
+                     json={"partNo": "TEST-RACE-001", "name": "第一次"})
+    assert r.status_code == 201, r.text
+
+    import routers.parts as parts_module
+    real_get_db = parts_module.get_db
+
+    class _LyingConn:
+        def __init__(self, real_conn):
+            self._real = real_conn
+
+        def execute(self, sql, params=()):
+            if sql.strip().startswith("SELECT id FROM parts WHERE part_no=?"):
+                return self._real.execute("SELECT id FROM parts WHERE part_no=?", ("__never_matches__",))
+            return self._real.execute(sql, params)
+
+        def __getattr__(self, name):
+            return getattr(self._real, name)
+
+    monkeypatch.setattr(parts_module, "get_db", lambda: _LyingConn(real_get_db()))
+
+    r = client.post("/api/parts", headers=_auth(token),
+                     json={"partNo": "TEST-RACE-001", "name": "模擬併發（繞過前置檢查）"})
+    assert r.status_code == 409, r.text
+    assert "重新整理" in r.text  # confirms the except-branch message, not the pre-check's
