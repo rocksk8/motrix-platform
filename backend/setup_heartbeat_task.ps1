@@ -1,39 +1,28 @@
-﻿# MOTRIX ERP — Windows 工作排程器「心跳監控」設定
-# 執行：powershell -ExecutionPolicy Bypass -File setup_heartbeat_task.ps1（需系統管理員權限，
-#       因為要用 SYSTEM 帳號註冊工作）
+﻿# MOTRIX ERP - Heartbeat scheduled task setup (independent of uvicorn)
+# Run: powershell -ExecutionPolicy Bypass -File setup_heartbeat_task.ps1
 #
-# 重建紀錄（2026-08-08）：同 setup_autostart_task.ps1，這支腳本原本只存在正式機、
-# 開發機 git repo 一直沒有備份（QUICK.md §0 已知落差第 2 筆、DR-SOP.md §3 第 1 點）。
-# 依 QUICK.md §1.2 記載的行為規格重建：獨立於登入狀態、每 5 分鐘執行一次
-# heartbeat_job.py（同目錄，本身不 import app，ERP 服務掛了也照跑）。下次接觸
-# 正式機時務必跟實際在跑的版本 diff 一次。
-#
-# ⚠️ 不要在非正式機上執行這支腳本並允許它註冊——heartbeat_config.json 裡設定的
-# ping_url 若剛好是正式機在用的 healthchecks.io 監控端點，在別台機器上重複打卡
-# 會混淆「正式機是否還活著」的判斷，本機服務沒開著時甚至會誤觸發 /fail 告警。
+# 2026-08-08：已跟正式機上實際版本 diff 過並校正一致（見 DR-SOP.md §3 第 1 點、
+# MOTRIX-ERP-QUICK.md §0）。唯一刻意保留的差異是下面這段「只能在正式機路徑
+# 執行」的身分守門——正式機原始版本沒有這段，是這次重建過程中額外補上的防呆，
+# 純粹避免在其他機器誤跑導致誤判（例如 heartbeat_config.json 的 ping_url 若剛好
+# 指到正式機在用的 healthchecks.io 端點，在別台機器上重複打卡會混淆判斷），
+# 不影響正式機上的實際行為。
 
 $TaskName   = "MOTRIX ERP Heartbeat"
 $BackendDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ProdRoot   = "C:\Users\Motrix\Desktop\V9.0"
-$Script     = Join-Path $BackendDir "heartbeat_job.py"
 
+# 正式機原始版本沒有這段，見檔頭說明。
 if ($BackendDir -ne (Join-Path $ProdRoot "backend")) {
     Write-Error "此腳本只應在正式機（$ProdRoot）執行；目前路徑為 $BackendDir。中止，未做任何變更。"
     exit 1
 }
 
-if (-not (Test-Path $Script)) { Write-Error "Script not found: $Script"; exit 1 }
+$Python     = "C:\Users\Motrix\AppData\Local\Programs\Python\Python312\pythonw.exe"
+$Script     = Join-Path $BackendDir "heartbeat_job.py"
 
-# 不寫死使用者帳號路徑——動態找目前這台機器實際在用的 python.exe（同
-# setup_backup_task.ps1 的做法）。
-$Python = $null
-$cmd = Get-Command python -ErrorAction SilentlyContinue
-if ($cmd) { $Python = $cmd.Source }
-if (-not $Python) {
-    $candidates = Get-ChildItem "$env:LOCALAPPDATA\Programs\Python\Python3*\python.exe" -ErrorAction SilentlyContinue
-    if ($candidates) { $Python = ($candidates | Select-Object -First 1).FullName }
-}
-if (-not $Python -or -not (Test-Path $Python)) { Write-Error "Python not found (checked PATH and $env:LOCALAPPDATA\Programs\Python\Python3*\python.exe)"; exit 1 }
+if (-not (Test-Path $Script)) { Write-Error "Script not found: $Script"; exit 1 }
+if (-not (Test-Path $Python)) { Write-Error "Python not found: $Python"; exit 1 }
 
 $existing = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
 if ($existing) {
@@ -41,34 +30,51 @@ if ($existing) {
     Write-Host "Removed old task: $TaskName"
 }
 
-$action = New-ScheduledTaskAction -Execute $Python -Argument "`"$Script`"" -WorkingDirectory $BackendDir
+$actionParams = @{
+    Execute          = $Python
+    Argument         = """$Script"""
+    WorkingDirectory = $BackendDir
+}
+$action = New-ScheduledTaskAction @actionParams
 
-# 註冊後立即開始，每 5 分鐘重複，不綁定登入狀態（見 QUICK.md §1.2）——
-# heartbeat_job.py 本身不 import main app，即使沒有人登入、ERP 服務本身掛了，
-# 這支心跳仍要能獨立運作並回報。
-$trigger = New-ScheduledTaskTrigger -Once -At (Get-Date) `
-    -RepetitionInterval (New-TimeSpan -Minutes 5) -RepetitionDuration ([TimeSpan]::MaxValue)
+# Starts immediately on registration, repeats every 5 minutes for 10 years (effectively indefinite);
+# not tied to any logon event, so it keeps running across logon/logoff.
+$triggerParams = @{
+    Once               = $true
+    At                 = (Get-Date)
+    RepetitionInterval = (New-TimeSpan -Minutes 5)
+    RepetitionDuration  = (New-TimeSpan -Days 3650)
+}
+$trigger = New-ScheduledTaskTrigger @triggerParams
 
-$settings = New-ScheduledTaskSettingsSet `
-    -ExecutionTimeLimit (New-TimeSpan -Minutes 2) `
-    -StartWhenAvailable `
-    -AllowStartIfOnBatteries `
-    -DontStopIfGoingOnBatteries
+$settingsParams = @{
+    ExecutionTimeLimit         = (New-TimeSpan -Minutes 3)
+    StartWhenAvailable         = $true
+    RunOnlyIfNetworkAvailable  = $false
+    AllowStartIfOnBatteries    = $true
+    DontStopIfGoingOnBatteries = $true
+    MultipleInstances          = "IgnoreNew"
+}
+$settings = New-ScheduledTaskSettingsSet @settingsParams
 
-# SYSTEM 帳號、ServiceAccount 登入類型：不需要存密碼，且不依賴任何使用者是否登入。
-$principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Limited
-
-Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger `
-    -Settings $settings -Principal $principal -Force `
-    -Description "MOTRIX ERP: 每 5 分鐘心跳檢查（heartbeat_job.py，獨立於登入狀態與 ERP 服務本身）" | Out-Null
+$taskParams = @{
+    TaskName    = $TaskName
+    Action      = $action
+    Trigger     = $trigger
+    Settings    = $settings
+    Description = "MOTRIX ERP heartbeat: checks local /api/ping every 5 min, pings healthchecks.io on success; if this host or the ERP service goes down the ping stops and healthchecks.io emails the admin after the grace period."
+    RunLevel    = "Limited"
+    Force       = $true
+}
+Register-ScheduledTask @taskParams -ErrorAction Stop | Out-Null
 
 Write-Host ""
 Write-Host "=== Scheduled task registered ===" -ForegroundColor Green
 Write-Host "Task    : $TaskName"
-Write-Host "Trigger : 立即開始，每 5 分鐘重複（不綁登入，SYSTEM 帳號）"
-Write-Host "Python  : $Python"
-Write-Host "Script  : $Script"
+Write-Host "Trigger : Starts now, repeat every 5min for 10 years (not tied to logon)"
+Write-Host "Action  : $Python $Script"
 Write-Host ""
 Write-Host "Test run:"
 Write-Host "  Start-ScheduledTask -TaskName '$TaskName'"
-Write-Host "  Get-Content backend\logs\heartbeat_job.log -Tail 20"
+Write-Host "  Get-ScheduledTaskInfo -TaskName '$TaskName'"
+Write-Host "  Get-Content ..\backend\logs\heartbeat_job.log -Tail 20"
