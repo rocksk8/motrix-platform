@@ -6,6 +6,7 @@ from routers.payslips import _calc, _get_tax_rules
 from helpers.quotations import _steps_to_tiers
 from helpers.auth import _hash_pw, _verify_pw, is_weak_password, MIN_PASSWORD_LEN
 from routers.quotations import _active_tiers, _current_tier_idx
+from routers.projects import _resolve_upload_path, UPLOADS_ROOT
 
 
 # ── _parse_period ─────────────────────────────────────────────────────────────
@@ -62,12 +63,13 @@ class TestParsePeriod:
 
 # ── _compute_achievement ──────────────────────────────────────────────────────
 
-def _make_case(quote_date="2026-03-01", total=100_000, received=50_000,
+def _make_case(quote_date="2026-03-01", total=100_000, pretax=None, received=50_000,
                settle_status="finalized", gross_profit=20_000,
                margin_pct=20.0, sales="Alice"):
     return {
         "quoteDate":      quote_date,
         "total":          total,
+        "pretax":         pretax if pretax is not None else total,
         "receivedAmount": received,
         "settleStatus":   settle_status,
         "grossProfit":    gross_profit,
@@ -332,6 +334,25 @@ class TestPasswordHelpers:
         pw = "legacyPass"
         legacy_hash = hashlib.sha256(pw.encode()).hexdigest()
         assert _verify_pw(pw, legacy_hash)
+
+
+# ── _resolve_upload_path (path traversal guard) ────────────────────────────────
+
+class TestResolveUploadPath:
+    def test_normal_path_within_uploads(self):
+        full = _resolve_upload_path("projects/1/photo.jpg")
+        assert full is not None
+        assert full.startswith(UPLOADS_ROOT)
+
+    def test_traversal_to_backend_db_is_blocked(self):
+        assert _resolve_upload_path("..\\backend\\motrix_erp.db") is None
+        assert _resolve_upload_path("../backend/motrix_erp.db") is None
+
+    def test_traversal_to_backend_main_is_blocked(self):
+        assert _resolve_upload_path("../backend/main.py") is None
+
+    def test_deep_traversal_outside_repo_is_blocked(self):
+        assert _resolve_upload_path("../../../../../../Windows/win.ini") is None
 
     def test_is_weak_too_short(self):
         assert is_weak_password("abc")

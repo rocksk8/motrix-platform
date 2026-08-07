@@ -19,6 +19,17 @@ from photos import _process_project_photo, _PHOTO_UPLOAD_BASE, _photo_root
 _PHOTO_TOKEN_TTL = 3600  # seconds
 _PHOTO_SECRET_CACHE: bytes | None = None
 
+UPLOADS_ROOT = os.path.realpath(os.path.join(os.path.dirname(__file__), '..', '..', 'uploads'))
+
+
+def _resolve_upload_path(rel_path: str) -> str | None:
+    """Resolve rel_path against UPLOADS_ROOT and reject any path that escapes it
+    (e.g. via '..' traversal). Returns the absolute path, or None if out of bounds."""
+    full = os.path.realpath(os.path.join(UPLOADS_ROOT, rel_path.lstrip('/\\')))
+    if os.path.commonpath([full, UPLOADS_ROOT]) != UPLOADS_ROOT:
+        return None
+    return full
+
 
 def _get_photo_secret() -> bytes:
     """Return persistent HMAC key stored in system_settings; generate once if absent."""
@@ -477,6 +488,8 @@ def get_photo_token(path: str = Query(...), authorization: str = Header(None)):
     """Return a short-lived signed token for accessing a specific upload path via ?pt=."""
     _require_user(authorization)
     safe = os.path.normpath(path).lstrip('/\\')
+    if _resolve_upload_path(safe) is None:
+        raise HTTPException(403, "無效路徑")
     return {"token": _make_photo_token(safe), "ttl": _PHOTO_TOKEN_TTL}
 
 
@@ -488,6 +501,9 @@ def serve_upload(
     pt: str = Query(None),
 ):
     safe = os.path.normpath(file_path).lstrip('/\\')
+    full = _resolve_upload_path(safe)
+    if full is None:
+        raise HTTPException(403, "無效路徑")
     if pt:
         if not _verify_photo_token(safe, pt):
             raise HTTPException(403, "照片連結已過期或無效，請重新載入")
@@ -495,7 +511,6 @@ def serve_upload(
         if not authorization and token:
             authorization = f"Bearer {token}"
         _require_user(authorization)
-    full = os.path.join(os.path.dirname(__file__), '..', '..', 'uploads', safe)
     if not os.path.isfile(full):
         raise HTTPException(404, "檔案不存在")
     return FileResponse(full)
