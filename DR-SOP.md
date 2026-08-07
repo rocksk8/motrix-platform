@@ -29,8 +29,10 @@
 
 在能真正照著 §4 走之前，以下缺口會讓復原流程卡住：
 
-1. 🟡 **`setup_autostart_task.ps1` / `setup_heartbeat_task.ps1` 原本只存在於正式機，開發機 git repo 沒有**（QUICK §0 已知落差第 2 筆，記錄於 2026-08-01）。**2026-08-08 部分解決**：由於沒有正式機的存取權限，沒辦法真的把原始檔案複製回來；改為依 QUICK.md §1.1/§1.2 記載的行為規格、比照 `setup_backup_task.ps1` 既有寫法**重建**了功能等效的版本，兩支都補上「只能在正式機路徑執行」的身分守門（比照 `apply_update.ps1`）。**這代表萬一正式機真的掛了，現在至少有東西可以拿來重新註冊這兩個排程工作**，不必再憑空重寫——但這是重建版，不是原始檔案，行為細節（例如確切的 ExecutionTimeLimit、Principal 設定）可能跟正式機實際在跑的版本有落差。
-   **仍待完成**：下次真的接觸到正式機時，把重建版跟正式機上實際的版本 diff 一次，確認行為一致；若有出入，以正式機實際版本為準覆蓋回開發機（比照 §14 跨機核對流程）。
+1. 🟡 **`setup_autostart_task.ps1` / `setup_heartbeat_task.ps1` 原本只存在於正式機，開發機 git repo 沒有**（QUICK §0 已知落差第 2 筆，記錄於 2026-08-01）。**2026-08-08 進度**：由於沒有正式機直接存取權限，改由使用者透過 RDP 連上正式機、將原始檔案改名為 `.orig` 保留後把內容貼回——已完成：
+   - ✅ **`setup_autostart_task.ps1`**：已跟正式機實際版本逐行 diff 並校正一致。差異：正式機版本用 `$env:WINDIR\System32\wscript.exe` 絕對路徑（不是裸 `wscript.exe`）、action 有帶 `WorkingDirectory`、trigger 用 `$env:COMPUTERNAME\$env:USERNAME` 完整帳號、`Settings` 明確帶 `RunOnlyIfNetworkAvailable=$false`、沒有另外建立 `$principal` 物件（`RunLevel` 直接放在 `$taskParams`）、`Register-ScheduledTask` 帶 `-ErrorAction Stop`——這些都已對齊。唯一刻意保留的差異是額外加的「只能在正式機路徑執行」身分守門，正式機原始版本沒有這段，是重建過程中額外補上的防呆。
+   - ⏳ **`setup_heartbeat_task.ps1`**：還沒拿到正式機實際版本，待補。
+   **仍待完成**：`setup_heartbeat_task.ps1` 比照上面流程 diff 一次。
    **重建過程中意外發現一個額外的坑**（已修復，見 QUICK.md §1.1）：這台開發機的 Windows PowerShell 5.1 在沒有 UTF-8 BOM 時會用系統預設編碼（此機器是 Shift-JIS）誤讀 `.ps1` 裡的中文，導致「只能在正式機執行」的身分守門邏輯本身在解析階段就被打亂、`exit 1` 沒有真的執行——**測試這兩支重建腳本時曾經在開發機上實際觸發過這個問題**（結果沒有真的註冊出東西，因為程式繼續往下跑時用到的變數同樣被編碼問題污染成空值而失敗），已確認事後開發機上沒有殘留任何錯誤註冊的排程工作，且已修正 `setup_backup_task.ps1`/`setup_autostart_task.ps1`/`setup_heartbeat_task.ps1` 三個檔案存成帶 BOM。
 2. ✅ ~~`uploads/`（專案照片）目前沒有離線／雲端備份機制~~——**2026-08-08 已解決**：`archive.py` 新增 `_mirror_uploads()`，`_daily_backup()` 每天執行時會把 `uploads/` 底下的檔案（依大小+修改時間判斷是否需要複製，避免同一批照片被複製 365 份）同步到雲端 `H:\我的雲端硬碟\系統存檔\上傳檔案鏡像\`；demo 隔離目錄（`_demo_projects` 等）故意排除，鏡像只增不減。還原時見 §4 Step 3。
    **仍未涵蓋**：各類 PDF 存檔（報價單/出貨單/勞報單）目前仍不在備份範圍內，之後可考慮用同一套 `_mirror_uploads()` 機制擴充。
