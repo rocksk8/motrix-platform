@@ -719,6 +719,8 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
     即時備份\報價單|客戶|供應商\
     每日備份\YYYY-MM-DD\  （JSON 八表 + motrix_erp.db；保留 365 天，超過自動清除整個日期資料夾）
     週備份\YYYY-WNN\      （保留 730 天，超過自動清除整個週別資料夾）
+    上傳檔案鏡像\          （2026-08-08 新增，uploads/ 專案照片等實體檔案，_mirror_uploads() 依大小+
+                            修改時間增量同步，不是每日整包複製；demo 隔離目錄不同步；只增不減）
 
 本機（不依賴 G:，務必保留）
   backend\db_backups\YYYY-MM-DD\motrix_erp.db   ← SQLite Online Backup，保留 30 天

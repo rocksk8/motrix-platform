@@ -50,8 +50,10 @@ def _app(tmp_path_factory):
     archive._REALTIME_DIR = str(archive_base / "即時備份")
     archive._WEEKLY_DIR = str(archive_base / "週備份")
     archive._DAILY_DIR = str(archive_base / "每日備份")
+    archive._UPLOADS_MIRROR_DIR = str(archive_base / "上傳檔案鏡像")
     archive._LOCAL_DB_BACKUP = str(base / "db_backups")
     archive._ALERT_DIR = str(base / "backup_alerts")
+    archive._UPLOADS_DIR = str(base / "uploads")  # empty — don't let tests read the real uploads/
 
     main = importlib.import_module("main")  # runs the real startup sequence now, isolated
     return main.app

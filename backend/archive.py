@@ -12,16 +12,18 @@ from helpers import _cleanup_sessions
 
 logger = logging.getLogger(__name__)
 
-_ARCHIVE_BASE = r"H:\我的雲端硬碟\系統存檔"
-_REALTIME_DIR = os.path.join(_ARCHIVE_BASE, "即時備份")
-_WEEKLY_DIR   = os.path.join(_ARCHIVE_BASE, "週備份")
-_DAILY_DIR    = os.path.join(_ARCHIVE_BASE, "每日備份")
+_ARCHIVE_BASE  = r"H:\我的雲端硬碟\系統存檔"
+_REALTIME_DIR  = os.path.join(_ARCHIVE_BASE, "即時備份")
+_WEEKLY_DIR    = os.path.join(_ARCHIVE_BASE, "週備份")
+_DAILY_DIR     = os.path.join(_ARCHIVE_BASE, "每日備份")
+_UPLOADS_MIRROR_DIR = os.path.join(_ARCHIVE_BASE, "上傳檔案鏡像")
 
 # Local always-on paths (independent of H: mount)
 _BACKEND_DIR      = os.path.dirname(os.path.abspath(__file__))
 _PROJECT_ROOT     = os.path.dirname(_BACKEND_DIR)
 _LOCAL_DB_BACKUP  = os.path.join(_BACKEND_DIR, "db_backups")
 _ALERT_DIR        = os.path.join(_PROJECT_ROOT, "backup_alerts")
+_UPLOADS_DIR      = os.path.join(_PROJECT_ROOT, "uploads")
 
 
 def _archive_ok() -> bool:
@@ -174,6 +176,7 @@ def _ensure_archive_dirs():
         os.path.join(_REALTIME_DIR, "供應商"),
         _WEEKLY_DIR,
         _DAILY_DIR,
+        _UPLOADS_MIRROR_DIR,
     ]:
         try:
             os.makedirs(d, exist_ok=True)
@@ -228,6 +231,46 @@ def _snapshot_sqlite(also_to_cloud: bool = True):
         logger.exception("_snapshot_sqlite failed")
         _write_backup_alert(f"本機 SQLite 快照失敗: {e}", level="ERROR")
         return None
+
+
+def _mirror_uploads() -> int:
+    """Incrementally sync uploads/（專案照片等實體檔案）到雲端 _UPLOADS_MIRROR_DIR。
+
+    這些檔案不在 quotations/customers/... 那幾張表裡，daily/weekly backup 原本完全
+    沒有覆蓋到——db 救得回來，但照片救不回來。跟 JSON 每日備份不同的是，這裡改用
+    「按檔案 size+mtime 判斷是否需要複製」的鏡像做法，而不是每天整包重新複製一份：
+    上傳的照片一旦寫入通常不會再變動，若每天都整份複製，一年下來雲端空間會被同一批
+    照片的 365 份重複拷貝塞滿。只複製新增/變動過的檔案，且鏡像只增不減——即使來源
+    檔案被刪除，鏡像裡的舊副本仍保留（跟每日/週備份「保留歷史」的精神一致）。
+
+    Demo 隔離目錄（uploads/_demo_projects 等，見 db.py）故意跳過：demo 帳號的資料
+    本來就每次登入都會被清空，不是需要保存的真實資料。
+    """
+    if not os.path.isdir(_UPLOADS_DIR):
+        return 0
+    copied = 0
+    for root, dirs, files in os.walk(_UPLOADS_DIR):
+        dirs[:] = [d for d in dirs if not d.startswith('_demo')]
+        rel_root = os.path.relpath(root, _UPLOADS_DIR)
+        dst_dir = _UPLOADS_MIRROR_DIR if rel_root == '.' else os.path.join(_UPLOADS_MIRROR_DIR, rel_root)
+        for fname in files:
+            src = os.path.join(root, fname)
+            dst = os.path.join(dst_dir, fname)
+            try:
+                if os.path.exists(dst):
+                    s = os.stat(src)
+                    d = os.stat(dst)
+                    if s.st_size == d.st_size and int(s.st_mtime) <= int(d.st_mtime):
+                        continue
+                os.makedirs(dst_dir, exist_ok=True)
+                shutil.copy2(src, dst)
+                copied += 1
+            except Exception:
+                logger.exception("_mirror_uploads failed for %s", src)
+    if copied:
+        logger.info("uploads mirror: copied %d new/changed file(s) to %s", copied, _UPLOADS_MIRROR_DIR)
+        _system_audit("backup.uploads_mirror", date.today().isoformat(), {"copied": copied})
+    return copied
 
 
 def _prune_audit_log(keep_days: int = 730) -> None:
@@ -389,10 +432,17 @@ def _daily_backup():
 
     if not _archive_ok():
         _write_backup_alert(
-            f"雲端備份路徑不可用（{_ARCHIVE_BASE}），已略過 JSON 每日備份；"
+            f"雲端備份路徑不可用（{_ARCHIVE_BASE}），已略過 JSON 每日備份與 uploads/ 鏡像；"
             f"本機 SQLite 快照見 {_LOCAL_DB_BACKUP}"
         )
         return
+
+    try:
+        _mirror_uploads()
+    except Exception:
+        logger.exception("_mirror_uploads failed in daily schedule")
+        _write_backup_alert("uploads/ 雲端鏡像失敗，詳見 server.log")
+
     try:
         today_label = date.today().isoformat()
         day_dir     = os.path.join(_DAILY_DIR, today_label)

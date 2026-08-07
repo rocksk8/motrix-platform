@@ -7,6 +7,7 @@ from helpers.quotations import _steps_to_tiers
 from helpers.auth import _hash_pw, _verify_pw, is_weak_password, MIN_PASSWORD_LEN
 from routers.quotations import _active_tiers, _current_tier_idx
 from routers.projects import _resolve_upload_path, UPLOADS_ROOT
+import archive
 
 
 # ── _parse_period ─────────────────────────────────────────────────────────────
@@ -353,6 +354,63 @@ class TestResolveUploadPath:
 
     def test_deep_traversal_outside_repo_is_blocked(self):
         assert _resolve_upload_path("../../../../../../Windows/win.ini") is None
+
+
+# ── archive._mirror_uploads (uploads/ → cloud mirror) ───────────────────────
+
+class TestMirrorUploads:
+    def _patch_dirs(self, monkeypatch, tmp_path):
+        uploads = tmp_path / "uploads"
+        mirror = tmp_path / "mirror"
+        uploads.mkdir()
+        monkeypatch.setattr(archive, "_UPLOADS_DIR", str(uploads))
+        monkeypatch.setattr(archive, "_UPLOADS_MIRROR_DIR", str(mirror))
+        return uploads, mirror
+
+    def test_copies_new_files_preserving_subdirs(self, monkeypatch, tmp_path):
+        uploads, mirror = self._patch_dirs(monkeypatch, tmp_path)
+        (uploads / "projects" / "1").mkdir(parents=True)
+        (uploads / "projects" / "1" / "photo.jpg").write_bytes(b"fake-jpeg-bytes")
+
+        copied = archive._mirror_uploads()
+
+        assert copied == 1
+        mirrored = mirror / "projects" / "1" / "photo.jpg"
+        assert mirrored.exists()
+        assert mirrored.read_bytes() == b"fake-jpeg-bytes"
+
+    def test_skips_unchanged_files_on_rerun(self, monkeypatch, tmp_path):
+        uploads, mirror = self._patch_dirs(monkeypatch, tmp_path)
+        (uploads / "a.jpg").write_bytes(b"data")
+        assert archive._mirror_uploads() == 1
+        assert archive._mirror_uploads() == 0, "unchanged file should not be re-copied"
+
+    def test_recopies_changed_files(self, monkeypatch, tmp_path):
+        uploads, mirror = self._patch_dirs(monkeypatch, tmp_path)
+        f = uploads / "a.jpg"
+        f.write_bytes(b"v1")
+        archive._mirror_uploads()
+        f.write_bytes(b"v2-longer-content")
+        assert archive._mirror_uploads() == 1
+        assert (mirror / "a.jpg").read_bytes() == b"v2-longer-content"
+
+    def test_demo_directories_are_excluded(self, monkeypatch, tmp_path):
+        uploads, mirror = self._patch_dirs(monkeypatch, tmp_path)
+        (uploads / "_demo_projects").mkdir()
+        (uploads / "_demo_projects" / "should-not-sync.jpg").write_bytes(b"demo-only")
+        (uploads / "projects").mkdir()
+        (uploads / "projects" / "real.jpg").write_bytes(b"real-data")
+
+        copied = archive._mirror_uploads()
+
+        assert copied == 1
+        assert (mirror / "projects" / "real.jpg").exists()
+        assert not (mirror / "_demo_projects").exists()
+
+    def test_no_uploads_dir_is_a_noop(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(archive, "_UPLOADS_DIR", str(tmp_path / "does-not-exist"))
+        monkeypatch.setattr(archive, "_UPLOADS_MIRROR_DIR", str(tmp_path / "mirror"))
+        assert archive._mirror_uploads() == 0
 
     def test_is_weak_too_short(self):
         assert is_weak_password("abc")
