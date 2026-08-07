@@ -20,7 +20,7 @@ from fastapi import APIRouter, Header, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
 from db import get_db
-from helpers import _require_user, _warranty_expiry, _get_edge_path, _get_setting, _set_setting
+from helpers import _require_user, _warranty_expiry, _get_edge_path, _get_setting, _set_setting, payment_item_amounts
 
 _log = logging.getLogger(__name__)
 
@@ -110,9 +110,9 @@ def _collect(period_start: str, period_end: str) -> dict:
         recv_amt = 0
 
         if pay:
-            others = sum(round(total * (p.get("pct") or 0) / 100) for p in pay[1:])
+            amounts = payment_item_amounts(total, pay)
             for idx, pi in enumerate(pay):
-                amt  = int(total - others) if idx == 0 else round(total * (pi.get("pct") or 0) / 100)
+                amt  = amounts[idx]
                 rcvd = bool(pi.get("received"))
                 rat  = (pi.get("receivedAt") or "")[:10]
                 aa   = pi.get("actualAmount")
@@ -1751,12 +1751,12 @@ def _compute_ar_aging() -> dict:
         except Exception:
             anchor = today
 
-        others = sum(round(total * (p.get("pct") or 0) / 100) for p in pay[1:])
+        amounts = payment_item_amounts(total, pay)
 
         for idx, pi in enumerate(pay):
             if pi.get("received"):
                 continue
-            amt  = int(total - others) if idx == 0 else round(total * (pi.get("pct") or 0) / 100)
+            amt  = amounts[idx]
             days = (today - anchor).days
 
             band = "90+" if days > 90 else "61-90" if days > 60 else "31-60" if days > 30 else "0-30"
@@ -1847,9 +1847,9 @@ def customer_history(authorization: str = Header(None)):
         pay = (cr.get("payment") or {}).get("items", [])
         collected = 0
         if pay:
-            others = sum(round(total * (p.get("pct") or 0) / 100) for p in pay[1:])
+            amounts = payment_item_amounts(total, pay)
             for idx, p in enumerate(pay):
-                amt = int(total - others) if idx == 0 else round(total * (p.get("pct") or 0) / 100)
+                amt = amounts[idx]
                 if p.get("received"):
                     collected += amt
 
@@ -2101,11 +2101,11 @@ def monthly_trend(months: int = 12, authorization: str = Header(None)):
             except Exception: pass
         pay = (cr.get("payment") or {}).get("items", [])
         if pay:
-            others = sum(round(total * (p.get("pct") or 0) / 100) for p in pay[1:])
+            amounts = payment_item_amounts(total, pay)
             for idx, pi in enumerate(pay):
                 if not pi.get("received"):
                     continue
-                amt = int(total - others) if idx == 0 else round(total * (pi.get("pct") or 0) / 100)
+                amt = amounts[idx]
                 aa  = pi.get("actualAmount")
                 rat = (pi.get("receivedAt") or "")[:7]
                 if rat in month_map:

@@ -27,6 +27,38 @@ def _steps_to_tiers(steps: list) -> list:
     ]
 
 
+def payment_item_amounts(total: float, pay_items: list) -> list:
+    """Return the effective amount for each payment item, in order.
+
+    Trusts each item's stored `amount` field when present — that's what the
+    editing UI (case-management.js) actually saved after the user finished
+    adjusting percentages/amounts, and is the source of truth. Only falls back
+    to reconstructing from `pct` for legacy rows that predate the `amount`
+    field being written, with the first item absorbing whatever rounding
+    remainder is left over from the rest (so the sum always equals `total`
+    exactly). Every backend spot that lists/reports on payment items
+    (dashboard.py receivables, reports.py financial reports/PDF/Excel) must
+    use this — duplicating the pct-reconstruction formula in each place is
+    what let dashboard/reports drift out of sync with what the edit UI
+    actually saved (and with each other, if the copies ever diverge).
+    """
+    if not pay_items:
+        return []
+    others = sum(
+        p["amount"] if p.get("amount") is not None else round(total * (p.get("pct") or 0) / 100)
+        for p in pay_items[1:]
+    )
+    out = []
+    for idx, pi in enumerate(pay_items):
+        if pi.get("amount") is not None:
+            out.append(pi["amount"])
+        elif idx == 0:
+            out.append(int(total - others))
+        else:
+            out.append(round(total * (pi.get("pct") or 0) / 100))
+    return out
+
+
 def quote_hot_fields(q: dict) -> tuple:
     """Return (deal_tag, settle_status) from a quotation data dict."""
     if not isinstance(q, dict):

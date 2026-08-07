@@ -9,7 +9,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Header, Query
 
 from db import get_db
-from helpers import _require_user, _warranty_expiry
+from helpers import _require_user, _warranty_expiry, payment_item_amounts
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -156,14 +156,11 @@ def dashboard_stats(authorization: str = Header(None)):
             cr    = json.loads(r["case_record_json"])
             items = (cr.get("payment") or {}).get("items") or []
             total = r["total"] or 0
+            amounts = payment_item_amounts(total, items)
             for i, p in enumerate(items):
                 if p.get("received"):
                     continue
-                if i == 0:
-                    others = sum(round(total * (items[j].get("pct", 0) / 100)) for j in range(1, len(items)))
-                    amount = int(total - others)
-                else:
-                    amount = round(total * (p.get("pct", 0) / 100))
+                amount = amounts[i]
                 payment_items.append({
                     "quoteNo":  r["quote_no"],
                     "customer": r["customer_name"] or "",
@@ -278,9 +275,9 @@ def dashboard_stats(authorization: str = Header(None)):
             total = r["total"] or 0
             if not items:
                 continue
-            others = sum(round(total * (items[j].get("pct", 0) / 100)) for j in range(1, len(items)))
+            amounts = payment_item_amounts(total, items)
             for i, p in enumerate(items):
-                amt = int(total - others) if i == 0 else round(total * (p.get("pct", 0) / 100))
+                amt = amounts[i]
                 recv_total += amt
                 if p.get("received"):
                     recv_received += amt
@@ -466,10 +463,10 @@ def list_receivables(status: Optional[str] = None, authorization: str = Header(N
             continue
 
         total = row["total"] or 0
-        others_sum = sum(round(total * (pi.get("pct") or 0) / 100) for pi in payment_items[1:])
+        amounts = payment_item_amounts(total, payment_items)
 
         for idx, pi in enumerate(payment_items):
-            amount = (total - others_sum) if idx == 0 else round(total * (pi.get("pct") or 0) / 100)
+            amount = amounts[idx]
             total_amount  += amount
             if pi.get("received"):
                 received_amount += amount
@@ -544,9 +541,9 @@ def list_sales_orders(authorization: str = Header(None)):
         total = r["total"] or 0
         recv_amount = 0
         if pay_items:
-            others = sum(round(total * (p.get("pct") or 0) / 100) for p in pay_items[1:])
+            amounts = payment_item_amounts(total, pay_items)
             for i, p in enumerate(pay_items):
-                amt = int(total - others) if i == 0 else round(total * (p.get("pct") or 0) / 100)
+                amt = amounts[i]
                 if p.get("received"):
                     recv_amount += amt
 

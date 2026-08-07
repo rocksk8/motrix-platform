@@ -3,7 +3,7 @@ import pytest
 
 from routers.reports import _parse_period, _compute_achievement
 from routers.payslips import _calc, _get_tax_rules
-from helpers.quotations import _steps_to_tiers
+from helpers.quotations import _steps_to_tiers, payment_item_amounts
 from helpers.auth import _hash_pw, _verify_pw, is_weak_password, MIN_PASSWORD_LEN
 from routers.quotations import _active_tiers, _current_tier_idx
 from routers.projects import _resolve_upload_path, UPLOADS_ROOT
@@ -429,3 +429,48 @@ class TestMirrorUploads:
     def test_strong_password_not_weak(self):
         assert not is_weak_password("Str0ng!Pass#2026")
         assert not is_weak_password("allowtec@666secure")
+
+
+# ── payment_item_amounts (regression for dashboard/reports vs edit-UI drift) ──
+
+class TestPaymentItemAmounts:
+    def test_empty_list(self):
+        assert payment_item_amounts(100_000, []) == []
+
+    def test_prefers_stored_amount_when_present(self):
+        # Mirrors what case-management.js actually saves — the last item balances
+        # the total, and every item ends up with an explicit `amount`.
+        items = [
+            {"pct": 30, "amount": 30_000},
+            {"pct": 30, "amount": 30_000},
+            {"pct": 40, "amount": 40_000},
+        ]
+        assert payment_item_amounts(100_000, items) == [30_000, 30_000, 40_000]
+
+    def test_stored_amounts_sum_exactly_even_if_pct_rounds_oddly(self):
+        # 1/3 + 1/3 + 1/3 of 100 can't split evenly by pct alone — but if the UI
+        # already saved amounts that sum to the total, that must be respected
+        # verbatim rather than recomputed from the (necessarily imprecise) pct.
+        items = [
+            {"pct": 33.33, "amount": 33_333},
+            {"pct": 33.33, "amount": 33_333},
+            {"pct": 33.34, "amount": 33_334},
+        ]
+        amounts = payment_item_amounts(100_000, items)
+        assert amounts == [33_333, 33_333, 33_334]
+        assert sum(amounts) == 100_000
+
+    def test_legacy_rows_without_amount_fall_back_to_pct_first_absorbs(self):
+        # Pre-existing backend convention for rows saved before `amount` existed:
+        # first item absorbs the rounding remainder from the rest.
+        items = [{"pct": 33.33}, {"pct": 33.33}, {"pct": 33.34}]
+        amounts = payment_item_amounts(100_000, items)
+        assert sum(amounts) == 100_000
+        assert amounts[0] == 100_000 - amounts[1] - amounts[2]
+
+    def test_mixed_stored_and_legacy_items(self):
+        items = [{"pct": 50, "amount": 50_000}, {"pct": 50}]
+        assert payment_item_amounts(100_000, items) == [50_000, 50_000]
+
+    def test_single_item_gets_full_total(self):
+        assert payment_item_amounts(100_000, [{"pct": 100}]) == [100_000]

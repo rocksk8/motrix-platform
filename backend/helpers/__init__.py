@@ -25,7 +25,10 @@ from .auth import (
 )
 from .settings import _get_setting, _set_setting
 from .audit import _notify, _audit, _filter_live_notifications, _purge_notifications
-from .quotations import SQL_DEAL_TAG, SQL_SETTLE_STATUS, quote_hot_fields, save_quotation_json, _steps_to_tiers
+from .quotations import (
+    SQL_DEAL_TAG, SQL_SETTLE_STATUS, quote_hot_fields, save_quotation_json, _steps_to_tiers,
+    payment_item_amounts,
+)
 from .dates import _add_months, _warranty_expiry
 from .email_notify import (
     notify_approval_request,
@@ -73,6 +76,7 @@ __all__ = [
     "_notify", "_audit", "_filter_live_notifications", "_purge_notifications",
     # quotations
     "SQL_DEAL_TAG", "SQL_SETTLE_STATUS", "quote_hot_fields", "save_quotation_json",
+    "payment_item_amounts",
     # dates
     "_add_months", "_warranty_expiry",
     # email_notify
