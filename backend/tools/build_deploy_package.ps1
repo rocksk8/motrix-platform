@@ -72,9 +72,9 @@ if ($dirty) {
 # 曾經發生過測試治具過時、既有測試靜默失敗一段時間才被發現的情況。這裡直接
 # 擋在打包之前，測試沒過就不產生部署包，避免明知有壞掉的測試還被拿去套用到
 # 正式機。
-Write-Host "`n[測試] 執行 pytest（backend/tests/test_core.py）..."
+Write-Host "`n[測試] 執行 pytest（backend/tests/，含 API 整合測試）..."
 Push-Location (Join-Path $projectRoot "backend")
-python -m pytest tests\test_core.py -q
+python -m pytest -q
 $testExit = $LASTEXITCODE
 Pop-Location
 if ($testExit -ne 0) {
