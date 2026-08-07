@@ -101,9 +101,32 @@ $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
 $dbBackupDir = Join-Path $BackendDir "db_backups\pre_update_$timestamp"
 New-Item -ItemType Directory -Force -Path $dbBackupDir | Out-Null
 $dbPath = Join-Path $BackendDir "motrix_erp.db"
+$dbBackupPath = Join-Path $dbBackupDir "motrix_erp.db"
 if (Test-Path $dbPath) {
-    Copy-Item $dbPath (Join-Path $dbBackupDir "motrix_erp.db") -Force
-    Ok "  db 快照：$dbBackupDir\motrix_erp.db"
+    # 用 SQLite Online Backup API（跟 archive.py _snapshot_sqlite() 每日備份一致的做法），
+    # 不用陽春 Copy-Item —— db 是 WAL 模式，伺服器這時可能還在跑，單純複製主檔案可能
+    # 漏掉尚未 checkpoint 進主檔案、還留在 -wal 的交易，快照不保證一致。backup() 會產生
+    # 真正完整、可安全還原的快照。
+    $backupPy = Join-Path $env:TEMP "motrix_predeploy_backup_$timestamp.py"
+    @"
+import sqlite3
+src = sqlite3.connect(r'$dbPath')
+dst = sqlite3.connect(r'$dbBackupPath')
+try:
+    src.backup(dst)
+finally:
+    dst.close()
+    src.close()
+print('BACKUP_OK')
+"@ | Set-Content -Path $backupPy -Encoding UTF8
+    $backupOutput = & python $backupPy 2>&1
+    $backupExit = $LASTEXITCODE
+    Remove-Item $backupPy -Force -ErrorAction SilentlyContinue
+    if ($backupExit -ne 0 -or ($backupOutput -notmatch "BACKUP_OK")) {
+        Write-Host ($backupOutput | Out-String)
+        Fail "升級前 db 備份失敗，中止套用（正式庫尚未被觸碰）。"
+    }
+    Ok "  db 快照（SQLite Online Backup API）：$dbBackupPath"
 } else {
     Warn "  找不到 motrix_erp.db，略過 db 快照。"
 }
@@ -261,14 +284,32 @@ if ($healthy -and -not $logErrors) {
     Ok "  /api/ping 回應正常，log 未見新錯誤。"
 } else {
     Warn "  套用後健康檢查失敗：healthy=$healthy, log 錯誤筆數=$($logErrors.Count)"
-    Warn "  觸發自動回滾..."
+    Warn "  觸發自動回滾（程式碼 + 資料庫）..."
+
+    # 先停服務再動檔案（含 db）——新版伺服器這時可能還在跑，直接覆寫 db 檔案
+    # 有鎖定/衝突風險；也避免舊版程式碼複製回去的同時新版還在寫入。
+    $conn2 = Get-NetTCPConnection -LocalPort 666 -State Listen -ErrorAction SilentlyContinue
+    if ($conn2) { Stop-Process -Id $conn2.OwningProcess -Force -ErrorAction SilentlyContinue }
+    Start-Sleep -Seconds 2
 
     robocopy (Join-Path $rollbackDir "backend") $BackendDir /E | Out-Null
     robocopy (Join-Path $rollbackDir "frontend") $FrontendDir /E | Out-Null
 
-    $conn2 = Get-NetTCPConnection -LocalPort 666 -State Listen -ErrorAction SilentlyContinue
-    if ($conn2) { Stop-Process -Id $conn2.OwningProcess -Force -ErrorAction SilentlyContinue }
-    Start-Sleep -Seconds 2
+    # 新版可能已經對正式庫套用過 migration（伺服器一啟動就會自動跑 init_db()）。
+    # 只回滾程式碼、不回滾資料庫的話，回滾後會是「舊程式碼 + 新 schema」的不一致
+    # 狀態——多數 migration 只是加欄位/加表，舊程式碼還撐得住，但只要哪次改了
+    # 不相容的變更就會出事。這裡把資料庫也還原回升級前的快照，才是真正回到
+    # 升級前的狀態。
+    if (Test-Path $dbBackupPath) {
+        Copy-Item $dbBackupPath $dbPath -Force
+        # 還原乾淨的主檔案後，殘留的 -wal/-shm（來自新版寫入）內容已經跟它對不上，
+        # 必須一併清掉，否則下次連線時 SQLite 可能把過期的 WAL 內容重新套用回來，
+        # 等於沒回滾乾淨。
+        Remove-Item "$dbPath-wal", "$dbPath-shm" -Force -ErrorAction SilentlyContinue
+        Ok "  資料庫已還原至升級前快照：$dbBackupPath"
+    } else {
+        Warn "  找不到升級前 db 快照（$dbBackupPath），資料庫維持目前狀態，可能仍是新版 schema，需要人工檢查！"
+    }
 
     $rolledBackHealthy = $false
     for ($i = 0; $i -lt 15; $i++) {
