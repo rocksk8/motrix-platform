@@ -1675,6 +1675,8 @@
                         <button @click="downloadShippingPdf(n)" style="padding:4px 10px;font-size:11px;border:1px solid #93C5FD;background:#EFF6FF;color:#1D4ED8;border-radius:5px;cursor:pointer;white-space:nowrap">下載 PDF</button>
                         <button x-show="!n.isSigned" @click="toggleSigned(n,'sign')" style="padding:4px 10px;font-size:11px;border:none;background:#059669;color:#fff;border-radius:5px;cursor:pointer;white-space:nowrap;font-weight:600">標記已回簽</button>
                         <button x-show="n.isSigned" @click="toggleSigned(n,'unsign')" style="padding:4px 10px;font-size:11px;border:1px solid var(--border);background:#fff;color:var(--text-secondary);border-radius:5px;cursor:pointer;white-space:nowrap">取消回簽</button>
+                        <button x-show="!n.isSigned" @click="revokeShippingApproval(n)" title="退回草稿，並自動歸還已扣的庫存序號"
+                                style="padding:4px 10px;font-size:11px;border:1px solid #FCA5A5;background:#FEF2F2;color:#DC2626;border-radius:5px;cursor:pointer;white-space:nowrap">撤銷核准</button>
                       </div>
 
                       <!-- 預覽（不分狀態） -->

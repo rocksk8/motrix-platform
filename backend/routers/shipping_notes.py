@@ -476,6 +476,67 @@ def approve_shipping_note(note_no: str, body: dict = Body(default={}), authoriza
     return {"ok": True, "allDone": all_done}
 
 
+@router.post("/api/shipping-notes/{note_no}/revoke-approval")
+def revoke_shipping_note_approval(note_no: str, body: dict = Body(default={}), authorization: str = Header(None)):
+    """撤銷已核准的出貨單，退回草稿並自動歸還已扣的庫存序號。
+
+    出貨單核准後原本沒有任何撤銷機制——庫存要改回可出貨狀態只能靠庫存管理頁
+    手動「歸還庫存」，但那個動作只改 stock_items，完全不會回頭同步這張出貨單
+    本身：出貨單會永遠停在「已核准」、品項列表也不會變，庫存卻已經在別處顯示
+    可再出貨，兩邊資料一旦分岔就沒有機制發現。這支端點把「撤銷核准」變成一個
+    正式流程：狀態退回草稿（可重新編輯品項後再送審）、approval 資料清空、且
+    核准當下扣的庫存序號一併自動歸還 in_stock，兩邊同一個動作內一起同步。
+
+    已回簽（客戶確認收貨）的出貨單不可撤銷——客戶已經簽收確認，不應該再讓
+    系統這邊反悔；要撤銷須先在案件管理頁取消回簽。
+    """
+    user = _require_user(authorization)
+    _require_admin(user)
+    note = (body or {}).get("note", "")
+    conn = get_db()
+    row = conn.execute(
+        "SELECT data_json, customer_name, is_signed FROM shipping_notes WHERE note_no=? AND status='已核准'",
+        (note_no,)
+    ).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(404, f"出貨單 {note_no} 不存在或不在已核准狀態")
+    if row["is_signed"]:
+        conn.close()
+        raise HTTPException(409, "已回簽（客戶確認收貨）的出貨單不可撤銷核准，請先取消回簽")
+    cname = row["customer_name"] or ""
+    d = json.loads(row["data_json"] or "{}")
+    appr = d.get("approval") or {}
+    requester = appr.get("requestedBy")
+    d.pop("approval", None)
+    now = datetime.now().isoformat()
+
+    returned_rows = conn.execute(
+        "SELECT id FROM stock_items WHERE shipping_note_no=? AND status='shipped'", (note_no,)
+    ).fetchall()
+    for r in returned_rows:
+        conn.execute("""
+            UPDATE stock_items
+            SET status='in_stock', shipping_note_no='', quote_no='', case_device_id='',
+                consumed_at='', consumed_by='', updated_at=?
+            WHERE id=?
+        """, (now, r["id"]))
+
+    conn.execute(
+        "UPDATE shipping_notes SET status='草稿', data_json=?, updated_at=? WHERE note_no=?",
+        (json.dumps(d, ensure_ascii=False), now, note_no)
+    )
+    conn.commit()
+    conn.close()
+    if requester:
+        msg = f"出貨單 {note_no}（{cname}）核准已被撤銷，請確認後重新送審" + (f"：{note}" if note else "")
+        _notify(requester, "shipping_returned", note_no, note_no, msg)
+        notify_shipping_returned(note_no, cname, note, requester)
+    _audit(_tok(authorization), "shipping.revoke_approval", "shipping_note", note_no, f"{note_no}（{cname}）",
+           {"note": note, "stockReturned": len(returned_rows)})
+    return {"ok": True, "stockReturned": len(returned_rows)}
+
+
 @router.post("/api/shipping-notes/{note_no}/reject")
 def reject_shipping_note(note_no: str, body: dict = Body(default={}), authorization: str = Header(None)):
     user = _require_user(authorization)

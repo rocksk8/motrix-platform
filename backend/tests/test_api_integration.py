@@ -391,3 +391,68 @@ def test_return_to_stock_rejects_already_in_stock(client, make_user):
     r = client.post(f"/api/inventory/stock-items/{item_id}/adjust", headers=_auth(token),
                      json={"action": "return_to_stock"})
     assert r.status_code == 409, r.text
+
+
+# ── shipping note revoke-approval (new endpoint, #3c) ────────────────────────
+
+def _make_shipping_note(note_no, quote_no, part_no=None, serial_no=None, is_signed=0):
+    import db
+    conn = db.get_db()
+    try:
+        items = [{"part_no": part_no, "serials": [serial_no]}] if part_no else []
+        conn.execute(
+            "INSERT INTO shipping_notes (note_no, quote_no, status, customer_name, items_json, "
+            "data_json, is_signed, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
+            (note_no, quote_no, "已核准", "測試客戶", json.dumps(items),
+             json.dumps({"approval": {"requestedBy": "someone"}}), is_signed,
+             "2026-01-01T00:00:00", "2026-01-01T00:00:00"),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def test_revoke_approval_reverts_status_and_returns_stock(client, make_user):
+    username, password = make_user(role="admin")
+    token = _login(client, username, password)
+    _make_quotation("MQ-TEST-009")
+    _make_stock_item("NET-005", "SN-SHIPPED-001", status="shipped")
+    import db
+    conn = db.get_db()
+    conn.execute(
+        "UPDATE stock_items SET shipping_note_no='DN-TEST-001', quote_no='MQ-TEST-009' "
+        "WHERE serial_no='SN-SHIPPED-001'"
+    )
+    conn.commit()
+    conn.close()
+    _make_shipping_note("DN-TEST-001", "MQ-TEST-009", "NET-005", "SN-SHIPPED-001")
+
+    r = client.post(
+        "/api/shipping-notes/DN-TEST-001/revoke-approval", headers=_auth(token),
+        json={"note": "測試撤銷"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["stockReturned"] == 1
+
+    conn = db.get_db()
+    note_row = conn.execute("SELECT status, data_json FROM shipping_notes WHERE note_no='DN-TEST-001'").fetchone()
+    stock_row = conn.execute("SELECT status, shipping_note_no, quote_no FROM stock_items WHERE serial_no='SN-SHIPPED-001'").fetchone()
+    conn.close()
+    assert note_row["status"] == "草稿"
+    assert "approval" not in json.loads(note_row["data_json"])
+    assert stock_row["status"] == "in_stock"
+    assert stock_row["shipping_note_no"] == ""
+    assert stock_row["quote_no"] == ""
+
+
+def test_revoke_approval_blocked_when_signed(client, make_user):
+    username, password = make_user(role="admin")
+    token = _login(client, username, password)
+    _make_quotation("MQ-TEST-010")
+    _make_shipping_note("DN-TEST-002", "MQ-TEST-010", is_signed=1)
+
+    r = client.post(
+        "/api/shipping-notes/DN-TEST-002/revoke-approval", headers=_auth(token),
+        json={},
+    )
+    assert r.status_code == 409, r.text

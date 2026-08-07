@@ -1714,6 +1714,20 @@ function app() {
       } catch (e) { alert('網路錯誤：' + e.message) }
     },
 
+    async revokeShippingApproval(n) {
+      const note = prompt(`撤銷出貨單「${n.noteNo}」的核准？將退回草稿，且已扣的庫存序號會自動歸還可出貨狀態。\n\n可填寫撤銷原因（選填）：`)
+      if (note === null) return
+      try {
+        const r = await fetch(`/api/shipping-notes/${n.noteNo}/revoke-approval`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify({ note })
+        })
+        if (!r.ok) { alert((await r.json()).detail || '撤銷失敗'); return }
+        await this.loadShippingNotes(this.selected?.quote_no)
+      } catch (e) { alert('網路錯誤：' + e.message) }
+    },
+
     async toggleSigned(n, action) {
       const msg = action === 'sign'
         ? `確定標記出貨單「${n.noteNo}」已回簽？`
