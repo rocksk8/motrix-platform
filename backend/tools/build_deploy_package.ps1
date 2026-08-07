@@ -67,7 +67,22 @@ if ($dirty) {
     Fail "請先 commit（或 stash）所有變更，再重新執行本腳本。打包內容只會包含已 commit 的版本，未 commit 的東西不會被打包，也不該被打包。"
 }
 
-# --- Step 2: 記錄 commit / 分支資訊 ---
+# --- Step 2: 測試必須通過 ---
+# 目前的把關只有「git status 乾淨」，不代表「這次 commit 沒把測試弄壞」——
+# 曾經發生過測試治具過時、既有測試靜默失敗一段時間才被發現的情況。這裡直接
+# 擋在打包之前，測試沒過就不產生部署包，避免明知有壞掉的測試還被拿去套用到
+# 正式機。
+Write-Host "`n[測試] 執行 pytest（backend/tests/test_core.py）..."
+Push-Location (Join-Path $projectRoot "backend")
+python -m pytest tests\test_core.py -q
+$testExit = $LASTEXITCODE
+Pop-Location
+if ($testExit -ne 0) {
+    Fail "測試未全數通過（exit code $testExit），中止打包。請先修好測試再重新執行本腳本。"
+}
+Write-Host "[OK] 測試全數通過。" -ForegroundColor Green
+
+# --- Step 3: 記錄 commit / 分支資訊 ---
 $commit = (git rev-parse HEAD).Trim()
 $commitShort = (git rev-parse --short HEAD).Trim()
 $branch = (git rev-parse --abbrev-ref HEAD).Trim()
@@ -79,7 +94,7 @@ if ($branch -ne "master") {
 Write-Host "Commit:  $commit ($commitShort)"
 Write-Host "Branch:  $branch"
 
-# --- Step 3: 讀 version_manifest.json 最新一筆（陣列最前面，新條目永遠插最前面） ---
+# --- Step 4: 讀 version_manifest.json 最新一筆（陣列最前面，新條目永遠插最前面） ---
 $versionManifestPath = Join-Path $projectRoot "backend\version_manifest.json"
 $versionLatest = $null
 if (Test-Path $versionManifestPath) {
@@ -96,7 +111,7 @@ if (Test-Path $versionManifestPath) {
     }
 }
 
-# --- Step 4: 用 git archive 匯出乾淨快照 ---
+# --- Step 5: 用 git archive 匯出乾淨快照 ---
 $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
 if (-not $OutDir) {
     $OutDir = Join-Path $projectRoot "deploy_packages"
@@ -118,7 +133,7 @@ Pop-Location
 # 部署包只需要 backend/ + frontend/ + 根目錄文件，其餘（如 .github/、測試用暫存檔等）
 # git archive 本來就只會匯出 git 追蹤的內容，這裡不需要額外過濾。
 
-# --- Step 5: 寫 deploy_manifest.json ---
+# --- Step 6: 寫 deploy_manifest.json ---
 $manifest = [ordered]@{
     commit               = $commit
     commit_short         = $commitShort
