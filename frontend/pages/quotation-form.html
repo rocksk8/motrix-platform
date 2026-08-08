@@ -237,21 +237,22 @@
     .cell-display.muted { color: var(--text-dim); }
     .margin-warn { color: var(--danger); font-weight: 600; }
     .del-btn {
-      width: 22px; height: 22px;
+      width: 26px; height: 26px;
       border-radius: 4px;
       border: none;
       background: transparent;
-      color: var(--text-dim);
+      color: var(--text-secondary);
       cursor: pointer;
       display: flex; align-items: center; justify-content: center;
       transition: all .1s;
-      opacity: 0;
+      opacity: .55;
     }
     tr:hover .del-btn { opacity: 1; }
     .del-btn:hover { background: var(--danger-light); color: var(--danger); }
     /* ── 拖曳排序 ── */
-    .drag-handle { cursor: grab; color: var(--text-dim); opacity: 0; transition: opacity .1s; display:inline-flex; align-items:center; }
-    tr:hover .drag-handle { opacity: 1; }
+    .drag-handle { cursor: grab; color: var(--text-secondary); opacity: .55; transition: opacity .1s, background .1s; display:inline-flex; align-items:center; padding: 4px; border-radius: 4px; }
+    .drag-handle:hover { opacity: 1; background: #EEECEA; }
+    tr:hover .drag-handle { opacity: .85; }
     .drag-handle:active { cursor: grabbing; }
     .sortable-ghost td { background: #EFF6FF !important; opacity: .5; }
     .sortable-chosen { box-shadow: 0 2px 16px rgba(0,0,0,.12); }
@@ -395,18 +396,10 @@
       color: #15803D;
     }
 
-    /* ── 按鈕群 ── */
-    .btn { display:inline-flex; align-items:center; gap:6px; padding:8px 16px; border-radius:var(--radius); font-size:12px; font-family:var(--font-zh); cursor:pointer; border:none; transition:all .12s; font-weight:500; }
-    .btn-primary   { background:var(--accent);  color:#fff; }
-    .btn-primary:hover { background:#1D4ED8; }
+    /* ── 按鈕群（.btn/.btn-primary/.btn-ghost/.btn-sm 已收斂至共用 style.css） ── */
     .btn-success   { background:var(--success); color:#fff; }
     .btn-success:hover { background:#15803D; }
-    .btn-ghost     { background:#fff; color:var(--text-secondary); border:1px solid var(--border-light); }
-    .btn-ghost:hover { border-color:#C8C4BC; }
     .btn-warning   { background:var(--warning-light); color:var(--warning); border:1px solid #FDE68A; }
-    .btn-approve   { background:#15803D; color:#fff; }
-    .btn-approve:hover { background:#166534; }
-    .btn-sm { padding:6px 12px; font-size:11px; }
     .status-select-admin { appearance:none; -webkit-appearance:none; cursor:pointer; padding-right:16px; border:none; background:transparent; font:inherit; color:inherit; outline:none; }
     .status-wrap-admin { position:relative; display:inline-flex; align-items:center; }
     .status-wrap-admin svg { position:absolute; right:3px; pointer-events:none; opacity:.7; }
@@ -456,18 +449,7 @@
       gap: 10px;
     }
     .modal-head__title { font-size: 13px; font-weight: 600; }
-    .modal-close {
-      margin-left: auto;
-      width: 28px; height: 28px;
-      border-radius: 4px;
-      border: none;
-      background: #F0EEE9;
-      cursor: pointer;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 16px;
-      color: var(--text-secondary);
-    }
-    .modal-close:hover { background: var(--danger-light); color: var(--danger); }
+    .modal-close { margin-left: auto; }
     .modal-body { flex: 1; overflow: auto; padding: 0; }
     .modal-foot { padding: 12px 20px; border-top: 1px solid var(--border-light); display: flex; justify-content: flex-end; gap: 8px; }
 
@@ -1325,7 +1307,7 @@
                   <td style="text-align:center;color:var(--text-dim);font-size:11px;font-family:LINE Seed TW_OTF, sans-serif;padding:0 4px">
                     <div style="display:flex;align-items:center;justify-content:center;gap:1px">
                       <span class="drag-handle" title="拖曳排序">
-                        <svg width="9" height="14" viewBox="0 0 9 14" fill="currentColor">
+                        <svg width="12" height="19" viewBox="0 0 9 14" fill="currentColor">
                           <circle cx="2.5" cy="2" r="1.5"/><circle cx="6.5" cy="2" r="1.5"/>
                           <circle cx="2.5" cy="7" r="1.5"/><circle cx="6.5" cy="7" r="1.5"/>
                           <circle cx="2.5" cy="12" r="1.5"/><circle cx="6.5" cy="12" r="1.5"/>
@@ -2016,7 +1998,7 @@
   const API = '/api'
   // ── 報價單模板版本：本頁（quotation-form.html）或其邏輯有任何改動都須遞增 ──
   // ── 小改版（欄位微調/樣式/文案）+0.1；大改版（版型結構/新增區塊/流程變更）+1 ──
-  const FORM_VERSION = 'V1.7'
+  const FORM_VERSION = 'V2.0'
 
   // ── 報價條件預設文字（供「與預設不同」比對用；付款條件另可被後端 settings/payment-terms 覆蓋）──
   const DEFAULT_TERMS = {

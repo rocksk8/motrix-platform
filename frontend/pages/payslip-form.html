@@ -362,11 +362,11 @@
         </div>
 
         <div style="margin-top:18px;display:flex;flex-direction:column;gap:10px">
-          <button class="action-btn action-btn--primary" style="width:100%;justify-content:center"
+          <button class="btn btn-primary" style="width:100%;justify-content:center"
                   @click="save()" :disabled="saving">
             <span x-text="saving ? '儲存中…' : isDirty ? '儲存草稿' : '已儲存'"></span>
           </button>
-          <button class="action-btn" style="width:100%;justify-content:center"
+          <button class="btn btn-ghost" style="width:100%;justify-content:center"
                   @click="previewPdf()" :disabled="previewFetching || !q.slipNo || isNew">
             <span x-text="previewFetching ? '準備預覽…' : '預覽 / 匯出 PDF'"></span>
           </button>
@@ -450,12 +450,12 @@
         </template>
       </div>
       <div style="display:flex;gap:10px">
-        <button class="action-btn" @click="closePreview()">關閉</button>
-        <button x-show="!previewArchiveMode" class="action-btn action-btn--primary"
+        <button class="btn btn-ghost" @click="closePreview()">關閉</button>
+        <button x-show="!previewArchiveMode" class="btn btn-primary"
                 @click="confirmExport()" :disabled="!previewIframeReady">
           確認匯出（下載 PDF）
         </button>
-        <button x-show="previewArchiveMode" class="action-btn action-btn--primary"
+        <button x-show="previewArchiveMode" class="btn btn-primary"
                 @click="downloadArchivePreview()" :disabled="!previewBlobUrl">
           下載此存檔
         </button>

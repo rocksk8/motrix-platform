@@ -134,18 +134,9 @@
     }
     .profit-bar__fill { height: 100%; border-radius: 5px; transition: width .3s; }
 
-    /* ── 按鈕 ── */
-    .btn { display:inline-flex; align-items:center; gap:6px; padding:8px 16px; border-radius:var(--radius); font-size:12px; font-family:var(--font-zh); cursor:pointer; border:none; transition:all .12s; font-weight:500; }
-    .btn-primary  { background:var(--accent); color:#fff; }
-    .btn-primary:hover { background:#1D4ED8; }
+    /* ── 按鈕（.btn/.btn-primary/.btn-ghost/.btn-danger/.btn-sm/.btn:disabled 已收斂至共用 style.css） ── */
     .btn-success  { background:var(--success); color:#fff; }
     .btn-success:hover { background:#15803D; }
-    .btn-ghost    { background:#fff; color:var(--text-secondary); border:1px solid var(--border-light); }
-    .btn-ghost:hover { border-color:#C8C4BC; }
-    .btn-danger   { background:#FFF1F2; color:#DC2626; border:1px solid #FECACA; }
-    .btn-danger:hover { background:#FEE2E2; }
-    .btn-sm { padding:6px 12px; font-size:11px; }
-    .btn:disabled { opacity:.45; cursor:not-allowed; }
 
     /* ── 額外品項 category badge ── */
     .cat-badge {

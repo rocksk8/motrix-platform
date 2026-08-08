@@ -51,15 +51,6 @@
     .data-table tr:hover td { background: #FDFCFA; }
     .data-table tr:hover .row-actions { opacity: 1; }
     .row-actions { opacity: 0; display: flex; gap: 6px; transition: opacity .12s; }
-    /* Buttons */
-    .btn { display:inline-flex; align-items:center; gap:6px; padding:8px 16px; border-radius:var(--radius); font-size:12px; font-family:var(--font-zh); cursor:pointer; border:none; transition:all .12s; font-weight:500; }
-    .btn-primary  { background:var(--accent);  color:#fff; }
-    .btn-primary:hover { background:#1D4ED8; }
-    .btn-ghost    { background:#fff; color:var(--text-secondary); border:1px solid var(--border-light); }
-    .btn-ghost:hover { border-color:#C8C4BC; }
-    .btn-danger   { background:var(--danger-light); color:var(--danger); border:1px solid #FECACA; }
-    .btn-danger:hover { background:#FEE2E2; }
-    .btn-sm { padding:5px 11px; font-size:11px; }
     /* Modal */
     .modal-overlay {
       position: fixed; inset: 0; background: rgba(0,0,0,.45);
@@ -76,12 +67,6 @@
       border-bottom: 1px solid var(--border-light); gap: 10px;
     }
     .modal-head__title { font-size: 14px; font-weight: 600; flex: 1; }
-    .modal-close {
-      width: 28px; height: 28px; border-radius: 4px; border: none;
-      background: #F0EEE9; cursor: pointer; font-size: 16px;
-      color: var(--text-secondary); display: flex; align-items: center; justify-content: center;
-    }
-    .modal-close:hover { background: #FEF2F2; color: var(--danger); }
     .modal-body { padding: 22px; }
     .modal-foot { padding: 14px 22px; border-top: 1px solid var(--border-light); display: flex; justify-content: flex-end; gap: 8px; }
     /* Form */

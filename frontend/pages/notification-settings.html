@@ -310,7 +310,7 @@
             <span x-show="!saving">儲存設定</span>
             <span x-show="saving">儲存中…</span>
           </button>
-          <button class="btn btn-secondary" @click="testEmail()" :disabled="testing || !cfg.enabled">
+          <button class="btn btn-ghost" @click="testEmail()" :disabled="testing || !cfg.enabled">
             <span x-show="!testing">寄送測試信</span>
             <span x-show="testing">寄送中…</span>
           </button>

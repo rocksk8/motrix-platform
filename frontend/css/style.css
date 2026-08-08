@@ -51,14 +51,22 @@
 
   --accent:  #2563EB;
   --accent-light: #EFF6FF;
+  --accent-hover: #1D4ED8;
   --success: #16A34A;
   --success-light: #F0FDF4;
+  --success-border: #BBF7D0;
+  --success-hover-bg: #DCFCE7;
   --warning: #D97706;
   --warning-light: #FFFBEB;
   --danger:  #DC2626;
   --danger-light: #FEF2F2;
+  --danger-border: #FECACA;
+  --danger-hover-bg: #FEE2E2;
   --orange:  #EA580C;
   --orange-light: #FFF7ED;
+
+  --ghost-hover-border: #C8C4BC;
+  --icon-btn-bg: #F0EEE9;
 
   --sidebar-w: 220px;
   --topbar-h:  60px;
@@ -693,6 +701,148 @@ body {
 .badge--lost     { background: #F3F4F6; color: #6B7280; }
 .badge--active   { background: var(--success-light); color: var(--success); }
 .badge--repair   { background: var(--orange-light);  color: var(--orange); }
+
+/* ═══════════════════════════════════════
+   共用按鈕元件（全站規格統一，2026-08-09）
+   各頁若有同名 local class 會依 CSS cascade
+   覆蓋此處規則 —— 逐頁移除 local 重複定義後
+   即統一改吃這裡。
+   ═══════════════════════════════════════ */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: var(--radius);
+  font-size: 12px;
+  font-family: var(--font-zh);
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  white-space: nowrap;
+  text-decoration: none;
+  transition: all .12s;
+}
+.btn:disabled { opacity: .55; cursor: not-allowed; }
+
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
+
+.btn-ghost { background: #fff; color: var(--text-secondary); border: 1px solid var(--border-light); }
+.btn-ghost:hover:not(:disabled) { border-color: var(--ghost-hover-border); }
+
+.btn-danger { background: var(--danger-light); color: var(--danger); border: 1px solid var(--danger-border); }
+.btn-danger:hover:not(:disabled) { background: var(--danger-hover-bg); }
+
+.btn-success { background: var(--success-light); color: var(--success); border: 1px solid var(--success-border); }
+.btn-success:hover:not(:disabled) { background: var(--success-hover-bg); }
+
+.btn-sm { padding: 5px 11px; font-size: 11px; }
+
+/* 簽核流程專用實心按鈕（核准/退回/拒絕結案，quotation-form.html 與 approval-queue.html 共用同一組值）
+   ——刻意比一般列表危險按鈕更醒目，因為代表不可逆的重大動作，不套用 .btn-danger 的淺色路線 */
+.btn-approve { background: #15803D; color: #fff; border: 1px solid #15803D; }
+.btn-approve:hover:not(:disabled) { background: #166534; border-color: #166534; }
+.btn-reject { background: var(--danger); color: #fff; border: 1px solid var(--danger); }
+.btn-reject:hover:not(:disabled) { background: #B91C1C; border-color: #B91C1C; }
+.btn-reject-final { background: #1C1917; color: #fff; border: 1px solid #1C1917; }
+.btn-reject-final:hover:not(:disabled) { background: #000; border-color: #000; }
+
+/* 小型方型圖示按鈕（取代各頁 .modal-close/.icon-btn/.as-step-btn 等重複定義）
+   熱區固定不小於 28px（.btn-icon--sm 例外，用於已很擁擠的密集列表列） */
+.btn-icon {
+  width: 28px; height: 28px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: var(--radius);
+  border: none;
+  background: var(--icon-btn-bg);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all .12s;
+}
+.btn-icon:hover:not(:disabled) { background: var(--danger-light); color: var(--danger); }
+.btn-icon--ghost { background: transparent; }
+.btn-icon--sm { width: 22px; height: 22px; }
+
+/* Modal 關閉鈕（取代各頁重複定義的 .modal-close，同尺寸規格） */
+.modal-close {
+  width: 28px; height: 28px;
+  border-radius: var(--radius);
+  border: none;
+  background: var(--icon-btn-bg);
+  color: var(--text-secondary);
+  font-size: 16px;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all .12s;
+}
+.modal-close:hover { background: var(--danger-light); color: var(--danger); }
+
+/* 列表列內的外框圖示按鈕（取代 quotations.html 原本的 .icon-btn） */
+.icon-btn { width:28px; height:28px; border-radius:var(--radius); display:flex; align-items:center; justify-content:center; border:1px solid var(--border-light); background:#fff; cursor:pointer; transition:all .12s; }
+.icon-btn:hover { background:var(--accent-light); border-color:var(--accent); color:var(--accent); }
+.icon-btn.del:hover { background:var(--danger-light); border-color:var(--danger); color:var(--danger); }
+.icon-btn svg { width:14px; height:14px; stroke:currentColor; }
+
+/* 簽核設定頁的步驟操作圖示按鈕（取代 approval-settings.html/shipping-approval-settings.html 重複定義） */
+.as-step-btn {
+  width: 28px; height: 28px; border: 1px solid var(--border);
+  border-radius: var(--radius); background: var(--white);
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  color: var(--text-secondary); transition: background .12s;
+}
+.as-step-btn:hover { background: #F3F4F6; }
+.as-step-btn:disabled { opacity: .35; cursor: default; }
+
+/* 底線分頁籤（取代 devices/warranty/procurement/receivables/reports 重複定義的
+   .tab/.tab-bar；現況 markup 一律用 .on 標示選取狀態，不是 .active，沿用既有命名
+   以免要跟著改 5 個頁面的 Alpine :class 綁定） */
+.tab-bar { display: flex; gap: 2px; margin-bottom: 16px; border-bottom: 1px solid var(--border-light); }
+.tab {
+  padding: 7px 16px;
+  font-size: 12px;
+  font-family: var(--font-zh);
+  color: var(--text-secondary);
+  cursor: pointer;
+  border: none;
+  background: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: all .1s;
+}
+.tab:hover { color: var(--text-primary); }
+.tab.on { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+
+/* 篩選／標籤膠囊按鈕（取代各頁 .att-chip/.preset-chip/.ftab/.attendee-chip/.exp-chip 等） */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-family: var(--font-zh);
+  border: 1px solid var(--border-light);
+  background: #fff;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all .12s;
+}
+.chip:hover { border-color: var(--ghost-hover-border); }
+.chip.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+/* 選型導覽頁（netarch-guide/env-guide/switch-guide）共用的小型外框按鈕，
+   取代 3 頁各自重複定義的 .mibtn（行內小按鈕）/.mbtn（Modal 按鈕） */
+.mibtn { border:1px solid var(--border-light); background:#fff; color:var(--text-secondary); font:inherit; font-size:11px; font-weight:600; padding:5px 12px; border-radius:var(--radius); cursor:pointer; }
+.mibtn:hover { border-color:var(--accent); color:var(--accent); }
+.mibtn.pri { background:var(--accent); border-color:var(--accent); color:#fff; margin-left:auto; }
+.mibtn.pri:hover { background:var(--accent-hover); color:#fff; }
+.mibtn.danger { color:var(--danger); border-color:var(--danger); }
+.mbtn { border:1px solid var(--border-light); background:#fff; color:var(--text-secondary); font:inherit; font-size:12.5px; font-weight:600; padding:7px 14px; border-radius:var(--radius); cursor:pointer; }
+.mbtn:hover { color:var(--text-primary); border-color:var(--accent); }
+.mbtn.pri { background:var(--accent); border-color:var(--accent); color:#fff; }
+.mbtn.pri:hover { background:var(--accent-hover); }
+.mbtn:disabled { opacity:.6; cursor:default; }
 
 /* ─── PAYMENT STATUS ─── */
 .pay-status {

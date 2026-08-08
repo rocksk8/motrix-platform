@@ -66,7 +66,7 @@
     .dt-bar-act-lock { background:#FEF3C7;color:#92400E;border-color:#FDE68A }
     .dt-bar-act-lock:hover { background:#FDE68A;border-color:#F59E0B }
     .dt-bar-act-add { background:var(--accent);color:#fff;border-color:var(--accent);font-weight:600 }
-    .dt-bar-act-add:hover { background:#1D4ED8;border-color:#1D4ED8 }
+    .dt-bar-act-add:hover { background:var(--accent-hover);border-color:var(--accent-hover) }
 
     /* ── 回報彙整 toolbar ── */
     .dt-report-person-row { display:flex;gap:4px;flex-wrap:wrap;margin-top:4px }
@@ -543,9 +543,9 @@
     }
 
     /* ── Calendar mode ── */
-    .dt-bar-act-cal { background:#EFF6FF;color:#1D4ED8;border-color:#BFDBFE }
+    .dt-bar-act-cal { background:var(--accent-light);color:var(--accent-hover);border-color:#BFDBFE }
     .dt-bar-act-cal:hover { background:#DBEAFE;border-color:#93C5FD }
-    .dt-bar-act-cal.on { background:#1D4ED8;color:#fff;border-color:#1D4ED8 }
+    .dt-bar-act-cal.on { background:var(--accent-hover);color:#fff;border-color:var(--accent-hover) }
     .dt-bar-act-cal.on:hover { background:#1E40AF }
 
     .dt-cal-body { display:flex;flex:1;min-height:0;overflow:hidden }
