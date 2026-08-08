@@ -434,7 +434,7 @@ def init_db(path: str = None):
     _seed_setting(conn, "company_profile", {
         "name": "允碩整合集創股份有限公司",
         "tax_id": "60575481",
-        "contact_info": "Tel: 04-3602-2818｜info@miactw.com"
+        "contact_info": "Tel: 04-3610-6566｜info@miactw.com"
     })
     _seed_setting(conn, "tax_rules", {
         "version": "2026",

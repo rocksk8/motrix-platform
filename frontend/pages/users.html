@@ -422,7 +422,7 @@
           </div>
           <div class="form-group">
             <label class="form-label">電話 <span style="color:var(--text-dim);font-size:9px">（自動帶入報價單）</span></label>
-            <input class="form-input" type="text" x-model="form.phone" placeholder="04-3602-2818">
+            <input class="form-input" type="text" x-model="form.phone" placeholder="04-3610-6566">
           </div>
         </div>
         <!-- 快速套用 -->
@@ -490,7 +490,7 @@
         <div class="form-group">
           <label class="form-label" x-text="editingId ? '新密碼（留空不更改）' : '密碼 *'"></label>
           <input class="form-input" type="password" x-model="form.password"
-                 :placeholder="editingId ? '留空則不修改密碼' : '設定密碼（至少 6 碼）'">
+                 :placeholder="editingId ? '留空則不修改密碼' : '設定密碼（至少 8 碼）'">
           <div class="form-hint error" x-show="formError" x-text="formError"></div>
         </div>
         <template x-if="form.password">
@@ -902,18 +902,18 @@
         if (!this.form.displayName)              { this.formError = '請填寫顯示名稱'; return }
         if (!this.editingId && !this.form.username) { this.formError = '請填寫帳號'; return }
         if (!this.editingId && !this.form.password) { this.formError = '請設定密碼'; return }
-        if (this.form.password && this.form.password.length < 6) { this.formError = '密碼至少 6 碼'; return }
+        if (this.form.password && this.form.password.length < 8) { this.formError = '密碼至少 8 碼'; return }
         if (this.form.password && this.form.password !== this.form.confirmPassword) {
           this.formError = '兩次密碼不一致'; return
         }
         if (this.form.unlockPassword) {
-          if (this.form.unlockPassword.length < 6) { this.formError = '解鎖密碼至少 6 碼'; return }
+          if (this.form.unlockPassword.length < 8) { this.formError = '解鎖密碼至少 8 碼'; return }
           if (this.form.unlockPassword !== this.form.confirmUnlockPassword) {
             this.formError = '解鎖密碼與確認密碼不一致'; return
           }
         }
         if (this.form.dtPassword) {
-          if (this.form.dtPassword.length < 6) { this.formError = '每日工作事項密碼至少 6 碼'; return }
+          if (this.form.dtPassword.length < 8) { this.formError = '每日工作事項密碼至少 8 碼'; return }
           if (this.form.dtPassword !== this.form.confirmDtPassword) {
             this.formError = '每日工作事項密碼與確認密碼不一致'; return
           }

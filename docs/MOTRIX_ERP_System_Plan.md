@@ -12,7 +12,7 @@
 | 公司英文名 | MARGIN INTEGRATED AGGREGATES |
 | 視覺品牌 | MOTRIX SYNERGY INTEGRATION |
 | 統一編號 | 60575481 |
-| 電話 | 04-3602-2818 |
+| 電話 | 04-3610-6566 |
 | E-mail | info@miactw.com |
 | Logo 檔案 | `C:\Users\hichan\current_logo.png` |
 

@@ -45,7 +45,7 @@ def _check_export_rate(user_id: int, fmt: str) -> None:
         if wait > 0:
             raise HTTPException(429, f"請等待 {int(wait) + 1} 秒後再次匯出")
         _export_times[key] = time.monotonic()
-_COMPANY2 = "統一編號 60575481 ｜ Tel: 04-3602-2818 ｜ info@miactw.com"
+_COMPANY2 = "統一編號 60575481 ｜ Tel: 04-3610-6566 ｜ info@miactw.com"
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
