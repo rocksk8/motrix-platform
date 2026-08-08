@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException, Header, Query
 
 from db import get_db
 from helpers import _require_user, _warranty_expiry, payment_item_amounts
+from routers.dev_crm import _can_access_case
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -661,6 +662,95 @@ def dashboard_funnel(authorization: str = Header(None)):
         },
         "followUpQuotes": follow_up_quotes[:10],
         "expiringQuotes": expiring_quotes[:5],
+    }
+
+
+@router.get("/api/dashboard/ops-alerts")
+def dashboard_ops_alerts(authorization: str = Header(None)):
+    """業務開發案件停滯（洽談中 30 天無新開發記錄，門檻同 helpers.email_notify.notify_dev_case_stale
+    的既有定義）+ 出貨單卡簽核（待審核/簽核中超過 5 天未動）提醒。"""
+    u = _require_user(authorization)
+    role = u["role"]
+    mods = json.loads(u.get("modules") or "[]") if isinstance(u.get("modules"), str) else (u.get("modules") or [])
+    is_admin    = role in ("superadmin", "admin")
+    can_dev_crm = is_admin or "dev_crm" in mods
+
+    today = date.today()
+
+    # 門檻／篩選條件（is_deleted=0、status='洽談中'、updated_at 起算 30 天）與
+    # dev_crm.py 既有的 _check_dev_case_stale()（每日排程通知）完全一致，避免儀表板
+    # 顯示的件數跟通知系統對「停滯」的認定兜不起來。
+    dev_stale = []
+    if can_dev_crm:
+        conn = get_db()
+        rows = conn.execute("""
+            SELECT id, case_name, customer_name, sales_persons, planners, created_by, updated_at
+            FROM dev_cases WHERE is_deleted=0 AND status='洽談中'
+        """).fetchall()
+        conn.close()
+        for r in rows:
+            if not _can_access_case(u, r):
+                continue
+            try:
+                updated    = datetime.strptime(r["updated_at"], "%Y-%m-%d %H:%M:%S")
+                days_since = (datetime.now() - updated).days
+            except (ValueError, TypeError):
+                continue
+            if days_since >= 30:
+                dev_stale.append({
+                    "id":           r["id"],
+                    "caseName":     r["case_name"] or "",
+                    "customerName": r["customer_name"] or "",
+                    "lastActivity": r["updated_at"],
+                    "daysSince":    days_since,
+                })
+        dev_stale.sort(key=lambda x: x["daysSince"], reverse=True)
+
+    conn = get_db()
+    rows = conn.execute("""
+        SELECT note_no, quote_no, status, customer_name, project_name, updated_at, data_json
+        FROM shipping_notes
+        WHERE status IN ('待審核','簽核中')
+    """).fetchall()
+    conn.close()
+
+    my_username = u["username"]
+    shipping_waiting_for_me = 0
+    shipping_stuck = []
+    for r in rows:
+        try:
+            d = json.loads(r["data_json"] or "{}")
+        except Exception:
+            d = {}
+        appr    = d.get("approval") or {}
+        tiers   = appr.get("tiers") or []
+        cur_idx = appr.get("currentTier") or 0
+        if 0 <= cur_idx < len(tiers):
+            approvers = tiers[cur_idx].get("approvers") or []
+            if any(a.get("username") == my_username and a.get("status") != "approved"
+                   for a in approvers):
+                shipping_waiting_for_me += 1
+
+        upd = (r["updated_at"] or "")[:10]
+        try:
+            days_since = (today - date.fromisoformat(upd)).days if upd else 0
+        except Exception:
+            days_since = 0
+        if days_since >= 5:
+            shipping_stuck.append({
+                "noteNo":       r["note_no"],
+                "quoteNo":      r["quote_no"] or "",
+                "status":       r["status"],
+                "customerName": r["customer_name"] or "",
+                "projectName":  r["project_name"] or "",
+                "daysSince":    days_since,
+            })
+    shipping_stuck.sort(key=lambda x: x["daysSince"], reverse=True)
+
+    return {
+        "devStale":             dev_stale[:10],
+        "shippingWaitingForMe": shipping_waiting_for_me,
+        "shippingStuck":        shipping_stuck[:10] if is_admin else [],
     }
 
 

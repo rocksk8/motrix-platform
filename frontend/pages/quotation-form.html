@@ -2961,6 +2961,11 @@ window.addEventListener('load',function(){
           exportCount: 0,
           exportLog: [],
           version: 1,
+          // 新單是全新的一筆案子，不可繼承來源單已經跑到哪的執行期資料
+          dealTag: '',
+          caseRecord: null,
+          settlement: null,
+          editHistory: [],
         }
         template.items = (this.q.items || []).map(it => ({...it, id: this.genId()}))
         sessionStorage.setItem('motrix_copy_template', JSON.stringify(template))

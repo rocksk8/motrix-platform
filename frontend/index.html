@@ -433,6 +433,75 @@
       </div>
     </div>
 
+    <!-- ─── 出貨單等我簽核 ─── -->
+    <div x-show="opsAlerts.shippingWaitingForMe > 0"
+         style="background:var(--warning-light);border-left:3px solid var(--warning);border-radius:var(--radius);padding:10px 16px;margin-bottom:8px;display:flex;gap:12px;align-items:center;cursor:pointer"
+         @click="location.href='pages/case-management.html'">
+      <span style="font-size:13px">📦</span>
+      <div style="flex:1;font-size:12px">
+        有 <strong x-text="opsAlerts.shippingWaitingForMe"></strong> 張出貨單等您簽核
+      </div>
+      <span style="font-size:11px;color:var(--warning);font-weight:600">前往案件管理 →</span>
+    </div>
+
+    <!-- ─── 開發案停滯（洽談中 30 天無新開發記錄） ─── -->
+    <div x-show="canDevCrm && opsAlerts.devStale.length > 0"
+         style="background:#FFF7ED;border-left:3px solid var(--warning);border-radius:var(--radius);padding:12px 16px;margin-bottom:12px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <div style="font-size:12px;font-weight:600;color:#92400E;display:flex;align-items:center;gap:6px">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          開發案停滯
+          <span style="background:#FDE68A;color:#92400E;font-size:10px;padding:1px 7px;border-radius:10px;font-weight:700" x-text="opsAlerts.devStale.length + ' 件'"></span>
+          <span style="font-size:11px;font-weight:400;color:#B45309">洽談中 30 天無新開發記錄</span>
+        </div>
+        <a href="pages/dev-crm.html" style="font-size:11px;color:var(--warning);text-decoration:none;font-weight:500">查看全部 →</a>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:5px">
+        <template x-for="c in opsAlerts.devStale.slice(0,4)" :key="'ds-'+c.id">
+          <div style="display:flex;align-items:center;gap:10px;font-size:11px;cursor:pointer;padding:5px 6px;border-radius:4px;transition:background .1s"
+               @mouseenter="$el.style.background='#FEF3C7'" @mouseleave="$el.style.background=''"
+               @click="location.href='pages/dev-crm.html'">
+            <span style="width:6px;height:6px;border-radius:50%;background:var(--warning);flex-shrink:0"></span>
+            <span style="flex:1;font-weight:500;color:var(--text-primary)" x-text="c.caseName || '—'"></span>
+            <span style="color:var(--text-dim);font-size:10px" x-text="c.customerName || '—'"></span>
+            <span style="font-family:LINE Seed TW_OTF, sans-serif;font-weight:700;color:var(--warning)" x-text="c.daysSince + ' 天未跟進'"></span>
+          </div>
+        </template>
+        <div x-show="opsAlerts.devStale.length > 4"
+             style="font-size:10px;color:var(--text-dim);padding:2px 6px"
+             x-text="'… 還有 ' + (opsAlerts.devStale.length - 4) + ' 件，點擊「查看全部」前往'"></div>
+      </div>
+    </div>
+
+    <!-- ─── 出貨單卡簽核（admin+ 可見全量） ─── -->
+    <div x-show="opsAlerts.shippingStuck.length > 0"
+         style="background:#FFF7ED;border-left:3px solid var(--warning);border-radius:var(--radius);padding:12px 16px;margin-bottom:12px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <div style="font-size:12px;font-weight:600;color:#92400E;display:flex;align-items:center;gap:6px">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 3H5a2 2 0 00-2 2v16l4-4h11a2 2 0 002-2V5a2 2 0 00-2-2z"/></svg>
+          出貨單卡簽核
+          <span style="background:#FDE68A;color:#92400E;font-size:10px;padding:1px 7px;border-radius:10px;font-weight:700" x-text="opsAlerts.shippingStuck.length + ' 筆'"></span>
+          <span style="font-size:11px;font-weight:400;color:#B45309">送審超過 5 天尚未完成簽核</span>
+        </div>
+        <a href="pages/case-management.html" style="font-size:11px;color:var(--warning);text-decoration:none;font-weight:500">查看全部 →</a>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:5px">
+        <template x-for="n in opsAlerts.shippingStuck.slice(0,4)" :key="'ss-'+n.noteNo">
+          <div style="display:flex;align-items:center;gap:10px;font-size:11px;cursor:pointer;padding:5px 6px;border-radius:4px;transition:background .1s"
+               @mouseenter="$el.style.background='#FEF3C7'" @mouseleave="$el.style.background=''"
+               @click="location.href='pages/case-management.html?q='+n.quoteNo">
+            <span style="width:6px;height:6px;border-radius:50%;background:var(--warning);flex-shrink:0"></span>
+            <span style="flex:1;font-weight:500;color:var(--text-primary)" x-text="n.customerName || '—'"></span>
+            <span style="font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-dim);font-size:10px" x-text="n.noteNo"></span>
+            <span style="font-family:LINE Seed TW_OTF, sans-serif;font-weight:700;color:var(--warning)" x-text="n.daysSince + ' 天未完成'"></span>
+          </div>
+        </template>
+        <div x-show="opsAlerts.shippingStuck.length > 4"
+             style="font-size:10px;color:var(--text-dim);padding:2px 6px"
+             x-text="'… 還有 ' + (opsAlerts.shippingStuck.length - 4) + ' 筆，點擊「查看全部」前往'"></div>
+      </div>
+    </div>
+
     <!-- ─── KPI CARDS ─── -->
     <div class="kpi-grid" :class="canQuotation ? 'kpi-grid--5' : ''" style="margin-top:12px">
 
@@ -917,6 +986,7 @@
       funnel: { won:0, lost:0, pendingResponse:0, winRate:null, totalSubmitted:0 },
       followUpQuotes: [],
       expiringQuotes: [],
+      opsAlerts: { devStale: [], shippingWaitingForMe: 0, shippingStuck: [] },
 
       get canFinance() {
         const r = this.session.role; const m = this.session.modules || []
@@ -925,6 +995,10 @@
       get canQuotation() {
         const r = this.session.role; const m = this.session.modules || []
         return r === 'superadmin' || r === 'admin' || m.includes('quotation')
+      },
+      get canDevCrm() {
+        const r = this.session.role; const m = this.session.modules || []
+        return r === 'superadmin' || r === 'admin' || m.includes('dev_crm')
       },
 
       get currentMonthAmount() {
@@ -958,6 +1032,7 @@
         await this.loadStats()
         this.monthly = await this.loadMonthly()
         this.loadFunnel()
+        this.loadOpsAlerts()
         this.loading = false
         this.$nextTick(() => initCharts(this.monthly, this.stats))
       },
@@ -997,6 +1072,15 @@
             this.followUpQuotes = d.followUpQuotes || []
             this.expiringQuotes = d.expiringQuotes || []
           }
+        } catch {}
+      },
+
+      async loadOpsAlerts() {
+        try {
+          const r = await fetch(`${API}/dashboard/ops-alerts`, {
+            headers: { Authorization: 'Bearer ' + this.session.token }
+          })
+          if (r.ok) this.opsAlerts = await r.json()
         } catch {}
       },
 

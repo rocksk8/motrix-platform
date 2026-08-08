@@ -310,3 +310,57 @@ function notifStore() {
     }
   }
 }
+
+/* ── 全域搜尋（topbar）─────────────────────────────────────────────────────
+   跨客戶/供應商/報價單/業務開發案/料號快速查找；後端 GET /api/search 已依各模組
+   既有角色規則過濾，前端不需再判斷可見性。無 ?id= 深連結的清單頁（客戶/供應商/
+   業務開發案/料號）點擊後導向該模組列表頁，只有報價單支援直達單筆。 */
+function globalSearchStore() {
+  const isPages = window.location.pathname.includes('/pages/')
+  const href = (name) => isPages ? name : 'pages/' + name
+  const empty = () => ({ customers: [], suppliers: [], quotations: [], devCases: [], parts: [] })
+
+  return {
+    q:       '',
+    open:    false,
+    loading: false,
+    results: empty(),
+    _sess:   null,
+    _timer:  null,
+
+    init() {
+      this._sess = JSON.parse(localStorage.getItem('motrix_session') || '{}')
+    },
+
+    get hasResults() {
+      const r = this.results
+      return (r.customers.length + r.suppliers.length + r.quotations.length + r.devCases.length + r.parts.length) > 0
+    },
+
+    onInput() {
+      clearTimeout(this._timer)
+      const term = this.q.trim()
+      if (!term) { this.results = empty(); this.open = false; return }
+      this._timer = setTimeout(() => this._search(term), 300)
+    },
+
+    async _search(term) {
+      if (!this._sess?.token) return
+      this.loading = true
+      try {
+        const r = await fetch('/api/search?q=' + encodeURIComponent(term), {
+          headers: { Authorization: 'Bearer ' + this._sess.token }
+        })
+        if (r.ok) { this.results = await r.json(); this.open = true }
+      } catch (e) {} finally { this.loading = false }
+    },
+
+    goCustomer()      { window.location.href = href('customers.html') },
+    goSupplier()      { window.location.href = href('suppliers.html') },
+    goQuotation(no)   { window.location.href = href('quotation-form.html') + '?id=' + encodeURIComponent(no) },
+    goDevCase()       { window.location.href = href('dev-crm.html') },
+    goPart()          { window.location.href = href('parts.html') },
+
+    close() { this.open = false; this.q = ''; this.results = empty() }
+  }
+}

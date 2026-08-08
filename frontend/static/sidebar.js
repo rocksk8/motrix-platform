@@ -128,6 +128,81 @@
       + '</div>'
   }
 
+  // ── 全域搜尋（跨客戶/供應商/報價單/業務開發案/料號）──────────────────────────
+  function buildGlobalSearch() {
+    return `
+      <div x-data="globalSearchStore()" x-init="init()" style="position:relative;flex:1;max-width:320px;margin:0 14px">
+        <div style="position:relative">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#888" stroke-width="2" style="position:absolute;left:9px;top:50%;transform:translateY(-50%);pointer-events:none"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+          <input type="text" x-model="q" @input="onInput()" @focus="q && (open = true)" @keydown.escape="close()"
+                 placeholder="搜尋客戶／報價單／案件／料號…"
+                 style="width:100%;padding:6px 10px 6px 28px;border:1px solid #333;border-radius:5px;background:#1a1a1a;color:#eee;font-size:12px;outline:none;box-sizing:border-box">
+        </div>
+        <div x-show="open" @click.outside="close()" x-cloak
+             style="display:none;position:absolute;top:calc(100% + 6px);left:0;width:340px;background:#fff;border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.13);z-index:999;max-height:420px;overflow-y:auto">
+          <template x-if="!loading && !hasResults">
+            <div style="padding:20px;text-align:center;font-size:12px;color:var(--text-dim)">查無符合結果</div>
+          </template>
+          <template x-if="results.quotations.length">
+            <div style="border-bottom:1px solid var(--border-light)">
+              <div style="padding:8px 14px 4px;font-size:10px;color:var(--text-dim);font-weight:600">報價單</div>
+              <template x-for="item in results.quotations" :key="'quote-'+item.quoteNo">
+                <div @click="goQuotation(item.quoteNo)" style="padding:7px 14px;cursor:pointer" @mouseenter="$el.style.background='#FAFAF8'" @mouseleave="$el.style.background=''">
+                  <div style="font-size:12px;font-weight:600;color:var(--text-main)" x-text="item.quoteNo + '　' + (item.customerName || '—')"></div>
+                  <div style="font-size:10px;color:var(--text-dim)" x-text="item.projectName || item.status || ''"></div>
+                </div>
+              </template>
+            </div>
+          </template>
+          <template x-if="results.devCases.length">
+            <div style="border-bottom:1px solid var(--border-light)">
+              <div style="padding:8px 14px 4px;font-size:10px;color:var(--text-dim);font-weight:600">業務開發案</div>
+              <template x-for="item in results.devCases" :key="'dc-'+item.id">
+                <div @click="goDevCase()" style="padding:7px 14px;cursor:pointer" @mouseenter="$el.style.background='#FAFAF8'" @mouseleave="$el.style.background=''">
+                  <div style="font-size:12px;font-weight:600;color:var(--text-main)" x-text="item.caseName"></div>
+                  <div style="font-size:10px;color:var(--text-dim)" x-text="(item.customerName || '—') + '　' + item.status"></div>
+                </div>
+              </template>
+            </div>
+          </template>
+          <template x-if="results.customers.length">
+            <div style="border-bottom:1px solid var(--border-light)">
+              <div style="padding:8px 14px 4px;font-size:10px;color:var(--text-dim);font-weight:600">客戶</div>
+              <template x-for="item in results.customers" :key="'c-'+item.id">
+                <div @click="goCustomer()" style="padding:7px 14px;cursor:pointer" @mouseenter="$el.style.background='#FAFAF8'" @mouseleave="$el.style.background=''">
+                  <div style="font-size:12px;font-weight:600;color:var(--text-main)" x-text="item.name"></div>
+                  <div style="font-size:10px;color:var(--text-dim)" x-text="item.code"></div>
+                </div>
+              </template>
+            </div>
+          </template>
+          <template x-if="results.suppliers.length">
+            <div style="border-bottom:1px solid var(--border-light)">
+              <div style="padding:8px 14px 4px;font-size:10px;color:var(--text-dim);font-weight:600">供應商</div>
+              <template x-for="item in results.suppliers" :key="'s-'+item.id">
+                <div @click="goSupplier()" style="padding:7px 14px;cursor:pointer" @mouseenter="$el.style.background='#FAFAF8'" @mouseleave="$el.style.background=''">
+                  <div style="font-size:12px;font-weight:600;color:var(--text-main)" x-text="item.name"></div>
+                  <div style="font-size:10px;color:var(--text-dim)" x-text="item.code"></div>
+                </div>
+              </template>
+            </div>
+          </template>
+          <template x-if="results.parts.length">
+            <div>
+              <div style="padding:8px 14px 4px;font-size:10px;color:var(--text-dim);font-weight:600">料號</div>
+              <template x-for="item in results.parts" :key="'p-'+item.partNo">
+                <div @click="goPart()" style="padding:7px 14px;cursor:pointer" @mouseenter="$el.style.background='#FAFAF8'" @mouseleave="$el.style.background=''">
+                  <div style="font-size:12px;font-weight:600;color:var(--text-main)" x-text="item.partNo + '　' + item.name"></div>
+                  <div style="font-size:10px;color:var(--text-dim)" x-text="item.brand"></div>
+                </div>
+              </template>
+            </div>
+          </template>
+        </div>
+      </div>
+    `
+  }
+
   // ── Topbar ─────────────────────────────────────────────────────────────────
   function buildTopbar() {
     var el = document.getElementById('app-topbar')
@@ -177,6 +252,7 @@
       + '</a>'
       + '<div class="topbar__divider"></div>'
       + '<span class="topbar__title">Motrix 營運系統</span>'
+      + buildGlobalSearch()
       + '<div class="topbar__right">'
       + '<span id="tb-display-name" style="font-size:12px;color:#888;font-family:LINE Seed TW_OTF, sans-serif">' + esc(dn) + '</span>'
       + buildFontCtrl()
