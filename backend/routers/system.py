@@ -357,7 +357,7 @@ def get_company_profile(authorization: str = Header(None)):
 
 @router.put("/api/settings/company-profile")
 def set_company_profile(body: CompanyProfile, authorization: str = Header(None)):
-    _require_user(authorization, require_superadmin=True)
+    _require_user(authorization, require_superadmin=True, module='settings')
     value = body.model_dump()
     _set_setting("company_profile", value)
     _audit(_tok(authorization), "settings.company_profile.update", "settings",

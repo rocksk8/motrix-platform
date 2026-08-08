@@ -721,3 +721,43 @@ def test_create_part_toctou_race_returns_409_not_500(client, make_user, monkeypa
                      json={"partNo": "TEST-RACE-001", "name": "模擬併發（繞過前置檢查）"})
     assert r.status_code == 409, r.text
     assert "重新整理" in r.text  # confirms the except-branch message, not the pre-check's
+
+
+# ── company-profile module-gated permission (settings automation account) ───
+# PUT /api/settings/company-profile 原本寫死 require_superadmin=True（無 module
+# 逃生門），只有真正的超管帳號能改。改用「settings」module 開放非 superadmin
+# 角色也能經授權存取——讓可以建立一個低權限自動化帳號專門呼叫這支 API，不必
+# 共用 superadmin 個人帳密。
+
+def test_company_profile_put_rejects_non_superadmin_without_settings_module(client, make_user):
+    username, password = make_user(role="viewer", modules=[])
+    token = _login(client, username, password)
+    r = client.put(
+        "/api/settings/company-profile", headers=_auth(token),
+        json={"name": "測試", "tax_id": "00000000", "contact_info": "Tel: 000"},
+    )
+    assert r.status_code == 403, r.text
+
+
+def test_company_profile_put_allows_non_superadmin_with_settings_module(client, make_user):
+    username, password = make_user(role="viewer", modules=["settings"])
+    token = _login(client, username, password)
+    r = client.put(
+        "/api/settings/company-profile", headers=_auth(token),
+        json={"name": "允碩整合集創股份有限公司", "tax_id": "60575481",
+              "contact_info": "Tel: 04-3610-6566｜info@miactw.com"},
+    )
+    assert r.status_code == 200, r.text
+
+    r = client.get("/api/settings/company-profile", headers=_auth(token))
+    assert r.json()["contact_info"] == "Tel: 04-3610-6566｜info@miactw.com"
+
+
+def test_company_profile_put_still_allows_superadmin(client, make_user):
+    username, password = make_user(role="superadmin", modules=[])
+    token = _login(client, username, password)
+    r = client.put(
+        "/api/settings/company-profile", headers=_auth(token),
+        json={"name": "允碩整合集創股份有限公司", "tax_id": "60575481", "contact_info": "Tel: 000"},
+    )
+    assert r.status_code == 200, r.text
