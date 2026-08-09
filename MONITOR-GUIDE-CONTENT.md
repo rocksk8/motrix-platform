@@ -50,8 +50,12 @@
 |------|------|------|
 | UniFi（Ubiquiti） | G6 世代全形式相機（子彈/半球/砲塔/PTZ/全景），需搭配 UniFi OS Console | store.ui.com、techspecs.ui.com |
 | Hikvision | 全球最主流專業監控品牌，全系列涵蓋子彈/半球/砲塔/PTZ/全景五種形式，ColorVu 全彩夜視與 AcuSense AI 偵測為特色，需搭配 Hikvision NVR/主機錄影 | hikvision.com（美規經銷商查價：a1securitycameras.com／networkcamerastore.com／surveillance-video.com） |
+| VIGI（TP-Link） | 商用監控子品牌，C 系列＋新一代 InSight 系列雙產品線並行，五個分類都有完整陣容（39 款），官網幾乎不公開定價 | vigi.com（依國別站台網址不同，如 /us/、/in/、/tw/） |
+| Spark | 台灣廠商，Lite／Advanced／Pro-view 三個等級產品線，台灣製造，官網不公開定價；未見獨立 Turret／Panoramic 形式產品 | spark-security.com.tw |
+| AXIS | 瑞典高階監控品牌，ARTPEC 晶片＋Object Analytics AI 分析，M31 系列官方定位為 Turret style；部分機型官網已標示汰換過渡期（如 M3067-P→M4327-P） | axis.com（美規經銷商查價：a1securitycameras.com／ipphonewarehouse.com） |
+| i-PRO | 原 Panasonic 監控事業獨立品牌，Edge AI App 生態系（最多可裝9款分析應用）與 FIPS 資安認證為特色，多款新機型官網標示 Coming Soon 尚未上市 | i-pro.com（美規經銷商查價：bhphotovideo.com） |
 
-其餘品牌（Dahua／Reolink／Axis 等）待有實際需求時再補。新增品牌時，順手補進這張表。
+其餘品牌（Dahua／Reolink 等）待有實際需求時再補。新增品牌時，順手補進這張表。
 
 ---
 
@@ -63,8 +67,10 @@
 
 ## §4 · 已知缺口／待確認
 
-- Hikvision 目前每個分類只有 1 款代表型號，尚未比照 Omada Wi-Fi 6 的深度擴充做法補齊完整產品線
+- Hikvision／UniFi 目前每個分類只有 1 款代表型號，尚未比照 VIGI/AXIS/i-PRO 補齊完整產品線深度
 - G6 Dome 只列了標準款，高階款 G6 Pro Dome（US$499，更高解析度/更遠 IR 距離）尚未建立獨立產品項
+- Spark 沒有 TURRET／PANORAMIC 分類產品（查證確認官網公開產品線中無此形式），這兩個分類目前
+  仍只有 UniFi／Hikvision／VIGI／AXIS／i-PRO 的產品
 - 尚未涵蓋 NVR/錄影主機本身的選型（本類別目前只涵蓋相機，NVR 容量/通道數規劃留待有實際需求時再開）
 - RETAIL／FACTORY 情境目前只是初版判斷，尚未有實際專案案例驗證，之後有真實案源請回來校正
   `fit_note`
@@ -72,6 +78,24 @@
 ---
 
 ## §5 · 變更記錄
+
+### 2026-08-09c — 新增 VIGI／Spark／AXIS／i-PRO（4 個品牌，84 款，比照 Omada 標準全數收錄）
+- 使用者指名要新增這 4 個品牌（Spark 附官網連結 spark-security.com.tw），並要求依「Omada 官網
+  完整品項掃描」建立的標準——不因規格重疊而篩選，官網真實列出的都收錄，力求 1:1 對應
+- 委派 4 個 subagent 各自研究一個品牌，5 個分類（子彈型/半球型/砲塔型/雲台變焦/全景型）盡量都補：
+  - **VIGI**（TP-Link 商用子品牌）：39 款，C 系列＋新一代 InSight 系列雙產品線並行，官網幾乎不
+    公開定價；InSight S385DPS 官網標示 Coming Soon 尚未上市，已在備註標明並收錄（不是排除）
+  - **AXIS**：18 款，M31 系列官方明確定位為「Turret style」；部分機型（M3067-P、M5525-E）官網
+    已標示進入汰換過渡期，備註中標明替代型號；Q3548-LVE／P3727-PLE／P3807-PVE 查無公開零售價，
+    標記「洽詢報價」
+  - **i-PRO**（原 Panasonic 監控事業）：16 款，多款新機型（X15500A/X22700A/X25500A/S85604A）
+    官網標示 Coming Soon 尚未上市，比照 VIGI 的處理方式收錄並標明，不排除
+  - **Spark**（台灣廠商）：11 款，Lite／Advanced／Pro-view 三個等級產品線；查證後確認官網公開
+    產品線中沒有 TURRET／PANORAMIC 形式，據實回報未硬湊
+- 這批寫入直接使用批次腳本（84 筆 API 呼叫），監控系統選型導覽現有 **94 筆**（6 個品牌：
+  UniFi 5／Hikvision 5／Spark 11／i-PRO 16／VIGI 39／AXIS 18）
+- 準備了 `backend/sync_2026-08-09e_monitor_brands.py`（用程式從資料庫匯出產生，避免手動謄寫
+  84 筆時出錯）供正式機套用更新後執行
 
 ### 2026-08-09b — 新增 Hikvision 品牌（第二個品牌，可跨品牌比較）
 - 使用者要求每個類別都要有多品牌深度，委派 subagent（`SELECTION-DB-INDEX.md` §3.1 流程）研究
