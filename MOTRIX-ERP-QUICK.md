@@ -553,7 +553,8 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
            網路架構選型導覽（netarch-guide.html, netarch_guide 模組旗標或 admin+）/
            交換器選型導覽（switch-guide.html, switch_guide 模組旗標或 admin+）/
            監控系統選型導覽（monitor-guide.html, monitor_guide 模組旗標或 admin+）/
-           門禁系統選型導覽（access-guide.html, access_guide 模組旗標或 admin+）
+           門禁系統選型導覽（access-guide.html, access_guide 模組旗標或 admin+）/
+           涵蓋度總覽（selection-db-overview.html, admin+ 限定，無獨立模組旗標）
 廠商與採購 客戶 / 供應商 / **承攬商** / 料號 / **庫存管理**（inventory.html, inventory 模組旗標或 admin+）/ 採購
 設備       設備登載 / 保固追蹤
 財務       應收帳款 / 營運報表（admin+ 或含 reports 模組）
@@ -574,6 +575,7 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
   - **監控系統選型導覽**：`monitor-guide.html`；檢視 `monitor_guide` 模組旗標或 admin+（`cMonitorG` 旗標）；編輯需 `monitor_guide_edit` 或 superadmin；選型資料庫第四個上線的類別（2026-08-09），資料形狀與交換器選型導覽相同（相機分類×場域情境矩陣），第一批資料為 UniFi Protect G6 世代
   - **門禁系統選型導覽**：`access-guide.html`；檢視 `access_guide` 模組旗標或 admin+（`cAccessG` 旗標）；編輯需 `access_guide_edit` 或 superadmin；選型資料庫第五個上線的類別（2026-08-09），資料形狀同上（元件分類×場域情境矩陣），第一批資料為 UniFi Access
   - 五者在**歷史紀錄**（`audit-log.html`）與**版本紀錄**（`module-versions.html`）皆已比照其餘模組補上對應的 optgroup／actionLabel／色碼（teal 色系＋🧭 圖示，五者共用同一識別色，強調同屬一個產品線而非各自獨立模組）
+  - **涵蓋度總覽**（2026-08-09）：`selection-db-overview.html`；admin+ 限定，無獨立模組旗標；彙總上述四個「品牌/型號目錄」型類別（網路架構/交換器/監控/門禁，不含場域選型導覽——資料形狀是情境×分層文字建議而非品牌目錄）在各世代/分類底下的品牌數與產品數，紅/黃/綠三色標示完全空白／偏薄弱／足夠；**不新增後端 API**，純前端呼叫既有 5 個類別各自的 GET 端點彙總而成
 - **出貨單簽核設定**：`shipping-approval-settings.html`；superadmin 限定；獨立於報價單「簽核設定」（`system_settings.shipping_approval_flow`，不同 key），UI 為 `approval-settings.html` 的複製版本；出貨單本身不是獨立 sidebar 項目，掛在「案件管理」頁面內的「出貨單」分頁，沿用 `case_manage`/`cCM`/`sb-mod-case`
 - **Schema 狀態**（2026-08-01）：`schema-status.html`；superadmin 限定；**純唯讀**診斷頁，顯示目前 db 版本 / 目標版本、狀態（✓最新／⚠尚未同步）、最後更新時間、完整 migration 清單（v34→v1，版號＋函式名稱＋說明）；**全頁無任何操作按鈕或表單**——migration 於伺服器啟動時自動套用，此頁不提供「觸發乾跑」之類的操作（架構上沒有意義：活著的伺服器對自己已是最新版的 db 再跑一次永遠是 no-op）；資料來源 `GET /api/system/schema-status`
 

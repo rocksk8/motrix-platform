@@ -73,6 +73,26 @@
 
 ## §5 · 變更記錄
 
+### 2026-08-09e — Omada 官網完整品項總表掃描（不篩選重複，力求 1:1 對應）
+- 使用者反映即使做完第二輪深度擴充，Omada 官網還是有很多品項沒收錄——上一輪 agent 自己承認
+  因為「規格跟已列的重疊」主動篩選跳過了 EAP650 D30/D120-Outdoor、EAP603-Outdoor、
+  EAP650-Desktop／EAP650GP-Desktop、EAP653／EAP653 UR、EAP673 等型號，這次改派 agent
+  直接逐一造訪 omadanetworks.com 的吸頂/牆插/戶外/桌上型/GPON 分類頁面，不因「看起來重複」
+  就篩選，力求官網列表與資料庫 1:1 對應
+- **Wi-Fi 6** 補 8 款：EAP673、EAP653、EAP653 UR（天花板系列）、EAP650 D120-Outdoor／
+  EAP650 D30-Outdoor（指向性天線變體）、EAP603-Outdoor、EAP650-Desktop／EAP650GP-Desktop
+  （桌上型/GPON），該世代現有 **20 款**
+- **Wi-Fi 6E** 查證後確認官網僅 EAP690E HD 一款，未新增（非缺漏，是真的只有這一款）
+- **Wi-Fi 7** 補 9 款：EAP770／EAP783／EAP727／EAP723／EAP720（天花板系列，涵蓋入門到旗艦
+  BE22000）、EAP725-Wall（牆插）、EAP772-Outdoor／EAP775-Outdoor／EAP725-Outdoor（戶外），
+  該世代現有 **13 款**
+- Omada 品牌在 `netarch_products` 現有 **34 筆**（`netarch_products` 全體共 77 筆）
+- **已知範圍外，留待之後有需求再處理**：官網另有「Wireless Bridge」分類 7 款（Sector
+  Bridge 5、Flex Bridge 5、Beam Bridge 5 UR KIT 等），是點對點無線橋接器，跟一般用戶端 AP
+  定位不同，未計入本次（若要收錄建議另立分類/家族，不要硬塞進現有 WIFI 家族）；官網也還有
+  Wi-Fi 5/4 世代舊機型仍在售（EAP225／EAP225-Outdoor／EAP235-Wall／EAP110-Outdoor），本類別
+  目前只涵蓋 Wi-Fi 6/6E/7，未往前擴充涵蓋舊世代
+
 ### 2026-08-09c — 全品牌深度擴充第二輪（使用者要求「每個項目都要完整」）
 - 使用者指出光靠「每個品牌補 1-2 款代表款」還不夠完整，舉例 Omada Wi-Fi 6 實際產品線遠超過
   當時的 2-4 款；改用 `SELECTION-DB-INDEX.md` §3.1 流程，針對剩餘薄弱品牌各自委派 subagent
