@@ -81,6 +81,20 @@
 
 ## §5 · 變更記錄
 
+### 2026-08-09b — UniFi 型號深度擴充（回應「資料不夠充分」的反饋）
+- 使用者反映交換器選型導覽的 UniFi 資料仍不夠充分、型號不完整，比照本文件既有的「同品牌產品線深度
+  擴充」慣例（見 2026-07-30k 條目），一次補齊 UniFi 在 SMART_L2PLUS／MANAGED_L3 兩分類的埠數/世代
+  梯度，全數用 WebSearch 查證 techspecs.ui.com 真實規格與售價：
+  - **SMART_L2PLUS** 新增 2 款：**Flex 2.5G 8 PoE**（US$199＋PSU 另購，8 埠 2.5GbE PoE++，小型
+    但需要 2.5GbE 高速上行的情境）、**24 PoE**（US$488，24 埠標準 L2 網管，同分類目前 UniFi 埠數
+    最多的選項）——連同既有 Switch Lite 8/16 PoE，UniFi 在本分類現有 4 款涵蓋小/中/大埠數
+  - **MANAGED_L3** 新增 1 款：**Pro Max 24 PoE**（US$799~1,136，Pro 24 PoE 的新一代升級款，400W
+    PoE 預算、PoE+++/PoE+/2.5GbE 三種混合埠型）——連同既有 Pro 24 PoE／Enterprise 48 PoE，UniFi
+    在本分類現有 3 款涵蓋中階到高階
+- UniFi 目前未進 UNMANAGED／INDUSTRIAL 兩分類，這是刻意的：UniFi 全線交換器都需透過 UniFi Network
+  App 管理，沒有真正「隨插即用無網管介面」的型號（不符 UNMANAGED 分類定義）；也沒有寬溫導軌工業款
+  （不符 INDUSTRIAL 分類定義），非資料缺漏，是這兩個分類本來就不適合硬塞 UniFi 進去
+
 ### 2026-08-09 — MANAGED_L3 補 UniFi（品牌缺口補齊）
 - 使用者提出「新增 UniFi」需求，§4 記錄的「MANAGED_L3 只有 Aruba 一個品牌」缺口這次一併處理
 - 新增 **UniFi Pro 24 PoE**（US$699，24 埠 GbE＋2×10G SFP+，PoE 預算 400W，完整 L3）作為中階代表、
