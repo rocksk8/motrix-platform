@@ -288,6 +288,8 @@
   var cEnvG = mods.indexOf('env_guide')  >= 0 || ad
   var cNetG = mods.indexOf('netarch_guide') >= 0 || ad
   var cSwitchG = mods.indexOf('switch_guide') >= 0 || ad
+  var cMonitorG = mods.indexOf('monitor_guide') >= 0 || ad
+  var cAccessG = mods.indexOf('access_guide') >= 0 || ad
 
   var ic = {
     dash:  '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
@@ -319,6 +321,8 @@
     envg:  '<path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>',
     netg:  '<path d="M12 20h.01M8.5 16.5a5 5 0 017 0M5 12.859a10 10 0 0114 0M1.5 9.5a15 15 0 0121 0"/>',
     switchg: '<rect x="2" y="3" width="20" height="6" rx="1"/><rect x="2" y="15" width="20" height="6" rx="1"/><path d="M6 6h.01M6 18h.01"/>',
+    monitorg: '<path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>',
+    accessg: '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/>',
     schema: '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v6c0 1.657 4.03 3 9 3s9-1.343 9-3V5"/><path d="M3 11v6c0 1.657 4.03 3 9 3s9-1.343 9-3v-6"/>',
   }
 
@@ -347,6 +351,8 @@
     'env-guide.html':          'env_guide',
     'netarch-guide.html':      'netarch_guide',
     'switch-guide.html':       'switch_guide',
+    'monitor-guide.html':      'monitor_guide',
+    'access-guide.html':       'access_guide',
   }
 
   var _SB_BADGE_STYLE = 'display:none;background:var(--accent);color:#fff;font-size:9px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;padding:1px 5px;border-radius:8px;margin-left:auto;min-width:16px;text-align:center;line-height:1.6'
@@ -381,10 +387,12 @@
         + '</a>' : ''),
       ni(pg('case-management.html'), 'case_', '案件管理', ['case-management.html'],                   cCM,  'sb-mod-case'),
       ni(pg('projects.html'),        'proj',  '專案管理', ['projects.html'],                          cPj,  'sb-mod-projects'),
-      sec('選型資料庫', cEnvG || cNetG || cSwitchG),
+      sec('選型資料庫', cEnvG || cNetG || cSwitchG || cMonitorG || cAccessG),
       ni(pg('env-guide.html'),      'envg',    '場域選型導覽',     ['env-guide.html'],     cEnvG),
       ni(pg('netarch-guide.html'),  'netg',    '網路架構選型導覽', ['netarch-guide.html'], cNetG),
       ni(pg('switch-guide.html'),   'switchg', '交換器選型導覽',   ['switch-guide.html'],  cSwitchG),
+      ni(pg('monitor-guide.html'),  'monitorg', '監控系統選型導覽', ['monitor-guide.html'], cMonitorG),
+      ni(pg('access-guide.html'),   'accessg',  '門禁系統選型導覽', ['access-guide.html'],  cAccessG),
       sec('廠商與採購', cCu || cPr),
       ni(pg('customers.html'),       'cust',  '客戶管理', ['customers.html', 'customer-log.html'],   cCu,  'sb-mod-customer'),
       ni(pg('suppliers.html'),          'supp',  '供應商管理', ['suppliers.html', 'supplier-log.html'],    cPr,  'sb-mod-suppliers'),
@@ -628,6 +636,8 @@
         cEnvG = mods.indexOf('env_guide')  >= 0 || ad
         cNetG = mods.indexOf('netarch_guide') >= 0 || ad
         cSwitchG = mods.indexOf('switch_guide') >= 0 || ad
+        cMonitorG = mods.indexOf('monitor_guide') >= 0 || ad
+        cAccessG = mods.indexOf('access_guide') >= 0 || ad
         canDash = sa || ad || mods.indexOf('finance') >= 0 || mods.indexOf('quotation') >= 0 || mods.indexOf('dashboard') >= 0
         buildSidebar()
         var dnEl = document.getElementById('tb-display-name')

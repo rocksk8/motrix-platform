@@ -72,7 +72,6 @@
 
 ## §4 · 已知缺口／待確認
 
-- MANAGED_L3 分類目前只有 Aruba 一個品牌，UniFi 的對應機種（如 Switch Pro/Enterprise 系列）尚未驗證加入
 - INDUSTRIAL 分類的 Sbjlink 型號沿用 env-guide 已驗證的 RPT-M1810GP-T-X2，未針對「交換器選型」情境
   重新核對是否有更適合一般工業場景（非 AMR 專用）的型號/包裝
 - RETAIL、FACTORY 情境目前只是初版判斷，尚未有實際專案案例驗證，之後有真實案源請回來校正
@@ -81,6 +80,16 @@
 ---
 
 ## §5 · 變更記錄
+
+### 2026-08-09 — MANAGED_L3 補 UniFi（品牌缺口補齊）
+- 使用者提出「新增 UniFi」需求，§4 記錄的「MANAGED_L3 只有 Aruba 一個品牌」缺口這次一併處理
+- 新增 **UniFi Pro 24 PoE**（US$699，24 埠 GbE＋2×10G SFP+，PoE 預算 400W，完整 L3）作為中階代表、
+  **UniFi Enterprise 48 PoE**（US$1,599，48 埠 2.5GbE＋4×10G SFP+，PoE 預算 720W，本分類目前埠數
+  與 PoE 預算最高的選項）作為大型代表，兩款皆用 WebSearch 查證 techspecs.ui.com／官網通路真實規格
+  與售價，非憑印象填入
+- **注意**：Enterprise 48 PoE 在 techspecs.ui.com 已被標記為「Vintage」，`price_note` 已註記提醒
+  下單前向代理商核實現貨/是否已有後續機種，避免報價後才發現停產
+- MANAGED_L3 現有 4 個品牌（Aruba／Cisco／HPE Aruba／Netgear）＋ UniFi，共 5 個品牌可比較
 
 ### 2026-07-30p — 規格比較寬度公式重算
 - 同步修正（詳見 NETARCH-GUIDE-CONTENT.md §5 同日條目）：`compareBoxWidth()` 公式從

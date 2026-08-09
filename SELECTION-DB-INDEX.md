@@ -35,8 +35,9 @@
 |---------|------|---------|--------|
 | 無人自動化載具部署場域 | ✅ 已上線 | [ENV-GUIDE-CONTENT.md](./ENV-GUIDE-CONTENT.md) | `env_guide_environments` / `env_guide_recommendations` / `env_guide_links` |
 | 網路架構（Wi-Fi／行動網路 4G-5G） | ✅ 已上線 | [NETARCH-GUIDE-CONTENT.md](./NETARCH-GUIDE-CONTENT.md) | `netarch_families` / `netarch_generations` / `netarch_products` |
-| 監控系統 | 📋 規劃中 | 待建立 | 待設計 |
-| 門禁系統 | 📋 規劃中 | 待建立 | 待設計 |
+| 商用／工業網路交換器 | ✅ 已上線 | [SWITCH-GUIDE-CONTENT.md](./SWITCH-GUIDE-CONTENT.md) | `switch_scenarios` / `switch_categories` / `switch_fit` / `switch_products` |
+| 監控系統 | ✅ 已上線 | [MONITOR-GUIDE-CONTENT.md](./MONITOR-GUIDE-CONTENT.md) | `monitor_scenarios` / `monitor_categories` / `monitor_fit` / `monitor_products` |
+| 門禁系統 | ✅ 已上線 | [ACCESS-GUIDE-CONTENT.md](./ACCESS-GUIDE-CONTENT.md) | `access_scenarios` / `access_categories` / `access_fit` / `access_products` |
 | 自動化系統 | 📋 規劃中 | 待建立 | 待設計 |
 
 > 新類別上線後，記得回來這裡加一行，並在下面「§5 變更記錄」留一筆。
@@ -79,6 +80,20 @@
 ## §5 · 變更記錄
 
 > 新類別上線、資料表改版等大事記，新的寫在上面。
+
+### 2026-08-09 — 新增 UniFi：兩個新類別上線＋既有類別補品牌
+- 使用者提出「新增 UniFi」需求，範圍涵蓋四個類別：
+  - **監控系統**（第四個類別，DB v39）與**門禁系統**（第五個類別，DB v40）：兩個全新類別皆
+    沿用交換器選型導覽的「情境 × 分類矩陣」四表結構，第一批資料皆為 UniFi（Protect／Access），
+    詳見各自的 CONTENT.md
+  - **交換器選型導覽**：`MANAGED_L3` 分類補上 UniFi Pro 24 PoE／Enterprise 48 PoE，補齊
+    `SWITCH-GUIDE-CONTENT.md` §4 記錄已久的品牌缺口
+  - **網路架構選型導覽**：校正文件記載的「Wi-Fi 6E 尚無產品」過時缺口記錄（資料庫其實已有
+    U6-Enterprise 掛在 6E 世代下，只是文件沒同步更新）
+- 順便補上本索引本來缺漏的「商用／工業網路交換器」類別列（原本 §2 表格沒有這一行，屬於既有
+  落差，這次一併補齊）
+- 排程自動化機制（每週檢查產品異動＋新廠商觸發同步）本次**未建置**，本次仍是手動走 §3 流程；
+  自動化留待後續另外討論設計
 
 ### 2026-07-30b — 網路架構類別上線（第二個類別）
 - DB v31：新增 `netarch_families` / `netarch_generations` / `netarch_products`（族系→世代→產品，非場域×分層×三級）
