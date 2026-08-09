@@ -46,9 +46,10 @@ Access App 的 UniFi OS Console**（如 Cloud Gateway／Dream Machine）才能�
 | 品牌 | 強項 | 官網 |
 |------|------|------|
 | UniFi（Ubiquiti） | 讀頭＋控制主機＋雲端軟體三件式架構，需搭配 UniFi OS Console | store.ui.com、techspecs.ui.com |
+| Akuvox | IP 門禁/對講整合商常用品牌，同樣走 PoE＋雲端（SmartPlus）管理路線；**無獨立的閘道/車庫
+  控制器產品**，車輛出入需用 UHF 長距離讀頭或既有終端機繼電器輸出觸發第三方欄杆機 | akuvox.com（美規經銷商查價：akuvoxdealer.com／lowvoltagedealer.com） |
 
-目前僅 UniFi 一個品牌（本次新增），其餘品牌（HID／Kisi／Brivo 等傳統門禁廠牌）待有實際需求時
-再補。新增品牌時，順手補進這張表。
+其餘品牌（HID／Kisi／Brivo 等傳統門禁廠牌）待有實際需求時再補。新增品牌時，順手補進這張表。
 
 ---
 
@@ -62,7 +63,8 @@ Access App 的 UniFi OS Console**（如 Cloud Gateway／Dream Machine）才能�
 
 - `MULTI_DOOR_HUB`／`READER`／目前部分型號（EAH-8、Reader Pro、Hub Gate）官網未列牌價，
   `price_note` 標記「洽詢報價」，之後有實際報價案例請回來補上區間
-- 目前只有 UniFi 一個品牌，尚無法做跨品牌規格比較
+- Akuvox 沒有 `GATE_CONTROLLER` 分類的對應產品（查證確認該品牌無獨立閘道/車庫控制器硬體），
+  此分類目前仍只有 UniFi Hub Gate 一款
 - 電鎖／門禁五金（磁力鎖、電插鎖）本身不在本類別範圍內，選型時仍需另外評估搭配的機械五金
 - RETAIL／WAREHOUSE_DOCK 情境目前只是初版判斷，尚未有實際專案案例驗證，之後有真實案源請回來
   校正 `fit_note`
@@ -70,6 +72,14 @@ Access App 的 UniFi OS Console**（如 Cloud Gateway／Dream Machine）才能�
 ---
 
 ## §5 · 變更記錄
+
+### 2026-08-09b — 新增 Akuvox 品牌（第二個品牌，可跨品牌比較）
+- 使用者要求每個類別都要有多品牌深度，委派 subagent（`SELECTION-DB-INDEX.md` §3.1 流程）研究
+  一個資料形狀類似（PoE＋雲端管理）、適合跟 UniFi Access 對照的品牌，選定 Akuvox
+- 3 個分類各補 1 款：ALLINONE_HUB → Akuvox A02、MULTI_DOOR_HUB → Akuvox A095（4 門控制器，
+  需外接讀頭）、READER → Akuvox ACR-CRM11，皆用 WebSearch 查證美規經銷商
+  （akuvoxdealer.com／lowvoltagedealer.com）真實規格與售價（2026-08 查價）
+- `GATE_CONTROLLER` 分類查證後確認 Akuvox 無對應硬體產品，未硬湊，據實記錄於 §4
 
 ### 2026-08-09 — 類別上線（選型資料庫第五個類別）
 - DB v40：新增 `access_scenarios`／`access_categories`／`access_fit`／`access_products`

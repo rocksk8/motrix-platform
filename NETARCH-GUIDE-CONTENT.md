@@ -42,9 +42,13 @@
 | 品牌 | 強項 | 官網 |
 |------|------|------|
 | UniFi（Ubiquiti） | Wi-Fi AP（U6/U7 系列）、交換器、路由器，全線 | store.ui.com、techspecs.ui.com |
-| Omada（TP-Link） | Wi-Fi AP（EAP 系列）、SDN 雲端管理 | omadanetworks.com |
-| Peplink | 行動網路路由器（MAX BR 系列）、SD-WAN、多 WAN 綁定 | peplink.com |
-| Netgear | 行動熱點路由器（Nighthawk M 系列）、商用 Insight 雲端管理 | netgear.com |
+| Omada（TP-Link） | Wi-Fi AP（EAP 系列，2026-08-09 深度擴充至吸頂/牆插/戶外近 20 款）、SDN 雲端管理 | omadanetworks.com |
+| Peplink | 行動網路路由器（MAX BR/Transit 系列）、SD-WAN、多 WAN 綁定 | peplink.com |
+| Netgear | 行動熱點路由器（Nighthawk M 系列）、Orbi Mesh、商用 Insight 雲端管理 | netgear.com |
+| Ruckus | 企業級 Wi-Fi AP（R 系列），內建 BLE/Zigbee IoT | ruckusnetworks.com |
+| Teltonika | 工業級蜂巢路由器（RUT/RUTM 系列），偏物聯網/M2M 取向 | teltonika-networks.com |
+| Cisco／Cisco Meraki | Cisco 為蜂巢閘道器（IR/Catalyst 系列）；Cisco Meraki 是獨立的雲端管理 Wi-Fi AP 產品線（MR/CW9 系列，訂閱授權制），**兩者是不同 brand 欄位值，勿混淆** | cisco.com、meraki.cisco.com |
+| Askey／Inseego／ZTE | 電信通路蜂巢 CPE／MiFi 熱點，多為電信客製化產品，官網通常未列公開牌價 | askey.com、inseego.com、zte.com.cn |
 
 新增品牌時，順手補進這張表。
 
@@ -68,6 +72,47 @@
 ---
 
 ## §5 · 變更記錄
+
+### 2026-08-09c — 全品牌深度擴充第二輪（使用者要求「每個項目都要完整」）
+- 使用者指出光靠「每個品牌補 1-2 款代表款」還不夠完整，舉例 Omada Wi-Fi 6 實際產品線遠超過
+  當時的 2-4 款；改用 `SELECTION-DB-INDEX.md` §3.1 流程，針對剩餘薄弱品牌各自委派 subagent
+  深入查證，這次全數寫入資料庫（netarch_products 從約 30 筆擴充到 60 筆）：
+  - **Omada Wi-Fi 6**：重新深度研究，新增 10 款（吸頂型 EAP610/613/620 HD/660 HD/683 UR、
+    牆插型 EAP615-Wall/655-Wall、戶外型 EAP610-Outdoor/625-Outdoor HD/650-Outdoor），連同既有
+    EAP670/EAP650，Wi-Fi 6 世代現有 **12 款**，涵蓋吸頂/牆插/戶外三種安裝型態與入門到旗艦價位帶
+  - **Ruckus**：Wi-Fi 6/6E 各補 1 款（R350／R560），Wi-Fi 7 世代原本完全沒有型號，新增 R770
+  - **Teltonika**：4G LTE 新增 RUT200，5G Sub-6 新增 RUTM50；5G mmWave 查證後確認全產品線
+    皆無 mmWave 機種，未硬湊
+  - **Askey／Inseego／ZTE**：三個原本各只有 1 款的品牌，各補 1-2 款（Askey 4G LTE+5G Sub-6、
+    Inseego 5G Sub-6〔MiFi 8000 因已停產未收錄〕、ZTE 4G LTE+5G mmWave）
+  - **Cisco／Cisco Meraki**：Cisco 5G mmWave 查證後確認官方文件明列插拔模組不支援 mmWave
+    （FR2），未新增；4G LTE／5G Sub-6 各補 1 款不同定位型號；Cisco Meraki 三個 Wi-Fi 世代
+    各補 1 款，形成該品牌內部的高中低階對照
+- 部分查證結果據實回報「查無實據，不新增」而非硬湊（Peplink mmWave、Teltonika mmWave、
+  Cisco mmWave），符合 §3.1 訂下的查證標準
+
+### 2026-08-09b — Omada／Peplink 型號深度擴充（委派 subagent 研究）
+- 使用者反映 Omada／Peplink／Netgear 產品線資料太薄弱，比照 `SELECTION-DB-INDEX.md` §3.1 新訂的
+  「委派 subagent 研究、只回傳結構化摘要」流程處理
+- **Omada**：Wi-Fi 6 世代原本掛的「EAP670 等 WiFi 6 系列」是模糊佔位資料（非真實單一型號），已刪除
+  並用 **EAP670**（US$155~170，中高階 AX5400）＋ **EAP650**（US$89.99~121.99，入門 AX3000）兩款
+  具體型號取代；Wi-Fi 7 世代新增 **EAP787**（US$249.99，旗艦款，10G 上行埠、8-Stream）與
+  **EAP775-Wall**（約US$250~280，牆插式，適合會議室/客房）；Wi-Fi 6E 世代經查證後**未新增**，
+  Omada 目前只有既有的 EAP690E HD 一款真實在售的 6E 機型，未強行湊數
+- **Peplink**：MAX BR1 Pro 5G 原本 `price_note` 空白，已補上 US$999（2026-08 查價）；5G Sub-6
+  世代新增 **MAX BR2 Pro 5G**（US$2,899，雙 5G modem 備援＋7 種 WAN 來源）；4G LTE 世代新增
+  **MAX Transit Duo Pro**（US$1,199，雙 modem 跨業者備援）；5G mmWave 世代查證後**未新增**，
+  Peplink 現行產品線均只支援 Sub-6GHz（mmWave 天線設計與 Peplink 外接天線/工業殼體衝突），據實
+  回報未硬湊
+- **Ruckus**：Wi-Fi 6/6E 各補 1 款（**R350**US$495~695、**R560**US$843~1,755，內建 BLE/Zigbee
+  IoT）；Wi-Fi 7 世代原本完全沒有 Ruckus 型號，新增 **R770**（US$2,500~3,103）
+- **Teltonika**：4G LTE 新增 **RUT200**（US$102.60~114.94，入門工業款）；5G Sub-6 新增
+  **RUTM50**（US$499~599）；5G mmWave 查證後確認 Teltonika 全產品線皆無 mmWave 機種，未新增
+- **Netgear**：Nighthawk M6 Pro（型號 MR6550）原本兩個世代（5G Sub-6／5G mmWave）都是空白
+  `price_note`，已查證確認為同一雙模型號（Snapdragon X65，同時支援 n260/n261 mmWave 頻段），
+  兩世代都保留、補上 US$900~1000（2026-08 查價）；原 DB 網址已失效（誤導向瑞典站型號總覽），
+  一併修正為正確的美規產品頁；4G LTE 世代新增 **Nighthawk AX4（LAX20）**（US$170~200）；
+  Wi-Fi 6E 世代新增 **Orbi RBRE960**（US$600~700，可擴充 Mesh）
 
 ### 2026-08-09 — UniFi 內容校正（文件追上資料庫現況）
 - 使用者提出「新增 UniFi」需求，核對後發現 UniFi Wi-Fi 產品其實已完整覆蓋 Wi-Fi 6/6E/7 三個世代

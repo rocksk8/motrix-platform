@@ -49,9 +49,9 @@
 | 品牌 | 強項 | 官網 |
 |------|------|------|
 | UniFi（Ubiquiti） | G6 世代全形式相機（子彈/半球/砲塔/PTZ/全景），需搭配 UniFi OS Console | store.ui.com、techspecs.ui.com |
+| Hikvision | 全球最主流專業監控品牌，全系列涵蓋子彈/半球/砲塔/PTZ/全景五種形式，ColorVu 全彩夜視與 AcuSense AI 偵測為特色，需搭配 Hikvision NVR/主機錄影 | hikvision.com（美規經銷商查價：a1securitycameras.com／networkcamerastore.com／surveillance-video.com） |
 
-目前僅 UniFi 一個品牌（本次新增），其餘品牌（Hikvision／Dahua／Reolink 等）待有實際需求時再補。
-新增品牌時，順手補進這張表。
+其餘品牌（Dahua／Reolink／Axis 等）待有實際需求時再補。新增品牌時，順手補進這張表。
 
 ---
 
@@ -63,7 +63,7 @@
 
 ## §4 · 已知缺口／待確認
 
-- 目前只有 UniFi 一個品牌，尚無法做跨品牌規格比較
+- Hikvision 目前每個分類只有 1 款代表型號，尚未比照 Omada Wi-Fi 6 的深度擴充做法補齊完整產品線
 - G6 Dome 只列了標準款，高階款 G6 Pro Dome（US$499，更高解析度/更遠 IR 距離）尚未建立獨立產品項
 - 尚未涵蓋 NVR/錄影主機本身的選型（本類別目前只涵蓋相機，NVR 容量/通道數規劃留待有實際需求時再開）
 - RETAIL／FACTORY 情境目前只是初版判斷，尚未有實際專案案例驗證，之後有真實案源請回來校正
@@ -72,6 +72,16 @@
 ---
 
 ## §5 · 變更記錄
+
+### 2026-08-09b — 新增 Hikvision 品牌（第二個品牌，可跨品牌比較）
+- 使用者要求每個類別都要有多品牌深度，委派 subagent（`SELECTION-DB-INDEX.md` §3.1 流程）研究
+  一個資料公開透明、適合跟 UniFi 對照的品牌，選定 Hikvision（全球最主流專業監控品牌）
+- 5 個分類各補 1 款：BULLET → DS-2CD2T47G2-LSU/SL、DOME → DS-2CD2147G2-LSU、
+  TURRET → DS-2CD2347G2-LU、PTZ → DS-2DE4425IW-DE、PANORAMIC → DS-2CD6365G0E-IVS，皆用
+  WebSearch 查證美規經銷商（a1securitycameras.com／networkcamerastore.com／
+  surveillance-video.com）真實規格與售價（2026-08 查價）
+- Hikvision 走 ColorVu 全彩夜視＋AcuSense AI 偵測路線，與 UniFi Protect 的紅外夜視＋
+  Multi-TOPS AI 形成技術路線對照
 
 ### 2026-08-09 — 類別上線（選型資料庫第四個類別）
 - DB v39：新增 `monitor_scenarios`／`monitor_categories`／`monitor_fit`／`monitor_products`
