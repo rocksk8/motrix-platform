@@ -31,12 +31,16 @@
     table.ov-table td{padding:9px 12px;border-bottom:1px solid #F0EEE9;vertical-align:top}
     table.ov-table tr:hover td{background:#FAFAF8}
     .ov-rowname{font-weight:700;color:var(--text-primary);white-space:nowrap}
+    .ov-rowname a{color:inherit;text-decoration:none}
+    .ov-rowname a:hover{color:var(--accent);text-decoration:underline}
+    .ov-count-link{text-decoration:none;display:inline-block}
     .ov-count-badge{display:inline-block;min-width:1.6em;text-align:center;font-weight:700;font-size:12px;padding:2px 8px;border-radius:10px;font-family:var(--font-en)}
     .ov-count-badge.zero{background:#FBE7E7;color:#B3261E}
     .ov-count-badge.thin{background:#FFF3D6;color:#8A5A00}
     .ov-count-badge.ok{background:#E6F4EA;color:#1E7E34}
     .ov-brands{display:flex;flex-wrap:wrap;gap:6px}
-    .ov-brand-chip{display:inline-flex;align-items:center;gap:4px;font-size:11px;padding:2px 8px;border-radius:10px;background:#FAFAF8;border:1px solid var(--border-light);color:var(--text-secondary);white-space:nowrap}
+    .ov-brand-chip{display:inline-flex;align-items:center;gap:4px;font-size:11px;padding:2px 8px;border-radius:10px;background:#FAFAF8;border:1px solid var(--border-light);color:var(--text-secondary);white-space:nowrap;text-decoration:none;cursor:pointer}
+    .ov-brand-chip:hover{border-color:var(--accent);color:var(--accent)}
     .ov-brand-chip .c{font-weight:700;color:var(--text-primary)}
     .ov-empty-hint{color:var(--text-dim);font-size:11.5px}
     .ov-loading{text-align:center;color:var(--text-dim);font-size:13px;padding:40px 0}
@@ -88,15 +92,15 @@
                       </tr>
                     </thead>
                     <tbody>
-                      <template x-for="row in sec.rows" :key="row.name">
+                      <template x-for="row in sec.rows" :key="row.key">
                         <tr>
-                          <td class="ov-rowname" x-text="row.name"></td>
-                          <td><span class="ov-count-badge" :class="badgeClass(row.brands.length)" x-text="row.brands.length"></span></td>
-                          <td><span class="ov-count-badge" :class="badgeClass(row.brands.length)" x-text="row.total"></span></td>
+                          <td class="ov-rowname"><a :href="rowHref(sec, row)" x-text="row.name"></a></td>
+                          <td><a class="ov-count-link" :href="rowHref(sec, row)"><span class="ov-count-badge" :class="badgeClass(row.brands.length)" x-text="row.brands.length"></span></a></td>
+                          <td><a class="ov-count-link" :href="rowHref(sec, row)"><span class="ov-count-badge" :class="badgeClass(row.brands.length)" x-text="row.total"></span></a></td>
                           <td>
                             <div class="ov-brands" x-show="row.brands.length>0">
                               <template x-for="b in row.brands" :key="b.name">
-                                <span class="ov-brand-chip"><span x-text="b.name"></span><span class="c" x-text="'×'+b.count"></span></span>
+                                <a class="ov-brand-chip" :href="rowHref(sec, row, b.name)"><span x-text="b.name"></span><span class="c" x-text="'×'+b.count"></span></a>
                               </template>
                             </div>
                             <span class="ov-empty-hint" x-show="row.brands.length===0">尚無任何品牌</span>
@@ -146,8 +150,16 @@
           const brandCounts = {}
           rowProducts.forEach(p => { brandCounts[p.brand] = (brandCounts[p.brand] || 0) + 1 })
           const brands = Object.keys(brandCounts).sort().map(name => ({ name, count: brandCounts[name] }))
-          return { name: def.name, brands, total: rowProducts.length }
+          return { key: def.key, name: def.name, brands, total: rowProducts.length }
         })
+      },
+
+      // 點選列名稱／數量／品牌 chip，帶到對應導覽頁並直接定位到該分類／世代（選填品牌篩選）
+      rowHref(sec, row, brand) {
+        const params = new URLSearchParams()
+        params.set(sec.paramName, row.key)
+        if (brand) params.set('brand', brand)
+        return sec.href + '?' + params.toString()
       },
 
       async loadAll() {
@@ -159,31 +171,37 @@
           swCats, swProds,
           moCats, moProds,
           acCats, acProds,
+          gwCats, gwProds,
         ] = await Promise.all([
           get('/netarch-guide/generations'), get('/netarch-guide/products'),
           get('/switch-guide/categories'), get('/switch-guide/products'),
           get('/monitor-guide/categories'), get('/monitor-guide/products'),
           get('/access-guide/categories'), get('/access-guide/products'),
+          get('/gateway-guide/categories'), get('/gateway-guide/products'),
         ])
 
         const netRowDefs = (netGens || []).map(g => ({ key: g.id, name: g.gen_name + '（' + g.family_code + '）' }))
         const swRowDefs = (swCats || []).map(c => ({ key: c.code, name: c.name }))
         const moRowDefs = (moCats || []).map(c => ({ key: c.code, name: c.name }))
         const acRowDefs = (acCats || []).map(c => ({ key: c.code, name: c.name }))
+        const gwRowDefs = (gwCats || []).map(c => ({ key: c.code, name: c.name }))
 
         this.sections = [
-          { key: 'netarch', title: '網路架構選型導覽', rowLabel: '世代', href: 'netarch-guide.html',
+          { key: 'netarch', title: '網路架構選型導覽', rowLabel: '世代', href: 'netarch-guide.html', paramName: 'generation',
             rows: this.buildRows(netRowDefs, netProds || [], 'generation_id'),
             totalProducts: (netProds || []).length },
-          { key: 'switch', title: '交換器選型導覽', rowLabel: '分類', href: 'switch-guide.html',
+          { key: 'switch', title: '交換器選型導覽', rowLabel: '分類', href: 'switch-guide.html', paramName: 'category',
             rows: this.buildRows(swRowDefs, swProds || [], 'category_code'),
             totalProducts: (swProds || []).length },
-          { key: 'monitor', title: '監控系統選型導覽', rowLabel: '分類', href: 'monitor-guide.html',
+          { key: 'monitor', title: '監控系統選型導覽', rowLabel: '分類', href: 'monitor-guide.html', paramName: 'category',
             rows: this.buildRows(moRowDefs, moProds || [], 'category_code'),
             totalProducts: (moProds || []).length },
-          { key: 'access', title: '門禁系統選型導覽', rowLabel: '分類', href: 'access-guide.html',
+          { key: 'access', title: '門禁系統選型導覽', rowLabel: '分類', href: 'access-guide.html', paramName: 'category',
             rows: this.buildRows(acRowDefs, acProds || [], 'category_code'),
             totalProducts: (acProds || []).length },
+          { key: 'gateway', title: '閘道器與控制器選型導覽', rowLabel: '分類', href: 'gateway-guide.html', paramName: 'category',
+            rows: this.buildRows(gwRowDefs, gwProds || [], 'category_code'),
+            totalProducts: (gwProds || []).length },
         ]
       },
     }

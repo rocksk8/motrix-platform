@@ -1,7 +1,7 @@
 # MOTRIX ERP — 開發快速參考
 
 > 允碩整合集創（統編 60575481）｜ Tel: 04-3610-6566 ｜ info@miactw.com  
-> 文件版本：**2026-08-10**（修正網路架構選型導覽新增/更新產品 API 的 500 錯誤，見 §12）
+> 文件版本：**2026-08-10a**（選型資料庫新增閘道器與控制器選型導覽，第六個類別，見 §12）
 
 ---
 
@@ -310,6 +310,11 @@ monitor_scenarios / monitor_categories / monitor_fit / monitor_products
 access_scenarios / access_categories / access_fit / access_products
                           -- 門禁系統選型導覽（DB v40）：元件分類×場域情境矩陣式交叉，選型資料庫第五個類別
                           -- access_products.specs_json：[[label,value],...] 結構化規格（直接隨建表加入）
+
+gateway_scenarios / gateway_categories / gateway_fit / gateway_products
+                          -- 閘道器與控制器選型導覽（DB v41）：分類×場域情境矩陣式交叉，選型資料庫第六個類別
+                          -- 與 switch_guide 邊界：switch_guide 只收交換器，本類別收路由/閘道器與硬體控制器
+                          -- gateway_products.specs_json：[[label,value],...] 結構化規格（直接隨建表加入）
 
 shipping_notes           -- 出貨單／回簽單（DB v34，案件管理子項目，quote_no 一對多）
   id, note_no PK（DN-YYYYMM-NNN，next_entity_code 泛化生成）, quote_no,
@@ -866,6 +871,24 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 ## §12 · 變更摘要（最新兩版）
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
+
+### 2026-08-10a — 選型資料庫新增閘道器與控制器選型導覽（第六個類別）＋四個既有導覽頁全域搜尋/深度連結
+
+- **背景**：選型資料庫繼交換器／網路架構／監控系統／門禁系統之後，新增第六個類別；同時補上
+  從「涵蓋度總覽」頁直接跳轉到對應分類的深度連結體驗
+- **gateway_guide（DB v41）**：`gateway_scenarios/categories/fit/products` 四表，資料形狀比照
+  switch_guide／monitor_guide／access_guide；與 switch_guide 的邊界是 switch_guide 只收交換器，
+  本類別收 Omada 路由/閘道器（Wired/Wi-Fi/4G-5G/整合型）與硬體控制器（OC 系列）；首批資料
+  5 情境／5 分類／25 筆適配矩陣／15 筆產品；`gateway-guide.html` 前端頁面、`routers/gateway_guide.py`
+  後端 CRUD 均以既有類別為範本；`users.html`／`sidebar.js`／`main.py` 依既有慣例同步補齊權限模組
+  與導覽項目；詳見 `GATEWAY-GUIDE-CONTENT.md`
+- **四個既有導覽頁＋總覽頁新增全域搜尋／深度連結**：switch/monitor/access/netarch-guide.html
+  工具列新增跨分類全域搜尋框（輸入型號/品牌直接篩出符合的分類卡片，取代原本要先選情境再逐一
+  展開的操作路徑）；`selection-db-overview.html` 的類別/品牌連結改為帶 `?category=&brand=` 參數
+  導向對應頁面並自動捲動＋短暫高亮命中的分類卡片（`applyDeepLink()`），解決總覽頁「看得到缺口
+  但要手動找到對應位置」的痛點
+- **驗證**：`pytest` 100 個測試全過；透過雙機 API 核對工具（見 §14.4／`check_guide_sync.py`）先
+  在開發機對 gateway_guide 四個端點做建立＋刪除測試資料驗證 CRUD 正常，才與其餘變更一併打包
 
 ### 2026-08-10 — 修正網路架構選型導覽新增/更新產品 API 的 500 錯誤（specs_json 欄位不存在）
 
@@ -2124,6 +2147,44 @@ MOTRIX-ERP/
 
 - PowerShell Remoting（`Invoke-Command`/`New-PSSession`）取代人工複製部署包——需先在正式機開放 WinRM，涉及帳密/防火牆設定
 - 拉檔案回開發機（§14.2 方向，跟 §15 相反方向）目前仍是全人工，尚未有對應的半自動工具
+
+### §14.4 · 選型資料庫雙機內容核對（API 版，2026-08-10）
+
+> §15 只管程式碼／schema，**選型資料庫的實際內容**（switch/monitor/access/gateway/netarch/env
+> 六大類的 scenarios/categories/fit/products 這些 row）不在 schema 裡、migration 也管不到——
+> 過去只能靠翻各支 `sync_YYYY-MM-DD_xxx.py` 的 docstring 回憶／人工核對兩機是否同步，這就是
+> 2026-08-10 這次落差被發現的原因。現在改用兩台機器都已開通的 API（兩邊 LAN 可互通，見 §1
+> 區網位址）直接比對，取代人工回憶。
+
+**前置需求**：兩台機器都要有 `claude` 自動化帳號（`create_claude_account.py`，role=admin＋
+`*_guide_edit` 模組旗標，最小權限）且核發過 session token：
+
+```
+python backend/issue_claude_session.py     # 於該機器 backend/ 目錄下執行，印出 token
+```
+
+token 不共用、各機器獨立（sessions 表各自是獨立 SQLite 檔案），效期比照一般登入 30 天，過期
+重跑上面這行即可（冪等，會自動清掉該帳號舊 session 再核發新的）。
+
+**核對**：
+
+```
+cd backend/tools
+python check_guide_sync.py                            # 核對全部 6 大類
+python check_guide_sync.py --category switch access    # 只核對指定類別
+```
+
+token 設定於 `backend/tools/.guide_sync_config.json`（**不進 git**，`.gitignore` 已排除，格式見
+腳本內 `_CONFIG_EXAMPLE`）；依自然鍵（多數是 `code`，跨表關聯用 `scenario_code`/`category_code`，
+`netarch_products` 例外用 `generation_id` 需先換算成 `(family_code, gen_name)` 再比對，因為那是
+機器本地自增數字、兩機不保證相同）逐一比對每個端點，印出「哪些 key 只有一邊有」。
+
+**已知限制**：這支工具只讀，不會自動修補落差；發現落差後仍要判斷是「單純缺資料」（直接用同帳號
+對缺的那一機 POST 補上，見下方）還是「資料被取代/刪除」（一邊新增了更細的項目、同時刪掉舊的
+籠統項目，這種情況另一邊要手動決定是否也要刪，不能自動判斷）。2026-08-10 這次首次使用就意外
+挖到 `routers/netarch_guide.py` 的既有 bug（見 §12 同日條目）——透過 API 實際寫入資料是比對過
+docstring 更可靠的驗證方式，往後新增選型資料庫內容建議優先用這個流程，而不是直接寫一次性
+sqlite 腳本後假設「兩機遲早會一致」。
 
 ---
 

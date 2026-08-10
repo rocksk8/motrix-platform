@@ -23,7 +23,7 @@ from datetime import datetime
 from helpers.auth import _hash_pw
 
 DB_PATH = "motrix_erp.db"
-MODULES = ["switch_guide_edit", "netarch_guide_edit", "monitor_guide_edit", "access_guide_edit"]
+MODULES = ["switch_guide_edit", "netarch_guide_edit", "monitor_guide_edit", "access_guide_edit", "gateway_guide_edit"]
 
 
 def main():

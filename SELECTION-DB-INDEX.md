@@ -38,6 +38,7 @@
 | 商用／工業網路交換器 | ✅ 已上線 | [SWITCH-GUIDE-CONTENT.md](./SWITCH-GUIDE-CONTENT.md) | `switch_scenarios` / `switch_categories` / `switch_fit` / `switch_products` |
 | 監控系統 | ✅ 已上線 | [MONITOR-GUIDE-CONTENT.md](./MONITOR-GUIDE-CONTENT.md) | `monitor_scenarios` / `monitor_categories` / `monitor_fit` / `monitor_products` |
 | 門禁系統 | ✅ 已上線 | [ACCESS-GUIDE-CONTENT.md](./ACCESS-GUIDE-CONTENT.md) | `access_scenarios` / `access_categories` / `access_fit` / `access_products` |
+| 路由器／閘道器與硬體控制器 | ✅ 已上線 | [GATEWAY-GUIDE-CONTENT.md](./GATEWAY-GUIDE-CONTENT.md) | `gateway_scenarios` / `gateway_categories` / `gateway_fit` / `gateway_products` |
 | 自動化系統 | 📋 規劃中 | 待建立 | 待設計 |
 
 > 新類別上線後，記得回來這裡加一行，並在下面「§5 變更記錄」留一筆。
@@ -129,6 +130,13 @@
 ## §5 · 變更記錄
 
 > 新類別上線、資料表改版等大事記，新的寫在上面。
+
+### 2026-08-10 — 新增「路由器／閘道器與硬體控制器」類別（第六個類別，DB v41）
+- 詳見 [GATEWAY-GUIDE-CONTENT.md](./GATEWAY-GUIDE-CONTENT.md) §5，同日條目
+- 同一輪也把交換器選型導覽的 `switch_categories` 從 4 個跨品牌通用分類擴充為 11 個（新增 7 個
+  `OMADA_` 前綴的 Omada 官方系列專屬分類，75 款產品），詳見 SWITCH-GUIDE-CONTENT.md §5
+  「2026-08-10」條目——這兩次異動都建立了「品牌專屬分類」的先例，之後新增品牌前請先讀過
+  這兩份文件的 §1 說明再決定要塞進通用分類還是新建專屬分類
 
 ### 2026-08-09f — 監控系統新增 4 品牌（84 款）＋建立本機研究管道
 - 使用者指名新增 VIGI／Spark（附官網）／AXIS／i-PRO 四個品牌，並要求比照 Omada 教訓（不篩選、

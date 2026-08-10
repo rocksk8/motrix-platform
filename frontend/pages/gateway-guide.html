@@ -5,16 +5,16 @@
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="../static/favicon.png">
-  <title>網路交換器選型導覽 — MOTRIX 營運管理系統</title>
+  <title>閘道器與控制器選型導覽 — MOTRIX 營運管理系統</title>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <style>
     [x-cloak]{display:none!important}
     .page-main{margin-left:var(--sidebar-w);margin-top:var(--topbar-h);padding:0;min-height:calc(100vh - var(--topbar-h));overflow:hidden;background:var(--white)}
-    .sg-toolbar{height:48px;box-sizing:border-box;display:flex;align-items:center;gap:10px;padding:0 20px;border-bottom:1px solid var(--border-light);background:#fff}
-    .sg-toolbar .ttl{font-size:14px;font-weight:700;color:var(--text-primary)}
-    .sg-toolbar .sub{font-size:11px;color:var(--text-dim)}
-    .sg-body{height:calc(100vh - var(--topbar-h) - 48px);overflow:auto;padding:20px 24px}
+    .gg-toolbar{height:48px;box-sizing:border-box;display:flex;align-items:center;gap:10px;padding:0 20px;border-bottom:1px solid var(--border-light);background:#fff}
+    .gg-toolbar .ttl{font-size:14px;font-weight:700;color:var(--text-primary)}
+    .gg-toolbar .sub{font-size:11px;color:var(--text-dim)}
+    .gg-body{height:calc(100vh - var(--topbar-h) - 48px);overflow:auto;padding:20px 24px}
 
     /* 情境選擇方塊 */
     .fam-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin-bottom:20px}
@@ -70,7 +70,6 @@
     .prod-search input:focus{border-color:var(--accent)}
     .prod-search .clr{position:absolute;right:5px;top:50%;transform:translateY(-50%);border:none;background:none;color:var(--text-dim);cursor:pointer;font-size:13px;line-height:1;padding:2px}
     .prod-search .clr:hover{color:var(--danger)}
-    .prod-noresult{color:var(--text-dim);font-size:11px;padding:6px 0}
 
     /* 全域搜尋（型號／品牌，跨分類直接篩出符合結果） */
     .gsearch-box{position:relative}
@@ -78,6 +77,7 @@
     .gsearch-box input:focus{border-color:var(--accent)}
     .gsearch-clr{position:absolute;right:6px;top:50%;transform:translateY(-50%);border:none;background:none;color:var(--text-dim);cursor:pointer;font-size:13px;line-height:1;padding:2px}
     .gsearch-clr:hover{color:var(--danger)}
+    .prod-noresult{color:var(--text-dim);font-size:11px;padding:6px 0}
 
     /* 規格比較表 */
     .compare-toolbar{display:flex;align-items:center;gap:10px;margin-bottom:12px;padding:8px 12px;background:#FAFAF8;border:1px solid var(--border-light);border-radius:var(--radius)}
@@ -157,12 +157,12 @@
 
     <main class="page-main">
 
-      <div class="sg-toolbar">
-        <span class="ttl">網路交換器選型導覽</span>
-        <span class="sub">行業情境 · 產品分類適配 · 產品連結</span>
+      <div class="gg-toolbar">
+        <span class="ttl">閘道器與控制器選型導覽</span>
+        <span class="sub">場域情境 · 閘道器／控制器分類適配 · 產品連結</span>
         <div style="margin-left:auto;display:flex;align-items:center;gap:10px">
           <div class="gsearch-box">
-            <input type="text" placeholder="搜尋型號／品牌，如「SG2210」「Omada」" x-model="globalSearch" @input="if(globalSearch.trim()) browseView='scenario'">
+            <input type="text" placeholder="搜尋型號／品牌，如「ER605」「OC200」" x-model="globalSearch" @input="if(globalSearch.trim()) browseView='scenario'">
             <button class="gsearch-clr" x-show="globalSearch" @click="globalSearch=''">✕</button>
           </div>
           <button class="mibtn" :class="mode==='browse' ? 'pri' : ''" @click="mode='browse'">瀏覽</button>
@@ -171,7 +171,7 @@
       </div>
 
       <!-- ══════ 瀏覽模式 ══════ -->
-      <div class="sg-body" x-show="mode==='browse'">
+      <div class="gg-body" x-show="mode==='browse'">
 
         <div class="view-tabs">
           <button class="mibtn" :class="browseView==='scenario' ? 'pri' : ''" @click="browseView='scenario'">依情境查看</button>
@@ -191,7 +191,7 @@
             </div>
 
             <template x-if="!activeScenario">
-              <div class="empty-hint">請點選上方一個行業情境，查看各產品分類的適配度</div>
+              <div class="empty-hint">請點選上方一個場域情境，查看各閘道器／控制器分類的適配度</div>
             </template>
 
             <template x-if="activeScenario && globalSearch.trim() && categoriesRankedFor(activeScenario).length===0">
@@ -292,7 +292,7 @@
       </div>
 
       <!-- ══════ 管理模式 ══════ -->
-      <div class="sg-body" x-show="mode==='manage'" x-cloak>
+      <div class="gg-body" x-show="mode==='manage'" x-cloak>
         <div class="mpanel">
           <div class="mhead"><b>行業情境</b><span class="n" x-text="'('+scenarios.length+')'"></span>
             <button class="mibtn pri" @click="openScenarioModal(null)">＋ 新增情境</button>
@@ -414,7 +414,7 @@
           </div>
           <div class="field-row">
             <div class="field-label">名稱</div>
-            <input class="field-input" type="text" placeholder="辦公室／機房" x-model="modal.name">
+            <input class="field-input" type="text" placeholder="辦公室／機房內部" x-model="modal.name">
           </div>
           <div class="field-row" style="grid-column:1/-1">
             <div class="field-label">說明</div>
@@ -427,11 +427,11 @@
         <div class="form-grid">
           <div class="field-row">
             <div class="field-label">分類代碼 <span style="color:var(--danger)">*</span></div>
-            <input class="field-input" type="text" placeholder="SMART_L2PLUS" x-model="modal.code" :disabled="!!modal.id">
+            <input class="field-input" type="text" placeholder="OMADA_GW_WIRED" x-model="modal.code" :disabled="!!modal.id">
           </div>
           <div class="field-row">
             <div class="field-label">名稱</div>
-            <input class="field-input" type="text" placeholder="簡易網管 Smart／L2+" x-model="modal.name">
+            <input class="field-input" type="text" placeholder="Omada 有線 VPN 閘道器" x-model="modal.name">
           </div>
           <div class="field-row" style="grid-column:1/-1">
             <div class="field-label">核心規格</div>
@@ -439,11 +439,11 @@
           </div>
           <div class="field-row">
             <div class="field-label">標籤（逗號分隔）</div>
-            <input class="field-input" type="text" placeholder="中小型部署,性價比" x-model="modal.tags">
+            <input class="field-input" type="text" placeholder="隱蔽,室內外通用" x-model="modal.tags">
           </div>
           <div class="field-row">
             <div class="field-label">建議售價區間</div>
-            <input class="field-input" type="text" placeholder="NT$3,500–8,000" x-model="modal.priceRange">
+            <input class="field-input" type="text" placeholder="US$279~499" x-model="modal.priceRange">
           </div>
           <div class="field-row" style="grid-column:1/-1">
             <div class="field-label">依賴／相關備註</div>
@@ -505,7 +505,7 @@
           </div>
           <div class="field-row">
             <div class="field-label">型號</div>
-            <input class="field-input" type="text" placeholder="Switch Lite 8 PoE" x-model="modal.model">
+            <input class="field-input" type="text" placeholder="G6 Dome" x-model="modal.model">
           </div>
           <div class="field-row" style="grid-column:1/-1">
             <div class="field-label">連結網址</div>
@@ -517,14 +517,14 @@
           </div>
           <div class="field-row">
             <div class="field-label">售價備註</div>
-            <input class="field-input" type="text" placeholder="US$109" x-model="modal.priceNote">
+            <input class="field-input" type="text" placeholder="US$279" x-model="modal.priceNote">
           </div>
           <div class="field-row" style="grid-column:1/-1">
             <div class="field-label">技術規格（key-value，會用於規格比較表）</div>
             <div class="spec-rows">
               <template x-for="(s, idx) in modal.specs" :key="idx">
                 <div class="spec-row">
-                  <input class="field-input" type="text" placeholder="規格名稱，如「PoE 埠數／預算」" x-model="s.key">
+                  <input class="field-input" type="text" placeholder="規格名稱，如「紅外線補光距離」" x-model="s.key">
                   <input class="field-input" type="text" placeholder="數值，如「8 埠，總 61W」" x-model="s.value">
                   <button class="rmbtn" @click="modal.specs.splice(idx, 1)">移除</button>
                 </div>
@@ -617,7 +617,7 @@
         if (!s.token) { location.href = 'login.html'; return }
         this.session = s
         const mods = Array.isArray(s.modules) ? s.modules : []
-        this.canEdit = s.role === 'superadmin' || mods.indexOf('switch_guide_edit') >= 0
+        this.canEdit = s.role === 'superadmin' || mods.indexOf('gateway_guide_edit') >= 0
         try {
           const r = await fetch(`${API}/auth/me`, { headers: { Authorization: 'Bearer ' + s.token } })
           if (!r.ok) { location.href = 'login.html'; return }
@@ -651,10 +651,10 @@
         const headers = { Authorization: 'Bearer ' + this.session.token }
         try {
           const [scns, cats, fits, prods] = await Promise.all([
-            fetch(`${API}/switch-guide/scenarios`, { headers }).then(r => r.json()),
-            fetch(`${API}/switch-guide/categories`, { headers }).then(r => r.json()),
-            fetch(`${API}/switch-guide/fit`, { headers }).then(r => r.json()),
-            fetch(`${API}/switch-guide/products`, { headers }).then(r => r.json()),
+            fetch(`${API}/gateway-guide/scenarios`, { headers }).then(r => r.json()),
+            fetch(`${API}/gateway-guide/categories`, { headers }).then(r => r.json()),
+            fetch(`${API}/gateway-guide/fit`, { headers }).then(r => r.json()),
+            fetch(`${API}/gateway-guide/products`, { headers }).then(r => r.json()),
           ])
           this.scenarios = scns; this.categories = cats; this.fits = fits; this.products = prods
         } catch {}
@@ -801,26 +801,26 @@
           if (!this.modal.code.trim()) { this.modal.error = '情境代碼不得為空'; return }
           body = { code: this.modal.code, name: this.modal.name, description: this.modal.description }
           method = this.modal.id ? 'PUT' : 'POST'
-          url = this.modal.id ? `${API}/switch-guide/scenarios/${encodeURIComponent(this.modal.id)}` : `${API}/switch-guide/scenarios`
+          url = this.modal.id ? `${API}/gateway-guide/scenarios/${encodeURIComponent(this.modal.id)}` : `${API}/gateway-guide/scenarios`
         } else if (this.modal.kind === 'category') {
           if (!this.modal.code.trim()) { this.modal.error = '分類代碼不得為空'; return }
           body = { code: this.modal.code, name: this.modal.name, keySpecs: this.modal.keySpecs, tags: this.modal.tags,
                     priceRange: this.modal.priceRange, dependencyNote: this.modal.dependencyNote, watchNote: this.modal.watchNote }
           method = this.modal.id ? 'PUT' : 'POST'
-          url = this.modal.id ? `${API}/switch-guide/categories/${encodeURIComponent(this.modal.id)}` : `${API}/switch-guide/categories`
+          url = this.modal.id ? `${API}/gateway-guide/categories/${encodeURIComponent(this.modal.id)}` : `${API}/gateway-guide/categories`
         } else if (this.modal.kind === 'fit') {
           if (!this.modal.scenarioCode || !this.modal.categoryCode) { this.modal.error = '請選擇情境與分類'; return }
           body = { scenarioCode: this.modal.scenarioCode, categoryCode: this.modal.categoryCode,
                     fitLevel: this.modal.fitLevel, fitNote: this.modal.fitNote }
           method = this.modal.id ? 'PUT' : 'POST'
-          url = this.modal.id ? `${API}/switch-guide/fit/${this.modal.id}` : `${API}/switch-guide/fit`
+          url = this.modal.id ? `${API}/gateway-guide/fit/${this.modal.id}` : `${API}/gateway-guide/fit`
         } else {
           if (!this.modal.categoryCode) { this.modal.error = '請選擇所屬分類'; return }
           body = { categoryCode: this.modal.categoryCode, brand: this.modal.brand, model: this.modal.model,
                     url: this.modal.url, label: this.modal.label, priceNote: this.modal.priceNote,
                     specs: this.modal.specs.filter(s => s.key.trim()).map(s => [s.key, s.value]) }
           method = this.modal.id ? 'PUT' : 'POST'
-          url = this.modal.id ? `${API}/switch-guide/products/${this.modal.id}` : `${API}/switch-guide/products`
+          url = this.modal.id ? `${API}/gateway-guide/products/${this.modal.id}` : `${API}/gateway-guide/products`
         }
         this.modal.saving = true
         try {
@@ -839,7 +839,7 @@
         const endpoints = { scenario: 'scenarios', category: 'categories', fit: 'fit', product: 'products' }
         const idPart = (kind === 'scenario' || kind === 'category') ? encodeURIComponent(item.code) : item.id
         try {
-          const r = await fetch(`${API}/switch-guide/${endpoints[kind]}/${idPart}`, { method: 'DELETE', headers: { Authorization: 'Bearer ' + this.session.token } })
+          const r = await fetch(`${API}/gateway-guide/${endpoints[kind]}/${idPart}`, { method: 'DELETE', headers: { Authorization: 'Bearer ' + this.session.token } })
           if (r.ok) await this.loadAll()
         } catch {}
       },

@@ -290,6 +290,7 @@
   var cSwitchG = mods.indexOf('switch_guide') >= 0 || ad
   var cMonitorG = mods.indexOf('monitor_guide') >= 0 || ad
   var cAccessG = mods.indexOf('access_guide') >= 0 || ad
+  var cGatewayG = mods.indexOf('gateway_guide') >= 0 || ad
 
   var ic = {
     dash:  '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
@@ -354,6 +355,7 @@
     'switch-guide.html':       'switch_guide',
     'monitor-guide.html':      'monitor_guide',
     'access-guide.html':       'access_guide',
+    'gateway-guide.html':      'gateway_guide',
     'selection-db-overview.html': 'selection_db_overview',
   }
 
@@ -395,6 +397,7 @@
       ni(pg('switch-guide.html'),   'switchg', '交換器選型導覽',   ['switch-guide.html'],  cSwitchG),
       ni(pg('monitor-guide.html'),  'monitorg', '監控系統選型導覽', ['monitor-guide.html'], cMonitorG),
       ni(pg('access-guide.html'),   'accessg',  '門禁系統選型導覽', ['access-guide.html'],  cAccessG),
+      ni(pg('gateway-guide.html'),  'gwg',      '閘道器與控制器選型導覽', ['gateway-guide.html'], cGatewayG),
       ni(pg('selection-db-overview.html'), 'ovg', '涵蓋度總覽', ['selection-db-overview.html'], ad),
       sec('廠商與採購', cCu || cPr),
       ni(pg('customers.html'),       'cust',  '客戶管理', ['customers.html', 'customer-log.html'],   cCu,  'sb-mod-customer'),
@@ -641,6 +644,7 @@
         cSwitchG = mods.indexOf('switch_guide') >= 0 || ad
         cMonitorG = mods.indexOf('monitor_guide') >= 0 || ad
         cAccessG = mods.indexOf('access_guide') >= 0 || ad
+        cGatewayG = mods.indexOf('gateway_guide') >= 0 || ad
         canDash = sa || ad || mods.indexOf('finance') >= 0 || mods.indexOf('quotation') >= 0 || mods.indexOf('dashboard') >= 0
         buildSidebar()
         var dnEl = document.getElementById('tb-display-name')

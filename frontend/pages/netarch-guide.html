@@ -21,6 +21,16 @@
     .fam-tile{border:1px solid var(--border-light);border-radius:var(--radius-lg);background:#fff;padding:16px 18px;cursor:pointer;transition:all .15s;text-align:left}
     .fam-tile:hover{border-color:var(--accent);box-shadow:var(--shadow-sm)}
     .fam-tile.active{border-color:var(--accent);background:var(--accent-light)}
+    .gen-card-highlight{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-light),var(--shadow-sm);animation:catFlash 1.6s ease-in-out 1}
+    @keyframes catFlash{0%{background:var(--accent-light)}100%{background:#fff}}
+    .prod-item-highlight{background:var(--accent-light);border-radius:var(--radius);margin:0 -6px;padding:2px 6px}
+
+    /* 全域搜尋（型號／品牌，跨族系直接篩出符合結果） */
+    .gsearch-box{position:relative}
+    .gsearch-box input{width:230px;box-sizing:border-box;padding:6px 26px 6px 10px;font-size:12.5px;font-family:inherit;border:1px solid var(--border-light);border-radius:var(--radius);outline:none;background:#fff;color:var(--text-primary)}
+    .gsearch-box input:focus{border-color:var(--accent)}
+    .gsearch-clr{position:absolute;right:6px;top:50%;transform:translateY(-50%);border:none;background:none;color:var(--text-dim);cursor:pointer;font-size:13px;line-height:1;padding:2px}
+    .gsearch-clr:hover{color:var(--danger)}
     .fam-tile .fname{font-size:15px;font-weight:700;color:var(--text-primary);margin-bottom:4px}
     .fam-tile .fdesc{font-size:12px;color:var(--text-secondary);line-height:1.5}
     .fam-tile .fcount{font-size:11px;color:var(--text-dim);margin-top:8px}
@@ -85,7 +95,11 @@
       <div class="ng-toolbar">
         <span class="ttl">網路架構選型導覽</span>
         <span class="sub">技術族系 · 世代對照 · 產品連結</span>
-        <div style="margin-left:auto;display:flex;gap:8px">
+        <div style="margin-left:auto;display:flex;align-items:center;gap:10px">
+          <div class="gsearch-box">
+            <input type="text" placeholder="搜尋型號／品牌，如「U6-Pro」「Omada」" x-model="globalSearch">
+            <button class="gsearch-clr" x-show="globalSearch" @click="globalSearch=''">✕</button>
+          </div>
           <button class="mibtn" :class="mode==='browse' ? 'pri' : ''" @click="mode='browse'">瀏覽</button>
           <button class="mibtn" :class="mode==='manage' ? 'pri' : ''" x-show="canEdit" @click="mode='manage'">管理</button>
         </div>
@@ -103,16 +117,20 @@
           </template>
         </div>
 
-        <template x-if="!activeFamily">
+        <template x-if="!activeFamily && !globalSearch.trim()">
           <div class="empty-hint">請點選上方一個技術族系，查看世代對照</div>
         </template>
 
-        <template x-if="activeFamily">
+        <template x-if="globalSearch.trim() && visibleGenerations().length===0">
+          <div class="empty-hint">查無符合「<span x-text="globalSearch"></span>」的型號／品牌</div>
+        </template>
+
+        <template x-if="activeFamily || globalSearch.trim()">
           <div class="gen-row">
-            <template x-for="g in generationsFor(activeFamily)" :key="g.id">
-              <div class="gen-card">
+            <template x-for="g in visibleGenerations()" :key="g.id">
+              <div class="gen-card" :id="'gen-' + g.id" :class="highlightGeneration===g.id ? 'gen-card-highlight' : ''">
                 <div class="gh">
-                  <div class="gname" x-text="g.gen_name"></div>
+                  <div class="gname" x-text="(globalSearch.trim() ? familyLabel(g.family_code) + ' · ' : '') + g.gen_name"></div>
                   <div class="gtags">
                     <template x-for="t in tagList(g.tags)" :key="t">
                       <span class="tag-pill" x-text="t"></span>
@@ -128,19 +146,19 @@
                   <div class="gen-field warn" x-show="g.watch_note"><div class="gl">注意事項</div><div class="gv" x-text="g.watch_note"></div></div>
                   <div class="gen-products">
                     <div class="gl" style="font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:var(--text-dim);font-weight:700;margin-bottom:4px">對應產品</div>
-                    <template x-for="p in productsFor(g.id)" :key="p.id">
-                      <div class="prod-item">
+                    <template x-for="p in productsToShowFor(g.id)" :key="p.id">
+                      <div class="prod-item" :class="highlightBrand && p.brand===highlightBrand ? 'prod-item-highlight' : ''">
                         <b x-text="p.brand"></b>
                         <a :href="p.url" target="_blank" rel="noopener" x-text="p.model"></a>
                         <span class="pnote" x-text="p.price_note"></span>
                       </div>
                     </template>
-                    <div x-show="productsFor(g.id).length===0" style="color:var(--text-dim);font-size:11px">尚無對應產品</div>
+                    <div x-show="productsToShowFor(g.id).length===0" style="color:var(--text-dim);font-size:11px">尚無對應產品</div>
                   </div>
                 </div>
               </div>
             </template>
-            <div x-show="generationsFor(activeFamily).length===0" class="empty-hint" style="flex:1">此族系尚無世代資料</div>
+            <div x-show="!globalSearch.trim() && generationsFor(activeFamily).length===0" class="empty-hint" style="flex:1">此族系尚無世代資料</div>
           </div>
         </template>
       </div>
@@ -343,7 +361,7 @@
   const API = '/api'
   function app() {
     return {
-      session: {}, canEdit: false, mode: 'browse', activeFamily: null,
+      session: {}, canEdit: false, mode: 'browse', activeFamily: null, highlightGeneration: null, highlightBrand: null, globalSearch: '',
       families: [], generations: [], products: [],
       modal: { show:false, kind:'family', id:null, code:'', name:'', description:'',
                familyCode:'', genName:'', keySpecs:'', upgradeNote:'', typicalScenario:'', tags:'', priceRange:'', dependencyNote:'', watchNote:'',
@@ -361,6 +379,29 @@
         } catch {}
         await this.loadAll()
         if (this.families.length) this.activeFamily = this.families[0].code
+        this.applyDeepLink()
+      },
+
+      // 從「涵蓋度總覽」頁點選世代／品牌連結過來時，切到對應族系並定位到該世代卡片（選填品牌標示）
+      applyDeepLink() {
+        const params = new URLSearchParams(location.search)
+        const genParam = params.get('generation')
+        const brandParam = params.get('brand')
+        if (!genParam) return
+        const gen = this.generations.find(g => String(g.id) === genParam)
+        if (!gen) return
+        this.activeFamily = gen.family_code
+        this.highlightGeneration = gen.id
+        if (brandParam) this.highlightBrand = brandParam
+        // topbar/sidebar 為非同步注入，會在頁面載入後才觸發一次版面重排，
+        // 太早捲動會被那次重排打斷、把捲動位置沖回原點，因此延後並補一次保險捲動
+        const doScroll = () => {
+          const el = document.getElementById('gen-' + gen.id)
+          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' })
+        }
+        setTimeout(doScroll, 250)
+        setTimeout(doScroll, 800)
+        setTimeout(() => { this.highlightGeneration = null }, 2800)
       },
 
       async loadAll() {
@@ -379,6 +420,24 @@
       generationsFor(code) { return this.generations.filter(g => g.family_code === code) },
       productsFor(genId) { return this.products.filter(p => p.generation_id === genId) },
       genLabel(genId) { const g = this.generations.find(x => x.id === genId); return g ? (g.family_code + ' － ' + g.gen_name) : ('#' + genId) },
+      familyLabel(code) { const f = this.families.find(x => x.code === code); return f ? f.name : code },
+
+      // ── 全域搜尋（型號／品牌，跨族系）──
+      matchesSearch(p, query) {
+        if (!query || !query.trim()) return true
+        const q = query.trim().toLowerCase()
+        return [p.brand, p.model, p.label].join(' ').toLowerCase().indexOf(q) >= 0
+      },
+      visibleGenerations() {
+        const q = this.globalSearch.trim()
+        if (!q) return this.generationsFor(this.activeFamily)
+        return this.generations.filter(g => this.productsFor(g.id).some(p => this.matchesSearch(p, q)))
+      },
+      productsToShowFor(genId) {
+        const q = this.globalSearch.trim()
+        const all = this.productsFor(genId)
+        return q ? all.filter(p => this.matchesSearch(p, q)) : all
+      },
       tagList(tags) { return (tags || '').split(',').map(t => t.trim()).filter(Boolean) },
 
       modalTitle() {
