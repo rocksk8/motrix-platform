@@ -18,6 +18,7 @@ motrix_erp.db
 
 # Deployment-specific config (per-machine, not app code)
 backend/heartbeat_config.json
+backend/tools/.guide_sync_config.json
 
 # Python
 __pycache__/

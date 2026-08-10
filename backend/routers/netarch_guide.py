@@ -185,9 +185,9 @@ def create_product(body: dict = Body(...), authorization: str = Header(None)):
         raise HTTPException(400, "所屬世代不存在")
     max_sort = conn.execute("SELECT COALESCE(MAX(sort_order), -1) AS m FROM netarch_products").fetchone()["m"]
     cur = conn.execute(
-        "INSERT INTO netarch_products (generation_id, brand, model, url, label, price_note, specs_json, sort_order) VALUES (?,?,?,?,?,?,?,?)",
+        "INSERT INTO netarch_products (generation_id, brand, model, url, label, price_note, sort_order) VALUES (?,?,?,?,?,?,?)",
         (generation_id, body.get("brand", ""), body.get("model", ""), body.get("url", ""),
-         body.get("label", ""), body.get("priceNote", ""), json.dumps(body.get("specs", []), ensure_ascii=False), max_sort + 1),
+         body.get("label", ""), body.get("priceNote", ""), max_sort + 1),
     )
     new_id = cur.lastrowid
     conn.commit()
@@ -206,9 +206,9 @@ def update_product(prod_id: int, body: dict = Body(...), authorization: str = He
         conn.close()
         raise HTTPException(404, "產品不存在")
     conn.execute(
-        "UPDATE netarch_products SET brand=?, model=?, url=?, label=?, price_note=?, specs_json=? WHERE id=?",
+        "UPDATE netarch_products SET brand=?, model=?, url=?, label=?, price_note=? WHERE id=?",
         (body.get("brand", ""), body.get("model", ""), body.get("url", ""),
-         body.get("label", ""), body.get("priceNote", ""), json.dumps(body.get("specs", []), ensure_ascii=False), prod_id),
+         body.get("label", ""), body.get("priceNote", ""), prod_id),
     )
     conn.commit()
     conn.close()

@@ -1,7 +1,7 @@
 # MOTRIX ERP — 開發快速參考
 
 > 允碩整合集創（統編 60575481）｜ Tel: 04-3610-6566 ｜ info@miactw.com  
-> 文件版本：**2026-08-09b**（選型資料庫新增監控系統／門禁系統兩個類別＋既有類別補 UniFi，見 §12）
+> 文件版本：**2026-08-10**（修正網路架構選型導覽新增/更新產品 API 的 500 錯誤，見 §12）
 
 ---
 
@@ -866,6 +866,21 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 ## §12 · 變更摘要（最新兩版）
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
+
+### 2026-08-10 — 修正網路架構選型導覽新增/更新產品 API 的 500 錯誤（specs_json 欄位不存在）
+
+- **背景**：建置雙機（開發機／正式機）選型資料庫內容核對工具（`backend/tools/check_guide_sync.py`，
+  透過 `claude` 自動化帳號的 API token 直接比對兩邊 `switch/monitor/access/gateway/netarch/env`
+  六大類選型資料庫內容）過程中，嘗試把開發機獨有的 netarch 產品透過 API 補寫進正式機，全數 500
+- **根因**：`routers/netarch_guide.py` 的 `create_product`／`update_product` 兩處 SQL 誤引用
+  `specs_json` 欄位，但 `netarch_products` 表從建立以來就沒有這個欄位（`db.py` 全部 migration
+  核對過，確認不存在）；兩台機器只要透過網路架構選型導覽頁面「新增/編輯產品」都會踩到，此前
+  未被發現是因為既有 77 筆資料都是透過種子腳本直接寫 db、從未經過這兩個 API 端點
+- **修正**：兩處 SQL 的 INSERT／UPDATE 移除 `specs_json` 欄位與對應參數，改動範圍限縮在這一支
+  檔案；已在開發機重啟後以真實 API 呼叫建立＋刪除測試資料驗證修復生效
+- 本次**只**部署這個 bug fix（單獨 commit＋`git stash` 隔開其餘尚未準備好的選型資料庫深度擴充／
+  新增 gateway_guide 模組等變更），修復生效後另外透過 API 把開發機獨有的 netarch 產品／switch
+  產品補寫進正式機，並清掉正式機一筆已被開發機拆分取代的舊 netarch 資料（Omada EAP670 那筆）
 
 ### 2026-08-09b — 選型資料庫新增監控系統／門禁系統兩個類別＋既有類別補 UniFi
 
