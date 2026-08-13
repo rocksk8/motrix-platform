@@ -30,7 +30,7 @@ DEMO_SHIPPING_PDF_ARCHIVE_DIR = os.path.join(os.path.dirname(__file__), "_demo_s
 # v32/v33 (switch_guide tables + specs_json column) were initially missing
 # from this checkout — reconstructed 2026-08-01 by reverse-engineering the
 # actual schema off a production DB backup (see _m032_switch_guide docstring).
-CURRENT_VERSION = 41
+CURRENT_VERSION = 42
 
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
 # execution model) whenever the current request is authenticated as the 'demo'
@@ -1041,6 +1041,23 @@ def _m028_dev_cases_soft_delete(conn):
     conn.commit()
 
 
+def _m042_dev_cases_relink_review(conn):
+    """Add pending-relink review columns to dev_cases — changing or clearing an
+    already-established converted_quote_no now goes through admin+ request →
+    superadmin approve, same shape as _m028_dev_cases_soft_delete's delete flow.
+    An empty relink_target_quote_no is a valid, meaningful value (= unlink)."""
+    for col, defn in [
+        ("pending_relink",         "INTEGER NOT NULL DEFAULT 0"),
+        ("relink_requested_by",    "TEXT    NOT NULL DEFAULT ''"),
+        ("relink_requested_at",    "TEXT    NOT NULL DEFAULT ''"),
+        ("relink_reason",          "TEXT    NOT NULL DEFAULT ''"),
+        ("relink_target_quote_no", "TEXT    NOT NULL DEFAULT ''"),
+    ]:
+        if not _col_exists(conn, "dev_cases", col):
+            conn.execute(f"ALTER TABLE dev_cases ADD COLUMN {col} {defn}")
+    conn.commit()
+
+
 def _m030_env_guide(conn):
     """Create env_guide_* tables (場域選型導覽): environments, tiered equipment
     recommendations, and vendor links — ported from the standalone 場域選型導覽.html
@@ -1786,6 +1803,7 @@ _MIGRATIONS = [
     _m039_monitor_guide,                       # v39
     _m040_access_guide,                        # v40
     _m041_gateway_guide,                       # v41
+    _m042_dev_cases_relink_review,              # v42
 ]
 
 

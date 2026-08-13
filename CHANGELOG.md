@@ -5,6 +5,26 @@
 
 ---
 
+### 2026-08-13 — 業務開發連結報價單改為審核制（可清空，DB v42）
+
+- **背景**：2026-08-05b 開放的「修改連結」直接覆寫既有 `converted_quote_no`，且欄位必填不可清空；
+  但案件變更常導致已連結的報價單被取消，此時需要能解除連結，而這類異動應比照案件刪除走審核，
+  不該由單一使用者直接覆寫/清空已成立的連結
+- **DB v42**（`_m042_dev_cases_relink_review`）：`dev_cases` 新增 `pending_relink` /
+  `relink_requested_by` / `relink_requested_at` / `relink_reason` / `relink_target_quote_no`
+  （空字串為合法值＝申請解除連結，非單純「未設定」）
+- **新 API**：`POST /api/dev-cases/{id}/request-relink-quote`（admin+ 申請，`quote_no` 留空＝
+  申請解除連結）／`POST .../cancel-relink-quote`（申請人或 superadmin 取消）／
+  `POST .../approve-relink-quote`（僅 superadmin，核准後套用新單號或清空；清空時案件狀態
+  一併退回「洽談中」，避免「成案」狀態掛著卻無對應報價單）
+- `PATCH /api/dev-cases/{id}/convert` 加上守門：`converted_quote_no` 已有值時回 409，
+  提示改走上述審核流程（原端點僅保留給尚未連結的初次轉建報價單使用）
+- `dev-crm.html`：「修改連結」鉛筆按鈕改為開啟申請 modal（可留空、可填原因），案件詳情與
+  清單卡片新增「待審核連結異動」標記，superadmin 專屬審核 modal（顯示申請人／原因／異動前後對照）
+- Email 通知：`notify_dev_case_relink_request()`（新，仿 `notify_dev_case_delete_request`）
+
+---
+
 ### 2026-08-05b — 業務開發×案件管理三項聯動（簽核閘門／連結可修改／動態同步）
 
 - **報價單「已成案」需簽核完成**：`PATCH /api/quotations/{no}/deal-tag` 新增檢查，`deal_tag` 欲

@@ -11,6 +11,7 @@ from db import get_db, spawn_bg_thread
 import threading
 from helpers import (
     _require_user, _tok, _audit, notify_module_activity, notify_dev_case_delete_request,
+    notify_dev_case_relink_request,
     _notify, _get_setting, _set_setting, notify_dev_case_stale, _purge_notifications,
 )
 
@@ -44,6 +45,17 @@ class DevCaseStatusIn(BaseModel):
 
 class DevCaseConvertIn(BaseModel):
     quote_no: str
+
+
+class DevCaseRelinkRequestIn(BaseModel):
+    # 留空＝申請解除連結（清空 converted_quote_no），非空＝申請改連結至該單號
+    quote_no: Optional[str] = ''
+    reason: Optional[str] = ''
+
+
+class DevCaseRelinkApproveIn(BaseModel):
+    approve: bool
+    reject_reason: Optional[str] = ''
 
 
 class DevCaseDeleteRequestIn(BaseModel):
@@ -203,6 +215,11 @@ def _case_row(row, umap: dict) -> dict:
         "deleteRequestedBy": row["delete_requested_by"] if "delete_requested_by" in row.keys() else "",
         "deleteRequestedAt": row["delete_requested_at"] if "delete_requested_at" in row.keys() else "",
         "deleteReason": row["delete_reason"] if "delete_reason" in row.keys() else "",
+        "pendingRelink": bool(row["pending_relink"] if "pending_relink" in row.keys() else 0),
+        "relinkRequestedBy": row["relink_requested_by"] if "relink_requested_by" in row.keys() else "",
+        "relinkRequestedAt": row["relink_requested_at"] if "relink_requested_at" in row.keys() else "",
+        "relinkReason": row["relink_reason"] if "relink_reason" in row.keys() else "",
+        "relinkTargetQuoteNo": row["relink_target_quote_no"] if "relink_target_quote_no" in row.keys() else "",
     }
 
 
@@ -508,6 +525,10 @@ def mark_converted(
             raise HTTPException(404, "案件不存在")
         if not _can_access_case(user, row):
             raise HTTPException(403, "無權限修改此案件")
+        if row["converted_quote_no"]:
+            # 已有連結的報價單號，異動／清空一律走審核流程（見 request-relink-quote），
+            # 避免繞過核准直接覆蓋掉已成立的連結。
+            raise HTTPException(409, "此案件已連結報價單，如需異動或解除請透過「修改連結」送審")
         quote_no = body.quote_no.strip()
         # quotations 跟 dev_cases 之間沒有 FK 約束，寫入前先確認單號真的存在——
         # 否則之後這張報價單被刪掉（或單號打錯字從沒對應過任何單），
@@ -525,6 +546,140 @@ def mark_converted(
         notify_module_activity("業務開發", "轉建報價單", user.get("display_name") or user["username"],
                                 f"{row['case_name']} → {quote_no}", "dev-crm.html")
         return _case_row(updated, _user_map(conn))
+    finally:
+        conn.close()
+
+
+@router.post("/dev-cases/{case_id}/request-relink-quote", status_code=200)
+def request_dev_case_relink(case_id: int, body: DevCaseRelinkRequestIn,
+                            authorization: str = Header("")):
+    """Admin+ 申請異動（或清空）已連結的報價單號 → 送交最高管理者審核。
+    quote_no 留空即申請「解除連結」——業務案件因報價單被取消等原因需要斷開關聯時使用。"""
+    user = _require_dev(authorization)
+    if not _is_admin(user):
+        raise HTTPException(403, "僅管理員可申請異動報價單連結")
+    now = _TW_NOW()
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT * FROM dev_cases WHERE id=? AND is_deleted=0", (case_id,)
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, "案件不存在")
+        if not row["converted_quote_no"]:
+            raise HTTPException(400, "此案件尚未連結報價單，請使用「轉建報價單」建立連結")
+        if row["pending_relink"]:
+            raise HTTPException(409, "此案件已有待審核的連結異動申請")
+        target = (body.quote_no or '').strip()
+        if target == row["converted_quote_no"]:
+            raise HTTPException(400, "新單號與目前連結相同")
+        if target and not conn.execute(
+            "SELECT 1 FROM quotations WHERE quote_no=?", (target,)
+        ).fetchone():
+            raise HTTPException(400, f"報價單 {target} 不存在，無法連結")
+        requester_display = user.get("display_name") or user["username"]
+        conn.execute(
+            "UPDATE dev_cases SET pending_relink=1, relink_requested_by=?,"
+            " relink_requested_at=?, relink_reason=?, relink_target_quote_no=? WHERE id=?",
+            (requester_display, now, body.reason or '', target, case_id),
+        )
+        conn.commit()
+        _audit(_tok(authorization), "dev_case.relink_request", "dev_case",
+               str(case_id), f"{row['case_name']} → {target or '（解除連結）'}")
+        spawn_bg_thread(
+            notify_dev_case_relink_request,
+            args=(case_id, row["case_name"], requester_display, target, body.reason or ''),
+        )
+        return {"ok": True}
+    finally:
+        conn.close()
+
+
+@router.post("/dev-cases/{case_id}/cancel-relink-quote", status_code=200)
+def cancel_dev_case_relink(case_id: int, authorization: str = Header("")):
+    """管理員取消自己發出的連結異動申請。"""
+    user = _require_dev(authorization)
+    if not _is_admin(user):
+        raise HTTPException(403, "僅管理員可取消連結異動申請")
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT * FROM dev_cases WHERE id=? AND is_deleted=0", (case_id,)
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, "案件不存在")
+        if not row["pending_relink"]:
+            raise HTTPException(409, "此案件無待審核的連結異動申請")
+        requester_display = user.get("display_name") or user["username"]
+        if user["role"] != "superadmin" and row["relink_requested_by"] != requester_display:
+            raise HTTPException(403, "只能取消自己發出的連結異動申請")
+        conn.execute(
+            "UPDATE dev_cases SET pending_relink=0, relink_requested_by='',"
+            " relink_requested_at='', relink_reason='', relink_target_quote_no='' WHERE id=?",
+            (case_id,),
+        )
+        conn.commit()
+        _audit(_tok(authorization), "dev_case.relink_cancel", "dev_case",
+               str(case_id), row["case_name"])
+        notify_module_activity("業務開發", "取消連結異動申請", requester_display,
+                                row["case_name"], "dev-crm.html")
+        return {"ok": True}
+    finally:
+        conn.close()
+
+
+@router.post("/dev-cases/{case_id}/approve-relink-quote", status_code=200)
+def approve_dev_case_relink(case_id: int, body: DevCaseRelinkApproveIn,
+                             authorization: str = Header("")):
+    """最高管理者審核連結異動申請 — approve=True 套用新單號（或清空）；False 退回。
+    清空（解除連結）核准後，案件狀態一併退回「洽談中」——報價單已不存在對應關係，
+    「成案」狀態繼續掛著會誤導其他人以為案件仍有成立中的報價單。"""
+    user = _require_dev(authorization)
+    if user["role"] != "superadmin":
+        raise HTTPException(403, "僅最高管理者可審核連結異動申請")
+    now = _TW_NOW()
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT * FROM dev_cases WHERE id=? AND is_deleted=0", (case_id,)
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, "案件不存在")
+        if not row["pending_relink"]:
+            raise HTTPException(409, "此案件無待審核的連結異動申請")
+        if body.approve:
+            target = row["relink_target_quote_no"] or ''
+            if target and not conn.execute(
+                "SELECT 1 FROM quotations WHERE quote_no=?", (target,)
+            ).fetchone():
+                raise HTTPException(400, f"報價單 {target} 已不存在，無法核准，請申請人取消或重新申請")
+            new_status = "洽談中" if not target else row["status"]
+            conn.execute(
+                "UPDATE dev_cases SET converted_quote_no=?, status=?, pending_relink=0,"
+                " relink_requested_by='', relink_requested_at='', relink_reason='',"
+                " relink_target_quote_no='', updated_at=? WHERE id=?",
+                (target, new_status, now, case_id),
+            )
+            conn.commit()
+            updated = conn.execute("SELECT * FROM dev_cases WHERE id=?", (case_id,)).fetchone()
+            _audit(_tok(authorization), "dev_case.relink_approve", "dev_case",
+                   str(case_id), f"{row['case_name']} → {target or '（解除連結）'}")
+            notify_module_activity("業務開發", "核准連結異動", user.get("display_name") or user["username"],
+                                    row["case_name"], "dev-crm.html")
+            return _case_row(updated, _user_map(conn))
+        else:
+            conn.execute(
+                "UPDATE dev_cases SET pending_relink=0, relink_requested_by='',"
+                " relink_requested_at='', relink_reason='', relink_target_quote_no='' WHERE id=?",
+                (case_id,),
+            )
+            conn.commit()
+            updated = conn.execute("SELECT * FROM dev_cases WHERE id=?", (case_id,)).fetchone()
+            _audit(_tok(authorization), "dev_case.relink_reject", "dev_case",
+                   str(case_id), row["case_name"])
+            notify_module_activity("業務開發", "退回連結異動申請", user.get("display_name") or user["username"],
+                                    row["case_name"], "dev-crm.html")
+            return _case_row(updated, _user_map(conn))
     finally:
         conn.close()
 

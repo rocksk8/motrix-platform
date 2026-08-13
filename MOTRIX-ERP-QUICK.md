@@ -1,7 +1,7 @@
 # MOTRIX ERP — 開發快速參考
 
 > 允碩整合集創（統編 60575481）｜ Tel: 04-3610-6566 ｜ info@miactw.com  
-> 文件版本：**2026-08-10a**（選型資料庫新增閘道器與控制器選型導覽，第六個類別，見 §12）
+> 文件版本：**2026-08-13a**（業務開發連結報價單改為審核制，可清空解除連結，DB v42，見 §12）
 
 ---
 
@@ -125,7 +125,7 @@
 
 | 模組 | 職責 |
 |------|------|
-| `db.py` | 連線、`init_db()`、PRAGMA WAL、熱路徑欄位／索引；**CURRENT_VERSION=40**（40 個 migrations；v32/v33 為交換器選型導覽 `switch_guide` 表結構，2026-08-01 由正式機備份 db 實際結構還原重建，詳見 db.py `_m032_switch_guide` 註解；v39/v40 為 2026-08-09 新增的監控系統／門禁系統選型導覽 `monitor_guide`/`access_guide` 表結構） |
+| `db.py` | 連線、`init_db()`、PRAGMA WAL、熱路徑欄位／索引；**CURRENT_VERSION=42**（42 個 migrations；v32/v33 為交換器選型導覽 `switch_guide` 表結構，2026-08-01 由正式機備份 db 實際結構還原重建，詳見 db.py `_m032_switch_guide` 註解；v39/v40 為 2026-08-09 新增的監控系統／門禁系統選型導覽 `monitor_guide`/`access_guide` 表結構；v41 為閘道器與控制器選型導覽 `gateway_guide` 表結構；v42 為 2026-08-13 新增的業務開發連結報價單審核制 `dev_cases` 欄位） |
 | `helpers/` | 密碼、session、audit、notify、settings、弱密碼標記、`save_quotation_json()` |
 | `archive.py` | 即時／每日／週備份；本機 SQLite 快照；**原子 JSON 寫入**（`_atomic_json_write`）；G: fallback |
 | `backup_job.py` | 獨立備份腳本（Windows 工作排程器，不依賴 server） |
@@ -245,7 +245,11 @@ dev_cases       -- 業務開發案件主檔（DB v27）
   id, case_name, customer_name, customer_id FK→customers(nullable),
   status('洽談中'|'成案'|'未成案'), sales_persons JSON([user_id,...]),
   planners JSON([user_id,...]), converted_quote_no,
-  created_by FK→users, created_at, updated_at
+  created_by FK→users, created_at, updated_at,
+  is_deleted, deleted_at, deleted_by, deleted_snapshot,
+  pending_delete, delete_requested_by, delete_requested_at, delete_reason（軟刪除審核，DB v28）,
+  pending_relink, relink_requested_by, relink_requested_at, relink_reason,
+  relink_target_quote_no（converted_quote_no 異動／清空審核，空字串為合法值＝解除連結，DB v42，見 §7.5/§12）
 
 dev_logs        -- 開發記錄（DB v27）
   id, case_id FK→dev_cases, log_date, log_by FK→users,
@@ -650,7 +654,7 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
 | PUT | /settings/payment-terms | 更新預設文字（superadmin only） |
 | GET | /system/schema-status | Schema／migration 唯讀診斷（superadmin only）；回傳目前版本、目標版本、`upToDate`、`lastAppliedAt`、完整 migration 清單 |
 
-### §7.5 · 業務開發 CRM（DB v27）
+### §7.5 · 業務開發 CRM（DB v27；連結報價單審核制 DB v42，見 §12 2026-08-13）
 
 | Method | Path | 說明 |
 |--------|------|------|
@@ -658,7 +662,13 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
 | POST | /dev-cases | 新建案件 |
 | GET/PUT/DELETE | /dev-cases/{id} | 單筆操作（DELETE admin+） |
 | PATCH | /dev-cases/{id}/status | 變更狀態（洽談中/成案/未成案） |
-| PATCH | /dev-cases/{id}/convert | 連結報價單號（`{quote_no}`，同時設 status=成案） |
+| PATCH | /dev-cases/{id}/convert | 首次連結報價單號（`{quote_no}`，同時設 status=成案）；**已有連結時回 409**，須改用下列審核流程 |
+| POST | /dev-cases/{id}/request-relink-quote | 申請異動／解除已連結的報價單號（admin+；`quote_no` 留空＝申請解除連結，`reason` 選填）→ 送交 superadmin 審核，DB v42 |
+| POST | /dev-cases/{id}/cancel-relink-quote | 取消連結異動申請（申請人或 superadmin） |
+| POST | /dev-cases/{id}/approve-relink-quote | 審核連結異動（superadmin only；`{approve}`；核准清空時 status 一併退回洽談中） |
+| POST | /dev-cases/{id}/request-delete | 申請刪除案件（admin+，設 pending_delete=1，觸發 Email） |
+| POST | /dev-cases/{id}/cancel-delete | 取消刪除申請（申請人或 superadmin） |
+| POST | /dev-cases/{id}/approve-delete | 審核刪除申請（superadmin only；approve=True→軟刪除+快照，False→拒絕清除旗標） |
 | GET/POST | /dev-cases/{id}/logs | 記錄列表 / 新增記錄（log_by≠填單人 → needs_approval=1） |
 | PUT/DELETE | /dev-logs/{id} | 編輯／刪除（發文者或 admin+） |
 | PATCH | /dev-logs/{id}/approve | 審核記錄（admin+ only） |
@@ -871,6 +881,23 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 ## §12 · 變更摘要（最新兩版）
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
+
+### 2026-08-13 — 業務開發連結報價單改為審核制（可清空，DB v42）
+
+- **背景**：2026-08-05b 開放的「修改連結」直接覆寫既有 `converted_quote_no`，且欄位必填不可清空；
+  但案件變更常導致已連結的報價單被取消，此時需要能解除連結，而這類異動應比照案件刪除走審核，
+  不該由單一使用者直接覆寫/清空已成立的連結
+- **DB v42**（`_m042_dev_cases_relink_review`）：`dev_cases` 新增 `pending_relink` /
+  `relink_requested_by` / `relink_requested_at` / `relink_reason` / `relink_target_quote_no`
+  （空字串為合法值＝申請解除連結，非單純「未設定」）
+- **新 API**（見 §7.5）：`request-relink-quote`（admin+ 申請，`quote_no` 留空＝申請解除連結）／
+  `cancel-relink-quote`（申請人或 superadmin 取消）／`approve-relink-quote`（僅 superadmin，
+  核准後套用新單號或清空；清空時案件狀態一併退回「洽談中」，避免「成案」狀態掛著卻無對應報價單）
+- `PATCH /dev-cases/{id}/convert` 加上守門：`converted_quote_no` 已有值時回 409，原端點僅保留
+  給尚未連結的初次轉建報價單使用
+- `dev-crm.html`：「修改連結」鉛筆按鈕改為開啟申請 modal（可留空、可填原因），案件詳情與清單
+  卡片新增「待審核連結異動」標記，superadmin 專屬審核 modal
+- Email 通知：`notify_dev_case_relink_request()`（新，仿 `notify_dev_case_delete_request`）
 
 ### 2026-08-10a — 選型資料庫新增閘道器與控制器選型導覽（第六個類別）＋四個既有導覽頁全域搜尋/深度連結
 
@@ -2061,7 +2088,7 @@ MOTRIX-ERP/
 ├── backup_alerts/               ← 備份警示（執行期產生）
 ├── backend/
 │   ├── main.py                  ← wiring；startup 呼叫 auth.init_rate_limiting()
-│   ├── db.py                    ← schema + 40 個 migrations（CURRENT_VERSION=40，見 §2）
+│   ├── db.py                    ← schema + 42 個 migrations（CURRENT_VERSION=42，見 §2）
 │   ├── version_manifest.json    ← 模組版本紀錄（重啟後同步至 DB module_versions）
 │   ├── helpers/                 ← 套件（拆自原 helpers.py）
 │   │   ├── __init__.py          ← re-export 全部符號（向後相容）

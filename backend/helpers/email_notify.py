@@ -365,6 +365,27 @@ def notify_dev_case_delete_request(case_id: int, case_name: str,
     _async_send(to, f"【MOTRIX】業務開發案件刪除申請 — {case_name}", html)
 
 
+def notify_dev_case_relink_request(case_id: int, case_name: str, requester_display: str,
+                                   target_quote_no: str = '', reason: str = '') -> None:
+    """業務開發案件報價單連結異動申請（改連結或清空連結）→ 通知所有最高管理者審核"""
+    to = _superadmin_emails()
+    if not to:
+        logger.warning("notify_dev_case_relink_request: 無最高管理者 email（case_id=%d）", case_id)
+        return
+    crm_page = f"{_base_url()}/pages/dev-crm.html"
+    action_desc = f"改為連結至 {target_quote_no}" if target_quote_no else "解除連結（清空報價單號）"
+    rows = [("案件名稱", case_name), ("申請人", requester_display), ("異動內容", action_desc)]
+    if reason and reason.strip():
+        rows.append(("申請原因", reason.strip()))
+    html = _build_html(
+        "業務開發案件報價單連結異動申請", "請盡速審核", "#DC2626",
+        rows, "", crm_page,
+        intro=f"{requester_display} 申請異動業務開發案件的報價單連結，請最高管理者登入系統審核。",
+        button_text="前往審核",
+    )
+    _async_send(to, f"【MOTRIX】業務開發案件連結異動申請 — {case_name}", html)
+
+
 def notify_daily_task_completed(task_id: int, title: str, task_date: str,
                                 completed_by_username: str, completed_by_display: str,
                                 report: str,

@@ -658,6 +658,128 @@ def test_delete_quotation_clears_orphaned_dev_case_link(client, make_user):
     assert r.json()["status"] == "洽談中"
 
 
+# ── dev_case relink-quote review flow (DB v42) ────────────────────────────────
+
+def _make_linked_dev_case(client, token, case_name, quote_no):
+    _make_quotation(quote_no)
+    r = client.post("/api/dev-cases", headers=_auth(token),
+                     json={"case_name": case_name, "customer_name": "", "status": "洽談中"})
+    case_id = r.json()["id"]
+    r = client.patch(f"/api/dev-cases/{case_id}/convert", headers=_auth(token),
+                      json={"quote_no": quote_no})
+    assert r.status_code == 200, r.text
+    return case_id
+
+
+def test_convert_rejects_already_linked_case(client, make_user):
+    username, password = make_user(role="admin")
+    token = _login(client, username, password)
+    case_id = _make_linked_dev_case(client, token, "測試已連結案件", "MQ-TEST-030")
+    _make_quotation("MQ-TEST-031")
+
+    r = client.patch(f"/api/dev-cases/{case_id}/convert", headers=_auth(token),
+                      json={"quote_no": "MQ-TEST-031"})
+    assert r.status_code == 409, r.text
+
+
+def test_request_relink_requires_admin(client, make_user):
+    username, password = make_user(role="admin")
+    token = _login(client, username, password)
+    case_id = _make_linked_dev_case(client, token, "測試權限案件", "MQ-TEST-032")
+
+    viewer_username, viewer_password = make_user(username="relink-viewer", role="viewer",
+                                                  modules=["dev_crm"])
+    viewer_token = _login(client, viewer_username, viewer_password)
+    r = client.post(f"/api/dev-cases/{case_id}/request-relink-quote", headers=_auth(viewer_token),
+                     json={"quote_no": "", "reason": ""})
+    assert r.status_code == 403, r.text
+
+
+def test_request_relink_rejects_nonexistent_target(client, make_user):
+    username, password = make_user(role="admin")
+    token = _login(client, username, password)
+    case_id = _make_linked_dev_case(client, token, "測試異動目標不存在", "MQ-TEST-033")
+
+    r = client.post(f"/api/dev-cases/{case_id}/request-relink-quote", headers=_auth(token),
+                     json={"quote_no": "MQ-NOT-EXIST-002", "reason": ""})
+    assert r.status_code == 400, r.text
+
+
+def test_relink_unlink_full_flow_reverts_status(client, make_user):
+    admin_username, admin_password = make_user(role="admin")
+    admin_token = _login(client, admin_username, admin_password)
+    case_id = _make_linked_dev_case(client, admin_token, "測試解除連結流程", "MQ-TEST-034")
+
+    superadmin_username, superadmin_password = make_user(username="relink-superadmin",
+                                                          role="superadmin")
+    superadmin_token = _login(client, superadmin_username, superadmin_password)
+
+    r = client.post(f"/api/dev-cases/{case_id}/request-relink-quote", headers=_auth(admin_token),
+                     json={"quote_no": "", "reason": "報價單已取消"})
+    assert r.status_code == 200, r.text
+
+    # 已有待審申請時重複申請 → 409
+    r = client.post(f"/api/dev-cases/{case_id}/request-relink-quote", headers=_auth(admin_token),
+                     json={"quote_no": "", "reason": ""})
+    assert r.status_code == 409, r.text
+
+    r = client.get(f"/api/dev-cases/{case_id}", headers=_auth(admin_token))
+    body = r.json()
+    assert body["pendingRelink"] is True
+    assert body["relinkTargetQuoteNo"] == ""
+    assert body["convertedQuoteNo"] == "MQ-TEST-034"  # 核准前仍維持原連結
+
+    r = client.post(f"/api/dev-cases/{case_id}/approve-relink-quote", headers=_auth(superadmin_token),
+                     json={"approve": True})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["convertedQuoteNo"] == ""
+    assert body["status"] == "洽談中"
+    assert body["pendingRelink"] is False
+
+
+def test_relink_reject_keeps_original_link(client, make_user):
+    admin_username, admin_password = make_user(role="admin")
+    admin_token = _login(client, admin_username, admin_password)
+    case_id = _make_linked_dev_case(client, admin_token, "測試退回申請", "MQ-TEST-035")
+
+    superadmin_username, superadmin_password = make_user(username="relink-reject-superadmin",
+                                                          role="superadmin")
+    superadmin_token = _login(client, superadmin_username, superadmin_password)
+
+    r = client.post(f"/api/dev-cases/{case_id}/request-relink-quote", headers=_auth(admin_token),
+                     json={"quote_no": "", "reason": ""})
+    assert r.status_code == 200, r.text
+
+    r = client.post(f"/api/dev-cases/{case_id}/approve-relink-quote", headers=_auth(superadmin_token),
+                     json={"approve": False})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["convertedQuoteNo"] == "MQ-TEST-035"
+    assert body["pendingRelink"] is False
+
+
+def test_cancel_relink_request(client, make_user):
+    admin_username, admin_password = make_user(role="admin")
+    admin_token = _login(client, admin_username, admin_password)
+    case_id = _make_linked_dev_case(client, admin_token, "測試取消申請", "MQ-TEST-036")
+
+    r = client.post(f"/api/dev-cases/{case_id}/request-relink-quote", headers=_auth(admin_token),
+                     json={"quote_no": "", "reason": ""})
+    assert r.status_code == 200, r.text
+
+    r = client.post(f"/api/dev-cases/{case_id}/cancel-relink-quote", headers=_auth(admin_token))
+    assert r.status_code == 200, r.text
+
+    r = client.get(f"/api/dev-cases/{case_id}", headers=_auth(admin_token))
+    assert r.json()["pendingRelink"] is False
+    assert r.json()["convertedQuoteNo"] == "MQ-TEST-036"
+
+    # 已無待審申請時再取消一次 → 409
+    r = client.post(f"/api/dev-cases/{case_id}/cancel-relink-quote", headers=_auth(admin_token))
+    assert r.status_code == 409, r.text
+
+
 # ── parts.py 409/leak fixes (#8 low risk) ────────────────────────────────────
 
 def test_create_part_duplicate_explicit_part_no_returns_409(client, make_user):

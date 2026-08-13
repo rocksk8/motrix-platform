@@ -451,6 +451,9 @@
               <template x-if="c.pendingDelete">
                 <span style="font-size:9px;padding:2px 6px;border-radius:5px;background:#FEF3C7;color:#92400E;border:1px solid #FDE68A;font-weight:700;margin-left:4px">待刪除審核</span>
               </template>
+              <template x-if="c.pendingRelink">
+                <span style="font-size:9px;padding:2px 6px;border-radius:5px;background:#FEF3C7;color:#92400E;border:1px solid #FDE68A;font-weight:700;margin-left:4px">待連結異動審核</span>
+              </template>
               <span style="font-size:10px;color:var(--text-dim);margin-left:auto;font-family:LINE Seed TW_OTF, sans-serif"
                     x-text="c.updatedAt ? c.updatedAt.slice(0,10) : ''"></span>
             </div>
@@ -492,10 +495,15 @@
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414A1 1 0 0119 9.414V19a2 2 0 01-2 2z"/></svg>
                     <span x-text="selectedCase.convertedQuoteNo"></span>
                   </a>
-                  <button x-show="selectedCase.convertedQuoteNo" class="btn btn-ghost btn-icon" style="width:20px;height:20px;padding:0"
-                          @click="openRelinkModal()" title="修改連結的報價單號">
+                  <button x-show="selectedCase.convertedQuoteNo && isAdmin && !selectedCase.pendingRelink"
+                          class="btn btn-ghost btn-icon" style="width:20px;height:20px;padding:0"
+                          @click="openRelinkModal()" title="申請修改／解除報價單連結">
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                   </button>
+                  <template x-if="selectedCase.pendingRelink">
+                    <span style="font-size:9px;padding:2px 6px;border-radius:5px;background:#FEF3C7;color:#92400E;border:1px solid #FDE68A;font-weight:700"
+                          :title="'申請人：' + selectedCase.relinkRequestedBy">待審核連結異動</span>
+                  </template>
                 </div>
               </div>
             </div>
@@ -534,6 +542,18 @@
                   </template>
                   <template x-if="session.role !== 'superadmin'">
                     <button class="btn btn-ghost btn-sm" @click="cancelDeleteRequest()">取消申請</button>
+                  </template>
+                </div>
+              </template>
+              <!-- 連結異動審核流程 -->
+              <template x-if="isAdmin && selectedCase.pendingRelink">
+                <div style="display:flex;gap:6px;align-items:center">
+                  <span style="font-size:10px;padding:3px 8px;border-radius:6px;background:#FEF3C7;color:#92400E;border:1px solid #FDE68A;font-weight:600">待審核連結異動</span>
+                  <template x-if="session.role === 'superadmin'">
+                    <button class="btn btn-sm" style="background:#DC2626;color:#fff;border-color:#DC2626" @click="showApproveRelinkModal=true">審核連結異動</button>
+                  </template>
+                  <template x-if="session.role !== 'superadmin'">
+                    <button class="btn btn-ghost btn-sm" @click="cancelRelinkRequest()">取消申請</button>
                   </template>
                 </div>
               </template>
@@ -837,23 +857,62 @@
       </div>
     </div>
 
-    <!-- ── Modal：修改報價單連結 ── -->
+    <!-- ── Modal：申請修改／解除報價單連結 ── -->
     <div class="dc-modal-bg" x-show="showRelinkModal" x-cloak @click.self="showRelinkModal=false">
       <div class="dc-modal" style="max-width:420px">
         <div class="dc-modal-head">
-          <h3>修改報價單連結</h3>
+          <h3>申請修改／解除報價單連結</h3>
           <button class="btn btn-ghost btn-icon" @click="showRelinkModal=false">✕</button>
         </div>
         <div class="dc-modal-body">
-          <div style="font-size:12px;color:var(--text-secondary);margin-bottom:6px;font-family:var(--font-zh)">
-            重新輸入要連結的報價單號：
+          <div style="background:#FEF3C7;border:1px solid #FDE68A;border-radius:8px;padding:12px 14px;font-size:12px;color:#92400E;margin-bottom:14px;font-family:var(--font-zh)">
+            <b>注意：</b>此異動將送交最高管理者審核，通過後才會實際生效。
           </div>
+          <div style="font-size:12px;color:var(--text-secondary);margin-bottom:6px;font-family:var(--font-zh)">
+            目前連結：<b x-text="selectedCase && selectedCase.convertedQuoteNo"></b>
+          </div>
+          <label style="display:block;font-size:11px;color:var(--text-secondary);margin-bottom:4px;font-family:var(--font-zh)">新的報價單號（留空＝申請解除連結）</label>
           <input class="dc-input" type="text" x-model="relinkQuoteNo"
-            placeholder="MQ-YYYYMM-NNN">
+            placeholder="MQ-YYYYMM-NNN，留空表示案件變更需取消連結">
+          <label style="display:block;font-size:11px;color:var(--text-secondary);margin:10px 0 4px;font-family:var(--font-zh)">申請原因（選填）</label>
+          <textarea class="dc-input" x-model="relinkReason" rows="3"
+            style="resize:vertical;min-height:56px"
+            placeholder="例如：報價單已取消，案件需求變更…"></textarea>
         </div>
         <div class="dc-modal-foot">
           <button class="btn btn-ghost" @click="showRelinkModal=false">取消</button>
-          <button class="btn btn-primary" @click="doRelink()">儲存</button>
+          <button class="btn btn-primary" @click="requestRelinkQuote()">送出申請</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Modal：審核連結異動申請（superadmin） ── -->
+    <div class="dc-modal-bg" x-show="showApproveRelinkModal" x-cloak @click.self="showApproveRelinkModal=false">
+      <div class="dc-modal" style="max-width:480px">
+        <div class="dc-modal-head">
+          <h3>審核連結異動申請</h3>
+          <button class="btn btn-ghost btn-icon" @click="showApproveRelinkModal=false">✕</button>
+        </div>
+        <div class="dc-modal-body">
+          <div style="background:#FEF3C7;border:1px solid #FDE68A;border-radius:8px;padding:12px 14px;font-size:12px;color:#92400E;margin-bottom:14px;font-family:var(--font-zh)">
+            <b>申請人：</b><span x-text="selectedCase && selectedCase.relinkRequestedBy"></span><br>
+            <b>申請時間：</b><span x-text="selectedCase && (selectedCase.relinkRequestedAt||'').slice(0,16).replace('T',' ')"></span><br>
+            <template x-if="selectedCase && selectedCase.relinkReason">
+              <div><b>申請原因：</b><span x-text="selectedCase.relinkReason"></span></div>
+            </template>
+          </div>
+          <div style="background:#F8FAFF;border:1px solid var(--border-light);border-radius:8px;padding:12px 14px;font-size:12px;margin-bottom:14px;font-family:var(--font-zh)">
+            <div style="margin-bottom:5px"><b>目前連結：</b><span x-text="selectedCase && selectedCase.convertedQuoteNo"></span></div>
+            <div><b>異動後：</b>
+              <span x-show="selectedCase && selectedCase.relinkTargetQuoteNo" x-text="selectedCase && selectedCase.relinkTargetQuoteNo"></span>
+              <span x-show="selectedCase && !selectedCase.relinkTargetQuoteNo" style="color:#DC2626;font-weight:600">解除連結（案件將退回洽談中）</span>
+            </div>
+          </div>
+        </div>
+        <div class="dc-modal-foot">
+          <button class="btn btn-ghost" @click="showApproveRelinkModal=false">取消</button>
+          <button class="btn btn-ghost" style="color:#D97706;border-color:#FDE68A" @click="approveRelinkQuote(false)">退回申請</button>
+          <button class="btn btn-danger" @click="approveRelinkQuote(true)">批准異動</button>
         </div>
       </div>
     </div>
@@ -967,6 +1026,8 @@ function devCrmPage() {
 
     showRelinkModal: false,
     relinkQuoteNo: '',
+    relinkReason: '',
+    showApproveRelinkModal: false,
 
     showDeleteModal: false,
     deleteReason: '',
@@ -1390,14 +1451,58 @@ function devCrmPage() {
 
     openRelinkModal() {
       this.relinkQuoteNo = this.selectedCase?.convertedQuoteNo || ''
+      this.relinkReason = ''
       this.showRelinkModal = true
     },
 
-    async doRelink() {
-      const no = this.relinkQuoteNo.trim()
-      if (!no) { this._toast('請輸入報價單號'); return }
-      await this.markConverted(no)
-      this.showRelinkModal = false
+    async requestRelinkQuote() {
+      if (!this.selectedCase) return
+      const r = await fetch('/api/dev-cases/' + this.selectedCase.id + '/request-relink-quote', {
+        method: 'POST', headers: this._h(),
+        body: JSON.stringify({ quote_no: this.relinkQuoteNo.trim(), reason: this.relinkReason || '' }),
+      })
+      if (r.ok) {
+        this.showRelinkModal = false
+        await this.loadCases()
+        const fresh = this.cases.find(c => c.id === this.selectedCase.id)
+        if (fresh) this.selectedCase = fresh
+        this._toast('連結異動申請已送出，等待最高管理者審核')
+      } else {
+        const d = await r.json().catch(() => ({}))
+        this._toast('申請失敗：' + (d.detail || r.status))
+      }
+    },
+
+    async cancelRelinkRequest() {
+      if (!this.selectedCase) return
+      const r = await fetch('/api/dev-cases/' + this.selectedCase.id + '/cancel-relink-quote', {
+        method: 'POST', headers: this._h(), body: '{}',
+      })
+      if (r.ok) {
+        await this.loadCases()
+        const fresh = this.cases.find(c => c.id === this.selectedCase.id)
+        if (fresh) this.selectedCase = fresh
+        this._toast('連結異動申請已取消')
+      }
+    },
+
+    async approveRelinkQuote(approve) {
+      if (!this.selectedCase) return
+      const r = await fetch('/api/dev-cases/' + this.selectedCase.id + '/approve-relink-quote', {
+        method: 'POST', headers: this._h(),
+        body: JSON.stringify({ approve }),
+      })
+      if (r.ok) {
+        const updated = await r.json()
+        this.selectedCase = updated
+        const idx = this.cases.findIndex(c => c.id === updated.id)
+        if (idx >= 0) this.cases.splice(idx, 1, updated)
+        this.showApproveRelinkModal = false
+        this._toast(approve ? '連結異動已核准' : '連結異動申請已退回')
+      } else {
+        const d = await r.json().catch(() => ({}))
+        this._toast('操作失敗：' + (d.detail || r.status))
+      }
     },
 
     async markConverted(quoteNo) {
