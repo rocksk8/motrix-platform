@@ -7,6 +7,7 @@
   <link rel="icon" type="image/png" href="../static/favicon.png">
   <title>料號主檔 — MOTRIX 營運管理系統</title>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <style>
     [x-cloak]{display:none!important}
@@ -41,6 +42,7 @@
     .stock-badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;font-family:LINE Seed TW_OTF, sans-serif}
     .stock-badge.ok{background:#DCFCE7;color:#15803D}
     .stock-badge.zero{background:#F0EEE9;color:var(--text-dim)}
+    @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 </head>
 <body x-data="app()" x-init="init()" x-cloak>
@@ -64,6 +66,15 @@
         <template x-for="c in categories" :key="c"><option :value="c" x-text="c"></option></template>
       </select>
       <div style="margin-left:auto;font-size:12px;color:var(--text-dim)" x-text="filtered.length + ' 項料號'"></div>
+      <input type="file" x-ref="importFile" accept=".xlsx,.xls,.csv" style="display:none" @change="handleImport($event)">
+      <button class="btn btn-ghost" @click="$refs.importFile.click()" style="font-size:11px">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+        匯入 Excel
+      </button>
+      <button class="btn btn-ghost" @click="exportExcel()" :disabled="!items.length" style="font-size:11px">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+        匯出 Excel
+      </button>
       <button class="btn btn-primary" @click="openModal(null)">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v16m8-8H4"/></svg>
         新增料號
@@ -227,6 +238,59 @@
   </div>
 </div>
 
+<!-- 匯入結果 Modal -->
+<div class="modal-overlay" x-show="showImportModal" x-transition style="display:none">
+  <div class="modal-box" style="max-width:460px" @click.stop>
+    <div class="modal-head">
+      <span class="modal-head__title">匯入 Excel</span>
+      <button class="modal-close" @click="showImportModal=false" :disabled="importing">×</button>
+    </div>
+    <div class="modal-body" style="padding:28px 24px">
+      <template x-if="importing">
+        <div style="text-align:center;padding:20px 0">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#2563EB" stroke-width="2" style="animation:spin .8s linear infinite;margin-bottom:12px"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>
+          <div style="font-size:13px;color:var(--text-secondary)">匯入中，請稍候…</div>
+        </div>
+      </template>
+      <template x-if="!importing && importResults">
+        <div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px">
+            <div style="text-align:center;padding:14px;background:#F0FDF4;border-radius:var(--radius)">
+              <div style="font-size:28px;font-weight:700;color:#15803D;font-family:LINE Seed TW_OTF, sans-serif" x-text="importResults.created"></div>
+              <div style="font-size:11px;color:#15803D;margin-top:4px">新增</div>
+            </div>
+            <div style="text-align:center;padding:14px;background:#EFF6FF;border-radius:var(--radius)">
+              <div style="font-size:28px;font-weight:700;color:#1D4ED8;font-family:LINE Seed TW_OTF, sans-serif" x-text="importResults.updated"></div>
+              <div style="font-size:11px;color:#1D4ED8;margin-top:4px">更新</div>
+            </div>
+            <div style="text-align:center;padding:14px;background:#FEF2F2;border-radius:var(--radius)">
+              <div style="font-size:28px;font-weight:700;color:#DC2626;font-family:LINE Seed TW_OTF, sans-serif" x-text="importResults.failed"></div>
+              <div style="font-size:11px;color:#DC2626;margin-top:4px">失敗</div>
+            </div>
+          </div>
+          <template x-if="importResults.errors.length > 0">
+            <div>
+              <div style="font-size:11px;font-weight:600;color:var(--text-secondary);margin-bottom:6px">錯誤明細</div>
+              <div style="max-height:150px;overflow-y:auto;background:#FEF2F2;border-radius:var(--radius);padding:10px 12px">
+                <template x-for="(e, ei) in importResults.errors" :key="ei">
+                  <div style="font-size:11px;color:#DC2626;margin-bottom:4px;font-family:var(--font-zh)" x-text="e"></div>
+                </template>
+              </div>
+            </div>
+          </template>
+        </div>
+      </template>
+    </div>
+    <div class="modal-foot">
+      <div style="font-size:11px;color:var(--text-dim);flex:1">
+        支援格式：.xlsx / .xls / .csv<br>
+        必填欄位：<strong>品名</strong>；料號相符則自動更新，料號留空則依類別自動產生
+      </div>
+      <button class="btn btn-primary" @click="showImportModal=false" :disabled="importing">確認</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const API = '/api'
 function app() {
@@ -243,6 +307,9 @@ function app() {
     showAddBrand: false,
     newBrandPreset: '',
     brandFix: { show: false, oldName: '', newName: '', affected: [], saving: false, error: '' },
+    showImportModal: false,
+    importing: false,
+    importResults: null,
 
     get categories() {
       return [...new Set(this.items.map(p => p.category).filter(Boolean))].sort()
@@ -385,6 +452,68 @@ function app() {
         else { const e = await r.json(); this.modal.error = e.detail || '儲存失敗' }
       } catch { this.modal.error = '網路錯誤' }
       this.modal.saving = false
+    },
+
+    exportExcel() {
+      const rows = this.items.map(p => {
+        const [bn, ...rest] = (p.brand || '').split('/')
+        return {
+          '料號': p.part_no || '', '品名': p.name || '',
+          '廠牌': (bn || '').trim(), '型號': rest.join('/').trim(),
+          '類別': p.category || '', '單位': p.unit || '台',
+          '成本(未稅)': p.cost || 0, '定價(含稅)': p.list_price || 0,
+          '備注': p.note || ''
+        }
+      })
+      const ws = XLSX.utils.json_to_sheet(rows)
+      ws['!cols'] = [12,24,12,20,10,8,12,12,24].map(w=>({wch:w}))
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, '料號')
+      XLSX.writeFile(wb, `MOTRIX_料號_${new Date().toISOString().slice(0,10)}.xlsx`)
+    },
+
+    async handleImport(event) {
+      const file = event.target.files[0]
+      if (!file) return
+      event.target.value = ''
+      this.importing = true; this.showImportModal = true; this.importResults = null
+      const results = { created: 0, updated: 0, failed: 0, errors: [] }
+      try {
+        const wb = XLSX.read(await file.arrayBuffer())
+        const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '' })
+        for (let i = 0; i < rows.length; i++) {
+          try {
+            const obj = this._parsePartRow(rows[i])
+            if (!obj.name) { results.failed++; results.errors.push(`第 ${i+2} 行：品名不可空白`); continue }
+            const match = obj.partNo ? this.items.find(p => p.part_no === obj.partNo) : null
+            const body = { partNo: obj.partNo, name: obj.name, brand: obj.brand, unit: obj.unit, cost: obj.cost, listPrice: obj.listPrice, category: obj.category, note: obj.note }
+            const r = await fetch(match ? `${API}/parts/${match.id}` : `${API}/parts`, {
+              method: match ? 'PUT' : 'POST',
+              headers: { 'Content-Type':'application/json', Authorization:`Bearer ${this.session.token}` },
+              body: JSON.stringify(body)
+            })
+            if (r.ok) { match ? results.updated++ : results.created++ }
+            else { const e = await r.json().catch(()=>({})); results.failed++; results.errors.push(`${obj.partNo || obj.name}：${match?'更新':'新增'}失敗（${e.detail || r.status}）`) }
+          } catch(e) { results.failed++; results.errors.push(`第 ${i+2} 行：${e.message}`) }
+        }
+        await this.load()
+      } catch(e) { results.failed++; results.errors.push('檔案解析失敗：' + e.message) }
+      this.importResults = results; this.importing = false
+    },
+
+    _parsePartRow(row) {
+      const n = {}
+      for (const [k, v] of Object.entries(row)) n[k.trim()] = String(v ?? '').trim()
+      const brand = [n['廠牌']||n['brand']||'', n['型號']||n['model']||''].map(s=>s.trim()).filter(Boolean).join(' / ')
+      const toNum = (s) => { const x = parseFloat(String(s).replace(/[^0-9.\-]/g,'')); return isNaN(x) ? 0 : x }
+      return {
+        partNo: n['料號']||n['part_no']||'', name: n['品名']||n['名稱']||n['name']||'',
+        brand, unit: n['單位']||n['unit']||'台',
+        cost: toNum(n['成本(未稅)']||n['成本']||n['cost']||0),
+        listPrice: toNum(n['定價(含稅)']||n['定價']||n['售價']||n['list_price']||0),
+        category: n['類別']||n['分類']||n['category']||'',
+        note: n['備注']||n['備註']||n['note']||''
+      }
     },
 
     async deletePart(part) {

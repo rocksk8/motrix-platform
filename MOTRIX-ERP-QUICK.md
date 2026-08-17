@@ -1,7 +1,7 @@
 # MOTRIX ERP — 開發快速參考
 
 > 允碩整合集創（統編 60575481）｜ Tel: 04-3610-6566 ｜ info@miactw.com  
-> 文件版本：**2026-08-17h**（案件管理動態 Tab 月曆總覽容器字級放大，見 §12）
+> 文件版本：**2026-08-17i**（料號主檔新增匯出／匯入 Excel，見 §12）
 
 ---
 
@@ -882,6 +882,11 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 ## §12 · 變更摘要（最新兩版）
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
+
+### 2026-08-17i — 料號主檔新增匯出／匯入 Excel
+
+- 比照 `customers.html` 既有模式（純前端 SheetJS，無新後端端點）：`parts.html` 新增 `exportExcel()`／`handleImport()`，匯入逐列比對料號決定呼叫既有 `PUT`（更新）或 `POST /api/parts`（新增，留空依類別前綴自動產生）
+- 已用 demo session 完整 round-trip 驗證（建立→匯出→改檔→匯入→查資料庫核對），新增/更新/失敗/自動產生料號情境皆確認正確；純前端調整，無 DB migration
 
 ### 2026-08-17h — 案件管理動態 Tab 月曆總覽容器字級過小（g 遺漏的另一半）
 
