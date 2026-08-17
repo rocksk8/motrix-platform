@@ -1,7 +1,7 @@
 # MOTRIX ERP — 開發快速參考
 
 > 允碩整合集創（統編 60575481）｜ Tel: 04-3610-6566 ｜ info@miactw.com  
-> 文件版本：**2026-08-17g**（案件管理動態 Tab 下方內容/人員顯示字級放大，見 §12）
+> 文件版本：**2026-08-17h**（案件管理動態 Tab 月曆總覽容器字級放大，見 §12）
 
 ---
 
@@ -882,6 +882,12 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 ## §12 · 變更摘要（最新兩版）
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
+
+### 2026-08-17h — 案件管理動態 Tab 月曆總覽容器字級過小（g 遺漏的另一半）
+
+- 使用者澄清「過窄」指的其實是月曆總覽容器（第一版比例修正時加的 `max-width:340px` 迷你月曆，內文字從未放大過）
+- `.feed-cal-wdays`/`.feed-cal-cell`/`.feed-cal-cnt`/`.feed-cal-title`/`.feed-cal-nav` 等字級全面放大，容器 `max-width` 340→380px 留呼吸空間（仍遠低於原本撐爆容器的臨界值）
+- 純前端 CSS 調整，無 DB migration
 
 ### 2026-08-17g — 案件管理動態 Tab 下方內容/人員顯示字級放大
 

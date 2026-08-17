@@ -5,6 +5,15 @@
 
 ---
 
+### 2026-08-17h — 案件管理動態 Tab 月曆總覽容器字級過小（g 遺漏的另一半）
+
+- 使用者上一版回報過窄看不清後，先修了下方發文列表字級，接著澄清「是月曆總覽內的容器」——實際指的是 `2026-08-17`（第一版月曆比例修正）當時為解決格子被撐成巨大方形而加上的 `max-width:340px` 迷你月曆容器。量測發現該容器內文字從未被放大過，仍維持很小的原始字級（`.feed-cal-wdays` 星期標頭 9px、`.feed-cal-cell` 日期數字 10px、`.feed-cal-cnt` 當日筆數 8px、`.feed-cal-title` 月份標題 12px），縮小容器後更顯侷促
+- 調整：`.feed-cal-wdays` 9→11px、`.feed-cal-cell` 10→13px、`.feed-cal-cnt` 8→10px、`.feed-cal-title` 12→14px、`.feed-cal-nav` 按鈕 20→24px（字級 11→13px）、`.feed-cal-toggle-btn`/`.feed-cal-filter-tag` 11→13px；容器 `max-width` 同步由 340px 微幅放寬到 380px 給放大後的文字留呼吸空間（仍遠低於當初撐爆容器的臨界值，不會重現原本的比例錯誤 bug）
+- 已用 `javascript_tool` 呼叫 `toggleFeedCalMode()` 展開月曆並截圖確認：日期數字/星期標頭/月份標題清晰可讀，格子仍維持緊湊排列不佔版面，console 無錯誤
+- 純前端 CSS 調整，無 DB migration
+
+---
+
 ### 2026-08-17g — 案件管理動態 Tab 下方內容/人員顯示字級放大
 
 - 使用者回報「動態」Tab 下方發文列表的文字內容與人員（頭像/名稱）顯示過窄無法閱讀。用 Chrome MCP `javascript_tool` 量測 `.feed-bubble__content` 實際渲染寬度達 1223px（容器完全不窄，問題不在寬度），但字級僅 13px/12px/10px（content/author/time），明顯小於全站預設 15px 基準，在使用者當下套用的 UI 縮放（`motrixSetZoom` 1.15）下仍顯得侷促
