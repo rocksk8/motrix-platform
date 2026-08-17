@@ -704,25 +704,25 @@ def list_pending_logs(authorization: str = Header("")):
 
 @router.get("/dev-crm/activity-stats")
 def dev_crm_activity_stats(authorization: str = Header("")):
-    """跨案件每週／每日接洽成效統計：近 60 天每日筆數、近 8 週週彙總、近 30 天依業務員／
+    """跨案件每週／每日接洽成效統計：近 60 天每日筆數、近 8 週週彙總、近 30 天依廠商／
     通路拆解。僅計入已核准（needs_approval=0）的開發記錄；權限比照 _can_access_case
     （非 admin 僅計入自己建立或被列為業務/規劃人員的案件）。"""
     user = _require_dev(authorization)
     conn = get_db()
     try:
         case_rows = conn.execute(
-            "SELECT id, sales_persons, planners, created_by FROM dev_cases WHERE is_deleted=0"
+            "SELECT id, sales_persons, planners, created_by, case_name, customer_name FROM dev_cases WHERE is_deleted=0"
         ).fetchall()
         visible_ids = [r["id"] for r in case_rows if _can_access_case(user, r)]
         if not visible_ids:
-            return {"daily": [], "weekly": [], "bySalesperson": [], "byChannel": []}
-        umap = _user_map(conn)
+            return {"daily": [], "weekly": [], "byVendor": [], "byChannel": []}
+        case_label = {r["id"]: (r["customer_name"] or r["case_name"] or "未命名案件") for r in case_rows}
 
         today = date.today()
         window_start = today - timedelta(days=59)  # 近 60 天（含今天）
         ph = ",".join("?" * len(visible_ids))
         rows = conn.execute(
-            f"SELECT log_date, log_by, channel FROM dev_logs "
+            f"SELECT log_date, log_by, channel, case_id FROM dev_logs "
             f"WHERE needs_approval=0 AND case_id IN ({ph}) AND log_date >= ?",
             visible_ids + [window_start.isoformat()],
         ).fetchall()
@@ -754,21 +754,20 @@ def dev_crm_activity_stats(authorization: str = Header("")):
                 "count": weekly_counts.get(ws.isoformat(), 0),
             })
 
-        # 依業務員／通路拆解（近 30 天）
+        # 依廠商／通路拆解（近 30 天）
         recent_start = (today - timedelta(days=29)).isoformat()
-        sp_counts, ch_counts = {}, {}
+        vendor_counts, ch_counts = {}, {}
         for r in rows:
             d = (r["log_date"] or "")[:10]
             if d < recent_start:
                 continue
-            if r["log_by"]:
-                sp_counts[r["log_by"]] = sp_counts.get(r["log_by"], 0) + 1
+            label = case_label.get(r["case_id"], "未命名案件")
+            vendor_counts[label] = vendor_counts.get(label, 0) + 1
             ch = r["channel"] or "未分類"
             ch_counts[ch] = ch_counts.get(ch, 0) + 1
 
-        by_salesperson = sorted(
-            [{"userId": uid, "displayName": umap.get(uid, str(uid)), "count": c}
-             for uid, c in sp_counts.items()],
+        by_vendor = sorted(
+            [{"name": name, "count": c} for name, c in vendor_counts.items()],
             key=lambda x: x["count"], reverse=True,
         )
         by_channel = sorted(
@@ -776,7 +775,7 @@ def dev_crm_activity_stats(authorization: str = Header("")):
             key=lambda x: x["count"], reverse=True,
         )
 
-        return {"daily": daily, "weekly": weekly, "bySalesperson": by_salesperson, "byChannel": by_channel}
+        return {"daily": daily, "weekly": weekly, "byVendor": by_vendor, "byChannel": by_channel}
     finally:
         conn.close()
 

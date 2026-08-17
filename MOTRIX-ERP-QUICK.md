@@ -1,7 +1,7 @@
 # MOTRIX ERP — 開發快速參考
 
 > 允碩整合集創（統編 60575481）｜ Tel: 04-3610-6566 ｜ info@miactw.com  
-> 文件版本：**2026-08-17e**（移除業務開發接洽成效總覽「近 30 天最活躍」KPI，見 §12）
+> 文件版本：**2026-08-17f**（案件管理動態 Tab 月曆比例修正＋業務開發排行改依廠商＋精算完結徽章空白 bug，見 §12）
 
 ---
 
@@ -882,6 +882,13 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 ## §12 · 變更摘要（最新兩版）
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
+
+### 2026-08-17f — 案件管理動態 Tab 月曆比例修正＋業務開發排行改依廠商＋精算完結徽章空白 bug
+
+- **A. 動態 Tab 月曆**：`.feed-cal-cell` 的 `aspect-ratio:1` 隨寬版 `.cm-detail`（`flex:1`）撐成巨大方格，6 週高度爆表被 `overflow:hidden` 裁掉下方發文框/動態列表；`.feed-cal-wdays`/`.feed-cal-grid` 加 `max-width:340px` 修正
+- **B. 業務開發排行**：`GET /api/dev-crm/activity-stats` 排行改依廠商（`customer_name`/`case_name`）分組，取代原本依業務員（`log_by`）分組；回傳欄位 `bySalesperson`→`byVendor`
+- **C.（順手修）精算完結徽章空白**：`case-management.html:1369` `toLocaleString(\'zh-TW\')` 多餘反斜線跳脫符號造成 Alpine 解析失敗、整段不渲染，移除即修復
+- 已用 Chrome MCP 瀏覽器實機驗證三處；純前端＋單一端點調整，無 DB migration；pytest 106/106 全過
 
 ### 2026-08-17e — 移除業務開發接洽成效總覽「近 30 天最活躍」KPI
 

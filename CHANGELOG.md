@@ -5,6 +5,16 @@
 
 ---
 
+### 2026-08-17f — 案件管理動態 Tab 月曆比例修正＋業務開發排行改依廠商＋精算完結徽章空白 bug
+
+- **A. 案件管理「動態」Tab 月曆比例錯誤**：使用者回報月曆無法完整顯示內容。根因是 `case-management.html` `.feed-cal-cell` 用 `aspect-ratio:1` 搭配 `grid-template-columns:repeat(7,1fr)`，但父層 `.cm-detail` 是 `flex:1` 可撐到 1000px+ 寬（案件詳情面板佔滿剩餘寬度），每格因此被撐成巨大正方形，6 週月曆總高度遠超過 `.cm-layout`/`.cm-detail` 的固定視窗高度＋`overflow:hidden`，導致下方發文框與動態列表被裁切看不到；格內字級本就是 9-10px 的小尺寸設計，明顯是設計成緊湊迷你月曆而非全寬。修正：`.feed-cal-wdays`/`.feed-cal-grid` 加上 `max-width:340px`，維持原設計的小尺寸樣式，不再隨版面寬度暴衝
+- **B. 業務開發接洽成效總覽排行改依廠商**：使用者要求把「業務員接洽排行（近 30 天）」改成「近期聯繫最多廠商」排行。後端 `dev_crm.py` `GET /api/dev-crm/activity-stats`：`case_rows` 查詢補上 `case_name`/`customer_name`，建立 `case_id → (customer_name or case_name)` 對照表，取代原本依 `log_by`（記錄人）分組的邏輯；回傳欄位由 `bySalesperson`（`userId`/`displayName`/`count`）改為 `byVendor`（`name`/`count`），移除不再使用的 `umap` 變數；前端 `dev-crm.html` 同步更新標題文案、`actStats` 初始狀態與 template 綁定欄位
+- **C. 精算完結徽章空白 bug**（驗證 A 時意外發現）：瀏覽器 console 出現 `Alpine Expression Error: Invalid or unexpected token`。`case-management.html:1369` 精算完結徽章的 `x-text` 內 `new Date(...).toLocaleString(\'zh-TW\')` 誤加了多餘反斜線跳脫符號（HTML 屬性內的 JS 字串不需跳脫，比對同檔案其餘 25 處 `toLocaleString()` 呼叫皆無此寫法），Alpine 解析整條 expression 失敗直接中止渲染，導致精算完結案件的「精算完結 · 精算日期：...」徽章整段空白；移除多餘反斜線即修復
+- **驗證**：三處皆已用 Chrome MCP 在開發機瀏覽器實機操作——A 月曆縮小為緊湊小尺寸、6 週日期完整顯示、下方發文框/動態列表正常顯示；B 業務開發頁右欄排行榜正確顯示廠商名稱與次數（如：壹己商務中心有限公司 2 次）；C 以 `MQ-202607-028`（已結案案件）財務 Tab 確認徽章完整顯示「精算完結 · 精算日期：2026-07-15　完結人：黃玉龍　2026/7/15 下午11:05:22」，`read_console_messages` 確認無殘留 Alpine/JS 錯誤
+- 純前端＋單一後端端點欄位調整，無 DB migration；`pytest` 106/106 全過
+
+---
+
 ### 2026-08-17e — 移除業務開發接洽成效總覽「近 30 天最活躍」KPI
 
 - 使用者要求拿掉這張卡片；`dev-crm.html` 移除該 `.dc-act-kpi` 區塊，KPI 列由 3 欄改回 2 欄，一併清掉行動裝置媒體查詢裡變成多餘的欄數覆寫

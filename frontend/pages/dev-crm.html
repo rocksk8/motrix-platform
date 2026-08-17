@@ -541,15 +541,15 @@
             <!-- leaderboard + channel breakdown -->
             <div class="dc-act-cols">
               <div class="dc-act-col">
-                <div class="dc-act-section-title">業務員接洽排行（近 30 天）</div>
-                <template x-if="actStats.bySalesperson.length === 0">
+                <div class="dc-act-section-title">近期聯繫最多廠商（近 30 天）</div>
+                <template x-if="actStats.byVendor.length === 0">
                   <div class="dc-act-empty">近 30 天尚無記錄</div>
                 </template>
-                <template x-for="(sp, i) in actStats.bySalesperson.slice(0,6)" :key="sp.userId">
+                <template x-for="(v, i) in actStats.byVendor.slice(0,6)" :key="v.name + i">
                   <div class="dc-act-rank-row">
                     <span class="dc-act-rank-no" x-text="i+1"></span>
-                    <span class="dc-act-rank-name" x-text="sp.displayName"></span>
-                    <span class="dc-act-rank-cnt" x-text="sp.count + ' 次'"></span>
+                    <span class="dc-act-rank-name" x-text="v.name"></span>
+                    <span class="dc-act-rank-cnt" x-text="v.count + ' 次'"></span>
                   </div>
                 </template>
               </div>
@@ -1115,7 +1115,7 @@ function devCrmPage() {
     pendingLogs: [],
     showPendingModal: false,
 
-    actStats: { daily: [], weekly: [], bySalesperson: [], byChannel: [] },
+    actStats: { daily: [], weekly: [], byVendor: [], byChannel: [] },
     actStatsLoading: false,
 
     showCaseModal: false,
