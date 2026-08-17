@@ -1,3 +1,12 @@
+// 依字串 hash 對應固定色盤，跟 daily-tasks.html 的 _avatarColor 用同一組色碼與演算法，
+// 讓同一位負責人在甘特圖／每日工作事項月曆／看板三處的顏色一致。
+const _GANTT_COLORS = ['#2563EB','#7C3AED','#DB2777','#D97706','#16A34A','#0891B2','#DC2626','#9333EA']
+function _avatarColor(u) {
+  let h = 0
+  for (let i = 0; i < u.length; i++) h = (h * 31 + u.charCodeAt(i)) | 0
+  return _GANTT_COLORS[Math.abs(h) % _GANTT_COLORS.length]
+}
+
 function app() {
   return {
       isMobileView: window.innerWidth <= 767,
@@ -60,6 +69,10 @@ function app() {
     updatesLoading: false,
     newComment: '',
     postingComment: false,
+    feedCalMode:    false,
+    feedCalYear:    new Date().getFullYear(),
+    feedCalMonth:   new Date().getMonth() + 1,
+    feedCalSelDate: '',
 
     // ── 承攬商派發 ──
     vendors: [],
@@ -765,8 +778,13 @@ function app() {
       this.$nextTick(() => this.renderGantt())
     },
 
+    _userDisplay(username) {
+      return (this.selectableUsers.find(u => u.username === username)?.display_name) || username
+    },
+
     _ganttTasks() {
       const stages = this.cr.caseRecord?.stages || []
+      const byId   = Object.fromEntries(stages.map(s => [String(s.id), s]))
       const today  = new Date().toISOString().slice(0,10)
       const addDays = (dateStr, n) => {
         const d = new Date(dateStr + 'T00:00:00')
@@ -777,13 +795,26 @@ function app() {
         let start = st.startDate || st.dueDate || today
         let end   = st.dueDate   || st.startDate || addDays(start, 1)
         if (start === end) end = addDays(start, 1)
+        const assignedTo  = st.assignedTo || []
+        const primary     = assignedTo[0] || ''
+        // 依主要負責人（assignedTo 第一位）hash 出固定色階 index，供 CSS .stage-c0~c7 上色
+        const idx = primary ? _GANTT_COLORS.indexOf(_avatarColor(primary)) : -1
+        const classes = [
+          idx >= 0 ? ('stage-c' + idx) : 'stage-unassigned',
+          st.done ? 'stage-done' : '',
+          (!st.done && this.stageIsOverdue(st)) ? 'stage-overdue' : '',
+        ].filter(Boolean).join(' ')
         return {
           id:           String(st.id),
           name:         st.label || '（未命名階段）',
           start, end,
           progress:     st.done ? 100 : 0,
           dependencies: (st.dependsOn || []).map(String).join(','),
-          custom_class: st.done ? 'stage-done' : (this.stageIsOverdue(st) ? 'stage-overdue' : ''),
+          custom_class: classes,
+          _assignedNames: assignedTo.map(u => this._userDisplay(u)),
+          _dependsNames:  (st.dependsOn || []).map(id => byId[String(id)]?.label).filter(Boolean),
+          _done: !!st.done,
+          _overdue: !st.done && this.stageIsOverdue(st),
         }
       })
     },
@@ -803,6 +834,24 @@ function app() {
           st.startDate = fmt(start)
           st.dueDate   = fmt(end)
           this.setDirty()
+        },
+        custom_popup_html: (task) => {
+          const statusChip = task._done
+            ? '<span class="gantt-pop-chip gantt-pop-chip--done">已完成</span>'
+            : (task._overdue ? '<span class="gantt-pop-chip gantt-pop-chip--overdue">已逾期</span>' : '')
+          const assignees = (task._assignedNames && task._assignedNames.length)
+            ? task._assignedNames.map(n => `<span class="gantt-pop-av">${n}</span>`).join('')
+            : '<span class="gantt-pop-empty">尚未指派</span>'
+          const depends = (task._dependsNames && task._dependsNames.length)
+            ? `<div class="gantt-pop-row"><span class="gantt-pop-lbl">前置階段</span>${task._dependsNames.map(n => `<span class="gantt-pop-av">${n}</span>`).join('')}</div>`
+            : ''
+          return `
+            <div class="gantt-pop">
+              <div class="gantt-pop-title">${task.name}${statusChip}</div>
+              <div class="gantt-pop-row"><span class="gantt-pop-lbl">日期</span>${task.start} ~ ${task.end}</div>
+              <div class="gantt-pop-row"><span class="gantt-pop-lbl">負責人</span>${assignees}</div>
+              ${depends}
+            </div>`
         },
       })
     },
@@ -1222,6 +1271,8 @@ function app() {
       if (!quoteNo) return
       this.updatesLoading = true
       this.caseUpdates = []
+      this.feedCalMode = false
+      this.feedCalSelDate = ''
       try {
         const r = await fetch(`/api/quotations/${encodeURIComponent(quoteNo)}/updates`, {
           headers: { Authorization: 'Bearer ' + this.session.token }
@@ -1229,6 +1280,51 @@ function app() {
         if (r.ok) this.caseUpdates = await r.json()
       } catch {}
       this.updatesLoading = false
+    },
+
+    // ── 動態 Tab：月曆總覽（依已載入的 caseUpdates 統計每日筆數，點日期篩選） ──
+    toggleFeedCalMode() {
+      this.feedCalMode = !this.feedCalMode
+      if (!this.feedCalMode) this.feedCalSelDate = ''
+    },
+    feedCalPrevMonth() {
+      this.feedCalMonth--
+      if (this.feedCalMonth < 1) { this.feedCalMonth = 12; this.feedCalYear-- }
+    },
+    feedCalNextMonth() {
+      this.feedCalMonth++
+      if (this.feedCalMonth > 12) { this.feedCalMonth = 1; this.feedCalYear++ }
+    },
+    feedCalDays() {
+      const year = this.feedCalYear, month = this.feedCalMonth
+      const _ld = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+      const todayStr = _ld(new Date())
+      const first    = new Date(year, month - 1, 1)
+      const daysInM  = new Date(year, month, 0).getDate()
+      const startDow = first.getDay()
+      const startPad = startDow === 0 ? 6 : startDow - 1
+      const cells = []
+      for (let i = startPad; i > 0; i--) {
+        const d = new Date(year, month - 1, 1 - i)
+        cells.push({ date: _ld(d), day: d.getDate(), inMonth: false, isToday: false })
+      }
+      for (let i = 1; i <= daysInM; i++) {
+        const s = `${year}-${String(month).padStart(2,'0')}-${String(i).padStart(2,'0')}`
+        cells.push({ date: s, day: i, inMonth: true, isToday: s === todayStr })
+      }
+      let nxt = 1
+      while (cells.length < 42) {
+        const d = new Date(year, month, nxt++)
+        cells.push({ date: _ld(d), day: d.getDate(), inMonth: false, isToday: false })
+      }
+      return cells
+    },
+    feedCalCount(date) {
+      return this.caseUpdates.filter(it => (it.created_at || '').replace('T',' ').slice(0,10) === date).length
+    },
+    filteredFeedItems() {
+      if (!this.feedCalSelDate) return this.caseUpdates
+      return this.caseUpdates.filter(it => (it.created_at || '').replace('T',' ').slice(0,10) === this.feedCalSelDate)
     },
 
     async postComment() {

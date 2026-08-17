@@ -73,6 +73,13 @@
     .pj-due-badge--overdue { background:#FEE2E2; color:#DC2626; }
     .pj-due-badge--soon    { background:#FEF3C7; color:#92400E; }
     .pj-due-badge--ok      { background:#F3F4F6; color:#9CA3AF; }
+    .pj-card__members { display:flex; align-items:center; gap:3px; margin-top:6px; flex-wrap:wrap; }
+    .pj-member-av {
+      width:16px; height:16px; border-radius:50%; color:#fff;
+      font-size:8px; font-weight:700; display:inline-flex; align-items:center; justify-content:center;
+      border:1.5px solid #fff; box-shadow:0 0 0 1px #F0EFEB; flex-shrink:0;
+    }
+    .pj-member-more { font-size:9px; color:var(--text-dim); font-family:LINE Seed TW_OTF, sans-serif; }
 
     .pj-empty { padding:48px 20px; text-align:center; color:var(--text-dim); font-size:13px; font-family:var(--font-zh); display:flex; flex-direction:column; align-items:center; gap:8px; }
     .pj-empty svg { opacity:.2; }
@@ -793,6 +800,17 @@
                       <span class="pj-due-badge" :class="'pj-due-badge--' + dueBadge(p).cls" x-text="dueBadge(p).text"></span>
                     </template>
                   </div>
+                  <template x-if="(p.assigned_user_ids||[]).length > 0">
+                    <div class="pj-card__members">
+                      <template x-for="uid in (p.assigned_user_ids||[]).slice(0,4)" :key="uid">
+                        <span class="pj-member-av" :style="`background:${assigneeColor(uid)}`"
+                              :title="assigneeName(uid)" x-text="(assigneeName(uid)||'?').slice(0,1)"></span>
+                      </template>
+                      <template x-if="(p.assigned_user_ids||[]).length > 4">
+                        <span class="pj-member-more" x-text="'+' + ((p.assigned_user_ids||[]).length - 4)"></span>
+                      </template>
+                    </div>
+                  </template>
                 </div>
               </template>
             </div>
@@ -966,6 +984,15 @@
   <script>
   const API = ''
 
+  // 依 username hash 對應固定色盤，跟 daily-tasks.html／case-management.js 用同一組色碼與演算法，
+  // 讓同一位成員在每日工作事項／案件甘特圖／專案看板三處的顏色一致。
+  const _AV_COLORS = ['#2563EB','#7C3AED','#DB2777','#D97706','#16A34A','#0891B2','#DC2626','#9333EA']
+  function _avatarColor(u) {
+    let h = 0
+    for (let i = 0; i < u.length; i++) h = (h * 31 + u.charCodeAt(i)) | 0
+    return _AV_COLORS[Math.abs(h) % _AV_COLORS.length]
+  }
+
   function projectsPage() {
     return {
       session:   {},
@@ -1058,6 +1085,18 @@
 
       isAdmin() {
         return this.session.role === 'superadmin' || this.session.role === 'admin'
+      },
+
+      assigneeUser(uid) {
+        return this.allUsers.find(u => u.id === uid) || null
+      },
+      assigneeName(uid) {
+        const u = this.assigneeUser(uid)
+        return u ? (u.displayName || u.username) : ''
+      },
+      assigneeColor(uid) {
+        const u = this.assigneeUser(uid)
+        return _avatarColor(u ? u.username : String(uid))
       },
 
       toggleAssignment(uid) {

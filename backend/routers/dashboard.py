@@ -11,6 +11,7 @@ from fastapi import APIRouter, HTTPException, Header, Query
 from db import get_db
 from helpers import _require_user, _warranty_expiry, payment_item_amounts
 from routers.dev_crm import _can_access_case
+from routers.vendor_contractors import _dispatch_row
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -357,6 +358,108 @@ def dashboard_monthly(authorization: str = Header(None)):
         items.append({"month": mo, "label": label, "amount": d["amount"], "count": d["count"]})
 
     return {"items": items}
+
+
+# 設備類 parts.category（進貨成本歸「設備」；線材配件／其他／無法對應 part_no 一律歸「料件」）
+_EQUIPMENT_PART_CATEGORIES = {"網通設備", "監控設備", "交換器", "伺服器/工控"}
+
+
+@router.get("/api/dashboard/expenses-monthly")
+def dashboard_expenses_monthly(authorization: str = Header(None)):
+    """近 12 個月支出結構：承攬商派發（比照 vendor_contractors._dispatch_row 的
+    grandTotal＝含稅承攬商費用＋外包人員個別計費）／料件與設備進貨成本（stock_items.cost，
+    依 parts.category 分桶）／其他支出（已精算完結案件的 settlement.extraItems，依
+    editHistory 最後一筆 settlement_finalized 的時間歸月）。"""
+    u = _require_user(authorization)
+    role = u["role"]
+    mods = json.loads(u.get("modules") or "[]") if isinstance(u.get("modules"), str) else (u.get("modules") or [])
+    if role not in ("superadmin", "admin") and "finance" not in mods:
+        return {"items": [], "otherBreakdown": {}}
+
+    today = date.today()
+    month_list = []
+    for i in range(11, -1, -1):
+        m = today.month - i
+        y = today.year
+        while m <= 0:
+            m += 12
+            y -= 1
+        month_list.append(f"{y:04d}-{m:02d}")
+    month_set = set(month_list)
+
+    expenses = {mo: {"contractor": 0.0, "equipment": 0.0, "material": 0.0, "other": 0.0} for mo in month_list}
+    other_breakdown = {mo: {} for mo in month_list}
+
+    conn = get_db()
+
+    # ── 承攬商派發 ───────────────────────────────────────────────────────────
+    disp_rows = conn.execute(
+        "SELECT * FROM contractor_dispatches WHERE status != 'cancelled'"
+    ).fetchall()
+    for r in disp_rows:
+        mo = (r["dispatch_date"] or "")[:7]
+        if mo not in expenses:
+            continue
+        expenses[mo]["contractor"] += _dispatch_row(r)["grandTotal"]
+
+    # ── 料件 / 設備進貨成本 ──────────────────────────────────────────────────
+    stock_rows = conn.execute("""
+        SELECT s.created_at AS created_at, s.cost AS cost, p.category AS category
+        FROM stock_items s LEFT JOIN parts p ON p.part_no = s.part_no
+        WHERE s.status != 'void'
+    """).fetchall()
+    for r in stock_rows:
+        mo = (r["created_at"] or "")[:7]
+        if mo not in expenses:
+            continue
+        bucket = "equipment" if r["category"] in _EQUIPMENT_PART_CATEGORIES else "material"
+        expenses[mo][bucket] += float(r["cost"] or 0)
+
+    # ── 其他支出（已精算完結案件的額外品項） ────────────────────────────────
+    quote_rows = conn.execute(
+        "SELECT data_json FROM quotations WHERE json_extract(data_json,'$.settlement.status')='finalized'"
+    ).fetchall()
+    conn.close()
+    for r in quote_rows:
+        try:
+            data = json.loads(r["data_json"] or "{}")
+        except Exception:
+            continue
+        history = data.get("editHistory") or []
+        finalized_at = ""
+        for h in history:
+            if h.get("type") == "settlement_finalized":
+                finalized_at = h.get("at") or finalized_at
+        mo = (finalized_at or "")[:7]
+        if mo not in expenses:
+            continue
+        extra_items = ((data.get("settlement") or {}).get("extraItems")) or []
+        for it in extra_items:
+            cost = float(it.get("totalCost") or 0)
+            if not cost:
+                continue
+            cat = it.get("category") or "其他"
+            expenses[mo]["other"] += cost
+            other_breakdown[mo][cat] = other_breakdown[mo].get(cat, 0) + cost
+
+    items = []
+    for mo in month_list:
+        e = expenses[mo]
+        total = e["contractor"] + e["equipment"] + e["material"] + e["other"]
+        items.append({
+            "month":      mo,
+            "label":      f"{int(mo[5:7])}月",
+            "contractor": round(e["contractor"]),
+            "equipment":  round(e["equipment"]),
+            "material":   round(e["material"]),
+            "other":      round(e["other"]),
+            "total":      round(total),
+        })
+
+    return {
+        "items": items,
+        "otherBreakdown": {mo: {k: round(v) for k, v in cats.items()} for mo, cats in other_breakdown.items()},
+    }
 
 
 # ── Devices ───────────────────────────────────────────────────────────────────

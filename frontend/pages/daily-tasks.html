@@ -7,6 +7,7 @@
   <link rel="icon" type="image/png" href="../static/favicon.png">
   <title>每日工作事項 — MOTRIX 營運管理系統</title>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.3/Sortable.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <style>
     [x-cloak] { display: none !important; }
@@ -670,6 +671,49 @@
     .dt-hocc-person { display:flex; align-items:flex-start; gap:6px; margin-bottom:9px }
     .dt-hocc-person:last-child { margin-bottom:0 }
     .dt-hocc-person-meta { display:flex; align-items:center; gap:5px; min-width:88px; flex-shrink:0 }
+
+    /* ── 月曆總覽（Asana 風格橫條月曆）── */
+    .dt-mcal-wrap { padding: 10px 14px 16px; }
+    .dt-mcal-week { border: 1px solid #ECEAE5; border-top: none; }
+    .dt-mcal-week:first-of-type { border-top: 1px solid #ECEAE5; border-radius: 6px 6px 0 0; overflow: hidden; }
+    .dt-mcal-week:last-of-type { border-radius: 0 0 6px 6px; overflow: hidden; }
+    .dt-mcal-daynums { display: grid; grid-template-columns: repeat(7,1fr); background: #FAFAF8; border-bottom: 1px solid #F0EEE9; }
+    .dt-mcal-daynum {
+      font-size: 10px; font-weight: 600; color: var(--text-dim); text-align: right;
+      padding: 4px 6px; font-family: 'LINE Seed TW_OTF', sans-serif; border-left: 1px solid #F0EEE9;
+    }
+    .dt-mcal-daynum:first-child { border-left: none; }
+    .dt-mcal-daynum.out { color: #D1CFC9; }
+    .dt-mcal-daynum.today { color: var(--accent); position: relative; }
+    .dt-mcal-daynum.today::after {
+      content: ''; position: absolute; top: 2px; right: 3px; width: 4px; height: 4px;
+      border-radius: 50%; background: var(--accent);
+    }
+    .dt-mcal-bars { display: grid; grid-template-columns: repeat(7,1fr); grid-auto-rows: 19px; gap: 2px; padding: 2px; min-height: 21px; }
+    .dt-mcal-bar {
+      border-radius: 4px; padding: 1px 6px; font-size: 10px; font-weight: 600; color: #fff;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer;
+      font-family: 'LINE Seed TW_OTF', sans-serif; display: flex; align-items: center;
+      opacity: .92; transition: opacity .1s;
+    }
+    .dt-mcal-bar:hover { opacity: 1; }
+
+    /* ── 看板（Asana 風格看板）── */
+    .dt-board-wrap { display: flex; gap: 12px; padding: 12px 14px 16px; overflow-x: auto; align-items: flex-start; }
+    .dt-board-col { flex: 0 0 240px; background: #FAFAF8; border: 1px solid #ECEAE5; border-radius: 8px; display: flex; flex-direction: column; max-height: calc(100vh - 220px); }
+    .dt-board-col-hd { display: flex; align-items: center; gap: 6px; padding: 9px 11px; border-bottom: 1px solid #ECEAE5; flex-shrink: 0; }
+    .dt-board-col-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .dt-board-col-title { font-size: 12px; font-weight: 700; color: var(--text-primary); flex: 1; font-family: 'LINE Seed TW_OTF', sans-serif; }
+    .dt-board-col-count { font-size: 10px; color: var(--text-dim); font-family: 'LINE Seed TW_OTF', sans-serif; }
+    .dt-board-col-body { flex: 1; overflow-y: auto; padding: 6px; min-height: 40px; }
+    .dt-board-col-body .dt-card {
+      border: 1px solid #ECEAE5; border-left: 3px solid transparent; border-radius: 6px;
+      margin-bottom: 6px; background: var(--white);
+    }
+    .dt-board-col-body .dt-card.range-card { border-left-color: #6EE7B7; }
+    .dt-board-col-body .dt-card:last-child { margin-bottom: 0; }
+    .dt-board-due { font-size: 9px; color: var(--text-dim); font-family: 'LINE Seed TW_OTF', sans-serif; white-space: nowrap; }
+    .dt-board-empty { padding: 20px 8px; text-align: center; font-size: 11px; color: var(--text-dim); }
   </style>
 </head>
 <body x-data="app()" x-init="init()" x-cloak>
@@ -701,6 +745,18 @@
     <button class="dt-bar-act dt-bar-act-report" :class="{on: reportMode}" @click="toggleReportMode()">
       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
       <span x-text="reportMode ? '← 返回列表' : '回報彙整'"></span>
+    </button>
+
+    <!-- 月曆總覽 toggle -->
+    <button class="dt-bar-act dt-bar-act-cal" :class="{on: monthCalMode}" @click="toggleMonthCalMode()">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="9" y1="4" x2="9" y2="20"/><line x1="15" y1="4" x2="15" y2="20"/></svg>
+      <span x-text="monthCalMode ? '← 關閉月曆' : '月曆總覽'"></span>
+    </button>
+
+    <!-- 看板 toggle -->
+    <button class="dt-bar-act dt-bar-act-report" :class="{on: boardMode}" @click="toggleBoardMode()">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="7" height="16" rx="1"/><rect x="14" y="4" width="7" height="10" rx="1"/></svg>
+      <span x-text="boardMode ? '← 關閉看板' : '看板'"></span>
     </button>
 
     <template x-if="session?.role === 'superadmin'">
@@ -1378,8 +1434,88 @@
 
   </div><!-- .dt-cal-body -->
 
+  <!-- ══ 月曆總覽視圖（Asana 風格橫條月曆） ══ -->
+  <div x-show="monthCalMode" class="dt-mcal-wrap" x-cloak>
+    <div class="dt-cal-wdays" style="padding:0 0 4px">
+      <span class="dt-cal-wday">一</span><span class="dt-cal-wday">二</span><span class="dt-cal-wday">三</span>
+      <span class="dt-cal-wday">四</span><span class="dt-cal-wday">五</span>
+      <span class="dt-cal-wday sat">六</span><span class="dt-cal-wday sun">日</span>
+    </div>
+    <template x-for="(week, wi) in monthCalWeeks()" :key="wi">
+      <div class="dt-mcal-week">
+        <div class="dt-mcal-daynums">
+          <template x-for="cell in week.cells" :key="cell.date">
+            <div class="dt-mcal-daynum" :class="{out: !cell.inMonth, today: cell.isToday}" x-text="cell.day"></div>
+          </template>
+        </div>
+        <div class="dt-mcal-bars">
+          <template x-for="run in week.runs" :key="run.task.id + '-' + run.start">
+            <div class="dt-mcal-bar"
+                 :style="`grid-column:${run.start+1}/${run.end+2};grid-row:${run.lane+1};background:${avatarColor(run.task.category || '未分類')}`"
+                 :title="run.task.title"
+                 @click="jumpToTask(run.task)">
+              <span x-text="run.task.title"></span>
+            </div>
+          </template>
+        </div>
+      </div>
+    </template>
+    <template x-if="tasks.length === 0 && !loading">
+      <div class="dt-board-empty">本月無工作事項</div>
+    </template>
+  </div>
+
+  <!-- ══ 看板視圖（Asana 風格，依分類分欄） ══ -->
+  <div x-show="boardMode" class="dt-board-wrap" x-cloak>
+    <template x-if="boardColumns().length === 0 && !loading">
+      <div class="dt-board-empty">本月無工作事項</div>
+    </template>
+    <template x-for="col in boardColumns()" :key="col.cat">
+      <div class="dt-board-col">
+        <div class="dt-board-col-hd">
+          <span class="dt-board-col-dot" :style="`background:${avatarColor(col.cat)}`"></span>
+          <span class="dt-board-col-title" x-text="col.cat"></span>
+          <span class="dt-board-col-count" x-text="col.tasks.length"></span>
+        </div>
+        <div class="dt-board-col-body" :data-category="col.cat">
+          <template x-for="t in col.tasks" :key="t.id">
+            <div class="dt-card" :class="{'range-card': t.recurrence_type==='range', active: selected?.id===t.id}"
+                 :data-id="t.id" @click="jumpToTask(t)">
+              <div class="dt-card-row1">
+                <div class="dt-priority-dot" :style="`background:${pc(t.priority).color}`"></div>
+                <div class="dt-card-title" x-text="t.title"></div>
+              </div>
+              <div class="dt-card-foot">
+                <span class="dt-board-due" x-text="(t.occurrence_date||t.task_date||'').slice(5).replace('-','/')"></span>
+                <template x-if="t.recurrence_type==='range'">
+                  <span class="dt-range-badge" x-text="'~ ' + (t.recurrence_end_date ? t.recurrence_end_date.slice(5).replace('-','/') : '?')"></span>
+                </template>
+                <template x-if="t.recurrence_type==='weekly'">
+                  <span class="dt-recur-badge" x-text="t.recurrence_label || '每週'"></span>
+                </template>
+                <span class="dt-prog"
+                      :class="{'all-done': completionCountRaw(t).done===completionCountRaw(t).total && completionCountRaw(t).total>0}"
+                      x-text="completionCountRaw(t).done + '/' + completionCountRaw(t).total + ' 完成'"></span>
+              </div>
+              <template x-if="(t.assignees||[]).length>0">
+                <div class="dt-assignees-row">
+                  <template x-for="a in (t.assignees||[]).slice(0,4)" :key="a.username">
+                    <span class="dt-assignee-chip">
+                      <span class="dt-assignee-av" :style="`background:${avatarColor(a.username)}`" x-text="(a.displayName||a.username).slice(0,1)"></span>
+                      <span x-text="a.displayName || a.username"></span>
+                    </span>
+                  </template>
+                </div>
+              </template>
+            </div>
+          </template>
+        </div>
+      </div>
+    </template>
+  </div>
+
   <!-- ── Body ── -->
-  <div class="dt-body" x-show="!reportMode && !calMode">
+  <div class="dt-body" x-show="!reportMode && !calMode && !monthCalMode && !boardMode">
 
     <!-- ── Left panel ── -->
     <div class="dt-left">
@@ -2352,6 +2488,13 @@ function app() {
     calDashData:    [],
     calDashLoading: false,
 
+    // Month calendar view (Asana 風格橫條月曆)
+    monthCalMode: false,
+
+    // Board view (Asana 風格看板，依 category 分欄)
+    boardMode:         false,
+    _kanbanSortables:  [],
+
     // Report summary view
     reportMode:         false,
     reportDate:         new Date().toISOString().slice(0,10),
@@ -2475,6 +2618,7 @@ function app() {
         if (found) this._setSelected(found)
         else { this.selected = null; this.selectedOccDate = '' }
       }
+      if (this.boardMode) this.$nextTick(() => this.initBoardSortable())
     },
 
     // ── List helpers ──────────────────────────────────────────────────────────
@@ -3272,6 +3416,136 @@ function app() {
       if (d.done === d.total) return 'done'
       if (d.done > 0) return 'partial'
       return 'none'
+    },
+
+    // ── 月曆總覽視圖 ─────────────────────────────────────────────────────────
+    // 依週分行：同一 task id 在同一週內連續的 occurrence_date 合併成一條橫條
+    // （跨週不合併，比照多數月曆元件在換行處斷開多日事件的慣例）。
+    monthCalWeeks() {
+      const cells = this.calMonthDays(this.viewYear, this.viewMonth)
+      const weeks = []
+      for (let w = 0; w < 6; w++) {
+        const weekCells = cells.slice(w * 7, w * 7 + 7)
+        const dateIdx = {}
+        weekCells.forEach((c, i) => { dateIdx[c.date] = i })
+
+        const byTask = {}
+        for (const t of this.tasks) {
+          const d = t.occurrence_date || t.task_date
+          if (!(d in dateIdx)) continue
+          if (!byTask[t.id]) byTask[t.id] = { task: t, cols: [] }
+          byTask[t.id].cols.push(dateIdx[d])
+        }
+
+        const runs = []
+        for (const { task, cols } of Object.values(byTask)) {
+          cols.sort((a, b) => a - b)
+          let runStart = cols[0], prev = cols[0]
+          for (let i = 1; i <= cols.length; i++) {
+            if (i < cols.length && cols[i] === prev + 1) { prev = cols[i]; continue }
+            runs.push({ task, start: runStart, end: prev })
+            if (i < cols.length) { runStart = cols[i]; prev = cols[i] }
+          }
+        }
+        // 較長的橫條優先排進較上層 lane（貪婪演算法）
+        runs.sort((a, b) => (b.end - b.start) - (a.end - a.start) || a.start - b.start)
+        const lanes = []
+        for (const run of runs) {
+          let li = lanes.findIndex(lane => lane.every(r => run.end < r.start || run.start > r.end))
+          if (li === -1) { li = lanes.length; lanes.push([]) }
+          lanes[li].push(run)
+          run.lane = li
+        }
+        weeks.push({ cells: weekCells, runs })
+      }
+      return weeks
+    },
+
+    toggleMonthCalMode() {
+      this.monthCalMode = !this.monthCalMode
+      if (this.monthCalMode) {
+        this.calMode = false; this.reportMode = false; this.boardMode = false
+        this.selected = null; this.selectedOccDate = ''
+      }
+    },
+
+    // ── 看板視圖 ─────────────────────────────────────────────────────────────
+    toggleBoardMode() {
+      this.boardMode = !this.boardMode
+      if (this.boardMode) {
+        this.calMode = false; this.reportMode = false; this.monthCalMode = false
+        this.selected = null; this.selectedOccDate = ''
+        this.$nextTick(() => this.initBoardSortable())
+      }
+    },
+
+    jumpToTask(t) {
+      this.monthCalMode = false
+      this.boardMode = false
+      this.$nextTick(() => this.selectTask(t))
+    },
+
+    filteredBoardTasks() {
+      const q = this.searchQ.trim().toLowerCase()
+      const seen = new Set()
+      const res = []
+      for (const t of this.tasks) {
+        if (q && !(t.title || '').toLowerCase().includes(q) && !(t.category || '').toLowerCase().includes(q)) continue
+        if (seen.has(t.id)) continue
+        seen.add(t.id)
+        res.push(t)
+      }
+      return res
+    },
+
+    boardColumns() {
+      const all = this.filteredBoardTasks()
+      const cats = [...new Set(all.map(t => t.category || '未分類'))]
+      cats.sort((a, b) => (a === '未分類') - (b === '未分類') || a.localeCompare(b, 'zh-Hant'))
+      return cats.map(cat => ({ cat, tasks: all.filter(t => (t.category || '未分類') === cat) }))
+    },
+
+    initBoardSortable() {
+      this._kanbanSortables.forEach(s => s.destroy())
+      this._kanbanSortables = []
+      if (typeof Sortable === 'undefined') return
+      if (!(this.session.role === 'superadmin' && this.dtUnlocked)) return
+      this.$el.querySelectorAll('.dt-board-col-body').forEach(el => {
+        const s = Sortable.create(el, {
+          group: 'daily-tasks-board',
+          animation: 150,
+          ghostClass: 'sortable-ghost',
+          onEnd: (evt) => {
+            const taskId = Number(evt.item.dataset.id)
+            const task   = this.tasks.find(t => t.id === taskId)
+            const newCat = evt.to.dataset.category === '未分類' ? '' : evt.to.dataset.category
+            if (task && (task.category || '') !== (newCat || '')) {
+              this.moveTaskCategory(task, newCat || '')
+            }
+          }
+        })
+        this._kanbanSortables.push(s)
+      })
+    },
+
+    async moveTaskCategory(t, newCategory) {
+      const payload = {
+        task_date: t.task_date, title: t.title, description: t.description || '',
+        category: newCategory, priority: t.priority || '一般',
+        assigned_to: [...(t.assigned_to || [])], supervisors: [...(t.supervisors || [])],
+        recurrence_type: t.recurrence_type || 'once',
+        recurrence_days: [...(t.recurrence_days || [])],
+        recurrence_end_date: t.recurrence_end_date || '',
+        case_no: t.case_no || ''
+      }
+      const r = await fetch(`${API}/daily-tasks/${t.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+        body: JSON.stringify(payload)
+      })
+      if (r.ok) this.toast('分類已更新為「' + (newCategory || '未分類') + '」')
+      else { const e = await r.json().catch(() => ({})); alert('更新失敗：' + (e.detail || '未知錯誤')) }
+      await this.loadTasks()
     },
 
     calPrevMonthYear() {

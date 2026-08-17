@@ -1,7 +1,7 @@
 # MOTRIX ERP — 開發快速參考
 
 > 允碩整合集創（統編 60575481）｜ Tel: 04-3610-6566 ｜ info@miactw.com  
-> 文件版本：**2026-08-17c**（系統通知信全面補齊完整內容，不再截斷/省略，見 §12）
+> 文件版本：**2026-08-17d**（Asana 風格視覺化整合＋財務儀錶板支出項＋業務開發接洽成效總覽，見 §12）
 
 ---
 
@@ -882,6 +882,15 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 ## §12 · 變更摘要（最新兩版）
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
+
+### 2026-08-17d — Asana 風格視覺化整合＋財務儀錶板支出項＋業務開發接洽成效總覽
+
+- **新增** `GET /api/dashboard/expenses-monthly`：月支出結構（承攬商/設備/料件/其他），`index.html` 新增堆疊長條圖，4 色配色已用 dataviz skill 驗證通過
+- **每日工作事項**（`daily-tasks.html`）新增「月曆總覽」（橫條式月曆，同週連續 occurrence 合併橫條）與「看板」（依 category 分欄，`sortablejs` 拖曳，僅 `superadmin && dtUnlocked` 可寫）
+- **案件甘特圖**（`case-management.js`）bar 依主要負責人上色＋`custom_popup_html`；**專案看板**（`projects.html`）卡片新增成員頭像（`assigned_user_ids`）；三處共用同一組色碼演算法 `_avatarColor`，同一人跨頁面顏色一致
+- **案件管理「動態」Tab** 新增月曆篩選（純前端統計，未加 API）；頭像改依發文者上色
+- **新增** `GET /api/dev-crm/activity-stats`：跨案件近 60 天/8 週/30 天接洽成效統計，`dev-crm.html` 右欄空狀態改為儀表板（KPI＋純 CSS 趨勢圖＋業務員/通路排行）
+- 無 DB migration；已對本機 server 用 demo session 做完整 curl round-trip（含 CRUD＋看板搬移 PUT）、`pytest` 106/106 全過、兩個新端點聚合結果已對照開發機真實資料手算核對吻合；瀏覽器畫面驗證由使用者自行確認
 
 ### 2026-08-17c — 系統通知信全面補齊完整內容（不再截斷/省略）
 

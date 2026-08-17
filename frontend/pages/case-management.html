@@ -189,6 +189,28 @@
     #stage-gantt-chart .gantt .bar-label.big { fill:#374151; }
     #stage-gantt-chart .gantt .arrow { stroke:#9CA3AF; fill:none; }
     #stage-gantt-chart .gantt .today-highlight { fill:#FEF3C7; opacity:.4; }
+    /* 依主要負責人上色（跟每日工作事項月曆/看板同一組色碼＋演算法，同一人顏色一致） */
+    #stage-gantt-chart .gantt .bar-wrapper.stage-c0 .bar { fill:#2563EB; }
+    #stage-gantt-chart .gantt .bar-wrapper.stage-c1 .bar { fill:#7C3AED; }
+    #stage-gantt-chart .gantt .bar-wrapper.stage-c2 .bar { fill:#DB2777; }
+    #stage-gantt-chart .gantt .bar-wrapper.stage-c3 .bar { fill:#D97706; }
+    #stage-gantt-chart .gantt .bar-wrapper.stage-c4 .bar { fill:#16A34A; }
+    #stage-gantt-chart .gantt .bar-wrapper.stage-c5 .bar { fill:#0891B2; }
+    #stage-gantt-chart .gantt .bar-wrapper.stage-c6 .bar { fill:#DC2626; }
+    #stage-gantt-chart .gantt .bar-wrapper.stage-c7 .bar { fill:#9333EA; }
+    #stage-gantt-chart .gantt .bar-wrapper.stage-unassigned .bar { fill:#9CA3AF; }
+    #stage-gantt-chart .gantt .bar-wrapper.stage-done .bar { opacity:.5; }
+    #stage-gantt-chart .gantt .bar-wrapper.stage-overdue .bar { stroke:#DC2626; stroke-width:1.5; }
+    /* Asana 風格自訂 popup */
+    .gantt-pop { padding:10px 12px; font-family:var(--font-zh); min-width:180px; }
+    .gantt-pop-title { font-size:12px; font-weight:700; color:var(--text-primary); margin-bottom:6px; display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+    .gantt-pop-row { display:flex; align-items:center; gap:5px; flex-wrap:wrap; font-size:11px; color:var(--text-secondary); margin-top:4px; }
+    .gantt-pop-lbl { font-size:10px; color:var(--text-dim); flex-shrink:0; }
+    .gantt-pop-av { font-size:10px; background:#F0EEE9; border-radius:10px; padding:1px 7px; color:var(--text-secondary); }
+    .gantt-pop-empty { font-size:11px; color:var(--text-dim); }
+    .gantt-pop-chip { font-size:9px; font-weight:700; padding:1px 6px; border-radius:3px; }
+    .gantt-pop-chip--done { background:#DCFCE7; color:#15803D; }
+    .gantt-pop-chip--overdue { background:#FEE2E2; color:#DC2626; }
 
     /* Payment */
     .pay-kpi-row { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:18px; }
@@ -280,12 +302,7 @@
   .feed-list::-webkit-scrollbar { width:4px; }
   .feed-list::-webkit-scrollbar-thumb { background:var(--border-light); border-radius:2px; }
   .feed-item { display:flex; gap:10px; }
-  .feed-avatar { width:30px; height:30px; min-width:30px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; font-family:LINE Seed TW_OTF, sans-serif; flex-shrink:0; margin-top:1px; }
-  .feed-avatar--comment { background:#EEF2FF; color:var(--accent); }
-  .feed-avatar--work_log { background:#FEF9C3; color:#B45309; }
-  .feed-avatar--daily_task { background:#DCFCE7; color:#15803D; }
-  .feed-avatar--dev_log { background:#EFF6FF; color:#1D4ED8; }
-  .feed-avatar--dev_case_status { background:#F3E8FF; color:#7C3AED; }
+  .feed-avatar { width:30px; height:30px; min-width:30px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; color:#fff; font-family:LINE Seed TW_OTF, sans-serif; flex-shrink:0; margin-top:1px; }
   .feed-bubble { flex:1; background:#F9FAFB; border:1px solid var(--border-light); border-radius:8px; padding:10px 12px; }
   .feed-bubble--comment { background:#fff; border-color:#E0E7FF; }
   .feed-bubble__head { display:flex; align-items:center; gap:6px; margin-bottom:5px; flex-wrap:wrap; }
@@ -300,6 +317,41 @@
   .feed-bubble__del { margin-left:auto; background:none; border:none; cursor:pointer; color:var(--text-dim); padding:0 4px; font-size:13px; line-height:1; border-radius:3px; }
   .feed-bubble__del:hover { color:var(--danger); background:#FEF2F2; }
   .feed-empty { text-align:center; color:var(--text-dim); font-size:13px; font-family:var(--font-zh); padding:40px 20px; }
+
+  /* ── 動態 Tab：月曆總覽 ── */
+  .feed-cal-toggle-row { display:flex; align-items:center; gap:8px; padding:10px 20px 0; flex-shrink:0; }
+  .feed-cal-toggle-btn {
+    display:inline-flex; align-items:center; gap:6px; padding:5px 12px; border-radius:6px; font-size:11px; font-weight:500;
+    cursor:pointer; border:1px solid #BFDBFE; background:var(--accent-light); color:var(--accent-hover); font-family:var(--font-zh);
+    transition:all .12s;
+  }
+  .feed-cal-toggle-btn:hover { background:#DBEAFE; }
+  .feed-cal-toggle-btn.on { background:var(--accent-hover); color:#fff; border-color:var(--accent-hover); }
+  .feed-cal-filter-tag { font-size:11px; color:var(--text-dim); font-family:var(--font-zh); display:flex; align-items:center; gap:4px; }
+  .feed-cal-filter-tag button { border:none; background:none; cursor:pointer; color:var(--text-dim); font-size:13px; line-height:1; padding:0 2px; }
+  .feed-cal-filter-tag button:hover { color:var(--danger); }
+  .feed-cal-wrap { padding:8px 20px 4px; flex-shrink:0; border-bottom:1px solid var(--border-light); }
+  .feed-cal-hd { display:flex; align-items:center; justify-content:center; gap:14px; margin-bottom:6px; }
+  .feed-cal-title { font-size:12px; font-weight:700; color:var(--text-primary); font-family:var(--font-zh); }
+  .feed-cal-nav { border:none; background:#F0EEE9; border-radius:5px; width:20px; height:20px; cursor:pointer; color:var(--text-secondary); font-size:11px; }
+  .feed-cal-nav:hover { background:#E5E3DD; }
+  .feed-cal-wdays { display:grid; grid-template-columns:repeat(7,1fr); text-align:center; font-size:9px; color:var(--text-dim); font-family:LINE Seed TW_OTF, sans-serif; margin-bottom:2px; }
+  .feed-cal-wdays .sat { color:#7C3AED; }
+  .feed-cal-wdays .sun { color:#DC2626; }
+  .feed-cal-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:2px; padding-bottom:8px; }
+  .feed-cal-cell {
+    aspect-ratio:1; border-radius:5px; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    cursor:pointer; font-size:10px; color:var(--text-secondary); font-family:LINE Seed TW_OTF, sans-serif; gap:1px;
+    transition:background .1s;
+  }
+  .feed-cal-cell:hover { background:#F0EEE9; }
+  .feed-cal-cell.out { color:#D1CFC9; cursor:default; }
+  .feed-cal-cell.out:hover { background:none; }
+  .feed-cal-cell.today .feed-cal-daynum { color:var(--accent); font-weight:700; }
+  .feed-cal-cell.has { background:#EEF2FF; }
+  .feed-cal-cell.sel { background:var(--accent); }
+  .feed-cal-cell.sel .feed-cal-daynum, .feed-cal-cell.sel .feed-cal-cnt { color:#fff; }
+  .feed-cal-cnt { font-size:8px; font-weight:700; color:var(--accent); }
 
   /* -- Mobile RWD -- */
   .mob-back-cm { display:none; }
@@ -1746,6 +1798,41 @@
 
               <!-- ══ 動態 Tab ══ -->
               <div x-show="activeTab==='feed'" class="feed-wrap">
+                <!-- 月曆總覽 toggle -->
+                <div class="feed-cal-toggle-row">
+                  <button class="feed-cal-toggle-btn" :class="{on: feedCalMode}" @click="toggleFeedCalMode()">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                    <span x-text="feedCalMode ? '← 關閉月曆' : '月曆總覽'"></span>
+                  </button>
+                  <template x-if="feedCalSelDate">
+                    <span class="feed-cal-filter-tag">
+                      篩選：<span x-text="feedCalSelDate"></span>
+                      <button @click="feedCalSelDate=''" title="清除篩選">×</button>
+                    </span>
+                  </template>
+                </div>
+                <!-- 月曆總覽 -->
+                <div class="feed-cal-wrap" x-show="feedCalMode" x-cloak>
+                  <div class="feed-cal-hd">
+                    <button class="feed-cal-nav" @click="feedCalPrevMonth()">&#8592;</button>
+                    <span class="feed-cal-title" x-text="feedCalYear + '年' + feedCalMonth + '月'"></span>
+                    <button class="feed-cal-nav" @click="feedCalNextMonth()">&#8594;</button>
+                  </div>
+                  <div class="feed-cal-wdays">
+                    <span>一</span><span>二</span><span>三</span><span>四</span><span>五</span>
+                    <span class="sat">六</span><span class="sun">日</span>
+                  </div>
+                  <div class="feed-cal-grid">
+                    <template x-for="cell in feedCalDays()" :key="cell.date">
+                      <div class="feed-cal-cell"
+                           :class="{out: !cell.inMonth, today: cell.isToday, sel: cell.date===feedCalSelDate, has: cell.inMonth && feedCalCount(cell.date)>0}"
+                           @click="cell.inMonth && (feedCalSelDate = feedCalSelDate===cell.date ? '' : cell.date)">
+                        <span class="feed-cal-daynum" x-text="cell.day"></span>
+                        <span class="feed-cal-cnt" x-show="cell.inMonth && feedCalCount(cell.date)>0" x-text="feedCalCount(cell.date)"></span>
+                      </div>
+                    </template>
+                  </div>
+                </div>
                 <!-- compose box -->
                 <div class="feed-compose">
                   <textarea class="feed-compose__box" placeholder="記錄聯繫情況、案件進展、備忘…" x-model="newComment" rows="2"></textarea>
@@ -1766,9 +1853,12 @@
                   <template x-if="!updatesLoading && caseUpdates.length === 0">
                     <div class="feed-empty">尚無任何動態，發布第一則更新吧！</div>
                   </template>
-                  <template x-for="item in caseUpdates" :key="item.id">
+                  <template x-if="!updatesLoading && caseUpdates.length > 0 && filteredFeedItems().length === 0">
+                    <div class="feed-empty">這天沒有動態紀錄</div>
+                  </template>
+                  <template x-for="item in filteredFeedItems()" :key="item.id">
                     <div class="feed-item">
-                      <div class="feed-avatar" :class="'feed-avatar--' + item.source"
+                      <div class="feed-avatar" :style="`background:${_avatarColor(item.author || item.authorDisplay || '?')}`"
                            x-text="(item.authorDisplay || '?').slice(0,2)"></div>
                       <div class="feed-bubble" :class="item.source==='comment' ? 'feed-bubble--comment' : ''">
                         <div class="feed-bubble__head">

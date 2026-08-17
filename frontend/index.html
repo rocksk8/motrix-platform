@@ -653,6 +653,25 @@
       </div>
     </div>
 
+    <!-- ─── 月支出結構（finance only）─── -->
+    <div class="chart-row-main" x-show="canFinance">
+      <div class="chart-card" style="flex:1 1 100%">
+        <div class="chart-card__head">
+          <div>
+            <div class="chart-card__title">月支出結構</div>
+            <div class="chart-card__sub">近 12 個月 · 承攬商／設備／料件／其他支出（NT$）</div>
+          </div>
+          <div class="chart-card__kpi">
+            <div class="chart-card__kpi-val" x-text="currentMonthExpenseTotal > 0 ? 'NT$ ' + Math.round(currentMonthExpenseTotal).toLocaleString() : '—'">—</div>
+            <div class="chart-card__kpi-label">本月支出</div>
+          </div>
+        </div>
+        <div class="chart-card__body" style="height:220px">
+          <canvas id="chartExpense"></canvas>
+        </div>
+      </div>
+    </div>
+
     <!-- ─── 主圖表行：折線 + 應收圓環（finance only）─── -->
     <div class="chart-row-main" x-show="canFinance">
 
@@ -1012,6 +1031,7 @@
         marginComparison: [], settledSummary: {},
       },
       monthly: [],
+      expenses: [],
       loading: true,
       funnel: { won:0, lost:0, pendingResponse:0, winRate:null, totalSubmitted:0 },
       followUpQuotes: [],
@@ -1038,6 +1058,12 @@
         const m = this.monthly.find(x => x.month === key)
         return m ? m.amount : 0
       },
+      get currentMonthExpenseTotal() {
+        const now = new Date()
+        const key = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0')
+        const m = this.expenses.find(x => x.month === key)
+        return m ? m.total : 0
+      },
       get receivedPct() {
         const rv = this.stats.receivableSummary || {}
         return rv.total > 0 ? Math.round(rv.received / rv.total * 100) : 0
@@ -1061,12 +1087,13 @@
 
         this.onboardingDismissed = !!localStorage.getItem('motrix_onboarding_banner_dismissed')
         await this.loadStats()
-        this.monthly = await this.loadMonthly()
+        this.monthly  = await this.loadMonthly()
+        this.expenses = this.canFinance ? await this.loadExpenses() : []
         this.loadFunnel()
         this.loadOpsAlerts()
         this.loadActivityFeed()
         this.loading = false
-        this.$nextTick(() => initCharts(this.monthly, this.stats))
+        this.$nextTick(() => initCharts(this.monthly, this.stats, this.expenses))
       },
 
       dismissOnboarding() {
@@ -1086,6 +1113,16 @@
       async loadMonthly() {
         try {
           const r = await fetch(`${API}/dashboard/monthly`, {
+            headers: { Authorization: 'Bearer ' + this.session.token }
+          })
+          if (r.ok) { const d = await r.json(); return d.items || [] }
+        } catch {}
+        return []
+      },
+
+      async loadExpenses() {
+        try {
+          const r = await fetch(`${API}/dashboard/expenses-monthly`, {
             headers: { Authorization: 'Bearer ' + this.session.token }
           })
           if (r.ok) { const d = await r.json(); return d.items || [] }
@@ -1170,7 +1207,7 @@
   }
 
   /* ── Chart.js 設定 ── */
-  function initCharts(monthly, stats) {
+  function initCharts(monthly, stats, expenses) {
     Chart.defaults.font.family = "'LINE Seed TW_OTF', sans-serif"
     Chart.defaults.color = '#9A9A9A'
 
@@ -1254,6 +1291,62 @@
         animation: { duration: 900, easing: 'easeInOutQuart' }
       }
     })
+
+    /* ── 月支出結構（堆疊長條圖）── */
+    const expEl = document.getElementById('chartExpense')
+    if (expEl) {
+      const expItems  = (expenses && expenses.length) ? expenses : []
+      const expLabels = expItems.length ? expItems.map(m => m.label) : ['—']
+      const expCategories = [
+        { key: 'contractor', label: '承攬商',   color: accent },
+        { key: 'equipment',  label: '設備',     color: warning },
+        { key: 'material',   label: '料件',     color: success },
+        { key: 'other',      label: '其他支出', color: '#DB2777' },
+      ]
+      const surface = cream
+      new Chart(expEl, {
+        type: 'bar',
+        data: {
+          labels: expLabels,
+          datasets: expCategories.map((c, i) => ({
+            label: c.label,
+            data: expItems.length ? expItems.map(m => m[c.key] || 0) : [0],
+            backgroundColor: c.color,
+            borderColor: surface,
+            borderWidth: 2,
+            borderRadius: i === expCategories.length - 1 ? { topLeft: 4, topRight: 4 } : 0,
+            stack: 'expense',
+          }))
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              display: true, position: 'top', align: 'end',
+              labels: { boxWidth: 10, boxHeight: 10, padding: 16, font: { size: 11 } }
+            },
+            tooltip: {
+              backgroundColor: black, titleColor: cream, bodyColor: '#AAA',
+              padding: 10, cornerRadius: 6,
+              callbacks: {
+                label: ctx => ' ' + ctx.dataset.label + '：NT$ ' + ctx.raw.toLocaleString()
+              }
+            }
+          },
+          scales: {
+            x: { stacked: true, grid: { display: false }, ticks: { font: { size: 10 } } },
+            y: {
+              stacked: true, grid: { color: '#F0EEE9' },
+              ticks: {
+                font: { size: 10 },
+                callback: v => v >= 1000000 ? (v/1000000).toFixed(1)+'M' : (v/1000)+'K'
+              }
+            }
+          },
+          animation: { duration: 900, easing: 'easeInOutQuart' }
+        }
+      })
+    }
 
     /* ── 應收款圓環 ── */
     const rv = stats?.receivableSummary || {}

@@ -125,12 +125,44 @@
       display: flex; flex-direction: column; background: #fff;
     }
     .dc-empty {
-      flex: 1; display: flex; align-items: center;
-      justify-content: center; flex-direction: column;
-      gap: 10px; color: var(--text-dim); padding: 40px;
+      flex: 1; display: flex; align-items: stretch;
+      justify-content: flex-start; flex-direction: column;
+      color: var(--text-dim); padding: 20px 28px; overflow-y: auto;
+    }
+    .dc-empty__hint {
+      flex: 1; display: flex; align-items: center; justify-content: center;
+      flex-direction: column; gap: 10px; padding: 30px 0;
     }
     .dc-empty svg { width: 48px; height: 48px; opacity: .25; }
     .dc-empty p { font-size: 13px; font-family: var(--font-zh); }
+
+    /* ── 接洽成效總覽 ── */
+    .dc-act-dash { border: 1px solid var(--border-light); border-radius: 10px; padding: 18px 20px; background: #FAFAF9; }
+    .dc-act-dash__title { font-size: 14px; font-weight: 700; color: var(--text-primary); font-family: var(--font-zh); }
+    .dc-act-dash__sub { font-size: 11px; color: var(--text-dim); font-family: var(--font-zh); margin-top: 2px; margin-bottom: 14px; }
+    .dc-act-kpis { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; margin-bottom: 18px; }
+    .dc-act-kpi { background: #fff; border: 1px solid var(--border-light); border-radius: 8px; padding: 10px 12px; }
+    .dc-act-kpi__val { font-size: 20px; font-weight: 700; font-family: LINE Seed TW_OTF, sans-serif; color: var(--text-primary); }
+    .dc-act-kpi__lbl { font-size: 10px; color: var(--text-dim); font-family: var(--font-zh); margin-top: 2px; }
+    .dc-act-kpi__delta { font-size: 10px; font-weight: 600; font-family: var(--font-zh); margin-top: 4px; }
+    .dc-act-section-title { font-size: 11px; font-weight: 700; color: var(--text-secondary); font-family: var(--font-zh); margin: 14px 0 8px; }
+    .dc-act-weekbars { display: flex; align-items: flex-end; gap: 8px; height: 90px; }
+    .dc-act-weekbar { flex: 1; display: flex; flex-direction: column; align-items: center; height: 100%; }
+    .dc-act-weekbar__cnt { font-size: 10px; font-weight: 700; color: var(--text-secondary); font-family: LINE Seed TW_OTF, sans-serif; margin-bottom: 2px; }
+    .dc-act-weekbar__track { flex: 1; width: 100%; display: flex; align-items: flex-end; background: #F0EEE9; border-radius: 3px; overflow: hidden; }
+    .dc-act-weekbar__fill { width: 100%; background: #93C5FD; border-radius: 3px 3px 0 0; min-height: 2px; transition: height .3s; }
+    .dc-act-weekbar__fill.cur { background: var(--accent); }
+    .dc-act-weekbar__lbl { font-size: 8px; color: var(--text-dim); font-family: LINE Seed TW_OTF, sans-serif; margin-top: 4px; white-space: nowrap; }
+    .dc-act-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .dc-act-empty { font-size: 11px; color: var(--text-dim); font-family: var(--font-zh); padding: 8px 0; }
+    .dc-act-rank-row { display: flex; align-items: center; gap: 7px; padding: 5px 0; border-bottom: 1px solid #F0EEE9; font-family: var(--font-zh); }
+    .dc-act-rank-no { font-size: 10px; font-weight: 700; color: var(--text-dim); width: 14px; flex-shrink: 0; }
+    .dc-act-rank-name { font-size: 12px; color: var(--text-primary); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .dc-act-rank-cnt { font-size: 11px; font-weight: 600; color: var(--accent); font-family: LINE Seed TW_OTF, sans-serif; white-space: nowrap; }
+    @media (max-width: 767px) {
+      .dc-act-cols { grid-template-columns: 1fr; }
+      .dc-act-kpis { grid-template-columns: 1fr 1fr; }
+    }
 
     /* Detail header */
     .dc-detail-head {
@@ -465,14 +497,92 @@
     <!-- ── 右欄：案件詳情 ── -->
     <div class="dc-right">
 
-      <!-- empty -->
+      <!-- empty：接洽成效總覽 -->
       <div class="dc-empty" x-show="!selectedCase">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-          <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/>
-          <circle cx="9" cy="7" r="4"/>
-          <path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/>
-        </svg>
-        <p>從左側選取案件，或新增第一筆業務開發案件</p>
+
+        <template x-if="actStatsLoading">
+          <div style="padding:24px;color:var(--text-dim);font-size:12px">載入接洽成效中…</div>
+        </template>
+
+        <template x-if="!actStatsLoading && actStats.daily.length">
+          <div class="dc-act-dash">
+            <div class="dc-act-dash__title">接洽成效總覽</div>
+            <div class="dc-act-dash__sub">跨案件彙整，僅計入已核准的開發記錄</div>
+
+            <!-- KPI row -->
+            <div class="dc-act-kpis">
+              <div class="dc-act-kpi">
+                <div class="dc-act-kpi__val" x-text="actThisWeekCount"></div>
+                <div class="dc-act-kpi__lbl">本週接洽</div>
+                <div class="dc-act-kpi__delta"
+                     :style="actWeekDelta > 0 ? 'color:#15803D' : actWeekDelta < 0 ? 'color:#DC2626' : 'color:var(--text-dim)'"
+                     x-text="actWeekDelta > 0 ? ('▲ +' + actWeekDelta + ' 較上週') : actWeekDelta < 0 ? ('▼ ' + actWeekDelta + ' 較上週') : '與上週持平'"></div>
+              </div>
+              <div class="dc-act-kpi">
+                <div class="dc-act-kpi__val" x-text="actLast30Count"></div>
+                <div class="dc-act-kpi__lbl">近 30 天總接洽</div>
+              </div>
+              <div class="dc-act-kpi">
+                <div class="dc-act-kpi__val" style="font-size:15px"
+                     x-text="actStats.bySalesperson.length ? actStats.bySalesperson[0].displayName : '—'"></div>
+                <div class="dc-act-kpi__lbl">近 30 天最活躍</div>
+              </div>
+            </div>
+
+            <!-- weekly trend bars -->
+            <div class="dc-act-section-title">近 8 週接洽趨勢</div>
+            <div class="dc-act-weekbars">
+              <template x-for="(w, idx) in actStats.weekly" :key="w.weekStart">
+                <div class="dc-act-weekbar">
+                  <span class="dc-act-weekbar__cnt" x-text="w.count"></span>
+                  <div class="dc-act-weekbar__track">
+                    <div class="dc-act-weekbar__fill" :class="{cur: idx===actStats.weekly.length-1}"
+                         :style="`height:${actWeekBarPct(w.count)}%`"></div>
+                  </div>
+                  <span class="dc-act-weekbar__lbl" x-text="w.label"></span>
+                </div>
+              </template>
+            </div>
+
+            <!-- leaderboard + channel breakdown -->
+            <div class="dc-act-cols">
+              <div class="dc-act-col">
+                <div class="dc-act-section-title">業務員接洽排行（近 30 天）</div>
+                <template x-if="actStats.bySalesperson.length === 0">
+                  <div class="dc-act-empty">近 30 天尚無記錄</div>
+                </template>
+                <template x-for="(sp, i) in actStats.bySalesperson.slice(0,6)" :key="sp.userId">
+                  <div class="dc-act-rank-row">
+                    <span class="dc-act-rank-no" x-text="i+1"></span>
+                    <span class="dc-act-rank-name" x-text="sp.displayName"></span>
+                    <span class="dc-act-rank-cnt" x-text="sp.count + ' 次'"></span>
+                  </div>
+                </template>
+              </div>
+              <div class="dc-act-col">
+                <div class="dc-act-section-title">通路分布（近 30 天）</div>
+                <template x-if="actStats.byChannel.length === 0">
+                  <div class="dc-act-empty">近 30 天尚無記錄</div>
+                </template>
+                <template x-for="ch in actStats.byChannel" :key="ch.channel">
+                  <div class="dc-act-rank-row">
+                    <span class="dc-act-rank-name" x-text="ch.channel"></span>
+                    <span class="dc-act-rank-cnt" x-text="ch.count + ' 次'"></span>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <div class="dc-empty__hint">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/>
+            <circle cx="9" cy="7" r="4"/>
+            <path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/>
+          </svg>
+          <p>從左側選取案件，或新增第一筆業務開發案件</p>
+        </div>
       </div>
 
       <template x-if="selectedCase">
@@ -1011,6 +1121,9 @@ function devCrmPage() {
     pendingLogs: [],
     showPendingModal: false,
 
+    actStats: { daily: [], weekly: [], bySalesperson: [], byChannel: [] },
+    actStatsLoading: false,
+
     showCaseModal: false,
     editingCaseId: null,
     caseForm: { case_name: '', customer_name: '', customer_id: null, status: '洽談中', sales_persons: [], planners: [] },
@@ -1121,6 +1234,36 @@ function devCrmPage() {
       } catch (_e) {}
       await Promise.all([this.loadCases(), this.loadUsers(), this.loadCustomers()])
       if (this.isAdmin) this.loadPendingCount()
+      this.loadActivityStats()
+    },
+
+    // ── 接洽成效總覽（右欄未選案件時顯示） ──────────────────────────────────
+    async loadActivityStats() {
+      this.actStatsLoading = true
+      try {
+        const r = await fetch('/api/dev-crm/activity-stats', { headers: this._h() })
+        if (r.ok) this.actStats = await r.json()
+      } catch (_e) {}
+      this.actStatsLoading = false
+    },
+
+    get actThisWeekCount() {
+      const w = this.actStats.weekly
+      return w.length ? w[w.length - 1].count : 0
+    },
+    get actLastWeekCount() {
+      const w = this.actStats.weekly
+      return w.length > 1 ? w[w.length - 2].count : 0
+    },
+    get actWeekDelta() {
+      return this.actThisWeekCount - this.actLastWeekCount
+    },
+    get actLast30Count() {
+      return this.actStats.daily.slice(-30).reduce((s, d) => s + d.count, 0)
+    },
+    actWeekBarPct(count) {
+      const max = Math.max(1, ...this.actStats.weekly.map(w => w.count))
+      return Math.round(count / max * 100)
     },
 
     async loadCases() {

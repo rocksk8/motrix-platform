@@ -5,6 +5,19 @@
 
 ---
 
+### 2026-08-17d — Asana 風格視覺化整合＋財務儀錶板支出項＋業務開發接洽成效總覽
+
+- **背景**：使用者參考 Asana 官方介面截圖（月曆多天橫條視圖、Board 看板視圖），要求把這種視覺語言套用到任務相關介面；同時要求財務儀錶板新增支出項，並在對話過程中追加案件管理「動態」與業務開發模組的整合需求
+- **A. 財務儀錶板支出項**：新增 `GET /api/dashboard/expenses-monthly`，彙整承攬商派發（複用 `vendor_contractors._dispatch_row()` 的 grandTotal 公式，避免重複邏輯）、料件/設備進貨成本（依 `parts.category` 分「設備」網通/監控/交換器/伺服器工控 vs「料件」線材配件/其他）、已精算完結案件的額外支出（`settlement.extraItems`，依 `editHistory` 最後一筆 `settlement_finalized` 時間歸月），近 12 個月，權限比照既有 `dashboard_monthly()`。`index.html` 新增「月支出結構」堆疊長條圖，4 類別配色已用 dataviz skill 的 `validate_palette.js` 驗證通過（CVD 檢查全過）
+- **B. 每日工作事項 Asana 化**：`daily-tasks.html` 新增「月曆總覽」（全寬月曆，任務以彩色橫條顯示，同週內連續 occurrence 合併成一條橫條、貪婪演算法分配 lane，跨週斷開）與「看板」（依 category 動態分欄，卡片重用既有 `.dt-card` 系列樣式，`sortablejs` 拖曳跨欄，僅 `superadmin && dtUnlocked` 可拖曳，重建完整 payload PUT）
+- **C. 案件甘特圖／專案看板加強**：`case-management.js` 甘特圖 bar 改依主要負責人 hash 上色並加 `custom_popup_html`（顯示負責人/日期/依賴階段）；`projects.html` 看板卡片新增成員頭像 chip（真實欄位 `projects.assigned_user_ids`，非新增資料模型）。三處共用同一組色碼＋hash 演算法（`_avatarColor`），讓同一人跨頁面顏色一致
+- **D1. 案件管理「動態」Tab**：新增月曆 mini-grid（純前端統計已載入的 `caseUpdates`，不加 API），點日期篩選；`.feed-avatar` 改依發文者上色（沿用 C 的色碼演算法），事件類型徽章保留原本依來源上色
+- **D2. 業務開發跨案件接洽成效總覽**：新增 `GET /api/dev-crm/activity-stats`（`dev_crm.py`），僅計入已核准 `dev_logs`，依既有 `_can_access_case()` 過濾權限，回傳近 60 天每日筆數、近 8 週週彙總、近 30 天業務員/通路排行；`dev-crm.html` 右欄「未選案件」空狀態改為接洽成效儀表板（KPI 卡＋純 CSS 長條趨勢圖＋排行榜），未額外引入圖表函式庫
+- **驗證**：`node --check`／`new Function()` 語法檢查全數通過；`ast.parse`/`python -m py_compile` 驗證後端語法；對本機實際跑起來的 server 用 demo session 做完整 curl round-trip（`expenses-monthly`／`activity-stats`／每日工作事項 CRUD＋看板分類搬移 PUT 皆確認資料正確寫入讀出，含中文字元 UTF-8 完整性核對）；`pytest` 106/106 全過；`dashboard/expenses-monthly`／`dev-crm/activity-stats` 兩個新端點的聚合邏輯已對照開發機真實資料手算核對（承攬商派發 grandTotal=175,382／近 8 週接洽 7/18/2/3/1/0/0/0 筆），數字完全吻合
+- 無 DB migration（全部復用既有欄位：`projects.assigned_user_ids`、`parts.category`、`contractor_dispatches` 既有欄位、`dev_logs` 既有欄位）；瀏覽器實機畫面驗證由使用者自行確認（Chrome MCP 操作時 plan mode 被反覆觸發，已改為純程式碼層級驗證）
+
+---
+
 ### 2026-08-17c — 系統通知信全面補齊完整內容（不再截斷/省略）
 
 - **背景**：使用者反映信件內容不完整，以案件留言板為例——收到新增留言通知信，但看不到留言
