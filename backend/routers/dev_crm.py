@@ -752,11 +752,19 @@ def create_dev_log(case_id: int, body: DevLogIn, authorization: str = Header("")
         case_name_str = case_row["case_name"] if case_row else str(case_id)
         _audit(_tok(authorization), "dev_log.create", "dev_log",
                str(cur.lastrowid), case_name_str)
+        _detail_lines = []
+        if body.channel:
+            _detail_lines.append(f"聯絡管道：{body.channel}")
+        if body.content:
+            _detail_lines.append(body.content)
+        if body.next_action:
+            _detail_lines.append(f"下一步：{body.next_action}")
         notify_module_activity(
             "業務開發", "新增拜訪記錄",
             user.get("display_name") or user["username"],
-            f"{case_name_str}：{(body.content or '')[:40]}",
+            case_name_str,
             "dev-crm.html",
+            detail="\n".join(_detail_lines),
         )
         _sync_customer_visit(conn, case_id, cur.lastrowid, "upsert", body.dict())
         return _log_row(row, _user_map(conn))

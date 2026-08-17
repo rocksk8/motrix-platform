@@ -292,7 +292,7 @@ def create_work_log(body: dict = Body(...), authorization: str = Header(None)):
     new_id = cur.lastrowid
     conn.close()
     notify_module_activity("工作日誌", "建立", u.get("display_name") or u["username"],
-                            f"{log_date} {content[:30]}", "work-log.html")
+                            log_date, "work-log.html", detail=content)
     return {"id": new_id, "ok": True}
 
 

@@ -693,7 +693,8 @@ def toggle_signed(note_no: str, body: dict = Body(...), authorization: str = Hea
     conn.close()
     _audit(_tok(authorization), f"shipping.{action}", "shipping_note", note_no, note_no, {"note": note})
     notify_module_activity("出貨單", "已回簽" if action == "sign" else "取消回簽",
-                            user.get("display_name") or user["username"], note_no, "shipping-notes.html")
+                            user.get("display_name") or user["username"], note_no, "shipping-notes.html",
+                            detail=note or "")
     return {"ok": True, "is_signed": action == "sign", "signed_log": log}
 
 

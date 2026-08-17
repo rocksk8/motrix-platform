@@ -1644,7 +1644,10 @@ def post_case_update(quote_no: str, body: dict = Body(...), authorization: str =
     if not content:
         raise HTTPException(400, "內容不得為空")
     conn = get_db()
-    if not conn.execute("SELECT 1 FROM quotations WHERE quote_no=?", (quote_no,)).fetchone():
+    qrow = conn.execute(
+        "SELECT customer_name, project_name FROM quotations WHERE quote_no=?", (quote_no,)
+    ).fetchone()
+    if not qrow:
         conn.close()
         raise HTTPException(404, "報價單不存在")
     now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
@@ -1664,9 +1667,12 @@ def post_case_update(quote_no: str, body: dict = Body(...), authorization: str =
         c2.close()
     except Exception:
         pass
+    case_label = quote_no
+    if qrow["customer_name"] or qrow["project_name"]:
+        case_label = f"{quote_no}（{qrow['customer_name'] or ''}{'／' if qrow['customer_name'] and qrow['project_name'] else ''}{qrow['project_name'] or ''}）"
     notify_module_activity("案件留言板", "新增留言",
                             (dn_row["display_name"] if dn_row else None) or user["username"],
-                            f"{quote_no}：{content[:30]}", "case-management.html")
+                            case_label, "case-management.html", detail=content)
     return {
         "id": new_id,
         "source": "comment",

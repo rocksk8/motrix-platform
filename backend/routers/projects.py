@@ -284,7 +284,8 @@ def create_project_log(project_id: int, body: dict = Body(...), authorization: s
     conn.close()
     _audit(_tok(authorization), 'project.log.create', 'project_log', str(project_id), f"PR-{project_id:04d} 日誌 {log_date}")
     notify_module_activity("專案管理", "新增工作日誌", user.get("display_name") or user["username"],
-                            f"PR-{project_id:04d} 日誌 {log_date}", "projects.html")
+                            f"PR-{project_id:04d} 日誌 {log_date}", "projects.html",
+                            detail=body.get('work_content', ''))
     return {"id": new_id, "ok": True}
 
 

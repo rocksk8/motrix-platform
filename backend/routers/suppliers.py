@@ -138,6 +138,8 @@ def update_supplier_visits(sid: int, body: dict, authorization: str = Header(Non
     spawn_bg_thread(_backup_suppliers)
     _audit(_tok(authorization), 'supplier.visit.update', 'supplier', str(sid),
            f"{sname}（{visit_count} 筆往來紀錄）")
+    _latest_visit = d["visits"][-1] if d["visits"] else {}
     notify_module_activity("供應商管理", "新增往來紀錄", user.get("display_name") or user["username"],
-                            sname, "suppliers.html")
+                            f"{sname}{('（' + _latest_visit['date'] + '）') if _latest_visit.get('date') else ''}",
+                            "suppliers.html", detail=_latest_visit.get("note", ""))
     return {"ok": True, "count": visit_count, "updated_at": now}

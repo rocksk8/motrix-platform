@@ -372,8 +372,10 @@ def update_vendor_visits(vid: int, body: dict, authorization: str = Header(None)
     conn.close()
     _audit(_tok(authorization), 'vendor.visit.update', 'vendor_contractor', str(vid),
            f"{row['name']}（{len(d['visits'])} 筆往來紀錄）")
+    _latest_visit = d["visits"][-1] if d["visits"] else {}
     notify_module_activity("承攬商管理", "新增往來紀錄", user.get("display_name") or user["username"],
-                            row["name"], "vendor-contractors.html")
+                            f"{row['name']}{('（' + _latest_visit['date'] + '）') if _latest_visit.get('date') else ''}",
+                            "vendor-contractors.html", detail=_latest_visit.get("note", ""))
     return {"ok": True, "count": len(d["visits"]), "updated_at": now}
 
 
@@ -425,9 +427,13 @@ def create_dispatch(body: DispatchIn, authorization: str = Header(None)):
         raise HTTPException(400, "請至少選擇承攬商或外包名單人員其中一項")
     total = sum(float(it.get("amount", 0) or 0) for it in items)
     conn = get_db()
-    if body.vendor_id and not conn.execute("SELECT id FROM vendor_contractors WHERE id=?", (body.vendor_id,)).fetchone():
-        conn.close()
-        raise HTTPException(404, "承攬商不存在")
+    vendor_name = ""
+    if body.vendor_id:
+        vrow = conn.execute("SELECT name FROM vendor_contractors WHERE id=?", (body.vendor_id,)).fetchone()
+        if not vrow:
+            conn.close()
+            raise HTTPException(404, "承攬商不存在")
+        vendor_name = vrow["name"]
     cur = conn.execute(
         "INSERT INTO contractor_dispatches "
         "(quote_no, vendor_id, dispatch_date, scope, items_json, personnel_json, total_amount, tax_rate, status, notes, invoice_no, created_by, created_at, updated_at) "
@@ -444,8 +450,9 @@ def create_dispatch(body: DispatchIn, authorization: str = Header(None)):
     conn.close()
     _audit(_tok(authorization), 'vendor.dispatch.create', 'contractor_dispatch', str(did),
            f"{body.quote_no}")
+    dispatch_label = f"{body.quote_no}" + (f"（{vendor_name}）" if vendor_name else "（外包人員點工）")
     notify_module_activity("承攬商派發", "建立", user.get("display_name") or user["username"],
-                            body.quote_no, "vendor-contractors.html")
+                            dispatch_label, "vendor-contractors.html", detail=body.scope or "")
     return {"id": did, "created_at": now, "total_amount": total}
 
 

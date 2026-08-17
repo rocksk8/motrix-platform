@@ -1,4 +1,5 @@
 """External email notifications via SMTP (Gmail App Password)."""
+import html as _html
 import logging
 import smtplib
 import threading
@@ -848,20 +849,30 @@ def notify_monthly_report(period_label: str, period_str: str,
 
 def notify_module_activity(module_label: str, action_label: str,
                            actor: str, item_label: str,
-                           page_path: str = "") -> None:
-    """Non-blocking email to all admin/superadmin when a new item is created in any module."""
+                           page_path: str = "", detail: str = "") -> None:
+    """Non-blocking email to all admin/superadmin when a new item is created in any module.
+
+    detail: optional full free-text body (comment / log content / note ...). Always rendered
+    in full, never truncated — the point is recipients can read the whole thing in the email
+    itself without having to log into the system. Pass the real content here instead of
+    folding a truncated snippet into item_label."""
     to = _admin_emails("module_activity")
     if not to:
         return
     base = _base_url()
     link = f"{base}/pages/{page_path}" if page_path else base
+    detail_html = ""
+    if detail and detail.strip():
+        detail_esc = _html.escape(detail.strip()).replace("\n", "<br>")
+        detail_html = f'<div class="lbl">內容</div><div class="val" style="white-space:pre-wrap">{detail_esc}</div>'
     html = (
         f'<!DOCTYPE html><html lang="zh-Hant"><head><meta charset="UTF-8">'
         f'<style>{_STYLE}</style></head><body><div class="card">'
         f'<div style="font-size:18px;font-weight:700;color:#1a1a1a;margin-bottom:16px;">'
-        f'MOTRIX系統通知 <span class="badge" style="background:#2563EB">{module_label}</span></div>'
-        f'<div class="intro"><b>{actor}</b> 在 <b>{module_label}</b> 執行了 <b>{action_label}</b>。</div>'
-        f'<div class="lbl">項目</div><div class="val">{item_label}</div>'
+        f'MOTRIX系統通知 <span class="badge" style="background:#2563EB">{_html.escape(module_label)}</span></div>'
+        f'<div class="intro"><b>{_html.escape(actor)}</b> 在 <b>{_html.escape(module_label)}</b> 執行了 <b>{_html.escape(action_label)}</b>。</div>'
+        f'<div class="lbl">項目</div><div class="val">{_html.escape(item_label)}</div>'
+        f'{detail_html}'
         f'<a href="{link}" class="btn" style="display:inline-block;margin-top:22px;'
         f'padding:10px 22px;background:#1D4ED8;color:#ffffff !important;border-radius:7px;'
         f'text-decoration:none;font-size:14px;font-weight:600">前往系統查看</a>'

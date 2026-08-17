@@ -135,8 +135,10 @@ def update_customer_visits(cid: int, body: dict, authorization: str = Header(Non
     spawn_bg_thread(_backup_customers)
     _audit(_tok(authorization), 'customer.visit.update', 'customer', str(cid),
            f"{cname}（{visit_count} 筆拜訪紀錄）")
+    _latest_visit = d["visits"][-1] if d["visits"] else {}
     notify_module_activity("客戶管理", "新增拜訪紀錄", user.get("display_name") or user["username"],
-                            cname, "customers.html")
+                            f"{cname}{('（' + _latest_visit['date'] + '）') if _latest_visit.get('date') else ''}",
+                            "customers.html", detail=_latest_visit.get("note", ""))
     return {"ok": True, "updated_at": now}
 
 
