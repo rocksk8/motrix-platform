@@ -9,6 +9,7 @@ from email.mime.text import MIMEText
 from urllib.parse import quote as _pct_quote
 
 from .settings import _get_setting
+from .notification_prefs import is_enabled as _pref_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -61,24 +62,25 @@ def _base_url() -> str:
     return (_cfg().get("base_url") or "http://172.16.10.177:666").rstrip("/")
 
 
-def _admin_emails() -> list:
-    """Return emails of active admin/superadmin users who have email configured."""
+def _admin_emails(event_key: str = None) -> list:
+    """Return emails of active admin/superadmin users who have email configured
+    and have not muted event_key (see helpers/notification_prefs.py)."""
     try:
         from db import get_db
         conn = get_db()
         rows = conn.execute(
-            "SELECT email FROM users "
+            "SELECT email, notification_muted FROM users "
             "WHERE active=1 AND role IN ('admin','superadmin') "
             "AND email IS NOT NULL AND email != ''",
         ).fetchall()
         conn.close()
-        return [r["email"] for r in rows]
+        return [r["email"] for r in rows if _pref_enabled(r["notification_muted"], event_key)]
     except Exception as exc:
         logger.warning("_admin_emails failed: %s", exc)
         return []
 
 
-def _lookup_emails(usernames: list) -> list:
+def _lookup_emails(usernames: list, event_key: str = None) -> list:
     if not usernames:
         return []
     try:
@@ -86,11 +88,12 @@ def _lookup_emails(usernames: list) -> list:
         conn = get_db()
         ph = ",".join("?" * len(usernames))
         rows = conn.execute(
-            f"SELECT email FROM users WHERE username IN ({ph}) AND active=1 AND email!=''",
+            f"SELECT email, notification_muted FROM users "
+            f"WHERE username IN ({ph}) AND active=1 AND email!=''",
             usernames,
         ).fetchall()
         conn.close()
-        return [r["email"] for r in rows if r["email"]]
+        return [r["email"] for r in rows if r["email"] and _pref_enabled(r["notification_muted"], event_key)]
     except Exception as exc:
         logger.warning("_lookup_emails failed: %s", exc)
         return []
@@ -163,7 +166,7 @@ def _send_raising(to_addrs: list, subject: str, html: str) -> None:
 
 def notify_approval_request(quote_no: str, customer: str, approver_usernames: list) -> None:
     """新報價/改版送審 → 通知當層簽核人"""
-    to = _lookup_emails(approver_usernames)
+    to = _lookup_emails(approver_usernames, "approval_request")
     if not to:
         logger.warning("notify_approval_request: 簽核人 %s 皆無設定 email（quote_no=%r）", approver_usernames, quote_no)
         return
@@ -180,7 +183,7 @@ def notify_approval_request(quote_no: str, customer: str, approver_usernames: li
 def notify_next_tier(quote_no: str, customer: str, tier_no: int,
                      total_tiers: int, approver_usernames: list) -> None:
     """前層通過，下一層簽核通知"""
-    to = _lookup_emails(approver_usernames)
+    to = _lookup_emails(approver_usernames, "next_tier")
     if not to:
         logger.warning("notify_next_tier: 第 %d 層簽核人 %s 皆無設定 email（quote_no=%r）", tier_no, approver_usernames, quote_no)
         return
@@ -198,7 +201,7 @@ def notify_next_tier(quote_no: str, customer: str, tier_no: int,
 def notify_approved(quote_no: str, customer: str,
                     approved_by: str, requester_username: str) -> None:
     """全員簽核完成 → 通知申請人 + admin_emails"""
-    to = list(set(_lookup_emails([requester_username]) + _admin_emails()))
+    to = list(set(_lookup_emails([requester_username], "approved") + _admin_emails("approved")))
     if not to:
         logger.warning("notify_approved: 申請人 %r 及所有管理員皆無設定 email（quote_no=%r）", requester_username, quote_no)
         return
@@ -215,7 +218,7 @@ def notify_approved(quote_no: str, customer: str,
 def notify_returned(quote_no: str, new_quote_no: str, customer: str,
                     note: str, requester_username: str) -> None:
     """退回修改 → 通知申請人"""
-    to = _lookup_emails([requester_username])
+    to = _lookup_emails([requester_username], "returned")
     if not to:
         logger.warning("notify_returned: 申請人 %r 無設定 email（quote_no=%r）", requester_username, quote_no)
         return
@@ -232,7 +235,7 @@ def notify_returned(quote_no: str, new_quote_no: str, customer: str,
 
 def notify_shipping_submitted(note_no: str, customer: str, approver_usernames: list) -> None:
     """出貨單送審 → 通知當層簽核人"""
-    to = _lookup_emails(approver_usernames)
+    to = _lookup_emails(approver_usernames, "shipping_submitted")
     if not to:
         logger.warning("notify_shipping_submitted: 簽核人 %s 皆無設定 email（note_no=%r）", approver_usernames, note_no)
         return
@@ -250,7 +253,7 @@ def notify_shipping_submitted(note_no: str, customer: str, approver_usernames: l
 def notify_shipping_next_tier(note_no: str, customer: str, tier_no: int,
                               total_tiers: int, approver_usernames: list) -> None:
     """前層通過，出貨單下一層簽核通知"""
-    to = _lookup_emails(approver_usernames)
+    to = _lookup_emails(approver_usernames, "shipping_next_tier")
     if not to:
         logger.warning("notify_shipping_next_tier: 第 %d 層簽核人 %s 皆無設定 email（note_no=%r）",
                        tier_no, approver_usernames, note_no)
@@ -269,7 +272,7 @@ def notify_shipping_next_tier(note_no: str, customer: str, tier_no: int,
 
 def notify_shipping_approved(note_no: str, customer: str, approved_by: str, requester_username: str) -> None:
     """出貨單全員簽核完成 → 通知申請人"""
-    to = _lookup_emails([requester_username])
+    to = _lookup_emails([requester_username], "shipping_approved")
     if not to:
         logger.warning("notify_shipping_approved: 申請人 %r 無設定 email（note_no=%r）", requester_username, note_no)
         return
@@ -286,7 +289,7 @@ def notify_shipping_approved(note_no: str, customer: str, approved_by: str, requ
 
 def notify_shipping_returned(note_no: str, customer: str, note: str, requester_username: str) -> None:
     """出貨單退回 → 通知申請人"""
-    to = _lookup_emails([requester_username])
+    to = _lookup_emails([requester_username], "shipping_returned")
     if not to:
         logger.warning("notify_shipping_returned: 申請人 %r 無設定 email（note_no=%r）", requester_username, note_no)
         return
@@ -306,7 +309,7 @@ def notify_resubmit_requester(new_quote_no: str, original_quote_no: str,
                               customer: str, requester_username: str,
                               approver_names: list) -> None:
     """退回改版重新送審 → 確認信給申請人"""
-    to = _lookup_emails([requester_username])
+    to = _lookup_emails([requester_username], "resubmit_requester")
     if not to:
         logger.warning("notify_resubmit_requester: 申請人 %r 無設定 email（quote_no=%r）",
                        requester_username, new_quote_no)
@@ -327,7 +330,7 @@ def notify_daily_task_assigned(task_id: int, title: str, task_date: str,
                                assignee_usernames: list,
                                description: str = '') -> None:
     """工作事項指派 → 通知被指派人"""
-    to = _lookup_emails(assignee_usernames)
+    to = _lookup_emails(assignee_usernames, "daily_task_assigned")
     if not to:
         logger.warning("notify_daily_task_assigned: 指派對象 %s 皆無設定 email（task_id=%d）",
                        assignee_usernames, task_id)
@@ -348,7 +351,7 @@ def notify_daily_task_assigned(task_id: int, title: str, task_date: str,
 def notify_dev_case_delete_request(case_id: int, case_name: str,
                                    requester_display: str, reason: str = '') -> None:
     """業務開發案件刪除申請 → 通知所有最高管理者審核"""
-    to = _superadmin_emails()
+    to = _superadmin_emails("dev_case_delete_request")
     if not to:
         logger.warning("notify_dev_case_delete_request: 無最高管理者 email（case_id=%d）", case_id)
         return
@@ -368,7 +371,7 @@ def notify_dev_case_delete_request(case_id: int, case_name: str,
 def notify_dev_case_relink_request(case_id: int, case_name: str, requester_display: str,
                                    target_quote_no: str = '', reason: str = '') -> None:
     """業務開發案件報價單連結異動申請（改連結或清空連結）→ 通知所有最高管理者審核"""
-    to = _superadmin_emails()
+    to = _superadmin_emails("dev_case_relink_request")
     if not to:
         logger.warning("notify_dev_case_relink_request: 無最高管理者 email（case_id=%d）", case_id)
         return
@@ -395,7 +398,7 @@ def notify_daily_task_completed(task_id: int, title: str, task_date: str,
     """工作事項完成回報 → 通知指定主管；未指定則通知所有 admin/superadmin。
     is_edit=True 時使用「已修改」格式並顯示修改前後對照。"""
     if supervisor_usernames:
-        to = _lookup_emails(supervisor_usernames)
+        to = _lookup_emails(supervisor_usernames, "daily_task_completed")
         if not to:
             logger.warning(
                 "notify_daily_task_completed: 指定主管均無設定 email，信件略過"
@@ -403,7 +406,7 @@ def notify_daily_task_completed(task_id: int, title: str, task_date: str,
             )
             return
     else:
-        to = _admin_emails()
+        to = _admin_emails("daily_task_completed")
     if not to:
         logger.warning("notify_daily_task_completed: 無有效收件人（task_id=%d）", task_id)
         return
@@ -452,16 +455,16 @@ def notify_daily_task_overdue(task_id: int, title: str, task_date: str,
                               assignee_username: str, assignee_display: str,
                               supervisor_usernames: list = None) -> None:
     """逾期未完成工作事項 → 通知被指派人 + 指定主管（若有），否則通知所有 admin/superadmin"""
-    assignee_to = _lookup_emails([assignee_username])
+    assignee_to = _lookup_emails([assignee_username], "daily_task_overdue")
     if supervisor_usernames:
-        mgr_to = _lookup_emails(supervisor_usernames)
+        mgr_to = _lookup_emails(supervisor_usernames, "daily_task_overdue")
         if not mgr_to:
             logger.warning(
                 "notify_daily_task_overdue: 指定主管均無設定 email（task_id=%d, supervisors=%s）",
                 task_id, supervisor_usernames,
             )
     else:
-        mgr_to = _admin_emails()
+        mgr_to = _admin_emails("daily_task_overdue")
     to = list({*assignee_to, *mgr_to})
     if not to:
         logger.warning(
@@ -494,13 +497,13 @@ def notify_range_task_deadline(
     supervisor_usernames: list = None,
 ) -> None:
     """區間工作事項即將到期 → 指派人 + 主管"""
-    assignee_to = _lookup_emails([assignee_username])
+    assignee_to = _lookup_emails([assignee_username], "range_task_deadline")
     if supervisor_usernames:
-        mgr_to = _lookup_emails(supervisor_usernames)
+        mgr_to = _lookup_emails(supervisor_usernames, "range_task_deadline")
         if not mgr_to:
-            mgr_to = _admin_emails()
+            mgr_to = _admin_emails("range_task_deadline")
     else:
-        mgr_to = _admin_emails()
+        mgr_to = _admin_emails("range_task_deadline")
     to = list({*assignee_to, *mgr_to})
     if not to:
         return
@@ -536,13 +539,13 @@ def notify_case_stage_deadline(
     supervisor_usernames: list = None,
 ) -> None:
     """案件執行進度階段即將到期／已逾期 → 負責人 + 主管（無則 admin）"""
-    assignee_to = _lookup_emails([assignee_username])
+    assignee_to = _lookup_emails([assignee_username], "case_stage_deadline")
     if supervisor_usernames:
-        mgr_to = _lookup_emails(supervisor_usernames)
+        mgr_to = _lookup_emails(supervisor_usernames, "case_stage_deadline")
         if not mgr_to:
-            mgr_to = _admin_emails()
+            mgr_to = _admin_emails("case_stage_deadline")
     else:
-        mgr_to = _admin_emails()
+        mgr_to = _admin_emails("case_stage_deadline")
     to = list({*assignee_to, *mgr_to})
     if not to:
         return
@@ -577,8 +580,8 @@ def notify_project_deadline(
     assignee_display: str,
 ) -> None:
     """專案「預計完工」日期即將到期／已逾期 → 通知被分配的成員（無分配則 admin）"""
-    assignee_to = _lookup_emails([assignee_username]) if assignee_username else []
-    to = list({*assignee_to, *(_admin_emails() if not assignee_to else [])})
+    assignee_to = _lookup_emails([assignee_username], "project_deadline") if assignee_username else []
+    to = list({*assignee_to, *(_admin_emails("project_deadline") if not assignee_to else [])})
     if not to:
         return
     project_page = f"{_base_url()}/pages/projects.html?id={project_id}"
@@ -602,7 +605,7 @@ def notify_project_deadline(
 def notify_dev_case_stale(case_id: int, case_name: str, customer_name: str,
                            days_since_update: int, usernames: list) -> None:
     """業務開發案件洽談中超過 30 天未更新 → 通知業務開發/專案規劃人員 + admin/superadmin"""
-    to = _lookup_emails(usernames)
+    to = _lookup_emails(usernames, "dev_case_stale")
     if not to:
         logger.warning("notify_dev_case_stale: 無有效收件人（case_id=%d）", case_id)
         return
@@ -629,7 +632,7 @@ def notify_daily_task_edited(
 ) -> None:
     """工作事項編輯 → 通知指定主管；未指定則通知所有 admin/superadmin"""
     if supervisor_usernames:
-        to = _lookup_emails(supervisor_usernames)
+        to = _lookup_emails(supervisor_usernames, "daily_task_edited")
         if not to:
             logger.warning(
                 "notify_daily_task_edited: 指定主管均無設定 email，信件略過"
@@ -637,7 +640,7 @@ def notify_daily_task_edited(
             )
             return
     else:
-        to = _admin_emails()
+        to = _admin_emails("daily_task_edited")
     if not to:
         logger.warning("notify_daily_task_edited: 無有效收件人（task_id=%d）", task_id)
         return
@@ -680,7 +683,7 @@ def notify_warranty_expiry(
     sales_person: str,
 ) -> None:
     """保固即將到期 → 業務員 + 管理員"""
-    to = list(dict.fromkeys(_lookup_emails([sales_person]) + _admin_emails()))
+    to = list(dict.fromkeys(_lookup_emails([sales_person], "warranty_expiry") + _admin_emails("warranty_expiry")))
     if not to:
         logger.warning("notify_warranty_expiry: 無有效收件人（quote_no=%r）", quote_no)
         return
@@ -708,7 +711,7 @@ def notify_warranty_expiry(
 
 def notify_settlement_finalized(quote_no: str, customer: str, finalized_by: str) -> None:
     """精算完結 → 通知 admin_emails"""
-    to = _admin_emails()
+    to = _admin_emails("settlement_finalized")
     if not to:
         logger.warning("notify_settlement_finalized: 所有管理員皆無設定 email（quote_no=%r）", quote_no)
         return
@@ -724,19 +727,19 @@ def notify_settlement_finalized(quote_no: str, customer: str, finalized_by: str)
 
 # ── Monthly report ────────────────────────────────────────────────────────────
 
-def _superadmin_emails() -> list:
+def _superadmin_emails(event_key: str = None) -> list:
     """Return emails of active superadmin users; fallback to all admin/superadmin."""
     try:
         from db import get_db
         conn = get_db()
         rows = conn.execute(
-            "SELECT email FROM users "
+            "SELECT email, notification_muted FROM users "
             "WHERE active=1 AND role='superadmin' "
             "AND email IS NOT NULL AND email != ''",
         ).fetchall()
         conn.close()
-        emails = [r["email"] for r in rows]
-        return emails if emails else _admin_emails()
+        emails = [r["email"] for r in rows if _pref_enabled(r["notification_muted"], event_key)]
+        return emails if emails else _admin_emails(event_key)
     except Exception as exc:
         logger.warning("_superadmin_emails failed: %s", exc)
         return []
@@ -797,7 +800,7 @@ def _send_with_attachments(to_addrs: list, subject: str, html: str, attachments:
 def notify_monthly_report(period_label: str, period_str: str,
                           excel_bytes: bytes, pdf_bytes: bytes) -> None:
     """每月營運報表 → 寄送 Excel + PDF 附件給 superadmin 使用者"""
-    to = _superadmin_emails()
+    to = _superadmin_emails("monthly_report")
     if not to:
         logger.warning("notify_monthly_report: 無 superadmin email 收件人（period=%r）", period_str)
         return
@@ -847,7 +850,7 @@ def notify_module_activity(module_label: str, action_label: str,
                            actor: str, item_label: str,
                            page_path: str = "") -> None:
     """Non-blocking email to all admin/superadmin when a new item is created in any module."""
-    to = _admin_emails()
+    to = _admin_emails("module_activity")
     if not to:
         return
     base = _base_url()

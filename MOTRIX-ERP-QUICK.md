@@ -1,7 +1,7 @@
 # MOTRIX ERP — 開發快速參考
 
 > 允碩整合集創（統編 60575481）｜ Tel: 04-3610-6566 ｜ info@miactw.com  
-> 文件版本：**2026-08-13a**（業務開發連結報價單改為審核制，可清空解除連結，DB v42，見 §12）
+> 文件版本：**2026-08-17a**（使用者個別 Email 通知偏好 + 首頁最新動態彙整，DB v43，見 §12）
 
 ---
 
@@ -125,7 +125,7 @@
 
 | 模組 | 職責 |
 |------|------|
-| `db.py` | 連線、`init_db()`、PRAGMA WAL、熱路徑欄位／索引；**CURRENT_VERSION=42**（42 個 migrations；v32/v33 為交換器選型導覽 `switch_guide` 表結構，2026-08-01 由正式機備份 db 實際結構還原重建，詳見 db.py `_m032_switch_guide` 註解；v39/v40 為 2026-08-09 新增的監控系統／門禁系統選型導覽 `monitor_guide`/`access_guide` 表結構；v41 為閘道器與控制器選型導覽 `gateway_guide` 表結構；v42 為 2026-08-13 新增的業務開發連結報價單審核制 `dev_cases` 欄位） |
+| `db.py` | 連線、`init_db()`、PRAGMA WAL、熱路徑欄位／索引；**CURRENT_VERSION=43**（43 個 migrations；v32/v33 為交換器選型導覽 `switch_guide` 表結構，2026-08-01 由正式機備份 db 實際結構還原重建，詳見 db.py `_m032_switch_guide` 註解；v39/v40 為 2026-08-09 新增的監控系統／門禁系統選型導覽 `monitor_guide`/`access_guide` 表結構；v41 為閘道器與控制器選型導覽 `gateway_guide` 表結構；v42 為 2026-08-13 新增的業務開發連結報價單審核制 `dev_cases` 欄位；v43 為 2026-08-17 新增的使用者個別 Email 通知偏好 `users.notification_muted` 欄位） |
 | `helpers/` | 密碼、session、audit、notify、settings、弱密碼標記、`save_quotation_json()` |
 | `archive.py` | 即時／每日／週備份；本機 SQLite 快照；**原子 JSON 寫入**（`_atomic_json_write`）；G: fallback |
 | `backup_job.py` | 獨立備份腳本（Windows 工作排程器，不依賴 server） |
@@ -265,7 +265,8 @@ quotations      -- 熱路徑欄位 + data_json 完整物件
   sales_person (顯示名稱，歷史相容), sales_person_id FK→users.id,
   quote_date, valid_days, data_json, created_at, updated_at, ...
 
-users           -- + must_change_password, unlock_password_hash, daily_task_pw_hash
+users           -- + must_change_password, unlock_password_hash, daily_task_pw_hash,
+                   notification_muted（JSON 陣列，已退訂的 email 通知事件 key，DB v43，見 §12）
 sessions        -- token, expires_at, last_active
 customers       -- code(C-YYYYMM-NNN) + 主欄 + data_json（contacts, visits, tags）
 suppliers       -- code(S-YYYYMM-NNN) + 主欄 + data_json
@@ -881,6 +882,22 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 ## §12 · 變更摘要（最新兩版）
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
+
+### 2026-08-17 — 使用者個別 Email 通知偏好（DB v43）＋首頁最新動態彙整
+
+- **背景**：`notify_*`（23 個事件）收件人原本全員一體適用，無法讓管理員/使用者關閉自己不需要
+  的信件類型；首頁也缺少跨模組（業務開發／報價單／案件留言／出貨單／工作日誌／進出物料）彙整
+  排序的「最新動態」總覽
+- **DB v43**（`_m043_notification_prefs`）：`users` 新增 `notification_muted TEXT DEFAULT '[]'`
+  ——存**退訂**清單（非白名單），空陣列／NULL＝全部照舊接收，既有帳號與未來新事件類型都不受影響
+- **新模組** `helpers/notification_prefs.py`：`EVENT_GROUPS`（23 個 key，比照 `notify_*` 函式名稱
+  去除前綴）＋ `is_enabled(muted_json, event_key)`；`email_notify.py` 三個收件人查詢函式
+  （`_admin_emails`／`_superadmin_emails`／`_lookup_emails`）加上 `event_key` 過濾
+- `users.html` 新增／編輯 Modal 內「Email 通知偏好」勾選區塊（比照既有「存取模組」手風琴 UI）
+- **新 API** `GET /api/dashboard/activity-feed`：彙整 6 個來源（`case_updates`／`work_logs`／
+  `dev_logs`／`stock_items` 直查 + `audit_log` 白名單動作），依時間新到舊排序，權限沿用
+  `can_quotation`／`can_dev_crm`／`_can_access_case()`／非 admin 只看自己名下資料等既有規則；
+  `index.html` 首頁新增「最新動態」卡片
 
 ### 2026-08-13 — 業務開發連結報價單改為審核制（可清空，DB v42）
 

@@ -30,7 +30,7 @@ DEMO_SHIPPING_PDF_ARCHIVE_DIR = os.path.join(os.path.dirname(__file__), "_demo_s
 # v32/v33 (switch_guide tables + specs_json column) were initially missing
 # from this checkout — reconstructed 2026-08-01 by reverse-engineering the
 # actual schema off a production DB backup (see _m032_switch_guide docstring).
-CURRENT_VERSION = 42
+CURRENT_VERSION = 43
 
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
 # execution model) whenever the current request is authenticated as the 'demo'
@@ -187,7 +187,8 @@ def init_db(path: str = None):
             active               INTEGER NOT NULL DEFAULT 1,
             created_at           TEXT    NOT NULL,
             unlock_password_hash TEXT    DEFAULT '',
-            must_change_password INTEGER NOT NULL DEFAULT 0
+            must_change_password INTEGER NOT NULL DEFAULT 0,
+            notification_muted   TEXT    DEFAULT '[]'
         );
 
         CREATE TABLE IF NOT EXISTS sessions (
@@ -1058,6 +1059,16 @@ def _m042_dev_cases_relink_review(conn):
     conn.commit()
 
 
+def _m043_notification_prefs(conn):
+    """Per-user email notification opt-out list (see helpers/notification_prefs.py).
+    DEFAULT '[]' means "nothing muted" — SQLite backfills existing rows with the
+    column default on ALTER TABLE ADD COLUMN, so no separate UPDATE is needed and
+    no existing user's email behaviour changes until they explicitly mute something."""
+    if not _col_exists(conn, "users", "notification_muted"):
+        conn.execute("ALTER TABLE users ADD COLUMN notification_muted TEXT DEFAULT '[]'")
+    conn.commit()
+
+
 def _m030_env_guide(conn):
     """Create env_guide_* tables (場域選型導覽): environments, tiered equipment
     recommendations, and vendor links — ported from the standalone 場域選型導覽.html
@@ -1804,6 +1815,7 @@ _MIGRATIONS = [
     _m040_access_guide,                        # v40
     _m041_gateway_guide,                       # v41
     _m042_dev_cases_relink_review,              # v42
+    _m043_notification_prefs,                   # v43
 ]
 
 

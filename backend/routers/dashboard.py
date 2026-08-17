@@ -801,3 +801,219 @@ def list_materials_summary(
                 "note":     mat.get("note", ""),
             })
     return {"items": items, "total": len(items)}
+
+
+# ── Activity feed ─────────────────────────────────────────────────────────────
+# 只列入「內容真的有變動」的動作，PDF 匯出/解鎖編輯這類操作性動作不算，避免洗版。
+
+_QUOTE_ACTION_LABELS = {
+    "quotation.create":       "新增報價單",
+    "quotation.update":       "編輯報價單內容",
+    "quotation.recall":       "撤回報價單",
+    "deal_tag.change":        "案件進度異動",
+    "case.update":            "更新案件執行記錄",
+    "quotation.approve":      "審核通過",
+    "quotation.return":       "退回修改",
+    "quotation.reject_final": "最終駁回",
+    "payment.mark":           "登記收款",
+    "quotation.settlement":   "完成成本精算",
+}
+_DEV_CASE_ACTION_LABELS = {
+    "dev_case.create":  "新增業務開發案件",
+    "dev_case.status":  "案件狀態異動",
+    "dev_case.convert": "轉換為報價單",
+}
+_SHIPPING_ACTION_LABELS = {
+    "shipping.create":  "新增出貨單",
+    "shipping.submit":  "出貨單送審",
+    "shipping.approve": "出貨單核准",
+    "shipping.reject":  "出貨單退回",
+    "shipping.update":  "編輯出貨單",
+}
+_STOCK_STATUS_LABELS = {
+    "in_stock":  "入庫／回存",
+    "shipped":   "已出貨",
+    "installed": "已安裝",
+    "void":      "已作廢",
+}
+
+
+def _trunc(s: str, n: int = 50) -> str:
+    s = (s or "").strip()
+    return s if len(s) <= n else s[:n] + "…"
+
+
+def _norm_at(s: str) -> str:
+    """統一時間格式（部分表用 'YYYY-MM-DDTHH:MM:SS'，部分用空白分隔），確保跨來源排序正確。"""
+    return (s or "").replace("T", " ")[:19]
+
+
+@router.get("/api/dashboard/activity-feed")
+def dashboard_activity_feed(limit: int = Query(30, ge=1, le=100), authorization: str = Header(None)):
+    """彙整業務開發／報價單／案件留言／出貨單／工作日誌／進出物料的最新動態，依時間新到舊合併排序。"""
+    u = _require_user(authorization)
+    role = u["role"]
+    mods = json.loads(u.get("modules") or "[]") if isinstance(u.get("modules"), str) else (u.get("modules") or [])
+    is_admin      = role in ("superadmin", "admin")
+    can_quotation = role in ("superadmin", "admin", "sales") or "quotation" in mods
+    can_dev_crm   = is_admin or "dev_crm" in mods
+
+    conn = get_db()
+    items = []
+
+    def _visible_to_sales(row) -> bool:
+        """比照 §3.4 報價列表過濾規則：sales_person_id=自己id OR
+        （尚未回填 sales_person_id 的舊資料）sales_person(顯示名稱文字)=自己"""
+        if is_admin:
+            return True
+        return row["sales_person_id"] == u["id"] or (
+            row["sales_person_id"] is None and row["sales_person"] == u["display_name"]
+        )
+
+    # 1. 案件留言板 comments（quote_no 範圍比照報價單可視權限）
+    if can_quotation:
+        rows = conn.execute("""
+            SELECT cu.id, cu.quote_no, cu.author, cu.content, cu.created_at,
+                   q.customer_name, q.sales_person_id, q.sales_person, du.display_name
+            FROM case_updates cu
+            LEFT JOIN quotations q ON q.quote_no = cu.quote_no
+            LEFT JOIN users du ON du.username = cu.author
+            ORDER BY cu.created_at DESC LIMIT 40
+        """).fetchall()
+        for r in rows:
+            if not _visible_to_sales(r):
+                continue
+            items.append({
+                "id": f"cu_{r['id']}", "source": "comment", "moduleLabel": "案件留言板",
+                "actor": r["display_name"] or r["author"], "actionLabel": "新增留言",
+                "itemLabel": r["customer_name"] or r["quote_no"] or "", "detail": _trunc(r["content"]),
+                "link": f"case-management.html?q={r['quote_no']}", "at": _norm_at(r["created_at"]),
+            })
+
+    # 2. 工作日誌（非 admin 只看自己的，比照 §3.4 編輯/刪除權限的既有精神）
+    wl_rows = conn.execute("""
+        SELECT w.id, w.log_date, w.content, w.created_at, u.id AS uid, u.display_name, u.username
+        FROM work_logs w LEFT JOIN users u ON u.id = w.user_id
+        ORDER BY w.created_at DESC LIMIT 40
+    """).fetchall()
+    for r in wl_rows:
+        if not is_admin and r["uid"] != u["id"]:
+            continue
+        items.append({
+            "id": f"wl_{r['id']}", "source": "work_log", "moduleLabel": "工作日誌",
+            "actor": r["display_name"] or r["username"] or "", "actionLabel": "新增工作日誌",
+            "itemLabel": r["log_date"] or "", "detail": _trunc(r["content"]),
+            "link": "work-log.html", "at": _norm_at(r["created_at"]),
+        })
+
+    # 3. 業務開發：開發記錄 + 案件建立／狀態異動／轉換（沿用 dev_crm._can_access_case 逐筆過濾）
+    if can_dev_crm:
+        dc_map = {r["id"]: r for r in conn.execute(
+            "SELECT id, case_name, customer_name, sales_persons, planners, created_by "
+            "FROM dev_cases WHERE is_deleted=0"
+        ).fetchall()}
+
+        dl_rows = conn.execute("""
+            SELECT dl.id, dl.case_id, dl.log_date, dl.channel, dl.content, dl.created_at,
+                   lu.display_name AS log_display, lu.username AS log_username
+            FROM dev_logs dl LEFT JOIN users lu ON lu.id = dl.log_by
+            WHERE dl.needs_approval=0
+            ORDER BY dl.created_at DESC LIMIT 40
+        """).fetchall()
+        for r in dl_rows:
+            dc = dc_map.get(r["case_id"])
+            if not dc or not _can_access_case(u, dc):
+                continue
+            items.append({
+                "id": f"dl_{r['id']}", "source": "dev_log", "moduleLabel": "業務開發",
+                "actor": r["log_display"] or r["log_username"] or "",
+                "actionLabel": f"新增開發記錄（{r['channel']}）" if r["channel"] else "新增開發記錄",
+                "itemLabel": dc["case_name"] or dc["customer_name"] or "",
+                "detail": _trunc(r["content"]), "link": "dev-crm.html", "at": _norm_at(r["created_at"]),
+            })
+
+        ph = ",".join("?" * len(_DEV_CASE_ACTION_LABELS))
+        al_rows = conn.execute(f"""
+            SELECT id, at, username, display_name, action, target_id, target_label
+            FROM audit_log WHERE target_type='dev_case' AND action IN ({ph})
+            ORDER BY at DESC LIMIT 40
+        """, list(_DEV_CASE_ACTION_LABELS.keys())).fetchall()
+        for r in al_rows:
+            try:
+                case_id = int(r["target_id"])
+            except (TypeError, ValueError):
+                continue
+            dc = dc_map.get(case_id)
+            if not dc or not _can_access_case(u, dc):
+                continue
+            items.append({
+                "id": f"al_{r['id']}", "source": "dev_case", "moduleLabel": "業務開發",
+                "actor": r["display_name"] or r["username"] or "",
+                "actionLabel": _DEV_CASE_ACTION_LABELS.get(r["action"], r["action"]),
+                "itemLabel": r["target_label"] or dc["case_name"] or "",
+                "detail": "", "link": "dev-crm.html", "at": _norm_at(r["at"]),
+            })
+
+    # 4. 報價單狀態／內容異動（非 admin 只看自己名下的報價單，比照 §3.4 報價列表過濾規則）
+    if can_quotation:
+        ph = ",".join("?" * len(_QUOTE_ACTION_LABELS))
+        rows = conn.execute(f"""
+            SELECT a.id, a.at, a.username, a.display_name, a.action, a.target_id AS quote_no,
+                   a.target_label, q.sales_person_id, q.sales_person
+            FROM audit_log a LEFT JOIN quotations q ON q.quote_no = a.target_id
+            WHERE a.target_type='quotation' AND a.action IN ({ph})
+            ORDER BY a.at DESC LIMIT 40
+        """, list(_QUOTE_ACTION_LABELS.keys())).fetchall()
+        for r in rows:
+            if not _visible_to_sales(r):
+                continue
+            items.append({
+                "id": f"qa_{r['id']}", "source": "quotation", "moduleLabel": "報價單",
+                "actor": r["display_name"] or r["username"] or "",
+                "actionLabel": _QUOTE_ACTION_LABELS.get(r["action"], r["action"]),
+                "itemLabel": r["target_label"] or r["quote_no"] or "",
+                "detail": "", "link": f"quotation-form.html?id={r['quote_no']}", "at": _norm_at(r["at"]),
+            })
+
+    # 5. 出貨單（案件管理子頁面，quote_no 歸屬比照報價單可視權限）
+    if can_quotation:
+        ph = ",".join("?" * len(_SHIPPING_ACTION_LABELS))
+        rows = conn.execute(f"""
+            SELECT a.id, a.at, a.username, a.display_name, a.action, a.target_id AS note_no,
+                   a.target_label, sn.quote_no, q.sales_person_id, q.sales_person
+            FROM audit_log a
+            LEFT JOIN shipping_notes sn ON sn.note_no = a.target_id
+            LEFT JOIN quotations q ON q.quote_no = sn.quote_no
+            WHERE a.target_type='shipping_note' AND a.action IN ({ph})
+            ORDER BY a.at DESC LIMIT 40
+        """, list(_SHIPPING_ACTION_LABELS.keys())).fetchall()
+        for r in rows:
+            if not _visible_to_sales(r):
+                continue
+            link = f"case-management.html?q={r['quote_no']}" if r["quote_no"] else "case-management.html"
+            items.append({
+                "id": f"sa_{r['id']}", "source": "shipping", "moduleLabel": "出貨單",
+                "actor": r["display_name"] or r["username"] or "",
+                "actionLabel": _SHIPPING_ACTION_LABELS.get(r["action"], r["action"]),
+                "itemLabel": r["target_label"] or r["note_no"] or "",
+                "detail": "", "link": link, "at": _norm_at(r["at"]),
+            })
+
+    # 6. 進出物料（序號級庫存異動，比照 /api/devices・/api/materials-summary 開放給所有已登入使用者）
+    # consumed_by/created_by 存的就是操作者顯示名稱字串（見 inventory.py），非 user id，不需再 join users
+    st_rows = conn.execute("""
+        SELECT id, part_no, serial_no, status, quote_no, updated_at, consumed_by, created_by
+        FROM stock_items ORDER BY updated_at DESC LIMIT 40
+    """).fetchall()
+    for r in st_rows:
+        items.append({
+            "id": f"st_{r['id']}", "source": "stock", "moduleLabel": "進出物料",
+            "actor": r["consumed_by"] or r["created_by"] or "",
+            "actionLabel": _STOCK_STATUS_LABELS.get(r["status"], r["status"] or ""),
+            "itemLabel": f"{r['part_no']} / {r['serial_no']}",
+            "detail": "", "link": "inventory.html", "at": _norm_at(r["updated_at"]),
+        })
+
+    conn.close()
+    items.sort(key=lambda x: x["at"], reverse=True)
+    return {"items": items[:limit], "total": len(items)}

@@ -5,6 +5,33 @@
 
 ---
 
+### 2026-08-17 — 使用者個別 Email 通知偏好（DB v43）＋首頁最新動態彙整
+
+- **背景**：`email_notify.py` 原本 23 個 `notify_*` 事件的收件人（`_admin_emails()` /
+  `_superadmin_emails()` / `_lookup_emails()`）全員一體適用，無法讓特定管理員/使用者關閉自己
+  不需要的信件類型；同時首頁缺少跨模組（業務開發／報價單／案件留言／出貨單／工作日誌／
+  進出物料）彙整排序的「最新動態」總覽，只能逐一進頁面查看各自的更新
+- **DB v43**（`_m043_notification_prefs`）：`users` 新增 `notification_muted TEXT DEFAULT '[]'`
+  — 存的是「已關閉」事件 key 的**退訂清單**（非白名單），空陣列／NULL＝全部照舊接收，
+  故既有使用者與新建帳號皆不受影響，未來新增事件類型也預設對所有人開啟
+- **新模組** `helpers/notification_prefs.py`：`EVENT_GROUPS`（23 個事件 key，比照
+  `notify_*` 函式名稱去除前綴，分 5 大類）＋ `is_enabled(muted_json, event_key)`
+- `email_notify.py`：`_admin_emails()` / `_superadmin_emails()` / `_lookup_emails()` 三個
+  收件人查詢函式加上 `event_key` 參數並依 `notification_muted` 過濾；23 個 `notify_*`
+  函式呼叫處逐一補上對應 event_key
+- **API**：`UserIn` 新增 `notification_muted`，`GET/POST/PUT /api/users` 同步讀寫
+  （JSON 欄位 `notificationMuted`）
+- `users.html`：新增／編輯使用者 Modal 內「Email 通知偏好」勾選區塊，比照既有「存取模組」
+  手風琴分組 UI 樣式（`allNotifyTypes` / `notifyGroups` / `toggleNotifyType()`）
+- **新 API** `GET /api/dashboard/activity-feed`（`routers/dashboard.py`）：彙整
+  `case_updates`／`work_logs`／`dev_logs`／`stock_items` 直查 + `audit_log` 白名單動作
+  （報價單／業務開發案件／出貨單）共 6 個來源，依時間新到舊合併排序；權限沿用既有規則
+  （`can_quotation`／`can_dev_crm`／`_can_access_case()`／非 admin 只看自己名下報價單或
+  工作日誌）
+- `index.html`：首頁新增「最新動態」卡片，六色 `feed-badge` 依來源分類
+
+---
+
 ### 2026-08-13 — 業務開發連結報價單改為審核制（可清空，DB v42）
 
 - **背景**：2026-08-05b 開放的「修改連結」直接覆寫既有 `converted_quote_no`，且欄位必填不可清空；

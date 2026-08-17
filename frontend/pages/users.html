@@ -468,6 +468,35 @@
           </div>
         </div>
         <div class="form-group">
+          <label class="form-label">Email 通知偏好 <span style="color:var(--text-dim);font-size:9px">（取消勾選＝不寄該類信件給此帳號）</span></label>
+          <div style="margin-top:6px;border:1px solid var(--border-light);border-radius:6px;overflow:hidden">
+            <template x-for="(grp, grpIdx) in notifyGroups" :key="grp.group">
+              <div :style="grpIdx > 0 ? 'border-top:1px solid var(--border-light)' : ''">
+                <div @click="toggleNotifyGroup(grp.group)"
+                     style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;cursor:pointer;background:var(--bg-secondary,#fafafa);font-size:12px;font-weight:600">
+                  <span style="display:flex;align-items:center;gap:6px">
+                    <span x-text="_notifyGroupOpen[grp.group] ? '▾' : '▸'" style="color:var(--text-dim);width:10px;display:inline-block"></span>
+                    <span x-text="grp.group"></span>
+                  </span>
+                  <span style="font-size:11px;color:var(--text-dim);font-weight:400"
+                        x-text="notifyGroupOnCount(grp.items) + ' / ' + grp.items.length"></span>
+                </div>
+                <div x-show="_notifyGroupOpen[grp.group]" x-cloak
+                     style="display:flex;flex-direction:column;gap:4px;padding:8px 10px">
+                  <template x-for="item in grp.items" :key="item.key">
+                    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;padding:4px 2px">
+                      <input type="checkbox"
+                             :checked="!form.notificationMuted.includes(item.key)"
+                             @change="toggleNotifyType(item.key)">
+                      <span x-text="item.label"></span>
+                    </label>
+                  </template>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+        <div class="form-group">
           <label class="form-label" x-text="editingId ? '新密碼（留空不更改）' : '密碼 *'"></label>
           <input class="form-input" type="password" x-model="form.password"
                  :placeholder="editingId ? '留空則不修改密碼' : '設定密碼（至少 8 碼）'">
@@ -627,10 +656,11 @@
       editingId: null,
       formError: '',
       _modGroupOpen: {},    // 存取模組手風琴展開狀態（編輯使用者 Modal）
+      _notifyGroupOpen: {}, // Email 通知偏好手風琴展開狀態（編輯使用者 Modal）
       showCrModal: false,
       crForm: { editId: null, name: '', baseRole: 'sales', modules: [] },
       _crModGroupOpen: {},  // 存取模組手風琴展開狀態（自訂角色 Modal）
-      form: { username:'', displayName:'', email:'', phone:'', role:'sales', password:'', confirmPassword:'', modules:[], unlockPassword:'', confirmUnlockPassword:'', dtPassword:'', confirmDtPassword:'' },
+      form: { username:'', displayName:'', email:'', phone:'', role:'sales', password:'', confirmPassword:'', modules:[], notificationMuted:[], unlockPassword:'', confirmUnlockPassword:'', dtPassword:'', confirmDtPassword:'' },
       get systemPresets() {
         return [
           {key:'superadmin', label: this.roleLabels.superadmin || '超級管理員'},
@@ -673,6 +703,56 @@
         {key:'gateway_guide_edit',   label:'閘道器與控制器選型導覽－新增修改刪除', group:'選型資料庫'},
         {key:'settings',             label:'系統設定',         group:'系統'},
       ],
+
+      // 對應 backend/helpers/notification_prefs.py 的 EVENT_GROUPS —— 兩邊修改時要同步
+      allNotifyTypes: [
+        {key:'approval_request',       label:'報價單待審核通知（當層簽核人）', group:'簽核流程'},
+        {key:'next_tier',              label:'報價單進入下一層審核',           group:'簽核流程'},
+        {key:'approved',               label:'報價單審核完成',                 group:'簽核流程'},
+        {key:'returned',               label:'報價單退回修改',                 group:'簽核流程'},
+        {key:'resubmit_requester',     label:'修改版報價單重新送審確認',       group:'簽核流程'},
+        {key:'shipping_submitted',     label:'出貨單待審核通知（當層簽核人）', group:'簽核流程'},
+        {key:'shipping_next_tier',     label:'出貨單進入下一層審核',           group:'簽核流程'},
+        {key:'shipping_approved',      label:'出貨單審核完成',                 group:'簽核流程'},
+        {key:'shipping_returned',      label:'出貨單退回修改',                 group:'簽核流程'},
+        {key:'daily_task_assigned',    label:'工作事項指派通知',   group:'工作事項'},
+        {key:'daily_task_completed',   label:'工作事項完成回報',   group:'工作事項'},
+        {key:'daily_task_overdue',     label:'工作事項逾期未完成', group:'工作事項'},
+        {key:'daily_task_edited',      label:'工作事項內容已編輯', group:'工作事項'},
+        {key:'range_task_deadline',    label:'區間工作事項即將到期', group:'工作事項'},
+        {key:'case_stage_deadline',    label:'案件執行進度即將到期', group:'案件與到期提醒'},
+        {key:'project_deadline',       label:'專案預計完工日即將到期', group:'案件與到期提醒'},
+        {key:'warranty_expiry',        label:'設備保固即將到期',     group:'案件與到期提醒'},
+        {key:'dev_case_stale',         label:'業務開發案件逾期未跟進', group:'案件與到期提醒'},
+        {key:'dev_case_delete_request',label:'業務開發案件刪除申請', group:'業務開發審核'},
+        {key:'dev_case_relink_request',label:'業務開發案件連結異動申請', group:'業務開發審核'},
+        {key:'settlement_finalized',   label:'成本精算完結通知',   group:'系統與報表'},
+        {key:'monthly_report',         label:'每月營運報表',       group:'系統與報表'},
+        {key:'module_activity',        label:'各模組新增／異動通知（建立帳號、案件等一般活動）', group:'系統與報表'},
+      ],
+
+      get notifyGroups() {
+        const order = [], map = {}
+        for (const it of this.allNotifyTypes) {
+          if (!map[it.group]) { map[it.group] = []; order.push(it.group) }
+          map[it.group].push(it)
+        }
+        return order.map(g => ({ group: g, items: map[g] }))
+      },
+
+      toggleNotifyType(key) {
+        const idx = this.form.notificationMuted.indexOf(key)
+        if (idx >= 0) this.form.notificationMuted.splice(idx, 1)  // 取消靜音（勾選＝接收）
+        else           this.form.notificationMuted.push(key)      // 靜音（取消勾選＝不接收）
+      },
+
+      toggleNotifyGroup(group) {
+        this._notifyGroupOpen[group] = !this._notifyGroupOpen[group]
+      },
+
+      notifyGroupOnCount(items) {
+        return items.filter(it => !this.form.notificationMuted.includes(it.key)).length
+      },
 
       get isSuperAdmin() { return this.session.role === 'superadmin' },
 
@@ -851,9 +931,11 @@
         this.editingId = null
         this.form = { username:'', displayName:'', email:'', phone:'', role:'sales',
                       password:'', confirmPassword:'', modules: [...ROLE_MODULES.sales],
+                      notificationMuted: [],
                       unlockPassword:'', confirmUnlockPassword:'', dtPassword:'', confirmDtPassword:'' }
         this.formError = ''
         this._modGroupOpen = this._initGroupOpenState(this.form.modules)
+        this._notifyGroupOpen = {}
         this.showModal = true
       },
 
@@ -869,6 +951,7 @@
           password:               '',
           confirmPassword:        '',
           modules:                [...((user.modules && user.modules.length > 0) ? user.modules : (ROLE_MODULES[user.role] || []))],
+          notificationMuted:      [...(user.notificationMuted || [])],
           unlockPassword:         '',
           confirmUnlockPassword:  '',
           dtPassword:             '',
@@ -876,6 +959,10 @@
         }
         this.formError = ''
         this._modGroupOpen = this._initGroupOpenState(this.form.modules)
+        this._notifyGroupOpen = {}
+        for (const { group, items } of this.notifyGroups) {
+          this._notifyGroupOpen[group] = items.some(it => this.form.notificationMuted.includes(it.key))
+        }
         this.showModal = true
       },
 
@@ -906,11 +993,12 @@
         }
 
         const payload = {
-          display_name: this.form.displayName,
-          email:        this.form.email,
-          phone:        this.form.phone,
-          role:         this.form.role,
-          modules:      this.form.modules,
+          display_name:        this.form.displayName,
+          email:                this.form.email,
+          phone:                this.form.phone,
+          role:                 this.form.role,
+          modules:              this.form.modules,
+          notification_muted:   this.form.notificationMuted,
         }
         if (this.form.password) payload.password = this.form.password
 

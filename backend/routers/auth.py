@@ -159,14 +159,15 @@ class SetDailyTaskPasswordIn(BaseModel):
 
 
 class UserIn(BaseModel):
-    username:     Optional[str]       = None
-    display_name: Optional[str]       = None
-    email:        Optional[str]       = None
-    phone:        Optional[str]       = None
-    role:         Optional[str]       = None
-    modules:      Optional[List[str]] = None
-    password:     Optional[str]       = None
-    active:       Optional[bool]      = None
+    username: Optional[str] = None
+    display_name: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    role: Optional[str] = None
+    modules: Optional[List[str]] = None
+    notification_muted: Optional[List[str]] = None
+    password: Optional[str] = None
+    active: Optional[bool] = None
 
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
@@ -380,15 +381,17 @@ def list_users(authorization: str = Header(None)):
     _require_user(authorization)
     conn = get_db()
     rows = conn.execute(
-        "SELECT id, username, display_name, role, email, phone, modules, active, created_at FROM users ORDER BY id"
+        "SELECT id, username, display_name, role, email, phone, modules, notification_muted, "
+        "active, created_at FROM users ORDER BY id"
     ).fetchall()
     conn.close()
     result = []
     for r in rows:
         d = dict(r)
-        d["displayName"] = d.pop("display_name")
-        d["createdAt"]   = d.pop("created_at")
-        d["modules"]     = json.loads(d["modules"] or "[]")
+        d["displayName"]        = d.pop("display_name")
+        d["createdAt"]          = d.pop("created_at")
+        d["modules"]             = json.loads(d["modules"] or "[]")
+        d["notificationMuted"]   = json.loads(d.pop("notification_muted") or "[]")
         result.append(d)
     return result
 
@@ -406,9 +409,9 @@ def create_user(body: UserIn, authorization: str = Header(None)):
     conn = get_db()
     try:
         conn.execute("""
-            INSERT INTO users (username, password_hash, display_name, role, email, phone, modules, active,
-                               created_at, must_change_password)
-            VALUES (?,?,?,?,?,?,?,1,?,1)
+            INSERT INTO users (username, password_hash, display_name, role, email, phone, modules,
+                               notification_muted, active, created_at, must_change_password)
+            VALUES (?,?,?,?,?,?,?,?,1,?,1)
         """, (
             body.username.strip(),
             _hash_pw(body.password),
@@ -417,6 +420,7 @@ def create_user(body: UserIn, authorization: str = Header(None)):
             body.email or '',
             body.phone or '',
             json.dumps(body.modules or [], ensure_ascii=False),
+            json.dumps(body.notification_muted or [], ensure_ascii=False),
             now,
         ))
         conn.commit()
@@ -444,6 +448,9 @@ def update_user(user_id: int, body: UserIn, authorization: str = Header(None)):
     if body.email        is not None: sets.append("email=?");        params.append(body.email)
     if body.phone        is not None: sets.append("phone=?");        params.append(body.phone)
     if body.modules      is not None: sets.append("modules=?");      params.append(json.dumps(body.modules, ensure_ascii=False))
+    if body.notification_muted is not None:
+        sets.append("notification_muted=?")
+        params.append(json.dumps(body.notification_muted, ensure_ascii=False))
     if body.password:
         if len(body.password) < MIN_PASSWORD_LEN:
             conn.close()
