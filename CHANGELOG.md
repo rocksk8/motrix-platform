@@ -5,6 +5,35 @@
 
 ---
 
+### 2026-08-17a — 修正精算「預估 vs 實際」毛利率公式不對稱
+
+- **背景**：使用者要求複查案件金額／毛利率／報表／儀表板是否同步正確且公式正確。追查發現
+  `quotation-form.html` 建立報價單時 `directProfit = pretax − totalCost − totalCost×5%`
+  （對品項總成本額外扣一筆 5% 非扣抵進項稅才得出直接毛利），但 `settlement.html` 成本精算的
+  每個品項預設 `actualCostTaxMode='pretax'`，`grossProfit = quotedPretax − totalActualCost`
+  完全沒有這 5% 的扣除；`reports.py`（Excel「毛利分析」差異(pp)欄、`GET /api/reports/*` 的
+  `estimatedMarginPct`/`actualMarginPct`）與 `dashboard.py`（`marginComparison`）都是直接拿
+  這兩個公式不對稱的數字相減比較，導致即使案件實際成本跟原始報價完全相同，每一筆已精算案件
+  都會系統性顯示「真實毛利率」比「預估毛利率」虛高——以典型 30~40% 毛利率的案件試算，落差約
+  3 個百分點；已用 Python 模擬兩種公式驗證：修正前 bias=+3.19pp，修正後 bias=0.00pp
+- **修正**（`frontend/pages/settlement.html`）：
+  1. 精算品項初始化的預設 `actualCostTaxMode` 由 `'pretax'`（未稅，無調整）改為
+     `'taxed_gross'`（含稅5%自動加總），與報價單建立時的假設基準一致；品項仍可個別切換回
+     「未稅」或「含稅5%」因應該筆成本實際的稅務性質，只是改變沒有動過的品項的預設行為
+  2. 精算頁「原始預估」欄位（`origDirectProfit`／`origMarginPct`／`origAdminCost`／
+     `origCharity`／`origNetProfit`／`origNetMarginPct`）原本用 `settlement.items` 的
+     `origQty`×`origCost` 重新加總計算，不僅同樣漏掉 5% 進項稅，還完全沒把
+     `indirectLogistics`／`indirectInstallation`／`indirectTravel`／`indirectWarranty`／
+     `indirectOther` 五個間接成本項目算進去；改為直接讀取報價單建立當下已經算好、存在
+     `data_json.tot` 裡的對應欄位（沒有才 fallback 舊算法，相容尚未有此欄位形狀的極舊報價單），
+     徹底消除「同一組數字兩處分別計算、公式各自漂移」的根本風險
+  3. 只影響**尚未儲存過精算資料的新品項**；既有草稿或已完結（`finalized`）精算紀錄裡每個品項
+     已存的 `actualCostTaxMode` 一律沿用不受影響，不回溯更動任何歷史精算快照
+- 已用 `node -e "new Function(...)"` 驗證 `settlement.html` 兩個內嵌 `<script>` 區塊語法正確；
+  `pytest` 106/106 全過（純前端修正，無 DB migration，後端測試本就不涉及此檔案）
+
+---
+
 ### 2026-08-17 — 使用者個別 Email 通知偏好（DB v43）＋首頁最新動態彙整
 
 - **背景**：`email_notify.py` 原本 23 個 `notify_*` 事件的收件人（`_admin_emails()` /

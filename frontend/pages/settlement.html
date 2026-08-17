@@ -865,8 +865,11 @@ function settlementPage() {
           origCost:        it.cost        || 0,
           actualQty:       it.qty         || 0,
           actualUnitCost:  it.cost        || 0,
-          actualCostTaxMode: 'pretax',
-          actualTotalCost: Math.round((it.qty || 0) * (it.cost || 0)),
+          // 預設帶入與報價單建立時相同的 5%「非扣抵進項稅」假設（quotation-form.html
+          // calcTotals() 的 inputVat = totalCost×5%），確保未經使用者調整的精算品項
+          // 預估/實際毛利率基準一致，「差異(pp)」欄反映的才是真實成本表現而非公式落差
+          actualCostTaxMode: 'taxed_gross',
+          actualTotalCost: Math.round((it.qty || 0) * (it.cost || 0) * 1.05),
           note:            '',
         }))
 
@@ -963,8 +966,12 @@ function settlementPage() {
       const quotedTotal  = tot.total    || 0
       const origItemTotal = this.settlement.items.reduce((s, i) => s + (i.origAmount || 0), 0)
       const origTotalCost = this.settlement.items.reduce((s, i) => s + (i.origQty || 0) * (i.origCost || 0), 0)
-      const origDirectProfit = quotedPretax - origTotalCost
-      const origMarginPct = quotedPretax > 0 ? origDirectProfit / quotedPretax * 100 : 0
+      // 直接沿用報價單建立當下已算好的預估毛利（quotation-form.html tot 物件），不在這裡
+      // 重算——重算會漏掉 5% 非扣抵進項稅與 5 個間接成本項目（indirectLogistics 等），
+      // 讓下方「與實際比較」的差異(pp)/差異金額反映的是公式落差而非真實成本表現
+      const origDirectProfit = tot.directProfit != null ? tot.directProfit : (quotedPretax - origTotalCost)
+      const origMarginPct = tot.directMarginPct != null ? tot.directMarginPct
+        : (quotedPretax > 0 ? origDirectProfit / quotedPretax * 100 : 0)
 
       const itemActualTotal = this.settlement.items.reduce((s, i) => s + (i.actualTotalCost || 0), 0)
       const extraTotal      = this.settlement.extraItems.reduce((s, e) => s + (e.totalCost || 0), 0)
@@ -977,10 +984,11 @@ function settlementPage() {
       const netProfit       = grossProfit - adminCost - charityDonation
       const netMarginPct    = quotedPretax > 0 ? netProfit / quotedPretax * 100 : 0
 
-      const origAdminCost   = Math.round(quotedPretax * 0.10)
-      const origCharity     = Math.round(origDirectProfit * 0.01)
-      const origNetProfit   = origDirectProfit - origAdminCost - origCharity
-      const origNetMarginPct = quotedPretax > 0 ? origNetProfit / quotedPretax * 100 : 0
+      const origAdminCost   = tot.adminCost != null ? tot.adminCost : Math.round(quotedPretax * 0.10)
+      const origCharity     = tot.charityDonation != null ? tot.charityDonation : Math.round(origDirectProfit * 0.01)
+      const origNetProfit   = tot.netProfit != null ? tot.netProfit : (origDirectProfit - origAdminCost - origCharity)
+      const origNetMarginPct = tot.netMarginPct != null ? tot.netMarginPct
+        : (quotedPretax > 0 ? origNetProfit / quotedPretax * 100 : 0)
 
       const profitDiff = netProfit - origNetProfit
 

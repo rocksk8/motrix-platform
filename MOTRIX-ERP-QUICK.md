@@ -883,6 +883,24 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
 
+### 2026-08-17a — 修正精算「預估 vs 實際」毛利率公式不對稱
+
+- **背景**：使用者要求複查案件金額／毛利率／報表／儀表板是否同步正確，追出 `quotation-form.html`
+  建立報價單時 `directProfit = pretax − totalCost − totalCost×5%`（多扣一筆 5% 非扣抵進項稅），
+  但 `settlement.html` 精算品項預設 `actualCostTaxMode='pretax'`，`grossProfit = quotedPretax −
+  totalActualCost` 完全沒有這 5%；`reports.py`／`dashboard.py` 的 `estimatedMarginPct` vs
+  `actualMarginPct`（Excel 毛利分析差異(pp)欄、儀表板 marginComparison）直接比較這兩個數字，
+  導致即使成本完全沒變，每筆已精算案件都會顯示「真實毛利率虛高約 3 個百分點」的假象（已用
+  Python 模擬驗證：修正前 bias=3.19pp，修正後 bias=0.00pp）
+- **修正**：`settlement.html` 精算品項預設 `actualCostTaxMode` 由 `'pretax'` 改為 `'taxed_gross'`
+  （與報價單建立時的假設一致），品項仍可個別切換回未稅／含稅5%因應實際情況；「原始預估」欄位
+  （`origDirectProfit`/`origMarginPct`/`origAdminCost`/`origCharity`/`origNetProfit`/
+  `origNetMarginPct`）改為直接讀取報價單建立時已算好的 `tot` 物件而非重新計算，一併修掉重算式
+  遺漏 5 個間接成本項目（`indirectLogistics` 等）的第二個落差；僅影響尚未儲存過精算資料的品項，
+  既有草稿/已完結精算的 `actualCostTaxMode` 不受影響（沿用既有儲存值）
+- 已用 `node -e new Function` 驗證 `settlement.html` 內嵌 script 語法正確；pytest 106/106 全過
+  （純前端修正，無 DB migration，後端測試不受影響）
+
 ### 2026-08-17 — 使用者個別 Email 通知偏好（DB v43）＋首頁最新動態彙整
 
 - **背景**：`notify_*`（23 個事件）收件人原本全員一體適用，無法讓管理員/使用者關閉自己不需要
