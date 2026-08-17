@@ -49,6 +49,7 @@ class DispatchIn(BaseModel):
     tax_rate: Optional[float] = 0.05
     status: Optional[str] = 'draft'
     notes: Optional[str] = ''
+    invoice_no: Optional[str] = ''
     # 樂觀鎖（選填，見 update_dispatch）——比照 customers.py 等的
     # expectedUpdatedAt 慣例
     expected_updated_at: Optional[str] = Field(None, alias="expectedUpdatedAt")
@@ -122,6 +123,7 @@ def _dispatch_row(row) -> dict:
         "status": row["status"] or "draft",
         "statusLabel": _STATUS_LABELS.get(row["status"] or "draft", row["status"] or ""),
         "notes": row["notes"] or "",
+        "invoiceNo": (row["invoice_no"] if "invoice_no" in keys else "") or "",
         "createdBy": row["created_by"] or "",
         "createdAt": row["created_at"] or "",
         "updatedAt": row["updated_at"] or "",
@@ -428,13 +430,13 @@ def create_dispatch(body: DispatchIn, authorization: str = Header(None)):
         raise HTTPException(404, "承攬商不存在")
     cur = conn.execute(
         "INSERT INTO contractor_dispatches "
-        "(quote_no, vendor_id, dispatch_date, scope, items_json, personnel_json, total_amount, tax_rate, status, notes, created_by, created_at, updated_at) "
-        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "(quote_no, vendor_id, dispatch_date, scope, items_json, personnel_json, total_amount, tax_rate, status, notes, invoice_no, created_by, created_at, updated_at) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (body.quote_no, body.vendor_id, body.dispatch_date or '',
          body.scope or '', json.dumps(items, ensure_ascii=False),
          json.dumps(personnel, ensure_ascii=False), total,
          body.tax_rate if body.tax_rate is not None else 0.05,
-         body.status or 'draft', body.notes or '',
+         body.status or 'draft', body.notes or '', body.invoice_no or '',
          user["username"], now, now)
     )
     did = cur.lastrowid
@@ -469,12 +471,12 @@ def update_dispatch(did: int, body: DispatchIn, authorization: str = Header(None
         raise HTTPException(404, "承攬商不存在")
     conn.execute(
         "UPDATE contractor_dispatches SET vendor_id=?, dispatch_date=?, scope=?, items_json=?, "
-        "personnel_json=?, total_amount=?, tax_rate=?, status=?, notes=?, updated_at=? WHERE id=?",
+        "personnel_json=?, total_amount=?, tax_rate=?, status=?, notes=?, invoice_no=?, updated_at=? WHERE id=?",
         (body.vendor_id, body.dispatch_date or '', body.scope or '',
          json.dumps(items, ensure_ascii=False),
          json.dumps(personnel, ensure_ascii=False), total,
          body.tax_rate if body.tax_rate is not None else 0.05,
-         body.status or 'draft', body.notes or '', now, did)
+         body.status or 'draft', body.notes or '', body.invoice_no or '', now, did)
     )
     conn.commit()
     conn.close()

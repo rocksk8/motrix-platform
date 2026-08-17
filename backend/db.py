@@ -30,7 +30,7 @@ DEMO_SHIPPING_PDF_ARCHIVE_DIR = os.path.join(os.path.dirname(__file__), "_demo_s
 # v32/v33 (switch_guide tables + specs_json column) were initially missing
 # from this checkout — reconstructed 2026-08-01 by reverse-engineering the
 # actual schema off a production DB backup (see _m032_switch_guide docstring).
-CURRENT_VERSION = 43
+CURRENT_VERSION = 44
 
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
 # execution model) whenever the current request is authenticated as the 'demo'
@@ -379,6 +379,7 @@ def init_db(path: str = None):
             total_amount  REAL    DEFAULT 0,
             status        TEXT    DEFAULT 'draft',
             notes         TEXT    DEFAULT '',
+            invoice_no    TEXT    DEFAULT '',
             created_by    TEXT    DEFAULT '',
             created_at    TEXT,
             updated_at    TEXT,
@@ -1066,6 +1067,13 @@ def _m043_notification_prefs(conn):
     no existing user's email behaviour changes until they explicitly mute something."""
     if not _col_exists(conn, "users", "notification_muted"):
         conn.execute("ALTER TABLE users ADD COLUMN notification_muted TEXT DEFAULT '[]'")
+    conn.commit()
+
+
+def _m044_dispatch_invoice_no(conn):
+    """承攬商派發新增發票號碼欄位，比照報價單收款品項 invoiceNo 的自由文字慣例。"""
+    if not _col_exists(conn, "contractor_dispatches", "invoice_no"):
+        conn.execute("ALTER TABLE contractor_dispatches ADD COLUMN invoice_no TEXT DEFAULT ''")
     conn.commit()
 
 
@@ -1816,6 +1824,7 @@ _MIGRATIONS = [
     _m041_gateway_guide,                       # v41
     _m042_dev_cases_relink_review,              # v42
     _m043_notification_prefs,                   # v43
+    _m044_dispatch_invoice_no,                   # v44
 ]
 
 

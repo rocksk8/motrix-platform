@@ -570,7 +570,11 @@
                   <template x-for="d in dispatches" :key="d.id">
                     <template x-for="row in _dispatchRows(d)">
                       <tr style="border-bottom:1px solid var(--border-light)">
-                        <td :style="row.isVendor ? 'font-weight:600' : 'color:var(--text-secondary)'" x-text="row.label"></td>
+                        <td :style="row.isVendor ? 'font-weight:600' : 'color:var(--text-secondary)'">
+                          <span x-text="row.label"></span>
+                          <div x-show="row.isVendor && d.invoiceNo" style="font-weight:400;font-size:10px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif"
+                               x-text="'發票：' + d.invoiceNo"></div>
+                        </td>
                         <td x-text="row.isVendor ? d.statusLabel : ''" style="color:var(--text-dim);font-size:11px"></td>
                         <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif" x-text="fmt(row.amount)"></td>
                       </tr>

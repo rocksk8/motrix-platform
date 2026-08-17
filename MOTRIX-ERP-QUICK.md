@@ -1,7 +1,7 @@
 # MOTRIX ERP — 開發快速參考
 
 > 允碩整合集創（統編 60575481）｜ Tel: 04-3610-6566 ｜ info@miactw.com  
-> 文件版本：**2026-08-17a**（使用者個別 Email 通知偏好 + 首頁最新動態彙整，DB v43，見 §12）
+> 文件版本：**2026-08-17b**（承攬商派發新增發票號碼欄位，DB v44，見 §12）
 
 ---
 
@@ -125,7 +125,7 @@
 
 | 模組 | 職責 |
 |------|------|
-| `db.py` | 連線、`init_db()`、PRAGMA WAL、熱路徑欄位／索引；**CURRENT_VERSION=43**（43 個 migrations；v32/v33 為交換器選型導覽 `switch_guide` 表結構，2026-08-01 由正式機備份 db 實際結構還原重建，詳見 db.py `_m032_switch_guide` 註解；v39/v40 為 2026-08-09 新增的監控系統／門禁系統選型導覽 `monitor_guide`/`access_guide` 表結構；v41 為閘道器與控制器選型導覽 `gateway_guide` 表結構；v42 為 2026-08-13 新增的業務開發連結報價單審核制 `dev_cases` 欄位；v43 為 2026-08-17 新增的使用者個別 Email 通知偏好 `users.notification_muted` 欄位） |
+| `db.py` | 連線、`init_db()`、PRAGMA WAL、熱路徑欄位／索引；**CURRENT_VERSION=44**（44 個 migrations；v32/v33 為交換器選型導覽 `switch_guide` 表結構，2026-08-01 由正式機備份 db 實際結構還原重建，詳見 db.py `_m032_switch_guide` 註解；v39/v40 為 2026-08-09 新增的監控系統／門禁系統選型導覽 `monitor_guide`/`access_guide` 表結構；v41 為閘道器與控制器選型導覽 `gateway_guide` 表結構；v42 為 2026-08-13 新增的業務開發連結報價單審核制 `dev_cases` 欄位；v43 為 2026-08-17 新增的使用者個別 Email 通知偏好 `users.notification_muted` 欄位；v44 為 2026-08-17 新增的承攬商派發發票號碼 `contractor_dispatches.invoice_no` 欄位） |
 | `helpers/` | 密碼、session、audit、notify、settings、弱密碼標記、`save_quotation_json()` |
 | `archive.py` | 即時／每日／週備份；本機 SQLite 快照；**原子 JSON 寫入**（`_atomic_json_write`）；G: fallback |
 | `backup_job.py` | 獨立備份腳本（Windows 工作排程器，不依賴 server） |
@@ -281,7 +281,7 @@ daily_tasks / daily_task_completions / daily_task_edit_log
 vendor_contractors   -- code(V-YYYYMM-NNN), name, tax_id, contact, data_json(visits/tags/category)
 contractor_dispatches -- quote_no, vendor_id, status, items_json, total_amount, tax_rate,
                          accepted_at, accepted_by（DB v25），personnel_json（外包名單人員個別計費快照
-                         [{id,name,amount,note}]，DB v36，見 §5.7）
+                         [{id,name,amount,note}]，DB v36，見 §5.7），invoice_no（發票號碼，DB v44）
 case_updates         -- id, quote_no, author(username), content, type('comment'), created_at（DB v26）
 work_logs            -- + case_no TEXT DEFAULT ''（DB v26）
 
@@ -882,6 +882,15 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 ## §12 · 變更摘要（最新兩版）
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
+
+### 2026-08-17b — 承攬商派發新增發票號碼欄位
+
+- **DB v44**（`_m044_dispatch_invoice_no`）：`contractor_dispatches` 新增 `invoice_no`
+- 填寫位置：`case-management.html` 承攬商派發 Modal；顯示位置：派發卡片列表、
+  `vendor-contractors.html` 派發紀錄、`settlement.html` 精算頁承攬商成本明細
+  （全庫搜尋確認無遺漏）
+- 已用 Node 直接執行 `case-management.js` 真正的表單函式驗證欄位帶入/送出正確；後端對本機
+  跑起來的 server 做完整 CRUD round-trip 驗證；pytest 106/106 全過
 
 ### 2026-08-17a — 修正精算「預估 vs 實際」毛利率公式不對稱
 

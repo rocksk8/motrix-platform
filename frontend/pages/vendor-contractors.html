@@ -239,6 +239,8 @@
               <span class="badge" :class="'badge--' + _dStatusClass(d.status)" x-text="d.statusLabel"></span>
             </div>
             <div style="color:var(--text-secondary)" x-text="d.scope || ''"></div>
+            <div x-show="d.invoiceNo" style="color:var(--text-dim);font-size:11px;font-family:LINE Seed TW_OTF, sans-serif;margin-top:2px"
+                 x-text="'發票：' + d.invoiceNo"></div>
             <div style="font-family:LINE Seed TW_OTF, sans-serif;font-weight:600;margin-top:3px;font-size:12px"
                  x-text="'NT$ ' + (d.totalAmount||0).toLocaleString()"></div>
           </div>

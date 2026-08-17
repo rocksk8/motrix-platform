@@ -5,6 +5,30 @@
 
 ---
 
+### 2026-08-17b — 承攬商派發新增發票號碼欄位
+
+- **背景**：使用者要求承攬商發包需要能填寫發票號碼，所有填寫/顯示派發資訊的位置都要同步新增
+- **DB v44**（`_m044_dispatch_invoice_no`）：`contractor_dispatches` 新增 `invoice_no TEXT DEFAULT ''`
+- 後端 `vendor_contractors.py`：`DispatchIn` 模型、`_dispatch_row()`、`create_dispatch()`／
+  `update_dispatch()` 的 INSERT/UPDATE 皆補上 `invoice_no`（JSON 欄位 `invoiceNo`，比照報價單
+  收款品項 `invoiceNo` 的自由文字慣例）
+- 前端：
+  - `case-management.html` 承攬商派發 Modal（填寫）新增「發票號碼」欄位；派發卡片列表（顯示）
+    新增發票號碼行
+  - `vendor-contractors.html` 承攬商詳情「派發紀錄」區塊（顯示）新增發票號碼行
+  - `settlement.html` 精算頁「三、承攬商派發成本」明細（顯示，唯讀即時讀取）承攬商列下方新增
+    發票號碼小字
+  - `case-management.js`：`dispatchForm` 狀態、`openEditDispatch()`、`saveDispatch()` 皆同步
+    帶入/送出 `invoice_no`
+- 已全庫搜尋確認派發相關欄位只出現在上述四個檔案，無遺漏位置；`node -e "new Function(...)"`
+  驗證四個檔案內嵌 script 語法皆正確；額外用 Node 直接執行 `case-management.js` 真正的
+  `_blankDispatchForm()`／`openEditDispatch()`／`saveDispatch()`（stub `fetch` 攔截送出內容）
+  驗證欄位正確帶入與送出；後端用 Python `urllib` 對本機實際跑起來的 server 做完整 CRUD
+  round-trip（建立含發票號碼→查詢→更新發票號碼→再查詢→列表端點皆正確反映），全部通過；
+  `pytest` 106/106 全過
+
+---
+
 ### 2026-08-17a — 修正精算「預估 vs 實際」毛利率公式不對稱
 
 - **背景**：使用者要求複查案件金額／毛利率／報表／儀表板是否同步正確且公式正確。追查發現
