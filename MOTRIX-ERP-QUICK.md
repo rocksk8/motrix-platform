@@ -1,7 +1,7 @@
 # MOTRIX ERP — 開發快速參考
 
 > 允碩整合集創（統編 60575481）｜ Tel: 04-3610-6566 ｜ info@miactw.com  
-> 文件版本：**2026-08-17f**（案件管理動態 Tab 月曆比例修正＋業務開發排行改依廠商＋精算完結徽章空白 bug，見 §12）
+> 文件版本：**2026-08-17g**（案件管理動態 Tab 下方內容/人員顯示字級放大，見 §12）
 
 ---
 
@@ -882,6 +882,11 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 ## §12 · 變更摘要（最新兩版）
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
+
+### 2026-08-17g — 案件管理動態 Tab 下方內容/人員顯示字級放大
+
+- 動態 Tab 發文列表字級全面放大：`.feed-bubble__content` 13→15px、`.feed-bubble__author` 12→14px、`.feed-bubble__time` 10→12px、`.feed-badge` 9→11px、`.feed-avatar` 30→36px，並放寬相關內距/間距
+- 容器寬度本身沒問題（實測 1223px），純粹是字級明顯小於全站 15px 基準；純前端 CSS 調整，無 DB migration
 
 ### 2026-08-17f — 案件管理動態 Tab 月曆比例修正＋業務開發排行改依廠商＋精算完結徽章空白 bug
 

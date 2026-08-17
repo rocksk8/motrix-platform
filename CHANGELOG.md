@@ -5,6 +5,15 @@
 
 ---
 
+### 2026-08-17g — 案件管理動態 Tab 下方內容/人員顯示字級放大
+
+- 使用者回報「動態」Tab 下方發文列表的文字內容與人員（頭像/名稱）顯示過窄無法閱讀。用 Chrome MCP `javascript_tool` 量測 `.feed-bubble__content` 實際渲染寬度達 1223px（容器完全不窄，問題不在寬度），但字級僅 13px/12px/10px（content/author/time），明顯小於全站預設 15px 基準，在使用者當下套用的 UI 縮放（`motrixSetZoom` 1.15）下仍顯得侷促
+- 調整 `case-management.html` 動態 Tab CSS：`.feed-bubble__content` 13→15px（line-height 1.65→1.7）、`.feed-bubble__author` 12→14px、`.feed-bubble__time` 10→12px、`.feed-badge` 9→11px、`.feed-avatar` 30→36px（字級 12→14px）、`.feed-compose__box` 13→14px、`.feed-empty`/`.feed-bubble__del` 13→14px；同步放寬 `.feed-bubble` 內距與 `.feed-item`/`.feed-list` 間距，純視覺尺寸調整不影響互動邏輯
+- 已用 `javascript_tool` 直接呼叫頁面內 Alpine 的 `selectCase()`/`loadCaseUpdates()` 選取真實案件（`MQ-202607-137`，8 筆動態）量測調整後渲染尺寸，確認皆放大且無 console 錯誤；本次 Chrome MCP screenshot 工具連續逾時，改以 DOM 尺寸量測＋console 檢查驗證，未取得視覺截圖
+- 純前端 CSS 調整，無 DB migration，無需 pytest
+
+---
+
 ### 2026-08-17f — 案件管理動態 Tab 月曆比例修正＋業務開發排行改依廠商＋精算完結徽章空白 bug
 
 - **A. 案件管理「動態」Tab 月曆比例錯誤**：使用者回報月曆無法完整顯示內容。根因是 `case-management.html` `.feed-cal-cell` 用 `aspect-ratio:1` 搭配 `grid-template-columns:repeat(7,1fr)`，但父層 `.cm-detail` 是 `flex:1` 可撐到 1000px+ 寬（案件詳情面板佔滿剩餘寬度），每格因此被撐成巨大正方形，6 週月曆總高度遠超過 `.cm-layout`/`.cm-detail` 的固定視窗高度＋`overflow:hidden`，導致下方發文框與動態列表被裁切看不到；格內字級本就是 9-10px 的小尺寸設計，明顯是設計成緊湊迷你月曆而非全寬。修正：`.feed-cal-wdays`/`.feed-cal-grid` 加上 `max-width:340px`，維持原設計的小尺寸樣式，不再隨版面寬度暴衝
