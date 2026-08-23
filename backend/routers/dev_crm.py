@@ -13,6 +13,7 @@ from helpers import (
     _require_user, _tok, _audit, notify_module_activity, notify_dev_case_delete_request,
     notify_dev_case_relink_request,
     _notify, _get_setting, _set_setting, notify_dev_case_stale, _purge_notifications,
+    push_event_for_dev_case_converted, push_event_for_dev_case_stale,
 )
 
 router = APIRouter()
@@ -545,6 +546,7 @@ def mark_converted(
                str(case_id), f"{row['case_name']} → {quote_no}")
         notify_module_activity("業務開發", "轉建報價單", user.get("display_name") or user["username"],
                                 f"{row['case_name']} → {quote_no}", "dev-crm.html")
+        spawn_bg_thread(push_event_for_dev_case_converted, args=(case_id,))
         return _case_row(updated, _user_map(conn))
     finally:
         conn.close()
@@ -991,6 +993,19 @@ def _check_dev_case_stale() -> None:
                 args=(row["id"], row["case_name"], row["customer_name"] or "", days, all_usernames),
                 daemon=True,
             ).start()
+
+            # 行事曆推送用獨立於上面 email 的 guard key（不帶 bucket 編號）：
+            # 只在這次停滯週期第一次跨過 30 天時建一次，跟 email 每 14 天重複的
+            # 頻率脫鉤，避免同一案件在行事曆上疊出好幾個重複事件（2026-08-21g，
+            # 使用者明確要求「只建一次」）。
+            cal_guard_key = f"devcase_stale_cal.{row['id']}.{row['updated_at']}"
+            if not _get_setting(cal_guard_key):
+                _set_setting(cal_guard_key, today_str)
+                threading.Thread(
+                    target=push_event_for_dev_case_stale,
+                    args=(row["id"], row["case_name"], row["customer_name"] or "", days),
+                    daemon=True,
+                ).start()
         _logger.info("Dev case stale check complete for %s", today_str)
     except Exception as exc:
         _logger.warning("_check_dev_case_stale failed: %s", exc)

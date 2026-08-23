@@ -7,7 +7,10 @@ import tempfile
 import logging
 from datetime import datetime, date
 
-from db import get_db, is_demo_mode, DEMO_PDF_ARCHIVE_DIR, DEMO_SHIPPING_PDF_ARCHIVE_DIR
+from db import (
+    get_db, is_demo_mode, DEMO_PDF_ARCHIVE_DIR, DEMO_SHIPPING_PDF_ARCHIVE_DIR,
+    DEMO_CONTRACTOR_VOUCHER_PDF_ARCHIVE_DIR, DEMO_INVOICE_VOUCHER_PDF_ARCHIVE_DIR,
+)
 from helpers import _get_edge_path, _get_setting
 
 logger = logging.getLogger(__name__)
@@ -37,6 +40,31 @@ def _get_shipping_pdf_base() -> str:
         return DEMO_SHIPPING_PDF_ARCHIVE_DIR
     configured = (_get_setting("shipping_pdf_base_path") or "").strip()
     return configured if configured else _SHIPPING_PDF_BASE_DEFAULT
+
+
+_CONTRACTOR_VOUCHER_PDF_BASE_DEFAULT = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "承攬商匯款申請PDF",
+)
+
+_INVOICE_VOUCHER_PDF_BASE_DEFAULT = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "開票申請憑據PDF",
+)
+
+
+def _get_contractor_voucher_pdf_base() -> str:
+    if is_demo_mode():
+        return DEMO_CONTRACTOR_VOUCHER_PDF_ARCHIVE_DIR
+    configured = (_get_setting("contractor_voucher_pdf_base_path") or "").strip()
+    return configured if configured else _CONTRACTOR_VOUCHER_PDF_BASE_DEFAULT
+
+
+def _get_invoice_voucher_pdf_base() -> str:
+    if is_demo_mode():
+        return DEMO_INVOICE_VOUCHER_PDF_ARCHIVE_DIR
+    configured = (_get_setting("invoice_voucher_pdf_base_path") or "").strip()
+    return configured if configured else _INVOICE_VOUCHER_PDF_BASE_DEFAULT
 
 
 def _build_quote_html(q: dict, tot: dict, internal: bool = False,
@@ -1122,6 +1150,672 @@ def _generate_shipping_pdf(note_no: str, actor: str = '', action_type: str = '�
     except Exception as e:
         logger.exception("_generate_shipping_pdf failed for %s", note_no)
         _shipping_pdf_audit(note_no, False, str(e), actor, action_type)
+    finally:
+        if tmp_html:
+            try:
+                os.unlink(tmp_html)
+            except Exception:
+                pass
+
+
+# ── 承攬商匯款申請 ────────────────────────────────────────────────────────────
+
+def _voucher_sign_html(appr: dict) -> str:
+    """簽核歷程 HTML 區塊，出貨單 PDF 沒有這段（出貨單簽核歷程只存在系統內），
+    但財務申請需要在紙本上就能看到完整簽核歷程，故獨立為共用小工具。"""
+    def esc(s):
+        return (s or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+    tiers = (appr or {}).get('tiers') or []
+    if not tiers:
+        return ''
+    rows = ''
+    for i, t in enumerate(tiers):
+        for a in (t.get('approvers') or []):
+            status = a.get('status') or 'pending'
+            mark = '✓ 已簽核' if status == 'approved' else '－ 待簽核'
+            at = (a.get('approvedAt') or '')[:16].replace('T', ' ')
+            rows += (
+                f'<tr><td>第 {i+1} 層</td><td>{esc(a.get("displayName") or a.get("username") or "")}</td>'
+                f'<td>{mark}</td><td style="font-family:Arial,sans-serif">{esc(at)}</td></tr>'
+            )
+    return (
+        '<div class="section-label">簽核歷程</div>'
+        '<table><thead><tr><th>層級</th><th>簽核人</th><th>狀態</th><th>簽核時間</th></tr></thead>'
+        f'<tbody>{rows}</tbody></table>'
+    )
+
+
+def _build_contractor_voucher_html(v: dict) -> str:
+    def esc(s):
+        return (s or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>')
+    def money(n):
+        return f'{n:,.0f}' if isinstance(n, (int, float)) else '0'
+
+    items = v.get('items') or []
+    item_rows = ''
+    for i, it in enumerate(items, 1):
+        item_rows += (
+            f'<tr><td>{i}</td><td>{esc(it.get("description",""))}</td>'
+            f'<td class="r">{money(it.get("amount", 0))}</td></tr>'
+        )
+
+    def bank_card(title, name_label, name_val, tax_id, bank_code, bank_name, bank_branch,
+                  account_name, account_number, passbook, amount_label='', amount_val=None):
+        img_html = (
+            f'<div style="margin-top:8px"><img src="{esc(passbook)}" '
+            f'style="max-width:260px;max-height:160px;border:1px solid #EDEAE4;border-radius:4px;display:block"></div>'
+        ) if passbook else ''
+        amount_row = (
+            f'    <div class="row"><span class="label">{esc(amount_label)}</span>'
+            f'<span class="val" style="font-family:Arial,sans-serif">{money(amount_val)}</span></div>\n'
+        ) if amount_label else ''
+        tax_row = (
+            f'    <div class="row"><span class="label">統一編號</span><span class="val">{esc(tax_id)}</span></div>\n'
+        ) if tax_id else ''
+        return (
+            f'  <div class="box">\n    <div class="box-title">{esc(title)}</div>\n'
+            f'    <div class="row"><span class="label">{esc(name_label)}</span><span class="val">{esc(name_val)}</span></div>\n'
+            f'{tax_row}'
+            f'{amount_row}'
+            f'    <div class="row"><span class="label">銀行</span><span class="val">{esc(bank_code)} {esc(bank_name)}</span></div>\n'
+            f'    <div class="row"><span class="label">分行</span><span class="val">{esc(bank_branch)}</span></div>\n'
+            f'    <div class="row"><span class="label">戶名</span><span class="val">{esc(account_name)}</span></div>\n'
+            f'    <div class="row"><span class="label">帳號</span><span class="val" style="font-family:Arial,sans-serif">{esc(account_number)}</span></div>\n'
+            f'{img_html}\n'
+            '  </div>\n'
+        )
+
+    personnel = v.get('personnel') or []
+    personnel_cards_html = ''
+    if personnel:
+        cards = ''.join(
+            bank_card(
+                f'外包人員：{p.get("name","")}', '備註', p.get('note', ''), '',
+                p.get('bankCode', ''), p.get('bankName', ''), p.get('bankBranch', ''),
+                p.get('bankAccountName', ''), p.get('bankAccountNumber', ''), p.get('bankPassbookImage', ''),
+                amount_label='派工金額', amount_val=p.get('amount', 0)
+            )
+            for p in personnel
+        )
+        personnel_cards_html = (
+            '<div class="section-label">四、外包人員匯款資訊</div>\n'
+            f'<div class="boxes" style="grid-template-columns:repeat(2,1fr)">\n{cards}</div>\n'
+        )
+
+    applicant_name = (v.get('approval') or {}).get('requestedByDisplay') or v.get('createdBy', '')
+    applicant_date = ((v.get('approval') or {}).get('requestedAt') or v.get('createdAt') or '')[:10]
+
+    is_final = v.get('status') == '已核准'
+    watermark_html = '' if is_final else (
+        '<div class="wm">' + ''.join(
+            '<div class="wm-item"><b>申請預覽稿</b><small>尚未正式核准</small></div>'
+            for _ in range(12)
+        ) + '</div>'
+    )
+    banner_html = '' if is_final else (
+        f'<div class="preview-banner">⚠ 此為承攬商匯款申請預覽稿（目前狀態：{esc(v.get("status") or "草稿")}），'
+        f'尚未正式核准，請勿提供財務單位辦理匯款</div>'
+    )
+    paid_note = ''
+    paid_date = ''
+    if v.get('isPaid'):
+        paid_by = esc(v.get('paidBy') or '')
+        paid_at_raw = v.get('paidAt') or ''
+        paid_at = esc(paid_at_raw[:16].replace('T', ' '))
+        paid_date = esc(paid_at_raw[:10])
+        paid_note = f'<div style="font-size:10px;color:#16A34A;margin-top:6px">✓ 已匯款　{paid_by}　{paid_at}</div>'
+
+    return (
+        '<!DOCTYPE html>\n<html lang="zh-Hant">\n<head>\n<meta charset="UTF-8">\n'
+        f'<title>{esc(v.get("voucherNo",""))} 承攬商匯款申請</title>\n'
+        '<style>\n'
+        '  *{box-sizing:border-box;margin:0;padding:0}\n'
+        '  body{font-family:"Microsoft JhengHei","PMingLiU",serif;font-size:13px;color:#0A0A0A;line-height:1.6;background:#fff}\n'
+        '  #root{padding:24px 32px;position:relative}\n'
+        '  .wm{position:absolute;inset:0;pointer-events:none;z-index:5;overflow:hidden;display:grid;'
+        'grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(4,1fr);align-items:center;justify-items:center;box-sizing:border-box}\n'
+        '  .wm-item{transform:rotate(-28deg);white-space:nowrap;user-select:none;text-align:center;line-height:1.5}\n'
+        '  .wm-item b{display:block;font-size:19px;font-weight:900;letter-spacing:.14em;color:rgba(185,28,28,.09)}\n'
+        '  .wm-item small{display:block;font-size:10px;font-weight:700;letter-spacing:.07em;color:rgba(185,28,28,.07)}\n'
+        '  .preview-banner{margin-bottom:12px;padding:7px 12px;background:#EFF6FF;border:1px solid #BFDBFE;'
+        'border-radius:5px;font-size:11px;color:#1E40AF;letter-spacing:.02em}\n'
+        '  @page{size:A4;margin:0 13mm 12mm 13mm;@bottom-center{content:counter(page);font-family:Arial,sans-serif;font-size:9px;color:#aaa}}\n'
+        '  @media print{html,body{margin:0;padding:0;background:#fff}#root{padding:15mm 0 0}.sign{page-break-inside:avoid}tr{page-break-inside:avoid}}\n'
+        '  .accent-bar{height:3px;background:#0A0A0A;margin-bottom:18px}\n'
+        '  .header{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:14px;border-bottom:1px solid #0A0A0A;margin-bottom:16px}\n'
+        '  .co-name{font-size:15px;font-weight:700;letter-spacing:.06em}\n'
+        '  .co-sub{font-size:10px;color:#888;margin-top:3px;font-family:Arial,sans-serif;letter-spacing:.02em}\n'
+        '  .doc-title{font-size:22px;font-weight:700;letter-spacing:.18em;text-align:right}\n'
+        '  .meta{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-bottom:14px;font-size:12px;background:#FAFAF8;padding:10px 12px;border-radius:4px;border:1px solid #EDEAE4}\n'
+        '  .meta span{color:#888;font-family:Arial,sans-serif;font-size:11px}\n'
+        '  .boxes{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px}\n'
+        '  .box{background:#FAFAF8;border:1px solid #EDEAE4;border-radius:4px;padding:11px 13px}\n'
+        '  .box-title{font-size:9px;font-family:Arial,sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#999;font-weight:600;margin-bottom:8px}\n'
+        '  .row{display:flex;gap:6px;margin-bottom:4px;font-size:12px}\n'
+        '  .label{color:#888;min-width:72px;flex-shrink:0;font-size:11px}\n'
+        '  .val{color:#0A0A0A;font-weight:500}\n'
+        '  .section-label{font-size:9px;font-family:Arial,sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#999;font-weight:600;margin-bottom:7px;display:flex;align-items:center;gap:8px}\n'
+        '  .section-label::after{content:"";flex:1;height:1px;background:#EDEAE4}\n'
+        '  table{width:100%;border-collapse:collapse;margin-bottom:14px}\n'
+        '  thead th{background:#0A0A0A;color:#F5F4F0;padding:8px 9px;text-align:left;font-size:11px;font-weight:500;font-family:Arial,sans-serif;letter-spacing:.04em}\n'
+        '  thead th.r{text-align:right}\n'
+        '  tbody td{padding:8px 9px;border-bottom:1px solid #EDEAE4;font-size:12px}\n'
+        '  tbody tr:last-child td{border-bottom:none}\n'
+        '  tbody tr:nth-child(even) td{background:#FAFAF8}\n'
+        '  td.r{text-align:right;font-family:Arial,sans-serif}\n'
+        '  .total-box{display:flex;justify-content:flex-end;margin-bottom:16px}\n'
+        '  .total-table{width:280px;font-size:12px}\n'
+        '  .total-table .row{display:flex;justify-content:space-between;padding:4px 0}\n'
+        '  .total-table .grand{font-size:15px;font-weight:700;border-top:1px solid #0A0A0A;padding-top:8px;margin-top:4px}\n'
+        '  .sign{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px}\n'
+        '  .sign-box{border:1px solid #EDEAE4;border-radius:4px;padding:16px 18px;min-height:110px;display:flex;flex-direction:column}\n'
+        '  .sign-label{font-size:9px;color:#999;font-family:Arial,sans-serif;letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px}\n'
+        '  .sign-line{flex:1;border-bottom:1px solid #ccc;margin:10px 0}\n'
+        '  .sign-date{font-size:10px;color:#999;font-family:Arial,sans-serif}\n'
+        '  .footer{text-align:center;font-size:10px;color:#999;margin-top:18px;padding-top:12px;border-top:1px solid #EDEAE4;font-family:Arial,sans-serif;letter-spacing:.04em}\n'
+        '</style>\n</head>\n<body>\n<div id="root">\n'
+        f'{watermark_html}\n'
+        '<div class="accent-bar"></div>\n'
+        '<div class="header">\n  <div>\n    <div class="co-name">允碩整合集創股份有限公司</div>\n'
+        '    <div class="co-sub">MOTRIX Synergy Integration Corp.</div>\n'
+        '    <div class="co-sub" style="margin-top:4px">統一編號：60575481　｜　電話：04-3610-6566　｜　info@miactw.com</div>\n'
+        '  </div>\n  <div>\n    <div class="doc-title">承攬商匯款申請</div>\n  </div>\n</div>\n'
+        '<div class="meta">\n'
+        f'  <div><span>申請單號：</span><strong style="font-family:Arial,sans-serif">{esc(v.get("voucherNo",""))}</strong></div>\n'
+        f'  <div><span>建立日期：</span>{esc((v.get("createdAt") or "")[:10])}</div>\n'
+        f'  <div><span>關聯案件：</span>{esc(v.get("quoteNo",""))}</div>\n'
+        '</div>\n'
+        f'{banner_html}\n'
+        '<div class="boxes">\n'
+        '  <div class="box">\n    <div class="box-title">一、承攬商資訊</div>\n'
+        f'    <div class="row"><span class="label">名稱</span><span class="val">{esc(v.get("vendorName","") or "（無承攬商，純外包人員）")}</span></div>\n'
+        f'    <div class="row"><span class="label">統一編號</span><span class="val">{esc(v.get("vendorTaxId",""))}</span></div>\n'
+        f'    <div class="row"><span class="label">發票號碼</span><span class="val">{esc(v.get("invoiceNo",""))}</span></div>\n'
+        '  </div>\n'
+        '  <div class="box">\n    <div class="box-title">二、匯款帳戶資訊</div>\n'
+        f'    <div class="row"><span class="label">銀行</span><span class="val">{esc(v.get("bankCode",""))} {esc(v.get("bankName",""))}</span></div>\n'
+        f'    <div class="row"><span class="label">分行</span><span class="val">{esc(v.get("bankBranch",""))}</span></div>\n'
+        f'    <div class="row"><span class="label">戶名</span><span class="val">{esc(v.get("bankAccountName",""))}</span></div>\n'
+        f'    <div class="row"><span class="label">帳號</span><span class="val" style="font-family:Arial,sans-serif">{esc(v.get("bankAccountNumber",""))}</span></div>\n'
+        + (f'    <div style="margin-top:8px"><img src="{esc(v.get("bankPassbookImage",""))}" '
+           f'style="max-width:260px;max-height:160px;border:1px solid #EDEAE4;border-radius:4px;display:block"></div>\n'
+           if v.get('bankPassbookImage') else '')
+        + '  </div>\n</div>\n'
+        '<div class="section-label">三、派發品項明細</div>\n'
+        '<table>\n  <thead><tr><th style="width:28px">#</th><th>品項說明</th><th class="r" style="width:100px">金額</th></tr></thead>\n'
+        f'  <tbody>{item_rows}</tbody>\n</table>\n'
+        f'{personnel_cards_html}'
+        '<div class="total-box"><div class="total-table">\n'
+        f'  <div class="row"><span>承攬商未稅小計</span><span style="font-family:Arial,sans-serif">{money(v.get("totalAmount",0))}</span></div>\n'
+        f'  <div class="row"><span>營業稅（{round((v.get("taxRate") or 0)*100)}%）</span><span style="font-family:Arial,sans-serif">{money(v.get("taxAmount",0))}</span></div>\n'
+        f'  <div class="row"><span>外包人員小計（不計稅）</span><span style="font-family:Arial,sans-serif">{money(v.get("personnelTotal",0))}</span></div>\n'
+        f'  <div class="row grand"><span>應付總額</span><span style="font-family:Arial,sans-serif">NT$ {money(v.get("grandTotal",0))}</span></div>\n'
+        '</div></div>\n'
+        f'{_voucher_sign_html(v.get("approval") or {})}\n'
+        '<div class="sign">\n'
+        '  <div class="sign-box">\n    <div class="sign-label">財務單位 · 匯款確認</div>\n'
+        f'    <div class="sign-line"></div>\n    <div class="sign-date">匯款日期：{paid_date or "＿＿＿＿＿＿＿＿＿＿"}</div>\n'
+        f'    {paid_note}\n  </div>\n'
+        '  <div class="sign-box">\n    <div class="sign-label">申請人 · 經手人</div>\n'
+        f'    <div style="font-size:13px;font-weight:600;color:#0A0A0A;margin:2px 0 8px">{esc(applicant_name)}</div>\n'
+        f'    <div class="sign-line"></div>\n    <div class="sign-date">申請日期：{esc(applicant_date) or "＿＿＿＿＿＿＿＿＿＿"}</div>\n  </div>\n'
+        '</div>\n'
+        '<div class="footer">\n  MOTRIX Synergy Integration Corp. 允碩整合集創 ｜ info@miactw.com ｜ Tel: 04-3610-6566 ｜ 統一編號: 60575481\n</div>\n'
+        '</div>\n'
+        '<script>window.addEventListener("load",function(){var r=document.getElementById("root");if(!r)return;'
+        'var A4H=Math.round(267/25.4*96);var h=r.scrollHeight;if(h>A4H){var s=A4H/h;if(s>=0.70){r.style.zoom=s.toFixed(4);}}});</script>\n'
+        '</body>\n</html>'
+    )
+
+
+def _voucher_pdf_audit(voucher_no: str, target_type: str, success: bool, detail: str = "",
+                       actor: str = "", action_type: str = ""):
+    try:
+        conn = get_db()
+        now  = datetime.now().isoformat()
+        label = f"{voucher_no} PDF {'生成成功' if success else '生成失敗'}"
+        if action_type:
+            label = f"{voucher_no}【{action_type}】PDF {'生成成功' if success else '生成失敗'}"
+        conn.execute(
+            "INSERT INTO audit_log "
+            "(at, username, display_name, action, target_type, target_id, target_label, detail) "
+            "VALUES (?,?,?,?,?,?,?,?)",
+            (now, actor or "system", actor or "系統自動", "pdf.auto_generate", target_type, voucher_no,
+             label,
+             json.dumps({"success": success, "detail": detail, "actor": actor, "actionType": action_type},
+                        ensure_ascii=False))
+        )
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
+
+def _display_name_for_username(username: str) -> str:
+    """建立憑證/申請時只存了帳號名稱（created_by），PDF 上要印顯示名稱不是帳號——
+    查無使用者（例如帳號後來被刪除）才退回帳號名稱本身，至少不要整欄空白。"""
+    if not username:
+        return ""
+    try:
+        conn = get_db()
+        row = conn.execute("SELECT display_name FROM users WHERE username=?", (username,)).fetchone()
+        conn.close()
+        return (row["display_name"] if row else "") or username
+    except Exception:
+        return username
+
+
+def _contractor_voucher_dict(row) -> dict:
+    d = dict(row)
+    snap = json.loads(d.pop("snapshot_json", None) or "{}")
+    appr = (json.loads(d.pop("data_json", None) or "{}") or {}).get("approval") or {}
+    out = {**snap}
+    out["voucherNo"] = d.get("voucher_no", "")
+    out["quoteNo"] = d.get("quote_no", "")
+    out["status"] = d.get("status", "")
+    out["isPaid"] = bool(d.get("is_paid"))
+    out["paidBy"] = d.get("paid_by", "")
+    out["paidAt"] = d.get("paid_at", "")
+    out["createdBy"] = _display_name_for_username(d.get("created_by", ""))
+    out["createdAt"] = d.get("created_at", "")
+    out["approval"] = appr
+    return out
+
+
+def generate_contractor_voucher_pdf_bytes(voucher_no: str) -> bytes:
+    """Edge Headless 產生承攬商匯款申請 PDF 並以 bytes 回傳（供 API 下載使用）。"""
+    edge = _get_edge_path()
+    conn = get_db()
+    row = conn.execute(
+        "SELECT * FROM contractor_payment_vouchers WHERE voucher_no=?", (voucher_no,)
+    ).fetchone()
+    conn.close()
+    if not row:
+        raise ValueError("申請不存在")
+    v = _contractor_voucher_dict(row)
+    html_content = _build_contractor_voucher_html(v)
+    tmp_html = tmp_pdf = None
+    try:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.html', encoding='utf-8', delete=False) as f:
+            f.write(html_content)
+            tmp_html = f.name
+        with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as f:
+            tmp_pdf = f.name
+        file_url = 'file:///' + tmp_html.replace('\\', '/')
+        subprocess.run(
+            [edge, '--headless', '--disable-gpu', '--no-sandbox',
+             f'--print-to-pdf={tmp_pdf}',
+             '--no-pdf-header-footer',
+             '--run-all-compositor-stages-before-draw',
+             file_url],
+            timeout=40, check=False,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
+        if not os.path.exists(tmp_pdf) or os.path.getsize(tmp_pdf) == 0:
+            raise ValueError("Edge 執行完畢但未產生 PDF 檔案")
+        with open(tmp_pdf, 'rb') as f:
+            return f.read()
+    finally:
+        for p in (tmp_html, tmp_pdf):
+            if p:
+                try: os.unlink(p)
+                except Exception: pass
+
+
+def _generate_contractor_voucher_pdf(voucher_no: str, actor: str = '', action_type: str = '簽核'):
+    """存檔＋稽核版承攬商匯款申請 PDF 產生，於全部簽核完成後背景觸發。"""
+    try:
+        edge = _get_edge_path()
+    except RuntimeError as e:
+        logger.warning("Edge not found, contractor voucher PDF generation skipped: %s", e)
+        _voucher_pdf_audit(voucher_no, "contractor_payment_voucher", False, str(e), actor, action_type)
+        return
+
+    safe_actor = re.sub(r'[\\/:*?"<>|\s]', '_', actor or '').strip('_')[:20]
+    tmp_html = None
+    pdf_path = ""
+    try:
+        conn = get_db()
+        row = conn.execute(
+            "SELECT * FROM contractor_payment_vouchers WHERE voucher_no=?", (voucher_no,)
+        ).fetchone()
+        conn.close()
+        if not row:
+            return
+        v = _contractor_voucher_dict(row)
+        html_content = _build_contractor_voucher_html(v)
+
+        today   = date.today().strftime('%Y%m%d')
+        out_dir = os.path.join(_get_contractor_voucher_pdf_base(), date.today().isoformat())
+        os.makedirs(out_dir, exist_ok=True)
+
+        base_name = f"{voucher_no}_{action_type}_{today}_{safe_actor}" if safe_actor \
+            else f"{voucher_no}_{action_type}_{today}"
+        pdf_path = os.path.join(out_dir, f"{base_name}.pdf")
+        if os.path.exists(pdf_path):
+            for i in range(2, 20):
+                candidate = os.path.join(out_dir, f"{base_name}_{i}.pdf")
+                if not os.path.exists(candidate):
+                    pdf_path = candidate
+                    break
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.html', encoding='utf-8', delete=False) as f:
+            f.write(html_content)
+            tmp_html = f.name
+
+        file_url = 'file:///' + tmp_html.replace('\\', '/')
+        subprocess.run(
+            [edge, '--headless', '--disable-gpu', '--no-sandbox',
+             f'--print-to-pdf={pdf_path}',
+             '--no-pdf-header-footer',
+             '--run-all-compositor-stages-before-draw',
+             file_url],
+            timeout=40, check=False,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
+        if os.path.exists(pdf_path) and os.path.getsize(pdf_path) > 0:
+            logger.info("Contractor voucher PDF saved: %s", pdf_path)
+            _voucher_pdf_audit(voucher_no, "contractor_payment_voucher", True, pdf_path, actor, action_type)
+        else:
+            logger.warning("Contractor voucher PDF not created for %s (Edge ran but no output file)", voucher_no)
+            _voucher_pdf_audit(voucher_no, "contractor_payment_voucher", False,
+                               "Edge 執行完畢但未產生 PDF 檔案", actor, action_type)
+    except Exception as e:
+        logger.exception("_generate_contractor_voucher_pdf failed for %s", voucher_no)
+        _voucher_pdf_audit(voucher_no, "contractor_payment_voucher", False, str(e), actor, action_type)
+    finally:
+        if tmp_html:
+            try:
+                os.unlink(tmp_html)
+            except Exception:
+                pass
+
+
+# ── 開票申請憑據 ──────────────────────────────────────────────────────────────
+
+def _build_invoice_voucher_html(v: dict) -> str:
+    def esc(s):
+        return (s or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>')
+    def money(n):
+        return f'{n:,.0f}' if isinstance(n, (int, float)) else '0'
+
+    scope = v.get('scope') or 'amount'
+    requested_amount = v.get('amount', 0) or 0
+    pretax_amount = v.get('pretaxAmount', 0) or 0
+    tax_amount = v.get('taxAmount', 0) or 0
+    selected_items = v.get('selectedItems') or []
+    quote_items = v.get('quoteItems') or []
+
+    if scope == 'items':
+        scope_label = '自訂品項'
+        sel_rows = ''
+        for i, it in enumerate(selected_items, 1):
+            spec = it.get('description', '')
+            brand = it.get('brand', '')
+            sel_rows += (
+                f'<tr><td>{i}</td><td>{esc(spec)}{("　" + esc(brand)) if brand else ""}</td>'
+                f'<td class="r">{esc(str(it.get("qty","")))}</td><td>{esc(it.get("unit",""))}</td>'
+                f'<td class="r">{money(it.get("unitPrice",0))}</td><td class="r">{money(it.get("amount",0))}</td></tr>'
+            )
+        items_table_html = (
+            '<div class="section-label">三、申請品項明細（未稅，稅額另計，見下方總額）</div>\n'
+            '<table>\n  <thead><tr><th style="width:24px">#</th><th>品名 / 規格</th>'
+            '<th class="r" style="width:44px">數量</th><th style="width:40px">單位</th>'
+            '<th class="r" style="width:70px">單價（未稅）</th><th class="r" style="width:90px">金額（未稅）</th></tr></thead>\n'
+            f'  <tbody>{sel_rows}</tbody>\n</table>\n'
+        )
+        quote_items_html = ''   # 已選品項本身就是要開的內容，不用再重複列一次全部報價品項參考
+    else:
+        scope_label = '自訂金額'
+        items_table_html = (
+            '<div class="section-label">三、申請金額</div>\n'
+            '<div class="boxes" style="grid-template-columns:1fr">\n'
+            '  <div class="box">\n'
+            f'    <div class="row"><span class="label">申請金額（含稅）</span>'
+            f'<span class="val" style="font-size:16px;font-weight:700;font-family:Arial,sans-serif">'
+            f'NT$ {money(requested_amount)}</span></div>\n'
+            '  </div>\n</div>\n'
+        )
+        quote_item_rows = ''
+        for i, it in enumerate(quote_items, 1):
+            spec = it.get('description', '')
+            brand = it.get('brand', '')
+            quote_item_rows += (
+                f'<tr><td>{i}</td><td>{esc(spec)}{("　" + esc(brand)) if brand else ""}</td>'
+                f'<td class="r">{esc(str(it.get("qty","")))}</td><td>{esc(it.get("unit",""))}</td>'
+                f'<td class="r">{money(it.get("unitPrice",0))}</td><td class="r">{money(it.get("amount",0))}</td></tr>'
+            )
+        quote_items_html = ''
+        if quote_item_rows:
+            quote_items_html = (
+                '<div class="section-label">四、開票品項參考（報價單內容）</div>\n'
+                '<table>\n  <thead><tr><th style="width:24px">#</th><th>品名 / 規格</th>'
+                '<th class="r" style="width:44px">數量</th><th style="width:40px">單位</th>'
+                '<th class="r" style="width:70px">單價</th><th class="r" style="width:90px">金額</th></tr></thead>\n'
+                f'  <tbody>{quote_item_rows}</tbody>\n</table>\n'
+            )
+
+    applicant_name = (v.get('approval') or {}).get('requestedByDisplay') or v.get('createdBy', '')
+    applicant_date = ((v.get('approval') or {}).get('requestedAt') or v.get('createdAt') or '')[:10]
+
+    is_final = v.get('status') == '已核准'
+    watermark_html = '' if is_final else (
+        '<div class="wm">' + ''.join(
+            '<div class="wm-item"><b>憑據預覽稿</b><small>尚未正式核准</small></div>'
+            for _ in range(12)
+        ) + '</div>'
+    )
+    banner_html = '' if is_final else (
+        f'<div class="preview-banner">⚠ 此為開票申請憑據預覽稿（目前狀態：{esc(v.get("status") or "草稿")}），'
+        f'尚未正式核准，請勿提供財務單位辦理開票</div>'
+    )
+
+    return (
+        '<!DOCTYPE html>\n<html lang="zh-Hant">\n<head>\n<meta charset="UTF-8">\n'
+        f'<title>{esc(v.get("voucherNo",""))} 開票申請憑據</title>\n'
+        '<style>\n'
+        '  *{box-sizing:border-box;margin:0;padding:0}\n'
+        '  body{font-family:"Microsoft JhengHei","PMingLiU",serif;font-size:13px;color:#0A0A0A;line-height:1.6;background:#fff}\n'
+        '  #root{padding:24px 32px;position:relative}\n'
+        '  .wm{position:absolute;inset:0;pointer-events:none;z-index:5;overflow:hidden;display:grid;'
+        'grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(4,1fr);align-items:center;justify-items:center;box-sizing:border-box}\n'
+        '  .wm-item{transform:rotate(-28deg);white-space:nowrap;user-select:none;text-align:center;line-height:1.5}\n'
+        '  .wm-item b{display:block;font-size:19px;font-weight:900;letter-spacing:.14em;color:rgba(185,28,28,.09)}\n'
+        '  .wm-item small{display:block;font-size:10px;font-weight:700;letter-spacing:.07em;color:rgba(185,28,28,.07)}\n'
+        '  .preview-banner{margin-bottom:12px;padding:7px 12px;background:#EFF6FF;border:1px solid #BFDBFE;'
+        'border-radius:5px;font-size:11px;color:#1E40AF;letter-spacing:.02em}\n'
+        '  @page{size:A4;margin:0 13mm 12mm 13mm;@bottom-center{content:counter(page);font-family:Arial,sans-serif;font-size:9px;color:#aaa}}\n'
+        '  @media print{html,body{margin:0;padding:0;background:#fff}#root{padding:15mm 0 0}.sign{page-break-inside:avoid}tr{page-break-inside:avoid}}\n'
+        '  .accent-bar{height:3px;background:#0A0A0A;margin-bottom:18px}\n'
+        '  .header{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:14px;border-bottom:1px solid #0A0A0A;margin-bottom:16px}\n'
+        '  .co-name{font-size:15px;font-weight:700;letter-spacing:.06em}\n'
+        '  .co-sub{font-size:10px;color:#888;margin-top:3px;font-family:Arial,sans-serif;letter-spacing:.02em}\n'
+        '  .doc-title{font-size:22px;font-weight:700;letter-spacing:.18em;text-align:right}\n'
+        '  .meta{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-bottom:14px;font-size:12px;background:#FAFAF8;padding:10px 12px;border-radius:4px;border:1px solid #EDEAE4}\n'
+        '  .meta span{color:#888;font-family:Arial,sans-serif;font-size:11px}\n'
+        '  .boxes{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px}\n'
+        '  .box{background:#FAFAF8;border:1px solid #EDEAE4;border-radius:4px;padding:11px 13px}\n'
+        '  .box-title{font-size:9px;font-family:Arial,sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#999;font-weight:600;margin-bottom:8px}\n'
+        '  .row{display:flex;gap:6px;margin-bottom:4px;font-size:12px}\n'
+        '  .label{color:#888;min-width:72px;flex-shrink:0;font-size:11px}\n'
+        '  .val{color:#0A0A0A;font-weight:500}\n'
+        '  .section-label{font-size:9px;font-family:Arial,sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#999;font-weight:600;margin-bottom:7px;display:flex;align-items:center;gap:8px}\n'
+        '  .section-label::after{content:"";flex:1;height:1px;background:#EDEAE4}\n'
+        '  table{width:100%;border-collapse:collapse;margin-bottom:14px}\n'
+        '  thead th{background:#0A0A0A;color:#F5F4F0;padding:8px 9px;text-align:left;font-size:11px;font-weight:500;font-family:Arial,sans-serif;letter-spacing:.04em}\n'
+        '  thead th.r{text-align:right}\n'
+        '  tbody td{padding:8px 9px;border-bottom:1px solid #EDEAE4;font-size:12px}\n'
+        '  tbody tr:last-child td{border-bottom:none}\n'
+        '  tbody tr:nth-child(even) td{background:#FAFAF8}\n'
+        '  td.r{text-align:right;font-family:Arial,sans-serif}\n'
+        '  .total-box{display:flex;justify-content:flex-end;margin-bottom:16px}\n'
+        '  .total-table{width:280px;font-size:12px}\n'
+        '  .total-table .row{display:flex;justify-content:space-between;padding:4px 0}\n'
+        '  .total-table .grand{font-size:15px;font-weight:700;border-top:1px solid #0A0A0A;padding-top:8px;margin-top:4px}\n'
+        '  .sign{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px}\n'
+        '  .sign-box{border:1px solid #EDEAE4;border-radius:4px;padding:16px 18px;min-height:110px;display:flex;flex-direction:column}\n'
+        '  .sign-label{font-size:9px;color:#999;font-family:Arial,sans-serif;letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px}\n'
+        '  .sign-line{flex:1;border-bottom:1px solid #ccc;margin:10px 0}\n'
+        '  .sign-date{font-size:10px;color:#999;font-family:Arial,sans-serif}\n'
+        '  .footer{text-align:center;font-size:10px;color:#999;margin-top:18px;padding-top:12px;border-top:1px solid #EDEAE4;font-family:Arial,sans-serif;letter-spacing:.04em}\n'
+        '</style>\n</head>\n<body>\n<div id="root">\n'
+        f'{watermark_html}\n'
+        '<div class="accent-bar"></div>\n'
+        '<div class="header">\n  <div>\n    <div class="co-name">允碩整合集創股份有限公司</div>\n'
+        '    <div class="co-sub">MOTRIX Synergy Integration Corp.</div>\n'
+        '    <div class="co-sub" style="margin-top:4px">統一編號：60575481　｜　電話：04-3610-6566　｜　info@miactw.com</div>\n'
+        '  </div>\n  <div>\n    <div class="doc-title">開票申請憑據</div>\n  </div>\n</div>\n'
+        '<div class="meta">\n'
+        f'  <div><span>憑據單號：</span><strong style="font-family:Arial,sans-serif">{esc(v.get("voucherNo",""))}</strong></div>\n'
+        f'  <div><span>建立日期：</span>{esc((v.get("createdAt") or "")[:10])}</div>\n'
+        f'  <div><span>關聯案件：</span>{esc(v.get("quoteNo",""))}</div>\n'
+        '</div>\n'
+        f'{banner_html}\n'
+        '<div class="boxes">\n'
+        '  <div class="box">\n    <div class="box-title">一、客戶資訊</div>\n'
+        f'    <div class="row"><span class="label">客戶名稱</span><span class="val">{esc(v.get("customerName",""))}</span></div>\n'
+        f'    <div class="row"><span class="label">統一編號</span><span class="val">{esc(v.get("customerTaxId",""))}</span></div>\n'
+        '  </div>\n'
+        '  <div class="box">\n    <div class="box-title">二、案件資訊</div>\n'
+        f'    <div class="row"><span class="label">案件名稱</span><span class="val">{esc(v.get("projectName",""))}</span></div>\n'
+        f'    <div class="row"><span class="label">申請範圍</span><span class="val">{esc(scope_label)}</span></div>\n'
+        '  </div>\n</div>\n'
+        f'{items_table_html}'
+        '<div class="total-box"><div class="total-table">\n'
+        f'  <div class="row"><span>未稅小計</span><span style="font-family:Arial,sans-serif">NT$ {money(pretax_amount)}</span></div>\n'
+        f'  <div class="row"><span>營業稅</span><span style="font-family:Arial,sans-serif">NT$ {money(tax_amount)}</span></div>\n'
+        f'  <div class="row grand"><span>申請開票總額（含稅）</span><span style="font-family:Arial,sans-serif">NT$ {money(requested_amount)}</span></div>\n'
+        '</div></div>\n'
+        f'{quote_items_html}'
+        f'{_voucher_sign_html(v.get("approval") or {})}\n'
+        '<div class="sign">\n'
+        '  <div class="sign-box">\n    <div class="sign-label">財務單位 · 開票確認</div>\n'
+        '    <div class="sign-line"></div>\n    <div class="sign-date">開票日期：＿＿＿＿＿＿＿＿＿＿</div>\n  </div>\n'
+        '  <div class="sign-box">\n    <div class="sign-label">申請人 · 經手人</div>\n'
+        f'    <div style="font-size:13px;font-weight:600;color:#0A0A0A;margin:2px 0 8px">{esc(applicant_name)}</div>\n'
+        f'    <div class="sign-line"></div>\n    <div class="sign-date">申請日期：{esc(applicant_date) or "＿＿＿＿＿＿＿＿＿＿"}</div>\n  </div>\n'
+        '</div>\n'
+        '<div class="footer">\n  MOTRIX Synergy Integration Corp. 允碩整合集創 ｜ info@miactw.com ｜ Tel: 04-3610-6566 ｜ 統一編號: 60575481\n</div>\n'
+        '</div>\n'
+        '<script>window.addEventListener("load",function(){var r=document.getElementById("root");if(!r)return;'
+        'var A4H=Math.round(267/25.4*96);var h=r.scrollHeight;if(h>A4H){var s=A4H/h;if(s>=0.70){r.style.zoom=s.toFixed(4);}}});</script>\n'
+        '</body>\n</html>'
+    )
+
+
+def _invoice_voucher_dict(row) -> dict:
+    d = dict(row)
+    snap = json.loads(d.pop("snapshot_json", None) or "{}")
+    appr = (json.loads(d.pop("data_json", None) or "{}") or {}).get("approval") or {}
+    out = {**snap}
+    out["voucherNo"] = d.get("voucher_no", "")
+    out["quoteNo"] = d.get("quote_no", "")
+    out["scope"] = d.get("scope", "amount")
+    out["amount"] = float(d.get("amount") or 0)
+    out["status"] = d.get("status", "")
+    out["createdBy"] = _display_name_for_username(d.get("created_by", ""))
+    out["createdAt"] = d.get("created_at", "")
+    out["approval"] = appr
+    return out
+
+
+def generate_invoice_voucher_pdf_bytes(voucher_no: str) -> bytes:
+    """Edge Headless 產生開票申請憑據 PDF 並以 bytes 回傳（供 API 下載使用）。"""
+    edge = _get_edge_path()
+    conn = get_db()
+    row = conn.execute("SELECT * FROM invoice_vouchers WHERE voucher_no=?", (voucher_no,)).fetchone()
+    conn.close()
+    if not row:
+        raise ValueError("憑據不存在")
+    v = _invoice_voucher_dict(row)
+    html_content = _build_invoice_voucher_html(v)
+    tmp_html = tmp_pdf = None
+    try:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.html', encoding='utf-8', delete=False) as f:
+            f.write(html_content)
+            tmp_html = f.name
+        with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as f:
+            tmp_pdf = f.name
+        file_url = 'file:///' + tmp_html.replace('\\', '/')
+        subprocess.run(
+            [edge, '--headless', '--disable-gpu', '--no-sandbox',
+             f'--print-to-pdf={tmp_pdf}',
+             '--no-pdf-header-footer',
+             '--run-all-compositor-stages-before-draw',
+             file_url],
+            timeout=40, check=False,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
+        if not os.path.exists(tmp_pdf) or os.path.getsize(tmp_pdf) == 0:
+            raise ValueError("Edge 執行完畢但未產生 PDF 檔案")
+        with open(tmp_pdf, 'rb') as f:
+            return f.read()
+    finally:
+        for p in (tmp_html, tmp_pdf):
+            if p:
+                try: os.unlink(p)
+                except Exception: pass
+
+
+def _generate_invoice_voucher_pdf(voucher_no: str, actor: str = '', action_type: str = '簽核'):
+    """存檔＋稽核版開票申請憑據 PDF 產生，於全部簽核完成後背景觸發。"""
+    try:
+        edge = _get_edge_path()
+    except RuntimeError as e:
+        logger.warning("Edge not found, invoice voucher PDF generation skipped: %s", e)
+        _voucher_pdf_audit(voucher_no, "invoice_voucher", False, str(e), actor, action_type)
+        return
+
+    safe_actor = re.sub(r'[\\/:*?"<>|\s]', '_', actor or '').strip('_')[:20]
+    tmp_html = None
+    pdf_path = ""
+    try:
+        conn = get_db()
+        row = conn.execute("SELECT * FROM invoice_vouchers WHERE voucher_no=?", (voucher_no,)).fetchone()
+        conn.close()
+        if not row:
+            return
+        v = _invoice_voucher_dict(row)
+        html_content = _build_invoice_voucher_html(v)
+
+        today   = date.today().strftime('%Y%m%d')
+        out_dir = os.path.join(_get_invoice_voucher_pdf_base(), date.today().isoformat())
+        os.makedirs(out_dir, exist_ok=True)
+
+        base_name = f"{voucher_no}_{action_type}_{today}_{safe_actor}" if safe_actor \
+            else f"{voucher_no}_{action_type}_{today}"
+        pdf_path = os.path.join(out_dir, f"{base_name}.pdf")
+        if os.path.exists(pdf_path):
+            for i in range(2, 20):
+                candidate = os.path.join(out_dir, f"{base_name}_{i}.pdf")
+                if not os.path.exists(candidate):
+                    pdf_path = candidate
+                    break
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.html', encoding='utf-8', delete=False) as f:
+            f.write(html_content)
+            tmp_html = f.name
+
+        file_url = 'file:///' + tmp_html.replace('\\', '/')
+        subprocess.run(
+            [edge, '--headless', '--disable-gpu', '--no-sandbox',
+             f'--print-to-pdf={pdf_path}',
+             '--no-pdf-header-footer',
+             '--run-all-compositor-stages-before-draw',
+             file_url],
+            timeout=40, check=False,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
+        if os.path.exists(pdf_path) and os.path.getsize(pdf_path) > 0:
+            logger.info("Invoice voucher PDF saved: %s", pdf_path)
+            _voucher_pdf_audit(voucher_no, "invoice_voucher", True, pdf_path, actor, action_type)
+        else:
+            logger.warning("Invoice voucher PDF not created for %s (Edge ran but no output file)", voucher_no)
+            _voucher_pdf_audit(voucher_no, "invoice_voucher", False,
+                               "Edge 執行完畢但未產生 PDF 檔案", actor, action_type)
+    except Exception as e:
+        logger.exception("_generate_invoice_voucher_pdf failed for %s", voucher_no)
+        _voucher_pdf_audit(voucher_no, "invoice_voucher", False, str(e), actor, action_type)
     finally:
         if tmp_html:
             try:

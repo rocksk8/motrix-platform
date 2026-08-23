@@ -12,13 +12,18 @@ from urllib.parse import quote as urlquote
 
 from fastapi import APIRouter, Body, HTTPException, Header
 from fastapi.responses import Response
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 from db import get_db, next_entity_code, spawn_bg_thread
 from helpers import (
     _require_user, _tok, _audit, _notify, _get_setting, _set_setting, _purge_notifications,
     notify_module_activity, notify_shipping_submitted, notify_shipping_next_tier,
     notify_shipping_approved, notify_shipping_returned,
+    push_event_for_shipping_note,
+    active_tiers as _active_tiers, current_tier_idx as _current_tier_idx,
+    setting_to_active_tiers as _setting_to_active_tiers,
+    check_approve_permission, check_reject_permission, check_no_tier_self_approval,
+    UnresolvedManagerError,
 )
 from pdf_gen import generate_shipping_pdf_bytes, _generate_shipping_pdf
 
@@ -39,9 +44,24 @@ class ShippingNoteIn(BaseModel):
 
 
 class ApprovalFlowApprover(BaseModel):
-    userId:      int
-    username:    str
-    displayName: str
+    sourceType:   Optional[str] = None
+    departmentId: Optional[int] = None
+    divisionId:   Optional[int] = None
+    userId:       Optional[int] = None
+    username:     Optional[str] = None
+    displayName:  Optional[str] = None
+
+    @model_validator(mode="after")
+    def _check_shape(self):
+        if self.sourceType == "department_manager":
+            if not self.departmentId:
+                raise ValueError("department_manager 簽核層需要指定 departmentId")
+        elif self.sourceType == "division_manager":
+            if not self.divisionId:
+                raise ValueError("division_manager 簽核層需要指定 divisionId")
+        elif not (self.userId and self.username):
+            raise ValueError("手動指定的簽核人需要 userId／username")
+        return self
 
 class ApprovalFlowTier(BaseModel):
     order:     int = 0
@@ -49,38 +69,10 @@ class ApprovalFlowTier(BaseModel):
 
 class ApprovalFlowSettings(BaseModel):
     tiers: List[ApprovalFlowTier] = []
+    includeSubmitterManagerTier: bool = True
 
 
-# ── Approval tier helpers（獨立於報價單，不共用 quotations.py 邏輯）───────────
-
-def _setting_to_active_tiers(setting: dict) -> list:
-    tiers = setting.get("tiers") or []
-    return [
-        {
-            "order": t.get("order", i),
-            "approvers": [
-                {
-                    "userId":      a.get("userId"),
-                    "username":    a["username"],
-                    "displayName": a.get("displayName", a["username"]),
-                    "status":      "pending",
-                    "approvedAt":  None,
-                }
-                for a in (t.get("approvers") or [])
-            ],
-        }
-        for i, t in enumerate(tiers)
-        if (t.get("approvers") or [])
-    ]
-
-
-def _active_tiers(appr: dict) -> list:
-    return appr.get("tiers") or []
-
-
-def _current_tier_idx(appr: dict) -> int:
-    return appr.get("currentTier") or 0
-
+# ── Approval tier helpers（純邏輯部分共用 helpers/tiered_approval.py，見上方 import）──
 
 def _require_admin(user: dict):
     if user["role"] not in ("superadmin", "admin"):
@@ -309,7 +301,11 @@ def submit_shipping_note(note_no: str, authorization: str = Header(None)):
     now   = datetime.now().isoformat()
 
     flow_setting = _get_setting("shipping_approval_flow", {"tiers": []}) or {}
-    active_tiers = _setting_to_active_tiers(flow_setting)
+    try:
+        active_tiers = _setting_to_active_tiers(flow_setting, conn, user["username"])
+    except UnresolvedManagerError as e:
+        conn.close()
+        raise HTTPException(400, str(e))
     d["approval"] = {
         "requestedBy":        user["username"],
         "requestedByDisplay": user.get("display_name") or user["username"],
@@ -340,8 +336,11 @@ def submit_shipping_note(note_no: str, authorization: str = Header(None)):
 
 @router.post("/api/shipping-notes/{note_no}/approve")
 def approve_shipping_note(note_no: str, body: dict = Body(default={}), authorization: str = Header(None)):
+    # 比照 quotations.py：能否簽核完全由「是否為當層簽核人員」決定，不額外要求
+    # 簽核人帳號角色必須是 admin/superadmin——簽核設定頁面允許加入任何角色的
+    # 使用者當簽核人，這裡若硬性擋 admin 會讓非管理員角色的簽核人永遠卡死無法簽核
+    # （2026-08-22 架構複查發現此檔案先前漏套用這個修正，這裡補上）。
     user = _require_user(authorization)
-    _require_admin(user)
     conn = get_db()
     row = conn.execute(
         "SELECT data_json, customer_name, items_json, quote_no FROM shipping_notes "
@@ -359,25 +358,13 @@ def approve_shipping_note(note_no: str, body: dict = Body(default={}), authoriza
 
     if tiers:
         ct_idx = _current_tier_idx(appr)
-        if ct_idx >= len(tiers):
+        ok, status_code, err_msg = check_approve_permission(tiers, ct_idx, user["username"])
+        if not ok:
             conn.close()
-            raise HTTPException(400, "所有層已完成")
+            raise HTTPException(status_code, err_msg)
         tier      = tiers[ct_idx]
         approvers = tier.get("approvers") or []
-
-        is_in_tier = any(a["username"] == user["username"] for a in approvers)
-        if not is_in_tier:
-            conn.close()
-            raise HTTPException(403, "此層無您的簽核權限")
-
         first_pending = next((a for a in approvers if a.get("status") != "approved"), None)
-        if not first_pending:
-            conn.close()
-            raise HTTPException(400, "此層所有簽核人員已完成")
-        if first_pending["username"] != user["username"]:
-            next_name = first_pending.get("displayName") or first_pending["username"]
-            conn.close()
-            raise HTTPException(403, f"請等待 {next_name} 先完成簽核（簽核順序固定）")
 
         first_pending["status"]     = "approved"
         first_pending["approvedAt"] = now
@@ -403,10 +390,20 @@ def approve_shipping_note(note_no: str, body: dict = Body(default={}), authoriza
             conn.close()
             raise HTTPException(403, "僅超級管理員可執行此操作")
         _global_flow  = _get_setting("shipping_approval_flow", {"tiers": []}) or {}
-        _global_tiers = _setting_to_active_tiers(_global_flow)
+        try:
+            _global_tiers = _setting_to_active_tiers(_global_flow, conn, appr.get("requestedBy"))
+        except UnresolvedManagerError as e:
+            conn.close()
+            raise HTTPException(400, str(e))
         if _global_tiers:
             conn.close()
             raise HTTPException(403, "系統已設定簽核流程，此出貨單缺少簽核層資料，請重新送審")
+        # 申請人不得自行審核（2026-08-22 架構複查發現此檔案先前完全沒有這道檢查，
+        # 這裡補上，比照 quotations.py／contractor_vouchers.py／invoice_vouchers.py）
+        self_block_msg = check_no_tier_self_approval(conn, appr, user)
+        if self_block_msg:
+            conn.close()
+            raise HTTPException(403, self_block_msg)
         all_done      = True
         detail_status = "超級管理員簽核"
 
@@ -456,6 +453,7 @@ def approve_shipping_note(note_no: str, body: dict = Body(default={}), authoriza
         conn.commit()
         approver_name = appr.get("approvedByDisplay") or user["username"]
         spawn_bg_thread(_generate_shipping_pdf, args=(note_no, approver_name, '簽核'))
+        spawn_bg_thread(push_event_for_shipping_note, args=(note_no,))
         requester = appr.get("requestedBy")
         if requester:
             _notify(requester, "shipping_approved", note_no, note_no, f"出貨單 {note_no}（{cname}）已核准")
@@ -539,8 +537,9 @@ def revoke_shipping_note_approval(note_no: str, body: dict = Body(default={}), a
 
 @router.post("/api/shipping-notes/{note_no}/reject")
 def reject_shipping_note(note_no: str, body: dict = Body(default={}), authorization: str = Header(None)):
+    # 比照 quotations.py：退回權限由當層簽核人員判斷，不額外要求 admin 角色
+    # （2026-08-22 架構複查發現此檔案先前漏套用這個修正，這裡補上）
     user = _require_user(authorization)
-    _require_admin(user)
     note = (body or {}).get("note", "")
     conn = get_db()
     row = conn.execute(
@@ -555,18 +554,11 @@ def reject_shipping_note(note_no: str, body: dict = Body(default={}), authorizat
     appr  = d.get("approval") or {}
     tiers = _active_tiers(appr)
 
-    if tiers:
-        ct_idx    = _current_tier_idx(appr)
-        tier      = tiers[ct_idx] if ct_idx < len(tiers) else {}
-        approvers = tier.get("approvers") or []
-        is_in_tier = any(a["username"] == user["username"] for a in approvers)
-        if not is_in_tier and user["role"] != "superadmin":
-            conn.close()
-            raise HTTPException(403, "無退回權限（非當層簽核人員）")
-    else:
-        if user["role"] != "superadmin":
-            conn.close()
-            raise HTTPException(403, "僅超級管理員可執行此操作")
+    ct_idx = _current_tier_idx(appr)
+    ok, status_code, err_msg = check_reject_permission(tiers, ct_idx, user)
+    if not ok:
+        conn.close()
+        raise HTTPException(status_code, err_msg)
 
     now       = datetime.now().isoformat()
     requester = appr.get("requestedBy")
@@ -710,8 +702,12 @@ def get_shipping_approval_flow(authorization: str = Header(None)):
 def set_shipping_approval_flow(body: ApprovalFlowSettings, authorization: str = Header(None)):
     _require_user(authorization, require_superadmin=True)
     total_approvers = sum(len(t.approvers) for t in body.tiers)
-    value = {"tiers": [t.model_dump() for t in body.tiers]}
+    value = {
+        "tiers": [t.model_dump() for t in body.tiers],
+        "includeSubmitterManagerTier": body.includeSubmitterManagerTier,
+    }
     _set_setting("shipping_approval_flow", value)
     _audit(_tok(authorization), "settings.shipping_approval_flow.update", "settings", "shipping_approval_flow",
-           "出貨單簽核流程設定", {"tierCount": len(body.tiers), "approverCount": total_approvers})
+           "出貨單簽核流程設定", {"tierCount": len(body.tiers), "approverCount": total_approvers,
+                            "includeSubmitterManagerTier": body.includeSubmitterManagerTier})
     return {"ok": True}

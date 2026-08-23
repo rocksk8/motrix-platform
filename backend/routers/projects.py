@@ -13,7 +13,10 @@ from fastapi import APIRouter, HTTPException, Header, Body, UploadFile, File, Qu
 from fastapi.responses import FileResponse
 
 from db import get_db
-from helpers import _require_user, _tok, _audit, _purge_notifications, notify_module_activity
+from helpers import (
+    _require_user, _tok, _audit, _purge_notifications, notify_module_activity,
+    resolve_department_manager, resolve_division_manager,
+)
 from photos import _process_project_photo, _PHOTO_UPLOAD_BASE, _photo_root
 
 _PHOTO_TOKEN_TTL = 3600  # seconds
@@ -75,21 +78,39 @@ def _parse_log(r: dict) -> dict:
     return r
 
 
+def _project_approver_ids(conn, department_id):
+    """回傳 (部門主管 user_id, 處主管 user_id)，department_id 空值或查無資料時回傳
+    (None, None)。專案確認事項簽核的額外路徑用（2026-08-23）——純附加，不影響既有
+    project_approve_eng/project_approve_biz 模組權限判斷；department_id 未設定或
+    部門/處未設主管時就是沒有新增任何人，行為完全比照現況。"""
+    if not department_id:
+        return None, None
+    dept_mgr = resolve_department_manager(conn, department_id)
+    row = conn.execute("SELECT division_id FROM departments WHERE id=?", (department_id,)).fetchone()
+    div_mgr = resolve_division_manager(conn, row["division_id"]) if row else None
+    return (
+        dept_mgr["userId"] if dept_mgr else None,
+        div_mgr["userId"] if div_mgr else None,
+    )
+
+
 # ── Projects CRUD ─────────────────────────────────────────────────────────────
 
 @router.get("/api/projects")
 def list_projects(
-    status:  Optional[str] = None,
-    q:       Optional[str] = None,
-    case_no: Optional[str] = None,
+    status:        Optional[str] = None,
+    q:             Optional[str] = None,
+    case_no:       Optional[str] = None,
+    department_id: Optional[int] = None,
     authorization: str = Header(None),
 ):
     user     = _require_user(authorization)
     is_admin = user['role'] in ('superadmin', 'admin')
+    is_super = user['role'] == 'superadmin'
+    modules  = json.loads(user.get('modules') or '[]')
     uid      = user['id']
     conn = get_db()
     rows = conn.execute("SELECT * FROM projects ORDER BY id DESC").fetchall()
-    conn.close()
     result = []
     for r in rows:
         d        = dict(r)
@@ -99,8 +120,9 @@ def list_projects(
         # 非 admin：只看到已被分配到的專案
         if not is_admin and uid not in assigned:
             continue
-        if status  and d['status'] != status:               continue
-        if case_no and case_no not in linked:               continue
+        if status        and d['status'] != status:               continue
+        if case_no        and case_no not in linked:               continue
+        if department_id and d.get('department_id') != department_id: continue
         if q:
             ql = q.lower()
             if not (ql in d.get('name','').lower() or ql in d.get('code','').lower()):
@@ -108,7 +130,11 @@ def list_projects(
         d['linked_cases']      = linked
         d['data_json']         = extra
         d['assigned_user_ids'] = assigned
+        dept_manager_id, division_manager_id = _project_approver_ids(conn, d.get('department_id'))
+        d['canApproveEng'] = is_super or 'project_approve_eng' in modules or uid == dept_manager_id
+        d['canApproveBiz'] = is_super or 'project_approve_biz' in modules or uid == division_manager_id
         result.append(d)
+    conn.close()
     return {"items": result}
 
 
@@ -121,8 +147,8 @@ def create_project(body: dict = Body(...), authorization: str = Header(None)):
     now  = datetime.now().isoformat()
     conn = get_db()
     cur  = conn.execute("""
-        INSERT INTO projects (code, name, status, description, linked_cases, created_at, created_by, data_json)
-        VALUES ('', ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO projects (code, name, status, description, linked_cases, created_at, created_by, data_json, department_id)
+        VALUES ('', ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         name,
         body.get('status', '規劃中'),
@@ -130,6 +156,7 @@ def create_project(body: dict = Body(...), authorization: str = Header(None)):
         json.dumps(body.get('linked_cases', []), ensure_ascii=False),
         now, user['display_name'],
         json.dumps(body.get('data_json', {}), ensure_ascii=False),
+        body.get('department_id') or None,
     ))
     new_id = cur.lastrowid
     code   = f"PR-{new_id:04d}"
@@ -144,16 +171,21 @@ def create_project(body: dict = Body(...), authorization: str = Header(None)):
 
 @router.get("/api/projects/{project_id}")
 def get_project(project_id: int, authorization: str = Header(None)):
-    _require_user(authorization)
+    user = _require_user(authorization)
     conn = get_db()
     row  = conn.execute("SELECT * FROM projects WHERE id=?", (project_id,)).fetchone()
-    conn.close()
     if not row:
-        raise HTTPException(404, "專案不存在")
+        conn.close(); raise HTTPException(404, "專案不存在")
     d = dict(row)
     d['linked_cases']      = json.loads(d.get('linked_cases')      or '[]')
     d['data_json']         = json.loads(d.get('data_json')         or '{}')
     d['assigned_user_ids'] = json.loads(d.get('assigned_user_ids') or '[]')
+    dept_manager_id, division_manager_id = _project_approver_ids(conn, d.get('department_id'))
+    conn.close()
+    modules = json.loads(user.get('modules') or '[]')
+    is_super = user['role'] == 'superadmin'
+    d['canApproveEng'] = is_super or 'project_approve_eng' in modules or user['id'] == dept_manager_id
+    d['canApproveBiz'] = is_super or 'project_approve_biz' in modules or user['id'] == division_manager_id
     return d
 
 
@@ -165,10 +197,11 @@ def update_project(project_id: int, body: dict = Body(...), authorization: str =
     if not row:
         conn.close(); raise HTTPException(404, "專案不存在")
     updates = {}
-    if 'name'         in body: updates['name']         = body['name']
-    if 'description'  in body: updates['description']  = body['description']
-    if 'linked_cases' in body: updates['linked_cases'] = json.dumps(body['linked_cases'], ensure_ascii=False)
-    if 'data_json'    in body: updates['data_json']    = json.dumps(body['data_json'], ensure_ascii=False)
+    if 'name'          in body: updates['name']          = body['name']
+    if 'description'   in body: updates['description']   = body['description']
+    if 'linked_cases'  in body: updates['linked_cases']  = json.dumps(body['linked_cases'], ensure_ascii=False)
+    if 'data_json'     in body: updates['data_json']     = json.dumps(body['data_json'], ensure_ascii=False)
+    if 'department_id' in body: updates['department_id'] = body['department_id'] or None
     if updates:
         sql = "UPDATE projects SET " + ', '.join(f"{k}=?" for k in updates) + " WHERE id=?"
         conn.execute(sql, list(updates.values()) + [project_id])
@@ -230,6 +263,9 @@ def delete_project(project_id: int, authorization: str = Header(None)):
         conn.close(); raise HTTPException(404, "專案不存在")
     if row['status'] not in ('規劃中', '取消'):
         conn.close(); raise HTTPException(400, "只有規劃中或取消狀態才可刪除")
+    linked = json.loads(row['linked_cases'] or '[]')
+    if linked:
+        conn.close(); raise HTTPException(400, f"此專案仍關聯 {len(linked)} 筆案件，請先在專案詳情頁解除案件關聯後再刪除")
     conn.execute("DELETE FROM project_logs WHERE project_id=?", (project_id,))
     conn.execute("DELETE FROM projects WHERE id=?", (project_id,))
     conn.commit()
@@ -347,17 +383,26 @@ def approve_action_item(
     user    = _require_user(authorization)
     stage   = body.get('stage')
     modules = json.loads(user.get('modules') or '[]')
-
-    if stage == 1:
-        if 'project_approve_eng' not in modules and user['role'] != 'superadmin':
-            raise HTTPException(403, "需要工程主管確認（project_approve_eng）權限")
-    elif stage == 2:
-        if 'project_approve_biz' not in modules and user['role'] != 'superadmin':
-            raise HTTPException(403, "需要業務確認（project_approve_biz）權限")
-    else:
+    if stage not in (1, 2):
         raise HTTPException(400, "stage 必須為 1 或 2")
 
     conn = get_db()
+    proj = conn.execute("SELECT department_id FROM projects WHERE id=?", (project_id,)).fetchone()
+    dept_manager_id, division_manager_id = _project_approver_ids(
+        conn, proj["department_id"] if proj else None
+    )
+
+    if stage == 1:
+        if ('project_approve_eng' not in modules and user['role'] != 'superadmin'
+                and user['id'] != dept_manager_id):
+            conn.close()
+            raise HTTPException(403, "需要工程主管確認（project_approve_eng 權限，或為該專案所屬部門主管）")
+    else:
+        if ('project_approve_biz' not in modules and user['role'] != 'superadmin'
+                and user['id'] != division_manager_id):
+            conn.close()
+            raise HTTPException(403, "需要業務確認（project_approve_biz 權限，或為該專案所屬處主管）")
+
     row  = conn.execute(
         "SELECT * FROM project_logs WHERE id=? AND project_id=?", (log_id, project_id)
     ).fetchone()
@@ -392,6 +437,8 @@ def approve_action_item(
     )
     conn.commit()
     conn.close()
+    _audit(_tok(authorization), 'project.log.approve', 'project_log', str(project_id),
+           f"PR-{project_id:04d} 日誌 #{log_id} 第{stage}階段：{user['display_name']}")
     notify_module_activity("專案管理", f"確認事項第 {stage} 階段完成",
                             user.get("display_name") or user["username"],
                             f"PR-{project_id:04d} 日誌 #{log_id}", "projects.html")

@@ -184,6 +184,20 @@
           <span x-text="steps.length === 0 ? '預設模式（任一超級管理員簽核）' : '自訂順序模式（共 ' + steps.length + ' 個簽核步驟）'"></span>
         </div>
 
+        <!-- 系統內建：申請人部門主管自動簽核（永遠排在最前面，不參與拖曳排序） -->
+        <div style="display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border:1px solid var(--border-light);border-radius:8px;background:#F8F7F4;margin-bottom:16px">
+          <label class="status-toggle" style="margin-top:1px;flex-shrink:0">
+            <input type="checkbox" x-model="includeSubmitterManagerTier" :disabled="session.role!=='superadmin'">
+            <span class="slider"></span>
+          </label>
+          <div>
+            <div style="font-size:12px;font-weight:600">系統內建：申請人部門主管自動簽核（第一層）</div>
+            <div style="font-size:11px;color:var(--text-dim);margin-top:2px">
+              送審時自動查申請人自己所屬部門的主管簽核；申請人本身就是部門主管時改由處主管簽核；申請人本身就是處主管時改由其他超級管理員簽核。取消勾選＝這份單據不套用此規則。
+            </div>
+          </div>
+        </div>
+
         <!-- Steps list -->
         <div class="as-steps" x-show="steps.length > 0">
           <template x-for="(step, idx) in steps" :key="step._id">
@@ -192,25 +206,81 @@
               <div class="as-step-arrow" x-show="idx > 0" style="margin-bottom:2px">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
               </div>
-              <div class="as-step">
-                <div class="as-step-num" x-text="idx + 1"></div>
-                <div class="as-step-info">
-                  <div class="as-step-name" x-text="step.displayName"></div>
-                  <div class="as-step-role">
-                    <span x-text="step.username" style="font-family:LINE Seed TW_OTF, sans-serif"></span>
-                    <span class="role-badge" :class="'role-' + step.role" x-text="roleLabel(step.role)" style="margin-left:5px"></span>
+              <div class="as-step" style="flex-direction:column;align-items:stretch;gap:10px">
+                <div style="display:flex;align-items:center;gap:12px">
+                  <div class="as-step-num" x-text="idx + 1"></div>
+                  <div style="flex:1;font-size:11px;color:var(--text-dim)"
+                       x-text="'第 ' + (idx+1) + ' 層' + (step.approvers.length > 1 ? '・' + step.approvers.length + ' 位簽核人（依序輪流）' : '')"></div>
+                  <div class="as-step-actions">
+                    <button class="as-step-btn" title="上移" @click="moveUp(idx)" :disabled="idx===0 || session.role!=='superadmin'">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 15l-6-6-6 6"/></svg>
+                    </button>
+                    <button class="as-step-btn" title="下移" @click="moveDown(idx)" :disabled="idx===steps.length-1 || session.role!=='superadmin'">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+                    </button>
+                    <button class="as-step-btn danger" title="移除整層" @click="removeStep(idx)" :disabled="session.role!=='superadmin'">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                    </button>
                   </div>
                 </div>
-                <div class="as-step-actions">
-                  <button class="as-step-btn" title="上移" @click="moveUp(idx)" :disabled="idx===0 || session.role!=='superadmin'">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 15l-6-6-6 6"/></svg>
-                  </button>
-                  <button class="as-step-btn" title="下移" @click="moveDown(idx)" :disabled="idx===steps.length-1 || session.role!=='superadmin'">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
-                  </button>
-                  <button class="as-step-btn danger" title="移除" @click="removeStep(idx)" :disabled="session.role!=='superadmin'">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
-                  </button>
+
+                <!-- 這一層目前的簽核人清單（可放多筆，依序輪流，可跨部門/處） -->
+                <div style="display:flex;flex-direction:column;gap:6px;padding-left:40px">
+                  <template x-for="(ap, apIdx) in step.approvers" :key="ap._aid">
+                    <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;border:1px solid var(--border-light);border-radius:6px;background:#fff">
+                      <span style="font-size:10px;color:var(--text-dim);width:14px;flex-shrink:0" x-text="apIdx + 1"></span>
+                      <template x-if="ap.kind === 'user'">
+                        <div style="flex:1;min-width:0">
+                          <span class="as-step-name" x-text="ap.displayName"></span>
+                          <span style="font-size:11px;color:var(--text-dim);margin-left:4px;font-family:LINE Seed TW_OTF, sans-serif" x-text="ap.username"></span>
+                          <span class="role-badge" :class="'role-' + ap.role" x-text="roleLabel(ap.role)" style="margin-left:5px"></span>
+                        </div>
+                      </template>
+                      <template x-if="ap.kind === 'department_manager'">
+                        <div style="flex:1;min-width:0">
+                          <span x-text="'🏢 ' + departmentLabel(ap.departmentId) + ' 主管（自動）'"></span>
+                          <span :style="currentManagerNameFor(ap.departmentId) ? 'color:var(--text-dim)' : 'color:var(--danger)'"
+                                style="font-size:11px;margin-left:6px"
+                                x-text="currentManagerNameFor(ap.departmentId) ? '目前：' + currentManagerNameFor(ap.departmentId) : '⚠ 尚未設定主管，送審時會被擋下'"></span>
+                        </div>
+                      </template>
+                      <template x-if="ap.kind === 'division_manager'">
+                        <div style="flex:1;min-width:0">
+                          <span x-text="'🏛 ' + divisionLabel(ap.divisionId) + ' 處主管（自動）'"></span>
+                          <span :style="currentDivManagerNameFor(ap.divisionId) ? 'color:var(--text-dim)' : 'color:var(--danger)'"
+                                style="font-size:11px;margin-left:6px"
+                                x-text="currentDivManagerNameFor(ap.divisionId) ? '目前：' + currentDivManagerNameFor(ap.divisionId) : '⚠ 尚未設定主管，送審時會被擋下'"></span>
+                        </div>
+                      </template>
+                      <button class="as-step-btn danger" title="從這層移除" @click="removeApprover(idx, apIdx)" :disabled="session.role!=='superadmin'" style="flex-shrink:0">
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                      </button>
+                    </div>
+                  </template>
+                  <div x-show="step.approvers.length === 0" style="font-size:11px;color:var(--text-dim)">這層還沒有任何簽核人，請從下方加入</div>
+                </div>
+
+                <!-- 加入這層的簽核人／自動簽核來源 -->
+                <div style="display:flex;gap:8px;padding-left:40px" x-show="session.role === 'superadmin'">
+                  <select x-model="step._addKey" style="flex:1;min-width:200px;padding:6px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px">
+                    <option value="">選擇要加入這層的簽核人／自動簽核來源…</option>
+                    <optgroup label="人員">
+                      <template x-for="u in availableUsers" :key="'u'+u.id">
+                        <option :value="'user:' + u.id" x-text="u.displayName + ' (' + u.username + ') — ' + roleLabel(u.role)"></option>
+                      </template>
+                    </optgroup>
+                    <optgroup label="部門主管（自動）">
+                      <template x-for="d in allDepartments" :key="'d'+d.id">
+                        <option :value="'dept:' + d.id" x-text="d.divisionName + ' / ' + d.name + (d.managerName ? '（目前：' + d.managerName + '）' : '（尚未設定主管）')"></option>
+                      </template>
+                    </optgroup>
+                    <optgroup label="處主管（自動）">
+                      <template x-for="v in allDivisions" :key="'v'+v.id">
+                        <option :value="'div:' + v.id" x-text="v.name + (v.managerName ? '（目前：' + v.managerName + '）' : '（尚未設定主管）')"></option>
+                      </template>
+                    </optgroup>
+                  </select>
+                  <button class="btn btn-sm btn-primary" @click="addApproverToStep(idx)" :disabled="!step._addKey">加入</button>
                 </div>
               </div>
             </div>
@@ -220,23 +290,21 @@
         <!-- Empty state -->
         <div class="as-empty" x-show="steps.length === 0">
           <div style="font-size:28px;opacity:.25;margin-bottom:6px">📋</div>
-          <div>尚未設定簽核人員，使用預設模式</div>
-          <div style="font-size:12px;margin-top:4px;color:var(--text-dim)">點選下方「新增簽核人員」建立簽核順序</div>
+          <div>尚未設定簽核層，使用預設模式</div>
+          <div style="font-size:12px;margin-top:4px;color:var(--text-dim)">點選下方「新增簽核層」建立簽核順序</div>
         </div>
 
-        <!-- Add step row -->
+        <!-- Add tier row -->
         <div class="as-add-row" x-show="session.role === 'superadmin'">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--text-dim);flex-shrink:0"><path d="M12 4v16m8-8H4"/></svg>
-          <select x-model="addUserId" style="flex:1;min-width:180px">
-            <option value="">選擇要加入的人員…</option>
-            <template x-for="u in availableUsers" :key="u.id">
-              <option :value="u.id" x-text="u.displayName + ' (' + u.username + ') — ' + roleLabel(u.role)"></option>
-            </template>
-          </select>
-          <button class="btn btn-sm btn-primary" @click="addStep()" :disabled="!addUserId">
+          <span style="flex:1;font-size:12px;color:var(--text-secondary)">新增一層空白層，再從層卡片內加入簽核人（同一層可放多人，依序輪流，可跨部門/處）</span>
+          <button class="btn btn-sm btn-primary" @click="addStep()">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v16m8-8H4"/></svg>
-            新增簽核人員
+            新增簽核層
           </button>
+        </div>
+        <div class="form-hint" x-show="session.role === 'superadmin'" style="margin-top:6px;color:var(--text-dim)">
+          部門／處主管自動簽核：實際簽核人在送審當下即時查詢當時的主管，若屆時沒有指定主管，送審會被擋下並要求先設定主管。
         </div>
 
         <!-- Reset to default note -->
@@ -278,11 +346,47 @@
     function shippingApprovalSettingsApp() {
       return {
         session:   {},
-        steps:     [],       // [{userId, username, displayName, role, _id}]
+        includeSubmitterManagerTier: true,   // 系統內建第一層開關，預設開
+        // steps[i] = 一個「層」：{_id, approvers:[{_aid, kind:'user'|'department_manager'|'division_manager', userId?,username?,displayName?,role?, departmentId?, divisionId?}], _addKey}
+        steps:     [],
         allUsers:  [],       // all users from /api/users
-        addUserId: '',
+        orgTree:   [],       // from /api/org/tree
         saving:    false,
         _idCounter: 0,
+
+        get allDepartments() {
+          const out = []
+          for (const div of this.orgTree) {
+            for (const dept of div.departments) {
+              out.push({ id: dept.id, name: dept.name, managerName: dept.managerName, divisionName: div.name })
+            }
+          }
+          return out
+        },
+
+        get allDivisions() {
+          return this.orgTree.map(div => ({ id: div.id, name: div.name, managerName: div.managerName }))
+        },
+
+        departmentLabel(deptId) {
+          const d = this.allDepartments.find(d => d.id === deptId)
+          return d ? (d.divisionName + ' / ' + d.name) : ('部門 #' + deptId)
+        },
+
+        divisionLabel(divId) {
+          const v = this.allDivisions.find(v => v.id === divId)
+          return v ? v.name : ('處 #' + divId)
+        },
+
+        currentManagerNameFor(deptId) {
+          const d = this.allDepartments.find(d => d.id === deptId)
+          return d ? d.managerName : null
+        },
+
+        currentDivManagerNameFor(divId) {
+          const v = this.allDivisions.find(v => v.id === divId)
+          return v ? v.managerName : null
+        },
 
         get availableUsers() {
           const roleOrder = { superadmin: 0, admin: 1, sales: 2, viewer: 3 }
@@ -299,7 +403,18 @@
           const s = JSON.parse(localStorage.getItem('motrix_session') || 'null')
           if (!s?.token) { location.href = 'login.html'; return }
           this.session = s
-          await Promise.all([this.loadFlow(), this.loadUsers()])
+          await Promise.all([this.loadFlow(), this.loadUsers(), this.loadOrgTree()])
+        },
+
+        async loadOrgTree() {
+          try {
+            const r = await fetch(`${API}/org/tree`, {
+              headers: { Authorization: 'Bearer ' + this.session.token }
+            })
+            if (r.ok) this.orgTree = await r.json()
+          } catch (e) {
+            console.error('loadOrgTree', e)
+          }
         },
 
         async loadFlow() {
@@ -309,11 +424,14 @@
             })
             if (r.status === 401) { location.href = 'login.html'; return }
             const d = await r.json()
-            // API returns { tiers: [{order, approvers:[{userId,username,displayName}]}] }
+            this.includeSubmitterManagerTier = d.includeSubmitterManagerTier !== false
+            // API returns { tiers: [{order, approvers:[{userId,username,displayName} or {sourceType,departmentId/divisionId}]}] }
             const tiers = d.tiers || []
-            this.steps = tiers.flatMap(tier =>
-              (tier.approvers || []).map(a => ({ ...a, _id: ++this._idCounter }))
-            )
+            this.steps = tiers.map(tier => ({
+              _id: ++this._idCounter,
+              _addKey: '',
+              approvers: (tier.approvers || []).map(a => ({ ...a, _aid: ++this._idCounter, kind: a.sourceType || 'user' })),
+            }))
           } catch (e) {
             console.error('loadFlow', e)
           }
@@ -328,29 +446,51 @@
             if (!r.ok) { console.error('loadUsers failed:', r.status); return }
             const d = await r.json()
             this.allUsers = Array.isArray(d) ? d : []
-            // Patch step roles from current user data
-            this.steps = this.steps.map(step => {
-              const u = this.allUsers.find(u => u.id === step.userId)
-              return u ? { ...step, role: u.role, displayName: u.displayName } : step
-            })
+            // Patch each user-kind approver's role/displayName from current user data
+            // (auto-signed department/division-manager approvers have no fixed userId —
+            // the actual signer resolves live at submission time, nothing to patch here)
+            this.steps = this.steps.map(step => ({
+              ...step,
+              approvers: step.approvers.map(ap => {
+                if (ap.kind !== 'user') return ap
+                const u = this.allUsers.find(u => u.id === ap.userId)
+                return u ? { ...ap, role: u.role, displayName: u.displayName } : ap
+              }),
+            }))
           } catch (e) {
             console.error('loadUsers', e)
           }
         },
 
         addStep() {
-          if (!this.addUserId) return
-          const uid = Number(this.addUserId)
-          const user = this.allUsers.find(u => u.id === uid)
-          if (!user) return
-          this.steps.push({
-            _id:         ++this._idCounter,
-            userId:      user.id,
-            username:    user.username,
-            displayName: user.displayName,
-            role:        user.role,
-          })
-          this.addUserId = ''
+          this.steps.push({ _id: ++this._idCounter, approvers: [], _addKey: '' })
+        },
+
+        addApproverToStep(idx) {
+          const step = this.steps[idx]
+          const key = step._addKey
+          if (!key) return
+          const [type, idStr] = key.split(':')
+          const id = Number(idStr)
+          let approver
+          if (type === 'user') {
+            const user = this.allUsers.find(u => u.id === id)
+            if (!user) return
+            approver = { kind: 'user', userId: user.id, username: user.username, displayName: user.displayName, role: user.role }
+          } else if (type === 'dept') {
+            approver = { kind: 'department_manager', departmentId: id }
+          } else if (type === 'div') {
+            approver = { kind: 'division_manager', divisionId: id }
+          } else {
+            return
+          }
+          approver._aid = ++this._idCounter
+          step.approvers.push(approver)
+          step._addKey = ''
+        },
+
+        removeApprover(stepIdx, apIdx) {
+          this.steps[stepIdx].approvers.splice(apIdx, 1)
         },
 
         removeStep(idx) {
@@ -381,13 +521,14 @@
           this.saving = true
           try {
             const payload = {
-              tiers: this.steps.map((s, i) => ({
+              includeSubmitterManagerTier: this.includeSubmitterManagerTier,
+              tiers: this.steps.filter(s => s.approvers.length > 0).map((s, i) => ({
                 order: i,
-                approvers: [{
-                  userId:      s.userId,
-                  username:    s.username,
-                  displayName: s.displayName,
-                }]
+                approvers: s.approvers.map(ap =>
+                  ap.kind === 'department_manager' ? { sourceType: 'department_manager', departmentId: ap.departmentId } :
+                  ap.kind === 'division_manager'   ? { sourceType: 'division_manager', divisionId: ap.divisionId } :
+                  { userId: ap.userId, username: ap.username, displayName: ap.displayName }
+                )
               }))
             }
             const r = await fetch(`${API}/shipping-notes/settings/approval-flow`, {

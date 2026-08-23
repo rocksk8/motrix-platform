@@ -25,12 +25,26 @@ DEMO_PROJECT_PHOTOS_DIR  = os.path.join(os.path.dirname(__file__), "..", "upload
 DEMO_PDF_ARCHIVE_DIR     = os.path.join(os.path.dirname(__file__), "_demo_pdf_archive")
 DEMO_PAYSLIP_ARCHIVE_DIR = os.path.join(os.path.dirname(__file__), "_demo_payslip_archive")
 DEMO_SHIPPING_PDF_ARCHIVE_DIR = os.path.join(os.path.dirname(__file__), "_demo_shipping_pdf_archive")
+DEMO_CONTRACTOR_VOUCHER_PDF_ARCHIVE_DIR = os.path.join(
+    os.path.dirname(__file__), "_demo_contractor_voucher_pdf_archive")
+DEMO_INVOICE_VOUCHER_PDF_ARCHIVE_DIR = os.path.join(
+    os.path.dirname(__file__), "_demo_invoice_voucher_pdf_archive")
 
 # Increment this whenever a new _mNNN function is added to _MIGRATIONS.
 # v32/v33 (switch_guide tables + specs_json column) were initially missing
 # from this checkout — reconstructed 2026-08-01 by reverse-engineering the
 # actual schema off a production DB backup (see _m032_switch_guide docstring).
-CURRENT_VERSION = 44
+# v45/v46 (contractor_payment_vouchers / invoice_vouchers) added 2026-08-20,
+# written directly on production while the dev machine was unreachable — see
+# MOTRIX-ERP-QUICK.md §12 2026-08-20 entry for the dev-machine backport plan.
+# v47: invoice_vouchers.amount real column, added same day after a redesign
+# (自訂金額/自訂品項+數量 replacing the old fixed-installment-only model).
+# v48: divisions/departments org structure (處/部門), 2026-08-22.
+# v49: divisions.manager_user_id (處級主管), 2026-08-22.
+# v50: projects.department_id, 2026-08-22.
+# v51: case_stages/case_stage_visits (caseRecord.stages 正規化第一階段：唯讀鏡像，
+# 回填既有資料，尚未接進任何讀寫路徑), 2026-08-23.
+CURRENT_VERSION = 52
 
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
 # execution model) whenever the current request is authenticated as the 'demo'
@@ -129,7 +143,8 @@ def reset_demo_db() -> None:
         finally:
             conn.close()
     init_db(DEMO_DB_PATH)
-    for d in (DEMO_PROJECT_PHOTOS_DIR, DEMO_PDF_ARCHIVE_DIR, DEMO_PAYSLIP_ARCHIVE_DIR, DEMO_SHIPPING_PDF_ARCHIVE_DIR):
+    for d in (DEMO_PROJECT_PHOTOS_DIR, DEMO_PDF_ARCHIVE_DIR, DEMO_PAYSLIP_ARCHIVE_DIR, DEMO_SHIPPING_PDF_ARCHIVE_DIR,
+              DEMO_CONTRACTOR_VOUCHER_PDF_ARCHIVE_DIR, DEMO_INVOICE_VOUCHER_PDF_ARCHIVE_DIR):
         _wipe_dir(d)
 
 
@@ -1077,6 +1092,327 @@ def _m044_dispatch_invoice_no(conn):
     conn.commit()
 
 
+def _m045_contractor_payment_vouchers(conn):
+    """Create contractor_payment_vouchers（承攬商匯款申請）：一張申請對應一筆已完工的
+    承攬商派發（dispatch_id UNIQUE，強制 1:1），供財務端核准匯款用。獨立簽核流程
+    （system_settings key 'contractor_voucher_approval_flow'），機制比照出貨單但
+    「已核准」之後額外多一個「已匯款」財務結案標記（is_paid，獨立於 status，比照
+    出貨單「已核准」跟「已回簽」是兩個獨立狀態的做法）。見 routers/contractor_vouchers.py。
+
+    承攬商/銀行帳戶/金額/品項於建立當下寫入 snapshot_json 凍結快照——日後若
+    vendor_contractors 資料異動（改銀行帳戶、改名稱等）不會回頭改到已產生的申請，
+    這點與出貨單品項快照、成本精算 finalized 快照是同一個「已定案文件不隨來源異動」
+    的慣例（見 §5.5 settlement 文件）。"""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS contractor_payment_vouchers (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            voucher_no    TEXT    UNIQUE NOT NULL,
+            dispatch_id   INTEGER UNIQUE NOT NULL REFERENCES contractor_dispatches(id),
+            quote_no      TEXT    NOT NULL,
+            vendor_id     INTEGER REFERENCES vendor_contractors(id),
+            status        TEXT    NOT NULL DEFAULT '草稿',
+            snapshot_json TEXT    NOT NULL DEFAULT '{}',
+            data_json     TEXT    NOT NULL DEFAULT '{}',
+            is_paid       INTEGER NOT NULL DEFAULT 0,
+            paid_by       TEXT    DEFAULT '',
+            paid_at       TEXT    DEFAULT '',
+            paid_log      TEXT    NOT NULL DEFAULT '[]',
+            export_count  INTEGER DEFAULT 0,
+            export_log    TEXT    DEFAULT '[]',
+            created_by    TEXT    DEFAULT '',
+            created_at    TEXT,
+            updated_at    TEXT
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_cpv_quote_no ON contractor_payment_vouchers(quote_no)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_cpv_status ON contractor_payment_vouchers(status)"
+    )
+    conn.commit()
+
+
+def _m046_invoice_vouchers(conn):
+    """Create invoice_vouchers（開票申請憑據）：案件款項明細（quotations.data_json.
+    caseRecord.payment.items[]，本身不是獨立資料表，見 helpers/quotations.py
+    payment_item_amounts()）匯出給財務單位申請開立發票用的獨立單據。scope='single'
+    對應單一 payment_idx；scope='all' 彙整整份收款排程，payment_idx 為 NULL。
+
+    不要求 received=true 才能建立（2026-08-20 起）——部分案件是先開發票才能收款，
+    未收款項目也允許申請，snapshot 內保留 received 旗標供 PDF 標示實際收款狀況。
+    獨立簽核流程（system_settings key 'invoice_voucher_approval_flow'），
+    狀態機比照出貨單（草稿→待審核→簽核中→已核准），核准即定稿，不像承攬商匯款
+    申請多一個「已匯款」財務結案節點——開票申請憑據本身就是最終文件。見
+    routers/invoice_vouchers.py。
+
+    客戶/案件/款項明細於建立當下寫入 snapshot_json 凍結快照，理由同
+    contractor_payment_vouchers：已送出財務的憑據不應該因為之後有人編輯報價單
+    款項明細而回頭改變內容。
+
+    2026-08-20 起 scope 語意已改為 'amount'（自訂金額）/'items'（自訂品項+數量），
+    取代原本的 'single'/'all'（見 _m047_invoice_vouchers_amount 與
+    routers/invoice_vouchers.py），payment_idx 欄位對新資料不再使用但保留不刪，
+    SQLite 不方便中途拿掉欄位，舊資料也還讀得到。"""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS invoice_vouchers (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            voucher_no    TEXT    UNIQUE NOT NULL,
+            quote_no      TEXT    NOT NULL,
+            scope         TEXT    NOT NULL DEFAULT 'single',
+            payment_idx   INTEGER,
+            status        TEXT    NOT NULL DEFAULT '草稿',
+            snapshot_json TEXT    NOT NULL DEFAULT '{}',
+            data_json     TEXT    NOT NULL DEFAULT '{}',
+            export_count  INTEGER DEFAULT 0,
+            export_log    TEXT    DEFAULT '[]',
+            created_by    TEXT    DEFAULT '',
+            created_at    TEXT,
+            updated_at    TEXT
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_iv_quote_no ON invoice_vouchers(quote_no)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_iv_status ON invoice_vouchers(status)"
+    )
+    conn.commit()
+
+
+def _m047_invoice_vouchers_amount(conn):
+    """新增 invoice_vouchers.amount 真實欄位（2026-08-20，使用者實測後重新設計）。
+
+    背景：原本開票申請只能挑一個既有款項期別（scope='single'/'all'），使用者
+    反映很多案件是「先開發票才能收款」，需要能自訂任意金額或自訂品項+數量來
+    申請，且已申請過的金額/品項數量要能從剩餘可開票額度扣除，避免重複請款。
+
+    這個 amount 欄位是「這張申請這次要開多少錢」的唯一權威數字（不論
+    scope='amount' 自訂金額、還是 scope='items' 自訂品項時等於選取品項金額
+    加總），獨立成真實 SQL 欄位是為了能直接用 SUM() 計算「這張報價單目前
+    已申請多少、還剩多少可申請」，不必每次都把所有筆 snapshot_json 解析一遍。
+
+    舊資料（scope='single'/'all' 建立的既有草稿）用當時存的 snapshot_json.items
+    金額加總回填，讓它們一樣正確算進「已申請額度」，不會產生資料落差。"""
+    if not _col_exists(conn, "invoice_vouchers", "amount"):
+        conn.execute("ALTER TABLE invoice_vouchers ADD COLUMN amount REAL NOT NULL DEFAULT 0")
+        for row in conn.execute("SELECT id, snapshot_json FROM invoice_vouchers").fetchall():
+            try:
+                snap = json.loads(row["snapshot_json"] or "{}")
+                total = sum(float(it.get("amount", 0) or 0) for it in (snap.get("items") or []))
+            except Exception:
+                total = 0
+            conn.execute("UPDATE invoice_vouchers SET amount=? WHERE id=?", (total, row["id"]))
+    conn.commit()
+
+
+def _m048_org_structure(conn):
+    """新增處/部門組織架構（2026-08-22）。純組織分類用途，department 上的
+    manager_user_id 先預留給未來「部門主管自動列入簽核」使用，這輪不接
+    tiered_approval.py。"""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS divisions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE,
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS departments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            division_id INTEGER NOT NULL REFERENCES divisions(id),
+            name TEXT NOT NULL,
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            manager_user_id INTEGER REFERENCES users(id),
+            created_at TEXT NOT NULL,
+            UNIQUE(division_id, name)
+        )
+    """)
+    if not _col_exists(conn, "users", "department_id"):
+        conn.execute("ALTER TABLE users ADD COLUMN department_id INTEGER REFERENCES departments(id)")
+    conn.commit()
+
+
+def _m049_division_manager(conn):
+    """新增 divisions.manager_user_id（處級主管，2026-08-22）。使用者回饋現有
+    組織架構只有部門能設主管、處級沒有對應欄位，這裡補齊對稱性，一樣先預留
+    給未來簽核路由使用，這輪不接 tiered_approval.py。"""
+    if not _col_exists(conn, "divisions", "manager_user_id"):
+        conn.execute("ALTER TABLE divisions ADD COLUMN manager_user_id INTEGER REFERENCES users(id)")
+    conn.commit()
+
+
+def _m050_project_department(conn):
+    """新增 projects.department_id（2026-08-22）。案件/專案管理延伸建議的一部分——
+    專案原本指派只到個人（assigned_user_ids），完全沒接組織架構；補上部門欄位讓
+    專案可依部門篩選、逾期通知可升級給部門主管（比照報價單既有的 sales_person_id
+    → department_id 查表模式）。"""
+    if not _col_exists(conn, "projects", "department_id"):
+        conn.execute("ALTER TABLE projects ADD COLUMN department_id INTEGER REFERENCES departments(id)")
+    conn.commit()
+
+
+def _m051_case_stages_normalize(conn):
+    """caseRecord.stages 正規化第一階段（2026-08-23）：新增 case_stages/case_stage_visits
+    唯讀鏡像表，回填既有 quotations.data_json.caseRecord.stages 資料。這輪刻意不接進
+    任何現有讀寫路徑——update_case_record()／case-management.js／quotation-form.html／
+    dashboard.py／daily_tasks.py／stage_board() 全部維持原樣讀寫 JSON；新表只是回填出
+    來的鏡像，供下一輪 CRUD 端點與前端切換使用。dependsOn 陣列裡的舊 JSON id（
+    Date.now() 基底，前端 addStage() 產生）在回填時 remap 成新的關聯式 id。
+    assigned_to/depends_on 刻意維持 JSON text 欄位，不再往下正規化成 join table——
+    這兩個陣列通常只有 1~3 個元素、永遠整組讀寫，沒有跨階段查詢需求。"""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS case_stages (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            quote_no    TEXT    NOT NULL,
+            label       TEXT    NOT NULL DEFAULT '',
+            sort_order  INTEGER NOT NULL DEFAULT 0,
+            done        INTEGER NOT NULL DEFAULT 0,
+            done_at     TEXT    NOT NULL DEFAULT '',
+            start_date  TEXT    NOT NULL DEFAULT '',
+            due_date    TEXT    NOT NULL DEFAULT '',
+            assigned_to TEXT    NOT NULL DEFAULT '[]',
+            depends_on  TEXT    NOT NULL DEFAULT '[]',
+            created_at  TEXT    NOT NULL,
+            updated_at  TEXT    NOT NULL
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_case_stages_quote_no ON case_stages(quote_no)")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS case_stage_visits (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            stage_id     INTEGER NOT NULL REFERENCES case_stages(id) ON DELETE CASCADE,
+            visit_date   TEXT    NOT NULL DEFAULT '',
+            visit_people INTEGER NOT NULL DEFAULT 0,
+            note         TEXT    NOT NULL DEFAULT '',
+            created_at   TEXT    NOT NULL
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_case_stage_visits_stage_id ON case_stage_visits(stage_id)")
+    conn.commit()
+
+    now = datetime.now().isoformat()
+    rows = conn.execute("""
+        SELECT quote_no, data_json FROM quotations
+        WHERE json_extract(data_json, '$.caseRecord.stages') IS NOT NULL
+    """).fetchall()
+
+    for row in rows:
+        try:
+            data = json.loads(row["data_json"] or "{}")
+        except Exception:
+            continue
+        stages = ((data.get("caseRecord") or {}).get("stages")) or []
+        if not stages:
+            continue
+
+        id_map = {}
+        inserted = []
+        for idx, st in enumerate(stages):
+            cur = conn.execute("""
+                INSERT INTO case_stages
+                    (quote_no, label, sort_order, done, done_at, start_date, due_date,
+                     assigned_to, depends_on, created_at, updated_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?)
+            """, (
+                row["quote_no"],
+                st.get("label") or "",
+                idx,
+                1 if st.get("done") else 0,
+                st.get("doneAt") or "",
+                st.get("startDate") or "",
+                st.get("dueDate") or "",
+                json.dumps(st.get("assignedTo") or [], ensure_ascii=False),
+                "[]",
+                now, now,
+            ))
+            new_id = cur.lastrowid
+            old_id = st.get("id")
+            if old_id is not None:
+                id_map[old_id] = new_id
+            inserted.append((new_id, st))
+
+        for new_id, st in inserted:
+            remapped = [id_map[d] for d in (st.get("dependsOn") or []) if d in id_map]
+            conn.execute("UPDATE case_stages SET depends_on=? WHERE id=?",
+                         (json.dumps(remapped, ensure_ascii=False), new_id))
+            for v in (st.get("visits") or []):
+                conn.execute("""
+                    INSERT INTO case_stage_visits (stage_id, visit_date, visit_people, note, created_at)
+                    VALUES (?,?,?,?,?)
+                """, (
+                    new_id,
+                    v.get("visitDate") or "",
+                    int(v.get("visitPeople") or 0),
+                    v.get("note") or "",
+                    now,
+                ))
+    conn.commit()
+
+
+def _m052_fix_stage_json_ids(conn):
+    """caseRecord.stages 正規化收尾修正（2026-08-23，同日）：v51 的 backfill migration
+    只寫進新的 case_stages 表，刻意沒有回頭修正 quotations.data_json.caseRecord.stages
+    裡的舊 id——v51 上線當時前端還沒有任何地方會引用這些 id，這個設計在當下是安全、
+    正確的。但同一天稍晚 3b 上線後，case-management.js 開始直接拿 data_json 裡的
+    stage id 打 `PUT/DELETE .../stages/{id}` 等 granular 端點；只要一個案件從 v51
+    backfill 之後、到 3b 上線這段期間**完全沒有**透過任何 granular 端點被存過一次，
+    data_json 裡的 id 就還停留在 backfill 前的舊值，跟 case_stages 表的真實 id
+    對不上，使用者一操作階段就會 404（正式機重現：13 個有 case_stages 資料的
+    案件裡 12 個中獎，使用者回報「執行進度儲存失敗」）。
+
+    這個 migration 把 case_stages（含 case_stage_visits）目前的內容，重新鏡射回
+    每個受影響 quote_no 的 data_json.caseRecord.stages——邏輯照搬
+    routers/quotations.py::_sync_stages_to_json()（db.py 不 import router 模組，
+    手動照抄一份，保持邏輯一致）。只動 caseRecord.stages 這個欄位，caseRecord
+    其他 key 與 quotations 其他欄位（含 updated_at）刻意維持原樣不動——這是
+    後端資料一致性修正，不是使用者操作，不該讓任何人手上還開著的頁面因為
+    updated_at 被動了而誤觸樂觀鎖 409。"""
+    quote_nos = [r["quote_no"] for r in conn.execute(
+        "SELECT DISTINCT quote_no FROM case_stages"
+    ).fetchall()]
+    for quote_no in quote_nos:
+        row = conn.execute(
+            "SELECT data_json FROM quotations WHERE quote_no=?", (quote_no,)
+        ).fetchone()
+        if not row:
+            continue
+        try:
+            data = json.loads(row["data_json"] or "{}")
+        except Exception:
+            continue
+        stage_rows = conn.execute(
+            "SELECT * FROM case_stages WHERE quote_no=? ORDER BY sort_order, id", (quote_no,)
+        ).fetchall()
+        stages_json = []
+        for sr in stage_rows:
+            visit_rows = conn.execute(
+                "SELECT visit_date, visit_people, note FROM case_stage_visits "
+                "WHERE stage_id=? ORDER BY id", (sr["id"],),
+            ).fetchall()
+            stages_json.append({
+                "id":         sr["id"],
+                "label":      sr["label"],
+                "done":       bool(sr["done"]),
+                "doneAt":     sr["done_at"],
+                "startDate":  sr["start_date"],
+                "dueDate":    sr["due_date"],
+                "assignedTo": json.loads(sr["assigned_to"] or "[]"),
+                "dependsOn":  json.loads(sr["depends_on"] or "[]"),
+                "visits": [
+                    {"visitDate": v["visit_date"], "visitPeople": v["visit_people"], "note": v["note"]}
+                    for v in visit_rows
+                ],
+            })
+        data.setdefault("caseRecord", {})["stages"] = stages_json
+        conn.execute(
+            "UPDATE quotations SET data_json=? WHERE quote_no=?",
+            (json.dumps(data, ensure_ascii=False), quote_no)
+        )
+    conn.commit()
+
+
 def _m030_env_guide(conn):
     """Create env_guide_* tables (場域選型導覽): environments, tiered equipment
     recommendations, and vendor links — ported from the standalone 場域選型導覽.html
@@ -1825,6 +2161,14 @@ _MIGRATIONS = [
     _m042_dev_cases_relink_review,              # v42
     _m043_notification_prefs,                   # v43
     _m044_dispatch_invoice_no,                   # v44
+    _m045_contractor_payment_vouchers,           # v45
+    _m046_invoice_vouchers,                      # v46
+    _m047_invoice_vouchers_amount,                # v47
+    _m048_org_structure,                          # v48
+    _m049_division_manager,                       # v49
+    _m050_project_department,                     # v50
+    _m051_case_stages_normalize,                  # v51
+    _m052_fix_stage_json_ids,                     # v52
 ]
 
 

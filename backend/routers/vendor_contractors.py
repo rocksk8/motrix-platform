@@ -501,6 +501,12 @@ def delete_dispatch(did: int, authorization: str = Header(None)):
     if not row:
         conn.close()
         raise HTTPException(404, "派發紀錄不存在")
+    voucher = conn.execute(
+        "SELECT voucher_no FROM contractor_payment_vouchers WHERE dispatch_id=?", (did,)
+    ).fetchone()
+    if voucher:
+        conn.close()
+        raise HTTPException(409, f"此派發已產生匯款申請（{voucher['voucher_no']}），請先處理該申請後再刪除")
     conn.execute("DELETE FROM contractor_dispatches WHERE id=?", (did,))
     conn.commit()
     conn.close()

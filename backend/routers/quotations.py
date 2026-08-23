@@ -20,7 +20,9 @@ from helpers import (
     quote_hot_fields, save_quotation_json, _steps_to_tiers, SQL_DEAL_TAG, SQL_SETTLE_STATUS,
     notify_approval_request, notify_next_tier, notify_approved,
     notify_returned, notify_resubmit_requester, notify_settlement_finalized,
-    notify_module_activity,
+    notify_module_activity, push_event_for_quotation_won, push_event_for_important_comment,
+    check_approve_permission, check_reject_permission, check_no_tier_self_approval,
+    resolve_tier_approvers, UnresolvedManagerError,
 )
 from archive import _backup_quotation
 from pdf_gen import _generate_quotation_pdf, generate_pdf_bytes
@@ -42,25 +44,19 @@ def _next_revision_no(quote_no: str) -> str:
     return f'{base}-R{rev}'
 
 
-def _setting_to_active_tiers(setting: dict) -> list:
-    """Convert settings format (tiers or old steps) → list of active tier dicts with status fields."""
-    tiers = setting.get("tiers") or []
+def _setting_to_active_tiers(setting: dict, conn, requester_username: str = None) -> list:
+    """Convert settings format (tiers or old steps) → list of active tier dicts with status fields.
+    Kept as quotations.py's own copy (not the shared helpers/tiered_approval.py version) because of
+    the legacy `steps` back-compat above — but the department/division/submitter-manager resolution
+    logic is shared via resolve_tier_approvers(), not reimplemented here, so both copies stay in sync
+    on that behavior. 系統內建「申請人部門主管自動簽核」層（2026-08-22i）跟共用版一致，預設插入。"""
+    tiers = list(setting.get("tiers") or [])
     if not tiers:
         tiers = _steps_to_tiers(setting.get("steps") or [])
+    if setting.get("includeSubmitterManagerTier", True):
+        tiers = [{"approvers": [{"sourceType": "submitter_manager"}]}] + tiers
     return [
-        {
-            "order": t.get("order", i),
-            "approvers": [
-                {
-                    "userId":      a.get("userId"),
-                    "username":    a["username"],
-                    "displayName": a.get("displayName", a["username"]),
-                    "status":      "pending",
-                    "approvedAt":  None,
-                }
-                for a in (t.get("approvers") or [])
-            ],
-        }
+        {"order": i, "approvers": resolve_tier_approvers(conn, t, requester_username)}
         for i, t in enumerate(tiers)
         if (t.get("approvers") or [])
     ]
@@ -118,8 +114,12 @@ def _build_approval_tiers_and_notify(q: dict, appr: dict, quote_no: str, is_new_
     build tiers and notify identically."""
     if not appr.get("tiers") and not appr.get("steps"):
         flow_setting = _get_setting("approval_flow", {"tiers": []}) or {}
-        active_tiers = _setting_to_active_tiers(flow_setting)
         requester_uname = appr.get("requestedBy") or ""
+        _tconn = get_db()
+        try:
+            active_tiers = _setting_to_active_tiers(flow_setting, _tconn, requester_uname)
+        finally:
+            _tconn.close()
         _before_ct = len(active_tiers)
         active_tiers = _exclude_requester(active_tiers, requester_uname)
         if len(active_tiers) != _before_ct:
@@ -279,44 +279,51 @@ def list_quotations(
 ):
     user   = _require_user(authorization)
     conn   = get_db()
-    sql    = (
-        "SELECT id, quote_no, status, customer_name, project_name, total, pretax, "
+    select_cols = (
+        "id, quote_no, status, customer_name, project_name, total, pretax, "
         "direct_margin_pct, net_margin_pct, sales_person, quote_date, valid_days, "
         f"{SQL_DEAL_TAG} as deal_tag, "
         "created_at, updated_at, "
         "COALESCE(json_array_length(json_extract(data_json, '$.editHistory')), 0) as edit_count, "
         "json_extract(data_json, '$.editHistory') as edit_history_json, "
         f"{SQL_SETTLE_STATUS} as settle_status, "
-        "json_extract(data_json, '$.caseRecord.stages') as stages_json "
-        "FROM quotations WHERE 1=1"
+        # Phase 5（2026-08-23）：改查 case_stages 表取代解析 caseRecord.stages JSON——
+        # 正規化橋樑（3a/3b/v52）已保證這張表對每個有執行進度的案件都是權威、完整的
+        # 來源，相關子查詢直接在 SQL 層取出第一個未完成階段的 label，不用整包 JSON
+        # 撈出來在 Python 裡逐列解析、迴圈找。
+        "(SELECT label FROM case_stages WHERE quote_no=quotations.quote_no AND done=0 "
+        " ORDER BY sort_order LIMIT 1) as current_stage"
     )
+    # where_sql 獨立累積，不再用字串搜尋從完整 SQL 裡「切」出 WHERE 片段——上面
+    # SELECT 子句裡的相關子查詢自己就帶了 " AND"/" ORDER BY"，字串搜尋版的作法
+    # 會切到子查詢內部而不是真正的外層 WHERE，導致 COUNT 查詢直接用了不存在的欄位
+    # 名稱（2026-08-23 Phase 5 上線後、下一次改動時發現並修正的 bug，過程中造成
+    # /api/quotations 短暫 500）。
+    where_sql = ""
     params = []
     if user["role"] not in ("superadmin", "admin"):
-        sql += " AND (sales_person_id=? OR (sales_person_id IS NULL AND sales_person=?))"
+        where_sql += " AND (sales_person_id=? OR (sales_person_id IS NULL AND sales_person=?))"
         params.extend([user["id"], user["display_name"]])
     if status:
-        sql += " AND status=?"; params.append(status)
+        where_sql += " AND status=?"; params.append(status)
     if customer:
-        sql += " AND customer_name LIKE ?"; params.append(f"%{customer}%")
+        where_sql += " AND customer_name LIKE ?"; params.append(f"%{customer}%")
     if month:
-        sql += " AND quote_no LIKE ?"; params.append(f"MQ-{month}%")
+        where_sql += " AND quote_no LIKE ?"; params.append(f"MQ-{month}%")
     if deal_tag:
         tags = [t.strip() for t in deal_tag.split(",")]
-        sql += f" AND {SQL_DEAL_TAG} IN (" + ",".join("?" * len(tags)) + ")"
+        where_sql += f" AND {SQL_DEAL_TAG} IN (" + ",".join("?" * len(tags)) + ")"
         params.extend(tags)
-    sql += " ORDER BY id DESC LIMIT ? OFFSET ?"
-    params += [limit, offset]
-    rows  = conn.execute(sql, params).fetchall()
+    sql = f"SELECT {select_cols} FROM quotations WHERE 1=1{where_sql} ORDER BY id DESC LIMIT ? OFFSET ?"
+    rows  = conn.execute(sql, params + [limit, offset]).fetchall()
     count = conn.execute(
-        "SELECT COUNT(*) FROM quotations WHERE 1=1" + sql[sql.find(" AND"):sql.find(" ORDER")],
-        params[:-2]
-    ).fetchone()[0] if params[:-2] else conn.execute("SELECT COUNT(*) FROM quotations").fetchone()[0]
+        "SELECT COUNT(*) FROM quotations WHERE 1=1" + where_sql, params
+    ).fetchone()[0]
     conn.close()
     items = []
     for r in rows:
         row = dict(r)
         eh_json     = row.pop("edit_history_json", None)
-        stages_json = row.pop("stages_json", None)
         edit_last = None
         if eh_json:
             try:
@@ -332,18 +339,97 @@ def list_quotations(
             except Exception:
                 pass
         row["edit_last"] = edit_last
-        current_stage = None
-        if stages_json:
-            try:
-                for s in json.loads(stages_json):
-                    if not s.get("done"):
-                        current_stage = s.get("label") or s.get("name")
-                        break
-            except Exception:
-                pass
-        row["current_stage"] = current_stage
         items.append(row)
     return {"total": count, "items": items}
+
+
+@router.get("/api/quotations/stage-board")
+def stage_board(authorization: str = Header(None)):
+    """攤平所有已成案案件的執行進度階段（quotations.data_json.caseRecord.stages），
+    每個「案件×階段」回傳一筆，供跨案看板/時間軸使用（案件跨案視覺化，2026-08-23）。
+    查詢邏輯比照 daily_tasks.py::_check_case_stage_deadline() 的既有查詢，唯讀，
+    不觸發任何通知。另外回傳 caseLifecycle（依 quoteNo）供跨案時間軸畫出「業務開發→
+    報價單成立→案件成立」前置歷程（2026-08-23e）——不重複塞進每個 stage item，
+    跟 items 平行回傳一份。"""
+    user = _require_user(authorization)
+    conn = get_db()
+    dn_map = {
+        r["username"]: (r["display_name"] or r["username"])
+        for r in conn.execute("SELECT username, display_name FROM users").fetchall()
+    }
+    # Phase 5（2026-08-23）：改成直接 JOIN case_stages 表，取代撈整包 caseRecord.stages
+    # JSON 再用 Python 迴圈攤平——正規化橋樑（3a/3b/v52）已保證這張表對每個有執行進度
+    # 的案件都是權威、完整的來源。JOIN 天生就是「每個案件 x 每個階段」一列，跟原本
+    # Python 攤平的結果結構完全對等；只有真的有 case_stages 列的案件才會出現，跟原本
+    # `json_extract(...) IS NOT NULL` 的篩選語意一致。
+    sql = (
+        f"SELECT q.quote_no, q.customer_name, q.project_name, q.sales_person, q.sales_person_id, "
+        f"q.created_at, cs.id AS stage_id, cs.label, cs.start_date, cs.due_date, cs.done, "
+        f"cs.depends_on, cs.assigned_to "
+        f"FROM quotations q JOIN case_stages cs ON cs.quote_no = q.quote_no "
+        f"WHERE {SQL_DEAL_TAG} = '已成案'"
+    )
+    params = []
+    if user["role"] not in ("superadmin", "admin"):
+        sql += " AND (q.sales_person_id=? OR (q.sales_person_id IS NULL AND q.sales_person=?))"
+        params.extend([user["id"], user["display_name"]])
+    sql += " ORDER BY q.quote_no, cs.sort_order"
+    rows = conn.execute(sql, params).fetchall()
+
+    dev_map = {
+        r["converted_quote_no"]: {
+            "devStart": (r["created_at"] or "")[:10] or None,
+            "devEnd":   (r["updated_at"] or "")[:10] or None,
+        }
+        for r in conn.execute(
+            "SELECT converted_quote_no, created_at, updated_at FROM dev_cases "
+            "WHERE converted_quote_no IS NOT NULL AND converted_quote_no != ''"
+        ).fetchall()
+    }
+    case_started_map = {
+        r["quote_no"]: r["became_case_at"][:10]
+        for r in conn.execute(
+            "SELECT target_id AS quote_no, MIN(at) AS became_case_at FROM audit_log "
+            "WHERE action='deal_tag.change' AND json_extract(detail,'$.to')='已成案' "
+            "GROUP BY target_id"
+        ).fetchall()
+    }
+    conn.close()
+
+    case_lifecycle = {}
+    for row in rows:
+        qno = row["quote_no"]
+        dev = dev_map.get(qno) or {}
+        case_lifecycle[qno] = {
+            "devStart":       dev.get("devStart"),
+            "devEnd":         dev.get("devEnd"),
+            "quoteCreatedAt": (row["created_at"] or "")[:10] or None,
+            "caseStartedAt":  case_started_map.get(qno),
+        }
+
+    today = datetime.now().strftime("%Y-%m-%d")
+    items = []
+    for row in rows:
+        due = row["due_date"] or ""
+        done = bool(row["done"])
+        overdue = (not done) and bool(due) and due < today
+        assigned = [u for u in json.loads(row["assigned_to"] or "[]") if u]
+        items.append({
+            "quoteNo":       row["quote_no"],
+            "customerName":  row["customer_name"] or "",
+            "projectName":   row["project_name"] or "",
+            "salesPerson":   row["sales_person"] or "",
+            "stageId":       row["stage_id"],
+            "stageLabel":    row["label"] or "（未命名階段）",
+            "startDate":     row["start_date"] or "",
+            "dueDate":       due,
+            "done":          done,
+            "overdue":       overdue,
+            "dependsOn":     json.loads(row["depends_on"] or "[]"),
+            "assignedTo":    assigned,
+            "assignedNames": [dn_map.get(u, u) for u in assigned],
+        })
+    return {"items": items, "caseLifecycle": case_lifecycle}
 
 
 @router.post("/api/quotations/case-activity")
@@ -463,6 +549,16 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
             "ON CONFLICT(month) DO UPDATE SET seq=MAX(seq, excluded.seq)",
             (month, seq_no)
         )
+    # caseRecord.stages 正規化 Phase 3a（2026-08-23）：新建報價單也可能挾帶
+    # caseRecord.stages（例如複製既有案件、或 quotation-form.html 自己的
+    # ensureCaseRecord() 產生的階段），同一 conn 內、commit 前一併同步進新表，
+    # 邏輯與 update_quotation()/update_case_record() 完全一致。
+    cr = q.get("caseRecord")
+    if isinstance(cr, dict) and isinstance(cr.get("stages"), list):
+        _sync_json_stages_to_table(conn, qno, cr["stages"])
+        # 3b 收尾追加修正（2026-08-23）：合併後有些階段可能拿到新的真實 id，立刻
+        # 寫回 data_json，前端下一次讀到的 id 才會跟 case_stages 表一致。
+        _sync_stages_to_json(conn, qno, updated_at=now)
     conn.commit()
     conn.close()
 
@@ -476,11 +572,21 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
     # busy_timeout, silently dropping the notification) during pre-deploy testing.
     if body.status == "待審核":
         appr = q.get("approval") or {}
-        appr = _build_approval_tiers_and_notify(q, appr, qno, is_new_submission=True)
+        try:
+            appr = _build_approval_tiers_and_notify(q, appr, qno, is_new_submission=True)
+        except UnresolvedManagerError as e:
+            raise HTTPException(400, str(e))
         _conn2 = get_db()
+        # 3b 收尾追加修正（2026-08-23）：不能直接 json.dumps(q, ...) 整包覆寫——
+        # q.caseRecord.stages 仍是 client 送來的原始（可能已作廢）id，上面已經把
+        # 正確版本同步進 data_json 了。改成讀回目前資料庫現有的 data_json，只patch
+        # approval 這個欄位，其餘（含剛修正好的 caseRecord.stages）維持不動。
+        _row2 = _conn2.execute("SELECT data_json FROM quotations WHERE quote_no=?", (qno,)).fetchone()
+        _data2 = json.loads(_row2["data_json"] or "{}") if _row2 else dict(q)
+        _data2["approval"] = appr
         _conn2.execute(
             "UPDATE quotations SET data_json=? WHERE quote_no=?",
-            (json.dumps(q, ensure_ascii=False), qno)
+            (json.dumps(_data2, ensure_ascii=False), qno)
         )
         _conn2.commit()
         _conn2.close()
@@ -548,7 +654,10 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
             _chk.close()
             _old_status = (_old["status"] if _old else "草稿")
             is_new_submission = _old_status not in ("待審核", "簽核中")
-        appr = _build_approval_tiers_and_notify(q, appr, quote_no, is_new_submission)
+        try:
+            appr = _build_approval_tiers_and_notify(q, appr, quote_no, is_new_submission)
+        except UnresolvedManagerError as e:
+            raise HTTPException(400, str(e))
 
     tot = q.get("tot", {})
 
@@ -606,6 +715,18 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
         json.dumps(q, ensure_ascii=False), now, deal_tag, settle_status,
         quote_no,
     ))
+    # caseRecord.stages 正規化 Phase 3a（2026-08-23）：quotation-form.html::apiSave()
+    # 走的是這支整包存檔端點，跟 update_case_record() 是完全分開的路徑，一樣可能
+    # 挾帶 caseRecord.stages（例如它自己那份較舊、欄位不全的 ensureCaseRecord()
+    # 產生的階段）。邏輯與 update_case_record() 完全比照：送了 stages 就整批同步
+    # 回 case_stages/case_stage_visits，沒送這個 key 才維持表內現有值不動。
+    cr = q.get("caseRecord")
+    if isinstance(cr, dict) and isinstance(cr.get("stages"), list):
+        _sync_json_stages_to_table(conn, quote_no, cr["stages"])
+        # 3b 收尾追加修正（2026-08-23）：合併後有些階段可能拿到新的真實 id，立刻
+        # 寫回 data_json，前端下一次讀到的 id 才會跟 case_stages 表一致。updated_at
+        # 沿用上面 UPDATE 已經用掉的同一個 now，不產生第二個時間戳，樂觀鎖不受影響。
+        _sync_stages_to_json(conn, quote_no, updated_at=now)
     conn.commit()
     conn.close()
     spawn_bg_thread(_backup_quotation, args=(quote_no,))
@@ -758,6 +879,8 @@ def update_deal_tag(quote_no: str, body: QuotationDealTagUpdate, authorization: 
            f"{quote_no}（{cname}）", {'from': old_tag, 'to': body.deal_tag})
     notify_module_activity("報價單", f"案件進度變更為「{body.deal_tag}」", user.get("display_name") or user["username"],
                             f"{quote_no}（{cname}）", "quotations.html")
+    if body.deal_tag == '已成案' and old_tag != '已成案':
+        spawn_bg_thread(push_event_for_quotation_won, args=(quote_no,))
     if body.deal_tag == '已結案':
         try:
             actor_u = _require_user(authorization)
@@ -796,7 +919,7 @@ def delete_quotation(quote_no: str, authorization: str = Header(None)):
     conn.commit()
     conn.close()
     _purge_notifications(quote_no, ['approval_request', 'approval_returned',
-                                     'approval_rejected', 'case_stage_deadline'])
+                                     'approval_rejected', 'case_stage_deadline', 'approval_reminder'])
     _audit(_tok(authorization), 'quotation.delete', 'quotation', quote_no, f"{quote_no}（{cname}）")
     for c in orphaned:
         _audit(_tok(authorization), 'dev_case.unlink_deleted_quote', 'dev_case', str(c['id']),
@@ -881,16 +1004,478 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
     data = json.loads(row["data_json"] or "{}")
     old_devices = (data.get("caseRecord") or {}).get("devices") or []
     new_devices = (body.case_record or {}).get("devices") or []
-    data["caseRecord"] = body.case_record or {}
+    # caseRecord.stages 正規化（2026-08-23，3a 新增／3b 上線後修正）：3b 上線後
+    # case-management.js 的階段操作已全部改走 Phase 2 的 granular 端點，這條整包
+    # 存檔路徑（`saveCaseRecord()`）只用來存 materials/payment/contract/roles 等
+    # 其他欄位——但它仍然會把當下快取的 `stages` 陣列整包送過來（即使這次沒有
+    # 真的改階段），不能忽略，否則會把伺服器現有值蓋掉。送了 `stages`（陣列）就
+    # 呼叫 `_sync_json_stages_to_table()` 做 id-preserving 差異合併，沒送這個 key
+    # 才保留伺服器現有值。不管是這條路徑還是 Phase 2 的新端點寫入，兩邊都會保持
+    # 同步，不會有一方過期。
+    new_case_record = body.case_record or {}
+    stages_synced = "stages" in new_case_record and isinstance(new_case_record["stages"], list)
+    if stages_synced:
+        _sync_json_stages_to_table(conn, quote_no, new_case_record["stages"])
+    else:
+        new_case_record["stages"] = (data.get("caseRecord") or {}).get("stages") or []
+    data["caseRecord"] = new_case_record
     stock_conflicts = []
     if new_devices != old_devices:
         stock_conflicts = _sync_device_stock(conn, quote_no, old_devices, new_devices, user)
     now = save_quotation_json(conn, quote_no, data)
+    if stages_synced:
+        # 3b 收尾追加修正（2026-08-23）：合併後有些階段可能拿到新的真實 id（例如
+        # client 陣列裡混了尚未存在於表內的階段），上面 save_quotation_json 寫的
+        # stages 內容可能還停留在 client 送來的舊 id。這裡重新從表撈一次覆寫回
+        # data_json，確保下一次 GET／回應拿到的 id 保證跟表一致，不會讓前端拿著
+        # 已經失效的 id 去打 granular 端點（連鎖 404 的根本原因）。updated_at 沿用
+        # 上面 save_quotation_json 已經算好的同一個 now，不產生第二個時間戳。
+        now = _sync_stages_to_json(conn, quote_no, updated_at=now) or now
     conn.commit()
     conn.close()
     spawn_bg_thread(_backup_quotation, args=(quote_no,))
     _audit(_tok(authorization), 'case.update', 'quotation', quote_no, label)
     return {"ok": True, "updated_at": now, "stockConflicts": stock_conflicts}
+
+
+def _serialize_stage(conn, sr) -> dict:
+    visit_rows = conn.execute(
+        "SELECT id, visit_date, visit_people, note FROM case_stage_visits "
+        "WHERE stage_id=? ORDER BY id",
+        (sr["id"],),
+    ).fetchall()
+    return {
+        "id":         sr["id"],
+        "label":      sr["label"],
+        "sortOrder":  sr["sort_order"],
+        "done":       bool(sr["done"]),
+        "doneAt":     sr["done_at"],
+        "startDate":  sr["start_date"],
+        "dueDate":    sr["due_date"],
+        "assignedTo": json.loads(sr["assigned_to"] or "[]"),
+        "dependsOn":  json.loads(sr["depends_on"] or "[]"),
+        "visits": [
+            {"id": v["id"], "visitDate": v["visit_date"], "visitPeople": v["visit_people"], "note": v["note"]}
+            for v in visit_rows
+        ],
+    }
+
+
+def _get_stage_row(conn, quote_no: str, stage_id: int):
+    """查一個階段，順便確認它真的屬於這個 quote_no（避免猜 id 跨案件竄改）。查無資料回傳 None。"""
+    return conn.execute(
+        "SELECT * FROM case_stages WHERE id=? AND quote_no=?", (stage_id, quote_no)
+    ).fetchone()
+
+
+def _sync_stages_to_json(conn, quote_no: str, updated_at: str = None) -> str | None:
+    """Phase 3a（2026-08-23）：把 case_stages/case_stage_visits 目前的內容重建回
+    quotations.data_json.caseRecord.stages，讓 JSON 在前端還沒切換到新端點的過渡期
+    間持續保持最新——list_quotations()/stage_board()/dashboard.py/daily_tasks.py
+    這四個既有讀取點完全不用改就能繼續正常運作。掛在 Phase 2 那 10 個變更端點的
+    commit 之後呼叫。只動 caseRecord.stages 這個欄位，caseRecord 其他 key（
+    payment/devices/materials/roles）與 quotations 其他欄位維持原樣不動。
+    3b 收尾追加修正（2026-08-23）：`_sync_json_stages_to_table()` 合併完可能產生
+    新的真實 id，呼叫端（`update_case_record`/`create_quotation`/`update_quotation`）
+    在那之後也會呼叫這裡把新 id 立刻寫回 `data_json`。可選傳入 `updated_at`
+    沿用呼叫端已經算好的同一個時間戳記，避免同一次請求裡把 `updated_at` 又悄悄
+    往後推一次、讓回傳給前端的樂觀鎖時間戳跟資料庫實際值對不上。回傳實際寫入的
+    時間戳（查無此單則回傳 None）。"""
+    row = conn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+    if not row:
+        return None
+    data = json.loads(row["data_json"] or "{}")
+    stage_rows = conn.execute(
+        "SELECT * FROM case_stages WHERE quote_no=? ORDER BY sort_order, id", (quote_no,)
+    ).fetchall()
+    stages_json = []
+    for sr in stage_rows:
+        visit_rows = conn.execute(
+            "SELECT visit_date, visit_people, note FROM case_stage_visits WHERE stage_id=? ORDER BY id",
+            (sr["id"],),
+        ).fetchall()
+        stages_json.append({
+            "id":         sr["id"],
+            "label":      sr["label"],
+            "done":       bool(sr["done"]),
+            "doneAt":     sr["done_at"],
+            "startDate":  sr["start_date"],
+            "dueDate":    sr["due_date"],
+            "assignedTo": json.loads(sr["assigned_to"] or "[]"),
+            "dependsOn":  json.loads(sr["depends_on"] or "[]"),
+            "visits": [
+                {"visitDate": v["visit_date"], "visitPeople": v["visit_people"], "note": v["note"]}
+                for v in visit_rows
+            ],
+        })
+    data.setdefault("caseRecord", {})["stages"] = stages_json
+    result_ts = save_quotation_json(conn, quote_no, data, updated_at=updated_at)
+    conn.commit()
+    return result_ts
+
+
+def _sync_json_stages_to_table(conn, quote_no: str, stages_from_json: list) -> None:
+    """Phase 3a（2026-08-23）反向同步，**3b 上線後複查發現嚴重回歸並於同日修正**：
+    原始版本每次都整批 DELETE quote_no 底下全部 case_stages 再重新 INSERT，
+    `id` 是 AUTOINCREMENT，每次重建一定拿到全新的 id，跟 db.py 的 Phase 1
+    backfill migration（一次性、當時還沒有任何前端會引用這些 id）邏輯相同沒問題；
+    但 3b 上線後 `case-management.js` 的階段操作全部直接用 `st.id` 打 granular
+    端點（`PUT .../stages/{id}` 等），而 `saveCaseRecord()` 仍然是**整包**送出
+    `caseRecord`（含 `stages`，即使這次只改了 materials/payment 等無關欄位）—
+    一旦這個整包存檔把 `stages` 傳進來，舊版邏輯就會把使用者手上還在用的
+    `st.id` 全部作廢換成新 id，且沒有把新 id 回寫進 `data_json`，導致使用者
+    緊接著點任何一個階段操作都會 404。已用 scratch DB 重現：`create_quotation`
+    建立階段後緊接著 `GET` 看到的還是舊 id、`update_case_record` 存一次無關的
+    `materials` 就讓原本能用的 `st.id` 直接消失。
+
+    修正為**id-preserving 差異合併**：傳入陣列裡 `id` 已存在於這個 quote_no
+    現有 `case_stages` 的，原地 UPDATE（id 不變，`dependsOn`/`visits` 刻意不動——
+    3b 之後這兩塊只透過各自的專用端點異動，整包存檔送來的可能是還沒更新的舊值，
+    覆寫反而有清空風險）；不存在的視為新階段才 INSERT 並依舊邏輯 remap
+    `dependsOn`／建立 `visits`；現有列若這次陣列裡完全沒出現，視為使用者刪除，
+    整批重建的語意維持不變一併 DELETE（`ON DELETE CASCADE` 清掉其 visits）。
+    呼叫端記得**接著呼叫 `_sync_stages_to_json()`** 把這次可能新產生的真實 id
+    立刻寫回 `data_json`，前端下一次讀到的就是跟表一致的 id，不會停留在舊值。
+    呼叫端負責 commit，這裡不 commit。"""
+    existing_ids = {r["id"] for r in conn.execute(
+        "SELECT id FROM case_stages WHERE quote_no=?", (quote_no,)
+    ).fetchall()}
+    now = datetime.now().isoformat()
+    id_map = {}
+    new_stages = []
+    seen_ids = set()
+
+    for idx, st in enumerate(stages_from_json):
+        old_id = st.get("id")
+        if old_id in existing_ids:
+            conn.execute("""
+                UPDATE case_stages SET
+                    label=?, sort_order=?, done=?, done_at=?, start_date=?, due_date=?,
+                    assigned_to=?, updated_at=?
+                WHERE id=?
+            """, (
+                st.get("label") or "", idx,
+                1 if st.get("done") else 0, st.get("doneAt") or "",
+                st.get("startDate") or "", st.get("dueDate") or "",
+                json.dumps(st.get("assignedTo") or [], ensure_ascii=False),
+                now, old_id,
+            ))
+            final_id = old_id
+        else:
+            cur = conn.execute("""
+                INSERT INTO case_stages
+                    (quote_no, label, sort_order, done, done_at, start_date, due_date,
+                     assigned_to, depends_on, created_at, updated_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?)
+            """, (
+                quote_no, st.get("label") or "", idx,
+                1 if st.get("done") else 0, st.get("doneAt") or "",
+                st.get("startDate") or "", st.get("dueDate") or "",
+                json.dumps(st.get("assignedTo") or [], ensure_ascii=False),
+                "[]", now, now,
+            ))
+            final_id = cur.lastrowid
+            new_stages.append((final_id, st))
+        if old_id is not None:
+            id_map[old_id] = final_id
+        seen_ids.add(final_id)
+
+    for gone_id in existing_ids - seen_ids:
+        conn.execute("DELETE FROM case_stages WHERE id=?", (gone_id,))
+
+    for final_id, st in new_stages:
+        remapped = [id_map[d] for d in (st.get("dependsOn") or []) if d in id_map]
+        if remapped:
+            conn.execute("UPDATE case_stages SET depends_on=? WHERE id=?",
+                         (json.dumps(remapped, ensure_ascii=False), final_id))
+        for v in (st.get("visits") or []):
+            conn.execute("""
+                INSERT INTO case_stage_visits (stage_id, visit_date, visit_people, note, created_at)
+                VALUES (?,?,?,?,?)
+            """, (final_id, v.get("visitDate") or "", int(v.get("visitPeople") or 0), v.get("note") or "", now))
+
+
+def _would_create_cycle(conn, quote_no: str, stage_id: int, candidate_id: int) -> bool:
+    """DFS 防環檢查，邏輯照搬 case-management.js 的 wouldCreateCycle()：若讓 stage_id
+    依賴 candidate_id，順著 dependsOn 追下去會不會繞回 stage_id 自己。範圍限定在同一
+    quote_no 底下的 case_stages。"""
+    if stage_id == candidate_id:
+        return True
+    rows = conn.execute("SELECT id, depends_on FROM case_stages WHERE quote_no=?", (quote_no,)).fetchall()
+    depends_map = {r["id"]: json.loads(r["depends_on"] or "[]") for r in rows}
+    seen = set()
+
+    def dfs(cur_id):
+        if cur_id == stage_id:
+            return True
+        if cur_id in seen:
+            return False
+        seen.add(cur_id)
+        return any(dfs(d) for d in depends_map.get(cur_id, []))
+
+    return dfs(candidate_id)
+
+
+@router.get("/api/quotations/{quote_no}/stages")
+def list_case_stages_normalized(quote_no: str, authorization: str = Header(None)):
+    """caseRecord.stages 正規化第一階段的驗證端點（2026-08-23）——查 case_stages/
+    case_stage_visits。第二階段（CRUD 端點）新增後，這個端點仍然是唯讀查詢，尚未接
+    進任何現有頁面/流程；`caseRecord.stages` JSON 欄位仍是唯一的讀寫來源，前端還沒
+    有任何頁面呼叫這一系列新端點。"""
+    _require_user(authorization)
+    conn = get_db()
+    stage_rows = conn.execute(
+        "SELECT * FROM case_stages WHERE quote_no=? ORDER BY sort_order, id",
+        (quote_no,),
+    ).fetchall()
+    stages = [_serialize_stage(conn, sr) for sr in stage_rows]
+    conn.close()
+    return {"items": stages}
+
+
+@router.post("/api/quotations/{quote_no}/stages", status_code=201)
+def create_case_stage(quote_no: str, body: dict = Body(...), authorization: str = Header(None)):
+    """新增階段，對應 case-management.js::addStage()。第二階段 CRUD 端點，尚未接進
+    任何前端頁面（2026-08-23）。"""
+    _require_user(authorization)
+    conn = get_db()
+    max_order = conn.execute(
+        "SELECT COALESCE(MAX(sort_order), -1) m FROM case_stages WHERE quote_no=?", (quote_no,)
+    ).fetchone()["m"]
+    now = datetime.now().isoformat()
+    cur = conn.execute("""
+        INSERT INTO case_stages
+            (quote_no, label, sort_order, done, done_at, start_date, due_date,
+             assigned_to, depends_on, created_at, updated_at)
+        VALUES (?,?,?,0,'','','','[]','[]',?,?)
+    """, (quote_no, body.get("label") or "", max_order + 1, now, now))
+    new_id = cur.lastrowid
+    conn.commit()
+    _sync_stages_to_json(conn, quote_no)
+    sr = _get_stage_row(conn, quote_no, new_id)
+    result = _serialize_stage(conn, sr)
+    conn.close()
+    return result
+
+
+@router.put("/api/quotations/{quote_no}/stages/{stage_id}")
+def update_case_stage(quote_no: str, stage_id: int, body: dict = Body(...), authorization: str = Header(None)):
+    """局部更新階段欄位（label/done/doneAt/startDate/dueDate），對應 case-management.html
+    的 x-model 直接綁定欄位＋renderGantt() 的 on_date_change。不加任何自動邏輯（例如
+    done=true 不自動填 doneAt）——維持跟現有前端行為一致，各欄位互相獨立。第二階段
+    CRUD 端點，尚未接進任何前端頁面（2026-08-23）。"""
+    _require_user(authorization)
+    conn = get_db()
+    sr = _get_stage_row(conn, quote_no, stage_id)
+    if not sr:
+        conn.close(); raise HTTPException(404, "階段不存在")
+    updates = {}
+    if "label" in body:     updates["label"]      = body.get("label") or ""
+    if "done" in body:      updates["done"]       = 1 if body.get("done") else 0
+    if "doneAt" in body:    updates["done_at"]    = body.get("doneAt") or ""
+    if "startDate" in body: updates["start_date"] = body.get("startDate") or ""
+    if "dueDate" in body:   updates["due_date"]   = body.get("dueDate") or ""
+    if updates:
+        updates["updated_at"] = datetime.now().isoformat()
+        sql = "UPDATE case_stages SET " + ", ".join(f"{k}=?" for k in updates) + " WHERE id=?"
+        conn.execute(sql, list(updates.values()) + [stage_id])
+        conn.commit()
+        _sync_stages_to_json(conn, quote_no)
+    sr = _get_stage_row(conn, quote_no, stage_id)
+    result = _serialize_stage(conn, sr)
+    conn.close()
+    return result
+
+
+@router.delete("/api/quotations/{quote_no}/stages/{stage_id}")
+def delete_case_stage(quote_no: str, stage_id: int, authorization: str = Header(None)):
+    """刪除階段，同時清掉同案件其他階段 dependsOn 裡對它的參照，對應
+    case-management.js::removeStage()。第二階段 CRUD 端點，尚未接進任何前端頁面
+    （2026-08-23）。"""
+    _require_user(authorization)
+    conn = get_db()
+    sr = _get_stage_row(conn, quote_no, stage_id)
+    if not sr:
+        conn.close(); raise HTTPException(404, "階段不存在")
+    conn.execute("DELETE FROM case_stages WHERE id=?", (stage_id,))
+    siblings = conn.execute("SELECT id, depends_on FROM case_stages WHERE quote_no=?", (quote_no,)).fetchall()
+    for s in siblings:
+        depends = json.loads(s["depends_on"] or "[]")
+        if stage_id in depends:
+            depends = [d for d in depends if d != stage_id]
+            conn.execute("UPDATE case_stages SET depends_on=? WHERE id=?",
+                         (json.dumps(depends, ensure_ascii=False), s["id"]))
+    conn.commit()
+    _sync_stages_to_json(conn, quote_no)
+    conn.close()
+    return {"ok": True}
+
+
+@router.patch("/api/quotations/{quote_no}/stages/reorder")
+def reorder_case_stages(quote_no: str, body: dict = Body(...), authorization: str = Header(None)):
+    """依 orderedIds 陣列順序重寫 sort_order，對應拖曳重排（dragOver/dragEnd）的最終
+    結果。第二階段 CRUD 端點，尚未接進任何前端頁面（2026-08-23）。"""
+    _require_user(authorization)
+    ordered_ids = body.get("orderedIds") or []
+    conn = get_db()
+    valid_ids = {r["id"] for r in conn.execute(
+        "SELECT id FROM case_stages WHERE quote_no=?", (quote_no,)
+    ).fetchall()}
+    now = datetime.now().isoformat()
+    for idx, sid in enumerate(ordered_ids):
+        if sid in valid_ids:
+            conn.execute("UPDATE case_stages SET sort_order=?, updated_at=? WHERE id=? AND quote_no=?",
+                         (idx, now, sid, quote_no))
+    conn.commit()
+    _sync_stages_to_json(conn, quote_no)
+    conn.close()
+    return {"ok": True}
+
+
+@router.post("/api/quotations/{quote_no}/stages/{stage_id}/assignees")
+def add_stage_assignee(quote_no: str, stage_id: int, body: dict = Body(...), authorization: str = Header(None)):
+    """加入負責人，對應 case-management.js::addStageAssignee()。第二階段 CRUD 端點，
+    尚未接進任何前端頁面（2026-08-23）。"""
+    _require_user(authorization)
+    username = body.get("username")
+    if not username:
+        raise HTTPException(400, "請提供 username")
+    conn = get_db()
+    sr = _get_stage_row(conn, quote_no, stage_id)
+    if not sr:
+        conn.close(); raise HTTPException(404, "階段不存在")
+    assigned = json.loads(sr["assigned_to"] or "[]")
+    if username not in assigned:
+        assigned.append(username)
+        conn.execute("UPDATE case_stages SET assigned_to=?, updated_at=? WHERE id=?",
+                     (json.dumps(assigned, ensure_ascii=False), datetime.now().isoformat(), stage_id))
+        conn.commit()
+        _sync_stages_to_json(conn, quote_no)
+    sr = _get_stage_row(conn, quote_no, stage_id)
+    result = _serialize_stage(conn, sr)
+    conn.close()
+    return result
+
+
+@router.delete("/api/quotations/{quote_no}/stages/{stage_id}/assignees/{username}")
+def remove_stage_assignee(quote_no: str, stage_id: int, username: str, authorization: str = Header(None)):
+    """移除負責人，對應 case-management.js::removeStageAssignee()。第二階段 CRUD 端
+    點，尚未接進任何前端頁面（2026-08-23）。"""
+    _require_user(authorization)
+    conn = get_db()
+    sr = _get_stage_row(conn, quote_no, stage_id)
+    if not sr:
+        conn.close(); raise HTTPException(404, "階段不存在")
+    assigned = [u for u in json.loads(sr["assigned_to"] or "[]") if u != username]
+    conn.execute("UPDATE case_stages SET assigned_to=?, updated_at=? WHERE id=?",
+                 (json.dumps(assigned, ensure_ascii=False), datetime.now().isoformat(), stage_id))
+    conn.commit()
+    _sync_stages_to_json(conn, quote_no)
+    sr = _get_stage_row(conn, quote_no, stage_id)
+    result = _serialize_stage(conn, sr)
+    conn.close()
+    return result
+
+
+@router.post("/api/quotations/{quote_no}/stages/{stage_id}/depends-on/{candidate_id}")
+def toggle_stage_dependency(quote_no: str, stage_id: int, candidate_id: int, authorization: str = Header(None)):
+    """切換依賴關係：已存在就移除，不存在就先做防環檢查（DFS，邏輯照搬
+    wouldCreateCycle()）再加入。對應 case-management.js::toggleStageDependency()。
+    第二階段 CRUD 端點，尚未接進任何前端頁面（2026-08-23）。"""
+    _require_user(authorization)
+    conn = get_db()
+    sr = _get_stage_row(conn, quote_no, stage_id)
+    if not sr:
+        conn.close(); raise HTTPException(404, "階段不存在")
+    if not _get_stage_row(conn, quote_no, candidate_id):
+        conn.close(); raise HTTPException(404, "前置階段不存在")
+    depends = json.loads(sr["depends_on"] or "[]")
+    if candidate_id in depends:
+        depends = [d for d in depends if d != candidate_id]
+    else:
+        if _would_create_cycle(conn, quote_no, stage_id, candidate_id):
+            conn.close()
+            raise HTTPException(400, "這樣設定會讓階段之間互相循環依賴，請重新選擇前置階段")
+        depends.append(candidate_id)
+    conn.execute("UPDATE case_stages SET depends_on=?, updated_at=? WHERE id=?",
+                 (json.dumps(depends, ensure_ascii=False), datetime.now().isoformat(), stage_id))
+    conn.commit()
+    _sync_stages_to_json(conn, quote_no)
+    sr = _get_stage_row(conn, quote_no, stage_id)
+    result = _serialize_stage(conn, sr)
+    conn.close()
+    return result
+
+
+@router.post("/api/quotations/{quote_no}/stages/{stage_id}/visits", status_code=201)
+def add_stage_visit(quote_no: str, stage_id: int, body: dict = Body(...), authorization: str = Header(None)):
+    """新增拜訪紀錄，對應 case-management.js::addVisit()。第二階段 CRUD 端點，尚未
+    接進任何前端頁面（2026-08-23）。"""
+    _require_user(authorization)
+    conn = get_db()
+    sr = _get_stage_row(conn, quote_no, stage_id)
+    if not sr:
+        conn.close(); raise HTTPException(404, "階段不存在")
+    now = datetime.now().isoformat()
+    conn.execute("""
+        INSERT INTO case_stage_visits (stage_id, visit_date, visit_people, note, created_at)
+        VALUES (?,?,?,?,?)
+    """, (stage_id, body.get("visitDate") or "", int(body.get("visitPeople") or 0), body.get("note") or "", now))
+    conn.execute("UPDATE case_stages SET updated_at=? WHERE id=?", (now, stage_id))
+    conn.commit()
+    _sync_stages_to_json(conn, quote_no)
+    sr = _get_stage_row(conn, quote_no, stage_id)
+    result = _serialize_stage(conn, sr)
+    conn.close()
+    return result
+
+
+@router.put("/api/quotations/{quote_no}/stages/{stage_id}/visits/{visit_id}")
+def update_stage_visit(quote_no: str, stage_id: int, visit_id: int, body: dict = Body(...), authorization: str = Header(None)):
+    """局部更新拜訪紀錄欄位，對應 v.visitDate/v.visitPeople/v.note 的 x-model 綁定。
+    第二階段 CRUD 端點，尚未接進任何前端頁面（2026-08-23）。"""
+    _require_user(authorization)
+    conn = get_db()
+    sr = _get_stage_row(conn, quote_no, stage_id)
+    if not sr:
+        conn.close(); raise HTTPException(404, "階段不存在")
+    vr = conn.execute("SELECT id FROM case_stage_visits WHERE id=? AND stage_id=?", (visit_id, stage_id)).fetchone()
+    if not vr:
+        conn.close(); raise HTTPException(404, "拜訪紀錄不存在")
+    fields = {}
+    if "visitDate" in body:   fields["visit_date"]   = body.get("visitDate") or ""
+    if "visitPeople" in body: fields["visit_people"] = int(body.get("visitPeople") or 0)
+    if "note" in body:        fields["note"]         = body.get("note") or ""
+    if fields:
+        sql = "UPDATE case_stage_visits SET " + ", ".join(f"{k}=?" for k in fields) + " WHERE id=?"
+        conn.execute(sql, list(fields.values()) + [visit_id])
+        conn.execute("UPDATE case_stages SET updated_at=? WHERE id=?", (datetime.now().isoformat(), stage_id))
+        conn.commit()
+        _sync_stages_to_json(conn, quote_no)
+    sr = _get_stage_row(conn, quote_no, stage_id)
+    result = _serialize_stage(conn, sr)
+    conn.close()
+    return result
+
+
+@router.delete("/api/quotations/{quote_no}/stages/{stage_id}/visits/{visit_id}")
+def delete_stage_visit(quote_no: str, stage_id: int, visit_id: int, authorization: str = Header(None)):
+    """刪除拜訪紀錄，對應 case-management.js::removeVisit()。第二階段 CRUD 端點，
+    尚未接進任何前端頁面（2026-08-23）。"""
+    _require_user(authorization)
+    conn = get_db()
+    sr = _get_stage_row(conn, quote_no, stage_id)
+    if not sr:
+        conn.close(); raise HTTPException(404, "階段不存在")
+    vr = conn.execute("SELECT id FROM case_stage_visits WHERE id=? AND stage_id=?", (visit_id, stage_id)).fetchone()
+    if not vr:
+        conn.close(); raise HTTPException(404, "拜訪紀錄不存在")
+    conn.execute("DELETE FROM case_stage_visits WHERE id=?", (visit_id,))
+    conn.execute("UPDATE case_stages SET updated_at=? WHERE id=?", (datetime.now().isoformat(), stage_id))
+    conn.commit()
+    _sync_stages_to_json(conn, quote_no)
+    conn.close()
+    return {"ok": True}
 
 
 @router.post("/api/quotations/{quote_no}/export")
@@ -1153,10 +1738,39 @@ def update_settlement(quote_no: str, body: SettlementIn, authorization: str = He
 
 # ── Approval queue ────────────────────────────────────────────────────────────
 
+def _queue_tier_fields(approval_json_raw: str) -> dict:
+    """三種文件類型（報價單／承攬商匯款申請／開票申請憑據）的 approval 欄位
+    形狀完全相同（tiers/currentTier，見 §5.3／§5.9），可共用同一段換算邏輯。"""
+    try:
+        appr = json.loads(approval_json_raw or "{}")
+    except Exception:
+        appr = {}
+    tiers  = _active_tiers(appr)
+    ct_idx = _current_tier_idx(appr)
+    cur_tier_approvers = tiers[ct_idx].get("approvers") or [] if tiers and ct_idx < len(tiers) else []
+    return {
+        "appr":               appr,
+        "requestedBy":        appr.get("requestedBy") or "",
+        "requestedByDisplay": appr.get("requestedByDisplay") or appr.get("requestedBy") or "",
+        "requestedAt":        appr.get("requestedAt") or "",
+        "tiers":              tiers,
+        "currentTier":        ct_idx,
+        "tierCount":          len(tiers),
+        "currentApprovers":   cur_tier_approvers,
+    }
+
+
 @router.get("/api/approval-queue")
 def get_approval_queue(authorization: str = Header(None)):
+    """2026-08-21 起合併三種待簽核文件類型：報價單、承攬商匯款申請、開票申請
+    憑據。刻意沿用報價單既有的欄位名稱（quoteNo/customer/projectName/total/
+    quoteDate/salesPerson）承載三種類型的資料，讓既有前端列表渲染邏輯幾乎不用
+    改，只多一個 `type` 欄位供前端分流動作按鈕與連結（見 approval-queue.html）。
+    兩個新單據類型沒有「拒絕結案」這種永久終止端點，前端會依 type 隱藏該按鈕。"""
     _require_user(authorization)
     conn = get_db()
+    items = []
+
     rows = conn.execute("""
         SELECT quote_no, customer_name, project_name, total, quote_date, sales_person,
                json_extract(data_json,'$.approval') as approval_json
@@ -1164,36 +1778,94 @@ def get_approval_queue(authorization: str = Header(None)):
         WHERE status IN ('待審核','簽核中')
         ORDER BY id DESC
     """).fetchall()
-    conn.close()
-
-    items = []
     for r in rows:
-        try:
-            appr = json.loads(r["approval_json"] or "{}")
-        except Exception:
-            appr = {}
-        tiers   = _active_tiers(appr)
-        ct_idx  = _current_tier_idx(appr)
-        cur_tier_approvers = []
-        if tiers and ct_idx < len(tiers):
-            cur_tier_approvers = tiers[ct_idx].get("approvers") or []
+        f = _queue_tier_fields(r["approval_json"])
         items.append({
+            "type":                "quotation",
             "quoteNo":             r["quote_no"],
             "customer":            r["customer_name"] or "",
             "projectName":         r["project_name"] or "",
             "total":               r["total"] or 0,
             "quoteDate":           r["quote_date"] or "",
             "salesPerson":         r["sales_person"] or "",
-            "requestedBy":         appr.get("requestedBy") or "",
-            "requestedByDisplay":  appr.get("requestedByDisplay") or appr.get("requestedBy") or "",
-            "requestedAt":         appr.get("requestedAt") or "",
-            "isEditApproval":      appr.get("isEditApproval", False),
-            "reasons":             appr.get("reasons") or [],
-            "tiers":               tiers,
-            "currentTier":         ct_idx,
-            "tierCount":           len(tiers),
-            "currentApprovers":    cur_tier_approvers,
+            "requestedBy":         f["requestedBy"],
+            "requestedByDisplay":  f["requestedByDisplay"],
+            "requestedAt":         f["requestedAt"],
+            "isEditApproval":      f["appr"].get("isEditApproval", False),
+            "reasons":             f["appr"].get("reasons") or [],
+            "tiers":               f["tiers"],
+            "currentTier":         f["currentTier"],
+            "tierCount":           f["tierCount"],
+            "currentApprovers":    f["currentApprovers"],
         })
+
+    cv_rows = conn.execute("""
+        SELECT voucher_no, quote_no, snapshot_json, created_at,
+               json_extract(data_json,'$.approval') as approval_json
+        FROM contractor_payment_vouchers
+        WHERE status IN ('待審核','簽核中')
+        ORDER BY id DESC
+    """).fetchall()
+    for r in cv_rows:
+        f = _queue_tier_fields(r["approval_json"])
+        try:
+            snap = json.loads(r["snapshot_json"] or "{}")
+        except Exception:
+            snap = {}
+        items.append({
+            "type":                "contractor_voucher",
+            "quoteNo":             r["voucher_no"],
+            "customer":            snap.get("vendorName") or "外包人員點工",
+            "projectName":         f"關聯案件 {r['quote_no']}",
+            "total":               snap.get("grandTotal", 0),
+            "quoteDate":           (r["created_at"] or "")[:10],
+            "salesPerson":         "",
+            "requestedBy":         f["requestedBy"],
+            "requestedByDisplay":  f["requestedByDisplay"],
+            "requestedAt":         f["requestedAt"],
+            "isEditApproval":      False,
+            "reasons":             [],
+            "tiers":               f["tiers"],
+            "currentTier":         f["currentTier"],
+            "tierCount":           f["tierCount"],
+            "currentApprovers":    f["currentApprovers"],
+            "linkedQuoteNo":       r["quote_no"],
+        })
+
+    iv_rows = conn.execute("""
+        SELECT voucher_no, quote_no, amount, snapshot_json, created_at,
+               json_extract(data_json,'$.approval') as approval_json
+        FROM invoice_vouchers
+        WHERE status IN ('待審核','簽核中')
+        ORDER BY id DESC
+    """).fetchall()
+    for r in iv_rows:
+        f = _queue_tier_fields(r["approval_json"])
+        try:
+            snap = json.loads(r["snapshot_json"] or "{}")
+        except Exception:
+            snap = {}
+        items.append({
+            "type":                "invoice_voucher",
+            "quoteNo":             r["voucher_no"],
+            "customer":            snap.get("customerName") or "",
+            "projectName":         snap.get("projectName") or f"關聯案件 {r['quote_no']}",
+            "total":               r["amount"] or 0,
+            "quoteDate":           (r["created_at"] or "")[:10],
+            "salesPerson":         "",
+            "requestedBy":         f["requestedBy"],
+            "requestedByDisplay":  f["requestedByDisplay"],
+            "requestedAt":         f["requestedAt"],
+            "isEditApproval":      False,
+            "reasons":             [],
+            "tiers":               f["tiers"],
+            "currentTier":         f["currentTier"],
+            "tierCount":           f["tierCount"],
+            "currentApprovers":    f["currentApprovers"],
+            "linkedQuoteNo":       r["quote_no"],
+        })
+
+    conn.close()
 
     groups: dict = defaultdict(list)
     for item in items:
@@ -1215,19 +1887,28 @@ def get_approval_queue(authorization: str = Header(None)):
 
 @router.get("/api/approval-queue/count")
 def get_approval_queue_count(authorization: str = Header(None)):
-    """輕量端點：回傳目前輪到當前用戶簽核的報價單數量。"""
+    """輕量端點：回傳目前輪到當前用戶簽核的項目數量（報價單＋承攬商匯款申請＋
+    開票申請憑據，2026-08-21 起合併三者）。每一頁 topbar 都會呼叫這支
+    （static/notif.js），刻意維持跟原本一樣的輕量寫法（只挑 approval_json 一欄），
+    不要拖累全站每頁的載入速度。"""
     u = _require_user(authorization)
     my_username = u["username"]
     conn = get_db()
-    rows = conn.execute(
-        "SELECT json_extract(data_json,'$.approval') as approval_json "
-        "FROM quotations WHERE status IN ('待審核','簽核中')"
-    ).fetchall()
+    approval_jsons = [r[0] for r in conn.execute(
+        "SELECT json_extract(data_json,'$.approval') FROM quotations WHERE status IN ('待審核','簽核中')"
+    ).fetchall()]
+    approval_jsons += [r[0] for r in conn.execute(
+        "SELECT json_extract(data_json,'$.approval') FROM contractor_payment_vouchers "
+        "WHERE status IN ('待審核','簽核中')"
+    ).fetchall()]
+    approval_jsons += [r[0] for r in conn.execute(
+        "SELECT json_extract(data_json,'$.approval') FROM invoice_vouchers WHERE status IN ('待審核','簽核中')"
+    ).fetchall()]
     conn.close()
     count = 0
-    for r in rows:
+    for approval_json in approval_jsons:
         try:
-            appr    = json.loads(r["approval_json"] or "{}")
+            appr    = json.loads(approval_json or "{}")
             tiers   = _active_tiers(appr)
             ct_idx  = _current_tier_idx(appr)
             if tiers and ct_idx < len(tiers):
@@ -1259,35 +1940,13 @@ def approve_quotation(quote_no: str, body: ApprovalActionBody, authorization: st
 
     if tiers:
         ct_idx = _current_tier_idx(appr)
-        if ct_idx >= len(tiers):
+        ok, status_code, err_msg = check_approve_permission(tiers, ct_idx, user["username"])
+        if not ok:
             conn.close()
-            raise HTTPException(400, "所有層已完成")
+            raise HTTPException(status_code, err_msg)
         tier      = tiers[ct_idx]
         approvers = tier.get("approvers") or []
-
-        # sequential order within tier: must be a member first
-        is_in_tier = any(a["username"] == user["username"] for a in approvers)
-        if not is_in_tier:
-            pending_names = "、".join(
-                a.get("displayName") or a["username"] for a in approvers if a.get("status") != "approved"
-            ) or "（無待簽核人員）"
-            conn.close()
-            raise HTTPException(403, f"此層需由以下人員簽核：{pending_names}")
-
-        # enforce sequential order: only the first unapproved approver may sign
-        first_pending = next(
-            (a for a in approvers if a.get("status") != "approved"),
-            None
-        )
-        if not first_pending:
-            conn.close()
-            raise HTTPException(400, "此層所有簽核人員已完成")
-
-        if first_pending["username"] != user["username"]:
-            next_name = first_pending.get("displayName") or first_pending["username"]
-            conn.close()
-            raise HTTPException(403, f"請等待 {next_name} 先完成簽核（簽核順序固定）")
-
+        first_pending = next((a for a in approvers if a.get("status") != "approved"), None)
         my_entry = first_pending
 
         my_entry["status"]     = "approved"
@@ -1322,7 +1981,11 @@ def approve_quotation(quote_no: str, body: ApprovalActionBody, authorization: st
         # This prevents a quotation submitted before flow was set (tiers missing)
         # from being approved without going through the flow.
         _global_flow   = _get_setting("approval_flow", {"tiers": []}) or {}
-        _global_tiers  = _setting_to_active_tiers(_global_flow)
+        try:
+            _global_tiers = _setting_to_active_tiers(_global_flow, conn, appr.get("requestedBy"))
+        except UnresolvedManagerError as e:
+            conn.close()
+            raise HTTPException(400, str(e))
         if _global_tiers:
             conn.close()
             raise HTTPException(
@@ -1330,15 +1993,10 @@ def approve_quotation(quote_no: str, body: ApprovalActionBody, authorization: st
                 "系統已設定簽核流程，此報價單缺少簽核層資料。"
                 "請請申請人收回並重新送審，以套用最新簽核設定"
             )
-        # 申請人不得自行審核 — 除非申請人是目前唯一在職的最高管理者（否則會永久卡死無人可簽）
-        if appr.get("requestedBy") == user["username"]:
-            other_admin = conn.execute(
-                "SELECT 1 FROM users WHERE role='superadmin' AND active=1 AND username!=? LIMIT 1",
-                (user["username"],),
-            ).fetchone()
-            if other_admin:
-                conn.close()
-                raise HTTPException(403, "申請人不得自行審核，請由其他最高管理者審核")
+        self_block_msg = check_no_tier_self_approval(conn, appr, user)
+        if self_block_msg:
+            conn.close()
+            raise HTTPException(403, self_block_msg)
         all_done      = True
         detail_status = "超級管理員簽核"
 
@@ -1383,18 +2041,11 @@ def reject_quotation(quote_no: str, body: ApprovalActionBody, authorization: str
     appr  = d.get("approval") or {}
     tiers = _active_tiers(appr)
 
-    if tiers:
-        ct_idx    = _current_tier_idx(appr)
-        tier      = tiers[ct_idx] if ct_idx < len(tiers) else {}
-        approvers = tier.get("approvers") or []
-        is_in_tier = any(a["username"] == user["username"] for a in approvers)
-        if not is_in_tier and user["role"] != "superadmin":
-            conn.close()
-            raise HTTPException(403, "無退回權限（非當層簽核人員）")
-    else:
-        if user["role"] != "superadmin":
-            conn.close()
-            raise HTTPException(403, "僅超級管理員可執行此操作")
+    ct_idx = _current_tier_idx(appr)
+    ok, status_code, err_msg = check_reject_permission(tiers, ct_idx, user)
+    if not ok:
+        conn.close()
+        raise HTTPException(status_code, err_msg)
 
     new_no = _next_revision_no(quote_no)
     note   = body.note or ""
@@ -1546,6 +2197,7 @@ def list_case_updates(quote_no: str, authorization: str = Header(None)):
             "created_at": c["created_at"],
             "canDelete": (user["username"] == c["author"]
                           or user["role"] in ("superadmin", "admin")),
+            "important": c["type"] == "important",
         })
 
     # 2. Work logs tagged with this case
@@ -1641,6 +2293,7 @@ def list_case_updates(quote_no: str, authorization: str = Header(None)):
 def post_case_update(quote_no: str, body: dict = Body(...), authorization: str = Header(None)):
     user = _require_user(authorization)
     content = (body.get("content") or "").strip()
+    important = bool(body.get("important"))
     if not content:
         raise HTTPException(400, "內容不得為空")
     conn = get_db()
@@ -1651,10 +2304,11 @@ def post_case_update(quote_no: str, body: dict = Body(...), authorization: str =
         conn.close()
         raise HTTPException(404, "報價單不存在")
     now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    update_type = "important" if important else "comment"
     cur = conn.execute(
         "INSERT INTO case_updates (quote_no, author, content, type, created_at) "
         "VALUES (?,?,?,?,?)",
-        (quote_no, user["username"], content, "comment", now),
+        (quote_no, user["username"], content, update_type, now),
     )
     new_id = cur.lastrowid
     conn.commit()
@@ -1667,20 +2321,23 @@ def post_case_update(quote_no: str, body: dict = Body(...), authorization: str =
         c2.close()
     except Exception:
         pass
+    author_display = (dn_row["display_name"] if dn_row else None) or user["username"]
     case_label = quote_no
     if qrow["customer_name"] or qrow["project_name"]:
         case_label = f"{quote_no}（{qrow['customer_name'] or ''}{'／' if qrow['customer_name'] and qrow['project_name'] else ''}{qrow['project_name'] or ''}）"
-    notify_module_activity("案件留言板", "新增留言",
-                            (dn_row["display_name"] if dn_row else None) or user["username"],
-                            case_label, "case-management.html", detail=content)
+    notify_module_activity("案件留言板", "新增留言", author_display, case_label,
+                            "case-management.html", detail=content)
+    if important:
+        spawn_bg_thread(push_event_for_important_comment, args=(new_id, quote_no, content, author_display))
     return {
         "id": new_id,
         "source": "comment",
         "author": user["username"],
-        "authorDisplay": (dn_row["display_name"] if dn_row else None) or user["username"],
+        "authorDisplay": author_display,
         "content": content,
         "created_at": now,
         "canDelete": True,
+        "important": important,
     }
 
 

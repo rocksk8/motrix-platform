@@ -168,6 +168,7 @@ class UserIn(BaseModel):
     notification_muted: Optional[List[str]] = None
     password: Optional[str] = None
     active: Optional[bool] = None
+    department_id: Optional[int] = None
 
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
@@ -380,10 +381,16 @@ def change_password(body: ChangePasswordIn, authorization: str = Header(None)):
 def list_users(authorization: str = Header(None)):
     _require_user(authorization)
     conn = get_db()
-    rows = conn.execute(
-        "SELECT id, username, display_name, role, email, phone, modules, notification_muted, "
-        "active, created_at FROM users ORDER BY id"
-    ).fetchall()
+    rows = conn.execute("""
+        SELECT u.id, u.username, u.display_name, u.role, u.email, u.phone, u.modules,
+               u.notification_muted, u.active, u.created_at,
+               u.department_id, dep.name AS department_name,
+               dep.division_id, dv.name AS division_name
+        FROM users u
+        LEFT JOIN departments dep ON dep.id = u.department_id
+        LEFT JOIN divisions dv ON dv.id = dep.division_id
+        ORDER BY u.id
+    """).fetchall()
     conn.close()
     result = []
     for r in rows:
@@ -392,6 +399,10 @@ def list_users(authorization: str = Header(None)):
         d["createdAt"]          = d.pop("created_at")
         d["modules"]             = json.loads(d["modules"] or "[]")
         d["notificationMuted"]   = json.loads(d.pop("notification_muted") or "[]")
+        d["departmentId"]        = d.pop("department_id")
+        d["departmentName"]      = d.pop("department_name")
+        d["divisionId"]          = d.pop("division_id")
+        d["divisionName"]        = d.pop("division_name")
         result.append(d)
     return result
 
@@ -410,8 +421,8 @@ def create_user(body: UserIn, authorization: str = Header(None)):
     try:
         conn.execute("""
             INSERT INTO users (username, password_hash, display_name, role, email, phone, modules,
-                               notification_muted, active, created_at, must_change_password)
-            VALUES (?,?,?,?,?,?,?,?,1,?,1)
+                               notification_muted, active, created_at, must_change_password, department_id)
+            VALUES (?,?,?,?,?,?,?,?,1,?,1,?)
         """, (
             body.username.strip(),
             _hash_pw(body.password),
@@ -422,6 +433,7 @@ def create_user(body: UserIn, authorization: str = Header(None)):
             json.dumps(body.modules or [], ensure_ascii=False),
             json.dumps(body.notification_muted or [], ensure_ascii=False),
             now,
+            body.department_id or None,
         ))
         conn.commit()
         user_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
@@ -451,6 +463,9 @@ def update_user(user_id: int, body: UserIn, authorization: str = Header(None)):
     if body.notification_muted is not None:
         sets.append("notification_muted=?")
         params.append(json.dumps(body.notification_muted, ensure_ascii=False))
+    if body.department_id is not None:
+        sets.append("department_id=?")
+        params.append(body.department_id or None)   # 0 -> 未分類（清空 NULL）
     if body.password:
         if len(body.password) < MIN_PASSWORD_LEN:
             conn.close()

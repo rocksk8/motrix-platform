@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Optional, List
 
 from fastapi import APIRouter, HTTPException, Header, Body
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 from db import get_db, CURRENT_VERSION, _MIGRATIONS
 from helpers import (
@@ -22,9 +22,28 @@ router = APIRouter()
 # ── Models ────────────────────────────────────────────────────────────────────
 
 class ApprovalFlowApprover(BaseModel):
-    userId:      int
-    username:    str
-    displayName: str
+    # 手動挑人（既有格式）：userId/username/displayName 三個都要有
+    # 部門主管自動簽核（2026-08-22g）：sourceType='department_manager' + departmentId
+    # 處主管自動簽核（2026-08-22h）：sourceType='division_manager' + divisionId
+    # 實際簽核人在送審當下即時解析（見 helpers/tiered_approval.py::resolve_tier_approvers）
+    sourceType:   Optional[str] = None
+    departmentId: Optional[int] = None
+    divisionId:   Optional[int] = None
+    userId:       Optional[int] = None
+    username:     Optional[str] = None
+    displayName:  Optional[str] = None
+
+    @model_validator(mode="after")
+    def _check_shape(self):
+        if self.sourceType == "department_manager":
+            if not self.departmentId:
+                raise ValueError("department_manager 簽核層需要指定 departmentId")
+        elif self.sourceType == "division_manager":
+            if not self.divisionId:
+                raise ValueError("division_manager 簽核層需要指定 divisionId")
+        elif not (self.userId and self.username):
+            raise ValueError("手動指定的簽核人需要 userId／username")
+        return self
 
 class ApprovalFlowTier(BaseModel):
     order:     int = 0
@@ -32,6 +51,11 @@ class ApprovalFlowTier(BaseModel):
 
 class ApprovalFlowSettings(BaseModel):
     tiers: List[ApprovalFlowTier] = []
+    # 系統內建「申請人部門主管自動簽核」層開關（2026-08-22i），預設 True——
+    # 送審時會在 tiers 最前面自動插入這一層，管理員在設定頁關掉才會存 False。
+    # 這一層永遠不會出現在 tiers 陣列裡（只由 helpers/tiered_approval.py 合成），
+    # 這裡刻意不接受前端在 tiers 裡塞 sourceType='submitter_manager' 的項目。
+    includeSubmitterManagerTier: bool = True
 
 
 class _SalespersonTarget(BaseModel):
@@ -75,10 +99,14 @@ def get_approval_flow_settings(authorization: str = Header(None)):
 def set_approval_flow_settings(body: ApprovalFlowSettings, authorization: str = Header(None)):
     _require_user(authorization, require_superadmin=True)
     total_approvers = sum(len(t.approvers) for t in body.tiers)
-    value = {"tiers": [t.model_dump() for t in body.tiers]}
+    value = {
+        "tiers": [t.model_dump() for t in body.tiers],
+        "includeSubmitterManagerTier": body.includeSubmitterManagerTier,
+    }
     _set_setting("approval_flow", value)
     _audit(_tok(authorization), "settings.approval_flow.update", "settings", "approval_flow",
-           "簽核流程設定", {"tierCount": len(body.tiers), "approverCount": total_approvers})
+           "簽核流程設定", {"tierCount": len(body.tiers), "approverCount": total_approvers,
+                          "includeSubmitterManagerTier": body.includeSubmitterManagerTier})
     return {"ok": True}
 
 
@@ -483,6 +511,60 @@ def set_email_notify(body: dict = Body(...), authorization: str = Header(None)):
     _audit(_tok(authorization), "settings.email_notify.update", "settings",
            "email_notify", "Email 通知設定")
     return {"ok": True}
+
+
+# ── Google 行事曆設定（2026-08-21，push only Phase 1）─────────────────────────
+
+_GCAL_DEFAULTS = {
+    "enabled":       False,
+    "client_id":     "",
+    "client_secret": "",
+    "calendar_id":   "primary",
+    "refresh_token": "",
+}
+
+
+@router.get("/api/settings/google-calendar")
+def get_google_calendar(authorization: str = Header(None)):
+    _require_user(authorization, require_superadmin=True)
+    cfg = _get_setting("google_calendar", {}) or {}
+    safe = {**_GCAL_DEFAULTS, **cfg}
+    safe["client_secret"] = _MASKED if cfg.get("client_secret") else ""
+    safe["connected"] = bool(cfg.get("refresh_token"))
+    safe.pop("refresh_token", None)
+    # 提示管理員授權時要用哪個 Gmail 帳號（跟寄信用的 SMTP 帳號同一組）
+    email_cfg = _get_setting("email_notify", {}) or {}
+    safe["smtp_user_hint"] = email_cfg.get("smtp_user", "")
+    return safe
+
+
+@router.put("/api/settings/google-calendar")
+def set_google_calendar(body: dict = Body(...), authorization: str = Header(None)):
+    _require_user(authorization, require_superadmin=True)
+    current = _get_setting("google_calendar", {}) or {}
+    data = {k: body[k] for k in _GCAL_DEFAULTS if k in body}
+    data = {**_GCAL_DEFAULTS, **current, **data}
+    if data.get("client_secret") in ("", _MASKED):
+        data["client_secret"] = current.get("client_secret", "")
+    # refresh_token 只由一次性授權腳本寫入，這個端點絕不清空/覆蓋它
+    data["refresh_token"] = current.get("refresh_token", "")
+    _set_setting("google_calendar", data)
+    _audit(_tok(authorization), "settings.google_calendar.update", "settings",
+           "google_calendar", "Google 行事曆設定")
+    return {"ok": True}
+
+
+@router.post("/api/settings/google-calendar/test")
+def test_google_calendar(authorization: str = Header(None)):
+    _require_user(authorization, require_superadmin=True)
+    from helpers.google_calendar import create_test_event
+    try:
+        event_id = create_test_event()
+    except RuntimeError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(500, f"建立測試事件失敗：{e}")
+    return {"ok": True, "event_id": event_id}
 
 
 @router.post("/api/settings/email-notify/test")

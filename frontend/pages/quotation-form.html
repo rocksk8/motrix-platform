@@ -2469,7 +2469,7 @@
         } catch(e) { console.warn('建立客戶失敗', e) }
       },
 
-      onDealTagChange(newTag) {
+      async onDealTagChange(newTag) {
         const oldTag = this._prevDealTag || ''
         // Guard: downgrading from 已成案 requires admin+
         if (oldTag === '已成案' && newTag !== '已成案') {
@@ -2495,6 +2495,7 @@
             return
           }
           this.ensureCaseRecord()
+          await this._seedDefaultStagesIfEmpty()
         }
         this.q.dealTag = newTag
         this._prevDealTag = newTag
@@ -2983,13 +2984,17 @@ window.addEventListener('load',function(){
       ensureCaseRecord() {
         if (!this.q.caseRecord) {
           this.q.caseRecord = {
-            stages: [
-              { id: 1, label: '訂單確認', done: false, doneAt: '' },
-              { id: 2, label: '叫料到貨', done: false, doneAt: '' },
-              { id: 3, label: '施工安裝', done: false, doneAt: '' },
-              { id: 4, label: '客戶驗收', done: false, doneAt: '' },
-              { id: 5, label: '尾款結清', done: false, doneAt: '' },
-            ],
+            // stages 正規化第四階段（2026-08-23）：不再本地寫死 5 個帶假 id（1-5）、
+            // 缺 startDate/dueDate/assignedTo/dependsOn/visits 欄位的舊版階段物件——
+            // 這份模板一旦透過整包存檔送出，caseRecord.stages 正規化的同步橋樑會把
+            // 這些假 id 存進 case_stages 表；但這裡從未拿回真正的 id，若使用者在這個
+            // 頁面之後又存了第二次（例如改其他欄位），舊邏輯會把假 id 又送一次，
+            // 導致同一批「預設階段」在表裡被當成新階段重複插入、案件管理頁面已經
+            // 記錄的執行進度（勾選、拜訪紀錄等）反而被沖銷。改成跟 case-management.js
+            // 完全一致的做法：stages 初始化空陣列，真正的 5 個預設階段改由
+            // _seedDefaultStagesIfEmpty() 透過 API 建立，一次到位拿到真實 id，
+            // 之後無論存幾次都不會再變動。
+            stages: [],
             payment: { received: 0, invoiced: false, invoiceNo: '', note: '' },
             materials: [],
             devices: [],
@@ -3001,6 +3006,29 @@ window.addEventListener('load',function(){
         if (!this.q.caseRecord.payment) this.q.caseRecord.payment  = { received: 0, invoiced: false, invoiceNo: '', note: '' }
         if (!this.q.caseRecord.materials) this.q.caseRecord.materials = []
         if (!this.q.caseRecord.devices)   this.q.caseRecord.devices   = []
+      },
+
+      // stages 正規化第四階段（2026-08-23）：案件目前完全沒有階段時，依序呼叫
+      // Phase 2 的 stages 端點建立 5 個預設階段（跟 case-management.js::
+      // _seedDefaultStagesIfEmpty() 用同一組標籤、同一支端點），取得真實 id，
+      // 避免這個頁面自己再生出一份假 id 模板。呼叫時機要求 this.q.quoteNo 已經
+      // 存在於資料庫（dealTag 能改成「已成案」前提是 status 已經是「已送出」，
+      // 或是讀取既有紀錄，兩種情況 quote_no 都必然已經 create 過），所以不用
+      // 額外處理「案件還沒被建立」的情境。
+      async _seedDefaultStagesIfEmpty() {
+        if (!this.q.quoteNo || !this.q.caseRecord) return
+        if ((this.q.caseRecord.stages || []).length > 0) return
+        const labels = ['訂單確認', '叫料出貨', '施工安裝', '客戶驗收', '尾款結清']
+        for (const label of labels) {
+          try {
+            const r = await fetch(`/api/quotations/${this.q.quoteNo}/stages`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+              body: JSON.stringify({ label })
+            })
+            if (r.ok) this.q.caseRecord.stages.push(await r.json())
+          } catch {}
+        }
       },
 
       async doUnlock() {
@@ -3185,7 +3213,10 @@ window.addEventListener('load',function(){
 
         this.calcTotals()
         this.checkApproval()
-        if (this.q.dealTag === '已成案') this.ensureCaseRecord()
+        if (this.q.dealTag === '已成案') {
+          this.ensureCaseRecord()
+          await this._seedDefaultStagesIfEmpty()
+        }
 
         if (this.lastSaved) {
           const now = new Date()

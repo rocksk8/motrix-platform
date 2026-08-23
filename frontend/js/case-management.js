@@ -15,6 +15,8 @@ function app() {
     cases: [],
     filteredCases: [],
     listTab: 'all',
+    caseViewMode: 'list',
+    stageBoardItems: [],
     search: '',
     unreadOnly: false,
     readAt: null,
@@ -68,6 +70,7 @@ function app() {
     caseUpdates: [],
     updatesLoading: false,
     newComment: '',
+    newCommentImportant: false,
     postingComment: false,
     feedCalMode:    false,
     feedCalYear:    new Date().getFullYear(),
@@ -103,6 +106,29 @@ function app() {
     shippingPreviewNote: null,
     _partsOptions: null,
     serialPicker: { show: false, itemIdx: null, partNo: '', options: [], selected: [], loading: false, error: '' },
+
+    // ── 承攬商匯款申請 ──
+    contractorVouchers: [],
+    contractorVouchersLoading: false,
+    cvPreviewModal: false,
+    cvPreviewBlobUrl: '',
+    cvPreviewVoucher: null,
+    cvPreviewFetching: false,
+
+    // ── 開票申請憑據 ──
+    invoiceVouchers: [],
+    invoiceVouchersLoading: false,
+    ivPreviewModal: false,
+    ivPreviewBlobUrl: '',
+    ivPreviewVoucher: null,
+    ivPreviewFetching: false,
+    ivCreateModal: false,
+    ivRemaining: null,
+    ivRemainingLoading: false,
+    ivMode: 'amount',
+    ivAmountInput: 0,
+    ivItemSelections: {},
+    ivSubmitting: false,
 
     canSeeFinancial() {
       const m = this.session.modules || []
@@ -170,6 +196,50 @@ function app() {
       this.loading = false
       this.filterCases()
       this.loadCaseActivity()
+      this.loadStageBoardSummary()
+    },
+
+    // 視覺化改版（2026-08-23）：摘要總覽卡片的「已逾期階段」數字需要跨案件的
+    // 階段到期資訊，這份資料 case-stage-board.html 已經在用（stage_board() 回傳
+    // 的 items 就含 dueDate/done/overdue），這裡直接重用同一支既有 API，不用
+    // 新增後端端點。只在案件管理頁載入時抓一次，不影響既有的 cases/filterCases。
+    async loadStageBoardSummary() {
+      try {
+        const r = await fetch('/api/quotations/stage-board', {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (r.ok) this.stageBoardItems = (await r.json()).items || []
+      } catch {}
+    },
+
+    summaryTotal()   { return this.cases.length },
+    summaryActive()  { return this.cases.filter(c => c.deal_tag === '已成案').length },
+    summaryOverdue() { return this.stageBoardItems.filter(i => i.overdue).length },
+    summarySettling(){ return this.cases.filter(c => c.settle_status === 'draft').length },
+
+    // 看板檢視分欄：跟清單分頁的定義完全一致，只是同時攤開而非切換——待精算優先
+    // （呼應既有「待精算」分頁的定義，settle_status 是跟 deal_tag 獨立的另一個軸，
+    // 一個案件可能同時是「已成案」又「待精算」，看板需要互斥分欄，所以待精算優先
+    // 分類，其餘才依 deal_tag 分成進行中/已結案）。
+    boardColumns() {
+      const q = this.search.trim().toLowerCase()
+      let pool = !q ? this.cases : this.cases.filter(c =>
+        (c.quote_no || '').toLowerCase().includes(q) ||
+        (c.customer_name || '').toLowerCase().includes(q) ||
+        (c.project_name  || '').toLowerCase().includes(q)
+      )
+      if (this.unreadOnly) pool = pool.filter(c => this.isUnread(c))
+      const settling = [], active = [], closed = []
+      for (const c of pool) {
+        if (c.settle_status === 'draft') settling.push(c)
+        else if (c.deal_tag === '已結案') closed.push(c)
+        else active.push(c)
+      }
+      return [
+        { key: '待精算', label: '待精算', dot: '#FCD34D', items: settling },
+        { key: '進行中', label: '進行中', dot: '#4ADE80', items: active },
+        { key: '已結案', label: '已結案', dot: '#C4B5FD', items: closed },
+      ]
     },
 
     async loadCaseActivity() {
@@ -238,7 +308,8 @@ function app() {
         this.selected = data
         this.cr.dealTag = data.data?.dealTag || data.deal_tag || '已成案'
         this.cr.caseRecord = data.data?.caseRecord || null
-        this.ensureCaseRecord()
+        await this.ensureCaseRecord()
+        await this._seedDefaultStagesIfEmpty()
         this.dirty = false
         this.saveStatus = ''
         this.saveMsg = ''
@@ -267,10 +338,16 @@ function app() {
         this.shippingContactOptions = []
         this.showShippingContactPicker = false
         this.closeShippingPreview()
+        this.contractorVouchers = []
+        this.closeContractorVoucherPreview()
+        this.invoiceVouchers = []
+        this.closeInvoiceVoucherPreview()
         // 背景查詢是否已有關聯專案
         this._checkLinkedProject(quoteNo)
         this._loadCaseTasks(quoteNo)
         this.loadDispatches(quoteNo)
+        this.loadContractorVouchers(quoteNo)
+        this.loadInvoiceVouchers(quoteNo)
       } catch {}
     },
 
@@ -342,13 +419,10 @@ function app() {
     ensureCaseRecord() {
       if (!this.cr.caseRecord) {
         this.cr.caseRecord = {
-          stages: [
-            { id: 1, label: '訂單確認', done: false, doneAt: '', visits: [], startDate:'', dueDate:'', assignedTo:[], dependsOn:[] },
-            { id: 2, label: '叫料出貨', done: false, doneAt: '', visits: [], startDate:'', dueDate:'', assignedTo:[], dependsOn:[] },
-            { id: 3, label: '施工安裝', done: false, doneAt: '', visits: [], startDate:'', dueDate:'', assignedTo:[], dependsOn:[] },
-            { id: 4, label: '客戶驗收', done: false, doneAt: '', visits: [], startDate:'', dueDate:'', assignedTo:[], dependsOn:[] },
-            { id: 5, label: '尾款結清', done: false, doneAt: '', visits: [], startDate:'', dueDate:'', assignedTo:[], dependsOn:[] },
-          ],
+          // stages 正規化 Phase 3b（2026-08-23）：不再本地寫死 5 個帶假 id 的階段物件——
+          // 一旦切到 stages 專屬端點，假 id 對伺服器來說根本不存在，操作會 404。真正的
+          // 5 個預設階段改由 _seedDefaultStagesIfEmpty() 透過 API 建立，取得真實 id。
+          stages: [],
           payment: { items: [
             { id: 1, type: '訂金款', pct: 30, received: false, receivedAt: '', invoiceNo: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' },
             { id: 2, type: '交貨款', pct: 30, received: false, receivedAt: '', invoiceNo: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' },
@@ -398,6 +472,26 @@ function app() {
           { id: 2, type: '交貨款', pct: 30, amount: null, received: false, receivedAt: '', invoiceNo: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' },
           { id: 3, type: '驗收款', pct: 40, amount: null, received: false, receivedAt: '', invoiceNo: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' },
         ], note: this.cr.caseRecord.payment.note || '' }
+      }
+    },
+
+    // stages 正規化 Phase 3b（2026-08-23）：案件目前完全沒有階段時（新案件、或早期
+    // 資料從未經過 quotation-form.html／case-management.html 任何一份預設模板寫入
+    // 過），透過 stages 端點依序建立 5 個預設階段，取得真實 id。selectCase() 載入完
+    // 成後呼叫一次；ensureCaseRecord() 補齊其他欄位形狀之後才會執行到這裡。
+    async _seedDefaultStagesIfEmpty() {
+      if (!this.selected || !this.cr.caseRecord) return
+      if ((this.cr.caseRecord.stages || []).length > 0) return
+      const labels = ['訂單確認', '叫料出貨', '施工安裝', '客戶驗收', '尾款結清']
+      for (const label of labels) {
+        try {
+          const r = await fetch(`/api/quotations/${this.selected.quote_no}/stages`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+            body: JSON.stringify({ label })
+          })
+          if (r.ok) this.cr.caseRecord.stages.push(await r.json())
+        } catch {}
       }
     },
 
@@ -712,17 +806,39 @@ function app() {
       return Math.round(stages.filter(s => s.done).length / stages.length * 100)
     },
 
-    addStage() {
-      this.ensureCaseRecord()
-      this.cr.caseRecord.stages.push({ id: Date.now(), label: '新階段', done: false, doneAt: '', visits: [], startDate:'', dueDate:'', assignedTo:[], dependsOn:[] })
-      this.setDirty()
+    // stages 正規化 Phase 3b（2026-08-23）：以下階段相關函式改成直接呼叫 stages 專屬
+    // 端點即時送出，不再靠本地陣列變更 + setDirty() 整包 debounce 存檔。成功後用伺服器
+    // 回應 Object.assign 覆蓋本地物件，確保跟資料庫一致；失敗用 alert()（比照本檔既有
+    // 慣例，例如 createProjectFromCase()）。materials/devices/payment/contract/roles
+    // 等其他 caseRecord 欄位不受影響，仍走 setDirty()/saveCaseRecord() 整包存檔。
+    _stagesApiBase() { return `/api/quotations/${this.selected.quote_no}/stages` },
+    _authHeaders(json) {
+      const h = { Authorization: 'Bearer ' + this.session.token }
+      if (json) h['Content-Type'] = 'application/json'
+      return h
     },
-    removeStage(idx)  {
+
+    async addStage() {
+      if (!this.selected) return
+      await this.ensureCaseRecord()
+      try {
+        const r = await fetch(this._stagesApiBase(), {
+          method: 'POST', headers: this._authHeaders(true), body: JSON.stringify({ label: '新階段' })
+        })
+        if (!r.ok) { alert('新增階段失敗'); return }
+        this.cr.caseRecord.stages.push(await r.json())
+      } catch (e) { alert('發生錯誤：' + e.message) }
+    },
+    async removeStage(idx) {
       const stages = this.cr.caseRecord.stages
-      const removedId = stages[idx]?.id
-      stages.splice(idx, 1)
-      stages.forEach(s => { if (s.dependsOn) s.dependsOn = s.dependsOn.filter(id => id !== removedId) })
-      this.setDirty()
+      const st = stages[idx]
+      if (!st) return
+      try {
+        const r = await fetch(`${this._stagesApiBase()}/${st.id}`, { method: 'DELETE', headers: this._authHeaders() })
+        if (!r.ok) { alert('刪除失敗'); return }
+        stages.splice(idx, 1)
+        stages.forEach(s => { if (s.dependsOn) s.dependsOn = s.dependsOn.filter(id => id !== st.id) })
+      } catch (e) { alert('發生錯誤：' + e.message) }
     },
 
     toggleStageDetail(id) { this._openStageDetail[id] = !this._openStageDetail[id] },
@@ -736,19 +852,40 @@ function app() {
       return (this.cr.caseRecord?.stages || []).filter(s => s.id !== stageId)
     },
 
-    addStageAssignee(st, username) {
-      if (!username) return
-      if (!st.assignedTo) st.assignedTo = []
-      if (!st.assignedTo.includes(username)) st.assignedTo.push(username)
-      this.setDirty()
+    // 通用階段欄位更新（label/done/doneAt/startDate/dueDate），取代原本靠 setDirty() 觸發
+    // 的整包存檔；成功後額外呼叫 _checkAllStagesDone()（原本是 setDirty() 順帶觸發的）。
+    async updateStage(st, fields) {
+      try {
+        const r = await fetch(`${this._stagesApiBase()}/${st.id}`, {
+          method: 'PUT', headers: this._authHeaders(true), body: JSON.stringify(fields)
+        })
+        if (!r.ok) { alert('儲存失敗'); return }
+        Object.assign(st, await r.json())
+        this._checkAllStagesDone()
+      } catch (e) { alert('發生錯誤：' + e.message) }
     },
-    removeStageAssignee(st, username) {
-      st.assignedTo = (st.assignedTo || []).filter(u => u !== username)
-      this.setDirty()
+
+    async addStageAssignee(st, username) {
+      if (!username) return
+      try {
+        const r = await fetch(`${this._stagesApiBase()}/${st.id}/assignees`, {
+          method: 'POST', headers: this._authHeaders(true), body: JSON.stringify({ username })
+        })
+        if (r.ok) Object.assign(st, await r.json())
+      } catch {}
+    },
+    async removeStageAssignee(st, username) {
+      try {
+        const r = await fetch(`${this._stagesApiBase()}/${st.id}/assignees/${encodeURIComponent(username)}`, {
+          method: 'DELETE', headers: this._authHeaders()
+        })
+        if (r.ok) Object.assign(st, await r.json())
+      } catch {}
     },
 
     wouldCreateCycle(stageId, candidateId) {
-      // 若讓 stageId 依賴 candidateId，順著 dependsOn 追下去會不會繞回 stageId 自己
+      // 若讓 stageId 依賴 candidateId，順著 dependsOn 追下去會不會繞回 stageId 自己。
+      // 純前端快速預檢，伺服器端 toggle_stage_dependency 仍是最終權威判斷（見下方 400 處理）。
       if (stageId === candidateId) return true
       const byId = Object.fromEntries((this.cr.caseRecord?.stages || []).map(s => [s.id, s]))
       const seen = new Set()
@@ -761,16 +898,23 @@ function app() {
       return dfs(candidateId)
     },
 
-    toggleStageDependency(st, candidateId) {
-      if (!st.dependsOn) st.dependsOn = []
-      const idx = st.dependsOn.indexOf(candidateId)
-      if (idx >= 0) { st.dependsOn.splice(idx, 1); this.setDirty(); return }
-      if (this.wouldCreateCycle(st.id, candidateId)) {
+    async toggleStageDependency(st, candidateId) {
+      const has = (st.dependsOn || []).includes(candidateId)
+      if (!has && this.wouldCreateCycle(st.id, candidateId)) {
         alert('這樣設定會讓階段之間互相循環依賴，請重新選擇前置階段')
         return
       }
-      st.dependsOn.push(candidateId)
-      this.setDirty()
+      try {
+        const r = await fetch(`${this._stagesApiBase()}/${st.id}/depends-on/${candidateId}`, {
+          method: 'POST', headers: this._authHeaders()
+        })
+        if (!r.ok) {
+          const err = await r.json().catch(() => ({}))
+          alert(err.detail || '設定失敗')
+          return
+        }
+        Object.assign(st, await r.json())
+      } catch (e) { alert('發生錯誤：' + e.message) }
     },
 
     switchToTimeline() {
@@ -831,9 +975,7 @@ function app() {
           const st = (this.cr.caseRecord?.stages || []).find(s => String(s.id) === task.id)
           if (!st) return
           const fmt = d => (d instanceof Date ? d : new Date(d)).toISOString().slice(0,10)
-          st.startDate = fmt(start)
-          st.dueDate   = fmt(end)
-          this.setDirty()
+          this.updateStage(st, { startDate: fmt(start), dueDate: fmt(end) })
         },
         custom_popup_html: (task) => {
           const statusChip = task._done
@@ -855,16 +997,37 @@ function app() {
         },
       })
     },
-    addVisit(stageIdx) {
+    async addVisit(stageIdx) {
       const st = this.cr.caseRecord.stages[stageIdx]
-      if (!st.visits) st.visits = []
-      st.visits.push({ id: Date.now(), visitDate: '', visitPeople: '', note: '' })
-      this.setDirty()
+      if (!st) return
+      try {
+        const r = await fetch(`${this._stagesApiBase()}/${st.id}/visits`, {
+          method: 'POST', headers: this._authHeaders(true), body: JSON.stringify({})
+        })
+        if (!r.ok) { alert('新增記錄失敗'); return }
+        Object.assign(st, await r.json())
+      } catch (e) { alert('發生錯誤：' + e.message) }
     },
-    removeVisit(stageIdx, visitIdx) {
+    async removeVisit(stageIdx, visitIdx) {
       const st = this.cr.caseRecord.stages[stageIdx]
-      if (st.visits) st.visits.splice(visitIdx, 1)
-      this.setDirty()
+      const visit = st?.visits?.[visitIdx]
+      if (!st || !visit) return
+      try {
+        const r = await fetch(`${this._stagesApiBase()}/${st.id}/visits/${visit.id}`, {
+          method: 'DELETE', headers: this._authHeaders()
+        })
+        if (!r.ok) { alert('刪除失敗'); return }
+        st.visits.splice(visitIdx, 1)
+      } catch (e) { alert('發生錯誤：' + e.message) }
+    },
+    async updateVisit(st, visit) {
+      try {
+        const r = await fetch(`${this._stagesApiBase()}/${st.id}/visits/${visit.id}`, {
+          method: 'PUT', headers: this._authHeaders(true),
+          body: JSON.stringify({ visitDate: visit.visitDate, visitPeople: visit.visitPeople, note: visit.note })
+        })
+        if (r.ok) Object.assign(st, await r.json())
+      } catch {}
     },
     stageTotalVisits(st) { return (st.visits || []).filter(v => v.visitDate || v.note).length },
     stageTotalPeople(st) { return (st.visits || []).reduce((s, v) => s + (+v.visitPeople || 0), 0) },
@@ -878,7 +1041,17 @@ function app() {
       stages.splice(idx, 0, moved)
       this.dragFromIdx = idx
     },
-    dragEnd() { this.dragFromIdx = null; this.setDirty() },
+    async dragEnd() {
+      this.dragFromIdx = null
+      const stages = this.cr.caseRecord?.stages || []
+      if (!this.selected || !stages.length) return
+      try {
+        await fetch(`${this._stagesApiBase()}/reorder`, {
+          method: 'PATCH', headers: this._authHeaders(true),
+          body: JSON.stringify({ orderedIds: stages.map(s => s.id) })
+        })
+      } catch {}
+    },
 
     addMaterial() {
       this.ensureCaseRecord()
@@ -1335,12 +1508,13 @@ function app() {
         const r = await fetch(`/api/quotations/${encodeURIComponent(this.selected.quote_no)}/updates`, {
           method: 'POST',
           headers: { Authorization: 'Bearer ' + this.session.token, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ content })
+          body: JSON.stringify({ content, important: this.newCommentImportant })
         })
         if (r.ok) {
           const item = await r.json()
           this.caseUpdates.unshift(item)
           this.newComment = ''
+          this.newCommentImportant = false
         }
       } catch {}
       this.postingComment = false
@@ -1897,6 +2071,401 @@ function app() {
     },
 
     _shippingStatusClass(s) {
+      return { '草稿': 'badge--draft', '待審核': 'badge--pending', '簽核中': 'badge--signing', '已核准': 'badge--approved' }[s] || ''
+    },
+
+    // ── 承攬商匯款申請 ──────────────────────────────────────────────────────────
+
+    async loadContractorVouchers(quoteNo) {
+      if (!quoteNo) return
+      this.contractorVouchersLoading = true
+      this.contractorVouchers = []
+      try {
+        const r = await fetch(`/api/contractor-vouchers?quote_no=${encodeURIComponent(quoteNo)}`, {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (r.ok) this.contractorVouchers = await r.json()
+      } catch {}
+      this.contractorVouchersLoading = false
+    },
+
+    _dispatchVoucher(d) {
+      return this.contractorVouchers.find(v => v.dispatchId === d.id) || null
+    },
+
+    async createContractorVoucher(d) {
+      if (!confirm(`確定為「${this._dispatchLabel(d)}」產生匯款申請？`)) return
+      try {
+        const r = await fetch('/api/contractor-vouchers', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify({ dispatch_id: d.id })
+        })
+        if (!r.ok) { alert((await r.json()).detail || '建立失敗'); return }
+        await this.loadContractorVouchers(this.selected?.quote_no)
+      } catch (e) { alert('網路錯誤：' + e.message) }
+    },
+
+    async deleteContractorVoucher(v) {
+      if (!confirm(`確定刪除匯款申請「${v.voucherNo}」？`)) return
+      try {
+        const r = await fetch(`/api/contractor-vouchers/${v.voucherNo}`, {
+          method: 'DELETE',
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (r.ok) await this.loadContractorVouchers(this.selected?.quote_no)
+        else alert((await r.json()).detail || '刪除失敗')
+      } catch (e) { alert('網路錯誤：' + e.message) }
+    },
+
+    async submitContractorVoucher(v) {
+      if (!confirm(`確定送出匯款申請「${v.voucherNo}」進行簽核？`)) return
+      try {
+        const r = await fetch(`/api/contractor-vouchers/${v.voucherNo}/submit`, {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (!r.ok) { alert((await r.json()).detail || '送出失敗'); return }
+        await this.loadContractorVouchers(this.selected?.quote_no)
+      } catch (e) { alert('網路錯誤：' + e.message) }
+    },
+
+    async approveContractorVoucher(v) {
+      if (!confirm(`確定簽核匯款申請「${v.voucherNo}」？`)) return
+      try {
+        const r = await fetch(`/api/contractor-vouchers/${v.voucherNo}/approve`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify({})
+        })
+        if (!r.ok) { alert((await r.json()).detail || '簽核失敗'); return }
+        await this.loadContractorVouchers(this.selected?.quote_no)
+      } catch (e) { alert('網路錯誤：' + e.message) }
+    },
+
+    async rejectContractorVoucher(v) {
+      const note = prompt(`退回匯款申請「${v.voucherNo}」，可填寫退回原因（選填）：`)
+      if (note === null) return
+      try {
+        const r = await fetch(`/api/contractor-vouchers/${v.voucherNo}/reject`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify({ note })
+        })
+        if (!r.ok) { alert((await r.json()).detail || '退回失敗'); return }
+        await this.loadContractorVouchers(this.selected?.quote_no)
+      } catch (e) { alert('網路錯誤：' + e.message) }
+    },
+
+    async revokeContractorVoucherApproval(v) {
+      const note = prompt(`撤銷匯款申請「${v.voucherNo}」的核准？將退回草稿。\n\n可填寫撤銷原因（選填）：`)
+      if (note === null) return
+      try {
+        const r = await fetch(`/api/contractor-vouchers/${v.voucherNo}/revoke-approval`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify({ note })
+        })
+        if (!r.ok) { alert((await r.json()).detail || '撤銷失敗'); return }
+        await this.loadContractorVouchers(this.selected?.quote_no)
+      } catch (e) { alert('網路錯誤：' + e.message) }
+    },
+
+    async toggleContractorVoucherPaid(v, action) {
+      const msg = action === 'pay'
+        ? `確定標記匯款申請「${v.voucherNo}」已匯款？`
+        : `確定取消匯款申請「${v.voucherNo}」的已匯款標記？`
+      if (!confirm(msg)) return
+      const note = action === 'pay' ? (prompt('備註（選填，例如匯款帳號末五碼）：') || '') : ''
+      try {
+        const r = await fetch(`/api/contractor-vouchers/${v.voucherNo}/paid-toggle`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify({ action, note })
+        })
+        if (!r.ok) { alert((await r.json()).detail || '操作失敗'); return }
+        await this.loadContractorVouchers(this.selected?.quote_no)
+      } catch (e) { alert('網路錯誤：' + e.message) }
+    },
+
+    async downloadContractorVoucherPdf(v) {
+      try {
+        fetch(`/api/contractor-vouchers/${v.voucherNo}/export?mode=external`, {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        }).catch(() => {})
+        const r = await fetch(`/api/contractor-vouchers/${v.voucherNo}/pdf-download`, {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || 'PDF 產生失敗'); return }
+        const blob = await r.blob()
+        const url  = URL.createObjectURL(blob)
+        const a    = document.createElement('a')
+        a.href     = url
+        a.download = `${v.voucherNo}.pdf`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        setTimeout(() => URL.revokeObjectURL(url), 1000)
+      } catch (e) { alert('下載失敗：' + e.message) }
+    },
+
+    async previewContractorVoucherPdf(v) {
+      this.cvPreviewFetching = true
+      try {
+        const r = await fetch(`/api/contractor-vouchers/${v.voucherNo}/pdf-download`, {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || 'PDF 產生失敗'); this.cvPreviewFetching = false; return }
+        const blob = await r.blob()
+        this.cvPreviewBlobUrl = URL.createObjectURL(blob)
+        this.cvPreviewVoucher = v
+        this.cvPreviewModal = true
+      } catch (e) { alert('預覽失敗：' + e.message) }
+      this.cvPreviewFetching = false
+    },
+
+    closeContractorVoucherPreview() {
+      if (this.cvPreviewBlobUrl) URL.revokeObjectURL(this.cvPreviewBlobUrl)
+      this.cvPreviewBlobUrl = ''
+      this.cvPreviewModal = false
+      this.cvPreviewVoucher = null
+    },
+
+    _cvStatusLabel(s) {
+      return { '草稿': '草稿', '待審核': '待審核', '簽核中': '簽核中', '已核准': '已核准' }[s] || s
+    },
+
+    _cvStatusClass(s) {
+      return { '草稿': 'badge--draft', '待審核': 'badge--pending', '簽核中': 'badge--signing', '已核准': 'badge--approved' }[s] || ''
+    },
+
+    // ── 開票申請憑據 ────────────────────────────────────────────────────────────
+
+    async loadInvoiceVouchers(quoteNo) {
+      if (!quoteNo) return
+      this.invoiceVouchersLoading = true
+      this.invoiceVouchers = []
+      try {
+        const r = await fetch(`/api/invoice-vouchers?quote_no=${encodeURIComponent(quoteNo)}`, {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (r.ok) this.invoiceVouchers = await r.json()
+      } catch {}
+      this.invoiceVouchersLoading = false
+    },
+
+    async openInvoiceVoucherModal() {
+      if (this.dirty) { alert('款項明細有未儲存的修改，請先儲存後再申請開票憑據'); return }
+      this.ivMode = 'amount'
+      this.ivAmountInput = 0
+      this.ivItemSelections = {}
+      this.ivRemaining = null
+      this.ivCreateModal = true
+      this.ivRemainingLoading = true
+      try {
+        const r = await fetch(`/api/invoice-vouchers/remaining?quote_no=${encodeURIComponent(this.selected.quote_no)}`, {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (r.ok) this.ivRemaining = await r.json()
+        else { alert((await r.json()).detail || '載入額度失敗'); this.ivCreateModal = false }
+      } catch (e) { alert('網路錯誤：' + e.message); this.ivCreateModal = false }
+      this.ivRemainingLoading = false
+    },
+
+    closeInvoiceVoucherModal() {
+      this.ivCreateModal = false
+    },
+
+    ivToggleItem(it) {
+      if (this.ivItemSelections[it.itemId]) {
+        delete this.ivItemSelections[it.itemId]
+      } else {
+        const qty = it.remainingQty
+        this.ivItemSelections[it.itemId] = { qty, amount: Math.round(qty * (it.unitPrice || 0)) }
+      }
+    },
+
+    ivItemQtyChanged(it) {
+      const sel = this.ivItemSelections[it.itemId]
+      if (!sel) return
+      if (sel.qty > it.remainingQty) sel.qty = it.remainingQty
+      if (sel.qty < 0) sel.qty = 0
+      sel.amount = Math.round(sel.qty * (it.unitPrice || 0))
+    },
+
+    // 按品項模式下，使用者輸入的金額比照報價單品項本身的慣例是「未稅」，
+    // 跟「剩餘可申請金額」（含稅，來自 quoteTotal）不是同一個基準，比較前
+    // 必須先用這張報價單自己的稅率（quoteTotal/quotePretax）換算成含稅。
+    _ivTaxRatio() {
+      const p = this.ivRemaining?.quotePretax || 0
+      return p > 0 ? (this.ivRemaining.quoteTotal / p) : 1
+    },
+
+    ivAmountPretax() {
+      const ratio = this._ivTaxRatio()
+      return ratio > 0 ? Math.round((this.ivAmountInput || 0) / ratio) : (this.ivAmountInput || 0)
+    },
+    ivAmountTax() {
+      return (this.ivAmountInput || 0) - this.ivAmountPretax()
+    },
+
+    ivSelectedTotal() {
+      // 未稅小計（品項金額欄位本身的加總）
+      return Object.values(this.ivItemSelections).reduce((sum, s) => sum + (Number(s.amount) || 0), 0)
+    },
+    ivSelectedGrossTotal() {
+      // 含稅小計，才能跟剩餘可申請金額（含稅）比較
+      return Math.round(this.ivSelectedTotal() * this._ivTaxRatio())
+    },
+    ivSelectedTax() {
+      return this.ivSelectedGrossTotal() - this.ivSelectedTotal()
+    },
+
+    async submitInvoiceVoucherCreate() {
+      if (!this.ivRemaining) return
+      let body
+      if (this.ivMode === 'amount') {
+        if (!this.ivAmountInput || this.ivAmountInput <= 0) { alert('請輸入申請金額'); return }
+        if (this.ivAmountInput > this.ivRemaining.remainingAmount) { alert('超過剩餘可申請金額'); return }
+        body = { quote_no: this.selected.quote_no, scope: 'amount', amount: this.ivAmountInput }
+      } else {
+        const items = Object.entries(this.ivItemSelections).map(([itemId, sel]) => ({
+          itemId: Number(itemId), qty: sel.qty, amount: sel.amount
+        }))
+        if (items.length === 0) { alert('請至少選擇一項品項'); return }
+        if (this.ivSelectedGrossTotal() > this.ivRemaining.remainingAmount) { alert('超過剩餘可申請金額'); return }
+        body = { quote_no: this.selected.quote_no, scope: 'items', items }
+      }
+      if (!confirm('確定送出建立開票申請憑據？')) return
+      this.ivSubmitting = true
+      try {
+        const r = await fetch('/api/invoice-vouchers', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify(body)
+        })
+        if (!r.ok) { alert((await r.json()).detail || '建立失敗'); this.ivSubmitting = false; return }
+        this.ivCreateModal = false
+        await this.loadInvoiceVouchers(this.selected?.quote_no)
+      } catch (e) { alert('網路錯誤：' + e.message) }
+      this.ivSubmitting = false
+    },
+
+    async deleteInvoiceVoucher(v) {
+      if (!confirm(`確定刪除開票申請憑據「${v.voucherNo}」？`)) return
+      try {
+        const r = await fetch(`/api/invoice-vouchers/${v.voucherNo}`, {
+          method: 'DELETE',
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (r.ok) await this.loadInvoiceVouchers(this.selected?.quote_no)
+        else alert((await r.json()).detail || '刪除失敗')
+      } catch (e) { alert('網路錯誤：' + e.message) }
+    },
+
+    async submitInvoiceVoucher(v) {
+      if (!confirm(`確定送出開票申請憑據「${v.voucherNo}」進行簽核？`)) return
+      try {
+        const r = await fetch(`/api/invoice-vouchers/${v.voucherNo}/submit`, {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (!r.ok) { alert((await r.json()).detail || '送出失敗'); return }
+        await this.loadInvoiceVouchers(this.selected?.quote_no)
+      } catch (e) { alert('網路錯誤：' + e.message) }
+    },
+
+    async approveInvoiceVoucher(v) {
+      if (!confirm(`確定簽核開票申請憑據「${v.voucherNo}」？`)) return
+      try {
+        const r = await fetch(`/api/invoice-vouchers/${v.voucherNo}/approve`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify({})
+        })
+        if (!r.ok) { alert((await r.json()).detail || '簽核失敗'); return }
+        await this.loadInvoiceVouchers(this.selected?.quote_no)
+      } catch (e) { alert('網路錯誤：' + e.message) }
+    },
+
+    async rejectInvoiceVoucher(v) {
+      const note = prompt(`退回開票申請憑據「${v.voucherNo}」，可填寫退回原因（選填）：`)
+      if (note === null) return
+      try {
+        const r = await fetch(`/api/invoice-vouchers/${v.voucherNo}/reject`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify({ note })
+        })
+        if (!r.ok) { alert((await r.json()).detail || '退回失敗'); return }
+        await this.loadInvoiceVouchers(this.selected?.quote_no)
+      } catch (e) { alert('網路錯誤：' + e.message) }
+    },
+
+    async revokeInvoiceVoucherApproval(v) {
+      const note = prompt(`撤銷開票申請憑據「${v.voucherNo}」的核准？將退回草稿。\n\n可填寫撤銷原因（選填）：`)
+      if (note === null) return
+      try {
+        const r = await fetch(`/api/invoice-vouchers/${v.voucherNo}/revoke-approval`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify({ note })
+        })
+        if (!r.ok) { alert((await r.json()).detail || '撤銷失敗'); return }
+        await this.loadInvoiceVouchers(this.selected?.quote_no)
+      } catch (e) { alert('網路錯誤：' + e.message) }
+    },
+
+    async downloadInvoiceVoucherPdf(v) {
+      try {
+        fetch(`/api/invoice-vouchers/${v.voucherNo}/export?mode=external`, {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        }).catch(() => {})
+        const r = await fetch(`/api/invoice-vouchers/${v.voucherNo}/pdf-download`, {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || 'PDF 產生失敗'); return }
+        const blob = await r.blob()
+        const url  = URL.createObjectURL(blob)
+        const a    = document.createElement('a')
+        a.href     = url
+        a.download = `${v.voucherNo}.pdf`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        setTimeout(() => URL.revokeObjectURL(url), 1000)
+      } catch (e) { alert('下載失敗：' + e.message) }
+    },
+
+    async previewInvoiceVoucherPdf(v) {
+      this.ivPreviewFetching = true
+      try {
+        const r = await fetch(`/api/invoice-vouchers/${v.voucherNo}/pdf-download`, {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || 'PDF 產生失敗'); this.ivPreviewFetching = false; return }
+        const blob = await r.blob()
+        this.ivPreviewBlobUrl = URL.createObjectURL(blob)
+        this.ivPreviewVoucher = v
+        this.ivPreviewModal = true
+      } catch (e) { alert('預覽失敗：' + e.message) }
+      this.ivPreviewFetching = false
+    },
+
+    closeInvoiceVoucherPreview() {
+      if (this.ivPreviewBlobUrl) URL.revokeObjectURL(this.ivPreviewBlobUrl)
+      this.ivPreviewBlobUrl = ''
+      this.ivPreviewModal = false
+      this.ivPreviewVoucher = null
+    },
+
+    _ivStatusLabel(s) {
+      return { '草稿': '草稿', '待審核': '待審核', '簽核中': '簽核中', '已核准': '已核准' }[s] || s
+    },
+
+    _ivStatusClass(s) {
       return { '草稿': 'badge--draft', '待審核': 'badge--pending', '簽核中': 'badge--signing', '已核准': 'badge--approved' }[s] || ''
     },
 

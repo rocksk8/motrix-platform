@@ -7,6 +7,10 @@ function reportsApp() {
     month:      new Date().getMonth() + 1,
     quarter:    Math.ceil((new Date().getMonth() + 1) / 3),
 
+    // ── Department filter ────────────────────────────────────────────────────
+    departmentId: '',   // '' = 不篩選
+    orgTree:      [],
+
     // ── UI state ──────────────────────────────────────────────────────────────
     loading:    false,
     exporting:  false,
@@ -58,6 +62,18 @@ function reportsApp() {
     },
     get summary()      { return (this.data || {}).summary     || {} },
     get periodItems()  { return (this.data || {}).periodItems || [] },
+    get deptPerf()      { return (this.data || {}).deptPerf    || [] },
+    get allDepartments() {
+      var out = []
+      for (var i = 0; i < this.orgTree.length; i++) {
+        var div = this.orgTree[i]
+        for (var j = 0; j < div.departments.length; j++) {
+          var dept = div.departments[j]
+          out.push({ id: dept.id, name: dept.name, divisionName: div.name })
+        }
+      }
+      return out
+    },
     get outstanding()  { return (this.data || {}).outstanding || [] },
     get casesAll()     { return (this.data || {}).casesAll    || [] },
     get casesPeriod()  { return (this.data || {}).casesPeriod || [] },
@@ -163,7 +179,8 @@ function reportsApp() {
       this.error   = ''
       this.data    = null
       try {
-        var res = await fetch('/api/reports/financial?period=' + this.periodParam, {
+        var qs = 'period=' + this.periodParam + (this.departmentId ? '&department_id=' + this.departmentId : '')
+        var res = await fetch('/api/reports/financial?' + qs, {
           headers: { Authorization: 'Bearer ' + this._token() }
         })
         if (!res.ok) {
@@ -178,11 +195,19 @@ function reportsApp() {
       }
     },
 
+    async loadOrgTree() {
+      try {
+        var res = await fetch('/api/org/tree', { headers: { Authorization: 'Bearer ' + this._token() } })
+        if (res.ok) this.orgTree = await res.json()
+      } catch (_) {}
+    },
+
     // ── Export ────────────────────────────────────────────────────────────────
     async exportFile(fmt) {
       this.exporting  = true
       this.exportType = fmt
-      var url = '/api/reports/financial/' + fmt + '?period=' + this.periodParam
+      var url = '/api/reports/financial/' + fmt + '?period=' + this.periodParam +
+                (this.departmentId ? '&department_id=' + this.departmentId : '')
       try {
         var res = await fetch(url, {
           headers: { Authorization: 'Bearer ' + this._token() }
@@ -659,6 +684,7 @@ function reportsApp() {
         }
       } catch (_) {}
       this.loadData()
+      this.loadOrgTree()
       var self = this
       // Re-init charts when data changes and charts tab is active (e.g. period change)
       this.$watch('data', function(newData) {

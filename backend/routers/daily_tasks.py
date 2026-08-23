@@ -18,9 +18,11 @@ from db import get_db, spawn_bg_thread
 from helpers import (
     _require_user, _tok, _audit, _notify, _purge_notifications,
     notify_daily_task_assigned, notify_daily_task_completed, notify_daily_task_overdue,
+    notify_daily_task_overdue_manager,
     notify_daily_task_edited, notify_warranty_expiry, notify_range_task_deadline, _warranty_expiry,
-    notify_case_stage_deadline, notify_project_deadline, notify_module_activity,
-    _get_setting, _set_setting,
+    notify_case_stage_deadline, notify_case_stage_deadline_manager,
+    notify_project_deadline, notify_project_deadline_manager, notify_module_activity,
+    _get_setting, _set_setting, notify_approval_reminder, _workdays_elapsed,
 )
 
 router = APIRouter()
@@ -879,6 +881,17 @@ def _check_overdue_and_notify(check_date: Optional[str] = None) -> None:
             r["username"]: (r["display_name"] or r["username"])
             for r in conn.execute("SELECT username, display_name FROM users").fetchall()
         }
+        dept_map = {
+            r["username"]: r["department_id"]
+            for r in conn.execute("SELECT username, department_id FROM users WHERE department_id IS NOT NULL").fetchall()
+        }
+        dept_mgr_username = {
+            r["id"]: r["mgr_username"]
+            for r in conn.execute("""
+                SELECT d.id, u.username AS mgr_username FROM departments d
+                JOIN users u ON u.id = d.manager_user_id WHERE u.active=1
+            """).fetchall()
+        }
 
         for row in tasks:
             assigned = json.loads(row["assigned_to"] or "[]")
@@ -917,6 +930,19 @@ def _check_overdue_and_notify(check_date: Optional[str] = None) -> None:
                         args=(row["id"], row["title"], occ_date, username, display, sup_list),
                         daemon=True,
                     ).start()
+                    # 2026-08-22g：額外通知該成員所屬部門的主管（處/部門組織架構延伸）——
+                    # 跟上面的 supervisors（逐任務手動指定）是兩條獨立路徑，主管等於
+                    # 逾期者本人時不重複通知自己
+                    dept_id = dept_map.get(username)
+                    mgr_username = dept_mgr_username.get(dept_id) if dept_id else None
+                    if mgr_username and mgr_username != username:
+                        _notify(mgr_username, "daily_task_overdue_manager", str(row["id"]), row["title"],
+                                f"部門成員 {display} 負責的工作事項「{row['title']}」於 {occ_date} 截止日前尚未完成回報")
+                        threading.Thread(
+                            target=notify_daily_task_overdue_manager,
+                            args=(row["id"], row["title"], occ_date, username, display, dept_id),
+                            daemon=True,
+                        ).start()
 
         conn.close()
         _logger.info("Daily task overdue check complete for %s", check_date)
@@ -979,48 +1005,76 @@ def _check_case_stage_deadline() -> None:
         users   = conn.execute("SELECT id, username, display_name FROM users").fetchall()
         dn_map  = {u["username"]: (u["display_name"] or u["username"]) for u in users}
         uid_map = {u["id"]: u["username"] for u in users}
+        dept_map = {
+            r["username"]: r["department_id"]
+            for r in conn.execute("SELECT username, department_id FROM users WHERE department_id IS NOT NULL").fetchall()
+        }
+        dept_mgr_username = {
+            r["id"]: r["mgr_username"]
+            for r in conn.execute("""
+                SELECT d.id, u.username AS mgr_username FROM departments d
+                JOIN users u ON u.id = d.manager_user_id WHERE u.active=1
+            """).fetchall()
+        }
+        # Phase 5（2026-08-23）：改成直接 JOIN case_stages 表，SQL 層就用 done=0 AND
+        # due_date IN (...) 篩出真正要處理的列，取代原本「撈全部已成案案件的整包
+        # stages JSON，Python 迴圈逐一比對到期日」的寫法——正規化橋樑（3a/3b/v52）
+        # 已保證這張表對每個有執行進度的案件都是權威、完整的來源。
+        check_date_3d = (today + _timedelta(days=3)).isoformat()
+        check_date_0  = today_str
+        date_to_type = {check_date_3d: (3, "3d"), check_date_0: (0, "deadline")}
         rows = conn.execute("""
-            SELECT quote_no, customer_name, project_name, sales_person_id,
-                   json_extract(data_json, '$.caseRecord.stages') AS stages_json
-            FROM quotations
-            WHERE COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') = '已成案'
-              AND json_extract(data_json, '$.caseRecord.stages') IS NOT NULL
-        """).fetchall()
+            SELECT q.quote_no, q.customer_name, q.project_name, q.sales_person_id,
+                   cs.id AS stage_id, cs.label, cs.due_date, cs.assigned_to
+            FROM case_stages cs
+            JOIN quotations q ON q.quote_no = cs.quote_no
+            WHERE COALESCE(NULLIF(q.deal_tag,''), json_extract(q.data_json,'$.dealTag'), '') = '已成案'
+              AND cs.done = 0
+              AND cs.due_date IN (?, ?)
+        """, (check_date_3d, check_date_0)).fetchall()
         conn.close()
 
-        for days_ahead, notif_type in ((3, "3d"), (0, "deadline")):
-            check_date = (today + _timedelta(days=days_ahead)).isoformat()
-            for row in rows:
-                try:
-                    stages = json.loads(row["stages_json"] or "[]")
-                except Exception:
+        for row in rows:
+            days_ahead, notif_type = date_to_type[row["due_date"]]
+            check_date = row["due_date"]
+            assignees = list(json.loads(row["assigned_to"] or "[]"))
+            if not assignees:
+                fallback = uid_map.get(row["sales_person_id"])
+                if fallback:
+                    assignees = [fallback]
+            for username in assignees:
+                if not username:
                     continue
-                for st in stages:
-                    if st.get("done") or (st.get("dueDate") or "") != check_date:
-                        continue
-                    assignees = list(st.get("assignedTo") or [])
-                    if not assignees:
-                        fallback = uid_map.get(row["sales_person_id"])
-                        if fallback:
-                            assignees = [fallback]
-                    for username in assignees:
-                        if not username:
-                            continue
-                        guard_key = f"casestage_notif.{row['quote_no']}.{st.get('id')}.{username}.{notif_type}"
-                        if _get_setting(guard_key):
-                            continue
-                        _set_setting(guard_key, today_str)
-                        display = dn_map.get(username, username)
-                        threading.Thread(
-                            target=notify_case_stage_deadline,
-                            args=(row["quote_no"], st.get("label") or "", check_date, days_ahead,
-                                  username, display, row["customer_name"] or "", row["project_name"] or "", None),
-                            daemon=True,
-                        ).start()
-                        _notify(username, "case_stage_deadline", row["quote_no"],
-                                f"{row['quote_no']} · {st.get('label','')}",
-                                "案件執行進度「" + (st.get('label') or '') + "」" +
-                                ("今日到期" if days_ahead == 0 else f"{days_ahead} 天後到期"))
+                guard_key = f"casestage_notif.{row['quote_no']}.{row['stage_id']}.{username}.{notif_type}"
+                if _get_setting(guard_key):
+                    continue
+                _set_setting(guard_key, today_str)
+                display = dn_map.get(username, username)
+                threading.Thread(
+                    target=notify_case_stage_deadline,
+                    args=(row["quote_no"], row["label"] or "", check_date, days_ahead,
+                          username, display, row["customer_name"] or "", row["project_name"] or "", None),
+                    daemon=True,
+                ).start()
+                _notify(username, "case_stage_deadline", row["quote_no"],
+                        f"{row['quote_no']} · {row['label'] or ''}",
+                        "案件執行進度「" + (row["label"] or "") + "」" +
+                        ("今日到期" if days_ahead == 0 else f"{days_ahead} 天後到期"))
+                # 案件/專案管理延伸（2026-08-22）：額外通知負責人所屬部門的主管，
+                # 跟指派人自己收到的 case_stage_deadline 是兩條獨立路徑
+                dept_id = dept_map.get(username)
+                mgr_username = dept_mgr_username.get(dept_id) if dept_id else None
+                if mgr_username and mgr_username != username:
+                    _notify(mgr_username, "case_stage_deadline_manager", row["quote_no"],
+                            f"{row['quote_no']} · {row['label'] or ''}",
+                            f"部門成員 {display} 負責的案件執行進度「{row['label'] or ''}」" +
+                            ("今日到期" if days_ahead == 0 else f"{days_ahead} 天後到期"))
+                    threading.Thread(
+                        target=notify_case_stage_deadline_manager,
+                        args=(row["quote_no"], row["label"] or "", check_date, days_ahead,
+                              username, display, dept_id, row["customer_name"] or "", row["project_name"] or ""),
+                        daemon=True,
+                    ).start()
         _logger.info("Case stage deadline check complete for %s", today_str)
     except Exception as exc:
         _logger.warning("_check_case_stage_deadline failed: %s", exc)
@@ -1038,8 +1092,15 @@ def _check_project_deadline() -> None:
         dn_map      = {u["username"]: (u["display_name"] or u["username"]) for u in users}
         uid_map     = {u["id"]: u["username"] for u in users}
         admin_users = [u["username"] for u in users if u["role"] in ("admin", "superadmin")]
+        dept_mgr_username = {
+            r["id"]: r["mgr_username"]
+            for r in conn.execute("""
+                SELECT d.id, u.username AS mgr_username FROM departments d
+                JOIN users u ON u.id = d.manager_user_id WHERE u.active=1
+            """).fetchall()
+        }
         rows = conn.execute("""
-            SELECT id, code, name, status, assigned_user_ids,
+            SELECT id, code, name, status, assigned_user_ids, department_id,
                    json_extract(data_json, '$.endDate') AS end_date
             FROM projects
             WHERE status NOT IN ('完工','結案','取消')
@@ -1071,6 +1132,22 @@ def _check_project_deadline() -> None:
                     ).start()
                     _notify(username, "project_deadline", row["code"], row["name"],
                             f"專案「{row['name']}」" + ("今日到期" if days_ahead == 0 else f"{days_ahead} 天後到期"))
+
+                # 案件/專案管理延伸（2026-08-22）：額外通知專案所屬部門的主管（一個專案通知一次，
+                # 不像上面逐 assignee 迴圈——專案本身就有 department_id，不用查表）
+                dept_id = row["department_id"]
+                mgr_username = dept_mgr_username.get(dept_id) if dept_id else None
+                if mgr_username:
+                    mgr_guard_key = f"project_notif_mgr.{row['code']}.{notif_type}"
+                    if not _get_setting(mgr_guard_key):
+                        _set_setting(mgr_guard_key, today_str)
+                        _notify(mgr_username, "project_deadline_manager", row["code"], row["name"],
+                                f"部門專案「{row['name']}」" + ("今日到期" if days_ahead == 0 else f"{days_ahead} 天後到期"))
+                        threading.Thread(
+                            target=notify_project_deadline_manager,
+                            args=(row["id"], row["code"], row["name"], check_date, days_ahead, dept_id),
+                            daemon=True,
+                        ).start()
         _logger.info("Project deadline check complete for %s", today_str)
     except Exception as exc:
         _logger.warning("_check_project_deadline failed: %s", exc)
@@ -1133,6 +1210,130 @@ def _check_warranty_expiry() -> None:
         _logger.warning("_check_warranty_expiry failed: %s", exc)
 
 
+# ── 簽核逾期催辦（2026-08-21）────────────────────────────────────────────────
+# 報價單／承攬商匯款申請／開票申請憑據三張表的 approval JSON 形狀完全相同
+# （{requestedBy, requestedAt, tiers:[{approvers:[{username,status}]}], currentTier}），
+# 但比照這三個 router 各自重複一份 _active_tiers()/_current_tier_idx() 小工具的既有
+# 慣例（quotations.py／contractor_vouchers.py／invoice_vouchers.py 皆有一份幾乎逐字
+# 相同的版本，刻意不跨 router import 以避免循環依賴），這裡也自己放一份。
+
+def _active_tiers(appr: dict) -> list:
+    return appr.get("tiers") or []
+
+
+def _current_tier_idx(appr: dict) -> int:
+    return appr.get("currentTier") or 0
+
+
+_APPROVAL_REMINDER_SOURCES = [
+    {
+        "table": "quotations", "no_col": "quote_no", "label": "報價單",
+        "select_extra": "customer_name, project_name",
+        "desc": lambda row, snap: (row["customer_name"] or "")
+                                   + (("｜" + row["project_name"]) if row["project_name"] else ""),
+    },
+    {
+        "table": "contractor_payment_vouchers", "no_col": "voucher_no", "label": "匯款申請",
+        "select_extra": "snapshot_json",
+        "desc": lambda row, snap: snap.get("vendorName") or "外包人員點工",
+    },
+    {
+        "table": "invoice_vouchers", "no_col": "voucher_no", "label": "開票申請憑據",
+        "select_extra": "snapshot_json",
+        "desc": lambda row, snap: snap.get("customerName") or "",
+    },
+]
+
+
+def _check_approval_reminders() -> None:
+    """簽核卡在柱列超過工作日 1/3/5 天分級催辦：1、3 天門檻各寄一次，3 天起同步
+    通知全部 superadmin，5 天以上每個工作日都重複寄，直到簽核完成或退回為止。
+    一律從 approval.requestedAt（原始送審時間）起算工作日，不因換層歸零；
+    guard key 帶入 requestedAt，文件退回重新送審後 requestedAt 換新值，催辦
+    倒數會自然重新從 0 天起算，不會被舊一輪的 guard 卡住讓新一輪永遠不寄。
+    工作日計算只排除週六日，不排除國定假日（見 helpers/dates.py _workdays_elapsed
+    docstring，系統目前沒有假日行事曆表可用，屬已知限制）。"""
+    today     = _date.today()
+    today_str = today.isoformat()
+    try:
+        conn = get_db()
+        superadmins = [r["username"] for r in conn.execute(
+            "SELECT username FROM users WHERE role='superadmin' AND active=1"
+        ).fetchall()]
+
+        for src in _APPROVAL_REMINDER_SOURCES:
+            rows = conn.execute(
+                f"SELECT {src['no_col']} AS doc_no, {src['select_extra']}, "
+                f"json_extract(data_json,'$.approval') AS approval_json "
+                f"FROM {src['table']} WHERE status IN ('待審核','簽核中')"
+            ).fetchall()
+            for row in rows:
+                try:
+                    appr = json.loads(row["approval_json"] or "{}")
+                except Exception:
+                    continue
+                requested_at = appr.get("requestedAt") or ""
+                if not requested_at:
+                    continue
+                try:
+                    start_date = _date.fromisoformat(requested_at[:10])
+                except Exception:
+                    continue
+                days_elapsed = _workdays_elapsed(start_date, today)
+                if days_elapsed < 1:
+                    continue
+
+                tiers  = _active_tiers(appr)
+                ct_idx = _current_tier_idx(appr)
+                if tiers and ct_idx < len(tiers):
+                    approvers     = tiers[ct_idx].get("approvers") or []
+                    first_pending = next((a for a in approvers if a.get("status") != "approved"), None)
+                    recipients    = [first_pending["username"]] if first_pending else []
+                elif tiers:
+                    continue  # 所有層皆已完成但 status 尚未更新 — 暫態，略過
+                else:
+                    recipients = list(superadmins)
+                if not recipients:
+                    continue
+
+                snap = {}
+                if "snapshot_json" in row.keys():
+                    try:
+                        snap = json.loads(row["snapshot_json"] or "{}")
+                    except Exception:
+                        snap = {}
+                desc      = src["desc"](row, snap)
+                doc_no    = row["doc_no"]
+                doc_type  = src["label"]
+                guard_base = f"approval_notif.{src['table']}.{doc_no}.{requested_at}"
+
+                def _fire(also_superadmin: bool, dedup_key: str) -> None:
+                    g = f"{guard_base}.{dedup_key}"
+                    if _get_setting(g):
+                        return
+                    _set_setting(g, today_str)
+                    threading.Thread(
+                        target=notify_approval_reminder,
+                        args=(doc_type, doc_no, desc, days_elapsed, recipients, also_superadmin),
+                        daemon=True,
+                    ).start()
+                    notify_targets = list(set(recipients + superadmins)) if also_superadmin else recipients
+                    for u in notify_targets:
+                        _notify(u, "approval_reminder", doc_no, doc_no,
+                                f"{doc_type} {doc_no} 已等待簽核 {days_elapsed} 個工作日，敬請儘速處理")
+
+                if days_elapsed >= 5:
+                    _fire(True, f"5d.{today_str}")
+                elif days_elapsed >= 3:
+                    _fire(True, "3d")
+                else:
+                    _fire(False, "1d")
+        conn.close()
+        _logger.info("Approval reminder check complete for %s", today_str)
+    except Exception as exc:
+        _logger.warning("_check_approval_reminders failed: %s", exc)
+
+
 def schedule_overdue_check() -> None:
     """Call once on server startup. Repeats daily at 08:00.
     On startup: immediately processes ALL missed days since last check (catch-up),
@@ -1145,6 +1346,7 @@ def schedule_overdue_check() -> None:
         _check_range_task_deadline()
         _check_case_stage_deadline()
         _check_project_deadline()
+        _check_approval_reminders()
 
     def _startup_catchup():
         """Process every day from (last_check + 1) through yesterday in order."""
@@ -1158,6 +1360,7 @@ def schedule_overdue_check() -> None:
             _check_warranty_expiry()
             _check_case_stage_deadline()
             _check_project_deadline()
+            _check_approval_reminders()
             return
 
         # Advance day-by-day through any gap
@@ -1175,6 +1378,7 @@ def schedule_overdue_check() -> None:
         _check_range_task_deadline()
         _check_case_stage_deadline()
         _check_project_deadline()
+        _check_approval_reminders()
         _logger.info("Startup catch-up complete, processed up to %s", yesterday)
 
     # Always run catch-up on startup (the guard inside prevents duplicate emails)

@@ -94,7 +94,7 @@ def search_by_name(q: str = Query(..., min_length=2)):
 # ── Dashboard ─────────────────────────────────────────────────────────────────
 
 @router.get("/api/dashboard/stats")
-def dashboard_stats(authorization: str = Header(None)):
+def dashboard_stats(department_id: Optional[int] = Query(None), authorization: str = Header(None)):
     u = _require_user(authorization)
     role = u["role"]
     mods = json.loads(u.get("modules") or "[]") if isinstance(u.get("modules"), str) else (u.get("modules") or [])
@@ -103,6 +103,7 @@ def dashboard_stats(authorization: str = Header(None)):
     conn = get_db()
     rows = conn.execute("""
         SELECT quote_no, status, customer_name, project_name, total, quote_date, sales_person,
+               sales_person_id,
                net_margin_pct, direct_margin_pct,
                COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') as deal_tag,
                json_extract(data_json,'$.caseRecord')           as case_record_json,
@@ -111,6 +112,9 @@ def dashboard_stats(authorization: str = Header(None)):
         FROM quotations ORDER BY id DESC
     """).fetchall()
     cust_count = conn.execute("SELECT COUNT(*) FROM customers").fetchone()[0]
+    if department_id:
+        dept_by_user = {r["id"]: r["department_id"] for r in conn.execute("SELECT id, department_id FROM users").fetchall()}
+        rows = [r for r in rows if r["sales_person_id"] and dept_by_user.get(r["sales_person_id"]) == department_id]
     conn.close()
 
     today = date.today()
@@ -289,6 +293,19 @@ def dashboard_stats(authorization: str = Header(None)):
         except Exception:
             pass
 
+    # ── Project summary（案件/專案管理延伸，2026-08-22）：依狀態分組計數，可依部門篩選 ──
+    proj_conn = get_db()
+    proj_sql  = "SELECT status FROM projects"
+    proj_args = ()
+    if department_id:
+        proj_sql  += " WHERE department_id=?"
+        proj_args  = (department_id,)
+    proj_rows = proj_conn.execute(proj_sql, proj_args).fetchall()
+    proj_conn.close()
+    project_summary = {}
+    for pr in proj_rows:
+        project_summary[pr["status"]] = project_summary.get(pr["status"], 0) + 1
+
     return {
         "totalQuotes":       total_count,
         "pendingQuotes":     pending_count if can_quotation else 0,
@@ -297,6 +314,7 @@ def dashboard_stats(authorization: str = Header(None)):
         "activeCases":       active_count,
         "closedCases":       closed_count,
         "customerCount":     cust_count,
+        "projectSummary":    project_summary,
         "pendingList":       pending_list       if can_quotation else [],
         "paymentItems":      payment_items[:10] if can_finance   else [],
         "warrantyWarnings":  warranty_warnings[:5],
@@ -627,7 +645,11 @@ def list_sales_orders(authorization: str = Header(None)):
                COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '')         AS deal_tag,
                json_extract(data_json,'$.caseRecord')      AS case_record_json,
                json_extract(data_json,'$.deliveryTerms')   AS delivery_terms,
-               json_extract(data_json,'$.deliveryAddress') AS delivery_address
+               json_extract(data_json,'$.deliveryAddress') AS delivery_address,
+               (SELECT COUNT(*) FROM case_stages cs WHERE cs.quote_no = quotations.quote_no)
+                   AS stages_count,
+               (SELECT COUNT(*) FROM case_stages cs WHERE cs.quote_no = quotations.quote_no AND cs.done=1)
+                   AS stages_done
         FROM quotations
         WHERE COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') IN ('已成案','已結案')
         ORDER BY quote_date DESC
@@ -651,11 +673,11 @@ def list_sales_orders(authorization: str = Header(None)):
                 if p.get("received"):
                     recv_amount += amt
 
-        stages = cr.get("stages") or []
-        progress_pct = 0
-        if stages:
-            done = sum(1 for s in stages if s.get("done"))
-            progress_pct = round(done / len(stages) * 100)
+        # Phase 5（2026-08-23）：progress_pct/stagesCount 改用 case_stages 表的 SQL
+        # 聚合子查詢（見上面 SELECT），取代解析 caseRecord.stages JSON 陣列——
+        # payment.items 仍需要整包 caseRecord JSON（跟 stages 無關，不在這次範圍）。
+        stages_count = r["stages_count"] or 0
+        progress_pct = round(r["stages_done"] / stages_count * 100) if stages_count else 0
 
         items.append({
             "quoteNo":        r["quote_no"],
@@ -669,7 +691,7 @@ def list_sales_orders(authorization: str = Header(None)):
             "netMarginPct":   r["net_margin_pct"],
             "deliveryTerms":  r["delivery_terms"] or "",
             "progressPct":    progress_pct,
-            "stagesCount":    len(stages),
+            "stagesCount":    stages_count,
         })
     return {"items": items, "total": len(items)}
 
@@ -952,8 +974,13 @@ def _norm_at(s: str) -> str:
 
 
 @router.get("/api/dashboard/activity-feed")
-def dashboard_activity_feed(limit: int = Query(30, ge=1, le=100), authorization: str = Header(None)):
-    """彙整業務開發／報價單／案件留言／出貨單／工作日誌／進出物料的最新動態，依時間新到舊合併排序。"""
+def dashboard_activity_feed(limit: int = Query(30, ge=1, le=100),
+                             department_id: Optional[int] = Query(None),
+                             authorization: str = Header(None)):
+    """彙整業務開發／報價單／案件留言／出貨單／工作日誌／進出物料的最新動態，依時間新到舊合併排序。
+    department_id 篩選目前只套用在「案件留言板」這個區塊——這是唯一有直接
+    sales_person_id 可查的區塊，其餘來源（工作日誌、業務開發記錄等）的作者
+    跟部門的對應關係定義不明確，這輪先不強行套用，避免篩選邏輯做錯。"""
     u = _require_user(authorization)
     role = u["role"]
     mods = json.loads(u.get("modules") or "[]") if isinstance(u.get("modules"), str) else (u.get("modules") or [])
@@ -973,6 +1000,15 @@ def dashboard_activity_feed(limit: int = Query(30, ge=1, le=100), authorization:
             row["sales_person_id"] is None and row["sales_person"] == u["display_name"]
         )
 
+    dept_by_user = {}
+    if department_id:
+        dept_by_user = {r["id"]: r["department_id"] for r in conn.execute("SELECT id, department_id FROM users").fetchall()}
+
+    def _in_department(row) -> bool:
+        if not department_id:
+            return True
+        return bool(row["sales_person_id"]) and dept_by_user.get(row["sales_person_id"]) == department_id
+
     # 1. 案件留言板 comments（quote_no 範圍比照報價單可視權限）
     if can_quotation:
         rows = conn.execute("""
@@ -984,7 +1020,7 @@ def dashboard_activity_feed(limit: int = Query(30, ge=1, le=100), authorization:
             ORDER BY cu.created_at DESC LIMIT 40
         """).fetchall()
         for r in rows:
-            if not _visible_to_sales(r):
+            if not _visible_to_sales(r) or not _in_department(r):
                 continue
             items.append({
                 "id": f"cu_{r['id']}", "source": "comment", "moduleLabel": "案件留言板",

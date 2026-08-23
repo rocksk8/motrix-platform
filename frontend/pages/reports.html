@@ -201,6 +201,14 @@
           </select>
         </template>
 
+        <select x-model="departmentId" @change="loadData()"
+                style="padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;background:#fff">
+          <option value="">全部部門</option>
+          <template x-for="d in allDepartments" :key="d.id">
+            <option :value="d.id" x-text="d.divisionName + ' / ' + d.name"></option>
+          </template>
+        </select>
+
         <div class="export-wrap">
           <button class="btn-export excel" @click="exportFile('excel')" :disabled="exporting || !data">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
@@ -494,6 +502,34 @@
                 </template>
               </tbody>
             </table>
+
+            <!-- 依部門彙總 -->
+            <div style="margin-top:24px">
+              <div style="font-size:13px;font-weight:600;margin-bottom:10px">依部門彙總</div>
+              <div x-show="deptPerf.length === 0" class="empty-state">尚無部門彙總資料</div>
+              <table x-show="deptPerf.length > 0" class="data-table">
+                <thead><tr>
+                  <th>部門</th>
+                  <th class="r">案件數</th>
+                  <th class="r">合約總額</th>
+                  <th class="r">已收款</th>
+                  <th class="r">收款率</th>
+                  <th class="r">預估毛利率</th>
+                </tr></thead>
+                <tbody>
+                  <template x-for="dp in deptPerf" :key="dp.deptName">
+                    <tr>
+                      <td x-text="dp.deptName"></td>
+                      <td class="r mono" x-text="dp.caseCount"></td>
+                      <td class="r mono" x-text="fmt(dp.totalAmount)"></td>
+                      <td class="r mono" x-text="fmt(dp.receivedAmount)"></td>
+                      <td class="r mono" x-text="dp.collectionRate.toFixed(1) + '%'"></td>
+                      <td class="r mono" x-text="dp.avgMarginPct.toFixed(1) + '%'"></td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
           </div>
 
           <!-- 毛利分析 -->

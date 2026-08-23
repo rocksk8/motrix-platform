@@ -122,6 +122,26 @@
           <option value="case.update">案件資料更新</option>
           <option value="payment.mark">收款標記</option>
         </optgroup>
+        <optgroup label="承攬商匯款申請">
+          <option value="contractor_voucher.create">建立匯款申請</option>
+          <option value="contractor_voucher.submit">送出審核</option>
+          <option value="contractor_voucher.approve">簽核通過</option>
+          <option value="contractor_voucher.reject">退回</option>
+          <option value="contractor_voucher.revoke_approval">撤銷核准</option>
+          <option value="contractor_voucher.delete">刪除匯款申請</option>
+          <option value="contractor_voucher.export_pdf">匯出 PDF</option>
+          <option value="contractor_voucher.pay">標記已匯款</option>
+          <option value="contractor_voucher.unpay">取消已匯款</option>
+        </optgroup>
+        <optgroup label="開票申請憑據">
+          <option value="invoice_voucher.create">建立開票憑據</option>
+          <option value="invoice_voucher.submit">送出審核</option>
+          <option value="invoice_voucher.approve">簽核通過</option>
+          <option value="invoice_voucher.reject">退回</option>
+          <option value="invoice_voucher.revoke_approval">撤銷核准</option>
+          <option value="invoice_voucher.delete">刪除開票憑據</option>
+          <option value="invoice_voucher.export_pdf">匯出 PDF</option>
+        </optgroup>
         <optgroup label="業務開發">
           <option value="dev_case.create">新增開發案件</option>
           <option value="dev_case.update">更新開發案件</option>
@@ -230,6 +250,7 @@
           <option value="project.assign">指派人員</option>
           <option value="project.delete">刪除專案</option>
           <option value="project.log.create">新增工程紀錄</option>
+          <option value="project.log.approve">確認事項簽核</option>
         </optgroup>
         <optgroup label="每日工作事項">
           <option value="daily_task.create">新增工作事項</option>
@@ -263,6 +284,8 @@
           <option value="quotation.unlock">報價單解鎖密碼</option>
           <option value="daily_task.admin_unlock">每日任務管理解鎖</option>
           <option value="settings.approval_flow.update">審核流程設定</option>
+          <option value="settings.contractor_voucher_approval_flow.update">匯款申請簽核設定</option>
+          <option value="settings.invoice_voucher_approval_flow.update">開票憑據簽核設定</option>
           <option value="settings.operating_targets.update">營運目標設定</option>
           <option value="settings.company_profile.update">公司資料設定</option>
           <option value="settings.edge_path.update">邊緣路徑設定</option>
@@ -385,6 +408,24 @@
           // 案件管理
           'case.update':                     '案件資料更新',
           'payment.mark':                    '收款標記',
+          // 承攬商匯款申請
+          'contractor_voucher.create':          '建立匯款申請',
+          'contractor_voucher.submit':          '送出審核',
+          'contractor_voucher.approve':         '簽核通過',
+          'contractor_voucher.reject':          '退回',
+          'contractor_voucher.revoke_approval': '撤銷核准',
+          'contractor_voucher.delete':          '刪除匯款申請',
+          'contractor_voucher.export_pdf':      '匯出 PDF',
+          'contractor_voucher.pay':             '標記已匯款',
+          'contractor_voucher.unpay':           '取消已匯款',
+          // 開票申請憑據
+          'invoice_voucher.create':          '建立開票憑據',
+          'invoice_voucher.submit':          '送出審核',
+          'invoice_voucher.approve':         '簽核通過',
+          'invoice_voucher.reject':          '退回',
+          'invoice_voucher.revoke_approval': '撤銷核准',
+          'invoice_voucher.delete':          '刪除開票憑據',
+          'invoice_voucher.export_pdf':      '匯出 PDF',
           // 業務開發
           'dev_case.create':                 '新增開發案件',
           'dev_case.update':                 '更新開發案件',
@@ -487,6 +528,7 @@
           'project.assign':                  '指派人員',
           'project.delete':                  '刪除專案',
           'project.log.create':              '新增工程紀錄',
+          'project.log.approve':             '確認事項簽核',
           // 每日工作事項
           'daily_task.create':               '新增工作事項',
           'daily_task.update':               '更新工作事項',
@@ -513,6 +555,8 @@
           'user.set_daily_task_password':    '設定任務解鎖密碼',
           // 系統設定
           'settings.approval_flow.update':   '審核流程設定',
+          'settings.contractor_voucher_approval_flow.update': '匯款申請簽核設定',
+          'settings.invoice_voucher_approval_flow.update':    '開票憑據簽核設定',
           'settings.operating_targets.update':'營運目標設定',
           'settings.company_profile.update': '公司資料設定',
           'settings.edge_path.update':       '邊緣路徑設定',
@@ -539,6 +583,8 @@
         if (action.startsWith('supplier.'))         return '#fdf4ff'
         if (action.startsWith('vendor.dispatch.'))  return '#fff7ed'
         if (action.startsWith('vendor.'))           return '#ffedd5'
+        if (action.startsWith('contractor_voucher.')) return '#fef3c7'
+        if (action.startsWith('invoice_voucher.'))    return '#f5f3ff'
         if (action.startsWith('dev_case.') || action.startsWith('dev_log.')) return '#eef2ff'
         if (action.startsWith('project.'))          return '#ecfeff'
         if (action.startsWith('daily_task.'))       return '#f0fdf4'
@@ -567,6 +613,8 @@
         if (action.startsWith('supplier.'))         return '#7e22ce'
         if (action.startsWith('vendor.dispatch.'))  return '#c2410c'
         if (action.startsWith('vendor.'))           return '#ea580c'
+        if (action.startsWith('contractor_voucher.')) return '#92400e'
+        if (action.startsWith('invoice_voucher.'))    return '#7c3aed'
         if (action.startsWith('dev_case.') || action.startsWith('dev_log.')) return '#4338ca'
         if (action.startsWith('project.'))          return '#0e7490'
         if (action.startsWith('daily_task.'))       return '#15803d'
@@ -592,6 +640,8 @@
         if (action.startsWith('customer.'))         return '#f5f3ff'
         if (action.startsWith('supplier.'))         return '#fdf4ff'
         if (action.startsWith('vendor.'))           return '#ffedd5'
+        if (action.startsWith('contractor_voucher.')) return '#fef3c7'
+        if (action.startsWith('invoice_voucher.'))    return '#f5f3ff'
         if (action.startsWith('dev_case.') || action.startsWith('dev_log.')) return '#eef2ff'
         if (action.startsWith('project.'))          return '#ecfeff'
         if (action.startsWith('daily_task.'))       return '#f0fdf4'
@@ -625,10 +675,19 @@
         if (action.startsWith('supplier.'))         return '🏢'
         if (action.startsWith('vendor.dispatch.'))  return '🚚'
         if (action.startsWith('vendor.'))           return '🤝'
+        if (action === 'contractor_voucher.pay')    return '💸'
+        if (action === 'contractor_voucher.unpay')  return '↩️'
+        if (action === 'contractor_voucher.approve' || action === 'invoice_voucher.approve') return '✅'
+        if (action === 'contractor_voucher.reject' || action === 'invoice_voucher.reject') return '↩️'
+        if (action === 'contractor_voucher.revoke_approval' || action === 'invoice_voucher.revoke_approval') return '↩️'
+        if (action === 'contractor_voucher.export_pdf' || action === 'invoice_voucher.export_pdf') return '📄'
+        if (action.startsWith('contractor_voucher.')) return '🏦'
+        if (action.startsWith('invoice_voucher.'))    return '🧾'
         if (action === 'dev_case.convert')          return '🔄'
         if (action.startsWith('dev_case.'))         return '💼'
         if (action === 'dev_log.approve')           return '✅'
         if (action.startsWith('dev_log.'))          return '📓'
+        if (action === 'project.log.approve')       return '✅'
         if (action === 'project.log.create')        return '🔧'
         if (action.startsWith('project.'))          return '📐'
         if (action === 'daily_task.complete')       return '✔️'

@@ -78,11 +78,11 @@ def _fmt(n):
     return f"NT$ {int(n or 0):,}"
 
 
-def _collect(period_start: str, period_end: str) -> dict:
+def _collect(period_start: str, period_end: str, department_id: Optional[int] = None) -> dict:
     conn = get_db()
     rows = conn.execute("""
         SELECT quote_no, status, customer_name, project_name,
-               total, pretax, quote_date, sales_person,
+               total, pretax, quote_date, sales_person, sales_person_id,
                net_margin_pct, direct_margin_pct,
                COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') AS deal_tag,
                json_extract(data_json,'$.caseRecord')                  AS cr_json,
@@ -94,10 +94,28 @@ def _collect(period_start: str, period_end: str) -> dict:
         WHERE COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') IN ('已成案','已結案')
         ORDER BY quote_date DESC
     """).fetchall()
+    # sales_person_id -> department_id/department_name，用來把報價單掛回部門
+    # （依部門彙總／department_id 篩選都靠這個對照表，quotations 本身沒有直接存部門）
+    dept_by_user = {
+        r["id"]: (r["department_id"], r["dept_name"])
+        for r in conn.execute("""
+            SELECT u.id, u.department_id, d.name AS dept_name
+            FROM users u LEFT JOIN departments d ON d.id = u.department_id
+        """).fetchall()
+    }
     conn.close()
+
+    def _row_dept(row):
+        """回傳 (department_id, department_name) 或 (None, '未分類')。"""
+        return dept_by_user.get(row["sales_person_id"]) or (None, "未分類")
+
+    if department_id:
+        rows = [r for r in rows if _row_dept(r)[0] == department_id]
+    allowed_quote_nos = {r["quote_no"] for r in rows} if department_id else None
 
     all_items, period_items, outstanding = [], [], []
     cases_all, cases_period = [], []
+    dm: dict = {}   # 依部門彙總（跟下面「依業務員」的 sm 用同樣邏輯，多一層部門分組）
 
     for row in rows:
         cr = {}
@@ -155,11 +173,14 @@ def _collect(period_start: str, period_end: str) -> dict:
 
         qdate = row["quote_date"] or ""
         roles = cr.get("roles") or {}
+        row_dept_id, row_dept_name = _row_dept(row)
         case = {
             "quoteNo":        row["quote_no"],
             "customer":       row["customer_name"] or "",
             "project":        row["project_name"]  or "",
             "salesPerson":    row["sales_person"]  or "",
+            "deptId":         row_dept_id,
+            "deptName":       row_dept_name,
             "quoteDate":      qdate,
             "dealTag":        row["deal_tag"]      or "",
             "roles":          roles,
@@ -212,6 +233,30 @@ def _collect(period_start: str, period_end: str) -> dict:
         })
     sales.sort(key=lambda x: x["totalAmount"], reverse=True)
 
+    # dept perf（依部門彙總，跟上面「依業務員」同樣算法，多一層部門分組；
+    # 查無 sales_person_id 對應部門的案件歸類「未分類」）
+    for c in cases_all:
+        k = c["deptName"] or "未分類"
+        dm.setdefault(k, {"deptId": c["deptId"], "deptName": k, "cases": 0, "total": 0, "received": 0,
+                          "mRevSum": 0.0, "mProfitSum": 0.0})
+        dm[k]["cases"]    += 1
+        dm[k]["total"]    += c["total"]
+        dm[k]["received"] += c["receivedAmount"]
+        dm[k]["mRevSum"]    += c["pretax"]
+        dm[k]["mProfitSum"] += c["pretax"] * (c["netMarginPct"] or 0) / 100
+    dept_perf = []
+    for v in dm.values():
+        dept_perf.append({
+            "deptId":         v["deptId"],
+            "deptName":       v["deptName"],
+            "caseCount":      v["cases"],
+            "totalAmount":    v["total"],
+            "receivedAmount": v["received"],
+            "collectionRate": round(v["received"] / v["total"] * 100, 1) if v["total"] > 0 else 0,
+            "avgMarginPct":   round(v["mProfitSum"] / v["mRevSum"] * 100, 1) if v["mRevSum"] > 0 else 0,
+        })
+    dept_perf.sort(key=lambda x: x["totalAmount"], reverse=True)
+
     # warranty
     warr = []
     conn2 = get_db()
@@ -223,6 +268,8 @@ def _collect(period_start: str, period_end: str) -> dict:
           AND json_extract(data_json,'$.caseRecord') IS NOT NULL
     """).fetchall()
     conn2.close()
+    if allowed_quote_nos is not None:
+        wrows = [r for r in wrows if r["quote_no"] in allowed_quote_nos]
     for r in wrows:
         try:
             cr2 = json.loads(r["cr_json"])
@@ -253,6 +300,8 @@ def _collect(period_start: str, period_end: str) -> dict:
         ORDER BY updated_at ASC
     """).fetchall()
     conn3.close()
+    if allowed_quote_nos is not None:
+        ov_rows = [r for r in ov_rows if r["quote_no"] in allowed_quote_nos]
     settle_overdue = [
         {
             "quoteNo":     r["quote_no"],
@@ -307,6 +356,7 @@ def _collect(period_start: str, period_end: str) -> dict:
         "casesAll":       cases_all,
         "casesPeriod":    cases_period,
         "salesPerf":      sales,
+        "deptPerf":       dept_perf,
         "marginCases":    [c for c in cases_all if c["actualMarginPct"] is not None and c["settleStatus"] == "finalized"],
         "warranty":       warr[:30],
         "settleOverdue":  settle_overdue,
@@ -1655,19 +1705,21 @@ def _augment_with_targets(data: dict, d0: str) -> dict:
 @router.get("/api/reports/financial")
 def report_json(
     period: Optional[str] = Query(None),
+    department_id: Optional[int] = Query(None),
     authorization: str = Header(None),
 ):
     u = _require_user(authorization)
     if u["role"] not in ("superadmin", "admin"):
         raise HTTPException(403, "僅管理員以上可存取報表")
     label, d0, d1 = _parse_period(period)
-    data = _augment_with_targets(_collect(d0, d1), d0)
+    data = _augment_with_targets(_collect(d0, d1, department_id), d0)
     return {"period": period, "periodLabel": label, "dateStart": d0, "dateEnd": d1, **data}
 
 
 @router.get("/api/reports/financial/excel")
 def report_excel(
     period: Optional[str] = Query(None),
+    department_id: Optional[int] = Query(None),
     authorization: str = Header(None),
 ):
     u = _require_user(authorization)
@@ -1675,7 +1727,7 @@ def report_excel(
         raise HTTPException(403, "僅管理員以上可存取報表")
     _check_export_rate(u["id"], "excel")
     label, d0, d1 = _parse_period(period)
-    data   = _augment_with_targets(_collect(d0, d1), d0)
+    data   = _augment_with_targets(_collect(d0, d1, department_id), d0)
     data["arAging"] = _compute_ar_aging()
     gen_at = datetime.now().strftime("%Y-%m-%d %H:%M")
     xlsx   = _build_excel(data, label, gen_at)
@@ -1691,6 +1743,7 @@ def report_excel(
 @router.get("/api/reports/financial/pdf")
 def report_pdf(
     period: Optional[str] = Query(None),
+    department_id: Optional[int] = Query(None),
     authorization: str = Header(None),
 ):
     u = _require_user(authorization)
@@ -1698,7 +1751,7 @@ def report_pdf(
         raise HTTPException(403, "僅管理員以上可存取報表")
     _check_export_rate(u["id"], "pdf")
     label, d0, d1 = _parse_period(period)
-    data   = _augment_with_targets(_collect(d0, d1), d0)
+    data   = _augment_with_targets(_collect(d0, d1, department_id), d0)
     data["arAging"] = _compute_ar_aging()
     gen_at = datetime.now().strftime("%Y-%m-%d %H:%M")
     try:

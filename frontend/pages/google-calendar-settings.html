@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="../static/favicon.png">
+  <title>Google 行事曆設定 — MOTRIX 營運管理系統</title>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
+  <style>
+    .gc-main {
+      margin-left: var(--sidebar-w);
+      margin-top: var(--topbar-h);
+      padding: 32px 36px;
+      min-height: calc(100vh - var(--topbar-h));
+      background: var(--white);
+    }
+    .gc-title { font-size: 20px; font-weight: 700; color: var(--text-main); }
+    .gc-subtitle { font-size: 13px; color: var(--text-secondary); margin-top: 4px; }
+    .gc-card {
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      max-width: 720px;
+      margin-top: 24px;
+    }
+    .gc-card-head {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border-light);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .gc-card-head-title { font-size: 14px; font-weight: 700; color: var(--text-main); flex: 1; }
+    .gc-card-body { padding: 20px 24px; }
+    .gc-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+    .gc-field label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      margin-bottom: 6px;
+    }
+    .gc-field input[type="text"],
+    .gc-field input[type="password"] {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 13px;
+      color: var(--text-main);
+      background: var(--white);
+      box-sizing: border-box;
+    }
+    .gc-field input:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(47,111,214,.12);
+    }
+    .gc-toggle {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 16px;
+      background: #F8F7F4;
+      border-radius: 8px;
+      margin-bottom: 20px;
+    }
+    .gc-toggle label { font-size: 14px; font-weight: 600; color: var(--text-main); cursor: pointer; }
+    .gc-desc {
+      font-size: 13px;
+      color: var(--text-secondary);
+      background: #F8F7F4;
+      border-radius: 7px;
+      padding: 12px 14px;
+      border-left: 3px solid var(--accent);
+      margin-bottom: 20px;
+      line-height: 1.6;
+    }
+    .gc-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 24px;
+      padding-top: 20px;
+      border-top: 1px solid var(--border-light);
+    }
+    .gc-hint {
+      font-size: 12px;
+      color: var(--text-dim);
+      margin-top: 20px;
+      line-height: 1.7;
+    }
+    .gc-event-list { font-size: 13px; color: var(--text-secondary); line-height: 1.9; }
+    .gc-event-list li::marker { color: var(--accent); }
+    .gc-check-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 9px 0;
+      border-bottom: 1px solid var(--border-light);
+    }
+    .gc-check-row:last-child { border-bottom: none; }
+    .gc-check-badge {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 10px;
+      flex-shrink: 0;
+      white-space: nowrap;
+    }
+    .gc-conn-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 12px;
+      font-weight: 700;
+      padding: 3px 10px;
+      border-radius: 20px;
+    }
+    .gc-steps {
+      font-size: 13px;
+      color: var(--text-secondary);
+      line-height: 1.9;
+    }
+    .gc-steps li::marker { color: var(--accent); font-weight: 700; }
+    .gc-code {
+      display: block;
+      background: #1C1917;
+      color: #D1FAE5;
+      padding: 10px 14px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-family: 'Courier New', monospace;
+      margin: 8px 0;
+      overflow-x: auto;
+      white-space: pre;
+    }
+  </style>
+</head>
+<body x-data="gcalSettingsPage()" x-init="init()" x-cloak>
+  <header id="app-topbar" class="topbar"></header>
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+  <aside class="sidebar" id="app-sidebar"></aside>
+  <main class="gc-main">
+    <div style="margin-bottom:28px">
+      <div class="gc-title">Google 行事曆設定</div>
+      <div class="gc-subtitle">重要事件（開票申請憑據核准、出貨單核准、報價單成案）自動建立整天行事曆事件，讓系統跟日常行事曆結合（目前僅系統→行事曆單向推送）</div>
+    </div>
+
+    <!-- 自動建立的事件 -->
+    <div class="gc-card">
+      <div class="gc-card-head">
+        <div class="gc-card-head-title">自動建立的行事曆事件</div>
+      </div>
+      <div class="gc-card-body">
+        <ul class="gc-event-list">
+          <li>開票申請憑據簽核核准 → 建立整天事件</li>
+          <li>出貨單簽核核准 → 建立整天事件</li>
+          <li>報價單標記為「已成案」 → 建立整天事件</li>
+        </ul>
+        <div class="gc-hint">
+          事件會建立在下方設定的行事曆（Calendar ID）裡；建議使用一個獨立的次要行事曆，跟寄件帳號的主行事曆分開，方便篩選查看。<br>
+          目前僅支援「系統 → 行事曆」單向推送新建事件，尚未支援事件更新/刪除同步（例如出貨單核准後被撤銷，行事曆事件不會跟著移除）。
+        </div>
+      </div>
+    </div>
+
+    <!-- 設定狀態 -->
+    <div class="gc-card">
+      <div class="gc-card-head">
+        <div class="gc-card-head-title">設定狀態</div>
+        <span x-show="allReady" style="font-size:12px;color:#16A34A;font-weight:600">● 已就緒</span>
+        <span x-show="!allReady" style="font-size:12px;color:#D97706;font-weight:600"
+              x-text="'尚有 ' + (checks.length - readyCount) + ' 項待完成'"></span>
+      </div>
+      <div class="gc-card-body" style="padding-top:8px;padding-bottom:8px">
+        <template x-for="c in checks" :key="c.label">
+          <div class="gc-check-row">
+            <div :style="c.ok ? 'color:#15803D' : 'color:#9CA3AF'" style="flex-shrink:0;margin-top:1px">
+              <template x-if="c.ok">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              </template>
+              <template x-if="!c.ok">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              </template>
+            </div>
+            <div style="flex:1">
+              <div style="font-size:13px;font-weight:500"
+                   :style="c.ok ? 'color:var(--text-main)' : 'color:var(--text-secondary)'"
+                   x-text="c.label"></div>
+              <div x-show="!c.ok" x-text="c.hint"
+                   style="font-size:11px;color:#D97706;margin-top:2px"></div>
+            </div>
+            <span class="gc-check-badge"
+                  :style="c.ok ? 'background:#D1FAE5;color:#065F46' : 'background:#FEF3C7;color:#92400E'"
+                  x-text="c.ok ? '完成' : '待設定'"></span>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- OAuth 設定 -->
+    <div class="gc-card">
+      <div class="gc-card-head">
+        <div class="gc-card-head-title">OAuth 連線設定</div>
+        <span x-show="saved" x-transition style="font-size:12px;color:#16A34A;font-weight:600">已儲存</span>
+      </div>
+      <div class="gc-card-body">
+
+        <div class="gc-toggle">
+          <input type="checkbox" id="chk-enabled" x-model="cfg.enabled" style="width:16px;height:16px;cursor:pointer">
+          <label for="chk-enabled">啟用 Google 行事曆整合</label>
+          <span x-show="!cfg.enabled" style="font-size:12px;color:var(--text-dim)">(目前關閉)</span>
+          <span x-show="cfg.enabled" style="font-size:12px;color:#16A34A;font-weight:600">(已啟用)</span>
+        </div>
+
+        <div class="gc-desc">
+          Client ID / Client Secret 來自 Google Cloud Console（OAuth 2.0 用戶端 ID，類型選「電腦版應用程式 Desktop app」，並啟用 Calendar API）。<br>
+          填好並儲存後，還需要到<strong>正式機本機</strong>執行一次性授權腳本
+          <code class="gc-code" style="display:inline;padding:1px 6px">python scripts/setup_google_calendar_oauth.py</code>
+          完成一次性登入同意，之後就不需要再手動介入。
+          <template x-if="cfg.smtp_user_hint">
+            <div style="margin-top:8px">請用寄信通知同一組帳號 <strong x-text="cfg.smtp_user_hint"></strong> 登入完成授權，避免連到別的 Gmail 帳號。</div>
+          </template>
+        </div>
+
+        <div class="gc-row">
+          <div class="gc-field">
+            <label>Client ID</label>
+            <input type="text" x-model="cfg.client_id" placeholder="xxxxxxxx.apps.googleusercontent.com">
+          </div>
+          <div class="gc-field">
+            <label>Client Secret</label>
+            <input type="password" x-model="cfg.client_secret" placeholder="GOCSPX-xxxxxxxx">
+          </div>
+        </div>
+
+        <div class="gc-row" style="grid-template-columns:1fr">
+          <div class="gc-field">
+            <label>Calendar ID</label>
+            <input type="text" x-model="cfg.calendar_id" placeholder="primary，或次要行事曆的 xxxxx@group.calendar.google.com">
+          </div>
+        </div>
+
+        <div class="gc-field" style="margin-bottom:16px">
+          <label>授權狀態</label>
+          <div>
+            <span class="gc-conn-badge" x-show="cfg.connected" style="background:#D1FAE5;color:#065F46">● 已連接</span>
+            <span class="gc-conn-badge" x-show="!cfg.connected" style="background:#FEF3C7;color:#92400E">○ 尚未連接，請於正式機執行一次性授權腳本</span>
+          </div>
+        </div>
+
+        <div class="gc-actions">
+          <button class="btn btn-primary" @click="save()" :disabled="saving">
+            <span x-show="!saving">儲存設定</span>
+            <span x-show="saving">儲存中…</span>
+          </button>
+          <button class="btn btn-ghost" @click="test()" :disabled="testing || !cfg.enabled || !cfg.connected">
+            <span x-show="!testing">建立測試事件</span>
+            <span x-show="testing">建立中…</span>
+          </button>
+        </div>
+
+        <div x-show="msg" x-text="msg" x-transition
+             :style="isError ? 'color:#DC2626' : 'color:#16A34A'"
+             style="font-size:13px;margin-top:12px;font-weight:600"></div>
+      </div>
+    </div>
+
+  </main>
+  <script src="../static/notif.js"></script>
+  <script src="../static/sidebar.js"></script>
+  <script>
+    function gcalSettingsPage() {
+      return {
+        cfg: {
+          enabled: false,
+          client_id: '',
+          client_secret: '',
+          calendar_id: 'primary',
+          connected: false,
+          smtp_user_hint: '',
+        },
+        saving: false,
+        testing: false,
+        saved: false,
+        msg: '',
+        isError: false,
+
+        get checks() {
+          return [
+            {
+              label: 'Google 行事曆整合已啟用',
+              ok: !!this.cfg.enabled,
+              hint: '請開啟「啟用 Google 行事曆整合」開關後儲存',
+            },
+            {
+              label: 'Client ID / Client Secret',
+              ok: !!(this.cfg.client_id && this.cfg.client_id.trim() && this.cfg.client_secret && this.cfg.client_secret.trim()),
+              hint: '請至 Google Cloud Console 建立 Desktop app 類型的 OAuth Client 並填入',
+            },
+            {
+              label: '已完成一次性授權',
+              ok: !!this.cfg.connected,
+              hint: '請於正式機本機執行 scripts/setup_google_calendar_oauth.py 完成授權',
+            },
+          ]
+        },
+        get readyCount() { return this.checks.filter(c => c.ok).length },
+        get allReady() { return this.readyCount === this.checks.length },
+
+        async init() {
+          const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
+          if (!s.token) { location.replace('login.html'); return }
+          const r = await fetch('/api/settings/google-calendar', {
+            headers: { Authorization: 'Bearer ' + s.token }
+          })
+          if (r.ok) {
+            const data = await r.json()
+            this.cfg = { ...this.cfg, ...data }
+          }
+        },
+
+        async save() {
+          this.saving = true; this.msg = ''
+          const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
+          const { connected: _c, smtp_user_hint: _h, ...payload } = this.cfg
+          const r = await fetch('/api/settings/google-calendar', {
+            method: 'PUT',
+            headers: { Authorization: 'Bearer ' + s.token, 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          })
+          this.saving = false
+          if (r.ok) {
+            this.msg = '設定已儲存'; this.isError = false
+            this.saved = true; setTimeout(() => this.saved = false, 3000)
+            await this.init()
+          } else {
+            const d = await r.json().catch(() => ({}))
+            this.msg = d.detail || '儲存失敗'; this.isError = true
+          }
+          setTimeout(() => this.msg = '', 4000)
+        },
+
+        async test() {
+          this.testing = true; this.msg = ''
+          const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
+          const r = await fetch('/api/settings/google-calendar/test', {
+            method: 'POST',
+            headers: { Authorization: 'Bearer ' + s.token },
+          })
+          this.testing = false
+          const d = await r.json().catch(() => ({}))
+          if (r.ok) {
+            this.msg = '測試事件已建立，請至行事曆確認'; this.isError = false
+          } else {
+            this.msg = d.detail || '建立失敗，請確認設定與授權狀態'; this.isError = true
+          }
+          setTimeout(() => this.msg = '', 6000)
+        },
+      }
+    }
+  </script>
+</body>
+</html>

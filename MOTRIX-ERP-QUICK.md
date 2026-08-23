@@ -1,7 +1,7 @@
 # MOTRIX ERP — 開發快速參考
 
 > 允碩整合集創（統編 60575481）｜ Tel: 04-3610-6566 ｜ info@miactw.com  
-> 文件版本：**2026-08-17i**（料號主檔新增匯出／匯入 Excel，見 §12）
+> 文件版本：**2026-08-20**（承攬商匯款申請＋開票申請憑據，DB v45/v46，見 §12）
 
 ---
 
@@ -42,6 +42,7 @@
 | 2026-08-01 | `backend/setup_autostart_task.ps1`、`backend/setup_heartbeat_task.ps1` 兩個部署排程設定腳本，正式機有（§1.1／§1.2 有描述其行為）、這台開發機完全沒有檔案 | ✅ 2026-08-08 已解決——透過 RDP 連上正式機，原始檔案改名 `.orig` 保留後貼回內容逐行 diff 校正一致（差異細節見 `DR-SOP.md` §3 第 1 點），已 commit 進 git 並隨這次更新包一併部署 |
 | 2026-08-01 | 已知程式碼未 commit 進 git（`git log` 停在較舊的提交，工作區有大量未 commit 變更）；正式機的程式碼版本與 git 歷史的對應關係目前不明 | ✅ 已於合併正式機更新模式匯出檔案時一併 commit（見 §12 2026-08-01j）；正式機仍無 git，日後版本比對仍需靠 §15 `deploy_manifest.json` 記的 commit 值 |
 | 2026-08-05 | 本文件與程式碼（`main.py` CORS 白名單／`email_notify.py` 與 `system.py` 的 email base_url 預設值／`notification-settings.html` 預設值）長期記載正式機區網位址為 `172.16.11.211:666`，實際上是 `172.16.10.177:666`（使用者於本次對話中指正並確認為固定 IP，非 DHCP 動態配發；已用 `curl` 實測連線成功） | ✅ 本次一併修正上述 5 處程式碼與 §1 位址表 |
+| 2026-08-20 | 開發機當時無法連線，承攬商匯款申請／開票申請憑據功能（DB v45/v46，見 §12）直接在正式機開發，開發機完全沒有這批程式碼 | ✅ 2026-08-23 已回推：`verify_manifest.py` 核對 43/43 相符、開發機本機啟動 server 驗證 `/api/ping`＋schema_version=52 正常後 `git commit`（累計至第 42 輪 2026-08-23q，DB 已到 v52，非僅 v45/v46） |
 
 ---
 
@@ -125,7 +126,7 @@
 
 | 模組 | 職責 |
 |------|------|
-| `db.py` | 連線、`init_db()`、PRAGMA WAL、熱路徑欄位／索引；**CURRENT_VERSION=44**（44 個 migrations；v32/v33 為交換器選型導覽 `switch_guide` 表結構，2026-08-01 由正式機備份 db 實際結構還原重建，詳見 db.py `_m032_switch_guide` 註解；v39/v40 為 2026-08-09 新增的監控系統／門禁系統選型導覽 `monitor_guide`/`access_guide` 表結構；v41 為閘道器與控制器選型導覽 `gateway_guide` 表結構；v42 為 2026-08-13 新增的業務開發連結報價單審核制 `dev_cases` 欄位；v43 為 2026-08-17 新增的使用者個別 Email 通知偏好 `users.notification_muted` 欄位；v44 為 2026-08-17 新增的承攬商派發發票號碼 `contractor_dispatches.invoice_no` 欄位） |
+| `db.py` | 連線、`init_db()`、PRAGMA WAL、熱路徑欄位／索引；**CURRENT_VERSION=46**（46 個 migrations；v32/v33 為交換器選型導覽 `switch_guide` 表結構，2026-08-01 由正式機備份 db 實際結構還原重建，詳見 db.py `_m032_switch_guide` 註解；v39/v40 為 2026-08-09 新增的監控系統／門禁系統選型導覽 `monitor_guide`/`access_guide` 表結構；v41 為閘道器與控制器選型導覽 `gateway_guide` 表結構；v42 為 2026-08-13 新增的業務開發連結報價單審核制 `dev_cases` 欄位；v43 為 2026-08-17 新增的使用者個別 Email 通知偏好 `users.notification_muted` 欄位；v44 為 2026-08-17 新增的承攬商派發發票號碼 `contractor_dispatches.invoice_no` 欄位；v45/v46 為 2026-08-20 新增的承攬商匯款申請／開票申請憑據 `contractor_payment_vouchers`/`invoice_vouchers` 表結構，正式機直接開發，見 §12） |
 | `helpers/` | 密碼、session、audit、notify、settings、弱密碼標記、`save_quotation_json()` |
 | `archive.py` | 即時／每日／週備份；本機 SQLite 快照；**原子 JSON 寫入**（`_atomic_json_write`）；G: fallback |
 | `backup_job.py` | 獨立備份腳本（Windows 工作排程器，不依賴 server） |
@@ -266,7 +267,18 @@ quotations      -- 熱路徑欄位 + data_json 完整物件
   quote_date, valid_days, data_json, created_at, updated_at, ...
 
 users           -- + must_change_password, unlock_password_hash, daily_task_pw_hash,
-                   notification_muted（JSON 陣列，已退訂的 email 通知事件 key，DB v43，見 §12）
+                   notification_muted（JSON 陣列，已退訂的 email 通知事件 key，DB v43，見 §12）,
+                   department_id FK→departments(id)(nullable)（DB v48，見 §12 2026-08-22d）
+divisions       -- 處（DB v48）：id, name UNIQUE, sort_order,
+                   manager_user_id FK→users(id)(nullable)（處級主管，DB v49，見 §12 2026-08-22e）
+departments     -- 部門（DB v48）：id, division_id FK→divisions(id), name（同處內 UNIQUE）,
+                   sort_order, manager_user_id FK→users(id)(nullable)
+                   ⚠️ 未來開發保留：divisions/departments.manager_user_id 目前只是資料欄位，
+                   尚未接進任何簽核邏輯——四個 approval-settings 頁面（quotations／
+                   shipping_notes／contractor_vouchers／invoice_vouchers）與 helpers/
+                   tiered_approval.py 仍是純手動逐一挑選簽核人員，日後若要做「依部門/處
+                   自動列入主管簽核」，這裡就是設計時要沿用的資料來源，見
+                   helpers/tiered_approval.py 檔頭註解與 §11。
 sessions        -- token, expires_at, last_active
 customers       -- code(C-YYYYMM-NNN) + 主欄 + data_json（contacts, visits, tags）
 suppliers       -- code(S-YYYYMM-NNN) + 主欄 + data_json
@@ -282,6 +294,28 @@ vendor_contractors   -- code(V-YYYYMM-NNN), name, tax_id, contact, data_json(vis
 contractor_dispatches -- quote_no, vendor_id, status, items_json, total_amount, tax_rate,
                          accepted_at, accepted_by（DB v25），personnel_json（外包名單人員個別計費快照
                          [{id,name,amount,note}]，DB v36，見 §5.7），invoice_no（發票號碼，DB v44）
+
+contractor_payment_vouchers -- 承攬商匯款申請（DB v45，見 §5.9，2026-08-20）
+  id, voucher_no PK（PV-YYYYMM-NNN）, dispatch_id FK→contractor_dispatches(id) UNIQUE（強制 1:1，
+  且僅完工派發可產生）, quote_no, vendor_id FK→vendor_contractors(id)(nullable),
+  status('草稿'|'待審核'|'簽核中'|'已核准'), snapshot_json（建立當下凍結：承攬商名稱/統編/
+  銀行帳戶/存簿影本（讀自 vendor_contractors.data_json）＋每位外包名單人員各自的銀行
+  帳戶/存簿影本（建立當下另外查 contractors 表，2026-08-20 起）＋派發品項/金額，不隨
+  來源異動回頭改變）, data_json（approval{tiers...}，獨立簽核流程，
+  system_settings key 'contractor_voucher_approval_flow'）,
+  is_paid/paid_by/paid_at/paid_log（財務「已匯款」標記，獨立於 status，比照出貨單「已核准」
+  跟「已回簽」是兩個獨立狀態）, export_count, export_log, created_by, created_at, updated_at
+
+invoice_vouchers     -- 開票申請憑據（DB v46/v47，見 §5.9，2026-08-20）
+  id, voucher_no PK（IV-YYYYMM-NNN）, quote_no, scope('amount'|'items'，2026-08-20 起，取代原本
+  的 'single'|'all'）, amount（REAL，DB v47 新增，這張申請要開多少錢的唯一權威數字，供
+  SUM() 直接算「這張報價單已申請多少／還剩多少可申請」，不必每次解析全部 snapshot_json）,
+  payment_idx（scope 改版後對新資料不再使用，欄位保留不刪）,
+  status('草稿'|'待審核'|'簽核中'|'已核准'，核准即定稿）, snapshot_json（建立當下凍結：
+  客戶/案件/quoteItems 報價品項參考／scope='items' 時的 selectedItems 明細）,
+  data_json（approval{tiers...}，獨立簽核流程，system_settings key
+  'invoice_voucher_approval_flow'）, export_count, export_log, created_by, created_at, updated_at
+
 case_updates         -- id, quote_no, author(username), content, type('comment'), created_at（DB v26）
 work_logs            -- + case_no TEXT DEFAULT ''（DB v26）
 
@@ -551,6 +585,44 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
 - 刪除僅限 `草稿` 狀態（保留已進入簽核/已回簽的歷程）
 - Demo 模式 PDF 隔離目錄：`backend/_demo_shipping_pdf_archive`
 
+### §5.9 · 承攬商匯款申請／開票申請憑據（2026-08-20）
+
+兩個獨立於報價單/出貨單的財務憑證流程，架構直接沿用 §5.8 出貨單的 tiers 簽核＋PDF＋匯出紀錄模式，`routers/contractor_vouchers.py`／`routers/invoice_vouchers.py`。
+
+**承攬商匯款申請**（案件管理承攬商 tab，`contractor_payment_vouchers`）：
+
+```
+草稿 → 待審核 → 簽核中 → 已核准
+                            ↓
+                      已匯款（財務勾選，獨立於 status，比照出貨單「已核准」跟「已回簽」，
+                              可取消回已核准；已匯款不可撤銷核准）
+```
+
+- `status='accepted'`（已驗收）或 `status='completed'`（完工）的派發可產生申請（2026-08-20 使用者實測後放寬，原本僅完工可申請），且**一筆派發僅能對應一張申請**（`dispatch_id` UNIQUE，雙重保護：DB 層 + API 層檢查）
+- 建立當下把承攬商名稱/統編/銀行帳戶（代碼/名稱/分行/戶名/帳號/存簿影本，讀自 `vendor_contractors.data_json`）/派發品項/`invoice_no`/金額**全部快照**進 `snapshot_json`，之後來源資料異動不會回頭改變已產生的憑證
+- **外包名單人員的銀行帳戶／存簿影本**（2026-08-20 起）：派發本身的 `personnel_json` 只快照 id/name/amount/note，不含銀行資訊；建立憑證當下另外查一次 `contractors` 表（外包名冊）取得每位人員目前的 `bank_code`/`bank_name`/`bank_branch`/`bank_account_name`/`bank_account_number`/`bank_passbook_image`，一併寫入 snapshot；查無資料（例如人員已被刪除）就留空，不擋建立。PDF 上每位外包人員各自一張帳戶卡片＋存簿縮圖，供財務逐一核對匯款
+- `routers/vendor_contractors.py` `delete_dispatch()` 新增守門：已產生憑證的派發不可刪除，回 409（避免撞上 FK 約束產生原始 500）
+- 獨立簽核設定：`system_settings.contractor_voucher_approval_flow`（`contractor-voucher-approval-settings.html`，superadmin）
+- 全部簽核完成 → 狀態 `已核准`，背景觸發 PDF 存檔（`pdf_gen.py _generate_contractor_voucher_pdf`）；PDF 含銀行匯款資訊＋簽核歷程表格
+- Demo 模式 PDF 隔離目錄：`backend/_demo_contractor_voucher_pdf_archive`
+
+**開票申請憑據**（案件管理案件資訊 tab／款項明細，`invoice_vouchers`）：
+
+```
+草稿 → 待審核 → 簽核中 → 已核准（定稿，無額外財務結案節點）
+```
+
+- **scope='amount'（自訂金額）或 scope='items'（自訂品項+數量）**（2026-08-20 重新設計，取代原本只能挑既有款項期別的 `single`/`all` 模式）：使用者反映很多案件是「先開發票才能收款」，需要能自訂任意金額或自訂品項+數量申請，不受限於報價單既有的款項排程分期
+- **剩餘可申請額度追蹤，防止重複/超額請款**：`GET /invoice-vouchers/remaining?quote_no=` 即時計算「合約總額 - 這張報價單所有既有 invoice_vouchers 的 `amount` 加總（**含草稿**，草稿就鎖額度，2026-08-20 使用者明確選擇，避免同時建立造成超額，見 `routers/invoice_vouchers.py _quote_remaining()`）」= 剩餘可申請金額；`scope='items'` 額外逐品項追蹤已申請數量／剩餘數量（同樣含草稿）。建立時後端會二次驗證（金額超過剩餘 409、品項數量超過剩餘 409），不只是前端擋
+- `amount`（DB v47 新增的真實 SQL 欄位）是唯一權威金額數字，不論哪種 scope 都會寫入，`_quote_remaining()` 用 `SUM(amount)` 直接算，不必解析全部 snapshot_json
+- 建立當下把客戶名稱/統編/案件名稱**全部快照**進 `snapshot_json`；`scope='items'` 時額外快照 `selectedItems`（實際要開的品項+數量+金額，金額可由使用者自行調整，不強制等於數量×單價）
+- **報價單品項參考**（`scope='amount'` 時顯示，`scope='items'` 時因為 `selectedItems` 本身就是實際品項不重複顯示）：`snapshot_json.quoteItems` 快照報價單 `items[]`，**只帶客戶看得到的欄位**（description/brand/qty/unit/unitPrice/amount/notes），刻意排除 `cost`/`margin`/`unitPriceOverride` 等內部機密欄位，避免成本/毛利外流到這份財務單位使用的文件；PDF 對應顯示「三、申請品項明細」（items 模式）或「三、申請金額」+「四、開票品項參考」（amount 模式）
+- 獨立簽核設定：`system_settings.invoice_voucher_approval_flow`（`invoice-voucher-approval-settings.html`，superadmin）
+- 全部簽核完成 → 狀態 `已核准`，背景觸發 PDF 存檔（`pdf_gen.py _generate_invoice_voucher_pdf`）
+- Demo 模式 PDF 隔離目錄：`backend/_demo_invoice_voucher_pdf_archive`
+
+**共同點**：兩者的簽核 tiers 邏輯各自獨立實作（未與出貨單共用 helper，刻意選擇避免共用抽象碰壞既有正式功能）；PDF 預覽（`GET .../pdf-download`）任何狀態皆可看、未核准帶浮水印警告橫幅；下載才計入 `export_count`/`export_log`（`POST .../export`）；刪除僅限草稿狀態；`audit-log.html`／`users.html` 通知偏好已比照出貨單補齊對應項目；跟報價單一起整合進統一簽核佇列頁 `approval-queue.html`（2026-08-20j，見 §12）；`approve`/`reject` 端點不限定 admin/superadmin 角色才能操作，改成純粹依「是否為當層簽核人員」判斷（2026-08-20k 修正，比照報價單原本就有的做法）。**簽核逾期催辦**（2026-08-21b，見 §12）：三種文件共用同一套規則，卡在簽核柱列超過工作日 1/3/5 天分級寄信催辦（1/3 天各一次，3 天起同步通知 superadmin，5 天以上每個工作日重複寄），`routers/daily_tasks.py _check_approval_reminders()`，掛在既有每日 08:00 排程裡。
+
 ---
 
 ## §6 · Sidebar 結構
@@ -781,6 +853,35 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
 - 前端 `frontend/pages/access-guide.html`：以交換器選型導覽為範本（依情境查看／對照矩陣總覽／規格比較／管理後台 CRUD 全數沿用）
 - 所有分類都需要一台執行 UniFi Access App 的 UniFi OS Console 才能運作，`READER` 分類的產品不能單獨運作，需搭配 `MULTI_DOOR_HUB` 才能控制門鎖，詳見 `ACCESS-GUIDE-CONTENT.md` §1
 
+### §7.11 · 承攬商匯款申請／開票申請憑據（DB v45/v46，見 §5.9，2026-08-20）
+
+| Method | Path | 說明 |
+|--------|------|------|
+| GET | /contractor-vouchers?quote_no= | 依案件列出承攬商匯款申請摘要（需登入，不含 snapshot） |
+| GET | /contractor-vouchers/{voucher_no} | 完整明細（含 snapshot/approval/paid_log/export_log） |
+| POST | /contractor-vouchers | `{dispatch_id}` 建立草稿（admin+）；僅 `completed` 派發且尚無憑證可建立；`voucher_no` 由 `next_entity_code(...,'PV',code_col='voucher_no')` 產生 |
+| DELETE | /contractor-vouchers/{voucher_no} | 刪除（admin+；非草稿 409） |
+| POST | /contractor-vouchers/{voucher_no}/submit | 送出審核（admin+） |
+| POST | /contractor-vouchers/{voucher_no}/approve | 簽核（當層簽核人依序；無流程時僅 superadmin） |
+| POST | /contractor-vouchers/{voucher_no}/reject | 退回草稿 `{note?}` |
+| POST | /contractor-vouchers/{voucher_no}/revoke-approval | 撤銷已核准 `{note?}`；已匯款不可撤銷 |
+| GET | /contractor-vouchers/{voucher_no}/pdf-download | Edge PDF（不記錄匯出） |
+| POST | /contractor-vouchers/{voucher_no}/export | 記錄匯出人/時間/次數 |
+| POST | /contractor-vouchers/{voucher_no}/paid-toggle | `{action:'pay'|'unpay', note?}`；僅已核准可標記，獨立於 status |
+| GET/PUT | /contractor-vouchers/settings/approval-flow | 專屬簽核流程設定（PUT 限 superadmin） |
+| GET | /invoice-vouchers?quote_no= | 依案件列出開票申請憑據摘要 |
+| GET | /invoice-vouchers/remaining?quote_no= | **建立申請前查剩餘額度**（含合約總額/已申請/剩餘金額＋各報價品項的已申請/剩餘數量）；⚠️ 註冊順序必須在 `/{voucher_no}` 之前，否則會被當成 voucher_no 吃掉 |
+| GET | /invoice-vouchers/{voucher_no} | 完整明細（含 snapshot/approval/export_log） |
+| POST | /invoice-vouchers | `{quote_no, scope:'amount'\|'items', amount?, items?:[{itemId,qty,amount}]}` 建立草稿（admin+，2026-08-20 重新設計）；金額或選取品項超過剩餘可申請額度會 409；`voucher_no` 由 `next_entity_code(...,'IV',code_col='voucher_no')` 產生 |
+| DELETE | /invoice-vouchers/{voucher_no} | 刪除（admin+；非草稿 409；刪除即釋放其佔用的額度，因為剩餘額度是即時從既有列加總算出） |
+| POST | /invoice-vouchers/{voucher_no}/submit | 送出審核（admin+） |
+| POST | /invoice-vouchers/{voucher_no}/approve | 簽核（同上規則） |
+| POST | /invoice-vouchers/{voucher_no}/reject | 退回草稿 `{note?}` |
+| POST | /invoice-vouchers/{voucher_no}/revoke-approval | 撤銷已核准 `{note?}` |
+| GET | /invoice-vouchers/{voucher_no}/pdf-download | Edge PDF（不記錄匯出） |
+| POST | /invoice-vouchers/{voucher_no}/export | 記錄匯出人/時間/次數 |
+| GET/PUT | /invoice-vouchers/settings/approval-flow | 專屬簽核流程設定（PUT 限 superadmin） |
+
 ---
 
 ## §8 · 備份與還原
@@ -876,12 +977,387 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 | ✅ | ~~文件拆 `CHANGELOG.md` 與本速查分離~~（已完成，見根目錄 `CHANGELOG.md`） |
 | ✅ | ~~Git Flow 分支規則~~（`develop` 分支 + `GITFLOW.md` 規範已建立） |
 | 低 | SQLite → PostgreSQL（資料量 > 1 GB 或同時連線數 > 5 時評估） |
+| ✅ | ~~簽核流程尚未整合處/部門組織架構~~（四個 approval-settings 頁面已支援「部門主管自動簽核」層，見 §12 2026-08-22g） |
+| ✅ | ~~通知路由只接了「工作事項逾期未完成」一個事件~~（已擴充到案件執行進度／專案到期兩個事件，`case_stage_deadline_manager`／`project_deadline_manager`，見 §12 2026-08-22k）；報表/儀表板依部門篩選仍只涵蓋 `reports.py`／`dashboard.py`（含新增的 `projectSummary`），activity-feed 仍只有「案件留言板」區塊套用篩選 |
+| 🟡 | 組織架構目前只有二層（處→部門），使用者僅能透過部門間接歸屬於處，不支援「只屬於某處、不屬於任何部門」的直接指派 |
+| ✅ | ~~專案管理「確認事項」兩階段簽核尚未接上 `helpers/tiered_approval.py` 的動態解析~~（已新增部門主管/處主管動態解析為額外路徑，`project_approve_eng`/`project_approve_biz` 模組權限完全保留，見 §12 2026-08-23d） |
+| 🟡 | **caseRecord.stages 正規化進行中（目前完成①②③a）**：①`case_stages`/`case_stage_visits` 兩張表已建立並回填既有資料（見 §12 2026-08-23h）②完整 CRUD 端點已新增（見 §12 2026-08-23i）③a 新舊兩條寫入路徑現在**雙向同步**——Phase 2 那 10 個新端點寫入後會同步回 `caseRecord.stages` JSON（`_sync_stages_to_json`），現有的整包存檔端點 `update_case_record()` 收到前端送來的 `stages` 也會同步重建回 `case_stages` 表（`_sync_json_stages_to_table`，見 §12 2026-08-23j）。**使用者現在透過既有介面編輯階段仍然正常運作、不受影響**，只是現在額外也會同步進新表；四個既有讀取點（`list_quotations`/`stage_board`/`dashboard.py`/`daily_tasks.py`）維持不用改。剩餘工作：③b 前端 `case-management.js`（~18 個函式）／`case-management.html` 真正改呼叫新端點取代目前的整包存檔模式（風險最高的一步，動到即時編輯體驗）④修正 `quotation-form.html` 落差（`ensureCaseRecord()` 預設階段模板少欄位，現在已有雙向同步保護不會資料損毀，但模板本身仍需修正）⑤讀取點改查新表當效能優化（非必要，已非正確性問題）。每階段各自規劃/驗證/上線，不會一次做完 |
+| ✅ | ~~案件執行進度沒有跨案的時間軸或看板視圖~~（新增 `case-stage-board.html`：看板五欄＋跨案時間軸，見 §12 2026-08-23c）；專案時程跨專案視覺化仍未做，`dashboard.py` 目前只有依狀態分組的專案彙總卡片（2026-08-22k） |
 
 ---
 
 ## §12 · 變更摘要（最新兩版）
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
+
+### 2026-08-23g — 甘特圖字體/背景對比度修正（案件執行看板＋案件管理頁時間軸）
+
+- **背景**：使用者回饋甘特圖「字體跟背景要有區隔性」。追查發現根因：frappe-gantt 內建的「進度」覆蓋層（`bar-progress`）原本用淺靛色 `#818CF8`，我們的階段進度只有 0% 或 100% 兩種值（沒有真的百分比追蹤），代表**所有已完成的階段／全部的生命週期里程碑**（progress 固定 100%）長條幾乎整條都被這個淺色覆蓋層蓋住，白色文字疊在淺靛色上對比度很差；另外「未指派」長條的灰色 `#9CA3AF` 對白字對比度也偏弱。
+- **修正（兩個頁面共用同一套 CSS 手法，一併修正，避免視覺不一致）**：
+  - `bar-progress` 改成 `rgba(0,0,0,.18)`（半透明黑色疊加，不管底色是哪一種都會自然變深，不用針對每種顏色分別調整，對比度自然變好）。
+  - 移除 `stage-done { opacity:.5 }` 整條規則——原本用降低整條長條透明度來表示「已完成」，但這樣連文字視覺重量都被削弱；現在改成完全依賴上面 progress-覆蓋層變深的效果來表示「已完成」，文字保持滿版不透明。
+  - `stage-unassigned`（未指派）灰階從 `#9CA3AF` 加深到 `#64748B`，白字對比度從約 2.3:1 提升到約 4.6:1（達到 WCAG AA 標準）。
+  - `case-stage-board.html` 專屬：`stage-milestone`（業務開發/報價單成立/案件成立里程碑）原本是淺灰 `#94A3B8` 疊加 75% 透明度（兩層變淺疊加，對比度最差），改成實心深灰 `#475569`（不降透明度）＋深色外框 `#1E293B`，跟其餘 8 色負責人配色明顯區分，白字對比度約 7.5:1。
+- **驗證**：純前端 CSS 變更，不需要 `py_compile`；只改動 `<style>` 區塊內的顏色值與刪除一條規則，未動任何 HTML/Alpine 樣板，結構性風險低；`case-stage-board.html` 括號/`<template>`/`<div>` 標籤配對複查維持平衡（63/63、145/145、23/23、7/7、44/44，跟上一輪一致，因為只動了顏色值沒動結構）。
+
+### 2026-08-23q — 案件管理視覺化改版：摘要總覽卡片＋看板檢視＋卡片層級優化
+
+- **背景**：使用者提出案件管理與業務開發「思考有更視覺化模板的展現方式」，先用 `artifact-design` skill 做了自包含 HTML 設計稿（兩頁改前改後對照）過稿，確認方向後分兩輪分別實作，這輪是案件管理。
+- **摘要總覽卡片**：`.cm-list__head` 新增 2 欄大數字卡片（沿用 `case-stage-board.html` 既有的 `.board-summary` 視覺語彙），顯示總案件數／進行中／已逾期階段／待精算。「已逾期階段」是全新指標，重用既有的 `GET /api/quotations/stage-board`（`stage_board()` 早就回傳 `overdue` 布林值），新增 `loadStageBoardSummary()` 抓一次，**沒有新增任何後端端點**。
+- **看板檢視**：清單／看板可切換（`caseViewMode`）。原本設計稿是橫向三欄 kanban，但案件管理的側欄只有 300px 寬，橫向三欄放不下——落地時調整為「依 待精算/進行中/已結案 垂直分組堆疊」，卡片沿用既有 `.cm-card` 樣式，點擊行為跟清單模式完全一致，搜尋/「只看新動態」在看板模式下一樣有效。分類邏輯：`settle_status` 是跟 `deal_tag` 獨立的另一個軸（一個案件可能同時是「已成案」又「待精算」），看板需要互斥分欄，所以待精算優先分類，其餘才依 deal_tag 分。
+- **卡片層級優化**：清單卡片 `.cm-card__customer` 放大加粗（12px/500 → 13px/600）、`.cm-card__amount` 加深顏色強化為主要資訊（原本金額字級跟日期幾乎沒區隔）、`.cm-card__date` 縮小降階為次要資訊。案件詳情頁的合約資訊/收款管理區塊複查後發現**已經**有良好的分區（`.cm-section-title` 分組標題、`.pay-kpi` 卡片化），不需要重做，避免不必要的改動風險。
+- **驗證**：純前端改動，`<template>`/`<div>` 括號配對複查平衡（114/114、432/432）；`case-management.js` 括號配對平衡；用正式機真實資料直接呼叫 `stage_board()`/`list_quotations()` 驗證摘要卡片數字計算邏輯正確（總案件數 13、進行中 5、待精算 2、目前無逾期階段——皆合理）。
+
+### 2026-08-23p — ⚠️ 緊急修正：第五階段上線後 /api/quotations 500（COUNT 查詢字串切割 bug）
+
+- **背景**：第五階段（2026-08-23o）重啟上線後，使用者立刻回報「案件管理無法顯示案件」。查 `logs/server.log` 看到 `GET /api/quotations` 500，`sqlite3.OperationalError: no such column: done`。
+- **根因**：`list_quotations()` 原本用字串搜尋從完整 SQL 裡「切」出 WHERE 片段給 COUNT 查詢複用（`sql[sql.find(" AND"):sql.find(" ORDER")]`）——這個寫法預設 SELECT 子句裡不會出現 `" AND"`/`" ORDER"` 這兩段文字。第五階段新增的相關子查詢（`current_stage`）自己就帶了 `AND done=0` 和 `ORDER BY sort_order`，字串搜尋直接切到子查詢內部，COUNT 查詢因此組出一個對 `quotations` 表（沒有 `done` 欄位）查詢卻帶了 `done` 條件的錯誤 SQL，整支 API 500，`quotations.html`／`case-management.html` 的案件清單都靠這支 API，直接全部看不到資料。
+- **修正**：`where_sql` 改成從一開始就獨立累積（不再事後用字串搜尋切），SELECT 子句裡不管加多少子查詢都不會再互相污染。
+- **驗證**：`py_compile` 通過；直接對**正式機真實資料庫**跑 `list_quotations()`（含不篩選、`deal_tag` 篩選兩種情境）確認不再噴錯，`total=25`／篩選後 `total=13`，跟已知案件數吻合；`current_stage` 逐案比對 13 案全部正確。
+- 這個 bug 從第五階段重啟（14:32）到這輪修正重啟之間短暫造成 `/api/quotations` 全面 500，已儘速定位修正並重啟排除。
+
+### 2026-08-23o — caseRecord.stages 正規化第五階段：4 個讀取點改查 case_stages 表（純效能/架構優化）
+
+- **背景**：Phase 3~4 全部上線並經使用者實測正常，且確認過各項即時存檔備份功能（`_backup_quotation` 即時備份、每日/週備份排程）都正常後，進入原訂第五階段。這輪**不是修 bug**——`case_stages` 表跟 `caseRecord.stages` JSON 的一致性已經被 3a/3b/v52/第四階段這幾輪的雙向同步橋樑完全保證，四個既有讀取點就算繼續讀 JSON 也不會有正確性問題。這輪純粹是把「撈整包 JSON 再用 Python 迴圈解析/過濾/聚合」換成「SQL 層直接查表」，減少不必要的 JSON parse 與 Python 迴圈。
+- **`routers/quotations.py::list_quotations()`**：`current_stage`（quotations.html 列表頁的階段徽章）原本是撈 `stages_json` 整欄再 Python 迴圈找第一個未完成階段，改成相關子查詢 `(SELECT label FROM case_stages WHERE quote_no=... AND done=0 ORDER BY sort_order LIMIT 1)`，SQL 層直接算好。
+- **`routers/quotations.py::stage_board()`**（案件執行看板）：原本撈所有已成案案件的整包 stages JSON，Python 迴圈攤平成「案件×階段」列表，改成直接 `JOIN case_stages`，JOIN 天生就是攤平好的結構，完全不用 Python 解析。`assignedTo`/`dependsOn` 仍是 JSON text 欄位，讀出來後一樣要 `json.loads()`（這兩個欄位本來就沒有再往下正規化，見第一階段設計）。
+- **`routers/dashboard.py::list_sales_orders()`**（`/api/sales-orders`）：`progressPct`/`stagesCount` 原本靠 Python 迴圈數 `stages`陣列，改用 `COUNT(*)`／`COUNT(...WHERE done=1)` 相關子查詢；`payment.items` 的計算仍需要整包 `caseRecord` JSON（跟 stages 無關，不在這次範圍，維持原樣）。
+- **`routers/daily_tasks.py::_check_case_stage_deadline()`**（每日到期提醒排程）：原本撈全部已成案案件的整包 stages JSON，Python 雙層迴圈（3天前/今天 × 每個案件的每個階段）逐一比對到期日，改成 `JOIN case_stages WHERE done=0 AND due_date IN (三天後日期, 今天日期)`，SQL 層直接篩出真正要通知的列，只需要單層迴圈處理通知邏輯。guard_key 去重機制、部門主管額外通知路徑等既有邏輯完全不變。
+- **驗證**：`py_compile` 通過；`import main`（對**正式機真實資料庫**）驗證通過，且過程中 `_check_case_stage_deadline()` 的新查詢已經對正式機真實資料成功執行一次（log 顯示 `Case stage deadline check complete`，無錯誤——guard_key 去重機制保證這不會發出真正重複的通知，這次驗證是安全的）。額外用正式機 db 唯讀複本寫比對腳本，把三個讀取端點（`list_quotations`／`stage_board`／`/api/sales-orders`）改動後的實際輸出，跟直接查 `case_stages` 表獨立算出的預期值逐項比對（`current_stage` 13 案全過、`stage_board` 20 個 item 逐欄位+`caseLifecycle` key 集合全過、`sales-orders` 13 案 progressPct/stagesCount 全過）；額外重跑 Phase 2 全部 22 組、Phase 3a 全部 11 組、create/update quotation 4 組情境，全數通過無回歸。
+- 這輪不需要 DB migration（沒有 schema 變動，純查詢邏輯調整），回傳給前端的 JSON 格式完全不變，前端不用動。
+
+### 2026-08-23n — caseRecord.stages 正規化第四階段：修 quotation-form.html 舊版階段模板（消除重複存檔沖銷風險）
+
+- **背景**：3a/3b/收尾修正／v52 migration 都已上線並實測正常後，使用者要求先確認串接都在正式代碼、整理舊有無效代碼，再繼續下一階段。複查過程中把 `quotations.py` 一段過時註解更新為現況（見上一輪收尾），接著進入原訂第四階段——修 `quotation-form.html::ensureCaseRecord()` 那份跟 `case-management.js` 不一致、少欄位的舊版預設階段模板（id 寫死 1-5、缺 `startDate`/`dueDate`/`assignedTo`/`dependsOn`/`visits`）。
+- **這輪修正的不是「會不會 404」（那個已經被 3a/3b 收尾的同步橋樑蓋住了），而是一個仍然存在的資料沖銷風險**：`quotation-form.html` 送出這份假 id（1-5）模板存檔後，同步橋樑會把它們插入 `case_stages` 表並拿到全新的真實 id——但 `quotation-form.html` 從未把這個真實 id 讀回自己的本地狀態。如果使用者在這個頁面之後又存了第二次（例如改其他欄位觸發 `saveDraft()`），本地 `q.caseRecord.stages` 送出的還是原本那份假 id 1-5，id-preserving 合併邏輯找不到匹配的既有列，會把這 5 個「預設階段」**再當成新階段插入一次**，同時把上一輪產生的真實列（連同期間案件管理頁面已經記錄的勾選完成、拜訪紀錄等執行進度）判定為「陣列裡消失了」而整批 DELETE——等於使用者在案件管理頁面的操作被無聲沖銷。
+- **修正**：`ensureCaseRecord()` 不再本地寫死 5 個假 id 階段物件，改成 `stages: []`；新增 `async _seedDefaultStagesIfEmpty()`，依序呼叫 Phase 2 的 `POST .../stages` 端點建立 5 個預設階段（跟 `case-management.js::_seedDefaultStagesIfEmpty()` 用同一組標籤「訂單確認/叫料出貨/施工安裝/客戶驗收/尾款結清」、同一支端點——順便修掉兩份模板原本第二個標籤不一致的問題，舊版是「叫料到貨」），一次到位拿到真實 id，之後無論存幾次都不會再變動。兩個呼叫點（`onDealTagChange()` 標記已成案時、`init()` 載入既有已成案記錄時）都加上 `await`。
+- **驗證**：`py_compile` 不適用（純前端）；HTML/JS 括號、`<template>`、`<div>` 配對逐一複查全部平衡；用正式機 db 的**唯讀複本**模擬真實情境跑過一次——建立階段（拿到真實 id）→ 整包存檔一次（確認 id 不變）→ 期間模擬使用者在案件管理頁面勾選完成＋新增拜訪紀錄 → 再整包存檔一次改別的欄位（確認 id 依然不變、勾選完成與拜訪紀錄都完整保留、沒有被沖銷）；額外重跑 Phase 2 全部 22 組、Phase 3a 全部 11 組、create/update quotation 4 組情境，全數通過無回歸。
+- 這是 `quotation-form.html` 第一次被同步進本回推資料夾（先前幾輪都沒動到這個檔案）。
+
+### 2026-08-23m — ⚠️ 緊急資料修正：v52 migration，補回 v51 backfill 遺留的 data_json id 落差（使用者實測回報「執行進度儲存失敗」）
+
+- **背景**：上一輪（2026-08-23l）修好「3b 上線後 id 會被無聲churn」的問題並重啟後，請使用者實測案件管理的執行進度分頁，使用者立刻回報「執行進度儲存失敗」。查 `logs/server.log`（提醒：正式機真正在寫的 log 是 `backend/logs/server.log`，不是 `backend/server.log`——後者是舊檔案，這次順便發現先前幾輪重啟驗證看的其實是這個沒在更新的舊檔，之後驗證要記得看對路徑）看到 `PUT /api/quotations/MQ-202607-025/stages/3` 404。
+- **根因**：跟上一輪是同一個資料落差的另一面，但成因不同——v51 的 backfill migration（2026-08-23h）當時**刻意**只把 `caseRecord.stages` 寫進新的 `case_stages` 表，沒有回頭修正 `quotations.data_json.caseRecord.stages` 裡的舊 id（設計文件寫得很清楚：「這輪刻意不接進任何現有讀寫路徑」），這在 v51 上線當下是對的，因為那時候前端還沒有任何地方會引用這些 id。但 3b 上線後，`case-management.html` 讀案件資料是讀 `data_json`（`GET /api/quotations/{quote_no}`），案件裡的 `stage.id` 就是 backfill 之前的舊值（例如 1、2、3……），而 `case_stages` 表裡真正的關聯式 id 早就是完全不同的數字（例如 10、11、12……）——**只要這個案件從 v51 backfill 之後到現在，完全沒有透過任何一個 granular 端點被存過一次，data_json 裡的 id 就永遠不會自我修正**。查了正式機全部 13 個有 `case_stages` 資料的案件，**12 個中獎**，只有 1 個（因為使用者剛好在 3b 上線後操作過拖曳排序）已經自我修正。
+- **修正**：新增 `_m052_fix_stage_json_ids`（DB migration v52，`db.py`），把 `case_stages`／`case_stage_visits` 目前的內容重新鏡射回每個受影響 quote_no 的 `data_json.caseRecord.stages`——邏輯照搬 `routers/quotations.py::_sync_stages_to_json()`（`db.py` 不 import router，手動照抄一份保持邏輯一致）。只動 `caseRecord.stages` 這個欄位，`updated_at` 刻意不更新（這是後端資料一致性修正，不是使用者操作，不該讓任何人手上開著的頁面因為 `updated_at` 被動了而誤觸樂觀鎖 409）。
+- **驗證**：`py_compile` 通過；用正式機 db 的**唯讀複本**跑過一次，確認 migration 前 13 個案件裡 12 個 id 不符、跑完 migration 後 **0 個不符**，且逐欄位（label/done/doneAt）都正確反映表內現值；沒有 `case_stages` 資料的案件（一般報價單）不受影響。
+- **上線前已備份**：`backend/db_backups/motrix_erp_pre_v52_stage_id_fix_20260823_140456.db`（正式機本機）。
+- **這個修正只需要重啟一次即可全部套用**——`db.init_db()` 在每次伺服器啟動時自動偵測 schema version 落差並套用，不需要額外手動跑腳本，兩台機器往後同步這份 `db.py` 都會自動修好各自的資料。
+
+### 2026-08-23l — ⚠️ 緊急修正：3b 上線後的階段 id 連鎖 404 回歸
+
+- **背景**：3b（2026-08-23k）上線並經使用者實測「正常」後，繼續往下一階段（`quotation-form.html` 舊版階段模板）複查時，回頭重新檢視 3a 的橋接邏輯，赫然發現一個 3b 上線後才會真正觸發、但已經**在正式機上線並可能已被真實流量踩到**的嚴重回歸。
+- **根因**：`_sync_json_stages_to_table()`（3a 新增）每次都是「整批 DELETE 這個 quote_no 底下全部 case_stages 再重新 INSERT」，`id` 欄位是 `AUTOINCREMENT`，每次重建都會拿到全新的 id。這個邏輯在 3a 上線時是安全的——因為當時前端還沒有任何地方會引用 `case_stages.id`。但 **3b 上線後，`case-management.js` 的階段操作全部直接用 `st.id` 打 granular 端點**（例如 `PUT /api/quotations/{quote_no}/stages/{id}`），而 `saveCaseRecord()` 仍然是**整包**送出 `caseRecord`（含 `stages`）——即使這次使用者只改了 materials/payment 等完全無關的欄位。只要這個整包存檔一送出，舊版橋接邏輯就會把使用者手上正在用的 `st.id` 全部作廢換成新 id，且沒有把新 id 回寫進 `data_json`，導致緊接著點任何一個階段操作（勾選完成、新增拜訪紀錄……）都會 404。用 scratch DB 重現：`create_quotation` 建立階段後緊接著 `GET` 看到的**居然還是 client 送出的舊 id**（不是資料庫真正的 id）；`update_case_record` 存一次完全無關的 `materials` 欄位，就讓原本能正常操作的階段 id 直接從表裡消失。
+- **修正（雙管齊下）**：
+  1. **`_sync_json_stages_to_table()` 改成 id-preserving 差異合併**：傳入陣列裡 `id` 已存在於這個 quote_no 現有 `case_stages` 的，改成原地 UPDATE（id 不變；`dependsOn`/`visits` 刻意不動，因為這兩塊 3b 之後只透過各自的專用端點異動，整包存檔送來的可能是還沒更新的舊值，覆寫反而有清空風險）；不存在的才視為新階段 INSERT，並沿用原本的 `dependsOn` remap／`visits` 建立邏輯；現有列若這次陣列裡完全沒出現，視為使用者刪除，一併 DELETE（`ON DELETE CASCADE` 清掉其 visits）——整批重建的「刪除已移除項目」語意維持不變，只是不再無謂churn沒變動的項目。
+  2. **`_sync_stages_to_json()` 加上可選 `updated_at` 參數並回傳實際寫入的時間戳**：`update_case_record()`／`create_quotation()`／`update_quotation()` 三處呼叫完 `_sync_json_stages_to_table()` 後，緊接著呼叫這支把（可能新產生的）真實 id 立刻寫回 `data_json`，沿用同一個 `now`，不產生第二個時間戳，樂觀鎖不受影響。
+  3. **`create_quotation()` 的「直接送審」分支**額外修正：這個分支會在第一次 commit 之後用另一個連線把 `approval` 欄位寫回 `data_json`，原本是直接 `json.dumps(q, ...)` 整包覆寫——這會把剛修正好的 `caseRecord.stages` 又蓋回 client 送來的舊 id。改成讀回資料庫目前的 `data_json`，只 patch `approval` 這個欄位，其餘（含剛同步好的 stages）維持不動。
+- **驗證**：`py_compile` 通過；用 scratch DB 精準重現並確認修正後的行為——create 之後 `GET` 看到的 id 跟表一致、對無關欄位（materials）整包存檔後階段 id **不再改變**、用該 id 呼叫 granular 端點成功（不再 404）；重跑 Phase 2 全部 22 組情境、Phase 3a 全部 11 組情境、本輪稍早新增的 create/update quotation 4 組情境，**全數通過、無回歸**。
+- **影響範圍**：只要案件在 3b 上線後被「先動過任一階段操作，之後又存了一次其他 caseRecord 欄位（materials/payment/裝置序號等）」的案件，都可能已經踩到這個問題。修正上線後問題自動排除，**不需要**額外修資料——舊資料的 `case_stages`／`data_json` 即使目前 id 不一致，下一次任何一次存檔（整包或 granular）都會用新邏輯重新對齊。
+
+### 2026-08-23k — caseRecord.stages 正規化第三階段之二（3b）：前端真正切換到新端點＋補上整包存檔缺口
+
+- **背景**：延續 3a（見 2026-08-23j）的雙向同步橋接，這輪是五階段中風險最高的一步——把 `case-management.js`/`case-management.html` 對階段的所有操作，從「本地改陣列元素 → `setDirty()` debounce 1.5 秒整包 PATCH」換成**單一動作即時呼叫** Phase 2 的 10 個 granular 端點。
+- **`case-management.js` 改動**：`ensureCaseRecord()` 移除本地寫死 5 個帶假 id 的預設階段物件（切到新端點後假 id 對伺服器不存在，操作會 404），改成 `stages: []`；新增 `async _seedDefaultStagesIfEmpty()`，`selectCase()` 載入完成後若階段陣列是空的，依序 `POST .../stages` 建立 5 個預設階段（訂單確認/叫料出貨/施工安裝/客戶驗收/尾款結清），取得真實 id。`addStage`/`removeStage`/`addStageAssignee`/`removeStageAssignee`/`toggleStageDependency`/`addVisit`/`removeVisit`/`dragEnd` 全部改成 `async`，直接呼叫對應的 Phase 2 端點，成功後用伺服器回應 `Object.assign` 覆蓋本地物件（樂觀 UI＋伺服器覆蓋，跟這個檔案既有的錯誤處理慣例一致，失敗用 `alert()`）；新增通用 `async updateStage(st, fields)`／`async updateVisit(st, visit)` 供欄位更新共用。`wouldCreateCycle()` 前端預檢保留不動（純讀取快速判斷，伺服器端仍是最終權威）。甘特圖拖曳長條調日期（`on_date_change`）改呼叫 `updateStage()`。
+- **`case-management.html` 改動**：模板結構完全不變，只換事件綁定。**刻意的 UX 調整**：`label`/`doneAt`/`startDate`/`dueDate`／拜訪紀錄欄位全部從 `@input="setDirty()"` 改成 `@change="updateStage(...)"`／`updateVisit(...)`，即打字過程不送出、失焦或 Enter 才送出一次，避免每個按鍵都打一次 API（原本 `@input` + debounce 是為了整包存檔設計的，單一欄位即時送出不需要也不該比照）。`done` checkbox 同樣改 `@change` 呼叫 `updateStage`。其餘 `@click` 綁定（`addStage`/`removeStage`/assignee/依賴/拜訪紀錄的新增刪除）文字不變，只是背後函式實作換了。
+- **⚠️ 收尾複查時額外發現並修正的缺口**：`quotation-form.html::apiSave()` 存檔走的是 `POST /api/quotations`／`PUT /api/quotations/{quote_no}`（`create_quotation()`/`update_quotation()`，`routers/quotations.py`），這兩支端點是跟 `update_case_record()` **完全分開**的整包存檔路徑，自己組 SQL 直接寫 `data_json`，3a 補的 `_sync_json_stages_to_table()` 橋接完全沒接到這裡——代表 `quotation-form.html` 自己那份欄位較不完整的 `ensureCaseRecord()` 若送出階段資料，會被寫進 JSON 但漏掉 `case_stages` 表，之後在案件管理頁用這輪剛切換的新端點操作這些階段就會 404。修法：在兩支端點 SQL commit 前比照 `update_case_record()` 的判斷式（`caseRecord.stages` 是陣列就同步，同一個 conn/交易內一起 commit）插入 `_sync_json_stages_to_table()` 呼叫。至此所有會寫入 `caseRecord.stages` 的路徑（`update_case_record`／`create_quotation`／`update_quotation`／Phase 2 十個端點）全部由同一套雙向同步邏輯覆蓋。
+- **驗證**：`py_compile` 通過；`case-management.js`/`.html` 括號/`<template>`/`<div>` 配對逐一複查全部平衡（無 Node.js 環境，用 Python 字元計數＋逐函式人工複查取代自動化測試）；scratchpad db 複本驗證新缺口修正共 4 組情境全過——create 帶階段＋依賴＋拜訪紀錄正確同步進新表且 id remap 正確、update 修改既有階段並新增帶 assignee 的階段正確同步、update 完全不帶 `caseRecord` key 時表內資料不受影響、Phase 2 端點原有的正向同步（表→JSON）無回歸。**已知限制**：瀏覽器工具無法連到本機測試伺服器（環境限制，非本次改動導致），無法自動化驗證即時互動 UX，這是本 session 少數幾個需要使用者實際操作驗證的項目——**重啟後請至案件管理頁面實際操作一次執行進度分頁**（勾選完成、改日期、拖曳排序、新增/刪除階段與拜訪紀錄），確認符合預期。
+
+### 2026-08-23j — caseRecord.stages 正規化第三階段之一（3a）：後端 JSON 同步橋接
+
+- **背景**：規劃第三階段（前端切換到新 CRUD 端點）時發現原本五階段路線圖的排序有風險——`list_quotations()`（`current_stage` 徽章）／`stage_board()`（案件執行看板）／`dashboard.py`（`progress_pct`）／`daily_tasks.py`（到期通知）這四個既有讀取點都還在讀 `caseRecord.stages` JSON；如果前端先切到新表卻同時停用 JSON 寫入，這四個地方會立刻讀到過期資料、悄悄壞掉。因此把第三階段拆成兩個子輪：**3a（這輪，純後端，風險低）先讓 JSON 在過渡期間自動保持最新**，3b（前端真正切換）留到下一輪，屆時這四個讀取點完全不用改就能繼續運作。
+- **⚠️ 過程中發現並修正一個差點誤植的設計錯誤**：一開始的做法是讓 `update_case_record()` 忽略前端送來的 `stages`、一律保留伺服器現有值。但仔細追查後發現這樣做會有**真實的資料遺失風險**——因為前端還沒切換到新端點（3b 還沒開始），`case-management.js` 的整包存檔（`saveCaseRecord()` → `PATCH .../case-record`）目前**仍是使用者編輯階段唯一真正在用的管道**；如果這條路徑送來的 `stages` 被忽略，等於這輪一上線，所有透過現有介面對階段做的編輯（勾選完成、新增拜訪紀錄、調整日期…）都會被悄悄丟棄，介面上看起來存檔成功、實際上什麼都沒存到。這個問題在 restart 之前發現並修正，**沒有上線過**。
+- **正式做法：雙向同步，不是單向忽略**：
+  - **表→JSON**：新增 `_sync_stages_to_json(conn, quote_no)`（`routers/quotations.py`），從 `case_stages`/`case_stage_visits` 重建 `caseRecord.stages` JSON 陣列寫回 `data_json`，掛在 Phase 2 那 10 個變更端點的 commit 之後呼叫。確認 `save_quotation_json()`（`helpers/quotations.py`）本身不會 commit，呼叫端要自己補一次。
+  - **JSON→表**：新增 `_sync_json_stages_to_table(conn, quote_no, stages_from_json)`，邏輯照搬 `db.py` 的 Phase 1 backfill migration（先刪除這個案件現有的階段列，`ON DELETE CASCADE` 一併清掉 visits，再依陣列順序重新插入，`dependsOn` 的舊 JSON id 重新 remap）。`update_case_record()` 收到 body 裡有 `stages`（且是陣列）就呼叫這個做整批重建，讓新表也跟上；body 完全沒有 `stages` 這個 key 時才保留伺服器現有值（防禦性情境，不清空）。這樣不管使用者是透過舊的整包存檔、還是（之後 3b 上線後）新端點編輯，兩邊都會保持同步，不會有一方變成過期資料——這才是真正的「橋接」。
+  - `payment`/`devices`/`materials`/`roles` 等其他 `caseRecord` 欄位與 `quotations` 其他欄位完全不受影響，維持原樣。
+- **副作用**：這個修正讓第四階段（修 `quotation-form.html` 落差）多一層保障——就算 `quotation-form.html::apiSave()` 繼續送出它那份少欄位的舊版預設階段陣列，也會經過同一套雙向同步邏輯正確處理，不會造成資料損毀（雖然那份預設模板本身少欄位的問題還是要在第四階段修正）。
+- **驗證**：`py_compile` 通過；scratchpad db 複本 11 組情境全過，核心情境是**模擬使用者透過現有整包存檔介面真的編輯階段**（勾選完成、改日期、新增第二個階段並設定依賴、新增拜訪紀錄）——確認 JSON 正確反映使用者的編輯（不是被忽略）、`case_stages` 表也同步跟上、`dependsOn` 的舊 JSON id 正確 remap 成新的關聯式 id、`materials` 等其他欄位不受影響、沒送 `stages` 時正確保留現有值不清空；額外驗證第二階段既有 22 組情境全部仍然通過（無回歸）；額外驗證舊的 `list_quotations()`（`current_stage` 徽章，完全沒改程式碼）能正確反映透過新端點建立的階段，證實這輪橋接的核心目的達成。
+
+### 2026-08-23i — caseRecord.stages 正規化第二階段：完整 CRUD 端點
+
+- **背景**：延續第一階段（Schema＋回填，見 2026-08-23h），這輪新增對應 `case-management.js` 現有操作的完整 CRUD 端點。**還是完全不動前端**——`case-management.js`/`case-management.html`/`quotation-form.html` 都維持現狀寫 JSON，`caseRecord.stages` 仍是唯一資料來源；新端點只能透過直接呼叫 API 測試，一般使用者操作介面不會有任何變化。前端真正切換（第三階段）是風險最高的一步，留待下一輪個別規劃。
+- **新增 10 個端點（`routers/quotations.py`，都掛在 `/api/quotations/{quote_no}/stages...` 底下）**：`POST .../stages`（新增階段，對應 `addStage()`）、`PUT .../stages/{id}`（局部更新 `label`/`done`/`doneAt`/`startDate`/`dueDate`，不加任何自動邏輯例如 done=true 不自動填 doneAt，維持跟現有前端行為一致）、`DELETE .../stages/{id}`（刪除並清掉同案件其他階段 `dependsOn` 裡對它的參照，對應 `removeStage()`）、`PATCH .../stages/reorder`（依 `orderedIds` 重寫 `sort_order`，對應拖曳重排最終結果）、`POST/DELETE .../assignees`（對應 `addStageAssignee()`/`removeStageAssignee()`）、`POST .../depends-on/{candidateId}`（切換依賴，含 DFS 防環檢查，邏輯照搬前端 `wouldCreateCycle()`，400 訊息跟前端 alert 一致）、`POST/PUT/DELETE .../visits`（拜訪紀錄 CRUD，對應 `addVisit()`/`removeVisit()`）。新增共用 helper `_serialize_stage()`（統一序列化含巢狀 visits）、`_get_stage_row()`（查詢時順便確認 `stage_id` 真的屬於這個 `quote_no`，避免猜 id 跨案件竄改）、`_would_create_cycle()`。權限比照現有 `case-record` PATCH 端點——只需要登入（`_require_user`），不額外加模組權限檢查，`case_manage` 模組是前端側邊欄可見性控制的。
+- **已知的暫時性落差（設計上預期、不用處理）**：因為前端還沒切換，使用者目前仍透過 JSON 寫入，`case_stages` 表的資料只是第一階段當下的快照，會逐漸跟 JSON 內容產生落差；等第三階段前端真正切換、同時停用 JSON 寫入之前，會在切換前重新跑一次回填銜接。
+- **驗證**：`py_compile` 通過；scratchpad db 複本 22 組情境全數 PASS——新增/更新（局部欄位不互相覆蓋）/刪除階段、重新排序、指派/移除負責人（重複加入不重複）、依賴切換＋防環（故意製造循環正確 400 擋下，訊息跟前端一致）、拜訪紀錄 CRUD、刪除階段正確清掉其他階段的懸空依賴參照、**跨案件保護**（拿 A 案件的 stage_id 去操作 B 案件的更新/刪除/新增拜訪紀錄，全部正確 404，且不影響 A 案件原本資料）。
+
+### 2026-08-23h — caseRecord.stages 正規化第一階段：Schema＋資料回填（DB v51）
+
+- **背景**：延續稍早的顧問式檢視，這是最後一項當初排除的大項目。使用者確認要做「完整寫側正規化（真正取代 JSON）」。動手前先用兩個 Explore agent 徹底查過所有讀寫點，發現實際範圍比預期更大：**兩條獨立的整包物件儲存路徑**都會把整個 `caseRecord`（含 `stages`）全部重寫——`case-management.js::saveCaseRecord()`（`PATCH .../case-record`）跟 `quotation-form.html::apiSave()`（`PUT/POST /api/quotations/{quote_no}`，`caseRecord` 是整個 `this.q` 的一部分跟著送出）；**兩邊各自有一份獨立、已經畫果不一致的預設階段模板**（`quotation-form.html` 那份少了 `startDate/dueDate/assignedTo/dependsOn` 幾個欄位，屬既有 schema drift，跟這次遷移無關但一併記錄）；`case-management.js` 裡約 18 個函式＋`case-management.html` 多處 `x-model` 直接雙向綁定陣列元素欄位。這個範圍不適合一次做完，**確認分五階段執行**，這輪只做第一階段（Schema＋回填，唯讀鏡像，不動任何現有讀寫路徑），後續四階段（CRUD 端點／前端切換／修 `quotation-form.html` 落差／後端讀取點切換＋清理）留待未來個別規劃執行。
+- **`db.py` 新 migration `_m051_case_stages_normalize`（`CURRENT_VERSION` 50→51）**：新增 `case_stages`（`quote_no`/`label`/`sort_order`/`done`/`done_at`/`start_date`/`due_date`/`assigned_to`/`depends_on`，各加索引）與 `case_stage_visits`（`stage_id` FK ON DELETE CASCADE／`visit_date`/`visit_people`/`note`）兩張表。`assigned_to`／`depends_on` 刻意維持 JSON text 欄位不再往下拆——這兩個陣列通常只有 1~3 個元素、永遠整組讀寫，沒有跨階段查詢需求，當初「查詢/統計受限」的痛點是針對 `stages` 本身，繼續往下拆是過度設計。回填邏輯：逐一走訪所有 `quotations`（不限 deal_tag，含已結案歷史案件）有 `caseRecord.stages` 的列，依原陣列順序 `INSERT` 進 `case_stages`（`sort_order` = 陣列 index），記住「舊 JSON id（前端 `Date.now()` 產生）→ 新流水號 id」對照表，第二輪把每個階段的 `dependsOn` 用對照表 remap 成新 id，`visits` 逐筆插入子表。
+- **新增唯讀驗證端點 `GET /api/quotations/{quote_no}/stages`**（`routers/quotations.py`）：查 `case_stages`＋巢狀 `visits`，純粹用來核對回填資料，這次不接進任何現有頁面/流程——`update_case_record()`／`case-management.js`／`case-management.html`／`quotation-form.html`／`dashboard.py`／`daily_tasks.py`／`stage_board()`／`list_quotations()` 全部維持現狀不變，`caseRecord.stages` JSON 欄位仍是唯一的讀寫來源。
+- **驗證**：`py_compile` 通過；scratchpad db 複本直接拿正式機真實資料跑一次完整 migration——13 筆有 `caseRecord.stages` 的真實案件、共 44 個階段，逐欄位比對（`label`/`done`/`dueDate`/`assignedTo`/`visits`）跟原始 JSON **零落差**；正式資料裡沒有案件用到 `dependsOn`，額外注入一筆含三階段依賴鏈（A←B←C）的合成資料驗證 remap 邏輯正確（新 id 確實不同於舊 JSON id，依賴關係正確轉譯）；驗證 migration 冪等（重跑 `init_db` 不會重複回填）；新端點手動呼叫確認回傳結構正確。
+- **注意**：這輪上線後**功能上使用者不會看到任何變化**——新表只是背景回填出來的鏡像，還沒有任何頁面在讀它。重啟只是讓 migration 跑過一次。
+
+### 2026-08-23f — 案件執行看板跨案時間軸新增縮放（日/週/月）
+
+- **背景**：使用者回饋跨案時間軸固定用「日」視圖，案件一多、時間跨度一拉長就很難閱讀（「觀賞性很差」）。查證 frappe-gantt@0.6.1（已用於本頁與 `case-management.html` 的既有依賴）本身就支援 `change_view_mode('Day'|'Week'|'Month'|...)` 這個公開方法（已用 WebFetch 讀原始碼確認函式簽名跟合法值），不用額外套件或自己刻。
+- **`frontend/pages/case-stage-board.html`**：跨案時間軸區塊新增「日／週／月」縮放切換（沿用頁面既有的 `.view-toggle` CSS，跟看板／時間軸主切換視覺一致），預設從「日」改成「週」（案件一多，日視圖預設就會太寬，週視圖對跨案彙總更合適）；`renderGantt()` 的 `view_mode` 改吃 `this.ganttViewMode`；新增 `setGanttViewMode(mode)`，Gantt 實例已存在時直接呼叫 `change_view_mode()`（不必整個重新渲染）。
+- **未變動**：看板（Kanban）視圖、後端完全沒有異動。
+- **驗證**：純前端變更，不需要 `py_compile`；括號/`<template>`/`<div>` 標籤配對複查全部平衡（63/63、145/145、23/23、template 7/7、div 44/44）。
+
+### 2026-08-23e — 案件執行看板跨案時間軸補上「業務開發→報價單成立→案件成立」前置歷程
+
+- **背景**：使用者對剛上線的案件執行看板回饋，跨案時間軸應該完整呈現一個案件的生命週期，不是只有成案後的執行階段——要從業務開發、報價單成立、案件成立開始，之後每個進度點都要顯示。看板（Kanban）視圖不受影響，這次只動跨案時間軸。
+- **資料來源（都是既有欄位/既有 audit 紀錄，沒新建資料表）**：業務開發區間 = `dev_cases.created_at`（開始）～`updated_at`（轉換成報價單那一刻，`dev_crm.py` 轉換時會同步更新這兩者，之後這筆 dev_case 基本不再變動，足夠準確）；報價單成立 = `quotations.created_at`；案件成立 = 查 `audit_log` 裡最早一筆 `action='deal_tag.change' AND detail.to='已成案'`（`quotations.py` 每次變更 deal_tag 都會呼叫 `_audit()` 記錄，取 `MIN(at)` 避免案件狀態被改來改去時抓到錯的那一筆）。三者任一查不到就是 `null`，不強求，不影響其餘資料正常顯示。
+- **後端 `routers/quotations.py::stage_board()`**：SELECT 多加 `created_at`；新增兩個批次查詢（`dev_cases` 依 `converted_quote_no` 分組、`audit_log` 依 `target_id` 分組取 `MIN(at)`，都是一次查全部，不逐案件查避免 N+1）；回傳格式新增跟 `items` 平行的 `caseLifecycle`（依 quoteNo 索引，不重複塞進每個階段列裡）。
+- **前端 `case-stage-board.html`**：`loadStageBoard()` 多存一份 `caseLifecycle`；新增 `_lifecycleMilestones(quoteNo)`，`_ganttTasks()` 依 quoteNo 分組時在每個案件的第一筆真正階段任務之前插入最多 3 個里程碑任務（業務開發／報價單成立／案件成立，資料缺失就省略對應項目）。這三個里程碑**不**塞進既有階段的 `dependsOn` 依賴鏈（避免竄改階段本身的資料語意），純粹靠時間軸上的先後順序呈現，id 用 `quoteNo+'-milestone-dev/quote/case'` 避免碰撞；新增 CSS class `.stage-milestone`（灰階，跟現有依負責人上色的 `stage-c0~c7` 視覺上明顯區分，代表流程里程碑而非某人負責的階段）。
+- **驗證**：`py_compile` 通過；scratchpad db 複本 8 組情境全過（有對應 dev_case／報價單成立日期／`deal_tag.change` 取最早一筆 MIN 正確、都沒有對應資料時三個欄位正確為 null 且不報錯、`quoteCreatedAt` 在任何情況下都正確帶出）。前端括號/`<template>`/`<div>` 標籤配對複查全部平衡（59/59、142/142、22/22、6/6、42/42）。
+
+### 2026-08-23d — 專案確認事項簽核新增部門/處主管動態解析路徑
+
+- **背景**：延續稍早的顧問式檢視，「專案兩階段確認簽核改接 `tiered_approval.py` 動態解析」是當時明確排除、需要獨立設計討論的項目。使用者確認要做前，先查了正式機資料庫發現兩個關鍵落差，用 `AskUserQuestion` 跟使用者確認處理方式：①實際持有 `project_approve_eng`/`project_approve_biz` 權限的人幾乎全部「兩個都有」（都是 admin/superadmin），並非真的工程/業務兩種角色分開審；②正式機目前僅有的兩個真實專案都還沒設定 `department_id`（這輪案件/專案延伸剛新增的欄位，尚未回填）。**使用者選擇：新增為額外路徑，原本模組權限完全保留**（OR 邏輯），不拿掉任何人現有能力，`department_id` 未設定時行為與現況完全一致。
+- **語意對應**：專案只有一個 `department_id`，沒有天生的「工程/業務」兩種部門概念，不套用 `submitter_manager` 那種申請人鏈路，而是：第一階段（工程主管確認）→ 該專案所屬**部門**的主管（沿用 `resolve_department_manager()`）；第二階段（業務確認）→ 該部門所屬**處**的主管（沿用 `resolve_division_manager()`，由 `department_id` 先查出 `division_id`）。兩者都是唯讀查詢、不擋流程——department_id 未設定、部門/處無主管時，該路徑就是沒有新增任何人。
+- **後端 `routers/projects.py`**：新增 `_project_approver_ids(conn, department_id)` 工具函式（回傳部門主管/處主管的 user_id，皆沿用既有 `resolve_department_manager()`/`resolve_division_manager()`，不新寫解析邏輯）。`approve_action_item()` 的 stage 1/2 權限檢查各加一個 `or user['id'] == 部門主管/處主管 id` 條件；`get_project()`／`list_projects()` 都補上 `canApproveEng`/`canApproveBiz` 兩個布林欄位（模組權限 or 部門/處主管 or superadmin），讓前端不用重複解析邏輯。
+- **前端 `projects.html`**：`canApproveEng()`/`canApproveBiz()` 改成優先讀 `this.selected.canApproveEng`/`canApproveBiz`（後端已算好），保留原本模組權限判斷當 fallback。
+- **不動的部分**：不新增簽核設定頁面／system_settings key——這不是走 tiered_approval 的 tiers 機制，是直接查組織架構的唯讀附加路徑，比照 `daily_task_overdue_manager`／案件到期通知那幾輪的模式；兩個既有模組權限完全保留，使用者管理頁的權限勾選不變。
+- **驗證**：`py_compile` 通過；scratchpad db 複本 10 組情境全數 PASS（部門主管可核准 stage1、處主管可核准 stage2、無關人員仍 403、`department_id` 為空時行為與現況完全一致、部門/處都無主管時新路徑無作用、`get_project()`/`list_projects()` 的 `canApproveEng`/`canApproveBiz` 三種身份分別驗證正確）。前端括號/`<template>`/`<div>` 標籤配對複查全部平衡（217/217、382/382、64/64、58/58、136/136）。
+
+### 2026-08-23c — 新增案件執行看板：跨案看板＋時間軸視覺化
+
+- **背景**：延續稍早的顧問式檢視，「案件執行進度跨案看板／甘特圖視覺化」是當時明確排除、列為未來獨立規劃的三項之一。使用者確認要做這一項，先用 Artifact 出一版含 mock 資料的視覺提案（含稽核彙總列、看板五欄、跨案時間軸），使用者看過確認「很好」後套用。
+- **關鍵發現**：這個系統其實已經有現成積木可以直接組出這個功能——`case-management.html` 已經用 frappe-gantt@0.6.1（CDN）畫單一案件的階段時間軸（`_ganttTasks()`／`renderGantt()`／`switchToTimeline()`），負責人配色已有全域共用邏輯 `_avatarColor()`／`_GANTT_COLORS`（跟每日工作事項月曆／看板同一組色碼，同一人顏色一致）；案件階段資料（`quotations.data_json.caseRecord.stages`）本身就有 `dependsOn` 前置階段關聯，天生就是甘特圖資料。這次是延伸既有元件到跨案彙總，不是重新發明。
+- **後端**：`routers/quotations.py` 新增 `GET /api/quotations/stage-board`（唯讀），查詢邏輯照抄 `daily_tasks.py::_check_case_stage_deadline()`（`deal_tag='已成案'` 且有 `caseRecord.stages`），攤平回傳每個「案件×階段」一筆：`quoteNo/customerName/projectName/salesPerson/stageId/stageLabel/startDate/dueDate/done/overdue/dependsOn/assignedTo/assignedNames`（`overdue` 與 `assignedNames` 由後端統一計算/解析，前端不用重複邏輯）。
+- **前端新頁 `frontend/pages/case-stage-board.html`**（獨立頁，比照 `org-structure.html` 的做法）：
+  - 稽核彙總列（比照組織圖那輪的 `.chart-summary` 手法）：進行中案件數／已逾期階段／3天內到期／未指派負責人。
+  - **看板檢視**：依「已逾期／今日到期／3天內到期／進行中／已完成」五欄分類，卡片點擊導向 `case-management.html?q=quoteNo`。
+  - **跨案時間軸**：沿用 `case-management.js` 既有的 `_ganttTasks()`/frappe-gantt 手法與 CSS 樣式（`#stage-gantt-chart` 樣式規則複製一份改用 `#board-gantt-chart` id），把多案件階段攤平畫在同一條時間軸，任務名稱前綴客戶名稱，依負責人上色，`dependsOn` 依賴箭頭沿用既有機制（用 `quoteNo+stageId` 組唯一 id，避免跨案 id 碰撞）。**這次刻意設計成唯讀**——沒有掛 `on_date_change`，日期調整/前置階段設定仍在個別案件的案件管理頁面進行，跨案彙總頁只看不改，避免從彙總視圖誤改到別的案件資料。
+  - 基本篩選：業務員下拉、關鍵字搜尋（客戶／案件名稱／單號）。
+  - `static/sidebar.js` 新增「案件執行看板」導覽項目（跟「案件管理」同一權限 `cCM`，沿用同一個 `case_` icon，不用另外設計新圖示；同時補上 `_FILE_MODULE` 對照，讓進到這頁也會清除「案件管理」模組的新動態徽章）。
+- **驗證**：`py_compile` 通過；scratchpad db 複本驗證 `/api/quotations/stage-board` 8 組情境（逾期/今日/未來/已完成四種階段狀態的 `overdue`/`done` 判斷正確、未指派階段 `assignedTo`/`assignedNames` 正確為空、`dependsOn` 正確保留、非已成案的報價單正確被排除），全過。新頁面括號/`<template>`/`<div>` 標籤配對複查全部平衡（53/53、121/121、17/17、template 6/6、div 42/42）。
+
+### 2026-08-23b — 組織圖點選卡片可查看成員名單
+
+- **背景**：使用者確認組織圖重新設計後回饋「組織圖點選可以知道底下有誰」——目前組織圖只顯示人數統計，看不到實際成員是誰（要看名單得切回清單檢視展開部門）。
+- **`frontend/pages/org-structure.html`**：處橫幅（`.chart-band`）與部門卡片（`.chart-dept-card`）都加上 `cursor:pointer` + hover 效果（邊框變 accent 色、輕微陰影/位移），點擊會開啟一個新的成員清單 Modal（沿用既有的 `.modal-overlay`/`.modal-box` 樣式，跟處/部門編輯 Modal 同一套殼）。點部門卡片顯示該部門成員（`membersOf(deptId)`，沿用清單檢視已有的方法，只列啟用中帳號）；點處橫幅顯示該處底下**所有部門**成員的彙總清單（新增 `openChartDivisionMembers()`，用 `div.departments` 的 id 清單去過濾 `users`）。純唯讀顯示，不能在這個 Modal 裡加人/移除人（編輯操作仍在清單檢視），沒有成員時顯示「尚無成員」。
+- **未變動**：後端完全沒有異動，資料來源仍是既有的 `GET /api/org/tree`／`GET /api/users`（`init()` 本來就會載入）。
+- **驗證**：純前端變更，不需要 `py_compile`；括號/`<template>`/`<div>` 標籤配對複查全部平衡（144/144、283/283、14/14、template 22/22、div 76/76）。
+
+### 2026-08-23 — 組織圖重新設計：稽核彙總列＋未設主管標示
+
+- **背景**：使用者請求「開始規劃組織圖那個 UI 設計」，確認是要重新設計/優化 2026-08-22j 已上線的組織圖（處/部門純 CSS 樹狀圖）。因瀏覽器工具連不到本機測試伺服器（已知環境限制），這次改用 Artifact 先產出一版可視覺瀏覽的重新設計提案（含 mock 資料）讓使用者實際看過畫面再套用，使用者確認後直接套用到 `org-structure.html`。
+- **設計改動（`frontend/pages/org-structure.html`）**：
+  1. **新增稽核彙總列**（`.chart-summary`）：組織圖最上方新增「處／部門／總人數／未設主管單位」四格統計，後三項為新增 Alpine getter（`chartTotalDepartments`／`chartTotalMembers`／`chartUnmanagedCount`），「未設主管單位」計數 > 0 時數字變琥珀色警示，把治理缺口直接攤在最上面。
+  2. **處/部門視覺層級拉開**：處從原本跟部門卡片大小相近的卡片，改成左側有色帶的橫幅（`.chart-band`），跟下方部門卡片（`.chart-dept-card`）明確區分兩層。
+  3. **未設主管明確標示**：原本沒主管時整段隱藏（沉默）；改成琥珀色「尚未設定主管」提示 chip（`.chart-chip--vacant`，色系沿用本頁既有的「⚠ 僅超級管理員可管理組織架構」警示色 `#FFFBEB`/`#FDE68A`/`#92400E`，不引入新色票），部門/處都適用。
+  4. **部門排列改用 CSS Grid**（`repeat(auto-fit, minmax(180px,1fr))`）取代原本的 flex-wrap，部門數多的處會自動換行，不再需要橫向捲動整個組織圖。
+- **未變動**：基本骨架（處卡片→線→部門卡片、零依賴純 CSS、無外部圖表庫）、清單檢視／組織圖切換機制、後端完全沒有異動（純視覺呈現，資料來源仍是既有 `GET /api/org/tree`）。
+- **驗證**：純前端變更，不需要 `py_compile`；大括號/小括號/中括號與 `<template>`／`<div>` 標籤配對複查全部平衡（140/140、269/269、13/13、template 21/21、div 70/70）。
+
+### 2026-08-22k — 案件/專案管理延伸：稽核補完＋組織串接＋視覺化（DB v50）
+
+- **背景**：使用者請一個顧問式檢視（fork agent 讀過 `projects.py`／`case-management.js`／`dashboard.py`／`notification_prefs.py`／`audit-log.html`／§11），從系統軟體架構／組織架構串接／視覺化管理／稽核／專案管理方法論五個角度給建議；使用者回覆「都做，你決定優先級，並確認及驗證」，由 Claude 自行決定範圍與優先序，刻意排除三項需要獨立設計討論的大改動（專案簽核改接 `tiered_approval.py` 動態解析、`caseRecord.stages` JSON 正規化成資料表、案件跨案看板/甘特圖），只做「延伸既有模式、不改變現有行為語意」的五項小改動。
+- **①稽核缺口**：`projects.py::approve_action_item()`（專案確認事項兩階段簽核）原本只有 `notify_module_activity()`，沒有像其他四種單據那樣呼叫 `_audit()`——補上一行，`audit-log.html` 新增 `project.log.approve` 的 optgroup／actionLabel／icon（✅）。
+- **②組織串接（DB v50）**：`db.py` `_m050_project_department` 新增 `projects.department_id`（`CURRENT_VERSION` 49→50）；`create_project()`/`update_project()`/`list_projects()` 都支援這個欄位；`frontend/pages/projects.html` 新建/編輯 Modal 新增部門下拉（沿用 `GET /api/org/tree`，跟 `reports.html`／`index.html` 已有的 `orgTree`/`allDepartments` getter 手法一致）。
+- **③通知路由擴充**：比照既有 `daily_task_overdue_manager` 的模式，新增兩個獨立事件 key `case_stage_deadline_manager`／`project_deadline_manager`（`notification_prefs.py`＋`users.html` 通知偏好 checkbox 同步新增）；`helpers/email_notify.py` 新增對應 `notify_case_stage_deadline_manager()`／`notify_project_deadline_manager()`，都是純通知性質——部門無主管時安靜跳過，不擋流程；`daily_tasks.py` 的 `_check_case_stage_deadline()`（逐 assignee 查部門主管，比照 `_check_overdue_and_notify()` 既有查表模式）與 `_check_project_deadline()`（直接用新的 `projects.department_id`，不用逐人查）都已接上。
+- **④視覺化**：`dashboard.py` `/api/dashboard/stats` 新增 `projectSummary`（依 `status` 分組計數，可用既有的 `department_id` 參數篩選）；`frontend/index.html` 新增「進行中專案」卡片（規劃中/進行中/暫停/已完工）。
+- **⑤參照完整性**：`delete_project()` 原本只檢查狀態是否為規劃中/取消，補上 `linked_cases` 非空時 400 擋下（比照 `org_structure.py` 刪除有子項的部門/處時的既有守門模式），避免案件端/專案端的關聯連結指到已刪除的專案。
+- **驗證**：`py_compile` 全部 7 個後端檔案通過；scratchpad db 複本 12 項情境測試全數 PASS——audit 寫入正確、migration 欄位存在且可寫入可篩選、`_department_manager_emails()` 正確解析／`None` 與無主管部門都安靜跳過不噴例外、`dashboard_stats(department_id=X)` 的 `projectSummary` 正確依部門篩選、`delete_project()` 對有關聯案件的專案正確 400 擋下、清空關聯後可正常刪除。前端 `projects.html`／`audit-log.html`／`users.html`／`index.html` 逐一複查大括號/小括號/中括號與 `<template>`／`<div>` 標籤配對，全部平衡。
+- **後續（尚未開始，刻意排除，見上方背景）**：專案簽核動態解析、案件執行進度 JSON 正規化、跨案視覺化看板，留待下一輪個別規劃討論。
+
+### 2026-08-22j — 組織架構頁新增組織圖檢視
+
+- **背景**：使用者在 2026-08-22i 進行中途詢問「組織架構是否能做一個組織表」，確認要做；這輪在申請人部門主管動態帶入上線重啟後接續執行。
+- **`frontend/pages/org-structure.html`**：新增 `viewMode`（`'list'`／`'chart'`，預設 `'list'`，不影響既有清單檢視行為）頁首切換按鈕。新增純 CSS 組織圖檢視——處為頂層卡片（顯示處名稱、部門數/總人數、處級主管徽章），下方接一條直線連到橫向排列的部門卡片列（顯示部門名稱、人數、部門主管徽章；部門數 > 1 時卡片列上方加一條橫線當連接橫桿，`flex-wrap` 避免溢出）；沒有部門的處只顯示卡片本身不畫連接線。純顯示既有 `orgTree` 資料（`loadOrgTree()` 本來就會載入，無新增 API 呼叫），唯讀、無點擊事件，不影響既有清單檢視的新增/編輯/刪除/成員管理功能。
+- **驗證**：純前端變更，無後端程式碼異動，不需要 `py_compile`。逐一複查大括號/小括號/中括號與 `<template>`／`<div>` 標籤配對，全部平衡（119/119、241/241、13/13、template 16/16、div 56/56）。瀏覽器工具連不到本機隔離測試伺服器（已知環境限制），改以樣板結構複查方式驗證。
+
+### 2026-08-22i — 簽核路由擴充：申請人部門主管動態帶入
+
+- **背景**：2026-08-22h 完成後，使用者釐清真正想要的是「第一層不指定固定部門，而是送審當下動態解析申請人自己的部門主管」——申請人本身就是部門主管時改送處主管，申請人本身就是處主管時改送超級管理員（比照既有無流程時的逃生條款）；申請人沒有部門時直接擋下要求先設定部門。這條規則要**內建**在四種單據的預設流程裡（不用管理員手動加這一層），但簽核設定頁要能顯示並允許移除。使用者並主動確認一個原則：「自動」只是自動判定簽核人是誰，該簽核人仍要自己手動核准，不是自動通過——這個原則跟既有的部門/處主管自動簽核一致，這輪沿用。
+- **後端**：`helpers/tiered_approval.py` 新增 `resolve_submitter_manager_chain(conn, requester_username)`——查申請人 `department_id`（無 → raise「尚未歸屬部門」）→ 該部門主管（無 → raise「部門未設主管」）→ 若主管就是申請人自己 → 改查該部門所屬處的主管（無 → raise「處未設主管」）→ 若處主管也是申請人自己 → 改查其他在職超級管理員（無 → raise「找不到其他在職超級管理員」）；每一步都明確排除「回傳的簽核人等於申請人自己」，避免自簽核。`resolve_tier_approvers()` 新增 `sourceType=='submitter_manager'` 分支；`setting_to_active_tiers(setting, conn, requester_username=None)` 在組出 `tiers` 前，若 `setting.get("includeSubmitterManagerTier", True)`（**沒有這個 key 時預設為 True，滿足「內建」要求**）為真，於陣列最前面插入合成層 `{"approvers":[{"sourceType":"submitter_manager"}]}`。此合成層**不接受**從前端 PUT 進來（Pydantic 驗證仍只認 `department_manager`／`division_manager`／手動指定三種），只由後端內部合成。
+- **四個 router 全部串接 `requester_username`**：送審端點傳目前登入使用者（`user["username"]`）；核准端點的「無自訂流程走全域設定」備援分支傳該筆單據**原始申請人**（`appr.get("requestedBy")`，不是目前核准者）——這是兩種不同語意，逐一確認每個呼叫點的可用變數後分開處理。`ApprovalFlowSettings` pydantic 模型新增 `includeSubmitterManagerTier: bool = True`，GET/PUT 都會序列化這個欄位；`quotations.py` 因為有自己獨立一份 `_setting_to_active_tiers`（相容舊版 `steps` 格式＋`_exclude_requester()` 機制），比照加上同樣的參數與合成邏輯，內部仍呼叫共用的 `resolve_tier_approvers()`。
+- **四個前端 approval-settings 頁面（一般／出貨／承攬商匯款／開票憑據，改法一致）**：steps 清單上方新增一個獨立區塊——勾選框「系統內建：申請人部門主管自動簽核（第一層）」，預設勾選，非 superadmin 唯讀；取消勾選＝存檔時送 `includeSubmitterManagerTier:false`，移除這一層。視覺上跟下方「自訂順序層」清單分開（灰底卡片），不參與拖曳排序，符合「內建但可移除、系統單據不用管理員手動加」的要求。
+- **驗證**：`py_compile` 全部通過；scratchpad db 複本驗證 `resolve_submitter_manager_chain` 完整鏈路 10 組情境——一般成員送審正確解析到部門主管；申請人本身是部門主管時正確改送處主管；申請人本身也是處主管時正確改送其他在職超級管理員（且驗證回傳對象不等於申請人自己）；申請人沒有部門時正確 400 擋下；`includeSubmitterManagerTier=false` 時正確不插入這一層；四種單據各自送審端到端驗證一次，全過（過程中一次測試資料設置疏漏——未真正把申請人設成部門主管導致斷言目標錯誤，已修正重測）。四個前端頁面逐一複查大括號/小括號/中括號與 `<template>` 標籤配對，四份完全一致（121/121、208/208、28/28、13/13），確認複製手法正確無誤。
+- **後續（尚未開始）**：組織圖（處/部門的純 CSS 視覺化樹狀圖，`org-structure.html`）尚未動工，等這輪重啟後再開始，見計畫檔。
+
+### 2026-08-22h — 簽核路由擴充：處主管自動簽核＋同層多人（可跨部門）
+
+- **背景**：使用者詢問「部門主管自動簽核後會送到處長嗎」「跨部門審核能不能放入」，確認兩者都要——①新增「處主管自動簽核」層類型（管理員自己加，跟部門主管自動簽核用法一致，不是無設定的隱性升級）；②同一層可放多個簽核人（可跨部門/處），依序輪流簽（比照既有多層規則，不是任一人即可的 OR 邏輯）。
+- **後端**：`helpers/tiered_approval.py` 新增 `resolve_division_manager()`（查 `divisions.manager_user_id`，仿 `resolve_department_manager`），`resolve_tier_approvers()` 新增 `sourceType=='division_manager'` 分支（解析失敗一樣 raise `UnresolvedManagerError`，訊息比照部門版本）。四個 router 的 `ApprovalFlowApprover` pydantic 模型都新增 `divisionId` 欄位，`model_validator` 改成三選一驗證。「同層多人」不需要新後端邏輯——`approvers` 本來就是列表，`check_approve_permission()` 的依序規則本來就不分是否跨部門。
+- **前端（四個 approval-settings 頁面，改法一致）**：資料模型從「一個 step 就是一個 approver」改成「一個 step 是一層，內含 approvers 陣列」；每層卡片顯示目前簽核人清單（可個別移除，可跨部門/處混合人員／部門主管／處主管），下方一個分組下拉（人員／部門主管／處主管）＋「加入」按鈕，可重複加到同一層；「新增簽核層」改成建立空白層再加人；存檔時自動過濾空層。
+- **驗證**：`py_compile` 全部通過；scratchpad db 複本驗證 `resolve_division_manager`（有主管／無主管兩種情境）、同一層混合 3 種來源（手動使用者＋部門主管＋處主管）依序解析正確、處主管未設定時正確擋下 400、透過 `quotations.py` 端到端驗證 division_manager 層正確展開、Pydantic 驗證正確擋下缺少 `divisionId` 的請求，全過。四個前端頁面逐一複查括號/template 標籤平衡，全部一致（86/86、123/123、28/28、13/13），確認複製手法正確無誤。
+- 這一輪額外確認一個原則（使用者主動提出釐清）：「自動簽核」只是自動判定/帶入誰是簽核人，該簽核人仍要自己手動核准，不是自動通過——這個原則沿用到既有的部門主管自動簽核、這輪新增的處主管自動簽核，以及後續規劃中的「申請人部門主管動態帶入」都一致。
+- **後續規劃（尚未開始）**：使用者接著提出「申請人部門主管動態帶入」——不指定固定部門，送審當下依申請人自己的部門動態解析主管；申請人自己是部門主管則改送處長；申請人自己是處長則改送超級管理員（比照現有無流程時的逃生條款）；申請人沒有部門時直接擋下要求先設定部門。這個機制要內建在四種單據的預設流程裡（不用管理員手動加），但簽核設定頁要能顯示並允許移除。這是下一輪的工作，這輪未動工。
+
+### 2026-08-22g — 處/部門延伸串接：簽核路由＋通知路由＋報表/儀表板篩選
+
+- **背景**：使用者詢問處/部門組織架構後續可串聯的方向，確認做三項（排除「權限範圍限縮」——牽動現有 role+module 權限模型，風險/工作量都大，這輪不做）：①簽核路由（approval-settings 新增「部門主管自動簽核」選項）；②通知路由（工作事項逾期通知部門主管）；③報表/儀表板依處/部門篩選。
+- **① 簽核路由（四種單據一次做齊：報價單／出貨單／承攬商匯款申請／開票申請憑據）**：`helpers/tiered_approval.py` 新增 `resolve_department_manager()`／`resolve_tier_approvers()`／`UnresolvedManagerError`——tier 設定的 approver 項目新增 `sourceType='department_manager'` 一種，送審當下即時查詢該部門目前的主管展開成真正的簽核人快照（而非設定當下就固定死）；四個 router 各自的 `ApprovalFlowApprover` pydantic 模型都加上 `sourceType`/`departmentId` 欄位＋驗證；四個 approval-settings 頁面都新增「加入部門主管簽核層」UI（下拉選部門，清單列會顯示目前主管姓名或警示尚未設定）。**部門無主管時的處理，使用者明確選擇「擋下送審」**：送審當下若解析不出主管，直接 400 擋下並提示管理員先設定部門主管，不會靜默跳過那一層（避免簽核關卡無聲消失的治理風險）。
+- **② 通知路由**：先接在「工作事項逾期未完成」上。`notification_prefs.py` 新增獨立事件 key `daily_task_overdue_manager`（跟指派人自己收到的 `daily_task_overdue` 分開訂閱/取消訂閱）；`email_notify.py` 新增 `_department_manager_emails()`（仿 `_superadmin_emails` 的寫法）與 `notify_daily_task_overdue_manager()`；`daily_tasks.py::_check_overdue_and_notify()` 逾期通知迴圈裡，額外對逾期者所屬部門的主管發站內＋email 通知（主管等於逾期者本人時跳過，避免自己通知自己）。這條路徑跟任務本身既有的 `supervisors`（逐任務手動指定的主管清單）是兩條獨立機制，互不影響。
+- **③ 報表/儀表板依處/部門篩選**：`reports.py::_collect()` 新增 `department_id` 參數，透過 `sales_person_id→department_id` 對照表把報價單掛回部門並篩選；新增「依部門彙總」（`deptPerf`，算法比照既有「依業務員」`salesPerf`），warranty／settle_overdue 兩個獨立查詢也同步套用篩選；`/api/reports/financial`／`/financial/excel`／`/financial/pdf` 三個端點都加上 `department_id` query 參數。`dashboard.py` 的 `/api/dashboard/stats` 與 `/activity-feed` 也加上 `department_id` 參數；activity-feed 的篩選範圍**刻意縮小到只套用在「案件留言板」區塊**——這是唯一有直接 `sales_person_id` 可查的來源，其餘來源（工作日誌、業務開發記錄）的作者跟部門對應關係定義不明確，這輪不強行套用避免篩錯。`reports.html`／`frontend/index.html` 都新增部門篩選下拉（來源 `GET /api/org/tree`），`reports.html` 額外新增「依部門彙總」表格區塊。
+- **驗證**：`py_compile` 全部通過；scratchpad db 複本三段各自驗證——①部門主管自動簽核成功案例＋無主管 400 阻擋，四種單據類型各驗證一次；②部門主管正確收到站內＋email 通知、主管等於逾期者本人時正確不重複通知自己；③帶 `department_id` 查詢 `_collect()`／`dashboard_stats()`，確認回傳資料只包含該部門成員名下的報價單，`deptPerf` 加總正確。前端樣板（4 個 approval-settings 頁面＋`reports.html`＋`index.html`）逐一人工複查 `<template>` 標籤配對與括號平衡，全部通過（瀏覽器工具連不到本機隔離測試伺服器，已知環境限制）。
+
+### 2026-08-22f — 組織架構人數統計排除停用帳號
+
+- **背景**：2026-08-22e 上線後，使用者要求做一次遷移後驗證（唯讀稽核：`schema_version`、外鍵完整性、`GET /api/org/tree`／`GET /api/users` 跟資料庫實際內容逐筆比對），全部正常，過程中已發現並主動回報一個觀察點——部門/處的人數統計不分帳號啟用/停用狀態全部算入；使用者確認要調整為「停用剔除」。
+- **`routers/org_structure.py`**：`GET /api/org/tree` 的 `member_count` 子查詢加上 `AND active=1`。
+- **`frontend/pages/org-structure.html`**：`membersOf()`／`availableUsersFor()` 加上 `u.active` 過濾——部門展開後的成員清單、加入成員下拉都只列出啟用中帳號；停用帳號的 `department_id` 資料仍保留不變，重新啟用後自動恢復顯示與計數，不需要重新指派。
+- **`frontend/pages/users.html`**：`buildOrgRows()` 的處/部門「X 人」計數改成只算 active 使用者，**但使用者列表本身仍列出全部帳號（含停用）**——這頁的用途就是管理全部帳號（含重新啟用停用帳號），不能整個藏起來，只調整計數口徑跟 `org-structure.html`／後端 API 對齊，避免兩頁數字對不上。
+- **驗證**：`py_compile` 通過；scratchpad db 複本情境測試——建部門指派 2 位使用者（皆啟用）確認 `memberCount=2`，停用其中一位確認降為 1，重新啟用後確認自動恢復為 2（不需重新指派 `department_id`），全過。
+
+### 2026-08-22e — 處級主管欄位＋組織架構頁可直接管理成員＋簽核文件保留註記（DB v49）
+
+- **背景**：使用者對 2026-08-22d 的組織架構功能提出三點回饋：①所有簽核相關開發文件都要標註「未來開發需保留處/部門」；②現有組織架構管理頁面（`org-structure.html`）無法直接增加/移除部門成員，只能透過使用者管理頁的編輯 Modal 間接指派；③處（division）沒有對應部門（department）已有的「主管」欄位。
+- **資料表**（`db.py` `_m049_division_manager`，`CURRENT_VERSION` 48→49）：`divisions` 新增可為 NULL 的 `manager_user_id`，跟 `departments.manager_user_id` 對稱，一樣先預留給未來簽核路由使用，這輪不接 `helpers/tiered_approval.py`。
+- **`routers/org_structure.py`**：`DivisionIn` 新增 `manager_user_id`；`create_division()`/`update_division()` 驗證並寫入；`GET /api/org/tree` 的處也一併 LEFT JOIN 回傳 `managerUserId`/`managerName`。
+- **`frontend/pages/org-structure.html` 新增成員管理**：部門列改成可展開的手風琴（比照使用者管理頁既有的摺疊樣式），展開後顯示目前成員清單（可移除）＋一個「選擇既有使用者加入」下拉＋加入按鈕，底層直接呼叫既有的 `PUT /api/users/{id}` 帶 `department_id`（沿用 2026-08-22d 已經定案的「傳 0 代表移出部門」約定，不需要新 API）；下拉會標示使用者目前所屬部門，避免誤操作把別的部門成員意外搬走而不自知。處的新增/編輯 Modal 同步加上主管下拉；處/部門標題列都新增「主管：X」徽章顯示（`users.html` 的處標題列也同步補上，跟部門既有的徽章風格一致）。
+- **開發文件保留註記**：`helpers/tiered_approval.py` 檔頭、`routers/org_structure.py` 檔頭都新增「⚠️ 未來開發保留」說明，明確指向 `manager_user_id` 是為未來依部門/處自動列入簽核而保留的欄位；`MOTRIX-ERP-QUICK.md` §4 資料模型補上 `divisions`/`departments`/`users.department_id` 三個表的完整說明＋保留註記，§11 已知限制新增對應條目，確保之後任何人碰簽核相關程式碼都能在文件裡看到這個提醒，不會不小心繞過或重複發明。
+- **驗證**：`py_compile` 全部通過；scratchpad db 複本直接呼叫端點函式驗證——處建立時可帶主管、`GET /api/org/tree` 正確回傳、指定不存在的主管 id 正確 404、清空主管正確寫回 NULL；另外用完整路徑情境（建處＋主管→建部門→加入兩位成員→確認部門/處的 memberCount 正確→移除一位→確認 `list_users()` 的 departmentName/divisionName 仍正確）全部通過。
+
+### 2026-08-22d — 使用者管理介面優化＋處/部門組織架構（DB v48）
+
+- **背景**：使用者要求「在使用者管理的介面思考如何顯示更明確，未來更新也好改寫，並且可建立處、部門做邏輯上及組織架構區分」。複查全站（前後端＋簽核設定）確認完全沒有既有的部門/處室欄位或邏輯可沿用，這是全新的組織分類概念。
+- **資料表**（`db.py` `_m048_org_structure`，`CURRENT_VERSION` 47→48）：新增 `divisions`（處，`name` UNIQUE、`sort_order`）與 `departments`（部門，`division_id` 隸屬某處、`name` 同處內 UNIQUE、`sort_order`、`manager_user_id` 先預留給未來簽核路由使用），`users` 新增可為 NULL 的 `department_id`。純組織分類用途，這輪**不**接進 `helpers/tiered_approval.py` 的簽核邏輯。
+- **新後端 API**（`backend/routers/org_structure.py`，`main.py` 已註冊）：`GET /api/org/tree`（任何登入者可查，回傳處→部門巢狀樹含每部門人數/主管姓名）；`POST/PUT/DELETE /api/org/divisions`、`POST/PUT/DELETE /api/org/departments`（皆限 superadmin；刪除有子部門的處、或有成員的部門會被 400 擋下並附清楚訊息）。
+- **`routers/auth.py`**：`UserIn` 新增 `department_id`；`create_user()`/`update_user()` 寫入該欄位（約定傳 `0` 代表清空回「未分類」，因 `Optional[int]=None` 無法區分「沒傳」跟「要清空」）；`list_users()` 改 LEFT JOIN `departments`/`divisions`，回傳多帶 `departmentId`/`departmentName`/`divisionId`/`divisionName`。
+- **`frontend/pages/users.html` 改版**：新增搜尋框（依帳號/顯示名稱/Email 篩選）；使用者清單從單一長表格改成「處→部門→使用者」三層可摺疊分組顯示（未分類使用者獨立一組），分組邏輯抽成獨立純函式 `buildOrgRows()`（不掛在 Alpine 元件上，方便未來單獨修改／測試，回應「未來更新也好改寫」的要求），跟畫面渲染/展開收合狀態完全分開；新增/編輯使用者 Modal 內加處→部門連動下拉；頁首新增「組織架構設定」導覽按鈕。
+- **新頁 `frontend/pages/org-structure.html`**：獨立設定頁面管理處/部門的新增／改名／刪除（比照使用者要求「處/部門的新增/改名/刪除走獨立設定頁面，不塞進 users.html 裡」），部門主管下拉重用既有 `/api/users/selectable`；`static/sidebar.js` 系統區塊新增對應連結與圖示（新增 `org` icon key）。
+- **⚠️ 跟 2026-08-20 那次一樣的狀況再度發生**：靜態驗證階段執行 `python -c "import main"` 時，`main.py` 模組層級呼叫 `init_db()`，再次非預期地把 v48 migration 直接套用到正式機 `motrix_erp.db`（僅新增兩張空表＋一個可為 NULL 的欄位，未動任何既有資料；當時運行中的舊版 uvicorn process 未重啟、`/api/ping` 正常）。後續驗證改用 scratchpad DB 複本＋monkeypatch `DB_PATH`，避免重蹈覆轍。
+- **瀏覽器實測受限**：本輪原計畫用 Chrome 瀏覽器工具在隔離的暫時測試伺服器（scratchpad DB 複本＋額外埠號）上操作一次完整路徑，但該環境的 Chrome 擴充功能無法連到本機的暫時測試伺服器（`curl` 從 Bash 端可正常連線，但瀏覽器端連線失敗，判斷是瀏覽器與 Bash 沙箱不在同一網路環境），確認並非 localhost 特例問題後（改連 example.com 正常）即停止重試，未強行繞過。改以：①後端邏輯已用 scratchpad db 直接呼叫真實端點函式驗證 8 組情境全過；②前端 Alpine 樣板逐段人工複查（`<template x-for>`/`x-if` 巢狀配對、大括號／括號平衡）；複查時額外抓到一個真實邏輯錯誤並修正——`visibleOrgRows` 摺疊過濾邏輯原本讓「未分類」群組的顯示與否錯誤地沿用了最後一個「處」的展開狀態（未分類不隸屬任何處，理應永遠不受任何處的收合狀態影響）。使用者若在瀏覽器實際操作時發現顯示異常，仍建議告知以便進一步排查。
+- **驗證**：`python -m py_compile` + `import main` 全部通過；scratchpad db 複本直接呼叫 `org_structure.py`／`auth.py` 端點函式驗證：新增處/部門（含指派主管）、指派使用者、`GET /api/users` 正確回傳 `departmentName`/`divisionName`、刪除有子部門的處/有成員的部門均正確被擋、清空後可正常刪除、重複名稱建立正確回 409，共 8 項情境全過。
+
+### 2026-08-20 — 承攬商匯款申請＋開票申請憑據（DB v45/v46，正式機直接開發）
+
+- **背景**：使用者要求兩個新流程——①案件管理承攬商 tab，已完工（`completed`）的派發可產生「承攬商匯款申請」供財務辦理匯款，需簽核；②案件資訊 tab 款項明細，已收款項目（單筆或整份收款排程）可產生「開票申請憑據」供財務申請開立發票，也需簽核。討論時使用者明確要求「最安全跟最謹慎的邏輯去做」。此時**開發機（hichan 帳號）無法連線**，比照 2026-08-10 gateway_guide 那次的做法，直接在正式機（Motrix 帳號，V9.0）開發，同步整理回推清單。
+- **資料表**（`db.py` `_m045_contractor_payment_vouchers` / `_m046_invoice_vouchers`）：新增 `contractor_payment_vouchers`（`dispatch_id` UNIQUE，強制一張憑證對應一筆派發；`snapshot_json` 凍結承攬商/銀行帳戶/品項金額）與 `invoice_vouchers`（`scope` 'single'\|'all'，`snapshot_json` 凍結客戶/款項明細），皆為獨立於報價單/出貨單的簽核流程（`system_settings` key 分別為 `contractor_voucher_approval_flow` / `invoice_voucher_approval_flow`），機制比照出貨單（`routers/shipping_notes.py`）tiers 依序簽核。
+- **承攬商匯款申請多一個「已匯款」財務結案節點**（`is_paid`，獨立於 `status`，比照出貨單「已核准」跟「已回簽」是兩個獨立狀態的做法，2026-08-20 討論時使用者明確要求）；開票申請憑據核准即定稿，無此節點。
+- **安全守門**：①建立憑證僅允許派發狀態為 `completed` 且尚無既有憑證（`dispatch_id` UNIQUE 雙重保護）；②開票憑據僅允許對 `received=true` 的款項項目建立（2026-08-20 討論時使用者明確選擇，未收款項目按鈕顯示停用）；③`routers/vendor_contractors.py` `delete_dispatch()` 新增守門：已產生憑證的派發不可刪除（避免撞上 FK 約束產生原始 500 錯誤）；④已匯款的承攬商憑證不可撤銷核准（比照出貨單「已回簽不可撤銷」）。
+- **新檔案**：`backend/routers/contractor_vouchers.py`、`backend/routers/invoice_vouchers.py`（各自完整 CRUD＋簽核三態＋PDF＋匯出紀錄）；`pdf_gen.py` 新增兩組 PDF 產生函式（Edge Headless，格式仿出貨單 PDF，未核准狀態帶浮水印預覽稿）；`frontend/pages/contractor-voucher-approval-settings.html`／`invoice-voucher-approval-settings.html`（複製自 `shipping-approval-settings.html`）。
+- **修改檔案**：`db.py`（`CURRENT_VERSION` 44→46）、`main.py`（router wiring）、`helpers/email_notify.py`＋`notification_prefs.py`＋`__init__.py`（8 個新 notify_* 函式／事件 key，比照 `shipping_*` 系列）、`frontend/js/case-management.js`（新增 ~30 個方法）、`frontend/pages/case-management.html`（承攬商 tab／款項明細 UI＋兩個 PDF 預覽 Modal）、`static/sidebar.js`（系統區塊兩個新連結）、`audit-log.html`（optgroup／actionLabel／badge，對照後端實際 `_audit()` 動作字串逐一核對）、`users.html`（8 個通知偏好 checkbox）。
+- **⚠️ 靜態驗證過程中，DB migration 已非預期地實際套用到正式機 `motrix_erp.db`**：`python -c "import main"` 原意只是「不重啟伺服器」的語法/wiring 靜態檢查，但 `main.py` 在模組層級呼叫 `init_db()`，單純 import 就對正式資料庫執行了 migration。已核實影響：僅新增兩張空表（`CREATE TABLE IF NOT EXISTS`），未動任何既有資料/欄位；正式機當時運行中的 uvicorn process（舊版程式碼仍在記憶體執行）未重啟、`/api/ping` 與 `logs/server.log` 皆正常。動手前已備份 `backend/db_backups/motrix_erp_pre_voucher_feature_20260820_205034.db`。
+- **回推開發機**：`V9.0\backend` 非 git repo，本次額外把全部新增/修改檔案（後端 9 個＋前端 7 個）複製到 `Desktop\回推開發機_2026-08-20_匯款發票憑證\`，含操作步驟說明，待開發機恢復連線後比對貼回、`git commit`，避免重蹈 gateway_guide 那次的落差（見 §0 已知落差紀錄）。
+- **後續**：獨立 `/code-review high` 覆核＋正式機重啟＋兩項需求調整，見下一筆 2026-08-20b。
+
+### 2026-08-20b — code review 修正＋正式機重啟＋匯款申請銀行資訊補完＋開票憑據放寬收款限制
+
+- **獨立 code review**：使用者要求重啟前先做一次完整檢查，跑 `/code-review high` 找出 5 項問題並全部修正：①`invoice_vouchers.py` 建立憑據原本無防重複機制，加 409 防護（同 `quote_no`+`scope`+`payment_idx` 不可重複建立），前端同步隱藏已建立過的按鈕；②承攬商匯款申請面板原本綁「派發狀態=completed」才顯示，但派發狀態可被 `update_dispatch` 隨時改掉，已核准/已匯款的憑證會從畫面消失，改為「狀態=completed 或已有憑證」都顯示；③開票申請憑據 `revoke-approval` 原本核准後可無限制撤銷，改為「已匯出過（`export_count>0`）不可撤銷」；④`reject`／`revoke-approval` 補上 `_purge_notifications`（避免過期的待簽核通知殘留）；⑤兩個下載端點的例外處理多接 `RuntimeError` 一併回 503（原本只接 `ValueError`，Edge 找不到時會落到錯誤的 500）。
+- **正式機已重啟**：停掉舊 uvicorn process tree（保留 `autostart.bat` 本身，讓它自己的 5 秒重試迴圈拉起新版程式碼，而非直接砍掉整個迴圈），重啟後 `/api/ping`、OpenAPI schema（19 個新路徑）、`server.log` 皆確認正常，兩個新功能正式生效。
+- **承攬商匯款申請補上銀行/存簿資訊**（使用者回饋「產生匯款憑據需要帶入承攬商、供應商外包名冊的帳戶相關資訊跟存簿檔案」）：`create_contractor_voucher()` 原本只快照了承攬商（`vendor_contractors`）的銀行文字欄位，沒帶 `bankPassbookImage`，也完全沒有外包名單人員（`contractors` 表）各自的銀行資訊。修正：①承攬商快照補上 `bankPassbookImage`；②建立當下額外查一次 `contractors` 表，把每位派發人員（`personnel_json` 內的 `id`）目前的銀行代碼/名稱/分行/戶名/帳號/存簿影本一併寫入 snapshot（查無資料則留空，不擋建立）；③PDF（`pdf_gen.py`）新增「四、外包人員匯款資訊」區塊，每人一張帳戶卡片＋存簿縮圖，承攬商本身的帳戶資訊卡片也補上存簿縮圖。
+- **開票申請憑據放寬收款限制**（使用者回饋「未勾選也要能申請，有部分是開立發票後才能收款」）：移除 `create_invoice_voucher()` 的 `received=true` 檢查（原本是使用者自己選的方案，但實際遇到「先開票後收款」的案件後推翻）；`scope='all'` 從「只收已收款項目」改為「收全部項目」；snapshot 每筆項目新增 `received` 旗標，PDF 款項明細表改列「收款狀態」欄（顯示「✓ 已收款 日期」或「未收款（開票在先）」）取代原本的「實收日期」欄；前端按鈕移除停用狀態，未收款項目改標示「（尚未收款）」提示文字但仍可點擊申請。
+- 修正後重新跑過 `python -c "import main"`＋`python -m py_compile` 全部通過；回推開發機清單資料夾已同步更新為最終版本。
+
+### 2026-08-22b — Google 行事曆推送加重試＋失敗可見度；案件動態欄位重新評估後決定不改
+
+- **Phase B（Google 行事曆推送加重試＋失敗可見度）**：`helpers/google_calendar.py` 的六個 `push_event_for_*()` 原本失敗只記一行 log，完全沒有人會主動去翻，導致「這筆核准其實沒真的推上行事曆」沒有任何管道會被發現。新增 `_create_event_with_retry()`：失敗時等待 5 秒後重試一次（一次性重試，不做無限重試，避免背景執行緒卡太久）；重試後仍失敗，新增 `_notify_push_failure()` 額外寫一筆站內通知給全部 active superadmin（`google_calendar_push_failed` 事件），不再只能翻 log 才發現。設定頁「建立測試事件」按鈕維持原本的單次嘗試（互動式操作，不應該讓使用者多等 5 秒），不套用重試邏輯。三個原始觸發點失敗時維持不寫入 `googleCalendarEventId`（現況不變，仍能分辨有沒有推成功）。已用 mock 驗證三種情境：首次成功不重試、失敗後重試成功、兩次都失敗才觸發 superadmin 通知（且通知數量精確等於 active superadmin 人數）。
+- **Phase C（案件動態 `case_updates.type` 欄位）重新評估後結論：不需要改**。先前架構檢查建議把 `type` 換成獨立布林欄位或 tags 陣列，複查後這個建議不夠嚴謹：`type` 本來就是字串欄位，之後真的要加第三種標記（例如「提醒」）直接讓 `type` 多一個字串值即可，完全不需要 schema 異動；真正需要 tags 陣列的情境是「同一則留言要同時掛多個標記」，但這不是使用者提過的需求，屬於還沒發生的假設情境，不符合「不要為了假設性的未來需求先做設計」的原則。**這項最終沒有程式碼異動**，記錄下來說明重新評估的過程跟結論，避免誤導未來查閱這份文件的人以為這件事還沒做。
+
+### 2026-08-22 — 抽出共用簽核 tiers 邏輯，順手修正 shipping_notes.py 兩個未套用的簽核漏洞
+
+- **背景**：使用者要求處理先前架構檢查提出的改進建議。複查「報價單／出貨單／承攬商匯款申請／開票申請憑據」四個 router 的簽核邏輯時，發現 `shipping_notes.py` 完全沒套用 2026-08-20k 那輪修好的兩個漏洞——證實了「同一段邏輯重複四份、改一個地方其他要記得改」的風險是真實發生過的（這次漏掉第三個地方）。
+- **`shipping_notes.py` 新修正的兩個漏洞**：①`approve_shipping_note()`／`reject_shipping_note()` 開頭寫死 `_require_admin(user)`，跟 contractor/invoice vouchers 原本一樣的問題——簽核設定頁允許加入任何角色當簽核人，這道硬性角色檢查會讓非管理員角色的簽核人永遠卡死無法簽核/退回出貨單；已移除。②無簽核層設定（superadmin fallback）分支完全沒有「申請人不得自行審核」的檢查；已補上（含唯一在職 superadmin 的逃生條款）。`revoke_shipping_note_approval()` 的 `_require_admin` 保留不動（屬於管理員專用覆蓋動作，不是 tiers 簽核流程的一部分，比照 contractor/invoice vouchers 的 revoke-approval）。
+- **新增 `helpers/tiered_approval.py`**：抽出四個 router 裡「沒有副作用、判斷用」的簽核邏輯（`active_tiers`／`current_tier_idx`／`setting_to_active_tiers`／`first_pending_approver`／`check_approve_permission`／`check_reject_permission`／`check_no_tier_self_approval`），純函式不依賴 FastAPI，各 router 自己決定怎麼包 HTTPException。**刻意保留 `quotations.py` 自己的 `_active_tiers`/`_current_tier_idx`/`_setting_to_active_tiers` 不動**——這三個函式在 quotations.py 裡其實不是單純的 trivial 版本，還帶著舊版「steps」格式的向下相容邏輯（`_steps_to_tiers`）跟 `_exclude_requester()`（送審當下就把申請人從 tiers 排除，比其他三個檔案的「approve 時攔截」更早一層防護），這是報價單獨有、其餘三個新單據類型從未有過的機制，動了有破壞既有相容性的風險，這輪不碰。`contractor_vouchers.py`／`invoice_vouchers.py`／`shipping_notes.py` 三個檔案的版本本來就是逐字相同的 trivial 版本，已全部改成直接匯入共用模組。
+- **統一錯誤訊息**：approve 時「不是當層簽核人」的錯誤訊息，四個檔案原本兩種寫法（quotations.py 的「此層需由以下人員簽核：X、Y」vs 其餘三個的「此層無您的簽核權限」），這輪統一採用 quotations.py 的版本（訊息更明確，直接列出誰能簽），contractor/invoice/shipping 三邊的措辭因此改變，這是預期內、唯一的行為差異，其餘邏輯（含 HTTP 狀態碼）逐一核對過完全不變。
+- **另外發現、這輪未處理的差異點**：`quotations.py` 的 `_exclude_requester()` 是報價單獨有的「送審當下就排除申請人」機制，其餘三個新單據類型沒有對應防護（只有「approve 時攔截自己批准自己」這一層，沒有「一開始就不把申請人放進 tiers」這一層）——如果申請人剛好也被設定成自己案件的某層簽核人，approve 時仍會被 `check_no_tier_self_approval` 或當層排序邏輯正確擋下，不是安全漏洞，但屬於防護層次的不對稱，先記錄下來，不在這輪範圍內處理。
+- **驗證**：`python -m py_compile` + `import main` 全部通過；四個檔案各自用 scratchpad db 複本 + monkeypatch 直接呼叫真實端點函式驗證——quotations.py 4 組情境（含原有 4 個既有行為完全不變）；contractor/invoice vouchers 各 4 組（沿用 2026-08-20k 那輪已驗證過的情境，確認抽出共用函式後行為不變）；shipping_notes.py 額外驗證兩個新修正的漏洞（非 admin 角色簽核人現在能核准/退回、自簽正確被擋、換一位 superadmin 能核准、唯一在職 superadmin 逃生條款正常），共 6 組情境全過。
+
+### 2026-08-21g — Google 行事曆 Push 擴充：業務開發轉建／案件停滯提醒／案件動態重要留言＋行事曆文案調整
+
+- **業務開發擴充**（`routers/dev_crm.py`）：①`PATCH /dev-cases/{id}/convert`（`mark_converted()`）成功轉建報價單後推送一個行事曆事件；已有 409 防護擋重複轉建，天生一次性動作不需額外 guard。②`_check_dev_case_stale()`（每日 08:00 排程既有檢查）新增獨立於既有 email 通知的 guard key `devcase_stale_cal.{case_id}.{updated_at}`（不帶 bucket 編號）——只在該案件這次停滯週期第一次跨過 30 天時建一次行事曆事件，**不比照 email 每 14 天重複的頻率**（使用者明確要求「只建一次」，避免行事曆疊出多個重複事件）；若案件之後更新過又再度停滯，`updated_at` 換新值會自然形成新的 guard key，可以再建一次。
+- **案件動態／標記重要留言**：使用者要求「只同步標記為重要的留言，不是每則都推」（動態本身是即時留言串流，全推太吵，牴觸「只推重要事件」的設計原則）。已用 AskUserQuestion 確認採 **UI 勾選方塊**（非文字標記慣例）：`case-management.html` 動態 Tab 留言輸入框旁新增「標記為重要（會同步到 Google 行事曆）」checkbox；`case-management.js postComment()` 送出時多帶 `important` 布林值；後端 `routers/quotations.py post_case_update()` 依此把 `case_updates.type` 寫成 `'important'` 或維持 `'comment'`，為 `important` 時額外背景推送行事曆事件；`list_case_updates()` 回傳的留言項目補上 `important` 欄位；前端動態列表對應加「⭐ 重要」小標籤（沿用既有 `.feed-badge` 樣式語言）。
+- **行事曆文案調整**（前一輪已上線的三個原始觸發點，使用者這輪要求微調）：①出貨單事件改用出貨單真正的 `ship_date` 欄位排日期，不再用「核准當下」——已用正式機真實資料確認 `ship_date` 常常跟核准日期不同天（甚至可能早於核准日），用核准日期會誤導行事曆上的時間軸；說明欄同步補上出貨日期文字。②開票申請憑據／報價單成案的金額文字補上「（含稅）」字樣，避免誤會是未稅金額。③金額維持只在說明欄顯示（使用者確認不需要放進標題）。
+- **event id 不記錄的差異點**：轉建/重要留言/停滯提醒這三類新觸發點沒有既有 `data_json` 可掛（`dev_cases`／`case_updates` 是輕量表），比照「先建立、不做更新/刪除同步」的既有原則不記錄 event id，跟原本三個觸發點（有記錄）不同，已在此說明。
+- **驗證**：`python -m py_compile` + `import main` 全部通過；scratchpad db 複本 + monkeypatch 新增的 3 個 push 函式，直接呼叫真實端點確認：①轉建觸發一次、重複轉建被既有 409 擋下不二次觸發；②停滯提醒第一次跨過 30 天觸發、同一 guard 視窗重跑不重複觸發（獨立於 email 的 14 天 bucket）；③留言勾選重要才觸發、一般留言不觸發，且 `list_case_updates()` 正確回報 `important` 旗標。出貨單日期欄位變更額外用合成資料驗證確實改用 `ship_date` 而非今天日期。
+- **回推開發機**：`routers/dev_crm.py` 本輪新加入追蹤；`helpers/google_calendar.py`／`helpers/__init__.py`／`routers/quotations.py`／`frontend/pages/case-management.html`／`frontend/js/case-management.js` 皆已同步並 `diff -q` 比對一致。
+
+### 2026-08-21f — Google 行事曆一次性授權完成，Phase 1（push）正式全功能上線
+
+- **最終確認完成**：`refresh_token` 已成功寫入 `system_settings.google_calendar`（103 字元），直接呼叫 `helpers.google_calendar.create_test_event()` 建立真實測試事件成功（回傳真實 Google event id），證實 OAuth token 換發＋Calendar API 呼叫整條鏈路在正式機上完全打通。至此開票申請憑據核准／出貨單核准／報價單成案三個觸發點會真正把整天事件推上 Google 行事曆，不再只是「程式碼就緒但不會真的動作」的狀態。
+- **過程中的插曲（記錄下來避免下次重蹈覆轍）**：這次授權過程中使用者陸續換了三組不同的 Client ID/Secret（可能是重新產生密鑰或改建新的 OAuth Client），每次都重新啟動一次性腳本——但**背景執行緒沒有確實逐一終止**：`scripts/setup_google_calendar_oauth.py` 用的 `http.server.HTTPServer` 在 Windows 上因為 `allow_reuse_address` 的行為差異，允許多個行程同時綁定同一個 port 而不會報錯（不像典型 Unix 行為會直接擋掉），導致好幾輪重啟後背景其實同時存在多個監聽中的舊行程，用舊憑證組合的那個意外先收到瀏覽器的授權回呼，換權杖時因密鑰已經換過被 Google 回 401 Unauthorized 而靜默失敗（`refresh_token` 沒寫入）——當下使用者看到瀏覽器顯示「授權完成」的頁面，但那其實是舊行程回應的、實際上換權杖失敗的一次嘗試，造成誤判。之後改用 `Get-CimInstance Win32_Process` 直接核對行程清單（而非只看 port 是否在 Listen 狀態）確認只剩一個乾淨的正確行程在監聽，才成功。**教訓**：往後如果一次性腳本要重跑，務必先確認前一個背景執行緒真的終止（用行程清單核對，不能只看 port 狀態），必要時明確 `TaskStop` 舊的再重啟新的。
+- **回推開發機**：無新增/修改程式碼檔案，僅系統設定資料本身的變化（`system_settings` 資料表內容，不隨程式碼回推）。
+
+### 2026-08-21d — Google 行事曆一次性授權：憑證存入＋第十三次重啟＋踩到 Google 測試者名單限制
+
+- 使用者提供 Google Cloud 專案的 Client ID/Secret，直接寫入正式機 `system_settings.google_calendar`（`enabled=true`、`calendar_id=primary`，`refresh_token` 當時仍空），不透過設定頁手動輸入，避免手動轉貼出錯。
+- **第十三次重啟**（2026-08-21 14:35）套用 2026-08-21c 這輪程式碼，`server.log` 確認 `/api/settings/google-calendar`（GET/PUT）與 `/api/settings/google-calendar/test`（POST）皆已上線，其餘既有功能無異常。
+- 執行 `scripts/setup_google_calendar_oauth.py` 第一次嘗試時，Google 端回「已封鎖存取權：『行事曆』未完成 Google 驗證程序」——**原因**：OAuth 同意畫面（OAuth consent screen）預設是「測試中 Testing」發布狀態，未驗證的 App 只有列在「測試使用者 Test users」名單裡的帳號才能完成授權，即使是專案建立者本人的帳號也一樣會被擋。**解法**：Google Cloud Console → APIs & Services → OAuth consent screen → Test users → 新增該共用 Gmail 帳號。使用者已完成新增，正在等待 Google 那邊生效（實測約需十幾分鐘到半小時），之後會重新執行腳本完成一次性授權。
+- 這是一次性設定的已知常見坑，跟系統程式碼本身無關，記錄下來避免下次（例如日後要換帳號或重新授權時）重複踩雷。
+- **尚未完成**：`refresh_token` 仍未寫入，行事曆推送功能程式碼已就緒但實際還不會真正推送（`_events_call()` 缺 refresh_token 時直接失敗記 log，不影響開票/出貨/成案主流程）。等測試使用者名單生效後重跑一次性腳本即可完成。
+
+### 2026-08-21c — Google 行事曆整合 Phase 1（系統 → 行事曆，push only）
+
+- **背景**：使用者要提供一組共用 Gmail（跟 email 通知的 SMTP 帳號同一組）串接 Google 行事曆，讓系統把重要事件自動推上行事曆。經討論拆兩階段，這輪只做 push（系統→行事曆）；pull 方向（行事曆→系統、沒更新隔日寄信提醒）留待之後。
+- **這輪三個觸發點**（使用者透過 AskUserQuestion 選定）：開票申請憑據簽核核准、出貨單簽核核准、報價單標記「已成案」——皆在真正的狀態轉換當下（不是每次呼叫對應端點）觸發一次，建立整天事件。
+- **刻意不裝任何新 pip 依賴**：正式機 `requirements.txt` 目前只有 `fastapi`/`uvicorn`/`pydantic`/`aiofiles`，新增 `helpers/google_calendar.py` 直接用內建 `urllib.request` 打 OAuth2 token endpoint + Calendar API v3 REST 介面（`_get_access_token()` 換發短效 access token，記憶體快取過期前自動換新；`_create_all_day_event()` 建立整天事件），不用官方 `google-api-python-client`/`google-auth` 那一整包，維持正式機依賴極簡的現狀。
+- **授權模式**：Desktop app 類型 OAuth Client + 一次性 loopback 授權（新增 `backend/scripts/setup_google_calendar_oauth.py`，必須在正式機本機執行，用 email 通知同一組 Gmail 帳號登入同意一次），換到的 `refresh_token` 永久存進 `system_settings.google_calendar`，之後全自動運作不需要再人工介入。Scope 用最小權限 `calendar.events`（只能讀寫事件，動不到行事曆清單/設定本身）。
+- **event id 不開新 SQL 欄位**：直接存進各文件既有的 `data_json.googleCalendarEventId`（比照 `returnInfo`/`statusLog` 這種輔助欄位直接放 JSON blob 的既有慣例），供之後要做「更新/刪除既有事件」時沿用，不用重新設計資料結構——**這輪只做新建，不做更新/刪除同步**（例如出貨單核准後被撤銷，行事曆事件不會跟著移除）。
+- **新增設定頁 `google-calendar-settings.html`**（superadmin，比照 `notification-settings.html` 的排版跟設定狀態 checklist 模式）：啟用開關、Client ID/Secret、Calendar ID、授權狀態（已連接/尚未連接）、測試按鈕；`routers/system.py` 新增 `GET/PUT /api/settings/google-calendar` + `POST .../test`（完全比照既有 email-notify 設定端點的 `_MASKED` 密碼回顯模式）。`sidebar.js` 系統群組新增連結。
+- **驗證**：`python -m py_compile` + `import main` 全部通過；`unittest.mock` 直接 stub `urllib.request.urlopen` 測 `google_calendar.py` 的 HTTP 邏輯（token 換發/快取/過期重新換、整天事件的 `end.date` 正確等於 `start.date+1`——這是 Google API 的既有慣例、停用時直接擋在打 API 之前、缺 refresh_token 訊息清楚），不需要真的連上 Google；用 scratchpad db 複本 + monkeypatch 三個 `push_event_for_*` 函式，直接呼叫**真實的** `approve_invoice_voucher()`/`approve_shipping_note()`/`update_deal_tag()`，確認：開票核准/出貨單核准都只在 `all_done=True`（真正核准完成，不是中間層）當下推送一次；出貨單兩層簽核，第一層通過時完全不推送，第二層（最終層）通過才推送；報價單標記已成案觸發一次，**重複 PATCH 同一個 `已成案` 值不會重複推送**（避免同一張報價單被反覆按到就一直建立重複事件）。
+- **⚠️ 目前尚未真正生效**：這輪程式碼已就緒，但**缺少 Google Cloud 的 Client ID/Secret，也還沒在正式機執行一次性授權腳本**——`enabled` 開關 + 沒有 `refresh_token` 時 `_events_call()` 會直接失敗並記 log，不影響開票/出貨/成案這些主流程本身（fire-and-forget，失敗不擋主要動作）。使用者需要：①自行到 Google Cloud Console 建專案、啟用 Calendar API、建 Desktop app 類型 OAuth Client；②到「Google 行事曆設定」頁面填入 Client ID/Secret 並儲存；③在正式機本機執行 `python scripts/setup_google_calendar_oauth.py` 完成一次性授權。三步驟都完成前，三個觸發點的程式碼會照常執行（背景執行緒嘗試推送、失敗記 log），核准/成案本身完全不受影響。
+- **回推開發機**：`helpers/google_calendar.py`／`scripts/setup_google_calendar_oauth.py`／`routers/system.py`／`routers/shipping_notes.py`／`frontend/pages/google-calendar-settings.html` 是本輪新加入追蹤的檔案，全部 25 個追蹤檔案已同步並 `diff -q` 比對一致。
+
+### 2026-08-21b — 簽核逾期催辦通知（工作日 1/3/5 天分級升級）
+
+- **背景**：使用者要求——待簽核項目卡在簽核柱列超過工作日 1 天、3 天要主動催簽核；超過 3 天同步通知超級管理員；超過 5 天後每個工作日都持續寄信，直到簽核或退回為止。三種文件（報價單／承攬商匯款申請／開票申請憑據）套用同一套規則，一律從 `approval.requestedAt`（原始送審時間）起算工作日，不因換層歸零。
+- **新增 `_workdays_elapsed(start_date, end_date)`**（`helpers/dates.py`）：計算兩個日期間有幾個週一到週五。**已知限制**：只排除週六日，不排除台灣國定假日（系統目前沒有假日行事曆表可用）。
+- **新增 `_check_approval_reminders()`**（`routers/daily_tasks.py`，比照既有 `_check_warranty_expiry()` 的寫法）：掛進既有每日 08:00 排程（`schedule_overdue_check()` 的 `_daily_run()`／`_startup_catchup()`），用一個小設定清單描述三種文件表格差異（欄位名稱、快照裡取名稱用的欄位路徑），迴圈跑三次避免整段邏輯複製三份；比照另外三個 router 各自重複 `_active_tiers()`/`_current_tier_idx()` 小工具的既有慣例，這裡也自己放一份，不跨 router import。判斷該提醒誰：有簽核層設定 → 目前這層第一位未簽核的人（跟 `approve_*` 端點判斷「誰能簽核」同一條邏輯，只通知真正能動作的人）；無簽核層設定（superadmin fallback）→ 全部 active superadmin。
+- **防重複寄送**：沿用既有的 `system_settings` guard key 慣例（不是記「上次寄送時間」，而是「這個門檻寄過了嗎」的一次性旗標），guard key 額外帶入 `requestedAt`——文件被退回、重新送審後 `requestedAt` 換新值，催辦倒數會自然重新從 0 天起算，不會被舊一輪的 guard 卡住讓新一輪永遠不寄；1/3 天門檻各寄一次，5 天以上 guard key 額外帶當天日期，讓每個工作日各寄一次。
+- **新增 email 函式 `notify_approval_reminder()`**（`helpers/email_notify.py`）：沿用 `_build_html()` 既有樣式，依逾期天數分三級 badge 顏色（1-2 天琥珀／3-4 天橘＋已通知管理員／5 天以上紅＋急件），按鈕統一連到簽核佇列頁（三種文件現在都在同一頁）。新增通知偏好事件 key `approval_reminder`（`notification_prefs.py` + `frontend/pages/users.html` 通知偏好 checkbox，使用者可自行靜音）。
+- **清理殘留提醒**：三個 router 的 `delete`／`reject`／`revoke-approval` 端點（比照各自既有的 `_purge_notifications(...)` 呼叫）加上 `'approval_reminder'`，簽核完成或退回後站內的催辦通知會一併清掉。
+- **驗證**：`python -m py_compile` + `import main` 全部通過；用 scratchpad 正式機 db 唯讀複本，直接呼叫真實的 `_check_approval_reminders()`（monkeypatch `db.DB_PATH` + 攔截 email 派送函式改為記錄呼叫，不會真的寄信），植入 0/1/2/3/4/5/6 個工作日前送審的合成項目，驗證：0 天不寄、1-2 天寄但無 superadmin、3 天以上加上 superadmin、5 天以上每次執行都寄（guard key 帶當天日期）；同一天重跑第二次確認全部門檻正確被擋下不重複寄；額外驗證「退回重新送審」情境（`requestedAt` 換新值後催辦倒數正確歸零，不會被舊 guard 卡住永遠不寄）。**過程中也發現正式機目前確實有 3 筆真實待簽核項目已滿 1 個工作日**（PV-202608-001／PV-202608-002／IV-202608-001），重啟後下一次排程執行會對這幾筆送出真實提醒信（email 通知功能已在系統設定中啟用），屬預期行為。
+- **回推開發機**：`routers/daily_tasks.py`／`helpers/dates.py` 是本輪新加入追蹤的檔案，全部 20 個追蹤檔案已同步並 `diff -q` 比對一致。
+
+### 2026-08-21 — Sidebar 選單順序調整：選型資料庫移到系統模組上方
+
+- 使用者要求：「選型資料庫」模組原本在左側 sidebar 第二組（緊接業務群組之後），改到「系統」群組正上方。純前端排版異動，`frontend/static/sidebar.js` `buildSidebar()` 內把 `選型資料庫` 那個區塊（`sec()` + 7 個 `ni()` 項目：場域/網路架構/交換器/監控/門禁/閘道器選型導覽＋涵蓋度總覽）整段搬到陣列尾端、`系統` 區塊正前方，順序邏輯與各項目的顯示條件（`cEnvG`／`cNetG` 等權限旗標）完全沒動，只調整陣列排列順序。
+- 純靜態前端檔案異動，不牽涉後端／資料庫，不需要重啟正式機伺服器——瀏覽器重新整理頁面即可看到新順序（若瀏覽器快取了舊版 `sidebar.js` 未及時更新，才需要強制重新整理）。
+- 已同步進 `Desktop\回推開發機_2026-08-20_匯款發票憑證\frontend\static\sidebar.js`。
+
+### 2026-08-20k — 架構自我檢查：修正簽核權限漏洞＋補上競爭條件防護
+
+- **背景**：使用者要求對兩個新單據做一次整體架構檢查。逐一比對 `contractor_vouchers.py`／`invoice_vouchers.py` 與其比照對象 `quotations.py` 的簽核邏輯，找出兩項真實落差＋兩項防禦性加固機會。
+- **① 高風險 bug（已修正）：非 admin/superadmin 角色的簽核人員永遠無法簽核**。`approve_contractor_voucher()`／`reject_contractor_voucher()`／`approve_invoice_voucher()`／`reject_invoice_voucher()` 開頭都寫死一道 `_require_admin(user)`，但簽核設定頁面（`contractor-voucher-approval-settings.html` 的 `availableUsers`）明明允許加入任何角色（業務／一般人員…）的使用者當簽核人。一旦真的指派了非 admin 角色的人當簽核人，該員點「確認簽核」會直接收到 403「需要管理員權限」，該層永久卡死無人可簽——`quotations.py` 的對應端點從一開始就沒有這道硬性角色檢查，完全交給「是否為當層簽核人員」判斷，兩個新單據當初比照時漏掉了這點。修正：移除這四個端點開頭的 `_require_admin(user)`，其餘動作端點（`create`／`delete`／`submit`／`paid-toggle`／`export`／簽核設定）維持不動，這些本來就該限管理員操作。
+- **② 中風險漏洞（已修正）：無簽核層設定時，申請人可自行核准自己的申請**。`quotations.py` 在「系統未設定簽核流程」的 fallback 分支有一道「申請人不得自行審核」的檢查（除非申請人是目前唯一在職的最高管理者，否則會永久卡死），這道檢查沒有被複製到兩個新單據的對應分支，等於一個 superadmin 可以自建、自送、自核一張匯款申請或開票申請，繞過財務文件本該有的權責分離。已在兩個 router 的 no-tiers 分支補上相同檢查（含逃生條款）。
+- **③／④ 低風險加固（已修正）：關閉兩處競爭視窗**。`create_invoice_voucher()`（剩餘可開票額度檢查）與 `create_contractor_voucher()`（同一派發重複建立檢查）原本都是「先查詢、後寫入」兩個分開步驟，理論上兩個近乎同時的請求可能都通過檢查。已在兩處建立端點開頭加上 `conn.execute("BEGIN IMMEDIATE")`，讓查詢跟寫入鎖進同一個資料庫交易，後到的請求會排隊等前一個交易 commit 後才能繼續，從資料庫層面徹底關閉這個窗口（不只是應用層檢查）。
+- **驗證**：`python -m py_compile`＋`import main` 全部通過。用 scratchpad 正式機 db **唯讀複本**＋monkeypatch `_require_user`，直接呼叫**真實的端點函式**（非重寫邏輯）跑了 5 組情境測試：非 admin 角色簽核人成功簽核／退回（驗證①）、申請人自簽被擋＋換一位其他 superadmin 成功核准（驗證②）、唯一在職 superadmin 的逃生條款仍正常運作（驗證②的例外情境）；另外用**真正的雙執行緒**同時呼叫 `create_invoice_voucher()`，模擬兩個各自合法但合計超額的請求，確認修正後恰好一個成功、一個被 409 擋下（驗證③），且最終累計申請金額沒有超過報價單總額。全程只碰 scratchpad 複本，正式 db 未被寫入。
+- **未列入這輪修正**：`pdf_gen.py` 全檔案（不只這兩個新單據）都沒有對插入 PDF 的欄位做 HTML escape——這是整個 PDF 產生子系統從一開始就有的既有模式（報價單／出貨單皆同），不是這兩個新功能新引入的問題，這輪範圍內不處理。
+- **回推開發機**：`backend/routers/contractor_vouchers.py`／`backend/routers/invoice_vouchers.py` 已同步進 `Desktop\回推開發機_2026-08-20_匯款發票憑證\`，18 個追蹤檔案全部 `diff -q` 比對一致。
+- **尚未執行**：正式機重啟。
+
+### 2026-08-20j — 承攬商匯款申請／開票申請憑據納入統一簽核佇列＋補上 PDF 預覽
+
+- **背景**：使用者要求「以上簽核部分都需要顯示在簽核佇列中，並且簽核跟預覽先參考別的模組的內容，一致樣式跟顯示模式」——兩個新單據原本只能在 `case-management.html` 各自的位置簽核，沒進到全公司共用的「簽核佇列」頁面（`approval-queue.html`），且完全沒有 PDF 預覽功能。
+- **後端**（`backend/routers/quotations.py`）：新增共用小工具 `_queue_tier_fields()`（三種文件類型 `approval_json` 的 `tiers`/`currentTier`/`currentApprovers` 形狀完全相同，抽出來避免貼三次）；`get_approval_queue()` 與 `get_approval_queue_count()`（topbar 每頁必打的輕量端點）都改成合併查詢 `quotations`／`contractor_payment_vouchers`／`invoice_vouchers` 三張表，刻意沿用報價單既有欄位名稱（`quoteNo`/`customer`/`total`/`quoteDate`...）承載新類型資料，只多一個 `type`（`quotation`/`contractor_voucher`/`invoice_voucher`）與 `linkedQuoteNo`（voucher 類型指向所屬案件），讓既有分組/排序邏輯完全不用改。
+- **前端**（`frontend/pages/approval-queue.html`）：新增型別小工具 `docTypeLabel()`/`apiBase()`/`isVoucher()`/`amountLabel()`/`dateLabel()`；列表項目加類型徽章（沿用 `.aq-group-badge` pill 視覺語言）；「開啟報價單」連結依類型分流成「開啟案件管理」（連到 `case-management.html?no=` + `linkedQuoteNo`）；三個簽核動作（`doApprove`/`doReject`/`doRejectFinal`）的 API 呼叫從寫死 `/api/quotations/...` 改用 `apiBase(item)` 分流；**兩個新單據沒有「拒絕結案」永久終止端點**（只有報價單有），佇列裡用 `x-show="!isVoucher(...)"` 把該按鈕在三處（header/superadmin bypass/bottom bar）都隱藏，並在 `doRejectFinal()` 內加防禦性 guard 雙重保險；基本資訊 grid 的金額/日期標籤、「業務人員」列（voucher 類型顯示「關聯案件」）都依型別動態化。
+- **新增 PDF 預覽 Modal**：複製 `case-management.html` 既有的 `cvPreviewModal`/`ivPreviewModal` iframe+blob 寫法（fetch blob → `URL.createObjectURL` → iframe → 關閉時 revoke），做成通用版套用在簽核佇列頁——三種文件類型（含報價單本身，之前完全沒有預覽功能）都能在佇列裡直接預覽 PDF，不用另外開頁籤。
+- **驗證**：`backend/routers/quotations.py` 通過 `python -m py_compile`；前端 HTML 標籤（`<div>`/`<template>`/`<span>`/`<button>`）與 JS 大括號/括號/中括號逐一計數比對平衡；用 scratchpad 內正式機 db **唯讀複本**插入合成的待審核承攬商匯款申請/開票申請憑據各一筆（含 tiers），實際跑一遍 `get_approval_queue()`/`get_approval_queue_count()` 的 SQL 邏輯，確認：①報價單既有查詢完全未受影響（風險最高的部分）；②合成的兩筆 voucher 正確帶入 `type`/`linkedQuoteNo`/金額欄位；③跟報價單分到同一個申請人分組；④count 端點正確算出待簽核數量。測試全程只碰 scratchpad 複本，正式 db 完全沒有寫入，測完即刪除複本與測試腳本。
+- **回推開發機**：`backend/routers/quotations.py`／`frontend/pages/approval-queue.html` 是**本輪新增進回推清單的檔案**（先前幾輪未追蹤），已複製進 `Desktop\回推開發機_2026-08-20_匯款發票憑證\` 並對全部 18 個追蹤檔案（後端 10 個＋前端 8 個）跑過 `diff -q` 全量比對，確認正式機與回推資料夾逐檔一致。
+- **尚未執行**：正式機重啟（第 10 次）。
+
+### 2026-08-20i — 開票申請憑據補上含稅/未稅顯示，順手修正 scope='items' 的稅基計算 bug
+
+- **背景**：使用者要求「申請開立發票的含稅未稅都需要顯示」。
+- **順手抓到一個真實 bug**：`scope='items'` 品項金額欄位比照報價單品項本身的慣例是**未稅**（品項 `unitPrice`/`amount` 加總起來是 `pretax` 的組成，不是 `total`），但原本的剩餘額度比較/`voucher.amount` 儲存都直接拿這個未稅加總去跟 `quoteTotal`（含稅）比，同一張報價單的稅率通常抓 5% 左右，等於每次都少算了那 5%，長期下來剩餘額度會被高估。修正：`_quote_remaining()` 補回傳 `quotePretax`；`create_invoice_voucher()` 依 scope 分兩個方向換算——`scope='amount'` 輸入視為含稅，除以稅率取未稅；`scope='items'` 輸入視為未稅，乘以稅率取含稅，換算後的含稅金額才拿去跟剩餘額度比較、才存進 `voucher.amount`。前端 `ivSelectedTotal()`（未稅小計）跟送出前的超額檢查同步修正為用換算後的含稅小計比較（新增 `ivSelectedGrossTotal()`）。
+- **顯示**：`snapshot_json` 新增 `pretaxAmount`／`taxAmount`；`_voucher_public()` 一併回傳；PDF 總額區塊改列「未稅小計／營業稅／申請開票總額（含稅）」三行；建立 Modal 按金額模式輸入時即時顯示未稅/稅額，按品項模式的小計區塊改列未稅小計/營業稅/含稅小計三行；既有申請列表也補上「未稅 NT$xxx」小字。
+- 已用真實案件（MQ-202607-025，稅率約 5%）驗證換算方向與四捨五入誤差在合理範圍內（正反換算對得回原數字，誤差 <2 元）；`python -m py_compile`＋`import main`＋PDF 兩種 scope 渲染測試皆通過；前端標籤/括號平衡確認。
+
+### 2026-08-20h — 開票申請憑據重新設計：自訂金額/品項 + 剩餘額度追蹤（DB v47）＋ NT$0 bug 修復
+
+- **Bug 修復**：`create_invoice_voucher()` 原本用 `data_json.get("total")` 算款項金額，但 `total` 其實是 `quotations` 資料表的正規 SQL 欄位，不保證存在於 `data_json` 頂層——實測某案件（MQ-202607-025）`data_json.total` 是 `None`，導致 100% 比例款項算出 NT$ 0。改為 `SELECT ... total ...` 直接讀 SQL 欄位。
+- **重新設計背景**：使用者反映很多案件是「先開發票才能收款」，原本只能挑一個既有款項期別（`single`/`all`）不夠彈性，且擔心重複請款。三個問題用 `AskUserQuestion` 逐一確認：①已存在的申請（含草稿）就要鎖額度；②自訂金額/自訂品項完全取代舊的挑期別模式；③品項金額使用者可自行調整（不強制=數量×單價）。
+- **`scope` 語意改變**：`'single'/'all'` → `'amount'`（自訂任意金額）/`'items'`（自訂品項+數量）。
+- **`invoice_vouchers.amount` 新增真實欄位**（`_m047_invoice_vouchers_amount`，舊資料用當時 snapshot 加總回填）：唯一權威金額數字，供 `_quote_remaining()` 直接 `SUM()` 算「已申請多少／還剩多少」，不必每次解析全部 JSON。
+- **新端點 `GET /invoice-vouchers/remaining?quote_no=`**：回傳合約總額/已申請/剩餘金額 + 各報價品項的已申請/剩餘數量；註冊順序刻意放在 `/{voucher_no}` 之前避免被動態路徑吃掉。
+- **前端**：`case-management.html` 款項明細區塊移除舊的「整份排程」/「單筆」兩顆按鈕與每筆款項各自的申請按鈕，改成單一「申請開立發票」按鈕開啟新 Modal——先顯示剩餘額度，選「按金額」或「按品項」兩個分頁，按品項時逐項勾選＋輸入數量（上限=剩餘數量）＋可自行調整金額，即時算選取小計並擋超額。`case-management.js` 新增 `openInvoiceVoucherModal()`／`ivToggleItem()`／`ivItemQtyChanged()`／`ivSelectedTotal()`／`submitInvoiceVoucherCreate()`，移除舊的 `_paymentVoucher()`／`_allInvoiceVoucher()`／`createInvoiceVoucher(scope, paymentIdx)`。
+- **PDF**：`scope='items'` 顯示「三、申請品項明細」（實際選取的品項，不重複顯示報價單全部品項參考）；`scope='amount'` 顯示「三、申請金額」+「四、開票品項參考」（報價單全品項背景參考，跟之前一樣排除 cost/margin）。
+- 已驗證：NT$0 bug 用真實受影響案件（MQ-202607-025）重新計算確認修正為 NT$233,725；建立/剩餘額度扣除/超額擋 409/品項數量超額擋 409 全部用**正式機 db 的唯讀複本**（非正式機本身）實測跑過一輪完整流程，正式機資料未受影響；兩種 scope 的 PDF 各自渲染測試通過；`python -m py_compile` + `import main`（含新路由排序檢查）全部通過；前端 HTML 標籤/JS 括號逐一計數比對平衡。
+- **尚未執行**：正式機重啟；重啟後強烈建議先用 demo 帳號完整走一次兩種模式（含刻意超額測試 409 是否正確擋下）再用於真實案件，畢竟這輪改動範圍比之前幾輪都大。
+
+### 2026-08-20d/e/f/g — 申請人姓名改顯示名稱／申請日期＋匯款日期自動帶入／開票申請補報價品項
+
+四筆使用者實測回饋的小修正，皆已重啟生效：
+- 申請人欄位原本 fallback 到 `createdBy`（帳號登入名），改為查 `users.display_name`（`pdf_gen.py _display_name_for_username()`）
+- 「申請日期」「匯款日期」兩個原本寫死空白底線的簽名欄，分別補上 `approval.requestedAt`／`paidAt` 自動帶入（無資料時仍保留空白底線待手動簽署）
+- **開票申請憑據新增報價單品項參考**（使用者回饋「也會帶入報價單的品項內容嗎」，原本只有款項期別/金額，沒有實際品名）：`snapshot_json.quoteItems` 只帶客戶看得到的欄位（description/brand/qty/unit/unitPrice/amount/notes），**刻意排除 `cost`/`margin` 等內部機密欄位**，避免成本/毛利外流到財務單位使用的文件；PDF 新增「四、開票品項參考」表格
+- 每項都用合成資料寫單元測試驗證（含 fallback 情境、無資料情境、cost/margin 數值確認不外流），`python -m py_compile`＋`import main` 全部通過；回推開發機清單資料夾已逐輪同步（曾發生一次 6 個檔案漏同步，用 `diff` 全檔核對後修正，詳見資料夾內 `README.md`）
+
+### 2026-08-20c — 「匯款憑證」改名「匯款申請」＋申請人自動帶入＋放寬派發資格為已驗收
+
+- **背景**：使用者實際用過一輪後回報三件事：①小林機械案件底下中勇科技無法申請匯款；②術語「承攬商匯款憑證」要改成「承攬商匯款申請」；③PDF 右下角「申請人．經手人」要自動帶入申請人姓名。
+- **中勇科技無法申請的診斷**：直接查正式機 `motrix_erp.db`（唯讀）確認並非 bug——該筆派發（`contractor_dispatches.id=2`，`vendor_id=3` 中勇科技）狀態是 `accepted`（已驗收），不是 `completed`（完工），而系統規則（使用者當初自己選的）只有完工才顯示「產生匯款申請」按鈕；同案件另一筆純點工派發已是完工狀態，已正常產生一張申請單在待審核，證明功能本身沒問題。用 `AskUserQuestion` 詢問使用者後，選擇放寬規則。
+- **放寬派發資格**：`create_contractor_voucher()` 判斷條件從「僅 `completed`」改為「`accepted` 或 `completed`」皆可建立；`case-management.html` 承攬商 tab 卡片的按鈕顯示條件同步放寬。
+- **全面改名「匯款憑證」→「匯款申請」**：只改承攬商匯款這個功能的中文顯示字串（頁面標題、按鈕、錯誤訊息、PDF 文案、email 內容、sidebar 連結、`§0`/`§4.1`/`§5.9`/`§7.11`/`§12` 本文件），刻意不改程式碼識別字（`contractor_vouchers.py`／`contractor-voucher-approval-settings.html` 等檔名、`contractor_payment_vouchers` 資料表、`PV-` 單號前綴、`voucherNo` 等 JSON 欄位、`/api/contractor-vouchers/*` API path）——這些是內部識別字，改了風險大、對使用者無實際幫助。開票申請憑據（發票功能）用字是「憑據」不是「憑證」，字面不衝突，這次未受影響。
+- **申請人自動帶入**：兩份 PDF（承攬商匯款申請、開票申請憑據）右下角「申請人．經手人」簽名欄，原本只有空白簽名線。新增 `applicant_name = approval.requestedByDisplay || createdBy`（已送審則顯示簽核流程記錄的申請人顯示名稱，草稿階段預覽則 fallback 顯示建立者帳號），`pdf_gen.py` 的 `_contractor_voucher_dict()`／`_invoice_voucher_dict()` 補上 `createdBy` 欄位。
+- 已用合成資料直接呼叫兩個 PDF builder 函式驗證（含草稿 fallback／已送審顯示兩種情境），`python -m py_compile`＋`python -c "import main"` 全部通過；回推開發機清單資料夾已同步。
+- **尚未執行**：正式機第三次重啟（待使用者同意）。
 
 ### 2026-08-17i — 料號主檔新增匯出／匯入 Excel
 
@@ -2210,20 +2686,24 @@ MOTRIX-ERP/
 │       ├── daily_tasks.py · warranty.py
 │       ├── vendor_contractors.py  ← 承攬商 + 派發 CRUD + accept + import-to-quote
 │       ├── dev_crm.py             ← 業務開發 CRM（dev_cases + dev_logs）
-│       └── shipping_notes.py      ← 出貨單 CRUD + 獨立簽核流程 + PDF + 回簽 toggle
+│       ├── shipping_notes.py      ← 出貨單 CRUD + 獨立簽核流程 + PDF + 回簽 toggle
+│       ├── contractor_vouchers.py ← 承攬商匯款申請 CRUD + 獨立簽核流程 + PDF + 已匯款 toggle（2026-08-20）
+│       └── invoice_vouchers.py    ← 開票申請憑據 CRUD + 獨立簽核流程 + PDF（2026-08-20）
 ├── frontend/
 │   ├── index.html               ← 儀表板（Alpine inline）
 │   ├── css/style.css
 │   ├── js/
-│   │   ├── case-management.js   ← ✅ 有效（案件管理 Alpine 元件）
+│   │   ├── case-management.js   ← ✅ 有效（案件管理 Alpine 元件，含匯款申請/開票憑據方法）
 │   │   └── reports.js           ← ✅ 有效（營運報表 Alpine 元件）
 │   ├── pages/
 │   │   ├── dev-crm.html         ← 業務開發 CRM（雙欄；devCrmPage() Alpine inline）
 │   │   ├── quotation-form.html  ← Alpine inline（真正的 quotationForm()）
 │   │   ├── settlement.html      ← Alpine inline（真正的 settlementPage()）
-│   │   ├── case-management.html ← 含承攬商派發 + 驗收流程 Tab + 出貨單 Tab
+│   │   ├── case-management.html ← 含承攬商派發 + 驗收流程 Tab + 出貨單 Tab + 匯款申請/開票憑據區塊
 │   │   ├── vendor-contractors.html ← 承攬商管理（雙欄；vendorContractorsPage()）
 │   │   ├── shipping-approval-settings.html ← 出貨單專屬簽核設定（複製 approval-settings.html）
+│   │   ├── contractor-voucher-approval-settings.html ← 承攬商匯款申請專屬簽核設定（複製上者，2026-08-20）
+│   │   ├── invoice-voucher-approval-settings.html ← 開票申請憑據專屬簽核設定（複製上者，2026-08-20）
 │   │   └── *.html               ← 其餘頁面均 Alpine inline，無對應外置 JS
 │   └── static/
 │       ├── sidebar.js           ← Topbar + Sidebar + 離開警示 + _FILE_MODULE + sb-mod-* badge

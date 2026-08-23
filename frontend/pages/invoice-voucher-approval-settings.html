@@ -5,7 +5,7 @@
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="../static/favicon.png">
-  <title>簽核設定 — MOTRIX 營運管理系統</title>
+  <title>開票申請憑據簽核設定 — MOTRIX 營運管理系統</title>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <style>
@@ -116,14 +116,14 @@
     .as-step-arrow {
       text-align: center; color: var(--text-dim); font-size: 14px; margin: -4px 0;
     }
-  
+
   /* -- Mobile RWD -- */
   @media (max-width:767px) {
     .as-main { margin-left:0 !important; padding:14px 12px; }
   }
   </style>
 </head>
-<body x-data="approvalSettingsApp()" x-init="init()" x-cloak>
+<body x-data="invoiceVoucherApprovalSettingsApp()" x-init="init()" x-cloak>
 
     <header id="app-topbar" class="topbar"></header>
 <div class="sidebar-overlay" id="sidebar-overlay"></div>
@@ -136,8 +136,8 @@
 
     <div class="as-header">
       <div>
-        <div class="as-title">簽核流程設定</div>
-        <div class="as-subtitle">設定報價單送出審核後，需依序由哪些人員簽核通過</div>
+        <div class="as-title">開票申請憑據簽核流程設定</div>
+        <div class="as-subtitle">設定開票申請憑據送出審核後，需依序由哪些人員簽核通過（獨立於報價單／出貨單／承攬商匯款申請簽核流程）</div>
       </div>
       <div style="display:flex;gap:8px;align-items:center">
         <template x-if="session.role !== 'superadmin'">
@@ -166,10 +166,10 @@
 
         <div class="as-desc">
           <template x-if="steps.length === 0">
-            <span>目前為<b>預設模式</b>：報價單送出後，由任何超級管理員簽核即可通過。</span>
+            <span>目前為<b>預設模式</b>：開票申請憑據送出後，由任何超級管理員簽核即可通過。</span>
           </template>
           <template x-if="steps.length > 0">
-            <span>目前為<b>自訂順序模式</b>：報價單須依下方設定的順序，由各指定人員依序簽核，全部通過後才送出。</span>
+            <span>目前為<b>自訂順序模式</b>：開票申請憑據須依下方設定的順序，由各指定人員依序簽核，全部通過後才核准。</span>
           </template>
         </div>
 
@@ -328,10 +328,11 @@
         </div>
         <div class="as-card-body" style="padding:14px 20px">
           <ul style="font-size:12px;color:var(--text-secondary);line-height:2;margin:0;padding-left:18px">
-            <li>報價單送出審核後，系統依此設定生成簽核步驟，並快照當時的設定（修改此頁不影響已在審核中的報價單）</li>
-            <li>每位簽核人員在自己的步驟輪到時，才能在「簽核佇列」頁面執行簽核</li>
+            <li>開票申請憑據送出審核後，系統依此設定生成簽核步驟，並快照當時的設定（修改此頁不影響已在審核中的憑據）</li>
+            <li>此設定與報價單／出貨單／承攬商匯款申請簽核流程各自獨立，可指定不同的簽核人員</li>
             <li>任何步驟皆可由超級管理員退回草稿</li>
-            <li>所有步驟完成後，報價單狀態自動更新為「已送出」並觸發 PDF 備存</li>
+            <li>所有步驟完成後，憑據狀態自動更新為「已核准」，可下載 PDF 供財務單位辦理開立發票</li>
+            <li>只有款項明細中已標記「已收款」的項目才能申請開票憑據</li>
             <li>未設定任何步驟時，回歸預設行為：任一超級管理員皆可簽核</li>
           </ul>
         </div>
@@ -343,7 +344,7 @@
   <script>
     const API = '/api'
 
-    function approvalSettingsApp() {
+    function invoiceVoucherApprovalSettingsApp() {
       return {
         session:   {},
         includeSubmitterManagerTier: true,   // 系統內建第一層開關，預設開
@@ -419,7 +420,7 @@
 
         async loadFlow() {
           try {
-            const r = await fetch(`${API}/settings/approval-flow`, {
+            const r = await fetch(`${API}/invoice-vouchers/settings/approval-flow`, {
               headers: { Authorization: 'Bearer ' + this.session.token }
             })
             if (r.status === 401) { location.href = 'login.html'; return }
@@ -531,7 +532,7 @@
                 )
               }))
             }
-            const r = await fetch(`${API}/settings/approval-flow`, {
+            const r = await fetch(`${API}/invoice-vouchers/settings/approval-flow`, {
               method: 'PUT',
               headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
               body: JSON.stringify(payload)

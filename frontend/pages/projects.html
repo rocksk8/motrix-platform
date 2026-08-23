@@ -844,6 +844,15 @@
           <label class="form-label">描述說明</label>
           <textarea class="form-textarea" x-model="pForm.description" placeholder="簡述專案背景或目標…"></textarea>
         </div>
+        <div class="form-row">
+          <label class="form-label">所屬部門</label>
+          <select class="form-input" x-model.number="pForm.department_id">
+            <option :value="null">未指定</option>
+            <template x-for="d in allDepartments" :key="d.id">
+              <option :value="d.id" x-text="d.divisionName + ' / ' + d.name"></option>
+            </template>
+          </select>
+        </div>
       </div>
       <div class="modal-foot">
         <button class="btn btn-ghost" @click="showProjectModal=false">取消</button>
@@ -997,6 +1006,7 @@
     return {
       session:   {},
       projects:  [],
+      orgTree:   [],
       selected:  null,
       logs:      [],
       viewMode:  'list',
@@ -1012,7 +1022,7 @@
       // Modals
       showProjectModal: false,
       editingProjectId: null,
-      pForm: { name:'', status:'規劃中', description:'' },
+      pForm: { name:'', status:'規劃中', description:'', department_id: null },
 
       showLogModal: false,
       editingLogId: null,
@@ -1043,6 +1053,16 @@
       },
 
       // 可被分配的使用者：非 admin/superadmin，且持有任一專案模組
+      get allDepartments() {
+        const out = []
+        for (const div of this.orgTree) {
+          for (const dept of div.departments) {
+            out.push({ id: dept.id, name: dept.name, divisionName: div.name })
+          }
+        }
+        return out
+      },
+
       get assignableUsers() {
         return this.allUsers.filter(u => {
           if (u.role === 'superadmin' || u.role === 'admin') return false
@@ -1062,7 +1082,7 @@
         const urlId = new URLSearchParams(location.search).get('id')
         const urlCase = new URLSearchParams(location.search).get('caseNo')
 
-        await Promise.all([this.loadProjects(), this.loadUsers()])
+        await Promise.all([this.loadProjects(), this.loadUsers(), this.loadOrgTree()])
 
         if (urlId) {
           const p = this.projects.find(p => p.id == urlId)
@@ -1119,11 +1139,13 @@
       },
 
       canApproveEng() {
+        if (this.selected && 'canApproveEng' in this.selected) return this.selected.canApproveEng
         const m = this.session.modules || []
         return m.includes('project_approve_eng') || this.session.role === 'superadmin'
       },
 
       canApproveBiz() {
+        if (this.selected && 'canApproveBiz' in this.selected) return this.selected.canApproveBiz
         const m = this.session.modules || []
         return m.includes('project_approve_biz') || this.session.role === 'superadmin'
       },
@@ -1132,6 +1154,13 @@
         const r = await fetch(`${API}/api/projects`, {headers: this._h()})
         const d = await r.json()
         this.projects = d.items || []
+      },
+
+      async loadOrgTree() {
+        try {
+          const r = await fetch(`${API}/api/org/tree`, {headers: this._h()})
+          if (r.ok) this.orgTree = await r.json()
+        } catch {}
       },
 
       async loadUsers() {
@@ -1245,7 +1274,7 @@
       // ── Project CRUD ──
       openCreateProject() {
         this.editingProjectId = null
-        this.pForm = { name:'', status:'規劃中', description:'' }
+        this.pForm = { name:'', status:'規劃中', description:'', department_id: null }
         this.showProjectModal = true
       },
 
@@ -1253,9 +1282,10 @@
         if (!this.selected) return
         this.editingProjectId = this.selected.id
         this.pForm = {
-          name:        this.selected.name,
-          status:      this.selected.status,
-          description: this.selected.description || '',
+          name:          this.selected.name,
+          status:        this.selected.status,
+          description:   this.selected.description || '',
+          department_id: this.selected.department_id || null,
         }
         this.showProjectModal = true
       },

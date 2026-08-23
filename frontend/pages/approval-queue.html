@@ -297,7 +297,16 @@
     .aq-step-status.done    { background: #D1FAE5; color: #065F46; }
     .aq-step-status.current { background: #EEF2FF; color: #4338CA; }
     .aq-step-status.pending { background: #F3F4F6; color: #6B7280; }
-  
+    /* Document type badges */
+    .aq-type-tag {
+      display: inline-flex; align-items: center;
+      font-size: 9px; font-weight: 700; font-family: 'LINE Seed TW_OTF', sans-serif;
+      padding: 1px 6px; border-radius: 8px; white-space: nowrap;
+    }
+    .aq-type-tag.aq-type-quotation { background: #EEF2FF; color: #4338CA; }
+    .aq-type-tag.aq-type-cv        { background: #FEF3C7; color: #92400E; }
+    .aq-type-tag.aq-type-iv        { background: #D1FAE5; color: #065F46; }
+
   /* -- Mobile RWD -- */
   @media (max-width:767px) {
     .aq-layout { flex-direction:column; height:auto; margin-left:0 !important; margin-top:var(--topbar-h); min-height:calc(100vh - var(--topbar-h)); }
@@ -330,7 +339,7 @@
            style="background:#FEF2F2;border-bottom:1px solid #FECACA;padding:8px 18px;display:flex;align-items:center;gap:8px">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#DC2626" stroke-width="2.5" style="flex-shrink:0"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
         <span style="font-size:12px;font-weight:600;color:#B91C1C;font-family:var(--font-zh)"
-              x-text="'有 ' + myPendingCount + ' 件報價單正在等待您簽核'"></span>
+              x-text="'有 ' + myPendingCount + ' 件項目正在等待您簽核'"></span>
       </div>
 
       <div x-show="loading" style="padding:24px;text-align:center;font-size:13px;color:var(--text-dim)">載入中…</div>
@@ -354,8 +363,10 @@
                    'mine-turn': canApprove(item)
                  }"
                  @click="selectItem(item)">
-              <div style="display:flex;align-items:center;gap:6px">
+              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
                 <div class="aq-item-quote" x-text="item.quoteNo"></div>
+                <span class="aq-type-tag" :class="'aq-type-' + (item.type==='quotation'?'quotation':(item.type==='contractor_voucher'?'cv':'iv'))"
+                      x-text="docTypeLabel(item)"></span>
                 <template x-if="(item.tiers||[]).length > 0">
                   <span class="aq-step-badge"
                         :class="canApprove(item) ? 'my-turn' : 'waiting'"
@@ -392,11 +403,16 @@
             <div class="aq-detail-customer" x-text="(selected?.customer || '') + (selected?.projectName ? '　' + selected.projectName : '')"></div>
           </div>
           <div class="aq-detail-actions">
-            <a :href="'quotation-form.html?id=' + (selected?.quoteNo||'')" target="_blank"
+            <a :href="isVoucher(selected) ? ('case-management.html?no=' + (selected?.linkedQuoteNo||'')) : ('quotation-form.html?id=' + (selected?.quoteNo||''))" target="_blank"
                style="font-size:12px;color:var(--accent);text-decoration:none;padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius);display:inline-flex;align-items:center;gap:5px">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3"/></svg>
-              開啟報價單
+              <span x-text="isVoucher(selected) ? '開啟案件管理' : '開啟報價單'"></span>
             </a>
+            <button class="btn btn-sm" @click="previewItem(selected)" :disabled="previewFetching"
+                    style="font-size:12px;color:var(--accent);background:#fff;border:1px solid var(--border);border-radius:var(--radius);padding:6px 10px;display:inline-flex;align-items:center;gap:5px;cursor:pointer">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              預覽
+            </button>
             <!-- Can approve: my turn in steps, OR (no steps + superadmin + not self) -->
             <template x-if="canApprove(selected)">
               <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -408,7 +424,7 @@
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                   退回草稿
                 </button>
-                <button class="btn btn-reject-final btn-sm" @click="openRejectFinalModal()" :disabled="actioning">
+                <button x-show="!isVoucher(selected)" class="btn btn-reject-final btn-sm" @click="openRejectFinalModal()" :disabled="actioning">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
                   拒絕結案
                 </button>
@@ -423,7 +439,7 @@
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                   退回草稿
                 </button>
-                <button class="btn btn-reject-final btn-sm" @click="openRejectFinalModal()" :disabled="actioning">
+                <button x-show="!isVoucher(selected)" class="btn btn-reject-final btn-sm" @click="openRejectFinalModal()" :disabled="actioning">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
                   拒絕結案
                 </button>
@@ -459,16 +475,26 @@
               <span class="aq-info-value" x-text="selected?.projectName || '—'"></span>
             </div>
             <div class="aq-info-row">
-              <span class="aq-info-label">報價金額</span>
+              <span class="aq-info-label" x-text="amountLabel(selected)"></span>
               <span class="aq-info-value" style="font-family:LINE Seed TW_OTF, sans-serif" x-text="'NT$ ' + (selected?.total||0).toLocaleString()"></span>
             </div>
             <div class="aq-info-row">
-              <span class="aq-info-label">報價日期</span>
+              <span class="aq-info-label" x-text="dateLabel(selected)"></span>
               <span class="aq-info-value" style="font-family:LINE Seed TW_OTF, sans-serif" x-text="selected?.quoteDate || '—'"></span>
             </div>
             <div class="aq-info-row">
-              <span class="aq-info-label">業務人員</span>
-              <span class="aq-info-value" x-text="selected?.salesPerson || '—'"></span>
+              <template x-if="!isVoucher(selected)">
+                <span class="aq-info-label">業務人員</span>
+              </template>
+              <template x-if="!isVoucher(selected)">
+                <span class="aq-info-value" x-text="selected?.salesPerson || '—'"></span>
+              </template>
+              <template x-if="isVoucher(selected)">
+                <span class="aq-info-label">關聯案件</span>
+              </template>
+              <template x-if="isVoucher(selected)">
+                <span class="aq-info-value" x-text="selected?.linkedQuoteNo || '—'"></span>
+              </template>
             </div>
             <div class="aq-info-row">
               <span class="aq-info-label">申請人</span>
@@ -538,7 +564,7 @@
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
             退回草稿
           </button>
-          <button class="btn btn-reject-final" @click="openRejectFinalModal()" :disabled="actioning" style="min-width:90px">
+          <button x-show="!isVoucher(selected)" class="btn btn-reject-final" @click="openRejectFinalModal()" :disabled="actioning" style="min-width:90px">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
             拒絕結案
           </button>
@@ -552,12 +578,33 @@
     </div><!-- /aq-right -->
   </div><!-- /aq-layout -->
 
+  <!-- PDF Preview modal -->
+  <div x-show="previewModal" x-cloak
+       style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:410;display:flex;align-items:center;justify-content:center;padding:20px"
+       @click.self="closePreview()"
+       @keydown.escape.window="closePreview()">
+    <div style="background:#fff;border-radius:12px;width:100%;max-width:820px;height:90vh;display:flex;flex-direction:column;box-shadow:0 16px 48px rgba(0,0,0,.22)">
+      <div style="display:flex;align-items:center;padding:14px 18px;border-bottom:1px solid var(--border-light);gap:10px">
+        <span style="font-size:14px;font-weight:700;flex:1;font-family:var(--font-zh)"
+              x-text="'預覽' + (previewItemData ? '　' + docTypeLabel(previewItemData) + '　' + previewItemData.quoteNo : '')"></span>
+        <button @click="closePreview()" style="width:28px;height:28px;border:none;background:#F0EEE9;border-radius:5px;cursor:pointer;font-size:16px">×</button>
+      </div>
+      <div style="flex:1;background:#F0EEE9;overflow:hidden">
+        <iframe :src="previewBlobUrl" style="width:100%;height:100%;border:none;display:block"></iframe>
+      </div>
+      <div style="padding:12px 20px;border-top:1px solid var(--border-light);display:flex;justify-content:flex-end;gap:10px">
+        <button @click="closePreview()"
+                style="padding:7px 16px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:var(--font-zh);background:#fff;cursor:pointer">關閉</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Reject modal -->
   <div class="reject-modal-overlay" x-show="rejectModalOpen" @click.self="rejectModalOpen=false">
     <div class="reject-modal">
       <h3>退回草稿</h3>
       <p style="font-size:12px;color:var(--text-secondary);margin-bottom:12px">
-        此報價單將退回「草稿」狀態，申請人可修改後重新送出。
+        此<span x-text="selected ? docTypeLabel(selected) : '報價單'"></span>將退回「草稿」狀態，申請人可修改後重新送出。
       </p>
       <textarea x-model="rejectNote" placeholder="退回原因（選填，供申請人參考）"></textarea>
       <div class="reject-modal-footer">
@@ -605,6 +652,60 @@
         rejectNote: '',
         rejectFinalModalOpen: false,
         rejectFinalNote: '',
+        previewModal: false,
+        previewBlobUrl: '',
+        previewFetching: false,
+        previewItemData: null,
+
+        docTypeLabel(item) {
+          if (!item) return ''
+          if (item.type === 'contractor_voucher') return '匯款申請'
+          if (item.type === 'invoice_voucher') return '開票申請憑據'
+          return '報價單'
+        },
+
+        apiBase(item) {
+          if (item?.type === 'contractor_voucher') return '/api/contractor-vouchers'
+          if (item?.type === 'invoice_voucher') return '/api/invoice-vouchers'
+          return '/api/quotations'
+        },
+
+        isVoucher(item) {
+          return !!item && item.type !== 'quotation'
+        },
+
+        amountLabel(item) {
+          if (item?.type === 'contractor_voucher') return '申請金額'
+          if (item?.type === 'invoice_voucher') return '申請金額（含稅）'
+          return '報價金額'
+        },
+
+        dateLabel(item) {
+          return this.isVoucher(item) ? '建立日期' : '報價日期'
+        },
+
+        async previewItem(item) {
+          if (!item) return
+          this.previewFetching = true
+          try {
+            const r = await fetch(`${API}${this.apiBase(item)}/${encodeURIComponent(item.quoteNo)}/pdf-download`, {
+              headers: { Authorization: 'Bearer ' + this.session.token }
+            })
+            if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || 'PDF 產生失敗'); this.previewFetching = false; return }
+            const blob = await r.blob()
+            this.previewBlobUrl = URL.createObjectURL(blob)
+            this.previewItemData = item
+            this.previewModal = true
+          } catch (e) { alert('預覽失敗：' + e.message) }
+          this.previewFetching = false
+        },
+
+        closePreview() {
+          if (this.previewBlobUrl) URL.revokeObjectURL(this.previewBlobUrl)
+          this.previewBlobUrl = ''
+          this.previewModal = false
+          this.previewItemData = null
+        },
 
         get myPendingCount() {
           return this.queue.flatMap(g => g.items).filter(item =>
@@ -693,13 +794,14 @@
           const isMultiTier = tiers.length > 0
           const isLastTier  = isMultiTier && (item.currentTier ?? 0) === tiers.length - 1
           const willFinish  = !isMultiTier || isLastTier
+          const finalStatus = this.isVoucher(item) ? '已核准' : '已送出'
           const confirmMsg  = willFinish
-            ? `確認簽核通過 ${item.quoteNo}？\n\n客戶：${item.customer}\n金額：NT$ ${(item.total||0).toLocaleString()}\n\n簽核後報價單狀態將更新為「已送出」。`
+            ? `確認簽核通過 ${this.docTypeLabel(item)} ${item.quoteNo}？\n\n客戶：${item.customer}\n金額：NT$ ${(item.total||0).toLocaleString()}\n\n簽核後狀態將更新為「${finalStatus}」。`
             : `確認完成第 ${(item.currentTier ?? 0) + 1} 層簽核（共 ${tiers.length} 層）？\n\n${item.quoteNo}｜${item.customer}`
           if (!confirm(confirmMsg)) return
           this.actioning = true
           try {
-            const r = await fetch(`${API}/api/quotations/${encodeURIComponent(item.quoteNo)}/approve`, {
+            const r = await fetch(`${API}${this.apiBase(item)}/${encodeURIComponent(item.quoteNo)}/approve`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
               body: JSON.stringify({ approvedByDisplay: this.session.displayName || this.session.username })
@@ -711,7 +813,7 @@
             }
             const resp = await r.json()
             if (resp.allDone) {
-              this._toast('✓ 簽核完成，報價單已送出', '#15803D')
+              this._toast(`✓ 簽核完成，${finalStatus}`, '#15803D')
               this.selected = null
             } else {
               this._toast('✓ 此層已簽核，等待下一層簽核人', '#4338CA')
@@ -738,6 +840,7 @@
         async doRejectFinal() {
           if (!this.selected || !this.rejectFinalNote.trim()) return
           const item = this.selected
+          if (this.isVoucher(item)) return
           this.actioning = true
           try {
             const r = await fetch(`${API}/api/quotations/${encodeURIComponent(item.quoteNo)}/reject-final`, {
@@ -766,7 +869,7 @@
           const item = this.selected
           this.actioning = true
           try {
-            const r = await fetch(`${API}/api/quotations/${encodeURIComponent(item.quoteNo)}/reject`, {
+            const r = await fetch(`${API}${this.apiBase(item)}/${encodeURIComponent(item.quoteNo)}/reject`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
               body: JSON.stringify({ note: this.rejectNote })

@@ -333,7 +333,14 @@
         <div class="page-header__title">營運儀表板</div>
         <div class="page-header__sub" x-text="'最後更新：' + now"></div>
       </div>
-      <div style="display:flex;gap:8px">
+      <div style="display:flex;gap:8px;align-items:center">
+        <select x-model="departmentId" @change="onDepartmentChange()"
+                style="padding:6px 10px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;background:#fff">
+          <option value="">全部部門</option>
+          <template x-for="d in allDepartments" :key="d.id">
+            <option :value="d.id" x-text="d.divisionName + ' / ' + d.name"></option>
+          </template>
+        </select>
         <button class="topbar__btn" style="background:#fff;color:var(--text-secondary);border-color:var(--border-light)">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
           匯出報表
@@ -609,6 +616,20 @@
         </div>
         <div class="kpi-card__sub">90 天內到期設備</div>
         <canvas class="kpi-card__spark" id="sparkWarranty"></canvas>
+      </div>
+
+      <!-- 進行中專案 -->
+      <div class="kpi-card" style="cursor:pointer" @click="location.href='pages/projects.html'">
+        <div class="kpi-card__label">進行中專案</div>
+        <div class="kpi-card__row">
+          <div class="kpi-card__val" x-text="loading ? '…' : ((stats.projectSummary?.['進行中']||0) + (stats.projectSummary?.['規劃中']||0))"></div>
+          <span class="kpi-card__delta kpi-card__delta--up" x-text="'已完工 ' + (stats.projectSummary?.['完工']||0)"></span>
+        </div>
+        <div class="kpi-card__sub">
+          規劃中 <span x-text="stats.projectSummary?.['規劃中']||0"></span> ·
+          進行中 <span x-text="stats.projectSummary?.['進行中']||0"></span> ·
+          暫停 <span x-text="stats.projectSummary?.['暫停']||0"></span>
+        </div>
       </div>
 
     </div>
@@ -1025,7 +1046,7 @@
       onboardingDismissed: false,
       stats: {
         totalQuotes: 0, pendingQuotes: 0, sentQuotes: 0, waitingForMe: 0,
-        activeCases: 0, closedCases: 0, customerCount: 0,
+        activeCases: 0, closedCases: 0, customerCount: 0, projectSummary: {},
         pendingList: [], paymentItems: [], warrantyWarnings: [],
         marginTop5: [], deviceSummary: {}, receivableSummary: {},
         marginComparison: [], settledSummary: {},
@@ -1038,6 +1059,18 @@
       expiringQuotes: [],
       opsAlerts: { devStale: [], shippingWaitingForMe: 0, shippingStuck: [] },
       activityFeed: [],
+      departmentId: '',   // '' = 不篩選
+      orgTree:      [],
+
+      get allDepartments() {
+        const out = []
+        for (const div of this.orgTree) {
+          for (const dept of div.departments) {
+            out.push({ id: dept.id, name: dept.name, divisionName: div.name })
+          }
+        }
+        return out
+      },
 
       get canFinance() {
         const r = this.session.role; const m = this.session.modules || []
@@ -1092,8 +1125,21 @@
         this.loadFunnel()
         this.loadOpsAlerts()
         this.loadActivityFeed()
+        this.loadOrgTree()
         this.loading = false
         this.$nextTick(() => initCharts(this.monthly, this.stats, this.expenses))
+      },
+
+      async loadOrgTree() {
+        try {
+          const r = await fetch(`${API}/org/tree`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+          if (r.ok) this.orgTree = await r.json()
+        } catch {}
+      },
+
+      async onDepartmentChange() {
+        await this.loadStats()
+        await this.loadActivityFeed()
       },
 
       dismissOnboarding() {
@@ -1103,7 +1149,8 @@
 
       async loadStats() {
         try {
-          const r = await fetch(`${API}/dashboard/stats`, {
+          const qs = this.departmentId ? `?department_id=${this.departmentId}` : ''
+          const r = await fetch(`${API}/dashboard/stats${qs}`, {
             headers: { Authorization: 'Bearer ' + this.session.token }
           })
           if (r.ok) this.stats = await r.json()
@@ -1155,7 +1202,8 @@
 
       async loadActivityFeed() {
         try {
-          const r = await fetch(`${API}/dashboard/activity-feed?limit=8`, {
+          const deptQs = this.departmentId ? `&department_id=${this.departmentId}` : ''
+          const r = await fetch(`${API}/dashboard/activity-feed?limit=8${deptQs}`, {
             headers: { Authorization: 'Bearer ' + this.session.token }
           })
           if (r.ok) this.activityFeed = (await r.json()).items || []
