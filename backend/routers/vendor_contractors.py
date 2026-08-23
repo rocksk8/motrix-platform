@@ -14,6 +14,16 @@ from routers.contractors import _stamp_passbook
 
 router = APIRouter()
 
+
+def _require_admin(user: dict):
+    """比照 shipping_notes.py／contractor_vouchers.py 同名 helper（2026-08-24
+    安全審查修正）：派發資料的金額/稅率等欄位後續會被凍結進正式的承攬商匯款憑證
+    快照，建立/修改不該只要求登入，之前完全沒有角色門檻，任何登入使用者都能
+    竄改。查詢類端點（list/get）維持唯讀不擋，跟其他模組一致。"""
+    if user["role"] not in ("superadmin", "admin"):
+        raise HTTPException(403, "需要管理員權限")
+
+
 _STATUS_LABELS = {
     "draft": "草稿",
     "sent": "已送出",
@@ -420,6 +430,7 @@ def get_dispatch(did: int, authorization: str = Header(None)):
 @router.post("/api/contractor-dispatches", status_code=201)
 def create_dispatch(body: DispatchIn, authorization: str = Header(None)):
     user = _require_user(authorization)
+    _require_admin(user)
     now = datetime.now().isoformat()
     items = body.items_json or []
     personnel = body.personnel_json or []
@@ -458,7 +469,8 @@ def create_dispatch(body: DispatchIn, authorization: str = Header(None)):
 
 @router.put("/api/contractor-dispatches/{did}")
 def update_dispatch(did: int, body: DispatchIn, authorization: str = Header(None)):
-    _require_user(authorization)
+    user = _require_user(authorization)
+    _require_admin(user)
     now = datetime.now().isoformat()
     items = body.items_json or []
     personnel = body.personnel_json or []

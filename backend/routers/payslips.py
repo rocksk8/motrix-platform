@@ -2,6 +2,7 @@
 import json
 import math
 import os
+import re
 import threading
 from datetime import datetime
 from typing import Optional
@@ -19,7 +20,15 @@ router = APIRouter()
 _ARCHIVE_DIR = os.path.join(os.path.dirname(__file__), "..", "export_archive")
 os.makedirs(_ARCHIVE_DIR, exist_ok=True)
 
+# 唯一合法格式，防止 slip_no 被用來做路徑穿越（2026-08-24 安全審查修正）：
+# _archive_path() 直接用 slip_no 拼檔案路徑，slip_no 若可被前端任意指定
+# （create_payslip 曾允許 body.slip_no 覆蓋自動產生的序號，完全沒驗證格式）
+# 就能組出 "..\..\..\x" 這種跳出 export_archive/ 目錄的路徑。
+_SLIP_NO_RE = re.compile(r"^PS-\d{6}-\d{3}$")
+
 def _archive_path(slip_no: str, idx: int) -> str:
+    if not _SLIP_NO_RE.match(slip_no):
+        raise ValueError(f"invalid slip_no: {slip_no!r}")
     # demo 帳號：存至隔離目錄（reset_demo_db() 每次登入清空），不進真實存檔
     archive_dir = DEMO_PAYSLIP_ARCHIVE_DIR if is_demo_mode() else _ARCHIVE_DIR
     os.makedirs(archive_dir, exist_ok=True)
@@ -178,6 +187,9 @@ def create_payslip(body: PayslipIn, authorization: str = Header(None)):
                  (month,))
 
     slip_no = body.slip_no or d.get("slipNo") or _peek_next_slip_no(conn, month)
+    if not _SLIP_NO_RE.match(slip_no):
+        conn.close()
+        raise HTTPException(400, f"勞報單號碼格式錯誤（須為 PS-YYYYMM-NNN）：{slip_no}")
 
     gross       = int(d.get("grossAmount", 0))
     income_type = d.get("incomeType", "9A")
@@ -375,7 +387,18 @@ def record_archive_download(slip_no: str, orig_idx: int, authorization: str = He
 @router.get("/api/payslips/{slip_no}/archive/{idx}")
 def get_archive_pdf(slip_no: str, idx: int, authorization: str = Header(None)):
     _require_user(authorization, require_superadmin=True, module='payslip')
-    path = _archive_path(slip_no, idx)
+    # 先確認 DB 裡真的有這張勞報單，避免 slip_no 被拿來做路徑穿越讀取任意檔案
+    # （_archive_path 本身也有格式檢查，這裡是第二層防禦：即使格式合法，也必須
+    # 對應到真實存在的勞報單）。
+    conn = get_db()
+    exists = conn.execute("SELECT 1 FROM payslips WHERE slip_no=?", (slip_no,)).fetchone()
+    conn.close()
+    if not exists:
+        raise HTTPException(404, "找不到此勞報單")
+    try:
+        path = _archive_path(slip_no, idx)
+    except ValueError:
+        raise HTTPException(400, "勞報單號碼格式錯誤")
     if os.path.exists(path):
         with open(path, "rb") as f:
             pdf_bytes = f.read()

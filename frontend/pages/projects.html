@@ -1261,7 +1261,11 @@
             }
           }).catch(() => { this._ptCache[path + '_fetching'] = false })
         }
-        return `${API}/api/uploads/${path}?token=${this.session.token}`
+        // 短效期簽章 pt token 還沒抓回來前，不要 fallback 成帶完整 session
+        // token 的 URL（會外洩到 server log／瀏覽器歷史，2026-08-24 安全審查
+        // 修正）。回傳 1x1 透明圖片，_ptCache 抓到 pt 後上面的 reactive 賦值
+        // 會讓 Alpine 重新算這個 binding，自動換成正確網址，不用額外邏輯。
+        return 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBTAA7'
       },
       clearPhotoCache(path) {
         if (!path) return

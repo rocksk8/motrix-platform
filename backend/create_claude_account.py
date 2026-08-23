@@ -6,7 +6,12 @@
 系統通知信誤植為該真人所為——2026-08-09 已在開發機建立專用 `claude` 帳號解決，這支
 腳本是把同一件事在正式機重做一次。
 
-role='admin'（非 superadmin，最小權限原則）＋只給選型資料庫相關的 *_guide_edit 模組旗標，
+role='viewer'（2026-08-24 安全審查修正，原本用 'admin' 並不是真的最小權限：全系統
+至少 15+ 個端點只檢查 `role in ("superadmin","admin")`、完全不看 `modules` 清單，
+role='admin' 因此能存取稽核記錄／財務儀表板／承攬商財稅資料等文件從未打算開放的
+範圍。`helpers/auth.py::_require_user()` 的 module 檢查邏輯只要求 `role != superadmin`
+就會生效，跟 role 實際是 admin 還是 viewer 無關，所以降級不影響下面這 5 個
+`*_guide_edit` 模組原本能打的端點）＋只給選型資料庫相關的 *_guide_edit 模組旗標，
 不具備使用者管理／簽核／刪除資料等完整超管能力。密碼為隨機字串，僅供留存記錄用——
 實際使用方式是之後需要時直接在 sessions 表插入綁定此帳號 id 的 token，不透過一般登入。
 
@@ -45,7 +50,7 @@ def main():
     cur.execute(
         """INSERT INTO users (username, password_hash, display_name, role, email, phone, modules, active, created_at, must_change_password)
            VALUES (?,?,?,?,?,?,?,?,?,?)""",
-        ("claude", pw_hash, "Claude", "admin", "", "", json.dumps(MODULES, ensure_ascii=False), 1, now, 0),
+        ("claude", pw_hash, "Claude", "viewer", "", "", json.dumps(MODULES, ensure_ascii=False), 1, now, 0),
     )
     user_id = cur.lastrowid
     con.commit()
@@ -53,7 +58,7 @@ def main():
 
     print("已建立 claude 帳號：")
     print(f"  user_id  = {user_id}")
-    print(f"  role     = admin")
+    print(f"  role     = viewer")
     print(f"  modules  = {MODULES}")
     print(f"  password = {password}  （僅供留存記錄，正常不會用來互動登入）")
     print()

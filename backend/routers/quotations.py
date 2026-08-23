@@ -92,6 +92,21 @@ def _current_tier_idx(appr: dict) -> int:
     return ct
 
 
+def _check_quotation_owner(row, user: dict) -> None:
+    """單筆存取（get/update/delete）比照 list_quotations() 既有的擁有者規則
+    （304-306 行）：非 admin/superadmin 只能存取自己名下的報價單，quote_no
+    格式可預測（MQ-YYYYMM-NNN），沒有這道檢查會讓任何登入使用者用猜/列舉
+    quote_no 看到甚至刪掉別的業務的報價單，繞過清單頁刻意做的隱藏
+    （2026-08-24 安全審查修正，IDOR）。"""
+    if user["role"] in ("superadmin", "admin"):
+        return
+    sp_id   = row["sales_person_id"] if "sales_person_id" in row.keys() else None
+    sp_name = row["sales_person"] if "sales_person" in row.keys() else None
+    owns = (sp_id == user["id"]) or (sp_id is None and sp_name == user["display_name"])
+    if not owns:
+        raise HTTPException(403, "無權限存取其他業務的報價單")
+
+
 def _exclude_requester(tiers: list, requester: str) -> list:
     """Drop the requester from tier approver lists — a submitter must never end up
     required to approve their own quotation. Tiers left with no approvers after
@@ -475,12 +490,13 @@ def case_activity(body: dict = Body(...), authorization: str = Header(None)):
 
 @router.get("/api/quotations/{quote_no}")
 def get_quotation(quote_no: str, authorization: str = Header(None)):
-    _require_user(authorization)
+    user = _require_user(authorization)
     conn = get_db()
     row  = conn.execute("SELECT * FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
     conn.close()
     if not row:
         raise HTTPException(404, f"報價單 {quote_no} 不存在")
+    _check_quotation_owner(row, user)
     result = dict(row)
     result["data"] = json.loads(result.pop("data_json", "{}"))
     result["data"]["status"] = result["status"]   # DB column is authoritative
@@ -600,6 +616,7 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
 
 @router.put("/api/quotations/{quote_no}")
 def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Header(None)):
+    user = _require_user(authorization)
     q   = body.data
     now = datetime.now().isoformat()
 
@@ -670,11 +687,17 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
     sp_id = sp_row["id"] if sp_row else None
 
     existing = conn.execute(
-        "SELECT id, status, deal_tag, settle_status, updated_at FROM quotations WHERE quote_no=?", (quote_no,)
+        "SELECT id, status, deal_tag, settle_status, updated_at, sales_person_id, sales_person "
+        "FROM quotations WHERE quote_no=?", (quote_no,)
     ).fetchone()
     if not existing:
         conn.close()
         raise HTTPException(404, f"報價單 {quote_no} 不存在")
+    try:
+        _check_quotation_owner(existing, user)
+    except HTTPException:
+        conn.close()
+        raise
     if existing["status"] == "已拒絕":
         conn.close()
         raise HTTPException(403, "已拒絕結案的報價單不可修改")
@@ -895,10 +918,18 @@ def update_deal_tag(quote_no: str, body: QuotationDealTagUpdate, authorization: 
 def delete_quotation(quote_no: str, authorization: str = Header(None)):
     user = _require_user(authorization)
     conn = get_db()
-    row = conn.execute("SELECT customer_name, status FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+    row = conn.execute(
+        "SELECT customer_name, status, sales_person_id, sales_person FROM quotations WHERE quote_no=?",
+        (quote_no,)
+    ).fetchone()
     if not row:
         conn.close()
         raise HTTPException(404, f"報價單 {quote_no} 不存在")
+    try:
+        _check_quotation_owner(row, user)
+    except HTTPException:
+        conn.close()
+        raise
     if row["status"] != "草稿":
         conn.close()
         raise HTTPException(403, f"只有草稿狀態的報價單可以刪除（目前狀態：{row['status']}）")

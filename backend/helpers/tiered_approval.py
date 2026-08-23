@@ -132,7 +132,12 @@ def resolve_tier_approvers(conn, tier_setting: dict, requester_username: str = N
                     f"此層設定為「{dept_name}」主管自動簽核，但目前該部門未指定主管"
                     f"（或主管帳號已停用），請聯絡管理員先設定部門主管"
                 )
-            resolved.append({**mgr, "status": "pending", "approvedAt": None})
+            # 申請人剛好就是這個部門的主管時跳過，不加入這層——比照
+            # _exclude_requester()／submitter_manager 鏈的既有原則：申請人不得
+            # 需要簽核自己的申請（2026-08-24 安全審查修正）。該層若因此變空，
+            # setting_to_active_tiers() 的空層過濾會自然跳過整層。
+            if mgr["username"] != requester_username:
+                resolved.append({**mgr, "status": "pending", "approvedAt": None})
         elif source == "division_manager":
             div_id = a.get("divisionId")
             div_row = conn.execute("SELECT name FROM divisions WHERE id=?", (div_id,)).fetchone()
@@ -143,7 +148,8 @@ def resolve_tier_approvers(conn, tier_setting: dict, requester_username: str = N
                     f"此層設定為「{div_name}」處主管自動簽核，但目前該處未指定主管"
                     f"（或主管帳號已停用），請聯絡管理員先設定處主管"
                 )
-            resolved.append({**mgr, "status": "pending", "approvedAt": None})
+            if mgr["username"] != requester_username:
+                resolved.append({**mgr, "status": "pending", "approvedAt": None})
         else:
             resolved.append({
                 "userId":      a.get("userId"),
