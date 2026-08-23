@@ -990,6 +990,15 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
 
+### 2026-08-23r — 修正：出貨單簽核沒有出現在統一簽核佇列
+
+- **背景**：使用者回推開發機後實測回報「出貨單簽核沒有在簽核佇列中出現」。追查發現：`/api/approval-queue`／`/api/approval-queue/count`（2026-08-20j 新增，見下方）與 `_check_approval_reminders()` 逾期催辦（2026-08-21b 新增）建立時，都只收了「報價單／承攬商匯款申請／開票申請憑據」三種文件，出貨單（§5.8，2026-08-01 就存在的舊功能，有自己獨立的 `shipping_approval_flow` 簽核設定）從一開始就沒被納入——不是這次回推造成的落差，是這兩個「統一」機制蓋上去時本來就漏掉了出貨單。全面核對過全部使用 tiers 簽核機制的文件類型（僅此 4 種），確認只有出貨單這一項遺漏；`contractor_dispatches` 派發狀態機、案件管理工程/業務確認用的是權限檢查式一次性確認，不是 tiers 佇列，本來就不該在這裡。
+- **修正**：
+  - `routers/quotations.py`：`get_approval_queue()`／`get_approval_queue_count()` 補上 `shipping_notes` 查詢區塊，`total` 欄位借用來放品項數量（出貨單沒有金額概念）。
+  - `routers/daily_tasks.py`：`_APPROVAL_REMINDER_SOURCES` 補上出貨單條目，逾期催辦自動涵蓋。
+  - `frontend/pages/approval-queue.html`：`docTypeLabel`/`apiBase`/`amountLabel` 補上 `shipping_note` 分支，新增 `typeTagClass()`／`amountDisplay()` 兩個 helper（金額欄位不再寫死 `NT$ ` 前綴，出貨單改顯示「N 項」），新增 `.aq-type-sn` 標籤配色。`isVoucher()`／連結目標／`finalStatus` 不用改——出貨單跟兩個新單據一樣沒有「拒絕結案」永久終止端點、且屬於案件管理子項目，既有的 `type !== 'quotation'` 判斷剛好正確涵蓋。
+- **驗證**：`py_compile`＋`import main`（含 `_check_approval_reminders()` 隨啟動流程跑過一次）通過；5 個 `<script>` 區塊逐一 `node --check` 語法通過；用正式機真實資料庫＋`claude` 自動化帳號 session token 實際打 `GET /api/approval-queue`，確認卡在 corbin 簽核的真實出貨單 `DN-202608-003`（小林機械廠）正確以 `type: "shipping_note"` 出現在佇列裡（先前完全看不到），`total` 品項數／`tiers`／`linkedQuoteNo` 等欄位皆正確。
+
 ### 2026-08-23g — 甘特圖字體/背景對比度修正（案件執行看板＋案件管理頁時間軸）
 
 - **背景**：使用者回饋甘特圖「字體跟背景要有區隔性」。追查發現根因：frappe-gantt 內建的「進度」覆蓋層（`bar-progress`）原本用淺靛色 `#818CF8`，我們的階段進度只有 0% 或 100% 兩種值（沒有真的百分比追蹤），代表**所有已完成的階段／全部的生命週期里程碑**（progress 固定 100%）長條幾乎整條都被這個淺色覆蓋層蓋住，白色文字疊在淺靛色上對比度很差；另外「未指派」長條的灰色 `#9CA3AF` 對白字對比度也偏弱。

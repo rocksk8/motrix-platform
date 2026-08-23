@@ -1242,6 +1242,12 @@ _APPROVAL_REMINDER_SOURCES = [
         "select_extra": "snapshot_json",
         "desc": lambda row, snap: snap.get("customerName") or "",
     },
+    {
+        "table": "shipping_notes", "no_col": "note_no", "label": "出貨單",
+        "select_extra": "customer_name, project_name",
+        "desc": lambda row, snap: (row["customer_name"] or "")
+                                   + (("｜" + row["project_name"]) if row["project_name"] else ""),
+    },
 ]
 
 

@@ -1763,10 +1763,12 @@ def _queue_tier_fields(approval_json_raw: str) -> dict:
 @router.get("/api/approval-queue")
 def get_approval_queue(authorization: str = Header(None)):
     """2026-08-21 起合併三種待簽核文件類型：報價單、承攬商匯款申請、開票申請
-    憑據。刻意沿用報價單既有的欄位名稱（quoteNo/customer/projectName/total/
-    quoteDate/salesPerson）承載三種類型的資料，讓既有前端列表渲染邏輯幾乎不用
-    改，只多一個 `type` 欄位供前端分流動作按鈕與連結（見 approval-queue.html）。
-    兩個新單據類型沒有「拒絕結案」這種永久終止端點，前端會依 type 隱藏該按鈕。"""
+    憑據；2026-08-24 補上出貨單（§5.8 的舊功能，統一佇列蓋上去時漏掉）。刻意
+    沿用報價單既有的欄位名稱（quoteNo/customer/projectName/total/quoteDate/
+    salesPerson）承載各類型的資料，讓既有前端列表渲染邏輯幾乎不用改，只多一個
+    `type` 欄位供前端分流動作按鈕與連結（見 approval-queue.html）。承攬商匯款
+    申請／開票申請憑據／出貨單都沒有「拒絕結案」這種永久終止端點（只有報價單
+    有），前端會依 type 隱藏該按鈕。"""
     _require_user(authorization)
     conn = get_db()
     items = []
@@ -1865,6 +1867,39 @@ def get_approval_queue(authorization: str = Header(None)):
             "linkedQuoteNo":       r["quote_no"],
         })
 
+    sn_rows = conn.execute("""
+        SELECT note_no, quote_no, customer_name, project_name, items_json, ship_date, created_at,
+               json_extract(data_json,'$.approval') as approval_json
+        FROM shipping_notes
+        WHERE status IN ('待審核','簽核中')
+        ORDER BY id DESC
+    """).fetchall()
+    for r in sn_rows:
+        f = _queue_tier_fields(r["approval_json"])
+        try:
+            item_count = len(json.loads(r["items_json"] or "[]"))
+        except Exception:
+            item_count = 0
+        items.append({
+            "type":                "shipping_note",
+            "quoteNo":             r["note_no"],
+            "customer":            r["customer_name"] or "",
+            "projectName":         r["project_name"] or "",
+            "total":               item_count,
+            "quoteDate":           r["ship_date"] or (r["created_at"] or "")[:10],
+            "salesPerson":         "",
+            "requestedBy":         f["requestedBy"],
+            "requestedByDisplay":  f["requestedByDisplay"],
+            "requestedAt":         f["requestedAt"],
+            "isEditApproval":      False,
+            "reasons":             [],
+            "tiers":               f["tiers"],
+            "currentTier":         f["currentTier"],
+            "tierCount":           f["tierCount"],
+            "currentApprovers":    f["currentApprovers"],
+            "linkedQuoteNo":       r["quote_no"],
+        })
+
     conn.close()
 
     groups: dict = defaultdict(list)
@@ -1888,9 +1923,9 @@ def get_approval_queue(authorization: str = Header(None)):
 @router.get("/api/approval-queue/count")
 def get_approval_queue_count(authorization: str = Header(None)):
     """輕量端點：回傳目前輪到當前用戶簽核的項目數量（報價單＋承攬商匯款申請＋
-    開票申請憑據，2026-08-21 起合併三者）。每一頁 topbar 都會呼叫這支
-    （static/notif.js），刻意維持跟原本一樣的輕量寫法（只挑 approval_json 一欄），
-    不要拖累全站每頁的載入速度。"""
+    開票申請憑據＋出貨單，2026-08-21 起合併前三者、2026-08-24 補上出貨單）。
+    每一頁 topbar 都會呼叫這支（static/notif.js），刻意維持跟原本一樣的輕量
+    寫法（只挑 approval_json 一欄），不要拖累全站每頁的載入速度。"""
     u = _require_user(authorization)
     my_username = u["username"]
     conn = get_db()
@@ -1903,6 +1938,9 @@ def get_approval_queue_count(authorization: str = Header(None)):
     ).fetchall()]
     approval_jsons += [r[0] for r in conn.execute(
         "SELECT json_extract(data_json,'$.approval') FROM invoice_vouchers WHERE status IN ('待審核','簽核中')"
+    ).fetchall()]
+    approval_jsons += [r[0] for r in conn.execute(
+        "SELECT json_extract(data_json,'$.approval') FROM shipping_notes WHERE status IN ('待審核','簽核中')"
     ).fetchall()]
     conn.close()
     count = 0

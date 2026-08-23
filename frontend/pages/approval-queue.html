@@ -306,6 +306,7 @@
     .aq-type-tag.aq-type-quotation { background: #EEF2FF; color: #4338CA; }
     .aq-type-tag.aq-type-cv        { background: #FEF3C7; color: #92400E; }
     .aq-type-tag.aq-type-iv        { background: #D1FAE5; color: #065F46; }
+    .aq-type-tag.aq-type-sn        { background: #CFFAFE; color: #155E75; }
 
   /* -- Mobile RWD -- */
   @media (max-width:767px) {
@@ -365,7 +366,7 @@
                  @click="selectItem(item)">
               <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
                 <div class="aq-item-quote" x-text="item.quoteNo"></div>
-                <span class="aq-type-tag" :class="'aq-type-' + (item.type==='quotation'?'quotation':(item.type==='contractor_voucher'?'cv':'iv'))"
+                <span class="aq-type-tag" :class="'aq-type-' + typeTagClass(item)"
                       x-text="docTypeLabel(item)"></span>
                 <template x-if="(item.tiers||[]).length > 0">
                   <span class="aq-step-badge"
@@ -376,7 +377,7 @@
               <div class="aq-item-customer" x-text="item.customer + (item.projectName ? '｜' + item.projectName : '')"></div>
               <div class="aq-item-meta">
                 <span class="aq-item-time" x-text="item.requestedAt ? new Date(item.requestedAt).toLocaleString('zh-TW',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : ''"></span>
-                <span class="aq-item-amount" x-text="'NT$ ' + (item.total||0).toLocaleString()"></span>
+                <span class="aq-item-amount" x-text="amountDisplay(item)"></span>
               </div>
             </div>
           </template>
@@ -476,7 +477,7 @@
             </div>
             <div class="aq-info-row">
               <span class="aq-info-label" x-text="amountLabel(selected)"></span>
-              <span class="aq-info-value" style="font-family:LINE Seed TW_OTF, sans-serif" x-text="'NT$ ' + (selected?.total||0).toLocaleString()"></span>
+              <span class="aq-info-value" style="font-family:LINE Seed TW_OTF, sans-serif" x-text="amountDisplay(selected)"></span>
             </div>
             <div class="aq-info-row">
               <span class="aq-info-label" x-text="dateLabel(selected)"></span>
@@ -661,12 +662,21 @@
           if (!item) return ''
           if (item.type === 'contractor_voucher') return '匯款申請'
           if (item.type === 'invoice_voucher') return '開票申請憑據'
+          if (item.type === 'shipping_note') return '出貨單'
           return '報價單'
+        },
+
+        typeTagClass(item) {
+          if (item?.type === 'contractor_voucher') return 'cv'
+          if (item?.type === 'invoice_voucher') return 'iv'
+          if (item?.type === 'shipping_note') return 'sn'
+          return 'quotation'
         },
 
         apiBase(item) {
           if (item?.type === 'contractor_voucher') return '/api/contractor-vouchers'
           if (item?.type === 'invoice_voucher') return '/api/invoice-vouchers'
+          if (item?.type === 'shipping_note') return '/api/shipping-notes'
           return '/api/quotations'
         },
 
@@ -677,7 +687,13 @@
         amountLabel(item) {
           if (item?.type === 'contractor_voucher') return '申請金額'
           if (item?.type === 'invoice_voucher') return '申請金額（含稅）'
+          if (item?.type === 'shipping_note') return '出貨品項'
           return '報價金額'
+        },
+
+        amountDisplay(item) {
+          if (item?.type === 'shipping_note') return (item.total || 0) + ' 項'
+          return 'NT$ ' + (item?.total || 0).toLocaleString()
         },
 
         dateLabel(item) {
@@ -796,7 +812,7 @@
           const willFinish  = !isMultiTier || isLastTier
           const finalStatus = this.isVoucher(item) ? '已核准' : '已送出'
           const confirmMsg  = willFinish
-            ? `確認簽核通過 ${this.docTypeLabel(item)} ${item.quoteNo}？\n\n客戶：${item.customer}\n金額：NT$ ${(item.total||0).toLocaleString()}\n\n簽核後狀態將更新為「${finalStatus}」。`
+            ? `確認簽核通過 ${this.docTypeLabel(item)} ${item.quoteNo}？\n\n客戶：${item.customer}\n${this.amountLabel(item)}：${this.amountDisplay(item)}\n\n簽核後狀態將更新為「${finalStatus}」。`
             : `確認完成第 ${(item.currentTier ?? 0) + 1} 層簽核（共 ${tiers.length} 層）？\n\n${item.quoteNo}｜${item.customer}`
           if (!confirm(confirmMsg)) return
           this.actioning = true
