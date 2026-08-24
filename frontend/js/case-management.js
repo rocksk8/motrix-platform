@@ -956,18 +956,27 @@ function app() {
         return d.toISOString().slice(0,10)
       }
       return stages.map(st => {
-        // 已完成的階段優先用「完成日期」doneAt 當長條位置——這是使用者實際會填、
-        // 也最準確的日期來源；起始/到期日期（startDate/dueDate）這兩個欄位在
-        // 實務上幾乎沒人填，只靠它們會讓已完成的階段全部退回「今天」擠成一團
-        // （2026-08-24 跨案時間軸同一個問題的根因，這裡是同一套邏輯的單案版）。
+        // 日期來源優先順序（2026-08-24）：
+        // 1. 「前往日期」visits 記錄的最早～最晚——施工類階段常有好幾筆前往記錄，
+        //    這是最能反映真實施作期間的來源，已完成的話終點改用完成日期（可能
+        //    比最後一次前往晚幾天才正式結案）。
+        // 2. 完成日期 doneAt（單日）——使用者實際會填、最準確的次要來源。
+        // 3. 起始/到期日期 startDate/dueDate——實務上幾乎沒人填，只靠它們會讓
+        //    已完成的階段全部退回「今天」擠成一團（跨案時間軸同一個問題的根因，
+        //    這裡是同一套邏輯的單案版）。
+        const visitDates = (st.visits || []).map(v => v.visitDate).filter(Boolean).sort()
         let start, end
-        if (st.done && st.doneAt) {
+        if (visitDates.length) {
+          start = visitDates[0]
+          end   = (st.done && st.doneAt) ? st.doneAt : visitDates[visitDates.length - 1]
+        } else if (st.done && st.doneAt) {
           start = st.doneAt
           end   = st.doneAt
         } else {
           start = st.startDate || st.dueDate || today
           end   = st.dueDate   || st.startDate || addDays(start, 1)
         }
+        if (end < start) end = start
         if (start === end) end = addDays(start, 1)
         const assignedTo  = st.assignedTo || []
         const primary     = assignedTo[0] || ''

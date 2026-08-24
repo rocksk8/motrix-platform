@@ -294,7 +294,7 @@
                     <template x-for="p in row.points" :key="p.label + p.date">
                       <div class="tl-pill" :class="p.type==='milestone' ? 'tl-pill--milestone' : tlChipClass(p.st, row)"
                            :style="{left: p.x + 'px', top: (p.lane * 26) + 'px', width: p.width + 'px'}"
-                           :title="p.type==='milestone' ? (p.label + ' ' + p.date) : tlChipTooltip(p.st)"
+                           :title="p.type==='milestone' ? (p.label + ' ' + p.date) : tlPillTooltip(p)"
                            @click="openCase(row.quoteNo)">
                         <span x-text="p.label"></span>
                       </div>
@@ -592,22 +592,42 @@
           if (lc.caseStartedAt)  points.push({ type: 'milestone', label: '案件成立', date: lc.caseStartedAt })
           const undated = []
           stages.forEach(st => {
-            const d = st.done ? st.doneAt : (st.dueDate || st.startDate)
-            if (d) points.push({ type: 'stage', st, label: st.stageLabel, date: d })
-            else undated.push(st)
+            // 區間顯示（2026-08-24）：施工類階段常有好幾筆「前往日期」記錄
+            // （visitStart～visitEnd），用最早～最晚前往日期當長條的真實起訖，
+            // 比單一個完成日期更能呈現實際施作期間；已完成的話終點改用完成
+            // 日期（可能比最後一次前往日期晚幾天才正式結案）。沒有前往記錄
+            // 才退回完成日期或到期/起始日期的單日標記。
+            let dateStart, dateEnd
+            if (st.visitStart) {
+              dateStart = st.visitStart
+              dateEnd = (st.done && st.doneAt) ? st.doneAt : (st.visitEnd || st.visitStart)
+            } else if (st.done && st.doneAt) {
+              dateStart = dateEnd = st.doneAt
+            } else if (st.dueDate || st.startDate) {
+              dateStart = st.startDate || st.dueDate
+              dateEnd = st.dueDate || st.startDate
+            } else {
+              undated.push(st)
+              return
+            }
+            if (dateEnd < dateStart) dateEnd = dateStart
+            points.push({ type: 'stage', st, label: st.stageLabel, date: dateStart, dateEnd })
           })
           // 貪婪多層排列（跟前一版邏輯相同，差別是這裡直接算資料，不用等畫完再回
           // 頭量 DOM）：依日期排序，找第一個不會撞到的層，都撞到就開新層，層數
-          // 不設上限。
+          // 不設上限。長條寬度取「文字估寬」跟「真實日期區間換算的像素寬」兩者
+          // 較大的一個——區間夠長就照實際天數畫寬，區間很短或沒有區間（單日／
+          // 里程碑）則保底用文字寬度，不會被壓成看不到字的細線。
           points.sort((a, b) => a.date.localeCompare(b.date))
           const laneEndX = []
           points.forEach(p => {
-            const x = this._dateToX(p.date)
-            const width = this._estimateLabelWidth(p.label)
-            let lane = laneEndX.findIndex(endX => x >= endX + MIN_GAP_X)
+            const xStart = this._dateToX(p.date)
+            const xEnd = p.dateEnd ? this._dateToX(p.dateEnd) : xStart
+            const width = Math.max(this._estimateLabelWidth(p.label), xEnd - xStart)
+            let lane = laneEndX.findIndex(endX => xStart >= endX + MIN_GAP_X)
             if (lane === -1) { lane = laneEndX.length; laneEndX.push(-Infinity) }
-            laneEndX[lane] = x + width
-            p.x = x; p.width = width; p.lane = lane
+            laneEndX[lane] = xStart + width
+            p.x = xStart; p.width = width; p.lane = lane
           })
           return {
             quoteNo: qno,
@@ -633,6 +653,16 @@
           : (st.overdue ? '已逾期' : (st.dueDate ? '到期 ' + st.dueDate : '未設定日期'))
         const who = st.assignedNames.length ? st.assignedNames.join('、') : (st.salesPerson ? '業務代管：' + st.salesPerson : '未指派')
         return st.stageLabel + ' — ' + status + '｜負責人：' + who
+      },
+
+      // 軸上長條用：跟 tlChipTooltip 差在會把區間（p.date～p.dateEnd）標出來，
+      // 而不是只講完成日期單一天，讓使用者看得出這段是跨好幾天的施作區間。
+      tlPillTooltip(p) {
+        const st = p.st
+        const range = p.dateEnd && p.dateEnd !== p.date ? (p.date + ' ~ ' + p.dateEnd) : p.date
+        const status = st.done ? '已完成' : (st.overdue ? '已逾期' : '進行中')
+        const who = st.assignedNames.length ? st.assignedNames.join('、') : (st.salesPerson ? '業務代管：' + st.salesPerson : '未指派')
+        return st.stageLabel + '（' + range + '）— ' + status + '｜負責人：' + who
       },
 
       logout() {

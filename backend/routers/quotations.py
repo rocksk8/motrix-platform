@@ -391,7 +391,12 @@ def stage_board(authorization: str = Header(None)):
     sql = (
         f"SELECT q.quote_no, q.customer_name, q.project_name, q.sales_person, q.sales_person_id, "
         f"q.created_at, cs.id AS stage_id, cs.label, cs.start_date, cs.due_date, cs.done_at, cs.done, "
-        f"cs.depends_on, cs.assigned_to "
+        f"cs.depends_on, cs.assigned_to, "
+        # 跨案時間軸區間顯示用（2026-08-24）：階段的「前往日期」記錄範圍——這是
+        # 施工類階段實際會累積多筆日期的地方，用最早～最晚前往日期當作長條的
+        # 起訖區間，比單一個完成日期更能呈現真實施作期間。
+        f"(SELECT MIN(visit_date) FROM case_stage_visits WHERE stage_id=cs.id AND visit_date != '') AS visit_start, "
+        f"(SELECT MAX(visit_date) FROM case_stage_visits WHERE stage_id=cs.id AND visit_date != '') AS visit_end "
         f"FROM quotations q JOIN case_stages cs ON cs.quote_no = q.quote_no "
         f"WHERE {SQL_DEAL_TAG} = '已成案'"
     )
@@ -450,6 +455,8 @@ def stage_board(authorization: str = Header(None)):
             "startDate":     row["start_date"] or "",
             "dueDate":       due,
             "doneAt":        row["done_at"] or "",
+            "visitStart":    row["visit_start"] or "",
+            "visitEnd":      row["visit_end"] or "",
             "done":          done,
             "overdue":       overdue,
             "dependsOn":     json.loads(row["depends_on"] or "[]"),
