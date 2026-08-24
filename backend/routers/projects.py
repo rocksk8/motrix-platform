@@ -372,6 +372,117 @@ def delete_project_log(project_id: int, log_id: int, authorization: str = Header
     return {"ok": True}
 
 
+# ── Project Stages（執行階段，2026-08-24：多階段清單＋可手動設起訖日期，比照
+#    案件管理 case_stages 的風格，但專案這邊沒有負責人/前置依賴/前往記錄的需求，
+#    刻意只做「具名階段＋完成狀態＋起訖日期」這個子集，不照搬整套）──────────────
+
+def _serialize_project_stage(r) -> dict:
+    return {
+        "id":        r["id"],
+        "label":     r["label"],
+        "sortOrder": r["sort_order"],
+        "done":      bool(r["done"]),
+        "doneAt":    r["done_at"],
+        "startDate": r["start_date"],
+        "dueDate":   r["due_date"],
+    }
+
+
+@router.get("/api/projects/{project_id}/stages")
+def list_project_stages(project_id: int, authorization: str = Header(None)):
+    _require_user(authorization)
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT * FROM project_stages WHERE project_id=? ORDER BY sort_order, id", (project_id,)
+    ).fetchall()
+    conn.close()
+    return {"items": [_serialize_project_stage(r) for r in rows]}
+
+
+@router.post("/api/projects/{project_id}/stages", status_code=201)
+def create_project_stage(project_id: int, body: dict = Body(...), authorization: str = Header(None)):
+    _require_user(authorization)
+    conn = get_db()
+    if not conn.execute("SELECT id FROM projects WHERE id=?", (project_id,)).fetchone():
+        conn.close(); raise HTTPException(404, "專案不存在")
+    max_order = conn.execute(
+        "SELECT COALESCE(MAX(sort_order), -1) m FROM project_stages WHERE project_id=?", (project_id,)
+    ).fetchone()["m"]
+    now = datetime.now().isoformat()
+    cur = conn.execute("""
+        INSERT INTO project_stages
+            (project_id, label, sort_order, done, done_at, start_date, due_date, created_at, updated_at)
+        VALUES (?,?,?,0,'','','',?,?)
+    """, (project_id, body.get("label") or "", max_order + 1, now, now))
+    new_id = cur.lastrowid
+    conn.commit()
+    row = conn.execute("SELECT * FROM project_stages WHERE id=?", (new_id,)).fetchone()
+    conn.close()
+    return _serialize_project_stage(row)
+
+
+@router.put("/api/projects/{project_id}/stages/{stage_id}")
+def update_project_stage(project_id: int, stage_id: int, body: dict = Body(...), authorization: str = Header(None)):
+    """局部更新階段欄位（label/done/doneAt/startDate/dueDate），比照
+    quotations.py::update_case_stage() 的作法：不加任何自動邏輯（done=true 不
+    自動填 doneAt），各欄位互相獨立，維持跟前端 x-model 直接綁定的行為一致。"""
+    _require_user(authorization)
+    conn = get_db()
+    row = conn.execute(
+        "SELECT * FROM project_stages WHERE id=? AND project_id=?", (stage_id, project_id)
+    ).fetchone()
+    if not row:
+        conn.close(); raise HTTPException(404, "階段不存在")
+    updates = {}
+    if "label" in body:     updates["label"]      = body.get("label") or ""
+    if "done" in body:      updates["done"]       = 1 if body.get("done") else 0
+    if "doneAt" in body:    updates["done_at"]    = body.get("doneAt") or ""
+    if "startDate" in body: updates["start_date"] = body.get("startDate") or ""
+    if "dueDate" in body:   updates["due_date"]   = body.get("dueDate") or ""
+    if updates:
+        updates["updated_at"] = datetime.now().isoformat()
+        sql = "UPDATE project_stages SET " + ", ".join(f"{k}=?" for k in updates) + " WHERE id=?"
+        conn.execute(sql, list(updates.values()) + [stage_id])
+        conn.commit()
+    row = conn.execute("SELECT * FROM project_stages WHERE id=?", (stage_id,)).fetchone()
+    conn.close()
+    return _serialize_project_stage(row)
+
+
+@router.delete("/api/projects/{project_id}/stages/{stage_id}")
+def delete_project_stage(project_id: int, stage_id: int, authorization: str = Header(None)):
+    _require_user(authorization)
+    conn = get_db()
+    row = conn.execute(
+        "SELECT id FROM project_stages WHERE id=? AND project_id=?", (stage_id, project_id)
+    ).fetchone()
+    if not row:
+        conn.close(); raise HTTPException(404, "階段不存在")
+    conn.execute("DELETE FROM project_stages WHERE id=?", (stage_id,))
+    conn.commit()
+    conn.close()
+    return {"ok": True}
+
+
+@router.patch("/api/projects/{project_id}/stages/reorder")
+def reorder_project_stages(project_id: int, body: dict = Body(...), authorization: str = Header(None)):
+    """依 orderedIds 陣列順序重寫 sort_order，對應拖曳重排的最終結果。"""
+    _require_user(authorization)
+    ordered_ids = body.get("orderedIds") or []
+    conn = get_db()
+    valid_ids = {r["id"] for r in conn.execute(
+        "SELECT id FROM project_stages WHERE project_id=?", (project_id,)
+    ).fetchall()}
+    now = datetime.now().isoformat()
+    for idx, sid in enumerate(ordered_ids):
+        if sid in valid_ids:
+            conn.execute("UPDATE project_stages SET sort_order=?, updated_at=? WHERE id=? AND project_id=?",
+                         (idx, now, sid, project_id))
+    conn.commit()
+    conn.close()
+    return {"ok": True}
+
+
 # ── Action Item Approval ──────────────────────────────────────────────────────
 
 @router.patch("/api/projects/{project_id}/logs/{log_id}/items/{item_id}/approve")

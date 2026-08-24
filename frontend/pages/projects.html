@@ -231,6 +231,27 @@
     .lightbox__close { position:absolute; top:16px; right:20px; background:rgba(255,255,255,.15); border:none; color:#fff; width:36px; height:36px; border-radius:50%; cursor:pointer; font-size:20px; display:flex; align-items:center; justify-content:center; transition:background .1s; }
     .lightbox__close:hover { background:rgba(255,255,255,.25); }
 
+    /* Execution stages（執行階段，2026-08-24） */
+    .stage-segbar { display:flex; gap:3px; height:8px; border-radius:99px; overflow:hidden; background:#EEECEA; }
+    .stage-segbar__seg { flex:1; height:100%; }
+    .stage-segbar__seg--done { background:var(--success); }
+    .stage-segbar__seg--current { background:var(--accent); }
+    .stage-segbar__seg--future { background:#D9D7D2; }
+    .stage-segbar__seg--overdue { background:var(--danger); }
+    .stage-card { border:1px solid var(--border-light); border-radius:10px; margin-bottom:10px; background:#fff; overflow:hidden; transition:box-shadow .15s; }
+    .stage-card:hover { box-shadow:0 2px 8px rgba(0,0,0,.06); }
+    .stage-card--done { border-color:#86EFAC; }
+    .stage-card__head { display:flex; align-items:center; gap:8px; padding:10px 12px; background:#FAFAF9; }
+    .stage-card--done .stage-card__head { background:#F0FDF4; }
+    .stage-overdue-badge { font-size:10px; padding:2px 7px; border-radius:4px; font-weight:600; font-family:LINE Seed TW_OTF, sans-serif; background:#FEE2E2; color:#DC2626; flex-shrink:0; white-space:nowrap; }
+    .stage-toggle-detail { background:none; border:none; cursor:pointer; color:var(--text-dim); padding:2px 4px; flex-shrink:0; font-size:11px; }
+    .stage-toggle-detail:hover { color:var(--accent); }
+    .stage-detail { padding:10px 12px; background:#FAFAF9; border-top:1px dashed #E5E7EB; }
+    .stage-detail__label { font-size:10px; color:var(--text-dim); font-family:LINE Seed TW_OTF, sans-serif; text-transform:uppercase; letter-spacing:.06em; margin-bottom:5px; display:block; }
+    .stage-detail input { width:100%; padding:6px 9px; border:1px solid var(--border-light); border-radius:6px; font-size:12px; font-family:var(--font-zh); outline:none; box-sizing:border-box; }
+    .stage-del { background:none; border:none; cursor:pointer; color:var(--text-dim); font-size:16px; line-height:1; padding:2px 4px; flex-shrink:0; }
+    .stage-del:hover { color:var(--danger); }
+
     /* Info section */
     .info-card { background:#FAFAF9; border:1px solid var(--border-light); border-radius:10px; padding:16px; margin-bottom:14px; }
     .info-card__title { font-size:10px; font-family:LINE Seed TW_OTF, sans-serif; text-transform:uppercase; letter-spacing:.1em; color:var(--text-dim); font-weight:600; margin-bottom:14px; display:flex; align-items:center; gap:6px; }
@@ -484,6 +505,10 @@
               工作日誌
               <span class="pj-tab-count" x-show="logs.length" x-text="logs.length"></span>
             </button>
+            <button class="pj-tab" :class="{active:tab==='stages'}" @click="tab='stages'; $nextTick(() => initStageSortable())">
+              執行階段
+              <span class="pj-tab-count" x-show="stages.length" x-text="stages.length"></span>
+            </button>
             <button class="pj-tab" :class="{active:tab==='info'}" @click="tab='info'">專案資訊</button>
           </div>
 
@@ -649,6 +674,80 @@
                     </div>
                   </div>
                 </template>
+              </div>
+            </template>
+
+            <!-- ── 執行階段 tab（2026-08-24：多階段清單＋可手動設起訖日期，比照案件
+                 管理風格，讓「執行到哪一階段」可以用日期區間呈現，不只是勾選式待辦） ── -->
+            <template x-if="tab==='stages'">
+              <div>
+                <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px" x-show="stages.length">
+                  <div style="flex:1">
+                    <div class="stage-segbar">
+                      <template x-for="st in stages" :key="'seg-'+st.id">
+                        <div class="stage-segbar__seg" :class="stageSegClass(st)" :title="stageSegTooltip(st)"></div>
+                      </template>
+                    </div>
+                  </div>
+                  <span style="font-size:14px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;color:var(--accent);min-width:42px;text-align:right"
+                        x-text="stageProgressPct() + '%'"></span>
+                </div>
+
+                <template x-if="stages.length===0">
+                  <div style="text-align:center;color:var(--text-dim);font-size:13px;font-family:var(--font-zh);padding:52px 20px;display:flex;flex-direction:column;align-items:center;gap:8px;">
+                    <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" style="opacity:.2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+                    <span>尚無執行階段</span>
+                    <span style="font-size:11px;opacity:.6" x-show="canManage()">點擊「新增階段」開始規劃執行流程，每個階段可自訂名稱與起訖日期</span>
+                  </div>
+                </template>
+
+                <div x-ref="stageList">
+                  <template x-for="st in stages" :key="st.id">
+                    <div class="stage-card" :class="st.done ? 'stage-card--done' : ''" :data-id="st.id">
+                      <div class="stage-card__head">
+                        <svg class="stage-drag-handle" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                             style="color:#C9C7C1;flex-shrink:0;cursor:grab" x-show="canManage()">
+                          <path d="M8 6h.01M8 12h.01M8 18h.01M16 6h.01M16 12h.01M16 18h.01"/>
+                        </svg>
+                        <input type="checkbox" x-model="st.done" :disabled="!canManage()"
+                               @change="updateProjectStage(st, {done: st.done, doneAt: st.done ? (st.doneAt || new Date().toISOString().slice(0,10)) : ''})"
+                               style="width:15px;height:15px;flex-shrink:0;accent-color:var(--success)">
+                        <input type="text" x-model="st.label" :readonly="!canManage()" @change="updateProjectStage(st, {label: st.label})"
+                               style="flex:1;border:none;outline:none;font-size:13px;font-weight:600;font-family:var(--font-zh);background:transparent;min-width:0"
+                               :style="st.done ? 'text-decoration:line-through;color:#9CA3AF' : 'color:var(--text-primary)'">
+                        <template x-if="st.done">
+                          <input type="date" x-model="st.doneAt" :disabled="!canManage()" @change="updateProjectStage(st, {doneAt: st.doneAt})"
+                                 style="font-size:11px;border:1px solid #86EFAC;border-radius:5px;padding:3px 6px;background:#F0FDF4;color:#15803D;font-family:LINE Seed TW_OTF, sans-serif;outline:none">
+                        </template>
+                        <span style="font-size:10px;padding:2px 7px;border-radius:4px;font-weight:600;font-family:LINE Seed TW_OTF, sans-serif;flex-shrink:0;white-space:nowrap"
+                              :style="st.done ? 'background:#DCFCE7;color:#15803D' : 'background:#F3F4F6;color:#9CA3AF'"
+                              x-text="st.done ? '完成' : '待辦'"></span>
+                        <span class="stage-overdue-badge" x-show="projectStageIsOverdue(st)">已逾期</span>
+                        <button class="stage-toggle-detail" @click="toggleStageDetail(st.id)"
+                                :title="_openStageDetail[st.id] ? '收合起訖日期' : '展開設定起訖日期'"
+                                x-text="_openStageDetail[st.id] ? '▾' : '▸'"></button>
+                        <button class="stage-del" @click="removeProjectStage(st)" x-show="canManage()" title="刪除階段">×</button>
+                      </div>
+                      <div class="stage-detail" x-show="_openStageDetail[st.id]" x-cloak>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+                          <div>
+                            <label class="stage-detail__label">起始日期</label>
+                            <input type="date" x-model="st.startDate" :disabled="!canManage()" @change="updateProjectStage(st, {startDate: st.startDate})">
+                          </div>
+                          <div>
+                            <label class="stage-detail__label">到期日期</label>
+                            <input type="date" x-model="st.dueDate" :disabled="!canManage()" @change="updateProjectStage(st, {dueDate: st.dueDate})">
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </template>
+                </div>
+
+                <button class="btn btn-primary btn-sm" @click="addProjectStage()" x-show="canManage()">
+                  <svg viewBox="0 0 20 20" fill="currentColor" style="width:11px;height:11px"><path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd"/></svg>
+                  新增階段
+                </button>
               </div>
             </template>
 
@@ -1009,6 +1108,9 @@
       orgTree:   [],
       selected:  null,
       logs:      [],
+      stages:    [],
+      _openStageDetail: {},
+      _stageSortable: null,
       viewMode:  'list',
       _kanbanSortables: [],
       openLogs:  [],
@@ -1175,10 +1277,12 @@
         this.selected = p
         this.tab = 'logs'
         this.openLogs = []
+        this.stages = []
+        this._openStageDetail = {}
         this.infoEdit = { ...p.data_json }
         this.assignedUserIds = [...(p.assigned_user_ids || [])]
         this.assignmentChanged = false
-        await this.loadLogs()
+        await Promise.all([this.loadLogs(), this.loadStages()])
       },
 
       async loadLogs() {
@@ -1186,6 +1290,98 @@
         const r = await fetch(`${API}/api/projects/${this.selected.id}/logs`, {headers: this._h()})
         const d = await r.json()
         this.logs = d.items || []
+      },
+
+      // ── 執行階段（2026-08-24：多階段清單＋可手動設起訖日期，比照案件管理
+      // case-management.js 的階段操作風格，改一個欄位就即時打對應的 granular
+      // 端點，不用整包存檔）──────────────────────────────────────────────
+      async loadStages() {
+        if (!this.selected) return
+        const r = await fetch(`${API}/api/projects/${this.selected.id}/stages`, {headers: this._h()})
+        const d = await r.json()
+        this.stages = d.items || []
+      },
+
+      async addProjectStage() {
+        if (!this.selected) return
+        const r = await fetch(`${API}/api/projects/${this.selected.id}/stages`, {
+          method: 'POST', headers: this._h(), body: JSON.stringify({ label: '新階段' })
+        })
+        if (!r.ok) { this.toast('新增階段失敗'); return }
+        this.stages.push(await r.json())
+        this.$nextTick(() => this.initStageSortable())
+      },
+
+      async updateProjectStage(st, fields) {
+        if (!this.selected) return
+        try {
+          const r = await fetch(`${API}/api/projects/${this.selected.id}/stages/${st.id}`, {
+            method: 'PUT', headers: this._h(), body: JSON.stringify(fields)
+          })
+          if (!r.ok) { this.toast('儲存失敗'); return }
+          Object.assign(st, await r.json())
+        } catch (e) { this.toast('發生錯誤：' + e.message) }
+      },
+
+      async removeProjectStage(st) {
+        if (!this.selected) return
+        const r = await fetch(`${API}/api/projects/${this.selected.id}/stages/${st.id}`, {
+          method: 'DELETE', headers: this._h()
+        })
+        if (!r.ok) { this.toast('刪除失敗'); return }
+        this.stages = this.stages.filter(s => s.id !== st.id)
+      },
+
+      toggleStageDetail(id) {
+        this._openStageDetail[id] = !this._openStageDetail[id]
+      },
+
+      initStageSortable() {
+        if (this._stageSortable) { this._stageSortable.destroy(); this._stageSortable = null }
+        if (typeof Sortable === 'undefined' || !this.canManage()) return
+        const el = this.$refs.stageList
+        if (!el) return
+        this._stageSortable = Sortable.create(el, {
+          animation: 150, handle: '.stage-drag-handle', ghostClass: 'sortable-ghost',
+          onEnd: async () => {
+            const orderedIds = [...el.children].map(c => Number(c.dataset.id))
+            this.stages.sort((a, b) => orderedIds.indexOf(a.id) - orderedIds.indexOf(b.id))
+            await fetch(`${API}/api/projects/${this.selected.id}/stages/reorder`, {
+              method: 'PATCH', headers: this._h(), body: JSON.stringify({ orderedIds })
+            })
+          }
+        })
+      },
+
+      _firstUndoneProjectStageId() {
+        const s = this.stages.find(s => !s.done)
+        return s ? s.id : null
+      },
+
+      projectStageIsOverdue(st) {
+        if (st.done || !st.dueDate) return false
+        return st.dueDate < new Date().toISOString().slice(0,10)
+      },
+
+      stageProgressPct() {
+        if (!this.stages.length) return 0
+        return Math.round(this.stages.filter(s => s.done).length / this.stages.length * 100)
+      },
+
+      stageSegClass(st) {
+        if (st.done) return 'stage-segbar__seg--done'
+        if (this.projectStageIsOverdue(st)) return 'stage-segbar__seg--overdue'
+        if (st.id === this._firstUndoneProjectStageId()) return 'stage-segbar__seg--current'
+        return 'stage-segbar__seg--future'
+      },
+
+      stageSegTooltip(st) {
+        const status = st.done
+          ? ('已完成' + (st.doneAt ? '（' + st.doneAt + '）' : ''))
+          : (this.projectStageIsOverdue(st)
+              ? ('已逾期' + (st.dueDate ? '（到期 ' + st.dueDate + '）' : ''))
+              : (st.dueDate ? ('到期日 ' + st.dueDate) : '未設定到期日'))
+        return (st.label || '（未命名階段）') + ' — ' + status
       },
 
       toggleLog(id) {

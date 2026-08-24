@@ -308,6 +308,21 @@ def init_db(path: str = None):
             FOREIGN KEY (project_id) REFERENCES projects(id)
         );
 
+        CREATE TABLE IF NOT EXISTS project_stages (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id  INTEGER NOT NULL,
+            label       TEXT    NOT NULL DEFAULT '',
+            sort_order  INTEGER NOT NULL DEFAULT 0,
+            done        INTEGER NOT NULL DEFAULT 0,
+            done_at     TEXT    NOT NULL DEFAULT '',
+            start_date  TEXT    NOT NULL DEFAULT '',
+            due_date    TEXT    NOT NULL DEFAULT '',
+            created_at  TEXT    NOT NULL,
+            updated_at  TEXT    NOT NULL,
+            FOREIGN KEY (project_id) REFERENCES projects(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_project_stages_project_id ON project_stages(project_id);
+
         CREATE TABLE IF NOT EXISTS work_logs (
             id         INTEGER PRIMARY KEY AUTOINCREMENT,
             log_date   TEXT    NOT NULL,
