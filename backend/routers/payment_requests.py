@@ -42,6 +42,16 @@ router = APIRouter()
 
 # ── Models ────────────────────────────────────────────────────────────────────
 
+# 「款項類別」：客戶端請款單 PDF 與整頁編輯介面上手動選擇的業務語意分類
+# （2026-08-24），跟 scope（amount/items，決定金額計算方式）並存、互不影響。
+PAYMENT_STAGES = {
+    "full":       "全額",
+    "deposit":    "訂金款",
+    "delivery":   "交貨款",
+    "acceptance": "驗收款",
+    "final":      "尾款",
+}
+
 class RequestItemIn(BaseModel):
     itemId: int
     qty:    float
@@ -56,9 +66,21 @@ class TermsIn(BaseModel):
 class RequestCreateIn(BaseModel):
     quote_no:  str
     scope:     str                                    # 'amount'（自訂金額）| 'items'（自訂品項+數量）
+    stage:     str                                     # 'full'/'deposit'/'delivery'/'acceptance'/'final'，見 PAYMENT_STAGES
     amount:    Optional[float] = None                 # scope='amount' 且未帶 ratio_pct 時必填
     ratio_pct: Optional[float] = None                  # scope='amount' 的輸入捷徑：amount = quoteTotal * ratio_pct/100
     items:     Optional[List[RequestItemIn]] = None    # scope='items' 時必填
+    terms:     Optional[TermsIn] = None                # 未帶則沿用報價單目前條款內容（見 _quote_default_terms）
+
+class RequestUpdateIn(BaseModel):
+    """整頁編輯介面（payment-request-form.html）用的草稿更新——跟 RequestCreateIn
+    同一套欄位語意，差別只在 quote_no 已固定在既有列不可改，故不收這個欄位。"""
+    scope:     str
+    stage:     str
+    amount:    Optional[float] = None
+    ratio_pct: Optional[float] = None
+    items:     Optional[List[RequestItemIn]] = None
+    terms:     Optional[TermsIn] = None
 
 
 # ── Approval tier helpers（純邏輯部分共用 helpers/tiered_approval.py，見上方 import）──
@@ -79,6 +101,8 @@ def _request_public(row, include_snapshot: bool = True) -> dict:
         "requestNo":     d["request_no"],
         "quoteNo":       d["quote_no"],
         "scope":         d["scope"] or "amount",
+        "stage":         d.get("stage") or "",
+        "stageLabel":    PAYMENT_STAGES.get(d.get("stage") or "", ""),
         "customerName":  snap.get("customerName", ""),
         "status":        d["status"] or "草稿",
         "amount":        amount,          # 含稅
@@ -100,11 +124,16 @@ def _request_public(row, include_snapshot: bool = True) -> dict:
     return out
 
 
-def _quote_remaining(conn, quote_no: str):
+def _quote_remaining(conn, quote_no: str, exclude_request_no: Optional[str] = None):
     """這張報價單目前的請款額度使用狀況：合約總額（含稅）、未稅總額、已請款
     金額（含稅，含草稿——草稿就鎖額度，跟 invoice_vouchers 同一套設計避免同時
     建立造成超額），剩餘可請款金額（含稅）、剩餘比例（%），以及每個報價品項
-    各自的已請款數量／剩餘數量。查無報價單回傳 None。"""
+    各自的已請款數量／剩餘數量。查無報價單回傳 None。
+
+    exclude_request_no：整頁編輯介面（payment-request-form.html）編輯既有草稿
+    時，該草稿自己已佔用的額度不該被算進「已請款」，否則使用者會看到自己這張
+    草稿把自己的剩餘額度吃掉——排除自己之後才是「除了這張草稿以外，還剩多少
+    可以請款」，可安全再調整到 remaining + 自己原本的金額。"""
     q = conn.execute("SELECT total, pretax, data_json FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
     if not q:
         return None
@@ -113,8 +142,10 @@ def _quote_remaining(conn, quote_no: str):
     quote_pretax = float(q["pretax"] or 0) or quote_total
 
     rows = conn.execute(
-        "SELECT amount, snapshot_json FROM payment_requests WHERE quote_no=?", (quote_no,)
+        "SELECT request_no, amount, snapshot_json FROM payment_requests WHERE quote_no=?", (quote_no,)
     ).fetchall()
+    if exclude_request_no:
+        rows = [r for r in rows if r["request_no"] != exclude_request_no]
     requested_amount = sum(float(r["amount"] or 0) for r in rows)
 
     qty_used = {}
@@ -165,6 +196,63 @@ def _quote_default_terms(data: dict) -> dict:
     }
 
 
+def _calc_scope_amount(data: dict, remaining: dict, quote_total: float, quote_pretax: float,
+                        scope: str, ratio_pct_in: Optional[float], amount_in: Optional[float],
+                        items_in: Optional[List[RequestItemIn]]):
+    """建立／更新請款單共用的金額計算與驗證：回傳
+    (request_amount, pretax_amount, tax_amount, ratio_pct, selected_items_snapshot)。
+    scope='amount' 用 ratio_pct_in 或 amount_in 換算；scope='items' 依 items_in 逐項核對
+    剩餘可請款數量並加總。驗證失敗一律丟 HTTPException，呼叫端不須另外處理錯誤訊息。"""
+    if scope == "amount":
+        if ratio_pct_in:
+            if ratio_pct_in <= 0 or ratio_pct_in > 100:
+                raise HTTPException(400, "請款比例需介於 0～100 之間")
+            ratio_pct = ratio_pct_in
+            request_amount = round(quote_total * ratio_pct / 100)
+        elif amount_in:
+            request_amount = amount_in
+            ratio_pct = round(request_amount / quote_total * 100, 2) if quote_total > 0 else 0
+        else:
+            raise HTTPException(400, "請輸入請款金額或請款比例")
+        if request_amount <= 0:
+            raise HTTPException(400, "請款金額需大於 0")
+        pretax_amount = round(request_amount * quote_pretax / quote_total) if quote_total > 0 else request_amount
+        selected_items_snapshot = []
+    else:
+        if not items_in:
+            raise HTTPException(400, "請至少選擇一項品項")
+        quote_items_by_id = {it.get("id"): it for it in (data.get("items") or []) if it.get("type") != "header"}
+        qty_remaining_by_id = {it["itemId"]: it["remainingQty"] for it in remaining["items"]}
+        pretax_amount = 0.0
+        selected_items_snapshot = []
+        for line in items_in:
+            src = quote_items_by_id.get(line.itemId)
+            if not src:
+                raise HTTPException(400, f"找不到品項 id={line.itemId}")
+            if line.qty <= 0:
+                raise HTTPException(400, f"品項「{src.get('description','')}」數量需大於 0")
+            avail = qty_remaining_by_id.get(line.itemId, 0)
+            if line.qty > avail + 1e-9:
+                raise HTTPException(409, f"品項「{src.get('description','')}」剩餘可請款數量不足（剩餘 {avail:g}）")
+            if line.amount <= 0:
+                raise HTTPException(400, f"品項「{src.get('description','')}」金額需大於 0")
+            pretax_amount += line.amount
+            selected_items_snapshot.append({
+                "itemId":      line.itemId,
+                "description": src.get("description", ""),
+                "brand":       src.get("brand", ""),
+                "unit":        src.get("unit", ""),
+                "unitPrice":   src.get("unitPrice", 0),
+                "qty":         line.qty,
+                "amount":      line.amount,   # 未稅（比照報價單品項金額慣例）
+            })
+        request_amount = round(pretax_amount * quote_total / quote_pretax) if quote_pretax > 0 else pretax_amount
+        ratio_pct = round(request_amount / quote_total * 100, 2) if quote_total > 0 else 0
+
+    tax_amount = request_amount - pretax_amount
+    return request_amount, pretax_amount, tax_amount, ratio_pct, selected_items_snapshot
+
+
 # ── CRUD ──────────────────────────────────────────────────────────────────────
 
 @router.get("/api/payment-requests")
@@ -182,12 +270,15 @@ def list_payment_requests(quote_no: Optional[str] = None, authorization: str = H
 
 
 @router.get("/api/payment-requests/remaining")
-def get_payment_request_remaining(quote_no: str, authorization: str = Header(None)):
-    """建立請款單前，前端要顯示「剩餘可請款金額／比例／品項數量」用——必須
-    註冊在 /{request_no} 之前，否則 FastAPI 會把 'remaining' 當成 request_no 吃掉。"""
+def get_payment_request_remaining(quote_no: str, exclude: Optional[str] = None, authorization: str = Header(None)):
+    """建立/編輯請款單前，前端要顯示「剩餘可請款金額／比例／品項數量」用——必須
+    註冊在 /{request_no} 之前，否則 FastAPI 會把 'remaining' 當成 request_no 吃掉。
+
+    exclude：整頁編輯介面編輯既有草稿時傳入該草稿自己的 request_no，排除自己
+    已佔用的額度（見 _quote_remaining 說明）。"""
     _require_user(authorization)
     conn = get_db()
-    info = _quote_remaining(conn, quote_no)
+    info = _quote_remaining(conn, quote_no, exclude_request_no=exclude)
     conn.close()
     if info is None:
         raise HTTPException(404, "找不到關聯的報價單")
@@ -211,6 +302,8 @@ def create_payment_request(body: RequestCreateIn, authorization: str = Header(No
     _require_admin(user)
     if body.scope not in ("amount", "items"):
         raise HTTPException(400, "scope 必須為 amount 或 items")
+    if body.stage not in PAYMENT_STAGES:
+        raise HTTPException(400, "請選擇請款範圍")
 
     conn = get_db()
     # BEGIN IMMEDIATE：把「算剩餘可請款額度」跟「寫入新申請」鎖進同一個交易，
@@ -252,61 +345,13 @@ def create_payment_request(body: RequestCreateIn, authorization: str = Header(No
         if it.get("type") != "header"
     ]
 
-    ratio_pct = 0.0
-    selected_items_snapshot = []
-    if body.scope == "amount":
-        if body.ratio_pct:
-            if body.ratio_pct <= 0 or body.ratio_pct > 100:
-                conn.close()
-                raise HTTPException(400, "請款比例需介於 0～100 之間")
-            ratio_pct = body.ratio_pct
-            request_amount = round(quote_total * ratio_pct / 100)
-        elif body.amount:
-            request_amount = body.amount
-            ratio_pct = round(request_amount / quote_total * 100, 2) if quote_total > 0 else 0
-        else:
-            conn.close()
-            raise HTTPException(400, "請輸入請款金額或請款比例")
-        if request_amount <= 0:
-            conn.close()
-            raise HTTPException(400, "請款金額需大於 0")
-        pretax_amount = round(request_amount * quote_pretax / quote_total) if quote_total > 0 else request_amount
-    else:
-        if not body.items:
-            conn.close()
-            raise HTTPException(400, "請至少選擇一項品項")
-        quote_items_by_id = {it.get("id"): it for it in (data.get("items") or []) if it.get("type") != "header"}
-        qty_remaining_by_id = {it["itemId"]: it["remainingQty"] for it in remaining["items"]}
-        pretax_amount = 0.0
-        for line in body.items:
-            src = quote_items_by_id.get(line.itemId)
-            if not src:
-                conn.close()
-                raise HTTPException(400, f"找不到品項 id={line.itemId}")
-            if line.qty <= 0:
-                conn.close()
-                raise HTTPException(400, f"品項「{src.get('description','')}」數量需大於 0")
-            avail = qty_remaining_by_id.get(line.itemId, 0)
-            if line.qty > avail + 1e-9:
-                conn.close()
-                raise HTTPException(409, f"品項「{src.get('description','')}」剩餘可請款數量不足（剩餘 {avail:g}）")
-            if line.amount <= 0:
-                conn.close()
-                raise HTTPException(400, f"品項「{src.get('description','')}」金額需大於 0")
-            pretax_amount += line.amount
-            selected_items_snapshot.append({
-                "itemId":      line.itemId,
-                "description": src.get("description", ""),
-                "brand":       src.get("brand", ""),
-                "unit":        src.get("unit", ""),
-                "unitPrice":   src.get("unitPrice", 0),
-                "qty":         line.qty,
-                "amount":      line.amount,   # 未稅（比照報價單品項金額慣例）
-            })
-        request_amount = round(pretax_amount * quote_total / quote_pretax) if quote_pretax > 0 else pretax_amount
-        ratio_pct = round(request_amount / quote_total * 100, 2) if quote_total > 0 else 0
-
-    tax_amount = request_amount - pretax_amount
+    try:
+        request_amount, pretax_amount, tax_amount, ratio_pct, selected_items_snapshot = _calc_scope_amount(
+            data, remaining, quote_total, quote_pretax, body.scope, body.ratio_pct, body.amount, body.items
+        )
+    except HTTPException:
+        conn.close()
+        raise
 
     if request_amount > remaining_amount + 1e-6:
         conn.close()
@@ -322,15 +367,15 @@ def create_payment_request(body: RequestCreateIn, authorization: str = Header(No
         "pretaxAmount":    round(pretax_amount),
         "taxAmount":       round(tax_amount),
     }
-    terms = _quote_default_terms(data)
+    terms = body.terms.model_dump() if body.terms else _quote_default_terms(data)
 
     now = datetime.now().isoformat()
     request_no = next_entity_code(conn, "payment_requests", "PR", code_col="request_no")
     conn.execute(
         "INSERT INTO payment_requests "
-        "(request_no, quote_no, scope, amount, ratio_pct, status, terms_json, snapshot_json, data_json, "
-        "created_by, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-        (request_no, body.quote_no, body.scope, request_amount, ratio_pct,
+        "(request_no, quote_no, scope, stage, amount, ratio_pct, status, terms_json, snapshot_json, data_json, "
+        "created_by, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        (request_no, body.quote_no, body.scope, body.stage, request_amount, ratio_pct,
          "草稿", json.dumps(terms, ensure_ascii=False), json.dumps(snapshot, ensure_ascii=False), "{}",
          user["username"], now, now)
     )
@@ -343,27 +388,102 @@ def create_payment_request(body: RequestCreateIn, authorization: str = Header(No
     return {"request_no": request_no, "created_at": now}
 
 
-@router.put("/api/payment-requests/{request_no}/terms")
-def update_payment_request_terms(request_no: str, body: TermsIn, authorization: str = Header(None)):
+@router.put("/api/payment-requests/{request_no}")
+def update_payment_request(request_no: str, body: RequestUpdateIn, authorization: str = Header(None)):
+    """整頁編輯介面（payment-request-form.html）用：草稿狀態下可整筆改
+    scope/stage/金額或品項/條款，取代原本只能改條款的 /terms 端點。跟建立
+    端點共用 _calc_scope_amount 驗證邏輯與防超額檢查，差異只在剩餘額度計算要
+    排除自己這張草稿目前已佔用的金額（見 _quote_remaining exclude_request_no）。"""
     user = _require_user(authorization)
     _require_admin(user)
+    if body.scope not in ("amount", "items"):
+        raise HTTPException(400, "scope 必須為 amount 或 items")
+    if body.stage not in PAYMENT_STAGES:
+        raise HTTPException(400, "請選擇請款範圍")
+
     conn = get_db()
-    row = conn.execute("SELECT status FROM payment_requests WHERE request_no=?", (request_no,)).fetchone()
+    conn.execute("BEGIN IMMEDIATE")
+    row = conn.execute(
+        "SELECT status, quote_no, terms_json FROM payment_requests WHERE request_no=?", (request_no,)
+    ).fetchone()
     if not row:
         conn.close()
         raise HTTPException(404, "請款單不存在")
     if row["status"] != "草稿":
         conn.close()
-        raise HTTPException(409, "僅草稿狀態可修改條款")
+        raise HTTPException(409, "僅草稿狀態可修改")
+    quote_no = row["quote_no"]
+
+    q = conn.execute(
+        "SELECT customer_name, project_name, total, pretax, data_json FROM quotations WHERE quote_no=?",
+        (quote_no,)
+    ).fetchone()
+    if not q:
+        conn.close()
+        raise HTTPException(404, "找不到關聯的報價單")
+    data = json.loads(q["data_json"] or "{}")
+    quote_total  = float(q["total"] or 0)
+    quote_pretax = float(q["pretax"] or 0) or quote_total
+
+    customer_id = data.get("customerId")
+    customer_tax_id = ""
+    if customer_id:
+        crow = conn.execute("SELECT tax_id FROM customers WHERE id=?", (customer_id,)).fetchone()
+        customer_tax_id = (crow["tax_id"] if crow else "") or ""
+
+    remaining = _quote_remaining(conn, quote_no, exclude_request_no=request_no)
+    remaining_amount = remaining["remainingAmount"]
+
+    quote_items_snapshot = [
+        {
+            "description": it.get("description", ""),
+            "brand":       it.get("brand", ""),
+            "qty":         it.get("qty", ""),
+            "unit":        it.get("unit", ""),
+            "unitPrice":   it.get("unitPrice", 0),
+            "amount":      it.get("amount", 0),
+            "notes":       it.get("notes", ""),
+        }
+        for it in (data.get("items") or [])
+        if it.get("type") != "header"
+    ]
+
+    try:
+        request_amount, pretax_amount, tax_amount, ratio_pct, selected_items_snapshot = _calc_scope_amount(
+            data, remaining, quote_total, quote_pretax, body.scope, body.ratio_pct, body.amount, body.items
+        )
+    except HTTPException:
+        conn.close()
+        raise
+
+    if request_amount > remaining_amount + 1e-6:
+        conn.close()
+        raise HTTPException(409, f"超過剩餘可請款金額（剩餘 NT$ {remaining_amount:,.0f}）")
+
+    snapshot = {
+        "customerName":    q["customer_name"] or "",
+        "customerTaxId":   customer_tax_id,
+        "projectName":     q["project_name"] or "",
+        "quoteItems":      quote_items_snapshot,
+        "selectedItems":   selected_items_snapshot,
+        "requestedAmount": request_amount,
+        "pretaxAmount":    round(pretax_amount),
+        "taxAmount":       round(tax_amount),
+    }
+    terms = body.terms.model_dump() if body.terms else json.loads(row["terms_json"] or "{}")
+
     now = datetime.now().isoformat()
     conn.execute(
-        "UPDATE payment_requests SET terms_json=?, updated_at=? WHERE request_no=?",
-        (json.dumps(body.model_dump(), ensure_ascii=False), now, request_no)
+        "UPDATE payment_requests SET scope=?, stage=?, amount=?, ratio_pct=?, terms_json=?, "
+        "snapshot_json=?, updated_at=? WHERE request_no=?",
+        (body.scope, body.stage, request_amount, ratio_pct, json.dumps(terms, ensure_ascii=False),
+         json.dumps(snapshot, ensure_ascii=False), now, request_no)
     )
     conn.commit()
     conn.close()
-    _audit(_tok(authorization), "payment_request.update_terms", "payment_request", request_no, request_no)
-    return {"ok": True}
+    _audit(_tok(authorization), "payment_request.update", "payment_request", request_no,
+           f"{request_no}（{snapshot['customerName']}）")
+    return {"ok": True, "amount": request_amount}
 
 
 @router.delete("/api/payment-requests/{request_no}")

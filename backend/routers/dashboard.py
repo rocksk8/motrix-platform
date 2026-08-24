@@ -346,12 +346,17 @@ def dashboard_monthly(authorization: str = Header(None)):
     if role not in ("superadmin", "admin") and "finance" not in mods:
         return {"items": []}
     conn = get_db()
+    # 分組依據優先用 dealWonAt（案件實際轉為「已成案」的時間戳，2026-08-24 起
+    # 於 update_deal_tag() 寫入）而非 quote_date——quote_date 是報價單建立當下
+    # 手動填的日期，常常跟業務員實際簽下這筆案子的月份對不上，會導致當月營收
+    # 被歸到錯的月份。dealWonAt 是這輪才新增的欄位，成案時間早於這次修正的舊
+    # 資料沒有這個值，一律 fallback 回 quote_date 維持既有行為，不需要回填遷移。
     rows = conn.execute("""
-        SELECT substr(quote_date, 1, 7) AS month,
+        SELECT substr(COALESCE(NULLIF(json_extract(data_json,'$.dealWonAt'),''), quote_date), 1, 7) AS month,
                SUM(total)  AS amount,
                COUNT(*)    AS cnt
         FROM quotations
-        WHERE quote_date IS NOT NULL AND quote_date != ''
+        WHERE COALESCE(NULLIF(json_extract(data_json,'$.dealWonAt'),''), quote_date, '') != ''
           AND COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') IN ('已成案','已結案')
         GROUP BY month
         ORDER BY month ASC

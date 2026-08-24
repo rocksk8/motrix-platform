@@ -1016,6 +1016,14 @@ def update_deal_tag(quote_no: str, body: QuotationDealTagUpdate, authorization: 
         conn.close()
         raise HTTPException(403, "案件已結案，僅超級管理員可變更案件進度")
     d["dealTag"] = body.deal_tag or ''
+    # 案件實際成案的時間點（供首頁「本月銷售」等營收月報表分組用）——quote_date
+    # 是報價單建立當下手動填的日期，跟業務員實際簽下這筆案子的時間常常對不上
+    # （甚至可能是提前估價填的未來日期），dashboard.py 過去直接拿 quote_date
+    # 分組會導致當月實際成交的案件被歸到錯誤的月份、首頁本月銷售看起來是 0。
+    # 只在「新轉為已成案」那一刻寫入一次，之後對這張報價單的其他編輯不會再
+    # 覆蓋，避免事後修改內容誤把成交月份往後推。
+    if body.deal_tag == "已成案" and old_tag != "已成案":
+        d["dealWonAt"] = datetime.now().isoformat()
     if body.log_entry:
         if "statusLog" not in d or not isinstance(d["statusLog"], list):
             d["statusLog"] = []

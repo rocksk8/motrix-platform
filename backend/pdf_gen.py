@@ -1840,6 +1840,15 @@ def _generate_invoice_voucher_pdf(voucher_no: str, actor: str = '', action_type:
 
 # ── 請款單 ────────────────────────────────────────────────────────────────────
 
+_PAYMENT_STAGE_LABELS = {
+    "full":       "全額",
+    "deposit":    "訂金款",
+    "delivery":   "交貨款",
+    "acceptance": "驗收款",
+    "final":      "尾款",
+}
+
+
 def _build_payment_request_html(v: dict) -> str:
     def esc(s):
         return (s or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>')
@@ -1853,9 +1862,11 @@ def _build_payment_request_html(v: dict) -> str:
     ratio_pct = v.get('ratioPct', 0) or 0
     selected_items = v.get('selectedItems') or []
     quote_items = v.get('quoteItems') or []
+    # 請款範圍：客戶端只需要看業務語意分類（全額/訂金款/交貨款/驗收款/尾款），
+    # scope（amount/items）純粹是內部金額計算方式，不對外顯示。
+    scope_label = _PAYMENT_STAGE_LABELS.get(v.get('stage') or '', '未分類')
 
     if scope == 'items':
-        scope_label = '自訂品項'
         sel_rows = ''
         for i, it in enumerate(selected_items, 1):
             spec = it.get('description', '')
@@ -1874,7 +1885,6 @@ def _build_payment_request_html(v: dict) -> str:
         )
         quote_items_html = ''
     else:
-        scope_label = f'自訂金額（{ratio_pct:g}%）' if ratio_pct else '自訂金額'
         items_table_html = (
             '<div class="section-label">三、請款金額</div>\n'
             '<div class="boxes" style="grid-template-columns:1fr">\n'
@@ -1908,7 +1918,7 @@ def _build_payment_request_html(v: dict) -> str:
         if not t:
             return ''
         return (f'<div style="margin-bottom:10px"><div class="section-label" style="margin-bottom:3px">{esc(title)}</div>'
-                f'<div style="font-size:11px;color:#555;line-height:1.7">{esc(t)}</div></div>')
+                f'<div style="font-size:11px;color:#0A0A0A;line-height:1.7">{esc(t)}</div></div>')
 
     # 收款帳戶資訊（2026-08-24 新增）：緊接在總額之後，讀者算完應付金額的下一步
     # 就是要匯款，比照大型企業/上市櫃公司請款單慣例把匯款帳戶放在明顯位置，
@@ -1946,9 +1956,6 @@ def _build_payment_request_html(v: dict) -> str:
         f'<div class="section-label">{"六" if bank_rows else "五"}、請款條件</div>' + terms_html
     ) if terms_html.strip() else ''
 
-    applicant_name = (v.get('approval') or {}).get('requestedByDisplay') or v.get('createdBy', '')
-    applicant_date = ((v.get('approval') or {}).get('requestedAt') or v.get('createdAt') or '')[:10]
-
     is_final = v.get('status') == '已核准'
     watermark_html = '' if is_final else (
         '<div class="wm">' + ''.join(
@@ -1958,7 +1965,7 @@ def _build_payment_request_html(v: dict) -> str:
     )
     banner_html = '' if is_final else (
         f'<div class="preview-banner">⚠ 此為請款單預覽稿（目前狀態：{esc(v.get("status") or "草稿")}），'
-        f'尚未正式核准，請勿提供財務單位或客戶辦理請款</div>'
+        f'尚未正式核准，請勿提供給客戶辦理請款</div>'
     )
 
     return (
@@ -1975,8 +1982,8 @@ def _build_payment_request_html(v: dict) -> str:
         '  .wm-item small{display:block;font-size:10px;font-weight:700;letter-spacing:.07em;color:rgba(185,28,28,.07)}\n'
         '  .preview-banner{margin-bottom:12px;padding:7px 12px;background:#EFF6FF;border:1px solid #BFDBFE;'
         'border-radius:5px;font-size:11px;color:#1E40AF;letter-spacing:.02em}\n'
-        '  @page{size:A4;margin:0 13mm 12mm 13mm;@bottom-center{content:counter(page);font-family:Arial,sans-serif;font-size:9px;color:#aaa}}\n'
-        '  @media print{html,body{margin:0;padding:0;background:#fff}#root{padding:15mm 0 0}.sign{page-break-inside:avoid}tr{page-break-inside:avoid}}\n'
+        '  @page{size:A4;margin:0 13mm 12mm 13mm;@bottom-center{content:counter(page);font-family:Arial,sans-serif;font-size:9px;color:#888}}\n'
+        '  @media print{html,body{margin:0;padding:0;background:#fff}#root{padding:15mm 0 0}tr{page-break-inside:avoid}}\n'
         '  .accent-bar{height:3px;background:#0A0A0A;margin-bottom:18px}\n'
         '  .header{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:14px;border-bottom:1px solid #0A0A0A;margin-bottom:16px}\n'
         '  .co-name{font-size:15px;font-weight:700;letter-spacing:.06em}\n'
@@ -1986,11 +1993,11 @@ def _build_payment_request_html(v: dict) -> str:
         '  .meta span{color:#888;font-family:Arial,sans-serif;font-size:11px}\n'
         '  .boxes{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px}\n'
         '  .box{background:#FAFAF8;border:1px solid #EDEAE4;border-radius:4px;padding:11px 13px}\n'
-        '  .box-title{font-size:9px;font-family:Arial,sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#999;font-weight:600;margin-bottom:8px}\n'
+        '  .box-title{font-size:9px;font-family:Arial,sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#888;font-weight:600;margin-bottom:8px}\n'
         '  .row{display:flex;gap:6px;margin-bottom:4px;font-size:12px}\n'
         '  .label{color:#888;min-width:72px;flex-shrink:0;font-size:11px}\n'
         '  .val{color:#0A0A0A;font-weight:500}\n'
-        '  .section-label{font-size:9px;font-family:Arial,sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#999;font-weight:600;margin-bottom:7px;display:flex;align-items:center;gap:8px}\n'
+        '  .section-label{font-size:9px;font-family:Arial,sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#888;font-weight:600;margin-bottom:7px;display:flex;align-items:center;gap:8px}\n'
         '  .section-label::after{content:"";flex:1;height:1px;background:#EDEAE4}\n'
         '  table{width:100%;border-collapse:collapse;margin-bottom:14px}\n'
         '  thead th{background:#0A0A0A;color:#F5F4F0;padding:8px 9px;text-align:left;font-size:11px;font-weight:500;font-family:Arial,sans-serif;letter-spacing:.04em}\n'
@@ -2003,12 +2010,7 @@ def _build_payment_request_html(v: dict) -> str:
         '  .total-table{width:280px;font-size:12px}\n'
         '  .total-table .row{display:flex;justify-content:space-between;padding:4px 0}\n'
         '  .total-table .grand{font-size:15px;font-weight:700;border-top:1px solid #0A0A0A;padding-top:8px;margin-top:4px}\n'
-        '  .sign{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px}\n'
-        '  .sign-box{border:1px solid #EDEAE4;border-radius:4px;padding:16px 18px;min-height:110px;display:flex;flex-direction:column}\n'
-        '  .sign-label{font-size:9px;color:#999;font-family:Arial,sans-serif;letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px}\n'
-        '  .sign-line{flex:1;border-bottom:1px solid #ccc;margin:10px 0}\n'
-        '  .sign-date{font-size:10px;color:#999;font-family:Arial,sans-serif}\n'
-        '  .footer{text-align:center;font-size:10px;color:#999;margin-top:18px;padding-top:12px;border-top:1px solid #EDEAE4;font-family:Arial,sans-serif;letter-spacing:.04em}\n'
+        '  .footer{text-align:center;font-size:10px;color:#888;margin-top:18px;padding-top:12px;border-top:1px solid #EDEAE4;font-family:Arial,sans-serif;letter-spacing:.04em}\n'
         '</style>\n</head>\n<body>\n<div id="root">\n'
         f'{watermark_html}\n'
         '<div class="accent-bar"></div>\n'
@@ -2040,14 +2042,6 @@ def _build_payment_request_html(v: dict) -> str:
         f'{quote_items_html}'
         f'{bank_info_section}'
         f'{terms_section}\n'
-        f'{_voucher_sign_html(v.get("approval") or {})}\n'
-        '<div class="sign">\n'
-        '  <div class="sign-box">\n    <div class="sign-label">財務單位 · 收款確認</div>\n'
-        '    <div class="sign-line"></div>\n    <div class="sign-date">收款日期：＿＿＿＿＿＿＿＿＿＿</div>\n  </div>\n'
-        '  <div class="sign-box">\n    <div class="sign-label">申請人 · 經手人</div>\n'
-        f'    <div style="font-size:13px;font-weight:600;color:#0A0A0A;margin:2px 0 8px">{esc(applicant_name)}</div>\n'
-        f'    <div class="sign-line"></div>\n    <div class="sign-date">申請日期：{esc(applicant_date) or "＿＿＿＿＿＿＿＿＿＿"}</div>\n  </div>\n'
-        '</div>\n'
         '<div class="footer">\n  MOTRIX Synergy Integration Corp. 允碩整合集創 ｜ info@miactw.com ｜ Tel: 04-3610-6566 ｜ 統一編號: 60575481\n</div>\n'
         '</div>\n'
         '<script>window.addEventListener("load",function(){var r=document.getElementById("root");if(!r)return;'
@@ -2064,6 +2058,7 @@ def _payment_request_dict(row) -> dict:
     out["requestNo"] = d.get("request_no", "")
     out["quoteNo"] = d.get("quote_no", "")
     out["scope"] = d.get("scope", "amount")
+    out["stage"] = d.get("stage", "")
     out["amount"] = float(d.get("amount") or 0)
     out["ratioPct"] = float(d.get("ratio_pct") or 0)
     out["terms"] = json.loads(d.get("terms_json") or "{}")

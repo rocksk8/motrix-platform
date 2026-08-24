@@ -569,6 +569,40 @@
           </div>
         </template>
 
+        <!-- 案件責任分布：獨立於接洽成效統計，只要有案件資料就顯示，不受「近 30 天有無開發記錄」影響 -->
+        <div class="dc-act-dash" x-show="cases.length > 0" style="margin-top:16px">
+          <div class="dc-act-dash__title">案件責任分布</div>
+          <div class="dc-act-dash__sub">依目前全部業務開發案件統計（含各狀態）</div>
+          <div class="dc-act-cols">
+            <div class="dc-act-col">
+              <div class="dc-act-section-title">人員業務開發案件數</div>
+              <template x-if="byDevOwner.length === 0">
+                <div class="dc-act-empty">尚無資料</div>
+              </template>
+              <template x-for="(p, i) in byDevOwner" :key="p.name">
+                <div class="dc-act-rank-row">
+                  <span class="dc-act-rank-no" x-text="i+1"></span>
+                  <span class="dc-act-rank-name" x-text="p.name"></span>
+                  <span class="dc-act-rank-cnt" x-text="p.count + ' 件'"></span>
+                </div>
+              </template>
+            </div>
+            <div class="dc-act-col">
+              <div class="dc-act-section-title">專案負責案件數</div>
+              <template x-if="byProjectOwner.length === 0">
+                <div class="dc-act-empty">尚無資料</div>
+              </template>
+              <template x-for="(p, i) in byProjectOwner" :key="p.name">
+                <div class="dc-act-rank-row">
+                  <span class="dc-act-rank-no" x-text="i+1"></span>
+                  <span class="dc-act-rank-name" x-text="p.name"></span>
+                  <span class="dc-act-rank-cnt" x-text="p.count + ' 件'"></span>
+                </div>
+              </template>
+            </div>
+          </div>
+        </div>
+
         <div class="dc-empty__hint">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
             <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/>
@@ -1259,6 +1293,22 @@ function devCrmPage() {
       const max = Math.max(1, ...this.actStats.weekly.map(w => w.count))
       return Math.round(count / max * 100)
     },
+
+    // 案件責任分布：直接從已載入的 cases 清單彙整（salesPersonNames/plannerNames
+    // 由後端 _case_row() 已經展開好），不需要另外打 API；未指定人員的案件歸進
+    // 「未指定」桶，讓使用者看得出還有多少案件缺人力，而不是悄悄漏計
+    _countByPerson(nameField) {
+      const counts = {}
+      for (const c of this.cases) {
+        const names = (c[nameField] && c[nameField].length) ? c[nameField] : ['未指定']
+        for (const n of names) counts[n] = (counts[n] || 0) + 1
+      }
+      return Object.entries(counts)
+        .map(([name, count]) => ({ name, count }))
+        .sort((a, b) => b.count - a.count)
+    },
+    get byDevOwner()     { return this._countByPerson('salesPersonNames') },
+    get byProjectOwner() { return this._countByPerson('plannerNames') },
 
     async loadCases() {
       const seq = ++this._loadSeq

@@ -990,6 +990,17 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
 
+### 2026-08-24d — 請款單整頁化（比照報價單）＋新增「款項類別」欄位＋客戶端 PDF 精簡（DB v57）
+
+- **背景**：使用者要求請款單 PDF（給客戶看的文件）拿掉簽核流程／財務單位／申請人這些內部資訊，字體顏色要統一；請款範圍改成「全額/訂金款/交貨款/驗收款/尾款」可手動選擇的業務語意分類；後續又要求整個建立/編輯流程「變得跟報價單一樣，有一個完整的介面可以處理」，取代原本塞在案件管理頁裡的小 Modal。
+- **DB**：`payment_requests` 新增 `stage` 欄位（`_m057_payment_request_stage`，TEXT NOT NULL DEFAULT ''，v57）——純粹是顯示用業務分類標籤，跟既有 `scope`（`amount`/`items`，決定金額計算方式）並存、互不影響。
+- **後端**（`backend/routers/payment_requests.py`）：`PAYMENT_STAGES` 對照表（`full`/`deposit`/`delivery`/`acceptance`/`final` → 全額/訂金款/交貨款/驗收款/尾款）；建立/更新共用的金額計算與驗證邏輯抽成 `_calc_scope_amount()`（原本只有建立端點在做，這次整頁化需要「編輯既有草稿」，若各寫一份容易兩邊邏輯漂移）；`_quote_remaining()` 新增 `exclude_request_no` 參數——編輯既有草稿時，該草稿自己已佔用的額度不該被算進「已請款」，否則使用者會看到自己這張草稿把自己的剩餘額度吃掉；`GET /payment-requests/remaining` 新增 `exclude` query param 對應這個需求；**新增 `PUT /api/payment-requests/{request_no}`**（整頁編輯介面用，草稿狀態下可整筆改 scope/stage/金額或品項/條款），**移除舊的 `PUT .../terms`**（只能改條款，已被新端點取代）。
+- **前端新增整頁編輯介面** `frontend/pages/payment-request-form.html`（比照 `payslip-form.html` 的「client 端 isNew 旗標＋首次存檔才 POST、之後 PUT」模式，而非 `quotation-form.html` 那套鎖定/解鎖/多層 Modal 的重量級設計，量級比較匹配請款單的資料複雜度）：關聯報價單資訊（唯讀）／款項類別五選一按鈕／請款方式（金額比例或品項，沿用原 Modal 的換算邏輯）／請款條件四欄位直接內嵌編輯（原本是獨立小 Modal）／右側試算卡含額度摘要、簽核歷程、送出審核/簽核/退回/撤銷核准/預覽下載 PDF/刪除全部收斂到同一頁。
+- **`case-management.html`／`case-management.js` 相應簡化**：移除「申請請款單」建立 Modal、「請款單條款編輯」Modal、「請款單 PDF 預覽」Modal 三個區塊；請款單列表每列的一排狀態別動作按鈕（送出審核/簽核/退回/撤銷核准/預覽/下載）收斂成單一「編輯」/「開啟」連結導去新頁面；「申請請款單」按鈕改為導頁（帶 `quote_no`）而非開 Modal；同步移除 `case-management.js` 對應的十幾個現在無用的方法與 data 欄位（`openPaymentRequestModal`/`prToggleItem`/`prSelectedTotal`/`submitPaymentRequestCreate`/`prOpenTermsEditor`/`prSaveTerms`/`deletePaymentRequest`/`submitPaymentRequest`/`approvePaymentRequest`/`rejectPaymentRequest`/`revokePaymentRequestApproval`/`downloadPaymentRequestPdf`/`previewPaymentRequestPdf`/`closePaymentRequestPreview` 等），保留 `loadPaymentRequests`/`_prStatusLabel`/`_prStatusClass`（清單顯示仍要用）。
+- **PDF**（`backend/pdf_gen.py::_build_payment_request_html`）：「請款範圍」欄位改顯示 `stage` 對照的業務分類（全額/訂金款/…），不再顯示 `scope` 的技術性描述（自訂金額(X%)/自訂品項）；移除「簽核歷程」表格（`_voucher_sign_html`）與「財務單位·收款確認」「申請人·經手人」兩個簽名框——客戶端文件不該看到內部簽核細節；`term_block()` 條款內文顏色從 `#555` 統一改用 `#0A0A0A`（跟其他內文同一色階，避免第三種灰階混入）；`.box-title`/`.section-label`/`.footer`/頁碼顏色統一從 `#999`/`#aaa` 改為單一 `#888`。
+- **驗證**：`import main` 觸發 migration 跑到 v57、`PRAGMA table_info` 確認 `stage` 欄位型別正確；用 scratchpad 內正式機 db **唯讀複本**直接呼叫 `_quote_remaining()`/`_calc_scope_amount()`（非重寫邏輯，呼叫真實函式）驗證：exclude 自己時剩餘額度正確還原、品項超額/比例超出 100% 正確丟 409/400；`_build_payment_request_html()` 用合成資料驗證輸出 HTML 不含「簽核歷程」「財務單位」「申請人」、含正確的 stage 中文標籤；`case-management.html` 前端 `<div>`/`<template>` 標籤計數平衡；三個後端檔案 `ast.parse` 語法檢查、`case-management.js` 與新頁面內嵌 script `node --check` 語法檢查全部通過。全程只碰 scratchpad 唯讀複本，正式 db 未被寫入（僅 `import main` 觸發的 migration 寫入本機開發機 db，屬預期行為）。
+- **尚未執行**：正式機套用（依 §15 流程）；套用後建議先用既有草稿走一次「編輯既有草稿」流程，確認 `exclude_request_no` 剩餘額度計算符合預期。
+
 ### 2026-08-24c — Google 行事曆推送擴充第 7 種事件：案件執行進度階段到期日（DB v55）
 
 - **背景**：使用者盤點「出貨單／發票開立／執行管理／報價單成案重要事項要更新行事曆」，查證後發現前三者其實已經在 §12 2026-08-21c/21g/22b 那幾輪做完（出貨單簽核核准、開票申請憑據核准、報價單成案都已推 Google 行事曆），唯獨「執行管理」（案件執行進度階段 `case_stages.due_date`）從未接上，是唯一的缺口。

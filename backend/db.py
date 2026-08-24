@@ -52,7 +52,17 @@ DEMO_PAYMENT_REQUEST_PDF_ARCHIVE_DIR = os.path.join(
 # （見 routers/system.py），不是 schema 變動、不需要獨立 migration。
 # v54: 報價單回簽欄位（新概念，比照 shipping_notes）＋三種單據（報價單/出貨單/
 # 開票申請憑據）補上附件上傳欄位，2026-08-24 同一輪。
-CURRENT_VERSION = 56
+# v57: payment_requests.stage（請款單「款項類別」：全額/訂金款/交貨款/驗收款/
+# 尾款，手動選擇的業務語意標籤），2026-08-24——跟既有 scope（amount/items，決定
+# 金額計算方式）並存，純粹取代客戶端 PDF 上「請款範圍」欄原本顯示的技術性描述
+# （自訂金額(X%)/自訂品項）。
+# v58: 回填既有已成案/已結案報價單的 data_json.dealWonAt（2026-08-24）——首頁
+# 「本月銷售」原本依 quote_date 分組，但 quote_date 是報價單建立當下手動填的
+# 日期，常常跟業務員實際簽下這筆案子的月份對不上，導致當月營收看起來是 0。
+# routers/quotations.py::update_deal_tag() 之後轉為已成案時會即時寫入
+# dealWonAt，這支 migration 只負責把修正前就已成案/已結案的舊資料補上（用
+# updated_at 當最佳可得的成交時間代理值）。
+CURRENT_VERSION = 58
 
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
 # execution model) whenever the current request is authenticated as the 'demo'
@@ -1456,6 +1466,7 @@ def _m053_payment_requests(conn):
             request_no    TEXT    UNIQUE NOT NULL,
             quote_no      TEXT    NOT NULL,
             scope         TEXT    NOT NULL DEFAULT 'amount',
+            stage         TEXT    NOT NULL DEFAULT '',
             status        TEXT    NOT NULL DEFAULT '草稿',
             ratio_pct     REAL    DEFAULT 0,
             amount        REAL    NOT NULL DEFAULT 0,
@@ -1475,6 +1486,39 @@ def _m053_payment_requests(conn):
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_pr_status ON payment_requests(status)"
     )
+    conn.commit()
+
+
+def _m058_backfill_deal_won_at(conn):
+    """回填既有已成案/已結案報價單的 data_json.dealWonAt（見上方 v58 說明）。
+    只補「目前完全沒有 dealWonAt」的舊資料，且用 UPDATE...WHERE 已經先過濾掉
+    有值的列，重跑一次不會二次覆蓋——冪等。"""
+    rows = conn.execute("""
+        SELECT quote_no, data_json, updated_at, quote_date
+        FROM quotations
+        WHERE COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') IN ('已成案','已結案')
+          AND (json_extract(data_json,'$.dealWonAt') IS NULL OR json_extract(data_json,'$.dealWonAt') = '')
+    """).fetchall()
+    for r in rows:
+        won_at = r["updated_at"] or r["quote_date"] or ""
+        if not won_at:
+            continue
+        data = json.loads(r["data_json"] or "{}")
+        data["dealWonAt"] = won_at
+        conn.execute(
+            "UPDATE quotations SET data_json=? WHERE quote_no=?",
+            (json.dumps(data, ensure_ascii=False), r["quote_no"])
+        )
+    conn.commit()
+
+
+def _m057_payment_request_stage(conn):
+    """請款單新增 stage（款項類別：full/deposit/delivery/acceptance/final，
+    2026-08-24）：客戶端請款單 PDF「請款範圍」欄要顯示業務語意的分類（全額/
+    訂金款/交貨款/驗收款/尾款），而不是內部 scope（amount/items）技術性描述。
+    兩個欄位並存，stage 純粹是顯示用標籤，不影響 scope 既有的金額計算方式。"""
+    if not _col_exists(conn, "payment_requests", "stage"):
+        conn.execute("ALTER TABLE payment_requests ADD COLUMN stage TEXT NOT NULL DEFAULT ''")
     conn.commit()
 
 
@@ -2305,6 +2349,8 @@ _MIGRATIONS = [
     _m054_signed_upload_files,                    # v54
     _m055_case_stage_calendar_event,              # v55
     _m056_user_list_prefs,                        # v56
+    _m057_payment_request_stage,                   # v57
+    _m058_backfill_deal_won_at,                    # v58
 ]
 
 
