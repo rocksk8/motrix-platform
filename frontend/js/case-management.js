@@ -956,8 +956,18 @@ function app() {
         return d.toISOString().slice(0,10)
       }
       return stages.map(st => {
-        let start = st.startDate || st.dueDate || today
-        let end   = st.dueDate   || st.startDate || addDays(start, 1)
+        // 已完成的階段優先用「完成日期」doneAt 當長條位置——這是使用者實際會填、
+        // 也最準確的日期來源；起始/到期日期（startDate/dueDate）這兩個欄位在
+        // 實務上幾乎沒人填，只靠它們會讓已完成的階段全部退回「今天」擠成一團
+        // （2026-08-24 跨案時間軸同一個問題的根因，這裡是同一套邏輯的單案版）。
+        let start, end
+        if (st.done && st.doneAt) {
+          start = st.doneAt
+          end   = st.doneAt
+        } else {
+          start = st.startDate || st.dueDate || today
+          end   = st.dueDate   || st.startDate || addDays(start, 1)
+        }
         if (start === end) end = addDays(start, 1)
         const assignedTo  = st.assignedTo || []
         const primary     = assignedTo[0] || ''
