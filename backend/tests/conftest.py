@@ -75,6 +75,14 @@ def client(_app, tmp_path, monkeypatch):
     db.init_db(demo_path)
     helpers.init_demo_account()  # seed the real-DB 'demo' gatekeeper row (see db.py comments)
 
+    # helpers/uploads.py (signed-file attachments for quotations/shipping_notes/
+    # invoice_vouchers) computes its own UPLOADS_ROOT independent of archive.py's
+    # _UPLOADS_DIR — redirect it too, or tests would write real files into the
+    # actual repo uploads/ directory (confirmed happening before this patch was
+    # added: test PNGs landed in uploads/quotations/MQ-SIGN-001/ etc. on disk).
+    import helpers.uploads as uploads_helper
+    monkeypatch.setattr(uploads_helper, "UPLOADS_ROOT", str(tmp_path / "uploads"))
+
     from fastapi.testclient import TestClient
     return TestClient(_app)
 

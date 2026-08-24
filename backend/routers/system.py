@@ -90,8 +90,11 @@ def _normalize_flow(raw: dict) -> dict:
 
 @router.get("/api/settings/approval-flow")
 def get_approval_flow_settings(authorization: str = Header(None)):
+    """統一簽核設定（2026-08-24 起）：本設定套用於報價單／開票申請憑據／出貨單／
+    請款單四種單據，取代原本各自獨立的 approval_flow / invoice_voucher_approval_flow /
+    shipping_approval_flow 三組設定——舊三組不再讀取，正式機上線後需重新設定一次。"""
     _require_user(authorization)
-    raw = _get_setting("approval_flow", {"tiers": []}) or {}
+    raw = _get_setting("unified_approval_flow", {"tiers": []}) or {}
     return _normalize_flow(raw)
 
 
@@ -103,10 +106,11 @@ def set_approval_flow_settings(body: ApprovalFlowSettings, authorization: str = 
         "tiers": [t.model_dump() for t in body.tiers],
         "includeSubmitterManagerTier": body.includeSubmitterManagerTier,
     }
-    _set_setting("approval_flow", value)
-    _audit(_tok(authorization), "settings.approval_flow.update", "settings", "approval_flow",
-           "簽核流程設定", {"tierCount": len(body.tiers), "approverCount": total_approvers,
-                          "includeSubmitterManagerTier": body.includeSubmitterManagerTier})
+    _set_setting("unified_approval_flow", value)
+    _audit(_tok(authorization), "settings.unified_approval_flow.update", "settings", "unified_approval_flow",
+           "統一簽核流程設定（報價單／開票申請憑據／出貨單／請款單）",
+           {"tierCount": len(body.tiers), "approverCount": total_approvers,
+            "includeSubmitterManagerTier": body.includeSubmitterManagerTier})
     return {"ok": True}
 
 

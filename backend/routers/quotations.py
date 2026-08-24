@@ -5,12 +5,12 @@ import sqlite3
 import threading
 from collections import defaultdict
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 from urllib.parse import quote as urlquote
 
 logger = logging.getLogger(__name__)
 
-from fastapi import APIRouter, Body, HTTPException, Header
+from fastapi import APIRouter, Body, HTTPException, Header, UploadFile, File
 from fastapi.responses import Response
 from pydantic import BaseModel
 
@@ -23,6 +23,7 @@ from helpers import (
     notify_module_activity, push_event_for_quotation_won, push_event_for_important_comment,
     check_approve_permission, check_reject_permission, check_no_tier_self_approval,
     resolve_tier_approvers, UnresolvedManagerError,
+    save_document_files, delete_document_file,
 )
 from archive import _backup_quotation
 from pdf_gen import _generate_quotation_pdf, generate_pdf_bytes
@@ -128,7 +129,7 @@ def _build_approval_tiers_and_notify(q: dict, appr: dict, quote_no: str, is_new_
     draft step) and update_quotation() (draft → 待審核) so both submission paths
     build tiers and notify identically."""
     if not appr.get("tiers") and not appr.get("steps"):
-        flow_setting = _get_setting("approval_flow", {"tiers": []}) or {}
+        flow_setting = _get_setting("unified_approval_flow", {"tiers": []}) or {}
         requester_uname = appr.get("requestedBy") or ""
         _tconn = get_db()
         try:
@@ -519,7 +520,111 @@ def get_quotation(quote_no: str, authorization: str = Header(None)):
     result = dict(row)
     result["data"] = json.loads(result.pop("data_json", "{}"))
     result["data"]["status"] = result["status"]   # DB column is authoritative
+    result["signed_log"] = json.loads(result.get("signed_log") or "[]")
+    result["signed_files"] = json.loads(result.pop("signed_files_json", None) or "[]")
     return result
+
+
+@router.post("/api/quotations/{quote_no}/signed-toggle")
+def toggle_quotation_signed(quote_no: str, body: dict = Body(...), authorization: str = Header(None)):
+    """報價單客戶回簽（2026-08-24 新增，比照 shipping_notes.py 既有的
+    signed-toggle 端點邏輯，唯一差別是報價單的終態是「已送出」而非
+    出貨單／開票申請憑據的「已核准」）。"""
+    user = _require_user(authorization)
+    if user["role"] not in ("superadmin", "admin"):
+        raise HTTPException(403, "需要管理員權限")
+    action = (body or {}).get("action", "")
+    note   = (body or {}).get("note", "")
+    if action not in ("sign", "unsign"):
+        raise HTTPException(400, "action 必須為 sign 或 unsign")
+    conn = get_db()
+    row = conn.execute(
+        "SELECT status, is_signed, signed_log FROM quotations WHERE quote_no=?", (quote_no,)
+    ).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(404, "報價單不存在")
+    if row["status"] != "已送出":
+        conn.close()
+        raise HTTPException(409, "僅已送出狀態可標記回簽")
+    is_signed = bool(row["is_signed"])
+    if action == "sign" and is_signed:
+        conn.close()
+        raise HTTPException(409, "已回簽，無需重複標記")
+    if action == "unsign" and not is_signed:
+        conn.close()
+        raise HTTPException(409, "尚未回簽")
+
+    now = datetime.now().isoformat()
+    log = json.loads(row["signed_log"] or "[]")
+    log.append({
+        "at":          now,
+        "username":    user["username"],
+        "userDisplay": user.get("display_name") or user["username"],
+        "action":      "signed" if action == "sign" else "unsigned",
+        "note":        note,
+    })
+    if action == "sign":
+        conn.execute(
+            "UPDATE quotations SET is_signed=1, signed_by=?, signed_at=?, signed_log=?, updated_at=? "
+            "WHERE quote_no=?",
+            (user.get("display_name") or user["username"], now, json.dumps(log, ensure_ascii=False), now, quote_no)
+        )
+    else:
+        conn.execute(
+            "UPDATE quotations SET is_signed=0, signed_by='', signed_at='', signed_log=?, updated_at=? "
+            "WHERE quote_no=?",
+            (json.dumps(log, ensure_ascii=False), now, quote_no)
+        )
+    conn.commit()
+    conn.close()
+    _audit(_tok(authorization), f"quotation.{action}", "quotation", quote_no, quote_no, {"note": note})
+    notify_module_activity("報價單", "已回簽" if action == "sign" else "取消回簽",
+                            user.get("display_name") or user["username"], quote_no, "quotation-form.html",
+                            detail=note or "")
+    return {"ok": True, "is_signed": action == "sign", "signed_log": log}
+
+
+@router.post("/api/quotations/{quote_no}/signed-files", status_code=201)
+async def upload_quotation_signed_files(quote_no: str, files: List[UploadFile] = File(...),
+                                        authorization: str = Header(None)):
+    """報價單回簽附件上傳（多檔）——任何登入使用者皆可補傳。"""
+    user = _require_user(authorization)
+    conn = get_db()
+    row = conn.execute("SELECT signed_files_json FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(404, "報價單不存在")
+    existing = json.loads(row["signed_files_json"] or "[]")
+    new_files = await save_document_files("quotations", quote_no, files, user.get("display_name") or user["username"])
+    all_files = existing + new_files
+    now = datetime.now().isoformat()
+    conn.execute("UPDATE quotations SET signed_files_json=?, updated_at=? WHERE quote_no=?",
+                 (json.dumps(all_files, ensure_ascii=False), now, quote_no))
+    conn.commit()
+    conn.close()
+    _audit(_tok(authorization), "quotation.upload_signed_files", "quotation", quote_no,
+           f"{quote_no}（{len(new_files)} 個檔案）")
+    return {"ok": True, "added": len(new_files), "files": new_files}
+
+
+@router.delete("/api/quotations/{quote_no}/signed-files/{file_id}")
+def delete_quotation_signed_file(quote_no: str, file_id: str, authorization: str = Header(None)):
+    user = _require_user(authorization)
+    conn = get_db()
+    row = conn.execute("SELECT signed_files_json FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(404, "報價單不存在")
+    existing = json.loads(row["signed_files_json"] or "[]")
+    remaining = delete_document_file("quotations", quote_no, existing, file_id)
+    now = datetime.now().isoformat()
+    conn.execute("UPDATE quotations SET signed_files_json=?, updated_at=? WHERE quote_no=?",
+                 (json.dumps(remaining, ensure_ascii=False), now, quote_no))
+    conn.commit()
+    conn.close()
+    _audit(_tok(authorization), "quotation.delete_signed_file", "quotation", quote_no, quote_no)
+    return {"ok": True}
 
 
 @router.post("/api/quotations", status_code=201)
@@ -1611,6 +1716,103 @@ def _load_payment_item(conn, no, idx):
     return data, pits
 
 
+@router.post("/api/quotations/{no}/payment/{idx}/invoice-files", status_code=201)
+async def upload_payment_item_invoice_files(no: str, idx: int, files: List[UploadFile] = File(...),
+                                            authorization: str = Header(None)):
+    """款項明細逐期發票掃描檔上傳（2026-08-24 新增，多檔，任何登入使用者皆可
+    傳）——跟報價單本身的「客戶回簽」附件是兩回事：那個是整張報價單送出後
+    客戶簽回的證明，這裡是每一期款項（訂金款/進度款/驗收款等）各自對應的
+    發票影本，比照 mark_payment() 既有的 invoiceNo 文字欄位所在位置，只是
+    多存實際檔案。存放路徑跟報價單本身的回簽附件分開（quotation_payment_items
+    子資料夾），避免混淆。"""
+    user = _require_user(authorization)
+    conn = get_db()
+    try:
+        data, pits = _load_payment_item(conn, no, idx)
+        new_files = await save_document_files("quotation_payment_items", f"{no}_{idx}", files,
+                                              user.get("display_name") or user["username"])
+        pits[idx].setdefault("invoiceFiles", [])
+        pits[idx]["invoiceFiles"].extend(new_files)
+        saved_at = save_quotation_json(conn, no, data)
+        conn.commit()
+    finally:
+        conn.close()
+    label = pits[idx].get('label', f'第{idx+1}期')
+    _audit(_tok(authorization), "payment.upload_invoice_files", "quotation", no,
+           f"{no} {label}（{len(new_files)} 個檔案）")
+    return {"ok": True, "added": len(new_files), "files": new_files, "updated_at": saved_at}
+
+
+@router.delete("/api/quotations/{no}/payment/{idx}/invoice-files/{file_id}")
+def delete_payment_item_invoice_file(no: str, idx: int, file_id: str, authorization: str = Header(None)):
+    user = _require_user(authorization)
+    conn = get_db()
+    try:
+        data, pits = _load_payment_item(conn, no, idx)
+        existing = pits[idx].get("invoiceFiles") or []
+        pits[idx]["invoiceFiles"] = delete_document_file("quotation_payment_items", f"{no}_{idx}", existing, file_id)
+        saved_at = save_quotation_json(conn, no, data)
+        conn.commit()
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "payment.delete_invoice_file", "quotation", no, no)
+    return {"ok": True, "updated_at": saved_at}
+
+
+def _load_material_item(conn, no, idx):
+    """比照 _load_payment_item()，定位叫料管控清單（cr.caseRecord.materials[]，
+    跟出貨單 shipping_notes 是完全不同的資料，這裡是報價單 JSON 裡的料件
+    到料追蹤）裡的一筆。"""
+    row = conn.execute("SELECT data_json, updated_at FROM quotations WHERE quote_no=?", (no,)).fetchone()
+    if not row:
+        raise HTTPException(404, "報價單不存在")
+    data = json.loads(row["data_json"] or "{}")
+    cr   = data.setdefault("caseRecord", {})
+    mats = cr.setdefault("materials", [])
+    if idx < 0 or idx >= len(mats):
+        raise HTTPException(400, "料件索引超出範圍")
+    return data, mats
+
+
+@router.post("/api/quotations/{no}/materials/{idx}/files", status_code=201)
+async def upload_material_files(no: str, idx: int, files: List[UploadFile] = File(...),
+                                authorization: str = Header(None)):
+    """叫料管控單筆料件附件上傳（2026-08-24 新增，多檔，任何登入使用者皆可
+    傳）——例如到貨憑證、包裝清單，供部分出貨是跟料件一起出的情境留存證明。"""
+    user = _require_user(authorization)
+    conn = get_db()
+    try:
+        data, mats = _load_material_item(conn, no, idx)
+        new_files = await save_document_files("quotation_materials", f"{no}_{idx}", files,
+                                              user.get("display_name") or user["username"])
+        mats[idx].setdefault("files", [])
+        mats[idx]["files"].extend(new_files)
+        saved_at = save_quotation_json(conn, no, data)
+        conn.commit()
+    finally:
+        conn.close()
+    name = mats[idx].get("name") or f"第{idx+1}項"
+    _audit(_tok(authorization), "material.upload_files", "quotation", no,
+           f"{no} {name}（{len(new_files)} 個檔案）")
+    return {"ok": True, "added": len(new_files), "files": new_files, "updated_at": saved_at}
+
+
+@router.delete("/api/quotations/{no}/materials/{idx}/files/{file_id}")
+def delete_material_file(no: str, idx: int, file_id: str, authorization: str = Header(None)):
+    user = _require_user(authorization)
+    conn = get_db()
+    try:
+        data, mats = _load_material_item(conn, no, idx)
+        existing = mats[idx].get("files") or []
+        mats[idx]["files"] = delete_document_file("quotation_materials", f"{no}_{idx}", existing, file_id)
+        saved_at = save_quotation_json(conn, no, data)
+        conn.commit()
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "material.delete_file", "quotation", no, no)
+    return {"ok": True, "updated_at": saved_at}
+
+
 @router.post("/api/quotations/{no}/payment/{idx}/request-writeoff")
 def request_payment_writeoff(no: str, idx: int, body: WriteOffRequestIn, authorization: str = Header(None)):
     """admin+ 申請將該筆收款的稅額沖銷（歸零），需 superadmin 審核。"""
@@ -1806,7 +2008,8 @@ def _queue_tier_fields(approval_json_raw: str) -> dict:
 @router.get("/api/approval-queue")
 def get_approval_queue(authorization: str = Header(None)):
     """2026-08-21 起合併三種待簽核文件類型：報價單、承攬商匯款申請、開票申請
-    憑據；2026-08-24 補上出貨單（§5.8 的舊功能，統一佇列蓋上去時漏掉）。刻意
+    憑據；2026-08-24 補上出貨單（§5.8 的舊功能，統一佇列蓋上去時漏掉）與請款單
+    （新增單據類型，見 routers/payment_requests.py）。刻意
     沿用報價單既有的欄位名稱（quoteNo/customer/projectName/total/quoteDate/
     salesPerson）承載各類型的資料，讓既有前端列表渲染邏輯幾乎不用改，只多一個
     `type` 欄位供前端分流動作按鈕與連結（見 approval-queue.html）。承攬商匯款
@@ -1943,6 +2146,39 @@ def get_approval_queue(authorization: str = Header(None)):
             "linkedQuoteNo":       r["quote_no"],
         })
 
+    pr_rows = conn.execute("""
+        SELECT request_no, quote_no, amount, snapshot_json, created_at,
+               json_extract(data_json,'$.approval') as approval_json
+        FROM payment_requests
+        WHERE status IN ('待審核','簽核中')
+        ORDER BY id DESC
+    """).fetchall()
+    for r in pr_rows:
+        f = _queue_tier_fields(r["approval_json"])
+        try:
+            snap = json.loads(r["snapshot_json"] or "{}")
+        except Exception:
+            snap = {}
+        items.append({
+            "type":                "payment_request",
+            "quoteNo":             r["request_no"],
+            "customer":            snap.get("customerName") or "",
+            "projectName":         snap.get("projectName") or f"關聯案件 {r['quote_no']}",
+            "total":               r["amount"] or 0,
+            "quoteDate":           (r["created_at"] or "")[:10],
+            "salesPerson":         "",
+            "requestedBy":         f["requestedBy"],
+            "requestedByDisplay":  f["requestedByDisplay"],
+            "requestedAt":         f["requestedAt"],
+            "isEditApproval":      False,
+            "reasons":             [],
+            "tiers":               f["tiers"],
+            "currentTier":         f["currentTier"],
+            "tierCount":           f["tierCount"],
+            "currentApprovers":    f["currentApprovers"],
+            "linkedQuoteNo":       r["quote_no"],
+        })
+
     conn.close()
 
     groups: dict = defaultdict(list)
@@ -1984,6 +2220,9 @@ def get_approval_queue_count(authorization: str = Header(None)):
     ).fetchall()]
     approval_jsons += [r[0] for r in conn.execute(
         "SELECT json_extract(data_json,'$.approval') FROM shipping_notes WHERE status IN ('待審核','簽核中')"
+    ).fetchall()]
+    approval_jsons += [r[0] for r in conn.execute(
+        "SELECT json_extract(data_json,'$.approval') FROM payment_requests WHERE status IN ('待審核','簽核中')"
     ).fetchall()]
     conn.close()
     count = 0
@@ -2061,7 +2300,7 @@ def approve_quotation(quote_no: str, body: ApprovalActionBody, authorization: st
         # If global approval_flow has tiers configured, block the no-tier fallback.
         # This prevents a quotation submitted before flow was set (tiers missing)
         # from being approved without going through the flow.
-        _global_flow   = _get_setting("approval_flow", {"tiers": []}) or {}
+        _global_flow   = _get_setting("unified_approval_flow", {"tiers": []}) or {}
         try:
             _global_tiers = _setting_to_active_tiers(_global_flow, conn, appr.get("requestedBy"))
         except UnresolvedManagerError as e:

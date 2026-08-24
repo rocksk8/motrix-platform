@@ -30,6 +30,9 @@ venv/
 uploads/
 報價單PDF/
 出貨單PDF/
+開票申請憑據PDF/
+承攬商匯款申請PDF/
+請款單PDF/
 exports/
 backend/export_archive/
 

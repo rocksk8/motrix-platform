@@ -1,0 +1,678 @@
+"""請款單：案件款項明細（quotations.data_json.caseRecord.payment.items[]，本身
+不是獨立資料表）之外，另外提供一種可走簽核流程、對內/對客戶要款用的獨立單據。
+
+跟 routers/invoice_vouchers.py 是同一套設計（凍結快照＋依剩餘可請款額度防
+超收＋BEGIN IMMEDIATE 防同時超額），scope='amount'（自訂金額，可搭配
+ratio_pct 換算）或 scope='items'（自訂品項+數量）。差異只在請款單多了
+terms_json（條款，比照報價單「報價條件」四個可自由編輯欄位，建立當下預帶入
+該報價單當時的條款內容，之後可自行修改，不回寫報價單）。
+
+簽核流程（system_settings key: unified_approval_flow，與報價單／開票申請
+憑據／出貨單共用同一組設定）機制為 tiers 依序簽核；核准即定稿，不像承攬商
+匯款申請多一個「已匯款」財務結案節點——請款單本身就是最終文件。
+
+客戶/案件/款項明細於建立當下寫入 snapshot_json 凍結快照，理由同
+routers/invoice_vouchers.py：已送出審核的請款單不應該因為之後有人編輯報價單
+款項明細而回頭改變內容。
+"""
+import json
+from datetime import datetime
+from typing import List, Optional
+from urllib.parse import quote as urlquote
+
+from fastapi import APIRouter, Body, HTTPException, Header
+from fastapi.responses import Response
+from pydantic import BaseModel
+
+from db import get_db, next_entity_code, spawn_bg_thread
+from helpers import (
+    _require_user, _tok, _audit, _notify, _get_setting, _purge_notifications,
+    notify_module_activity, notify_payment_request_submitted, notify_payment_request_next_tier,
+    notify_payment_request_approved, notify_payment_request_returned,
+    push_event_for_payment_request,
+    active_tiers as _active_tiers, current_tier_idx as _current_tier_idx,
+    setting_to_active_tiers as _setting_to_active_tiers,
+    check_approve_permission, check_reject_permission, check_no_tier_self_approval,
+    UnresolvedManagerError,
+)
+from pdf_gen import generate_payment_request_pdf_bytes, _generate_payment_request_pdf
+
+router = APIRouter()
+
+
+# ── Models ────────────────────────────────────────────────────────────────────
+
+class RequestItemIn(BaseModel):
+    itemId: int
+    qty:    float
+    amount: float
+
+class TermsIn(BaseModel):
+    paymentTerms:    Optional[str] = ''
+    deliveryTerms:   Optional[str] = ''
+    acceptanceTerms: Optional[str] = ''
+    warrantyTerms:   Optional[str] = ''
+
+class RequestCreateIn(BaseModel):
+    quote_no:  str
+    scope:     str                                    # 'amount'（自訂金額）| 'items'（自訂品項+數量）
+    amount:    Optional[float] = None                 # scope='amount' 且未帶 ratio_pct 時必填
+    ratio_pct: Optional[float] = None                  # scope='amount' 的輸入捷徑：amount = quoteTotal * ratio_pct/100
+    items:     Optional[List[RequestItemIn]] = None    # scope='items' 時必填
+
+
+# ── Approval tier helpers（純邏輯部分共用 helpers/tiered_approval.py，見上方 import）──
+
+
+def _require_admin(user: dict):
+    if user["role"] not in ("superadmin", "admin"):
+        raise HTTPException(403, "需要管理員權限")
+
+
+def _request_public(row, include_snapshot: bool = True) -> dict:
+    d = dict(row)
+    snap = json.loads(d.get("snapshot_json") or "{}")
+    approval = (json.loads(d.get("data_json") or "{}") or {}).get("approval") or {}
+    amount = float(d.get("amount") or 0)
+    out = {
+        "id":            d["id"],
+        "requestNo":     d["request_no"],
+        "quoteNo":       d["quote_no"],
+        "scope":         d["scope"] or "amount",
+        "customerName":  snap.get("customerName", ""),
+        "status":        d["status"] or "草稿",
+        "amount":        amount,          # 含稅
+        "totalAmount":   amount,          # 別名，沿用開票申請憑據既有前端欄位命名習慣
+        "pretaxAmount":  snap.get("pretaxAmount", 0),
+        "taxAmount":     snap.get("taxAmount", 0),
+        "ratioPct":      d.get("ratio_pct") or 0,
+        "selectedItems": snap.get("selectedItems") or [],
+        "terms":         json.loads(d.get("terms_json") or "{}"),
+        "exportCount":   d.get("export_count") or 0,
+        "exportLog":     json.loads(d.get("export_log") or "[]"),
+        "approval":      approval,
+        "createdBy":     d.get("created_by") or "",
+        "createdAt":     d.get("created_at") or "",
+        "updatedAt":     d.get("updated_at") or "",
+    }
+    if include_snapshot:
+        out["snapshot"] = snap
+    return out
+
+
+def _quote_remaining(conn, quote_no: str):
+    """這張報價單目前的請款額度使用狀況：合約總額（含稅）、未稅總額、已請款
+    金額（含稅，含草稿——草稿就鎖額度，跟 invoice_vouchers 同一套設計避免同時
+    建立造成超額），剩餘可請款金額（含稅）、剩餘比例（%），以及每個報價品項
+    各自的已請款數量／剩餘數量。查無報價單回傳 None。"""
+    q = conn.execute("SELECT total, pretax, data_json FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+    if not q:
+        return None
+    data = json.loads(q["data_json"] or "{}")
+    quote_total = float(q["total"] or 0)
+    quote_pretax = float(q["pretax"] or 0) or quote_total
+
+    rows = conn.execute(
+        "SELECT amount, snapshot_json FROM payment_requests WHERE quote_no=?", (quote_no,)
+    ).fetchall()
+    requested_amount = sum(float(r["amount"] or 0) for r in rows)
+
+    qty_used = {}
+    for r in rows:
+        snap = json.loads(r["snapshot_json"] or "{}")
+        for it in (snap.get("selectedItems") or []):
+            iid = it.get("itemId")
+            qty_used[iid] = qty_used.get(iid, 0) + float(it.get("qty", 0) or 0)
+
+    items_info = []
+    for it in (data.get("items") or []):
+        if it.get("type") == "header":
+            continue
+        iid = it.get("id")
+        item_qty = float(it.get("qty", 0) or 0)
+        used = qty_used.get(iid, 0)
+        items_info.append({
+            "itemId":       iid,
+            "description":  it.get("description", ""),
+            "brand":        it.get("brand", ""),
+            "unit":         it.get("unit", ""),
+            "unitPrice":    it.get("unitPrice", 0),
+            "qty":          item_qty,
+            "requestedQty": used,
+            "remainingQty": item_qty - used,
+        })
+
+    remaining_amount = quote_total - requested_amount
+    return {
+        "quoteTotal":       quote_total,
+        "quotePretax":      quote_pretax,
+        "requestedAmount":  requested_amount,
+        "remainingAmount":  remaining_amount,
+        "remainingRatioPct": (remaining_amount / quote_total * 100) if quote_total > 0 else 0,
+        "items":            items_info,
+    }
+
+
+def _quote_default_terms(data: dict) -> dict:
+    """建立請款單當下，預帶入該報價單目前的條款內容（比照 quotation-form.html
+    的四個「報價條件」欄位）——請款單存自己獨立的一份（terms_json），之後可
+    自由修改，不回寫報價單。"""
+    return {
+        "paymentTerms":    data.get("paymentTerms", "") or "",
+        "deliveryTerms":   data.get("deliveryTerms", "") or "",
+        "acceptanceTerms": data.get("acceptanceTerms", "") or "",
+        "warrantyTerms":   data.get("warrantyTerms", "") or "",
+    }
+
+
+# ── CRUD ──────────────────────────────────────────────────────────────────────
+
+@router.get("/api/payment-requests")
+def list_payment_requests(quote_no: Optional[str] = None, authorization: str = Header(None)):
+    _require_user(authorization)
+    conn = get_db()
+    if quote_no:
+        rows = conn.execute(
+            "SELECT * FROM payment_requests WHERE quote_no=? ORDER BY created_at DESC", (quote_no,)
+        ).fetchall()
+    else:
+        rows = conn.execute("SELECT * FROM payment_requests ORDER BY created_at DESC LIMIT 200").fetchall()
+    conn.close()
+    return [_request_public(r, include_snapshot=False) for r in rows]
+
+
+@router.get("/api/payment-requests/remaining")
+def get_payment_request_remaining(quote_no: str, authorization: str = Header(None)):
+    """建立請款單前，前端要顯示「剩餘可請款金額／比例／品項數量」用——必須
+    註冊在 /{request_no} 之前，否則 FastAPI 會把 'remaining' 當成 request_no 吃掉。"""
+    _require_user(authorization)
+    conn = get_db()
+    info = _quote_remaining(conn, quote_no)
+    conn.close()
+    if info is None:
+        raise HTTPException(404, "找不到關聯的報價單")
+    return info
+
+
+@router.get("/api/payment-requests/{request_no}")
+def get_payment_request(request_no: str, authorization: str = Header(None)):
+    _require_user(authorization)
+    conn = get_db()
+    row = conn.execute("SELECT * FROM payment_requests WHERE request_no=?", (request_no,)).fetchone()
+    conn.close()
+    if not row:
+        raise HTTPException(404, f"請款單 {request_no} 不存在")
+    return _request_public(row)
+
+
+@router.post("/api/payment-requests", status_code=201)
+def create_payment_request(body: RequestCreateIn, authorization: str = Header(None)):
+    user = _require_user(authorization)
+    _require_admin(user)
+    if body.scope not in ("amount", "items"):
+        raise HTTPException(400, "scope 必須為 amount 或 items")
+
+    conn = get_db()
+    # BEGIN IMMEDIATE：把「算剩餘可請款額度」跟「寫入新申請」鎖進同一個交易，
+    # 避免兩個近乎同時送出的請求都通過超額檢查、合計超過報價單總額。
+    conn.execute("BEGIN IMMEDIATE")
+    q = conn.execute(
+        "SELECT customer_name, project_name, total, pretax, data_json FROM quotations WHERE quote_no=?",
+        (body.quote_no,)
+    ).fetchone()
+    if not q:
+        conn.close()
+        raise HTTPException(404, "找不到關聯的報價單")
+    data = json.loads(q["data_json"] or "{}")
+    quote_total  = float(q["total"] or 0)
+    quote_pretax = float(q["pretax"] or 0) or quote_total
+
+    customer_id = data.get("customerId")
+    customer_tax_id = ""
+    if customer_id:
+        crow = conn.execute("SELECT tax_id FROM customers WHERE id=?", (customer_id,)).fetchone()
+        customer_tax_id = (crow["tax_id"] if crow else "") or ""
+
+    remaining = _quote_remaining(conn, body.quote_no)
+    remaining_amount = remaining["remainingAmount"]
+
+    # 報價單品項參考（僅供顯示用，刻意排除 cost/margin/unitPriceOverride 等
+    # 內部機密欄位——比照 invoice_vouchers.py 同樣的理由，這份文件可能會給客戶看）。
+    quote_items_snapshot = [
+        {
+            "description": it.get("description", ""),
+            "brand":       it.get("brand", ""),
+            "qty":         it.get("qty", ""),
+            "unit":        it.get("unit", ""),
+            "unitPrice":   it.get("unitPrice", 0),
+            "amount":      it.get("amount", 0),
+            "notes":       it.get("notes", ""),
+        }
+        for it in (data.get("items") or [])
+        if it.get("type") != "header"
+    ]
+
+    ratio_pct = 0.0
+    selected_items_snapshot = []
+    if body.scope == "amount":
+        if body.ratio_pct:
+            if body.ratio_pct <= 0 or body.ratio_pct > 100:
+                conn.close()
+                raise HTTPException(400, "請款比例需介於 0～100 之間")
+            ratio_pct = body.ratio_pct
+            request_amount = round(quote_total * ratio_pct / 100)
+        elif body.amount:
+            request_amount = body.amount
+            ratio_pct = round(request_amount / quote_total * 100, 2) if quote_total > 0 else 0
+        else:
+            conn.close()
+            raise HTTPException(400, "請輸入請款金額或請款比例")
+        if request_amount <= 0:
+            conn.close()
+            raise HTTPException(400, "請款金額需大於 0")
+        pretax_amount = round(request_amount * quote_pretax / quote_total) if quote_total > 0 else request_amount
+    else:
+        if not body.items:
+            conn.close()
+            raise HTTPException(400, "請至少選擇一項品項")
+        quote_items_by_id = {it.get("id"): it for it in (data.get("items") or []) if it.get("type") != "header"}
+        qty_remaining_by_id = {it["itemId"]: it["remainingQty"] for it in remaining["items"]}
+        pretax_amount = 0.0
+        for line in body.items:
+            src = quote_items_by_id.get(line.itemId)
+            if not src:
+                conn.close()
+                raise HTTPException(400, f"找不到品項 id={line.itemId}")
+            if line.qty <= 0:
+                conn.close()
+                raise HTTPException(400, f"品項「{src.get('description','')}」數量需大於 0")
+            avail = qty_remaining_by_id.get(line.itemId, 0)
+            if line.qty > avail + 1e-9:
+                conn.close()
+                raise HTTPException(409, f"品項「{src.get('description','')}」剩餘可請款數量不足（剩餘 {avail:g}）")
+            if line.amount <= 0:
+                conn.close()
+                raise HTTPException(400, f"品項「{src.get('description','')}」金額需大於 0")
+            pretax_amount += line.amount
+            selected_items_snapshot.append({
+                "itemId":      line.itemId,
+                "description": src.get("description", ""),
+                "brand":       src.get("brand", ""),
+                "unit":        src.get("unit", ""),
+                "unitPrice":   src.get("unitPrice", 0),
+                "qty":         line.qty,
+                "amount":      line.amount,   # 未稅（比照報價單品項金額慣例）
+            })
+        request_amount = round(pretax_amount * quote_total / quote_pretax) if quote_pretax > 0 else pretax_amount
+        ratio_pct = round(request_amount / quote_total * 100, 2) if quote_total > 0 else 0
+
+    tax_amount = request_amount - pretax_amount
+
+    if request_amount > remaining_amount + 1e-6:
+        conn.close()
+        raise HTTPException(409, f"超過剩餘可請款金額（剩餘 NT$ {remaining_amount:,.0f}）")
+
+    snapshot = {
+        "customerName":    q["customer_name"] or "",
+        "customerTaxId":   customer_tax_id,
+        "projectName":     q["project_name"] or "",
+        "quoteItems":      quote_items_snapshot,
+        "selectedItems":   selected_items_snapshot,
+        "requestedAmount": request_amount,      # 含稅（＝ payment_requests.amount）
+        "pretaxAmount":    round(pretax_amount),
+        "taxAmount":       round(tax_amount),
+    }
+    terms = _quote_default_terms(data)
+
+    now = datetime.now().isoformat()
+    request_no = next_entity_code(conn, "payment_requests", "PR", code_col="request_no")
+    conn.execute(
+        "INSERT INTO payment_requests "
+        "(request_no, quote_no, scope, amount, ratio_pct, status, terms_json, snapshot_json, data_json, "
+        "created_by, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+        (request_no, body.quote_no, body.scope, request_amount, ratio_pct,
+         "草稿", json.dumps(terms, ensure_ascii=False), json.dumps(snapshot, ensure_ascii=False), "{}",
+         user["username"], now, now)
+    )
+    conn.commit()
+    conn.close()
+    _audit(_tok(authorization), "payment_request.create", "payment_request", request_no,
+           f"{request_no}（{snapshot['customerName']}）")
+    notify_module_activity("請款單", "建立", user.get("display_name") or user["username"],
+                            f"{request_no}（{snapshot['customerName']}）", "case-management.html")
+    return {"request_no": request_no, "created_at": now}
+
+
+@router.put("/api/payment-requests/{request_no}/terms")
+def update_payment_request_terms(request_no: str, body: TermsIn, authorization: str = Header(None)):
+    user = _require_user(authorization)
+    _require_admin(user)
+    conn = get_db()
+    row = conn.execute("SELECT status FROM payment_requests WHERE request_no=?", (request_no,)).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(404, "請款單不存在")
+    if row["status"] != "草稿":
+        conn.close()
+        raise HTTPException(409, "僅草稿狀態可修改條款")
+    now = datetime.now().isoformat()
+    conn.execute(
+        "UPDATE payment_requests SET terms_json=?, updated_at=? WHERE request_no=?",
+        (json.dumps(body.model_dump(), ensure_ascii=False), now, request_no)
+    )
+    conn.commit()
+    conn.close()
+    _audit(_tok(authorization), "payment_request.update_terms", "payment_request", request_no, request_no)
+    return {"ok": True}
+
+
+@router.delete("/api/payment-requests/{request_no}")
+def delete_payment_request(request_no: str, authorization: str = Header(None)):
+    user = _require_user(authorization)
+    _require_admin(user)
+    conn = get_db()
+    row = conn.execute("SELECT status FROM payment_requests WHERE request_no=?", (request_no,)).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(404, "請款單不存在")
+    if row["status"] != "草稿":
+        conn.close()
+        raise HTTPException(409, "僅草稿狀態可刪除")
+    conn.execute("DELETE FROM payment_requests WHERE request_no=?", (request_no,))
+    conn.commit()
+    conn.close()
+    _purge_notifications(request_no, ['payment_request_approval_request', 'payment_request_approved',
+                                       'payment_request_returned', 'approval_reminder'])
+    _audit(_tok(authorization), "payment_request.delete", "payment_request", request_no, request_no)
+    notify_module_activity("請款單", "刪除", user.get("display_name") or user["username"],
+                            request_no, "case-management.html")
+    return {"ok": True}
+
+
+# ── 簽核流程 ──────────────────────────────────────────────────────────────────
+
+@router.post("/api/payment-requests/{request_no}/submit")
+def submit_payment_request(request_no: str, authorization: str = Header(None)):
+    user = _require_user(authorization)
+    _require_admin(user)
+    conn = get_db()
+    row = conn.execute(
+        "SELECT status, data_json, snapshot_json FROM payment_requests WHERE request_no=?", (request_no,)
+    ).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(404, "請款單不存在")
+    if row["status"] != "草稿":
+        conn.close()
+        raise HTTPException(409, "僅草稿狀態可送出審核")
+
+    snap  = json.loads(row["snapshot_json"] or "{}")
+    cname = snap.get("customerName") or ""
+    d     = json.loads(row["data_json"] or "{}")
+    now   = datetime.now().isoformat()
+
+    flow_setting = _get_setting("unified_approval_flow", {"tiers": []}) or {}
+    try:
+        active_tiers = _setting_to_active_tiers(flow_setting, conn, user["username"])
+    except UnresolvedManagerError as e:
+        conn.close()
+        raise HTTPException(400, str(e))
+    d["approval"] = {
+        "requestedBy":        user["username"],
+        "requestedByDisplay": user.get("display_name") or user["username"],
+        "requestedAt":        now,
+        "tiers":              active_tiers,
+        "currentTier":        0,
+    }
+
+    first_tier_usernames = []
+    if active_tiers:
+        for a in active_tiers[0].get("approvers") or []:
+            _notify(a["username"], "payment_request_approval_request", request_no, request_no,
+                    f"請款單 {request_no}（{cname}）需要您簽核")
+            first_tier_usernames.append(a["username"])
+
+    conn.execute(
+        "UPDATE payment_requests SET status='待審核', data_json=?, updated_at=? WHERE request_no=?",
+        (json.dumps(d, ensure_ascii=False), now, request_no)
+    )
+    conn.commit()
+    conn.close()
+    _audit(_tok(authorization), "payment_request.submit", "payment_request", request_no,
+           f"{request_no}（{cname}）", {"tierCount": len(active_tiers)})
+    if active_tiers:
+        notify_payment_request_submitted(request_no, cname, first_tier_usernames)
+    return {"ok": True, "status": "待審核"}
+
+
+@router.post("/api/payment-requests/{request_no}/approve")
+def approve_payment_request(request_no: str, body: dict = Body(default={}), authorization: str = Header(None)):
+    # 比照 quotations.py：能否簽核完全由「是否為當層簽核人員」決定，不額外要求
+    # 簽核人帳號角色必須是 admin/superadmin。
+    user = _require_user(authorization)
+    conn = get_db()
+    row = conn.execute(
+        "SELECT data_json, snapshot_json FROM payment_requests WHERE request_no=? AND status IN ('待審核','簽核中')",
+        (request_no,)
+    ).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(404, f"請款單 {request_no} 不存在或不在待審核狀態")
+    snap  = json.loads(row["snapshot_json"] or "{}")
+    cname = snap.get("customerName") or ""
+    d     = json.loads(row["data_json"] or "{}")
+    appr  = d.get("approval") or {}
+    tiers = _active_tiers(appr)
+    now   = datetime.now().isoformat()
+
+    if tiers:
+        ct_idx = _current_tier_idx(appr)
+        ok, status_code, err_msg = check_approve_permission(tiers, ct_idx, user["username"])
+        if not ok:
+            conn.close()
+            raise HTTPException(status_code, err_msg)
+        tier      = tiers[ct_idx]
+        approvers = tier.get("approvers") or []
+        first_pending = next((a for a in approvers if a.get("status") != "approved"), None)
+
+        first_pending["status"]     = "approved"
+        first_pending["approvedAt"] = now
+
+        tier_done = all(a.get("status") == "approved" for a in approvers)
+        next_tier_usernames = []
+        if tier_done:
+            appr["currentTier"] = ct_idx + 1
+            all_done = (ct_idx + 1) >= len(tiers)
+            if not all_done:
+                for na in tiers[ct_idx + 1].get("approvers") or []:
+                    _notify(na["username"], "payment_request_approval_request", request_no, request_no,
+                            f"請款單 {request_no}（{cname}）輪到您簽核（第 {ct_idx + 2} 層 / 共 {len(tiers)} 層）")
+                    next_tier_usernames.append(na["username"])
+                notify_payment_request_next_tier(request_no, cname, ct_idx + 2, len(tiers), next_tier_usernames)
+        else:
+            all_done = False
+        appr["tiers"] = tiers
+    else:
+        if user["role"] != "superadmin":
+            conn.close()
+            raise HTTPException(403, "僅超級管理員可執行此操作")
+        _global_flow  = _get_setting("unified_approval_flow", {"tiers": []}) or {}
+        try:
+            _global_tiers = _setting_to_active_tiers(_global_flow, conn, appr.get("requestedBy"))
+        except UnresolvedManagerError as e:
+            conn.close()
+            raise HTTPException(400, str(e))
+        if _global_tiers:
+            conn.close()
+            raise HTTPException(403, "系統已設定簽核流程，此請款單缺少簽核層資料，請重新送審")
+        self_block_msg = check_no_tier_self_approval(conn, appr, user)
+        if self_block_msg:
+            conn.close()
+            raise HTTPException(403, self_block_msg)
+        all_done = True
+
+    if all_done:
+        appr["approvedBy"]        = user["username"]
+        appr["approvedByDisplay"] = user.get("display_name") or user["username"]
+        appr["approvedAt"]        = now
+        appr["status"]            = "approved"
+        d["approval"] = appr
+        conn.execute(
+            "UPDATE payment_requests SET status='已核准', data_json=?, updated_at=? WHERE request_no=?",
+            (json.dumps(d, ensure_ascii=False), now, request_no)
+        )
+        conn.commit()
+        approver_name = appr.get("approvedByDisplay") or user["username"]
+        spawn_bg_thread(_generate_payment_request_pdf, args=(request_no, approver_name, '簽核'))
+        spawn_bg_thread(push_event_for_payment_request, args=(request_no,))
+        requester = appr.get("requestedBy")
+        if requester:
+            _notify(requester, "payment_request_approved", request_no, request_no,
+                    f"請款單 {request_no}（{cname}）已核准")
+            notify_payment_request_approved(request_no, cname, approver_name, requester)
+    else:
+        d["approval"] = appr
+        new_status = "簽核中" if (appr.get("currentTier") or 0) > 0 else "待審核"
+        conn.execute(
+            "UPDATE payment_requests SET status=?, data_json=?, updated_at=? WHERE request_no=?",
+            (new_status, json.dumps(d, ensure_ascii=False), now, request_no)
+        )
+        conn.commit()
+
+    conn.close()
+    _audit(_tok(authorization), "payment_request.approve", "payment_request", request_no,
+           f"{request_no}（{cname}）", {"allDone": all_done})
+    return {"ok": True, "allDone": all_done}
+
+
+@router.post("/api/payment-requests/{request_no}/revoke-approval")
+def revoke_payment_request_approval(request_no: str, body: dict = Body(default={}),
+                                    authorization: str = Header(None)):
+    user = _require_user(authorization)
+    _require_admin(user)
+    note = (body or {}).get("note", "")
+    conn = get_db()
+    row = conn.execute(
+        "SELECT data_json, snapshot_json, export_count FROM payment_requests WHERE request_no=? AND status='已核准'",
+        (request_no,)
+    ).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(404, f"請款單 {request_no} 不存在或不在已核准狀態")
+    if (row["export_count"] or 0) > 0:
+        conn.close()
+        raise HTTPException(409, "此請款單已匯出過，不可撤銷核准")
+    snap  = json.loads(row["snapshot_json"] or "{}")
+    cname = snap.get("customerName") or ""
+    d = json.loads(row["data_json"] or "{}")
+    appr = d.get("approval") or {}
+    requester = appr.get("requestedBy")
+    d.pop("approval", None)
+    now = datetime.now().isoformat()
+    conn.execute(
+        "UPDATE payment_requests SET status='草稿', data_json=?, updated_at=? WHERE request_no=?",
+        (json.dumps(d, ensure_ascii=False), now, request_no)
+    )
+    conn.commit()
+    conn.close()
+    _purge_notifications(request_no, ['payment_request_approval_request', 'approval_reminder'])
+    if requester:
+        msg = f"請款單 {request_no}（{cname}）核准已被撤銷，請確認後重新送審" + (f"：{note}" if note else "")
+        _notify(requester, "payment_request_returned", request_no, request_no, msg)
+        notify_payment_request_returned(request_no, cname, note, requester)
+    _audit(_tok(authorization), "payment_request.revoke_approval", "payment_request", request_no,
+           f"{request_no}（{cname}）", {"note": note})
+    return {"ok": True}
+
+
+@router.post("/api/payment-requests/{request_no}/reject")
+def reject_payment_request(request_no: str, body: dict = Body(default={}), authorization: str = Header(None)):
+    # 比照 quotations.py：退回權限由當層簽核人員判斷，不額外要求 admin 角色
+    user = _require_user(authorization)
+    note = (body or {}).get("note", "")
+    conn = get_db()
+    row = conn.execute(
+        "SELECT data_json, snapshot_json FROM payment_requests WHERE request_no=? AND status IN ('待審核','簽核中')",
+        (request_no,)
+    ).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(404, f"請款單 {request_no} 不存在或不在待審核狀態")
+    snap  = json.loads(row["snapshot_json"] or "{}")
+    cname = snap.get("customerName") or ""
+    d     = json.loads(row["data_json"] or "{}")
+    appr  = d.get("approval") or {}
+    tiers = _active_tiers(appr)
+
+    ct_idx = _current_tier_idx(appr)
+    ok, status_code, err_msg = check_reject_permission(tiers, ct_idx, user)
+    if not ok:
+        conn.close()
+        raise HTTPException(status_code, err_msg)
+
+    now       = datetime.now().isoformat()
+    requester = appr.get("requestedBy")
+    d.pop("approval", None)
+    conn.execute(
+        "UPDATE payment_requests SET status='草稿', data_json=?, updated_at=? WHERE request_no=?",
+        (json.dumps(d, ensure_ascii=False), now, request_no)
+    )
+    conn.commit()
+    conn.close()
+    _purge_notifications(request_no, ['payment_request_approval_request', 'approval_reminder'])
+    if requester:
+        msg = f"請款單 {request_no}（{cname}）已退回，請確認後重新送審" + (f"：{note}" if note else "")
+        _notify(requester, "payment_request_returned", request_no, request_no, msg)
+        notify_payment_request_returned(request_no, cname, note, requester)
+    _audit(_tok(authorization), "payment_request.reject", "payment_request", request_no,
+           f"{request_no}（{cname}）", {"note": note})
+    return {"ok": True}
+
+
+# ── PDF / 匯出紀錄 ────────────────────────────────────────────────────────────
+
+@router.get("/api/payment-requests/{request_no}/pdf-download")
+def download_payment_request_pdf(request_no: str, authorization: str = Header(None)):
+    _require_user(authorization)
+    conn = get_db()
+    row = conn.execute("SELECT request_no FROM payment_requests WHERE request_no=?", (request_no,)).fetchone()
+    conn.close()
+    if not row:
+        raise HTTPException(404, "請款單不存在")
+    try:
+        pdf_bytes = generate_payment_request_pdf_bytes(request_no)
+    except (ValueError, RuntimeError) as e:
+        raise HTTPException(503, str(e))
+    except Exception as e:
+        raise HTTPException(500, f"PDF 產生失敗：{e}")
+    encoded = urlquote(f"{request_no}.pdf")
+    return Response(
+        content=pdf_bytes, media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded}"}
+    )
+
+
+@router.post("/api/payment-requests/{request_no}/export")
+def record_payment_request_export(request_no: str, mode: str = "external", authorization: str = Header(None)):
+    user = _require_user(authorization)
+    _require_admin(user)
+    conn = get_db()
+    row = conn.execute(
+        "SELECT export_count, export_log FROM payment_requests WHERE request_no=?", (request_no,)
+    ).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(404, f"請款單 {request_no} 不存在")
+    log   = json.loads(row["export_log"] or "[]")
+    count = (row["export_count"] or 0) + 1
+    log.append({
+        "at": datetime.now().isoformat(), "mode": mode, "user": user["username"],
+        "userDisplay": user.get("display_name") or user["username"], "count": count,
+    })
+    conn.execute("UPDATE payment_requests SET export_count=?, export_log=? WHERE request_no=?",
+                 (count, json.dumps(log, ensure_ascii=False), request_no))
+    conn.commit()
+    conn.close()
+    _audit(_tok(authorization), "payment_request.export_pdf", "payment_request", request_no,
+           f"{request_no} PDF 匯出（{mode}）by {user['username']}")
+    return {"export_count": count, "log": log}

@@ -1248,6 +1248,11 @@ _APPROVAL_REMINDER_SOURCES = [
         "desc": lambda row, snap: (row["customer_name"] or "")
                                    + (("｜" + row["project_name"]) if row["project_name"] else ""),
     },
+    {
+        "table": "payment_requests", "no_col": "request_no", "label": "請款單",
+        "select_extra": "snapshot_json",
+        "desc": lambda row, snap: snap.get("customerName") or "",
+    },
 ]
 
 

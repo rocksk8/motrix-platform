@@ -204,6 +204,35 @@ def push_event_for_invoice_voucher(voucher_no: str) -> None:
         logger.warning("push_event_for_invoice_voucher(%r) failed: %s", voucher_no, exc)
 
 
+def push_event_for_payment_request(request_no: str) -> None:
+    try:
+        from db import get_db
+        conn = get_db()
+        row = conn.execute(
+            "SELECT data_json, snapshot_json, amount FROM payment_requests WHERE request_no=?", (request_no,)
+        ).fetchone()
+        if not row:
+            conn.close()
+            return
+        snap = json.loads(row["snapshot_json"] or "{}")
+        cname = snap.get("customerName") or ""
+        amount = row["amount"] or 0
+        event_id = _create_event_with_retry(
+            f"請款單已核准 — {request_no}（{cname}）",
+            f"請款單 {request_no} 已完成簽核核准。\n客戶：{cname}\n金額（含稅）：NT$ {amount:,.0f}",
+            date.today(),
+        )
+        d = json.loads(row["data_json"] or "{}")
+        d["googleCalendarEventId"] = event_id
+        conn.execute("UPDATE payment_requests SET data_json=? WHERE request_no=?",
+                     (json.dumps(d, ensure_ascii=False), request_no))
+        conn.commit()
+        conn.close()
+        logger.info("push_event_for_payment_request: %s -> event %s", request_no, event_id)
+    except Exception as exc:
+        logger.warning("push_event_for_payment_request(%r) failed: %s", request_no, exc)
+
+
 def push_event_for_shipping_note(note_no: str) -> None:
     try:
         from db import get_db

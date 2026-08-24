@@ -460,6 +460,83 @@ def notify_invoice_voucher_returned(voucher_no: str, customer: str, note: str,
     _async_send(to, f"【MOTRIX】開票申請憑據已退回 — {voucher_no}（{customer}）", html)
 
 
+def notify_payment_request_submitted(request_no: str, customer: str, approver_usernames: list) -> None:
+    """請款單送審 → 通知當層簽核人"""
+    to = _lookup_emails(approver_usernames, "payment_request_submitted")
+    if not to:
+        logger.warning("notify_payment_request_submitted: 簽核人 %s 皆無設定 email（request_no=%r）",
+                       approver_usernames, request_no)
+        return
+    page = f"{_base_url()}/pages/case-management.html"
+    html = _build_html(
+        "請款單簽核申請", "待您審核", "#2F6FD6",
+        [("請款單號", request_no), ("客戶名稱", customer)],
+        "", page,
+        intro="您好，以下請款單已進入簽核流程，敬請於系統中完成審核作業。",
+        button_text="前往審核",
+    )
+    _async_send(to, f"【MOTRIX】請款單待審核 — {request_no}（{customer}）", html)
+
+
+def notify_payment_request_next_tier(request_no: str, customer: str, tier_no: int,
+                                     total_tiers: int, approver_usernames: list) -> None:
+    """前層通過，請款單下一層簽核通知"""
+    to = _lookup_emails(approver_usernames, "payment_request_next_tier")
+    if not to:
+        logger.warning("notify_payment_request_next_tier: 第 %d 層簽核人 %s 皆無設定 email（request_no=%r）",
+                       tier_no, approver_usernames, request_no)
+        return
+    page = f"{_base_url()}/pages/case-management.html"
+    html = _build_html(
+        "請款單簽核流程通知", "輪到您審核", "#2F6FD6",
+        [("請款單號", request_no), ("客戶名稱", customer),
+         ("目前進度", f"第 {tier_no} 層審核（共 {total_tiers} 層）")],
+        "", page,
+        intro=f"您好，前層審核已完成，請款單現已進入第 {tier_no} 層審核階段，敬請登入系統完成審核。",
+        button_text="前往審核",
+    )
+    _async_send(to, f"【MOTRIX】請款單審核通知（第 {tier_no}/{total_tiers} 層）— {request_no}（{customer}）", html)
+
+
+def notify_payment_request_approved(request_no: str, customer: str, approved_by: str,
+                                    requester_username: str) -> None:
+    """請款單全員簽核完成 → 通知申請人"""
+    to = _lookup_emails([requester_username], "payment_request_approved")
+    if not to:
+        logger.warning("notify_payment_request_approved: 申請人 %r 無設定 email（request_no=%r）",
+                       requester_username, request_no)
+        return
+    page = f"{_base_url()}/pages/case-management.html"
+    html = _build_html(
+        "請款單審核完成", "已核准", "#16A34A",
+        [("請款單號", request_no), ("客戶名稱", customer), ("核准人", approved_by)],
+        "", page,
+        intro="您好，以下請款單已完成審核並核准。",
+        button_text="前往查看",
+    )
+    _async_send(to, f"【MOTRIX】請款單已核准 — {request_no}（{customer}）", html)
+
+
+def notify_payment_request_returned(request_no: str, customer: str, note: str,
+                                    requester_username: str) -> None:
+    """請款單退回 → 通知申請人"""
+    to = _lookup_emails([requester_username], "payment_request_returned")
+    if not to:
+        logger.warning("notify_payment_request_returned: 申請人 %r 無設定 email（request_no=%r）",
+                       requester_username, request_no)
+        return
+    page = f"{_base_url()}/pages/case-management.html"
+    html = _build_html(
+        "請款單退回通知", "請修改後重新送審", "#DC2626",
+        [("請款單號", request_no), ("客戶名稱", customer)],
+        "", page,
+        intro="您好，您送出的請款單經審核後，因需要調整已退回，請參閱下方備註後完成修改並重新送審。",
+        note=note,
+        button_text="前往修改",
+    )
+    _async_send(to, f"【MOTRIX】請款單已退回 — {request_no}（{customer}）", html)
+
+
 def notify_approval_reminder(doc_type_label: str, doc_no: str, desc: str, days_elapsed: int,
                              approver_usernames: list, also_superadmin: bool = False) -> None:
     """簽核逾期催辦（2026-08-21，2026-08-24 補上出貨單）：報價單／承攬商匯款申請／

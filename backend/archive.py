@@ -12,13 +12,13 @@ from helpers import _cleanup_sessions
 
 logger = logging.getLogger(__name__)
 
-_ARCHIVE_BASE  = r"H:\我的雲端硬碟\系統存檔"
+_ARCHIVE_BASE  = r"G:\我的雲端硬碟\系統存檔"
 _REALTIME_DIR  = os.path.join(_ARCHIVE_BASE, "即時備份")
 _WEEKLY_DIR    = os.path.join(_ARCHIVE_BASE, "週備份")
 _DAILY_DIR     = os.path.join(_ARCHIVE_BASE, "每日備份")
 _UPLOADS_MIRROR_DIR = os.path.join(_ARCHIVE_BASE, "上傳檔案鏡像")
 
-# Local always-on paths (independent of H: mount)
+# Local always-on paths (independent of G: mount)
 _BACKEND_DIR      = os.path.dirname(os.path.abspath(__file__))
 _PROJECT_ROOT     = os.path.dirname(_BACKEND_DIR)
 _LOCAL_DB_BACKUP  = os.path.join(_BACKEND_DIR, "db_backups")
@@ -80,7 +80,7 @@ def _write_backup_alert(reason: str, level: str = "WARN") -> None:
             f"原因: {reason}\n"
             f"\n"
             f"請確認：\n"
-            f"1. Google 雲端硬碟是否已掛載為 H: 且可存取「我的雲端硬碟\\系統存檔」\n"
+            f"1. Google 雲端硬碟是否已掛載為 G: 且可存取「我的雲端硬碟\\系統存檔」\n"
             f"2. 本機 SQLite 快照是否仍存在於 backend\\db_backups\\\n"
             f"3. 處理完成後可刪除本檔；系統會在問題持續時再次寫入\n"
         )
@@ -123,10 +123,14 @@ def _write_backup_alert(reason: str, level: str = "WARN") -> None:
 
 
 def _send_backup_error_email(reason: str, ts: str) -> None:
-    """Send async email to all admin/superadmin on ERROR-level backup failure."""
+    """Send async email to superadmin (最高管理者) on ERROR-level backup failure
+    — 2026-08-24 改用 _superadmin_emails() 而非 _admin_emails()：備份基礎設施出問題
+    （例如雲端硬碟磁碟機代號跑掉）需要有權限處理伺服器/磁碟機掛載的人知道，不是
+    一般 admin 職務範圍；_superadmin_emails() 找不到人時仍會 fallback 回全體
+    admin/superadmin，不會真的寄不出去。"""
     try:
-        from helpers.email_notify import _admin_emails, _async_send
-        to = _admin_emails()
+        from helpers.email_notify import _superadmin_emails, _async_send
+        to = _superadmin_emails()
         if not to:
             return
         html = (
@@ -138,7 +142,7 @@ def _send_backup_error_email(reason: str, ts: str) -> None:
             f"<strong>錯誤原因：</strong><br>{reason}</div>"
             "<p style='color:#374151'>請儘速確認：</p>"
             "<ol style='color:#374151'>"
-            "<li>Google 雲端硬碟是否已掛載為 H:（可存取「我的雲端硬碟/系統存檔」）</li>"
+            "<li>Google 雲端硬碟是否已掛載為 G:（可存取「我的雲端硬碟/系統存檔」）</li>"
             "<li>本機 SQLite 快照（<code>backend/db_backups/</code>）是否仍存在</li>"
             "<li>伺服器磁碟空間是否不足</li>"
             "</ol>"
@@ -165,9 +169,16 @@ def _clear_backup_alert_if_healthy() -> None:
 
 def _ensure_archive_dirs():
     if not _archive_ok():
+        # 2026-08-24：這個路徑不可用的情境曾經連續三週以上每天觸發（磁碟機代號從
+        # G: 被改成 H: 之後就一直沒偵測到），但過去這裡只寫 WARN（不寄信），只留在
+        # backup_alerts/ 裡沒人主動看，直到使用者要求「備份失敗要寄警示信」才發現。
+        # 整條雲端備份（即時/每日/週+uploads鏡像）全跳過屬於系統性失效，改為
+        # ERROR 等級才會觸發 _send_backup_error_email()，避免同一個問題再度悄悄
+        # 卡好幾週沒人知道。
         _write_backup_alert(
             f"雲端備份路徑不存在或未掛載：{_ARCHIVE_BASE}。"
-            f"即時/每日/週雲端備份已跳過。本機 SQLite 快照仍會寫入 {_LOCAL_DB_BACKUP}。"
+            f"即時/每日/週雲端備份已跳過。本機 SQLite 快照仍會寫入 {_LOCAL_DB_BACKUP}。",
+            level="ERROR",
         )
         return
     for d in [
@@ -181,7 +192,7 @@ def _ensure_archive_dirs():
         try:
             os.makedirs(d, exist_ok=True)
         except Exception as e:
-            _write_backup_alert(f"無法建立備份目錄 {d}: {e}")
+            _write_backup_alert(f"無法建立備份目錄 {d}: {e}", level="ERROR")
             return
     _clear_backup_alert_if_healthy()
 
@@ -223,7 +234,7 @@ def _snapshot_sqlite(also_to_cloud: bool = True):
                 cloud_dest = os.path.join(cloud_day, "motrix_erp.db")
                 shutil.copy2(dest, cloud_dest)
             except Exception as e:
-                _write_backup_alert(f"SQLite 快照複製到雲端失敗: {e}")
+                _write_backup_alert(f"SQLite 快照複製到雲端失敗: {e}", level="ERROR")
         # Prune local snapshots older than 30 days
         _prune_local_db_backups(keep_days=30)
         return dest
@@ -309,12 +320,12 @@ def _prune_local_db_backups(keep_days: int = 30) -> None:
 
 
 def _prune_cloud_backups(daily_keep_days: int = 365, weekly_keep_days: int = 730) -> None:
-    """Delete dated folders under H: 每日備份／週備份 once older than the
+    """Delete dated folders under G: 每日備份／週備份 once older than the
     retention window. Mirrors _prune_local_db_backups's safety: only ever
     deletes a folder whose name parses cleanly as the expected date pattern
     for that directory (YYYY-MM-DD for daily, YYYY-Wxx for weekly) — anything
     else (unexpected file/folder name) is left untouched, never guessed at.
-    No-ops entirely if H: isn't mounted (never operates on a partial/offline
+    No-ops entirely if G: isn't mounted (never operates on a partial/offline
     view of the archive)."""
     if not _archive_ok():
         return
@@ -373,10 +384,10 @@ def _backup_quotation(quote_no: str):
             _atomic_json_write(path, payload)
             return
         except Exception as e:
-            logger.exception("_backup_quotation H: write failed for %s", quote_no)
-            _write_backup_alert(f"即時備份報價單失敗（H:）{quote_no}: {e}")
+            logger.exception("_backup_quotation G: write failed for %s", quote_no)
+            _write_backup_alert(f"即時備份報價單失敗（G:）{quote_no}: {e}")
 
-    # H: unavailable — write to local instant-backup dir
+    # G: unavailable — write to local instant-backup dir
     try:
         local_dir = os.path.join(_LOCAL_DB_BACKUP, "quotation_instant")
         os.makedirs(local_dir, exist_ok=True)
@@ -427,13 +438,14 @@ def _backup_suppliers():
 
 
 def _daily_backup():
-    # Always snapshot SQLite locally first (independent of H:)
+    # Always snapshot SQLite locally first (independent of G:)
     _snapshot_sqlite(also_to_cloud=True)
 
     if not _archive_ok():
         _write_backup_alert(
             f"雲端備份路徑不可用（{_ARCHIVE_BASE}），已略過 JSON 每日備份與 uploads/ 鏡像；"
-            f"本機 SQLite 快照見 {_LOCAL_DB_BACKUP}"
+            f"本機 SQLite 快照見 {_LOCAL_DB_BACKUP}",
+            level="ERROR",
         )
         return
 
@@ -441,7 +453,7 @@ def _daily_backup():
         _mirror_uploads()
     except Exception:
         logger.exception("_mirror_uploads failed in daily schedule")
-        _write_backup_alert("uploads/ 雲端鏡像失敗，詳見 server.log")
+        _write_backup_alert("uploads/ 雲端鏡像失敗，詳見 server.log", level="ERROR")
 
     try:
         today_label = date.today().isoformat()

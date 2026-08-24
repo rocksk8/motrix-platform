@@ -1,8 +1,9 @@
 """出貨單（Shipping/Delivery Note）：CRUD + 獨立簽核流程 + PDF + 回簽歷程。
 
 案件管理的子項目，一個報價單（quote_no）可對應多張出貨單（分批出貨）。
-簽核流程獨立於報價單（system_settings key: shipping_approval_flow），
-機制比照報價單簽核（tiers 依序簽核）但故意簡化：無改版號的退回機制。
+簽核流程（system_settings key: unified_approval_flow，2026-08-24 起與報價單／
+開票申請憑據／請款單共用同一組設定）機制比照報價單簽核（tiers 依序簽核）但故意
+簡化：無改版號的退回機制。
 """
 import json
 import threading
@@ -10,13 +11,13 @@ from datetime import datetime
 from typing import List, Optional
 from urllib.parse import quote as urlquote
 
-from fastapi import APIRouter, Body, HTTPException, Header
+from fastapi import APIRouter, Body, HTTPException, Header, UploadFile, File
 from fastapi.responses import Response
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel
 
 from db import get_db, next_entity_code, spawn_bg_thread
 from helpers import (
-    _require_user, _tok, _audit, _notify, _get_setting, _set_setting, _purge_notifications,
+    _require_user, _tok, _audit, _notify, _get_setting, _purge_notifications,
     notify_module_activity, notify_shipping_submitted, notify_shipping_next_tier,
     notify_shipping_approved, notify_shipping_returned,
     push_event_for_shipping_note,
@@ -24,6 +25,7 @@ from helpers import (
     setting_to_active_tiers as _setting_to_active_tiers,
     check_approve_permission, check_reject_permission, check_no_tier_self_approval,
     UnresolvedManagerError,
+    save_document_files, delete_document_file,
 )
 from pdf_gen import generate_shipping_pdf_bytes, _generate_shipping_pdf
 
@@ -41,35 +43,6 @@ class ShippingNoteIn(BaseModel):
     delivery_address: Optional[str]  = ''
     items:            Optional[list] = []
     notes:            Optional[str]  = ''
-
-
-class ApprovalFlowApprover(BaseModel):
-    sourceType:   Optional[str] = None
-    departmentId: Optional[int] = None
-    divisionId:   Optional[int] = None
-    userId:       Optional[int] = None
-    username:     Optional[str] = None
-    displayName:  Optional[str] = None
-
-    @model_validator(mode="after")
-    def _check_shape(self):
-        if self.sourceType == "department_manager":
-            if not self.departmentId:
-                raise ValueError("department_manager 簽核層需要指定 departmentId")
-        elif self.sourceType == "division_manager":
-            if not self.divisionId:
-                raise ValueError("division_manager 簽核層需要指定 divisionId")
-        elif not (self.userId and self.username):
-            raise ValueError("手動指定的簽核人需要 userId／username")
-        return self
-
-class ApprovalFlowTier(BaseModel):
-    order:     int = 0
-    approvers: List[ApprovalFlowApprover] = []
-
-class ApprovalFlowSettings(BaseModel):
-    tiers: List[ApprovalFlowTier] = []
-    includeSubmitterManagerTier: bool = True
 
 
 # ── Approval tier helpers（純邏輯部分共用 helpers/tiered_approval.py，見上方 import）──
@@ -101,6 +74,7 @@ def _note_public(row, include_items: bool = True) -> dict:
         "signedBy":        d.get("signed_by") or "",
         "signedAt":        d.get("signed_at") or "",
         "signedLog":       json.loads(d.get("signed_log") or "[]"),
+        "signedFiles":     json.loads(d.get("signed_files_json") or "[]"),
         "exportCount":     d.get("export_count") or 0,
         "exportLog":       json.loads(d.get("export_log") or "[]"),
         "approval":        approval,
@@ -300,7 +274,7 @@ def submit_shipping_note(note_no: str, authorization: str = Header(None)):
     d     = json.loads(row["data_json"] or "{}")
     now   = datetime.now().isoformat()
 
-    flow_setting = _get_setting("shipping_approval_flow", {"tiers": []}) or {}
+    flow_setting = _get_setting("unified_approval_flow", {"tiers": []}) or {}
     try:
         active_tiers = _setting_to_active_tiers(flow_setting, conn, user["username"])
     except UnresolvedManagerError as e:
@@ -389,7 +363,7 @@ def approve_shipping_note(note_no: str, body: dict = Body(default={}), authoriza
         if user["role"] != "superadmin":
             conn.close()
             raise HTTPException(403, "僅超級管理員可執行此操作")
-        _global_flow  = _get_setting("shipping_approval_flow", {"tiers": []}) or {}
+        _global_flow  = _get_setting("unified_approval_flow", {"tiers": []}) or {}
         try:
             _global_tiers = _setting_to_active_tiers(_global_flow, conn, appr.get("requestedBy"))
         except UnresolvedManagerError as e:
@@ -690,24 +664,45 @@ def toggle_signed(note_no: str, body: dict = Body(...), authorization: str = Hea
     return {"ok": True, "is_signed": action == "sign", "signed_log": log}
 
 
-# ── 出貨單專屬簽核流程設定（獨立於報價單 approval_flow）───────────────────────
+@router.post("/api/shipping-notes/{note_no}/signed-files", status_code=201)
+async def upload_shipping_signed_files(note_no: str, files: List[UploadFile] = File(...),
+                                       authorization: str = Header(None)):
+    """回簽附件上傳（多檔）——任何登入使用者皆可補傳，未來要查證『當初到底簽了
+    什麼』直接在這裡看得到。不限制單據狀態，草稿階段也能先留存客戶提供的
+    參考資料，不強制一定要 already 已核准才能傳。"""
+    user = _require_user(authorization)
+    conn = get_db()
+    row = conn.execute("SELECT signed_files_json FROM shipping_notes WHERE note_no=?", (note_no,)).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(404, "出貨單不存在")
+    existing = json.loads(row["signed_files_json"] or "[]")
+    new_files = await save_document_files("shipping_notes", note_no, files, user.get("display_name") or user["username"])
+    all_files = existing + new_files
+    now = datetime.now().isoformat()
+    conn.execute("UPDATE shipping_notes SET signed_files_json=?, updated_at=? WHERE note_no=?",
+                 (json.dumps(all_files, ensure_ascii=False), now, note_no))
+    conn.commit()
+    conn.close()
+    _audit(_tok(authorization), "shipping.upload_signed_files", "shipping_note", note_no,
+           f"{note_no}（{len(new_files)} 個檔案）")
+    return {"ok": True, "added": len(new_files), "files": new_files}
 
-@router.get("/api/shipping-notes/settings/approval-flow")
-def get_shipping_approval_flow(authorization: str = Header(None)):
-    _require_user(authorization)
-    return _get_setting("shipping_approval_flow", {"tiers": []}) or {"tiers": []}
 
-
-@router.put("/api/shipping-notes/settings/approval-flow")
-def set_shipping_approval_flow(body: ApprovalFlowSettings, authorization: str = Header(None)):
-    _require_user(authorization, require_superadmin=True)
-    total_approvers = sum(len(t.approvers) for t in body.tiers)
-    value = {
-        "tiers": [t.model_dump() for t in body.tiers],
-        "includeSubmitterManagerTier": body.includeSubmitterManagerTier,
-    }
-    _set_setting("shipping_approval_flow", value)
-    _audit(_tok(authorization), "settings.shipping_approval_flow.update", "settings", "shipping_approval_flow",
-           "出貨單簽核流程設定", {"tierCount": len(body.tiers), "approverCount": total_approvers,
-                            "includeSubmitterManagerTier": body.includeSubmitterManagerTier})
+@router.delete("/api/shipping-notes/{note_no}/signed-files/{file_id}")
+def delete_shipping_signed_file(note_no: str, file_id: str, authorization: str = Header(None)):
+    user = _require_user(authorization)
+    conn = get_db()
+    row = conn.execute("SELECT signed_files_json FROM shipping_notes WHERE note_no=?", (note_no,)).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(404, "出貨單不存在")
+    existing = json.loads(row["signed_files_json"] or "[]")
+    remaining = delete_document_file("shipping_notes", note_no, existing, file_id)
+    now = datetime.now().isoformat()
+    conn.execute("UPDATE shipping_notes SET signed_files_json=?, updated_at=? WHERE note_no=?",
+                 (json.dumps(remaining, ensure_ascii=False), now, note_no))
+    conn.commit()
+    conn.close()
+    _audit(_tok(authorization), "shipping.delete_signed_file", "shipping_note", note_no, note_no)
     return {"ok": True}

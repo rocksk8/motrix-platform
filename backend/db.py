@@ -22,6 +22,7 @@ DEMO_DB_PATH = os.path.join(os.path.dirname(__file__), "motrix_erp_demo.db")
 # collide with real filenames (project photos keyed by project id, PDFs keyed
 # by quote_no/slip_no — both restart from 1 in the freshly-reset demo DB).
 DEMO_PROJECT_PHOTOS_DIR  = os.path.join(os.path.dirname(__file__), "..", "uploads", "_demo_projects")
+DEMO_UPLOADS_DIR         = os.path.join(os.path.dirname(__file__), "..", "uploads", "_demo_uploads")
 DEMO_PDF_ARCHIVE_DIR     = os.path.join(os.path.dirname(__file__), "_demo_pdf_archive")
 DEMO_PAYSLIP_ARCHIVE_DIR = os.path.join(os.path.dirname(__file__), "_demo_payslip_archive")
 DEMO_SHIPPING_PDF_ARCHIVE_DIR = os.path.join(os.path.dirname(__file__), "_demo_shipping_pdf_archive")
@@ -29,6 +30,8 @@ DEMO_CONTRACTOR_VOUCHER_PDF_ARCHIVE_DIR = os.path.join(
     os.path.dirname(__file__), "_demo_contractor_voucher_pdf_archive")
 DEMO_INVOICE_VOUCHER_PDF_ARCHIVE_DIR = os.path.join(
     os.path.dirname(__file__), "_demo_invoice_voucher_pdf_archive")
+DEMO_PAYMENT_REQUEST_PDF_ARCHIVE_DIR = os.path.join(
+    os.path.dirname(__file__), "_demo_payment_request_pdf_archive")
 
 # Increment this whenever a new _mNNN function is added to _MIGRATIONS.
 # v32/v33 (switch_guide tables + specs_json column) were initially missing
@@ -44,7 +47,12 @@ DEMO_INVOICE_VOUCHER_PDF_ARCHIVE_DIR = os.path.join(
 # v50: projects.department_id, 2026-08-22.
 # v51: case_stages/case_stage_visits (caseRecord.stages 正規化第一階段：唯讀鏡像，
 # 回填既有資料，尚未接進任何讀寫路徑), 2026-08-23.
-CURRENT_VERSION = 52
+# v53: payment_requests（請款單），2026-08-24——同一輪也把報價單／開票申請憑據／
+# 出貨單三組獨立簽核設定統一成 system_settings key 'unified_approval_flow'
+# （見 routers/system.py），不是 schema 變動、不需要獨立 migration。
+# v54: 報價單回簽欄位（新概念，比照 shipping_notes）＋三種單據（報價單/出貨單/
+# 開票申請憑據）補上附件上傳欄位，2026-08-24 同一輪。
+CURRENT_VERSION = 54
 
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
 # execution model) whenever the current request is authenticated as the 'demo'
@@ -143,8 +151,9 @@ def reset_demo_db() -> None:
         finally:
             conn.close()
     init_db(DEMO_DB_PATH)
-    for d in (DEMO_PROJECT_PHOTOS_DIR, DEMO_PDF_ARCHIVE_DIR, DEMO_PAYSLIP_ARCHIVE_DIR, DEMO_SHIPPING_PDF_ARCHIVE_DIR,
-              DEMO_CONTRACTOR_VOUCHER_PDF_ARCHIVE_DIR, DEMO_INVOICE_VOUCHER_PDF_ARCHIVE_DIR):
+    for d in (DEMO_PROJECT_PHOTOS_DIR, DEMO_UPLOADS_DIR, DEMO_PDF_ARCHIVE_DIR, DEMO_PAYSLIP_ARCHIVE_DIR,
+              DEMO_SHIPPING_PDF_ARCHIVE_DIR, DEMO_CONTRACTOR_VOUCHER_PDF_ARCHIVE_DIR,
+              DEMO_INVOICE_VOUCHER_PDF_ARCHIVE_DIR, DEMO_PAYMENT_REQUEST_PDF_ARCHIVE_DIR):
         _wipe_dir(d)
 
 
@@ -1428,6 +1437,79 @@ def _m052_fix_stage_json_ids(conn):
     conn.commit()
 
 
+def _m053_payment_requests(conn):
+    """Create payment_requests（請款單，2026-08-24）：案件款項明細
+    （quotations.data_json.caseRecord.payment.items[]）之外，另外提供一種可走
+    簽核流程、對內/對客戶要款用的獨立單據——跟 invoice_vouchers（開票申請憑據）
+    是同一套設計（凍結快照＋依剩餘可請款額度防超收），差異只在多了 terms_json
+    （條款，比照報價單「報價條件」可自由編輯的欄位）跟 ratio_pct（請款比例，
+    UI 輸入捷徑，非唯一權威金額——amount 才是，SUM(amount) 用來算剩餘額度，
+    邏輯詳見 routers/payment_requests.py::_quote_remaining()）。
+
+    簽核流程比照四種單據 2026-08-24 起統一使用的 system_settings key
+    'unified_approval_flow'（見 routers/system.py），不再各自獨立一組。"""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS payment_requests (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            request_no    TEXT    UNIQUE NOT NULL,
+            quote_no      TEXT    NOT NULL,
+            scope         TEXT    NOT NULL DEFAULT 'amount',
+            status        TEXT    NOT NULL DEFAULT '草稿',
+            ratio_pct     REAL    DEFAULT 0,
+            amount        REAL    NOT NULL DEFAULT 0,
+            terms_json    TEXT    NOT NULL DEFAULT '{}',
+            snapshot_json TEXT    NOT NULL DEFAULT '{}',
+            data_json     TEXT    NOT NULL DEFAULT '{}',
+            export_count  INTEGER DEFAULT 0,
+            export_log    TEXT    DEFAULT '[]',
+            created_by    TEXT    DEFAULT '',
+            created_at    TEXT,
+            updated_at    TEXT
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_pr_quote_no ON payment_requests(quote_no)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_pr_status ON payment_requests(status)"
+    )
+    conn.commit()
+
+
+def _m054_signed_upload_files(conn):
+    """已開立出去的單據補上附件上傳能力（2026-08-24，同一輪功能）：報價單
+    回簽、出貨單回簽、開票申請憑據開立，事後都應該能補傳客戶簽回/已開立的
+    掃描檔，未來直接在系統裡查詢當初內容與檔案，不必再翻紙本或問人。
+
+    - quotations：'回簽'對這張表是全新概念（出貨單已有、報價單原本沒有），
+      比照 shipping_notes 既有的 is_signed/signed_by/signed_at/signed_log
+      四欄一起補上，再加 signed_files_json 存檔案清單。
+    - shipping_notes：回簽狀態機已存在，只補 signed_files_json。
+    - invoice_vouchers：沒有「已開立」這個額外狀態機（核准即定稿，見
+      routers/invoice_vouchers.py docstring），只補 issued_files_json 讓
+      已核准的憑據能掛檔案，不新增狀態欄位。
+
+    所有檔案清單欄位存 JSON 陣列 [{id, filename, path, uploadedBy,
+    uploadedAt, size, mime}, ...]，實際檔案存 uploads/{module}/{doc_no}/，
+    比照 routers/projects.py 專案照片既有慣例，複用同一套通用
+    /api/uploads/{file_path:path} 簽名 URL 服務，不另外新增 serving 端點。"""
+    if not _col_exists(conn, "quotations", "is_signed"):
+        conn.execute("ALTER TABLE quotations ADD COLUMN is_signed INTEGER NOT NULL DEFAULT 0")
+    if not _col_exists(conn, "quotations", "signed_by"):
+        conn.execute("ALTER TABLE quotations ADD COLUMN signed_by TEXT DEFAULT ''")
+    if not _col_exists(conn, "quotations", "signed_at"):
+        conn.execute("ALTER TABLE quotations ADD COLUMN signed_at TEXT DEFAULT ''")
+    if not _col_exists(conn, "quotations", "signed_log"):
+        conn.execute("ALTER TABLE quotations ADD COLUMN signed_log TEXT NOT NULL DEFAULT '[]'")
+    if not _col_exists(conn, "quotations", "signed_files_json"):
+        conn.execute("ALTER TABLE quotations ADD COLUMN signed_files_json TEXT NOT NULL DEFAULT '[]'")
+    if not _col_exists(conn, "shipping_notes", "signed_files_json"):
+        conn.execute("ALTER TABLE shipping_notes ADD COLUMN signed_files_json TEXT NOT NULL DEFAULT '[]'")
+    if not _col_exists(conn, "invoice_vouchers", "issued_files_json"):
+        conn.execute("ALTER TABLE invoice_vouchers ADD COLUMN issued_files_json TEXT NOT NULL DEFAULT '[]'")
+    conn.commit()
+
+
 def _m030_env_guide(conn):
     """Create env_guide_* tables (場域選型導覽): environments, tiered equipment
     recommendations, and vendor links — ported from the standalone 場域選型導覽.html
@@ -2184,6 +2266,8 @@ _MIGRATIONS = [
     _m050_project_department,                     # v50
     _m051_case_stages_normalize,                  # v51
     _m052_fix_stage_json_ids,                     # v52
+    _m053_payment_requests,                       # v53
+    _m054_signed_upload_files,                    # v54
 ]
 
 

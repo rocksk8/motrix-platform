@@ -307,6 +307,7 @@
     .aq-type-tag.aq-type-cv        { background: #FEF3C7; color: #92400E; }
     .aq-type-tag.aq-type-iv        { background: #D1FAE5; color: #065F46; }
     .aq-type-tag.aq-type-sn        { background: #CFFAFE; color: #155E75; }
+    .aq-type-tag.aq-type-pr        { background: #FFEDD5; color: #9A3412; }
 
   /* -- Mobile RWD -- */
   @media (max-width:767px) {
@@ -663,6 +664,7 @@
           if (item.type === 'contractor_voucher') return '匯款申請'
           if (item.type === 'invoice_voucher') return '開票申請憑據'
           if (item.type === 'shipping_note') return '出貨單'
+          if (item.type === 'payment_request') return '請款單'
           return '報價單'
         },
 
@@ -670,6 +672,7 @@
           if (item?.type === 'contractor_voucher') return 'cv'
           if (item?.type === 'invoice_voucher') return 'iv'
           if (item?.type === 'shipping_note') return 'sn'
+          if (item?.type === 'payment_request') return 'pr'
           return 'quotation'
         },
 
@@ -677,6 +680,7 @@
           if (item?.type === 'contractor_voucher') return '/api/contractor-vouchers'
           if (item?.type === 'invoice_voucher') return '/api/invoice-vouchers'
           if (item?.type === 'shipping_note') return '/api/shipping-notes'
+          if (item?.type === 'payment_request') return '/api/payment-requests'
           return '/api/quotations'
         },
 
@@ -688,6 +692,7 @@
           if (item?.type === 'contractor_voucher') return '申請金額'
           if (item?.type === 'invoice_voucher') return '申請金額（含稅）'
           if (item?.type === 'shipping_note') return '出貨品項'
+          if (item?.type === 'payment_request') return '請款金額（含稅）'
           return '報價金額'
         },
 

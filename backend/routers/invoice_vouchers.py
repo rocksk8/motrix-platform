@@ -7,9 +7,9 @@ scope='single' 對應單一 payment_idx；scope='all' 彙整整份收款排程�
 snapshot 裡仍保留 received 旗標，PDF 上會標示「已收款」或「未收款（開票在先）」
 供財務辨識目前實際收款狀況。
 
-獨立簽核流程（system_settings key: invoice_voucher_approval_flow），機制比照
-出貨單／承攬商匯款申請的 tiers 依序簽核；核准即定稿，不像承攬商匯款申請多一個
-「已匯款」財務結案節點——開票申請憑據本身就是最終文件。
+簽核流程（system_settings key: unified_approval_flow，2026-08-24 起與報價單／
+出貨單／請款單共用同一組設定）機制為 tiers 依序簽核；核准即定稿，不像承攬商匯款
+申請多一個「已匯款」財務結案節點——開票申請憑據本身就是最終文件。
 
 客戶/案件/款項明細於建立當下寫入 snapshot_json 凍結快照，理由同
 routers/contractor_vouchers.py：已送出財務的憑據不應該因為之後有人編輯報價單
@@ -20,13 +20,13 @@ from datetime import datetime
 from typing import List, Optional
 from urllib.parse import quote as urlquote
 
-from fastapi import APIRouter, Body, HTTPException, Header
+from fastapi import APIRouter, Body, HTTPException, Header, UploadFile, File
 from fastapi.responses import Response
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel
 
 from db import get_db, next_entity_code, spawn_bg_thread
 from helpers import (
-    _require_user, _tok, _audit, _notify, _get_setting, _set_setting, _purge_notifications,
+    _require_user, _tok, _audit, _notify, _get_setting, _purge_notifications,
     notify_module_activity, notify_invoice_voucher_submitted, notify_invoice_voucher_next_tier,
     notify_invoice_voucher_approved, notify_invoice_voucher_returned,
     push_event_for_invoice_voucher,
@@ -34,6 +34,7 @@ from helpers import (
     setting_to_active_tiers as _setting_to_active_tiers,
     check_approve_permission, check_reject_permission, check_no_tier_self_approval,
     UnresolvedManagerError,
+    save_document_files, delete_document_file,
 )
 from pdf_gen import generate_invoice_voucher_pdf_bytes, _generate_invoice_voucher_pdf
 
@@ -52,35 +53,6 @@ class VoucherCreateIn(BaseModel):
     scope:    str                            # 'amount'（自訂金額）| 'items'（自訂品項+數量）
     amount:   Optional[float] = None         # scope='amount' 時必填
     items:    Optional[List[InvoiceItemIn]] = None   # scope='items' 時必填
-
-
-class ApprovalFlowApprover(BaseModel):
-    sourceType:   Optional[str] = None
-    departmentId: Optional[int] = None
-    divisionId:   Optional[int] = None
-    userId:       Optional[int] = None
-    username:     Optional[str] = None
-    displayName:  Optional[str] = None
-
-    @model_validator(mode="after")
-    def _check_shape(self):
-        if self.sourceType == "department_manager":
-            if not self.departmentId:
-                raise ValueError("department_manager 簽核層需要指定 departmentId")
-        elif self.sourceType == "division_manager":
-            if not self.divisionId:
-                raise ValueError("division_manager 簽核層需要指定 divisionId")
-        elif not (self.userId and self.username):
-            raise ValueError("手動指定的簽核人需要 userId／username")
-        return self
-
-class ApprovalFlowTier(BaseModel):
-    order:     int = 0
-    approvers: List[ApprovalFlowApprover] = []
-
-class ApprovalFlowSettings(BaseModel):
-    tiers: List[ApprovalFlowTier] = []
-    includeSubmitterManagerTier: bool = True
 
 
 # ── Approval tier helpers（純邏輯部分共用 helpers/tiered_approval.py，見上方 import）──
@@ -108,6 +80,7 @@ def _voucher_public(row, include_snapshot: bool = True) -> dict:
         "pretaxAmount":  snap.get("pretaxAmount", 0),
         "taxAmount":     snap.get("taxAmount", 0),
         "selectedItems": snap.get("selectedItems") or [],
+        "issuedFiles":   json.loads(d.get("issued_files_json") or "[]"),
         "exportCount":   d.get("export_count") or 0,
         "exportLog":     json.loads(d.get("export_log") or "[]"),
         "approval":      approval,
@@ -400,7 +373,7 @@ def submit_invoice_voucher(voucher_no: str, authorization: str = Header(None)):
     d     = json.loads(row["data_json"] or "{}")
     now   = datetime.now().isoformat()
 
-    flow_setting = _get_setting("invoice_voucher_approval_flow", {"tiers": []}) or {}
+    flow_setting = _get_setting("unified_approval_flow", {"tiers": []}) or {}
     try:
         active_tiers = _setting_to_active_tiers(flow_setting, conn, user["username"])
     except UnresolvedManagerError as e:
@@ -486,7 +459,7 @@ def approve_invoice_voucher(voucher_no: str, body: dict = Body(default={}), auth
         if user["role"] != "superadmin":
             conn.close()
             raise HTTPException(403, "僅超級管理員可執行此操作")
-        _global_flow  = _get_setting("invoice_voucher_approval_flow", {"tiers": []}) or {}
+        _global_flow  = _get_setting("unified_approval_flow", {"tiers": []}) or {}
         try:
             _global_tiers = _setting_to_active_tiers(_global_flow, conn, appr.get("requestedBy"))
         except UnresolvedManagerError as e:
@@ -668,25 +641,47 @@ def record_invoice_voucher_export(voucher_no: str, mode: str = "external", autho
     return {"export_count": count, "log": log}
 
 
-# ── 簽核設定（獨立於報價單／出貨單／承攬商匯款申請）────────────────────────────
+# ── 已開立附件上傳 ────────────────────────────────────────────────────────────
 
-@router.get("/api/invoice-vouchers/settings/approval-flow")
-def get_invoice_voucher_approval_flow(authorization: str = Header(None)):
-    _require_user(authorization)
-    return _get_setting("invoice_voucher_approval_flow", {"tiers": []}) or {"tiers": []}
+@router.post("/api/invoice-vouchers/{voucher_no}/issued-files", status_code=201)
+async def upload_invoice_voucher_issued_files(voucher_no: str, files: List[UploadFile] = File(...),
+                                              authorization: str = Header(None)):
+    """已開立發票附件上傳（多檔）——任何登入使用者皆可補傳，供未來查詢當初
+    實際開立的內容（例如發票影本）。不限制狀態，草稿/簽核中也能先留存。"""
+    user = _require_user(authorization)
+    conn = get_db()
+    row = conn.execute("SELECT issued_files_json FROM invoice_vouchers WHERE voucher_no=?", (voucher_no,)).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(404, "憑據不存在")
+    existing = json.loads(row["issued_files_json"] or "[]")
+    new_files = await save_document_files("invoice_vouchers", voucher_no, files,
+                                          user.get("display_name") or user["username"])
+    all_files = existing + new_files
+    now = datetime.now().isoformat()
+    conn.execute("UPDATE invoice_vouchers SET issued_files_json=?, updated_at=? WHERE voucher_no=?",
+                 (json.dumps(all_files, ensure_ascii=False), now, voucher_no))
+    conn.commit()
+    conn.close()
+    _audit(_tok(authorization), "invoice_voucher.upload_issued_files", "invoice_voucher", voucher_no,
+           f"{voucher_no}（{len(new_files)} 個檔案）")
+    return {"ok": True, "added": len(new_files), "files": new_files}
 
 
-@router.put("/api/invoice-vouchers/settings/approval-flow")
-def set_invoice_voucher_approval_flow(body: ApprovalFlowSettings, authorization: str = Header(None)):
-    _require_user(authorization, require_superadmin=True)
-    total_approvers = sum(len(t.approvers) for t in body.tiers)
-    value = {
-        "tiers": [t.model_dump() for t in body.tiers],
-        "includeSubmitterManagerTier": body.includeSubmitterManagerTier,
-    }
-    _set_setting("invoice_voucher_approval_flow", value)
-    _audit(_tok(authorization), "settings.invoice_voucher_approval_flow.update", "settings",
-           "invoice_voucher_approval_flow", "開票申請憑據簽核流程設定",
-           {"tierCount": len(body.tiers), "approverCount": total_approvers,
-            "includeSubmitterManagerTier": body.includeSubmitterManagerTier})
+@router.delete("/api/invoice-vouchers/{voucher_no}/issued-files/{file_id}")
+def delete_invoice_voucher_issued_file(voucher_no: str, file_id: str, authorization: str = Header(None)):
+    user = _require_user(authorization)
+    conn = get_db()
+    row = conn.execute("SELECT issued_files_json FROM invoice_vouchers WHERE voucher_no=?", (voucher_no,)).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(404, "憑據不存在")
+    existing = json.loads(row["issued_files_json"] or "[]")
+    remaining = delete_document_file("invoice_vouchers", voucher_no, existing, file_id)
+    now = datetime.now().isoformat()
+    conn.execute("UPDATE invoice_vouchers SET issued_files_json=?, updated_at=? WHERE voucher_no=?",
+                 (json.dumps(remaining, ensure_ascii=False), now, voucher_no))
+    conn.commit()
+    conn.close()
+    _audit(_tok(authorization), "invoice_voucher.delete_issued_file", "invoice_voucher", voucher_no, voucher_no)
     return {"ok": True}
