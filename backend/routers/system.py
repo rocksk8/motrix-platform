@@ -376,15 +376,27 @@ def delete_work_log(wid: int, authorization: str = Header(None)):
 # ── Company profile（甲方設定，勞報單使用）────────────────────────────────────
 
 class CompanyProfile(BaseModel):
-    name:         str = ''
-    tax_id:       str = ''
-    contact_info: str = ''
+    name:                str = ''
+    tax_id:              str = ''
+    contact_info:        str = ''
+    bank_name:           str = ''  # 收款帳戶資訊（2026-08-24 新增，供請款單 PDF 顯示）
+    bank_branch:         str = ''
+    bank_account_name:   str = ''
+    bank_account_number: str = ''
+
+
+_COMPANY_PROFILE_DEFAULT = {
+    "name": "", "tax_id": "", "contact_info": "",
+    "bank_name": "", "bank_branch": "", "bank_account_name": "", "bank_account_number": "",
+}
 
 
 @router.get("/api/settings/company-profile")
 def get_company_profile(authorization: str = Header(None)):
     _require_user(authorization)
-    return _get_setting("company_profile", {"name": "", "tax_id": "", "contact_info": ""})
+    # 既有安裝的 DB 值可能是新增銀行欄位前存的舊 shape，缺的鍵補上空字串，
+    # 前端才不用每個欄位都自己防 undefined。
+    return {**_COMPANY_PROFILE_DEFAULT, **(_get_setting("company_profile", {}) or {})}
 
 
 @router.put("/api/settings/company-profile")

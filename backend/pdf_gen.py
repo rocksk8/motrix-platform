@@ -1910,13 +1910,40 @@ def _build_payment_request_html(v: dict) -> str:
         return (f'<div style="margin-bottom:10px"><div class="section-label" style="margin-bottom:3px">{esc(title)}</div>'
                 f'<div style="font-size:11px;color:#555;line-height:1.7">{esc(t)}</div></div>')
 
+    # 收款帳戶資訊（2026-08-24 新增）：緊接在總額之後，讀者算完應付金額的下一步
+    # 就是要匯款，比照大型企業/上市櫃公司請款單慣例把匯款帳戶放在明顯位置，
+    # 不要埋在條款/簽核區塊後面才看到。company_profile 未填任何一個銀行欄位時
+    # 整段不顯示（新裝機/尚未設定時不留一個空殼區塊）。
+    profile = _get_setting("company_profile", {}) or {}
+    bank_rows = [
+        ('銀行名稱', profile.get('bank_name', '')),
+        ('分行名稱', profile.get('bank_branch', '')),
+        ('戶　　名', profile.get('bank_account_name', '')),
+        ('帳　　號', profile.get('bank_account_number', '')),
+    ]
+    bank_rows = [(label, val) for label, val in bank_rows if (val or '').strip()]
+    bank_info_section = ''
+    if bank_rows:
+        bank_rows_html = ''.join(
+            f'    <div class="row"><span class="label">{esc(label)}</span>'
+            f'<span class="val" style="font-family:Arial,sans-serif">{esc(val)}</span></div>\n'
+            for label, val in bank_rows
+        )
+        bank_info_section = (
+            '<div class="section-label">五、收款帳戶資訊</div>\n'
+            '<div class="boxes" style="grid-template-columns:1fr;margin-bottom:14px">\n'
+            '  <div class="box" style="border-color:#0A0A0A">\n'
+            f'{bank_rows_html}'
+            '  </div>\n</div>\n'
+        )
+
     terms = v.get('terms') or {}
     terms_html  = term_block('付款條件', terms.get('paymentTerms', ''))
     terms_html += term_block('交貨條件', terms.get('deliveryTerms', ''))
     terms_html += term_block('驗收標準', terms.get('acceptanceTerms', ''))
     terms_html += term_block('保固條件', terms.get('warrantyTerms', ''))
     terms_section = (
-        '<div class="section-label">五、請款條件</div>' + terms_html
+        f'<div class="section-label">{"六" if bank_rows else "五"}、請款條件</div>' + terms_html
     ) if terms_html.strip() else ''
 
     applicant_name = (v.get('approval') or {}).get('requestedByDisplay') or v.get('createdBy', '')
@@ -2011,6 +2038,7 @@ def _build_payment_request_html(v: dict) -> str:
         f'  <div class="row grand"><span>請款總額（含稅）</span><span style="font-family:Arial,sans-serif">NT$ {money(requested_amount)}</span></div>\n'
         '</div></div>\n'
         f'{quote_items_html}'
+        f'{bank_info_section}'
         f'{terms_section}\n'
         f'{_voucher_sign_html(v.get("approval") or {})}\n'
         '<div class="sign">\n'

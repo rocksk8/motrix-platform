@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="../static/favicon.png">
+  <title>公司資料設定 — MOTRIX 營運管理系統</title>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
+  <style>
+    .ns-main {
+      margin-left: var(--sidebar-w);
+      margin-top: var(--topbar-h);
+      padding: 32px 36px;
+      min-height: calc(100vh - var(--topbar-h));
+      background: var(--white);
+    }
+    .ns-title { font-size: 20px; font-weight: 700; color: var(--text-main); }
+    .ns-subtitle { font-size: 13px; color: var(--text-secondary); margin-top: 4px; }
+    .ns-card {
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      max-width: 720px;
+      margin-top: 24px;
+    }
+    .ns-card-head {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border-light);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .ns-card-head-title { font-size: 14px; font-weight: 700; color: var(--text-main); flex: 1; }
+    .ns-card-body { padding: 20px 24px; }
+    .ns-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+    .ns-row.full { grid-template-columns: 1fr; }
+    .ns-field label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      margin-bottom: 6px;
+    }
+    .ns-field input[type="text"] {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 13px;
+      color: var(--text-main);
+      background: var(--white);
+      box-sizing: border-box;
+    }
+    .ns-field input:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(47,111,214,.12);
+    }
+    .ns-desc {
+      font-size: 13px;
+      color: var(--text-secondary);
+      background: #F8F7F4;
+      border-radius: 7px;
+      padding: 12px 14px;
+      border-left: 3px solid var(--accent);
+      margin-bottom: 20px;
+      line-height: 1.6;
+    }
+    .ns-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 24px;
+      padding-top: 20px;
+      border-top: 1px solid var(--border-light);
+    }
+    .ns-locked {
+      font-size: 13px;
+      color: var(--text-secondary);
+      padding: 16px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body x-data="companyProfilePage()" x-init="init()" x-cloak>
+  <header id="app-topbar" class="topbar"></header>
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+  <aside class="sidebar" id="app-sidebar"></aside>
+  <main class="ns-main">
+    <div style="margin-bottom:28px">
+      <div class="ns-title">公司資料設定</div>
+      <div class="ns-subtitle">公司基本資料與收款帳戶資訊，用於勞報單、請款單等文件顯示</div>
+    </div>
+
+    <template x-if="!isSuperadmin">
+      <div class="ns-card"><div class="ns-locked">僅超級管理員可檢視／修改此頁面</div></div>
+    </template>
+
+    <template x-if="isSuperadmin">
+      <div>
+        <!-- 基本資料 -->
+        <div class="ns-card">
+          <div class="ns-card-head">
+            <div class="ns-card-head-title">公司基本資料</div>
+          </div>
+          <div class="ns-card-body">
+            <div class="ns-row full">
+              <div class="ns-field">
+                <label>公司名稱</label>
+                <input type="text" x-model="cfg.name" placeholder="允碩整合集創股份有限公司">
+              </div>
+            </div>
+            <div class="ns-row">
+              <div class="ns-field">
+                <label>統一編號</label>
+                <input type="text" x-model="cfg.tax_id" placeholder="60575481">
+              </div>
+              <div class="ns-field">
+                <label>聯絡方式</label>
+                <input type="text" x-model="cfg.contact_info" placeholder="Tel: 04-3610-6566｜info@miactw.com">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 收款帳戶資訊 -->
+        <div class="ns-card">
+          <div class="ns-card-head">
+            <div class="ns-card-head-title">收款帳戶資訊</div>
+            <span x-show="saved" x-transition style="font-size:12px;color:#16A34A;font-weight:600">已儲存</span>
+          </div>
+          <div class="ns-card-body">
+            <div class="ns-desc">
+              僅超級管理員可修改。設定後將顯示於請款單 PDF，供客戶財務單位辦理匯款。
+            </div>
+            <div class="ns-row">
+              <div class="ns-field">
+                <label>銀行名稱</label>
+                <input type="text" x-model="cfg.bank_name" placeholder="例：台灣銀行">
+              </div>
+              <div class="ns-field">
+                <label>分行名稱</label>
+                <input type="text" x-model="cfg.bank_branch" placeholder="例：台中分行">
+              </div>
+            </div>
+            <div class="ns-row">
+              <div class="ns-field">
+                <label>戶名</label>
+                <input type="text" x-model="cfg.bank_account_name" placeholder="允碩整合集創股份有限公司">
+              </div>
+              <div class="ns-field">
+                <label>帳號</label>
+                <input type="text" x-model="cfg.bank_account_number" placeholder="請輸入匯款帳號">
+              </div>
+            </div>
+
+            <div class="ns-actions">
+              <button class="btn btn-primary" @click="save()" :disabled="saving">
+                <span x-show="!saving">儲存設定</span>
+                <span x-show="saving">儲存中…</span>
+              </button>
+            </div>
+
+            <div x-show="msg" x-text="msg" x-transition
+                 :style="isError ? 'color:#DC2626' : 'color:#16A34A'"
+                 style="font-size:13px;margin-top:12px;font-weight:600"></div>
+          </div>
+        </div>
+      </div>
+    </template>
+
+  </main>
+  <script src="../static/notif.js"></script>
+  <script src="../static/sidebar.js"></script>
+  <script>
+    function companyProfilePage() {
+      return {
+        session: {},
+        cfg: {
+          name: '', tax_id: '', contact_info: '',
+          bank_name: '', bank_branch: '', bank_account_name: '', bank_account_number: '',
+        },
+        saving: false,
+        saved: false,
+        msg: '',
+        isError: false,
+
+        get isSuperadmin() { return this.session.role === 'superadmin' },
+
+        async init() {
+          this.session = JSON.parse(localStorage.getItem('motrix_session') || '{}')
+          if (!this.session.token) { location.replace('login.html'); return }
+          const r = await fetch('/api/settings/company-profile', {
+            headers: { Authorization: 'Bearer ' + this.session.token }
+          })
+          if (r.ok) {
+            const data = await r.json()
+            this.cfg = { ...this.cfg, ...data }
+          }
+        },
+
+        async save() {
+          this.saving = true; this.msg = ''
+          const r = await fetch('/api/settings/company-profile', {
+            method: 'PUT',
+            headers: { Authorization: 'Bearer ' + this.session.token, 'Content-Type': 'application/json' },
+            body: JSON.stringify(this.cfg),
+          })
+          this.saving = false
+          if (r.ok) {
+            this.msg = '設定已儲存'; this.isError = false
+            this.saved = true; setTimeout(() => this.saved = false, 3000)
+          } else {
+            const d = await r.json().catch(() => ({}))
+            this.msg = d.detail || '儲存失敗'; this.isError = true
+          }
+          setTimeout(() => this.msg = '', 4000)
+        },
+      }
+    }
+  </script>
+</body>
+</html>

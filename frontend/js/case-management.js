@@ -14,6 +14,8 @@ function app() {
     loading: true,
     cases: [],
     filteredCases: [],
+    caseSortPref: { sortMode: '', sortDir: 'desc', customOrder: [] },
+    _caseSortable: null,
     listTab: 'all',
     caseViewMode: 'list',
     stageBoardItems: [],
@@ -92,6 +94,7 @@ function app() {
     // ── 出貨單 ──
     shippingNotes: [],
     shippingNotesLoading: false,
+    snSortPref: { sortMode: '', sortDir: 'desc', customOrder: [] },
     showShippingModal: false,
     editShippingNoteNo: null,
     shippingSaving: false,
@@ -118,6 +121,7 @@ function app() {
     // ── 開票申請憑據 ──
     invoiceVouchers: [],
     invoiceVouchersLoading: false,
+    ivSortPref: { sortMode: '', sortDir: 'desc', customOrder: [] },
     ivPreviewModal: false,
     ivPreviewBlobUrl: '',
     ivPreviewVoucher: null,
@@ -133,6 +137,8 @@ function app() {
     // ── 請款單 ──
     paymentRequests: [],
     paymentRequestsLoading: false,
+    prListSortPref: { sortMode: '', sortDir: 'desc', customOrder: [] },
+    _subSortables: {},
     prPreviewModal: false,
     prPreviewBlobUrl: '',
     prPreviewVoucher: null,
@@ -190,6 +196,7 @@ function app() {
           localStorage.setItem('motrix_casemgmt_read_at', this.readAt)
         }
       } catch {}
+      this.caseSortPref = await loadListPref(s.token, 'case_list')
       await this.loadCases()
       this.loadVendors()
       const _qp = new URLSearchParams(location.search).get('q')
@@ -312,7 +319,91 @@ function app() {
           (c.project_name  || '').toLowerCase().includes(q)
         )
       }
-      this.filteredCases = list
+      this.filteredCases = applyListSort(list, this.caseSortPref, {
+        quote_date:    c => c.quote_date || c.created_at || '',
+        total:         c => c.total || 0,
+        customer_name: c => c.customer_name || '',
+      }, c => c.quote_no)
+      this.$nextTick(() => this.initCaseSortable())
+    },
+
+    async setCaseSortMode(mode) {
+      this.caseSortPref.sortMode = mode
+      this.filterCases()
+      await saveListPref(this.session.token, 'case_list', this.caseSortPref)
+    },
+    async toggleCaseSortDir() {
+      this.caseSortPref.sortDir = this.caseSortPref.sortDir === 'asc' ? 'desc' : 'asc'
+      this.filterCases()
+      await saveListPref(this.session.token, 'case_list', this.caseSortPref)
+    },
+    initCaseSortable() {
+      const body = this.$refs.caseListBody
+      if (!body || typeof Sortable === 'undefined') return
+      if (this._caseSortable) { this._caseSortable.destroy(); this._caseSortable = null }
+      if (this.caseSortPref.sortMode !== 'custom') return
+      this._caseSortable = Sortable.create(body, {
+        animation: 150,
+        handle: '.drag-handle',
+        ghostClass: 'sortable-ghost',
+        chosenClass: 'sortable-chosen',
+        onEnd: async () => {
+          const visibleIds = [...body.querySelectorAll('.cm-card[data-quote-no]')].map(el => el.dataset.quoteNo)
+          const rest = this.caseSortPref.customOrder.filter(id => !visibleIds.includes(id))
+          this.caseSortPref.customOrder = [...visibleIds, ...rest]
+          await saveListPref(this.session.token, 'case_list', this.caseSortPref)
+        }
+      })
+    },
+
+    // ── 案件內單據子清單排序（出貨單/開票憑據/請款單，2026-08-24）───────────────
+    // 三個子清單的排序偏好各自獨立，list_key 帶上 quote_no 前綴（見 loadShippingNotes
+    // /loadInvoiceVouchers/loadPaymentRequests 載入時機），避免跨案件互相污染。
+    _subListMeta: {
+      sn:     { pref: 'snSortPref',     dataKey: 'shippingNotes',   ref: 'snListBody', idField: 'noteNo',
+                fields: { shipDate: n => n.shipDate || '', createdAt: n => n.createdAt || '' } },
+      iv:     { pref: 'ivSortPref',     dataKey: 'invoiceVouchers', ref: 'ivListBody', idField: 'voucherNo',
+                fields: { createdAt: v => v.createdAt || '', totalAmount: v => v.totalAmount || 0 } },
+      prList: { pref: 'prListSortPref', dataKey: 'paymentRequests', ref: 'prListBody', idField: 'requestNo',
+                fields: { createdAt: v => v.createdAt || '', amount: v => v.amount || 0 } },
+    },
+    _sortedSubList(kind) {
+      const meta = this._subListMeta[kind]
+      return applyListSort(this[meta.dataKey] || [], this[meta.pref], meta.fields, item => item[meta.idField])
+    },
+    sortedShippingNotes()   { return this._sortedSubList('sn') },
+    sortedInvoiceVouchers() { return this._sortedSubList('iv') },
+    sortedPaymentRequests() { return this._sortedSubList('prList') },
+
+    async setSubListSortMode(kind, mode) {
+      const meta = this._subListMeta[kind]
+      this[meta.pref].sortMode = mode
+      this.$nextTick(() => this._initSubListSortable(kind))
+      await saveListPref(this.session.token, `${kind}:${this.selected.quote_no}`, this[meta.pref])
+    },
+    async toggleSubListSortDir(kind) {
+      const meta = this._subListMeta[kind]
+      this[meta.pref].sortDir = this[meta.pref].sortDir === 'asc' ? 'desc' : 'asc'
+      await saveListPref(this.session.token, `${kind}:${this.selected.quote_no}`, this[meta.pref])
+    },
+    _initSubListSortable(kind) {
+      const meta = this._subListMeta[kind]
+      const body = this.$refs[meta.ref]
+      if (!body || typeof Sortable === 'undefined') return
+      if (this._subSortables[kind]) { this._subSortables[kind].destroy(); this._subSortables[kind] = null }
+      if (this[meta.pref].sortMode !== 'custom') return
+      this._subSortables[kind] = Sortable.create(body, {
+        animation: 150,
+        handle: '.drag-handle',
+        ghostClass: 'sortable-ghost',
+        chosenClass: 'sortable-chosen',
+        onEnd: async () => {
+          const visibleIds = [...body.querySelectorAll('[data-item-id]')].map(el => el.dataset.itemId)
+          const rest = (this[meta.pref].customOrder || []).filter(id => !visibleIds.includes(id))
+          this[meta.pref].customOrder = [...visibleIds, ...rest]
+          await saveListPref(this.session.token, `${kind}:${this.selected.quote_no}`, this[meta.pref])
+        }
+      })
     },
 
     async selectCase(quoteNo) {
@@ -1796,6 +1887,7 @@ function app() {
       if (!quoteNo) return
       this.shippingNotesLoading = true
       this.shippingNotes = []
+      this.snSortPref = await loadListPref(this.session.token, `sn:${quoteNo}`)
       try {
         const r = await fetch(`/api/shipping-notes?quote_no=${encodeURIComponent(quoteNo)}`, {
           headers: { Authorization: 'Bearer ' + this.session.token }
@@ -1803,6 +1895,7 @@ function app() {
         if (r.ok) this.shippingNotes = await r.json()
       } catch {}
       this.shippingNotesLoading = false
+      this.$nextTick(() => this._initSubListSortable('sn'))
     },
 
     _blankShippingForm() {
@@ -2306,6 +2399,7 @@ function app() {
       if (!quoteNo) return
       this.invoiceVouchersLoading = true
       this.invoiceVouchers = []
+      this.ivSortPref = await loadListPref(this.session.token, `iv:${quoteNo}`)
       try {
         const r = await fetch(`/api/invoice-vouchers?quote_no=${encodeURIComponent(quoteNo)}`, {
           headers: { Authorization: 'Bearer ' + this.session.token }
@@ -2313,6 +2407,7 @@ function app() {
         if (r.ok) this.invoiceVouchers = await r.json()
       } catch {}
       this.invoiceVouchersLoading = false
+      this.$nextTick(() => this._initSubListSortable('iv'))
     },
 
     async openInvoiceVoucherModal() {
@@ -2678,6 +2773,7 @@ function app() {
       if (!quoteNo) return
       this.paymentRequestsLoading = true
       this.paymentRequests = []
+      this.prListSortPref = await loadListPref(this.session.token, `prList:${quoteNo}`)
       try {
         const r = await fetch(`/api/payment-requests?quote_no=${encodeURIComponent(quoteNo)}`, {
           headers: { Authorization: 'Bearer ' + this.session.token }
@@ -2685,6 +2781,7 @@ function app() {
         if (r.ok) this.paymentRequests = await r.json()
       } catch {}
       this.paymentRequestsLoading = false
+      this.$nextTick(() => this._initSubListSortable('prList'))
     },
 
     async openPaymentRequestModal() {

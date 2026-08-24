@@ -7,6 +7,7 @@
   <link rel="icon" type="image/png" href="../static/favicon.png">
   <title>報價單管理 — MOTRIX 營運管理系統</title>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.3/Sortable.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <style>
     .filter-tabs { display:flex; gap:2px; background:#F0EEE9; padding:3px; border-radius:8px; margin-bottom:20px; }
@@ -26,6 +27,12 @@
     .action-btn--ghost:hover { border-color:#C8C4BC; }
     .row-actions { display:flex; gap:4px; opacity:0; transition:opacity .12s; }
     tr:hover .row-actions { opacity:1; }
+    .drag-handle { cursor: grab; color: var(--text-secondary); opacity: .55; transition: opacity .1s, background .1s; display:inline-flex; align-items:center; justify-content:center; padding: 4px; border-radius: 4px; }
+    .drag-handle:hover { opacity: 1; background: #EEECEA; }
+    tr:hover .drag-handle { opacity: .85; }
+    .drag-handle:active { cursor: grabbing; }
+    .sortable-ghost td { background: #EFF6FF !important; opacity: .5; }
+    .sortable-chosen { box-shadow: 0 2px 16px rgba(0,0,0,.12); }
     .summary-row { display:flex; gap:24px; margin-bottom:20px; padding:14px 20px; background:#fff; border:1px solid var(--border-light); border-radius:var(--radius-lg); }
     .summary-item { display:flex; flex-direction:column; gap:2px; }
     .summary-item__label { font-size:10px; font-family:var(--font-en); letter-spacing:.08em; text-transform:uppercase; color:var(--text-dim); }
@@ -134,6 +141,18 @@
         <option value="已成案">已成案</option>
         <option value="已結案">已結案</option>
       </select>
+      <select class="search-input" style="max-width:150px;cursor:pointer"
+              :value="sortPref.sortMode" @change="setSortMode($event.target.value)">
+        <option value="">排序：預設</option>
+        <option value="quote_date">排序：報價日期</option>
+        <option value="total">排序：金額</option>
+        <option value="customer_name">排序：客戶名稱</option>
+        <option value="custom">排序：自訂（可拖曳）</option>
+      </select>
+      <button class="action-btn action-btn--ghost" x-show="sortPref.sortMode && sortPref.sortMode !== 'custom'"
+              @click="toggleSortDir()" title="切換正序/倒序">
+        <span x-text="sortPref.sortDir === 'asc' ? '↑ 由小到大' : '↓ 由大到小'"></span>
+      </button>
     </div>
 
     <div class="filter-tabs">
@@ -151,6 +170,7 @@
       <table class="data-table">
         <thead>
           <tr>
+            <th x-show="sortPref.sortMode === 'custom'" style="width:24px"></th>
             <th>報價單號</th>
             <th>客戶名稱</th>
             <th>案件名稱</th>
@@ -164,9 +184,10 @@
             <th>操作</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody x-ref="quotesTbody">
           <template x-for="q in filtered" :key="q.quote_no">
-            <tr>
+            <tr :data-quote-no="q.quote_no">
+              <td x-show="sortPref.sortMode === 'custom'" class="drag-handle" style="cursor:grab;text-align:center;color:var(--text-dim)">⠿</td>
               <td>
                 <div style="display:flex;align-items:center;gap:6px">
                   <a :href="'quotation-form.html?id=' + q.quote_no"
@@ -337,6 +358,9 @@
       dealTagLostInfo: null,
       dealTagLostReason: '',
 
+      sortPref: { sortMode: '', sortDir: 'desc', customOrder: [] },
+      _sortable: null,
+
       tabs: [
         { key: 'all',    label: '全部(不含未成案)'  },
         { key: '草稿',   label: '草稿'  },
@@ -386,7 +410,7 @@
       },
 
       get filtered() {
-        return this.quotes.filter(q => {
+        const base = this.quotes.filter(q => {
           let matchTab
           if (this.activeTab === 'all') {
             matchTab = (q.deal_tag || '') !== '未成案' && (q.deal_tag || '') !== '已結案'
@@ -403,6 +427,11 @@
           const matchDealTag = !this.filterDealTag || (q.deal_tag || '') === this.filterDealTag
           return matchTab && matchSearch && matchSales && matchMonth && matchDealTag
         })
+        return applyListSort(base, this.sortPref, {
+          quote_date:    q => q.quote_date || q.created_at || '',
+          total:         q => q.total || 0,
+          customer_name: q => q.customer_name || '',
+        }, q => q.quote_no)
       },
 
       summaryData: { thisMonth: 0, thisMonthTotal: 0, pending: 0, confirmed: 0, avgMargin: '—' },
@@ -587,6 +616,34 @@
         localStorage.removeItem('motrix_session'); window.location.href = 'login.html'
       },
 
+      async setSortMode(mode) {
+        this.sortPref.sortMode = mode
+        await saveListPref(this.session.token, 'quotations', this.sortPref)
+        this.$nextTick(() => this.initSortable())
+      },
+      async toggleSortDir() {
+        this.sortPref.sortDir = this.sortPref.sortDir === 'asc' ? 'desc' : 'asc'
+        await saveListPref(this.session.token, 'quotations', this.sortPref)
+      },
+      initSortable() {
+        const tbody = this.$refs.quotesTbody
+        if (!tbody || typeof Sortable === 'undefined') return
+        if (this._sortable) { this._sortable.destroy(); this._sortable = null }
+        if (this.sortPref.sortMode !== 'custom') return
+        this._sortable = Sortable.create(tbody, {
+          animation: 150,
+          handle: '.drag-handle',
+          ghostClass: 'sortable-ghost',
+          chosenClass: 'sortable-chosen',
+          onEnd: async () => {
+            const visibleIds = [...tbody.querySelectorAll('tr[data-quote-no]')].map(tr => tr.dataset.quoteNo)
+            const rest = this.sortPref.customOrder.filter(id => !visibleIds.includes(id))
+            this.sortPref.customOrder = [...visibleIds, ...rest]
+            await saveListPref(this.session.token, 'quotations', this.sortPref)
+          }
+        })
+      },
+
       async init() {
       window.addEventListener('resize', () => { this.isMobileView = window.innerWidth <= 767 })
         const s = localStorage.getItem('motrix_session')
@@ -598,6 +655,8 @@
         if (param === 'queue') this.view = 'queue'
         if (window.location.search) history.replaceState(null, '', window.location.pathname)
 
+        this.sortPref = await loadListPref(this.session.token, 'quotations')
+
         const ok = await this.loadQuotes()
         if (!ok || this.quotes.length === 0) {
           this.retrying = true
@@ -605,11 +664,13 @@
           this.retrying = false
           await this.loadQuotes()
         }
+        this.$nextTick(() => this.initSortable())
       }
     }
   }
   </script>
   <script src="../static/notif.js"></script>
   <script src="../static/sidebar.js"></script>
+  <script src="../static/list-sort.js"></script>
 </body>
 </html>

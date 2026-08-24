@@ -8,6 +8,8 @@
   <title>案件管理 — MOTRIX 營運管理系統</title>
   <script src="../js/case-management.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.3/Sortable.min.js"></script>
+  <script src="../static/list-sort.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/frappe-gantt@0.6.1/dist/frappe-gantt.min.js"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/frappe-gantt@0.6.1/dist/frappe-gantt.css">
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
@@ -336,7 +338,43 @@
     .fi--mono { font-family:'Courier New',monospace; }
     .fi-label { font-size:10px; color:var(--text-dim); font-family:LINE Seed TW_OTF, sans-serif; margin-bottom:3px; display:block; }
     .fi-group { margin-bottom:12px; }
-  
+
+    /* 條款編輯（比照 quotation-form.html 報價條件段落的欄位樣式，2026-08-24 擴充） */
+    .form-grid { display: grid; gap: 12px; }
+    .form-grid-2 { grid-template-columns: 1fr 1fr; }
+    .form-group { display: flex; flex-direction: column; gap: 4px; }
+    .form-label {
+      font-size: 10px;
+      font-family: 'LINE Seed TW_OTF', sans-serif;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      font-weight: 500;
+    }
+    .form-textarea {
+      padding: 8px 10px;
+      border: 1px solid var(--border-light);
+      border-radius: var(--radius);
+      font-size: 13px;
+      font-family: var(--font-zh);
+      color: var(--text-primary);
+      background: #fff;
+      outline: none;
+      transition: border-color .12s, box-shadow .12s;
+      width: 100%;
+      box-sizing: border-box;
+      resize: vertical;
+      min-height: 72px;
+      line-height: 1.6;
+    }
+    .form-textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(37,99,235,.08); }
+
+    /* 拖曳自訂排序（清單排序偏好，2026-08-24 擴充） */
+    .drag-handle { cursor: grab; color: var(--text-secondary); opacity: .7; display:inline-flex; align-items:center; justify-content:center; }
+    .drag-handle:active { cursor: grabbing; }
+    .sortable-ghost { opacity: .4; background: #EFF6FF !important; }
+    .sortable-chosen { box-shadow: 0 2px 16px rgba(0,0,0,.12); }
+
   /* ── 動態 Tab ── */
   .feed-wrap { display:flex; flex-direction:column; height:100%; overflow:hidden; }
   .feed-compose { padding:14px 20px; border-bottom:1px solid var(--border-light); flex-shrink:0; }
@@ -446,6 +484,18 @@
             <input class="cm-list__search-input" type="text" placeholder="搜尋單號或客戶..."
                    x-model="search" @input="filterCases()">
           </div>
+          <div style="display:flex;gap:6px;margin-bottom:10px" x-show="caseViewMode==='list'">
+            <select class="cm-list__search-input" style="width:auto;flex:1;padding-left:10px;cursor:pointer"
+                    :value="caseSortPref.sortMode" @change="setCaseSortMode($event.target.value)">
+              <option value="">排序：預設</option>
+              <option value="quote_date">排序：日期</option>
+              <option value="total">排序：金額</option>
+              <option value="customer_name">排序：客戶名稱</option>
+              <option value="custom">排序：自訂（可拖曳）</option>
+            </select>
+            <button class="btn-add" style="padding:0 10px" x-show="caseSortPref.sortMode && caseSortPref.sortMode !== 'custom'"
+                    @click="toggleCaseSortDir()" x-text="caseSortPref.sortDir === 'asc' ? '↑' : '↓'"></button>
+          </div>
           <div class="cm-list__tabs" x-show="caseViewMode==='list'">
             <button class="cm-list__tab" :class="{active: listTab==='all'}" @click="listTab='all'; filterCases()">
               全部
@@ -473,7 +523,7 @@
           <button class="btn-add" style="margin-left:auto;padding:2px 10px;font-size:10px;border-style:solid" @click.stop="markAllRead()">一鍵已讀</button>
         </div>
 
-        <div class="cm-list__body" x-show="caseViewMode==='list'">
+        <div class="cm-list__body" x-show="caseViewMode==='list'" x-ref="caseListBody">
           <template x-if="loading">
             <div class="cm-empty">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:.3"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
@@ -490,8 +540,10 @@
           <template x-for="c in filteredCases" :key="c.quote_no">
             <div class="cm-card" :class="{selected: selected && selected.quote_no === c.quote_no}"
                  :style="isUnread(c) ? 'border-left-color:#D97706' : ''"
+                 :data-quote-no="c.quote_no"
                  @click="selectCase(c.quote_no)">
               <div class="cm-card__head">
+                <span class="drag-handle" x-show="caseSortPref.sortMode === 'custom'" style="cursor:grab;margin-right:4px" @click.stop>⠿</span>
                 <span class="cm-card__no" x-text="c.quote_no"></span>
                 <span class="cm-card__tag"
                       :class="c.deal_tag==='已結案' ? 'cm-card__tag--closed' : (c.deal_tag==='已成案' && c.current_stage ? 'cm-card__tag--stage' : 'cm-card__tag--active')"
@@ -992,9 +1044,22 @@
 
                 <!-- 開票申請憑據列表 -->
                 <div x-show="invoiceVouchers.length > 0" style="margin-top:18px">
-                  <div class="cm-section-title" style="margin-bottom:10px">開票申請憑據</div>
-                  <template x-for="v in invoiceVouchers" :key="v.id">
-                    <div style="border:1px solid var(--border-light);border-radius:8px;margin-bottom:8px;padding:10px 14px;background:#FAFAF9;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                  <div class="cm-section-title" style="margin-bottom:10px;display:flex;align-items:center;gap:8px">
+                    <span>開票申請憑據</span>
+                    <select style="margin-left:auto;font-size:11px;padding:3px 6px;border:1px solid var(--border-light);border-radius:5px;cursor:pointer"
+                            :value="ivSortPref.sortMode" @change="setSubListSortMode('iv', $event.target.value)">
+                      <option value="">排序：預設</option>
+                      <option value="createdAt">排序：建立日期</option>
+                      <option value="totalAmount">排序：金額</option>
+                      <option value="custom">排序：自訂（可拖曳）</option>
+                    </select>
+                    <button x-show="ivSortPref.sortMode && ivSortPref.sortMode !== 'custom'" @click="toggleSubListSortDir('iv')"
+                            style="font-size:11px;padding:3px 8px;border:1px solid var(--border-light);border-radius:5px;background:#fff;cursor:pointer" x-text="ivSortPref.sortDir==='asc'?'↑':'↓'"></button>
+                  </div>
+                  <div x-ref="ivListBody">
+                  <template x-for="v in sortedInvoiceVouchers()" :key="v.id">
+                    <div style="border:1px solid var(--border-light);border-radius:8px;margin-bottom:8px;padding:10px 14px;background:#FAFAF9;display:flex;align-items:center;gap:8px;flex-wrap:wrap" :data-item-id="v.voucherNo">
+                      <span class="drag-handle" x-show="ivSortPref.sortMode === 'custom'" @click.stop>⠿</span>
                       <span style="font-size:12px;font-weight:600;color:var(--text-main)" x-text="v.voucherNo"></span>
                       <span style="font-size:11px;color:var(--text-dim)" x-text="v.scope==='items' ? '自訂品項' : '自訂金額'"></span>
                       <span :class="'badge ' + _ivStatusClass(v.status)" x-text="_ivStatusLabel(v.status)"
@@ -1040,13 +1105,27 @@
                       </div>
                     </div>
                   </template>
+                  </div>
                 </div>
 
                 <!-- 請款單列表 -->
                 <div x-show="paymentRequests.length > 0" style="margin-top:18px">
-                  <div class="cm-section-title" style="margin-bottom:10px">請款單</div>
-                  <template x-for="v in paymentRequests" :key="v.id">
-                    <div style="border:1px solid var(--border-light);border-radius:8px;margin-bottom:8px;padding:10px 14px;background:#FAFAF9;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                  <div class="cm-section-title" style="margin-bottom:10px;display:flex;align-items:center;gap:8px">
+                    <span>請款單</span>
+                    <select style="margin-left:auto;font-size:11px;padding:3px 6px;border:1px solid var(--border-light);border-radius:5px;cursor:pointer"
+                            :value="prListSortPref.sortMode" @change="setSubListSortMode('prList', $event.target.value)">
+                      <option value="">排序：預設</option>
+                      <option value="createdAt">排序：建立日期</option>
+                      <option value="amount">排序：金額</option>
+                      <option value="custom">排序：自訂（可拖曳）</option>
+                    </select>
+                    <button x-show="prListSortPref.sortMode && prListSortPref.sortMode !== 'custom'" @click="toggleSubListSortDir('prList')"
+                            style="font-size:11px;padding:3px 8px;border:1px solid var(--border-light);border-radius:5px;background:#fff;cursor:pointer" x-text="prListSortPref.sortDir==='asc'?'↑':'↓'"></button>
+                  </div>
+                  <div x-ref="prListBody">
+                  <template x-for="v in sortedPaymentRequests()" :key="v.id">
+                    <div style="border:1px solid var(--border-light);border-radius:8px;margin-bottom:8px;padding:10px 14px;background:#FAFAF9;display:flex;align-items:center;gap:8px;flex-wrap:wrap" :data-item-id="v.requestNo">
+                      <span class="drag-handle" x-show="prListSortPref.sortMode === 'custom'" @click.stop>⠿</span>
                       <span style="font-size:12px;font-weight:600;color:var(--text-main)" x-text="v.requestNo"></span>
                       <span style="font-size:11px;color:var(--text-dim)"
                             x-text="v.scope==='items' ? '自訂品項' : (v.ratioPct ? ('比例 ' + v.ratioPct + '%') : '自訂金額')"></span>
@@ -1079,6 +1158,7 @@
                       </div>
                     </div>
                   </template>
+                  </div>
                 </div>
 
               </div><!-- /biz -->
@@ -1961,6 +2041,15 @@
                   <div style="flex:1">
                     <span class="cm-section-title" style="margin-bottom:0">出貨單管理</span>
                   </div>
+                  <select style="font-size:11px;padding:3px 6px;border:1px solid var(--border-light);border-radius:5px;cursor:pointer"
+                          :value="snSortPref.sortMode" @change="setSubListSortMode('sn', $event.target.value)">
+                    <option value="">排序：預設</option>
+                    <option value="shipDate">排序：出貨日期</option>
+                    <option value="createdAt">排序：建立日期</option>
+                    <option value="custom">排序：自訂（可拖曳）</option>
+                  </select>
+                  <button x-show="snSortPref.sortMode && snSortPref.sortMode !== 'custom'" @click="toggleSubListSortDir('sn')"
+                          style="font-size:11px;padding:3px 8px;border:1px solid var(--border-light);border-radius:5px;background:#fff;cursor:pointer" x-text="snSortPref.sortDir==='asc'?'↑':'↓'"></button>
                   <button x-show="['superadmin','admin'].includes(session.role)"
                           class="btn-add" @click="openNewShippingNote()" style="padding:5px 12px;font-size:12px">
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 4v16m8-8H4"/></svg>
@@ -1978,10 +2067,12 @@
                 </div>
 
                 <!-- Shipping note list -->
-                <template x-for="n in shippingNotes" :key="n.id">
-                  <div style="border:1px solid var(--border-light);border-radius:10px;margin-bottom:12px;overflow:hidden">
+                <div x-ref="snListBody">
+                <template x-for="n in sortedShippingNotes()" :key="n.id">
+                  <div style="border:1px solid var(--border-light);border-radius:10px;margin-bottom:12px;overflow:hidden" :data-item-id="n.noteNo">
                     <!-- Header row -->
                     <div style="display:flex;align-items:center;gap:10px;padding:12px 16px;background:#FAFAF9;border-bottom:1px solid var(--border-light);flex-wrap:wrap">
+                      <span class="drag-handle" x-show="snSortPref.sortMode === 'custom'" @click.stop>⠿</span>
                       <div style="flex:1;min-width:160px">
                         <div style="font-size:13px;font-weight:600;color:var(--text-main);font-family:LINE Seed TW_OTF, sans-serif" x-text="n.noteNo"></div>
                         <div style="font-size:11px;color:var(--text-dim);margin-top:2px">
@@ -2093,6 +2184,7 @@
                     </div>
                   </div>
                 </template>
+                </div>
 
               </div><!-- /shipping -->
 
@@ -3065,27 +3157,29 @@
      style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:425;display:flex;align-items:center;justify-content:center;padding:20px"
      @click.self="_prEditingTermsFor=null"
      @keydown.escape.window="_prEditingTermsFor=null">
-  <div style="background:#fff;border-radius:12px;width:100%;max-width:560px;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 16px 48px rgba(0,0,0,.22)">
+  <div style="background:#fff;border-radius:12px;width:100%;max-width:720px;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 16px 48px rgba(0,0,0,.22)">
     <div style="display:flex;align-items:center;padding:14px 18px;border-bottom:1px solid var(--border-light);gap:10px">
       <span style="font-size:14px;font-weight:700;flex:1;font-family:var(--font-zh)" x-text="'請款條件　' + (_prEditingTermsFor||'')"></span>
       <button @click="_prEditingTermsFor=null" style="width:28px;height:28px;border:none;background:#F0EEE9;border-radius:5px;cursor:pointer;font-size:16px">×</button>
     </div>
-    <div style="flex:1;overflow-y:auto;padding:16px 18px;display:flex;flex-direction:column;gap:12px">
-      <div class="fi-group">
-        <label class="fi-label">付款條件</label>
-        <textarea class="form-textarea" rows="3" x-model="prTerms.paymentTerms"></textarea>
+    <div style="flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:14px">
+      <div class="form-group">
+        <label class="form-label">付款條件</label>
+        <textarea class="form-textarea" rows="5" style="min-height:100px" x-model="prTerms.paymentTerms"></textarea>
       </div>
-      <div class="fi-group">
-        <label class="fi-label">交貨條件</label>
-        <textarea class="form-textarea" rows="2" x-model="prTerms.deliveryTerms"></textarea>
-      </div>
-      <div class="fi-group">
-        <label class="fi-label">驗收標準</label>
-        <textarea class="form-textarea" rows="2" x-model="prTerms.acceptanceTerms"></textarea>
-      </div>
-      <div class="fi-group">
-        <label class="fi-label">保固條件</label>
-        <textarea class="form-textarea" rows="2" x-model="prTerms.warrantyTerms"></textarea>
+      <div class="form-grid form-grid-2">
+        <div class="form-group">
+          <label class="form-label">交貨條件</label>
+          <textarea class="form-textarea" rows="3" x-model="prTerms.deliveryTerms"></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">驗收標準</label>
+          <textarea class="form-textarea" rows="3" x-model="prTerms.acceptanceTerms"></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">保固條件</label>
+          <textarea class="form-textarea" rows="3" x-model="prTerms.warrantyTerms"></textarea>
+        </div>
       </div>
     </div>
     <div style="padding:12px 20px;border-top:1px solid var(--border-light);display:flex;justify-content:flex-end;gap:10px">

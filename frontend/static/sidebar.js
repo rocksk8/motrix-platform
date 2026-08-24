@@ -435,6 +435,7 @@
       ni(pg('contractor-voucher-approval-settings.html'), 'sett', '匯款申請簽核設定', ['contractor-voucher-approval-settings.html'], sa),
       ni(pg('notification-settings.html'), 'ntfy',  '通知設定',   ['notification-settings.html'],  sa),
       ni(pg('google-calendar-settings.html'), 'gcal', 'Google 行事曆設定', ['google-calendar-settings.html'], sa),
+      ni(pg('company-profile-settings.html'), 'co',   '公司資料設定',   ['company-profile-settings.html'], sa),
       ni(pg('audit-log.html'),         'hist',  '歷史紀錄',   ['audit-log.html'],         ad),
       ni(pg('shipping-export-history.html'), 'hist', '出貨單歷史紀錄', ['shipping-export-history.html'], ad),
       ni(pg('module-versions.html'),  'ver',   '版本紀錄',   ['module-versions.html'],               ad),

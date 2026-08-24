@@ -52,7 +52,7 @@ DEMO_PAYMENT_REQUEST_PDF_ARCHIVE_DIR = os.path.join(
 # （見 routers/system.py），不是 schema 變動、不需要獨立 migration。
 # v54: 報價單回簽欄位（新概念，比照 shipping_notes）＋三種單據（報價單/出貨單/
 # 開票申請憑據）補上附件上傳欄位，2026-08-24 同一輪。
-CURRENT_VERSION = 55
+CURRENT_VERSION = 56
 
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
 # execution model) whenever the current request is authenticated as the 'demo'
@@ -475,7 +475,8 @@ def init_db(path: str = None):
     _seed_setting(conn, "company_profile", {
         "name": "允碩整合集創股份有限公司",
         "tax_id": "60575481",
-        "contact_info": "Tel: 04-3610-6566｜info@miactw.com"
+        "contact_info": "Tel: 04-3610-6566｜info@miactw.com",
+        "bank_name": "", "bank_branch": "", "bank_account_name": "", "bank_account_number": "",
     })
     _seed_setting(conn, "tax_rules", {
         "version": "2026",
@@ -1511,6 +1512,27 @@ def _m054_signed_upload_files(conn):
     conn.commit()
 
 
+def _m056_user_list_prefs(conn):
+    """每位使用者對各清單（報價單列表／案件管理案件清單／案件內單據子清單…）的
+    排序偏好——排序欄位/正倒序，或拖曳自訂順序（DB v56，2026-08-24）。
+    list_key 用來區分不同清單/範圍：頂層清單固定字串（如 'quotations'／
+    'case_list'），案件內單據子清單則帶上 quote_no 範圍（如
+    'shipping_notes:MQ-202608-001'）——後端完全不解析這個字串的內容，純粹
+    當作 opaque key，範圍規則由前端呼叫端自行決定。"""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS user_list_prefs (
+            username     TEXT    NOT NULL,
+            list_key     TEXT    NOT NULL,
+            sort_mode    TEXT    NOT NULL DEFAULT '',
+            sort_dir     TEXT    NOT NULL DEFAULT 'desc',
+            custom_order TEXT    NOT NULL DEFAULT '[]',
+            updated_at   TEXT    NOT NULL DEFAULT '',
+            PRIMARY KEY (username, list_key)
+        )
+    """)
+    conn.commit()
+
+
 def _m055_case_stage_calendar_event(conn):
     """案件執行進度階段到期日 → Google 行事曆（2026-08-24，helpers/google_calendar.py
     擴充第 7 種推送事件）。跟既有 6 種「只建立、不更新」的事件不同，階段到期日
@@ -2282,6 +2304,7 @@ _MIGRATIONS = [
     _m053_payment_requests,                       # v53
     _m054_signed_upload_files,                    # v54
     _m055_case_stage_calendar_event,              # v55
+    _m056_user_list_prefs,                        # v56
 ]
 
 
