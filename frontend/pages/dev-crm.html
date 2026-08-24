@@ -1295,13 +1295,12 @@ function devCrmPage() {
     },
 
     // 案件責任分布：直接從已載入的 cases 清單彙整（salesPersonNames/plannerNames
-    // 由後端 _case_row() 已經展開好），不需要另外打 API；未指定人員的案件歸進
-    // 「未指定」桶，讓使用者看得出還有多少案件缺人力，而不是悄悄漏計
+    // 由後端 _case_row() 已經展開好），不需要另外打 API；未指定人員的案件不計入
+    // 排行榜（只統計有實際負責人的案件）
     _countByPerson(nameField) {
       const counts = {}
       for (const c of this.cases) {
-        const names = (c[nameField] && c[nameField].length) ? c[nameField] : ['未指定']
-        for (const n of names) counts[n] = (counts[n] || 0) + 1
+        for (const n of (c[nameField] || [])) counts[n] = (counts[n] || 0) + 1
       }
       return Object.entries(counts)
         .map(([name, count]) => ({ name, count }))

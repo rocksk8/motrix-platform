@@ -20,7 +20,10 @@ from fastapi import APIRouter, Header, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
 from db import get_db
-from helpers import _require_user, _warranty_expiry, _get_edge_path, _get_setting, _set_setting, payment_item_amounts
+from helpers import (
+    _require_user, _warranty_expiry, _get_edge_path, _get_setting, _set_setting,
+    payment_item_amounts, quote_won_month_map,
+)
 
 _log = logging.getLogger(__name__)
 
@@ -2128,8 +2131,9 @@ def monthly_trend(months: int = 12, authorization: str = Header(None)):
     }
 
     conn = get_db()
+    won_month = quote_won_month_map(conn)
     rows = conn.execute("""
-        SELECT total, pretax, quote_date, net_margin_pct,
+        SELECT quote_no, total, pretax, net_margin_pct,
                json_extract(data_json,'$.caseRecord') AS cr_json
         FROM quotations
         WHERE COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') IN ('已成案','已結案')
@@ -2140,7 +2144,10 @@ def monthly_trend(months: int = 12, authorization: str = Header(None)):
         total  = row["total"]  or 0
         pretax = row["pretax"] or 0
         nm     = float(row["net_margin_pct"] or 0)
-        qk     = (row["quote_date"] or "")[:7]
+        # 用實際成案月份（quote_won_month_map，見 helpers/quotations.py 說明）
+        # 而非 quote_date，否則會把整筆案件錯誤歸到報價單建立當下手動填的
+        # 日期，甚至因為那個日期落在報表範圍之外而整筆從趨勢圖上消失。
+        qk     = won_month.get(row["quote_no"], "")
 
         if qk in month_map:
             month_map[qk]["newCases"]   += 1

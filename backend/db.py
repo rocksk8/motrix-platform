@@ -62,7 +62,21 @@ DEMO_PAYMENT_REQUEST_PDF_ARCHIVE_DIR = os.path.join(
 # routers/quotations.py::update_deal_tag() 之後轉為已成案時會即時寫入
 # dealWonAt，這支 migration 只負責把修正前就已成案/已結案的舊資料補上（用
 # updated_at 當最佳可得的成交時間代理值）。
-CURRENT_VERSION = 58
+# v59: 修正 v58 backfill 的值（2026-08-24，同一天使用者實測就回報「銷售收入
+# 趨勢錯誤」）——updated_at 是「最後一次編輯」，案件成案後只要再被動過（哪怕
+# 跟 dealTag 完全無關），updated_at 就會被推遲，導致好幾筆案件被錯誤歸到很久
+# 之後才成交。改用 audit_log 裡 action='deal_tag.change' 的真實事件時間戳
+# （成案當下就寫入、不會被後續無關編輯覆蓋），查不到 audit 紀錄的舊資料則把
+# dealWonAt 拿掉、fallback 回 quote_date。
+# ⚠️ dealWonAt 這整套（v58/v59）已在同一天被 dashboard.py 的下一輪修正取代
+# ——使用者進一步要求「本月銷售」該依實際收款時間（caseRecord.payment.items[].
+# receivedAt）分組，不是案件成交（dealTag 轉已成案）的時間，兩者常常是不同
+# 月份。dashboard_monthly() 已經改用 receivedAt，不再讀 dealWonAt；
+# update_deal_tag() 也已移除寫入。v58/v59 migration 保留純粹是歷史紀錄
+# （已套用過的 schema_version 不可回頭刪除/重排），data_json.dealWonAt 這個
+# 欄位會留在既有資料裡但目前沒有任何程式碼讀取，之後如果要重新加回「成交時間」
+# 這種概念，不要複用這個欄位名稱免得語意混淆。
+CURRENT_VERSION = 59
 
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
 # execution model) whenever the current request is authenticated as the 'demo'
@@ -1512,6 +1526,46 @@ def _m058_backfill_deal_won_at(conn):
     conn.commit()
 
 
+def _m059_fix_deal_won_at_from_audit_log(conn):
+    """修正 v58 用 updated_at 猜的 dealWonAt（見上方 v59 說明）。改用 audit_log
+    裡 action='deal_tag.change'、detail.to='已成案' 的真實事件時間戳——這是每次
+    成案動作當下就寫入、不會被後續無關編輯覆蓋的權威紀錄。取每張報價單最後一次
+    轉為已成案的時間（ORDER BY at ASC 逐筆覆蓋，若曾降級又重新成案以最新一次為
+    準，符合目前狀態）。完全查不到 audit 紀錄的舊資料（例如匯入時就已經是已成案
+    狀態、從未真的呼叫過這支 API）就把 dealWonAt 拿掉，讓查詢邏輯 fallback 回
+    quote_date——沒有真實成交時間可用時，寧可維持舊行為也不要用不可靠的猜測值。
+    冪等：只在算出來的值跟目前不同時才寫入。"""
+    won_events = {}
+    for r in conn.execute(
+        "SELECT at, target_id, detail FROM audit_log WHERE action='deal_tag.change' ORDER BY at ASC"
+    ).fetchall():
+        try:
+            detail = json.loads(r["detail"] or "{}")
+        except Exception:
+            continue
+        if detail.get("to") == "已成案":
+            won_events[r["target_id"]] = r["at"]
+
+    rows = conn.execute("""
+        SELECT quote_no, data_json
+        FROM quotations
+        WHERE COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') IN ('已成案','已結案')
+    """).fetchall()
+    for r in rows:
+        data = json.loads(r["data_json"] or "{}")
+        true_won_at = won_events.get(r["quote_no"])
+        if true_won_at:
+            if data.get("dealWonAt") != true_won_at:
+                data["dealWonAt"] = true_won_at
+                conn.execute("UPDATE quotations SET data_json=? WHERE quote_no=?",
+                             (json.dumps(data, ensure_ascii=False), r["quote_no"]))
+        elif "dealWonAt" in data:
+            data.pop("dealWonAt", None)
+            conn.execute("UPDATE quotations SET data_json=? WHERE quote_no=?",
+                         (json.dumps(data, ensure_ascii=False), r["quote_no"]))
+    conn.commit()
+
+
 def _m057_payment_request_stage(conn):
     """請款單新增 stage（款項類別：full/deposit/delivery/acceptance/final，
     2026-08-24）：客戶端請款單 PDF「請款範圍」欄要顯示業務語意的分類（全額/
@@ -2351,6 +2405,7 @@ _MIGRATIONS = [
     _m056_user_list_prefs,                        # v56
     _m057_payment_request_stage,                   # v57
     _m058_backfill_deal_won_at,                    # v58
+    _m059_fix_deal_won_at_from_audit_log,          # v59
 ]
 
 

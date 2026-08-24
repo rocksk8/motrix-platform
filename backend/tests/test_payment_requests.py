@@ -60,7 +60,7 @@ def test_create_payment_request_by_amount(client, make_user):
 
     r = client.post(
         "/api/payment-requests", headers=_auth(token),
-        json={"quote_no": "MQ-PR-001", "scope": "amount", "amount": 30000},
+        json={"quote_no": "MQ-PR-001", "scope": "amount", "stage": "deposit", "amount": 30000},
     )
     assert r.status_code == 201, r.text
     request_no = r.json()["request_no"]
@@ -82,7 +82,7 @@ def test_create_payment_request_by_ratio_pct(client, make_user):
 
     r = client.post(
         "/api/payment-requests", headers=_auth(token),
-        json={"quote_no": "MQ-PR-002", "scope": "amount", "ratio_pct": 30},
+        json={"quote_no": "MQ-PR-002", "scope": "amount", "stage": "deposit", "ratio_pct": 30},
     )
     assert r.status_code == 201, r.text
     request_no = r.json()["request_no"]
@@ -99,13 +99,13 @@ def test_payment_request_blocks_overcollection(client, make_user):
 
     r1 = client.post(
         "/api/payment-requests", headers=_auth(token),
-        json={"quote_no": "MQ-PR-003", "scope": "amount", "ratio_pct": 60},
+        json={"quote_no": "MQ-PR-003", "scope": "amount", "stage": "deposit", "ratio_pct": 60},
     )
     assert r1.status_code == 201, r1.text
 
     r2 = client.post(
         "/api/payment-requests", headers=_auth(token),
-        json={"quote_no": "MQ-PR-003", "scope": "amount", "ratio_pct": 50},
+        json={"quote_no": "MQ-PR-003", "scope": "amount", "stage": "final", "ratio_pct": 50},
     )
     assert r2.status_code == 409, r2.text
 
@@ -117,7 +117,7 @@ def test_payment_request_remaining_reflects_drafts(client, make_user):
 
     client.post(
         "/api/payment-requests", headers=_auth(token),
-        json={"quote_no": "MQ-PR-004", "scope": "amount", "ratio_pct": 40},
+        json={"quote_no": "MQ-PR-004", "scope": "amount", "stage": "deposit", "ratio_pct": 40},
     )
     r = client.get("/api/payment-requests/remaining", headers=_auth(token), params={"quote_no": "MQ-PR-004"})
     assert r.status_code == 200, r.text
@@ -141,7 +141,7 @@ def test_payment_request_full_approval_cycle_no_tiers(client, make_user):
 
     r = client.post(
         "/api/payment-requests", headers=_auth(requester_token),
-        json={"quote_no": "MQ-PR-005", "scope": "amount", "amount": 50000},
+        json={"quote_no": "MQ-PR-005", "scope": "amount", "stage": "deposit", "amount": 50000},
     )
     request_no = r.json()["request_no"]
 
@@ -165,7 +165,7 @@ def test_payment_request_delete_only_allowed_in_draft(client, make_user):
 
     r = client.post(
         "/api/payment-requests", headers=_auth(token),
-        json={"quote_no": "MQ-PR-006", "scope": "amount", "amount": 10000},
+        json={"quote_no": "MQ-PR-006", "scope": "amount", "stage": "deposit", "amount": 10000},
     )
     request_no = r.json()["request_no"]
     client.post(f"/api/payment-requests/{request_no}/submit", headers=_auth(token))
@@ -175,6 +175,9 @@ def test_payment_request_delete_only_allowed_in_draft(client, make_user):
 
 
 def test_payment_request_terms_editable_only_in_draft(client, make_user):
+    # /terms（單獨改條款）端點已被整頁編輯介面用的統一 PUT /api/payment-requests/
+    # {request_no} 取代（見 routers/payment_requests.py update_payment_request()），
+    # 這裡改用新端點，其餘「僅草稿可改」的行為驗證不變。
     username, password = make_user(role="superadmin")
     token = _login(client, username, password)
     _use_no_tier_flow(client, token)
@@ -182,13 +185,16 @@ def test_payment_request_terms_editable_only_in_draft(client, make_user):
 
     r = client.post(
         "/api/payment-requests", headers=_auth(token),
-        json={"quote_no": "MQ-PR-007", "scope": "amount", "amount": 10000},
+        json={"quote_no": "MQ-PR-007", "scope": "amount", "stage": "deposit", "amount": 10000},
     )
     request_no = r.json()["request_no"]
 
     ok = client.put(
-        f"/api/payment-requests/{request_no}/terms", headers=_auth(token),
-        json={"paymentTerms": "改為分四期付款", "deliveryTerms": "", "acceptanceTerms": "", "warrantyTerms": ""},
+        f"/api/payment-requests/{request_no}", headers=_auth(token),
+        json={
+            "scope": "amount", "stage": "deposit", "amount": 10000,
+            "terms": {"paymentTerms": "改為分四期付款", "deliveryTerms": "", "acceptanceTerms": "", "warrantyTerms": ""},
+        },
     )
     assert ok.status_code == 200, ok.text
     body = client.get(f"/api/payment-requests/{request_no}", headers=_auth(token)).json()
@@ -196,8 +202,11 @@ def test_payment_request_terms_editable_only_in_draft(client, make_user):
 
     client.post(f"/api/payment-requests/{request_no}/submit", headers=_auth(token))
     blocked = client.put(
-        f"/api/payment-requests/{request_no}/terms", headers=_auth(token),
-        json={"paymentTerms": "應該被擋下", "deliveryTerms": "", "acceptanceTerms": "", "warrantyTerms": ""},
+        f"/api/payment-requests/{request_no}", headers=_auth(token),
+        json={
+            "scope": "amount", "stage": "deposit", "amount": 10000,
+            "terms": {"paymentTerms": "應該被擋下", "deliveryTerms": "", "acceptanceTerms": "", "warrantyTerms": ""},
+        },
     )
     assert blocked.status_code == 409, blocked.text
 
@@ -210,7 +219,7 @@ def test_payment_request_appears_in_unified_approval_queue(client, make_user):
 
     r = client.post(
         "/api/payment-requests", headers=_auth(token),
-        json={"quote_no": "MQ-PR-008", "scope": "amount", "amount": 20000},
+        json={"quote_no": "MQ-PR-008", "scope": "amount", "stage": "deposit", "amount": 20000},
     )
     request_no = r.json()["request_no"]
     client.post(f"/api/payment-requests/{request_no}/submit", headers=_auth(token))

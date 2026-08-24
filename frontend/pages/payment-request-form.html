@@ -470,6 +470,19 @@ function paymentRequestForm() {
           const d = await r.json()
           this.customerName = d.customer_name || ''
           this.projectName = d.project_name || ''
+          // 新建請款單時，四、請款條件預設帶入該報價單目前的條款內容（比照後端
+          // _quote_default_terms() 建立當下的行為，但這裡是使用者存檔前就先看到、
+          // 可直接編輯）；編輯既有草稿時 q.terms 已經是這張請款單自己存過的版本
+          // （applyData() 設定），不可被這裡覆蓋掉使用者已修改的內容。
+          if (this.isNew) {
+            const qd = d.data || {}
+            this.q.terms = {
+              paymentTerms:    qd.paymentTerms    || '',
+              deliveryTerms:   qd.deliveryTerms   || '',
+              acceptanceTerms: qd.acceptanceTerms || '',
+              warrantyTerms:   qd.warrantyTerms   || '',
+            }
+          }
         }
       } catch (e) {}
     },

@@ -346,21 +346,41 @@ def dashboard_monthly(authorization: str = Header(None)):
     if role not in ("superadmin", "admin") and "finance" not in mods:
         return {"items": []}
     conn = get_db()
-    # 分組依據優先用 dealWonAt（案件實際轉為「已成案」的時間戳，2026-08-24 起
-    # 於 update_deal_tag() 寫入）而非 quote_date——quote_date 是報價單建立當下
-    # 手動填的日期，常常跟業務員實際簽下這筆案子的月份對不上，會導致當月營收
-    # 被歸到錯的月份。dealWonAt 是這輪才新增的欄位，成案時間早於這次修正的舊
-    # 資料沒有這個值，一律 fallback 回 quote_date 維持既有行為，不需要回填遷移。
-    rows = conn.execute("""
-        SELECT substr(COALESCE(NULLIF(json_extract(data_json,'$.dealWonAt'),''), quote_date), 1, 7) AS month,
-               SUM(total)  AS amount,
-               COUNT(*)    AS cnt
-        FROM quotations
-        WHERE COALESCE(NULLIF(json_extract(data_json,'$.dealWonAt'),''), quote_date, '') != ''
-          AND COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') IN ('已成案','已結案')
-        GROUP BY month
-        ORDER BY month ASC
-    """).fetchall()
+    # 依實際收款進度與時間分組（2026-08-24，第二輪修正）：使用者指出「銷售收入
+    # 趨勢」該反映真正收到錢的月份，不是案件成交（dealTag 轉為已成案，第一輪
+    # 用 dealWonAt 修正的邏輯）的月份——業務簽單跟財務實際收款常常不同月份，
+    # 同一張報價單也常分好幾期款項陸續收款，理當各自算進實際收到的那個月。
+    # 改用 caseRecord.payment.items[]（案件管理頁「款項明細」，每期有
+    # received/receivedAt/actualAmount）逐筆展開，只計入 received=true 的款項，
+    # 依 receivedAt 分組；金額優先用使用者填的 actualAmount（實收金額，含稅／
+    # 可能因手續費打折等因素跟應收金額不同），未填則退回 payment_item_amounts()
+    # 換算出的應收金額。跟「應收款狀態」圓環（本檔案上方 recv_received 那段）
+    # 共用同一套換算邏輯，避免兩處分開實作、算出不一致的數字。
+    rows = conn.execute(
+        "SELECT total, data_json FROM quotations WHERE deal_tag IN ('已成案','已結案')"
+    ).fetchall()
+
+    monthly_amount, monthly_count, monthly_fee = {}, {}, {}
+    for r in rows:
+        try:
+            data = json.loads(r["data_json"] or "{}")
+        except Exception:
+            continue
+        pay_items = ((data.get("caseRecord") or {}).get("payment") or {}).get("items") or []
+        if not pay_items:
+            continue
+        amounts = payment_item_amounts(r["total"] or 0, pay_items)
+        for i, p in enumerate(pay_items):
+            if not p.get("received"):
+                continue
+            mo = (p.get("receivedAt") or "")[:7]
+            if not mo:
+                continue
+            act_amt = p.get("actualAmount")
+            amt = act_amt if act_amt is not None else amounts[i]
+            monthly_amount[mo] = monthly_amount.get(mo, 0) + amt
+            monthly_count[mo]  = monthly_count.get(mo, 0) + 1
+            monthly_fee[mo]    = monthly_fee.get(mo, 0) + (p.get("feeAmount") or 0)
 
     today = date.today()
     month_list = []
@@ -372,13 +392,21 @@ def dashboard_monthly(authorization: str = Header(None)):
             y -= 1
         month_list.append(f"{y:04d}-{m:02d}")
 
-    data_map = {r["month"]: {"amount": r["amount"] or 0, "count": r["cnt"] or 0} for r in rows}
-
     items = []
     for mo in month_list:
-        d = data_map.get(mo, {"amount": 0, "count": 0})
         label = f"{int(mo[5:7])}月"
-        items.append({"month": mo, "label": label, "amount": d["amount"], "count": d["count"]})
+        gross = monthly_amount.get(mo, 0)
+        fee   = monthly_fee.get(mo, 0)
+        items.append({
+            "month": mo, "label": label,
+            "amount": gross,
+            "count":  monthly_count.get(mo, 0),
+            # 手續費/扣款＋淨收（首頁「當月實收」圓餅圖用，2026-08-25）：跟
+            # amount 共用同一組 receivedAt 篩選過的款項明細，保證兩者加總對得
+            # 起來，不是兩套各自平行的計算。
+            "fee": fee,
+            "net": gross - fee,
+        })
 
     return {"items": items}
 

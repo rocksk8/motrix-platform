@@ -990,6 +990,24 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
 
+### 2026-08-25a — 營運報表成案趨勢比照修正＋兩個 Chart.js 疑難雜症＋首頁新增當月實收圓餅圖
+
+- **`reports.py::monthly_trend()` 比照 dashboard.py 同一天的修法**：新增共用工具 `helpers/quotations.py::quote_won_month_map()`（讀 `audit_log` 裡 `deal_tag.change` 事件的真實時間戳，查不到才 fallback 回 `quote_date`），套用到「近12月成案趨勢」的成案件數/合約金額分組——修前有一筆金額達 NT$284 萬的合約因為 `quote_date` 誤填未來月份，直接從近 12 月範圍消失，使用者回報「異常沒有顯示」。
+- **順手抓到兩個真正讓圖表偶爾整片空白的 Chart.js/Alpine 疑難雜症**（跟上面的資料 bug 是兩回事，用 Claude in Chrome 實際打開頁面反覆測試＋讀 console/canvas pixel data 才抓到）：
+  1. `frontend/js/reports.js` 原本把 5 個 Chart.js 實例存進 `this._charts`（Alpine `x-data` 底下的 reactive 屬性），Alpine 會把整個物件樹遞迴包成 reactive Proxy，Chart.js 實例內部大量 getter/循環參照被包住後渲染邏輯異常（對包住的 chart 呼叫方法甚至會直接 `RangeError: Maximum call stack size exceeded`）。改成模組層級的一般物件 `_reportCharts`，不再放進 Alpine data——`frontend/index.html` 的 Chart.js 用法本來就沒把實例存進 Alpine data，是同一個坑的正確示範。
+  2. 「近12月成案趨勢」這張混合長條+雙Y軸圖表在同一次分頁切換裡會被建立兩次（先用退回資料畫一次，`_loadTrendData()` 抓到真實資料後再重建一次），Chart.js 預設用 `requestAnimationFrame` 分幀漸進動畫繪製，第一次動畫還沒畫完就被第二次 `destroy()` 砍掉，孤兒 rAF callback 之後照樣嘗試繼續畫、此時畫布已清空，直接噴 `Uncaught TypeError: Cannot read properties of null (reading 'save')`——每次切頁籤幾乎都在悄悄炸一次。全域關掉 `Chart.defaults.animation` 排除整類「跨影格未完成繪製」的 race。
+- **首頁新增「當月實收」圓餅圖**：使用者要求參考既有「應收款狀態」圓環，過程中發現那張卡片小標寫「本月」但實際是全時間累計（`dashboard_stats()` 的 `receivableSummary` 沒有依日期篩選），順手把小標修成「累計」，避免誤導；新卡片切「淨收金額」vs「手續費/扣款」兩塊（使用者透過 AskUserQuestion 確認），擴充既有 `dashboard_monthly()`（同一輪剛修好、已驗證的 receivedAt 分組邏輯）多回傳 `fee`/`net` 兩個欄位，保證新卡片跟「本月銷售」KPI 共用同一份資料來源、加總對得起來，不是兩套平行計算。
+- **補測試缺口**：`tests/test_payment_requests.py` 8 個測試原本用舊格式（缺 `stage` 必填欄位、呼叫已被整頁編輯介面統一 PUT 取代的舊 `/terms` 端點）建立請款單，是 2026-08-24d 那輪整頁化改動時漏改的既有測試——`build_deploy_package.ps1` 打包前的 pytest 關卡這次才抓到，已同步更新至 124 全過。
+- **驗證**：用 Claude in Chrome 反覆重新整理／切頁籤十幾輪，含直接讀 canvas `getImageData` 比對長條/線段顏色與座標軸範圍，確認 5 張圖穩定渲染；首頁新卡片與既有「本月銷售」KPI 交叉核對加總一致；`python -m pytest -q` 124 全過；`py_compile`/`node --check` 全過。
+
+### 2026-08-24e — 「銷售收入趨勢」改依實際收款時間分組（三度修正，取代 dealWonAt，DB v57~59 保留但欄位已停用）
+
+- **背景**：2026-08-24d 那輪把「本月銷售」從依 `quote_date` 分組改成依 `dealWonAt`（案件轉為已成案的時間，DB v58 backfill＋v59 用 audit_log 修正 updated_at 誤差版），使用者實測後進一步指出：真正該看的不是「案件何時成交」，是「錢何時實際收到」——業務簽單跟財務收款常常不同月，同一張單也常分好幾期陸續收款，理當各自算進收到的那個月。
+- **改用 `caseRecord.payment.items[]`**（案件管理頁「款項明細」，每期有 `received`/`receivedAt`/`actualAmount`）：`dashboard.py::dashboard_monthly()` 改成逐張報價單展開款項期別，只計入 `received=true` 的期別，依 `receivedAt` 分組；金額優先用 `actualAmount`（實收金額，可能因手續費打折跟應收金額不同），未填則退回 `payment_item_amounts()` 換算的應收金額——跟「應收款狀態」圓環共用同一套換算邏輯，避免兩處算出不一致的數字。
+- **`dealWonAt` 停用**：`routers/quotations.py::update_deal_tag()` 移除寫入；DB v58/v59 migration 保留（已套用過的 schema_version 不可回頭刪除/重排），既有 `data_json.dealWonAt` 欄位留在資料裡但目前沒有任何程式碼讀取，之後若要重新做「成交時間」這種概念不要複用這個欄位名稱。
+- **順手發現的資料缺口**：`MQ-202608-003` 有一期款項標記已收款但收款日期欄位是空的，導致這筆 NT$24,500 沒被算進任何月份（無日期無法歸月，非程式邏輯問題）——已回報給使用者，需要到案件管理頁補填收款日期。
+- **驗證**：用真實 db 直接呼叫新邏輯（非重寫）逐筆列出所有 `caseRecord.payment.items`，人工核對每一筆 received/receivedAt/actualAmount 對應到的月份彙總結果，確認換算與過濾條件（未填日期不歸月、優先用實收金額）符合預期；`py_compile` 三個改動檔案全過；本機 127.0.0.1:666 重啟驗證 `/api/ping` 正常。
+
 ### 2026-08-24d — 請款單整頁化（比照報價單）＋新增「款項類別」欄位＋客戶端 PDF 精簡（DB v57）
 
 - **背景**：使用者要求請款單 PDF（給客戶看的文件）拿掉簽核流程／財務單位／申請人這些內部資訊，字體顏色要統一；請款範圍改成「全額/訂金款/交貨款/驗收款/尾款」可手動選擇的業務語意分類；後續又要求整個建立/編輯流程「變得跟報價單一樣，有一個完整的介面可以處理」，取代原本塞在案件管理頁裡的小 Modal。

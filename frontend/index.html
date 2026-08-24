@@ -713,12 +713,12 @@
         </div>
       </div>
 
-      <!-- 應收款圓環 -->
+      <!-- 應收款圓環（全時間累計，非本月——2026-08-25 修正誤標） -->
       <div class="chart-card">
         <div class="chart-card__head">
           <div>
             <div class="chart-card__title">應收款狀態</div>
-            <div class="chart-card__sub">本月（NT$）</div>
+            <div class="chart-card__sub">累計（NT$）</div>
           </div>
         </div>
         <div class="chart-card__body--center" style="height:240px">
@@ -745,6 +745,47 @@
                 <div class="legend-dot" style="background:#E8E5DF"></div>
                 <span style="color:var(--text-secondary)">應收總額</span>
                 <span class="legend-item__val" x-text="fmtAmount(stats.receivableSummary?.total || 0)">—</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 當月實收圓環（真正依收款日期分月，2026-08-25 新增——跟「應收款狀態」
+           上面那張全時間累計的圓環不同，這張才是名符其實的「本月」數字，
+           跟「銷售收入趨勢」卡片的「本月銷售」KPI 共用同一組 /api/dashboard/monthly
+           資料來源，淨收＋手續費加總會等於本月銷售金額 ── 見同一輪修正 -->
+      <div class="chart-card">
+        <div class="chart-card__head">
+          <div>
+            <div class="chart-card__title">當月實收</div>
+            <div class="chart-card__sub">本月（NT$）</div>
+          </div>
+        </div>
+        <div class="chart-card__body--center" style="height:240px">
+          <div class="ring-wrap">
+            <canvas id="chartMonthlyCollection" width="160" height="160"></canvas>
+            <div class="ring-center">
+              <div class="ring-center__val" x-text="(currentMonthNet + currentMonthFee) > 0 ? 'NT$ ' + Math.round(currentMonthNet + currentMonthFee).toLocaleString() : '—'">—</div>
+              <div class="ring-center__label">實收</div>
+            </div>
+          </div>
+          <div class="legend">
+            <div class="legend-item">
+              <div class="legend-dot" style="background:var(--success)"></div>
+              <span style="color:var(--text-secondary)">淨收金額</span>
+              <span class="legend-item__val" style="color:var(--success)" x-text="fmtAmount(currentMonthNet)">—</span>
+            </div>
+            <div class="legend-item">
+              <div class="legend-dot" style="background:var(--warning)"></div>
+              <span style="color:var(--text-secondary)">手續費/扣款</span>
+              <span class="legend-item__val" style="color:var(--warning)" x-text="fmtAmount(currentMonthFee)">—</span>
+            </div>
+            <div style="border-top:1px solid var(--border-light);padding-top:8px;margin-top:4px">
+              <div class="legend-item">
+                <div class="legend-dot" style="background:#E8E5DF"></div>
+                <span style="color:var(--text-secondary)">本月實收毛額</span>
+                <span class="legend-item__val" x-text="fmtAmount(currentMonthNet + currentMonthFee)">—</span>
               </div>
             </div>
           </div>
@@ -1097,6 +1138,18 @@
         const m = this.expenses.find(x => x.month === key)
         return m ? m.total : 0
       },
+      get currentMonthNet() {
+        const now = new Date()
+        const key = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0')
+        const m = this.monthly.find(x => x.month === key)
+        return m ? m.net : 0
+      },
+      get currentMonthFee() {
+        const now = new Date()
+        const key = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0')
+        const m = this.monthly.find(x => x.month === key)
+        return m ? m.fee : 0
+      },
       get receivedPct() {
         const rv = this.stats.receivableSummary || {}
         return rv.total > 0 ? Math.round(rv.received / rv.total * 100) : 0
@@ -1303,7 +1356,7 @@
       data: {
         labels: revLabels,
         datasets: [{
-          label: '報價金額',
+          label: '成交金額',
           data: revData,
           borderColor: accent, borderWidth: 2,
           fill: true, backgroundColor: revGrad,
@@ -1313,6 +1366,9 @@
       },
       options: {
         responsive: true, maintainAspectRatio: false,
+        // index + intersect:false：滑鼠只要在該月份的垂直區間內（不用精準點在
+        // 圓點上）就觸發 tooltip，比預設的 nearest+intersect:true 好操作
+        interaction: { mode: 'index', intersect: false },
         plugins: {
           legend: {
             display: true, position: 'top', align: 'end',
@@ -1408,6 +1464,31 @@
         datasets: [{
           data: rvData,
           backgroundColor: [success, danger],
+          borderWidth: 0, spacing: 2
+        }]
+      },
+      options: {
+        responsive: false, cutout: '72%',
+        plugins: { legend: { display: false }, tooltip: {
+          backgroundColor: black, bodyColor: cream, padding: 8, cornerRadius: 6,
+          callbacks: { label: ctx => ' NT$ ' + ctx.raw.toLocaleString() }
+        }},
+        animation: { duration: 1000, easing: 'easeInOutQuart' }
+      }
+    })
+
+    /* ── 當月實收圓環（真正依收款日期分月，跟 currentMonthNet/currentMonthFee getter 讀同一份 monthly 資料）── */
+    const mcNow = new Date()
+    const mcKey = mcNow.getFullYear() + '-' + String(mcNow.getMonth() + 1).padStart(2, '0')
+    const mcMonth = (monthly || []).find(x => x.month === mcKey)
+    const mcGross = mcMonth ? { net: mcMonth.net || 0, fee: mcMonth.fee || 0 } : { net: 0, fee: 0 }
+    new Chart(document.getElementById('chartMonthlyCollection'), {
+      type: 'doughnut',
+      data: {
+        labels: ['淨收金額', '手續費/扣款'],
+        datasets: [{
+          data: (mcGross.net + mcGross.fee) > 0 ? [mcGross.net, mcGross.fee] : [1, 0],
+          backgroundColor: [success, warning],
           borderWidth: 0, spacing: 2
         }]
       },

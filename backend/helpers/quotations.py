@@ -59,6 +59,44 @@ def payment_item_amounts(total: float, pay_items: list) -> list:
     return out
 
 
+def quote_won_month_map(conn) -> dict:
+    """回傳 {quote_no: 'YYYY-MM'}，該報價單「實際轉為已成案」的月份，用於
+    成案趨勢一類報表按月分組（2026-08-24）。
+
+    不能用 quote_date（報價單建立當下手動填的日期）——業務員實際簽下這筆案子
+    的時間常常對不上，甚至可能是提前估價填的未來日期，導致同一份報表裡有些
+    案件被歸到錯誤的月份，有些甚至因為 quote_date 落在報表的近 N 月範圍之外
+    而整筆從趨勢圖上消失（實測發現一筆 quote_date 誤填在未來月份的合約，金額
+    達 NT$284 萬，就這樣從「近 12 月成案趨勢」裡憑空消失）。
+
+    真正權威的時間來源是 audit_log 裡 action='deal_tag.change'、
+    detail.to='已成案' 的事件時間戳——是每次成案動作當下就寫入、不會被後續
+    無關編輯覆蓋的紀錄（同一輪也用這套方法修正過 dashboard 的 dealWonAt
+    backfill，見 db.py v59 說明）。取每張報價單最後一次轉為已成案的時間（若
+    曾降級又重新成案，以最新一次為準）。查不到 audit 紀錄的舊資料（例如匯入
+    時就已經是已成案狀態、從未真的呼叫過 deal-tag API）才 fallback 回
+    quote_date。"""
+    won_events: dict = {}
+    for r in conn.execute(
+        "SELECT at, target_id, detail FROM audit_log WHERE action='deal_tag.change' ORDER BY at ASC"
+    ).fetchall():
+        try:
+            detail = json.loads(r["detail"] or "{}")
+        except Exception:
+            continue
+        if detail.get("to") == "已成案":
+            won_events[r["target_id"]] = r["at"]
+
+    result = {}
+    for r in conn.execute(
+        f"SELECT quote_no, quote_date FROM quotations WHERE {SQL_DEAL_TAG} IN ('已成案','已結案')"
+    ).fetchall():
+        won_at = won_events.get(r["quote_no"]) or r["quote_date"] or ""
+        if won_at:
+            result[r["quote_no"]] = won_at[:7]
+    return result
+
+
 def quote_hot_fields(q: dict) -> tuple:
     """Return (deal_tag, settle_status) from a quotation data dict."""
     if not isinstance(q, dict):

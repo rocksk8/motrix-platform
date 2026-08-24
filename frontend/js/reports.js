@@ -1,4 +1,7 @@
 /* global Alpine */
+// Chart.js 實例故意放在 Alpine reactive data 之外（見 initCharts() 註解說明原因）
+const _reportCharts = {}
+
 function reportsApp() {
   return {
     // ── Period state ──────────────────────────────────────────────────────────
@@ -311,12 +314,22 @@ function reportsApp() {
     },
 
     activeTab: 'targets',
-    _charts:   {},
 
     // ── Charts (圖表分析) ──────────────────────────────────────────────────────
+    // Chart.js 實例故意用模組層級的 _reportCharts（見檔案最上方），不放進這個
+    // Alpine 元件的 reactive data：Alpine 會把 x-data 物件底下每個屬性遞迴包成
+    // reactive Proxy，Chart.js 實例內部有大量 getter／循環參照／animation
+    // registry，被 Proxy 包住後會讓內部渲染迴圈行為異常——實測現象是「近12月
+    // 成案趨勢」這張混合長條+雙Y軸圖表，物件內部資料（datasets/scales）完全
+    // 正確，但畫布實際畫出來的內容卻是舊的／不完整的，且對 proxy 包住的 chart
+    // 實例呼叫方法會直接噴 RangeError: Maximum call stack size exceeded（Alpine
+    // 的 reactive getter 對 Chart.js 內部循環結構遞迴到爆堆疊）。同樣邏輯下,
+    // status/sales/target/margin 這幾張比較單純的圖恰好沒踩到會爆的內部程式
+    // 路徑，只有這張最複雜的圖表現出來。frontend/index.html 的 Chart.js 用法
+    // 從頭到尾都不把 chart 實例存進 Alpine data，是同一個坑的正確示範。
     initCharts() {
-      Object.values(this._charts).forEach(function(c) { try { c.destroy() } catch(_) {} })
-      this._charts = {}
+      Object.values(_reportCharts).forEach(function(c) { try { c.destroy() } catch(_) {} })
+      Object.keys(_reportCharts).forEach(function(k) { delete _reportCharts[k] })
       if (!this.data) return
       // Clear any lingering canvas state after destroy
       ;['rpt-chart-trend','rpt-chart-status','rpt-chart-sales','rpt-chart-target','rpt-chart-margin'].forEach(function(id) {
@@ -326,6 +339,16 @@ function reportsApp() {
       Chart.defaults.font.family = "'LINE Seed TW_OTF', sans-serif"
       Chart.defaults.font.size   = 11
       Chart.defaults.color       = '#6B7280'
+      // 關掉全域動畫：trend 這張圖在同一次分頁切換裡會被建立兩次（一次用
+      // casesAll 退回值先畫，_loadTrendData() 抓到真實 receivedAt 資料後再重建
+      // 一次），Chart.js 預設用 requestAnimationFrame 驅動的漸進動畫繪製，第一
+      // 次建立的動畫還沒畫完，第二次 destroy() 就把它砍了，砍掉後那個還沒觸發
+      // 的 rAF callback照樣會在下一影格嘗試繼續畫，此時 ctx 已經被清空，直接
+      // 噴 Uncaught TypeError: Cannot read properties of null (reading 'save')
+      // ——每次切到這個頁籤幾乎都會炸一次，只是不影響其他已經同步畫完的圖，
+      // 不容易被發現。關掉動畫後 Chart.js 在建構/update 當下就同步畫完，不再
+      // 有任何跨越多個影格的未完成繪製，從根本上排除這整類 race。
+      Chart.defaults.animation = false
       try { this._buildTrendChart()  } catch(e) { console.error('trend chart:', e) }
       try { this._buildStatusChart() } catch(e) { console.error('status chart:', e) }
       if (this.salesPerf.length > 0)
@@ -334,6 +357,15 @@ function reportsApp() {
         try { this._buildTargetChart() } catch(e) { console.error('target chart:', e) }
       if (this.marginCases.length > 0)
         try { this._buildMarginChart() } catch(e) { console.error('margin chart:', e) }
+      // 五張圖是在同一輪同步迴圈裡陸續建立的，每建一張、卡片版面就可能因為
+      // 相鄰卡片高度變化再收斂一次，讓 Chart.js 建構當下量到的 canvas 尺寸
+      // 過期（實測會出現座標軸畫對了、長條/線段卻沒畫上去的空白圖）。全部
+      // 建完後再等下一個影格統一補一次 resize，用瀏覽器這時已經穩定的版面
+      // 重新量一次，修正這種殘留的過期尺寸。
+      var self = this
+      requestAnimationFrame(function() {
+        Object.values(_reportCharts).forEach(function(c) { try { c.resize() } catch(_) {} })
+      })
     },
 
     _buildTrendChart() {
@@ -418,10 +450,10 @@ function reportsApp() {
         })
       }
 
-      if (this._charts.trend) {
-        try { this._charts.trend.destroy() } catch(_) {}
+      if (_reportCharts.trend) {
+        try { _reportCharts.trend.destroy() } catch(_) {}
       }
-      this._charts.trend = new Chart(el, {
+      _reportCharts.trend = new Chart(el, {
         type: 'bar',
         data: {
           labels:   months.map(function(m) { return m.label }),
@@ -471,7 +503,7 @@ function reportsApp() {
       if (!el) return
       var s = this.summary
       var total = s.totalCases || 0
-      this._charts.status = new Chart(el, {
+      _reportCharts.status = new Chart(el, {
         type: 'doughnut',
         data: {
           labels: ['進行中', '已結案'],
@@ -505,7 +537,7 @@ function reportsApp() {
       var el = document.getElementById('rpt-chart-sales')
       if (!el) return
       var sp = this.salesPerf.slice(0, 8)
-      this._charts.sales = new Chart(el, {
+      _reportCharts.sales = new Chart(el, {
         type: 'bar',
         data: {
           labels: sp.map(function(s) { return s.salesPerson }),
@@ -567,7 +599,7 @@ function reportsApp() {
         if (!r) return '#E5E7EB'
         return r >= 95 ? '#15803D' : r >= 80 ? '#D97706' : '#DC2626'
       })
-      this._charts.target = new Chart(el, {
+      _reportCharts.target = new Chart(el, {
         type: 'bar',
         data: {
           labels: LBLS,
@@ -634,7 +666,7 @@ function reportsApp() {
       var actual = labels.map(function(sp) {
         var v = spMap[sp].act; return v.length ? v.reduce(function(a, b) { return a + b }, 0) / v.length : null
       })
-      this._charts.margin = new Chart(el, {
+      _reportCharts.margin = new Chart(el, {
         type: 'bar',
         data: {
           labels: labels,
@@ -729,8 +761,10 @@ function reportsApp() {
           this.trendLoaded = true
           if (this.activeTab === 'charts') {
             var self = this
-            requestAnimationFrame(function() {
-              try { self._buildTrendChart() } catch(e) { console.error('trend rebuild:', e) }
+            this.$nextTick(function() {
+              requestAnimationFrame(function() {
+                try { self._buildTrendChart() } catch(e) { console.error('trend rebuild:', e) }
+              })
             })
           }
         }
@@ -762,18 +796,25 @@ function reportsApp() {
       return 'NT$ ' + Math.round(n).toLocaleString()
     },
 
-    // Called by the 圖表分析 tab button; uses rAF so layout is done before Chart.js measures canvas
+    // Called by the 圖表分析 tab button. $nextTick waits for Alpine to finish
+    // patching the DOM for this activeTab change (the x-show toggle that
+    // actually reveals the chart cards) — the same pattern already used
+    // elsewhere in this codebase (e.g. case-management.js's
+    // this.$nextTick(() => this._initSubListSortable(...))) before touching
+    // freshly-shown DOM with a third-party library. The extra rAF on top
+    // waits for the browser to actually complete a layout pass, since
+    // Chart.js reads the canvas's rendered size at construction time.
     showChartsTab() {
       this.activeTab = 'charts'
       if (!this.data) return
       if (!this.trendLoaded && !this.trendLoading) this._loadTrendData()
       var self = this
-      requestAnimationFrame(function() {
+      this.$nextTick(function() {
         requestAnimationFrame(function() {
-          if (Object.keys(self._charts).length === 0) {
+          if (Object.keys(_reportCharts).length === 0) {
             self.initCharts()
           } else {
-            Object.values(self._charts).forEach(function(c) { try { c.resize() } catch(_) {} })
+            Object.values(_reportCharts).forEach(function(c) { try { c.resize() } catch(_) {} })
           }
         })
       })
