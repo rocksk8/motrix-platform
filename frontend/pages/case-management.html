@@ -52,6 +52,8 @@
        加深顏色、日期維持小字淡色，強化主次層級（原本兩者字級/顏色幾乎沒有區隔）。 */
     .cm-card__amount { font-size:12.5px; font-family:LINE Seed TW_OTF, sans-serif; font-weight:700; color:var(--text-primary); }
     .cm-card__date { font-size:9.5px; color:var(--text-dim); font-family:LINE Seed TW_OTF, sans-serif; }
+    .cm-card__stageprog { font-size:9.5px; font-weight:700; padding:1px 6px; border-radius:10px; background:#EEF2FF; color:var(--accent); font-family:LINE Seed TW_OTF, sans-serif; flex-shrink:0; }
+    .cm-card__stageprog--danger { background:#FEE2E2; color:var(--danger); }
     .cm-empty { padding:40px 20px; text-align:center; color:var(--text-dim); font-size:13px; font-family:var(--font-zh); display:flex; flex-direction:column; align-items:center; gap:6px; }
     .cm-empty__sub { font-size:11px; font-family:var(--font-zh); color:var(--text-dim); opacity:.65; }
     .cm-list__tab-badge { display:inline-flex; align-items:center; justify-content:center; min-width:16px; padding:0 4px; height:16px; background:#E5E7EB; color:#6B7280; font-size:9px; font-weight:700; font-family:LINE Seed TW_OTF, sans-serif; border-radius:8px; margin-left:3px; line-height:1; }
@@ -171,6 +173,16 @@
     .prog__fill--blue { background:linear-gradient(90deg,var(--accent),#818CF8); }
     .prog__fill--green { background:linear-gradient(90deg,var(--success),#22C55E); }
 
+    /* Stage segmented progress bar（視覺化改版，2026-08-24：取代單色 .prog，每階段一段） */
+    .stage-segbar { display:flex; gap:3px; height:8px; border-radius:99px; overflow:hidden; background:#EEECEA; }
+    .stage-segbar__seg { flex:1; height:100%; cursor:pointer; transition:opacity .15s; }
+    .stage-segbar__seg:hover { opacity:.75; }
+    .stage-segbar__seg--done { background:var(--success); }
+    .stage-segbar__seg--current { background:var(--accent); }
+    .stage-segbar__seg--future { background:#D9D7D2; }
+    .stage-segbar__seg--overdue { background:var(--danger); }
+    .stage-segbar__seg--empty { background:#EEECEA; flex:1; }
+
     /* Stage cards */
     .stage-card { border:1px solid var(--border-light); border-radius:10px; margin-bottom:10px; background:#fff; box-shadow:0 1px 2px rgba(0,0,0,.04); overflow:hidden; transition:box-shadow .15s; }
     .stage-card:hover { box-shadow:0 2px 8px rgba(0,0,0,.08); }
@@ -178,6 +190,14 @@
     .stage-card__head { display:flex; align-items:center; gap:8px; padding:10px 12px; border-bottom:1px solid #F0EFEB; background:#FAFAF9; }
     .stage-card--done .stage-card__head { background:#F0FDF4; border-color:#BBF7D0; }
     .stage-card__body { padding:10px 12px; background:#fff; }
+    .stage-avatars { display:flex; align-items:center; cursor:pointer; flex-shrink:0; }
+    .stage-avatar-dot {
+      width:20px; height:20px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center;
+      font-size:9px; font-weight:700; color:#fff; border:2px solid #fff; margin-left:-6px; flex-shrink:0;
+    }
+    .stage-avatar-dot:first-child { margin-left:0; }
+    .stage-avatar-dot--empty { background:#F0EEE9; color:var(--text-dim); border:2px dashed var(--border-light); }
+    .stage-avatar-dot--more { background:#E5E3DE; color:var(--text-secondary); font-size:8.5px; }
     .visit-row { display:grid; grid-template-columns:122px 50px 1fr 22px; gap:6px; align-items:start; margin-bottom:5px; }
     .stage-detail { padding:10px 12px; background:#FAFAF9; border-bottom:1px dashed #E5E7EB; }
     .stage-detail__row { margin-bottom:10px; }
@@ -483,7 +503,13 @@
               <div class="cm-card__customer" x-text="c.customer_name || '(未填客戶)'"></div>
               <div class="cm-card__sales" x-show="c.sales_person" x-text="'業務：' + c.sales_person"></div>
               <div class="cm-card__footer">
-                <span class="cm-card__amount" x-text="'NT$ ' + (c.total||0).toLocaleString()"></span>
+                <span style="display:flex;align-items:center;gap:6px;overflow:hidden">
+                  <span class="cm-card__amount" x-text="'NT$ ' + (c.total||0).toLocaleString()"></span>
+                  <span class="cm-card__stageprog" x-show="c.stage_total > 0"
+                        :class="{'cm-card__stageprog--danger': c.stage_overdue > 0}"
+                        x-text="Math.round((c.stage_done||0) / (c.stage_total||1) * 100) + '%'"
+                        :title="(c.stage_done||0) + '/' + (c.stage_total||0) + ' 階段完成' + (c.stage_overdue>0 ? '，' + c.stage_overdue + ' 項逾期' : '')"></span>
+                </span>
                 <span class="cm-card__date" x-text="(c.quote_date || c.created_at || '').slice(0,10)"></span>
               </div>
             </div>
@@ -515,7 +541,13 @@
                   </div>
                   <div class="cm-card__customer" x-text="c.customer_name || '(未填客戶)'"></div>
                   <div class="cm-card__footer">
-                    <span class="cm-card__amount" x-text="'NT$ ' + (c.total||0).toLocaleString()"></span>
+                    <span style="display:flex;align-items:center;gap:6px;overflow:hidden">
+                      <span class="cm-card__amount" x-text="'NT$ ' + (c.total||0).toLocaleString()"></span>
+                      <span class="cm-card__stageprog" x-show="c.stage_total > 0"
+                            :class="{'cm-card__stageprog--danger': c.stage_overdue > 0}"
+                            x-text="Math.round((c.stage_done||0) / (c.stage_total||1) * 100) + '%'"
+                            :title="(c.stage_done||0) + '/' + (c.stage_total||0) + ' 階段完成' + (c.stage_overdue>0 ? '，' + c.stage_overdue + ' 項逾期' : '')"></span>
+                    </span>
                     <span class="cm-card__date" x-text="(c.quote_date || c.created_at || '').slice(0,10)"></span>
                   </div>
                 </div>
@@ -991,8 +1023,12 @@
               <div x-show="execSubTab==='progress'">
                 <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px">
                   <div style="flex:1">
-                    <div class="prog">
-                      <div class="prog__fill prog__fill--blue" :style="'width:' + caseProgressPct() + '%'"></div>
+                    <div class="stage-segbar">
+                      <template x-for="st in (cr.caseRecord?.stages || [])" :key="'seg-' + st.id">
+                        <div class="stage-segbar__seg" :class="stageSegClass(st)" :title="stageSegTooltip(st)"
+                             @click="toggleStageDetail(st.id)"></div>
+                      </template>
+                      <div class="stage-segbar__seg stage-segbar__seg--empty" x-show="!(cr.caseRecord?.stages || []).length"></div>
                     </div>
                   </div>
                   <span style="font-size:14px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;color:var(--accent);min-width:42px;text-align:right" x-text="caseProgressPct() + '%'"></span>
@@ -1038,6 +1074,18 @@
                         <input type="date" x-model="st.doneAt" @change="updateStage(st, {doneAt: st.doneAt})"
                                style="font-size:11px;border:1px solid #86EFAC;border-radius:5px;padding:3px 6px;background:#F0FDF4;color:#15803D;font-family:LINE Seed TW_OTF, sans-serif;outline:none">
                       </template>
+                      <div class="stage-avatars" @click="toggleStageDetail(st.id)" title="點擊查看／編輯負責人">
+                        <template x-if="!(st.assignedTo || []).length">
+                          <span class="stage-avatar-dot stage-avatar-dot--empty">？</span>
+                        </template>
+                        <template x-for="uname in (st.assignedTo || []).slice(0,3)" :key="uname">
+                          <span class="stage-avatar-dot" :style="{background: _avatarColor(uname)}"
+                                :title="_userDisplay(uname)" x-text="_userDisplay(uname)[0] || uname[0]"></span>
+                        </template>
+                        <template x-if="(st.assignedTo || []).length > 3">
+                          <span class="stage-avatar-dot stage-avatar-dot--more" x-text="'+' + ((st.assignedTo||[]).length - 3)"></span>
+                        </template>
+                      </div>
                       <span style="font-size:10px;padding:2px 7px;border-radius:4px;font-weight:600;font-family:LINE Seed TW_OTF, sans-serif;flex-shrink:0;white-space:nowrap"
                             :style="st.done ? 'background:#DCFCE7;color:#15803D' : 'background:#F3F4F6;color:#9CA3AF'"
                             x-text="st.done ? '完成' : '待辦'"></span>

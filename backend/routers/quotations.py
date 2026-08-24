@@ -294,6 +294,7 @@ def list_quotations(
 ):
     user   = _require_user(authorization)
     conn   = get_db()
+    today = datetime.now().strftime("%Y-%m-%d")
     select_cols = (
         "id, quote_no, status, customer_name, project_name, total, pretax, "
         "direct_margin_pct, net_margin_pct, sales_person, quote_date, valid_days, "
@@ -307,8 +308,18 @@ def list_quotations(
         # 來源，相關子查詢直接在 SQL 層取出第一個未完成階段的 label，不用整包 JSON
         # 撈出來在 Python 裡逐列解析、迴圈找。
         "(SELECT label FROM case_stages WHERE quote_no=quotations.quote_no AND done=0 "
-        " ORDER BY sort_order LIMIT 1) as current_stage"
+        " ORDER BY sort_order LIMIT 1) as current_stage, "
+        # 案件清單卡片進度徽章用（視覺化改版，2026-08-24）：階段總數／完成數／逾期數。
+        "(SELECT COUNT(*) FROM case_stages WHERE quote_no=quotations.quote_no) as stage_total, "
+        "(SELECT COUNT(*) FROM case_stages WHERE quote_no=quotations.quote_no AND done=1) as stage_done, "
+        "(SELECT COUNT(*) FROM case_stages WHERE quote_no=quotations.quote_no AND done=0 "
+        " AND due_date != '' AND due_date < ?) as stage_overdue"
     )
+    # select_params 只服務上面 SELECT 子句裡的相關子查詢（stage_overdue 的 today），跟
+    # where_sql 的 params 分開放——SELECT 子句在 SQL 字串裡排在 WHERE 之前，它的 ? 佔位
+    # 符必須排在 params 前面；但下面的 COUNT 查詢是另一支獨立 SQL，沒有這個子查詢，不吃
+    # select_params，兩者共用一個 list 會讓 COUNT 查詢的 ? 數量對不上而 500。
+    select_params = [today]
     # where_sql 獨立累積，不再用字串搜尋從完整 SQL 裡「切」出 WHERE 片段——上面
     # SELECT 子句裡的相關子查詢自己就帶了 " AND"/" ORDER BY"，字串搜尋版的作法
     # 會切到子查詢內部而不是真正的外層 WHERE，導致 COUNT 查詢直接用了不存在的欄位
@@ -330,7 +341,7 @@ def list_quotations(
         where_sql += f" AND {SQL_DEAL_TAG} IN (" + ",".join("?" * len(tags)) + ")"
         params.extend(tags)
     sql = f"SELECT {select_cols} FROM quotations WHERE 1=1{where_sql} ORDER BY id DESC LIMIT ? OFFSET ?"
-    rows  = conn.execute(sql, params + [limit, offset]).fetchall()
+    rows  = conn.execute(sql, select_params + params + [limit, offset]).fetchall()
     count = conn.execute(
         "SELECT COUNT(*) FROM quotations WHERE 1=1" + where_sql, params
     ).fetchone()[0]
@@ -379,7 +390,7 @@ def stage_board(authorization: str = Header(None)):
     # `json_extract(...) IS NOT NULL` 的篩選語意一致。
     sql = (
         f"SELECT q.quote_no, q.customer_name, q.project_name, q.sales_person, q.sales_person_id, "
-        f"q.created_at, cs.id AS stage_id, cs.label, cs.start_date, cs.due_date, cs.done, "
+        f"q.created_at, cs.id AS stage_id, cs.label, cs.start_date, cs.due_date, cs.done_at, cs.done, "
         f"cs.depends_on, cs.assigned_to "
         f"FROM quotations q JOIN case_stages cs ON cs.quote_no = q.quote_no "
         f"WHERE {SQL_DEAL_TAG} = '已成案'"
@@ -438,6 +449,7 @@ def stage_board(authorization: str = Header(None)):
             "stageLabel":    row["label"] or "（未命名階段）",
             "startDate":     row["start_date"] or "",
             "dueDate":       due,
+            "doneAt":        row["done_at"] or "",
             "done":          done,
             "overdue":       overdue,
             "dependsOn":     json.loads(row["depends_on"] or "[]"),
@@ -1035,33 +1047,26 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
     data = json.loads(row["data_json"] or "{}")
     old_devices = (data.get("caseRecord") or {}).get("devices") or []
     new_devices = (body.case_record or {}).get("devices") or []
-    # caseRecord.stages 正規化（2026-08-23，3a 新增／3b 上線後修正）：3b 上線後
-    # case-management.js 的階段操作已全部改走 Phase 2 的 granular 端點，這條整包
-    # 存檔路徑（`saveCaseRecord()`）只用來存 materials/payment/contract/roles 等
-    # 其他欄位——但它仍然會把當下快取的 `stages` 陣列整包送過來（即使這次沒有
-    # 真的改階段），不能忽略，否則會把伺服器現有值蓋掉。送了 `stages`（陣列）就
-    # 呼叫 `_sync_json_stages_to_table()` 做 id-preserving 差異合併，沒送這個 key
-    # 才保留伺服器現有值。不管是這條路徑還是 Phase 2 的新端點寫入，兩邊都會保持
-    # 同步，不會有一方過期。
+    # caseRecord.stages 正規化（2026-08-23，3a 新增／3b 上線後修正；2026-08-24 停用
+    # 整包 stages 同步）：case-management.js 的階段操作（label/done/日期/負責人/
+    # 前置階段/前往記錄）已全部改走 Phase 2 的 granular 端點即時寫入，且每個 granular
+    # 端點寫完都會呼叫 `_sync_stages_to_json()` 把結果同步回 data_json——這條整包
+    # 存檔路徑（`saveCaseRecord()`）現在只用來存 materials/payment/contract/roles 等
+    # 其他欄位。過去這裡會信任 client 送來的 `stages` 陣列並整批覆寫回 case_stages，
+    # 原意是怕忽略掉這個欄位會讓伺服器值變舊，但反而造成真正的資料損毀：使用者
+    # 用 granular 端點剛存好的日期／負責人，一旦頁面上任何其他欄位（材料、付款…）
+    # 觸發這條 1.5 秒防抖的整包存檔，就會被瀏覽器記憶體裡「這次載入當下」的舊
+    # `stages` 快照蓋回空值（2026-08-24 案件執行看板日期消失回報，追出的根因）。
+    # 一律改成忽略 client 送來的 `stages`，永遠保留伺服器現有值——因為 granular
+    # 端點已經確保 data_json.caseRecord.stages 隨時是最新的，不需要也不該再讓這條
+    # 路徑覆寫。
     new_case_record = body.case_record or {}
-    stages_synced = "stages" in new_case_record and isinstance(new_case_record["stages"], list)
-    if stages_synced:
-        _sync_json_stages_to_table(conn, quote_no, new_case_record["stages"])
-    else:
-        new_case_record["stages"] = (data.get("caseRecord") or {}).get("stages") or []
+    new_case_record["stages"] = (data.get("caseRecord") or {}).get("stages") or []
     data["caseRecord"] = new_case_record
     stock_conflicts = []
     if new_devices != old_devices:
         stock_conflicts = _sync_device_stock(conn, quote_no, old_devices, new_devices, user)
     now = save_quotation_json(conn, quote_no, data)
-    if stages_synced:
-        # 3b 收尾追加修正（2026-08-23）：合併後有些階段可能拿到新的真實 id（例如
-        # client 陣列裡混了尚未存在於表內的階段），上面 save_quotation_json 寫的
-        # stages 內容可能還停留在 client 送來的舊 id。這裡重新從表撈一次覆寫回
-        # data_json，確保下一次 GET／回應拿到的 id 保證跟表一致，不會讓前端拿著
-        # 已經失效的 id 去打 granular 端點（連鎖 404 的根本原因）。updated_at 沿用
-        # 上面 save_quotation_json 已經算好的同一個 now，不產生第二個時間戳。
-        now = _sync_stages_to_json(conn, quote_no, updated_at=now) or now
     conn.commit()
     conn.close()
     spawn_bg_thread(_backup_quotation, args=(quote_no,))

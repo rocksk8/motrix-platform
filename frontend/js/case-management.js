@@ -806,6 +806,26 @@ function app() {
       return Math.round(stages.filter(s => s.done).length / stages.length * 100)
     },
 
+    _firstUndoneStageId() {
+      const stages = this.cr.caseRecord?.stages || []
+      const s = stages.find(s => !s.done)
+      return s ? s.id : null
+    },
+    stageSegClass(st) {
+      if (st.done) return 'stage-segbar__seg--done'
+      if (this.stageIsOverdue(st)) return 'stage-segbar__seg--overdue'   // 逾期優先於「目前/未來」
+      if (st.id === this._firstUndoneStageId()) return 'stage-segbar__seg--current'
+      return 'stage-segbar__seg--future'
+    },
+    stageSegTooltip(st) {
+      const status = st.done
+        ? ('已完成' + (st.doneAt ? '（' + st.doneAt + '）' : ''))
+        : (this.stageIsOverdue(st)
+            ? ('已逾期' + (st.dueDate ? '（到期 ' + st.dueDate + '）' : ''))
+            : (st.dueDate ? ('到期日 ' + st.dueDate) : '未設定到期日'))
+      return (st.label || '（未命名階段）') + ' — ' + status
+    },
+
     // stages 正規化 Phase 3b（2026-08-23）：以下階段相關函式改成直接呼叫 stages 專屬
     // 端點即時送出，不再靠本地陣列變更 + setDirty() 整包 debounce 存檔。成功後用伺服器
     // 回應 Object.assign 覆蓋本地物件，確保跟資料庫一致；失敗用 alert()（比照本檔既有
