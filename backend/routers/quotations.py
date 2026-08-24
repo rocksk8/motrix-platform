@@ -21,6 +21,7 @@ from helpers import (
     notify_approval_request, notify_next_tier, notify_approved,
     notify_returned, notify_resubmit_requester, notify_settlement_finalized,
     notify_module_activity, push_event_for_quotation_won, push_event_for_important_comment,
+    push_event_for_case_stage_due, push_event_delete_for_case_stage,
     check_approve_permission, check_reject_permission, check_no_tier_self_approval,
     resolve_tier_approvers, UnresolvedManagerError,
     save_document_files, delete_document_file,
@@ -1429,6 +1430,8 @@ def update_case_stage(quote_no: str, stage_id: int, body: dict = Body(...), auth
         conn.execute(sql, list(updates.values()) + [stage_id])
         conn.commit()
         _sync_stages_to_json(conn, quote_no)
+        if "due_date" in updates:
+            spawn_bg_thread(push_event_for_case_stage_due, args=(stage_id,))
     sr = _get_stage_row(conn, quote_no, stage_id)
     result = _serialize_stage(conn, sr)
     conn.close()
@@ -1445,6 +1448,7 @@ def delete_case_stage(quote_no: str, stage_id: int, authorization: str = Header(
     sr = _get_stage_row(conn, quote_no, stage_id)
     if not sr:
         conn.close(); raise HTTPException(404, "階段不存在")
+    calendar_event_id = sr["google_calendar_event_id"] or ""
     conn.execute("DELETE FROM case_stages WHERE id=?", (stage_id,))
     siblings = conn.execute("SELECT id, depends_on FROM case_stages WHERE quote_no=?", (quote_no,)).fetchall()
     for s in siblings:
@@ -1456,6 +1460,8 @@ def delete_case_stage(quote_no: str, stage_id: int, authorization: str = Header(
     conn.commit()
     _sync_stages_to_json(conn, quote_no)
     conn.close()
+    if calendar_event_id:
+        spawn_bg_thread(push_event_delete_for_case_stage, args=(calendar_event_id,))
     return {"ok": True}
 
 

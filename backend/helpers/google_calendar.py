@@ -159,6 +159,58 @@ def _create_event_with_retry(summary: str, description: str, event_date: date) -
             raise
 
 
+def _update_all_day_event(event_id: str, summary: str, description: str, event_date: date) -> str:
+    """PATCH 既有整天事件的內容/日期，回傳事件 id（正常情況下跟傳入的 event_id 相同）。"""
+    body = {
+        "summary":     summary,
+        "description": description,
+        "start": {"date": event_date.isoformat()},
+        "end":   {"date": (event_date + timedelta(days=1)).isoformat()},
+    }
+    resp = _events_call("PATCH", f"/{urllib.parse.quote(event_id, safe='')}", body)
+    new_id = resp.get("id")
+    if not new_id:
+        raise RuntimeError(f"更新行事曆事件失敗，回應無 id：{resp}")
+    return new_id
+
+
+def _delete_event(event_id: str) -> None:
+    _events_call("DELETE", f"/{urllib.parse.quote(event_id, safe='')}")
+
+
+def _update_event_with_retry(event_id: str, summary: str, description: str, event_date: date) -> str:
+    """更新既有事件；若該事件已在 Google 端被刪除（404，例如使用者手動刪掉），
+    改為新建一筆並回傳新 id，避免「行事曆上事件被手動刪除」變成之後永遠更新失敗。"""
+    try:
+        return _update_all_day_event(event_id, summary, description, event_date)
+    except RuntimeError as e:
+        if "404" in str(e):
+            logger.info("行事曆事件 %s 已不存在，改為新建：%s", event_id, summary)
+            return _create_event_with_retry(summary, description, event_date)
+        logger.warning("行事曆事件更新失敗，5 秒後重試一次：%s — %s", summary, e)
+        time.sleep(5)
+        try:
+            return _update_all_day_event(event_id, summary, description, event_date)
+        except Exception as second_exc:
+            _notify_push_failure(summary, str(second_exc))
+            raise
+
+
+def _delete_event_with_retry(event_id: str) -> None:
+    """刪除既有事件；404/410（已經不存在）視為成功，不重試。"""
+    try:
+        _delete_event(event_id)
+    except RuntimeError as e:
+        if "404" in str(e) or "410" in str(e):
+            return
+        logger.warning("行事曆事件刪除失敗，5 秒後重試一次：event %s — %s", event_id, e)
+        time.sleep(5)
+        try:
+            _delete_event(event_id)
+        except Exception as second_exc:
+            logger.warning("行事曆事件刪除重試仍失敗，忽略（不影響任何業務流程）：%s", second_exc)
+
+
 def create_test_event() -> str:
     """設定頁「測試連線」按鈕用：建立一個當天的測試事件，驗證整套授權/API 串接正常。"""
     today = date.today()
@@ -334,6 +386,71 @@ def push_event_for_dev_case_stale(case_id: int, case_name: str, customer_name: s
         logger.info("push_event_for_dev_case_stale: %s -> event %s", case_id, event_id)
     except Exception as exc:
         logger.warning("push_event_for_dev_case_stale(%r) failed: %s", case_id, exc)
+
+
+# ── 2026-08-24：案件執行進度階段到期日（唯一需要真正 upsert 的事件類型）─────────
+# 到期日常常會被使用者事後調整（延期），跟其他 6 種「只建立一次」的一次性事件
+# 不同，這裡用 case_stages.google_calendar_event_id（DB v55）記住上一次建立的
+# 事件 id，設定/變更到期日時改 PATCH 既有事件，清空到期日時改 DELETE，避免
+# 行事曆上留一堆過期重複事件。
+
+def push_event_for_case_stage_due(stage_id: int) -> None:
+    try:
+        from db import get_db
+        conn = get_db()
+        row = conn.execute("""
+            SELECT cs.id, cs.label, cs.due_date, cs.quote_no, cs.google_calendar_event_id,
+                   q.customer_name, q.project_name
+            FROM case_stages cs JOIN quotations q ON q.quote_no = cs.quote_no
+            WHERE cs.id=?
+        """, (stage_id,)).fetchone()
+        if not row:
+            conn.close()
+            return
+
+        due_date_str  = (row["due_date"] or "").strip()
+        existing_id   = row["google_calendar_event_id"] or ""
+        cname, pname  = row["customer_name"] or "", row["project_name"] or ""
+        case_label    = f"{row['quote_no']}（{cname}{'／' if cname and pname else ''}{pname}）"
+        stage_label   = row["label"] or "執行階段"
+
+        if not due_date_str:
+            if existing_id:
+                _delete_event_with_retry(existing_id)
+                conn.execute("UPDATE case_stages SET google_calendar_event_id='' WHERE id=?", (stage_id,))
+                conn.commit()
+            conn.close()
+            return
+
+        try:
+            event_date = date.fromisoformat(due_date_str[:10])
+        except ValueError:
+            conn.close()
+            return
+
+        summary     = f"案件執行進度到期 — {stage_label}（{case_label}）"
+        description = f"案件 {case_label} 的執行進度階段「{stage_label}」到期日：{due_date_str}"
+
+        if existing_id:
+            event_id = _update_event_with_retry(existing_id, summary, description, event_date)
+        else:
+            event_id = _create_event_with_retry(summary, description, event_date)
+
+        conn.execute("UPDATE case_stages SET google_calendar_event_id=? WHERE id=?", (event_id, stage_id))
+        conn.commit()
+        conn.close()
+        logger.info("push_event_for_case_stage_due: %s -> event %s", stage_id, event_id)
+    except Exception as exc:
+        logger.warning("push_event_for_case_stage_due(%r) failed: %s", stage_id, exc)
+
+
+def push_event_delete_for_case_stage(event_id: str) -> None:
+    """階段本身被刪除時呼叫（呼叫端已從即將刪除的 row 取出 event_id）。"""
+    try:
+        _delete_event_with_retry(event_id)
+        logger.info("push_event_delete_for_case_stage: deleted event %s", event_id)
+    except Exception as exc:
+        logger.warning("push_event_delete_for_case_stage(%r) failed: %s", event_id, exc)
 
 
 def push_event_for_important_comment(update_id, quote_no: str, content: str, author_display: str) -> None:

@@ -3,7 +3,9 @@ import json
 import os
 import shutil
 import sqlite3
+import string
 import threading
+import time
 import logging
 from datetime import datetime, date, timedelta
 
@@ -12,13 +14,54 @@ from helpers import _cleanup_sessions
 
 logger = logging.getLogger(__name__)
 
-_ARCHIVE_BASE  = r"G:\我的雲端硬碟\系統存檔"
-_REALTIME_DIR  = os.path.join(_ARCHIVE_BASE, "即時備份")
-_WEEKLY_DIR    = os.path.join(_ARCHIVE_BASE, "週備份")
-_DAILY_DIR     = os.path.join(_ARCHIVE_BASE, "每日備份")
-_UPLOADS_MIRROR_DIR = os.path.join(_ARCHIVE_BASE, "上傳檔案鏡像")
+# Google Drive for Desktop's drive letter is NOT stable across reboots/relogins
+# (observed switching G:<->H: repeatedly, see 2026-08-24 note in _ensure_archive_dirs).
+# Rather than hardcode a letter, scan mounted drives each time for the one that
+# actually has this folder, so a letter swap can't silently break cloud backups.
+_ARCHIVE_SUBPATH = os.path.join("我的雲端硬碟", "系統存檔")
+_ARCHIVE_CACHE_TTL = 30  # seconds; avoid rescanning A-Z on every single real-time write
+_archive_base_cache = {"path": None, "checked_at": 0.0}
 
-# Local always-on paths (independent of G: mount)
+
+def _detect_archive_base() -> str:
+    """Scan mounted drive letters for one containing 我的雲端硬碟\\系統存檔.
+    Returns the first match, or "" if none is currently mounted/accessible."""
+    for letter in string.ascii_uppercase:
+        candidate = f"{letter}:\\{_ARCHIVE_SUBPATH}"
+        if os.path.isdir(candidate):
+            return candidate
+    return ""
+
+
+def _archive_base() -> str:
+    """Currently valid cloud archive path, or "" if not found on any drive."""
+    cached = _archive_base_cache["path"]
+    if cached and time.monotonic() - _archive_base_cache["checked_at"] < _ARCHIVE_CACHE_TTL:
+        if os.path.isdir(cached):
+            return cached
+    detected = _detect_archive_base()
+    _archive_base_cache["path"] = detected or None
+    _archive_base_cache["checked_at"] = time.monotonic()
+    return detected
+
+
+def _realtime_dir() -> str:
+    return os.path.join(_archive_base(), "即時備份")
+
+
+def _weekly_dir() -> str:
+    return os.path.join(_archive_base(), "週備份")
+
+
+def _daily_dir() -> str:
+    return os.path.join(_archive_base(), "每日備份")
+
+
+def _uploads_mirror_dir() -> str:
+    return os.path.join(_archive_base(), "上傳檔案鏡像")
+
+
+# Local always-on paths (independent of cloud drive mount)
 _BACKEND_DIR      = os.path.dirname(os.path.abspath(__file__))
 _PROJECT_ROOT     = os.path.dirname(_BACKEND_DIR)
 _LOCAL_DB_BACKUP  = os.path.join(_BACKEND_DIR, "db_backups")
@@ -27,7 +70,7 @@ _UPLOADS_DIR      = os.path.join(_PROJECT_ROOT, "uploads")
 
 
 def _archive_ok() -> bool:
-    return os.path.isdir(_ARCHIVE_BASE)
+    return bool(_archive_base())
 
 
 def _atomic_json_write(path: str, data) -> None:
@@ -80,7 +123,7 @@ def _write_backup_alert(reason: str, level: str = "WARN") -> None:
             f"原因: {reason}\n"
             f"\n"
             f"請確認：\n"
-            f"1. Google 雲端硬碟是否已掛載為 G: 且可存取「我的雲端硬碟\\系統存檔」\n"
+            f"1. Google 雲端硬碟是否已掛載（任一代號皆可）且可存取「我的雲端硬碟\\系統存檔」\n"
             f"2. 本機 SQLite 快照是否仍存在於 backend\\db_backups\\\n"
             f"3. 處理完成後可刪除本檔；系統會在問題持續時再次寫入\n"
         )
@@ -142,7 +185,7 @@ def _send_backup_error_email(reason: str, ts: str) -> None:
             f"<strong>錯誤原因：</strong><br>{reason}</div>"
             "<p style='color:#374151'>請儘速確認：</p>"
             "<ol style='color:#374151'>"
-            "<li>Google 雲端硬碟是否已掛載為 G:（可存取「我的雲端硬碟/系統存檔」）</li>"
+            "<li>Google 雲端硬碟是否已掛載（任一代號皆可，可存取「我的雲端硬碟/系統存檔」）</li>"
             "<li>本機 SQLite 快照（<code>backend/db_backups/</code>）是否仍存在</li>"
             "<li>伺服器磁碟空間是否不足</li>"
             "</ol>"
@@ -176,18 +219,18 @@ def _ensure_archive_dirs():
         # ERROR 等級才會觸發 _send_backup_error_email()，避免同一個問題再度悄悄
         # 卡好幾週沒人知道。
         _write_backup_alert(
-            f"雲端備份路徑不存在或未掛載：{_ARCHIVE_BASE}。"
+            f"雲端備份路徑不存在或未掛載：任一磁碟機代號下都找不到 {_ARCHIVE_SUBPATH}。"
             f"即時/每日/週雲端備份已跳過。本機 SQLite 快照仍會寫入 {_LOCAL_DB_BACKUP}。",
             level="ERROR",
         )
         return
     for d in [
-        os.path.join(_REALTIME_DIR, "報價單"),
-        os.path.join(_REALTIME_DIR, "客戶"),
-        os.path.join(_REALTIME_DIR, "供應商"),
-        _WEEKLY_DIR,
-        _DAILY_DIR,
-        _UPLOADS_MIRROR_DIR,
+        os.path.join(_realtime_dir(), "報價單"),
+        os.path.join(_realtime_dir(), "客戶"),
+        os.path.join(_realtime_dir(), "供應商"),
+        _weekly_dir(),
+        _daily_dir(),
+        _uploads_mirror_dir(),
     ]:
         try:
             os.makedirs(d, exist_ok=True)
@@ -229,7 +272,7 @@ def _snapshot_sqlite(also_to_cloud: bool = True):
             )
         if also_to_cloud and _archive_ok():
             try:
-                cloud_day = os.path.join(_DAILY_DIR, today)
+                cloud_day = os.path.join(_daily_dir(), today)
                 os.makedirs(cloud_day, exist_ok=True)
                 cloud_dest = os.path.join(cloud_day, "motrix_erp.db")
                 shutil.copy2(dest, cloud_dest)
@@ -245,7 +288,7 @@ def _snapshot_sqlite(also_to_cloud: bool = True):
 
 
 def _mirror_uploads() -> int:
-    """Incrementally sync uploads/（專案照片等實體檔案）到雲端 _UPLOADS_MIRROR_DIR。
+    """Incrementally sync uploads/（專案照片等實體檔案）到雲端 _uploads_mirror_dir()。
 
     這些檔案不在 quotations/customers/... 那幾張表裡，daily/weekly backup 原本完全
     沒有覆蓋到——db 救得回來，但照片救不回來。跟 JSON 每日備份不同的是，這裡改用
@@ -263,7 +306,7 @@ def _mirror_uploads() -> int:
     for root, dirs, files in os.walk(_UPLOADS_DIR):
         dirs[:] = [d for d in dirs if not d.startswith('_demo')]
         rel_root = os.path.relpath(root, _UPLOADS_DIR)
-        dst_dir = _UPLOADS_MIRROR_DIR if rel_root == '.' else os.path.join(_UPLOADS_MIRROR_DIR, rel_root)
+        dst_dir = _uploads_mirror_dir() if rel_root == '.' else os.path.join(_uploads_mirror_dir(), rel_root)
         for fname in files:
             src = os.path.join(root, fname)
             dst = os.path.join(dst_dir, fname)
@@ -279,7 +322,7 @@ def _mirror_uploads() -> int:
             except Exception:
                 logger.exception("_mirror_uploads failed for %s", src)
     if copied:
-        logger.info("uploads mirror: copied %d new/changed file(s) to %s", copied, _UPLOADS_MIRROR_DIR)
+        logger.info("uploads mirror: copied %d new/changed file(s) to %s", copied, _uploads_mirror_dir())
         _system_audit("backup.uploads_mirror", date.today().isoformat(), {"copied": copied})
     return copied
 
@@ -320,21 +363,22 @@ def _prune_local_db_backups(keep_days: int = 30) -> None:
 
 
 def _prune_cloud_backups(daily_keep_days: int = 365, weekly_keep_days: int = 730) -> None:
-    """Delete dated folders under G: 每日備份／週備份 once older than the
-    retention window. Mirrors _prune_local_db_backups's safety: only ever
-    deletes a folder whose name parses cleanly as the expected date pattern
-    for that directory (YYYY-MM-DD for daily, YYYY-Wxx for weekly) — anything
-    else (unexpected file/folder name) is left untouched, never guessed at.
-    No-ops entirely if G: isn't mounted (never operates on a partial/offline
-    view of the archive)."""
+    """Delete dated folders under 每日備份／週備份 (wherever the cloud drive is
+    currently mounted) once older than the retention window. Mirrors
+    _prune_local_db_backups's safety: only ever deletes a folder whose name
+    parses cleanly as the expected date pattern for that directory
+    (YYYY-MM-DD for daily, YYYY-Wxx for weekly) — anything else (unexpected
+    file/folder name) is left untouched, never guessed at. No-ops entirely if
+    the cloud drive isn't mounted (never operates on a partial/offline view
+    of the archive)."""
     if not _archive_ok():
         return
 
     cutoff_daily = date.today().toordinal() - daily_keep_days
     try:
-        if os.path.isdir(_DAILY_DIR):
-            for name in os.listdir(_DAILY_DIR):
-                path = os.path.join(_DAILY_DIR, name)
+        if os.path.isdir(_daily_dir()):
+            for name in os.listdir(_daily_dir()):
+                path = os.path.join(_daily_dir(), name)
                 if not os.path.isdir(path):
                     continue
                 try:
@@ -349,9 +393,9 @@ def _prune_cloud_backups(daily_keep_days: int = 365, weekly_keep_days: int = 730
 
     cutoff_weekly = date.today().toordinal() - weekly_keep_days
     try:
-        if os.path.isdir(_WEEKLY_DIR):
-            for name in os.listdir(_WEEKLY_DIR):
-                path = os.path.join(_WEEKLY_DIR, name)
+        if os.path.isdir(_weekly_dir()):
+            for name in os.listdir(_weekly_dir()):
+                path = os.path.join(_weekly_dir(), name)
                 if not os.path.isdir(path):
                     continue
                 try:
@@ -380,14 +424,14 @@ def _backup_quotation(quote_no: str):
 
     if _archive_ok():
         try:
-            path = os.path.join(_REALTIME_DIR, "報價單", f"{quote_no}.json")
+            path = os.path.join(_realtime_dir(), "報價單", f"{quote_no}.json")
             _atomic_json_write(path, payload)
             return
         except Exception as e:
-            logger.exception("_backup_quotation G: write failed for %s", quote_no)
-            _write_backup_alert(f"即時備份報價單失敗（G:）{quote_no}: {e}")
+            logger.exception("_backup_quotation cloud write failed for %s", quote_no)
+            _write_backup_alert(f"即時備份報價單失敗（雲端）{quote_no}: {e}")
 
-    # G: unavailable — write to local instant-backup dir
+    # cloud archive unavailable — write to local instant-backup dir
     try:
         local_dir = os.path.join(_LOCAL_DB_BACKUP, "quotation_instant")
         os.makedirs(local_dir, exist_ok=True)
@@ -410,7 +454,7 @@ def _backup_customers():
             "count": len(rows),
             "data": [dict(r) for r in rows],
         }
-        path = os.path.join(_REALTIME_DIR, "客戶", "clients.json")
+        path = os.path.join(_realtime_dir(), "客戶", "clients.json")
         _atomic_json_write(path, data)
     except Exception as e:
         logger.exception("_backup_customers failed")
@@ -429,8 +473,8 @@ def _backup_suppliers():
             "count": len(rows),
             "data": [dict(r) for r in rows],
         }
-        os.makedirs(os.path.join(_REALTIME_DIR, "供應商"), exist_ok=True)
-        path = os.path.join(_REALTIME_DIR, "供應商", "suppliers.json")
+        os.makedirs(os.path.join(_realtime_dir(), "供應商"), exist_ok=True)
+        path = os.path.join(_realtime_dir(), "供應商", "suppliers.json")
         _atomic_json_write(path, data)
     except Exception as e:
         logger.exception("_backup_suppliers failed")
@@ -438,13 +482,13 @@ def _backup_suppliers():
 
 
 def _daily_backup():
-    # Always snapshot SQLite locally first (independent of G:)
+    # Always snapshot SQLite locally first (independent of the cloud drive)
     _snapshot_sqlite(also_to_cloud=True)
 
     if not _archive_ok():
         _write_backup_alert(
-            f"雲端備份路徑不可用（{_ARCHIVE_BASE}），已略過 JSON 每日備份與 uploads/ 鏡像；"
-            f"本機 SQLite 快照見 {_LOCAL_DB_BACKUP}",
+            f"雲端備份路徑不可用（任一磁碟機代號下都找不到 {_ARCHIVE_SUBPATH}），"
+            f"已略過 JSON 每日備份與 uploads/ 鏡像；本機 SQLite 快照見 {_LOCAL_DB_BACKUP}",
             level="ERROR",
         )
         return
@@ -457,7 +501,7 @@ def _daily_backup():
 
     try:
         today_label = date.today().isoformat()
-        day_dir     = os.path.join(_DAILY_DIR, today_label)
+        day_dir     = os.path.join(_daily_dir(), today_label)
         os.makedirs(day_dir, exist_ok=True)
         marker = os.path.join(day_dir, '.done')
         if os.path.exists(marker):
@@ -519,7 +563,7 @@ def _weekly_backup():
         return
     try:
         week_label = date.today().strftime('%Y-W%W')
-        week_dir   = os.path.join(_WEEKLY_DIR, week_label)
+        week_dir   = os.path.join(_weekly_dir(), week_label)
         os.makedirs(week_dir, exist_ok=True)
         marker = os.path.join(week_dir, '.done')
         if os.path.exists(marker):

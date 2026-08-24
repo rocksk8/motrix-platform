@@ -990,6 +990,21 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
 
+### 2026-08-24c — Google 行事曆推送擴充第 7 種事件：案件執行進度階段到期日（DB v55）
+
+- **背景**：使用者盤點「出貨單／發票開立／執行管理／報價單成案重要事項要更新行事曆」，查證後發現前三者其實已經在 §12 2026-08-21c/21g/22b 那幾輪做完（出貨單簽核核准、開票申請憑據核准、報價單成案都已推 Google 行事曆），唯獨「執行管理」（案件執行進度階段 `case_stages.due_date`）從未接上，是唯一的缺口。
+- **跟既有 6 種事件的關鍵差異**：既有事件（成案／核准…）都是「一次性狀態轉換」，只建立一次不用更新；但階段到期日常常會被使用者事後調整（延期），若照搬「只建立」的邏輯，每次改到期日就會在行事曆上多一筆過期重複事件。這次改成真正的 upsert：新增 `case_stages.google_calendar_event_id` 欄位（DB v55，`_m055_case_stage_calendar_event`）記住上一次建立的事件 id，設定/變更到期日時 `PATCH` 既有事件，清空到期日時改 `DELETE`；若 PATCH 遇到 404（使用者手動把事件從 Google 行事曆刪掉）則自動改為新建一筆，不會卡死。
+- **觸發點**：`routers/quotations.py::update_case_stage()`（`PUT /api/quotations/{quote_no}/stages/{stage_id}`，case-management.js 的 `updateStage()` 已在用這支端點，並非文件裡舊註解講的「尚未接進任何前端頁面」）——body 帶 `dueDate` 且成功更新時，背景執行緒呼叫新的 `push_event_for_case_stage_due(stage_id)`。`delete_case_stage()` 刪除階段時若該階段先前有建立過事件，一併呼叫 `push_event_delete_for_case_stage(event_id)` 清掉行事曆上的事件，避免孤兒事件。
+- **新增/修改檔案**：`helpers/google_calendar.py`（`_update_all_day_event`/`_delete_event`/`_update_event_with_retry`/`_delete_event_with_retry` 四個底層工具 + `push_event_for_case_stage_due`/`push_event_delete_for_case_stage` 兩個對外函式）、`helpers/__init__.py`（補匯出）、`routers/quotations.py`（`update_case_stage`/`delete_case_stage` 掛勾）、`db.py`（v55）。
+- **順帶修復**：`tests/test_core.py::TestMirrorUploads` 的 `_patch_dirs()` 還在 monkeypatch 已被 2026-08-24b 那輪改掉的 `archive._UPLOADS_MIRROR_DIR` 模組常數（該輪把它從常數改成 `_uploads_mirror_dir()` 函式，測試沒有同步更新），改為 patch 函式本身；修復前這 3 個測試會失敗。
+- **驗證**：`pytest tests/` 124 題全過。尚未套用至正式機，需依 §15 流程；正式機套用後這一批案件執行進度變更才會真的推上 Google 行事曆。
+
+### 2026-08-24b — 修正：雲端備份路徑寫死磁碟機代號，改為動態偵測
+
+- **背景**：使用者要求確認 §8 備份邏輯是否正常運行，實測發現 `archive.py` 的 `_ARCHIVE_BASE` 寫死為 `G:\我的雲端硬碟\系統存檔`，但 Google 雲端硬碟磁碟機代號並不穩定。同一天稍早該檔案才因為代號曾從 G: 漂到 H: 連續多週靜默失敗，補上 ERROR 級信件警示（見檔案內 2026-08-24 註解）——結果警示補完沒多久，代號又反向漂移（另一個個人 Google 帳號掛上了 G:，原本的正式帳號變成 H:），立刻重新觸發同一類失敗。警示機制正確攔截到了問題（`backup_alerts/BACKUP_ALERT.txt` + 寄信），但寫死代號的根因當時並未真正修掉。
+- **修正**：`_ARCHIVE_BASE` 常數改為 `_archive_base()` 函式，每次呼叫時掃描 A–Z 磁碟機代號（30 秒快取，避免每次即時備份都全掃）尋找含「我的雲端硬碟\系統存檔」的那一個；找不到則回傳空字串，`_archive_ok()` 行為與原本一致。`_REALTIME_DIR`/`_WEEKLY_DIR`/`_DAILY_DIR`/`_UPLOADS_MIRROR_DIR` 同步改為對應函式（`_realtime_dir()`/`_weekly_dir()`/`_daily_dir()`/`_uploads_mirror_dir()`），確保伺服器長時間運行期間磁碟機代號中途變動也能即時反映，不需要重啟才生效。警示訊息文字同步調整為不再假設固定代號。
+- **驗證**：正式機用既有驗證過的 stop/respawn 流程重啟（約 8 秒恢復），`logs/server.log` 顯示「Cloud archive path OK — cleared BACKUP_ALERT.txt」，uploads 鏡像正確寫入偵測到的 H:；`GET /api/ping` 200 OK。此修正**直接改在正式機**（未走 §15 `apply_update.ps1` 流程），需透過本次回推套件同步到開發機，避免下次部署把正式機覆蓋回舊版寫死代號的程式碼。
+
 ### 2026-08-24a — 案件執行看板／案件管理視覺化改版；修復「整包存檔覆蓋階段日期」資料損毀 bug；時間軸改用完成日期／前往日期區間
 
 - **背景**：使用者回報案件執行看板案件全部顯示「未指派」，追查後發現只是單純沒人指派（非 bug），順勢加了快速指派彈窗＋業務代管備援顯示。接續要求視覺化改版案件管理／看板；過程中使用者又回報「大綜電腦/小林機械明明填了日期，時間軸卻沒同步」，追查發現兩層根因：①`stage_board()` 從一開始就沒有 `SELECT cs.done_at`（完成日期），只查了幾乎沒人填的 `start_date`/`due_date`，是漏欄位不是同步問題；②更嚴重的是 `update_case_record()`（整包存檔路徑 `saveCaseRecord()`）過去會把瀏覽器記憶體裡的 `stages` 快照整批覆寫回 `case_stages` 表，只要在頁面上編輯任何其他無關欄位（材料、付款…）觸發 1.5 秒防抖存檔，就會把使用者剛透過 granular 端點存好的日期／負責人蓋回空值——這是真正會造成資料損毀的 bug，跟①一起修。

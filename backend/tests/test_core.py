@@ -364,7 +364,7 @@ class TestMirrorUploads:
         mirror = tmp_path / "mirror"
         uploads.mkdir()
         monkeypatch.setattr(archive, "_UPLOADS_DIR", str(uploads))
-        monkeypatch.setattr(archive, "_UPLOADS_MIRROR_DIR", str(mirror))
+        monkeypatch.setattr(archive, "_uploads_mirror_dir", lambda: str(mirror))
         return uploads, mirror
 
     def test_copies_new_files_preserving_subdirs(self, monkeypatch, tmp_path):
@@ -409,7 +409,7 @@ class TestMirrorUploads:
 
     def test_no_uploads_dir_is_a_noop(self, monkeypatch, tmp_path):
         monkeypatch.setattr(archive, "_UPLOADS_DIR", str(tmp_path / "does-not-exist"))
-        monkeypatch.setattr(archive, "_UPLOADS_MIRROR_DIR", str(tmp_path / "mirror"))
+        monkeypatch.setattr(archive, "_uploads_mirror_dir", lambda: str(tmp_path / "mirror"))
         assert archive._mirror_uploads() == 0
 
     def test_is_weak_too_short(self):

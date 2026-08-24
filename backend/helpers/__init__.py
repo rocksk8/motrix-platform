@@ -87,6 +87,8 @@ from .google_calendar import (
     push_event_for_dev_case_converted,
     push_event_for_dev_case_stale,
     push_event_for_important_comment,
+    push_event_for_case_stage_due,
+    push_event_delete_for_case_stage,
     create_test_event as create_calendar_test_event,
 )
 from .uploads import (

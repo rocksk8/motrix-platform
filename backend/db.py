@@ -52,7 +52,7 @@ DEMO_PAYMENT_REQUEST_PDF_ARCHIVE_DIR = os.path.join(
 # （見 routers/system.py），不是 schema 變動、不需要獨立 migration。
 # v54: 報價單回簽欄位（新概念，比照 shipping_notes）＋三種單據（報價單/出貨單/
 # 開票申請憑據）補上附件上傳欄位，2026-08-24 同一輪。
-CURRENT_VERSION = 54
+CURRENT_VERSION = 55
 
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
 # execution model) whenever the current request is authenticated as the 'demo'
@@ -1299,7 +1299,8 @@ def _m051_case_stages_normalize(conn):
             assigned_to TEXT    NOT NULL DEFAULT '[]',
             depends_on  TEXT    NOT NULL DEFAULT '[]',
             created_at  TEXT    NOT NULL,
-            updated_at  TEXT    NOT NULL
+            updated_at  TEXT    NOT NULL,
+            google_calendar_event_id TEXT NOT NULL DEFAULT ''
         )
     """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_case_stages_quote_no ON case_stages(quote_no)")
@@ -1507,6 +1508,18 @@ def _m054_signed_upload_files(conn):
         conn.execute("ALTER TABLE shipping_notes ADD COLUMN signed_files_json TEXT NOT NULL DEFAULT '[]'")
     if not _col_exists(conn, "invoice_vouchers", "issued_files_json"):
         conn.execute("ALTER TABLE invoice_vouchers ADD COLUMN issued_files_json TEXT NOT NULL DEFAULT '[]'")
+    conn.commit()
+
+
+def _m055_case_stage_calendar_event(conn):
+    """案件執行進度階段到期日 → Google 行事曆（2026-08-24，helpers/google_calendar.py
+    擴充第 7 種推送事件）。跟既有 6 種「只建立、不更新」的事件不同，階段到期日
+    常常會被使用者事後調整（延期），這裡需要真正的 upsert 而非每次都新建一筆，
+    所以要記住上一次建立的事件 id 才能之後 PATCH／DELETE，比照
+    quotations/shipping_notes/invoice_vouchers 把 googleCalendarEventId 存進
+    data_json 的既有做法——但 case_stages 是獨立的表沒有 data_json，改開專用欄位。"""
+    if not _col_exists(conn, "case_stages", "google_calendar_event_id"):
+        conn.execute("ALTER TABLE case_stages ADD COLUMN google_calendar_event_id TEXT NOT NULL DEFAULT ''")
     conn.commit()
 
 
@@ -2268,6 +2281,7 @@ _MIGRATIONS = [
     _m052_fix_stage_json_ids,                     # v52
     _m053_payment_requests,                       # v53
     _m054_signed_upload_files,                    # v54
+    _m055_case_stage_calendar_event,              # v55
 ]
 
 
