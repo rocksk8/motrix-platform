@@ -32,6 +32,8 @@ DEMO_INVOICE_VOUCHER_PDF_ARCHIVE_DIR = os.path.join(
     os.path.dirname(__file__), "_demo_invoice_voucher_pdf_archive")
 DEMO_PAYMENT_REQUEST_PDF_ARCHIVE_DIR = os.path.join(
     os.path.dirname(__file__), "_demo_payment_request_pdf_archive")
+DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR = os.path.join(
+    os.path.dirname(__file__), "_demo_case_closing_pdf_archive")
 
 # Increment this whenever a new _mNNN function is added to _MIGRATIONS.
 # v32/v33 (switch_guide tables + specs_json column) were initially missing
@@ -177,7 +179,8 @@ def reset_demo_db() -> None:
     init_db(DEMO_DB_PATH)
     for d in (DEMO_PROJECT_PHOTOS_DIR, DEMO_UPLOADS_DIR, DEMO_PDF_ARCHIVE_DIR, DEMO_PAYSLIP_ARCHIVE_DIR,
               DEMO_SHIPPING_PDF_ARCHIVE_DIR, DEMO_CONTRACTOR_VOUCHER_PDF_ARCHIVE_DIR,
-              DEMO_INVOICE_VOUCHER_PDF_ARCHIVE_DIR, DEMO_PAYMENT_REQUEST_PDF_ARCHIVE_DIR):
+              DEMO_INVOICE_VOUCHER_PDF_ARCHIVE_DIR, DEMO_PAYMENT_REQUEST_PDF_ARCHIVE_DIR,
+              DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR):
         _wipe_dir(d)
 
 

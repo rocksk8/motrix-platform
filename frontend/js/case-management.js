@@ -2159,6 +2159,29 @@ function app() {
       } catch (e) { alert('網路錯誤：' + e.message) }
     },
 
+    closingReportDownloading: false,
+    async downloadClosingReportPdf() {
+      if (!this.selected) return
+      const quoteNo = this.selected.quote_no
+      this.closingReportDownloading = true
+      try {
+        const r = await fetch(`/api/quotations/${quoteNo}/closing-report-pdf`, {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '結案報表產生失敗'); return }
+        const blob = await r.blob()
+        const url  = URL.createObjectURL(blob)
+        const a    = document.createElement('a')
+        a.href     = url
+        a.download = `${quoteNo}_結案報表.pdf`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        setTimeout(() => URL.revokeObjectURL(url), 1000)
+      } catch (e) { alert('下載失敗：' + e.message) }
+      finally { this.closingReportDownloading = false }
+    },
+
     async downloadShippingPdf(n) {
       try {
         // 記錄匯出（fire-and-forget，不阻塞 PDF 下載）

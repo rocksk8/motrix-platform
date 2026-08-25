@@ -10,9 +10,9 @@ from datetime import datetime, date
 from db import (
     get_db, is_demo_mode, DEMO_PDF_ARCHIVE_DIR, DEMO_SHIPPING_PDF_ARCHIVE_DIR,
     DEMO_CONTRACTOR_VOUCHER_PDF_ARCHIVE_DIR, DEMO_INVOICE_VOUCHER_PDF_ARCHIVE_DIR,
-    DEMO_PAYMENT_REQUEST_PDF_ARCHIVE_DIR,
+    DEMO_PAYMENT_REQUEST_PDF_ARCHIVE_DIR, DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR,
 )
-from helpers import _get_edge_path, _get_setting
+from helpers import _get_edge_path, _get_setting, payment_item_amounts
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +79,19 @@ def _get_payment_request_pdf_base() -> str:
         return DEMO_PAYMENT_REQUEST_PDF_ARCHIVE_DIR
     configured = (_get_setting("payment_request_pdf_base_path") or "").strip()
     return configured if configured else _PAYMENT_REQUEST_PDF_BASE_DEFAULT
+
+
+_CASE_CLOSING_PDF_BASE_DEFAULT = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "結案報表PDF",
+)
+
+
+def _get_case_closing_pdf_base() -> str:
+    if is_demo_mode():
+        return DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR
+    configured = (_get_setting("case_closing_pdf_base_path") or "").strip()
+    return configured if configured else _CASE_CLOSING_PDF_BASE_DEFAULT
 
 
 def _build_quote_html(q: dict, tot: dict, internal: bool = False,
@@ -2166,6 +2179,514 @@ def _generate_payment_request_pdf(request_no: str, actor: str = '', action_type:
     except Exception as e:
         logger.exception("_generate_payment_request_pdf failed for %s", request_no)
         _voucher_pdf_audit(request_no, "payment_request", False, str(e), actor, action_type)
+    finally:
+        if tmp_html:
+            try:
+                os.unlink(tmp_html)
+            except Exception:
+                pass
+
+
+# ── 案件結案報表（案件完結時內部財務/執行進度綜合報告，2026-08-25）────────────
+
+def _case_closing_report_data(quote_no: str) -> dict:
+    """彙整結案報表所需的全部資料。財務數字（損益分析）一律直接讀
+    data_json.settlement.summary 這份精算存檔當下寫入的快照，不在這裡重新計算——
+    跟財務 Tab／營運報表共用同一份權威來源，避免三處顯示互相對不上（見
+    helpers/quotations.py 對 dispatchTotal 快照 vs 即時重算的既有說明）。"""
+    conn = get_db()
+    row = conn.execute("""
+        SELECT quote_no, customer_name, project_name, sales_person, quote_date,
+               total, pretax, net_margin_pct, status,
+               COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') AS deal_tag,
+               COALESCE(NULLIF(settle_status,''), json_extract(data_json,'$.settlement.status'), '') AS settle_status,
+               data_json, created_at
+        FROM quotations WHERE quote_no=?
+    """, (quote_no,)).fetchone()
+    if not row:
+        conn.close()
+        raise ValueError("案件不存在")
+
+    d   = json.loads(row["data_json"] or "{}")
+    cr  = d.get("caseRecord") or {}
+    settlement = d.get("settlement") or {}
+
+    # 成案日期／結案日期：取 audit_log 裡 deal_tag.change 事件的最新一次時間戳
+    # （比 quote_date 更能反映案件實際進度，跟 quote_won_month_map 同一套精神）
+    won_at = closed_at = ""
+    for r in conn.execute(
+        "SELECT at, detail FROM audit_log WHERE action='deal_tag.change' AND target_id=? ORDER BY at ASC",
+        (quote_no,)
+    ).fetchall():
+        try:
+            detail = json.loads(r["detail"] or "{}")
+        except Exception:
+            continue
+        if detail.get("to") == "已成案":
+            won_at = r["at"]
+        elif detail.get("to") == "已結案":
+            closed_at = r["at"]
+
+    # 收款明細：跟 reports.py::_collect() 用同一套 payment_item_amounts() 換算，
+    # 避免另外重寫一次 pct→金額的公式又跟其他報表的數字兜不起來
+    total = row["total"] or 0
+    pay   = (cr.get("payment") or {}).get("items", [])
+    payment_rows = []
+    if pay:
+        amounts = payment_item_amounts(total, pay)
+        for idx, pi in enumerate(pay):
+            amt = amounts[idx]
+            payment_rows.append({
+                "type":         pi.get("type") or f"第{idx+1}期",
+                "pct":          pi.get("pct") or 0,
+                "amount":       amt,
+                "received":     bool(pi.get("received")),
+                "receivedAt":   (pi.get("receivedAt") or "")[:10],
+                "actualAmount": pi.get("actualAmount"),
+                "feeAmount":    pi.get("feeAmount") or 0,
+                "invoiceNo":    pi.get("invoiceNo", ""),
+                "note":         pi.get("note", ""),
+            })
+
+    # 執行進度：直接查 case_stages（已結案案件不再出現在 stage_board() 的
+    # WHERE deal_tag='已成案' 條件裡，所以這裡不能重用那支端點，得自己查）
+    stage_rows = conn.execute(
+        "SELECT label, start_date, due_date, done, done_at, assigned_to, "
+        "(SELECT MIN(visit_date) FROM case_stage_visits WHERE stage_id=case_stages.id AND visit_date!='') AS visit_start, "
+        "(SELECT MAX(visit_date) FROM case_stage_visits WHERE stage_id=case_stages.id AND visit_date!='') AS visit_end "
+        "FROM case_stages WHERE quote_no=? ORDER BY sort_order, id",
+        (quote_no,)
+    ).fetchall()
+    dn_map = {
+        r["username"]: (r["display_name"] or r["username"])
+        for r in conn.execute("SELECT username, display_name FROM users").fetchall()
+    }
+    today = date.today().isoformat()
+    stages = []
+    for r in stage_rows:
+        done = bool(r["done"])
+        due  = r["due_date"] or ""
+        assigned = [u for u in json.loads(r["assigned_to"] or "[]") if u]
+        stages.append({
+            "label":         r["label"] or "（未命名階段）",
+            "startDate":     r["start_date"] or "",
+            "dueDate":       due,
+            "doneAt":        (r["done_at"] or "")[:10],
+            "visitStart":    r["visit_start"] or "",
+            "visitEnd":      r["visit_end"] or "",
+            "done":          done,
+            "overdue":       (not done) and bool(due) and due < today,
+            "assignedNames": [dn_map.get(u, u) for u in assigned],
+        })
+
+    # 承攬商／外包派發明細（排除已取消，比照精算頁「唯讀讀取」的既有規則；
+    # status 存的是英文代碼 draft/sent/confirmed/pending_acceptance/accepted/
+    # completed/cancelled，見 routers/vendor_contractors.py::_STATUS_LABELS）
+    dispatch_rows = conn.execute("""
+        SELECT cd.dispatch_date, cd.scope, cd.total_amount, cd.status, cd.invoice_no,
+               vc.name AS vendor_name
+        FROM contractor_dispatches cd LEFT JOIN vendor_contractors vc ON vc.id = cd.vendor_id
+        WHERE cd.quote_no=? AND cd.status != 'cancelled'
+        ORDER BY cd.dispatch_date
+    """, (quote_no,)).fetchall()
+    _dispatch_status_labels = {
+        "draft": "草稿", "sent": "已送出", "confirmed": "已確認",
+        "pending_acceptance": "待驗收", "accepted": "已驗收",
+        "completed": "完工", "cancelled": "已取消",
+    }
+    dispatches = [{
+        "vendorName": r["vendor_name"] or "（外包人員）",
+        "date":       r["dispatch_date"] or "",
+        "scope":      r["scope"] or "",
+        "amount":     r["total_amount"] or 0,
+        "status":     _dispatch_status_labels.get(r["status"] or "draft", r["status"] or ""),
+        "invoiceNo":  r["invoice_no"] or "",
+    } for r in dispatch_rows]
+
+    conn.close()
+
+    return {
+        "quoteNo":      row["quote_no"],
+        "customer":     row["customer_name"] or "",
+        "project":      row["project_name"] or "",
+        "salesPerson":  row["sales_person"] or "",
+        "quoteDate":    row["quote_date"] or "",
+        "wonAt":        won_at[:10] if won_at else "",
+        "closedAt":     closed_at[:10] if closed_at else "",
+        "dealTag":      row["deal_tag"] or "",
+        "settleStatus": row["settle_status"] or "",
+        "total":        total,
+        "pretax":       row["pretax"] or 0,
+        "taxAmount":    total - (row["pretax"] or 0),
+        "paymentRows":  payment_rows,
+        "receivedTotal": sum((pr["actualAmount"] if pr["actualAmount"] is not None else pr["amount"])
+                             for pr in payment_rows if pr["received"]),
+        "settlement":   settlement,
+        "stages":       stages,
+        "dispatches":   dispatches,
+    }
+
+
+def _build_case_closing_html(data: dict) -> str:
+    def esc(s):
+        return (str(s) if s is not None else '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>')
+
+    def money(n):
+        return f'{n:,.0f}' if isinstance(n, (int, float)) else '0'
+
+    s = data.get("settlement") or {}
+    summary = s.get("summary") or {}
+    is_finalized = s.get("status") == "finalized"
+
+    # ── 一、收款明細 ──────────────────────────────────────────────────────────
+    pay_rows_html = ""
+    for pr in data["paymentRows"]:
+        recv_cls = "#15803D" if pr["received"] else "#9CA3AF"
+        recv_txt = "已收款" if pr["received"] else "未收款"
+        net_amt  = (pr["actualAmount"] if pr["actualAmount"] is not None else pr["amount"]) - (pr["feeAmount"] or 0)
+        pay_rows_html += (
+            f'<tr><td>{esc(pr["type"])}</td>'
+            f'<td class="r">{pr["pct"]}%</td>'
+            f'<td class="r">{money(pr["amount"])}</td>'
+            f'<td class="c" style="color:{recv_cls};font-weight:600">{recv_txt}</td>'
+            f'<td class="c">{esc(pr["receivedAt"]) or "—"}</td>'
+            f'<td class="r">{money(net_amt) if pr["received"] else "—"}</td>'
+            f'<td>{esc(pr["invoiceNo"])}</td>'
+            f'<td>{esc(pr["note"])}</td></tr>'
+        )
+    collection_rate = round(data["receivedTotal"] / data["total"] * 100, 1) if data["total"] > 0 else 0
+    _no_pay_row = '<tr><td colspan="8" class="c" style="color:#9CA3AF">無款項明細資料</td></tr>'
+    payment_section = (
+        '<div class="section-label">二、收款明細</div>'
+        '<table><thead><tr><th>期別</th><th class="r">比例</th><th class="r">應收金額</th>'
+        '<th class="c">狀態</th><th class="c">收款日期</th><th class="r">實收淨額</th>'
+        '<th>發票號碼</th><th>備註</th></tr></thead>'
+        f'<tbody>{pay_rows_html or _no_pay_row}</tbody></table>'
+        '<div class="total-box"><div class="total-table">'
+        f'<div class="row"><span>已收金額</span><span>{money(data["receivedTotal"])}</span></div>'
+        f'<div class="row grand"><span>收款率</span><span>{collection_rate}%</span></div>'
+        '</div></div>'
+    )
+
+    # ── 三、損益分析 ──────────────────────────────────────────────────────────
+    if is_finalized:
+        prof_diff = int(summary.get("profitDiff", 0) or 0)
+        diff_clr  = "#15803D" if prof_diff >= 0 else "#DC2626"
+        diff_ppts = round(float(summary.get("netMarginPct") or 0) - float(summary.get("origNetMarginPct") or 0), 1)
+        settle_date = s.get("settlementDate", "") or ""
+        settle_by   = s.get("finalizedBy", "") or ""
+        profit_section = f"""
+<div class="section-label">三、損益分析（精算完結 · 精算日期：{esc(settle_date) or '—'}　完結人：{esc(settle_by) or '—'}）</div>
+<div class="profit-grid">
+  <table>
+    <thead><tr><th colspan="2" class="c" style="background:#F9FAFB;color:#374151">原始報價預估</th></tr></thead>
+    <tbody>
+      <tr><td>報價稅前收入</td><td class="r">{money(summary.get("quotedPretax"))}</td></tr>
+      <tr><td>原始成本（料件）</td><td class="r">{money(summary.get("origTotalCost"))}</td></tr>
+      <tr><td class="bold">原始直接毛利</td><td class="r bold">{money(summary.get("origDirectProfit"))}</td></tr>
+      <tr><td>原始毛利率</td><td class="r">{float(summary.get("origMarginPct") or 0):.1f}%</td></tr>
+      <tr><td>管銷分攤（10%）</td><td class="r red">− {money(summary.get("origAdminCost"))}</td></tr>
+      <tr><td>公益捐款（1%）</td><td class="r red">− {money(summary.get("origCharity"))}</td></tr>
+      <tr class="bold-row"><td>原始預估淨利</td><td class="r">{money(summary.get("origNetProfit"))}</td></tr>
+      <tr><td>原始預估淨利率</td><td class="r">{float(summary.get("origNetMarginPct") or 0):.1f}%</td></tr>
+    </tbody>
+  </table>
+  <table>
+    <thead><tr><th colspan="2" class="c" style="background:#FFFBEB;color:#92400E">實際成本精算</th></tr></thead>
+    <tbody>
+      <tr><td>報價稅前收入</td><td class="r">{money(summary.get("quotedPretax"))}</td></tr>
+      <tr><td>品項實際成本</td><td class="r orange">{money(summary.get("itemActualTotal"))}</td></tr>
+      <tr><td>額外支出</td><td class="r orange">{money(summary.get("extraTotal"))}</td></tr>
+      <tr><td>承攬商派發成本</td><td class="r orange">{money(summary.get("dispatchTotal"))}</td></tr>
+      <tr class="bold-row"><td>實際總成本</td><td class="r orange bold">{money(summary.get("totalActualCost"))}</td></tr>
+      <tr><td>真實毛利</td><td class="r {'green' if int(summary.get('grossProfit',0) or 0)>=0 else 'red'}">{money(summary.get("grossProfit"))}</td></tr>
+      <tr><td>真實毛利率</td><td class="r">{float(summary.get("grossMarginPct") or 0):.1f}%</td></tr>
+      <tr><td>管銷分攤（10%）</td><td class="r red">− {money(summary.get("adminCost"))}</td></tr>
+      <tr><td>公益捐款（1%）</td><td class="r red">− {money(summary.get("charityDonation"))}</td></tr>
+      <tr class="bold-row"><td>真實淨利</td><td class="r {'green' if int(summary.get('netProfit',0) or 0)>=0 else 'red'}">{money(summary.get("netProfit"))}</td></tr>
+      <tr><td>真實淨利率</td><td class="r bold" style="color:{'#15803D' if float(summary.get('netMarginPct',0) or 0)>=20 else '#B45309' if float(summary.get('netMarginPct',0) or 0)>=0 else '#DC2626'}">{float(summary.get("netMarginPct") or 0):.1f}%</td></tr>
+    </tbody>
+  </table>
+</div>
+<div class="diff-banner" style="background:{'#F0FDF4' if prof_diff>=0 else '#FFF1F2'};border-color:{'#86EFAC' if prof_diff>=0 else '#FECACA'};color:{diff_clr}">
+  {'真實淨利比原始預估高' if prof_diff>=0 else '真實淨利比原始預估低'} NT$ {abs(prof_diff):,}（{'+' if diff_ppts>=0 else ''}{diff_ppts:.1f} ppts）
+</div>"""
+    else:
+        profit_section = (
+            '<div class="section-label">三、損益分析</div>'
+            '<div class="notice-banner">⚠ 本案尚未完成成本精算（settlement 未 finalized），'
+            '以下僅列報價階段的預估數字，實際成本、真實毛利／淨利待精算完結後才會顯示。</div>'
+            '<div class="total-box" style="justify-content:flex-start"><div class="total-table" style="width:320px">'
+            f'<div class="row"><span>報價稅前收入</span><span>{money(data["pretax"])}</span></div>'
+            f'<div class="row"><span>預估淨毛利率</span><span>{float(summary.get("netMarginPct") or 0):.1f}%</span></div>'
+            '</div></div>'
+        )
+
+    # 四～七是條件式區塊（成本品項／額外支出／派發明細／執行進度都可能沒資料
+    # 而整段不顯示），中文數字用一個 iterator 依「實際有顯示的區塊」動態發號，
+    # 避免固定寫死「四、五、六、七」在某段被跳過時，編號出現斷層（例如沒有
+    # 派發資料時直接從「五」跳到「七」）。
+    _cn_nums = iter(["四", "五", "六", "七"])
+
+    # ── 成本品項明細 ─────────────────────────────────────────────────────────
+    item_rows_html = "".join(
+        f'<tr><td>{esc(it.get("origDescription") or "（無品名）")}</td>'
+        f'<td>{esc(it.get("origBrand"))}</td>'
+        f'<td class="r">{money(it.get("actualTotalCost")) if it.get("actualTotalCost") else "未填寫"}</td></tr>'
+        for it in (s.get("items") or [])
+    )
+    _no_item_row = '<tr><td colspan="3" class="c" style="color:#9CA3AF">無成本品項資料</td></tr>'
+    items_section = (
+        f'<div class="section-label">{next(_cn_nums)}、成本品項明細</div>'
+        '<table><thead><tr><th>品項</th><th style="width:120px">廠牌</th><th class="r" style="width:110px">實際成本</th></tr></thead>'
+        f'<tbody>{item_rows_html or _no_item_row}</tbody></table>'
+    ) if s.get("items") else ""
+
+    # ── 額外支出明細 ─────────────────────────────────────────────────────────
+    extra_rows_html = "".join(
+        f'<tr><td>{esc(ex.get("category"))}</td><td>{esc(ex.get("description")) or "—"}</td>'
+        f'<td class="r">{money(ex.get("totalCost")) if ex.get("totalCost") else "—"}</td></tr>'
+        for ex in (s.get("extraItems") or [])
+    )
+    _no_extra_row = '<tr><td colspan="3" class="c" style="color:#9CA3AF">無額外支出資料</td></tr>'
+    extras_section = (
+        f'<div class="section-label">{next(_cn_nums)}、額外支出明細</div>'
+        '<table><thead><tr><th style="width:100px">類別</th><th>說明</th><th class="r" style="width:110px">金額</th></tr></thead>'
+        f'<tbody>{extra_rows_html or _no_extra_row}</tbody></table>'
+    ) if s.get("extraItems") else ""
+
+    # ── 承攬商／外包派發明細 ────────────────────────────────────────────────
+    dispatch_rows_html = "".join(
+        f'<tr><td>{esc(dp["vendorName"])}</td><td>{esc(dp["date"])}</td><td>{esc(dp["scope"])}</td>'
+        f'<td class="c">{esc(dp["status"])}</td><td class="r">{money(dp["amount"])}</td></tr>'
+        for dp in data["dispatches"]
+    )
+    dispatch_section = (
+        f'<div class="section-label">{next(_cn_nums)}、承攬商／外包派發明細</div>'
+        '<table><thead><tr><th>承攬商／人員</th><th style="width:90px">派發日期</th><th>派發範圍</th>'
+        '<th class="c" style="width:70px">狀態</th><th class="r" style="width:100px">金額</th></tr></thead>'
+        f'<tbody>{dispatch_rows_html}</tbody></table>'
+    ) if data["dispatches"] else ""
+
+    # ── 執行進度 ─────────────────────────────────────────────────────────────
+    def _stage_period(st):
+        if st["visitStart"] or st["visitEnd"]:
+            a, b = st["visitStart"] or "—", st["visitEnd"] or "—"
+            return f'{a} ～ {b}' if a != b else a
+        if st["startDate"] or st["dueDate"]:
+            return f'{st["startDate"] or "—"} ～ {st["dueDate"] or "—"}'
+        return "—"
+    stage_rows_html = "".join(
+        f'<tr><td>{esc(st["label"])}</td><td>{_stage_period(st)}</td>'
+        f'<td class="c">{esc(st["doneAt"]) or "—"}</td>'
+        f'<td class="c" style="color:{"#15803D" if st["done"] else "#DC2626" if st["overdue"] else "#9CA3AF"};font-weight:600">'
+        f'{"✓ 已完成" if st["done"] else "⚠ 逾期" if st["overdue"] else "進行中"}</td>'
+        f'<td>{esc("、".join(st["assignedNames"]))}</td></tr>'
+        for st in data["stages"]
+    )
+    _no_stage_row = '<tr><td colspan="5" class="c" style="color:#9CA3AF">無執行進度階段資料</td></tr>'
+    stages_section = (
+        f'<div class="section-label">{next(_cn_nums)}、執行進度</div>'
+        '<table><thead><tr><th>階段</th><th style="width:150px">期間</th><th class="c" style="width:90px">完成日期</th>'
+        '<th class="c" style="width:80px">狀態</th><th style="width:120px">負責人</th></tr></thead>'
+        f'<tbody>{stage_rows_html or _no_stage_row}</tbody></table>'
+    ) if data["stages"] else ""
+
+    memo_section = (
+        f'<div class="section-label">精算備註</div><div class="memo-box">{esc(s.get("memo"))}</div>'
+    ) if (s.get("memo") or "").strip() else ""
+
+    gen_at = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+    return (
+        '<!DOCTYPE html>\n<html lang="zh-Hant">\n<head>\n<meta charset="UTF-8">\n'
+        f'<title>{esc(data["quoteNo"])} 案件結案報表</title>\n'
+        '<style>\n'
+        '  *{box-sizing:border-box;margin:0;padding:0}\n'
+        '  body{font-family:"Microsoft JhengHei","PMingLiU",serif;font-size:12px;color:#0A0A0A;line-height:1.6;background:#fff}\n'
+        '  #root{padding:24px 32px}\n'
+        '  @page{size:A4;margin:0 13mm 12mm 13mm;@bottom-center{content:counter(page);font-family:Arial,sans-serif;font-size:9px;color:#aaa}}\n'
+        '  @media print{html,body{margin:0;padding:0;background:#fff}#root{padding:15mm 0 0}tr{page-break-inside:avoid}'
+        '.profit-grid,.diff-banner,.sign{page-break-inside:avoid}}\n'
+        '  .accent-bar{height:3px;background:#0A0A0A;margin-bottom:18px}\n'
+        '  .header{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:14px;border-bottom:1px solid #0A0A0A;margin-bottom:16px}\n'
+        '  .co-name{font-size:15px;font-weight:700;letter-spacing:.06em}\n'
+        '  .co-sub{font-size:10px;color:#888;margin-top:3px;font-family:Arial,sans-serif;letter-spacing:.02em}\n'
+        '  .doc-title{font-size:22px;font-weight:700;letter-spacing:.18em;text-align:right}\n'
+        '  .meta{display:grid;grid-template-columns:repeat(3,1fr);gap:6px 4px;margin-bottom:16px;font-size:12px;'
+        'background:#FAFAF8;padding:10px 12px;border-radius:4px;border:1px solid #EDEAE4}\n'
+        '  .meta span{color:#888;font-family:Arial,sans-serif;font-size:11px}\n'
+        '  .section-label{font-size:11px;font-weight:700;letter-spacing:.04em;color:#111;margin:16px 0 7px;'
+        'display:flex;align-items:center;gap:8px}\n'
+        '  .section-label::after{content:"";flex:1;height:1px;background:#EDEAE4}\n'
+        '  table{width:100%;border-collapse:collapse;margin-bottom:10px}\n'
+        '  thead th{background:#0A0A0A;color:#F5F4F0;padding:7px 8px;text-align:left;font-size:10.5px;font-weight:500;'
+        'font-family:Arial,sans-serif;letter-spacing:.03em}\n'
+        '  tbody td{padding:6px 8px;border-bottom:1px solid #EDEAE4;font-size:11.5px}\n'
+        '  tbody tr:last-child td{border-bottom:none}\n'
+        '  tbody tr:nth-child(even) td{background:#FAFAF8}\n'
+        '  td.r,th.r{text-align:right;font-family:Arial,sans-serif}\n'
+        '  td.c,th.c{text-align:center}\n'
+        '  td.bold{font-weight:700}\n'
+        '  td.red{color:#DC2626}\n'
+        '  td.green{color:#15803D}\n'
+        '  td.orange{color:#92400E}\n'
+        '  tr.bold-row td{border-top:1.5px solid #E5E7EB;font-weight:700}\n'
+        '  .total-box{display:flex;justify-content:flex-end;margin-bottom:14px}\n'
+        '  .total-table{width:260px;font-size:12px}\n'
+        '  .total-table .row{display:flex;justify-content:space-between;padding:4px 0;font-family:Arial,sans-serif}\n'
+        '  .total-table .grand{font-size:14px;font-weight:700;border-top:1px solid #0A0A0A;padding-top:6px;margin-top:2px}\n'
+        '  .profit-grid{display:grid;grid-template-columns:1fr 1fr;gap:0;border:1px solid #E5E7EB;border-radius:4px;overflow:hidden}\n'
+        '  .profit-grid table{margin-bottom:0}\n'
+        '  .profit-grid table:first-child{border-right:1px solid #E5E7EB}\n'
+        '  .profit-grid td{padding:5px 10px;font-size:11px}\n'
+        '  .diff-banner{margin-top:0;border:1px solid;border-top:none;border-radius:0 0 4px 4px;padding:7px 12px;'
+        'font-size:11.5px;font-weight:600;margin-bottom:14px}\n'
+        '  .notice-banner{background:#FFFBEB;border:1px solid #FDE68A;color:#92400E;border-radius:4px;'
+        'padding:8px 12px;font-size:11px;margin-bottom:10px}\n'
+        '  .memo-box{background:#F9FAFB;border:1px solid #E5E7EB;border-radius:4px;padding:10px 12px;font-size:11.5px;'
+        'color:#374151;margin-bottom:14px;white-space:pre-wrap}\n'
+        '  .sign{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:22px}\n'
+        '  .sign-box{border:1px solid #EDEAE4;border-radius:4px;padding:16px 18px;min-height:100px;display:flex;flex-direction:column}\n'
+        '  .sign-label{font-size:9px;color:#999;font-family:Arial,sans-serif;letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px}\n'
+        '  .sign-line{flex:1;border-bottom:1px solid #ccc;margin:10px 0}\n'
+        '  .sign-date{font-size:10px;color:#999;font-family:Arial,sans-serif}\n'
+        '  .footer{text-align:center;font-size:10px;color:#999;margin-top:18px;padding-top:12px;border-top:1px solid #EDEAE4;'
+        'font-family:Arial,sans-serif;letter-spacing:.04em}\n'
+        '</style>\n</head>\n<body>\n<div id="root">\n'
+        '<div class="accent-bar"></div>\n'
+        '<div class="header">\n  <div>\n    <div class="co-name">允碩整合集創股份有限公司</div>\n'
+        '    <div class="co-sub">MOTRIX Synergy Integration Corp.</div>\n'
+        '    <div class="co-sub" style="margin-top:4px">統一編號：60575481　｜　電話：04-3610-6566　｜　info@miactw.com</div>\n'
+        '  </div>\n  <div>\n    <div class="doc-title">案件結案報表</div>\n'
+        f'    <div class="co-sub" style="text-align:right;margin-top:4px">產出時間：{gen_at}</div>\n  </div>\n</div>\n'
+        '<div class="meta">\n'
+        f'  <div><span>案號：</span><strong style="font-family:Arial,sans-serif">{esc(data["quoteNo"])}</strong></div>\n'
+        f'  <div><span>客戶：</span>{esc(data["customer"])}</div>\n'
+        f'  <div><span>專案：</span>{esc(data["project"])}</div>\n'
+        f'  <div><span>業務員：</span>{esc(data["salesPerson"])}</div>\n'
+        f'  <div><span>報價日期：</span>{esc(data["quoteDate"])}</div>\n'
+        f'  <div><span>成案日期：</span>{esc(data["wonAt"]) or "—"}</div>\n'
+        f'  <div><span>結案日期：</span>{esc(data["closedAt"]) or "—"}</div>\n'
+        f'  <div><span>精算狀態：</span>{"已完結精算" if is_finalized else "尚未完成精算"}</div>\n'
+        '</div>\n'
+        '<div class="section-label">一、收入與合約金額</div>\n'
+        '<div class="total-box" style="justify-content:flex-start"><div class="total-table" style="width:320px">\n'
+        f'  <div class="row"><span>合約總額（含稅）</span><span>NT$ {money(data["total"])}</span></div>\n'
+        f'  <div class="row"><span>稅前收入</span><span>NT$ {money(data["pretax"])}</span></div>\n'
+        f'  <div class="row grand"><span>營業稅（5%）</span><span>NT$ {money(data["taxAmount"])}</span></div>\n'
+        '</div></div>\n'
+        f'{payment_section}\n'
+        f'{profit_section}\n'
+        f'{items_section}\n'
+        f'{extras_section}\n'
+        f'{dispatch_section}\n'
+        f'{stages_section}\n'
+        f'{memo_section}\n'
+        '<div class="sign">\n'
+        '  <div class="sign-box">\n    <div class="sign-label">案件負責人 · 完結確認</div>\n'
+        f'    <div class="sign-line"></div>\n    <div class="sign-date">完結日期：{esc(data["closedAt"]) or "＿＿＿＿＿＿＿＿＿＿"}</div>\n  </div>\n'
+        '  <div class="sign-box">\n    <div class="sign-label">財務主管 · 覆核</div>\n'
+        '    <div class="sign-line"></div>\n    <div class="sign-date">覆核日期：＿＿＿＿＿＿＿＿＿＿</div>\n  </div>\n'
+        '</div>\n'
+        '<div class="footer">\n  本文件含案件內部財務與成本資訊，僅供內部留存查核使用，不對外提供 ｜ '
+        'MOTRIX Synergy Integration Corp. 允碩整合集創\n</div>\n'
+        '</div>\n</body>\n</html>'
+    )
+
+
+def generate_case_closing_pdf_bytes(quote_no: str) -> bytes:
+    """Edge Headless 產生案件結案報表 PDF 並以 bytes 回傳（供 API 下載使用）。"""
+    edge = _get_edge_path()
+    data = _case_closing_report_data(quote_no)
+    html_content = _build_case_closing_html(data)
+    tmp_html = tmp_pdf = None
+    try:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.html', encoding='utf-8', delete=False) as f:
+            f.write(html_content)
+            tmp_html = f.name
+        with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as f:
+            tmp_pdf = f.name
+        file_url = 'file:///' + tmp_html.replace('\\', '/')
+        subprocess.run(
+            [edge, '--headless', '--disable-gpu', '--no-sandbox',
+             f'--print-to-pdf={tmp_pdf}',
+             '--no-pdf-header-footer',
+             '--run-all-compositor-stages-before-draw',
+             file_url],
+            timeout=40, check=False,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
+        if not os.path.exists(tmp_pdf) or os.path.getsize(tmp_pdf) == 0:
+            raise ValueError("Edge 執行完畢但未產生 PDF 檔案")
+        with open(tmp_pdf, 'rb') as f:
+            return f.read()
+    finally:
+        for p in (tmp_html, tmp_pdf):
+            if p:
+                try: os.unlink(p)
+                except Exception: pass
+
+
+def _generate_case_closing_pdf(quote_no: str, actor: str = '', action_type: str = '結案報表'):
+    """存檔＋稽核版案件結案報表 PDF 產生，於案件標記已結案後背景觸發。"""
+    try:
+        edge = _get_edge_path()
+    except RuntimeError as e:
+        logger.warning("Edge not found, case closing report PDF generation skipped: %s", e)
+        _pdf_audit(quote_no, False, str(e), actor, action_type)
+        return
+
+    safe_actor = re.sub(r'[\\/:*?"<>|\s]', '_', actor or '').strip('_')[:20]
+
+    tmp_html = None
+    pdf_path = ""
+    try:
+        data = _case_closing_report_data(quote_no)
+        html_content = _build_case_closing_html(data)
+
+        today   = date.today().strftime('%Y%m%d')
+        out_dir = os.path.join(_get_case_closing_pdf_base(), date.today().isoformat())
+        os.makedirs(out_dir, exist_ok=True)
+
+        if safe_actor:
+            base_name = f"{quote_no}_{action_type}_{today}_{safe_actor}"
+        else:
+            base_name = f"{quote_no}_{action_type}_{today}"
+
+        pdf_path = os.path.join(out_dir, f"{base_name}.pdf")
+        if os.path.exists(pdf_path):
+            for i in range(2, 20):
+                candidate = os.path.join(out_dir, f"{base_name}_{i}.pdf")
+                if not os.path.exists(candidate):
+                    pdf_path = candidate
+                    break
+
+        with tempfile.NamedTemporaryFile(
+            mode='w', suffix='.html', encoding='utf-8', delete=False
+        ) as f:
+            f.write(html_content)
+            tmp_html = f.name
+
+        file_url = 'file:///' + tmp_html.replace('\\', '/')
+        subprocess.run(
+            [edge, '--headless', '--disable-gpu', '--no-sandbox',
+             f'--print-to-pdf={pdf_path}',
+             '--no-pdf-header-footer',
+             '--run-all-compositor-stages-before-draw',
+             file_url],
+            timeout=40, check=False,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
+        if os.path.exists(pdf_path) and os.path.getsize(pdf_path) > 0:
+            logger.info("Case closing report PDF saved: %s", pdf_path)
+            _pdf_audit(quote_no, True, pdf_path, actor, action_type)
+        else:
+            logger.warning("Case closing report PDF not created for %s (Edge ran but no output file)", quote_no)
+            _pdf_audit(quote_no, False, "Edge 執行完畢但未產生 PDF 檔案", actor, action_type)
+    except Exception as e:
+        logger.exception("_generate_case_closing_pdf failed for %s", quote_no)
+        _pdf_audit(quote_no, False, str(e), actor, action_type)
     finally:
         if tmp_html:
             try:

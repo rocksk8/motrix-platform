@@ -27,7 +27,10 @@ from helpers import (
     save_document_files, delete_document_file,
 )
 from archive import _backup_quotation
-from pdf_gen import _generate_quotation_pdf, generate_pdf_bytes
+from pdf_gen import (
+    _generate_quotation_pdf, generate_pdf_bytes,
+    _generate_case_closing_pdf, generate_case_closing_pdf_bytes,
+)
 
 router = APIRouter()
 
@@ -1036,6 +1039,7 @@ def update_deal_tag(quote_no: str, body: QuotationDealTagUpdate, authorization: 
         except Exception:
             actor_name = ""
         spawn_bg_thread(_generate_quotation_pdf, args=(quote_no, actor_name, '結案'))
+        spawn_bg_thread(_generate_case_closing_pdf, args=(quote_no, actor_name, '結案報表'))
     return {"ok": True}
 
 
@@ -2707,6 +2711,38 @@ def download_quotation_pdf(quote_no: str, internal: bool = False, authorization:
     _audit(_tok(authorization), "quotation.export_pdf", "quotation", quote_no,
            f"{quote_no} {mode_label} PDF 下載", {"mode": "internal" if internal else "external", "via": "server"})
     fname = f"{quote_no}_內部.pdf" if internal else f"{quote_no}.pdf"
+    encoded = urlquote(fname)
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded}"}
+    )
+
+
+@router.get("/api/quotations/{quote_no}/closing-report-pdf")
+def download_case_closing_report_pdf(quote_no: str, authorization: str = Header(None)):
+    """案件結案報表 PDF（含財務數據／支出／收入／收款／執行進度／損益分析），
+    僅限已結案案件；含成本與毛利等內部機密資訊，不對外提供。"""
+    _require_user(authorization)
+    conn = get_db()
+    row = conn.execute(
+        "SELECT COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') AS deal_tag "
+        "FROM quotations WHERE quote_no=?", (quote_no,)
+    ).fetchone()
+    conn.close()
+    if not row:
+        raise HTTPException(404, "報價單不存在")
+    if row["deal_tag"] != "已結案":
+        raise HTTPException(400, "案件尚未結案，無結案報表可供下載")
+    try:
+        pdf_bytes = generate_case_closing_pdf_bytes(quote_no)
+    except ValueError as e:
+        raise HTTPException(503, str(e))
+    except Exception as e:
+        raise HTTPException(500, f"結案報表 PDF 產生失敗：{e}")
+    _audit(_tok(authorization), "quotation.export_closing_report", "quotation", quote_no,
+           f"{quote_no} 結案報表 PDF 下載", {"via": "server"})
+    fname = f"{quote_no}_結案報表.pdf"
     encoded = urlquote(fname)
     return Response(
         content=pdf_bytes,

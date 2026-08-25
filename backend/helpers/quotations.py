@@ -1,6 +1,6 @@
 """Quotation hot-path field sync helpers."""
 import json
-from datetime import datetime
+from datetime import date, datetime
 
 from db import get_db
 
@@ -60,22 +60,22 @@ def payment_item_amounts(total: float, pay_items: list) -> list:
 
 
 def quote_won_month_map(conn) -> dict:
-    """回傳 {quote_no: 'YYYY-MM'}，該報價單「實際轉為已成案」的月份，用於
-    成案趨勢一類報表按月分組（2026-08-24）。
+    """回傳 {quote_no: 'YYYY-MM'}，該報價單應歸入成案趨勢報表的月份
+    （2026-08-24 建立，2026-08-25 修正優先順序）。
 
-    不能用 quote_date（報價單建立當下手動填的日期）——業務員實際簽下這筆案子
-    的時間常常對不上，甚至可能是提前估價填的未來日期，導致同一份報表裡有些
-    案件被歸到錯誤的月份，有些甚至因為 quote_date 落在報表的近 N 月範圍之外
-    而整筆從趨勢圖上消失（實測發現一筆 quote_date 誤填在未來月份的合約，金額
-    達 NT$284 萬，就這樣從「近 12 月成案趨勢」裡憑空消失）。
+    優先用 quote_date（報價單自己的日期欄位）。2026-08-24 那版原本反過來優先
+    用 audit_log 裡 action='deal_tag.change'、detail.to='已成案' 的事件時間戳，
+    理由是它「每次成案動作當下就寫入、不會被後續編輯覆蓋」；但實測上線後發現
+    大量舊案件是系統上線後才補登（quote_date 填的是案件本身真正的日期，例如
+    2026-01/02，但補登這個動作、也就是 deal_tag 第一次被設成已成案的那個
+    audit 事件，發生在補登當下的 2026-07/08），導致這些舊案件全部被錯誤歸到
+    補登月份，「近 12 月成案趨勢」變成看起來業績集中爆量在系統剛上線的
+    七、八月——這正是本函式原本要避免的同一種失真，只是換了個方向發生。
 
-    真正權威的時間來源是 audit_log 裡 action='deal_tag.change'、
-    detail.to='已成案' 的事件時間戳——是每次成案動作當下就寫入、不會被後續
-    無關編輯覆蓋的紀錄（同一輪也用這套方法修正過 dashboard 的 dealWonAt
-    backfill，見 db.py v59 說明）。取每張報價單最後一次轉為已成案的時間（若
-    曾降級又重新成案，以最新一次為準）。查不到 audit 紀錄的舊資料（例如匯入
-    時就已經是已成案狀態、從未真的呼叫過 deal-tag API）才 fallback 回
-    quote_date。"""
+    因此改成：quote_date 只要不是「未來日期」（不晚於今天）就直接採用；只有
+    quote_date 缺漏，或明顯異常（業務員手誤填成未來月份，例如曾實測發現一筆
+    達 NT$284 萬的合約 quote_date 誤填在未來月份，導致整筆從報表的近 N 月
+    範圍消失）時，才 fallback 回 audit_log 的成案時間戳。"""
     won_events: dict = {}
     for r in conn.execute(
         "SELECT at, target_id, detail FROM audit_log WHERE action='deal_tag.change' ORDER BY at ASC"
@@ -87,13 +87,18 @@ def quote_won_month_map(conn) -> dict:
         if detail.get("to") == "已成案":
             won_events[r["target_id"]] = r["at"]
 
+    today_str = date.today().isoformat()
     result = {}
     for r in conn.execute(
         f"SELECT quote_no, quote_date FROM quotations WHERE {SQL_DEAL_TAG} IN ('已成案','已結案')"
     ).fetchall():
-        won_at = won_events.get(r["quote_no"]) or r["quote_date"] or ""
-        if won_at:
-            result[r["quote_no"]] = won_at[:7]
+        qdate = r["quote_date"] or ""
+        if qdate and qdate <= today_str:
+            chosen = qdate
+        else:
+            chosen = won_events.get(r["quote_no"]) or qdate
+        if chosen:
+            result[r["quote_no"]] = chosen[:7]
     return result
 
 

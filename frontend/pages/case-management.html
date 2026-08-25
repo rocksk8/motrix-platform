@@ -1655,8 +1655,16 @@
                           :style="caseSettleStatus()==='finalized' ? 'background:#DCFCE7;color:#15803D' : 'background:#FEF3C7;color:#92400E'"
                           x-text="caseSettleStatus()==='finalized' ? '已定稿' : '草稿'"></span>
                   </template>
+                  <template x-if="cr.dealTag==='已結案'">
+                    <button @click="downloadClosingReportPdf()" :disabled="closingReportDownloading"
+                            style="margin-left:auto;font-size:12px;padding:5px 12px;background:#F0FDF4;color:#15803D;border:1px solid #86EFAC;border-radius:6px;cursor:pointer;font-family:var(--font-zh);font-weight:500">
+                      <span x-show="!closingReportDownloading">下載結案報表 PDF</span>
+                      <span x-show="closingReportDownloading">產生中…</span>
+                    </button>
+                  </template>
                   <a :href="'settlement.html?no=' + (selected?.quote_no||'')"
-                     style="margin-left:auto;font-size:12px;padding:5px 12px;background:#EEF2FF;color:#4338CA;border:1px solid #C7D2FE;border-radius:6px;text-decoration:none;font-family:var(--font-zh);font-weight:500">
+                     :style="cr.dealTag==='已結案' ? '' : 'margin-left:auto'"
+                     style="font-size:12px;padding:5px 12px;background:#EEF2FF;color:#4338CA;border:1px solid #C7D2FE;border-radius:6px;text-decoration:none;font-family:var(--font-zh);font-weight:500">
                     前往精算頁面 ▶
                   </a>
                 </div>

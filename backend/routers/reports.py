@@ -2144,9 +2144,9 @@ def monthly_trend(months: int = 12, authorization: str = Header(None)):
         total  = row["total"]  or 0
         pretax = row["pretax"] or 0
         nm     = float(row["net_margin_pct"] or 0)
-        # 用實際成案月份（quote_won_month_map，見 helpers/quotations.py 說明）
-        # 而非 quote_date，否則會把整筆案件錯誤歸到報價單建立當下手動填的
-        # 日期，甚至因為那個日期落在報表範圍之外而整筆從趨勢圖上消失。
+        # 用 quote_won_month_map 決定的月份（見 helpers/quotations.py 說明：
+        # 優先 quote_date，quote_date 缺漏或誤填未來日期才退回 audit_log 成案
+        # 時間戳），避免系統上線後補登的舊案件全部灌到補登當下的月份。
         qk     = won_month.get(row["quote_no"], "")
 
         if qk in month_map:
