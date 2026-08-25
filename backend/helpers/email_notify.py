@@ -539,14 +539,15 @@ def notify_payment_request_returned(request_no: str, customer: str, note: str,
 
 def notify_approval_reminder(doc_type_label: str, doc_no: str, desc: str, days_elapsed: int,
                              approver_usernames: list, also_superadmin: bool = False) -> None:
-    """簽核逾期催辦（2026-08-21，2026-08-24 補上出貨單）：報價單／承攬商匯款申請／
-    開票申請憑據／出貨單共用同一支——卡在簽核柱列超過工作日 1/3/5 天時由
-    routers/daily_tasks.py 的每日排程呼叫。days_elapsed 決定 badge 文字/顏色的
-    嚴重度分級；also_superadmin 為真時額外加上全部 admin/superadmin 收件人
-    （3 天門檻起）。統一連到簽核佇列頁（四種文件現在都在同一頁），不用像其他
-    通知一樣依文件類型分開連結。"""
+    """簽核逾期催辦（2026-08-21，2026-08-24 補上出貨單，2026-08-25 收斂收件人）：
+    報價單／承攬商匯款申請／開票申請憑據／出貨單共用同一支——卡在簽核柱列超過
+    工作日 1/3/5 天時由 routers/daily_tasks.py 的每日排程呼叫。days_elapsed 決定
+    badge 文字/顏色的嚴重度分級；also_superadmin 為真時額外加上最高管理員收件人
+    （3 天門檻起）——只通知 superadmin，不是全部 admin，避免一般 admin 被灌爆。
+    統一連到簽核佇列頁（四種文件現在都在同一頁），不用像其他通知一樣依文件類型
+    分開連結。"""
     to = list(set(_lookup_emails(approver_usernames, "approval_reminder")
-                  + (_admin_emails("approval_reminder") if also_superadmin else [])))
+                  + (_superadmin_emails("approval_reminder") if also_superadmin else [])))
     if not to:
         logger.warning("notify_approval_reminder: %s %r 的簽核人 %s 及管理員皆無設定 email（also_superadmin=%s）",
                        doc_type_label, doc_no, approver_usernames, also_superadmin)

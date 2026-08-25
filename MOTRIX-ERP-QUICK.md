@@ -990,7 +990,11 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
 
-### 2026-08-25a — 營運報表成案趨勢比照修正＋兩個 Chart.js 疑難雜症＋首頁新增當月實收圓餅圖
+### 2026-08-25b — 簽核逾期提醒 email 收件人收斂為簽核人＋最高管理員
+
+- **背景**：使用者反映簽核逾期催辦信件範圍太廣。查證後發現 `routers/daily_tasks.py::_check_approval_reminders()` 呼叫端本來就只把當層待簽核人（`recipients`）跟 `superadmins` 傳給站內通知（`_notify()`），沒有問題；但 `helpers/email_notify.py::notify_approval_reminder()` 內部 `also_superadmin=True` 時是呼叫 `_admin_emails()`——會撈全部 `admin`＋`superadmin` 角色的信箱，跟站內通知的收件人範圍對不上，等於 email 比站內通知多發給一般 admin。
+- **修法**：改呼叫既有的 `_superadmin_emails()`（只抓 `role='superadmin'`，查無資料才 fallback 回 `_admin_emails()`，跟 `notify_dev_case_delete_request()` 等既有「最高管理員」類通知共用同一支），讓 email 與站內通知兩條路徑的收件人範圍一致：逾期未簽核滿 3 個工作日起，只加註最高管理員，不再連一般 admin 一起通知。
+- 純 email 收件人邏輯修正，無 DB migration，無新端點，無前端改動。
 
 - **`reports.py::monthly_trend()` 比照 dashboard.py 同一天的修法**：新增共用工具 `helpers/quotations.py::quote_won_month_map()`（讀 `audit_log` 裡 `deal_tag.change` 事件的真實時間戳，查不到才 fallback 回 `quote_date`），套用到「近12月成案趨勢」的成案件數/合約金額分組——修前有一筆金額達 NT$284 萬的合約因為 `quote_date` 誤填未來月份，直接從近 12 月範圍消失，使用者回報「異常沒有顯示」。
 - **順手抓到兩個真正讓圖表偶爾整片空白的 Chart.js/Alpine 疑難雜症**（跟上面的資料 bug 是兩回事，用 Claude in Chrome 實際打開頁面反覆測試＋讀 console/canvas pixel data 才抓到）：
