@@ -2,14 +2,15 @@
 import json
 import uuid
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 
-from fastapi import APIRouter, Body, HTTPException, Header
+from fastapi import APIRouter, Body, File, HTTPException, Header, UploadFile
 from pydantic import BaseModel, Field, ConfigDict
 
 from db import get_db, next_entity_code
 from helpers import _require_user, _tok, _audit, notify_module_activity
 from helpers.quotations import save_quotation_json
+from helpers.uploads import save_document_files, delete_document_file
 from routers.contractors import _stamp_passbook
 
 router = APIRouter()
@@ -107,6 +108,12 @@ def _dispatch_row(row) -> dict:
             personnel = json.loads(row["personnel_json"] or "[]")
         except Exception:
             pass
+    files = []
+    if "files_json" in keys:
+        try:
+            files = json.loads(row["files_json"] or "[]")
+        except Exception:
+            pass
     personnel_total = sum(float(p.get("amount", 0) or 0) for p in personnel)
     total = float(row["total_amount"] or 0)
     if not total and items:
@@ -128,6 +135,7 @@ def _dispatch_row(row) -> dict:
         "totalWithTax": total_with_tax,
         "personnel": personnel,
         "personnelTotal": personnel_total,
+        "files": files,
         # 承攬商本身（含稅）+ 外包名單人員（不計稅，屬個人薪資性質），供財務/精算加總引用
         "grandTotal": total_with_tax + personnel_total,
         "status": row["status"] or "draft",
@@ -526,6 +534,71 @@ def delete_dispatch(did: int, authorization: str = Header(None)):
     notify_module_activity("承攬商派發", "刪除", user.get("display_name") or user["username"],
                             row["quote_no"], "vendor-contractors.html")
     return {"ok": True}
+
+
+# ── 承攬商報價附件 ────────────────────────────────────────────────────────────
+
+@router.post("/api/contractor-dispatches/{did}/files", status_code=201)
+async def upload_dispatch_files(did: int, files: List[UploadFile] = File(...),
+                                authorization: str = Header(None)):
+    """承攬商報價/估價文件上傳（2026-08-25 新增，多檔，admin+，比照
+    quotations.py::upload_material_files 的存法）——存承攬商提供的原始報價
+    文件本身，跟 items_json 拆解後的品項明細是分開的兩件事。"""
+    user = _require_user(authorization)
+    _require_admin(user)
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT quote_no, files_json FROM contractor_dispatches WHERE id=?", (did,)
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, "派發紀錄不存在")
+        try:
+            existing = json.loads(row["files_json"] or "[]")
+        except Exception:
+            existing = []
+        new_files = await save_document_files("contractor_dispatches", str(did), files,
+                                              user.get("display_name") or user["username"])
+        existing.extend(new_files)
+        now = datetime.now().isoformat()
+        conn.execute(
+            "UPDATE contractor_dispatches SET files_json=?, updated_at=? WHERE id=?",
+            (json.dumps(existing, ensure_ascii=False), now, did)
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "vendor.dispatch.upload_files", "contractor_dispatch", str(did),
+           f"{row['quote_no']}（{len(new_files)} 個檔案）")
+    return {"ok": True, "added": len(new_files), "files": new_files, "updated_at": now}
+
+
+@router.delete("/api/contractor-dispatches/{did}/files/{file_id}")
+def delete_dispatch_file(did: int, file_id: str, authorization: str = Header(None)):
+    user = _require_user(authorization)
+    _require_admin(user)
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT quote_no, files_json FROM contractor_dispatches WHERE id=?", (did,)
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, "派發紀錄不存在")
+        try:
+            existing = json.loads(row["files_json"] or "[]")
+        except Exception:
+            existing = []
+        updated = delete_document_file("contractor_dispatches", str(did), existing, file_id)
+        now = datetime.now().isoformat()
+        conn.execute(
+            "UPDATE contractor_dispatches SET files_json=?, updated_at=? WHERE id=?",
+            (json.dumps(updated, ensure_ascii=False), now, did)
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "vendor.dispatch.delete_file", "contractor_dispatch", str(did), row["quote_no"])
+    return {"ok": True, "updated_at": now}
 
 
 # ── 驗收流程節點 ──────────────────────────────────────────────────────────────

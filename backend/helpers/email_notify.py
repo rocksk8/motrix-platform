@@ -1089,6 +1089,34 @@ def notify_settlement_finalized(quote_no: str, customer: str, finalized_by: str)
     _async_send(to, f"【MOTRIX】成本精算完結 — {quote_no}（{customer}）", html)
 
 
+def notify_case_closing_report(quote_no: str, customer: str, project: str, pdf_bytes: bytes) -> None:
+    """案件標記已結案 → 自動寄送內部結案報表 PDF 給最高管理員（2026-08-25）。
+    報表含成本/毛利等內部機密資訊，只寄 superadmin（不比照 notify_settlement_finalized
+    發給全部 admin），由 pdf_gen.py::_generate_case_closing_pdf() 產生 PDF 成功後呼叫。"""
+    to = _superadmin_emails("case_closing_report")
+    if not to:
+        logger.warning("notify_case_closing_report: 無 superadmin email 收件人（quote_no=%r）", quote_no)
+        return
+    if not pdf_bytes:
+        logger.warning("notify_case_closing_report: PDF 內容為空，略過寄送（quote_no=%r）", quote_no)
+        return
+    case_page = f"{_base_url()}/pages/case-management.html?q={quote_no}"
+    label = f"{customer}{'／' + project if project else ''}" or quote_no
+    html = _build_html(
+        "案件結案報表", "已產生", "#7C3AED",
+        [("報價單號", quote_no), ("客戶名稱", customer), ("專案名稱", project or "（未填寫）")],
+        "", case_page,
+        intro=f"案件「{label}」已標記結案，系統已自動產生內部結案報表 PDF（含收入/成本/損益分析等內部財務資訊），詳見附件，僅供內部留存查核使用。",
+        button_text="前往查看案件",
+    )
+    attachments = [(f"{quote_no}_結案報表.pdf", pdf_bytes, "application/pdf")]
+    threading.Thread(
+        target=_send_with_attachments,
+        args=(to, f"【MOTRIX】案件結案報表 — {quote_no}（{customer}）", html, attachments),
+        daemon=True,
+    ).start()
+
+
 # ── Monthly report ────────────────────────────────────────────────────────────
 
 def _superadmin_emails(event_key: str = None) -> list:

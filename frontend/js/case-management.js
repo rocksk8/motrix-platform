@@ -2765,6 +2765,73 @@ function app() {
       } catch (e) { alert('刪除失敗：' + e.message) }
     },
 
+    async uploadMaterialInvoiceFiles(idx, evt) {
+      const files = evt?.target?.files
+      if (!files || files.length === 0) return
+      const fd = new FormData()
+      for (const f of files) fd.append('files', f)
+      try {
+        const r = await fetch(`/api/quotations/${this.selected.quote_no}/materials/${idx}/invoice-files`, {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + this.session.token },
+          body: fd
+        })
+        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '上傳失敗'); return }
+        const body = await r.json()
+        const mat = (this.cr.caseRecord.materials || [])[idx]
+        if (mat) {
+          if (!mat.invoiceFiles) mat.invoiceFiles = []
+          mat.invoiceFiles.push(...body.files)
+        }
+      } catch (e) { alert('上傳失敗：' + e.message) }
+      evt.target.value = ''
+    },
+
+    async deleteMaterialInvoiceFile(idx, fileId) {
+      if (!confirm('確定刪除此發票附件？')) return
+      try {
+        const r = await fetch(`/api/quotations/${this.selected.quote_no}/materials/${idx}/invoice-files/${fileId}`, {
+          method: 'DELETE',
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '刪除失敗'); return }
+        const body = await r.json()
+        const mat = (this.cr.caseRecord.materials || [])[idx]
+        if (mat && mat.invoiceFiles) mat.invoiceFiles = mat.invoiceFiles.filter(f => f.id !== fileId)
+      } catch (e) { alert('刪除失敗：' + e.message) }
+    },
+
+    async uploadDispatchFiles(d, evt) {
+      const files = evt?.target?.files
+      if (!files || files.length === 0) return
+      const fd = new FormData()
+      for (const f of files) fd.append('files', f)
+      try {
+        const r = await fetch(`/api/contractor-dispatches/${d.id}/files`, {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + this.session.token },
+          body: fd
+        })
+        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '上傳失敗'); return }
+        const body = await r.json()
+        if (!d.files) d.files = []
+        d.files.push(...body.files)
+      } catch (e) { alert('上傳失敗：' + e.message) }
+      evt.target.value = ''
+    },
+
+    async deleteDispatchFile(d, fileId) {
+      if (!confirm('確定刪除此報價附件？')) return
+      try {
+        const r = await fetch(`/api/contractor-dispatches/${d.id}/files/${fileId}`, {
+          method: 'DELETE',
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '刪除失敗'); return }
+        if (d.files) d.files = d.files.filter(f => f.id !== fileId)
+      } catch (e) { alert('刪除失敗：' + e.message) }
+    },
+
     async deleteInvoiceVoucherIssuedFile(v, fileId) {
       if (!confirm('確定刪除此附件？')) return
       try {

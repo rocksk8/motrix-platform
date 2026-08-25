@@ -12,7 +12,7 @@ from db import (
     DEMO_CONTRACTOR_VOUCHER_PDF_ARCHIVE_DIR, DEMO_INVOICE_VOUCHER_PDF_ARCHIVE_DIR,
     DEMO_PAYMENT_REQUEST_PDF_ARCHIVE_DIR, DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR,
 )
-from helpers import _get_edge_path, _get_setting, payment_item_amounts
+from helpers import _get_edge_path, _get_setting, payment_item_amounts, notify_case_closing_report
 
 logger = logging.getLogger(__name__)
 
@@ -2681,6 +2681,12 @@ def _generate_case_closing_pdf(quote_no: str, actor: str = '', action_type: str 
         if os.path.exists(pdf_path) and os.path.getsize(pdf_path) > 0:
             logger.info("Case closing report PDF saved: %s", pdf_path)
             _pdf_audit(quote_no, True, pdf_path, actor, action_type)
+            try:
+                with open(pdf_path, 'rb') as f:
+                    pdf_bytes = f.read()
+                notify_case_closing_report(quote_no, data.get("customer", ""), data.get("project", ""), pdf_bytes)
+            except Exception:
+                logger.exception("notify_case_closing_report failed for %s", quote_no)
         else:
             logger.warning("Case closing report PDF not created for %s (Edge ran but no output file)", quote_no)
             _pdf_audit(quote_no, False, "Edge 執行完畢但未產生 PDF 檔案", actor, action_type)

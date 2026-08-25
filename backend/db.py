@@ -78,7 +78,7 @@ DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR = os.path.join(
 # （已套用過的 schema_version 不可回頭刪除/重排），data_json.dealWonAt 這個
 # 欄位會留在既有資料裡但目前沒有任何程式碼讀取，之後如果要重新加回「成交時間」
 # 這種概念，不要複用這個欄位名稱免得語意混淆。
-CURRENT_VERSION = 59
+CURRENT_VERSION = 60
 
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
 # execution model) whenever the current request is authenticated as the 'demo'
@@ -1569,6 +1569,17 @@ def _m059_fix_deal_won_at_from_audit_log(conn):
     conn.commit()
 
 
+def _m060_dispatch_files(conn):
+    """承攬商派發新增 files_json（2026-08-25）：承攬商提供的報價/估價文件
+    附件上傳，比照 _m054_signed_upload_files 的通用附件 JSON 陣列存法，實際
+    檔案存 uploads/contractor_dispatches/{id}/。跟派發本身既有的 items_json/
+    personnel_json（拆解後的品項/人員「內容」）是不同層次——這裡存的是承攬商
+    提供的原始報價文件（PDF/圖檔），供事後核對用。"""
+    if not _col_exists(conn, "contractor_dispatches", "files_json"):
+        conn.execute("ALTER TABLE contractor_dispatches ADD COLUMN files_json TEXT NOT NULL DEFAULT '[]'")
+    conn.commit()
+
+
 def _m057_payment_request_stage(conn):
     """請款單新增 stage（款項類別：full/deposit/delivery/acceptance/final，
     2026-08-24）：客戶端請款單 PDF「請款範圍」欄要顯示業務語意的分類（全額/
@@ -2409,6 +2420,7 @@ _MIGRATIONS = [
     _m057_payment_request_stage,                   # v57
     _m058_backfill_deal_won_at,                    # v58
     _m059_fix_deal_won_at_from_audit_log,          # v59
+    _m060_dispatch_files,                          # v60
 ]
 
 

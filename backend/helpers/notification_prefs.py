@@ -61,6 +61,7 @@ EVENT_GROUPS = [
     ]),
     ("系統與報表", [
         ("settlement_finalized", "成本精算完結通知"),
+        ("case_closing_report", "案件結案報表 PDF（僅最高管理員）"),
         ("monthly_report",       "每月營運報表"),
         ("module_activity",      "各模組新增／異動通知（建立帳號、案件等一般活動）"),
     ]),

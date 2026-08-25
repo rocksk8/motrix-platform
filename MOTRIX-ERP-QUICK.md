@@ -293,7 +293,8 @@ daily_tasks / daily_task_completions / daily_task_edit_log
 vendor_contractors   -- code(V-YYYYMM-NNN), name, tax_id, contact, data_json(visits/tags/category)
 contractor_dispatches -- quote_no, vendor_id, status, items_json, total_amount, tax_rate,
                          accepted_at, accepted_by（DB v25），personnel_json（外包名單人員個別計費快照
-                         [{id,name,amount,note}]，DB v36，見 §5.7），invoice_no（發票號碼，DB v44）
+                         [{id,name,amount,note}]，DB v36，見 §5.7），invoice_no（發票號碼，DB v44），
+                         files_json（承攬商報價/估價文件附件，DB v60，2026-08-25，見 §5.9）
 
 contractor_payment_vouchers -- 承攬商匯款申請（DB v45，見 §5.9，2026-08-20）
   id, voucher_no PK（PV-YYYYMM-NNN）, dispatch_id FK→contractor_dispatches(id) UNIQUE（強制 1:1，
@@ -989,6 +990,13 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 ## §12 · 變更摘要（最新兩版）
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
+
+### 2026-08-25c — 承攬商報價附件＋叫料管控獨立發票欄位＋案件結案報表自動寄信最高管理員
+
+- **承攬商報價附件**（DB v60，`_m060_dispatch_files`）：`contractor_dispatches` 新增 `files_json`，`vendor_contractors.py` 新增 `POST/DELETE /api/contractor-dispatches/{did}/files`（admin+，比照 `quotations.py::upload_material_files` 存法），案件管理「承攬商」分頁的派發卡片新增「承攬商報價附件」上傳區塊——存承攬商提供的原始報價/估價文件本身，跟 `items_json` 拆解後的品項明細是分開的兩件事。
+- **叫料管控新增獨立「發票」欄位**：使用者確認叫料管控的發票要跟既有的「附件（到貨憑證/包裝清單...）」分開放，不能混在同一個清單。新增 `POST/DELETE /api/quotations/{no}/materials/{idx}/invoice-files`，存進 `mats[idx].invoiceFiles`（跟既有的 `mats[idx].files` 是兩個各自獨立的陣列），比照款項收款項目 `item.invoiceFiles` 的既有慣例——只是那邊掛在款項期別，這裡掛在叫料料件；前端新增獨立的「+ 上傳發票」按鈕，跟原本的「+ 上傳附件」並列但各自管理。
+- **案件結案報表自動寄信最高管理員**：`pdf_gen.py::_generate_case_closing_pdf()` 產生 PDF 成功寫檔後，新增 `helpers/email_notify.py::notify_case_closing_report()` 呼叫，讀剛存檔的 PDF bytes 當附件（比照既有 `notify_monthly_report()` 的 `_send_with_attachments()` 寄法）寄給 `_superadmin_emails()`——只寄最高管理員，不比照 `notify_settlement_finalized()` 發給全部 admin，因為結案報表含成本/毛利等內部機密財務資訊。新增事件 key `case_closing_report`（`notification_prefs.py`，可個別退訂）。PDF 產生本身跟寄信都在背景執行緒，不影響結案 API 的回應速度。
+- **測試**：新增 `test_dispatch_file_uploads.py`（3 個測試：上傳/刪除、多檔、非 admin 403）＋ `test_payment_item_and_material_uploads.py` 補一組叫料發票附件測試（驗證 `invoiceFiles` 跟 `files` 互不影響）；案件結案報表寄信這段沿用既有慣例不特別測（本地測試環境沒有 Edge headless，既有 PDF 產生相關程式碼本來就沒有自動化測試覆蓋，屬既有已知限制，非本輪新增缺口）。`python -m pytest -q` 128 全過（124→128）。
 
 ### 2026-08-25b — 簽核逾期提醒 email 收件人收斂為簽核人＋最高管理員
 

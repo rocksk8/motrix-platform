@@ -1823,6 +1823,47 @@ def delete_material_file(no: str, idx: int, file_id: str, authorization: str = H
     return {"ok": True, "updated_at": saved_at}
 
 
+@router.post("/api/quotations/{no}/materials/{idx}/invoice-files", status_code=201)
+async def upload_material_invoice_files(no: str, idx: int, files: List[UploadFile] = File(...),
+                                        authorization: str = Header(None)):
+    """叫料管控單筆料件的發票附件上傳（2026-08-25 新增，獨立於既有的到貨憑證/
+    包裝清單附件——存在 mats[idx]['invoiceFiles']，跟 mats[idx]['files']
+    是兩個各自獨立的清單，比照款項收款項目 item.invoiceFiles 的既有慣例，
+    只是那邊掛在款項而這裡掛在叫料料件）。任何登入使用者皆可傳，多檔。"""
+    user = _require_user(authorization)
+    conn = get_db()
+    try:
+        data, mats = _load_material_item(conn, no, idx)
+        new_files = await save_document_files("quotation_materials_invoices", f"{no}_{idx}", files,
+                                              user.get("display_name") or user["username"])
+        mats[idx].setdefault("invoiceFiles", [])
+        mats[idx]["invoiceFiles"].extend(new_files)
+        saved_at = save_quotation_json(conn, no, data)
+        conn.commit()
+    finally:
+        conn.close()
+    name = mats[idx].get("name") or f"第{idx+1}項"
+    _audit(_tok(authorization), "material.upload_invoice_files", "quotation", no,
+           f"{no} {name}（{len(new_files)} 個檔案）")
+    return {"ok": True, "added": len(new_files), "files": new_files, "updated_at": saved_at}
+
+
+@router.delete("/api/quotations/{no}/materials/{idx}/invoice-files/{file_id}")
+def delete_material_invoice_file(no: str, idx: int, file_id: str, authorization: str = Header(None)):
+    user = _require_user(authorization)
+    conn = get_db()
+    try:
+        data, mats = _load_material_item(conn, no, idx)
+        existing = mats[idx].get("invoiceFiles") or []
+        mats[idx]["invoiceFiles"] = delete_document_file("quotation_materials_invoices", f"{no}_{idx}", existing, file_id)
+        saved_at = save_quotation_json(conn, no, data)
+        conn.commit()
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "material.delete_invoice_file", "quotation", no, no)
+    return {"ok": True, "updated_at": saved_at}
+
+
 @router.post("/api/quotations/{no}/payment/{idx}/request-writeoff")
 def request_payment_writeoff(no: str, idx: int, body: WriteOffRequestIn, authorization: str = Header(None)):
     """admin+ 申請將該筆收款的稅額沖銷（歸零），需 superadmin 審核。"""

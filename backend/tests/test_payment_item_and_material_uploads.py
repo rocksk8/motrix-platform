@@ -129,3 +129,28 @@ def test_material_file_upload_multi_file(client, make_user):
     assert up.json()["added"] == 2
     cr = _get_case_record(client, token, "MQ-UP-011")
     assert len(cr["materials"][0]["files"]) == 2
+
+
+# ── material invoice files（獨立於上面的一般附件，2026-08-25 新增）────────────
+
+def test_material_invoice_file_upload_and_delete(client, make_user):
+    username, password = make_user(role="superadmin")
+    token = _login(client, username, password)
+    _make_quotation("MQ-UP-020")
+
+    up = client.post(
+        "/api/quotations/MQ-UP-020/materials/0/invoice-files", headers=_auth(token),
+        files={"files": _png_file()},
+    )
+    assert up.status_code == 201, up.text
+    file_id = up.json()["files"][0]["id"]
+
+    cr = _get_case_record(client, token, "MQ-UP-020")
+    assert len(cr["materials"][0]["invoiceFiles"]) == 1
+    # 一般附件（files）跟發票附件（invoiceFiles）互不影響，各自獨立
+    assert cr["materials"][0].get("files", []) == []
+
+    d = client.delete(f"/api/quotations/MQ-UP-020/materials/0/invoice-files/{file_id}", headers=_auth(token))
+    assert d.status_code == 200, d.text
+    cr2 = _get_case_record(client, token, "MQ-UP-020")
+    assert len(cr2["materials"][0]["invoiceFiles"]) == 0

@@ -45,6 +45,7 @@ from .email_notify import (
     notify_returned,
     notify_resubmit_requester,
     notify_settlement_finalized,
+    notify_case_closing_report,
     notify_daily_task_assigned,
     notify_daily_task_completed,
     notify_daily_task_overdue,
@@ -126,6 +127,7 @@ __all__ = [
     # email_notify
     "notify_approval_request", "notify_next_tier", "notify_approved",
     "notify_returned", "notify_resubmit_requester", "notify_settlement_finalized",
+    "notify_case_closing_report",
     "notify_daily_task_assigned", "notify_daily_task_completed", "notify_daily_task_overdue",
     "notify_daily_task_edited", "notify_warranty_expiry", "notify_monthly_report",
     "notify_range_task_deadline", "notify_dev_case_delete_request", "notify_dev_case_relink_request",
