@@ -1404,11 +1404,17 @@ def _build_report_html(data: dict, period_label: str, gen_at: str) -> str:
 
     # per-case profit detail blocks for PDF
     for mc in data["marginCases"]:
-        s = mc.get("settleSummary") or {}
+        # 命名為 ss（settleSummary）而非 s——函式開頭 s = data["summary"] 是整份
+        # 報表最後 KPI 區塊要用的彙總資料，Python 沒有迴圈區塊作用域，這個迴圈
+        # 跑完後若沿用 s 這個變數名，會把 s 永久覆蓋成最後一筆案件的精算摘要，
+        # 導致後面的 KPI 區塊讀 s["totalReceivable"] 直接 KeyError（曾經修過一次
+        # 見 2026-08-01c，但那次修的是月報寄信路徑；這裡是 PDF 匯出路徑同一個
+        # bug 的另一個發生點，2026-08-25 隨「營運報表匯出PDF」故障回報一併修正）
+        ss = mc.get("settleSummary") or {}
         net = mc["netMarginPct"] or 0
         act = mc["actualMarginPct"] or 0
         diff_ppts = round(act - net, 1)
-        prof_diff = int(s.get("profitDiff", 0) or 0)
+        prof_diff = int(ss.get("profitDiff", 0) or 0)
         diff_clr  = "#15803D" if prof_diff >= 0 else "#DC2626"
         diff_sign = "+" if prof_diff >= 0 else ""
         settle_date = mc.get("settleDate","") or ""
@@ -1424,29 +1430,29 @@ def _build_report_html(data: dict, period_label: str, gen_at: str) -> str:
     <table style="width:100%;border-right:1px solid #E5E7EB">
       <thead><tr><th colspan="2" style="background:#F9FAFB;color:#374151;text-align:center;padding:5px;font-size:9pt">原始報價預估</th></tr></thead>
       <tbody>
-        <tr><td>報價稅前收入</td><td class="r">{_fn(s.get("quotedPretax"))}</td></tr>
-        <tr><td>原始成本（料件）</td><td class="r">{_fn(s.get("origTotalCost"))}</td></tr>
-        <tr><td class="bold">原始直接毛利</td><td class="r bold">{_fn(s.get("origDirectProfit"))}</td></tr>
-        <tr><td>原始毛利率</td><td class="r">{float(s.get("origMarginPct") or 0):.1f}%</td></tr>
-        <tr class="sub"><td>管銷分攤（10%）</td><td class="r red">− {_fn(s.get("origAdminCost"))}</td></tr>
-        <tr class="sub"><td>公益捐款（1%）</td><td class="r red">− {_fn(s.get("origCharity"))}</td></tr>
-        <tr class="bold-row"><td>原始預估淨利</td><td class="r">{_fn(s.get("origNetProfit"))}</td></tr>
-        <tr><td>原始預估淨利率</td><td class="r">{float(s.get("origNetMarginPct") or 0):.1f}%</td></tr>
+        <tr><td>報價稅前收入</td><td class="r">{_fn(ss.get("quotedPretax"))}</td></tr>
+        <tr><td>原始成本（料件）</td><td class="r">{_fn(ss.get("origTotalCost"))}</td></tr>
+        <tr><td class="bold">原始直接毛利</td><td class="r bold">{_fn(ss.get("origDirectProfit"))}</td></tr>
+        <tr><td>原始毛利率</td><td class="r">{float(ss.get("origMarginPct") or 0):.1f}%</td></tr>
+        <tr class="sub"><td>管銷分攤（10%）</td><td class="r red">− {_fn(ss.get("origAdminCost"))}</td></tr>
+        <tr class="sub"><td>公益捐款（1%）</td><td class="r red">− {_fn(ss.get("origCharity"))}</td></tr>
+        <tr class="bold-row"><td>原始預估淨利</td><td class="r">{_fn(ss.get("origNetProfit"))}</td></tr>
+        <tr><td>原始預估淨利率</td><td class="r">{float(ss.get("origNetMarginPct") or 0):.1f}%</td></tr>
       </tbody>
     </table>
     <table style="width:100%">
       <thead><tr><th colspan="2" style="background:#FFFBEB;color:#92400E;text-align:center;padding:5px;font-size:9pt">實際成本精算</th></tr></thead>
       <tbody>
-        <tr><td>報價稅前收入</td><td class="r">{_fn(s.get("quotedPretax"))}</td></tr>
-        <tr><td>品項實際成本</td><td class="r orange">{_fn(s.get("itemActualTotal"))}</td></tr>
-        <tr><td>額外支出</td><td class="r orange">{_fn(s.get("extraTotal"))}</td></tr>
-        <tr class="bold-row"><td>實際總成本</td><td class="r orange bold">{_fn(s.get("totalActualCost"))}</td></tr>
-        <tr><td>真實毛利</td><td class="r {'green' if int(s.get('grossProfit',0) or 0)>=0 else 'red'}">{_fn(s.get("grossProfit"))}</td></tr>
-        <tr><td>真實毛利率</td><td class="r">{float(s.get("grossMarginPct") or 0):.1f}%</td></tr>
-        <tr class="sub"><td>管銷分攤（10%）</td><td class="r red">− {_fn(s.get("adminCost"))}</td></tr>
-        <tr class="sub"><td>公益捐款（1%）</td><td class="r red">− {_fn(s.get("charityDonation"))}</td></tr>
-        <tr class="bold-row"><td>真實淨利</td><td class="r {'green' if int(s.get('netProfit',0) or 0)>=0 else 'red'}">{_fn(s.get("netProfit"))}</td></tr>
-        <tr><td>真實淨利率</td><td class="r" style="color:{'#15803D' if float(s.get('netMarginPct',0) or 0)>=20 else '#B45309' if float(s.get('netMarginPct',0) or 0)>=0 else '#DC2626'};font-weight:700">{float(s.get("netMarginPct") or 0):.1f}%</td></tr>
+        <tr><td>報價稅前收入</td><td class="r">{_fn(ss.get("quotedPretax"))}</td></tr>
+        <tr><td>品項實際成本</td><td class="r orange">{_fn(ss.get("itemActualTotal"))}</td></tr>
+        <tr><td>額外支出</td><td class="r orange">{_fn(ss.get("extraTotal"))}</td></tr>
+        <tr class="bold-row"><td>實際總成本</td><td class="r orange bold">{_fn(ss.get("totalActualCost"))}</td></tr>
+        <tr><td>真實毛利</td><td class="r {'green' if int(ss.get('grossProfit',0) or 0)>=0 else 'red'}">{_fn(ss.get("grossProfit"))}</td></tr>
+        <tr><td>真實毛利率</td><td class="r">{float(ss.get("grossMarginPct") or 0):.1f}%</td></tr>
+        <tr class="sub"><td>管銷分攤（10%）</td><td class="r red">− {_fn(ss.get("adminCost"))}</td></tr>
+        <tr class="sub"><td>公益捐款（1%）</td><td class="r red">− {_fn(ss.get("charityDonation"))}</td></tr>
+        <tr class="bold-row"><td>真實淨利</td><td class="r {'green' if int(ss.get('netProfit',0) or 0)>=0 else 'red'}">{_fn(ss.get("netProfit"))}</td></tr>
+        <tr><td>真實淨利率</td><td class="r" style="color:{'#15803D' if float(ss.get('netMarginPct',0) or 0)>=20 else '#B45309' if float(ss.get('netMarginPct',0) or 0)>=0 else '#DC2626'};font-weight:700">{float(ss.get("netMarginPct") or 0):.1f}%</td></tr>
       </tbody>
     </table>
   </div>
