@@ -39,6 +39,17 @@ function reportsApp() {
     trendLoading: false,
     trendLoaded:  false,
 
+    // ── 月支出金額及明細（2026-08-26）───────────────────────────────────────
+    expensesYear:      new Date().getFullYear(),
+    expensesData:      null,
+    expensesLoading:   false,
+    expensesLoadedFor: null,   // 記錄已載入資料對應的年度，年度切換時判斷要不要重打 API
+    expensesFilter:    'all',  // all/contractor/equipment/material/other，明細列表的類別篩選 chip
+
+    // ── 案件清單依月份區分（2026-08-26）─────────────────────────────────────
+    caseListYear:         new Date().getFullYear(),
+    caseListGroupByMonth: true,
+
     // ── Settlement modal ──────────────────────────────────────────────────────
     settlementModal:   false,
     settlementLoading: false,
@@ -79,6 +90,53 @@ function reportsApp() {
     },
     get outstanding()  { return (this.data || {}).outstanding || [] },
     get casesAll()     { return (this.data || {}).casesAll    || [] },
+
+    // ── 案件清單依月份區分 ────────────────────────────────────────────────────
+    get caseListYears() {
+      var years = {}
+      this.casesAll.forEach(function(c) { if (c.quoteDate) years[c.quoteDate.slice(0, 4)] = true })
+      years[String(new Date().getFullYear())] = true
+      return Object.keys(years).sort().reverse()
+    },
+    get casesByMonth() {
+      var year = String(this.caseListYear)
+      var buckets = []
+      for (var m = 1; m <= 12; m++) {
+        buckets.push({ month: m, label: m + '月', cases: [], total: 0, received: 0 })
+      }
+      this.casesAll.forEach(function(c) {
+        if (!c.quoteDate || c.quoteDate.slice(0, 4) !== year) return
+        var m = parseInt(c.quoteDate.slice(5, 7), 10)
+        if (!buckets[m - 1]) return
+        buckets[m - 1].cases.push(c)
+        buckets[m - 1].total    += c.total || 0
+        buckets[m - 1].received += c.receivedAmount || 0
+      })
+      return buckets
+    },
+    get caseListYearTotal() {
+      return this.casesByMonth.reduce(function(s, b) { return s + b.cases.length }, 0)
+    },
+
+    // ── 月支出金額及明細 ──────────────────────────────────────────────────────
+    get expensesMonthly() { return (this.expensesData || {}).monthly || [] },
+    get expensesTotals()  { return (this.expensesData || {}).totals  || {} },
+    get expensesDetails() {
+      var d = (this.expensesData || {}).details || {}
+      if (this.expensesFilter !== 'all') {
+        return (d[this.expensesFilter] || []).map(function(x) { return Object.assign({ cat: this.expensesFilter }, x) }, this)
+      }
+      var cats = ['contractor', 'equipment', 'material', 'other']
+      var out = []
+      cats.forEach(function(cat) {
+        (d[cat] || []).forEach(function(x) { out.push(Object.assign({ cat: cat }, x)) })
+      })
+      out.sort(function(a, b) { return (b.date || '').localeCompare(a.date || '') })
+      return out
+    },
+    expensesCatLabel(cat) {
+      return { contractor: '承攬商派發', equipment: '設備進貨', material: '料件進貨', other: '其他支出' }[cat] || cat
+    },
     get casesPeriod()  { return (this.data || {}).casesPeriod || [] },
     get salesPerf()    { return (this.data || {}).salesPerf   || [] },
     get marginCases()  { return (this.data || {}).marginCases || [] },
@@ -730,6 +788,26 @@ function reportsApp() {
     showCustTab() {
       this.activeTab = 'cust'
       if (!this.custLoaded) this.loadCustHistory()
+    },
+
+    showExpensesTab() {
+      this.activeTab = 'expenses'
+      if (this.expensesLoadedFor !== this.expensesYear) this.loadExpenses()
+    },
+
+    async loadExpenses() {
+      this.expensesLoading = true
+      try {
+        var res = await fetch('/api/reports/expenses-monthly?year=' + this.expensesYear, {
+          headers: { Authorization: 'Bearer ' + this._token() }
+        })
+        if (!res.ok) throw new Error('支出明細載入失敗')
+        this.expensesData      = await res.json()
+        this.expensesLoadedFor = this.expensesYear
+      } catch (e) {
+        alert('支出明細載入失敗：' + (e.message || e))
+      }
+      this.expensesLoading = false
     },
 
     async showArTab() {

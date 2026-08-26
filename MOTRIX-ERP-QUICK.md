@@ -993,6 +993,25 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
 
+### 2026-08-26c — 月支出/案件依月份區分補上 Excel／PDF 匯出
+
+- **背景**：2026-08-26b 上線時刻意先做畫面即時查詢、沒納入匯出（見該則「刻意不做的範圍」），使用者確認也需要匯出後補齊。
+- **Excel**（`_build_excel()`）：新增「月支出」sheet，插在「未收款清單」跟「案件清單」之間——全年 1~12 月分類加總表（承攬商派發/設備進貨/料件進貨/其他支出/合計）+ 全年合計列（深色 sum-row 樣式）+ 下方支出明細列表（四類合併、依日期新到舊排序）。「案件清單」sheet 原本是 `casesAll`（依 quote_date DESC）平鋪列出，改成掃描時年月變化就插入一列合併儲存格的月份標題列（含當月案件數/合約金額小計，淺灰底），不需要重新排序，`casesAll` 本來就已經是 DESC 排序。
+- **PDF**（`_build_report_html()`）：比照 Excel 新增「月支出」章節（章節順序也插在未收款跟案件清單之間）；「案件清單」章節同樣先掃一輪算出每月小計（`month_sums` dict），組字串時遇到年月變化插入月份標題列（新增 `.month-hdr-row` CSS class，淺灰底比照 Excel 視覺）。
+- **年度來源**：`report_excel()`/`report_pdf()` 端點內 `data["expensesYear"] = int(d0[:4])`（`d0` 是 `_parse_period()` 算出的期間起始日）——不管使用者在畫面上選的是月報/季報/年報，匯出時「月支出」章節一律涵蓋該期間起始年份的完整 1~12 月，跟畫面上「月支出」分頁有自己獨立的年度選擇器是兩個不同來源，但語意一致（都是「這份報表所在年度」），使用者不會感覺兩邊對不起來。
+- **前端完全不用改**：`reports.js::exportFile()` 本來就是打 `/api/reports/financial/excel|pdf?period=...` 這組既有端點，新增的兩個章節/sheet 是後端資料組裝時自動一併帶進去，不需要前端知道新章節的存在。
+- **測試**：新增 `backend/tests/test_reports_export_expenses.py`（2 題）。Excel 用 `openpyxl.load_workbook()` 讀回產生的檔案，驗證「月支出」sheet 存在、表頭正確、指定月份金額正確（含稅換算對得起來）、「案件清單」sheet 確實出現月份標題列文字。PDF **不走** `_html_to_pdf()`（需要 Edge headless，本機測試環境沒有——這是既有已知限制，`pdf_gen`／這裡的 PDF 轉檔都本來就沒有自動化測試覆蓋，不是這次新增的缺口），改成直接呼叫 `_build_report_html()` 驗證回傳的 HTML 字串本身正確包含新章節與月份標題文字（純 Python 字串組裝，不需要外部瀏覽器）。`python -m pytest -q` 147/147 全過（145→147）。
+- **尚未執行**：正式機套用（依 §15 流程）。
+
+### 2026-08-26b — 營運報表新增「月支出金額及明細」＋「案件清單依月份區分」
+
+- **背景**：使用者要求營運報表（`reports.html`）新增支出面向的檢視，以及案件清單改依月份呈現，之前只有首頁儀表板有「近12個月支出結構」圖表（`dashboard.py::dashboard_expenses_monthly()`），營運報表本身完全沒有支出相關分頁。
+- **月支出金額及明細**：新增 `routers/reports.py::_collect_expenses(year)` + `GET /api/reports/expenses-monthly?year=YYYY`（admin+）。分類沿用 dashboard 既有的四類（承攬商派發／設備進貨／料件進貨／其他支出，`_EQUIPMENT_PART_CATEGORIES` 名單刻意保持一致），但**刻意不重構成共用函式**——dashboard 那支是固定近12個月、只算月度加總（供圖表），這支是任選年度、全年 1~12 月＋要保留逐筆明細，兩邊查詢範圍與回傳形狀差異夠大，硬共用只會讓兩邊都變難讀；日後若異動分類名單，記得兩邊一起改。明細計算：承攬商派發逐筆列出（含稅+外包人員個別計費，比照 `vendor_contractors._dispatch_row`）；料件/設備進貨因為 `stock_items` 是逐序號一筆，明細改成同月/同料號/同批號合併成一列（否則報表會被幾百個序號洗版）；其他支出取自已精算完結案件的 `settlement.extraItems`，依 `editHistory` 最後一筆 `settlement_finalized` 時間歸月。前端 `reports.html`/`reports.js` 新增「月支出」分頁：年度選擇器＋全年 1~12 月分類加總表，下方明細列表可依四類篩選（chip 按鈕沿用既有 `.period-type-btn` 樣式，不新增 CSS）。
+- **案件清單依月份區分**：純前端調整，不動後端——`casesAll`（`_collect()` 回傳，所有已成案/已結案案件，不受報表選取期間篩選）本來就有 `quoteDate` 欄位，直接在 `reports.js` 新增 `casesByMonth`/`caseListYears` computed getter 依 `quoteDate` 分組。「案件清單」分頁新增年度選擇器＋「依月份區分／顯示全部年度」切換按鈕，依月份分組時每個月一個小計列（案件數/合約金額小計/已收款小計），切到「顯示全部年度」則退回原本的平面清單（保留舊行為，沒有拿掉功能）。
+- **範圍（2026-08-26 當下）**：兩項先只做畫面即時查詢，未納入 Excel/PDF 匯出，以最小可用版本上線；**已於 2026-08-26c 補上**（見上方條目），照既有的 `_xl_style()`/`_set_row()` 慣例加 sheet，沒有另起新架構。
+- **測試**：新增 `backend/tests/test_reports_expenses.py`（5 題：非管理員 403、空年度全零、承攬商派發正確含稅計入、料件/設備依 category 正確分桶且明細正確合併批號、精算額外品項正確歸月計入其他支出）。`python -m pytest -q` 145/145 全過（140→145）。
+- **尚未執行**：正式機套用（依 §15 流程）。
+
 ### 2026-08-26 — 已結案案件解鎖/半解鎖機制（DB v61）＋完結案三項前置條件防呆機制
 
 - **背景**：兩項獨立需求一起施作。①§11 🔴最優先（2026-08-25 使用者提出）：完結案（`deal_tag: 已成案→已結案`）過去沒有任何前置條件檢查。②使用者本輪新提出：已結案上鎖的案件要能解鎖，解鎖後進入「半解鎖」狀態，期間的變更/上傳都要送最高管理員審核，且要在簽核佇列顯示。兩者互不依賴，但都改在 `update_deal_tag()`/`update_case_record()` 一帶的既有邏輯上，一併處理。

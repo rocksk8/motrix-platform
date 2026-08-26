@@ -333,6 +333,9 @@
             <button class="tab" :class="{on:activeTab==='out'}" @click="activeTab='out'">
               未收款<span class="tab__cnt" x-text="outstanding.length"></span>
             </button>
+            <button class="tab" :class="{on:activeTab==='expenses'}" @click="showExpensesTab()">
+              月支出<span class="tab__cnt" x-show="expensesTotals.total" x-text="fmt(expensesTotals.total)"></span>
+            </button>
             <button class="tab" :class="{on:activeTab==='cases'}" @click="activeTab='cases'">
               案件清單<span class="tab__cnt" x-text="casesAll.length"></span>
             </button>
@@ -430,12 +433,150 @@
             </template>
           </div>
 
+          <!-- 月支出金額及明細（2026-08-26） -->
+          <div x-show="activeTab==='expenses'" class="panel">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+              <span class="cm-section-title" style="margin:0;font-size:13px;font-weight:700;font-family:var(--font-zh)">年度</span>
+              <select x-model.number="expensesYear" @change="loadExpenses()"
+                      style="padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;background:#fff">
+                <template x-for="y in caseListYears" :key="y">
+                  <option :value="y" x-text="y"></option>
+                </template>
+              </select>
+              <span x-show="expensesLoading" style="font-size:12px;color:var(--text-dim)">載入中…</span>
+            </div>
+
+            <template x-if="!expensesLoading && expensesMonthly.length">
+              <table class="data-table" style="margin-bottom:20px">
+                <thead><tr>
+                  <th>月份</th><th class="r">承攬商派發</th><th class="r">設備進貨</th>
+                  <th class="r">料件進貨</th><th class="r">其他支出</th><th class="r">合計</th>
+                </tr></thead>
+                <tbody>
+                  <template x-for="m in expensesMonthly" :key="m.month">
+                    <tr>
+                      <td x-text="m.label"></td>
+                      <td class="r mono" x-text="fmt(m.contractor)"></td>
+                      <td class="r mono" x-text="fmt(m.equipment)"></td>
+                      <td class="r mono" x-text="fmt(m.material)"></td>
+                      <td class="r mono" x-text="fmt(m.other)"></td>
+                      <td class="r mono" style="font-weight:700" x-text="fmt(m.total)"></td>
+                    </tr>
+                  </template>
+                  <tr class="sum-row">
+                    <td>全年合計</td>
+                    <td class="r" x-text="fmt(expensesTotals.contractor)"></td>
+                    <td class="r" x-text="fmt(expensesTotals.equipment)"></td>
+                    <td class="r" x-text="fmt(expensesTotals.material)"></td>
+                    <td class="r" x-text="fmt(expensesTotals.other)"></td>
+                    <td class="r" x-text="fmt(expensesTotals.total)"></td>
+                  </tr>
+                </tbody>
+              </table>
+            </template>
+
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+              <span class="cm-section-title" style="margin:0;font-size:13px;font-weight:700;font-family:var(--font-zh)">支出明細</span>
+              <button class="period-type-btn" :class="{on:expensesFilter==='all'}" @click="expensesFilter='all'">全部</button>
+              <button class="period-type-btn" :class="{on:expensesFilter==='contractor'}" @click="expensesFilter='contractor'">承攬商派發</button>
+              <button class="period-type-btn" :class="{on:expensesFilter==='equipment'}" @click="expensesFilter='equipment'">設備進貨</button>
+              <button class="period-type-btn" :class="{on:expensesFilter==='material'}" @click="expensesFilter='material'">料件進貨</button>
+              <button class="period-type-btn" :class="{on:expensesFilter==='other'}" @click="expensesFilter='other'">其他支出</button>
+            </div>
+            <template x-if="!expensesLoading && expensesDetails.length === 0">
+              <div class="empty-state">此年度尚無支出明細資料</div>
+            </template>
+            <template x-if="expensesDetails.length > 0">
+              <table class="data-table">
+                <thead><tr>
+                  <th class="c">日期</th><th>類別</th><th>關聯案件</th><th>說明</th><th class="r">金額</th>
+                </tr></thead>
+                <tbody>
+                  <template x-for="(it, i) in expensesDetails" :key="it.cat + '-' + it.date + '-' + i">
+                    <tr>
+                      <td class="c mono" x-text="it.date"></td>
+                      <td x-text="expensesCatLabel(it.cat)"></td>
+                      <td class="mono" x-text="it.quoteNo || '—'"></td>
+                      <td x-text="it.desc"></td>
+                      <td class="r mono" x-text="fmt(it.amount)"></td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </template>
+          </div>
+
           <!-- 案件清單 -->
           <div x-show="activeTab==='cases'" class="panel">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+              <template x-if="caseListGroupByMonth">
+                <select x-model.number="caseListYear"
+                        style="padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;background:#fff">
+                  <template x-for="y in caseListYears" :key="y">
+                    <option :value="y" x-text="y + ' 年'"></option>
+                  </template>
+                </select>
+              </template>
+              <button class="period-type-btn" :class="{on:caseListGroupByMonth}" @click="caseListGroupByMonth=true">依月份區分</button>
+              <button class="period-type-btn" :class="{on:!caseListGroupByMonth}" @click="caseListGroupByMonth=false">顯示全部年度</button>
+              <span x-show="caseListGroupByMonth" style="font-size:12px;color:var(--text-dim)" x-text="caseListYear + ' 年共 ' + caseListYearTotal + ' 件已成案/已結案'"></span>
+            </div>
+
             <template x-if="casesAll.length === 0">
               <div class="empty-state">尚無成案資料</div>
             </template>
-            <template x-if="casesAll.length > 0">
+
+            <!-- 依月份區分檢視 -->
+            <template x-if="casesAll.length > 0 && caseListGroupByMonth">
+              <table class="data-table">
+                <thead><tr>
+                  <th>案件號</th><th>客戶</th><th>專案名稱</th><th>業務員</th>
+                  <th class="c">報價日</th><th class="c">進度</th>
+                  <th class="r">合約金額</th><th class="r">預估毛利率</th>
+                  <th class="r">已收款</th><th class="r">收款率</th>
+                  <th class="c">實際毛利率</th><th class="c">精算</th>
+                </tr></thead>
+                <template x-for="mgroup in casesByMonth" :key="mgroup.month">
+                  <tbody>
+                    <template x-if="mgroup.cases.length > 0">
+                      <tr class="sum-row">
+                        <td colspan="6" x-text="caseListYear + ' 年 ' + mgroup.label + '（' + mgroup.cases.length + ' 件）'"></td>
+                        <td class="r" x-text="fmt(mgroup.total)"></td>
+                        <td></td>
+                        <td class="r" x-text="fmt(mgroup.received)"></td>
+                        <td colspan="3"></td>
+                      </tr>
+                    </template>
+                    <template x-for="c in mgroup.cases" :key="c.quoteNo">
+                      <tr>
+                        <td class="mono" x-text="c.quoteNo"></td>
+                        <td x-text="c.customer"></td>
+                        <td x-text="c.project"></td>
+                        <td x-text="c.salesPerson"></td>
+                        <td class="c mono" x-text="c.quoteDate"></td>
+                        <td class="c"><span class="rb" :class="c.dealTag==='已結案'?'rb-closed':'rb-active'" x-text="c.dealTag"></span></td>
+                        <td class="r mono" x-text="fmt(c.total)"></td>
+                        <td class="r mono" x-text="(c.netMarginPct||0).toFixed(1) + '%'"></td>
+                        <td class="r mono" x-text="fmt(c.receivedAmount)"></td>
+                        <td class="r mono" :class="c.collectionRate>=80?'green-txt':c.collectionRate>=50?'orange-txt':'red-txt'" x-text="c.collectionRate.toFixed(1) + '%'"></td>
+                        <td class="c mono" :class="c.actualMarginPct!==null?(c.actualMarginPct>=(c.netMarginPct||0)?'green-txt':'red-txt'):''" x-text="c.actualMarginPct!==null ? c.actualMarginPct.toFixed(1)+'%' : '—'"></td>
+                        <td class="c">
+                          <template x-if="stlCanOpen(c)">
+                            <button class="link-btn" @click="openSettlement(c.quoteNo)">精算</button>
+                          </template>
+                          <template x-if="!stlCanOpen(c)">
+                            <span style="color:var(--text-dim);font-size:11px">—</span>
+                          </template>
+                        </td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </template>
+              </table>
+            </template>
+
+            <!-- 顯示全部年度（不分組，原始平面清單） -->
+            <template x-if="casesAll.length > 0 && !caseListGroupByMonth">
               <table class="data-table">
                 <thead><tr>
                   <th>案件號</th><th>客戶</th><th>專案名稱</th><th>業務員</th>

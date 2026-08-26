@@ -1,0 +1,129 @@
+"""營運報表「月支出金額及明細」（2026-08-26）API 層測試——
+routers/reports.py::_collect_expenses()/GET /api/reports/expenses-monthly。"""
+import json
+
+
+def _login(client, username, password):
+    r = client.post("/api/auth/login", json={"username": username, "password": password})
+    assert r.status_code == 200, r.text
+    return r.json()["token"]
+
+
+def _auth(token):
+    return {"Authorization": f"Bearer {token}"}
+
+
+def test_non_admin_forbidden(client, make_user):
+    username, password = make_user(role="sales")
+    token = _login(client, username, password)
+    r = client.get("/api/reports/expenses-monthly?year=2026", headers=_auth(token))
+    assert r.status_code == 403, r.text
+
+
+def test_empty_year_returns_zeroed_12_months(client, make_user):
+    username, password = make_user(role="admin")
+    token = _login(client, username, password)
+    r = client.get("/api/reports/expenses-monthly?year=2099", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["year"] == 2099
+    assert len(body["monthly"]) == 12
+    assert body["monthly"][0]["label"] == "1月"
+    assert body["totals"]["total"] == 0
+    assert body["details"] == {"contractor": [], "equipment": [], "material": [], "other": []}
+
+
+def test_contractor_dispatch_counted(client, make_user):
+    username, password = make_user(role="admin")
+    token = _login(client, username, password)
+    import db
+    conn = db.get_db()
+    try:
+        conn.execute(
+            "INSERT INTO vendor_contractors (name, active, created_at) VALUES (?,1,?)",
+            ("測試承攬商", "2026-01-01T00:00:00"),
+        )
+        vendor_id = conn.execute("SELECT id FROM vendor_contractors WHERE name='測試承攬商'").fetchone()["id"]
+        conn.execute(
+            "INSERT INTO contractor_dispatches (quote_no, vendor_id, dispatch_date, scope, items_json, "
+            "total_amount, status, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
+            ("MQ-EXP-001", vendor_id, "2026-03-15", "amount", "[]", 10000, "confirmed",
+             "2026-03-15T00:00:00", "2026-03-15T00:00:00"),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    r = client.get("/api/reports/expenses-monthly?year=2026", headers=_auth(token))
+    body = r.json()
+    march = next(m for m in body["monthly"] if m["month"] == "2026-03")
+    assert march["contractor"] == 10500  # 10000 + 5% 稅（_dispatch_row 預設稅率）
+    assert body["totals"]["contractor"] == 10500
+    assert any(d["desc"] == "測試承攬商" and d["amount"] == 10500 for d in body["details"]["contractor"])
+
+
+def test_stock_purchase_bucketed_by_category(client, make_user):
+    username, password = make_user(role="admin")
+    token = _login(client, username, password)
+    import db
+    conn = db.get_db()
+    try:
+        conn.execute(
+            "INSERT INTO parts (part_no, name, category, active, created_at, updated_at) "
+            "VALUES (?,?,?,1,?,?)",
+            ("P-EQ-001", "測試設備", "網通設備", "2026-01-01T00:00:00", "2026-01-01T00:00:00"),
+        )
+        conn.execute(
+            "INSERT INTO parts (part_no, name, category, active, created_at, updated_at) "
+            "VALUES (?,?,?,1,?,?)",
+            ("P-MAT-001", "測試料件", "線材配件", "2026-01-01T00:00:00", "2026-01-01T00:00:00"),
+        )
+        for sn, part_no, cost in (("SN1", "P-EQ-001", 5000), ("SN2", "P-EQ-001", 5000), ("SN3", "P-MAT-001", 300)):
+            conn.execute(
+                "INSERT INTO stock_items (part_no, serial_no, status, batch_no, cost, created_at, updated_at) "
+                "VALUES (?,?,?,?,?,?,?)",
+                (part_no, sn, "in_stock", "BATCH1", cost, "2026-05-10T00:00:00", "2026-05-10T00:00:00"),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+    r = client.get("/api/reports/expenses-monthly?year=2026", headers=_auth(token))
+    body = r.json()
+    may = next(m for m in body["monthly"] if m["month"] == "2026-05")
+    assert may["equipment"] == 10000
+    assert may["material"] == 300
+    eq_detail = next(d for d in body["details"]["equipment"] if "測試設備" in d["desc"])
+    assert eq_detail["amount"] == 10000
+    assert "× 2" in eq_detail["desc"]
+
+
+def test_settlement_extra_item_counted_as_other(client, make_user):
+    username, password = make_user(role="admin")
+    token = _login(client, username, password)
+    import db
+    conn = db.get_db()
+    try:
+        data_json = json.dumps({
+            "dealTag": "已結案",
+            "editHistory": [{"type": "settlement_finalized", "at": "2026-07-20T00:00:00"}],
+            "settlement": {
+                "status": "finalized",
+                "extraItems": [{"category": "運費", "name": "貨運費用", "totalCost": 2500}],
+            },
+        })
+        conn.execute(
+            "INSERT INTO quotations (quote_no, status, customer_name, project_name, total, pretax, "
+            "data_json, created_at, updated_at, deal_tag) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            ("MQ-EXP-002", "已送出", "測試客戶", "測試專案", 50000, 47619, data_json,
+             "2026-01-01T00:00:00", "2026-01-01T00:00:00", "已結案"),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    r = client.get("/api/reports/expenses-monthly?year=2026", headers=_auth(token))
+    body = r.json()
+    july = next(m for m in body["monthly"] if m["month"] == "2026-07")
+    assert july["other"] == 2500
+    assert any(d["quoteNo"] == "MQ-EXP-002" and d["amount"] == 2500 for d in body["details"]["other"])

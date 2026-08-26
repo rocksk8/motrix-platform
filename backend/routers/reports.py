@@ -24,6 +24,7 @@ from helpers import (
     _require_user, _warranty_expiry, _get_edge_path, _get_setting, _set_setting,
     payment_item_amounts, quote_won_month_map,
 )
+from routers.vendor_contractors import _dispatch_row
 
 _log = logging.getLogger(__name__)
 
@@ -841,6 +842,83 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
              aligns=[al("left")] + [al("right")] * 8, height=20)
     ws3.cell(row=sr3, column=7).number_format = '#,##0'
 
+    # ── Sheet 4b: 月支出（2026-08-26 新增）──────────────────────────────────
+    exp = data.get("expenses") or {"monthly": [], "totals": {}, "details": {}}
+    ws_exp = wb.create_sheet("月支出")
+    ws_exp.sheet_view.showGridLines = False
+
+    hdrs_exp = ["月份", "承攬商派發", "設備進貨", "料件進貨", "其他支出", "合計"]
+    cols_exp = [10, 14, 14, 14, 14, 14]
+    for i, (h, w) in enumerate(zip(hdrs_exp, cols_exp), 1):
+        ws_exp.column_dimensions[get_column_letter(i)].width = w
+
+    ws_exp.merge_cells(f"A1:{get_column_letter(len(hdrs_exp))}1")
+    c = ws_exp["A1"]
+    c.value = f"{data.get('expensesYear', '')}年度月支出結構"
+    c.font  = mk(bold=True, size=12, color=C_WHITE)
+    c.fill  = fill("7C3AED")
+    c.alignment = al("center")
+    ws_exp.row_dimensions[1].height = 24
+
+    _set_row(ws_exp, 2, hdrs_exp,
+             font=mk(bold=True, size=9, color=C_WHITE),
+             fill=fill("374151"), border=BD,
+             aligns=[al("center")], height=20)
+
+    r_i = 3
+    for m in exp["monthly"]:
+        _set_row(ws_exp, r_i,
+                 [m["label"], m["contractor"], m["equipment"], m["material"], m["other"], m["total"]],
+                 font=mk(size=9), fill=fill(C_WHITE), border=BD,
+                 aligns=[al("center")] + [al("right")] * 5, height=18)
+        for ci in (2, 3, 4, 5, 6):
+            ws_exp.cell(row=r_i, column=ci).number_format = '#,##0'
+        r_i += 1
+
+    tot = exp.get("totals") or {}
+    _set_row(ws_exp, r_i,
+             ["全年合計", tot.get("contractor", 0), tot.get("equipment", 0),
+              tot.get("material", 0), tot.get("other", 0), tot.get("total", 0)],
+             font=mk(bold=True, size=9, color=C_WHITE),
+             fill=fill(C_DARK), border=BD,
+             aligns=[al("left")] + [al("right")] * 5, height=20)
+    for ci in (2, 3, 4, 5, 6):
+        ws_exp.cell(row=r_i, column=ci).number_format = '#,##0'
+    r_i += 2
+
+    # 支出明細（承攬商/設備/料件/其他四類合併，依日期新到舊排序）
+    ws_exp.merge_cells(f"A{r_i}:{get_column_letter(len(hdrs_exp))}{r_i}")
+    dc = ws_exp.cell(row=r_i, column=1, value="支出明細")
+    dc.font = mk(bold=True, size=11, color=C_WHITE)
+    dc.fill = fill(C_GRAY)
+    dc.alignment = al("center")
+    ws_exp.row_dimensions[r_i].height = 22
+    r_i += 1
+
+    cat_label = {"contractor": "承攬商派發", "equipment": "設備進貨", "material": "料件進貨", "other": "其他支出"}
+    detail_hdrs = ["日期", "類別", "關聯案件", "說明", "金額"]
+    _set_row(ws_exp, r_i, detail_hdrs,
+             font=mk(bold=True, size=9, color=C_WHITE),
+             fill=fill("374151"), border=BD,
+             aligns=[al("center")], height=20)
+    r_i += 1
+
+    all_details = []
+    for cat, rows in (exp.get("details") or {}).items():
+        for it in rows:
+            all_details.append((cat, it))
+    all_details.sort(key=lambda x: x[1].get("date") or "", reverse=True)
+
+    for cat, it in all_details:
+        _set_row(ws_exp, r_i,
+                 [it.get("date", ""), cat_label.get(cat, cat), it.get("quoteNo", ""),
+                  it.get("desc", ""), it.get("amount", 0)],
+                 font=mk(size=9), fill=fill(C_WHITE), border=BD,
+                 aligns=[al("center"), al("center"), al("left"), al("left"), al("right")],
+                 height=18)
+        ws_exp.cell(row=r_i, column=5).number_format = '#,##0'
+        r_i += 1
+
     # ── Sheet 5: 案件清單 ────────────────────────────────────────────────────
     ws4 = wb.create_sheet("案件清單")
     ws4.sheet_view.showGridLines = False
@@ -864,7 +942,23 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
              fill=fill("374151"), border=BD,
              aligns=[al("center")], height=20)
 
-    for r_i, c_ in enumerate(data["casesAll"], 3):
+    # 依月份區分（2026-08-26）：casesAll 本來就依 quote_date DESC 排序，逐筆掃描、
+    # 年月變化時插入一列合併儲存格的月份標題列（含當月案件數/合約金額小計），
+    # 不需要另外排序或分組運算。
+    r_i = 3
+    last_ym = None
+    for c_ in data["casesAll"]:
+        ym = (c_["quoteDate"] or "")[:7]
+        if ym != last_ym:
+            ym_label = f"{ym[:4]}年{int(ym[5:7])}月" if ym else "（未填報價日）"
+            ws4.merge_cells(f"A{r_i}:{get_column_letter(len(hdrs4))}{r_i}")
+            hc = ws4.cell(row=r_i, column=1, value=ym_label)
+            hc.font = mk(bold=True, size=9, color=C_GRAY)
+            hc.fill = fill(C_LGRAY)
+            hc.alignment = al("left")
+            ws4.row_dimensions[r_i].height = 18
+            r_i += 1
+            last_ym = ym
         in_p = c_["inPeriod"]
         bg   = C_LBLUE if in_p else C_WHITE
         am   = c_["actualMarginPct"]
@@ -899,6 +993,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
                 size=9, bold=True,
                 color=C_GREEN if am >= (net or 0) else C_RED
             )
+        r_i += 1
 
     # ── Sheet 6: 業務員績效 ──────────────────────────────────────────────────
     ws5 = wb.create_sheet("業務員績效")
@@ -1326,8 +1421,28 @@ def _build_report_html(data: dict, period_label: str, gen_at: str) -> str:
         )
 
     # case rows
-    case_rows = ""
+    # 依月份區分（2026-08-26）：casesAll 本來就依 quote_date DESC 排序，先掃一輪
+    # 算出每個年月的案件數/合約金額小計，第二輪逐筆組字串時遇到年月變化就插入
+    # 一列跨欄的月份標題列，比照 Excel「案件清單」sheet 同一套邏輯。
+    month_sums: dict = {}
     for c in data["casesAll"]:
+        ym = (c["quoteDate"] or "")[:7]
+        ms = month_sums.setdefault(ym, {"count": 0, "total": 0})
+        ms["count"] += 1
+        ms["total"] += c["total"] or 0
+
+    case_rows = ""
+    last_ym = None
+    for c in data["casesAll"]:
+        ym = (c["quoteDate"] or "")[:7]
+        if ym != last_ym:
+            ym_label = f"{ym[:4]}年{int(ym[5:7])}月" if ym else "（未填報價日）"
+            ms = month_sums[ym]
+            case_rows += (
+                f"<tr class='month-hdr-row'><td colspan='6'>{esc(ym_label)}（{ms['count']} 件）</td>"
+                f"<td class='r'>NT$ {ms['total']:,}</td><td colspan='3'></td></tr>"
+            )
+            last_ym = ym
         am = c["actualMarginPct"]
         diff = round((am or 0) - (c["netMarginPct"] or 0), 1) if am is not None else None
         in_p_cls = ' class="in-period"' if c["inPeriod"] else ""
@@ -1340,6 +1455,29 @@ def _build_report_html(data: dict, period_label: str, gen_at: str) -> str:
             "<td class='r " + ("green" if c["collectionRate"] >= 80 else "orange") + f"'>{c['collectionRate']:.1f}%</td>"
             "<td class='c'>" + ((("▲" if diff >= 0 else "▼") + str(abs(diff)) + "%") if diff is not None else "—") + "</td></tr>"
         )
+
+    # ── 月支出（2026-08-26）───────────────────────────────────────────────────
+    exp = data.get("expenses") or {"monthly": [], "totals": {}, "details": {}}
+    exp_month_rows = ""
+    for m in exp["monthly"]:
+        exp_month_rows += (
+            f"<tr><td>{esc(m['label'])}</td>"
+            f"<td class='r'>NT$ {m['contractor']:,}</td><td class='r'>NT$ {m['equipment']:,}</td>"
+            f"<td class='r'>NT$ {m['material']:,}</td><td class='r'>NT$ {m['other']:,}</td>"
+            f"<td class='r'><b>NT$ {m['total']:,}</b></td></tr>"
+        )
+    exp_cat_label = {"contractor": "承攬商派發", "equipment": "設備進貨", "material": "料件進貨", "other": "其他支出"}
+    exp_details = []
+    for cat, rows in (exp.get("details") or {}).items():
+        for it in rows:
+            exp_details.append((cat, it))
+    exp_details.sort(key=lambda x: x[1].get("date") or "", reverse=True)
+    exp_detail_rows = "".join(
+        f"<tr><td class='c'>{esc(it.get('date',''))}</td><td>{esc(exp_cat_label.get(cat, cat))}</td>"
+        f"<td>{esc(it.get('quoteNo','') or '—')}</td><td>{esc(it.get('desc',''))}</td>"
+        f"<td class='r'>NT$ {it.get('amount',0):,}</td></tr>"
+        for cat, it in exp_details
+    )
 
     # sales rows
     sp_rows = ""
@@ -1579,6 +1717,8 @@ tr.in-period{{background:#EFF6FF}}
 .fee{{color:#DC2626}}.net{{color:#15803D;font-weight:700}}.tag{{font-weight:700}}
 .sum-row{{background:#111827!important;color:#fff;font-weight:700}}
 .sum-row td{{border:none}}
+.month-hdr-row{{background:#F3F4F6!important;font-weight:700;color:#374151}}
+.month-hdr-row td{{border:none}}
 .footer{{font-size:7pt;color:#9CA3AF;text-align:center;margin-top:8px;border-top:1px solid #E5E7EB;padding-top:6px}}
 </style></head><body>
 
@@ -1633,9 +1773,27 @@ tr.in-period{{background:#EFF6FF}}
 </tr>
 </table>
 
+<!-- 月支出（2026-08-26） -->
+<div class="page-break"></div>
+<div class="section-title" style="background:#7C3AED">{data.get("expensesYear","")}年度月支出結構</div>
+<table>
+<thead>{tbl_hdr("月份","承攬商派發","設備進貨","料件進貨","其他支出","合計")}</thead>
+<tbody>{exp_month_rows}</tbody>
+<tr class="sum-row">
+  <td>全年合計</td>
+  <td class="r">NT$ {exp["totals"].get("contractor",0):,}</td>
+  <td class="r">NT$ {exp["totals"].get("equipment",0):,}</td>
+  <td class="r">NT$ {exp["totals"].get("material",0):,}</td>
+  <td class="r">NT$ {exp["totals"].get("other",0):,}</td>
+  <td class="r">NT$ {exp["totals"].get("total",0):,}</td>
+</tr>
+</table>
+<h3 style="margin:16px 0 8px;font-size:10pt;color:#7C3AED;border-bottom:1px solid #DDD6FE;padding-bottom:4px">支出明細</h3>
+{'<table><thead>' + tbl_hdr("日期","類別","關聯案件","說明","金額") + '</thead><tbody>' + exp_detail_rows + '</tbody></table>' if exp_details else '<p style="color:#6B7280;font-size:9pt;padding:8px 0;font-style:italic">此年度尚無支出明細資料。</p>'}
+
 <!-- 案件清單 -->
 <div class="page-break"></div>
-<div class="section-title" style="background:#1F2937">案件清單（本期新成案以藍色標示）</div>
+<div class="section-title" style="background:#1F2937">案件清單（本期新成案以藍色標示，依月份區分）</div>
 <table>
 <thead>{tbl_hdr("案件號","客戶","專案","業務員","報價日","進度","合約金額","預估毛利率","收款率","實際毛利率(▲▼)")}</thead>
 <tbody>{case_rows}</tbody>
@@ -1737,7 +1895,9 @@ def report_excel(
     _check_export_rate(u["id"], "excel")
     label, d0, d1 = _parse_period(period)
     data   = _augment_with_targets(_collect(d0, d1, department_id), d0)
-    data["arAging"] = _compute_ar_aging()
+    data["arAging"]   = _compute_ar_aging()
+    data["expensesYear"] = int(d0[:4])
+    data["expenses"]     = _collect_expenses(data["expensesYear"])
     gen_at = datetime.now().strftime("%Y-%m-%d %H:%M")
     xlsx   = _build_excel(data, label, gen_at)
     safe   = label.replace(" ", "").replace("年", "Y").replace("月", "M").replace("第", "Q").replace("季", "")
@@ -1761,7 +1921,9 @@ def report_pdf(
     _check_export_rate(u["id"], "pdf")
     label, d0, d1 = _parse_period(period)
     data   = _augment_with_targets(_collect(d0, d1, department_id), d0)
-    data["arAging"] = _compute_ar_aging()
+    data["arAging"]   = _compute_ar_aging()
+    data["expensesYear"] = int(d0[:4])
+    data["expenses"]     = _collect_expenses(data["expensesYear"])
     gen_at = datetime.now().strftime("%Y-%m-%d %H:%M")
     try:
         pdf_bytes = _html_to_pdf(_build_report_html(data, label, gen_at))
@@ -2190,3 +2352,137 @@ def monthly_trend(months: int = 12, authorization: str = Header(None)):
             "avgMarginPct": round(md["mProfitSum"] / rev_sum * 100, 1) if rev_sum > 0 else None,
         })
     return result
+
+
+# ── 月支出金額及明細（2026-08-26）───────────────────────────────────────────
+# 分類跟 dashboard.py::dashboard_expenses_monthly()（首頁「近12個月支出結構」
+# 圖表）刻意保持一致（承攬商派發／設備進貨／料件進貨／其他支出），但那支是
+# 固定近12個月、只算月度加總（供圖表用，無明細）；這裡改成依報表選取的任意
+# 年度全年 1~12 月計算，且要保留逐筆明細（供「支出明細」表列查核用）。刻意
+# 不重構成共用函式直接複用 dashboard.py 那份——兩邊查詢範圍與回傳形狀差異
+# 大（固定近12月 vs 任意年度、無明細 vs 有明細），硬共用只會讓兩邊都變難讀，
+# 只共用「設備類 parts.category」名單（下方常數，異動時記得跟 dashboard.py
+# 那份一起改）。
+_EQUIPMENT_PART_CATEGORIES = {"網通設備", "監控設備", "交換器", "伺服器/工控"}
+
+
+def _collect_expenses(year: int) -> dict:
+    """回傳該年度 1~12 月的支出結構（承攬商/設備/料件/其他）＋逐筆明細。"""
+    d0 = f"{year}-01-01"
+    d1 = f"{year}-12-31"
+    month_list = [f"{year}-{m:02d}" for m in range(1, 13)]
+    monthly = {mo: {"contractor": 0.0, "equipment": 0.0, "material": 0.0, "other": 0.0} for mo in month_list}
+    details: dict = {"contractor": [], "equipment": [], "material": [], "other": []}
+
+    conn = get_db()
+
+    # ── 承攬商派發（含稅承攬商費用＋外包人員個別計費，比照 vendor_contractors._dispatch_row）
+    disp_rows = conn.execute("""
+        SELECT cd.*, vc.name AS vendor_name
+        FROM contractor_dispatches cd LEFT JOIN vendor_contractors vc ON vc.id = cd.vendor_id
+        WHERE cd.status != 'cancelled' AND cd.dispatch_date BETWEEN ? AND ?
+    """, (d0, d1)).fetchall()
+    for r in disp_rows:
+        mo = (r["dispatch_date"] or "")[:7]
+        if mo not in monthly:
+            continue
+        amt = _dispatch_row(r)["grandTotal"]
+        if not amt:
+            continue
+        monthly[mo]["contractor"] += amt
+        details["contractor"].append({
+            "date": r["dispatch_date"] or "", "quoteNo": r["quote_no"] or "",
+            "desc": r["vendor_name"] or "（未指定承攬商）", "amount": round(amt),
+        })
+
+    # ── 料件 / 設備進貨成本（stock_items.cost，依 parts.category 分桶；同月同料號
+    # 同批號合併成一列明細——單一序號逐筆列出對報表而言太瑣碎，見上方常數）
+    stock_rows = conn.execute("""
+        SELECT substr(s.created_at,1,10) AS created_date, s.cost AS cost, s.part_no AS part_no,
+               s.batch_no AS batch_no, p.name AS part_name, p.category AS category
+        FROM stock_items s LEFT JOIN parts p ON p.part_no = s.part_no
+        WHERE s.status != 'void' AND substr(s.created_at,1,10) BETWEEN ? AND ?
+    """, (d0, d1)).fetchall()
+    stock_agg: dict = {}
+    for r in stock_rows:
+        mo = (r["created_date"] or "")[:7]
+        if mo not in monthly:
+            continue
+        bucket = "equipment" if r["category"] in _EQUIPMENT_PART_CATEGORIES else "material"
+        cost = float(r["cost"] or 0)
+        monthly[mo][bucket] += cost
+        key = (mo, bucket, r["part_no"], r["batch_no"] or "")
+        agg = stock_agg.setdefault(key, {
+            "date": r["created_date"] or "", "bucket": bucket,
+            "name": r["part_name"] or r["part_no"] or "（未知料號）",
+            "batchNo": r["batch_no"] or "", "amount": 0.0, "qty": 0,
+        })
+        agg["amount"] += cost
+        agg["qty"]    += 1
+    for agg in stock_agg.values():
+        label = agg["name"] + (f"（批號 {agg['batchNo']}）" if agg["batchNo"] else "")
+        details[agg["bucket"]].append({
+            "date": agg["date"], "quoteNo": "",
+            "desc": f"{label} × {agg['qty']}", "amount": round(agg["amount"]),
+        })
+
+    # ── 其他支出（已精算完結案件的額外品項，依 settlement_finalized 時間歸月）
+    quote_rows = conn.execute(
+        "SELECT quote_no, customer_name, data_json FROM quotations "
+        "WHERE json_extract(data_json,'$.settlement.status')='finalized'"
+    ).fetchall()
+    conn.close()
+    for r in quote_rows:
+        try:
+            data = json.loads(r["data_json"] or "{}")
+        except Exception:
+            continue
+        history = data.get("editHistory") or []
+        finalized_at = ""
+        for h in history:
+            if h.get("type") == "settlement_finalized":
+                finalized_at = h.get("at") or finalized_at
+        mo = (finalized_at or "")[:7]
+        if mo not in monthly:
+            continue
+        for it in ((data.get("settlement") or {}).get("extraItems")) or []:
+            cost = float(it.get("totalCost") or 0)
+            if not cost:
+                continue
+            monthly[mo]["other"] += cost
+            cat = it.get("category") or "其他"
+            desc = it.get("name") or it.get("desc") or cat
+            details["other"].append({
+                "date": (finalized_at or "")[:10], "quoteNo": r["quote_no"] or "",
+                "desc": f"{r['customer_name'] or ''}｜{cat}｜{desc}".strip("｜"),
+                "amount": round(cost),
+            })
+
+    monthly_items = []
+    totals = {"contractor": 0, "equipment": 0, "material": 0, "other": 0, "total": 0}
+    for mo in month_list:
+        e = monthly[mo]
+        total = e["contractor"] + e["equipment"] + e["material"] + e["other"]
+        item = {
+            "month": mo, "label": f"{int(mo[5:7])}月",
+            "contractor": round(e["contractor"]), "equipment": round(e["equipment"]),
+            "material": round(e["material"]), "other": round(e["other"]),
+            "total": round(total),
+        }
+        monthly_items.append(item)
+        for k in ("contractor", "equipment", "material", "other", "total"):
+            totals[k] += item[k]
+
+    for cat in details:
+        details[cat].sort(key=lambda x: x["date"], reverse=True)
+
+    return {"monthly": monthly_items, "totals": totals, "details": details}
+
+
+@router.get("/api/reports/expenses-monthly")
+def report_expenses_monthly(year: int = Query(None), authorization: str = Header(None)):
+    u = _require_user(authorization)
+    if u["role"] not in ("superadmin", "admin"):
+        raise HTTPException(403, "僅管理員以上可存取報表")
+    year = year or date.today().year
+    return {"year": year, **_collect_expenses(year)}
