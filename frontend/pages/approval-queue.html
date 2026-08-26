@@ -308,6 +308,7 @@
     .aq-type-tag.aq-type-iv        { background: #D1FAE5; color: #065F46; }
     .aq-type-tag.aq-type-sn        { background: #CFFAFE; color: #155E75; }
     .aq-type-tag.aq-type-pr        { background: #FFEDD5; color: #9A3412; }
+    .aq-type-tag.aq-type-cc        { background: #EDE9FE; color: #6D28D9; }
 
   /* -- Mobile RWD -- */
   @media (max-width:767px) {
@@ -410,7 +411,7 @@
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3"/></svg>
               <span x-text="isVoucher(selected) ? '開啟案件管理' : '開啟報價單'"></span>
             </a>
-            <button class="btn btn-sm" @click="previewItem(selected)" :disabled="previewFetching"
+            <button class="btn btn-sm" x-show="selected?.type !== 'case_change'" @click="previewItem(selected)" :disabled="previewFetching"
                     style="font-size:12px;color:var(--accent);background:#fff;border:1px solid var(--border);border-radius:var(--radius);padding:6px 10px;display:inline-flex;align-items:center;gap:5px;cursor:pointer">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
               預覽
@@ -604,14 +605,17 @@
   <!-- Reject modal -->
   <div class="reject-modal-overlay" x-show="rejectModalOpen" @click.self="rejectModalOpen=false">
     <div class="reject-modal">
-      <h3>退回草稿</h3>
-      <p style="font-size:12px;color:var(--text-secondary);margin-bottom:12px">
+      <h3 x-text="selected?.type === 'case_change' ? '拒絕此變更' : '退回草稿'"></h3>
+      <p style="font-size:12px;color:var(--text-secondary);margin-bottom:12px" x-show="selected?.type !== 'case_change'">
         此<span x-text="selected ? docTypeLabel(selected) : '報價單'"></span>將退回「草稿」狀態，申請人可修改後重新送出。
+      </p>
+      <p style="font-size:12px;color:var(--text-secondary);margin-bottom:12px" x-show="selected?.type === 'case_change'">
+        此變更申請將被拒絕、不會套用到案件資料（暫存的上傳檔案會一併刪除），申請人會收到通知。
       </p>
       <textarea x-model="rejectNote" placeholder="退回原因（選填，供申請人參考）"></textarea>
       <div class="reject-modal-footer">
         <button class="btn btn-ghost btn-sm" @click="rejectModalOpen=false">取消</button>
-        <button class="btn btn-reject btn-sm" @click="doReject()" :disabled="actioning">確認退回</button>
+        <button class="btn btn-reject btn-sm" @click="doReject()" :disabled="actioning" x-text="selected?.type === 'case_change' ? '確認拒絕' : '確認退回'"></button>
       </div>
     </div>
   </div>
@@ -665,6 +669,7 @@
           if (item.type === 'invoice_voucher') return '開票申請憑據'
           if (item.type === 'shipping_note') return '出貨單'
           if (item.type === 'payment_request') return '請款單'
+          if (item.type === 'case_change') return '已結案案件變更'
           return '報價單'
         },
 
@@ -673,6 +678,7 @@
           if (item?.type === 'invoice_voucher') return 'iv'
           if (item?.type === 'shipping_note') return 'sn'
           if (item?.type === 'payment_request') return 'pr'
+          if (item?.type === 'case_change') return 'cc'
           return 'quotation'
         },
 
@@ -693,11 +699,13 @@
           if (item?.type === 'invoice_voucher') return '申請金額（含稅）'
           if (item?.type === 'shipping_note') return '出貨品項'
           if (item?.type === 'payment_request') return '請款金額（含稅）'
+          if (item?.type === 'case_change') return '變更內容'
           return '報價金額'
         },
 
         amountDisplay(item) {
           if (item?.type === 'shipping_note') return (item.total || 0) + ' 項'
+          if (item?.type === 'case_change') return item.projectName || ''
           return 'NT$ ' + (item?.total || 0).toLocaleString()
         },
 
@@ -706,7 +714,7 @@
         },
 
         async previewItem(item) {
-          if (!item) return
+          if (!item || item.type === 'case_change') return
           this.previewFetching = true
           try {
             const r = await fetch(`${API}${this.apiBase(item)}/${encodeURIComponent(item.quoteNo)}/pdf-download`, {
@@ -729,9 +737,15 @@
         },
 
         get myPendingCount() {
-          return this.queue.flatMap(g => g.items).filter(item =>
-            (item.currentApprovers || []).some(a => a.username === this.session.username && a.status !== 'approved')
-          ).length
+          return this.queue.flatMap(g => g.items).filter(item => {
+            // 已結案案件變更：單層「任一 superadmin」，不是 tiers 循序簽核，
+            // currentApprovers 刻意留空（見 get_approval_queue() 註解），這裡
+            // 另外判斷，不能套用其他類型的 tiers 比對邏輯。
+            if (item.type === 'case_change') {
+              return this.session.role === 'superadmin' && item.requestedBy !== this.session.username
+            }
+            return (item.currentApprovers || []).some(a => a.username === this.session.username && a.status !== 'approved')
+          }).length
         },
 
         async init() {
@@ -786,6 +800,7 @@
 
         waitingForText(item) {
           if (!item) return ''
+          if (item.type === 'case_change') return '需最高管理員審核'
           const tiers = item.tiers || []
           if (tiers.length > 0) {
             const cur = item.currentTier ?? 0
@@ -811,6 +826,29 @@
         async doApprove() {
           if (!this.selected) return
           const item = this.selected
+          if (item.type === 'case_change') {
+            if (!confirm(`確認核准此變更並套用？\n\n${item.customer}｜${item.projectName}\n\n核准後將立即套用到案件資料，無法復原。`)) return
+            this.actioning = true
+            try {
+              const r = await fetch(`${API}/api/case-changes/${item.changeRequestId}/approve`, {
+                method: 'POST',
+                headers: { Authorization: 'Bearer ' + this.session.token }
+              })
+              if (!r.ok) {
+                const err = await r.json().catch(() => ({}))
+                alert('核准失敗：' + (err.detail || r.status))
+                return
+              }
+              this._toast('✓ 已核准並套用', '#15803D')
+              this.selected = null
+              await this.loadQueue()
+            } catch (e) {
+              alert('網路錯誤：' + e.message)
+            } finally {
+              this.actioning = false
+            }
+            return
+          }
           const tiers = item.tiers || []
           const isMultiTier = tiers.length > 0
           const isLastTier  = isMultiTier && (item.currentTier ?? 0) === tiers.length - 1
@@ -888,6 +926,30 @@
         async doReject() {
           if (!this.selected) return
           const item = this.selected
+          if (item.type === 'case_change') {
+            this.actioning = true
+            try {
+              const r = await fetch(`${API}/api/case-changes/${item.changeRequestId}/reject`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+                body: JSON.stringify({ reason: this.rejectNote })
+              })
+              if (!r.ok) {
+                const err = await r.json().catch(() => ({}))
+                alert('拒絕失敗：' + (err.detail || r.status))
+                return
+              }
+              this.rejectModalOpen = false
+              this._toast('✗ 已拒絕此變更', '#B45309')
+              this.selected = null
+              await this.loadQueue()
+            } catch (e) {
+              alert('網路錯誤：' + e.message)
+            } finally {
+              this.actioning = false
+            }
+            return
+          }
           this.actioning = true
           try {
             const r = await fetch(`${API}${this.apiBase(item)}/${encodeURIComponent(item.quoteNo)}/reject`, {

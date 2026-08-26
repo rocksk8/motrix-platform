@@ -762,6 +762,14 @@ function app() {
 
     async saveCaseRecord() {
       if (!this.selected) return
+      if (this.cr.dealTag === '已結案' && !this.selected.case_semi_unlocked) {
+        // 已結案且未解鎖：後端會直接 403，這裡先擋下避免每次 @input 觸發的
+        // 防抖自動存檔都跑一趟網路請求、又跳出令人困惑的「儲存失敗」。
+        this.dirty = false
+        this.saveStatus = 'error'
+        this.saveMsg = '案件已結案並鎖定，請先解鎖'
+        return
+      }
       this.saving = true
       try {
         const r = await fetch('/api/quotations/' + this.selected.quote_no + '/case-record', {
@@ -772,6 +780,14 @@ function app() {
         if (r.ok) {
           this.dirty = false
           const res = await r.json().catch(() => ({}))
+          if (res.pending) {
+            // 已結案案件半解鎖期間：此次存檔不會立即生效，已排隊等最高管理員審核
+            // （見 backend/routers/quotations.py::_gate_case_edit()）。
+            this.saveStatus = 'dirty'
+            this.saveMsg = '已送出，待最高管理員審核後套用'
+            this.saving = false
+            return
+          }
           const conflicts = res.stockConflicts || []
           if (conflicts.length) {
             // 序號已登載到案件，但庫存系統裡這些序號其實卡在別的狀態（已出貨/已安裝於
@@ -894,8 +910,47 @@ function app() {
           const idx = this.cases.findIndex(c => c.quote_no === this.selected.quote_no)
           if (idx !== -1) this.cases[idx].deal_tag = tag
           this.filterCases()
+        } else {
+          // 完結案防呆機制（2026-08-25/26）擋下時會回 400 + 說明未達成的前置
+          // 條件，不能靜默吞掉，不然使用者只會看到「完結案」按鈕沒反應。
+          const err = await r.json().catch(() => ({}))
+          alert(err.detail || '操作失敗，請稍後再試')
         }
-      } catch {}
+      } catch {
+        alert('網路錯誤，請稍後再試')
+      }
+    },
+
+    async unlockCase() {
+      if (!this.selected) return
+      if (!confirm('確認解鎖此已結案案件？\n\n解鎖後將進入「半解鎖」狀態，之後對案件記錄的變更/上傳需最高管理員於簽核佇列審核通過後才會套用。')) return
+      try {
+        const r = await fetch(`/api/quotations/${this.selected.quote_no}/case-unlock`, {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (r.ok) {
+          this.selected.case_semi_unlocked = 1
+        } else {
+          alert((await r.json().catch(() => ({}))).detail || '解鎖失敗')
+        }
+      } catch (e) { alert('網路錯誤：' + e.message) }
+    },
+
+    async lockCase() {
+      if (!this.selected) return
+      if (!confirm('確認重新上鎖此案件？\n\n上鎖後將無法再變更案件記錄，需再次解鎖才能繼續編輯（既有待審核項目不受影響）。')) return
+      try {
+        const r = await fetch(`/api/quotations/${this.selected.quote_no}/case-lock`, {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (r.ok) {
+          this.selected.case_semi_unlocked = 0
+        } else {
+          alert((await r.json().catch(() => ({}))).detail || '上鎖失敗')
+        }
+      } catch (e) { alert('網路錯誤：' + e.message) }
     },
 
     caseProgressPct() {
@@ -2706,6 +2761,7 @@ function app() {
         })
         if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '上傳失敗'); return }
         const body = await r.json()
+        if (body.pending) { alert(body.message || '已送出，待最高管理員審核後套用'); return }
         const item = this.paymentItems()[idx]
         if (item) {
           if (!item.invoiceFiles) item.invoiceFiles = []
@@ -2724,6 +2780,7 @@ function app() {
         })
         if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '刪除失敗'); return }
         const body = await r.json()
+        if (body.pending) { alert(body.message || '已送出，待最高管理員審核後套用'); return }
         const item = this.paymentItems()[idx]
         if (item && item.invoiceFiles) item.invoiceFiles = item.invoiceFiles.filter(f => f.id !== fileId)
       } catch (e) { alert('刪除失敗：' + e.message) }
@@ -2742,6 +2799,7 @@ function app() {
         })
         if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '上傳失敗'); return }
         const body = await r.json()
+        if (body.pending) { alert(body.message || '已送出，待最高管理員審核後套用'); return }
         const mat = (this.cr.caseRecord.materials || [])[idx]
         if (mat) {
           if (!mat.files) mat.files = []
@@ -2760,6 +2818,7 @@ function app() {
         })
         if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '刪除失敗'); return }
         const body = await r.json()
+        if (body.pending) { alert(body.message || '已送出，待最高管理員審核後套用'); return }
         const mat = (this.cr.caseRecord.materials || [])[idx]
         if (mat && mat.files) mat.files = mat.files.filter(f => f.id !== fileId)
       } catch (e) { alert('刪除失敗：' + e.message) }
@@ -2778,6 +2837,7 @@ function app() {
         })
         if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '上傳失敗'); return }
         const body = await r.json()
+        if (body.pending) { alert(body.message || '已送出，待最高管理員審核後套用'); return }
         const mat = (this.cr.caseRecord.materials || [])[idx]
         if (mat) {
           if (!mat.invoiceFiles) mat.invoiceFiles = []
@@ -2796,6 +2856,7 @@ function app() {
         })
         if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '刪除失敗'); return }
         const body = await r.json()
+        if (body.pending) { alert(body.message || '已送出，待最高管理員審核後套用'); return }
         const mat = (this.cr.caseRecord.materials || [])[idx]
         if (mat && mat.invoiceFiles) mat.invoiceFiles = mat.invoiceFiles.filter(f => f.id !== fileId)
       } catch (e) { alert('刪除失敗：' + e.message) }

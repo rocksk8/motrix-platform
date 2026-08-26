@@ -653,6 +653,15 @@
                     已結案
                   </span>
                 </template>
+                <template x-if="cr.dealTag === '已結案' && !selected.case_semi_unlocked">
+                  <button class="btn-ghost" style="font-size:12px;padding:4px 10px" title="解鎖後可繼續變更，但每筆變更/上傳都需最高管理員審核" @click="unlockCase()">解鎖</button>
+                </template>
+                <template x-if="cr.dealTag === '已結案' && selected.case_semi_unlocked">
+                  <span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:#B45309;background:#FFFBEB;border:1px solid #FDE68A;border-radius:6px;padding:3px 8px" title="變更/上傳需最高管理員審核通過後才會套用">
+                    半解鎖中
+                    <button class="btn-ghost" style="font-size:12px;padding:2px 8px" @click="lockCase()">重新上鎖</button>
+                  </span>
+                </template>
 
                 <div class="cm-header__spacer"></div>
 

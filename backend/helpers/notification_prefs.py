@@ -65,6 +65,10 @@ EVENT_GROUPS = [
         ("monthly_report",       "每月營運報表"),
         ("module_activity",      "各模組新增／異動通知（建立帳號、案件等一般活動）"),
     ]),
+    ("已結案案件解鎖", [
+        ("case_close_blocked",   "完結案被防呆機制擋下（未達成前置條件）"),
+        ("case_change_requested","已結案案件半解鎖期間的變更/上傳待審核（僅最高管理員）"),
+    ]),
 ]
 
 EVENT_KEYS = [key for _, items in EVENT_GROUPS for key, _ in items]

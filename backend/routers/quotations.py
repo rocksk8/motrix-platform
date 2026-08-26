@@ -1,8 +1,11 @@
 """Quotation CRUD, approval workflow, deal-tag, export endpoints."""
 import json
 import logging
+import os
+import shutil
 import sqlite3
 import threading
+import uuid
 from collections import defaultdict
 from datetime import datetime
 from typing import List, Optional
@@ -25,7 +28,10 @@ from helpers import (
     check_approve_permission, check_reject_permission, check_no_tier_self_approval,
     resolve_tier_approvers, UnresolvedManagerError,
     save_document_files, delete_document_file,
+    notify_case_close_blocked, notify_case_change_requested,
 )
+import helpers.uploads as _uploads_mod
+from helpers.uploads import _effective_subfolder
 from archive import _backup_quotation
 from pdf_gen import (
     _generate_quotation_pdf, generate_pdf_bytes,
@@ -110,6 +116,122 @@ def _check_quotation_owner(row, user: dict) -> None:
     owns = (sp_id == user["id"]) or (sp_id is None and sp_name == user["display_name"])
     if not owns:
         raise HTTPException(403, "無權限存取其他業務的報價單")
+
+
+# ── Case semi-unlock / change-request helpers (2026-08-26) ────────────────────
+# 已結案案件解鎖後的「半解鎖」機制：deal_tag='已結案' 時，quotations 表
+# case_semi_unlocked 欄位若為 0，_gate_case_edit() 涵蓋的端點一律 403；若為 1，
+# 這些端點不直接套用變更，而是寫入 case_change_requests 一筆 pending 記錄、
+# 背景寄信通知最高管理員，回傳 pending 回應給前端；等 superadmin 於簽核佇列
+# 核准後才由 _apply_case_change_request() 真正套用。涵蓋範圍與設計取捨（哪些
+# 端點刻意不支援排隊、一律直接 403）見 db.py _m061_case_semi_unlock() docstring。
+
+def _check_case_gate(conn, quote_no: str) -> bool:
+    """已結案且未半解鎖 → 403；已結案且已半解鎖 → True（呼叫端應改走
+    _create_case_change_request() 排隊，不要直接套用變更）；案件未結案 →
+    False（照常繼續，不受任何限制）。"""
+    row = conn.execute(
+        "SELECT deal_tag, case_semi_unlocked FROM quotations WHERE quote_no=?", (quote_no,)
+    ).fetchone()
+    if not row:
+        raise HTTPException(404, f"報價單 {quote_no} 不存在")
+    if (row["deal_tag"] or "") != "已結案":
+        return False
+    if not row["case_semi_unlocked"]:
+        raise HTTPException(403, "案件已結案並鎖定，請先解鎖（半解鎖）後再操作")
+    return True
+
+
+def _create_case_change_request(conn, quote_no: str, user: dict, authorization: str,
+                                action_type: str, summary: str, payload: dict,
+                                staged_files: list = None) -> int:
+    now = datetime.now().isoformat()
+    cur = conn.execute(
+        "INSERT INTO case_change_requests "
+        "(quote_no, action_type, summary, payload_json, staged_files_json, status, "
+        " requested_by, requested_by_display, requested_at) "
+        "VALUES (?,?,?,?,?,'pending',?,?,?)",
+        (quote_no, action_type, summary, json.dumps(payload, ensure_ascii=False),
+         json.dumps(staged_files or [], ensure_ascii=False),
+         user["username"], user.get("display_name") or user["username"], now),
+    )
+    conn.commit()
+    change_id = cur.lastrowid
+    requester_display = user.get("display_name") or user["username"]
+    spawn_bg_thread(_notify_case_change_requested_bg, args=(quote_no, summary, requester_display))
+    _audit(_tok(authorization), "case.change_requested", "quotation", quote_no,
+           f"{quote_no}（待審核 #{change_id}：{summary}）")
+    return change_id
+
+
+def _gate_case_edit(conn, quote_no: str, user: dict, authorization: str, action_type: str,
+                    summary: str, payload: dict, staged_files: list = None):
+    """簡化版：payload 已完整（不需要事後補 staged_files，例如 case_record_update／
+    payment_mark 這種純 JSON body 的異動），一次做完「檢查 + 建立待審核記錄」。
+    回傳 (gated, change_id)——gated=True 時呼叫端應立即回傳 pending 回應，不要
+    再執行實際變更；gated=False 時比照原本邏輯繼續。需要先建立記錄取得 id
+    才能存放暫存檔案的上傳類端點，改用 _check_case_gate() +
+    _create_case_change_request() 兩段式呼叫（見 upload_material_files() 等）。
+
+    case_record_update 特別處理（2026-08-26 自我審查發現的合併去重）：
+    `update_case_record()` 是每次欄位編輯 1.5 秒防抖自動存檔都會呼叫的端點，
+    半解鎖期間若每次都新建一筆待審核記錄，編輯個幾分鐘就會在佇列裡疊出幾十筆
+    近乎重複的記錄（且各自是「當下那一刻」的完整 caseRecord 快照）；更嚴重的
+    是若 superadmin 沒有嚴格照時間先後核准，核准較舊的一筆會用當時的舊快照
+    整包蓋掉已經核准過的較新內容，等於資料倒退。修法：同一張案件若已有一筆
+    `pending` 的 case_record_update，後續存檔直接更新那一筆的內容/時間戳，
+    不新建、不重複寄信——核准時永遠拿到最新一次編輯的完整內容，佇列裡也只會
+    看到一筆。"""
+    if not _check_case_gate(conn, quote_no):
+        return False, None
+    if action_type == "case_record_update":
+        existing = conn.execute(
+            "SELECT id FROM case_change_requests WHERE quote_no=? AND action_type=? AND status='pending'",
+            (quote_no, action_type),
+        ).fetchone()
+        if existing:
+            now = datetime.now().isoformat()
+            conn.execute(
+                "UPDATE case_change_requests SET summary=?, payload_json=?, requested_by=?, "
+                "requested_by_display=?, requested_at=? WHERE id=?",
+                (summary, json.dumps(payload, ensure_ascii=False), user["username"],
+                 user.get("display_name") or user["username"], now, existing["id"]),
+            )
+            conn.commit()
+            return True, existing["id"]
+    change_id = _create_case_change_request(conn, quote_no, user, authorization,
+                                             action_type, summary, payload, staged_files)
+    return True, change_id
+
+
+def _notify_case_change_requested_bg(quote_no: str, summary: str, requester_display: str) -> None:
+    conn = get_db()
+    row = conn.execute(
+        "SELECT customer_name, project_name FROM quotations WHERE quote_no=?", (quote_no,)
+    ).fetchone()
+    conn.close()
+    notify_case_change_requested(
+        quote_no, row["customer_name"] or "" if row else "",
+        row["project_name"] or "" if row else "", summary, requester_display,
+    )
+
+
+def _deny_if_case_locked_unsupported(conn, quote_no: str) -> None:
+    """給不支援排隊審核的細項端點（案件執行階段的新增/編輯/刪除/排序/加入
+    負責人/移除負責人/前置階段/新增拜訪/編輯拜訪/刪除拜訪共 10 支，加上款項
+    稅額沖銷申請/撤銷/核准 3 支，合計 13 支）用：已結案案件
+    一律 403，不論是否半解鎖都不例外（設計取捨見 db.py migration docstring —
+    需要修正時請透過已支援排隊審核的案件資料整體編輯/款項標記收款/附件上傳
+    端點處理，或聯繫最高管理員直接校正）。"""
+    row = conn.execute("SELECT deal_tag FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+    if not row:
+        raise HTTPException(404, f"報價單 {quote_no} 不存在")
+    if (row["deal_tag"] or "") == "已結案":
+        raise HTTPException(
+            403,
+            "案件已結案並鎖定，此操作不支援於已結案案件（如需修正請透過案件資料整體編輯，"
+            "或聯繫最高管理員）",
+        )
 
 
 def _exclude_requester(tiers: list, requester: str) -> list:
@@ -987,6 +1109,61 @@ def recall_quotation(quote_no: str, authorization: str = Header(None)):
     return {"quote_no": quote_no, "status": "草稿"}
 
 
+def _case_close_block_reasons(conn, quote_no: str, d: dict):
+    """完結案三項前置條件檢查（2026-08-25 使用者提出，見 QUICK.md §11 🔴最優先
+    那一列）。回傳 (reasons, pending_usernames)：reasons 非空時應擋下完結案；
+    pending_usernames 是③相關單據簽核人（①②沒有對應的「簽核人」概念，維持
+    空清單，通知只會落到最高管理員，見 notify_case_close_blocked() docstring）。"""
+    reasons = []
+    pending_usernames: list = []
+
+    # ① 執行管理進度 100%（沒有任何階段視為「無需檢查」，不算未達成）
+    stage_row = conn.execute(
+        "SELECT COUNT(*) total, SUM(CASE WHEN done=1 THEN 1 ELSE 0 END) done "
+        "FROM case_stages WHERE quote_no=?", (quote_no,)
+    ).fetchone()
+    total = stage_row["total"] or 0
+    done  = stage_row["done"] or 0
+    if total > 0 and done < total:
+        reasons.append(f"執行管理進度尚未 100%（{done}/{total}）")
+
+    # ② 款項明細全部收齊（沒有任何期別視為「無需檢查」）
+    items = ((d.get("caseRecord") or {}).get("payment") or {}).get("items") or []
+    unpaid = [it for it in items if not it.get("received")]
+    if unpaid:
+        reasons.append(f"款項明細尚有 {len(unpaid)} 期未收齊")
+
+    # ③ 相關單據簽核流程全部完成（報價單本身＋承攬商匯款申請／開票申請憑據／
+    # 出貨單／請款單，四種 tiers 簽核機制皆不可處於待審核/簽核中）
+    doc_checks = [
+        ("報價單",       "quotations"),
+        ("承攬商匯款申請", "contractor_payment_vouchers"),
+        ("開票申請憑據",   "invoice_vouchers"),
+        ("出貨單",       "shipping_notes"),
+        ("請款單",       "payment_requests"),
+    ]
+    for label, table in doc_checks:
+        rows = conn.execute(
+            f"SELECT json_extract(data_json,'$.approval') ap FROM {table} "
+            f"WHERE quote_no=? AND status IN ('待審核','簽核中')",
+            (quote_no,)
+        ).fetchall()
+        if rows:
+            reasons.append(f"{label}尚有 {len(rows)} 筆簽核中")
+            for r in rows:
+                try:
+                    appr = json.loads(r["ap"] or "{}")
+                except Exception:
+                    appr = {}
+                tiers = _active_tiers(appr)
+                ct = _current_tier_idx(appr)
+                if tiers and ct < len(tiers):
+                    for a in (tiers[ct].get("approvers") or []):
+                        if a.get("status") != "approved" and a.get("username"):
+                            pending_usernames.append(a["username"])
+    return reasons, list(dict.fromkeys(pending_usernames))
+
+
 @router.patch("/api/quotations/{quote_no}/deal-tag")
 def update_deal_tag(quote_no: str, body: QuotationDealTagUpdate, authorization: str = Header(None)):
     user = _require_user(authorization)
@@ -994,11 +1171,14 @@ def update_deal_tag(quote_no: str, body: QuotationDealTagUpdate, authorization: 
     if body.deal_tag in ("未成案", "已成案") and user["role"] not in ("superadmin", "admin"):
         raise HTTPException(403, "僅管理員以上可標記「未成案」或「已成案」")
     conn = get_db()
-    row = conn.execute("SELECT data_json, customer_name, status FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+    row = conn.execute(
+        "SELECT data_json, customer_name, project_name, status FROM quotations WHERE quote_no=?", (quote_no,)
+    ).fetchone()
     if not row:
         conn.close()
         raise HTTPException(404, f"報價單 {quote_no} 不存在")
     cname = row['customer_name'] or ''
+    pname = row['project_name'] or ''
     d = json.loads(row["data_json"] or "{}")
     old_tag = d.get("dealTag", "")
     # 已成案 需先完成簽核（報價單狀態為「已送出」）
@@ -1010,6 +1190,18 @@ def update_deal_tag(quote_no: str, body: QuotationDealTagUpdate, authorization: 
     if body.deal_tag == "已結案" and old_tag != "已成案":
         conn.close()
         raise HTTPException(400, "案件須先標記為「已成案」才能結案")
+    # 完結案防呆（2026-08-25 使用者提出、2026-08-26 施作）：①執行管理進度100%
+    # ②款項明細全部收齊③相關單據（報價單/承攬商匯款申請/開票申請憑據/出貨單/
+    # 請款單）簽核流程全部完成，三項須同時達成才能完結案；任一未達成直接 400
+    # 擋下，並通知尚未完成該項的簽核人＋最高管理員（見 _case_close_block_reasons()）。
+    if body.deal_tag == "已結案":
+        reasons, pending_usernames = _case_close_block_reasons(conn, quote_no, d)
+        if reasons:
+            conn.close()
+            spawn_bg_thread(notify_case_close_blocked, args=(quote_no, cname, pname, reasons, pending_usernames))
+            _audit(_tok(authorization), 'case.close_blocked', 'quotation', quote_no,
+                   f"{quote_no}（{cname}）完結案被擋下", {"reasons": reasons})
+            raise HTTPException(400, "尚有前置條件未達成，無法完結案：" + "；".join(reasons))
     # 已成案 → 降級 限管理員以上
     if old_tag == "已成案" and body.deal_tag != "已成案" and user["role"] not in ("superadmin", "admin"):
         conn.close()
@@ -1144,6 +1336,76 @@ def _sync_device_stock(conn, quote_no: str, old_devices: list, new_devices: list
     return conflicts
 
 
+@router.post("/api/quotations/{quote_no}/case-unlock")
+def unlock_case(quote_no: str, authorization: str = Header(None)):
+    """已結案案件解鎖為「半解鎖」狀態（2026-08-26）：任何登入使用者皆可觸發
+    （2026-08-26 使用者透過 AskUserQuestion 確認，比照既有附件上傳「任何人皆
+    可傳」的最寬鬆權限慣例），解鎖本身立即生效、不需審核；半解鎖期間的每一筆
+    變更/上傳才需要 superadmin 審核（見 _gate_case_edit()／_check_case_gate()）。
+    只對 deal_tag='已結案' 的案件有意義，其他狀態呼叫這支端點沒有實質作用。"""
+    user = _require_user(authorization)
+    conn = get_db()
+    row = conn.execute("SELECT deal_tag, customer_name, project_name FROM quotations WHERE quote_no=?",
+                       (quote_no,)).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(404, f"報價單 {quote_no} 不存在")
+    if (row["deal_tag"] or "") != "已結案":
+        conn.close()
+        raise HTTPException(400, "只有已結案的案件才需要解鎖")
+    now = datetime.now().isoformat()
+    display = user.get("display_name") or user["username"]
+    conn.execute(
+        "UPDATE quotations SET case_semi_unlocked=1, case_semi_unlocked_by=?, case_semi_unlocked_at=? "
+        "WHERE quote_no=?",
+        (display, now, quote_no),
+    )
+    conn.commit()
+    conn.close()
+    _audit(_tok(authorization), "case.semi_unlock", "quotation", quote_no,
+           f"{quote_no}（{row['customer_name'] or ''}）解鎖為半解鎖狀態")
+    notify_module_activity("案件管理", "解鎖為半解鎖狀態", display,
+                            f"{quote_no}（{row['customer_name'] or ''}）", "case-management.html")
+    spawn_bg_thread(_notify_case_unlocked_bg, args=(quote_no, row["customer_name"] or "",
+                                                    row["project_name"] or "", display))
+    return {"ok": True, "caseSemiUnlocked": True, "caseSemiUnlockedBy": display, "caseSemiUnlockedAt": now}
+
+
+def _notify_case_unlocked_bg(quote_no: str, customer: str, project: str, unlocked_by_display: str) -> None:
+    notify_case_change_requested(
+        quote_no, customer, project,
+        f"案件已由 {unlocked_by_display} 解鎖為半解鎖狀態，之後的變更/上傳將陸續送審",
+        unlocked_by_display,
+    )
+
+
+@router.post("/api/quotations/{quote_no}/case-lock")
+def lock_case(quote_no: str, authorization: str = Header(None)):
+    """將半解鎖案件重新上鎖（2026-08-26），權限比照解鎖——任何登入使用者皆可
+    觸發。重新上鎖不會影響既有的 pending 待審核記錄（case_change_requests 仍
+    保留，superadmin 之後還是能在簽核佇列核准/拒絕；核准時 _apply_case_change_
+    request() 不檢查當下是否半解鎖，避免上鎖動作意外卡住既有審核流程）。"""
+    user = _require_user(authorization)
+    conn = get_db()
+    row = conn.execute("SELECT deal_tag, customer_name FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(404, f"報價單 {quote_no} 不存在")
+    conn.execute(
+        "UPDATE quotations SET case_semi_unlocked=0, case_semi_unlocked_by='', case_semi_unlocked_at='' "
+        "WHERE quote_no=?",
+        (quote_no,),
+    )
+    conn.commit()
+    conn.close()
+    display = user.get("display_name") or user["username"]
+    _audit(_tok(authorization), "case.semi_lock", "quotation", quote_no,
+           f"{quote_no}（{row['customer_name'] or ''}）重新上鎖")
+    notify_module_activity("案件管理", "重新上鎖", display,
+                            f"{quote_no}（{row['customer_name'] or ''}）", "case-management.html")
+    return {"ok": True, "caseSemiUnlocked": False}
+
+
 @router.patch("/api/quotations/{quote_no}/case-record")
 def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str = Header(None)):
     user = _require_user(authorization)
@@ -1161,6 +1423,14 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
         conn.close()
         raise HTTPException(409, "案件資料已被其他人更新，請重新載入後再存")
     label = f"{quote_no}（{row['customer_name'] or ''}{'／' if row['project_name'] else ''}{row['project_name'] or ''}）"
+    gated, change_id = _gate_case_edit(
+        conn, quote_no, user, authorization, "case_record_update",
+        f"{label} 更新案件記錄（材料/款項/角色/合約等）", {"case_record": body.case_record or {}},
+    )
+    if gated:
+        conn.close()
+        return {"ok": True, "pending": True, "changeRequestId": change_id,
+                "message": "案件已結案並處於半解鎖狀態，此變更已送出，待最高管理員審核通過後才會套用"}
     data = json.loads(row["data_json"] or "{}")
     old_devices = (data.get("caseRecord") or {}).get("devices") or []
     new_devices = (body.case_record or {}).get("devices") or []
@@ -1189,6 +1459,240 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
     spawn_bg_thread(_backup_quotation, args=(quote_no,))
     _audit(_tok(authorization), 'case.update', 'quotation', quote_no, label)
     return {"ok": True, "updated_at": now, "stockConflicts": stock_conflicts}
+
+
+# ── Case change request approve/reject (2026-08-26) ────────────────────────────
+
+def _cleanup_staged_files(staged_files: list) -> None:
+    """拒絕核准時清掉暫存檔案（含空資料夾），套用時搬移失敗或找不到檔案都
+    靜默略過——不能因為殘留的暫存檔清不掉就讓審核動作整個失敗。"""
+    for f in staged_files or []:
+        try:
+            full = os.path.join(_uploads_mod.UPLOADS_ROOT, f["path"])
+            if os.path.isfile(full):
+                os.remove(full)
+            d = os.path.dirname(full)
+            if os.path.isdir(d) and not os.listdir(d):
+                os.rmdir(d)
+        except Exception:
+            pass
+
+
+def _move_staged_files(staged_files: list, subfolder: str, doc_no: str) -> list:
+    """核准套用上傳類變更時，把暫存於 uploads/_pending_case_changes/{change_id}/
+    的檔案搬進正式路徑（跟 helpers/uploads.py::save_document_files() 存檔時
+    產生的路徑格式一致），回傳更新過 path 的 metadata 陣列。"""
+    eff_subfolder = _effective_subfolder(subfolder)
+    dest_dir = os.path.join(_uploads_mod.UPLOADS_ROOT, eff_subfolder, doc_no)
+    os.makedirs(dest_dir, exist_ok=True)
+    moved = []
+    src_dirs = set()
+    for f in staged_files or []:
+        src = os.path.join(_uploads_mod.UPLOADS_ROOT, f["path"])
+        src_dirs.add(os.path.dirname(src))
+        ext = os.path.splitext(f["path"])[1]
+        fname = uuid.uuid4().hex[:16] + ext
+        dest_rel = f"{eff_subfolder}/{doc_no}/{fname}"
+        dest_full = os.path.join(_uploads_mod.UPLOADS_ROOT, dest_rel)
+        if os.path.isfile(src):
+            shutil.move(src, dest_full)
+        new_meta = dict(f)
+        new_meta["path"] = dest_rel
+        moved.append(new_meta)
+    for d in src_dirs:
+        try:
+            if os.path.isdir(d) and not os.listdir(d):
+                os.rmdir(d)
+        except Exception:
+            pass
+    return moved
+
+
+def _apply_case_change_request(conn, req, approver: dict, authorization: str) -> dict:
+    """superadmin 核准後真正套用一筆 case_change_requests。呼叫端負責在成功
+    回傳後把該筆記錄標記 approved 並 commit；這裡只處理「套用效果」本身，
+    邏輯分別對應 8 個「暫存待審」端點原本會做的事（見各端點 docstring）。
+    找不到對應報價單或索引超出範圍時 raise HTTPException，呼叫端會讓整個
+    審核動作失敗（不會標記 approved），避免留下「已核准但沒套用」的不一致。
+    回傳 dict 供呼叫端附加到 API 回應（目前只有 case_record_update 可能帶
+    stockConflicts——即時存檔路徑 update_case_record() 會把這個資訊回傳給
+    當下操作的使用者看，這裡改成 superadmin 事後核准套用，同樣不能讓衝突
+    悄悄消失，至少寫進 audit_log detail 並回傳給呼叫端）。"""
+    quote_no    = req["quote_no"]
+    action_type = req["action_type"]
+    payload     = json.loads(req["payload_json"] or "{}")
+    staged_files = json.loads(req["staged_files_json"] or "[]")
+    row = conn.execute(
+        "SELECT customer_name, project_name, data_json FROM quotations WHERE quote_no=?", (quote_no,)
+    ).fetchone()
+    if not row:
+        raise HTTPException(404, f"報價單 {quote_no} 不存在")
+    label = f"{quote_no}（{row['customer_name'] or ''}）"
+    data = json.loads(row["data_json"] or "{}")
+    cr = data.setdefault("caseRecord", {})
+    result: dict = {}
+
+    if action_type == "case_record_update":
+        old_devices = cr.get("devices") or []
+        new_case_record = payload.get("case_record") or {}
+        new_devices = new_case_record.get("devices") or []
+        new_case_record["stages"] = cr.get("stages") or []
+        data["caseRecord"] = new_case_record
+        stock_conflicts = []
+        if new_devices != old_devices:
+            stock_conflicts = _sync_device_stock(conn, quote_no, old_devices, new_devices, approver)
+        save_quotation_json(conn, quote_no, data)
+        if stock_conflicts:
+            result["stockConflicts"] = stock_conflicts
+        _audit(_tok(authorization), 'case.update', 'quotation', quote_no, f"{label}（半解鎖審核通過套用）",
+               {"stockConflicts": stock_conflicts} if stock_conflicts else None)
+
+    elif action_type == "payment_mark":
+        idx = payload["idx"]
+        body = payload["body"] or {}
+        pits = cr.setdefault("payment", {}).setdefault("items", [])
+        if idx < 0 or idx >= len(pits):
+            raise HTTPException(400, "款項索引超出範圍")
+        if "received" in body:
+            is_rcv = bool(body["received"])
+            pits[idx]["received"]   = is_rcv
+            pits[idx]["receivedAt"] = body.get("receivedAt", "") if is_rcv else ""
+            pits[idx]["receivedBy"] = body.get("receivedBy", "") if is_rcv else ""
+            if is_rcv:
+                pits[idx]["actualAmount"] = body.get("actualAmount")
+                pits[idx]["feeAmount"]    = body.get("feeAmount") or 0
+                pits[idx]["feeNote"]      = body.get("feeNote", "")
+                pits[idx]["note"]         = body.get("note", "")
+            else:
+                for k in ("actualAmount", "feeAmount", "feeNote", "note"):
+                    pits[idx].pop(k, None)
+        if "invoiceNo" in body:
+            pits[idx]["invoiceNo"] = body["invoiceNo"]
+        save_quotation_json(conn, quote_no, data)
+        _audit(_tok(authorization), 'payment.mark', 'quotation', quote_no, f"{label}（半解鎖審核通過套用）")
+
+    elif action_type in ("payment_invoice_upload", "material_file_upload", "material_invoice_upload"):
+        idx = payload["idx"]
+        if action_type == "payment_invoice_upload":
+            arr, field, subfolder = cr.setdefault("payment", {}).setdefault("items", []), "invoiceFiles", "quotation_payment_items"
+        elif action_type == "material_file_upload":
+            arr, field, subfolder = cr.setdefault("materials", []), "files", "quotation_materials"
+        else:
+            arr, field, subfolder = cr.setdefault("materials", []), "invoiceFiles", "quotation_materials_invoices"
+        if idx < 0 or idx >= len(arr):
+            raise HTTPException(400, "索引超出範圍")
+        moved = _move_staged_files(staged_files, subfolder, f"{quote_no}_{idx}")
+        arr[idx].setdefault(field, [])
+        arr[idx][field].extend(moved)
+        save_quotation_json(conn, quote_no, data)
+        _audit(_tok(authorization), f'{action_type}.approved', 'quotation', quote_no,
+               f"{label}（半解鎖審核通過套用，{len(moved)} 個檔案）")
+
+    elif action_type in ("payment_invoice_delete", "material_file_delete", "material_invoice_delete"):
+        idx = payload["idx"]
+        file_id = payload["file_id"]
+        if action_type == "payment_invoice_delete":
+            arr, field, subfolder = cr.setdefault("payment", {}).setdefault("items", []), "invoiceFiles", "quotation_payment_items"
+        elif action_type == "material_file_delete":
+            arr, field, subfolder = cr.setdefault("materials", []), "files", "quotation_materials"
+        else:
+            arr, field, subfolder = cr.setdefault("materials", []), "invoiceFiles", "quotation_materials_invoices"
+        if idx < 0 or idx >= len(arr):
+            raise HTTPException(400, "索引超出範圍")
+        existing = arr[idx].get(field) or []
+        arr[idx][field] = delete_document_file(subfolder, f"{quote_no}_{idx}", existing, file_id)
+        save_quotation_json(conn, quote_no, data)
+        _audit(_tok(authorization), f'{action_type}.approved', 'quotation', quote_no,
+               f"{label}（半解鎖審核通過套用）")
+
+    else:
+        raise HTTPException(500, f"未知的變更類型：{action_type}")
+
+    return result
+
+
+@router.get("/api/case-changes/{change_id}")
+def get_case_change_request(change_id: int, authorization: str = Header(None)):
+    _require_user(authorization)
+    conn = get_db()
+    row = conn.execute("SELECT * FROM case_change_requests WHERE id=?", (change_id,)).fetchone()
+    conn.close()
+    if not row:
+        raise HTTPException(404, "找不到此筆變更申請")
+    return dict(row)
+
+
+@router.post("/api/case-changes/{change_id}/approve")
+def approve_case_change(change_id: int, authorization: str = Header(None)):
+    """已結案案件半解鎖期間的變更/上傳，僅最高管理者可核准（比照已結案案件本身
+    的解鎖/降級規則）。核准成功才標記 approved 並 commit——_apply_case_change_
+    request() 內任何 HTTPException 都會讓這支端點直接回傳錯誤、不落資料庫，
+    避免「顯示已核准但其實沒套用」的不一致狀態。"""
+    user = _require_user(authorization)
+    if user["role"] != "superadmin":
+        raise HTTPException(403, "僅最高管理者可審核已結案案件的變更申請")
+    conn = get_db()
+    req = conn.execute("SELECT * FROM case_change_requests WHERE id=?", (change_id,)).fetchone()
+    if not req:
+        conn.close()
+        raise HTTPException(404, "找不到此筆變更申請")
+    if req["status"] != "pending":
+        conn.close()
+        raise HTTPException(409, f"此筆變更申請已經是「{req['status']}」狀態")
+    self_msg = check_no_tier_self_approval(conn, {"requestedBy": req["requested_by"]}, user)
+    if self_msg:
+        conn.close()
+        raise HTTPException(403, self_msg)
+    try:
+        apply_result = _apply_case_change_request(conn, req, user, authorization)
+    except HTTPException:
+        conn.close()
+        raise
+    now = datetime.now().isoformat()
+    approver_display = user.get("display_name") or user["username"]
+    conn.execute("UPDATE case_change_requests SET status='approved', decided_by=?, decided_at=? WHERE id=?",
+                 (approver_display, now, change_id))
+    conn.commit()
+    conn.close()
+    spawn_bg_thread(_backup_quotation, args=(req["quote_no"],))
+    _notify(req["requested_by"], "case_change_decided", req["quote_no"], req["quote_no"],
+            f"您對已結案案件 {req['quote_no']} 提出的變更「{req['summary']}」已由 {approver_display} 核准套用")
+    return {"ok": True, "status": "approved", **(apply_result or {})}
+
+
+@router.post("/api/case-changes/{change_id}/reject")
+def reject_case_change(change_id: int, body: dict = Body(default={}), authorization: str = Header(None)):
+    user = _require_user(authorization)
+    if user["role"] != "superadmin":
+        raise HTTPException(403, "僅最高管理者可審核已結案案件的變更申請")
+    conn = get_db()
+    req = conn.execute("SELECT * FROM case_change_requests WHERE id=?", (change_id,)).fetchone()
+    if not req:
+        conn.close()
+        raise HTTPException(404, "找不到此筆變更申請")
+    if req["status"] != "pending":
+        conn.close()
+        raise HTTPException(409, f"此筆變更申請已經是「{req['status']}」狀態")
+    self_msg = check_no_tier_self_approval(conn, {"requestedBy": req["requested_by"]}, user)
+    if self_msg:
+        conn.close()
+        raise HTTPException(403, self_msg)
+    reason = (body or {}).get("reason") or ""
+    _cleanup_staged_files(json.loads(req["staged_files_json"] or "[]"))
+    now = datetime.now().isoformat()
+    approver_display = user.get("display_name") or user["username"]
+    conn.execute(
+        "UPDATE case_change_requests SET status='rejected', decided_by=?, decided_at=?, reject_reason=? WHERE id=?",
+        (approver_display, now, reason, change_id),
+    )
+    conn.commit()
+    conn.close()
+    _audit(_tok(authorization), "case.change_rejected", "quotation", req["quote_no"],
+           f"{req['quote_no']}（拒絕變更 #{change_id}：{req['summary']}）", {"reason": reason})
+    _notify(req["requested_by"], "case_change_decided", req["quote_no"], req["quote_no"],
+            f"您對已結案案件 {req['quote_no']} 提出的變更「{req['summary']}」已由 {approver_display} 拒絕"
+            + (f"（原因：{reason}）" if reason else ""))
+    return {"ok": True, "status": "rejected"}
 
 
 def _serialize_stage(conn, sr) -> dict:
@@ -1392,6 +1896,7 @@ def create_case_stage(quote_no: str, body: dict = Body(...), authorization: str 
     任何前端頁面（2026-08-23）。"""
     _require_user(authorization)
     conn = get_db()
+    _deny_if_case_locked_unsupported(conn, quote_no)
     max_order = conn.execute(
         "SELECT COALESCE(MAX(sort_order), -1) m FROM case_stages WHERE quote_no=?", (quote_no,)
     ).fetchone()["m"]
@@ -1419,6 +1924,7 @@ def update_case_stage(quote_no: str, stage_id: int, body: dict = Body(...), auth
     CRUD 端點，尚未接進任何前端頁面（2026-08-23）。"""
     _require_user(authorization)
     conn = get_db()
+    _deny_if_case_locked_unsupported(conn, quote_no)
     sr = _get_stage_row(conn, quote_no, stage_id)
     if not sr:
         conn.close(); raise HTTPException(404, "階段不存在")
@@ -1449,6 +1955,7 @@ def delete_case_stage(quote_no: str, stage_id: int, authorization: str = Header(
     （2026-08-23）。"""
     _require_user(authorization)
     conn = get_db()
+    _deny_if_case_locked_unsupported(conn, quote_no)
     sr = _get_stage_row(conn, quote_no, stage_id)
     if not sr:
         conn.close(); raise HTTPException(404, "階段不存在")
@@ -1476,6 +1983,7 @@ def reorder_case_stages(quote_no: str, body: dict = Body(...), authorization: st
     _require_user(authorization)
     ordered_ids = body.get("orderedIds") or []
     conn = get_db()
+    _deny_if_case_locked_unsupported(conn, quote_no)
     valid_ids = {r["id"] for r in conn.execute(
         "SELECT id FROM case_stages WHERE quote_no=?", (quote_no,)
     ).fetchall()}
@@ -1499,6 +2007,7 @@ def add_stage_assignee(quote_no: str, stage_id: int, body: dict = Body(...), aut
     if not username:
         raise HTTPException(400, "請提供 username")
     conn = get_db()
+    _deny_if_case_locked_unsupported(conn, quote_no)
     sr = _get_stage_row(conn, quote_no, stage_id)
     if not sr:
         conn.close(); raise HTTPException(404, "階段不存在")
@@ -1521,6 +2030,7 @@ def remove_stage_assignee(quote_no: str, stage_id: int, username: str, authoriza
     點，尚未接進任何前端頁面（2026-08-23）。"""
     _require_user(authorization)
     conn = get_db()
+    _deny_if_case_locked_unsupported(conn, quote_no)
     sr = _get_stage_row(conn, quote_no, stage_id)
     if not sr:
         conn.close(); raise HTTPException(404, "階段不存在")
@@ -1542,6 +2052,7 @@ def toggle_stage_dependency(quote_no: str, stage_id: int, candidate_id: int, aut
     第二階段 CRUD 端點，尚未接進任何前端頁面（2026-08-23）。"""
     _require_user(authorization)
     conn = get_db()
+    _deny_if_case_locked_unsupported(conn, quote_no)
     sr = _get_stage_row(conn, quote_no, stage_id)
     if not sr:
         conn.close(); raise HTTPException(404, "階段不存在")
@@ -1571,6 +2082,7 @@ def add_stage_visit(quote_no: str, stage_id: int, body: dict = Body(...), author
     接進任何前端頁面（2026-08-23）。"""
     _require_user(authorization)
     conn = get_db()
+    _deny_if_case_locked_unsupported(conn, quote_no)
     sr = _get_stage_row(conn, quote_no, stage_id)
     if not sr:
         conn.close(); raise HTTPException(404, "階段不存在")
@@ -1594,6 +2106,7 @@ def update_stage_visit(quote_no: str, stage_id: int, visit_id: int, body: dict =
     第二階段 CRUD 端點，尚未接進任何前端頁面（2026-08-23）。"""
     _require_user(authorization)
     conn = get_db()
+    _deny_if_case_locked_unsupported(conn, quote_no)
     sr = _get_stage_row(conn, quote_no, stage_id)
     if not sr:
         conn.close(); raise HTTPException(404, "階段不存在")
@@ -1622,6 +2135,7 @@ def delete_stage_visit(quote_no: str, stage_id: int, visit_id: int, authorizatio
     尚未接進任何前端頁面（2026-08-23）。"""
     _require_user(authorization)
     conn = get_db()
+    _deny_if_case_locked_unsupported(conn, quote_no)
     sr = _get_stage_row(conn, quote_no, stage_id)
     if not sr:
         conn.close(); raise HTTPException(404, "階段不存在")
@@ -1681,6 +2195,14 @@ def mark_payment(no: str, idx: int, body: dict, authorization: str = Header(None
         pits = pay.setdefault("items", [])
         if idx < 0 or idx >= len(pits):
             raise HTTPException(400, "款項索引超出範圍")
+        gated, change_id = _gate_case_edit(
+            conn, no, user, authorization, "payment_mark",
+            f"{no} 第{idx+1}期款項標記（{'收款' if body.get('received') else '取消收款'}）",
+            {"idx": idx, "body": dict(body)},
+        )
+        if gated:
+            return {"ok": True, "pending": True, "changeRequestId": change_id,
+                    "message": "案件已結案並處於半解鎖狀態，此變更已送出，待最高管理員審核通過後才會套用"}
         if "received" in body:
             is_rcv = bool(body["received"])
             pits[idx]["received"]   = is_rcv
@@ -1739,6 +2261,19 @@ async def upload_payment_item_invoice_files(no: str, idx: int, files: List[Uploa
     conn = get_db()
     try:
         data, pits = _load_payment_item(conn, no, idx)
+        label = pits[idx].get('label', f'第{idx+1}期')
+        if _check_case_gate(conn, no):
+            change_id = _create_case_change_request(
+                conn, no, user, authorization, "payment_invoice_upload",
+                f"{no} {label} 上傳發票附件（{len(files)} 個檔案）", {"idx": idx},
+            )
+            new_files = await save_document_files(f"_pending_case_changes/{change_id}", f"{no}_{idx}", files,
+                                                  user.get("display_name") or user["username"])
+            conn.execute("UPDATE case_change_requests SET staged_files_json=? WHERE id=?",
+                         (json.dumps(new_files, ensure_ascii=False), change_id))
+            conn.commit()
+            return {"ok": True, "pending": True, "changeRequestId": change_id,
+                    "message": "案件已結案並處於半解鎖狀態，此上傳已送出，待最高管理員審核通過後才會套用"}
         new_files = await save_document_files("quotation_payment_items", f"{no}_{idx}", files,
                                               user.get("display_name") or user["username"])
         pits[idx].setdefault("invoiceFiles", [])
@@ -1747,7 +2282,6 @@ async def upload_payment_item_invoice_files(no: str, idx: int, files: List[Uploa
         conn.commit()
     finally:
         conn.close()
-    label = pits[idx].get('label', f'第{idx+1}期')
     _audit(_tok(authorization), "payment.upload_invoice_files", "quotation", no,
            f"{no} {label}（{len(new_files)} 個檔案）")
     return {"ok": True, "added": len(new_files), "files": new_files, "updated_at": saved_at}
@@ -1759,6 +2293,14 @@ def delete_payment_item_invoice_file(no: str, idx: int, file_id: str, authorizat
     conn = get_db()
     try:
         data, pits = _load_payment_item(conn, no, idx)
+        if _check_case_gate(conn, no):
+            label = pits[idx].get('label', f'第{idx+1}期')
+            change_id = _create_case_change_request(
+                conn, no, user, authorization, "payment_invoice_delete",
+                f"{no} {label} 刪除發票附件", {"idx": idx, "file_id": file_id},
+            )
+            return {"ok": True, "pending": True, "changeRequestId": change_id,
+                    "message": "案件已結案並處於半解鎖狀態，此刪除已送出，待最高管理員審核通過後才會套用"}
         existing = pits[idx].get("invoiceFiles") or []
         pits[idx]["invoiceFiles"] = delete_document_file("quotation_payment_items", f"{no}_{idx}", existing, file_id)
         saved_at = save_quotation_json(conn, no, data)
@@ -1793,6 +2335,19 @@ async def upload_material_files(no: str, idx: int, files: List[UploadFile] = Fil
     conn = get_db()
     try:
         data, mats = _load_material_item(conn, no, idx)
+        name = mats[idx].get("name") or f"第{idx+1}項"
+        if _check_case_gate(conn, no):
+            change_id = _create_case_change_request(
+                conn, no, user, authorization, "material_file_upload",
+                f"{no} {name} 上傳附件（{len(files)} 個檔案）", {"idx": idx},
+            )
+            new_files = await save_document_files(f"_pending_case_changes/{change_id}", f"{no}_{idx}", files,
+                                                  user.get("display_name") or user["username"])
+            conn.execute("UPDATE case_change_requests SET staged_files_json=? WHERE id=?",
+                         (json.dumps(new_files, ensure_ascii=False), change_id))
+            conn.commit()
+            return {"ok": True, "pending": True, "changeRequestId": change_id,
+                    "message": "案件已結案並處於半解鎖狀態，此上傳已送出，待最高管理員審核通過後才會套用"}
         new_files = await save_document_files("quotation_materials", f"{no}_{idx}", files,
                                               user.get("display_name") or user["username"])
         mats[idx].setdefault("files", [])
@@ -1801,7 +2356,6 @@ async def upload_material_files(no: str, idx: int, files: List[UploadFile] = Fil
         conn.commit()
     finally:
         conn.close()
-    name = mats[idx].get("name") or f"第{idx+1}項"
     _audit(_tok(authorization), "material.upload_files", "quotation", no,
            f"{no} {name}（{len(new_files)} 個檔案）")
     return {"ok": True, "added": len(new_files), "files": new_files, "updated_at": saved_at}
@@ -1813,6 +2367,14 @@ def delete_material_file(no: str, idx: int, file_id: str, authorization: str = H
     conn = get_db()
     try:
         data, mats = _load_material_item(conn, no, idx)
+        if _check_case_gate(conn, no):
+            name = mats[idx].get("name") or f"第{idx+1}項"
+            change_id = _create_case_change_request(
+                conn, no, user, authorization, "material_file_delete",
+                f"{no} {name} 刪除附件", {"idx": idx, "file_id": file_id},
+            )
+            return {"ok": True, "pending": True, "changeRequestId": change_id,
+                    "message": "案件已結案並處於半解鎖狀態，此刪除已送出，待最高管理員審核通過後才會套用"}
         existing = mats[idx].get("files") or []
         mats[idx]["files"] = delete_document_file("quotation_materials", f"{no}_{idx}", existing, file_id)
         saved_at = save_quotation_json(conn, no, data)
@@ -1834,6 +2396,19 @@ async def upload_material_invoice_files(no: str, idx: int, files: List[UploadFil
     conn = get_db()
     try:
         data, mats = _load_material_item(conn, no, idx)
+        name = mats[idx].get("name") or f"第{idx+1}項"
+        if _check_case_gate(conn, no):
+            change_id = _create_case_change_request(
+                conn, no, user, authorization, "material_invoice_upload",
+                f"{no} {name} 上傳發票附件（{len(files)} 個檔案）", {"idx": idx},
+            )
+            new_files = await save_document_files(f"_pending_case_changes/{change_id}", f"{no}_{idx}", files,
+                                                  user.get("display_name") or user["username"])
+            conn.execute("UPDATE case_change_requests SET staged_files_json=? WHERE id=?",
+                         (json.dumps(new_files, ensure_ascii=False), change_id))
+            conn.commit()
+            return {"ok": True, "pending": True, "changeRequestId": change_id,
+                    "message": "案件已結案並處於半解鎖狀態，此上傳已送出，待最高管理員審核通過後才會套用"}
         new_files = await save_document_files("quotation_materials_invoices", f"{no}_{idx}", files,
                                               user.get("display_name") or user["username"])
         mats[idx].setdefault("invoiceFiles", [])
@@ -1842,7 +2417,6 @@ async def upload_material_invoice_files(no: str, idx: int, files: List[UploadFil
         conn.commit()
     finally:
         conn.close()
-    name = mats[idx].get("name") or f"第{idx+1}項"
     _audit(_tok(authorization), "material.upload_invoice_files", "quotation", no,
            f"{no} {name}（{len(new_files)} 個檔案）")
     return {"ok": True, "added": len(new_files), "files": new_files, "updated_at": saved_at}
@@ -1854,6 +2428,14 @@ def delete_material_invoice_file(no: str, idx: int, file_id: str, authorization:
     conn = get_db()
     try:
         data, mats = _load_material_item(conn, no, idx)
+        if _check_case_gate(conn, no):
+            name = mats[idx].get("name") or f"第{idx+1}項"
+            change_id = _create_case_change_request(
+                conn, no, user, authorization, "material_invoice_delete",
+                f"{no} {name} 刪除發票附件", {"idx": idx, "file_id": file_id},
+            )
+            return {"ok": True, "pending": True, "changeRequestId": change_id,
+                    "message": "案件已結案並處於半解鎖狀態，此刪除已送出，待最高管理員審核通過後才會套用"}
         existing = mats[idx].get("invoiceFiles") or []
         mats[idx]["invoiceFiles"] = delete_document_file("quotation_materials_invoices", f"{no}_{idx}", existing, file_id)
         saved_at = save_quotation_json(conn, no, data)
@@ -1872,6 +2454,7 @@ def request_payment_writeoff(no: str, idx: int, body: WriteOffRequestIn, authori
         raise HTTPException(403, "僅管理員可申請沖銷")
     conn = get_db()
     try:
+        _deny_if_case_locked_unsupported(conn, no)
         data, pits = _load_payment_item(conn, no, idx)
         item = pits[idx]
         if item.get("writeOffStatus") == "pending":
@@ -1903,6 +2486,7 @@ def cancel_payment_writeoff(no: str, idx: int, authorization: str = Header(None)
         raise HTTPException(403, "僅管理員可取消沖銷申請")
     conn = get_db()
     try:
+        _deny_if_case_locked_unsupported(conn, no)
         data, pits = _load_payment_item(conn, no, idx)
         item = pits[idx]
         if item.get("writeOffStatus") != "pending":
@@ -1931,6 +2515,7 @@ def approve_payment_writeoff(no: str, idx: int, body: WriteOffApproveIn, authori
         raise HTTPException(403, "僅最高管理者可審核沖銷申請")
     conn = get_db()
     try:
+        _deny_if_case_locked_unsupported(conn, no)
         data, pits = _load_payment_item(conn, no, idx)
         item = pits[idx]
         if item.get("writeOffStatus") != "pending":
@@ -2065,7 +2650,11 @@ def get_approval_queue(authorization: str = Header(None)):
     salesPerson）承載各類型的資料，讓既有前端列表渲染邏輯幾乎不用改，只多一個
     `type` 欄位供前端分流動作按鈕與連結（見 approval-queue.html）。承攬商匯款
     申請／開票申請憑據／出貨單都沒有「拒絕結案」這種永久終止端點（只有報價單
-    有），前端會依 type 隱藏該按鈕。"""
+    有），前端會依 type 隱藏該按鈕。2026-08-26 補上 type='case_change'（已結案
+    案件半解鎖期間的變更/上傳待審核，見 case_change_requests 表）——這類項目不是
+    真正的多層 tiers 簽核，是單層「任一 superadmin 皆可審核」，approve/reject
+    走獨立端點 POST /api/case-changes/{id}/approve|reject，不是既有的
+    quotation 簽核端點，前端需依 type 分流。"""
     _require_user(authorization)
     conn = get_db()
     items = []
@@ -2230,6 +2819,42 @@ def get_approval_queue(authorization: str = Header(None)):
             "linkedQuoteNo":       r["quote_no"],
         })
 
+    ccr_rows = conn.execute("""
+        SELECT id, quote_no, action_type, summary, requested_by, requested_by_display, requested_at
+        FROM case_change_requests
+        WHERE status='pending'
+        ORDER BY id DESC
+    """).fetchall()
+    for r in ccr_rows:
+        cust = conn.execute(
+            "SELECT customer_name, project_name FROM quotations WHERE quote_no=?", (r["quote_no"],)
+        ).fetchone()
+        items.append({
+            # 刻意留空 tiers（跟既有「無 tiers 設定時任一 superadmin 皆可簽核」
+            # 的 fallback 語意共用同一套前端 canApprove() 判斷——不是真正的多層
+            # 循序簽核，是單層「任一 superadmin」，用空 tiers 借用既有邏輯最簡單，
+            # 不需要另外構造「這層有 N 個 approvers 但誰簽都算數」的新語意。
+            "type":                "case_change",
+            "quoteNo":             f"{r['quote_no']}-CCR{r['id']}",
+            "customer":            (cust["customer_name"] if cust else "") or "",
+            "projectName":         r["summary"] or "",
+            "total":               0,
+            "quoteDate":           (r["requested_at"] or "")[:10],
+            "salesPerson":         "",
+            "requestedBy":         r["requested_by"] or "",
+            "requestedByDisplay":  r["requested_by_display"] or r["requested_by"] or "",
+            "requestedAt":         r["requested_at"] or "",
+            "isEditApproval":      False,
+            "reasons":             [],
+            "tiers":               [],
+            "currentTier":         0,
+            "tierCount":           0,
+            "currentApprovers":    [],
+            "linkedQuoteNo":       r["quote_no"],
+            "changeRequestId":     r["id"],
+            "actionType":          r["action_type"],
+        })
+
     conn.close()
 
     groups: dict = defaultdict(list)
@@ -2275,8 +2900,15 @@ def get_approval_queue_count(authorization: str = Header(None)):
     approval_jsons += [r[0] for r in conn.execute(
         "SELECT json_extract(data_json,'$.approval') FROM payment_requests WHERE status IN ('待審核','簽核中')"
     ).fetchall()]
+    # 已結案案件半解鎖變更（2026-08-26）：單層審核，任一 superadmin 皆算「輪到我」，
+    # 不像其他文件類型需要比對 tiers 當層 approver username，直接另外加總。
+    ccr_count = 0
+    if u["role"] == "superadmin":
+        ccr_count = conn.execute(
+            "SELECT COUNT(*) c FROM case_change_requests WHERE status='pending'"
+        ).fetchone()["c"]
     conn.close()
-    count = 0
+    count = ccr_count
     for approval_json in approval_jsons:
         try:
             appr    = json.loads(approval_json or "{}")

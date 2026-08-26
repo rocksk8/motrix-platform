@@ -78,7 +78,7 @@ DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR = os.path.join(
 # （已套用過的 schema_version 不可回頭刪除/重排），data_json.dealWonAt 這個
 # 欄位會留在既有資料裡但目前沒有任何程式碼讀取，之後如果要重新加回「成交時間」
 # 這種概念，不要複用這個欄位名稱免得語意混淆。
-CURRENT_VERSION = 60
+CURRENT_VERSION = 61
 
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
 # execution model) whenever the current request is authenticated as the 'demo'
@@ -1580,6 +1580,71 @@ def _m060_dispatch_files(conn):
     conn.commit()
 
 
+def _m061_case_semi_unlock(conn):
+    """已結案案件解鎖／半解鎖機制（2026-08-26）：deal_tag='已結案' 的案件目前
+    完全鎖定（quotations.py 的相關端點沒有例外）；使用者要求能解鎖成「半解鎖」
+    狀態，讓案件記錄（case-record 整包存檔、款項標記收款、款項/叫料附件上傳）
+    可以繼續變更，但每一筆變更/上傳都要先送最高管理員審核通過才真的套用，不能
+    像未結案案件一樣立即生效。
+
+    quotations 新增三欄記錄目前解鎖狀態（任何登入使用者皆可解鎖/重新上鎖，
+    2026-08-26 使用者透過 AskUserQuestion 確認，比照既有附件上傳「任何人皆可
+    傳」的最寬鬆權限慣例）：
+    - case_semi_unlocked：0/1，是否處於半解鎖狀態
+    - case_semi_unlocked_by／case_semi_unlocked_at：最近一次解鎖的操作者/時間
+      （純顯示用，不做權限判斷）
+
+    新表 case_change_requests：半解鎖期間每一筆待審核的變更/上傳請求，
+    action_type 對應 routers/quotations.py 裡新增的 8 個「暫存待審」端點
+    （case_record_update／payment_mark／payment_invoice_upload／
+    payment_invoice_delete／material_file_upload／material_file_delete／
+    material_invoice_upload／material_invoice_delete）。payload_json 存
+    套用該筆變更所需的資料（例如 case_record_update 存整包 caseRecord；
+    上傳類存 idx/field，實際檔案先存進 uploads/_pending_case_changes/{id}/，
+    staged_files_json 記錄暫存路徑，核准時才搬進正式路徑並寫回 data_json，
+    拒絕則直接刪除暫存檔）。status 只有 pending/approved/rejected 三種，
+    approve/reject 只限 superadmin（比照已結案案件本身的解鎖/降級規則）。
+
+    刻意不涵蓋的範圍（2026-08-26 設計取捨，非遺漏）：案件執行階段的細項端點
+    （新增/編輯/刪除/排序/加入負責人/移除負責人/前置階段/新增拜訪/編輯拜訪/
+    刪除拜訪，共 10 支）與款項稅額沖銷申請/撤銷/核准（3 支）——這些端點在
+    案件已結案時一律直接 403 擋下（不論
+    是否半解鎖都不支援），需要修正時請透過 case-record 整包編輯或款項標記
+    收款這幾支已支援排隊審核的端點處理，或聯繫最高管理員直接於資料庫層級
+    校正。之後如果要擴大涵蓋範圍，比照本次 case_record_update 的「暫存
+    payload_json、核准時重放同一段套用邏輯」模式即可，不需要另立新架構。"""
+    if not _col_exists(conn, "quotations", "case_semi_unlocked"):
+        conn.execute("ALTER TABLE quotations ADD COLUMN case_semi_unlocked INTEGER NOT NULL DEFAULT 0")
+    if not _col_exists(conn, "quotations", "case_semi_unlocked_by"):
+        conn.execute("ALTER TABLE quotations ADD COLUMN case_semi_unlocked_by TEXT DEFAULT ''")
+    if not _col_exists(conn, "quotations", "case_semi_unlocked_at"):
+        conn.execute("ALTER TABLE quotations ADD COLUMN case_semi_unlocked_at TEXT DEFAULT ''")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS case_change_requests (
+            id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+            quote_no             TEXT    NOT NULL,
+            action_type          TEXT    NOT NULL,
+            summary              TEXT    NOT NULL DEFAULT '',
+            payload_json         TEXT    NOT NULL DEFAULT '{}',
+            staged_files_json    TEXT    NOT NULL DEFAULT '[]',
+            status               TEXT    NOT NULL DEFAULT 'pending',
+            requested_by         TEXT    NOT NULL DEFAULT '',
+            requested_by_display TEXT    DEFAULT '',
+            requested_at         TEXT,
+            decided_by           TEXT    DEFAULT '',
+            decided_at           TEXT,
+            reject_reason        TEXT    DEFAULT ''
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_ccr_quote_no ON case_change_requests(quote_no)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_ccr_status ON case_change_requests(status)"
+    )
+    conn.commit()
+
+
 def _m057_payment_request_stage(conn):
     """請款單新增 stage（款項類別：full/deposit/delivery/acceptance/final，
     2026-08-24）：客戶端請款單 PDF「請款範圍」欄要顯示業務語意的分類（全額/
@@ -2421,6 +2486,7 @@ _MIGRATIONS = [
     _m058_backfill_deal_won_at,                    # v58
     _m059_fix_deal_won_at_from_audit_log,          # v59
     _m060_dispatch_files,                          # v60
+    _m061_case_semi_unlock,                        # v61
 ]
 
 

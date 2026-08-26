@@ -1117,6 +1117,55 @@ def notify_case_closing_report(quote_no: str, customer: str, project: str, pdf_b
     ).start()
 
 
+def notify_case_close_blocked(quote_no: str, customer: str, project: str,
+                              reasons: list, pending_usernames: list) -> None:
+    """完結案防呆擋下（2026-08-26）：三項前置條件（執行進度100%／款項全收齊／
+    相關單據簽核完成）任一未達成時，完結案動作被擋下，通知尚未完成該項的
+    簽核人（pending_usernames，可能為空——例如款項未收齊沒有對應的「簽核人」
+    概念）＋最高管理員（不論如何都通知，即使 pending_usernames 已涵蓋所有
+    superadmin，重複的 email 由呼叫端 set() 去重）。"""
+    to = list(set(_lookup_emails(pending_usernames, "case_close_blocked")
+                  + _superadmin_emails("case_close_blocked")))
+    if not to:
+        logger.warning("notify_case_close_blocked: 無收件人（quote_no=%r）", quote_no)
+        return
+    case_page = f"{_base_url()}/pages/case-management.html?q={quote_no}"
+    label = f"{customer}{'／' + project if project else ''}" or quote_no
+    html = _build_html(
+        "完結案被擋下", "尚未達成前置條件", "#DC2626",
+        [("報價單號", quote_no), ("客戶名稱", customer), ("專案名稱", project or "（未填寫）"),
+         ("未達成項目", "、".join(reasons))],
+        "", case_page,
+        intro=f"案件「{label}」嘗試完結案時被系統擋下，因為尚有前置條件未達成，請盡速處理相關項目後再次嘗試完結案。",
+        button_text="前往查看案件",
+    )
+    _async_send(to, f"【MOTRIX】完結案被擋下 — {quote_no}（{customer}）", html)
+
+
+def notify_case_change_requested(quote_no: str, customer: str, project: str,
+                                 summary: str, requester_display: str) -> None:
+    """已結案案件半解鎖期間的變更/上傳請求（2026-08-26）→ 通知最高管理員審核
+    （routers/quotations.py 新增的 8 個「暫存待審」端點共用這支）。只寄
+    superadmin，跟 notify_case_closing_report 一樣的收件範圍取捨——已結案
+    案件的異動審核屬於高權限操作，不比照一般附件上傳（任何人可傳）發給全部
+    admin。"""
+    to = _superadmin_emails("case_change_request")
+    if not to:
+        logger.warning("notify_case_change_requested: 無 superadmin email 收件人（quote_no=%r）", quote_no)
+        return
+    queue_page = f"{_base_url()}/pages/approval-queue.html"
+    label = f"{customer}{'／' + project if project else ''}" or quote_no
+    html = _build_html(
+        "已結案案件變更待審核", "待審核", "#7C3AED",
+        [("報價單號", quote_no), ("客戶名稱", customer), ("申請人", requester_display),
+         ("變更內容", summary)],
+        "", queue_page,
+        intro=f"已結案案件「{label}」目前處於半解鎖狀態，{requester_display} 提出以下變更，需最高管理員於簽核佇列審核後才會套用。",
+        button_text="前往簽核佇列",
+    )
+    _async_send(to, f"【MOTRIX】已結案案件變更待審核 — {quote_no}（{customer}）", html)
+
+
 # ── Monthly report ────────────────────────────────────────────────────────────
 
 def _superadmin_emails(event_key: str = None) -> list:

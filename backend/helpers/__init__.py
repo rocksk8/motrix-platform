@@ -79,6 +79,8 @@ from .email_notify import (
     notify_payment_request_approved,
     notify_payment_request_returned,
     notify_approval_reminder,
+    notify_case_close_blocked,
+    notify_case_change_requested,
 )
 from .google_calendar import (
     push_event_for_invoice_voucher,
@@ -142,6 +144,7 @@ __all__ = [
     "notify_payment_request_submitted", "notify_payment_request_next_tier",
     "notify_payment_request_approved", "notify_payment_request_returned",
     "notify_approval_reminder",
+    "notify_case_close_blocked", "notify_case_change_requested",
     # google_calendar
     "push_event_for_invoice_voucher", "push_event_for_payment_request", "push_event_for_shipping_note",
     "push_event_for_quotation_won", "create_calendar_test_event",
