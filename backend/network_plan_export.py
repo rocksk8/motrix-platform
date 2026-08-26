@@ -127,12 +127,18 @@ def parse_plan_excel(content: bytes) -> dict:
     """讀取使用者匯入的 Excel（預期是本系統匯出的範本，可能已離線填寫過），
     回傳 {"sections": {sectionKey: [rows...]}, "warnings": [...]}。
 
-    比對規則：分頁名稱＝`SECTIONS` 定義的標題（跟匯出時完全一致才會被辨識，
-    未知分頁直接略過不報錯——使用者可能在 Excel 裡自己加了輔助分頁）；欄位
-    用**表頭文字**比對（不是欄位順序），使用者調整過欄位順序、或刪掉不需要
-    的欄位都還能正確對應，只有表頭文字被改掉的欄位會對不到、視為略過。
+    比對規則：分頁名稱＝`SECTIONS` 定義的標題（跟匯出時完全一致才會被辨識）；
+    欄位用**表頭文字**比對（不是欄位順序），使用者調整過欄位順序、或刪掉不
+    需要的欄位都還能正確對應，只有表頭文字被改掉的欄位會對不到、視為略過。
     完全空白的列（所有欄位皆空）不納入。只會拋出例外給呼叫端轉成 400 的
-    情況是檔案本身不是合法 xlsx（openpyxl 無法開啟）。"""
+    情況是檔案本身不是合法 xlsx（openpyxl 無法開啟）。
+
+    未辨識的分頁名稱一律回報在 warnings（不當成錯誤，因為使用者可能在
+    Excel 裡自己加了輔助分頁），**這是 2026-08-26 特意補上的行為**：舊版
+    分頁名稱（改分頁命名前，如帶全形斜線的「WAN／對外線路」）匯入到新版
+    程式碼會完全比對不到、被略過，若靜默跳過使用者會完全看不出「為什麼
+    匯入完成訊息裡少了這兩個分頁」，只能回頭翻程式碼或猜——曾實際發生過
+    使用者拿舊範本測試匯入、成功訊息卻少兩個分頁又沒有任何提示的情況。"""
     wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
     title_to_section = {title[:31]: (key, columns) for key, title, columns in SECTIONS}
 
@@ -140,6 +146,8 @@ def parse_plan_excel(content: bytes) -> dict:
     warnings = []
     for sheet_name in wb.sheetnames:
         if sheet_name not in title_to_section:
+            warnings.append(f"分頁「{sheet_name}」無法辨識，已略過（若這是舊版範本的分頁，"
+                             f"請改用最新匯出的範本重新填寫）")
             continue
         section_key, columns = title_to_section[sheet_name]
         ws = wb[sheet_name]
