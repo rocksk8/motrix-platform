@@ -342,7 +342,7 @@ def _build_quote_html(q: dict, tot: dict, internal: bool = False,
         '  var r=document.getElementById("root");if(!r)return;\n'
         '  var A4H=Math.round(267/25.4*96);\n'
         '  var h=r.scrollHeight;\n'
-        '  if(h>A4H){var s=A4H/h;if(s>=0.70){r.style.zoom=s.toFixed(4);}}\n'
+        '  if(h>A4H){var s=A4H/h;if(s>=0.70){document.body.style.zoom=s.toFixed(4);}}\n'
         '});\n'
         '</script>\n'
         '</body>\n'
@@ -1030,7 +1030,7 @@ def _build_shipping_html(n: dict) -> str:
         '  var r=document.getElementById("root");if(!r)return;\n'
         '  var A4H=Math.round(267/25.4*96);\n'
         '  var h=r.scrollHeight;\n'
-        '  if(h>A4H){var s=A4H/h;if(s>=0.70){r.style.zoom=s.toFixed(4);}}\n'
+        '  if(h>A4H){var s=A4H/h;if(s>=0.70){document.body.style.zoom=s.toFixed(4);}}\n'
         '});\n'
         '</script>\n'
         '</body>\n'
@@ -1390,7 +1390,8 @@ def _build_contractor_voucher_html(v: dict) -> str:
         '<div class="footer">\n  MOTRIX Synergy Integration Corp. 允碩整合集創 ｜ info@miactw.com ｜ Tel: 04-3610-6566 ｜ 統一編號: 60575481\n</div>\n'
         '</div>\n'
         '<script>window.addEventListener("load",function(){var r=document.getElementById("root");if(!r)return;'
-        'var A4H=Math.round(267/25.4*96);var h=r.scrollHeight;if(h>A4H){var s=A4H/h;if(s>=0.70){r.style.zoom=s.toFixed(4);}}});</script>\n'
+        'var A4H=Math.round(267/25.4*96);var h=r.scrollHeight;'
+        'if(h>A4H){var s=A4H/h;if(s>=0.70){document.body.style.zoom=s.toFixed(4);}}});</script>\n'
         '</body>\n</html>'
     )
 
@@ -1725,7 +1726,8 @@ def _build_invoice_voucher_html(v: dict) -> str:
         '<div class="footer">\n  MOTRIX Synergy Integration Corp. 允碩整合集創 ｜ info@miactw.com ｜ Tel: 04-3610-6566 ｜ 統一編號: 60575481\n</div>\n'
         '</div>\n'
         '<script>window.addEventListener("load",function(){var r=document.getElementById("root");if(!r)return;'
-        'var A4H=Math.round(267/25.4*96);var h=r.scrollHeight;if(h>A4H){var s=A4H/h;if(s>=0.70){r.style.zoom=s.toFixed(4);}}});</script>\n'
+        'var A4H=Math.round(267/25.4*96);var h=r.scrollHeight;'
+        'if(h>A4H){var s=A4H/h;if(s>=0.70){document.body.style.zoom=s.toFixed(4);}}});</script>\n'
         '</body>\n</html>'
     )
 
@@ -2058,7 +2060,8 @@ def _build_payment_request_html(v: dict) -> str:
         '<div class="footer">\n  MOTRIX Synergy Integration Corp. 允碩整合集創 ｜ info@miactw.com ｜ Tel: 04-3610-6566 ｜ 統一編號: 60575481\n</div>\n'
         '</div>\n'
         '<script>window.addEventListener("load",function(){var r=document.getElementById("root");if(!r)return;'
-        'var A4H=Math.round(267/25.4*96);var h=r.scrollHeight;if(h>A4H){var s=A4H/h;if(s>=0.70){r.style.zoom=s.toFixed(4);}}});</script>\n'
+        'var A4H=Math.round(267/25.4*96);var h=r.scrollHeight;'
+        'if(h>A4H){var s=A4H/h;if(s>=0.70){document.body.style.zoom=s.toFixed(4);}}});</script>\n'
         '</body>\n</html>'
     )
 
