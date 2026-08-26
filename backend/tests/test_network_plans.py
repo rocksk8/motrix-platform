@@ -129,6 +129,19 @@ def test_status_transition_appends_revision_log(client, make_user):
     assert bad.status_code == 400
 
 
+def test_excel_sheet_names_avoid_fullwidth_forbidden_chars():
+    """2026-08-26 迴歸測試：分頁名稱含全形斜線「／」（如舊版的「WAN／對外
+    線路」「IP／Port 群組」）會讓 Microsoft Excel 判定 workbook.xml 損毀、
+    跳出修復對話框、把後續分頁吞掉重組成「復原_工作表1」——即使 openpyxl／
+    zipfile／XML well-formedness 檢查全部過關也一樣，這是 Excel 自己額外的
+    分頁名稱驗證規則。純靜態檢查 SECTIONS 定義，不需要真的產生檔案。"""
+    import network_plan_export as npe
+    forbidden_fullwidth = "／＼？＊［］："
+    for _, title, _ in npe.SECTIONS:
+        bad = [c for c in title if c in forbidden_fullwidth]
+        assert not bad, f"分頁標題「{title}」含有可能讓 Excel 判定損毀的字元：{bad}"
+
+
 def test_export_excel_and_pdf(client, make_user):
     username, password = make_user(role="superadmin")
     token = _login(client, username, password)

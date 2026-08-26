@@ -21,8 +21,18 @@ _COMPANY2 = "MOTRIX Synergy Integration Corp."
 
 # (data_json key, 章節/分頁標題, 欄位 [(key, 中文表頭), ...]) —— 與
 # network-plan-form.html::DATA_TABS 一一對應。
+#
+# ⚠️ 分頁標題（第二個欄位）之後新增/修改時絕對不能包含全形斜線「／」（U+FF0F）：
+# 2026-08-26 實測發現，含「／」的分頁名稱（原本的「WAN／對外線路」「IP／Port
+# 群組」）會讓 Microsoft Excel 判定 workbook.xml 損毀、跳出修復對話框、把該
+# 分頁之後的內容整個吞掉重組成「復原_工作表1」——即使 openpyxl／python
+# zipfile／XML well-formedness 檢查全部通過也一樣（這是 Excel 自己額外的
+# 分頁名稱驗證規則，並非標準 OOXML schema 或一般 XML 工具會擋下的問題）。
+# 已改用半形空格／連字號替代（"WAN 對外線路"／"IP-Port 群組"）。欄位表頭
+# （每個 tuple 的第二個字串，如 "角色／用途"）是儲存格文字內容，不受此限制，
+# 可以繼續用全形斜線。
 SECTIONS = [
-    ("wanLines", "WAN／對外線路", [
+    ("wanLines", "WAN 對外線路", [
         ("isp", "ISP"), ("lineType", "線路類型"), ("bandwidthUp", "上行頻寬"),
         ("bandwidthDown", "下行頻寬"), ("publicIp", "固定 IP"), ("subnet", "遮罩"),
         ("gateway", "Gateway"), ("dns1", "DNS1"), ("dns2", "DNS2"),
@@ -63,7 +73,7 @@ SECTIONS = [
         ("protocol", "協定"), ("source", "來源"), ("destination", "目的"),
         ("destPort", "目的 Port"), ("enabled", "啟用"), ("note", "備註"),
     ]),
-    ("ipPortGroups", "IP／Port 群組", [
+    ("ipPortGroups", "IP-Port 群組", [
         ("category", "類別"), ("groupName", "群組名稱"), ("members", "成員（IP／網段／Port）"),
         ("usage", "用途"), ("referencedBy", "被哪些規則引用"), ("status", "狀態"), ("note", "備註"),
     ]),
