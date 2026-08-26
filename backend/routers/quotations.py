@@ -36,6 +36,7 @@ from archive import _backup_quotation
 from pdf_gen import (
     _generate_quotation_pdf, generate_pdf_bytes,
     _generate_case_closing_pdf, generate_case_closing_pdf_bytes,
+    generate_project_execution_report_pdf_bytes,
 )
 
 router = APIRouter()
@@ -648,7 +649,30 @@ def get_quotation(quote_no: str, authorization: str = Header(None)):
     result["data"]["status"] = result["status"]   # DB column is authoritative
     result["signed_log"] = json.loads(result.get("signed_log") or "[]")
     result["signed_files"] = json.loads(result.pop("signed_files_json", None) or "[]")
+    result["assigned_user_ids"] = json.loads(result.get("assigned_user_ids") or "[]")
     return result
+
+
+@router.patch("/api/quotations/{quote_no}/assigned-users")
+def update_case_assigned_users(quote_no: str, body: dict = Body(...), authorization: str = Header(None)):
+    """案件成員分配（2026-08-26 專案管理併入案件管理，取代原
+    PATCH /api/projects/{id}/assigned-users），比照原端點僅 admin+ 可設定。"""
+    user = _require_user(authorization)
+    if user['role'] not in ('superadmin', 'admin'):
+        raise HTTPException(403, "僅管理員可設定成員分配")
+    user_ids = [int(uid) for uid in (body.get('user_ids') or []) if uid]
+    conn = get_db()
+    row = conn.execute("SELECT quote_no FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+    if not row:
+        conn.close(); raise HTTPException(404, "案件不存在")
+    conn.execute("UPDATE quotations SET assigned_user_ids=? WHERE quote_no=?",
+                 (json.dumps(user_ids, ensure_ascii=False), quote_no))
+    conn.commit()
+    conn.close()
+    _audit(_tok(authorization), 'case.assign', 'quotation', quote_no, f"分配 {len(user_ids)} 位成員")
+    notify_module_activity("案件管理", "設定成員分配", user.get("display_name") or user["username"],
+                            f"{quote_no}（{len(user_ids)} 位成員）", "case-management.html")
+    return {"ok": True}
 
 
 @router.post("/api/quotations/{quote_no}/signed-toggle")
@@ -3205,13 +3229,14 @@ def list_case_updates(quote_no: str, authorization: str = Header(None)):
 
     # 2. Work logs tagged with this case
     for w in conn.execute(
-        "SELECT w.id, w.log_date, w.content, w.hours, w.created_at, "
+        "SELECT w.id, w.log_date, w.content, w.hours, w.created_at, w.photos, "
         "u.username, u.display_name "
         "FROM work_logs w LEFT JOIN users u ON u.id=w.user_id "
         "WHERE w.case_no=?", (quote_no,)
     ).fetchall():
         results.append({
             "id": f"wl_{w['id']}",
+            "workLogId": w["id"],
             "source": "work_log",
             "author": w["username"] or "",
             "authorDisplay": w["display_name"] or w["username"] or "未知",
@@ -3219,6 +3244,7 @@ def list_case_updates(quote_no: str, authorization: str = Header(None)):
             "logDate": w["log_date"],
             "hours": w["hours"],
             "created_at": w["created_at"],
+            "photos": json.loads(w["photos"] or "[]"),
             "canDelete": False,
         })
 
@@ -3416,6 +3442,34 @@ def download_case_closing_report_pdf(quote_no: str, authorization: str = Header(
     _audit(_tok(authorization), "quotation.export_closing_report", "quotation", quote_no,
            f"{quote_no} 結案報表 PDF 下載", {"via": "server"})
     fname = f"{quote_no}_結案報表.pdf"
+    encoded = urlquote(fname)
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded}"}
+    )
+
+
+@router.get("/api/quotations/{quote_no}/project-report-pdf")
+def download_project_execution_report_pdf(quote_no: str, authorization: str = Header(None)):
+    """專案執行報告 PDF（執行進度／叫料管控／代辦事項／工作日誌／動態彙整，
+    2026-08-26 專案管理併入案件管理），任何案件狀態下皆可下載，不像結案報表
+    限已結案案件。"""
+    _require_user(authorization)
+    conn = get_db()
+    row = conn.execute("SELECT 1 FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+    conn.close()
+    if not row:
+        raise HTTPException(404, "報價單不存在")
+    try:
+        pdf_bytes = generate_project_execution_report_pdf_bytes(quote_no)
+    except ValueError as e:
+        raise HTTPException(503, str(e))
+    except Exception as e:
+        raise HTTPException(500, f"專案執行報告 PDF 產生失敗：{e}")
+    _audit(_tok(authorization), "quotation.export_project_report", "quotation", quote_no,
+           f"{quote_no} 專案執行報告 PDF 下載", {"via": "server"})
+    fname = f"{quote_no}_專案執行報告.pdf"
     encoded = urlquote(fname)
     return Response(
         content=pdf_bytes,

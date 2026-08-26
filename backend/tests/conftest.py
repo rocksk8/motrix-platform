@@ -83,6 +83,15 @@ def client(_app, tmp_path, monkeypatch):
     import helpers.uploads as uploads_helper
     monkeypatch.setattr(uploads_helper, "UPLOADS_ROOT", str(tmp_path / "uploads"))
 
+    # photos.py computes its own project-photo storage roots independent of
+    # archive.py/uploads_helper above too (used by projects.py's project-log
+    # photos and, since 2026-08-26, system.py's work-log photos) — redirect
+    # both the real and demo variants or tests would write into the actual
+    # repo uploads/projects//_demo_projects/.
+    import photos
+    monkeypatch.setattr(photos, "_PHOTO_UPLOAD_BASE", str(tmp_path / "uploads" / "projects"))
+    monkeypatch.setattr(db, "DEMO_PROJECT_PHOTOS_DIR", str(tmp_path / "uploads" / "_demo_projects"))
+
     from fastapi.testclient import TestClient
     return TestClient(_app)
 

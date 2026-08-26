@@ -2699,3 +2699,303 @@ def _generate_case_closing_pdf(quote_no: str, actor: str = '', action_type: str 
                 os.unlink(tmp_html)
             except Exception:
                 pass
+
+
+# ── 專案執行報告（2026-08-26 專案管理併入案件管理）─────────────────────────────
+# 跟結案報表（_case_closing_report_data）同一套資料組裝風格，但：①任何時候都能
+# 匯出，不檢查是否已結案；②內容聚焦「執行過程」而非財務損益——執行進度、叫料
+# 管控、代辦事項兩階段簽核狀態、工作日誌時間軸（含照片，用檔名/上傳者列出，不
+# 內嵌圖檔，避免大量圖片讓 PDF 過大且拖慢 Edge headless 轉檔）、近期動態摘要。
+
+def _project_execution_report_data(quote_no: str) -> dict:
+    conn = get_db()
+    row = conn.execute("""
+        SELECT quote_no, customer_name, project_name, sales_person, quote_date,
+               COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') AS deal_tag,
+               data_json, assigned_user_ids
+        FROM quotations WHERE quote_no=?
+    """, (quote_no,)).fetchone()
+    if not row:
+        conn.close()
+        raise ValueError("案件不存在")
+
+    d  = json.loads(row["data_json"] or "{}")
+    cr = d.get("caseRecord") or {}
+
+    dn_map = {
+        r["username"]: (r["display_name"] or r["username"])
+        for r in conn.execute("SELECT username, display_name FROM users").fetchall()
+    }
+    uid_name_map = {
+        r["id"]: (r["display_name"] or r["username"])
+        for r in conn.execute("SELECT id, username, display_name FROM users").fetchall()
+    }
+
+    # 執行進度：跟 _case_closing_report_data() 同一段查詢
+    stage_rows = conn.execute(
+        "SELECT label, start_date, due_date, done, done_at, assigned_to, "
+        "(SELECT MIN(visit_date) FROM case_stage_visits WHERE stage_id=case_stages.id AND visit_date!='') AS visit_start, "
+        "(SELECT MAX(visit_date) FROM case_stage_visits WHERE stage_id=case_stages.id AND visit_date!='') AS visit_end "
+        "FROM case_stages WHERE quote_no=? ORDER BY sort_order, id",
+        (quote_no,)
+    ).fetchall()
+    today = date.today().isoformat()
+    stages = []
+    for r in stage_rows:
+        done = bool(r["done"])
+        due  = r["due_date"] or ""
+        assigned = [u for u in json.loads(r["assigned_to"] or "[]") if u]
+        stages.append({
+            "label":         r["label"] or "（未命名階段）",
+            "startDate":     r["start_date"] or "",
+            "dueDate":       due,
+            "doneAt":        (r["done_at"] or "")[:10],
+            "visitStart":    r["visit_start"] or "",
+            "visitEnd":      r["visit_end"] or "",
+            "done":          done,
+            "overdue":       (not done) and bool(due) and due < today,
+            "assignedNames": [dn_map.get(u, u) for u in assigned],
+        })
+
+    # 叫料管控
+    materials = [{
+        "name":     m.get("name") or m.get("description") or "（未命名料件）",
+        "spec":     m.get("spec") or "",
+        "qty":      m.get("qty") or "",
+        "status":   m.get("status") or "",
+        "eta":      m.get("eta") or "",
+    } for m in (cr.get("materials") or [])]
+
+    # 代辦事項（兩階段簽核）
+    action_items = [{
+        "text":           r["text"],
+        "status":         r["status"],
+        "stage1Approver": r["stage1_approver"] or "",
+        "stage1At":       (r["stage1_at"] or "")[:16],
+        "stage2Approver": r["stage2_approver"] or "",
+        "stage2At":       (r["stage2_at"] or "")[:16],
+    } for r in conn.execute(
+        "SELECT * FROM case_action_items WHERE quote_no=? ORDER BY sort_order, id", (quote_no,)
+    ).fetchall()]
+
+    # 工作日誌時間軸（含照片，僅列檔名/上傳者，不內嵌圖檔）
+    work_logs = []
+    for r in conn.execute(
+        "SELECT log_date, user_id, content, hours, photos FROM work_logs "
+        "WHERE case_no=? ORDER BY log_date DESC, id DESC", (quote_no,)
+    ).fetchall():
+        photos = json.loads(r["photos"] or "[]")
+        work_logs.append({
+            "logDate":  r["log_date"] or "",
+            "author":   uid_name_map.get(r["user_id"], "未知"),
+            "content":  r["content"] or "",
+            "hours":    r["hours"],
+            "photoCount": len(photos),
+            "photoNames": [p.get("filename", "") for p in photos],
+        })
+
+    # 近期動態摘要（人工留言，最新 15 則；工作日誌已在上方獨立列出，這裡不重複）
+    feed = [{
+        "author":  dn_map.get(r["author"], r["author"]),
+        "content": r["content"],
+        "at":      r["created_at"],
+    } for r in conn.execute(
+        "SELECT author, content, created_at FROM case_updates WHERE quote_no=? "
+        "ORDER BY created_at DESC LIMIT 15", (quote_no,)
+    ).fetchall()]
+
+    assigned_names = [dn_map.get(uid_name_map.get(uid, ""), uid_name_map.get(uid, str(uid)))
+                       for uid in json.loads(row["assigned_user_ids"] or "[]")]
+
+    conn.close()
+    return {
+        "quoteNo":      row["quote_no"],
+        "customer":     row["customer_name"] or "",
+        "project":      row["project_name"] or "",
+        "salesPerson":  row["sales_person"] or "",
+        "quoteDate":    row["quote_date"] or "",
+        "dealTag":      row["deal_tag"] or "",
+        "assignedNames": assigned_names,
+        "stages":       stages,
+        "materials":    materials,
+        "actionItems":  action_items,
+        "workLogs":     work_logs,
+        "feed":         feed,
+    }
+
+
+def _build_project_execution_report_html(data: dict) -> str:
+    def esc(s):
+        return (str(s) if s is not None else '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>')
+
+    def _stage_period(st):
+        if st["visitStart"] or st["visitEnd"]:
+            a, b = st["visitStart"] or "—", st["visitEnd"] or "—"
+            return f'{a} ～ {b}' if a != b else a
+        if st["startDate"] or st["dueDate"]:
+            return f'{st["startDate"] or "—"} ～ {st["dueDate"] or "—"}'
+        return "—"
+
+    stage_rows_html = "".join(
+        f'<tr><td>{esc(st["label"])}</td><td>{_stage_period(st)}</td>'
+        f'<td class="c">{esc(st["doneAt"]) or "—"}</td>'
+        f'<td class="c" style="color:{"#15803D" if st["done"] else "#DC2626" if st["overdue"] else "#9CA3AF"};font-weight:600">'
+        f'{"✓ 已完成" if st["done"] else "⚠ 逾期" if st["overdue"] else "進行中"}</td>'
+        f'<td>{esc("、".join(st["assignedNames"]))}</td></tr>'
+        for st in data["stages"]
+    )
+    _no_stage_row = '<tr><td colspan="5" class="c" style="color:#9CA3AF">無執行進度階段資料</td></tr>'
+    stages_section = (
+        '<div class="section-label">一、執行進度</div>'
+        '<table><thead><tr><th>階段</th><th style="width:150px">期間</th><th class="c" style="width:90px">完成日期</th>'
+        '<th class="c" style="width:80px">狀態</th><th style="width:120px">負責人</th></tr></thead>'
+        f'<tbody>{stage_rows_html or _no_stage_row}</tbody></table>'
+    )
+
+    mat_rows_html = "".join(
+        f'<tr><td>{esc(m["name"])}</td><td>{esc(m["spec"])}</td><td class="c">{esc(m["qty"])}</td>'
+        f'<td class="c">{esc(m["status"]) or "—"}</td><td class="c">{esc(m["eta"]) or "—"}</td></tr>'
+        for m in data["materials"]
+    )
+    _no_mat_row = '<tr><td colspan="5" class="c" style="color:#9CA3AF">無叫料管控資料</td></tr>'
+    materials_section = (
+        '<div class="section-label">二、叫料管控</div>'
+        '<table><thead><tr><th>料件</th><th>規格</th><th class="c" style="width:70px">數量</th>'
+        '<th class="c" style="width:90px">狀態</th><th class="c" style="width:100px">預計到貨</th></tr></thead>'
+        f'<tbody>{mat_rows_html or _no_mat_row}</tbody></table>'
+    )
+
+    def _item_status(it):
+        if it["status"] == "done":
+            return '<span style="color:#15803D;font-weight:600">✓ 已完成</span>'
+        if it["status"] == "stage1_done":
+            return '<span style="color:#B45309;font-weight:600">工程已確認，待業務確認</span>'
+        return '<span style="color:#9CA3AF">待確認</span>'
+    item_rows_html = "".join(
+        f'<tr><td>{esc(it["text"])}</td><td class="c">{_item_status(it)}</td>'
+        f'<td>{esc(it["stage1Approver"]) or "—"}{"　" + esc(it["stage1At"]) if it["stage1At"] else ""}</td>'
+        f'<td>{esc(it["stage2Approver"]) or "—"}{"　" + esc(it["stage2At"]) if it["stage2At"] else ""}</td></tr>'
+        for it in data["actionItems"]
+    )
+    _no_item_row = '<tr><td colspan="4" class="c" style="color:#9CA3AF">無代辦事項資料</td></tr>'
+    action_items_section = (
+        '<div class="section-label">三、代辦事項（兩階段簽核）</div>'
+        '<table><thead><tr><th>事項</th><th class="c" style="width:180px">狀態</th>'
+        '<th style="width:160px">工程主管確認</th><th style="width:160px">業務主管確認</th></tr></thead>'
+        f'<tbody>{item_rows_html or _no_item_row}</tbody></table>'
+    )
+
+    wl_rows_html = "".join(
+        f'<tr><td class="c" style="width:90px">{esc(wl["logDate"])}</td><td style="width:90px">{esc(wl["author"])}</td>'
+        f'<td>{esc(wl["content"])}</td><td class="c" style="width:70px">{wl["photoCount"] or "—"}</td></tr>'
+        for wl in data["workLogs"]
+    )
+    _no_wl_row = '<tr><td colspan="4" class="c" style="color:#9CA3AF">無工作日誌資料</td></tr>'
+    work_logs_section = (
+        '<div class="section-label">四、工作日誌</div>'
+        '<table><thead><tr><th class="c">日期</th><th>記錄人</th><th>內容</th><th class="c">照片數</th></tr></thead>'
+        f'<tbody>{wl_rows_html or _no_wl_row}</tbody></table>'
+    )
+
+    feed_rows_html = "".join(
+        f'<tr><td class="c" style="width:130px">{esc((f["at"] or "")[:16])}</td>'
+        f'<td style="width:90px">{esc(f["author"])}</td><td>{esc(f["content"])}</td></tr>'
+        for f in data["feed"]
+    )
+    _no_feed_row = '<tr><td colspan="3" class="c" style="color:#9CA3AF">無動態留言紀錄</td></tr>'
+    feed_section = (
+        '<div class="section-label">五、近期動態（最新 15 則留言）</div>'
+        '<table><thead><tr><th class="c">時間</th><th>發布人</th><th>內容</th></tr></thead>'
+        f'<tbody>{feed_rows_html or _no_feed_row}</tbody></table>'
+    )
+
+    gen_at = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+    return (
+        '<!DOCTYPE html>\n<html lang="zh-Hant">\n<head>\n<meta charset="UTF-8">\n'
+        f'<title>{esc(data["quoteNo"])} 專案執行報告</title>\n'
+        '<style>\n'
+        '  *{box-sizing:border-box;margin:0;padding:0}\n'
+        '  body{font-family:"Microsoft JhengHei","PMingLiU",serif;font-size:12px;color:#0A0A0A;line-height:1.6;background:#fff}\n'
+        '  #root{padding:24px 32px}\n'
+        '  @page{size:A4;margin:0 13mm 12mm 13mm;@bottom-center{content:counter(page);font-family:Arial,sans-serif;font-size:9px;color:#aaa}}\n'
+        '  @media print{html,body{margin:0;padding:0;background:#fff}#root{padding:15mm 0 0}tr{page-break-inside:avoid}}\n'
+        '  .accent-bar{height:3px;background:#0A0A0A;margin-bottom:18px}\n'
+        '  .header{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:14px;border-bottom:1px solid #0A0A0A;margin-bottom:16px}\n'
+        '  .co-name{font-size:15px;font-weight:700;letter-spacing:.06em}\n'
+        '  .co-sub{font-size:10px;color:#888;margin-top:3px;font-family:Arial,sans-serif;letter-spacing:.02em}\n'
+        '  .doc-title{font-size:22px;font-weight:700;letter-spacing:.18em;text-align:right}\n'
+        '  .meta{display:grid;grid-template-columns:repeat(3,1fr);gap:6px 4px;margin-bottom:16px;font-size:12px;'
+        'background:#FAFAF8;padding:10px 12px;border-radius:4px;border:1px solid #EDEAE4}\n'
+        '  .meta span{color:#888;font-family:Arial,sans-serif;font-size:11px}\n'
+        '  .section-label{font-size:11px;font-weight:700;letter-spacing:.04em;color:#111;margin:16px 0 7px;'
+        'display:flex;align-items:center;gap:8px}\n'
+        '  .section-label::after{content:"";flex:1;height:1px;background:#EDEAE4}\n'
+        '  table{width:100%;border-collapse:collapse;margin-bottom:10px}\n'
+        '  thead th{background:#0A0A0A;color:#F5F4F0;padding:7px 8px;text-align:left;font-size:10.5px;font-weight:500;'
+        'font-family:Arial,sans-serif;letter-spacing:.03em}\n'
+        '  tbody td{padding:6px 8px;border-bottom:1px solid #EDEAE4;font-size:11.5px}\n'
+        '  tbody tr:last-child td{border-bottom:none}\n'
+        '  tbody tr:nth-child(even) td{background:#FAFAF8}\n'
+        '  td.r,th.r{text-align:right;font-family:Arial,sans-serif}\n'
+        '  td.c,th.c{text-align:center}\n'
+        '  .footer{text-align:center;font-size:10px;color:#999;margin-top:18px;padding-top:12px;border-top:1px solid #EDEAE4;'
+        'font-family:Arial,sans-serif;letter-spacing:.04em}\n'
+        '</style>\n</head>\n<body>\n<div id="root">\n'
+        '<div class="accent-bar"></div>\n'
+        '<div class="header">\n  <div>\n    <div class="co-name">允碩整合集創股份有限公司</div>\n'
+        '    <div class="co-sub">MOTRIX Synergy Integration Corp.</div>\n'
+        '    <div class="co-sub" style="margin-top:4px">統一編號：60575481　｜　電話：04-3610-6566　｜　info@miactw.com</div>\n'
+        '  </div>\n  <div>\n    <div class="doc-title">專案執行報告</div>\n'
+        f'    <div class="co-sub" style="text-align:right;margin-top:4px">產出時間：{gen_at}</div>\n  </div>\n</div>\n'
+        '<div class="meta">\n'
+        f'  <div><span>案號：</span><strong style="font-family:Arial,sans-serif">{esc(data["quoteNo"])}</strong></div>\n'
+        f'  <div><span>客戶：</span>{esc(data["customer"])}</div>\n'
+        f'  <div><span>專案：</span>{esc(data["project"])}</div>\n'
+        f'  <div><span>業務員：</span>{esc(data["salesPerson"])}</div>\n'
+        f'  <div><span>案件狀態：</span>{esc(data["dealTag"]) or "—"}</div>\n'
+        f'  <div><span>分配成員：</span>{esc("、".join(data["assignedNames"])) or "—"}</div>\n'
+        '</div>\n'
+        f'{stages_section}\n'
+        f'{materials_section}\n'
+        f'{action_items_section}\n'
+        f'{work_logs_section}\n'
+        f'{feed_section}\n'
+        '<div class="footer">\n  本文件彙整案件執行過程資訊，僅供內部留存查核使用 ｜ '
+        'MOTRIX Synergy Integration Corp. 允碩整合集創\n</div>\n'
+        '</div>\n</body>\n</html>'
+    )
+
+
+def generate_project_execution_report_pdf_bytes(quote_no: str) -> bytes:
+    """Edge Headless 產生專案執行報告 PDF 並以 bytes 回傳（供 API 下載使用），
+    任何時候皆可產出，不像結案報表限已結案案件。"""
+    edge = _get_edge_path()
+    data = _project_execution_report_data(quote_no)
+    html_content = _build_project_execution_report_html(data)
+    tmp_html = tmp_pdf = None
+    try:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.html', encoding='utf-8', delete=False) as f:
+            f.write(html_content)
+            tmp_html = f.name
+        with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as f:
+            tmp_pdf = f.name
+        file_url = 'file:///' + tmp_html.replace('\\', '/')
+        subprocess.run(
+            [edge, '--headless', '--disable-gpu', '--no-sandbox',
+             f'--print-to-pdf={tmp_pdf}',
+             '--no-pdf-header-footer',
+             '--run-all-compositor-stages-before-draw',
+             file_url],
+            timeout=40, check=False,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
+        if not os.path.exists(tmp_pdf) or os.path.getsize(tmp_pdf) == 0:
+            raise ValueError("Edge 執行完畢但未產生 PDF 檔案")
+        with open(tmp_pdf, 'rb') as f:
+            return f.read()
+    finally:
+        for p in (tmp_html, tmp_pdf):
+            if p:
+                try: os.unlink(p)
+                except Exception: pass

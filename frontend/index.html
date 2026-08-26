@@ -17,7 +17,7 @@
       if(!s.token){location.replace('pages/login.html');return}
       var ok=r==='superadmin'||r==='admin'
              ||m.indexOf('finance')>=0||m.indexOf('quotation')>=0
-      if(!ok){location.replace('pages/projects.html');return}
+      if(!ok){location.replace('pages/case-management.html');return}
     }catch(e){location.replace('pages/login.html')}
   })()
   </script>
@@ -618,8 +618,8 @@
         <canvas class="kpi-card__spark" id="sparkWarranty"></canvas>
       </div>
 
-      <!-- 進行中專案 -->
-      <div class="kpi-card" style="cursor:pointer" @click="location.href='pages/projects.html'">
+      <!-- 進行中專案（2026-08-26 專案管理併入案件管理，改連到案件管理） -->
+      <div class="kpi-card" style="cursor:pointer" @click="location.href='pages/case-management.html'">
         <div class="kpi-card__label">進行中專案</div>
         <div class="kpi-card__row">
           <div class="kpi-card__val" x-text="loading ? '…' : ((stats.projectSummary?.['進行中']||0) + (stats.projectSummary?.['規劃中']||0))"></div>
@@ -1161,9 +1161,10 @@
         if (!s) { window.location.href = 'pages/login.html'; return }
         try { this.session = JSON.parse(s) } catch(e) { window.location.href = 'pages/login.html'; return }
 
-        // 無儀表板相關權限 → 導向專案頁面
+        // 無儀表板相關權限 → 導向案件管理頁面（2026-08-26 專案管理併入案件
+        // 管理後，案件管理是這類角色最泛用的落地頁）
         if (!this.canFinance && !this.canQuotation) {
-          window.location.replace('pages/projects.html'); return
+          window.location.replace('pages/case-management.html'); return
         }
 
         const d = new Date()

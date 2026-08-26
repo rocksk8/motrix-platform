@@ -1,16 +1,14 @@
-"""Projects, project logs, action item approvals, photo upload/serving."""
-import hashlib
-import hmac
+"""Projects, project logs, action item approvals, photo upload (2026-08-26:
+専案管理業務端點已從 main.py 拔除掛載，見 db.py::_m062_case_project_merge()
+docstring——此檔保留當歷史/備用程式碼，不再對外服務；通用上傳簽名 URL 服務
+已搬到 routers/uploads.py 獨立維護，不隨此模組一起下線）。"""
 import json
 import os
-import secrets
-import time
 import uuid
 from datetime import datetime
 from typing import Optional, List
 
-from fastapi import APIRouter, HTTPException, Header, Body, UploadFile, File, Query
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, HTTPException, Header, Body, UploadFile, File
 
 from db import get_db
 from helpers import (
@@ -18,54 +16,6 @@ from helpers import (
     resolve_department_manager, resolve_division_manager,
 )
 from photos import _process_project_photo, _PHOTO_UPLOAD_BASE, _photo_root
-
-_PHOTO_TOKEN_TTL = 3600  # seconds
-_PHOTO_SECRET_CACHE: bytes | None = None
-
-UPLOADS_ROOT = os.path.realpath(os.path.join(os.path.dirname(__file__), '..', '..', 'uploads'))
-
-
-def _resolve_upload_path(rel_path: str) -> str | None:
-    """Resolve rel_path against UPLOADS_ROOT and reject any path that escapes it
-    (e.g. via '..' traversal). Returns the absolute path, or None if out of bounds."""
-    full = os.path.realpath(os.path.join(UPLOADS_ROOT, rel_path.lstrip('/\\')))
-    if os.path.commonpath([full, UPLOADS_ROOT]) != UPLOADS_ROOT:
-        return None
-    return full
-
-
-def _get_photo_secret() -> bytes:
-    """Return persistent HMAC key stored in system_settings; generate once if absent."""
-    global _PHOTO_SECRET_CACHE
-    if _PHOTO_SECRET_CACHE is not None:
-        return _PHOTO_SECRET_CACHE
-    from helpers import _get_setting, _set_setting
-    stored = _get_setting("photo_secret")
-    if not stored:
-        stored = secrets.token_hex(32)
-        _set_setting("photo_secret", stored)
-    _PHOTO_SECRET_CACHE = bytes.fromhex(stored)
-    return _PHOTO_SECRET_CACHE
-
-
-def _make_photo_token(path: str, ttl: int = _PHOTO_TOKEN_TTL) -> str:
-    expires = int(time.time()) + ttl
-    msg = f"{path}:{expires}".encode()
-    sig = hmac.new(_get_photo_secret(), msg, hashlib.sha256).hexdigest()
-    return f"{expires}.{sig}"
-
-
-def _verify_photo_token(path: str, token: str) -> bool:
-    try:
-        expires_str, sig = token.split(".", 1)
-        expires = int(expires_str)
-    except (ValueError, AttributeError):
-        return False
-    if time.time() > expires:
-        return False
-    msg = f"{path}:{expires}".encode()
-    expected = hmac.new(_get_photo_secret(), msg, hashlib.sha256).hexdigest()
-    return hmac.compare_digest(expected, sig)
 
 router = APIRouter()
 
@@ -640,36 +590,3 @@ def delete_project_photo(
     notify_module_activity("專案管理", "刪除照片", user.get("display_name") or user["username"],
                             f"PR-{project_id:04d} 日誌 #{log_id}", "projects.html")
     return {"ok": True}
-
-
-@router.get("/api/photo-token")
-def get_photo_token(path: str = Query(...), authorization: str = Header(None)):
-    """Return a short-lived signed token for accessing a specific upload path via ?pt=."""
-    _require_user(authorization)
-    safe = os.path.normpath(path).lstrip('/\\')
-    if _resolve_upload_path(safe) is None:
-        raise HTTPException(403, "無效路徑")
-    return {"token": _make_photo_token(safe), "ttl": _PHOTO_TOKEN_TTL}
-
-
-@router.get("/api/uploads/{file_path:path}")
-def serve_upload(
-    file_path: str,
-    authorization: str = Header(None),
-    token: str = Query(None),
-    pt: str = Query(None),
-):
-    safe = os.path.normpath(file_path).lstrip('/\\')
-    full = _resolve_upload_path(safe)
-    if full is None:
-        raise HTTPException(403, "無效路徑")
-    if pt:
-        if not _verify_photo_token(safe, pt):
-            raise HTTPException(403, "照片連結已過期或無效，請重新載入")
-    else:
-        if not authorization and token:
-            authorization = f"Bearer {token}"
-        _require_user(authorization)
-    if not os.path.isfile(full):
-        raise HTTPException(404, "檔案不存在")
-    return FileResponse(full)

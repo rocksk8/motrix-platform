@@ -903,69 +903,6 @@ def notify_case_stage_deadline_manager(
     _async_send(to, f"【MOTRIX】部門成員案件進度到期提醒 — {name} · {label} · {stage_label}", html)
 
 
-def notify_project_deadline(
-    project_id: int,
-    project_code: str,
-    project_name: str,
-    end_date: str,
-    days_left: int,
-    assignee_username: str,
-    assignee_display: str,
-) -> None:
-    """專案「預計完工」日期即將到期／已逾期 → 通知被分配的成員（無分配則 admin）"""
-    assignee_to = _lookup_emails([assignee_username], "project_deadline") if assignee_username else []
-    to = list({*assignee_to, *(_admin_emails("project_deadline") if not assignee_to else [])})
-    if not to:
-        return
-    project_page = f"{_base_url()}/pages/projects.html?id={project_id}"
-    name = assignee_display or assignee_username or "（未指派成員）"
-    if days_left <= 0:
-        badge_text, badge_color = "已逾期", "#DC2626"
-        intro = f"專案「{project_name}」（{project_code}）預計完工日 {end_date} 已到期，請盡速確認進度。"
-    else:
-        badge_text, badge_color = f"剩餘 {days_left} 天", "#D97706"
-        intro = f"專案「{project_name}」（{project_code}）預計於 {end_date} 完工，尚餘 {days_left} 天，請儘早確認進度。"
-    html = _build_html(
-        "專案預計完工日即將到期", badge_text, badge_color,
-        [("專案代號", project_code), ("專案名稱", project_name), ("預計完工", end_date)],
-        "", project_page,
-        intro=intro,
-        button_text="前往專案管理",
-    )
-    _async_send(to, f"【MOTRIX】專案到期提醒 — {project_name}（{project_code}）", html)
-
-
-def notify_project_deadline_manager(
-    project_id: int,
-    project_code: str,
-    project_name: str,
-    end_date: str,
-    days_left: int,
-    department_id: int,
-) -> None:
-    """專案「預計完工」日期即將到期／已逾期 → 額外通知專案所屬部門的主管（案件/專案管理延伸，2026-08-22）。
-    跟 notify_project_deadline（通知被分配成員）是兩條獨立路徑；department_id 是空值或
-    部門沒有主管時安靜跳過，純通知性質，不擋流程。"""
-    to = _department_manager_emails(department_id, "project_deadline_manager")
-    if not to:
-        return
-    project_page = f"{_base_url()}/pages/projects.html?id={project_id}"
-    if days_left <= 0:
-        badge_text, badge_color = "已逾期", "#DC2626"
-        intro = f"您部門的專案「{project_name}」（{project_code}）預計完工日 {end_date} 已到期，請關注進度。"
-    else:
-        badge_text, badge_color = f"剩餘 {days_left} 天", "#D97706"
-        intro = f"您部門的專案「{project_name}」（{project_code}）預計於 {end_date} 完工，尚餘 {days_left} 天，請儘早關注。"
-    html = _build_html(
-        "部門專案預計完工日即將到期", badge_text, badge_color,
-        [("專案代號", project_code), ("專案名稱", project_name), ("預計完工", end_date)],
-        "", project_page,
-        intro=intro,
-        button_text="前往專案管理",
-    )
-    _async_send(to, f"【MOTRIX】部門專案到期提醒 — {project_name}（{project_code}）", html)
-
-
 def notify_dev_case_stale(case_id: int, case_name: str, customer_name: str,
                            days_since_update: int, usernames: list) -> None:
     """業務開發案件洽談中超過 30 天未更新 → 通知業務開發/專案規劃人員 + admin/superadmin"""

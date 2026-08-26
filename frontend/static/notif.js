@@ -96,7 +96,6 @@ function notifStore() {
           dev_crm:    ['sb-mod-dev-crm'],
           quotation:  ['sb-mod-quotation'],
           case_manage:['sb-mod-case'],
-          projects:   ['sb-mod-projects'],
           customer:   ['sb-mod-customer'],
           procurement:['sb-mod-suppliers', 'sb-mod-vendor', 'sb-mod-parts', 'sb-mod-procurement'],
           equipment:  ['sb-mod-equipment', 'sb-mod-warranty'],

@@ -21,7 +21,7 @@ from helpers import (
     notify_daily_task_overdue_manager,
     notify_daily_task_edited, notify_warranty_expiry, notify_range_task_deadline, _warranty_expiry,
     notify_case_stage_deadline, notify_case_stage_deadline_manager,
-    notify_project_deadline, notify_project_deadline_manager, notify_module_activity,
+    notify_module_activity,
     _get_setting, _set_setting, notify_approval_reminder, _workdays_elapsed,
 )
 
@@ -1081,76 +1081,11 @@ def _check_case_stage_deadline() -> None:
 
 
 def _check_project_deadline() -> None:
-    """Notify assigned members of projects whose expected completion date
-    (projects.data_json.endDate) is 3 days out or today, if project not yet closed.
-    Falls back to admin/superadmin when no members are assigned."""
-    today     = _date.today()
-    today_str = today.isoformat()
-    try:
-        conn = get_db()
-        users       = conn.execute("SELECT id, username, display_name, role FROM users WHERE active=1").fetchall()
-        dn_map      = {u["username"]: (u["display_name"] or u["username"]) for u in users}
-        uid_map     = {u["id"]: u["username"] for u in users}
-        admin_users = [u["username"] for u in users if u["role"] in ("admin", "superadmin")]
-        dept_mgr_username = {
-            r["id"]: r["mgr_username"]
-            for r in conn.execute("""
-                SELECT d.id, u.username AS mgr_username FROM departments d
-                JOIN users u ON u.id = d.manager_user_id WHERE u.active=1
-            """).fetchall()
-        }
-        rows = conn.execute("""
-            SELECT id, code, name, status, assigned_user_ids, department_id,
-                   json_extract(data_json, '$.endDate') AS end_date
-            FROM projects
-            WHERE status NOT IN ('完工','結案','取消')
-              AND json_extract(data_json, '$.endDate') IS NOT NULL
-              AND json_extract(data_json, '$.endDate') != ''
-        """).fetchall()
-        conn.close()
-
-        for days_ahead, notif_type in ((3, "3d"), (0, "deadline")):
-            check_date = (today + _timedelta(days=days_ahead)).isoformat()
-            for row in rows:
-                if row["end_date"] != check_date:
-                    continue
-                try:
-                    assigned_ids = json.loads(row["assigned_user_ids"] or "[]")
-                except Exception:
-                    assigned_ids = []
-                usernames = [uid_map[uid] for uid in assigned_ids if uid in uid_map] or admin_users
-                for username in usernames:
-                    guard_key = f"project_notif.{row['code']}.{username}.{notif_type}"
-                    if _get_setting(guard_key):
-                        continue
-                    _set_setting(guard_key, today_str)
-                    display = dn_map.get(username, username)
-                    threading.Thread(
-                        target=notify_project_deadline,
-                        args=(row["id"], row["code"], row["name"], check_date, days_ahead, username, display),
-                        daemon=True,
-                    ).start()
-                    _notify(username, "project_deadline", row["code"], row["name"],
-                            f"專案「{row['name']}」" + ("今日到期" if days_ahead == 0 else f"{days_ahead} 天後到期"))
-
-                # 案件/專案管理延伸（2026-08-22）：額外通知專案所屬部門的主管（一個專案通知一次，
-                # 不像上面逐 assignee 迴圈——專案本身就有 department_id，不用查表）
-                dept_id = row["department_id"]
-                mgr_username = dept_mgr_username.get(dept_id) if dept_id else None
-                if mgr_username:
-                    mgr_guard_key = f"project_notif_mgr.{row['code']}.{notif_type}"
-                    if not _get_setting(mgr_guard_key):
-                        _set_setting(mgr_guard_key, today_str)
-                        _notify(mgr_username, "project_deadline_manager", row["code"], row["name"],
-                                f"部門專案「{row['name']}」" + ("今日到期" if days_ahead == 0 else f"{days_ahead} 天後到期"))
-                        threading.Thread(
-                            target=notify_project_deadline_manager,
-                            args=(row["id"], row["code"], row["name"], check_date, days_ahead, dept_id),
-                            daemon=True,
-                        ).start()
-        _logger.info("Project deadline check complete for %s", today_str)
-    except Exception as exc:
-        _logger.warning("_check_project_deadline failed: %s", exc)
+    """停用（2026-08-26 專案管理併入案件管理）：專案管理業務端點/頁面已下線，
+    projects 表不會再有新的 endDate 被設定，案件本身的階段到期提醒已有對應
+    機制（見同檔 _check_case_stage_deadline()，走 case_stages），不需要重複
+    維護兩套。函式保留空殼是因為既有 3 處呼叫點不用跟著改。"""
+    pass
 
 
 _WARR_THRESHOLDS = (7, 30)  # days — must be in ascending order

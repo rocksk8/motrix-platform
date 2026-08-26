@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 _SUPERADMIN_MODULES = [
     "dashboard", "quotation", "customer", "sales",
     "procurement", "inventory", "equipment", "finance", "settings",
-    "project_manage", "project_approve_eng", "project_approve_biz", "financial_view",
+    "project_approve_eng", "project_approve_biz", "financial_view",
 ]
 
 _LEGACY_WEAK_PASSWORDS = (

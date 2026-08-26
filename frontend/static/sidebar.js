@@ -278,7 +278,6 @@
   var cCM  = mods.indexOf('case_manage') >= 0 || eng || ad
   var cEq  = mods.indexOf('equipment')   >= 0 || ad
   var cInv = mods.indexOf('inventory')   >= 0 || ad
-  var cPj  = (sa || ad || eng) || mods.some(function (m) { return m.slice(0, 8) === 'project_' })
   var cRpt = mods.indexOf('reports')     >= 0 || ad
   var cWL  = mods.indexOf('work_log')    >= 0 || role !== 'viewer'
   var cDT  = mods.indexOf('daily_task')  >= 0 || role !== 'viewer'
@@ -338,7 +337,6 @@
     'approval-queue.html':     'quotation',
     'case-management.html':    'case_manage',
     'case-stage-board.html':   'case_manage',
-    'projects.html':           'projects',
     'customers.html':          'customer',
     'customer-log.html':       'customer',
     'suppliers.html':          'procurement',
@@ -384,7 +382,7 @@
     var html = [
       sec('主選單'),
       ni(up + 'index.html',          'dash',  '儀表板',   ['index.html', ''],                       canDash),
-      sec('業務', cDev || cQ || cCM || cPj),
+      sec('業務', cDev || cQ || cCM),
       ni(pg('dev-crm.html'),         'bdev',  '業務開發', ['dev-crm.html'],                          cDev, 'sb-mod-dev-crm'),
       ni(pg('quotations.html'),      'quote', '報價單',   ['quotations.html', 'quotation-form.html'], cQ,   'sb-mod-quotation'),
       (cQ ? '<a href="' + pg('approval-queue.html') + '" class="nav__item' + act(['approval-queue.html']) + '" title="簽核佇列">'
@@ -394,7 +392,6 @@
         + '</a>' : ''),
       ni(pg('case-management.html'), 'case_', '案件管理', ['case-management.html'],                   cCM,  'sb-mod-case'),
       ni(pg('case-stage-board.html'),'case_', '案件執行看板', ['case-stage-board.html'],               cCM),
-      ni(pg('projects.html'),        'proj',  '專案管理', ['projects.html'],                          cPj,  'sb-mod-projects'),
       sec('廠商與採購', cCu || cPr),
       ni(pg('customers.html'),       'cust',  '客戶管理', ['customers.html', 'customer-log.html'],   cCu,  'sb-mod-customer'),
       ni(pg('suppliers.html'),          'supp',  '供應商管理', ['suppliers.html', 'supplier-log.html'],    cPr,  'sb-mod-suppliers'),
@@ -539,7 +536,6 @@
     dev_crm:     ['sb-mod-dev-crm'],
     quotation:   ['sb-mod-quotation'],
     case_manage: ['sb-mod-case'],
-    projects:    ['sb-mod-projects'],
     customer:    ['sb-mod-customer'],
     procurement: ['sb-mod-suppliers', 'sb-mod-vendor', 'sb-mod-parts', 'sb-mod-procurement'],
     equipment:   ['sb-mod-equipment', 'sb-mod-warranty'],
@@ -641,7 +637,6 @@
         cCM  = mods.indexOf('case_manage') >= 0 || eng || ad
         cEq  = mods.indexOf('equipment')   >= 0 || ad
         cInv = mods.indexOf('inventory')   >= 0 || ad
-        cPj  = (sa || ad || eng) || mods.some(function (m) { return m.slice(0, 8) === 'project_' })
         cRpt = mods.indexOf('reports')     >= 0 || ad
         cWL  = mods.indexOf('work_log')    >= 0 || role !== 'viewer'
         cDT  = mods.indexOf('daily_task')  >= 0 || role !== 'viewer'

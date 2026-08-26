@@ -993,6 +993,20 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
 
+### 2026-08-26d — 專案管理併入案件管理（DB v62），下線專案管理模組
+
+- **背景**：使用者要求把獨立的「專案管理」模組（`projects`/`project_logs`/`project_stages` 三表＋`projects.html`）整合進「案件管理」的案件內子項目，讓時間週期/工作日誌/物料/代辦/專案資訊都在案件詳情頁同步呈現，驗證串接正常後正式下線專案管理模組，並補上專案執行報告匯出。查證當下 `projects` 只有 2 筆真實資料，且每筆都恰好對應到 1 個案件，資料量小、風險低。
+- **現況盤點結論**：案件管理原本就有的 `case_stages`（時間軸，含 `assigned_to`/`depends_on`/`google_calendar_event_id`）跟 `data_json.caseRecord.materials[]`（叫料，含附件上傳）已經是專案管理對應功能的超集，**不需要新開發**；唯一缺的是①工作日誌（`work_logs`，已有 `case_no` 關聯並併入「動態」feed）沒有照片能力②代辦事項兩階段簽核（工程主管→業務主管）③案件層級的成員分配。
+- **DB migration**（`_m062_case_project_merge`，v62）：新表 `case_action_items`（正規化表，比照 `case_stages` 風格，取代 `project_logs.action_items` JSON blob，保留 `status`/`stage1_approver`/`stage1_at`/`stage2_approver`/`stage2_at` 兩階段狀態機）；`work_logs` 新增 `photos` 欄位（JSON 陣列，結構比照 `project_logs.photos`）；`quotations` 新增 `assigned_user_ids`。同一支 migration 內做一次性資料搬移：`project_logs` → 對應案件的 `work_logs`（找不到對應帳號時 fallback 到在職 superadmin，並在內容前註記原記錄人姓名）；`action_items` → `case_action_items`；`project_stages`（查證當下 2 筆皆空白預設「新階段」、無內容）**刻意不搬**，避免跟案件本來就有的 `case_stages` 重複；**不 DROP** 原本三表，保留當歷史紀錄。
+- **代辦事項兩階段簽核**（新檔 `routers/case_action_items.py`）：邏輯整段比照原 `projects.py::approve_action_item()`/`_project_approver_ids()`，差異只在改用案件既有的 `sales_person_id → users.department_id → departments/divisions.manager_user_id` 查主管（沿用 `_m050_project_department()` docstring 描述的既有查表 pattern），**不需要**替 `quotations` 新增 `department_id` 欄位。重用 `helpers/tiered_approval.py` 既有的 `resolve_department_manager()`/`resolve_division_manager()`。
+- **工作日誌照片**：`system.py` 新增 `POST/DELETE /api/work-logs/{id}/photos`，整段搬用 `projects.py` 原本 `upload_project_photos()`/`delete_project_photo()` 的處理邏輯（`photos.py::_process_project_photo()` 做 GPS/浮水印，`_photo_root()` 判斷 demo 隔離），檔案讀取繼續共用通用簽名 URL 服務。案件「動態」分頁 compose box 新增照片選取，有選照片時改建立/更新一筆 `work_logs`（而非純文字 `case_updates` 留言），feed 項目渲染新增縮圖列。
+- **成員分配**：新增 `PATCH /api/quotations/{no}/assigned-users`（admin+），取代原 `PATCH /api/projects/{id}/assigned-users`。
+- **專案執行報告**：`pdf_gen.py` 新增 `_project_execution_report_data()`/`_build_project_execution_report_html()`/`generate_project_execution_report_pdf_bytes()`，直接參考既有 `_case_closing_report_data()`/`_build_case_closing_html()` 的組裝風格，但**任何案件狀態皆可匯出**（不像結案報表限已結案），內容涵蓋執行進度/叫料/代辦事項/工作日誌（含照片，列檔名不內嵌圖檔）/近期動態摘要。新端點 `GET /api/quotations/{quote_no}/project-report-pdf`。案件詳情頁工具列新增「產生專案報告」按鈕。
+- **前端整合位置**：使用者確認選擇併入既有「執行管理」分頁，新增「代辦事項」「專案資訊」兩個子分頁，跟執行進度/叫料管控/設備登錄/保固備注並列；移除 `case-management.js` 原本「前往專案／建立專案」跳頁機制（`goToProject()`/`createProjectFromCase()`/`linkedProjectId`/`showCreateProjectModal` 整段刪除），改成頁內直接操作，不必再跳去另一個模組。
+- **模組下線**：移除 sidebar 專案管理入口（`cPj` 判斷/nav item/badge 對應整段刪除，`sidebar.js`+`notif.js`+`system.py::_MODULE_ACTION_PREFIXES`）；`git rm frontend/pages/projects.html`；`main.py` 拔除 `projects.router` 掛載——但通用簽名 URL 上傳服務（`serve_upload()`/`get_photo_token()`，叫料附件/報價回簽/工作日誌照片等各模組共用）先抽成獨立的 `routers/uploads.py` 再掛載，不隨業務端點一起下線；`routers/projects.py` 保留檔案本體當歷史/備用程式碼（CRUD/logs/stages/action-item 端點未刪除，只是不再掛載，之後確認不需要可整個移除）。`daily_tasks.py::_check_project_deadline()` 排程改成空殼（案件本身已有 `_check_case_stage_deadline()` 走 `case_stages`，不需要重複維護）；連帶移除 `helpers/email_notify.py` 的 `notify_project_deadline()`/`notify_project_deadline_manager()`（唯一呼叫端已停用）。`users.html` 的 `project_manage` module key 一併移除（原本唯一用途「建立專案」按鈕已不存在）；`project_approve_eng`/`project_approve_biz` 兩個 module key **沿用不改名**，重新掛到案件代辦簽核判斷式上，既有使用者的權限設定不需要重新設定，僅顯示文案改標註「案件代辦－」以符合新語意。`index.html` 兩處導向 `projects.html` 的 fallback／KPI 連結改指向 `case-management.html`。
+- **測試**：新增 `backend/tests/test_case_project_merge.py`（5 題：代辦事項兩階段簽核含部門/處主管解析與 stage2 需先有 stage1、成員分配 PATCH 權限、工作日誌照片上傳/刪除含 feed 同步、專案執行報告資料/HTML 組裝、migration 資料搬移正確性）；`conftest.py` 補上 `photos._PHOTO_UPLOAD_BASE`/`db.DEMO_PROJECT_PHOTOS_DIR` 隔離（原本只隔離 `helpers.uploads.UPLOADS_ROOT`，沒涵蓋 `photos.py` 自己算的路徑，這次新增工作日誌照片測試才發現）。`python -m pytest -q` 152/152 全過（147→152）。
+- **⚠️ 尚未套用至正式機**：本輪僅完成開發機實作與自動化測試驗證（刻意不碰正式資料庫/不啟動正式機服務，避免觸發背景排程對 jeff/corbin 等真實同仁寄出非預期通知信），尚待走 §15 部署流程並在瀏覽器手動驗證（登入既有案件如 `MQ-202607-045` 確認搬移資料/照片上傳/報告匯出皆正常）後才算完整收尾。
+
 ### 2026-08-26c — 月支出/案件依月份區分補上 Excel／PDF 匯出
 
 - **背景**：2026-08-26b 上線時刻意先做畫面即時查詢、沒納入匯出（見該則「刻意不做的範圍」），使用者確認也需要匯出後補齊。
@@ -1001,7 +1015,7 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 - **年度來源**：`report_excel()`/`report_pdf()` 端點內 `data["expensesYear"] = int(d0[:4])`（`d0` 是 `_parse_period()` 算出的期間起始日）——不管使用者在畫面上選的是月報/季報/年報，匯出時「月支出」章節一律涵蓋該期間起始年份的完整 1~12 月，跟畫面上「月支出」分頁有自己獨立的年度選擇器是兩個不同來源，但語意一致（都是「這份報表所在年度」），使用者不會感覺兩邊對不起來。
 - **前端完全不用改**：`reports.js::exportFile()` 本來就是打 `/api/reports/financial/excel|pdf?period=...` 這組既有端點，新增的兩個章節/sheet 是後端資料組裝時自動一併帶進去，不需要前端知道新章節的存在。
 - **測試**：新增 `backend/tests/test_reports_export_expenses.py`（2 題）。Excel 用 `openpyxl.load_workbook()` 讀回產生的檔案，驗證「月支出」sheet 存在、表頭正確、指定月份金額正確（含稅換算對得起來）、「案件清單」sheet 確實出現月份標題列文字。PDF **不走** `_html_to_pdf()`（需要 Edge headless，本機測試環境沒有——這是既有已知限制，`pdf_gen`／這裡的 PDF 轉檔都本來就沒有自動化測試覆蓋，不是這次新增的缺口），改成直接呼叫 `_build_report_html()` 驗證回傳的 HTML 字串本身正確包含新章節與月份標題文字（純 Python 字串組裝，不需要外部瀏覽器）。`python -m pytest -q` 147/147 全過（145→147）。
-- **尚未執行**：正式機套用（依 §15 流程）。
+- **✅ 已於 2026-08-26 套用至正式機**（commit `b778e9d`，健康檢查通過、無回滾）。
 
 ### 2026-08-26b — 營運報表新增「月支出金額及明細」＋「案件清單依月份區分」
 
@@ -1010,7 +1024,7 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 - **案件清單依月份區分**：純前端調整，不動後端——`casesAll`（`_collect()` 回傳，所有已成案/已結案案件，不受報表選取期間篩選）本來就有 `quoteDate` 欄位，直接在 `reports.js` 新增 `casesByMonth`/`caseListYears` computed getter 依 `quoteDate` 分組。「案件清單」分頁新增年度選擇器＋「依月份區分／顯示全部年度」切換按鈕，依月份分組時每個月一個小計列（案件數/合約金額小計/已收款小計），切到「顯示全部年度」則退回原本的平面清單（保留舊行為，沒有拿掉功能）。
 - **範圍（2026-08-26 當下）**：兩項先只做畫面即時查詢，未納入 Excel/PDF 匯出，以最小可用版本上線；**已於 2026-08-26c 補上**（見上方條目），照既有的 `_xl_style()`/`_set_row()` 慣例加 sheet，沒有另起新架構。
 - **測試**：新增 `backend/tests/test_reports_expenses.py`（5 題：非管理員 403、空年度全零、承攬商派發正確含稅計入、料件/設備依 category 正確分桶且明細正確合併批號、精算額外品項正確歸月計入其他支出）。`python -m pytest -q` 145/145 全過（140→145）。
-- **尚未執行**：正式機套用（依 §15 流程）。
+- **✅ 已於 2026-08-26 套用至正式機**（隨 commit `b778e9d` 一起套用，健康檢查通過、無回滾）。
 
 ### 2026-08-26 — 已結案案件解鎖/半解鎖機制（DB v61）＋完結案三項前置條件防呆機制
 
@@ -1022,7 +1036,7 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 - **踩坑**：`routers/quotations.py` 一開始用 `from helpers.uploads import UPLOADS_ROOT` 直接把值 import 進來，這是 `conftest.py` 開頭大段註解明確警告過的坑（`db.DB_PATH`/`archive.DB_PATH` 同類問題）——`tests/conftest.py::client` fixture 只 monkeypatch `helpers.uploads` 模組本身的 `UPLOADS_ROOT` 屬性，不會回頭更新已經「by value」綁進 `quotations` 模組命名空間的那份拷貝，會讓 `_move_staged_files()`/`_cleanup_staged_files()` 在測試時寫進本機真實 `uploads/` 目錄。修正：改成 `import helpers.uploads as _uploads_mod`，所有存取一律走 `_uploads_mod.UPLOADS_ROOT`（模組屬性即時查找，不是 import 當下的快照值）。**Why：** 之後任何新模組要用到會被測試環境 monkeypatch 的模組級常數，一律用 `import module` 而不是 `from module import CONST`。
 - **測試**：新增 `backend/tests/test_case_semi_unlock.py`（10 題）——解鎖前/後編輯行為差異、暫存不套用／核准後才套用／拒絕清暫存檔、材料附件上傳排隊+核准後檔案真的搬過去、重新上鎖恢復全鎖、細項端點不論半解鎖與否一律 403、完結案三項防呆各自阻擋＋全數達成才放行。`python -m pytest -q` 138 全過（128→138）。
 - **自我審查追加修復**（同一輪，使用者要求「再看看有沒有建議事項」後主動複查）：①`case-record` 是每次編輯 1.5 秒防抖自動存檔都會呼叫的端點，半解鎖期間若每次都新建一筆待審核記錄會洗版佇列，且核准順序錯了會用舊快照蓋掉新內容——`_gate_case_edit()` 補上「同一案件已有 pending 的 case_record_update 就更新那一筆，不新建」的去重邏輯。②`approve_case_change()`/`reject_case_change()` 原本只檢查 `role=='superadmin'`，沒擋自己審自己（前端隱藏按鈕但 API 沒擋），補上呼叫既有 `check_no_tier_self_approval()`（含唯一在職 superadmin 逃生條款）。③`_apply_case_change_request()` 核准 `case_record_update` 時若觸發裝置庫存衝突，原本會悄悄吞掉（即時存檔路徑會秀給操作者看，這條延後核准路徑沒有），改為寫入 audit_log 並回傳給呼叫端。三項中②③各補一題測試，`test_case_semi_unlock.py` 共 12 題（前段 10 題為原始功能測試，見上一則）。`python -m pytest -q` 140/140 全過（128→138→140）。
-- **尚未執行**：正式機套用（依 §15 流程）。
+- **✅ 已於 2026-08-26 套用至正式機**（commit `26e2f8e`，健康檢查通過、無回滾；後續 `b778e9d`〔營運報表匯出〕已一併套用）。
 
 ### 2026-08-25c — 承攬商報價附件＋叫料管控獨立發票欄位＋案件結案報表自動寄信最高管理員
 

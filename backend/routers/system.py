@@ -3,10 +3,11 @@ import inspect
 import json
 import os
 import secrets
+import uuid
 from datetime import datetime
 from typing import Optional, List
 
-from fastapi import APIRouter, HTTPException, Header, Body
+from fastapi import APIRouter, HTTPException, Header, Body, UploadFile, File
 from pydantic import BaseModel, model_validator
 
 from db import get_db, CURRENT_VERSION, _MIGRATIONS
@@ -15,6 +16,7 @@ from helpers import (
     _filter_live_notifications, notify_module_activity,
 )
 from helpers.quotations import _steps_to_tiers
+from photos import _process_project_photo, _photo_root
 
 router = APIRouter()
 
@@ -188,7 +190,6 @@ _MODULE_ACTION_PREFIXES: dict = {
     "finance":    ("payment.", "sales_order.", "settlement."),
     "work_log":   ("work_log.",),
     "daily_task": ("daily_task.",),
-    "projects":   ("project.",),
 }
 
 # Actions that should NOT contribute to the module badge (e.g. deletion meta-events)
@@ -279,7 +280,7 @@ def list_work_logs(
     conn = get_db()
     sql = """
         SELECT w.id, w.log_date, w.user_id, w.content, w.hours, w.created_at,
-               w.case_no, u.display_name, u.username
+               w.case_no, w.photos, u.display_name, u.username
         FROM work_logs w
         LEFT JOIN users u ON u.id = w.user_id
         WHERE 1=1
@@ -300,7 +301,12 @@ def list_work_logs(
     sql += " ORDER BY w.log_date DESC, w.id DESC"
     rows = conn.execute(sql, params).fetchall()
     conn.close()
-    return [dict(r) for r in rows]
+    result = []
+    for r in rows:
+        d = dict(r)
+        d["photos"] = json.loads(d.get("photos") or "[]")
+        result.append(d)
+    return result
 
 
 @router.post("/api/work-logs")
@@ -370,6 +376,90 @@ def delete_work_log(wid: int, authorization: str = Header(None)):
     conn.close()
     notify_module_activity("工作日誌", "刪除", u.get("display_name") or u["username"],
                             str(wid), "work-log.html")
+    return {"ok": True}
+
+
+# ── Work Log Photos（2026-08-26 專案管理併入案件管理：案件動態的工作日誌
+#    補上照片能力，處理邏輯/儲存位置整段沿用 routers/projects.py 既有的
+#    upload_project_photos()/delete_project_photo()（含 GPS/浮水印處理與
+#    demo 帳號隔離，經同一支 _photo_root() 判斷），子資料夾用 worklog_{id}
+#    區分，不需要另外新增 demo 專用目錄或清空清單項目）───────────────────────
+
+@router.post("/api/work-logs/{wid}/photos", status_code=201)
+async def upload_work_log_photos(
+    wid: int,
+    files: List[UploadFile] = File(...),
+    authorization: str = Header(None),
+):
+    user = _require_user(authorization)
+    conn = get_db()
+    row = conn.execute("SELECT * FROM work_logs WHERE id=?", (wid,)).fetchone()
+    if not row:
+        conn.close(); raise HTTPException(404, "找不到日誌")
+    if user["role"] not in ("superadmin", "admin") and user["id"] != row["user_id"]:
+        conn.close(); raise HTTPException(403, "只能替自己的工作日誌上傳照片")
+
+    existing = json.loads(row["photos"] or "[]")
+    today = datetime.now().strftime("%Y-%m-%d")
+    base_dir, url_prefix = _photo_root()
+    save_dir = os.path.join(base_dir, f"worklog_{wid}", today)
+    os.makedirs(save_dir, exist_ok=True)
+
+    new_photos = []
+    for upload in files:
+        raw_bytes = await upload.read()
+        processed, gps_str, wm_str = _process_project_photo(raw_bytes, user['display_name'])
+        ext   = os.path.splitext(upload.filename or 'photo.jpg')[1] or '.jpg'
+        fname = uuid.uuid4().hex[:14] + ext.lower()
+        with open(os.path.join(save_dir, fname), 'wb') as f:
+            f.write(processed)
+        new_photos.append({
+            "id":          uuid.uuid4().hex[:8],
+            "filename":    fname,
+            "path":        f"{url_prefix}/worklog_{wid}/{today}/{fname}",
+            "gps":         gps_str,
+            "watermark":   wm_str,
+            "uploaded_by": user['display_name'],
+            "uploaded_at": datetime.now().isoformat(),
+        })
+
+    all_photos = existing + new_photos
+    conn.execute("UPDATE work_logs SET photos=? WHERE id=?",
+                 (json.dumps(all_photos, ensure_ascii=False), wid))
+    conn.commit()
+    conn.close()
+    notify_module_activity("工作日誌", "上傳照片", user['display_name'],
+                            f"日誌 #{wid}（{len(new_photos)} 張）", "work-log.html")
+    return {"ok": True, "added": len(new_photos), "photos": new_photos}
+
+
+@router.delete("/api/work-logs/{wid}/photos/{photo_id}")
+def delete_work_log_photo(wid: int, photo_id: str, authorization: str = Header(None)):
+    user = _require_user(authorization)
+    conn = get_db()
+    row  = conn.execute("SELECT * FROM work_logs WHERE id=?", (wid,)).fetchone()
+    if not row:
+        conn.close(); raise HTTPException(404, "找不到日誌")
+    if user["role"] not in ("superadmin", "admin") and user["id"] != row["user_id"]:
+        conn.close(); raise HTTPException(403, "只能刪除自己工作日誌的照片")
+    photos = json.loads(row["photos"] or "[]")
+    photo  = next((p for p in photos if p.get('id') == photo_id), None)
+    if not photo:
+        conn.close(); raise HTTPException(404, "照片不存在")
+    try:
+        base_dir, _url_prefix = _photo_root()
+        fp = os.path.join(base_dir, '..', photo['path'])
+        if os.path.isfile(fp):
+            os.remove(fp)
+    except Exception:
+        pass
+    photos = [p for p in photos if p.get('id') != photo_id]
+    conn.execute("UPDATE work_logs SET photos=? WHERE id=?",
+                 (json.dumps(photos, ensure_ascii=False), wid))
+    conn.commit()
+    conn.close()
+    notify_module_activity("工作日誌", "刪除照片", user.get("display_name") or user["username"],
+                            f"日誌 #{wid}", "work-log.html")
     return {"ok": True}
 
 

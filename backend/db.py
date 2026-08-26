@@ -78,7 +78,7 @@ DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR = os.path.join(
 # （已套用過的 schema_version 不可回頭刪除/重排），data_json.dealWonAt 這個
 # 欄位會留在既有資料裡但目前沒有任何程式碼讀取，之後如果要重新加回「成交時間」
 # 這種概念，不要複用這個欄位名稱免得語意混淆。
-CURRENT_VERSION = 61
+CURRENT_VERSION = 62
 
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
 # execution model) whenever the current request is authenticated as the 'demo'
@@ -1645,6 +1645,120 @@ def _m061_case_semi_unlock(conn):
     conn.commit()
 
 
+def _m062_case_project_merge(conn):
+    """專案管理併入案件管理（2026-08-26）：使用者要求把「專案管理」
+    （projects/project_logs/project_stages）的獨有功能收斂進案件管理，讓
+    案件本身就有代辦事項兩階段簽核、成員分配、工作日誌可上傳照片，不必再
+    跳去另一個模組。
+
+    案件管理原本就有的 case_stages（時間軸）／data_json.caseRecord.materials
+    （叫料）已經是對應功能的超集，不需要新增欄位；這裡只補三個真正缺的能力：
+    - case_action_items：代辦事項正規化表（比照 case_stages 的風格），取代
+      project_logs.action_items 這個 JSON blob 欄位，保留原本「工程主管
+      確認 stage1 → 業務主管確認 stage2」兩階段狀態機（比照
+      routers/projects.py::approve_action_item() 的欄位設計）。
+    - work_logs.photos：既有「動態」分頁合併顯示的 work_logs 目前是純文字，
+      補上照片能力（JSON 陣列，欄位結構比照 project_logs.photos）。
+    - quotations.assigned_user_ids：案件成員分配，取代
+      projects.assigned_user_ids。
+
+    一次性資料搬移（僅此一次，之後 projects/project_logs/project_stages
+    不再由任何前端頁面存取，但刻意不 DROP TABLE，保留作歷史紀錄）：只處理
+    「恰好關聯 1 個案件」的 project（2026-08-26 查證當下的 2 筆全部符合），
+    project_logs 逐筆轉成 work_logs（work_content→content，photos 直接
+    搬），action_items 逐筆轉成 case_action_items。project_stages 這次查
+    證的內容都是空白預設「新階段」、無任何日期/完成狀態，且案件本身已有一
+    份真正在用的 case_stages，為避免時間軸重複顯示混淆，刻意不搬（若之後
+    在其他環境套用這支 migration 時 project_stages 有實質內容，需要另外
+    人工評估是否要補搬，這裡不自動處理）。沒有恰好 1 個關聯案件的
+    project（0 個或多個）一併跳過，資料仍完整保留在原表，不會遺失。"""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS case_action_items (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            quote_no        TEXT    NOT NULL,
+            text            TEXT    NOT NULL DEFAULT '',
+            status          TEXT    NOT NULL DEFAULT 'pending',
+            stage1_approver TEXT    DEFAULT '',
+            stage1_at       TEXT    DEFAULT '',
+            stage2_approver TEXT    DEFAULT '',
+            stage2_at       TEXT    DEFAULT '',
+            sort_order      INTEGER NOT NULL DEFAULT 0,
+            created_at      TEXT    NOT NULL,
+            created_by      TEXT    DEFAULT '',
+            updated_at      TEXT    NOT NULL
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_case_action_items_quote_no ON case_action_items(quote_no)"
+    )
+    if not _col_exists(conn, "work_logs", "photos"):
+        conn.execute("ALTER TABLE work_logs ADD COLUMN photos TEXT NOT NULL DEFAULT '[]'")
+    if not _col_exists(conn, "quotations", "assigned_user_ids"):
+        conn.execute("ALTER TABLE quotations ADD COLUMN assigned_user_ids TEXT NOT NULL DEFAULT '[]'")
+    conn.commit()
+
+    # ── 一次性資料搬移：projects → 對應案件 ──
+    fallback_row = conn.execute(
+        "SELECT id FROM users WHERE role='superadmin' AND active=1 ORDER BY id LIMIT 1"
+    ).fetchone()
+    fallback_uid = fallback_row["id"] if fallback_row else None
+
+    name_to_uid = {
+        r["display_name"]: r["id"]
+        for r in conn.execute(
+            "SELECT id, display_name FROM users WHERE display_name != ''"
+        ).fetchall()
+    }
+
+    now = datetime.now().isoformat()
+    for proj in conn.execute("SELECT * FROM projects").fetchall():
+        linked = json.loads(proj["linked_cases"] or "[]")
+        if len(linked) != 1:
+            continue
+        quote_no = linked[0]
+        if not conn.execute(
+            "SELECT 1 FROM quotations WHERE quote_no=?", (quote_no,)
+        ).fetchone():
+            continue
+
+        assigned = json.loads(proj["assigned_user_ids"] or "[]")
+        if assigned:
+            conn.execute(
+                "UPDATE quotations SET assigned_user_ids=? WHERE quote_no=?",
+                (json.dumps(assigned, ensure_ascii=False), quote_no)
+            )
+
+        for log in conn.execute(
+            "SELECT * FROM project_logs WHERE project_id=? ORDER BY id", (proj["id"],)
+        ).fetchall():
+            author_uid = name_to_uid.get(log["created_by"]) or fallback_uid
+            if author_uid is None:
+                continue
+            content = log["work_content"] or ""
+            if log["created_by"] and log["created_by"] not in name_to_uid:
+                content = f"（原記錄人：{log['created_by']}）\n{content}"
+            conn.execute(
+                "INSERT INTO work_logs (log_date, user_id, content, hours, created_at, created_by, case_no, photos) "
+                "VALUES (?,?,?,?,?,?,?,?)",
+                (log["log_date"], author_uid, content, 8.0, log["created_at"] or now,
+                 author_uid, quote_no, log["photos"] or "[]")
+            )
+            items = json.loads(log["action_items"] or "[]")
+            for idx, item in enumerate(items):
+                conn.execute("""
+                    INSERT INTO case_action_items
+                        (quote_no, text, status, stage1_approver, stage1_at,
+                         stage2_approver, stage2_at, sort_order, created_at, created_by, updated_at)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?)
+                """, (
+                    quote_no, item.get("text") or "", item.get("status") or "pending",
+                    item.get("stage1_approver") or "", item.get("stage1_at") or "",
+                    item.get("stage2_approver") or "", item.get("stage2_at") or "",
+                    idx, log["created_at"] or now, log["created_by"] or "", log["updated_at"] or now,
+                ))
+    conn.commit()
+
+
 def _m057_payment_request_stage(conn):
     """請款單新增 stage（款項類別：full/deposit/delivery/acceptance/final，
     2026-08-24）：客戶端請款單 PDF「請款範圍」欄要顯示業務語意的分類（全額/
@@ -2487,6 +2601,7 @@ _MIGRATIONS = [
     _m059_fix_deal_won_at_from_audit_log,          # v59
     _m060_dispatch_files,                          # v60
     _m061_case_semi_unlock,                        # v61
+    _m062_case_project_merge,                      # v62
 ]
 
 

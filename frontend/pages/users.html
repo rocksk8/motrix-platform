@@ -711,10 +711,10 @@
 
   <script>
   const ROLE_MODULES = {
-    superadmin: ['dashboard','quotation','case_manage','customer','sales','procurement','inventory','equipment','finance','reports','settings','project_manage','project_approve_eng','project_approve_biz','financial_view','work_log','daily_task','env_guide','netarch_guide','switch_guide','monitor_guide','access_guide','gateway_guide'],
-    admin:      ['dashboard','quotation','case_manage','customer','sales','procurement','inventory','equipment','finance','reports','project_manage','project_approve_eng','project_approve_biz','financial_view','work_log','daily_task','env_guide','netarch_guide','switch_guide','monitor_guide','access_guide','gateway_guide'],
+    superadmin: ['dashboard','quotation','case_manage','customer','sales','procurement','inventory','equipment','finance','reports','settings','project_approve_eng','project_approve_biz','financial_view','work_log','daily_task','env_guide','netarch_guide','switch_guide','monitor_guide','access_guide','gateway_guide'],
+    admin:      ['dashboard','quotation','case_manage','customer','sales','procurement','inventory','equipment','finance','reports','project_approve_eng','project_approve_biz','financial_view','work_log','daily_task','env_guide','netarch_guide','switch_guide','monitor_guide','access_guide','gateway_guide'],
     sales:      ['dashboard','quotation','case_manage','customer','financial_view','project_approve_biz','work_log','daily_task'],
-    engineer:   ['dashboard','case_manage','project_manage','project_approve_eng','equipment','work_log','daily_task'],
+    engineer:   ['dashboard','case_manage','project_approve_eng','equipment','work_log','daily_task'],
     viewer:     ['dashboard'],
   }
 
@@ -796,9 +796,8 @@
         {key:'procurement',          label:'供應商／料號／採購', group:'採購'},
         {key:'inventory',            label:'庫存管理',         group:'採購'},
         {key:'equipment',            label:'設備登載／保固',   group:'設備'},
-        {key:'project_manage',       label:'專案管理',         group:'專案'},
-        {key:'project_approve_eng',  label:'工程主管確認',     group:'專案'},
-        {key:'project_approve_biz',  label:'業務確認',         group:'專案'},
+        {key:'project_approve_eng',  label:'案件代辦－工程主管確認', group:'專案'},
+        {key:'project_approve_biz',  label:'案件代辦－業務確認',     group:'專案'},
         {key:'work_log',             label:'工作日誌',         group:'工作'},
         {key:'daily_task',           label:'每日工作事項',     group:'工作'},
         {key:'contractor_list',      label:'外包名冊',         group:'勞務'},

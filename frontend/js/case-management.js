@@ -52,11 +52,18 @@ function app() {
     _devHoverGroupId: null,  // group ID when hovering group header → add-to-group mode
     _devHoverStart: 0,       // timestamp when we entered _devDragOverId
     _devGroupTarget: null,   // 'dev_X' confirmed for grouping after 900ms hover
-    linkedProjectId: null,
-    showCreateProjectModal: false,
-    newProjectName: '',
-    creatingProject: false,
     selectableUsers: [],
+
+    // ── 代辦事項（2026-08-26 專案管理併入案件管理）──
+    caseActionItems: [],
+    caseActionItemsLoading: false,
+    newActionItemText: '',
+    addingActionItem: false,
+
+    // ── 專案資訊（成員分配）──
+    assignedUserIds: [],
+    assignedUsersSaving: false,
+    exportingProjectReport: false,
 
     caseTasks: [],
     caseTasksLoading: false,
@@ -73,7 +80,9 @@ function app() {
     updatesLoading: false,
     newComment: '',
     newCommentImportant: false,
+    newCommentPhotos: [],
     postingComment: false,
+    _ptCache: {},
     feedCalMode:    false,
     feedCalYear:    new Date().getFullYear(),
     feedCalMonth:   new Date().getMonth() + 1,
@@ -146,11 +155,6 @@ function app() {
       return m.includes('financial_view') || ['superadmin','admin','sales'].includes(this.session.role)
     },
 
-    canManageProject() {
-      const m = this.session.modules || []
-      return m.includes('project_manage') || ['superadmin','admin'].includes(this.session.role)
-    },
-
     caseSettlement()    { return this.selected?.data?.settlement || null },
     caseSettleStatus()  { return this.caseSettlement()?.status || '' },
     caseSettleSummary() { return this.caseSettlement()?.summary || {} },
@@ -169,6 +173,7 @@ function app() {
         if (!r.ok) { location.href = 'login.html'; return }
         const me = await r.json()
         this.session.displayName = me.display_name
+        this.session.id = me.id
       } catch {}
       try {
         const ru = await fetch('/api/users/selectable', { headers: { Authorization: 'Bearer ' + s.token } })
@@ -424,7 +429,8 @@ function app() {
         this._devHoverGroupId = null
         this._devGroupTarget = null
         this._devHoverStart = 0
-        this.linkedProjectId = null
+        this.caseActionItems = []
+        this.assignedUserIds = data.assigned_user_ids || []
         this.caseTasks = []
         this.caseUpdates = []
         this.newComment = ''
@@ -439,8 +445,6 @@ function app() {
         this.invoiceVouchers = []
         this.closeInvoiceVoucherPreview()
         this.paymentRequests = []
-        // 背景查詢是否已有關聯專案
-        this._checkLinkedProject(quoteNo)
         this._loadCaseTasks(quoteNo)
         this.loadDispatches(quoteNo)
         this.loadContractorVouchers(quoteNo)
@@ -462,55 +466,119 @@ function app() {
       this.caseTasksLoading = false
     },
 
-    async _checkLinkedProject(quoteNo) {
+    // ── 代辦事項（2026-08-26 專案管理併入案件管理，取代原本跳去 projects.html
+    //    的 goToProject()/createProjectFromCase()）──
+    async loadCaseActionItems() {
+      if (!this.selected) return
+      this.caseActionItemsLoading = true
       try {
-        const r = await fetch(`/api/projects?case_no=${encodeURIComponent(quoteNo)}`, {
+        const r = await fetch(`/api/quotations/${this.selected.quote_no}/action-items`, {
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
-        if (!r.ok) return
-        const d = await r.json()
-        this.linkedProjectId = d.items?.length > 0 ? d.items[0].id : null
+        if (r.ok) this.caseActionItems = (await r.json()).items || []
       } catch {}
+      this.caseActionItemsLoading = false
     },
 
-    async goToProject() {
-      if (!this.selected) return
-      if (this.linkedProjectId) {
-        location.href = `projects.html?id=${this.linkedProjectId}`
-        return
-      }
-      // 非管理員直接導到專案列表過濾此案件
-      if (!this.canManageProject()) {
-        location.href = `projects.html?caseNo=${this.selected.quote_no}`
-        return
-      }
-      // 管理員：預填名稱後開啟建立 Modal
-      this.newProjectName = this.selected.project_name || this.selected.customer_name || ''
-      this.showCreateProjectModal = true
-    },
-
-    async createProjectFromCase() {
-      if (!this.newProjectName.trim() || !this.selected) return
-      this.creatingProject = true
+    async addActionItem() {
+      const text = this.newActionItemText.trim()
+      if (!text || !this.selected) return
+      this.addingActionItem = true
       try {
-        const r = await fetch('/api/projects', {
+        const r = await fetch(`/api/quotations/${this.selected.quote_no}/action-items`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
-          body: JSON.stringify({
-            name: this.newProjectName.trim(),
-            status: '進行中',
-            description: `由案件 ${this.selected.quote_no} 轉入`,
-            linked_cases: [this.selected.quote_no],
-          })
+          body: JSON.stringify({ text })
         })
-        if (!r.ok) { alert('建立失敗：' + (await r.json()).detail); return }
-        const d = await r.json()
-        this.showCreateProjectModal = false
-        location.href = `projects.html?id=${d.id}`
+        if (!r.ok) { alert('新增失敗：' + (await r.json()).detail); return }
+        this.newActionItemText = ''
+        await this.loadCaseActionItems()
       } catch(e) {
         alert('發生錯誤：' + e.message)
       } finally {
-        this.creatingProject = false
+        this.addingActionItem = false
+      }
+    },
+
+    async deleteActionItem(itemId) {
+      if (!this.selected || !confirm('確定刪除此代辦事項？')) return
+      try {
+        const r = await fetch(`/api/quotations/${this.selected.quote_no}/action-items/${itemId}`, {
+          method: 'DELETE',
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (!r.ok) { alert('刪除失敗：' + (await r.json()).detail); return }
+        await this.loadCaseActionItems()
+      } catch(e) {
+        alert('發生錯誤：' + e.message)
+      }
+    },
+
+    async approveActionItem(itemId, stage) {
+      if (!this.selected) return
+      try {
+        const r = await fetch(`/api/quotations/${this.selected.quote_no}/action-items/${itemId}/approve`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify({ stage })
+        })
+        if (!r.ok) { alert('確認失敗：' + (await r.json()).detail); return }
+        await this.loadCaseActionItems()
+      } catch(e) {
+        alert('發生錯誤：' + e.message)
+      }
+    },
+
+    actionItemStatusLabel(item) {
+      if (item.status === 'done') return '✓ 已完成'
+      if (item.status === 'stage1_done') return '工程已確認，待業務確認'
+      return '待確認'
+    },
+
+    // ── 專案資訊（成員分配，取代原 PATCH /api/projects/{id}/assigned-users）──
+    toggleAssignedUser(userId) {
+      const i = this.assignedUserIds.indexOf(userId)
+      if (i >= 0) this.assignedUserIds.splice(i, 1)
+      else this.assignedUserIds.push(userId)
+    },
+
+    async saveAssignedUsers() {
+      if (!this.selected) return
+      this.assignedUsersSaving = true
+      try {
+        const r = await fetch(`/api/quotations/${this.selected.quote_no}/assigned-users`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify({ user_ids: this.assignedUserIds })
+        })
+        if (!r.ok) { alert('儲存失敗：' + (await r.json()).detail); return }
+      } catch(e) {
+        alert('發生錯誤：' + e.message)
+      } finally {
+        this.assignedUsersSaving = false
+      }
+    },
+
+    // ── 專案執行報告匯出 ──
+    async exportProjectReport() {
+      if (!this.selected || this.exportingProjectReport) return
+      this.exportingProjectReport = true
+      try {
+        const r = await fetch(`/api/quotations/${this.selected.quote_no}/project-report-pdf`, {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (!r.ok) { alert('匯出失敗：' + (await r.json()).detail); return }
+        const blob = await r.blob()
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `${this.selected.quote_no}_專案執行報告.pdf`
+        a.click()
+        URL.revokeObjectURL(url)
+      } catch(e) {
+        alert('發生錯誤：' + e.message)
+      } finally {
+        this.exportingProjectReport = false
       }
     },
 
@@ -1692,9 +1760,46 @@ function app() {
       return this.caseUpdates.filter(it => (it.created_at || '').replace('T',' ').slice(0,10) === this.feedCalSelDate)
     },
 
+    onCommentPhotosSelected(e) {
+      this.newCommentPhotos = Array.from(e.target.files || [])
+    },
+
+    // 工作日誌照片簽章 URL（跟 projects.html 既有的 photoUrl()/_ptCache 同一套
+    // 作法：短效期 pt token，抓回來前先回 1x1 透明圖，避免完整 session token
+    // 外洩到網址列/瀏覽器歷史）。
+    photoUrl(path) {
+      if (!path) return ''
+      const now = Math.floor(Date.now() / 1000)
+      const cached = this._ptCache[path]
+      if (cached && cached.exp > now) {
+        return `/api/uploads/${path}?pt=${cached.pt}`
+      }
+      if (!this._ptCache[path + '_fetching']) {
+        this._ptCache[path + '_fetching'] = true
+        fetch(`/api/photo-token?path=${encodeURIComponent(path)}`, {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        }).then(r => r.ok ? r.json() : null).then(d => {
+          if (d && d.token) {
+            this._ptCache = {
+              ...this._ptCache,
+              [path]: { pt: d.token, exp: now + (d.ttl || 3600) - 60 },
+              [path + '_fetching']: false,
+            }
+          }
+        }).catch(() => { this._ptCache[path + '_fetching'] = false })
+      }
+      return 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBTAA7'
+    },
+
     async postComment() {
       const content = this.newComment.trim()
       if (!content || this.postingComment) return
+      // 有選照片 → 當成工作日誌（可上傳照片），走 work_logs；純文字 → 維持原本
+      // 輕量留言（case_updates），2026-08-26 專案管理併入案件管理新增。
+      if (this.newCommentPhotos.length > 0) {
+        await this.postWorkLogWithPhotos(content)
+        return
+      }
       this.postingComment = true
       try {
         const r = await fetch(`/api/quotations/${encodeURIComponent(this.selected.quote_no)}/updates`, {
@@ -1710,6 +1815,39 @@ function app() {
         }
       } catch {}
       this.postingComment = false
+    },
+
+    async postWorkLogWithPhotos(content) {
+      this.postingComment = true
+      try {
+        const today = new Date().toISOString().slice(0, 10)
+        const r = await fetch('/api/work-logs', {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + this.session.token, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            log_date: today, user_id: this.session.id, content,
+            hours: 8, case_no: this.selected.quote_no,
+          })
+        })
+        if (!r.ok) { alert('新增工作日誌失敗：' + (await r.json()).detail); return }
+        const { id } = await r.json()
+        const fd = new FormData()
+        this.newCommentPhotos.forEach(f => fd.append('files', f))
+        const rp = await fetch(`/api/work-logs/${id}/photos`, {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + this.session.token },
+          body: fd
+        })
+        if (!rp.ok) alert('照片上傳失敗：' + (await rp.json()).detail)
+        this.newComment = ''
+        this.newCommentImportant = false
+        this.newCommentPhotos = []
+        await this.loadCaseUpdates(this.selected.quote_no)
+      } catch(e) {
+        alert('發生錯誤：' + e.message)
+      } finally {
+        this.postingComment = false
+      }
     },
 
     async deleteUpdate(uid) {

@@ -6,7 +6,7 @@ from routers.payslips import _calc, _get_tax_rules
 from helpers.quotations import _steps_to_tiers, payment_item_amounts
 from helpers.auth import _hash_pw, _verify_pw, is_weak_password, MIN_PASSWORD_LEN
 from routers.quotations import _active_tiers, _current_tier_idx
-from routers.projects import _resolve_upload_path, UPLOADS_ROOT
+from routers.uploads import _resolve_upload_path, UPLOADS_ROOT
 import archive
 
 
