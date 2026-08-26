@@ -162,21 +162,24 @@ def _build_quote_html(q: dict, tot: dict, internal: bool = False,
     freight_row  = f'<div class="total-row"><span>運費</span><span>NT$ {int(freight):,}</span></div>' if freight else ''
     discount_row = f'<div class="total-row"><span style="color:#DC2626">折讓</span><span style="color:#DC2626">-NT$ {int(discount):,}</span></div>' if discount else ''
 
-    def term_block(title, text):
+    def term_block(title, text, span_full=False):
         t = (text or '').strip()
         if not t:
             return ''
-        return f'<div style="margin-bottom:10px"><div class="term-title">{esc(title)}</div><div class="term-block">{esc(t)}</div></div>'
+        cls = 'term-item term-item--full' if span_full else 'term-item'
+        return f'<div class="{cls}"><div class="term-title">{esc(title)}</div><div class="term-block">{esc(t)}</div></div>'
 
+    # 雙欄排版（2026-08-26 視覺優化）：付款/交貨一排、保固/售後一排，篇幅通常
+    # 最長的驗收標準獨立跨欄滿版，避免跟另一欄長度差太多造成版面失衡。
     terms_html  = term_block('付款條件', q.get('paymentTerms', ''))
     terms_html += term_block('交貨條件', q.get('deliveryTerms', ''))
-    terms_html += term_block('驗收標準', q.get('acceptanceTerms', ''))
     terms_html += term_block('保固條件', q.get('warrantyTerms', ''))
     terms_html += term_block('售後服務', q.get('afterSales', ''))
+    terms_html += term_block('驗收標準', q.get('acceptanceTerms', ''), span_full=True)
 
     terms_section = (
         '<div class="terms"><div class="section-label" style="margin-bottom:8px">五、報價條件</div>'
-        + terms_html + '</div>'
+        f'<div class="terms-grid">{terms_html}</div></div>'
     ) if terms_html.strip() else ''
 
     return (
@@ -192,7 +195,7 @@ def _build_quote_html(q: dict, tot: dict, internal: bool = False,
         '  @page{size:A4;margin:0 13mm 12mm 13mm;'
         '@bottom-left{content:none}@bottom-right{content:none}'
         '@bottom-center{content:counter(page);font-family:Arial,sans-serif;font-size:9px;color:#aaa}}\n'
-        '  @media print{html,body{margin:0;padding:0;background:#fff}#root{padding:15mm 0 0}.sign{page-break-inside:avoid}.totals{page-break-inside:avoid}.terms{page-break-inside:avoid}tr{page-break-inside:avoid}}\n'
+        '  @media print{html,body{margin:0;padding:0;background:#fff}#root{padding:15mm 0 0}.sign{page-break-inside:avoid}.totals{page-break-inside:avoid}.totals-group{page-break-inside:avoid}.terms{page-break-inside:avoid}tr{page-break-inside:avoid}}\n'
         '  .cost-cell{background:#FFF8F0}\n'
         '  .cost-banner{background:#FFF3E0;border:1px solid #F59E0B;border-radius:4px;padding:6px 12px;font-size:10px;color:#92400E;margin-bottom:10px;font-family:Arial,sans-serif;letter-spacing:.04em}\n'
         '  .accent-bar{height:3px;background:#0A0A0A;margin-bottom:18px}\n'
@@ -200,12 +203,12 @@ def _build_quote_html(q: dict, tot: dict, internal: bool = False,
         '  .co-name{font-size:15px;font-weight:700;letter-spacing:.06em}\n'
         '  .co-sub{font-size:10px;color:#888;margin-top:3px;font-family:Arial,sans-serif;letter-spacing:.02em}\n'
         '  .doc-title{font-size:24px;font-weight:700;letter-spacing:.24em;text-align:right}\n'
-        '  .meta{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-bottom:14px;font-size:12px;background:#FAFAF8;padding:10px 12px;border-radius:4px;border:1px solid #EDEAE4}\n'
+        '  .meta{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-bottom:12px;font-size:12px;background:#FAFAF8;padding:10px 12px;border-radius:4px;border:1px solid #EDEAE4}\n'
         '  .meta span{color:#888;font-family:Arial,sans-serif;font-size:11px}\n'
-        '  .boxes{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px}\n'
-        '  .box{background:#FAFAF8;border:1px solid #EDEAE4;border-radius:4px;padding:11px 13px}\n'
-        '  .box-title{font-size:9px;font-family:Arial,sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#999;font-weight:600;margin-bottom:8px}\n'
-        '  .row{display:flex;gap:6px;margin-bottom:4px;font-size:12px}\n'
+        '  .boxes{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}\n'
+        '  .box{background:#FAFAF8;border:1px solid #EDEAE4;border-radius:4px;padding:9px 12px}\n'
+        '  .box-title{font-size:9px;font-family:Arial,sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#999;font-weight:600;margin-bottom:6px}\n'
+        '  .row{display:flex;gap:6px;margin-bottom:3px;font-size:12px}\n'
         '  .label{color:#888;min-width:72px;flex-shrink:0;font-size:11px}\n'
         '  .val{color:#0A0A0A;font-weight:500}\n'
         '  .section-label{font-size:9px;font-family:Arial,sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#999;font-weight:600;margin-bottom:7px;display:flex;align-items:center;gap:8px}\n'
@@ -222,7 +225,10 @@ def _build_quote_html(q: dict, tot: dict, internal: bool = False,
         '  .total-row:last-child{border-bottom:none;font-weight:700;font-size:14px;background:#F5F4F0;border-top:1.5px solid #0A0A0A}\n'
         '  .total-row span:last-child{font-family:Arial,sans-serif}\n'
         '  .terms{margin-bottom:16px}\n'
-        '  .term-block{font-size:11px;color:#444;line-height:1.8}\n'
+        '  .terms-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}\n'
+        '  .term-item{background:#FAFAF8;border:1px solid #EDEAE4;border-radius:4px;padding:9px 12px}\n'
+        '  .term-item--full{grid-column:1/-1}\n'
+        '  .term-block{font-size:9px;color:#666;line-height:1.6}\n'
         '  .term-title{font-size:9px;color:#999;font-weight:600;font-family:Arial,sans-serif;letter-spacing:.1em;text-transform:uppercase;margin-bottom:4px}\n'
         '  .sign{max-width:52%;margin-top:0}\n'
         '  .sign-box{border:1px solid #EDEAE4;border-radius:4px;padding:16px 18px;min-height:100px;display:flex;flex-direction:column}\n'
@@ -303,8 +309,8 @@ def _build_quote_html(q: dict, tot: dict, internal: bool = False,
         '  <thead>\n'
         '    <tr>\n'
         '      <th style="width:28px">#</th>\n'
-        '      <th>品名 / 規格說明</th>\n'
-        '      <th>廠牌 / 型號</th>\n'
+        '      <th style="width:190px">品名 / 規格說明</th>\n'
+        '      <th style="width:110px">廠牌 / 型號</th>\n'
         '      <th class="r" style="width:48px">數量</th>\n'
         '      <th style="width:70px">單位</th>\n'
         + ('      <th class="r cost-cell" style="width:100px">單位成本</th>\n'
@@ -316,6 +322,7 @@ def _build_quote_html(q: dict, tot: dict, internal: bool = False,
         '  </thead>\n'
         + f'  <tbody>{item_rows}</tbody>\n'
         '</table>\n'
+        '<div class="totals-group">\n'
         '<div class="section-label" style="margin-bottom:8px;margin-top:14px;color:#666">四、報價合計</div>\n'
         '<div class="totals">\n'
         f'  <div class="total-row"><span>品項小計</span><span>NT$ {int(subtotal):,}</span></div>\n'
@@ -324,6 +331,7 @@ def _build_quote_html(q: dict, tot: dict, internal: bool = False,
         f'  <div class="total-row"><span>稅前合計</span><span>NT$ {int(pretax):,}</span></div>\n'
         f'  <div class="total-row"><span>營業稅 {tax_rate}%</span><span>NT$ {int(tax):,}</span></div>\n'
         f'  <div class="total-row"><span>總　計</span><span>NT$ {int(total):,}</span></div>\n'
+        '</div>\n'
         '</div>\n'
         f'{terms_section}\n'
         '<div style="height:32px"></div>\n'
