@@ -280,7 +280,7 @@ def list_work_logs(
     conn = get_db()
     sql = """
         SELECT w.id, w.log_date, w.user_id, w.content, w.hours, w.created_at,
-               w.case_no, w.photos, u.display_name, u.username
+               w.case_no, w.photos, w.contact_type, u.display_name, u.username
         FROM work_logs w
         LEFT JOIN users u ON u.id = w.user_id
         WHERE 1=1
@@ -317,14 +317,15 @@ def create_work_log(body: dict = Body(...), authorization: str = Header(None)):
     content  = body.get("content", "").strip()
     hours    = float(body.get("hours", 8.0))
     case_no  = (body.get("case_no") or "").strip()
+    contact_type = (body.get("contact_type") or "").strip()
     if not log_date or not user_id or not content:
         raise HTTPException(400, "log_date / user_id / content 必填")
     now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     conn = get_db()
     cur = conn.execute(
-        "INSERT INTO work_logs (log_date, user_id, content, hours, created_at, created_by, case_no) "
-        "VALUES (?,?,?,?,?,?,?)",
-        (log_date, user_id, content, hours, now, u["id"], case_no)
+        "INSERT INTO work_logs (log_date, user_id, content, hours, created_at, created_by, case_no, contact_type) "
+        "VALUES (?,?,?,?,?,?,?,?)",
+        (log_date, user_id, content, hours, now, u["id"], case_no, contact_type)
     )
     conn.commit()
     new_id = cur.lastrowid
@@ -346,7 +347,7 @@ def update_work_log(wid: int, body: dict = Body(...), authorization: str = Heade
         conn.close()
         raise HTTPException(403, "只能修改自己的工作日誌")
     sets, params = [], []
-    for field in ("log_date", "user_id", "content", "hours", "case_no"):
+    for field in ("log_date", "user_id", "content", "hours", "case_no", "contact_type"):
         if field in body:
             sets.append(f"{field}=?")
             params.append(body[field])

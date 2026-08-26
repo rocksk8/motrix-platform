@@ -3229,7 +3229,7 @@ def list_case_updates(quote_no: str, authorization: str = Header(None)):
 
     # 2. Work logs tagged with this case
     for w in conn.execute(
-        "SELECT w.id, w.log_date, w.content, w.hours, w.created_at, w.photos, "
+        "SELECT w.id, w.log_date, w.content, w.hours, w.created_at, w.photos, w.contact_type, "
         "u.username, u.display_name "
         "FROM work_logs w LEFT JOIN users u ON u.id=w.user_id "
         "WHERE w.case_no=?", (quote_no,)
@@ -3243,6 +3243,7 @@ def list_case_updates(quote_no: str, authorization: str = Header(None)):
             "content": w["content"],
             "logDate": w["log_date"],
             "hours": w["hours"],
+            "contactType": w["contact_type"] or "",
             "created_at": w["created_at"],
             "photos": json.loads(w["photos"] or "[]"),
             "canDelete": False,

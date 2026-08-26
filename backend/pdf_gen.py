@@ -2781,7 +2781,7 @@ def _project_execution_report_data(quote_no: str) -> dict:
     # 工作日誌時間軸（含照片，僅列檔名/上傳者，不內嵌圖檔）
     work_logs = []
     for r in conn.execute(
-        "SELECT log_date, user_id, content, hours, photos FROM work_logs "
+        "SELECT log_date, user_id, content, hours, photos, contact_type FROM work_logs "
         "WHERE case_no=? ORDER BY log_date DESC, id DESC", (quote_no,)
     ).fetchall():
         photos = json.loads(r["photos"] or "[]")
@@ -2790,6 +2790,7 @@ def _project_execution_report_data(quote_no: str) -> dict:
             "author":   uid_name_map.get(r["user_id"], "未知"),
             "content":  r["content"] or "",
             "hours":    r["hours"],
+            "contactType": r["contact_type"] or "",
             "photoCount": len(photos),
             "photoNames": [p.get("filename", "") for p in photos],
         })
@@ -2887,13 +2888,14 @@ def _build_project_execution_report_html(data: dict) -> str:
 
     wl_rows_html = "".join(
         f'<tr><td class="c" style="width:90px">{esc(wl["logDate"])}</td><td style="width:90px">{esc(wl["author"])}</td>'
-        f'<td>{esc(wl["content"])}</td><td class="c" style="width:70px">{wl["photoCount"] or "—"}</td></tr>'
+        f'<td>{esc(wl["content"])}</td><td class="c" style="width:90px">{esc(wl["contactType"]) or "—"}</td>'
+        f'<td class="c" style="width:70px">{wl["photoCount"] or "—"}</td></tr>'
         for wl in data["workLogs"]
     )
-    _no_wl_row = '<tr><td colspan="4" class="c" style="color:#9CA3AF">無工作日誌資料</td></tr>'
+    _no_wl_row = '<tr><td colspan="5" class="c" style="color:#9CA3AF">無工作日誌資料</td></tr>'
     work_logs_section = (
         '<div class="section-label">四、工作日誌</div>'
-        '<table><thead><tr><th class="c">日期</th><th>記錄人</th><th>內容</th><th class="c">照片數</th></tr></thead>'
+        '<table><thead><tr><th class="c">日期</th><th>記錄人</th><th>內容</th><th class="c">聯絡事項</th><th class="c">照片數</th></tr></thead>'
         f'<tbody>{wl_rows_html or _no_wl_row}</tbody></table>'
     )
 

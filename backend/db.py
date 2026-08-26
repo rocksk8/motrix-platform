@@ -78,7 +78,7 @@ DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR = os.path.join(
 # （已套用過的 schema_version 不可回頭刪除/重排），data_json.dealWonAt 這個
 # 欄位會留在既有資料裡但目前沒有任何程式碼讀取，之後如果要重新加回「成交時間」
 # 這種概念，不要複用這個欄位名稱免得語意混淆。
-CURRENT_VERSION = 62
+CURRENT_VERSION = 63
 
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
 # execution model) whenever the current request is authenticated as the 'demo'
@@ -1759,6 +1759,16 @@ def _m062_case_project_merge(conn):
     conn.commit()
 
 
+def _m063_work_log_contact_type(conn):
+    """work_logs 新增 contact_type（2026-08-26）：案件管理「動態」分頁發布
+    更新時，執行時數（既有 hours 欄位，先前寫死 8 沒有開放填寫）＋聯絡事項
+    類型（新欄位，下拉選單＋「其他」時可輸入自訂文字）補成可用的結構化欄位，
+    讓案件動態顯示的資訊更完整，不再只有一段自由文字。"""
+    if not _col_exists(conn, "work_logs", "contact_type"):
+        conn.execute("ALTER TABLE work_logs ADD COLUMN contact_type TEXT NOT NULL DEFAULT ''")
+    conn.commit()
+
+
 def _m057_payment_request_stage(conn):
     """請款單新增 stage（款項類別：full/deposit/delivery/acceptance/final，
     2026-08-24）：客戶端請款單 PDF「請款範圍」欄要顯示業務語意的分類（全額/
@@ -2602,6 +2612,7 @@ _MIGRATIONS = [
     _m060_dispatch_files,                          # v60
     _m061_case_semi_unlock,                        # v61
     _m062_case_project_merge,                      # v62
+    _m063_work_log_contact_type,                   # v63
 ]
 
 

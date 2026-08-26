@@ -182,6 +182,43 @@ def test_work_log_photo_upload_and_delete(client, make_user):
     assert r.json()[0]["photos"] == []
 
 
+# ── 工作日誌「聯絡事項」結構化欄位（2026-08-26，動態發布更新新增） ────────────
+
+def test_work_log_contact_type_roundtrip(client, make_user):
+    username, password = make_user(username="wl_user2", role="engineer")
+    _make_case("MQ-PJM-005")
+    token = _login(client, username, password)
+
+    import db
+    conn = db.get_db()
+    try:
+        uid = conn.execute("SELECT id FROM users WHERE username='wl_user2'").fetchone()["id"]
+    finally:
+        conn.close()
+
+    r = client.post("/api/work-logs", headers=_auth(token), json={
+        "log_date": "2026-08-26", "user_id": uid, "content": "客戶來電討論交期",
+        "case_no": "MQ-PJM-005", "hours": 1.5, "contact_type": "電話溝通",
+    })
+    assert r.status_code == 200, r.text
+    log_id = r.json()["id"]
+
+    r = client.get("/api/work-logs", headers=_auth(token), params={"case_no": "MQ-PJM-005"})
+    row = r.json()[0]
+    assert row["hours"] == 1.5
+    assert row["contact_type"] == "電話溝通"
+
+    r = client.get("/api/quotations/MQ-PJM-005/updates", headers=_auth(token))
+    wl_item = next(it for it in r.json() if it.get("source") == "work_log")
+    assert wl_item["hours"] == 1.5
+    assert wl_item["contactType"] == "電話溝通"
+
+    r = client.put(f"/api/work-logs/{log_id}", headers=_auth(token), json={"contact_type": "現場拜訪"})
+    assert r.status_code == 200, r.text
+    r = client.get("/api/work-logs", headers=_auth(token), params={"case_no": "MQ-PJM-005"})
+    assert r.json()[0]["contact_type"] == "現場拜訪"
+
+
 # ── 專案執行報告：資料組裝／HTML 組裝（不需要 Edge headless）──────────────────
 
 def test_project_execution_report_data_and_html(client, make_user):

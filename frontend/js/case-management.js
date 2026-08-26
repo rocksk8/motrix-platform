@@ -81,6 +81,9 @@ function app() {
     newComment: '',
     newCommentImportant: false,
     newCommentPhotos: [],
+    newCommentHours: '',
+    newCommentContactType: '',
+    newCommentContactTypeCustom: '',
     postingComment: false,
     _ptCache: {},
     feedCalMode:    false,
@@ -1791,13 +1794,21 @@ function app() {
       return 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBTAA7'
     },
 
+    // 聯絡事項選單非「其他」時直接用選項文字，選「其他」時用自訂輸入
+    resolvedContactType() {
+      return this.newCommentContactType === '其他'
+        ? this.newCommentContactTypeCustom.trim()
+        : this.newCommentContactType
+    },
+
     async postComment() {
       const content = this.newComment.trim()
       if (!content || this.postingComment) return
-      // 有選照片 → 當成工作日誌（可上傳照片），走 work_logs；純文字 → 維持原本
-      // 輕量留言（case_updates），2026-08-26 專案管理併入案件管理新增。
-      if (this.newCommentPhotos.length > 0) {
-        await this.postWorkLogWithPhotos(content)
+      // 有選照片、填執行時數、或選聯絡事項類型 → 當成工作日誌（結構化欄位＋可
+      // 上傳照片），走 work_logs；純文字 → 維持原本輕量留言（case_updates，含
+      // 「標記為重要」＋ Google 行事曆同步），2026-08-26 新增結構化欄位。
+      if (this.newCommentPhotos.length > 0 || this.newCommentHours || this.newCommentContactType) {
+        await this.postWorkLogEntry(content)
         return
       }
       this.postingComment = true
@@ -1817,7 +1828,7 @@ function app() {
       this.postingComment = false
     },
 
-    async postWorkLogWithPhotos(content) {
+    async postWorkLogEntry(content) {
       this.postingComment = true
       try {
         const today = new Date().toISOString().slice(0, 10)
@@ -1826,22 +1837,28 @@ function app() {
           headers: { Authorization: 'Bearer ' + this.session.token, 'Content-Type': 'application/json' },
           body: JSON.stringify({
             log_date: today, user_id: this.session.id, content,
-            hours: 8, case_no: this.selected.quote_no,
+            hours: this.newCommentHours || 8, case_no: this.selected.quote_no,
+            contact_type: this.resolvedContactType(),
           })
         })
         if (!r.ok) { alert('新增工作日誌失敗：' + (await r.json()).detail); return }
         const { id } = await r.json()
-        const fd = new FormData()
-        this.newCommentPhotos.forEach(f => fd.append('files', f))
-        const rp = await fetch(`/api/work-logs/${id}/photos`, {
-          method: 'POST',
-          headers: { Authorization: 'Bearer ' + this.session.token },
-          body: fd
-        })
-        if (!rp.ok) alert('照片上傳失敗：' + (await rp.json()).detail)
+        if (this.newCommentPhotos.length > 0) {
+          const fd = new FormData()
+          this.newCommentPhotos.forEach(f => fd.append('files', f))
+          const rp = await fetch(`/api/work-logs/${id}/photos`, {
+            method: 'POST',
+            headers: { Authorization: 'Bearer ' + this.session.token },
+            body: fd
+          })
+          if (!rp.ok) alert('照片上傳失敗：' + (await rp.json()).detail)
+        }
         this.newComment = ''
         this.newCommentImportant = false
         this.newCommentPhotos = []
+        this.newCommentHours = ''
+        this.newCommentContactType = ''
+        this.newCommentContactTypeCustom = ''
         await this.loadCaseUpdates(this.selected.quote_no)
       } catch(e) {
         alert('發生錯誤：' + e.message)
