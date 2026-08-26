@@ -63,6 +63,22 @@ def _base_url() -> str:
     return (_cfg().get("base_url") or "http://172.16.10.177:666").rstrip("/")
 
 
+_DEV_SUBJECT_PREFIX = "【開發機測試】"
+
+
+def _apply_dev_subject_prefix(cfg: dict, subject: str) -> str:
+    """開發機測試模式（system_settings.email_notify.dev_mode，2026-08-26 新增）：
+    這是存在各機器自己 SQLite DB 裡的設定值，不隨 git 部署流程移動，正式機的
+    DB 不會被這個設定影響，只要開發機自己開啟即可，避免開發機測試觸發的通知信
+    被收件人誤認為正式環境的真實通知（見一次啟動開發伺服器後不慎寄出正式逾期
+    提醒信給真實同仁的事故）。"""
+    if not cfg.get("dev_mode"):
+        return subject
+    if subject.startswith(_DEV_SUBJECT_PREFIX):
+        return subject
+    return f"{_DEV_SUBJECT_PREFIX}{subject}"
+
+
 def _admin_emails(event_key: str = None) -> list:
     """Return emails of active admin/superadmin users who have email configured
     and have not muted event_key (see helpers/notification_prefs.py)."""
@@ -104,6 +120,7 @@ def _send(to_addrs: list, subject: str, html: str) -> None:
     cfg = _cfg()
     if not cfg.get("enabled"):
         return
+    subject = _apply_dev_subject_prefix(cfg, subject)
     if not to_addrs:
         logger.warning("email skipped — recipient list empty; subject: %r", subject)
         return
@@ -141,6 +158,7 @@ def _send_raising(to_addrs: list, subject: str, html: str) -> None:
     cfg = _cfg()
     if not cfg.get("enabled"):
         raise RuntimeError("Email 通知功能未啟用")
+    subject = _apply_dev_subject_prefix(cfg, subject)
     if not to_addrs:
         raise RuntimeError("收件人清單為空")
     host = cfg.get("smtp_host", "smtp.gmail.com")
@@ -1154,6 +1172,7 @@ def _send_with_attachments(to_addrs: list, subject: str, html: str, attachments:
     cfg = _cfg()
     if not cfg.get("enabled"):
         return
+    subject = _apply_dev_subject_prefix(cfg, subject)
     if not to_addrs:
         logger.warning("email skipped — recipient list empty; subject: %r", subject)
         return

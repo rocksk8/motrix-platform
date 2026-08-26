@@ -245,6 +245,14 @@
           <span x-show="cfg.enabled" style="font-size:12px;color:#16A34A;font-weight:600">(已啟用)</span>
         </div>
 
+        <!-- 開發機測試模式（2026-08-26 新增）：這個設定值存在本機 DB，不隨部署
+             流程移動到正式機，只需要在開發機自己開啟即可 -->
+        <div class="ns-toggle">
+          <input type="checkbox" id="chk-dev-mode" x-model="cfg.dev_mode" style="width:16px;height:16px;cursor:pointer">
+          <label for="chk-dev-mode">開發機測試模式（寄出信件標題加註「【開發機測試】」）</label>
+          <span x-show="cfg.dev_mode" style="font-size:12px;color:#D97706;font-weight:600">(測試模式已開啟)</span>
+        </div>
+
         <div class="ns-desc">
           請使用 Gmail <strong>應用程式密碼</strong>（App Password），而非 Google 帳號的登入密碼。<br>
           取得方式：Google 帳戶 → 安全性 → 兩步驟驗證 → 應用程式密碼
@@ -336,6 +344,7 @@
           smtp_password: '',
           from_name: 'MOTRIX ERP',
           base_url: 'http://172.16.10.177:666',
+          dev_mode: false,
           admin_email_preview: [],
         },
         saving: false,
