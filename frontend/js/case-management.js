@@ -2651,6 +2651,36 @@ function app() {
       this.ivCreateModal = false
     },
 
+    async openNetworkPlan() {
+      const quoteNo = this.selected.quote_no
+      try {
+        const r = await fetch(`/api/quotations/${encodeURIComponent(quoteNo)}/network-plan`, {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (r.ok) {
+          const d = await r.json()
+          location.href = `network-plan-form.html?id=${d.id}`
+          return
+        }
+        if (r.status !== 404) { alert((await r.json().catch(() => ({}))).detail || '查詢失敗'); return }
+      } catch (e) { alert('網路錯誤：' + e.message); return }
+
+      const mods = this.session.modules || []
+      const canEdit = ['superadmin', 'admin'].includes(this.session.role) || mods.indexOf('netplan_edit') >= 0
+      if (!canEdit) { alert('此案件尚無網路架構規劃書'); return }
+      if (!confirm('此案件尚無網路架構規劃書，是否建立一份？')) return
+      try {
+        const cr = await fetch('/api/network-plans', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify({ quoteNo })
+        })
+        if (!cr.ok) { alert((await cr.json().catch(() => ({}))).detail || '建立失敗'); return }
+        const d = await cr.json()
+        location.href = `network-plan-form.html?id=${d.id}`
+      } catch (e) { alert('網路錯誤：' + e.message) }
+    },
+
     ivToggleItem(it) {
       if (this.ivItemSelections[it.itemId]) {
         delete this.ivItemSelections[it.itemId]

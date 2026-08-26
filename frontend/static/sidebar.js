@@ -290,6 +290,7 @@
   var cMonitorG = mods.indexOf('monitor_guide') >= 0 || ad
   var cAccessG = mods.indexOf('access_guide') >= 0 || ad
   var cGatewayG = mods.indexOf('gateway_guide') >= 0 || ad
+  var cNetPlan = mods.indexOf('netplan_edit') >= 0 || ad || eng
 
   var ic = {
     dash:  '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
@@ -327,6 +328,7 @@
     ovg: '<path d="M3 3v18h18"/><path d="M18.7 8l-5.1 5.1-2.8-2.8L7 14"/>',
     schema: '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v6c0 1.657 4.03 3 9 3s9-1.343 9-3V5"/><path d="M3 11v6c0 1.657 4.03 3 9 3s9-1.343 9-3v-6"/>',
     gcal: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+    netplan: '<rect x="9" y="2" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="16" y="16" width="6" height="6" rx="1"/><path d="M12 8v4M12 12H5v4M12 12h7v4"/>',
   }
 
   // Module → localStorage key map (used to mark current page's module as "seen")
@@ -347,6 +349,8 @@
     'procurement.html':        'procurement',
     'devices.html':            'equipment',
     'warranty.html':           'equipment',
+    'network-plans.html':      'netplan_edit',
+    'network-plan-form.html':  'netplan_edit',
     'receivables.html':        'finance',
     'sales-orders.html':       'finance',
     'work-log.html':           'work_log',
@@ -399,9 +403,10 @@
       ni(pg('parts.html'),              'part',  '料號主檔',  ['parts.html'],                            cPr,  'sb-mod-parts'),
       ni(pg('inventory.html'),          'inv',   '庫存管理',  ['inventory.html'],                        cInv, 'sb-mod-inventory'),
       ni(pg('procurement.html'),        'proc',  '採購管理',  ['procurement.html'],                      cPr,  'sb-mod-procurement'),
-      sec('設備', cEq),
+      sec('設備', cEq || cNetPlan),
       ni(pg('devices.html'),         'dev',   '設備登載', ['devices.html'],  cEq,  'sb-mod-equipment'),
       ni(pg('warranty.html'),        'warr',  '保固追蹤', ['warranty.html'], cEq,  'sb-mod-warranty'),
+      ni(pg('network-plans.html'),   'netplan', '網路架構規劃書', ['network-plans.html', 'network-plan-form.html'], cNetPlan, 'sb-mod-netplan'),
       sec('財務', cFi),
       ni(pg('receivables.html'),     'recv',  '應收帳款', ['receivables.html'],                      cFi,  'sb-mod-finance'),
       ni(pg('sales-orders.html'),    'order', '銷售訂單', ['sales-orders.html'],                     cFi,  'sb-mod-sales-orders'),

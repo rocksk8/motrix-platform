@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="../static/favicon.png">
+  <title>網路架構規劃書 — MOTRIX 營運管理系統</title>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
+  <style>
+    [x-cloak]{display:none!important}
+    .page-main{margin-left:var(--sidebar-w);margin-top:var(--topbar-h);padding:28px 32px;min-height:calc(100vh - var(--topbar-h));background:var(--white)}
+    .filter-bar{display:flex;align-items:center;gap:10px;margin-bottom:18px;flex-wrap:wrap}
+    .search-wrap{position:relative;flex:0 0 300px}
+    .search-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text-dim);pointer-events:none}
+    .search-input{width:100%;padding:8px 11px 8px 34px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:var(--font-zh);background:#fff;outline:none;box-sizing:border-box}
+    .search-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(37,99,235,.08)}
+    .tab__cnt{font-family:LINE Seed TW_OTF, sans-serif;font-size:10px;font-weight:600;margin-left:4px;padding:1px 5px;border-radius:8px;background:#F0EEE9}
+    .tab.on .tab__cnt{background:var(--accent-light);color:var(--accent)}
+    .panel{background:#fff;border:1px solid var(--border-light);border-radius:var(--radius-lg);overflow:hidden}
+    .data-table{width:100%;border-collapse:collapse;font-size:13px}
+    .data-table th{padding:10px 14px;text-align:left;font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);font-weight:500;background:#FAFAF8;border-bottom:1px solid var(--border-light);white-space:nowrap}
+    .data-table td{padding:11px 14px;border-bottom:1px solid #F0EEE9;vertical-align:middle;color:var(--text-primary)}
+    .data-table tr:last-child td{border-bottom:none}
+    .data-table tr:hover td{background:#FDFCFA;cursor:pointer}
+    .mono{font-family:LINE Seed TW_OTF, sans-serif;font-size:11px;letter-spacing:.03em}
+    .st{display:inline-flex;padding:2px 8px;border-radius:4px;font-size:11px;font-family:LINE Seed TW_OTF, sans-serif;font-weight:600}
+    .st-plan{background:#F0EEE9;color:#6B7280}
+    .st-confirmed{background:#DBEAFE;color:#1D4ED8}
+    .st-delivered{background:#DCFCE7;color:#15803D}
+    .empty{text-align:center;padding:60px 20px;color:var(--text-dim)}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:300;display:flex;align-items:center;justify-content:center;padding:16px}
+    .modal-box{background:#fff;border-radius:12px;width:min(460px,96vw);padding:22px 24px;box-shadow:0 20px 60px rgba(0,0,0,.4)}
+    .modal-box h3{font-size:15px;font-weight:700;margin-bottom:16px}
+    .form-group{margin-bottom:12px}
+    .form-group label{display:block;font-size:12px;font-weight:500;color:var(--text-secondary);margin-bottom:4px}
+    .form-group input{width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box}
+    .form-group input:focus{border-color:var(--accent)}
+    .link-pill{display:inline-flex;padding:8px 14px;border-radius:7px;border:1px solid var(--border-light);background:#fff;color:var(--text-secondary);font-size:12px;cursor:pointer;font-weight:600}
+    .link-pill.active{background:#C2410C;color:#fff;border-color:#C2410C}
+    .stock-item-row{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border:1px solid var(--border-light);border-radius:6px;cursor:pointer;font-size:12px}
+    .stock-item-row:hover{border-color:var(--accent);background:var(--accent-light)}
+    .btn-xs{padding:4px 8px;font-size:11px}
+  </style>
+</head>
+<body x-data="networkPlansPage()" x-init="init()" x-cloak>
+  <header id="app-topbar" class="topbar"></header>
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+  <aside class="sidebar" id="app-sidebar"></aside>
+
+  <div class="page-main">
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px">
+      <div>
+        <div style="font-size:11px;color:var(--text-dim);margin-bottom:4px">設備管理</div>
+        <h1 style="font-size:20px;font-weight:700">網路架構規劃書</h1>
+        <p style="font-size:12px;color:var(--text-secondary);margin-top:4px">WAN／VLAN／IP／交換器／防火牆／無線／線路配置的完整規劃文件，可匯出 Excel／PDF 給客戶</p>
+      </div>
+      <button class="btn btn-primary" @click="openCreateModal()" x-show="canEdit">新增規劃書</button>
+    </div>
+
+    <div class="filter-bar">
+      <div class="search-wrap">
+        <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+        <input class="search-input" type="text" x-model="search" @input.debounce.400ms="load()" placeholder="搜尋規劃書編號、案場名稱…">
+      </div>
+      <span style="font-size:11px;color:var(--text-dim);margin-left:auto;font-family:LINE Seed TW_OTF, sans-serif" x-text="filtered.length + ' 份'"></span>
+    </div>
+
+    <div class="tab-bar">
+      <button class="tab" :class="{on: statusTab===''}" @click="statusTab=''">全部<span class="tab__cnt" x-text="plans.length"></span></button>
+      <button class="tab" :class="{on: statusTab==='規劃中'}" @click="statusTab='規劃中'">規劃中<span class="tab__cnt" x-text="plans.filter(p=>p.status==='規劃中').length"></span></button>
+      <button class="tab" :class="{on: statusTab==='已確認'}" @click="statusTab='已確認'">已確認<span class="tab__cnt" x-text="plans.filter(p=>p.status==='已確認').length"></span></button>
+      <button class="tab" :class="{on: statusTab==='已交付'}" @click="statusTab='已交付'">已交付<span class="tab__cnt" x-text="plans.filter(p=>p.status==='已交付').length"></span></button>
+    </div>
+
+    <template x-if="loading">
+      <div class="empty">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin .8s linear infinite;color:var(--accent)"><path d="M21 12a9 9 0 11-18 0"/></svg>
+        <div style="margin-top:12px;font-size:12px">載入中…</div>
+      </div>
+    </template>
+
+    <template x-if="!loading">
+      <div class="panel">
+        <template x-if="filtered.length === 0">
+          <div class="empty">
+            <div style="font-size:32px;opacity:.3;margin-bottom:10px">🌐</div>
+            <div style="font-size:13px;font-weight:600;color:var(--text-secondary)">尚無網路架構規劃書</div>
+          </div>
+        </template>
+        <template x-if="filtered.length > 0">
+          <div class="table-scroll">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>規劃書編號</th>
+                <th>案場名稱</th>
+                <th>綁定案件</th>
+                <th>狀態</th>
+                <th>最後更新</th>
+                <th>更新人</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="p in filtered" :key="p.id">
+                <tr @click="openPlan(p)">
+                  <td><span class="mono" x-text="p.planNo"></span></td>
+                  <td x-text="p.siteName || '—'"></td>
+                  <td>
+                    <a :href="'case-management.html?q=' + p.quoteNo" x-show="p.quoteNo"
+                       style="font-size:11px;font-family:LINE Seed TW_OTF, sans-serif;color:var(--accent);text-decoration:none"
+                       x-text="p.quoteNo" @click.stop></a>
+                    <span x-show="!p.quoteNo" style="color:var(--text-dim)">獨立建立</span>
+                  </td>
+                  <td><span class="st" :class="stCls(p.status)" x-text="p.status"></span></td>
+                  <td style="font-size:11px;font-family:LINE Seed TW_OTF, sans-serif" x-text="(p.updatedAt||'').replace('T',' ').slice(0,16)"></td>
+                  <td style="font-size:12px" x-text="p.updatedBy || '—'"></td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+          </div>
+        </template>
+      </div>
+    </template>
+  </div>
+
+  <!-- 新增規劃書 Modal -->
+  <div class="modal-overlay" x-show="showCreateModal" x-cloak @keydown.escape.window="showCreateModal=false">
+    <div class="modal-box" @click.stop>
+      <h3>新增網路架構規劃書</h3>
+      <div style="display:flex;gap:8px;margin-bottom:16px">
+        <button type="button" class="link-pill" style="flex:1;text-align:center" :class="{active: createMode==='case'}" @click="createMode='case'">綁定既有案件</button>
+        <button type="button" class="link-pill" style="flex:1;text-align:center" :class="{active: createMode==='standalone'}" @click="createMode='standalone'">獨立建立</button>
+      </div>
+
+      <template x-if="createMode==='case'">
+        <div class="form-group">
+          <label>案件編號（報價單號）</label>
+          <template x-if="createForm.quoteNo">
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px">
+              <span x-text="selectedCaseLabel"></span>
+              <button type="button" class="btn btn-ghost btn-xs" @click="createForm.quoteNo=''; selectedCaseLabel=''">變更</button>
+            </div>
+          </template>
+          <template x-if="!createForm.quoteNo">
+            <div>
+              <input type="text" x-model="caseSearch" placeholder="搜尋案件編號／客戶名稱／案件名稱…"
+                     style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box">
+              <div style="max-height:220px;overflow-y:auto;margin-top:6px;border:1px solid var(--border-light);border-radius:6px" x-show="caseOptionsLoading || filteredCaseOptions().length">
+                <div x-show="caseOptionsLoading" style="padding:10px;font-size:12px;color:var(--text-dim)">載入案件中…</div>
+                <template x-for="c in filteredCaseOptions()" :key="c.quote_no">
+                  <div class="stock-item-row" style="margin:6px" @click="pickCase(c)">
+                    <div>
+                      <div style="font-weight:600" x-text="c.quote_no"></div>
+                      <div style="font-size:11px;color:var(--text-dim)" x-text="(c.customer_name||'—') + '　' + (c.project_name||'')"></div>
+                    </div>
+                    <span style="font-size:11px;color:var(--text-dim)" x-text="c.deal_tag"></span>
+                  </div>
+                </template>
+              </div>
+              <div x-show="!caseOptionsLoading && filteredCaseOptions().length===0" style="font-size:12px;color:var(--text-dim);margin-top:6px">
+                無符合案件，或已成案/已結案案件皆已建立過規劃書
+              </div>
+            </div>
+          </template>
+        </div>
+      </template>
+
+      <div class="form-group">
+        <label>案場名稱<span x-show="createMode==='case'" style="color:var(--text-dim)">（留空則自動帶入案件客戶名稱）</span></label>
+        <input type="text" x-model="createForm.siteName" placeholder="例：小林機械廠股份有限公司">
+      </div>
+      <div class="form-group">
+        <label>聯絡人</label>
+        <input type="text" x-model="createForm.contactName">
+      </div>
+      <div class="form-group">
+        <label>聯絡電話</label>
+        <input type="text" x-model="createForm.contactPhone">
+      </div>
+
+      <div x-show="createErr" style="color:var(--danger);font-size:12px;margin-bottom:10px" x-text="createErr"></div>
+
+      <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:16px">
+        <button class="btn btn-ghost" @click="showCreateModal=false">取消</button>
+        <button class="btn btn-primary" @click="submitCreate()" :disabled="creating">
+          <span x-text="creating ? '建立中…' : '建立並開始填寫'"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  const API = '/api'
+
+  function networkPlansPage() {
+    return {
+      session: {},
+      plans: [],
+      loading: true,
+      search: '',
+      statusTab: '',
+      showCreateModal: false,
+      createMode: 'case',
+      createForm: { quoteNo: '', siteName: '', contactName: '', contactPhone: '' },
+      createErr: '',
+      creating: false,
+      selectedCaseLabel: '',
+      caseSearch: '',
+      caseOptions: [],
+      caseOptionsLoaded: false,
+      caseOptionsLoading: false,
+
+      async init() {
+        const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
+        if (!s.token) { location.href = 'login.html'; return }
+        this.session = s
+        await this.load()
+        this.loading = false
+      },
+
+      get canEdit() {
+        const role = this.session.role || ''
+        const mods = this.session.modules || []
+        return role === 'superadmin' || role === 'admin' || mods.indexOf('netplan_edit') >= 0
+      },
+
+      async load() {
+        try {
+          const params = new URLSearchParams()
+          if (this.search.trim()) params.set('q', this.search.trim())
+          const r = await fetch(`${API}/network-plans?${params}`, {
+            headers: { Authorization: 'Bearer ' + this.session.token }
+          })
+          if (r.ok) this.plans = await r.json()
+        } catch (e) {}
+      },
+
+      get filtered() {
+        if (!this.statusTab) return this.plans
+        return this.plans.filter(p => p.status === this.statusTab)
+      },
+
+      stCls(status) {
+        return { '規劃中': 'st-plan', '已確認': 'st-confirmed', '已交付': 'st-delivered' }[status] || 'st-plan'
+      },
+
+      openCreateModal() {
+        this.createMode = 'case'
+        this.createForm = { quoteNo: '', siteName: '', contactName: '', contactPhone: '' }
+        this.selectedCaseLabel = ''
+        this.caseSearch = ''
+        this.createErr = ''
+        this.showCreateModal = true
+        if (!this.caseOptionsLoaded) this.loadCaseOptions()
+      },
+
+      async loadCaseOptions() {
+        this.caseOptionsLoading = true
+        try {
+          const r = await fetch(`${API}/quotations?deal_tag=${encodeURIComponent('已成案,已結案')}&limit=300`, {
+            headers: { Authorization: 'Bearer ' + this.session.token }
+          })
+          if (r.ok) {
+            const d = await r.json()
+            this.caseOptions = d.items || []
+            this.caseOptionsLoaded = true
+          }
+        } catch (e) {}
+        this.caseOptionsLoading = false
+      },
+
+      filteredCaseOptions() {
+        const bound = new Set(this.plans.filter(p => p.quoteNo).map(p => p.quoteNo))
+        let list = this.caseOptions.filter(c => !bound.has(c.quote_no))
+        const q = (this.caseSearch || '').trim().toLowerCase()
+        if (q) {
+          list = list.filter(c =>
+            [c.quote_no, c.customer_name, c.project_name].some(v => (v || '').toLowerCase().includes(q))
+          )
+        }
+        return list.slice(0, 50)
+      },
+
+      pickCase(c) {
+        this.createForm.quoteNo = c.quote_no
+        this.selectedCaseLabel = `${c.quote_no}（${c.customer_name || '—'}）`
+        if (!this.createForm.siteName.trim()) this.createForm.siteName = c.customer_name || ''
+      },
+
+      async submitCreate() {
+        this.createErr = ''
+        if (this.createMode === 'case' && !this.createForm.quoteNo.trim()) {
+          this.createErr = '請選擇案件'
+          return
+        }
+        this.creating = true
+        try {
+          const body = {
+            siteName: this.createForm.siteName.trim(),
+            contactName: this.createForm.contactName.trim(),
+            contactPhone: this.createForm.contactPhone.trim(),
+          }
+          if (this.createMode === 'case') body.quoteNo = this.createForm.quoteNo.trim()
+          const r = await fetch(`${API}/network-plans`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+            body: JSON.stringify(body)
+          })
+          if (!r.ok) { this.createErr = (await r.json().catch(() => ({}))).detail || '建立失敗'; this.creating = false; return }
+          const d = await r.json()
+          location.href = `network-plan-form.html?id=${d.id}`
+        } catch (e) { this.createErr = '網路錯誤：' + e.message }
+        this.creating = false
+      },
+
+      openPlan(p) {
+        location.href = `network-plan-form.html?id=${p.id}`
+      },
+    }
+  }
+  </script>
+  <script src="../static/notif.js"></script>
+  <script src="../static/sidebar.js"></script>
+</body>
+</html>

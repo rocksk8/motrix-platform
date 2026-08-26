@@ -78,7 +78,7 @@ DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR = os.path.join(
 # （已套用過的 schema_version 不可回頭刪除/重排），data_json.dealWonAt 這個
 # 欄位會留在既有資料裡但目前沒有任何程式碼讀取，之後如果要重新加回「成交時間」
 # 這種概念，不要複用這個欄位名稱免得語意混淆。
-CURRENT_VERSION = 63
+CURRENT_VERSION = 64
 
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
 # execution model) whenever the current request is authenticated as the 'demo'
@@ -1769,6 +1769,51 @@ def _m063_work_log_contact_type(conn):
     conn.commit()
 
 
+def _m064_network_plans(conn):
+    """新增 network_plans（網路架構規劃書，2026-08-26）：工程師可在系統內填寫
+    一份客戶網路建置案的完整技術規劃文件（WAN／設備清單／VLAN／IP位址配置／
+    PortProfile定義／交換器Port對應／防火牆規則／IP-Port群組／無線SSID／線路
+    幹線／修訂紀錄），並匯出 Excel／PDF 給客戶。完整設計依據見專案根目錄
+    `NETWORK-PLAN-MODULE-DESIGN.md`（已調閱實際業務範本擬定資料模型）。
+
+    quote_no 選填──比照 case_action_items/payment_requests 的慣例，用
+    quotations.quote_no 綁定案件，但這裡刻意允許留空，因為規劃書也常用在
+    還沒有案件的售前評估/巡檢場景（使用者確認的取捨）。一案最多一份規劃書
+    （用 partial unique index 擋重複 quote_no，NULL 不受限），版本管理採
+    「單一文件＋修訂紀錄」而非報價單式 R1/R2 改版鎖定，修訂紀錄存在
+    data_json.revision_log 裡，不另開資料表。
+
+    9+1 大類明細全部收在 data_json 一個欄位裡（陣列＋自由物件），不比照
+    switch_guide 等選型資料庫拆成多張正規化表──跟 quotations/dev_cases
+    的 hot-column + data_json 模式一致，理由是每個案子欄位齊全度差異很大
+    （不是每案都有無線SSID或線路幹線資料），拆表反而每次都要處理一堆全
+    NULL 的列。"""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS network_plans (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            plan_no       TEXT    UNIQUE NOT NULL,
+            quote_no      TEXT,
+            site_name     TEXT    NOT NULL DEFAULT '',
+            contact_name  TEXT    NOT NULL DEFAULT '',
+            contact_phone TEXT    NOT NULL DEFAULT '',
+            status        TEXT    NOT NULL DEFAULT '規劃中',
+            created_by    TEXT    NOT NULL DEFAULT '',
+            updated_by    TEXT    NOT NULL DEFAULT '',
+            created_at    TEXT,
+            updated_at    TEXT,
+            data_json     TEXT    NOT NULL DEFAULT '{}'
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_network_plans_status ON network_plans(status)"
+    )
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_network_plans_quote_no "
+        "ON network_plans(quote_no) WHERE quote_no IS NOT NULL"
+    )
+    conn.commit()
+
+
 def _m057_payment_request_stage(conn):
     """請款單新增 stage（款項類別：full/deposit/delivery/acceptance/final，
     2026-08-24）：客戶端請款單 PDF「請款範圍」欄要顯示業務語意的分類（全額/
@@ -2613,6 +2658,7 @@ _MIGRATIONS = [
     _m061_case_semi_unlock,                        # v61
     _m062_case_project_merge,                      # v62
     _m063_work_log_contact_type,                   # v63
+    _m064_network_plans,                           # v64
 ]
 
 
