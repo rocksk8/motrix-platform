@@ -104,17 +104,35 @@ def _current_tier_idx(appr: dict) -> int:
     return ct
 
 
+def _visible_case_filter_sql(user: dict, prefix: str = "") -> tuple:
+    """回傳 (sql_fragment, params)：非 admin/superadmin 只能看自己名下業務歸屬的案件，
+    或被 assigned_user_ids 勾選分配的案件（2026-08-27 起，接上原本只存欄位、沒實際
+    拿來過濾可見性的 assigned_user_ids——見 quotations.py::update_case_assigned_users()
+    /case-management.html 成員分配 UI）。json_each() 是 SQLite JSON1 擴充函式，
+    daily_tasks.py 的 json_each(assigned_to) 已在用同一招。prefix 是 SQL 別名前綴
+    （例如 stage_board() JOIN case_stages 後用 'q.'），unaliased 查詢留空字串即可。"""
+    return (
+        f" AND ({prefix}sales_person_id=? OR ({prefix}sales_person_id IS NULL AND {prefix}sales_person=?)"
+        f" OR EXISTS (SELECT 1 FROM json_each({prefix}assigned_user_ids) WHERE value=?))",
+        [user["id"], user["display_name"], user["id"]],
+    )
+
+
 def _check_quotation_owner(row, user: dict) -> None:
     """單筆存取（get/update/delete）比照 list_quotations() 既有的擁有者規則
     （304-306 行）：非 admin/superadmin 只能存取自己名下的報價單，quote_no
     格式可預測（MQ-YYYYMM-NNN），沒有這道檢查會讓任何登入使用者用猜/列舉
     quote_no 看到甚至刪掉別的業務的報價單，繞過清單頁刻意做的隱藏
-    （2026-08-24 安全審查修正，IDOR）。"""
+    （2026-08-24 安全審查修正，IDOR）。2026-08-27：補上 assigned_user_ids
+    判斷，跟 list_quotations() 的可見性規則保持一致。"""
     if user["role"] in ("superadmin", "admin"):
         return
     sp_id   = row["sales_person_id"] if "sales_person_id" in row.keys() else None
     sp_name = row["sales_person"] if "sales_person" in row.keys() else None
     owns = (sp_id == user["id"]) or (sp_id is None and sp_name == user["display_name"])
+    if not owns and "assigned_user_ids" in row.keys():
+        assigned = json.loads(row["assigned_user_ids"] or "[]")
+        owns = user["id"] in assigned
     if not owns:
         raise HTTPException(403, "無權限存取其他業務的報價單")
 
@@ -456,8 +474,9 @@ def list_quotations(
     where_sql = ""
     params = []
     if user["role"] not in ("superadmin", "admin"):
-        where_sql += " AND (sales_person_id=? OR (sales_person_id IS NULL AND sales_person=?))"
-        params.extend([user["id"], user["display_name"]])
+        frag, fparams = _visible_case_filter_sql(user)
+        where_sql += frag
+        params.extend(fparams)
     if status:
         where_sql += " AND status=?"; params.append(status)
     if customer:
@@ -530,8 +549,9 @@ def stage_board(authorization: str = Header(None)):
     )
     params = []
     if user["role"] not in ("superadmin", "admin"):
-        sql += " AND (q.sales_person_id=? OR (q.sales_person_id IS NULL AND q.sales_person=?))"
-        params.extend([user["id"], user["display_name"]])
+        frag, fparams = _visible_case_filter_sql(user, prefix="q.")
+        sql += frag
+        params.extend(fparams)
     sql += " ORDER BY q.quote_no, cs.sort_order"
     rows = conn.execute(sql, params).fetchall()
 
@@ -606,10 +626,10 @@ def case_activity(body: dict = Body(...), authorization: str = Header(None)):
     try:
         if user["role"] not in ("superadmin", "admin"):
             ph = ",".join("?" * len(quote_nos))
+            frag, fparams = _visible_case_filter_sql(user)
             allowed = conn.execute(
-                f"SELECT quote_no FROM quotations WHERE quote_no IN ({ph}) "
-                "AND (sales_person_id=? OR (sales_person_id IS NULL AND sales_person=?))",
-                quote_nos + [user["id"], user["display_name"]],
+                f"SELECT quote_no FROM quotations WHERE quote_no IN ({ph}){frag}",
+                quote_nos + fparams,
             ).fetchall()
             quote_nos = [r["quote_no"] for r in allowed]
             if not quote_nos:

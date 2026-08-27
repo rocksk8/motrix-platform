@@ -330,6 +330,58 @@
       </div>
     </div>
 
+    <!-- 每月營運報表收件人（2026-08-27 新增：取代原本寫死只寄 superadmin） -->
+    <div class="ns-card">
+      <div class="ns-card-head">
+        <div class="ns-card-head-title">每月營運報表收件人</div>
+        <span x-show="mrSaved" x-transition style="font-size:12px;color:#16A34A;font-weight:600">已儲存</span>
+      </div>
+      <div class="ns-card-body">
+        <div class="ns-desc">
+          每月 1 號自動寄送的營運報表（Excel + PDF），只會寄給下方勾選的使用者。尚未設定過時預設寄給所有
+          superadmin；儲存過一次後（即使清單是空的）就完全依這份名單為準。
+        </div>
+
+        <div class="ns-field" style="margin-bottom:12px">
+          <label>目前收件人</label>
+          <div class="ns-email-tags-wrap">
+            <template x-if="mrRecipients.length">
+              <template x-for="uid in mrRecipients" :key="uid">
+                <span class="ns-email-tag">
+                  <span x-text="mrUserLabel(uid)"></span>
+                  <button type="button" @click="removeMrRecipient(uid)" title="移除">×</button>
+                </span>
+              </template>
+            </template>
+            <template x-if="!mrRecipients.length">
+              <span style="font-size:12px;color:var(--text-dim);padding:4px 2px">尚未設定收件人</span>
+            </template>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:8px">
+          <select x-model="mrAddKey" style="flex:1;min-width:200px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px">
+            <option value="">選擇要加入的使用者…</option>
+            <template x-for="u in mrAvailableUsers" :key="u.id">
+              <option :value="String(u.id)" x-text="(u.display_name || u.username) + '（' + u.username + '）'"></option>
+            </template>
+          </select>
+          <button type="button" class="btn btn-ghost" @click="addMrRecipient()" :disabled="!mrAddKey">加入</button>
+        </div>
+
+        <div class="ns-actions">
+          <button class="btn btn-primary" @click="saveMrRecipients()" :disabled="mrSaving">
+            <span x-show="!mrSaving">儲存收件人名單</span>
+            <span x-show="mrSaving">儲存中…</span>
+          </button>
+        </div>
+
+        <div x-show="mrMsg" x-text="mrMsg" x-transition
+             :style="mrIsError ? 'color:#DC2626' : 'color:#16A34A'"
+             style="font-size:13px;margin-top:12px;font-weight:600"></div>
+      </div>
+    </div>
+
   </main>
   <script src="../static/notif.js"></script>
   <script src="../static/sidebar.js"></script>
@@ -352,6 +404,31 @@
         saved: false,
         msg: '',
         isError: false,
+
+        mrRecipients: [],
+        mrAllUsers: [],
+        mrAddKey: '',
+        mrSaving: false,
+        mrSaved: false,
+        mrMsg: '',
+        mrIsError: false,
+
+        get mrAvailableUsers() {
+          return this.mrAllUsers.filter(u => !this.mrRecipients.includes(u.id))
+        },
+        mrUserLabel(uid) {
+          const u = this.mrAllUsers.find(x => x.id === uid)
+          return u ? (u.display_name || u.username) + '（' + u.username + '）' : ('使用者 #' + uid)
+        },
+        addMrRecipient() {
+          if (!this.mrAddKey) return
+          const uid = Number(this.mrAddKey)
+          if (!this.mrRecipients.includes(uid)) this.mrRecipients.push(uid)
+          this.mrAddKey = ''
+        },
+        removeMrRecipient(uid) {
+          this.mrRecipients = this.mrRecipients.filter(x => x !== uid)
+        },
 
         get checks() {
           return [
@@ -391,6 +468,35 @@
             this.cfg = { ...this.cfg, ...data }
             if (!Array.isArray(this.cfg.admin_email_preview)) this.cfg.admin_email_preview = []
           }
+
+          const [usersRes, mrRes] = await Promise.all([
+            fetch('/api/users/selectable', { headers: { Authorization: 'Bearer ' + s.token } }),
+            fetch('/api/settings/monthly-report-recipients', { headers: { Authorization: 'Bearer ' + s.token } }),
+          ])
+          if (usersRes.ok) this.mrAllUsers = await usersRes.json()
+          if (mrRes.ok) {
+            const d = await mrRes.json()
+            this.mrRecipients = Array.isArray(d.userIds) ? d.userIds : []
+          }
+        },
+
+        async saveMrRecipients() {
+          this.mrSaving = true; this.mrMsg = ''
+          const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
+          const r = await fetch('/api/settings/monthly-report-recipients', {
+            method: 'PUT',
+            headers: { Authorization: 'Bearer ' + s.token, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userIds: this.mrRecipients }),
+          })
+          this.mrSaving = false
+          if (r.ok) {
+            this.mrMsg = '收件人名單已儲存'; this.mrIsError = false
+            this.mrSaved = true; setTimeout(() => this.mrSaved = false, 3000)
+          } else {
+            const d = await r.json().catch(() => ({}))
+            this.mrMsg = d.detail || '儲存失敗'; this.mrIsError = true
+          }
+          setTimeout(() => this.mrMsg = '', 4000)
         },
 
         async save() {

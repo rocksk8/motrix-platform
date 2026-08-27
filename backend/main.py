@@ -20,7 +20,7 @@ from helpers import (
 )
 from archive import _ensure_archive_dirs, _schedule_weekly, _schedule_daily
 
-from routers import auth, quotations, customers, suppliers, parts, dashboard, system, reports, contractors, payslips, daily_tasks, module_versions, vendor_contractors, dev_crm, env_guide, netarch_guide, switch_guide, shipping_notes, inventory, search, monitor_guide, access_guide, gateway_guide, contractor_vouchers, invoice_vouchers, org_structure, payment_requests, list_prefs, case_action_items, uploads, network_plans
+from routers import auth, quotations, customers, suppliers, parts, dashboard, system, reports, contractors, payslips, daily_tasks, module_versions, vendor_contractors, dev_crm, env_guide, netarch_guide, switch_guide, shipping_notes, inventory, search, monitor_guide, access_guide, gateway_guide, automation_guide, contractor_vouchers, invoice_vouchers, org_structure, payment_requests, list_prefs, case_action_items, uploads, network_plans
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -235,6 +235,7 @@ app.include_router(switch_guide.router)
 app.include_router(monitor_guide.router)
 app.include_router(access_guide.router)
 app.include_router(gateway_guide.router)
+app.include_router(automation_guide.router)
 app.include_router(shipping_notes.router)
 app.include_router(inventory.router)
 app.include_router(search.router)

@@ -290,6 +290,7 @@
   var cMonitorG = mods.indexOf('monitor_guide') >= 0 || ad
   var cAccessG = mods.indexOf('access_guide') >= 0 || ad
   var cGatewayG = mods.indexOf('gateway_guide') >= 0 || ad
+  var cAutomationG = mods.indexOf('automation_guide') >= 0 || ad
   var cNetPlan = mods.indexOf('netplan_edit') >= 0 || ad || eng
 
   var ic = {
@@ -325,6 +326,7 @@
     switchg: '<rect x="2" y="3" width="20" height="6" rx="1"/><rect x="2" y="15" width="20" height="6" rx="1"/><path d="M6 6h.01M6 18h.01"/>',
     monitorg: '<path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>',
     accessg: '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/>',
+    automationg: '<rect x="3" y="11" width="18" height="8" rx="2"/><circle cx="7.5" cy="7" r="2.5"/><circle cx="16.5" cy="7" r="2.5"/><path d="M7.5 9.5v1.5M16.5 9.5v1.5"/>',
     ovg: '<path d="M3 3v18h18"/><path d="M18.7 8l-5.1 5.1-2.8-2.8L7 14"/>',
     schema: '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v6c0 1.657 4.03 3 9 3s9-1.343 9-3V5"/><path d="M3 11v6c0 1.657 4.03 3 9 3s9-1.343 9-3v-6"/>',
     gcal: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
@@ -361,6 +363,7 @@
     'monitor-guide.html':      'monitor_guide',
     'access-guide.html':       'access_guide',
     'gateway-guide.html':      'gateway_guide',
+    'automation-guide.html':   'automation_guide',
     'selection-db-overview.html': 'selection_db_overview',
   }
 
@@ -422,13 +425,14 @@
       + '<span id="sb-dt-badge" style="display:none;background:#7C3AED;color:#fff;font-size:9px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;padding:1px 5px;border-radius:8px;margin-left:auto;min-width:16px;text-align:center;line-height:1.6"></span>'
       + '<span id="sb-mod-daily-task" style="display:none;background:var(--accent);color:#fff;font-size:9px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;padding:1px 5px;border-radius:8px;margin-left:4px;min-width:16px;text-align:center;line-height:1.6"></span>'
       + '</a>' : ''),
-      sec('選型資料庫', cEnvG || cNetG || cSwitchG || cMonitorG || cAccessG),
+      sec('選型資料庫', cEnvG || cNetG || cSwitchG || cMonitorG || cAccessG || cGatewayG || cAutomationG),
       ni(pg('env-guide.html'),      'envg',    '場域選型導覽',     ['env-guide.html'],     cEnvG),
       ni(pg('netarch-guide.html'),  'netg',    '網路架構選型導覽', ['netarch-guide.html'], cNetG),
       ni(pg('switch-guide.html'),   'switchg', '交換器選型導覽',   ['switch-guide.html'],  cSwitchG),
       ni(pg('monitor-guide.html'),  'monitorg', '監控系統選型導覽', ['monitor-guide.html'], cMonitorG),
       ni(pg('access-guide.html'),   'accessg',  '門禁系統選型導覽', ['access-guide.html'],  cAccessG),
       ni(pg('gateway-guide.html'),  'gwg',      '閘道器與控制器選型導覽', ['gateway-guide.html'], cGatewayG),
+      ni(pg('automation-guide.html'), 'automationg', '自動化系統選型導覽', ['automation-guide.html'], cAutomationG),
       ni(pg('selection-db-overview.html'), 'ovg', '涵蓋度總覽', ['selection-db-overview.html'], ad),
       sec('系統'),
       ni(pg('users.html'),             'users', '使用者管理', ['users.html'],             sa),
@@ -652,6 +656,7 @@
         cMonitorG = mods.indexOf('monitor_guide') >= 0 || ad
         cAccessG = mods.indexOf('access_guide') >= 0 || ad
         cGatewayG = mods.indexOf('gateway_guide') >= 0 || ad
+        cAutomationG = mods.indexOf('automation_guide') >= 0 || ad
         canDash = sa || ad || mods.indexOf('finance') >= 0 || mods.indexOf('quotation') >= 0 || mods.indexOf('dashboard') >= 0
         buildSidebar()
         var dnEl = document.getElementById('tb-display-name')

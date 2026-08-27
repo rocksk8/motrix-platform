@@ -39,7 +39,7 @@
 | 監控系統 | ✅ 已上線 | [MONITOR-GUIDE-CONTENT.md](./MONITOR-GUIDE-CONTENT.md) | `monitor_scenarios` / `monitor_categories` / `monitor_fit` / `monitor_products` |
 | 門禁系統 | ✅ 已上線 | [ACCESS-GUIDE-CONTENT.md](./ACCESS-GUIDE-CONTENT.md) | `access_scenarios` / `access_categories` / `access_fit` / `access_products` |
 | 路由器／閘道器與硬體控制器 | ✅ 已上線 | [GATEWAY-GUIDE-CONTENT.md](./GATEWAY-GUIDE-CONTENT.md) | `gateway_scenarios` / `gateway_categories` / `gateway_fit` / `gateway_products` |
-| 自動化系統 | 📋 規劃中 | 待建立 | 待設計 |
+| 自動化系統（倉儲/產線：AGV／AMR／機械手臂） | ✅ 已上線 | [AUTOMATION-GUIDE-CONTENT.md](./AUTOMATION-GUIDE-CONTENT.md) | `automation_scenarios` / `automation_categories` / `automation_fit` / `automation_products` |
 
 > 新類別上線後，記得回來這裡加一行，並在下面「§5 變更記錄」留一筆。
 

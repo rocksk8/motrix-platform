@@ -78,7 +78,7 @@ DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR = os.path.join(
 # （已套用過的 schema_version 不可回頭刪除/重排），data_json.dealWonAt 這個
 # 欄位會留在既有資料裡但目前沒有任何程式碼讀取，之後如果要重新加回「成交時間」
 # 這種概念，不要複用這個欄位名稱免得語意混淆。
-CURRENT_VERSION = 64
+CURRENT_VERSION = 65
 
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
 # execution model) whenever the current request is authenticated as the 'demo'
@@ -1814,6 +1814,96 @@ def _m064_network_plans(conn):
     conn.commit()
 
 
+def _m065_automation_guide(conn):
+    """Create automation_* tables（自動化系統選型導覽）：倉儲/產線自動化設備分類
+    （AGV／AMR／協作型機械手臂／工業型機械手臂）× 場域情境矩陣式交叉，選型資料庫
+    第七個類別，資料形狀與 switch_guide／monitor_guide／access_guide／gateway_guide
+    相同。見 routers/automation_guide.py 與 automation_guide_seed.py。首批只建立
+    情境/分類骨架＋適配矩陣，品牌/型號/報價留待後續獨立任務用 WebSearch 查證補上
+    （PRODUCTS_JSON 這次是空陣列）。"""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS automation_scenarios (
+            code       TEXT PRIMARY KEY,
+            name       TEXT NOT NULL DEFAULT '',
+            description TEXT NOT NULL DEFAULT '',
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            updated_at TEXT NOT NULL DEFAULT ''
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS automation_categories (
+            code            TEXT PRIMARY KEY,
+            name            TEXT NOT NULL DEFAULT '',
+            key_specs       TEXT NOT NULL DEFAULT '',
+            tags            TEXT NOT NULL DEFAULT '',
+            price_range     TEXT NOT NULL DEFAULT '',
+            dependency_note TEXT NOT NULL DEFAULT '',
+            watch_note      TEXT NOT NULL DEFAULT '',
+            sort_order      INTEGER NOT NULL DEFAULT 0,
+            updated_at      TEXT NOT NULL DEFAULT ''
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS automation_fit (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            scenario_code TEXT NOT NULL REFERENCES automation_scenarios(code) ON DELETE CASCADE,
+            category_code TEXT NOT NULL REFERENCES automation_categories(code) ON DELETE CASCADE,
+            fit_level     TEXT NOT NULL DEFAULT '',
+            fit_note      TEXT NOT NULL DEFAULT '',
+            sort_order    INTEGER NOT NULL DEFAULT 0,
+            updated_at    TEXT NOT NULL DEFAULT ''
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS automation_products (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            category_code TEXT NOT NULL REFERENCES automation_categories(code) ON DELETE CASCADE,
+            brand         TEXT NOT NULL DEFAULT '',
+            model         TEXT NOT NULL DEFAULT '',
+            url           TEXT NOT NULL DEFAULT '',
+            label         TEXT NOT NULL DEFAULT '',
+            price_note    TEXT NOT NULL DEFAULT '',
+            specs_json    TEXT NOT NULL DEFAULT '[]',
+            sort_order    INTEGER NOT NULL DEFAULT 0
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_automation_fit_scenario ON automation_fit(scenario_code)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_automation_fit_category ON automation_fit(category_code)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_automation_prod_category ON automation_products(category_code)")
+
+    if conn.execute("SELECT 1 FROM automation_scenarios LIMIT 1").fetchone():
+        conn.commit()
+        return
+
+    from automation_guide_seed import SCENARIOS_JSON, CATEGORIES_JSON, FIT_JSON, PRODUCTS_JSON
+    now = datetime.now().isoformat()
+    for i, s in enumerate(json.loads(SCENARIOS_JSON)):
+        conn.execute(
+            "INSERT INTO automation_scenarios (code, name, description, sort_order, updated_at) VALUES (?,?,?,?,?)",
+            (s[0], s[1], s[2], i, now),
+        )
+    for i, c in enumerate(json.loads(CATEGORIES_JSON)):
+        conn.execute(
+            "INSERT INTO automation_categories "
+            "(code, name, key_specs, tags, price_range, dependency_note, watch_note, sort_order, updated_at) "
+            "VALUES (?,?,?,?,?,?,?,?,?)",
+            (c[0], c[1], c[2], c[3], c[4], c[5], c[6], i, now),
+        )
+    for i, f in enumerate(json.loads(FIT_JSON)):
+        conn.execute(
+            "INSERT INTO automation_fit (scenario_code, category_code, fit_level, fit_note, sort_order, updated_at) "
+            "VALUES (?,?,?,?,?,?)",
+            (f[0], f[1], f[2], f[3], i, now),
+        )
+    for i, p in enumerate(json.loads(PRODUCTS_JSON)):
+        conn.execute(
+            "INSERT INTO automation_products (category_code, brand, model, url, label, price_note, specs_json, sort_order) "
+            "VALUES (?,?,?,?,?,?,?,?)",
+            (p[0], p[1], p[2], p[3], p[4], p[5], p[6], i),
+        )
+    conn.commit()
+
+
 def _m057_payment_request_stage(conn):
     """請款單新增 stage（款項類別：full/deposit/delivery/acceptance/final，
     2026-08-24）：客戶端請款單 PDF「請款範圍」欄要顯示業務語意的分類（全額/
@@ -2659,6 +2749,7 @@ _MIGRATIONS = [
     _m062_case_project_merge,                      # v62
     _m063_work_log_contact_type,                   # v63
     _m064_network_plans,                           # v64
+    _m065_automation_guide,                        # v65
 ]
 
 

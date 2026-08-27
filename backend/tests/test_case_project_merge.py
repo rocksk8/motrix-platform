@@ -141,6 +141,48 @@ def test_assigned_users_patch(client, make_user):
     assert r.json()["assigned_user_ids"] == [1, 2]
 
 
+def test_assigned_user_can_see_case_visibility(client, make_user):
+    """2026-08-27：assigned_user_ids 除了原本的「個人視角任務標記」，現在也要
+    真正拿來過濾案件清單/詳情的可見性——非業務歸屬、未被分配的人看不到，
+    分配後就看得到（清單 + 單筆）。"""
+    import db
+
+    admin_user, admin_pw = make_user(username="admin2", role="admin")
+    outsider_user, outsider_pw = make_user(username="outsider2", role="engineer")
+    _make_case("MQ-PJM-VIS")
+
+    admin_token = _login(client, admin_user, admin_pw)
+    outsider_token = _login(client, outsider_user, outsider_pw)
+
+    conn = db.get_db()
+    try:
+        outsider_id = conn.execute(
+            "SELECT id FROM users WHERE username='outsider2'"
+        ).fetchone()["id"]
+    finally:
+        conn.close()
+
+    # 分配前：看不到
+    r = client.get("/api/quotations", headers=_auth(outsider_token))
+    assert r.status_code == 200, r.text
+    assert "MQ-PJM-VIS" not in [i["quote_no"] for i in r.json()["items"]]
+
+    r = client.get("/api/quotations/MQ-PJM-VIS", headers=_auth(outsider_token))
+    assert r.status_code == 403, r.text
+
+    # admin 分配 outsider 進 assigned_user_ids
+    r = client.patch("/api/quotations/MQ-PJM-VIS/assigned-users", headers=_auth(admin_token),
+                      json={"user_ids": [outsider_id]})
+    assert r.status_code == 200, r.text
+
+    # 分配後：清單 + 單筆都看得到
+    r = client.get("/api/quotations", headers=_auth(outsider_token))
+    assert "MQ-PJM-VIS" in [i["quote_no"] for i in r.json()["items"]]
+
+    r = client.get("/api/quotations/MQ-PJM-VIS", headers=_auth(outsider_token))
+    assert r.status_code == 200, r.text
+
+
 # ── 工作日誌照片上傳/刪除 ─────────────────────────────────────────────────────
 
 def test_work_log_photo_upload_and_delete(client, make_user):

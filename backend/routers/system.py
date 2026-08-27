@@ -134,6 +134,28 @@ def put_operating_targets(body: OperatingTargetsBody, authorization: str = Heade
     return {"ok": True}
 
 
+# ── Monthly report recipients（2026-08-27，取代原本寫死只寄 superadmin 的規則）────
+
+class MonthlyReportRecipientsBody(BaseModel):
+    userIds: List[int] = []
+
+
+@router.get("/api/settings/monthly-report-recipients")
+def get_monthly_report_recipients(authorization: str = Header(None)):
+    _require_user(authorization)
+    return _get_setting("monthly_report_recipients") or {"userIds": []}
+
+
+@router.put("/api/settings/monthly-report-recipients")
+def put_monthly_report_recipients(body: MonthlyReportRecipientsBody, authorization: str = Header(None)):
+    user = _require_user(authorization, require_superadmin=True)
+    _set_setting("monthly_report_recipients", body.model_dump())
+    _audit(_tok(authorization), "settings.monthly_report_recipients.update", "settings",
+           "monthly_report_recipients", f"{len(body.userIds)} 位收件人",
+           {"userIds": body.userIds, "changedBy": user.get("display_name") or user["username"]})
+    return {"ok": True}
+
+
 # ── Notifications ─────────────────────────────────────────────────────────────
 
 @router.get("/api/notifications/mine")

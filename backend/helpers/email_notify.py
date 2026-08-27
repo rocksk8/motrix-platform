@@ -1,6 +1,7 @@
 """External email notifications via SMTP (Gmail App Password)."""
 import html as _html
 import logging
+import os
 import smtplib
 import threading
 from email.encoders import encode_base64 as _encode_b64
@@ -13,6 +14,33 @@ from .settings import _get_setting
 from .notification_prefs import is_enabled as _pref_enabled
 
 logger = logging.getLogger(__name__)
+
+
+def _is_production_install() -> bool:
+    """正式機身分守門，比照 apply_update.ps1／setup_autostart_task.ps1 既有的
+    「只認 C:\\Users\\Motrix\\Desktop\\V9.0 這個安裝路徑」慣例——這支檔案自己的
+    絕對路徑若不在 \\V9.0\\ 底下，就一律視為開發/測試環境。"""
+    here = os.path.abspath(__file__).replace("/", "\\")
+    return "\\V9.0\\" in here
+
+
+_PRODUCTION_INSTALL = _is_production_install()
+
+
+def _smtp_send_blocked(subject: str) -> bool:
+    """2026-08-27 新增的硬性防呆：開發機啟動 dev server 時，既有的「簽核逾期催辦」
+    啟動排程曾經意外對真實同仁寄出真實催辦信（見 _apply_dev_subject_prefix 的
+    dev_mode 機制——那套是 2026-08-26 針對同類事故加的軟性提醒，只會在 subject
+    加註文字，需要手動開啟且不會真的擋下寄送，這次同一種事故又發生了一次，代表
+    「預設關閉、需要手動開啟」的軟性方案不夠）。這裡改成預設硬擋：只要目前執行的
+    程式碼不是安裝在正式機路徑（_is_production_install()），無論 email_notify 設定
+    的 enabled／dev_mode 開關怎麼設，一律不會真的呼叫 SMTP 寄信，只會記錄
+    log 供除錯查看內容。要在開發機真的測試寄信，請直接用真實的正式機環境測試，
+    不要在本機開發環境啟動會觸發背景排程的完整 dev server。"""
+    if _PRODUCTION_INSTALL:
+        return False
+    logger.warning("email BLOCKED — not running from production install path (dev/test environment); subject: %r", subject)
+    return True
 
 _STYLE = """
 body{font-family:Arial,sans-serif;background:#F5F5F0;margin:0;padding:24px}
@@ -121,6 +149,8 @@ def _send(to_addrs: list, subject: str, html: str) -> None:
     if not cfg.get("enabled"):
         return
     subject = _apply_dev_subject_prefix(cfg, subject)
+    if _smtp_send_blocked(subject):
+        return
     if not to_addrs:
         logger.warning("email skipped — recipient list empty; subject: %r", subject)
         return
@@ -159,6 +189,8 @@ def _send_raising(to_addrs: list, subject: str, html: str) -> None:
     if not cfg.get("enabled"):
         raise RuntimeError("Email 通知功能未啟用")
     subject = _apply_dev_subject_prefix(cfg, subject)
+    if _smtp_send_blocked(subject):
+        raise RuntimeError("非正式機環境，已擋下寄送（見 _smtp_send_blocked 說明）")
     if not to_addrs:
         raise RuntimeError("收件人清單為空")
     host = cfg.get("smtp_host", "smtp.gmail.com")
@@ -1141,6 +1173,34 @@ def _superadmin_emails(event_key: str = None) -> list:
         return []
 
 
+def _monthly_report_recipient_emails() -> list:
+    """每月營運報表收件人（2026-08-27 起可設定，取代原本寫死只寄 superadmin）。
+    settings key 從未寫入過（superadmin 還沒按過一次「儲存」）時，沿用舊行為寄給
+    superadmin，避免上線當下設定值是空的、突然沒人收到信；一旦 superadmin 存過
+    一次（即使存的是空清單），就完全照設定值決定收件人，不再 fallback。"""
+    raw = _get_setting("monthly_report_recipients")
+    if raw is None:
+        return _superadmin_emails("monthly_report")
+    user_ids = raw.get("userIds") or []
+    if not user_ids:
+        return []
+    try:
+        from db import get_db
+        conn = get_db()
+        placeholders = ",".join("?" * len(user_ids))
+        rows = conn.execute(
+            f"SELECT email, notification_muted FROM users "
+            f"WHERE active=1 AND id IN ({placeholders}) "
+            f"AND email IS NOT NULL AND email != ''",
+            user_ids,
+        ).fetchall()
+        conn.close()
+        return [r["email"] for r in rows if _pref_enabled(r["notification_muted"], "monthly_report")]
+    except Exception as exc:
+        logger.warning("_monthly_report_recipient_emails failed: %s", exc)
+        return []
+
+
 def _department_manager_emails(department_id: int, event_key: str = None) -> list:
     """Return the email of a department's current manager (empty list if the
     department has no manager set, the manager account has no email, or the
@@ -1173,6 +1233,8 @@ def _send_with_attachments(to_addrs: list, subject: str, html: str, attachments:
     if not cfg.get("enabled"):
         return
     subject = _apply_dev_subject_prefix(cfg, subject)
+    if _smtp_send_blocked(subject):
+        return
     if not to_addrs:
         logger.warning("email skipped — recipient list empty; subject: %r", subject)
         return
@@ -1220,8 +1282,8 @@ def _send_with_attachments(to_addrs: list, subject: str, html: str, attachments:
 
 def notify_monthly_report(period_label: str, period_str: str,
                           excel_bytes: bytes, pdf_bytes: bytes) -> None:
-    """每月營運報表 → 寄送 Excel + PDF 附件給 superadmin 使用者"""
-    to = _superadmin_emails("monthly_report")
+    """每月營運報表 → 寄送 Excel + PDF 附件給設定的收件人（見 _monthly_report_recipient_emails）"""
+    to = _monthly_report_recipient_emails()
     if not to:
         logger.warning("notify_monthly_report: 無 superadmin email 收件人（period=%r）", period_str)
         return
