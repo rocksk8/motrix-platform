@@ -1139,7 +1139,7 @@ def notify_case_change_requested(quote_no: str, customer: str, project: str,
     superadmin，跟 notify_case_closing_report 一樣的收件範圍取捨——已結案
     案件的異動審核屬於高權限操作，不比照一般附件上傳（任何人可傳）發給全部
     admin。"""
-    to = _superadmin_emails("case_change_request")
+    to = _superadmin_emails("case_change_requested")
     if not to:
         logger.warning("notify_case_change_requested: 無 superadmin email 收件人（quote_no=%r）", quote_no)
         return

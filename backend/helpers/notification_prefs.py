@@ -50,8 +50,6 @@ EVENT_GROUPS = [
     ("案件與到期提醒", [
         ("case_stage_deadline", "案件執行進度即將到期"),
         ("case_stage_deadline_manager", "案件執行進度即將到期（我是部門主管，通知我部門成員的案件進度）"),
-        ("project_deadline",    "專案預計完工日即將到期"),
-        ("project_deadline_manager", "專案預計完工日即將到期（我是部門主管，通知我部門的專案）"),
         ("warranty_expiry",     "設備保固即將到期"),
         ("dev_case_stale",      "業務開發案件逾期未跟進"),
     ]),

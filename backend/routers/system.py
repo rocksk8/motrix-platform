@@ -82,8 +82,12 @@ class OperatingTargetsBody(BaseModel):
 def _normalize_flow(raw: dict) -> dict:
     """Convert old {steps:[]} format to new {tiers:[]} format (settings read path).
     NOTE: _active_tiers() in quotations.py handles the active-approval read path separately
-    because it must preserve existing status/approvedAt fields."""
-    if raw.get("tiers"):
+    because it must preserve existing status/approvedAt fields.
+
+    Uses key presence ("tiers" in raw), not truthiness (raw.get("tiers")) — a legitimately
+    saved empty tier list ([]) is falsy in Python and would otherwise be misrouted through
+    the legacy steps-conversion path below (2026-08-28, defensive hardening)."""
+    if "tiers" in raw:
         return raw
     return {"tiers": _steps_to_tiers(raw.get("steps") or [])}
 
