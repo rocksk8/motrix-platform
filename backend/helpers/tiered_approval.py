@@ -172,15 +172,27 @@ def setting_to_active_tiers(setting: dict, conn, requester_username: str = None)
 
     「申請人部門主管自動簽核」（2026-08-22i）是系統內建、預設一律套用的第一層——
     setting.get("includeSubmitterManagerTier", True) 沒有這個 key 時視為 True，
-    管理員要在簽核設定頁明確關掉才會存 False，符合「內建但可移除」的需求。"""
+    管理員要在簽核設定頁明確關掉才會存 False，符合「內建但可移除」的需求。
+
+    ⚠️ 2026-08-28 修正：先前的過濾條件檢查的是「設定裡這層有沒有 approver 項目」
+    （恆真——department_manager/division_manager 項目本身一定有 1 筆），而不是
+    「展開後這層實際解析出幾位簽核人」。當管理員手動指定的部門/處主管層，剛好
+    解析到的主管就是申請人自己時，resolve_tier_approvers() 會把該筆靜默排除
+    （避免自簽），但這層仍會以「approvers: []」的空層之姿留在回傳結果裡——
+    check_approve_permission() 對空層永遠回傳「無待簽核人員」，任何人（含
+    superadmin）都無法通過，等同卡死。改成依「展開後」的結果過濾，讓這層照
+    docstring 原意直接跳過，並重新編號 order 讓陣列保持連續。"""
     tiers = list(setting.get("tiers") or [])
     if setting.get("includeSubmitterManagerTier", True):
         tiers = [{"approvers": [{"sourceType": "submitter_manager"}]}] + tiers
-    return [
-        {"order": i, "approvers": resolve_tier_approvers(conn, t, requester_username)}
-        for i, t in enumerate(tiers)
-        if (t.get("approvers") or [])
-    ]
+    result = []
+    for t in tiers:
+        if not (t.get("approvers") or []):
+            continue
+        resolved = resolve_tier_approvers(conn, t, requester_username)
+        if resolved:
+            result.append({"order": len(result), "approvers": resolved})
+    return result
 
 
 def first_pending_approver(tier: dict) -> Optional[dict]:

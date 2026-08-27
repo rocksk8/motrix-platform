@@ -61,17 +61,26 @@ def _setting_to_active_tiers(setting: dict, conn, requester_username: str = None
     Kept as quotations.py's own copy (not the shared helpers/tiered_approval.py version) because of
     the legacy `steps` back-compat above — but the department/division/submitter-manager resolution
     logic is shared via resolve_tier_approvers(), not reimplemented here, so both copies stay in sync
-    on that behavior. 系統內建「申請人部門主管自動簽核」層（2026-08-22i）跟共用版一致，預設插入。"""
+    on that behavior. 系統內建「申請人部門主管自動簽核」層（2026-08-22i）跟共用版一致，預設插入。
+
+    ⚠️ 2026-08-28 修正（跟 helpers/tiered_approval.py::setting_to_active_tiers() 同步）：
+    過濾條件改成看「展開後」的解析結果，不是設定裡原始的 approver 項目數——後者
+    對 department_manager/division_manager 一定恆真，若解析到的主管剛好就是申請人
+    自己（resolve_tier_approvers() 會靜默排除以避免自簽），先前會留下一個
+    approvers:[] 的空層卡死流程（任何人都無法通過該層）。"""
     tiers = list(setting.get("tiers") or [])
     if not tiers:
         tiers = _steps_to_tiers(setting.get("steps") or [])
     if setting.get("includeSubmitterManagerTier", True):
         tiers = [{"approvers": [{"sourceType": "submitter_manager"}]}] + tiers
-    return [
-        {"order": i, "approvers": resolve_tier_approvers(conn, t, requester_username)}
-        for i, t in enumerate(tiers)
-        if (t.get("approvers") or [])
-    ]
+    result = []
+    for t in tiers:
+        if not (t.get("approvers") or []):
+            continue
+        resolved = resolve_tier_approvers(conn, t, requester_username)
+        if resolved:
+            result.append({"order": len(result), "approvers": resolved})
+    return result
 
 
 def _active_tiers(appr: dict) -> list:
