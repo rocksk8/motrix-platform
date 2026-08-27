@@ -35,6 +35,11 @@ app.add_middleware(
         "http://localhost:666",
         "http://127.0.0.1:666",
         "http://172.16.10.177:666",
+        # 2026-08-27：正式機導入 HTTPS 後（見 backend/tools/https_setup.ps1），
+        # 保留原本 http 三筆是因為開發機仍是明文運作，共用同一份 main.py
+        "https://localhost:666",
+        "https://127.0.0.1:666",
+        "https://172.16.10.177:666",
     ],
     allow_methods=["*"],
     allow_headers=["*"],

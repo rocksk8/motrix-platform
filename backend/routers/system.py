@@ -609,7 +609,7 @@ _EMAIL_DEFAULTS = {
     "smtp_user":     "",
     "smtp_password": "",
     "from_name":     "MOTRIX營運系統",
-    "base_url":      "http://172.16.10.177:666",
+    "base_url":      "https://172.16.10.177:666",  # 2026-08-27：見 backend/tools/https_setup.ps1
     "dev_mode":      False,  # 開發機測試模式：寄出信件標題加註「【開發機測試】」，
                              # 存在本機 DB，不隨部署流程移動到正式機（2026-08-26）
 }

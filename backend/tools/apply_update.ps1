@@ -30,7 +30,19 @@ $ErrorActionPreference = "Stop"
 $ProdRoot = "C:\Users\Motrix\Desktop\V9.0"
 $BackendDir = Join-Path $ProdRoot "backend"
 $FrontendDir = Join-Path $ProdRoot "frontend"
-$PingUrl = "http://127.0.0.1:666/api/ping"
+
+# 2026-08-27：憑證存在（見 backend/tools/https_setup.ps1）代表 uvicorn 現在只服務
+# HTTPS，健康檢查要跟著改用 https；自簽憑證沒有受信任的 CA，Invoke-WebRequest
+# 預設會擋下憑證驗證失敗，這裡略過驗證（僅用於本機 loopback 健康檢查，不影響
+# 其他任何對外連線的憑證驗證）。Windows PowerShell 5.1 沒有
+# -SkipCertificateCheck 參數（那是 PS7+ 才有），改用 ServicePointManager 回呼繞過。
+$UsesHttps = Test-Path (Join-Path $BackendDir "certs\cert.pem")
+if ($UsesHttps) {
+    [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
+    $PingUrl = "https://127.0.0.1:666/api/ping"
+} else {
+    $PingUrl = "http://127.0.0.1:666/api/ping"
+}
 
 function Fail($msg) {
     Write-Host "`n[FAIL] $msg" -ForegroundColor Red
