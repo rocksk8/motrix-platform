@@ -9,7 +9,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Header, Query
 
 from db import get_db
-from helpers import _require_user, _warranty_expiry, payment_item_amounts
+from helpers import _require_user, _warranty_expiry, payment_item_amounts, norm_at
 from routers.dev_crm import _can_access_case
 from routers.vendor_contractors import _dispatch_row
 
@@ -102,7 +102,7 @@ def dashboard_stats(department_id: Optional[int] = Query(None), authorization: s
     can_quotation = role in ("superadmin", "admin", "sales") or "quotation" in mods
     conn = get_db()
     rows = conn.execute("""
-        SELECT quote_no, status, customer_name, project_name, total, quote_date, sales_person,
+        SELECT quote_no, status, customer_name, project_name, total, pretax, quote_date, sales_person,
                sales_person_id,
                net_margin_pct, direct_margin_pct,
                COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') as deal_tag,
@@ -162,7 +162,7 @@ def dashboard_stats(department_id: Optional[int] = Query(None), authorization: s
             cr    = json.loads(r["case_record_json"])
             items = (cr.get("payment") or {}).get("items") or []
             total = r["total"] or 0
-            amounts = payment_item_amounts(total, items)
+            amounts = payment_item_amounts(total, items, r["pretax"])
             for i, p in enumerate(items):
                 if p.get("received"):
                     continue
@@ -281,7 +281,7 @@ def dashboard_stats(department_id: Optional[int] = Query(None), authorization: s
             total = r["total"] or 0
             if not items:
                 continue
-            amounts = payment_item_amounts(total, items)
+            amounts = payment_item_amounts(total, items, r["pretax"])
             for i, p in enumerate(items):
                 amt = amounts[i]
                 recv_total += amt
@@ -357,7 +357,7 @@ def dashboard_monthly(authorization: str = Header(None)):
     # 換算出的應收金額。跟「應收款狀態」圓環（本檔案上方 recv_received 那段）
     # 共用同一套換算邏輯，避免兩處分開實作、算出不一致的數字。
     rows = conn.execute(
-        "SELECT total, data_json FROM quotations WHERE deal_tag IN ('已成案','已結案')"
+        "SELECT total, pretax, data_json FROM quotations WHERE deal_tag IN ('已成案','已結案')"
     ).fetchall()
 
     monthly_amount, monthly_count, monthly_fee = {}, {}, {}
@@ -369,7 +369,7 @@ def dashboard_monthly(authorization: str = Header(None)):
         pay_items = ((data.get("caseRecord") or {}).get("payment") or {}).get("items") or []
         if not pay_items:
             continue
-        amounts = payment_item_amounts(r["total"] or 0, pay_items)
+        amounts = payment_item_amounts(r["total"] or 0, pay_items, r["pretax"])
         for i, p in enumerate(pay_items):
             if not p.get("received"):
                 continue
@@ -594,7 +594,7 @@ def list_receivables(status: Optional[str] = None, authorization: str = Header(N
         raise HTTPException(403, "無應收帳款查閱權限")
     conn = get_db()
     rows = conn.execute("""
-        SELECT quote_no, customer_name, total, quote_date,
+        SELECT quote_no, customer_name, total, pretax, quote_date,
                COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '')    AS deal_tag,
                json_extract(data_json,'$.caseRecord') AS case_record_json
         FROM quotations
@@ -618,7 +618,7 @@ def list_receivables(status: Optional[str] = None, authorization: str = Header(N
             continue
 
         total = row["total"] or 0
-        amounts = payment_item_amounts(total, payment_items)
+        amounts = payment_item_amounts(total, payment_items, row["pretax"])
 
         for idx, pi in enumerate(payment_items):
             amount = amounts[idx]
@@ -673,7 +673,7 @@ def list_sales_orders(authorization: str = Header(None)):
     _require_user(authorization)
     conn = get_db()
     rows = conn.execute("""
-        SELECT quote_no, customer_name, project_name, total, quote_date, sales_person,
+        SELECT quote_no, customer_name, project_name, total, pretax, quote_date, sales_person,
                net_margin_pct,
                COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '')         AS deal_tag,
                json_extract(data_json,'$.caseRecord')      AS case_record_json,
@@ -700,7 +700,7 @@ def list_sales_orders(authorization: str = Header(None)):
         total = r["total"] or 0
         recv_amount = 0
         if pay_items:
-            amounts = payment_item_amounts(total, pay_items)
+            amounts = payment_item_amounts(total, pay_items, r["pretax"])
             for i, p in enumerate(pay_items):
                 amt = amounts[i]
                 if p.get("received"):
@@ -1001,11 +1001,6 @@ def _trunc(s: str, n: int = 50) -> str:
     return s if len(s) <= n else s[:n] + "…"
 
 
-def _norm_at(s: str) -> str:
-    """統一時間格式（部分表用 'YYYY-MM-DDTHH:MM:SS'，部分用空白分隔），確保跨來源排序正確。"""
-    return (s or "").replace("T", " ")[:19]
-
-
 @router.get("/api/dashboard/activity-feed")
 def dashboard_activity_feed(limit: int = Query(30, ge=1, le=100),
                              department_id: Optional[int] = Query(None),
@@ -1059,7 +1054,7 @@ def dashboard_activity_feed(limit: int = Query(30, ge=1, le=100),
                 "id": f"cu_{r['id']}", "source": "comment", "moduleLabel": "案件留言板",
                 "actor": r["display_name"] or r["author"], "actionLabel": "新增留言",
                 "itemLabel": r["customer_name"] or r["quote_no"] or "", "detail": _trunc(r["content"]),
-                "link": f"case-management.html?q={r['quote_no']}", "at": _norm_at(r["created_at"]),
+                "link": f"case-management.html?q={r['quote_no']}", "at": norm_at(r["created_at"]),
             })
 
     # 2. 工作日誌（非 admin 只看自己的，比照 §3.4 編輯/刪除權限的既有精神）
@@ -1075,7 +1070,7 @@ def dashboard_activity_feed(limit: int = Query(30, ge=1, le=100),
             "id": f"wl_{r['id']}", "source": "work_log", "moduleLabel": "工作日誌",
             "actor": r["display_name"] or r["username"] or "", "actionLabel": "新增工作日誌",
             "itemLabel": r["log_date"] or "", "detail": _trunc(r["content"]),
-            "link": "work-log.html", "at": _norm_at(r["created_at"]),
+            "link": "work-log.html", "at": norm_at(r["created_at"]),
         })
 
     # 3. 業務開發：開發記錄 + 案件建立／狀態異動／轉換（沿用 dev_crm._can_access_case 逐筆過濾）
@@ -1101,7 +1096,7 @@ def dashboard_activity_feed(limit: int = Query(30, ge=1, le=100),
                 "actor": r["log_display"] or r["log_username"] or "",
                 "actionLabel": f"新增開發記錄（{r['channel']}）" if r["channel"] else "新增開發記錄",
                 "itemLabel": dc["case_name"] or dc["customer_name"] or "",
-                "detail": _trunc(r["content"]), "link": "dev-crm.html", "at": _norm_at(r["created_at"]),
+                "detail": _trunc(r["content"]), "link": "dev-crm.html", "at": norm_at(r["created_at"]),
             })
 
         ph = ",".join("?" * len(_DEV_CASE_ACTION_LABELS))
@@ -1123,7 +1118,7 @@ def dashboard_activity_feed(limit: int = Query(30, ge=1, le=100),
                 "actor": r["display_name"] or r["username"] or "",
                 "actionLabel": _DEV_CASE_ACTION_LABELS.get(r["action"], r["action"]),
                 "itemLabel": r["target_label"] or dc["case_name"] or "",
-                "detail": "", "link": "dev-crm.html", "at": _norm_at(r["at"]),
+                "detail": "", "link": "dev-crm.html", "at": norm_at(r["at"]),
             })
 
     # 4. 報價單狀態／內容異動（非 admin 只看自己名下的報價單，比照 §3.4 報價列表過濾規則）
@@ -1144,7 +1139,7 @@ def dashboard_activity_feed(limit: int = Query(30, ge=1, le=100),
                 "actor": r["display_name"] or r["username"] or "",
                 "actionLabel": _QUOTE_ACTION_LABELS.get(r["action"], r["action"]),
                 "itemLabel": r["target_label"] or r["quote_no"] or "",
-                "detail": "", "link": f"quotation-form.html?id={r['quote_no']}", "at": _norm_at(r["at"]),
+                "detail": "", "link": f"quotation-form.html?id={r['quote_no']}", "at": norm_at(r["at"]),
             })
 
     # 5. 出貨單（案件管理子頁面，quote_no 歸屬比照報價單可視權限）
@@ -1168,7 +1163,7 @@ def dashboard_activity_feed(limit: int = Query(30, ge=1, le=100),
                 "actor": r["display_name"] or r["username"] or "",
                 "actionLabel": _SHIPPING_ACTION_LABELS.get(r["action"], r["action"]),
                 "itemLabel": r["target_label"] or r["note_no"] or "",
-                "detail": "", "link": link, "at": _norm_at(r["at"]),
+                "detail": "", "link": link, "at": norm_at(r["at"]),
             })
 
     # 6. 進出物料（序號級庫存異動，比照 /api/devices・/api/materials-summary 開放給所有已登入使用者）
@@ -1183,7 +1178,7 @@ def dashboard_activity_feed(limit: int = Query(30, ge=1, le=100),
             "actor": r["consumed_by"] or r["created_by"] or "",
             "actionLabel": _STOCK_STATUS_LABELS.get(r["status"], r["status"] or ""),
             "itemLabel": f"{r['part_no']} / {r['serial_no']}",
-            "detail": "", "link": "inventory.html", "at": _norm_at(r["updated_at"]),
+            "detail": "", "link": "inventory.html", "at": norm_at(r["updated_at"]),
         })
 
     conn.close()

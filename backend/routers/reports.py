@@ -83,6 +83,35 @@ def _fmt(n):
     return f"NT$ {int(n or 0):,}"
 
 
+def _live_dispatch_totals_by_quote(conn) -> dict:
+    """回傳 {quote_no: 目前有效（非取消）承攬商派發總成本}，算法比照
+    vendor_contractors.py::_dispatch_row() 的 grandTotal（含稅承攬商費用＋
+    外包名單人員個別計費），供比對精算快照是否過期使用（見 _collect() 的
+    staleSettlementCount）。"""
+    rows = conn.execute("""
+        SELECT quote_no, total_amount, tax_rate, personnel_json, items_json
+        FROM contractor_dispatches WHERE status != 'cancelled'
+    """).fetchall()
+    totals: dict = {}
+    for r in rows:
+        amt = float(r["total_amount"] or 0)
+        if not amt:
+            try:
+                items = json.loads(r["items_json"] or "[]")
+                amt = sum(float(it.get("amount", 0) or 0) for it in items)
+            except Exception:
+                amt = 0
+        rate = float(r["tax_rate"]) if r["tax_rate"] is not None else 0.05
+        total_with_tax = amt + round(amt * rate)
+        try:
+            personnel = json.loads(r["personnel_json"] or "[]")
+        except Exception:
+            personnel = []
+        personnel_total = sum(float(p.get("amount", 0) or 0) for p in personnel)
+        totals[r["quote_no"]] = totals.get(r["quote_no"], 0) + total_with_tax + personnel_total
+    return totals
+
+
 def _collect(period_start: str, period_end: str, department_id: Optional[int] = None) -> dict:
     conn = get_db()
     rows = conn.execute("""
@@ -108,6 +137,14 @@ def _collect(period_start: str, period_end: str, department_id: Optional[int] = 
             FROM users u LEFT JOIN departments d ON d.id = u.department_id
         """).fetchall()
     }
+    # 案件實際「成案」的月份（見 helpers/quotations.py::quote_won_month_map()
+    # docstring）——優先 quote_date，quote_date 缺漏或誤填未來日期才退回
+    # audit_log 實際成案時間戳；monthly_trend() 已經用這個避開「舊案件補登/
+    # 業務員手誤填未來日期，被歸錯月份甚至整筆從近N月報表消失」的坑，這裡
+    # 一併存進每個 case，讓 _compute_achievement()（年度目標達成率）也能用
+    # 同一套邏輯判斷案件算哪一年，不要各自用一半的日期判斷邏輯。
+    won_month = quote_won_month_map(conn)
+    live_dispatch_totals = _live_dispatch_totals_by_quote(conn)
     conn.close()
 
     def _row_dept(row):
@@ -133,7 +170,7 @@ def _collect(period_start: str, period_end: str, department_id: Optional[int] = 
         recv_amt = 0
 
         if pay:
-            amounts = payment_item_amounts(total, pay)
+            amounts = payment_item_amounts(total, pay, row["pretax"])
             for idx, pi in enumerate(pay):
                 amt  = amounts[idx]
                 rcvd = bool(pi.get("received"))
@@ -187,7 +224,9 @@ def _collect(period_start: str, period_end: str, department_id: Optional[int] = 
             "deptId":         row_dept_id,
             "deptName":       row_dept_name,
             "quoteDate":      qdate,
+            "wonMonth":       won_month.get(row["quote_no"]) or qdate[:7],
             "dealTag":        row["deal_tag"]      or "",
+            "hasPaymentItems": bool(pay),
             "roles":          roles,
             "total":          total,
             "pretax":         row["pretax"] or 0,
@@ -321,6 +360,33 @@ def _collect(period_start: str, period_end: str, department_id: Optional[int] = 
     # backlog: 進行中案件的剩餘應收金額
     backlog = sum(c["total"] - c["receivedAmount"] for c in cases_all if c["dealTag"] == "已成案")
 
+    # 精算快照過期：finalized 案件的 dispatchTotal 快照 vs 目前即時計算值不一致，
+    # 代表承攬商成本在精算完結後又異動過，這份報表用到的毛利/業務員績效/部門
+    # 績效數字可能已經跟實際不符（同一份快照，settlement.html／案件管理財務Tab
+    # 各自有逐案件的即時比對banner，這裡只給總數當全域警訊，不逐案列出——
+    # 要看是哪幾筆，去對應案件本身的頁面會有詳細比較）。
+    stale_settlement_count = 0
+    for c in cases_all:
+        if c["settleStatus"] != "finalized" or not c["settleSummary"]:
+            continue
+        frozen = c["settleSummary"].get("dispatchTotal")
+        if frozen is None:
+            continue
+        live = live_dispatch_totals.get(c["quoteNo"], 0)
+        if round(live) != round(frozen):
+            stale_settlement_count += 1
+
+    # 已成案/已結案但完全沒有收款期別（caseRecord.payment.items 是空的）：這類
+    # 案件的合約金額不會計入 totalReceivable/收款率/毛利等任何金額類統計（下面
+    # all_items 從頭到尾就沒有這筆案件的資料），但案件數量統計（totalCases 等）
+    # 仍然算得到，兩者對不上且完全沒有提示——正常情況下 case-management.js
+    # 開案件時會自動帶入預設收款期別，這裡列出的通常是從未被人工打開過的案件。
+    cases_without_payment_items = [
+        {"quoteNo": c["quoteNo"], "customer": c["customer"], "project": c["project"],
+         "salesPerson": c["salesPerson"], "dealTag": c["dealTag"], "total": c["total"]}
+        for c in cases_all if not c["hasPaymentItems"]
+    ]
+
     # totals
     tr   = sum(i["amount"] for i in all_items)
     tc   = sum(i["amount"] for i in all_items if i["received"])
@@ -354,6 +420,8 @@ def _collect(period_start: str, period_end: str, department_id: Optional[int] = 
             "settleCoverage":         round(_settled / _closed * 100, 1) if _closed > 0 else 0,
             "backlog":                int(backlog),
             "settleOverdueCount":     len(settle_overdue),
+            "staleSettlementCount":   stale_settlement_count,
+            "missingPaymentItemsCount": len(cases_without_payment_items),
         },
         "periodItems":    period_items,
         "outstanding":    outstanding,
@@ -365,13 +433,19 @@ def _collect(period_start: str, period_end: str, department_id: Optional[int] = 
         "marginCases":    [c for c in cases_all if c["actualMarginPct"] is not None and c["settleStatus"] == "finalized"],
         "warranty":       warr[:30],
         "settleOverdue":  settle_overdue,
+        "casesWithoutPaymentItems": cases_without_payment_items,
     }
 
 
 # ── Achievement computation ───────────────────────────────────────────────────
 
 def _compute_achievement(year: int, targets: dict, cases_all: list) -> dict:
-    """Compute YTD metrics vs annual targets for a given year."""
+    """Compute YTD metrics vs annual targets for a given year.
+
+    案件歸入哪一年用 c['wonMonth']（_collect() 算好的，見 quote_won_month_map()
+    docstring），不是直接看 quoteDate——2026-08-28 修正：這裡原本直接用
+    quoteDate 篩選，跟 monthly_trend() 已經修過的邏輯不一致，會讓「補登的舊
+    案件」或「quote_date 誤填未來日期」的案子被算進錯的年度目標達成率。"""
     if not targets or targets.get("year") != year:
         return {"year": year, "hasTargets": False}
 
@@ -388,7 +462,7 @@ def _compute_achievement(year: int, targets: dict, cases_all: list) -> dict:
         total = 366 if (year % 4 == 0 and (year % 100 != 0 or year % 400 == 0)) else 365
         frac  = round(yday / total, 3)
 
-    ytd          = [c for c in cases_all if (c["quoteDate"] or "").startswith(yr_str)]
+    ytd          = [c for c in cases_all if (c.get("wonMonth") or c["quoteDate"] or "").startswith(yr_str)]
     ytd_cases    = len(ytd)
     ytd_revenue  = sum(c["total"] for c in ytd)
     ytd_coll     = sum(c["receivedAmount"] for c in ytd)
@@ -1947,7 +2021,7 @@ def _compute_ar_aging() -> dict:
     conn = get_db()
     rows = conn.execute("""
         SELECT quote_no, customer_name, project_name, sales_person,
-               total, quote_date,
+               total, pretax, quote_date,
                COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') AS deal_tag,
                json_extract(data_json,'$.caseRecord') AS cr_json
         FROM quotations
@@ -1976,7 +2050,7 @@ def _compute_ar_aging() -> dict:
         except Exception:
             anchor = today
 
-        amounts = payment_item_amounts(total, pay)
+        amounts = payment_item_amounts(total, pay, row["pretax"])
 
         for idx, pi in enumerate(pay):
             if pi.get("received"):
@@ -2103,10 +2177,14 @@ def _collect_tax_invoices(year: Optional[int] = None, month: Optional[int] = Non
 
     未填 invoiceNo 的收款品項（尚未開發票）不列入。金額欄位：item 的 amount 為
     報價單「含稅總價」的一部分（見 payment_item_amounts() docstring），這裡換算
-    5% 稅額拆出未稅/稅額/含稅三欄；若日後改用非 5% 稅率，此處需一併調整。"""
+    5% 稅額拆出未稅/稅額/含稅三欄；若日後改用非 5% 稅率，此處需一併調整。
+    taxExempt（已核准稅額沖銷）的品項，payment_item_amounts() 已經回傳未稅金額
+    （不是含稅金額的一部分），這裡不能再對它套用「除以 1.05 拆稅額」的公式
+    （那樣會把已經是未稅的數字誤當成含稅去拆分，稅額算成負的）——直接列稅額=0、
+    未稅=含稅=該未稅金額即可，這筆本來就沒有稅額可收。"""
     conn = get_db()
     rows = conn.execute("""
-        SELECT quote_no, customer_name, total,
+        SELECT quote_no, customer_name, total, pretax,
                json_extract(data_json,'$.customerTaxId') AS tax_id,
                json_extract(data_json,'$.caseRecord.payment.items') AS pay_json
         FROM quotations
@@ -2122,7 +2200,7 @@ def _collect_tax_invoices(year: Optional[int] = None, month: Optional[int] = Non
             items = []
         if not items:
             continue
-        amounts = payment_item_amounts(row["total"] or 0, items)
+        amounts = payment_item_amounts(row["total"] or 0, items, row["pretax"])
         for idx, pi in enumerate(items):
             inv_no = (pi.get("invoiceNo") or "").strip()
             if not inv_no:
@@ -2132,9 +2210,14 @@ def _collect_tax_invoices(year: Optional[int] = None, month: Optional[int] = Non
                 continue
             if month and received_at[5:7] != f"{month:02d}":
                 continue
-            amt_incl   = amounts[idx]
-            tax_amt    = round(amt_incl - amt_incl / 1.05)
-            amt_pretax = amt_incl - tax_amt
+            if pi.get("taxExempt"):
+                amt_pretax = amounts[idx]
+                tax_amt    = 0
+                amt_incl   = amt_pretax
+            else:
+                amt_incl   = amounts[idx]
+                tax_amt    = round(amt_incl - amt_incl / 1.05)
+                amt_pretax = amt_incl - tax_amt
             out.append({
                 "invoiceNo":     inv_no,
                 "date":          received_at,
@@ -2362,7 +2445,7 @@ def customer_history(authorization: str = Header(None)):
 
     conn = get_db()
     rows = conn.execute("""
-        SELECT quote_no, customer_name, project_name, status, total, quote_date,
+        SELECT quote_no, customer_name, project_name, status, total, pretax, quote_date,
                sales_person, net_margin_pct,
                COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') AS deal_tag,
                json_extract(data_json,'$.caseRecord')   AS cr_json,
@@ -2391,7 +2474,7 @@ def customer_history(authorization: str = Header(None)):
         pay = (cr.get("payment") or {}).get("items", [])
         collected = 0
         if pay:
-            amounts = payment_item_amounts(total, pay)
+            amounts = payment_item_amounts(total, pay, row["pretax"])
             for idx, p in enumerate(pay):
                 amt = amounts[idx]
                 if p.get("received"):
@@ -2649,7 +2732,7 @@ def monthly_trend(months: int = 12, authorization: str = Header(None)):
             except Exception: pass
         pay = (cr.get("payment") or {}).get("items", [])
         if pay:
-            amounts = payment_item_amounts(total, pay)
+            amounts = payment_item_amounts(total, pay, pretax)
             for idx, pi in enumerate(pay):
                 if not pi.get("received"):
                     continue

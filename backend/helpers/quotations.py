@@ -12,6 +12,20 @@ SQL_SETTLE_STATUS = (
 )
 
 
+def norm_at(s: str) -> str:
+    """統一時間格式（部分表用 'YYYY-MM-DDTHH:MM:SS[.ffffff]'，部分用空白分隔且無
+    微秒），確保跨來源合併排序正確。2026-08-28：抽成共用函式——原本 dashboard.py
+    的活動動態（首頁）跟 quotations.py::list_case_updates()（案件管理「動態」Tab）
+    是同一種「合併多張表、依 created_at 字串排序」的動態牆邏輯，前者已經套用這個
+    正規化，後者原本只對其中一個來源（audit_log）做了同樣的處理、其餘四個來源
+    （case_updates／work_logs／daily_task_completions／dev_logs）維持各自原始格式
+    直接排序——dev_logs 存的是空白分隔格式，跟其餘多數來源的 'T' 分隔格式排序時
+    永遠排在同一天其他來源之前（ASCII 空白 0x20 < 'T' 0x54），不管實際時間點是
+    幾點，導致同一天有業務開發記錄時動態牆順序會錯亂。兩處統一改呼叫這支共用
+    函式，不要再各自處理一部分來源就以為排序沒問題。"""
+    return (s or "").replace("T", " ")[:19]
+
+
 def _steps_to_tiers(steps: list) -> list:
     """Convert old single-approver steps list to modern tiers list (no status fields)."""
     return [
@@ -27,8 +41,8 @@ def _steps_to_tiers(steps: list) -> list:
     ]
 
 
-def payment_item_amounts(total: float, pay_items: list) -> list:
-    """Return the effective amount for each payment item, in order.
+def payment_item_amounts(total: float, pay_items: list, pretax: float = None) -> list:
+    """Return the effective **receivable** amount for each payment item, in order.
 
     Trusts each item's stored `amount` field when present — that's what the
     editing UI (case-management.js) actually saved after the user finished
@@ -41,6 +55,22 @@ def payment_item_amounts(total: float, pay_items: list) -> list:
     use this — duplicating the pct-reconstruction formula in each place is
     what let dashboard/reports drift out of sync with what the edit UI
     actually saved (and with each other, if the copies ever diverge).
+
+    2026-08-28: an item with `taxExempt=True` (approved tax write-off, see
+    routers/quotations.py::approve_payment_writeoff()) is only actually
+    receivable at its untaxed value — the customer no longer owes the tax
+    portion. approve_payment_writeoff() only ever sets the taxExempt flag and
+    never touches the stored `amount` itself, so without this the raw
+    (still tax-inclusive) `amount` silently kept flowing into every
+    backend-wide rollup that calls this shared helper (reports.py, AR aging,
+    dashboard.py receivables) even after a write-off was approved — case-
+    management.js already got this right client-side via itemAmountPretax(),
+    this brings the shared backend helper in line with it. Conversion mirrors
+    the frontend formula exactly (item's share of the quote's untaxed/taxed
+    ratio, not a flat 5% assumption): pretax_amount = amount * pretax / total.
+    Callers that don't have `pretax` handy yet keep the old (unexempted)
+    behavior for taxExempt items rather than guessing — better to under-fix
+    a rarely-hit call site than divide by an unknown ratio.
     """
     if not pay_items:
         return []
@@ -51,11 +81,14 @@ def payment_item_amounts(total: float, pay_items: list) -> list:
     out = []
     for idx, pi in enumerate(pay_items):
         if pi.get("amount") is not None:
-            out.append(pi["amount"])
+            amt = pi["amount"]
         elif idx == 0:
-            out.append(int(total - others))
+            amt = int(total - others)
         else:
-            out.append(round(total * (pi.get("pct") or 0) / 100))
+            amt = round(total * (pi.get("pct") or 0) / 100)
+        if pi.get("taxExempt") and pretax and total:
+            amt = round(amt * pretax / total)
+        out.append(amt)
     return out
 
 

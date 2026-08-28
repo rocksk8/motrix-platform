@@ -310,6 +310,31 @@
             </span>
           </div>
 
+          <!-- 精算快照過期警示 -->
+          <div x-show="summary.staleSettlementCount > 0"
+               style="margin-bottom:10px;padding:9px 14px;background:#FEF3C7;border:1px solid #D97706;border-radius:6px;font-size:12px;color:#92400E;display:flex;align-items:center;gap:8px">
+            <span style="font-size:14px">⚠️</span>
+            <span>
+              <strong>精算快照可能已過期：</strong>
+              <span x-text="summary.staleSettlementCount + ' 件'"></span> 已完結案件的承攬商成本在精算完結後又異動，下方毛利/業務員/部門績效可能未反映最新數字——請至個別案件的成本精算頁面確認並視需要重新完結
+            </span>
+          </div>
+
+          <!-- 已成案缺收款期別警示 -->
+          <div x-show="casesWithoutPaymentItems.length > 0"
+               style="margin-bottom:10px;padding:9px 14px;background:#FEF2F2;border:1px solid #DC2626;border-radius:6px;font-size:12px;color:#991B1B;display:flex;align-items:center;gap:8px">
+            <span style="font-size:14px">⚠️</span>
+            <span>
+              <strong>案件缺收款期別：</strong>
+              <span x-text="casesWithoutPaymentItems.length + ' 件'"></span> 已成案/已結案案件沒有填寫收款期別，合約金額不會計入收款率/毛利等統計
+              —
+              <template x-for="cw in casesWithoutPaymentItems.slice(0,4)" :key="cw.quoteNo">
+                <span style="margin-right:4px;font-family:monospace" x-text="cw.quoteNo"></span>
+              </template>
+              <span x-show="casesWithoutPaymentItems.length > 4" x-text="'等 ' + casesWithoutPaymentItems.length + ' 件'"></span>
+            </span>
+          </div>
+
           <!-- Tabs（CEO 視角：戰略優先 → 財務明細） -->
           <div class="tab-bar">
             <button class="tab" :class="{on:activeTab==='targets'}" @click="activeTab='targets'">

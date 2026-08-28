@@ -158,6 +158,7 @@ function reportsApp() {
     get targets()       { return (this.data || {}).targets       || {} },
     get achievement()   { return (this.data || {}).achievement   || {} },
     get settleOverdue() { return (this.data || {}).settleOverdue || [] },
+    get casesWithoutPaymentItems() { return (this.data || {}).casesWithoutPaymentItems || [] },
 
     get filteredCusts() {
       var q = this.custSearch.trim().toLowerCase()

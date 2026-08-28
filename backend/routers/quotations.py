@@ -29,6 +29,7 @@ from helpers import (
     resolve_tier_approvers, UnresolvedManagerError, resolve_active_flow_setting,
     save_document_files, delete_document_file,
     notify_case_close_blocked, notify_case_change_requested,
+    norm_at,
 )
 import helpers.uploads as _uploads_mod
 from helpers.uploads import _effective_subfolder
@@ -3243,7 +3244,12 @@ def reject_final_quotation(quote_no: str, body: ApprovalActionBody, authorizatio
 
 @router.get("/api/quotations/{quote_no}/updates")
 def list_case_updates(quote_no: str, authorization: str = Header(None)):
-    """Return merged activity feed: manual comments + work_logs + daily_task completions."""
+    """Return merged activity feed: manual comments + work_logs + daily_task completions
+    + dev_logs + dev_case_status. 2026-08-28: every source's created_at is normalized via
+    norm_at() before the final string-sort — the five source tables store timestamps in
+    different formats (some 'T'-separated with microseconds, dev_logs space-separated
+    without), and ASCII ' ' < 'T' meant dev_log entries always sorted as "older" than any
+    same-day entry from the other sources regardless of actual time. See norm_at() docstring."""
     _require_user(authorization)
     conn = get_db()
     row = conn.execute("SELECT quote_no FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
@@ -3267,7 +3273,7 @@ def list_case_updates(quote_no: str, authorization: str = Header(None)):
             "author": c["author"],
             "authorDisplay": dn_map.get(c["author"], c["author"]),
             "content": c["content"],
-            "created_at": c["created_at"],
+            "created_at": norm_at(c["created_at"]),
             "canDelete": (user["username"] == c["author"]
                           or user["role"] in ("superadmin", "admin")),
             "important": c["type"] == "important",
@@ -3290,7 +3296,7 @@ def list_case_updates(quote_no: str, authorization: str = Header(None)):
             "logDate": w["log_date"],
             "hours": w["hours"],
             "contactType": w["contact_type"] or "",
-            "created_at": w["created_at"],
+            "created_at": norm_at(w["created_at"]),
             "photos": json.loads(w["photos"] or "[]"),
             "canDelete": False,
         })
@@ -3311,7 +3317,7 @@ def list_case_updates(quote_no: str, authorization: str = Header(None)):
             "content": dt["report"] or f"完成工作事項：{dt['title']}",
             "taskTitle": dt["title"],
             "occurrenceDate": dt["occurrence_date"],
-            "created_at": dt["completed_at"] or "",
+            "created_at": norm_at(dt["completed_at"] or ""),
             "canDelete": False,
         })
 
@@ -3342,7 +3348,7 @@ def list_case_updates(quote_no: str, authorization: str = Header(None)):
                 "content": content,
                 "channel": dl["channel"] or "",
                 "logDate": dl["log_date"],
-                "created_at": dl["created_at"],
+                "created_at": norm_at(dl["created_at"]),
                 "canDelete": False,
             })
         for al in conn.execute(
@@ -3356,7 +3362,7 @@ def list_case_updates(quote_no: str, authorization: str = Header(None)):
                 "author": al["username"] or "",
                 "authorDisplay": al["display_name"] or al["username"] or "未知",
                 "content": al["target_label"] or "",
-                "created_at": (al["at"] or "").replace("T", " ")[:19],
+                "created_at": norm_at(al["at"]),
                 "canDelete": False,
             })
 

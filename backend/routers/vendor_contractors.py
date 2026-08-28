@@ -477,6 +477,15 @@ def create_dispatch(body: DispatchIn, authorization: str = Header(None)):
 
 @router.put("/api/contractor-dispatches/{did}")
 def update_dispatch(did: int, body: DispatchIn, authorization: str = Header(None)):
+    """2026-08-28 補上守門：已產生匯款申請的派發不可再編輯金額相關欄位——
+    delete_dispatch() 原本就有這個檢查（避免刪除已被匯款申請引用的紀錄），但
+    editing 路徑（這支 PUT）完全沒有對應防護，派發的 total_amount/items_json/
+    personnel_json 在匯款申請核准、甚至財務已標記「已匯款」之後仍可被悄悄改掉，
+    讓 contractor_payment_vouchers.snapshot_json 記錄的金額（財務實際依此匯款）
+    跟派發紀錄的即時金額（案件管理承攬商Tab／資金水位／月支出報表都讀這個）
+    對不上，且完全沒有任何比對或警示機制——比精算快照過期更嚴重，因為牽涉的是
+    已經送出去、甚至已經執行的財務文件。修法比照 delete_dispatch() 同一套判斷：
+    偵測到已有對應的匯款申請就直接 409 擋下，要改請先撤銷/處理該申請。"""
     user = _require_user(authorization)
     _require_admin(user)
     now = datetime.now().isoformat()
@@ -490,6 +499,12 @@ def update_dispatch(did: int, body: DispatchIn, authorization: str = Header(None
     if not existing:
         conn.close()
         raise HTTPException(404, "派發紀錄不存在")
+    voucher = conn.execute(
+        "SELECT voucher_no FROM contractor_payment_vouchers WHERE dispatch_id=?", (did,)
+    ).fetchone()
+    if voucher:
+        conn.close()
+        raise HTTPException(409, f"此派發已產生匯款申請（{voucher['voucher_no']}），請先撤銷/處理該申請後再編輯")
     if body.expected_updated_at and existing["updated_at"] and body.expected_updated_at != existing["updated_at"]:
         conn.close()
         raise HTTPException(409, "派發紀錄已被其他人更新，請重新載入後再存")
