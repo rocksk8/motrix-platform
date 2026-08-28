@@ -652,6 +652,7 @@
         session: {},
         queue: [],
         totalPending: 0,
+        myDelegatedFor: [],  // 我目前正在代理誰的簽核權限（2026-08-28，見 get_approval_queue() 說明）
         selected: null,
         loading: true,
         actioning: false,
@@ -745,7 +746,7 @@
             if (item.type === 'case_change') {
               return this.session.role === 'superadmin' && item.requestedBy !== this.session.username
             }
-            return (item.currentApprovers || []).some(a => a.username === this.session.username && a.status !== 'approved')
+            return (item.currentApprovers || []).some(a => this._isMeOrDelegate(a.username) && a.status !== 'approved')
           }).length
         },
 
@@ -767,6 +768,7 @@
             const d = await r.json()
             this.queue = d.queue || []
             this.totalPending = d.total || 0
+            this.myDelegatedFor = d.myDelegatedFor || []
             // Keep selection in sync
             if (this.selected) {
               const found = this.queue.flatMap(g => g.items).find(i => i.quoteNo === this.selected.quoteNo)
@@ -783,6 +785,11 @@
           this.selected = item
         },
 
+        // 目前登入者本人，或目前正在代理簽核權限的委託人（見 myDelegatedFor）
+        _isMeOrDelegate(username) {
+          return username === this.session.username || this.myDelegatedFor.includes(username)
+        },
+
         canApprove(item) {
           if (!item) return false
           if (item.requestedBy === this.session.username) return false
@@ -793,7 +800,7 @@
             const approvers = tiers[cur].approvers || []
             // sequential within tier: only the first unapproved approver may act
             const firstPending = approvers.find(a => a.status !== 'approved')
-            return firstPending?.username === this.session.username
+            return firstPending && this._isMeOrDelegate(firstPending.username)
           }
           // No tiers: superadmin, not self
           return this.session.role === 'superadmin'

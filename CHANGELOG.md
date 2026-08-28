@@ -5,6 +5,19 @@
 
 ---
 
+### 2026-08-28d — 金額同步稽核（模組逐步檢查）
+
+- 營運報表：精算快照過期不再只在案件層級可見，公司彙總新增 `staleSettlementCount`；`_compute_achievement()` 改與 `monthly_trend()` 共用 `wonMonth` date 歸屬邏輯；空付款排程案件新增 `missingPaymentItemsCount`＋清單，避免悄悄消失於金額類報表
+- `payment_item_amounts()` 補上 `pretax` 參數，修正已核准稅額沖銷（`taxExempt`）在 12 個呼叫點被忽略、含稅/未稅金額算錯的問題（實測影響 MQ-202608-007，NT$135,660）
+- 新增共用 `norm_at()`，修正案件動態時間軸跨來源（`case_updates`/`work_logs`/`daily_task_completions`/`dev_logs`/`audit_log`）時間格式不一致導致排序錯亂
+- 承攬商派發 `update_dispatch()` 補上跟 `delete_dispatch()` 一樣的匯款申請已產生鎖，避免已核准匯款申請的凍結快照跟活動中的派發記錄悄悄兜不起來
+- 簽核佇列：`get_approval_queue()`／`get_approval_queue_count()` 補上 `myDelegatedFor`，修正簽核代理人設定後在佇列列表／topbar 角標完全看不到任何項目輪到自己的問題
+- 勞報單 `update_payslip()`（PUT）補上「已匯出不可修改」鎖，比照既有 `delete_payslip()` 的保護——匯出成 PDF 封存後金額/稅額欄位原本仍可自由修改，封存內容會跟資料庫悄悄兜不起來，且系統無取消匯出的還原機制
+- 新增/更新測試共 20 題（`test_reports_logic_fixes`／`test_case_management_logic_fixes`／`test_dispatch_edit_guard`／`test_approval_queue_delegate_visibility`／`test_payslip_edit_guard`）；`pytest` 248/248 全過
+- 依「檢查兄弟端點是否有同一道鎖」方法逐一比對報價單/出貨單/請款單/發票憑據/匯款申請等共用簽核系統的文件類型，其餘皆確認已有對等保護，不需修改
+
+---
+
 ### 2026-08-28c — 資訊安全＋企業管理優化（四面向優化建議第三批）
 
 - 高權限帳號（superadmin/admin）閒置逾時縮短為 2 小時：既有全域 8 小時閒置登出機制（`main.py::auth_middleware`，DB v17）新增角色分流，其餘角色維持 8 小時

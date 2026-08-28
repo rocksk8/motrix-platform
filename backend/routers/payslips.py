@@ -260,6 +260,16 @@ def get_payslip(slip_no: str, authorization: str = Header(None)):
 @router.put("/api/payslips/{slip_no}")
 def update_payslip(slip_no: str, body: PayslipIn, authorization: str = Header(None)):
     _require_user(authorization, require_superadmin=True, module='payslip')
+    conn0 = get_db()
+    existing = conn0.execute("SELECT status FROM payslips WHERE slip_no=?", (slip_no,)).fetchone()
+    conn0.close()
+    if not existing:
+        raise HTTPException(404, "找不到此勞報單")
+    # 2026-08-28（模組逐步檢查）：匯出成 PDF 封存後（record_export 設 status='已匯出'）
+    # 沒有取消匯出的還原機制，屬單向終結狀態；比照 delete_payslip() 既有的同一道鎖，
+    # 避免封存的 PDF 內容跟資料庫最新金額/稅額悄悄兜不起來。
+    if existing["status"] == "已匯出":
+        raise HTTPException(409, "已匯出的勞報單不可修改")
     now   = datetime.now().isoformat()
     d     = body.data
     rules = _get_tax_rules()

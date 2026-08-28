@@ -29,7 +29,7 @@ from helpers import (
     resolve_tier_approvers, UnresolvedManagerError, resolve_active_flow_setting,
     save_document_files, delete_document_file,
     notify_case_close_blocked, notify_case_change_requested,
-    norm_at,
+    norm_at, active_delegators_for,
 )
 import helpers.uploads as _uploads_mod
 from helpers.uploads import _effective_subfolder
@@ -2725,9 +2725,18 @@ def get_approval_queue(authorization: str = Header(None)):
     案件半解鎖期間的變更/上傳待審核，見 case_change_requests 表）——這類項目不是
     真正的多層 tiers 簽核，是單層「任一 superadmin 皆可審核」，approve/reject
     走獨立端點 POST /api/case-changes/{id}/approve|reject，不是既有的
-    quotation 簽核端點，前端需依 type 分流。"""
-    _require_user(authorization)
+    quotation 簽核端點，前端需依 type 分流。
+
+    2026-08-28：額外回傳 myDelegatedFor（目前使用者正在代理誰的簽核權限，見
+    approval_delegates 表／active_delegators_for()）——check_approve_permission()
+    後端早就支援代理人真的能完成簽核動作，但這個佇列列表／canApprove() 前端
+    判斷原本只比對 currentApprovers 的 username 是否等於自己，代理人登入後完全
+    看不到任何項目被標成「輪到我」、核准/退回按鈕也不會出現，等於代理人設定了
+    也沒用（除非剛好知道確切單號直接開頁面）。前端 canApprove()/myPendingCount
+    要一併比對這份清單。"""
+    user = _require_user(authorization)
     conn = get_db()
+    my_delegated_for = sorted(active_delegators_for(conn, user["username"]))
     items = []
 
     rows = conn.execute("""
@@ -2943,7 +2952,7 @@ def get_approval_queue(authorization: str = Header(None)):
         })
     queue.sort(key=lambda g: g["items"][0]["requestedAt"] if g["items"] else "")
 
-    return {"queue": queue, "total": len(items)}
+    return {"queue": queue, "total": len(items), "myDelegatedFor": my_delegated_for}
 
 
 @router.get("/api/approval-queue/count")
@@ -2951,10 +2960,16 @@ def get_approval_queue_count(authorization: str = Header(None)):
     """輕量端點：回傳目前輪到當前用戶簽核的項目數量（報價單＋承攬商匯款申請＋
     開票申請憑據＋出貨單，2026-08-21 起合併前三者、2026-08-24 補上出貨單）。
     每一頁 topbar 都會呼叫這支（static/notif.js），刻意維持跟原本一樣的輕量
-    寫法（只挑 approval_json 一欄），不要拖累全站每頁的載入速度。"""
+    寫法（只挑 approval_json 一欄），不要拖累全站每頁的載入速度。
+
+    2026-08-28：一併算進「我目前代理誰」（見 get_approval_queue() 同一則
+    2026-08-28 說明），否則代理人這段期間看到的側邊欄角標數字仍然是 0，
+    跟佇列頁面本身修好後的狀態矛盾。"""
     u = _require_user(authorization)
     my_username = u["username"]
     conn = get_db()
+    my_delegated_for = active_delegators_for(conn, my_username)
+    my_usernames = {my_username} | my_delegated_for
     approval_jsons = [r[0] for r in conn.execute(
         "SELECT json_extract(data_json,'$.approval') FROM quotations WHERE status IN ('待審核','簽核中')"
     ).fetchall()]
@@ -2987,7 +3002,7 @@ def get_approval_queue_count(authorization: str = Header(None)):
             ct_idx  = _current_tier_idx(appr)
             if tiers and ct_idx < len(tiers):
                 approvers = tiers[ct_idx].get("approvers") or []
-                if any(a.get("username") == my_username and a.get("status") != "approved"
+                if any(a.get("username") in my_usernames and a.get("status") != "approved"
                        for a in approvers):
                     count += 1
         except Exception:

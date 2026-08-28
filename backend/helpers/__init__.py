@@ -37,7 +37,7 @@ from .tiered_approval import (
     first_pending_approver, check_approve_permission, check_reject_permission,
     check_no_tier_self_approval, resolve_department_manager, resolve_division_manager,
     resolve_submitter_manager_chain, resolve_tier_approvers, UnresolvedManagerError,
-    approval_flow_setting_key, resolve_active_flow_setting,
+    approval_flow_setting_key, resolve_active_flow_setting, active_delegators_for,
     APPROVAL_DOC_TYPES, DEFAULT_UNIFIED_DOC_TYPES, APPROVAL_DOC_TYPE_LABELS,
 )
 from .email_notify import (
@@ -125,7 +125,7 @@ __all__ = [
     "_add_months", "_warranty_expiry", "_workdays_elapsed",
     "active_tiers", "current_tier_idx", "setting_to_active_tiers",
     "first_pending_approver", "check_approve_permission", "check_reject_permission",
-    "check_no_tier_self_approval",
+    "check_no_tier_self_approval", "active_delegators_for",
     "approval_flow_setting_key", "resolve_active_flow_setting",
     "APPROVAL_DOC_TYPES", "DEFAULT_UNIFIED_DOC_TYPES", "APPROVAL_DOC_TYPE_LABELS",
     # email_notify
