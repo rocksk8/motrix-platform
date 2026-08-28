@@ -138,11 +138,17 @@ def set_approval_flow_settings(body: ApprovalFlowSettings, authorization: str = 
 # 這樣「切換」永遠不會弄丟另一邊的既有設定，勾來勾去也不會互相覆蓋。
 
 class ApprovalFlowScopeSettings(BaseModel):
-    quotation:          bool = True
-    shipping:           bool = True
-    invoice_voucher:    bool = True
-    payment_request:    bool = True
-    contractor_voucher: bool = False
+    # 刻意不給預設值——PUT 這個模型永遠代表「完整覆蓋」整組 scope，五個欄位都
+    # 必須明確帶值。2026-08-28 code review 抓到：若欄位有預設值，前端載入 scope
+    # 失敗（例如 GET 失敗留下空物件 `{}`）又剛好按了儲存，PUT body 會是 `{}`，
+    # Pydantic 會靜默把每個缺漏欄位填回這裡的預設值，等於在使用者毫無所覺的
+    # 情況下把已自訂的 scope 洗回預設分組。改成必填後，這種殘缺 body 會直接
+    # 422，而不是靜默套用預設值。
+    quotation:          bool
+    shipping:           bool
+    invoice_voucher:    bool
+    payment_request:    bool
+    contractor_voucher: bool
 
 
 @router.get("/api/settings/approval-flow-scope")
@@ -164,8 +170,16 @@ def set_approval_flow_scope(body: ApprovalFlowScopeSettings, authorization: str 
         if was_unified and not is_unified:
             # 剛從統一流程勾掉、改成獨立設定：把目前統一流程的內容複製一份當起點，
             # 避免行為在切換的當下突然改變（使用者 2026-08-28 討論時選定的預設）。
-            _set_setting(f"{dt}_approval_flow", unified_flow)
-            seeded.append(dt)
+            #
+            # ⚠️ 只在該類型自己的 key 目前是空的（從沒設定過，或這輪之前從沒獨立過）
+            # 時才複製——2026-08-28 code review 抓到：若不加這個判斷，反覆切換
+            # 統一/獨立（例如透過 contractor_vouchers.py 仍保留的專屬設定頁面先手動
+            # 設定好一份 tiers，之後切成統一、再切回獨立）會讓這裡無條件覆蓋，
+            # 悄悄洗掉先前已經設定好的獨立內容。
+            existing = _get_setting(f"{dt}_approval_flow", {"tiers": []}) or {"tiers": []}
+            if not (existing.get("tiers") or []):
+                _set_setting(f"{dt}_approval_flow", unified_flow)
+                seeded.append(dt)
     _set_setting("approval_flow_scope", new_scope)
     _audit(_tok(authorization), "settings.approval_flow_scope.update", "settings", "approval_flow_scope",
            "簽核流程套用範圍設定", {"scope": new_scope, "seededFromUnified": seeded})

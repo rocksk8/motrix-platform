@@ -26,14 +26,14 @@ from pydantic import BaseModel
 
 from db import get_db, next_entity_code, spawn_bg_thread
 from helpers import (
-    _require_user, _tok, _audit, _notify, _get_setting, _purge_notifications,
+    _require_user, _tok, _audit, _notify, _purge_notifications,
     notify_module_activity, notify_invoice_voucher_submitted, notify_invoice_voucher_next_tier,
     notify_invoice_voucher_approved, notify_invoice_voucher_returned,
     push_event_for_invoice_voucher,
     active_tiers as _active_tiers, current_tier_idx as _current_tier_idx,
     setting_to_active_tiers as _setting_to_active_tiers,
     check_approve_permission, check_reject_permission, check_no_tier_self_approval,
-    UnresolvedManagerError, approval_flow_setting_key,
+    UnresolvedManagerError, resolve_active_flow_setting,
     save_document_files, delete_document_file,
 )
 from pdf_gen import generate_invoice_voucher_pdf_bytes, _generate_invoice_voucher_pdf
@@ -373,8 +373,7 @@ def submit_invoice_voucher(voucher_no: str, authorization: str = Header(None)):
     d     = json.loads(row["data_json"] or "{}")
     now   = datetime.now().isoformat()
 
-    _scope = _get_setting("approval_flow_scope", {}) or {}
-    flow_setting = _get_setting(approval_flow_setting_key("invoice_voucher", _scope), {"tiers": []}) or {}
+    flow_setting = resolve_active_flow_setting("invoice_voucher")
     try:
         active_tiers = _setting_to_active_tiers(flow_setting, conn, user["username"])
     except UnresolvedManagerError as e:
@@ -460,8 +459,7 @@ def approve_invoice_voucher(voucher_no: str, body: dict = Body(default={}), auth
         if user["role"] != "superadmin":
             conn.close()
             raise HTTPException(403, "僅超級管理員可執行此操作")
-        _scope        = _get_setting("approval_flow_scope", {}) or {}
-        _global_flow  = _get_setting(approval_flow_setting_key("invoice_voucher", _scope), {"tiers": []}) or {}
+        _global_flow  = resolve_active_flow_setting("invoice_voucher")
         try:
             _global_tiers = _setting_to_active_tiers(_global_flow, conn, appr.get("requestedBy"))
         except UnresolvedManagerError as e:

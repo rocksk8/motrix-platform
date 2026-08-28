@@ -27,7 +27,7 @@ from helpers import (
     active_tiers as _active_tiers, current_tier_idx as _current_tier_idx,
     setting_to_active_tiers as _setting_to_active_tiers,
     check_approve_permission, check_reject_permission, check_no_tier_self_approval,
-    UnresolvedManagerError, approval_flow_setting_key,
+    UnresolvedManagerError, resolve_active_flow_setting,
 )
 from pdf_gen import generate_contractor_voucher_pdf_bytes, _generate_contractor_voucher_pdf
 
@@ -286,8 +286,7 @@ def submit_contractor_voucher(voucher_no: str, authorization: str = Header(None)
     d     = json.loads(row["data_json"] or "{}")
     now   = datetime.now().isoformat()
 
-    _scope = _get_setting("approval_flow_scope", {}) or {}
-    flow_setting = _get_setting(approval_flow_setting_key("contractor_voucher", _scope), {"tiers": []}) or {}
+    flow_setting = resolve_active_flow_setting("contractor_voucher")
     try:
         active_tiers = _setting_to_active_tiers(flow_setting, conn, user["username"])
     except UnresolvedManagerError as e:
@@ -374,8 +373,7 @@ def approve_contractor_voucher(voucher_no: str, body: dict = Body(default={}), a
         if user["role"] != "superadmin":
             conn.close()
             raise HTTPException(403, "僅超級管理員可執行此操作")
-        _scope        = _get_setting("approval_flow_scope", {}) or {}
-        _global_flow  = _get_setting(approval_flow_setting_key("contractor_voucher", _scope), {"tiers": []}) or {}
+        _global_flow  = resolve_active_flow_setting("contractor_voucher")
         try:
             _global_tiers = _setting_to_active_tiers(_global_flow, conn, appr.get("requestedBy"))
         except UnresolvedManagerError as e:

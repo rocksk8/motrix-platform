@@ -19,14 +19,14 @@ from pydantic import BaseModel
 
 from db import get_db, spawn_bg_thread
 from helpers import (
-    _require_user, _tok, _audit, _notify, _get_setting, _purge_notifications,
+    _require_user, _tok, _audit, _notify, _purge_notifications,
     quote_hot_fields, save_quotation_json, _steps_to_tiers, SQL_DEAL_TAG, SQL_SETTLE_STATUS,
     notify_approval_request, notify_next_tier, notify_approved,
     notify_returned, notify_resubmit_requester, notify_settlement_finalized,
     notify_module_activity, push_event_for_quotation_won, push_event_for_important_comment,
     push_event_for_case_stage_due, push_event_delete_for_case_stage,
     check_approve_permission, check_reject_permission, check_no_tier_self_approval,
-    resolve_tier_approvers, UnresolvedManagerError, approval_flow_setting_key,
+    resolve_tier_approvers, UnresolvedManagerError, resolve_active_flow_setting,
     save_document_files, delete_document_file,
     notify_case_close_blocked, notify_case_change_requested,
 )
@@ -283,8 +283,7 @@ def _build_approval_tiers_and_notify(q: dict, appr: dict, quote_no: str, is_new_
     draft step) and update_quotation() (draft → 待審核) so both submission paths
     build tiers and notify identically."""
     if not appr.get("tiers") and not appr.get("steps"):
-        _scope = _get_setting("approval_flow_scope", {}) or {}
-        flow_setting = _get_setting(approval_flow_setting_key("quotation", _scope), {"tiers": []}) or {}
+        flow_setting = resolve_active_flow_setting("quotation")
         requester_uname = appr.get("requestedBy") or ""
         _tconn = get_db()
         try:
@@ -3037,8 +3036,7 @@ def approve_quotation(quote_no: str, body: ApprovalActionBody, authorization: st
         # If global approval_flow has tiers configured, block the no-tier fallback.
         # This prevents a quotation submitted before flow was set (tiers missing)
         # from being approved without going through the flow.
-        _scope         = _get_setting("approval_flow_scope", {}) or {}
-        _global_flow   = _get_setting(approval_flow_setting_key("quotation", _scope), {"tiers": []}) or {}
+        _global_flow   = resolve_active_flow_setting("quotation")
         try:
             _global_tiers = _setting_to_active_tiers(_global_flow, conn, appr.get("requestedBy"))
         except UnresolvedManagerError as e:

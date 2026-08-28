@@ -21,6 +21,8 @@ MOTRIX-ERP-QUICK.md 2026-08-22 changelog）——邏輯重複四份、改一個�
 """
 from typing import Optional
 
+from .settings import _get_setting
+
 # 文件類型可選擇「走統一流程」或「獨立設定」（2026-08-28 新增，見
 # system.py 的 approval_flow_scope 設定＋前端 approval-settings.html 多選選單）。
 # scope 沒有記錄某個 doc_type 時，套用這裡的預設分組——對應 2026-08-24 統一前後的
@@ -44,6 +46,17 @@ def approval_flow_setting_key(doc_type: str, scope: dict) -> str:
     scope 讀出來傳進來（比照本模組其餘函式的既有分工）。"""
     is_unified = scope.get(doc_type, doc_type in DEFAULT_UNIFIED_DOC_TYPES)
     return "unified_approval_flow" if is_unified else f"{doc_type}_approval_flow"
+
+
+def resolve_active_flow_setting(doc_type: str) -> dict:
+    """一行拿到某文件類型「當下生效」的 flow 設定字典：讀 approval_flow_scope→
+    解出該類型現在該讀哪把 key→讀出那把 key 的內容。取代原本五個 router 十個
+    呼叫點（送審端點＋approve 的無自訂 tiers fallback 各一次）各自重複的「讀
+    scope、再呼叫 approval_flow_setting_key()」兩行（2026-08-28 code review
+    抓到的重複，見 MOTRIX-ERP-QUICK.md §12 同日 changelog）。"""
+    scope = _get_setting("approval_flow_scope", {}) or {}
+    key = approval_flow_setting_key(doc_type, scope)
+    return _get_setting(key, {"tiers": []}) or {}
 
 
 def active_tiers(appr: dict) -> list:

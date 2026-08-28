@@ -183,7 +183,7 @@
           </template>
         </div>
         <div style="display:flex;justify-content:flex-end" x-show="session.role === 'superadmin'">
-          <button class="btn btn-primary btn-sm" @click="saveScope()" :disabled="scopeSaving">
+          <button class="btn btn-primary btn-sm" @click="saveScope()" :disabled="scopeSaving || !_scopeLoaded" :title="!_scopeLoaded ? '套用範圍尚未成功載入' : ''">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
             <span x-text="scopeSaving ? '儲存中…' : '儲存套用範圍'"></span>
           </button>
@@ -404,6 +404,7 @@
         },
         scope:       {},      // {quotation:bool, shipping:bool, ...}
         scopeSaving: false,
+        _scopeLoaded: false,  // true 只有在成功從後端載入過一次 scope 之後才會是 true
         // flows.unified 永遠存在；flows[docType] 只在該類型被設成獨立設定時才會建立
         // 每個 flow = {includeSubmitterManagerTier, steps:[...], saving, resetPending}
         flows: {},
@@ -528,9 +529,15 @@
               headers: { Authorization: 'Bearer ' + this.session.token }
             })
             if (r.status === 401) { location.href = 'login.html'; return }
+            if (!r.ok) { console.error('loadScope failed:', r.status); return }
             const scope = await r.json()
             this._ensureFlowSlots(scope)
             this.scope = scope
+            // 2026-08-28 code review：只有成功從後端載入過一次，才允許儲存——
+            // 避免載入失敗（scope 還是初始的空物件）時使用者按下儲存，把 PUT
+            // body 送出一份殘缺資料，讓後端把沒帶到的欄位悄悄套用預設值，
+            // 洗掉其他人已經自訂好的套用範圍。
+            this._scopeLoaded = true
             await this.loadAllFlows()
           } catch (e) {
             console.error('loadScope', e)
@@ -702,6 +709,10 @@
 
         async saveScope() {
           if (this.scopeSaving) return
+          if (!this._scopeLoaded) {
+            alert('套用範圍尚未成功載入，無法儲存（避免送出殘缺資料覆蓋掉其他人已設定的內容）。請重新整理頁面後再試一次。')
+            return
+          }
           this.scopeSaving = true
           try {
             const r = await fetch(`${API}/settings/approval-flow-scope`, {
