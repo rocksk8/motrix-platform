@@ -397,6 +397,7 @@
         + '<span class="nav__label">簽核佇列</span>'
         + '<span id="sb-approval-badge" style="display:none;background:#DC2626;color:#fff;font-size:9px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;padding:1px 5px;border-radius:8px;margin-left:auto;min-width:16px;text-align:center;line-height:1.6"></span>'
         + '</a>' : ''),
+      ni(pg('approval-delegates.html'), 'appr', '簽核代理人', ['approval-delegates.html'], cQ || sa || ad),
       ni(pg('case-management.html'), 'case_', '案件管理', ['case-management.html'],                   cCM,  'sb-mod-case'),
       ni(pg('case-stage-board.html'),'case_', '案件執行看板', ['case-stage-board.html'],               cCM),
       sec('廠商與採購', cCu || cPr),

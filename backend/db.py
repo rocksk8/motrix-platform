@@ -78,7 +78,7 @@ DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR = os.path.join(
 # （已套用過的 schema_version 不可回頭刪除/重排），data_json.dealWonAt 這個
 # 欄位會留在既有資料裡但目前沒有任何程式碼讀取，之後如果要重新加回「成交時間」
 # 這種概念，不要複用這個欄位名稱免得語意混淆。
-CURRENT_VERSION = 65
+CURRENT_VERSION = 67
 
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
 # execution model) whenever the current request is authenticated as the 'demo'
@@ -1904,6 +1904,56 @@ def _m065_automation_guide(conn):
     conn.commit()
 
 
+def _m067_approval_delegates(conn):
+    """簽核代理人機制（2026-08-28，企業管理優化）：目前簽核只有「代理送審」
+    （approval.delegateSubmitter，申請人請人代為送出申請），沒有「代理簽核」——
+    tiers 裡的簽核人若請假，除了 superadmin 外沒有人能代替他完成該層簽核，容易
+    卡住整條簽核鏈（尤其正式機目前 superadmin 只有 jeff/corbin 兩人，見
+    MOTRIX-ERP-QUICK.md §12 相關討論）。
+
+    新表 approval_delegates：一筆＝「delegator_username 把自己的簽核權限在
+    [start_date, end_date] 區間內暫時交給 delegate_username」，可以同時有多筆
+    （例如一人請假期間委託兩個不同的人分擔不同天數）。純粹是「誰可以代替誰在
+    tiers 裡簽核」的授權表，不影響 tiers 本身記錄的原始 approver username——
+    委託人的名字仍照舊出現在 approval.tiers[].approvers[].username，check_approve_
+    permission()/check_reject_permission()（見 helpers/tiered_approval.py）
+    比對時額外允許「目前對這個 username 持有有效代理權的人」通過，是否真的
+    透過代理身分完成的，由呼叫端事後從 _audit() 的操作者本人（非委託人）
+    自然看得出來，不需要另外在 tiers JSON 裡疊一份標記。
+
+    active=0 代表已停用（提早結束代理或設錯了想撤銷），不刪列，保留歷史紀錄。"""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS approval_delegates (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            delegator_username  TEXT    NOT NULL,
+            delegate_username   TEXT    NOT NULL,
+            start_date          TEXT    NOT NULL,
+            end_date            TEXT    NOT NULL,
+            reason              TEXT    DEFAULT '',
+            active              INTEGER NOT NULL DEFAULT 1,
+            created_by          TEXT    DEFAULT '',
+            created_at          TEXT    NOT NULL,
+            updated_at          TEXT    NOT NULL
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_approval_delegates_delegate ON approval_delegates(delegate_username, active)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_approval_delegates_delegator ON approval_delegates(delegator_username)"
+    )
+    conn.commit()
+
+
+def _m066_parts_safety_stock(conn):
+    """parts 新增 safety_stock（2026-08-28，視覺化管理優化：庫存水位燈號）：
+    料號可設定安全庫存量，庫存管理頁依此對比目前在庫數量顯示紅/黃/綠燈號。
+    預設 0＝未設定安全庫存，此時一律顯示綠燈（不強迫每個料號都要設定門檻）。"""
+    if not _col_exists(conn, "parts", "safety_stock"):
+        conn.execute("ALTER TABLE parts ADD COLUMN safety_stock INTEGER NOT NULL DEFAULT 0")
+    conn.commit()
+
+
 def _m057_payment_request_stage(conn):
     """請款單新增 stage（款項類別：full/deposit/delivery/acceptance/final，
     2026-08-24）：客戶端請款單 PDF「請款範圍」欄要顯示業務語意的分類（全額/
@@ -2750,6 +2800,8 @@ _MIGRATIONS = [
     _m063_work_log_contact_type,                   # v63
     _m064_network_plans,                           # v64
     _m065_automation_guide,                        # v65
+    _m066_parts_safety_stock,                      # v66
+    _m067_approval_delegates,                      # v67
 ]
 
 

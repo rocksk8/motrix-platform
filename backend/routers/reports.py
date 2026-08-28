@@ -1,4 +1,5 @@
 """Financial report generation — Excel & PDF (admin+ only)."""
+import csv
 import io
 import json
 import logging
@@ -16,7 +17,7 @@ import openpyxl
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
-from fastapi import APIRouter, Header, HTTPException, Query
+from fastapi import APIRouter, Header, HTTPException, Query, UploadFile, File
 from fastapi.responses import StreamingResponse
 
 from db import get_db
@@ -1897,7 +1898,7 @@ def report_excel(
     data   = _augment_with_targets(_collect(d0, d1, department_id), d0)
     data["arAging"]   = _compute_ar_aging()
     data["expensesYear"] = int(d0[:4])
-    data["expenses"]     = _collect_expenses(data["expensesYear"])
+    data["expenses"]     = _collect_expenses(data["expensesYear"], department_id)
     gen_at = datetime.now().strftime("%Y-%m-%d %H:%M")
     xlsx   = _build_excel(data, label, gen_at)
     safe   = label.replace(" ", "").replace("年", "Y").replace("月", "M").replace("第", "Q").replace("季", "")
@@ -1923,7 +1924,7 @@ def report_pdf(
     data   = _augment_with_targets(_collect(d0, d1, department_id), d0)
     data["arAging"]   = _compute_ar_aging()
     data["expensesYear"] = int(d0[:4])
-    data["expenses"]     = _collect_expenses(data["expensesYear"])
+    data["expenses"]     = _collect_expenses(data["expensesYear"], department_id)
     gen_at = datetime.now().strftime("%Y-%m-%d %H:%M")
     try:
         pdf_bytes = _html_to_pdf(_build_report_html(data, label, gen_at))
@@ -2029,6 +2030,325 @@ def get_ar_aging(authorization: str = Header(None)):
     if u["role"] not in ("superadmin", "admin"):
         raise HTTPException(403, "財務報告僅管理員以上可查閱")
     return _compute_ar_aging()
+
+
+def _compute_cash_position() -> dict:
+    """資金水位總覽 — 應收帳齡（既有 _compute_ar_aging）+ 應付（承攬商已核准未匯款）。
+
+    刻意排除兩類、避免誤導：
+    ①料件/設備進貨（stock_items.cost）——系統目前沒有對供應商的付款狀態追蹤，
+      只有進貨當下的成本快照，無法判斷「已付/未付」，硬納入會虛報應付金額。
+    ②payment_requests（請款單）——這是對客戶要款用的 AR 文件（見
+      routers/payment_requests.py 檔頭），核准即為最終文件本身，不是一筆新
+      產生的應付支出；金額仍算在對應報價單的應收帳齡裡，這裡不重複計入應付，
+      否則會把同一筆錢同時算進應收又算進應付。"""
+    ar = _compute_ar_aging()
+    conn = get_db()
+    rows = conn.execute("""
+        SELECT v.voucher_no, v.quote_no, v.snapshot_json, v.updated_at, q.customer_name
+        FROM contractor_payment_vouchers v
+        LEFT JOIN quotations q ON q.quote_no = v.quote_no
+        WHERE v.status='已核准' AND v.is_paid=0
+        ORDER BY v.updated_at ASC
+    """).fetchall()
+    conn.close()
+
+    ap_items = []
+    for r in rows:
+        snap = {}
+        try:
+            snap = json.loads(r["snapshot_json"] or "{}")
+        except Exception:
+            pass
+        amt = float(snap.get("grandTotal") or 0)
+        ap_items.append({
+            "voucherNo":  r["voucher_no"],
+            "quoteNo":    r["quote_no"] or "",
+            "customer":   r["customer_name"] or "",
+            "vendorName": snap.get("vendorName") or "",
+            "amount":     amt,
+            "approvedAt": r["updated_at"] or "",
+        })
+    ap_total = sum(i["amount"] for i in ap_items)
+    ar_total = ar["total"]["amount"]
+
+    return {
+        "asOf": date.today().isoformat(),
+        "ar": {"bands": ar["bands"], "total": ar_total, "count": ar["total"]["count"]},
+        "ap": {"items": ap_items, "total": ap_total, "count": len(ap_items)},
+        "net": ar_total - ap_total,
+        "note": "應付僅含承攬商匯款申請（已核准未匯款）；料件/設備進貨無付款狀態追蹤、"
+                "請款單為對客戶要款文件，兩者均不計入應付，避免虛報或重複計算。",
+    }
+
+
+@router.get("/api/reports/cash-position")
+def get_cash_position(authorization: str = Header(None)):
+    """
+    資金水位總覽：應收帳款帳齡（沿用 ar-aging）+ 應付帳款（承攬商已核准未匯款），
+    供管理階層快速掌握目前手上「還欠多少、還要付多少」，取代逐一開報表核對。
+    不是逐月現金流預測——系統目前沒有結構化的預計收款/付款日期欄位，見 _compute_cash_position() docstring。
+    """
+    u = _require_user(authorization)
+    if u["role"] not in ("superadmin", "admin"):
+        raise HTTPException(403, "財務報告僅管理員以上可查閱")
+    return _compute_cash_position()
+
+
+# ── 稅務匯出（銷項發票清單）──────────────────────────────────────────────────
+
+def _collect_tax_invoices(year: Optional[int] = None, month: Optional[int] = None) -> list:
+    """收集所有已填發票號碼的收款品項（案件管理財務Tab item.invoiceNo，自由文字，
+    使用者開立發票後手動填入）＝銷項發票清單，供記帳士/稅務申報使用。
+
+    未填 invoiceNo 的收款品項（尚未開發票）不列入。金額欄位：item 的 amount 為
+    報價單「含稅總價」的一部分（見 payment_item_amounts() docstring），這裡換算
+    5% 稅額拆出未稅/稅額/含稅三欄；若日後改用非 5% 稅率，此處需一併調整。"""
+    conn = get_db()
+    rows = conn.execute("""
+        SELECT quote_no, customer_name, total,
+               json_extract(data_json,'$.customerTaxId') AS tax_id,
+               json_extract(data_json,'$.caseRecord.payment.items') AS pay_json
+        FROM quotations
+        WHERE json_extract(data_json,'$.caseRecord.payment.items') IS NOT NULL
+    """).fetchall()
+    conn.close()
+
+    out = []
+    for row in rows:
+        try:
+            items = json.loads(row["pay_json"] or "[]")
+        except Exception:
+            items = []
+        if not items:
+            continue
+        amounts = payment_item_amounts(row["total"] or 0, items)
+        for idx, pi in enumerate(items):
+            inv_no = (pi.get("invoiceNo") or "").strip()
+            if not inv_no:
+                continue
+            received_at = pi.get("receivedAt") or ""
+            if year and received_at[:4] != str(year):
+                continue
+            if month and received_at[5:7] != f"{month:02d}":
+                continue
+            amt_incl   = amounts[idx]
+            tax_amt    = round(amt_incl - amt_incl / 1.05)
+            amt_pretax = amt_incl - tax_amt
+            out.append({
+                "invoiceNo":     inv_no,
+                "date":          received_at,
+                "quoteNo":       row["quote_no"],
+                "customer":      row["customer_name"] or "",
+                "taxId":         row["tax_id"] or "",
+                "amountPretax":  amt_pretax,
+                "taxAmount":     tax_amt,
+                "amountTotal":   amt_incl,
+            })
+    out.sort(key=lambda r: (r["date"], r["quoteNo"]))
+    return out
+
+
+def _build_tax_export_excel(rows: list, period_label: str, gen_at: str) -> bytes:
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "銷項發票清單"
+    ws.sheet_view.showGridLines = False
+    mk, fill, mk_border, al = _xl_style(wb)
+    BD = mk_border()
+
+    widths = [16, 12, 14, 22, 14, 14, 12, 14]
+    for i, w in enumerate(widths, 1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+
+    ws.merge_cells("A1:H1")
+    c = ws["A1"]; c.value = f"{_COMPANY} — 銷項發票清單（{period_label}）"
+    c.font = mk(bold=True, size=13, color="FFFFFF"); c.fill = fill("111827"); c.alignment = al("center")
+    ws.row_dimensions[1].height = 28
+
+    ws.merge_cells("A2:H2")
+    c = ws["A2"]; c.value = f"產製時間：{gen_at}　僅列出已填發票號碼之收款品項，未開立發票者不列入"
+    c.font = mk(size=9, color="6B7280"); c.alignment = al("center")
+    ws.row_dimensions[2].height = 18
+
+    headers = ["發票號碼", "收款日期", "案件號", "客戶名稱", "統一編號", "金額（未稅）", "稅額", "金額（含稅）"]
+    _set_row(ws, 3, headers, font=mk(bold=True, color="FFFFFF"), fill=fill("2563EB"), border=BD, aligns=[al("center")])
+    ws.row_dimensions[3].height = 22
+
+    r = 4
+    total_pretax = total_tax = total_incl = 0
+    body_aligns = [al("center"), al("center"), al("center"), al("left"),
+                   al("center"), al("right"), al("right"), al("right")]
+    for row in rows:
+        _set_row(ws, r, [
+            row["invoiceNo"], row["date"], row["quoteNo"], row["customer"], row["taxId"],
+            row["amountPretax"], row["taxAmount"], row["amountTotal"],
+        ], font=mk(), border=BD, aligns=body_aligns)
+        total_pretax += row["amountPretax"]
+        total_tax    += row["taxAmount"]
+        total_incl   += row["amountTotal"]
+        r += 1
+
+    _set_row(ws, r, ["合計", "", "", "", "", total_pretax, total_tax, total_incl],
+             font=mk(bold=True), fill=fill("F9FAFB"), border=BD, aligns=body_aligns)
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+@router.get("/api/reports/tax-export")
+def tax_export_excel(
+    year: Optional[int] = Query(None),
+    month: Optional[int] = Query(None),
+    authorization: str = Header(None),
+):
+    """銷項發票清單匯出（Excel），供記帳士/營業稅申報使用。不篩選 year 時匯出全部。"""
+    u = _require_user(authorization)
+    if u["role"] not in ("superadmin", "admin"):
+        raise HTTPException(403, "財務報告僅管理員以上可查閱")
+    _check_export_rate(u["id"], "excel")
+    rows = _collect_tax_invoices(year, month)
+    label = "全部區間"
+    if year and month:
+        label = f"{year}年{month:02d}月"
+    elif year:
+        label = f"{year}年"
+    gen_at = datetime.now().strftime("%Y-%m-%d %H:%M")
+    xlsx = _build_tax_export_excel(rows, label, gen_at)
+    fname = f"MOTRIX_銷項發票清單_{label}.xlsx"
+    return StreamingResponse(
+        io.BytesIO(xlsx),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{_url_quote(fname)}"},
+    )
+
+
+# ── 銀行對帳單比對（承攬商匯款申請）───────────────────────────────────────────
+
+_BANK_DATE_ALIASES   = ["交易日期", "日期", "過帳日", "轉帳日期", "交易日", "date", "Date"]
+_BANK_AMOUNT_ALIASES = ["金額", "提出金額", "支出金額", "轉出金額", "付款金額", "提款金額",
+                         "amount", "Amount", "Debit", "withdrawal"]
+_BANK_DESC_ALIASES   = ["摘要", "備註", "說明", "對方戶名", "附言", "memo", "Description", "Memo"]
+
+
+def _pick_csv_header(fieldnames: list, aliases: list) -> Optional[str]:
+    """依常見銀行匯出欄位別名找出對應欄位——各家銀行 CSV 標頭不統一，這裡先精準比對，
+    找不到再退而求其次找含該關鍵字的欄位，仍找不到就回傳 None（呼叫端自行決定要不要擋）。"""
+    clean = [fn for fn in fieldnames if fn]
+    for a in aliases:
+        for fn in clean:
+            if fn.strip() == a:
+                return fn
+    for a in aliases:
+        for fn in clean:
+            if a in fn:
+                return fn
+    return None
+
+
+def _parse_bank_csv(raw: bytes) -> list:
+    """解析銀行對帳單 CSV。不同銀行匯出的編碼／欄位命名差異很大，這裡採寬鬆偵測：
+    依序嘗試常見編碼、依別名清單找日期/金額/摘要欄位，只有金額欄位是必要的。"""
+    text = None
+    for enc in ("utf-8-sig", "utf-8", "cp950", "big5"):
+        try:
+            text = raw.decode(enc)
+            break
+        except (UnicodeDecodeError, LookupError):
+            continue
+    if text is None:
+        raise HTTPException(400, "CSV 編碼無法辨識，請確認匯出檔案格式（支援 UTF-8 / Big5）")
+
+    reader = csv.DictReader(io.StringIO(text))
+    fieldnames = reader.fieldnames or []
+    date_col = _pick_csv_header(fieldnames, _BANK_DATE_ALIASES)
+    amt_col  = _pick_csv_header(fieldnames, _BANK_AMOUNT_ALIASES)
+    desc_col = _pick_csv_header(fieldnames, _BANK_DESC_ALIASES)
+    if not amt_col:
+        raise HTTPException(400, f"CSV 找不到可辨識的金額欄位，偵測到的欄位為：{'、'.join(fieldnames) or '（無）'}")
+
+    rows = []
+    for r in reader:
+        raw_amt = (r.get(amt_col) or "").replace(",", "").replace("NT$", "").strip()
+        if not raw_amt:
+            continue
+        try:
+            amt = abs(float(raw_amt))
+        except ValueError:
+            continue
+        if amt <= 0:
+            continue
+        rows.append({
+            "date":   (r.get(date_col) or "").strip() if date_col else "",
+            "amount": amt,
+            "desc":   (r.get(desc_col) or "").strip() if desc_col else "",
+        })
+    return rows
+
+
+@router.post("/api/reports/bank-reconcile")
+async def bank_reconcile(file: UploadFile = File(...), authorization: str = Header(None)):
+    """銀行對帳單比對：上傳 CSV，依金額比對目前「已核准未匯款」的承攬商匯款申請。
+
+    只做金額比對（同金額只配對一次，避免一筆申請被重複配對到多筆銀行紀錄），純供人工
+    複核用途——回傳配對建議，不會自動標記已匯款，實際標記仍走既有 paid-toggle 端點，
+    避免比對誤判（例如剛好同金額但其實是不同筆款項）被誤當正式入帳紀錄。"""
+    u = _require_user(authorization)
+    if u["role"] not in ("superadmin", "admin"):
+        raise HTTPException(403, "財務報告僅管理員以上可查閱")
+
+    raw = await file.read()
+    if len(raw) > 5 * 1024 * 1024:
+        raise HTTPException(400, "檔案過大（上限 5MB）")
+    bank_rows = _parse_bank_csv(raw)
+
+    conn = get_db()
+    voucher_rows = conn.execute("""
+        SELECT v.voucher_no, v.quote_no, v.snapshot_json, v.updated_at, q.customer_name
+        FROM contractor_payment_vouchers v
+        LEFT JOIN quotations q ON q.quote_no = v.quote_no
+        WHERE v.status='已核准' AND v.is_paid=0
+    """).fetchall()
+    conn.close()
+
+    vouchers = []
+    for r in voucher_rows:
+        snap = {}
+        try:
+            snap = json.loads(r["snapshot_json"] or "{}")
+        except Exception:
+            pass
+        vouchers.append({
+            "voucherNo":  r["voucher_no"],
+            "quoteNo":    r["quote_no"] or "",
+            "customer":   r["customer_name"] or "",
+            "vendorName": snap.get("vendorName") or "",
+            "amount":     round(float(snap.get("grandTotal") or 0)),
+        })
+
+    matched_voucher_nos = set()
+    bank_results = []
+    for br in bank_rows:
+        amt_r = round(br["amount"])
+        candidate = next(
+            (v for v in vouchers if round(v["amount"]) == amt_r and v["voucherNo"] not in matched_voucher_nos),
+            None,
+        )
+        if candidate:
+            matched_voucher_nos.add(candidate["voucherNo"])
+        bank_results.append({**br, "match": candidate})
+
+    unmatched_vouchers = [v for v in vouchers if v["voucherNo"] not in matched_voucher_nos]
+
+    return {
+        "bankRows":           bank_results,
+        "matchedCount":       len(matched_voucher_nos),
+        "unmatchedBankCount": sum(1 for r in bank_results if not r["match"]),
+        "unmatchedVouchers":  unmatched_vouchers,
+        "note": "僅依金額比對，且同金額只配對一次，屬建議配對供人工複核；請核對案件號/"
+                "承攬商名稱後再手動標記已匯款，系統不會自動標記。",
+    }
 
 
 # ── Customer transaction history ───────────────────────────────────────────────
@@ -2366,8 +2686,15 @@ def monthly_trend(months: int = 12, authorization: str = Header(None)):
 _EQUIPMENT_PART_CATEGORIES = {"網通設備", "監控設備", "交換器", "伺服器/工控"}
 
 
-def _collect_expenses(year: int) -> dict:
-    """回傳該年度 1~12 月的支出結構（承攬商/設備/料件/其他）＋逐筆明細。"""
+def _collect_expenses(year: int, department_id: Optional[int] = None) -> dict:
+    """回傳該年度 1~12 月的支出結構（承攬商/設備/料件/其他）＋逐筆明細。
+
+    department_id（2026-08-28 新增）：承攬商派發／料件進貨／其他支出三類都只透過
+    quote_no 間接連結案件，不像 dashboard.py 的案件列表本身就有 sales_person_id
+    可直接篩——這裡改用 quote_no → sales_person_id → department_id 兩段查表比對。
+    設備進貨若料號批次沒有掛在任何案件（quote_no 為空，例如尚未出貨的常備庫存
+    先行進貨），department_id 篩選開啟時會被排除，因為無法歸屬到任何部門，這點
+    與 dashboard.py「案件沒有 sales_person_id 就被篩掉」的既有落差一致。"""
     d0 = f"{year}-01-01"
     d1 = f"{year}-12-31"
     month_list = [f"{year}-{m:02d}" for m in range(1, 13)]
@@ -2375,6 +2702,19 @@ def _collect_expenses(year: int) -> dict:
     details: dict = {"contractor": [], "equipment": [], "material": [], "other": []}
 
     conn = get_db()
+
+    dept_by_quote: dict = {}
+    if department_id:
+        dept_by_user = {r["id"]: r["department_id"] for r in conn.execute("SELECT id, department_id FROM users").fetchall()}
+        dept_by_quote = {
+            r["quote_no"]: dept_by_user.get(r["sales_person_id"])
+            for r in conn.execute("SELECT quote_no, sales_person_id FROM quotations").fetchall()
+        }
+
+    def _quote_in_department(quote_no: str) -> bool:
+        if not department_id:
+            return True
+        return bool(quote_no) and dept_by_quote.get(quote_no) == department_id
 
     # ── 承攬商派發（含稅承攬商費用＋外包人員個別計費，比照 vendor_contractors._dispatch_row）
     disp_rows = conn.execute("""
@@ -2384,7 +2724,7 @@ def _collect_expenses(year: int) -> dict:
     """, (d0, d1)).fetchall()
     for r in disp_rows:
         mo = (r["dispatch_date"] or "")[:7]
-        if mo not in monthly:
+        if mo not in monthly or not _quote_in_department(r["quote_no"]):
             continue
         amt = _dispatch_row(r)["grandTotal"]
         if not amt:
@@ -2399,14 +2739,14 @@ def _collect_expenses(year: int) -> dict:
     # 同批號合併成一列明細——單一序號逐筆列出對報表而言太瑣碎，見上方常數）
     stock_rows = conn.execute("""
         SELECT substr(s.created_at,1,10) AS created_date, s.cost AS cost, s.part_no AS part_no,
-               s.batch_no AS batch_no, p.name AS part_name, p.category AS category
+               s.batch_no AS batch_no, s.quote_no AS quote_no, p.name AS part_name, p.category AS category
         FROM stock_items s LEFT JOIN parts p ON p.part_no = s.part_no
         WHERE s.status != 'void' AND substr(s.created_at,1,10) BETWEEN ? AND ?
     """, (d0, d1)).fetchall()
     stock_agg: dict = {}
     for r in stock_rows:
         mo = (r["created_date"] or "")[:7]
-        if mo not in monthly:
+        if mo not in monthly or not _quote_in_department(r["quote_no"]):
             continue
         bucket = "equipment" if r["category"] in _EQUIPMENT_PART_CATEGORIES else "material"
         cost = float(r["cost"] or 0)
@@ -2443,7 +2783,7 @@ def _collect_expenses(year: int) -> dict:
             if h.get("type") == "settlement_finalized":
                 finalized_at = h.get("at") or finalized_at
         mo = (finalized_at or "")[:7]
-        if mo not in monthly:
+        if mo not in monthly or not _quote_in_department(r["quote_no"]):
             continue
         for it in ((data.get("settlement") or {}).get("extraItems")) or []:
             cost = float(it.get("totalCost") or 0)
@@ -2480,9 +2820,10 @@ def _collect_expenses(year: int) -> dict:
 
 
 @router.get("/api/reports/expenses-monthly")
-def report_expenses_monthly(year: int = Query(None), authorization: str = Header(None)):
+def report_expenses_monthly(year: int = Query(None), department_id: Optional[int] = Query(None),
+                             authorization: str = Header(None)):
     u = _require_user(authorization)
     if u["role"] not in ("superadmin", "admin"):
         raise HTTPException(403, "僅管理員以上可存取報表")
     year = year or date.today().year
-    return {"year": year, **_collect_expenses(year)}
+    return {"year": year, **_collect_expenses(year, department_id)}

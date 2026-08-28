@@ -19,6 +19,7 @@ MOTRIX-ERP-QUICK.md 2026-08-22 changelog）——邏輯重複四份、改一個�
 「這裡不碰 FastAPI、不做 side effect」的既有分工，不要把組織架構查詢邏輯
 直接寫進四個 router 裡。
 """
+from datetime import date
 from typing import Optional
 
 from .settings import _get_setting
@@ -236,8 +237,25 @@ def first_pending_approver(tier: dict) -> Optional[dict]:
     return next((a for a in (tier.get("approvers") or []) if a.get("status") != "approved"), None)
 
 
-def check_approve_permission(tiers: list, ct_idx: int, username: str):
-    """approve 用的嚴格版：必須是當層「排序最前面的未簽核人」才能動作。
+def active_delegators_for(conn, delegate_username: str, today: Optional[str] = None) -> set:
+    """回傳目前（today，預設今天）誰把簽核代理權指派給 delegate_username——也就是
+    delegate_username 現在可以代替誰簽核/退回（2026-08-28 新增，見 db.py
+    _m067_approval_delegates()）。conn 為 None 時直接回傳空集合，供呼叫端在
+    還沒有資料庫連線的情境下安全跳過（例如尚未確定要不要做代理判斷的呼叫點）。"""
+    if conn is None:
+        return set()
+    today = today or date.today().isoformat()
+    rows = conn.execute("""
+        SELECT delegator_username FROM approval_delegates
+        WHERE delegate_username=? AND active=1 AND start_date<=? AND end_date>=?
+    """, (delegate_username, today, today)).fetchall()
+    return {r["delegator_username"] for r in rows}
+
+
+def check_approve_permission(tiers: list, ct_idx: int, username: str, conn=None):
+    """approve 用的嚴格版：必須是當層「排序最前面的未簽核人」才能動作，或是
+    該未簽核人目前有效的簽核代理人（conn 有傳入時才會檢查代理權，見
+    active_delegators_for()——維持這個函式呼叫端沒有 conn 時的既有行為不變）。
     回傳 (ok, status_code, error_message)：ok=True 時後兩者為 None；ok=False 時
     呼叫端直接拿 status_code/error_message 去包 HTTPException(status_code, error_message) 即可
     （狀態碼跟訊息逐一比照四個 router 原本各自的寫法，不引入新的行為差異）。"""
@@ -245,7 +263,12 @@ def check_approve_permission(tiers: list, ct_idx: int, username: str):
         return False, 400, "所有層已完成"
     tier = tiers[ct_idx]
     approvers = tier.get("approvers") or []
-    is_in_tier = any(a["username"] == username for a in approvers)
+    delegated_for = active_delegators_for(conn, username)
+
+    def _matches(a):
+        return a["username"] == username or a["username"] in delegated_for
+
+    is_in_tier = any(_matches(a) for a in approvers)
     if not is_in_tier:
         pending_names = "、".join(
             a.get("displayName") or a["username"] for a in approvers if a.get("status") != "approved"
@@ -254,20 +277,24 @@ def check_approve_permission(tiers: list, ct_idx: int, username: str):
     fp = first_pending_approver(tier)
     if not fp:
         return False, 400, "此層所有簽核人員已完成"
-    if fp["username"] != username:
+    if not _matches(fp):
         next_name = fp.get("displayName") or fp["username"]
         return False, 403, f"請等待 {next_name} 先完成簽核（簽核順序固定）"
     return True, None, None
 
 
-def check_reject_permission(tiers: list, ct_idx: int, user: dict):
-    """reject 用的寬鬆版：當層任一簽核人或 superadmin 皆可退回（不要求排序，
+def check_reject_permission(tiers: list, ct_idx: int, user: dict, conn=None):
+    """reject 用的寬鬆版：當層任一簽核人（或其目前有效的簽核代理人，見
+    check_approve_permission() 同一段說明）或 superadmin 皆可退回（不要求排序，
     退回不像核准需要嚴格依序，任何一個當層相關人員發現問題都該能先擋下來）。
     回傳 (ok, status_code, error_message)，同上約定。"""
     if tiers:
         tier = tiers[ct_idx] if ct_idx < len(tiers) else {}
         approvers = tier.get("approvers") or []
-        is_in_tier = any(a["username"] == user["username"] for a in approvers)
+        delegated_for = active_delegators_for(conn, user["username"])
+        is_in_tier = any(
+            a["username"] == user["username"] or a["username"] in delegated_for for a in approvers
+        )
         if not is_in_tier and user["role"] != "superadmin":
             return False, 403, "無退回權限（非當層簽核人員）"
         return True, None, None

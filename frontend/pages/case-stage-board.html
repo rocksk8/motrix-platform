@@ -172,6 +172,15 @@
       </div>
       <div class="toolbar">
         <div class="field">
+          <span>部門</span>
+          <select x-model="departmentId" @change="loadStageBoard()">
+            <option value="">全部部門</option>
+            <template x-for="d in allDepartments" :key="d.id">
+              <option :value="d.id" x-text="d.divisionName + ' / ' + d.name"></option>
+            </template>
+          </select>
+        </div>
+        <div class="field">
           <span>業務員</span>
           <select x-model="salesFilter">
             <option value="">全部</option>
@@ -376,6 +385,16 @@
       viewMode: 'board',
       salesFilter: '',
       searchQ: '',
+      departmentId: '',
+      orgTree: [],
+
+      get allDepartments() {
+        const out = []
+        for (const div of this.orgTree) {
+          for (const dept of (div.departments || [])) out.push({ id: dept.id, name: dept.name, divisionName: div.name })
+        }
+        return out
+      },
       onlyMine: false,
       selectableUsers: [],
       assigningKey: null,
@@ -494,10 +513,18 @@
         return { 'Authorization': 'Bearer ' + (this.session.token || '') }
       },
 
+      async loadOrgTree() {
+        try {
+          const r = await fetch('/api/org/tree', { headers: this._headers() })
+          if (r.ok) this.orgTree = await r.json()
+        } catch {}
+      },
+
       async loadStageBoard() {
         this.loading = true
         try {
-          const r = await fetch('/api/quotations/stage-board', { headers: this._headers() })
+          const qs = this.departmentId ? ('?department_id=' + this.departmentId) : ''
+          const r = await fetch('/api/quotations/stage-board' + qs, { headers: this._headers() })
           if (r.ok) {
             const d = await r.json()
             this.items = d.items || []
@@ -689,6 +716,7 @@
           const ru = await fetch('/api/users/selectable', { headers: this._headers() })
           if (ru.ok) this.selectableUsers = await ru.json()
         } catch {}
+        await this.loadOrgTree()
         await this.loadStageBoard()
 
         // 這頁常常開著不關、切去別的分頁編輯案件再切回來看——每次真的重新可見時

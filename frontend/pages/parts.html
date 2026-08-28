@@ -225,6 +225,11 @@
         <input class="field-input" type="number" placeholder="0" x-model.number="modal.listPrice">
       </div>
       <div class="field-row" style="grid-column:1/-1">
+        <div class="field-label">安全庫存</div>
+        <input class="field-input" type="number" min="0" placeholder="0＝不設定" x-model.number="modal.safetyStock">
+        <div style="font-size:11px;color:var(--text-dim);margin-top:4px">在庫低於此數量時，庫存管理頁會顯示紅燈；低於 1.5 倍時顯示黃燈</div>
+      </div>
+      <div class="field-row" style="grid-column:1/-1">
         <div class="field-label">備注</div>
         <input class="field-input" type="text" placeholder="選填" x-model="modal.note">
       </div>
@@ -303,7 +308,7 @@ function app() {
     stockMap: {},
     search: '',
     filterCat: '',
-    modal: { show: false, id: null, partNo: '', name: '', brandName: '', brandModel: '', unit: '台', cost: 0, listPrice: 0, category: '', note: '', saving: false, error: '' },
+    modal: { show: false, id: null, partNo: '', name: '', brandName: '', brandModel: '', unit: '台', cost: 0, listPrice: 0, safetyStock: 0, category: '', note: '', saving: false, error: '' },
     brandPresets: [],
     showAddBrand: false,
     newBrandPreset: '',
@@ -426,9 +431,9 @@ function app() {
       window.motrixIsDirty = false
       if (part) {
         const [bn, ...rest] = (part.brand || '').split('/')
-        this.modal = { show: true, id: part.id, partNo: part.part_no, name: part.name, brandName: (bn || '').trim(), brandModel: rest.join('/').trim(), unit: part.unit || '台', cost: part.cost || 0, listPrice: part.list_price || 0, category: part.category || '', note: part.note || '', saving: false, error: '' }
+        this.modal = { show: true, id: part.id, partNo: part.part_no, name: part.name, brandName: (bn || '').trim(), brandModel: rest.join('/').trim(), unit: part.unit || '台', cost: part.cost || 0, listPrice: part.list_price || 0, safetyStock: part.safety_stock || 0, category: part.category || '', note: part.note || '', saving: false, error: '' }
       } else {
-        this.modal = { show: true, id: null, partNo: '', name: '', brandName: '', brandModel: '', unit: '台', cost: 0, listPrice: 0, category: '', note: '', saving: false, error: '' }
+        this.modal = { show: true, id: null, partNo: '', name: '', brandName: '', brandModel: '', unit: '台', cost: 0, listPrice: 0, safetyStock: 0, category: '', note: '', saving: false, error: '' }
       }
     },
 
@@ -444,7 +449,7 @@ function app() {
       if (!this.modal.name.trim())   { this.modal.error = '品名不得為空'; return }
       this.modal.saving = true; this.modal.error = ''
       const brand = [this.modal.brandName, this.modal.brandModel].map(s => (s || '').trim()).filter(Boolean).join(' / ')
-      const body = { partNo: this.modal.partNo, name: this.modal.name, brand, unit: this.modal.unit, cost: this.modal.cost, listPrice: this.modal.listPrice, category: this.modal.category, note: this.modal.note }
+      const body = { partNo: this.modal.partNo, name: this.modal.name, brand, unit: this.modal.unit, cost: this.modal.cost, listPrice: this.modal.listPrice, safetyStock: this.modal.safetyStock, category: this.modal.category, note: this.modal.note }
       const url  = this.modal.id ? `${API}/parts/${this.modal.id}` : `${API}/parts`
       const meth = this.modal.id ? 'PUT' : 'POST'
       try {

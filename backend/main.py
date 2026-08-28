@@ -20,7 +20,7 @@ from helpers import (
 )
 from archive import _ensure_archive_dirs, _schedule_weekly, _schedule_daily
 
-from routers import auth, quotations, customers, suppliers, parts, dashboard, system, reports, contractors, payslips, daily_tasks, module_versions, vendor_contractors, dev_crm, env_guide, netarch_guide, switch_guide, shipping_notes, inventory, search, monitor_guide, access_guide, gateway_guide, automation_guide, contractor_vouchers, invoice_vouchers, org_structure, payment_requests, list_prefs, case_action_items, uploads, network_plans
+from routers import auth, quotations, customers, suppliers, parts, dashboard, system, reports, contractors, payslips, daily_tasks, module_versions, vendor_contractors, dev_crm, env_guide, netarch_guide, switch_guide, shipping_notes, inventory, search, monitor_guide, access_guide, gateway_guide, automation_guide, contractor_vouchers, invoice_vouchers, org_structure, payment_requests, list_prefs, case_action_items, uploads, network_plans, approval_delegates
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -46,7 +46,12 @@ app.add_middleware(
 )
 
 _PUBLIC_API_PATHS = {"/api/auth/login", "/api/auth/logout", "/api/ping", "/api/system/version"}
-_IDLE_TIMEOUT_SECONDS = 8 * 3600  # 8 hours
+_IDLE_TIMEOUT_SECONDS = 8 * 3600  # 8 hours（一般角色）
+# 2026-08-28 資安優化：superadmin/admin 能看財務/稽核紀錄/使用者管理等敏感資料，
+# 沿用一般角色的 8 小時閒置門檻風險偏高（電腦沒鎖畫面就離開一整個上班日都還有效）；
+# 這兩層角色改用較短的門檻，其餘（last_active 讀寫、300 秒節流寫入、首次補值）邏輯
+# 完全共用下方既有機制，只有超時判斷用的門檻值依角色不同。
+_ADMIN_IDLE_TIMEOUT_SECONDS = 2 * 3600  # 2 hours（superadmin/admin）
 # Allowed while must_change_password=1 (everything else returns 403)
 _MUST_CHANGE_PW_ALLOWED = {
     "/api/auth/login",
@@ -95,7 +100,7 @@ async def auth_middleware(request: Request, call_next):
     conn    = get_db()
     try:
         row = conn.execute(
-            "SELECT u.id, COALESCE(u.must_change_password, 0) AS must_change_password, "
+            "SELECT u.id, u.role, COALESCE(u.must_change_password, 0) AS must_change_password, "
             "s.last_active "
             "FROM sessions s JOIN users u ON s.user_id=u.id "
             "WHERE s.token=? AND u.active=1 "
@@ -107,11 +112,14 @@ async def auth_middleware(request: Request, call_next):
     if not row:
         return JSONResponse(status_code=401, content={"detail": "Session 已過期，請重新登入"})
 
+    is_high_priv = row["role"] in ("superadmin", "admin")
+    idle_limit = _ADMIN_IDLE_TIMEOUT_SECONDS if is_high_priv else _IDLE_TIMEOUT_SECONDS
+
     # Idle timeout check (only if last_active is already set)
     la_str = row["last_active"]
     if la_str:
         idle_secs = (now_dt - datetime.fromisoformat(la_str)).total_seconds()
-        if idle_secs > _IDLE_TIMEOUT_SECONDS:
+        if idle_secs > idle_limit:
             # Expire this session
             try:
                 ec = get_db()
@@ -120,7 +128,8 @@ async def auth_middleware(request: Request, call_next):
                 ec.close()
             except Exception:
                 pass
-            return JSONResponse(status_code=401, content={"detail": "閒置超過 8 小時，請重新登入"})
+            limit_label = "2 小時" if is_high_priv else "8 小時"
+            return JSONResponse(status_code=401, content={"detail": f"閒置超過 {limit_label}，請重新登入"})
         if idle_secs > 300:
             try:
                 uc = get_db()
@@ -252,6 +261,7 @@ app.include_router(list_prefs.router)
 app.include_router(case_action_items.router)
 app.include_router(uploads.router)
 app.include_router(network_plans.router)
+app.include_router(approval_delegates.router)
 
 
 # ── Static frontend ───────────────────────────────────────────────────────────

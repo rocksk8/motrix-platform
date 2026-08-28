@@ -352,6 +352,9 @@
             <button class="tab" :class="{on:activeTab==='ar'}" @click="showArTab()">
               帳齡分析<span class="tab__cnt" x-show="arAging" x-text="arAging ? arAging.total.count : ''"></span>
             </button>
+            <button class="tab" :class="{on:activeTab==='cashpos'}" @click="showCashPosTab()">
+              資金水位<span class="tab__cnt" x-show="cashPos" x-text="cashPos ? (cashPos.ar.count + cashPos.ap.count) : ''"></span>
+            </button>
           </div>
 
           <!-- 本期收款 -->
@@ -1127,6 +1130,139 @@
                   </div>
                 </template>
                 <div style="font-size:11px;color:var(--text-dim);margin-top:4px" x-text="'資料截至 ' + arAging.asOf + '　' + arAging.note"></div>
+              </div>
+            </template>
+          </div>
+
+          <!-- 資金水位 -->
+          <div x-show="activeTab==='cashpos'" class="panel">
+            <div x-show="cashPosLoading" class="loading-text">資金水位載入中…</div>
+            <template x-if="cashPos && !cashPosLoading">
+              <div>
+                <div class="kpi-grid" style="margin-bottom:14px">
+                  <div class="kpi-card blue">
+                    <div class="kpi-card__lbl">應收帳款（客戶未收款）</div>
+                    <div class="kpi-card__val" x-text="fmt(cashPos.ar.total)"></div>
+                    <div class="kpi-card__sub" x-text="'共 ' + cashPos.ar.count + ' 筆　詳見「帳齡分析」'"></div>
+                  </div>
+                  <div class="kpi-card red">
+                    <div class="kpi-card__lbl">應付帳款（承攬商待匯款）</div>
+                    <div class="kpi-card__val" x-text="fmt(cashPos.ap.total)"></div>
+                    <div class="kpi-card__sub" x-text="'共 ' + cashPos.ap.count + ' 筆（已核准未匯款）'"></div>
+                  </div>
+                  <div class="kpi-card" :class="cashPos.net >= 0 ? 'green' : 'red'">
+                    <div class="kpi-card__lbl">淨部位（應收 − 應付）</div>
+                    <div class="kpi-card__val" x-text="(cashPos.net >= 0 ? '+' : '') + fmt(cashPos.net)"></div>
+                    <div class="kpi-card__sub" x-text="'資料截至 ' + cashPos.asOf"></div>
+                  </div>
+                </div>
+
+                <template x-if="cashPos.ap.items.length > 0">
+                  <div style="margin-bottom:18px">
+                    <div style="font-size:11px;font-weight:600;color:var(--text-secondary);margin-bottom:6px">
+                      應付明細（承攬商匯款申請・已核准未匯款）
+                    </div>
+                    <table class="data-table">
+                      <thead><tr>
+                        <th>申請單號</th><th>案件號</th><th>客戶</th><th>承攬商</th>
+                        <th class="r">金額</th><th class="c">核准時間</th>
+                      </tr></thead>
+                      <tbody>
+                        <template x-for="it in cashPos.ap.items" :key="it.voucherNo">
+                          <tr>
+                            <td class="mono" x-text="it.voucherNo"></td>
+                            <td class="mono" x-text="it.quoteNo"></td>
+                            <td x-text="it.customer"></td>
+                            <td x-text="it.vendorName || '（外包人員點工）'"></td>
+                            <td class="r mono" x-text="fmt(it.amount)"></td>
+                            <td class="c" x-text="it.approvedAt ? new Date(it.approvedAt).toLocaleString('zh-TW') : ''"></td>
+                          </tr>
+                        </template>
+                      </tbody>
+                    </table>
+                  </div>
+                </template>
+
+                <div style="font-size:11px;color:var(--text-dim);margin-top:4px" x-text="'資料截至 ' + cashPos.asOf + '　' + cashPos.note"></div>
+
+                <!-- 銀行對帳單比對 -->
+                <div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border-light)">
+                  <div class="cm-section-title" style="margin-bottom:8px">銀行對帳單比對（承攬商匯款）</div>
+                  <div style="font-size:11px;color:var(--text-dim);margin-bottom:10px">
+                    上傳銀行匯出的 CSV（需含日期與金額欄位），依金額比對上方「已核准未匯款」清單，僅供人工複核，不會自動標記已匯款。
+                  </div>
+                  <label class="btn-export" style="cursor:pointer;display:inline-flex">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+                    <span x-text="bankReconciling ? '比對中…' : '上傳 CSV 比對'"></span>
+                    <input type="file" accept=".csv" style="display:none" :disabled="bankReconciling" @change="uploadBankCsv($event)">
+                  </label>
+
+                  <template x-if="bankResult">
+                    <div style="margin-top:14px">
+                      <div class="kpi-grid" style="margin-bottom:12px">
+                        <div class="kpi-card green">
+                          <div class="kpi-card__lbl">配對成功</div>
+                          <div class="kpi-card__val" x-text="bankResult.matchedCount"></div>
+                        </div>
+                        <div class="kpi-card orange">
+                          <div class="kpi-card__lbl">銀行紀錄未配對</div>
+                          <div class="kpi-card__val" x-text="bankResult.unmatchedBankCount"></div>
+                        </div>
+                        <div class="kpi-card red">
+                          <div class="kpi-card__lbl">仍待匯款（未配對）</div>
+                          <div class="kpi-card__val" x-text="bankResult.unmatchedVouchers.length"></div>
+                        </div>
+                      </div>
+
+                      <table class="data-table">
+                        <thead><tr>
+                          <th class="c">銀行日期</th><th class="r">銀行金額</th><th>銀行摘要</th>
+                          <th>配對申請單號</th><th>承攬商</th><th class="c">動作</th>
+                        </tr></thead>
+                        <tbody>
+                          <template x-for="(r, i) in bankResult.bankRows" :key="i">
+                            <tr>
+                              <td class="c" x-text="r.date"></td>
+                              <td class="r mono" x-text="fmt(r.amount)"></td>
+                              <td x-text="r.desc"></td>
+                              <td x-show="r.match" class="mono" x-text="r.match ? (r.match.quoteNo + ' / ' + r.match.voucherNo) : ''"></td>
+                              <td x-show="!r.match" colspan="2" style="color:var(--text-dim)">未找到金額相符的待匯款申請</td>
+                              <td x-show="r.match" x-text="r.match ? r.match.vendorName : ''"></td>
+                              <td class="c">
+                                <button x-show="r.match && !r.match._paid" class="btn-export excel" style="padding:3px 8px;font-size:11px"
+                                        @click="markVoucherPaidFromReconcile(r.match.voucherNo)">標記已匯款</button>
+                                <span x-show="r.match && r.match._paid" style="color:#15803D;font-size:11px">✓ 已標記</span>
+                              </td>
+                            </tr>
+                          </template>
+                        </tbody>
+                      </table>
+
+                      <div style="font-size:11px;color:var(--text-dim);margin-top:8px" x-text="bankResult.note"></div>
+                    </div>
+                  </template>
+                </div>
+
+                <!-- 稅務匯出 -->
+                <div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border-light)">
+                  <div class="cm-section-title" style="margin-bottom:8px">稅務匯出（銷項發票清單）</div>
+                  <div style="font-size:11px;color:var(--text-dim);margin-bottom:10px">
+                    匯出已填發票號碼的收款品項，含統一編號/金額/稅額欄位，供記帳士申報使用。
+                  </div>
+                  <div style="display:flex;align-items:center;gap:8px">
+                    <select x-model.number="taxExportYear" style="padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;background:#fff">
+                      <template x-for="y in [2023,2024,2025,2026,2027]" :key="y"><option :value="y" x-text="y + ' 年'"></option></template>
+                    </select>
+                    <select x-model="taxExportMonth" style="padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;background:#fff">
+                      <option value="">整年</option>
+                      <template x-for="m in 12" :key="m"><option :value="m" x-text="m + ' 月'"></option></template>
+                    </select>
+                    <button class="btn-export excel" @click="exportTaxInvoices()" :disabled="taxExporting">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                      <span x-text="taxExporting ? '產製中…' : '匯出 Excel'"></span>
+                    </button>
+                  </div>
+                </div>
               </div>
             </template>
           </div>

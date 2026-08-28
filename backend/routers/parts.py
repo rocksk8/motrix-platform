@@ -84,8 +84,8 @@ def create_part(body: dict = Body(...), authorization: str = Header(None)):
         # 拋成不友善的 500，而不是乾淨的 409。
         try:
             conn.execute("""
-                INSERT INTO parts (part_no, name, brand, unit, cost, list_price, category, note, active, created_at, updated_at)
-                VALUES (?,?,?,?,?,?,?,?,1,?,?)
+                INSERT INTO parts (part_no, name, brand, unit, cost, list_price, category, note, safety_stock, active, created_at, updated_at)
+                VALUES (?,?,?,?,?,?,?,?,?,1,?,?)
             """, (
                 part_no, name,
                 body.get("brand",""),
@@ -94,6 +94,7 @@ def create_part(body: dict = Body(...), authorization: str = Header(None)):
                 body.get("listPrice") or body.get("list_price") or 0,
                 category,
                 body.get("note",""),
+                body.get("safetyStock") or body.get("safety_stock") or 0,
                 now, now,
             ))
             conn.commit()
@@ -113,13 +114,20 @@ def update_part(part_id: int, body: dict = Body(...), authorization: str = Heade
     _require_user(authorization)
     conn = get_db()
     try:
-        row = conn.execute("SELECT part_no, name FROM parts WHERE id=?", (part_id,)).fetchone()
+        row = conn.execute("SELECT part_no, name, safety_stock FROM parts WHERE id=?", (part_id,)).fetchone()
         if not row:
             raise HTTPException(404, "料號不存在")
         now = datetime.now().isoformat()
         new_name = body.get("name", "")
+        # safety_stock 只有請求明確帶了 safetyStock/safety_stock 鍵才更新，否則沿用
+        # 現值——沒有這個保護的話，brand 批次改名／Excel 匯入等不知道這個新欄位的
+        # 既有呼叫路徑會因為沒帶這個鍵而把每個料號的安全庫存悄悄清零
+        if "safetyStock" in body or "safety_stock" in body:
+            safety_stock = body.get("safetyStock", body.get("safety_stock")) or 0
+        else:
+            safety_stock = row["safety_stock"]
         conn.execute("""
-            UPDATE parts SET name=?, brand=?, unit=?, cost=?, list_price=?, category=?, note=?, updated_at=?
+            UPDATE parts SET name=?, brand=?, unit=?, cost=?, list_price=?, category=?, note=?, safety_stock=?, updated_at=?
             WHERE id=?
         """, (
             new_name,
@@ -129,6 +137,7 @@ def update_part(part_id: int, body: dict = Body(...), authorization: str = Heade
             body.get("listPrice") or body.get("list_price") or 0,
             body.get("category",""),
             body.get("note",""),
+            safety_stock,
             now, part_id,
         ))
         conn.commit()

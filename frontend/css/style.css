@@ -45,18 +45,22 @@
 
   --text-primary:   #0A0A0A;
   --text-secondary: #6B6B6B;
-  --text-dim:       #9A9A9A;
+  --text-dim:       #767676;  /* 2026-08-28：原 #9A9A9A 對白底僅 2.81:1，未達 WCAG AA 文字 4.5:1 門檻；
+                                  改後 4.54:1 過關（全站 969 處引用，改這個變數一次生效，見 WCAG 稽核紀錄） */
   --text-on-dark:   #F5F4F0;
   --text-on-dark-dim: #8A8A8A;
 
   --accent:  #2563EB;
   --accent-light: #EFF6FF;
   --accent-hover: #1D4ED8;
-  --success: #16A34A;
+  --success: #15803D;  /* 2026-08-28：原 #16A34A 對白底僅 3.30:1，未達 WCAG AA 文字 4.5:1（KPI 數字/
+                          狀態文字等小字級直接用到此變數的場合會不過）；改用站內既有徽章文字慣用的較深綠
+                          （#15803D，多處硬編碼已在用），對白底 5.02:1 過關，也讓全站綠色統一成同一色階 */
   --success-light: #F0FDF4;
   --success-border: #BBF7D0;
   --success-hover-bg: #DCFCE7;
-  --warning: #D97706;
+  --warning: #92400E;  /* 2026-08-28：原 #D97706 對白底僅 3.19:1，未達 AA；改用站內既有徽章文字慣用的
+                          較深琥珀（#92400E），對白底 7.09:1 過關 */
   --warning-light: #FFFBEB;
   --danger:  #DC2626;
   --danger-light: #FEF2F2;

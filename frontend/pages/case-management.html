@@ -1792,6 +1792,15 @@
                       </div>
                     </template>
 
+                    <!-- 快照過期警示：承攬商成本在精算完結後又異動，下方數字尚未反映最新狀況 -->
+                    <template x-if="financeDispatchStale()">
+                      <div style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:9px 14px;margin-bottom:14px;font-size:12px;color:#92400E;display:flex;align-items:center;gap:8px">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#92400E" stroke-width="2"><path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+                        <span style="font-family:var(--font-zh)"
+                              x-text="'下方精算數字為完結當下快照，承攬商成本之後已異動（快照 NT$' + financeDispatchStale().frozen.toLocaleString() + ' → 目前 NT$' + financeDispatchStale().live.toLocaleString() + '），如需更新請至精算頁面重新開啟並完結'"></span>
+                      </div>
+                    </template>
+
                     <!-- KPI 四格 -->
                     <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:14px">
                       <div class="cm-kpi__pill">

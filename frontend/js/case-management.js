@@ -1929,6 +1929,17 @@ function app() {
         .reduce((s, d) => s + (d.grandTotal || 0), 0)
     },
 
+    // 財務 Tab 顯示的精算結果是完結當下凍結的 caseSettleSummary().dispatchTotal 快照，
+    // 跟 dispatchTotalCost() 目前即時計算值比對——不一致代表承攬商派發在精算完結後
+    // 又被異動過，此頁數字尚未反映最新狀況（見 settlement.html dispatchStale() 同一邏輯）
+    financeDispatchStale() {
+      if (this.caseSettleStatus() !== 'finalized') return null
+      const frozen = Math.round(this.caseSettleSummary().dispatchTotal || 0)
+      const live   = Math.round(this.dispatchTotalCost() || 0)
+      if (frozen === live) return null
+      return { frozen, live, diff: live - frozen }
+    },
+
     _blankDispatchForm() {
       const today = new Date().toISOString().slice(0, 10)
       return {

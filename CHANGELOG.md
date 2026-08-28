@@ -5,6 +5,37 @@
 
 ---
 
+### 2026-08-28c — 資訊安全＋企業管理優化（四面向優化建議第三批）
+
+- 高權限帳號（superadmin/admin）閒置逾時縮短為 2 小時：既有全域 8 小時閒置登出機制（`main.py::auth_middleware`，DB v17）新增角色分流，其餘角色維持 8 小時
+- 新增高權限帳號定期稽查工具 `backend/tools/audit_account_permissions.py`，依 modules 數量與 role 是否不成比例排序標註，供人工複核（不自動判定）
+- 區網 HTTPS 現況釐清：2026-08-27 另一 session（commit `d7b8ee9`）已完成基礎設施，只差正式機手動執行 mkcert 產證，已寫成 `HTTPS-DEPLOY-CHECKLIST.md`
+- 新增簽核代理人機制（DB 新表 `approval_delegates`）：任何人可自助委託簽核權限，超級管理員可代替他人設定；`helpers/tiered_approval.py::check_approve_permission()`/`check_reject_permission()` 新增可選 `conn` 參數，5 個 router／10 個呼叫點統一更新；新頁面 `frontend/pages/approval-delegates.html`
+- 已結案案件半解鎖範圍評估：13 支被排除端點被擋下時原本零紀錄，改在共用守門函式 `_deny_if_case_locked_unsupported()` 補上 `audit_log`（`case.locked_edit_denied`），供之後累積數據決定是否擴大範圍，這輪刻意不擴大
+- 新增/更新測試共 24 題；`pytest` 227/227 全過
+
+---
+
+### 2026-08-28b — 視覺化管理優化＋WCAG 對比度修復（四面向優化建議第二批）
+
+- 部門篩選擴大到案件執行看板（`stage_board()`）與月支出報表（`_collect_expenses()`，涵蓋承攬商派發/料件進貨）
+- 庫存水位燈號：DB v66 新增 `parts.safety_stock`，`inventory.py::parts_summary()` 新增 `stockLevel` 計算，`inventory.html` 新增水位圓點欄＋快篩；修正 `update_part()` 未帶 `safetyStock` 鍵時悄悄清零安全庫存的 bug
+- 跨案件時程視覺化查證後發現不需新開發：專案管理已於 2026-08-26 併入案件管理，既有跨案時間軸已涵蓋此需求
+- WCAG 對比度稽核（額外發現）：`--text-dim`/`--success`/`--warning` 三個 CSS 變數對白底對比度不足 WCAG AA 門檻，已加深（沿用站內既有徽章文字色，非新發明），一行 CSS 全站生效
+- 新增測試 5 題；`pytest` 203/203 全過（含財務批次）
+
+---
+
+### 2026-08-28 — 財務顧問優化（四面向優化建議第一批）
+
+- 精算快照過期提醒：`settlement.html`／案件管理財務Tab 比對精算完結凍結快照 vs 即時值，承攬商成本異動後提示
+- 資金水位總覽：新端點 `GET /api/reports/cash-position`（應收帳齡＋承攬商已核准未匯款），刻意排除請款單（對客戶要款文件非應付支出）與料件/設備進貨（無付款狀態追蹤）；原規劃的現金流預測因無結構化預計收付款日期而改做此回顧性總覽
+- 銀行對帳單 CSV 比對：新端點 `POST /api/reports/bank-reconcile`，寬鬆偵測欄位別名，僅依金額比對供人工複核，不自動標記已匯款
+- 稅務匯出：新端點 `GET /api/reports/tax-export`，匯出已開發票收款品項為銷項發票清單 Excel
+- 新增測試 10 題，另用本機 Ollama qwen3.6 做獨立複查；`pytest` 198/198 全過
+
+---
+
 ### 2026-08-17i — 料號主檔新增匯出／匯入 Excel
 
 - 使用者要求料號主檔能匯出跟匯入。比照 `customers.html` 既有匯入/匯出模式（純前端 SheetJS，無新後端端點），`parts.html` 新增 `exportExcel()`（欄位：料號/品名/廠牌/型號/類別/單位/成本(未稅)/定價(含稅)/備注，`brand` 欄位依 `openModal()` 既有的「/」分割慣例拆成廠牌/型號兩欄）與 `handleImport()`（逐列比對料號是否已存在於 `this.items` 決定呼叫既有 `PUT /api/parts/{id}`（更新）或 `POST /api/parts`（新增，料號留空時沿用後端既有依類別前綴自動產生邏輯）），完成後彙總新增/更新/失敗筆數與錯誤明細，樣式與互動邏輯逐一比照 `customers.html` 既有匯入結果 Modal，並新增全域共用的 `@keyframes spin`（`parts.html` 原本沒有）

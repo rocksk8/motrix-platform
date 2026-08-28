@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="../static/favicon.png">
+  <title>簽核代理人 — MOTRIX 營運管理系統</title>
+  <script src="../static/auth-guard.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css?v=20260828a">
+  <style>
+    [x-cloak] { display: none !important; }
+    .dg-main {
+      margin-left: var(--sidebar-w);
+      margin-top: var(--topbar-h);
+      padding: 28px 32px;
+      min-height: calc(100vh - var(--topbar-h));
+      background: var(--white);
+    }
+    .dg-card {
+      background:#fff; border:1px solid var(--border-light); border-radius:var(--radius-lg);
+      padding:20px; margin-bottom:20px;
+    }
+    .dg-form-row { display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap; margin-bottom:14px; }
+    .dg-field { display:flex; flex-direction:column; gap:4px; }
+    .dg-field label { font-size:11px; color:var(--text-secondary); font-family:var(--font-zh); }
+    .dg-field select, .dg-field input {
+      padding:7px 10px; border:1px solid var(--border-light); border-radius:var(--radius);
+      font-size:12px; font-family:var(--font-zh); outline:none; min-width:160px;
+    }
+    .dg-field input[type="date"] { min-width:140px; }
+  </style>
+</head>
+<body x-data="approvalDelegatesPage()" x-init="init()" x-cloak>
+
+<header id="app-topbar" class="topbar"></header>
+<div class="sidebar-overlay" id="sidebar-overlay"></div>
+<aside class="sidebar" id="app-sidebar"></aside>
+
+<main class="dg-main">
+  <div style="margin-bottom:20px">
+    <h1 style="font-size:20px;font-weight:700">簽核代理人</h1>
+    <p style="font-size:12px;color:var(--text-secondary);margin-top:4px">
+      請假等情境下，把自己在簽核流程裡的簽核權限暫時交給另一位同事——代理期間對方可以代替你完成待簽核的項目（報價單／出貨單／承攬商匯款申請／發票開立簽核單／請款單皆適用）。
+    </p>
+  </div>
+
+  <div x-show="toast" style="background:#F0FDF4;border:1px solid #86EFAC;color:#15803D;padding:10px 14px;border-radius:var(--radius);font-size:12px;margin-bottom:14px" x-text="toast"></div>
+  <div x-show="error" style="background:#FEF2F2;border:1px solid #FECACA;color:#DC2626;padding:10px 14px;border-radius:var(--radius);font-size:12px;margin-bottom:14px" x-text="error"></div>
+
+  <div class="dg-card">
+    <div class="cm-section-title" style="margin-bottom:12px">新增代理設定</div>
+    <div class="dg-form-row">
+      <template x-if="isSuperadmin">
+        <div class="dg-field">
+          <label>委託人（誰的簽核權限）</label>
+          <select x-model="form.delegatorUsername">
+            <option value="">— 我自己 —</option>
+            <template x-for="u in selectableUsers" :key="u.username">
+              <option :value="u.username" x-text="u.display_name + '（' + u.username + '）'"></option>
+            </template>
+          </select>
+        </div>
+      </template>
+      <div class="dg-field">
+        <label>代理人</label>
+        <select x-model="form.delegateUsername">
+          <option value="">請選擇</option>
+          <template x-for="u in selectableUsers" :key="u.username">
+            <option :value="u.username" x-text="u.display_name + '（' + u.username + '）'"></option>
+          </template>
+        </select>
+      </div>
+      <div class="dg-field">
+        <label>開始日期</label>
+        <input type="date" x-model="form.startDate">
+      </div>
+      <div class="dg-field">
+        <label>結束日期</label>
+        <input type="date" x-model="form.endDate">
+      </div>
+      <div class="dg-field" style="flex:1">
+        <label>原因（選填）</label>
+        <input type="text" x-model="form.reason" placeholder="例如：出差、休假">
+      </div>
+      <button class="btn btn-primary" @click="createDelegate()" :disabled="saving">
+        <span x-text="saving ? '儲存中…' : '新增'"></span>
+      </button>
+    </div>
+    <div style="font-size:11px;color:var(--text-dim)" x-show="!isSuperadmin">
+      只能設定自己的簽核代理人；如需代替他人設定（例如對方突然請假忘了自己先設定），請聯絡最高管理員。
+    </div>
+  </div>
+
+  <div class="dg-card">
+    <div class="cm-section-title" style="margin-bottom:12px" x-text="isSuperadmin ? '全部代理設定' : '我的代理設定'"></div>
+    <div x-show="loading" class="loading-text">載入中…</div>
+    <template x-if="!loading && delegates.length === 0">
+      <div class="empty-state">目前沒有代理設定</div>
+    </template>
+    <table class="data-table" x-show="!loading && delegates.length > 0">
+      <thead><tr>
+        <th>委託人</th><th>代理人</th><th class="c">起訖日期</th><th>原因</th>
+        <th class="c">狀態</th><th>建立者</th><th class="c">操作</th>
+      </tr></thead>
+      <tbody>
+        <template x-for="d in delegates" :key="d.id">
+          <tr>
+            <td x-text="d.delegatorUsername"></td>
+            <td x-text="d.delegateUsername"></td>
+            <td class="c" x-text="d.startDate + ' ~ ' + d.endDate"></td>
+            <td x-text="d.reason || '—'"></td>
+            <td class="c">
+              <span :style="d.active ? 'color:#15803D' : 'color:var(--text-dim)'"
+                    x-text="d.active ? '生效中' : '已停用'"></span>
+            </td>
+            <td x-text="d.createdBy"></td>
+            <td class="c">
+              <button class="btn-export excel" style="padding:3px 8px;font-size:11px"
+                      x-show="d.active && (isSuperadmin || d.delegatorUsername === myUsername)"
+                      @click="deactivate(d.id)">停用</button>
+            </td>
+          </tr>
+        </template>
+      </tbody>
+    </table>
+  </div>
+</main>
+
+<script>
+function approvalDelegatesPage() {
+  return {
+    session: {},
+    myUsername: '',
+    isSuperadmin: false,
+    selectableUsers: [],
+    delegates: [],
+    loading: true,
+    saving: false,
+    toast: '',
+    error: '',
+    form: { delegatorUsername: '', delegateUsername: '', startDate: '', endDate: '', reason: '' },
+
+    _headers() {
+      return { 'Authorization': 'Bearer ' + (this.session.token || '') }
+    },
+
+    async init() {
+      const s = localStorage.getItem('motrix_session')
+      if (!s) { window.location.href = 'login.html'; return }
+      try {
+        this.session = JSON.parse(s)
+        if (!this.session.token) { window.location.href = 'login.html'; return }
+      } catch(e) { window.location.href = 'login.html'; return }
+
+      const res = await fetch('/api/auth/me', { headers: this._headers() })
+      if (!res.ok) { localStorage.removeItem('motrix_session'); window.location.href = 'login.html'; return }
+      const me = await res.json()
+      this.myUsername = me.username
+      this.isSuperadmin = me.role === 'superadmin'
+
+      const today = new Date().toISOString().slice(0, 10)
+      this.form.startDate = today
+      this.form.endDate = today
+
+      try {
+        const ru = await fetch('/api/users/selectable', { headers: this._headers() })
+        if (ru.ok) this.selectableUsers = (await ru.json()).filter(u => u.username !== this.myUsername)
+      } catch {}
+
+      await this.loadDelegates()
+    },
+
+    async loadDelegates() {
+      this.loading = true
+      try {
+        const r = await fetch('/api/approval-delegates', { headers: this._headers() })
+        if (r.ok) this.delegates = await r.json()
+      } catch {}
+      this.loading = false
+    },
+
+    async createDelegate() {
+      this.error = ''
+      this.toast = ''
+      if (!this.form.delegateUsername) { this.error = '請選擇代理人'; return }
+      if (!this.form.startDate || !this.form.endDate) { this.error = '請指定代理起訖日期'; return }
+      this.saving = true
+      try {
+        const body = {
+          delegateUsername: this.form.delegateUsername,
+          startDate: this.form.startDate,
+          endDate: this.form.endDate,
+          reason: this.form.reason,
+        }
+        if (this.isSuperadmin && this.form.delegatorUsername) body.delegatorUsername = this.form.delegatorUsername
+        const r = await fetch('/api/approval-delegates', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...this._headers() },
+          body: JSON.stringify(body),
+        })
+        if (!r.ok) {
+          const j = await r.json().catch(() => ({}))
+          throw new Error(j.detail || '新增失敗')
+        }
+        this.toast = '已新增代理設定'
+        this.form.delegateUsername = ''
+        this.form.reason = ''
+        await this.loadDelegates()
+      } catch (e) {
+        this.error = e.message || '新增失敗'
+      } finally {
+        this.saving = false
+      }
+    },
+
+    async deactivate(id) {
+      if (!confirm('確認停用此代理設定？')) return
+      try {
+        const r = await fetch('/api/approval-delegates/' + id + '/deactivate', {
+          method: 'PATCH',
+          headers: this._headers(),
+        })
+        if (!r.ok) {
+          const j = await r.json().catch(() => ({}))
+          throw new Error(j.detail || '停用失敗')
+        }
+        await this.loadDelegates()
+      } catch (e) {
+        this.error = e.message || '停用失敗'
+      }
+    },
+  }
+}
+</script>
+<script src="../static/notif.js"></script>
+<script src="../static/sidebar.js"></script>
+</body>
+</html>

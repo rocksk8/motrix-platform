@@ -344,7 +344,7 @@ def approve_contractor_voucher(voucher_no: str, body: dict = Body(default={}), a
 
     if tiers:
         ct_idx = _current_tier_idx(appr)
-        ok, status_code, err_msg = check_approve_permission(tiers, ct_idx, user["username"])
+        ok, status_code, err_msg = check_approve_permission(tiers, ct_idx, user["username"], conn=conn)
         if not ok:
             conn.close()
             raise HTTPException(status_code, err_msg)
@@ -485,7 +485,7 @@ def reject_contractor_voucher(voucher_no: str, body: dict = Body(default={}), au
     tiers = _active_tiers(appr)
 
     ct_idx = _current_tier_idx(appr)
-    ok, status_code, err_msg = check_reject_permission(tiers, ct_idx, user)
+    ok, status_code, err_msg = check_reject_permission(tiers, ct_idx, user, conn=conn)
     if not ok:
         conn.close()
         raise HTTPException(status_code, err_msg)

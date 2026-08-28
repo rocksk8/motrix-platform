@@ -168,6 +168,11 @@
       background:#F0FDF4; border:1px solid #86EFAC; border-radius:8px;
       padding:12px 16px; margin-bottom:18px;
     }
+    .stale-banner {
+      display:flex; align-items:center; gap:12px;
+      background:#FFFBEB; border:1px solid #FDE68A; border-radius:8px;
+      padding:12px 16px; margin-bottom:18px;
+    }
   </style>
 </head>
 <body x-data="settlementPage()" x-init="init()" x-cloak>
@@ -240,6 +245,18 @@
             <div style="font-size:12px;font-weight:600;color:#15803D">精算已完結・唯讀</div>
             <div style="font-size:11px;color:#16a34a;margin-top:1px"
                  x-text="'完結時間：' + (settlement.finalizedAt ? new Date(settlement.finalizedAt).toLocaleString('zh-TW') : '') + '　完結人：' + (settlement.finalizedBy || '')"></div>
+          </div>
+        </div>
+      </template>
+
+      <!-- 快照過期警示：承攬商成本在精算完結後又異動 -->
+      <template x-if="settlement.status === 'finalized' && dispatchStale()">
+        <div class="stale-banner">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#92400E" stroke-width="2"><path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+          <div>
+            <div style="font-size:12px;font-weight:600;color:#92400E">承攬商成本自精算完結後已異動，其他頁面顯示的快照可能已過期</div>
+            <div style="font-size:11px;color:#92400E;margin-top:1px"
+                 x-text="'完結當下承攬商派發成本：NT$ ' + fmt(dispatchStale().frozen) + '　目前即時計算：NT$ ' + fmt(dispatchStale().live) + '（' + (dispatchStale().diff>=0?'+':'') + fmt(dispatchStale().diff) + '）　此頁上方數字已是最新即時計算，但案件管理財務Tab／營運報表仍顯示完結當下的舊快照，如需同步請按右上角「重新開啟」後重新完結'"></div>
           </div>
         </div>
       </template>
@@ -806,6 +823,7 @@ function settlementPage() {
     },
 
     dispatches: [],  // 承攬商派發（唯讀，即時從 /api/contractor-dispatches 讀取，不隨精算存檔凍結）
+    _frozenSummary: null,  // 精算完結當下寫入 data_json 的 summary 快照，供比對是否已過期
 
     summary: {
       quotedPretax:    0,
@@ -887,6 +905,7 @@ function settlementPage() {
           this.settlement.finalizedBy   = saved.finalizedBy || ''
           this.settlement.memo          = saved.memo || ''
           this.settlement.extraItems    = saved.extraItems || []
+          this._frozenSummary           = saved.summary || null
 
           // 合併報價品項（若報價單有新增/刪除品項，以報價單為基準）
           const savedMap = {}
@@ -933,6 +952,17 @@ function settlementPage() {
     // 承攬商含稅合計 + 外包名單人員（不計稅）＝該筆派發對「實際總成本」的貢獻
     dispatchTotal() {
       return this.dispatches.reduce((s, d) => s + (+d.grandTotal || 0), 0)
+    },
+
+    // 精算已完結時，比對完結當下凍結的 dispatchTotal 快照 vs 目前即時計算值；
+    // 承攬商派發在完結後又被異動（新增/取消/改金額）就會不一致，回傳差異供橫幅顯示，
+    // 一致或非完結狀態回傳 null（見 §5.5「精算完結即凍結」設計，此為過期提醒非錯誤）
+    dispatchStale() {
+      if (this.settlement.status !== 'finalized' || !this._frozenSummary) return null
+      const frozen = Math.round(this._frozenSummary.dispatchTotal || 0)
+      const live   = Math.round(this.summary.dispatchTotal || 0)
+      if (frozen === live) return null
+      return { frozen, live, diff: live - frozen }
     },
 
     // 展開單筆派發的明細列：有承攬商就先列承攬商、外包人員接續縮排；

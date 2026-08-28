@@ -332,7 +332,7 @@ def approve_shipping_note(note_no: str, body: dict = Body(default={}), authoriza
 
     if tiers:
         ct_idx = _current_tier_idx(appr)
-        ok, status_code, err_msg = check_approve_permission(tiers, ct_idx, user["username"])
+        ok, status_code, err_msg = check_approve_permission(tiers, ct_idx, user["username"], conn=conn)
         if not ok:
             conn.close()
             raise HTTPException(status_code, err_msg)
@@ -529,7 +529,7 @@ def reject_shipping_note(note_no: str, body: dict = Body(default={}), authorizat
     tiers = _active_tiers(appr)
 
     ct_idx = _current_tier_idx(appr)
-    ok, status_code, err_msg = check_reject_permission(tiers, ct_idx, user)
+    ok, status_code, err_msg = check_reject_permission(tiers, ct_idx, user, conn=conn)
     if not ok:
         conn.close()
         raise HTTPException(status_code, err_msg)

@@ -329,3 +329,20 @@ def test_close_case_succeeds_when_all_conditions_met(client, make_user):
     r = client.patch("/api/quotations/MQ-CLOSE-004/deal-tag", headers=_auth(token),
                      json={"deal_tag": "已結案"})
     assert r.status_code == 200, r.text
+
+
+def test_locked_edit_denial_is_audit_logged(client, make_user):
+    """2026-08-28 新增：13 支不支援排隊審核的端點被已結案案件擋下時，現在會留一筆
+    audit_log（action='case.locked_edit_denied'）——之後才有數據判斷這道限制實際
+    被撞到的頻率，見 _deny_if_case_locked_unsupported() docstring。"""
+    username, password = make_user(role="admin")
+    token = _login(client, username, password)
+    _make_closed_case("MQ-CCR-AUDIT-001")
+
+    r = client.post("/api/quotations/MQ-CCR-AUDIT-001/stages", headers=_auth(token), json={"label": "新階段"})
+    assert r.status_code == 403, r.text
+
+    r2 = client.get("/api/audit-log", headers=_auth(token))
+    assert r2.status_code == 200, r2.text
+    actions = [it["action"] for it in r2.json()["items"]]
+    assert "case.locked_edit_denied" in actions

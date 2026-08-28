@@ -34,6 +34,20 @@ function reportsApp() {
     arLoading: false,
     arLoaded:  false,
 
+    // ── 資金水位（應收帳齡 + 應付：承攬商已核准未匯款）
+    cashPos:        null,
+    cashPosLoading: false,
+    cashPosLoaded:  false,
+
+    // ── 稅務匯出（銷項發票清單）
+    taxExportYear:  new Date().getFullYear(),
+    taxExportMonth: '',   // '' = 整年
+    taxExporting:   false,
+
+    // ── 銀行對帳單比對（承攬商匯款申請）
+    bankReconciling: false,
+    bankResult:       null,
+
     // ── Monthly trend
     trendData:    null,
     trendLoading: false,
@@ -249,6 +263,7 @@ function reportsApp() {
           throw new Error(j.detail || '載入失敗')
         }
         this.data = await res.json()
+        if (this.activeTab === 'expenses') this.loadExpenses()
       } catch (e) {
         this.error = e.message || '載入錯誤'
       } finally {
@@ -792,18 +807,20 @@ function reportsApp() {
 
     showExpensesTab() {
       this.activeTab = 'expenses'
-      if (this.expensesLoadedFor !== this.expensesYear) this.loadExpenses()
+      var key = this.expensesYear + ':' + (this.departmentId || '')
+      if (this.expensesLoadedFor !== key) this.loadExpenses()
     },
 
     async loadExpenses() {
       this.expensesLoading = true
       try {
-        var res = await fetch('/api/reports/expenses-monthly?year=' + this.expensesYear, {
+        var qs = '?year=' + this.expensesYear + (this.departmentId ? '&department_id=' + this.departmentId : '')
+        var res = await fetch('/api/reports/expenses-monthly' + qs, {
           headers: { Authorization: 'Bearer ' + this._token() }
         })
         if (!res.ok) throw new Error('支出明細載入失敗')
         this.expensesData      = await res.json()
-        this.expensesLoadedFor = this.expensesYear
+        this.expensesLoadedFor = this.expensesYear + ':' + (this.departmentId || '')
       } catch (e) {
         alert('支出明細載入失敗：' + (e.message || e))
       }
@@ -825,6 +842,101 @@ function reportsApp() {
         alert('帳齡分析載入失敗：' + (e.message || e))
       } finally {
         this.arLoading = false
+      }
+    },
+
+    async showCashPosTab() {
+      this.activeTab = 'cashpos'
+      if (this.cashPosLoaded) return
+      this.cashPosLoading = true
+      try {
+        var res = await fetch('/api/reports/cash-position', {
+          headers: { Authorization: 'Bearer ' + this._token() }
+        })
+        if (!res.ok) throw new Error('資金水位載入失敗')
+        this.cashPos       = await res.json()
+        this.cashPosLoaded = true
+      } catch (e) {
+        alert('資金水位載入失敗：' + (e.message || e))
+      } finally {
+        this.cashPosLoading = false
+      }
+    },
+
+    async exportTaxInvoices() {
+      this.taxExporting = true
+      try {
+        var qs = 'year=' + this.taxExportYear + (this.taxExportMonth ? '&month=' + this.taxExportMonth : '')
+        var res = await fetch('/api/reports/tax-export?' + qs, {
+          headers: { Authorization: 'Bearer ' + this._token() }
+        })
+        if (!res.ok) {
+          var j = await res.json().catch(function () { return {} })
+          throw new Error(j.detail || '匯出失敗')
+        }
+        var blob = await res.blob()
+        var label = this.taxExportYear + (this.taxExportMonth ? ('_' + String(this.taxExportMonth).padStart(2, '0')) : '')
+        var a = document.createElement('a')
+        a.href = URL.createObjectURL(blob)
+        a.download = 'MOTRIX_銷項發票清單_' + label + '.xlsx'
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(a.href)
+      } catch (e) {
+        alert('稅務匯出失敗：' + (e.message || e))
+      } finally {
+        this.taxExporting = false
+      }
+    },
+
+    async uploadBankCsv(evt) {
+      var file = evt.target.files[0]
+      if (!file) return
+      this.bankReconciling = true
+      this.bankResult = null
+      try {
+        var fd = new FormData()
+        fd.append('file', file)
+        var res = await fetch('/api/reports/bank-reconcile', {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + this._token() },
+          body: fd,
+        })
+        if (!res.ok) {
+          var j = await res.json().catch(function () { return {} })
+          throw new Error(j.detail || '比對失敗')
+        }
+        this.bankResult = await res.json()
+      } catch (e) {
+        alert('銀行對帳比對失敗：' + (e.message || e))
+      } finally {
+        this.bankReconciling = false
+        evt.target.value = ''
+      }
+    },
+
+    async markVoucherPaidFromReconcile(voucherNo) {
+      if (!confirm('確認標記 ' + voucherNo + ' 為已匯款？')) return
+      try {
+        var res = await fetch('/api/contractor-vouchers/' + voucherNo + '/paid-toggle', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this._token() },
+          body: JSON.stringify({ action: 'pay', note: '銀行對帳單比對後標記' }),
+        })
+        if (!res.ok) {
+          var j = await res.json().catch(function () { return {} })
+          throw new Error(j.detail || '標記失敗')
+        }
+        if (this.bankResult) {
+          this.bankResult.bankRows.forEach(function (r) {
+            if (r.match && r.match.voucherNo === voucherNo) r.match._paid = true
+          })
+        }
+        this.cashPosLoaded = false
+        await this.showCashPosTab()
+      } catch (e) {
+        alert('標記失敗：' + (e.message || e))
       }
     },
 

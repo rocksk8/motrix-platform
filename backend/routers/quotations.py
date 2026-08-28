@@ -244,17 +244,26 @@ def _notify_case_change_requested_bg(quote_no: str, summary: str, requester_disp
     )
 
 
-def _deny_if_case_locked_unsupported(conn, quote_no: str) -> None:
+def _deny_if_case_locked_unsupported(conn, quote_no: str, authorization: str = None) -> None:
     """給不支援排隊審核的細項端點（案件執行階段的新增/編輯/刪除/排序/加入
     負責人/移除負責人/前置階段/新增拜訪/編輯拜訪/刪除拜訪共 10 支，加上款項
     稅額沖銷申請/撤銷/核准 3 支，合計 13 支）用：已結案案件
     一律 403，不論是否半解鎖都不例外（設計取捨見 db.py migration docstring —
     需要修正時請透過已支援排隊審核的案件資料整體編輯/款項標記收款/附件上傳
-    端點處理，或聯繫最高管理員直接校正）。"""
+    端點處理，或聯繫最高管理員直接校正）。
+
+    2026-08-28：這道 403 牆原本被擋下時完全不留紀錄，之後要評估「是否該擴大
+    半解鎖排隊審核的涵蓋範圍」時沒有任何實際使用頻率數據可看——這裡補上一筆
+    audit_log（action='case.locked_edit_denied'），純記錄用途，不影響回應內容，
+    之後累積一段時間就能看出這道限制實際被撞到的頻率，用數據而非猜測決定
+    要不要擴大範圍。"""
     row = conn.execute("SELECT deal_tag FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
     if not row:
         raise HTTPException(404, f"報價單 {quote_no} 不存在")
     if (row["deal_tag"] or "") == "已結案":
+        if authorization:
+            _audit(_tok(authorization), "case.locked_edit_denied", "quotation", quote_no,
+                   f"{quote_no} 已結案，此操作不支援排隊審核，直接擋下")
         raise HTTPException(
             403,
             "案件已結案並鎖定，此操作不支援於已結案案件（如需修正請透過案件資料整體編輯，"
@@ -526,13 +535,17 @@ def list_quotations(
 
 
 @router.get("/api/quotations/stage-board")
-def stage_board(authorization: str = Header(None)):
+def stage_board(department_id: Optional[int] = None, authorization: str = Header(None)):
     """攤平所有已成案案件的執行進度階段（quotations.data_json.caseRecord.stages），
     每個「案件×階段」回傳一筆，供跨案看板/時間軸使用（案件跨案視覺化，2026-08-23）。
     查詢邏輯比照 daily_tasks.py::_check_case_stage_deadline() 的既有查詢，唯讀，
     不觸發任何通知。另外回傳 caseLifecycle（依 quoteNo）供跨案時間軸畫出「業務開發→
     報價單成立→案件成立」前置歷程（2026-08-23e）——不重複塞進每個 stage item，
-    跟 items 平行回傳一份。"""
+    跟 items 平行回傳一份。
+
+    department_id（2026-08-28 新增）：比照 dashboard.py 既有慣例，依案件負責業務員
+    （q.sales_person_id）所屬部門篩選——沒有回填 sales_person_id 的舊案件會被篩掉，
+    這點跟 dashboard.py 的既有落差一致，非本次新增的缺陷。"""
     user = _require_user(authorization)
     conn = get_db()
     dn_map = {
@@ -563,6 +576,10 @@ def stage_board(authorization: str = Header(None)):
         params.extend(fparams)
     sql += " ORDER BY q.quote_no, cs.sort_order"
     rows = conn.execute(sql, params).fetchall()
+
+    if department_id:
+        dept_by_user = {r["id"]: r["department_id"] for r in conn.execute("SELECT id, department_id FROM users").fetchall()}
+        rows = [r for r in rows if r["sales_person_id"] and dept_by_user.get(r["sales_person_id"]) == department_id]
 
     dev_map = {
         r["converted_quote_no"]: {
@@ -1949,7 +1966,7 @@ def create_case_stage(quote_no: str, body: dict = Body(...), authorization: str 
     任何前端頁面（2026-08-23）。"""
     _require_user(authorization)
     conn = get_db()
-    _deny_if_case_locked_unsupported(conn, quote_no)
+    _deny_if_case_locked_unsupported(conn, quote_no, authorization)
     max_order = conn.execute(
         "SELECT COALESCE(MAX(sort_order), -1) m FROM case_stages WHERE quote_no=?", (quote_no,)
     ).fetchone()["m"]
@@ -1977,7 +1994,7 @@ def update_case_stage(quote_no: str, stage_id: int, body: dict = Body(...), auth
     CRUD 端點，尚未接進任何前端頁面（2026-08-23）。"""
     _require_user(authorization)
     conn = get_db()
-    _deny_if_case_locked_unsupported(conn, quote_no)
+    _deny_if_case_locked_unsupported(conn, quote_no, authorization)
     sr = _get_stage_row(conn, quote_no, stage_id)
     if not sr:
         conn.close(); raise HTTPException(404, "階段不存在")
@@ -2008,7 +2025,7 @@ def delete_case_stage(quote_no: str, stage_id: int, authorization: str = Header(
     （2026-08-23）。"""
     _require_user(authorization)
     conn = get_db()
-    _deny_if_case_locked_unsupported(conn, quote_no)
+    _deny_if_case_locked_unsupported(conn, quote_no, authorization)
     sr = _get_stage_row(conn, quote_no, stage_id)
     if not sr:
         conn.close(); raise HTTPException(404, "階段不存在")
@@ -2036,7 +2053,7 @@ def reorder_case_stages(quote_no: str, body: dict = Body(...), authorization: st
     _require_user(authorization)
     ordered_ids = body.get("orderedIds") or []
     conn = get_db()
-    _deny_if_case_locked_unsupported(conn, quote_no)
+    _deny_if_case_locked_unsupported(conn, quote_no, authorization)
     valid_ids = {r["id"] for r in conn.execute(
         "SELECT id FROM case_stages WHERE quote_no=?", (quote_no,)
     ).fetchall()}
@@ -2060,7 +2077,7 @@ def add_stage_assignee(quote_no: str, stage_id: int, body: dict = Body(...), aut
     if not username:
         raise HTTPException(400, "請提供 username")
     conn = get_db()
-    _deny_if_case_locked_unsupported(conn, quote_no)
+    _deny_if_case_locked_unsupported(conn, quote_no, authorization)
     sr = _get_stage_row(conn, quote_no, stage_id)
     if not sr:
         conn.close(); raise HTTPException(404, "階段不存在")
@@ -2083,7 +2100,7 @@ def remove_stage_assignee(quote_no: str, stage_id: int, username: str, authoriza
     點，尚未接進任何前端頁面（2026-08-23）。"""
     _require_user(authorization)
     conn = get_db()
-    _deny_if_case_locked_unsupported(conn, quote_no)
+    _deny_if_case_locked_unsupported(conn, quote_no, authorization)
     sr = _get_stage_row(conn, quote_no, stage_id)
     if not sr:
         conn.close(); raise HTTPException(404, "階段不存在")
@@ -2105,7 +2122,7 @@ def toggle_stage_dependency(quote_no: str, stage_id: int, candidate_id: int, aut
     第二階段 CRUD 端點，尚未接進任何前端頁面（2026-08-23）。"""
     _require_user(authorization)
     conn = get_db()
-    _deny_if_case_locked_unsupported(conn, quote_no)
+    _deny_if_case_locked_unsupported(conn, quote_no, authorization)
     sr = _get_stage_row(conn, quote_no, stage_id)
     if not sr:
         conn.close(); raise HTTPException(404, "階段不存在")
@@ -2135,7 +2152,7 @@ def add_stage_visit(quote_no: str, stage_id: int, body: dict = Body(...), author
     接進任何前端頁面（2026-08-23）。"""
     _require_user(authorization)
     conn = get_db()
-    _deny_if_case_locked_unsupported(conn, quote_no)
+    _deny_if_case_locked_unsupported(conn, quote_no, authorization)
     sr = _get_stage_row(conn, quote_no, stage_id)
     if not sr:
         conn.close(); raise HTTPException(404, "階段不存在")
@@ -2159,7 +2176,7 @@ def update_stage_visit(quote_no: str, stage_id: int, visit_id: int, body: dict =
     第二階段 CRUD 端點，尚未接進任何前端頁面（2026-08-23）。"""
     _require_user(authorization)
     conn = get_db()
-    _deny_if_case_locked_unsupported(conn, quote_no)
+    _deny_if_case_locked_unsupported(conn, quote_no, authorization)
     sr = _get_stage_row(conn, quote_no, stage_id)
     if not sr:
         conn.close(); raise HTTPException(404, "階段不存在")
@@ -2188,7 +2205,7 @@ def delete_stage_visit(quote_no: str, stage_id: int, visit_id: int, authorizatio
     尚未接進任何前端頁面（2026-08-23）。"""
     _require_user(authorization)
     conn = get_db()
-    _deny_if_case_locked_unsupported(conn, quote_no)
+    _deny_if_case_locked_unsupported(conn, quote_no, authorization)
     sr = _get_stage_row(conn, quote_no, stage_id)
     if not sr:
         conn.close(); raise HTTPException(404, "階段不存在")
@@ -2507,7 +2524,7 @@ def request_payment_writeoff(no: str, idx: int, body: WriteOffRequestIn, authori
         raise HTTPException(403, "僅管理員可申請沖銷")
     conn = get_db()
     try:
-        _deny_if_case_locked_unsupported(conn, no)
+        _deny_if_case_locked_unsupported(conn, no, authorization)
         data, pits = _load_payment_item(conn, no, idx)
         item = pits[idx]
         if item.get("writeOffStatus") == "pending":
@@ -2539,7 +2556,7 @@ def cancel_payment_writeoff(no: str, idx: int, authorization: str = Header(None)
         raise HTTPException(403, "僅管理員可取消沖銷申請")
     conn = get_db()
     try:
-        _deny_if_case_locked_unsupported(conn, no)
+        _deny_if_case_locked_unsupported(conn, no, authorization)
         data, pits = _load_payment_item(conn, no, idx)
         item = pits[idx]
         if item.get("writeOffStatus") != "pending":
@@ -2568,7 +2585,7 @@ def approve_payment_writeoff(no: str, idx: int, body: WriteOffApproveIn, authori
         raise HTTPException(403, "僅最高管理者可審核沖銷申請")
     conn = get_db()
     try:
-        _deny_if_case_locked_unsupported(conn, no)
+        _deny_if_case_locked_unsupported(conn, no, authorization)
         data, pits = _load_payment_item(conn, no, idx)
         item = pits[idx]
         if item.get("writeOffStatus") != "pending":
@@ -2996,7 +3013,7 @@ def approve_quotation(quote_no: str, body: ApprovalActionBody, authorization: st
 
     if tiers:
         ct_idx = _current_tier_idx(appr)
-        ok, status_code, err_msg = check_approve_permission(tiers, ct_idx, user["username"])
+        ok, status_code, err_msg = check_approve_permission(tiers, ct_idx, user["username"], conn=conn)
         if not ok:
             conn.close()
             raise HTTPException(status_code, err_msg)
@@ -3098,7 +3115,7 @@ def reject_quotation(quote_no: str, body: ApprovalActionBody, authorization: str
     tiers = _active_tiers(appr)
 
     ct_idx = _current_tier_idx(appr)
-    ok, status_code, err_msg = check_reject_permission(tiers, ct_idx, user)
+    ok, status_code, err_msg = check_reject_permission(tiers, ct_idx, user, conn=conn)
     if not ok:
         conn.close()
         raise HTTPException(status_code, err_msg)

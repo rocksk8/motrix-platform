@@ -29,7 +29,7 @@ def _require_admin(user: dict):
 def parts_summary(q: Optional[str] = None, category: Optional[str] = None, authorization: str = Header(None)):
     _require_user(authorization)
     conn = get_db()
-    parts_rows = conn.execute("SELECT part_no, name, brand, unit, category FROM parts WHERE active=1").fetchall()
+    parts_rows = conn.execute("SELECT part_no, name, brand, unit, category, safety_stock FROM parts WHERE active=1").fetchall()
     counts = conn.execute(
         "SELECT part_no, status, COUNT(*) AS cnt, SUM(cost) AS cost_sum, MAX(created_at) AS last_in "
         "FROM stock_items GROUP BY part_no, status"
@@ -46,6 +46,19 @@ def parts_summary(q: Optional[str] = None, category: Optional[str] = None, autho
         s = st.get(status, {})
         return s.get("cnt", 0), s.get("cost_sum", 0)
 
+    _STOCK_LEVEL_YELLOW_MULTIPLIER = 1.5  # 在庫 < 安全庫存 * 此倍數時顯示黃燈（接近安全庫存）
+
+    def _stock_level(in_cnt: int, safety_stock: int) -> str:
+        """庫存水位燈號（2026-08-28）：safety_stock<=0 代表未設定門檻，一律綠燈，
+        不強迫每個料號都要設定；有設定時 <門檻=紅、<門檻*_STOCK_LEVEL_YELLOW_MULTIPLIER=黃、其餘綠。"""
+        if safety_stock <= 0:
+            return "green"
+        if in_cnt < safety_stock:
+            return "red"
+        if in_cnt < safety_stock * _STOCK_LEVEL_YELLOW_MULTIPLIER:
+            return "yellow"
+        return "green"
+
     result = []
     for p in parts_rows:
         d = dict(p)
@@ -58,6 +71,7 @@ def parts_summary(q: Optional[str] = None, category: Optional[str] = None, autho
         shipped_cnt, _ = _stats(st, "shipped")
         installed_cnt, _ = _stats(st, "installed")
         void_cnt, _ = _stats(st, "void")
+        safety_stock = d.get("safety_stock") or 0
         d.update({
             "inStockCount":   in_cnt,
             "inStockValue":   in_value,
@@ -65,6 +79,8 @@ def parts_summary(q: Optional[str] = None, category: Optional[str] = None, autho
             "installedCount": installed_cnt,
             "voidCount":      void_cnt,
             "lastInAt":       st.get("in_stock", {}).get("last_in", ""),
+            "safetyStock":    safety_stock,
+            "stockLevel":     _stock_level(in_cnt, safety_stock),
         })
         result.append(d)
     # 也列出僅存在庫存、目前不在 parts 目錄的料號（避免資料孤兒不可見）
@@ -84,6 +100,8 @@ def parts_summary(q: Optional[str] = None, category: Optional[str] = None, autho
             "installedCount": installed_cnt,
             "voidCount":      void_cnt,
             "lastInAt":       st.get("in_stock", {}).get("last_in", ""),
+            "safetyStock":    0,
+            "stockLevel":     _stock_level(in_cnt, 0),
         })
     return {"items": result}
 

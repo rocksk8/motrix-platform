@@ -44,6 +44,10 @@
     .stock-badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;font-family:LINE Seed TW_OTF, sans-serif}
     .stock-badge.ok{background:#DCFCE7;color:#15803D}
     .stock-badge.zero{background:#F0EEE9;color:var(--text-dim)}
+    .stock-level-dot{display:inline-block;width:9px;height:9px;border-radius:50%;flex-shrink:0}
+    .stock-level-dot.red{background:#DC2626}
+    .stock-level-dot.yellow{background:#D97706}
+    .stock-level-dot.green{background:#D1D5DB}
     .serial-row{display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:center;margin-bottom:8px}
     .status-chip{display:inline-flex;align-items:center;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600}
     .status-chip.in_stock{background:#DCFCE7;color:#15803D}
@@ -74,6 +78,8 @@
         <option value="">全部類別</option>
         <template x-for="c in categories" :key="c"><option :value="c" x-text="c"></option></template>
       </select>
+      <button type="button" class="filter-chip" :class="{active: lowStockOnly}" @click="lowStockOnly = !lowStockOnly"
+              x-show="lowStockCount > 0" x-text="'低於安全庫存（' + lowStockCount + '）'"></button>
       <div style="margin-left:auto;font-size:12px;color:var(--text-dim);display:flex;align-items:center;gap:14px">
         <span x-text="filtered.length + ' 項料號'"></span>
         <span>庫存總金額：<strong style="color:var(--text-primary);font-family:LINE Seed TW_OTF, sans-serif" x-text="'NT$ ' + Math.round(totalStockValue).toLocaleString()"></strong></span>
@@ -96,6 +102,7 @@
                 <th>品名</th>
                 <th>廠牌/型號</th>
                 <th>類別</th>
+                <th style="text-align:center">水位</th>
                 <th style="text-align:right">在庫</th>
                 <th style="text-align:right">在庫金額</th>
                 <th>最近入庫</th>
@@ -114,6 +121,10 @@
                   <td>
                     <span x-show="p.category" style="font-size:11px;padding:2px 8px;border-radius:4px;background:#F0EEE9;color:var(--text-secondary)" x-text="p.category"></span>
                     <span x-show="!p.category" style="color:var(--text-dim)">—</span>
+                  </td>
+                  <td style="text-align:center">
+                    <span class="stock-level-dot" :class="p.stockLevel"
+                          :title="p.safetyStock > 0 ? ('安全庫存 ' + p.safetyStock + '　目前在庫 ' + p.inStockCount + (p.stockLevel==='red' ? '　低於安全庫存' : p.stockLevel==='yellow' ? '　接近安全庫存' : '')) : '未設定安全庫存'"></span>
                   </td>
                   <td style="text-align:right"><span class="stock-badge" :class="p.inStockCount > 0 ? 'ok' : 'zero'" x-text="p.inStockCount"></span></td>
                   <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-size:12px;color:var(--text-secondary)" x-text="p.inStockValue ? 'NT$ ' + Math.round(p.inStockValue).toLocaleString() : '—'"></td>
@@ -249,6 +260,7 @@ function app() {
     parts: [],
     search: '',
     filterCat: '',
+    lowStockOnly: false,
     intake: { show: false, partNo: '', partSearch: '', showPartDrop: false, qty: 1, cost: null, note: '', serials: [{serial_no:'',mac:''}], saving: false, error: '' },
     detail: { show: false, partNo: '', items: [], loading: false, filterStatus: '' },
 
@@ -258,6 +270,7 @@ function app() {
     get filtered() {
       let list = this.items
       if (this.filterCat) list = list.filter(p => p.category === this.filterCat)
+      if (this.lowStockOnly) list = list.filter(p => p.stockLevel === 'red' || p.stockLevel === 'yellow')
       const q = this.search.trim().toLowerCase()
       if (q) list = list.filter(p =>
         (p.part_no||'').toLowerCase().includes(q) ||
@@ -265,6 +278,9 @@ function app() {
         (p.brand||'').toLowerCase().includes(q)
       )
       return list
+    },
+    get lowStockCount() {
+      return this.items.filter(p => p.stockLevel === 'red' || p.stockLevel === 'yellow').length
     },
     get detailFiltered() {
       if (!this.detail.filterStatus) return this.detail.items
