@@ -117,12 +117,26 @@ def update_case_action_item(quote_no: str, item_id: int, body: dict = Body(...),
     ).fetchone()
     if not row:
         conn.close(); raise HTTPException(404, "代辦事項不存在")
-    if "text" not in body or not (body.get("text") or "").strip():
+    new_text = (body.get("text") or "").strip()
+    if "text" not in body or not new_text:
         conn.close(); raise HTTPException(400, "代辦事項內容不得為空")
-    conn.execute(
-        "UPDATE case_action_items SET text=?, updated_at=? WHERE id=?",
-        (body["text"].strip(), datetime.now().isoformat(), item_id)
-    )
+    now = datetime.now().isoformat()
+    # 2026-08-28（模組逐步檢查）：內容異動時，若已進入/完成簽核流程，一併重置
+    # stage1/stage2 的核准紀錄，避免「主管已核准」的紀錄留在畫面上，但實際核准
+    # 的是被改掉之前的舊內容——比照系統其他單據「內容變更即失去既有核准效力」
+    # 的既定慣例。文字沒變時不重置，避免無意義的重新送審。
+    if row["status"] != "pending" and new_text != row["text"]:
+        conn.execute(
+            "UPDATE case_action_items SET text=?, status='pending', "
+            "stage1_approver=NULL, stage1_at=NULL, stage2_approver=NULL, stage2_at=NULL, "
+            "updated_at=? WHERE id=?",
+            (new_text, now, item_id)
+        )
+    else:
+        conn.execute(
+            "UPDATE case_action_items SET text=?, updated_at=? WHERE id=?",
+            (new_text, now, item_id)
+        )
     conn.commit()
     conn.close()
     return {"ok": True}

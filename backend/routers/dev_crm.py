@@ -318,7 +318,7 @@ def get_dev_case(case_id: int, authorization: str = Header("")):
     user = _require_dev(authorization)
     conn = get_db()
     try:
-        row = conn.execute("SELECT * FROM dev_cases WHERE id=?", (case_id,)).fetchone()
+        row = conn.execute("SELECT * FROM dev_cases WHERE id=? AND is_deleted=0", (case_id,)).fetchone()
         if not row:
             raise HTTPException(404, "案件不存在")
         if not _can_access_case(user, row):
@@ -334,7 +334,7 @@ def update_dev_case(case_id: int, body: DevCaseIn, authorization: str = Header("
     now = _TW_NOW()
     conn = get_db()
     try:
-        row = conn.execute("SELECT * FROM dev_cases WHERE id=?", (case_id,)).fetchone()
+        row = conn.execute("SELECT * FROM dev_cases WHERE id=? AND is_deleted=0", (case_id,)).fetchone()
         if not row:
             raise HTTPException(404, "案件不存在")
         if not _can_access_case(user, row):
@@ -493,7 +493,7 @@ def update_dev_case_status(
     now = _TW_NOW()
     conn = get_db()
     try:
-        row = conn.execute("SELECT * FROM dev_cases WHERE id=?", (case_id,)).fetchone()
+        row = conn.execute("SELECT * FROM dev_cases WHERE id=? AND is_deleted=0", (case_id,)).fetchone()
         if not row:
             raise HTTPException(404, "案件不存在")
         if not _can_access_case(user, row):
@@ -521,7 +521,7 @@ def mark_converted(
     now = _TW_NOW()
     conn = get_db()
     try:
-        row = conn.execute("SELECT * FROM dev_cases WHERE id=?", (case_id,)).fetchone()
+        row = conn.execute("SELECT * FROM dev_cases WHERE id=? AND is_deleted=0", (case_id,)).fetchone()
         if not row:
             raise HTTPException(404, "案件不存在")
         if not _can_access_case(user, row):
@@ -808,7 +808,9 @@ def create_dev_log(case_id: int, body: DevLogIn, authorization: str = Header("")
     now = _TW_NOW()
     conn = get_db()
     try:
-        case_row_chk = conn.execute("SELECT * FROM dev_cases WHERE id=?", (case_id,)).fetchone()
+        case_row_chk = conn.execute(
+            "SELECT * FROM dev_cases WHERE id=? AND is_deleted=0", (case_id,)
+        ).fetchone()
         if not case_row_chk:
             raise HTTPException(404, "案件不存在")
         if not _can_access_case(user, case_row_chk):

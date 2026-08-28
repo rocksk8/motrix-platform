@@ -499,9 +499,20 @@ def delete_user(user_id: int, authorization: str = Header(None)):
         raise HTTPException(400, "不可刪除超級管理員帳號")
     uname  = row["username"]
     ulabel = row["display_name"] or uname
-    conn.execute("DELETE FROM users WHERE id=?", (user_id,))
-    conn.execute("DELETE FROM sessions WHERE user_id=?", (user_id,))
-    conn.commit()
+    try:
+        conn.execute("DELETE FROM users WHERE id=?", (user_id,))
+        conn.execute("DELETE FROM sessions WHERE user_id=?", (user_id,))
+        conn.commit()
+    except sqlite3.IntegrityError:
+        # 2026-08-28（模組逐步檢查）：users.id 被多張表以 FK 引用（quotations.
+        # sales_person_id／dev_cases.created_by／dev_logs 多欄／divisions／
+        # departments.manager_user_id 等）且都沒定 ON DELETE 行為，硬刪除有
+        # 關聯資料的帳號原本會被全域 exception handler 接成一個不明不白的
+        # 500；改為友善提示——硬刪除本來就只適合沒有歷史資料的誤建/測試帳號，
+        # 正式離職應改用 toggle_user_active() 停用。
+        conn.rollback()
+        conn.close()
+        raise HTTPException(409, f"「{ulabel}」仍有關聯資料（如業務開發案件、報價單業務歸屬、部門/處主管等），無法刪除，請改用「停用」")
     conn.close()
     _audit(_tok(authorization), 'user.delete', 'user', str(user_id), ulabel)
     notify_module_activity("使用者管理", "刪除帳號", actor.get("display_name") or actor["username"],

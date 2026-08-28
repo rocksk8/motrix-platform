@@ -5,6 +5,16 @@
 
 ---
 
+### 2026-08-28e — 模組逐步檢查（第二輪：主檔資料／業務開發／案件代辦／使用者管理）
+
+- 主檔資料與七大類選型資料庫（switch/monitor/access/gateway/netarch/env/automation）逐一核對：組織架構刪除有子節點保護、客戶/供應商刪除因資料為快照文字本就安全、外包人員/承攬商無硬刪除端點、料號刪除有庫存保護、七大選型資料庫的 fit/products 皆有 `ON DELETE CASCADE`＋全域 `PRAGMA foreign_keys=ON` 保護，確認皆無需修改
+- 業務開發（dev_crm.py）：軟刪除（`is_deleted=1`，需 superadmin 核准）後的專案，`get_dev_case()`／`update_dev_case()`／`update_dev_case_status()`／`mark_converted()`／`create_dev_log()` 五個端點原本都沒有檢查 `is_deleted`，知道/猜到 case_id 即可繼續查看/編輯/轉建報價單/新增記錄到一個已核准刪除的專案，且完全不出現在任何列表裡；五處皆補上 `is_deleted=0` 過濾，找不到時回 404
+- 案件代辦事項（case_action_items.py）：PUT 編輯內容原本不檢查簽核狀態，已完成兩階段簽核（`status='done'`）的內容仍可被任意改掉，但 `stage1_approver`/`stage2_approver`/時間戳不會跟著重置，變成「顯示已核准，但實際內容沒人審過」；改為內容真的有變動且已進入/完成簽核流程時，一併重置回 `pending` 並清空簽核紀錄，需重新送審；內容沒變時不誤觸重置
+- 使用者管理（auth.py）：`delete_user()` 硬刪除時完全沒有關聯資料檢查，但 `users.id` 被多張表以 FK 引用（`quotations.sales_person_id`／`dev_cases.created_by`／`dev_logs` 多欄／`divisions`/`departments.manager_user_id`）且都沒定 `ON DELETE` 行為，實測確認只要有任何一項關聯資料就會拋出未接住的 `sqlite3.IntegrityError`，被全域 exception handler 接成一個不明不白的「伺服器發生內部錯誤」500；接住後改回友善的 409，提示改用既有的「停用」（`toggle_user_active()`）
+- 新增測試共 11 題（`test_dev_case_soft_delete_guard`5題／`test_case_action_item_edit_reset`3題／`test_delete_user_referenced_guard`3題）；`pytest` 259/259 全過
+
+---
+
 ### 2026-08-28d — 金額同步稽核（模組逐步檢查）
 
 - 營運報表：精算快照過期不再只在案件層級可見，公司彙總新增 `staleSettlementCount`；`_compute_achievement()` 改與 `monthly_trend()` 共用 `wonMonth` date 歸屬邏輯；空付款排程案件新增 `missingPaymentItemsCount`＋清單，避免悄悄消失於金額類報表
