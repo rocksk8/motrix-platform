@@ -14,6 +14,8 @@ from db import get_db, CURRENT_VERSION, _MIGRATIONS
 from helpers import (
     _require_user, _tok, _audit, _get_setting, _set_setting, _get_edge_path,
     _filter_live_notifications, notify_module_activity,
+    approval_flow_setting_key, APPROVAL_DOC_TYPES, DEFAULT_UNIFIED_DOC_TYPES,
+    APPROVAL_DOC_TYPE_LABELS,
 )
 from helpers.quotations import _steps_to_tiers
 from photos import _process_project_photo, _photo_root
@@ -96,9 +98,14 @@ def _normalize_flow(raw: dict) -> dict:
 
 @router.get("/api/settings/approval-flow")
 def get_approval_flow_settings(authorization: str = Header(None)):
-    """統一簽核設定（2026-08-24 起）：本設定套用於報價單／開票申請憑據／出貨單／
+    """統一簽核設定（2026-08-24 起）：本設定預設套用於報價單／開票申請憑據／出貨單／
     請款單四種單據，取代原本各自獨立的 approval_flow / invoice_voucher_approval_flow /
-    shipping_approval_flow 三組設定——舊三組不再讀取，正式機上線後需重新設定一次。"""
+    shipping_approval_flow 三組設定——舊三組不再讀取，正式機上線後需重新設定一次。
+
+    2026-08-28 起「預設套用」變成可設定：見下方 approval_flow_scope 相關端點，
+    管理員可把任一文件類型從這裡切出去、改走自己獨立的 {doc_type}_approval_flow——
+    這把 unified_approval_flow key 本身的讀寫方式完全沒變，只是「誰在用它」
+    多了一層可設定的間接層。"""
     _require_user(authorization)
     raw = _get_setting("unified_approval_flow", {"tiers": []}) or {}
     return _normalize_flow(raw)
@@ -115,6 +122,82 @@ def set_approval_flow_settings(body: ApprovalFlowSettings, authorization: str = 
     _set_setting("unified_approval_flow", value)
     _audit(_tok(authorization), "settings.unified_approval_flow.update", "settings", "unified_approval_flow",
            "統一簽核流程設定（報價單／開票申請憑據／出貨單／請款單）",
+           {"tierCount": len(body.tiers), "approverCount": total_approvers,
+            "includeSubmitterManagerTier": body.includeSubmitterManagerTier})
+    return {"ok": True}
+
+
+# ── 簽核流程套用範圍（2026-08-28）：五種文件類型可各自勾選要不要走統一流程 ────────
+#
+# 「編輯」跟「套用」是兩件事，刻意分開：
+#   - 編輯：unified_approval_flow／{doc_type}_approval_flow 六把 key 各自永遠可直接
+#     讀寫（見下面 get/set_approval_flow_for_doc_type()），跟 scope 設定無關。
+#   - 套用：scope 只決定各 router 送審/無簽核層 fallback 那兩處「當下該讀哪把 key」
+#     （helpers/tiered_approval.py::approval_flow_setting_key()），本身不影響任何
+#     一把 key 的實際內容。
+# 這樣「切換」永遠不會弄丟另一邊的既有設定，勾來勾去也不會互相覆蓋。
+
+class ApprovalFlowScopeSettings(BaseModel):
+    quotation:          bool = True
+    shipping:           bool = True
+    invoice_voucher:    bool = True
+    payment_request:    bool = True
+    contractor_voucher: bool = False
+
+
+@router.get("/api/settings/approval-flow-scope")
+def get_approval_flow_scope(authorization: str = Header(None)):
+    _require_user(authorization)
+    raw = _get_setting("approval_flow_scope", {}) or {}
+    return {dt: raw.get(dt, dt in DEFAULT_UNIFIED_DOC_TYPES) for dt in APPROVAL_DOC_TYPES}
+
+
+@router.put("/api/settings/approval-flow-scope")
+def set_approval_flow_scope(body: ApprovalFlowScopeSettings, authorization: str = Header(None)):
+    _require_user(authorization, require_superadmin=True)
+    old_scope  = _get_setting("approval_flow_scope", {}) or {}
+    new_scope  = body.model_dump()
+    unified_flow = _get_setting("unified_approval_flow", {"tiers": []}) or {"tiers": []}
+    seeded = []
+    for dt, is_unified in new_scope.items():
+        was_unified = old_scope.get(dt, dt in DEFAULT_UNIFIED_DOC_TYPES)
+        if was_unified and not is_unified:
+            # 剛從統一流程勾掉、改成獨立設定：把目前統一流程的內容複製一份當起點，
+            # 避免行為在切換的當下突然改變（使用者 2026-08-28 討論時選定的預設）。
+            _set_setting(f"{dt}_approval_flow", unified_flow)
+            seeded.append(dt)
+    _set_setting("approval_flow_scope", new_scope)
+    _audit(_tok(authorization), "settings.approval_flow_scope.update", "settings", "approval_flow_scope",
+           "簽核流程套用範圍設定", {"scope": new_scope, "seededFromUnified": seeded})
+    return {"ok": True, "seededFromUnified": seeded}
+
+
+@router.get("/api/settings/approval-flow/{doc_type}")
+def get_approval_flow_for_doc_type(doc_type: str, authorization: str = Header(None)):
+    """獨立設定專用：不管 scope 目前怎麼設，永遠直接讀該文件類型自己的
+    {doc_type}_approval_flow key（跟 unified_approval_flow 分開存放）。"""
+    _require_user(authorization)
+    if doc_type not in APPROVAL_DOC_TYPES:
+        raise HTTPException(404, f"不支援的文件類型：{doc_type}")
+    raw = _get_setting(f"{doc_type}_approval_flow", {"tiers": []}) or {}
+    return _normalize_flow(raw)
+
+
+@router.put("/api/settings/approval-flow/{doc_type}")
+def set_approval_flow_for_doc_type(doc_type: str, body: ApprovalFlowSettings, authorization: str = Header(None)):
+    _require_user(authorization, require_superadmin=True)
+    if doc_type not in APPROVAL_DOC_TYPES:
+        raise HTTPException(404, f"不支援的文件類型：{doc_type}")
+    total_approvers = sum(len(t.approvers) for t in body.tiers)
+    value = {
+        "tiers": [t.model_dump() for t in body.tiers],
+        "includeSubmitterManagerTier": body.includeSubmitterManagerTier,
+    }
+    key = f"{doc_type}_approval_flow"
+    _set_setting(key, value)
+    label = APPROVAL_DOC_TYPE_LABELS.get(doc_type, doc_type)
+    _audit(_tok(authorization), f"settings.{key}.update", "settings", key,
+           f"{label}獨立簽核流程設定",
            {"tierCount": len(body.tiers), "approverCount": total_approvers,
             "includeSubmitterManagerTier": body.includeSubmitterManagerTier})
     return {"ok": True}

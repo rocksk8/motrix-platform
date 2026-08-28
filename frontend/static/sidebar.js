@@ -437,7 +437,7 @@
       sec('系統'),
       ni(pg('users.html'),             'users', '使用者管理', ['users.html'],             sa),
       ni(pg('org-structure.html'),     'org',   '組織架構設定', ['org-structure.html'],   sa),
-      ni(pg('approval-settings.html'),      'sett',  '簽核設定（報價單/發票/出貨單/請款單）',   ['approval-settings.html'],      sa),
+      ni(pg('approval-settings.html'),      'sett',  '簽核設定',   ['approval-settings.html'],      sa),
       ni(pg('contractor-voucher-approval-settings.html'), 'sett', '匯款申請簽核設定', ['contractor-voucher-approval-settings.html'], sa),
       ni(pg('notification-settings.html'), 'ntfy',  '通知設定',   ['notification-settings.html'],  sa),
       ni(pg('google-calendar-settings.html'), 'gcal', 'Google 行事曆設定', ['google-calendar-settings.html'], sa),

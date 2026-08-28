@@ -21,6 +21,30 @@ MOTRIX-ERP-QUICK.md 2026-08-22 changelog）——邏輯重複四份、改一個�
 """
 from typing import Optional
 
+# 文件類型可選擇「走統一流程」或「獨立設定」（2026-08-28 新增，見
+# system.py 的 approval_flow_scope 設定＋前端 approval-settings.html 多選選單）。
+# scope 沒有記錄某個 doc_type 時，套用這裡的預設分組——對應 2026-08-24 統一前後的
+# 既有事實：報價單／出貨單／發票開立簽核單／請款單預設走統一流程，承攬商匯款申請
+# 預設維持獨立（本來就有自己的 contractor_voucher_approval_flow）。
+APPROVAL_DOC_TYPES = ["quotation", "shipping", "invoice_voucher", "payment_request", "contractor_voucher"]
+DEFAULT_UNIFIED_DOC_TYPES = {"quotation", "shipping", "invoice_voucher", "payment_request"}
+APPROVAL_DOC_TYPE_LABELS = {
+    "quotation":         "報價單",
+    "shipping":          "出貨單",
+    "invoice_voucher":   "發票開立簽核單",
+    "payment_request":   "請款單",
+    "contractor_voucher": "承攬商匯款申請",
+}
+
+
+def approval_flow_setting_key(doc_type: str, scope: dict) -> str:
+    """依 approval_flow_scope 設定解析某文件類型送審當下該讀寫哪把 system_settings
+    key：scope[doc_type] 為 True（或沒設定時的預設分組）就是走 unified_approval_flow，
+    否則是該類型自己的 {doc_type}_approval_flow。純判斷、不碰 DB，呼叫端自己先把
+    scope 讀出來傳進來（比照本模組其餘函式的既有分工）。"""
+    is_unified = scope.get(doc_type, doc_type in DEFAULT_UNIFIED_DOC_TYPES)
+    return "unified_approval_flow" if is_unified else f"{doc_type}_approval_flow"
+
 
 def active_tiers(appr: dict) -> list:
     return appr.get("tiers") or []

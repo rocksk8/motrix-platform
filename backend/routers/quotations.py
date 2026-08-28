@@ -26,7 +26,7 @@ from helpers import (
     notify_module_activity, push_event_for_quotation_won, push_event_for_important_comment,
     push_event_for_case_stage_due, push_event_delete_for_case_stage,
     check_approve_permission, check_reject_permission, check_no_tier_self_approval,
-    resolve_tier_approvers, UnresolvedManagerError,
+    resolve_tier_approvers, UnresolvedManagerError, approval_flow_setting_key,
     save_document_files, delete_document_file,
     notify_case_close_blocked, notify_case_change_requested,
 )
@@ -283,7 +283,8 @@ def _build_approval_tiers_and_notify(q: dict, appr: dict, quote_no: str, is_new_
     draft step) and update_quotation() (draft → 待審核) so both submission paths
     build tiers and notify identically."""
     if not appr.get("tiers") and not appr.get("steps"):
-        flow_setting = _get_setting("unified_approval_flow", {"tiers": []}) or {}
+        _scope = _get_setting("approval_flow_scope", {}) or {}
+        flow_setting = _get_setting(approval_flow_setting_key("quotation", _scope), {"tiers": []}) or {}
         requester_uname = appr.get("requestedBy") or ""
         _tconn = get_db()
         try:
@@ -3036,7 +3037,8 @@ def approve_quotation(quote_no: str, body: ApprovalActionBody, authorization: st
         # If global approval_flow has tiers configured, block the no-tier fallback.
         # This prevents a quotation submitted before flow was set (tiers missing)
         # from being approved without going through the flow.
-        _global_flow   = _get_setting("unified_approval_flow", {"tiers": []}) or {}
+        _scope         = _get_setting("approval_flow_scope", {}) or {}
+        _global_flow   = _get_setting(approval_flow_setting_key("quotation", _scope), {"tiers": []}) or {}
         try:
             _global_tiers = _setting_to_active_tiers(_global_flow, conn, appr.get("requestedBy"))
         except UnresolvedManagerError as e:

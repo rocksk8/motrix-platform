@@ -1,7 +1,7 @@
 # MOTRIX ERP — 開發快速參考
 
 > 允碩整合集創（統編 60575481）｜ Tel: 04-3610-6566 ｜ info@miactw.com  
-> 文件版本：**2026-08-20**（承攬商匯款申請＋開票申請憑據，DB v45/v46，見 §12）
+> 文件版本：**2026-08-20**（承攬商匯款申請＋發票開立簽核單，DB v45/v46，見 §12）
 
 ---
 
@@ -42,7 +42,7 @@
 | 2026-08-01 | `backend/setup_autostart_task.ps1`、`backend/setup_heartbeat_task.ps1` 兩個部署排程設定腳本，正式機有（§1.1／§1.2 有描述其行為）、這台開發機完全沒有檔案 | ✅ 2026-08-08 已解決——透過 RDP 連上正式機，原始檔案改名 `.orig` 保留後貼回內容逐行 diff 校正一致（差異細節見 `DR-SOP.md` §3 第 1 點），已 commit 進 git 並隨這次更新包一併部署 |
 | 2026-08-01 | 已知程式碼未 commit 進 git（`git log` 停在較舊的提交，工作區有大量未 commit 變更）；正式機的程式碼版本與 git 歷史的對應關係目前不明 | ✅ 已於合併正式機更新模式匯出檔案時一併 commit（見 §12 2026-08-01j）；正式機仍無 git，日後版本比對仍需靠 §15 `deploy_manifest.json` 記的 commit 值 |
 | 2026-08-05 | 本文件與程式碼（`main.py` CORS 白名單／`email_notify.py` 與 `system.py` 的 email base_url 預設值／`notification-settings.html` 預設值）長期記載正式機區網位址為 `172.16.11.211:666`，實際上是 `172.16.10.177:666`（使用者於本次對話中指正並確認為固定 IP，非 DHCP 動態配發；已用 `curl` 實測連線成功） | ✅ 本次一併修正上述 5 處程式碼與 §1 位址表 |
-| 2026-08-20 | 開發機當時無法連線，承攬商匯款申請／開票申請憑據功能（DB v45/v46，見 §12）直接在正式機開發，開發機完全沒有這批程式碼 | ✅ 2026-08-23 已回推：`verify_manifest.py` 核對 43/43 相符、開發機本機啟動 server 驗證 `/api/ping`＋schema_version=52 正常後 `git commit`（累計至第 42 輪 2026-08-23q，DB 已到 v52，非僅 v45/v46） |
+| 2026-08-20 | 開發機當時無法連線，承攬商匯款申請／發票開立簽核單功能（DB v45/v46，見 §12）直接在正式機開發，開發機完全沒有這批程式碼 | ✅ 2026-08-23 已回推：`verify_manifest.py` 核對 43/43 相符、開發機本機啟動 server 驗證 `/api/ping`＋schema_version=52 正常後 `git commit`（累計至第 42 輪 2026-08-23q，DB 已到 v52，非僅 v45/v46） |
 
 ---
 
@@ -126,7 +126,7 @@
 
 | 模組 | 職責 |
 |------|------|
-| `db.py` | 連線、`init_db()`、PRAGMA WAL、熱路徑欄位／索引；**CURRENT_VERSION=46**（46 個 migrations；v32/v33 為交換器選型導覽 `switch_guide` 表結構，2026-08-01 由正式機備份 db 實際結構還原重建，詳見 db.py `_m032_switch_guide` 註解；v39/v40 為 2026-08-09 新增的監控系統／門禁系統選型導覽 `monitor_guide`/`access_guide` 表結構；v41 為閘道器與控制器選型導覽 `gateway_guide` 表結構；v42 為 2026-08-13 新增的業務開發連結報價單審核制 `dev_cases` 欄位；v43 為 2026-08-17 新增的使用者個別 Email 通知偏好 `users.notification_muted` 欄位；v44 為 2026-08-17 新增的承攬商派發發票號碼 `contractor_dispatches.invoice_no` 欄位；v45/v46 為 2026-08-20 新增的承攬商匯款申請／開票申請憑據 `contractor_payment_vouchers`/`invoice_vouchers` 表結構，正式機直接開發，見 §12） |
+| `db.py` | 連線、`init_db()`、PRAGMA WAL、熱路徑欄位／索引；**CURRENT_VERSION=46**（46 個 migrations；v32/v33 為交換器選型導覽 `switch_guide` 表結構，2026-08-01 由正式機備份 db 實際結構還原重建，詳見 db.py `_m032_switch_guide` 註解；v39/v40 為 2026-08-09 新增的監控系統／門禁系統選型導覽 `monitor_guide`/`access_guide` 表結構；v41 為閘道器與控制器選型導覽 `gateway_guide` 表結構；v42 為 2026-08-13 新增的業務開發連結報價單審核制 `dev_cases` 欄位；v43 為 2026-08-17 新增的使用者個別 Email 通知偏好 `users.notification_muted` 欄位；v44 為 2026-08-17 新增的承攬商派發發票號碼 `contractor_dispatches.invoice_no` 欄位；v45/v46 為 2026-08-20 新增的承攬商匯款申請／發票開立簽核單 `contractor_payment_vouchers`/`invoice_vouchers` 表結構，正式機直接開發，見 §12） |
 | `helpers/` | 密碼、session、audit、notify、settings、弱密碼標記、`save_quotation_json()` |
 | `archive.py` | 即時／每日／週備份；本機 SQLite 快照；**原子 JSON 寫入**（`_atomic_json_write`）；G: fallback |
 | `backup_job.py` | 獨立備份腳本（Windows 工作排程器，不依賴 server） |
@@ -307,7 +307,7 @@ contractor_payment_vouchers -- 承攬商匯款申請（DB v45，見 §5.9，2026
   is_paid/paid_by/paid_at/paid_log（財務「已匯款」標記，獨立於 status，比照出貨單「已核准」
   跟「已回簽」是兩個獨立狀態）, export_count, export_log, created_by, created_at, updated_at
 
-invoice_vouchers     -- 開票申請憑據（DB v46/v47，見 §5.9，2026-08-20）
+invoice_vouchers     -- 發票開立簽核單（DB v46/v47，見 §5.9，2026-08-20）
   id, voucher_no PK（IV-YYYYMM-NNN）, quote_no, scope('amount'|'items'，2026-08-20 起，取代原本
   的 'single'|'all'）, amount（REAL，DB v47 新增，這張申請要開多少錢的唯一權威數字，供
   SUM() 直接算「這張報價單已申請多少／還剩多少可申請」，不必每次解析全部 snapshot_json）,
@@ -577,7 +577,7 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
 
 - 一個案件（`quote_no`）可對應多張出貨單（分批出貨）；分頁對所有能開案件管理的人可見，**新增/編輯/送審/簽核/匯出 PDF/勾選回簽等操作限 admin+**（與承攬商分頁一致：分頁可見、寫入操作後端擋權限）
 - 品項純出貨用途，**不含金額欄位**；可從報價單一鍵匯入品項（前端純轉換，去除 cost/margin/unitPrice/amount），或手動新增/編輯，支援段落標題列（`type:'header'`）
-- **簽核流程獨立於報價單**：`system_settings.shipping_approval_flow`（不與報價單 `approval_flow` 共用），設定頁 `shipping-approval-settings.html`；tiers 依序簽核，有設定流程時申請人可自簽；**無流程時僅 superadmin 可簽（含自簽）**——與報價單「無流程時禁止申請人自簽」的規則刻意不同（2026-08-01g 調整，見 §12）
+- **簽核流程**：2026-08-24 起預設與報價單／發票開立簽核單／請款單共用 `system_settings.unified_approval_flow`；2026-08-28 起可在「簽核設定」頁（`approval-settings.html`）的套用範圍選單勾掉，改成出貨單自己獨立的 `system_settings.shipping_approval_flow`（同一頁面內展開編輯，不再有獨立的 `shipping-approval-settings.html`，見 §12 2026-08-28）；tiers 依序簽核，有設定流程時申請人可自簽；**無流程時僅 superadmin 可簽（含自簽）**——與報價單「無流程時禁止申請人自簽」的規則刻意不同（2026-08-01g 調整，見 §12）
 - 全部簽核完成 → 狀態 `已核准`，背景觸發 PDF 存檔（`pdf_gen.py _generate_shipping_pdf`）
 - **已回簽**：`已核准` 狀態才可切換；`signed-toggle` 為嚴格 toggle（已回簽不可重複標記，需先取消），每次切換完整記錄至 `signed_log`（誰、何時、動作、備註），案件管理 UI 可展開查看完整歷程
 - PDF 匯出與報價單同一套機制：`GET .../pdf-download` 產生 bytes（不記錄），`POST .../export` 另外累計 `export_count`/`export_log`
@@ -586,7 +586,7 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
 - 刪除僅限 `草稿` 狀態（保留已進入簽核/已回簽的歷程）
 - Demo 模式 PDF 隔離目錄：`backend/_demo_shipping_pdf_archive`
 
-### §5.9 · 承攬商匯款申請／開票申請憑據（2026-08-20）
+### §5.9 · 承攬商匯款申請／發票開立簽核單（2026-08-20）
 
 兩個獨立於報價單/出貨單的財務憑證流程，架構直接沿用 §5.8 出貨單的 tiers 簽核＋PDF＋匯出紀錄模式，`routers/contractor_vouchers.py`／`routers/invoice_vouchers.py`。
 
@@ -607,7 +607,7 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
 - 全部簽核完成 → 狀態 `已核准`，背景觸發 PDF 存檔（`pdf_gen.py _generate_contractor_voucher_pdf`）；PDF 含銀行匯款資訊＋簽核歷程表格
 - Demo 模式 PDF 隔離目錄：`backend/_demo_contractor_voucher_pdf_archive`
 
-**開票申請憑據**（案件管理案件資訊 tab／款項明細，`invoice_vouchers`）：
+**發票開立簽核單**（案件管理案件資訊 tab／款項明細，`invoice_vouchers`）：
 
 ```
 草稿 → 待審核 → 簽核中 → 已核准（定稿，無額外財務結案節點）
@@ -618,11 +618,11 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
 - `amount`（DB v47 新增的真實 SQL 欄位）是唯一權威金額數字，不論哪種 scope 都會寫入，`_quote_remaining()` 用 `SUM(amount)` 直接算，不必解析全部 snapshot_json
 - 建立當下把客戶名稱/統編/案件名稱**全部快照**進 `snapshot_json`；`scope='items'` 時額外快照 `selectedItems`（實際要開的品項+數量+金額，金額可由使用者自行調整，不強制等於數量×單價）
 - **報價單品項參考**（`scope='amount'` 時顯示，`scope='items'` 時因為 `selectedItems` 本身就是實際品項不重複顯示）：`snapshot_json.quoteItems` 快照報價單 `items[]`，**只帶客戶看得到的欄位**（description/brand/qty/unit/unitPrice/amount/notes），刻意排除 `cost`/`margin`/`unitPriceOverride` 等內部機密欄位，避免成本/毛利外流到這份財務單位使用的文件；PDF 對應顯示「三、申請品項明細」（items 模式）或「三、申請金額」+「四、開票品項參考」（amount 模式）
-- 獨立簽核設定：`system_settings.invoice_voucher_approval_flow`（`invoice-voucher-approval-settings.html`，superadmin）
+- **簽核流程**：2026-08-24 起預設與報價單／出貨單／請款單共用 `system_settings.unified_approval_flow`；2026-08-28 起可在「簽核設定」頁套用範圍選單勾掉，改成自己獨立的 `system_settings.invoice_voucher_approval_flow`（同一頁面內展開編輯，不再有獨立的 `invoice-voucher-approval-settings.html`，見 §12 2026-08-28）
 - 全部簽核完成 → 狀態 `已核准`，背景觸發 PDF 存檔（`pdf_gen.py _generate_invoice_voucher_pdf`）
 - Demo 模式 PDF 隔離目錄：`backend/_demo_invoice_voucher_pdf_archive`
 
-**共同點**：兩者的簽核 tiers 邏輯各自獨立實作（未與出貨單共用 helper，刻意選擇避免共用抽象碰壞既有正式功能）；PDF 預覽（`GET .../pdf-download`）任何狀態皆可看、未核准帶浮水印警告橫幅；下載才計入 `export_count`/`export_log`（`POST .../export`）；刪除僅限草稿狀態；`audit-log.html`／`users.html` 通知偏好已比照出貨單補齊對應項目；跟報價單一起整合進統一簽核佇列頁 `approval-queue.html`（2026-08-20j，見 §12）；`approve`/`reject` 端點不限定 admin/superadmin 角色才能操作，改成純粹依「是否為當層簽核人員」判斷（2026-08-20k 修正，比照報價單原本就有的做法）。**簽核逾期催辦**（2026-08-21b，見 §12）：三種文件共用同一套規則，卡在簽核柱列超過工作日 1/3/5 天分級寄信催辦（1/3 天各一次，3 天起同步通知 superadmin，5 天以上每個工作日重複寄），`routers/daily_tasks.py _check_approval_reminders()`，掛在既有每日 08:00 排程裡。
+**共同點**：兩者的簽核 tiers 純邏輯共用 `helpers/tiered_approval.py`（2026-08-22 起，見 §12 同日 changelog）；PDF 預覽（`GET .../pdf-download`）任何狀態皆可看、未核准帶浮水印警告橫幅；下載才計入 `export_count`/`export_log`（`POST .../export`）；刪除僅限草稿狀態；`audit-log.html`／`users.html` 通知偏好已比照出貨單補齊對應項目；跟報價單一起整合進統一簽核佇列頁 `approval-queue.html`（2026-08-20j，見 §12）；`approve`/`reject` 端點不限定 admin/superadmin 角色才能操作，改成純粹依「是否為當層簽核人員」判斷（2026-08-20k 修正，比照報價單原本就有的做法）。**簽核逾期催辦**（2026-08-21b，見 §12）：三種文件共用同一套規則，卡在簽核柱列超過工作日 1/3/5 天分級寄信催辦（1/3 天各一次，3 天起同步通知 superadmin，5 天以上每個工作日重複寄），`routers/daily_tasks.py _check_approval_reminders()`，掛在既有每日 08:00 排程裡。
 
 ---
 
@@ -659,7 +659,7 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
   - **門禁系統選型導覽**：`access-guide.html`；檢視 `access_guide` 模組旗標或 admin+（`cAccessG` 旗標）；編輯需 `access_guide_edit` 或 superadmin；選型資料庫第五個上線的類別（2026-08-09），資料形狀同上（元件分類×場域情境矩陣），第一批資料為 UniFi Access
   - 五者在**歷史紀錄**（`audit-log.html`）與**版本紀錄**（`module-versions.html`）皆已比照其餘模組補上對應的 optgroup／actionLabel／色碼（teal 色系＋🧭 圖示，五者共用同一識別色，強調同屬一個產品線而非各自獨立模組）
   - **涵蓋度總覽**（2026-08-09）：`selection-db-overview.html`；admin+ 限定，無獨立模組旗標；彙總上述四個「品牌/型號目錄」型類別（網路架構/交換器/監控/門禁，不含場域選型導覽——資料形狀是情境×分層文字建議而非品牌目錄）在各世代/分類底下的品牌數與產品數，紅/黃/綠三色標示完全空白／偏薄弱／足夠；**不新增後端 API**，純前端呼叫既有 5 個類別各自的 GET 端點彙總而成
-- **出貨單簽核設定**：`shipping-approval-settings.html`；superadmin 限定；獨立於報價單「簽核設定」（`system_settings.shipping_approval_flow`，不同 key），UI 為 `approval-settings.html` 的複製版本；出貨單本身不是獨立 sidebar 項目，掛在「案件管理」頁面內的「出貨單」分頁，沿用 `case_manage`/`cCM`/`sb-mod-case`
+- **簽核設定**：`approval-settings.html`；superadmin 限定；2026-08-28 起單一頁面涵蓋全部五種文件類型（報價單／出貨單／發票開立簽核單／請款單／承攬商匯款申請）——頁面上方是套用範圍多選選單，勾選的類型共用「統一簽核流程設定」，取消勾選的類型各自在同一頁展開獨立編輯區塊；不再有各自獨立的 `shipping-approval-settings.html`／`invoice-voucher-approval-settings.html`（`contractor-voucher-approval-settings.html` 仍保留獨立頁面，見 §12 2026-08-28）；出貨單本身不是獨立 sidebar 項目，掛在「案件管理」頁面內的「出貨單」分頁，沿用 `case_manage`/`cCM`/`sb-mod-case`
 - **Schema 狀態**（2026-08-01）：`schema-status.html`；superadmin 限定；**純唯讀**診斷頁，顯示目前 db 版本 / 目標版本、狀態（✓最新／⚠尚未同步）、最後更新時間、完整 migration 清單（v34→v1，版號＋函式名稱＋說明）；**全頁無任何操作按鈕或表單**——migration 於伺服器啟動時自動套用，此頁不提供「觸發乾跑」之類的操作（架構上沒有意義：活著的伺服器對自己已是最新版的 db 再跑一次永遠是 no-op）；資料來源 `GET /api/system/schema-status`
 
 ---
@@ -716,7 +716,9 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
 | GET | /dashboard/stats · /monthly | 需認證 |
 | GET | /devices · /receivables | 需認證 |
 | GET | /reports/financial · /excel · /pdf | admin+ |
-| GET/PUT | /settings/approval-flow | |
+| GET/PUT | /settings/approval-flow | 統一簽核流程（`unified_approval_flow`），PUT 限 superadmin |
+| GET/PUT | /settings/approval-flow-scope | 五種文件類型套用範圍（統一／獨立），PUT 限 superadmin，2026-08-28 |
+| GET/PUT | /settings/approval-flow/{doc_type} | 該文件類型自己獨立的簽核設定（`{doc_type}_approval_flow`），doc_type ∈ quotation/shipping/invoice_voucher/payment_request/contractor_voucher，PUT 限 superadmin，2026-08-28 |
 | GET/PATCH | /notifications/* | |
 | GET | /audit-log | **admin+ only**；viewer/sales/engineer → 403 |
 | GET/POST/PUT/DELETE | /work-logs | PUT/DELETE 非 admin 只能操作自己的 |
@@ -815,7 +817,7 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
 | GET | /shipping-notes/{note_no}/pdf-download | Edge PDF（不記錄匯出） |
 | POST | /shipping-notes/{note_no}/export | 記錄匯出人/時間/次數（`export_count`/`export_log`） |
 | POST | /shipping-notes/{note_no}/signed-toggle | `{action:'sign'|'unsign', note?}`；已核准才可切換，嚴格 toggle（409 若狀態不符） |
-| GET/PUT | /shipping-notes/settings/approval-flow | 出貨單專屬簽核流程設定（PUT 限 superadmin），獨立於報價單 `approval_flow` |
+| （無專屬 settings 端點） | | 簽核流程走統一設定 `/settings/approval-flow` 或（獨立時）`/settings/approval-flow/shipping`，見 §7.3／§12 2026-08-28 |
 
 ### §7.9 · 監控系統選型導覽（DB v39）
 
@@ -854,7 +856,7 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
 - 前端 `frontend/pages/access-guide.html`：以交換器選型導覽為範本（依情境查看／對照矩陣總覽／規格比較／管理後台 CRUD 全數沿用）
 - 所有分類都需要一台執行 UniFi Access App 的 UniFi OS Console 才能運作，`READER` 分類的產品不能單獨運作，需搭配 `MULTI_DOOR_HUB` 才能控制門鎖，詳見 `ACCESS-GUIDE-CONTENT.md` §1
 
-### §7.11 · 承攬商匯款申請／開票申請憑據（DB v45/v46，見 §5.9，2026-08-20）
+### §7.11 · 承攬商匯款申請／發票開立簽核單（DB v45/v46，見 §5.9，2026-08-20）
 
 | Method | Path | 說明 |
 |--------|------|------|
@@ -869,8 +871,8 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
 | GET | /contractor-vouchers/{voucher_no}/pdf-download | Edge PDF（不記錄匯出） |
 | POST | /contractor-vouchers/{voucher_no}/export | 記錄匯出人/時間/次數 |
 | POST | /contractor-vouchers/{voucher_no}/paid-toggle | `{action:'pay'|'unpay', note?}`；僅已核准可標記，獨立於 status |
-| GET/PUT | /contractor-vouchers/settings/approval-flow | 專屬簽核流程設定（PUT 限 superadmin） |
-| GET | /invoice-vouchers?quote_no= | 依案件列出開票申請憑據摘要 |
+| GET/PUT | /contractor-vouchers/settings/approval-flow | 專屬簽核流程設定（PUT 限 superadmin）；讀寫的 key 固定是 `contractor_voucher_approval_flow`，跟送審當下實際生效與否無關（生效與否看 §12 2026-08-28 的套用範圍設定） |
+| GET | /invoice-vouchers?quote_no= | 依案件列出發票開立簽核單摘要 |
 | GET | /invoice-vouchers/remaining?quote_no= | **建立申請前查剩餘額度**（含合約總額/已申請/剩餘金額＋各報價品項的已申請/剩餘數量）；⚠️ 註冊順序必須在 `/{voucher_no}` 之前，否則會被當成 voucher_no 吃掉 |
 | GET | /invoice-vouchers/{voucher_no} | 完整明細（含 snapshot/approval/export_log） |
 | POST | /invoice-vouchers | `{quote_no, scope:'amount'\|'items', amount?, items?:[{itemId,qty,amount}]}` 建立草稿（admin+，2026-08-20 重新設計）；金額或選取品項超過剩餘可申請額度會 409；`voucher_no` 由 `next_entity_code(...,'IV',code_col='voucher_no')` 產生 |
@@ -881,7 +883,7 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
 | POST | /invoice-vouchers/{voucher_no}/revoke-approval | 撤銷已核准 `{note?}` |
 | GET | /invoice-vouchers/{voucher_no}/pdf-download | Edge PDF（不記錄匯出） |
 | POST | /invoice-vouchers/{voucher_no}/export | 記錄匯出人/時間/次數 |
-| GET/PUT | /invoice-vouchers/settings/approval-flow | 專屬簽核流程設定（PUT 限 superadmin） |
+| （無專屬 settings 端點） | | 簽核流程走統一設定 `/settings/approval-flow` 或（獨立時）`/settings/approval-flow/invoice_voucher`，見 §7.3／§12 2026-08-28 |
 
 ---
 
@@ -993,6 +995,15 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
 
+### 2026-08-28 — 簽核流程套用範圍：五種文件類型可各自選統一流程或獨立設定
+
+- **背景**：使用者釐清「統一簽核設定」的現況後，要求做一個選單，可複數選擇哪些文件類型走統一流程送簽、哪些各自獨立設定——2026-08-24 統一之後，報價單／出貨單／發票開立簽核單／請款單四者共用 `unified_approval_flow`、承攬商匯款申請維持自己的 `contractor_voucher_approval_flow` 是寫死在各 router 程式碼裡的分組，這次改成可設定。決定兩個關鍵行為前先用 AskUserQuestion 跟使用者確認：①切換到獨立設定時初始值＝複製目前統一流程內容（不是從空白開始）；②獨立設定的編輯區塊同一頁展開（不是跳轉到各自獨立頁面）。
+- **核心設計**：「編輯」跟「套用」分開——`unified_approval_flow`／`{doc_type}_approval_flow`（quotation/shipping/invoice_voucher/payment_request/contractor_voucher 五把 key）永遠各自可直接讀寫，不受 scope 影響；新增 `system_settings.approval_flow_scope`（`{doc_type: bool}`，true＝統一）只決定各 router 送審／無簽核層 fallback 那兩處「當下該讀哪把 key」。這樣勾來勾去不會互相覆蓋或洗掉另一邊的既有設定。
+- **後端**：`helpers/tiered_approval.py` 新增純函式 `approval_flow_setting_key(doc_type, scope)`（沒設定時的預設分組＝報價單/出貨單/發票開立簽核單/請款單統一、承攬商匯款申請獨立，對應既有事實）＋常數 `APPROVAL_DOC_TYPES`/`DEFAULT_UNIFIED_DOC_TYPES`/`APPROVAL_DOC_TYPE_LABELS`，經 `helpers/__init__.py` 轉出。五個 router（`quotations.py`/`shipping_notes.py`/`invoice_vouchers.py`/`payment_requests.py`/`contractor_vouchers.py`）的送審端點與「無自訂 tiers 走全域設定」fallback 分支，原本寫死的 key 字串改成先讀 `approval_flow_scope`、再呼叫這個函式解析。`system.py` 新增三組端點：`GET/PUT /api/settings/approval-flow-scope`（superadmin，PUT 時偵測「這次從 true 變 false」的類型，把目前 `unified_approval_flow` 內容複製一份存進該類型自己的 key 當起點，回傳 `seededFromUnified` 清單）、`GET/PUT /api/settings/approval-flow/{doc_type}`（永遠直接讀寫該類型自己的 key，doc_type 白名單含全部五種，供前端獨立設定編輯區塊呼叫；contractor_voucher 原本專屬的 `/api/contractor-vouchers/settings/approval-flow` 端點保留不動，兩者最終讀寫同一把 key）。
+- **前端**：`approval-settings.html` 整頁改版——頂部新增「簽核流程套用範圍」卡片（五個文件類型 toggle + 說明 + 獨立儲存按鈕），下方原本單一的「統一簽核流程設定」卡片改成 `flowSectionKeys`（`['unified', ...獨立類型]`）驅動的 `x-for`，同一份 UI／方法（`addStep`/`moveUp`/`moveDown`/`saveFlow` 等）現在都多帶一個 `key` 參數，分別操作 `flows.unified` 或 `flows[doc_type]`，避免整段 tiers 編輯 UI 複製五份。`_ensureFlowSlots()` 確保 scope 更新的同一個 tick 內就先建好空的 flow 物件，避免 x-for 在資料還沒載入完成前存取 undefined。
+- **驗證**：新測試 `backend/tests/test_approval_flow_scope.py`（預設分組符合現況／切換時正確複製＋只在 true→false 那個當下複製一次／權限檢查／未知 doc_type 404），連同既有整套測試 `python -m pytest tests/`，186 個全過；前端 JS（`node --check`）與 HTML 標籤配對（Python `html.parser`）另外驗證過。
+- **文件同步**：一併修正本文件多處 2026-08-24 統一上線後就沒更新的殘留舊描述——§5.8/§5.9 出貨單／發票開立簽核單段落仍寫著各自獨立的舊 key／舊端點；§6 sidebar 結構、§7 API 表、檔案樹三處都還列著從未真正合併、或合併後已不存在的 `shipping-approval-settings.html`／`invoice-voucher-approval-settings.html`／對應舊端點。
+
 ### 2026-08-26d — 專案管理併入案件管理（DB v62），下線專案管理模組
 
 - **背景**：使用者要求把獨立的「專案管理」模組（`projects`/`project_logs`/`project_stages` 三表＋`projects.html`）整合進「案件管理」的案件內子項目，讓時間週期/工作日誌/物料/代辦/專案資訊都在案件詳情頁同步呈現，驗證串接正常後正式下線專案管理模組，並補上專案執行報告匯出。查證當下 `projects` 只有 2 筆真實資料，且每筆都恰好對應到 1 個案件，資料量小、風險低。
@@ -1029,7 +1040,7 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 ### 2026-08-26 — 已結案案件解鎖/半解鎖機制（DB v61）＋完結案三項前置條件防呆機制
 
 - **背景**：兩項獨立需求一起施作。①§11 🔴最優先（2026-08-25 使用者提出）：完結案（`deal_tag: 已成案→已結案`）過去沒有任何前置條件檢查。②使用者本輪新提出：已結案上鎖的案件要能解鎖，解鎖後進入「半解鎖」狀態，期間的變更/上傳都要送最高管理員審核，且要在簽核佇列顯示。兩者互不依賴，但都改在 `update_deal_tag()`/`update_case_record()` 一帶的既有邏輯上，一併處理。
-- **完結案防呆**（`routers/quotations.py::update_deal_tag()` + 新增 `_case_close_block_reasons()`）：轉入「已結案」前檢查①`case_stages` 全部 `done`（無階段視為無需檢查）②`caseRecord.payment.items[]` 全部 `received`（無期別視為無需檢查）③關聯報價單／承攬商匯款申請／開票申請憑據／出貨單／請款單皆無 `狀態 IN ('待審核','簽核中')` 的記錄。任一未達成回 400（附未達成項目說明），背景寄信通知③找到的當層待簽核人＋最高管理員（新函式 `notify_case_close_blocked()`，新事件 key `case_close_blocked`，①②沒有「簽核人」概念故只通知最高管理員）。前端 `case-management.js::updateDealTag()` 原本非 2xx 回應完全靜默吞掉（連 `console` 都沒有），這次補上 `alert(err.detail)`，否則使用者點「完結案」看起來像沒反應。
+- **完結案防呆**（`routers/quotations.py::update_deal_tag()` + 新增 `_case_close_block_reasons()`）：轉入「已結案」前檢查①`case_stages` 全部 `done`（無階段視為無需檢查）②`caseRecord.payment.items[]` 全部 `received`（無期別視為無需檢查）③關聯報價單／承攬商匯款申請／發票開立簽核單／出貨單／請款單皆無 `狀態 IN ('待審核','簽核中')` 的記錄。任一未達成回 400（附未達成項目說明），背景寄信通知③找到的當層待簽核人＋最高管理員（新函式 `notify_case_close_blocked()`，新事件 key `case_close_blocked`，①②沒有「簽核人」概念故只通知最高管理員）。前端 `case-management.js::updateDealTag()` 原本非 2xx 回應完全靜默吞掉（連 `console` 都沒有），這次補上 `alert(err.detail)`，否則使用者點「完結案」看起來像沒反應。
 - **已結案案件解鎖/半解鎖**（DB v61，`_m061_case_semi_unlock`）：`quotations` 新增 `case_semi_unlocked`/`_by`/`_at` 三欄；新表 `case_change_requests`（`id/quote_no/action_type/summary/payload_json/staged_files_json/status/requested_by.../decided_by...`）。新增 `POST .../case-unlock`｜`case-lock`（任何登入使用者皆可，2026-08-26 使用者透過 AskUserQuestion 確認比照既有「任何人皆可上傳附件」的最寬鬆權限慣例）。**範圍刻意收斂**（見 db.py migration docstring 完整取捨說明）：只有 8 個端點在半解鎖期間改為「暫存待審」而非直接套用——`update_case_record()`（案件記錄整包存檔）、`mark_payment()`（款項標記收款）、款項/叫料/叫料發票共 3 組上傳＋刪除端點（6 支）。共用兩個 helper：`_check_case_gate(conn, quote_no)`（已結案＋未半解鎖→403；已結案＋半解鎖→True 交給呼叫端排隊；未結案→False 照常）與 `_create_case_change_request()`（寫入 pending 記錄＋背景寄信 `notify_case_change_requested()`，新事件 key `case_change_request`＋稽核）。上傳類端點先建立記錄取得 `change_id`，檔案先存進 `uploads/_pending_case_changes/{change_id}/`（沿用 `helpers/uploads.py::save_document_files()`，demo 隔離前綴自動涵蓋），核准時 `_apply_case_change_request()` 依 `action_type` 分派：`case_record_update` 重放跟 `update_case_record()` 完全一致的套用邏輯（含裝置庫存同步）；上傳類搬移暫存檔到正式路徑（`_move_staged_files()`，重新產生 uuid 檔名避免碰撞）；刪除類直接呼叫既有 `delete_document_file()`。拒絕（`_cleanup_staged_files()`）清掉暫存檔案與空資料夾。**其餘 13 個案件相關端點刻意不支援排隊**：案件執行階段細項（新增/編輯/刪除/排序/負責人/前置階段/拜訪紀錄，10 支，多數本來就「尚未接進任何前端頁面」）與款項稅額沖銷申請/撤銷/核准（3 支）——已結案時一律直接 403，不論是否半解鎖，避免這批複雜狀態機（防環依賴檢查／沖銷審核鏈）也要各自實作暫存重放邏輯，需要修正時走 `case-record` 整包編輯或聯繫最高管理員。
 - **簽核佇列整合**：`get_approval_queue()`／`get_approval_queue_count()` 新增 `type='case_change'`，**刻意用空 `tiers`**（借用既有「無 tiers 設定時任一 superadmin 皆可簽核、不得自簽」的 fallback 語意，不是真正的多層循序簽核，若構造出「一個 tier 裡塞全部 superadmin」的假 tiers 會被前端 `canApprove()` 的「同層依序，只有排最前面那位能簽」邏輯誤判成只有特定一位 superadmin 能點，其他人看不到按鈕）。新增 `GET /api/case-changes/{id}`、`POST .../approve`｜`reject`（僅 `role=='superadmin'`）。approval-queue.html 新增對應分流：類型標籤（`aq-type-cc`，沿用 已結案 徽章的紫色 `#6D28D9`）、金額欄位借用顯示變更摘要、隱藏 PDF 預覽按鈕（無此文件類型的 PDF）、退回 Modal 文案改「拒絕此變更/暫存檔案會一併刪除」、`doApprove()`/`doReject()` 呼叫獨立端點而非既有 `quotation/approve|reject`。
 - **前端 `case-management.html`／`.js`**：案件已結案 badge 旁新增「解鎖」按鈕／半解鎖中提示條＋「重新上鎖」按鈕；`saveCaseRecord()` 對 `res.pending===true` 顯示「已送出，待最高管理員審核後套用」而非誤判成功；已結案且未半解鎖時 `saveCaseRecord()` 直接短路不打 API（避免每次防抖自動存檔都跑一趟注定 403 的網路請求）；6 個上傳/刪除 handler 補上 `body.pending` 判斷。
@@ -1080,7 +1091,7 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 
 ### 2026-08-24c — Google 行事曆推送擴充第 7 種事件：案件執行進度階段到期日（DB v55）
 
-- **背景**：使用者盤點「出貨單／發票開立／執行管理／報價單成案重要事項要更新行事曆」，查證後發現前三者其實已經在 §12 2026-08-21c/21g/22b 那幾輪做完（出貨單簽核核准、開票申請憑據核准、報價單成案都已推 Google 行事曆），唯獨「執行管理」（案件執行進度階段 `case_stages.due_date`）從未接上，是唯一的缺口。
+- **背景**：使用者盤點「出貨單／發票開立／執行管理／報價單成案重要事項要更新行事曆」，查證後發現前三者其實已經在 §12 2026-08-21c/21g/22b 那幾輪做完（出貨單簽核核准、發票開立簽核單核准、報價單成案都已推 Google 行事曆），唯獨「執行管理」（案件執行進度階段 `case_stages.due_date`）從未接上，是唯一的缺口。
 - **跟既有 6 種事件的關鍵差異**：既有事件（成案／核准…）都是「一次性狀態轉換」，只建立一次不用更新；但階段到期日常常會被使用者事後調整（延期），若照搬「只建立」的邏輯，每次改到期日就會在行事曆上多一筆過期重複事件。這次改成真正的 upsert：新增 `case_stages.google_calendar_event_id` 欄位（DB v55，`_m055_case_stage_calendar_event`）記住上一次建立的事件 id，設定/變更到期日時 `PATCH` 既有事件，清空到期日時改 `DELETE`；若 PATCH 遇到 404（使用者手動把事件從 Google 行事曆刪掉）則自動改為新建一筆，不會卡死。
 - **觸發點**：`routers/quotations.py::update_case_stage()`（`PUT /api/quotations/{quote_no}/stages/{stage_id}`，case-management.js 的 `updateStage()` 已在用這支端點，並非文件裡舊註解講的「尚未接進任何前端頁面」）——body 帶 `dueDate` 且成功更新時，背景執行緒呼叫新的 `push_event_for_case_stage_due(stage_id)`。`delete_case_stage()` 刪除階段時若該階段先前有建立過事件，一併呼叫 `push_event_delete_for_case_stage(event_id)` 清掉行事曆上的事件，避免孤兒事件。
 - **新增/修改檔案**：`helpers/google_calendar.py`（`_update_all_day_event`/`_delete_event`/`_update_event_with_retry`/`_delete_event_with_retry` 四個底層工具 + `push_event_for_case_stage_due`/`push_event_delete_for_case_stage` 兩個對外函式）、`helpers/__init__.py`（補匯出）、`routers/quotations.py`（`update_case_stage`/`delete_case_stage` 掛勾）、`db.py`（v55）。
@@ -1116,7 +1127,7 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 
 ### 2026-08-23r — 修正：出貨單簽核沒有出現在統一簽核佇列
 
-- **背景**：使用者回推開發機後實測回報「出貨單簽核沒有在簽核佇列中出現」。追查發現：`/api/approval-queue`／`/api/approval-queue/count`（2026-08-20j 新增，見下方）與 `_check_approval_reminders()` 逾期催辦（2026-08-21b 新增）建立時，都只收了「報價單／承攬商匯款申請／開票申請憑據」三種文件，出貨單（§5.8，2026-08-01 就存在的舊功能，有自己獨立的 `shipping_approval_flow` 簽核設定）從一開始就沒被納入——不是這次回推造成的落差，是這兩個「統一」機制蓋上去時本來就漏掉了出貨單。全面核對過全部使用 tiers 簽核機制的文件類型（僅此 4 種），確認只有出貨單這一項遺漏；`contractor_dispatches` 派發狀態機、案件管理工程/業務確認用的是權限檢查式一次性確認，不是 tiers 佇列，本來就不該在這裡。
+- **背景**：使用者回推開發機後實測回報「出貨單簽核沒有在簽核佇列中出現」。追查發現：`/api/approval-queue`／`/api/approval-queue/count`（2026-08-20j 新增，見下方）與 `_check_approval_reminders()` 逾期催辦（2026-08-21b 新增）建立時，都只收了「報價單／承攬商匯款申請／發票開立簽核單」三種文件，出貨單（§5.8，2026-08-01 就存在的舊功能，有自己獨立的 `shipping_approval_flow` 簽核設定）從一開始就沒被納入——不是這次回推造成的落差，是這兩個「統一」機制蓋上去時本來就漏掉了出貨單。全面核對過全部使用 tiers 簽核機制的文件類型（僅此 4 種），確認只有出貨單這一項遺漏；`contractor_dispatches` 派發狀態機、案件管理工程/業務確認用的是權限檢查式一次性確認，不是 tiers 佇列，本來就不該在這裡。
 - **修正**：
   - `routers/quotations.py`：`get_approval_queue()`／`get_approval_queue_count()` 補上 `shipping_notes` 查詢區塊，`total` 欄位借用來放品項數量（出貨單沒有金額概念）。
   - `routers/daily_tasks.py`：`_APPROVAL_REMINDER_SOURCES` 補上出貨單條目，逾期催辦自動涵蓋。
@@ -1298,7 +1309,7 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 - **背景**：2026-08-22h 完成後，使用者釐清真正想要的是「第一層不指定固定部門，而是送審當下動態解析申請人自己的部門主管」——申請人本身就是部門主管時改送處主管，申請人本身就是處主管時改送超級管理員（比照既有無流程時的逃生條款）；申請人沒有部門時直接擋下要求先設定部門。這條規則要**內建**在四種單據的預設流程裡（不用管理員手動加這一層），但簽核設定頁要能顯示並允許移除。使用者並主動確認一個原則：「自動」只是自動判定簽核人是誰，該簽核人仍要自己手動核准，不是自動通過——這個原則跟既有的部門/處主管自動簽核一致，這輪沿用。
 - **後端**：`helpers/tiered_approval.py` 新增 `resolve_submitter_manager_chain(conn, requester_username)`——查申請人 `department_id`（無 → raise「尚未歸屬部門」）→ 該部門主管（無 → raise「部門未設主管」）→ 若主管就是申請人自己 → 改查該部門所屬處的主管（無 → raise「處未設主管」）→ 若處主管也是申請人自己 → 改查其他在職超級管理員（無 → raise「找不到其他在職超級管理員」）；每一步都明確排除「回傳的簽核人等於申請人自己」，避免自簽核。`resolve_tier_approvers()` 新增 `sourceType=='submitter_manager'` 分支；`setting_to_active_tiers(setting, conn, requester_username=None)` 在組出 `tiers` 前，若 `setting.get("includeSubmitterManagerTier", True)`（**沒有這個 key 時預設為 True，滿足「內建」要求**）為真，於陣列最前面插入合成層 `{"approvers":[{"sourceType":"submitter_manager"}]}`。此合成層**不接受**從前端 PUT 進來（Pydantic 驗證仍只認 `department_manager`／`division_manager`／手動指定三種），只由後端內部合成。
 - **四個 router 全部串接 `requester_username`**：送審端點傳目前登入使用者（`user["username"]`）；核准端點的「無自訂流程走全域設定」備援分支傳該筆單據**原始申請人**（`appr.get("requestedBy")`，不是目前核准者）——這是兩種不同語意，逐一確認每個呼叫點的可用變數後分開處理。`ApprovalFlowSettings` pydantic 模型新增 `includeSubmitterManagerTier: bool = True`，GET/PUT 都會序列化這個欄位；`quotations.py` 因為有自己獨立一份 `_setting_to_active_tiers`（相容舊版 `steps` 格式＋`_exclude_requester()` 機制），比照加上同樣的參數與合成邏輯，內部仍呼叫共用的 `resolve_tier_approvers()`。
-- **四個前端 approval-settings 頁面（一般／出貨／承攬商匯款／開票憑據，改法一致）**：steps 清單上方新增一個獨立區塊——勾選框「系統內建：申請人部門主管自動簽核（第一層）」，預設勾選，非 superadmin 唯讀；取消勾選＝存檔時送 `includeSubmitterManagerTier:false`，移除這一層。視覺上跟下方「自訂順序層」清單分開（灰底卡片），不參與拖曳排序，符合「內建但可移除、系統單據不用管理員手動加」的要求。
+- **四個前端 approval-settings 頁面（一般／出貨／承攬商匯款／發票開立簽核單，改法一致）**：steps 清單上方新增一個獨立區塊——勾選框「系統內建：申請人部門主管自動簽核（第一層）」，預設勾選，非 superadmin 唯讀；取消勾選＝存檔時送 `includeSubmitterManagerTier:false`，移除這一層。視覺上跟下方「自訂順序層」清單分開（灰底卡片），不參與拖曳排序，符合「內建但可移除、系統單據不用管理員手動加」的要求。
 - **驗證**：`py_compile` 全部通過；scratchpad db 複本驗證 `resolve_submitter_manager_chain` 完整鏈路 10 組情境——一般成員送審正確解析到部門主管；申請人本身是部門主管時正確改送處主管；申請人本身也是處主管時正確改送其他在職超級管理員（且驗證回傳對象不等於申請人自己）；申請人沒有部門時正確 400 擋下；`includeSubmitterManagerTier=false` 時正確不插入這一層；四種單據各自送審端到端驗證一次，全過（過程中一次測試資料設置疏漏——未真正把申請人設成部門主管導致斷言目標錯誤，已修正重測）。四個前端頁面逐一複查大括號/小括號/中括號與 `<template>` 標籤配對，四份完全一致（121/121、208/208、28/28、13/13），確認複製手法正確無誤。
 - **後續（尚未開始）**：組織圖（處/部門的純 CSS 視覺化樹狀圖，`org-structure.html`）尚未動工，等這輪重啟後再開始，見計畫檔。
 
@@ -1314,7 +1325,7 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 ### 2026-08-22g — 處/部門延伸串接：簽核路由＋通知路由＋報表/儀表板篩選
 
 - **背景**：使用者詢問處/部門組織架構後續可串聯的方向，確認做三項（排除「權限範圍限縮」——牽動現有 role+module 權限模型，風險/工作量都大，這輪不做）：①簽核路由（approval-settings 新增「部門主管自動簽核」選項）；②通知路由（工作事項逾期通知部門主管）；③報表/儀表板依處/部門篩選。
-- **① 簽核路由（四種單據一次做齊：報價單／出貨單／承攬商匯款申請／開票申請憑據）**：`helpers/tiered_approval.py` 新增 `resolve_department_manager()`／`resolve_tier_approvers()`／`UnresolvedManagerError`——tier 設定的 approver 項目新增 `sourceType='department_manager'` 一種，送審當下即時查詢該部門目前的主管展開成真正的簽核人快照（而非設定當下就固定死）；四個 router 各自的 `ApprovalFlowApprover` pydantic 模型都加上 `sourceType`/`departmentId` 欄位＋驗證；四個 approval-settings 頁面都新增「加入部門主管簽核層」UI（下拉選部門，清單列會顯示目前主管姓名或警示尚未設定）。**部門無主管時的處理，使用者明確選擇「擋下送審」**：送審當下若解析不出主管，直接 400 擋下並提示管理員先設定部門主管，不會靜默跳過那一層（避免簽核關卡無聲消失的治理風險）。
+- **① 簽核路由（四種單據一次做齊：報價單／出貨單／承攬商匯款申請／發票開立簽核單）**：`helpers/tiered_approval.py` 新增 `resolve_department_manager()`／`resolve_tier_approvers()`／`UnresolvedManagerError`——tier 設定的 approver 項目新增 `sourceType='department_manager'` 一種，送審當下即時查詢該部門目前的主管展開成真正的簽核人快照（而非設定當下就固定死）；四個 router 各自的 `ApprovalFlowApprover` pydantic 模型都加上 `sourceType`/`departmentId` 欄位＋驗證；四個 approval-settings 頁面都新增「加入部門主管簽核層」UI（下拉選部門，清單列會顯示目前主管姓名或警示尚未設定）。**部門無主管時的處理，使用者明確選擇「擋下送審」**：送審當下若解析不出主管，直接 400 擋下並提示管理員先設定部門主管，不會靜默跳過那一層（避免簽核關卡無聲消失的治理風險）。
 - **② 通知路由**：先接在「工作事項逾期未完成」上。`notification_prefs.py` 新增獨立事件 key `daily_task_overdue_manager`（跟指派人自己收到的 `daily_task_overdue` 分開訂閱/取消訂閱）；`email_notify.py` 新增 `_department_manager_emails()`（仿 `_superadmin_emails` 的寫法）與 `notify_daily_task_overdue_manager()`；`daily_tasks.py::_check_overdue_and_notify()` 逾期通知迴圈裡，額外對逾期者所屬部門的主管發站內＋email 通知（主管等於逾期者本人時跳過，避免自己通知自己）。這條路徑跟任務本身既有的 `supervisors`（逐任務手動指定的主管清單）是兩條獨立機制，互不影響。
 - **③ 報表/儀表板依處/部門篩選**：`reports.py::_collect()` 新增 `department_id` 參數，透過 `sales_person_id→department_id` 對照表把報價單掛回部門並篩選；新增「依部門彙總」（`deptPerf`，算法比照既有「依業務員」`salesPerf`），warranty／settle_overdue 兩個獨立查詢也同步套用篩選；`/api/reports/financial`／`/financial/excel`／`/financial/pdf` 三個端點都加上 `department_id` query 參數。`dashboard.py` 的 `/api/dashboard/stats` 與 `/activity-feed` 也加上 `department_id` 參數；activity-feed 的篩選範圍**刻意縮小到只套用在「案件留言板」區塊**——這是唯一有直接 `sales_person_id` 可查的來源，其餘來源（工作日誌、業務開發記錄）的作者跟部門對應關係定義不明確，這輪不強行套用避免篩錯。`reports.html`／`frontend/index.html` 都新增部門篩選下拉（來源 `GET /api/org/tree`），`reports.html` 額外新增「依部門彙總」表格區塊。
 - **驗證**：`py_compile` 全部通過；scratchpad db 複本三段各自驗證——①部門主管自動簽核成功案例＋無主管 400 阻擋，四種單據類型各驗證一次；②部門主管正確收到站內＋email 通知、主管等於逾期者本人時正確不重複通知自己；③帶 `department_id` 查詢 `_collect()`／`dashboard_stats()`，確認回傳資料只包含該部門成員名下的報價單，`deptPerf` 加總正確。前端樣板（4 個 approval-settings 頁面＋`reports.html`＋`index.html`）逐一人工複查 `<template>` 標籤配對與括號平衡，全部通過（瀏覽器工具連不到本機隔離測試伺服器，已知環境限制）。
@@ -1348,24 +1359,24 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 - **瀏覽器實測受限**：本輪原計畫用 Chrome 瀏覽器工具在隔離的暫時測試伺服器（scratchpad DB 複本＋額外埠號）上操作一次完整路徑，但該環境的 Chrome 擴充功能無法連到本機的暫時測試伺服器（`curl` 從 Bash 端可正常連線，但瀏覽器端連線失敗，判斷是瀏覽器與 Bash 沙箱不在同一網路環境），確認並非 localhost 特例問題後（改連 example.com 正常）即停止重試，未強行繞過。改以：①後端邏輯已用 scratchpad db 直接呼叫真實端點函式驗證 8 組情境全過；②前端 Alpine 樣板逐段人工複查（`<template x-for>`/`x-if` 巢狀配對、大括號／括號平衡）；複查時額外抓到一個真實邏輯錯誤並修正——`visibleOrgRows` 摺疊過濾邏輯原本讓「未分類」群組的顯示與否錯誤地沿用了最後一個「處」的展開狀態（未分類不隸屬任何處，理應永遠不受任何處的收合狀態影響）。使用者若在瀏覽器實際操作時發現顯示異常，仍建議告知以便進一步排查。
 - **驗證**：`python -m py_compile` + `import main` 全部通過；scratchpad db 複本直接呼叫 `org_structure.py`／`auth.py` 端點函式驗證：新增處/部門（含指派主管）、指派使用者、`GET /api/users` 正確回傳 `departmentName`/`divisionName`、刪除有子部門的處/有成員的部門均正確被擋、清空後可正常刪除、重複名稱建立正確回 409，共 8 項情境全過。
 
-### 2026-08-20 — 承攬商匯款申請＋開票申請憑據（DB v45/v46，正式機直接開發）
+### 2026-08-20 — 承攬商匯款申請＋發票開立簽核單（DB v45/v46，正式機直接開發）
 
-- **背景**：使用者要求兩個新流程——①案件管理承攬商 tab，已完工（`completed`）的派發可產生「承攬商匯款申請」供財務辦理匯款，需簽核；②案件資訊 tab 款項明細，已收款項目（單筆或整份收款排程）可產生「開票申請憑據」供財務申請開立發票，也需簽核。討論時使用者明確要求「最安全跟最謹慎的邏輯去做」。此時**開發機（hichan 帳號）無法連線**，比照 2026-08-10 gateway_guide 那次的做法，直接在正式機（Motrix 帳號，V9.0）開發，同步整理回推清單。
+- **背景**：使用者要求兩個新流程——①案件管理承攬商 tab，已完工（`completed`）的派發可產生「承攬商匯款申請」供財務辦理匯款，需簽核；②案件資訊 tab 款項明細，已收款項目（單筆或整份收款排程）可產生「發票開立簽核單」供財務申請開立發票，也需簽核。討論時使用者明確要求「最安全跟最謹慎的邏輯去做」。此時**開發機（hichan 帳號）無法連線**，比照 2026-08-10 gateway_guide 那次的做法，直接在正式機（Motrix 帳號，V9.0）開發，同步整理回推清單。
 - **資料表**（`db.py` `_m045_contractor_payment_vouchers` / `_m046_invoice_vouchers`）：新增 `contractor_payment_vouchers`（`dispatch_id` UNIQUE，強制一張憑證對應一筆派發；`snapshot_json` 凍結承攬商/銀行帳戶/品項金額）與 `invoice_vouchers`（`scope` 'single'\|'all'，`snapshot_json` 凍結客戶/款項明細），皆為獨立於報價單/出貨單的簽核流程（`system_settings` key 分別為 `contractor_voucher_approval_flow` / `invoice_voucher_approval_flow`），機制比照出貨單（`routers/shipping_notes.py`）tiers 依序簽核。
-- **承攬商匯款申請多一個「已匯款」財務結案節點**（`is_paid`，獨立於 `status`，比照出貨單「已核准」跟「已回簽」是兩個獨立狀態的做法，2026-08-20 討論時使用者明確要求）；開票申請憑據核准即定稿，無此節點。
-- **安全守門**：①建立憑證僅允許派發狀態為 `completed` 且尚無既有憑證（`dispatch_id` UNIQUE 雙重保護）；②開票憑據僅允許對 `received=true` 的款項項目建立（2026-08-20 討論時使用者明確選擇，未收款項目按鈕顯示停用）；③`routers/vendor_contractors.py` `delete_dispatch()` 新增守門：已產生憑證的派發不可刪除（避免撞上 FK 約束產生原始 500 錯誤）；④已匯款的承攬商憑證不可撤銷核准（比照出貨單「已回簽不可撤銷」）。
+- **承攬商匯款申請多一個「已匯款」財務結案節點**（`is_paid`，獨立於 `status`，比照出貨單「已核准」跟「已回簽」是兩個獨立狀態的做法，2026-08-20 討論時使用者明確要求）；發票開立簽核單核准即定稿，無此節點。
+- **安全守門**：①建立憑證僅允許派發狀態為 `completed` 且尚無既有憑證（`dispatch_id` UNIQUE 雙重保護）；②發票開立簽核單僅允許對 `received=true` 的款項項目建立（2026-08-20 討論時使用者明確選擇，未收款項目按鈕顯示停用）；③`routers/vendor_contractors.py` `delete_dispatch()` 新增守門：已產生憑證的派發不可刪除（避免撞上 FK 約束產生原始 500 錯誤）；④已匯款的承攬商憑證不可撤銷核准（比照出貨單「已回簽不可撤銷」）。
 - **新檔案**：`backend/routers/contractor_vouchers.py`、`backend/routers/invoice_vouchers.py`（各自完整 CRUD＋簽核三態＋PDF＋匯出紀錄）；`pdf_gen.py` 新增兩組 PDF 產生函式（Edge Headless，格式仿出貨單 PDF，未核准狀態帶浮水印預覽稿）；`frontend/pages/contractor-voucher-approval-settings.html`／`invoice-voucher-approval-settings.html`（複製自 `shipping-approval-settings.html`）。
 - **修改檔案**：`db.py`（`CURRENT_VERSION` 44→46）、`main.py`（router wiring）、`helpers/email_notify.py`＋`notification_prefs.py`＋`__init__.py`（8 個新 notify_* 函式／事件 key，比照 `shipping_*` 系列）、`frontend/js/case-management.js`（新增 ~30 個方法）、`frontend/pages/case-management.html`（承攬商 tab／款項明細 UI＋兩個 PDF 預覽 Modal）、`static/sidebar.js`（系統區塊兩個新連結）、`audit-log.html`（optgroup／actionLabel／badge，對照後端實際 `_audit()` 動作字串逐一核對）、`users.html`（8 個通知偏好 checkbox）。
 - **⚠️ 靜態驗證過程中，DB migration 已非預期地實際套用到正式機 `motrix_erp.db`**：`python -c "import main"` 原意只是「不重啟伺服器」的語法/wiring 靜態檢查，但 `main.py` 在模組層級呼叫 `init_db()`，單純 import 就對正式資料庫執行了 migration。已核實影響：僅新增兩張空表（`CREATE TABLE IF NOT EXISTS`），未動任何既有資料/欄位；正式機當時運行中的 uvicorn process（舊版程式碼仍在記憶體執行）未重啟、`/api/ping` 與 `logs/server.log` 皆正常。動手前已備份 `backend/db_backups/motrix_erp_pre_voucher_feature_20260820_205034.db`。
 - **回推開發機**：`V9.0\backend` 非 git repo，本次額外把全部新增/修改檔案（後端 9 個＋前端 7 個）複製到 `Desktop\回推開發機_2026-08-20_匯款發票憑證\`，含操作步驟說明，待開發機恢復連線後比對貼回、`git commit`，避免重蹈 gateway_guide 那次的落差（見 §0 已知落差紀錄）。
 - **後續**：獨立 `/code-review high` 覆核＋正式機重啟＋兩項需求調整，見下一筆 2026-08-20b。
 
-### 2026-08-20b — code review 修正＋正式機重啟＋匯款申請銀行資訊補完＋開票憑據放寬收款限制
+### 2026-08-20b — code review 修正＋正式機重啟＋匯款申請銀行資訊補完＋發票開立簽核單放寬收款限制
 
-- **獨立 code review**：使用者要求重啟前先做一次完整檢查，跑 `/code-review high` 找出 5 項問題並全部修正：①`invoice_vouchers.py` 建立憑據原本無防重複機制，加 409 防護（同 `quote_no`+`scope`+`payment_idx` 不可重複建立），前端同步隱藏已建立過的按鈕；②承攬商匯款申請面板原本綁「派發狀態=completed」才顯示，但派發狀態可被 `update_dispatch` 隨時改掉，已核准/已匯款的憑證會從畫面消失，改為「狀態=completed 或已有憑證」都顯示；③開票申請憑據 `revoke-approval` 原本核准後可無限制撤銷，改為「已匯出過（`export_count>0`）不可撤銷」；④`reject`／`revoke-approval` 補上 `_purge_notifications`（避免過期的待簽核通知殘留）；⑤兩個下載端點的例外處理多接 `RuntimeError` 一併回 503（原本只接 `ValueError`，Edge 找不到時會落到錯誤的 500）。
+- **獨立 code review**：使用者要求重啟前先做一次完整檢查，跑 `/code-review high` 找出 5 項問題並全部修正：①`invoice_vouchers.py` 建立憑據原本無防重複機制，加 409 防護（同 `quote_no`+`scope`+`payment_idx` 不可重複建立），前端同步隱藏已建立過的按鈕；②承攬商匯款申請面板原本綁「派發狀態=completed」才顯示，但派發狀態可被 `update_dispatch` 隨時改掉，已核准/已匯款的憑證會從畫面消失，改為「狀態=completed 或已有憑證」都顯示；③發票開立簽核單 `revoke-approval` 原本核准後可無限制撤銷，改為「已匯出過（`export_count>0`）不可撤銷」；④`reject`／`revoke-approval` 補上 `_purge_notifications`（避免過期的待簽核通知殘留）；⑤兩個下載端點的例外處理多接 `RuntimeError` 一併回 503（原本只接 `ValueError`，Edge 找不到時會落到錯誤的 500）。
 - **正式機已重啟**：停掉舊 uvicorn process tree（保留 `autostart.bat` 本身，讓它自己的 5 秒重試迴圈拉起新版程式碼，而非直接砍掉整個迴圈），重啟後 `/api/ping`、OpenAPI schema（19 個新路徑）、`server.log` 皆確認正常，兩個新功能正式生效。
 - **承攬商匯款申請補上銀行/存簿資訊**（使用者回饋「產生匯款憑據需要帶入承攬商、供應商外包名冊的帳戶相關資訊跟存簿檔案」）：`create_contractor_voucher()` 原本只快照了承攬商（`vendor_contractors`）的銀行文字欄位，沒帶 `bankPassbookImage`，也完全沒有外包名單人員（`contractors` 表）各自的銀行資訊。修正：①承攬商快照補上 `bankPassbookImage`；②建立當下額外查一次 `contractors` 表，把每位派發人員（`personnel_json` 內的 `id`）目前的銀行代碼/名稱/分行/戶名/帳號/存簿影本一併寫入 snapshot（查無資料則留空，不擋建立）；③PDF（`pdf_gen.py`）新增「四、外包人員匯款資訊」區塊，每人一張帳戶卡片＋存簿縮圖，承攬商本身的帳戶資訊卡片也補上存簿縮圖。
-- **開票申請憑據放寬收款限制**（使用者回饋「未勾選也要能申請，有部分是開立發票後才能收款」）：移除 `create_invoice_voucher()` 的 `received=true` 檢查（原本是使用者自己選的方案，但實際遇到「先開票後收款」的案件後推翻）；`scope='all'` 從「只收已收款項目」改為「收全部項目」；snapshot 每筆項目新增 `received` 旗標，PDF 款項明細表改列「收款狀態」欄（顯示「✓ 已收款 日期」或「未收款（開票在先）」）取代原本的「實收日期」欄；前端按鈕移除停用狀態，未收款項目改標示「（尚未收款）」提示文字但仍可點擊申請。
+- **發票開立簽核單放寬收款限制**（使用者回饋「未勾選也要能申請，有部分是開立發票後才能收款」）：移除 `create_invoice_voucher()` 的 `received=true` 檢查（原本是使用者自己選的方案，但實際遇到「先開票後收款」的案件後推翻）；`scope='all'` 從「只收已收款項目」改為「收全部項目」；snapshot 每筆項目新增 `received` 旗標，PDF 款項明細表改列「收款狀態」欄（顯示「✓ 已收款 日期」或「未收款（開票在先）」）取代原本的「實收日期」欄；前端按鈕移除停用狀態，未收款項目改標示「（尚未收款）」提示文字但仍可點擊申請。
 - 修正後重新跑過 `python -c "import main"`＋`python -m py_compile` 全部通過；回推開發機清單資料夾已同步更新為最終版本。
 
 ### 2026-08-22b — Google 行事曆推送加重試＋失敗可見度；案件動態欄位重新評估後決定不改
@@ -1375,7 +1386,7 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 
 ### 2026-08-22 — 抽出共用簽核 tiers 邏輯，順手修正 shipping_notes.py 兩個未套用的簽核漏洞
 
-- **背景**：使用者要求處理先前架構檢查提出的改進建議。複查「報價單／出貨單／承攬商匯款申請／開票申請憑據」四個 router 的簽核邏輯時，發現 `shipping_notes.py` 完全沒套用 2026-08-20k 那輪修好的兩個漏洞——證實了「同一段邏輯重複四份、改一個地方其他要記得改」的風險是真實發生過的（這次漏掉第三個地方）。
+- **背景**：使用者要求處理先前架構檢查提出的改進建議。複查「報價單／出貨單／承攬商匯款申請／發票開立簽核單」四個 router 的簽核邏輯時，發現 `shipping_notes.py` 完全沒套用 2026-08-20k 那輪修好的兩個漏洞——證實了「同一段邏輯重複四份、改一個地方其他要記得改」的風險是真實發生過的（這次漏掉第三個地方）。
 - **`shipping_notes.py` 新修正的兩個漏洞**：①`approve_shipping_note()`／`reject_shipping_note()` 開頭寫死 `_require_admin(user)`，跟 contractor/invoice vouchers 原本一樣的問題——簽核設定頁允許加入任何角色當簽核人，這道硬性角色檢查會讓非管理員角色的簽核人永遠卡死無法簽核/退回出貨單；已移除。②無簽核層設定（superadmin fallback）分支完全沒有「申請人不得自行審核」的檢查；已補上（含唯一在職 superadmin 的逃生條款）。`revoke_shipping_note_approval()` 的 `_require_admin` 保留不動（屬於管理員專用覆蓋動作，不是 tiers 簽核流程的一部分，比照 contractor/invoice vouchers 的 revoke-approval）。
 - **新增 `helpers/tiered_approval.py`**：抽出四個 router 裡「沒有副作用、判斷用」的簽核邏輯（`active_tiers`／`current_tier_idx`／`setting_to_active_tiers`／`first_pending_approver`／`check_approve_permission`／`check_reject_permission`／`check_no_tier_self_approval`），純函式不依賴 FastAPI，各 router 自己決定怎麼包 HTTPException。**刻意保留 `quotations.py` 自己的 `_active_tiers`/`_current_tier_idx`/`_setting_to_active_tiers` 不動**——這三個函式在 quotations.py 裡其實不是單純的 trivial 版本，還帶著舊版「steps」格式的向下相容邏輯（`_steps_to_tiers`）跟 `_exclude_requester()`（送審當下就把申請人從 tiers 排除，比其他三個檔案的「approve 時攔截」更早一層防護），這是報價單獨有、其餘三個新單據類型從未有過的機制，動了有破壞既有相容性的風險，這輪不碰。`contractor_vouchers.py`／`invoice_vouchers.py`／`shipping_notes.py` 三個檔案的版本本來就是逐字相同的 trivial 版本，已全部改成直接匯入共用模組。
 - **統一錯誤訊息**：approve 時「不是當層簽核人」的錯誤訊息，四個檔案原本兩種寫法（quotations.py 的「此層需由以下人員簽核：X、Y」vs 其餘三個的「此層無您的簽核權限」），這輪統一採用 quotations.py 的版本（訊息更明確，直接列出誰能簽），contractor/invoice/shipping 三邊的措辭因此改變，這是預期內、唯一的行為差異，其餘邏輯（含 HTTP 狀態碼）逐一核對過完全不變。
@@ -1386,14 +1397,14 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 
 - **業務開發擴充**（`routers/dev_crm.py`）：①`PATCH /dev-cases/{id}/convert`（`mark_converted()`）成功轉建報價單後推送一個行事曆事件；已有 409 防護擋重複轉建，天生一次性動作不需額外 guard。②`_check_dev_case_stale()`（每日 08:00 排程既有檢查）新增獨立於既有 email 通知的 guard key `devcase_stale_cal.{case_id}.{updated_at}`（不帶 bucket 編號）——只在該案件這次停滯週期第一次跨過 30 天時建一次行事曆事件，**不比照 email 每 14 天重複的頻率**（使用者明確要求「只建一次」，避免行事曆疊出多個重複事件）；若案件之後更新過又再度停滯，`updated_at` 換新值會自然形成新的 guard key，可以再建一次。
 - **案件動態／標記重要留言**：使用者要求「只同步標記為重要的留言，不是每則都推」（動態本身是即時留言串流，全推太吵，牴觸「只推重要事件」的設計原則）。已用 AskUserQuestion 確認採 **UI 勾選方塊**（非文字標記慣例）：`case-management.html` 動態 Tab 留言輸入框旁新增「標記為重要（會同步到 Google 行事曆）」checkbox；`case-management.js postComment()` 送出時多帶 `important` 布林值；後端 `routers/quotations.py post_case_update()` 依此把 `case_updates.type` 寫成 `'important'` 或維持 `'comment'`，為 `important` 時額外背景推送行事曆事件；`list_case_updates()` 回傳的留言項目補上 `important` 欄位；前端動態列表對應加「⭐ 重要」小標籤（沿用既有 `.feed-badge` 樣式語言）。
-- **行事曆文案調整**（前一輪已上線的三個原始觸發點，使用者這輪要求微調）：①出貨單事件改用出貨單真正的 `ship_date` 欄位排日期，不再用「核准當下」——已用正式機真實資料確認 `ship_date` 常常跟核准日期不同天（甚至可能早於核准日），用核准日期會誤導行事曆上的時間軸；說明欄同步補上出貨日期文字。②開票申請憑據／報價單成案的金額文字補上「（含稅）」字樣，避免誤會是未稅金額。③金額維持只在說明欄顯示（使用者確認不需要放進標題）。
+- **行事曆文案調整**（前一輪已上線的三個原始觸發點，使用者這輪要求微調）：①出貨單事件改用出貨單真正的 `ship_date` 欄位排日期，不再用「核准當下」——已用正式機真實資料確認 `ship_date` 常常跟核准日期不同天（甚至可能早於核准日），用核准日期會誤導行事曆上的時間軸；說明欄同步補上出貨日期文字。②發票開立簽核單／報價單成案的金額文字補上「（含稅）」字樣，避免誤會是未稅金額。③金額維持只在說明欄顯示（使用者確認不需要放進標題）。
 - **event id 不記錄的差異點**：轉建/重要留言/停滯提醒這三類新觸發點沒有既有 `data_json` 可掛（`dev_cases`／`case_updates` 是輕量表），比照「先建立、不做更新/刪除同步」的既有原則不記錄 event id，跟原本三個觸發點（有記錄）不同，已在此說明。
 - **驗證**：`python -m py_compile` + `import main` 全部通過；scratchpad db 複本 + monkeypatch 新增的 3 個 push 函式，直接呼叫真實端點確認：①轉建觸發一次、重複轉建被既有 409 擋下不二次觸發；②停滯提醒第一次跨過 30 天觸發、同一 guard 視窗重跑不重複觸發（獨立於 email 的 14 天 bucket）；③留言勾選重要才觸發、一般留言不觸發，且 `list_case_updates()` 正確回報 `important` 旗標。出貨單日期欄位變更額外用合成資料驗證確實改用 `ship_date` 而非今天日期。
 - **回推開發機**：`routers/dev_crm.py` 本輪新加入追蹤；`helpers/google_calendar.py`／`helpers/__init__.py`／`routers/quotations.py`／`frontend/pages/case-management.html`／`frontend/js/case-management.js` 皆已同步並 `diff -q` 比對一致。
 
 ### 2026-08-21f — Google 行事曆一次性授權完成，Phase 1（push）正式全功能上線
 
-- **最終確認完成**：`refresh_token` 已成功寫入 `system_settings.google_calendar`（103 字元），直接呼叫 `helpers.google_calendar.create_test_event()` 建立真實測試事件成功（回傳真實 Google event id），證實 OAuth token 換發＋Calendar API 呼叫整條鏈路在正式機上完全打通。至此開票申請憑據核准／出貨單核准／報價單成案三個觸發點會真正把整天事件推上 Google 行事曆，不再只是「程式碼就緒但不會真的動作」的狀態。
+- **最終確認完成**：`refresh_token` 已成功寫入 `system_settings.google_calendar`（103 字元），直接呼叫 `helpers.google_calendar.create_test_event()` 建立真實測試事件成功（回傳真實 Google event id），證實 OAuth token 換發＋Calendar API 呼叫整條鏈路在正式機上完全打通。至此發票開立簽核單核准／出貨單核准／報價單成案三個觸發點會真正把整天事件推上 Google 行事曆，不再只是「程式碼就緒但不會真的動作」的狀態。
 - **過程中的插曲（記錄下來避免下次重蹈覆轍）**：這次授權過程中使用者陸續換了三組不同的 Client ID/Secret（可能是重新產生密鑰或改建新的 OAuth Client），每次都重新啟動一次性腳本——但**背景執行緒沒有確實逐一終止**：`scripts/setup_google_calendar_oauth.py` 用的 `http.server.HTTPServer` 在 Windows 上因為 `allow_reuse_address` 的行為差異，允許多個行程同時綁定同一個 port 而不會報錯（不像典型 Unix 行為會直接擋掉），導致好幾輪重啟後背景其實同時存在多個監聽中的舊行程，用舊憑證組合的那個意外先收到瀏覽器的授權回呼，換權杖時因密鑰已經換過被 Google 回 401 Unauthorized 而靜默失敗（`refresh_token` 沒寫入）——當下使用者看到瀏覽器顯示「授權完成」的頁面，但那其實是舊行程回應的、實際上換權杖失敗的一次嘗試，造成誤判。之後改用 `Get-CimInstance Win32_Process` 直接核對行程清單（而非只看 port 是否在 Listen 狀態）確認只剩一個乾淨的正確行程在監聽，才成功。**教訓**：往後如果一次性腳本要重跑，務必先確認前一個背景執行緒真的終止（用行程清單核對，不能只看 port 狀態），必要時明確 `TaskStop` 舊的再重啟新的。
 - **回推開發機**：無新增/修改程式碼檔案，僅系統設定資料本身的變化（`system_settings` 資料表內容，不隨程式碼回推）。
 
@@ -1408,7 +1419,7 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 ### 2026-08-21c — Google 行事曆整合 Phase 1（系統 → 行事曆，push only）
 
 - **背景**：使用者要提供一組共用 Gmail（跟 email 通知的 SMTP 帳號同一組）串接 Google 行事曆，讓系統把重要事件自動推上行事曆。經討論拆兩階段，這輪只做 push（系統→行事曆）；pull 方向（行事曆→系統、沒更新隔日寄信提醒）留待之後。
-- **這輪三個觸發點**（使用者透過 AskUserQuestion 選定）：開票申請憑據簽核核准、出貨單簽核核准、報價單標記「已成案」——皆在真正的狀態轉換當下（不是每次呼叫對應端點）觸發一次，建立整天事件。
+- **這輪三個觸發點**（使用者透過 AskUserQuestion 選定）：發票開立簽核單簽核核准、出貨單簽核核准、報價單標記「已成案」——皆在真正的狀態轉換當下（不是每次呼叫對應端點）觸發一次，建立整天事件。
 - **刻意不裝任何新 pip 依賴**：正式機 `requirements.txt` 目前只有 `fastapi`/`uvicorn`/`pydantic`/`aiofiles`，新增 `helpers/google_calendar.py` 直接用內建 `urllib.request` 打 OAuth2 token endpoint + Calendar API v3 REST 介面（`_get_access_token()` 換發短效 access token，記憶體快取過期前自動換新；`_create_all_day_event()` 建立整天事件），不用官方 `google-api-python-client`/`google-auth` 那一整包，維持正式機依賴極簡的現狀。
 - **授權模式**：Desktop app 類型 OAuth Client + 一次性 loopback 授權（新增 `backend/scripts/setup_google_calendar_oauth.py`，必須在正式機本機執行，用 email 通知同一組 Gmail 帳號登入同意一次），換到的 `refresh_token` 永久存進 `system_settings.google_calendar`，之後全自動運作不需要再人工介入。Scope 用最小權限 `calendar.events`（只能讀寫事件，動不到行事曆清單/設定本身）。
 - **event id 不開新 SQL 欄位**：直接存進各文件既有的 `data_json.googleCalendarEventId`（比照 `returnInfo`/`statusLog` 這種輔助欄位直接放 JSON blob 的既有慣例），供之後要做「更新/刪除既有事件」時沿用，不用重新設計資料結構——**這輪只做新建，不做更新/刪除同步**（例如出貨單核准後被撤銷，行事曆事件不會跟著移除）。
@@ -1419,7 +1430,7 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 
 ### 2026-08-21b — 簽核逾期催辦通知（工作日 1/3/5 天分級升級）
 
-- **背景**：使用者要求——待簽核項目卡在簽核柱列超過工作日 1 天、3 天要主動催簽核；超過 3 天同步通知超級管理員；超過 5 天後每個工作日都持續寄信，直到簽核或退回為止。三種文件（報價單／承攬商匯款申請／開票申請憑據）套用同一套規則，一律從 `approval.requestedAt`（原始送審時間）起算工作日，不因換層歸零。
+- **背景**：使用者要求——待簽核項目卡在簽核柱列超過工作日 1 天、3 天要主動催簽核；超過 3 天同步通知超級管理員；超過 5 天後每個工作日都持續寄信，直到簽核或退回為止。三種文件（報價單／承攬商匯款申請／發票開立簽核單）套用同一套規則，一律從 `approval.requestedAt`（原始送審時間）起算工作日，不因換層歸零。
 - **新增 `_workdays_elapsed(start_date, end_date)`**（`helpers/dates.py`）：計算兩個日期間有幾個週一到週五。**已知限制**：只排除週六日，不排除台灣國定假日（系統目前沒有假日行事曆表可用）。
 - **新增 `_check_approval_reminders()`**（`routers/daily_tasks.py`，比照既有 `_check_warranty_expiry()` 的寫法）：掛進既有每日 08:00 排程（`schedule_overdue_check()` 的 `_daily_run()`／`_startup_catchup()`），用一個小設定清單描述三種文件表格差異（欄位名稱、快照裡取名稱用的欄位路徑），迴圈跑三次避免整段邏輯複製三份；比照另外三個 router 各自重複 `_active_tiers()`/`_current_tier_idx()` 小工具的既有慣例，這裡也自己放一份，不跨 router import。判斷該提醒誰：有簽核層設定 → 目前這層第一位未簽核的人（跟 `approve_*` 端點判斷「誰能簽核」同一條邏輯，只通知真正能動作的人）；無簽核層設定（superadmin fallback）→ 全部 active superadmin。
 - **防重複寄送**：沿用既有的 `system_settings` guard key 慣例（不是記「上次寄送時間」，而是「這個門檻寄過了嗎」的一次性旗標），guard key 額外帶入 `requestedAt`——文件被退回、重新送審後 `requestedAt` 換新值，催辦倒數會自然重新從 0 天起算，不會被舊一輪的 guard 卡住讓新一輪永遠不寄；1/3 天門檻各寄一次，5 天以上 guard key 額外帶當天日期，讓每個工作日各寄一次。
@@ -1438,31 +1449,31 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 
 - **背景**：使用者要求對兩個新單據做一次整體架構檢查。逐一比對 `contractor_vouchers.py`／`invoice_vouchers.py` 與其比照對象 `quotations.py` 的簽核邏輯，找出兩項真實落差＋兩項防禦性加固機會。
 - **① 高風險 bug（已修正）：非 admin/superadmin 角色的簽核人員永遠無法簽核**。`approve_contractor_voucher()`／`reject_contractor_voucher()`／`approve_invoice_voucher()`／`reject_invoice_voucher()` 開頭都寫死一道 `_require_admin(user)`，但簽核設定頁面（`contractor-voucher-approval-settings.html` 的 `availableUsers`）明明允許加入任何角色（業務／一般人員…）的使用者當簽核人。一旦真的指派了非 admin 角色的人當簽核人，該員點「確認簽核」會直接收到 403「需要管理員權限」，該層永久卡死無人可簽——`quotations.py` 的對應端點從一開始就沒有這道硬性角色檢查，完全交給「是否為當層簽核人員」判斷，兩個新單據當初比照時漏掉了這點。修正：移除這四個端點開頭的 `_require_admin(user)`，其餘動作端點（`create`／`delete`／`submit`／`paid-toggle`／`export`／簽核設定）維持不動，這些本來就該限管理員操作。
-- **② 中風險漏洞（已修正）：無簽核層設定時，申請人可自行核准自己的申請**。`quotations.py` 在「系統未設定簽核流程」的 fallback 分支有一道「申請人不得自行審核」的檢查（除非申請人是目前唯一在職的最高管理者，否則會永久卡死），這道檢查沒有被複製到兩個新單據的對應分支，等於一個 superadmin 可以自建、自送、自核一張匯款申請或開票申請，繞過財務文件本該有的權責分離。已在兩個 router 的 no-tiers 分支補上相同檢查（含逃生條款）。
+- **② 中風險漏洞（已修正）：無簽核層設定時，申請人可自行核准自己的申請**。`quotations.py` 在「系統未設定簽核流程」的 fallback 分支有一道「申請人不得自行審核」的檢查（除非申請人是目前唯一在職的最高管理者，否則會永久卡死），這道檢查沒有被複製到兩個新單據的對應分支，等於一個 superadmin 可以自建、自送、自核一張匯款申請或發票開立簽核單，繞過財務文件本該有的權責分離。已在兩個 router 的 no-tiers 分支補上相同檢查（含逃生條款）。
 - **③／④ 低風險加固（已修正）：關閉兩處競爭視窗**。`create_invoice_voucher()`（剩餘可開票額度檢查）與 `create_contractor_voucher()`（同一派發重複建立檢查）原本都是「先查詢、後寫入」兩個分開步驟，理論上兩個近乎同時的請求可能都通過檢查。已在兩處建立端點開頭加上 `conn.execute("BEGIN IMMEDIATE")`，讓查詢跟寫入鎖進同一個資料庫交易，後到的請求會排隊等前一個交易 commit 後才能繼續，從資料庫層面徹底關閉這個窗口（不只是應用層檢查）。
 - **驗證**：`python -m py_compile`＋`import main` 全部通過。用 scratchpad 正式機 db **唯讀複本**＋monkeypatch `_require_user`，直接呼叫**真實的端點函式**（非重寫邏輯）跑了 5 組情境測試：非 admin 角色簽核人成功簽核／退回（驗證①）、申請人自簽被擋＋換一位其他 superadmin 成功核准（驗證②）、唯一在職 superadmin 的逃生條款仍正常運作（驗證②的例外情境）；另外用**真正的雙執行緒**同時呼叫 `create_invoice_voucher()`，模擬兩個各自合法但合計超額的請求，確認修正後恰好一個成功、一個被 409 擋下（驗證③），且最終累計申請金額沒有超過報價單總額。全程只碰 scratchpad 複本，正式 db 未被寫入。
 - **未列入這輪修正**：`pdf_gen.py` 全檔案（不只這兩個新單據）都沒有對插入 PDF 的欄位做 HTML escape——這是整個 PDF 產生子系統從一開始就有的既有模式（報價單／出貨單皆同），不是這兩個新功能新引入的問題，這輪範圍內不處理。
 - **回推開發機**：`backend/routers/contractor_vouchers.py`／`backend/routers/invoice_vouchers.py` 已同步進 `Desktop\回推開發機_2026-08-20_匯款發票憑證\`，18 個追蹤檔案全部 `diff -q` 比對一致。
 - **尚未執行**：正式機重啟。
 
-### 2026-08-20j — 承攬商匯款申請／開票申請憑據納入統一簽核佇列＋補上 PDF 預覽
+### 2026-08-20j — 承攬商匯款申請／發票開立簽核單納入統一簽核佇列＋補上 PDF 預覽
 
 - **背景**：使用者要求「以上簽核部分都需要顯示在簽核佇列中，並且簽核跟預覽先參考別的模組的內容，一致樣式跟顯示模式」——兩個新單據原本只能在 `case-management.html` 各自的位置簽核，沒進到全公司共用的「簽核佇列」頁面（`approval-queue.html`），且完全沒有 PDF 預覽功能。
 - **後端**（`backend/routers/quotations.py`）：新增共用小工具 `_queue_tier_fields()`（三種文件類型 `approval_json` 的 `tiers`/`currentTier`/`currentApprovers` 形狀完全相同，抽出來避免貼三次）；`get_approval_queue()` 與 `get_approval_queue_count()`（topbar 每頁必打的輕量端點）都改成合併查詢 `quotations`／`contractor_payment_vouchers`／`invoice_vouchers` 三張表，刻意沿用報價單既有欄位名稱（`quoteNo`/`customer`/`total`/`quoteDate`...）承載新類型資料，只多一個 `type`（`quotation`/`contractor_voucher`/`invoice_voucher`）與 `linkedQuoteNo`（voucher 類型指向所屬案件），讓既有分組/排序邏輯完全不用改。
 - **前端**（`frontend/pages/approval-queue.html`）：新增型別小工具 `docTypeLabel()`/`apiBase()`/`isVoucher()`/`amountLabel()`/`dateLabel()`；列表項目加類型徽章（沿用 `.aq-group-badge` pill 視覺語言）；「開啟報價單」連結依類型分流成「開啟案件管理」（連到 `case-management.html?no=` + `linkedQuoteNo`）；三個簽核動作（`doApprove`/`doReject`/`doRejectFinal`）的 API 呼叫從寫死 `/api/quotations/...` 改用 `apiBase(item)` 分流；**兩個新單據沒有「拒絕結案」永久終止端點**（只有報價單有），佇列裡用 `x-show="!isVoucher(...)"` 把該按鈕在三處（header/superadmin bypass/bottom bar）都隱藏，並在 `doRejectFinal()` 內加防禦性 guard 雙重保險；基本資訊 grid 的金額/日期標籤、「業務人員」列（voucher 類型顯示「關聯案件」）都依型別動態化。
 - **新增 PDF 預覽 Modal**：複製 `case-management.html` 既有的 `cvPreviewModal`/`ivPreviewModal` iframe+blob 寫法（fetch blob → `URL.createObjectURL` → iframe → 關閉時 revoke），做成通用版套用在簽核佇列頁——三種文件類型（含報價單本身，之前完全沒有預覽功能）都能在佇列裡直接預覽 PDF，不用另外開頁籤。
-- **驗證**：`backend/routers/quotations.py` 通過 `python -m py_compile`；前端 HTML 標籤（`<div>`/`<template>`/`<span>`/`<button>`）與 JS 大括號/括號/中括號逐一計數比對平衡；用 scratchpad 內正式機 db **唯讀複本**插入合成的待審核承攬商匯款申請/開票申請憑據各一筆（含 tiers），實際跑一遍 `get_approval_queue()`/`get_approval_queue_count()` 的 SQL 邏輯，確認：①報價單既有查詢完全未受影響（風險最高的部分）；②合成的兩筆 voucher 正確帶入 `type`/`linkedQuoteNo`/金額欄位；③跟報價單分到同一個申請人分組；④count 端點正確算出待簽核數量。測試全程只碰 scratchpad 複本，正式 db 完全沒有寫入，測完即刪除複本與測試腳本。
+- **驗證**：`backend/routers/quotations.py` 通過 `python -m py_compile`；前端 HTML 標籤（`<div>`/`<template>`/`<span>`/`<button>`）與 JS 大括號/括號/中括號逐一計數比對平衡；用 scratchpad 內正式機 db **唯讀複本**插入合成的待審核承攬商匯款申請/發票開立簽核單各一筆（含 tiers），實際跑一遍 `get_approval_queue()`/`get_approval_queue_count()` 的 SQL 邏輯，確認：①報價單既有查詢完全未受影響（風險最高的部分）；②合成的兩筆 voucher 正確帶入 `type`/`linkedQuoteNo`/金額欄位；③跟報價單分到同一個申請人分組；④count 端點正確算出待簽核數量。測試全程只碰 scratchpad 複本，正式 db 完全沒有寫入，測完即刪除複本與測試腳本。
 - **回推開發機**：`backend/routers/quotations.py`／`frontend/pages/approval-queue.html` 是**本輪新增進回推清單的檔案**（先前幾輪未追蹤），已複製進 `Desktop\回推開發機_2026-08-20_匯款發票憑證\` 並對全部 18 個追蹤檔案（後端 10 個＋前端 8 個）跑過 `diff -q` 全量比對，確認正式機與回推資料夾逐檔一致。
 - **尚未執行**：正式機重啟（第 10 次）。
 
-### 2026-08-20i — 開票申請憑據補上含稅/未稅顯示，順手修正 scope='items' 的稅基計算 bug
+### 2026-08-20i — 發票開立簽核單補上含稅/未稅顯示，順手修正 scope='items' 的稅基計算 bug
 
 - **背景**：使用者要求「申請開立發票的含稅未稅都需要顯示」。
 - **順手抓到一個真實 bug**：`scope='items'` 品項金額欄位比照報價單品項本身的慣例是**未稅**（品項 `unitPrice`/`amount` 加總起來是 `pretax` 的組成，不是 `total`），但原本的剩餘額度比較/`voucher.amount` 儲存都直接拿這個未稅加總去跟 `quoteTotal`（含稅）比，同一張報價單的稅率通常抓 5% 左右，等於每次都少算了那 5%，長期下來剩餘額度會被高估。修正：`_quote_remaining()` 補回傳 `quotePretax`；`create_invoice_voucher()` 依 scope 分兩個方向換算——`scope='amount'` 輸入視為含稅，除以稅率取未稅；`scope='items'` 輸入視為未稅，乘以稅率取含稅，換算後的含稅金額才拿去跟剩餘額度比較、才存進 `voucher.amount`。前端 `ivSelectedTotal()`（未稅小計）跟送出前的超額檢查同步修正為用換算後的含稅小計比較（新增 `ivSelectedGrossTotal()`）。
 - **顯示**：`snapshot_json` 新增 `pretaxAmount`／`taxAmount`；`_voucher_public()` 一併回傳；PDF 總額區塊改列「未稅小計／營業稅／申請開票總額（含稅）」三行；建立 Modal 按金額模式輸入時即時顯示未稅/稅額，按品項模式的小計區塊改列未稅小計/營業稅/含稅小計三行；既有申請列表也補上「未稅 NT$xxx」小字。
 - 已用真實案件（MQ-202607-025，稅率約 5%）驗證換算方向與四捨五入誤差在合理範圍內（正反換算對得回原數字，誤差 <2 元）；`python -m py_compile`＋`import main`＋PDF 兩種 scope 渲染測試皆通過；前端標籤/括號平衡確認。
 
-### 2026-08-20h — 開票申請憑據重新設計：自訂金額/品項 + 剩餘額度追蹤（DB v47）＋ NT$0 bug 修復
+### 2026-08-20h — 發票開立簽核單重新設計：自訂金額/品項 + 剩餘額度追蹤（DB v47）＋ NT$0 bug 修復
 
 - **Bug 修復**：`create_invoice_voucher()` 原本用 `data_json.get("total")` 算款項金額，但 `total` 其實是 `quotations` 資料表的正規 SQL 欄位，不保證存在於 `data_json` 頂層——實測某案件（MQ-202607-025）`data_json.total` 是 `None`，導致 100% 比例款項算出 NT$ 0。改為 `SELECT ... total ...` 直接讀 SQL 欄位。
 - **重新設計背景**：使用者反映很多案件是「先開發票才能收款」，原本只能挑一個既有款項期別（`single`/`all`）不夠彈性，且擔心重複請款。三個問題用 `AskUserQuestion` 逐一確認：①已存在的申請（含草稿）就要鎖額度；②自訂金額/自訂品項完全取代舊的挑期別模式；③品項金額使用者可自行調整（不強制=數量×單價）。
@@ -1474,12 +1485,12 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 - 已驗證：NT$0 bug 用真實受影響案件（MQ-202607-025）重新計算確認修正為 NT$233,725；建立/剩餘額度扣除/超額擋 409/品項數量超額擋 409 全部用**正式機 db 的唯讀複本**（非正式機本身）實測跑過一輪完整流程，正式機資料未受影響；兩種 scope 的 PDF 各自渲染測試通過；`python -m py_compile` + `import main`（含新路由排序檢查）全部通過；前端 HTML 標籤/JS 括號逐一計數比對平衡。
 - **尚未執行**：正式機重啟；重啟後強烈建議先用 demo 帳號完整走一次兩種模式（含刻意超額測試 409 是否正確擋下）再用於真實案件，畢竟這輪改動範圍比之前幾輪都大。
 
-### 2026-08-20d/e/f/g — 申請人姓名改顯示名稱／申請日期＋匯款日期自動帶入／開票申請補報價品項
+### 2026-08-20d/e/f/g — 申請人姓名改顯示名稱／申請日期＋匯款日期自動帶入／發票開立簽核單補報價品項
 
 四筆使用者實測回饋的小修正，皆已重啟生效：
 - 申請人欄位原本 fallback 到 `createdBy`（帳號登入名），改為查 `users.display_name`（`pdf_gen.py _display_name_for_username()`）
 - 「申請日期」「匯款日期」兩個原本寫死空白底線的簽名欄，分別補上 `approval.requestedAt`／`paidAt` 自動帶入（無資料時仍保留空白底線待手動簽署）
-- **開票申請憑據新增報價單品項參考**（使用者回饋「也會帶入報價單的品項內容嗎」，原本只有款項期別/金額，沒有實際品名）：`snapshot_json.quoteItems` 只帶客戶看得到的欄位（description/brand/qty/unit/unitPrice/amount/notes），**刻意排除 `cost`/`margin` 等內部機密欄位**，避免成本/毛利外流到財務單位使用的文件；PDF 新增「四、開票品項參考」表格
+- **發票開立簽核單新增報價單品項參考**（使用者回饋「也會帶入報價單的品項內容嗎」，原本只有款項期別/金額，沒有實際品名）：`snapshot_json.quoteItems` 只帶客戶看得到的欄位（description/brand/qty/unit/unitPrice/amount/notes），**刻意排除 `cost`/`margin` 等內部機密欄位**，避免成本/毛利外流到財務單位使用的文件；PDF 新增「四、開票品項參考」表格
 - 每項都用合成資料寫單元測試驗證（含 fallback 情境、無資料情境、cost/margin 數值確認不外流），`python -m py_compile`＋`import main` 全部通過；回推開發機清單資料夾已逐輪同步（曾發生一次 6 個檔案漏同步，用 `diff` 全檔核對後修正，詳見資料夾內 `README.md`）
 
 ### 2026-08-20c — 「匯款憑證」改名「匯款申請」＋申請人自動帶入＋放寬派發資格為已驗收
@@ -1487,8 +1498,8 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 - **背景**：使用者實際用過一輪後回報三件事：①小林機械案件底下中勇科技無法申請匯款；②術語「承攬商匯款憑證」要改成「承攬商匯款申請」；③PDF 右下角「申請人．經手人」要自動帶入申請人姓名。
 - **中勇科技無法申請的診斷**：直接查正式機 `motrix_erp.db`（唯讀）確認並非 bug——該筆派發（`contractor_dispatches.id=2`，`vendor_id=3` 中勇科技）狀態是 `accepted`（已驗收），不是 `completed`（完工），而系統規則（使用者當初自己選的）只有完工才顯示「產生匯款申請」按鈕；同案件另一筆純點工派發已是完工狀態，已正常產生一張申請單在待審核，證明功能本身沒問題。用 `AskUserQuestion` 詢問使用者後，選擇放寬規則。
 - **放寬派發資格**：`create_contractor_voucher()` 判斷條件從「僅 `completed`」改為「`accepted` 或 `completed`」皆可建立；`case-management.html` 承攬商 tab 卡片的按鈕顯示條件同步放寬。
-- **全面改名「匯款憑證」→「匯款申請」**：只改承攬商匯款這個功能的中文顯示字串（頁面標題、按鈕、錯誤訊息、PDF 文案、email 內容、sidebar 連結、`§0`/`§4.1`/`§5.9`/`§7.11`/`§12` 本文件），刻意不改程式碼識別字（`contractor_vouchers.py`／`contractor-voucher-approval-settings.html` 等檔名、`contractor_payment_vouchers` 資料表、`PV-` 單號前綴、`voucherNo` 等 JSON 欄位、`/api/contractor-vouchers/*` API path）——這些是內部識別字，改了風險大、對使用者無實際幫助。開票申請憑據（發票功能）用字是「憑據」不是「憑證」，字面不衝突，這次未受影響。
-- **申請人自動帶入**：兩份 PDF（承攬商匯款申請、開票申請憑據）右下角「申請人．經手人」簽名欄，原本只有空白簽名線。新增 `applicant_name = approval.requestedByDisplay || createdBy`（已送審則顯示簽核流程記錄的申請人顯示名稱，草稿階段預覽則 fallback 顯示建立者帳號），`pdf_gen.py` 的 `_contractor_voucher_dict()`／`_invoice_voucher_dict()` 補上 `createdBy` 欄位。
+- **全面改名「匯款憑證」→「匯款申請」**：只改承攬商匯款這個功能的中文顯示字串（頁面標題、按鈕、錯誤訊息、PDF 文案、email 內容、sidebar 連結、`§0`/`§4.1`/`§5.9`/`§7.11`/`§12` 本文件），刻意不改程式碼識別字（`contractor_vouchers.py`／`contractor-voucher-approval-settings.html` 等檔名、`contractor_payment_vouchers` 資料表、`PV-` 單號前綴、`voucherNo` 等 JSON 欄位、`/api/contractor-vouchers/*` API path）——這些是內部識別字，改了風險大、對使用者無實際幫助。發票開立簽核單（發票功能）用字是「憑據」不是「憑證」，字面不衝突，這次未受影響。
+- **申請人自動帶入**：兩份 PDF（承攬商匯款申請、發票開立簽核單）右下角「申請人．經手人」簽名欄，原本只有空白簽名線。新增 `applicant_name = approval.requestedByDisplay || createdBy`（已送審則顯示簽核流程記錄的申請人顯示名稱，草稿階段預覽則 fallback 顯示建立者帳號），`pdf_gen.py` 的 `_contractor_voucher_dict()`／`_invoice_voucher_dict()` 補上 `createdBy` 欄位。
 - 已用合成資料直接呼叫兩個 PDF builder 函式驗證（含草稿 fallback／已送審顯示兩種情境），`python -m py_compile`＋`python -c "import main"` 全部通過；回推開發機清單資料夾已同步。
 - **尚未執行**：正式機第三次重啟（待使用者同意）。
 
@@ -2820,23 +2831,22 @@ MOTRIX-ERP/
 │       ├── vendor_contractors.py  ← 承攬商 + 派發 CRUD + accept + import-to-quote
 │       ├── dev_crm.py             ← 業務開發 CRM（dev_cases + dev_logs）
 │       ├── shipping_notes.py      ← 出貨單 CRUD + 獨立簽核流程 + PDF + 回簽 toggle
-│       ├── contractor_vouchers.py ← 承攬商匯款申請 CRUD + 獨立簽核流程 + PDF + 已匯款 toggle（2026-08-20）
-│       └── invoice_vouchers.py    ← 開票申請憑據 CRUD + 獨立簽核流程 + PDF（2026-08-20）
+│       ├── contractor_vouchers.py ← 承攬商匯款申請 CRUD + 簽核流程（預設獨立，可設為統一，見 §12 2026-08-28）+ PDF + 已匯款 toggle（2026-08-20）
+│       └── invoice_vouchers.py    ← 發票開立簽核單 CRUD + 簽核流程（預設統一，可設為獨立，見 §12 2026-08-28）+ PDF（2026-08-20）
 ├── frontend/
 │   ├── index.html               ← 儀表板（Alpine inline）
 │   ├── css/style.css
 │   ├── js/
-│   │   ├── case-management.js   ← ✅ 有效（案件管理 Alpine 元件，含匯款申請/開票憑據方法）
+│   │   ├── case-management.js   ← ✅ 有效（案件管理 Alpine 元件，含匯款申請/發票開立簽核單方法）
 │   │   └── reports.js           ← ✅ 有效（營運報表 Alpine 元件）
 │   ├── pages/
 │   │   ├── dev-crm.html         ← 業務開發 CRM（雙欄；devCrmPage() Alpine inline）
 │   │   ├── quotation-form.html  ← Alpine inline（真正的 quotationForm()）
 │   │   ├── settlement.html      ← Alpine inline（真正的 settlementPage()）
-│   │   ├── case-management.html ← 含承攬商派發 + 驗收流程 Tab + 出貨單 Tab + 匯款申請/開票憑據區塊
+│   │   ├── case-management.html ← 含承攬商派發 + 驗收流程 Tab + 出貨單 Tab + 匯款申請/發票開立簽核單區塊
 │   │   ├── vendor-contractors.html ← 承攬商管理（雙欄；vendorContractorsPage()）
-│   │   ├── shipping-approval-settings.html ← 出貨單專屬簽核設定（複製 approval-settings.html）
-│   │   ├── contractor-voucher-approval-settings.html ← 承攬商匯款申請專屬簽核設定（複製上者，2026-08-20）
-│   │   ├── invoice-voucher-approval-settings.html ← 開票申請憑據專屬簽核設定（複製上者，2026-08-20）
+│   │   ├── approval-settings.html ← 簽核設定（2026-08-28 起單一頁涵蓋五種文件類型：套用範圍多選選單＋統一流程編輯區塊＋各獨立設定類型各自展開的編輯區塊，見 §12）
+│   │   ├── contractor-voucher-approval-settings.html ← 承攬商匯款申請專屬簽核設定頁（仍獨立存在，複製自 approval-settings.html，2026-08-20；讀寫 `contractor_voucher_approval_flow`，跟 approval-settings.html 的獨立設定區塊是同一份資料）
 │   │   └── *.html               ← 其餘頁面均 Alpine inline，無對應外置 JS
 │   └── static/
 │       ├── sidebar.js           ← Topbar + Sidebar + 離開警示 + _FILE_MODULE + sb-mod-* badge

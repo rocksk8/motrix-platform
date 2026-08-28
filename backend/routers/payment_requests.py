@@ -33,7 +33,7 @@ from helpers import (
     active_tiers as _active_tiers, current_tier_idx as _current_tier_idx,
     setting_to_active_tiers as _setting_to_active_tiers,
     check_approve_permission, check_reject_permission, check_no_tier_self_approval,
-    UnresolvedManagerError,
+    UnresolvedManagerError, approval_flow_setting_key,
 )
 from pdf_gen import generate_payment_request_pdf_bytes, _generate_payment_request_pdf
 
@@ -531,7 +531,8 @@ def submit_payment_request(request_no: str, authorization: str = Header(None)):
     d     = json.loads(row["data_json"] or "{}")
     now   = datetime.now().isoformat()
 
-    flow_setting = _get_setting("unified_approval_flow", {"tiers": []}) or {}
+    _scope = _get_setting("approval_flow_scope", {}) or {}
+    flow_setting = _get_setting(approval_flow_setting_key("payment_request", _scope), {"tiers": []}) or {}
     try:
         active_tiers = _setting_to_active_tiers(flow_setting, conn, user["username"])
     except UnresolvedManagerError as e:
@@ -616,7 +617,8 @@ def approve_payment_request(request_no: str, body: dict = Body(default={}), auth
         if user["role"] != "superadmin":
             conn.close()
             raise HTTPException(403, "僅超級管理員可執行此操作")
-        _global_flow  = _get_setting("unified_approval_flow", {"tiers": []}) or {}
+        _scope        = _get_setting("approval_flow_scope", {}) or {}
+        _global_flow  = _get_setting(approval_flow_setting_key("payment_request", _scope), {"tiers": []}) or {}
         try:
             _global_tiers = _setting_to_active_tiers(_global_flow, conn, appr.get("requestedBy"))
         except UnresolvedManagerError as e:

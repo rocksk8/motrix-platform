@@ -37,6 +37,8 @@ from .tiered_approval import (
     first_pending_approver, check_approve_permission, check_reject_permission,
     check_no_tier_self_approval, resolve_department_manager, resolve_division_manager,
     resolve_submitter_manager_chain, resolve_tier_approvers, UnresolvedManagerError,
+    approval_flow_setting_key, APPROVAL_DOC_TYPES, DEFAULT_UNIFIED_DOC_TYPES,
+    APPROVAL_DOC_TYPE_LABELS,
 )
 from .email_notify import (
     notify_approval_request,
@@ -124,6 +126,8 @@ __all__ = [
     "active_tiers", "current_tier_idx", "setting_to_active_tiers",
     "first_pending_approver", "check_approve_permission", "check_reject_permission",
     "check_no_tier_self_approval",
+    "approval_flow_setting_key", "APPROVAL_DOC_TYPES", "DEFAULT_UNIFIED_DOC_TYPES",
+    "APPROVAL_DOC_TYPE_LABELS",
     # email_notify
     "notify_approval_request", "notify_next_tier", "notify_approved",
     "notify_returned", "notify_resubmit_requester", "notify_settlement_finalized",
