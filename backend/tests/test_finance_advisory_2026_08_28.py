@@ -252,3 +252,17 @@ def test_bank_reconcile_requires_admin(client, make_user):
         files={"file": ("bank.csv", _csv_bytes(csv_text), "text/csv")},
     )
     assert r.status_code == 403
+
+
+def test_bank_reconcile_allows_cashier_module_2026_08_31(client, make_user):
+    """2026-08-31（財務/出納權限分工）：銀行對帳單比對搬進出納模組，非
+    admin+ 但具備 cashier 模組的使用者也要能存取（不需要完整管理員權限）。"""
+    username, password = make_user(role="sales", modules=["cashier"])
+    token = _login(client, username, password)
+    csv_text = "交易日期,金額,摘要\n2026-03-20,1000,x\n"
+    r = client.post(
+        "/api/reports/bank-reconcile",
+        headers=_auth(token),
+        files={"file": ("bank.csv", _csv_bytes(csv_text), "text/csv")},
+    )
+    assert r.status_code == 200, r.text

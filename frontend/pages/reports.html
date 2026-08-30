@@ -1271,62 +1271,9 @@
 
                 <div style="font-size:11px;color:var(--text-dim);margin-top:4px" x-text="'資料截至 ' + cashPos.asOf + '　' + cashPos.note"></div>
 
-                <!-- 銀行對帳單比對 -->
-                <div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border-light)">
-                  <div class="cm-section-title" style="margin-bottom:8px">銀行對帳單比對（承攬商匯款）</div>
-                  <div style="font-size:11px;color:var(--text-dim);margin-bottom:10px">
-                    上傳銀行匯出的 CSV（需含日期與金額欄位），依金額比對上方「已核准未匯款」清單，僅供人工複核，不會自動標記已匯款。
-                  </div>
-                  <label class="btn-export" style="cursor:pointer;display:inline-flex">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
-                    <span x-text="bankReconciling ? '比對中…' : '上傳 CSV 比對'"></span>
-                    <input type="file" accept=".csv" style="display:none" :disabled="bankReconciling" @change="uploadBankCsv($event)">
-                  </label>
-
-                  <template x-if="bankResult">
-                    <div style="margin-top:14px">
-                      <div class="kpi-grid" style="margin-bottom:12px">
-                        <div class="kpi-card green">
-                          <div class="kpi-card__lbl">配對成功</div>
-                          <div class="kpi-card__val" x-text="bankResult.matchedCount"></div>
-                        </div>
-                        <div class="kpi-card orange">
-                          <div class="kpi-card__lbl">銀行紀錄未配對</div>
-                          <div class="kpi-card__val" x-text="bankResult.unmatchedBankCount"></div>
-                        </div>
-                        <div class="kpi-card red">
-                          <div class="kpi-card__lbl">仍待匯款（未配對）</div>
-                          <div class="kpi-card__val" x-text="bankResult.unmatchedVouchers.length"></div>
-                        </div>
-                      </div>
-
-                      <table class="data-table">
-                        <thead><tr>
-                          <th class="c">銀行日期</th><th class="r">銀行金額</th><th>銀行摘要</th>
-                          <th>配對申請單號</th><th>承攬商</th><th class="c">動作</th>
-                        </tr></thead>
-                        <tbody>
-                          <template x-for="(r, i) in bankResult.bankRows" :key="i">
-                            <tr>
-                              <td class="c" x-text="r.date"></td>
-                              <td class="r mono" x-text="fmt(r.amount)"></td>
-                              <td x-text="r.desc"></td>
-                              <td x-show="r.match" class="mono" x-text="r.match ? (r.match.quoteNo + ' / ' + r.match.voucherNo) : ''"></td>
-                              <td x-show="!r.match" colspan="2" style="color:var(--text-dim)">未找到金額相符的待匯款申請</td>
-                              <td x-show="r.match" x-text="r.match ? r.match.vendorName : ''"></td>
-                              <td class="c">
-                                <button x-show="r.match && !r.match._paid" class="btn-export excel" style="padding:3px 8px;font-size:11px"
-                                        @click="openBankPayModal(r)">標記已匯款</button>
-                                <span x-show="r.match && r.match._paid" style="color:#15803D;font-size:11px">✓ 已標記</span>
-                              </td>
-                            </tr>
-                          </template>
-                        </tbody>
-                      </table>
-
-                      <div style="font-size:11px;color:var(--text-dim);margin-top:8px" x-text="bankResult.note"></div>
-                    </div>
-                  </template>
+                <!-- 銀行對帳單比對已搬到出納模組（cashier.html，2026-08-31，財務/出納權限分工）-->
+                <div style="margin-top:20px;padding-top:14px;border-top:1px solid var(--border-light);font-size:12px;color:var(--text-dim)">
+                  銀行對帳單比對已搬到 <a href="cashier.html" style="color:var(--accent)">出納模組</a>。
                 </div>
 
                 <!-- 稅務匯出 -->
@@ -1445,30 +1392,6 @@
     </div>
   </div>
 
-  <!-- 銀行對帳比對 標記已匯款 Modal（2026-08-31 新增，銀行 CSV 日期格式不保證是 YYYY-MM-DD，
-       改成猜測日期讓使用者眼睛確認/修正後再送出，不直接把原始文字送給後端） -->
-  <div x-show="bankPayModal" class="modal-overlay" @click.self="bankPayModal=false">
-    <div class="modal-box" style="max-width:360px">
-      <div class="modal-hd">
-        <div class="modal-title" x-text="'標記已匯款' + (bankPayRow && bankPayRow.match ? '　' + bankPayRow.match.voucherNo : '')"></div>
-        <button class="modal-close" @click="bankPayModal=false">&#10005;</button>
-      </div>
-      <div class="modal-body">
-        <label style="font-size:12px;color:var(--text-secondary);font-family:var(--font-zh);display:block;margin-bottom:4px">匯款日期</label>
-        <input type="date" x-model="bankPayDate"
-               style="width:100%;padding:7px 10px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;margin-bottom:8px">
-        <div style="font-size:11px;color:var(--text-dim);font-family:var(--font-zh)">
-          銀行對帳單上的日期原文：<span x-text="bankPayRow ? (bankPayRow.date || '（無）') : ''"></span>　請核對後再確認
-        </div>
-        <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:18px;padding-top:14px;border-top:1px solid var(--border-light)">
-          <button type="button" @click="bankPayModal=false" :disabled="bankPaySaving" style="padding:8px 18px;border:1px solid var(--border-light);background:#fff;border-radius:var(--radius);font-size:13px;font-family:var(--font-zh);cursor:pointer;color:var(--text-secondary)">取消</button>
-          <button type="button" @click="confirmBankPay()" :disabled="bankPaySaving || !bankPayDate" style="padding:8px 22px;border:1px solid #059669;background:#059669;color:#fff;border-radius:var(--radius);font-size:13px;font-family:var(--font-zh);font-weight:600;cursor:pointer" :style="{opacity:bankPaySaving?'.6':'1'}">
-            <span x-text="bankPaySaving ? '處理中…' : '確認標記已匯款'"></span>
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
 
   <!-- Settlement Modal -->
   <div x-show="settlementModal" class="modal-overlay" @click.self="closeSettlement()">

@@ -712,8 +712,8 @@
 
   <script>
   const ROLE_MODULES = {
-    superadmin: ['dashboard','quotation','case_manage','customer','sales','procurement','inventory','equipment','finance','reports','settings','project_approve_eng','project_approve_biz','financial_view','work_log','daily_task','env_guide','netarch_guide','switch_guide','monitor_guide','access_guide','gateway_guide','automation_guide'],
-    admin:      ['dashboard','quotation','case_manage','customer','sales','procurement','inventory','equipment','finance','reports','project_approve_eng','project_approve_biz','financial_view','work_log','daily_task','env_guide','netarch_guide','switch_guide','monitor_guide','access_guide','gateway_guide','automation_guide'],
+    superadmin: ['dashboard','quotation','case_manage','customer','sales','procurement','inventory','equipment','finance','reports','settings','project_approve_eng','project_approve_biz','financial_view','work_log','daily_task','env_guide','netarch_guide','switch_guide','monitor_guide','access_guide','gateway_guide','automation_guide','cashier'],
+    admin:      ['dashboard','quotation','case_manage','customer','sales','procurement','inventory','equipment','finance','reports','project_approve_eng','project_approve_biz','financial_view','work_log','daily_task','env_guide','netarch_guide','switch_guide','monitor_guide','access_guide','gateway_guide','automation_guide','cashier'],
     sales:      ['dashboard','quotation','case_manage','customer','financial_view','project_approve_biz','work_log','daily_task'],
     engineer:   ['dashboard','case_manage','project_approve_eng','equipment','work_log','daily_task'],
     viewer:     ['dashboard'],
@@ -794,6 +794,7 @@
         {key:'financial_view',       label:'財務金額可視',     group:'財務'},
         {key:'finance',              label:'應收帳款／銷售訂單', group:'財務'},
         {key:'reports',              label:'營運報表',         group:'財務'},
+        {key:'cashier',              label:'出納（標記已匯款/已收款、銀行對帳）', group:'財務'},
         {key:'procurement',          label:'供應商／料號／採購', group:'採購'},
         {key:'inventory',            label:'庫存管理',         group:'採購'},
         {key:'equipment',            label:'設備登載／保固',   group:'設備'},

@@ -275,6 +275,7 @@
   var cCu  = mods.indexOf('customer')    >= 0 || ad
   var cPr  = mods.indexOf('procurement') >= 0 || ad
   var cFi  = mods.indexOf('finance')     >= 0 || ad
+  var cCash = mods.indexOf('cashier')    >= 0 || ad
   var cCM  = mods.indexOf('case_manage') >= 0 || eng || ad
   var cEq  = mods.indexOf('equipment')   >= 0 || ad
   var cInv = mods.indexOf('inventory')   >= 0 || ad
@@ -310,6 +311,7 @@
     dev:   '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>',
     warr:  '<path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>',
     recv:  '<path d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"/>',
+    cash:  '<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="3"/><path d="M6 6v.01M18 6v.01M6 18v-.01M18 18v-.01"/>',
     rpt:   '<path d="M9 17v-2m3 2v-4m3 4v-6M3 21h18M3 10l9-7 9 7M12 3v1"/>',
     users: '<path d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/>',
     org:   '<path d="M3 21h18M5 21V7l7-4 7 4v14M9 9h1m-1 4h1m4-4h1m-1 4h1M9 21v-4h6v4"/>',
@@ -415,6 +417,8 @@
       ni(pg('receivables.html'),     'recv',  '應收帳款', ['receivables.html'],                      cFi,  'sb-mod-finance'),
       ni(pg('sales-orders.html'),    'order', '銷售訂單', ['sales-orders.html'],                     cFi,  'sb-mod-sales-orders'),
       ni(pg('reports.html'),         'rpt',   '營運報表', ['reports.html'],                          cRpt),
+      sec('出納', cCash),
+      ni(pg('cashier.html'),         'cash',  '出納',     ['cashier.html'],                          cCash, 'sb-mod-cashier'),
       sec('勞務管理', cCon || cPay),
       ni(pg('contractors.html'),     'contl', '外包名冊', ['contractors.html'],                      cCon),
       ni(pg('payslips.html'),        'paysl', '勞報單',   ['payslips.html', 'payslip-form.html'],    cPay),
@@ -644,6 +648,7 @@
         cCu  = mods.indexOf('customer')    >= 0 || ad
         cPr  = mods.indexOf('procurement') >= 0 || ad
         cFi  = mods.indexOf('finance')     >= 0 || ad
+        cCash = mods.indexOf('cashier')    >= 0 || ad
         cCM  = mods.indexOf('case_manage') >= 0 || eng || ad
         cEq  = mods.indexOf('equipment')   >= 0 || ad
         cInv = mods.indexOf('inventory')   >= 0 || ad

@@ -933,7 +933,7 @@
                       </div>
                       <label style="display:flex;align-items:center;gap:5px;padding:5px 10px;border-radius:6px;cursor:pointer;flex-shrink:0;transition:background .12s"
                              :style="item.received ? 'background:#DCFCE7' : 'background:#F3F4F6'">
-                        <input type="checkbox" x-model="item.received" @change="setDirty()" style="accent-color:var(--success)">
+                        <input type="checkbox" x-model="item.received" @change="setDirty()" :disabled="!canMarkPayment()" style="accent-color:var(--success)">
                         <span style="font-size:11px;font-weight:600;font-family:var(--font-zh)"
                               :style="item.received ? 'color:var(--success)' : 'color:#9CA3AF'"
                               x-text="item.received ? '已收款' : '未收'"></span>
@@ -942,7 +942,11 @@
                               :disabled="(cr.caseRecord?.payment?.items?.length||0)<=1">×</button>
                     </div>
 
-                    <div style="display:grid;grid-template-columns:136px 140px 1fr;gap:8px">
+                    <div style="display:grid;grid-template-columns:136px 136px 140px 1fr;gap:8px">
+                      <div>
+                        <span class="fi-label">預計收款日</span>
+                        <input class="fi fi--sm" type="date" x-model="item.expectedReceiptDate" @change="setDirty()">
+                      </div>
                       <div>
                         <span class="fi-label">收款日期</span>
                         <input class="fi fi--sm" type="date" x-model="item.receivedAt" @change="setDirty()">
@@ -982,7 +986,7 @@
                             <input class="fi fi--sm" type="number" min="0"
                                    :placeholder="itemAmountReceivable(idx)"
                                    x-model.number="item.actualAmount"
-                                   @input="setDirty()"
+                                   @input="setDirty()" :disabled="!canMarkPayment()"
                                    style="padding-left:30px;font-family:LINE Seed TW_OTF, sans-serif">
                           </div>
                         </div>
@@ -992,7 +996,7 @@
                             <span style="position:absolute;left:6px;top:50%;transform:translateY(-50%);font-size:10px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif">NT$</span>
                             <input class="fi fi--sm" type="number" min="0" placeholder="0"
                                    x-model.number="item.feeAmount"
-                                   @input="setDirty()"
+                                   @input="setDirty()" :disabled="!canMarkPayment()"
                                    style="padding-left:30px;font-family:LINE Seed TW_OTF, sans-serif">
                           </div>
                         </div>

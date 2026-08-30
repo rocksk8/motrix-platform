@@ -27,7 +27,7 @@ from helpers import (
     active_tiers as _active_tiers, current_tier_idx as _current_tier_idx,
     setting_to_active_tiers as _setting_to_active_tiers,
     check_approve_permission, check_reject_permission, check_no_tier_self_approval,
-    UnresolvedManagerError, resolve_active_flow_setting,
+    UnresolvedManagerError, resolve_active_flow_setting, user_has_module,
 )
 from pdf_gen import generate_contractor_voucher_pdf_bytes, _generate_contractor_voucher_pdf
 
@@ -592,7 +592,12 @@ def toggle_paid(voucher_no: str, body: dict = Body(...), authorization: str = He
     本身發生的系統時間」，跟 paid_at（匯款發生的日期）是兩個不同概念，不要
     混用。"""
     user = _require_user(authorization)
-    _require_admin(user)
+    # 2026-08-31（財務/出納權限分工）：標記已匯款是出納的執行動作，不是財務
+    # 核准，額外放行具備 cashier 模組的使用者（不需要完整 admin 權限）——跟
+    # 這個檔案其餘建立/送審/撤銷等「財務」動作的 _require_admin() 分開判斷，
+    # 不能把 _require_admin() 本身改鬆，那些動作仍然只限 admin+。
+    if user["role"] not in ("superadmin", "admin") and not user_has_module(user, "cashier"):
+        raise HTTPException(403, "需要管理員或出納權限")
     action = (body or {}).get("action", "")
     note   = (body or {}).get("note", "")
     if action not in ("pay", "unpay"):

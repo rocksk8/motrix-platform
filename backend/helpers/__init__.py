@@ -24,6 +24,7 @@ from .auth import (
     _write_initial_credentials,
     _require_user,
     _tok,
+    user_has_module,
 )
 from .settings import _get_setting, _set_setting
 from .audit import _notify, _audit, _filter_live_notifications, _purge_notifications

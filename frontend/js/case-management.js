@@ -608,9 +608,9 @@ function app() {
           // 5 個預設階段改由 _seedDefaultStagesIfEmpty() 透過 API 建立，取得真實 id。
           stages: [],
           payment: { items: [
-            { id: 1, type: '訂金款', pct: 30, received: false, receivedAt: '', invoiceNo: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' },
-            { id: 2, type: '交貨款', pct: 30, received: false, receivedAt: '', invoiceNo: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' },
-            { id: 3, type: '驗收款', pct: 40, received: false, receivedAt: '', invoiceNo: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' },
+            { id: 1, type: '訂金款', pct: 30, received: false, receivedAt: '', expectedReceiptDate: '', invoiceNo: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' },
+            { id: 2, type: '交貨款', pct: 30, received: false, receivedAt: '', expectedReceiptDate: '', invoiceNo: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' },
+            { id: 3, type: '驗收款', pct: 40, received: false, receivedAt: '', expectedReceiptDate: '', invoiceNo: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' },
           ], note: '' },
           materials: [], devices: [], warrantyNote: '', notes: '',
         }
@@ -646,15 +646,15 @@ function app() {
 
       if (!this.cr.caseRecord.payment) {
         this.cr.caseRecord.payment = { items: [
-          { id: 1, type: '訂金款', pct: 30, amount: null, received: false, receivedAt: '', invoiceNo: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' },
-          { id: 2, type: '交貨款', pct: 30, amount: null, received: false, receivedAt: '', invoiceNo: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' },
-          { id: 3, type: '驗收款', pct: 40, amount: null, received: false, receivedAt: '', invoiceNo: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' },
+          { id: 1, type: '訂金款', pct: 30, amount: null, received: false, receivedAt: '', expectedReceiptDate: '', invoiceNo: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' },
+          { id: 2, type: '交貨款', pct: 30, amount: null, received: false, receivedAt: '', expectedReceiptDate: '', invoiceNo: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' },
+          { id: 3, type: '驗收款', pct: 40, amount: null, received: false, receivedAt: '', expectedReceiptDate: '', invoiceNo: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' },
         ], note: '' }
       } else if (!this.cr.caseRecord.payment.items) {
         this.cr.caseRecord.payment = { items: [
-          { id: 1, type: '訂金款', pct: 30, amount: null, received: false, receivedAt: '', invoiceNo: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' },
-          { id: 2, type: '交貨款', pct: 30, amount: null, received: false, receivedAt: '', invoiceNo: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' },
-          { id: 3, type: '驗收款', pct: 40, amount: null, received: false, receivedAt: '', invoiceNo: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' },
+          { id: 1, type: '訂金款', pct: 30, amount: null, received: false, receivedAt: '', expectedReceiptDate: '', invoiceNo: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' },
+          { id: 2, type: '交貨款', pct: 30, amount: null, received: false, receivedAt: '', expectedReceiptDate: '', invoiceNo: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' },
+          { id: 3, type: '驗收款', pct: 40, amount: null, received: false, receivedAt: '', expectedReceiptDate: '', invoiceNo: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' },
         ], note: this.cr.caseRecord.payment.note || '' }
       }
     },
@@ -811,7 +811,7 @@ function app() {
 
     addPaymentItem() {
       const items = this.cr.caseRecord.payment.items
-      items.push({ id: Date.now(), type: '進度款', pct: 0, received: false, receivedAt: '', invoiceNo: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' })
+      items.push({ id: Date.now(), type: '進度款', pct: 0, received: false, receivedAt: '', expectedReceiptDate: '', invoiceNo: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' })
       this.setDirty()
     },
     removePaymentItem(idx) {
@@ -1985,6 +1985,16 @@ function app() {
       d = d || new Date()
       const tz = d.getTimezoneOffset() * 60000
       return new Date(d.getTime() - tz).toISOString().slice(0, 10)
+    },
+
+    // 2026-08-31（財務/出納權限分工）：是否具備指定模組——session.modules 是
+    // 登入當下 /api/auth/login、/api/auth/me 回傳的已解析陣列（不是 JSON 字串）。
+    hasModule(key) {
+      return (this.session.modules || []).includes(key)
+    },
+
+    canMarkPayment() {
+      return ['superadmin', 'admin'].includes(this.session.role) || this.hasModule('cashier')
     },
 
     // ── Modal 誤觸關閉保護（2026-08-31 新增）：backdrop 點外面／Esc／× 這三個

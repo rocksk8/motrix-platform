@@ -95,6 +95,17 @@ def _write_initial_credentials(username: str, password: str) -> str:
 
 # ── Session helpers ───────────────────────────────────────────────────────────
 
+def user_has_module(user: dict, key: str) -> bool:
+    """`user["modules"]` 是 _require_user() 回傳的原始 JSON 字串（未解析），
+    這裡統一解析比對——供「admin+ 或具備特定模組」這類判斷共用（2026-08-31
+    財務/出納權限分工新增），取代散落在各檔案裡各自重寫一次 role 判斷式的
+    寫法：`if user["role"] not in ("superadmin","admin") and not user_has_module(user,"cashier"): raise ...`"""
+    try:
+        return key in json.loads(user.get("modules") or "[]")
+    except Exception:
+        return False
+
+
 def _require_user(authorization: str, require_superadmin: bool = False, module: str = None) -> dict:
     """Validate session and check role/module permissions.
 

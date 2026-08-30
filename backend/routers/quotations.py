@@ -29,7 +29,7 @@ from helpers import (
     resolve_tier_approvers, UnresolvedManagerError, resolve_active_flow_setting,
     save_document_files, delete_document_file,
     notify_case_close_blocked, notify_case_change_requested,
-    norm_at, active_delegators_for,
+    norm_at, active_delegators_for, user_has_module,
 )
 import helpers.uploads as _uploads_mod
 from helpers.uploads import _effective_subfolder
@@ -1494,6 +1494,42 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
         conn.close()
         raise HTTPException(409, "案件資料已被其他人更新，請重新載入後再存")
     label = f"{quote_no}（{row['customer_name'] or ''}{'／' if row['project_name'] else ''}{row['project_name'] or ''}）"
+    data = json.loads(row["data_json"] or "{}")
+
+    # 2026-08-31（安全稽核發現）：這支整包存檔端點原本完全沒有角色檢查——
+    # 案件管理頁面的款項明細（勾選已收款／填實收金額／手續費）就是走這支，
+    # 不是走有 admin+ 門檻的 mark_payment（PATCH .../payment/{idx}，只有
+    # receivables.html 在用），任何登入使用者都能在案件管理頁面直接改動
+    # 金流狀態。這支端點同時承載材料/合約條款/角色等其他任何登入使用者都
+    # 該能編輯的欄位，不能整支端點都要求 admin+；改成只在真的偵測到
+    # received/actualAmount/feeAmount 這幾個金流欄位有變動時才擋，偵測到就
+    # 整筆拒絕（不寫入任何欄位），不做「只還原金流欄位、其餘正常存檔」的
+    # 靜默處理——使用者已確認採「拒絕整筆」，避免使用者不知情下被悄悄改回
+    # 舊值。比對用 item["id"]（新增/編輯款項期別時前端固定會帶，見
+    # case-management.js::addPaymentItem()）配對新舊品項，不能用陣列索引位置
+    # 比對——sales/engineer 本來就能自行新增/刪除/調整款項期別（跟「標記
+    # 已收款」是完全不同的動作），若用位置比對，光是筆數改變（新增一期
+    # 款項）就會被整支擋下，變成非 admin/出納完全不能編輯款項明細，不是
+    # 這次要的效果。新增的品項若一開始就帶 received=true 仍視為違規擋下。
+    if user["role"] not in ("superadmin", "admin") and not user_has_module(user, "cashier"):
+        old_items = ((data.get("caseRecord") or {}).get("payment") or {}).get("items") or []
+        new_items = ((body.case_record or {}).get("payment") or {}).get("items") or []
+        old_by_id = {it.get("id"): it for it in old_items if it.get("id") is not None}
+        payment_changed = False
+        for new_it in new_items:
+            old_it = old_by_id.get(new_it.get("id"))
+            if old_it is None:
+                if new_it.get("received"):
+                    payment_changed = True
+                    break
+                continue
+            if any(old_it.get(f) != new_it.get(f) for f in ("received", "actualAmount", "feeAmount")):
+                payment_changed = True
+                break
+        if payment_changed:
+            conn.close()
+            raise HTTPException(403, "款項收款狀態需由管理員或出納標記")
+
     gated, change_id = _gate_case_edit(
         conn, quote_no, user, authorization, "case_record_update",
         f"{label} 更新案件記錄（材料/款項/角色/合約等）", {"case_record": body.case_record or {}},
@@ -1502,7 +1538,6 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
         conn.close()
         return {"ok": True, "pending": True, "changeRequestId": change_id,
                 "message": "案件已結案並處於半解鎖狀態，此變更已送出，待最高管理員審核通過後才會套用"}
-    data = json.loads(row["data_json"] or "{}")
     old_devices = (data.get("caseRecord") or {}).get("devices") or []
     new_devices = (body.case_record or {}).get("devices") or []
     # caseRecord.stages 正規化（2026-08-23，3a 新增／3b 上線後修正；2026-08-24 停用
@@ -2259,8 +2294,8 @@ def mark_payment(no: str, idx: int, body: dict, authorization: str = Header(None
     模組「發票號碼」這類單純登錄用途的欄位一致寬鬆。"""
     user = _require_user(authorization)
     touches_receipt = "received" in body or "actualAmount" in body or "feeAmount" in body
-    if touches_receipt and user["role"] not in ("superadmin", "admin"):
-        raise HTTPException(403, "僅管理員可標記收款狀態")
+    if touches_receipt and user["role"] not in ("superadmin", "admin") and not user_has_module(user, "cashier"):
+        raise HTTPException(403, "僅管理員或出納可標記收款狀態")
     conn = get_db()
     try:
         row = conn.execute("SELECT data_json, updated_at FROM quotations WHERE quote_no=?", (no,)).fetchone()

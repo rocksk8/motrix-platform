@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="../static/favicon.png">
+  <title>出納 — MOTRIX 營運管理系統</title>
+  <script src="../js/cashier.js"></script>
+  <script src="../static/auth-guard.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
+  <style>
+    [x-cloak]{display:none!important}
+    .page-main{margin-left:var(--sidebar-w);margin-top:var(--topbar-h);padding:28px 32px;min-height:calc(100vh - var(--topbar-h));background:var(--white)}
+
+    .tabs{display:flex;gap:8px;margin-bottom:18px;border-bottom:1px solid var(--border-light)}
+    .tab{padding:9px 4px;margin-right:14px;font-size:13px;font-family:var(--font-zh);font-weight:600;color:var(--text-dim);background:none;border:none;border-bottom:2px solid transparent;cursor:pointer}
+    .tab.on{color:var(--accent);border-bottom-color:var(--accent)}
+    .tab__cnt{font-family:LINE Seed TW_OTF, sans-serif;font-size:10px;font-weight:600;margin-left:4px;padding:1px 6px;border-radius:8px;background:#F0EEE9}
+    .tab.on .tab__cnt{background:var(--accent-light);color:var(--accent)}
+
+    .r{text-align:right}.c{text-align:center}
+    .panel{background:#fff;border:1px solid var(--border-light);border-radius:var(--radius-lg);overflow:hidden}
+    .data-table td.overdue{color:var(--danger);font-weight:700}
+    .data-table td.soon{color:#D97706;font-weight:700}
+    .mono{font-family:LINE Seed TW_OTF, sans-serif;font-size:11px;letter-spacing:.03em}
+
+    .action-btn{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:var(--radius);font-size:11px;font-family:var(--font-zh);font-weight:500;cursor:pointer;border:1px solid;transition:all .12s}
+    .action-btn.pay{background:#F0FDF4;border-color:#86EFAC;color:#15803D}
+    .action-btn.pay:hover{background:#DCFCE7}
+
+    .kpi-grid{display:flex;gap:12px;margin-bottom:14px;flex-wrap:wrap}
+    .kpi-card{flex:1;min-width:130px;padding:12px 16px;border:1px solid var(--border-light);border-radius:var(--radius-lg);background:#fff}
+    .kpi-card__lbl{font-size:10px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.06em;text-transform:uppercase}
+    .kpi-card__val{font-size:20px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;margin-top:4px}
+    .kpi-card.green .kpi-card__val{color:var(--success)}
+    .kpi-card.orange .kpi-card__val{color:#D97706}
+    .kpi-card.red .kpi-card__val{color:var(--danger)}
+
+    .empty-state{text-align:center;padding:48px;color:var(--text-dim);font-family:var(--font-zh);font-size:13px}
+    .error-banner{padding:12px 16px;background:#FEF2F2;border:1px solid #FECACA;border-radius:var(--radius-lg);color:#B91C1C;font-size:13px;font-family:var(--font-zh);margin-bottom:16px}
+
+    .field-label{font-size:11px;font-family:var(--font-zh);color:var(--text-secondary);margin-bottom:4px;font-weight:500;display:block}
+    .field-input{width:100%;padding:7px 10px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:var(--font-zh);outline:none;box-sizing:border-box;margin-bottom:12px}
+  </style>
+</head>
+<body x-data="cashierApp()" x-init="init()" x-cloak>
+
+  <header id="app-topbar" class="topbar"></header>
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+  <div class="app-shell">
+    <aside class="sidebar" id="app-sidebar"></aside>
+
+    <main class="page-main">
+      <div style="font-size:20px;font-weight:700;font-family:var(--font-zh);margin-bottom:18px">出納</div>
+
+      <template x-if="error">
+        <div class="error-banner" x-text="error"></div>
+      </template>
+
+      <template x-if="!error">
+        <div>
+          <div class="tabs">
+            <button class="tab" :class="{on: activeTab==='payable'}" @click="activeTab='payable'">
+              待付款<span class="tab__cnt" x-text="payable.length"></span>
+            </button>
+            <button class="tab" :class="{on: activeTab==='receivable'}" @click="activeTab='receivable'">
+              待收款<span class="tab__cnt" x-text="receivable.length"></span>
+            </button>
+            <button class="tab" :class="{on: activeTab==='bank'}" @click="activeTab='bank'">
+              銀行對帳單比對
+            </button>
+          </div>
+
+          <!-- 待付款 -->
+          <div x-show="activeTab==='payable'">
+            <template x-if="loading">
+              <div class="empty-state">載入中…</div>
+            </template>
+            <template x-if="!loading && payable.length===0">
+              <div class="empty-state">目前沒有待匯款的申請</div>
+            </template>
+            <template x-if="!loading && payable.length>0">
+              <div class="panel">
+                <table class="data-table">
+                  <thead><tr>
+                    <th>申請單號</th><th>關聯案件</th><th>廠商</th>
+                    <th class="r">應付金額</th><th class="c">應付款日期</th><th class="c">動作</th>
+                  </tr></thead>
+                  <tbody>
+                    <template x-for="v in payable" :key="v.voucherNo">
+                      <tr>
+                        <td class="mono" x-text="v.voucherNo"></td>
+                        <td class="mono" x-text="v.quoteNo"></td>
+                        <td x-text="v.vendorName || '（外包人員點工）'"></td>
+                        <td class="r mono" x-text="fmt(v.grandTotal)"></td>
+                        <td class="c mono" :class="isOverdue(v.payableDate) ? 'overdue' : (isDueSoon(v.payableDate) ? 'soon' : '')"
+                            x-text="v.payableDate || '未指定'"></td>
+                        <td class="c">
+                          <button class="action-btn pay" @click="openPayVoucherModal(v)">標記已匯款</button>
+                        </td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+              </div>
+            </template>
+          </div>
+
+          <!-- 待收款 -->
+          <div x-show="activeTab==='receivable'">
+            <template x-if="!loading && receivable.length===0">
+              <div class="empty-state">目前沒有待收款的品項</div>
+            </template>
+            <template x-if="!loading && receivable.length>0">
+              <div class="panel">
+                <table class="data-table">
+                  <thead><tr>
+                    <th>案件號</th><th>客戶</th><th>業務員</th><th>款項類型</th>
+                    <th class="r">應收金額</th><th class="c">預計收款日</th><th class="c">動作</th>
+                  </tr></thead>
+                  <tbody>
+                    <template x-for="it in receivable" :key="it.quoteNo + '-' + it.idx">
+                      <tr>
+                        <td class="mono" x-text="it.quoteNo"></td>
+                        <td x-text="it.customer"></td>
+                        <td x-text="it.salesPerson"></td>
+                        <td x-text="it.type"></td>
+                        <td class="r mono" x-text="fmt(it.amount)"></td>
+                        <td class="c mono" :class="isOverdue(it.expectedReceiptDate) ? 'overdue' : (isDueSoon(it.expectedReceiptDate) ? 'soon' : '')"
+                            x-text="it.expectedReceiptDate || '未指定'"></td>
+                        <td class="c">
+                          <button class="action-btn pay" @click="openReceiveModal(it)">標記已收款</button>
+                        </td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+              </div>
+            </template>
+          </div>
+
+          <!-- 銀行對帳單比對（搬自營運報表，2026-08-31） -->
+          <div x-show="activeTab==='bank'">
+            <div style="font-size:11px;color:var(--text-dim);margin-bottom:10px">
+              上傳銀行匯出的 CSV（需含日期與金額欄位），依金額比對目前「已核准未匯款」清單，僅供人工複核，不會自動標記已匯款。
+            </div>
+            <label class="action-btn pay" style="cursor:pointer;display:inline-flex">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+              <span x-text="bankReconciling ? '比對中…' : '上傳 CSV 比對'"></span>
+              <input type="file" accept=".csv" style="display:none" :disabled="bankReconciling" @change="uploadBankCsv($event)">
+            </label>
+
+            <template x-if="bankResult">
+              <div style="margin-top:14px">
+                <div class="kpi-grid">
+                  <div class="kpi-card green">
+                    <div class="kpi-card__lbl">配對成功</div>
+                    <div class="kpi-card__val" x-text="bankResult.matchedCount"></div>
+                  </div>
+                  <div class="kpi-card orange">
+                    <div class="kpi-card__lbl">銀行紀錄未配對</div>
+                    <div class="kpi-card__val" x-text="bankResult.unmatchedBankCount"></div>
+                  </div>
+                  <div class="kpi-card red">
+                    <div class="kpi-card__lbl">仍待匯款（未配對）</div>
+                    <div class="kpi-card__val" x-text="bankResult.unmatchedVouchers.length"></div>
+                  </div>
+                </div>
+
+                <div class="panel">
+                  <table class="data-table">
+                    <thead><tr>
+                      <th class="c">銀行日期</th><th class="r">銀行金額</th><th>銀行摘要</th>
+                      <th>配對申請單號</th><th>承攬商</th><th class="c">動作</th>
+                    </tr></thead>
+                    <tbody>
+                      <template x-for="(r, i) in bankResult.bankRows" :key="i">
+                        <tr>
+                          <td class="c" x-text="r.date"></td>
+                          <td class="r mono" x-text="fmt(r.amount)"></td>
+                          <td x-text="r.desc"></td>
+                          <td x-show="r.match" class="mono" x-text="r.match ? (r.match.quoteNo + ' / ' + r.match.voucherNo) : ''"></td>
+                          <td x-show="!r.match" colspan="2" style="color:var(--text-dim)">未找到金額相符的待匯款申請</td>
+                          <td x-show="r.match" x-text="r.match ? r.match.vendorName : ''"></td>
+                          <td class="c">
+                            <button x-show="r.match && !r.match._paid" class="action-btn pay" @click="openBankPayModal(r)">標記已匯款</button>
+                            <span x-show="r.match && r.match._paid" style="color:#15803D;font-size:11px">✓ 已標記</span>
+                          </td>
+                        </tr>
+                      </template>
+                    </tbody>
+                  </table>
+                </div>
+                <div style="font-size:11px;color:var(--text-dim);margin-top:8px" x-text="bankResult.note"></div>
+              </div>
+            </template>
+          </div>
+        </div>
+      </template>
+    </main>
+  </div>
+
+  <!-- 標記已匯款 Modal -->
+  <div x-show="payVoucherModal" class="modal-overlay" @click.self="payVoucherModal=false">
+    <div class="modal-box" style="width:360px">
+      <div class="modal-title" x-text="'標記已匯款' + (payVoucherTarget ? '　' + payVoucherTarget.voucherNo : '')"></div>
+      <label class="field-label">匯款日期</label>
+      <input type="date" class="field-input" x-model="payVoucherDate">
+      <label class="field-label">備註（選填，例如匯款帳號末五碼）</label>
+      <input type="text" class="field-input" x-model="payVoucherNote" placeholder="選填">
+      <div class="modal-footer" style="display:flex;justify-content:flex-end;gap:8px">
+        <button @click="payVoucherModal=false" :disabled="payVoucherSaving"
+                style="padding:7px 16px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:var(--font-zh);background:#fff;cursor:pointer">取消</button>
+        <button @click="confirmPayVoucher()" :disabled="payVoucherSaving || !payVoucherDate"
+                style="padding:7px 16px;border:none;border-radius:var(--radius);font-size:13px;font-weight:600;font-family:var(--font-zh);background:#059669;color:#fff;cursor:pointer"
+                x-text="payVoucherSaving ? '處理中…' : '確認標記已匯款'"></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 標記已收款 Modal -->
+  <div x-show="receiveModal" class="modal-overlay" @click.self="receiveModal=false">
+    <div class="modal-box" style="width:360px">
+      <div class="modal-title" x-text="'標記已收款' + (receiveTarget ? '　' + receiveTarget.quoteNo : '')"></div>
+      <label class="field-label">收款日期</label>
+      <input type="date" class="field-input" x-model="receiveDate">
+      <label class="field-label">實收金額（含稅）</label>
+      <input type="number" min="0" class="field-input" x-model.number="receiveActualAmount">
+      <label class="field-label">手續費 / 扣款</label>
+      <input type="number" min="0" class="field-input" x-model.number="receiveFeeAmount">
+      <div class="modal-footer" style="display:flex;justify-content:flex-end;gap:8px">
+        <button @click="receiveModal=false" :disabled="receiveSaving"
+                style="padding:7px 16px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:var(--font-zh);background:#fff;cursor:pointer">取消</button>
+        <button @click="confirmReceive()" :disabled="receiveSaving || !receiveDate"
+                style="padding:7px 16px;border:none;border-radius:var(--radius);font-size:13px;font-weight:600;font-family:var(--font-zh);background:#059669;color:#fff;cursor:pointer"
+                x-text="receiveSaving ? '處理中…' : '確認標記已收款'"></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 銀行對帳比對 標記已匯款 Modal -->
+  <div x-show="bankPayModal" class="modal-overlay" @click.self="bankPayModal=false">
+    <div class="modal-box" style="width:360px">
+      <div class="modal-title" x-text="'標記已匯款' + (bankPayRow && bankPayRow.match ? '　' + bankPayRow.match.voucherNo : '')"></div>
+      <label class="field-label">匯款日期</label>
+      <input type="date" class="field-input" x-model="bankPayDate">
+      <div style="font-size:11px;color:var(--text-dim);font-family:var(--font-zh);margin-bottom:12px">
+        銀行對帳單上的日期原文：<span x-text="bankPayRow ? (bankPayRow.date || '（無）') : ''"></span>　請核對後再確認
+      </div>
+      <div class="modal-footer" style="display:flex;justify-content:flex-end;gap:8px">
+        <button @click="bankPayModal=false" :disabled="bankPaySaving"
+                style="padding:7px 16px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:var(--font-zh);background:#fff;cursor:pointer">取消</button>
+        <button @click="confirmBankPay()" :disabled="bankPaySaving || !bankPayDate"
+                style="padding:7px 16px;border:none;border-radius:var(--radius);font-size:13px;font-weight:600;font-family:var(--font-zh);background:#059669;color:#fff;cursor:pointer"
+                x-text="bankPaySaving ? '處理中…' : '確認標記已匯款'"></button>
+      </div>
+    </div>
+  </div>
+
+  <script src="../static/notif.js"></script>
+  <script src="../static/sidebar.js"></script>
+</body>
+</html>

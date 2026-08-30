@@ -23,7 +23,7 @@ from fastapi.responses import StreamingResponse
 from db import get_db
 from helpers import (
     _require_user, _warranty_expiry, _get_edge_path, _get_setting, _set_setting,
-    payment_item_amounts, quote_won_month_map,
+    payment_item_amounts, quote_won_month_map, user_has_module,
 )
 from routers.vendor_contractors import _dispatch_row
 
@@ -2526,8 +2526,8 @@ async def bank_reconcile(file: UploadFile = File(...), authorization: str = Head
     複核用途——回傳配對建議，不會自動標記已匯款，實際標記仍走既有 paid-toggle 端點，
     避免比對誤判（例如剛好同金額但其實是不同筆款項）被誤當正式入帳紀錄。"""
     u = _require_user(authorization)
-    if u["role"] not in ("superadmin", "admin"):
-        raise HTTPException(403, "財務報告僅管理員以上可查閱")
+    if u["role"] not in ("superadmin", "admin") and not user_has_module(u, "cashier"):
+        raise HTTPException(403, "僅管理員或出納可查閱")
 
     raw = await file.read()
     if len(raw) > 5 * 1024 * 1024:
