@@ -11,7 +11,7 @@
 vendor_contractors 或 contractor_dispatches 本身異動不會回頭改到已產生的申請。
 """
 import json
-from datetime import datetime
+from datetime import date, datetime
 from typing import List, Optional
 from urllib.parse import quote as urlquote
 
@@ -570,12 +570,26 @@ def record_contractor_voucher_export(voucher_no: str, mode: str = "external", au
 
 @router.post("/api/contractor-vouchers/{voucher_no}/paid-toggle")
 def toggle_paid(voucher_no: str, body: dict = Body(...), authorization: str = Header(None)):
+    """標記已匯款時可帶入 paid_at（YYYY-MM-DD，實際匯款日期，不一定等於操作
+    當下的系統時間——財務常常是先在銀行完成匯款，之後才回系統標記）；不帶
+    就沿用舊行為，退回今天。paid_log 裡的 "at"／updated_at 仍然是「這次操作
+    本身發生的系統時間」，跟 paid_at（匯款發生的日期）是兩個不同概念，不要
+    混用。"""
     user = _require_user(authorization)
     _require_admin(user)
     action = (body or {}).get("action", "")
     note   = (body or {}).get("note", "")
     if action not in ("pay", "unpay"):
         raise HTTPException(400, "action 必須為 pay 或 unpay")
+    paid_at_value = date.today().isoformat()
+    if action == "pay":
+        raw_paid_at = (body or {}).get("paid_at") or ""
+        if raw_paid_at:
+            try:
+                date.fromisoformat(raw_paid_at)
+            except ValueError:
+                raise HTTPException(400, f"匯款日期格式錯誤（{raw_paid_at}），需為 YYYY-MM-DD")
+            paid_at_value = raw_paid_at
     conn = get_db()
     row = conn.execute(
         "SELECT status, is_paid, paid_log FROM contractor_payment_vouchers WHERE voucher_no=?", (voucher_no,)
@@ -599,12 +613,14 @@ def toggle_paid(voucher_no: str, body: dict = Body(...), authorization: str = He
     log.append({
         "at": now, "username": user["username"], "userDisplay": user.get("display_name") or user["username"],
         "action": "paid" if action == "pay" else "unpaid", "note": note,
+        **({"paidAt": paid_at_value} if action == "pay" else {}),
     })
     if action == "pay":
         conn.execute(
             "UPDATE contractor_payment_vouchers SET is_paid=1, paid_by=?, paid_at=?, paid_log=?, updated_at=? "
             "WHERE voucher_no=?",
-            (user.get("display_name") or user["username"], now, json.dumps(log, ensure_ascii=False), now, voucher_no)
+            (user.get("display_name") or user["username"], paid_at_value,
+             json.dumps(log, ensure_ascii=False), now, voucher_no)
         )
     else:
         conn.execute(
@@ -615,7 +631,7 @@ def toggle_paid(voucher_no: str, body: dict = Body(...), authorization: str = He
     conn.commit()
     conn.close()
     _audit(_tok(authorization), f"contractor_voucher.{action}", "contractor_payment_voucher", voucher_no,
-           voucher_no, {"note": note})
+           voucher_no, {"note": note, **({"paidAt": paid_at_value} if action == "pay" else {})})
     notify_module_activity("承攬商匯款申請", "已匯款" if action == "pay" else "取消已匯款",
                             user.get("display_name") or user["username"], voucher_no, "case-management.html",
                             detail=note or "")

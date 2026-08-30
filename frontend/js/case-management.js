@@ -131,6 +131,13 @@ function app() {
     cvPreviewBlobUrl: '',
     cvPreviewVoucher: null,
     cvPreviewFetching: false,
+    // ── 標記已匯款 Modal（2026-08-31 新增，原本用 prompt() 只能填備註，
+    // 沒有地方填實際匯款日期，一律誤記成操作當下的系統時間）
+    payVoucherModal: false,
+    payVoucherTarget: null,
+    payVoucherDate: '',
+    payVoucherNote: '',
+    payVoucherSaving: false,
 
     // ── 開票申請憑據 ──
     invoiceVouchers: [],
@@ -2566,20 +2573,43 @@ function app() {
     },
 
     async toggleContractorVoucherPaid(v, action) {
-      const msg = action === 'pay'
-        ? `確定標記匯款申請「${v.voucherNo}」已匯款？`
-        : `確定取消匯款申請「${v.voucherNo}」的已匯款標記？`
-      if (!confirm(msg)) return
-      const note = action === 'pay' ? (prompt('備註（選填，例如匯款帳號末五碼）：') || '') : ''
+      // 標記已匯款需要填實際匯款日期（不一定等於操作當下），改走 Modal；
+      // 取消已匯款不涉及日期，維持原本 confirm() 快速操作。
+      if (action === 'pay') {
+        this.payVoucherTarget = v
+        this.payVoucherDate = new Date().toISOString().slice(0, 10)
+        this.payVoucherNote = ''
+        this.payVoucherModal = true
+        return
+      }
+      if (!confirm(`確定取消匯款申請「${v.voucherNo}」的已匯款標記？`)) return
       try {
         const r = await fetch(`/api/contractor-vouchers/${v.voucherNo}/paid-toggle`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
-          body: JSON.stringify({ action, note })
+          body: JSON.stringify({ action: 'unpay', note: '' })
         })
         if (!r.ok) { alert((await r.json()).detail || '操作失敗'); return }
         await this.loadContractorVouchers(this.selected?.quote_no)
       } catch (e) { alert('網路錯誤：' + e.message) }
+    },
+
+    async confirmPayVoucher() {
+      const v = this.payVoucherTarget
+      if (!v || !this.payVoucherDate) return
+      this.payVoucherSaving = true
+      try {
+        const r = await fetch(`/api/contractor-vouchers/${v.voucherNo}/paid-toggle`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify({ action: 'pay', paid_at: this.payVoucherDate, note: this.payVoucherNote })
+        })
+        if (!r.ok) { alert((await r.json()).detail || '操作失敗'); this.payVoucherSaving = false; return }
+        this.payVoucherModal = false
+        this.payVoucherTarget = null
+        await this.loadContractorVouchers(this.selected?.quote_no)
+      } catch (e) { alert('網路錯誤：' + e.message) }
+      this.payVoucherSaving = false
     },
 
     async downloadContractorVoucherPdf(v) {

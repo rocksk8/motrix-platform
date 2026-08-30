@@ -2137,7 +2137,9 @@
                           <span style="font-size:11px;font-weight:600;color:#92400E" x-text="_dispatchVoucher(d).voucherNo"></span>
                           <span :class="'badge ' + _cvStatusClass(_dispatchVoucher(d).status)" x-text="_cvStatusLabel(_dispatchVoucher(d).status)"
                                 style="font-size:10px;padding:2px 8px;border-radius:4px;font-weight:600"></span>
-                          <span x-show="_dispatchVoucher(d).isPaid" style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:4px;background:#DCFCE7;color:#15803D">✓ 已匯款</span>
+                          <span x-show="_dispatchVoucher(d).isPaid" style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:4px;background:#DCFCE7;color:#15803D">
+                            ✓ 已匯款<span x-show="_dispatchVoucher(d).paidAt" x-text="'（' + _dispatchVoucher(d).paidAt.slice(0,10) + '）'"></span>
+                          </span>
 
                           <div x-show="_dispatchVoucher(d).status==='草稿'" style="display:flex;gap:6px">
                             <button @click="submitContractorVoucher(_dispatchVoucher(d))" style="padding:3px 10px;font-size:11px;border:none;background:var(--accent);color:#fff;border-radius:5px;cursor:pointer;white-space:nowrap;font-weight:600">送出審核</button>
@@ -3092,6 +3094,35 @@
     <div style="padding:12px 20px;border-top:1px solid var(--border-light);display:flex;justify-content:flex-end;gap:10px">
       <button @click="closeContractorVoucherPreview()"
               style="padding:7px 16px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:var(--font-zh);background:#fff;cursor:pointer">關閉</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── 承攬商匯款申請 標記已匯款 Modal（2026-08-31 新增，原本用 prompt() 沒有地方填實際匯款日期）── -->
+<div x-show="payVoucherModal" x-cloak
+     style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:410;display:flex;align-items:center;justify-content:center;padding:20px"
+     @click.self="payVoucherModal=false"
+     @keydown.escape.window="payVoucherModal=false">
+  <div style="background:#fff;border-radius:12px;width:100%;max-width:380px;box-shadow:0 16px 48px rgba(0,0,0,.22)">
+    <div style="display:flex;align-items:center;padding:14px 18px;border-bottom:1px solid var(--border-light);gap:10px">
+      <span style="font-size:14px;font-weight:700;flex:1;font-family:var(--font-zh)"
+            x-text="'標記已匯款' + (payVoucherTarget ? '　' + payVoucherTarget.voucherNo : '')"></span>
+      <button @click="payVoucherModal=false" style="width:28px;height:28px;border:none;background:#F0EEE9;border-radius:5px;cursor:pointer;font-size:16px">×</button>
+    </div>
+    <div style="padding:18px 20px">
+      <label style="font-size:11px;font-weight:500;color:var(--text-secondary);display:block;margin-bottom:4px">匯款日期</label>
+      <input type="date" x-model="payVoucherDate"
+             style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;margin-bottom:14px">
+      <label style="font-size:11px;font-weight:500;color:var(--text-secondary);display:block;margin-bottom:4px">備註（選填，例如匯款帳號末五碼）</label>
+      <input type="text" x-model="payVoucherNote" placeholder="選填"
+             style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:var(--font-zh);outline:none;box-sizing:border-box">
+    </div>
+    <div style="padding:12px 20px;border-top:1px solid var(--border-light);display:flex;justify-content:flex-end;gap:10px">
+      <button @click="payVoucherModal=false" :disabled="payVoucherSaving"
+              style="padding:7px 16px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:var(--font-zh);background:#fff;cursor:pointer">取消</button>
+      <button @click="confirmPayVoucher()" :disabled="payVoucherSaving || !payVoucherDate"
+              style="padding:7px 16px;border:none;border-radius:7px;font-size:13px;font-weight:600;font-family:var(--font-zh);background:#059669;color:#fff;cursor:pointer"
+              x-text="payVoucherSaving ? '處理中…' : '確認標記已匯款'"></button>
     </div>
   </div>
 </div>
