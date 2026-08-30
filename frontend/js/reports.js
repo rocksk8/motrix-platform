@@ -80,6 +80,54 @@ function reportsApp() {
       salesperson: []
     },
 
+    // ── 出納（2026-08-31 併入營運報表，原獨立的 cashier.html/cashier.js 頁面
+    // 退役成頁內「出納」頁籤，內容/邏輯完全比照原本，只有跟本檔案既有狀態
+    // 衝突的名稱做了改名，見下方各區塊註解）────────────────────────────────────
+    cashierSub:    'payable',   // payable/receivable/history/bank，出納頁籤內部子頁籤
+    cashierLoaded: false,       // 出納頁籤第一次打開時 payable+receivable+history 一次性彙整載入 guard
+
+    payable:    [],
+    receivable: [],   // status=all，含已收+未收全部歷史（併入 receivables.html 用途）
+
+    receivableSearch:    '',
+    receivableFilterTab: 'unreceived',   // all / unreceived / received / uninvoiced
+
+    payVoucherModal:   false,
+    payVoucherTarget:  null,
+    payVoucherDate:    '',
+    payVoucherNote:    '',
+    payVoucherSaving:  false,
+
+    receiveModal:         false,
+    receiveTarget:        null,
+    receiveDate:          '',
+    receiveActualAmount:  null,
+    receiveFeeAmount:     0,
+    receiveNote:          '',
+    receiveSaving:        false,
+
+    invoiceModal: { show: false, item: null, no: '' },
+
+    // 原 cashier.js 的 historyStart/historyEnd/... 改加 cashier 前綴，避免在
+    // 這支已經很大的共用檔案裡跟「執行歷史」以外的概念混淆
+    cashierHistoryStart:        '',
+    cashierHistoryEnd:          '',
+    cashierHistoryLoading:      false,
+    cashierHistoryOutgoing:     [],
+    cashierHistoryIncoming:     [],
+    cashierHistoryOutgoingTotal: 0,
+    cashierHistoryIncomingTotal: 0,
+    // 原 cashier.js 叫 exporting，這裡本來就有同名的「exporting」給財務報表
+    // 匯出用（見 exportFile()），改名避免互踩
+    cashierExporting: false,
+
+    bankReconciling: false,
+    bankResult:      null,
+    bankPayModal:    false,
+    bankPayRow:      null,
+    bankPayDate:     '',
+    bankPaySaving:   false,
+
     // ── Helpers ───────────────────────────────────────────────────────────────
     get periodParam() {
       if (this.periodType === 'year')    return String(this.year)
@@ -261,12 +309,39 @@ function reportsApp() {
       var s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
       return s.role || ''
     },
+    _modules() {
+      var s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
+      return s.modules || []
+    },
+    _displayName() {
+      var s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
+      return s.displayName || s.username || ''
+    },
+    isAdminPlus() {
+      var r = this._role()
+      return r === 'admin' || r === 'superadmin'
+    },
+    // 2026-08-31：出納併入本頁後的准入判斷——cashier/finance 模組使用者（非
+    // 管理職）只能看到「出納」頁籤，其餘 11 個財務報表頁籤仍只有 admin+ 看得到
+    // （見 init()/showCashierTab()），這兩個 getter 就是那道區隔線。
+    hasCashierAccess() {
+      return this.isAdminPlus() || this._modules().includes('cashier') || this._modules().includes('finance')
+    },
+    canExecuteCashier() {
+      return this.isAdminPlus() || this._modules().includes('cashier')
+    },
+    // 本地日期字串（YYYY-MM-DD），不用 toISOString()（UTC，台灣 UTC+8 每天
+    // 00:00-08:00 之間會誤判成前一天，比照 case-management.js/cashier.js 同款修法）。
+    _localDateStr(d) {
+      d = d || new Date()
+      const tz = d.getTimezoneOffset() * 60000
+      return new Date(d.getTime() - tz).toISOString().slice(0, 10)
+    },
 
     // ── Load preview data ─────────────────────────────────────────────────────
     async loadData() {
-      var role = this._role()
-      if (role !== 'admin' && role !== 'superadmin') {
-        this.error = '僅管理員以上可存取營運報表功能'
+      if (!this.isAdminPlus()) {
+        if (!this.hasCashierAccess()) this.error = '僅管理員以上可存取營運報表功能'
         return
       }
       this.loading = true
@@ -794,11 +869,22 @@ function reportsApp() {
     },
 
     async init() {
-      var role = this._role()
-      if (role !== 'admin' && role !== 'superadmin') {
+      // 2026-08-31：出納模組併入本頁後的准入判斷放寬——admin+ 維持原行為
+      // （全部 12 個財務報表頁籤＋出納頁籤都看得到）；純 cashier/finance 模組
+      // 的非管理職使用者只開放出納頁籤，其餘財務報表資料完全不載入。
+      if (!this.hasCashierAccess()) {
         this.error = '僅管理員以上可存取營運報表功能'
         return
       }
+      if (!this.isAdminPlus()) {
+        this.activeTab = 'cashier'
+        await this.showCashierTab()
+        return
+      }
+      // 極簡深連結支援：cashier.html 退役後改導向 reports.html?tab=cashier，
+      // admin+ 使用者從那個連結進來時直接落在出納頁籤（其餘情況維持預設 targets）。
+      var qsTab = new URLSearchParams(location.search).get('tab')
+      if (qsTab === 'cashier') this.activeTab = 'cashier'
       try {
         var r = await fetch('/api/now')
         if (r.ok) {
@@ -810,6 +896,7 @@ function reportsApp() {
       } catch (_) {}
       this.loadData()
       this.loadOrgTree()
+      if (this.activeTab === 'cashier') this.showCashierTab()
       var self = this
       // Re-init charts when data changes and charts tab is active (e.g. period change)
       this.$watch('data', function(newData) {
@@ -882,6 +969,274 @@ function reportsApp() {
       } finally {
         this.cashPosLoading = false
       }
+    },
+
+    // ── 出納頁籤（2026-08-31 併入本頁，原 frontend/js/cashier.js 內容原封不動
+    // 搬過來，只改了跟本檔案既有狀態衝突的名稱，見上方 state 區塊註解）────────
+
+    get kpiPayableTotal() {
+      return this.payable.reduce((s, v) => s + (v.grandTotal || 0), 0)
+    },
+    get kpiPayableOverdue() {
+      return this.payable.filter(v => this.isOverdue(v.payableDate)).length
+    },
+    get kpiReceivableTotal() {
+      return this.receivable.filter(i => !i.received).reduce((s, i) => s + (i.amount || 0), 0)
+    },
+    get kpiReceivableOverdue() {
+      return this.receivable.filter(i => i.overdue).length
+    },
+    get filteredReceivable() {
+      let list = this.receivable
+      if (this.receivableFilterTab === 'unreceived') list = list.filter(i => !i.received)
+      if (this.receivableFilterTab === 'received')   list = list.filter(i => i.received)
+      if (this.receivableFilterTab === 'uninvoiced') list = list.filter(i => !i.invoiceNo)
+      const q = this.receivableSearch.trim().toLowerCase()
+      if (q) list = list.filter(i =>
+        (i.quoteNo || '').toLowerCase().includes(q) ||
+        (i.customer || '').toLowerCase().includes(q) ||
+        (i.type || '').toLowerCase().includes(q) ||
+        (i.invoiceNo || '').toLowerCase().includes(q)
+      )
+      return list
+    },
+    get receivableUninvoicedCount() {
+      return this.receivable.filter(i => !i.invoiceNo).length
+    },
+
+    isOverdue(dateStr) {
+      return !!dateStr && dateStr < this._localDateStr()
+    },
+    isDueSoon(dateStr) {
+      if (!dateStr || this.isOverdue(dateStr)) return false
+      const soon = new Date()
+      soon.setDate(soon.getDate() + 7)
+      return dateStr <= this._localDateStr(soon)
+    },
+
+    async showCashierTab() {
+      this.activeTab = 'cashier'
+      if (this.cashierLoaded) return
+      const today = new Date()
+      this.cashierHistoryStart = this._localDateStr(new Date(today.getFullYear(), today.getMonth(), 1))
+      this.cashierHistoryEnd = this._localDateStr(today)
+      await Promise.all([this.loadPayable(), this.loadReceivable(), this.loadCashierHistory()])
+      this.cashierLoaded = true
+    },
+
+    async loadPayable() {
+      try {
+        const r = await fetch('/api/cashier/payable-queue', { headers: { Authorization: 'Bearer ' + this._token() } })
+        if (r.ok) this.payable = await r.json()
+        else if (r.status === 403) this.error = '僅管理員、出納或財務可存取出納功能'
+      } catch (e) { console.error(e) }
+    },
+
+    async loadReceivable() {
+      try {
+        const r = await fetch('/api/cashier/receivable-queue?status=all', { headers: { Authorization: 'Bearer ' + this._token() } })
+        if (r.ok) this.receivable = await r.json()
+        else if (r.status === 403) this.error = '僅管理員、出納或財務可存取出納功能'
+      } catch (e) { console.error(e) }
+    },
+
+    async loadCashierHistory() {
+      this.cashierHistoryLoading = true
+      try {
+        const qs = `?start=${this.cashierHistoryStart}&end=${this.cashierHistoryEnd}`
+        const r = await fetch('/api/cashier/execution-history' + qs, { headers: { Authorization: 'Bearer ' + this._token() } })
+        if (r.ok) {
+          const d = await r.json()
+          this.cashierHistoryOutgoing = d.outgoing || []
+          this.cashierHistoryIncoming = d.incoming || []
+          this.cashierHistoryOutgoingTotal = d.outgoingTotal || 0
+          this.cashierHistoryIncomingTotal = d.incomingTotal || 0
+        }
+      } catch (e) { console.error(e) }
+      this.cashierHistoryLoading = false
+    },
+
+    async exportCashierHistory() {
+      this.cashierExporting = true
+      try {
+        const qs = `?start=${this.cashierHistoryStart}&end=${this.cashierHistoryEnd}`
+        const r = await fetch('/api/cashier/export' + qs, { headers: { Authorization: 'Bearer ' + this._token() } })
+        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '匯出失敗'); this.cashierExporting = false; return }
+        const blob = await r.blob()
+        const a = document.createElement('a')
+        a.href = URL.createObjectURL(blob)
+        a.download = `MOTRIX_出納執行紀錄_${this.cashierHistoryStart}_${this.cashierHistoryEnd}.xlsx`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(a.href)
+      } catch (e) { alert('匯出失敗：' + e.message) }
+      this.cashierExporting = false
+    },
+
+    openPayVoucherModal(v) {
+      this.payVoucherTarget = v
+      this.payVoucherDate = v.payableDate || this._localDateStr()
+      this.payVoucherNote = ''
+      this.payVoucherModal = true
+    },
+
+    async confirmPayVoucher() {
+      const v = this.payVoucherTarget
+      if (!v || !this.payVoucherDate) return
+      this.payVoucherSaving = true
+      try {
+        const r = await fetch(`/api/contractor-vouchers/${v.voucherNo}/paid-toggle`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this._token() },
+          body: JSON.stringify({ action: 'pay', paid_at: this.payVoucherDate, note: this.payVoucherNote })
+        })
+        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '操作失敗'); this.payVoucherSaving = false; return }
+        this.payVoucherModal = false
+        this.payVoucherTarget = null
+        await Promise.all([this.loadPayable(), this.loadCashierHistory()])
+      } catch (e) { alert('網路錯誤：' + e.message) }
+      this.payVoucherSaving = false
+    },
+
+    openReceiveModal(it) {
+      this.receiveTarget = it
+      this.receiveDate = this._localDateStr()
+      this.receiveActualAmount = it.amount
+      this.receiveFeeAmount = 0
+      this.receiveNote = ''
+      this.receiveModal = true
+    },
+
+    async confirmReceive() {
+      const it = this.receiveTarget
+      if (!it || !this.receiveDate) return
+      this.receiveSaving = true
+      try {
+        const r = await fetch(`/api/quotations/${encodeURIComponent(it.quoteNo)}/payment/${it.idx}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this._token() },
+          body: JSON.stringify({
+            received: true, receivedAt: this.receiveDate, receivedBy: this._displayName(),
+            actualAmount: this.receiveActualAmount, feeAmount: this.receiveFeeAmount || 0, note: this.receiveNote,
+          })
+        })
+        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '操作失敗'); this.receiveSaving = false; return }
+        this.receiveModal = false
+        this.receiveTarget = null
+        await Promise.all([this.loadReceivable(), this.loadCashierHistory()])
+      } catch (e) { alert('網路錯誤：' + e.message) }
+      this.receiveSaving = false
+    },
+
+    async toggleReceived(item, received) {
+      if (!confirm(received ? '標記此款項為已收？' : '取消此款項的收款紀錄？')) return
+      try {
+        const r = await fetch(`/api/quotations/${encodeURIComponent(item.quoteNo)}/payment/${item.idx}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this._token() },
+          body: JSON.stringify({ received, receivedAt: '', receivedBy: '' })
+        })
+        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '操作失敗'); return }
+        await this.loadReceivable()
+      } catch (e) { alert('網路錯誤：' + e.message) }
+    },
+
+    openInvoiceModal(item) {
+      this.invoiceModal = { show: true, item, no: item.invoiceNo || '' }
+    },
+
+    async confirmInvoice() {
+      const item = this.invoiceModal.item
+      if (!item) return
+      try {
+        const r = await fetch(`/api/quotations/${encodeURIComponent(item.quoteNo)}/payment/${item.idx}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this._token() },
+          body: JSON.stringify({ invoiceNo: this.invoiceModal.no.trim() })
+        })
+        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '操作失敗'); return }
+        item.invoiceNo = this.invoiceModal.no.trim()
+        this.invoiceModal.show = false
+      } catch (e) { alert('網路錯誤：' + e.message) }
+    },
+
+    async uploadBankCsv(evt) {
+      var file = evt.target.files[0]
+      if (!file) return
+      this.bankReconciling = true
+      this.bankResult = null
+      try {
+        var fd = new FormData()
+        fd.append('file', file)
+        var res = await fetch('/api/reports/bank-reconcile', {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + this._token() },
+          body: fd,
+        })
+        if (!res.ok) {
+          var j = await res.json().catch(function () { return {} })
+          throw new Error(j.detail || '比對失敗')
+        }
+        this.bankResult = await res.json()
+      } catch (e) {
+        alert('銀行對帳比對失敗：' + (e.message || e))
+      } finally {
+        this.bankReconciling = false
+        evt.target.value = ''
+      }
+    },
+
+    _guessDateFromBankText(raw) {
+      const s = (raw || '').trim()
+      if (!s) return ''
+      let m = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/)
+      if (m) return this._normalizeYmd(+m[1], +m[2], +m[3])
+      m = s.match(/^(\d{4})(\d{2})(\d{2})(\d{0,6})?$/)
+      if (m) return this._normalizeYmd(+m[1], +m[2], +m[3])
+      // 民國年（台灣銀行常見，例如 115/08/20 = 2026/08/20）
+      m = s.match(/^(\d{2,3})[-/.](\d{1,2})[-/.](\d{1,2})$/)
+      if (m && +m[1] >= 1 && +m[1] <= 200) return this._normalizeYmd(+m[1] + 1911, +m[2], +m[3])
+      return ''
+    },
+
+    _normalizeYmd(y, mo, d) {
+      if (mo < 1 || mo > 12 || d < 1 || d > 31) return ''
+      const dt = new Date(y, mo - 1, d)
+      if (dt.getFullYear() !== y || dt.getMonth() !== mo - 1 || dt.getDate() !== d) return ''
+      return y + '-' + String(mo).padStart(2, '0') + '-' + String(d).padStart(2, '0')
+    },
+
+    openBankPayModal(row) {
+      if (!row || !row.match) return
+      this.bankPayRow = row
+      this.bankPayDate = this._guessDateFromBankText(row.date) || this._localDateStr()
+      this.bankPayModal = true
+    },
+
+    async confirmBankPay() {
+      const row = this.bankPayRow
+      if (!row || !row.match || !this.bankPayDate) return
+      const voucherNo = row.match.voucherNo
+      this.bankPaySaving = true
+      try {
+        var res = await fetch('/api/contractor-vouchers/' + voucherNo + '/paid-toggle', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this._token() },
+          body: JSON.stringify({ action: 'pay', paid_at: this.bankPayDate, note: '銀行對帳單比對後標記' }),
+        })
+        if (!res.ok) {
+          var j = await res.json().catch(function () { return {} })
+          throw new Error(j.detail || '標記失敗')
+        }
+        row.match._paid = true
+        this.bankPayModal = false
+        this.bankPayRow = null
+        await Promise.all([this.loadPayable(), this.loadCashierHistory()])
+      } catch (e) {
+        alert('標記失敗：' + (e.message || e))
+      }
+      this.bankPaySaving = false
     },
 
     async exportTaxInvoices() {

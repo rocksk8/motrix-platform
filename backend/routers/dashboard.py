@@ -357,7 +357,8 @@ def dashboard_monthly(authorization: str = Header(None)):
     # 換算出的應收金額。跟「應收款狀態」圓環（本檔案上方 recv_received 那段）
     # 共用同一套換算邏輯，避免兩處分開實作、算出不一致的數字。
     rows = conn.execute(
-        "SELECT total, pretax, data_json FROM quotations WHERE deal_tag IN ('已成案','已結案')"
+        "SELECT total, pretax, data_json FROM quotations WHERE "
+        "COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') IN ('已成案','已結案')"
     ).fetchall()
 
     monthly_amount, monthly_count, monthly_fee = {}, {}, {}
