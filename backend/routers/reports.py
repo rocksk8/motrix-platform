@@ -1563,7 +1563,7 @@ def _build_report_html(data: dict, period_label: str, gen_at: str) -> str:
             f"<td class='c'>{esc(it['receivedAt'])}</td>"
             f"<td class='r'>NT$ {aa_v:,}</td>"
             "<td class='r fee'>" + (f"NT$ {int(it['feeAmount']):,}" if it['feeAmount'] else "—") + "</td>"
-            f"<td class='r net'>NT$ {int(it['netAmount'] or aa_v):,}</td>"
+            f"<td class='r net'>NT$ {int(it['netAmount'] if it['netAmount'] is not None else aa_v):,}</td>"
             f"<td>{esc(it['invoiceNo'] or '—')}</td></tr>"
         )
 
@@ -1642,7 +1642,7 @@ def _build_report_html(data: dict, period_label: str, gen_at: str) -> str:
                 f"<td class='c'>{esc(it['receivedAt'])}</td>"
                 f"<td class='r'>NT$ {aa_v:,}</td>"
                 "<td class='r fee'>" + (f"NT$ {int(it['feeAmount']):,}" if it['feeAmount'] else "—") + "</td>"
-                f"<td class='r net'>NT$ {int(it['netAmount'] or aa_v):,}</td>"
+                f"<td class='r net'>NT$ {int(it['netAmount'] if it['netAmount'] is not None else aa_v):,}</td>"
                 f"<td>{esc(it['invoiceNo'] or '—')}</td></tr>"
             )
         return out
@@ -3005,6 +3005,13 @@ def _build_income_expense_scopes(year: int, month: str, department_id: Optional[
     漏改。month 跟 year 若剛好不同年（例如瀏覽舊年度報表但「當月」仍是今天
     的真實月份），_month_expense_slice() 需要另外用 month 所屬年度重算一次
     支出資料，見該函式 docstring。"""
+    try:
+        mo_check = int(month[5:7])
+        if len(month) != 7 or month[4] != "-" or not (1 <= mo_check <= 12) or int(month[:4]) <= 0:
+            raise ValueError
+    except (ValueError, IndexError):
+        raise HTTPException(400, f"month 格式錯誤（{month}），需為 YYYY-MM")
+
     expenses_annual = _collect_expenses(year, department_id)
     if month[:4] == str(year):
         month_slice = _month_expense_slice(expenses_annual, month)

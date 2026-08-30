@@ -177,7 +177,7 @@ function app() {
         const r = await fetch('/api/auth/me', { headers: { Authorization: 'Bearer ' + s.token } })
         if (!r.ok) { location.href = 'login.html'; return }
         const me = await r.json()
-        this.session.displayName = me.display_name
+        this.session.displayName = me.displayName
         this.session.id = me.userId
       } catch {}
       try {
