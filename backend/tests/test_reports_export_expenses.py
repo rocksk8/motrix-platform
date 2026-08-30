@@ -57,15 +57,17 @@ def test_excel_export_includes_expenses_sheet_and_month_grouped_cases(client, ma
     r = client.get("/api/reports/financial/excel?period=2026", headers=_auth(token))
     assert r.status_code == 200, r.text
     wb = openpyxl.load_workbook(io.BytesIO(r.content))
-    assert "月支出" in wb.sheetnames
+    assert "當月收支" in wb.sheetnames
+    assert "今年度收支" in wb.sheetnames
+    assert "月支出" not in wb.sheetnames  # 舊 sheet 已拆成上面兩張，不應再存在
 
-    ws_exp = wb["月支出"]
-    assert ws_exp["A1"].value == "2026年度月支出結構"
-    header_row = [ws_exp.cell(row=2, column=c).value for c in range(1, 7)]
+    ws_exp = wb["今年度收支"]
+    assert ws_exp["A1"].value == "2026年度收支總表"
+    header_row = [ws_exp.cell(row=4, column=c).value for c in range(1, 7)]
     assert header_row == ["月份", "承攬商派發", "設備進貨", "料件進貨", "其他支出", "合計"]
-    # 3月列（row 5 = header(2) + 3個月）承攬商派發應含稅 8000*1.05=8400
-    row_labels = [ws_exp.cell(row=r, column=1).value for r in range(3, 15)]
-    march_row = 3 + row_labels.index("3月")
+    # 3月列（row 5=header, row 5+2=3月列）承攬商派發應含稅 8000*1.05=8400
+    row_labels = [ws_exp.cell(row=r, column=1).value for r in range(5, 17)]
+    march_row = 5 + row_labels.index("3月")
     assert ws_exp.cell(row=march_row, column=2).value == 8400
 
     ws_cases = wb["案件清單"]
@@ -79,7 +81,7 @@ def test_pdf_html_includes_expenses_and_month_grouped_cases(client, make_user):
     驗證 HTML 字串本身正確組裝。"""
     from datetime import datetime
     from routers.reports import (
-        _augment_with_targets, _build_report_html, _collect, _collect_expenses,
+        _augment_with_targets, _build_income_expense_scopes, _build_report_html, _collect,
         _compute_ar_aging, _parse_period,
     )
 
@@ -90,11 +92,15 @@ def test_pdf_html_includes_expenses_and_month_grouped_cases(client, make_user):
     label, d0, d1 = _parse_period("2026")
     data = _augment_with_targets(_collect(d0, d1, None), d0)
     data["arAging"] = _compute_ar_aging()
-    data["expensesYear"] = int(d0[:4])
-    data["expenses"] = _collect_expenses(data["expensesYear"])
+    data.update(_build_income_expense_scopes(2026, "2026-05", None))
     gen_at = datetime.now().strftime("%Y-%m-%d %H:%M")
 
     html = _build_report_html(data, label, gen_at)
-    assert "2026年度月支出結構" in html
-    assert "支出明細" in html
+    assert "2026年度收支總表" in html
+    assert "年度月支出結構" in html
+    assert "2026-05 當月收支明細" in html
+    assert "當月支出明細" in html
+    assert "今年度支出明細" in html
     assert "2026年5月" in html  # 案件清單依月份區分的月份標題列
+    # 該月的承攬商派發（含稅 8000*1.05=8400）應該同時出現在《當月支出明細》
+    assert "8,400" in html

@@ -462,20 +462,46 @@
             </template>
           </div>
 
-          <!-- 月支出金額及明細（2026-08-26） -->
+          <!-- 收支報表（原「月支出」，2026-08-30 重構為《當月收支》/《今年度收支》） -->
           <div x-show="activeTab==='expenses'" class="panel">
-            <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
-              <span class="cm-section-title" style="margin:0;font-size:13px;font-weight:700;font-family:var(--font-zh)">年度</span>
-              <select x-model.number="expensesYear" @change="loadExpenses()"
-                      style="padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;background:#fff">
-                <template x-for="y in caseListYears" :key="y">
-                  <option :value="y" x-text="y"></option>
-                </template>
-              </select>
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+              <button class="period-type-btn" :class="{on:expensesScope==='month'}" @click="expensesScope='month'; loadExpenses()">當月</button>
+              <button class="period-type-btn" :class="{on:expensesScope==='year'}" @click="expensesScope='year'; loadExpenses()">今年度</button>
+
+              <template x-if="expensesScope==='month'">
+                <input type="month" x-model="expensesMonth" @change="loadExpenses()"
+                       style="padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;background:#fff">
+              </template>
+              <template x-if="expensesScope==='year'">
+                <select x-model.number="expensesYear" @change="loadExpenses()"
+                        style="padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;background:#fff">
+                  <template x-for="y in caseListYears" :key="y">
+                    <option :value="y" x-text="y"></option>
+                  </template>
+                </select>
+              </template>
               <span x-show="expensesLoading" style="font-size:12px;color:var(--text-dim)">載入中…</span>
             </div>
 
-            <template x-if="!expensesLoading && expensesMonthly.length">
+            <!-- 收入/支出/淨額 KPI -->
+            <div style="display:flex;gap:12px;margin-bottom:18px;flex-wrap:wrap">
+              <div style="flex:1;min-width:140px;padding:12px 16px;border:1px solid var(--border-light);border-radius:var(--radius);background:#F0FDF4">
+                <div style="font-size:11px;color:var(--text-dim)" x-text="(expensesScope==='month'?'當月':'今年度') + '收入合計'"></div>
+                <div style="font-size:18px;font-weight:700;color:#15803D;font-family:LINE Seed TW_OTF, sans-serif" x-text="fmt(expensesScope==='month'?monthIncomeTotal:yearIncomeTotal)"></div>
+              </div>
+              <div style="flex:1;min-width:140px;padding:12px 16px;border:1px solid var(--border-light);border-radius:var(--radius);background:#FAF5FF">
+                <div style="font-size:11px;color:var(--text-dim)" x-text="(expensesScope==='month'?'當月':'今年度') + '支出合計'"></div>
+                <div style="font-size:18px;font-weight:700;color:#7C3AED;font-family:LINE Seed TW_OTF, sans-serif" x-text="fmt(expensesScope==='month'?monthExpenseTotal:expensesTotals.total)"></div>
+              </div>
+              <div style="flex:1;min-width:140px;padding:12px 16px;border:1px solid var(--border-light);border-radius:var(--radius);background:#F9FAFB">
+                <div style="font-size:11px;color:var(--text-dim)" x-text="(expensesScope==='month'?'當月':'今年度') + '淨額'"></div>
+                <div style="font-size:18px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif"
+                     :style="netScopeAmount >= 0 ? 'color:#15803D' : 'color:#DC2626'" x-text="fmt(netScopeAmount)"></div>
+              </div>
+            </div>
+
+            <!-- 年度月支出趨勢矩陣，只在「今年度」範圍顯示 -->
+            <template x-if="expensesScope==='year' && !expensesLoading && expensesMonthly.length">
               <table class="data-table" style="margin-bottom:20px">
                 <thead><tr>
                   <th>月份</th><th class="r">承攬商派發</th><th class="r">設備進貨</th>
@@ -504,24 +530,59 @@
               </table>
             </template>
 
+            <!-- 收入明細 -->
+            <div class="cm-section-title" style="margin-bottom:8px;font-size:13px;font-weight:700;font-family:var(--font-zh)"
+                 x-text="(expensesScope==='month'?'當月':'今年度') + '收入明細（' + activeIncomeItems.length + ' 筆）'"></div>
+            <template x-if="!expensesLoading && activeIncomeItems.length === 0">
+              <div class="empty-state" x-text="(expensesScope==='month'?'當月':'此年度') + '尚無收款紀錄'"></div>
+            </template>
+            <template x-if="activeIncomeItems.length > 0">
+              <table class="data-table" style="margin-bottom:20px">
+                <thead><tr>
+                  <th>案件號</th><th>客戶</th><th>專案名稱</th><th>業務員</th>
+                  <th>款項類型</th><th class="r">應收金額</th><th class="c">收款日</th>
+                  <th class="r">實收金額</th><th class="r">手續費</th><th class="r">實收淨額</th><th>發票號碼</th>
+                </tr></thead>
+                <tbody>
+                  <template x-for="it in activeIncomeItems" :key="it.quoteNo + '-' + it.type + '-' + it.receivedAt">
+                    <tr>
+                      <td class="mono" x-text="it.quoteNo"></td>
+                      <td x-text="it.customer"></td>
+                      <td x-text="it.project"></td>
+                      <td x-text="it.salesPerson"></td>
+                      <td class="c" x-text="it.type"></td>
+                      <td class="r mono" x-text="fmt(it.amount)"></td>
+                      <td class="c mono" x-text="it.receivedAt"></td>
+                      <td class="r mono" x-text="fmt(it.actualAmount !== null ? it.actualAmount : it.amount)"></td>
+                      <td class="r mono red-txt" x-text="it.feeAmount ? fmt(it.feeAmount) : '—'"></td>
+                      <td class="r mono green-txt" x-text="fmt(it.netAmount)"></td>
+                      <td x-text="it.invoiceNo || '—'"></td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </template>
+
+            <!-- 支出明細 -->
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap">
-              <span class="cm-section-title" style="margin:0;font-size:13px;font-weight:700;font-family:var(--font-zh)">支出明細</span>
+              <span class="cm-section-title" style="margin:0;font-size:13px;font-weight:700;font-family:var(--font-zh)"
+                    x-text="(expensesScope==='month'?'當月':'今年度') + '支出明細（' + filteredExpenseItems.length + ' 筆）'"></span>
               <button class="period-type-btn" :class="{on:expensesFilter==='all'}" @click="expensesFilter='all'">全部</button>
               <button class="period-type-btn" :class="{on:expensesFilter==='contractor'}" @click="expensesFilter='contractor'">承攬商派發</button>
               <button class="period-type-btn" :class="{on:expensesFilter==='equipment'}" @click="expensesFilter='equipment'">設備進貨</button>
               <button class="period-type-btn" :class="{on:expensesFilter==='material'}" @click="expensesFilter='material'">料件進貨</button>
               <button class="period-type-btn" :class="{on:expensesFilter==='other'}" @click="expensesFilter='other'">其他支出</button>
             </div>
-            <template x-if="!expensesLoading && expensesDetails.length === 0">
-              <div class="empty-state">此年度尚無支出明細資料</div>
+            <template x-if="!expensesLoading && filteredExpenseItems.length === 0">
+              <div class="empty-state" x-text="(expensesScope==='month'?'當月':'此年度') + '尚無支出明細資料'"></div>
             </template>
-            <template x-if="expensesDetails.length > 0">
+            <template x-if="filteredExpenseItems.length > 0">
               <table class="data-table">
                 <thead><tr>
                   <th class="c">日期</th><th>類別</th><th>關聯案件</th><th>說明</th><th class="r">金額</th>
                 </tr></thead>
                 <tbody>
-                  <template x-for="(it, i) in expensesDetails" :key="it.cat + '-' + it.date + '-' + i">
+                  <template x-for="(it, i) in filteredExpenseItems" :key="it.cat + '-' + it.date + '-' + i">
                     <tr>
                       <td class="c mono" x-text="it.date"></td>
                       <td x-text="expensesCatLabel(it.cat)"></td>

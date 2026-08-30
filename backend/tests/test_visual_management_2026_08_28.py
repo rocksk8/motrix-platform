@@ -127,12 +127,12 @@ def test_expenses_monthly_filters_contractor_and_material_by_department(client, 
 
     r_all = client.get("/api/reports/expenses-monthly?year=2026", headers=_auth(token))
     assert r_all.status_code == 200, r_all.text
-    march_all = next(m for m in r_all.json()["monthly"] if m["month"] == "2026-03")
+    march_all = next(m for m in r_all.json()["expenses"]["monthly"] if m["month"] == "2026-03")
     assert march_all["contractor"] == 10000 * 1.05 + 20000 * 1.05
 
     r_a = client.get(f"/api/reports/expenses-monthly?year=2026&department_id={dept_a}", headers=_auth(token))
     assert r_a.status_code == 200, r_a.text
-    march_a = next(m for m in r_a.json()["monthly"] if m["month"] == "2026-03")
+    march_a = next(m for m in r_a.json()["expenses"]["monthly"] if m["month"] == "2026-03")
     assert march_a["contractor"] == round(10000 * 1.05)
 
 

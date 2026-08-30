@@ -2001,6 +2001,8 @@
                         <div style="font-size:13px;font-weight:600;color:var(--text-main)" x-text="d.vendorName || '外包人員（點工）'"></div>
                         <div style="font-size:11px;color:var(--text-dim);margin-top:2px">
                           <span x-show="d.dispatchDate" x-text="'派發日：' + d.dispatchDate"></span>
+                          <span x-show="d.payableDate"> · </span>
+                          <span x-show="d.payableDate" x-text="'應付款日：' + d.payableDate" style="color:#92400E;font-weight:600"></span>
                           <span x-show="d.scope"> · </span>
                           <span x-show="d.scope" x-text="d.scope" style="font-style:italic"></span>
                         </div>
@@ -2095,6 +2097,21 @@
                              style="padding:2px 8px;font-size:10px;border:1px solid var(--border);background:#fff;color:var(--text-secondary);border-radius:4px;cursor:pointer;white-space:nowrap">
                         + 上傳報價
                         <input type="file" multiple accept=".jpg,.jpeg,.png,.pdf" style="display:none" @change="uploadDispatchFiles(d, $event)">
+                      </label>
+                    </div>
+                    <!-- 廠商發票 -->
+                    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 16px 0">
+                      <span style="font-size:10px;color:var(--text-dim);font-family:var(--font-zh)">廠商發票</span>
+                      <template x-for="f in (d.invoiceFiles||[])" :key="f.id">
+                        <span style="display:flex;align-items:center;gap:4px;font-size:11px;background:#F3F4F6;border-radius:4px;padding:2px 6px">
+                          <a href="javascript:void(0)" @click="previewAttachmentFile(f)" style="color:var(--accent);text-decoration:underline" x-text="f.filename"></a>
+                          <button @click="deleteDispatchInvoiceFile(d, f.id)" style="border:none;background:none;color:var(--danger);cursor:pointer;font-size:11px;padding:0 2px">×</button>
+                        </span>
+                      </template>
+                      <label x-show="['superadmin','admin'].includes(session.role)"
+                             style="padding:2px 8px;font-size:10px;border:1px solid var(--border);background:#fff;color:var(--text-secondary);border-radius:4px;cursor:pointer;white-space:nowrap">
+                        + 上傳發票
+                        <input type="file" multiple accept=".jpg,.jpeg,.png,.pdf" style="display:none" @change="uploadDispatchInvoiceFiles(d, $event)">
                       </label>
                     </div>
                     <!-- 驗收資訊 -->
@@ -2343,8 +2360,25 @@
                 <div class="feed-compose">
                   <textarea class="feed-compose__box" placeholder="記錄聯繫情況、案件進展、備忘…（填了執行時數/聯絡事項或附上照片即記為工作日誌）" x-model="newComment" rows="2"></textarea>
 
-                  <!-- 結構化欄位：執行時數／聯絡事項（2026-08-26 新增，結合可輸入可選項） -->
+                  <!-- 結構化欄位：日期／記錄對象／執行時數／聯絡事項（2026-08-26 新增執行時數/聯絡事項，
+                       2026-08-30 補上日期／記錄對象——原本固定「今天／自己」沒有可選欄位，補登過去
+                       日期或代其他人記錄時無從選起） -->
                   <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:8px">
+                    <div style="display:flex;align-items:center;gap:6px">
+                      <label style="font-size:11px;color:var(--text-dim);font-family:var(--font-zh);white-space:nowrap">日期</label>
+                      <input type="date" x-model="newCommentLogDate"
+                             style="padding:5px 8px;font-size:12px;border:1px solid var(--border-light);border-radius:6px;font-family:var(--font-zh);outline:none;box-sizing:border-box">
+                    </div>
+                    <div style="display:flex;align-items:center;gap:6px">
+                      <label style="font-size:11px;color:var(--text-dim);font-family:var(--font-zh);white-space:nowrap">記錄對象</label>
+                      <select x-model="newCommentUserId"
+                              style="padding:5px 8px;font-size:12px;border:1px solid var(--border-light);border-radius:6px;font-family:var(--font-zh);outline:none;background:#fff">
+                        <option value="">我自己</option>
+                        <template x-for="u in selectableUsers" :key="u.id">
+                          <option :value="String(u.id)" x-text="u.display_name || u.username"></option>
+                        </template>
+                      </select>
+                    </div>
                     <div style="display:flex;align-items:center;gap:6px">
                       <label style="font-size:11px;color:var(--text-dim);font-family:var(--font-zh);white-space:nowrap">執行時數</label>
                       <input type="number" step="0.5" min="0" x-model="newCommentHours" placeholder="選填，例如 2"
@@ -2365,6 +2399,9 @@
                              placeholder="輸入聯絡事項…"
                              style="width:140px;padding:5px 8px;font-size:12px;border:1px solid var(--border-light);border-radius:6px;font-family:var(--font-zh);outline:none;box-sizing:border-box">
                     </div>
+                  </div>
+                  <div style="font-size:10px;color:var(--text-dim);font-family:var(--font-zh);margin-top:4px">
+                    日期改成非今天、或指定記錄對象時，這則更新也會記為工作日誌
                   </div>
 
                   <div class="feed-compose__foot">
@@ -2617,6 +2654,11 @@
           <label style="font-size:11px;font-weight:500;color:var(--text-secondary);display:block;margin-bottom:4px">發票號碼</label>
           <input type="text" x-model="dispatchForm.invoice_no" placeholder="AB-12345678"
                  style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:'LINE Seed TW_OTF', monospace;outline:none;box-sizing:border-box">
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:500;color:var(--text-secondary);display:block;margin-bottom:4px">應付款日期</label>
+          <input type="date" x-model="dispatchForm.payable_date"
+                 style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box">
         </div>
       </div>
 

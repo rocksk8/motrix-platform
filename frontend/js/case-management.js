@@ -84,6 +84,8 @@ function app() {
     newCommentHours: '',
     newCommentContactType: '',
     newCommentContactTypeCustom: '',
+    newCommentLogDate: new Date().toISOString().slice(0, 10),
+    newCommentUserId: '',   // 空字串＝記錄人＝目前登入者，見 postWorkLogEntry()
     postingComment: false,
     _ptCache: {},
     feedCalMode:    false,
@@ -176,7 +178,7 @@ function app() {
         if (!r.ok) { location.href = 'login.html'; return }
         const me = await r.json()
         this.session.displayName = me.display_name
-        this.session.id = me.id
+        this.session.id = me.userId
       } catch {}
       try {
         const ru = await fetch('/api/users/selectable', { headers: { Authorization: 'Bearer ' + s.token } })
@@ -1804,10 +1806,13 @@ function app() {
     async postComment() {
       const content = this.newComment.trim()
       if (!content || this.postingComment) return
-      // 有選照片、填執行時數、或選聯絡事項類型 → 當成工作日誌（結構化欄位＋可
-      // 上傳照片），走 work_logs；純文字 → 維持原本輕量留言（case_updates，含
-      // 「標記為重要」＋ Google 行事曆同步），2026-08-26 新增結構化欄位。
-      if (this.newCommentPhotos.length > 0 || this.newCommentHours || this.newCommentContactType) {
+      // 有選照片、填執行時數、選聯絡事項類型、改過日期、或指定記錄對象 → 當成
+      // 工作日誌（結構化欄位＋可上傳照片），走 work_logs；純文字 → 維持原本
+      // 輕量留言（case_updates，含「標記為重要」＋ Google 行事曆同步），
+      // 2026-08-26 新增結構化欄位，2026-08-30 補上日期／記錄對象兩個觸發條件。
+      const isBackdated = this.newCommentLogDate !== new Date().toISOString().slice(0, 10)
+      if (this.newCommentPhotos.length > 0 || this.newCommentHours || this.newCommentContactType ||
+          isBackdated || this.newCommentUserId) {
         await this.postWorkLogEntry(content)
         return
       }
@@ -1831,12 +1836,13 @@ function app() {
     async postWorkLogEntry(content) {
       this.postingComment = true
       try {
-        const today = new Date().toISOString().slice(0, 10)
+        const uid = this.newCommentUserId ? Number(this.newCommentUserId) : this.session.id
         const r = await fetch('/api/work-logs', {
           method: 'POST',
           headers: { Authorization: 'Bearer ' + this.session.token, 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            log_date: today, user_id: this.session.id, content,
+            log_date: this.newCommentLogDate || new Date().toISOString().slice(0, 10),
+            user_id: uid, content,
             hours: this.newCommentHours || 8, case_no: this.selected.quote_no,
             contact_type: this.resolvedContactType(),
           })
@@ -1859,6 +1865,8 @@ function app() {
         this.newCommentHours = ''
         this.newCommentContactType = ''
         this.newCommentContactTypeCustom = ''
+        this.newCommentLogDate = new Date().toISOString().slice(0, 10)
+        this.newCommentUserId = ''
         await this.loadCaseUpdates(this.selected.quote_no)
       } catch(e) {
         alert('發生錯誤：' + e.message)
@@ -1949,6 +1957,7 @@ function app() {
         scope: '',
         notes: '',
         invoice_no: '',
+        payable_date: '',
         status: this._quoteStatusToDispatch(this.selected?.status || ''),
         tax_rate: 0.05,
         items: [],
@@ -1973,6 +1982,7 @@ function app() {
         scope: d.scope || '',
         notes: d.notes || '',
         invoice_no: d.invoiceNo || '',
+        payable_date: d.payableDate || '',
         status: d.status || 'draft',
         tax_rate: d.taxRate !== undefined ? d.taxRate : 0.05,
         items: JSON.parse(JSON.stringify(d.items || [])),
@@ -2037,6 +2047,7 @@ function app() {
         scope: this.dispatchForm.scope || '',
         notes: this.dispatchForm.notes || '',
         invoice_no: this.dispatchForm.invoice_no || '',
+        payable_date: this.dispatchForm.payable_date || '',
         status: this.dispatchForm.status || 'draft',
         tax_rate: parseFloat(this.dispatchForm.tax_rate) || 0,
         items_json: this.dispatchForm.items || [],
@@ -3086,6 +3097,37 @@ function app() {
         })
         if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '刪除失敗'); return }
         if (d.files) d.files = d.files.filter(f => f.id !== fileId)
+      } catch (e) { alert('刪除失敗：' + e.message) }
+    },
+
+    async uploadDispatchInvoiceFiles(d, evt) {
+      const files = evt?.target?.files
+      if (!files || files.length === 0) return
+      const fd = new FormData()
+      for (const f of files) fd.append('files', f)
+      try {
+        const r = await fetch(`/api/contractor-dispatches/${d.id}/invoice-files`, {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + this.session.token },
+          body: fd
+        })
+        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '上傳失敗'); return }
+        const body = await r.json()
+        if (!d.invoiceFiles) d.invoiceFiles = []
+        d.invoiceFiles.push(...body.files)
+      } catch (e) { alert('上傳失敗：' + e.message) }
+      evt.target.value = ''
+    },
+
+    async deleteDispatchInvoiceFile(d, fileId) {
+      if (!confirm('確定刪除此廠商發票？')) return
+      try {
+        const r = await fetch(`/api/contractor-dispatches/${d.id}/invoice-files/${fileId}`, {
+          method: 'DELETE',
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '刪除失敗'); return }
+        if (d.invoiceFiles) d.invoiceFiles = d.invoiceFiles.filter(f => f.id !== fileId)
       } catch (e) { alert('刪除失敗：' + e.message) }
     },
 

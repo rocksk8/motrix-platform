@@ -78,7 +78,7 @@ DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR = os.path.join(
 # （已套用過的 schema_version 不可回頭刪除/重排），data_json.dealWonAt 這個
 # 欄位會留在既有資料裡但目前沒有任何程式碼讀取，之後如果要重新加回「成交時間」
 # 這種概念，不要複用這個欄位名稱免得語意混淆。
-CURRENT_VERSION = 67
+CURRENT_VERSION = 68
 
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
 # execution model) whenever the current request is authenticated as the 'demo'
@@ -1945,6 +1945,24 @@ def _m067_approval_delegates(conn):
     conn.commit()
 
 
+def _m068_dispatch_payable_date_invoice_files(conn):
+    """承攬商派發新增應付款日期（payable_date）與廠商發票附件（invoice_files_json）
+    （2026-08-30）：使用者要求填寫派發時可指定這筆款項的應付款日期，並上傳
+    廠商提供的發票（跟既有 invoice_no 純文字發票號碼、files_json 的「承攬商
+    報價/估價文件」是不同概念，各自獨立欄位不要混用）。
+
+    產生匯款申請時（contractor_vouchers.py::create_contractor_voucher）會把
+    這兩個欄位一併寫入 snapshot_json 凍結快照，供簽核佇列／申請單 PDF 顯示，
+    比照既有 bankAccountNumber/bankPassbookImage 凍結快照的做法。"""
+    if not _col_exists(conn, "contractor_dispatches", "payable_date"):
+        conn.execute("ALTER TABLE contractor_dispatches ADD COLUMN payable_date TEXT DEFAULT ''")
+    if not _col_exists(conn, "contractor_dispatches", "invoice_files_json"):
+        conn.execute(
+            "ALTER TABLE contractor_dispatches ADD COLUMN invoice_files_json TEXT NOT NULL DEFAULT '[]'"
+        )
+    conn.commit()
+
+
 def _m066_parts_safety_stock(conn):
     """parts 新增 safety_stock（2026-08-28，視覺化管理優化：庫存水位燈號）：
     料號可設定安全庫存量，庫存管理頁依此對比目前在庫數量顯示紅/黃/綠燈號。
@@ -2802,6 +2820,7 @@ _MIGRATIONS = [
     _m065_automation_guide,                        # v65
     _m066_parts_safety_stock,                      # v66
     _m067_approval_delegates,                      # v67
+    _m068_dispatch_payable_date_invoice_files,      # v68
 ]
 
 

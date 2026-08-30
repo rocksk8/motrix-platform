@@ -1366,7 +1366,11 @@ def _build_contractor_voucher_html(v: dict) -> str:
         f'    <div class="row"><span class="label">名稱</span><span class="val">{esc(v.get("vendorName","") or "（無承攬商，純外包人員）")}</span></div>\n'
         f'    <div class="row"><span class="label">統一編號</span><span class="val">{esc(v.get("vendorTaxId",""))}</span></div>\n'
         f'    <div class="row"><span class="label">發票號碼</span><span class="val">{esc(v.get("invoiceNo",""))}</span></div>\n'
-        '  </div>\n'
+        f'    <div class="row"><span class="label">應付款日期</span><span class="val">{esc(v.get("payableDate","") or "未指定")}</span></div>\n'
+        + (f'    <div class="row"><span class="label">廠商發票</span><span class="val">'
+           f'{esc("、".join(f.get("filename","") for f in (v.get("invoiceFiles") or [])))}</span></div>\n'
+           if v.get('invoiceFiles') else '')
+        + '  </div>\n'
         '  <div class="box">\n    <div class="box-title">二、匯款帳戶資訊</div>\n'
         f'    <div class="row"><span class="label">銀行</span><span class="val">{esc(v.get("bankCode",""))} {esc(v.get("bankName",""))}</span></div>\n'
         f'    <div class="row"><span class="label">分行</span><span class="val">{esc(v.get("bankBranch",""))}</span></div>\n'

@@ -61,6 +61,7 @@ class DispatchIn(BaseModel):
     status: Optional[str] = 'draft'
     notes: Optional[str] = ''
     invoice_no: Optional[str] = ''
+    payable_date: Optional[str] = ''
     # 樂觀鎖（選填，見 update_dispatch）——比照 customers.py 等的
     # expectedUpdatedAt 慣例
     expected_updated_at: Optional[str] = Field(None, alias="expectedUpdatedAt")
@@ -114,6 +115,12 @@ def _dispatch_row(row) -> dict:
             files = json.loads(row["files_json"] or "[]")
         except Exception:
             pass
+    invoice_files = []
+    if "invoice_files_json" in keys:
+        try:
+            invoice_files = json.loads(row["invoice_files_json"] or "[]")
+        except Exception:
+            pass
     personnel_total = sum(float(p.get("amount", 0) or 0) for p in personnel)
     total = float(row["total_amount"] or 0)
     if not total and items:
@@ -142,6 +149,8 @@ def _dispatch_row(row) -> dict:
         "statusLabel": _STATUS_LABELS.get(row["status"] or "draft", row["status"] or ""),
         "notes": row["notes"] or "",
         "invoiceNo": (row["invoice_no"] if "invoice_no" in keys else "") or "",
+        "payableDate": (row["payable_date"] if "payable_date" in keys else "") or "",
+        "invoiceFiles": invoice_files,
         "createdBy": row["created_by"] or "",
         "createdAt": row["created_at"] or "",
         "updatedAt": row["updated_at"] or "",
@@ -455,13 +464,14 @@ def create_dispatch(body: DispatchIn, authorization: str = Header(None)):
         vendor_name = vrow["name"]
     cur = conn.execute(
         "INSERT INTO contractor_dispatches "
-        "(quote_no, vendor_id, dispatch_date, scope, items_json, personnel_json, total_amount, tax_rate, status, notes, invoice_no, created_by, created_at, updated_at) "
-        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "(quote_no, vendor_id, dispatch_date, scope, items_json, personnel_json, total_amount, tax_rate, status, notes, invoice_no, payable_date, created_by, created_at, updated_at) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (body.quote_no, body.vendor_id, body.dispatch_date or '',
          body.scope or '', json.dumps(items, ensure_ascii=False),
          json.dumps(personnel, ensure_ascii=False), total,
          body.tax_rate if body.tax_rate is not None else 0.05,
          body.status or 'draft', body.notes or '', body.invoice_no or '',
+         body.payable_date or '',
          user["username"], now, now)
     )
     did = cur.lastrowid
@@ -513,12 +523,13 @@ def update_dispatch(did: int, body: DispatchIn, authorization: str = Header(None
         raise HTTPException(404, "承攬商不存在")
     conn.execute(
         "UPDATE contractor_dispatches SET vendor_id=?, dispatch_date=?, scope=?, items_json=?, "
-        "personnel_json=?, total_amount=?, tax_rate=?, status=?, notes=?, invoice_no=?, updated_at=? WHERE id=?",
+        "personnel_json=?, total_amount=?, tax_rate=?, status=?, notes=?, invoice_no=?, payable_date=?, updated_at=? WHERE id=?",
         (body.vendor_id, body.dispatch_date or '', body.scope or '',
          json.dumps(items, ensure_ascii=False),
          json.dumps(personnel, ensure_ascii=False), total,
          body.tax_rate if body.tax_rate is not None else 0.05,
-         body.status or 'draft', body.notes or '', body.invoice_no or '', now, did)
+         body.status or 'draft', body.notes or '', body.invoice_no or '',
+         body.payable_date or '', now, did)
     )
     conn.commit()
     conn.close()
@@ -613,6 +624,72 @@ def delete_dispatch_file(did: int, file_id: str, authorization: str = Header(Non
     finally:
         conn.close()
     _audit(_tok(authorization), "vendor.dispatch.delete_file", "contractor_dispatch", str(did), row["quote_no"])
+    return {"ok": True, "updated_at": now}
+
+
+# ── 廠商發票附件 ──────────────────────────────────────────────────────────────
+
+@router.post("/api/contractor-dispatches/{did}/invoice-files", status_code=201)
+async def upload_dispatch_invoice_files(did: int, files: List[UploadFile] = File(...),
+                                        authorization: str = Header(None)):
+    """廠商發票上傳（2026-08-30 新增，多檔，admin+）——跟既有 files_json（承攬商
+    報價/估價文件）、invoice_no（純文字發票號碼）是不同欄位，各自獨立存放，
+    避免混用。存入 invoice_files_json，會在產生匯款申請當下一併凍結進
+    snapshot_json（見 contractor_vouchers.py::create_contractor_voucher）。"""
+    user = _require_user(authorization)
+    _require_admin(user)
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT quote_no, invoice_files_json FROM contractor_dispatches WHERE id=?", (did,)
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, "派發紀錄不存在")
+        try:
+            existing = json.loads(row["invoice_files_json"] or "[]")
+        except Exception:
+            existing = []
+        new_files = await save_document_files("contractor_dispatch_invoices", str(did), files,
+                                              user.get("display_name") or user["username"])
+        existing.extend(new_files)
+        now = datetime.now().isoformat()
+        conn.execute(
+            "UPDATE contractor_dispatches SET invoice_files_json=?, updated_at=? WHERE id=?",
+            (json.dumps(existing, ensure_ascii=False), now, did)
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "vendor.dispatch.upload_invoice_files", "contractor_dispatch", str(did),
+           f"{row['quote_no']}（{len(new_files)} 個檔案）")
+    return {"ok": True, "added": len(new_files), "files": new_files, "updated_at": now}
+
+
+@router.delete("/api/contractor-dispatches/{did}/invoice-files/{file_id}")
+def delete_dispatch_invoice_file(did: int, file_id: str, authorization: str = Header(None)):
+    user = _require_user(authorization)
+    _require_admin(user)
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT quote_no, invoice_files_json FROM contractor_dispatches WHERE id=?", (did,)
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, "派發紀錄不存在")
+        try:
+            existing = json.loads(row["invoice_files_json"] or "[]")
+        except Exception:
+            existing = []
+        updated = delete_document_file("contractor_dispatch_invoices", str(did), existing, file_id)
+        now = datetime.now().isoformat()
+        conn.execute(
+            "UPDATE contractor_dispatches SET invoice_files_json=?, updated_at=? WHERE id=?",
+            (json.dumps(updated, ensure_ascii=False), now, did)
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "vendor.dispatch.delete_invoice_file", "contractor_dispatch", str(did), row["quote_no"])
     return {"ok": True, "updated_at": now}
 
 

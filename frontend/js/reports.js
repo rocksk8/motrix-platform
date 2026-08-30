@@ -53,12 +53,14 @@ function reportsApp() {
     trendLoading: false,
     trendLoaded:  false,
 
-    // ── 月支出金額及明細（2026-08-26）───────────────────────────────────────
+    // ── 收支報表（原「月支出」，2026-08-30 重構為《當月收支》/《今年度收支》）──
+    expensesScope:     'month', // month/year — 畫面上目前顯示哪個範圍
     expensesYear:      new Date().getFullYear(),
+    expensesMonth:     new Date().toISOString().slice(0, 7),  // 'YYYY-MM'，當月範圍用
     expensesData:      null,
     expensesLoading:   false,
-    expensesLoadedFor: null,   // 記錄已載入資料對應的年度，年度切換時判斷要不要重打 API
-    expensesFilter:    'all',  // all/contractor/equipment/material/other，明細列表的類別篩選 chip
+    expensesLoadedFor: null,   // 記錄已載入資料對應的年度+月份，切換時判斷要不要重打 API
+    expensesFilter:    'all',  // all/contractor/equipment/material/other，支出明細的類別篩選 chip
 
     // ── 案件清單依月份區分（2026-08-26）─────────────────────────────────────
     caseListYear:         new Date().getFullYear(),
@@ -132,14 +134,12 @@ function reportsApp() {
       return this.casesByMonth.reduce(function(s, b) { return s + b.cases.length }, 0)
     },
 
-    // ── 月支出金額及明細 ──────────────────────────────────────────────────────
-    get expensesMonthly() { return (this.expensesData || {}).monthly || [] },
-    get expensesTotals()  { return (this.expensesData || {}).totals  || {} },
-    get expensesDetails() {
-      var d = (this.expensesData || {}).details || {}
-      if (this.expensesFilter !== 'all') {
-        return (d[this.expensesFilter] || []).map(function(x) { return Object.assign({ cat: this.expensesFilter }, x) }, this)
-      }
+    // ── 收支報表 ──────────────────────────────────────────────────────────────
+    get expensesMonthly() { return ((this.expensesData || {}).expenses || {}).monthly || [] },
+    get expensesTotals()  { return ((this.expensesData || {}).expenses || {}).totals  || {} },
+    // 今年度支出明細（逐筆，全部類別），供 filteredExpenseItems 在 expensesScope==='year' 時使用
+    get yearExpenseItemsAll() {
+      var d = ((this.expensesData || {}).expenses || {}).details || {}
       var cats = ['contractor', 'equipment', 'material', 'other']
       var out = []
       cats.forEach(function(cat) {
@@ -147,6 +147,24 @@ function reportsApp() {
       })
       out.sort(function(a, b) { return (b.date || '').localeCompare(a.date || '') })
       return out
+    },
+    get monthExpenseItems() { return (this.expensesData || {}).monthExpenseItems || [] },
+    get monthExpenseTotal() { return (this.expensesData || {}).monthExpenseTotal || 0 },
+    get monthIncomeItems()  { return (this.expensesData || {}).monthIncomeItems  || [] },
+    get monthIncomeTotal()  { return (this.expensesData || {}).monthIncomeTotal  || 0 },
+    get yearIncomeItems()   { return (this.expensesData || {}).yearIncomeItems   || [] },
+    get yearIncomeTotal()   { return (this.expensesData || {}).yearIncomeTotal   || 0 },
+    // 目前選取範圍（當月/今年度）對應的收入/支出明細＋淨額，畫面統一透過這幾個 getter 讀取
+    get activeIncomeItems() { return this.expensesScope === 'month' ? this.monthIncomeItems : this.yearIncomeItems },
+    get filteredExpenseItems() {
+      var items = this.expensesScope === 'month' ? this.monthExpenseItems : this.yearExpenseItemsAll
+      if (this.expensesFilter === 'all') return items
+      return items.filter(function(x) { return x.cat === this.expensesFilter }, this)
+    },
+    get netScopeAmount() {
+      var income  = this.expensesScope === 'month' ? this.monthIncomeTotal  : this.yearIncomeTotal
+      var expense = this.expensesScope === 'month' ? this.monthExpenseTotal : this.expensesTotals.total
+      return income - (expense || 0)
     },
     expensesCatLabel(cat) {
       return { contractor: '承攬商派發', equipment: '設備進貨', material: '料件進貨', other: '其他支出' }[cat] || cat
@@ -284,6 +302,7 @@ function reportsApp() {
       this.exporting  = true
       this.exportType = fmt
       var url = '/api/reports/financial/' + fmt + '?period=' + this.periodParam +
+                '&expense_month=' + this.expensesMonth +
                 (this.departmentId ? '&department_id=' + this.departmentId : '')
       try {
         var res = await fetch(url, {
@@ -808,20 +827,21 @@ function reportsApp() {
 
     showExpensesTab() {
       this.activeTab = 'expenses'
-      var key = this.expensesYear + ':' + (this.departmentId || '')
+      var key = this.expensesYear + ':' + this.expensesMonth + ':' + (this.departmentId || '')
       if (this.expensesLoadedFor !== key) this.loadExpenses()
     },
 
     async loadExpenses() {
       this.expensesLoading = true
       try {
-        var qs = '?year=' + this.expensesYear + (this.departmentId ? '&department_id=' + this.departmentId : '')
+        var qs = '?year=' + this.expensesYear + '&month=' + this.expensesMonth +
+                 (this.departmentId ? '&department_id=' + this.departmentId : '')
         var res = await fetch('/api/reports/expenses-monthly' + qs, {
           headers: { Authorization: 'Bearer ' + this._token() }
         })
         if (!res.ok) throw new Error('支出明細載入失敗')
         this.expensesData      = await res.json()
-        this.expensesLoadedFor = this.expensesYear + ':' + (this.departmentId || '')
+        this.expensesLoadedFor = this.expensesYear + ':' + this.expensesMonth + ':' + (this.departmentId || '')
       } catch (e) {
         alert('支出明細載入失敗：' + (e.message || e))
       }

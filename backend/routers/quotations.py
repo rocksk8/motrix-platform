@@ -2798,6 +2798,16 @@ def get_approval_queue(authorization: str = Header(None)):
             "tierCount":           f["tierCount"],
             "currentApprovers":    f["currentApprovers"],
             "linkedQuoteNo":       r["quote_no"],
+            # 2026-08-30：使用者要求簽核佇列連同申請單本身都要顯示應付款日期／
+            # 匯款帳戶／存簿圖檔／廠商發票，這裡直接從凍結快照帶出，不用簽核人員
+            # 另外點開案件管理才看得到匯款要用的資訊。
+            "payableDate":         snap.get("payableDate") or "",
+            "bankName":            snap.get("bankName") or "",
+            "bankBranch":          snap.get("bankBranch") or "",
+            "bankAccountName":     snap.get("bankAccountName") or "",
+            "bankAccountNumber":   snap.get("bankAccountNumber") or "",
+            "bankPassbookImage":   snap.get("bankPassbookImage") or "",
+            "invoiceFiles":        snap.get("invoiceFiles") or [],
         })
 
     iv_rows = conn.execute("""

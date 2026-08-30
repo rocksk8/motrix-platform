@@ -512,6 +512,40 @@
           </div>
         </div>
 
+        <!-- 承攬商匯款資訊（僅 contractor_voucher 類型顯示） -->
+        <div class="aq-section" x-show="selected?.type === 'contractor_voucher'">
+          <div class="aq-section-title">承攬商匯款資訊</div>
+          <div class="aq-info-grid">
+            <div class="aq-info-row">
+              <span class="aq-info-label">應付款日期</span>
+              <span class="aq-info-value" style="font-family:LINE Seed TW_OTF, sans-serif" x-text="selected?.payableDate || '未指定'"></span>
+            </div>
+            <div class="aq-info-row">
+              <span class="aq-info-label">匯款銀行</span>
+              <span class="aq-info-value" x-text="((selected?.bankName||'') + ' ' + (selected?.bankBranch||'')).trim() || '—'"></span>
+            </div>
+            <div class="aq-info-row">
+              <span class="aq-info-label">戶名</span>
+              <span class="aq-info-value" x-text="selected?.bankAccountName || '—'"></span>
+            </div>
+            <div class="aq-info-row">
+              <span class="aq-info-label">帳號</span>
+              <span class="aq-info-value" style="font-family:LINE Seed TW_OTF, sans-serif" x-text="selected?.bankAccountNumber || '—'"></span>
+            </div>
+          </div>
+          <div style="margin-top:10px" x-show="selected?.bankPassbookImage">
+            <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">存簿封面圖檔</div>
+            <img :src="selected?.bankPassbookImage" style="max-width:260px;max-height:160px;border:1px solid var(--border-light);border-radius:6px;display:block">
+          </div>
+          <div style="margin-top:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap" x-show="(selected?.invoiceFiles||[]).length > 0">
+            <span style="font-size:11px;color:var(--text-dim)">廠商發票</span>
+            <template x-for="f in (selected?.invoiceFiles||[])" :key="f.id">
+              <a href="javascript:void(0)" @click="previewFile(f)"
+                 style="display:flex;align-items:center;gap:4px;font-size:12px;background:#F3F4F6;border-radius:4px;padding:3px 8px;color:var(--accent);text-decoration:underline" x-text="f.filename"></a>
+            </template>
+          </div>
+        </div>
+
         <!-- Reasons -->
         <div class="aq-section" x-show="(selected?.reasons||[]).length > 0">
           <div class="aq-section-title">審核原因</div>
@@ -729,6 +763,17 @@
             this.previewModal = true
           } catch (e) { alert('預覽失敗：' + e.message) }
           this.previewFetching = false
+        },
+
+        async previewFile(file) {
+          try {
+            const r = await fetch(`${API}/api/photo-token?path=${encodeURIComponent(file.path)}`, {
+              headers: { Authorization: 'Bearer ' + this.session.token }
+            })
+            if (!r.ok) { alert('取得檔案連結失敗'); return }
+            const { token } = await r.json()
+            window.open(`${API}/api/uploads/${file.path}?pt=${encodeURIComponent(token)}`, '_blank')
+          } catch (e) { alert('開啟檔案失敗：' + e.message) }
         },
 
         closePreview() {

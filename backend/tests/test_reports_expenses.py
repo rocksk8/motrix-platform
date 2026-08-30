@@ -27,10 +27,10 @@ def test_empty_year_returns_zeroed_12_months(client, make_user):
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["year"] == 2099
-    assert len(body["monthly"]) == 12
-    assert body["monthly"][0]["label"] == "1月"
-    assert body["totals"]["total"] == 0
-    assert body["details"] == {"contractor": [], "equipment": [], "material": [], "other": []}
+    assert len(body["expenses"]["monthly"]) == 12
+    assert body["expenses"]["monthly"][0]["label"] == "1月"
+    assert body["expenses"]["totals"]["total"] == 0
+    assert body["expenses"]["details"] == {"contractor": [], "equipment": [], "material": [], "other": []}
 
 
 def test_contractor_dispatch_counted(client, make_user):
@@ -56,10 +56,10 @@ def test_contractor_dispatch_counted(client, make_user):
 
     r = client.get("/api/reports/expenses-monthly?year=2026", headers=_auth(token))
     body = r.json()
-    march = next(m for m in body["monthly"] if m["month"] == "2026-03")
+    march = next(m for m in body["expenses"]["monthly"] if m["month"] == "2026-03")
     assert march["contractor"] == 10500  # 10000 + 5% 稅（_dispatch_row 預設稅率）
-    assert body["totals"]["contractor"] == 10500
-    assert any(d["desc"] == "測試承攬商" and d["amount"] == 10500 for d in body["details"]["contractor"])
+    assert body["expenses"]["totals"]["contractor"] == 10500
+    assert any(d["desc"] == "測試承攬商" and d["amount"] == 10500 for d in body["expenses"]["details"]["contractor"])
 
 
 def test_stock_purchase_bucketed_by_category(client, make_user):
@@ -90,10 +90,10 @@ def test_stock_purchase_bucketed_by_category(client, make_user):
 
     r = client.get("/api/reports/expenses-monthly?year=2026", headers=_auth(token))
     body = r.json()
-    may = next(m for m in body["monthly"] if m["month"] == "2026-05")
+    may = next(m for m in body["expenses"]["monthly"] if m["month"] == "2026-05")
     assert may["equipment"] == 10000
     assert may["material"] == 300
-    eq_detail = next(d for d in body["details"]["equipment"] if "測試設備" in d["desc"])
+    eq_detail = next(d for d in body["expenses"]["details"]["equipment"] if "測試設備" in d["desc"])
     assert eq_detail["amount"] == 10000
     assert "× 2" in eq_detail["desc"]
 
@@ -124,6 +124,6 @@ def test_settlement_extra_item_counted_as_other(client, make_user):
 
     r = client.get("/api/reports/expenses-monthly?year=2026", headers=_auth(token))
     body = r.json()
-    july = next(m for m in body["monthly"] if m["month"] == "2026-07")
+    july = next(m for m in body["expenses"]["monthly"] if m["month"] == "2026-07")
     assert july["other"] == 2500
-    assert any(d["quoteNo"] == "MQ-EXP-002" and d["amount"] == 2500 for d in body["details"]["other"])
+    assert any(d["quoteNo"] == "MQ-EXP-002" and d["amount"] == 2500 for d in body["expenses"]["details"]["other"])
