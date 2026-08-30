@@ -1316,7 +1316,7 @@
                               <td x-show="r.match" x-text="r.match ? r.match.vendorName : ''"></td>
                               <td class="c">
                                 <button x-show="r.match && !r.match._paid" class="btn-export excel" style="padding:3px 8px;font-size:11px"
-                                        @click="markVoucherPaidFromReconcile(r.match.voucherNo)">標記已匯款</button>
+                                        @click="openBankPayModal(r)">標記已匯款</button>
                                 <span x-show="r.match && r.match._paid" style="color:#15803D;font-size:11px">✓ 已標記</span>
                               </td>
                             </tr>
@@ -1439,6 +1439,31 @@
           <button type="button" @click="targetModal=false" style="padding:8px 18px;border:1px solid var(--border-light);background:#fff;border-radius:var(--radius);font-size:13px;font-family:var(--font-zh);cursor:pointer;color:var(--text-secondary)">取消</button>
           <button type="button" @click="saveTargets()" :disabled="targetSaving" style="padding:8px 22px;border:1px solid #7C3AED;background:#7C3AED;color:#fff;border-radius:var(--radius);font-size:13px;font-family:var(--font-zh);font-weight:600;cursor:pointer" :style="{opacity:targetSaving?'.6':'1'}">
             <span x-text="targetSaving ? '儲存中…' : '儲存目標'"></span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 銀行對帳比對 標記已匯款 Modal（2026-08-31 新增，銀行 CSV 日期格式不保證是 YYYY-MM-DD，
+       改成猜測日期讓使用者眼睛確認/修正後再送出，不直接把原始文字送給後端） -->
+  <div x-show="bankPayModal" class="modal-overlay" @click.self="bankPayModal=false">
+    <div class="modal-box" style="max-width:360px">
+      <div class="modal-hd">
+        <div class="modal-title" x-text="'標記已匯款' + (bankPayRow && bankPayRow.match ? '　' + bankPayRow.match.voucherNo : '')"></div>
+        <button class="modal-close" @click="bankPayModal=false">&#10005;</button>
+      </div>
+      <div class="modal-body">
+        <label style="font-size:12px;color:var(--text-secondary);font-family:var(--font-zh);display:block;margin-bottom:4px">匯款日期</label>
+        <input type="date" x-model="bankPayDate"
+               style="width:100%;padding:7px 10px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;margin-bottom:8px">
+        <div style="font-size:11px;color:var(--text-dim);font-family:var(--font-zh)">
+          銀行對帳單上的日期原文：<span x-text="bankPayRow ? (bankPayRow.date || '（無）') : ''"></span>　請核對後再確認
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:18px;padding-top:14px;border-top:1px solid var(--border-light)">
+          <button type="button" @click="bankPayModal=false" :disabled="bankPaySaving" style="padding:8px 18px;border:1px solid var(--border-light);background:#fff;border-radius:var(--radius);font-size:13px;font-family:var(--font-zh);cursor:pointer;color:var(--text-secondary)">取消</button>
+          <button type="button" @click="confirmBankPay()" :disabled="bankPaySaving || !bankPayDate" style="padding:8px 22px;border:1px solid #059669;background:#059669;color:#fff;border-radius:var(--radius);font-size:13px;font-family:var(--font-zh);font-weight:600;cursor:pointer" :style="{opacity:bankPaySaving?'.6':'1'}">
+            <span x-text="bankPaySaving ? '處理中…' : '確認標記已匯款'"></span>
           </button>
         </div>
       </div>

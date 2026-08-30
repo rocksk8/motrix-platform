@@ -47,6 +47,13 @@ function reportsApp() {
     // ── 銀行對帳單比對（承攬商匯款申請）
     bankReconciling: false,
     bankResult:       null,
+    // 標記已匯款 Modal（2026-08-31 新增）：CSV 各家銀行日期欄位格式不一，
+    // 不能直接把 r.date 原文送給後端（現在會驗證 YYYY-MM-DD 格式），改成開
+    // 小 Modal 帶「猜測」出來的日期讓使用者眼睛確認/修正後再送出。
+    bankPayModal:   false,
+    bankPayRow:     null,
+    bankPayDate:    '',
+    bankPaySaving:  false,
 
     // ── Monthly trend
     trendData:    null,
@@ -937,28 +944,66 @@ function reportsApp() {
       }
     },
 
-    async markVoucherPaidFromReconcile(voucherNo) {
-      if (!confirm('確認標記 ' + voucherNo + ' 為已匯款？')) return
+    // 銀行 CSV 各家欄位格式不一（見 backend _parse_bank_csv() 寬鬆偵測），r.date
+    // 是原始文字，不保證是 YYYY-MM-DD——這裡盡量猜出來預先帶入 Modal，猜不出來
+    // 就留空讓使用者自己看畫面上「銀行日期」欄手動填，不會拿猜錯的日期硬送。
+    _guessDateFromBankText(raw) {
+      const s = (raw || '').trim()
+      if (!s) return ''
+      let m = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/)
+      if (m) return this._normalizeYmd(+m[1], +m[2], +m[3])
+      m = s.match(/^(\d{4})(\d{2})(\d{2})(\d{0,6})?$/)
+      if (m) return this._normalizeYmd(+m[1], +m[2], +m[3])
+      // 民國年（台灣銀行常見，例如 115/08/20 = 2026/08/20）
+      m = s.match(/^(\d{2,3})[-/.](\d{1,2})[-/.](\d{1,2})$/)
+      if (m && +m[1] >= 1 && +m[1] <= 200) return this._normalizeYmd(+m[1] + 1911, +m[2], +m[3])
+      return ''
+    },
+
+    _normalizeYmd(y, mo, d) {
+      if (mo < 1 || mo > 12 || d < 1 || d > 31) return ''
+      const dt = new Date(y, mo - 1, d)
+      if (dt.getFullYear() !== y || dt.getMonth() !== mo - 1 || dt.getDate() !== d) return ''
+      return y + '-' + String(mo).padStart(2, '0') + '-' + String(d).padStart(2, '0')
+    },
+
+    openBankPayModal(row) {
+      if (!row || !row.match) return
+      this.bankPayRow  = row
+      this.bankPayDate = this._guessDateFromBankText(row.date) || this._localDateStr()
+      this.bankPayModal = true
+    },
+
+    _localDateStr(d) {
+      d = d || new Date()
+      const tz = d.getTimezoneOffset() * 60000
+      return new Date(d.getTime() - tz).toISOString().slice(0, 10)
+    },
+
+    async confirmBankPay() {
+      const row = this.bankPayRow
+      if (!row || !row.match || !this.bankPayDate) return
+      const voucherNo = row.match.voucherNo
+      this.bankPaySaving = true
       try {
         var res = await fetch('/api/contractor-vouchers/' + voucherNo + '/paid-toggle', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this._token() },
-          body: JSON.stringify({ action: 'pay', note: '銀行對帳單比對後標記' }),
+          body: JSON.stringify({ action: 'pay', paid_at: this.bankPayDate, note: '銀行對帳單比對後標記' }),
         })
         if (!res.ok) {
           var j = await res.json().catch(function () { return {} })
           throw new Error(j.detail || '標記失敗')
         }
-        if (this.bankResult) {
-          this.bankResult.bankRows.forEach(function (r) {
-            if (r.match && r.match.voucherNo === voucherNo) r.match._paid = true
-          })
-        }
+        row.match._paid = true
+        this.bankPayModal = false
+        this.bankPayRow = null
         this.cashPosLoaded = false
         await this.showCashPosTab()
       } catch (e) {
         alert('標記失敗：' + (e.message || e))
       }
+      this.bankPaySaving = false
     },
 
     async _loadTrendData() {
