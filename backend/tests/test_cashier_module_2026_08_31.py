@@ -56,6 +56,7 @@ def _make_quotation_with_unreceived_item(quote_no, expected_receipt_date=""):
     conn = db.get_db()
     try:
         data_json = json.dumps({
+            "dealTag": "已成案",
             "caseRecord": {
                 "payment": {"items": [
                     {"type": "訂金款", "pct": 30, "amount": 30000, "received": False,
@@ -154,6 +155,70 @@ def test_cashier_summary_counts(client, make_user):
     body = r.json()
     assert body["payableCount"] >= 1
     assert body["receivableCount"] >= 1
+
+
+def test_receivable_queue_status_all_includes_received_and_unreceived(client, make_user):
+    """v2：status=all 併入 receivables.html 的完整歷史查詢，含已收+未收，
+    且每筆品項要帶出發票登錄/取消收款/手續費統計用得到的欄位。"""
+    username, password = make_user(username="cash_admin4", role="admin")
+    token = _login(client, username, password)
+
+    _make_quotation_with_unreceived_item("MQ-CASH-040", expected_receipt_date="2026-09-10")
+    mark = client.patch(
+        "/api/quotations/MQ-CASH-040/payment/0", headers=_auth(token),
+        json={"received": True, "receivedAt": "2026-08-31", "actualAmount": 29500, "feeAmount": 500,
+              "invoiceNo": "AB-12345678"},
+    )
+    assert mark.status_code == 200, mark.text
+
+    # 預設 unreceived 不應再出現這筆（已收款）
+    r_unreceived = client.get("/api/cashier/receivable-queue", headers=_auth(token))
+    assert not any(i["quoteNo"] == "MQ-CASH-040" for i in r_unreceived.json())
+
+    r_all = client.get("/api/cashier/receivable-queue?status=all", headers=_auth(token))
+    assert r_all.status_code == 200, r_all.text
+    items = [i for i in r_all.json() if i["quoteNo"] == "MQ-CASH-040"]
+    assert len(items) == 1
+    it = items[0]
+    assert it["received"] is True
+    assert it["actualAmount"] == 29500
+    assert it["feeAmount"] == 500
+    assert it["invoiceNo"] == "AB-12345678"
+
+    r_received = client.get("/api/cashier/receivable-queue?status=received", headers=_auth(token))
+    assert any(i["quoteNo"] == "MQ-CASH-040" for i in r_received.json())
+
+    bad = client.get("/api/cashier/receivable-queue?status=bogus", headers=_auth(token))
+    assert bad.status_code == 400
+
+
+def test_finance_module_can_view_but_not_execute(client, make_user):
+    """v2：finance 模組使用者沿用 receivables.html 原本的查詢權限（可看
+    payable/receivable/execution-history），但標記動作走 admin+/cashier 專用
+    的 mark_payment／paid-toggle，finance 不含在內，維持查看/執行分權。"""
+    admin_username, admin_password = make_user(username="cash_admin5", role="superadmin")
+    admin_token = _login(client, admin_username, admin_password)
+    voucher_no = _make_approved_voucher(client, admin_token, "MQ-CASH-050")
+    _make_quotation_with_unreceived_item("MQ-CASH-051")
+
+    finance_username, finance_password = make_user(username="finance_user", role="sales", modules=["finance"])
+    finance_token = _login(client, finance_username, finance_password)
+
+    assert client.get("/api/cashier/payable-queue", headers=_auth(finance_token)).status_code == 200
+    assert client.get("/api/cashier/receivable-queue?status=all", headers=_auth(finance_token)).status_code == 200
+    assert client.get("/api/cashier/execution-history", headers=_auth(finance_token)).status_code == 200
+
+    pay = client.post(
+        f"/api/contractor-vouchers/{voucher_no}/paid-toggle", headers=_auth(finance_token),
+        json={"action": "pay", "paid_at": "2026-08-31"},
+    )
+    assert pay.status_code == 403, pay.text
+
+    mark = client.patch(
+        "/api/quotations/MQ-CASH-051/payment/0", headers=_auth(finance_token),
+        json={"received": True, "receivedAt": "2026-08-31", "actualAmount": 30000, "feeAmount": 0},
+    )
+    assert mark.status_code == 403, mark.text
 
 
 def test_cashier_module_user_can_mark_paid_and_received(client, make_user):

@@ -14,21 +14,52 @@
     [x-cloak]{display:none!important}
     .page-main{margin-left:var(--sidebar-w);margin-top:var(--topbar-h);padding:28px 32px;min-height:calc(100vh - var(--topbar-h));background:var(--white)}
 
+    .stat-strip{display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap}
+    .stat-pill{display:flex;flex-direction:column;padding:14px 18px;border:1px solid var(--border-light);border-radius:var(--radius-lg);background:#fff;min-width:130px;flex:1;max-width:200px}
+    .stat-pill__val{font-size:22px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;line-height:1;color:var(--text-primary)}
+    .stat-pill__lbl{font-size:10px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.06em;margin-top:4px;text-transform:uppercase}
+    .stat-pill.accent .stat-pill__val{color:var(--accent)}
+    .stat-pill.danger  .stat-pill__val{color:var(--danger)}
+    .stat-pill.success .stat-pill__val{color:var(--success)}
+    .stat-pill.warn    .stat-pill__val{color:#D97706}
+
     .tabs{display:flex;gap:8px;margin-bottom:18px;border-bottom:1px solid var(--border-light)}
     .tab{padding:9px 4px;margin-right:14px;font-size:13px;font-family:var(--font-zh);font-weight:600;color:var(--text-dim);background:none;border:none;border-bottom:2px solid transparent;cursor:pointer}
     .tab.on{color:var(--accent);border-bottom-color:var(--accent)}
     .tab__cnt{font-family:LINE Seed TW_OTF, sans-serif;font-size:10px;font-weight:600;margin-left:4px;padding:1px 6px;border-radius:8px;background:#F0EEE9}
     .tab.on .tab__cnt{background:var(--accent-light);color:var(--accent)}
 
+    .period-type-btn{padding:5px 12px;border-radius:var(--radius);border:1px solid var(--border-light);font-size:12px;font-family:var(--font-zh);cursor:pointer;background:#fff;color:var(--text-secondary)}
+    .period-type-btn.on{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+
+    .toolbar{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+    .search-wrap{position:relative;flex:0 0 260px}
+    .search-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text-dim);pointer-events:none}
+    .search-input{width:100%;padding:8px 11px 8px 34px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:var(--font-zh);background:#fff;outline:none;box-sizing:border-box}
+
+    .alert-bar{display:flex;align-items:center;gap:10px;padding:10px 16px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:var(--radius-lg);margin-bottom:14px;font-size:12px;font-family:var(--font-zh);color:#92400E}
+    .alert-bar svg{flex-shrink:0;color:#D97706}
+
     .r{text-align:right}.c{text-align:center}
     .panel{background:#fff;border:1px solid var(--border-light);border-radius:var(--radius-lg);overflow:hidden}
     .data-table td.overdue{color:var(--danger);font-weight:700}
     .data-table td.soon{color:#D97706;font-weight:700}
+    .data-table tr.uninvoiced-row td{background:#FFFBEB}
     .mono{font-family:LINE Seed TW_OTF, sans-serif;font-size:11px;letter-spacing:.03em}
+
+    .rb{display:inline-flex;align-items:center;padding:2px 9px;border-radius:4px;font-size:11px;font-weight:600;gap:4px}
+    .rb-received{background:var(--success-light);color:var(--success)}
+    .rb-pending{background:#FEF3C7;color:#92400E}
+    .rb-invoiced{background:#ECFDF5;color:#065F46}
 
     .action-btn{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:var(--radius);font-size:11px;font-family:var(--font-zh);font-weight:500;cursor:pointer;border:1px solid;transition:all .12s}
     .action-btn.pay{background:#F0FDF4;border-color:#86EFAC;color:#15803D}
     .action-btn.pay:hover{background:#DCFCE7}
+    .action-btn.unreceive{background:#F9FAFB;border-color:#D1D5DB;color:#6B7280}
+    .action-btn.invoice{background:#FFF7ED;border-color:#FED7AA;color:#C2410C}
+
+    .summary-bar{display:flex;gap:24px;padding:10px 14px;background:#FAFAF8;border-top:1px solid var(--border-light);font-size:12px;font-family:var(--font-zh);color:var(--text-secondary)}
+    .summary-bar strong{color:var(--text-primary);font-family:LINE Seed TW_OTF, sans-serif}
 
     .kpi-grid{display:flex;gap:12px;margin-bottom:14px;flex-wrap:wrap}
     .kpi-card{flex:1;min-width:130px;padding:12px 16px;border:1px solid var(--border-light);border-radius:var(--radius-lg);background:#fff}
@@ -62,12 +93,39 @@
 
       <template x-if="!error">
         <div>
+          <!-- 頂部 KPI 統計列 -->
+          <div class="stat-strip">
+            <div class="stat-pill danger">
+              <div class="stat-pill__val" x-text="fmt(kpiPayableTotal)">—</div>
+              <div class="stat-pill__lbl">待付款總額</div>
+            </div>
+            <div class="stat-pill accent">
+              <div class="stat-pill__val" x-text="fmt(kpiReceivableTotal)">—</div>
+              <div class="stat-pill__lbl">待收款總額</div>
+            </div>
+            <div class="stat-pill success">
+              <div class="stat-pill__val" x-text="fmt(historyOutgoingTotal)">—</div>
+              <div class="stat-pill__lbl">本期已匯款</div>
+            </div>
+            <div class="stat-pill success">
+              <div class="stat-pill__val" x-text="fmt(historyIncomingTotal)">—</div>
+              <div class="stat-pill__lbl">本期已收款</div>
+            </div>
+            <div class="stat-pill warn">
+              <div class="stat-pill__val" x-text="kpiPayableOverdue + kpiReceivableOverdue">—</div>
+              <div class="stat-pill__lbl">逾期待處理筆數</div>
+            </div>
+          </div>
+
           <div class="tabs">
             <button class="tab" :class="{on: activeTab==='payable'}" @click="activeTab='payable'">
               待付款<span class="tab__cnt" x-text="payable.length"></span>
             </button>
             <button class="tab" :class="{on: activeTab==='receivable'}" @click="activeTab='receivable'">
-              待收款<span class="tab__cnt" x-text="receivable.length"></span>
+              待收款<span class="tab__cnt" x-text="receivable.filter(i=>!i.received).length"></span>
+            </button>
+            <button class="tab" :class="{on: activeTab==='history'}" @click="activeTab='history'">
+              執行歷史
             </button>
             <button class="tab" :class="{on: activeTab==='bank'}" @click="activeTab='bank'">
               銀行對帳單比對
@@ -99,7 +157,8 @@
                         <td class="c mono" :class="isOverdue(v.payableDate) ? 'overdue' : (isDueSoon(v.payableDate) ? 'soon' : '')"
                             x-text="v.payableDate || '未指定'"></td>
                         <td class="c">
-                          <button class="action-btn pay" @click="openPayVoucherModal(v)">標記已匯款</button>
+                          <button x-show="canExecute()" class="action-btn pay" @click="openPayVoucherModal(v)">標記已匯款</button>
+                          <span x-show="!canExecute()" style="font-size:11px;color:var(--text-dim)">僅檢視</span>
                         </td>
                       </tr>
                     </template>
@@ -109,35 +168,150 @@
             </template>
           </div>
 
-          <!-- 待收款 -->
+          <!-- 待收款（併入 receivables.html 全部功能，2026-08-31 v2） -->
           <div x-show="activeTab==='receivable'">
-            <template x-if="!loading && receivable.length===0">
-              <div class="empty-state">目前沒有待收款的品項</div>
+            <div class="alert-bar" x-show="receivableUninvoicedCount > 0">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+              <span>共 <strong x-text="receivableUninvoicedCount"></strong> 筆款項尚未登錄發票號碼。</span>
+            </div>
+
+            <div class="toolbar">
+              <div class="search-wrap">
+                <span class="search-icon">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                </span>
+                <input class="search-input" type="search" placeholder="搜尋案件號 / 客戶 / 款項…" x-model="receivableSearch">
+              </div>
+              <button class="period-type-btn" :class="{on:receivableFilterTab==='all'}" @click="receivableFilterTab='all'">全部</button>
+              <button class="period-type-btn" :class="{on:receivableFilterTab==='unreceived'}" @click="receivableFilterTab='unreceived'">未收款</button>
+              <button class="period-type-btn" :class="{on:receivableFilterTab==='received'}" @click="receivableFilterTab='received'">已收款</button>
+              <button class="period-type-btn" :class="{on:receivableFilterTab==='uninvoiced'}" @click="receivableFilterTab='uninvoiced'">未開發票</button>
+              <div style="margin-left:auto;font-size:12px;color:var(--text-dim)" x-text="'共 ' + filteredReceivable.length + ' 筆'"></div>
+            </div>
+
+            <template x-if="!loading && filteredReceivable.length===0">
+              <div class="empty-state">沒有符合條件的款項</div>
             </template>
-            <template x-if="!loading && receivable.length>0">
+            <template x-if="filteredReceivable.length>0">
               <div class="panel">
                 <table class="data-table">
                   <thead><tr>
                     <th>案件號</th><th>客戶</th><th>業務員</th><th>款項類型</th>
-                    <th class="r">應收金額</th><th class="c">預計收款日</th><th class="c">動作</th>
+                    <th class="r">應收金額</th><th class="c">預計收款日</th><th class="c">收款狀態</th>
+                    <th>發票號碼</th><th class="c">動作</th>
                   </tr></thead>
                   <tbody>
-                    <template x-for="it in receivable" :key="it.quoteNo + '-' + it.idx">
-                      <tr>
+                    <template x-for="it in filteredReceivable" :key="it.quoteNo + '-' + it.idx">
+                      <tr :class="!it.invoiceNo && 'uninvoiced-row'">
                         <td class="mono" x-text="it.quoteNo"></td>
                         <td x-text="it.customer"></td>
                         <td x-text="it.salesPerson"></td>
                         <td x-text="it.type"></td>
                         <td class="r mono" x-text="fmt(it.amount)"></td>
-                        <td class="c mono" :class="isOverdue(it.expectedReceiptDate) ? 'overdue' : (isDueSoon(it.expectedReceiptDate) ? 'soon' : '')"
+                        <td class="c mono" :class="it.overdue ? 'overdue' : (isDueSoon(it.expectedReceiptDate) ? 'soon' : '')"
                             x-text="it.expectedReceiptDate || '未指定'"></td>
+                        <td class="c"><span class="rb" :class="it.received ? 'rb-received' : 'rb-pending'" x-text="it.received ? '已收款' : '待收款'"></span></td>
+                        <td>
+                          <template x-if="it.invoiceNo">
+                            <span class="rb rb-invoiced" :style="canExecute() ? 'cursor:pointer' : ''" @click="canExecute() && openInvoiceModal(it)" x-text="it.invoiceNo"></span>
+                          </template>
+                          <template x-if="!it.invoiceNo && canExecute()">
+                            <button class="action-btn invoice" @click="openInvoiceModal(it)">登錄發票</button>
+                          </template>
+                          <span x-show="!it.invoiceNo && !canExecute()" style="color:var(--text-dim);font-size:11px">未登錄</span>
+                        </td>
                         <td class="c">
-                          <button class="action-btn pay" @click="openReceiveModal(it)">標記已收款</button>
+                          <template x-if="canExecute() && !it.received">
+                            <button class="action-btn pay" @click="openReceiveModal(it)">標記已收款</button>
+                          </template>
+                          <template x-if="canExecute() && it.received">
+                            <button class="action-btn unreceive" @click="toggleReceived(it, false)">取消收款</button>
+                          </template>
+                          <span x-show="!canExecute()" style="font-size:11px;color:var(--text-dim)">僅檢視</span>
                         </td>
                       </tr>
                     </template>
                   </tbody>
                 </table>
+                <div class="summary-bar">
+                  <span>篩選結果合計：<strong x-text="fmt(filteredReceivable.reduce((s,i)=>s+i.amount,0))"></strong></span>
+                  <span>已收：<strong style="color:var(--success)" x-text="fmt(filteredReceivable.filter(i=>i.received).reduce((s,i)=>s+i.amount,0))"></strong></span>
+                  <span>未收：<strong style="color:var(--danger)" x-text="fmt(filteredReceivable.filter(i=>!i.received).reduce((s,i)=>s+i.amount,0))"></strong></span>
+                  <span>未開票：<strong style="color:#D97706" x-text="filteredReceivable.filter(i=>!i.invoiceNo).length + ' 筆'"></strong></span>
+                </div>
+              </div>
+            </template>
+          </div>
+
+          <!-- 執行歷史（2026-08-31 v2 新增） -->
+          <div x-show="activeTab==='history'">
+            <div class="toolbar">
+              <label class="field-label" style="margin:0">起</label>
+              <input type="date" class="field-input" style="width:auto;margin:0" x-model="historyStart">
+              <label class="field-label" style="margin:0">迄</label>
+              <input type="date" class="field-input" style="width:auto;margin:0" x-model="historyEnd">
+              <button class="period-type-btn" @click="loadHistory()">查詢</button>
+              <button class="action-btn pay" style="margin-left:auto" :disabled="exporting" @click="exportHistory()">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+                <span x-text="exporting ? '匯出中…' : '匯出 Excel'"></span>
+              </button>
+            </div>
+
+            <template x-if="historyLoading">
+              <div class="empty-state">載入中…</div>
+            </template>
+            <template x-if="!historyLoading">
+              <div>
+                <div class="cm-section-title" style="font-size:13px;font-weight:700;font-family:var(--font-zh);margin-bottom:8px">
+                  已匯款明細（共 <span x-text="historyOutgoing.length"></span> 筆，合計 <span x-text="fmt(historyOutgoingTotal)"></span>）
+                </div>
+                <template x-if="historyOutgoing.length===0">
+                  <div class="empty-state">此區間沒有已匯款紀錄</div>
+                </template>
+                <template x-if="historyOutgoing.length>0">
+                  <div class="panel" style="margin-bottom:20px">
+                    <table class="data-table">
+                      <thead><tr><th>申請單號</th><th>關聯案件</th><th>廠商</th><th class="r">金額</th><th class="c">匯款日期</th></tr></thead>
+                      <tbody>
+                        <template x-for="v in historyOutgoing" :key="v.voucherNo">
+                          <tr>
+                            <td class="mono" x-text="v.voucherNo"></td>
+                            <td class="mono" x-text="v.quoteNo"></td>
+                            <td x-text="v.vendorName || '（外包人員點工）'"></td>
+                            <td class="r mono" x-text="fmt(v.grandTotal)"></td>
+                            <td class="c mono" x-text="v.paidAt ? v.paidAt.slice(0,10) : ''"></td>
+                          </tr>
+                        </template>
+                      </tbody>
+                    </table>
+                  </div>
+                </template>
+
+                <div class="cm-section-title" style="font-size:13px;font-weight:700;font-family:var(--font-zh);margin-bottom:8px">
+                  已收款明細（共 <span x-text="historyIncoming.length"></span> 筆，合計 <span x-text="fmt(historyIncomingTotal)"></span>）
+                </div>
+                <template x-if="historyIncoming.length===0">
+                  <div class="empty-state">此區間沒有已收款紀錄</div>
+                </template>
+                <template x-if="historyIncoming.length>0">
+                  <div class="panel">
+                    <table class="data-table">
+                      <thead><tr><th>案件號</th><th>客戶</th><th>業務員</th><th>款項類型</th><th class="r">實收金額</th><th class="c">收款日</th></tr></thead>
+                      <tbody>
+                        <template x-for="it in historyIncoming" :key="it.quoteNo + it.type + it.receivedAt">
+                          <tr>
+                            <td class="mono" x-text="it.quoteNo"></td>
+                            <td x-text="it.customer"></td>
+                            <td x-text="it.salesPerson"></td>
+                            <td x-text="it.type"></td>
+                            <td class="r mono" x-text="fmt(it.actualAmount !== null ? it.actualAmount : it.amount)"></td>
+                            <td class="c mono" x-text="it.receivedAt"></td>
+                          </tr>
+                        </template>
+                      </tbody>
+                    </table>
+                  </div>
+                </template>
               </div>
             </template>
           </div>
@@ -147,11 +321,12 @@
             <div style="font-size:11px;color:var(--text-dim);margin-bottom:10px">
               上傳銀行匯出的 CSV（需含日期與金額欄位），依金額比對目前「已核准未匯款」清單，僅供人工複核，不會自動標記已匯款。
             </div>
-            <label class="action-btn pay" style="cursor:pointer;display:inline-flex">
+            <label x-show="canExecute()" class="action-btn pay" style="cursor:pointer;display:inline-flex">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
               <span x-text="bankReconciling ? '比對中…' : '上傳 CSV 比對'"></span>
               <input type="file" accept=".csv" style="display:none" :disabled="bankReconciling" @change="uploadBankCsv($event)">
             </label>
+            <span x-show="!canExecute()" style="font-size:12px;color:var(--text-dim)">僅出納/管理員可上傳比對</span>
 
             <template x-if="bankResult">
               <div style="margin-top:14px">
@@ -186,7 +361,7 @@
                           <td x-show="!r.match" colspan="2" style="color:var(--text-dim)">未找到金額相符的待匯款申請</td>
                           <td x-show="r.match" x-text="r.match ? r.match.vendorName : ''"></td>
                           <td class="c">
-                            <button x-show="r.match && !r.match._paid" class="action-btn pay" @click="openBankPayModal(r)">標記已匯款</button>
+                            <button x-show="r.match && !r.match._paid && canExecute()" class="action-btn pay" @click="openBankPayModal(r)">標記已匯款</button>
                             <span x-show="r.match && r.match._paid" style="color:#15803D;font-size:11px">✓ 已標記</span>
                           </td>
                         </tr>
@@ -231,12 +406,28 @@
       <input type="number" min="0" class="field-input" x-model.number="receiveActualAmount">
       <label class="field-label">手續費 / 扣款</label>
       <input type="number" min="0" class="field-input" x-model.number="receiveFeeAmount">
+      <label class="field-label">備註（選填）</label>
+      <input type="text" class="field-input" x-model="receiveNote" placeholder="例：匯款轉入、票期兌現…">
       <div class="modal-footer" style="display:flex;justify-content:flex-end;gap:8px">
         <button @click="receiveModal=false" :disabled="receiveSaving"
                 style="padding:7px 16px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:var(--font-zh);background:#fff;cursor:pointer">取消</button>
         <button @click="confirmReceive()" :disabled="receiveSaving || !receiveDate"
                 style="padding:7px 16px;border:none;border-radius:var(--radius);font-size:13px;font-weight:600;font-family:var(--font-zh);background:#059669;color:#fff;cursor:pointer"
                 x-text="receiveSaving ? '處理中…' : '確認標記已收款'"></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 發票登錄 Modal（併入 receivables.html） -->
+  <div x-show="invoiceModal.show" class="modal-overlay" @click.self="invoiceModal.show=false">
+    <div class="modal-box" style="width:360px">
+      <div class="modal-title" x-text="'登錄發票號碼' + (invoiceModal.item ? '　' + invoiceModal.item.quoteNo : '')"></div>
+      <label class="field-label">統一發票號碼</label>
+      <input type="text" class="field-input" x-model="invoiceModal.no" placeholder="AB-12345678" @keydown.enter="confirmInvoice()">
+      <div style="font-size:11px;color:var(--text-dim);font-family:var(--font-zh);margin-top:-6px;margin-bottom:12px">留空並儲存可清除發票號碼</div>
+      <div class="modal-footer" style="display:flex;justify-content:flex-end;gap:8px">
+        <button @click="invoiceModal.show=false" style="padding:7px 16px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:var(--font-zh);background:#fff;cursor:pointer">取消</button>
+        <button @click="confirmInvoice()" style="padding:7px 16px;border:none;border-radius:var(--radius);font-size:13px;font-weight:600;font-family:var(--font-zh);background:#059669;color:#fff;cursor:pointer">儲存</button>
       </div>
     </div>
   </div>
