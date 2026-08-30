@@ -2251,7 +2251,16 @@ def record_export(quote_no: str, mode: str = "external", authorization: str = He
 
 @router.patch("/api/quotations/{no}/payment/{idx}")
 def mark_payment(no: str, idx: int, body: dict, authorization: str = Header(None)):
+    """2026-08-31（安全稽核發現）：標記款項收款/取消收款是本檔案裡少數完全沒有
+    角色門檻的金流寫入端點——任何登入使用者（含 viewer）原本都能標記任意案件
+    的任意期款項為已收款、任意填實收金額/手續費。比照同檔案 request_payment_
+    writeoff()/cancel_payment_writeoff() 同款 admin+ 門檻補上。純改 invoiceNo
+    （登錄發票號碼，不影響金額/收款狀態）維持原本任何登入使用者皆可，跟其他
+    模組「發票號碼」這類單純登錄用途的欄位一致寬鬆。"""
     user = _require_user(authorization)
+    touches_receipt = "received" in body or "actualAmount" in body or "feeAmount" in body
+    if touches_receipt and user["role"] not in ("superadmin", "admin"):
+        raise HTTPException(403, "僅管理員可標記收款狀態")
     conn = get_db()
     try:
         row = conn.execute("SELECT data_json, updated_at FROM quotations WHERE quote_no=?", (no,)).fetchone()
