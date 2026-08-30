@@ -2598,14 +2598,14 @@
 <!-- ── 承攬商派發 Modal ── -->
 <div x-show="showDispatchModal" x-cloak
      style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:400;display:flex;align-items:center;justify-content:center;padding:20px"
-     @click.self="showDispatchModal=false"
-     @keydown.escape.window="showDispatchModal=false">
+     @click.self="closeDispatchModalGuarded()"
+     @keydown.escape.window="closeDispatchModalGuarded()">
   <div style="background:#fff;border-radius:12px;width:100%;max-width:680px;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 16px 48px rgba(0,0,0,.22)">
     <!-- Header -->
     <div style="display:flex;align-items:center;padding:14px 18px;border-bottom:1px solid var(--border-light);gap:10px">
       <span style="font-size:14px;font-weight:700;flex:1;font-family:var(--font-zh)"
             x-text="editDispatchId ? '編輯派發紀錄' : '新增承攬商派發'"></span>
-      <button @click="showDispatchModal=false" style="width:28px;height:28px;border:none;background:#F0EEE9;border-radius:5px;cursor:pointer;font-size:16px">×</button>
+      <button @click="closeDispatchModalGuarded()" style="width:28px;height:28px;border:none;background:#F0EEE9;border-radius:5px;cursor:pointer;font-size:16px">×</button>
     </div>
     <!-- Body -->
     <div style="flex:1;overflow-y:auto;padding:18px 20px">
@@ -2823,13 +2823,13 @@
 <!-- ── 收款沖銷 申請/駁回原因 Modal ── -->
 <div x-show="writeoffModal.open" x-cloak
      style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:400;display:flex;align-items:center;justify-content:center;padding:20px"
-     @click.self="writeoffModal.open=false"
-     @keydown.escape.window="writeoffModal.open=false">
+     @click.self="closeWriteoffModalGuarded()"
+     @keydown.escape.window="closeWriteoffModalGuarded()">
   <div style="background:#fff;border-radius:12px;width:100%;max-width:420px;box-shadow:0 16px 48px rgba(0,0,0,.22)">
     <div style="display:flex;align-items:center;padding:14px 18px;border-bottom:1px solid var(--border-light);gap:10px">
       <span style="font-size:14px;font-weight:700;flex:1;font-family:var(--font-zh)"
             x-text="writeoffModal.mode==='reject' ? '駁回沖銷申請' : '申請款項沖銷（稅額歸零）'"></span>
-      <button @click="writeoffModal.open=false" style="width:28px;height:28px;border:none;background:#F0EEE9;border-radius:5px;cursor:pointer;font-size:16px">×</button>
+      <button @click="closeWriteoffModalGuarded()" style="width:28px;height:28px;border:none;background:#F0EEE9;border-radius:5px;cursor:pointer;font-size:16px">×</button>
     </div>
     <div style="padding:18px 20px">
       <div x-show="writeoffModal.mode==='request'" style="font-size:12px;color:var(--text-secondary);margin-bottom:10px;line-height:1.6">
@@ -2854,14 +2854,14 @@
 <!-- ── 出貨單新增／編輯 Modal ── -->
 <div x-show="showShippingModal" x-cloak
      style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:400;display:flex;align-items:center;justify-content:center;padding:20px"
-     @click.self="showShippingModal=false"
-     @keydown.escape.window="showShippingModal=false">
+     @click.self="closeShippingModalGuarded()"
+     @keydown.escape.window="closeShippingModalGuarded()">
   <div style="background:#fff;border-radius:12px;width:100%;max-width:680px;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 16px 48px rgba(0,0,0,.22)">
     <!-- Header -->
     <div style="display:flex;align-items:center;padding:14px 18px;border-bottom:1px solid var(--border-light);gap:10px">
       <span style="font-size:14px;font-weight:700;flex:1;font-family:var(--font-zh)"
             x-text="editShippingNoteNo ? '編輯出貨單' : '新增出貨單'"></span>
-      <button @click="showShippingModal=false" style="width:28px;height:28px;border:none;background:#F0EEE9;border-radius:5px;cursor:pointer;font-size:16px">×</button>
+      <button @click="closeShippingModalGuarded()" style="width:28px;height:28px;border:none;background:#F0EEE9;border-radius:5px;cursor:pointer;font-size:16px">×</button>
     </div>
     <!-- Body -->
     <div style="flex:1;overflow-y:auto;padding:18px 20px">
@@ -3101,13 +3101,13 @@
 <!-- ── 承攬商匯款申請 標記已匯款 Modal（2026-08-31 新增，原本用 prompt() 沒有地方填實際匯款日期）── -->
 <div x-show="payVoucherModal" x-cloak
      style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:410;display:flex;align-items:center;justify-content:center;padding:20px"
-     @click.self="payVoucherModal=false"
-     @keydown.escape.window="payVoucherModal=false">
+     @click.self="closePayVoucherModalGuarded()"
+     @keydown.escape.window="closePayVoucherModalGuarded()">
   <div style="background:#fff;border-radius:12px;width:100%;max-width:380px;box-shadow:0 16px 48px rgba(0,0,0,.22)">
     <div style="display:flex;align-items:center;padding:14px 18px;border-bottom:1px solid var(--border-light);gap:10px">
       <span style="font-size:14px;font-weight:700;flex:1;font-family:var(--font-zh)"
             x-text="'標記已匯款' + (payVoucherTarget ? '　' + payVoucherTarget.voucherNo : '')"></span>
-      <button @click="payVoucherModal=false" style="width:28px;height:28px;border:none;background:#F0EEE9;border-radius:5px;cursor:pointer;font-size:16px">×</button>
+      <button @click="closePayVoucherModalGuarded()" style="width:28px;height:28px;border:none;background:#F0EEE9;border-radius:5px;cursor:pointer;font-size:16px">×</button>
     </div>
     <div style="padding:18px 20px">
       <label style="font-size:11px;font-weight:500;color:var(--text-secondary);display:block;margin-bottom:4px">匯款日期</label>
@@ -3130,13 +3130,13 @@
 <!-- ── 承攬商匯款申請 產生申請 Modal（2026-08-31 新增，讓應付款日期在產生申請當下就能直接填/改）── -->
 <div x-show="createVoucherModal" x-cloak
      style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:410;display:flex;align-items:center;justify-content:center;padding:20px"
-     @click.self="createVoucherModal=false"
-     @keydown.escape.window="createVoucherModal=false">
+     @click.self="closeCreateVoucherModalGuarded()"
+     @keydown.escape.window="closeCreateVoucherModalGuarded()">
   <div style="background:#fff;border-radius:12px;width:100%;max-width:380px;box-shadow:0 16px 48px rgba(0,0,0,.22)">
     <div style="display:flex;align-items:center;padding:14px 18px;border-bottom:1px solid var(--border-light);gap:10px">
       <span style="font-size:14px;font-weight:700;flex:1;font-family:var(--font-zh)"
             x-text="'產生匯款申請' + (createVoucherDispatch ? '　' + _dispatchLabel(createVoucherDispatch) : '')"></span>
-      <button @click="createVoucherModal=false" style="width:28px;height:28px;border:none;background:#F0EEE9;border-radius:5px;cursor:pointer;font-size:16px">×</button>
+      <button @click="closeCreateVoucherModalGuarded()" style="width:28px;height:28px;border:none;background:#F0EEE9;border-radius:5px;cursor:pointer;font-size:16px">×</button>
     </div>
     <div style="padding:18px 20px">
       <label style="font-size:11px;font-weight:500;color:var(--text-secondary);display:block;margin-bottom:4px">應付款日期（選填）</label>
@@ -3159,12 +3159,12 @@
 <!-- ── 開票申請憑據 建立 Modal ── -->
 <div x-show="ivCreateModal" x-cloak
      style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:420;display:flex;align-items:center;justify-content:center;padding:20px"
-     @click.self="closeInvoiceVoucherModal()"
-     @keydown.escape.window="closeInvoiceVoucherModal()">
+     @click.self="closeInvoiceVoucherModalGuarded()"
+     @keydown.escape.window="closeInvoiceVoucherModalGuarded()">
   <div style="background:#fff;border-radius:12px;width:100%;max-width:640px;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 16px 48px rgba(0,0,0,.22)">
     <div style="display:flex;align-items:center;padding:14px 18px;border-bottom:1px solid var(--border-light);gap:10px">
       <span style="font-size:14px;font-weight:700;flex:1;font-family:var(--font-zh)">申請開立發票</span>
-      <button @click="closeInvoiceVoucherModal()" style="width:28px;height:28px;border:none;background:#F0EEE9;border-radius:5px;cursor:pointer;font-size:16px">×</button>
+      <button @click="closeInvoiceVoucherModalGuarded()" style="width:28px;height:28px;border:none;background:#F0EEE9;border-radius:5px;cursor:pointer;font-size:16px">×</button>
     </div>
     <div style="flex:1;overflow-y:auto;padding:16px 18px">
 

@@ -1978,6 +1978,32 @@ function app() {
       }
     },
 
+    // ── Modal 誤觸關閉保護（2026-08-31 新增）：backdrop 點外面／Esc／× 這三個
+    // 「容易誤觸」的關閉路徑，改成先跳原生 confirm() 警示，取消就留在原本
+    // 填寫到一半的頁面，不會直接歸零關閉；表單底部明確標示「取消」的按鈕
+    // 維持原樣不用二次確認（那本來就是使用者主動放棄的明確意圖）。
+    _confirmDiscardForm() {
+      return confirm('表單尚未儲存，確定要關閉嗎？目前輸入的內容將會遺失。')
+    },
+    closeDispatchModalGuarded() {
+      if (this._confirmDiscardForm()) this.showDispatchModal = false
+    },
+    closeWriteoffModalGuarded() {
+      if (this._confirmDiscardForm()) this.writeoffModal.open = false
+    },
+    closeShippingModalGuarded() {
+      if (this._confirmDiscardForm()) this.showShippingModal = false
+    },
+    closePayVoucherModalGuarded() {
+      if (this._confirmDiscardForm()) this.payVoucherModal = false
+    },
+    closeCreateVoucherModalGuarded() {
+      if (this._confirmDiscardForm()) this.createVoucherModal = false
+    },
+    closeInvoiceVoucherModalGuarded() {
+      if (this._confirmDiscardForm()) this.closeInvoiceVoucherModal()
+    },
+
     openNewDispatch() {
       this.editDispatchId = null
       this.dispatchForm = this._blankDispatchForm()
