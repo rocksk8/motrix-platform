@@ -183,3 +183,62 @@ def test_voucher_snapshot_and_approval_queue_carry_payable_date_and_bank_info(cl
     assert item["bankPassbookImage"] == "data:image/png;base64,ZmFrZQ=="
     assert len(item["invoiceFiles"]) == 1
     assert item["invoiceFiles"][0]["filename"] == "vendor_invoice.png"
+
+
+def test_create_voucher_can_set_payable_date_at_creation_time(client, make_user):
+    """2026-08-31：使用者要求產生匯款申請當下就能直接填/改應付款日期，不用
+    先跳去編輯派發紀錄——派發本身建立時沒填 payable_date，產生申請時補填，
+    要同時寫進申請快照，也要回寫到派發紀錄本身（維持兩邊一致）。"""
+    username, password = make_user(role="superadmin")
+    token = _login(client, username, password)
+
+    r = client.post(
+        "/api/contractor-dispatches", headers=_auth(token),
+        json={
+            "quote_no": "MQ-PAYDATE-005",
+            "personnel_json": [{"id": "p1", "name": "測試點工", "amount": 1000}],
+            "status": "completed",
+        },
+    )
+    assert r.status_code == 201, r.text
+    did = r.json()["id"]
+    assert client.get(f"/api/contractor-dispatches/{did}", headers=_auth(token)).json()["payableDate"] == ""
+
+    cv = client.post(
+        "/api/contractor-vouchers", headers=_auth(token),
+        json={"dispatch_id": did, "payable_date": "2026-10-05"},
+    )
+    assert cv.status_code == 201, cv.text
+    voucher_no = cv.json()["voucher_no"]
+
+    detail = client.get(f"/api/contractor-vouchers/{voucher_no}", headers=_auth(token))
+    assert detail.json()["payableDate"] == "2026-10-05"
+
+    # 回寫派發紀錄本身
+    d = client.get(f"/api/contractor-dispatches/{did}", headers=_auth(token))
+    assert d.json()["payableDate"] == "2026-10-05"
+
+
+def test_create_voucher_rejects_malformed_payable_date(client, make_user):
+    username, password = make_user(role="superadmin")
+    token = _login(client, username, password)
+    r = client.post(
+        "/api/contractor-dispatches", headers=_auth(token),
+        json={
+            "quote_no": "MQ-PAYDATE-006",
+            "personnel_json": [{"id": "p1", "name": "測試點工", "amount": 1000}],
+            "status": "completed",
+        },
+    )
+    did = r.json()["id"]
+
+    for bad in ("2026/10/05", "not-a-date", "2026-13-01"):
+        cv = client.post(
+            "/api/contractor-vouchers", headers=_auth(token),
+            json={"dispatch_id": did, "payable_date": bad},
+        )
+        assert cv.status_code == 400, f"payable_date={bad!r} should be rejected, got {cv.status_code}: {cv.text}"
+
+    # 格式錯誤時不該有任何申請被建立
+    r2 = client.get(f"/api/contractor-dispatches?quote_no=MQ-PAYDATE-006", headers=_auth(token))
+    assert r2.json()[0]["payableDate"] == "", "格式錯誤時不該把畸形值寫回派發紀錄"

@@ -3127,6 +3127,35 @@
   </div>
 </div>
 
+<!-- ── 承攬商匯款申請 產生申請 Modal（2026-08-31 新增，讓應付款日期在產生申請當下就能直接填/改）── -->
+<div x-show="createVoucherModal" x-cloak
+     style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:410;display:flex;align-items:center;justify-content:center;padding:20px"
+     @click.self="createVoucherModal=false"
+     @keydown.escape.window="createVoucherModal=false">
+  <div style="background:#fff;border-radius:12px;width:100%;max-width:380px;box-shadow:0 16px 48px rgba(0,0,0,.22)">
+    <div style="display:flex;align-items:center;padding:14px 18px;border-bottom:1px solid var(--border-light);gap:10px">
+      <span style="font-size:14px;font-weight:700;flex:1;font-family:var(--font-zh)"
+            x-text="'產生匯款申請' + (createVoucherDispatch ? '　' + _dispatchLabel(createVoucherDispatch) : '')"></span>
+      <button @click="createVoucherModal=false" style="width:28px;height:28px;border:none;background:#F0EEE9;border-radius:5px;cursor:pointer;font-size:16px">×</button>
+    </div>
+    <div style="padding:18px 20px">
+      <label style="font-size:11px;font-weight:500;color:var(--text-secondary);display:block;margin-bottom:4px">應付款日期（選填）</label>
+      <input type="date" x-model="createVoucherPayableDate"
+             style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box">
+      <div style="font-size:10px;color:var(--text-dim);font-family:var(--font-zh);margin-top:6px">
+        會一併寫回派發紀錄，之後在派發清單也看得到；不填就沿用派發原本設定的應付款日期（若有）。
+      </div>
+    </div>
+    <div style="padding:12px 20px;border-top:1px solid var(--border-light);display:flex;justify-content:flex-end;gap:10px">
+      <button @click="createVoucherModal=false" :disabled="createVoucherSaving"
+              style="padding:7px 16px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:var(--font-zh);background:#fff;cursor:pointer">取消</button>
+      <button @click="confirmCreateContractorVoucher()" :disabled="createVoucherSaving"
+              style="padding:7px 16px;border:none;border-radius:7px;font-size:13px;font-weight:600;font-family:var(--font-zh);background:#059669;color:#fff;cursor:pointer"
+              x-text="createVoucherSaving ? '處理中…' : '確認產生申請'"></button>
+    </div>
+  </div>
+</div>
+
 <!-- ── 開票申請憑據 建立 Modal ── -->
 <div x-show="ivCreateModal" x-cloak
      style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:420;display:flex;align-items:center;justify-content:center;padding:20px"

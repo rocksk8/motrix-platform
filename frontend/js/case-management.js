@@ -138,6 +138,12 @@ function app() {
     payVoucherDate: '',
     payVoucherNote: '',
     payVoucherSaving: false,
+    // ── 產生匯款申請 Modal（2026-08-31 新增，讓應付款日期在產生申請當下就能
+    // 直接填/改，不用先跳去編輯派發紀錄）
+    createVoucherModal: false,
+    createVoucherDispatch: null,
+    createVoucherPayableDate: '',
+    createVoucherSaving: false,
 
     // ── 開票申請憑據 ──
     invoiceVouchers: [],
@@ -2494,17 +2500,29 @@ function app() {
       return this.contractorVouchers.find(v => v.dispatchId === d.id) || null
     },
 
-    async createContractorVoucher(d) {
-      if (!confirm(`確定為「${this._dispatchLabel(d)}」產生匯款申請？`)) return
+    createContractorVoucher(d) {
+      this.createVoucherDispatch = d
+      this.createVoucherPayableDate = d.payableDate || ''
+      this.createVoucherModal = true
+    },
+
+    async confirmCreateContractorVoucher() {
+      const d = this.createVoucherDispatch
+      if (!d) return
+      this.createVoucherSaving = true
       try {
         const r = await fetch('/api/contractor-vouchers', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
-          body: JSON.stringify({ dispatch_id: d.id })
+          body: JSON.stringify({ dispatch_id: d.id, payable_date: this.createVoucherPayableDate || null })
         })
-        if (!r.ok) { alert((await r.json()).detail || '建立失敗'); return }
+        if (!r.ok) { alert((await r.json()).detail || '建立失敗'); this.createVoucherSaving = false; return }
+        this.createVoucherModal = false
+        this.createVoucherDispatch = null
+        await this.loadDispatches(this.selected?.quote_no)
         await this.loadContractorVouchers(this.selected?.quote_no)
       } catch (e) { alert('網路錯誤：' + e.message) }
+      this.createVoucherSaving = false
     },
 
     async deleteContractorVoucher(v) {

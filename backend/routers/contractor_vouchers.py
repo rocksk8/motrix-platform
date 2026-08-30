@@ -38,6 +38,7 @@ router = APIRouter()
 
 class VoucherCreateIn(BaseModel):
     dispatch_id: int
+    payable_date: Optional[str] = None
 
 
 class ApprovalFlowApprover(BaseModel):
@@ -167,6 +168,21 @@ def create_contractor_voucher(body: VoucherCreateIn, authorization: str = Header
         conn.close()
         raise HTTPException(409, f"此派發已產生匯款申請（{existing['voucher_no']}）")
 
+    # 2026-08-31：使用者要求產生匯款申請當下就能直接填/改應付款日期，不用先
+    # 跳去編輯派發紀錄。有帶就順便寫回派發本身（維持派發跟申請快照的日期
+    # 一致），沒帶就沿用派發既有的 payable_date（可能是空的，也沒關係）。
+    payable_date = dispatch["payable_date"] if "payable_date" in dispatch.keys() else ""
+    if body.payable_date:
+        try:
+            date.fromisoformat(body.payable_date)
+        except ValueError:
+            conn.close()
+            raise HTTPException(400, f"應付款日期格式錯誤（{body.payable_date}），需為 YYYY-MM-DD")
+        payable_date = body.payable_date
+        conn.execute(
+            "UPDATE contractor_dispatches SET payable_date=? WHERE id=?", (payable_date, body.dispatch_id)
+        )
+
     keys = dispatch.keys()
     items = json.loads(dispatch["items_json"] or "[]")
     personnel = json.loads(dispatch["personnel_json"] or "[]") if "personnel_json" in keys else []
@@ -215,7 +231,7 @@ def create_contractor_voucher(body: VoucherCreateIn, authorization: str = Header
         "bankAccountNumber": vendor_data.get("bankAccountNumber", ""),
         "bankPassbookImage": vendor_data.get("bankPassbookImage", ""),
         "invoiceNo":         (dispatch["invoice_no"] if "invoice_no" in keys else "") or "",
-        "payableDate":       (dispatch["payable_date"] if "payable_date" in keys else "") or "",
+        "payableDate":       payable_date or "",
         "invoiceFiles":      json.loads(dispatch["invoice_files_json"] or "[]") if "invoice_files_json" in keys else [],
         "dispatchDate":      dispatch["dispatch_date"] or "",
         "scope":             dispatch["scope"] or "",
