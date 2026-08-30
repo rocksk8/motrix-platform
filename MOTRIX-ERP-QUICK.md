@@ -995,6 +995,15 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
 
+### 2026-08-31g — 出納整合進營運報表模組（頁籤合併）＋案件管理數字連動稽核
+
+- **背景**：使用者實測前兩輪（2026-08-31e/f）交付的獨立出納模組後要求「出納整合進去營運報表模組內，營運報表確認整個代碼跟順序、案件管理各項數字連動正常」，用 AskUserQuestion 確認為併成 `reports.html` 的一個頁籤（而非只是 sidebar 分組相鄰）。
+- **頁籤合併**：`reports.html` 新增第 13 個頁籤「出納」（排在資金水位之後），內含原出納模組的 4 個子頁籤（待付款/待收款/執行歷史/銀行對帳單比對）。獨立的 `cashier.html`／`cashier.js` 退役：`cashier.html` 改為導向 `reports.html?tab=cashier` 的 stub（保留檔案不刪除，舊書籤仍可用）；`cashier.js` 內容完全併入 `reports.js` 後整支刪除（`fmt`/`_token`/`_role` 三個同款 helper 直接重用，唯一真實命名衝突 `exporting` 改名 `cashierExporting`）；`sidebar.js` 移除獨立「出納」nav 區塊，只保留「營運報表」一個入口。
+- **准入權限重新分層**：`reports.js` 新增 `isAdminPlus()`/`hasCashierAccess()`/`canExecuteCashier()`，admin+ 維持原本 12 個財務報表頁籤全開放；純 `cashier`/`finance` 模組的非管理職使用者現在也能開 `reports.html`，但只看得到「出納」頁籤（其餘 11 個頁籤、期間選擇列、KPI 摘要整批用 `template x-if` 包住不渲染），登入直接落在出納頁籤，不會誤觸「點擊載入報表」的 admin-only 提示；新增 `?tab=cashier` 深連結支援。
+- **數字連動稽核**：核對 `payment_item_amounts()` 含稅額沖銷換算在 `cashier.py`／`dashboard.py`／`reports.py` 全部既有呼叫點與 `case-management.js` 前端算法一致；找到並修復一個真實 bug——`dashboard.py::dashboard_monthly()`（首頁銷售收入趨勢/實際收款月度圖表）用裸的 `deal_tag` 欄位查詢，未比照同檔案其餘 5 處用寬鬆 `COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '')` 判斷，只寫在 `data_json`、DB 欄位未回填的舊格式報價單會被這張圖表靜默漏算（但出納/帳齡分析/資金水位都算得到）。
+- **測試/驗證**：新增 `test_dashboard_monthly_dealtag_fallback_2026_08_31.py`（1 題）。`python -m pytest tests/` 294/294 全過。已用兩個臨時測試帳號（admin+ 與純 `cashier` 模組非管理職）實機瀏覽器驗證兩種身分的頁面行為與 console 無錯誤，`cashier.html` 舊網址正確導向並落在出納頁籤。
+- **尚未套用至正式機**：需依 §15 流程。
+
 ### 2026-08-28 — 簽核流程套用範圍：五種文件類型可各自選統一流程或獨立設定
 
 - **背景**：使用者釐清「統一簽核設定」的現況後，要求做一個選單，可複數選擇哪些文件類型走統一流程送簽、哪些各自獨立設定——2026-08-24 統一之後，報價單／出貨單／發票開立簽核單／請款單四者共用 `unified_approval_flow`、承攬商匯款申請維持自己的 `contractor_voucher_approval_flow` 是寫死在各 router 程式碼裡的分組，這次改成可設定。決定兩個關鍵行為前先用 AskUserQuestion 跟使用者確認：①切換到獨立設定時初始值＝複製目前統一流程內容（不是從空白開始）；②獨立設定的編輯區塊同一頁展開（不是跳轉到各自獨立頁面）。
