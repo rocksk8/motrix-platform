@@ -2697,41 +2697,33 @@ def _prev_month_str(ref: date = None) -> str:
 
 def _send_monthly_report_for(period_str: str) -> None:
     """Generate Excel + PDF for period_str ('YYYY-MM') and email to superadmins.
-    The emailed report is scoped to ONLY the target month's data (not cumulative)."""
+
+    收款相關 KPI（總應收/已收款/手續費合計/實收淨額）反映「本月實際收款」——
+    依款項的 receivedAt 是否落在當月判斷，跟案件本身是何時報價/成案無關。
+
+    2026-09-01 修復：舊版改用 casesPeriod（quote_date 落在當月的案件）過濾
+    outstanding/allItems 後才重新計算這幾個 KPI，若當月剛好沒有新報價/成案
+    的案件（casesPeriod 空），會把這幾個 KPI 全部歸零——即使當月實際上真的
+    收到舊案件的款項也一樣被清空（使用者以小林機械案為例回報 8 月月報「總
+    應收/已收/未收/實收/合約總案」全是零，就是這個成因）。改直接沿用
+    _collect() 已經依 receivedAt 正確算好的 summary.periodReceived/periodFee/
+    periodNet，不用案件簽約時間重新篩一次。未收款清單／合約總案數等「當前
+    餘額」類指標則維持不篩選（跟互動版 reports.html 同一份邏輯一致——那些
+    本來就是累計快照，不是本期流量，不該隨月份歸零）。"""
     from helpers.email_notify import notify_monthly_report
     try:
         label, d0, d1 = _parse_period(period_str)
         data   = _augment_with_targets(_collect(d0, d1), d0)
         gen_at = datetime.now().strftime("%Y-%m-%d %H:%M")
 
-        # Scope to this month only: use casesPeriod as the case list,
-        # and filter outstanding / allItems to those same cases.
-        period_case_nos = {c["quoteNo"] for c in data["casesPeriod"]}
         mail_data = dict(data)
-        mail_data["casesAll"]    = data["casesPeriod"]
-        mail_data["outstanding"] = [i for i in data["outstanding"]
-                                    if i["quoteNo"] in period_case_nos]
-        mail_data["allItems"]    = [i for i in data["allItems"]
-                                    if i["quoteNo"] in period_case_nos]
-        # Recompute period-scoped summary totals
-        p_items  = mail_data["allItems"]
-        p_recv   = [i for i in p_items if i["received"]]
-        p_tr     = sum(i["amount"] for i in p_items)
-        p_tc     = sum(i["amount"] for i in p_recv)
-        p_fee    = sum(i["feeAmount"] or 0 for i in p_recv)
-        p_act    = sum((i["actualAmount"] if i["actualAmount"] is not None else i["amount"])
-                       for i in p_recv)
-        mail_data["summary"] = dict(data["summary"])
+        mail_data["casesAll"] = data["casesPeriod"]
+        mail_data["summary"]  = dict(data["summary"])
         mail_data["summary"].update({
-            "totalReceivable":  p_tr,
-            "totalCollected":   p_tc,
-            "totalOutstanding": p_tr - p_tc,
-            "totalFee":         p_fee,
-            "netCollected":     p_act - p_fee,
-            "collectionRate":   round(p_tc / p_tr * 100, 1) if p_tr > 0 else 0,
-            "totalCases":       len(data["casesPeriod"]),
-            "activeCases":      sum(1 for c in data["casesPeriod"] if c["dealTag"] == "已成案"),
-            "closedCases":      sum(1 for c in data["casesPeriod"] if c["dealTag"] == "已結案"),
+            "totalReceivable": data["summary"]["periodReceived"],
+            "totalCollected":  data["summary"]["periodReceived"],
+            "totalFee":        data["summary"]["periodFee"],
+            "netCollected":    data["summary"]["periodNet"],
         })
         mail_data["salesPerf"]   = [
             s for s in data["salesPerf"]
