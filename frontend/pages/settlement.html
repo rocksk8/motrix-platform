@@ -1092,6 +1092,17 @@ function settlementPage() {
     async uploadSettlementExtraFiles(idx, evt) {
       const files = evt?.target?.files
       if (!files || files.length === 0) return
+      try {
+        // 剛用「新增欄位」加的額外支出項目在存檔前只存在瀏覽器本機，後端還
+        // 沒有這一筆（見 _load_settlement_extra_item()），此時直接用 idx 上傳
+        // 會被 400「額外支出項目索引超出範圍」擋下。先確保目前的 extraItems
+        // 已同步存檔，讓後端的陣列長度／順序跟畫面一致，idx 才會對得上。
+        await this._putSettlement()
+      } catch (e) {
+        this.toast('儲存失敗，無法上傳附件：' + e.message)
+        evt.target.value = ''
+        return
+      }
       const fd = new FormData()
       for (const f of files) fd.append('files', f)
       try {
@@ -1113,6 +1124,14 @@ function settlementPage() {
 
     async deleteSettlementExtraFile(idx, fileId) {
       if (!confirm('確定刪除此附件？')) return
+      try {
+        // 同上傳一樣：若畫面上有其他尚未存檔的欄位新增/刪除異動，先同步存檔
+        // 避免後端陣列順序跟畫面 idx 對不上。
+        await this._putSettlement()
+      } catch (e) {
+        this.toast('儲存失敗，無法刪除附件：' + e.message)
+        return
+      }
       try {
         const r = await fetch(`${API}/quotations/${this.quoteNo}/settlement/extra/${idx}/files/${fileId}`, {
           method:  'DELETE',
@@ -1162,17 +1181,22 @@ function settlementPage() {
       }
     },
 
+    async _putSettlement() {
+      this.calcSummary()
+      const res = await fetch(`${API}/quotations/${this.quoteNo}/settlement`, {
+        method:  'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+        body:    JSON.stringify({ settlement: this.buildPayload() }),
+      })
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || '儲存失敗')
+      return res
+    },
+
     async saveDraft() {
       this.saving = true
       try {
-        this.calcSummary()
-        const res = await fetch(`${API}/quotations/${this.quoteNo}/settlement`, {
-          method:  'PUT',
-          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
-          body:    JSON.stringify({ settlement: this.buildPayload() }),
-        })
-        if (res.ok) this.toast('精算草稿已儲存')
-        else        this.toast('儲存失敗')
+        await this._putSettlement()
+        this.toast('精算草稿已儲存')
       } catch(e) { this.toast('儲存失敗：' + e.message) }
       finally { this.saving = false }
     },
