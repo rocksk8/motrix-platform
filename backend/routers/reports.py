@@ -929,7 +929,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
     income_hdrs = ["案件號", "客戶", "專案名稱", "業務員", "款項類型",
                    "應收金額", "收款日期", "實收金額", "手續費", "實收淨額", "發票號碼"]
     income_cols = [13, 18, 18, 10, 9, 12, 11, 12, 10, 12, 12]
-    expense_hdrs = ["日期", "類別", "關聯案件", "說明", "金額"]
+    expense_hdrs = ["日期", "類別", "關聯案件", "說明", "金額", "發票/收據附件"]
 
     def write_income_table(ws, start_row, items, banner):
         ws.merge_cells(f"A{start_row}:{get_column_letter(len(income_hdrs))}{start_row}")
@@ -977,15 +977,16 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
                  fill=fill("374151"), border=BD, aligns=[al("center")], height=20)
         r += 1
         for it in items:
+            file_names = "、".join(f.get("filename", "") for f in (it.get("files") or []))
             _set_row(ws, r, [it.get("date", ""), cat_label.get(it.get("cat"), it.get("cat", "")),
-                              it.get("quoteNo", ""), it.get("desc", ""), it.get("amount", 0)],
+                              it.get("quoteNo", ""), it.get("desc", ""), it.get("amount", 0), file_names],
                      font=mk(size=9), fill=fill(C_LYELLOW), border=BD,
-                     aligns=[al("center"), al("center"), al("left"), al("left"), al("right")], height=18)
+                     aligns=[al("center"), al("center"), al("left"), al("left"), al("right"), al("left")], height=18)
             ws.cell(row=r, column=5).number_format = '#,##0'
             r += 1
-        _set_row(ws, r, ["合計（" + str(len(items)) + " 筆）", "", "", "", sum(i.get("amount", 0) for i in items)],
+        _set_row(ws, r, ["合計（" + str(len(items)) + " 筆）", "", "", "", sum(i.get("amount", 0) for i in items), ""],
                  font=mk(bold=True, size=9, color=C_WHITE), fill=fill(C_DARK), border=BD,
-                 aligns=[al("left"), al("left"), al("left"), al("left"), al("right")], height=20)
+                 aligns=[al("left"), al("left"), al("left"), al("left"), al("right"), al("left")], height=20)
         ws.cell(row=r, column=5).number_format = '#,##0'
         return r + 2
 
@@ -1660,7 +1661,8 @@ def _build_report_html(data: dict, period_label: str, gen_at: str) -> str:
         return "".join(
             f"<tr><td class='c'>{esc(it.get('date',''))}</td><td>{esc(exp_cat_label.get(it.get('cat'), it.get('cat','')))}</td>"
             f"<td>{esc(it.get('quoteNo','') or '—')}</td><td>{esc(it.get('desc',''))}</td>"
-            f"<td class='r'>NT$ {it.get('amount',0):,}</td></tr>"
+            f"<td class='r'>NT$ {it.get('amount',0):,}</td>"
+            f"<td>{esc('、'.join(f.get('filename','') for f in (it.get('files') or []))) or '—'}</td></tr>"
             for it in items
         )
 
@@ -1973,7 +1975,7 @@ tr.in-period{{background:#EFF6FF}}
 <h3 style="margin:8px 0 8px;font-size:10pt;color:#15803D;border-bottom:1px solid #BBF7D0;padding-bottom:4px">當月收入明細</h3>
 {'<table><thead>' + tbl_hdr("案件號","客戶","專案","業務員","款項","應收金額","收款日","實收金額","手續費","實收淨額","發票號碼") + '</thead><tbody>' + income_rows_html(month_income_items) + income_sum_row(month_income_items) + '</tbody></table>' if month_income_items else '<p style="color:#6B7280;font-size:9pt;padding:8px 0;font-style:italic">當月尚無收款紀錄。</p>'}
 <h3 style="margin:16px 0 8px;font-size:10pt;color:#7C3AED;border-bottom:1px solid #DDD6FE;padding-bottom:4px">當月支出明細</h3>
-{'<table><thead>' + tbl_hdr("日期","類別","關聯案件","說明","金額") + '</thead><tbody>' + expense_rows_html(month_expense_items) + '</tbody></table>' if month_expense_items else '<p style="color:#6B7280;font-size:9pt;padding:8px 0;font-style:italic">當月尚無支出明細資料。</p>'}
+{'<table><thead>' + tbl_hdr("日期","類別","關聯案件","說明","金額","發票/收據附件") + '</thead><tbody>' + expense_rows_html(month_expense_items) + '</tbody></table>' if month_expense_items else '<p style="color:#6B7280;font-size:9pt;padding:8px 0;font-style:italic">當月尚無支出明細資料。</p>'}
 <table style="margin-top:10px"><tbody>
 <tr class="sum-row">
   <td>當月收入合計</td><td class="r">NT$ {data.get("monthIncomeTotal",0):,}</td>
@@ -2001,7 +2003,7 @@ tr.in-period{{background:#EFF6FF}}
 <h3 style="margin:16px 0 8px;font-size:10pt;color:#15803D;border-bottom:1px solid #BBF7D0;padding-bottom:4px">今年度收入明細（共 {len(year_income_items)} 筆）</h3>
 {'<table><thead>' + tbl_hdr("案件號","客戶","專案","業務員","款項","應收金額","收款日","實收金額","手續費","實收淨額","發票號碼") + '</thead><tbody>' + income_rows_html(year_income_items) + income_sum_row(year_income_items) + '</tbody></table>' if year_income_items else '<p style="color:#6B7280;font-size:9pt;padding:8px 0;font-style:italic">此年度尚無收款紀錄。</p>'}
 <h3 style="margin:16px 0 8px;font-size:10pt;color:#7C3AED;border-bottom:1px solid #DDD6FE;padding-bottom:4px">今年度支出明細（共 {len(year_expense_items)} 筆）</h3>
-{'<table><thead>' + tbl_hdr("日期","類別","關聯案件","說明","金額") + '</thead><tbody>' + expense_rows_html(year_expense_items) + '</tbody></table>' if year_expense_items else '<p style="color:#6B7280;font-size:9pt;padding:8px 0;font-style:italic">此年度尚無支出明細資料。</p>'}
+{'<table><thead>' + tbl_hdr("日期","類別","關聯案件","說明","金額","發票/收據附件") + '</thead><tbody>' + expense_rows_html(year_expense_items) + '</tbody></table>' if year_expense_items else '<p style="color:#6B7280;font-size:9pt;padding:8px 0;font-style:italic">此年度尚無支出明細資料。</p>'}
 <table style="margin-top:10px"><tbody>
 <tr class="sum-row">
   <td>今年度收入合計</td><td class="r">NT$ {data.get("yearIncomeTotal",0):,}</td>
@@ -3150,9 +3152,10 @@ def _collect_expenses(year: int, department_id: Optional[int] = None) -> dict:
             cat = it.get("category") or "其他"
             desc = it.get("name") or it.get("desc") or cat
             details["other"].append({
-                "date": (finalized_at or "")[:10], "quoteNo": r["quote_no"] or "",
+                "date": (it.get("expenseDate") or finalized_at or "")[:10], "quoteNo": r["quote_no"] or "",
                 "desc": f"{r['customer_name'] or ''}｜{cat}｜{desc}".strip("｜"),
                 "amount": round(cost),
+                "files": it.get("files") or [],
             })
 
     monthly_items = []

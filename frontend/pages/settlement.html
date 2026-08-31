@@ -479,6 +479,8 @@
                     <th style="width:110px">單位成本 (NT$)</th>
                     <th style="width:110px">小計 (NT$)</th>
                     <th style="min-width:100px">備註</th>
+                    <th style="width:110px">支出日期</th>
+                    <th style="min-width:160px">發票/收據</th>
                     <th style="width:28px"></th>
                   </tr>
                 </thead>
@@ -531,6 +533,29 @@
                                placeholder="備註…" @input="calcSummary()">
                       </td>
                       <td>
+                        <input class="stl-input" type="date" x-model="ex.expenseDate"
+                               :disabled="settlement.status === 'finalized'"
+                               style="width:120px">
+                      </td>
+                      <td>
+                        <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap">
+                          <template x-for="f in (ex.files||[])" :key="f.id">
+                            <span style="display:flex;align-items:center;gap:4px;font-size:11px;background:#F3F4F6;border-radius:4px;padding:2px 6px">
+                              <a href="javascript:void(0)" @click="previewAttachmentFile(f)" style="color:var(--accent);text-decoration:underline" x-text="f.filename"></a>
+                              <template x-if="settlement.status !== 'finalized'">
+                                <button @click="deleteSettlementExtraFile(idx, f.id)" style="border:none;background:none;color:var(--danger,#DC2626);cursor:pointer;font-size:11px;padding:0 2px">×</button>
+                              </template>
+                            </span>
+                          </template>
+                          <template x-if="settlement.status !== 'finalized'">
+                            <label style="padding:2px 8px;font-size:10px;border:1px solid var(--border);background:#fff;color:var(--text-secondary);border-radius:4px;cursor:pointer;white-space:nowrap">
+                              + 上傳
+                              <input type="file" multiple accept=".jpg,.jpeg,.png,.pdf" style="display:none" @change="uploadSettlementExtraFiles(idx, $event)">
+                            </label>
+                          </template>
+                        </div>
+                      </td>
+                      <td>
                         <template x-if="settlement.status !== 'finalized'">
                           <button style="background:none;border:none;cursor:pointer;color:#D1D5DB;padding:4px;line-height:0;border-radius:4px"
                                   @click="removeExtra(idx)"
@@ -548,7 +573,7 @@
                   <tr style="background:#FEF9C3;font-weight:600">
                     <td colspan="6" style="border-top:1.5px solid #FDE68A;padding:10px;text-align:right;font-size:11px;color:#92400E">額外支出小計</td>
                     <td style="border-top:1.5px solid #FDE68A;text-align:right;font-family:LINE Seed TW_OTF, sans-serif;color:#92400E" x-text="'NT$ ' + fmt(summary.extraTotal)"></td>
-                    <td colspan="2" style="border-top:1.5px solid #FDE68A"></td>
+                    <td colspan="4" style="border-top:1.5px solid #FDE68A"></td>
                   </tr>
                 </tfoot>
               </table>
@@ -1054,12 +1079,60 @@ function settlementPage() {
         unitCost:    0,
         totalCost:   0,
         note:        '',
+        expenseDate: '',
+        files:       [],
       })
     },
 
     removeExtra(idx) {
       this.settlement.extraItems.splice(idx, 1)
       this.calcSummary()
+    },
+
+    async uploadSettlementExtraFiles(idx, evt) {
+      const files = evt?.target?.files
+      if (!files || files.length === 0) return
+      const fd = new FormData()
+      for (const f of files) fd.append('files', f)
+      try {
+        const r = await fetch(`${API}/quotations/${this.quoteNo}/settlement/extra/${idx}/files`, {
+          method:  'POST',
+          headers: { Authorization: 'Bearer ' + this.session.token },
+          body:    fd,
+        })
+        if (!r.ok) { this.toast((await r.json().catch(() => ({}))).detail || '上傳失敗'); return }
+        const body = await r.json()
+        const item = this.settlement.extraItems[idx]
+        if (item) {
+          if (!item.files) item.files = []
+          item.files.push(...body.files)
+        }
+      } catch (e) { this.toast('上傳失敗：' + e.message) }
+      evt.target.value = ''
+    },
+
+    async deleteSettlementExtraFile(idx, fileId) {
+      if (!confirm('確定刪除此附件？')) return
+      try {
+        const r = await fetch(`${API}/quotations/${this.quoteNo}/settlement/extra/${idx}/files/${fileId}`, {
+          method:  'DELETE',
+          headers: { Authorization: 'Bearer ' + this.session.token },
+        })
+        if (!r.ok) { this.toast((await r.json().catch(() => ({}))).detail || '刪除失敗'); return }
+        const item = this.settlement.extraItems[idx]
+        if (item && item.files) item.files = item.files.filter(f => f.id !== fileId)
+      } catch (e) { this.toast('刪除失敗：' + e.message) }
+    },
+
+    async previewAttachmentFile(file) {
+      try {
+        const r = await fetch(`${API}/photo-token?path=${encodeURIComponent(file.path)}`, {
+          headers: { Authorization: 'Bearer ' + this.session.token },
+        })
+        if (!r.ok) { this.toast('取得檔案連結失敗'); return }
+        const { token } = await r.json()
+        window.open(`${API}/uploads/${file.path}?pt=${encodeURIComponent(token)}`, '_blank')
+      } catch (e) { this.toast('開啟檔案失敗：' + e.message) }
     },
 
     buildPayload() {

@@ -2732,6 +2732,62 @@ def update_settlement(quote_no: str, body: SettlementIn, authorization: str = He
     return {"ok": True, "updated_at": now}
 
 
+def _load_settlement_extra_item(conn, no, idx):
+    """比照 _load_payment_item()，定位精算頁「額外支出」清單（data.settlement.
+    extraItems[]）裡的一筆，供發票/收據附件上傳/刪除使用。"""
+    row = conn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (no,)).fetchone()
+    if not row:
+        raise HTTPException(404, "報價單不存在")
+    data  = json.loads(row["data_json"] or "{}")
+    stl   = data.setdefault("settlement", {})
+    items = stl.setdefault("extraItems", [])
+    if idx < 0 or idx >= len(items):
+        raise HTTPException(400, "額外支出項目索引超出範圍")
+    if stl.get("status") == "finalized":
+        raise HTTPException(403, "精算已完結，僅超級管理員可重新修改")
+    return data, items
+
+
+@router.post("/api/quotations/{no}/settlement/extra/{idx}/files", status_code=201)
+async def upload_settlement_extra_files(no: str, idx: int, files: List[UploadFile] = File(...),
+                                        authorization: str = Header(None)):
+    """精算「額外支出」單筆項目的發票/收據附件上傳（多檔，任何登入使用者皆可
+    傳；精算已完結時一律擋下，與 update_settlement() 的完結後鎖定規則一致，
+    但這裡不比照該端點放寬 superadmin 例外——附件是佐證用途，完結後若真的
+    要補件，走 reopenDraft() 重新開啟精算即可）。"""
+    user = _require_user(authorization)
+    conn = get_db()
+    try:
+        data, items = _load_settlement_extra_item(conn, no, idx)
+        new_files = await save_document_files("quotation_settlement_extra", f"{no}_{idx}", files,
+                                              user.get("display_name") or user["username"])
+        items[idx].setdefault("files", [])
+        items[idx]["files"].extend(new_files)
+        saved_at = save_quotation_json(conn, no, data)
+        conn.commit()
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "settlement.upload_extra_files", "quotation", no,
+           f"{no}（{len(new_files)} 個檔案）")
+    return {"ok": True, "added": len(new_files), "files": new_files, "updated_at": saved_at}
+
+
+@router.delete("/api/quotations/{no}/settlement/extra/{idx}/files/{file_id}")
+def delete_settlement_extra_file(no: str, idx: int, file_id: str, authorization: str = Header(None)):
+    _require_user(authorization)
+    conn = get_db()
+    try:
+        data, items = _load_settlement_extra_item(conn, no, idx)
+        existing = items[idx].get("files") or []
+        items[idx]["files"] = delete_document_file("quotation_settlement_extra", f"{no}_{idx}", existing, file_id)
+        saved_at = save_quotation_json(conn, no, data)
+        conn.commit()
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "settlement.delete_extra_file", "quotation", no, no)
+    return {"ok": True, "updated_at": saved_at}
+
+
 # ── Approval queue ────────────────────────────────────────────────────────────
 
 def _queue_tier_fields(approval_json_raw: str) -> dict:
