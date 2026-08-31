@@ -701,6 +701,43 @@ def set_pdf_base_path_setting(body: dict = Body(...), authorization: str = Heade
     return {"ok": True}
 
 
+# ── Backup retention settings ─────────────────────────────────────────────────
+# 2026-09-01：本機/雲端備份保留天數原本寫死在 archive.py（見該檔 _BACKUP_RETENTION_
+# DEFAULT 註解），使用者要求可調整避免雲端空間被逐年累積的每日/週備份塞爆，改成
+# 存進 system_settings.backup_retention，這裡提供 API 讀寫（無對應前端頁面，
+# 比照 edge-path／pdf-base-path 這類低頻技術設定的既有慣例，透過 API 直接調整）。
+
+class BackupRetentionBody(BaseModel):
+    local_db_keep_days:    int
+    cloud_daily_keep_days: int
+    cloud_weekly_keep_days: int
+    audit_log_keep_days:   int
+
+
+@router.get("/api/settings/backup-retention")
+def get_backup_retention_setting(authorization: str = Header(None)):
+    _require_user(authorization, require_superadmin=True)
+    from archive import _backup_retention
+    return _backup_retention()
+
+
+@router.patch("/api/settings/backup-retention")
+def set_backup_retention_setting(body: BackupRetentionBody, authorization: str = Header(None)):
+    actor = _require_user(authorization, require_superadmin=True)
+    value = body.model_dump()
+    for label, days in value.items():
+        if days < 1 or days > 3650:
+            raise HTTPException(400, f"{label} 需介於 1～3650 天之間")
+    _set_setting("backup_retention", value)
+    _audit(_tok(authorization), "settings.backup_retention.update", "settings", "backup_retention",
+           f"本機DB快照{value['local_db_keep_days']}天／雲端每日{value['cloud_daily_keep_days']}天／"
+           f"雲端週{value['cloud_weekly_keep_days']}天／稽核紀錄{value['audit_log_keep_days']}天")
+    notify_module_activity("系統設定", "變更備份保留天數", actor.get("display_name") or actor["username"],
+                            f"每日{value['cloud_daily_keep_days']}天／週{value['cloud_weekly_keep_days']}天",
+                            "notification-settings.html")
+    return {"ok": True}
+
+
 # ── Email notification settings ───────────────────────────────────────────────
 
 _EMAIL_DEFAULTS = {

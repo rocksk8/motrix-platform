@@ -10,9 +10,27 @@ import logging
 from datetime import datetime, date, timedelta
 
 from db import get_db, DB_PATH
-from helpers import _cleanup_sessions
+from helpers import _cleanup_sessions, _get_setting
 
 logger = logging.getLogger(__name__)
+
+# 2026-09-01：保留天數原本寫死在下面各個 _prune_*() 呼叫點（本機30天／雲端每日365天／
+# 雲端週730天／稽核紀錄730天），使用者要求「備份次數跟週期可調整避免檔案過大」，改為
+# 存進 system_settings.backup_retention（見 routers/system.py 的
+# GET/PATCH /api/settings/backup-retention），不用改程式碼重新部署就能調整。
+# cloud_daily_keep_days 預設值同日改為 1825 天（5年）——使用者確認目前雲端每日備份
+# 僅 1.45GB，5年容量無虞，比原本 365 天更符合需求。
+_BACKUP_RETENTION_DEFAULT = {
+    "local_db_keep_days":    30,
+    "cloud_daily_keep_days": 1825,
+    "cloud_weekly_keep_days": 730,
+    "audit_log_keep_days":   730,
+}
+
+
+def _backup_retention() -> dict:
+    """可調整的備份保留天數設定，供 _daily_backup()/_snapshot_sqlite() 讀取。"""
+    return {**_BACKUP_RETENTION_DEFAULT, **(_get_setting("backup_retention", {}) or {})}
 
 # Google Drive for Desktop's drive letter is NOT stable across reboots/relogins
 # (observed switching G:<->H: repeatedly, see 2026-08-24 note in _ensure_archive_dirs).
@@ -278,8 +296,8 @@ def _snapshot_sqlite(also_to_cloud: bool = True):
                 shutil.copy2(dest, cloud_dest)
             except Exception as e:
                 _write_backup_alert(f"SQLite 快照複製到雲端失敗: {e}", level="ERROR")
-        # Prune local snapshots older than 30 days
-        _prune_local_db_backups(keep_days=30)
+        # Prune local snapshots per configured retention (see _backup_retention())
+        _prune_local_db_backups(keep_days=_backup_retention()["local_db_keep_days"])
         return dest
     except Exception as e:
         logger.exception("_snapshot_sqlite failed")
@@ -539,8 +557,10 @@ def _daily_backup():
         logger.info("Daily backup completed: %s", day_dir)
         _system_audit("backup.daily_ok", today_label, summary)
         _clear_backup_alert_if_healthy()
-        _prune_audit_log(keep_days=730)
-        _prune_cloud_backups(daily_keep_days=365, weekly_keep_days=730)
+        retention = _backup_retention()
+        _prune_audit_log(keep_days=retention["audit_log_keep_days"])
+        _prune_cloud_backups(daily_keep_days=retention["cloud_daily_keep_days"],
+                              weekly_keep_days=retention["cloud_weekly_keep_days"])
     except Exception as e:
         logger.exception("_daily_backup failed")
         _write_backup_alert(f"每日雲端 JSON 備份失敗: {e}", level="ERROR")
