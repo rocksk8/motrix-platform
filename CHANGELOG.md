@@ -5,6 +5,36 @@
 
 ---
 
+### 2026-09-01 — T100（鼎新）傳票批次匯出（新模組）＋料件/設備進貨付款狀態追蹤（DB v70）＋匯入確認追蹤（DB v69）
+
+- T100 批次匯出採現金基礎：收款事件（款項明細已開發票且已收款）＋付款事件（承攬商匯款申請已標記已匯款）兩類天生借貸平衡；刻意排除請款單（對客戶要款文件非金流事件）。新檔 `routers/accounting_export.py`，科目代號設定留白供財務自行填入，`reports.html`「資金水位」分頁新增匯出區塊
+- 新增料件/設備進貨付款狀態追蹤：新表 `stock_batches`（批次層級表頭，`is_paid`/`paid_by`/`paid_at`，比照承攬商匯款申請模式，既有批次全部回填但預設未付款），並納入 T100 匯出第三個事件來源（借料件設備成本／貸銀行存款）
+- 新增已匯入確認追蹤（新表 `t100_export_confirmations`）：財務先 `GET preview` 預覽未確認事件，實際匯入 T100 後 `POST confirm` 整批標記，避免同區間重複匯出/重複匯入；識別碼採資料本身穩定鍵（非流水號）
+- 新增測試 `test_t100_export_2026_09_01.py`（6題）／`test_stock_batch_payment_2026_09_01.py`（6題）／已匯入確認追蹤補測 2 題，pytest 全過
+- 尚未套用至正式機（依 §15 流程）
+
+---
+
+### 2026-08-31g — 出納整合進營運報表模組（頁籤合併）＋案件管理數字連動稽核
+
+- 獨立的出納模組（2026-08-31e/f 交付）併入 `reports.html` 第 13 個頁籤「出納」（含待付款/待收款/執行歷史/銀行對帳單比對 4 個子頁籤）；`cashier.html` 改為導向 `reports.html?tab=cashier` 的 stub 保留舊書籤，`cashier.js` 內容併入 `reports.js` 後刪除，sidebar 移除獨立出納入口
+- 准入權限重新分層：admin+ 維持全部 12 個財務報表頁籤，純 cashier/finance 模組的非管理職使用者只看得到出納頁籤
+- 金額連動稽核修復一個真實 bug：`dashboard.py::dashboard_monthly()`（首頁銷售收入趨勢圖表）未比照同檔案其餘 5 處用寬鬆 `COALESCE` 判斷 dealTag，只寫在 data_json 未回填 DB 欄位的舊格式報價單被靜默漏算
+- 新增測試 `test_dashboard_monthly_dealtag_fallback_2026_08_31.py`，pytest 294/294 全過
+- 尚未套用至正式機
+
+---
+
+### 2026-08-28f — 簽核流程套用範圍：五種文件類型可各自選統一流程或獨立設定
+
+- 報價單／出貨單／發票開立簽核單／請款單／承攬商匯款申請五種文件類型，新增可各自選擇「跟統一流程走」或「獨立設定」；切換到獨立設定時初始值複製目前統一流程內容，不從空白開始
+- 核心設計：「編輯」跟「套用」分開——各文件類型自己的 flow key 永遠可直接讀寫，新增 `system_settings.approval_flow_scope` 只決定送審時當下讀哪把 key，避免勾選切換時互相覆蓋
+- 後端新增 `helpers/tiered_approval.py::approval_flow_setting_key()` 與相關端點；`approval-settings.html` 整頁改版，五個文件類型的 tiers 編輯 UI 共用同一份元件
+- 同時修正文件本身（QUICK.md §5.8/§5.9/§6/§7）多處 2026-08-24 統一簽核上線後未更新的殘留舊描述
+- 新增測試 `test_approval_flow_scope.py`，pytest 186/186 全過
+
+---
+
 ### 2026-08-28e — 模組逐步檢查（第二輪：主檔資料／業務開發／案件代辦／使用者管理）
 
 - 主檔資料與七大類選型資料庫（switch/monitor/access/gateway/netarch/env/automation）逐一核對：組織架構刪除有子節點保護、客戶/供應商刪除因資料為快照文字本就安全、外包人員/承攬商無硬刪除端點、料號刪除有庫存保護、七大選型資料庫的 fit/products 皆有 `ON DELETE CASCADE`＋全域 `PRAGMA foreign_keys=ON` 保護，確認皆無需修改
