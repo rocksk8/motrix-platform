@@ -942,7 +942,7 @@
                               :disabled="(cr.caseRecord?.payment?.items?.length||0)<=1">×</button>
                     </div>
 
-                    <div style="display:grid;grid-template-columns:136px 136px 140px 1fr;gap:8px">
+                    <div style="display:grid;grid-template-columns:136px 136px 140px 136px 1fr;gap:8px">
                       <div>
                         <span class="fi-label">預計收款日</span>
                         <input class="fi fi--sm" type="date" x-model="item.expectedReceiptDate" @change="setDirty()">
@@ -953,8 +953,12 @@
                       </div>
                       <div>
                         <span class="fi-label">發票號碼</span>
-                        <input class="fi fi--sm fi--mono" type="text" placeholder="AB-12345678"
+                        <input class="fi fi--sm fi--mono" type="text" placeholder="AB12345678"
                                x-model="item.invoiceNo" @input="setDirty()">
+                      </div>
+                      <div>
+                        <span class="fi-label" title="決定這張發票歸屬哪個營業稅申報期別，跟收款日期是兩回事">發票開立日期</span>
+                        <input class="fi fi--sm" type="date" x-model="item.invoiceDate" @change="setDirty()">
                       </div>
                       <div>
                         <span class="fi-label">備注</span>

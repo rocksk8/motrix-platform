@@ -614,9 +614,9 @@ function app() {
           // 5 個預設階段改由 _seedDefaultStagesIfEmpty() 透過 API 建立，取得真實 id。
           stages: [],
           payment: { items: [
-            { id: 1, type: '訂金款', pct: 30, received: false, receivedAt: '', expectedReceiptDate: '', invoiceNo: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' },
-            { id: 2, type: '交貨款', pct: 30, received: false, receivedAt: '', expectedReceiptDate: '', invoiceNo: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' },
-            { id: 3, type: '驗收款', pct: 40, received: false, receivedAt: '', expectedReceiptDate: '', invoiceNo: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' },
+            { id: 1, type: '訂金款', pct: 30, received: false, receivedAt: '', expectedReceiptDate: '', invoiceNo: '', invoiceDate: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' },
+            { id: 2, type: '交貨款', pct: 30, received: false, receivedAt: '', expectedReceiptDate: '', invoiceNo: '', invoiceDate: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' },
+            { id: 3, type: '驗收款', pct: 40, received: false, receivedAt: '', expectedReceiptDate: '', invoiceNo: '', invoiceDate: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' },
           ], note: '' },
           materials: [], devices: [], warrantyNote: '', notes: '',
         }
@@ -652,15 +652,15 @@ function app() {
 
       if (!this.cr.caseRecord.payment) {
         this.cr.caseRecord.payment = { items: [
-          { id: 1, type: '訂金款', pct: 30, amount: null, received: false, receivedAt: '', expectedReceiptDate: '', invoiceNo: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' },
-          { id: 2, type: '交貨款', pct: 30, amount: null, received: false, receivedAt: '', expectedReceiptDate: '', invoiceNo: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' },
-          { id: 3, type: '驗收款', pct: 40, amount: null, received: false, receivedAt: '', expectedReceiptDate: '', invoiceNo: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' },
+          { id: 1, type: '訂金款', pct: 30, amount: null, received: false, receivedAt: '', expectedReceiptDate: '', invoiceNo: '', invoiceDate: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' },
+          { id: 2, type: '交貨款', pct: 30, amount: null, received: false, receivedAt: '', expectedReceiptDate: '', invoiceNo: '', invoiceDate: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' },
+          { id: 3, type: '驗收款', pct: 40, amount: null, received: false, receivedAt: '', expectedReceiptDate: '', invoiceNo: '', invoiceDate: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' },
         ], note: '' }
       } else if (!this.cr.caseRecord.payment.items) {
         this.cr.caseRecord.payment = { items: [
-          { id: 1, type: '訂金款', pct: 30, amount: null, received: false, receivedAt: '', expectedReceiptDate: '', invoiceNo: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' },
-          { id: 2, type: '交貨款', pct: 30, amount: null, received: false, receivedAt: '', expectedReceiptDate: '', invoiceNo: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' },
-          { id: 3, type: '驗收款', pct: 40, amount: null, received: false, receivedAt: '', expectedReceiptDate: '', invoiceNo: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' },
+          { id: 1, type: '訂金款', pct: 30, amount: null, received: false, receivedAt: '', expectedReceiptDate: '', invoiceNo: '', invoiceDate: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' },
+          { id: 2, type: '交貨款', pct: 30, amount: null, received: false, receivedAt: '', expectedReceiptDate: '', invoiceNo: '', invoiceDate: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' },
+          { id: 3, type: '驗收款', pct: 40, amount: null, received: false, receivedAt: '', expectedReceiptDate: '', invoiceNo: '', invoiceDate: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' },
         ], note: this.cr.caseRecord.payment.note || '' }
       }
     },
@@ -817,7 +817,7 @@ function app() {
 
     addPaymentItem() {
       const items = this.cr.caseRecord.payment.items
-      items.push({ id: Date.now(), type: '進度款', pct: 0, received: false, receivedAt: '', expectedReceiptDate: '', invoiceNo: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' })
+      items.push({ id: Date.now(), type: '進度款', pct: 0, received: false, receivedAt: '', expectedReceiptDate: '', invoiceNo: '', invoiceDate: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' })
       this.setDirty()
     },
     removePaymentItem(idx) {

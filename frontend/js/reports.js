@@ -1227,7 +1227,7 @@ function reportsApp() {
     },
 
     openInvoiceModal(item) {
-      this.invoiceModal = { show: true, item, no: item.invoiceNo || '' }
+      this.invoiceModal = { show: true, item, no: item.invoiceNo || '', date: item.invoiceDate || '' }
     },
 
     async confirmInvoice() {
@@ -1237,10 +1237,11 @@ function reportsApp() {
         const r = await fetch(`/api/quotations/${encodeURIComponent(item.quoteNo)}/payment/${item.idx}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this._token() },
-          body: JSON.stringify({ invoiceNo: this.invoiceModal.no.trim() })
+          body: JSON.stringify({ invoiceNo: this.invoiceModal.no.trim(), invoiceDate: this.invoiceModal.date || '' })
         })
         if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '操作失敗'); return }
         item.invoiceNo = this.invoiceModal.no.trim()
+        item.invoiceDate = this.invoiceModal.date || ''
         this.invoiceModal.show = false
       } catch (e) { alert('網路錯誤：' + e.message) }
     },

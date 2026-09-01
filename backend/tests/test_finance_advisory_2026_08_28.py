@@ -144,19 +144,22 @@ def test_tax_export_lists_invoiced_items_with_tax_breakdown_and_year_filter(clie
     assert r.status_code == 200, r.text
     wb = openpyxl.load_workbook(io.BytesIO(r.content))
     ws = wb["銷項發票清單"]
-    header = [ws.cell(row=3, column=c).value for c in range(1, 9)]
-    assert header == ["發票號碼", "收款日期", "案件號", "客戶名稱", "統一編號",
+    # 2026-09-02 新增「發票開立日期」欄（期別歸屬改用這個欄位，見
+    # reports.py::_collect_tax_invoices() docstring），欄位數由 8 變 9。
+    header = [ws.cell(row=3, column=c).value for c in range(1, 10)]
+    assert header == ["發票號碼", "發票開立日期", "收款日期", "案件號", "客戶名稱", "統一編號",
                        "金額（未稅）", "稅額", "金額（含稅）"]
-    data_row = [ws.cell(row=4, column=c).value for c in range(1, 9)]
+    data_row = [ws.cell(row=4, column=c).value for c in range(1, 10)]
     assert data_row[0] == "INV-0001"
-    assert data_row[2] == "MQ-TAX-001"
-    assert data_row[4] == "12345678"
-    assert data_row[5] == 20000   # 未稅
-    assert data_row[6] == 1000    # 稅額
-    assert data_row[7] == 21000   # 含稅
+    assert data_row[2] == "2026-03-15"  # 沒填 invoiceDate，退回收款日期
+    assert data_row[3] == "MQ-TAX-001"
+    assert data_row[5] == "12345678"
+    assert data_row[6] == 20000   # 未稅
+    assert data_row[7] == 1000    # 稅額
+    assert data_row[8] == 21000   # 含稅
     # 只有一筆符合 2026 年的已開發票品項，第 5 列應為合計列（2025 年那筆被篩掉）
     assert ws.cell(row=5, column=1).value == "合計"
-    assert ws.cell(row=5, column=8).value == 21000
+    assert ws.cell(row=5, column=9).value == 21000
 
 
 def test_tax_export_requires_admin(client, make_user):

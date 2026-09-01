@@ -100,6 +100,7 @@ def _receivable_queue(conn, status: str = "unreceived") -> list:
                 "receivedAt":          pi.get("receivedAt") or "",
                 "receivedBy":          pi.get("receivedBy") or "",
                 "invoiceNo":           pi.get("invoiceNo") or "",
+                "invoiceDate":         pi.get("invoiceDate") or "",
                 "actualAmount":        pi.get("actualAmount"),
                 "feeAmount":           pi.get("feeAmount") or 0,
                 "feeNote":             pi.get("feeNote") or "",

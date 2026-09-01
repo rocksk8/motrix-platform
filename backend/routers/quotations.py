@@ -1567,6 +1567,21 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
             conn.close()
             raise HTTPException(403, "款項收款狀態需由管理員或出納標記")
 
+    # 2026-09-02（反派/國稅局視角複查發現）：這支整包存檔端點是案件管理財務
+    # Tab 填發票號碼的實際主要路徑（mark_payment() 的 invoiceNo 驗證只涵蓋
+    # receivables.html 出納快速登錄那條路，這裡才是大多數人真正在用的地方），
+    # 過去完全沒有走到格式/重複驗證，等於前面加的防呆對最常用的入口沒有生效。
+    # 用 item id 比對排除自己這筆（見 validate_invoice_no() docstring 說明
+    # 為什麼不能用陣列位置）。
+    new_items_for_inv = ((body.case_record or {}).get("payment") or {}).get("items") or []
+    old_items_for_inv = ((data.get("caseRecord") or {}).get("payment") or {}).get("items") or []
+    old_inv_by_id = {it.get("id"): it.get("invoiceNo") for it in old_items_for_inv if it.get("id") is not None}
+    for new_it in new_items_for_inv:
+        new_inv = new_it.get("invoiceNo")
+        if new_it.get("id") is not None and old_inv_by_id.get(new_it.get("id")) == new_inv:
+            continue  # 未變動，不必重新驗證
+        validate_invoice_no(conn, new_inv, exclude_quote_no=quote_no, exclude_item_id=new_it.get("id"))
+
     gated, change_id = _gate_case_edit(
         conn, quote_no, user, authorization, "case_record_update",
         f"{label} 更新案件記錄（材料/款項/角色/合約等）", {"case_record": body.case_record or {}},
@@ -1717,6 +1732,8 @@ def _apply_case_change_request(conn, req, approver: dict, authorization: str) ->
         if "invoiceNo" in body:
             validate_invoice_no(conn, body["invoiceNo"], exclude_quote_no=quote_no, exclude_idx=idx)
             pits[idx]["invoiceNo"] = body["invoiceNo"]
+        if "invoiceDate" in body:
+            pits[idx]["invoiceDate"] = body["invoiceDate"]
         save_quotation_json(conn, quote_no, data)
         _audit(_tok(authorization), 'payment.mark', 'quotation', quote_no, f"{label}（半解鎖審核通過套用）")
 
@@ -2383,6 +2400,15 @@ def mark_payment(no: str, idx: int, body: dict, authorization: str = Header(None
                     pits[idx].pop(k, None)
         if "invoiceNo" in body:
             pits[idx]["invoiceNo"] = body["invoiceNo"]
+        if "invoiceDate" in body:
+            # 統一發票「開立日期」（2026-09-02 新增，跟 invoiceNo 同一格填寫，選填）
+            # ——法定上決定這張發票屬於哪個申報期別的日期，跟 receivedAt（款項實際
+            # 入帳日）是兩件事：稅務匯出（reports.py::_collect_tax_invoices()）的
+            # 期別篩選改用這個欄位，缺漏才退回 receivedAt；T100 現金基礎傳票
+            # （accounting_export.py）刻意仍用 receivedAt 當傳票日期（現金基礎會計
+            # 要跟銀行實際入帳日一致，不能改用開立日期，否則傳票日期會跟銀行對帳
+            # 單對不上）。直接存 data_json，不需要 migration。
+            pits[idx]["invoiceDate"] = body["invoiceDate"]
         now = save_quotation_json(conn, no, data)
         conn.commit()
     finally:

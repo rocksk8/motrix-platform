@@ -2413,7 +2413,16 @@ def _collect_tax_invoices(year: Optional[int] = None, month: Optional[int] = Non
     決定不跟客戶收那筆稅額），不會、也不能追溯改變已經開立當下就確定的法定
     稅捐義務。改用 apply_tax_exempt=False 取得「原始開立金額」（不套用沖銷
     折算）永遠照標準 5% 拆稅公式計算，taxExempt 對「客戶還欠多少」（AR帳齡/
-    收款率/dashboard）的影響維持不變，只是不再讓它同時改寫稅務匯出的數字。"""
+    收款率/dashboard）的影響維持不變，只是不再讓它同時改寫稅務匯出的數字。
+
+    2026-09-02 追加：year/month 期別篩選改用 invoiceDate（發票開立日期，
+    2026-09-02 新增欄位，選填）而不是 receivedAt（款項收款日）——依加值型及
+    非加值型營業稅法，發票該歸入哪個申報期別是看開立日，不是看客戶什麼時候
+    把錢匯進來，兩者常常不同月甚至跨期別。缺漏 invoiceDate 的舊資料退回
+    receivedAt（維持既有行為，不會讓歷史資料憑空消失）。回傳的 "date" 欄位
+    刻意維持 receivedAt 不變——accounting_export.py 的 T100 現金基礎傳票要的
+    就是「現金真的進帳」那天，跟這裡的期別篩選是兩個不同問題，不能共用同一
+    個日期：新增獨立的 "invoiceDate" 欄位供期別篩選跟稅務匯出 Excel 顯示用。"""
     conn = get_db()
     rows = conn.execute("""
         SELECT quote_no, customer_name, total, pretax,
@@ -2437,10 +2446,11 @@ def _collect_tax_invoices(year: Optional[int] = None, month: Optional[int] = Non
             inv_no = (pi.get("invoiceNo") or "").strip()
             if not inv_no:
                 continue
-            received_at = pi.get("receivedAt") or ""
-            if year and received_at[:4] != str(year):
+            received_at  = pi.get("receivedAt") or ""
+            invoice_date = pi.get("invoiceDate") or received_at
+            if year and invoice_date[:4] != str(year):
                 continue
-            if month and received_at[5:7] != f"{month:02d}":
+            if month and invoice_date[5:7] != f"{month:02d}":
                 continue
             amt_incl   = amounts[idx]
             tax_amt    = _round_half_up(amt_incl - amt_incl / 1.05)
@@ -2448,6 +2458,7 @@ def _collect_tax_invoices(year: Optional[int] = None, month: Optional[int] = Non
             out.append({
                 "invoiceNo":     inv_no,
                 "date":          received_at,
+                "invoiceDate":   invoice_date,
                 "quoteNo":       row["quote_no"],
                 "customer":      row["customer_name"] or "",
                 "taxId":         row["tax_id"] or "",
@@ -2460,7 +2471,7 @@ def _collect_tax_invoices(year: Optional[int] = None, month: Optional[int] = Non
                 "bankAccountName": pi.get("bankAccountName") or "",
                 "bankAccountCode": pi.get("bankAccountCode") or "",
             })
-    out.sort(key=lambda r: (r["date"], r["quoteNo"]))
+    out.sort(key=lambda r: (r["invoiceDate"], r["quoteNo"]))
     return out
 
 
@@ -2472,31 +2483,33 @@ def _build_tax_export_excel(rows: list, period_label: str, gen_at: str) -> bytes
     mk, fill, mk_border, al = _xl_style(wb)
     BD = mk_border()
 
-    widths = [16, 12, 14, 22, 14, 14, 12, 14]
+    widths = [16, 12, 12, 14, 22, 14, 14, 12, 14]
     for i, w in enumerate(widths, 1):
         ws.column_dimensions[get_column_letter(i)].width = w
 
-    ws.merge_cells("A1:H1")
+    ws.merge_cells("A1:I1")
     c = ws["A1"]; c.value = f"{_COMPANY} — 銷項發票清單（{period_label}）"
     c.font = mk(bold=True, size=13, color="FFFFFF"); c.fill = fill("111827"); c.alignment = al("center")
     ws.row_dimensions[1].height = 28
 
-    ws.merge_cells("A2:H2")
-    c = ws["A2"]; c.value = f"產製時間：{gen_at}　僅列出已填發票號碼之收款品項，未開立發票者不列入"
+    ws.merge_cells("A2:I2")
+    c = ws["A2"]; c.value = f"產製時間：{gen_at}　僅列出已填發票號碼之收款品項，未開立發票者不列入；" \
+                             "期別依發票開立日期歸屬，缺漏開立日期者以收款日期代替"
     c.font = mk(size=9, color="6B7280"); c.alignment = al("center")
     ws.row_dimensions[2].height = 18
 
-    headers = ["發票號碼", "收款日期", "案件號", "客戶名稱", "統一編號", "金額（未稅）", "稅額", "金額（含稅）"]
+    headers = ["發票號碼", "發票開立日期", "收款日期", "案件號", "客戶名稱", "統一編號",
+               "金額（未稅）", "稅額", "金額（含稅）"]
     _set_row(ws, 3, headers, font=mk(bold=True, color="FFFFFF"), fill=fill("2563EB"), border=BD, aligns=[al("center")])
     ws.row_dimensions[3].height = 22
 
     r = 4
     total_pretax = total_tax = total_incl = 0
-    body_aligns = [al("center"), al("center"), al("center"), al("left"),
+    body_aligns = [al("center"), al("center"), al("center"), al("center"), al("left"),
                    al("center"), al("right"), al("right"), al("right")]
     for row in rows:
         _set_row(ws, r, [
-            row["invoiceNo"], row["date"], row["quoteNo"], row["customer"], row["taxId"],
+            row["invoiceNo"], row["invoiceDate"], row["date"], row["quoteNo"], row["customer"], row["taxId"],
             row["amountPretax"], row["taxAmount"], row["amountTotal"],
         ], font=mk(), border=BD, aligns=body_aligns)
         total_pretax += row["amountPretax"]
@@ -2504,7 +2517,7 @@ def _build_tax_export_excel(rows: list, period_label: str, gen_at: str) -> bytes
         total_incl   += row["amountTotal"]
         r += 1
 
-    _set_row(ws, r, ["合計", "", "", "", "", total_pretax, total_tax, total_incl],
+    _set_row(ws, r, ["合計", "", "", "", "", "", total_pretax, total_tax, total_incl],
              font=mk(bold=True), fill=fill("F9FAFB"), border=BD, aligns=body_aligns)
 
     buf = io.BytesIO()

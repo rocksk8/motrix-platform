@@ -108,13 +108,21 @@ def payment_item_amounts(total: float, pay_items: list, pretax: float = None,
 _INVOICE_NO_RE = re.compile(r"^[A-Z]{2}\d{8}$")
 
 
-def validate_invoice_no(conn, invoice_no: str, exclude_quote_no: str = None, exclude_idx: int = None) -> None:
+def validate_invoice_no(conn, invoice_no: str, exclude_quote_no: str = None,
+                         exclude_idx: int = None, exclude_item_id=None) -> None:
     """統一發票號碼格式檢查（2 碼英文字軌＋8 碼流水號，如 AB12345678）＋重複
     偵測（同一組號碼已經填在別的案件/期別上）——2026-09-02 稽核發現這個欄位
     過去完全是自由文字，格式錯誤或複製貼上打錯號碼、甚至真的重複開立，系統
     都不會有任何提示，而重複發票號碼正是國稅局查核時最先抓的稽核紅旗。
-    空字串（尚未開立）視為合法，直接放行。exclude_quote_no/exclude_idx 供
-    「修改自己這筆」時排除自己，不要跟自己比對出假警報。"""
+    空字串（尚未開立）視為合法，直接放行。
+
+    排除「自己這筆」有兩種呼叫情境：mark_payment()（PATCH .../payment/{idx}，
+    出納快速登錄用）逐筆改動、當下的陣列位置就是穩定的，用 exclude_idx 即可；
+    update_case_record()（PATCH .../case-record，案件管理財務Tab 整包存檔，
+    是使用者實際填發票號碼最常用的路徑）品項可能同時被新增/刪除/重新排序，
+    陣列位置不可靠，要用品項自己的 id（case-management.js 建立品項時固定會
+    帶，見該檔 addPaymentItem() 附近註解）比對，改傳 exclude_item_id。兩者
+    只會用其中一種，exclude_item_id 有值時優先信任它。"""
     inv = (invoice_no or "").strip()
     if not inv:
         return
@@ -134,8 +142,11 @@ def validate_invoice_no(conn, invoice_no: str, exclude_quote_no: str = None, exc
         for i, it in enumerate(items):
             if (it.get("invoiceNo") or "").strip().upper() != inv.upper():
                 continue
-            if r["quote_no"] == exclude_quote_no and i == exclude_idx:
-                continue
+            if r["quote_no"] == exclude_quote_no:
+                if exclude_item_id is not None and it.get("id") == exclude_item_id:
+                    continue
+                if exclude_item_id is None and exclude_idx is not None and i == exclude_idx:
+                    continue
             raise HTTPException(
                 400, f"發票號碼 {invoice_no} 已用於案件 {r['quote_no']} 第{i + 1}期款項，請確認是否重複或填錯"
             )
