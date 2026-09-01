@@ -942,6 +942,8 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
 
 ### §7.17 · T100（鼎新）傳票批次匯出（2026-09-01，DB v69，見 §12 同日條目）
 
+**2026-09-02 UX 調整（純前端，無 DB/API 變動）：** 使用者反映 T100 匯出/設定原本埋在「資金水位」頁籤最底下太隱蔽，改成 `reports.html` 獨立的第 14 個頁籤「T100匯出」（`showT100Tab()`，切換進來自動預覽本期待確認事件）。另外三個「標記已付款/已收款」Modal（`case-management.html`／`reports.html`出納分頁／`inventory.html`）讀取銀行帳戶清單的 `loadT100BankAccounts()` 改成每次開啟 Modal 都重新 fetch（不再 cache-once）——superadmin 在 T100 設定頁新增/修改銀行帳戶後，其他人下一次開啟任一個標記視窗就會看到最新清單，三處共用同一份設定、即時連動，不用整頁重新整理。
+
 | Method | Path | 說明 |
 |--------|------|------|
 | GET | /settings/t100-export-config | 科目代號對照設定（admin+ 可查閱） |

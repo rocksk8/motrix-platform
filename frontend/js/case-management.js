@@ -140,9 +140,9 @@ function app() {
     payVoucherBankAcctCode: '',
     payVoucherSaving: false,
     // T100 傳票匯出設定裡的銀行帳戶清單（2026-09-01 新增），標記已匯款/已收款
-    // 時挑選要用哪個帳戶；lazy load，第一次開啟任一個標記 Modal 時才抓
+    // 時挑選要用哪個帳戶；每次開啟標記 Modal 都重抓最新清單，見
+    // loadT100BankAccounts()
     t100BankAccounts: [],
-    t100BankAccountsLoaded: false,
     // ── 產生匯款申請 Modal（2026-08-31 新增，讓應付款日期在產生申請當下就能
     // 直接填/改，不用先跳去編輯派發紀錄）
     createVoucherModal: false,
@@ -2641,12 +2641,15 @@ function app() {
     },
 
     async loadT100BankAccounts() {
-      if (this.t100BankAccountsLoaded) return
+      // 2026-09-02：改成每次開啟標記 Modal 都重抓（不再 cache-once），確保跟
+      // 案件管理／出納／庫存管理三處標記畫面共用同一份最新清單——superadmin
+      // 在 T100 設定頁新增/修改銀行帳戶後，其他人下一次開啟標記視窗立刻看得到，
+      // 不用重新整理整頁（使用者要求「要能互相連動」）。GET 這支很輕量，
+      // 每次重抓成本可忽略。
       try {
         const r = await fetch('/api/settings/t100-export-config', { headers: { Authorization: 'Bearer ' + this.session.token } })
         if (r.ok) { const d = await r.json(); this.t100BankAccounts = d.bankAccounts || [] }
       } catch {}
-      this.t100BankAccountsLoaded = true
     },
 
     onPayVoucherBankChange() {

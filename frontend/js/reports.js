@@ -120,9 +120,9 @@ function reportsApp() {
     receiveBankAcctCode:  '',
     receiveSaving:        false,
     // T100 傳票匯出設定裡的銀行帳戶清單（2026-09-01 新增），標記已收款/已匯款
-    // 時挑選要用哪個帳戶；lazy load
+    // 時挑選要用哪個帳戶；每次開啟標記 Modal 都重抓最新清單，見
+    // loadT100BankAccounts()
     t100BankAccounts:     [],
-    t100BankAccountsLoaded: false,
 
     invoiceModal: { show: false, item: null, no: '' },
 
@@ -971,6 +971,13 @@ function reportsApp() {
       }
     },
 
+    async showT100Tab() {
+      // 2026-09-02：T100 匯出從資金水位頁籤拆成獨立頁籤，切換進來時就先預覽
+      // 本期（近 30 天）待確認事件，不用再多按一次「預覽待確認事件」
+      this.activeTab = 't100'
+      if (!this.t100Preview) this.loadT100Preview()
+    },
+
     async showCashPosTab() {
       this.activeTab = 'cashpos'
       if (this.cashPosLoaded) return
@@ -1093,12 +1100,13 @@ function reportsApp() {
     },
 
     async loadT100BankAccounts() {
-      if (this.t100BankAccountsLoaded) return
+      // 2026-09-02：改成每次開啟標記 Modal 都重抓（不再 cache-once），確保跟
+      // 案件管理／庫存管理三處標記畫面共用同一份最新清單，見
+      // case-management.js::loadT100BankAccounts() 同款註解。
       try {
         const r = await fetch('/api/settings/t100-export-config', { headers: { Authorization: 'Bearer ' + this._token() } })
         if (r.ok) { const d = await r.json(); this.t100BankAccounts = d.bankAccounts || [] }
       } catch {}
-      this.t100BankAccountsLoaded = true
     },
 
     _t100BankName(code) {

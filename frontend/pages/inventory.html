@@ -383,7 +383,6 @@ function app() {
     batchEdit: { show: false, batchNo: '', supplierId: null, invoiceNo: '', note: '', saving: false, error: '' },
     batchPay: { show: false, batchNo: '', paidAt: '', bankAcctCode: '', saving: false, error: '' },
     t100BankAccounts: [],
-    t100BankAccountsLoaded: false,
 
     get categories() {
       return [...new Set(this.items.map(p => p.category).filter(Boolean))].sort()
@@ -527,12 +526,13 @@ function app() {
     },
 
     async loadT100BankAccounts() {
-      if (this.t100BankAccountsLoaded) return
+      // 2026-09-02：改成每次開啟標記 Modal 都重抓（不再 cache-once），確保跟
+      // 案件管理／出納三處標記畫面共用同一份最新清單，見
+      // case-management.js::loadT100BankAccounts() 同款註解。
       try {
         const r = await fetch(`${API}/settings/t100-export-config`, { headers: { Authorization: 'Bearer ' + this.session.token } })
         if (r.ok) { const d = await r.json(); this.t100BankAccounts = d.bankAccounts || [] }
       } catch {}
-      this.t100BankAccountsLoaded = true
     },
 
     openBatchPayModal(b) {
