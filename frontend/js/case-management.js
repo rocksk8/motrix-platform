@@ -143,6 +143,7 @@ function app() {
     // 時挑選要用哪個帳戶；每次開啟標記 Modal 都重抓最新清單，見
     // loadT100BankAccounts()
     t100BankAccounts: [],
+    t100DefaultBankAcctCode: '',   // 2026-09-02 新增：系統預設銀行帳戶，見 _resolveDefaultBankAccount()
     // ── 產生匯款申請 Modal（2026-08-31 新增，讓應付款日期在產生申請當下就能
     // 直接填/改，不用先跳去編輯派發紀錄）
     createVoucherModal: false,
@@ -2648,8 +2649,27 @@ function app() {
       // 每次重抓成本可忽略。
       try {
         const r = await fetch('/api/settings/t100-export-config', { headers: { Authorization: 'Bearer ' + this.session.token } })
-        if (r.ok) { const d = await r.json(); this.t100BankAccounts = d.bankAccounts || [] }
+        if (r.ok) {
+          const d = await r.json()
+          this.t100BankAccounts = d.bankAccounts || []
+          this.t100DefaultBankAcctCode = d.defaultBankAccountCode || ''
+        }
       } catch {}
+    },
+
+    // 銀行帳戶預設值（2026-09-02 新增，比照 reports.js 同款 helper）：①這個
+    // 對象上次標記用的帳戶 ②系統預設帳戶 ③兩者都沒有就空白。
+    async _resolveDefaultBankAccount(lastUsedUrl) {
+      if (lastUsedUrl) {
+        try {
+          const r = await fetch(lastUsedUrl, { headers: { Authorization: 'Bearer ' + this.session.token } })
+          if (r.ok) {
+            const d = await r.json()
+            if (d.acctCode) return d.acctCode
+          }
+        } catch {}
+      }
+      return this.t100DefaultBankAcctCode || ''
     },
 
     onPayVoucherBankChange() {
@@ -2666,7 +2686,10 @@ function app() {
         this.payVoucherBankAcctCode = ''
         this._payVoucherBankName = ''
         this.payVoucherModal = true
-        this.loadT100BankAccounts()
+        await this.loadT100BankAccounts()
+        const url = v.vendorId ? `/api/contractor-vouchers/last-paid-bank-account?vendor_id=${v.vendorId}` : ''
+        this.payVoucherBankAcctCode = await this._resolveDefaultBankAccount(url)
+        this.onPayVoucherBankChange()
         return
       }
       if (!confirm(`確定取消匯款申請「${v.voucherNo}」的已匯款標記？`)) return

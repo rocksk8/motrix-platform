@@ -682,6 +682,43 @@ def case_activity(body: dict = Body(...), authorization: str = Header(None)):
         conn.close()
 
 
+@router.get("/api/quotations/last-received-bank-account")
+def get_last_received_bank_account(customerName: Optional[str] = None, authorization: str = Header(None)):
+    """查這個客戶上一次「標記已收款」用的銀行帳戶，供出納分頁標記收款 Modal
+    開啟時預帶值。見 accounting_export.py 檔頭「標記已付款/已收款時的銀行帳戶
+    預設值」說明。⚠️ 必須在 GET /api/quotations/{quote_no} 之前註冊，否則
+    "last-received-bank-account" 會被當成 quote_no 吃掉。
+
+    案件沒有正規化的客戶 id（customerId 只在報價單建立時從客戶下拉挑選才會
+    有值，很多舊案件是純打字輸入客戶名稱），這裡直接用 quotations 熱路徑欄位
+    customer_name 比對——跟其他所有「依客戶彙總」的既有邏輯（如 §7 帳齡分析／
+    客戶歷史）用的是同一個欄位，口徑一致。全表掃描 data_json 找收款品項，比照
+    reports.py::_collect_tax_invoices() 同一套既有做法，這個資料量級可接受。"""
+    _require_user(authorization)
+    if not customerName:
+        return {"name": "", "acctCode": ""}
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT data_json FROM quotations WHERE customer_name=?", (customerName,)
+    ).fetchall()
+    conn.close()
+    best_at, best_name, best_code = "", "", ""
+    for row in rows:
+        try:
+            data = json.loads(row["data_json"] or "{}")
+        except Exception:
+            continue
+        items = ((data.get("caseRecord") or {}).get("payment") or {}).get("items") or []
+        for it in items:
+            code = it.get("bankAccountCode") or ""
+            if not (it.get("received") and code):
+                continue
+            at = it.get("receivedAt") or ""
+            if at > best_at:
+                best_at, best_name, best_code = at, it.get("bankAccountName") or "", code
+    return {"name": best_name, "acctCode": best_code}
+
+
 @router.get("/api/quotations/{quote_no}")
 def get_quotation(quote_no: str, authorization: str = Header(None)):
     user = _require_user(authorization)

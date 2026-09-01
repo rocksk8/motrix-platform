@@ -383,6 +383,7 @@ function app() {
     batchEdit: { show: false, batchNo: '', supplierId: null, invoiceNo: '', note: '', saving: false, error: '' },
     batchPay: { show: false, batchNo: '', paidAt: '', bankAcctCode: '', saving: false, error: '' },
     t100BankAccounts: [],
+    t100DefaultBankAcctCode: '',   // 2026-09-02 新增：系統預設銀行帳戶，見 _resolveDefaultBankAccount()
 
     get categories() {
       return [...new Set(this.items.map(p => p.category).filter(Boolean))].sort()
@@ -531,13 +532,34 @@ function app() {
       // case-management.js::loadT100BankAccounts() 同款註解。
       try {
         const r = await fetch(`${API}/settings/t100-export-config`, { headers: { Authorization: 'Bearer ' + this.session.token } })
-        if (r.ok) { const d = await r.json(); this.t100BankAccounts = d.bankAccounts || [] }
+        if (r.ok) {
+          const d = await r.json()
+          this.t100BankAccounts = d.bankAccounts || []
+          this.t100DefaultBankAcctCode = d.defaultBankAccountCode || ''
+        }
       } catch {}
     },
 
-    openBatchPayModal(b) {
+    // 銀行帳戶預設值（2026-09-02 新增，比照 reports.js 同款 helper）：①這個
+    // 對象上次標記用的帳戶 ②系統預設帳戶 ③兩者都沒有就空白。
+    async _resolveDefaultBankAccount(lastUsedUrl) {
+      if (lastUsedUrl) {
+        try {
+          const r = await fetch(lastUsedUrl, { headers: { Authorization: 'Bearer ' + this.session.token } })
+          if (r.ok) {
+            const d = await r.json()
+            if (d.acctCode) return d.acctCode
+          }
+        } catch {}
+      }
+      return this.t100DefaultBankAcctCode || ''
+    },
+
+    async openBatchPayModal(b) {
       this.batchPay = { show: true, batchNo: b.batch_no, paidAt: new Date().toISOString().slice(0,10), bankAcctCode: '', saving: false, error: '' }
-      this.loadT100BankAccounts()
+      await this.loadT100BankAccounts()
+      const url = b.supplier_id ? `${API}/inventory/batches/last-paid-bank-account?supplier_id=${b.supplier_id}` : ''
+      this.batchPay.bankAcctCode = await this._resolveDefaultBankAccount(url)
     },
 
     async confirmBatchPay() {

@@ -115,6 +115,30 @@ def _voucher_public(row, include_snapshot: bool = True) -> dict:
     return out
 
 
+# ── 銀行帳戶預設值（2026-09-02 新增，見 accounting_export.py 檔頭「標記已付款/
+#    已收款時的銀行帳戶預設值」說明）────────────────────────────────────────────
+
+@router.get("/api/contractor-vouchers/last-paid-bank-account")
+def get_last_paid_bank_account(vendor_id: Optional[int] = None, authorization: str = Header(None)):
+    """查這個承攬商上一次「標記已匯款」用的銀行帳戶，供標記 Modal 開啟時預帶值。
+    純讀取，找不到（vendor_id 未提供、或這個承攬商從沒被標記過已匯款、或舊資料
+    沒填帳戶）一律回傳空字串，由前端接著退回系統預設帳戶。"""
+    _require_user(authorization)
+    if not vendor_id:
+        return {"name": "", "acctCode": ""}
+    conn = get_db()
+    row = conn.execute(
+        "SELECT paid_bank_account_name, paid_bank_account_code FROM contractor_payment_vouchers "
+        "WHERE vendor_id=? AND is_paid=1 AND paid_bank_account_code != '' "
+        "ORDER BY paid_at DESC LIMIT 1",
+        (vendor_id,),
+    ).fetchone()
+    conn.close()
+    if not row:
+        return {"name": "", "acctCode": ""}
+    return {"name": row["paid_bank_account_name"], "acctCode": row["paid_bank_account_code"]}
+
+
 # ── CRUD ──────────────────────────────────────────────────────────────────────
 
 @router.get("/api/contractor-vouchers")

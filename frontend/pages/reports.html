@@ -1449,11 +1449,19 @@
                     <div style="font-size:10px;color:var(--text-dim);margin-bottom:10px;line-height:1.5">維護貴公司所有銀行帳戶＋各自的 T100 科目代號。標記已付款/已收款時（案件管理／出納／庫存管理三處共用同一份清單）會從這裡挑選帳戶——這裡改了，其他頁面下次開啟標記視窗就會看到最新清單；但不會回頭改到已經標記過的舊交易。</div>
                     <template x-for="(b, bi) in t100Config.bankAccounts" :key="bi">
                       <div style="display:flex;gap:6px;margin-bottom:6px;align-items:center">
+                        <button type="button" x-show="_role()==='superadmin'"
+                                @click="t100Config.defaultBankAccountCode = (t100Config.defaultBankAccountCode === b.acctCode ? '' : b.acctCode)"
+                                :title="t100Config.defaultBankAccountCode === b.acctCode ? '目前是系統預設帳戶，點一下取消' : '設為系統預設帳戶'"
+                                style="background:none;border:none;cursor:pointer;font-size:15px;padding:2px;line-height:1;flex-shrink:0"
+                                :style="t100Config.defaultBankAccountCode === b.acctCode ? 'color:#D97706' : 'color:var(--border-light)'"
+                                x-text="t100Config.defaultBankAccountCode === b.acctCode ? '★' : '☆'"></button>
+                        <span x-show="_role()!=='superadmin' && t100Config.defaultBankAccountCode === b.acctCode" style="font-size:14px;color:#D97706;flex-shrink:0">★</span>
                         <input type="text" placeholder="帳戶名稱（如：第一銀行 xxx）" x-model="b.name" :disabled="_role()!=='superadmin'" style="flex:1;padding:5px 9px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px">
                         <input type="text" placeholder="科目代號" x-model="b.acctCode" :disabled="_role()!=='superadmin'" style="width:100px;padding:5px 9px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px">
-                        <button class="btn-ghost btn-sm" x-show="_role()==='superadmin'" @click="t100Config.bankAccounts.splice(bi,1)">刪除</button>
+                        <button class="btn-ghost btn-sm" x-show="_role()==='superadmin'" @click="if (t100Config.defaultBankAccountCode === b.acctCode) t100Config.defaultBankAccountCode = ''; t100Config.bankAccounts.splice(bi,1)">刪除</button>
                       </div>
                     </template>
+                    <div style="font-size:10px;color:var(--text-dim);margin:-2px 0 8px" x-show="t100Config.bankAccounts && t100Config.bankAccounts.length">點 ☆ 可把該帳戶設為系統預設（標記已付款/已收款時，若該對象沒有上次使用紀錄，會自動帶入這個預設帳戶）</div>
                     <div x-show="_role()==='superadmin' && (!t100Config.bankAccounts || !t100Config.bankAccounts.length)" style="font-size:11px;color:var(--warning);margin-bottom:6px">⚠ 尚未設定任何銀行帳戶，標記已付款/已收款時將無法選擇帳戶</div>
                     <button class="btn-ghost btn-sm" x-show="_role()==='superadmin'" @click="t100Config.bankAccounts.push({name:'',acctCode:''})">+ 新增銀行帳戶</button>
                   </div>

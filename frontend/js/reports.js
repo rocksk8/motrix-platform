@@ -123,6 +123,7 @@ function reportsApp() {
     // 時挑選要用哪個帳戶；每次開啟標記 Modal 都重抓最新清單，見
     // loadT100BankAccounts()
     t100BankAccounts:     [],
+    t100DefaultBankAcctCode: '',   // 2026-09-02 新增：系統預設銀行帳戶，見 _resolveDefaultBankAccount()
 
     invoiceModal: { show: false, item: null, no: '' },
 
@@ -1118,7 +1119,11 @@ function reportsApp() {
       // case-management.js::loadT100BankAccounts() 同款註解。
       try {
         const r = await fetch('/api/settings/t100-export-config', { headers: { Authorization: 'Bearer ' + this._token() } })
-        if (r.ok) { const d = await r.json(); this.t100BankAccounts = d.bankAccounts || [] }
+        if (r.ok) {
+          const d = await r.json()
+          this.t100BankAccounts = d.bankAccounts || []
+          this.t100DefaultBankAcctCode = d.defaultBankAccountCode || ''
+        }
       } catch {}
     },
 
@@ -1126,13 +1131,30 @@ function reportsApp() {
       return (this.t100BankAccounts.find(b => b.acctCode === code) || {}).name || ''
     },
 
-    openPayVoucherModal(v) {
+    // 銀行帳戶預設值（2026-09-02 新增）：①這個對象上次標記用的帳戶 ②系統
+    // 預設帳戶 ③兩者都沒有就空白。lastUsedUrl 由呼叫端組好（各自對象不同）。
+    async _resolveDefaultBankAccount(lastUsedUrl) {
+      if (lastUsedUrl) {
+        try {
+          const r = await fetch(lastUsedUrl, { headers: { Authorization: 'Bearer ' + this._token() } })
+          if (r.ok) {
+            const d = await r.json()
+            if (d.acctCode) return d.acctCode
+          }
+        } catch {}
+      }
+      return this.t100DefaultBankAcctCode || ''
+    },
+
+    async openPayVoucherModal(v) {
       this.payVoucherTarget = v
       this.payVoucherBankAcctCode = ''
-      this.loadT100BankAccounts()
       this.payVoucherDate = v.payableDate || this._localDateStr()
       this.payVoucherNote = ''
       this.payVoucherModal = true
+      await this.loadT100BankAccounts()
+      const url = v.vendorId ? `/api/contractor-vouchers/last-paid-bank-account?vendor_id=${v.vendorId}` : ''
+      this.payVoucherBankAcctCode = await this._resolveDefaultBankAccount(url)
     },
 
     async confirmPayVoucher() {
@@ -1156,15 +1178,17 @@ function reportsApp() {
       this.payVoucherSaving = false
     },
 
-    openReceiveModal(it) {
+    async openReceiveModal(it) {
       this.receiveTarget = it
       this.receiveDate = this._localDateStr()
       this.receiveActualAmount = it.amount
       this.receiveFeeAmount = 0
       this.receiveNote = ''
       this.receiveBankAcctCode = ''
-      this.loadT100BankAccounts()
       this.receiveModal = true
+      await this.loadT100BankAccounts()
+      const url = it.customer ? `/api/quotations/last-received-bank-account?customerName=${encodeURIComponent(it.customer)}` : ''
+      this.receiveBankAcctCode = await this._resolveDefaultBankAccount(url)
     },
 
     async confirmReceive() {

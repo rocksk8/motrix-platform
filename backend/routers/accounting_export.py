@@ -42,6 +42,16 @@ Excel、財務人員在 T100 用既有匯入功能手動核對匯入，風險小
   - 其餘科目（銷貨收入/銷項稅額/承攬商費用/部門別/傳票別）維持全公司單一設定，
     未要求分維度。
 
+**標記已付款/已收款時的銀行帳戶預設值（2026-09-02 新增）**：使用者要求「須帶入
+當時填寫或是預設的匯款帳戶」——三個標記畫面打開時，銀行帳戶下拉不再一律空白，
+依序嘗試：①查「這個對象（承攬商/供應商/客戶）上一次標記時用的帳戶」（見
+`contractor_vouchers.py::get_last_paid_bank_account()`／
+`inventory.py::get_last_paid_bank_account()`／
+`quotations.py::get_last_received_bank_account()` 三支各自查詢自己資料表最近
+一筆已標記記錄）②查無上次紀錄則退回 `defaultBankAccountCode`（系統預設）
+③兩者都沒有才維持空白。三支查詢都只讀不寫，前端仍可手動改選，這只是省下
+「大多數情況根本不用選」的那次點擊，不是強制值。
+
 **已匯入確認追蹤（2026-09-01 同輪新增，DB v69 `t100_export_confirmations`）**：
 匯出 Excel 本身不代表財務真的把這批傳票匯入了 T100（匯出後可能發現資料有誤、
 或財務決定分批匯入）——匯出跟「標記已匯入」是兩個獨立動作，只有明確標記過的
@@ -71,6 +81,8 @@ router = APIRouter()
 
 _DEFAULT_T100_CONFIG = {
     "bankAccounts":              [],  # [{"name": str, "acctCode": str}, ...]，設定頁維護，供標記已付款/收款時選擇（見下方 T100BankAccount）
+    "defaultBankAccountCode":    "",  # 2026-09-02 新增：系統預設銀行帳戶（acctCode），標記已付款/收款時
+                                       # 找不到「這個對象上次用哪個帳戶」才會退回用這個，見 §對象別最近一次使用
     "salesRevenueAccount":       "",  # 銷貨收入科目代號
     "outputTaxAccount":          "",  # 銷項稅額科目代號
     "contractorExpenseAccount":  "",  # 承攬商費用科目代號
@@ -89,6 +101,7 @@ class T100BankAccount(BaseModel):
 
 class T100ExportConfigBody(BaseModel):
     bankAccounts: List[T100BankAccount] = []
+    defaultBankAccountCode: str = ""
     salesRevenueAccount: str = ""
     outputTaxAccount: str = ""
     contractorExpenseAccount: str = ""

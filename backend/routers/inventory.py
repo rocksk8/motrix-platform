@@ -141,6 +141,29 @@ def list_stock_items(
 
 # ── 進貨批次 ─────────────────────────────────────────────────────────────────
 
+# ⚠️ 這支必須在 GET /api/inventory/batches/{batch_no} 之前註冊，否則
+# "last-paid-bank-account" 這個路徑會被當成 batch_no 吃掉（比照
+# invoice_vouchers.py::/remaining 的既有慣例）。
+@router.get("/api/inventory/batches/last-paid-bank-account")
+def get_last_paid_bank_account(supplier_id: Optional[int] = None, authorization: str = Header(None)):
+    """查這個供應商上一次「標記已付款」用的銀行帳戶，供標記 Modal 開啟時預帶值。
+    見 accounting_export.py 檔頭「標記已付款/已收款時的銀行帳戶預設值」說明。"""
+    _require_user(authorization)
+    if not supplier_id:
+        return {"name": "", "acctCode": ""}
+    conn = get_db()
+    row = conn.execute(
+        "SELECT paid_bank_account_name, paid_bank_account_code FROM stock_batches "
+        "WHERE supplier_id=? AND is_paid=1 AND paid_bank_account_code != '' "
+        "ORDER BY paid_at DESC LIMIT 1",
+        (supplier_id,),
+    ).fetchone()
+    conn.close()
+    if not row:
+        return {"name": "", "acctCode": ""}
+    return {"name": row["paid_bank_account_name"], "acctCode": row["paid_bank_account_code"]}
+
+
 @router.post("/api/inventory/batches", status_code=201)
 def create_batch(body: dict = Body(...), authorization: str = Header(None)):
     user = _require_user(authorization)

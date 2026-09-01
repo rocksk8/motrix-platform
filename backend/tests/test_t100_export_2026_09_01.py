@@ -297,3 +297,102 @@ def test_t100_preview_and_confirm_require_admin(client, make_user):
         json={"start": "2026-08-01", "end": "2026-08-31"},
     )
     assert r2.status_code == 403, r2.text
+
+
+def test_last_paid_bank_account_for_vendor(client, make_user):
+    """2026-09-02：標記已匯款時銀行帳戶下拉的預設值——查這個承攬商上次用的帳戶。"""
+    username, password = make_user(username="t100_admin5", role="superadmin")
+    token = _login(client, username, password)
+
+    r0 = client.get("/api/contractor-vouchers/last-paid-bank-account", headers=_auth(token))
+    assert r0.status_code == 200, r0.text
+    assert r0.json() == {"name": "", "acctCode": ""}
+
+    v1 = _make_paid_contractor_voucher(client, token, "MQ-BANK-001", "2026-08-05", bank_name="舊帳戶", bank_code="1101")
+    vendor_id = client.get(f"/api/contractor-vouchers/{v1}", headers=_auth(token)).json()["vendorId"]
+
+    r1 = client.get(
+        f"/api/contractor-vouchers/last-paid-bank-account?vendor_id={vendor_id}", headers=_auth(token)
+    )
+    assert r1.json() == {"name": "舊帳戶", "acctCode": "1101"}
+
+    # 同一個承攬商再匯款一次（用不同的派發/申請），查詢應回傳「最新」那筆
+    r_dispatch = client.post(
+        "/api/contractor-dispatches", headers=_auth(token),
+        json={
+            "quote_no": "MQ-BANK-001", "vendor_id": vendor_id,
+            "items_json": [{"description": "第二筆", "qty": 1, "unit": "式", "unitPrice": 5000, "amount": 5000}],
+            "status": "completed",
+        },
+    )
+    did = r_dispatch.json()["id"]
+    cv = client.post("/api/contractor-vouchers", headers=_auth(token), json={"dispatch_id": did})
+    voucher_no2 = cv.json()["voucher_no"]
+    import db
+    conn = db.get_db()
+    try:
+        conn.execute("UPDATE contractor_payment_vouchers SET status='已核准' WHERE voucher_no=?", (voucher_no2,))
+        conn.commit()
+    finally:
+        conn.close()
+    client.post(
+        f"/api/contractor-vouchers/{voucher_no2}/paid-toggle", headers=_auth(token),
+        json={"action": "pay", "paid_at": "2026-08-25", "bankAccountName": "最新帳戶", "bankAccountCode": "1102"},
+    )
+
+    r2 = client.get(
+        f"/api/contractor-vouchers/last-paid-bank-account?vendor_id={vendor_id}", headers=_auth(token)
+    )
+    assert r2.json() == {"name": "最新帳戶", "acctCode": "1102"}
+
+
+def test_last_received_bank_account_for_customer(client, make_user):
+    """2026-09-02：標記已收款時銀行帳戶下拉的預設值——查這個客戶上次用的帳戶
+    （依 quotations.customer_name 熱路徑欄位比對）。"""
+    username, password = make_user(username="t100_admin6", role="superadmin")
+    token = _login(client, username, password)
+
+    r0 = client.get("/api/quotations/last-received-bank-account", headers=_auth(token))
+    assert r0.status_code == 200, r0.text
+    assert r0.json() == {"name": "", "acctCode": ""}
+
+    r0b = client.get(
+        "/api/quotations/last-received-bank-account?customerName=從沒收過款的客戶", headers=_auth(token)
+    )
+    assert r0b.json() == {"name": "", "acctCode": ""}
+
+    import db
+    conn = db.get_db()
+    try:
+        for quote_no, received_at, bank_name, bank_code in [
+            ("MQ-BANKC-001", "2026-08-05", "舊收款帳戶", "1101"),
+            ("MQ-BANKC-002", "2026-08-20", "最新收款帳戶", "1102"),
+        ]:
+            data_json = json.dumps({
+                "dealTag": "已成案",
+                "caseRecord": {"payment": {"items": [
+                    {"type": "訂金款", "pct": 100, "amount": 10000, "received": True,
+                     "receivedAt": received_at, "invoiceNo": f"INV-{quote_no}", "actualAmount": 10000,
+                     "bankAccountName": bank_name, "bankAccountCode": bank_code},
+                ]}},
+            })
+            conn.execute(
+                "INSERT INTO quotations (quote_no, status, customer_name, project_name, total, pretax, "
+                "data_json, created_at, updated_at, deal_tag, quote_date) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                (quote_no, "已送出", "測試銀行客戶A", "測試專案", 10000, 9524, data_json,
+                 "2026-08-01T00:00:00", "2026-08-01T00:00:00", "已成案", "2026-08-01"),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+    r1 = client.get(
+        "/api/quotations/last-received-bank-account?customerName=測試銀行客戶A", headers=_auth(token)
+    )
+    assert r1.json() == {"name": "最新收款帳戶", "acctCode": "1102"}
+
+    # 不同客戶名稱查不到
+    r2 = client.get(
+        "/api/quotations/last-received-bank-account?customerName=測試銀行客戶B", headers=_auth(token)
+    )
+    assert r2.json() == {"name": "", "acctCode": ""}

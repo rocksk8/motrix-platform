@@ -963,6 +963,16 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
 - **依料件分類**：`inventoryExpenseAccounts: {分類名稱: 科目代號}`（鍵對應 `parts.py::PART_CATEGORIES`），這個**是**即時查表（不快照）——分類本身不會變，財務事後更正某分類科目代號，未確認的舊事件會一起套用新值。
 - 其餘科目（銷貨收入/銷項稅額/承攬商費用/部門別/傳票別）維持全公司單一設定。
 
+**銀行帳戶欄位自動帶入預設值（2026-09-02 新增，無 DB migration）：** 使用者要求「標示已匯款須帶入當時填寫或是預設的匯款帳戶」——三個標記 Modal 開啟時，銀行帳戶下拉不再一律空白「未指定」，依序嘗試：①查這個對象（承攬商/供應商/客戶）上一次標記時用的帳戶 ②查無則退回 `t100-export-config` 新增的 `defaultBankAccountCode`（系統預設帳戶，設定頁「🏦 銀行帳戶清單」卡片每列可點 ☆ 設為預設）③兩者都沒有才維持空白；使用者仍可手動改選，不是強制值。三支新端點：
+
+| Method | Path | 說明 |
+|--------|------|------|
+| GET | /contractor-vouchers/last-paid-bank-account?vendor_id= | 該承攬商上次已匯款用的帳戶 |
+| GET | /inventory/batches/last-paid-bank-account?supplier_id= | 該供應商上次已付款用的帳戶 |
+| GET | /quotations/last-received-bank-account?customerName= | 該客戶（依 `customer_name` 熱路徑欄位比對）上次已收款用的帳戶；⚠️ 註冊在 `GET /quotations/{quote_no}` 之前，避免被當成 quote_no 吃掉 |
+
+三支皆純讀取、需登入不需要 admin+，查無資料回傳 `{"name":"","acctCode":""}` 不噴錯。前端 `reports.js`/`case-management.js`/`inventory.html` 各自新增 `_resolveDefaultBankAccount()` helper 呼叫對應端點。
+
 ### §7.18 · 進貨批次供應商/發票/付款狀態（DB v70，2026-09-01）
 
 | Method | Path | 說明 |

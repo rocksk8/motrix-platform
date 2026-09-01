@@ -212,3 +212,67 @@ def test_unpaid_batch_excluded_from_t100_export(client, make_user):
     )
     assert preview.status_code == 200, preview.text
     assert all(e["sourceType"] != "stock_batch" or e["sourceKey"] != "STK-P6" for e in preview.json()["events"])
+
+
+def test_last_paid_bank_account_for_supplier(client, make_user):
+    """2026-09-02：標記已付款時銀行帳戶下拉的預設值——查這個供應商上次用的帳戶。"""
+    username, password = make_user(username="stk_admin7", role="superadmin")
+    token = _login(client, username, password)
+    supplier_id = _make_supplier(client, token, "測試供應商D")
+
+    # 未查過任何紀錄前，回傳空字串（不噴錯）
+    r0 = client.get("/api/inventory/batches/last-paid-bank-account", headers=_auth(token))
+    assert r0.status_code == 200, r0.text
+    assert r0.json() == {"name": "", "acctCode": ""}
+
+    r0b = client.get(
+        f"/api/inventory/batches/last-paid-bank-account?supplier_id={supplier_id}", headers=_auth(token)
+    )
+    assert r0b.json() == {"name": "", "acctCode": ""}
+
+    _make_part(client, token, "STK-BANK1")
+    batch1 = _make_batch(client, token, "STK-BANK1", supplier_id=supplier_id, cost=1000, qty=1)
+    client.post(
+        f"/api/inventory/batches/{batch1}/paid-toggle", headers=_auth(token),
+        json={"action": "pay", "paid_at": "2026-08-10", "bankAccountName": "舊帳戶", "bankAccountCode": "1101"},
+    )
+
+    _make_part(client, token, "STK-BANK2")
+    batch2 = _make_batch(client, token, "STK-BANK2", supplier_id=supplier_id, cost=2000, qty=1)
+    client.post(
+        f"/api/inventory/batches/{batch2}/paid-toggle", headers=_auth(token),
+        json={"action": "pay", "paid_at": "2026-08-20", "bankAccountName": "最新帳戶", "bankAccountCode": "1102"},
+    )
+
+    r1 = client.get(
+        f"/api/inventory/batches/last-paid-bank-account?supplier_id={supplier_id}", headers=_auth(token)
+    )
+    assert r1.status_code == 200, r1.text
+    assert r1.json() == {"name": "最新帳戶", "acctCode": "1102"}
+
+    # 不同供應商查不到這筆紀錄
+    other_supplier_id = _make_supplier(client, token, "測試供應商E")
+    r2 = client.get(
+        f"/api/inventory/batches/last-paid-bank-account?supplier_id={other_supplier_id}", headers=_auth(token)
+    )
+    assert r2.json() == {"name": "", "acctCode": ""}
+
+
+def test_default_bank_account_config_field(client, make_user):
+    """2026-09-02：T100 設定新增 defaultBankAccountCode（系統預設帳戶），
+    找不到對象上次使用紀錄時的第二層 fallback。"""
+    username, password = make_user(username="stk_admin8", role="superadmin")
+    token = _login(client, username, password)
+
+    r0 = client.get("/api/settings/t100-export-config", headers=_auth(token))
+    assert r0.json()["defaultBankAccountCode"] == ""
+
+    r1 = client.put(
+        "/api/settings/t100-export-config", headers=_auth(token),
+        json={"bankAccounts": [{"name": "主要帳戶", "acctCode": "1101"}],
+              "defaultBankAccountCode": "1101"},
+    )
+    assert r1.status_code == 200, r1.text
+
+    r2 = client.get("/api/settings/t100-export-config", headers=_auth(token))
+    assert r2.json()["defaultBankAccountCode"] == "1101"

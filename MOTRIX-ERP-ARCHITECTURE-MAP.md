@@ -103,6 +103,8 @@ SQLite (WAL)  motrix_erp.db（正式）+ motrix_erp_demo.db（demo 隔離）
 
 **科目代號分維度（2026-09-01 同輪，DB v71）**：使用者要求銀行帳戶與料件分類分開設定科目代號。**銀行帳戶採快照模式**（不是查表）——`contractor_payment_vouchers`/`stock_batches` 新增 `paid_bank_account_name/code` 欄位、報價單款項 JSON 新增 `bankAccountName/Code`，標記已付款/已收款當下直接把選的帳戶寫死在那筆交易上，之後設定頁的銀行帳戶清單怎麼改都不會回頭影響舊交易（`bankAccounts` 設定清單純粹是給 UI 下拉選單用）。**料件分類則是即時查表**（`inventoryExpenseAccounts: {分類: 代號}`）——分類本身不變，財務事後更正代號會套用到所有未確認的舊事件，跟其餘固定科目走同一套邏輯。三個「標記已付款/已收款」UI 都已加上銀行帳戶下拉（`case-management.html`／`reports.html`出納分頁／`inventory.html`）。
 
+**銀行帳戶欄位自動帶入預設值（2026-09-02）**：使用者要求「須帶入當時填寫或是預設的匯款帳戶」——三個標記 Modal 開啟時依序嘗試①該對象（承攬商/供應商/客戶）上次標記用的帳戶（三支新查詢端點：`contractor_vouchers.py::get_last_paid_bank_account()`／`inventory.py::get_last_paid_bank_account()`／`quotations.py::get_last_received_bank_account()`，皆純讀取）②`t100-export-config.defaultBankAccountCode`（系統預設，設定頁銀行帳戶清單可點 ☆ 指定）③兩者皆無才空白；使用者仍可手動覆蓋。無 DB migration。
+
 ### 2.8 出納 `cashier.py` (276行，2026-08-28 新增，QUICK.md 舊版完全沒記載)
 - 前端：併入「營運報表」頁籤（非獨立 sidebar 項目）
 - API：`/api/cashier/payable-queue`、`receivable-queue`、`summary`、`execution-history`、`export`（`cashier.py:117-192`）
