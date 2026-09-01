@@ -11,20 +11,30 @@ Excel、財務人員在 T100 用既有匯入功能手動核對匯入，風險小
     ＋ 貸 銷項稅額(稅額，若有)
   - 付款事件：承攬商匯款申請已標記已匯款（沿用 cashier.py 出納模組同一份資料源）
     → 借 承攬商費用(含稅) / 貸 銀行存款(含稅)
+  - 付款事件：料件/設備進貨批次已標記已付款（2026-09-01 同輪新增，見 DB v70
+    `stock_batches`）→ 借 料件設備成本 / 貸 銀行存款
 
 刻意排除 payment_requests（請款單）——那是對客戶要款的文件，沒有「已收款」狀態，
 不是真的金流事件，比照 reports.py::_compute_cash_position() 既有的排除理由（同一
 份資料在系統裡任何金流类彙總都不該把它算進去，避免各處各自決定要不要排除造成
 不一致）。
 
-每筆事件產生的傳票天生借貸平衡（同一 voucherNo 底下借方合計＝貸方合計），三個
-面向（銷項發票／應付／銀行對帳）用同一份匯出涵蓋，避免三份報表各自各的資料源、
-數字對不上。
+每筆事件產生的傳票天生借貸平衡（同一 voucherNo 底下借方合計＝貸方合計），銷項
+發票／承攬商應付／料件設備應付／銀行對帳四個面向用同一份匯出涵蓋，避免各自
+獨立報表、資料源不同、數字對不上。
 
 科目代號（借貸方會計科目）由 superadmin 在 GET/PUT /api/settings/t100-export-config
 設定，預設全部留白——這是刻意的，貴公司財務團隊需要先確認實際使用的科目代號
 才具備直接匯入 T100 的意義；金額/日期/摘要/來源單號/交易對象等其餘欄位在科目
 代號填入前就已經正確可用，財務可以先核對數字正確性。
+
+**已匯入確認追蹤（2026-09-01 同輪新增，DB v69 `t100_export_confirmations`）**：
+匯出 Excel 本身不代表財務真的把這批傳票匯入了 T100（匯出後可能發現資料有誤、
+或財務決定分批匯入）——匯出跟「標記已匯入」是兩個獨立動作，只有明確標記過的
+事件才會在之後的匯出/預覽自動排除，避免同一筆事件被財務重複匯入 T100 造成
+金額灌水。流程：財務 `GET preview` 預覽本期未確認事件 → 實際到 T100 匯入 →
+回來 `POST confirm` 標記整批已匯入 → 該批事件之後永久不再出現在任何日期區間
+的匯出/預覽中（除非用 `POST unconfirm` 撤銷）。
 """
 import io
 from datetime import date, datetime
@@ -49,6 +59,7 @@ _DEFAULT_T100_CONFIG = {
     "salesRevenueAccount":      "",   # 銷貨收入科目代號
     "outputTaxAccount":         "",   # 銷項稅額科目代號
     "contractorExpenseAccount": "",   # 承攬商費用科目代號
+    "inventoryExpenseAccount":  "",   # 料件/設備成本科目代號（2026-09-01 同輪新增）
     "departmentCode":           "",   # 部門別代號（選填，留空則傳票不分部門）
     "voucherCategory":          "轉", # 傳票別（T100 常見：現／轉／記，預設「轉」）
 }
@@ -61,6 +72,7 @@ class T100ExportConfigBody(BaseModel):
     salesRevenueAccount: str = ""
     outputTaxAccount: str = ""
     contractorExpenseAccount: str = ""
+    inventoryExpenseAccount: str = ""
     departmentCode: str = ""
     voucherCategory: str = "轉"
 
@@ -102,56 +114,140 @@ def _collect_paid_contractor_vouchers(start: str, end: str) -> list:
         conn.close()
 
 
-def _voucher_line(voucher_no, d, category, summary, acct_code, acct_name, debit, credit,
-                   dept, source_no, counterparty):
+def _voucher_line(d, category, summary, acct_code, acct_name, debit, credit, dept, source_no, counterparty):
     return {
-        "voucherNo": voucher_no, "date": d, "category": category, "summary": summary,
+        "date": d, "category": category, "summary": summary,
         "acctCode": acct_code, "acctName": acct_name,
         "debit": round(debit) if debit else 0, "credit": round(credit) if credit else 0,
         "dept": dept, "sourceNo": source_no, "counterparty": counterparty,
     }
 
 
-def _build_t100_vouchers(start: str, end: str, cfg: dict) -> list:
-    """回傳一組傳票分錄列（每列是一筆借方或貸方分錄），供 Excel 逐列輸出。
-    每張傳票（同一 voucherNo）借方合計＝貸方合計，天生借貸平衡。"""
-    rows = []
-    seq = 0
+def _collect_paid_stock_batches(start: str, end: str) -> list:
+    """料件/設備進貨已付款批次（2026-09-01 同輪新增，見 db.py::_m070_stock_batches()）。
+    qty/total_cost 即時從 stock_items 群組加總（不信任任何快取值），比照
+    routers/inventory.py::list_batches() 同一套「即時算，不信任快取」原則。"""
+    conn = get_db()
+    try:
+        rows = conn.execute("""
+            SELECT sb.batch_no, sb.part_no, sb.supplier_name, sb.invoice_no, sb.paid_at,
+                   SUM(si.cost) AS total_cost
+            FROM stock_batches sb
+            JOIN stock_items si ON si.batch_no = sb.batch_no
+            WHERE sb.is_paid=1 AND sb.paid_at BETWEEN ? AND ?
+            GROUP BY sb.batch_no
+            ORDER BY sb.paid_at
+        """, (start, end)).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+def _confirmed_keys(conn) -> set:
+    rows = conn.execute("SELECT source_type, source_key FROM t100_export_confirmations").fetchall()
+    return {(r["source_type"], r["source_key"]) for r in rows}
+
+
+def _collect_t100_events(start: str, end: str, exclude_confirmed: bool = True) -> list:
+    """回傳**事件層級**清單（一個事件＝一張傳票，含其借貸分錄 lines），供
+    Excel 攤平輸出、預覽 JSON、標記已匯入共用同一份組裝邏輯，避免三處各自
+    重寫一遍篩選條件而彼此不一致。"""
+    conn = get_db()
+    try:
+        confirmed = _confirmed_keys(conn) if exclude_confirmed else set()
+    finally:
+        conn.close()
+
+    cfg = _t100_config()
+    events = []
 
     # 收款事件（銷項）：借 銀行存款(含稅) / 貸 銷貨收入(未稅) ＋ 貸 銷項稅額(稅額)
     for inv in _collect_tax_invoices():
         d = (inv.get("date") or "")[:10]
         if not d or not (start <= d <= end):
             continue
-        seq += 1
-        vno = f"AR{seq:04d}"
+        key = f"{inv['quoteNo']}::{inv['invoiceNo']}"
+        if ("quotation_payment", key) in confirmed:
+            continue
         summary = f"{inv['customer']} {inv['quoteNo']} 發票{inv['invoiceNo']} 收款"[:60]
-        rows.append(_voucher_line(vno, d, cfg["voucherCategory"], summary,
-                                   cfg["bankAccount"], "銀行存款", inv["amountTotal"], 0,
-                                   cfg["departmentCode"], inv["quoteNo"], inv["customer"]))
-        rows.append(_voucher_line(vno, d, cfg["voucherCategory"], summary,
-                                   cfg["salesRevenueAccount"], "銷貨收入", 0, inv["amountPretax"],
-                                   cfg["departmentCode"], inv["quoteNo"], inv["customer"]))
+        lines = [
+            _voucher_line(d, cfg["voucherCategory"], summary, cfg["bankAccount"], "銀行存款",
+                          inv["amountTotal"], 0, cfg["departmentCode"], inv["quoteNo"], inv["customer"]),
+            _voucher_line(d, cfg["voucherCategory"], summary, cfg["salesRevenueAccount"], "銷貨收入",
+                          0, inv["amountPretax"], cfg["departmentCode"], inv["quoteNo"], inv["customer"]),
+        ]
         if inv["taxAmount"]:
-            rows.append(_voucher_line(vno, d, cfg["voucherCategory"], summary,
-                                       cfg["outputTaxAccount"], "銷項稅額", 0, inv["taxAmount"],
-                                       cfg["departmentCode"], inv["quoteNo"], inv["customer"]))
+            lines.append(_voucher_line(d, cfg["voucherCategory"], summary, cfg["outputTaxAccount"], "銷項稅額",
+                                        0, inv["taxAmount"], cfg["departmentCode"], inv["quoteNo"], inv["customer"]))
+        events.append({
+            "sourceType": "quotation_payment", "sourceKey": key,
+            "date": d, "amount": inv["amountTotal"], "summary": summary, "lines": lines,
+        })
 
     # 付款事件（承攬商費用）：借 承攬商費用(含稅) / 貸 銀行存款(含稅)
     for v in _collect_paid_contractor_vouchers(start, end):
-        seq += 1
-        vno = f"AP{seq:04d}"
+        key = v["voucherNo"]
+        if ("contractor_voucher", key) in confirmed:
+            continue
         vendor = v["vendorName"] or "外包人員點工"
         summary = f"{vendor} {v['quoteNo']} 匯款申請{v['voucherNo']}"[:60]
         paid_d = (v["paidAt"] or "")[:10]
-        rows.append(_voucher_line(vno, paid_d, cfg["voucherCategory"], summary,
-                                   cfg["contractorExpenseAccount"], "承攬商費用", v["grandTotal"], 0,
-                                   cfg["departmentCode"], v["voucherNo"], vendor))
-        rows.append(_voucher_line(vno, paid_d, cfg["voucherCategory"], summary,
-                                   cfg["bankAccount"], "銀行存款", 0, v["grandTotal"],
-                                   cfg["departmentCode"], v["voucherNo"], vendor))
+        lines = [
+            _voucher_line(paid_d, cfg["voucherCategory"], summary, cfg["contractorExpenseAccount"], "承攬商費用",
+                          v["grandTotal"], 0, cfg["departmentCode"], v["voucherNo"], vendor),
+            _voucher_line(paid_d, cfg["voucherCategory"], summary, cfg["bankAccount"], "銀行存款",
+                          0, v["grandTotal"], cfg["departmentCode"], v["voucherNo"], vendor),
+        ]
+        events.append({
+            "sourceType": "contractor_voucher", "sourceKey": key,
+            "date": paid_d, "amount": v["grandTotal"], "summary": summary, "lines": lines,
+        })
 
-    rows.sort(key=lambda r: (r["date"], r["voucherNo"]))
+    # 付款事件（料件/設備進貨）：借 料件設備成本 / 貸 銀行存款
+    for b in _collect_paid_stock_batches(start, end):
+        key = b["batch_no"]
+        if ("stock_batch", key) in confirmed:
+            continue
+        supplier = b["supplier_name"] or "（未登記供應商）"
+        summary = f"{supplier} {b['part_no']} 進貨批次{b['batch_no']}"[:60]
+        total_cost = b["total_cost"] or 0
+        lines = [
+            _voucher_line(b["paid_at"], cfg["voucherCategory"], summary,
+                          cfg["inventoryExpenseAccount"], "料件設備成本",
+                          total_cost, 0, cfg["departmentCode"], b["batch_no"], supplier),
+            _voucher_line(b["paid_at"], cfg["voucherCategory"], summary,
+                          cfg["bankAccount"], "銀行存款",
+                          0, total_cost, cfg["departmentCode"], b["batch_no"], supplier),
+        ]
+        events.append({
+            "sourceType": "stock_batch", "sourceKey": key,
+            "date": b["paid_at"], "amount": total_cost, "summary": summary, "lines": lines,
+        })
+
+    events.sort(key=lambda e: (e["date"], e["sourceKey"]))
+    return events
+
+
+def _flatten_events_for_excel(events: list) -> list:
+    """把事件層級清單攤平成傳票分錄列，補上每張傳票的流水傳票號
+    （AR0001/AP0002，純顯示用，每次匯出重新編號，不是穩定識別碼——
+    真正用來判斷「是否已匯入過」的是 sourceType/sourceKey，見 _collect_t100_events()）。"""
+    rows = []
+    ar_seq = ap_seq = pc_seq = 0
+    for ev in events:
+        if ev["sourceType"] == "quotation_payment":
+            ar_seq += 1
+            vno = f"AR{ar_seq:04d}"
+        elif ev["sourceType"] == "contractor_voucher":
+            ap_seq += 1
+            vno = f"AP{ap_seq:04d}"
+        else:
+            pc_seq += 1
+            vno = f"PC{pc_seq:04d}"
+        for line in ev["lines"]:
+            row = dict(line)
+            row["voucherNo"] = vno
+            rows.append(row)
     return rows
 
 
@@ -163,8 +259,8 @@ def _build_t100_voucher_excel(rows: list, start: str, end: str, cfg: dict, gen_a
     mk, fill, mk_border, al = _xl_style(wb)
     BD = mk_border()
 
-    missing_codes = [k for k in ("bankAccount", "salesRevenueAccount",
-                                  "outputTaxAccount", "contractorExpenseAccount")
+    missing_codes = [k for k in ("bankAccount", "salesRevenueAccount", "outputTaxAccount",
+                                  "contractorExpenseAccount", "inventoryExpenseAccount")
                       if not cfg.get(k)]
 
     widths = [10, 12, 8, 30, 10, 12, 12, 12, 8, 14, 16]
@@ -216,21 +312,32 @@ def _build_t100_voucher_excel(rows: list, start: str, end: str, cfg: dict, gen_a
     return buf.getvalue()
 
 
+def _require_t100_admin(authorization: str) -> dict:
+    u = _require_user(authorization)
+    if u["role"] not in ("superadmin", "admin"):
+        raise HTTPException(403, "財務報告僅管理員以上可查閱")
+    return u
+
+
+def _validate_range(start: str, end: str) -> None:
+    if not start or not end or start > end:
+        raise HTTPException(400, "start/end 日期區間無效")
+
+
 @router.get("/api/reports/t100-export/vouchers")
 def t100_export_vouchers(
     start: str = Query(...),
     end: str = Query(...),
     authorization: str = Header(None),
 ):
-    """T100 傳票批次匯出（Excel），現金基礎，涵蓋已收款發票與已匯款承攬商費用。"""
-    u = _require_user(authorization)
-    if u["role"] not in ("superadmin", "admin"):
-        raise HTTPException(403, "財務報告僅管理員以上可查閱")
-    if not start or not end or start > end:
-        raise HTTPException(400, "start/end 日期區間無效")
+    """T100 傳票批次匯出（Excel），現金基礎，涵蓋已收款發票／已匯款承攬商費用／
+    已付款料件設備進貨；已標記「已匯入」的事件自動排除，不會重複出現在匯出檔裡。"""
+    u = _require_t100_admin(authorization)
+    _validate_range(start, end)
     _check_export_rate(u["id"], "excel")
     cfg = _t100_config()
-    rows = _build_t100_vouchers(start, end, cfg)
+    events = _collect_t100_events(start, end)
+    rows = _flatten_events_for_excel(events)
     gen_at = datetime.now().strftime("%Y-%m-%d %H:%M")
     xlsx = _build_t100_voucher_excel(rows, start, end, cfg, gen_at)
     fname = f"MOTRIX_T100傳票匯出_{start}_{end}.xlsx"
@@ -239,3 +346,112 @@ def t100_export_vouchers(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename*=UTF-8''{_url_quote(fname)}"},
     )
+
+
+@router.get("/api/reports/t100-export/preview")
+def t100_export_preview(
+    start: str = Query(...),
+    end: str = Query(...),
+    authorization: str = Header(None),
+):
+    """預覽本期尚未標記「已匯入」的事件（JSON，非 Excel），供財務在正式標記
+    已匯入前先核對筆數/金額。"""
+    _require_t100_admin(authorization)
+    _validate_range(start, end)
+    events = _collect_t100_events(start, end)
+    return {
+        "count": len(events),
+        "totalAmount": sum(e["amount"] for e in events),
+        "events": [
+            {"sourceType": e["sourceType"], "sourceKey": e["sourceKey"],
+             "date": e["date"], "amount": e["amount"], "summary": e["summary"]}
+            for e in events
+        ],
+    }
+
+
+class T100ConfirmBody(BaseModel):
+    start: str
+    end: str
+
+
+@router.post("/api/reports/t100-export/confirm")
+def t100_export_confirm(body: T100ConfirmBody, authorization: str = Header(None)):
+    """財務確認「這個區間內尚未標記的事件已經實際匯入 T100」——標記後這些
+    事件會從之後所有匯出/預覽自動排除，避免重複匯入。冪等：已標記過的事件
+    這次呼叫不會出現在候選清單裡（_collect_t100_events 預設排除已確認）。"""
+    u = _require_t100_admin(authorization)
+    _validate_range(body.start, body.end)
+    events = _collect_t100_events(body.start, body.end)
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    conn = get_db()
+    try:
+        for ev in events:
+            conn.execute(
+                "INSERT OR IGNORE INTO t100_export_confirmations "
+                "(source_type, source_key, event_date, amount, summary, confirmed_by, confirmed_at) "
+                "VALUES (?,?,?,?,?,?,?)",
+                (ev["sourceType"], ev["sourceKey"], ev["date"], ev["amount"], ev["summary"],
+                 u["username"], now),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "reports.t100_export.confirm", "t100_export",
+           f"{body.start}~{body.end}", f"確認 {len(events)} 筆事件已匯入 T100")
+    return {"confirmedCount": len(events)}
+
+
+@router.get("/api/reports/t100-export/confirmed")
+def t100_export_confirmed_list(
+    start: str = Query(None),
+    end: str = Query(None),
+    authorization: str = Header(None),
+):
+    """已標記「已匯入」的事件清單（稽核／複核用），可選日期區間篩選。"""
+    _require_t100_admin(authorization)
+    conn = get_db()
+    try:
+        if start and end:
+            rows = conn.execute(
+                "SELECT * FROM t100_export_confirmations WHERE event_date BETWEEN ? AND ? "
+                "ORDER BY confirmed_at DESC", (start, end),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM t100_export_confirmations ORDER BY confirmed_at DESC LIMIT 500"
+            ).fetchall()
+        return [
+            {"sourceType": r["source_type"], "sourceKey": r["source_key"],
+             "date": r["event_date"], "amount": r["amount"], "summary": r["summary"],
+             "confirmedBy": r["confirmed_by"], "confirmedAt": r["confirmed_at"]}
+            for r in rows
+        ]
+    finally:
+        conn.close()
+
+
+class T100UnconfirmBody(BaseModel):
+    sourceType: str
+    sourceKey: str
+
+
+@router.post("/api/reports/t100-export/unconfirm")
+def t100_export_unconfirm(body: T100UnconfirmBody, authorization: str = Header(None)):
+    """撤銷單一事件的「已匯入」標記（標記錯誤時的救援手段），撤銷後該事件
+    會在下次涵蓋其日期的匯出/預覽重新出現。"""
+    u = _require_t100_admin(authorization)
+    conn = get_db()
+    try:
+        cur = conn.execute(
+            "DELETE FROM t100_export_confirmations WHERE source_type=? AND source_key=?",
+            (body.sourceType, body.sourceKey),
+        )
+        conn.commit()
+        if cur.rowcount == 0:
+            raise HTTPException(404, "找不到對應的已匯入標記")
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "reports.t100_export.unconfirm", "t100_export",
+           f"{body.sourceType}:{body.sourceKey}", "撤銷 T100 已匯入標記")
+    return {"ok": True}

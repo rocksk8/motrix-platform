@@ -52,6 +52,9 @@ function reportsApp() {
     t100Config:       null,
     t100ConfigLoaded: false,
     t100ConfigSaving: false,
+    t100Preview:      null,   // {count, totalAmount, events:[...]}，未確認事件預覽
+    t100Previewing:   false,
+    t100Confirming:   false,
 
     // 銀行對帳單比對（連同標記已匯款 Modal）2026-08-31 搬到出納模組
     // frontend/js/cashier.js（財務/出納權限分工，見那邊同一輪改動），
@@ -1342,6 +1345,58 @@ function reportsApp() {
         alert('T100 傳票匯出失敗：' + (e.message || e))
       } finally {
         this.t100Exporting = false
+      }
+    },
+
+    async loadT100Preview() {
+      if (!this.t100Start || !this.t100End || this.t100Start > this.t100End) {
+        alert('請確認起訖日期區間正確')
+        return
+      }
+      this.t100Previewing = true
+      try {
+        var qs = 'start=' + this.t100Start + '&end=' + this.t100End
+        var res = await fetch('/api/reports/t100-export/preview?' + qs, {
+          headers: { Authorization: 'Bearer ' + this._token() }
+        })
+        if (!res.ok) {
+          var j = await res.json().catch(function () { return {} })
+          throw new Error(j.detail || '預覽失敗')
+        }
+        this.t100Preview = await res.json()
+      } catch (e) {
+        alert('T100 預覽失敗：' + (e.message || e))
+      } finally {
+        this.t100Previewing = false
+      }
+    },
+
+    // 財務人員實際到 T100 匯入後，回來按這顆按鈕標記整批已匯入——標記後這些
+    // 事件會從之後所有匯出/預覽自動排除，避免重複匯入
+    async confirmT100Imported() {
+      if (!this.t100Preview || !this.t100Preview.count) {
+        alert('目前沒有可確認的事件，請先預覽')
+        return
+      }
+      if (!confirm('確認這 ' + this.t100Preview.count + ' 筆事件已經實際匯入 T100？確認後將自動從之後的匯出/預覽排除，避免重複匯入。')) return
+      this.t100Confirming = true
+      try {
+        var res = await fetch('/api/reports/t100-export/confirm', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this._token() },
+          body: JSON.stringify({ start: this.t100Start, end: this.t100End }),
+        })
+        if (!res.ok) {
+          var j = await res.json().catch(function () { return {} })
+          throw new Error(j.detail || '確認失敗')
+        }
+        var result = await res.json()
+        alert('已標記 ' + result.confirmedCount + ' 筆事件為已匯入')
+        this.loadT100Preview()
+      } catch (e) {
+        alert('確認已匯入失敗：' + (e.message || e))
+      } finally {
+        this.t100Confirming = false
       }
     },
 

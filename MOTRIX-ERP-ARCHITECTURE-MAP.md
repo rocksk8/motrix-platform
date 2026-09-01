@@ -99,7 +99,7 @@ SQLite (WAL)  motrix_erp.db（正式）+ motrix_erp_demo.db（demo 隔離）
 
 三者架構高度一致（草稿→待審核→簽核中→已核准，snapshot_json 凍結、PDF、export_log），簽核流程可選「統一 `unified_approval_flow`」或各自獨立（`/api/settings/approval-flow-scope`，2026-08-28 起）。**這是全系統唯一稱得上「準會計憑證流」的部分**，見 §6.1 建議。
 
-**2026-09-01 起新增第四個角色：`accounting_export.py`（244行）**——不是憑證流本身，是憑證流的**下游匯出層**：把已核准/已收款/已匯款的事件轉成 T100（鼎新）標準傳票 Excel（現金基礎，借貸自動平衡），供財務手動匯入 T100。`GET/PUT /api/settings/t100-export-config`（科目代號對照，superadmin 維護）＋ `GET /api/reports/t100-export/vouchers`。這是 §6.1 建議「先做批次匯出、不做即時 API 對接」的第一階段實作，詳見 §6.1 更新說明。
+**2026-09-01 起新增第四個角色：`accounting_export.py`**——不是憑證流本身，是憑證流的**下游匯出層**：把已核准/已收款/已匯款的事件轉成 T100（鼎新）標準傳票 Excel（現金基礎，借貸自動平衡），供財務手動匯入 T100。三個事件來源：①已收款發票（`quotation_payment`）②已匯款承攬商費用（`contractor_voucher`）③已付款料件/設備進貨（`stock_batch`，DB v70 `stock_batches`，見 §2.9）。`GET/PUT /api/settings/t100-export-config`（科目代號對照，superadmin 維護）＋ `GET /api/reports/t100-export/vouchers`（Excel）＋ `GET .../preview`（JSON 預覽）＋ `POST .../confirm`／`POST .../unconfirm`（財務標記「已實際匯入 T100」，DB v69 `t100_export_confirmations`，標記後永久排除於之後匯出/預覽，避免重複匯入）＋ `GET .../confirmed`（稽核清單）。這是 §6.1 建議「先做批次匯出、不做即時 API 對接」的實作，詳見 §6.1 更新說明。
 
 ### 2.8 出納 `cashier.py` (276行，2026-08-28 新增，QUICK.md 舊版完全沒記載)
 - 前端：併入「營運報表」頁籤（非獨立 sidebar 項目）
@@ -112,9 +112,9 @@ SQLite (WAL)  motrix_erp.db（正式）+ motrix_erp_demo.db（demo 隔離）
 | 客戶 | `customers.py` (161行) | `customers`（`C-YYYYMM-NNN`） |
 | 供應商 | `suppliers.py` (145行) | `suppliers`（`S-YYYYMM-NNN`） |
 | 料件主檔 | `parts.py` (169行) | `parts`（含 v66 `safety_stock`） |
-| 序號級庫存 | `inventory.py` (304行) | `stock_items`（DB v38） |
+| 序號級庫存 | `inventory.py` | `stock_items`（DB v38）＋ `stock_batches`（DB v70，2026-09-01 新增批次表頭） |
 
-重點：序號級庫存（`stock_items`）與批次進貨（`batch_no`）＋安全庫存水位燈號（2026-08-28 新增）已是相對成熟的進銷存邏輯；扣庫存掛勾在出貨單核准與設備登載兩處（`_sync_device_stock()`）。
+重點：序號級庫存（`stock_items`）與批次進貨（`batch_no`）＋安全庫存水位燈號（2026-08-28 新增）已是相對成熟的進銷存邏輯；扣庫存掛勾在出貨單核准與設備登載兩處（`_sync_device_stock()`）。**2026-09-01 新增**：`stock_batches` 批次表頭補上供應商/發票號/付款狀態（`is_paid`/`paid_by`/`paid_at`，比照承攬商匯款申請模式），既有批次回填但 `is_paid` 預設 0（過去從未追蹤，非假設已付款）；`qty`/`total_cost` 仍即時從 `stock_items` 群組加總不信任表頭快取。這是 §2.7 財務憑證下游 `accounting_export.py` 的第三個事件來源。
 
 ### 2.10 專案管理 `projects.py` (592行)
 - 前端：無獨立頁面（2026-08-26 `_m062_case_project_merge` 已併入案件管理，`projects.html` 已刪除，僅保留舊 API 供內部沿用）
@@ -243,7 +243,7 @@ SQLite (WAL)  motrix_erp.db（正式）+ motrix_erp_demo.db（demo 隔離）
 - 已有的 `tax-export`（銷項發票 Excel）、`bank-reconcile`（CSV 寬鬆比對）已經是正確方向的第一步
 - 下一步建議做**定期批次匯出成目標會計系統可匯入的格式**（多數會計軟體支援 CSV/Excel 匯入傳票），而非投入資源做即時 API 對接或自建總帳——這個規模的公司請會計師事務所處理報稅，會計師慣用的工具（鼎新/正航/自己的 Excel 範本）才是終點，MOTRIX 角色應該停在「產生乾淨、可核對的原始憑證資料」
 
-**實作進度**：使用者確認目標是鼎新 T100，且明確選擇「先做批次匯出、不做 API 對接」（T100 API 需要貴公司自行申請存取權限，沒有真實憑證無法測試）。已完成第一階段：`accounting_export.py`（現金基礎傳票匯出，見 §2.7），科目代號留白待財務填入。**尚未做**：①科目代號實際填入（需財務/鼎新顧問提供）②若之後升級 API 即時推送，需先取得 T100 API 存取權限③目前只涵蓋「已收款發票」與「已匯款承攬商費用」兩類事件，料件/設備進貨等其餘支出面尚未涵蓋，之後有需要可比照同一套「現金基礎、天生借貸平衡」的模式擴充。
+**實作進度**：使用者確認目標是鼎新 T100，且明確選擇「先做批次匯出、不做 API 對接」（T100 API 需要貴公司自行申請存取權限，沒有真實憑證無法測試）。已完成：`accounting_export.py`（現金基礎傳票匯出，見 §2.7）＋已匯入確認追蹤（`t100_export_confirmations`，DB v69）＋料件/設備進貨付款狀態追蹤與納入匯出（`stock_batches`，DB v70），三類事件來源皆已涵蓋。科目代號留白待財務填入。**尚未做**：①科目代號實際填入（需財務/鼎新顧問提供）②若之後升級 API 即時推送，需先取得 T100 API 存取權限③既有進貨批次的付款狀態全部預設「未知/未付款」，財務需回頭逐批確認歷史資料④請款單/客戶供應商主檔等仍非涵蓋範圍（非金流事件或屬主檔同步，性質不同）。
 
 ### 6.2【高】MFA 與敏感操作二次驗證
 superadmin 目前是「密碼 + Bearer token in localStorage」單一因子。專業做法（比照 Okta/Google Workspace 對管理員帳號的要求）：至少對 superadmin 角色加 TOTP（`pyotp` 套件，不需要外部服務）。這比 2 小時閒置逾時（已做，見 §3）更能防範憑證外洩情境，是相對低成本、高投資報酬的一項。
@@ -329,3 +329,4 @@ G: 磁碟機掛載模式已經證實脆弱（磁碟機代號漂移事故）。�
 
 12. **`from module import CONST` 會繞過測試環境的 monkeypatch**：`conftest.py` 只 patch 模組本身的屬性（如 `helpers.uploads.UPLOADS_ROOT`），若別的模組用 `from helpers.uploads import UPLOADS_ROOT` 把值「by value」import 進自己的命名空間，測試時會意外寫進本機真實目錄而非隔離的 tmp_path。正確做法是 `import module`，所有存取都走 `module.CONST` 即時查找。
 13. **本機 Ollama 推理模型（qwen3.6/deepseek-r1 等）呼叫 `/api/generate` 要加 `"think": false`**：否則內容會被塞進獨立的 `thinking` 欄位、`response` 留空，容易誤判成「模型沒輸出任何東西」；程式邏輯應該 `response` 優先，空的話 fallback 讀 `thinking`。
+14. **process-global 狀態（rate-limit 字典等）也要在 `conftest.py` 裡重置，不是只有 DB/檔案路徑才算隔離**（2026-09-01 發現）：`reports.py::_check_export_rate()` 用模組級 `_export_times` dict 以 `(user_id, fmt)` 為 key 做匯出冷卻，`client` fixture 每個測試都建全新空 DB（`user_id` 從 1 重新編號），但這個 dict 本身跨測試從未重置——兩個各自獨立、彼此不相關的測試只要剛好都建立了「第 N 位使用者」又都呼叫同一個匯出端點、且真實時間差在冷卻窗口內，就會讓後一個測試莫名其妙 429。只在單一測試檔案跑測試時完全重現不出來，只有跑全套 `pytest tests/` 才會間歇性出現，容易誤判成「不穩定的測試」。修法：`conftest.py` 的 `client` fixture 用 `monkeypatch.setattr(reports_module, "_export_times", {})` 比照既有的 `UPLOADS_ROOT` 隔離模式一併重置。**Why：** 之後新增任何「模組級可變狀態」（尤其是這種 dict/計數器/lock），只要沒有隨 `client` fixture 重置，都可能是下一個間歇性、只在全套測試才浮現的 flaky 測試來源，不要等它發作才想到查。

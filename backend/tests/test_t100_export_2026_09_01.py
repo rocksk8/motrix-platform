@@ -181,3 +181,102 @@ def test_t100_voucher_export_rejects_invalid_range(client, make_user):
         headers=_auth(token),
     )
     assert r.status_code == 400, r.text
+
+
+def test_t100_preview_confirm_excludes_from_future_export(client, make_user):
+    username, password = make_user(username="t100_admin4", role="superadmin")
+    token = _login(client, username, password)
+
+    client.put(
+        "/api/settings/t100-export-config", headers=_auth(token),
+        json={"bankAccount": "1101", "salesRevenueAccount": "4101",
+              "outputTaxAccount": "2191", "contractorExpenseAccount": "6101"},
+    )
+
+    v = _make_paid_contractor_voucher(client, token, "MQ-T100-030", "2026-08-05")
+    _make_invoiced_quotation("MQ-T100-031", "INV-030", "2026-08-06", total=31500, pretax=30000)
+
+    # 預覽：兩筆事件都還沒確認，應該都出現
+    preview1 = client.get(
+        "/api/reports/t100-export/preview?start=2026-08-01&end=2026-08-31",
+        headers=_auth(token),
+    )
+    assert preview1.status_code == 200, preview1.text
+    keys1 = {(e["sourceType"], e["sourceKey"]) for e in preview1.json()["events"]}
+    assert ("contractor_voucher", v) in keys1
+    assert ("quotation_payment", "MQ-T100-031::INV-030") in keys1
+    assert preview1.json()["count"] == 2
+
+    # 確認整批已匯入
+    confirm = client.post(
+        "/api/reports/t100-export/confirm", headers=_auth(token),
+        json={"start": "2026-08-01", "end": "2026-08-31"},
+    )
+    assert confirm.status_code == 200, confirm.text
+    assert confirm.json()["confirmedCount"] == 2
+
+    # 再次確認同一區間：冪等，這次候選清單應為 0（已排除）
+    confirm2 = client.post(
+        "/api/reports/t100-export/confirm", headers=_auth(token),
+        json={"start": "2026-08-01", "end": "2026-08-31"},
+    )
+    assert confirm2.status_code == 200, confirm2.text
+    assert confirm2.json()["confirmedCount"] == 0
+
+    # 預覽：確認後這兩筆事件應該從候選清單消失
+    preview2 = client.get(
+        "/api/reports/t100-export/preview?start=2026-08-01&end=2026-08-31",
+        headers=_auth(token),
+    )
+    assert preview2.json()["count"] == 0
+    # （Excel 匯出走同一份 _collect_t100_events()，排除邏輯已在其他測試涵蓋，
+    # 這裡不重覆呼叫 excel 端點，避免撞上 process-global 匯出冷卻限流，見既有踩坑記錄）
+
+    # 已確認清單應可查到這兩筆
+    confirmed_list = client.get(
+        "/api/reports/t100-export/confirmed?start=2026-08-01&end=2026-08-31",
+        headers=_auth(token),
+    )
+    assert confirmed_list.status_code == 200, confirmed_list.text
+    confirmed_keys = {(c["sourceType"], c["sourceKey"]) for c in confirmed_list.json()}
+    assert ("contractor_voucher", v) in confirmed_keys
+    assert ("quotation_payment", "MQ-T100-031::INV-030") in confirmed_keys
+
+    # 撤銷承攬商費用那一筆的確認
+    unconfirm = client.post(
+        "/api/reports/t100-export/unconfirm", headers=_auth(token),
+        json={"sourceType": "contractor_voucher", "sourceKey": v},
+    )
+    assert unconfirm.status_code == 200, unconfirm.text
+
+    # 撤銷後應重新出現在預覽（但另一筆仍被排除）
+    preview3 = client.get(
+        "/api/reports/t100-export/preview?start=2026-08-01&end=2026-08-31",
+        headers=_auth(token),
+    )
+    keys3 = {(e["sourceType"], e["sourceKey"]) for e in preview3.json()["events"]}
+    assert keys3 == {("contractor_voucher", v)}
+
+    # 撤銷不存在的標記應回 404
+    unconfirm2 = client.post(
+        "/api/reports/t100-export/unconfirm", headers=_auth(token),
+        json={"sourceType": "contractor_voucher", "sourceKey": "PV-NOTEXIST"},
+    )
+    assert unconfirm2.status_code == 404, unconfirm2.text
+
+
+def test_t100_preview_and_confirm_require_admin(client, make_user):
+    viewer_username, viewer_password = make_user(role="viewer", modules=[])
+    viewer_token = _login(client, viewer_username, viewer_password)
+
+    r1 = client.get(
+        "/api/reports/t100-export/preview?start=2026-08-01&end=2026-08-31",
+        headers=_auth(viewer_token),
+    )
+    assert r1.status_code == 403, r1.text
+
+    r2 = client.post(
+        "/api/reports/t100-export/confirm", headers=_auth(viewer_token),
+        json={"start": "2026-08-01", "end": "2026-08-31"},
+    )
+    assert r2.status_code == 403, r2.text

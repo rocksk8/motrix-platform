@@ -78,7 +78,7 @@ DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR = os.path.join(
 # （已套用過的 schema_version 不可回頭刪除/重排），data_json.dealWonAt 這個
 # 欄位會留在既有資料裡但目前沒有任何程式碼讀取，之後如果要重新加回「成交時間」
 # 這種概念，不要複用這個欄位名稱免得語意混淆。
-CURRENT_VERSION = 68
+CURRENT_VERSION = 70
 
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
 # execution model) whenever the current request is authenticated as the 'demo'
@@ -1945,6 +1945,89 @@ def _m067_approval_delegates(conn):
     conn.commit()
 
 
+def _m070_stock_batches(conn):
+    """進貨批次新增獨立表頭 `stock_batches`（2026-09-01）：`stock_items` 原本
+    沒有獨立批次父表，`batch_no` 只是共用字串，供應商/付款狀態這類「批次層級」
+    屬性完全沒地方放（見 `_m068` 附近文件註解「無獨立 stock_batches 父表」）。
+
+    使用者要求把「料件/設備進貨」納入 T100 傳票匯出（現金基礎），但進貨本身
+    完全沒有「是否已付款」的追蹤——這是本次要補的前置功能，不只是匯出模組
+    的擴充。設計比照 `contractor_payment_vouchers` 既有的 is_paid/paid_by/
+    paid_at 三欄模式。
+
+    一個 `create_batch()` 呼叫只會建立單一 part_no 的一批序號（見
+    `routers/inventory.py::create_batch()`），batch_no 與 part_no 天生 1:1，
+    所以可以安全地把既有資料回填成一筆 stock_batches header。`qty`/
+    `total_cost` 刻意不快取在 header（避免跟之後 `adjust_stock_item()`
+    的人工調整脫鉤），改由呼叫端即時從 `stock_items` 用 batch_no 群組 SUM。
+
+    **⚠️ 回填的既有批次一律預設 `is_paid=0`（未付款）**——系統過去從未追蹤
+    這件事，不能假設「有進貨紀錄＝已付款」，也不能假設「未付款」；這是誠實
+    反映「系統從未知道過」的預設值，財務團隊首次使用這個功能時，需要回頭
+    逐批確認歷史進貨是否已付款（或用批次匯入方式一次性標記，见 §7.18
+    docstring）。"""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS stock_batches (
+            batch_no      TEXT PRIMARY KEY,
+            part_no       TEXT NOT NULL DEFAULT '',
+            supplier_id   INTEGER,
+            supplier_name TEXT NOT NULL DEFAULT '',
+            invoice_no    TEXT NOT NULL DEFAULT '',
+            is_paid       INTEGER NOT NULL DEFAULT 0,
+            paid_by       TEXT NOT NULL DEFAULT '',
+            paid_at       TEXT NOT NULL DEFAULT '',
+            note          TEXT NOT NULL DEFAULT '',
+            created_by    TEXT NOT NULL DEFAULT '',
+            created_at    TEXT NOT NULL DEFAULT '',
+            updated_at    TEXT NOT NULL DEFAULT ''
+        )
+    """)
+    existing = {r["batch_no"] for r in conn.execute("SELECT batch_no FROM stock_batches").fetchall()}
+    rows = conn.execute("""
+        SELECT batch_no, MIN(part_no) AS part_no, MIN(created_by) AS created_by, MIN(created_at) AS created_at
+        FROM stock_items WHERE batch_no != '' GROUP BY batch_no
+    """).fetchall()
+    for r in rows:
+        if r["batch_no"] in existing:
+            continue
+        conn.execute(
+            "INSERT INTO stock_batches (batch_no, part_no, created_by, created_at, updated_at) "
+            "VALUES (?,?,?,?,?)",
+            (r["batch_no"], r["part_no"] or "", r["created_by"] or "", r["created_at"] or "", r["created_at"] or ""),
+        )
+    conn.commit()
+
+
+def _m069_t100_export_confirmations(conn):
+    """T100（鼎新）傳票批次匯出的「已匯入確認」追蹤表（2026-09-01）：使用者要求
+    「匯入由財務單位確認，已匯入自動排除」——匯出 Excel 本身不代表財務真的把
+    這批傳票匯入了 T100（可能匯出後發現資料有誤沒有真的匯入），所以匯出跟
+    「標記已匯入」是兩個獨立動作；只有明確標記過的事件才會在之後的匯出範圍
+    自動排除，避免同一筆事件被財務重複匯入 T100 造成金額灌水。
+
+    source_type/source_key 是這筆事件在原始資料表的穩定識別碼（不用 accounting_
+    export.py 內部產生的 AR0001/AP0002 這種每次匯出重算的流水號，那個不穩定）：
+      - 'quotation_payment' → f"{quote_no}::{invoiceNo}"（invoiceNo 是財務開立
+        發票時填的自由文字欄位，同一張報價單同一個發票號碼理論上只會出現一次）
+      - 'contractor_voucher' → voucher_no（PV-YYYYMM-NNN，全域唯一）
+    UNIQUE(source_type, source_key) 讓「標記已匯入」動作天生冪等，同一筆事件
+    重複標記不會產生兩筆紀錄。"""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS t100_export_confirmations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source_type  TEXT NOT NULL,
+            source_key   TEXT NOT NULL,
+            event_date   TEXT NOT NULL DEFAULT '',
+            amount       REAL NOT NULL DEFAULT 0,
+            summary      TEXT NOT NULL DEFAULT '',
+            confirmed_by TEXT NOT NULL DEFAULT '',
+            confirmed_at TEXT NOT NULL DEFAULT '',
+            UNIQUE(source_type, source_key)
+        )
+    """)
+    conn.commit()
+
+
 def _m068_dispatch_payable_date_invoice_files(conn):
     """承攬商派發新增應付款日期（payable_date）與廠商發票附件（invoice_files_json）
     （2026-08-30）：使用者要求填寫派發時可指定這筆款項的應付款日期，並上傳
@@ -2821,6 +2904,8 @@ _MIGRATIONS = [
     _m066_parts_safety_stock,                      # v66
     _m067_approval_delegates,                      # v67
     _m068_dispatch_payable_date_invoice_files,      # v68
+    _m069_t100_export_confirmations,                # v69
+    _m070_stock_batches,                            # v70
 ]
 
 

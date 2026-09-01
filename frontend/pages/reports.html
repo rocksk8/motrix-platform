@@ -1354,8 +1354,8 @@
                 <div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border-light)">
                   <div class="cm-section-title" style="margin-bottom:8px">T100（鼎新）傳票批次匯出</div>
                   <div style="font-size:11px;color:var(--text-dim);margin-bottom:10px">
-                    現金基礎：匯出期間內已收款發票（借銀行存款／貸銷貨收入＋銷項稅額）與已匯款承攬商費用（借承攬商費用／貸銀行存款），每張傳票借貸自動平衡。
-                    請款單不含在內（尚未實際收款，非金流事件）。匯出後請財務用 T100 既有匯入功能核對後手動匯入。
+                    現金基礎：匯出期間內已收款發票（借銀行存款／貸銷貨收入＋銷項稅額）、已匯款承攬商費用（借承攬商費用／貸銀行存款）、已付款料件/設備進貨（借料件設備成本／貸銀行存款），每張傳票借貸自動平衡。
+                    請款單不含在內（尚未實際收款，非金流事件）；進貨批次要先到「庫存管理」頁的「進貨批次」標記已付款才會出現。匯出後請財務用 T100 既有匯入功能核對後手動匯入。
                   </div>
                   <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
                     <input type="date" x-model="t100Start" style="padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px">
@@ -1365,7 +1365,32 @@
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                       <span x-text="t100Exporting ? '產製中…' : '匯出傳票 Excel'"></span>
                     </button>
+                    <button class="btn-ghost btn-sm" @click="loadT100Preview()" :disabled="t100Previewing" x-text="t100Previewing ? '載入中…' : '預覽待確認事件'"></button>
                     <button class="btn-ghost btn-sm" @click="toggleT100Config()" x-text="t100ConfigOpen ? '收合科目代號設定' : '科目代號設定'"></button>
+                  </div>
+
+                  <!-- 預覽表格＋確認已匯入 -->
+                  <div x-show="t100Preview" x-cloak style="margin-top:12px">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+                      <div style="font-size:12px;color:var(--text-secondary)">
+                        待確認事件 <b x-text="t100Preview && t100Preview.count"></b> 筆，合計 <b x-text="t100Preview && fmt(t100Preview.totalAmount)"></b>
+                      </div>
+                      <button class="btn-primary btn-sm" @click="confirmT100Imported()" :disabled="t100Confirming || !t100Preview || !t100Preview.count" x-text="t100Confirming ? '處理中…' : '確認已匯入 T100（排除下次匯出）'"></button>
+                    </div>
+                    <table class="data-table" x-show="t100Preview && t100Preview.count">
+                      <thead><tr><th>日期</th><th>類型</th><th>摘要</th><th class="r">金額</th></tr></thead>
+                      <tbody>
+                        <template x-for="e in (t100Preview ? t100Preview.events : [])" :key="e.sourceType + e.sourceKey">
+                          <tr>
+                            <td class="mono" x-text="e.date"></td>
+                            <td x-text="e.sourceType === 'quotation_payment' ? '收款' : '付款'"></td>
+                            <td x-text="e.summary"></td>
+                            <td class="r mono" x-text="fmt(e.amount)"></td>
+                          </tr>
+                        </template>
+                      </tbody>
+                    </table>
+                    <div style="font-size:11px;color:var(--text-dim)" x-show="t100Preview && !t100Preview.count">目前這個區間沒有待確認的事件（可能是還沒有金流事件，或已經全部確認過了）。</div>
                   </div>
 
                   <div x-show="t100ConfigOpen" x-cloak style="margin-top:12px;padding:12px;background:var(--bg-subtle,#F9FAFB);border:1px solid var(--border-light);border-radius:var(--radius)">
@@ -1394,6 +1419,10 @@
                           <div>
                             <label style="font-size:10px;color:var(--text-dim);display:block;margin-bottom:2px">承攬商費用科目代號</label>
                             <input type="text" x-model="t100Config.contractorExpenseAccount" :disabled="_role()!=='superadmin'" style="width:100%;padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px">
+                          </div>
+                          <div>
+                            <label style="font-size:10px;color:var(--text-dim);display:block;margin-bottom:2px">料件/設備成本科目代號</label>
+                            <input type="text" x-model="t100Config.inventoryExpenseAccount" :disabled="_role()!=='superadmin'" style="width:100%;padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px">
                           </div>
                           <div>
                             <label style="font-size:10px;color:var(--text-dim);display:block;margin-bottom:2px">部門別代號（選填）</label>

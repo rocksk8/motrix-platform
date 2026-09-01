@@ -186,12 +186,24 @@ def create_batch(body: dict = Body(...), authorization: str = Header(None)):
     now = datetime.now().isoformat()
     actor = user.get("display_name") or user["username"]
 
+    supplier_id = body.get("supplier_id") or body.get("supplierId")
+    supplier_name = ""
+    if supplier_id:
+        srow = conn.execute("SELECT name FROM suppliers WHERE id=?", (supplier_id,)).fetchone()
+        supplier_name = srow["name"] if srow else ""
+    invoice_no = (body.get("invoice_no") or body.get("invoiceNo") or "").strip()
+
     for c in clean:
         conn.execute("""
             INSERT INTO stock_items (part_no, serial_no, mac, status, batch_no, cost, note,
                                       created_by, created_at, updated_at)
             VALUES (?,?,?,'in_stock',?,?,?,?,?,?)
         """, (part_no, c["serial_no"], c["mac"], batch_no, cost, c["note"] or note, actor, now, now))
+    conn.execute("""
+        INSERT INTO stock_batches (batch_no, part_no, supplier_id, supplier_name, invoice_no,
+                                    note, created_by, created_at, updated_at)
+        VALUES (?,?,?,?,?,?,?,?,?)
+    """, (batch_no, part_no, supplier_id, supplier_name, invoice_no, note, actor, now, now))
     conn.commit()
     conn.close()
 
@@ -206,12 +218,19 @@ def create_batch(body: dict = Body(...), authorization: str = Header(None)):
 def list_batches(authorization: str = Header(None)):
     _require_user(authorization)
     conn = get_db()
+    # qty/total_cost 刻意即時從 stock_items 群組加總，不信任 stock_batches 裡
+    # 快取的值（表本身也沒存這兩欄）——避免跟人工調整（adjust_stock_item）脫鉤，
+    # 見 db.py::_m070_stock_batches() docstring。供應商/發票號/付款狀態才是
+    # stock_batches header 專屬的批次層級屬性。
     rows = conn.execute("""
-        SELECT batch_no, part_no, COUNT(*) AS qty, SUM(cost) AS total_cost,
-               MIN(created_at) AS created_at, MIN(created_by) AS created_by
-        FROM stock_items
-        WHERE batch_no != ''
-        GROUP BY batch_no
+        SELECT si.batch_no, si.part_no, COUNT(*) AS qty, SUM(si.cost) AS total_cost,
+               MIN(si.created_at) AS created_at, MIN(si.created_by) AS created_by,
+               sb.supplier_id, sb.supplier_name, sb.invoice_no,
+               sb.is_paid, sb.paid_by, sb.paid_at, sb.note
+        FROM stock_items si
+        LEFT JOIN stock_batches sb ON sb.batch_no = si.batch_no
+        WHERE si.batch_no != ''
+        GROUP BY si.batch_no
         ORDER BY created_at DESC
     """).fetchall()
     conn.close()
@@ -223,10 +242,90 @@ def get_batch(batch_no: str, authorization: str = Header(None)):
     _require_user(authorization)
     conn = get_db()
     rows = conn.execute("SELECT * FROM stock_items WHERE batch_no=? ORDER BY id", (batch_no,)).fetchall()
+    header = conn.execute("SELECT * FROM stock_batches WHERE batch_no=?", (batch_no,)).fetchone()
     conn.close()
     if not rows:
         raise HTTPException(404, "批次不存在")
-    return {"batchNo": batch_no, "items": [dict(r) for r in rows]}
+    return {"batchNo": batch_no, "items": [dict(r) for r in rows],
+            "header": dict(header) if header else None}
+
+
+@router.put("/api/inventory/batches/{batch_no}")
+def update_batch_header(batch_no: str, body: dict = Body(...), authorization: str = Header(None)):
+    """編輯批次層級屬性（供應商／發票號／備註），不動 stock_items 本身。
+    已標記已付款的批次仍可編輯這些欄位（供應商/發票號屬於補登資料，不是
+    財務金額，不比照憑證流「已核准鎖定」的邏輯）。"""
+    user = _require_user(authorization)
+    _require_admin(user)
+    conn = get_db()
+    header = conn.execute("SELECT * FROM stock_batches WHERE batch_no=?", (batch_no,)).fetchone()
+    if not header:
+        conn.close()
+        raise HTTPException(404, "批次不存在")
+
+    supplier_id = header["supplier_id"]
+    supplier_name = header["supplier_name"]
+    if "supplier_id" in body or "supplierId" in body:
+        supplier_id = body.get("supplier_id", body.get("supplierId"))
+        if supplier_id:
+            srow = conn.execute("SELECT name FROM suppliers WHERE id=?", (supplier_id,)).fetchone()
+            supplier_name = srow["name"] if srow else ""
+        else:
+            supplier_id = None
+            supplier_name = ""
+
+    invoice_no = body.get("invoice_no", body.get("invoiceNo", header["invoice_no"])) or ""
+    note = body.get("note", header["note"]) or ""
+    now = datetime.now().isoformat()
+    conn.execute(
+        "UPDATE stock_batches SET supplier_id=?, supplier_name=?, invoice_no=?, note=?, updated_at=? "
+        "WHERE batch_no=?",
+        (supplier_id, supplier_name, invoice_no, note, now, batch_no),
+    )
+    conn.commit()
+    conn.close()
+    return {"ok": True}
+
+
+@router.post("/api/inventory/batches/{batch_no}/paid-toggle")
+def toggle_batch_paid(batch_no: str, body: dict = Body(...), authorization: str = Header(None)):
+    """標記/取消標記進貨批次已付款（比照 contractor_payment_vouchers 的
+    paid-toggle 慣例），供 T100 傳票匯出（accounting_export.py）作為現金
+    基礎的付款事件來源。"""
+    user = _require_user(authorization)
+    _require_admin(user)
+    action = body.get("action")
+    if action not in ("pay", "unpay"):
+        raise HTTPException(400, "action 必須為 pay 或 unpay")
+    conn = get_db()
+    header = conn.execute("SELECT * FROM stock_batches WHERE batch_no=?", (batch_no,)).fetchone()
+    if not header:
+        conn.close()
+        raise HTTPException(404, "批次不存在")
+    now = datetime.now().isoformat()
+    actor = user.get("display_name") or user["username"]
+    if action == "pay":
+        if header["is_paid"]:
+            conn.close()
+            raise HTTPException(409, "此批次已標記為已付款")
+        paid_at = body.get("paid_at") or body.get("paidAt") or now[:10]
+        conn.execute(
+            "UPDATE stock_batches SET is_paid=1, paid_by=?, paid_at=?, updated_at=? WHERE batch_no=?",
+            (actor, paid_at, now, batch_no),
+        )
+    else:
+        if not header["is_paid"]:
+            conn.close()
+            raise HTTPException(409, "此批次尚未標記為已付款")
+        conn.execute(
+            "UPDATE stock_batches SET is_paid=0, paid_by='', paid_at='', updated_at=? WHERE batch_no=?",
+            (now, batch_no),
+        )
+    conn.commit()
+    conn.close()
+    _audit(_tok(authorization), f"inventory.batch_{action}", "stock_batch", batch_no,
+           f"{batch_no} 標記{'已付款' if action == 'pay' else '取消已付款'}")
+    return {"ok": True}
 
 
 # ── 人工調整 ─────────────────────────────────────────────────────────────────

@@ -940,15 +940,33 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
 | 案件代辦事項（`case_action_items.py`，DB v62 `_m062_case_project_merge`） | `GET/POST /quotations/{quote_no}/action-items`、`PUT/DELETE .../action-items/{item_id}`、`PATCH .../action-items/{item_id}/approve` | 取代舊 `project_logs.action_items` JSON blob；兩階段簽核（`stage1_approver`/`stage2_approver`），主管解析比照 `_m050_project_department()` 既有查表 pattern |
 | 出納彙總（`cashier.py`） | `GET /cashier/payable-queue \| receivable-queue \| summary \| execution-history \| export` | **2026-08-31 起併入 `reports.html` 第 13 個頁籤「出納」**（`?tab=cashier` 深連結），獨立 `cashier.html`/`cashier.js` 已退役為導向 stub；本質是 §5.9 財務三憑證流的**唯讀彙總層**，非獨立資料源 |
 
-### §7.17 · T100（鼎新）傳票批次匯出（2026-09-01，見 §12 同日條目）
+### §7.17 · T100（鼎新）傳票批次匯出（2026-09-01，DB v69，見 §12 同日條目）
 
 | Method | Path | 說明 |
 |--------|------|------|
 | GET | /settings/t100-export-config | 科目代號對照設定（admin+ 可查閱） |
 | PUT | /settings/t100-export-config | 更新科目代號（superadmin only） |
-| GET | /reports/t100-export/vouchers?start=&end= | 現金基礎傳票批次匯出 Excel（admin+），涵蓋已收款發票＋已匯款承攬商費用，刻意排除請款單 |
+| GET | /reports/t100-export/vouchers?start=&end= | 現金基礎傳票批次匯出 Excel（admin+），涵蓋已收款發票＋已匯款承攬商費用，刻意排除請款單；**已標記已匯入的事件自動排除** |
+| GET | /reports/t100-export/preview?start=&end= | 預覽本期尚未標記已匯入的事件（JSON，非 Excel），供財務正式標記前核對筆數/金額 |
+| POST | /reports/t100-export/confirm | `{start,end}`；財務確認該區間候選事件已實際匯入 T100，標記後永久排除於之後匯出/預覽（除非撤銷）；冪等 |
+| GET | /reports/t100-export/confirmed?start=&end= | 已標記已匯入的事件清單（稽核／複核用） |
+| POST | /reports/t100-export/unconfirm | `{sourceType,sourceKey}`；撤銷單一事件的已匯入標記（誤標記時的救援手段） |
 
-`backend/routers/accounting_export.py`；每筆事件產生的傳票天生借貸平衡；科目代號預設全部留白，需 superadmin 依貴公司 T100 實際設定填入才具備直接匯入意義。
+`backend/routers/accounting_export.py`；每筆事件產生的傳票天生借貸平衡；科目代號預設全部留白，需 superadmin 依貴公司 T100 實際設定填入才具備直接匯入意義。**匯出≠已匯入**：`t100_export_confirmations` 表（DB v69）獨立追蹤「財務確認已實際匯入 T100」的事件，用 `(source_type, source_key)` 穩定識別碼（`quotation_payment` → `{quote_no}::{invoiceNo}`；`contractor_voucher` → `voucher_no`；`stock_batch` → `batch_no`），不是每次匯出重算的 AR0001/AP0002/PC0003 流水號。
+
+**事件來源第三類：料件/設備進貨已付款（2026-09-01 同輪新增，DB v70 `stock_batches`，端點見 §7.18）**——過去 `stock_items`（序號級庫存）只有共用字串 `batch_no`，沒有獨立批次表頭，供應商/發票號/付款狀態完全沒地方放。新增 `stock_batches` 表頭，既有批次全部回填但 `is_paid` 一律預設 0（系統過去從未追蹤這件事，不能假設已付款，見 `db.py::_m070_stock_batches()` docstring）——**首次啟用這個功能時，財務需要回頭逐批確認歷史進貨是否已付款**，之後才會逐漸準確反映在 T100 匯出裡。
+
+### §7.18 · 進貨批次供應商/發票/付款狀態（DB v70，2026-09-01）
+
+| Method | Path | 說明 |
+|--------|------|------|
+| POST | /inventory/batches | 建立進貨批次（既有端點擴充，admin+），新接受 `supplier_id`/`invoice_no`（選填），一併寫入 `stock_batches` 表頭 |
+| GET | /inventory/batches | 批次列表（既有端點擴充），新回傳 `supplier_id`/`supplier_name`/`invoice_no`/`is_paid`/`paid_by`/`paid_at`/`note`；`qty`/`total_cost` 仍即時從 `stock_items` 群組加總，不信任表頭快取 |
+| GET | /inventory/batches/{batch_no} | 單批明細（既有端點擴充），新增回傳 `header`（`stock_batches` 表頭完整內容） |
+| PUT | /inventory/batches/{batch_no} | 編輯批次層級屬性（供應商/發票號/備註，admin+），不動 `stock_items` 本身 |
+| POST | /inventory/batches/{batch_no}/paid-toggle | `{action:'pay'\|'unpay', paid_at?}`（admin+），比照承攬商匯款申請 paid-toggle 慣例；重複標記回 409 |
+
+前端：`inventory.html`「進貨」Modal 新增供應商/發票號欄位；新增「進貨批次」Modal（列表＋標記已付款/編輯）。
 
 ---
 
@@ -1073,8 +1091,12 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 - **設計採現金基礎（cash basis）**：只匯出「錢真的有進出」的事件——收款事件（案件款項明細已填發票號碼且已收款，沿用 `reports.py::_collect_tax_invoices()` 同一份資料源，跟稅務匯出數字保證一致）→ 借銀行存款(含稅) / 貸銷貨收入(未稅) ＋ 貸銷項稅額(稅額)；付款事件（承攬商匯款申請已標記已匯款，沿用 `cashier.py` 出納模組同一份資料源）→ 借承攬商費用(含稅) / 貸銀行存款(含稅)。**刻意排除請款單**（`payment_requests`）——那是對客戶要款的文件，沒有「已收款」狀態，不是真的金流事件，比照 `reports.py::_compute_cash_position()` 既有的排除理由。每筆事件天生借貸平衡，一份匯出同時涵蓋銷項/應付/銀行對帳三個面向，避免三份報表各自資料源、數字對不上。
 - **新檔** `backend/routers/accounting_export.py`：`GET/PUT /api/settings/t100-export-config`（科目代號對照設定，PUT 限 superadmin，GET admin+ 可查；預設全部留白——貴公司財務團隊需自行確認實際科目代號，金額/日期/摘要/來源單號/交易對象等其餘欄位在科目代號填入前就已正確可用）、`GET /api/reports/t100-export/vouchers?start=&end=`（Excel 匯出，欄位：傳票號/傳票日期/傳票別/摘要/科目代號/科目名稱/借方金額/貸方金額/部門別/來源單號/交易對象）。
 - **前端**：`reports.html`「資金水位」分頁新增「T100（鼎新）傳票批次匯出」區塊（日期區間＋匯出按鈕）＋可收合的「科目代號設定」面板（admin+ 可查看，僅 superadmin 可修改），`reports.js` 對應新增 `t100*` 狀態與 `loadT100Config()`/`saveT100Config()`/`exportT100Vouchers()` 方法。
-- **測試**：`backend/tests/test_t100_export_2026_09_01.py`（4題：科目代號預設留白且僅 superadmin 可寫、傳票借貸平衡＋正確排除期間外事件與請款單、需管理員權限、日期區間驗證），pytest 全過（見本輪 commit）。
+- **測試**：`backend/tests/test_t100_export_2026_09_01.py`（6題：科目代號預設留白且僅 superadmin 可寫、傳票借貸平衡＋正確排除期間外事件與請款單、需管理員權限、日期區間驗證），pytest 全過（見本輪 commit）。
 - **下次還沒做的**：科目代號目前是空白骨架，需使用者填入實際值才具備直接匯入 T100 的意義；若之後要升級成即時 API 推送，需先向鼎新申請 T100 API 存取權限並在此基礎上擴充，非本輪範圍。尚未執行：正式機套用（依 §15 流程）。
+
+**2026-09-01（同日更晚）— 料件/設備進貨付款狀態追蹤（DB v70 `stock_batches`）＋納入 T100 匯出：** 使用者要求盤點「其他模組有相應數字」可否併入 T100 匯出。查證發現 `procurement.html`／`parts.py` 完全沒有「進貨是否已付款」這個概念（連欄位都不存在）——這不是匯出模組漏掉，是系統本身從未追蹤這件事，`cash-position` 端點當初就是因此刻意排除料件/設備進貨。使用者確認要做，比照承攬商匯款申請的 `is_paid`/`paid_by`/`paid_at` 模式補上：新表 `stock_batches`（批次層級表頭，`batch_no` 與 `part_no` 天生 1:1，見 `_m070_stock_batches()` docstring），既有批次全部回填但 `is_paid` 一律預設 0（不能假設歷史進貨已付款，財務首次啟用需回頭逐批確認）。`routers/inventory.py`：`create_batch()` 擴充接受 `supplier_id`/`invoice_no`；`list_batches()`/`get_batch()` 擴充回傳付款欄位（`qty`/`total_cost` 仍即時算，不信任表頭快取）；新增 `PUT .../batches/{batch_no}`（編輯供應商/發票/備註）與 `POST .../batches/{batch_no}/paid-toggle`（標記已付款/取消，比照 contractor_payment_vouchers 慣例，重複標記回 409）。`accounting_export.py` 新增第三個事件來源（借料件設備成本／貸銀行存款，新科目代號 `inventoryExpenseAccount`，傳票號前綴 `PC`），與既有 AR/AP 事件共用同一套已匯入確認機制。前端 `inventory.html` 新增「進貨批次」Modal（列表＋供應商/發票編輯＋付款狀態切換），「進貨」Modal 新增供應商下拉＋發票號欄位。新增測試 `test_stock_batch_payment_2026_09_01.py`（6題：表頭寫入、pay/unpay 含 409 guard、需 admin+ 權限、編輯供應商發票、已付款批次流入 T100 匯出並可確認排除、未付款批次不出現）。
+
+**2026-09-01（同日稍晚）— 已匯入確認追蹤（DB v69）＋預覽 UI：** 使用者要求「匯入由財務單位確認，已匯入自動排除」——原本每次匯出都會把符合日期區間的全部事件列出，財務若對同一區間匯出兩次（或區間重疊）會重複列出同一筆事件，有重複匯入 T100 的風險。已改為兩段式：財務先 `GET preview` 預覽本期未確認事件（JSON，reports.html 資金水位分頁新增預覽表格），實際到 T100 匯入後回來 `POST confirm` 整批標記已匯入（新表 `t100_export_confirmations`，DB v69，`UNIQUE(source_type, source_key)` 讓標記動作天生冪等）；標記後的事件之後**永久**不再出現在任何日期區間的匯出/預覽中，直到用 `POST unconfirm` 撤銷。識別碼刻意不用 `_flatten_events_for_excel()` 產生的 AR0001/AP0002 流水號（每次匯出重新編號、不穩定），改用資料本身的穩定鍵：`quotation_payment` 用 `{quote_no}::{invoiceNo}`、`contractor_voucher` 用 `voucher_no`（全域唯一）。重構把原本單一函式 `_build_t100_vouchers()` 拆成事件層級的 `_collect_t100_events()`（供 Excel 攤平/預覽/確認共用同一份篩選邏輯，避免三處各自重寫一遍條件彼此不一致）＋ `_flatten_events_for_excel()`（只在產 Excel 時把事件攤平成借貸分錄列）。新增測試 2 題（確認→排除→撤銷→重新出現的完整流程、preview/confirm 需管理員權限），該檔測試共 6 題，pytest 全過。
 
 ### 2026-08-31g — 出納整合進營運報表模組（頁籤合併）＋案件管理數字連動稽核
 
