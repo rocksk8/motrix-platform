@@ -1403,11 +1403,21 @@
                           科目代號留白時，匯出的 Excel 仍會產出正確的金額/日期/摘要/來源單號，只是科目代號欄位空白，財務可先核對數字，之後再回來補上代號。
                           <span x-show="_role()!=='superadmin'">（僅 superadmin 可修改，你目前只能檢視）</span>
                         </div>
+                        <!-- 銀行帳戶清單（依銀行帳戶分開設定，供標記已付款/收款時選擇；匯出時實際套用的是那筆交易「標記當下」選的帳戶，不是這份清單本身，見說明） -->
+                        <div style="margin-bottom:12px">
+                          <div style="font-size:11px;font-weight:600;color:var(--text-secondary);margin-bottom:4px">銀行帳戶清單</div>
+                          <div style="font-size:10px;color:var(--text-dim);margin-bottom:6px">維護貴公司所有銀行帳戶＋各自的 T100 科目代號；標記已付款/已收款時會從這份清單挑選要用哪個帳戶。之後修改這裡不會回頭改到已經標記過的舊交易。</div>
+                          <template x-for="(b, bi) in t100Config.bankAccounts" :key="bi">
+                            <div style="display:flex;gap:6px;margin-bottom:6px;align-items:center">
+                              <input type="text" placeholder="帳戶名稱（如：第一銀行 xxx）" x-model="b.name" :disabled="_role()!=='superadmin'" style="flex:1;padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px">
+                              <input type="text" placeholder="科目代號" x-model="b.acctCode" :disabled="_role()!=='superadmin'" style="width:110px;padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px">
+                              <button class="btn-ghost btn-sm" x-show="_role()==='superadmin'" @click="t100Config.bankAccounts.splice(bi,1)">刪除</button>
+                            </div>
+                          </template>
+                          <button class="btn-ghost btn-sm" x-show="_role()==='superadmin'" @click="t100Config.bankAccounts.push({name:'',acctCode:''})">+ 新增銀行帳戶</button>
+                        </div>
+
                         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px">
-                          <div>
-                            <label style="font-size:10px;color:var(--text-dim);display:block;margin-bottom:2px">銀行存款科目代號</label>
-                            <input type="text" x-model="t100Config.bankAccount" :disabled="_role()!=='superadmin'" style="width:100%;padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px">
-                          </div>
                           <div>
                             <label style="font-size:10px;color:var(--text-dim);display:block;margin-bottom:2px">銷貨收入科目代號</label>
                             <input type="text" x-model="t100Config.salesRevenueAccount" :disabled="_role()!=='superadmin'" style="width:100%;padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px">
@@ -1421,10 +1431,6 @@
                             <input type="text" x-model="t100Config.contractorExpenseAccount" :disabled="_role()!=='superadmin'" style="width:100%;padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px">
                           </div>
                           <div>
-                            <label style="font-size:10px;color:var(--text-dim);display:block;margin-bottom:2px">料件/設備成本科目代號</label>
-                            <input type="text" x-model="t100Config.inventoryExpenseAccount" :disabled="_role()!=='superadmin'" style="width:100%;padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px">
-                          </div>
-                          <div>
                             <label style="font-size:10px;color:var(--text-dim);display:block;margin-bottom:2px">部門別代號（選填）</label>
                             <input type="text" x-model="t100Config.departmentCode" :disabled="_role()!=='superadmin'" style="width:100%;padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px">
                           </div>
@@ -1433,6 +1439,20 @@
                             <input type="text" x-model="t100Config.voucherCategory" :disabled="_role()!=='superadmin'" style="width:100%;padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px">
                           </div>
                         </div>
+
+                        <!-- 料件/設備成本科目代號（依料件分類分開設定） -->
+                        <div style="margin-top:12px">
+                          <div style="font-size:11px;font-weight:600;color:var(--text-secondary);margin-bottom:4px">料件/設備成本科目代號（依分類）</div>
+                          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px">
+                            <template x-for="cat in Object.keys(t100Config.inventoryExpenseAccounts)" :key="cat">
+                              <div>
+                                <label style="font-size:10px;color:var(--text-dim);display:block;margin-bottom:2px" x-text="cat"></label>
+                                <input type="text" x-model="t100Config.inventoryExpenseAccounts[cat]" :disabled="_role()!=='superadmin'" style="width:100%;padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px">
+                              </div>
+                            </template>
+                          </div>
+                        </div>
+
                         <div style="margin-top:10px" x-show="_role()==='superadmin'">
                           <button class="btn-primary btn-sm" @click="saveT100Config()" :disabled="t100ConfigSaving" x-text="t100ConfigSaving ? '儲存中…' : '儲存設定'"></button>
                         </div>
@@ -2023,6 +2043,11 @@
       <div class="modal-body">
         <label class="field-label">匯款日期</label>
         <input type="date" class="field-input" x-model="payVoucherDate">
+        <label class="field-label">匯款銀行帳戶（選填，供 T100 傳票匯出使用）</label>
+        <select class="field-input" x-model="payVoucherBankAcctCode">
+          <option value="">— 未指定 —</option>
+          <template x-for="b in t100BankAccounts" :key="b.acctCode"><option :value="b.acctCode" x-text="b.name"></option></template>
+        </select>
         <label class="field-label">備註（選填，例如匯款帳號末五碼）</label>
         <input type="text" class="field-input" x-model="payVoucherNote" placeholder="選填">
         <div style="display:flex;justify-content:flex-end;gap:8px">
@@ -2049,6 +2074,11 @@
         <input type="number" min="0" class="field-input" x-model.number="receiveActualAmount">
         <label class="field-label">手續費 / 扣款</label>
         <input type="number" min="0" class="field-input" x-model.number="receiveFeeAmount">
+        <label class="field-label">收款銀行帳戶（選填，供 T100 傳票匯出使用）</label>
+        <select class="field-input" x-model="receiveBankAcctCode">
+          <option value="">— 未指定 —</option>
+          <template x-for="b in t100BankAccounts" :key="b.acctCode"><option :value="b.acctCode" x-text="b.name"></option></template>
+        </select>
         <label class="field-label">備註（選填）</label>
         <input type="text" class="field-input" x-model="receiveNote" placeholder="例：匯款轉入、票期兌現…">
         <div style="display:flex;justify-content:flex-end;gap:8px">

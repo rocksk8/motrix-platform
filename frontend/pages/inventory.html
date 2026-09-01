@@ -287,11 +287,11 @@
                 <td style="font-size:12px" x-text="b.supplier_name || '—'"></td>
                 <td style="font-size:12px" x-text="b.invoice_no || '—'"></td>
                 <td>
-                  <span class="stock-badge" :class="b.is_paid ? 'ok' : 'zero'" x-text="b.is_paid ? ('已付款 ' + b.paid_at) : '未付款'"></span>
+                  <span class="stock-badge" :class="b.is_paid ? 'ok' : 'zero'" x-text="b.is_paid ? ('已付款 ' + b.paid_at + (b.paid_bank_account_name ? ('・' + b.paid_bank_account_name) : '')) : '未付款'"></span>
                 </td>
                 <td style="white-space:nowrap">
                   <button class="action-btn ghost" @click="openBatchEdit(b)">編輯</button>
-                  <button class="action-btn edit" x-show="!b.is_paid" @click="toggleBatchPaid(b, 'pay')" style="margin-left:4px">標記已付款</button>
+                  <button class="action-btn edit" x-show="!b.is_paid" @click="openBatchPayModal(b)" style="margin-left:4px">標記已付款</button>
                   <button class="action-btn del" x-show="b.is_paid" @click="toggleBatchPaid(b, 'unpay')" style="margin-left:4px">取消已付款</button>
                 </td>
               </tr>
@@ -303,6 +303,33 @@
     </template>
     <div class="modal-footer">
       <button class="btn btn-ghost" @click="batches.show=false">關閉</button>
+    </div>
+  </div>
+</div>
+
+<!-- 標記已付款 Modal（2026-09-01 新增，選銀行帳戶供 T100 傳票匯出使用） -->
+<div class="modal-overlay" x-show="batchPay.show" @click.self="batchPay.show=false" x-cloak>
+  <div class="modal-box" @click.stop>
+    <div class="modal-title" x-text="'標記已付款 ' + batchPay.batchNo"></div>
+    <div class="form-grid">
+      <div class="field-row">
+        <div class="field-label">付款日期</div>
+        <input class="field-input" type="date" x-model="batchPay.paidAt">
+      </div>
+      <div class="field-row">
+        <div class="field-label">付款銀行帳戶（選填，供 T100 傳票匯出使用）</div>
+        <select class="field-input" x-model="batchPay.bankAcctCode">
+          <option value="">— 未指定 —</option>
+          <template x-for="b in t100BankAccounts" :key="b.acctCode"><option :value="b.acctCode" x-text="b.name"></option></template>
+        </select>
+      </div>
+    </div>
+    <div x-show="batchPay.error" style="color:var(--danger);font-size:12px;margin-top:12px" x-text="batchPay.error"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" @click="batchPay.show=false">取消</button>
+      <button class="btn btn-primary" @click="confirmBatchPay()" :disabled="batchPay.saving">
+        <span x-text="batchPay.saving ? '處理中…' : '確認標記已付款'"></span>
+      </button>
     </div>
   </div>
 </div>
@@ -354,6 +381,9 @@ function app() {
     suppliers: [],
     batches: { show: false, items: [], loading: false },
     batchEdit: { show: false, batchNo: '', supplierId: null, invoiceNo: '', note: '', saving: false, error: '' },
+    batchPay: { show: false, batchNo: '', paidAt: '', bankAcctCode: '', saving: false, error: '' },
+    t100BankAccounts: [],
+    t100BankAccountsLoaded: false,
 
     get categories() {
       return [...new Set(this.items.map(p => p.category).filter(Boolean))].sort()
@@ -484,16 +514,47 @@ function app() {
     },
 
     async toggleBatchPaid(b, action) {
-      const label = action === 'pay' ? '標記已付款' : '取消已付款'
-      if (!confirm(`確認「${label}」批次 ${b.batch_no}？`)) return
+      // action==='pay' 改走 openBatchPayModal()（需要選銀行帳戶），這裡只處理 unpay
+      if (!confirm(`確認「取消已付款」批次 ${b.batch_no}？`)) return
       try {
-        const body = action === 'pay' ? { action, paid_at: new Date().toISOString().slice(0,10) } : { action }
         const r = await fetch(`${API}/inventory/batches/${encodeURIComponent(b.batch_no)}/paid-toggle`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token }, body: JSON.stringify(body),
+          method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify({ action: 'unpay' }),
         })
         if (r.ok) { await this.openBatchesModal() }
         else { const e = await r.json(); alert(e.detail || '操作失敗') }
       } catch { alert('網路錯誤') }
+    },
+
+    async loadT100BankAccounts() {
+      if (this.t100BankAccountsLoaded) return
+      try {
+        const r = await fetch(`${API}/settings/t100-export-config`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (r.ok) { const d = await r.json(); this.t100BankAccounts = d.bankAccounts || [] }
+      } catch {}
+      this.t100BankAccountsLoaded = true
+    },
+
+    openBatchPayModal(b) {
+      this.batchPay = { show: true, batchNo: b.batch_no, paidAt: new Date().toISOString().slice(0,10), bankAcctCode: '', saving: false, error: '' }
+      this.loadT100BankAccounts()
+    },
+
+    async confirmBatchPay() {
+      this.batchPay.saving = true; this.batchPay.error = ''
+      const bankName = (this.t100BankAccounts.find(x => x.acctCode === this.batchPay.bankAcctCode) || {}).name || ''
+      try {
+        const r = await fetch(`${API}/inventory/batches/${encodeURIComponent(this.batchPay.batchNo)}/paid-toggle`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify({
+            action: 'pay', paid_at: this.batchPay.paidAt,
+            bankAccountCode: this.batchPay.bankAcctCode, bankAccountName: bankName,
+          }),
+        })
+        if (r.ok) { this.batchPay.show = false; await this.openBatchesModal() }
+        else { const e = await r.json(); this.batchPay.error = e.detail || '操作失敗' }
+      } catch { this.batchPay.error = '網路錯誤' }
+      this.batchPay.saving = false
     },
 
     openBatchEdit(b) {

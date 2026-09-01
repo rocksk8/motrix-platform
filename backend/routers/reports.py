@@ -2377,6 +2377,11 @@ def _collect_tax_invoices(year: Optional[int] = None, month: Optional[int] = Non
                 "amountPretax":  amt_pretax,
                 "taxAmount":     tax_amt,
                 "amountTotal":   amt_incl,
+                # 收款進帳的 MOTRIX 銀行帳戶（2026-09-01 新增，供 accounting_export.py
+                # 依銀行帳戶分開設定 T100 科目代號用；既有呼叫端如 tax-export 不讀這兩個
+                # 新 key，多帶不影響既有行為）
+                "bankAccountName": pi.get("bankAccountName") or "",
+                "bankAccountCode": pi.get("bankAccountCode") or "",
             })
     out.sort(key=lambda r: (r["date"], r["quoteNo"]))
     return out

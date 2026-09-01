@@ -98,6 +98,10 @@ def _voucher_public(row, include_snapshot: bool = True) -> dict:
         "isPaid":        bool(d.get("is_paid")),
         "paidBy":        d.get("paid_by") or "",
         "paidAt":        d.get("paid_at") or "",
+        # MOTRIX 自己付款用的銀行帳戶（標記已匯款當下選的，不是上面 snapshot
+        # 裡承攬商的收款帳戶，兩者是完全不同的概念，見 db.py::_m071_paid_bank_account）
+        "paidBankAccountName": d.get("paid_bank_account_name") or "",
+        "paidBankAccountCode": d.get("paid_bank_account_code") or "",
         "paidLog":       json.loads(d.get("paid_log") or "[]"),
         "exportCount":   d.get("export_count") or 0,
         "exportLog":     json.loads(d.get("export_log") or "[]"),
@@ -637,16 +641,18 @@ def toggle_paid(voucher_no: str, body: dict = Body(...), authorization: str = He
         **({"paidAt": paid_at_value} if action == "pay" else {}),
     })
     if action == "pay":
+        bank_name = (body or {}).get("bank_account_name") or (body or {}).get("bankAccountName") or ""
+        bank_code = (body or {}).get("bank_account_code") or (body or {}).get("bankAccountCode") or ""
         conn.execute(
-            "UPDATE contractor_payment_vouchers SET is_paid=1, paid_by=?, paid_at=?, paid_log=?, updated_at=? "
-            "WHERE voucher_no=?",
+            "UPDATE contractor_payment_vouchers SET is_paid=1, paid_by=?, paid_at=?, paid_log=?, "
+            "paid_bank_account_name=?, paid_bank_account_code=?, updated_at=? WHERE voucher_no=?",
             (user.get("display_name") or user["username"], paid_at_value,
-             json.dumps(log, ensure_ascii=False), now, voucher_no)
+             json.dumps(log, ensure_ascii=False), bank_name, bank_code, now, voucher_no)
         )
     else:
         conn.execute(
-            "UPDATE contractor_payment_vouchers SET is_paid=0, paid_by='', paid_at='', paid_log=?, updated_at=? "
-            "WHERE voucher_no=?",
+            "UPDATE contractor_payment_vouchers SET is_paid=0, paid_by='', paid_at='', paid_log=?, "
+            "paid_bank_account_name='', paid_bank_account_code='', updated_at=? WHERE voucher_no=?",
             (json.dumps(log, ensure_ascii=False), now, voucher_no)
         )
     conn.commit()

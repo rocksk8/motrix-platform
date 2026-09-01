@@ -147,9 +147,9 @@ def test_stock_batch_flows_into_t100_export_and_can_be_confirmed(client, make_us
 
     client.put(
         "/api/settings/t100-export-config", headers=_auth(token),
-        json={"bankAccount": "1101", "salesRevenueAccount": "4101",
-              "outputTaxAccount": "2191", "contractorExpenseAccount": "6101",
-              "inventoryExpenseAccount": "5101"},
+        json={"salesRevenueAccount": "4101", "outputTaxAccount": "2191",
+              "contractorExpenseAccount": "6101",
+              "inventoryExpenseAccounts": {"其他": "5101"}},
     )
 
     _make_part(client, token, "STK-P5")
@@ -158,7 +158,8 @@ def test_stock_batch_flows_into_t100_export_and_can_be_confirmed(client, make_us
 
     pay = client.post(
         f"/api/inventory/batches/{batch_no}/paid-toggle", headers=_auth(token),
-        json={"action": "pay", "paid_at": "2026-08-18"},
+        json={"action": "pay", "paid_at": "2026-08-18",
+              "bankAccountName": "第一銀行", "bankAccountCode": "1101"},
     )
     assert pay.status_code == 200, pay.text
 

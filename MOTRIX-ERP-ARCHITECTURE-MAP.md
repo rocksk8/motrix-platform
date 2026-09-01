@@ -101,6 +101,8 @@ SQLite (WAL)  motrix_erp.db（正式）+ motrix_erp_demo.db（demo 隔離）
 
 **2026-09-01 起新增第四個角色：`accounting_export.py`**——不是憑證流本身，是憑證流的**下游匯出層**：把已核准/已收款/已匯款的事件轉成 T100（鼎新）標準傳票 Excel（現金基礎，借貸自動平衡），供財務手動匯入 T100。三個事件來源：①已收款發票（`quotation_payment`）②已匯款承攬商費用（`contractor_voucher`）③已付款料件/設備進貨（`stock_batch`，DB v70 `stock_batches`，見 §2.9）。`GET/PUT /api/settings/t100-export-config`（科目代號對照，superadmin 維護）＋ `GET /api/reports/t100-export/vouchers`（Excel）＋ `GET .../preview`（JSON 預覽）＋ `POST .../confirm`／`POST .../unconfirm`（財務標記「已實際匯入 T100」，DB v69 `t100_export_confirmations`，標記後永久排除於之後匯出/預覽，避免重複匯入）＋ `GET .../confirmed`（稽核清單）。這是 §6.1 建議「先做批次匯出、不做即時 API 對接」的實作，詳見 §6.1 更新說明。
 
+**科目代號分維度（2026-09-01 同輪，DB v71）**：使用者要求銀行帳戶與料件分類分開設定科目代號。**銀行帳戶採快照模式**（不是查表）——`contractor_payment_vouchers`/`stock_batches` 新增 `paid_bank_account_name/code` 欄位、報價單款項 JSON 新增 `bankAccountName/Code`，標記已付款/已收款當下直接把選的帳戶寫死在那筆交易上，之後設定頁的銀行帳戶清單怎麼改都不會回頭影響舊交易（`bankAccounts` 設定清單純粹是給 UI 下拉選單用）。**料件分類則是即時查表**（`inventoryExpenseAccounts: {分類: 代號}`）——分類本身不變，財務事後更正代號會套用到所有未確認的舊事件，跟其餘固定科目走同一套邏輯。三個「標記已付款/已收款」UI 都已加上銀行帳戶下拉（`case-management.html`／`reports.html`出納分頁／`inventory.html`）。
+
 ### 2.8 出納 `cashier.py` (276行，2026-08-28 新增，QUICK.md 舊版完全沒記載)
 - 前端：併入「營運報表」頁籤（非獨立 sidebar 項目）
 - API：`/api/cashier/payable-queue`、`receivable-queue`、`summary`、`execution-history`、`export`（`cashier.py:117-192`）

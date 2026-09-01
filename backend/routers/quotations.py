@@ -1669,8 +1669,13 @@ def _apply_case_change_request(conn, req, approver: dict, authorization: str) ->
                 pits[idx]["feeAmount"]    = body.get("feeAmount") or 0
                 pits[idx]["feeNote"]      = body.get("feeNote", "")
                 pits[idx]["note"]         = body.get("note", "")
+                # 收款進了 MOTRIX 自己哪個銀行帳戶（選填，2026-09-01 新增，供 T100
+                # 傳票匯出依銀行帳戶分開設定科目代號用；跟其他欄位一樣直接存
+                # data_json，不需要 migration，見 db.py::_m071_paid_bank_account docstring）
+                pits[idx]["bankAccountName"] = body.get("bankAccountName", "")
+                pits[idx]["bankAccountCode"] = body.get("bankAccountCode", "")
             else:
-                for k in ("actualAmount", "feeAmount", "feeNote", "note"):
+                for k in ("actualAmount", "feeAmount", "feeNote", "note", "bankAccountName", "bankAccountCode"):
                     pits[idx].pop(k, None)
         if "invoiceNo" in body:
             pits[idx]["invoiceNo"] = body["invoiceNo"]
@@ -2328,8 +2333,13 @@ def mark_payment(no: str, idx: int, body: dict, authorization: str = Header(None
                 pits[idx]["feeAmount"]    = body.get("feeAmount") or 0
                 pits[idx]["feeNote"]      = body.get("feeNote", "")
                 pits[idx]["note"]         = body.get("note", "")
+                # 收款進了 MOTRIX 自己哪個銀行帳戶（選填，2026-09-01 新增，供 T100
+                # 傳票匯出依銀行帳戶分開設定科目代號用；跟其他欄位一樣直接存
+                # data_json，不需要 migration，見 db.py::_m071_paid_bank_account docstring）
+                pits[idx]["bankAccountName"] = body.get("bankAccountName", "")
+                pits[idx]["bankAccountCode"] = body.get("bankAccountCode", "")
             else:
-                for k in ("actualAmount", "feeAmount", "feeNote", "note"):
+                for k in ("actualAmount", "feeAmount", "feeNote", "note", "bankAccountName", "bankAccountCode"):
                     pits[idx].pop(k, None)
         if "invoiceNo" in body:
             pits[idx]["invoiceNo"] = body["invoiceNo"]

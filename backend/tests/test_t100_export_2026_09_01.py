@@ -1,6 +1,11 @@
 """2026-09-01：T100（鼎新）傳票批次匯出，現金基礎，涵蓋已收款發票（沿用
 reports.py::_collect_tax_invoices 同一份資料源）與已匯款承攬商費用（沿用
 cashier.py 出納模組同一份資料源）。科目代號設定 GET/PUT 僅 superadmin 可寫。
+
+2026-09-01（同日）：科目代號改為分維度——銀行帳戶科目代號直接讀「標記已付款/
+收款當下」寫進各筆交易自己身上的 bankAccountCode（不是查全公司統一的設定），
+料件分類科目代號則是 inventoryExpenseAccounts 字典即時查表（見
+accounting_export.py 檔頭 docstring 完整說明）。
 """
 import io
 import json
@@ -18,7 +23,7 @@ def _auth(token):
     return {"Authorization": f"Bearer {token}"}
 
 
-def _make_paid_contractor_voucher(client, token, quote_no, paid_at):
+def _make_paid_contractor_voucher(client, token, quote_no, paid_at, bank_name="第一銀行", bank_code="1101"):
     r = client.post(
         "/api/vendor-contractors", headers=_auth(token),
         json={"name": f"廠商{quote_no}", "data": {}},
@@ -49,13 +54,14 @@ def _make_paid_contractor_voucher(client, token, quote_no, paid_at):
 
     pay = client.post(
         f"/api/contractor-vouchers/{voucher_no}/paid-toggle", headers=_auth(token),
-        json={"action": "pay", "paid_at": paid_at},
+        json={"action": "pay", "paid_at": paid_at, "bankAccountName": bank_name, "bankAccountCode": bank_code},
     )
     assert pay.status_code == 200, pay.text
     return voucher_no
 
 
-def _make_invoiced_quotation(quote_no, invoice_no, received_at, total=31500, pretax=30000):
+def _make_invoiced_quotation(quote_no, invoice_no, received_at, total=31500, pretax=30000,
+                              bank_name="第一銀行", bank_code="1101"):
     import db
     conn = db.get_db()
     try:
@@ -64,7 +70,8 @@ def _make_invoiced_quotation(quote_no, invoice_no, received_at, total=31500, pre
             "caseRecord": {
                 "payment": {"items": [
                     {"type": "訂金款", "pct": 100, "amount": total, "received": True,
-                     "receivedAt": received_at, "invoiceNo": invoice_no, "actualAmount": total},
+                     "receivedAt": received_at, "invoiceNo": invoice_no, "actualAmount": total,
+                     "bankAccountName": bank_name, "bankAccountCode": bank_code},
                 ]},
             },
         })
@@ -86,27 +93,33 @@ def test_t100_export_config_defaults_blank_and_superadmin_only_write(client, mak
     r = client.get("/api/settings/t100-export-config", headers=_auth(token))
     assert r.status_code == 200, r.text
     cfg = r.json()
-    assert cfg["bankAccount"] == ""
+    assert cfg["bankAccounts"] == []
     assert cfg["voucherCategory"] == "轉"
+    # 料件分類科目代號應自動補齊所有已知分類鍵（皆留白）
+    assert "其他" in cfg["inventoryExpenseAccounts"]
+    assert cfg["inventoryExpenseAccounts"]["其他"] == ""
 
     non_super_username, non_super_password = make_user(role="admin")
     non_super_token = _login(client, non_super_username, non_super_password)
     r2 = client.put(
         "/api/settings/t100-export-config", headers=_auth(non_super_token),
-        json={"bankAccount": "1101"},
+        json={"bankAccounts": [{"name": "第一銀行", "acctCode": "1101"}]},
     )
     assert r2.status_code == 403, r2.text
 
     r3 = client.put(
         "/api/settings/t100-export-config", headers=_auth(token),
-        json={"bankAccount": "1101", "salesRevenueAccount": "4101",
-              "outputTaxAccount": "2191", "contractorExpenseAccount": "6101"},
+        json={"bankAccounts": [{"name": "第一銀行", "acctCode": "1101"}],
+              "salesRevenueAccount": "4101", "outputTaxAccount": "2191",
+              "contractorExpenseAccount": "6101",
+              "inventoryExpenseAccounts": {"其他": "5109"}},
     )
     assert r3.status_code == 200, r3.text
 
     r4 = client.get("/api/settings/t100-export-config", headers=_auth(token))
-    assert r4.json()["bankAccount"] == "1101"
+    assert r4.json()["bankAccounts"] == [{"name": "第一銀行", "acctCode": "1101"}]
     assert r4.json()["salesRevenueAccount"] == "4101"
+    assert r4.json()["inventoryExpenseAccounts"]["其他"] == "5109"
 
 
 def test_t100_voucher_export_balances_and_excludes_out_of_range(client, make_user):
@@ -115,8 +128,8 @@ def test_t100_voucher_export_balances_and_excludes_out_of_range(client, make_use
 
     client.put(
         "/api/settings/t100-export-config", headers=_auth(token),
-        json={"bankAccount": "1101", "salesRevenueAccount": "4101",
-              "outputTaxAccount": "2191", "contractorExpenseAccount": "6101"},
+        json={"salesRevenueAccount": "4101", "outputTaxAccount": "2191",
+              "contractorExpenseAccount": "6101"},
     )
 
     v_in_range = _make_paid_contractor_voucher(client, token, "MQ-T100-001", "2026-08-15")
@@ -155,12 +168,16 @@ def test_t100_voucher_export_balances_and_excludes_out_of_range(client, make_use
     ar_rows = [row for row in body_rows if row[9] == "MQ-T100-010"]
     assert len(ar_rows) == 3
     assert sum(row[6] or 0 for row in ar_rows) == sum(row[7] or 0 for row in ar_rows) == 31500
+    # 銀行帳戶科目代號來自這筆交易自己標記時填的 bankAccountCode（"1101"），
+    # 不是全公司統一設定（本測試這次刻意沒有設定任何 bankAccounts）
     acct_codes = {row[4] for row in ar_rows}
     assert acct_codes == {"1101", "4101", "2191"}
 
     ap_rows = [row for row in body_rows if row[9] == v_in_range]
     assert len(ap_rows) == 2
     assert sum(row[6] or 0 for row in ap_rows) == sum(row[7] or 0 for row in ap_rows) == 10500
+    ap_acct_codes = {row[4] for row in ap_rows}
+    assert ap_acct_codes == {"1101", "6101"}
 
 
 def test_t100_voucher_export_requires_admin(client, make_user):
@@ -189,8 +206,8 @@ def test_t100_preview_confirm_excludes_from_future_export(client, make_user):
 
     client.put(
         "/api/settings/t100-export-config", headers=_auth(token),
-        json={"bankAccount": "1101", "salesRevenueAccount": "4101",
-              "outputTaxAccount": "2191", "contractorExpenseAccount": "6101"},
+        json={"salesRevenueAccount": "4101", "outputTaxAccount": "2191",
+              "contractorExpenseAccount": "6101"},
     )
 
     v = _make_paid_contractor_voucher(client, token, "MQ-T100-030", "2026-08-05")

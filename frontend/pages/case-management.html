@@ -3117,6 +3117,12 @@
       <label style="font-size:11px;font-weight:500;color:var(--text-secondary);display:block;margin-bottom:4px">匯款日期</label>
       <input type="date" x-model="payVoucherDate"
              style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;margin-bottom:14px">
+      <label style="font-size:11px;font-weight:500;color:var(--text-secondary);display:block;margin-bottom:4px">匯款銀行帳戶（選填，供 T100 傳票匯出使用）</label>
+      <select x-model="payVoucherBankAcctCode" @change="onPayVoucherBankChange()"
+              style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:var(--font-zh);outline:none;box-sizing:border-box;margin-bottom:14px">
+        <option value="">— 未指定 —</option>
+        <template x-for="b in t100BankAccounts" :key="b.acctCode"><option :value="b.acctCode" x-text="b.name"></option></template>
+      </select>
       <label style="font-size:11px;font-weight:500;color:var(--text-secondary);display:block;margin-bottom:4px">備註（選填，例如匯款帳號末五碼）</label>
       <input type="text" x-model="payVoucherNote" placeholder="選填"
              style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:var(--font-zh);outline:none;box-sizing:border-box">

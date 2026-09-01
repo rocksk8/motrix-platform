@@ -226,7 +226,8 @@ def list_batches(authorization: str = Header(None)):
         SELECT si.batch_no, si.part_no, COUNT(*) AS qty, SUM(si.cost) AS total_cost,
                MIN(si.created_at) AS created_at, MIN(si.created_by) AS created_by,
                sb.supplier_id, sb.supplier_name, sb.invoice_no,
-               sb.is_paid, sb.paid_by, sb.paid_at, sb.note
+               sb.is_paid, sb.paid_by, sb.paid_at, sb.note,
+               sb.paid_bank_account_name, sb.paid_bank_account_code
         FROM stock_items si
         LEFT JOIN stock_batches sb ON sb.batch_no = si.batch_no
         WHERE si.batch_no != ''
@@ -309,16 +310,20 @@ def toggle_batch_paid(batch_no: str, body: dict = Body(...), authorization: str 
             conn.close()
             raise HTTPException(409, "此批次已標記為已付款")
         paid_at = body.get("paid_at") or body.get("paidAt") or now[:10]
+        bank_name = body.get("bank_account_name") or body.get("bankAccountName") or ""
+        bank_code = body.get("bank_account_code") or body.get("bankAccountCode") or ""
         conn.execute(
-            "UPDATE stock_batches SET is_paid=1, paid_by=?, paid_at=?, updated_at=? WHERE batch_no=?",
-            (actor, paid_at, now, batch_no),
+            "UPDATE stock_batches SET is_paid=1, paid_by=?, paid_at=?, "
+            "paid_bank_account_name=?, paid_bank_account_code=?, updated_at=? WHERE batch_no=?",
+            (actor, paid_at, bank_name, bank_code, now, batch_no),
         )
     else:
         if not header["is_paid"]:
             conn.close()
             raise HTTPException(409, "此批次尚未標記為已付款")
         conn.execute(
-            "UPDATE stock_batches SET is_paid=0, paid_by='', paid_at='', updated_at=? WHERE batch_no=?",
+            "UPDATE stock_batches SET is_paid=0, paid_by='', paid_at='', "
+            "paid_bank_account_name='', paid_bank_account_code='', updated_at=? WHERE batch_no=?",
             (now, batch_no),
         )
     conn.commit()

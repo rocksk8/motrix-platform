@@ -108,6 +108,7 @@ function reportsApp() {
     payVoucherTarget:  null,
     payVoucherDate:    '',
     payVoucherNote:    '',
+    payVoucherBankAcctCode: '',
     payVoucherSaving:  false,
 
     receiveModal:         false,
@@ -116,7 +117,12 @@ function reportsApp() {
     receiveActualAmount:  null,
     receiveFeeAmount:     0,
     receiveNote:          '',
+    receiveBankAcctCode:  '',
     receiveSaving:        false,
+    // T100 傳票匯出設定裡的銀行帳戶清單（2026-09-01 新增），標記已收款/已匯款
+    // 時挑選要用哪個帳戶；lazy load
+    t100BankAccounts:     [],
+    t100BankAccountsLoaded: false,
 
     invoiceModal: { show: false, item: null, no: '' },
 
@@ -1086,8 +1092,23 @@ function reportsApp() {
       this.cashierExporting = false
     },
 
+    async loadT100BankAccounts() {
+      if (this.t100BankAccountsLoaded) return
+      try {
+        const r = await fetch('/api/settings/t100-export-config', { headers: { Authorization: 'Bearer ' + this._token() } })
+        if (r.ok) { const d = await r.json(); this.t100BankAccounts = d.bankAccounts || [] }
+      } catch {}
+      this.t100BankAccountsLoaded = true
+    },
+
+    _t100BankName(code) {
+      return (this.t100BankAccounts.find(b => b.acctCode === code) || {}).name || ''
+    },
+
     openPayVoucherModal(v) {
       this.payVoucherTarget = v
+      this.payVoucherBankAcctCode = ''
+      this.loadT100BankAccounts()
       this.payVoucherDate = v.payableDate || this._localDateStr()
       this.payVoucherNote = ''
       this.payVoucherModal = true
@@ -1101,7 +1122,10 @@ function reportsApp() {
         const r = await fetch(`/api/contractor-vouchers/${v.voucherNo}/paid-toggle`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this._token() },
-          body: JSON.stringify({ action: 'pay', paid_at: this.payVoucherDate, note: this.payVoucherNote })
+          body: JSON.stringify({
+            action: 'pay', paid_at: this.payVoucherDate, note: this.payVoucherNote,
+            bankAccountCode: this.payVoucherBankAcctCode, bankAccountName: this._t100BankName(this.payVoucherBankAcctCode),
+          })
         })
         if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '操作失敗'); this.payVoucherSaving = false; return }
         this.payVoucherModal = false
@@ -1117,6 +1141,8 @@ function reportsApp() {
       this.receiveActualAmount = it.amount
       this.receiveFeeAmount = 0
       this.receiveNote = ''
+      this.receiveBankAcctCode = ''
+      this.loadT100BankAccounts()
       this.receiveModal = true
     },
 
@@ -1131,6 +1157,7 @@ function reportsApp() {
           body: JSON.stringify({
             received: true, receivedAt: this.receiveDate, receivedBy: this._displayName(),
             actualAmount: this.receiveActualAmount, feeAmount: this.receiveFeeAmount || 0, note: this.receiveNote,
+            bankAccountCode: this.receiveBankAcctCode, bankAccountName: this._t100BankName(this.receiveBankAcctCode),
           })
         })
         if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '操作失敗'); this.receiveSaving = false; return }

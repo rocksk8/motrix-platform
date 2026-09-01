@@ -28,6 +28,20 @@ Excel、財務人員在 T100 用既有匯入功能手動核對匯入，風險小
 才具備直接匯入 T100 的意義；金額/日期/摘要/來源單號/交易對象等其餘欄位在科目
 代號填入前就已經正確可用，財務可以先核對數字正確性。
 
+**科目代號分維度設定（2026-09-01 同輪擴充）**：
+  - **依銀行帳戶**：`bankAccounts`（設定頁維護的清單 `[{name, acctCode}]`，供標記
+    已付款/已收款時選擇）——但匯出計算本身**不查這份清單**，而是直接讀「標記
+    當下」寫進各筆交易自己身上的 `bankAccountName`/`bankAccountCode`（比照
+    `paidBankAccountName`/`paidBankAccountCode` 快照模式，見 §各表 docstring）。
+    這樣設計的理由：銀行帳戶是「這一筆錢實際走哪個戶頭」的一次性事實，跟後續
+    設定頁清單怎麼改都無關，不應該被之後的設定變動追溯影響。
+  - **依料件分類**：`inventoryExpenseAccounts`（`{分類名稱: 科目代號}`，鍵對應
+    `parts.py::PART_CATEGORIES`）——這個**是**即時查表（不快照），因為分類本身
+    不會變，之後財務更正某分類的科目代號，應該連未確認的舊事件都一起套用新值，
+    跟 `salesRevenueAccount` 等其餘固定欄位是同一種「即時解析」邏輯。
+  - 其餘科目（銷貨收入/銷項稅額/承攬商費用/部門別/傳票別）維持全公司單一設定，
+    未要求分維度。
+
 **已匯入確認追蹤（2026-09-01 同輪新增，DB v69 `t100_export_confirmations`）**：
 匯出 Excel 本身不代表財務真的把這批傳票匯入了 T100（匯出後可能發現資料有誤、
 或財務決定分批匯入）——匯出跟「標記已匯入」是兩個獨立動作，只有明確標記過的
@@ -38,7 +52,7 @@ Excel、財務人員在 T100 用既有匯入功能手動核對匯入，風險小
 """
 import io
 from datetime import date, datetime
-from typing import Optional
+from typing import Dict, List, Optional
 from urllib.parse import quote as _url_quote
 
 import openpyxl
@@ -51,35 +65,48 @@ from db import get_db
 from helpers import _require_user, _tok, _audit, _get_setting, _set_setting
 from routers.reports import _collect_tax_invoices, _check_export_rate, _xl_style, _set_row, _COMPANY
 from routers.contractor_vouchers import _voucher_public
+from routers.parts import PART_CATEGORIES
 
 router = APIRouter()
 
 _DEFAULT_T100_CONFIG = {
-    "bankAccount":              "",   # 銀行存款科目代號
-    "salesRevenueAccount":      "",   # 銷貨收入科目代號
-    "outputTaxAccount":         "",   # 銷項稅額科目代號
-    "contractorExpenseAccount": "",   # 承攬商費用科目代號
-    "inventoryExpenseAccount":  "",   # 料件/設備成本科目代號（2026-09-01 同輪新增）
-    "departmentCode":           "",   # 部門別代號（選填，留空則傳票不分部門）
-    "voucherCategory":          "轉", # 傳票別（T100 常見：現／轉／記，預設「轉」）
+    "bankAccounts":              [],  # [{"name": str, "acctCode": str}, ...]，設定頁維護，供標記已付款/收款時選擇（見下方 T100BankAccount）
+    "salesRevenueAccount":       "",  # 銷貨收入科目代號
+    "outputTaxAccount":          "",  # 銷項稅額科目代號
+    "contractorExpenseAccount":  "",  # 承攬商費用科目代號
+    "inventoryExpenseAccounts":  {},  # {料件分類: 科目代號}，鍵對應 parts.py::PART_CATEGORIES（2026-09-01 同輪新增）
+    "departmentCode":            "",  # 部門別代號（選填，留空則傳票不分部門）
+    "voucherCategory":           "轉", # 傳票別（T100 常見：現／轉／記，預設「轉」）
 }
 
 
 # ── 科目代號設定（superadmin 維護，admin+ 可查閱） ─────────────────────────────
 
+class T100BankAccount(BaseModel):
+    name: str = ""
+    acctCode: str = ""
+
+
 class T100ExportConfigBody(BaseModel):
-    bankAccount: str = ""
+    bankAccounts: List[T100BankAccount] = []
     salesRevenueAccount: str = ""
     outputTaxAccount: str = ""
     contractorExpenseAccount: str = ""
-    inventoryExpenseAccount: str = ""
+    inventoryExpenseAccounts: Dict[str, str] = {}
     departmentCode: str = ""
     voucherCategory: str = "轉"
 
 
 def _t100_config() -> dict:
-    cfg = _get_setting("t100_export_config", {}) or {}
-    return {**_DEFAULT_T100_CONFIG, **cfg}
+    cfg = {**_DEFAULT_T100_CONFIG, **(_get_setting("t100_export_config", {}) or {})}
+    # 確保目前所有料件分類（parts.py::PART_CATEGORIES）都有一個鍵可填，即使
+    # 使用者還沒存過任何值；分類名稱之後若新增，重新 GET 一次就會自動補上
+    # 空白鍵，不需要額外 migration 或手動同步。
+    filled = dict(cfg.get("inventoryExpenseAccounts") or {})
+    for c in PART_CATEGORIES:
+        filled.setdefault(c["name"], "")
+    cfg["inventoryExpenseAccounts"] = filled
+    return cfg
 
 
 @router.get("/api/settings/t100-export-config")
@@ -126,14 +153,18 @@ def _voucher_line(d, category, summary, acct_code, acct_name, debit, credit, dep
 def _collect_paid_stock_batches(start: str, end: str) -> list:
     """料件/設備進貨已付款批次（2026-09-01 同輪新增，見 db.py::_m070_stock_batches()）。
     qty/total_cost 即時從 stock_items 群組加總（不信任任何快取值），比照
-    routers/inventory.py::list_batches() 同一套「即時算，不信任快取」原則。"""
+    routers/inventory.py::list_batches() 同一套「即時算，不信任快取」原則。
+    額外 JOIN parts 取得料件分類，供 inventoryExpenseAccounts 依分類查科目代號。"""
     conn = get_db()
     try:
         rows = conn.execute("""
             SELECT sb.batch_no, sb.part_no, sb.supplier_name, sb.invoice_no, sb.paid_at,
+                   sb.paid_bank_account_name, sb.paid_bank_account_code,
+                   COALESCE(p.category, '') AS category,
                    SUM(si.cost) AS total_cost
             FROM stock_batches sb
             JOIN stock_items si ON si.batch_no = sb.batch_no
+            LEFT JOIN parts p ON p.part_no = sb.part_no
             WHERE sb.is_paid=1 AND sb.paid_at BETWEEN ? AND ?
             GROUP BY sb.batch_no
             ORDER BY sb.paid_at
@@ -170,8 +201,10 @@ def _collect_t100_events(start: str, end: str, exclude_confirmed: bool = True) -
         if ("quotation_payment", key) in confirmed:
             continue
         summary = f"{inv['customer']} {inv['quoteNo']} 發票{inv['invoiceNo']} 收款"[:60]
+        bank_name = inv.get("bankAccountName") or "銀行存款"
+        bank_code = inv.get("bankAccountCode") or ""
         lines = [
-            _voucher_line(d, cfg["voucherCategory"], summary, cfg["bankAccount"], "銀行存款",
+            _voucher_line(d, cfg["voucherCategory"], summary, bank_code, bank_name,
                           inv["amountTotal"], 0, cfg["departmentCode"], inv["quoteNo"], inv["customer"]),
             _voucher_line(d, cfg["voucherCategory"], summary, cfg["salesRevenueAccount"], "銷貨收入",
                           0, inv["amountPretax"], cfg["departmentCode"], inv["quoteNo"], inv["customer"]),
@@ -192,10 +225,12 @@ def _collect_t100_events(start: str, end: str, exclude_confirmed: bool = True) -
         vendor = v["vendorName"] or "外包人員點工"
         summary = f"{vendor} {v['quoteNo']} 匯款申請{v['voucherNo']}"[:60]
         paid_d = (v["paidAt"] or "")[:10]
+        bank_name = v.get("paidBankAccountName") or "銀行存款"
+        bank_code = v.get("paidBankAccountCode") or ""
         lines = [
             _voucher_line(paid_d, cfg["voucherCategory"], summary, cfg["contractorExpenseAccount"], "承攬商費用",
                           v["grandTotal"], 0, cfg["departmentCode"], v["voucherNo"], vendor),
-            _voucher_line(paid_d, cfg["voucherCategory"], summary, cfg["bankAccount"], "銀行存款",
+            _voucher_line(paid_d, cfg["voucherCategory"], summary, bank_code, bank_name,
                           0, v["grandTotal"], cfg["departmentCode"], v["voucherNo"], vendor),
         ]
         events.append({
@@ -211,12 +246,17 @@ def _collect_t100_events(start: str, end: str, exclude_confirmed: bool = True) -
         supplier = b["supplier_name"] or "（未登記供應商）"
         summary = f"{supplier} {b['part_no']} 進貨批次{b['batch_no']}"[:60]
         total_cost = b["total_cost"] or 0
+        category = b.get("category") or ""
+        expense_code = (cfg["inventoryExpenseAccounts"] or {}).get(category, "")
+        expense_name = f"料件設備成本（{category}）" if category else "料件設備成本"
+        bank_name = b.get("paid_bank_account_name") or "銀行存款"
+        bank_code = b.get("paid_bank_account_code") or ""
         lines = [
             _voucher_line(b["paid_at"], cfg["voucherCategory"], summary,
-                          cfg["inventoryExpenseAccount"], "料件設備成本",
+                          expense_code, expense_name,
                           total_cost, 0, cfg["departmentCode"], b["batch_no"], supplier),
             _voucher_line(b["paid_at"], cfg["voucherCategory"], summary,
-                          cfg["bankAccount"], "銀行存款",
+                          bank_code, bank_name,
                           0, total_cost, cfg["departmentCode"], b["batch_no"], supplier),
         ]
         events.append({
@@ -259,9 +299,12 @@ def _build_t100_voucher_excel(rows: list, start: str, end: str, cfg: dict, gen_a
     mk, fill, mk_border, al = _xl_style(wb)
     BD = mk_border()
 
-    missing_codes = [k for k in ("bankAccount", "salesRevenueAccount", "outputTaxAccount",
-                                  "contractorExpenseAccount", "inventoryExpenseAccount")
+    missing_codes = [k for k in ("salesRevenueAccount", "outputTaxAccount", "contractorExpenseAccount")
                       if not cfg.get(k)]
+    if not cfg.get("bankAccounts"):
+        missing_codes.append("bankAccounts（尚未設定任何銀行帳戶）")
+    if not any((cfg.get("inventoryExpenseAccounts") or {}).values()):
+        missing_codes.append("inventoryExpenseAccounts（料件分類科目代號皆未設定）")
 
     widths = [10, 12, 8, 30, 10, 12, 12, 12, 8, 14, 16]
     for i, w in enumerate(widths, 1):

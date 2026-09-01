@@ -137,7 +137,12 @@ function app() {
     payVoucherTarget: null,
     payVoucherDate: '',
     payVoucherNote: '',
+    payVoucherBankAcctCode: '',
     payVoucherSaving: false,
+    // T100 傳票匯出設定裡的銀行帳戶清單（2026-09-01 新增），標記已匯款/已收款
+    // 時挑選要用哪個帳戶；lazy load，第一次開啟任一個標記 Modal 時才抓
+    t100BankAccounts: [],
+    t100BankAccountsLoaded: false,
     // ── 產生匯款申請 Modal（2026-08-31 新增，讓應付款日期在產生申請當下就能
     // 直接填/改，不用先跳去編輯派發紀錄）
     createVoucherModal: false,
@@ -2635,6 +2640,19 @@ function app() {
       } catch (e) { alert('網路錯誤：' + e.message) }
     },
 
+    async loadT100BankAccounts() {
+      if (this.t100BankAccountsLoaded) return
+      try {
+        const r = await fetch('/api/settings/t100-export-config', { headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (r.ok) { const d = await r.json(); this.t100BankAccounts = d.bankAccounts || [] }
+      } catch {}
+      this.t100BankAccountsLoaded = true
+    },
+
+    onPayVoucherBankChange() {
+      this._payVoucherBankName = (this.t100BankAccounts.find(b => b.acctCode === this.payVoucherBankAcctCode) || {}).name || ''
+    },
+
     async toggleContractorVoucherPaid(v, action) {
       // 標記已匯款需要填實際匯款日期（不一定等於操作當下），改走 Modal；
       // 取消已匯款不涉及日期，維持原本 confirm() 快速操作。
@@ -2642,7 +2660,10 @@ function app() {
         this.payVoucherTarget = v
         this.payVoucherDate = this._localDateStr()
         this.payVoucherNote = ''
+        this.payVoucherBankAcctCode = ''
+        this._payVoucherBankName = ''
         this.payVoucherModal = true
+        this.loadT100BankAccounts()
         return
       }
       if (!confirm(`確定取消匯款申請「${v.voucherNo}」的已匯款標記？`)) return
@@ -2665,7 +2686,10 @@ function app() {
         const r = await fetch(`/api/contractor-vouchers/${v.voucherNo}/paid-toggle`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
-          body: JSON.stringify({ action: 'pay', paid_at: this.payVoucherDate, note: this.payVoucherNote })
+          body: JSON.stringify({
+            action: 'pay', paid_at: this.payVoucherDate, note: this.payVoucherNote,
+            bankAccountCode: this.payVoucherBankAcctCode, bankAccountName: this._payVoucherBankName || '',
+          })
         })
         if (!r.ok) { alert((await r.json()).detail || '操作失敗'); this.payVoucherSaving = false; return }
         this.payVoucherModal = false

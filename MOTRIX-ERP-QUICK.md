@@ -956,6 +956,11 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
 
 **事件來源第三類：料件/設備進貨已付款（2026-09-01 同輪新增，DB v70 `stock_batches`，端點見 §7.18）**——過去 `stock_items`（序號級庫存）只有共用字串 `batch_no`，沒有獨立批次表頭，供應商/發票號/付款狀態完全沒地方放。新增 `stock_batches` 表頭，既有批次全部回填但 `is_paid` 一律預設 0（系統過去從未追蹤這件事，不能假設已付款，見 `db.py::_m070_stock_batches()` docstring）——**首次啟用這個功能時，財務需要回頭逐批確認歷史進貨是否已付款**，之後才會逐漸準確反映在 T100 匯出裡。
 
+**科目代號分維度設定（2026-09-01 同輪擴充，DB v71）：**
+- **依銀行帳戶**：設定頁維護 `bankAccounts: [{name, acctCode}]` 清單，但匯出計算**不查這份清單**——直接讀「標記已付款/已收款當下」寫進各筆交易自己身上的欄位（`contractor_payment_vouchers.paid_bank_account_name/code`、`stock_batches.paid_bank_account_name/code`、報價單款項 JSON 的 `bankAccountName/Code`，皆為 DB v71 新增，比照既有 `paidBy/paidAt` 快照精神——之後改設定頁清單不會回頭影響已標記的舊交易）。三個「標記已付款/已收款」UI（`case-management.html`「標記已匯款」Modal、`reports.html`「出納」分頁的標記已匯款/已收款 Modal、`inventory.html`「標記已付款」Modal）皆已加上銀行帳戶下拉選單（選填）。
+- **依料件分類**：`inventoryExpenseAccounts: {分類名稱: 科目代號}`（鍵對應 `parts.py::PART_CATEGORIES`），這個**是**即時查表（不快照）——分類本身不會變，財務事後更正某分類科目代號，未確認的舊事件會一起套用新值。
+- 其餘科目（銷貨收入/銷項稅額/承攬商費用/部門別/傳票別）維持全公司單一設定。
+
 ### §7.18 · 進貨批次供應商/發票/付款狀態（DB v70，2026-09-01）
 
 | Method | Path | 說明 |

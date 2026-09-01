@@ -78,7 +78,7 @@ DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR = os.path.join(
 # （已套用過的 schema_version 不可回頭刪除/重排），data_json.dealWonAt 這個
 # 欄位會留在既有資料裡但目前沒有任何程式碼讀取，之後如果要重新加回「成交時間」
 # 這種概念，不要複用這個欄位名稱免得語意混淆。
-CURRENT_VERSION = 70
+CURRENT_VERSION = 71
 
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
 # execution model) whenever the current request is authenticated as the 'demo'
@@ -1945,6 +1945,30 @@ def _m067_approval_delegates(conn):
     conn.commit()
 
 
+def _m071_paid_bank_account(conn):
+    """付款事件新增「MOTRIX 自己是用哪個銀行帳戶付的」欄位（2026-09-01）：
+    使用者要求 T100 科目代號要能依銀行帳戶分開設定（一間公司可能有多個銀行
+    帳戶，各自對應不同的 T100 銀行存款科目）。
+
+    ⚠️ 這跟 `contractor_payment_vouchers` 既有的 `snapshot_json.bankAccountName/
+    bankAccountNumber` 是完全不同的概念，不要混淆：既有欄位是**承攬商（收款方）
+    的收款帳戶**（建立申請當下凍結快照，用來告訴財務要匯去哪個戶頭）；這裡新增
+    的是**MOTRIX 自己（付款方）用哪個帳戶付出去的**，標記已匯款當下才會知道，
+    無法在建立申請時就預先知道，所以是獨立欄位、獨立時機寫入。
+
+    只加在 `contractor_payment_vouchers`／`stock_batches` 兩張表（今天才新增
+    的低流量 paid-toggle 流程）。報價單款項收款（`quotations.data_json.
+    caseRecord.payment.items[idx]`）走 JSON blob，不需要 migration，直接在
+    `mark_payment()` 多存 `bankAccountName`/`bankAccountCode` 兩個 key 即可，
+    比照既有 `invoiceNo`/`actualAmount` 的做法。"""
+    for col in ("paid_bank_account_name", "paid_bank_account_code"):
+        if not _col_exists(conn, "contractor_payment_vouchers", col):
+            conn.execute(f"ALTER TABLE contractor_payment_vouchers ADD COLUMN {col} TEXT NOT NULL DEFAULT ''")
+        if not _col_exists(conn, "stock_batches", col):
+            conn.execute(f"ALTER TABLE stock_batches ADD COLUMN {col} TEXT NOT NULL DEFAULT ''")
+    conn.commit()
+
+
 def _m070_stock_batches(conn):
     """進貨批次新增獨立表頭 `stock_batches`（2026-09-01）：`stock_items` 原本
     沒有獨立批次父表，`batch_no` 只是共用字串，供應商/付款狀態這類「批次層級」
@@ -2906,6 +2930,7 @@ _MIGRATIONS = [
     _m068_dispatch_payable_date_invoice_files,      # v68
     _m069_t100_export_confirmations,                # v69
     _m070_stock_batches,                            # v70
+    _m071_paid_bank_account,                        # v71
 ]
 
 
