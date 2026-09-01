@@ -112,7 +112,7 @@ def test_non_admin_can_still_register_invoice_number_only(client, make_user):
 
     r = client.patch(
         "/api/quotations/MQ-MARKPAY-004/payment/0", headers=_auth(token),
-        json={"invoiceNo": "AB-12345678"},
+        json={"invoiceNo": "AB12345678"},
     )
     assert r.status_code == 200, r.text
-    assert _payment_item("MQ-MARKPAY-004")["invoiceNo"] == "AB-12345678"
+    assert _payment_item("MQ-MARKPAY-004")["invoiceNo"] == "AB12345678"

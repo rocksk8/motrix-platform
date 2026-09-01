@@ -1,6 +1,9 @@
 """Quotation hot-path field sync helpers."""
 import json
+import re
 from datetime import date, datetime
+
+from fastapi import HTTPException
 
 from db import get_db
 
@@ -41,7 +44,8 @@ def _steps_to_tiers(steps: list) -> list:
     ]
 
 
-def payment_item_amounts(total: float, pay_items: list, pretax: float = None) -> list:
+def payment_item_amounts(total: float, pay_items: list, pretax: float = None,
+                          apply_tax_exempt: bool = True) -> list:
     """Return the effective **receivable** amount for each payment item, in order.
 
     Trusts each item's stored `amount` field when present — that's what the
@@ -71,7 +75,16 @@ def payment_item_amounts(total: float, pay_items: list, pretax: float = None) ->
     Callers that don't have `pretax` handy yet keep the old (unexempted)
     behavior for taxExempt items rather than guessing — better to under-fix
     a rarely-hit call site than divide by an unknown ratio.
-    """
+
+    apply_tax_exempt=False（2026-09-02 新增）：回傳「原始開立金額」，不套用
+    上述沖銷折算。這行為上是刻意分岔的兩個問題——「客戶現在還欠多少錢」
+    （AR/收款/dashboard 要的答案，taxExempt 後金額變小）跟「這筆款項當初
+    實際開立的統一發票金額是多少」（稅務匯出/T100 傳票要的答案，taxExempt
+    是核准沖銷之後才發生的內部應收帳款減讓，不會、也不能追溯改變已經對
+    國稅局申報過的銷項稅額）完全是两回事，把稅額沖銷後的「應收金額」直接
+    當成「已開立發票金額=0 稅額」拿去做稅務申報用途，會讓已開立、已產生
+    法定稅捐義務的發票在申報文件上憑空消失（見 routers/reports.py::
+    _collect_tax_invoices() 呼叫點的說明）。"""
     if not pay_items:
         return []
     others = sum(
@@ -86,10 +99,46 @@ def payment_item_amounts(total: float, pay_items: list, pretax: float = None) ->
             amt = int(total - others)
         else:
             amt = round(total * (pi.get("pct") or 0) / 100)
-        if pi.get("taxExempt") and pretax and total:
+        if apply_tax_exempt and pi.get("taxExempt") and pretax and total:
             amt = round(amt * pretax / total)
         out.append(amt)
     return out
+
+
+_INVOICE_NO_RE = re.compile(r"^[A-Z]{2}\d{8}$")
+
+
+def validate_invoice_no(conn, invoice_no: str, exclude_quote_no: str = None, exclude_idx: int = None) -> None:
+    """統一發票號碼格式檢查（2 碼英文字軌＋8 碼流水號，如 AB12345678）＋重複
+    偵測（同一組號碼已經填在別的案件/期別上）——2026-09-02 稽核發現這個欄位
+    過去完全是自由文字，格式錯誤或複製貼上打錯號碼、甚至真的重複開立，系統
+    都不會有任何提示，而重複發票號碼正是國稅局查核時最先抓的稽核紅旗。
+    空字串（尚未開立）視為合法，直接放行。exclude_quote_no/exclude_idx 供
+    「修改自己這筆」時排除自己，不要跟自己比對出假警報。"""
+    inv = (invoice_no or "").strip()
+    if not inv:
+        return
+    if not _INVOICE_NO_RE.match(inv.upper()):
+        raise HTTPException(
+            400, f"發票號碼格式錯誤（{invoice_no}），需為 2 碼英文字軌＋8 碼數字，例如 AB12345678"
+        )
+    rows = conn.execute(
+        "SELECT quote_no, json_extract(data_json,'$.caseRecord.payment.items') AS pay_json "
+        "FROM quotations WHERE json_extract(data_json,'$.caseRecord.payment.items') IS NOT NULL"
+    ).fetchall()
+    for r in rows:
+        try:
+            items = json.loads(r["pay_json"] or "[]")
+        except Exception:
+            continue
+        for i, it in enumerate(items):
+            if (it.get("invoiceNo") or "").strip().upper() != inv.upper():
+                continue
+            if r["quote_no"] == exclude_quote_no and i == exclude_idx:
+                continue
+            raise HTTPException(
+                400, f"發票號碼 {invoice_no} 已用於案件 {r['quote_no']} 第{i + 1}期款項，請確認是否重複或填錯"
+            )
 
 
 def quote_won_month_map(conn) -> dict:

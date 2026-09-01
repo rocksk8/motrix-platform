@@ -22,7 +22,7 @@ from fastapi.responses import StreamingResponse
 
 from db import get_db
 from helpers import (
-    _require_user, _warranty_expiry, _get_edge_path, _get_setting, _set_setting,
+    _require_user, _tok, _audit, _warranty_expiry, _get_edge_path, _get_setting, _set_setting,
     payment_item_amounts, quote_won_month_map, user_has_module,
 )
 from routers.vendor_contractors import _dispatch_row
@@ -59,24 +59,35 @@ def _parse_period(period: str):
     today = date.today()
     if not period:
         period = f"{today.year}-{today.month:02d}"
-    # Annual: bare 4-digit year
-    if period.isdigit() and len(period) == 4:
-        yr = int(period)
-        d0 = date(yr, 1, 1)
-        d1 = date(yr, 12, 31)
-        return f"{yr} 年度", d0.isoformat(), d1.isoformat()
-    if "Q" in period.upper():
-        yr, q = period.upper().split("-Q")
-        yr, q = int(yr), int(q)
-        ms = (q - 1) * 3 + 1
-        me = ms + 2
-        d0 = date(yr, ms, 1)
-        d1 = date(yr, me, monthrange(yr, me)[1])
-        return f"{yr} 年第 {q} 季", d0.isoformat(), d1.isoformat()
-    yr, mo = int(period[:4]), int(period[5:7])
-    d0 = date(yr, mo, 1)
-    d1 = date(yr, mo, monthrange(yr, mo)[1])
-    return f"{yr} 年 {mo} 月", d0.isoformat(), d1.isoformat()
+    # 格式錯誤（如 2026-13、abc、單獨一個 "Q"）過去會讓 date()/int() 拋出未
+    # 被局部捕捉的 ValueError，靠 main.py 的全域 handler 兜底變成通用 500——
+    # 跟已經修過的 _build_income_expense_scopes() month 參數驗證（見該函式）
+    # 是同一種坑，這裡補上對稱的驗證。
+    try:
+        # Annual: bare 4-digit year
+        if period.isdigit() and len(period) == 4:
+            yr = int(period)
+            d0 = date(yr, 1, 1)
+            d1 = date(yr, 12, 31)
+            return f"{yr} 年度", d0.isoformat(), d1.isoformat()
+        if "Q" in period.upper():
+            yr_s, q_s = period.upper().split("-Q")
+            yr, q = int(yr_s), int(q_s)
+            if q not in (1, 2, 3, 4):
+                raise ValueError
+            ms = (q - 1) * 3 + 1
+            me = ms + 2
+            d0 = date(yr, ms, 1)
+            d1 = date(yr, me, monthrange(yr, me)[1])
+            return f"{yr} 年第 {q} 季", d0.isoformat(), d1.isoformat()
+        if len(period) != 7 or period[4] != "-":
+            raise ValueError
+        yr, mo = int(period[:4]), int(period[5:7])
+        d0 = date(yr, mo, 1)
+        d1 = date(yr, mo, monthrange(yr, mo)[1])
+        return f"{yr} 年 {mo} 月", d0.isoformat(), d1.isoformat()
+    except (ValueError, IndexError):
+        raise HTTPException(400, f"period 參數格式錯誤（{period}），需為 YYYY、YYYY-MM 或 YYYY-Qn")
 
 
 def _fmt(n):
@@ -128,12 +139,15 @@ def _collect(period_start: str, period_end: str, department_id: Optional[int] = 
         WHERE COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') IN ('已成案','已結案')
         ORDER BY quote_date DESC
     """).fetchall()
-    # sales_person_id -> department_id/department_name，用來把報價單掛回部門
-    # （依部門彙總／department_id 篩選都靠這個對照表，quotations 本身沒有直接存部門）
-    dept_by_user = {
-        r["id"]: (r["department_id"], r["dept_name"])
+    # sales_person_id -> department_id/department_name/目前顯示名稱，用來把報價單
+    # 掛回部門（依部門彙總／department_id 篩選都靠這個對照表，quotations 本身沒有
+    # 直接存部門），displayName 則供下方業務員績效/目標達成率用 id 比對、
+    # 但顯示「目前」名稱（不受 quotations.sales_person 這個建立當下快照字串
+    # 影響，見 case["salesPersonId"] 的說明）。
+    user_by_id = {
+        r["id"]: {"deptId": r["department_id"], "deptName": r["dept_name"], "displayName": r["display_name"]}
         for r in conn.execute("""
-            SELECT u.id, u.department_id, d.name AS dept_name
+            SELECT u.id, u.department_id, u.display_name, d.name AS dept_name
             FROM users u LEFT JOIN departments d ON d.id = u.department_id
         """).fetchall()
     }
@@ -149,7 +163,8 @@ def _collect(period_start: str, period_end: str, department_id: Optional[int] = 
 
     def _row_dept(row):
         """回傳 (department_id, department_name) 或 (None, '未分類')。"""
-        return dept_by_user.get(row["sales_person_id"]) or (None, "未分類")
+        info = user_by_id.get(row["sales_person_id"])
+        return (info["deptId"], info["deptName"]) if info else (None, "未分類")
 
     if department_id:
         rows = [r for r in rows if _row_dept(r)[0] == department_id]
@@ -221,6 +236,12 @@ def _collect(period_start: str, period_end: str, department_id: Optional[int] = 
             "customer":       row["customer_name"] or "",
             "project":        row["project_name"]  or "",
             "salesPerson":    row["sales_person"]  or "",
+            # sales_person 是建立當下快照的顯示名稱字串（歷史相容），業務員
+            # 改名後舊案件仍是舊名字；salesPersonId 才是穩定的 FK，業務員績效
+            # /目標達成率比對一律優先用這個 id，避免改名後該業務員的歷史業績
+            # 被靜默拆成新舊兩個名字、或直接對不上年度目標設定（見 sm/
+            # _compute_achievement() 用法）。
+            "salesPersonId":  row["sales_person_id"],
             "deptId":         row_dept_id,
             "deptName":       row_dept_name,
             "quoteDate":      qdate,
@@ -247,11 +268,18 @@ def _collect(period_start: str, period_end: str, department_id: Optional[int] = 
         if case["inPeriod"]:
             cases_period.append(case)
 
-    # sales perf
+    # sales perf — 優先用 salesPersonId 分組（改名後仍歸同一人），查無 id 的
+    # 舊資料才退回 salesPerson 名字字串分組（見 case["salesPersonId"] 註解）
     sm: dict = {}
     for c in cases_all:
-        k = c["salesPerson"] or "（未指定）"
-        sm.setdefault(k, {"salesPerson": k, "cases": 0, "total": 0, "received": 0,
+        spid = c["salesPersonId"]
+        if spid and spid in user_by_id:
+            k = ("id", spid)
+            label = user_by_id[spid]["displayName"] or c["salesPerson"] or "（未指定）"
+        else:
+            label = c["salesPerson"] or "（未指定）"
+            k = ("name", label)
+        sm.setdefault(k, {"salesPerson": label, "cases": 0, "total": 0, "received": 0,
                           "mRevSum": 0.0, "mProfitSum": 0.0,
                           "amRevSum": 0.0, "amProfitSum": 0.0, "amCnt": 0})
         sm[k]["cases"]    += 1
@@ -489,10 +517,26 @@ def _compute_achievement(year: int, targets: dict, cases_all: list) -> dict:
     t_mgn  = ann.get("avgNetMarginPct")  or 0
     t_gp   = ann.get("grossProfit")      or 0
 
+    # 目標設定（operating_targets.salesperson[]）只存業務員「名字」，
+    # quotations.sales_person 卻是建立當下快照的字串——業務員改名後
+    # （display_name 可由 admin 編輯，見 auth.py update_user()）舊案件仍是
+    # 舊名字，直接拿名字互相比對會讓改名前的業績從目標達成率裡消失。
+    # 這裡把目標設定的名字解析成目前對應的 user id，案件比對優先用
+    # salesPersonId（穩定 FK，不受改名影響）；查無對應使用者（名字打錯字、
+    # 離職刪除帳號等）才退回原本的名字字串比對，不砍歷史涵蓋範圍。
+    conn4 = get_db()
+    name_to_id = {r["display_name"]: r["id"] for r in conn4.execute("SELECT id, display_name FROM users").fetchall()}
+    conn4.close()
+
     sp_acv = []
     for sp_t in (targets.get("salesperson") or []):
         sn   = sp_t.get("name") or ""
-        sy_c = [c for c in ytd if c["salesPerson"] == sn]
+        sp_id = name_to_id.get(sn)
+        if sp_id is not None:
+            sy_c = [c for c in ytd if c.get("salesPersonId") == sp_id
+                    or (not c.get("salesPersonId") and c["salesPerson"] == sn)]
+        else:
+            sy_c = [c for c in ytd if c["salesPerson"] == sn]
         sy_r = sum(c["total"] for c in sy_c)
         sp_acv.append({
             "name":          sn,
@@ -537,9 +581,26 @@ def _xl_style(wb):
     return f, fill, border, al
 
 
+# openpyxl 會把「開頭是 =/+/-/@ 的字串」自動當成公式寫入（Cell.value 的
+# bind_value() 行為），不是單純字面字串——只要使用者能在客戶名稱/專案名稱/
+# 款項備注/發票號碼/承攬商名稱/料件名稱等任一自由文字欄位填入
+# `=HYPERLINK(...)` 或舊式 DDE payload，之後任何人匯出本報表 Excel 並在
+# Excel 開啟，就可能觸發公式/連結（CWE-1236，CSV/Formula Injection 同類
+# 手法對 xlsx 一樣有效）。PDF/HTML 路徑已經用 html.escape() 處理過這類風險
+# （見 _build_report_html() 的 esc()），這裡比照同樣的防禦精神，把觸發字元
+# 開頭的字串前面補一個單引號讓 openpyxl 存成純文字。
+_XL_FORMULA_TRIGGERS = ("=", "+", "-", "@")
+
+
+def _xl_safe(val):
+    if isinstance(val, str) and val[:1] in _XL_FORMULA_TRIGGERS:
+        return "'" + val
+    return val
+
+
 def _set_row(ws, row_idx, values, font=None, fill=None, border=None, aligns=None, height=None):
     for ci, val in enumerate(values, 1):
-        cell = ws.cell(row=row_idx, column=ci, value=val)
+        cell = ws.cell(row=row_idx, column=ci, value=_xl_safe(val))
         if font:   cell.font   = font
         if fill:   cell.fill   = fill
         if border: cell.border = border
@@ -2125,6 +2186,9 @@ def report_excel(
     xlsx   = _build_excel(data, label, gen_at)
     safe   = label.replace(" ", "").replace("年", "Y").replace("月", "M").replace("第", "Q").replace("季", "")
     fname  = f"MOTRIX_營運報表_{safe}.xlsx"
+    _audit(_tok(authorization), "reports.export", "reports", "financial",
+           f"營運報表 Excel 匯出（{label}）",
+           {"format": "excel", "period": period, "departmentId": department_id})
     return StreamingResponse(
         io.BytesIO(xlsx),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -2156,6 +2220,9 @@ def report_pdf(
         raise HTTPException(500, str(e))
     safe  = label.replace(" ", "").replace("年", "Y").replace("月", "M").replace("第", "Q").replace("季", "")
     fname = f"MOTRIX_營運報表_{safe}.pdf"
+    _audit(_tok(authorization), "reports.export", "reports", "financial",
+           f"營運報表 PDF 匯出（{label}）",
+           {"format": "pdf", "period": period, "departmentId": department_id})
     return StreamingResponse(
         io.BytesIO(pdf_bytes),
         media_type="application/pdf",
@@ -2321,6 +2388,15 @@ def get_cash_position(authorization: str = Header(None)):
 
 # ── 稅務匯出（銷項發票清單）──────────────────────────────────────────────────
 
+def _round_half_up(n) -> int:
+    """財政部統一發票金額計算慣例是「四捨五入」（.5 一律進位），Python 內建
+    `round()` 是「銀行家捨入」（.5 進位到最近偶數）——兩者只在剛好卡在 .5
+    邊界時才會差 1 元，但既然這裡的數字要拿去對真實開立的發票金額，就該用
+    跟開票軟體一致的規則，不要假設「大部分時候一樣」就夠了。"""
+    from decimal import Decimal, ROUND_HALF_UP
+    return int(Decimal(str(n)).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+
+
 def _collect_tax_invoices(year: Optional[int] = None, month: Optional[int] = None) -> list:
     """收集所有已填發票號碼的收款品項（案件管理財務Tab item.invoiceNo，自由文字，
     使用者開立發票後手動填入）＝銷項發票清單，供記帳士/稅務申報使用。
@@ -2328,10 +2404,16 @@ def _collect_tax_invoices(year: Optional[int] = None, month: Optional[int] = Non
     未填 invoiceNo 的收款品項（尚未開發票）不列入。金額欄位：item 的 amount 為
     報價單「含稅總價」的一部分（見 payment_item_amounts() docstring），這裡換算
     5% 稅額拆出未稅/稅額/含稅三欄；若日後改用非 5% 稅率，此處需一併調整。
-    taxExempt（已核准稅額沖銷）的品項，payment_item_amounts() 已經回傳未稅金額
-    （不是含稅金額的一部分），這裡不能再對它套用「除以 1.05 拆稅額」的公式
-    （那樣會把已經是未稅的數字誤當成含稅去拆分，稅額算成負的）——直接列稅額=0、
-    未稅=含稅=該未稅金額即可，這筆本來就沒有稅額可收。"""
+
+    2026-09-02 修復（反派/國稅局視角複查發現）：taxExempt（已核准稅額沖銷）
+    品項過去在這裡被列成「稅額=0、未稅=含稅」，等於把一筆已經開立發票、已經
+    對國稅局產生銷項稅額的交易，在申報用文件上回溯性地變成免稅交易——但
+    這個迴圈本身已經先過濾掉沒填 invoiceNo 的品項，能走到這裡的一定是「已經
+    開立過統一發票」的款項，taxExempt 只是之後才核准的內部應收帳款減讓（公司
+    決定不跟客戶收那筆稅額），不會、也不能追溯改變已經開立當下就確定的法定
+    稅捐義務。改用 apply_tax_exempt=False 取得「原始開立金額」（不套用沖銷
+    折算）永遠照標準 5% 拆稅公式計算，taxExempt 對「客戶還欠多少」（AR帳齡/
+    收款率/dashboard）的影響維持不變，只是不再讓它同時改寫稅務匯出的數字。"""
     conn = get_db()
     rows = conn.execute("""
         SELECT quote_no, customer_name, total, pretax,
@@ -2350,7 +2432,7 @@ def _collect_tax_invoices(year: Optional[int] = None, month: Optional[int] = Non
             items = []
         if not items:
             continue
-        amounts = payment_item_amounts(row["total"] or 0, items, row["pretax"])
+        amounts = payment_item_amounts(row["total"] or 0, items, row["pretax"], apply_tax_exempt=False)
         for idx, pi in enumerate(items):
             inv_no = (pi.get("invoiceNo") or "").strip()
             if not inv_no:
@@ -2360,14 +2442,9 @@ def _collect_tax_invoices(year: Optional[int] = None, month: Optional[int] = Non
                 continue
             if month and received_at[5:7] != f"{month:02d}":
                 continue
-            if pi.get("taxExempt"):
-                amt_pretax = amounts[idx]
-                tax_amt    = 0
-                amt_incl   = amt_pretax
-            else:
-                amt_incl   = amounts[idx]
-                tax_amt    = round(amt_incl - amt_incl / 1.05)
-                amt_pretax = amt_incl - tax_amt
+            amt_incl   = amounts[idx]
+            tax_amt    = _round_half_up(amt_incl - amt_incl / 1.05)
+            amt_pretax = amt_incl - tax_amt
             out.append({
                 "invoiceNo":     inv_no,
                 "date":          received_at,
@@ -2455,6 +2532,9 @@ def tax_export_excel(
     gen_at = datetime.now().strftime("%Y-%m-%d %H:%M")
     xlsx = _build_tax_export_excel(rows, label, gen_at)
     fname = f"MOTRIX_銷項發票清單_{label}.xlsx"
+    _audit(_tok(authorization), "reports.export", "reports", "tax-export",
+           f"銷項發票清單匯出（{label}，共 {len(rows)} 筆）",
+           {"year": year, "month": month, "count": len(rows)})
     return StreamingResponse(
         io.BytesIO(xlsx),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -2579,6 +2659,9 @@ async def bank_reconcile(file: UploadFile = File(...), authorization: str = Head
 
     unmatched_vouchers = [v for v in vouchers if v["voucherNo"] not in matched_voucher_nos]
 
+    _audit(_tok(authorization), "reports.bank_reconcile", "reports", "bank-reconcile",
+           f"銀行對帳單比對（上傳 {len(bank_rows)} 筆，配對成功 {len(matched_voucher_nos)} 筆）",
+           {"bankRowCount": len(bank_rows), "matchedCount": len(matched_voucher_nos)})
     return {
         "bankRows":           bank_results,
         "matchedCount":       len(matched_voucher_nos),
@@ -3138,18 +3221,29 @@ def _collect_expenses(year: int, department_id: Optional[int] = None) -> dict:
         for h in history:
             if h.get("type") == "settlement_finalized":
                 finalized_at = h.get("at") or finalized_at
-        mo = (finalized_at or "")[:7]
-        if mo not in monthly or not _quote_in_department(r["quote_no"]):
+        if not _quote_in_department(r["quote_no"]):
             continue
         for it in ((data.get("settlement") or {}).get("extraItems")) or []:
             cost = float(it.get("totalCost") or 0)
             if not cost:
                 continue
+            # 2026-09-02 修復：月度加總過去一律用「精算完結時間」(finalized_at)
+            # 分月，但每筆額外支出本身的憑證日期 expenseDate（2026-09-01 新增
+            # 欄位）才是明細列顯示的 date——案件精算常常是事後補做，完結月份
+            # 跟支出實際發生月份可能差好幾個月，兩者用不同日期分桶會讓「當月
+            # 明細」跟「月度加總欄位」對不上（明細照 expenseDate 篩，加總卻
+            # 算進 finalized_at 那個月）。這裡統一改成優先用 expenseDate 決定
+            # 要計入哪個月，缺漏才退回 finalized_at，明細顯示的 date 用同一個
+            # 值，確保兩處一致。
+            item_date = (it.get("expenseDate") or finalized_at or "")
+            mo = item_date[:7]
+            if mo not in monthly:
+                continue
             monthly[mo]["other"] += cost
             cat = it.get("category") or "其他"
             desc = it.get("name") or it.get("desc") or cat
             details["other"].append({
-                "date": (it.get("expenseDate") or finalized_at or "")[:10], "quoteNo": r["quote_no"] or "",
+                "date": item_date[:10], "quoteNo": r["quote_no"] or "",
                 "desc": f"{r['customer_name'] or ''}｜{cat}｜{desc}".strip("｜"),
                 "amount": round(cost),
                 "files": it.get("files") or [],

@@ -74,9 +74,15 @@ def test_ar_aging_excludes_tax_exempt_portion(client, make_user):
     assert all_items[0]["amount"] == 100000  # 未稅價，不是 105000
 
 
-def test_tax_export_shows_zero_tax_for_exempt_item(client, make_user):
-    """稅務匯出：已沖銷品項稅額該是 0，不能再對已經是未稅的數字套用 1.05 拆稅公式
-    （那樣會拆出負稅額）。"""
+def test_tax_export_shows_original_invoiced_tax_for_exempt_item(client, make_user):
+    """稅務匯出：taxExempt（已核准稅額沖銷）是「開立發票之後」才發生的內部應收
+    帳款減讓（公司決定不跟客戶收那筆稅額），不會、也不能追溯改變開立當下就已
+    確定的法定稅捐義務——這個品項既然填了 invoiceNo，代表發票早已按原始金額
+    （105,000 含稅）開立，稅務匯出該照原始金額算出稅額 5,000，不是沖銷後的
+    customer 應付金額（100,000）。2026-09-02 修復：舊版把這種情況的稅額列成
+    0，等於讓已開立、已產生銷項稅額的發票在申報文件上憑空消失（見
+    reports.py::_collect_tax_invoices() docstring）。taxExempt 對「客戶還欠
+    多少」（AR帳齡/收款率）的折算邏輯不受影響，只是不再連動改寫這裡。"""
     from routers.reports import _collect_tax_invoices
     import db
     conn = db.get_db()
@@ -101,9 +107,9 @@ def test_tax_export_shows_zero_tax_for_exempt_item(client, make_user):
 
     rows = _collect_tax_invoices(year=2026)
     row = next(r for r in rows if r["quoteNo"] == "MQ-TAXEX-002")
-    assert row["taxAmount"] == 0
+    assert row["taxAmount"] == 5000
     assert row["amountPretax"] == 100000
-    assert row["amountTotal"] == 100000
+    assert row["amountTotal"] == 105000
 
 
 # ── ②norm_at() 跨來源時間格式正規化 ──────────────────────────────────────────

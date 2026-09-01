@@ -167,7 +167,7 @@ def test_receivable_queue_status_all_includes_received_and_unreceived(client, ma
     mark = client.patch(
         "/api/quotations/MQ-CASH-040/payment/0", headers=_auth(token),
         json={"received": True, "receivedAt": "2026-08-31", "actualAmount": 29500, "feeAmount": 500,
-              "invoiceNo": "AB-12345678"},
+              "invoiceNo": "AB12345678"},
     )
     assert mark.status_code == 200, mark.text
 
@@ -183,7 +183,7 @@ def test_receivable_queue_status_all_includes_received_and_unreceived(client, ma
     assert it["received"] is True
     assert it["actualAmount"] == 29500
     assert it["feeAmount"] == 500
-    assert it["invoiceNo"] == "AB-12345678"
+    assert it["invoiceNo"] == "AB12345678"
 
     r_received = client.get("/api/cashier/receivable-queue?status=received", headers=_auth(token))
     assert any(i["quoteNo"] == "MQ-CASH-040" for i in r_received.json())

@@ -221,7 +221,9 @@ def set_approval_flow_for_doc_type(doc_type: str, body: ApprovalFlowSettings, au
 
 @router.get("/api/settings/operating-targets")
 def get_operating_targets(authorization: str = Header(None)):
-    _require_user(authorization)
+    u = _require_user(authorization)
+    if u["role"] not in ("superadmin", "admin"):
+        raise HTTPException(403, "僅管理員以上可查閱年度目標")
     return _get_setting("operating_targets") or {}
 
 

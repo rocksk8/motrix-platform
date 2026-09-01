@@ -29,7 +29,7 @@ from helpers import (
     resolve_tier_approvers, UnresolvedManagerError, resolve_active_flow_setting,
     save_document_files, delete_document_file,
     notify_case_close_blocked, notify_case_change_requested,
-    norm_at, active_delegators_for, user_has_module,
+    norm_at, active_delegators_for, user_has_module, validate_invoice_no,
 )
 import helpers.uploads as _uploads_mod
 from helpers.uploads import _effective_subfolder
@@ -1715,6 +1715,7 @@ def _apply_case_change_request(conn, req, approver: dict, authorization: str) ->
                 for k in ("actualAmount", "feeAmount", "feeNote", "note", "bankAccountName", "bankAccountCode"):
                     pits[idx].pop(k, None)
         if "invoiceNo" in body:
+            validate_invoice_no(conn, body["invoiceNo"], exclude_quote_no=quote_no, exclude_idx=idx)
             pits[idx]["invoiceNo"] = body["invoiceNo"]
         save_quotation_json(conn, quote_no, data)
         _audit(_tok(authorization), 'payment.mark', 'quotation', quote_no, f"{label}（半解鎖審核通過套用）")
@@ -2352,6 +2353,8 @@ def mark_payment(no: str, idx: int, body: dict, authorization: str = Header(None
         pits = pay.setdefault("items", [])
         if idx < 0 or idx >= len(pits):
             raise HTTPException(400, "款項索引超出範圍")
+        if "invoiceNo" in body:
+            validate_invoice_no(conn, body["invoiceNo"], exclude_quote_no=no, exclude_idx=idx)
         gated, change_id = _gate_case_edit(
             conn, no, user, authorization, "payment_mark",
             f"{no} 第{idx+1}期款項標記（{'收款' if body.get('received') else '取消收款'}）",
