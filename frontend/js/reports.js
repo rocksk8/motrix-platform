@@ -44,6 +44,15 @@ function reportsApp() {
     taxExportMonth: '',   // '' = 整年
     taxExporting:   false,
 
+    // ── T100（鼎新）傳票批次匯出（2026-09-01 新增，見 accounting_export.py）
+    t100Start:        new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10),
+    t100End:          new Date().toISOString().slice(0, 10),
+    t100Exporting:    false,
+    t100ConfigOpen:   false,
+    t100Config:       null,
+    t100ConfigLoaded: false,
+    t100ConfigSaving: false,
+
     // 銀行對帳單比對（連同標記已匯款 Modal）2026-08-31 搬到出納模組
     // frontend/js/cashier.js（財務/出納權限分工，見那邊同一輪改動），
     // 這裡不再重複維護一份。
@@ -1263,6 +1272,76 @@ function reportsApp() {
         alert('稅務匯出失敗：' + (e.message || e))
       } finally {
         this.taxExporting = false
+      }
+    },
+
+    // ── T100（鼎新）傳票批次匯出 ──────────────────────────────────────────────
+    async loadT100Config() {
+      if (this.t100ConfigLoaded) return
+      try {
+        var res = await fetch('/api/settings/t100-export-config', {
+          headers: { Authorization: 'Bearer ' + this._token() }
+        })
+        if (res.ok) {
+          this.t100Config = await res.json()
+          this.t100ConfigLoaded = true
+        }
+      } catch (e) { /* 靜默失敗，畫面仍可用預設空白值操作 */ }
+    },
+
+    toggleT100Config() {
+      this.t100ConfigOpen = !this.t100ConfigOpen
+      if (this.t100ConfigOpen) this.loadT100Config()
+    },
+
+    async saveT100Config() {
+      if (this._role() !== 'superadmin') return
+      this.t100ConfigSaving = true
+      try {
+        var res = await fetch('/api/settings/t100-export-config', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this._token() },
+          body: JSON.stringify(this.t100Config),
+        })
+        if (!res.ok) {
+          var j = await res.json().catch(function () { return {} })
+          throw new Error(j.detail || '儲存失敗')
+        }
+        alert('已儲存 T100 科目代號設定')
+      } catch (e) {
+        alert('儲存失敗：' + (e.message || e))
+      } finally {
+        this.t100ConfigSaving = false
+      }
+    },
+
+    async exportT100Vouchers() {
+      if (!this.t100Start || !this.t100End || this.t100Start > this.t100End) {
+        alert('請確認起訖日期區間正確')
+        return
+      }
+      this.t100Exporting = true
+      try {
+        var qs = 'start=' + this.t100Start + '&end=' + this.t100End
+        var res = await fetch('/api/reports/t100-export/vouchers?' + qs, {
+          headers: { Authorization: 'Bearer ' + this._token() }
+        })
+        if (!res.ok) {
+          var j = await res.json().catch(function () { return {} })
+          throw new Error(j.detail || '匯出失敗')
+        }
+        var blob = await res.blob()
+        var a = document.createElement('a')
+        a.href = URL.createObjectURL(blob)
+        a.download = 'MOTRIX_T100傳票匯出_' + this.t100Start + '_' + this.t100End + '.xlsx'
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(a.href)
+      } catch (e) {
+        alert('T100 傳票匯出失敗：' + (e.message || e))
+      } finally {
+        this.t100Exporting = false
       }
     },
 

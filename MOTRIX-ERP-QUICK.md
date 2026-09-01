@@ -940,6 +940,16 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
 | 案件代辦事項（`case_action_items.py`，DB v62 `_m062_case_project_merge`） | `GET/POST /quotations/{quote_no}/action-items`、`PUT/DELETE .../action-items/{item_id}`、`PATCH .../action-items/{item_id}/approve` | 取代舊 `project_logs.action_items` JSON blob；兩階段簽核（`stage1_approver`/`stage2_approver`），主管解析比照 `_m050_project_department()` 既有查表 pattern |
 | 出納彙總（`cashier.py`） | `GET /cashier/payable-queue \| receivable-queue \| summary \| execution-history \| export` | **2026-08-31 起併入 `reports.html` 第 13 個頁籤「出納」**（`?tab=cashier` 深連結），獨立 `cashier.html`/`cashier.js` 已退役為導向 stub；本質是 §5.9 財務三憑證流的**唯讀彙總層**，非獨立資料源 |
 
+### §7.17 · T100（鼎新）傳票批次匯出（2026-09-01，見 §12 同日條目）
+
+| Method | Path | 說明 |
+|--------|------|------|
+| GET | /settings/t100-export-config | 科目代號對照設定（admin+ 可查閱） |
+| PUT | /settings/t100-export-config | 更新科目代號（superadmin only） |
+| GET | /reports/t100-export/vouchers?start=&end= | 現金基礎傳票批次匯出 Excel（admin+），涵蓋已收款發票＋已匯款承攬商費用，刻意排除請款單 |
+
+`backend/routers/accounting_export.py`；每筆事件產生的傳票天生借貸平衡；科目代號預設全部留白，需 superadmin 依貴公司 T100 實際設定填入才具備直接匯入意義。
+
 ---
 
 ## §8 · 備份與還原
@@ -1056,6 +1066,15 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 ## §12 · 變更摘要（最新兩版）
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
+
+### 2026-09-01 — T100（鼎新）傳票批次匯出（新模組，DB 無異動）
+
+- **背景**：使用者要求對接鼎新 T100，「鼎新有的都做」。討論後確認：T100 API 對接需要貴公司自行申請存取權限，目前沒有真實憑證可測試，貿然串接無法驗證正確性；改做批次匯出成 T100 標準傳票匯入格式，財務用既有匯入功能手動核對匯入，風險小很多且立刻可測試。科目代號規格「先用 T100 公版標準傳票格式打底，科目代號先留空白欄位」（使用者明確選擇，見下）。
+- **設計採現金基礎（cash basis）**：只匯出「錢真的有進出」的事件——收款事件（案件款項明細已填發票號碼且已收款，沿用 `reports.py::_collect_tax_invoices()` 同一份資料源，跟稅務匯出數字保證一致）→ 借銀行存款(含稅) / 貸銷貨收入(未稅) ＋ 貸銷項稅額(稅額)；付款事件（承攬商匯款申請已標記已匯款，沿用 `cashier.py` 出納模組同一份資料源）→ 借承攬商費用(含稅) / 貸銀行存款(含稅)。**刻意排除請款單**（`payment_requests`）——那是對客戶要款的文件，沒有「已收款」狀態，不是真的金流事件，比照 `reports.py::_compute_cash_position()` 既有的排除理由。每筆事件天生借貸平衡，一份匯出同時涵蓋銷項/應付/銀行對帳三個面向，避免三份報表各自資料源、數字對不上。
+- **新檔** `backend/routers/accounting_export.py`：`GET/PUT /api/settings/t100-export-config`（科目代號對照設定，PUT 限 superadmin，GET admin+ 可查；預設全部留白——貴公司財務團隊需自行確認實際科目代號，金額/日期/摘要/來源單號/交易對象等其餘欄位在科目代號填入前就已正確可用）、`GET /api/reports/t100-export/vouchers?start=&end=`（Excel 匯出，欄位：傳票號/傳票日期/傳票別/摘要/科目代號/科目名稱/借方金額/貸方金額/部門別/來源單號/交易對象）。
+- **前端**：`reports.html`「資金水位」分頁新增「T100（鼎新）傳票批次匯出」區塊（日期區間＋匯出按鈕）＋可收合的「科目代號設定」面板（admin+ 可查看，僅 superadmin 可修改），`reports.js` 對應新增 `t100*` 狀態與 `loadT100Config()`/`saveT100Config()`/`exportT100Vouchers()` 方法。
+- **測試**：`backend/tests/test_t100_export_2026_09_01.py`（4題：科目代號預設留白且僅 superadmin 可寫、傳票借貸平衡＋正確排除期間外事件與請款單、需管理員權限、日期區間驗證），pytest 全過（見本輪 commit）。
+- **下次還沒做的**：科目代號目前是空白骨架，需使用者填入實際值才具備直接匯入 T100 的意義；若之後要升級成即時 API 推送，需先向鼎新申請 T100 API 存取權限並在此基礎上擴充，非本輪範圍。尚未執行：正式機套用（依 §15 流程）。
 
 ### 2026-08-31g — 出納整合進營運報表模組（頁籤合併）＋案件管理數字連動稽核
 

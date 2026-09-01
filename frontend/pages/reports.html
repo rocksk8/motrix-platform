@@ -1349,6 +1349,68 @@
                     </button>
                   </div>
                 </div>
+
+                <!-- T100（鼎新）傳票批次匯出（2026-09-01 新增） -->
+                <div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border-light)">
+                  <div class="cm-section-title" style="margin-bottom:8px">T100（鼎新）傳票批次匯出</div>
+                  <div style="font-size:11px;color:var(--text-dim);margin-bottom:10px">
+                    現金基礎：匯出期間內已收款發票（借銀行存款／貸銷貨收入＋銷項稅額）與已匯款承攬商費用（借承攬商費用／貸銀行存款），每張傳票借貸自動平衡。
+                    請款單不含在內（尚未實際收款，非金流事件）。匯出後請財務用 T100 既有匯入功能核對後手動匯入。
+                  </div>
+                  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                    <input type="date" x-model="t100Start" style="padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px">
+                    <span style="font-size:12px;color:var(--text-dim)">～</span>
+                    <input type="date" x-model="t100End" style="padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px">
+                    <button class="btn-export excel" @click="exportT100Vouchers()" :disabled="t100Exporting">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                      <span x-text="t100Exporting ? '產製中…' : '匯出傳票 Excel'"></span>
+                    </button>
+                    <button class="btn-ghost btn-sm" @click="toggleT100Config()" x-text="t100ConfigOpen ? '收合科目代號設定' : '科目代號設定'"></button>
+                  </div>
+
+                  <div x-show="t100ConfigOpen" x-cloak style="margin-top:12px;padding:12px;background:var(--bg-subtle,#F9FAFB);border:1px solid var(--border-light);border-radius:var(--radius)">
+                    <template x-if="!t100Config">
+                      <div style="font-size:12px;color:var(--text-dim)">載入中…</div>
+                    </template>
+                    <template x-if="t100Config">
+                      <div>
+                        <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px">
+                          科目代號留白時，匯出的 Excel 仍會產出正確的金額/日期/摘要/來源單號，只是科目代號欄位空白，財務可先核對數字，之後再回來補上代號。
+                          <span x-show="_role()!=='superadmin'">（僅 superadmin 可修改，你目前只能檢視）</span>
+                        </div>
+                        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px">
+                          <div>
+                            <label style="font-size:10px;color:var(--text-dim);display:block;margin-bottom:2px">銀行存款科目代號</label>
+                            <input type="text" x-model="t100Config.bankAccount" :disabled="_role()!=='superadmin'" style="width:100%;padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px">
+                          </div>
+                          <div>
+                            <label style="font-size:10px;color:var(--text-dim);display:block;margin-bottom:2px">銷貨收入科目代號</label>
+                            <input type="text" x-model="t100Config.salesRevenueAccount" :disabled="_role()!=='superadmin'" style="width:100%;padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px">
+                          </div>
+                          <div>
+                            <label style="font-size:10px;color:var(--text-dim);display:block;margin-bottom:2px">銷項稅額科目代號</label>
+                            <input type="text" x-model="t100Config.outputTaxAccount" :disabled="_role()!=='superadmin'" style="width:100%;padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px">
+                          </div>
+                          <div>
+                            <label style="font-size:10px;color:var(--text-dim);display:block;margin-bottom:2px">承攬商費用科目代號</label>
+                            <input type="text" x-model="t100Config.contractorExpenseAccount" :disabled="_role()!=='superadmin'" style="width:100%;padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px">
+                          </div>
+                          <div>
+                            <label style="font-size:10px;color:var(--text-dim);display:block;margin-bottom:2px">部門別代號（選填）</label>
+                            <input type="text" x-model="t100Config.departmentCode" :disabled="_role()!=='superadmin'" style="width:100%;padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px">
+                          </div>
+                          <div>
+                            <label style="font-size:10px;color:var(--text-dim);display:block;margin-bottom:2px">傳票別</label>
+                            <input type="text" x-model="t100Config.voucherCategory" :disabled="_role()!=='superadmin'" style="width:100%;padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px">
+                          </div>
+                        </div>
+                        <div style="margin-top:10px" x-show="_role()==='superadmin'">
+                          <button class="btn-primary btn-sm" @click="saveT100Config()" :disabled="t100ConfigSaving" x-text="t100ConfigSaving ? '儲存中…' : '儲存設定'"></button>
+                        </div>
+                      </div>
+                    </template>
+                  </div>
+                </div>
               </div>
             </template>
           </div>

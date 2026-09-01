@@ -97,7 +97,9 @@ SQLite (WAL)  motrix_erp.db（正式）+ motrix_erp_demo.db（demo 隔離）
 | 發票開立簽核單 | `invoice_vouchers.py` (687行) | `case-management.html` 案件資訊Tab | `invoice_vouchers` | v46/v47 |
 | 請款單 | `payment_requests.py` (798行) | `payment-request-form.html` | `payment_requests` | v53 |
 
-三者架構高度一致（草稿→待審核→簽核中→已核准，snapshot_json 凍結、PDF、export_log），簽核流程可選「統一 `unified_approval_flow`」或各自獨立（`/api/settings/approval-flow-scope`，2026-08-28 起）。**這是全系統唯一稱得上「準會計憑證流」的部分**，見 §6.4 建議。
+三者架構高度一致（草稿→待審核→簽核中→已核准，snapshot_json 凍結、PDF、export_log），簽核流程可選「統一 `unified_approval_flow`」或各自獨立（`/api/settings/approval-flow-scope`，2026-08-28 起）。**這是全系統唯一稱得上「準會計憑證流」的部分**，見 §6.1 建議。
+
+**2026-09-01 起新增第四個角色：`accounting_export.py`（244行）**——不是憑證流本身，是憑證流的**下游匯出層**：把已核准/已收款/已匯款的事件轉成 T100（鼎新）標準傳票 Excel（現金基礎，借貸自動平衡），供財務手動匯入 T100。`GET/PUT /api/settings/t100-export-config`（科目代號對照，superadmin 維護）＋ `GET /api/reports/t100-export/vouchers`。這是 §6.1 建議「先做批次匯出、不做即時 API 對接」的第一階段實作，詳見 §6.1 更新說明。
 
 ### 2.8 出納 `cashier.py` (276行，2026-08-28 新增，QUICK.md 舊版完全沒記載)
 - 前端：併入「營運報表」頁籤（非獨立 sidebar 項目）
@@ -236,10 +238,12 @@ SQLite (WAL)  motrix_erp.db（正式）+ motrix_erp_demo.db（demo 隔離）
 
 > 原則：**不建議推翻重做已經運作良好的部分**——MOTRIX 的簽核引擎、案件狀態機、Demo 隔離、部署安全閘門，這些設計已經達到、甚至超過很多中小企業採購套裝軟體的實作品質。以下建議聚焦在「專業軟體通常會有、MOTRIX 目前沒有或較弱」的具體缺口，並標明優先序。
 
-### 6.1【高】財務憑證流：不要自建複式記帳，改做單向匯出
+### 6.1【高】財務憑證流：不要自建複式記帳，改做單向匯出　**✅ 2026-09-01 第一階段已實作**
 `invoice_vouchers`/`payment_requests`/`contractor_payment_vouchers`/`cashier.py` 這一組已經是相當完整的「應收/應付準憑證流」，但終究不是複式記帳（沒有借貸科目、沒有總分類帳）。**專業做法（如多數 CRM/ERP 週邊系統對接 QuickBooks/Xero/鼎新/正航的模式）是不要在 MOTRIX 內重造會計系統**，而是：
 - 已有的 `tax-export`（銷項發票 Excel）、`bank-reconcile`（CSV 寬鬆比對）已經是正確方向的第一步
 - 下一步建議做**定期批次匯出成目標會計系統可匯入的格式**（多數會計軟體支援 CSV/Excel 匯入傳票），而非投入資源做即時 API 對接或自建總帳——這個規模的公司請會計師事務所處理報稅，會計師慣用的工具（鼎新/正航/自己的 Excel 範本）才是終點，MOTRIX 角色應該停在「產生乾淨、可核對的原始憑證資料」
+
+**實作進度**：使用者確認目標是鼎新 T100，且明確選擇「先做批次匯出、不做 API 對接」（T100 API 需要貴公司自行申請存取權限，沒有真實憑證無法測試）。已完成第一階段：`accounting_export.py`（現金基礎傳票匯出，見 §2.7），科目代號留白待財務填入。**尚未做**：①科目代號實際填入（需財務/鼎新顧問提供）②若之後升級 API 即時推送，需先取得 T100 API 存取權限③目前只涵蓋「已收款發票」與「已匯款承攬商費用」兩類事件，料件/設備進貨等其餘支出面尚未涵蓋，之後有需要可比照同一套「現金基礎、天生借貸平衡」的模式擴充。
 
 ### 6.2【高】MFA 與敏感操作二次驗證
 superadmin 目前是「密碼 + Bearer token in localStorage」單一因子。專業做法（比照 Okta/Google Workspace 對管理員帳號的要求）：至少對 superadmin 角色加 TOTP（`pyotp` 套件，不需要外部服務）。這比 2 小時閒置逾時（已做，見 §3）更能防範憑證外洩情境，是相對低成本、高投資報酬的一項。

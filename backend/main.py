@@ -20,7 +20,7 @@ from helpers import (
 )
 from archive import _ensure_archive_dirs, _schedule_weekly, _schedule_daily
 
-from routers import auth, quotations, customers, suppliers, parts, dashboard, system, reports, contractors, payslips, daily_tasks, module_versions, vendor_contractors, dev_crm, env_guide, netarch_guide, switch_guide, shipping_notes, inventory, search, monitor_guide, access_guide, gateway_guide, automation_guide, contractor_vouchers, invoice_vouchers, org_structure, payment_requests, list_prefs, case_action_items, uploads, network_plans, approval_delegates, cashier
+from routers import auth, quotations, customers, suppliers, parts, dashboard, system, reports, contractors, payslips, daily_tasks, module_versions, vendor_contractors, dev_crm, env_guide, netarch_guide, switch_guide, shipping_notes, inventory, search, monitor_guide, access_guide, gateway_guide, automation_guide, contractor_vouchers, invoice_vouchers, org_structure, payment_requests, list_prefs, case_action_items, uploads, network_plans, approval_delegates, cashier, accounting_export
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -263,6 +263,7 @@ app.include_router(uploads.router)
 app.include_router(network_plans.router)
 app.include_router(approval_delegates.router)
 app.include_router(cashier.router)
+app.include_router(accounting_export.router)
 
 
 # ── Static frontend ───────────────────────────────────────────────────────────
