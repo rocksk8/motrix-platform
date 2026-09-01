@@ -2,6 +2,7 @@
 
 > 允碩整合集創（統編 60575481）｜ Tel: 04-3610-6566 ｜ info@miactw.com  
 > 文件版本：**2026-08-20**（承攬商匯款申請＋發票開立簽核單，DB v45/v46，見 §12）
+> **§2/§7/§11/§13 已於 2026-09-01 依實際程式碼盤點（`db.py` CURRENT_VERSION=68、`git log` 最新 commit `8f40e4e`）補齊落後內容，§12 逐日 changelog 本身仍是最新的**（本文件是持續累積的活文件，不是單一時間點快照）；同日新增互補文件 `MOTRIX-ERP-ARCHITECTURE-MAP.md`（架構地圖＋建議＋踩坑索引）
 
 ---
 
@@ -126,7 +127,7 @@
 
 | 模組 | 職責 |
 |------|------|
-| `db.py` | 連線、`init_db()`、PRAGMA WAL、熱路徑欄位／索引；**CURRENT_VERSION=46**（46 個 migrations；v32/v33 為交換器選型導覽 `switch_guide` 表結構，2026-08-01 由正式機備份 db 實際結構還原重建，詳見 db.py `_m032_switch_guide` 註解；v39/v40 為 2026-08-09 新增的監控系統／門禁系統選型導覽 `monitor_guide`/`access_guide` 表結構；v41 為閘道器與控制器選型導覽 `gateway_guide` 表結構；v42 為 2026-08-13 新增的業務開發連結報價單審核制 `dev_cases` 欄位；v43 為 2026-08-17 新增的使用者個別 Email 通知偏好 `users.notification_muted` 欄位；v44 為 2026-08-17 新增的承攬商派發發票號碼 `contractor_dispatches.invoice_no` 欄位；v45/v46 為 2026-08-20 新增的承攬商匯款申請／發票開立簽核單 `contractor_payment_vouchers`/`invoice_vouchers` 表結構，正式機直接開發，見 §12） |
+| `db.py` | 連線、`init_db()`、PRAGMA WAL、熱路徑欄位／索引；**2026-09-01 更正：CURRENT_VERSION=68**（本行長期未同步更新，之前記載的 46 已過時；v47–v68 詳細主題見 `MOTRIX-ERP-ARCHITECTURE-MAP.md` §4「資料庫演進索引」，含請款單/組織架構/案件階段正規化/專案併入案件管理/網路架構規劃書/自動化系統選型導覽/安全庫存/簽核代理人等；v32/v33 交換器選型導覽 `switch_guide` 表結構由正式機備份還原重建，詳見 db.py `_m032_switch_guide` 註解） |
 | `helpers/` | 密碼、session、audit、notify、settings、弱密碼標記、`save_quotation_json()` |
 | `archive.py` | 即時／每日／週備份；本機 SQLite 快照；**原子 JSON 寫入**（`_atomic_json_write`）；G: fallback |
 | `backup_job.py` | 獨立備份腳本（Windows 工作排程器，不依賴 server） |
@@ -273,12 +274,11 @@ divisions       -- 處（DB v48）：id, name UNIQUE, sort_order,
                    manager_user_id FK→users(id)(nullable)（處級主管，DB v49，見 §12 2026-08-22e）
 departments     -- 部門（DB v48）：id, division_id FK→divisions(id), name（同處內 UNIQUE）,
                    sort_order, manager_user_id FK→users(id)(nullable)
-                   ⚠️ 未來開發保留：divisions/departments.manager_user_id 目前只是資料欄位，
-                   尚未接進任何簽核邏輯——四個 approval-settings 頁面（quotations／
-                   shipping_notes／contractor_vouchers／invoice_vouchers）與 helpers/
-                   tiered_approval.py 仍是純手動逐一挑選簽核人員，日後若要做「依部門/處
-                   自動列入主管簽核」，這裡就是設計時要沿用的資料來源，見
-                   helpers/tiered_approval.py 檔頭註解與 §11。
+                   ✅ 2026-09-01 更正：本欄位**已經**接進簽核邏輯（此處舊註記過時）——
+                   `helpers/tiered_approval.py` 的 `resolve_department_manager()`/
+                   `resolve_division_manager()` 會動態解析部門/處主管為額外簽核路徑，
+                   四個 approval-settings 頁面與案件代辦事項簽核皆已套用，見 §12
+                   2026-08-22g／2026-08-23d。
 sessions        -- token, expires_at, last_active
 customers       -- code(C-YYYYMM-NNN) + 主欄 + data_json（contacts, visits, tags）
 suppliers       -- code(S-YYYYMM-NNN) + 主欄 + data_json
@@ -631,18 +631,17 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
 ```
 主選單     儀表板
 業務       業務開發（dev-crm.html, dev_crm 模組旗標或 admin+）/ 報價單（含簽核佇列 ?view=queue） /
-           案件管理 / 專案管理
-選型資料庫  場域選型導覽（env-guide.html, env_guide 模組旗標或 admin+）/
-           網路架構選型導覽（netarch-guide.html, netarch_guide 模組旗標或 admin+）/
-           交換器選型導覽（switch-guide.html, switch_guide 模組旗標或 admin+）/
-           監控系統選型導覽（monitor-guide.html, monitor_guide 模組旗標或 admin+）/
-           門禁系統選型導覽（access-guide.html, access_guide 模組旗標或 admin+）/
-           涵蓋度總覽（selection-db-overview.html, admin+ 限定，無獨立模組旗標）
+           案件管理（⚠️ 「專案管理」已於 2026-08-26 併入案件管理，projects.html 已刪除，不再是獨立項目）
+選型資料庫  場域選型導覽 / 網路架構選型導覽 / 交換器選型導覽 / 監控系統選型導覽 /
+           門禁系統選型導覽 / 自動化系統選型導覽（automation-guide.html，DB v65，2026-08-26 起第七類，
+           本文件先前未記載）/ 涵蓋度總覽（selection-db-overview.html, admin+ 限定）
 廠商與採購 客戶 / 供應商 / **承攬商** / 料號 / **庫存管理**（inventory.html, inventory 模組旗標或 admin+）/ 採購
-設備       設備登載 / 保固追蹤
-財務       應收帳款 / 營運報表（admin+ 或含 reports 模組）
+設備       設備登載 / 保固追蹤 / 網路架構規劃書（network-plans.html，DB v64，可綁案件也可獨立建立，netplan_edit 模組或 superadmin，本文件先前未記載，詳見 §7.12／`NETWORK-PLAN-MODULE-DESIGN.md`）
+財務       應收帳款 / 營運報表（admin+ 或含 reports 模組；**2026-08-31 起內含第 13 個頁籤「出納」**，`cashier.html` 舊網址已退役為導向 stub）
 工作       工作日誌（非 viewer 或含 work_log 模組） / 每日工作事項（非 viewer 或含 daily_task 模組）
-系統       使用者 / 簽核設定（superadmin）/ 出貨單簽核設定（superadmin）/ 歷史紀錄 / 版本紀錄 / Schema 狀態（superadmin）
+系統       使用者 / 組織架構（org-structure.html，DB v48，本文件先前未記載）/ 簽核設定（superadmin）/
+           簽核代理人（approval-delegates.html，DB v67，任何人可自助設定，本文件先前未記載）/
+           出貨單簽核設定（superadmin）/ 歷史紀錄 / 版本紀錄 / Schema 狀態（superadmin）
 ```
 
 - 簽核佇列不在 sidebar，在報價單內 tab
@@ -651,16 +650,19 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
 - `work_log` / `daily_task`：非 viewer 或明確帶對應模組者可見（相容既有帳號）
 - `承攬商管理`：`admin+`（`cPr` 旗標，同採購）可見；`vendor-contractors.html`
 - **模組通知 badge**：所有模組 nav 項目（含子項）均有藍色 `sb-mod-*` badge，由 `_fetchModuleCounts()` 根據 `motrix_module_seen` 顯示其他人的更新計數；廠商採購/設備/財務各組同步顯示同一模組計數
-- **選型資料庫**（2026-08-01 獨立成頂層 sidebar 區塊，不再掛在「業務」底下；`SELECTION-DB-INDEX.md` 是這個產品線的總索引，規劃中還有自動化系統一個未來類別）：
+- **選型資料庫**（2026-08-01 獨立成頂層 sidebar 區塊，不再掛在「業務」底下；`SELECTION-DB-INDEX.md` 是這個產品線的總索引，現為**七大類**，見下）：
   - **場域選型導覽**：`env-guide.html`；檢視 `env_guide` 模組旗標或 admin+（`cEnvG` 旗標）；編輯（新增/修改/刪除場域、建議、連結）與 Excel 匯出入另需 `env_guide_edit` 模組旗標或 superadmin；`users.html` 可分別授予兩者；**無** 模組通知 badge（資料變動頻率低，未接 `_fetchModuleCounts()`）
   - **網路架構選型導覽**：`netarch-guide.html`；檢視 `netarch_guide` 模組旗標或 admin+（`cNetG` 旗標）；編輯需 `netarch_guide_edit` 或 superadmin；瀏覽邏輯與場域選型導覽不同——**先選技術族系方塊，再看世代橫向對照卡片**（非矩陣/篩選），選型資料庫第二個上線的類別
-  - **交換器選型導覽**：`switch-guide.html`；檢視 `switch_guide` 模組旗標或 admin+（`cSwitchG` 旗標）；編輯需 `switch_guide_edit` 或 superadmin；選型資料庫第三個上線的類別；**2026-08-01 前完全沒有 sidebar 入口與 `users.html` 權限勾選項**（只有 superadmin 能用），本次補齊跟另外兩個一致
+  - **交換器選型導覽**：`switch-guide.html`；檢視 `switch_guide` 模組旗標或 admin+（`cSwitchG` 旗標）；編輯需 `switch_guide_edit` 或 superadmin；選型資料庫第三個上線的類別
   - **監控系統選型導覽**：`monitor-guide.html`；檢視 `monitor_guide` 模組旗標或 admin+（`cMonitorG` 旗標）；編輯需 `monitor_guide_edit` 或 superadmin；選型資料庫第四個上線的類別（2026-08-09），資料形狀與交換器選型導覽相同（相機分類×場域情境矩陣），第一批資料為 UniFi Protect G6 世代
   - **門禁系統選型導覽**：`access-guide.html`；檢視 `access_guide` 模組旗標或 admin+（`cAccessG` 旗標）；編輯需 `access_guide_edit` 或 superadmin；選型資料庫第五個上線的類別（2026-08-09），資料形狀同上（元件分類×場域情境矩陣），第一批資料為 UniFi Access
-  - 五者在**歷史紀錄**（`audit-log.html`）與**版本紀錄**（`module-versions.html`）皆已比照其餘模組補上對應的 optgroup／actionLabel／色碼（teal 色系＋🧭 圖示，五者共用同一識別色，強調同屬一個產品線而非各自獨立模組）
-  - **涵蓋度總覽**（2026-08-09）：`selection-db-overview.html`；admin+ 限定，無獨立模組旗標；彙總上述四個「品牌/型號目錄」型類別（網路架構/交換器/監控/門禁，不含場域選型導覽——資料形狀是情境×分層文字建議而非品牌目錄）在各世代/分類底下的品牌數與產品數，紅/黃/綠三色標示完全空白／偏薄弱／足夠；**不新增後端 API**，純前端呼叫既有 5 個類別各自的 GET 端點彙總而成
+  - **自動化系統選型導覽**：`automation-guide.html`；檢視 `automation_guide` 模組旗標或 admin+；編輯需 `automation_guide_edit` 或 superadmin；DB v65，2026-08-26 起選型資料庫第七類，資料形狀同交換器/監控/門禁（情境×分類矩陣），見 §7.14。**本文件先前完全未記載此類別，2026-09-01 補上**
+  - 上述類別在**歷史紀錄**（`audit-log.html`）與**版本紀錄**（`module-versions.html`）皆已比照其餘模組補上對應的 optgroup／actionLabel／色碼（teal 色系＋🧭 圖示，共用同一識別色，強調同屬一個產品線而非各自獨立模組）
+  - **涵蓋度總覽**（2026-08-09）：`selection-db-overview.html`；admin+ 限定，無獨立模組旗標；彙總「品牌/型號目錄」型類別（不含場域選型導覽——資料形狀是情境×分層文字建議而非品牌目錄）在各世代/分類底下的品牌數與產品數，紅/黃/綠三色標示完全空白／偏薄弱／足夠；**不新增後端 API**，純前端呼叫既有各類別 GET 端點彙總而成；**是否已納入自動化系統選型導覽（第七類）尚未查證，之後碰這頁時先確認**
 - **簽核設定**：`approval-settings.html`；superadmin 限定；2026-08-28 起單一頁面涵蓋全部五種文件類型（報價單／出貨單／發票開立簽核單／請款單／承攬商匯款申請）——頁面上方是套用範圍多選選單，勾選的類型共用「統一簽核流程設定」，取消勾選的類型各自在同一頁展開獨立編輯區塊；不再有各自獨立的 `shipping-approval-settings.html`／`invoice-voucher-approval-settings.html`（`contractor-voucher-approval-settings.html` 仍保留獨立頁面，見 §12 2026-08-28）；出貨單本身不是獨立 sidebar 項目，掛在「案件管理」頁面內的「出貨單」分頁，沿用 `case_manage`/`cCM`/`sb-mod-case`
-- **Schema 狀態**（2026-08-01）：`schema-status.html`；superadmin 限定；**純唯讀**診斷頁，顯示目前 db 版本 / 目標版本、狀態（✓最新／⚠尚未同步）、最後更新時間、完整 migration 清單（v34→v1，版號＋函式名稱＋說明）；**全頁無任何操作按鈕或表單**——migration 於伺服器啟動時自動套用，此頁不提供「觸發乾跑」之類的操作（架構上沒有意義：活著的伺服器對自己已是最新版的 db 再跑一次永遠是 no-op）；資料來源 `GET /api/system/schema-status`
+- **簽核代理人**（2026-08-28，DB v67）：`approval-delegates.html`；任何人可自助委託簽核權限給他人，superadmin 可代替他人設定；核心解析 `helpers/tiered_approval.py::active_delegators_for()`，見 §7.13
+- **組織架構**：`org-structure.html`；DB v48，處→部門二層；`manager_user_id` 已接入簽核流程動態解析（§4.1 已更正舊註記）
+- **Schema 狀態**（2026-08-01）：`schema-status.html`；superadmin 限定；**純唯讀**診斷頁，顯示目前 db 版本 / 目標版本、狀態（✓最新／⚠尚未同步）、最後更新時間、完整 migration 清單；**全頁無任何操作按鈕或表單**——migration 於伺服器啟動時自動套用，此頁不提供「觸發乾跑」之類的操作；資料來源 `GET /api/system/schema-status`
 
 ---
 
@@ -885,6 +887,59 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
 | POST | /invoice-vouchers/{voucher_no}/export | 記錄匯出人/時間/次數 |
 | （無專屬 settings 端點） | | 簽核流程走統一設定 `/settings/approval-flow` 或（獨立時）`/settings/approval-flow/invoice_voucher`，見 §7.3／§12 2026-08-28 |
 
+### §7.12 · 網路架構規劃書（DB v64，2026-08-26，見 §5 補充／`NETWORK-PLAN-MODULE-DESIGN.md`）
+
+| Method | Path | 說明 |
+|--------|------|------|
+| GET | /network-plans | 列表（需登入） |
+| GET | /network-plans/{plan_id} | 完整明細（10 分頁資料） |
+| GET | /quotations/{quote_no}/network-plan | 依案件查詢對應規劃書 |
+| POST | /network-plans | 建立（`netplan_edit` 模組或 superadmin） |
+| PUT | /network-plans/{plan_id} | 更新 |
+| PATCH | /network-plans/{plan_id}/status | 狀態切換 |
+| DELETE | /network-plans/{plan_id} | 刪除 |
+| GET | /network-plans/{plan_id}/export/excel \| /export/pdf | 匯出（10 分頁 Excel／Edge PDF） |
+| POST | /network-plans/{plan_id}/import/excel | 匯入（分頁名稱＋欄位表頭比對，無法辨識分頁於 warnings 明確提示） |
+
+可綁 `quote_no` 也可獨立建立；**與 §7.6/§7.7 的「網路架構選型導覽」`netarch_guide` 是完全不同的兩個模組**，勿混淆。
+
+### §7.13 · 簽核代理人（DB v67，2026-08-28）
+
+| Method | Path | 說明 |
+|--------|------|------|
+| GET | /approval-delegates | 列表（需登入） |
+| POST | /approval-delegates | 新建委託（任何人可自助設定，superadmin 可代設） |
+| PATCH | /approval-delegates/{delegate_id}/deactivate | 停用委託 |
+
+核心解析邏輯 `helpers/tiered_approval.py::active_delegators_for()`；`check_approve_permission()`/`check_reject_permission()` 新增可選 `conn` 參數才會檢查代理權，5 個 router／10 個呼叫點皆已接上。
+
+### §7.14 · 自動化系統選型導覽（DB v65，2026-08-26 起，選型資料庫第七類）
+
+情境×分類矩陣結構，與 switch/monitor/access/gateway 四類完全同款樣板（CRUD 端點命名/權限模式一致，`automation_guide_edit` 模組或 superadmin 可編輯）：
+
+| Method | Path |
+|--------|------|
+| GET / POST / PUT / DELETE | /automation-guide/scenarios[/{code}] |
+| GET / POST / PUT / DELETE | /automation-guide/categories[/{code}] |
+| GET / POST / PUT / DELETE | /automation-guide/fit[/{id}] |
+| GET / POST / PUT / DELETE | /automation-guide/products[/{id}] |
+
+§6 Sidebar「選型資料庫」區塊現為**七大類**（原六類＋本類），`selection-db-overview.html` 涵蓋度總覽頁是否已納入本類需之後確認。
+
+### §7.15 · 個人化清單偏好（DB v56）
+
+| Method | Path | 說明 |
+|--------|------|------|
+| GET | /list-prefs/{list_key} | 讀取使用者個人清單偏好（欄位顯示/排序記憶） |
+| PUT | /list-prefs/{list_key} | 更新 |
+
+### §7.16 · 案件代辦事項 / 出納彙總視圖
+
+| 模組 | Method+Path | 說明 |
+|---|---|---|
+| 案件代辦事項（`case_action_items.py`，DB v62 `_m062_case_project_merge`） | `GET/POST /quotations/{quote_no}/action-items`、`PUT/DELETE .../action-items/{item_id}`、`PATCH .../action-items/{item_id}/approve` | 取代舊 `project_logs.action_items` JSON blob；兩階段簽核（`stage1_approver`/`stage2_approver`），主管解析比照 `_m050_project_department()` 既有查表 pattern |
+| 出納彙總（`cashier.py`） | `GET /cashier/payable-queue \| receivable-queue \| summary \| execution-history \| export` | **2026-08-31 起併入 `reports.html` 第 13 個頁籤「出納」**（`?tab=cashier` 深連結），獨立 `cashier.html`/`cashier.js` 已退役為導向 stub；本質是 §5.9 財務三憑證流的**唯讀彙總層**，非獨立資料源 |
+
 ---
 
 ## §8 · 備份與還原
@@ -974,9 +1029,9 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 
 | 優先 | 項目 |
 |------|------|
-| 🔴 | 區網 HTTPS／反向代理（Nginx + mkcert，Bearer Token 目前區網明文） |
+| ✅ | ~~區網 HTTPS／反向代理~~（`https_setup.ps1`，uvicorn 原生 TLS 自簽憑證，2026-08-27 commit `d7b8ee9`）——**但正式機尚未實際執行 mkcert 產證＋重啟這個手動步驟**，即工具已就緒但未真正啟用，見 `HTTPS-DEPLOY-CHECKLIST.md`；下次處理前先在正式機確認 `backend/certs/` 是否有內容 |
 | ✅ | ~~死碼 JS 清除~~（21 個死碼 .js 已刪，`frontend/js/` 僅剩 2 個有效檔） |
-| ✅ | ~~關鍵 API 自動化測試~~（48 tests 全通過，`backend/tests/test_core.py`） |
+| ✅ | ~~關鍵 API 自動化測試~~（2026-09-01 更正：早已遠超 48 tests，現為 `backend/tests/` 45 個測試檔，累計 300+ 題，近期為 308/308 全過） |
 | ✅ | ~~文件拆 `CHANGELOG.md` 與本速查分離~~（已完成，見根目錄 `CHANGELOG.md`） |
 | ✅ | ~~Git Flow 分支規則~~（`develop` 分支 + `GITFLOW.md` 規範已建立） |
 | 低 | SQLite → PostgreSQL（資料量 > 1 GB 或同時連線數 > 5 時評估） |
@@ -988,6 +1043,13 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 | ✅ | ~~案件執行進度沒有跨案的時間軸或看板視圖~~（新增 `case-stage-board.html`：看板五欄＋跨案時間軸，見 §12 2026-08-23c）；專案時程跨專案視覺化仍未做，`dashboard.py` 目前只有依狀態分組的專案彙總卡片（2026-08-22k） |
 | ✅ | ~~案件完結案缺防呆機制~~（2026-08-25 使用者提出，2026-08-26 已施作：`update_deal_tag()` 轉入「已結案」前檢查①`case_stages` 全部完成②`payment.items` 全部收齊③關聯單據皆無待審核中，任一未達成回 400 並通知尚未完成該項的簽核人＋最高管理員，見 §12 2026-08-26） |
 | 🟡 | **已結案案件解鎖/半解鎖（2026-08-26 新增，範圍刻意收斂，非完整涵蓋）**：新增 `case-unlock`/`case-lock` 讓已結案案件進入「半解鎖」狀態，僅 8 個端點（案件記錄整包存檔／款項標記收款／款項發票附件／叫料附件／叫料發票附件共 8 支）支援半解鎖期間排隊等 superadmin 審核套用；案件執行階段細項端點（10 支）與款項稅額沖銷（3 支）刻意不支援排隊，已結案時一律直接 403（不論是否半解鎖），需要修正時只能透過案件資料整體編輯或聯繫最高管理員直接校正。之後若要擴大涵蓋範圍，比照 `case_record_update` 的「暫存 payload_json、核准時重放同一段套用邏輯」模式即可，見 db.py `_m061_case_semi_unlock()` docstring。 |
+| 🟢 | PDF 存檔（報價單/出貨單/勞報單）未納入雲端備份範圍，可沿用 `_mirror_uploads()` 機制擴充，見 `DR-SOP.md` §5 |
+| 🟢 | CORS 白名單寫死 IP，未改用環境變數，換機器/換 IP 需改 code 重新部署，見 `DR-SOP.md` §5 |
+| 🟢 | `routers/projects.py`（592行）自 2026-08-26 專案併入案件管理後已無任何前端流程掛載，是否整個移除尚未決定 |
+| 🟡 | 多分公司架構＋自動核版更新規劃中，未列入排程，見 `MULTI-BRANCH-AUTO-UPDATE-DESIGN.md`（2026-08-31，4 項待決事項） |
+| 🟢 | 災難復原（DR）從未實際演練過，`DR-SOP.md` §6 演練紀錄表完全空白，RTO 目前僅為估計值 |
+
+**📖 2026-09-01 新增：`MOTRIX-ERP-ARCHITECTURE-MAP.md`**（專案根目錄）——依實際程式碼盤點（非僅依賴本文件）產出的架構地圖，涵蓋 18 組模組的檔案:行號索引、DB v1→v68 完整演進索引、13 條踩坑教訓彙整、依專業軟體慣例的分優先序建議清單。**與本文件互補、不取代**：本文件仍是行為規格與逐日 changelog 的權威來源；架構地圖是「哪個功能在哪個檔案哪一行」的快速定位索引＋外部視角建議。本次盤點也發現本文件 §7/§13 的 router／migration 數量記載落後實際程式碼，已於本輪一併補齊（見下方 §7.12–§7.15、§13）。
 
 ---
 
@@ -2796,73 +2858,56 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 
 ---
 
-## §13 · 目錄結構（精簡）
+## §13 · 目錄結構（精簡，2026-09-01 依實際程式碼盤點更正）
+
+> **完整版含每個 router 的檔案:行號、API 前綴、資料表對照，見 `MOTRIX-ERP-ARCHITECTURE-MAP.md` §2。本節維持精簡，只列骨架＋容易漏找的項目。**
 
 ```
 MOTRIX-ERP/
-├── MOTRIX-ERP-QUICK.md          ← 本文件
-├── GITFLOW.md                   ← Git Flow 分支規則（develop 分支 + commit 規範）
+├── MOTRIX-ERP-QUICK.md              ← 本文件（行為規格＋逐日 changelog 權威來源）
+├── MOTRIX-ERP-ARCHITECTURE-MAP.md   ← 架構地圖＋建議＋踩坑索引（2026-09-01 新增，互補本文件）
+├── CHANGELOG.md                     ← §12 的精簡版本，按版本倒序
+├── DR-SOP.md · GITFLOW.md · APPLY-UPDATE-CHECKLIST.md · HTTPS-DEPLOY-CHECKLIST.md
+├── NETWORK-PLAN-MODULE-DESIGN.md · MULTI-BRANCH-AUTO-UPDATE-DESIGN.md（規劃中，未列入排程）
+├── SELECTION-DB-INDEX.md · {ENV,NETARCH,SWITCH,MONITOR,ACCESS,GATEWAY}-GUIDE-CONTENT.md · SWITCH-BRAND-REFERENCE.md
 ├── .gitignore
-├── backup_alerts/               ← 備份警示（執行期產生）
+├── backup_alerts/                   ← 備份警示（執行期產生）
 ├── backend/
-│   ├── main.py                  ← wiring；startup 呼叫 auth.init_rate_limiting()
-│   ├── db.py                    ← schema + 42 個 migrations（CURRENT_VERSION=42，見 §2）
-│   ├── version_manifest.json    ← 模組版本紀錄（重啟後同步至 DB module_versions）
-│   ├── helpers/                 ← 套件（拆自原 helpers.py）
-│   │   ├── __init__.py          ← re-export 全部符號（向後相容）
-│   │   ├── auth.py              ← 密碼、session、弱密碼政策
-│   │   ├── settings.py          ← system_settings CRUD
-│   │   ├── audit.py             ← audit log + 通知
-│   │   ├── quotations.py        ← SQL 常數、save_quotation_json
-│   │   ├── dates.py             ← _add_months、_warranty_expiry
-│   │   ├── email_notify.py      ← Email 通知（月報、逾期、保固、備份告警）
-│   │   └── startup.py           ← 啟動檢查、Edge 路徑解析
-│   ├── archive.py               ← 備份；_atomic_json_write()；H: fallback
-│   ├── pdf_gen.py · photos.py
-│   ├── backup_job.py            ← 獨立備份腳本（Task Scheduler 呼叫）
-│   ├── setup_backup_task.ps1    ← 工作排程器設定（初次部署執行一次）
-│   ├── autostart.bat            ← 正式環境登入自動啟動；crash-restart 迴圈（見 §1.1）
-│   ├── autostart_hidden.vbs     ← 供 Task Scheduler 隱藏視窗呼叫 autostart.bat
-│   ├── setup_autostart_task.ps1 ← 「MOTRIX ERP Server Autostart」排程設定（初次部署執行一次）
-│   ├── heartbeat_job.py         ← 心跳監控腳本（見 §1.2），Task Scheduler 每 5 分鐘呼叫
-│   ├── heartbeat_config.json    ← 心跳打卡網址設定（healthchecks.io ping_url）
-│   ├── setup_heartbeat_task.ps1 ← 「MOTRIX ERP Heartbeat」排程設定（初次部署執行一次）
-│   ├── motrix_erp.db
-│   ├── db_backups/
-│   │   ├── YYYY-MM-DD/          ← 本機整庫 SQLite 快照（保留 30 天）
-│   │   └── quotation_instant/   ← H: 不可用時即時報價單 JSON fallback
-│   ├── logs/backup_job.log · heartbeat_job.log
-│   ├── tests/test_core.py       ← 48 自動化測試（全通過）
-│   └── routers/
-│       ├── auth.py · quotations.py · customers.py · suppliers.py
-│       ├── parts.py · projects.py · dashboard.py · system.py · reports.py
-│       ├── daily_tasks.py · warranty.py
-│       ├── vendor_contractors.py  ← 承攬商 + 派發 CRUD + accept + import-to-quote
-│       ├── dev_crm.py             ← 業務開發 CRM（dev_cases + dev_logs）
-│       ├── shipping_notes.py      ← 出貨單 CRUD + 獨立簽核流程 + PDF + 回簽 toggle
-│       ├── contractor_vouchers.py ← 承攬商匯款申請 CRUD + 簽核流程（預設獨立，可設為統一，見 §12 2026-08-28）+ PDF + 已匯款 toggle（2026-08-20）
-│       └── invoice_vouchers.py    ← 發票開立簽核單 CRUD + 簽核流程（預設統一，可設為獨立，見 §12 2026-08-28）+ PDF（2026-08-20）
+│   ├── main.py                      ← wiring only；34 個 app.include_router()；3 層 middleware
+│   ├── db.py                        ← schema + 68 個 migrations（CURRENT_VERSION=68，見 §2／完整主題索引見 ARCHITECTURE-MAP §4）
+│   ├── version_manifest.json        ← 模組版本紀錄（重啟後同步至 DB module_versions）
+│   ├── helpers/                     ← 11 個檔案（拆自原 helpers.py）
+│   │   ├── __init__.py              ← re-export 全部符號
+│   │   ├── auth.py · settings.py · audit.py · quotations.py · dates.py
+│   │   ├── email_notify.py · google_calendar.py · notification_prefs.py
+│   │   ├── uploads.py               ← save_document_files/delete_document_file（附件上傳共用）
+│   │   ├── startup.py               ← 啟動檢查、Edge 路徑解析
+│   │   └── tiered_approval.py       ← ⭐ 五種文件類型共用的簽核 tiers 展開＋權限檢查唯一事實來源
+│   ├── archive.py                   ← 備份；_atomic_json_write()；G: fallback；_mirror_uploads()
+│   ├── pdf_gen.py · photos.py · network_plan_export.py
+│   ├── backup_job.py · heartbeat_job.py   ← 獨立排程腳本（不 import main）
+│   ├── autostart.bat · autostart_hidden.vbs · setup_{backup,autostart,heartbeat}_task.ps1
+│   ├── tools/                       ← build_deploy_package.ps1 · apply_update.ps1 · check_guide_sync.py ·
+│   │                                   audit_account_permissions.py · https_setup.ps1 · local_research_pipeline.py
+│   ├── motrix_erp.db（正式）+ motrix_erp_demo.db（demo 隔離）
+│   ├── db_backups/YYYY-MM-DD/（30天）+ quotation_instant/（G: fallback）
+│   ├── tests/                       ← 45 個測試檔（累計 300+ 題，近期 308/308 全過）
+│   └── routers/（34 個檔案，主檔/財務/簽核/選型資料庫/系統支援五大類，完整清單與行號見 ARCHITECTURE-MAP §2）
+│       ├── 主檔：auth／customers／suppliers／parts／inventory／org_structure
+│       ├── 業務流程：quotations（全庫最大）／dev_crm／shipping_notes／case_action_items／daily_tasks／payslips
+│       ├── 財務：contractor_vouchers／invoice_vouchers／payment_requests／cashier（2026-08-31 併入報表頁籤）
+│       ├── 承攬商/採購：vendor_contractors／contractors
+│       ├── 選型資料庫（七類）：env_guide／netarch_guide／switch_guide／monitor_guide／access_guide／gateway_guide／automation_guide（v65 新增）
+│       ├── 其他業務：network_plans（v64）／projects（⚠️ 已不掛載，死碼保留）
+│       └── 系統支援：dashboard／reports（全庫第二大）／system／approval_delegates（v67）／uploads／search／list_prefs（v56）／module_versions
 ├── frontend/
-│   ├── index.html               ← 儀表板（Alpine inline）
-│   ├── css/style.css
-│   ├── js/
-│   │   ├── case-management.js   ← ✅ 有效（案件管理 Alpine 元件，含匯款申請/發票開立簽核單方法）
-│   │   └── reports.js           ← ✅ 有效（營運報表 Alpine 元件）
-│   ├── pages/
-│   │   ├── dev-crm.html         ← 業務開發 CRM（雙欄；devCrmPage() Alpine inline）
-│   │   ├── quotation-form.html  ← Alpine inline（真正的 quotationForm()）
-│   │   ├── settlement.html      ← Alpine inline（真正的 settlementPage()）
-│   │   ├── case-management.html ← 含承攬商派發 + 驗收流程 Tab + 出貨單 Tab + 匯款申請/發票開立簽核單區塊
-│   │   ├── vendor-contractors.html ← 承攬商管理（雙欄；vendorContractorsPage()）
-│   │   ├── approval-settings.html ← 簽核設定（2026-08-28 起單一頁涵蓋五種文件類型：套用範圍多選選單＋統一流程編輯區塊＋各獨立設定類型各自展開的編輯區塊，見 §12）
-│   │   ├── contractor-voucher-approval-settings.html ← 承攬商匯款申請專屬簽核設定頁（仍獨立存在，複製自 approval-settings.html，2026-08-20；讀寫 `contractor_voucher_approval_flow`，跟 approval-settings.html 的獨立設定區塊是同一份資料）
-│   │   └── *.html               ← 其餘頁面均 Alpine inline，無對應外置 JS
-│   └── static/
-│       ├── sidebar.js           ← Topbar + Sidebar + 離開警示 + _FILE_MODULE + sb-mod-* badge
-│       ├── notif.js             ← 通知 Bell + daily_task badge + 模組活動 badge (_fetchModuleCounts)
-│       └── logo.png             ← MOTRIX 白字去背 PNG
-├── uploads/projects/
-└── 報價單PDF/
+│   ├── index.html                   ← 儀表板（Alpine inline）
+│   ├── css/style.css                ← 含全站共用 .btn/.tab/.chip 元件（2026-08-09 統一後）
+│   ├── js/case-management.js · reports.js   ← ⭐ 僅有的 2 個有效外置 JS，其餘 48 頁全 inline
+│   ├── pages/（50 個 .html，完整清單見本文件標頭目錄或 ARCHITECTURE-MAP §2）
+│   └── static/sidebar.js · notif.js · logo.png
+├── uploads/                         ← 各類附件（照片/回簽/發票等），_demo_* 前綴為 demo 隔離
+└── deploy_packages/<timestamp>_<commit>/   ← build_deploy_package.ps1 產物，人工搬移到正式機
 ```
 
 ---
