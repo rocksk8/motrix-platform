@@ -973,9 +973,22 @@ function reportsApp() {
 
     async showT100Tab() {
       // 2026-09-02：T100 匯出從資金水位頁籤拆成獨立頁籤，切換進來時就先預覽
-      // 本期（近 30 天）待確認事件，不用再多按一次「預覽待確認事件」
+      // 本期待確認事件＋讀科目代號設定（不用展開設定面板才看得到 KPI 統計），
+      // 不用再多按一次「預覽待確認事件」
       this.activeTab = 't100'
       if (!this.t100Preview) this.loadT100Preview()
+      if (!this.t100Config) this.loadT100Config()
+    },
+
+    // 科目代號設定完成度（視覺化提示用，非阻擋匯出的硬性檢查）：核心科目
+    // （銷貨收入/銷項稅額/承攬商費用）與至少一個銀行帳戶都設定了，才算「已設定」。
+    // 料件分類科目代號允許部分留白（可能有些分類真的沒進貨過），不列入判斷。
+    get t100ConfigComplete() {
+      const c = this.t100Config
+      if (!c) return false
+      const coreFilled = c.salesRevenueAccount && c.outputTaxAccount && c.contractorExpenseAccount
+      const hasBank = c.bankAccounts && c.bankAccounts.length > 0 && c.bankAccounts.every(b => b.name && b.acctCode)
+      return !!(coreFilled && hasBank)
     },
 
     async showCashPosTab() {
