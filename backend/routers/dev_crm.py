@@ -506,10 +506,8 @@ def update_dev_case_status(
         updated = conn.execute("SELECT * FROM dev_cases WHERE id=?", (case_id,)).fetchone()
         _audit(_tok(authorization), "dev_case.status", "dev_case",
                str(case_id), f"{row['case_name']} → {body.status}")
-        # 暫擱置＝業務主動按下暫停鍵，不需要驚動所有 admin/superadmin 的信箱
-        if body.status != "暫擱置":
-            notify_module_activity("業務開發", f"狀態變更為「{body.status}」", user.get("display_name") or user["username"],
-                                    row["case_name"], "dev-crm.html")
+        notify_module_activity("業務開發", f"狀態變更為「{body.status}」", user.get("display_name") or user["username"],
+                                row["case_name"], "dev-crm.html")
         return _case_row(updated, _user_map(conn))
     finally:
         conn.close()
@@ -1018,8 +1016,9 @@ def _check_dev_case_stale() -> None:
 
 def _check_dev_case_hold_expiry() -> None:
     """暫擱置案件超過 180 天未更新 → 自動轉為未成案，避免案件無限期卡在暫擱置、
-    篩選與統計持續失真。純系統動作，不發 email、不站內通知（比照暫擱置本身
-    不驚動信箱的原則），僅寫入 audit_log 供事後追查。"""
+    篩選與統計持續失真。系統排程動作，不發 email、不站內通知（跟人工手動變更
+    狀態不同——這裡沒有一個負責的操作者可歸因，通知也不會有人回應跟進），
+    僅寫入 audit_log 供事後追查。"""
     now = datetime.now()
     now_str = now.strftime("%Y-%m-%d %H:%M:%S")
     cutoff = (now - timedelta(days=_HOLD_AUTO_CONVERT_DAYS)).strftime("%Y-%m-%d %H:%M:%S")
