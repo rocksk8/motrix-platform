@@ -19,7 +19,7 @@ from helpers import (
 router = APIRouter()
 _logger = logging.getLogger(__name__)
 
-_STATUS_OPTIONS = ["洽談中", "成案", "未成案"]
+_STATUS_OPTIONS = ["洽談中", "成案", "未成案", "暫擱置"]
 _TW_NOW = lambda: datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
@@ -506,8 +506,10 @@ def update_dev_case_status(
         updated = conn.execute("SELECT * FROM dev_cases WHERE id=?", (case_id,)).fetchone()
         _audit(_tok(authorization), "dev_case.status", "dev_case",
                str(case_id), f"{row['case_name']} → {body.status}")
-        notify_module_activity("業務開發", f"狀態變更為「{body.status}」", user.get("display_name") or user["username"],
-                                row["case_name"], "dev-crm.html")
+        # 暫擱置＝業務主動按下暫停鍵，不需要驚動所有 admin/superadmin 的信箱
+        if body.status != "暫擱置":
+            notify_module_activity("業務開發", f"狀態變更為「{body.status}」", user.get("display_name") or user["username"],
+                                    row["case_name"], "dev-crm.html")
         return _case_row(updated, _user_map(conn))
     finally:
         conn.close()
@@ -937,6 +939,7 @@ def approve_dev_log(log_id: int, authorization: str = Header("")):
 
 _STALE_DAYS = 30
 _STALE_RENOTIFY_INTERVAL = 14
+_HOLD_AUTO_CONVERT_DAYS = 180
 
 
 def _check_dev_case_stale() -> None:
@@ -1013,6 +1016,47 @@ def _check_dev_case_stale() -> None:
         _logger.warning("_check_dev_case_stale failed: %s", exc)
 
 
+def _check_dev_case_hold_expiry() -> None:
+    """暫擱置案件超過 180 天未更新 → 自動轉為未成案，避免案件無限期卡在暫擱置、
+    篩選與統計持續失真。純系統動作，不發 email、不站內通知（比照暫擱置本身
+    不驚動信箱的原則），僅寫入 audit_log 供事後追查。"""
+    now = datetime.now()
+    now_str = now.strftime("%Y-%m-%d %H:%M:%S")
+    cutoff = (now - timedelta(days=_HOLD_AUTO_CONVERT_DAYS)).strftime("%Y-%m-%d %H:%M:%S")
+    conn = None
+    try:
+        conn = get_db()
+        rows = conn.execute(
+            "SELECT id, case_name FROM dev_cases "
+            "WHERE is_deleted=0 AND status='暫擱置' AND updated_at <= ?",
+            (cutoff,),
+        ).fetchall()
+        for row in rows:
+            conn.execute(
+                "UPDATE dev_cases SET status='未成案', updated_at=? WHERE id=?",
+                (now_str, row["id"]),
+            )
+            conn.execute(
+                "INSERT INTO audit_log "
+                "(at,username,display_name,action,target_type,target_id,target_label,detail) "
+                "VALUES (?,?,?,?,?,?,?,?)",
+                (now.isoformat(), "system", "系統自動", "dev_case.status", "dev_case",
+                 str(row["id"]), f"{row['case_name']} → 未成案",
+                 json.dumps(
+                     {"reason": f"暫擱置逾{_HOLD_AUTO_CONVERT_DAYS}天未更新，自動轉為未成案"},
+                     ensure_ascii=False,
+                 )),
+            )
+        conn.commit()
+        if rows:
+            _logger.info("Dev case hold-expiry auto-converted %d case(s)", len(rows))
+    except Exception as exc:
+        _logger.warning("_check_dev_case_hold_expiry failed: %s", exc)
+    finally:
+        if conn is not None:
+            conn.close()
+
+
 def schedule_dev_case_stale_check() -> None:
     """啟動時呼叫一次。啟動立即補跑一次，之後每天 08:00 重跑，
     比照 daily_tasks.schedule_overdue_check() 的排程寫法。
@@ -1026,13 +1070,17 @@ def schedule_dev_case_stale_check() -> None:
             t08 += timedelta(days=1)
         return (t08 - cur).total_seconds()
 
-    def _loop():
+    def _run_all():
         _check_dev_case_stale()
+        _check_dev_case_hold_expiry()
+
+    def _loop():
+        _run_all()
         t = threading.Timer(_next_08(), _loop)
         t.daemon = True
         t.start()
 
-    threading.Thread(target=_check_dev_case_stale, daemon=True).start()  # startup catch-up
+    threading.Thread(target=_run_all, daemon=True).start()  # startup catch-up
     t = threading.Timer(_next_08(), _loop)
     t.daemon = True
     t.start()

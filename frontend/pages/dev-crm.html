@@ -82,6 +82,8 @@
     .dc-chip.won.on       { background: #059669; color: #fff; }
     .dc-chip.lost         { border-color: var(--danger); color: var(--danger); }
     .dc-chip.lost.on      { background: var(--danger); color: #fff; }
+    .dc-chip.hold         { border-color: #6B7280; color: #6B7280; }
+    .dc-chip.hold.on      { background: #6B7280; color: #fff; }
 
     .dc-list__body { flex: 1; overflow-y: auto; padding: 6px; }
     .dc-list__body::-webkit-scrollbar { width: 4px; }
@@ -119,6 +121,7 @@
     .dc-badge--talk { background: #FEF3C7; color: #92400E; }
     .dc-badge--won  { background: #D1FAE5; color: #065F46; }
     .dc-badge--lost { background: #FEE2E2; color: #991B1B; }
+    .dc-badge--hold { background: #F3F4F6; color: #374151; }
 
     /* ── Right panel ── */
     .dc-right {
@@ -414,6 +417,7 @@
           <span class="dc-chip talk" :class="{on: filterStatus==='洽談中'}" @click="filterStatus='洽談中'">洽談中</span>
           <span class="dc-chip won"  :class="{on: filterStatus==='成案'}"   @click="filterStatus='成案'">成案</span>
           <span class="dc-chip lost" :class="{on: filterStatus==='未成案'}" @click="filterStatus='未成案'">未成案</span>
+          <span class="dc-chip hold" :class="{on: filterStatus==='暫擱置'}" @click="filterStatus='暫擱置'">暫擱置</span>
         </div>
         <div style="display:flex;gap:5px;margin-top:8px">
           <select class="dc-select" style="flex:1;font-size:11px;padding:5px 6px" x-model="filterYear">
@@ -478,7 +482,7 @@
             </div>
             <div class="dc-case-card__foot">
               <span class="dc-badge"
-                :class="c.status==='成案'?'dc-badge--won':c.status==='未成案'?'dc-badge--lost':'dc-badge--talk'"
+                :class="c.status==='成案'?'dc-badge--won':c.status==='未成案'?'dc-badge--lost':c.status==='暫擱置'?'dc-badge--hold':'dc-badge--talk'"
                 x-text="c.status"></span>
               <template x-if="c.pendingDelete">
                 <span style="font-size:9px;padding:2px 6px;border-radius:5px;background:#FEF3C7;color:#92400E;border:1px solid #FDE68A;font-weight:700;margin-left:4px">待刪除審核</span>
@@ -623,7 +627,7 @@
                 <h2 class="dc-detail-title" x-text="selectedCase.caseName"></h2>
                 <div class="dc-detail-meta">
                   <span class="dc-badge"
-                    :class="selectedCase.status==='成案'?'dc-badge--won':selectedCase.status==='未成案'?'dc-badge--lost':'dc-badge--talk'"
+                    :class="selectedCase.status==='成案'?'dc-badge--won':selectedCase.status==='未成案'?'dc-badge--lost':selectedCase.status==='暫擱置'?'dc-badge--hold':'dc-badge--talk'"
                     x-text="selectedCase.status"></span>
                   <span x-show="selectedCase.customerName" x-text="selectedCase.customerName"></span>
                   <span x-show="selectedCase.customerName" style="color:var(--border-light)">|</span>
@@ -655,6 +659,7 @@
                 <div style="display:flex;gap:6px">
                   <button class="btn btn-success btn-sm" @click="changeStatus('成案')">設為成案</button>
                   <button class="btn btn-danger btn-sm"  @click="changeStatus('未成案')">設為未成案</button>
+                  <button class="btn btn-ghost btn-sm"   @click="changeStatus('暫擱置')">暫擱置</button>
                 </div>
               </template>
               <template x-if="selectedCase.status === '成案' && !selectedCase.convertedQuoteNo">
@@ -787,7 +792,7 @@
                   <span class="dc-lbl">案件狀態快照（選填）</span>
                   <select class="dc-select" x-model="logForm.status_snapshot">
                     <option value="">不記錄</option>
-                    <option>洽談中</option><option>成案</option><option>未成案</option>
+                    <option>洽談中</option><option>成案</option><option>未成案</option><option>暫擱置</option>
                   </select>
                 </div>
               </div>
