@@ -26,22 +26,28 @@
     .form-group input[readonly]{background:var(--bg-secondary);color:var(--text-secondary)}
     .tab-bar{margin-bottom:16px}
 
-    /* 明細記錄卡片（取代寬表格，避免同一筆資料要左右滑動才能填完） */
-    .rec-list{display:flex;flex-direction:column;gap:10px}
-    .rec-card{background:#EFEDE7;border:1px solid var(--border-light);border-radius:8px;padding:10px 12px}
-    .rec-card-head{display:flex;align-items:center;gap:8px;margin-bottom:8px}
-    .rec-card-head input[type=checkbox]{width:15px;height:15px;flex-shrink:0}
-    .rec-card-idx{font-size:11px;font-weight:700;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif}
-    .rec-card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px 10px}
-    .rec-field label{display:block;font-size:10px;color:var(--text-dim);margin-bottom:3px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.03em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    .rec-field input[type=text],.rec-field input[type=number]{width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px;font-family:inherit;outline:none;box-sizing:border-box;background:#fff;color:#0A0A0A}
-    .rec-field input:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(37,99,235,.15)}
-    .rec-field input[disabled]{color:var(--text-secondary);background:transparent;border-color:transparent}
-    .rec-field select{width:100%;padding:6px 4px;border:1px solid var(--border);border-radius:4px;font-size:12px;font-family:inherit;background:#fff;color:#0A0A0A}
-    .rec-field select:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(37,99,235,.15)}
-    .rec-field select:disabled{background:transparent;border-color:transparent;color:var(--text-secondary)}
-    .rec-field.checkbox{display:flex;align-items:flex-end;gap:6px;padding-bottom:6px}
-    .row-del{background:none;border:none;color:var(--danger);cursor:pointer;font-size:11px;padding:3px 6px}
+    /* 密集網格表格（取代原本一筆一張卡片的版面，改成 Excel 式一列一整排、
+       Tab 鍵可跳下一格，方便大量資料輸入／比對） */
+    .grid-table-wrap{overflow-x:auto;border:1px solid var(--border-light);border-radius:8px}
+    .grid-table{width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap}
+    .grid-table thead th{background:#F1F5F9;color:var(--text-secondary);font-weight:700;font-size:11px;
+      padding:7px 6px;text-align:left;white-space:nowrap;border-bottom:2px solid var(--border)}
+    .grid-table tbody td{padding:1px 3px;border-bottom:1px solid var(--border-light)}
+    .grid-table tbody tr:hover td{background:#FAFAF8}
+    .grid-table tbody tr:nth-child(even) td{background:#FCFBF9}
+    .grid-table tbody tr:nth-child(even):hover td{background:#F5F3EF}
+    .grid-idx{color:var(--text-dim);font-family:LINE Seed TW_OTF, monospace;font-size:11px;text-align:center;padding:0 6px!important}
+    .grid-cell-na{color:var(--text-dim);padding-left:6px;font-size:11px}
+    .grid-table input[type=text],.grid-table input[type=number]{
+      width:118px;padding:6px 6px;border:1px solid transparent;border-radius:4px;font-size:12px;
+      font-family:inherit;outline:none;box-sizing:border-box;background:transparent;color:#0A0A0A}
+    .grid-table input[type=text]:focus,.grid-table input[type=number]:focus{border-color:var(--accent);background:#fff;box-shadow:0 0 0 2px rgba(37,99,235,.15)}
+    .grid-table input[disabled]{color:var(--text-secondary);background:transparent;border-color:transparent}
+    .grid-table select{width:118px;padding:6px 4px;border:1px solid transparent;border-radius:4px;font-size:12px;font-family:inherit;background:transparent;color:#0A0A0A}
+    .grid-table select:focus{border-color:var(--accent);background:#fff}
+    .grid-table select:disabled{background:transparent;border-color:transparent;color:var(--text-secondary)}
+    .grid-table td.checkbox-cell{text-align:center;padding:0 4px!important}
+    .row-del{background:none;border:none;color:var(--danger);cursor:pointer;font-size:11px;padding:3px 6px;white-space:nowrap}
     .row-del:hover{text-decoration:underline}
     .btn-xs{padding:4px 8px;font-size:11px}
     .tab-panel-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px}
@@ -88,6 +94,10 @@
         <span x-text="importResultMsg"></span>
         <button @click="importResultMsg=''" style="background:none;border:none;color:#15803D;cursor:pointer;font-weight:700">×</button>
       </div>
+      <div x-show="actionResultMsg" style="color:#15803D;font-size:12px;margin-bottom:10px;padding:8px 12px;background:#F0FDF4;border:1px solid #A7F3D0;border-radius:6px;display:flex;justify-content:space-between;gap:10px;white-space:pre-line">
+        <span x-text="actionResultMsg"></span>
+        <button @click="actionResultMsg=''" style="background:none;border:none;color:#15803D;cursor:pointer;font-weight:700;flex-shrink:0">×</button>
+      </div>
 
       <div class="toolbar">
         <button class="btn btn-primary" @click="save()" :disabled="saving || !editable" x-show="editable">
@@ -112,8 +122,37 @@
 
       <div class="tab-bar" style="display:flex;flex-wrap:wrap;gap:2px;border-bottom:1px solid var(--border-light)">
         <template x-for="t in ALL_TABS" :key="t.key">
-          <button class="tab" :class="{on: activeTab===t.key}" @click="activeTab=t.key; batchField=''; batchValue=''" x-text="t.label"></button>
+          <button class="tab" :class="{on: activeTab===t.key}" @click="activeTab=t.key; batchField=''; batchValue=''; if(t.key==='topology') refreshTopology()" x-text="t.label"></button>
         </template>
+      </div>
+
+      <datalist id="switchDeviceNames">
+        <template x-for="d in (plan.data.devices||[]).filter(d=>d.category==='交換器' && d.name)" :key="d.name">
+          <option :value="d.name"></option>
+        </template>
+      </datalist>
+
+      <!-- 拓樸圖 -->
+      <div x-show="activeTab==='topology'">
+        <div class="card">
+          <div class="tab-panel-head">
+            <div class="card-title" style="border:none;padding:0;margin:0">
+              網路拓樸圖（依「設備清單」交換器＋「交換器 Port 對應」明細自動產生；調整文字內容後按下方按鈕重新產生預覽，儲存後匯出 PDF 會自動內嵌最新版本）
+            </div>
+            <button class="btn btn-ghost btn-xs" @click="refreshTopology()" :disabled="topoLoading">
+              <span x-text="topoLoading ? '產生中…' : '重新產生預覽'"></span>
+            </button>
+          </div>
+          <div x-show="topoErr" style="color:var(--danger);font-size:12px;margin-bottom:10px" x-text="topoErr"></div>
+          <div x-show="topoWarnings.length" style="color:#92400E;font-size:12px;margin-bottom:10px;padding:8px 12px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:6px">
+            <div style="font-weight:700;margin-bottom:4px">⚠ 拓樸圖提醒（不影響已儲存的資料，僅代表這些項目未畫在圖上或需要確認）</div>
+            <template x-for="(w, i) in topoWarnings" :key="i"><div style="margin-top:2px" x-text="'・' + w"></div></template>
+          </div>
+          <div x-show="!topoLoading && !topoSvg && !topoErr" style="color:var(--text-dim);font-size:12px;padding:20px;text-align:center">
+            尚無交換器資料，請先在「設備清單」新增類別為「交換器」的設備並填寫埠數，再到「交換器 Port 對應」填寫各埠的連接對象
+          </div>
+          <div style="overflow-x:auto" x-html="topoSvg"></div>
+        </div>
       </div>
 
       <!-- 總覽 -->
@@ -171,7 +210,14 @@
 
           <div class="tab-panel-head">
             <div class="card-title" style="border:none;padding:0;margin:0" x-text="tab.label"></div>
-            <button class="btn btn-ghost btn-xs" @click="addRow(tab.key)" x-show="editable">+ 新增一列</button>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <button class="btn btn-ghost btn-xs" @click="syncSwitchPortsFromDevices()" x-show="editable && tab.key==='switchPorts'">依設備清單自動產生缺少的埠列</button>
+              <button class="btn btn-ghost btn-xs" @click="openPasteModal(tab)" x-show="editable">貼上 Excel 資料</button>
+              <button class="btn btn-ghost btn-xs" @click="addRow(tab.key)" x-show="editable">+ 新增一列</button>
+            </div>
+          </div>
+          <div class="tab-panel-head" x-show="tab.key==='switchPorts'" style="margin-top:-4px;margin-bottom:12px">
+            <span style="font-size:11px;color:var(--text-dim)">依「設備清單」裡類別為「交換器」設備的 RJ45／SFP 埠數，自動補齊缺少的埠列（設備名稱＋埠號）；已存在的埠列不會被覆蓋或刪除，未設定埠數的交換器預設視為 24 RJ45（比照拓樸圖預覽的預設值）。</span>
           </div>
 
           <!-- 批次套用：勾選多筆後，一次把同一個欄位（例如 VLAN、階段）設成同一個值 -->
@@ -197,57 +243,71 @@
             <button class="btn btn-ghost btn-xs" @click="clearSelection(tab.key)">清除選取</button>
           </div>
 
-          <div class="rec-list">
-            <template x-for="(row, idx) in plan.data[tab.key]" :key="idx">
-              <div class="rec-card">
-                <div class="rec-card-head">
-                  <input type="checkbox" x-show="editable" :checked="isSelected(tab.key, idx)" @change="toggleSelect(tab.key, idx)">
-                  <span class="rec-card-idx" x-text="'#' + (idx + 1)"></span>
-                  <span style="flex:1"></span>
-                  <button class="row-del" @click="removeRow(tab.key, idx)" x-show="editable">刪除</button>
-                </div>
-                <div class="rec-card-grid">
+          <div class="grid-table-wrap">
+            <table class="grid-table">
+              <thead>
+                <tr>
+                  <th x-show="editable" style="width:20px"></th>
+                  <th style="width:28px">#</th>
                   <template x-for="col in tab.columns" :key="col.key">
-                    <div class="rec-field" :class="{checkbox: col.type==='checkbox'}">
-                      <template x-if="col.type==='select'">
-                        <div>
-                          <label x-text="col.label"></label>
-                          <select x-model="row[col.key]" :disabled="!editable" @change="dirty()">
-                            <option value=""></option>
-                            <template x-for="opt in col.options" :key="opt"><option :value="opt" x-text="opt"></option></template>
-                          </select>
-                        </div>
-                      </template>
-                      <template x-if="col.type==='checkbox'">
-                        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-primary)">
-                          <input type="checkbox" :checked="!!row[col.key]" :disabled="!editable" @change="row[col.key] = $event.target.checked; dirty()">
-                          <span x-text="col.label"></span>
-                        </label>
-                      </template>
-                      <template x-if="col.type==='mac'">
-                        <div>
-                          <label x-text="col.label"></label>
-                          <input type="text" x-model="row[col.key]" :disabled="!editable || !!row.stockItemId"
-                                 @blur="row[col.key] = formatMac(row[col.key]); dirty()" placeholder="xx:xx:xx:xx:xx:xx">
-                        </div>
-                      </template>
-                      <template x-if="!col.type || col.type==='text' || col.type==='number'">
-                        <div>
-                          <label x-text="col.label"></label>
-                          <input :type="col.type==='number' ? 'number' : 'text'" x-model="row[col.key]" :disabled="!editable" @input="dirty()">
-                        </div>
-                      </template>
-                    </div>
+                    <th x-text="col.label"></th>
                   </template>
-                  <div class="rec-field" x-show="tab.key==='devices'">
-                    <label>庫存序號</label>
-                    <button class="btn btn-ghost btn-xs" style="width:100%" @click="openStockPicker(row)" x-show="editable"
-                            x-text="row.stockItemId ? ('已連結：' + (row.stockSerialNo || row.stockItemId)) : '選庫存'"></button>
-                    <button class="row-del" @click="unlinkStock(row)" x-show="editable && row.stockItemId">解除庫存連結</button>
-                  </div>
-                </div>
-              </div>
-            </template>
+                  <th x-show="tab.key==='devices'">機型快選</th>
+                  <th x-show="tab.key==='devices'">庫存序號</th>
+                  <th x-show="editable" style="width:44px"></th>
+                </tr>
+              </thead>
+              <tbody>
+                <template x-for="(row, idx) in plan.data[tab.key]" :key="idx">
+                  <tr>
+                    <td class="checkbox-cell" x-show="editable">
+                      <input type="checkbox" :checked="isSelected(tab.key, idx)" @change="toggleSelect(tab.key, idx)">
+                    </td>
+                    <td class="grid-idx" x-text="idx + 1"></td>
+                    <template x-for="col in tab.columns" :key="col.key">
+                      <td>
+                        <template x-if="col.showIf && !col.showIf(row)">
+                          <span class="grid-cell-na">—</span>
+                        </template>
+                        <template x-if="!col.showIf || col.showIf(row)">
+                          <span>
+                            <template x-if="col.type==='select'">
+                              <select x-model="row[col.key]" :disabled="!editable" @change="dirty()">
+                                <option value=""></option>
+                                <template x-for="opt in col.options" :key="opt"><option :value="opt" x-text="opt"></option></template>
+                              </select>
+                            </template>
+                            <template x-if="col.type==='checkbox'">
+                              <input type="checkbox" :checked="!!row[col.key]" :disabled="!editable" @change="row[col.key] = $event.target.checked; dirty()">
+                            </template>
+                            <template x-if="col.type==='mac'">
+                              <input type="text" x-model="row[col.key]" :disabled="!editable || !!row.stockItemId"
+                                     @blur="row[col.key] = formatMac(row[col.key]); dirty()" placeholder="xx:xx:xx:xx:xx:xx">
+                            </template>
+                            <template x-if="!col.type || col.type==='text' || col.type==='number'">
+                              <input :type="col.type==='number' ? 'number' : 'text'" x-model="row[col.key]" :disabled="!editable" @input="dirty()" :list="col.datalist || null">
+                            </template>
+                          </span>
+                        </template>
+                      </td>
+                    </template>
+                    <td x-show="tab.key==='devices'">
+                      <select x-show="row.category==='交換器'" @change="applySwitchPreset(row, $event.target.value); $event.target.value=''" :disabled="!editable">
+                        <option value="">選擇機型…</option>
+                        <template x-for="(spec, key) in SWITCH_PRESETS" :key="key"><option :value="key" x-text="key"></option></template>
+                      </select>
+                      <span x-show="row.category!=='交換器'" class="grid-cell-na">—</span>
+                    </td>
+                    <td x-show="tab.key==='devices'">
+                      <button class="btn btn-ghost btn-xs" @click="openStockPicker(row)" x-show="editable"
+                              x-text="row.stockItemId ? ('已連結：' + (row.stockSerialNo || row.stockItemId)) : '選庫存'"></button>
+                      <button class="row-del" @click="unlinkStock(row)" x-show="editable && row.stockItemId">解除連結</button>
+                    </td>
+                    <td x-show="editable"><button class="row-del" @click="removeRow(tab.key, idx)">刪除</button></td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
             <div x-show="(plan.data[tab.key]||[]).length===0" style="text-align:center;color:var(--text-dim);padding:20px">尚無資料</div>
           </div>
         </div>
@@ -274,6 +334,25 @@
     <div style="display:flex;justify-content:flex-end;gap:10px">
       <button class="btn btn-ghost" @click="importConfirmOpen=false; pendingImportFile=null">取消</button>
       <button class="btn btn-primary" @click="confirmImportExcel()">確定匯入</button>
+    </div>
+  </div>
+</div>
+
+<!-- 貼上 Excel 資料 Modal -->
+<div class="modal-overlay" x-show="pasteModalOpen" x-cloak @keydown.escape.window="pasteModalOpen=false">
+  <div class="modal-box" @click.stop style="width:min(820px,96vw);max-height:none">
+    <h3>貼上 Excel 資料 — <span x-text="pasteModalTabLabel"></span></h3>
+    <p style="font-size:12px;color:var(--text-dim);line-height:1.6;margin-bottom:10px">
+      在 Excel（或本系統匯出的範本）選取要貼上的範圍複製，貼到下方文字框（Ctrl+V）。
+      第一列若跟欄位標題相符會自動當標題列比對，順序、缺欄位都沒關係；沒有標題列則依本分頁欄位由左到右對應。
+      這是<b>新增</b>，會加在現有資料最後面，不會覆蓋或刪除既有列。
+    </p>
+    <textarea x-model="pasteModalText" rows="12"
+              style="width:100%;font-family:Consolas,'Courier New',monospace;font-size:12px;padding:8px;border:1px solid var(--border);border-radius:6px;box-sizing:border-box;resize:vertical"
+              placeholder="在此按 Ctrl+V 貼上從 Excel 複製的範圍…"></textarea>
+    <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px">
+      <button class="btn btn-ghost" @click="pasteModalOpen=false">取消</button>
+      <button class="btn btn-primary" @click="confirmPasteImport()">加入表格</button>
     </div>
   </div>
 </div>
@@ -333,10 +412,37 @@ function networkPlanForm() {
     importConfirmOpen: false,
     pendingImportFile: null,
     importResultMsg: '',
+    actionResultMsg: '',
 
     batchSelections: {},
     batchField: '',
     batchValue: '',
+
+    topoSvg: '',
+    topoLoading: false,
+    topoErr: '',
+    topoWarnings: [],
+    SWITCH_PRESETS: {
+      // 常見規格快選（數字皆可在選好後於「RJ45 埠數／SFP 埠數」欄位手動再調整，
+      // 不限於下列組合；每個埠要當 RJ45 或 SFP 也可在「交換器 Port 對應」分頁
+      // 逐埠用「埠介質」欄位手動指定，不受這裡選的機型限制）
+      '4埠（無SFP）':      { portsCopper: 4,  portsSfp: 0, poe: false },
+      '4埠+1 SFP':         { portsCopper: 4,  portsSfp: 1, poe: false },
+      '4埠+2 SFP':         { portsCopper: 4,  portsSfp: 2, poe: false },
+      '8埠（無SFP）':      { portsCopper: 8,  portsSfp: 0, poe: false },
+      '8埠+1 SFP':         { portsCopper: 8,  portsSfp: 1, poe: false },
+      '8埠+2 SFP':         { portsCopper: 8,  portsSfp: 2, poe: false },
+      '16埠+1 SFP':        { portsCopper: 16, portsSfp: 1, poe: false },
+      '16埠+2 SFP':        { portsCopper: 16, portsSfp: 2, poe: false },
+      '24埠+1 SFP':        { portsCopper: 24, portsSfp: 1, poe: false },
+      '24埠+2 SFP':        { portsCopper: 24, portsSfp: 2, poe: false },
+      '24埠+3 SFP':        { portsCopper: 24, portsSfp: 3, poe: false },
+      '24埠+4 SFP':        { portsCopper: 24, portsSfp: 4, poe: false },
+      // 公司常用實際機型（自動帶入型號文字＋PoE 狀態）
+      'AT-x230-28GT（24埠+4SFP，無PoE）': { model: 'AT-x230-28GT', portsCopper: 24, portsSfp: 4, poe: false },
+      'AT-x230-28GP（24埠+4SFP，PoE+）':  { model: 'AT-x230-28GP', portsCopper: 24, portsSfp: 4, poe: true },
+      'AT-x230-18GT（16埠+2SFP，無PoE）': { model: 'AT-x230-18GT', portsCopper: 16, portsSfp: 2, poe: false },
+    },
 
     DATA_TABS: [
       { key: 'wanLines', label: 'WAN 對外線路', columns: [
@@ -366,6 +472,9 @@ function networkPlanForm() {
         { key: 'phase', label: '階段' },
         { key: 'status', label: '狀態', type: 'select', options: ['規劃中', '已完成', '待確認'] },
         { key: 'note', label: '備註' },
+        { key: 'portsCopper', label: 'RJ45 埠數', type: 'number', showIf: r => r.category === '交換器' },
+        { key: 'portsSfp', label: 'SFP 埠數', type: 'number', showIf: r => r.category === '交換器' },
+        { key: 'poe', label: 'PoE 供電', type: 'checkbox', showIf: r => r.category === '交換器' },
       ]},
       { key: 'vlans', label: 'VLAN 規劃', columns: [
         { key: 'vlanId', label: 'VLAN ID', type: 'number' },
@@ -426,6 +535,9 @@ function networkPlanForm() {
         { key: 'endpointLocation', label: '端點位置' },
         { key: 'status', label: '狀態', type: 'select', options: ['規劃中', '已完成', '待確認'] },
         { key: 'note', label: '備註' },
+        { key: 'portMedia', label: '埠介質', type: 'select', options: ['RJ45', 'SFP'] },
+        { key: 'linkDevice', label: '拓樸圖連線對象（設備名稱，留空不畫線）', datalist: 'switchDeviceNames' },
+        { key: 'linkPort', label: '拓樸圖連線對象埠號（如是SFP請含"SFP"字樣）' },
       ]},
       { key: 'firewallRules', label: '防火牆規則', columns: [
         { key: 'priority', label: '優先權', type: 'number' },
@@ -480,7 +592,7 @@ function networkPlanForm() {
     ],
 
     get ALL_TABS() {
-      return [{ key: 'overview', label: '總覽' }, ...this.DATA_TABS]
+      return [{ key: 'overview', label: '總覽' }, { key: 'topology', label: '拓樸圖' }, ...this.DATA_TABS]
     },
 
     get canEdit() {
@@ -576,6 +688,152 @@ function networkPlanForm() {
       })
       this.plan.data.revisionLog = log
       this.dirty()
+    },
+
+    // 貼上 Excel 資料：從剪貼簿貼進來的 TSV（Tab 分隔）文字，依欄位標題（或
+    // 沒有標題列時依欄位定義順序）解析成多筆列，直接加進表格——不用先存檔匯出
+    // 範本再匯入，填寫節奏比照直接在 Excel 打字。純新增，不覆蓋、不刪除既有列
+    // （跟既有「匯入 Excel」的整批覆蓋語意刻意不同，這裡是給快速大量新增用的）。
+    pasteModalOpen: false,
+    pasteModalTabKey: '',
+    pasteModalTabLabel: '',
+    pasteModalText: '',
+    openPasteModal(tab) {
+      this.pasteModalTabKey = tab.key
+      this.pasteModalTabLabel = tab.label
+      this.pasteModalText = ''
+      this.pasteModalOpen = true
+    },
+    _parseTsvGrid(text) {
+      return text.replace(/\r/g, '').split('\n')
+        .filter(line => line.length > 0)
+        .map(line => line.split('\t'))
+    },
+    confirmPasteImport() {
+      const tab = this.DATA_TABS.find(t => t.key === this.pasteModalTabKey)
+      const text = this.pasteModalText
+      this.pasteModalOpen = false
+      if (!tab || !text || !text.trim()) return
+      const grid = this._parseTsvGrid(text)
+      if (!grid.length) return
+
+      // 第一列若大部分欄位文字跟已知標題相符，當標題列比對（可調過順序／
+      // 缺欄位，不需要跟本系統範本一模一樣）；否則依欄位定義順序位置對應。
+      const firstRow = grid[0].map(c => c.trim())
+      const headerMatches = firstRow.filter(c => tab.columns.some(col => col.label === c)).length
+      const looksLikeHeader = headerMatches >= Math.max(1, Math.ceil(tab.columns.length * 0.3))
+      let colKeys, dataRows
+      if (looksLikeHeader) {
+        colKeys = firstRow.map(c => { const col = tab.columns.find(cc => cc.label === c); return col ? col.key : null })
+        dataRows = grid.slice(1)
+      } else {
+        colKeys = tab.columns.map(c => c.key)
+        dataRows = grid
+      }
+
+      if (!Array.isArray(this.plan.data[tab.key])) this.plan.data[tab.key] = []
+      let added = 0
+      for (const cells of dataRows) {
+        if (cells.every(c => !c.trim())) continue
+        const row = {}
+        cells.forEach((raw, i) => {
+          const key = colKeys[i]
+          if (!key) return
+          const v = raw.trim()
+          if (!v) return
+          const col = tab.columns.find(c => c.key === key)
+          if (col && col.type === 'checkbox') {
+            row[key] = ['是', 'true', 'TRUE', 'True', '1', 'v', 'V', '✓'].includes(v)
+          } else if (col && col.type === 'number') {
+            const n = parseFloat(v)
+            row[key] = Number.isNaN(n) ? v : n
+          } else {
+            row[key] = v
+          }
+        })
+        if (Object.keys(row).length) { this.plan.data[tab.key].push(row); added++ }
+      }
+      if (added > 0) this.dirty()
+      this.actionResultMsg = added > 0
+        ? `已新增 ${added} 筆資料到「${tab.label}」（可再逐筆檢查欄位是否對應正確）`
+        : '沒有偵測到可用的資料列'
+    },
+
+    // 依「設備清單」交換器的 RJ45／SFP 埠數，補齊「交換器 Port 對應」缺少的埠列。
+    // 純新增：只補上尚不存在的 (設備, 埠介質, 埠號) 組合，不動、不刪任何既有列，
+    // 避免使用者已經填好的連接對象/VLAN 等資料被蓋掉。埠數上限與預設值（未設定
+    // 時 RJ45 預設 24、SFP 預設 0）比照後端 network_plan_topology.py 的防呆邏輯，
+    // 確保這裡產生的埠列跟「拓樸圖」預覽畫出來的埠數一致。
+    _MAX_COPPER: 96,
+    _MAX_SFP: 32,
+    _portNumOf(raw) {
+      if (raw === null || raw === undefined) return null
+      const m = String(raw).match(/\d+/)
+      return m ? parseInt(m[0], 10) : null
+    },
+    syncSwitchPortsFromDevices() {
+      const devices = (this.plan.data.devices || []).filter(d => d.category === '交換器' && (d.name || '').trim())
+      if (!devices.length) { this.actionResultMsg = '「設備清單」尚無類別為「交換器」的設備，請先新增。'; return }
+      if (!Array.isArray(this.plan.data.switchPorts)) this.plan.data.switchPorts = []
+      const rows = this.plan.data.switchPorts
+
+      const existing = new Set()
+      for (const r of rows) {
+        const dev = (r.device || '').trim()
+        const n = this._portNumOf(r.portNo)
+        if (!dev || n === null) continue
+        const kind = r.portMedia === 'SFP' ? 'sfp' : 'cu'
+        existing.add(dev + '|' + kind + '|' + n)
+      }
+
+      let addedCount = 0
+      const clampedDevices = []
+      for (const d of devices) {
+        const name = d.name.trim()
+        let copper = parseInt(d.portsCopper) || 24
+        let sfp = parseInt(d.portsSfp) || 0
+        if (copper > this._MAX_COPPER) { copper = this._MAX_COPPER; clampedDevices.push(name) }
+        if (sfp > this._MAX_SFP) { sfp = this._MAX_SFP; clampedDevices.push(name) }
+        for (let n = 1; n <= copper; n++) {
+          const key = name + '|cu|' + n
+          if (!existing.has(key)) { rows.push({ device: name, portNo: String(n), portMedia: 'RJ45' }); existing.add(key); addedCount++ }
+        }
+        for (let n = 1; n <= sfp; n++) {
+          const key = name + '|sfp|' + n
+          if (!existing.has(key)) { rows.push({ device: name, portNo: String(n), portMedia: 'SFP' }); existing.add(key); addedCount++ }
+        }
+      }
+
+      if (addedCount > 0) this.dirty()
+      let msg = addedCount > 0 ? `已新增 ${addedCount} 筆缺少的埠列（既有資料不受影響）` : '目前埠列已完整，沒有需要新增的項目'
+      if (clampedDevices.length) msg += `\n提醒：以下設備埠數超過上限（RJ45 ${this._MAX_COPPER}／SFP ${this._MAX_SFP}），已自動限制：${[...new Set(clampedDevices)].join('、')}`
+      this.actionResultMsg = msg
+    },
+
+    applySwitchPreset(row, key) {
+      const spec = this.SWITCH_PRESETS[key]
+      if (!spec) return
+      Object.assign(row, spec)
+      this.dirty()
+    },
+
+    async refreshTopology() {
+      if (!this.plan.id) return
+      this.topoLoading = true
+      this.topoErr = ''
+      this.topoWarnings = []
+      try {
+        const r = await fetch(`${API}/network-plans/${this.plan.id}/topology-preview`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...this._auth() },
+          body: JSON.stringify({ data: this.plan.data })
+        })
+        const d = await r.json().catch(() => ({}))
+        if (!r.ok) { this.topoErr = d.detail || '拓樸圖產生失敗'; this.topoLoading = false; return }
+        this.topoSvg = d.svg || ''
+        this.topoWarnings = d.warnings || []
+      } catch (e) { this.topoErr = '網路錯誤：' + e.message }
+      this.topoLoading = false
     },
 
     formatMac(v) {

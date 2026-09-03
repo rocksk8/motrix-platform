@@ -15,6 +15,7 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
 from helpers import _get_edge_path
+from network_plan_topology import build_topology_svg
 
 _COMPANY  = "允碩整合集創股份有限公司"
 _COMPANY2 = "MOTRIX Synergy Integration Corp."
@@ -271,6 +272,14 @@ def _section_table_html(title, columns, items):
 
 def build_plan_html(plan: dict) -> str:
     data = plan.get("data") or {}
+    try:
+        topo_svg = (build_topology_svg(data) or {}).get("html")
+    except Exception:
+        topo_svg = None
+    topo_html = (
+        f'<div class="section-label">網路拓樸圖</div>'
+        f'<div style="overflow-x:auto">{topo_svg}</div>'
+    ) if topo_svg else ""
     sections_html = "".join(
         _section_table_html(title, columns, data.get(key) or [])
         for key, title, columns in SECTIONS
@@ -324,6 +333,7 @@ def build_plan_html(plan: dict) -> str:
         f'  <div><span>綁定案件：</span>{_esc(plan.get("quoteNo") or "獨立建立")}</div>\n'
         f'  <div><span>狀態：</span>{_esc(plan.get("status", ""))}</div>\n'
         "</div>\n"
+        f"{topo_html}"
         f"{sections_html}"
         f"{rev_html}"
         f'<div class="footer">{_esc(_COMPANY2)} 允碩整合集創 ｜ info@miactw.com ｜ Tel: 04-3610-6566 ｜ 統一編號: 60575481　｜　產製時間：{datetime.now().strftime("%Y-%m-%d %H:%M")}</div>\n'
@@ -331,9 +341,10 @@ def build_plan_html(plan: dict) -> str:
     )
 
 
-def build_plan_pdf_bytes(plan: dict) -> bytes:
+def _render_pdf_via_edge(html_content: str) -> bytes:
+    """共用的 HTML→PDF 轉檔（Edge headless），供完整規劃書與純拓樸圖快速工具
+    共用，避免兩處各自維護一份幾乎一樣的 subprocess 邏輯。"""
     edge = _get_edge_path()
-    html_content = build_plan_html(plan)
     tmp_html = tmp_pdf = None
     try:
         with tempfile.NamedTemporaryFile(mode="w", suffix=".html", encoding="utf-8", delete=False) as f:
@@ -362,3 +373,50 @@ def build_plan_pdf_bytes(plan: dict) -> bytes:
                     os.unlink(p)
                 except Exception:
                     pass
+
+
+def build_plan_pdf_bytes(plan: dict) -> bytes:
+    return _render_pdf_via_edge(build_plan_html(plan))
+
+
+# ── 快速拓樸圖（不建立規劃書，純畫圖用，見 routers/network_plans_quick.py） ──
+
+def build_topology_only_html(data: dict, title: str = "", floor_tag: str = "", footer: str = "") -> str:
+    """快速拓樸圖工具專用：只有標題＋拓樸圖＋頁尾的極簡頁面，不含規劃書的
+    WAN／VLAN／IP 等其餘章節——呼叫端（routers/network_plans_quick.py）已經
+    先確認過 build_topology_svg 有東西可畫才會呼叫這裡。"""
+    try:
+        topo = build_topology_svg(data) or {}
+    except Exception:
+        topo = {}
+    topo_svg = topo.get("html") or "<div style='color:#888'>（尚無可畫的交換器資料）</div>"
+    title = (title or "").strip() or "網路埠拓樸圖"
+    floor_tag_html = f'<span class="tag">{_esc(floor_tag)}</span>' if (floor_tag or "").strip() else ""
+    footer_text = (footer or "").strip() or f"{_COMPANY2} 允碩整合集創 ｜ 產製時間：{datetime.now().strftime('%Y-%m-%d %H:%M')}"
+    return (
+        '<!DOCTYPE html>\n<html lang="zh-Hant">\n<head>\n<meta charset="UTF-8">\n'
+        f'<title>{_esc(title)}</title>\n'
+        "<style>\n"
+        "  *{box-sizing:border-box;margin:0;padding:0}\n"
+        '  body{font-family:"Microsoft JhengHei","PMingLiU",serif;font-size:10.5px;color:#0A0A0A;line-height:1.5;background:#fff}\n'
+        "  #root{padding:20px 24px}\n"
+        '  @page{size:A4 landscape;margin:8mm;@bottom-center{content:counter(page);font-family:Arial,sans-serif;font-size:9px;color:#888}}\n'
+        "  @media print{html,body{margin:0;padding:0;background:#fff}}\n"
+        "  .accent-bar{height:3px;background:#0A0A0A;margin-bottom:12px}\n"
+        "  .header{display:flex;justify-content:space-between;align-items:baseline;padding-bottom:10px;border-bottom:1px solid #0A0A0A;margin-bottom:16px;gap:12px;flex-wrap:wrap}\n"
+        "  .co-name{font-size:12px;font-weight:700;letter-spacing:.06em;color:#888;font-family:Arial,sans-serif}\n"
+        "  .doc-title{font-size:20px;font-weight:700;letter-spacing:.1em}\n"
+        '  .tag{display:inline-block;margin-left:10px;font-family:Consolas,monospace;font-weight:700;font-size:12px;background:#0A0A0A;color:#fff;padding:3px 10px;border-radius:6px;vertical-align:middle}\n'
+        "  .footer{text-align:center;font-size:9px;color:#888;margin-top:18px;padding-top:10px;border-top:1px solid #EDEAE4;font-family:Arial,sans-serif}\n"
+        "</style>\n</head>\n<body>\n<div id=\"root\">\n"
+        '<div class="accent-bar"></div>\n'
+        f'<div class="header">\n  <div class="co-name">{_esc(_COMPANY)}　{_esc(_COMPANY2)}</div>\n'
+        f'  <div class="doc-title">{_esc(title)}{floor_tag_html}</div>\n</div>\n'
+        f"{topo_svg}\n"
+        f'<div class="footer">{_esc(footer_text)}</div>\n'
+        "</div>\n</body>\n</html>"
+    )
+
+
+def build_topology_only_pdf_bytes(data: dict, title: str = "", floor_tag: str = "", footer: str = "") -> bytes:
+    return _render_pdf_via_edge(build_topology_only_html(data, title, floor_tag, footer))

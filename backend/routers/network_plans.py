@@ -31,6 +31,7 @@ from fastapi.responses import Response
 from db import get_db, next_entity_code
 from helpers import _require_user, _tok, _audit, notify_module_activity
 from network_plan_export import build_plan_excel, build_plan_pdf_bytes, parse_plan_excel
+from network_plan_topology import build_topology_svg
 
 router = APIRouter()
 
@@ -240,6 +241,24 @@ def delete_network_plan(plan_id: int, authorization: str = Header(None)):
     notify_module_activity("網路架構規劃書", "刪除", user.get("display_name") or user["username"],
                             f"{row['plan_no']}（{row['site_name']}）", "network-plans.html")
     return {"ok": True}
+
+
+@router.post("/api/network-plans/{plan_id}/topology-preview")
+def preview_network_plan_topology(plan_id: int, body: dict = Body(...), authorization: str = Header(None)):
+    """即時預覽用：不落地存檔，直接把前端目前（含尚未儲存）的 data 拿去畫拓樸圖，
+    供「拓樸圖」分頁按下「重新產生預覽」時呼叫。"""
+    _require_user(authorization)
+    conn = get_db()
+    row = conn.execute("SELECT id FROM network_plans WHERE id=?", (plan_id,)).fetchone()
+    conn.close()
+    if not row:
+        raise HTTPException(404, "規劃書不存在")
+    data = body.get("data") or {}
+    try:
+        result = build_topology_svg(data)
+    except Exception as e:
+        raise HTTPException(400, f"拓樸圖產生失敗：{e}")
+    return {"svg": result.get("html"), "warnings": result.get("warnings") or []}
 
 
 # ── 匯出（§10 步驟 8/9） ──────────────────────────────────────────────────────
