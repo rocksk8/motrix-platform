@@ -15,7 +15,7 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
 from helpers import _get_edge_path
-from network_plan_topology import build_topology_svg
+from network_plan_topology import build_topology_svg, build_topology_text_summary_html
 
 _COMPANY  = "允碩整合集創股份有限公司"
 _COMPANY2 = "MOTRIX Synergy Integration Corp."
@@ -278,7 +278,7 @@ def build_plan_html(plan: dict) -> str:
         topo_svg = None
     topo_html = (
         f'<div class="section-label">網路拓樸圖</div>'
-        f'<div style="overflow-x:auto">{topo_svg}</div>'
+        f'<div style="overflow-x:auto;page-break-inside:avoid;break-inside:avoid">{topo_svg}</div>'
     ) if topo_svg else ""
     sections_html = "".join(
         _section_table_html(title, columns, data.get(key) or [])
@@ -382,14 +382,24 @@ def build_plan_pdf_bytes(plan: dict) -> bytes:
 # ── 快速拓樸圖（不建立規劃書，純畫圖用，見 routers/network_plans_quick.py） ──
 
 def build_topology_only_html(data: dict, title: str = "", floor_tag: str = "", footer: str = "") -> str:
-    """快速拓樸圖工具專用：只有標題＋拓樸圖＋頁尾的極簡頁面，不含規劃書的
-    WAN／VLAN／IP 等其餘章節——呼叫端（routers/network_plans_quick.py）已經
-    先確認過 build_topology_svg 有東西可畫才會呼叫這裡。"""
+    """快速拓樸圖工具專用：標題＋拓樸圖＋文字版埠位對照表＋頁尾的極簡頁面，
+    不含規劃書的 WAN／VLAN／IP 等其餘章節——呼叫端（routers/network_plans_quick.py）
+    已經先確認過 build_topology_svg 有東西可畫才會呼叫這裡。
+
+    2026-09-04 使用者要求：A4 直版（原本沿用規劃書 PDF 的橫向）；圖不能被
+    印表分頁切斷（.topo-wrap 加 page-break-inside:avoid，SVG 本身用 viewBox
+    等比縮到版面寬度內，避免橫向超出直版較窄的可印刷寬度）；圖旁要有文字
+    敘述，不能只有一張圖——補上 build_topology_text_summary_html() 產生的
+    逐埠文字對照表（比照原始個案腳本 b1f_topology.py 的表格區塊）。"""
     try:
         topo = build_topology_svg(data) or {}
     except Exception:
         topo = {}
     topo_svg = topo.get("html") or "<div style='color:#888'>（尚無可畫的交換器資料）</div>"
+    try:
+        summary_html = build_topology_text_summary_html(data)
+    except Exception:
+        summary_html = ""
     title = (title or "").strip() or "網路埠拓樸圖"
     floor_tag_html = f'<span class="tag">{_esc(floor_tag)}</span>' if (floor_tag or "").strip() else ""
     footer_text = (footer or "").strip() or f"{_COMPANY2} 允碩整合集創 ｜ 產製時間：{datetime.now().strftime('%Y-%m-%d %H:%M')}"
@@ -400,19 +410,28 @@ def build_topology_only_html(data: dict, title: str = "", floor_tag: str = "", f
         "  *{box-sizing:border-box;margin:0;padding:0}\n"
         '  body{font-family:"Microsoft JhengHei","PMingLiU",serif;font-size:10.5px;color:#0A0A0A;line-height:1.5;background:#fff}\n'
         "  #root{padding:20px 24px}\n"
-        '  @page{size:A4 landscape;margin:8mm;@bottom-center{content:counter(page);font-family:Arial,sans-serif;font-size:9px;color:#888}}\n'
-        "  @media print{html,body{margin:0;padding:0;background:#fff}}\n"
+        '  @page{size:A4 portrait;margin:10mm;@bottom-center{content:counter(page);font-family:Arial,sans-serif;font-size:9px;color:#888}}\n'
+        "  @media print{html,body{margin:0;padding:0;background:#fff}tr{page-break-inside:avoid}}\n"
         "  .accent-bar{height:3px;background:#0A0A0A;margin-bottom:12px}\n"
         "  .header{display:flex;justify-content:space-between;align-items:baseline;padding-bottom:10px;border-bottom:1px solid #0A0A0A;margin-bottom:16px;gap:12px;flex-wrap:wrap}\n"
         "  .co-name{font-size:12px;font-weight:700;letter-spacing:.06em;color:#888;font-family:Arial,sans-serif}\n"
-        "  .doc-title{font-size:20px;font-weight:700;letter-spacing:.1em}\n"
+        "  .doc-title{font-size:18px;font-weight:700;letter-spacing:.1em}\n"
         '  .tag{display:inline-block;margin-left:10px;font-family:Consolas,monospace;font-weight:700;font-size:12px;background:#0A0A0A;color:#fff;padding:3px 10px;border-radius:6px;vertical-align:middle}\n'
+        "  .topo-wrap{page-break-inside:avoid;break-inside:avoid;margin-bottom:14px}\n"
+        "  .topo-wrap svg{max-width:100%;height:auto;display:block}\n"
+        '  .section-label{font-size:9px;font-family:Arial,sans-serif;letter-spacing:.1em;text-transform:uppercase;color:#888;font-weight:600;margin:14px 0 6px;display:flex;align-items:center;gap:8px}\n'
+        '  .section-label::after{content:"";flex:1;height:1px;background:#EDEAE4}\n'
+        "  table{width:100%;border-collapse:collapse;margin-bottom:10px;table-layout:fixed}\n"
+        "  thead th{background:#0A0A0A;color:#F5F4F0;padding:5px 6px;text-align:left;font-size:9px;font-weight:500;font-family:Arial,sans-serif;word-break:break-all}\n"
+        "  tbody td{padding:4px 6px;border-bottom:1px solid #EDEAE4;font-size:9.5px;word-break:break-all}\n"
+        "  tbody tr:nth-child(even) td{background:#FAFAF8}\n"
         "  .footer{text-align:center;font-size:9px;color:#888;margin-top:18px;padding-top:10px;border-top:1px solid #EDEAE4;font-family:Arial,sans-serif}\n"
         "</style>\n</head>\n<body>\n<div id=\"root\">\n"
         '<div class="accent-bar"></div>\n'
         f'<div class="header">\n  <div class="co-name">{_esc(_COMPANY)}　{_esc(_COMPANY2)}</div>\n'
         f'  <div class="doc-title">{_esc(title)}{floor_tag_html}</div>\n</div>\n'
-        f"{topo_svg}\n"
+        f'<div class="topo-wrap">{topo_svg}</div>\n'
+        f"{summary_html}\n"
         f'<div class="footer">{_esc(footer_text)}</div>\n'
         "</div>\n</body>\n</html>"
     )

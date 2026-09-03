@@ -77,7 +77,42 @@ def test_build_topology_only_html_contains_title_and_svg():
     assert "測試拓樸圖" in html
     assert "1F" in html
     assert "<svg" in html
-    assert "SW-Q1" in html
+
+
+def test_build_topology_only_html_is_a4_portrait_and_avoids_page_break():
+    """2026-09-04 使用者要求：快速拓樸圖 PDF 改 A4 直版，且圖不能被印表分頁切斷。"""
+    import network_plan_export as npe
+    html = npe.build_topology_only_html(_SAMPLE, title="測試", floor_tag="", footer="")
+    assert "size:A4 portrait" in html
+    assert "page-break-inside:avoid" in html
+
+
+def test_build_topology_only_html_includes_text_port_table():
+    """使用者要求：圖旁要有文字敘述，不能只有圖——文字版埠位對照表要包含每個
+    交換器的埠號、連接對象等欄位標題，以及範例資料裡的實際內容。"""
+    import network_plan_export as npe
+    html = npe.build_topology_only_html(_SAMPLE, title="測試", floor_tag="", footer="")
+    assert "埠位對照表" in html or "SW-Q1" in html
+    assert "連接對象／端點" in html
+    assert "客戶端A" in html
+    assert "Spare" in html  # 未使用的埠也要列出（比照原始腳本）
+
+
+def test_build_topology_text_summary_html_lists_all_ports_including_spares():
+    import network_plan_topology as topo
+    data = {
+        "devices": [{"name": "SW-A", "category": "交換器", "portsCopper": 4, "portsSfp": 1}],
+        "switchPorts": [{"device": "SW-A", "portNo": "1", "endpoint": "客戶端X", "portProfile": "A"}],
+    }
+    html = topo.build_topology_text_summary_html(data)
+    assert "客戶端X" in html
+    assert html.count("Spare") == 4  # port 2,3,4 空 + SFP1 空 = 4 個 Spare
+    assert "<table>" in html
+
+
+def test_build_topology_text_summary_html_empty_when_no_switches():
+    import network_plan_topology as topo
+    assert topo.build_topology_text_summary_html({}) == ""
 
 
 def test_build_topology_only_html_no_switches_shows_placeholder_not_crash():

@@ -338,9 +338,9 @@ def build_topology_svg(data: dict) -> dict:
                 f'<g>{title_tag}'
                 f'<rect x="{ex}" y="40" rx="10" width="{w}" height="{ext_h}" '
                 f'fill="#0b1220" stroke="{UPLINK_COLOR}" stroke-width="2"/>'
-                f'<text x="{ex+14}" y="{40+22}" fill="#fbbf24" font-family="{FONT}" '
+                f'<text x="{ex+14}" y="{40+19}" fill="#fbbf24" font-family="{FONT}" '
                 f'font-size="12.5" font-weight="900">{_esc(shown)}</text>'
-                f'<text x="{ex+14}" y="66" fill="#94a3b8" font-family="{MONO}" font-size="10">外部/未列出設備</text>'
+                f'<text x="{ex+14}" y="{40+37}" fill="#94a3b8" font-family="{MONO}" font-size="10">外部/未列出設備</text>'
                 f'</g>'
             )
             ext_anchor[label] = dict(cx=ex + w / 2, top=40, bot=40 + ext_h, center_y=40)
@@ -400,3 +400,76 @@ def build_topology_svg(data: dict) -> dict:
            f'{"".join(ext_svg)}{"".join(cable_svgs)}{"".join(svg_switches)}</svg>')
     legend_html = f'<div style="display:flex;flex-wrap:wrap;margin-top:10px;font-size:12px;color:#475569">{"".join(legend)}</div>'
     return {"html": svg + legend_html, "warnings": warnings}
+
+
+def build_topology_text_summary_html(data: dict) -> str:
+    """純文字版「埠位對照表」（比照使用者原本個案腳本 b1f_topology.py 的表格
+    區塊），每台交換器一張表，逐埠列出連接對象／Port Profile／拓樸圖連線對象。
+    SVG 圖只能用「看」的，這裡補一份可搜尋/可讀的文字說明——供快速拓樸圖 PDF
+    匯出使用（見 network_plan_export.py::build_topology_only_html），一律列出
+    1..埠數的每一個埠（含未使用的 Spare），不因為排版考量省略任何埠。"""
+    devices = data.get("devices") or []
+    switch_ports = data.get("switchPorts") or []
+    switches = [d for d in devices if (d.get("category") == "交換器") and (d.get("name") or "").strip()]
+    if not switches:
+        return ""
+
+    rows_by_device = {}
+    for row in switch_ports:
+        dev = (row.get("device") or "").strip()
+        if dev:
+            rows_by_device.setdefault(dev, []).append(row)
+
+    blocks = []
+    seen_names = set()
+    for d in switches:
+        name = (d.get("name") or "").strip()
+        if name in seen_names:
+            continue  # 與 build_topology_svg 一致：重複名稱只取第一筆
+        seen_names.add(name)
+        try:
+            copper = min(max(int(d.get("portsCopper") or 24), 0), MAX_COPPER)
+            sfp_n = min(max(int(d.get("portsSfp") or 0), 0), MAX_SFP)
+        except (TypeError, ValueError):
+            continue
+
+        by_key = {}
+        for r in rows_by_device.get(name, []):
+            n = _port_num(r.get("portNo"))
+            if n is None:
+                continue
+            kind = "sfp" if r.get("portMedia") == "SFP" else "cu"
+            by_key[(kind, n)] = r
+
+        def _row_html(label_no, r):
+            endpoint = _esc((r.get("endpoint") or "").strip()) if r else ""
+            profile = _esc((r.get("portProfile") or "").strip()) if r else ""
+            link = (r.get("linkDevice") or "").strip() if r else ""
+            link_port = (r.get("linkPort") or "").strip() if r else ""
+            link_text = _esc(f"{link}" + (f" P{link_port}" if link_port else "")) if link else ""
+            target = endpoint or "<span style=\"color:#9CA3AF\">Spare（未使用）</span>"
+            return (f"<tr><td>{label_no}</td><td>{target}</td>"
+                    f"<td>{profile}</td><td>{link_text}</td></tr>")
+
+        trs = []
+        for n in range(1, copper + 1):
+            trs.append(_row_html(f"P{n}", by_key.get(("cu", n))))
+        for n in range(1, sfp_n + 1):
+            trs.append(_row_html(f"SFP{n}", by_key.get(("sfp", n))))
+
+        model = (d.get("model") or "").strip()
+        loc = (d.get("location") or "").strip()
+        cap_bits = [name]
+        if model:
+            cap_bits.append(model)
+        if loc:
+            cap_bits.append(loc)
+        caption = "　".join(cap_bits) + f"（使用中 {len(rows_by_device.get(name, []))} / {copper + sfp_n} 埠）"
+
+        blocks.append(
+            f'<div class="section-label">{_esc(caption)}</div>'
+            '<table><thead><tr><th>埠號</th><th>連接對象／端點</th>'
+            '<th>Port Profile</th><th>拓樸圖連線對象</th></tr></thead>'
+            f'<tbody>{"".join(trs)}</tbody></table>'
+        )
+    return "".join(blocks)
