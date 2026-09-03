@@ -40,6 +40,10 @@ MAX_SFP = 32
 PORT_LABEL_MAX = 6
 TITLE_MAX = 40
 EXT_LABEL_MAX = 16
+CABLE_LABEL_NAME_MAX = 14
+# 連線標籤置中在兩端連接埠的中點，若中點落在面板左/右邊緣附近、標籤文字又長，
+# 標籤方塊會超出畫布邊界被裁切——viewBox 左右各留這麼多緩衝空間吸收溢出。
+LABEL_MARGIN = 160
 
 _PALETTE = ["#2563eb", "#0d9488", "#7c3aed", "#db2777", "#16a34a",
             "#0891b2", "#dc2626", "#6366f1", "#ca8a04", "#059669"]
@@ -68,7 +72,9 @@ def _port_num(raw):
     return int(m.group()) if m else None
 
 
-def _copper_cols(copper):
+def _copper_cols(copper, layout="2row"):
+    if layout == "1row":
+        return max(copper, 1)
     return (max(copper, 1) + 1) // 2
 
 
@@ -77,14 +83,17 @@ def _copper_col_x(ox, c, half):
     return ox + c * (CW + COLGAP) + extra
 
 
-def _geom_of(copper, sfp_n):
-    cols = _copper_cols(copper)
+def _geom_of(copper, sfp_n, layout="2row"):
+    cols = _copper_cols(copper, layout)
     half = (cols + 1) // 2
     copper_w = _copper_col_x(0, cols - 1, half) + CW
     sfp_w = (sfp_n * CW + max(0, sfp_n - 1) * COLGAP) if sfp_n else CW
     body_w = PAD + max(copper_w, sfp_w) + PAD
     ports_y = PLATE_H + 14
-    sfp_y = ports_y + CH * 2 + ROWGAP + SFPGAP
+    if layout == "1row":
+        sfp_y = ports_y + CH + SFPGAP
+    else:
+        sfp_y = ports_y + CH * 2 + ROWGAP + SFPGAP
     body_h = sfp_y + CH + 14
     return dict(cols=cols, half=half, copper_w=copper_w, sfp_w=sfp_w,
                 body_w=body_w, ports_y=ports_y, sfp_y=sfp_y, body_h=body_h)
@@ -121,7 +130,8 @@ def _cell(px, py, label_no, port):
 
 def _render_faceplate(x, y, sw):
     copper, sfp_n = sw["copper"], sw["sfp"]
-    g = _geom_of(copper, sfp_n)
+    layout = sw.get("layout") or "2row"
+    g = _geom_of(copper, sfp_n, layout)
     half = g["half"]
     ox, oy = x + PAD, y + g["ports_y"]
     ports = sw["ports"]
@@ -132,13 +142,20 @@ def _render_faceplate(x, y, sw):
     s.append(f'<text x="{x+PAD+10}" y="{y+10+PLATE_H-13}" fill="#93c5fd" '
              f'font-family="{MONO}" font-size="12.5" font-weight="700">{_esc(sw["title"])}</text>')
 
-    for c in range(g["cols"]):
-        px = _copper_col_x(ox, c, half)
-        p_top, p_bot = 2 * c + 1, 2 * c + 2
-        if p_top <= copper:
-            s.append(_cell(px, oy, p_top, ports.get(("cu", p_top))))
-        if p_bot <= copper:
-            s.append(_cell(px, oy + CH + ROWGAP, p_bot, ports.get(("cu", p_bot))))
+    if layout == "1row":
+        for c in range(g["cols"]):
+            px = _copper_col_x(ox, c, half)
+            n = c + 1
+            if n <= copper:
+                s.append(_cell(px, oy, n, ports.get(("cu", n))))
+    else:
+        for c in range(g["cols"]):
+            px = _copper_col_x(ox, c, half)
+            p_top, p_bot = 2 * c + 1, 2 * c + 2
+            if p_top <= copper:
+                s.append(_cell(px, oy, p_top, ports.get(("cu", p_top))))
+            if p_bot <= copper:
+                s.append(_cell(px, oy + CH + ROWGAP, p_bot, ports.get(("cu", p_bot))))
 
     sfp_y = y + g["sfp_y"]
     sfp_x0 = ox + (g["copper_w"] - g["sfp_w"]) / 2 if copper else ox
@@ -161,6 +178,9 @@ def _render_faceplate(x, y, sw):
         if kind == "sfp":
             cx = sfp_x0 + (n - 1) * (CW + COLGAP) + CW / 2
             return dict(cx=cx, top=sfp_y, bot=sfp_y + CH)
+        if layout == "1row":
+            cx = _copper_col_x(ox, n - 1, half) + CW / 2
+            return dict(cx=cx, top=oy, bot=oy + CH)
         c = (n - 1) // 2
         r = (n - 1) % 2
         cx = _copper_col_x(ox, c, half) + CW / 2
@@ -171,20 +191,30 @@ def _render_faceplate(x, y, sw):
                             center_y=y + g["body_h"] / 2, port_xy=port_xy)
 
 
-def _cable(ax, ay, bx, by, color, label):
+def _cable(ax, ay, bx, by, color):
     mid = (ay + by) / 2
     s = [f'<path d="M {ax} {ay} C {ax} {mid}, {bx} {mid}, {bx} {by}" fill="none" '
          f'stroke="{color}" stroke-width="3.5" stroke-linecap="round"/>']
     s.append(f'<circle cx="{ax}" cy="{ay}" r="4.5" fill="{color}"/>'
               f'<circle cx="{bx}" cy="{by}" r="4.5" fill="{color}"/>')
-    if label:
-        lx, ly = (ax + bx) / 2, mid
-        w = max(116, 16 + len(label) * 11)
-        s.append(f'<rect x="{lx-w/2}" y="{ly-13}" rx="6" width="{w}" height="24" '
-                  f'fill="#fff7ed" stroke="{color}" stroke-width="1.3"/>')
-        s.append(f'<text x="{lx}" y="{ly+3}" text-anchor="middle" fill="#b45309" '
-                 f'font-family="{MONO}" font-size="11.5" font-weight="700">{_esc(label)}</text>')
     return "".join(s)
+
+
+def _cable_label(ax, ay, bx, by, color, label):
+    """連線標籤獨立成一個函式，故意跟 _cable() 的線本身分開回傳——呼叫端把
+    這個疊在所有交換器面板「之上」繪製（2026-09-04 發現的 bug：連線本身在
+    面板之下繪製，是刻意讓線看起來像插進面板；但若連出的埠剛好在面板上緣
+    附近、線又要繞一大圈接到下方另一台交換器，貝茲曲線中點常會落回自己
+    面板的範圍內，標籤就會被自己這台面板的不透明底色蓋住看不到）。"""
+    if not label:
+        return ""
+    mid = (ay + by) / 2
+    lx, ly = (ax + bx) / 2, mid
+    w = max(116, 16 + len(label) * 11)
+    return (f'<rect x="{lx-w/2}" y="{ly-13}" rx="6" width="{w}" height="24" '
+            f'fill="#fff7ed" stroke="{color}" stroke-width="1.3"/>'
+            f'<text x="{lx}" y="{ly+3}" text-anchor="middle" fill="#b45309" '
+            f'font-family="{MONO}" font-size="11.5" font-weight="700">{_esc(label)}</text>')
 
 
 def build_topology_svg(data: dict) -> dict:
@@ -224,8 +254,10 @@ def build_topology_svg(data: dict) -> dict:
         model = (d.get("model") or "").strip()
         loc = (d.get("location") or "").strip()
         poe = bool(d.get("poe"))
+        layout = "1row" if (d.get("portLayout") or "").strip() == "單排橫向" else "2row"
         title = name + (f"　{model}" if model else "") + (" ⚡PoE" if poe else "") + (f"　（{loc}）" if loc else "")
-        switches[name] = dict(name=name, copper=copper, sfp=sfp_n, title=_truncate(title, TITLE_MAX), ports={})
+        switches[name] = dict(name=name, copper=copper, sfp=sfp_n, layout=layout,
+                               title=_truncate(title, TITLE_MAX), ports={})
     if dup_names:
         warnings.append("設備清單有重複名稱（拓樸圖只會畫第一筆，其餘略過）：" + "、".join(sorted(dup_names)))
 
@@ -352,9 +384,10 @@ def build_topology_svg(data: dict) -> dict:
         return geo["port_xy"](kind, n), geo["center_y"]
 
     def _port_label(dev, kind, n):
-        return f'{dev} {"SFP" if kind == "sfp" else "P"}{n}'
+        return f'{_truncate(dev, CABLE_LABEL_NAME_MAX)} {"SFP" if kind == "sfp" else "P"}{n}'
 
     cable_svgs = []
+    cable_label_svgs = []
     for c in cables:
         a, a_cy = endpoint_of(c["a_dev"], c["a_kind"], c["a_n"])
         if c["kind"] == "device":
@@ -368,7 +401,8 @@ def build_topology_svg(data: dict) -> dict:
             ax, ay, bx, by = a["cx"], a["top"], b["cx"], b["bot"]
         else:
             ax, ay, bx, by = a["cx"], a["bot"], b["cx"], b["top"]
-        cable_svgs.append(_cable(ax, ay, bx, by, UPLINK_COLOR, label))
+        cable_svgs.append(_cable(ax, ay, bx, by, UPLINK_COLOR))
+        cable_label_svgs.append(_cable_label(ax, ay, bx, by, UPLINK_COLOR, label))
 
     width_candidates = [g["body_w"] for g in geoms.values()]
     if has_ext:
@@ -395,9 +429,11 @@ def build_topology_svg(data: dict) -> dict:
         # 全部交換器都因格式錯誤被跳過（極端情況：唯一一台就寫錯埠數）
         return {"html": None, "warnings": warnings}
 
-    svg = (f'<svg width="{total_w}" height="{total_h}" viewBox="0 0 {total_w} {total_h}" '
+    svg_w = total_w + 2 * LABEL_MARGIN
+    svg = (f'<svg width="{svg_w}" height="{total_h}" '
+           f'viewBox="{-LABEL_MARGIN} 0 {svg_w} {total_h}" '
            f'xmlns="http://www.w3.org/2000/svg">'
-           f'{"".join(ext_svg)}{"".join(cable_svgs)}{"".join(svg_switches)}</svg>')
+           f'{"".join(ext_svg)}{"".join(cable_svgs)}{"".join(svg_switches)}{"".join(cable_label_svgs)}</svg>')
     legend_html = f'<div style="display:flex;flex-wrap:wrap;margin-top:10px;font-size:12px;color:#475569">{"".join(legend)}</div>'
     return {"html": svg + legend_html, "warnings": warnings}
 
@@ -467,9 +503,14 @@ def build_topology_text_summary_html(data: dict) -> str:
         caption = "　".join(cap_bits) + f"（使用中 {len(rows_by_device.get(name, []))} / {copper + sfp_n} 埠）"
 
         blocks.append(
-            f'<div class="section-label">{_esc(caption)}</div>'
-            '<table><thead><tr><th>埠號</th><th>連接對象／端點</th>'
+            f'<table><caption>{_esc(caption)}</caption>'
+            '<thead><tr><th>埠號</th><th>連接對象／端點</th>'
             '<th>Port Profile</th><th>拓樸圖連線對象</th></tr></thead>'
             f'<tbody>{"".join(trs)}</tbody></table>'
         )
+
+    # 2026-09-04 使用者要求「像 b1f_topology.py 原始腳本輸出那樣」：所有交換器
+    # 的表格丟進同一個固定兩欄的 CSS Grid（呼叫端負責用 .tbl-wrap 包起來），
+    # 由瀏覽器自動兩兩並排、自動換行，不用自己算配對——單台或奇數最後一張
+    # 自然佔滿整行，不需要另外特殊處理。
     return "".join(blocks)

@@ -390,16 +390,22 @@ def build_topology_only_html(data: dict, title: str = "", floor_tag: str = "", f
     印表分頁切斷（.topo-wrap 加 page-break-inside:avoid，SVG 本身用 viewBox
     等比縮到版面寬度內，避免橫向超出直版較窄的可印刷寬度）；圖旁要有文字
     敘述，不能只有一張圖——補上 build_topology_text_summary_html() 產生的
-    逐埠文字對照表（比照原始個案腳本 b1f_topology.py 的表格區塊）。"""
+    逐埠文字對照表；並比照使用者提供的原始個案腳本 b1f_topology.py 實際輸出
+    （B1F_topology.html）的展示方式：「埠位對照表 Port Assignment」標題下、
+    所有交換器的表格放進同一個固定兩欄 CSS Grid（.tbl-wrap），由瀏覽器自動
+    兩兩並排、自動換行——兩台以上交換器時省版面、方便左右對照閱讀。"""
     try:
         topo = build_topology_svg(data) or {}
     except Exception:
         topo = {}
     topo_svg = topo.get("html") or "<div style='color:#888'>（尚無可畫的交換器資料）</div>"
     try:
-        summary_html = build_topology_text_summary_html(data)
+        summary_tables = build_topology_text_summary_html(data)
     except Exception:
-        summary_html = ""
+        summary_tables = ""
+    summary_block = (
+        f'<h2>埠位對照表 Port Assignment</h2>\n<div class="tbl-wrap">{summary_tables}</div>\n'
+    ) if summary_tables else ""
     title = (title or "").strip() or "網路埠拓樸圖"
     floor_tag_html = f'<span class="tag">{_esc(floor_tag)}</span>' if (floor_tag or "").strip() else ""
     footer_text = (footer or "").strip() or f"{_COMPANY2} 允碩整合集創 ｜ 產製時間：{datetime.now().strftime('%Y-%m-%d %H:%M')}"
@@ -411,7 +417,7 @@ def build_topology_only_html(data: dict, title: str = "", floor_tag: str = "", f
         '  body{font-family:"Microsoft JhengHei","PMingLiU",serif;font-size:10.5px;color:#0A0A0A;line-height:1.5;background:#fff}\n'
         "  #root{padding:20px 24px}\n"
         '  @page{size:A4 portrait;margin:10mm;@bottom-center{content:counter(page);font-family:Arial,sans-serif;font-size:9px;color:#888}}\n'
-        "  @media print{html,body{margin:0;padding:0;background:#fff}tr{page-break-inside:avoid}}\n"
+        "  @media print{html,body{margin:0;padding:0;background:#fff}tr{page-break-inside:avoid}table{page-break-inside:avoid;break-inside:avoid}}\n"
         "  .accent-bar{height:3px;background:#0A0A0A;margin-bottom:12px}\n"
         "  .header{display:flex;justify-content:space-between;align-items:baseline;padding-bottom:10px;border-bottom:1px solid #0A0A0A;margin-bottom:16px;gap:12px;flex-wrap:wrap}\n"
         "  .co-name{font-size:12px;font-weight:700;letter-spacing:.06em;color:#888;font-family:Arial,sans-serif}\n"
@@ -419,11 +425,13 @@ def build_topology_only_html(data: dict, title: str = "", floor_tag: str = "", f
         '  .tag{display:inline-block;margin-left:10px;font-family:Consolas,monospace;font-weight:700;font-size:12px;background:#0A0A0A;color:#fff;padding:3px 10px;border-radius:6px;vertical-align:middle}\n'
         "  .topo-wrap{page-break-inside:avoid;break-inside:avoid;margin-bottom:14px}\n"
         "  .topo-wrap svg{max-width:100%;height:auto;display:block}\n"
-        '  .section-label{font-size:9px;font-family:Arial,sans-serif;letter-spacing:.1em;text-transform:uppercase;color:#888;font-weight:600;margin:14px 0 6px;display:flex;align-items:center;gap:8px}\n'
-        '  .section-label::after{content:"";flex:1;height:1px;background:#EDEAE4}\n'
-        "  table{width:100%;border-collapse:collapse;margin-bottom:10px;table-layout:fixed}\n"
+        "  h2{font-weight:900;font-size:14px;margin:18px 0 8px;color:#0A0A0A}\n"
+        "  .tbl-wrap{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px}\n"
+        "  table{width:100%;border-collapse:collapse;font-size:9.5px;background:#fff;border:1px solid #E5E7EB;border-radius:8px;overflow:hidden;table-layout:fixed}\n"
+        "  caption{caption-side:top;text-align:left;font-weight:700;font-size:10px;padding:0 0 6px 2px;color:#0A0A0A}\n"
         "  thead th{background:#0A0A0A;color:#F5F4F0;padding:5px 6px;text-align:left;font-size:9px;font-weight:500;font-family:Arial,sans-serif;word-break:break-all}\n"
         "  tbody td{padding:4px 6px;border-bottom:1px solid #EDEAE4;font-size:9.5px;word-break:break-all}\n"
+        "  tbody tr:last-child td{border-bottom:none}\n"
         "  tbody tr:nth-child(even) td{background:#FAFAF8}\n"
         "  .footer{text-align:center;font-size:9px;color:#888;margin-top:18px;padding-top:10px;border-top:1px solid #EDEAE4;font-family:Arial,sans-serif}\n"
         "</style>\n</head>\n<body>\n<div id=\"root\">\n"
@@ -431,7 +439,7 @@ def build_topology_only_html(data: dict, title: str = "", floor_tag: str = "", f
         f'<div class="header">\n  <div class="co-name">{_esc(_COMPANY)}　{_esc(_COMPANY2)}</div>\n'
         f'  <div class="doc-title">{_esc(title)}{floor_tag_html}</div>\n</div>\n'
         f'<div class="topo-wrap">{topo_svg}</div>\n'
-        f"{summary_html}\n"
+        f"{summary_block}"
         f'<div class="footer">{_esc(footer_text)}</div>\n'
         "</div>\n</body>\n</html>"
     )

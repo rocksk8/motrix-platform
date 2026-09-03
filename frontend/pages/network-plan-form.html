@@ -475,6 +475,7 @@ function networkPlanForm() {
         { key: 'portsCopper', label: 'RJ45 埠數', type: 'number', showIf: r => r.category === '交換器' },
         { key: 'portsSfp', label: 'SFP 埠數', type: 'number', showIf: r => r.category === '交換器' },
         { key: 'poe', label: 'PoE 供電', type: 'checkbox', showIf: r => r.category === '交換器' },
+        { key: 'portLayout', label: '拓樸圖埠位排列', type: 'select', options: ['雙排交錯', '單排橫向'], showIf: r => r.category === '交換器' },
       ]},
       { key: 'vlans', label: 'VLAN 規劃', columns: [
         { key: 'vlanId', label: 'VLAN ID', type: 'number' },

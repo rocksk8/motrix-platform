@@ -227,3 +227,73 @@ def test_pdf_export_embeds_topology_when_switches_present(client, make_user):
     html = npe.build_plan_html(plan)
     assert "網路拓樸圖" in html
     assert "<svg" in html
+
+
+# ── 2026-09-04：埠位排列樣式（單排橫向 vs 預設雙排交錯）──────────────────────
+
+def test_single_row_layout_places_same_row_ports_side_by_side():
+    sw = dict(name="SW-1row", copper=4, sfp=0, layout="1row", title="SW-1row", ports={})
+    _, geo = topo._render_faceplate(0, 0, sw)
+    p1 = geo["port_xy"]("cu", 1)
+    p2 = geo["port_xy"]("cu", 2)
+    assert p1["top"] == p2["top"]  # 單排：同一列
+    assert p1["cx"] != p2["cx"]    # 不同欄（左右並排）
+
+
+def test_default_two_row_layout_places_odd_even_on_different_rows():
+    sw = dict(name="SW-2row", copper=4, sfp=0, title="SW-2row", ports={})  # 不設 layout，預設雙排交錯
+    _, geo = topo._render_faceplate(0, 0, sw)
+    p1 = geo["port_xy"]("cu", 1)
+    p2 = geo["port_xy"]("cu", 2)
+    assert p1["top"] != p2["top"]  # 雙排交錯：port1/2 不同列
+    assert p1["cx"] == p2["cx"]    # 同一欄（一上一下）
+
+
+def test_build_topology_svg_wires_port_layout_from_device():
+    data = {
+        "devices": [{"name": "SW-A", "category": "交換器", "portsCopper": 8, "portsSfp": 0, "portLayout": "單排橫向"}],
+        "switchPorts": [{"device": "SW-A", "portNo": "1", "endpoint": "x"}],
+    }
+    r = topo.build_topology_svg(data)
+    assert r["html"] is not None
+    assert r["warnings"] == []
+
+
+# ── 2026-09-04：文字對照表（每台交換器一張 <table><caption>，呼叫端負責用
+#    固定兩欄 CSS Grid 包起來自動兩兩並排——比照使用者提供的原始個案腳本
+#    b1f_topology.py 實際輸出 B1F_topology.html 的展示方式）─────────────────
+
+def test_text_summary_returns_one_table_per_switch_in_order():
+    data = {
+        "devices": [
+            {"name": "SW-A", "category": "交換器", "portsCopper": 4, "portsSfp": 0},
+            {"name": "SW-B", "category": "交換器", "portsCopper": 4, "portsSfp": 0},
+        ],
+    }
+    html = topo.build_topology_text_summary_html(data)
+    assert html.count("<table>") == 2
+    assert html.count("<caption>") == 2
+    assert html.index("SW-A") < html.index("SW-B")
+
+
+def test_text_summary_single_switch_returns_one_table():
+    data = {"devices": [{"name": "SW-A", "category": "交換器", "portsCopper": 4, "portsSfp": 0}]}
+    html = topo.build_topology_text_summary_html(data)
+    assert html.count("<table>") == 1
+
+
+def test_build_topology_only_html_wraps_tables_in_two_column_grid():
+    """呼叫端（build_topology_only_html）負責把逐台交換器的表格放進固定兩欄
+    CSS Grid，並加上「埠位對照表 Port Assignment」標題，比照參考的原始腳本
+    輸出格式；瀏覽器自動兩兩並排、自動換行，不需要程式手動配對。"""
+    import network_plan_export as npe
+    data = {
+        "devices": [
+            {"name": "SW-A", "category": "交換器", "portsCopper": 4, "portsSfp": 0},
+            {"name": "SW-B", "category": "交換器", "portsCopper": 4, "portsSfp": 0},
+        ],
+    }
+    html = npe.build_topology_only_html(data, title="測試", floor_tag="", footer="")
+    assert "埠位對照表 Port Assignment" in html
+    assert "grid-template-columns:minmax(0,1fr) minmax(0,1fr)" in html
+    assert html.count("<table>") == 2
