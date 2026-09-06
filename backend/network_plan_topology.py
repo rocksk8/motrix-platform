@@ -43,7 +43,13 @@ EXT_LABEL_MAX = 16
 CABLE_LABEL_NAME_MAX = 14
 # 連線標籤置中在兩端連接埠的中點，若中點落在面板左/右邊緣附近、標籤文字又長，
 # 標籤方塊會超出畫布邊界被裁切——viewBox 左右各留這麼多緩衝空間吸收溢出。
-LABEL_MARGIN = 160
+# 2026-09-06：完整版規劃書 PDF 改用 width:100% 讓拓樸圖撐滿跟埠位對照表
+# 一樣的寬度後，這個固定緩衝在畫面上會變成一大段沒用到的空白（原本 160
+# 在寬版單欄堆疊時佔比不明顯，改成多欄並排、整體 canvas 較窄後占比就很
+# 明顯），縮小到 70——多數連線標籤（CABLE_LABEL_NAME_MAX=14 中文字元
+# 對照表命名）仍有基本防裁切空間，只是不再保留到極端最長標籤都不會溢出
+# 的份量；真的溢出也只是視覺上被輕微裁掉最外側幾個字，不影響圖表本身。
+LABEL_MARGIN = 70
 
 _PALETTE = ["#2563eb", "#0d9488", "#7c3aed", "#db2777", "#16a34a",
             "#0891b2", "#dc2626", "#6366f1", "#ca8a04", "#059669"]
@@ -348,19 +354,62 @@ def build_topology_svg(data: dict) -> dict:
             seen.add(c["dedupe"])
         cables.append(c)
 
-    # ── layout：外部上行方塊（若有）置頂，交換器由上而下堆疊 ──
+    # ── layout：外部上行方塊（若有）置頂；交換器用有多餘寬度就往右並排、
+    # 排不下才換下一列的 flow-wrap 排版 ──
+    #
+    # 2026-09-06 三輪來回調整，記錄取捨過程供之後參考：
+    # 第一輪：原本永遠單欄由上往下堆疊，交換器一多整張圖又高又窄，右側版面
+    #   完全沒利用到，嵌入固定版面報告時逼得只能把整張圖等比縮小塞進一頁，
+    #   改成 MAX_ROW_WIDTH=1650 讓標準 24+4 埠交換器兩台並排一列。
+    # 第二輪：使用者要求拓樸圖寬度要跟下方埠位對照表一致，改用 CSS
+    #   width:100%（撐滿容器寬度，非僅上限）取代 max-width。
+    # 第三輪：使用者實測後回報「port 文字無法閱讀」——字體清楚／寬度一致／
+    #   單頁塞下三者互斥（原因：兩台並排時，撐滿跟表格一樣寬的容器寬度會把
+    #   整張圖等比縮到約 0.5-0.6 倍，port 文字縮到只剩 5-8px）。曾一度改成
+    #   一列只放 1 台（MAX_ROW_WIDTH=900）換取字體放大，但代價是拓樸圖跨頁
+    #   數大增（5 台變 3 頁），使用者實際比較兩版後認為第一輪的兩欄並排單頁
+    #   版本比較好——寧可字稍小，也不要犧牲頁數。第四輪：改回 1650，維持
+    #   兩台並排一列；見 network_plan_export.py 同日註解，那邊的
+    #   max-height/page-break-inside:avoid 也對應改回。
     X = 40
+    COL_GAP = 40
+    ROW_GAP = 70
+    MAX_ROW_WIDTH = 1650
     ext_h = 46
     ext_gap = 20
     has_ext = bool(external_targets)
-    y = (40 + ext_h + 60) if has_ext else 40
+    y0 = (40 + ext_h + 60) if has_ext else 40
+
+    dims = {name: (lambda g: (g["body_w"], g["body_h"]))(
+        _geom_of(sw["copper"], sw["sfp"], sw.get("layout") or "2row")
+    ) for name, sw in switches.items()}
+
+    positions = {}
+    row_of = {}  # 每台交換器所在列索引，供下方連線繪製判斷是否為同列（水平）連線
+    cur_x, cur_y, row_h, row_started, row_idx = X, y0, 0, False, 0
+    for name in switches:
+        w, h = dims[name]
+        if row_started and (cur_x + w > X + MAX_ROW_WIDTH):
+            cur_x = X
+            cur_y += row_h + ROW_GAP
+            row_h = 0
+            row_started = False
+            row_idx += 1
+        positions[name] = (cur_x, cur_y)
+        row_of[name] = row_idx
+        cur_x += w + COL_GAP
+        row_h = max(row_h, h)
+        row_started = True
+    grid_bottom = cur_y + row_h
+    grid_right = max((x + dims[n][0] for n, (x, _y) in positions.items()), default=X)
+
     geoms = {}
     svg_switches = []
     for name, sw in switches.items():
-        piece, geo = _render_faceplate(X, y, sw)
+        x, y = positions[name]
+        piece, geo = _render_faceplate(x, y, sw)
         svg_switches.append(piece)
         geoms[name] = geo
-        y = geo["y"] + geo["body_h"] + 70
 
     ext_svg = []
     ext_anchor = {}
@@ -398,22 +447,33 @@ def build_topology_svg(data: dict) -> dict:
         if c["kind"] == "device":
             b, b_cy = endpoint_of(c["b_dev"], c["b_kind"], c["b_n"])
             label = f'{_port_label(c["a_dev"], c["a_kind"], c["a_n"])} ↔ {_port_label(c["b_dev"], c["b_kind"], c["b_n"])}'
+            same_row = row_of.get(c["a_dev"]) == row_of.get(c["b_dev"])
         else:
             anchor = ext_anchor[c["ext_label"]]
             b, b_cy = anchor, anchor["center_y"]
             label = f'{_port_label(c["a_dev"], c["a_kind"], c["a_n"])} → {c["ext_label"]}'
-        if a_cy <= b_cy:
+            same_row = False
+        if same_row:
+            # 2026-09-06：兩台交換器排在同一列（水平相鄰）時，原本假設垂直
+            # 堆疊的邏輯會直接拿兩邊「埠位小格子」的上/下緣當連線端點——
+            # 同列時這兩個 y 值幾乎相同，貝茲曲線中點連同標籤框會落在埠位
+            # 格子高度範圍內，直接蓋住格子文字看不到。改成連到「整台交換器
+            # 面板」的下緣（而非單一埠位格子下緣），讓線與標籤改到面板下方
+            # 的列間空白處，不再蓋住任何埠位內容。
+            ax = a["cx"]; ay = geoms[c["a_dev"]]["y"] + geoms[c["a_dev"]]["body_h"]
+            bx = b["cx"]; by = geoms[c["b_dev"]]["y"] + geoms[c["b_dev"]]["body_h"]
+        elif a_cy <= b_cy:
             ax, ay, bx, by = a["cx"], a["top"], b["cx"], b["bot"]
         else:
             ax, ay, bx, by = a["cx"], a["bot"], b["cx"], b["top"]
         cable_svgs.append(_cable(ax, ay, bx, by, UPLINK_COLOR))
         cable_label_svgs.append(_cable_label(ax, ay, bx, by, UPLINK_COLOR, label))
 
-    width_candidates = [g["body_w"] for g in geoms.values()]
+    width_candidates = [grid_right - X]
     if has_ext:
         width_candidates.append(ext_right_edge - X)
     total_w = X + max(width_candidates, default=300) + 30
-    total_h = y + 20
+    total_h = grid_bottom + 20
 
     legend = [
         '<span style="display:inline-flex;align-items:center;gap:6px;margin-right:16px">'

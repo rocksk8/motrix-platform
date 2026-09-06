@@ -293,18 +293,24 @@ def build_plan_html(plan: dict) -> str:
         '<div class="section-label" style="margin-top:14px">埠位對照表 Port Assignment</div>'
         f'<div class="tbl-wrap">{topo_summary}</div>'
     ) if topo_summary else ''
-    # 2026-09-06 第二輪修復：使用者實測完整版 PDF 後回報「仍然一樣」——
-    # 捲軸 bug／缺埠位對照表都已修好，但拓樸圖本身還是常常跨好幾頁破碎（標題
-    # 孤伶伶佔一頁、交換器分散到後面幾頁），因為 build_topology_svg() 目前只會
-    # 單欄由上往下堆疊交換器，台數一多整張圖就遠比一頁還高，光靠 max-width
-    # 等比縮寬治標不治本（高度完全沒變）。改用 max-height 同時限制寬高等比
-    # 縮小（CSS 對有 width/height 屬性的 SVG 這種 replaced element，
-    # max-width/max-height 兩個同時設定時會自動取兩者中更嚴格的縮放比例，
-    # 是標準行為不是 hack），確保一般規模的規劃書（幾台到十幾台交換器）
-    # 拓樸圖能整個塞進一頁，不再跨頁；台數多到即使縮到很小仍裝不下的極端
-    # 案例，才會退回原本的自然分頁流程（不強制切版，只是不保證單頁）。
-    # max-height 抓 640px 是抓 A4 橫向可印刷高度扣掉表頭/meta/標題後的
-    # 保守可用空間（見下方 svg CSS）。
+    # 2026-09-06 拓樸圖嵌入完整版規劃書的排版，經過四輪來回調整，記錄取捨
+    # 過程供之後參考（同輪對話，network_plan_topology.py 的 MAX_ROW_WIDTH
+    # 一併調整，見該檔案同日註解）：
+    # 第一/二輪：修捲軸 bug（overflow-x:auto 誤觸發垂直捲軸畫進 PDF）、
+    #   補上文字版埠位對照表、拓樸圖改多欄並排壓低整體高度。
+    # 第三輪：使用者要求拓樸圖寬度要跟下方埠位對照表一致，CSS 改用
+    #   width:100%（強制撐滿，不是上限）取代 max-width。
+    # 第四輪：使用者實測後回報「port 文字無法閱讀」——字體清楚／寬度
+    #   一致／單頁塞下三者互斥（多欄並排時，撐滿跟表格一樣寬的容器會把
+    #   整張圖等比縮到只剩 0.5-0.6 倍，port 文字縮到 5-8px）。曾一度改成
+    #   一列只放 1 台＋拿掉 max-height 換取字體放大，但拓樸圖跨頁數大增
+    #   （5 台交換器變 3 頁）。使用者實際比較兩版後認為兩欄並排單頁版本
+    #   比較好——寧可字稍小，也不要犧牲頁數。第五輪：改回兩欄並排
+    #   （MAX_ROW_WIDTH=1650，見 network_plan_topology.py 同日註解），
+    #   svg CSS 加回 max-height:640px，這裡也加回 page-break-inside:avoid
+    #   包住標題+圖（兩欄並排＋max-height 縮放後內容本來就能塞進一頁，
+    #   這時 avoid 才有實質保護效果，不會再落入「明知裝不下硬要求」的
+    #   矛盾）。
     topo_html = (
         '<div style="page-break-inside:avoid;break-inside:avoid">'
         '<div class="section-label">網路拓樸圖</div>'
@@ -348,7 +354,7 @@ def build_plan_html(plan: dict) -> str:
         "  .meta span{color:#888;font-family:Arial,sans-serif;font-size:9.5px}\n"
         '  .section-label{font-size:9px;font-family:Arial,sans-serif;letter-spacing:.1em;text-transform:uppercase;color:#888;font-weight:600;margin:12px 0 6px;display:flex;align-items:center;gap:8px;page-break-after:avoid;break-after:avoid-page}\n'
         '  .section-label::after{content:"";flex:1;height:1px;background:#EDEAE4}\n'
-        "  svg{max-width:100%;max-height:640px;width:auto;height:auto;display:block}\n"
+        "  svg{width:100%;max-height:640px;height:auto;display:block}\n"
         "  .tbl-wrap{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;margin-bottom:10px}\n"
         "  .tbl-wrap table{margin-bottom:0}\n"
         "  .tbl-wrap caption{caption-side:top;text-align:left;font-weight:700;font-size:10px;padding:0 0 6px 2px;color:#0A0A0A}\n"
