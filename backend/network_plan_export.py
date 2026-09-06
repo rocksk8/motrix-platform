@@ -293,14 +293,23 @@ def build_plan_html(plan: dict) -> str:
         '<div class="section-label" style="margin-top:14px">埠位對照表 Port Assignment</div>'
         f'<div class="tbl-wrap">{topo_summary}</div>'
     ) if topo_summary else ''
-    # 標題跟圖不再用 page-break-inside:avoid 硬包在一起——拓樸圖常常比一整頁
-    # 還高，對「明知裝不下」的內容硬要求 avoid 只會讓瀏覽器把標題也一起擠成
-    # 自己孤伶伶佔一整頁再換頁畫圖，反而更浪費版面；改用 .section-label 統一
-    # 套用 break-after:avoid（見下方樣式表，其餘章節標題同樣受惠），讓標題
-    # 沒有足夠空間時直接跟著後續內容一起換頁，不會自己單獨留在前一頁。
+    # 2026-09-06 第二輪修復：使用者實測完整版 PDF 後回報「仍然一樣」——
+    # 捲軸 bug／缺埠位對照表都已修好，但拓樸圖本身還是常常跨好幾頁破碎（標題
+    # 孤伶伶佔一頁、交換器分散到後面幾頁），因為 build_topology_svg() 目前只會
+    # 單欄由上往下堆疊交換器，台數一多整張圖就遠比一頁還高，光靠 max-width
+    # 等比縮寬治標不治本（高度完全沒變）。改用 max-height 同時限制寬高等比
+    # 縮小（CSS 對有 width/height 屬性的 SVG 這種 replaced element，
+    # max-width/max-height 兩個同時設定時會自動取兩者中更嚴格的縮放比例，
+    # 是標準行為不是 hack），確保一般規模的規劃書（幾台到十幾台交換器）
+    # 拓樸圖能整個塞進一頁，不再跨頁；台數多到即使縮到很小仍裝不下的極端
+    # 案例，才會退回原本的自然分頁流程（不強制切版，只是不保證單頁）。
+    # max-height 抓 640px 是抓 A4 橫向可印刷高度扣掉表頭/meta/標題後的
+    # 保守可用空間（見下方 svg CSS）。
     topo_html = (
+        '<div style="page-break-inside:avoid;break-inside:avoid">'
         '<div class="section-label">網路拓樸圖</div>'
         f'<div>{topo_svg}</div>'
+        '</div>'
         f'{topo_summary_html}'
     ) if topo_svg else ""
     sections_html = "".join(
@@ -339,7 +348,7 @@ def build_plan_html(plan: dict) -> str:
         "  .meta span{color:#888;font-family:Arial,sans-serif;font-size:9.5px}\n"
         '  .section-label{font-size:9px;font-family:Arial,sans-serif;letter-spacing:.1em;text-transform:uppercase;color:#888;font-weight:600;margin:12px 0 6px;display:flex;align-items:center;gap:8px;page-break-after:avoid;break-after:avoid-page}\n'
         '  .section-label::after{content:"";flex:1;height:1px;background:#EDEAE4}\n'
-        "  svg{max-width:100%;height:auto;display:block}\n"
+        "  svg{max-width:100%;max-height:640px;width:auto;height:auto;display:block}\n"
         "  .tbl-wrap{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;margin-bottom:10px}\n"
         "  .tbl-wrap table{margin-bottom:0}\n"
         "  .tbl-wrap caption{caption-side:top;text-align:left;font-weight:700;font-size:10px;padding:0 0 6px 2px;color:#0A0A0A}\n"
