@@ -5,7 +5,7 @@
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="../static/favicon.png">
-  <title>客戶日誌 — MOTRIX 營運管理系統</title>
+  <title>客戶日誌 — MOTRIX 專案管理系統</title>
   <script src="../static/auth-guard.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
@@ -603,7 +603,7 @@
           const list = await r.json()
           this.customer = list.find(c => String(c.id) === String(cid)) || null
           if (!this.customer) { location.href = 'customers.html'; return }
-          document.title = this.customer.name + ' 日誌 — MOTRIX 營運管理系統'
+          document.title = this.customer.name + ' 日誌 — MOTRIX 專案管理系統'
           this.visits = (this.customer.visits || []).map(v => this.migrateVisit(v))
         } catch {}
       },

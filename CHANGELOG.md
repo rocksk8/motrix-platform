@@ -5,6 +5,19 @@
 
 ---
 
+### 2026-09-06 — 品牌文字補漏：全站頁面 `<title>` 與 Email 頁尾（DB 無異動）
+
+- 使用者實際打開網頁後發現分頁標題仍顯示舊字樣：先前那輪「營運系統→專案管理系統」
+  只精確比對「營運系統」四字，沒抓到實際散落在全站的「**營運管理系統**」（中間多了
+  「管理」二字，不是同一組連續子字串，grep 沒命中）
+- 全面掃描 git 已追蹤檔案（`git ls-files`，排除 `rollback_snapshots/` 等備份快照
+  目錄，避免誤改歷史備份），共 46 個檔案、53 處字樣：全站 44 個前端頁面的
+  `<title>` 分頁標題、2 處動態 `document.title`（`customer-log.html`／
+  `supplier-log.html`）、`email_notify.py` 5 處信件頁尾「本郵件由 MOTRIX
+  營運管理系統自動發送」、`docs/MOTRIX_ERP_System_Plan.md` 文件標題，全部統一
+  改為「MOTRIX 專案管理系統」
+- 全套 pytest 389/389 全過（純文字替換，不影響任何邏輯）
+
 ### 2026-09-06 — 快速拓樸圖 PDF 格式/分頁改回比照 b1f_topology.py 原始腳本（DB 無異動）
 
 - 使用者要求「輸出的格式跟分頁方式要完全一樣」：`build_topology_only_html()` 版面

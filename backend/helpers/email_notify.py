@@ -77,7 +77,7 @@ def _build_html(title: str, badge_text: str, badge_color: str,
         f'{title} <span class="badge" style="background:{badge_color}">{badge_text}</span></div>'
         f'{intro_html}{row_html}{note_html}'
         f'<a href="{link}" class="btn" style="display:inline-block;margin-top:22px;padding:10px 22px;background:#1D4ED8;color:#ffffff !important;border-radius:7px;text-decoration:none;font-size:14px;font-weight:600">{button_text}</a>'
-        f'<div class="foot">本郵件由 MOTRIX 營運管理系統自動發送，請勿直接回覆。'
+        f'<div class="foot">本郵件由 MOTRIX 專案管理系統自動發送，請勿直接回覆。'
         f'如有疑問，請聯絡系統管理員。</div>'
         f'</div></body></html>'
     )
@@ -749,7 +749,7 @@ def notify_daily_task_completed(task_id: int, title: str, task_date: str,
             f'font-size:12px;color:#15803D;font-weight:600;margin-bottom:4px">修改後</div>'
             f'<div class="val"><strong style="white-space:pre-wrap">{new_text}</strong></div>'
             f'<a href="{task_page}" class="btn" style="display:inline-block;margin-top:22px;padding:10px 22px;background:#1D4ED8;color:#ffffff !important;border-radius:7px;text-decoration:none;font-size:14px;font-weight:600">前往查看回報</a>'
-            f'<div class="foot">本郵件由 MOTRIX 營運管理系統自動發送，請勿直接回覆。如有疑問，請聯絡系統管理員。</div>'
+            f'<div class="foot">本郵件由 MOTRIX 專案管理系統自動發送，請勿直接回覆。如有疑問，請聯絡系統管理員。</div>'
             f'</div></body></html>'
         )
         _async_send(to, f"【MOTRIX】工作事項回報已修改 — {name} · {title}（{task_date}）", html)
@@ -1021,7 +1021,7 @@ def notify_daily_task_edited(
         f'font-size:12px;color:#5B21B6;font-weight:600">異動欄位</div>'
         f'{change_lines}'
         f'<a href="{task_page}" class="btn" style="display:inline-block;margin-top:22px;padding:10px 22px;background:#1D4ED8;color:#ffffff !important;border-radius:7px;text-decoration:none;font-size:14px;font-weight:600">前往查看工作事項</a>'
-        f'<div class="foot">本郵件由 MOTRIX 營運管理系統自動發送，請勿直接回覆。'
+        f'<div class="foot">本郵件由 MOTRIX 專案管理系統自動發送，請勿直接回覆。'
         f'如有疑問，請聯絡系統管理員。</div>'
         f'</div></body></html>'
     )
@@ -1302,7 +1302,7 @@ def notify_monthly_report(period_label: str, period_str: str,
         f'<div class="lbl">報表期間</div><div class="val">{period_label}</div>'
         f'<div class="lbl">附件格式</div><div class="val">Excel（.xlsx）+ PDF</div>'
         f'<a href="{base}/pages/reports.html" class="btn" style="display:inline-block;margin-top:22px;padding:10px 22px;background:#1D4ED8;color:#ffffff !important;border-radius:7px;text-decoration:none;font-size:14px;font-weight:600">前往線上報表系統</a>'
-        f'<div class="foot">本郵件由 MOTRIX 營運管理系統每月自動寄送，請勿直接回覆。'
+        f'<div class="foot">本郵件由 MOTRIX 專案管理系統每月自動寄送，請勿直接回覆。'
         f'如有疑問，請聯絡系統管理員。</div>'
         f'</div></body></html>'
     )
@@ -1361,7 +1361,7 @@ def notify_module_activity(module_label: str, action_label: str,
         f'<a href="{link}" class="btn" style="display:inline-block;margin-top:22px;'
         f'padding:10px 22px;background:#1D4ED8;color:#ffffff !important;border-radius:7px;'
         f'text-decoration:none;font-size:14px;font-weight:600">前往系統查看</a>'
-        f'<div class="foot">本郵件由 MOTRIX 營運管理系統自動發送，請勿直接回覆。</div>'
+        f'<div class="foot">本郵件由 MOTRIX 專案管理系統自動發送，請勿直接回覆。</div>'
         f'</div></body></html>'
     )
     _async_send(to, f"[MOTRIX] {module_label} — {action_label}", html)
