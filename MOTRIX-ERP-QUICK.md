@@ -898,10 +898,13 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
 | PUT | /network-plans/{plan_id} | 更新 |
 | PATCH | /network-plans/{plan_id}/status | 狀態切換 |
 | DELETE | /network-plans/{plan_id} | 刪除 |
-| GET | /network-plans/{plan_id}/export/excel \| /export/pdf | 匯出（10 分頁 Excel／Edge PDF） |
+| GET | /network-plans/{plan_id}/export/excel \| /export/pdf | 匯出（10 分頁 Excel／Edge PDF，PDF 自動內嵌拓樸圖，見下） |
 | POST | /network-plans/{plan_id}/import/excel | 匯入（分頁名稱＋欄位表頭比對，無法辨識分頁於 warnings 明確提示） |
+| POST | /network-plans/{plan_id}/topology-preview | 拓樸圖即時預覽（不落地存檔），2026-09-04 新增，見 §12 同日條目 |
 
 可綁 `quote_no` 也可獨立建立；**與 §7.6/§7.7 的「網路架構選型導覽」`netarch_guide` 是完全不同的兩個模組**，勿混淆。
+
+**拓樸圖（2026-09-04）**：`backend/network_plan_topology.py::build_topology_svg()` 依「設備清單」＋「交換器 Port 對應」自動繪圖，PDF 匯出自動內嵌。獨立無狀態的「快速拓樸圖產生器」（不填規劃書、單純產圖）走另一組路由 `routers/network_plans_quick.py`（`POST /api/network-plans-quick/preview` \| `/pdf`，刻意用 `-quick` 前綴避免跟本節 `{plan_id}` 參數化路由衝突），對應頁面 `frontend/pages/topology-quick.html`，資料只存瀏覽器 localStorage、不寫入 `network_plans` 表。
 
 ### §7.13 · 簽核代理人（DB v67，2026-08-28）
 
@@ -1102,29 +1105,23 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
 
-### 2026-09-02 — 營運報表模組反派/國稅局視角複查（DB 無異動）
+### 2026-09-06 — 完整版規劃書拓樸圖三輪修復＋品牌文字統一「MOTRIX 專案管理系統」（DB 無異動）
 
-- **背景**：使用者要求分別以「反派/專業視角」「公司內部＋台灣國稅局角度」複查 `reports.py`（營運報表模組），共分三輪修復，詳細成因與踩坑見 `helpers/quotations.py::validate_invoice_no()`/`payment_item_amounts()`、`reports.py::_collect_tax_invoices()`/`_round_half_up()` 各自 docstring。
-- **第一輪（安全性/穩健性 5 項，已套用正式機）**：①Excel 匯出補上公式注入防護（CWE-1236）——`_set_row()` 統一套用新增的 `_xl_safe()`，客戶名稱/備注/發票號碼等自由文字開頭若是 `=+-@` 會被中和成純文字，不會被 openpyxl 寫成真公式。②`GET /api/settings/operating-targets` 原本完全沒有角色檢查，任何登入使用者（含明文規定不可看財務的 engineer/viewer）都能讀取年度營收/毛利/業務員配額目標，補上 admin+ 檢查。③《月支出》「其他支出」月度加總過去用精算完結日期分月，跟明細顯示的憑證日期（`expenseDate`）對不上，改成兩者統一用 `expenseDate`（缺漏才退回完結日期）。④`period` 參數格式錯誤（如 `2026-13`）會丟未捕捉例外變 500，補上驗證回 400。⑤業務員績效/目標達成率過去用可變動的顯示名稱字串比對，業務員改名後歷史業績會被靜默拆散，改用穩定的 `sales_person_id`（`_collect()` case dict 新增 `salesPersonId`）。
-- **第二輪（財務正確性 4 項，已套用正式機）**：①**最嚴重**——`taxExempt`（已核准稅額沖銷，一種內部應收帳款減讓）過去在稅務匯出/T100 傳票裡被當成「這筆交易稅額=0」，但走到這段邏輯的品項一定已經開立過統一發票、已經對國稅局產生銷項稅額，沖銷是開立之後才發生的內部決定，不會、也不能追溯改變已確定的法定稅捐義務。已改用 `payment_item_amounts(..., apply_tax_exempt=False)` 取得原始開立金額，永遠照標準 5% 拆稅公式計算，taxExempt 對「客戶還欠多少」（AR帳齡/收款率）的影響不受影響。②新增統一發票號碼格式驗證（2碼英文字軌＋8碼數字）＋跨案件重複偵測（`validate_invoice_no()`），先接進 `mark_payment()`。③稅額計算改用 `_round_half_up()`（Decimal ROUND_HALF_UP），符合統一發票四捨五入慣例，不用 Python 內建的銀行家捨入。④營運報表 Excel/PDF、銷項發票清單、銀行對帳單比對四支匯出端點補上 `_audit()` 稽核記錄（過去完全沒有，是全公司最敏感的財務資料匯出卻查不到是誰匯出的）。**提醒**：若過去曾拿銷項發票清單/T100 傳票申報過含稅額沖銷的期別，那些期別可能低報了銷項稅額，需自行跟記帳士確認是否要補正，系統無法判斷是否已實際申報，這部分不會自動處理——**使用者確認目前尚未申報過**，無需補正。
-- **第三輪（發票開立日期，同輪追加，尚待套用正式機）**：複查時發現 `mark_payment()` 只是出納快速登錄（`receivables.html`／`reports.html` 出納頁籤）在用，案件管理財務Tab 整包存檔 `update_case_record()` 才是使用者實際填發票號碼最常用的路徑，卻完全沒接到②的驗證——已補上（改用品項 `id` 比對排除自己這筆，不能用陣列位置，款項期別本來就能自由新增/刪除/排序）。另新增統一發票「開立日期」欄位 `invoiceDate`（直接存 `data_json.caseRecord.payment.items[].invoiceDate`，無需 migration）：依加值型及非加值型營業稅法，發票歸屬哪個申報期別看開立日不是看收款日，`_collect_tax_invoices()` 的 year/month 篩選改用這個欄位（缺漏才退回收款日期，不影響舊資料）；**T100 現金基礎傳票的傳票日期刻意維持用收款日期不變**（`_collect_tax_invoices()` 回傳的 `date` 欄位不變，`accounting_export.py` 不用改）——現金基礎會計要跟銀行實際入帳日一致，不能改用開立日期。前端：`case-management.html` 財務Tab、`reports.html` 出納「登錄發票」Modal 都新增對應輸入欄位；`cashier.py::_receivable_queue()` 補上回傳這個欄位。
-- **測試**：新增 `test_reports_review_fixes_2026_09_02.py`（15題）／`test_reports_tax_compliance_2026_09_02.py`（10題）／`test_invoice_date_and_case_record_validation_2026_09_02.py`（9題），另修正 3 個舊測試裡因新規則而失效的假資料（含連字號的假發票號碼、taxExempt=0 的舊版錯誤預期），pytest 全過。
-- **部署**：第一＋二輪 commit `bb911d8` 已套用正式機（使用者確認）；第三輪（發票開立日期）為同輪追加尚未 commit 前的新工作，見下次部署。
+- 品牌顯示文字全面從「營運系統」統一改為「MOTRIX 專案管理系統」：分兩輪掃描共 46 檔案 53 處（44 個前端頁面 `<title>`、2 處動態 `document.title`、`email_notify.py` 5 處信件頁尾、docs 文件標題）——第一輪只精確比對「營運系統」四字漏抓「營運管理系統」（中間多「管理」二字非連續子字串），第二輪全面掃描已追蹤檔案才補齊
+- 完整版「網路架構規劃書」PDF 拓樸圖區塊修復三輪：①修復原生捲軸誤植入 PDF 輸出②一般規模（5台以上交換器）不再跨頁破碎③改成有多餘寬度就多欄並排、排不下才換行，並修正連帶產生的連線標籤蓋住交換器面板 bug；寬度改跟埠位對照表對齊（`width:100%`），縮小連線標籤防裁切緩衝區（160→70px）
+- 使用者實測比較「兩欄並排＋字稍小」vs「一列一台＋字較大但頁數大增（5台交換器 1 頁變 3 頁）」兩版後選定前者，維持單頁塞下優先於字體大小
+- 快速拓樸圖 PDF 格式/分頁改回比照 `b1f_topology.py` 原始腳本
+- pytest 389/389 全過（每輪皆用合成資料＋開發機真實 API 雙重驗證，逐版拿 PDF 實測比對）
 
-### 2026-09-01 — T100（鼎新）傳票批次匯出（新模組，DB 無異動）
+### 2026-09-04 — 網路架構規劃書拓樸圖功能上線＋快速拓樸圖工具
 
-- **背景**：使用者要求對接鼎新 T100，「鼎新有的都做」。討論後確認：T100 API 對接需要貴公司自行申請存取權限，目前沒有真實憑證可測試，貿然串接無法驗證正確性；改做批次匯出成 T100 標準傳票匯入格式，財務用既有匯入功能手動核對匯入，風險小很多且立刻可測試。科目代號規格「先用 T100 公版標準傳票格式打底，科目代號先留空白欄位」（使用者明確選擇，見下）。
-- **設計採現金基礎（cash basis）**：只匯出「錢真的有進出」的事件——收款事件（案件款項明細已填發票號碼且已收款，沿用 `reports.py::_collect_tax_invoices()` 同一份資料源，跟稅務匯出數字保證一致）→ 借銀行存款(含稅) / 貸銷貨收入(未稅) ＋ 貸銷項稅額(稅額)；付款事件（承攬商匯款申請已標記已匯款，沿用 `cashier.py` 出納模組同一份資料源）→ 借承攬商費用(含稅) / 貸銀行存款(含稅)。**刻意排除請款單**（`payment_requests`）——那是對客戶要款的文件，沒有「已收款」狀態，不是真的金流事件，比照 `reports.py::_compute_cash_position()` 既有的排除理由。每筆事件天生借貸平衡，一份匯出同時涵蓋銷項/應付/銀行對帳三個面向，避免三份報表各自資料源、數字對不上。
-- **新檔** `backend/routers/accounting_export.py`：`GET/PUT /api/settings/t100-export-config`（科目代號對照設定，PUT 限 superadmin，GET admin+ 可查；預設全部留白——貴公司財務團隊需自行確認實際科目代號，金額/日期/摘要/來源單號/交易對象等其餘欄位在科目代號填入前就已正確可用）、`GET /api/reports/t100-export/vouchers?start=&end=`（Excel 匯出，欄位：傳票號/傳票日期/傳票別/摘要/科目代號/科目名稱/借方金額/貸方金額/部門別/來源單號/交易對象）。
-- **前端**：`reports.html`「資金水位」分頁新增「T100（鼎新）傳票批次匯出」區塊（日期區間＋匯出按鈕）＋可收合的「科目代號設定」面板（admin+ 可查看，僅 superadmin 可修改），`reports.js` 對應新增 `t100*` 狀態與 `loadT100Config()`/`saveT100Config()`/`exportT100Vouchers()` 方法。
-- **測試**：`backend/tests/test_t100_export_2026_09_01.py`（6題：科目代號預設留白且僅 superadmin 可寫、傳票借貸平衡＋正確排除期間外事件與請款單、需管理員權限、日期區間驗證），pytest 全過（見本輪 commit）。
-- **下次還沒做的**：科目代號目前是空白骨架，需使用者填入實際值才具備直接匯入 T100 的意義；若之後要升級成即時 API 推送，需先向鼎新申請 T100 API 存取權限並在此基礎上擴充，非本輪範圍。尚未執行：正式機套用（依 §15 流程）。
+- 新模組 `network_plan_topology.py::build_topology_svg()`：規劃書設備清單＋交換器 Port 對應明細自動產生拓樸圖 SVG／PDF 內嵌，取代舊個案腳本 `b1f_topology.py` 手動繪製；四種防呆情況（埠號超出範圍/設備名稱重複/連線目標找不到/`linkDevice` 大小寫打錯疑似）回傳 `warnings` 不靜默漏資料，見 §7.12
+- 交換器 Port 對應新增「依設備清單自動產生缺少的埠列」一鍵按鈕；10 個明細分頁改密集網格表格＋新增「貼上 Excel 資料」比對匯入
+- 新增獨立無狀態頁面「快速拓樸圖產生器」（`topology-quick.html`＋`routers/network_plans_quick.py`），**不寫入** `network_plans` 資料表，資料只存瀏覽器 localStorage，對應「不填企劃書、單純產拓樸圖」的用完即丟情境
+- 同日追加三輪：PDF 改 A4 直版＋補文字版埠位對照表＋不被印表分頁切斷；交換器埠位排列樣式可選（雙排交錯/單排橫向）；複查真實 PDF 輸出額外抓到並修復 3 個既有繪圖 bug（文字重疊/標籤被面板遮擋/長名稱被畫布邊界裁切）
+- 測試新增 18 題，388 測試全過；已用真實瀏覽器完整驗證。**這輪視覺類 bug 全靠使用者拿真實 PDF 實測回饋才抓到，之後拓樸圖相關改動建議都產一份真實 PDF 肉眼複查，不要只信 pytest 綠燈**
 
-**2026-09-01（同日更晚）— 料件/設備進貨付款狀態追蹤（DB v70 `stock_batches`）＋納入 T100 匯出：** 使用者要求盤點「其他模組有相應數字」可否併入 T100 匯出。查證發現 `procurement.html`／`parts.py` 完全沒有「進貨是否已付款」這個概念（連欄位都不存在）——這不是匯出模組漏掉，是系統本身從未追蹤這件事，`cash-position` 端點當初就是因此刻意排除料件/設備進貨。使用者確認要做，比照承攬商匯款申請的 `is_paid`/`paid_by`/`paid_at` 模式補上：新表 `stock_batches`（批次層級表頭，`batch_no` 與 `part_no` 天生 1:1，見 `_m070_stock_batches()` docstring），既有批次全部回填但 `is_paid` 一律預設 0（不能假設歷史進貨已付款，財務首次啟用需回頭逐批確認）。`routers/inventory.py`：`create_batch()` 擴充接受 `supplier_id`/`invoice_no`；`list_batches()`/`get_batch()` 擴充回傳付款欄位（`qty`/`total_cost` 仍即時算，不信任表頭快取）；新增 `PUT .../batches/{batch_no}`（編輯供應商/發票/備註）與 `POST .../batches/{batch_no}/paid-toggle`（標記已付款/取消，比照 contractor_payment_vouchers 慣例，重複標記回 409）。`accounting_export.py` 新增第三個事件來源（借料件設備成本／貸銀行存款，新科目代號 `inventoryExpenseAccount`，傳票號前綴 `PC`），與既有 AR/AP 事件共用同一套已匯入確認機制。前端 `inventory.html` 新增「進貨批次」Modal（列表＋供應商/發票編輯＋付款狀態切換），「進貨」Modal 新增供應商下拉＋發票號欄位。新增測試 `test_stock_batch_payment_2026_09_01.py`（6題：表頭寫入、pay/unpay 含 409 guard、需 admin+ 權限、編輯供應商發票、已付款批次流入 T100 匯出並可確認排除、未付款批次不出現）。
-
-**2026-09-01（同日稍晚）— 已匯入確認追蹤（DB v69）＋預覽 UI：** 使用者要求「匯入由財務單位確認，已匯入自動排除」——原本每次匯出都會把符合日期區間的全部事件列出，財務若對同一區間匯出兩次（或區間重疊）會重複列出同一筆事件，有重複匯入 T100 的風險。已改為兩段式：財務先 `GET preview` 預覽本期未確認事件（JSON，reports.html 資金水位分頁新增預覽表格），實際到 T100 匯入後回來 `POST confirm` 整批標記已匯入（新表 `t100_export_confirmations`，DB v69，`UNIQUE(source_type, source_key)` 讓標記動作天生冪等）；標記後的事件之後**永久**不再出現在任何日期區間的匯出/預覽中，直到用 `POST unconfirm` 撤銷。識別碼刻意不用 `_flatten_events_for_excel()` 產生的 AR0001/AP0002 流水號（每次匯出重新編號、不穩定），改用資料本身的穩定鍵：`quotation_payment` 用 `{quote_no}::{invoiceNo}`、`contractor_voucher` 用 `voucher_no`（全域唯一）。重構把原本單一函式 `_build_t100_vouchers()` 拆成事件層級的 `_collect_t100_events()`（供 Excel 攤平/預覽/確認共用同一份篩選邏輯，避免三處各自重寫一遍條件彼此不一致）＋ `_flatten_events_for_excel()`（只在產 Excel 時把事件攤平成借貸分錄列）。新增測試 2 題（確認→排除→撤銷→重新出現的完整流程、preview/confirm 需管理員權限），該檔測試共 6 題，pytest 全過。
-
-> 2026-08-31g（出納整合進營運報表模組）及更早版本已移出本視窗，完整內容見 [`CHANGELOG.md`](CHANGELOG.md)。
+> 2026-09-02（業務開發新增暫擱置狀態＋營運報表反派/國稅局視角複查）及更早版本已移出本視窗，完整內容見 [`CHANGELOG.md`](CHANGELOG.md)。
 
 ## §13 · 目錄結構（精簡，2026-09-01 依實際程式碼盤點更正）
 
