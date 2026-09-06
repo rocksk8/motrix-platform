@@ -5,6 +5,34 @@
 
 ---
 
+### 2026-09-06 — 快速拓樸圖 PDF 格式/分頁改回比照 b1f_topology.py 原始腳本（DB 無異動）
+
+- 使用者要求「輸出的格式跟分頁方式要完全一樣」：`build_topology_only_html()` 版面
+  （CSS 變數、放射漸層背景、`.board` 白卡陰影圓角、h1+徽章式標題列、footer 靠右
+  對齊）逐項比照原始個案腳本 b1f_topology.py 實際輸出，不再沿用規劃書 PDF 那套
+  企業合約書風格
+- **分頁方式取捨**（已與使用者確認）：拿掉 2026-09-04 當時因應印表分頁切斷問題
+  採用的 A4 直版＋`page-break-inside:avoid`，改回原腳本手法——頁尾 `<script>`
+  於 load＋字型 ready 後量測實際渲染尺寸，動態產生剛好等於內容大小的 `@page`
+  （永遠一頁、無頁碼）。代價：匯出的 PDF 頁面尺寸不是標準 A4，直接送實體印表機
+  可能被印表機驅動縮放或裁切，但數位保存/瀏覽器開啟不受影響——已實測驗證匯出
+  PDF 確實只有 1 頁、尺寸為動態值（553.92×1577.04pt）而非 A4 的 595×842pt
+- 型號徽章（`.tag.mod`）改為依實際資料動態算：`build_topology_svg()` 新增回傳
+  `models`／`uniform_ports`，單一型號且所有交換器銅埠/SFP埠數一致時顯示
+  「型號　(N×GbE + M×SFP)」，型號或埠數不一致時只顯示型號、不強加可能失真的
+  埠數字樣（原腳本是寫死文字，此為泛化後的必要調整）
+- 埠位對照表埠號欄位改用等寬字體＋粗體（比照原腳本 `td.port`，純 CSS 選取器
+  達成，未更動 `build_topology_text_summary_html()` 的表格 HTML 結構）
+- 「營運系統」→「專案管理系統」品牌文字（見下則）與本次拓樸圖格式調整為
+  同一輪對話但互不相關的兩件事
+
+### 2026-09-06 — 品牌顯示文字「營運系統」→「專案管理系統」（DB schema 無異動）
+
+- 頂部列標題（`sidebar.js`）、Email 寄件人預設名稱與測試信標題（`email_notify.py`／`system.py`）、
+  Google 行事曆測試事件說明文字（`google_calendar.py`）四處程式碼字樣統一改為「MOTRIX 專案管理系統」
+- 一併更新本機 `system_settings.email_notify.from_name` 已持久化的舊值（僅改資料值，非 schema migration）
+- 「營運報表」（Reports 模組名稱）不在此次調整範圍內，與本次品牌文字變更無關
+
 ### 2026-09-02 — 營運報表模組反派/國稅局視角複查（DB 無異動）
 
 - **安全性/存取控制**：Excel 匯出補上公式注入防護（CWE-1236，`_xl_safe()`）；`GET /api/settings/operating-targets` 補上 admin+ 角色檢查（原本任何登入使用者含 engineer/viewer 皆可讀取年度營收/毛利/業務員配額目標）；營運報表 Excel/PDF、銷項發票清單、銀行對帳單比對四支匯出端點補上稽核記錄

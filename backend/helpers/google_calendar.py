@@ -216,7 +216,7 @@ def create_test_event() -> str:
     today = date.today()
     return _create_all_day_event(
         "MOTRIX 測試事件",
-        "此事件由 MOTRIX 營運系統的 Google 行事曆設定頁「測試連線」按鈕建立，"
+        "此事件由 MOTRIX 專案管理系統的 Google 行事曆設定頁「測試連線」按鈕建立，"
         "確認無誤後可自行刪除。",
         today,
     )

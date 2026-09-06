@@ -251,7 +251,7 @@
       + ' onerror="this.replaceWith(Object.assign(document.createElement(\'span\'),{textContent:\'MOTRIX\',style:\'color:#F5F4F0;font-family:LINE Seed TW_OTF, sans-serif;font-weight:700;font-size:15px;letter-spacing:.08em\'}))">'
       + '</a>'
       + '<div class="topbar__divider"></div>'
-      + '<span class="topbar__title">Motrix 營運系統</span>'
+      + '<span class="topbar__title">Motrix 專案管理系統</span>'
       + buildGlobalSearch()
       + '<div class="topbar__right">'
       + '<span id="tb-display-name" style="font-size:12px;color:#888;font-family:LINE Seed TW_OTF, sans-serif">' + esc(dn) + '</span>'

@@ -79,12 +79,25 @@ def test_build_topology_only_html_contains_title_and_svg():
     assert "<svg" in html
 
 
-def test_build_topology_only_html_is_a4_portrait_and_avoids_page_break():
-    """2026-09-04 使用者要求：快速拓樸圖 PDF 改 A4 直版，且圖不能被印表分頁切斷。"""
+def test_build_topology_only_html_uses_dynamic_single_page_not_a4():
+    """2026-09-06 使用者要求「格式跟分頁方式要完全一樣」，改回比照原始個案
+    腳本 b1f_topology.py：不用固定 A4（取代 2026-09-04 當時的 A4 直版版本），
+    改用頁尾 script 於 load+字型 ready 後量測實際內容尺寸，動態產生剛好等於
+    內容大小的 @page（永遠一頁、無頁碼）。"""
     import network_plan_export as npe
     html = npe.build_topology_only_html(_SAMPLE, title="測試", floor_tag="", footer="")
-    assert "size:A4 portrait" in html
-    assert "page-break-inside:avoid" in html
+    assert "size:A4" not in html
+    assert "fitPageToContent" in html
+    assert "documentElement.scrollHeight" in html
+
+
+def test_build_topology_only_html_model_tag_reflects_uniform_ports():
+    """單一型號＋所有交換器銅埠/SFP埠數一致時，型號徽章比照原腳本樣式帶上
+    埠數字樣；資料裡本來就只有一台 SW-Q1（8 銅埠＋2 SFP），視為一致。"""
+    import network_plan_export as npe
+    html = npe.build_topology_only_html(_SAMPLE, title="測試", floor_tag="", footer="")
+    assert "AT-x230-18GT" in html
+    assert "8×GbE" in html and "2×SFP" in html
 
 
 def test_build_topology_only_html_includes_text_port_table():

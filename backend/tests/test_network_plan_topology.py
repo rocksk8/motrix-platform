@@ -37,7 +37,7 @@ _SAMPLE = {
 
 def test_no_switches_returns_none():
     r = topo.build_topology_svg({"devices": [], "switchPorts": []})
-    assert r == {"html": None, "warnings": []}
+    assert r == {"html": None, "warnings": [], "models": [], "uniform_ports": None}
     r2 = topo.build_topology_svg({"devices": [{"name": "AP-01", "category": "無線AP"}]})
     assert r2["html"] is None
 

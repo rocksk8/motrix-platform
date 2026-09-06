@@ -341,9 +341,16 @@ def build_plan_html(plan: dict) -> str:
     )
 
 
-def _render_pdf_via_edge(html_content: str) -> bytes:
+def _render_pdf_via_edge(html_content: str, virtual_time_budget: int = None) -> bytes:
     """共用的 HTML→PDF 轉檔（Edge headless），供完整規劃書與純拓樸圖快速工具
-    共用，避免兩處各自維護一份幾乎一樣的 subprocess 邏輯。"""
+    共用，避免兩處各自維護一份幾乎一樣的 subprocess 邏輯。
+
+    virtual_time_budget：比照使用者原本個案腳本 b1f_topology.py 的轉檔方式
+    （見 build_topology_only_pdf_bytes）——當頁面內有轉檔前必須先跑完的非同步
+    JS（如動態量測內容尺寸再設定 @page 大小），單純等 window.onload 不夠，
+    需要這個旗標讓 headless 把頁面內部的計時器/Promise 佇列往前推進足夠時間
+    再截圖轉檔。一般靜態頁面（完整規劃書 PDF）不需要，維持 None 走原本的
+    --run-all-compositor-stages-before-draw。"""
     edge = _get_edge_path()
     tmp_html = tmp_pdf = None
     try:
@@ -353,11 +360,13 @@ def _render_pdf_via_edge(html_content: str) -> bytes:
         with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
             tmp_pdf = f.name
         file_url = "file:///" + tmp_html.replace("\\", "/")
+        wait_flag = (f"--virtual-time-budget={virtual_time_budget}" if virtual_time_budget
+                     else "--run-all-compositor-stages-before-draw")
         subprocess.run(
             [edge, "--headless", "--disable-gpu", "--no-sandbox",
              f"--print-to-pdf={tmp_pdf}",
              "--no-pdf-header-footer",
-             "--run-all-compositor-stages-before-draw",
+             wait_flag,
              file_url],
             timeout=40, check=False,
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
@@ -386,14 +395,26 @@ def build_topology_only_html(data: dict, title: str = "", floor_tag: str = "", f
     不含規劃書的 WAN／VLAN／IP 等其餘章節——呼叫端（routers/network_plans_quick.py）
     已經先確認過 build_topology_svg 有東西可畫才會呼叫這裡。
 
-    2026-09-04 使用者要求：A4 直版（原本沿用規劃書 PDF 的橫向）；圖不能被
-    印表分頁切斷（.topo-wrap 加 page-break-inside:avoid，SVG 本身用 viewBox
-    等比縮到版面寬度內，避免橫向超出直版較窄的可印刷寬度）；圖旁要有文字
-    敘述，不能只有一張圖——補上 build_topology_text_summary_html() 產生的
-    逐埠文字對照表；並比照使用者提供的原始個案腳本 b1f_topology.py 實際輸出
-    （B1F_topology.html）的展示方式：「埠位對照表 Port Assignment」標題下、
-    所有交換器的表格放進同一個固定兩欄 CSS Grid（.tbl-wrap），由瀏覽器自動
-    兩兩並排、自動換行——兩台以上交換器時省版面、方便左右對照閱讀。"""
+    2026-09-06 使用者要求「格式跟分頁方式要完全一樣」，改回逐項比照使用者
+    原始個案腳本 b1f_topology.py 實際輸出（B1F_topology.html）：
+    - 版面（CSS 變數、淺色放射漸層背景、.board 白卡＋陰影圓角、h1+徽章式
+      標題列、footer 靠右對齊樣式）逐一比照原腳本 CSS，不再沿用規劃書 PDF
+      那套企業合約書風格（accent-bar／co-name／doc-title）。
+    - 型號徽章（.tag.mod）比照原腳本「型號　(N×GbE + M×SFP)」樣式，從
+      build_topology_svg() 回傳的 models／uniform_ports 動態組出（原腳本是
+      寫死文字，這裡改成依實際資料算，多型號或埠數不一致時只顯示型號、
+      不強加可能失真的埠數字樣）。
+    - 分頁方式改回原腳本手法：不用固定 A4，改用頁尾 <script> 等頁面
+      load+字型 ready 後，量測實際渲染尺寸再動態產生剛好等於內容大小的
+      @page（永遠一頁、不強制切成 A4 多頁；本次 2026-09-06 對話已跟使用者
+      確認過取捨——這會使匯出的 PDF 頁面尺寸不是標準 A4，直接送實體印表機
+      可能被印表機驅動縮放或裁切，不影響數位保存/瀏覽器開啟）——取代
+      2026-09-04 當時因應印表分頁切斷問題而暫時採用的 A4 直版＋
+      page-break-inside:avoid 版本。
+    - 「埠位對照表 Port Assignment」＋固定兩欄 .tbl-wrap CSS Grid維持不變
+      （2026-09-04 已比照原腳本做過，本次沿用）；埠號欄位改用等寬字體＋
+      粗體（比照原腳本 td.port），純 CSS 選取器達成，不需更動
+      build_topology_text_summary_html() 的表格 HTML 結構。"""
     try:
         topo = build_topology_svg(data) or {}
     except Exception:
@@ -407,43 +428,79 @@ def build_topology_only_html(data: dict, title: str = "", floor_tag: str = "", f
         f'<h2>埠位對照表 Port Assignment</h2>\n<div class="tbl-wrap">{summary_tables}</div>\n'
     ) if summary_tables else ""
     title = (title or "").strip() or "網路埠拓樸圖"
+
+    models = topo.get("models") or []
+    mod_tag = " / ".join(models)
+    uniform_ports = topo.get("uniform_ports")
+    if uniform_ports:
+        copper, sfp = uniform_ports
+        spec_bits = [b for b in (f"{copper}×GbE" if copper else "", f"{sfp}×SFP" if sfp else "") if b]
+        if spec_bits:
+            mod_tag = (mod_tag + "　" if mod_tag else "") + "(" + " + ".join(spec_bits) + ")"
+    mod_tag_html = f'<span class="tag mod">{_esc(mod_tag)}</span>' if mod_tag else ""
     floor_tag_html = f'<span class="tag">{_esc(floor_tag)}</span>' if (floor_tag or "").strip() else ""
     footer_text = (footer or "").strip() or f"{_COMPANY2} 允碩整合集創 ｜ 產製時間：{datetime.now().strftime('%Y-%m-%d %H:%M')}"
     return (
         '<!DOCTYPE html>\n<html lang="zh-Hant">\n<head>\n<meta charset="UTF-8">\n'
+        '<meta name="viewport" content="width=device-width, initial-scale=1.0">\n'
         f'<title>{_esc(title)}</title>\n'
         "<style>\n"
-        "  *{box-sizing:border-box;margin:0;padding:0}\n"
-        '  body{font-family:"Microsoft JhengHei","PMingLiU",serif;font-size:10.5px;color:#0A0A0A;line-height:1.5;background:#fff}\n'
-        "  #root{padding:20px 24px}\n"
-        '  @page{size:A4 portrait;margin:10mm;@bottom-center{content:counter(page);font-family:Arial,sans-serif;font-size:9px;color:#888}}\n'
-        "  @media print{html,body{margin:0;padding:0;background:#fff}tr{page-break-inside:avoid}table{page-break-inside:avoid;break-inside:avoid}}\n"
-        "  .accent-bar{height:3px;background:#0A0A0A;margin-bottom:12px}\n"
-        "  .header{display:flex;justify-content:space-between;align-items:baseline;padding-bottom:10px;border-bottom:1px solid #0A0A0A;margin-bottom:16px;gap:12px;flex-wrap:wrap}\n"
-        "  .co-name{font-size:12px;font-weight:700;letter-spacing:.06em;color:#888;font-family:Arial,sans-serif}\n"
-        "  .doc-title{font-size:18px;font-weight:700;letter-spacing:.1em}\n"
-        '  .tag{display:inline-block;margin-left:10px;font-family:Consolas,monospace;font-weight:700;font-size:12px;background:#0A0A0A;color:#fff;padding:3px 10px;border-radius:6px;vertical-align:middle}\n'
-        "  .topo-wrap{page-break-inside:avoid;break-inside:avoid;margin-bottom:14px}\n"
-        "  .topo-wrap svg{max-width:100%;height:auto;display:block}\n"
-        "  h2{font-weight:900;font-size:14px;margin:18px 0 8px;color:#0A0A0A}\n"
-        "  .tbl-wrap{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px}\n"
-        "  table{width:100%;border-collapse:collapse;font-size:9.5px;background:#fff;border:1px solid #E5E7EB;border-radius:8px;overflow:hidden;table-layout:fixed}\n"
-        "  caption{caption-side:top;text-align:left;font-weight:700;font-size:10px;padding:0 0 6px 2px;color:#0A0A0A}\n"
-        "  thead th{background:#0A0A0A;color:#F5F4F0;padding:5px 6px;text-align:left;font-size:9px;font-weight:500;font-family:Arial,sans-serif;word-break:break-all}\n"
-        "  tbody td{padding:4px 6px;border-bottom:1px solid #EDEAE4;font-size:9.5px;word-break:break-all}\n"
-        "  tbody tr:last-child td{border-bottom:none}\n"
-        "  tbody tr:nth-child(even) td{background:#FAFAF8}\n"
-        "  .footer{text-align:center;font-size:9px;color:#888;margin-top:18px;padding-top:10px;border-top:1px solid #EDEAE4;font-family:Arial,sans-serif}\n"
-        "</style>\n</head>\n<body>\n<div id=\"root\">\n"
-        '<div class="accent-bar"></div>\n'
-        f'<div class="header">\n  <div class="co-name">{_esc(_COMPANY)}　{_esc(_COMPANY2)}</div>\n'
-        f'  <div class="doc-title">{_esc(title)}{floor_tag_html}</div>\n</div>\n'
-        f'<div class="topo-wrap">{topo_svg}</div>\n'
+        "  :root{--ink:#0f172a;--sub:#475569;--line:#cbd5e1;--paper:#fff;}\n"
+        "  *{box-sizing:border-box}\n"
+        "  body{margin:0;padding:30px 26px 54px;color:var(--ink);"
+        "font-family:'Microsoft JhengHei','Noto Sans TC',system-ui,sans-serif;\n"
+        "   background:radial-gradient(1200px 600px at 12% -10%,#e7eef7 0%,transparent 60%),\n"
+        "   radial-gradient(1000px 500px at 100% 0%,#eef0f8 0%,transparent 55%),#eef2f6;\n"
+        "   -webkit-print-color-adjust:exact;print-color-adjust:exact}\n"
+        "  .wrap{margin:0 auto}\n"
+        "  header{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}\n"
+        "  h1{font-weight:900;font-size:28px;letter-spacing:.5px;margin:0}\n"
+        "  .tag{font-family:Consolas,'Courier New',monospace;font-weight:700;font-size:13px;"
+        "background:var(--ink);color:#fff;padding:4px 11px;border-radius:6px}\n"
+        "  .tag.mod{background:#334155}\n"
+        "  .board{background:var(--paper);border:1px solid var(--line);border-radius:16px;"
+        "padding:22px 20px 26px;box-shadow:0 10px 30px -18px rgba(15,23,42,.35);display:inline-block}\n"
+        "  .board svg{display:block;max-width:100%;height:auto}\n"
+        "  h2{font-weight:900;font-size:18px;margin:32px 0 10px}\n"
+        "  .tbl-wrap{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px}\n"
+        "  table{width:100%;border-collapse:collapse;font-size:13px;background:var(--paper);"
+        "border:1px solid var(--line);border-radius:12px;overflow:hidden;table-layout:fixed}\n"
+        "  caption{caption-side:top;text-align:left;font-weight:700;font-size:14px;padding:0 0 7px 2px}\n"
+        "  th,td{padding:6px 10px;text-align:left;border-bottom:1px solid #e2e8f0;word-break:break-all}\n"
+        "  th{background:#f1f5f9;font-weight:700;font-size:12px}\n"
+        "  td:first-child{font-family:Consolas,'Courier New',monospace;font-weight:700}\n"
+        "  tr:last-child td{border-bottom:none}\n"
+        "  footer{display:block;margin-top:28px;color:var(--sub);font-size:12px;text-align:right}\n"
+        "</style>\n</head>\n<body>\n<div class=\"wrap\">\n"
+        f'<header>\n  <h1>{_esc(title)}</h1>\n  {floor_tag_html}\n  {mod_tag_html}\n</header>\n'
+        f'<div class="board">{topo_svg}</div>\n'
         f"{summary_block}"
-        f'<div class="footer">{_esc(footer_text)}</div>\n'
-        "</div>\n</body>\n</html>"
+        f'<footer>{_esc(footer_text)}</footer>\n'
+        "</div>\n"
+        "<script>\n"
+        "function fitPageToContent() {\n"
+        '  var board = document.querySelector(".board");\n'
+        '  var wrap = document.querySelector(".wrap");\n'
+        "  if (board && wrap) {\n"
+        '    wrap.style.maxWidth = Math.ceil(board.getBoundingClientRect().width) + "px";\n'
+        "  }\n"
+        "  var w = Math.ceil(document.documentElement.scrollWidth);\n"
+        "  var h = Math.ceil(document.documentElement.scrollHeight) + 16;\n"
+        '  var style = document.createElement("style");\n'
+        '  style.textContent = "@page { size: " + w + "px " + h + "px; margin: 0; } body { margin: 0; }";\n'
+        "  document.head.appendChild(style);\n"
+        "}\n"
+        "var loaded = new Promise(function (res) {\n"
+        '  if (document.readyState === "complete") res();\n'
+        '  else window.addEventListener("load", res);\n'
+        "});\n"
+        "var fontsReady = (document.fonts && document.fonts.ready) ? document.fonts.ready : Promise.resolve();\n"
+        "Promise.all([loaded, fontsReady]).then(fitPageToContent);\n"
+        "</script>\n"
+        "</body>\n</html>"
     )
 
 
 def build_topology_only_pdf_bytes(data: dict, title: str = "", floor_tag: str = "", footer: str = "") -> bytes:
-    return _render_pdf_via_edge(build_topology_only_html(data, title, floor_tag, footer))
+    html = build_topology_only_html(data, title, floor_tag, footer)
+    return _render_pdf_via_edge(html, virtual_time_budget=8000)

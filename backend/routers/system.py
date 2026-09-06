@@ -748,7 +748,7 @@ _EMAIL_DEFAULTS = {
     "smtp_port":     587,
     "smtp_user":     "",
     "smtp_password": "",
-    "from_name":     "MOTRIX營運系統",
+    "from_name":     "MOTRIX專案管理系統",
     "base_url":      "https://172.16.10.177:666",  # 2026-08-27：見 backend/tools/https_setup.ps1
     "dev_mode":      False,  # 開發機測試模式：寄出信件標題加註「【開發機測試】」，
                              # 存在本機 DB，不隨部署流程移動到正式機（2026-08-26）
@@ -847,7 +847,7 @@ def test_email_notify(authorization: str = Header(None)):
         raise HTTPException(400, "找不到可發送對象：請至「使用者管理」為 admin 或 superadmin 帳號填寫 Email")
     html = (
         "<div style='font-family:Arial,sans-serif;padding:24px'>"
-        "<h2 style='color:#1a1a1a'>MOTRIX營運系統 — Email 通知測試</h2>"
+        "<h2 style='color:#1a1a1a'>MOTRIX專案管理系統 — Email 通知測試</h2>"
         "<p>此為測試郵件，SMTP 設定正常。</p>"
         f"<p style='color:#888;font-size:12px'>由 {user.get('display_name') or user['username']} 觸發</p>"
         "</div>"

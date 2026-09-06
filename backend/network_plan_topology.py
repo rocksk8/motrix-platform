@@ -219,15 +219,20 @@ def _cable_label(ax, ay, bx, by, color, label):
 
 def build_topology_svg(data: dict) -> dict:
     """data：規劃書 data_json（含 devices／switchPorts）。回傳
-    {"html": SVG+圖例 HTML 片段 或 None, "warnings": [提醒文字, ...]}。
+    {"html": SVG+圖例 HTML 片段 或 None, "warnings": [提醒文字, ...],
+     "models": [實際畫出的交換器型號（去重排序）, ...],
+     "uniform_ports": (copper, sfp) 若所有畫出的交換器銅埠/SFP埠數完全一致，否則 None}。
     html 為 None 代表沒有任何「交換器」類別設備可畫（呼叫端據此略過整段，
-    不畫空圖），此時 warnings 恆為空清單。"""
+    不畫空圖），此時 warnings 恆為空清單，models/uniform_ports 亦為空。
+    models／uniform_ports 供呼叫端組裝比照 b1f_topology.py 原始腳本樣式的
+    型號標籤（如「AT-x230-28GT　(24×GbE + 4×SFP)」）用，見
+    network_plan_export.py::build_topology_only_html()。"""
     warnings = []
     devices = data.get("devices") or []
     switch_ports = data.get("switchPorts") or []
     switches_raw = [d for d in devices if (d.get("category") == "交換器") and (d.get("name") or "").strip()]
     if not switches_raw:
-        return {"html": None, "warnings": []}
+        return {"html": None, "warnings": [], "models": [], "uniform_ports": None}
 
     switches = {}
     dup_names = set()
@@ -256,7 +261,7 @@ def build_topology_svg(data: dict) -> dict:
         poe = bool(d.get("poe"))
         layout = "1row" if (d.get("portLayout") or "").strip() == "單排橫向" else "2row"
         title = name + (f"　{model}" if model else "") + (" ⚡PoE" if poe else "") + (f"　（{loc}）" if loc else "")
-        switches[name] = dict(name=name, copper=copper, sfp=sfp_n, layout=layout,
+        switches[name] = dict(name=name, copper=copper, sfp=sfp_n, layout=layout, model=model,
                                title=_truncate(title, TITLE_MAX), ports={})
     if dup_names:
         warnings.append("設備清單有重複名稱（拓樸圖只會畫第一筆，其餘略過）：" + "、".join(sorted(dup_names)))
@@ -427,7 +432,7 @@ def build_topology_svg(data: dict) -> dict:
 
     if not switches:
         # 全部交換器都因格式錯誤被跳過（極端情況：唯一一台就寫錯埠數）
-        return {"html": None, "warnings": warnings}
+        return {"html": None, "warnings": warnings, "models": [], "uniform_ports": None}
 
     svg_w = total_w + 2 * LABEL_MARGIN
     svg = (f'<svg width="{svg_w}" height="{total_h}" '
@@ -435,7 +440,11 @@ def build_topology_svg(data: dict) -> dict:
            f'xmlns="http://www.w3.org/2000/svg">'
            f'{"".join(ext_svg)}{"".join(cable_svgs)}{"".join(svg_switches)}{"".join(cable_label_svgs)}</svg>')
     legend_html = f'<div style="display:flex;flex-wrap:wrap;margin-top:10px;font-size:12px;color:#475569">{"".join(legend)}</div>'
-    return {"html": svg + legend_html, "warnings": warnings}
+    models = sorted({sw["model"] for sw in switches.values() if sw["model"]})
+    port_specs = {(sw["copper"], sw["sfp"]) for sw in switches.values()}
+    uniform_ports = next(iter(port_specs)) if len(port_specs) == 1 else None
+    return {"html": svg + legend_html, "warnings": warnings,
+            "models": models, "uniform_ports": uniform_ports}
 
 
 def build_topology_text_summary_html(data: dict) -> str:
