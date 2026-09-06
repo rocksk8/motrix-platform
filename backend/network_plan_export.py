@@ -276,9 +276,32 @@ def build_plan_html(plan: dict) -> str:
         topo_svg = (build_topology_svg(data) or {}).get("html")
     except Exception:
         topo_svg = None
+    try:
+        topo_summary = build_topology_text_summary_html(data)
+    except Exception:
+        topo_summary = ""
+    # 2026-09-06 修復：舊版用 overflow-x:auto 包住拓樸圖——CSS 規範規定
+    # overflow-x 設為非 visible 值時，未指定的 overflow-y 會被瀏覽器一併
+    # 強制改成 auto，這個拓樸圖 SVG 常比一頁高出許多，容器因此變成可垂直
+    # 捲動，Edge headless 轉 PDF 時把原生捲軸（含上下箭頭方塊）實際畫進了
+    # 輸出頁面，且「網路拓樸圖」標題與圖本身分屬兩個沒有共同 break-avoid
+    # 包裹的區塊，也曾被印表分頁攔腰切開。改為完全不設 overflow（讓內容
+    # 自然往下延伸走一般分頁流程，不再產生捲軸），SVG 另外加 max-width:100%
+    # 等比縮小到版面寬度內；圖旁比照 b1f_topology.py／快速拓樸圖工具補上
+    # 逐埠文字對照表（build_topology_text_summary_html()），不再只有一張圖。
+    topo_summary_html = (
+        '<div class="section-label" style="margin-top:14px">埠位對照表 Port Assignment</div>'
+        f'<div class="tbl-wrap">{topo_summary}</div>'
+    ) if topo_summary else ''
+    # 標題跟圖不再用 page-break-inside:avoid 硬包在一起——拓樸圖常常比一整頁
+    # 還高，對「明知裝不下」的內容硬要求 avoid 只會讓瀏覽器把標題也一起擠成
+    # 自己孤伶伶佔一整頁再換頁畫圖，反而更浪費版面；改用 .section-label 統一
+    # 套用 break-after:avoid（見下方樣式表，其餘章節標題同樣受惠），讓標題
+    # 沒有足夠空間時直接跟著後續內容一起換頁，不會自己單獨留在前一頁。
     topo_html = (
-        f'<div class="section-label">網路拓樸圖</div>'
-        f'<div style="overflow-x:auto;page-break-inside:avoid;break-inside:avoid">{topo_svg}</div>'
+        '<div class="section-label">網路拓樸圖</div>'
+        f'<div>{topo_svg}</div>'
+        f'{topo_summary_html}'
     ) if topo_svg else ""
     sections_html = "".join(
         _section_table_html(title, columns, data.get(key) or [])
@@ -314,8 +337,12 @@ def build_plan_html(plan: dict) -> str:
         "  .doc-title{font-size:18px;font-weight:700;letter-spacing:.16em;text-align:right}\n"
         "  .meta{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-bottom:12px;font-size:10.5px;background:#FAFAF8;padding:8px 10px;border-radius:4px;border:1px solid #EDEAE4}\n"
         "  .meta span{color:#888;font-family:Arial,sans-serif;font-size:9.5px}\n"
-        '  .section-label{font-size:9px;font-family:Arial,sans-serif;letter-spacing:.1em;text-transform:uppercase;color:#888;font-weight:600;margin:12px 0 6px;display:flex;align-items:center;gap:8px}\n'
+        '  .section-label{font-size:9px;font-family:Arial,sans-serif;letter-spacing:.1em;text-transform:uppercase;color:#888;font-weight:600;margin:12px 0 6px;display:flex;align-items:center;gap:8px;page-break-after:avoid;break-after:avoid-page}\n'
         '  .section-label::after{content:"";flex:1;height:1px;background:#EDEAE4}\n'
+        "  svg{max-width:100%;height:auto;display:block}\n"
+        "  .tbl-wrap{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;margin-bottom:10px}\n"
+        "  .tbl-wrap table{margin-bottom:0}\n"
+        "  .tbl-wrap caption{caption-side:top;text-align:left;font-weight:700;font-size:10px;padding:0 0 6px 2px;color:#0A0A0A}\n"
         "  table{width:100%;border-collapse:collapse;margin-bottom:10px;table-layout:fixed}\n"
         "  thead th{background:#0A0A0A;color:#F5F4F0;padding:5px 6px;text-align:left;font-size:9px;font-weight:500;font-family:Arial,sans-serif;word-break:break-all}\n"
         "  tbody td{padding:5px 6px;border-bottom:1px solid #EDEAE4;font-size:9.5px;word-break:break-all}\n"
