@@ -382,11 +382,17 @@ if (Test-Path $reqPath) {
 # ============================================================
 # Step 5: 套用後健康檢查
 # ============================================================
+# 2026-09-08 加寬：實測發現正式機 HTTPS（自簽憑證）連線 curl.exe 會發生兩次
+# schannel TLS renegotiation，單次 3 秒逾時偶爾不夠、造成健康檢查偽陰性
+# （見 MOTRIX-ERP-QUICK.md §12 同日條目——連續兩輪部署都在這裡誤判觸發
+# 不必要的回滾，事後用同一行 curl.exe 手動重測完全正常）。單次逾時
+# 3→5 秒、迴圈次數 15→20（總等待上限拉寬，多數情況仍會在前幾次就成功
+# 提前跳出，不影響正常部署的速度）。
 Info "`n[5/6] 等待伺服器恢復並健康檢查..."
 $healthy = $false
-for ($i = 0; $i -lt 15; $i++) {
+for ($i = 0; $i -lt 20; $i++) {
     Start-Sleep -Seconds 2
-    if (Test-Ping -Url $PingUrl -TimeoutSec 3) { $healthy = $true; break }
+    if (Test-Ping -Url $PingUrl -TimeoutSec 5) { $healthy = $true; break }
 }
 
 $logErrors = @()
@@ -454,9 +460,9 @@ if ($healthy -and -not $logErrors) {
     }
 
     $rolledBackHealthy = $false
-    for ($i = 0; $i -lt 15; $i++) {
+    for ($i = 0; $i -lt 20; $i++) {
         Start-Sleep -Seconds 2
-        if (Test-Ping -Url $PingUrl -TimeoutSec 3) { $rolledBackHealthy = $true; break }
+        if (Test-Ping -Url $PingUrl -TimeoutSec 5) { $rolledBackHealthy = $true; break }
     }
 
     Write-Host ""

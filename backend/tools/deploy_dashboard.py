@@ -332,6 +332,81 @@ def list_snapshots(body: SnapshotsIn):
     return JSONResponse(status_code=502, content={"detail": "無法解析正式機回傳的快照清單", "raw": proc.stdout})
 
 
+class LogTailIn(BaseModel):
+    username: str
+    password: str
+    lines: int = 300
+
+
+@app.post("/api/log-tail")
+def log_tail(body: LogTailIn):
+    """純讀取正式機 server.log 最後 N 行，供 apply_update.ps1 健康檢查失敗
+    （healthy=False, log 錯誤筆數=N）時人工診斷用——不動任何東西，跟
+    list_snapshots 是同一種同步呼叫模式。"""
+    cmd = _ps_cmd(
+        TOOLS_DIR / "_dashboard_remote.ps1",
+        {"Action": "tail-log", "Username": body.username, "Lines": str(body.lines)},
+    )
+    try:
+        proc = subprocess.run(
+            cmd, input=body.password + "\n", capture_output=True, text=True,
+            encoding="utf-8", errors="replace", cwd=str(PROJECT_ROOT), timeout=60,
+        )
+    except subprocess.TimeoutExpired:
+        return JSONResponse(status_code=504, content={"detail": "連線正式機逾時"})
+
+    if proc.returncode != 0:
+        return JSONResponse(status_code=502, content={"detail": proc.stdout.strip() or "連線失敗"})
+
+    marker = "===JSON==="
+    if marker in proc.stdout:
+        json_text = proc.stdout.split(marker, 1)[1].strip()
+        try:
+            data = json.loads(json_text)
+            # _dashboard_remote.ps1 現在回傳單一字串（join 過的整段 log），
+            # 不是陣列——這裡切回逐行陣列，前端 join('\n') 顯示邏輯不用改。
+            if isinstance(data, str):
+                return data.split("\n") if data else []
+            return data if isinstance(data, list) else [data]
+        except Exception:
+            pass
+    return JSONResponse(status_code=502, content={"detail": "無法解析正式機回傳的 log", "raw": proc.stdout})
+
+
+class CheckOnlyIn(BaseModel):
+    username: str
+    password: str
+
+
+@app.post("/api/check-only")
+def check_only(body: CheckOnlyIn):
+    """遠端跑 apply_update.ps1 -CheckOnly——純測健康檢查機制本身（一次
+    curl.exe 對正式機 127.0.0.1:666 的呼叫），不動備份/停服/部署/回滾。"""
+    cmd = _ps_cmd(TOOLS_DIR / "_dashboard_remote.ps1", {"Action": "check-only", "Username": body.username})
+    try:
+        proc = subprocess.run(
+            cmd, input=body.password + "\n", capture_output=True, text=True,
+            encoding="utf-8", errors="replace", cwd=str(PROJECT_ROOT), timeout=60,
+        )
+    except subprocess.TimeoutExpired:
+        return JSONResponse(status_code=504, content={"detail": "連線正式機逾時"})
+
+    if proc.returncode != 0:
+        return JSONResponse(status_code=502, content={"detail": proc.stdout.strip() or "連線失敗"})
+
+    marker = "===JSON==="
+    if marker in proc.stdout:
+        json_text = proc.stdout.split(marker, 1)[1].strip()
+        try:
+            data = json.loads(json_text)
+            if isinstance(data, str):
+                return data.split("\n") if data else []
+            return data if isinstance(data, list) else [data]
+        except Exception:
+            pass
+    return JSONResponse(status_code=502, content={"detail": "無法解析正式機回傳的結果", "raw": proc.stdout})
+
+
 if __name__ == "__main__":
     print("MOTRIX 部署儀表板：http://127.0.0.1:8765")
     uvicorn.run(app, host="127.0.0.1", port=8765, log_level="warning")

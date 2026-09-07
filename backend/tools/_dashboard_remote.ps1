@@ -18,14 +18,15 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet("deploy", "rollback", "list-snapshots")]
+    [ValidateSet("deploy", "rollback", "list-snapshots", "tail-log", "check-only")]
     [string]$Action,
 
     [Parameter(Mandatory = $true)]
     [string]$Username,
 
     [string]$PackagePath,
-    [string]$SnapshotTimestamp
+    [string]$SnapshotTimestamp,
+    [int]$Lines = 300
 )
 
 $ErrorActionPreference = "Stop"
@@ -77,7 +78,7 @@ try {
             param($Ts, $Root)
             powershell -ExecutionPolicy Bypass -File "$Root\backend\tools\rollback_update.ps1" -SnapshotTimestamp $Ts -Yes
         }
-    } else {
+    } elseif ($Action -eq "list-snapshots") {
         # list-snapshots：跟 apply_update.ps1 一樣，rollback_snapshots/<ts> 與
         # db_backups/pre_update_<ts> 用同一個時間戳，只需要列其中一份資料夾名稱。
         $result = Invoke-Command -Session $session -ArgumentList $ProdRoot -ScriptBlock {
@@ -93,6 +94,51 @@ try {
         # Python 那端可以直接切出 JSON 區塊，不用逐行猜哪裡是 JSON 開頭。
         Write-Host "===JSON==="
         @($result) | ConvertTo-Json
+    } elseif ($Action -eq "check-only") {
+        # check-only：目前正式機上「已回滾」的 apply_update.ps1 版本比
+        # -CheckOnly 這個功能還舊（實測撞到「找不到符合參數名稱 'CheckOnly'
+        # 的參數」），沒辦法直接呼叫該旗標。改成直接在遠端 session 裡執行
+        # Test-Ping 用的同一行 curl.exe 指令（外加 curl.exe 路徑解析／
+        # -v 詳細輸出），純診斷、不寫入任何檔案，不動備份/停服/部署/回滾。
+        # 用來驗證「這次連續兩輪部署都健康檢查失敗，但外部從開發機直接打
+        # LAN IP 又能打通」這個落差，是不是 WinRM 巢狀執行環境本身讓
+        # curl.exe 打 loopback 出了問題（跟直接在正式機主控台跑不一樣）。
+        $raw = Invoke-Command -Session $session -ScriptBlock {
+            $out = @()
+            $out += "curl.exe 路徑解析：$((Get-Command curl.exe -ErrorAction SilentlyContinue).Source)"
+            $out += ""
+            $out += "--- 一般模式（跟 apply_update.ps1 Test-Ping 完全一樣的呼叫）---"
+            $code = & curl.exe -k -s -o NUL -w "%{http_code}" --max-time 3 https://127.0.0.1:666/api/ping 2>&1
+            $out += "回傳 http_code = [$code]"
+            $out += ""
+            $out += "--- -v 詳細模式（同一支網址，看實際卡在哪個階段）---"
+            $verbose = & curl.exe -k -v --max-time 3 https://127.0.0.1:666/api/ping 2>&1
+            $out += $verbose
+            ($out -join "`n")
+        }
+        [string]$outText = $raw
+        Write-Host "===JSON==="
+        $outText | ConvertTo-Json
+    } else {
+        # tail-log：純讀取 server.log 最後 N 行，供部署健康檢查失敗時人工診斷
+        # 用（跟 apply_update.ps1 的「healthy=False, log 錯誤筆數=N」是同一份
+        # 檔案），完全唯讀不動任何東西。
+        #
+        # 在遠端 scriptblock 內就先用 -join 併成單一字串再回傳——PS Remoting
+        # 對「陣列」回傳值的每個元素都會加簽 PSComputerName/RunspaceId/
+        # PSShowComputerName 這幾個額外屬性，ConvertTo-Json 會把每個看起來
+        # 明明是純字串的陣列元素序列化成帶這些欄位的物件，前端 join 出一串
+        # [object Object]（實測踩到）。回傳單一字串再用 [string] 強制轉型，
+        # 繞開這整個問題。
+        $raw = Invoke-Command -Session $session -ArgumentList $ProdRoot, $Lines -ScriptBlock {
+            param($Root, $N)
+            $logPath = Join-Path $Root "backend\logs\server.log"
+            if (-not (Test-Path $logPath)) { return "" }
+            (Get-Content $logPath -Tail $N) -join "`n"
+        }
+        [string]$logText = $raw
+        Write-Host "===JSON==="
+        $logText | ConvertTo-Json
     }
 } finally {
     Remove-PSSession $session

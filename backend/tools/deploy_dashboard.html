@@ -97,6 +97,15 @@
     <div class="log hidden" id="rollbackLog"></div>
   </div>
 
+  <div class="card" style="margin-bottom:16px">
+    <h2>4. 查看正式機最近 log（唯讀，不動任何東西）</h2>
+    <input id="logUser" placeholder="正式機帳號（例如 Motrix）" value="Motrix">
+    <input id="logPass" type="password" placeholder="正式機密碼">
+    <button class="ghost" onclick="loadLogTail()">讀取最後 300 行</button>
+    <button class="ghost" onclick="loadCheckOnly()">只測健康檢查機制（-CheckOnly，不部署）</button>
+    <div class="log hidden" id="logTail"></div>
+  </div>
+
   <div class="card">
     <h2>歷史紀錄</h2>
     <div id="historyList"></div>
@@ -245,6 +254,42 @@ async function confirmRollback() {
   if (!res.ok) { const e = await res.json(); alert(e.detail || '回滾請求失敗'); return; }
   const { jobId } = await res.json();
   pollJob(jobId, 'rollbackLog');
+}
+
+async function loadLogTail() {
+  const username = document.getElementById('logUser').value.trim();
+  const password = document.getElementById('logPass').value;
+  if (!username || !password) { alert('請填正式機帳密'); return; }
+  const logEl = document.getElementById('logTail');
+  logEl.classList.remove('hidden');
+  logEl.textContent = '讀取中...';
+  const res = await fetch('/api/log-tail', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password, lines: 300 })
+  });
+  document.getElementById('logPass').value = '';
+  if (!res.ok) { const e = await res.json().catch(() => ({})); logEl.textContent = e.detail || '讀取失敗'; return; }
+  const lines = await res.json();
+  logEl.textContent = lines.join('\n') || '（空的）';
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+async function loadCheckOnly() {
+  const username = document.getElementById('logUser').value.trim();
+  const password = document.getElementById('logPass').value;
+  if (!username || !password) { alert('請填正式機帳密'); return; }
+  const logEl = document.getElementById('logTail');
+  logEl.classList.remove('hidden');
+  logEl.textContent = '執行中...';
+  const res = await fetch('/api/check-only', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password })
+  });
+  document.getElementById('logPass').value = '';
+  if (!res.ok) { const e = await res.json().catch(() => ({})); logEl.textContent = e.detail || '執行失敗'; return; }
+  const lines = await res.json();
+  logEl.textContent = lines.join('\n') || '（空的）';
+  logEl.scrollTop = logEl.scrollHeight;
 }
 
 refreshStatus();
