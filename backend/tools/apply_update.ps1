@@ -116,7 +116,7 @@ Info "身分確認：正式機（$ProdRoot）`n"
 
 if ($CheckOnly) {
     Info "[CheckOnly] 只測試健康檢查邏輯本身，不做任何備份／停服／部署動作。"
-    Info "  健康檢查網址：$PingUrl（$(if ($UsesHttps) { 'HTTPS，走 curl.exe -k' } else { 'HTTP，走 Invoke-WebRequest' })）"
+    Info "  健康檢查網址：$PingUrl（走 _healthcheck_ping.py，$(if ($UsesHttps) { 'HTTPS' } else { 'HTTP' })）"
     if (Test-Ping -Url $PingUrl -TimeoutSec 5) {
         Ok "  /api/ping 回應 200，健康檢查機制正常。"
         exit 0

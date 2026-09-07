@@ -95,15 +95,25 @@ try {
         Write-Host "===JSON==="
         @($result) | ConvertTo-Json
     } elseif ($Action -eq "check-only") {
-        # check-only：目前正式機上「已回滾」的 apply_update.ps1 版本比
-        # -CheckOnly 這個功能還舊（實測撞到「找不到符合參數名稱 'CheckOnly'
-        # 的參數」），沒辦法直接呼叫該旗標。改成直接在遠端 session 裡執行
-        # Test-Ping 用的同一行 curl.exe 指令（外加 curl.exe 路徑解析／
-        # -v 詳細輸出），純診斷、不寫入任何檔案，不動備份/停服/部署/回滾。
-        # 用來驗證「這次連續兩輪部署都健康檢查失敗，但外部從開發機直接打
-        # LAN IP 又能打通」這個落差，是不是 WinRM 巢狀執行環境本身讓
-        # curl.exe 打 loopback 出了問題（跟直接在正式機主控台跑不一樣）。
-        $raw = Invoke-Command -Session $session -ScriptBlock {
+        # check-only：2026-09-08 當晚連續三次部署健康檢查誤判失敗時新增的
+        # 純診斷動作（不寫入任何檔案，不動備份/停服/部署/回滾）。A/B 兩段
+        # 測的是 curl.exe（直接呼叫／巢狀一層呼叫，模擬 apply_update.ps1
+        # 當時的執行深度），C 段測 port 666 監聽狀態——三個假設（WinRM 巢狀
+        # 執行、孤兒 socket）都在當晚被這三段測試獨立推翻，最後改用
+        # backend/tools/_healthcheck_ping.py（Python + OpenSSL，不經過
+        # curl.exe／Schannel）取代 apply_update.ps1 的健康檢查機制，見
+        # MOTRIX-ERP-QUICK.md §12 同日條目。這裡的 curl.exe 測試留著當作
+        # 一般性的連線診斷工具，D 段另外測新的 Python 健康檢查腳本本身
+        # （巢狀深度跟 apply_update.ps1 實際呼叫方式一致），用來驗證下次
+        # 部署時正式機上的新版健康檢查機制本身能不能正常運作。
+        # D 段要測的 _healthcheck_ping.py 內容從「開發機這支腳本自己旁邊」讀，
+        # 不是正式機上的檔案——正式機現在跑的是回滾後的舊版，backend/tools/
+        # 底下還沒有這支新檔案（要等下次部署成功才會有）。把內容當參數傳進
+        # WinRM session，在正式機寫一份暫存檔案來測，等於預先驗證「這支腳本
+        # 之後部署上去，在正式機這個環境跑起來真的沒問題」，不用等部署完才知道。
+        $localPingScript = Get-Content (Join-Path $PSScriptRoot "_healthcheck_ping.py") -Raw
+        $raw = Invoke-Command -Session $session -ArgumentList $localPingScript -ScriptBlock {
+            param($PingScriptContent)
             $out = @()
             $out += "curl.exe 路徑解析：$((Get-Command curl.exe -ErrorAction SilentlyContinue).Source)"
             $out += ""
@@ -140,6 +150,27 @@ try {
                     $procInfo = try { (Get-Process -Id $c.OwningProcess -ErrorAction Stop).ProcessName } catch { "(process 已不存在)" }
                     $out += "State=$($c.State)  PID=$($c.OwningProcess)  Process=$procInfo"
                 }
+            }
+            $out += ""
+            $out += "--- D. 預先驗證新版健康檢查腳本（_healthcheck_ping.py），巢狀深度跟 apply_update.ps1 -> Test-Ping 實際呼叫方式一致（WinRM session -> 子行程 powershell -File -> python） ---"
+            $pingTmp = Join-Path $env:TEMP "motrix_healthcheck_ping_predeploy_test.py"
+            $PingScriptContent | Set-Content -Path $pingTmp -Encoding UTF8
+            $wrapperTmp = Join-Path $env:TEMP "motrix_healthcheck_wrapper_predeploy_test.ps1"
+            @"
+`$prevEap = `$ErrorActionPreference
+`$ErrorActionPreference = "Continue"
+try {
+    & python '$pingTmp' "https://127.0.0.1:666/api/ping" 5 2>`$null
+    Write-Output "exit_code=[`$LASTEXITCODE]"
+} finally {
+    `$ErrorActionPreference = `$prevEap
+}
+"@ | Set-Content -Path $wrapperTmp -Encoding UTF8
+            try {
+                $dResult = & powershell -ExecutionPolicy Bypass -File $wrapperTmp 2>&1
+                $out += ($dResult | Out-String)
+            } finally {
+                Remove-Item $pingTmp, $wrapperTmp -Force -ErrorAction SilentlyContinue
             }
             ($out -join "`n")
         }
