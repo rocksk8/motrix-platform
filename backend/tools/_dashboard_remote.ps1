@@ -44,7 +44,14 @@ if ($Action -eq "rollback" -and -not $SnapshotTimestamp) {
     Fail "-Action rollback 需要 -SnapshotTimestamp。"
 }
 
-$securePw = Read-Host -AsSecureString
+# 2026-09-08 修復：`Read-Host -AsSecureString` 依賴主控台的遮罩輸入機制，
+# stdin 被 deploy_dashboard.py 用管線重新導向（不是真的互動主控台）時會
+# 直接卡死、永遠讀不到內容（實測：換成一般 Read-Host 也能證實這點——它確實
+# 讀得到管線輸入，但反而會把讀到的密碼原樣回顯進輸出，被儀表板的工作紀錄
+# 畫面顯示出來，是更嚴重的資安問題）。改用 [Console]::In.ReadLine() 直接讀
+# 一行純文字，不經過主控台遮罩機制也不會回顯，讀到後再手動轉成 SecureString。
+$plainPw = [Console]::In.ReadLine()
+$securePw = ConvertTo-SecureString -String $plainPw -AsPlainText -Force
 $cred = New-Object System.Management.Automation.PSCredential($Username, $securePw)
 
 Write-Host "連線正式機（$ProdIp）..."
