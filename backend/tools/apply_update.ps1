@@ -390,9 +390,12 @@ if (Test-Path $reqPath) {
 # 提前跳出，不影響正常部署的速度）。
 Info "`n[5/6] 等待伺服器恢復並健康檢查..."
 $healthy = $false
+$hcStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
 for ($i = 0; $i -lt 20; $i++) {
     Start-Sleep -Seconds 2
-    if (Test-Ping -Url $PingUrl -TimeoutSec 5) { $healthy = $true; break }
+    $thisTry = Test-Ping -Url $PingUrl -TimeoutSec 5
+    Info "    健檢第 $($i + 1)/20 次（經過 $([int]$hcStopwatch.Elapsed.TotalSeconds)s）：$(if ($thisTry) { '成功' } else { '無回應' })"
+    if ($thisTry) { $healthy = $true; break }
 }
 
 $logErrors = @()
@@ -415,6 +418,10 @@ if (Test-Path $logPath) {
         $scanRange = @()
     }
     $logErrors = $scanRange | Select-String -Pattern "Traceback|ERROR" -SimpleMatch:$false
+    if ($logErrors) {
+        Info "  比對範圍內找到的錯誤行（共 $($logErrors.Count) 筆）："
+        foreach ($e in $logErrors) { Info "    $($e.Line)" }
+    }
 }
 
 if ($healthy -and -not $logErrors) {
@@ -460,9 +467,12 @@ if ($healthy -and -not $logErrors) {
     }
 
     $rolledBackHealthy = $false
+    $rbStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
     for ($i = 0; $i -lt 20; $i++) {
         Start-Sleep -Seconds 2
-        if (Test-Ping -Url $PingUrl -TimeoutSec 5) { $rolledBackHealthy = $true; break }
+        $thisTry = Test-Ping -Url $PingUrl -TimeoutSec 5
+        Info "    回滾後複驗第 $($i + 1)/20 次（經過 $([int]$rbStopwatch.Elapsed.TotalSeconds)s）：$(if ($thisTry) { '成功' } else { '無回應' })"
+        if ($thisTry) { $rolledBackHealthy = $true; break }
     }
 
     Write-Host ""

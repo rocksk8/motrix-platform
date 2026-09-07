@@ -107,13 +107,40 @@ try {
             $out = @()
             $out += "curl.exe 路徑解析：$((Get-Command curl.exe -ErrorAction SilentlyContinue).Source)"
             $out += ""
-            $out += "--- 一般模式（跟 apply_update.ps1 Test-Ping 完全一樣的呼叫）---"
-            $code = & curl.exe -k -s -o NUL -w "%{http_code}" --max-time 3 https://127.0.0.1:666/api/ping 2>&1
+            $out += "--- A. 直接在這層 WinRM session 呼叫 curl.exe（先前測過會成功）---"
+            $code = & curl.exe -k -s -o NUL -w "%{http_code}" --max-time 5 https://127.0.0.1:666/api/ping 2>&1
             $out += "回傳 http_code = [$code]"
             $out += ""
-            $out += "--- -v 詳細模式（同一支網址，看實際卡在哪個階段）---"
-            $verbose = & curl.exe -k -v --max-time 3 https://127.0.0.1:666/api/ping 2>&1
-            $out += $verbose
+            $out += "--- B. 巢狀一層：跟真正部署時 apply_update.ps1 的執行深度一致 ---"
+            $out += "（WinRM session -> 子行程 powershell -File <暫存.ps1> -> curl.exe，不用 -Command 字串，避開多層轉送引號被吃掉的問題）"
+            $tmpScript = Join-Path $env:TEMP "motrix_nested_curl_test.ps1"
+            @'
+$ErrorActionPreference = "Stop"
+$prevEap = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
+try {
+    $c = & curl.exe -k -s -o NUL -w "%{http_code}" --max-time 5 https://127.0.0.1:666/api/ping 2>$null
+    Write-Output "nested_http_code=[$c]"
+} catch {
+    Write-Output "nested_exception=$_"
+} finally {
+    $ErrorActionPreference = $prevEap
+}
+'@ | Set-Content -Path $tmpScript -Encoding UTF8
+            $nested = & powershell -ExecutionPolicy Bypass -File $tmpScript 2>&1
+            Remove-Item $tmpScript -Force -ErrorAction SilentlyContinue
+            $out += ($nested | Out-String)
+            $out += ""
+            $out += "--- C. port 666 目前監聽狀態（找有沒有殘留的孤兒/多個 listener）---"
+            $conns = Get-NetTCPConnection -LocalPort 666 -ErrorAction SilentlyContinue
+            if (-not $conns) {
+                $out += "（目前完全沒有任何連線/監聽在 port 666 上）"
+            } else {
+                foreach ($c in $conns) {
+                    $procInfo = try { (Get-Process -Id $c.OwningProcess -ErrorAction Stop).ProcessName } catch { "(process 已不存在)" }
+                    $out += "State=$($c.State)  PID=$($c.OwningProcess)  Process=$procInfo"
+                }
+            }
             ($out -join "`n")
         }
         [string]$outText = $raw
