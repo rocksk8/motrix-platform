@@ -1402,12 +1402,44 @@ MOTRIX-ERP/
 
 ### §14.3 · 之後才考慮的方向
 
-> ✅ **已實作半自動版本，見 §15**（2026-08-01j）：`build_deploy_package.ps1` + `apply_update.ps1`，方向是「開發機打包（git archive，強制先 commit）→ 人工複製 → 正式機套用（版本比對＋備份＋安全停服＋健康檢查＋失敗自動回滾）」。仍非全自動：套用前需操作者手動確認一次，兩機之間的檔案傳輸也仍是人工複製（隨身碟/網路芳鄰/雲端硬碟），沒有做 WinRM/網路直連。
+> ✅ **已實作半自動版本，見 §15**（2026-08-01j）：`build_deploy_package.ps1` + `apply_update.ps1`，方向是「開發機打包（git archive，強制先 commit）→ 人工複製 → 正式機套用（版本比對＋備份＋安全停服＋健康檢查＋失敗自動回滾）」。仍非全自動：套用前需操作者手動確認一次。
+>
+> ✅ **兩機 WinRM 網路直連已建立**（2026-09-08，見 §14.3b）：不用再靠人工把部署包複製到隨身碟/雲端硬碟——但**只用來讓開發機能對正式機下遠端指令／傳檔案，不是取代 §15 的部署安全機制**，`apply_update.ps1` 本身仍然要照原本方式在正式機執行（版本比對／備份／健康檢查／自動回滾一個都不能少）。
 
 以下是還沒做、之後可以再評估的方向：
 
-- PowerShell Remoting（`Invoke-Command`/`New-PSSession`）取代人工複製部署包——需先在正式機開放 WinRM，涉及帳密/防火牆設定
 - 拉檔案回開發機（§14.2 方向，跟 §15 相反方向）目前仍是全人工，尚未有對應的半自動工具
+- 部署流程全自動化（開發機一鍵打包→透過 WinRM 直接觸發正式機執行 `apply_update.ps1`，不需要人工介入複製或按 Enter 確認）——技術上現在已經有 WinRM 通道可以做到，但故意還沒做，因為 §15 的「套用前需操作者手動確認一次」是刻意保留的人工把關，避免半夜/誤觸發不小心把錯的版本套到正式機
+
+### §14.3b · WinRM 網路直連設定（2026-09-08）
+
+開發機（`hichan`，172.16.11.211）與正式機（`Motrix`，172.16.10.177）現在可以透過 WinRM 直接互相執行遠端指令，不需要再用隨身碟/雲端硬碟人工複製檔案。**用途僅限「輔助操作」**（傳檔案、遠端跑診斷指令、必要時直接呼叫 `apply_update.ps1`），不是要繞過 §15 既有的部署安全機制。
+
+**兩邊各自的設定（一次性，已完成）：**
+
+| 機器 | 設定內容 |
+|------|---------|
+| 兩邊都要 | `Enable-PSRemoting -Force -SkipNetworkProfileCheck`（需系統管理員權限，UAC 無法用指令繞過，一定要真人點「是」） |
+| 開發機 | `Set-Item WSMan:\localhost\Client\TrustedHosts -Value "172.16.10.177" -Force`（信任正式機為遠端目標） |
+| 正式機 | `New-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name LocalAccountTokenFilterPolicy -PropertyType DWord -Value 1 -Force`（**工作群組環境必踩的坑**：本機系統管理員帳號遠端連線時 UAC 預設會拿到過濾後的權杖，導致需要提升權限的操作被拒絕，此登錄機值可以解除這個限制） |
+| 正式機 | `Get-NetFirewallRule -DisplayGroup "Windows Remote Management" \| Set-NetFirewallRule -RemoteAddress Any`（**第二個坑**：Windows 內建的 WinRM 防火牆規則在 Public 設定檔下預設把遠端位址範圍限定成 `LocalSubnet`，即使兩機實際上在同一個實體網段，只要正式機自己的網卡設的是較窄的 `/24` 遮罩就會判定開發機「不算同子網路」而擋下——即使規則本身顯示 `Enabled: True` 也一樣會擋，因為問題出在遠端位址範圍不是啟用狀態，需要另外放寬） |
+
+**使用方式（開發機執行）：**
+
+```powershell
+# 互動式遠端操作，像坐在正式機前面一樣（打 exit 離開）
+Enter-PSSession -ComputerName 172.16.10.177 -Credential (Get-Credential -UserName "Motrix")
+
+# 或一次性執行單一指令/腳本
+$cred = Get-Credential -UserName "Motrix"
+Invoke-Command -ComputerName 172.16.10.177 -Credential $cred -ScriptBlock { hostname }
+
+# 免重複輸入密碼：先把密碼存成只有這台機器這個帳號能解開的加密檔案
+Get-Credential -UserName "Motrix" | Export-Clixml -Path "$env:USERPROFILE\motrix_cred.xml"
+# 之後用 Import-Clixml 讀回來當 -Credential 參數即可
+```
+
+**已知風險（刻意接受）**：正式機多了一個常駐的遠端執行入口（WinRM 服務＋開放的防火牆規則），若開發機帳密或這台機器本身被入侵，攻擊者可直接對正式機下遠端指令——這是持續性攻擊面，經使用者確認可接受這個取捨，換取部署效率。若未來要撤銷，正式機執行 `Disable-PSRemoting -Force` 並把上述防火牆規則改回 `LocalSubnet`／關閉即可還原。
 
 ### §14.4 · 選型資料庫雙機內容核對（API 版，2026-08-10）
 
