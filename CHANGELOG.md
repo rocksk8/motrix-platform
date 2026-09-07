@@ -5,6 +5,18 @@
 
 ---
 
+### 2026-09-07（加開）— PDF 存檔納入雲端每日備份鏡像（DB 無異動）
+
+- 背景：QUICK.md §11 長期記載的已知限制——報價單/出貨單/承攬商匯款申請/開票申請憑據/請款單/結案報表這 6 類 PDF 檔案各自存在專案根目錄獨立資料夾（如 `報價單PDF/`、`出貨單PDF/`），不在 `uploads/` 底下，過去 `_mirror_uploads()`（2026-08-08 新增，只掃 `uploads/` 目錄樹）完全沒有覆蓋到。這些 PDF 是簽核完成後系統背景自動產生存檔的正式文件，DB 裡的 `quotations`/`shipping_notes` 等資料表本身有每日 JSON 備份能救回來，但已經產出的 PDF 檔案本身從未被雲端備份過——跟 2026-08-08 修復 uploads/ 照片缺口是同一類風險
+- 把 `_mirror_uploads()` 原本的「按檔案 size+mtime 判斷是否需要複製」增量鏡像邏輯抽成共用函式 `_mirror_directory_incremental(local_root, dst_root_abs, s3_dir_root, exclude_demo_dirs=True)`，`_mirror_uploads()` 改成呼叫它的薄包裝（行為完全不變，純重構）
+- 新增 `_pdf_archive_dirs()`：回傳目前實際生效的 6 類 PDF 目錄清單，**呼叫 `pdf_gen.py` 各自的 `_get_*_pdf_base()` getter**，不是直接假設專案根目錄下的預設資料夾名稱——這些 base path 可能被 superadmin 透過 `system_settings` 改到公司共用網路磁碟等自訂位置，備份要跟著實際生效的路徑走
+- 新增 `_mirror_pdf_archives()`，掛進 `_daily_backup()`，跟 `_mirror_uploads()` 並列執行、各自獨立的 try/except（其中一個失敗不影響另一個），失敗會走既有的 `_write_backup_alert()` 告警路徑。雲端鏡像位置為 `PDF存檔鏡像\{類別}\`（跟 `上傳檔案鏡像\` 同一層），backend="s3" 時對應到 S3 key 前綴 `PDF存檔鏡像/{類別}/`
+- 同步更新 `DR-SOP.md` 三處原本標注「仍未涵蓋」的過期記載（§3 第 2 點、Step 3 還原步驟、待辦事項總表）
+- 新增測試 `test_pdf_archive_mirror_2026_09_07.py`（5 題）：`_pdf_archive_dirs()` 正確反映自訂設定路徑、6 類全部正確複製、不變檔案不重複上傳、目錄不存在時安全 no-op、`_daily_backup()` 確實有掛上這個新步驟
+- pytest 444/444 全過（含既有 `TestMirrorUploads` 測試組全數維持通過，確認共用邏輯抽取沒有改變原本行為）
+
+---
+
 ### 2026-09-07（末）— 補齊 requirements.txt 缺漏套件＋新增弱點掃描工具（DB 無異動）
 
 - 背景：正式機長期不重建 Python 環境，`requirements.txt` 只列了 `fastapi`/`uvicorn`/`pydantic`/`aiofiles`/`pyotp`/`qrcode`/`boto3` 七項，但實際靜態掃描全部後端程式碼的 import 之後發現至少 4 個第三方套件完全沒被任何 requirements 檔記載過

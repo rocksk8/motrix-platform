@@ -80,6 +80,10 @@ def _uploads_mirror_dir() -> str:
     return os.path.join(_archive_base(), "上傳檔案鏡像")
 
 
+def _pdf_mirror_dir(subdir: str) -> str:
+    return os.path.join(_archive_base(), "PDF存檔鏡像", subdir)
+
+
 # Local always-on paths (independent of cloud drive mount)
 _BACKEND_DIR      = os.path.dirname(os.path.abspath(__file__))
 _PROJECT_ROOT     = os.path.dirname(_BACKEND_DIR)
@@ -391,27 +395,22 @@ def _snapshot_sqlite(also_to_cloud: bool = True):
         return None
 
 
-def _mirror_uploads() -> int:
-    """Incrementally sync uploads/（專案照片等實體檔案）到雲端 _uploads_mirror_dir()。
-
-    這些檔案不在 quotations/customers/... 那幾張表裡，daily/weekly backup 原本完全
-    沒有覆蓋到——db 救得回來，但照片救不回來。跟 JSON 每日備份不同的是，這裡改用
-    「按檔案 size+mtime 判斷是否需要複製」的鏡像做法，而不是每天整包重新複製一份：
-    上傳的照片一旦寫入通常不會再變動，若每天都整份複製，一年下來雲端空間會被同一批
-    照片的 365 份重複拷貝塞滿。只複製新增/變動過的檔案，且鏡像只增不減——即使來源
-    檔案被刪除，鏡像裡的舊副本仍保留（跟每日/週備份「保留歷史」的精神一致）。
-
-    Demo 隔離目錄（uploads/_demo_projects 等，見 db.py）故意跳過：demo 帳號的資料
-    本來就每次登入都會被清空，不是需要保存的真實資料。
-    """
-    if not os.path.isdir(_UPLOADS_DIR):
+def _mirror_directory_incremental(local_root: str, dst_root_abs: str, s3_dir_root: str,
+                                   exclude_demo_dirs: bool = True) -> int:
+    """共用的「按檔案 size+mtime 判斷是否需要複製」鏡像邏輯（2026-09-07 從
+    `_mirror_uploads()` 抽出，供 `_mirror_pdf_archives()` 共用，見該函式與
+    `_mirror_uploads()` 各自的 docstring 說明用途差異）。只複製新增/變動過的
+    檔案，鏡像只增不減；`exclude_demo_dirs=True` 時跳過任何 `_` 開頭的子目錄
+    （demo 隔離資料夾慣例，見 db.py），回傳實際複製的檔案數。"""
+    if not os.path.isdir(local_root):
         return 0
     copied = 0
-    for root, dirs, files in os.walk(_UPLOADS_DIR):
-        dirs[:] = [d for d in dirs if not d.startswith('_demo')]
-        rel_root = os.path.relpath(root, _UPLOADS_DIR)
-        dst_dir = _uploads_mirror_dir() if rel_root == '.' else os.path.join(_uploads_mirror_dir(), rel_root)
-        s3_dir = "上傳檔案鏡像" if rel_root == '.' else f"上傳檔案鏡像/{rel_root.replace(os.sep, '/')}"
+    for root, dirs, files in os.walk(local_root):
+        if exclude_demo_dirs:
+            dirs[:] = [d for d in dirs if not d.startswith('_demo')]
+        rel_root = os.path.relpath(root, local_root)
+        dst_dir = dst_root_abs if rel_root == '.' else os.path.join(dst_root_abs, rel_root)
+        s3_dir = s3_dir_root if rel_root == '.' else f"{s3_dir_root}/{rel_root.replace(os.sep, '/')}"
         for fname in files:
             src = os.path.join(root, fname)
             dst = os.path.join(dst_dir, fname)
@@ -426,11 +425,66 @@ def _mirror_uploads() -> int:
                 _cloud_copy_file(src, dst, s3_key)
                 copied += 1
             except Exception:
-                logger.exception("_mirror_uploads failed for %s", src)
+                logger.exception("_mirror_directory_incremental failed for %s", src)
+    return copied
+
+
+def _mirror_uploads() -> int:
+    """Incrementally sync uploads/（專案照片等實體檔案）到雲端 _uploads_mirror_dir()。
+
+    這些檔案不在 quotations/customers/... 那幾張表裡，daily/weekly backup 原本完全
+    沒有覆蓋到——db 救得回來，但照片救不回來。跟 JSON 每日備份不同的是，這裡改用
+    「按檔案 size+mtime 判斷是否需要複製」的鏡像做法，而不是每天整包重新複製一份：
+    上傳的照片一旦寫入通常不會再變動，若每天都整份複製，一年下來雲端空間會被同一批
+    照片的 365 份重複拷貝塞滿。只複製新增/變動過的檔案，且鏡像只增不減——即使來源
+    檔案被刪除，鏡像裡的舊副本仍保留（跟每日/週備份「保留歷史」的精神一致）。
+
+    Demo 隔離目錄（uploads/_demo_projects 等，見 db.py）故意跳過：demo 帳號的資料
+    本來就每次登入都會被清空，不是需要保存的真實資料。
+    """
+    copied = _mirror_directory_incremental(_UPLOADS_DIR, _uploads_mirror_dir(), "上傳檔案鏡像")
     if copied:
         logger.info("uploads mirror: copied %d new/changed file(s) to %s", copied, _uploads_mirror_dir())
         _system_audit("backup.uploads_mirror", date.today().isoformat(), {"copied": copied})
     return copied
+
+
+def _pdf_archive_dirs() -> list:
+    """回傳目前設定生效的 6 類 PDF 存檔目錄 (子資料夾代稱, 實際絕對路徑)。
+    刻意呼叫 pdf_gen.py 的 `_get_*_pdf_base()` 而非直接拼預設路徑——這些
+    base path 可能被 superadmin 透過 `system_settings` 改到公司共用網路磁碟等
+    自訂位置（見 pdf_gen.py 各 getter docstring），備份要跟著實際生效的路徑走，
+    不能假設一定是專案根目錄底下的預設資料夾。背景排程本來就不掛在任何
+    request 上，`is_demo_mode()` 這些 getter 內部的判斷會自然落在預設值 False，
+    跟 `get_db()` 的既有推理一致，永遠拿到正式（非 demo）路徑。"""
+    import pdf_gen
+    return [
+        ("報價單", pdf_gen._get_pdf_base()),
+        ("出貨單", pdf_gen._get_shipping_pdf_base()),
+        ("承攬商匯款申請", pdf_gen._get_contractor_voucher_pdf_base()),
+        ("開票申請憑據", pdf_gen._get_invoice_voucher_pdf_base()),
+        ("請款單", pdf_gen._get_payment_request_pdf_base()),
+        ("結案報表", pdf_gen._get_case_closing_pdf_base()),
+    ]
+
+
+def _mirror_pdf_archives() -> int:
+    """比照 `_mirror_uploads()` 的鏡像邏輯，把 6 類 PDF 存檔目錄（報價單／出貨單／
+    承攬商匯款申請／發票開立簽核單／請款單／結案報表）也納入每日雲端備份範圍
+    （2026-09-07，見 MOTRIX-ERP-QUICK.md §11 已知限制條目）。這些目錄各自在
+    專案根目錄下獨立存在（如 `報價單PDF/`），不在 `uploads/` 底下，過去
+    `_mirror_uploads()` 完全掃不到——只有 quotations 等資料表本身有每日 JSON
+    備份，已經產生好的 PDF 檔案本身從來沒被備份過，DB 救得回來但 PDF 檔案救不回來，
+    跟 uploads 的照片是同一類風險。"""
+    total = 0
+    for subdir, local_dir in _pdf_archive_dirs():
+        copied = _mirror_directory_incremental(local_dir, _pdf_mirror_dir(subdir), f"PDF存檔鏡像/{subdir}")
+        total += copied
+    if total:
+        logger.info("PDF archive mirror: copied %d new/changed file(s) across %d categories",
+                     total, len(_pdf_archive_dirs()))
+        _system_audit("backup.pdf_archive_mirror", date.today().isoformat(), {"copied": total})
+    return total
 
 
 def _prune_audit_log(keep_days: int = 730) -> None:
@@ -653,6 +707,12 @@ def _daily_backup():
     except Exception:
         logger.exception("_mirror_uploads failed in daily schedule")
         _write_backup_alert("uploads/ 雲端鏡像失敗，詳見 server.log", level="ERROR")
+
+    try:
+        _mirror_pdf_archives()
+    except Exception:
+        logger.exception("_mirror_pdf_archives failed in daily schedule")
+        _write_backup_alert("PDF 存檔雲端鏡像失敗，詳見 server.log", level="ERROR")
 
     try:
         today_label = date.today().isoformat()

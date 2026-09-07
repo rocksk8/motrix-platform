@@ -1045,6 +1045,9 @@ GET/PUT /api/settings/cloud-backup-target（superadmin only，無前端頁面，
     週備份\YYYY-WNN\      （保留 730 天，超過自動清除整個週別資料夾）
     上傳檔案鏡像\          （2026-08-08 新增，uploads/ 專案照片等實體檔案，_mirror_uploads() 依大小+
                             修改時間增量同步，不是每日整包複製；demo 隔離目錄不同步；只增不減）
+    PDF存檔鏡像\{類別}\    （2026-09-07 新增，報價單/出貨單/承攬商匯款申請/開票申請憑據/請款單/
+                            結案報表 6 類，_mirror_pdf_archives() 同一套增量同步邏輯；跟隨
+                            system_settings 裡各自 pdf_base_path 的實際設定值，非固定預設路徑）
 
 本機（不依賴 G:，務必保留）
   backend\db_backups\YYYY-MM-DD\motrix_erp.db   ← SQLite Online Backup，保留 30 天
@@ -1145,7 +1148,7 @@ xlsx-0.18.5.full.min.js     （SheetJS）
 | ✅ | ~~案件執行進度沒有跨案的時間軸或看板視圖~~（新增 `case-stage-board.html`：看板五欄＋跨案時間軸，見 §12 2026-08-23c）；專案時程跨專案視覺化仍未做，`dashboard.py` 目前只有依狀態分組的專案彙總卡片（2026-08-22k） |
 | ✅ | ~~案件完結案缺防呆機制~~（2026-08-25 使用者提出，2026-08-26 已施作：`update_deal_tag()` 轉入「已結案」前檢查①`case_stages` 全部完成②`payment.items` 全部收齊③關聯單據皆無待審核中，任一未達成回 400 並通知尚未完成該項的簽核人＋最高管理員，見 §12 2026-08-26） |
 | 🟡 | **已結案案件解鎖/半解鎖（2026-08-26 新增，範圍刻意收斂，非完整涵蓋）**：新增 `case-unlock`/`case-lock` 讓已結案案件進入「半解鎖」狀態，僅 8 個端點（案件記錄整包存檔／款項標記收款／款項發票附件／叫料附件／叫料發票附件共 8 支）支援半解鎖期間排隊等 superadmin 審核套用；案件執行階段細項端點（10 支）與款項稅額沖銷（3 支）刻意不支援排隊，已結案時一律直接 403（不論是否半解鎖），需要修正時只能透過案件資料整體編輯或聯繫最高管理員直接校正。之後若要擴大涵蓋範圍，比照 `case_record_update` 的「暫存 payload_json、核准時重放同一段套用邏輯」模式即可，見 db.py `_m061_case_semi_unlock()` docstring。 |
-| 🟢 | PDF 存檔（報價單/出貨單/勞報單）未納入雲端備份範圍，可沿用 `_mirror_uploads()` 機制擴充，見 `DR-SOP.md` §5 |
+| ✅ | ~~PDF 存檔（報價單/出貨單/勞報單）未納入雲端備份範圍~~（2026-09-07 新增 `archive.py::_mirror_pdf_archives()`，沿用 `_mirror_uploads()` 抽出的共用鏡像邏輯，涵蓋 6 類 PDF：報價單/出貨單/承攬商匯款申請/開票申請憑據/請款單/結案報表，見 §8.1） |
 | 🟢 | CORS 白名單寫死 IP，未改用環境變數，換機器/換 IP 需改 code 重新部署，見 `DR-SOP.md` §5 |
 | 🟢 | `routers/projects.py`（592行）自 2026-08-26 專案併入案件管理後已無任何前端流程掛載，是否整個移除尚未決定 |
 | 🟡 | 多分公司架構＋自動核版更新規劃中，未列入排程，見 `MULTI-BRANCH-AUTO-UPDATE-DESIGN.md`（2026-08-31，4 項待決事項） |
@@ -1158,6 +1161,14 @@ xlsx-0.18.5.full.min.js     （SheetJS）
 ## §12 · 變更摘要（最新兩版）
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
+
+### 2026-09-07（加開）— PDF 存檔納入雲端每日備份鏡像（DB 無異動）
+
+- 補上 §11 已知限制：報價單/出貨單/承攬商匯款申請/開票申請憑據/請款單/結案報表 6 類 PDF 各自存在專案根目錄獨立資料夾（如 `報價單PDF/`），不在 `uploads/` 底下，`_mirror_uploads()` 完全掃不到——DB 救得回來但已產出的 PDF 檔案本身從未被備份過
+- 把 `_mirror_uploads()` 的增量鏡像邏輯抽成共用的 `_mirror_directory_incremental()`，新增 `_mirror_pdf_archives()` 呼叫 `pdf_gen.py` 各自的 `_get_*_pdf_base()` getter（跟隨 superadmin 可能改到的自訂路徑，不是硬猜預設資料夾），掛進 `_daily_backup()`，與 `_mirror_uploads()` 並列執行
+- 同步更新 `DR-SOP.md` 三處過期記載（原本標注「仍未涵蓋」的地方）
+- 新增測試 `test_pdf_archive_mirror_2026_09_07.py`（5 題）
+- pytest 444/444 全過
 
 ### 2026-09-07（末）— 補齊 requirements.txt 缺漏套件＋新增弱點掃描工具（DB 無異動）
 
