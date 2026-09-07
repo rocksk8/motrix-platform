@@ -121,10 +121,15 @@ def test_login_create_submit_approve_smoke(live_server, make_user):
             _login(page2, live_server, approver_user, approver_pw)
 
             page2.goto(f"{live_server}/pages/quotation-form.html?id={quote_no}")
-            # 20 秒（比其餘等待寬鬆許多）：這條測試在單獨執行時很穩定，但夾在整批
-            # 400+ 個測試中間跑過一次因為系統負載較高而逾時過一次（2026-09-07），
-            # 加大時限吸收偶發的系統忙碌，而不是每次都精準卡在剛好會逾時的邊界。
-            page2.wait_for_selector('button:has-text("預覽後簽核")', timeout=20000)
+            # 30 秒（已知這條測試偶爾會在這裡逾時，2026-09-07 兩輪觀察）：第一次
+            # 只在整批 400+ 測試中間跑過一次時逾時過（當時 10 秒→20 秒），但同一天
+            # 稍晚又在「單獨只跑這個檔案的 2 個測試」這種輕量情境下逾時過一次，
+            # 代表不是單純「系統忙碌時才會慢」，根因還沒有抓到（懷疑跟 SQLite WAL
+            # 模式下 approve 端點需要讀 quotations + tiered_approval 解析時偶發的
+            # 鎖等待有關，但沒有實際證實）。目前的因應是持續加大這一處等待時限
+            # 吸收，而不是照下修——之後若又觀察到逾時，先確認是不是同一個點卡住，
+            # 而非重新從頭排查整條路徑。
+            page2.wait_for_selector('button:has-text("預覽後簽核")', timeout=30000)
             page2.click('button:has-text("預覽後簽核")')
             page2.wait_for_selector('button:has-text("確認簽核")', timeout=20000)
             page2.click('button:has-text("確認簽核")')
@@ -136,5 +141,46 @@ def test_login_create_submit_approve_smoke(live_server, make_user):
             status_value = page2.locator("select.status-select-admin").input_value()
             assert status_value == "已送出", f"簽核後狀態應為已送出，實際: {status_value!r}"
             ctx2.close()
+        finally:
+            browser.close()
+
+
+@pytest.mark.e2e
+def test_inventory_purchase_suggestions_modal_smoke(live_server, make_user):
+    """庫存頁「採購建議」按鈕→開啟 Modal→正確顯示低於安全庫存的料號與建議採購量
+    （2026-09-07，架構地圖 §6.6）。後端邏輯已有 test_purchase_suggestions_2026_09_07.py
+    完整涵蓋，這裡只驗證前端按鈕/Modal 這條路徑真的能點得通、資料有正確渲染出來
+    ——純 API 測試看不出 x-show/Modal 綁定寫錯這類純前端問題。"""
+    username, password = make_user(username="e2e_inv_admin", role="admin")
+
+    import db
+    conn = db.get_db()
+    now = "2026-01-01T00:00:00"
+    conn.execute(
+        "INSERT INTO parts (part_no, name, brand, unit, cost, category, safety_stock, active, created_at, updated_at) "
+        "VALUES (?,?,?,?,?,?,?,1,?,?)",
+        ("E2E-LOWSTOCK", "E2E 測試低庫存料件", "", "台", 100, "其他", 10, now, now),
+    )
+    conn.commit()
+    conn.close()
+
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        try:
+            page = browser.new_page()
+            _login(page, live_server, username, password)
+
+            page.goto(f"{live_server}/pages/inventory.html")
+            page.wait_for_selector('button:has-text("採購建議")', timeout=10000)
+            page.click('button:has-text("採購建議")')
+
+            # 底下主表格本來就會列出這個料號（未篩選），"E2E-LOWSTOCK" 文字在
+            # Modal 開啟前就已經存在於畫面 DOM 裡——必須把查詢範圍限定在
+            # 「採購建議」那個 Modal 本身內，不能用整頁的裸文字搜尋，否則會誤判
+            # 成模組還沒載入資料就通過。
+            modal = page.locator(".modal-box", has_text="採購建議")
+            modal.locator("tr", has_text="E2E-LOWSTOCK").wait_for(timeout=10000)
+            row_text = modal.locator("tr", has_text="E2E-LOWSTOCK").inner_text()
+            assert "15" in row_text, f"應建議補到黃燈門檻 ceil(10*1.5)=15，實際列內容: {row_text!r}"
         finally:
             browser.close()

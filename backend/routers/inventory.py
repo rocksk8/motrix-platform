@@ -7,6 +7,7 @@ in_stock -> void（人工報廢/遺失/盤點差異）
 shipped/installed -> in_stock（人工 return_to_stock 更正，見 §出貨單回滾設計）
 """
 import json
+import math
 from datetime import datetime
 from typing import Optional
 
@@ -104,6 +105,77 @@ def parts_summary(q: Optional[str] = None, category: Optional[str] = None, autho
             "stockLevel":     _stock_level(in_cnt, 0),
         })
     return {"items": result}
+
+
+# ── 採購建議（2026-09-07，架構地圖 §6.6） ───────────────────────────────────────
+
+@router.get("/api/inventory/purchase-suggestions")
+def purchase_suggestions(authorization: str = Header(None)):
+    """依安全庫存缺口自動生成採購建議清單。
+
+    **跟架構地圖 §6.6 原始建議的落差**：該條建議寫「資料已齊備、開發成本不高」，
+    但實際查證後系統完全沒有追蹤「供應商前置時間」這個概念（`suppliers`/`parts`
+    表都沒有對應欄位）——這裡刻意不做 ETA 預估，只回答「這個料號該補多少、上次
+    是跟哪個供應商用多少單價買的」，不猜前置時間；缺料急迫程度用既有的
+    `stockLevel`（紅/黃燈，`parts_summary()` 同一套邏輯）表示，不是用天數。
+
+    建議採購量 = 補到「黃燈門檻」（安全庫存 * 1.5，跟既有水位燈號定義一致，
+    見 `_stock_level()`）所需的數量，不是只補到剛好等於安全庫存——否則採購
+    完成後燈號會立刻從紅燈變黃燈，還是會被同一張建議清單再抓出來一次。
+
+    供應商/單價來源：`stock_batches` 該料號最近一筆進貨批次（依 created_at
+    排序），查無進貨紀錄則供應商留空、單價退回 `parts.cost`（料件標準成本）。
+    只回傳目前在紅燈或黃燈區間、且已設定安全庫存（>0）的料號。
+    """
+    _require_user(authorization)
+    conn = get_db()
+    parts_rows = conn.execute(
+        "SELECT part_no, name, brand, unit, category, cost, safety_stock "
+        "FROM parts WHERE active=1 AND safety_stock > 0"
+    ).fetchall()
+    in_stock_by_part = {
+        r["part_no"]: r["cnt"] for r in conn.execute(
+            "SELECT part_no, COUNT(*) AS cnt FROM stock_items WHERE status='in_stock' GROUP BY part_no"
+        ).fetchall()
+    }
+    # SQLite 特性：GROUP BY 搭配單一 MAX() 聚合時，其餘裸欄位保證來自產生該
+    # MAX 值的那一列（本專案既有 migration 已依賴同一特性，見 _m070_stock_batches()）
+    last_batch_by_part = {
+        r["part_no"]: {"supplierId": r["supplier_id"], "supplierName": r["supplier_name"],
+                        "lastPurchaseAt": r["last_at"]}
+        for r in conn.execute(
+            "SELECT part_no, supplier_id, supplier_name, MAX(created_at) AS last_at "
+            "FROM stock_batches WHERE part_no != '' GROUP BY part_no"
+        ).fetchall()
+    }
+    conn.close()
+
+    yellow_multiplier = 1.5  # 跟 parts_summary()::_stock_level() 的黃燈門檻定義一致
+    result = []
+    for p in parts_rows:
+        d = dict(p)
+        safety_stock = d["safety_stock"] or 0
+        in_stock = in_stock_by_part.get(d["part_no"], 0)
+        target = math.ceil(safety_stock * yellow_multiplier)  # 補到黃燈門檻，避免浮點小數採購量
+        suggested_qty = max(0, target - in_stock)
+        if suggested_qty <= 0:
+            continue
+        level = "red" if in_stock < safety_stock else "yellow"
+        last_batch = last_batch_by_part.get(d["part_no"], {})
+        unit_cost = d.get("cost") or 0
+        result.append({
+            "part_no": d["part_no"], "name": d["name"], "brand": d["brand"],
+            "unit": d["unit"], "category": d["category"],
+            "safetyStock": safety_stock, "inStockCount": in_stock,
+            "stockLevel": level, "suggestedQty": suggested_qty,
+            "unitCost": unit_cost, "estimatedCost": round(unit_cost * suggested_qty, 2),
+            "lastSupplierId": last_batch.get("supplierId"),
+            "lastSupplierName": last_batch.get("supplierName") or "",
+            "lastPurchaseAt": last_batch.get("lastPurchaseAt") or "",
+        })
+    result.sort(key=lambda r: (r["stockLevel"] != "red", -r["estimatedCost"]))
+    total_estimated_cost = round(sum(r["estimatedCost"] for r in result), 2)
+    return {"items": result, "count": len(result), "totalEstimatedCost": total_estimated_cost}
 
 
 # ── 序號清單 ─────────────────────────────────────────────────────────────────

@@ -1015,6 +1015,23 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
 
 前端：`inventory.html`「進貨」Modal 新增供應商/發票號欄位；新增「進貨批次」Modal（列表＋標記已付款/編輯）。
 
+### §7.19 · 採購建議（2026-09-07，架構地圖 §6.6）
+
+| Method | Path | 說明 |
+|--------|------|------|
+| GET | /inventory/purchase-suggestions | 依安全庫存缺口自動生成，僅回傳紅/黃燈且已設定安全庫存的料號 |
+
+回傳 `{items, count, totalEstimatedCost}`。**跟架構地圖 §6.6 原始建議的落差**：該條建議寫「資料已齊備」，但系統其實完全沒有追蹤供應商前置時間，所以刻意不做 ETA 預估，只算「該補多少、上次跟誰買、大概要花多少」：
+
+```
+建議採購量 = ceil(安全庫存 × 1.5) − 目前在庫（補到黃燈門檻，不是只補到剛好等於安全庫存，
+             否則採購完成後燈號會立刻變黃再被同一張清單抓到一次）
+供應商/單價 = 該料號最近一筆 stock_batches 進貨紀錄；查無紀錄則供應商留空、單價退回 parts.cost
+排序 = 紅燈優先於黃燈，同燈號內依預估金額由高到低
+```
+
+前端 `inventory.html`：工具列新增「採購建議」按鈕（`lowStockCount > 0` 才顯示，跟既有「低於安全庫存」篩選 chip 同一組判斷條件），開啟 Modal 顯示清單與預估總金額；純唯讀，不含下單/標記已處理等狀態追蹤（v1 刻意收斂範圍）。
+
 ---
 
 ## §8 · 備份與還原
@@ -1161,6 +1178,14 @@ xlsx-0.18.5.full.min.js     （SheetJS）
 ## §12 · 變更摘要（最新兩版）
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
+
+### 2026-09-07（再加開）— 庫存新增自動採購建議（架構地圖 §6.6，DB 無異動）
+
+- 新端點 `GET /api/inventory/purchase-suggestions`，依安全庫存缺口計算建議採購量（補到黃燈門檻 = 安全庫存 × 1.5），供應商/單價取自該料號最近一筆 `stock_batches` 進貨紀錄，查無紀錄退回 `parts.cost`；只回傳目前紅/黃燈且已設定安全庫存的料號，紅燈優先排序
+- **複查更正架構地圖 §6.6**：原始建議寫「資料已齊備」，但系統其實從未追蹤供應商前置時間，故刻意不做 ETA 預估，只回答「該補多少、上次跟誰買、大概多少錢」
+- 前端 `inventory.html` 工具列新增「採購建議」按鈕（沿用既有 `lowStockCount` 判斷式）＋唯讀 Modal，v1 刻意不含下單/已處理狀態追蹤
+- 新增後端測試 `test_purchase_suggestions_2026_09_07.py`（9 題）與一條 Playwright 前端 smoke test（`test_inventory_purchase_suggestions_modal_smoke`），驗證按鈕/Modal 這條純前端路徑真的能點得通、資料正確渲染——過程中這條新測試第一版有選錯 DOM 節點的 bug（誤抓到 Modal 開啟前就已存在的背景主表格同名料號列，而非 Modal 內的建議清單列），修正為把查詢範圍限定在 Modal 容器內
+- pytest 454/454 全過
 
 ### 2026-09-07（加開）— PDF 存檔納入雲端每日備份鏡像（DB 無異動）
 
