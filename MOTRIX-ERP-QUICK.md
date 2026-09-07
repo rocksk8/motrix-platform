@@ -747,6 +747,7 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
 | GET/PUT | /settings/approval-flow | 統一簽核流程（`unified_approval_flow`），PUT 限 superadmin |
 | GET/PUT | /settings/approval-flow-scope | 五種文件類型套用範圍（統一／獨立），PUT 限 superadmin，2026-08-28 |
 | GET/PUT | /settings/approval-flow/{doc_type} | 該文件類型自己獨立的簽核設定（`{doc_type}_approval_flow`），doc_type ∈ quotation/shipping/invoice_voucher/payment_request/contractor_voucher，PUT 限 superadmin，2026-08-28 |
+| GET/PUT | /settings/cloud-backup-target | 雲端備份目標（`local_drive`／`s3`），PUT 限 superadmin，見 §8.0，2026-09-07 |
 | GET/PATCH | /notifications/* | |
 | GET | /audit-log | **admin+ only**；viewer/sales/engineer → 403 |
 | GET/POST/PUT/DELETE | /work-logs | PUT/DELETE 非 admin 只能操作自己的 |
@@ -1021,6 +1022,19 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
 > 整台正式機硬體故障時的完整重建流程，見獨立文件 [`DR-SOP.md`](DR-SOP.md)（2026-08-07 新增）。
 > 這裡的 §8.1–§8.4 是日常備份機制；DR-SOP.md 是「機器掛了怎麼辦」的實際操作步驟。
 
+### §8.0 · 雲端備份目標可插拔（2026-09-07，架構地圖 §6.4）
+
+`archive.py` 原本只支援「本機掛載的雲端硬碟磁碟機」（下方 §8.1，磁碟機代號漂移已造成過真實備份靜默失效事故）。新增 `cloud_storage.py`，可切換成 S3 相容物件儲存（AWS S3／Backblaze B2 皆可，B2 有 S3 相容端點）：
+
+```
+system_settings.cloud_backup_target = { backend: "local_drive" | "s3", s3: {bucket, endpoint_url, region, prefix} }
+GET/PUT /api/settings/cloud-backup-target（superadmin only，無前端頁面，比照 edge-path 等技術設定慣例）
+```
+
+- **憑證一律不存 DB**——走 boto3 標準憑證鏈（環境變數 `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` 或 `~/.aws/credentials`），設定裡只有 bucket/endpoint/region/prefix 這類非機密值
+- `archive.py` 內所有原本「寫本機掛載磁碟機路徑」的地方（即時/每日/週備份、uploads 鏡像、SQLite 快照複製、過期備份清除）都已改走 `_cloud_write_json()`/`_cloud_copy_file()`/`_cloud_stat()`/`_cloud_marker_exists()`/`_cloud_write_marker()`/`_cloud_list_top_level()`/`_cloud_delete_dir()` 這組派送層——`backend="local_drive"`（預設）時這些函式的行為與改動前逐位元組相同（本機路徑計算完全沒變，只是多繞一層），`backend="s3"` 時才會改呼叫 `cloud_storage.py`
+- **目前沒有真實 S3/B2 帳號可測試**，S3 路徑只用假的記憶體 S3 client 做過完整單元測試（`tests/test_cloud_storage_2026_09_07.py`，18 題）；要在正式機真正啟用，需要①先申請一個 AWS S3 或 Backblaze B2 帳號建 bucket ②在正式機環境變數設定 access key ③呼叫上面的 PUT 端點切換 backend。切換前這些都還沒做，正式機目前**維持 §8.1 原本的本機磁碟機模式**
+
 ### §8.1 · 路徑
 
 ```
@@ -1130,6 +1144,13 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 ## §12 · 變更摘要（最新兩版）
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
+
+### 2026-09-07（更晚）— 雲端備份目標可插拔，新增 S3 相容後端（架構地圖 §6.4，DB 無異動）
+
+- 新模組 `backend/cloud_storage.py`：S3 相容物件儲存後端（AWS S3／Backblaze B2 皆可），憑證走 boto3 標準憑證鏈（環境變數/`~/.aws/credentials`），**一律不存 DB**；新設定 `system_settings.cloud_backup_target`（`GET/PUT /api/settings/cloud-backup-target`，superadmin only）
+- `archive.py` 所有原本直接操作本機掛載磁碟機路徑的地方（即時/每日/週備份、uploads 鏡像、SQLite 快照複製到雲端、過期備份清除）改走新的 `_cloud_*()` 派送層；`backend="local_drive"`（預設）時每個函式呼叫的本機路徑計算與 os/shutil 操作跟改動前逐位元組相同，只是多繞一層——確保現有正式機行為零回歸
+- **目前沒有真實 S3/B2 帳號可測試**：S3 路徑只用假的記憶體 S3 client 做過完整單元測試（`test_cloud_storage_2026_09_07.py`，18 題，涵蓋 put/stat/list/delete、`_archive_ok()` 隨後端切換、`_backup_quotation`/`_mirror_uploads`/`_daily_backup`/`_prune_cloud_backups` 在 s3 模式下的整合行為），未在真實 bucket 上驗證過。要在正式機真正啟用需要使用者自行申請帳號、設定環境變數、呼叫設定端點切換，見 §8.0
+- pytest 429/429 全過（400 原有 + 11 TOTP + 18 雲端備份）
 
 ### 2026-09-07（稍晚）— 新增 TOTP 兩步驟驗證，自助啟用（DB v72）
 

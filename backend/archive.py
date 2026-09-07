@@ -9,6 +9,7 @@ import time
 import logging
 from datetime import datetime, date, timedelta
 
+import cloud_storage
 from db import get_db, DB_PATH
 from helpers import _cleanup_sessions, _get_setting
 
@@ -87,8 +88,88 @@ _ALERT_DIR        = os.path.join(_PROJECT_ROOT, "backup_alerts")
 _UPLOADS_DIR      = os.path.join(_PROJECT_ROOT, "uploads")
 
 
+def _active_backend() -> str:
+    return cloud_storage.cloud_backup_target().get("backend", "local_drive")
+
+
 def _archive_ok() -> bool:
+    """"Is the cloud backup destination currently reachable?" — branches on
+    the configured backend (architecture map §6.4, 2026-09-07). Everything
+    below this line that used to check "is the drive mounted" now goes
+    through this, so switching backends doesn't require touching every
+    call site's availability check, only the actual read/write dispatch
+    (see the _cloud_*() helpers below)."""
+    if _active_backend() == "s3":
+        return cloud_storage.s3_available()
     return bool(_archive_base())
+
+
+# ── Backend-dispatching read/write helpers (2026-09-07) ────────────────────────
+#
+# Each call site still computes its "local_drive" absolute path exactly as
+# before (via _realtime_dir()/_daily_dir()/_weekly_dir()/_uploads_mirror_dir())
+# — that computation, and the existing test monkeypatches of those directory
+# functions, are untouched. These helpers only add a second branch: when
+# `backend == "s3"`, the local absolute path is ignored and an S3 key
+# (relative to the configured prefix, forward-slash separated) is used
+# instead. This keeps 100% of existing "local_drive" behavior byte-for-byte
+# identical (it is, and always was, the production default) while adding the
+# new backend as a strictly additive alternative.
+
+def _cloud_write_json(local_abs_path: str, s3_key: str, data) -> None:
+    if _active_backend() == "s3":
+        cloud_storage.s3_put_bytes(s3_key, json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8"))
+    else:
+        os.makedirs(os.path.dirname(local_abs_path), exist_ok=True)
+        _atomic_json_write(local_abs_path, data)
+
+
+def _cloud_copy_file(local_src: str, local_dest_abs: str, s3_key: str) -> None:
+    if _active_backend() == "s3":
+        cloud_storage.s3_upload_file(local_src, s3_key)
+    else:
+        os.makedirs(os.path.dirname(local_dest_abs), exist_ok=True)
+        shutil.copy2(local_src, local_dest_abs)
+
+
+def _cloud_stat(local_dest_abs: str, s3_key: str):
+    """Returns (size, mtime_epoch) for an existing destination, or None —
+    used by _mirror_uploads() to decide whether a file needs re-copying."""
+    if _active_backend() == "s3":
+        return cloud_storage.s3_stat(s3_key)
+    if not os.path.exists(local_dest_abs):
+        return None
+    st = os.stat(local_dest_abs)
+    return st.st_size, st.st_mtime
+
+
+def _cloud_marker_exists(local_marker_abs: str, s3_key: str) -> bool:
+    if _active_backend() == "s3":
+        return cloud_storage.s3_stat(s3_key) is not None
+    return os.path.exists(local_marker_abs)
+
+
+def _cloud_write_marker(local_marker_abs: str, s3_key: str) -> None:
+    if _active_backend() == "s3":
+        cloud_storage.s3_put_bytes(s3_key, b"")
+    else:
+        os.makedirs(os.path.dirname(local_marker_abs), exist_ok=True)
+        open(local_marker_abs, "w").close()
+
+
+def _cloud_list_top_level(local_dir_abs: str, s3_rel_dir: str) -> list:
+    if _active_backend() == "s3":
+        return cloud_storage.s3_list_prefixes(s3_rel_dir)
+    if not os.path.isdir(local_dir_abs):
+        return []
+    return [n for n in os.listdir(local_dir_abs) if os.path.isdir(os.path.join(local_dir_abs, n))]
+
+
+def _cloud_delete_dir(local_dir_abs: str, s3_rel_dir: str) -> None:
+    if _active_backend() == "s3":
+        cloud_storage.s3_delete_prefix(s3_rel_dir)
+    else:
+        shutil.rmtree(local_dir_abs, ignore_errors=True)
 
 
 def _atomic_json_write(path: str, data) -> None:
@@ -236,11 +317,18 @@ def _ensure_archive_dirs():
         # 整條雲端備份（即時/每日/週+uploads鏡像）全跳過屬於系統性失效，改為
         # ERROR 等級才會觸發 _send_backup_error_email()，避免同一個問題再度悄悄
         # 卡好幾週沒人知道。
+        reason = (f"S3 bucket 無法連線（設定：{cloud_storage.cloud_backup_target()['s3'].get('bucket') or '未設定'}）"
+                   if _active_backend() == "s3" else
+                   f"雲端備份路徑不存在或未掛載：任一磁碟機代號下都找不到 {_ARCHIVE_SUBPATH}")
         _write_backup_alert(
-            f"雲端備份路徑不存在或未掛載：任一磁碟機代號下都找不到 {_ARCHIVE_SUBPATH}。"
-            f"即時/每日/週雲端備份已跳過。本機 SQLite 快照仍會寫入 {_LOCAL_DB_BACKUP}。",
+            f"{reason}。即時/每日/週雲端備份已跳過。本機 SQLite 快照仍會寫入 {_LOCAL_DB_BACKUP}。",
             level="ERROR",
         )
+        return
+    if _active_backend() == "s3":
+        # S3 有沒有「資料夾」是假的（key 裡有沒有 "/" 純粹是命名習慣），不需要、
+        # 也不能像本機磁碟機那樣預先 os.makedirs()——略過，直接視為就緒。
+        _clear_backup_alert_if_healthy()
         return
     for d in [
         os.path.join(_realtime_dir(), "報價單"),
@@ -290,10 +378,8 @@ def _snapshot_sqlite(also_to_cloud: bool = True):
             )
         if also_to_cloud and _archive_ok():
             try:
-                cloud_day = os.path.join(_daily_dir(), today)
-                os.makedirs(cloud_day, exist_ok=True)
-                cloud_dest = os.path.join(cloud_day, "motrix_erp.db")
-                shutil.copy2(dest, cloud_dest)
+                cloud_dest = os.path.join(_daily_dir(), today, "motrix_erp.db")
+                _cloud_copy_file(dest, cloud_dest, f"每日備份/{today}/motrix_erp.db")
             except Exception as e:
                 _write_backup_alert(f"SQLite 快照複製到雲端失敗: {e}", level="ERROR")
         # Prune local snapshots per configured retention (see _backup_retention())
@@ -325,17 +411,19 @@ def _mirror_uploads() -> int:
         dirs[:] = [d for d in dirs if not d.startswith('_demo')]
         rel_root = os.path.relpath(root, _UPLOADS_DIR)
         dst_dir = _uploads_mirror_dir() if rel_root == '.' else os.path.join(_uploads_mirror_dir(), rel_root)
+        s3_dir = "上傳檔案鏡像" if rel_root == '.' else f"上傳檔案鏡像/{rel_root.replace(os.sep, '/')}"
         for fname in files:
             src = os.path.join(root, fname)
             dst = os.path.join(dst_dir, fname)
+            s3_key = f"{s3_dir}/{fname}"
             try:
-                if os.path.exists(dst):
+                existing = _cloud_stat(dst, s3_key)
+                if existing is not None:
                     s = os.stat(src)
-                    d = os.stat(dst)
-                    if s.st_size == d.st_size and int(s.st_mtime) <= int(d.st_mtime):
+                    d_size, d_mtime = existing
+                    if s.st_size == d_size and int(s.st_mtime) <= int(d_mtime):
                         continue
-                os.makedirs(dst_dir, exist_ok=True)
-                shutil.copy2(src, dst)
+                _cloud_copy_file(src, dst, s3_key)
                 copied += 1
             except Exception:
                 logger.exception("_mirror_uploads failed for %s", src)
@@ -394,36 +482,28 @@ def _prune_cloud_backups(daily_keep_days: int = 365, weekly_keep_days: int = 730
 
     cutoff_daily = date.today().toordinal() - daily_keep_days
     try:
-        if os.path.isdir(_daily_dir()):
-            for name in os.listdir(_daily_dir()):
-                path = os.path.join(_daily_dir(), name)
-                if not os.path.isdir(path):
-                    continue
-                try:
-                    d = date.fromisoformat(name)
-                except ValueError:
-                    continue
-                if d.toordinal() < cutoff_daily:
-                    shutil.rmtree(path, ignore_errors=True)
-                    logger.info("Pruned old cloud daily backup dir: %s", path)
+        for name in _cloud_list_top_level(_daily_dir(), "每日備份"):
+            try:
+                d = date.fromisoformat(name)
+            except ValueError:
+                continue
+            if d.toordinal() < cutoff_daily:
+                _cloud_delete_dir(os.path.join(_daily_dir(), name), f"每日備份/{name}")
+                logger.info("Pruned old cloud daily backup dir: %s", name)
     except Exception:
         logger.exception("_prune_cloud_backups (daily) failed")
 
     cutoff_weekly = date.today().toordinal() - weekly_keep_days
     try:
-        if os.path.isdir(_weekly_dir()):
-            for name in os.listdir(_weekly_dir()):
-                path = os.path.join(_weekly_dir(), name)
-                if not os.path.isdir(path):
-                    continue
-                try:
-                    year_str, week_str = name.split('-W')
-                    d = datetime.strptime(f"{year_str} {week_str} 1", "%Y %W %w").date()
-                except (ValueError, IndexError):
-                    continue
-                if d.toordinal() < cutoff_weekly:
-                    shutil.rmtree(path, ignore_errors=True)
-                    logger.info("Pruned old cloud weekly backup dir: %s", path)
+        for name in _cloud_list_top_level(_weekly_dir(), "週備份"):
+            try:
+                year_str, week_str = name.split('-W')
+                d = datetime.strptime(f"{year_str} {week_str} 1", "%Y %W %w").date()
+            except (ValueError, IndexError):
+                continue
+            if d.toordinal() < cutoff_weekly:
+                _cloud_delete_dir(os.path.join(_weekly_dir(), name), f"週備份/{name}")
+                logger.info("Pruned old cloud weekly backup dir: %s", name)
     except Exception:
         logger.exception("_prune_cloud_backups (weekly) failed")
 
@@ -443,7 +523,7 @@ def _backup_quotation(quote_no: str):
     if _archive_ok():
         try:
             path = os.path.join(_realtime_dir(), "報價單", f"{quote_no}.json")
-            _atomic_json_write(path, payload)
+            _cloud_write_json(path, f"即時備份/報價單/{quote_no}.json", payload)
             return
         except Exception as e:
             logger.exception("_backup_quotation cloud write failed for %s", quote_no)
@@ -473,7 +553,7 @@ def _backup_customers():
             "data": [dict(r) for r in rows],
         }
         path = os.path.join(_realtime_dir(), "客戶", "clients.json")
-        _atomic_json_write(path, data)
+        _cloud_write_json(path, "即時備份/客戶/clients.json", data)
     except Exception as e:
         logger.exception("_backup_customers failed")
         _write_backup_alert(f"即時備份客戶失敗: {e}")
@@ -491,9 +571,8 @@ def _backup_suppliers():
             "count": len(rows),
             "data": [dict(r) for r in rows],
         }
-        os.makedirs(os.path.join(_realtime_dir(), "供應商"), exist_ok=True)
         path = os.path.join(_realtime_dir(), "供應商", "suppliers.json")
-        _atomic_json_write(path, data)
+        _cloud_write_json(path, "即時備份/供應商/suppliers.json", data)
     except Exception as e:
         logger.exception("_backup_suppliers failed")
         _write_backup_alert(f"即時備份供應商失敗: {e}")
@@ -520,9 +599,8 @@ def _daily_backup():
     try:
         today_label = date.today().isoformat()
         day_dir     = os.path.join(_daily_dir(), today_label)
-        os.makedirs(day_dir, exist_ok=True)
-        marker = os.path.join(day_dir, '.done')
-        if os.path.exists(marker):
+        marker      = os.path.join(day_dir, '.done')
+        if _cloud_marker_exists(marker, f"每日備份/{today_label}/.done"):
             _clear_backup_alert_if_healthy()
             return
         conn = get_db()
@@ -542,8 +620,9 @@ def _daily_backup():
         for fname, sql in tables.items():
             try:
                 rows = [dict(r) for r in conn.execute(sql).fetchall()]
-                _atomic_json_write(
+                _cloud_write_json(
                     os.path.join(day_dir, f"{fname}.json"),
+                    f"每日備份/{today_label}/{fname}.json",
                     {"exported_at": now, "count": len(rows), "data": rows},
                 )
                 summary[fname] = len(rows)
@@ -552,8 +631,8 @@ def _daily_backup():
                 summary[fname] = "error"
 
         conn.close()
-        _atomic_json_write(os.path.join(day_dir, '彙總.json'), summary)
-        open(marker, 'w').close()
+        _cloud_write_json(os.path.join(day_dir, '彙總.json'), f"每日備份/{today_label}/彙總.json", summary)
+        _cloud_write_marker(marker, f"每日備份/{today_label}/.done")
         logger.info("Daily backup completed: %s", day_dir)
         _system_audit("backup.daily_ok", today_label, summary)
         _clear_backup_alert_if_healthy()
@@ -584,29 +663,29 @@ def _weekly_backup():
     try:
         week_label = date.today().strftime('%Y-W%W')
         week_dir   = os.path.join(_weekly_dir(), week_label)
-        os.makedirs(week_dir, exist_ok=True)
-        marker = os.path.join(week_dir, '.done')
-        if os.path.exists(marker):
+        marker     = os.path.join(week_dir, '.done')
+        s3_dir     = f"週備份/{week_label}"
+        if _cloud_marker_exists(marker, f"{s3_dir}/.done"):
             return
         conn = get_db()
         qs   = [dict(r) for r in conn.execute("SELECT * FROM quotations ORDER BY created_at").fetchall()]
         cs   = [dict(r) for r in conn.execute("SELECT * FROM customers ORDER BY id").fetchall()]
         conn.close()
         now  = datetime.now().isoformat()
-        _atomic_json_write(os.path.join(week_dir, '報價單_全部.json'),
+        _cloud_write_json(os.path.join(week_dir, '報價單_全部.json'), f"{s3_dir}/報價單_全部.json",
                            {"exported_at": now, "count": len(qs), "data": qs})
         by_status: dict = {}
         for q in qs:
             s = (q.get('status') or '草稿').replace('/', '-')
             by_status.setdefault(s, []).append(q)
         for status, items in by_status.items():
-            _atomic_json_write(os.path.join(week_dir, f'報價單_{status}.json'),
+            _cloud_write_json(os.path.join(week_dir, f'報價單_{status}.json'), f"{s3_dir}/報價單_{status}.json",
                                {"exported_at": now, "status": status, "count": len(items), "data": items})
-        _atomic_json_write(os.path.join(week_dir, '客戶.json'),
+        _cloud_write_json(os.path.join(week_dir, '客戶.json'), f"{s3_dir}/客戶.json",
                            {"exported_at": now, "count": len(cs), "data": cs})
-        _atomic_json_write(os.path.join(week_dir, '彙總.json'),
+        _cloud_write_json(os.path.join(week_dir, '彙總.json'), f"{s3_dir}/彙總.json",
                            {"week": week_label, "exported_at": now, "quotations": len(qs), "customers": len(cs)})
-        open(marker, 'w').close()
+        _cloud_write_marker(marker, f"{s3_dir}/.done")
         _system_audit("backup.weekly_ok", week_label, {"quotations": len(qs), "customers": len(cs)})
     except Exception as e:
         logger.exception("_weekly_backup failed")

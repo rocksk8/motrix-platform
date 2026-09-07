@@ -5,6 +5,17 @@
 
 ---
 
+### 2026-09-07（更晚）— 雲端備份目標可插拔，新增 S3 相容後端（架構地圖 §6.4，DB 無異動）
+
+- 新模組 `backend/cloud_storage.py`：新增 S3 相容物件儲存後端（AWS S3、Backblaze B2 皆可，B2 提供 S3 相容端點），作為既有「本機掛載雲端硬碟磁碟機」模式（已證實脆弱，磁碟機代號漂移曾造成備份靜默失效長達三週）的替代方案。憑證走 boto3 標準憑證鏈（環境變數／`~/.aws/credentials`／instance profile），**一律不存資料庫**——新設定 `system_settings.cloud_backup_target` 只存 bucket/endpoint/region/prefix 這類非機密值，新端點 `GET/PUT /api/settings/cloud-backup-target`（superadmin only，無前端頁面，比照既有技術設定慣例）
+- `archive.py` 重構：所有原本直接操作本機磁碟機路徑的地方（即時備份報價單/客戶/供應商、每日/週備份 JSON、uploads/ 鏡像、SQLite 快照複製到雲端、過期備份清除）改走新的一組派送層函式（`_cloud_write_json()`／`_cloud_copy_file()`／`_cloud_stat()`／`_cloud_marker_exists()`／`_cloud_write_marker()`／`_cloud_list_top_level()`／`_cloud_delete_dir()`），依 `system_settings.cloud_backup_target.backend` 分流。`backend="local_drive"`（預設值，也是目前正式機唯一在用的模式）時，這些函式內部呼叫的本機路徑計算與 `os`/`shutil` 操作跟改動前逐位元組相同，只是多繞一層間接呼叫——確保這次重構對現有正式機行為零回歸，只有主動切到 `backend="s3"` 才會改用新程式碼路徑
+- **目前沒有真實 S3/B2 帳號可測試**，S3 路徑完全靠一個記憶體版的假 S3 client（只實作 `put_object`/`head_object`/`list_objects_v2`/`delete_objects`/`head_bucket`/`upload_file` 六個實際會用到的方法）做單元測試，未曾對接過真實 bucket。要在正式機真正啟用，需要使用者：①自行申請 AWS S3 或 Backblaze B2 帳號並建立 bucket ②在正式機的服務執行環境設定 access key 環境變數 ③呼叫上述 PUT 端點切換 `backend` 為 `"s3"` 並填入 bucket 等設定。這三步都還沒做，正式機目前維持原本的本機磁碟機模式不受影響
+- 新增測試 `test_cloud_storage_2026_09_07.py`（18 題）：涵蓋 `cloud_storage.py` 本身（put/stat 往返、bucket 不可達時 `s3_available()` 正確回報 false、`list_prefixes`/`delete_prefix` 分頁邏輯）與 `archive.py` 在 `backend="s3"` 下的整合行為（`_backup_quotation`/`_mirror_uploads`/`_daily_backup`/`_prune_cloud_backups` 確實透過假 client 寫入而非碰觸本機檔案系統）＋新設定端點的權限/驗證測試
+- pytest 429/429 全過（400 既有 + 09-07 稍早的 TOTP 11 題 + 本次雲端備份 18 題）
+- 尚未執行：正式機套用（依 §15 流程）；即使套用，預設行為也不會改變，除非之後另外執行上述三步驟主動切換
+
+---
+
 ### 2026-09-07（稍晚）— 新增 TOTP 兩步驟驗證，自助啟用（DB v72）
 
 - 架構地圖 §6.2 建議事項：新增 `pyotp`／`qrcode` 依賴，`users` 表新增 `totp_secret`/`totp_enabled`/`totp_recovery_codes`（`db.py::_m072_totp()`）。**刻意做成自助啟用而非強制**——正式機 superadmin 是 jeff/corbin 兩位真人業主，若強制下次登入即進入設定流程，部署當下他們手邊沒先裝好驗證 App 會直接被鎖在系統外面，屬於會中斷真實業務的風險，與使用者確認後定案

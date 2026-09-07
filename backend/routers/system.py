@@ -740,6 +740,52 @@ def set_backup_retention_setting(body: BackupRetentionBody, authorization: str =
     return {"ok": True}
 
 
+# ── Cloud backup storage target（2026-09-07，架構地圖 §6.4）────────────────────
+# 選擇備份要寫去哪裡：本機掛載的雲端硬碟磁碟機（預設，沿用 archive.py 既有邏輯，
+# 已知磁碟機代號會漂移）或 S3 相容物件儲存（AWS S3／Backblaze B2 等，見
+# cloud_storage.py）。**憑證一律不存這裡**——走 boto3 標準憑證鏈（環境變數／
+# ~/.aws/credentials／instance profile），這裡只存 bucket/endpoint/region/prefix
+# 這類非機密設定值，無對應前端頁面（比照 edge-path/pdf-base-path 等技術設定慣例，
+# 透過 API 直接調整）。
+
+class CloudBackupS3Body(BaseModel):
+    bucket: str = ""
+    endpoint_url: str = ""
+    region: str = "us-east-1"
+    prefix: str = "motrix-erp-backups/"
+
+
+class CloudBackupTargetBody(BaseModel):
+    backend: str
+    s3: CloudBackupS3Body = CloudBackupS3Body()
+
+
+@router.get("/api/settings/cloud-backup-target")
+def get_cloud_backup_target_setting(authorization: str = Header(None)):
+    _require_user(authorization, require_superadmin=True)
+    from cloud_storage import cloud_backup_target
+    return cloud_backup_target()
+
+
+@router.put("/api/settings/cloud-backup-target")
+def set_cloud_backup_target_setting(body: CloudBackupTargetBody, authorization: str = Header(None)):
+    actor = _require_user(authorization, require_superadmin=True)
+    if body.backend not in ("local_drive", "s3"):
+        raise HTTPException(400, "backend 需為 local_drive 或 s3")
+    if body.backend == "s3" and not body.s3.bucket:
+        raise HTTPException(400, "選擇 s3 時 bucket 為必填")
+    value = {"backend": body.backend, "s3": body.s3.model_dump()}
+    _set_setting("cloud_backup_target", value)
+    import cloud_storage
+    cloud_storage.reset_s3_client_cache()
+    cloud_storage.reset_s3_available_cache()
+    _audit(_tok(authorization), "settings.cloud_backup_target.update", "settings", "cloud_backup_target",
+           f"備份目標改為 {body.backend}" + (f"（bucket={body.s3.bucket}）" if body.backend == "s3" else ""))
+    notify_module_activity("系統設定", "變更雲端備份目標", actor.get("display_name") or actor["username"],
+                            body.backend, "notification-settings.html")
+    return {"ok": True}
+
+
 # ── Email notification settings ───────────────────────────────────────────────
 
 _EMAIL_DEFAULTS = {
