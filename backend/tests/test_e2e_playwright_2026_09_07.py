@@ -118,8 +118,43 @@ def test_login_create_submit_approve_smoke(live_server, make_user):
             page2 = ctx2.new_page()
             dialogs = []
             page2.on("dialog", lambda d: (dialogs.append(d.message), d.accept()))
+
+            # 2026-09-08 臨時診斷探針（排查 flaky 根因用，見 MOTRIX-ERP-QUICK.md §12
+            # 2026-09-08 條目）：記錄這個 page 從此刻起發出的每個 request 的耗時／
+            # 狀態，以及 console 訊息——只有在下面 wait_for_selector 真的逾時失敗時
+            # 才印出來，平常通過的執行不受影響、也不會弄髒輸出。
+            _reqs = []
+            _console = []
+
+            def _on_request(req):
+                _reqs.append({"url": req.url, "method": req.method, "start": time.time(), "end": None, "status": None})
+
+            def _on_finished(req):
+                for r in reversed(_reqs):
+                    if r["url"] == req.url and r["end"] is None:
+                        r["end"] = time.time()
+                        try:
+                            resp = req.response()
+                            r["status"] = resp.status if resp else "no-response"
+                        except Exception as e:
+                            r["status"] = f"error:{e}"
+                        break
+
+            def _on_requestfailed(req):
+                for r in reversed(_reqs):
+                    if r["url"] == req.url and r["end"] is None:
+                        r["end"] = time.time()
+                        r["status"] = f"FAILED:{req.failure}"
+                        break
+
+            page2.on("request", _on_request)
+            page2.on("requestfinished", _on_finished)
+            page2.on("requestfailed", _on_requestfailed)
+            page2.on("console", lambda m: _console.append(f"[{m.type}] {m.text}"))
+
             _login(page2, live_server, approver_user, approver_pw)
 
+            _t_goto = time.time()
             page2.goto(f"{live_server}/pages/quotation-form.html?id={quote_no}")
             # 30 秒（已知這條測試偶爾會在這裡逾時，2026-09-07 兩輪觀察）：第一次
             # 只在整批 400+ 測試中間跑過一次時逾時過（當時 10 秒→20 秒），但同一天
@@ -129,7 +164,24 @@ def test_login_create_submit_approve_smoke(live_server, make_user):
             # 鎖等待有關，但沒有實際證實）。目前的因應是持續加大這一處等待時限
             # 吸收，而不是照下修——之後若又觀察到逾時，先確認是不是同一個點卡住，
             # 而非重新從頭排查整條路徑。
-            page2.wait_for_selector('button:has-text("預覽後簽核")', timeout=30000)
+            try:
+                page2.wait_for_selector('button:has-text("預覽後簽核")', timeout=30000)
+            except Exception:
+                print(f"\n=== DIAGNOSTIC DUMP: elapsed since goto = {time.time() - _t_goto:.2f}s ===")
+                try:
+                    ready_state = page2.evaluate("document.readyState")
+                    has_alpine = page2.evaluate("typeof window.Alpine !== 'undefined'")
+                    print(f"document.readyState={ready_state}  window.Alpine defined={has_alpine}")
+                except Exception as e:
+                    print(f"(page2.evaluate failed: {e})")
+                print("--- requests on page2 since ctx2 created ---")
+                for r in _reqs:
+                    dur = (r["end"] or time.time()) - r["start"]
+                    print(f"  {dur:7.2f}s  status={r['status']!r:>14}  {r['method']} {r['url']}")
+                print("--- console messages ---")
+                for c in _console:
+                    print(" ", c)
+                raise
             page2.click('button:has-text("預覽後簽核")')
             page2.wait_for_selector('button:has-text("確認簽核")', timeout=20000)
             page2.click('button:has-text("確認簽核")')
