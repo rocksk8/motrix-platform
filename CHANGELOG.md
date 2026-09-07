@@ -5,6 +5,18 @@
 
 ---
 
+### 2026-09-07（完）— `logs/server.log` 新增大小輪替（DB 無異動）
+
+- 背景：正式機 `autostart.bat` 用 shell `>>` 把伺服器 24/7 運行期間的全部 stdout/stderr（含 uvicorn 自己的存取記錄與應用程式的 `logging` 輸出）直接重導向進 `logs/server.log`——這條路徑完全不經過 Python 的 `logging` 模組，`main.py` 裡的 `logging.basicConfig()` 管不到它。伺服器常駐執行、從未重啟過就會一直長，先前沒有任何大小上限或輪替機制，長期下來理論上可能把磁碟塞滿（正式機過去已經踩過一次類似性質的事故——`module_versions` 表無限增生塞爆每日備份空間，見 2026-08-XX 相關記錄）
+- 新增 `archive.py::_rotate_server_log_if_large()`，掛在 `_daily_backup()` 函式最開頭執行——刻意放在 `_archive_ok()` 判斷之前、也不受「今天的每日備份是否已經跑過」的 `.done` 早退影響，因為 log 檔案的成長跟雲端備份完全是兩件事，不應該因為雲端磁碟機沒掛載或今天已經備份過就被跳過
+- 超過 50MB 觸發輪替，用 **copytruncate** 手法：先複製目前內容到 `server.log.1`（既有的 `.1`~`.4` 依序遞增一代變成 `.2`~`.5`，原本的 `.5` 直接刪除，保留最新 5 個世代），再把 `server.log` 原地 truncate 成 0 bytes——**不是改檔名**。這是刻意的選擇：`apply_update.ps1` 的部署健康檢查（`$logPath = ...` 那段）寫死讀 `logs/server.log` 這個固定檔名判斷「最後一次成功啟動之後有沒有新的錯誤」，如果改用常見的「日期戳檔名」輪替法（如 `server_2026-09-07.log`），會讓那個檢查永遠讀到空的或過期的檔案，等於讓一個現有的部署安全機制悄悄失效，不能單純套用最直覺的輪替寫法
+- Windows 上 `autostart.bat` 用 `>>` 開檔屬於 append 模式的 file handle——truncate 原檔之後，同一個 handle 下一次寫入永遠會先 seek 到檔案目前結尾再寫，清空後的結尾就是 0，所以下一次寫入會自然接續在新的（空的）檔案開頭，不需要通知或重啟寫入端。這個假設已經用一個模擬測試驗證過（同一個 Python file handle 在測試進行中 truncate、驗證後續寫入內容正確落在新檔案裡）
+- **⚠️ 尚未在真正跑著 `autostart.bat` 的正式機上驗證過**：Windows 上 cmd.exe 的 `>>` 重導向所開檔案的共用權限（sharing flags）是否真的允許外部行程（`backup_job.py`／in-process 的每日排程）同時開啟並 truncate，這裡沒有實機測試過。已做了防禦性設計——truncate 失敗會被 `except Exception` 接住、只留一筆警告 log，`server.log` 維持原樣繼續成長，不會比現狀更糟，只是輪替沒有真的生效；下次正式機套用後，需要留意 `logs/server.log` 是否真的在超過 50MB 後被清空過一次，確認機制真的有效
+- 新增測試 `backend/tests/test_log_rotation_2026_09_07.py`（6 題）：檔案不存在/低於門檻不輪替、超過門檻正確 copytruncate 且內容完整保存到 `.1`、既有多代 `.1`~`.3` 正確依序遞增且超過 `keep` 上限的最舊一代被砍掉、同一個 append-mode file handle 在輪替前後持續寫入的內容正確、`_daily_backup()` 不論雲端是否可用都會觸發輪替
+- pytest 439/439 全過
+
+---
+
 ### 2026-09-07（終）— PDF 產生新增並發限制（架構地圖建議事項，DB 無異動）
 
 - 背景：每一份 PDF 匯出（報價單／出貨單／承攬商匯款申請／發票開立簽核單／請款單／案件結案報表／網路架構規劃書／營運報表）都各自 spawn 一個 `msedge.exe --headless` 子行程。正式機是單一 Windows 主機、沒有任何行程池限制——短時間內多人同時觸發簽核完成（背景執行緒各自產 PDF）或匯出動作，理論上可能同時開出一堆 Edge 行程，把單機 CPU/記憶體吃滿，拖垮正在跑的 uvicorn 本身

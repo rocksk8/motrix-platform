@@ -448,6 +448,60 @@ def _prune_audit_log(keep_days: int = 730) -> None:
         logger.exception("_prune_audit_log failed")
 
 
+_SERVER_LOG_PATH = os.path.join(_BACKEND_DIR, "logs", "server.log")
+_SERVER_LOG_MAX_BYTES = 50 * 1024 * 1024  # 50 MB
+_SERVER_LOG_KEEP_GENERATIONS = 5
+
+
+def _rotate_server_log_if_large(
+    log_path: str = None, max_bytes: int = _SERVER_LOG_MAX_BYTES, keep: int = _SERVER_LOG_KEEP_GENERATIONS,
+) -> bool:
+    """`logs/server.log` 是正式機 `autostart.bat` 用 shell `>>` 重導向寫入的
+    （見該檔），不是走 Python `logging` 的 handler——伺服器 24/7 常駐執行，這個
+    檔案完全沒有任何大小上限或輪替機制，長期下來可能把磁碟塞滿（正式機已經
+    踩過一次「表格無限增生塞爆每日備份」的類似事故，見 §12 module_versions
+    62萬列那次）。
+
+    **這裡刻意不能用改檔名輪替（如 server_YYYY-MM-DD.log）**：`apply_update.ps1`
+    的健康檢查（`$logPath = ...` 底下的 `logs/server.log`）寫死讀這個檔名判斷部署是否
+    成功，換了輪替方式會讓那個檢查永遠讀到空/舊檔案，等於整套部署安全機制
+    悄悄失效。改用 copytruncate：先複製目前內容到 `logs/server.log.N`（保留最新
+    `keep` 份，最舊的直接刪除），再原地把 `server.log` truncate 成 0 bytes——
+    `autostart.bat` 裡 `>>` 開的是 append 模式 file handle，每次寫入永遠先 seek
+    到檔案目前結尾再寫，truncate 之後下一次寫入會正確從新的（空的）結尾開始，
+    不需要通知或重啟寫入端。
+
+    **⚠️ 尚未在真正跑著 autostart.bat 的正式機上驗證過**：Windows 上 cmd.exe
+    的 `>>` 重導向所開檔案的共用權限（sharing flags）是否真的允許外部行程同時
+    truncate，這裡沒有實機測試過，只能確保「truncate 失敗就整個放棄、log 檔案
+    維持原樣繼續成長」（不會比現狀更糟，只是輪替沒生效），下次正式機套用後
+    要留意 `logs/server.log` 是否真的有被清空過，見 QUICK.md §12 2026-09-07 條目。
+    回傳是否真的執行了輪替（供呼叫端寫 log/測試斷言用）。"""
+    path = log_path or _SERVER_LOG_PATH
+    try:
+        if not os.path.exists(path) or os.path.getsize(path) < max_bytes:
+            return False
+        log_dir = os.path.dirname(path)
+        # 最舊的直接砍掉（.{keep} 若存在），其餘依序往後遞增一代
+        oldest = f"{path}.{keep}"
+        if os.path.exists(oldest):
+            os.remove(oldest)
+        for gen in range(keep - 1, 0, -1):
+            src = f"{path}.{gen}"
+            if os.path.exists(src):
+                os.replace(src, f"{path}.{gen + 1}")
+        shutil.copy2(path, f"{path}.1")
+        # copytruncate：原地清空，而不是刪除/改名，讓仍持有 append handle 的
+        # 寫入端（autostart.bat 的 `>>`）下一次寫入自然從新的檔案結尾（0）開始
+        with open(path, "r+b") as f:
+            f.truncate(0)
+        logger.info("server.log rotated (was >= %d bytes), kept %d generation(s) under %s", max_bytes, keep, log_dir)
+        return True
+    except Exception:
+        logger.exception("_rotate_server_log_if_large failed — server.log 維持原樣未輪替")
+        return False
+
+
 def _prune_local_db_backups(keep_days: int = 30) -> None:
     try:
         if not os.path.isdir(_LOCAL_DB_BACKUP):
@@ -581,6 +635,10 @@ def _backup_suppliers():
 def _daily_backup():
     # Always snapshot SQLite locally first (independent of the cloud drive)
     _snapshot_sqlite(also_to_cloud=True)
+
+    # 同樣不依賴雲端是否可用、也不受下方「今天已經跑過」的 .done 早退影響——
+    # server.log 的成長跟雲端備份完全無關，見 _rotate_server_log_if_large() docstring
+    _rotate_server_log_if_large()
 
     if not _archive_ok():
         _write_backup_alert(

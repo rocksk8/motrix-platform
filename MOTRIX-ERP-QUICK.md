@@ -1064,6 +1064,8 @@ GET/PUT /api/settings/cloud-backup-target（superadmin only，無前端頁面，
 
 **雲端備份清除**（2026-08-01 新增，`_prune_cloud_backups()`）：`每日備份`／`週備份` 原本永不清除、會無限期累積；現在 `_daily_backup()` 跑完後會呼叫，各自依保留天數（預設每日 365 天、週備份 730 天）刪除整個過期的日期/週別資料夾。安全機制比照既有 `_prune_local_db_backups()`：只刪「資料夾名稱能正確解析成日期」的項目（`YYYY-MM-DD` / `YYYY-WNN`），其他檔名一律不動；H: 未掛載時整段略過，不會誤判成「全部過期」。
 
+**`logs/server.log` 大小輪替**（2026-09-07 新增，`archive.py::_rotate_server_log_if_large()`）：`autostart.bat` 用 shell `>>` 把伺服器 24/7 的 stdout/stderr 直接導向這個檔案（見 §1.1），完全不是走 Python `logging` 的 handler，先前沒有任何大小上限或輪替機制，長期下來可能把磁碟塞滿（正式機曾經因為另一張表無限增生塞爆過每日備份空間，是同一類風險）。`_daily_backup()` 一開頭（不受雲端是否可用、今天是否已備份過影響）就會檢查：超過 50MB 就用 **copytruncate**（複製到 `server.log.1`，舊的 `.1~.4` 依序遞增一代，`.5` 直接砍掉）原地把 `server.log` 清空成 0 bytes，而不是改檔名——因為 `apply_update.ps1` 的健康檢查寫死讀 `logs/server.log` 這個檔名，換檔名輪替會讓那個檢查悄悄失效。**⚠️ 尚未在真正跑著 `autostart.bat` 的正式機上驗證過**（Windows 上 cmd `>>` 開檔的共用權限是否真的允許外部行程同時 truncate，這裡沒有實機測試過，失敗會直接放棄、log 檔案維持原樣繼續成長，不會比現狀更糟）——下次部署後留意 `logs/server.log` 是否真的有被清空過。
+
 ### §8.3 · 行為
 
 | 條件 | 行為 |
@@ -1156,6 +1158,14 @@ xlsx-0.18.5.full.min.js     （SheetJS）
 ## §12 · 變更摘要（最新兩版）
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
+
+### 2026-09-07（完）— `logs/server.log` 新增大小輪替（DB 無異動）
+
+- `autostart.bat` 用 shell `>>` 把伺服器 24/7 的 stdout/stderr 導向 `logs/server.log`，完全不經過 Python `logging`，先前沒有任何大小上限——長期下來可能塞滿磁碟。新增 `archive.py::_rotate_server_log_if_large()`，掛在 `_daily_backup()` 最前面（不受雲端可用性/今天是否已備份影響）：超過 50MB 就用 copytruncate 輪替（原地清空＋保留最新 5 份 `.1~.5`）
+- **刻意不能改檔名輪替**：`apply_update.ps1` 健康檢查寫死讀 `logs/server.log` 這個檔名，換名字會讓那個安全機制悄悄失效，這是選擇 copytruncate 而非常見的「日期戳檔名」輪替法的原因
+- 新增測試 `test_log_rotation_2026_09_07.py`（6 題），含一題模擬 `autostart.bat` 用同一個 append-mode file handle 持續寫入、驗證輪替後下一次寫入正確接續在清空後的新檔案裡
+- **⚠️ 尚未在真正跑著 `autostart.bat` 的正式機上驗證過**：Windows cmd `>>` 開檔的共用權限是否真的允許外部行程同時 truncate 沒有實機測試過，失敗會安靜放棄（log 繼續成長，不會比現狀更糟），下次部署後需要留意實際是否生效
+- pytest 439/439 全過
 
 ### 2026-09-07（終）— PDF 產生新增並發限制（架構地圖建議事項，DB 無異動）
 
