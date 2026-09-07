@@ -1179,6 +1179,13 @@ xlsx-0.18.5.full.min.js     （SheetJS）
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
 
+### 2026-09-07（最末，正式機部署事故）— `apply_update.ps1` 新增 pip install 步驟
+
+- **事故**：19:16 在正式機套用當天累積的 12 個 commit（TOTP／S3備份／CDN自架／PDF並發限制／log輪替／依賴掃描／採購建議）部署包時，套用後健康檢查失敗（`healthy=False`，log 錯誤筆數=9）觸發自動回滾。回滾機制運作正常，正式機資料與舊版程式碼皆未受影響
+- **根因**：`ModuleNotFoundError: No module named 'pyotp'`——TOTP 功能（見下方 2026-09-07（稍晚）條目）用到的 `pyotp` 早已正確補進 `requirements.txt`（見 2026-09-07（末）條目），但 `apply_update.ps1` 的部署流程從頭到尾只複製程式碼檔案，**從未執行過 `pip install`**，正式機 Python 環境從沒裝過這個套件，新程式碼一 import 就炸，autostart crash-restart 迴圈重試多次皆失敗
+- **修復**：`apply_update.ps1` 在「套用新程式碼」與「健康檢查」之間新增 Step「安裝/更新 Python 依賴」（`python -m pip install -q -r requirements.txt`），步驟總數改為 6 步；pip install 本身失敗不中止流程（維持既有健康檢查作為最終安全網，若真缺套件仍會被抓到並觸發回滾）
+- **待辦**：正式機需先手動 `python -m pip install -r backend\requirements.txt` 補裝 `pyotp` 等套件，再重新套用同一個部署包（`.deployed_commit.json` 未更新，版本比對仍視為新版，不需 `-Force`）
+
 ### 2026-09-07（緊急修復）— 修復 conftest.py 雲端備份隔離死碼，曾讓測試假資料寫進真實 G: 磁碟機
 
 - **問題**：`backend/tests/conftest.py` 的 `_app` fixture 原本 patch `archive._ARCHIVE_BASE`／`_REALTIME_DIR`／`_WEEKLY_DIR`／`_DAILY_DIR`／`_UPLOADS_MIRROR_DIR` 這五個大寫常數，但 `archive.py` 早就改成 `_archive_base()`／`_realtime_dir()` 等會動態掃描磁碟機代號的函式（見架構地圖 §6.4／本文件 §12 2026-09-07 雲端備份可插拔條目），conftest.py 沒有跟著更新——這五行 patch 對現在的程式碼完全是死碼，什麼都沒隔離到
@@ -1432,6 +1439,7 @@ powershell -ExecutionPolicy Bypass -File backend\tools\apply_update.ps1 -Package
 | 套用前 | 版本比對（commit 相同視為重複套用，需 `-Force` 才強制）；記錄套用前健康狀態；**db 快照**至 `backend/db_backups/pre_update_<timestamp>/`；**Migration 乾跑驗證**（2026-08-01m 新增，見下方說明）；**程式碼回滾快照**至 `backend/rollback_snapshots/<timestamp>/`（保留最新 5 份）；印出摘要，等待操作者輸入 `y` 確認 |
 | 停服 | 依 port 666 監聽者 PID／`uvicorn*main:app` commandline 逐一 kill；**不自己啟動新 uvicorn**，改讓既有 `MOTRIX ERP Server Autostart` 排程的 crash-restart 迴圈（§1.1）5 秒內自動接手重啟，避免搶 port |
 | 套用 | robocopy 把套件的 `backend/`＋`frontend/`＋根目錄文件覆蓋過去；**只加不改既有多餘檔案，絕不用 `/MIR`**，加上 `/XD`／`/XF` 排除 db／uploads／報價單PDF／logs／設定檔等，即使套件不小心含這些也不會覆蓋 |
+| 依賴安裝 | `python -m pip install -q -r backend\requirements.txt`（2026-09-07 新增，見下方說明）；失敗只警告不中止，靠下一步健康檢查當最終安全網 |
 | 套用後 | 輪詢 `GET /api/ping` 最多 30 秒＋檢查 `logs/server.log` tail 200 行、**只看「最後一次成功啟動（`Uvicorn running on`）」之後**有無 traceback/ERROR（2026-08-02a 修正，避免把重啟迴圈重試階段已自癒的暫時性錯誤誤判成失敗，見下方說明）；成功→更新 `backend/.deployed_commit.json`；**失敗→自動回滾**（用剛才的程式碼快照復原＋重新停服讓迴圈拉起舊版＋再次確認健康），並印出 db／程式碼快照路徑供人工進一步排查 |
 
 `-Force`：版本比對沒過仍要套用時使用。`-Yes`：跳過互動確認（僅供自動化測試，正常人工執行不要加）。
@@ -1439,6 +1447,8 @@ powershell -ExecutionPolicy Bypass -File backend\tools\apply_update.ps1 -Package
 **Migration 乾跑驗證**（2026-08-01m）：正式庫過去是「第一個試跑新 migration 的地方」——伺服器套新程式碼重啟後 `init_db()` 立刻對正式庫跑 migration，若寫壞了，schema 已經被改壞才被套用後健康檢查發現，「自動回滾」雖然會把 db 整檔換回套用前快照（安全），但仍會遺失套用後到偵測失敗這段時間內產生的新業務資料。現在改成：db 快照做完後，先把快照複製一份到系統 temp 目錄，用**新套件裡的** `db.py`（`init_db(path)` 本來就接受任意路徑，只操作傳入的檔案）在這份副本上先跑一次；失敗就直接中止，不進入停服／複製程式碼／回滾快照等後續步驟，**正式庫全程不受觸碰**。
 
 **健康檢查誤判自動回滾修正**（2026-08-02a）：commit `484c1b4` 第一次在正式機真實套用時，Step 2 停服後沒等 port 666 真正釋放，既有 crash-restart 迴圈搶著重新綁定撞到 `[Errno 10048]` 位址已被使用，重試 2 次後自行成功（迴圈設計上本來就會自癒），但 Step 4 健康檢查掃 log tail 80 行沒有分辨這些錯誤是否已被後續成功啟動蓋過去，誤判成更新失敗觸發回滾（回滾本身正常運作，正式機沒有受到實際影響）。已修正：Step 2 停服後新增主動輪詢確認 port 真正釋放；Step 4 log 掃描只看「最後一次成功啟動」之後的內容。
+
+**缺套件導致真實部署失敗＋新增 pip install 步驟**（2026-09-07）：套用當天累積 12 個 commit 的部署包時，套用後健康檢查真的失敗（`healthy=False`，log 錯誤筆數=9），根因是 `ModuleNotFoundError: No module named 'pyotp'`——`requirements.txt` 早就正確列了新套件，但腳本從頭到尾只複製程式碼檔案，從未執行 `pip install`，正式機環境沒裝過。這次不是誤判，是腳本流程本身真的少了一步；已在「套用新程式碼」與「健康檢查」之間新增 `pip install -r requirements.txt`（詳見 §12 同日條目與 §15.3 表格），步驟數改為 6 步。
 
 ### §15.4 · 已知限制
 

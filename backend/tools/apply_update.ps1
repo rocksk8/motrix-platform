@@ -8,6 +8,7 @@
     - 身分守門：只能在正式機路徑下執行
     - 套用前：版本比對（避免重複/退版套用）+ 健康檢查記錄 + db 快照 + 程式碼快照（回滾用）
     - 套用中：安全停服（讓既有 autostart crash-restart 迴圈接手重啟，不自己搶 port）+ 只複製，不做 /MIR 鏡像刪除
+      + pip install -r requirements.txt（新版新增的第三方套件一併裝好，避免 import 就炸）
     - 套用後：輪詢 /api/ping + 檢查 server.log 有無新錯誤；失敗就自動回滾並重啟
 
   用法：
@@ -77,7 +78,7 @@ $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
 # ============================================================
 # Step 1: 套用前檢查
 # ============================================================
-Info "[1/5] 套用前檢查..."
+Info "[1/6] 套用前檢查..."
 
 $deployedMarkerPath = Join-Path $BackendDir ".deployed_commit.json"
 $prevDeployed = $null
@@ -206,7 +207,7 @@ if (-not $Yes) {
 # ============================================================
 # Step 2: 停止伺服器（讓 autostart 迴圈接手重啟，不自己搶 port）
 # ============================================================
-Info "`n[2/5] 停止伺服器..."
+Info "`n[2/6] 停止伺服器..."
 $conn = Get-NetTCPConnection -LocalPort 666 -State Listen -ErrorAction SilentlyContinue
 if ($conn) {
     $p = $conn.OwningProcess
@@ -241,7 +242,7 @@ Ok "  伺服器已停止，等待 autostart crash-restart 迴圈接手（見 §1
 # ============================================================
 # Step 3: 複製新程式碼（只加不刪，絕不 /MIR）
 # ============================================================
-Info "`n[3/5] 套用新程式碼..."
+Info "`n[3/6] 套用新程式碼..."
 
 $rc1 = robocopy (Join-Path $PackagePath "backend") $BackendDir /E `
     /XD db_backups rollback_snapshots uploads logs 報價單PDF `
@@ -258,9 +259,31 @@ Get-ChildItem -Path $PackagePath -File | Where-Object { $_.Name -ne "deploy_mani
 Ok "  程式碼＋文件已套用。"
 
 # ============================================================
-# Step 4: 套用後健康檢查
+# Step 4: 安裝/更新 Python 依賴
 # ============================================================
-Info "`n[4/5] 等待伺服器恢復並健康檢查..."
+# 新版程式碼可能在 requirements.txt 新增了套件（例如 2026-09-07 TOTP 功能
+# 新增 pyotp）；上面只複製程式碼檔案，不會自動幫正式機的 Python 環境裝新套件，
+# 新程式碼一 import 就 ModuleNotFoundError，害健康檢查失敗觸發自動回滾
+# （2026-09-07 實際發生過一次，見 §12/§15.4）。這裡在健康檢查前先確保裝好。
+Info "`n[4/6] 安裝/更新 Python 依賴..."
+$reqPath = Join-Path $BackendDir "requirements.txt"
+if (Test-Path $reqPath) {
+    $pipOutput = & python -m pip install -q -r $reqPath 2>&1
+    $pipExit = $LASTEXITCODE
+    if ($pipExit -ne 0) {
+        Warn "  pip install 失敗（exit code $pipExit），繼續往下走——若真的缺套件，下一步健康檢查會抓到並觸發自動回滾："
+        Write-Host ($pipOutput | Out-String)
+    } else {
+        Ok "  requirements.txt 依賴已確認安裝。"
+    }
+} else {
+    Warn "  找不到 $reqPath，略過依賴安裝。"
+}
+
+# ============================================================
+# Step 5: 套用後健康檢查
+# ============================================================
+Info "`n[5/6] 等待伺服器恢復並健康檢查..."
 $healthy = $false
 for ($i = 0; $i -lt 15; $i++) {
     Start-Sleep -Seconds 2
@@ -343,9 +366,9 @@ if ($healthy -and -not $logErrors) {
 }
 
 # ============================================================
-# Step 5: 更新版本追蹤檔
+# Step 6: 更新版本追蹤檔
 # ============================================================
-Info "`n[5/5] 更新版本追蹤檔..."
+Info "`n[6/6] 更新版本追蹤檔..."
 $deployed = [ordered]@{
     commit       = $manifest.commit
     commit_short = $manifest.commit_short
