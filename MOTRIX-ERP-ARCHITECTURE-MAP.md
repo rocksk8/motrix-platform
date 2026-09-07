@@ -258,8 +258,8 @@ superadmin 原本是「密碼 + Bearer token in localStorage」單一因子。�
 ### 6.4【中】備份目標：消費級 Google Drive → 專業物件儲存　**✅ 2026-09-07 已實作整合代碼（尚待真實帳號連線）**
 G: 磁碟機掛載模式已經證實脆弱（磁碟機代號漂移事故）。已新增 `backend/cloud_storage.py`（S3 相容物件儲存，AWS S3／Backblaze B2 皆可），`archive.py` 內所有寫入雲端的地方都已改走可切換後端的派送層（`_cloud_write_json()`/`_cloud_copy_file()`/`_cloud_stat()`/`_cloud_marker_exists()`/`_cloud_list_top_level()`/`_cloud_delete_dir()`），`backend="local_drive"`（預設）時行為與改動前逐位元組相同，切到 `backend="s3"` 才會改呼叫物件儲存。**尚未做**：使用者目前沒有現成的 S3/B2 帳號，這輪只做到「整合代碼寫好＋用假 S3 client 完整單元測試（18 題）」，實際連線需要使用者自行申請帳號建 bucket、在正式機設定 access key 環境變數，再透過 `PUT /api/settings/cloud-backup-target` 切換，見 `MOTRIX-ERP-QUICK.md` §8.0。
 
-### 6.5【中】專案時程視覺化：目前是清單/看板，缺真正的甘特圖
-`case-stage-board.html` 已有跨案時間軸與看板五欄，但沒有依賴關係的視覺化甘特圖（`depends-on` 目前只是資料關聯，沒有畫成箭頭）。若要往這個方向做，**不建議重造甘特圖渲染引擎**，可评估輕量嵌入（如 `frappe-gantt`，MIT License、零依賴、可直接吃現有 `case_stages` 資料）。優先序中等——目前的看板+時間軸已經涵蓋多數日常需求，甘特圖是「更好」而非「缺」。
+### 6.5【中】專案時程視覺化：目前是清單/看板，缺真正的甘特圖　**✅ 本文件寫成時其實已經做了，記載過期**
+**2026-09-07 複查更正**：這條建議寫的當下（本文件標頭日期 2026-09-01）就已經過時——`frappe-gantt` 其實早在 2026-08-24（commit `9f86d93`「案件管理／案件執行看板視覺化改版」）就已經整合進 `case-management.html`／`case-stage-board.html`，比本文件成文還早一週，屬於盤點時沒交叉核對到的既有功能，不是本文件寫完之後才補的。依賴關係箭頭／甘特圖渲染皆已上線，非未來待辦事項。**Why**：這是繼 §6.2（Phase 3b 已完成卻記載進行中）之後第二次「文件盤點當下沒有先查程式碼」的案例，之後產出建議清單前，先對每一項做一次快速 `grep`/`git log -S` 核對是否已存在，而不是只憑既有 QUICK.md 記載的舊印象。
 
 ### 6.6【中】庫存管理：已有安全庫存燈號，缺自動採購建議
 `parts.safety_stock`（v66）已經做到「低於安全庫存」篩選，專業進銷存軟體（Zoho Inventory/inFlow）下一步通常是「自動生成採購建議清單」（依安全庫存缺口 + 供應商前置時間），目前 MOTRIX 的 `procurement.html` 是否已有這個邏輯本次未深入盤點，若沒有，這是一個中優先、資料已齊備、開發成本不高的功能。

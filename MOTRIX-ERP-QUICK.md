@@ -1088,7 +1088,7 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 
 | 項目 | 做法 |
 |------|------|
-| 框架 | Alpine.js CDN |
+| 框架 | Alpine.js（2026-09-07 起自架，見下方「外部函式庫自架」） |
 | JS | `frontend/js/{page}.js`（非 defer，先於 Alpine） |
 | Auth | `init()` 讀 session；無 token → login |
 | 強制改密 | session.mustChangePassword 或 sidebar 導向 |
@@ -1096,8 +1096,20 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 | 自動存 | debounce 1.5s（`setDirty`）；`isDirty=false` 需在 API 成功回調內設定 |
 | 客戶選公司 | `selectCustomer()` async；每次選擇都 `GET /api/customers/{id}`，**強制覆寫**聯絡人欄位 |
 | No-cache | `.html` / `.css` / `.js` 皆 no-store |
-| Excel | SheetJS CDN（客戶／供應商） |
+| Excel | SheetJS（2026-09-07 起自架，客戶／供應商／料號／承攬商等頁面匯出入用） |
 | XSS 防護 | 動態插入 API 資料一律用 DOM API，**禁止 innerHTML 插入非靜態內容** |
+
+**外部函式庫自架（2026-09-07）**：正式機是純內網部署（172.16.10.177，無對外網路依賴設計），先前 Alpine.js／Chart.js／SortableJS／frappe-gantt／SheetJS 全部從 `cdn.jsdelivr.net` 載入，若辦公室對外網路中斷或 CDN 被擋，整套 ERP 會直接打不開——這對一個刻意做成內網系統的應用是不必要的外部單點故障。已全部改成本機靜態檔案，`frontend/static/vendor/`：
+
+```
+alpine-3.17.1.min.js        （原 alpinejs@3.x.x 浮動版號，這裡固定下來）
+chart-4.4.0.umd.min.js      （reports.html 原本用浮動的 @4，一併固定）
+sortable-1.15.3.min.js
+frappe-gantt-0.6.1.min.js／.css
+xlsx-0.18.5.full.min.js     （SheetJS）
+```
+
+`pages/*.html` 引用 `../static/vendor/...`，`index.html` 引用 `static/vendor/...`（無 `../`，維持既有其他 static 資源的相對路徑慣例）。字型（`LINE Seed TW_OTF`）本來就已經自架，不受影響。之後若要升級這些函式庫版本，直接下載新版檔案覆蓋同名檔（或改檔名+改全部引用路徑），不必再依賴 CDN。
 
 ---
 
@@ -1144,6 +1156,14 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 ## §12 · 變更摘要（最新兩版）
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
+
+### 2026-09-07（最晚）— 外部函式庫全面自架，移除 CDN 依賴（DB 無異動）
+
+- 正式機是純內網部署，先前 Alpine.js／Chart.js／SortableJS／frappe-gantt／SheetJS 全部從 `cdn.jsdelivr.net` 載入，對外網路中斷或 CDN 被擋會讓整套 ERP 直接打不開——已全部下載到 `frontend/static/vendor/` 自架，詳見 §9「外部函式庫自架」
+- 順便固定了兩個原本用浮動版號的引用（`alpinejs@3.x.x`、`reports.html` 的 `chart.js@4`），改成跟其餘頁面一致的明確固定版本，避免上游偷改版本卻沒人發現
+- 複查 CDN 清單過程中意外發現架構地圖 §6.5「甘特圖」建議其實在該文件寫成前一週（2026-08-24）就已經用 `frappe-gantt` 做完，是繼 §6.2/§6.5 之後**第二次**盤點沒交叉核對程式碼的過期記載，已一併更正
+- 字型（`LINE Seed TW_OTF`）本來就已自架，不受影響；純換 script/link 標籤的 `src`/`href`，前端邏輯零變動
+- pytest 430/430 全過（本次不影響任何後端測試）
 
 ### 2026-09-07（再更晚）— 新增第一條瀏覽器端對端測試（架構地圖 §6 建議事項，DB 無異動）
 

@@ -5,6 +5,17 @@
 
 ---
 
+### 2026-09-07（最晚）— 外部函式庫全面自架，移除 CDN 依賴（DB 無異動）
+
+- 背景：正式機是純內網部署（172.16.10.177，設計上不依賴對外網路），但先前 Alpine.js／Chart.js／SortableJS／frappe-gantt／SheetJS 這五套函式庫全部從 `cdn.jsdelivr.net` 動態載入——如果辦公室對外網路中斷，或防火牆/代理設定變動導致 jsdelivr 被擋，整套 ERP 會直接打不開，這對一個刻意設計成內網系統的應用是不必要的外部單點故障
+- 下載全部 6 個檔案（Alpine.js、Chart.js、SortableJS、frappe-gantt 的 JS+CSS、SheetJS）到新的 `frontend/static/vendor/` 目錄，全站 55 個前端頁面 + `index.html` 的 `<script src>`/`<link href>` 一律改指向本機路徑；`pages/*.html` 用 `../static/vendor/...`，`index.html` 用 `static/vendor/...`（沿用既有其他 static 資源的相對路徑慣例，無 `../`）
+- 順便固定兩處原本用浮動版號的引用：`alpinejs@3.x.x`（實際解析結果為 3.17.1，這裡明確釘住）與 `reports.html` 單獨用的 `chart.js@4`（改成跟 `index.html` 一致的 4.4.0）——浮動版號代表上游隨時可能推新版而沒有人知道，對正式機這種很少重新整理快取的環境是額外風險
+- 複查全站 CDN 清單時意外發現架構地圖 §6.5「甘特圖」建議其實早在該文件成文前一週（2026-08-24，commit `9f86d93`）就已經用 `frappe-gantt` 做完——是繼 §6.2（caseRecord.stages Phase 3b）之後第二次「文件盤點沒有先對照程式碼」的過期記載，已一併更正該節內容
+- 字型（`LINE Seed TW_OTF`）本來就已經自架，不受這次調整影響；純粹置換 script/link 標籤的來源路徑，前端邏輯本身零改動，理論上不影響任何既有測試
+- pytest 430/430 全過（純靜態資源路徑調整，不涉及任何後端程式碼）
+
+---
+
 ### 2026-09-07（再更晚）— 新增第一條瀏覽器端對端測試（DB 無異動）
 
 - 全系統 400+ 個 pytest 都是後端 API 整合測試，前端 Alpine inline script 完全沒有自動化測試——過去多次真實回歸（`x-show`/`x-if` 誤用、badge 同步漏更新、日期字串排序）都是純前端邏輯問題，後端 API 測試全綠也攔不下來，只能靠人工在瀏覽器裡肉眼發現。新增 `backend/tests/test_e2e_playwright_2026_09_07.py`：用 Playwright 驅動真實 Chromium 跑一條關鍵路徑 golden path smoke test——登入 → 新增報價單（填客戶/案件/一項品項）→ 送出審核 → 另一位主管登入 → 開啟同一張單 → 簽核 → 確認狀態變成「已送出」
