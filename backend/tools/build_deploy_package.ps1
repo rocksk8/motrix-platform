@@ -67,7 +67,30 @@ if ($dirty) {
     Fail "請先 commit（或 stash）所有變更，再重新執行本腳本。打包內容只會包含已 commit 的版本，未 commit 的東西不會被打包，也不該被打包。"
 }
 
-# --- Step 2: 測試必須通過 ---
+# --- Step 2: 記錄 commit / 分支資訊 ---
+# 2026-09-08 修復：這裡原本排在 pytest（Step 3）之後才記錄 commit hash，
+# 有個潛在的競態——如果打包過程中（pytest 跑 6+ 分鐘）repo 又有新的
+# commit 進來（例如背景跑這支腳本的同時，另一個 session／終端機又
+# commit 了新變更），Step 3 抓到的 HEAD 會是「pytest 剛剛跑完之後」的
+# 最新狀態，可能已經不是「剛剛真正跑過 pytest 驗證」的那個 commit——
+# archive 出來的部署包內容跟「已驗證通過測試」這個保證就對不上了。改成
+# 在 pytest 開始前就先把 commit hash 釘住，之後全程使用這個變數，跟
+# git 上實際 HEAD 之後有沒有異動無關。當晚實測過一次：這支腳本背景執行
+# 期間，另一個對話動作確實在 pytest 跑到一半時對同一個 repo 做了新
+# commit，只是那次剛好被既有的 flaky 測試提前擋下沒有走到 archive 那步，
+# 沒有真的產出型別不一致的部署包，但這個競態本身是真實存在的，必須修。
+$commit = (git rev-parse HEAD).Trim()
+$commitShort = (git rev-parse --short HEAD).Trim()
+$branch = (git rev-parse --abbrev-ref HEAD).Trim()
+
+if ($branch -ne "master") {
+    Write-Host "[WARN] 目前分支是 '$branch'，不是 'master'。依 GITFLOW.md，正式機理論上只套用 master 的內容，請確認這是預期行為。" -ForegroundColor Yellow
+}
+
+Write-Host "Commit:  $commit ($commitShort)"
+Write-Host "Branch:  $branch"
+
+# --- Step 3: 測試必須通過 ---
 # 目前的把關只有「git status 乾淨」，不代表「這次 commit 沒把測試弄壞」——
 # 曾經發生過測試治具過時、既有測試靜默失敗一段時間才被發現的情況。這裡直接
 # 擋在打包之前，測試沒過就不產生部署包，避免明知有壞掉的測試還被拿去套用到
@@ -81,18 +104,6 @@ if ($testExit -ne 0) {
     Fail "測試未全數通過（exit code $testExit），中止打包。請先修好測試再重新執行本腳本。"
 }
 Write-Host "[OK] 測試全數通過。" -ForegroundColor Green
-
-# --- Step 3: 記錄 commit / 分支資訊 ---
-$commit = (git rev-parse HEAD).Trim()
-$commitShort = (git rev-parse --short HEAD).Trim()
-$branch = (git rev-parse --abbrev-ref HEAD).Trim()
-
-if ($branch -ne "master") {
-    Write-Host "[WARN] 目前分支是 '$branch'，不是 'master'。依 GITFLOW.md，正式機理論上只套用 master 的內容，請確認這是預期行為。" -ForegroundColor Yellow
-}
-
-Write-Host "Commit:  $commit ($commitShort)"
-Write-Host "Branch:  $branch"
 
 # --- Step 4: 讀 version_manifest.json 最新一筆（陣列最前面，新條目永遠插最前面） ---
 $versionManifestPath = Join-Path $projectRoot "backend\version_manifest.json"

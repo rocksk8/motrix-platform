@@ -27,9 +27,16 @@ $ProdRoot = "C:\Users\Motrix\Desktop\V9.0"
 $BackendDir = Join-Path $ProdRoot "backend"
 $FrontendDir = Join-Path $ProdRoot "frontend"
 
-# 跟 apply_update.ps1 完全同一套 HTTPS 健康檢查手法（見該檔案 2026-09-08 條目：
-# Invoke-WebRequest + ServerCertificateValidationCallback 在背景執行緒沒有
-# Runspace 會崩潰，改用 curl.exe -k）。
+# 跟 apply_update.ps1 同一套健康檢查手法。
+#
+# 2026-09-08：這裡原本還是 curl.exe -k 的舊版做法，跟 apply_update.ps1 當晚
+# 早已改用 backend/tools/_healthcheck_ping.py（Python + OpenSSL，不經過
+# Windows Schannel）不同步——兩支腳本原本各自維護一份幾乎一樣的 Test-Ping，
+# apply_update.ps1 那邊修過、這邊忘了同步改，導致手動觸發回滾（這支腳本的
+# 使用情境：健康檢查本身通過，但實際操作發現功能邏輯不對）仍然會踩到同一個
+# curl.exe/Schannel 不穩定的問題。已同步改用 _healthcheck_ping.py，並補上
+# 跟 apply_update.ps1 一致的逾時/迴圈次數/逐次記錄。詳見
+# MOTRIX-ERP-QUICK.md §12 同日條目。
 $UsesHttps = Test-Path (Join-Path $BackendDir "certs\cert.pem")
 if ($UsesHttps) {
     $PingUrl = "https://127.0.0.1:666/api/ping"
@@ -39,24 +46,15 @@ if ($UsesHttps) {
 
 function Test-Ping {
     param([string]$Url, [int]$TimeoutSec = 3)
-    if ($UsesHttps) {
-        $prevEap = $ErrorActionPreference
-        $ErrorActionPreference = "Continue"
-        try {
-            $code = & curl.exe -k -s -o NUL -w "%{http_code}" --max-time $TimeoutSec $Url 2>$null
-            return $code -eq "200"
-        } catch {
-            return $false
-        } finally {
-            $ErrorActionPreference = $prevEap
-        }
-    } else {
-        try {
-            $resp = Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec $TimeoutSec
-            return $resp.StatusCode -eq 200
-        } catch {
-            return $false
-        }
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        & python (Join-Path $PSScriptRoot "_healthcheck_ping.py") $Url $TimeoutSec 2>$null
+        return $LASTEXITCODE -eq 0
+    } catch {
+        return $false
+    } finally {
+        $ErrorActionPreference = $prevEap
     }
 }
 
@@ -135,9 +133,12 @@ Remove-Item "$dbPath-wal", "$dbPath-shm" -Force -ErrorAction SilentlyContinue
 Ok "  資料庫已還原：$dbBackupPath"
 
 $healthy = $false
-for ($i = 0; $i -lt 15; $i++) {
+$hcStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+for ($i = 0; $i -lt 20; $i++) {
     Start-Sleep -Seconds 2
-    if (Test-Ping -Url $PingUrl -TimeoutSec 3) { $healthy = $true; break }
+    $thisTry = Test-Ping -Url $PingUrl -TimeoutSec 5
+    Info "    健檢第 $($i + 1)/20 次（經過 $([int]$hcStopwatch.Elapsed.TotalSeconds)s）：$(if ($thisTry) { '成功' } else { '無回應' })"
+    if ($thisTry) { $healthy = $true; break }
 }
 
 Write-Host ""
@@ -149,5 +150,18 @@ if ($healthy) {
     Write-Host "======================================" -ForegroundColor Red
     Write-Host "  回滾動作已執行，但健康檢查仍異常，需要人工介入！" -ForegroundColor Red
     Write-Host "======================================" -ForegroundColor Red
+    # 跟 apply_update.ps1 一致：健康檢查失敗可能是服務真的中斷，也可能又是
+    # 健康檢查機制本身的偽陰性，直接印出 port 666 監聽狀態協助判斷。
+    Write-Host ""
+    Write-Host "  port 666 目前監聽狀態（協助判斷是否為服務真的中斷）：" -ForegroundColor Yellow
+    $conns = Get-NetTCPConnection -LocalPort 666 -ErrorAction SilentlyContinue
+    if (-not $conns) {
+        Write-Host "    （完全沒有任何連線/監聽在 port 666 上——服務可能真的沒起來）" -ForegroundColor Yellow
+    } else {
+        foreach ($c in $conns) {
+            $procName = try { (Get-Process -Id $c.OwningProcess -ErrorAction Stop).ProcessName } catch { "(process 已不存在)" }
+            Write-Host "    State=$($c.State)  PID=$($c.OwningProcess)  Process=$procName" -ForegroundColor Yellow
+        }
+    }
     exit 1
 }
