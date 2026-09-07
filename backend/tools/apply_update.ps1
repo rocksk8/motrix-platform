@@ -15,15 +15,22 @@
     powershell -ExecutionPolicy Bypass -File apply_update.ps1 -PackagePath D:\deploy\20260801_120000_abcd123
     powershell -ExecutionPolicy Bypass -File apply_update.ps1 -PackagePath ... -Force   # 版本比對沒過也強制套用
     powershell -ExecutionPolicy Bypass -File apply_update.ps1 -PackagePath ... -Yes     # 跳過互動確認（僅供自動化測試用）
+    powershell -ExecutionPolicy Bypass -File apply_update.ps1 -CheckOnly                # 只測健康檢查邏輯，不部署（見下方）
+
+  -CheckOnly（2026-09-08 新增）：只對目前正在跑的伺服器打一次 /api/ping、印出結果就結束，
+    不做備份／停服／複製程式碼／pip install／回滾等任何動作，也不需要 -PackagePath。用途是
+    驗證「健康檢查機制本身」對不對（例如這次修 HTTPS 健康檢查的 curl.exe 邏輯）——2026-09-08
+    當天為了驗證一個健康檢查修復，被迫實際跑了兩次完整的部署+回滾循環（各自停服＋可能觸發
+    不必要的回滾），這個模式讓同樣的驗證 10 秒內完成、完全不影響正在運作的服務。
 #>
 
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory = $true)]
     [string]$PackagePath,
 
     [switch]$Force,
-    [switch]$Yes
+    [switch]$Yes,
+    [switch]$CheckOnly
 )
 
 $ErrorActionPreference = "Stop"
@@ -98,6 +105,21 @@ if ($scriptRoot -ne $ProdRoot) {
 }
 Info "身分確認：正式機（$ProdRoot）`n"
 
+if ($CheckOnly) {
+    Info "[CheckOnly] 只測試健康檢查邏輯本身，不做任何備份／停服／部署動作。"
+    Info "  健康檢查網址：$PingUrl（$(if ($UsesHttps) { 'HTTPS，走 curl.exe -k' } else { 'HTTP，走 Invoke-WebRequest' })）"
+    if (Test-Ping -Url $PingUrl -TimeoutSec 5) {
+        Ok "  /api/ping 回應 200，健康檢查機制正常。"
+        exit 0
+    } else {
+        Warn "  /api/ping 未回應 200 或逾時——可能是伺服器真的沒開，也可能是健康檢查機制本身還有問題（例如協定/憑證不對）。"
+        exit 1
+    }
+}
+
+if (-not $PackagePath) {
+    Fail "-PackagePath 為必填參數（除非搭配 -CheckOnly 使用）。"
+}
 if (-not (Test-Path $PackagePath)) {
     Fail "找不到部署包路徑：$PackagePath"
 }

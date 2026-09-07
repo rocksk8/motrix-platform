@@ -1488,13 +1488,27 @@ powershell -ExecutionPolicy Bypass -File "C:\Users\Motrix\Desktop\V9.0\backend\t
 | 依賴安裝 | `python -m pip install -q -r backend\requirements.txt`（2026-09-07 新增，見下方說明）；失敗只警告不中止，靠下一步健康檢查當最終安全網 |
 | 套用後 | 輪詢 `GET /api/ping` 最多 30 秒＋檢查 `logs/server.log` tail 200 行、**只看「最後一次成功啟動（`Uvicorn running on`）」之後**有無 traceback/ERROR（2026-08-02a 修正，避免把重啟迴圈重試階段已自癒的暫時性錯誤誤判成失敗，見下方說明）；成功→更新 `backend/.deployed_commit.json`；**失敗→自動回滾**（用剛才的程式碼快照復原＋重新停服讓迴圈拉起舊版＋再次確認健康），並印出 db／程式碼快照路徑供人工進一步排查 |
 
-`-Force`：版本比對沒過仍要套用時使用。`-Yes`：跳過互動確認（僅供自動化測試，正常人工執行不要加）。
+`-Force`：版本比對沒過仍要套用時使用。`-Yes`：跳過互動確認（僅供自動化測試，正常人工執行不要加）。`-CheckOnly`（2026-09-08 新增）：只對目前正在跑的伺服器打一次 `/api/ping`、印出結果就結束，不需要 `-PackagePath`，也不做備份／停服／複製程式碼／pip install／回滾等任何動作——專門用來驗證「健康檢查機制本身」對不對，不用每次都跑一次完整的部署+回滾循環（見下方 Runspace 崩潰條目的教訓）：
+```
+powershell -ExecutionPolicy Bypass -File "C:\Users\Motrix\Desktop\V9.0\backend\tools\apply_update.ps1" -CheckOnly
+```
 
 **Migration 乾跑驗證**（2026-08-01m）：正式庫過去是「第一個試跑新 migration 的地方」——伺服器套新程式碼重啟後 `init_db()` 立刻對正式庫跑 migration，若寫壞了，schema 已經被改壞才被套用後健康檢查發現，「自動回滾」雖然會把 db 整檔換回套用前快照（安全），但仍會遺失套用後到偵測失敗這段時間內產生的新業務資料。現在改成：db 快照做完後，先把快照複製一份到系統 temp 目錄，用**新套件裡的** `db.py`（`init_db(path)` 本來就接受任意路徑，只操作傳入的檔案）在這份副本上先跑一次；失敗就直接中止，不進入停服／複製程式碼／回滾快照等後續步驟，**正式庫全程不受觸碰**。
 
 **健康檢查誤判自動回滾修正**（2026-08-02a）：commit `484c1b4` 第一次在正式機真實套用時，Step 2 停服後沒等 port 666 真正釋放，既有 crash-restart 迴圈搶著重新綁定撞到 `[Errno 10048]` 位址已被使用，重試 2 次後自行成功（迴圈設計上本來就會自癒），但 Step 4 健康檢查掃 log tail 80 行沒有分辨這些錯誤是否已被後續成功啟動蓋過去，誤判成更新失敗觸發回滾（回滾本身正常運作，正式機沒有受到實際影響）。已修正：Step 2 停服後新增主動輪詢確認 port 真正釋放；Step 4 log 掃描只看「最後一次成功啟動」之後的內容。
 
 **缺套件導致真實部署失敗＋新增 pip install 步驟**（2026-09-07）：套用當天累積 12 個 commit 的部署包時，套用後健康檢查真的失敗（`healthy=False`，log 錯誤筆數=9），根因是 `ModuleNotFoundError: No module named 'pyotp'`——`requirements.txt` 早就正確列了新套件，但腳本從頭到尾只複製程式碼檔案，從未執行 `pip install`，正式機環境沒裝過。這次不是誤判，是腳本流程本身真的少了一步；已在「套用新程式碼」與「健康檢查」之間新增 `pip install -r requirements.txt`（詳見 §12 同日條目與 §15.3 表格），步驟數改為 6 步。
+
+**HTTPS 健康檢查 Runspace 崩潰，造成誤判自動回滾**（2026-09-08）：正式機切換 HTTPS 後第一次真實套用，健康檢查連續兩次回報 `healthy=False, log 錯誤筆數=0` 觸發回滾，但 `server.log` 證明新程式碼其實正常啟動成功。根因：`[System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }` 用 PowerShell 指令碼區塊當委派方法，.NET 在 TLS handshake 階段從背景執行緒呼叫它，該執行緒沒有 PowerShell Runspace 可執行指令碼，丟出的例外被健康檢查迴圈的 `catch {}` 整個吞掉、完全不留痕跡。已改用 Windows 內建原生執行檔 `curl.exe -k`（不經過 .NET `ServicePointManager`，無 Runspace 問題）取代 HTTPS 情境下的 `Invoke-WebRequest`，新增 `Test-Ping` 共用函式；HTTP 情境維持不變。**這批事故也暴露一個流程性問題**：修 `apply_update.ps1` 本身的 bug，過去只能靠「真的在正式機跑一次完整部署+回滾」來驗證對不對——同一天因此被迫觸發了兩次不必要的停服/回滾。這正是新增 `-CheckOnly` 模式的動機。
+
+### §15.3b · 正式機輔助工具的分工（2026-09-08 新增）
+
+正式機除了 `V9.0`（實際運作目錄，混著程式碼＋db＋uploads＋logs）之外，可能還有以下輔助工具，**用途要分清楚，不要混用**：
+
+| 工具 | 定位 | 可以做什麼 | 不能做什麼 |
+|------|------|-----------|-----------|
+| `motrix-erp-repo`（唯讀 git clone，建議放在跟 `V9.0` 平行的位置，例如 `C:\Users\Motrix\Desktop\motrix-erp-repo`） | 緊急單檔案取件用 | 遇到部署工具腳本本身（`apply_update.ps1`／`https_setup.ps1` 等）需要緊急修復、又還沒走完整打包流程時，`git pull` 更新這份 clone，再手動複製「單一檔案」到 `V9.0` 對應位置 | **不要**拿來部署應用程式碼（`routers/`／`frontend/` 等）——應用程式碼永遠只走 `build_deploy_package.ps1`＋`apply_update.ps1` 這套有 pytest 全過關卡＋備份＋健康檢查＋自動回滾保護的流程，直接 `git pull` 覆蓋 `V9.0` 會繞過所有這些保護 |
+| 正式機上的 Claude Code session | 套用操作的執行者 | 之後要套用更新，直接請正式機本地的 Claude 執行 `apply_update.ps1`／查 log／驗證健康狀態，不要再讓開發機這邊的人工把指令貼到聊天視窗、請使用者手動轉貼到正式機——2026-09-08 那次事故裡，三次操作型失誤（漏打 `powershell` 前綴、目錄不對、多行 here-string 貼壞）全部出在「人工在兩台機器間轉貼指令」這一步，跟程式邏輯完全無關 | 不會改變 `apply_update.ps1` 本身的安全機制，仍然要照 §15.3 的方式帶 `-PackagePath` 執行，不要圖方便繞過版本比對／備份 |
 
 ### §15.4 · 已知限制
 
