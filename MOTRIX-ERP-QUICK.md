@@ -1179,6 +1179,18 @@ xlsx-0.18.5.full.min.js     （SheetJS）
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
 
+### 2026-09-08（稍晚）— 正式機真實套用事故：`apply_update.ps1` HTTPS 健康檢查誤判觸發不必要的回滾
+
+- **背景**：套用 commit `305511e` 部署包（no-cache 修復＋flaky 測試診斷探針）時，`[4/6] pip install` 步驟順利通過（084eb78 的修復生效），但 `[5/6]` 健康檢查回報 `healthy=False, log 錯誤筆數=0` 觸發自動回滾。**回滾流程本身也正常完成**（程式碼／db 皆已還原）
+- **關鍵線索**：使用者提供的 `server.log` 顯示新程式碼（PID 7392）與回滾後的舊程式碼（PID 25180）**兩次都正常啟動成功**（`Application startup complete`／`Uvicorn running on https://0.0.0.0:666`／各項排程檢查皆正常跑完），代表這次回滾是被誤判觸發，新程式碼原本沒問題
+- **根因（第一次誤判：TLS12）**：正式機先前已經（在本文件記載之外、未同步更新 §0/§11 認知）實際執行過 `https_setup.ps1` 切換成 HTTPS。第一輪懷疑是 `ServicePointManager.SecurityProtocol` 預設不含 `Tls12` 導致 TLS handshake 失敗，加了 `SecurityProtocol = Tls12` 後請使用者手動熱修重試——**仍然失敗，同一組症狀**
+- **真正根因（第二輪，已用 `curl.exe -k` 直接連線＋帶完整例外訊息的診斷腳本確認）**：原本的 `[System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }` 用 PowerShell **指令碼區塊**當委派方法，但 .NET 在 TLS handshake 階段是從**背景執行緒**呼叫這個委派，該執行緒沒有 PowerShell Runspace 可以執行指令碼區塊——InnerException 明確寫著「沒有 Runspace 可在這個執行緒中用來執行指令碼」。這個委派從一開始（2026-08-27 引入 HTTPS 健康檢查時）就是不可靠的，只是這是第一次真正在已切換 HTTPS 的正式機跑到這條路徑；TLS12 從頭到尾都不是問題所在
+- **修復**：改用 Windows 內建原生執行檔 `curl.exe -k`（不經過 .NET `ServicePointManager`，沒有 Runspace 委派問題）取代 HTTPS 情境下的 `Invoke-WebRequest`，新增 `Test-Ping` 共用函式，三處健康檢查（套用前記錄／套用後主檢查／回滾後再驗證）統一呼叫；HTTP 情境維持原本 `Invoke-WebRequest` 不變（本來就沒壞過）。已用 `curl.exe -k -s -o NUL -w "%{http_code}"` 這個確切呼叫形式對真實 HTTPS 網站測過，回傳乾淨的 `200` 字串
+- **當下處置**：由於回滾流程會把 `apply_update.ps1` 自己也還原回升級前版本，每次重跑都會用回舊（有 bug 的）健康檢查邏輯，兩輪熱修嘗試都必須繞過這個限制才能生效
+- **附帶發現／文件修正**：§0/§11 先前記載「正式機尚未實際執行 mkcert 產證＋重啟」已過時——正式機顯然已經在本文件不知情的情況下轉為 HTTPS，是本次事故的間接成因（見 §0 一貫提醒的「正式機做了什麼，開發機不知道」情境再次發生）
+- **附帶改善**：§15.3 的操作指令範例改為建議一律使用絕對路徑（`-File` 用絕對路徑不影響腳本行為，純粹減少一步 `cd`／避免目錄錯誤；`-PackagePath` 本來就該給絕對路徑），因為這次套用過程中使用者連續踩到「忘了 `powershell` 前綴」與「當前目錄不是專案根目錄導致相對路徑找不到檔案」兩個操作型錯誤
+- 這批純粹是部署工具腳本修復＋文件更正，不在 pytest 覆蓋範圍內，未新增測試
+
 ### 2026-09-08 — 修復 `no_cache_static` middleware 誤傷 vendor 函式庫快取（flaky 測試放大因子之一）
 
 - **背景**：延續 2026-09-07（最末之四）條目的排查，架構複查發現 `main.py::no_cache_static()` 對所有 `.html`/`.css`/`.js` 一律加 `Cache-Control: no-store`——這條規則是為了讓開發中頁面永遠拿到最新版而設計，CDN 自架前沒事（外部函式庫由 jsdelivr 自己另外設定長效快取，且是不同 origin），但 2026-09-07「外部函式庫全面自架」之後，`frontend/static/vendor/` 底下版本號釘死在檔名裡（如 `alpine-3.17.1.min.js`）、內容保證不變的第三方函式庫也被這條規則誤傷，變成每次換頁都要向本機同一個 uvicorn process 重新要一次
@@ -1462,8 +1474,10 @@ powershell -ExecutionPolicy Bypass -File backend\tools\build_deploy_package.ps1
 ### §15.3 · 套用（正式機）
 
 ```
-powershell -ExecutionPolicy Bypass -File backend\tools\apply_update.ps1 -PackagePath <複製過去的路徑>
+powershell -ExecutionPolicy Bypass -File "C:\Users\Motrix\Desktop\V9.0\backend\tools\apply_update.ps1" -PackagePath "<複製過去的絕對路徑>"
 ```
+
+**建議一律用絕對路徑**（2026-09-08 起，見 §12 同日條目）：`-File` 用絕對路徑不影響腳本行為（腳本內部本來就用 `$PSScriptRoot` 反推專案根目錄，跟目前所在目錄無關），純粹是少一步 `cd`、避免在錯誤目錄下執行時「找不到檔案」；`-PackagePath` 本來就該給絕對路徑。兩者都用雙引號包起來，避免路徑含空白時出錯。
 
 | 階段 | 動作 |
 |------|------|

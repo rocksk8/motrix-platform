@@ -39,10 +39,42 @@ $FrontendDir = Join-Path $ProdRoot "frontend"
 # -SkipCertificateCheck 參數（那是 PS7+ 才有），改用 ServicePointManager 回呼繞過。
 $UsesHttps = Test-Path (Join-Path $BackendDir "certs\cert.pem")
 if ($UsesHttps) {
-    [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
     $PingUrl = "https://127.0.0.1:666/api/ping"
 } else {
     $PingUrl = "http://127.0.0.1:666/api/ping"
+}
+
+# 2026-09-08 修復：HTTPS 健康檢查曾經用 Invoke-WebRequest +
+# [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
+# 跳過自簽憑證驗證，但這是個已知地雷——.NET 在 TLS handshake 階段是從「背景執行緒」
+# 呼叫這個委派，而 PowerShell 指令碼區塊（{ $true }）需要 Runspace 才能執行，
+# 背景執行緒沒有 Runspace，實際呼叫時直接丟「沒有 Runspace 可在這個執行緒中用來
+# 執行指令碼」的例外——被下面每個健康檢查迴圈的 catch {} 整個吞掉，完全不留痕跡，
+# 造成「healthy=False 但 log 錯誤筆數=0」的誤判自動回滾（伺服器其實正常啟動成功，
+# 見 §12 2026-09-08 條目）。改用 curl.exe（Windows 10/11 內建原生執行檔，-k 跳過憑證
+# 驗證，不經過 .NET ServicePointManager，完全沒有這個問題）取代 HTTPS 情境下的
+# Invoke-WebRequest；HTTP 情境維持原本 Invoke-WebRequest 不變（本來就沒壞過）。
+function Test-Ping {
+    param([string]$Url, [int]$TimeoutSec = 3)
+    if ($UsesHttps) {
+        $prevEap = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
+        try {
+            $code = & curl.exe -k -s -o NUL -w "%{http_code}" --max-time $TimeoutSec $Url 2>$null
+            return $code -eq "200"
+        } catch {
+            return $false
+        } finally {
+            $ErrorActionPreference = $prevEap
+        }
+    } else {
+        try {
+            $resp = Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec $TimeoutSec
+            return $resp.StatusCode -eq 200
+        } catch {
+            return $false
+        }
+    }
 }
 
 function Fail($msg) {
@@ -101,11 +133,7 @@ if ($manifest.version_manifest_latest) {
 }
 
 # 套用前健康檢查（僅記錄，不作為中止條件）
-$preHealthy = $false
-try {
-    $resp = Invoke-WebRequest -Uri $PingUrl -UseBasicParsing -TimeoutSec 3
-    if ($resp.StatusCode -eq 200) { $preHealthy = $true }
-} catch {}
+$preHealthy = Test-Ping -Url $PingUrl -TimeoutSec 3
 Info "  套用前伺服器健康狀態：$(if ($preHealthy) { '正常' } else { '無回應（可能已停機，仍會繼續套用）' })"
 
 # --- 備份（不管等一下順不順利，都先留退路）---
@@ -308,10 +336,7 @@ Info "`n[5/6] 等待伺服器恢復並健康檢查..."
 $healthy = $false
 for ($i = 0; $i -lt 15; $i++) {
     Start-Sleep -Seconds 2
-    try {
-        $resp = Invoke-WebRequest -Uri $PingUrl -UseBasicParsing -TimeoutSec 3
-        if ($resp.StatusCode -eq 200) { $healthy = $true; break }
-    } catch {}
+    if (Test-Ping -Url $PingUrl -TimeoutSec 3) { $healthy = $true; break }
 }
 
 $logErrors = @()
@@ -381,10 +406,7 @@ if ($healthy -and -not $logErrors) {
     $rolledBackHealthy = $false
     for ($i = 0; $i -lt 15; $i++) {
         Start-Sleep -Seconds 2
-        try {
-            $resp = Invoke-WebRequest -Uri $PingUrl -UseBasicParsing -TimeoutSec 3
-            if ($resp.StatusCode -eq 200) { $rolledBackHealthy = $true; break }
-        } catch {}
+        if (Test-Ping -Url $PingUrl -TimeoutSec 3) { $rolledBackHealthy = $true; break }
     }
 
     Write-Host ""
