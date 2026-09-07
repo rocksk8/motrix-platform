@@ -5,6 +5,17 @@
 
 ---
 
+### 2026-09-07（再更晚）— 新增第一條瀏覽器端對端測試（DB 無異動）
+
+- 全系統 400+ 個 pytest 都是後端 API 整合測試，前端 Alpine inline script 完全沒有自動化測試——過去多次真實回歸（`x-show`/`x-if` 誤用、badge 同步漏更新、日期字串排序）都是純前端邏輯問題，後端 API 測試全綠也攔不下來，只能靠人工在瀏覽器裡肉眼發現。新增 `backend/tests/test_e2e_playwright_2026_09_07.py`：用 Playwright 驅動真實 Chromium 跑一條關鍵路徑 golden path smoke test——登入 → 新增報價單（填客戶/案件/一項品項）→ 送出審核 → 另一位主管登入 → 開啟同一張單 → 簽核 → 確認狀態變成「已送出」
+- 新增 `backend/tests/live_server` 測試 fixture：複用既有 `client` fixture 已做好的 DB/uploads 隔離，額外把同一個 `main.app` 用 `uvicorn.Server` 開一個真正的 loopback TCP 監聽（Playwright 是真實瀏覽器程序，不能像 `TestClient` 直接呼叫 ASGI app）
+- 新增 `backend/requirements-dev.txt` 記載 `playwright` 為測試專用相依，**刻意不放進** `requirements.txt`（正式機執行 ERP 服務不需要瀏覽器引擎）；沒安裝 playwright 或沒執行過 `playwright install chromium` 的環境，這個測試檔會透過 `pytest.importorskip` 自動整檔跳過，不影響 `build_deploy_package.ps1` 既有的「先跑 pytest 再打包」流程。`pytest.ini` 新增 `e2e` marker 供之後篩選
+- **開發過程中意外發現一個目前系統的真實隱性需求，不是這次新增的行為**：簽核解析走 `helpers/tiered_approval.py::resolve_submitter_manager_chain()`（申請人部門主管自動簽核鏈），這是**動態解析、不是送審當下的快照**——申請人若沒有歸屬任何部門，簽核當下才會噴出「申請人尚未歸屬任何部門，請聯絡管理員設定部門後才能送審」，不是送出審核那一刻就會擋下。測試裡刻意建了一個測試部門把建立者掛上去、部門主管設為核准者，讓測試情境符合實際系統要求，同時也把這個容易被忽略的即時依賴用一條會自動跑的測試釘住
+- 這條測試本身跑起來約 8 秒（真實啟動一個 uvicorn 執行緒＋一個無頭 Chromium 程序），比其餘純 API 測試慢，但仍在可接受範圍內；多跑 3 次確認沒有時序性 flaky 問題
+- pytest 430/430 全過（429 既有 + 這條）
+
+---
+
 ### 2026-09-07（更晚）— 雲端備份目標可插拔，新增 S3 相容後端（架構地圖 §6.4，DB 無異動）
 
 - 新模組 `backend/cloud_storage.py`：新增 S3 相容物件儲存後端（AWS S3、Backblaze B2 皆可，B2 提供 S3 相容端點），作為既有「本機掛載雲端硬碟磁碟機」模式（已證實脆弱，磁碟機代號漂移曾造成備份靜默失效長達三週）的替代方案。憑證走 boto3 標準憑證鏈（環境變數／`~/.aws/credentials`／instance profile），**一律不存資料庫**——新設定 `system_settings.cloud_backup_target` 只存 bucket/endpoint/region/prefix 這類非機密值，新端點 `GET/PUT /api/settings/cloud-backup-target`（superadmin only，無前端頁面，比照既有技術設定慣例）

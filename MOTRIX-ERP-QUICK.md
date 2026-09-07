@@ -1145,6 +1145,14 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
 
+### 2026-09-07（再更晚）— 新增第一條瀏覽器端對端測試（架構地圖 §6 建議事項，DB 無異動）
+
+- 全系統 400+ 個 pytest 都是後端 API 整合測試，前端 Alpine inline script 完全沒有測試網——但過去多次真實回歸（`x-show`/`x-if` 誤用、badge 同步漏更新、日期排序）恰好都是純前端邏輯問題，後端測試攔不下來。新增 `test_e2e_playwright_2026_09_07.py`：用 Playwright 真實瀏覽器跑「登入→新增報價單→送出審核→另一位主管登入簽核→狀態變成已送出」golden path
+- 需要 `playwright`（新增 `backend/requirements-dev.txt` 記載，**刻意不放進** `requirements.txt`——正式機執行 ERP 服務不需要瀏覽器引擎），沒裝的環境會 `pytest.importorskip` 自動 skip 整個檔案，不影響 `build_deploy_package.ps1` 既有流程；新增 `pytest.ini` marker `e2e` 供之後篩選
+- 開發過程中意外發現一個目前系統的真實隱性需求：簽核解析走 `helpers/tiered_approval.py::resolve_submitter_manager_chain()`（申請人部門主管自動簽核鏈），**這是動態解析、不是送審當下快照**，申請人若沒有歸屬任何部門，簽核當下才會噴錯「申請人尚未歸屬任何部門」——測試裡刻意建了一個部門把建立者掛上去、部門主管設為核准者，讓流程符合實際情境
+- 這條測試本身跑起來約 8 秒（真實啟動一個 uvicorn＋一個無頭 Chromium），比其餘 API 測試慢但仍在可接受範圍
+- pytest 430/430 全過（429 既有 + 這條）
+
 ### 2026-09-07（更晚）— 雲端備份目標可插拔，新增 S3 相容後端（架構地圖 §6.4，DB 無異動）
 
 - 新模組 `backend/cloud_storage.py`：S3 相容物件儲存後端（AWS S3／Backblaze B2 皆可），憑證走 boto3 標準憑證鏈（環境變數/`~/.aws/credentials`），**一律不存 DB**；新設定 `system_settings.cloud_backup_target`（`GET/PUT /api/settings/cloud-backup-target`，superadmin only）
