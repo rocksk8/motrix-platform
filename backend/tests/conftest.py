@@ -44,13 +44,23 @@ def _app(tmp_path_factory):
 
     import archive
     archive.DB_PATH = db.DB_PATH  # archive.py imported DB_PATH by value — repoint it too
+    # 2026-09-07 修正：這裡曾經 patch archive._ARCHIVE_BASE/_REALTIME_DIR/_WEEKLY_DIR/
+    # _DAILY_DIR/_UPLOADS_MIRROR_DIR 這五個大寫常數，但現在的 archive.py 早就沒有
+    # 這些常數了（改成 _archive_base()/_realtime_dir() 等會動態掃描磁碟機代號的
+    # 函式，見架構地圖 §6.4／2026-09-07 雲端備份可插拔重構）——這幾行 patch 對現在
+    # 的程式碼完全是死碼，什麼都沒隔離到。實際驗證發現：任何透過 API 建立/更新
+    # 報價單／客戶／供應商的測試都會 spawn_bg_thread 呼叫 _backup_quotation() 等
+    # 背景函式，這些函式呼叫的 _archive_base() 完全不受這裡的 patch 影響，會做
+    # 真正的磁碟機代號掃描——在這台開發機上（G: 剛好掛載著真實的公司雲端硬碟）
+    # 這代表測試產生的假資料曾經真的寫進 G:\我的雲端硬碟\系統存檔\即時備份\ 底下
+    # （已在 G: 找到多筆 MQ-TEST-*/MQ-MARKPAY-* 等測試專用假單號的殘留 JSON，
+    # 應該是不同時期的測試留下的）。改成直接 patch `_archive_base` 這個函式本身，
+    # 讓所有依賴它的 _realtime_dir()/_weekly_dir()/_daily_dir()/_uploads_mirror_dir()/
+    # _pdf_mirror_dir() 全部自動跟著隔離，不用每個都個別 patch，也不會再重蹈
+    #「archive.py 內部改了實作方式、conftest.py 沒跟著更新」的同一種錯誤。
     archive_base = base / "archive_base"
     archive_base.mkdir()
-    archive._ARCHIVE_BASE = str(archive_base)
-    archive._REALTIME_DIR = str(archive_base / "即時備份")
-    archive._WEEKLY_DIR = str(archive_base / "週備份")
-    archive._DAILY_DIR = str(archive_base / "每日備份")
-    archive._UPLOADS_MIRROR_DIR = str(archive_base / "上傳檔案鏡像")
+    archive._archive_base = lambda: str(archive_base)
     archive._LOCAL_DB_BACKUP = str(base / "db_backups")
     archive._ALERT_DIR = str(base / "backup_alerts")
     archive._UPLOADS_DIR = str(base / "uploads")  # empty — don't let tests read the real uploads/

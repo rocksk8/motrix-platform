@@ -1179,6 +1179,15 @@ xlsx-0.18.5.full.min.js     （SheetJS）
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
 
+### 2026-09-07（緊急修復）— 修復 conftest.py 雲端備份隔離死碼，曾讓測試假資料寫進真實 G: 磁碟機
+
+- **問題**：`backend/tests/conftest.py` 的 `_app` fixture 原本 patch `archive._ARCHIVE_BASE`／`_REALTIME_DIR`／`_WEEKLY_DIR`／`_DAILY_DIR`／`_UPLOADS_MIRROR_DIR` 這五個大寫常數，但 `archive.py` 早就改成 `_archive_base()`／`_realtime_dir()` 等會動態掃描磁碟機代號的函式（見架構地圖 §6.4／本文件 §12 2026-09-07 雲端備份可插拔條目），conftest.py 沒有跟著更新——這五行 patch 對現在的程式碼完全是死碼，什麼都沒隔離到
+- **實際影響**：任何透過 API 建立/更新報價單、客戶、供應商的測試，背景執行緒呼叫的 `_backup_quotation()`/`_backup_customers()`/`_backup_suppliers()` 完全沒被隔離，會做真正的磁碟機代號掃描——在剛好掛載著真實公司雲端硬碟的開發機上，這代表測試產生的合成資料會真的寫進 `G:\我的雲端硬碟\系統存檔\即時備份\` 底下。逐一核對後確認：`報價單\` 資料夾混進約 30 份測試專用假單號（`MQ-TEST-*`／`MQ-CRGATE-*`／`MQ-CCR-*` 等，各自獨立檔案，只是新增不影響其他內容）；**較嚴重的是** `客戶\clients.json`／`供應商\suppliers.json` 這兩個全量快照檔案被整個覆寫成某次測試的合成資料，不是真實客戶/供應商清單
+- **修復**：改成直接 `archive._archive_base = lambda: str(archive_base)` patch 函式本身，讓所有依賴它的 `_realtime_dir()`／`_weekly_dir()`／`_daily_dir()`／`_uploads_mirror_dir()`／`_pdf_mirror_dir()` 全部自動一併隔離，不用每個都個別 patch，也不會重蹈「`archive.py` 改了實作方式、`conftest.py` 沒跟著更新」的同一種錯誤
+- **驗證**：修復前後分別記錄 G: 磁碟機 `即時備份\報價單\` 的檔案數（82），重新跑會建立報價單的測試後檔案數維持 82（沒有新增），確認修復生效；全套 pytest 454/454 全過，確認修復沒有弄壞任何既有測試
+- **善後**：已對真實開發機資料庫執行一次 `archive._backup_customers()`／`_backup_suppliers()`，用目前資料庫的真實內容（13 個客戶／24 個供應商）重新整批覆寫 `clients.json`／`suppliers.json`（這兩個檔案設計上本來就是每次完整覆寫、非累加寫入，重新產生不會有合併/重複問題）；`報價單\` 資料夾裡的測試假單號殘留檔案**刻意不主動清除**，留給使用者自行決定是否要清掉（各自獨立檔案，不影響任何現有真實備份內容，純粹是雜訊）
+- 這個缺口存在的時間**早於今天**（推測是先前某次把 `archive.py` 常數改成動態函式的重構沒有同步更新 conftest.py），過去所有在 G: 剛好掛載時執行過整套 pytest 的開發階段理論上都有可能留下類似殘留，只是這次剛好被系統性複查抓到
+
 ### 2026-09-07（再加開）— 庫存新增自動採購建議（架構地圖 §6.6，DB 無異動）
 
 - 新端點 `GET /api/inventory/purchase-suggestions`，依安全庫存缺口計算建議採購量（補到黃燈門檻 = 安全庫存 × 1.5），供應商/單價取自該料號最近一筆 `stock_batches` 進貨紀錄，查無紀錄退回 `parts.cost`；只回傳目前紅/黃燈且已設定安全庫存的料號，紅燈優先排序
