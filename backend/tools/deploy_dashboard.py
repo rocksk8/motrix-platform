@@ -40,46 +40,76 @@ BACKEND_DIR = TOOLS_DIR.parent
 PROJECT_ROOT = BACKEND_DIR.parent
 DEPLOY_PACKAGES_DIR = PROJECT_ROOT / "deploy_packages"
 HISTORY_PATH = TOOLS_DIR / "deploy_dashboard_history.json"
+# 2026-09-08（複查後新增）：job 輸出原本只存記憶體，這個小工具本身重啟
+# （例如改完程式碼要重載）就整個消失——當晚實際發生過好幾次，每次重啟
+# 儀表板都得請使用者重新複製貼上先前的畫面內容才留得住紀錄。改成每個
+# deploy/rollback job 同時逐行寫進磁碟，重啟儀表板／事後複查都還找得到。
+DEPLOY_LOGS_DIR = TOOLS_DIR / "deploy_logs"
 
 PROD_HOST = "172.16.10.177"
 PROD_BASE_URL = f"https://{PROD_HOST}:666"
 
 app = FastAPI(title="MOTRIX 部署儀表板")
 
-# ── 背景 job 追蹤（記憶體內，重啟這個小工具就重置，不需要持久化）──────────
+# ── 背景 job 追蹤（記憶體內，重啟這個小工具就重置——完整輸出另外落地在
+#    DEPLOY_LOGS_DIR，重啟後記憶體內的即時串流會不見，但檔案還在）──────
 _jobs_lock = threading.Lock()
 _jobs: dict = {}  # job_id -> {"status": "running"|"succeeded"|"failed", "lines": [...], "action": str}
 
+# 2026-09-08（複查後新增）：同一晚實際發生過使用者在前一次部署還沒跑完、
+# 或剛失敗完幾秒內就又按了一次部署，兩個 apply_update.ps1／WinRM session
+# 同時搶 port 666 的風險原本完全沒有防護。同一時間只允許一個 deploy/
+# rollback job 在跑，第二個請求直接 409 拒絕，不排隊、不覆蓋。
+_active_job_lock = threading.Lock()
+_active_job_id: str | None = None
+
 
 def _run_job(job_id: str, action: str, cmd: list, input_text: str = None):
+    global _active_job_id
     with _jobs_lock:
         _jobs[job_id] = {"status": "running", "lines": [], "action": action}
 
-    proc = subprocess.Popen(
-        cmd,
-        stdin=subprocess.PIPE if input_text is not None else None,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        cwd=str(PROJECT_ROOT),
-    )
-    if input_text is not None:
-        proc.stdin.write(input_text)
-        proc.stdin.close()
+    DEPLOY_LOGS_DIR.mkdir(exist_ok=True)
+    log_path = DEPLOY_LOGS_DIR / f"{time.strftime('%Y%m%d_%H%M%S')}_{action}_{job_id[:8]}.log"
 
-    for line in proc.stdout:
+    try:
+        with log_path.open("a", encoding="utf-8") as log_file:
+            proc = subprocess.Popen(
+                cmd,
+                stdin=subprocess.PIPE if input_text is not None else None,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                cwd=str(PROJECT_ROOT),
+            )
+            if input_text is not None:
+                proc.stdin.write(input_text)
+                proc.stdin.close()
+
+            for line in proc.stdout:
+                stripped = line.rstrip("\n")
+                with _jobs_lock:
+                    _jobs[job_id]["lines"].append(stripped)
+                log_file.write(stripped + "\n")
+                log_file.flush()
+            proc.wait()
+
+        success = proc.returncode == 0
         with _jobs_lock:
-            _jobs[job_id]["lines"].append(line.rstrip("\n"))
-    proc.wait()
+            _jobs[job_id]["status"] = "succeeded" if success else "failed"
 
-    success = proc.returncode == 0
-    with _jobs_lock:
-        _jobs[job_id]["status"] = "succeeded" if success else "failed"
-
-    if action in ("deploy", "rollback"):
-        _append_history(action, job_id, success)
+        if action in ("deploy", "rollback"):
+            _append_history(action, job_id, success, str(log_path))
+    finally:
+        # 不管上面成功、失敗、還是中途拋例外，只要是這個 job 占著鎖，
+        # 一定要釋放——否則儀表板重啟前這把鎖會卡死，之後所有部署/回滾
+        # 請求永遠拿到「已經有工作在跑」的 409。
+        if action in ("deploy", "rollback"):
+            with _active_job_lock:
+                if _active_job_id == job_id:
+                    _active_job_id = None
 
 
 def _ps_cmd(script_path: Path, named_args: dict = None) -> list:
@@ -119,11 +149,12 @@ def _is_safe_name(value: str) -> bool:
     return bool(value) and bool(_SAFE_NAME_RE.match(value)) and ".." not in value
 
 
-def _append_history(action: str, job_id: str, success: bool):
+def _append_history(action: str, job_id: str, success: bool, log_path: str = ""):
     entry = {
         "time": time.strftime("%Y-%m-%d %H:%M:%S"),
         "action": action,
         "success": success,
+        "logPath": log_path,
     }
     history = []
     if HISTORY_PATH.exists():
@@ -133,6 +164,42 @@ def _append_history(action: str, job_id: str, success: bool):
             history = []
     history.insert(0, entry)
     HISTORY_PATH.write_text(json.dumps(history[:200], ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _try_acquire_job_lock(job_id: str) -> bool:
+    """同一時間只允許一個 deploy/rollback job 在跑，避免兩個 apply_update.ps1
+    ／WinRM session 同時搶正式機 port 666（2026-09-08 當晚複查時發現完全
+    沒有這層防護，使用者在前一次還沒跑完或剛失敗完幾秒內就可能又按一次）。"""
+    global _active_job_id
+    with _active_job_lock:
+        if _active_job_id is not None:
+            return False
+        _active_job_id = job_id
+        return True
+
+
+def _recent_failure_warning() -> str:
+    """檢查最近一筆部署/回滾歷史紀錄，如果是 15 分鐘內的失敗，回傳一段
+    警告文字給前端的二次確認卡片顯示——2026-09-08 當晚實際發生連續三次
+    盲目重試都沒先看清楚上一次到底發生什麼事，這裡至少在畫面上提醒一次。"""
+    if not HISTORY_PATH.exists():
+        return ""
+    try:
+        history = json.loads(HISTORY_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return ""
+    if not history:
+        return ""
+    last = history[0]
+    if last.get("success"):
+        return ""
+    try:
+        last_time = time.mktime(time.strptime(last["time"], "%Y-%m-%d %H:%M:%S"))
+    except Exception:
+        return ""
+    if time.time() - last_time > 15 * 60:
+        return ""
+    return f"⚠️ 上一次{last.get('action', '操作')}（{last.get('time', '')}）失敗了，還沒查清楚原因就再試,可能會讓正式機被反覆停/啟服務。確定要繼續嗎？"
 
 
 # ── 靜態頁面 ──────────────────────────────────────────────────────────────
@@ -230,6 +297,16 @@ def job_status(job_id: str, since: int = 0):
         }
 
 
+@app.get("/api/pre-deploy-check")
+def pre_deploy_check():
+    """部署/回滾按鈕跳出二次確認卡片前，前端會先查這支端點：目前有沒有
+    別的 deploy/rollback job 正在跑（busy），以及上一筆歷史紀錄是不是
+    15 分鐘內的失敗（warning）。"""
+    with _active_job_lock:
+        busy = _active_job_id is not None
+    return {"busy": busy, "warning": _recent_failure_warning()}
+
+
 # ── 打包 ─────────────────────────────────────────────────────────────────
 
 @app.post("/api/build")
@@ -260,6 +337,8 @@ def start_deploy(body: DeployIn):
         return JSONResponse(status_code=400, content={"detail": f"找不到部署包：{package_path}"})
 
     job_id = uuid.uuid4().hex
+    if not _try_acquire_job_lock(job_id):
+        return JSONResponse(status_code=409, content={"detail": "已經有一個部署/回滾工作正在執行，請等它結束再試"})
     cmd = _ps_cmd(
         TOOLS_DIR / "_dashboard_remote.ps1",
         {"Action": "deploy", "Username": body.username, "PackagePath": str(package_path)},
@@ -287,6 +366,8 @@ def start_rollback(body: RollbackIn):
         return JSONResponse(status_code=400, content={"detail": "無效的快照時間戳"})
 
     job_id = uuid.uuid4().hex
+    if not _try_acquire_job_lock(job_id):
+        return JSONResponse(status_code=409, content={"detail": "已經有一個部署/回滾工作正在執行，請等它結束再試"})
     cmd = _ps_cmd(
         TOOLS_DIR / "_dashboard_remote.ps1",
         {"Action": "rollback", "Username": body.username, "SnapshotTimestamp": body.snapshotTimestamp},

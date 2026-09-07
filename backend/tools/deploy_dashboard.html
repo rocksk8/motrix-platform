@@ -142,7 +142,7 @@ async function refreshPackages() {
 async function refreshHistory() {
   const hist = await (await fetch('/api/history')).json();
   document.getElementById('historyList').innerHTML = hist.map(h =>
-    `<div class="hist-row"><span>${h.time} · ${h.action}</span><span class="badge ${h.success ? 'ok' : 'bad'}">${h.success ? '成功' : '失敗'}</span></div>`
+    `<div class="hist-row"><span>${h.time} · ${h.action}${h.logPath ? ' · <span style="color:#666">' + h.logPath.split(/[\\/]/).pop() + '</span>' : ''}</span><span class="badge ${h.success ? 'ok' : 'bad'}">${h.success ? '成功' : '失敗'}</span></div>`
   ).join('') || '<div style="color:#666;font-size:12px">尚無紀錄</div>';
 }
 
@@ -178,15 +178,20 @@ async function startBuild() {
   });
 }
 
-function requestDeploy() {
+async function requestDeploy() {
   const pkg = document.getElementById('pkgSelect').value;
   const username = document.getElementById('deployUser').value.trim();
   const password = document.getElementById('deployPass').value;
   if (!pkg || !username || !password) { alert('請填完整資訊'); return; }
+
+  const pre = await (await fetch('/api/pre-deploy-check')).json();
+  if (pre.busy) { alert('已經有一個部署/回滾工作正在執行，請等它結束再試'); return; }
+
   pendingDeploy = { pkg, username, password };
   const box = document.getElementById('deployConfirm');
   box.classList.remove('hidden');
-  box.innerHTML = `即將把部署包 <b>${pkg}</b> 套用到正式機 172.16.10.177。此操作會停止服務、覆蓋程式碼、可能觸發資料庫 migration。確定要繼續嗎？
+  const warningHtml = pre.warning ? `<div style="color:#F87171;margin-bottom:8px">${pre.warning}</div>` : '';
+  box.innerHTML = `${warningHtml}即將把部署包 <b>${pkg}</b> 套用到正式機 172.16.10.177。此操作會停止服務、覆蓋程式碼、可能觸發資料庫 migration。確定要繼續嗎？
     <div style="margin-top:10px"><button class="danger" onclick="confirmDeploy()">確認套用</button> <button class="ghost" onclick="cancelDeploy()">取消</button></div>`;
 }
 function cancelDeploy() {
@@ -226,14 +231,19 @@ async function loadSnapshots() {
   document.getElementById('rollbackBtn').classList.remove('hidden');
 }
 
-function requestRollback() {
+async function requestRollback() {
   const snapshotTimestamp = document.getElementById('snapshotSelect').value;
   const username = document.getElementById('rbUser').value.trim();
   const password = document.getElementById('rbPass').value;
+
+  const pre = await (await fetch('/api/pre-deploy-check')).json();
+  if (pre.busy) { alert('已經有一個部署/回滾工作正在執行，請等它結束再試'); return; }
+
   pendingRollback = { snapshotTimestamp, username, password };
   const box = document.getElementById('rollbackConfirm');
   box.classList.remove('hidden');
-  box.innerHTML = `即將把正式機回滾到快照 <b>${snapshotTimestamp}</b>（程式碼＋資料庫都會被還原）。確定要繼續嗎？
+  const warningHtml = pre.warning ? `<div style="color:#F87171;margin-bottom:8px">${pre.warning}</div>` : '';
+  box.innerHTML = `${warningHtml}即將把正式機回滾到快照 <b>${snapshotTimestamp}</b>（程式碼＋資料庫都會被還原）。確定要繼續嗎？
     <div style="margin-top:10px"><button class="danger" onclick="confirmRollback()">確認回滾</button> <button class="ghost" onclick="cancelRollback()">取消</button></div>`;
 }
 function cancelRollback() {

@@ -57,36 +57,39 @@ if ($UsesHttps) {
     $PingUrl = "http://127.0.0.1:666/api/ping"
 }
 
-# 2026-09-08 修復：HTTPS 健康檢查曾經用 Invoke-WebRequest +
+# 2026-09-08 修復（第一輪）：HTTPS 健康檢查曾經用 Invoke-WebRequest +
 # [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
 # 跳過自簽憑證驗證，但這是個已知地雷——.NET 在 TLS handshake 階段是從「背景執行緒」
 # 呼叫這個委派，而 PowerShell 指令碼區塊（{ $true }）需要 Runspace 才能執行，
 # 背景執行緒沒有 Runspace，實際呼叫時直接丟「沒有 Runspace 可在這個執行緒中用來
 # 執行指令碼」的例外——被下面每個健康檢查迴圈的 catch {} 整個吞掉，完全不留痕跡，
-# 造成「healthy=False 但 log 錯誤筆數=0」的誤判自動回滾（伺服器其實正常啟動成功，
-# 見 §12 2026-09-08 條目）。改用 curl.exe（Windows 10/11 內建原生執行檔，-k 跳過憑證
-# 驗證，不經過 .NET ServicePointManager，完全沒有這個問題）取代 HTTPS 情境下的
-# Invoke-WebRequest；HTTP 情境維持原本 Invoke-WebRequest 不變（本來就沒壞過）。
+# 造成「healthy=False 但 log 錯誤筆數=0」的誤判自動回滾。當時改用 curl.exe
+# （Windows 10/11 內建原生執行檔，-k 跳過憑證驗證，不經過 .NET ServicePointManager）
+# 取代 Invoke-WebRequest。
+#
+# 2026-09-08 修復（第二輪，同一晚更晚）：curl.exe 這個做法後來也不可靠——
+# 同一晚連續三次部署，套用後健康檢查都判定失敗（healthy=False），但事後用
+# 完全相同的 curl.exe 呼叫（含直接呼叫／巢狀一層呼叫、拉寬 timeout）獨立
+# 重測每次都正常回應 200，代表問題只在部署當下的即時狀態才會出現。同一段
+# 時間，開發機這邊用 Python requests 打同一支端點的背景輪詢每次都正確回報
+# 真實狀態，形成明顯對照。curl.exe 在 Windows 上預設走 Schannel（實測 -v
+# 輸出可見自簽憑證連線會發生兩次 TLS renegotiation），改用
+# backend/tools/_healthcheck_ping.py（Python 內建 ssl 模組，走 OpenSSL，
+# 不經過 Schannel）統一 HTTP/HTTPS 兩種情境，繞開整條 Schannel 路徑。
+# 這是根據當晚實際證據做的合理猜測，不是已證實的根因——如果之後這支健康
+# 檢查仍然誤判，下一個該懷疑的方向是「部署當下 port 666 重新綁定那個瞬間」
+# 本身的競態，而不是健康檢查呼叫的實作細節。
 function Test-Ping {
     param([string]$Url, [int]$TimeoutSec = 3)
-    if ($UsesHttps) {
-        $prevEap = $ErrorActionPreference
-        $ErrorActionPreference = "Continue"
-        try {
-            $code = & curl.exe -k -s -o NUL -w "%{http_code}" --max-time $TimeoutSec $Url 2>$null
-            return $code -eq "200"
-        } catch {
-            return $false
-        } finally {
-            $ErrorActionPreference = $prevEap
-        }
-    } else {
-        try {
-            $resp = Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec $TimeoutSec
-            return $resp.StatusCode -eq 200
-        } catch {
-            return $false
-        }
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        & python (Join-Path $PSScriptRoot "_healthcheck_ping.py") $Url $TimeoutSec 2>$null
+        return $LASTEXITCODE -eq 0
+    } catch {
+        return $false
+    } finally {
+        $ErrorActionPreference = $prevEap
     }
 }
 
@@ -482,6 +485,25 @@ if ($healthy -and -not $logErrors) {
     Write-Host "  程式碼回滾快照留存於：$rollbackDir" -ForegroundColor Red
     Write-Host "  db 套用前快照留存於：$dbBackupDir" -ForegroundColor Red
     Write-Host "======================================" -ForegroundColor Red
+
+    if (-not $rolledBackHealthy) {
+        # 2026-09-08：回滾後複驗失敗有兩種可能——正式機真的掛了，或者又是
+        # 健康檢查機制本身的偽陰性（同一晚已發生過）。直接把 port 666 目前
+        # 監聽狀態印出來，不用再另外跑一次診斷工具才知道是哪一種：如果這裡
+        # 顯示有 process 正常監聽，代表服務其實還活著，優先懷疑是健康檢查
+        # 本身的問題，不要急著當成真的服務中斷處理。
+        Write-Host ""
+        Write-Host "  port 666 目前監聽狀態（協助判斷是否為服務真的中斷）：" -ForegroundColor Yellow
+        $conns = Get-NetTCPConnection -LocalPort 666 -ErrorAction SilentlyContinue
+        if (-not $conns) {
+            Write-Host "    （完全沒有任何連線/監聽在 port 666 上——服務可能真的沒起來）" -ForegroundColor Yellow
+        } else {
+            foreach ($c in $conns) {
+                $procName = try { (Get-Process -Id $c.OwningProcess -ErrorAction Stop).ProcessName } catch { "(process 已不存在)" }
+                Write-Host "    State=$($c.State)  PID=$($c.OwningProcess)  Process=$procName" -ForegroundColor Yellow
+            }
+        }
+    }
     exit 1
 }
 
