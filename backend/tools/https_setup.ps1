@@ -40,15 +40,22 @@ $BackendDir = Split-Path -Parent $PSScriptRoot
 $CertsDir = Join-Path $BackendDir "certs"
 
 # --- 找 mkcert.exe（PATH 或 backend/tools/ 底下）---
-$mkcert = Get-Command mkcert.exe -ErrorAction SilentlyContinue
-if (-not $mkcert) {
+# 注意：Get-Command 回傳的 ApplicationInfo 有 .Source，但 Get-Item 回傳的
+# FileInfo 沒有這個屬性（只有 .FullName）——統一在這裡就轉成路徑字串，
+# 避免後面 `& $mkcert.Source` 在走 backend/tools/ 這條分支時因為 .Source
+# 是 $null 而炸掉（& $null ... 會丟「運算元後面的運算式產生的資料類型無效」）。
+$mkcertPath = $null
+$mkcertCmd = Get-Command mkcert.exe -ErrorAction SilentlyContinue
+if ($mkcertCmd) {
+    $mkcertPath = $mkcertCmd.Source
+} else {
     $localMkcert = Join-Path $PSScriptRoot "mkcert.exe"
-    if (Test-Path $localMkcert) { $mkcert = Get-Item $localMkcert }
+    if (Test-Path $localMkcert) { $mkcertPath = (Get-Item $localMkcert).FullName }
 }
-if (-not $mkcert) {
+if (-not $mkcertPath) {
     Fail "找不到 mkcert.exe。請先下載並放進 backend\tools\ 目錄或系統 PATH：`n  https://github.com/FiloSottile/mkcert/releases`n（選 windows amd64 版本，下載後直接改名成 mkcert.exe 即可，不需要安裝）"
 }
-Info "使用 mkcert：$($mkcert.Source)"
+Info "使用 mkcert：$mkcertPath"
 
 if (-not (Test-Path $CertsDir)) {
     New-Item -ItemType Directory -Path $CertsDir | Out-Null
@@ -64,7 +71,7 @@ if ((Test-Path $certFile) -and (Test-Path $keyFile)) {
 }
 
 Info "`n產生憑證中（SAN：$Host2, localhost, 127.0.0.1）..."
-& $mkcert.Source -cert-file $certFile -key-file $keyFile $Host2 localhost 127.0.0.1
+& $mkcertPath -cert-file $certFile -key-file $keyFile $Host2 localhost 127.0.0.1
 if ($LASTEXITCODE -ne 0) {
     Fail "mkcert 執行失敗（exit code $LASTEXITCODE）。"
 }

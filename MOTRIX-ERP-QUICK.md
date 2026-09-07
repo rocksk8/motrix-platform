@@ -1179,7 +1179,15 @@ xlsx-0.18.5.full.min.js     （SheetJS）
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
 
-### 2026-09-07（最末，正式機部署事故）— `apply_update.ps1` 新增 pip install 步驟
+### 2026-09-07（最末之二）— 拉回正式機 Claude 直接修復的兩個部署工具 bug
+
+- **背景**：19:16 那次自動回滾後，開發機這邊已先修好 pip install 缺步驟的問題並準備重新打包，但正式機當下另有 Claude session 直接在正式機上排查、也各自修好了兩個獨立問題——這正是 §0 一直提醒的「正式機做了什麼，開發機不知道」情境，這次是部署工具本身先撞到
+- **`apply_update.ps1`｜根目錄文件回滾落差**：健康檢查失敗回滾時，原本只回滾 `backend/`／`frontend/`／db，沒回滾根目錄文件（`MOTRIX-ERP-QUICK.md`／`CHANGELOG.md` 等）——但 Step 3 複製新程式碼時，根目錄文件是在健康檢查「之前」就先覆蓋過去，回滾若不處理，會變成「文件內容已經是新版、實際跑的程式碼卻被還原成舊版」的落差，19:16 那次事故裡實際發生過。修復：套用前多存一份 `rollback_snapshots/<timestamp>/root_docs/` 快照，回滾時一併還原
+- **`https_setup.ps1`｜`.Source` 屬性缺失**：找 `mkcert.exe` 時若命中系統 PATH（`Get-Command`），回傳的 `ApplicationInfo` 有 `.Source`；若命中 `backend/tools/` 本機路徑（`Get-Item`），回傳的 `FileInfo` 沒有這個屬性，讀到 `$null`，後面 `& $mkcert.Source ...` 直接炸掉「運算元後面的運算式產生的資料類型無效」。修復：統一在找到當下就轉成路徑字串 `$mkcertPath`，不再混用兩種物件型別
+- **已拉回開發機**：兩支腳本內容已與正式機這份逐位元組核對一致（`diff` 確認），並各自過語法檢查
+- 這次沒有新增/修改任何測試——兩處都是部署/憑證設定腳本本身，不在 pytest 覆蓋範圍內（`build_deploy_package.ps1` 目前也不檢查 `.ps1` 語法，僅檢查 `git status` 乾淨），日後如果這類部署工具 bug 再發生，可以考慮補一支獨立的 `Test-Path`／語法層級檢查腳本
+
+### 2026-09-07（最末之一，正式機部署事故）— `apply_update.ps1` 新增 pip install 步驟
 
 - **事故**：19:16 在正式機套用當天累積的 12 個 commit（TOTP／S3備份／CDN自架／PDF並發限制／log輪替／依賴掃描／採購建議）部署包時，套用後健康檢查失敗（`healthy=False`，log 錯誤筆數=9）觸發自動回滾。回滾機制運作正常，正式機資料與舊版程式碼皆未受影響
 - **根因**：`ModuleNotFoundError: No module named 'pyotp'`——TOTP 功能（見下方 2026-09-07（稍晚）條目）用到的 `pyotp` 早已正確補進 `requirements.txt`（見 2026-09-07（末）條目），但 `apply_update.ps1` 的部署流程從頭到尾只複製程式碼檔案，**從未執行過 `pip install`**，正式機 Python 環境從沒裝過這個套件，新程式碼一 import 就炸，autostart crash-restart 迴圈重試多次皆失敗

@@ -187,7 +187,16 @@ New-Item -ItemType Directory -Force -Path $rollbackDir | Out-Null
 Info "  建立程式碼回滾快照：$rollbackDir"
 robocopy $BackendDir (Join-Path $rollbackDir "backend") /E /XD db_backups rollback_snapshots logs /XF motrix_erp.db motrix_erp.db-wal motrix_erp.db-shm motrix_erp_demo.db motrix_erp_demo.db-wal motrix_erp_demo.db-shm heartbeat_config.json .deployed_commit.json server.log | Out-Null
 robocopy $FrontendDir (Join-Path $rollbackDir "frontend") /E | Out-Null
-Ok "  回滾快照完成。"
+# 根目錄文件（CHANGELOG.md / MOTRIX-ERP-QUICK.md 等）也要存一份回滾快照——
+# Step 3 會在健康檢查「之前」就先覆蓋這些文件，如果沒有這份快照，健康檢查
+# 失敗回滾程式碼＋db 時，根目錄文件會維持新版內容，變成「文件說已經是新版，
+# 實際跑的程式碼卻是舊版」的落差（2026-09-07 實際發生過，見 §0）。
+$rootDocDir = Join-Path $rollbackDir "root_docs"
+New-Item -ItemType Directory -Force -Path $rootDocDir | Out-Null
+Get-ChildItem -Path $ProdRoot -File | ForEach-Object {
+    Copy-Item $_.FullName -Destination $rootDocDir -Force
+}
+Ok "  回滾快照完成（含根目錄文件）。"
 
 # 只保留最新 5 份回滾快照
 $oldSnapshots = Get-ChildItem $rollbackRoot -Directory | Sort-Object Name -Descending | Select-Object -Skip 5
@@ -329,6 +338,17 @@ if ($healthy -and -not $logErrors) {
 
     robocopy (Join-Path $rollbackDir "backend") $BackendDir /E | Out-Null
     robocopy (Join-Path $rollbackDir "frontend") $FrontendDir /E | Out-Null
+
+    # 根目錄文件（MOTRIX-ERP-QUICK.md / CHANGELOG.md 等）也一併回滾，否則文件
+    # 會停留在「已經是新版」的內容，跟被回滾回舊版的實際程式碼對不上（見上方
+    # Step 3.5 快照時的說明／§0）。
+    $rootDocDir = Join-Path $rollbackDir "root_docs"
+    if (Test-Path $rootDocDir) {
+        Get-ChildItem -Path $rootDocDir -File | ForEach-Object {
+            Copy-Item $_.FullName -Destination $ProdRoot -Force
+        }
+        Ok "  根目錄文件已還原至升級前版本。"
+    }
 
     # 新版可能已經對正式庫套用過 migration（伺服器一啟動就會自動跑 init_db()）。
     # 只回滾程式碼、不回滾資料庫的話，回滾後會是「舊程式碼 + 新 schema」的不一致
