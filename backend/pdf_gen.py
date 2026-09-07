@@ -12,7 +12,7 @@ from db import (
     DEMO_CONTRACTOR_VOUCHER_PDF_ARCHIVE_DIR, DEMO_INVOICE_VOUCHER_PDF_ARCHIVE_DIR,
     DEMO_PAYMENT_REQUEST_PDF_ARCHIVE_DIR, DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR,
 )
-from helpers import _get_edge_path, _get_setting, payment_item_amounts, notify_case_closing_report
+from helpers import _get_edge_path, _get_setting, payment_item_amounts, notify_case_closing_report, EDGE_PDF_SEMAPHORE
 
 logger = logging.getLogger(__name__)
 
@@ -409,15 +409,16 @@ def generate_pdf_bytes(quote_no: str, internal: bool = False) -> bytes:
         with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as f:
             tmp_pdf = f.name
         file_url = 'file:///' + tmp_html.replace('\\', '/')
-        subprocess.run(
-            [edge, '--headless', '--disable-gpu', '--no-sandbox',
-             f'--print-to-pdf={tmp_pdf}',
-             '--no-pdf-header-footer',
-             '--run-all-compositor-stages-before-draw',
-             file_url],
-            timeout=40, check=False,
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-        )
+        with EDGE_PDF_SEMAPHORE:
+            subprocess.run(
+                [edge, '--headless', '--disable-gpu', '--no-sandbox',
+                 f'--print-to-pdf={tmp_pdf}',
+                 '--no-pdf-header-footer',
+                 '--run-all-compositor-stages-before-draw',
+                 file_url],
+                timeout=40, check=False,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
         if not os.path.exists(tmp_pdf) or os.path.getsize(tmp_pdf) == 0:
             raise ValueError("Edge 執行完畢但未產生 PDF 檔案")
         with open(tmp_pdf, 'rb') as f:
@@ -747,15 +748,16 @@ def generate_payslip_pdf_bytes(slip_no: str) -> bytes:
         with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as f:
             tmp_pdf = f.name
         file_url = 'file:///' + tmp_html.replace('\\', '/')
-        subprocess.run(
-            [edge, '--headless', '--disable-gpu', '--no-sandbox',
-             f'--print-to-pdf={tmp_pdf}',
-             '--no-pdf-header-footer',
-             '--run-all-compositor-stages-before-draw',
-             file_url],
-            timeout=40, check=False,
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-        )
+        with EDGE_PDF_SEMAPHORE:
+            subprocess.run(
+                [edge, '--headless', '--disable-gpu', '--no-sandbox',
+                 f'--print-to-pdf={tmp_pdf}',
+                 '--no-pdf-header-footer',
+                 '--run-all-compositor-stages-before-draw',
+                 file_url],
+                timeout=40, check=False,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
         if not os.path.exists(tmp_pdf) or os.path.getsize(tmp_pdf) == 0:
             raise ValueError("Edge 未產生 PDF 檔案")
         with open(tmp_pdf, 'rb') as f:
@@ -834,15 +836,16 @@ def _generate_quotation_pdf(quote_no: str, actor: str = '', action_type: str = '
             tmp_html = f.name
 
         file_url = 'file:///' + tmp_html.replace('\\', '/')
-        subprocess.run(
-            [edge, '--headless', '--disable-gpu', '--no-sandbox',
-             f'--print-to-pdf={pdf_path}',
-             '--no-pdf-header-footer',
-             '--run-all-compositor-stages-before-draw',
-             file_url],
-            timeout=40, check=False,
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-        )
+        with EDGE_PDF_SEMAPHORE:
+            subprocess.run(
+                [edge, '--headless', '--disable-gpu', '--no-sandbox',
+                 f'--print-to-pdf={pdf_path}',
+                 '--no-pdf-header-footer',
+                 '--run-all-compositor-stages-before-draw',
+                 file_url],
+                timeout=40, check=False,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
         if os.path.exists(pdf_path) and os.path.getsize(pdf_path) > 0:
             logger.info("PDF saved: %s", pdf_path)
             _pdf_audit(quote_no, True, pdf_path, actor, action_type)
@@ -1101,15 +1104,16 @@ def generate_shipping_pdf_bytes(note_no: str) -> bytes:
         with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as f:
             tmp_pdf = f.name
         file_url = 'file:///' + tmp_html.replace('\\', '/')
-        subprocess.run(
-            [edge, '--headless', '--disable-gpu', '--no-sandbox',
-             f'--print-to-pdf={tmp_pdf}',
-             '--no-pdf-header-footer',
-             '--run-all-compositor-stages-before-draw',
-             file_url],
-            timeout=40, check=False,
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-        )
+        with EDGE_PDF_SEMAPHORE:
+            subprocess.run(
+                [edge, '--headless', '--disable-gpu', '--no-sandbox',
+                 f'--print-to-pdf={tmp_pdf}',
+                 '--no-pdf-header-footer',
+                 '--run-all-compositor-stages-before-draw',
+                 file_url],
+                timeout=40, check=False,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
         if not os.path.exists(tmp_pdf) or os.path.getsize(tmp_pdf) == 0:
             raise ValueError("Edge 執行完畢但未產生 PDF 檔案")
         with open(tmp_pdf, 'rb') as f:
@@ -1167,15 +1171,16 @@ def _generate_shipping_pdf(note_no: str, actor: str = '', action_type: str = '�
             tmp_html = f.name
 
         file_url = 'file:///' + tmp_html.replace('\\', '/')
-        subprocess.run(
-            [edge, '--headless', '--disable-gpu', '--no-sandbox',
-             f'--print-to-pdf={pdf_path}',
-             '--no-pdf-header-footer',
-             '--run-all-compositor-stages-before-draw',
-             file_url],
-            timeout=40, check=False,
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-        )
+        with EDGE_PDF_SEMAPHORE:
+            subprocess.run(
+                [edge, '--headless', '--disable-gpu', '--no-sandbox',
+                 f'--print-to-pdf={pdf_path}',
+                 '--no-pdf-header-footer',
+                 '--run-all-compositor-stages-before-draw',
+                 file_url],
+                timeout=40, check=False,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
         if os.path.exists(pdf_path) and os.path.getsize(pdf_path) > 0:
             logger.info("Shipping PDF saved: %s", pdf_path)
             _shipping_pdf_audit(note_no, True, pdf_path, actor, action_type)
@@ -1482,15 +1487,16 @@ def generate_contractor_voucher_pdf_bytes(voucher_no: str) -> bytes:
         with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as f:
             tmp_pdf = f.name
         file_url = 'file:///' + tmp_html.replace('\\', '/')
-        subprocess.run(
-            [edge, '--headless', '--disable-gpu', '--no-sandbox',
-             f'--print-to-pdf={tmp_pdf}',
-             '--no-pdf-header-footer',
-             '--run-all-compositor-stages-before-draw',
-             file_url],
-            timeout=40, check=False,
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-        )
+        with EDGE_PDF_SEMAPHORE:
+            subprocess.run(
+                [edge, '--headless', '--disable-gpu', '--no-sandbox',
+                 f'--print-to-pdf={tmp_pdf}',
+                 '--no-pdf-header-footer',
+                 '--run-all-compositor-stages-before-draw',
+                 file_url],
+                timeout=40, check=False,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
         if not os.path.exists(tmp_pdf) or os.path.getsize(tmp_pdf) == 0:
             raise ValueError("Edge 執行完畢但未產生 PDF 檔案")
         with open(tmp_pdf, 'rb') as f:
@@ -1544,15 +1550,16 @@ def _generate_contractor_voucher_pdf(voucher_no: str, actor: str = '', action_ty
             tmp_html = f.name
 
         file_url = 'file:///' + tmp_html.replace('\\', '/')
-        subprocess.run(
-            [edge, '--headless', '--disable-gpu', '--no-sandbox',
-             f'--print-to-pdf={pdf_path}',
-             '--no-pdf-header-footer',
-             '--run-all-compositor-stages-before-draw',
-             file_url],
-            timeout=40, check=False,
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-        )
+        with EDGE_PDF_SEMAPHORE:
+            subprocess.run(
+                [edge, '--headless', '--disable-gpu', '--no-sandbox',
+                 f'--print-to-pdf={pdf_path}',
+                 '--no-pdf-header-footer',
+                 '--run-all-compositor-stages-before-draw',
+                 file_url],
+                timeout=40, check=False,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
         if os.path.exists(pdf_path) and os.path.getsize(pdf_path) > 0:
             logger.info("Contractor voucher PDF saved: %s", pdf_path)
             _voucher_pdf_audit(voucher_no, "contractor_payment_voucher", True, pdf_path, actor, action_type)
@@ -1778,15 +1785,16 @@ def generate_invoice_voucher_pdf_bytes(voucher_no: str) -> bytes:
         with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as f:
             tmp_pdf = f.name
         file_url = 'file:///' + tmp_html.replace('\\', '/')
-        subprocess.run(
-            [edge, '--headless', '--disable-gpu', '--no-sandbox',
-             f'--print-to-pdf={tmp_pdf}',
-             '--no-pdf-header-footer',
-             '--run-all-compositor-stages-before-draw',
-             file_url],
-            timeout=40, check=False,
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-        )
+        with EDGE_PDF_SEMAPHORE:
+            subprocess.run(
+                [edge, '--headless', '--disable-gpu', '--no-sandbox',
+                 f'--print-to-pdf={tmp_pdf}',
+                 '--no-pdf-header-footer',
+                 '--run-all-compositor-stages-before-draw',
+                 file_url],
+                timeout=40, check=False,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
         if not os.path.exists(tmp_pdf) or os.path.getsize(tmp_pdf) == 0:
             raise ValueError("Edge 執行完畢但未產生 PDF 檔案")
         with open(tmp_pdf, 'rb') as f:
@@ -1838,15 +1846,16 @@ def _generate_invoice_voucher_pdf(voucher_no: str, actor: str = '', action_type:
             tmp_html = f.name
 
         file_url = 'file:///' + tmp_html.replace('\\', '/')
-        subprocess.run(
-            [edge, '--headless', '--disable-gpu', '--no-sandbox',
-             f'--print-to-pdf={pdf_path}',
-             '--no-pdf-header-footer',
-             '--run-all-compositor-stages-before-draw',
-             file_url],
-            timeout=40, check=False,
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-        )
+        with EDGE_PDF_SEMAPHORE:
+            subprocess.run(
+                [edge, '--headless', '--disable-gpu', '--no-sandbox',
+                 f'--print-to-pdf={pdf_path}',
+                 '--no-pdf-header-footer',
+                 '--run-all-compositor-stages-before-draw',
+                 file_url],
+                timeout=40, check=False,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
         if os.path.exists(pdf_path) and os.path.getsize(pdf_path) > 0:
             logger.info("Invoice voucher PDF saved: %s", pdf_path)
             _voucher_pdf_audit(voucher_no, "invoice_voucher", True, pdf_path, actor, action_type)
@@ -2115,15 +2124,16 @@ def generate_payment_request_pdf_bytes(request_no: str) -> bytes:
         with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as f:
             tmp_pdf = f.name
         file_url = 'file:///' + tmp_html.replace('\\', '/')
-        subprocess.run(
-            [edge, '--headless', '--disable-gpu', '--no-sandbox',
-             f'--print-to-pdf={tmp_pdf}',
-             '--no-pdf-header-footer',
-             '--run-all-compositor-stages-before-draw',
-             file_url],
-            timeout=40, check=False,
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-        )
+        with EDGE_PDF_SEMAPHORE:
+            subprocess.run(
+                [edge, '--headless', '--disable-gpu', '--no-sandbox',
+                 f'--print-to-pdf={tmp_pdf}',
+                 '--no-pdf-header-footer',
+                 '--run-all-compositor-stages-before-draw',
+                 file_url],
+                timeout=40, check=False,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
         if not os.path.exists(tmp_pdf) or os.path.getsize(tmp_pdf) == 0:
             raise ValueError("Edge 執行完畢但未產生 PDF 檔案")
         with open(tmp_pdf, 'rb') as f:
@@ -2175,15 +2185,16 @@ def _generate_payment_request_pdf(request_no: str, actor: str = '', action_type:
             tmp_html = f.name
 
         file_url = 'file:///' + tmp_html.replace('\\', '/')
-        subprocess.run(
-            [edge, '--headless', '--disable-gpu', '--no-sandbox',
-             f'--print-to-pdf={pdf_path}',
-             '--no-pdf-header-footer',
-             '--run-all-compositor-stages-before-draw',
-             file_url],
-            timeout=40, check=False,
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-        )
+        with EDGE_PDF_SEMAPHORE:
+            subprocess.run(
+                [edge, '--headless', '--disable-gpu', '--no-sandbox',
+                 f'--print-to-pdf={pdf_path}',
+                 '--no-pdf-header-footer',
+                 '--run-all-compositor-stages-before-draw',
+                 file_url],
+                timeout=40, check=False,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
         if os.path.exists(pdf_path) and os.path.getsize(pdf_path) > 0:
             logger.info("Payment request PDF saved: %s", pdf_path)
             _voucher_pdf_audit(request_no, "payment_request", True, pdf_path, actor, action_type)
@@ -2626,15 +2637,16 @@ def generate_case_closing_pdf_bytes(quote_no: str) -> bytes:
         with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as f:
             tmp_pdf = f.name
         file_url = 'file:///' + tmp_html.replace('\\', '/')
-        subprocess.run(
-            [edge, '--headless', '--disable-gpu', '--no-sandbox',
-             f'--print-to-pdf={tmp_pdf}',
-             '--no-pdf-header-footer',
-             '--run-all-compositor-stages-before-draw',
-             file_url],
-            timeout=40, check=False,
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-        )
+        with EDGE_PDF_SEMAPHORE:
+            subprocess.run(
+                [edge, '--headless', '--disable-gpu', '--no-sandbox',
+                 f'--print-to-pdf={tmp_pdf}',
+                 '--no-pdf-header-footer',
+                 '--run-all-compositor-stages-before-draw',
+                 file_url],
+                timeout=40, check=False,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
         if not os.path.exists(tmp_pdf) or os.path.getsize(tmp_pdf) == 0:
             raise ValueError("Edge 執行完畢但未產生 PDF 檔案")
         with open(tmp_pdf, 'rb') as f:
@@ -2687,15 +2699,16 @@ def _generate_case_closing_pdf(quote_no: str, actor: str = '', action_type: str 
             tmp_html = f.name
 
         file_url = 'file:///' + tmp_html.replace('\\', '/')
-        subprocess.run(
-            [edge, '--headless', '--disable-gpu', '--no-sandbox',
-             f'--print-to-pdf={pdf_path}',
-             '--no-pdf-header-footer',
-             '--run-all-compositor-stages-before-draw',
-             file_url],
-            timeout=40, check=False,
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-        )
+        with EDGE_PDF_SEMAPHORE:
+            subprocess.run(
+                [edge, '--headless', '--disable-gpu', '--no-sandbox',
+                 f'--print-to-pdf={pdf_path}',
+                 '--no-pdf-header-footer',
+                 '--run-all-compositor-stages-before-draw',
+                 file_url],
+                timeout=40, check=False,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
         if os.path.exists(pdf_path) and os.path.getsize(pdf_path) > 0:
             logger.info("Case closing report PDF saved: %s", pdf_path)
             _pdf_audit(quote_no, True, pdf_path, actor, action_type)
@@ -3001,15 +3014,16 @@ def generate_project_execution_report_pdf_bytes(quote_no: str) -> bytes:
         with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as f:
             tmp_pdf = f.name
         file_url = 'file:///' + tmp_html.replace('\\', '/')
-        subprocess.run(
-            [edge, '--headless', '--disable-gpu', '--no-sandbox',
-             f'--print-to-pdf={tmp_pdf}',
-             '--no-pdf-header-footer',
-             '--run-all-compositor-stages-before-draw',
-             file_url],
-            timeout=40, check=False,
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-        )
+        with EDGE_PDF_SEMAPHORE:
+            subprocess.run(
+                [edge, '--headless', '--disable-gpu', '--no-sandbox',
+                 f'--print-to-pdf={tmp_pdf}',
+                 '--no-pdf-header-footer',
+                 '--run-all-compositor-stages-before-draw',
+                 file_url],
+                timeout=40, check=False,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
         if not os.path.exists(tmp_pdf) or os.path.getsize(tmp_pdf) == 0:
             raise ValueError("Edge 執行完畢但未產生 PDF 檔案")
         with open(tmp_pdf, 'rb') as f:

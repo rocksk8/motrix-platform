@@ -14,7 +14,7 @@ import openpyxl
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
-from helpers import _get_edge_path
+from helpers import _get_edge_path, EDGE_PDF_SEMAPHORE
 from network_plan_topology import build_topology_svg, build_topology_text_summary_html
 
 _COMPANY  = "允碩整合集創股份有限公司"
@@ -404,15 +404,16 @@ def _render_pdf_via_edge(html_content: str, virtual_time_budget: int = None) -> 
         file_url = "file:///" + tmp_html.replace("\\", "/")
         wait_flag = (f"--virtual-time-budget={virtual_time_budget}" if virtual_time_budget
                      else "--run-all-compositor-stages-before-draw")
-        subprocess.run(
-            [edge, "--headless", "--disable-gpu", "--no-sandbox",
-             f"--print-to-pdf={tmp_pdf}",
-             "--no-pdf-header-footer",
-             wait_flag,
-             file_url],
-            timeout=40, check=False,
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        )
+        with EDGE_PDF_SEMAPHORE:
+            subprocess.run(
+                [edge, "--headless", "--disable-gpu", "--no-sandbox",
+                 f"--print-to-pdf={tmp_pdf}",
+                 "--no-pdf-header-footer",
+                 wait_flag,
+                 file_url],
+                timeout=40, check=False,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
         if not os.path.exists(tmp_pdf) or os.path.getsize(tmp_pdf) == 0:
             raise ValueError("Edge 執行完畢但未產生 PDF 檔案")
         with open(tmp_pdf, "rb") as f:

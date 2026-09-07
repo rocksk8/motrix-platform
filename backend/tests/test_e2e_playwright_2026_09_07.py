@@ -121,11 +121,14 @@ def test_login_create_submit_approve_smoke(live_server, make_user):
             _login(page2, live_server, approver_user, approver_pw)
 
             page2.goto(f"{live_server}/pages/quotation-form.html?id={quote_no}")
-            page2.wait_for_selector('button:has-text("預覽後簽核")', timeout=10000)
+            # 20 秒（比其餘等待寬鬆許多）：這條測試在單獨執行時很穩定，但夾在整批
+            # 400+ 個測試中間跑過一次因為系統負載較高而逾時過一次（2026-09-07），
+            # 加大時限吸收偶發的系統忙碌，而不是每次都精準卡在剛好會逾時的邊界。
+            page2.wait_for_selector('button:has-text("預覽後簽核")', timeout=20000)
             page2.click('button:has-text("預覽後簽核")')
-            page2.wait_for_selector('button:has-text("確認簽核")', timeout=10000)
+            page2.wait_for_selector('button:has-text("確認簽核")', timeout=20000)
             page2.click('button:has-text("確認簽核")')
-            page2.wait_for_timeout(1500)  # apiSave() 非同步，等一下讓狀態更新回來
+            page2.wait_for_timeout(2500)  # apiSave() 非同步，等一下讓狀態更新回來
             # 第一個對話框是預期中的「確認簽核通過此報價單？」confirm()；若簽核 API
             # 失敗，approveQuote() 會再跳出第二個 alert('簽核失敗：...')。
             assert len(dialogs) == 1, f"簽核流程跳出未預期的額外對話框：{dialogs}"

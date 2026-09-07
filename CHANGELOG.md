@@ -5,6 +5,17 @@
 
 ---
 
+### 2026-09-07（終）— PDF 產生新增並發限制（架構地圖建議事項，DB 無異動）
+
+- 背景：每一份 PDF 匯出（報價單／出貨單／承攬商匯款申請／發票開立簽核單／請款單／案件結案報表／網路架構規劃書／營運報表）都各自 spawn 一個 `msedge.exe --headless` 子行程。正式機是單一 Windows 主機、沒有任何行程池限制——短時間內多人同時觸發簽核完成（背景執行緒各自產 PDF）或匯出動作，理論上可能同時開出一堆 Edge 行程，把單機 CPU/記憶體吃滿，拖垮正在跑的 uvicorn 本身
+- 新增 `helpers/startup.py::EDGE_PDF_SEMAPHORE`（`threading.BoundedSemaphore(3)`，透過 `helpers/__init__.py` 對外重新匯出），`pdf_gen.py`（14 個呼叫點）／`network_plan_export.py::_render_pdf_via_edge()`（1 個）／`routers/reports.py::_html_to_pdf()`（1 個）共 16 處 `subprocess.run([edge, '--headless', ...])` 全部改用 `with EDGE_PDF_SEMAPHORE:` 包住；三個檔案 import 的是同一個全域物件，並發額度是全站共用一份，不是三份各自獨立加總。超過上限的呼叫方單純排隊等待輪到自己，不會報錯，只是慢一點
+- 複查全站 Edge 子行程呼叫點時發現 `routers/reports.py::_html_to_pdf()` 是先前完全沒被 §11 或架構地圖記載過的第三個獨立呼叫點（原本以為只有 `pdf_gen.py` 跟 `network_plan_export.py` 兩處各自維護一份轉檔邏輯）
+- 新增測試 `test_pdf_concurrency_2026_09_07.py`（3 題）：不透過完整 PDF 產生流程（那部分已有既有的 `generate_*_pdf_bytes` 測試涵蓋），直接測 semaphore 機制本身——起 9 個執行緒搶 3 個名額驗證同時持有數不超過上限且確實有頂到上限、確認同一個物件可以反覆借還不會報廢、確認三個檔案各自 import 到的是同一個全域物件
+- 順便修正同一輪意外發現的既有 E2E flaky 問題：`test_e2e_playwright_2026_09_07.py::test_login_create_submit_approve_smoke` 單獨執行連續 3 次都穩定通過，但夾在整批 400+ 個測試中間完整跑一次時因系統負載較高而逾時失敗過一次——把簽核相關的兩處等待時限從 10 秒加大到 20 秒，這類真實瀏覽器測試在系統忙碌時偶爾需要更多緩衝，跟這次的 PDF 並發限制改動本身無關，只是剛好同一輪發現
+- pytest 433/433 全過
+
+---
+
 ### 2026-09-07（最晚）— 外部函式庫全面自架，移除 CDN 依賴（DB 無異動）
 
 - 背景：正式機是純內網部署（172.16.10.177，設計上不依賴對外網路），但先前 Alpine.js／Chart.js／SortableJS／frappe-gantt／SheetJS 這五套函式庫全部從 `cdn.jsdelivr.net` 動態載入——如果辦公室對外網路中斷，或防火牆/代理設定變動導致 jsdelivr 被擋，整套 ERP 會直接打不開，這對一個刻意設計成內網系統的應用是不必要的外部單點故障

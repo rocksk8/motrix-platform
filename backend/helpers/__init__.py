@@ -102,6 +102,7 @@ from .uploads import (
 from .startup import (
     _EDGE_CANDIDATES,
     _get_edge_path,
+    EDGE_PDF_SEMAPHORE,
     init_default_admin,
     init_demo_account,
     flag_weak_passwords,
@@ -154,7 +155,7 @@ __all__ = [
     # uploads
     "save_document_files", "delete_document_file",
     # startup
-    "_EDGE_CANDIDATES", "_get_edge_path",
+    "_EDGE_CANDIDATES", "_get_edge_path", "EDGE_PDF_SEMAPHORE",
     "init_default_admin", "init_demo_account", "flag_weak_passwords", "init_unlock_passwords",
     "_cleanup_sessions", "_sync_module_versions",
 ]

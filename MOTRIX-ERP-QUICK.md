@@ -131,7 +131,7 @@
 | `helpers/` | 密碼、session、audit、notify、settings、弱密碼標記、`save_quotation_json()` |
 | `archive.py` | 即時／每日／週備份；本機 SQLite 快照；**原子 JSON 寫入**（`_atomic_json_write`）；G: fallback |
 | `backup_job.py` | 獨立備份腳本（Windows 工作排程器，不依賴 server） |
-| `pdf_gen.py` | Edge Headless PDF；路徑讀 `system_settings["pdf_base_path"]` |
+| `pdf_gen.py` | Edge Headless PDF；路徑讀 `system_settings["pdf_base_path"]`；**2026-09-07 起**所有 Edge 子行程呼叫（含 `network_plan_export.py`／`routers/reports.py`）共用 `helpers.EDGE_PDF_SEMAPHORE`（`BoundedSemaphore(3)`）限制同時執行數量，避免短時間多人觸發匯出時單機被一堆 Edge 行程拖垮 |
 | `photos.py` | 專案照片水印 |
 | `routers/*` | 業務 API |
 | `main.py` | CORS、middleware、全域 Exception Handler、startup、static |
@@ -1156,6 +1156,14 @@ xlsx-0.18.5.full.min.js     （SheetJS）
 ## §12 · 變更摘要（最新兩版）
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
+
+### 2026-09-07（終）— PDF 產生新增並發限制（架構地圖建議事項，DB 無異動）
+
+- 每份 PDF 匯出都各自 spawn 一個 `msedge.exe --headless` 子行程，正式機是單一 Windows 主機沒有行程池限制——短時間內多人觸發簽核完成或匯出動作，理論上可能同時開出一堆 Edge 行程吃滿單機資源。新增 `helpers.EDGE_PDF_SEMAPHORE`（`threading.BoundedSemaphore(3)`），`pdf_gen.py`（14 處）／`network_plan_export.py`（1 處）／`routers/reports.py`（1 處）共 16 個 `subprocess.run([edge, '--headless',...])` 呼叫點全部用 `with EDGE_PDF_SEMAPHORE:` 包住，三個檔案共用同一個全域物件，超過上限的呼叫排隊等待，不會失敗只是變慢
+- 複查過程中發現 `routers/reports.py::_html_to_pdf()` 是先前完全沒被 §11/架構地圖記載過的第三個獨立 Edge 子行程呼叫點（原以為只有 `pdf_gen.py` 跟 `network_plan_export.py` 兩處）
+- 新增測試 `test_pdf_concurrency_2026_09_07.py`（3 題）：直接測 semaphore 本身的並發上限（起 9 個執行緒搶 3 個名額，驗證同時持有數不超過上限）、可重複借還、三個檔案 import 到的是同一個物件而非各自獨立
+- 順便修正一個同輪發現的既有 E2E 測試 flaky 問題：`test_login_create_submit_approve_smoke` 單獨執行很穩定，但夾在整批 400+ 測試中間跑過一次因系統負載較高逾時，把簽核相關的等待時限從 10 秒加大到 20 秒
+- pytest 433/433 全過
 
 ### 2026-09-07（最晚）— 外部函式庫全面自架，移除 CDN 依賴（DB 無異動）
 

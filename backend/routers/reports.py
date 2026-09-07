@@ -23,7 +23,7 @@ from fastapi.responses import StreamingResponse
 from db import get_db
 from helpers import (
     _require_user, _tok, _audit, _warranty_expiry, _get_edge_path, _get_setting, _set_setting,
-    payment_item_amounts, quote_won_month_map, user_has_module,
+    payment_item_amounts, quote_won_month_map, user_has_module, EDGE_PDF_SEMAPHORE,
 )
 from routers.vendor_contractors import _dispatch_row
 
@@ -2121,14 +2121,15 @@ def _html_to_pdf(html: str) -> bytes:
             tmp_html = f.name
         with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
             tmp_pdf = f.name
-        subprocess.run(
-            [edge, "--headless", "--disable-gpu", "--no-sandbox",
-             f"--print-to-pdf={tmp_pdf}", "--no-pdf-header-footer",
-             "--run-all-compositor-stages-before-draw",
-             "file:///" + tmp_html.replace("\\", "/")],
-            timeout=60, check=False,
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        )
+        with EDGE_PDF_SEMAPHORE:
+            subprocess.run(
+                [edge, "--headless", "--disable-gpu", "--no-sandbox",
+                 f"--print-to-pdf={tmp_pdf}", "--no-pdf-header-footer",
+                 "--run-all-compositor-stages-before-draw",
+                 "file:///" + tmp_html.replace("\\", "/")],
+                timeout=60, check=False,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
         with open(tmp_pdf, "rb") as f:
             data = f.read()
         if not data:

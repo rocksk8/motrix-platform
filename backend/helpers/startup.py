@@ -3,6 +3,7 @@ import json
 import os
 import logging
 import secrets
+import threading
 from datetime import datetime, date
 
 from db import get_db
@@ -40,6 +41,20 @@ def _get_edge_path() -> str:
         "找不到 Microsoft Edge 執行檔。"
         "請至「系統設定 → Edge 執行檔路徑」手動指定完整路徑。"
     )
+
+
+# ── PDF 產生並發限制（2026-09-07，架構地圖建議事項）─────────────────────────
+#
+# 每一份 PDF 匯出（報價單／出貨單／承攬商匯款申請／發票開立簽核單／請款單／
+# 案件結案報表／網路架構規劃書）都會各自 spawn 一個 `msedge.exe --headless`
+# 子行程（見 pdf_gen.py 與 network_plan_export.py::_render_pdf_via_edge()）。
+# 正式機是單一 Windows 主機、沒有任何行程池限制——如果短時間內多人同時觸發
+# 簽核完成（背景執行緒各自產 PDF）或匯出動作，理論上可能同時開出一堆 Edge
+# 行程，把單機 CPU/記憶體吃滿，拖垮正在跑的 uvicorn 本身。用一個全域
+# BoundedSemaphore 限制同時執行的 Edge headless 行程數量，超過上限的呼叫方
+# 排隊等待輪到自己即可，不會真的失敗，只是慢一點。
+EDGE_PDF_MAX_CONCURRENCY = 3
+EDGE_PDF_SEMAPHORE = threading.BoundedSemaphore(EDGE_PDF_MAX_CONCURRENCY)
 
 
 # ── Startup routines ──────────────────────────────────────────────────────────
