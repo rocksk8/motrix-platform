@@ -1179,6 +1179,14 @@ xlsx-0.18.5.full.min.js     （SheetJS）
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
 
+### 2026-09-08（凌晨後）— 部署儀表板第一次真實使用抓到兩個部署工具真實 bug
+
+- **背景**：用部署儀表板（§14.3c）第一次真的觸發「打包」，畫面顯示成功，但套用到正式機時 Migration 乾跑驗證階段炸掉，只印出 `python.exe : Traceback (most recent call last):` 一行就中止（`apply_update.ps1:167`），完整錯誤內容被吞掉。
+- **根因 1（`build_deploy_package.ps1`）**：透過儀表板（Python subprocess 啟動）觸發打包時，腳本裡的 `tar -xf` 解析到 **Git for Windows 內建的 Unix 風格 `tar`**（PATH 順序問題，跟使用者自己開的終端機環境不同），不是 Windows 內建的 BSD `tar.exe`——Unix tar 把 `C:\Users\...` 路徑開頭的 `C:` 誤判成「要連線的遠端主機」（老式 tar 的 `-f host:path` 遠端磁帶機語法），直接印 `Cannot connect to C: resolve failed` 解壓失敗。**更嚴重的是這一行呼叫完全沒檢查 exit code**，腳本照樣往下跑完印出綠字「完成！」，產出的部署包資料夾裡**只有 `deploy_manifest.json`，backend/frontend 完全是空的**——這個問題不只影響儀表板，理論上任何 PATH 順序不同的呼叫環境都可能踩到。已修復：改用完整路徑 `$env:SystemRoot\System32\tar.exe` 徹底避開 PATH 解析歧義，並補上 `git archive`／`tar` 兩處的 exit code 檢查＋額外驗證解壓後真的有 `backend/`／`frontend/` 目錄，三層防護取代原本完全沒檢查的狀態。
+- **根因 2（`apply_update.ps1`）**：Migration 乾跑驗證階段真正在測的是「新版 db.py 在裝了壞掉部署包（只有 manifest 沒有程式碼）的情況下當然會 `ModuleNotFoundError: No module named 'db'`」——這本身是根因 1 造成的必然結果，但揭露了 `apply_update.ps1` 另一個獨立的既有缺陷：跟 db 備份（第191行）／migration 乾跑驗證（第223行）這兩處 `& python ... 2>&1` 呼叫，都沒有比照 pip install（2026-09-07 修過）加上 `$ErrorActionPreference = "Continue"` 的防護——只要 Python 腳本往 stderr 印任何東西（含它自己一個真正的 Traceback），在 `$ErrorActionPreference = "Stop"` 底下會被包成 `NativeCommandError` 直接中止整支腳本，且只看得到 Traceback 第一行，看不到完整錯誤內容，也看不到腳本原本設計好的「Migration 乾跑驗證失敗，中止套用（正式庫完全未被觸碰）」這行說明訊息。已補上同款防護。
+- **教訓**：這是同一類「Windows PowerShell 5.1 對原生執行檔 stderr 輸出的地雷」第三次在這個專案不同地方被踩到（pip install、tar、db備份/migration乾跑），已知這個模式後，下次新增任何 `& <原生執行檔> ... 2>&1` 呼叫時應該直接預設加上這層防護，不要等踩到才修一次。用便宜的方式（抽出 git archive/tar 那一小段、跳過完整 pytest）透過跟儀表板完全一樣的 subprocess 呼叫方式在本機重現＋驗證修復，避免又讓使用者對正式機盲測一次。
+- **當下影響**：只有 db 快照被建立（`db_backups/pre_update_20260908_041209/`），正式機的服務／程式碼／資料庫完全沒被觸碰（crash 發生在 Step 1，Step 2 停服都還沒開始）。已刪除兩個壞掉的部署包資料夾（`20260908_035627_bc73efe`／`20260908_041017_8d83021`），修復後需要重新打包一次乾淨的部署包再重試。
+
 ### 2026-09-08（最晚）— 新增本機部署儀表板（含手動回滾），見 §14.3c
 
 - **背景**：今天套用 QR 登入功能到正式機時，反覆卡在操作型摩擦（`Get-Credential` 圖形視窗不彈出、密碼誤打進聊天視窗）。已建立的 WinRM 直連通道（§14.3b）目前只能用一長串手動 PowerShell 指令操作。新增 `backend/tools/deploy_dashboard.py`——本機 FastAPI 小工具（只綁 `127.0.0.1`），瀏覽器打開後可以按鈕點選完成「打包→推送→套用」，密碼用一般網頁輸入框輸入，完全避開 Windows 原生憑證視窗的問題。

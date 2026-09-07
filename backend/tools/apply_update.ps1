@@ -188,8 +188,19 @@ finally:
     src.close()
 print('BACKUP_OK')
 "@ | Set-Content -Path $backupPy -Encoding UTF8
-    $backupOutput = & python $backupPy 2>&1
-    $backupExit = $LASTEXITCODE
+    # 2026-09-08 修復：跟 pip install 那個地雷同一類——Windows PowerShell 5.1
+    # 對「原生執行檔 + 2>&1」的問題，只要 python.exe 往 stderr 印任何東西
+    # （含它自己一個真正的 Traceback），在 $ErrorActionPreference = "Stop"
+    # 底下會被包成 NativeCommandError 直接中止整支腳本，且只印得出 Traceback
+    # 第一行，看不到完整錯誤內容。呼叫期間暫時改成 Continue，用完立刻還原。
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        $backupOutput = & python $backupPy 2>&1
+        $backupExit = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $prevEap
+    }
     Remove-Item $backupPy -Force -ErrorAction SilentlyContinue
     if ($backupExit -ne 0 -or ($backupOutput -notmatch "BACKUP_OK")) {
         Write-Host ($backupOutput | Out-String)
@@ -220,8 +231,19 @@ db.init_db(r'$dryRunDb')
 print('DRYRUN_OK')
 "@ | Set-Content -Path $dryRunPy -Encoding UTF8
 
-    $dryRunOutput = & python $dryRunPy 2>&1
-    $dryRunExit = $LASTEXITCODE
+    # 2026-09-08 修復（見上方 db 備份那段同款註解）：這裡尤其重要——這支
+    # dry-run 腳本本來就是「預期它可能會真的丟例外」的檢查，沒有這層防護，
+    # 一旦新版 migration 真的有問題，PowerShell 只會印出 Traceback 第一行
+    # 就整個崩潰，看不到下面設計好的「Migration 乾跑驗證失敗」說明訊息，
+    # 也看不到完整的錯誤內容，等於白設計了這個安全機制。
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        $dryRunOutput = & python $dryRunPy 2>&1
+        $dryRunExit = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $prevEap
+    }
     Remove-Item $dryRunDb, $dryRunPy -Force -ErrorAction SilentlyContinue
 
     if ($dryRunExit -ne 0 -or ($dryRunOutput -notmatch "DRYRUN_OK")) {

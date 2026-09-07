@@ -125,10 +125,34 @@ $tarPath = Join-Path $pkgDir "snapshot.tar"
 # 匯出的檔案會以 backend/、frontend/ 等開頭（不帶 Desktop/MOTRIX-ERP/ 前綴），
 # 符合 apply_update.ps1 預期的部署包結構。
 git archive --format=tar -o $tarPath "${commit}:${relPath}"
+if ($LASTEXITCODE -ne 0) {
+    Fail "git archive 失敗（exit code $LASTEXITCODE），部署包可能不完整，已中止。"
+}
+
+# 2026-09-08 修復：bare `tar` 在某些呼叫環境下（例如透過 deploy_dashboard.py
+# 這類外部 Python process 啟動、繼承了不同 PATH 順序的情境）會解析到 Git for
+# Windows 內建的 Unix 風格 tar（通常在 Git\usr\bin\tar.exe），而不是 Windows
+# 內建的 BSD tar（System32\tar.exe）——Unix tar 把 `C:\Users\...` 這種路徑的
+# 開頭 `C:` 誤判成「要連線的遠端主機」語法（老式 tar 的 -f host:path 遠端磁帶
+# 機用法），直接印「Cannot connect to C: resolve failed」失敗，且這行呼叫沒有
+# 任何 exit code 檢查，會靜默放行、產出只有 deploy_manifest.json 的空殼部署包
+# ——實際發生過一次，見 §12 2026-09-08 條目。改用完整路徑指定 Windows 內建的
+# tar.exe，徹底避開 PATH 解析順序的不確定性；並補上退出碼檢查。
+$tarExe = Join-Path $env:SystemRoot "System32\tar.exe"
 Push-Location $pkgDir
-tar -xf $tarPath
+& $tarExe -xf $tarPath
+if ($LASTEXITCODE -ne 0) {
+    Pop-Location
+    Fail "tar 解壓失敗（exit code $LASTEXITCODE），部署包不完整，已中止。"
+}
 Remove-Item $tarPath
 Pop-Location
+
+# 額外驗證：確認真的解壓出東西，不要只信 exit code（防禦縱深——即使兩個
+# exit code 檢查都誤判通過，這裡再擋一次明顯不合理的空殼輸出）。
+if (-not (Test-Path (Join-Path $pkgDir "backend")) -or -not (Test-Path (Join-Path $pkgDir "frontend"))) {
+    Fail "部署包解壓後找不到 backend/ 或 frontend/ 目錄，內容不完整，已中止。請檢查 $pkgDir。"
+}
 
 # 部署包只需要 backend/ + frontend/ + 根目錄文件，其餘（如 .github/、測試用暫存檔等）
 # git archive 本來就只會匯出 git 追蹤的內容，這裡不需要額外過濾。
