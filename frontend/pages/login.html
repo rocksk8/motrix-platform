@@ -171,7 +171,7 @@
       <div class="card-title">登入系統</div>
       <div class="card-sub">允碩整合集創 · 內部管理平台</div>
 
-      <form @submit.prevent="login()">
+      <form @submit.prevent="login()" x-show="!totpStep">
         <div class="form-group">
           <label class="form-label">帳號</label>
           <input class="form-input" :class="{error: error}"
@@ -213,6 +213,30 @@
         </button>
       </form>
 
+      <form @submit.prevent="verifyTotp()" x-show="totpStep">
+        <div class="form-group">
+          <label class="form-label">兩步驟驗證碼</label>
+          <input class="form-input" :class="{error: error}"
+                 type="text" inputmode="numeric" x-model="totpCode"
+                 placeholder="請輸入驗證 App 顯示的 6 位數字，或救援碼" autocomplete="one-time-code" autofocus>
+          <div class="error-msg" x-show="error">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01"/></svg>
+            <span x-text="error"></span>
+          </div>
+        </div>
+
+        <button type="submit" class="btn-login" :disabled="loading">
+          <template x-if="loading">
+            <div class="spinner"></div>
+          </template>
+          <span x-text="loading ? '驗證中…' : '驗證'"></span>
+        </button>
+        <button type="button" @click="backToLogin()"
+                style="width:100%;margin-top:10px;background:none;border:none;color:#666;font-size:12px;cursor:pointer;padding:6px">
+          ← 返回重新登入
+        </button>
+      </form>
+
       <hr class="divider">
       <div class="footer-note">
         如需開立帳號或重設密碼，請聯繫系統管理員<br>
@@ -230,6 +254,9 @@
       loading:  false,
       error:    '',
       systemVersion: '',
+      totpStep: false,
+      totpCode: '',
+      challengeToken: '',
 
       async login() {
         this.error = ''
@@ -249,20 +276,63 @@
             this.loading = false; return
           }
           const data = await res.json()
-          localStorage.setItem('motrix_session', JSON.stringify({
-            token:       data.token,
-            userId:      data.userId,
-            username:    data.username,
-            displayName: data.displayName,
-            role:        data.role,
-            modules:     data.modules,
-            loginAt:     data.loginAt,
-          }))
-          window.location.href = '../index.html'
+          if (data.totpRequired) {
+            this.challengeToken = data.challengeToken
+            this.totpStep = true
+            this.loading  = false
+            return
+          }
+          this._storeSessionAndRedirect(data)
         } catch(e) {
           this.error   = '連線失敗，請確認伺服器是否啟動'
           this.loading = false
         }
+      },
+
+      async verifyTotp() {
+        this.error = ''
+        if (!this.totpCode) { this.error = '請輸入驗證碼'; return }
+        this.loading = true
+        try {
+          const res = await fetch('/api/auth/login/totp', {
+            method:  'POST',
+            headers: {'Content-Type': 'application/json'},
+            body:    JSON.stringify({ challenge_token: this.challengeToken, code: this.totpCode.trim() })
+          })
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}))
+            this.error   = err.detail || '驗證碼不正確'
+            this.loading = false
+            if (res.status === 400) this.backToLogin()  // challenge 逾時/作廢，只能重新登入
+            return
+          }
+          const data = await res.json()
+          this._storeSessionAndRedirect(data)
+        } catch(e) {
+          this.error   = '連線失敗，請確認伺服器是否啟動'
+          this.loading = false
+        }
+      },
+
+      backToLogin() {
+        this.totpStep      = false
+        this.totpCode       = ''
+        this.challengeToken = ''
+        this.error          = ''
+        this.password       = ''
+      },
+
+      _storeSessionAndRedirect(data) {
+        localStorage.setItem('motrix_session', JSON.stringify({
+          token:       data.token,
+          userId:      data.userId,
+          username:    data.username,
+          displayName: data.displayName,
+          role:        data.role,
+          modules:     data.modules,
+          loginAt:     data.loginAt,
+        }))
+        window.location.href = '../index.html'
       },
 
       async init() {

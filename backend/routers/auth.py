@@ -1,4 +1,6 @@
 """Auth + User management endpoints."""
+import base64
+import io
 import json
 import logging
 import os
@@ -9,6 +11,8 @@ import time
 from datetime import datetime, timedelta
 from typing import Optional, List
 
+import pyotp
+import qrcode
 from fastapi import APIRouter, HTTPException, Header, Request
 from pydantic import BaseModel
 
@@ -129,6 +133,30 @@ def _rl_clear(ip: str) -> None:
     _rl_db_clear(ip)
 
 
+# ── TOTP two-factor login (2026-09-07, self-service — see db.py::_m072_totp) ──
+#
+# Second-factor state for a login-in-progress lives only in-process memory
+# (mirrors the pattern above), keyed by a random challenge token instead of
+# IP — a wrong code from one teammate on a shared office IP must not lock out
+# everyone else mid-login. Losing this dict on a dev-machine --reload restart
+# just means "log in again from the top", which is an acceptable trade-off for
+# a few minutes of state versus adding a DB table for something this short-lived.
+
+_TOTP_CHALLENGE_TTL_S = 300    # 5 minutes to enter the code after password succeeds
+_TOTP_MAX_FAILS       = 5      # wrong codes before the challenge itself is invalidated
+
+_totp_lock: threading.Lock = threading.Lock()
+# challenge_token -> {"user_id": int, "must_change": bool, "fails": int, "expires": monotonic}
+_totp_pending: dict = {}
+
+
+def _totp_sweep_expired() -> None:
+    now = time.monotonic()
+    with _totp_lock:
+        for tok in [t for t, v in _totp_pending.items() if v["expires"] < now]:
+            del _totp_pending[tok]
+
+
 # ── Models ────────────────────────────────────────────────────────────────────
 
 class LoginIn(BaseModel):
@@ -144,6 +172,19 @@ class ChangePasswordIn(BaseModel):
 class VerifyUnlockIn(BaseModel):
     password: str
     ref: str = ''
+
+
+class TotpLoginVerifyIn(BaseModel):
+    challenge_token: str
+    code: str
+
+
+class TotpEnableIn(BaseModel):
+    code: str
+
+
+class TotpDisableIn(BaseModel):
+    password: str
 
 
 class SetUnlockPasswordIn(BaseModel):
@@ -199,7 +240,8 @@ def auth_login(body: LoginIn, request: Request):
     conn = get_db()
     row = conn.execute(
         "SELECT id, username, display_name, role, modules, password_hash, "
-        "COALESCE(must_change_password, 0) AS must_change_password "
+        "COALESCE(must_change_password, 0) AS must_change_password, "
+        "COALESCE(totp_enabled, 0) AS totp_enabled "
         "FROM users WHERE username=? AND active=1",
         (body.username.strip(),)
     ).fetchone()
@@ -267,6 +309,35 @@ def auth_login(body: LoginIn, request: Request):
             "mustChangePassword": False,
         }
 
+    if row["totp_enabled"]:
+        # Password is correct but this account has TOTP enabled — don't issue a
+        # session yet. Persist the must_change/password-hash-upgrade side effects
+        # computed above, then hand back a short-lived challenge token instead of
+        # a real token; the actual session is only created once the code checks
+        # out in auth_login_totp() below.
+        conn.commit()
+        conn.close()
+        _totp_sweep_expired()
+        challenge_token = secrets.token_hex(24)
+        with _totp_lock:
+            _totp_pending[challenge_token] = {
+                "user_id": row["id"], "must_change": must_change,
+                "fails": 0, "expires": time.monotonic() + _TOTP_CHALLENGE_TTL_S,
+            }
+        return {"totpRequired": True, "challengeToken": challenge_token}
+
+    result = _issue_session(conn, row, must_change)
+    conn.close()
+    _rl_clear(ip)
+    return result
+
+
+def _issue_session(conn, row, must_change: bool) -> dict:
+    """Create the real `sessions` row + build the standard login response.
+    Shared by the direct (no-TOTP) login path and auth_login_totp() below —
+    keeps both paths issuing identically-shaped sessions/responses. Caller
+    commits/closes `conn` and clears the IP rate limit afterward."""
+    now        = datetime.now().isoformat()
     token      = secrets.token_hex(32)
     expires_at = (datetime.now() + timedelta(days=30)).isoformat()
     conn.execute(
@@ -274,8 +345,6 @@ def auth_login(body: LoginIn, request: Request):
         (token, row["id"], row["username"], now, expires_at, now)
     )
     conn.commit()
-    conn.close()
-    _rl_clear(ip)
     _audit(token, 'auth.login', 'user', row['username'], row['display_name'] or row['username'],
            {'mustChangePassword': must_change})
     return {
@@ -288,6 +357,149 @@ def auth_login(body: LoginIn, request: Request):
         "loginAt":            now,
         "mustChangePassword": must_change,
     }
+
+
+@router.post("/api/auth/login/totp")
+def auth_login_totp(body: TotpLoginVerifyIn, request: Request):
+    """Second step of login for accounts with TOTP enabled — verifies the
+    6-digit authenticator code (or an 8-hex-char one-time recovery code)
+    against the challenge token issued by auth_login() above."""
+    ip = _client_ip(request)
+    _totp_sweep_expired()
+    with _totp_lock:
+        pending = _totp_pending.get(body.challenge_token)
+    if not pending:
+        raise HTTPException(400, "驗證逾時或工作階段無效，請重新登入")
+
+    conn = get_db()
+    row = conn.execute(
+        "SELECT id, username, display_name, role, modules, active, "
+        "totp_secret, totp_recovery_codes FROM users WHERE id=?",
+        (pending["user_id"],),
+    ).fetchone()
+    if not row or not row["active"]:
+        conn.close()
+        with _totp_lock:
+            _totp_pending.pop(body.challenge_token, None)
+        raise HTTPException(401, "帳號不存在或已停用")
+
+    code = (body.code or "").strip()
+    ok = False
+    used_recovery = False
+    if code.isdigit() and len(code) == 6:
+        ok = pyotp.TOTP(row["totp_secret"]).verify(code, valid_window=1)
+    else:
+        codes = json.loads(row["totp_recovery_codes"] or "[]")
+        for i, hashed in enumerate(codes):
+            if _verify_pw(code, hashed):
+                ok = True
+                used_recovery = True
+                codes.pop(i)
+                conn.execute("UPDATE users SET totp_recovery_codes=? WHERE id=?",
+                             (json.dumps(codes, ensure_ascii=False), row["id"]))
+                conn.commit()
+                break
+
+    if not ok:
+        conn.close()
+        _rl_fail(ip, row["username"])
+        with _totp_lock:
+            still = _totp_pending.get(body.challenge_token)
+            if still:
+                still["fails"] += 1
+                if still["fails"] >= _TOTP_MAX_FAILS:
+                    del _totp_pending[body.challenge_token]
+                    raise HTTPException(401, "驗證碼錯誤次數過多，請重新登入")
+        raise HTTPException(401, "驗證碼不正確")
+
+    with _totp_lock:
+        _totp_pending.pop(body.challenge_token, None)
+    result = _issue_session(conn, row, pending["must_change"])
+    conn.close()
+    _rl_clear(ip)
+    if used_recovery:
+        _audit(result["token"], "auth.totp_recovery_used", "user", row["username"],
+               row["display_name"] or row["username"])
+    return result
+
+
+@router.get("/api/auth/totp/status")
+def totp_status(authorization: str = Header(None)):
+    user = _require_user(authorization)
+    conn = get_db()
+    row = conn.execute("SELECT COALESCE(totp_enabled,0) AS totp_enabled FROM users WHERE id=?",
+                        (user["id"],)).fetchone()
+    conn.close()
+    return {"enabled": bool(row["totp_enabled"]) if row else False}
+
+
+@router.post("/api/auth/totp/setup")
+def totp_setup(authorization: str = Header(None)):
+    """產生新的 TOTP 密鑰（尚未生效，`totp_enabled` 仍是 0，需接著呼叫
+    /api/auth/totp/enable 驗證一次正確的驗證碼才會真正切換過去）。任何角色
+    皆可自助呼叫——採自助啟用而非強制，見 db.py::_m072_totp() docstring。
+    重複呼叫會覆蓋掉尚未經 enable 確認的暫存密鑰，已啟用狀態下呼叫視同
+    「重新設定」，在完成新一輪 enable 前，登入仍然驗證舊密鑰。"""
+    user = _require_user(authorization)
+    secret = pyotp.random_base32()
+    conn = get_db()
+    conn.execute("UPDATE users SET totp_secret=? WHERE id=?", (secret, user["id"]))
+    conn.commit()
+    conn.close()
+    uri = pyotp.TOTP(secret).provisioning_uri(name=user["username"], issuer_name="MOTRIX 專案管理系統")
+    img = qrcode.make(uri)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    qr_b64 = base64.b64encode(buf.getvalue()).decode()
+    return {"secret": secret, "otpauthUri": uri, "qrCodePng": f"data:image/png;base64,{qr_b64}"}
+
+
+@router.post("/api/auth/totp/enable")
+def totp_enable(body: TotpEnableIn, authorization: str = Header(None)):
+    """驗證一次正確的驗證碼後才真正啟用，避免掃錯 QR code／密鑰輸入錯誤卻
+    直接生效導致下次登入被鎖在外面。成功後產生 10 組一次性救援碼，明文只在
+    這次回應裡出現一次，DB 只存雜湊（見 db.py::_m072_totp() docstring）。"""
+    user = _require_user(authorization)
+    conn = get_db()
+    row = conn.execute("SELECT totp_secret FROM users WHERE id=?", (user["id"],)).fetchone()
+    if not row or not row["totp_secret"]:
+        conn.close()
+        raise HTTPException(400, "請先呼叫設定端點取得密鑰")
+    if not pyotp.TOTP(row["totp_secret"]).verify((body.code or "").strip(), valid_window=1):
+        conn.close()
+        raise HTTPException(400, "驗證碼不正確，請確認驗證 App 時間與密鑰輸入無誤")
+    recovery_plain  = [secrets.token_hex(4) for _ in range(10)]
+    recovery_hashed = [_hash_pw(c) for c in recovery_plain]
+    conn.execute(
+        "UPDATE users SET totp_enabled=1, totp_recovery_codes=? WHERE id=?",
+        (json.dumps(recovery_hashed, ensure_ascii=False), user["id"]),
+    )
+    conn.commit()
+    conn.close()
+    _audit(_tok(authorization), "auth.totp_enabled", "user", user["username"],
+           user.get("display_name") or user["username"])
+    return {"ok": True, "recoveryCodes": recovery_plain}
+
+
+@router.post("/api/auth/totp/disable")
+def totp_disable(body: TotpDisableIn, authorization: str = Header(None)):
+    """停用需重新輸入目前密碼確認身分（比照本檔既有 verify-unlock 的敏感操作
+    慣例），不需要再帶一次驗證碼——密碼本身就是這裡要求的第二重確認。"""
+    user = _require_user(authorization)
+    conn = get_db()
+    row = conn.execute("SELECT password_hash FROM users WHERE id=?", (user["id"],)).fetchone()
+    if not row or not _verify_pw(body.password, row["password_hash"]):
+        conn.close()
+        raise HTTPException(400, "密碼不正確")
+    conn.execute(
+        "UPDATE users SET totp_enabled=0, totp_secret='', totp_recovery_codes='[]' WHERE id=?",
+        (user["id"],),
+    )
+    conn.commit()
+    conn.close()
+    _audit(_tok(authorization), "auth.totp_disabled", "user", user["username"],
+           user.get("display_name") or user["username"])
+    return {"ok": True}
 
 
 @router.post("/api/auth/logout")

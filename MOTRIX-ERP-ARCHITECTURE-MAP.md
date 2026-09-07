@@ -249,8 +249,8 @@ SQLite (WAL)  motrix_erp.db（正式）+ motrix_erp_demo.db（demo 隔離）
 
 **實作進度**：使用者確認目標是鼎新 T100，且明確選擇「先做批次匯出、不做 API 對接」（T100 API 需要貴公司自行申請存取權限，沒有真實憑證無法測試）。已完成：`accounting_export.py`（現金基礎傳票匯出，見 §2.7）＋已匯入確認追蹤（`t100_export_confirmations`，DB v69）＋料件/設備進貨付款狀態追蹤與納入匯出（`stock_batches`，DB v70），三類事件來源皆已涵蓋。科目代號留白待財務填入。**尚未做**：①科目代號實際填入（需財務/鼎新顧問提供）②若之後升級 API 即時推送，需先取得 T100 API 存取權限③既有進貨批次的付款狀態全部預設「未知/未付款」，財務需回頭逐批確認歷史資料④請款單/客戶供應商主檔等仍非涵蓋範圍（非金流事件或屬主檔同步，性質不同）。
 
-### 6.2【高】MFA 與敏感操作二次驗證
-superadmin 目前是「密碼 + Bearer token in localStorage」單一因子。專業做法（比照 Okta/Google Workspace 對管理員帳號的要求）：至少對 superadmin 角色加 TOTP（`pyotp` 套件，不需要外部服務）。這比 2 小時閒置逾時（已做，見 §3）更能防範憑證外洩情境，是相對低成本、高投資報酬的一項。
+### 6.2【高】MFA 與敏感操作二次驗證　**✅ 2026-09-07 已實作（自助啟用）**
+superadmin 原本是「密碼 + Bearer token in localStorage」單一因子。已用 `pyotp`＋`qrcode`（皆不需外部服務）新增 TOTP 兩步驟驗證，DB v72（`users.totp_secret`/`totp_enabled`/`totp_recovery_codes`）。**刻意做成自助啟用而非強制**：正式機 superadmin 是 jeff/corbin 兩位真人業主，強制下次登入即進入設定流程，部署當下他們沒先裝好驗證 App 會直接被鎖在外面，是會中斷真實業務的風險——這個取捨經與使用者確認後定案。任何角色皆可在「修改密碼」頁自助開啟，admin/superadmin 未啟用時有提醒 banner（不阻擋操作）。細節見 `MOTRIX-ERP-QUICK.md` §3.3b、`db.py::_m072_totp()`、`routers/auth.py` 的 `totp_*`/`auth_login_totp()` docstring。**尚未做**（同一份自助模型下可視需求評估）：救援碼用罄後的重新產生端點、超過某個角色風險等級才觸發的強制提醒升級。
 
 ### 6.3【中】Session 安全：Bearer-in-localStorage → 考慮 httpOnly Cookie
 目前 XSS 防護靠「全站禁止 innerHTML 插入動態內容」的紀律（DOM API only），這個紀律本身做得不錯，但屬於「靠自律」而非架構性防護。專業 Web 應用（銀行/SaaS 常見模式）用 httpOnly + Secure + SameSite cookie 存 session，即使真的出現 XSS 漏洞也偷不到 token。**這是架構級改動，不建議現在動**（牽動全站 API 呼叫方式），但若之後要做外網暴露（例如業務出差用手機連線），這個改動的優先序會大幅提升。

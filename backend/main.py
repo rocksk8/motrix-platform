@@ -45,7 +45,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-_PUBLIC_API_PATHS = {"/api/auth/login", "/api/auth/logout", "/api/ping", "/api/system/version"}
+_PUBLIC_API_PATHS = {
+    "/api/auth/login", "/api/auth/login/totp", "/api/auth/logout",
+    "/api/ping", "/api/system/version",
+}
 _IDLE_TIMEOUT_SECONDS = 8 * 3600  # 8 hours（一般角色）
 # 2026-08-28 資安優化：superadmin/admin 能看財務/稽核紀錄/使用者管理等敏感資料，
 # 沿用一般角色的 8 小時閒置門檻風險偏高（電腦沒鎖畫面就離開一整個上班日都還有效）；

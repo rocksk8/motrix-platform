@@ -190,10 +190,31 @@
 | 項目 | 值 |
 |------|-----|
 | Session | `sessions` 表，預設 30 天；`expires_at` 中介層 + `/auth/me` 雙重驗證 |
-| 白名單 | `/api/ping` · `/api/auth/login` · `/api/auth/logout` |
+| 白名單 | `/api/ping` · `/api/auth/login` · `/api/auth/login/totp` · `/api/auth/logout` · `/api/system/version` |
 | 其餘 `/api/**` | 需 `Authorization: Bearer {token}` |
 | 回應標頭 | `X-Content-Type-Options` · `X-Frame-Options` · `Referrer-Policy` |
 | **登入暴力破解** | per-IP rate limiting；5 次失敗鎖 15 分鐘；HTTP 429 含倒數；**鎖定狀態持久化** `login_rate_limit` 表（DB v11），重啟不失效 |
+
+### §3.3b · TOTP 兩步驟驗證（自助啟用，DB v72，2026-09-07）
+
+架構地圖 §6.2 建議事項——`users` 目前只有密碼＋Bearer token 單因子。採**自助啟用而非強制**：正式機 superadmin 是 jeff/corbin 兩位真人業主，若做成下次登入強制進入設定流程，部署當下他們手邊沒先裝好驗證 App 會直接被鎖在外面，屬於會中斷真實業務的風險（決策見 db.py `_m072_totp()` docstring）。任何角色皆可自助到「修改密碼」頁（`change-password.html`）啟用；`notif.js` 對 admin/superadmin 未啟用時顯示提醒 banner（`sessionStorage` 節流每分頁一次，純提醒不阻擋操作）。
+
+```
+setup（POST /api/auth/totp/setup）→ 產生密鑰，totp_enabled 仍是 0
+  → enable（POST /api/auth/totp/enable，需輸入一次正確驗證碼）→ totp_enabled=1
+    → 產生 10 組一次性救援碼，明文只在這次回應出現，DB 只存雜湊
+登入：/api/auth/login 密碼正確但 totp_enabled=1 時不核發 session，
+      回傳 {totpRequired, challengeToken}（process-global 記憶體，5分鐘過期，非 DB）
+  → /api/auth/login/totp 送驗證碼或救援碼核實後才真正核發 session
+      （6 位數字視為 TOTP code；其餘視為救援碼，比對雜湊後即時作廢）
+```
+
+| 項目 | 說明 |
+|------|------|
+| `users.totp_secret`/`totp_enabled`/`totp_recovery_codes` | DB v72，見 `_m072_totp()` |
+| 停用 | 需重新輸入目前密碼確認（比照既有敏感操作慣例），不需再帶驗證碼 |
+| 登入第二階段防暴力破解 | 每個 challenge 最多 5 次錯誤即作廢（需重新輸入密碼），錯誤同時也計入既有 per-IP 登入鎖定 |
+| Demo 帳號 | 不支援（`auth_login()` 的 demo 分支在檢查 totp 之前就已回傳，設計上就不會走到） |
 
 ### §3.4 · 角色與模組
 
@@ -673,7 +694,12 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
 | Method | Path | 說明 |
 |--------|------|------|
 | GET | /ping | 心跳 |
-| POST | /auth/login | 回傳含 `mustChangePassword`；rate limit 保護 |
+| POST | /auth/login | 回傳含 `mustChangePassword`；rate limit 保護；`totp_enabled` 時改回傳 `{totpRequired,challengeToken}`，不核發 session，見 §3.3b |
+| POST | /auth/login/totp | 登入第二階段：`{challenge_token, code}`，`code` 為 6 位數 TOTP 或救援碼；白名單路徑（無 Bearer） |
+| GET | /auth/totp/status | 目前使用者是否已啟用 TOTP（需登入） |
+| POST | /auth/totp/setup | 產生新密鑰＋QR code（需登入，任何角色） |
+| POST | /auth/totp/enable | `{code}` 驗證後才真正啟用，回傳 10 組一次性救援碼（僅此次可見明文） |
+| POST | /auth/totp/disable | `{password}` 確認身分後停用 |
 | POST | /auth/logout | |
 | GET | /auth/me | 含 `mustChangePassword`；驗 `expires_at` |
 | PATCH | /auth/change-password | ≥8；清除強制改密 |
@@ -1104,6 +1130,15 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 ## §12 · 變更摘要（最新兩版）
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
+
+### 2026-09-07（稍晚）— 新增 TOTP 兩步驟驗證，自助啟用（DB v72）
+
+- 架構地圖 §6.2 建議事項：`pyotp`＋`qrcode` 新增 TOTP，`users` 新增 `totp_secret`/`totp_enabled`/`totp_recovery_codes`（`db.py::_m072_totp()`）。**刻意做成自助啟用而非強制**——正式機 superadmin 是 jeff/corbin 兩位真人業主，強制流程若部署後他們手邊沒先裝好驗證 App 會直接被鎖在外面，與使用者確認後定案，見該 migration docstring
+- 新端點：`/api/auth/totp/{status,setup,enable,disable}`（需登入自助操作）＋ `/api/auth/login/totp`（登入第二階段，白名單路徑）；`setup`→`enable` 需輸入一次正確驗證碼才真正生效，避免掃錯 QR code 卻直接啟用把自己鎖在外面；`enable` 成功回傳 10 組一次性救援碼（明文僅此次可見，DB 只存雜湊）
+- 登入流程：密碼正確但 `totp_enabled=1` 時不核發 session，回傳短效 `challengeToken`（process-global 記憶體，5 分鐘過期）；`/auth/login/totp` 核實驗證碼或救援碼後才真正核發，每個 challenge 最多 5 次錯誤即作廢
+- 前端：`login.html` 新增第二步驟輸入畫面；`change-password.html` 新增「兩步驟驗證」卡片（設定 QR code／確認啟用／顯示救援碼／停用）；`notif.js` 對 admin/superadmin 未啟用時顯示提醒 banner（`sessionStorage` 節流，純提醒不阻擋操作）
+- **修復一個開發中發現的既有 bug**：`main.py` 的 `_PUBLIC_API_PATHS` 白名單原本只有 `/api/auth/login`，新端點 `/api/auth/login/totp` 沒登入前呼叫會被 `auth_middleware` 攔成 401「未登入」——這其實是任何「登入流程本身要拆兩支端點」都會踩到的通用陷阱，之後若再拆分登入步驟要記得同步檢查這份白名單
+- 新增測試 `test_totp_2026_09_07.py`（11 題，涵蓋 setup/enable/disable、登入兩步驟、救援碼一次性、per-challenge 鎖定），pytest 411/411 全過；已用真實開發機 API（非 pytest 隔離 DB）跑過完整流程驗證（含瀏覽器層級的 UI 因本次環境限制無法連線本機 dev server 完成視覺驗證，已用等效 HTTP 呼叫覆蓋全流程，UI 本身建議之後補人工檢查一次）
 
 ### 2026-09-07 — 更正 caseRecord.stages 正規化狀態記載＋補齊階段端點測試（DB 無異動）
 

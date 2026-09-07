@@ -5,6 +5,18 @@
 
 ---
 
+### 2026-09-07（稍晚）— 新增 TOTP 兩步驟驗證，自助啟用（DB v72）
+
+- 架構地圖 §6.2 建議事項：新增 `pyotp`／`qrcode` 依賴，`users` 表新增 `totp_secret`/`totp_enabled`/`totp_recovery_codes`（`db.py::_m072_totp()`）。**刻意做成自助啟用而非強制**——正式機 superadmin 是 jeff/corbin 兩位真人業主，若強制下次登入即進入設定流程，部署當下他們手邊沒先裝好驗證 App 會直接被鎖在系統外面，屬於會中斷真實業務的風險，與使用者確認後定案
+- 新端點：`GET/POST /api/auth/totp/status|setup|enable|disable`（需登入自助操作，任何角色）＋ `POST /api/auth/login/totp`（登入第二階段，白名單路徑）。`setup`→`enable` 要求輸入一次正確驗證碼才真正生效，避免掃錯 QR code / 密鑰輸入錯誤卻直接啟用，導致使用者下次登入被鎖在外面；`enable` 成功回傳 10 組一次性救援碼，明文只在該次回應出現一次，DB 只存雜湊
+- 登入流程：`POST /api/auth/login` 密碼正確但帳號 `totp_enabled=1` 時不核發 session，改回傳 `{totpRequired, challengeToken}`；`challengeToken` 是短效（5 分鐘）process-global 記憶體狀態，非 DB 持久化；`POST /api/auth/login/totp` 核實 6 位數 TOTP 或 8 碼救援碼後才真正核發 session，每個 challenge 最多 5 次錯誤即作廢（需重新輸入密碼從頭開始）
+- 前端：`login.html` 新增第二步驟驗證碼輸入畫面（含返回重新登入）；`change-password.html` 新增「兩步驟驗證」卡片（QR code 設定／確認啟用／一次性顯示救援碼／輸入密碼停用）；`notif.js` 對 admin/superadmin 尚未啟用時顯示提醒 banner（`sessionStorage` 節流每分頁一次，純提醒不阻擋操作，且不在 `change-password.html` 本身顯示避免重複）
+- **開發過程中發現並修復一個既有陷阱**：`main.py` 的 `_PUBLIC_API_PATHS` 白名單原本只列 `/api/auth/login`，新端點 `/api/auth/login/totp` 在使用者尚未登入前呼叫會被 `auth_middleware` 攔成 401「未登入」（因為它要求 Bearer token，但登入第二步驟本來就還沒有 token）——這是任何「把登入流程拆成多支端點」都會踩到的通用陷阱，之後若再拆分登入步驟需要同步檢查這份白名單
+- 新增測試 `backend/tests/test_totp_2026_09_07.py`（11 題，涵蓋 setup/enable/disable、登入兩步驟完整流程、救援碼一次性使用、per-challenge 鎖定機制），pytest 411/411 全過；另用真實開發機 API（非 pytest 隔離 DB）跑過完整流程二次驗證，確認在真實環境同樣正確。**UI 視覺層級因本次工作環境限制（連接的瀏覽器不在本機、無法連線本機 dev server）未能完成畫面實測**，功能面已用等效 HTTP 呼叫涵蓋全流程，建議之後找機會人工開瀏覽器檢查一次三處新增/修改的頁面
+- 尚未執行：正式機套用（依 §15 流程）
+
+---
+
 ### 2026-09-07 — 更正 caseRecord.stages 正規化狀態記載＋補齊階段端點測試（DB 無異動）
 
 - 複查 `MOTRIX-ERP-QUICK.md` §11 已知限制清單時發現「caseRecord.stages 正規化進行中」長期記載已過期：核對 `case-management.js`／`quotation-form.html` 程式碼確認 Phase 3b（前端切換）與 Phase 4（`quotation-form.html` 落差修正）其實早在 2026-08-23 當天就已完成——那次是在正式機斷線期間直接於正式機開發、事後用一次大批量回推 commit `2b8e7ad` 拉回開發機，沒有補記錄，導致文件誤記為「進行中」達兩週。已更正 §11 為完成狀態並說明緣由

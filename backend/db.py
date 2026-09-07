@@ -78,7 +78,7 @@ DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR = os.path.join(
 # （已套用過的 schema_version 不可回頭刪除/重排），data_json.dealWonAt 這個
 # 欄位會留在既有資料裡但目前沒有任何程式碼讀取，之後如果要重新加回「成交時間」
 # 這種概念，不要複用這個欄位名稱免得語意混淆。
-CURRENT_VERSION = 71
+CURRENT_VERSION = 72
 
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
 # execution model) whenever the current request is authenticated as the 'demo'
@@ -1945,6 +1945,34 @@ def _m067_approval_delegates(conn):
     conn.commit()
 
 
+def _m072_totp(conn):
+    """使用者帳號新增 TOTP 兩步驟驗證欄位（2026-09-07）：架構地圖 §6.2 建議
+    superadmin 至少加 TOTP（目前只有密碼＋Bearer token 單因子），採自助啟用
+    模式（非強制）——正式機 superadmin 是 jeff/corbin 兩位真人業主，若做成
+    下次登入強制進入設定流程，部署當下他們手邊若沒有先裝好驗證 App 會直接
+    被鎖在外面，屬於會中斷真實業務的風險；改為任何角色都可以自行到帳號設定
+    開啟，`routers/auth.py` 對 admin/superadmin 登入後未開啟時顯示提醒 banner
+    （純前端 UI 提醒，不阻擋操作）。
+
+    - `totp_secret`：base32 密鑰明文存放（TOTP 標準做法就是伺服器保有明文密鑰
+      才能重新計算驗證碼比對，跟密碼雜湊不同，不能做成不可逆雜湊）；未啟用
+      或尚未完成驗證的暫存密鑰也共用此欄位（`totp_enabled=0` 期間視為「設定中
+      尚未生效」，重新呼叫 setup 端點會覆蓋掉舊的暫存值）
+    - `totp_enabled`：0/1，只有走完「輸入一次正確驗證碼」的確認流程才會被設
+      成 1，避免使用者掃了 QR code 但 App 設定錯誤、之後永遠登不進去
+    - `totp_recovery_codes`：JSON 陣列，存 10 組一次性救援碼的雜湊值（比照
+      密碼用 `_hash_pw()`，不存明文），供驗證 App 遺失時（換手機、App 被刪）
+      仍能登入；每組用過就從陣列移除，見 `routers/auth.py` 使用處"""
+    for col, ddl in (
+        ("totp_secret", "TEXT NOT NULL DEFAULT ''"),
+        ("totp_enabled", "INTEGER NOT NULL DEFAULT 0"),
+        ("totp_recovery_codes", "TEXT NOT NULL DEFAULT '[]'"),
+    ):
+        if not _col_exists(conn, "users", col):
+            conn.execute(f"ALTER TABLE users ADD COLUMN {col} {ddl}")
+    conn.commit()
+
+
 def _m071_paid_bank_account(conn):
     """付款事件新增「MOTRIX 自己是用哪個銀行帳戶付的」欄位（2026-09-01）：
     使用者要求 T100 科目代號要能依銀行帳戶分開設定（一間公司可能有多個銀行
@@ -2931,6 +2959,7 @@ _MIGRATIONS = [
     _m069_t100_export_confirmations,                # v69
     _m070_stock_batches,                            # v70
     _m071_paid_bank_account,                        # v71
+    _m072_totp,                                     # v72
 ]
 
 
