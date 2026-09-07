@@ -14,7 +14,13 @@
   用法：
     powershell -ExecutionPolicy Bypass -File apply_update.ps1 -PackagePath D:\deploy\20260801_120000_abcd123
     powershell -ExecutionPolicy Bypass -File apply_update.ps1 -PackagePath ... -Force   # 版本比對沒過也強制套用
-    powershell -ExecutionPolicy Bypass -File apply_update.ps1 -PackagePath ... -Yes     # 跳過互動確認（僅供自動化測試用）
+    powershell -ExecutionPolicy Bypass -File apply_update.ps1 -PackagePath ... -Yes     # 跳過互動確認——僅供自動化測試，或由
+                                                                                          # 2026-09-08 新增的 deploy_dashboard.py
+                                                                                          # 這類已經在自己的網頁介面做過明確二次
+                                                                                          # 確認的受監督工具呼叫（人工確認關卡換了
+                                                                                          # 地方，不是被繞過——WinRM 遠端執行不支援
+                                                                                          # 事後對正在跑的遠端 script block 注入 y/N，
+                                                                                          # 所以由呼叫端自己的 UI 提供等價確認）
     powershell -ExecutionPolicy Bypass -File apply_update.ps1 -CheckOnly                # 只測健康檢查邏輯，不部署（見下方）
 
   -CheckOnly（2026-09-08 新增）：只對目前正在跑的伺服器打一次 /api/ping、印出結果就結束，

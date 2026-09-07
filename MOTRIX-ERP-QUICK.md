@@ -1179,6 +1179,15 @@ xlsx-0.18.5.full.min.js     （SheetJS）
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
 
+### 2026-09-08（最晚）— 新增本機部署儀表板（含手動回滾），見 §14.3c
+
+- **背景**：今天套用 QR 登入功能到正式機時，反覆卡在操作型摩擦（`Get-Credential` 圖形視窗不彈出、密碼誤打進聊天視窗）。已建立的 WinRM 直連通道（§14.3b）目前只能用一長串手動 PowerShell 指令操作。新增 `backend/tools/deploy_dashboard.py`——本機 FastAPI 小工具（只綁 `127.0.0.1`），瀏覽器打開後可以按鈕點選完成「打包→推送→套用」，密碼用一般網頁輸入框輸入，完全避開 Windows 原生憑證視窗的問題。
+- **新增檔案**：`rollback_update.ps1`（照抄 `apply_update.ps1` 自動回滾邏輯，參數化成可手動指定要回滾到哪個時間戳的快照）、`_dashboard_remote.ps1`（實際透過 WinRM 對正式機執行 deploy/rollback/list-snapshots 三種動作，寫死在檔案裡不是 Python 動態組字串，避免注入風險；密碼從 STDIN 讀，不出現在指令列參數）、`deploy_dashboard.py`／`deploy_dashboard.html`（FastAPI app + 前端頁面）。
+- **關鍵設計決策**：`apply_update.ps1`／`rollback_update.ps1` 的互動確認提示（`Read-Host "...(y/N)"`）是在 `Invoke-Command -ComputerName` 遠端 script block 內執行——**WinRM 不支援事後對正在跑的遠端 script block 注入互動輸入**，所以儀表板改用網頁 UI 自己的兩段式確認（顯示摘要卡片→按【確認套用】才真的送出）當作等價的人工安全關卡，遠端呼叫本身帶 `-Yes` 跳過腳本自己的提示。已同步更新 `apply_update.ps1` 檔頭註解，避免以後看到 `-Yes` 被使用誤判成繞過安全機制。
+- **新增公開端點** `GET /api/system/deployed-version`（`routers/auth.py`，讀 `backend/.deployed_commit.json`）：讓儀表板查詢正式機目前部署版本不需要 WinRM 帳密。**已知限制**：正式機要等這批工具套用過去之後這個端點才存在，第一次查詢會顯示「未知」。
+- **踩坑**：新 `.ps1` 檔案用 Write 工具建立時預設沒有 UTF-8 BOM，這台機器的 PowerShell 5.1 會用系統非 Unicode 編碼猜測讀檔，把中文註解讀亂連帶炸掉後面的引號/大括號配對——這是專案已知的編碼陷阱（見 `feedback_windows_locale_encoding_pitfall` 記憶），這次新建 `.ps1` 檔案時又踩到一次，已手動補 BOM 修復。另外 `deploy_manifest.json` 是 PowerShell 寫的也帶 BOM，Python 讀取要用 `utf-8-sig` 不能用 `utf-8`（純 utf-8 遇到 BOM 直接丟 `JSONDecodeError`，這次用真實瀏覽器 Playwright 檢查時才發現套件清單資料整個是空的）。
+- 用 Playwright 直接開這個工具的頁面實測（開發機/正式機狀態卡正確顯示、套件下拉選單正確載入 4 筆、部署兩段式確認流程能正常跳出）；新增 pytest 測試 `test_deployed_version_endpoint_2026_09_08.py`（2題）。完整回歸 pytest 466/467（1 個已知 flaky 測試無關，單獨重跑穩定）。**尚未實際用真實正式機帳密跑過一次完整部署/回滾**，下次需要部署時就會是這個工具的第一次真實使用。
+
 ### 2026-09-08（更晚）— TOTP 登入新增「手機掃 QR 核准」並行選項（DB 無異動）
 
 - **需求**：既有 TOTP 兩步驟驗證（2026-09-07 上線）登入時只能手動輸入驗證 App 的 6 位數字。使用者要求並行新增第二種選項：手機相機掃描登入頁面上的 QR code → 開啟確認頁面 → 輸入密碼核准 → 電腦端自動偵測到核准並完成登入，不需要在電腦上手動輸入任何東西。兩種方式並存，使用者自己選，互不影響。
@@ -1448,6 +1457,20 @@ Get-Credential -UserName "Motrix" | Export-Clixml -Path "$env:USERPROFILE\motrix
 ```
 
 **已知風險（刻意接受）**：正式機多了一個常駐的遠端執行入口（WinRM 服務＋開放的防火牆規則），若開發機帳密或這台機器本身被入侵，攻擊者可直接對正式機下遠端指令——這是持續性攻擊面，經使用者確認可接受這個取捨，換取部署效率。若未來要撤銷，正式機執行 `Disable-PSRemoting -Force` 並把上述防火牆規則改回 `LocalSubnet`／關閉即可還原。
+
+### §14.3c · 本機部署儀表板（2026-09-08）
+
+在 §14.3b 的 WinRM 通道上包了一層網頁 GUI，把「打包→推送→套用」跟「查看正式機狀態」跟「手動回滾」都變成按鈕點選，不用再手打一長串 PowerShell 指令。
+
+```
+cd backend
+python tools/deploy_dashboard.py
+```
+瀏覽器打開 `http://127.0.0.1:8765`。只綁 loopback，不會被 LAN 上其他機器連到。密碼只在單次部署/回滾請求的生命週期內存在（寫進 `_dashboard_remote.ps1` 子行程的 STDIN 後立即捨棄），不落地、不進 log、不進 `deploy_dashboard_history.json`（只記錄時間/動作/成功與否，不記密碼）。
+
+- 部署／回滾都是**兩段式確認**：填完資訊按第一次按鈕只會跳出摘要卡片，要再按一次「確認套用」/「確認回滾」才真的執行——這是網頁版的人工安全關卡，等價於 `apply_update.ps1`/`rollback_update.ps1` 原本的 `Read-Host "(y/N)"`（WinRM 遠端執行不支援事後對正在跑的遠端 script block 注入互動輸入，遠端呼叫本身帶 `-Yes` 跳過腳本自己的提示，詳見 §12 2026-09-08 條目）。
+- 手動回滾：按「查詢可回滾的快照」（需帳密，因為快照清單只存在正式機上）→ 選一個時間戳 → 兩段式確認 → 執行 `rollback_update.ps1`（新檔案，照抄 `apply_update.ps1` 健康檢查失敗時的自動回滾邏輯，差別是操作者主動觸發，用於「健康檢查本身通過、但實際操作發現功能邏輯不對」這種 `apply_update.ps1` 自己不會自動回滾的情境）。
+- 目前**還沒有真正跑過一次完整的部署/回滾**（只驗證過 UI 渲染與兩段式確認流程本身），下次需要部署時就是這個工具的第一次真實使用，屆時要留意：Copy-Item -ToSession 傳整個部署包資料夾的實際耗時、WinRM session 逾時設定是否夠長（部署包含完整的 backend/frontend 樹狀結構，檔案數不少）。
 
 ### §14.4 · 選型資料庫雙機內容核對（API 版，2026-08-10）
 

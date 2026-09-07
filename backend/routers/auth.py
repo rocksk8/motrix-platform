@@ -249,6 +249,24 @@ def system_version():
     return {"version": latest.get("version", ""), "date": latest.get("date", "")}
 
 
+_DEPLOYED_MARKER_PATH = os.path.join(os.path.dirname(__file__), "..", ".deployed_commit.json")
+
+
+@router.get("/api/system/deployed-version")
+def system_deployed_version():
+    """哪個 git commit 目前真正部署在這台機器上（apply_update.ps1 套用成功後
+    寫入的 backend/.deployed_commit.json）。Public——供 2026-09-08 新增的
+    deploy_dashboard.py 本機工具查詢正式機目前版本用，不需要密碼／session。
+    這份檔案只存在正式機（開發機/測試環境從來沒套用過部署包，檔案不存在，
+    回傳空物件是正常情況，不是錯誤）。模組層級變數（而非函式內即算）方便
+    測試用 monkeypatch 導向暫存路徑，不用寫進真實的 backend/ 目錄。"""
+    try:
+        with open(_DEPLOYED_MARKER_PATH, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
 @router.post("/api/auth/login")
 def auth_login(body: LoginIn, request: Request):
     ip = _client_ip(request)

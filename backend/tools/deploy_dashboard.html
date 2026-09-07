@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<title>MOTRIX 部署儀表板</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'Microsoft JhengHei', system-ui, sans-serif;
+    background: #0A0A0A;
+    color: #F5F4F0;
+    margin: 0;
+    padding: 24px;
+  }
+  h1 { font-size: 18px; margin: 0 0 20px; }
+  h2 { font-size: 14px; color: #999; margin: 0 0 10px; text-transform: uppercase; letter-spacing: .06em; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+  .card {
+    background: #111; border: 1px solid #222; border-radius: 10px; padding: 18px;
+  }
+  .card.warn { border-color: #DC2626; background: #1A0F0F; }
+  .row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 13px; }
+  .row span:first-child { color: #888; }
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; }
+  .dot.ok { background: #4ADE80; }
+  .dot.bad { background: #F87171; }
+  select, input, button {
+    font-family: inherit; font-size: 13px; padding: 8px 10px;
+    background: #1A1A1A; border: 1px solid #2A2A2A; border-radius: 6px; color: #F5F4F0;
+  }
+  select, input { width: 100%; margin-bottom: 8px; }
+  button {
+    background: #2563EB; border: none; cursor: pointer; font-weight: 600; padding: 9px 16px;
+  }
+  button:hover { background: #1D4ED8; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  button.danger { background: #DC2626; }
+  button.danger:hover { background: #B91C1C; }
+  button.ghost { background: none; border: 1px solid #333; }
+  .log {
+    background: #000; border: 1px solid #222; border-radius: 6px; padding: 10px;
+    font-family: Consolas, monospace; font-size: 12px; height: 220px; overflow-y: auto;
+    white-space: pre-wrap; margin-top: 10px;
+  }
+  .confirm-box {
+    border: 2px solid #DC2626; background: #1A0F0F; border-radius: 8px; padding: 14px; margin-top: 10px;
+  }
+  .hist-row { font-size: 12px; padding: 6px 0; border-bottom: 1px solid #1E1E1E; display: flex; justify-content: space-between; }
+  .badge { font-size: 11px; padding: 2px 8px; border-radius: 10px; }
+  .badge.ok { background: #14532D; color: #4ADE80; }
+  .badge.bad { background: #450A0A; color: #F87171; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+  <h1>MOTRIX ERP 部署儀表板</h1>
+
+  <div class="grid">
+    <div class="card">
+      <h2>開發機</h2>
+      <div class="row"><span>分支</span><span id="devBranch">…</span></div>
+      <div class="row"><span>HEAD</span><span id="devCommit">…</span></div>
+      <div class="row"><span>工作目錄</span><span id="devDirty">…</span></div>
+      <div class="row"><span>領先 origin</span><span id="devAhead">…</span></div>
+    </div>
+    <div class="card" id="prodCard">
+      <h2>正式機（172.16.10.177）</h2>
+      <div class="row"><span>健康狀態</span><span id="prodHealth"><span class="dot"></span>…</span></div>
+      <div class="row"><span>目前部署版本</span><span id="prodCommit">…</span></div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px">
+    <h2>1. 打包</h2>
+    <button id="buildBtn" onclick="startBuild()">開始打包（含完整 pytest，約 5-6 分鐘）</button>
+    <div class="log hidden" id="buildLog"></div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px">
+    <h2>2. 部署到正式機</h2>
+    <select id="pkgSelect"></select>
+    <input id="deployUser" placeholder="正式機帳號（例如 Motrix）" value="Motrix">
+    <input id="deployPass" type="password" placeholder="正式機密碼">
+    <button onclick="requestDeploy()">部署</button>
+    <div class="confirm-box hidden" id="deployConfirm"></div>
+    <div class="log hidden" id="deployLog"></div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px">
+    <h2>3. 手動回滾</h2>
+    <input id="rbUser" placeholder="正式機帳號（例如 Motrix）" value="Motrix">
+    <input id="rbPass" type="password" placeholder="正式機密碼">
+    <button class="ghost" onclick="loadSnapshots()">查詢可回滾的快照</button>
+    <select id="snapshotSelect" class="hidden"></select>
+    <button class="danger hidden" id="rollbackBtn" onclick="requestRollback()">回滾</button>
+    <div class="confirm-box hidden" id="rollbackConfirm"></div>
+    <div class="log hidden" id="rollbackLog"></div>
+  </div>
+
+  <div class="card">
+    <h2>歷史紀錄</h2>
+    <div id="historyList"></div>
+  </div>
+
+<script>
+let pendingDeploy = null;
+let pendingRollback = null;
+
+async function refreshStatus() {
+  try {
+    const dev = await (await fetch('/api/dev-status')).json();
+    document.getElementById('devBranch').textContent = dev.branch || '?';
+    document.getElementById('devCommit').textContent = dev.commit || '?';
+    document.getElementById('devDirty').textContent = dev.dirty ? '有未 commit 變更' : '乾淨';
+    document.getElementById('devAhead').textContent = dev.aheadOfOrigin === null ? '未知' : (dev.aheadOfOrigin + ' 個 commit');
+  } catch (e) {}
+
+  try {
+    const prod = await (await fetch('/api/prod-status')).json();
+    const dot = prod.healthy ? '<span class="dot ok"></span>正常' : '<span class="dot bad"></span>無回應';
+    document.getElementById('prodHealth').innerHTML = dot;
+    const dep = prod.deployed || {};
+    document.getElementById('prodCommit').textContent = dep.commit_short ? (dep.commit_short + ' (' + (dep.applied_at || '') + ')') : '未知';
+  } catch (e) {}
+}
+
+async function refreshPackages() {
+  const pkgs = await (await fetch('/api/packages')).json();
+  const sel = document.getElementById('pkgSelect');
+  sel.innerHTML = pkgs.map(p => `<option value="${p.folder}">${p.folder} — ${p.commit_short || '?'} (${p.built_at || '?'})</option>`).join('');
+}
+
+async function refreshHistory() {
+  const hist = await (await fetch('/api/history')).json();
+  document.getElementById('historyList').innerHTML = hist.map(h =>
+    `<div class="hist-row"><span>${h.time} · ${h.action}</span><span class="badge ${h.success ? 'ok' : 'bad'}">${h.success ? '成功' : '失敗'}</span></div>`
+  ).join('') || '<div style="color:#666;font-size:12px">尚無紀錄</div>';
+}
+
+function pollJob(jobId, logElId, onDone) {
+  const logEl = document.getElementById(logElId);
+  logEl.classList.remove('hidden');
+  let since = 0;
+  const timer = setInterval(async () => {
+    const res = await fetch(`/api/jobs/${jobId}?since=${since}`);
+    const data = await res.json();
+    if (data.lines && data.lines.length) {
+      logEl.textContent += data.lines.join('\n') + '\n';
+      logEl.scrollTop = logEl.scrollHeight;
+      since = data.totalLines;
+    }
+    if (data.status === 'succeeded' || data.status === 'failed') {
+      clearInterval(timer);
+      if (onDone) onDone(data.status === 'succeeded');
+      refreshStatus();
+      refreshHistory();
+    }
+  }, 1500);
+}
+
+async function startBuild() {
+  document.getElementById('buildBtn').disabled = true;
+  const buildLog = document.getElementById('buildLog');
+  buildLog.textContent = '';
+  const { jobId } = await (await fetch('/api/build', { method: 'POST' })).json();
+  pollJob(jobId, 'buildLog', (ok) => {
+    document.getElementById('buildBtn').disabled = false;
+    if (ok) refreshPackages();
+  });
+}
+
+function requestDeploy() {
+  const pkg = document.getElementById('pkgSelect').value;
+  const username = document.getElementById('deployUser').value.trim();
+  const password = document.getElementById('deployPass').value;
+  if (!pkg || !username || !password) { alert('請填完整資訊'); return; }
+  pendingDeploy = { pkg, username, password };
+  const box = document.getElementById('deployConfirm');
+  box.classList.remove('hidden');
+  box.innerHTML = `即將把部署包 <b>${pkg}</b> 套用到正式機 172.16.10.177。此操作會停止服務、覆蓋程式碼、可能觸發資料庫 migration。確定要繼續嗎？
+    <div style="margin-top:10px"><button class="danger" onclick="confirmDeploy()">確認套用</button> <button class="ghost" onclick="cancelDeploy()">取消</button></div>`;
+}
+function cancelDeploy() {
+  pendingDeploy = null;
+  document.getElementById('deployConfirm').classList.add('hidden');
+}
+async function confirmDeploy() {
+  document.getElementById('deployConfirm').classList.add('hidden');
+  const { pkg, username, password } = pendingDeploy;
+  document.getElementById('deployPass').value = '';
+  pendingDeploy = null;
+  const deployLog = document.getElementById('deployLog');
+  deployLog.textContent = '';
+  const res = await fetch('/api/deploy', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ package: pkg, username, password, confirm: true })
+  });
+  if (!res.ok) { const e = await res.json(); alert(e.detail || '部署請求失敗'); return; }
+  const { jobId } = await res.json();
+  pollJob(jobId, 'deployLog');
+}
+
+async function loadSnapshots() {
+  const username = document.getElementById('rbUser').value.trim();
+  const password = document.getElementById('rbPass').value;
+  if (!username || !password) { alert('請填正式機帳密'); return; }
+  const res = await fetch('/api/snapshots', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password })
+  });
+  if (!res.ok) { const e = await res.json().catch(() => ({})); alert(e.detail || '查詢失敗'); return; }
+  const snapshots = await res.json();
+  const sel = document.getElementById('snapshotSelect');
+  if (!snapshots.length) { alert('正式機目前沒有任何回滾快照'); return; }
+  sel.innerHTML = snapshots.map(s => `<option value="${s}">${s}</option>`).join('');
+  sel.classList.remove('hidden');
+  document.getElementById('rollbackBtn').classList.remove('hidden');
+}
+
+function requestRollback() {
+  const snapshotTimestamp = document.getElementById('snapshotSelect').value;
+  const username = document.getElementById('rbUser').value.trim();
+  const password = document.getElementById('rbPass').value;
+  pendingRollback = { snapshotTimestamp, username, password };
+  const box = document.getElementById('rollbackConfirm');
+  box.classList.remove('hidden');
+  box.innerHTML = `即將把正式機回滾到快照 <b>${snapshotTimestamp}</b>（程式碼＋資料庫都會被還原）。確定要繼續嗎？
+    <div style="margin-top:10px"><button class="danger" onclick="confirmRollback()">確認回滾</button> <button class="ghost" onclick="cancelRollback()">取消</button></div>`;
+}
+function cancelRollback() {
+  pendingRollback = null;
+  document.getElementById('rollbackConfirm').classList.add('hidden');
+}
+async function confirmRollback() {
+  document.getElementById('rollbackConfirm').classList.add('hidden');
+  const { snapshotTimestamp, username, password } = pendingRollback;
+  document.getElementById('rbPass').value = '';
+  pendingRollback = null;
+  const rollbackLog = document.getElementById('rollbackLog');
+  rollbackLog.textContent = '';
+  const res = await fetch('/api/rollback', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ snapshotTimestamp, username, password, confirm: true })
+  });
+  if (!res.ok) { const e = await res.json(); alert(e.detail || '回滾請求失敗'); return; }
+  const { jobId } = await res.json();
+  pollJob(jobId, 'rollbackLog');
+}
+
+refreshStatus();
+refreshPackages();
+refreshHistory();
+setInterval(refreshStatus, 15000);
+</script>
+</body>
+</html>

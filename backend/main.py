@@ -51,6 +51,9 @@ _PUBLIC_API_PATHS = {
     # 2026-09-08：手機掃 QR 核准登入——手機打開確認頁面時完全沒有任何 session，
     # 這三個端點本身各自用 challenge_token／密碼做驗證，見 routers/auth.py。
     "/api/auth/login/qr-info", "/api/auth/login/qr-approve", "/api/auth/login/qr-status",
+    # 2026-09-08：供本機部署儀表板工具（deploy_dashboard.py）查詢正式機目前
+    # 部署版本用，純讀 commit 資訊，無敏感內容，不需要密碼／session。
+    "/api/system/deployed-version",
 }
 _IDLE_TIMEOUT_SECONDS = 8 * 3600  # 8 hours（一般角色）
 # 2026-08-28 資安優化：superadmin/admin 能看財務/稽核紀錄/使用者管理等敏感資料，
