@@ -82,15 +82,24 @@ def _run_job(job_id: str, action: str, cmd: list, input_text: str = None):
         _append_history(action, job_id, success)
 
 
-def _ps_cmd(script_path: Path, extra_args: list = None) -> list:
+def _ps_cmd(script_path: Path, named_args: dict = None) -> list:
     """組出呼叫某支 .ps1 的 powershell 指令列表，並強制 Console 輸出用 UTF-8
     （這台機器的預設主控台編碼不是 UTF-8，Write-Host 的中文字不強制轉碼會
-    亂碼，見 MOTRIX-ERP-QUICK.md 的 Windows locale 編碼陷阱記錄）。"""
+    亂碼，見 MOTRIX-ERP-QUICK.md 的 Windows locale 編碼陷阱記錄）。
+
+    named_args 是 {參數名: 值} 的 dict（不是攤平的 flat list）——**參數名本身
+    是我自己寫死的固定字串，直接原樣輸出、不加引號，PowerShell 才認得出這是
+    參數旗標**；只有「值」需要用單引號跳脫（值可能來自使用者輸入）。之前的
+    版本把參數名跟值混在同一個 list 裡、統一加引號，導致 `-Action` 被包成
+    `'-Action'` 這個純字串常值，PowerShell 認不出是旗標，改去綁定成第一個
+    位置參數的值，撞上 ValidateSet 驗證失敗（2026-09-08 實際發生過，見
+    MOTRIX-ERP-QUICK.md §12 條目）。"""
     args_str = ""
-    if extra_args:
+    if named_args:
         parts = []
-        for a in extra_args:
-            parts.append("'" + str(a).replace("'", "''") + "'")
+        for name, value in named_args.items():
+            escaped = str(value).replace("'", "''")
+            parts.append(f"-{name} '{escaped}'")
         args_str = " " + " ".join(parts)
     inner = (
         "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; "
@@ -253,7 +262,7 @@ def start_deploy(body: DeployIn):
     job_id = uuid.uuid4().hex
     cmd = _ps_cmd(
         TOOLS_DIR / "_dashboard_remote.ps1",
-        ["-Action", "deploy", "-Username", body.username, "-PackagePath", str(package_path)],
+        {"Action": "deploy", "Username": body.username, "PackagePath": str(package_path)},
     )
     threading.Thread(
         target=_run_job, args=(job_id, "deploy", cmd, body.password + "\n"), daemon=True
@@ -280,7 +289,7 @@ def start_rollback(body: RollbackIn):
     job_id = uuid.uuid4().hex
     cmd = _ps_cmd(
         TOOLS_DIR / "_dashboard_remote.ps1",
-        ["-Action", "rollback", "-Username", body.username, "-SnapshotTimestamp", body.snapshotTimestamp],
+        {"Action": "rollback", "Username": body.username, "SnapshotTimestamp": body.snapshotTimestamp},
     )
     threading.Thread(
         target=_run_job, args=(job_id, "rollback", cmd, body.password + "\n"), daemon=True
@@ -297,7 +306,7 @@ class SnapshotsIn(BaseModel):
 def list_snapshots(body: SnapshotsIn):
     """跟 deploy/rollback 不同，這個是同步呼叫（不用背景 job）——單純列一份
     清單，通常幾秒內就回來，不需要即時串流進度。"""
-    cmd = _ps_cmd(TOOLS_DIR / "_dashboard_remote.ps1", ["-Action", "list-snapshots", "-Username", body.username])
+    cmd = _ps_cmd(TOOLS_DIR / "_dashboard_remote.ps1", {"Action": "list-snapshots", "Username": body.username})
     try:
         proc = subprocess.run(
             cmd, input=body.password + "\n", capture_output=True, text=True,
