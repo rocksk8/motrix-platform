@@ -1,9 +1,20 @@
-# 開發/測試專用相依，正式機執行 ERP 服務不需要——不要加進 requirements.txt。
-#
-# playwright：backend/tests/test_e2e_playwright_2026_09_07.py 用的真實瀏覽器
-# 端對端測試。裝好套件後還需要額外抓瀏覽器執行檔（不在 pip 套件裡）：
-#   pip install -r requirements-dev.txt
-#   playwright install chromium
-# 沒裝的環境執行 `pytest tests/` 時，該測試檔會自動 skip（pytest.importorskip），
-# 不影響其餘測試或 build_deploy_package.ps1 既有的「先跑 pytest 再打包」流程。
+# Dev/test-only dependencies -- not needed to run the ERP service in
+# production, keep these out of requirements.txt. See MOTRIX-ERP-QUICK.md
+# SS9 for the full (Chinese) rationale. Comments here are kept ASCII-only
+# on purpose -- some requirements-file parsers (e.g. pip-audit) guess the
+# file's text encoding from the OS locale instead of assuming UTF-8, and
+# non-ASCII comments broke that on this Windows dev machine (cp932 locale).
+
+# playwright: real-browser E2E smoke test (test_e2e_playwright_2026_09_07.py).
+# After installing, also run: playwright install chromium
+# Environments without it get pytest.importorskip-based auto-skip for that
+# one test file; doesn't affect anything else or build_deploy_package.ps1's
+# "run pytest before packaging" gate.
 playwright>=1.40.0
+
+# beautifulsoup4/requests: only used by tools/local_research_pipeline.py, a
+# standalone one-off research script -- main.py never imports anything under
+# tools/. Found missing from every requirements file during a 2026-09-07
+# dependency-hygiene pass.
+beautifulsoup4>=4.12.0
+requests>=2.31.0

@@ -5,6 +5,18 @@
 
 ---
 
+### 2026-09-07（末）— 補齊 requirements.txt 缺漏套件＋新增弱點掃描工具（DB 無異動）
+
+- 背景：正式機長期不重建 Python 環境，`requirements.txt` 只列了 `fastapi`/`uvicorn`/`pydantic`/`aiofiles`/`pyotp`/`qrcode`/`boto3` 七項，但實際靜態掃描全部後端程式碼的 import 之後發現至少 4 個第三方套件完全沒被任何 requirements 檔記載過
+- **`openpyxl`**（`network_plan_export.py`／`routers/accounting_export.py`／`routers/reports.py` 三處 Excel 匯出核心功能直接用到）與 **`Pillow`**（`routers/contractors.py` 是模組頂層 `from PIL import ...`，屬於 unconditional import——`photos.py` 對 PIL 的用法有做成函式內 try/except 的「可選」設計，但 `contractors.py` 這處沒有，若照現有 `requirements.txt` 在一台全新機器上裝環境，裝完啟動伺服器會在載入這個 router 的當下就整台起不來）：這兩個已補進 `requirements.txt`
+- **`beautifulsoup4`／`requests`**：只有 `tools/local_research_pipeline.py`（一支獨立的一次性研究腳本，`main.py` 完全不會載入 `tools/` 目錄下任何東西）用到，不影響伺服器本身能不能啟動，改放進 `requirements-dev.txt`（跟 2026-09-07 稍早新增的 `playwright` 同一份檔案，測試/工具專用、正式機執行 ERP 服務不需要）
+- 新增 `backend/tools/check_dependencies.py`：跑 `pip-audit` 對照 PyPA Advisory Database 分別掃 `requirements.txt`（正式機服務實際需要的）與 `requirements-dev.txt`（開發/測試專用，不影響正式機），支援 `--prod-only`/`--dev-only` 只掃其中一份。**刻意不是排程工具、也不掛進 pytest 套件**——比照 `check_guide_sync.py` 這類「需要時才手動執行」的既有工具慣例：新 CVE 隨時可能被揭露，讓「弱點掃描」變成 pytest 硬性關卡，會導致某天一個完全沒改過的既有套件被揭露新漏洞，就無端擋住 `build_deploy_package.ps1` 的部署打包，這不是我們要的行為——弱點掃描該是「定期人工檢查、決定要不要升級」的節奏，不是自動化測試門檻
+- 目前掃描 `requirements.txt`／`requirements-dev.txt` 兩份皆回報「沒有已知弱點」
+- **踩坑**：`requirements-dev.txt` 原本用中文寫註解，`pip-audit` 用的 requirements 檔解析器在這台機器（Windows cp932 locale）猜檔案編碼時直接 `UnicodeDecodeError`——這是跟 `.ps1` 檔案需要存成帶 UTF-8 BOM（見 §12 2026-08-08 條目）同一類「工具用系統預設編碼而非 UTF-8 猜檔案內容」的問題，只是換了一個不同的檔案類型與工具。`requirements.txt`/`requirements-dev.txt` 這類會被外部工具解析的純文字設定檔，改用純 ASCII 英文寫註解徹底避開編碼猜測，比加 BOM 更保險（畢竟不是每個解析器都認 BOM）
+- pytest 439/439 全過（純依賴聲明調整，不涉及任何程式邏輯變動）
+
+---
+
 ### 2026-09-07（完）— `logs/server.log` 新增大小輪替（DB 無異動）
 
 - 背景：正式機 `autostart.bat` 用 shell `>>` 把伺服器 24/7 運行期間的全部 stdout/stderr（含 uvicorn 自己的存取記錄與應用程式的 `logging` 輸出）直接重導向進 `logs/server.log`——這條路徑完全不經過 Python 的 `logging` 模組，`main.py` 裡的 `logging.basicConfig()` 管不到它。伺服器常駐執行、從未重啟過就會一直長，先前沒有任何大小上限或輪替機制，長期下來理論上可能把磁碟塞滿（正式機過去已經踩過一次類似性質的事故——`module_versions` 表無限增生塞爆每日備份空間，見 2026-08-XX 相關記錄）

@@ -1159,6 +1159,13 @@ xlsx-0.18.5.full.min.js     （SheetJS）
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
 
+### 2026-09-07（末）— 補齊 requirements.txt 缺漏套件＋新增弱點掃描工具（DB 無異動）
+
+- 複查發現 `requirements.txt` 長期缺漏 `openpyxl`（`network_plan_export.py`／`routers/accounting_export.py`／`routers/reports.py` 三處 Excel 匯出核心功能）與 `Pillow`（`routers/contractors.py` 模組頂層 unconditional import——若照 `requirements.txt` 在全新機器裝環境，裝完啟動時 import 這個 router 就會讓整台伺服器起不來）。已補進 `requirements.txt`；只有工具腳本用到、伺服器本身不會 import 的 `beautifulsoup4`/`requests`（`tools/local_research_pipeline.py` 專用）改放進 `requirements-dev.txt`
+- 新增 `backend/tools/check_dependencies.py`：跑 `pip-audit` 對照 PyPI 弱點資料庫分別掃 `requirements.txt`／`requirements-dev.txt`，目前掃描結果皆無已知弱點。非排程工具，比照 `check_guide_sync.py` 慣例手動執行即可，不會自動跑（新 CVE 隨時可能出現，不適合當成 pytest 套件的硬性關卡，避免無關的套件更新阻擋部署）
+- **踩坑**：`requirements-dev.txt` 原本的中文註解讓 `pip-audit` 在這台機器（cp932 locale）解析時直接 `UnicodeDecodeError`——跟 `.ps1` 檔案需要 UTF-8 BOM 是同一類問題的不同變體，這裡改用純 ASCII 英文註解徹底避開編碼猜測
+- pytest 439/439 全過
+
 ### 2026-09-07（完）— `logs/server.log` 新增大小輪替（DB 無異動）
 
 - `autostart.bat` 用 shell `>>` 把伺服器 24/7 的 stdout/stderr 導向 `logs/server.log`，完全不經過 Python `logging`，先前沒有任何大小上限——長期下來可能塞滿磁碟。新增 `archive.py::_rotate_server_log_if_large()`，掛在 `_daily_backup()` 最前面（不受雲端可用性/今天是否已備份影響）：超過 50MB 就用 copytruncate 輪替（原地清空＋保留最新 5 份 `.1~.5`）
@@ -1430,3 +1437,4 @@ powershell -ExecutionPolicy Bypass -File backend\tools\apply_update.ps1 -Package
 
 - 功能變更時先更新本檔「對應 §N 章節」，再在 §12 加摘要。
 - 死碼警告欄位如有整理（移除 .js、改用 include），記得更新 §2 與 §13。
+- **新增任何 `import` 第三方套件時，記得同步補進 `backend/requirements.txt`**（2026-09-07 複查發現 `openpyxl`／`Pillow` 這兩個核心功能會直接用到的套件，先前完全沒被記載——`routers/contractors.py` 對 `PIL` 是模組頂層 unconditional import，若一台全新機器照抄 `requirements.txt` 裝環境，裝完直接啟動會在 import 這個 router 時整台伺服器起不來）；只有測試/工具腳本用到、伺服器本身不會 import 的套件（如 `tools/local_research_pipeline.py` 用的 `beautifulsoup4`/`requests`）放進 `backend/requirements-dev.txt` 即可。想確認目前有沒有已知安全弱點，跑 `python backend/tools/check_dependencies.py`（需要先 `pip install pip-audit`，見該腳本 docstring；非排程工具，建議升級套件版本或每季手動跑一次）。
