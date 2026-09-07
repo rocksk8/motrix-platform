@@ -1179,6 +1179,14 @@ xlsx-0.18.5.full.min.js     （SheetJS）
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
 
+### 2026-09-07（最末之三）— 修復 pip install 步驟本身在 PowerShell 5.1 下的崩潰 bug
+
+- **事故**：套用 `66a414f` 部署包時，Step 4（前一輪新增的 pip install 步驟）本身直接讓整支腳本崩潰報錯 `NativeCommandError`，卡在 Step 3（新程式碼已複製）與 Step 5（健康檢查）之間，沒跑完健康檢查也沒觸發自動回滾
+- **根因**：Windows PowerShell 5.1 對「原生執行檔 + `2>&1`」有個已知地雷——只要該執行檔往 stderr 寫任何內容（就算成功也一樣），在 `$ErrorActionPreference = "Stop"`（本檔開頭就設定）底下會被包裝成 `NativeCommandError` 直接中止腳本。`pip install` 即使成功也常態性往 stderr 印提示（例如這次的「有新版 pip 可更新」），因此每次都會炸；先前 db 備份／migration 乾跑那兩段同樣寫法的 `python ... 2>&1` 沒事，是因為那兩支腳本成功時完全不寫 stderr，這次新增的 pip install 才第一次踩到這個地雷
+- **修復**：pip install 呼叫期間暫時把 `$ErrorActionPreference` 改成 `Continue`，執行完立刻用 `finally` 還原，不影響腳本其餘部分既有的錯誤處理行為；已用 `cmd /c "echo x & echo y 1>&2"` 做最小重現＋驗證修復前會崩潰、修復後能存活
+- **當下實際影響**：正式機執行到這步之前，使用者已經手動在正式機跑過一次 `pip install -r requirements.txt`（依照當時建議先手動補裝），代表套件在腳本內部這次多餘的 pip install 執行前就已經裝好，新程式碼與 autostart 迴圈理論上已經正常運作，只是腳本本身沒跑完後續健康檢查與版本紀錄——不是回滾情境，是腳本自己中途摔倒
+- **教訓**：這是同一天連續第二次在「正式機真實套用」這個情境才第一次踩到的地雷（第一次是缺套件，這次是修缺套件本身用的寫法又踩了另一個雷），`apply_update.ps1` 目前完全沒有自己的單元測試或語法驗證關卡，`build_deploy_package.ps1` 也只檢查 `git status` 乾淨、不檢查 `.ps1` 語法或邏輯——之後如果部署工具本身的改動頻率提高，值得評估要不要至少加一層基本語法檢查
+
 ### 2026-09-07（最末之二）— 拉回正式機 Claude 直接修復的兩個部署工具 bug
 
 - **背景**：19:16 那次自動回滾後，開發機這邊已先修好 pip install 缺步驟的問題並準備重新打包，但正式機當下另有 Claude session 直接在正式機上排查、也各自修好了兩個獨立問題——這正是 §0 一直提醒的「正式機做了什麼，開發機不知道」情境，這次是部署工具本身先撞到

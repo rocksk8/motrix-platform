@@ -277,8 +277,20 @@ Ok "  程式碼＋文件已套用。"
 Info "`n[4/6] 安裝/更新 Python 依賴..."
 $reqPath = Join-Path $BackendDir "requirements.txt"
 if (Test-Path $reqPath) {
-    $pipOutput = & python -m pip install -q -r $reqPath 2>&1
-    $pipExit = $LASTEXITCODE
+    # pip 就算成功也常態性往 stderr 印提示訊息（例如「有新版 pip 可更新」）；
+    # Windows PowerShell 5.1 對「原生執行檔 + 2>&1」有個地雷——只要 stderr 有
+    # 任何輸出，在 $ErrorActionPreference = "Stop"（本檔開頭已設定）底下會被
+    # 包成 NativeCommandError 直接中止整支腳本（2026-09-07 實際發生過，見 §12）。
+    # 這裡在呼叫期間暫時改成 Continue，用完立刻還原，不影響腳本其餘部分的
+    # 錯誤處理行為。
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        $pipOutput = & python -m pip install -q -r $reqPath 2>&1
+        $pipExit = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $prevEap
+    }
     if ($pipExit -ne 0) {
         Warn "  pip install 失敗（exit code $pipExit），繼續往下走——若真的缺套件，下一步健康檢查會抓到並觸發自動回滾："
         Write-Host ($pipOutput | Out-String)
