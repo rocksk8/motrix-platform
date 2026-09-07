@@ -157,6 +157,17 @@ def _totp_sweep_expired() -> None:
             del _totp_pending[tok]
 
 
+def _mask_username(name: str) -> str:
+    """First + last character kept, middle replaced with '*' — just enough for
+    the legitimate phone owner to recognise "yes that's my own login attempt"
+    on the QR-approve page, without fully exposing the account name to anyone
+    who merely sees the QR code on someone else's screen."""
+    name = name or ""
+    if len(name) <= 2:
+        return "*" * len(name)
+    return name[0] + "*" * (len(name) - 2) + name[-1]
+
+
 # ── Models ────────────────────────────────────────────────────────────────────
 
 class LoginIn(BaseModel):
@@ -177,6 +188,11 @@ class VerifyUnlockIn(BaseModel):
 class TotpLoginVerifyIn(BaseModel):
     challenge_token: str
     code: str
+
+
+class QrApproveIn(BaseModel):
+    challenge_token: str
+    password: str
 
 
 class TotpEnableIn(BaseModel):
@@ -323,8 +339,25 @@ def auth_login(body: LoginIn, request: Request):
             _totp_pending[challenge_token] = {
                 "user_id": row["id"], "must_change": must_change,
                 "fails": 0, "expires": time.monotonic() + _TOTP_CHALLENGE_TTL_S,
+                "approved": False,
             }
-        return {"totpRequired": True, "challengeToken": challenge_token}
+        # 2026-09-08 新增：手機相機掃 QR 核准登入，跟手動輸入驗證碼並行、互不影響
+        # （見 login-qr-approve.html／qr-info／qr-approve／qr-status 四個新端點）。
+        # QR 內容是指向確認頁面的完整網址，動態組出（不寫死 IP，比照既有「CORS
+        # 白名單寫死 IP」的已知限制更穩健）。
+        approve_url = (
+            f"{request.url.scheme}://{request.headers.get('host', '')}"
+            f"/pages/login-qr-approve.html?challenge={challenge_token}"
+        )
+        qr_img = qrcode.make(approve_url)
+        qr_buf = io.BytesIO()
+        qr_img.save(qr_buf, format="PNG")
+        qr_b64 = base64.b64encode(qr_buf.getvalue()).decode()
+        return {
+            "totpRequired": True,
+            "challengeToken": challenge_token,
+            "qrCodePng": f"data:image/png;base64,{qr_b64}",
+        }
 
     result = _issue_session(conn, row, must_change)
     conn.close()
@@ -420,6 +453,95 @@ def auth_login_totp(body: TotpLoginVerifyIn, request: Request):
     if used_recovery:
         _audit(result["token"], "auth.totp_recovery_used", "user", row["username"],
                row["display_name"] or row["username"])
+    return result
+
+
+@router.get("/api/auth/login/qr-info")
+def login_qr_info(challenge: str):
+    """Public — the phone's camera opens login-qr-approve.html straight from
+    the QR code, with no session token yet. Lets that page show a masked
+    account name so the legitimate phone owner can recognise their own
+    in-progress login before typing a password."""
+    _totp_sweep_expired()
+    with _totp_lock:
+        pending = _totp_pending.get(challenge)
+    if not pending:
+        raise HTTPException(400, "此登入請求已逾時或無效，請回到電腦重新登入")
+    conn = get_db()
+    row = conn.execute(
+        "SELECT username, display_name FROM users WHERE id=?", (pending["user_id"],)
+    ).fetchone()
+    conn.close()
+    if not row:
+        raise HTTPException(400, "此登入請求已逾時或無效")
+    return {"maskedUsername": _mask_username(row["display_name"] or row["username"])}
+
+
+@router.post("/api/auth/login/qr-approve")
+def login_qr_approve(body: QrApproveIn, request: Request):
+    """Public — phone submits the account password here to approve the
+    pending login. Does NOT issue a session (the phone shouldn't hold the
+    desktop's token) — it just flips pending["approved"], which
+    login_qr_status() below (polled by the desktop) picks up."""
+    ip = _client_ip(request)
+    _totp_sweep_expired()
+    with _totp_lock:
+        pending = _totp_pending.get(body.challenge_token)
+    if not pending:
+        raise HTTPException(400, "此登入請求已逾時或無效，請回到電腦重新登入")
+
+    conn = get_db()
+    row = conn.execute(
+        "SELECT id, username, password_hash FROM users WHERE id=?",
+        (pending["user_id"],),
+    ).fetchone()
+    conn.close()
+
+    if not row or not _verify_pw(body.password, row["password_hash"]):
+        _rl_fail(ip, row["username"] if row else "")
+        # 共用同一個 pending["fails"] 計數器（跟手動輸入驗證碼那條路徑同一組上限），
+        # 不是另開一組獨立的失敗次數——避免同一張 challenge 變相有兩倍可猜次數。
+        with _totp_lock:
+            still = _totp_pending.get(body.challenge_token)
+            if still:
+                still["fails"] += 1
+                if still["fails"] >= _TOTP_MAX_FAILS:
+                    del _totp_pending[body.challenge_token]
+                    raise HTTPException(401, "密碼錯誤次數過多，請回到電腦重新登入")
+        raise HTTPException(401, "密碼不正確")
+
+    with _totp_lock:
+        still = _totp_pending.get(body.challenge_token)
+        if still:
+            still["approved"] = True
+    _rl_clear(ip)
+    return {"ok": True}
+
+
+@router.get("/api/auth/login/qr-status")
+def login_qr_status(challenge: str):
+    """Public — polled by the desktop login page every ~2s while showing the
+    QR code. Only issues the real session once (single-use, mirrors the
+    manual-code path), the first time it observes approved=True."""
+    _totp_sweep_expired()
+    with _totp_lock:
+        pending = _totp_pending.get(challenge)
+        if not pending:
+            raise HTTPException(400, "此登入請求已逾時或無效，請重新登入")
+        if not pending["approved"]:
+            return {"pending": True}
+        del _totp_pending[challenge]
+
+    conn = get_db()
+    row = conn.execute(
+        "SELECT id, username, display_name, role, modules FROM users WHERE id=?",
+        (pending["user_id"],),
+    ).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(400, "帳號不存在或已停用")
+    result = _issue_session(conn, row, pending["must_change"])
+    conn.close()
     return result
 
 

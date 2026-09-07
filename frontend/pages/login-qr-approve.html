@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="../static/favicon.png">
+  <title>核准登入 — MOTRIX 專案管理系統</title>
+  <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'LINE Seed TW_OTF', system-ui, sans-serif;
+      background: #0A0A0A;
+      min-height: 100dvh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #F5F4F0;
+    }
+    .login-wrap {
+      width: 100%;
+      max-width: 420px;
+      padding: 20px;
+    }
+    .logo-area {
+      text-align: center;
+      margin-bottom: 36px;
+    }
+    .logo-area img {
+      height: 38px;
+      filter: brightness(0) invert(1);
+      margin-bottom: 10px;
+    }
+    .logo-fallback {
+      font-family: 'LINE Seed TW_OTF', sans-serif;
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: .12em;
+      color: #F5F4F0;
+      margin-bottom: 6px;
+    }
+    .logo-sub {
+      font-size: 11px;
+      color: #555;
+      letter-spacing: .08em;
+      font-family: 'LINE Seed TW_OTF', sans-serif;
+    }
+    .card {
+      background: #111;
+      border: 1px solid #222;
+      border-radius: 12px;
+      padding: 32px;
+    }
+    .card-title {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+    .card-sub {
+      font-size: 12px;
+      color: #666;
+      margin-bottom: 28px;
+      line-height: 1.6;
+    }
+    .form-group { margin-bottom: 18px; }
+    .form-label {
+      display: block;
+      font-size: 11px;
+      font-family: 'LINE Seed TW_OTF', sans-serif;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: #666;
+      font-weight: 500;
+      margin-bottom: 6px;
+    }
+    .form-input {
+      width: 100%;
+      padding: 11px 14px;
+      background: #1A1A1A;
+      border: 1px solid #2A2A2A;
+      border-radius: 7px;
+      color: #F5F4F0;
+      font-size: 14px;
+      font-family: 'LINE Seed TW_OTF', sans-serif;
+      outline: none;
+      transition: border-color .15s, box-shadow .15s;
+    }
+    .form-input:focus {
+      border-color: #2563EB;
+      box-shadow: 0 0 0 3px rgba(37,99,235,.15);
+    }
+    .form-input::placeholder { color: #444; }
+    .form-input.error { border-color: #DC2626; }
+    .error-msg {
+      font-size: 12px;
+      color: #F87171;
+      margin-top: 6px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .btn-login {
+      width: 100%;
+      padding: 12px;
+      background: #2563EB;
+      color: #fff;
+      border: none;
+      border-radius: 7px;
+      font-size: 14px;
+      font-family: 'LINE Seed TW_OTF', sans-serif;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background .12s;
+      margin-top: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .btn-login:hover { background: #1D4ED8; }
+    .btn-login:disabled { opacity: .5; cursor: not-allowed; }
+    .spinner {
+      width: 14px; height: 14px;
+      border: 2px solid rgba(255,255,255,.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin .6s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .status-box {
+      text-align: center;
+      font-size: 14px;
+      line-height: 1.8;
+      padding: 8px 0;
+    }
+    .status-box.ok { color: #4ADE80; }
+    .status-box.bad { color: #F87171; }
+  </style>
+</head>
+<body x-data="qrApprovePage()">
+
+  <div class="login-wrap">
+    <div class="logo-area">
+      <img src="../static/logo.png" alt="MOTRIX"
+           onerror="this.style.display='none'; this.nextElementSibling.style.display='block'">
+      <div class="logo-fallback" style="display:none">MOTRIX</div>
+      <div class="logo-sub">SYNERGY INTEGRATION ERP</div>
+    </div>
+
+    <div class="card">
+      <template x-if="invalid">
+        <div>
+          <div class="card-title">連結已失效</div>
+          <div class="card-sub">這個登入核准連結已經逾時或已被使用過，請回到電腦重新整理登入頁面，掃描新的 QR code。</div>
+        </div>
+      </template>
+
+      <template x-if="!invalid && done">
+        <div class="status-box ok">
+          ✓ 已核准登入<br>請回到電腦繼續操作，可以關閉這個頁面
+        </div>
+      </template>
+
+      <template x-if="!invalid && !done">
+        <div>
+          <div class="card-title">核准登入</div>
+          <div class="card-sub">
+            有人正在嘗試以帳號
+            <strong x-text="maskedUsername || '…'" style="color:#F5F4F0"></strong>
+            登入電腦端的系統。如果是你本人，請輸入密碼核准；如果不是，請忽略此頁面。
+          </div>
+
+          <form @submit.prevent="approve()">
+            <div class="form-group">
+              <label class="form-label">密碼</label>
+              <input class="form-input" :class="{error: error}"
+                     type="password" x-model="password"
+                     placeholder="輸入你的登入密碼" autocomplete="current-password" autofocus>
+              <div class="error-msg" x-show="error">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01"/></svg>
+                <span x-text="error"></span>
+              </div>
+            </div>
+
+            <button type="submit" class="btn-login" :disabled="loading || !challengeToken">
+              <template x-if="loading">
+                <div class="spinner"></div>
+              </template>
+              <span x-text="loading ? '核准中…' : '核准登入'"></span>
+            </button>
+          </form>
+        </div>
+      </template>
+    </div>
+  </div>
+
+  <script>
+  function qrApprovePage() {
+    return {
+      challengeToken: '',
+      maskedUsername: '',
+      password: '',
+      loading: false,
+      error: '',
+      invalid: false,
+      done: false,
+
+      async init() {
+        this.challengeToken = new URLSearchParams(window.location.search).get('challenge') || ''
+        if (!this.challengeToken) { this.invalid = true; return }
+        try {
+          const res = await fetch('/api/auth/login/qr-info?challenge=' + encodeURIComponent(this.challengeToken))
+          if (!res.ok) { this.invalid = true; return }
+          const data = await res.json()
+          this.maskedUsername = data.maskedUsername || ''
+        } catch (e) {
+          this.invalid = true
+        }
+      },
+
+      async approve() {
+        this.error = ''
+        if (!this.password) { this.error = '請輸入密碼'; return }
+        this.loading = true
+        try {
+          const res = await fetch('/api/auth/login/qr-approve', {
+            method:  'POST',
+            headers: {'Content-Type': 'application/json'},
+            body:    JSON.stringify({ challenge_token: this.challengeToken, password: this.password })
+          })
+          this.loading = false
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}))
+            this.error = err.detail || '密碼不正確'
+            if (res.status === 400) this.invalid = true
+            return
+          }
+          this.done = true
+        } catch (e) {
+          this.loading = false
+          this.error = '連線失敗，請確認網路連線'
+        }
+      }
+    }
+  }
+  </script>
+</body>
+</html>

@@ -48,6 +48,9 @@ app.add_middleware(
 _PUBLIC_API_PATHS = {
     "/api/auth/login", "/api/auth/login/totp", "/api/auth/logout",
     "/api/ping", "/api/system/version",
+    # 2026-09-08：手機掃 QR 核准登入——手機打開確認頁面時完全沒有任何 session，
+    # 這三個端點本身各自用 challenge_token／密碼做驗證，見 routers/auth.py。
+    "/api/auth/login/qr-info", "/api/auth/login/qr-approve", "/api/auth/login/qr-status",
 }
 _IDLE_TIMEOUT_SECONDS = 8 * 3600  # 8 hours（一般角色）
 # 2026-08-28 資安優化：superadmin/admin 能看財務/稽核紀錄/使用者管理等敏感資料，

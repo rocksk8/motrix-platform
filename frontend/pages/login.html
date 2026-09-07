@@ -231,6 +231,12 @@
           </template>
           <span x-text="loading ? '驗證中…' : '驗證'"></span>
         </button>
+
+        <div x-show="qrCodePng" style="text-align:center;margin-top:22px;padding-top:20px;border-top:1px solid #1E1E1E">
+          <div style="font-size:11px;color:#666;margin-bottom:10px">或用手機相機掃描 QR code 核准登入</div>
+          <img :src="qrCodePng" width="160" height="160" style="border-radius:8px;background:#fff;padding:8px">
+        </div>
+
         <button type="button" @click="backToLogin()"
                 style="width:100%;margin-top:10px;background:none;border:none;color:#666;font-size:12px;cursor:pointer;padding:6px">
           ← 返回重新登入
@@ -257,6 +263,8 @@
       totpStep: false,
       totpCode: '',
       challengeToken: '',
+      qrCodePng: '',
+      qrPollTimer: null,
 
       async login() {
         this.error = ''
@@ -278,8 +286,10 @@
           const data = await res.json()
           if (data.totpRequired) {
             this.challengeToken = data.challengeToken
+            this.qrCodePng      = data.qrCodePng || ''
             this.totpStep = true
             this.loading  = false
+            this._startQrPolling()
             return
           }
           this._storeSessionAndRedirect(data)
@@ -314,15 +324,40 @@
         }
       },
 
+      _startQrPolling() {
+        if (this.qrPollTimer) clearInterval(this.qrPollTimer)
+        this.qrPollTimer = setInterval(async () => {
+          try {
+            const res = await fetch('/api/auth/login/qr-status?challenge=' + encodeURIComponent(this.challengeToken))
+            if (!res.ok) {
+              // challenge 逾時/作廢（含錯誤密碼次數過多）——回到重新登入畫面
+              this.backToLogin()
+              return
+            }
+            const data = await res.json()
+            if (data.token) {
+              // 手機已核准，直接完成登入，不用使用者在電腦上按任何東西
+              this._storeSessionAndRedirect(data)
+            }
+            // 否則 { pending: true }，什麼都不做，等下一輪
+          } catch (e) {
+            // 網路暫時抖動，不中斷輪詢，下一輪再試
+          }
+        }, 2000)
+      },
+
       backToLogin() {
+        if (this.qrPollTimer) { clearInterval(this.qrPollTimer); this.qrPollTimer = null }
         this.totpStep      = false
         this.totpCode       = ''
         this.challengeToken = ''
+        this.qrCodePng      = ''
         this.error          = ''
         this.password       = ''
       },
 
       _storeSessionAndRedirect(data) {
+        if (this.qrPollTimer) { clearInterval(this.qrPollTimer); this.qrPollTimer = null }
         localStorage.setItem('motrix_session', JSON.stringify({
           token:       data.token,
           userId:      data.userId,
