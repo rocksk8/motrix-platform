@@ -16,6 +16,7 @@ build_deploy_package.ps1 / apply_update.ps1 / rollback_update.ps1，
 """
 import json
 import os
+import re
 import subprocess
 import threading
 import time
@@ -96,6 +97,17 @@ def _ps_cmd(script_path: Path, extra_args: list = None) -> list:
         f"& '{script_path}'{args_str}"
     )
     return ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", inner]
+
+
+# 2026-09-08 安全性複查補上：package/snapshotTimestamp 都會被直接拼進檔案
+# 路徑（deploy/rollback 兩條路徑），這個工具雖然只綁 loopback、外部攻擊者
+# 連不到，但仍不該省略基本輸入驗證——限定只能是「乾淨的資料夾名稱」
+# （字母/數字/底線/連字號），擋掉任何含路徑分隔符或 `..` 的路徑穿越嘗試。
+_SAFE_NAME_RE = re.compile(r"^[A-Za-z0-9_-]+$")
+
+
+def _is_safe_name(value: str) -> bool:
+    return bool(value) and bool(_SAFE_NAME_RE.match(value)) and ".." not in value
 
 
 def _append_history(action: str, job_id: str, success: bool):
@@ -232,6 +244,8 @@ class DeployIn(BaseModel):
 def start_deploy(body: DeployIn):
     if not body.confirm:
         return JSONResponse(status_code=400, content={"detail": "需要先在網頁上完成二次確認（confirm 必須為 true）"})
+    if not _is_safe_name(body.package):
+        return JSONResponse(status_code=400, content={"detail": "無效的部署包名稱"})
     package_path = DEPLOY_PACKAGES_DIR / body.package
     if not package_path.exists():
         return JSONResponse(status_code=400, content={"detail": f"找不到部署包：{package_path}"})
@@ -260,6 +274,8 @@ class RollbackIn(BaseModel):
 def start_rollback(body: RollbackIn):
     if not body.confirm:
         return JSONResponse(status_code=400, content={"detail": "需要先在網頁上完成二次確認（confirm 必須為 true）"})
+    if not _is_safe_name(body.snapshotTimestamp):
+        return JSONResponse(status_code=400, content={"detail": "無效的快照時間戳"})
 
     job_id = uuid.uuid4().hex
     cmd = _ps_cmd(
