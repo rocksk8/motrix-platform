@@ -15,6 +15,7 @@ badge 同步漏更新、日期字串排序、Alpine reactivity 相關 bug）恰�
 import threading
 import time
 
+import pyotp
 import pytest
 
 pytest.importorskip("playwright.sync_api")
@@ -234,5 +235,64 @@ def test_inventory_purchase_suggestions_modal_smoke(live_server, make_user):
             modal.locator("tr", has_text="E2E-LOWSTOCK").wait_for(timeout=10000)
             row_text = modal.locator("tr", has_text="E2E-LOWSTOCK").inner_text()
             assert "15" in row_text, f"應建議補到黃燈門檻 ceil(10*1.5)=15，實際列內容: {row_text!r}"
+        finally:
+            browser.close()
+
+
+@pytest.mark.e2e
+def test_login_qr_approve_smoke(live_server, make_user):
+    """手機掃 QR 核准登入 smoke test（2026-09-08，見 routers/auth.py 的
+    login_qr_info/login_qr_approve/login_qr_status 與 login-qr-approve.html）。
+    桌面登入頁顯示 QR 後，模擬手機另開一個獨立瀏覽器 context 開啟確認頁面、
+    輸入密碼核准，桌面應該在輪詢週期內自動偵測到核准並完成登入，全程不需要
+    在桌面上做任何其他操作（不輸入驗證碼、不用按任何按鈕）。"""
+    username, password = make_user(role="superadmin")
+
+    with sync_playwright() as pw:
+        # 前置設定：用 Playwright 的 APIRequestContext 直接呼叫 API 幫這個帳號
+        # 啟用 TOTP（不開瀏覽器頁面——這是測試前置設定，不是測試本身要驗證的路徑）。
+        api = pw.request.new_context(base_url=live_server)
+        login_resp = api.post("/api/auth/login", data={"username": username, "password": password})
+        assert login_resp.ok, login_resp.text()
+        headers = {"Authorization": f"Bearer {login_resp.json()['token']}"}
+        setup_resp = api.post("/api/auth/totp/setup", headers=headers)
+        assert setup_resp.ok, setup_resp.text()
+        secret = setup_resp.json()["secret"]
+        enable_resp = api.post("/api/auth/totp/enable", headers=headers,
+                                data={"code": pyotp.TOTP(secret).now()})
+        assert enable_resp.ok, enable_resp.text()
+        api.dispose()
+
+        browser = pw.chromium.launch()
+        try:
+            # ── 桌面：輸入帳密，進入兩步驟驗證畫面，應該看到並列的 QR code ──
+            ctx_desktop = browser.new_context()
+            page_desktop = ctx_desktop.new_page()
+            page_desktop.goto(f"{live_server}/pages/login.html")
+            page_desktop.fill('input[x-model="username"]', username)
+            page_desktop.fill('input[x-model="password"]', password)
+            page_desktop.click('button:has-text("登入")')
+            page_desktop.wait_for_selector('img[width="160"]', timeout=10000)
+
+            # 真實情境是手機相機掃描 QR 圖片解碼出網址；這裡直接讀 Alpine 元件
+            # 內部狀態拿 challengeToken 達到等價效果，不需要真的做影像辨識。
+            challenge = page_desktop.evaluate(
+                "window.Alpine.$data(document.body).challengeToken"
+            )
+            assert challenge, "桌面頁面沒有拿到 challengeToken，QR 流程沒有正確啟動"
+
+            # ── 手機：另開一個完全獨立的 context（模擬另一台裝置），開確認頁面 ──
+            ctx_phone = browser.new_context()
+            page_phone = ctx_phone.new_page()
+            page_phone.goto(f"{live_server}/pages/login-qr-approve.html?challenge={challenge}")
+            page_phone.wait_for_selector('input[type="password"]', timeout=10000)
+            page_phone.fill('input[type="password"]', password)
+            page_phone.click('button:has-text("核准登入")')
+            page_phone.wait_for_selector('text=已核准登入', timeout=10000)
+            ctx_phone.close()
+
+            # ── 桌面：不做任何操作，應該在輪詢週期內（每 2 秒一次）自動完成登入 ──
+            page_desktop.wait_for_url(lambda url: url.endswith("/index.html"), timeout=10000)
+            ctx_desktop.close()
         finally:
             browser.close()

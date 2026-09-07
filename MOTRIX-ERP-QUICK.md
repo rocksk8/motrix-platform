@@ -1184,7 +1184,7 @@ xlsx-0.18.5.full.min.js     （SheetJS）
 - **需求**：既有 TOTP 兩步驟驗證（2026-09-07 上線）登入時只能手動輸入驗證 App 的 6 位數字。使用者要求並行新增第二種選項：手機相機掃描登入頁面上的 QR code → 開啟確認頁面 → 輸入密碼核准 → 電腦端自動偵測到核准並完成登入，不需要在電腦上手動輸入任何東西。兩種方式並存，使用者自己選，互不影響。
 - **實作**：沿用既有的 `_totp_pending` 記憶體 dict（不新增資料表），多存一個 `"approved": False` 欄位。`auth_login()` 的 `totp_enabled` 分支額外用 `qrcode.make()`（沿用 `totp_setup()` 既有手法）產生一張 QR，內容是動態組出的確認頁面網址（`{scheme}://{host}/pages/login-qr-approve.html?challenge=...`，不寫死 IP），回應多一個 `qrCodePng` 欄位。新增三個公開端點（`_PUBLIC_API_PATHS` 加入）：`GET qr-info`（給手機看遮蔽後的帳號名稱）、`POST qr-approve`（手機送密碼核准，只翻轉 `approved` 旗標，**不**在這裡發 session）、`GET qr-status`（電腦端每 2 秒輪詢，偵測到 `approved=True` 才真正彈出 pending、呼叫既有 `_issue_session()`，回應形狀跟 `/api/auth/login/totp` 成功時完全一致，前端直接重用同一支 `_storeSessionAndRedirect()`）。`qr-approve` 密碼錯誤刻意共用同一個 `pending["fails"]` 計數器（不是另開一組獨立上限），避免同一張 challenge 變相有兩倍可猜次數。
 - 新增頁面 `frontend/pages/login-qr-approve.html`（獨立、無需登入即可開啟的手機確認頁）；`login.html` 的 `totpStep` 表單並列顯示 QR code＋新增輪詢邏輯（全站第一個用到 `setInterval` 輪詢的前端頁面）。
-- 新增測試 `test_totp_qr_push_2026_09_08.py`（8 題，含跨路徑共用失敗計數器的交叉驗證、單次有效性驗證），pytest 464/464 全過。
+- 新增測試 `test_totp_qr_push_2026_09_08.py`（8 題，含跨路徑共用失敗計數器的交叉驗證、單次有效性驗證），pytest 464/464 全過。另在 `test_e2e_playwright_2026_09_07.py` 新增 `test_login_qr_approve_smoke`——用兩個獨立瀏覽器 context 模擬「桌面登入＋手機另開頁面掃 QR 核准」的真實流程（桌面讀 Alpine `challengeToken` 狀態模擬相機解碼，手機 context 開確認頁輸入密碼核准），驗證桌面在輪詢週期內確實會自動完成登入、不需要任何手動操作——首次執行即通過，證明功能端到端真的可行，不只是 API 層級的假設。
 - 這次先進入 Plan Mode 完整設計後才動手（新增認證流程，安全性影響大，值得先確認方向），已用 Explore agent 蒐集現有 challenge-token 機制／session 發放機制／`qrcode` 產生慣例的精確程式碼位置後才落筆設計。
 
 ### 2026-09-08（稍晚）— 正式機真實套用事故：`apply_update.ps1` HTTPS 健康檢查誤判觸發不必要的回滾
