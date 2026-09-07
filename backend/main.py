@@ -69,6 +69,15 @@ _MUST_CHANGE_PW_ALLOWED = {
 async def no_cache_static(request: Request, call_next):
     response = await call_next(request)
     p = request.url.path
+    # 2026-09-08 修復：外部函式庫自架後（見 §9「外部函式庫自架」），vendor 目錄下的
+    # 檔案是版本號釘死在檔名裡的第三方函式庫（如 alpine-3.17.1.min.js），跟會頻繁
+    # 覆寫的頁面 .html/.css/.js 完全不同類——版本升級一定會改檔名，同名檔案內容
+    # 保證不變，可以安全長效快取。原本這條規則不分青紅皂白把 .js/.css 全部設成
+    # no-store，CDN 自架前沒差（CDN 自己另外設了快取表頭），自架後這些函式庫變成
+    # 每次換頁都要向本機同一個 uvicorn process 重新要一次，徒增同源請求量與延遲。
+    if p.startswith("/static/vendor/"):
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        return response
     if p.endswith((".html", ".css", ".js")) or p in ("/", ""):
         response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
         response.headers["Pragma"] = "no-cache"

@@ -1179,6 +1179,14 @@ xlsx-0.18.5.full.min.js     （SheetJS）
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
 
+### 2026-09-08 — 修復 `no_cache_static` middleware 誤傷 vendor 函式庫快取（flaky 測試放大因子之一）
+
+- **背景**：延續 2026-09-07（最末之四）條目的排查，架構複查發現 `main.py::no_cache_static()` 對所有 `.html`/`.css`/`.js` 一律加 `Cache-Control: no-store`——這條規則是為了讓開發中頁面永遠拿到最新版而設計，CDN 自架前沒事（外部函式庫由 jsdelivr 自己另外設定長效快取，且是不同 origin），但 2026-09-07「外部函式庫全面自架」之後，`frontend/static/vendor/` 底下版本號釘死在檔名裡（如 `alpine-3.17.1.min.js`）、內容保證不變的第三方函式庫也被這條規則誤傷，變成每次換頁都要向本機同一個 uvicorn process 重新要一次
+- **影響**：不只是測試環境的問題——正式機使用者平常在系統內換頁，理論上也在不必要地重複下載 Alpine.js 等函式庫，徒增每次換頁的延遲與伺服器負載；也是 `test_login_create_submit_approve_smoke` 在整套 pytest 跑到中段時偶發卡在 `wait_for_selector(timeout=30000)` 的放大因子之一（同源請求量增加，疊加整套跑到中段時單一 Python process 已累積的物件/GC 壓力）——單獨跑該測試 5/5 穩定通過（~11 秒），只有整套跑時才會卡，符合「位置相依、非測試邏輯本身問題」的診斷
+- **修復**：`/static/vendor/` 底下的檔案改為 `Cache-Control: public, max-age=31536000, immutable`（一年＋不可變），其餘 `.html`/`.css`/`.js`（頁面程式碼、`sidebar.js`/`notif.js` 等）維持原本 `no-store` 不變——版本升級一定會改檔名，同名檔案內容保證不變，長效快取安全無虞
+- 新增迴歸測試 `test_vendor_cache_headers_2026_09_08.py`（3 題，驗證 vendor 長快取／其餘頁面 JS／HTML 仍是 no-store）
+- **尚待驗證**：這個修復能否讓整套 pytest 跑穩仍待下次 `build_deploy_package.ps1` 實測確認；「整套跑到中段 GC/物件累積壓力」目前仍是未經證實的假設，若修復後整套跑依然偶發逾時，代表放大因子還有其他來源，需要繼續排查（而非再次單純加大等待時限）
+
 ### 2026-09-07（最末之四）— 排查 `test_login_create_submit_approve_smoke` flaky 根因：排除執行緒資源洩漏
 
 - **背景**：這條已知 flaky 測試（見 §12 2026-09-07j 條目起持續加大等待時限的記錄）今晚連續 4 次在整套打包流程的 pytest 全跑（`build_deploy_package.ps1`）中卡在同一個逾時點（`page2.wait_for_selector('button:has-text("預覽後簽核")', timeout=30000)`），但單獨只跑這個檔案時 3/3 穩定通過，直接卡住緊急部署（pip install 修復包）的收尾
