@@ -1087,7 +1087,7 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 | ✅ | ~~通知路由只接了「工作事項逾期未完成」一個事件~~（已擴充到案件執行進度／專案到期兩個事件，`case_stage_deadline_manager`／`project_deadline_manager`，見 §12 2026-08-22k）；報表/儀表板依部門篩選仍只涵蓋 `reports.py`／`dashboard.py`（含新增的 `projectSummary`），activity-feed 仍只有「案件留言板」區塊套用篩選 |
 | 🟡 | 組織架構目前只有二層（處→部門），使用者僅能透過部門間接歸屬於處，不支援「只屬於某處、不屬於任何部門」的直接指派 |
 | ✅ | ~~專案管理「確認事項」兩階段簽核尚未接上 `helpers/tiered_approval.py` 的動態解析~~（已新增部門主管/處主管動態解析為額外路徑，`project_approve_eng`/`project_approve_biz` 模組權限完全保留，見 §12 2026-08-23d） |
-| 🟡 | **caseRecord.stages 正規化進行中（目前完成①②③a）**：①`case_stages`/`case_stage_visits` 兩張表已建立並回填既有資料（見 §12 2026-08-23h）②完整 CRUD 端點已新增（見 §12 2026-08-23i）③a 新舊兩條寫入路徑現在**雙向同步**——Phase 2 那 10 個新端點寫入後會同步回 `caseRecord.stages` JSON（`_sync_stages_to_json`），現有的整包存檔端點 `update_case_record()` 收到前端送來的 `stages` 也會同步重建回 `case_stages` 表（`_sync_json_stages_to_table`，見 §12 2026-08-23j）。**使用者現在透過既有介面編輯階段仍然正常運作、不受影響**，只是現在額外也會同步進新表；四個既有讀取點（`list_quotations`/`stage_board`/`dashboard.py`/`daily_tasks.py`）維持不用改。剩餘工作：③b 前端 `case-management.js`（~18 個函式）／`case-management.html` 真正改呼叫新端點取代目前的整包存檔模式（風險最高的一步，動到即時編輯體驗）④修正 `quotation-form.html` 落差（`ensureCaseRecord()` 預設階段模板少欄位，現在已有雙向同步保護不會資料損毀，但模板本身仍需修正）⑤讀取點改查新表當效能優化（非必要，已非正確性問題）。每階段各自規劃/驗證/上線，不會一次做完 |
+| ✅ | ~~caseRecord.stages 正規化進行中~~（**2026-09-07 依實際程式碼複查更正**：①②③a 早已完成，③b 前端切換與④ `quotation-form.html` 落差修正**也已經在 2026-08-23 當天完成**——`case-management.js` 全部 10 個階段操作函式已改打 `/api/quotations/{no}/stages...` 專屬端點，`quotation-form.html::ensureCaseRecord()` 也已改成空陣列＋API 建立預設階段。這批工作是在正式機斷線期間直接於正式機完成，事後用一次大批量回推 commit `2b8e7ad` 拉回開發機，當時沒有補一篇正式 changelog／§11 更新，導致本節長期誤記為「進行中」。⑤讀取點改查新表當效能優化仍非必要、維持現狀。**2026-09-07 複查時另外發現並修復的真缺口**：這批 granular 端點本身先前幾乎沒有正面路徑測試（先前 `backend/tests/` 唯一涵蓋 `/stages` 的地方只測「已結案案件鎖定」情境）——已新增 `test_case_stages_endpoints_2026_09_07.py`（11 題，涵蓋 CRUD／負責人／前置階段防環／拜訪紀錄／跨案件 id 隔離／`_sync_stages_to_json` 橋樑／鎖定案件擋下），並修正 10 個端點 docstring 裡「尚未接進任何前端頁面」的過期字樣） |
 | ✅ | ~~案件執行進度沒有跨案的時間軸或看板視圖~~（新增 `case-stage-board.html`：看板五欄＋跨案時間軸，見 §12 2026-08-23c）；專案時程跨專案視覺化仍未做，`dashboard.py` 目前只有依狀態分組的專案彙總卡片（2026-08-22k） |
 | ✅ | ~~案件完結案缺防呆機制~~（2026-08-25 使用者提出，2026-08-26 已施作：`update_deal_tag()` 轉入「已結案」前檢查①`case_stages` 全部完成②`payment.items` 全部收齊③關聯單據皆無待審核中，任一未達成回 400 並通知尚未完成該項的簽核人＋最高管理員，見 §12 2026-08-26） |
 | 🟡 | **已結案案件解鎖/半解鎖（2026-08-26 新增，範圍刻意收斂，非完整涵蓋）**：新增 `case-unlock`/`case-lock` 讓已結案案件進入「半解鎖」狀態，僅 8 個端點（案件記錄整包存檔／款項標記收款／款項發票附件／叫料附件／叫料發票附件共 8 支）支援半解鎖期間排隊等 superadmin 審核套用；案件執行階段細項端點（10 支）與款項稅額沖銷（3 支）刻意不支援排隊，已結案時一律直接 403（不論是否半解鎖），需要修正時只能透過案件資料整體編輯或聯繫最高管理員直接校正。之後若要擴大涵蓋範圍，比照 `case_record_update` 的「暫存 payload_json、核准時重放同一段套用邏輯」模式即可，見 db.py `_m061_case_semi_unlock()` docstring。 |
@@ -1105,6 +1105,12 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
 
+### 2026-09-07 — 更正 caseRecord.stages 正規化狀態記載＋補齊階段端點測試（DB 無異動）
+
+- 複查本文件 §11 發現「caseRecord.stages 正規化進行中」記載已過期：核對程式碼確認 Phase 3b（前端切換）與 Phase 4（`quotation-form.html` 落差修正）其實早在 2026-08-23 就已完成，只是當時在正式機斷線期間直接開發、事後靠一次大批量回推 commit `2b8e7ad` 拉回開發機沒有補記錄。已更正 §11，詳見該處說明
+- 補上真缺口：10 個階段 CRUD 端點先前幾乎沒有正面路徑測試，新增 `test_case_stages_endpoints_2026_09_07.py`（11 題），並修正 10 個端點 docstring 裡「尚未接進任何前端頁面」的過期字樣
+- pytest 400/400 全過
+
 ### 2026-09-06 — 完整版規劃書拓樸圖三輪修復＋品牌文字統一「MOTRIX 專案管理系統」（DB 無異動）
 
 - 品牌顯示文字全面從「營運系統」統一改為「MOTRIX 專案管理系統」：分兩輪掃描共 46 檔案 53 處（44 個前端頁面 `<title>`、2 處動態 `document.title`、`email_notify.py` 5 處信件頁尾、docs 文件標題）——第一輪只精確比對「營運系統」四字漏抓「營運管理系統」（中間多「管理」二字非連續子字串），第二輪全面掃描已追蹤檔案才補齊
@@ -1113,15 +1119,7 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 - 快速拓樸圖 PDF 格式/分頁改回比照 `b1f_topology.py` 原始腳本
 - pytest 389/389 全過（每輪皆用合成資料＋開發機真實 API 雙重驗證，逐版拿 PDF 實測比對）
 
-### 2026-09-04 — 網路架構規劃書拓樸圖功能上線＋快速拓樸圖工具
-
-- 新模組 `network_plan_topology.py::build_topology_svg()`：規劃書設備清單＋交換器 Port 對應明細自動產生拓樸圖 SVG／PDF 內嵌，取代舊個案腳本 `b1f_topology.py` 手動繪製；四種防呆情況（埠號超出範圍/設備名稱重複/連線目標找不到/`linkDevice` 大小寫打錯疑似）回傳 `warnings` 不靜默漏資料，見 §7.12
-- 交換器 Port 對應新增「依設備清單自動產生缺少的埠列」一鍵按鈕；10 個明細分頁改密集網格表格＋新增「貼上 Excel 資料」比對匯入
-- 新增獨立無狀態頁面「快速拓樸圖產生器」（`topology-quick.html`＋`routers/network_plans_quick.py`），**不寫入** `network_plans` 資料表，資料只存瀏覽器 localStorage，對應「不填企劃書、單純產拓樸圖」的用完即丟情境
-- 同日追加三輪：PDF 改 A4 直版＋補文字版埠位對照表＋不被印表分頁切斷；交換器埠位排列樣式可選（雙排交錯/單排橫向）；複查真實 PDF 輸出額外抓到並修復 3 個既有繪圖 bug（文字重疊/標籤被面板遮擋/長名稱被畫布邊界裁切）
-- 測試新增 18 題，388 測試全過；已用真實瀏覽器完整驗證。**這輪視覺類 bug 全靠使用者拿真實 PDF 實測回饋才抓到，之後拓樸圖相關改動建議都產一份真實 PDF 肉眼複查，不要只信 pytest 綠燈**
-
-> 2026-09-02（業務開發新增暫擱置狀態＋營運報表反派/國稅局視角複查）及更早版本已移出本視窗，完整內容見 [`CHANGELOG.md`](CHANGELOG.md)。
+> 2026-09-04（網路架構規劃書拓樸圖功能上線＋快速拓樸圖工具）及更早版本已移出本視窗，完整內容見 [`CHANGELOG.md`](CHANGELOG.md)。
 
 ## §13 · 目錄結構（精簡，2026-09-01 依實際程式碼盤點更正）
 

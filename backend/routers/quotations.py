@@ -2058,8 +2058,9 @@ def list_case_stages_normalized(quote_no: str, authorization: str = Header(None)
 
 @router.post("/api/quotations/{quote_no}/stages", status_code=201)
 def create_case_stage(quote_no: str, body: dict = Body(...), authorization: str = Header(None)):
-    """新增階段，對應 case-management.js::addStage()。第二階段 CRUD 端點，尚未接進
-    任何前端頁面（2026-08-23）。"""
+    """新增階段，對應 case-management.js::addStage()。第二階段 CRUD 端點，2026-08-23
+    Phase 3b/4 起已由 case-management.js／quotation-form.html 實際呼叫（見 2026-09-07
+    docstring 更正紀錄，本行原誤留 Phase 2 剛新增時「尚未接進」的舊字樣）。"""
     _require_user(authorization)
     conn = get_db()
     _deny_if_case_locked_unsupported(conn, quote_no, authorization)
@@ -2087,7 +2088,7 @@ def update_case_stage(quote_no: str, stage_id: int, body: dict = Body(...), auth
     """局部更新階段欄位（label/done/doneAt/startDate/dueDate），對應 case-management.html
     的 x-model 直接綁定欄位＋renderGantt() 的 on_date_change。不加任何自動邏輯（例如
     done=true 不自動填 doneAt）——維持跟現有前端行為一致，各欄位互相獨立。第二階段
-    CRUD 端點，尚未接進任何前端頁面（2026-08-23）。"""
+    CRUD 端點，已由前端實際呼叫（見 create_case_stage() docstring）。"""
     _require_user(authorization)
     conn = get_db()
     _deny_if_case_locked_unsupported(conn, quote_no, authorization)
@@ -2117,8 +2118,8 @@ def update_case_stage(quote_no: str, stage_id: int, body: dict = Body(...), auth
 @router.delete("/api/quotations/{quote_no}/stages/{stage_id}")
 def delete_case_stage(quote_no: str, stage_id: int, authorization: str = Header(None)):
     """刪除階段，同時清掉同案件其他階段 dependsOn 裡對它的參照，對應
-    case-management.js::removeStage()。第二階段 CRUD 端點，尚未接進任何前端頁面
-    （2026-08-23）。"""
+    case-management.js::removeStage()。第二階段 CRUD 端點，已由前端實際呼叫
+    （見 create_case_stage() docstring）。"""
     _require_user(authorization)
     conn = get_db()
     _deny_if_case_locked_unsupported(conn, quote_no, authorization)
@@ -2145,7 +2146,7 @@ def delete_case_stage(quote_no: str, stage_id: int, authorization: str = Header(
 @router.patch("/api/quotations/{quote_no}/stages/reorder")
 def reorder_case_stages(quote_no: str, body: dict = Body(...), authorization: str = Header(None)):
     """依 orderedIds 陣列順序重寫 sort_order，對應拖曳重排（dragOver/dragEnd）的最終
-    結果。第二階段 CRUD 端點，尚未接進任何前端頁面（2026-08-23）。"""
+    結果。第二階段 CRUD 端點，已由前端實際呼叫（見 create_case_stage() docstring）。"""
     _require_user(authorization)
     ordered_ids = body.get("orderedIds") or []
     conn = get_db()
@@ -2167,7 +2168,7 @@ def reorder_case_stages(quote_no: str, body: dict = Body(...), authorization: st
 @router.post("/api/quotations/{quote_no}/stages/{stage_id}/assignees")
 def add_stage_assignee(quote_no: str, stage_id: int, body: dict = Body(...), authorization: str = Header(None)):
     """加入負責人，對應 case-management.js::addStageAssignee()。第二階段 CRUD 端點，
-    尚未接進任何前端頁面（2026-08-23）。"""
+    已由前端實際呼叫（見 create_case_stage() docstring）。"""
     _require_user(authorization)
     username = body.get("username")
     if not username:
@@ -2193,7 +2194,7 @@ def add_stage_assignee(quote_no: str, stage_id: int, body: dict = Body(...), aut
 @router.delete("/api/quotations/{quote_no}/stages/{stage_id}/assignees/{username}")
 def remove_stage_assignee(quote_no: str, stage_id: int, username: str, authorization: str = Header(None)):
     """移除負責人，對應 case-management.js::removeStageAssignee()。第二階段 CRUD 端
-    點，尚未接進任何前端頁面（2026-08-23）。"""
+    點，已由前端實際呼叫（見 create_case_stage() docstring）。"""
     _require_user(authorization)
     conn = get_db()
     _deny_if_case_locked_unsupported(conn, quote_no, authorization)
@@ -2215,7 +2216,7 @@ def remove_stage_assignee(quote_no: str, stage_id: int, username: str, authoriza
 def toggle_stage_dependency(quote_no: str, stage_id: int, candidate_id: int, authorization: str = Header(None)):
     """切換依賴關係：已存在就移除，不存在就先做防環檢查（DFS，邏輯照搬
     wouldCreateCycle()）再加入。對應 case-management.js::toggleStageDependency()。
-    第二階段 CRUD 端點，尚未接進任何前端頁面（2026-08-23）。"""
+    第二階段 CRUD 端點，已由前端實際呼叫（見 create_case_stage() docstring）。"""
     _require_user(authorization)
     conn = get_db()
     _deny_if_case_locked_unsupported(conn, quote_no, authorization)
@@ -2244,8 +2245,8 @@ def toggle_stage_dependency(quote_no: str, stage_id: int, candidate_id: int, aut
 
 @router.post("/api/quotations/{quote_no}/stages/{stage_id}/visits", status_code=201)
 def add_stage_visit(quote_no: str, stage_id: int, body: dict = Body(...), authorization: str = Header(None)):
-    """新增拜訪紀錄，對應 case-management.js::addVisit()。第二階段 CRUD 端點，尚未
-    接進任何前端頁面（2026-08-23）。"""
+    """新增拜訪紀錄，對應 case-management.js::addVisit()。第二階段 CRUD 端點，
+    已由前端實際呼叫（見 create_case_stage() docstring）。"""
     _require_user(authorization)
     conn = get_db()
     _deny_if_case_locked_unsupported(conn, quote_no, authorization)
@@ -2269,7 +2270,7 @@ def add_stage_visit(quote_no: str, stage_id: int, body: dict = Body(...), author
 @router.put("/api/quotations/{quote_no}/stages/{stage_id}/visits/{visit_id}")
 def update_stage_visit(quote_no: str, stage_id: int, visit_id: int, body: dict = Body(...), authorization: str = Header(None)):
     """局部更新拜訪紀錄欄位，對應 v.visitDate/v.visitPeople/v.note 的 x-model 綁定。
-    第二階段 CRUD 端點，尚未接進任何前端頁面（2026-08-23）。"""
+    第二階段 CRUD 端點，已由前端實際呼叫（見 create_case_stage() docstring）。"""
     _require_user(authorization)
     conn = get_db()
     _deny_if_case_locked_unsupported(conn, quote_no, authorization)
@@ -2298,7 +2299,7 @@ def update_stage_visit(quote_no: str, stage_id: int, visit_id: int, body: dict =
 @router.delete("/api/quotations/{quote_no}/stages/{stage_id}/visits/{visit_id}")
 def delete_stage_visit(quote_no: str, stage_id: int, visit_id: int, authorization: str = Header(None)):
     """刪除拜訪紀錄，對應 case-management.js::removeVisit()。第二階段 CRUD 端點，
-    尚未接進任何前端頁面（2026-08-23）。"""
+    已由前端實際呼叫（見 create_case_stage() docstring）。"""
     _require_user(authorization)
     conn = get_db()
     _deny_if_case_locked_unsupported(conn, quote_no, authorization)
