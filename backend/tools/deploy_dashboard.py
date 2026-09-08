@@ -378,6 +378,12 @@ class DeployIn(BaseModel):
     username: str
     password: str
     confirm: bool = False
+    # 2026-09-08 新增：健康檢查機制這一晚已證實會用好幾種不同方式誤判，
+    # 導致明明程式碼跟 pytest 都沒問題卻連續被自動回滾。這個選項讓套用後
+    # 健康檢查失敗時不自動回滾，改成需要人工確認——db/程式碼快照仍然照常
+    # 建立，只是「自動判定→自動回滾」這段換成人工決定。預設關閉，不是
+    # 日常部署的預設行為，只在已經反覆確認健康檢查本身不可靠時才勾選。
+    skipAutoRollback: bool = False
 
 
 @app.post("/api/deploy")
@@ -393,10 +399,10 @@ def start_deploy(body: DeployIn):
     job_id = uuid.uuid4().hex
     if not _try_acquire_job_lock(job_id):
         return JSONResponse(status_code=409, content={"detail": "已經有一個部署/回滾工作正在執行，請等它結束再試"})
-    cmd = _ps_cmd(
-        TOOLS_DIR / "_dashboard_remote.ps1",
-        {"Action": "deploy", "Username": body.username, "PackagePath": str(package_path)},
-    )
+    named_args = {"Action": "deploy", "Username": body.username, "PackagePath": str(package_path)}
+    if body.skipAutoRollback:
+        named_args["SkipAutoRollback"] = "true"
+    cmd = _ps_cmd(TOOLS_DIR / "_dashboard_remote.ps1", named_args)
     threading.Thread(
         target=_run_job, args=(job_id, "deploy", cmd, body.password + "\n"), daemon=True
     ).start()

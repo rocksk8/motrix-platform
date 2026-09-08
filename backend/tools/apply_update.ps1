@@ -22,12 +22,24 @@
                                                                                           # 事後對正在跑的遠端 script block 注入 y/N，
                                                                                           # 所以由呼叫端自己的 UI 提供等價確認）
     powershell -ExecutionPolicy Bypass -File apply_update.ps1 -CheckOnly                # 只測健康檢查邏輯，不部署（見下方）
+    powershell -ExecutionPolicy Bypass -File apply_update.ps1 -PackagePath ... -SkipAutoRollback -Yes  # 見下方，謹慎使用
 
   -CheckOnly（2026-09-08 新增）：只對目前正在跑的伺服器打一次 /api/ping、印出結果就結束，
     不做備份／停服／複製程式碼／pip install／回滾等任何動作，也不需要 -PackagePath。用途是
     驗證「健康檢查機制本身」對不對（例如這次修 HTTPS 健康檢查的 curl.exe 邏輯）——2026-09-08
     當天為了驗證一個健康檢查修復，被迫實際跑了兩次完整的部署+回滾循環（各自停服＋可能觸發
     不必要的回滾），這個模式讓同樣的驗證 10 秒內完成、完全不影響正在運作的服務。
+
+  -SkipAutoRollback（2026-09-08 再新增）：健康檢查機制本身這一晚已經證實會用至少三種
+    不同方式誤判（Schannel/Runspace 崩潰、Python 健康檢查腳本本身的例外、Windows asyncio
+    良性 ConnectionResetError 雜訊被當成錯誤），每修好一種就冒出下一種，導致明明程式碼跟
+    pytest（467/467）都沒問題，卻連續套用失敗被自動回滾，兩邊檔案一直對不齊。這個旗標讓
+    Step 5 健康檢查照常執行、照常印出結果，但**不**在判定失敗時自動觸發回滾——只印出醒目
+    警告，把新程式碼留在原地，改成需要人工用瀏覽器或 -CheckOnly 確認真實健康狀態後自己決定
+    是否要用 rollback_update.ps1 手動回滾。**不是關掉健康檢查，是把「自動判定→自動回滾」
+    這個目前不可靠的自動化環節換成人工決定**；db／程式碼快照（Step 1）完全不受影響，
+    仍然照常建立，人工要回滾一樣有得用。只建議在像這次這種「健康檢查本身已被證實反覆
+    誤判、且已用其他管道獨立確認過服務其實正常」的情況下才使用，不是日常部署的預設選項。
 #>
 
 [CmdletBinding()]
@@ -36,7 +48,8 @@ param(
 
     [switch]$Force,
     [switch]$Yes,
-    [switch]$CheckOnly
+    [switch]$CheckOnly,
+    [switch]$SkipAutoRollback
 )
 
 $ErrorActionPreference = "Stop"
@@ -463,6 +476,20 @@ if (Test-Path $logPath) {
 
 if ($healthy -and -not $logErrors) {
     Ok "  /api/ping 回應正常，log 未見新錯誤。"
+} elseif ($SkipAutoRollback) {
+    Write-Host ""
+    Write-Host "======================================" -ForegroundColor Yellow
+    Write-Host "  健康檢查判定異常：healthy=$healthy, log 錯誤筆數=$($logErrors.Count)" -ForegroundColor Yellow
+    Write-Host "  已依 -SkipAutoRollback 略過自動回滾——新程式碼維持在原地，不會被還原。" -ForegroundColor Yellow
+    Write-Host "  這不代表服務真的正常，只是健康檢查機制本身這一晚已多次證實不可靠，" -ForegroundColor Yellow
+    Write-Host "  改為需要人工確認。請立刻用瀏覽器或 -CheckOnly 確認真實健康狀態；" -ForegroundColor Yellow
+    Write-Host "  如果確認真的壞了，回滾快照留存於：$rollbackDir" -ForegroundColor Yellow
+    Write-Host "  db 套用前快照留存於：$dbBackupDir（用 rollback_update.ps1 手動回滾）" -ForegroundColor Yellow
+    Write-Host "======================================" -ForegroundColor Yellow
+    if ($logErrors) {
+        Write-Host "  （log 錯誤內容已列印在上方，供人工判斷是否為已知良性雜訊之外的真實問題）" -ForegroundColor Yellow
+    }
+    exit 0
 } else {
     Warn "  套用後健康檢查失敗：healthy=$healthy, log 錯誤筆數=$($logErrors.Count)"
     Warn "  觸發自動回滾（程式碼 + 資料庫）..."

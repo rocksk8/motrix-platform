@@ -82,6 +82,10 @@
     <select id="pkgSelect"></select>
     <input id="deployUser" placeholder="正式機帳號（例如 Motrix）" value="Motrix">
     <input id="deployPass" type="password" placeholder="正式機密碼">
+    <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#F59E0B;margin-bottom:8px">
+      <input type="checkbox" id="skipAutoRollback" style="width:auto;margin:0">
+      略過自動回滾（健康檢查失敗也不還原，需人工確認——僅在已確認健康檢查本身不可靠時使用）
+    </label>
     <button onclick="requestDeploy()">部署</button>
     <div class="confirm-box hidden" id="deployConfirm"></div>
     <div class="log hidden" id="deployLog"></div>
@@ -223,16 +227,20 @@ async function requestDeploy() {
   const pkg = document.getElementById('pkgSelect').value;
   const username = document.getElementById('deployUser').value.trim();
   const password = document.getElementById('deployPass').value;
+  const skipAutoRollback = document.getElementById('skipAutoRollback').checked;
   if (!pkg || !username || !password) { alert('請填完整資訊'); return; }
 
   const pre = await (await fetch('/api/pre-deploy-check')).json();
   if (pre.busy) { alert('已經有一個部署/回滾工作正在執行，請等它結束再試'); return; }
 
-  pendingDeploy = { pkg, username, password };
+  pendingDeploy = { pkg, username, password, skipAutoRollback };
   const box = document.getElementById('deployConfirm');
   box.classList.remove('hidden');
   const warningHtml = pre.warning ? `<div style="color:#F87171;margin-bottom:8px">${pre.warning}</div>` : '';
-  box.innerHTML = `${warningHtml}即將把部署包 <b>${pkg}</b> 套用到正式機 172.16.10.177。此操作會停止服務、覆蓋程式碼、可能觸發資料庫 migration。確定要繼續嗎？
+  const skipHtml = skipAutoRollback
+    ? `<div style="color:#F59E0B;margin-bottom:8px">⚠️ 已勾選「略過自動回滾」——健康檢查失敗也不會自動還原，新程式碼會留在正式機，需要你自己確認健康狀態、必要時手動回滾。</div>`
+    : '';
+  box.innerHTML = `${warningHtml}${skipHtml}即將把部署包 <b>${pkg}</b> 套用到正式機 172.16.10.177。此操作會停止服務、覆蓋程式碼、可能觸發資料庫 migration。確定要繼續嗎？
     <div style="margin-top:10px"><button class="danger" onclick="confirmDeploy()">確認套用</button> <button class="ghost" onclick="cancelDeploy()">取消</button></div>`;
 }
 function cancelDeploy() {
@@ -241,14 +249,14 @@ function cancelDeploy() {
 }
 async function confirmDeploy() {
   document.getElementById('deployConfirm').classList.add('hidden');
-  const { pkg, username, password } = pendingDeploy;
+  const { pkg, username, password, skipAutoRollback } = pendingDeploy;
   document.getElementById('deployPass').value = '';
   pendingDeploy = null;
   const deployLog = document.getElementById('deployLog');
   deployLog.textContent = '';
   const res = await fetch('/api/deploy', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ package: pkg, username, password, confirm: true })
+    body: JSON.stringify({ package: pkg, username, password, confirm: true, skipAutoRollback })
   });
   if (!res.ok) { const e = await res.json(); alert(e.detail || '部署請求失敗'); return; }
   const { jobId } = await res.json();

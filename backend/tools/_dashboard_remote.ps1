@@ -26,7 +26,13 @@ param(
 
     [string]$PackagePath,
     [string]$SnapshotTimestamp,
-    [int]$Lines = 300
+    [int]$Lines = 300,
+    # 2026-09-08 新增：字串而不是 [switch]——這支腳本的所有參數都是透過
+    # deploy_dashboard.py 的 _ps_cmd()（固定用 -Name 'value' 空白分隔形式組
+    # 指令字串）傳進來，[switch] 參數用這種傳法容易產生繫結歧義（該用
+    # -Name:$true 而非 -Name 'value'）。用字串 "true"/"false" 換取呼叫端
+    # 一致性，內部再轉成布林。
+    [string]$SkipAutoRollback = "false"
 )
 
 $ErrorActionPreference = "Stop"
@@ -86,10 +92,16 @@ try {
         # 畫面會整段時間空白、最後才一次噴出全部內容，等於弄丟了原本「即時
         # 滾動 log」的體驗。用管線接 ForEach-Object，每個物件從遠端一抵達
         # 就立刻處理／印出，結束碼標記那一行到達時再另外攔截存起來即可。
+        $skipRollbackBool = ($SkipAutoRollback -eq "true")
+        if ($skipRollbackBool) {
+            Write-Host "[注意] 本次套用帶 -SkipAutoRollback：健康檢查若判定異常，正式機不會自動回滾，需要人工確認。" -ForegroundColor Yellow
+        }
         $remoteExitCode = $null
-        Invoke-Command -Session $session -ArgumentList $remotePkgPath, $ProdRoot -ScriptBlock {
-            param($RemotePkgPath, $Root)
-            powershell -ExecutionPolicy Bypass -File "$Root\backend\tools\apply_update.ps1" -PackagePath $RemotePkgPath -Yes
+        Invoke-Command -Session $session -ArgumentList $remotePkgPath, $ProdRoot, $skipRollbackBool -ScriptBlock {
+            param($RemotePkgPath, $Root, $SkipRollback)
+            $applyArgs = @("-ExecutionPolicy", "Bypass", "-File", "$Root\backend\tools\apply_update.ps1", "-PackagePath", $RemotePkgPath, "-Yes")
+            if ($SkipRollback) { $applyArgs += "-SkipAutoRollback" }
+            & powershell @applyArgs
             Write-Output "===EXITCODE=$LASTEXITCODE==="
         } | ForEach-Object {
             if ($_ -match '^===EXITCODE=(-?\d+)===$') {
