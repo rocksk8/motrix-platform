@@ -161,7 +161,14 @@
         </div>
       </template>
 
-      <template x-if="!invalid && !done">
+      <template x-if="!invalid && !done && autoTrying">
+        <div class="status-box">
+          <div class="spinner" style="margin:0 auto 10px"></div>
+          正在用這支手機目前的登入狀態核准…
+        </div>
+      </template>
+
+      <template x-if="!invalid && !done && !autoTrying">
         <div>
           <div class="card-title">核准登入</div>
           <div class="card-sub">
@@ -204,6 +211,7 @@
       error: '',
       invalid: false,
       done: false,
+      autoTrying: false,
 
       async init() {
         this.challengeToken = new URLSearchParams(window.location.search).get('challenge') || ''
@@ -215,6 +223,31 @@
           this.maskedUsername = data.maskedUsername || ''
         } catch (e) {
           this.invalid = true
+          return
+        }
+
+        // 2026-09-08 新增：這支手機的瀏覽器如果自己已經是登入狀態（之前用
+        // 密碼登入過、還沒過期），先安靜試一次用現有 session 直接核准，
+        // 不用再輸入一次密碼。伺服器那端一定會核對這個 session 的帳號跟這
+        // 次核准請求的目標帳號是否相同，不符合就會被拒絕——這裡失敗了只是
+        // 靜靜退回手動輸入密碼表單，不特別顯示成「錯誤」，因為「這支手機
+        // 沒登入過這個帳號」是完全正常、預期中的情況，不是使用者的操作失誤。
+        let sessionToken = ''
+        try {
+          const stored = JSON.parse(localStorage.getItem('motrix_session') || '{}')
+          sessionToken = stored.token || ''
+        } catch (e) {}
+        if (sessionToken) {
+          this.autoTrying = true
+          try {
+            const res = await fetch('/api/auth/login/qr-approve', {
+              method:  'POST',
+              headers: {'Content-Type': 'application/json'},
+              body:    JSON.stringify({ challenge_token: this.challengeToken, session_token: sessionToken })
+            })
+            if (res.ok) { this.done = true; return }
+          } catch (e) {}
+          this.autoTrying = false
         }
       },
 

@@ -147,6 +147,107 @@ def test_qr_approve_and_manual_code_share_fail_counter(client, make_user):
     assert again.status_code == 400, again.text
 
 
+def test_qr_approve_via_session_token_same_account_succeeds(client, make_user):
+    # 2026-09-08（再新增）：手機瀏覽器已經是登入狀態時免再輸入密碼——用手機
+    # 現有 session token 核准，只要 session 的帳號跟這次核准請求的目標帳號
+    # 相同即可，不需要密碼。
+    username, password = make_user(role="superadmin")
+    phone_session_token = _login(client, username, password)["token"]
+    _enable_totp(client, phone_session_token)
+    challenge = client.post(
+        "/api/auth/login", json={"username": username, "password": password}
+    ).json()["challengeToken"]
+
+    approve = client.post(
+        "/api/auth/login/qr-approve",
+        json={"challenge_token": challenge, "session_token": phone_session_token},
+    )
+    assert approve.status_code == 200, approve.text
+    assert approve.json() == {"ok": True}
+
+    status = client.get(f"/api/auth/login/qr-status?challenge={challenge}")
+    assert status.status_code == 200, status.text
+    assert status.json()["username"] == username
+
+
+def test_qr_approve_via_session_token_different_account_rejected(client, make_user):
+    username, password = make_user(role="superadmin")
+    token = _login(client, username, password)["token"]
+    _enable_totp(client, token)
+    challenge = client.post(
+        "/api/auth/login", json={"username": username, "password": password}
+    ).json()["challengeToken"]
+
+    other_username, other_password = make_user(username="other_tester", role="viewer")
+    other_session_token = _login(client, other_username, other_password)["token"]
+
+    r = client.post(
+        "/api/auth/login/qr-approve",
+        json={"challenge_token": challenge, "session_token": other_session_token},
+    )
+    assert r.status_code == 401, r.text
+
+    # 沒有真的核准掉——challenge 仍然 pending，不因為錯的 session 就被消耗掉
+    status = client.get(f"/api/auth/login/qr-status?challenge={challenge}")
+    assert status.status_code == 200, status.text
+    assert status.json() == {"pending": True}
+
+
+def test_qr_approve_via_bogus_session_token_rejected(client, make_user):
+    username, password = make_user(role="superadmin")
+    token = _login(client, username, password)["token"]
+    _enable_totp(client, token)
+    challenge = client.post(
+        "/api/auth/login", json={"username": username, "password": password}
+    ).json()["challengeToken"]
+
+    r = client.post(
+        "/api/auth/login/qr-approve",
+        json={"challenge_token": challenge, "session_token": "not-a-real-session-token"},
+    )
+    assert r.status_code == 401, r.text
+
+
+def test_qr_approve_without_password_or_session_token_400(client, make_user):
+    username, password = make_user(role="superadmin")
+    token = _login(client, username, password)["token"]
+    _enable_totp(client, token)
+    challenge = client.post(
+        "/api/auth/login", json={"username": username, "password": password}
+    ).json()["challengeToken"]
+
+    r = client.post("/api/auth/login/qr-approve", json={"challenge_token": challenge})
+    assert r.status_code == 400, r.text
+
+
+def test_qr_approve_via_session_token_does_not_consume_shared_fail_counter(client, make_user):
+    # session token 不是「猜測型」憑證，錯的 session token 不該計入跟密碼/
+    # 驗證碼共用的 fails 上限——連續打錯 session token 很多次，之後改用
+    # 正確密碼仍然要能核准成功。
+    headers = {"X-Forwarded-For": "203.0.113.203"}
+    username, password = make_user(role="superadmin")
+    token = _login(client, username, password)["token"]
+    _enable_totp(client, token)
+    challenge = client.post(
+        "/api/auth/login", json={"username": username, "password": password}, headers=headers
+    ).json()["challengeToken"]
+
+    for _ in range(6):
+        r = client.post(
+            "/api/auth/login/qr-approve",
+            json={"challenge_token": challenge, "session_token": "not-a-real-session-token"},
+            headers=headers,
+        )
+        assert r.status_code == 401, r.text
+
+    approve = client.post(
+        "/api/auth/login/qr-approve",
+        json={"challenge_token": challenge, "password": password},
+        headers=headers,
+    )
+    assert approve.status_code == 200, approve.text
+
+
 def test_qr_approve_correct_password_then_status_issues_session_once(client, make_user):
     username, password = make_user(role="superadmin")
     token = _login(client, username, password)["token"]

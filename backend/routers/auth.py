@@ -192,7 +192,10 @@ class TotpLoginVerifyIn(BaseModel):
 
 class QrApproveIn(BaseModel):
     challenge_token: str
-    password: str
+    password: Optional[str] = None
+    # 2026-09-08 新增：手機瀏覽器如果自己已經是登入狀態，帶現有 session token
+    # 免再輸入密碼一次核准（見 login_qr_approve() 內的分流邏輯）。
+    session_token: Optional[str] = None
 
 
 class TotpEnableIn(BaseModel):
@@ -502,10 +505,11 @@ def login_qr_info(challenge: str):
 
 @router.post("/api/auth/login/qr-approve")
 def login_qr_approve(body: QrApproveIn, request: Request):
-    """Public — phone submits the account password here to approve the
-    pending login. Does NOT issue a session (the phone shouldn't hold the
-    desktop's token) — it just flips pending["approved"], which
-    login_qr_status() below (polled by the desktop) picks up."""
+    """Public — phone approves the pending login here, either by password or
+    (2026-09-08 新增) by an existing session token already held by that
+    phone's browser. Does NOT issue a session for the phone itself (it
+    shouldn't hold the desktop's token) — it just flips pending["approved"],
+    which login_qr_status() below (polled by the desktop) picks up."""
     ip = _client_ip(request)
     _totp_sweep_expired()
     with _totp_lock:
@@ -518,7 +522,30 @@ def login_qr_approve(body: QrApproveIn, request: Request):
         "SELECT id, username, password_hash FROM users WHERE id=?",
         (pending["user_id"],),
     ).fetchone()
+
+    if body.session_token:
+        # 手機瀏覽器已經是登入狀態時免再輸入密碼——用手機現有 session 驗證
+        # 身分，但仍要求 session 的帳號跟這次核准請求的目標帳號完全相同，
+        # 不能拿「手機上隨便哪個已登入帳號」核准別人的登入請求。session
+        # token 是 32-byte 隨機值，不像密碼/驗證碼可被暴力猜測，這條路徑
+        # 刻意不計入共用的 fails 計數器（比照既有慣例：只有「猜測型」的
+        # 失敗才計入 lockout）。
+        sess = conn.execute(
+            "SELECT user_id FROM sessions WHERE token=? AND expires_at > ?",
+            (body.session_token, datetime.now().isoformat()),
+        ).fetchone()
+        conn.close()
+        if not sess or not row or sess["user_id"] != row["id"]:
+            raise HTTPException(401, "手機目前登入的帳號跟這次核准請求不符，請改用密碼核准")
+        with _totp_lock:
+            still = _totp_pending.get(body.challenge_token)
+            if still:
+                still["approved"] = True
+        return {"ok": True}
+
     conn.close()
+    if not body.password:
+        raise HTTPException(400, "請輸入密碼")
 
     if not row or not _verify_pw(body.password, row["password_hash"]):
         _rl_fail(ip, row["username"] if row else "")
