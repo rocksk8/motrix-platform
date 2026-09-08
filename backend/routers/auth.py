@@ -261,7 +261,12 @@ def system_deployed_version():
     回傳空物件是正常情況，不是錯誤）。模組層級變數（而非函式內即算）方便
     測試用 monkeypatch 導向暫存路徑，不用寫進真實的 backend/ 目錄。"""
     try:
-        with open(_DEPLOYED_MARKER_PATH, encoding="utf-8") as f:
+        # utf-8-sig（不是 utf-8）：apply_update.ps1 用 PowerShell 5.1
+        # `Set-Content -Encoding UTF8` 寫這個檔案會帶 BOM，純 utf-8 遇到
+        # BOM 會讓 json.load 直接丟 JSONDecodeError，被下面 except 吞掉
+        # 悄悄回傳空物件——2026-09-08 第一次真實成功套用後才發現這個檔案
+        # 讀不到內容，見 MOTRIX-ERP-QUICK.md §12 同日條目。
+        with open(_DEPLOYED_MARKER_PATH, encoding="utf-8-sig") as f:
             return json.load(f)
     except Exception:
         return {}
