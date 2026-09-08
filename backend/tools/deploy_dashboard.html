@@ -64,9 +64,10 @@
       <div class="row"><span>領先 origin</span><span id="devAhead">…</span></div>
     </div>
     <div class="card" id="prodCard">
-      <h2>正式機（172.16.10.177）</h2>
+      <h2>正式機（172.16.10.177）<span id="wsIndicator" style="float:right;font-size:11px;color:#666">連線中…</span></h2>
       <div class="row"><span>健康狀態</span><span id="prodHealth"><span class="dot"></span>…</span></div>
       <div class="row"><span>目前部署版本</span><span id="prodCommit">…</span></div>
+      <div class="row"><span>最後確認時間</span><span id="prodCheckedAt">…</span></div>
     </div>
   </div>
 
@@ -115,7 +116,7 @@
 let pendingDeploy = null;
 let pendingRollback = null;
 
-async function refreshStatus() {
+async function refreshDevStatus() {
   try {
     const dev = await (await fetch('/api/dev-status')).json();
     document.getElementById('devBranch').textContent = dev.branch || '?';
@@ -123,15 +124,52 @@ async function refreshStatus() {
     document.getElementById('devDirty').textContent = dev.dirty ? '有未 commit 變更' : '乾淨';
     document.getElementById('devAhead').textContent = dev.aheadOfOrigin === null ? '未知' : (dev.aheadOfOrigin + ' 個 commit');
   } catch (e) {}
-
-  try {
-    const prod = await (await fetch('/api/prod-status')).json();
-    const dot = prod.healthy ? '<span class="dot ok"></span>正常' : '<span class="dot bad"></span>無回應';
-    document.getElementById('prodHealth').innerHTML = dot;
-    const dep = prod.deployed || {};
-    document.getElementById('prodCommit').textContent = dep.commit_short ? (dep.commit_short + ' (' + (dep.applied_at || '') + ')') : '未知';
-  } catch (e) {}
 }
+
+function renderProdStatus(prod) {
+  const dot = prod.healthy ? '<span class="dot ok"></span>正常' : '<span class="dot bad"></span>無回應';
+  document.getElementById('prodHealth').innerHTML = dot;
+  const dep = prod.deployed || {};
+  document.getElementById('prodCommit').textContent = dep.commit_short ? (dep.commit_short + ' (' + (dep.applied_at || '') + ')') : '未知';
+  document.getElementById('prodCheckedAt').textContent = prod.checkedAt || '…';
+}
+
+// ── 正式機狀態：WebSocket 雙向即時連線（2026-09-08 新增）───────────────────
+// 分頁打開就連線，伺服器每 4 秒主動推一次最新健康狀態／部署版本；部署或
+// 回滾 job 剛結束時額外送一個字串要求立即重查一次，不用等下一個週期。
+// 分頁關閉/重新整理時瀏覽器會自動關閉這條連線，伺服器那端的背景檢查迴圈
+// 也會跟著結束，不會留下孤兒輪詢。連線意外中斷（伺服器重啟等）但分頁還
+// 開著時，會自動重試重連。
+let prodWs = null;
+let prodWsRetryTimer = null;
+let prodWsClosedByPage = false;
+
+function connectProdWs() {
+  const indicator = document.getElementById('wsIndicator');
+  prodWs = new WebSocket(`ws://${location.host}/ws/prod-status`);
+  prodWs.onopen = () => { indicator.textContent = '即時連線中'; indicator.style.color = '#4ADE80'; };
+  prodWs.onmessage = (ev) => {
+    try { renderProdStatus(JSON.parse(ev.data)); } catch (e) {}
+  };
+  prodWs.onclose = () => {
+    if (prodWsClosedByPage) return;
+    indicator.textContent = '連線中斷，5 秒後重試…';
+    indicator.style.color = '#F87171';
+    clearTimeout(prodWsRetryTimer);
+    prodWsRetryTimer = setTimeout(connectProdWs, 5000);
+  };
+  prodWs.onerror = () => { try { prodWs.close(); } catch (e) {} };
+}
+
+function requestProdRefreshNow() {
+  if (prodWs && prodWs.readyState === WebSocket.OPEN) prodWs.send('refresh');
+}
+
+window.addEventListener('beforeunload', () => {
+  prodWsClosedByPage = true;
+  clearTimeout(prodWsRetryTimer);
+  if (prodWs) prodWs.close();
+});
 
 async function refreshPackages() {
   const pkgs = await (await fetch('/api/packages')).json();
@@ -161,7 +199,8 @@ function pollJob(jobId, logElId, onDone) {
     if (data.status === 'succeeded' || data.status === 'failed') {
       clearInterval(timer);
       if (onDone) onDone(data.status === 'succeeded');
-      refreshStatus();
+      refreshDevStatus();
+      requestProdRefreshNow();
       refreshHistory();
     }
   }, 1500);
@@ -302,10 +341,11 @@ async function loadCheckOnly() {
   logEl.scrollTop = logEl.scrollHeight;
 }
 
-refreshStatus();
+refreshDevStatus();
 refreshPackages();
 refreshHistory();
-setInterval(refreshStatus, 15000);
+connectProdWs();
+setInterval(refreshDevStatus, 15000);
 </script>
 </body>
 </html>

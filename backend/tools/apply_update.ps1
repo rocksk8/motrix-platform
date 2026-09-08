@@ -84,7 +84,12 @@ function Test-Ping {
     $prevEap = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
     try {
-        & python (Join-Path $PSScriptRoot "_healthcheck_ping.py") $Url $TimeoutSec 2>$null
+        # 2026-09-08（再修）：先前用 2>$null 把 _healthcheck_ping.py 失敗時印出的
+        # 實際例外訊息整個丟掉，導致每次健康檢查誤判都只看得到「healthy=False」
+        # 沒有原因——這正是這一晚不斷重複盲目猜測根因的主因之一。改成 2>&1
+        # 合併輸出，失敗時透過 Warn 印出腳本自己回報的失敗原因。
+        $out = & python (Join-Path $PSScriptRoot "_healthcheck_ping.py") $Url $TimeoutSec 2>&1
+        if ($LASTEXITCODE -ne 0 -and $out) { Warn "    健康檢查失敗詳情：$($out -join ' | ')" }
         return $LASTEXITCODE -eq 0
     } catch {
         return $false

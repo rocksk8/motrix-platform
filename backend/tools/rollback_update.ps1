@@ -49,7 +49,10 @@ function Test-Ping {
     $prevEap = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
     try {
-        & python (Join-Path $PSScriptRoot "_healthcheck_ping.py") $Url $TimeoutSec 2>$null
+        # 2026-09-08（再修）：同步 apply_update.ps1 的修法——2>$null 會把失敗
+        # 原因整個丟掉，改成 2>&1 合併輸出，失敗時印出腳本回報的實際原因。
+        $out = & python (Join-Path $PSScriptRoot "_healthcheck_ping.py") $Url $TimeoutSec 2>&1
+        if ($LASTEXITCODE -ne 0 -and $out) { Warn "    健康檢查失敗詳情：$($out -join ' | ')" }
         return $LASTEXITCODE -eq 0
     } catch {
         return $false

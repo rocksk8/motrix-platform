@@ -37,6 +37,9 @@ function Fail($msg) {
     Write-Host "`n[FAIL] $msg" -ForegroundColor Red
     exit 1
 }
+function Ok($msg) {
+    Write-Host "[OK] $msg" -ForegroundColor Green
+}
 
 if ($Action -eq "deploy" -and -not $PackagePath) {
     Fail "-Action deploy 需要 -PackagePath。"
@@ -68,16 +71,63 @@ try {
         Copy-Item -Path $PackagePath -Destination $remoteDest -ToSession $session -Recurse -Force
         Write-Host "推送完成，開始遠端套用..."
 
+        # 2026-09-08（重大修復）：先前這裡直接呼叫巢狀 powershell，完全沒有
+        # 檢查/回傳它的結束碼。apply_update.ps1 健康檢查失敗、觸發自動回滾
+        # 時確實會 exit 1，但 Invoke-Command 的 ScriptBlock 不會因為裡面一個
+        # 原生執行檔的非零結束碼而拋出例外，這個失敗訊號從頭到尾沒有機會
+        # 傳回開發機這邊——不管正式機那邊實際是成功、健康檢查失敗自動回滾、
+        # 還是任何其他失敗，這支腳本都會正常執行完畢、exit code 維持 0，
+        # deploy_dashboard.py 的 `success = proc.returncode == 0` 因此永遠
+        # 判定成功。已改為在遠端 ScriptBlock 內额外印出一行帶標記的結束碼，
+        # 本機這邊解析出來後才決定真的要不要 Fail（非 0 就整支腳本失敗）。
+        # 用 | ForEach-Object（不是 $x = Invoke-Command ...）串流處理——直接賦值
+        # 給變數的話，PowerShell 要等整個遠端命令跑完才會把結果一次寫進變數，
+        # 這段部署可能耗時 1~2 分鐘（健康檢查迴圈+pip install+robocopy），
+        # 畫面會整段時間空白、最後才一次噴出全部內容，等於弄丟了原本「即時
+        # 滾動 log」的體驗。用管線接 ForEach-Object，每個物件從遠端一抵達
+        # 就立刻處理／印出，結束碼標記那一行到達時再另外攔截存起來即可。
+        $remoteExitCode = $null
         Invoke-Command -Session $session -ArgumentList $remotePkgPath, $ProdRoot -ScriptBlock {
             param($RemotePkgPath, $Root)
             powershell -ExecutionPolicy Bypass -File "$Root\backend\tools\apply_update.ps1" -PackagePath $RemotePkgPath -Yes
+            Write-Output "===EXITCODE=$LASTEXITCODE==="
+        } | ForEach-Object {
+            if ($_ -match '^===EXITCODE=(-?\d+)===$') {
+                $remoteExitCode = [int]$matches[1]
+            } else {
+                Write-Host $_
+            }
         }
+        if ($null -eq $remoteExitCode) {
+            Fail "無法取得正式機 apply_update.ps1 的實際執行結果（WinRM 輸出未包含結束碼標記，可能連線中途中斷，不能當成套用成功）。"
+        }
+        if ($remoteExitCode -ne 0) {
+            Fail "正式機 apply_update.ps1 執行失敗（exit code $remoteExitCode）——上方輸出如果出現「更新失敗，已自動回滾」，代表健康檢查沒過、正式機已自動還原到套用前版本；若沒有那段文字，代表更早的步驟（如 Migration 乾跑驗證）就中止了，正式庫完全未被觸碰。"
+        }
+        Ok "正式機 apply_update.ps1 執行成功（exit code 0）。"
     } elseif ($Action -eq "rollback") {
         Write-Host "遠端執行回滾（$SnapshotTimestamp）..."
+        # 同上，回滾也要真的檢查遠端 rollback_update.ps1 的結束碼，不能只看
+        # WinRM 連線本身有沒有出錯。
+        $remoteExitCode = $null
         Invoke-Command -Session $session -ArgumentList $SnapshotTimestamp, $ProdRoot -ScriptBlock {
             param($Ts, $Root)
             powershell -ExecutionPolicy Bypass -File "$Root\backend\tools\rollback_update.ps1" -SnapshotTimestamp $Ts -Yes
+            Write-Output "===EXITCODE=$LASTEXITCODE==="
+        } | ForEach-Object {
+            if ($_ -match '^===EXITCODE=(-?\d+)===$') {
+                $remoteExitCode = [int]$matches[1]
+            } else {
+                Write-Host $_
+            }
         }
+        if ($null -eq $remoteExitCode) {
+            Fail "無法取得正式機 rollback_update.ps1 的實際執行結果（WinRM 輸出未包含結束碼標記，可能連線中途中斷，不能當成回滾成功）。"
+        }
+        if ($remoteExitCode -ne 0) {
+            Fail "正式機 rollback_update.ps1 執行失敗（exit code $remoteExitCode），詳見上方輸出。"
+        }
+        Ok "正式機 rollback_update.ps1 執行成功（exit code 0）。"
     } elseif ($Action -eq "list-snapshots") {
         # list-snapshots：跟 apply_update.ps1 一樣，rollback_snapshots/<ts> 與
         # db_backups/pre_update_<ts> 用同一個時間戳，只需要列其中一份資料夾名稱。
@@ -129,7 +179,7 @@ $ErrorActionPreference = "Stop"
 $prevEap = $ErrorActionPreference
 $ErrorActionPreference = "Continue"
 try {
-    $c = & curl.exe -k -s -o NUL -w "%{http_code}" --max-time 5 https://127.0.0.1:666/api/ping 2>$null
+    $c = & curl.exe -k -s -o NUL -w "%{http_code}" --max-time 5 https://127.0.0.1:666/api/ping 2>&1
     Write-Output "nested_http_code=[$c]"
 } catch {
     Write-Output "nested_exception=$_"
@@ -160,7 +210,7 @@ try {
 `$prevEap = `$ErrorActionPreference
 `$ErrorActionPreference = "Continue"
 try {
-    & python '$pingTmp' "https://127.0.0.1:666/api/ping" 5 2>`$null
+    & python '$pingTmp' "https://127.0.0.1:666/api/ping" 5 2>&1
     Write-Output "exit_code=[`$LASTEXITCODE]"
 } finally {
     `$ErrorActionPreference = `$prevEap

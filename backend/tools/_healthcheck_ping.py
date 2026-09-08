@@ -38,9 +38,20 @@ def main() -> int:
 
     try:
         with urllib.request.urlopen(url, timeout=timeout, context=ctx) as resp:
-            return 0 if resp.status == 200 else 1
+            status = getattr(resp, "status", None)
+            if status is None:
+                status = resp.getcode()
+            if status == 200:
+                return 0
+            print(f"HEALTHCHECK_FAIL: unexpected status {status}")
+            return 1
     except Exception as e:
-        print(f"health check failed: {e}", file=sys.stderr)
+        # 2026-09-08：印到 stdout 而非 stderr——呼叫端（apply_update.ps1／
+        # rollback_update.ps1／_dashboard_remote.ps1）過去用 2>$null 把
+        # stderr 整個丟掉，導致每次失敗只看得到 exit code、看不到原因，
+        # 是這一晚反覆盲猜根因的主因之一。印到 stdout 才能確保不管呼叫端
+        # 有沒有記得改，這行都會被撈到。
+        print(f"HEALTHCHECK_FAIL: {type(e).__name__}: {e}")
         return 1
 
 

@@ -14,6 +14,7 @@ build_deploy_package.ps1 / apply_update.ps1 / rollback_update.ps1，
 （實際透過 WinRM 對正式機執行動作的腳本，這裡的 Python 只負責背景執行緒
 管理／串流輸出／歷史紀錄，不直接碰 WinRM）。
 """
+import asyncio
 import json
 import os
 import re
@@ -26,7 +27,7 @@ from pathlib import Path
 import requests
 import urllib3
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
@@ -97,6 +98,14 @@ def _run_job(job_id: str, action: str, cmd: list, input_text: str = None):
             proc.wait()
 
         success = proc.returncode == 0
+        if success:
+            # 2026-09-08（保險）：即使 _dashboard_remote.ps1 已修好結束碼傳遞，
+            # 這裡再加一道獨立防線——掃輸出文字本身有沒有出現「明明失敗」的
+            # 字樣，兩者矛盾時一律當失敗處理。不是為了取代結束碼判定，是避免
+            # 同一類「exit code 沒接住真實結果」的漏洞以後又用不同方式重演。
+            joined = "\n".join(_jobs[job_id]["lines"])
+            if re.search(r"更新失敗|已自動回滾|\[FAIL\]", joined):
+                success = False
         with _jobs_lock:
             _jobs[job_id]["status"] = "succeeded" if success else "failed"
 
@@ -233,8 +242,10 @@ def dev_status():
     return {"branch": branch, "commit": commit, "dirty": dirty, "aheadOfOrigin": ahead}
 
 
-@app.get("/api/prod-status")
-def prod_status():
+def _check_prod_status() -> dict:
+    """實際打正式機的健康檢查＋版本查詢，REST 端點跟 WebSocket 共用同一份
+    邏輯，避免以後改一邊忘了改另一邊（這個專案已經在部署工具腳本本身踩過
+    好幾次這種「兩份副本沒同步」的坑）。"""
     healthy = False
     try:
         r = requests.get(f"{PROD_BASE_URL}/api/ping", verify=False, timeout=5)
@@ -250,7 +261,39 @@ def prod_status():
     except Exception:
         pass
 
-    return {"healthy": healthy, "deployed": deployed}
+    return {"healthy": healthy, "deployed": deployed, "checkedAt": time.strftime("%Y-%m-%d %H:%M:%S")}
+
+
+@app.get("/api/prod-status")
+def prod_status():
+    return _check_prod_status()
+
+
+# ── 正式機狀態即時推送（WebSocket，2026-09-08 新增）──────────────────────────
+# 先前是前端每 15 秒 fetch 一次 /api/prod-status，畫面關掉分頁 setInterval
+# 自然停止，但仍是「輪詢」而非「主機主動推」，部署/回滾剛結束的那個當下
+# 最多要等到下一次輪詢才會更新畫面。改成 WebSocket：連線期間伺服器每幾秒
+# 主動推一次最新狀態，前端收到任何訊息（例如部署 job 剛結束）也可以直接
+# 送一個字串要求立即重新檢查一次，不用等下一個週期——雙向、即時，分頁關閉
+# （連線自然斷線）就自動停止背景檢查，不會留下孤兒輪詢迴圈。
+@app.websocket("/ws/prod-status")
+async def ws_prod_status(websocket: WebSocket):
+    await websocket.accept()
+    try:
+        while True:
+            status = await asyncio.to_thread(_check_prod_status)
+            await websocket.send_json(status)
+            try:
+                # 4 秒週期性推送；期間如果前端主動送任何訊息（例如「剛好有
+                # 一個部署 job 結束了，馬上重查一次」），提前中斷等待、立刻
+                # 重新檢查一輪，不用乾等到下一個週期。
+                await asyncio.wait_for(websocket.receive_text(), timeout=4)
+            except asyncio.TimeoutError:
+                pass
+    except WebSocketDisconnect:
+        # 瀏覽器分頁關閉／重新整理／手動斷線都會走到這裡，迴圈直接結束，
+        # 不會有背景工作繼續留著空轉。
+        pass
 
 
 @app.get("/api/packages")

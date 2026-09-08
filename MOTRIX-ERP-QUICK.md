@@ -1179,6 +1179,14 @@ xlsx-0.18.5.full.min.js     （SheetJS）
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
 
+### 2026-09-08（清晨）— 修復儀表板「假成功」判定＋健康檢查失敗原因被吞掉兩個核心 bug；新增正式機狀態 WebSocket 即時推送（尚未 commit）
+
+- **背景**：連續多次部署後使用者回報「畫面顯示成功，但實際上失敗」，複查 `deploy_dashboard_history.json` 發現連續五筆 `success:true` 裡完全沒有 `47d0cca` 已新增的 `logPath` 欄位——代表當晚整段測試期間實際在跑的 `deploy_dashboard.py` 進程根本是 03:41 剛寫完、從未重啟過的舊版，中間十個修復 commit 都沒被真正驗證到。已先重啟一次儀表板進程。
+- **根因一（判定邏輯本身就是假的）**：`_dashboard_remote.ps1` 呼叫遠端 `apply_update.ps1`／`rollback_update.ps1` 時只是單純 `Invoke-Command { powershell -File ... }`，從不檢查巢狀 powershell 的 `$LASTEXITCODE`。`apply_update.ps1` 健康檢查失敗觸發自動回滾時確實有 `exit 1`，但這個結束碼被 `Invoke-Command` 完全吞掉、從不傳回開發機——只要 WinRM 連線本身沒斷，`_dashboard_remote.ps1` 就會正常結束、回傳碼永遠 0，`deploy_dashboard.py::_run_job()` 的 `success = proc.returncode == 0` 因此無論正式機那邊實際成功或失敗都判定成功。已修復：遠端 ScriptBlock 內額外印出 `===EXITCODE=N===` 標記行，本機端用 `Invoke-Command | ForEach-Object` 串流解析（不能改成 `$x = Invoke-Command ...` 賦值寫法，那樣會讓即時 log 整段變成部署跑完才一次噴出，弄丟即時滾動的體驗），非 0 才真的 `Fail`。`deploy_dashboard.py::_run_job()` 也加一道獨立防線：即使結束碼判定成功，仍掃輸出文字有沒有出現「更新失敗」／「已自動回滾」／`[FAIL]`，兩者矛盾一律視為失敗。
+- **根因二（真正的健康檢查失敗原因全程被吞掉）**：使用者複查時貼出的 `-CheckOnly` 診斷輸出顯示 curl.exe 直接呼叫／巢狀呼叫都拿到 `200`、port 666 有正常監聽的 python 進程，但 D 段新版健康檢查腳本（`_healthcheck_ping.py`）卻回報 `exit_code=1`——服務其實是健康的，是這支新腳本本身有問題導致誤判。往下查發現 `apply_update.ps1`／`rollback_update.ps1` 的 `Test-Ping` 呼叫這支腳本時用 `2>$null` 把例外訊息整個丟掉，`_dashboard_remote.ps1` 的 `-CheckOnly` D 段測試也是同樣寫法——每次失敗都只看得到「healthy=False」，完全看不到 Python 那邊真正的例外是什麼，這正是這一晚反覆盲目猜測根因、來回熱修好幾輪的主因之一。**尚未查出 `_healthcheck_ping.py` 這次失敗的確切例外內容**（沒有正式機帳密無法在這次對話中重新觸發診斷），已做防禦性修復：兩支呼叫端改用 `2>&1` 合併輸出＋失敗時用 `Warn` 印出腳本回報的原因；`_healthcheck_ping.py` 本身把例外訊息改印到 stdout（不是 stderr），不管未來呼叫端會不會又不小心用 `2>$null`，這行都能被撈到；順便把 `resp.status` 加上 `resp.getcode()` 的 fallback（跨 Python 版本相容性防禦，不確定是否為這次真正根因）。**下次健康檢查再失敗時，Warn 那一行會直接印出 Python 的例外內容，才有機會真正定位根因**，這次是誠實承認還沒抓到真正原因，只是讓下次失敗時看得見。
+- **新增（使用者要求）：正式機狀態 WebSocket 即時雙向連線**：新端點 `GET /ws/prod-status`，連線期間伺服器每 4 秒主動推一次 `{healthy, deployed, checkedAt}`；前端任何時候送一個字串（例如部署/回滾 job 剛結束時）可以立即觸發一次重查，不用等下一個 4 秒週期——雙向、即時。分頁關閉/重新整理時 WebSocket 自然斷線，伺服器背景檢查迴圈跟著結束，不會留下孤兒輪詢；連線意外中斷但分頁還開著時前端會自動 5 秒後重連。`deploy_dashboard.html` 新增連線狀態指示燈。已用 Python `websockets` client 實測：連線後立即收到狀態、送 `refresh` 觸發立即重查皆正常。
+- **這批修復尚未 commit**（`git status` 目前 dirty），下次要重新打包部署前記得先 commit，`build_deploy_package.ps1` 才會放行。
+
 ### 2026-09-08（凌晨，8 小時排查）— 部署儀表板連續三次真實部署健康檢查誤判失敗；改健康檢查機制＋儀表板安全性補強
 
 - **背景**：延續 §12 同日「凌晨後」條目修好 tar／migration 乾跑防護之後，用部署儀表板對正式機做這一大批新功能（QR 登入、部署儀表板本身、多項修復，commit 一路到 `ebd182f`）**第一次真正的完整部署**。連續三次套用後健康檢查都判定失敗（`healthy=False`，一次真的抓到 6 筆 log 錯誤、兩次是 0 筆），每次都自動觸發回滾；第二次回滾後複驗甚至也判定失敗（「仍異常，需要人工介入！」），但用獨立管道（開發機 Python `requests` 直接打正式機、儀表板背景輪詢）查證當下正式機其實一直是健康的——三次都是健康檢查機制本身的偽陽性，不是新程式碼真的壞掉或服務真的中斷。
