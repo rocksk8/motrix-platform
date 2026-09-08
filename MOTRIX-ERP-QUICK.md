@@ -1179,6 +1179,12 @@ xlsx-0.18.5.full.min.js     （SheetJS）
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
 
+### 2026-09-08（早上）— 修好結束碼判定後第一次真實套用又抓到第三種健康檢查誤判：良性 asyncio 雜訊被算成錯誤（commit `2ea87e8`）
+
+- 前一批（`6ee3a6d`）修好「假成功」判定後，09:13 真的重新套用一次，這次判定結果變成真的失敗（`success:false`，符合實際情況），但複查貼出的 `server.log` 發現這次「healthy=False, log 錯誤筆數=6」本身又是誤判：新程式碼實際運作 24 秒完全正常（`/api/ping`／`deployed-version`／QR 登入流程皆 200），中途出現兩次 Windows asyncio 眾所皆知的良性 `ConnectionResetError`（`_ProactorBasePipeTransport._call_connection_lost`），舊版 `"Traceback|ERROR"` 不分大小寫掃描連這個字本身都算命中，兩次雜訊貢獻剛好 6 行。已改用逐行狀態機整段跳過這個已知良性區塊。
+- **誠實記錄：這次還額外真的觀察到服務 crash 一次重啟**（`exit code -1`，crash-restart 迴圈 5 秒後拉起），發生時機跟這兩次雜訊重疊，但目前沒有證據能確認因果關係，**沒有宣稱已修好**，只做了一個合理的降風險動作：`/ws/prod-status`（本次一併新增的正式機狀態 WebSocket）在有 deploy/rollback job 進行中時暫停實際查詢，避免額外疊加連線負擔在服務最脆弱的重啟時刻。下次若又發生真的 crash，需要另外找時間查 uvicorn/asyncio 在 Windows 自簽憑證下是否有已知的 proactor+SSL 邊界問題。
+- 同一輪也修好了更根本的判定邏輯 bug（`6ee3a6d`）：`_dashboard_remote.ps1` 呼叫遠端 `apply_update.ps1`／`rollback_update.ps1` 從不檢查其結束碼，導致 WinRM 連線本身沒斷就一律回報成功——這正是先前連續五次 `deploy_dashboard_history.json` 顯示 `success:true` 但實際上使用者觀察到失敗的根因，加上健康檢查失敗原因先前被 `2>$null` 整個吞掉的另一個獨立 bug，詳見上方「2026-09-08（清晨）」條目。
+
 ### 2026-09-08（清晨）— 修復儀表板「假成功」判定＋健康檢查失敗原因被吞掉兩個核心 bug；新增正式機狀態 WebSocket 即時推送（尚未 commit）
 
 - **背景**：連續多次部署後使用者回報「畫面顯示成功，但實際上失敗」，複查 `deploy_dashboard_history.json` 發現連續五筆 `success:true` 裡完全沒有 `47d0cca` 已新增的 `logPath` 欄位——代表當晚整段測試期間實際在跑的 `deploy_dashboard.py` 進程根本是 03:41 剛寫完、從未重啟過的舊版，中間十個修復 commit 都沒被真正驗證到。已先重啟一次儀表板進程。
