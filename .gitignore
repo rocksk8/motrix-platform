@@ -47,6 +47,7 @@ backend/rollback_snapshots/
 backend/.deployed_commit.json
 backend/tools/deploy_dashboard_history.json
 backend/tools/deploy_logs/
+backend/tools/deploy_dashboard_run.log
 
 # Root-level debug/temp files (generated during development)
 /*.txt
