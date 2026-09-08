@@ -281,7 +281,18 @@ async def ws_prod_status(websocket: WebSocket):
     await websocket.accept()
     try:
         while True:
-            status = await asyncio.to_thread(_check_prod_status)
+            with _active_job_lock:
+                busy = _active_job_id is not None
+            if busy:
+                # 2026-09-08（複查後新增）：部署/回滾期間正式機正在重啟服務，
+                # 這時候本來就有 apply_update.ps1 自己的健康檢查在對同一個
+                # loopback 端點連續打，儀表板這條額外的背景輪詢只是再疊加
+                # 一批短命連線，對「正式機剛切換新版還在起服務」這個脆弱
+                # 時刻沒有幫助，純粹增加連線churn。job 進行期間暫停實際打
+                # 正式機，改回傳一個「部署中」狀態，job 結束後自動恢復。
+                status = {"healthy": None, "deployed": {}, "checkedAt": time.strftime("%Y-%m-%d %H:%M:%S"), "paused": True}
+            else:
+                status = await asyncio.to_thread(_check_prod_status)
             await websocket.send_json(status)
             try:
                 # 4 秒週期性推送；期間如果前端主動送任何訊息（例如「剛好有

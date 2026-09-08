@@ -127,7 +127,9 @@ async function refreshDevStatus() {
 }
 
 function renderProdStatus(prod) {
-  const dot = prod.healthy ? '<span class="dot ok"></span>正常' : '<span class="dot bad"></span>無回應';
+  const dot = prod.paused
+    ? '<span class="dot" style="background:#F59E0B"></span>部署/回滾進行中，暫停查詢'
+    : (prod.healthy ? '<span class="dot ok"></span>正常' : '<span class="dot bad"></span>無回應');
   document.getElementById('prodHealth').innerHTML = dot;
   const dep = prod.deployed || {};
   document.getElementById('prodCommit').textContent = dep.commit_short ? (dep.commit_short + ' (' + (dep.applied_at || '') + ')') : '未知';

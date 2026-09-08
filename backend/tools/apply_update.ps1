@@ -425,7 +425,36 @@ if (Test-Path $logPath) {
     } elseif ($lastStartIdx -eq ($tail.Count - 1)) {
         $scanRange = @()
     }
-    $logErrors = $scanRange | Select-String -Pattern "Traceback|ERROR" -SimpleMatch:$false
+    # 2026-09-08（再修）：Windows 上 asyncio ProactorEventLoop 在 TCP 連線被
+    # 對方突然重置時，固定會在 _ProactorBasePipeTransport._call_connection_lost
+    # 這個 callback 印出一段 ConnectionResetError traceback——這是 Python 在
+    # Windows 上眾所皆知、對服務健康完全無影響的雜訊（asyncio 自己的例外處理
+    # 機制會接住，不會讓 process 真的掛掉；套用當下 Test-Ping／使用者實際
+    # 操作都會製造大量短命連線，觸發機率不低）。舊版 "Traceback|ERROR" 不分
+    # 大小寫比對，連「ConnectionResetError」這個字本身都算命中，一次這種
+    # 雜訊事件就貢獻 3 行「錯誤」，服務明明正常運作卻被誤判成失敗（實測：
+    # 09/08 09:14 那次套用，服務前後都正常回應，log 錯誤筆數卻算出 6，
+    # 就是兩次這種雜訊各貢獻 3 行）。掃描前先把這個已知良性雜訊區塊整段
+    # 濾掉，其餘真正的 Traceback/ERROR 不受影響、不會被連帶放過。
+    # 逐行掃描、整段跳過已知良性雜訊區塊（從「Exception in callback ...
+    # _call_connection_lost」那一行開始，跳到那一段自己的 ConnectionResetError/
+    # OSError 結尾行為止）——用逐行狀態機而不是一次性多行 regex，避免
+    # 觸發行本身開頭那段時間戳＋ERROR 字樣（跟真正的例外訊息同一行）沒被
+    # 一併濾掉、殘留成一個孤兒 "ERROR " 片段又被下面重新命中。
+    $cleanedLines = New-Object System.Collections.Generic.List[string]
+    $inBenignBlock = $false
+    foreach ($ln in $scanRange) {
+        if (-not $inBenignBlock -and $ln -match "Exception in callback _ProactorBasePipeTransport\._call_connection_lost") {
+            $inBenignBlock = $true
+            continue
+        }
+        if ($inBenignBlock) {
+            if ($ln -match "^(ConnectionResetError|OSError):") { $inBenignBlock = $false }
+            continue
+        }
+        $cleanedLines.Add($ln)
+    }
+    $logErrors = $cleanedLines | Select-String -Pattern "Traceback|ERROR" -SimpleMatch:$false
     if ($logErrors) {
         Info "  比對範圍內找到的錯誤行（共 $($logErrors.Count) 筆）："
         foreach ($e in $logErrors) { Info "    $($e.Line)" }
