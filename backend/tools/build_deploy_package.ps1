@@ -90,6 +90,31 @@ if ($branch -ne "master") {
 Write-Host "Commit:  $commit ($commitShort)"
 Write-Host "Branch:  $branch"
 
+# --- Step 1.5: 部署工具腳本語法驗證 ---
+# 這批部署工具（apply_update.ps1／rollback_update.ps1／_dashboard_remote.ps1／
+# build_deploy_package.ps1 自己）完全沒有 pytest 覆蓋，這裡的 git-status-乾淨
+# 檢查也只管「有沒有 commit」，不管內容對不對——過去好幾次語法/邏輯 bug
+# （tar 路徑解析成遠端主機語法、健康檢查誤判觸發不必要回滾等，見
+# MOTRIX-ERP-QUICK.md §12）都是靠「真的在正式機套用一次」才發現。這裡先
+# 擋掉最低成本能抓到的一種：語法本身就寫錯（漏括號、字串沒收尾等），不用
+# 等正式機才發現腳本直接崩潰。只驗證語法（tokenize），不驗證邏輯正確性。
+Write-Host "`n[語法檢查] 驗證 backend/tools/*.ps1 語法..."
+$psFiles = Get-ChildItem (Join-Path $projectRoot "backend\tools") -Filter "*.ps1"
+$syntaxOk = $true
+foreach ($f in $psFiles) {
+    $parseErrors = $null
+    [System.Management.Automation.PSParser]::Tokenize((Get-Content $f.FullName -Raw), [ref]$parseErrors) | Out-Null
+    if ($parseErrors.Count -gt 0) {
+        $syntaxOk = $false
+        Write-Host "  [FAIL] $($f.Name)：" -ForegroundColor Red
+        $parseErrors | ForEach-Object { Write-Host "    $($_.Message)" -ForegroundColor Red }
+    }
+}
+if (-not $syntaxOk) {
+    Fail "backend/tools/ 底下有 .ps1 語法錯誤，中止打包（見上方訊息）。"
+}
+Write-Host "[OK] 語法檢查通過（共 $($psFiles.Count) 支 .ps1）。" -ForegroundColor Green
+
 # --- Step 3: 測試必須通過 ---
 # 目前的把關只有「git status 乾淨」，不代表「這次 commit 沒把測試弄壞」——
 # 曾經發生過測試治具過時、既有測試靜默失敗一段時間才被發現的情況。這裡直接
