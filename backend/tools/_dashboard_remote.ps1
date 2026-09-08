@@ -75,7 +75,36 @@ try {
 
         Write-Host "推送部署包：$PackagePath → $remotePkgPath ..."
         Copy-Item -Path $PackagePath -Destination $remoteDest -ToSession $session -Recurse -Force
-        Write-Host "推送完成，開始遠端套用..."
+        Write-Host "推送完成..."
+
+        # 2026-09-08（重大發現＋修復）：下面呼叫的是正式機「既有安裝路徑」的
+        # apply_update.ps1（$Root\backend\tools\...），不是剛推送過去這份套件
+        # 裡的版本——因為 apply_update.ps1 自己有身分守門機制（Step 0：只能在
+        # $ProdRoot 底下執行，防止不小心從錯誤路徑執行部署腳本本身），不能直接
+        # 改成從套件路徑呼叫。但這造成一個嚴重後果：PowerShell 腳本一旦開始
+        # 執行，用的就是啟動當下讀進記憶體的內容，跟磁碟上的檔案「之後」被
+        # Step 3 覆蓋無關；而只要這次部署因健康檢查失敗被自動回滾，Step 3
+        # 複製進去的新檔案又會被回滾邏輯用套用前快照蓋回去——代表只要從沒有
+        # 一次真正成功套用過，$Root 這份 apply_update.ps1 會一直凍結在「最後
+        # 一次成功套用」當下的版本，完全不會執行到套件裡任何後續才寫的修復
+        # （這晚稍早「健檢第 N/20 次」log 從未出現過、-SkipAutoRollback 直接
+        # 報「找不到符合參數名稱」，都是這個根因的直接證據）。
+        # 修復：呼叫既有安裝路徑的 apply_update.ps1 之前，先把套件裡
+        # backend/tools/ 底下的工具腳本本身同步覆蓋過去——身分守門仍然通過
+        # （還是從 $Root 執行），但實際執行的內容就是套件裡已經過 pytest／
+        # 語法檢查驗證的最新版。只同步工具腳本，不影響 db／業務程式碼／
+        # uploads 等其餘部署流程（那些仍照 apply_update.ps1 自己的 Step 3
+        # 邏輯，含備份/回滾保護）。
+        Write-Host "同步部署工具腳本本身（backend/tools/）至正式機既有位置，確保這次執行的是套件內驗證過的最新版..."
+        Invoke-Command -Session $session -ArgumentList $remotePkgPath, $ProdRoot -ScriptBlock {
+            param($RemotePkgPath, $Root)
+            $srcTools = Join-Path $RemotePkgPath "backend\tools"
+            $dstTools = Join-Path $Root "backend\tools"
+            if (Test-Path $srcTools) {
+                Copy-Item -Path (Join-Path $srcTools "*") -Destination $dstTools -Recurse -Force
+            }
+        }
+        Write-Host "工具腳本同步完成，開始遠端套用..."
 
         # 2026-09-08（重大修復）：先前這裡直接呼叫巢狀 powershell，完全沒有
         # 檢查/回傳它的結束碼。apply_update.ps1 健康檢查失敗、觸發自動回滾
