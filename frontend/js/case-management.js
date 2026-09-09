@@ -909,6 +909,15 @@ function app() {
         this.saveMsg = '案件已結案並鎖定，請先解鎖'
         return
       }
+      // 驗證：已收款項必須填入收款日期
+      const payItems = this.cr.caseRecord.payment?.items || []
+      for (const item of payItems) {
+        if (item.received && !item.receivedAt) {
+          this.saveStatus = 'error'
+          this.saveMsg = `${item.type || '款項'}：已標記收款但未填入收款日期，請補填`
+          return
+        }
+      }
       this.saving = true
       try {
         const r = await fetch('/api/quotations/' + this.selected.quote_no + '/case-record', {
