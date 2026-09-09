@@ -30,6 +30,7 @@ from helpers import (
     save_document_files, delete_document_file,
     notify_case_close_blocked, notify_case_change_requested,
     norm_at, active_delegators_for, user_has_module, validate_invoice_no,
+    summarize_payment_items,
 )
 import helpers.uploads as _uploads_mod
 from helpers.uploads import _effective_subfolder
@@ -2807,6 +2808,130 @@ def update_settlement(quote_no: str, body: SettlementIn, authorization: str = He
             user.get("display_name") or user["username"],
         )
     return {"ok": True, "updated_at": now}
+
+
+# ── 案件財務總覽（應收應付，2026-09-09）────────────────────────────────────────
+
+@router.get("/api/quotations/{quote_no}/finance-summary")
+def get_finance_summary(quote_no: str, authorization: str = Header(None)):
+    """案件管理－財務 Tab「應收應付總覽」用：把一個案件的錢一次算完回傳。
+
+    這些數字原本散在四個地方，從來沒有一個畫面把它們並排看過：應收在
+    `data_json.caseRecord.payment.items[]`（案件資訊 Tab 的款項明細）、應付在
+    `contractor_payment_vouchers`（承攬商 Tab）、開票申請在 `invoice_vouchers`、
+    請款單在 `payment_requests`（各自的子清單）。
+
+    **刻意不做的事**：
+    - `invoice_vouchers`／`payment_requests` 只回唯讀清單，**不併進應收合計**。
+      它們是「開票／要款」流程文件，金額範圍（scope='amount'|'items'）跟收款
+      排程的期別不是一對一對應，合併會變成同一筆錢被算兩次。
+    - 精算「額外支出」（`settlement.extraItems[]`）只回小計供參考，**不計入
+      應付**。這個清單沒有已付/未付狀態欄位，硬把它當應付等於憑空發明一個
+      系統從來沒追蹤過的狀態。
+    - 權限比照同一批資料的既有端點（`get_settlement()`／
+      `list_contractor_vouchers()`／`list_invoice_vouchers()`）只要求登入即可，
+      財務可見性由前端 `canSeeFinancial()` 把關。這裡不另外加 `financial_view`
+      檢查——同一份資料透過上述既有端點本來就拿得到，只擋這一支會是假的安全感。
+    """
+    _require_user(authorization)
+    conn = get_db()
+    row = conn.execute(
+        "SELECT total, pretax, data_json FROM quotations WHERE quote_no=?", (quote_no,)
+    ).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(404, f"報價單 {quote_no} 不存在")
+
+    data  = json.loads(row["data_json"] or "{}")
+    total = float(row["total"] or 0)
+    pay_items = ((data.get("caseRecord") or {}).get("payment") or {}).get("items") or []
+    receivable = summarize_payment_items(total, pay_items, row["pretax"])
+
+    # ── 應付：承攬商匯款申請 ──────────────────────────────────────────────
+    # 「已核准未匯款」才是真正該付而未付的錢；還在簽核流程裡的只回筆數當提醒，
+    # 不計入未付合計（金額還可能被退回或改動）。is_paid 跟 status 是兩個獨立
+    # 狀態（見 db.py::_m045_contractor_payment_vouchers），不要用 status 推論
+    # 有沒有付款。
+    approved_unpaid = approved_paid = pending_total = 0
+    pending_count = 0
+    vouchers = []
+    for v in conn.execute(
+        "SELECT * FROM contractor_payment_vouchers WHERE quote_no=? ORDER BY created_at DESC",
+        (quote_no,),
+    ).fetchall():
+        snap   = json.loads(v["snapshot_json"] or "{}")
+        amount = float(snap.get("grandTotal") or 0)
+        status = v["status"] or "草稿"
+        paid   = bool(v["is_paid"])
+        if status == "已核准" and paid:
+            approved_paid += amount
+        elif status == "已核准":
+            approved_unpaid += amount
+        else:
+            pending_total += amount
+            pending_count += 1
+        vouchers.append({
+            "voucherNo":   v["voucher_no"],
+            "vendorName":  snap.get("vendorName", ""),
+            "status":      status,
+            "grandTotal":  amount,
+            "payableDate": snap.get("payableDate", ""),
+            "isPaid":      paid,
+            "paidAt":      v["paid_at"] or "",
+            "createdAt":   v["created_at"] or "",
+        })
+
+    # ── 關聯文件（唯讀清單，不併入合計，理由見 docstring）──────────────────
+    invoice_vouchers = [{
+        "voucherNo": r["voucher_no"],
+        "status":    r["status"] or "草稿",
+        "amount":    float(r["amount"] or 0),
+        "createdAt": r["created_at"] or "",
+    } for r in conn.execute(
+        "SELECT voucher_no, status, amount, created_at FROM invoice_vouchers "
+        "WHERE quote_no=? ORDER BY created_at DESC", (quote_no,)
+    ).fetchall()]
+
+    payment_requests = [{
+        "requestNo": r["request_no"],
+        "status":    r["status"] or "草稿",
+        "stage":     r["stage"] or "",
+        "amount":    float(r["amount"] or 0),
+        "createdAt": r["created_at"] or "",
+    } for r in conn.execute(
+        "SELECT request_no, status, stage, amount, created_at FROM payment_requests "
+        "WHERE quote_no=? ORDER BY created_at DESC", (quote_no,)
+    ).fetchall()]
+    conn.close()
+
+    settlement = data.get("settlement") or {}
+    extras = [{
+        "category":    ex.get("category", ""),
+        "description": ex.get("description", ""),
+        "docNo":       ex.get("docNo", ""),
+        "totalCost":   float(ex.get("totalCost") or 0),
+        "expenseDate": ex.get("expenseDate", ""),
+    } for ex in (settlement.get("extraItems") or [])]
+
+    return {
+        "quoteNo":    quote_no,
+        "receivable": receivable,
+        "payable": {
+            "approvedUnpaidTotal": approved_unpaid,
+            "approvedPaidTotal":   approved_paid,
+            "pendingTotal":        pending_total,
+            "pendingCount":        pending_count,
+            "vouchers":            vouchers,
+        },
+        "relatedDocuments": {
+            "invoiceVouchers": invoice_vouchers,
+            "paymentRequests": payment_requests,
+        },
+        "settlementExtras": {
+            "total": sum(e["totalCost"] for e in extras),
+            "items": extras,
+        },
+    }
 
 
 def _load_settlement_extra_item(conn, no, idx):

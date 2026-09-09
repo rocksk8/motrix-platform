@@ -124,6 +124,16 @@ function app() {
     _partsOptions: null,
     serialPicker: { show: false, itemIdx: null, partNo: '', options: [], selected: [], loading: false, error: '' },
 
+    // ── 案件財務總覽（應收應付，2026-09-09）──
+    // 後端一支 /finance-summary 端點算完，不在前端把 contractorVouchers /
+    // paymentItems() 等既有陣列再加總一次——同一個案件的「還有多少沒收/沒付」
+    // 若在前後端各算一份，遲早會因為其中一邊漏改（例如 taxExempt 沖銷折算）
+    // 而對不起來，見 helpers/quotations.py::summarize_payment_items() 說明。
+    financeSummary: null,
+    financeSummaryLoading: false,
+    finShowRecvDetail: false,
+    finShowPayDetail: false,
+
     // ── 承攬商匯款申請 ──
     contractorVouchers: [],
     contractorVouchersLoading: false,
@@ -186,6 +196,28 @@ function app() {
     caseSettleExtras()  { return this.caseSettlement()?.extraItems || [] },
     caseSettleMemo()    { return this.caseSettlement()?.memo || '' },
     caseSettleFmt(n)    { return 'NT$ ' + (Math.round(n || 0)).toLocaleString() },
+
+    // ── 應收應付總覽（2026-09-09）──────────────────────────────────────────
+    async loadFinanceSummary(quoteNo) {
+      if (!quoteNo) return
+      this.financeSummaryLoading = true
+      this.financeSummary = null
+      try {
+        const r = await fetch(`/api/quotations/${encodeURIComponent(quoteNo)}/finance-summary`, {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (r.ok) this.financeSummary = await r.json()
+      } catch {}
+      this.financeSummaryLoading = false
+    },
+    finReceivable()  { return this.financeSummary?.receivable || null },
+    finPayable()     { return this.financeSummary?.payable || null },
+    finRelatedDocs() { return this.financeSummary?.relatedDocuments || { invoiceVouchers: [], paymentRequests: [] } },
+    finExtrasTotal() { return this.financeSummary?.settlementExtras?.total || 0 },
+    // 未收款項清單：只給總覽的展開明細用，已收的那些在「案件資訊」Tab 的款項
+    // 明細本來就看得到，這裡重複列一次只會讓畫面變長
+    finOutstandingItems() { return (this.finReceivable()?.items || []).filter(it => !it.received) },
+    finUnpaidVouchers()   { return (this.finPayable()?.vouchers || []).filter(v => v.status === '已核准' && !v.isPaid) },
 
     async init() {
       window.addEventListener('resize', () => { this.isMobileView = window.innerWidth <= 767 })
@@ -469,11 +501,15 @@ function app() {
         this.invoiceVouchers = []
         this.closeInvoiceVoucherPreview()
         this.paymentRequests = []
+        this.financeSummary = null
+        this.finShowRecvDetail = false
+        this.finShowPayDetail = false
         this._loadCaseTasks(quoteNo)
         this.loadDispatches(quoteNo)
         this.loadContractorVouchers(quoteNo)
         this.loadInvoiceVouchers(quoteNo)
         this.loadPaymentRequests(quoteNo)
+        this.loadFinanceSummary(quoteNo)
       } catch {}
     },
 
@@ -891,6 +927,9 @@ function app() {
             this.saveMsg = '已儲存'
             setTimeout(() => { if (!this.dirty) { this.saveStatus = ''; this.saveMsg = '' } }, 2000)
           }
+          // 款項明細（勾已收款/實收金額/手續費）就是在這支存的，財務 Tab 的
+          // 應收應付總覽必須跟著重算，否則會停在存檔前的舊數字
+          this.loadFinanceSummary(this.selected?.quote_no)
         } else {
           this.saveStatus = 'error'
           this.saveMsg = '儲存失敗'
@@ -2701,6 +2740,7 @@ function app() {
         })
         if (!r.ok) { alert((await r.json()).detail || '操作失敗'); return }
         await this.loadContractorVouchers(this.selected?.quote_no)
+        this.loadFinanceSummary(this.selected?.quote_no)   // 已付/未付數字會變
       } catch (e) { alert('網路錯誤：' + e.message) }
     },
 
@@ -2721,6 +2761,7 @@ function app() {
         this.payVoucherModal = false
         this.payVoucherTarget = null
         await this.loadContractorVouchers(this.selected?.quote_no)
+        this.loadFinanceSummary(this.selected?.quote_no)   // 已付/未付數字會變
       } catch (e) { alert('網路錯誤：' + e.message) }
       this.payVoucherSaving = false
     },

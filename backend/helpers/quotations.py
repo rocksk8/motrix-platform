@@ -105,6 +105,70 @@ def payment_item_amounts(total: float, pay_items: list, pretax: float = None,
     return out
 
 
+def summarize_payment_items(total: float, pay_items: list, pretax: float = None) -> dict:
+    """單一案件的應收／已收／未收彙總＋逐筆明細（2026-09-09 新增，供案件財務
+    「應收應付」總覽用）。
+
+    金額一律透過既有的 payment_item_amounts() 取得（含 taxExempt 沖銷折算），
+    **不要在呼叫端自己重寫 pct 反推公式**——「這個案件還有多少錢沒收」原本在
+    三個地方各自算過一次：case-management.js 的 receivedTotal()/feeTotal()/
+    netReceivedTotal()/outstandingTotal() 這組 getter、reports.py::_collect()、
+    以及案件財務總覽，這支函式是為了避免第三份實作而抽出來的。各欄位語意刻意
+    跟前端那組 getter 逐一對應（見下方註解），兩邊數字才會一致——財務 Tab 的
+    總覽跟「案件資訊」Tab 的款項明細顯示的是同一批款項，對不起來使用者會第一
+    眼就發現。
+
+    回傳 items[] 的欄位形狀比照 reports.py::_collect() 的收款明細（amount／
+    received／actualAmount／feeAmount／netAmount 同語意），日後若要把這裡的
+    結果餵進報表類的彙總，不需要再做一次欄位轉換。
+    """
+    amounts = payment_item_amounts(total, pay_items, pretax)
+    receivable = collected = fee_total = net_collected = outstanding = 0
+    items = []
+    for idx, pi in enumerate(pay_items or []):
+        amt  = amounts[idx]
+        rcvd = bool(pi.get("received"))
+        aa   = pi.get("actualAmount")
+        fee  = pi.get("feeAmount") or 0
+        # 已收款項的「實際入帳淨額」：有填實收金額就用實收（匯差/短收），
+        # 沒填就用應收金額，再扣掉手續費——對應前端 netReceivedTotal()。
+        net  = ((aa if aa is not None else amt) - fee) if rcvd else None
+        receivable += amt
+        if rcvd:
+            collected     += amt          # 對應前端 receivedTotal()（用應收金額，非實收）
+            fee_total     += fee          # 對應前端 feeTotal()
+            net_collected += net          # 對應前端 netReceivedTotal()
+        else:
+            outstanding   += amt          # 對應前端 outstandingTotal()
+        items.append({
+            "idx":          idx,
+            "type":         pi.get("type", f"第{idx + 1}期"),
+            "pct":          pi.get("pct") or 0,
+            "amount":       amt,
+            "received":     rcvd,
+            "receivedAt":   (pi.get("receivedAt") or "")[:10],
+            "receivedBy":   pi.get("receivedBy", ""),
+            "expectedReceiptDate": pi.get("expectedReceiptDate", ""),
+            "actualAmount": aa,
+            "feeAmount":    fee,
+            "netAmount":    net,
+            "invoiceNo":    pi.get("invoiceNo", ""),
+            "invoiceDate":  pi.get("invoiceDate", ""),
+            "feeNote":      pi.get("feeNote", ""),
+            "note":         pi.get("note", ""),
+            "taxExempt":    bool(pi.get("taxExempt")),
+        })
+    return {
+        "receivableTotal":  receivable,
+        "collectedTotal":   collected,
+        "feeTotal":         fee_total,
+        "netCollected":     net_collected,
+        # max(0, ...)：比照前端 outstandingTotal()，避免舊資料金額為負時顯示負的未收
+        "outstandingTotal": max(0, outstanding),
+        "items":            items,
+    }
+
+
 _INVOICE_NO_RE = re.compile(r"^[A-Z]{2}\d{8}$")
 
 

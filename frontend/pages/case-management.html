@@ -1756,6 +1756,116 @@
               <!-- ══ 財務 Tab ══ -->
               <div x-show="activeTab==='fin' && canSeeFinancial()">
 
+                <!-- ══ 應收應付總覽（2026-09-09）══
+                     這個案件的錢原本散在四個 Tab：應收在「案件資訊」的款項明細、
+                     應付在「承攬商」的匯款申請、開票申請/請款單各自有子清單、成本
+                     在下方精算結果。這一區是唯一把它們並排看的地方；數字全部由後端
+                     /finance-summary 算好（不在前端重算一次，見 case-management.js
+                     loadFinanceSummary() 註解）。 -->
+                <div id="fin-ar-ap-overview" style="margin-bottom:24px">
+                  <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+                    <span class="cm-section-title" style="margin-bottom:0">應收應付總覽</span>
+                    <span x-show="financeSummaryLoading" style="font-size:11px;color:var(--text-dim);font-family:var(--font-zh)">載入中…</span>
+                  </div>
+
+                  <template x-if="financeSummary">
+                    <div>
+                      <!-- 應收 -->
+                      <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">
+                        <span style="font-size:11px;font-weight:600;font-family:var(--font-zh);color:#15803D">應收</span>
+                        <span style="flex:1;height:1px;background:#E5E7EB"></span>
+                      </div>
+                      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px">
+                        <div class="cm-kpi__pill">
+                          <span class="cm-kpi__val" x-text="caseSettleFmt(finReceivable().receivableTotal)"></span>
+                          <span class="cm-kpi__lbl">應收總額</span>
+                        </div>
+                        <div class="cm-kpi__pill success">
+                          <span class="cm-kpi__val" x-text="caseSettleFmt(finReceivable().collectedTotal)"></span>
+                          <span class="cm-kpi__lbl">已收</span>
+                        </div>
+                        <div class="cm-kpi__pill" :class="finReceivable().outstandingTotal > 0 ? 'warning' : ''">
+                          <span class="cm-kpi__val" x-text="caseSettleFmt(finReceivable().outstandingTotal)"></span>
+                          <span class="cm-kpi__lbl">未收</span>
+                        </div>
+                        <div class="cm-kpi__pill">
+                          <span class="cm-kpi__val" x-text="caseSettleFmt(finReceivable().netCollected)"></span>
+                          <span class="cm-kpi__lbl">實收淨額（扣手續費 <span style="font-family:LINE Seed TW_OTF, sans-serif" x-text="caseSettleFmt(finReceivable().feeTotal)"></span>）</span>
+                        </div>
+                      </div>
+
+                      <!-- 應付 -->
+                      <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">
+                        <span style="font-size:11px;font-weight:600;font-family:var(--font-zh);color:#92400E">應付（承攬商匯款申請）</span>
+                        <span style="flex:1;height:1px;background:#E5E7EB"></span>
+                      </div>
+                      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px">
+                        <div class="cm-kpi__pill">
+                          <span class="cm-kpi__val" x-text="caseSettleFmt(finPayable().approvedUnpaidTotal + finPayable().approvedPaidTotal)"></span>
+                          <span class="cm-kpi__lbl">應付總額（已核准）</span>
+                        </div>
+                        <div class="cm-kpi__pill success">
+                          <span class="cm-kpi__val" x-text="caseSettleFmt(finPayable().approvedPaidTotal)"></span>
+                          <span class="cm-kpi__lbl">已匯款</span>
+                        </div>
+                        <div class="cm-kpi__pill" :class="finPayable().approvedUnpaidTotal > 0 ? 'danger' : ''">
+                          <span class="cm-kpi__val" x-text="caseSettleFmt(finPayable().approvedUnpaidTotal)"></span>
+                          <span class="cm-kpi__lbl">未匯款</span>
+                        </div>
+                        <div class="cm-kpi__pill">
+                          <span class="cm-kpi__val" x-text="caseSettleFmt(finPayable().pendingTotal)"></span>
+                          <span class="cm-kpi__lbl">簽核中（<span style="font-family:LINE Seed TW_OTF, sans-serif" x-text="finPayable().pendingCount"></span> 張，未計入應付）</span>
+                        </div>
+                      </div>
+
+                      <!-- 關聯文件＋精算額外支出：都是刻意不計入上方合計的參考資訊，
+                           理由見 routers/quotations.py::get_finance_summary() docstring -->
+                      <div style="font-size:11px;color:var(--text-dim);font-family:var(--font-zh);margin-bottom:10px;display:flex;gap:14px;flex-wrap:wrap">
+                        <span>開票申請 <span style="font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-secondary)" x-text="finRelatedDocs().invoiceVouchers.length"></span> 張</span>
+                        <span>請款單 <span style="font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-secondary)" x-text="finRelatedDocs().paymentRequests.length"></span> 張</span>
+                        <span>精算額外支出 <span style="font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-secondary)" x-text="caseSettleFmt(finExtrasTotal())"></span>（未計入應付）</span>
+                      </div>
+
+                      <!-- 展開明細 -->
+                      <div style="display:flex;gap:8px;flex-wrap:wrap">
+                        <button x-show="finOutstandingItems().length > 0" @click="finShowRecvDetail = !finShowRecvDetail"
+                                style="font-size:11px;padding:4px 10px;background:#FFFBEB;color:#92400E;border:1px solid #FDE68A;border-radius:6px;cursor:pointer;font-family:var(--font-zh)">
+                          <span x-text="(finShowRecvDetail ? '▾ ' : '▸ ') + '未收款項明細（' + finOutstandingItems().length + '）'"></span>
+                        </button>
+                        <button x-show="finUnpaidVouchers().length > 0" @click="finShowPayDetail = !finShowPayDetail"
+                                style="font-size:11px;padding:4px 10px;background:#FEF2F2;color:#B91C1C;border:1px solid #FECACA;border-radius:6px;cursor:pointer;font-family:var(--font-zh)">
+                          <span x-text="(finShowPayDetail ? '▾ ' : '▸ ') + '待匯款明細（' + finUnpaidVouchers().length + '）'"></span>
+                        </button>
+                      </div>
+
+                      <div x-show="finShowRecvDetail" style="margin-top:10px">
+                        <!-- 小標：兩個明細可以同時展開，沒有標題會連成一片分不出來 -->
+                        <div style="font-size:10px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.06em;text-transform:uppercase;padding-bottom:4px;border-bottom:1.5px solid #E5E7EB">未收款項</div>
+                        <template x-for="it in finOutstandingItems()" :key="it.idx">
+                          <div style="display:flex;align-items:baseline;gap:8px;padding:6px 0;border-bottom:1px solid #F0EFEB;font-size:12px">
+                            <span style="font-family:var(--font-zh);color:var(--text-primary);min-width:70px" x-text="it.type"></span>
+                            <span style="font-size:10px;color:var(--text-dim);font-family:var(--font-zh)" x-text="it.expectedReceiptDate ? '預計 ' + it.expectedReceiptDate : ''"></span>
+                            <span style="font-size:10px;color:var(--text-dim);font-family:var(--font-zh);flex:1" x-text="it.invoiceNo ? '發票 ' + it.invoiceNo : ''"></span>
+                            <span style="font-family:LINE Seed TW_OTF, sans-serif;font-weight:600;color:#92400E;min-width:90px;text-align:right" x-text="caseSettleFmt(it.amount)"></span>
+                          </div>
+                        </template>
+                      </div>
+
+                      <div x-show="finShowPayDetail" style="margin-top:10px">
+                        <div style="font-size:10px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.06em;text-transform:uppercase;padding-bottom:4px;border-bottom:1.5px solid #E5E7EB">待匯款（已核准未匯款）</div>
+                        <template x-for="v in finUnpaidVouchers()" :key="v.voucherNo">
+                          <div style="display:flex;align-items:baseline;gap:8px;padding:6px 0;border-bottom:1px solid #F0EFEB;font-size:12px">
+                            <span style="font-family:LINE Seed TW_OTF, sans-serif;font-size:11px;color:var(--text-secondary)" x-text="v.voucherNo"></span>
+                            <span style="font-family:var(--font-zh);color:var(--text-primary);flex:1" x-text="v.vendorName || '—'"></span>
+                            <span style="font-size:10px;color:var(--text-dim);font-family:var(--font-zh)" x-text="v.payableDate ? '應付日 ' + v.payableDate : ''"></span>
+                            <span style="font-family:LINE Seed TW_OTF, sans-serif;font-weight:600;color:#B91C1C;min-width:90px;text-align:right" x-text="caseSettleFmt(v.grandTotal)"></span>
+                          </div>
+                        </template>
+                      </div>
+                    </div>
+                  </template>
+                </div>
+
                 <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px">
                   <span class="cm-section-title" style="margin-bottom:0">精算結果</span>
                   <template x-if="caseSettleStatus()">
@@ -1948,6 +2058,10 @@
                           <div style="display:flex;align-items:baseline;gap:8px;padding:7px 0;border-bottom:1px solid #F0EFEB;font-size:12px">
                             <span style="font-size:10px;background:#F3F4F6;color:#6B7280;padding:1px 6px;border-radius:3px;font-family:var(--font-zh);white-space:nowrap" x-text="ex.category || ''"></span>
                             <span style="flex:1;font-family:var(--font-zh);color:var(--text-primary)" x-text="ex.description || '—'"></span>
+                            <!-- 單號（2026-09-09）：舊資料沒這個欄位就不顯示標籤 -->
+                            <template x-if="ex.docNo">
+                              <span style="font-size:10px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;white-space:nowrap" x-text="'單號 ' + ex.docNo"></span>
+                            </template>
                             <span style="font-family:LINE Seed TW_OTF, sans-serif;font-weight:600;color:#92400E;min-width:90px;text-align:right"
                                   x-text="(ex.totalCost||0) > 0 ? caseSettleFmt(ex.totalCost) : '—'"></span>
                           </div>

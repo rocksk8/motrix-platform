@@ -2469,18 +2469,22 @@ def _build_case_closing_html(data: dict) -> str:
     ) if s.get("items") else ""
 
     # ── 額外支出明細 ─────────────────────────────────────────────────────────
+    # 單號欄（2026-09-09 新增）：額外支出的憑證編號，會計對帳時要靠它回頭找到
+    # 實體憑證，結案報表是對外/存查用的最終文件，這裡沒有就等於帳上有金額卻查
+    # 不到憑證出處。舊資料沒有這個欄位，顯示 "—"。
     extra_rows_html = "".join(
         f'<tr><td>{esc(ex.get("category"))}</td><td>{esc(ex.get("description")) or "—"}</td>'
         f'<td class="r">{money(ex.get("totalCost")) if ex.get("totalCost") else "—"}</td>'
         f'<td class="c">{esc(ex.get("expenseDate")) or "—"}</td>'
+        f'<td class="c">{esc(ex.get("docNo")) or "—"}</td>'
         f'<td>{esc("、".join(f.get("filename","") for f in (ex.get("files") or []))) or "—"}</td></tr>'
         for ex in (s.get("extraItems") or [])
     )
-    _no_extra_row = '<tr><td colspan="5" class="c" style="color:#9CA3AF">無額外支出資料</td></tr>'
+    _no_extra_row = '<tr><td colspan="6" class="c" style="color:#9CA3AF">無額外支出資料</td></tr>'
     extras_section = (
         f'<div class="section-label">{next(_cn_nums)}、額外支出明細</div>'
         '<table><thead><tr><th style="width:100px">類別</th><th>說明</th><th class="r" style="width:110px">金額</th>'
-        '<th style="width:90px">支出日期</th><th>發票/收據附件</th></tr></thead>'
+        '<th style="width:90px">支出日期</th><th style="width:100px">單號</th><th>發票/收據附件</th></tr></thead>'
         f'<tbody>{extra_rows_html or _no_extra_row}</tbody></table>'
     ) if s.get("extraItems") else ""
 

@@ -480,6 +480,7 @@
                     <th style="width:110px">小計 (NT$)</th>
                     <th style="min-width:100px">備註</th>
                     <th style="width:110px">支出日期</th>
+                    <th style="width:120px">單號</th>
                     <th style="min-width:160px">發票/收據</th>
                     <th style="width:28px"></th>
                   </tr>
@@ -536,6 +537,14 @@
                         <input class="stl-input" type="date" x-model="ex.expenseDate"
                                :disabled="settlement.status === 'finalized'"
                                style="width:120px">
+                      </td>
+                      <td>
+                        <!-- 單號（2026-09-09）：發票/收據/請購單號等憑證編號，自由文字
+                             （不套用 validate_invoice_no() 的統一發票格式檢查——這裡收的
+                             不只統一發票，收據/自製憑單/廠商出貨單號都可能填進來）。 -->
+                        <input class="stl-input" type="text" x-model="ex.docNo"
+                               :disabled="settlement.status === 'finalized'"
+                               placeholder="憑證單號…" style="width:110px">
                       </td>
                       <td>
                         <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap">
@@ -1080,6 +1089,7 @@ function settlementPage() {
         totalCost:   0,
         note:        '',
         expenseDate: '',
+        docNo:       '',   // 憑證單號（2026-09-09），案件財務總覽也會顯示
         files:       [],
       })
     },

@@ -722,6 +722,7 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
 | PATCH | /quotations/{no}/case-record | 樂觀鎖 `_expectedUpdatedAt` → 409 |
 | PATCH | /quotations/{no}/payment/{idx} | 收款標記；樂觀鎖 `_expectedUpdatedAt` → 409 |
 | GET/PUT | /quotations/{no}/settlement | 精算；finalized 後非 superadmin 不可改 |
+| GET | /quotations/{no}/finance-summary | 案件財務「應收應付總覽」彙總（2026-09-09）：應收/已收/未收＋承攬商匯款申請的已核准未匯款/已匯款/簽核中＋開票申請/請款單唯讀清單＋精算額外支出小計。**後三者刻意不併入合計**，理由見端點 docstring |
 | GET | /quotations/{no}/pdf-download | Edge PDF |
 | POST | /quotations/{no}/export | 記錄匯出人/時間 |
 | GET | /quotations/{no}/updates | 動態 Tab 合併 feed（comments+work_logs+daily_tasks） |
@@ -1173,7 +1174,7 @@ xlsx-0.18.5.full.min.js     （SheetJS）
 | ✅ | ~~QR 登入手機端免密碼~~（2026-09-08 已實作，見 §12 同日條目——手機瀏覽器已有效 session 時自動核准，沒有則退回既有密碼手動輸入／瀏覽器自動填入密碼兩層） |
 | ✅ | ~~`build_deploy_package.ps1` 打包關卡用 `pytest-xdist` 平行化~~（2026-09-09 已實作，見 §12 同日條目——動手前先驗證序列/`-n auto` 兩邊 470 題非 e2e 測試 pass/fail 清單完全一致，序列 390 秒→平行 166 秒，約 2.35 倍加速） |
 | 📋 | **待開發（2026-09-08 討論，尚未實作）：WebAuthn/Passkey 裝置綁定登入**——使用者原始需求是想綁定電腦/手機 MAC 位址做「認得這台裝置、快速放行」，查證後瀏覽器沒有任何 JS API 能讀取 MAC（隱私限制，非我們沒做），且 MAC 軟體層可偽造本來就不可靠。改用業界正規解法：裝置的安全晶片（Face ID/指紋/TPM）產生一組無法匯出/複製的金鑰跟帳號綁定，之後那台裝置生物辨識一下即可登入或核准 QR 請求，比 MAC 位址安全非常多。**尚未評估技術方案細節**——前端需串接瀏覽器 WebAuthn API（`navigator.credentials.create/get`），後端需新增 credential 註冊/驗證端點與公鑰儲存（新表，例如 `webauthn_credentials`），且要設計跟現有密碼／TOTP／QR session 三種登入路徑如何並存、要不要能列出/命名/撤銷已註冊裝置。下次要動手前應先進 Plan Mode 完整設計，比照 QR 核准功能與 TOTP 當初的作法（見 [[feedback_check_existing_before_building]]，認證流程設計優先權高於一般功能）。 |
-| 📋 | **待開發（2026-09-08 討論，尚未實作）：案件財務新增獨立「應收應付」模組**——在專案管理－案件管理－財務底下新增一個獨立模組，整合該案件所有會計相關內容：應收款、應付款、未收、未付等，並串接該案件相關的所有財務資訊、支出項等（目前分散在報價單金額、承攬商匯款申請、發票開立簽核單、精算表單等多處，尚未有統一彙總視圖）。**附帶需求**：精算表單（settlement）內的「雜支」項目要增加可填寫單號欄位。**細節待評估**（資料模型、與既有 `contractor_payment_vouchers`／`invoice_vouchers`／`quotations.data_json` 精算的關聯方式、UI 位置等），token 足夠時再展開設計，先記錄需求方向。 |
+| ✅ | ~~案件財務新增獨立「應收應付」模組＋精算雜支單號欄位~~（2026-09-09 已實作，見 §12 同日條目與 §7.16——新增 `GET /api/quotations/{quote_no}/finance-summary` 彙總端點，未新增任何資料表/欄位；精算「額外支出」新增 `docNo` 欄位，因 settlement 整包存 `data_json` 故後端零改動） |
 | 📋 | **待開發（2026-09-09 討論，尚未實作）：營運報表（reports）當月與當年度數據獨立分開顯示**——目前營運報表的應收未收、已收已支等數字似乎是當年度與當月混在一起（或至少沒有明確區隔），需求是把「當月」的應收未收／已收已支獨立顯示，跟「當年度」的數字做出區隔，不要混算或混排在一起。**併同影響**：營運報表下方的分頁（tabs）內容也要一併比照，跟當年度視圖分開顯示，而不是共用同一份彙總。**細節待評估**（目前 `frontend/js/reports.js` 現有的月/年篩選邏輯、後端 `routers/reports.py` 對應的查詢與彙總方式），token 足夠時再展開設計，先記錄需求方向。 |
 
 **📖 2026-09-01 新增：`MOTRIX-ERP-ARCHITECTURE-MAP.md`**（專案根目錄）——依實際程式碼盤點（非僅依賴本文件）產出的架構地圖，涵蓋 18 組模組的檔案:行號索引、DB v1→v68 完整演進索引、13 條踩坑教訓彙整、依專業軟體慣例的分優先序建議清單。**與本文件互補、不取代**：本文件仍是行為規格與逐日 changelog 的權威來源；架構地圖是「哪個功能在哪個檔案哪一行」的快速定位索引＋外部視角建議。本次盤點也發現本文件 §7/§13 的 router／migration 數量記載落後實際程式碼，已於本輪一併補齊（見下方 §7.12–§7.15、§13）。
@@ -1183,6 +1184,15 @@ xlsx-0.18.5.full.min.js     （SheetJS）
 ## §12 · 變更摘要（最新兩版）
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
+
+### 2026-09-09 — 案件財務新增「應收應付總覽」＋精算額外支出單號欄位（DB 無異動）
+
+- **需求**：專案管理－案件－財務底下要有一個能一次看完該案件所有會計相關內容（應收/應付/未收/未付）的獨立區塊；精算表單的雜支（＝「額外支出」）要能填單號。
+- **不新增任何資料表/欄位**：這些資料本來就都在（應收在 `data_json.caseRecord.payment.items[]`、應付在 `contractor_payment_vouchers`、開票申請/請款單各有其表），缺的只是一個把它們並排看的視圖。新增 `GET /api/quotations/{quote_no}/finance-summary` 彙總端點（`routers/quotations.py`），權限比照同批資料的既有端點（只要求登入，財務可見性由前端 `canSeeFinancial()` 把關——同一份資料透過既有端點本來就拿得到，只擋這一支是假的安全感）。
+- **應收/已收/未收的判斷抽成共用函式** `helpers/quotations.py::summarize_payment_items()`：這個邏輯原本在 `case-management.js` 的 getter 群與 `reports.py::_collect()` 各自算過一次，這是第三個呼叫點，抽出來避免再寫第三份（金額一律走既有 `payment_item_amounts()`，含 taxExempt 沖銷折算）。
+- **刻意不算進合計的東西**（最容易重複計算的地方，測試裡有對應的規格化測項）：開票申請／請款單只做唯讀清單，不併入應收（跟收款排程期別非一對一對應）；精算額外支出只回小計供參考，不當應付（這個清單根本沒有已付/未付狀態欄位）；簽核中的匯款申請只計筆數，不進未付合計。
+- **精算額外支出新增 `docNo`（單號）**：`settlement.html` 表格加一欄輸入框＋`addExtra()` 初始物件加 key，後端 `PUT /settlement` 是整包 dict 存檔、無欄位白名單，**零改動**；案件財務 Tab 的額外支出唯讀顯示與結案報表 PDF（`pdf_gen.py`，欄位數 5→6）一併顯示單號——會計對帳要靠它回頭找實體憑證，只能編輯不能列印等於沒用。
+- **測試**：新增 `test_case_finance_summary_2026_09_09.py`（6 題，含「哪些東西刻意不併入合計」的規格化測項），非 e2e 476/476 全過；另在 e2e 檔新增 `test_case_finance_summary_smoke`，用真實瀏覽器驗證新的 Alpine getter 在 `financeSummary` 還是 null 時不會炸頁。**踩坑（兩個，都值得記）**：①這題第一版斷言用整頁 `body` 文字找金額，實際上是**假性通過**——案件標題列 KPI 與左側案件清單卡本來就會顯示同一批金額（合約金額/已收款/未收款），財務分頁根本沒展開也照樣「找得到」。已改成給總覽區塊一個 `id="fin-ar-ap-overview"`，所有斷言都鎖定這個區塊內的文字。②單獨跑穩定通過、跟其他 3 題 e2e 連跑時偶發失敗（約 1/10），原因是頁面初始化期間分頁點擊偶爾沒生效：`selectCase()` 在兩個 await 之後才設 `activeTab='biz'`，分頁列卻更早就渲染出來，**剛點開案件的瞬間切分頁會被彈回「案件資訊」**（既有行為，非本次改動造成，未修）。測試改成等總覽以 `state="attached"` 進 DOM（`x-if` 只在 `financeSummary` 載入後渲染，而該載入排在 `activeTab='biz'` 那行之後）＋分頁沒切過去就重點一次（最多 3 次），之後連跑 8 輪整套 e2e 全過。另記一個寫測試時的陷阱：不要用 `Alpine.$data(document.querySelector('[x-data]'))` 讀頁面狀態，`sidebar.js` 會另外注入自己的 x-data 元件，DOM 裡第一個 `[x-data]` 不保證是頁面主元件。
 
 ### 2026-09-09 — `build_deploy_package.ps1` 打包測試改用 `pytest-xdist` 平行化（DB 無異動）
 

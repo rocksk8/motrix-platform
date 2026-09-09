@@ -296,3 +296,85 @@ def test_login_qr_approve_smoke(live_server, make_user):
             ctx_desktop.close()
         finally:
             browser.close()
+
+
+@pytest.mark.e2e
+def test_case_finance_summary_smoke(live_server, make_user):
+    """案件管理－財務 Tab「應收應付總覽」smoke test（2026-09-09，見
+    routers/quotations.py::get_finance_summary()）。後端彙總邏輯已有
+    test_case_finance_summary_2026_09_09.py 完整涵蓋，這裡只驗證前端這一區
+    真的渲染得出來——新增的 Alpine getter（finReceivable()/finPayable()）在
+    financeSummary 還是 null 時被 template 讀到會直接整頁炸掉，這正是純 API
+    測試看不出來、又只會在瀏覽器裡才發生的那類問題。"""
+    import json
+
+    username, password = make_user(username="e2e_fin_admin", role="superadmin")
+
+    import db
+    conn = db.get_db()
+    now = "2026-01-01T00:00:00"
+    data_json = json.dumps({
+        "caseRecord": {"payment": {"items": [
+            {"id": 1, "type": "訂金款", "pct": 40, "amount": 40000, "received": True,
+             "receivedAt": "2026-03-05T00:00:00", "actualAmount": None, "feeAmount": 0},
+            {"id": 2, "type": "尾款", "pct": 60, "amount": 60000, "received": False},
+        ]}},
+    }, ensure_ascii=False)
+    conn.execute(
+        "INSERT INTO quotations (quote_no, status, customer_name, project_name, total, pretax, "
+        "data_json, created_at, updated_at, deal_tag) VALUES (?,?,?,?,?,?,?,?,?,?)",
+        ("MQ-E2EFIN-001", "已送出", "E2E 財務客戶", "E2E 財務專案", 100000, 95238,
+         data_json, now, now, "已成案"),
+    )
+    conn.commit()
+    conn.close()
+
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        try:
+            page = browser.new_page()
+            _login(page, live_server, username, password)
+
+            page.goto(f"{live_server}/pages/case-management.html?q=MQ-E2EFIN-001")
+            page.wait_for_selector('button.cm-tab:has-text("財務")', timeout=10000)
+            # 必須等 selectCase() 整串 async 工作跑完再點分頁：它在兩個 await
+            # 之後才設 activeTab='biz'，分頁列卻在那之前就已經渲染出來，太早點
+            # 「財務」會被那行覆蓋回「案件資訊」（既有行為，非本功能造成）。
+            # 用 state="attached" 等總覽區塊「進入 DOM」（x-if 在 financeSummary
+            # 有值時才渲染，而 loadFinanceSummary() 排在 selectCase() 尾端、
+            # activeTab='biz' 那行之後）——此時分頁還沒點開所以它是隱藏的，不能
+            # 用預設的 visible 條件。刻意不從 Alpine.$data(querySelector('[x-data]'))
+            # 讀狀態：sidebar.js 會另外注入自己的 x-data 元件，DOM 裡第一個
+            # [x-data] 不保證是案件管理元件，實測會間歇性抓錯而提早往下跑。
+            page.wait_for_selector("#fin-ar-ap-overview", state="attached", timeout=10000)
+            page.click('button.cm-tab:has-text("財務")')
+
+            # 斷言一律鎖定總覽區塊本身，不要用整頁 body 文字：案件標題列的 KPI
+            # 跟左側案件清單卡本來就會顯示同一批金額（合約金額/已收款/未收款），
+            # 用整頁搜尋會在財務分頁根本沒展開的情況下也「矇對」而假性通過——
+            # 這正是這題第一版寫法踩到的坑。
+            # 分頁沒切過去就再點一次（最多 3 次）：上面的 attached 等待已經排除
+            # 大部分競態，但頁面初始化期間仍有其他 async 工作在跑，實測整套 e2e
+            # 連跑時偶發點擊沒生效。這裡要驗證的是「總覽渲染得對不對」，不是
+            # 「一次點擊能不能贏過頁面初始化」，所以容忍重點一次而不是讓整題紅掉。
+            overview = page.locator("#fin-ar-ap-overview")
+            for _ in range(3):
+                try:
+                    overview.wait_for(state="visible", timeout=4000)
+                    break
+                except Exception:
+                    page.click('button.cm-tab:has-text("財務")')
+            else:
+                overview.wait_for(state="visible", timeout=4000)
+            page.wait_for_function(
+                "() => document.querySelector('#fin-ar-ap-overview')"
+                "?.innerText.includes('NT$ 60,000')",
+                timeout=10000,
+            )
+            text = overview.inner_text()
+            assert "NT$ 100,000" in text, f"應收總額應顯示 NT$ 100,000，實際: {text!r}"
+            assert "NT$ 40,000" in text, f"已收應顯示 NT$ 40,000，實際: {text!r}"
+            assert "未收" in text and "未匯款" in text, \
+                f"應收/應付兩組 KPI 標籤都要在，實際總覽文字: {text!r}"
+        finally:
+            browser.close()
