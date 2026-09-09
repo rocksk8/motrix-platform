@@ -130,9 +130,17 @@ Write-Host "[OK] 語法檢查通過（共 $($psFiles.Count) 支 .ps1）。" -For
 # 測試分開跑、失敗只警告不中止——e2e 測試本身仍然會執行（不是跳過不驗證），
 # 只是「瀏覽器渲染在系統忙碌時偶發變慢」這種環境雜訊不該擋住整條部署管線，
 # 這是架構地圖與 §12 早就記載的長期建議，這裡正式落地。
-Write-Host "`n[測試] 執行 pytest（非 e2e，backend/tests/，含 API 整合測試）..."
+#
+# 2026-09-09：非 e2e 這段加上 pytest-xdist 的 "-n auto"（動態分派給多個
+# worker process）。動手前已先驗證過 backend/tests/conftest.py 的隔離機制
+# （每題測試各自獨立的 tmp_path DB/檔案，沒有寫死路徑或 port）撐得住多
+# process 平行跑：同一份 470 題非 e2e 測試序列跑一次、-n auto 跑一次，
+# 兩邊 pass/fail 清單逐題比對完全一致，且序列 390 秒／平行 166 秒（約
+# 2.35 倍加速）。之後不需要每次都「平行完再序列驗證一次」，那樣會抵銷
+# 平行化的意義——這裡只是一次性把關，不是常態雙跑。
+Write-Host "`n[測試] 執行 pytest（非 e2e，backend/tests/，含 API 整合測試，pytest-xdist 平行化）..."
 Push-Location (Join-Path $projectRoot "backend")
-python -m pytest -q -m "not e2e"
+python -m pytest -q -m "not e2e" -n auto
 $testExit = $LASTEXITCODE
 if ($testExit -ne 0) {
     Pop-Location
