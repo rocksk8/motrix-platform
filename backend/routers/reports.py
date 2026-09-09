@@ -23,7 +23,7 @@ from fastapi.responses import StreamingResponse
 from db import get_db
 from helpers import (
     _require_user, _tok, _audit, _warranty_expiry, _get_edge_path, _get_setting, _set_setting,
-    payment_item_amounts, settlement_extra_expenses, quote_won_month_map,
+    payment_item_amounts, summarize_payment_items, settlement_extra_expenses, quote_won_month_map,
     user_has_module, EDGE_PDF_SEMAPHORE,
 )
 from routers.vendor_contractors import _dispatch_row
@@ -3293,3 +3293,130 @@ def report_expenses_monthly(year: int = Query(None), month: str = Query(None),
     year  = year or today.year
     month = month or today.strftime("%Y-%m")
     return _build_income_expense_scopes(year, month, department_id)
+
+
+def _collect_receivable_items(department_id: Optional[int] = None) -> list:
+  """輕量應收／已收／未收收集器（2026-09-09）。迭代全部『已成案』『已結案』報價單，
+  從 caseRecord.payment.items[] 逐筆列舉，透過既有 quote_won_month_map() 確定
+  成案月份（彌補 quote_date 缺漏或明顯未來日期的防呆），最後回傳攤平的逐筆款項 dict
+  list，各筆包含 case 層級（quoteNo/customer/project/salesPerson/dealTag/quoteDate/
+  wonMonth）與款項層級欄位（idx/type/pct/amount/received/receivedAt/receivedBy/
+  expectedReceiptDate/actualAmount/feeAmount/netAmount/invoiceNo/invoiceDate/
+  feeNote/note/taxExempt，完全複用 summarize_payment_items() 回傳形狀）。
+
+  非 Excel/PDF 匯出路徑的單純報表頁面用途，故不含 settlement/contractor/warranty
+  等匯出常需但頁面用不到的計算；比照 _collect_income_items() 的輕量設計。
+
+  成案月份分組務必透過 quote_won_month_map() 取得——不能直接用 quote_date。
+  _collect() L161/L249 已經驗證過該防呆邏輯。"""
+  conn = get_db()
+
+  dept_by_user = {}
+  if department_id:
+    dept_by_user = {r["id"]: r["department_id"]
+                    for r in conn.execute("SELECT id, department_id FROM users").fetchall()}
+
+  won_month = quote_won_month_map(conn)
+
+  all_items = []
+  for row in conn.execute(
+      """SELECT quote_no, customer_name, project_name, sales_person, sales_person_id,
+                total, pretax, quote_date,
+                COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') AS deal_tag,
+                json_extract(data_json,'$.caseRecord') AS cr_json
+         FROM quotations
+         WHERE COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '')
+               IN ('已成案','已結案')"""
+  ).fetchall():
+    if department_id and dept_by_user.get(row["sales_person_id"]) != department_id:
+      continue
+
+    try:
+      cr = json.loads(row["cr_json"] or "{}")
+    except (json.JSONDecodeError, TypeError):
+      cr = {}
+
+    pay = (cr.get("payment") or {}).get("items", [])
+    if not pay:
+      continue
+
+    won = won_month.get(row["quote_no"]) or (row["quote_date"] or "")[:7]
+    summary = summarize_payment_items(row["total"] or 0, pay, row["pretax"])
+
+    for item in summary["items"]:
+      flat = {
+        "quoteNo": row["quote_no"],
+        "customer": row["customer_name"],
+        "project": row["project_name"],
+        "salesPerson": row["sales_person"],
+        "dealTag": row["deal_tag"],
+        "quoteDate": (row["quote_date"] or "")[:10],
+        "wonMonth": won,
+      }
+      flat.update(item)
+      all_items.append(flat)
+
+  conn.close()
+  return all_items
+
+
+def _build_receivables_scopes(year: int, month: str, department_id: Optional[int] = None) -> dict:
+  """2026-09-09：按成案月份分組的應收報表（當月/當年度）。月份格式 YYYY-MM；
+  跟 _build_income_expense_scopes() 一樣回傳 month* 與 year* 雙套欄位，讓前端
+  能獨立切換「當月/今年度」檢視。
+
+  monthReceivableTotal == monthCollectedTotal + monthOutstandingTotal 恆成立（by
+  construction），year 版同理。此設計刻意與 _collect() 回傳的 summary.total* 欄位
+  不同：那些是全歷史累計「餘額快照」（見 _send_monthly_report_for() L2804-2815
+  docstring），這裡是某段期間內「成案案件」的應收／已收／未收「流量」——兩種不同的
+  統計口徑並存，不衝突。"""
+  try:
+    mo_check = int(month[5:7])
+    if len(month) != 7 or month[4] != "-" or not (1 <= mo_check <= 12) or int(month[:4]) <= 0:
+      raise ValueError
+  except (ValueError, IndexError):
+    raise HTTPException(400, f"month 格式錯誤（{month}），需為 YYYY-MM")
+
+  all_items = _collect_receivable_items(department_id)
+
+  month_items      = [i for i in all_items if i["wonMonth"] == month]
+  month_collected  = [i for i in month_items if i["received"]]
+  month_outstanding = [i for i in month_items if not i["received"]]
+
+  year_str = str(year)
+  year_items      = [i for i in all_items if i["wonMonth"][:4] == year_str]
+  year_collected  = [i for i in year_items if i["received"]]
+  year_outstanding = [i for i in year_items if not i["received"]]
+
+  return {
+    "receivablesYear":         year,
+    "receivablesMonth":        month,
+    "monthReceivableItems":    month_items,
+    "monthReceivableTotal":    sum(i["amount"] for i in month_items),
+    "monthCollectedItems":     month_collected,
+    "monthCollectedTotal":     sum(i["amount"] for i in month_collected),
+    "monthOutstandingItems":   month_outstanding,
+    "monthOutstandingTotal":   sum(i["amount"] for i in month_outstanding),
+    "yearReceivableItems":     year_items,
+    "yearReceivableTotal":     sum(i["amount"] for i in year_items),
+    "yearCollectedItems":      year_collected,
+    "yearCollectedTotal":      sum(i["amount"] for i in year_collected),
+    "yearOutstandingItems":    year_outstanding,
+    "yearOutstandingTotal":    sum(i["amount"] for i in year_outstanding),
+  }
+
+
+@router.get("/api/reports/receivables-monthly")
+def report_receivables_monthly(year: int = Query(None), month: str = Query(None),
+                                department_id: Optional[int] = Query(None),
+                                authorization: str = Header(None)):
+  """2026-09-09：應收明細表（當月/當年度獨立檢視）。供 `reports.html` recv/out
+  分頁新增的「當月/今年度」切換鈕使用，取代目前硬卡在頂部 period-bar 的期間邏輯。
+  僅 admin+ 可存取。"""
+  u = _require_user(authorization)
+  if u["role"] not in ("superadmin", "admin"):
+    raise HTTPException(403, "僅管理員以上可存取報表")
+  today = date.today()
+  year  = year or today.year
+  month = month or today.strftime("%Y-%m")
+  return _build_receivables_scopes(year, month, department_id)

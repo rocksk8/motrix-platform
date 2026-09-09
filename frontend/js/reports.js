@@ -74,6 +74,14 @@ function reportsApp() {
     expensesLoadedFor: null,   // 記錄已載入資料對應的年度+月份，切換時判斷要不要重打 API
     expensesFilter:    'all',  // all/contractor/equipment/material/other，支出明細的類別篩選 chip
 
+    // ── 應收報表（recv/out 分頁，2026-09-09 從 period-bar 切換為獨立「當月/今年度」）──
+    receivablesScope:     'month', // month/year
+    receivablesYear:      new Date().getFullYear(),
+    receivablesMonth:     new Date().toISOString().slice(0, 7),  // 'YYYY-MM'
+    receivablesData:      null,
+    receivablesLoading:   false,
+    receivablesLoadedFor: null,
+
     // ── 案件清單依月份區分（2026-08-26）─────────────────────────────────────
     caseListYear:         new Date().getFullYear(),
     caseListGroupByMonth: true,
@@ -158,7 +166,6 @@ function reportsApp() {
       return this.data.periodLabel || this.periodParam
     },
     get summary()      { return (this.data || {}).summary     || {} },
-    get periodItems()  { return (this.data || {}).periodItems || [] },
     get deptPerf()      { return (this.data || {}).deptPerf    || [] },
     get allDepartments() {
       var out = []
@@ -171,7 +178,6 @@ function reportsApp() {
       }
       return out
     },
-    get outstanding()  { return (this.data || {}).outstanding || [] },
     get casesAll()     { return (this.data || {}).casesAll    || [] },
 
     // ── 案件清單依月份區分 ────────────────────────────────────────────────────
@@ -233,6 +239,17 @@ function reportsApp() {
       var expense = this.expensesScope === 'month' ? this.monthExpenseTotal : this.expensesTotals.total
       return income - (expense || 0)
     },
+
+    // ── 應收報表（recv/out 分頁，2026-09-09）───────────────────────────────────
+    get monthReceivableItems()  { return (this.receivablesData || {}).monthReceivableItems || [] },
+    get monthCollectedItems()   { return (this.receivablesData || {}).monthCollectedItems || [] },
+    get monthOutstandingItems() { return (this.receivablesData || {}).monthOutstandingItems || [] },
+    get yearReceivableItems()   { return (this.receivablesData || {}).yearReceivableItems || [] },
+    get yearCollectedItems()    { return (this.receivablesData || {}).yearCollectedItems || [] },
+    get yearOutstandingItems()  { return (this.receivablesData || {}).yearOutstandingItems || [] },
+    get activeCollectedItems()  { return this.receivablesScope === 'month' ? this.monthCollectedItems : this.yearCollectedItems },
+    get activeOutstandingItems(){ return this.receivablesScope === 'month' ? this.monthOutstandingItems : this.yearOutstandingItems },
+
     expensesCatLabel(cat) {
       return { contractor: '承攬商派發', equipment: '設備進貨', material: '料件進貨', other: '其他支出' }[cat] || cat
     },
@@ -952,6 +969,29 @@ function reportsApp() {
         alert('支出明細載入失敗：' + (e.message || e))
       }
       this.expensesLoading = false
+    },
+
+    showReceivablesTab(tab) {
+      this.activeTab = tab
+      var key = this.receivablesYear + ':' + this.receivablesMonth + ':' + (this.departmentId || '')
+      if (this.receivablesLoadedFor !== key) this.loadReceivables()
+    },
+
+    async loadReceivables() {
+      this.receivablesLoading = true
+      try {
+        var qs = '?year=' + this.receivablesYear + '&month=' + this.receivablesMonth +
+                 (this.departmentId ? '&department_id=' + this.departmentId : '')
+        var res = await fetch('/api/reports/receivables-monthly' + qs, {
+          headers: { Authorization: 'Bearer ' + this._token() }
+        })
+        if (!res.ok) throw new Error('應收明細載入失敗')
+        this.receivablesData      = await res.json()
+        this.receivablesLoadedFor = this.receivablesYear + ':' + this.receivablesMonth + ':' + (this.departmentId || '')
+      } catch (e) {
+        alert('應收明細載入失敗：' + (e.message || e))
+      }
+      this.receivablesLoading = false
     },
 
     async showArTab() {

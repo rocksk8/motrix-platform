@@ -401,11 +401,11 @@
             <button class="tab" :class="{on:activeTab==='sales'}" @click="activeTab='sales'">
               業務員績效<span class="tab__cnt" x-text="salesPerf.length"></span>
             </button>
-            <button class="tab" :class="{on:activeTab==='recv'}" @click="activeTab='recv'">
-              本期收款<span class="tab__cnt" x-text="periodItems.length"></span>
+            <button class="tab" :class="{on:activeTab==='recv'}" @click="showReceivablesTab('recv')">
+              已收款<span class="tab__cnt" x-text="activeCollectedItems.length"></span>
             </button>
-            <button class="tab" :class="{on:activeTab==='out'}" @click="activeTab='out'">
-              未收款<span class="tab__cnt" x-text="outstanding.length"></span>
+            <button class="tab" :class="{on:activeTab==='out'}" @click="showReceivablesTab('out')">
+              未收款<span class="tab__cnt" x-text="activeOutstandingItems.length"></span>
             </button>
             <button class="tab" :class="{on:activeTab==='expenses'}" @click="showExpensesTab()">
               月支出<span class="tab__cnt" x-show="expensesTotals.total" x-text="fmt(expensesTotals.total)"></span>
@@ -438,12 +438,31 @@
           </button>
           </div>
 
-          <!-- 本期收款 -->
-          <div x-show="activeTab==='recv'" class="panel">
-            <template x-if="periodItems.length === 0">
-              <div class="empty-state">本期無收款紀錄</div>
+          <!-- recv/out 分頁共用的「當月/今年度」切換鈕 -->
+          <div x-show="activeTab==='recv' || activeTab==='out'" style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+            <button class="period-type-btn" :class="{on:receivablesScope==='month'}" @click="receivablesScope='month'; loadReceivables()">當月</button>
+            <button class="period-type-btn" :class="{on:receivablesScope==='year'}" @click="receivablesScope='year'; loadReceivables()">今年度</button>
+            <template x-if="receivablesScope==='month'">
+              <input type="month" x-model="receivablesMonth" @change="loadReceivables()"
+                     style="padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;background:#fff">
             </template>
-            <template x-if="periodItems.length > 0">
+            <template x-if="receivablesScope==='year'">
+              <select x-model.number="receivablesYear" @change="loadReceivables()"
+                      style="padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;background:#fff">
+                <template x-for="y in caseListYears" :key="y">
+                  <option :value="y" x-text="y"></option>
+                </template>
+              </select>
+            </template>
+            <span x-show="receivablesLoading" style="font-size:12px;color:var(--text-dim)">載入中…</span>
+          </div>
+
+          <!-- 已收款 -->
+          <div x-show="activeTab==='recv'" class="panel">
+            <template x-if="activeCollectedItems.length === 0">
+              <div class="empty-state">所選期間無收款紀錄</div>
+            </template>
+            <template x-if="activeCollectedItems.length > 0">
               <table class="data-table">
                 <thead><tr>
                   <th>案件號</th><th>客戶</th><th>專案名稱</th><th>業務員</th>
@@ -452,7 +471,7 @@
                   <th>發票號碼</th><th>備注</th>
                 </tr></thead>
                 <tbody>
-                  <template x-for="it in periodItems" :key="it.quoteNo + '-' + it.idx">
+                  <template x-for="it in activeCollectedItems" :key="it.quoteNo + '-' + it.idx">
                     <tr>
                       <td class="mono" x-text="it.quoteNo"></td>
                       <td x-text="it.customer"></td>
@@ -469,12 +488,12 @@
                     </tr>
                   </template>
                   <tr class="sum-row">
-                    <td colspan="5">合計（<span x-text="periodItems.length"></span> 筆）</td>
-                    <td class="r" x-text="fmt(periodItems.reduce((s,i)=>s+i.amount,0))"></td>
+                    <td colspan="5">合計（<span x-text="activeCollectedItems.length"></span> 筆）</td>
+                    <td class="r" x-text="fmt(activeCollectedItems.reduce((s,i)=>s+i.amount,0))"></td>
                     <td></td>
-                    <td class="r" x-text="fmt(periodItems.reduce((s,i)=>s+(i.actualAmount!==null?i.actualAmount:i.amount),0))"></td>
-                    <td class="r" x-text="fmt(periodItems.reduce((s,i)=>s+(i.feeAmount||0),0))"></td>
-                    <td class="r" x-text="fmt(summary.periodNet)"></td>
+                    <td class="r" x-text="fmt(activeCollectedItems.reduce((s,i)=>s+(i.actualAmount!==null?i.actualAmount:i.amount),0))"></td>
+                    <td class="r" x-text="fmt(activeCollectedItems.reduce((s,i)=>s+(i.feeAmount||0),0))"></td>
+                    <td class="r" x-text="fmt(activeCollectedItems.reduce((s,i)=>s+((i.actualAmount!==null?i.actualAmount:i.amount)-(i.feeAmount||0)),0))"></td>
                     <td colspan="2"></td>
                   </tr>
                 </tbody>
@@ -484,18 +503,18 @@
 
           <!-- 未收款 -->
           <div x-show="activeTab==='out'" class="panel">
-            <template x-if="outstanding.length === 0">
-              <div class="empty-state">目前無未收款項目</div>
+            <template x-if="activeOutstandingItems.length === 0">
+              <div class="empty-state">所選期間無未收款項目</div>
             </template>
-            <template x-if="outstanding.length > 0">
+            <template x-if="activeOutstandingItems.length > 0">
               <table class="data-table">
                 <thead><tr>
                   <th>案件號</th><th>客戶</th><th>專案名稱</th><th>業務員</th>
                   <th class="c">案件進度</th><th>款項類型</th>
-                  <th class="r">應收金額</th><th class="c">比例</th><th class="c">報價日期</th>
+                  <th class="r">應收金額</th><th class="c">比例</th><th class="c">成案月份</th>
                 </tr></thead>
                 <tbody>
-                  <template x-for="it in outstanding" :key="it.quoteNo + '-' + it.idx">
+                  <template x-for="it in activeOutstandingItems" :key="it.quoteNo + '-' + it.idx">
                     <tr>
                       <td class="mono" x-text="it.quoteNo"></td>
                       <td x-text="it.customer"></td>
@@ -505,12 +524,12 @@
                       <td x-text="it.type"></td>
                       <td class="r mono red-txt" x-text="fmt(it.amount)"></td>
                       <td class="c mono" x-text="(it.pct||0).toFixed(1) + '%'"></td>
-                      <td class="c mono" x-text="it.quoteDate"></td>
+                      <td class="c mono" x-text="it.wonMonth"></td>
                     </tr>
                   </template>
                   <tr class="sum-row">
                     <td colspan="6">合計未收</td>
-                    <td class="r" x-text="fmt(outstanding.reduce((s,i)=>s+i.amount,0))"></td>
+                    <td class="r" x-text="fmt(activeOutstandingItems.reduce((s,i)=>s+i.amount,0))"></td>
                     <td colspan="2"></td>
                   </tr>
                 </tbody>
