@@ -78,7 +78,7 @@ DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR = os.path.join(
 # （已套用過的 schema_version 不可回頭刪除/重排），data_json.dealWonAt 這個
 # 欄位會留在既有資料裡但目前沒有任何程式碼讀取，之後如果要重新加回「成交時間」
 # 這種概念，不要複用這個欄位名稱免得語意混淆。
-CURRENT_VERSION = 72
+CURRENT_VERSION = 73
 
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
 # execution model) whenever the current request is authenticated as the 'demo'
@@ -1973,6 +1973,38 @@ def _m072_totp(conn):
     conn.commit()
 
 
+def _m073_webauthn_credentials(conn):
+    """使用者帳號新增 WebAuthn/Passkey 裝置綁定登入（2026-09-09）：比照 TOTP
+    的自助啟用模式（非強制），允許使用者在多個裝置（Windows Hello、Touch ID、
+    Yubikey 等）上儲存 Passkey 憑證。
+
+    與 TOTP 不同，Passkey 是每張憑證有自己的生命週期（簽名計數遞增防複製、
+    可個別改名/撤銷），所以獨立建表 `webauthn_credentials` 而非 JSON 陣列存在
+    users 表（比照 `sessions` 表的先例）。不加 FOREIGN KEY 約束（同 sessions）。
+
+    - `credential_id`：W3C 認證器標準定義的憑證 ID（二進位），BLOB 類型並加
+      UNIQUE 約束（全球唯一）
+    - `public_key`：COSE 編碼的公鑰（二進位），由 webauthn 庫回傳並透明儲存
+    - `name`：使用者自定義易讀名稱（"iPhone"、"Windows Hello"），支援改名
+    - `sign_count`：簽名計數，每次成功登入遞增（防重放攻擊偵測用）
+    - `created_at`：憑證建立時間
+    - `last_used_at`：最後一次成功登入時間（用於排序/顯示使用情況）"""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS webauthn_credentials (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id      INTEGER NOT NULL,
+            credential_id BLOB NOT NULL UNIQUE,
+            public_key   BLOB NOT NULL,
+            name         TEXT NOT NULL DEFAULT '',
+            sign_count   INTEGER NOT NULL DEFAULT 0,
+            created_at   TEXT NOT NULL,
+            last_used_at TEXT
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_webauthn_credentials_user_id ON webauthn_credentials(user_id)")
+    conn.commit()
+
+
 def _m071_paid_bank_account(conn):
     """付款事件新增「MOTRIX 自己是用哪個銀行帳戶付的」欄位（2026-09-01）：
     使用者要求 T100 科目代號要能依銀行帳戶分開設定（一間公司可能有多個銀行
@@ -2960,6 +2992,7 @@ _MIGRATIONS = [
     _m070_stock_batches,                            # v70
     _m071_paid_bank_account,                        # v71
     _m072_totp,                                     # v72
+    _m073_webauthn_credentials,                     # v73
 ]
 
 

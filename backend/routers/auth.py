@@ -15,6 +15,13 @@ import pyotp
 import qrcode
 from fastapi import APIRouter, HTTPException, Header, Request
 from pydantic import BaseModel
+from webauthn import (
+    generate_registration_options,
+    verify_registration_response,
+    generate_authentication_options,
+    verify_authentication_response,
+    options_to_json,
+)
 
 from db import get_db, get_demo_db, reset_demo_db, demo_reset_lock
 from helpers import (
@@ -229,6 +236,33 @@ class UserIn(BaseModel):
     password: Optional[str] = None
     active: Optional[bool] = None
     department_id: Optional[int] = None
+
+
+class WebauthnRegisterBeginIn(BaseModel):
+    pass
+
+
+class WebauthnRegisterCompleteIn(BaseModel):
+    challengeToken: str
+    id: str
+    rawId: str
+    response: dict
+
+
+class WebauthnLoginBeginIn(BaseModel):
+    username: str
+
+
+class WebauthnLoginCompleteIn(BaseModel):
+    challengeToken: str
+    username: str
+    id: str
+    rawId: str
+    response: dict
+
+
+class WebauthnCredentialRenameIn(BaseModel):
+    name: str
 
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
@@ -671,6 +705,321 @@ def totp_disable(body: TotpDisableIn, authorization: str = Header(None)):
     conn.close()
     _audit(_tok(authorization), "auth.totp_disabled", "user", user["username"],
            user.get("display_name") or user["username"])
+    return {"ok": True}
+
+
+# ── WebAuthn/Passkey device binding (2026-09-09, self-service) ────────────────
+#
+# V1 design: already-logged-in users can register multiple devices; login path
+# requires username first (not usernameless/resident-key mode). Follows same
+# self-service model as TOTP — optional, not forced.
+#
+# ⚠️ Crucial safeguards (not negotiable — must ship with V1):
+# - sign_count replay-attack detection (increment & verify on every login)
+# - credential revocation (individual delete, no orphaned DB rows)
+# These are security minimums, not future enhancements.
+
+from webauthn.helpers.structs import PublicKeyCredentialDescriptor, PublicKeyCredentialType, AuthenticatorTransport
+
+_WEBAUTHN_ORIGIN = os.environ.get("WEBAUTHN_ORIGIN", "http://localhost:5000")
+_WEBAUTHN_RP_ID = os.environ.get("WEBAUTHN_RP_ID", "localhost")
+
+_webauthn_lock = threading.Lock()
+# challenge_token -> {"user_id": int, "challenge": bytes, "expires": monotonic_time}
+_webauthn_challenges: dict = {}
+_WEBAUTHN_CHALLENGE_TTL_S = 600  # 10 minutes
+
+
+def _store_webauthn_challenge(challenge: bytes) -> str:
+    """Store challenge server-side, return opaque token for client to pass back."""
+    token = secrets.token_hex(16)
+    now = time.monotonic()
+    with _webauthn_lock:
+        _webauthn_challenges[token] = {"challenge": challenge, "expires": now + _WEBAUTHN_CHALLENGE_TTL_S}
+    return token
+
+
+def _retrieve_webauthn_challenge(token: str) -> Optional[bytes]:
+    """Retrieve and consume challenge (single-use). Return None if expired or not found."""
+    with _webauthn_lock:
+        data = _webauthn_challenges.pop(token, None)
+        if not data:
+            return None
+        if time.monotonic() > data["expires"]:
+            return None
+        return data["challenge"]
+
+
+@router.post("/api/auth/webauthn/register/begin")
+def webauthn_register_begin(authorization: str = Header(None)):
+    """已登入使用者開始 Passkey 註冊流程。回傳 W3C WebAuthn registration options
+    JSON，以及 challenge_token 供前端在 complete 時回傳。"""
+    user = _require_user(authorization)
+    conn = get_db()
+    try:
+        existing_creds = conn.execute(
+            "SELECT credential_id FROM webauthn_credentials WHERE user_id=?",
+            (user["id"],)
+        ).fetchall()
+    finally:
+        conn.close()
+
+    exclude_credentials = [
+        PublicKeyCredentialDescriptor(
+            type=PublicKeyCredentialType.PUBLIC_KEY,
+            id=cred["credential_id"]
+        )
+        for cred in existing_creds
+    ]
+
+    options = generate_registration_options(
+        rp_id=_WEBAUTHN_RP_ID,
+        rp_name="MOTRIX 專案管理系統",
+        user_id=str(user["id"]).encode("utf-8"),
+        user_name=user["username"],
+        user_display_name=user.get("display_name") or user["username"],
+        exclude_credentials=exclude_credentials,
+    )
+    challenge_token = _store_webauthn_challenge(options.challenge)
+    options_json = options_to_json(options)
+    return {
+        "challengeToken": challenge_token,
+        "options": json.loads(options_json) if isinstance(options_json, str) else options_json
+    }
+
+
+@router.post("/api/auth/webauthn/register/complete")
+def webauthn_register_complete(body: WebauthnRegisterCompleteIn, authorization: str = Header(None)):
+    """完成 Passkey 註冊：驗證認證器回應、儲存公鑰與 credential_id。"""
+    user = _require_user(authorization)
+
+    # Get challenge_token from request body (frontend should include it)
+    challenge_token = body.dict().get("challengeToken")
+    if not challenge_token:
+        raise HTTPException(400, "缺少 challengeToken")
+
+    challenge = _retrieve_webauthn_challenge(challenge_token)
+    if not challenge:
+        raise HTTPException(400, "Challenge 已過期或無效")
+
+    conn = get_db()
+    try:
+        existing_creds = conn.execute(
+            "SELECT credential_id FROM webauthn_credentials WHERE user_id=?",
+            (user["id"],)
+        ).fetchall()
+        existing_ids = {cred["credential_id"] for cred in existing_creds}
+
+        try:
+            cred_raw_id = base64.b64decode(body.rawId)
+            if cred_raw_id in existing_ids:
+                conn.close()
+                raise HTTPException(400, "此認證器已被註冊")
+
+            verified = verify_registration_response(
+                credential=body.dict(),
+                expected_challenge=challenge,
+                expected_origin=_WEBAUTHN_ORIGIN,
+                expected_rp_id=_WEBAUTHN_RP_ID,
+            )
+            public_key_bytes = verified.credential_public_key
+            conn.execute(
+                "INSERT INTO webauthn_credentials (user_id, credential_id, public_key, name, created_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (user["id"], cred_raw_id, public_key_bytes, "新Passkey", datetime.now().isoformat()),
+            )
+            conn.commit()
+        except HTTPException:
+            conn.close()
+            raise
+        except Exception as e:
+            conn.close()
+            logger.error("WebAuthn registration failed: %s", str(e))
+            raise HTTPException(400, f"認證器驗證失敗")
+    finally:
+        conn.close()
+
+    _audit(_tok(authorization), "auth.webauthn_registered", "user", user["username"],
+           user.get("display_name") or user["username"])
+    return {"ok": True}
+
+
+@router.post("/api/auth/webauthn/login/begin")
+def webauthn_login_begin(body: WebauthnLoginBeginIn):
+    """未登入時開始 Passkey 登入：查該帳號已註冊的 credential 清單、回傳
+    authentication options JSON 與 challenge_token。"""
+    conn = get_db()
+    try:
+        user_row = conn.execute(
+            "SELECT id FROM users WHERE username=? AND active=1",
+            (body.username,)
+        ).fetchone()
+        if not user_row:
+            raise HTTPException(404, "帳號不存在或已停用")
+
+        creds = conn.execute(
+            "SELECT credential_id FROM webauthn_credentials WHERE user_id=?",
+            (user_row["id"],)
+        ).fetchall()
+
+        if not creds:
+            raise HTTPException(404, "此帳號未設定任何 Passkey")
+
+        allow_credentials = [
+            PublicKeyCredentialDescriptor(
+                type=PublicKeyCredentialType.PUBLIC_KEY,
+                id=cred["credential_id"],
+                transports=[AuthenticatorTransport.INTERNAL, AuthenticatorTransport.USB]
+            )
+            for cred in creds
+        ]
+
+        options = generate_authentication_options(
+            rp_id=_WEBAUTHN_RP_ID,
+            allow_credentials=allow_credentials,
+        )
+        challenge_token = _store_webauthn_challenge(options.challenge)
+        options_json = options_to_json(options)
+        return {
+            "challengeToken": challenge_token,
+            "options": json.loads(options_json) if isinstance(options_json, str) else options_json
+        }
+    finally:
+        conn.close()
+
+
+@router.post("/api/auth/webauthn/login/complete")
+def webauthn_login_complete(body: WebauthnLoginCompleteIn, request: Request):
+    """完成 Passkey 登入：驗證認證器簽名、檢查 sign_count 防重放、發行 session。"""
+    # Get and consume challenge
+    challenge_token = body.dict().get("challengeToken")
+    if not challenge_token:
+        _rl_fail(_client_ip(request), body.username)
+        raise HTTPException(400, "缺少 challengeToken")
+
+    challenge = _retrieve_webauthn_challenge(challenge_token)
+    if not challenge:
+        _rl_fail(_client_ip(request), body.username)
+        raise HTTPException(401, "Challenge 已過期或無效")
+
+    conn = get_db()
+    try:
+        user_row = conn.execute(
+            "SELECT id, display_name FROM users WHERE username=? AND active=1",
+            (body.username,)
+        ).fetchone()
+        if not user_row:
+            conn.close()
+            _rl_fail(_client_ip(request), body.username)
+            raise HTTPException(401, "帳號不存在或已停用")
+
+        cred_raw_id = base64.b64decode(body.rawId)
+        cred_row = conn.execute(
+            "SELECT id, public_key, sign_count FROM webauthn_credentials WHERE user_id=? AND credential_id=?",
+            (user_row["id"], cred_raw_id)
+        ).fetchone()
+        if not cred_row:
+            conn.close()
+            _rl_fail(_client_ip(request), body.username)
+            raise HTTPException(401, "認證失敗")
+
+        try:
+            verified = verify_authentication_response(
+                credential=body.dict(),
+                expected_challenge=challenge,
+                expected_origin=_WEBAUTHN_ORIGIN,
+                expected_rp_id=_WEBAUTHN_RP_ID,
+                credential_public_key=cred_row["public_key"],
+                credential_current_sign_count=cred_row["sign_count"],
+            )
+
+            if verified.sign_count <= cred_row["sign_count"]:
+                conn.close()
+                logger.warning("WebAuthn replay attack detected: user=%s cred_id=%d", body.username, cred_row["id"])
+                _audit("", "auth.webauthn_replay_detected", "user", body.username, "重放攻擊被阻止")
+                raise HTTPException(401, "認證失敗（重放攻擊偵測）")
+
+            conn.execute(
+                "UPDATE webauthn_credentials SET sign_count=?, last_used_at=? WHERE id=?",
+                (verified.sign_count, datetime.now().isoformat(), cred_row["id"])
+            )
+
+            user_full = conn.execute(
+                "SELECT id, username, display_name, role, modules FROM users WHERE id=?",
+                (user_row["id"],)
+            ).fetchone()
+            result = _issue_session(conn, user_full, False)
+            return result
+
+        except HTTPException:
+            conn.close()
+            raise
+        except Exception as e:
+            conn.close()
+            logger.error("WebAuthn authentication failed: %s", str(e))
+            _rl_fail(_client_ip(request), body.username)
+            raise HTTPException(401, "認證失敗")
+    finally:
+        if conn:
+            conn.close()
+
+
+@router.get("/api/auth/webauthn/credentials")
+def webauthn_credentials_list(authorization: str = Header(None)):
+    """已登入使用者的 Passkey 清單（名稱、建立日期、最後使用日期）。"""
+    user = _require_user(authorization)
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            "SELECT id, name, created_at, last_used_at FROM webauthn_credentials WHERE user_id=? ORDER BY created_at DESC",
+            (user["id"],)
+        ).fetchall()
+    finally:
+        conn.close()
+    return [dict(row) for row in rows]
+
+
+@router.patch("/api/auth/webauthn/credentials/{cred_id}")
+def webauthn_credential_rename(cred_id: int, body: WebauthnCredentialRenameIn, authorization: str = Header(None)):
+    """改名單個 Passkey（如「iPhone」、「Windows Hello」）。"""
+    user = _require_user(authorization)
+    conn = get_db()
+    try:
+        cred_row = conn.execute(
+            "SELECT id FROM webauthn_credentials WHERE id=? AND user_id=?",
+            (cred_id, user["id"])
+        ).fetchone()
+        if not cred_row:
+            raise HTTPException(404, "認證器不存在或無存取權限")
+        conn.execute(
+            "UPDATE webauthn_credentials SET name=? WHERE id=?",
+            (body.name, cred_id)
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "auth.webauthn_renamed", "credential", str(cred_id),
+           body.name)
+    return {"ok": True}
+
+
+@router.delete("/api/auth/webauthn/credentials/{cred_id}")
+def webauthn_credential_delete(cred_id: int, authorization: str = Header(None)):
+    """撤銷單個 Passkey。必須是可用功能——遺失裝置時使用者需要能自己補救。"""
+    user = _require_user(authorization)
+    conn = get_db()
+    try:
+        cred_row = conn.execute(
+            "SELECT id FROM webauthn_credentials WHERE id=? AND user_id=?",
+            (cred_id, user["id"])
+        ).fetchone()
+        if not cred_row:
+            raise HTTPException(404, "認證器不存在或無存取權限")
+        conn.execute("DELETE FROM webauthn_credentials WHERE id=?", (cred_id,))
+        conn.commit()
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "auth.webauthn_revoked", "credential", str(cred_id), "")
     return {"ok": True}
 
 

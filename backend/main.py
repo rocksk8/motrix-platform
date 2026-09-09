@@ -51,6 +51,9 @@ _PUBLIC_API_PATHS = {
     # 2026-09-08：手機掃 QR 核准登入——手機打開確認頁面時完全沒有任何 session，
     # 這三個端點本身各自用 challenge_token／密碼做驗證，見 routers/auth.py。
     "/api/auth/login/qr-info", "/api/auth/login/qr-approve", "/api/auth/login/qr-status",
+    # 2026-09-09：WebAuthn/Passkey 未登入登入流程——login/begin 查詢帳號 Passkey 清單，
+    # login/complete 驗證認證器簽名；皆自行驗證，無需 Bearer token。
+    "/api/auth/webauthn/login/begin", "/api/auth/webauthn/login/complete",
     # 2026-09-08：供本機部署儀表板工具（deploy_dashboard.py）查詢正式機目前
     # 部署版本用，純讀 commit 資訊，無敏感內容，不需要密碼／session。
     "/api/system/deployed-version",
