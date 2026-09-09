@@ -385,6 +385,41 @@
       .dc-info-grid { grid-template-columns: 1fr; }
       .dc-form-row, .dc-form-row.triple { grid-template-columns: 1fr; }
     }
+
+    /* 暗黑模式：左側列表樣式 */
+    :root[data-theme="dark"] .dc-list {
+      background: #1A1A1A; border-right-color: #2A2A2A;
+    }
+    :root[data-theme="dark"] .dc-list__head {
+      background: #111; border-bottom-color: #2A2A2A;
+    }
+    :root[data-theme="dark"] .dc-search {
+      background: #1E1E1E; border-color: #2A2A2A; color: #F5F4F0;
+    }
+    :root[data-theme="dark"] .dc-search:focus {
+      background: #222; border-color: #2563EB;
+    }
+    :root[data-theme="dark"] .dc-search::placeholder {
+      color: #555;
+    }
+    :root[data-theme="dark"] .dc-chip {
+      background: #1E1E1E; border-color: #2A2A2A; color: #999;
+    }
+    :root[data-theme="dark"] .dc-chip:hover {
+      background: #222; border-color: #333;
+    }
+    :root[data-theme="dark"] .dc-chip.on {
+      background: var(--accent); border-color: var(--accent); color: #fff;
+    }
+    :root[data-theme="dark"] .dc-case-card {
+      background: #1A1A1A; border-color: #2A2A2A;
+    }
+    :root[data-theme="dark"] .dc-case-card:hover {
+      background: #222;
+    }
+    :root[data-theme="dark"] .dc-case-card.selected {
+      background: #1E3A5F; border-color: #2563EB; border-left-color: #2563EB;
+    }
   </style>
 </head>
 <body>
