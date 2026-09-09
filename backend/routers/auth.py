@@ -847,7 +847,7 @@ def webauthn_register_complete(body: WebauthnRegisterCompleteIn, authorization: 
 @router.post("/api/auth/webauthn/login/begin")
 def webauthn_login_begin(body: WebauthnLoginBeginIn):
     """未登入時開始 Passkey 登入：查該帳號已註冊的 credential 清單、回傳
-    authentication options JSON 與 challenge_token。"""
+    authentication options JSON 與 challenge_token。統一錯誤響應避免用戶枚舉。"""
     conn = get_db()
     try:
         user_row = conn.execute(
@@ -855,7 +855,7 @@ def webauthn_login_begin(body: WebauthnLoginBeginIn):
             (body.username,)
         ).fetchone()
         if not user_row:
-            raise HTTPException(404, "帳號不存在或已停用")
+            raise HTTPException(404, "無法開始 Passkey 登入")
 
         creds = conn.execute(
             "SELECT credential_id FROM webauthn_credentials WHERE user_id=?",
@@ -863,7 +863,7 @@ def webauthn_login_begin(body: WebauthnLoginBeginIn):
         ).fetchall()
 
         if not creds:
-            raise HTTPException(404, "此帳號未設定任何 Passkey")
+            raise HTTPException(404, "無法開始 Passkey 登入")
 
         allow_credentials = [
             PublicKeyCredentialDescriptor(

@@ -1,0 +1,36 @@
+feat: WebAuthn/Passkey 裝置綁定登入後端實作（V1）
+
+新增 Passkey 自助註冊與登入流程（比照 TOTP 非強制模式）：
+
+後端（routers/auth.py）：
+- 新增 _m073_webauthn_credentials migration（CURRENT_VERSION 72→73）
+  獨立表設計（非 JSON 陣列），含 sign_count 防複製計數器
+- 7 個 WebAuthn 端點：
+  POST /api/auth/webauthn/register/begin/complete（已登入用戶自助新增裝置）
+  POST /api/auth/webauthn/login/begin/complete（未登入 Passkey 登入流程）
+  GET/PATCH/DELETE /api/auth/webauthn/credentials/{id}（清單/改名/撤銷）
+- 內存 challenge 儲存機制（10 分鐘 TTL，比照 _totp_pending 模式）
+- 重放攻擊防禦（sign_count 嚴格遞增檢驗）
+
+配置變更（main.py）：
+- 新增 /api/auth/webauthn/login/begin 與 login/complete 到 _PUBLIC_API_PATHS
+
+依賴（requirements.txt）：
+- 新增 webauthn>=2.1.0
+
+測試（backend/tests/test_webauthn_basic.py）：
+- 7 項基本規格測試：端點存在、參數驗證、清單與撤銷邏輯
+- 所有測試通過
+
+安全性設計重點（必須功能，不可拆到後期）：
+✓ sign_count 防複製攻擊（每次登入遞增）
+✓ 單一裝置撤銷功能（遺失裝置時使用者自救）
+✓ challenge 一次性消費（防重放挑戰）
+✓ 登入失敗計數（複用既有 rate limiting）
+
+下一步（前端）：
+- login.html 加 Passkey 登入按鈕
+- change-password.html 加 Passkey 設備管理卡片
+- JavaScript 呼叫 navigator.credentials.create/get API
+
+Co-Authored-By: Claude Haiku 4.5 <noreply@anthropic.com>

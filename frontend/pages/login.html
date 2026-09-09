@@ -155,6 +155,26 @@
     }
     .eye-btn:hover { color: #888; }
     .pw-wrap { position: relative; }
+    .btn-secondary {
+      width: 100%;
+      padding: 10px;
+      background: none;
+      border: 1px solid #333;
+      color: #999;
+      border-radius: 7px;
+      font-size: 13px;
+      font-family: 'LINE Seed TW_OTF', sans-serif;
+      cursor: pointer;
+      transition: all .12s;
+      margin-top: 8px;
+    }
+    .btn-secondary:hover { color: #ddd; border-color: #444; }
+    .passkey-status {
+      font-size: 12px;
+      color: #666;
+      text-align: center;
+      margin: 14px 0;
+    }
   </style>
 </head>
 <body x-data="loginPage()">
@@ -211,6 +231,27 @@
           </template>
           <span x-text="loading ? '驗證中…' : '登入'"></span>
         </button>
+
+        <button type="button" @click="startWebauthnLogin()" class="btn-secondary" :disabled="loading">
+          或使用 Passkey 登入
+        </button>
+      </form>
+
+      <form @submit.prevent="completeWebauthnLogin()" x-show="webauthnStep">
+        <div class="form-group">
+          <div class="passkey-status">
+            請在認證器上完成驗證…
+          </div>
+          <div class="error-msg" x-show="error">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01"/></svg>
+            <span x-text="error"></span>
+          </div>
+        </div>
+
+        <button type="button" @click="backToLogin()"
+                style="width:100%;background:none;border:none;color:#666;font-size:12px;cursor:pointer;padding:6px">
+          ← 返回重新登入
+        </button>
       </form>
 
       <form @submit.prevent="verifyTotp()" x-show="totpStep">
@@ -265,6 +306,8 @@
       challengeToken: '',
       qrCodePng: '',
       qrPollTimer: null,
+      webauthnStep: false,
+      webauthnChallenge: '',
 
       async login() {
         this.error = ''
@@ -349,11 +392,108 @@
       backToLogin() {
         if (this.qrPollTimer) { clearInterval(this.qrPollTimer); this.qrPollTimer = null }
         this.totpStep      = false
+        this.webauthnStep  = false
         this.totpCode       = ''
         this.challengeToken = ''
         this.qrCodePng      = ''
         this.error          = ''
         this.password       = ''
+      },
+
+      async startWebauthnLogin() {
+        this.error = ''
+        if (!this.username) { this.error = '請輸入帳號'; return }
+        this.loading = true
+        try {
+          const res = await fetch('/api/auth/webauthn/login/begin', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ username: this.username.trim() })
+          })
+          if (!res.ok) {
+            this.loading = false
+            this.error = '此帳號無法使用 Passkey 登入'
+            return
+          }
+          const data = await res.json()
+          this.webauthnChallenge = data.challengeToken
+          this.challengeToken = data.challengeToken
+          const opts = data.options
+
+          opts.challenge = this._b64ToUint8Array(opts.challenge)
+          opts.user.id = this._b64ToUint8Array(opts.user.id)
+          if (opts.allowCredentials) {
+            opts.allowCredentials = opts.allowCredentials.map(c => ({
+              ...c, id: this._b64ToUint8Array(c.id)
+            }))
+          }
+
+          const cred = await navigator.credentials.get({ publicKey: opts })
+          if (!cred) {
+            this.loading = false
+            this.error = '驗證已取消'
+            return
+          }
+          this.webauthnStep = true
+          this.loading = false
+          this._webauthnCredential = cred
+          await this.completeWebauthnLogin()
+        } catch(e) {
+          this.loading = false
+          this.error = e.message || '驗證失敗'
+        }
+      },
+
+      async completeWebauthnLogin() {
+        this.error = ''
+        this.loading = true
+        try {
+          const cred = this._webauthnCredential
+          if (!cred) { this.error = '缺少認證器回應'; return }
+
+          const body = {
+            challengeToken: this.challengeToken,
+            username: this.username,
+            id: cred.id,
+            rawId: this._uint8ArrayToB64(new Uint8Array(cred.rawId)),
+            response: {
+              clientDataJSON: this._uint8ArrayToB64(new Uint8Array(cred.response.clientDataJSON)),
+              authenticatorData: this._uint8ArrayToB64(new Uint8Array(cred.response.authenticatorData)),
+              signature: this._uint8ArrayToB64(new Uint8Array(cred.response.signature)),
+              userHandle: cred.response.userHandle ? this._uint8ArrayToB64(new Uint8Array(cred.response.userHandle)) : null
+            }
+          }
+
+          const res = await fetch('/api/auth/webauthn/login/complete', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(body)
+          })
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}))
+            this.error = err.detail || '驗證失敗'
+            this.loading = false
+            return
+          }
+          const data = await res.json()
+          this._storeSessionAndRedirect(data)
+        } catch(e) {
+          this.error = e.message || '連線失敗'
+          this.loading = false
+        }
+      },
+
+      _b64ToUint8Array(b64) {
+        const binary = atob(b64)
+        const bytes = new Uint8Array(binary.length)
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+        return bytes
+      },
+
+      _uint8ArrayToB64(bytes) {
+        let binary = ''
+        for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i])
+        return btoa(binary)
       },
 
       _storeSessionAndRedirect(data) {
