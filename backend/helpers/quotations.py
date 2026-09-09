@@ -182,9 +182,10 @@ def settlement_extra_expenses(data: dict) -> list:
 
     歸月日期依序取：
       1. `expenseDate`（憑證日期，最準；2026-09-01 起精算表單就有這個欄位）
-      2. 精算完結時間（只有已完結的案件才有）
-      3. 最後一次精算存檔時間（草稿也有，對應使用者說的「當月有填寫」）
-    三者都沒有就跳過——真的無從判斷是哪個月，硬塞會污染月報。
+      2. `createdDate`（項目建立日期，2026-09-09 起記錄，代表當時的時間）
+      3. 精算完結時間（只有已完結的案件才有）
+      4. 最後一次精算存檔時間（草稿也有，但用項目建立時間比較準）
+    四者都沒有就跳過——真的無從判斷是哪個月，硬塞會污染月報。
 
     每筆帶 `pending`（精算尚未完結）旗標：這些金額仍可能被改動，呼叫端要讓
     使用者看得出來，不要讓人以為是已定稿的數字。
@@ -208,7 +209,7 @@ def settlement_extra_expenses(data: dict) -> list:
         cost = float(it.get("totalCost") or 0)
         if not cost:
             continue
-        item_date = it.get("expenseDate") or finalized_at or last_saved_at or ""
+        item_date = it.get("expenseDate") or it.get("createdDate") or finalized_at or last_saved_at or ""
         if not item_date:
             continue
         out.append({

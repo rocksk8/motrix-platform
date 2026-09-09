@@ -1079,6 +1079,7 @@ function settlementPage() {
     },
 
     addExtra() {
+      const today = new Date().toISOString().slice(0, 10)
       this.settlement.extraItems.push({
         id:          Date.now(),
         category:    '工時',
@@ -1089,6 +1090,7 @@ function settlementPage() {
         totalCost:   0,
         note:        '',
         expenseDate: '',
+        createdDate: today,  // 建立項目的日期，日期未填時用這個
         docNo:       '',   // 憑證單號（2026-09-09），案件財務總覽也會顯示
         files:       [],
         createdBy:   this.session?.user?.display_name || '',  // 填寫人（2026-09-09，案件財務總覽要顯示）
