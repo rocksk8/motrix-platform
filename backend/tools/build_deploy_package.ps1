@@ -183,12 +183,10 @@ if (-not $OutDir) {
 $pkgDir = Join-Path $OutDir "${timestamp}_${commitShort}"
 New-Item -ItemType Directory -Force -Path $pkgDir | Out-Null
 
-Write-Host "`n[1/2] git archive 匯出至 $pkgDir （範圍限定 $relPath）..."
+Write-Host "`n[1/2] git archive 匯出至 $pkgDir..."
 $tarPath = Join-Path $pkgDir "snapshot.tar"
-# <commit>:<relPath> 是 git 的 tree-ish 語法，直接指到子目錄的 tree 物件，
-# 匯出的檔案會以 backend/、frontend/ 等開頭（不帶 Desktop/MOTRIX-ERP/ 前綴），
-# 符合 apply_update.ps1 預期的部署包結構。
-git archive --format=tar -o $tarPath "${commit}:${relPath}"
+# 匯出整個 commit 的內容（包含根目錄的所有檔案，符合 apply_update.ps1 預期）
+git archive --format=tar -o $tarPath $commit
 if ($LASTEXITCODE -ne 0) {
     Fail "git archive 失敗（exit code $LASTEXITCODE），部署包可能不完整，已中止。"
 }
