@@ -2905,12 +2905,20 @@ def get_finance_summary(quote_no: str, authorization: str = Header(None)):
     conn.close()
 
     settlement = data.get("settlement") or {}
+    # 精算額外支出完整明細，包括發票文件與填寫人（2026-09-09）：案件財務總覽
+    # 要展示這些，讓使用者知道是誰何時填的、有沒有上傳發票、憑證單號是什麼
     extras = [{
         "category":    ex.get("category", ""),
         "description": ex.get("description", ""),
         "docNo":       ex.get("docNo", ""),
         "totalCost":   float(ex.get("totalCost") or 0),
         "expenseDate": ex.get("expenseDate", ""),
+        "qty":         ex.get("qty"),
+        "unit":        ex.get("unit", ""),
+        "unitCost":    float(ex.get("unitCost") or 0),
+        "note":        ex.get("note", ""),
+        "createdBy":   ex.get("createdBy", ""),
+        "files":       ex.get("files") or [],
     } for ex in (settlement.get("extraItems") or [])]
 
     return {

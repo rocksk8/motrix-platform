@@ -1091,6 +1091,7 @@ function settlementPage() {
         expenseDate: '',
         docNo:       '',   // 憑證單號（2026-09-09），案件財務總覽也會顯示
         files:       [],
+        createdBy:   this.session?.user?.display_name || '',  // 填寫人（2026-09-09，案件財務總覽要顯示）
       })
     },
 

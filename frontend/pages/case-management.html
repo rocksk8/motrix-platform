@@ -1863,12 +1863,41 @@
                       <div x-show="finShowExtraDetail" style="margin-top:10px">
                         <div style="font-size:10px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.06em;text-transform:uppercase;padding-bottom:4px;border-bottom:1.5px solid #E5E7EB">精算額外支出（未計入應付）</div>
                         <template x-for="(ex, i) in finExtraItems()" :key="i">
-                          <div style="display:flex;align-items:baseline;gap:8px;padding:6px 0;border-bottom:1px solid #F0EFEB;font-size:12px">
-                            <span style="font-size:10px;background:#F3F4F6;color:#6B7280;padding:1px 6px;border-radius:3px;font-family:var(--font-zh);white-space:nowrap" x-text="ex.category || '—'"></span>
-                            <span style="font-family:var(--font-zh);color:var(--text-primary);flex:1" x-text="ex.description || '—'"></span>
-                            <span style="font-size:10px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;white-space:nowrap" x-text="ex.docNo ? '單號 ' + ex.docNo : ''"></span>
-                            <span style="font-size:10px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;white-space:nowrap" x-text="ex.expenseDate || ''"></span>
-                            <span style="font-family:LINE Seed TW_OTF, sans-serif;font-weight:600;color:#92400E;min-width:90px;text-align:right" x-text="caseSettleFmt(ex.totalCost)"></span>
+                          <!-- 精算額外支出項目（2026-09-09）：顯示完整信息：類別、說明、填寫人、
+                               填單日期、單號、是否有發票、數量x單位價、實際成本 -->
+                          <div style="border:1px solid #E5E7EB;border-radius:4px;padding:8px;margin-bottom:6px;background:#FAFAF9">
+                            <!-- 第一列：類別、說明、金額 -->
+                            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+                              <span style="font-size:10px;background:#F3F4F6;color:#6B7280;padding:2px 6px;border-radius:3px;font-family:var(--font-zh);white-space:nowrap;font-weight:500" x-text="ex.category || '—'"></span>
+                              <span style="font-family:var(--font-zh);color:var(--text-primary);flex:1;font-size:12px;font-weight:500" x-text="ex.description || '—'"></span>
+                              <span style="font-family:LINE Seed TW_OTF, sans-serif;font-weight:600;color:#92400E;text-align:right;min-width:80px" x-text="caseSettleFmt(ex.totalCost)"></span>
+                            </div>
+                            <!-- 第二列：填寫人、填單日期、單號 -->
+                            <div style="display:flex;align-items:center;gap:12px;font-size:10px;color:var(--text-dim);margin-bottom:4px;font-family:var(--font-zh)">
+                              <span x-text="ex.createdBy ? '填寫人：' + ex.createdBy : '填寫人：—'"></span>
+                              <span x-text="ex.expenseDate ? '日期：' + ex.expenseDate : '日期：—'"></span>
+                              <span x-text="ex.docNo ? '單號：' + ex.docNo : ''"></span>
+                            </div>
+                            <!-- 第三列：備註、發票文件 -->
+                            <template x-if="ex.note || ex.files.length > 0">
+                              <div style="display:flex;align-items:center;gap:12px;font-size:10px;color:var(--text-dim)">
+                                <span style="font-family:var(--font-zh)" x-text="ex.note ? '備註：' + ex.note : ''"></span>
+                                <template x-if="ex.files.length > 0">
+                                  <span style="background:#E0F2FE;color:#0369A1;padding:1px 4px;border-radius:2px;font-weight:500">
+                                    發票已開立 <span x-text="'(' + ex.files.length + ')'"></span>
+                                  </span>
+                                </template>
+                                <template x-if="ex.files.length === 0">
+                                  <span style="background:#F3E8FF;color:#7E22CE;padding:1px 4px;border-radius:2px;font-size:9px">未上傳發票</span>
+                                </template>
+                              </div>
+                            </template>
+                            <!-- 數量×單位價（簡摘版） -->
+                            <template x-if="ex.qty">
+                              <div style="font-size:9px;color:var(--text-dim);margin-top:4px;font-family:LINE Seed TW_OTF, sans-serif">
+                                <span x-text="ex.qty + ' × ' + (ex.unit || '個') + ' @ NT$' + fmt(ex.unitCost)"></span>
+                              </div>
+                            </template>
                           </div>
                         </template>
                       </div>
