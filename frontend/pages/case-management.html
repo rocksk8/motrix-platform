@@ -1776,19 +1776,19 @@
                         <span style="flex:1;height:1px;background:#E5E7EB"></span>
                       </div>
                       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px">
-                        <div class="cm-kpi__pill" style="cursor:pointer" @click="finShowRecvDetail = !finShowRecvDetail" :style="finShowRecvDetail ? 'background:#FFFBEB;border-color:#FDE68A' : ''">
+                        <div class="cm-kpi__pill" style="cursor:pointer" @click="finShowRecvDetail = true; $nextTick(() => document.getElementById('fin-recv-detail')?.scrollIntoView({behavior:'smooth',block:'start'}))" :style="finShowRecvDetail ? 'background:#FFFBEB;border-color:#FDE68A' : ''">
                           <span class="cm-kpi__val" x-text="caseSettleFmt(finReceivable().receivableTotal)"></span>
                           <span class="cm-kpi__lbl" x-text="finShowRecvDetail ? '▾ 應收總額' : '▸ 應收總額'"></span>
                         </div>
-                        <div class="cm-kpi__pill success" style="cursor:pointer" @click="finShowRecvDetail = !finShowRecvDetail" :style="finShowRecvDetail ? 'opacity:0.8' : ''">
+                        <div class="cm-kpi__pill success" style="cursor:pointer" @click="finShowRecvDetail = true; $nextTick(() => document.getElementById('fin-recv-detail')?.scrollIntoView({behavior:'smooth',block:'start'}))" :style="finShowRecvDetail ? 'opacity:0.8' : ''">
                           <span class="cm-kpi__val" x-text="caseSettleFmt(finReceivable().collectedTotal)"></span>
                           <span class="cm-kpi__lbl">已收</span>
                         </div>
-                        <div class="cm-kpi__pill" :class="finReceivable().outstandingTotal > 0 ? 'warning' : ''" style="cursor:pointer" @click="finShowRecvDetail = !finShowRecvDetail" :style="finShowRecvDetail ? 'opacity:0.8' : ''">
+                        <div class="cm-kpi__pill" :class="finReceivable().outstandingTotal > 0 ? 'warning' : ''" style="cursor:pointer" @click="finShowRecvDetail = true; $nextTick(() => document.getElementById('fin-recv-detail')?.scrollIntoView({behavior:'smooth',block:'start'}))" :style="finShowRecvDetail ? 'opacity:0.8' : ''">
                           <span class="cm-kpi__val" x-text="caseSettleFmt(finReceivable().outstandingTotal)"></span>
                           <span class="cm-kpi__lbl">未收</span>
                         </div>
-                        <div class="cm-kpi__pill" style="cursor:pointer" @click="finShowRecvDetail = !finShowRecvDetail" :style="finShowRecvDetail ? 'opacity:0.8' : ''">
+                        <div class="cm-kpi__pill" style="cursor:pointer" @click="finShowRecvDetail = true; $nextTick(() => document.getElementById('fin-recv-detail')?.scrollIntoView({behavior:'smooth',block:'start'}))" :style="finShowRecvDetail ? 'opacity:0.8' : ''">
                           <span class="cm-kpi__val" x-text="caseSettleFmt(finReceivable().netCollected)"></span>
                           <span class="cm-kpi__lbl">實收淨額（扣手續費 <span style="font-family:LINE Seed TW_OTF, sans-serif" x-text="caseSettleFmt(finReceivable().feeTotal)"></span>）</span>
                         </div>
@@ -1800,19 +1800,19 @@
                         <span style="flex:1;height:1px;background:#E5E7EB"></span>
                       </div>
                       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px">
-                        <div class="cm-kpi__pill" style="cursor:pointer" @click="finShowPayDetail = !finShowPayDetail" :style="finShowPayDetail ? 'background:#FEF2F2;border-color:#FECACA' : ''">
+                        <div class="cm-kpi__pill" style="cursor:pointer" @click="finShowPayDetail = true; $nextTick(() => document.getElementById('fin-pay-detail')?.scrollIntoView({behavior:'smooth',block:'start'}))" :style="finShowPayDetail ? 'background:#FEF2F2;border-color:#FECACA' : ''">
                           <span class="cm-kpi__val" x-text="caseSettleFmt(finPayable().approvedUnpaidTotal + finPayable().approvedPaidTotal)"></span>
                           <span class="cm-kpi__lbl" x-text="finShowPayDetail ? '▾ 應付總額' : '▸ 應付總額'"></span>
                         </div>
-                        <div class="cm-kpi__pill success" style="cursor:pointer" @click="finShowPayDetail = !finShowPayDetail" :style="finShowPayDetail ? 'opacity:0.8' : ''">
+                        <div class="cm-kpi__pill success" style="cursor:pointer" @click="finShowPayDetail = true; $nextTick(() => document.getElementById('fin-pay-detail')?.scrollIntoView({behavior:'smooth',block:'start'}))" :style="finShowPayDetail ? 'opacity:0.8' : ''">
                           <span class="cm-kpi__val" x-text="caseSettleFmt(finPayable().approvedPaidTotal)"></span>
                           <span class="cm-kpi__lbl">已匯款</span>
                         </div>
-                        <div class="cm-kpi__pill" :class="finPayable().approvedUnpaidTotal > 0 ? 'danger' : ''" style="cursor:pointer" @click="finShowPayDetail = !finShowPayDetail" :style="finShowPayDetail ? 'opacity:0.8' : ''">
+                        <div class="cm-kpi__pill" :class="finPayable().approvedUnpaidTotal > 0 ? 'danger' : ''" style="cursor:pointer" @click="finShowPayDetail = true; $nextTick(() => document.getElementById('fin-pay-detail')?.scrollIntoView({behavior:'smooth',block:'start'}))" :style="finShowPayDetail ? 'opacity:0.8' : ''">
                           <span class="cm-kpi__val" x-text="caseSettleFmt(finPayable().approvedUnpaidTotal)"></span>
                           <span class="cm-kpi__lbl">未匯款</span>
                         </div>
-                        <div class="cm-kpi__pill" style="cursor:pointer" @click="finShowPayDetail = !finShowPayDetail" :style="finShowPayDetail ? 'opacity:0.8' : ''">
+                        <div class="cm-kpi__pill" style="cursor:pointer" @click="finShowPayDetail = true; $nextTick(() => document.getElementById('fin-pay-detail')?.scrollIntoView({behavior:'smooth',block:'start'}))" :style="finShowPayDetail ? 'opacity:0.8' : ''">
                           <span class="cm-kpi__val" x-text="caseSettleFmt(finPayable().pendingTotal)"></span>
                           <span class="cm-kpi__lbl">簽核中（<span style="font-family:LINE Seed TW_OTF, sans-serif" x-text="finPayable().pendingCount"></span> 張，未計入應付）</span>
                         </div>
@@ -1842,7 +1842,7 @@
                         </button>
                       </div>
 
-                      <div x-show="finShowRecvDetail" style="margin-top:10px">
+                      <div x-show="finShowRecvDetail" style="margin-top:10px" id="fin-recv-detail">
                         <!-- 小標：兩個明細可以同時展開，沒有標題會連成一片分不出來 -->
                         <div style="font-size:10px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.06em;text-transform:uppercase;padding-bottom:4px;border-bottom:1.5px solid #E5E7EB">未收款項</div>
                         <template x-for="it in finOutstandingItems()" :key="it.idx">
@@ -1902,7 +1902,7 @@
                         </template>
                       </div>
 
-                      <div x-show="finShowPayDetail" style="margin-top:10px">
+                      <div x-show="finShowPayDetail" style="margin-top:10px" id="fin-pay-detail">
                         <div style="font-size:10px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.06em;text-transform:uppercase;padding-bottom:4px;border-bottom:1.5px solid #E5E7EB">待匯款（已核准未匯款）</div>
                         <template x-for="v in finUnpaidVouchers()" :key="v.voucherNo">
                           <div style="display:flex;align-items:baseline;gap:8px;padding:6px 0;border-bottom:1px solid #F0EFEB;font-size:12px">
