@@ -420,11 +420,12 @@
           this.challengeToken = data.challengeToken
           const opts = data.options
 
-          opts.challenge = this._b64ToUint8Array(opts.challenge)
-          opts.user.id = this._b64ToUint8Array(opts.user.id)
+          // Convert challenge and user.id to Uint8Array if they're strings
+          if (typeof opts.challenge === 'string') opts.challenge = this._b64ToUint8Array(opts.challenge)
+          if (typeof opts.user.id === 'string') opts.user.id = this._b64ToUint8Array(opts.user.id)
           if (opts.allowCredentials) {
             opts.allowCredentials = opts.allowCredentials.map(c => ({
-              ...c, id: this._b64ToUint8Array(c.id)
+              ...c, id: typeof c.id === 'string' ? this._b64ToUint8Array(c.id) : c.id
             }))
           }
 
