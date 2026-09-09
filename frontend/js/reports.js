@@ -938,6 +938,10 @@ function reportsApp() {
       this.expensesMonth = this.year + '-' + String(this.month).padStart(2, '0')
       this.expensesLoadedFor = null  // 清除快取，強制重新載入
       this.loadExpenses()
+      // 修復 receivablesMonth UTC bug（跟 expensesMonth 同樣的本地時區字串拼接 + 清快取）
+      this.receivablesYear = this.year
+      this.receivablesMonth = this.year + '-' + String(this.month).padStart(2, '0')
+      this.receivablesLoadedFor = null
       var self = this
       // Re-init charts when data changes and charts tab is active (e.g. period change)
       this.$watch('data', function(newData) {

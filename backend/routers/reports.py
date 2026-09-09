@@ -3065,20 +3065,74 @@ def _collect_income_items(d0: str, d1: str, department_id: Optional[int] = None)
             amt = amounts[idx]
             aa  = pi.get("actualAmount")
             fee = pi.get("feeAmount") or 0
+            # 統一用 actualAmount（實收金額），未填則退回系統試算金額
+            gross_amt = aa if aa is not None else amt
             items.append({
                 "quoteNo":      row["quote_no"],
                 "customer":     row["customer_name"] or "",
                 "project":      row["project_name"]  or "",
                 "salesPerson":  row["sales_person"]  or "",
                 "type":         pi.get("type", f"第{idx+1}期"),
-                "amount":       amt,
+                "amount":       gross_amt,
                 "receivedAt":   rat,
                 "actualAmount": aa,
                 "feeAmount":    fee,
-                "netAmount":    (aa if aa is not None else amt) - fee,
+                "netAmount":    gross_amt - fee,
                 "invoiceNo":    pi.get("invoiceNo", ""),
             })
     items.sort(key=lambda x: x["receivedAt"], reverse=True)
+    return items
+
+
+def _collect_unreceived_items(d0: str, d1: str, department_id: Optional[int] = None) -> list:
+    """當月未收款項（現金流口徑，依 expectedReceiptDate）：篩出 received=false
+    且 expectedReceiptDate 落在 [d0,d1] 區間內的款項。缺填日期者跳過，不假造。
+    2026-09-09 新增，供《當月收支》報表「當月未收（預計）」使用。"""
+    conn = get_db()
+    rows = conn.execute("""
+        SELECT quote_no, customer_name, project_name, sales_person, sales_person_id,
+               total, pretax,
+               json_extract(data_json,'$.caseRecord') AS cr_json
+        FROM quotations
+        WHERE COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') IN ('已成案','已結案')
+    """).fetchall()
+    dept_by_user = {}
+    if department_id:
+        dept_by_user = {r["id"]: r["department_id"] for r in conn.execute("SELECT id, department_id FROM users").fetchall()}
+    conn.close()
+
+    items = []
+    for row in rows:
+        if department_id and dept_by_user.get(row["sales_person_id"]) != department_id:
+            continue
+        cr = {}
+        if row["cr_json"]:
+            try:
+                cr = json.loads(row["cr_json"])
+            except Exception:
+                pass
+        pay = (cr.get("payment") or {}).get("items", [])
+        if not pay:
+            continue
+        amounts = payment_item_amounts(row["total"] or 0, pay, row["pretax"])
+        for idx, pi in enumerate(pay):
+            if pi.get("received"):  # 跳過已收款項
+                continue
+            exp_date = (pi.get("expectedReceiptDate") or "")[:10]
+            if not exp_date or not (d0 <= exp_date <= d1):  # 缺日期或不在區間內都跳過
+                continue
+            amt = amounts[idx]
+            items.append({
+                "quoteNo":       row["quote_no"],
+                "customer":      row["customer_name"] or "",
+                "project":       row["project_name"]  or "",
+                "salesPerson":   row["sales_person"]  or "",
+                "type":          pi.get("type", f"第{idx+1}期"),
+                "amount":        amt,
+                "expectedDate":  exp_date,
+                "invoiceNo":     pi.get("invoiceNo", ""),
+            })
+    items.sort(key=lambda x: x["expectedDate"], reverse=True)
     return items
 
 
@@ -3123,6 +3177,7 @@ def _build_income_expense_scopes(year: int, month: str, department_id: Optional[
 
     month_income = _collect_income_items(m0, m1, department_id)
     year_income  = _collect_income_items(y0, y1, department_id)
+    month_unreceived = _collect_unreceived_items(m0, m1, department_id)
 
     return {
         "year":              year,
@@ -3134,6 +3189,8 @@ def _build_income_expense_scopes(year: int, month: str, department_id: Optional[
         "monthIncomeItems":  month_income,
         "monthIncomeTotal":  sum(i["amount"] for i in month_income),
         "monthIncomeNet":    sum(i["netAmount"] or 0 for i in month_income),
+        "monthUnreceivedItems": month_unreceived,
+        "monthUnreceivedTotal":  sum(i["amount"] for i in month_unreceived),
         "yearIncomeItems":   year_income,
         "yearIncomeTotal":   sum(i["amount"] for i in year_income),
         "yearIncomeNet":     sum(i["netAmount"] or 0 for i in year_income),
