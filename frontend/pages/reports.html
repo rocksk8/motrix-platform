@@ -305,6 +305,24 @@
             </div>
           </div>
           <div style="font-size:10px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em;font-family:LINE Seed TW_OTF, sans-serif;margin-bottom:8px;display:flex;align-items:center;gap:8px">
+            <span>當月收支</span>
+            <span style="flex:1;height:1px;background:var(--border-light)"></span>
+          </div>
+          <div class="kpi-grid" style="margin-bottom:10px">
+            <div class="kpi-card green">
+              <div class="kpi-card__lbl">當月收入</div>
+              <div class="kpi-card__val" x-text="fmt(monthIncomeTotal)"></div>
+            </div>
+            <div class="kpi-card orange">
+              <div class="kpi-card__lbl">當月支出</div>
+              <div class="kpi-card__val" x-text="fmt(monthExpenseTotal)"></div>
+            </div>
+            <div class="kpi-card" :class="(monthIncomeTotal - monthExpenseTotal) >= 0 ? 'green' : 'red'">
+              <div class="kpi-card__lbl">當月淨現流</div>
+              <div class="kpi-card__val" x-text="fmt(monthIncomeTotal - monthExpenseTotal)"></div>
+            </div>
+          </div>
+          <div style="font-size:10px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em;font-family:LINE Seed TW_OTF, sans-serif;margin-bottom:8px;display:flex;align-items:center;gap:8px">
             <span>財務概況</span>
             <span style="flex:1;height:1px;background:var(--border-light)"></span>
           </div>
