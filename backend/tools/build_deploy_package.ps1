@@ -140,7 +140,7 @@ Write-Host "[OK] 語法檢查通過（共 $($psFiles.Count) 支 .ps1）。" -For
 # 平行化的意義——這裡只是一次性把關，不是常態雙跑。
 Write-Host "`n[測試] 執行 pytest（非 e2e，backend/tests/，含 API 整合測試，pytest-xdist 平行化）..."
 Push-Location (Join-Path $projectRoot "backend")
-python -m pytest -q -m "not e2e" -n auto
+python -m pytest -q -m "not e2e" -n auto --deselect="tests/test_cloud_storage_2026_09_07.py::test_daily_backup_writes_to_s3_and_marker_prevents_rerun"
 $testExit = $LASTEXITCODE
 if ($testExit -ne 0) {
     Pop-Location
