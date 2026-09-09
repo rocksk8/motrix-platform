@@ -932,6 +932,9 @@ function reportsApp() {
       } catch (_) {}
       this.loadData()
       this.loadOrgTree()
+      this.expensesYear = this.year
+      this.expensesMonth = new Date(this.year, this.month - 1, 1).toISOString().slice(0, 7)
+      this.loadExpenses()
       if (this.activeTab === 'cashier') this.showCashierTab()
       var self = this
       // Re-init charts when data changes and charts tab is active (e.g. period change)
