@@ -340,13 +340,17 @@ def dashboard_stats(department_id: Optional[int] = Query(None), authorization: s
 
 
 @router.get("/api/dashboard/monthly")
-def dashboard_monthly(authorization: str = Header(None)):
+def dashboard_monthly(department_id: Optional[int] = Query(None), authorization: str = Header(None)):
     u = _require_user(authorization)
     role = u["role"]
     mods = json.loads(u.get("modules") or "[]") if isinstance(u.get("modules"), str) else (u.get("modules") or [])
     if role not in ("superadmin", "admin") and "finance" not in mods:
         return {"items": []}
     conn = get_db()
+    # 部門篩選邏輯（2026-09-09 新增）
+    dept_by_user = {}
+    if department_id:
+        dept_by_user = {r["id"]: r["department_id"] for r in conn.execute("SELECT id, department_id FROM users").fetchall()}
     # 依實際收款進度與時間分組（2026-08-24，第二輪修正）：使用者指出「銷售收入
     # 趨勢」該反映真正收到錢的月份，不是案件成交（dealTag 轉為已成案，第一輪
     # 用 dealWonAt 修正的邏輯）的月份——業務簽單跟財務實際收款常常不同月份，
@@ -358,12 +362,15 @@ def dashboard_monthly(authorization: str = Header(None)):
     # 換算出的應收金額。跟「應收款狀態」圓環（本檔案上方 recv_received 那段）
     # 共用同一套換算邏輯，避免兩處分開實作、算出不一致的數字。
     rows = conn.execute(
-        "SELECT total, pretax, data_json FROM quotations WHERE "
+        "SELECT total, pretax, sales_person_id, data_json FROM quotations WHERE "
         "COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') IN ('已成案','已結案')"
     ).fetchall()
 
     monthly_amount, monthly_count, monthly_fee = {}, {}, {}
     for r in rows:
+        # 部門篩選
+        if department_id and dept_by_user.get(r["sales_person_id"]) != department_id:
+            continue
         try:
             data = json.loads(r["data_json"] or "{}")
         except Exception:
@@ -418,7 +425,7 @@ _EQUIPMENT_PART_CATEGORIES = {"網通設備", "監控設備", "交換器", "伺�
 
 
 @router.get("/api/dashboard/expenses-monthly")
-def dashboard_expenses_monthly(authorization: str = Header(None)):
+def dashboard_expenses_monthly(department_id: Optional[int] = Query(None), authorization: str = Header(None)):
     """近 12 個月支出結構：承攬商派發（比照 vendor_contractors._dispatch_row 的
     grandTotal＝含稅承攬商費用＋外包人員個別計費）／料件與設備進貨成本（stock_items.cost，
     依 parts.category 分桶）／其他支出（已精算完結案件的 settlement.extraItems，依
@@ -428,6 +435,21 @@ def dashboard_expenses_monthly(authorization: str = Header(None)):
     mods = json.loads(u.get("modules") or "[]") if isinstance(u.get("modules"), str) else (u.get("modules") or [])
     if role not in ("superadmin", "admin") and "finance" not in mods:
         return {"items": [], "otherBreakdown": {}}
+
+    conn = get_db()
+    # 部門篩選邏輯（2026-09-09 新增）
+    dept_by_quote = {}
+    if department_id:
+        dept_by_user = {r["id"]: r["department_id"] for r in conn.execute("SELECT id, department_id FROM users").fetchall()}
+        dept_by_quote = {
+            r["quote_no"]: dept_by_user.get(r["sales_person_id"])
+            for r in conn.execute("SELECT quote_no, sales_person_id FROM quotations").fetchall()
+        }
+
+    def _quote_in_department(quote_no: str) -> bool:
+        if not department_id:
+            return True
+        return bool(quote_no) and dept_by_quote.get(quote_no) == department_id
 
     today = date.today()
     month_list = []
@@ -451,19 +473,19 @@ def dashboard_expenses_monthly(authorization: str = Header(None)):
     ).fetchall()
     for r in disp_rows:
         mo = (r["dispatch_date"] or "")[:7]
-        if mo not in expenses:
+        if mo not in expenses or not _quote_in_department(r["quote_no"]):
             continue
         expenses[mo]["contractor"] += _dispatch_row(r)["grandTotal"]
 
     # ── 料件 / 設備進貨成本 ──────────────────────────────────────────────────
     stock_rows = conn.execute("""
-        SELECT s.created_at AS created_at, s.cost AS cost, p.category AS category
+        SELECT s.created_at AS created_at, s.cost AS cost, s.quote_no, p.category AS category
         FROM stock_items s LEFT JOIN parts p ON p.part_no = s.part_no
         WHERE s.status != 'void'
     """).fetchall()
     for r in stock_rows:
         mo = (r["created_at"] or "")[:7]
-        if mo not in expenses:
+        if mo not in expenses or not _quote_in_department(r["quote_no"]):
             continue
         bucket = "equipment" if r["category"] in _EQUIPMENT_PART_CATEGORIES else "material"
         expenses[mo][bucket] += float(r["cost"] or 0)
@@ -475,11 +497,13 @@ def dashboard_expenses_monthly(authorization: str = Header(None)):
     # 所以首頁「本月支出」跟營運報表的同一個數字本來就對不起來。兩處統一改用
     # helpers.settlement_extra_expenses()。
     quote_rows = conn.execute(
-        "SELECT data_json FROM quotations "
+        "SELECT quote_no, data_json FROM quotations "
         "WHERE json_extract(data_json,'$.settlement.extraItems') IS NOT NULL"
     ).fetchall()
     conn.close()
     for r in quote_rows:
+        if not _quote_in_department(r["quote_no"]):
+            continue
         try:
             data = json.loads(r["data_json"] or "{}")
         except Exception:

@@ -960,7 +960,14 @@ function reportsApp() {
     showExpensesTab() {
       this.activeTab = 'expenses'
       var key = this.expensesYear + ':' + this.expensesMonth + ':' + (this.departmentId || '')
-      if (this.expensesLoadedFor !== key) this.loadExpenses()
+      if (this.expensesLoadedFor !== key) {
+        this.loadExpenses()
+        // 同步加載應收明細，確保兩邊月份對齊
+        this.receivablesYear = this.expensesYear
+        this.receivablesMonth = this.expensesMonth
+        this.receivablesLoadedFor = null
+        this.loadReceivables()
+      }
     },
 
     async loadExpenses() {

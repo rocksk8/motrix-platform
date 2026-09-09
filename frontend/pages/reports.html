@@ -321,6 +321,16 @@
               <div class="kpi-card__lbl">當月淨現流</div>
               <div class="kpi-card__val" x-text="fmt(monthIncomeTotal - monthExpenseTotal)"></div>
             </div>
+            <div class="kpi-card">
+              <div class="kpi-card__lbl">當月未收（預計）</div>
+              <div class="kpi-card__val" x-text="fmt(monthUnreceivedTotal)" style="color:var(--alert)"></div>
+              <div style="font-size:11px;color:var(--text-dim);margin-top:4px" x-text="monthUnreceivedItems.length + ' 筆'"></div>
+            </div>
+            <div class="kpi-card" x-show="receivablesData && receivablesData.monthOutstandingTotal > 0">
+              <div class="kpi-card__lbl">當月未收（案件）</div>
+              <div class="kpi-card__val" x-text="fmt(receivablesData?.monthOutstandingTotal || 0)" style="color:var(--alert)"></div>
+              <div style="font-size:11px;color:var(--text-dim);margin-top:4px">依成案月份計</div>
+            </div>
           </div>
           <div style="font-size:10px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em;font-family:LINE Seed TW_OTF, sans-serif;margin-bottom:8px;display:flex;align-items:center;gap:8px">
             <span>財務概況</span>

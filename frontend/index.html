@@ -1214,7 +1214,8 @@
 
       async loadMonthly() {
         try {
-          const r = await fetch(`${API}/dashboard/monthly`, {
+          const qs = this.departmentId ? `?department_id=${this.departmentId}` : ''
+          const r = await fetch(`${API}/dashboard/monthly${qs}`, {
             headers: { Authorization: 'Bearer ' + this.session.token }
           })
           if (r.ok) { const d = await r.json(); return d.items || [] }
@@ -1224,7 +1225,8 @@
 
       async loadExpenses() {
         try {
-          const r = await fetch(`${API}/dashboard/expenses-monthly`, {
+          const qs = this.departmentId ? `?department_id=${this.departmentId}` : ''
+          const r = await fetch(`${API}/dashboard/expenses-monthly${qs}`, {
             headers: { Authorization: 'Bearer ' + this.session.token }
           })
           if (r.ok) { const d = await r.json(); return d.items || [] }
