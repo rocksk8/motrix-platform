@@ -932,10 +932,12 @@ function reportsApp() {
       } catch (_) {}
       this.loadData()
       this.loadOrgTree()
-      this.expensesYear = this.year
-      this.expensesMonth = new Date(this.year, this.month - 1, 1).toISOString().slice(0, 7)
-      this.loadExpenses()
       if (this.activeTab === 'cashier') this.showCashierTab()
+      // 設置當月並加載當月收支（非異步等待，但自動刷新當月數據）
+      this.expensesYear = this.year
+      this.expensesMonth = this.year + '-' + String(this.month).padStart(2, '0')
+      this.expensesLoadedFor = null  // 清除快取，強制重新載入
+      this.loadExpenses()
       var self = this
       // Re-init charts when data changes and charts tab is active (e.g. period change)
       this.$watch('data', function(newData) {
