@@ -9,7 +9,8 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Header, Query
 
 from db import get_db
-from helpers import _require_user, _warranty_expiry, payment_item_amounts, norm_at
+from helpers import (_require_user, _warranty_expiry, payment_item_amounts, norm_at,
+                     settlement_extra_expenses)
 from routers.dev_crm import _can_access_case
 from routers.vendor_contractors import _dispatch_row
 
@@ -467,9 +468,15 @@ def dashboard_expenses_monthly(authorization: str = Header(None)):
         bucket = "equipment" if r["category"] in _EQUIPMENT_PART_CATEGORIES else "material"
         expenses[mo][bucket] += float(r["cost"] or 0)
 
-    # ── 其他支出（已精算完結案件的額外品項） ────────────────────────────────
+    # ── 其他支出（精算「額外支出」逐筆）─────────────────────────────────────
+    # 2026-09-09 修：這裡原本有兩個問題，(a) 只撈 settlement.status='finalized'
+    # 的案件，草稿階段填的額外支出完全不算；(b) 一律用精算完結時間歸月，連
+    # reports.py 2026-09-02 已經改用 expenseDate（憑證日期）的修正都沒同步過來，
+    # 所以首頁「本月支出」跟營運報表的同一個數字本來就對不起來。兩處統一改用
+    # helpers.settlement_extra_expenses()。
     quote_rows = conn.execute(
-        "SELECT data_json FROM quotations WHERE json_extract(data_json,'$.settlement.status')='finalized'"
+        "SELECT data_json FROM quotations "
+        "WHERE json_extract(data_json,'$.settlement.extraItems') IS NOT NULL"
     ).fetchall()
     conn.close()
     for r in quote_rows:
@@ -477,22 +484,13 @@ def dashboard_expenses_monthly(authorization: str = Header(None)):
             data = json.loads(r["data_json"] or "{}")
         except Exception:
             continue
-        history = data.get("editHistory") or []
-        finalized_at = ""
-        for h in history:
-            if h.get("type") == "settlement_finalized":
-                finalized_at = h.get("at") or finalized_at
-        mo = (finalized_at or "")[:7]
-        if mo not in expenses:
-            continue
-        extra_items = ((data.get("settlement") or {}).get("extraItems")) or []
-        for it in extra_items:
-            cost = float(it.get("totalCost") or 0)
-            if not cost:
+        for ex in settlement_extra_expenses(data):
+            if ex["month"] not in expenses:
                 continue
-            cat = it.get("category") or "其他"
-            expenses[mo]["other"] += cost
-            other_breakdown[mo][cat] = other_breakdown[mo].get(cat, 0) + cost
+            expenses[ex["month"]]["other"] += ex["cost"]
+            other_breakdown[ex["month"]][ex["category"]] = (
+                other_breakdown[ex["month"]].get(ex["category"], 0) + ex["cost"]
+            )
 
     items = []
     for mo in month_list:

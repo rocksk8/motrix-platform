@@ -169,6 +169,63 @@ def summarize_payment_items(total: float, pay_items: list, pretax: float = None)
     }
 
 
+def settlement_extra_expenses(data: dict) -> list:
+    """把一張報價單的精算「額外支出」攤成月度支出彙總用的逐筆資料。
+
+    2026-09-09 修：`dashboard.py::dashboard_monthly()` 與
+    `reports.py::_collect_expenses()` 原本各自只撈
+    `settlement.status='finalized'` 的案件，代表**精算還在草稿階段的額外支出
+    完全不會出現在任何月度支出數字裡**。但實際作業順序是「支出當下就先填進
+    精算表單，案件整個結束後才做精算完結」，中間可能隔好幾個月——這段期間
+    當月已經花掉的錢在報表與首頁上等於憑空消失，使用者是看著當月數字對不上
+    才發現的。改成**只要填了就算**，不再要求精算完結。
+
+    歸月日期依序取：
+      1. `expenseDate`（憑證日期，最準；2026-09-01 起精算表單就有這個欄位）
+      2. 精算完結時間（只有已完結的案件才有）
+      3. 最後一次精算存檔時間（草稿也有，對應使用者說的「當月有填寫」）
+    三者都沒有就跳過——真的無從判斷是哪個月，硬塞會污染月報。
+
+    每筆帶 `pending`（精算尚未完結）旗標：這些金額仍可能被改動，呼叫端要讓
+    使用者看得出來，不要讓人以為是已定稿的數字。
+    """
+    settlement = data.get("settlement") or {}
+    items = settlement.get("extraItems") or []
+    if not items:
+        return []
+
+    finalized_at = last_saved_at = ""
+    for h in (data.get("editHistory") or []):
+        htype = h.get("type") or ""
+        if htype == "settlement_finalized":
+            finalized_at = h.get("at") or finalized_at
+        if htype in ("settlement_finalized", "settlement_draft"):
+            last_saved_at = h.get("at") or last_saved_at
+
+    pending = settlement.get("status") != "finalized"
+    out = []
+    for it in items:
+        cost = float(it.get("totalCost") or 0)
+        if not cost:
+            continue
+        item_date = it.get("expenseDate") or finalized_at or last_saved_at or ""
+        if not item_date:
+            continue
+        out.append({
+            "date":     item_date[:10],
+            "month":    item_date[:7],
+            "cost":     cost,
+            "category": it.get("category") or "其他",
+            # 精算表單存的欄位是 description（見 settlement.html::addExtra()）；
+            # name/desc 是更早期的欄位名，留著相容舊資料
+            "desc":     it.get("description") or it.get("name") or it.get("desc") or "",
+            "docNo":    it.get("docNo") or "",
+            "files":    it.get("files") or [],
+            "pending":  pending,
+        })
+    return out
+
+
 _INVOICE_NO_RE = re.compile(r"^[A-Z]{2}\d{8}$")
 
 

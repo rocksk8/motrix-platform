@@ -643,7 +643,15 @@
                       <td class="c mono" x-text="it.date"></td>
                       <td x-text="expensesCatLabel(it.cat)"></td>
                       <td class="mono" x-text="it.quoteNo || '—'"></td>
-                      <td x-text="it.desc"></td>
+                      <td>
+                        <span x-text="it.desc"></span>
+                        <!-- 精算尚未完結（2026-09-09）：這筆金額已經計入當月支出，
+                             但精算還沒定稿、數字仍可能被改動，標示出來讓看報表的人
+                             知道，不要以為是已定稿的數字 -->
+                        <template x-if="it.pending">
+                          <span style="margin-left:6px;font-size:10px;padding:1px 5px;border-radius:3px;background:#FEF3C7;color:#92400E;white-space:nowrap">精算未完結</span>
+                        </template>
+                      </td>
                       <td class="r mono" x-text="fmt(it.amount)"></td>
                     </tr>
                   </template>

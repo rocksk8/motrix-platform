@@ -319,6 +319,12 @@ def test_case_finance_summary_smoke(live_server, make_user):
              "receivedAt": "2026-03-05T00:00:00", "actualAmount": None, "feeAmount": 0},
             {"id": 2, "type": "尾款", "pct": 60, "amount": 60000, "received": False},
         ]}},
+        # 刻意用「草稿」精算：使用者的作業順序是支出當下就先填、案件結束才做
+        # 精算完結，總覽必須照樣列出來（含單號），不能等完結才顯示
+        "settlement": {"status": "draft", "extraItems": [
+            {"category": "運費", "description": "吊車運費", "docNo": "AB12345678",
+             "totalCost": 8000, "expenseDate": "2026-04-02"},
+        ]},
     }, ensure_ascii=False)
     conn.execute(
         "INSERT INTO quotations (quote_no, status, customer_name, project_name, total, pretax, "
@@ -376,5 +382,17 @@ def test_case_finance_summary_smoke(live_server, make_user):
             assert "NT$ 40,000" in text, f"已收應顯示 NT$ 40,000，實際: {text!r}"
             assert "未收" in text and "未匯款" in text, \
                 f"應收/應付兩組 KPI 標籤都要在，實際總覽文字: {text!r}"
+
+            # 精算額外支出明細（草稿精算也要列，含單號）：這一段專門防「Alpine
+            # getter 沒定義」這種只有瀏覽器裡才看得出來的錯——x-show 呼叫到不存在
+            # 的方法時 Alpine 只會靜靜當成 false，按鈕整個不出現，後端測試全綠也
+            # 完全看不出來（2026-09-09 實際犯過一次，是靠人工截圖才發現）。
+            overview.locator('button:has-text("精算額外支出明細")').click()
+            # 點開後要等明細列真的渲染出來再讀文字：Alpine 的 x-show 切換不是同步
+            # 的，click() 一回來就 inner_text() 會讀到還沒展開的內容
+            overview.locator("text=吊車運費").wait_for(timeout=5000)
+            detail_text = overview.inner_text()
+            assert "AB12345678" in detail_text, \
+                f"草稿精算的額外支出單號要顯示，實際總覽文字: {detail_text!r}"
         finally:
             browser.close()

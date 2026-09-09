@@ -133,6 +133,7 @@ function app() {
     financeSummaryLoading: false,
     finShowRecvDetail: false,
     finShowPayDetail: false,
+    finShowExtraDetail: false,
 
     // ── 承攬商匯款申請 ──
     contractorVouchers: [],
@@ -214,6 +215,10 @@ function app() {
     finPayable()     { return this.financeSummary?.payable || null },
     finRelatedDocs() { return this.financeSummary?.relatedDocuments || { invoiceVouchers: [], paymentRequests: [] } },
     finExtrasTotal() { return this.financeSummary?.settlementExtras?.total || 0 },
+    // 精算額外支出逐筆（含 2026-09-09 新增的單號）：資料源就是精算頁「二、額外
+    // 支出」那張表，精算不論草稿或已完結都會列出來——使用者的作業順序是支出
+    // 當下就先填、案件結束才做精算完結，只列已完結的等於當月看不到剛花的錢
+    finExtraItems()  { return this.financeSummary?.settlementExtras?.items || [] },
     // 未收款項清單：只給總覽的展開明細用，已收的那些在「案件資訊」Tab 的款項
     // 明細本來就看得到，這裡重複列一次只會讓畫面變長
     finOutstandingItems() { return (this.finReceivable()?.items || []).filter(it => !it.received) },
@@ -463,6 +468,14 @@ function app() {
         if (!r.ok) return
         const data = await r.json()
         this.selected = data
+        // 分頁/檢視狀態必須在任何 await 之前就重設完（2026-09-09 修）：
+        // this.selected 一設定，分頁列就立刻渲染給使用者點；但下面
+        // _seedDefaultStagesIfEmpty() 對全新案件會連打 5 次建立階段的 API，
+        // 這段期間如果使用者已經切到別的分頁（例如「財務」），原本寫在 await
+        // 之後的 activeTab='biz' 會把人硬彈回「案件資訊」——階段建立越慢、
+        // 被彈回的機率越高。這幾個都是純檢視狀態，提前重設沒有副作用。
+        this.activeTab = 'biz'
+        this.execSubTab = 'progress'
         this.cr.dealTag = data.data?.dealTag || data.deal_tag || '已成案'
         this.cr.caseRecord = data.data?.caseRecord || null
         await this.ensureCaseRecord()
@@ -470,8 +483,6 @@ function app() {
         this.dirty = false
         this.saveStatus = ''
         this.saveMsg = ''
-        this.activeTab = 'biz'
-        this.execSubTab = 'progress'
         this.showLog = false
         this.showImportModal = false
         this._allDonePrompted = false

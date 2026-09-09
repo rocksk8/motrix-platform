@@ -1836,6 +1836,10 @@
                                 style="font-size:11px;padding:4px 10px;background:#FEF2F2;color:#B91C1C;border:1px solid #FECACA;border-radius:6px;cursor:pointer;font-family:var(--font-zh)">
                           <span x-text="(finShowPayDetail ? '▾ ' : '▸ ') + '待匯款明細（' + finUnpaidVouchers().length + '）'"></span>
                         </button>
+                        <button x-show="finExtraItems().length > 0" @click="finShowExtraDetail = !finShowExtraDetail"
+                                style="font-size:11px;padding:4px 10px;background:#F9FAFB;color:#6B7280;border:1px solid var(--border-light);border-radius:6px;cursor:pointer;font-family:var(--font-zh)">
+                          <span x-text="(finShowExtraDetail ? '▾ ' : '▸ ') + '精算額外支出明細（' + finExtraItems().length + '）'"></span>
+                        </button>
                       </div>
 
                       <div x-show="finShowRecvDetail" style="margin-top:10px">
@@ -1847,6 +1851,24 @@
                             <span style="font-size:10px;color:var(--text-dim);font-family:var(--font-zh)" x-text="it.expectedReceiptDate ? '預計 ' + it.expectedReceiptDate : ''"></span>
                             <span style="font-size:10px;color:var(--text-dim);font-family:var(--font-zh);flex:1" x-text="it.invoiceNo ? '發票 ' + it.invoiceNo : ''"></span>
                             <span style="font-family:LINE Seed TW_OTF, sans-serif;font-weight:600;color:#92400E;min-width:90px;text-align:right" x-text="caseSettleFmt(it.amount)"></span>
+                          </div>
+                        </template>
+                      </div>
+
+                      <!-- 精算額外支出明細：資料源就是精算頁「二、額外支出」那張表
+                           （data.settlement.extraItems），在精算頁存檔後這裡就會跟著
+                           顯示，含 2026-09-09 新增的單號欄位。金額不計入上方應付合計
+                           （這個清單沒有已付/未付狀態），但明細要看得到，否則使用者
+                           只看到一個「精算額外支出 NT$X」的總數無從核對。 -->
+                      <div x-show="finShowExtraDetail" style="margin-top:10px">
+                        <div style="font-size:10px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.06em;text-transform:uppercase;padding-bottom:4px;border-bottom:1.5px solid #E5E7EB">精算額外支出（未計入應付）</div>
+                        <template x-for="(ex, i) in finExtraItems()" :key="i">
+                          <div style="display:flex;align-items:baseline;gap:8px;padding:6px 0;border-bottom:1px solid #F0EFEB;font-size:12px">
+                            <span style="font-size:10px;background:#F3F4F6;color:#6B7280;padding:1px 6px;border-radius:3px;font-family:var(--font-zh);white-space:nowrap" x-text="ex.category || '—'"></span>
+                            <span style="font-family:var(--font-zh);color:var(--text-primary);flex:1" x-text="ex.description || '—'"></span>
+                            <span style="font-size:10px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;white-space:nowrap" x-text="ex.docNo ? '單號 ' + ex.docNo : ''"></span>
+                            <span style="font-size:10px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;white-space:nowrap" x-text="ex.expenseDate || ''"></span>
+                            <span style="font-family:LINE Seed TW_OTF, sans-serif;font-weight:600;color:#92400E;min-width:90px;text-align:right" x-text="caseSettleFmt(ex.totalCost)"></span>
                           </div>
                         </template>
                       </div>

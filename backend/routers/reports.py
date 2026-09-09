@@ -23,7 +23,8 @@ from fastapi.responses import StreamingResponse
 from db import get_db
 from helpers import (
     _require_user, _tok, _audit, _warranty_expiry, _get_edge_path, _get_setting, _set_setting,
-    payment_item_amounts, quote_won_month_map, user_has_module, EDGE_PDF_SEMAPHORE,
+    payment_item_amounts, settlement_extra_expenses, quote_won_month_map,
+    user_has_module, EDGE_PDF_SEMAPHORE,
 )
 from routers.vendor_contractors import _dispatch_row
 
@@ -3219,10 +3220,16 @@ def _collect_expenses(year: int, department_id: Optional[int] = None) -> dict:
             "desc": f"{label} × {agg['qty']}", "amount": round(agg["amount"]),
         })
 
-    # ── 其他支出（已精算完結案件的額外品項，依 settlement_finalized 時間歸月）
+    # ── 其他支出（精算「額外支出」逐筆）─────────────────────────────────────
+    # 2026-09-09 修：原本這裡只撈 settlement.status='finalized' 的案件，代表
+    # **精算還在草稿階段填的額外支出完全不會出現在月支出裡**。實際作業順序是
+    # 支出當下就先填進精算表單、案件全部結束後才做完結，中間可能隔好幾個月，
+    # 這段期間當月已經花掉的錢在報表上等於不存在。改成只要填了就算，歸月與
+    # pending 旗標的判斷邏輯集中在 helpers.settlement_extra_expenses()（同一支
+    # 也給 dashboard.py 用，兩邊過去各寫一份、連歸月依據都不一樣）。
     quote_rows = conn.execute(
         "SELECT quote_no, customer_name, data_json FROM quotations "
-        "WHERE json_extract(data_json,'$.settlement.status')='finalized'"
+        "WHERE json_extract(data_json,'$.settlement.extraItems') IS NOT NULL"
     ).fetchall()
     conn.close()
     for r in quote_rows:
@@ -3230,37 +3237,23 @@ def _collect_expenses(year: int, department_id: Optional[int] = None) -> dict:
             data = json.loads(r["data_json"] or "{}")
         except Exception:
             continue
-        history = data.get("editHistory") or []
-        finalized_at = ""
-        for h in history:
-            if h.get("type") == "settlement_finalized":
-                finalized_at = h.get("at") or finalized_at
         if not _quote_in_department(r["quote_no"]):
             continue
-        for it in ((data.get("settlement") or {}).get("extraItems")) or []:
-            cost = float(it.get("totalCost") or 0)
-            if not cost:
+        for ex in settlement_extra_expenses(data):
+            if ex["month"] not in monthly:
                 continue
-            # 2026-09-02 修復：月度加總過去一律用「精算完結時間」(finalized_at)
-            # 分月，但每筆額外支出本身的憑證日期 expenseDate（2026-09-01 新增
-            # 欄位）才是明細列顯示的 date——案件精算常常是事後補做，完結月份
-            # 跟支出實際發生月份可能差好幾個月，兩者用不同日期分桶會讓「當月
-            # 明細」跟「月度加總欄位」對不上（明細照 expenseDate 篩，加總卻
-            # 算進 finalized_at 那個月）。這裡統一改成優先用 expenseDate 決定
-            # 要計入哪個月，缺漏才退回 finalized_at，明細顯示的 date 用同一個
-            # 值，確保兩處一致。
-            item_date = (it.get("expenseDate") or finalized_at or "")
-            mo = item_date[:7]
-            if mo not in monthly:
-                continue
-            monthly[mo]["other"] += cost
-            cat = it.get("category") or "其他"
-            desc = it.get("name") or it.get("desc") or cat
+            monthly[ex["month"]]["other"] += ex["cost"]
+            desc = ex["desc"] or ex["category"]
+            if ex["docNo"]:
+                desc = f"{desc}（單號 {ex['docNo']}）"
             details["other"].append({
-                "date": item_date[:10], "quoteNo": r["quote_no"] or "",
-                "desc": f"{r['customer_name'] or ''}｜{cat}｜{desc}".strip("｜"),
-                "amount": round(cost),
-                "files": it.get("files") or [],
+                "date": ex["date"], "quoteNo": r["quote_no"] or "",
+                "desc": f"{r['customer_name'] or ''}｜{ex['category']}｜{desc}".strip("｜"),
+                "amount": round(ex["cost"]),
+                "files": ex["files"],
+                # 精算尚未完結：金額還可能變動，前端會標示出來，不要讓使用者
+                # 誤以為是已定稿的數字
+                "pending": ex["pending"],
             })
 
     monthly_items = []
