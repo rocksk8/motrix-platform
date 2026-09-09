@@ -1536,6 +1536,10 @@ Get-Credential -UserName "Motrix" | Export-Clixml -Path "$env:USERPROFILE\motrix
 
 在 §14.3b 的 WinRM 通道上包了一層網頁 GUI，把「打包→推送→套用」跟「查看正式機狀態」跟「手動回滾」都變成按鈕點選，不用再手打一長串 PowerShell 指令。
 
+**開關方式（2026-09-09 起）**：桌面捷徑「MOTRIX 部署儀表板」→ `backend/tools/deploy_dashboard_ctl.pyw`，一個 tkinter 小視窗，只有「開啟」「關閉」兩顆按鈕＋狀態燈（每 1.5 秒用 TCP 連 127.0.0.1:8765 判定，不靠任何會被系統語系影響的指令輸出）。開啟＝背景以 `pythonw.exe` 拉起 `deploy_dashboard.py`（無主控台視窗，輸出全進 `tools/deploy_dashboard_run.log`），起來後自動開瀏覽器；關閉＝二次確認後找 8765 的監聽者 `taskkill`，且**只殺 python 系列行程**，被別的程式佔用時寧可不動手也不誤殺。取代了原本的 `deploy_dashboard_start.bat`／`deploy_dashboard_stop.bat`（`91a80c8` 新增、2026-09-09 合併後刪除；改 Python GUI 順帶擺脫 .bat 檔不能寫中文的 codepage 限制，見 feedback_windows_locale_encoding_pitfall）。
+
+也可以照舊直接手動啟動：
+
 ```
 cd backend
 python tools/deploy_dashboard.py
