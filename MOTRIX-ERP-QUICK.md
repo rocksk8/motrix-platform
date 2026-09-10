@@ -1635,6 +1635,73 @@ python tools/deploy_dashboard.py
 - ~~目前還沒有真正跑過一次完整的部署/回滾~~（**2026-09-10 更正**：截至 09-09 22:16 已累積 **20 次**真實部署嘗試、其中 6 次失敗，逐次因果鏈見 `WEEKLY-AUDIT-2026-09-07_2026-09-10.md` §C-1。⚠️ **但 09-10 那次真正上線的部署沒有走這個儀表板**——`deploy_dashboard_history.json` 裡查不到、`deploy_logs/` 也沒有對應的 build log，代表是直接執行腳本。用儀表板以外的方式部署會同時失去「打包測試關卡」與「歷史紀錄」兩層保障。）
 - **已修復一個第一次真實嘗試就撞到的 bug**：`_ps_cmd()` 原本把參數「名稱」（`-Action`／`-Username`／`-PackagePath`）跟「值」混在同一個 list 裡統一加單引號跳脫，導致 `-Action` 被包成 `'-Action'` 純字串常值，PowerShell 認不出是參數旗標，改去綁定成 `_dashboard_remote.ps1` 第一個位置參數的值，撞上 `ValidateSet` 驗證失敗（`Cannot validate argument on parameter 'Action'`）。改成 `named_args: dict` 的介面——參數名原樣輸出（不加引號，因為是我自己寫死的固定字串）、只有值需要跳脫——並用 dry-run 對照 `ValidateSet` 的假腳本實測過確認修復（含值本身含單引號的情況）。**安全性複查那次沒抓到這個問題**：因為當時只推演了「單引號跳脫本身有沒有正確」，沒有實際跑一次生成的完整指令字串驗證參數綁定，這次靠使用者實際點擊部署按鈕才抓到——教訓是「跳脫邏輯正確」跟「整條指令實際能跑」是兩件不同的事，改動這類組指令字串的程式碼一定要跑一次真實 dry-run，不能只靠推演。
 
+### §14.3d · 兩邊同時有人／有 AI session 在動時的交接協定（2026-09-10）
+
+> 2026-09-10 首次遇到「開發機與正式機同時各有一個 Claude session 在改同一個功能
+> （WebAuthn）」，開發機這邊已經打包好正要部署才被叫停（見 §0 落差表同日條目）。
+> §0 那張表長期記錄的都是「事後才發現」，這次是即時發現——差別只在有人剛好在看。
+> 以下把它變成不依賴運氣的流程。
+
+**原則：序列化，不要並行。** 同一時間只有一邊在改程式碼。理由很實際——正式機不是
+git repo，兩邊各改各的之後沒有任何工具能自動合併，而 `apply_update.ps1` Step 3 是
+整個覆蓋，先部署的那邊會無聲無息蓋掉另一邊。
+
+**交接檔（由「正在動的那一邊」在收工時產出）**
+
+固定路徑，刻意放在部署會覆蓋的範圍之外，才不會被 `apply_update.ps1` 蓋掉：
+
+```
+正式機：C:\Users\Motrix\Desktop\AGENT-HANDOFF\YYYYMMDD_HHMM_prod.md
+開發機：C:\Users\hichan\Desktop\MOTRIX-ERP\..\AGENT-HANDOFF\YYYYMMDD_HHMM_dev.md
+```
+
+開發機這邊用 `backend/tools/check_prod_drift.ps1` 把正式機的交接檔拉回來讀
+（同一條 WinRM 通道，`Copy-Item -FromSession`）。
+
+**交接檔必須包含這 7 項**（少一項下一棒就得自己去翻，等於沒交接）：
+
+| # | 欄位 | 為什麼需要 |
+|---|------|-----------|
+| 1 | 改了哪些檔案（完整路徑清單） | 下一棒要知道自己的改動會不會撞到 |
+| 2 | 每個檔案改了什麼、為什麼 | 決定該合併還是該丟棄 |
+| 3 | 有沒有動資料庫（schema／資料列） | migration 沒進 `db.py` 的話，兩機 schema 會分岔（§0 v32/v33 就是這樣） |
+| 4 | 有沒有改設定（`system_settings` 的 key 與**實際值**） | 例如 `webauthn_rp_id`／`webauthn_origin`，這些不在 git 裡，重建環境時會整個消失 |
+| 5 | 有沒有重啟服務／改排程工作 | 影響下一棒判斷當下狀態 |
+| 6 | 有沒有進 git（有的話附 commit hash） | 沒進 git 的東西下次部署就會被覆蓋掉 |
+| 7 | 未完成、待接手的事 | 半成品最容易被下一棒當成完成品 |
+
+**接手方的固定動作**（不要只信交接檔）：
+
+1. 讀交接檔
+2. 跑 `check_prod_drift.ps1` —— 交接檔寫的是「對方以為自己改了什麼」，drift 檢查
+   看的是「實際上什麼不一樣」。兩者對不上的部分才是真正的風險
+3. 把有價值、還沒進 git 的改動依 §14.2 拉回開發機合併進 git
+4. 確認 §0 落差表已更新，再開始自己的工作
+
+### §14.3e · 正式機漂移檢查（`check_prod_drift.ps1`，2026-09-10）
+
+正式機不是 git repo，任何人直接在 `C:\Users\Motrix\Desktop\V9.0` 底下改檔案，開發機
+完全看不到；下次 `apply_update.ps1` 一跑，Step 3 整個覆蓋，那些改動就無聲消失。過去
+只能靠人記得講——而 §0 那張表本身就是「人不會記得」的證據。
+
+作法：正式機的 `/api/system/deployed-version` 會回報它跑在哪個 commit，本工具用
+`git archive` 還原該 commit 算 SHA256，再透過 WinRM 對正式機同一批路徑算一次，逐檔
+比對。**全程唯讀**（遠端只跑 `Get-ChildItem`／`Get-FileHash`，不寫入、不重啟）。
+
+```powershell
+"密碼" | powershell -ExecutionPolicy Bypass -File backend\tools\check_prod_drift.ps1
+"密碼" | powershell -ExecutionPolicy Bypass -File backend\tools\check_prod_drift.ps1 -Commit 2471747
+```
+
+輸出分三類：**內容被改過**（下次部署會覆蓋掉）／**只有正式機有**（新增但沒進 git）／
+**正式機缺少**（被刪或套用不完整）。比對範圍只含 `backend/`＋`frontend/`，排除 db、
+log、上傳檔、快照、憑證、per-machine 設定檔等執行期產物。
+
+**踩過的坑**：排除規則必須在**遠端**就套用，不能只在本機端過濾結果——正式機的
+`backend\logs\server.log` 被執行中的 uvicorn 開著，`Get-FileHash` 會拋 FileReadError
+讓整個 `Invoke-Command` 中止；另外每個檔案要個別 try/catch，任何一個讀不到都不該
+讓整次掃描報廢。
+
 ### §14.4 · 選型資料庫雙機內容核對（API 版，2026-08-10）
 
 > §15 只管程式碼／schema，**選型資料庫的實際內容**（switch/monitor/access/gateway/netarch/env
