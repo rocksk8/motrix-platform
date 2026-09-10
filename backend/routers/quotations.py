@@ -19,7 +19,7 @@ from pydantic import BaseModel
 
 from db import get_db, spawn_bg_thread
 from helpers import (
-    _require_user, _tok, _audit, _notify, _purge_notifications,
+    _require_user, _tok, _audit, _notify, _purge_notifications, _check_quotation_owner,
     quote_hot_fields, save_quotation_json, _steps_to_tiers, SQL_DEAL_TAG, SQL_SETTLE_STATUS,
     notify_approval_request, notify_next_tier, notify_approved,
     notify_returned, notify_resubmit_requester, notify_settlement_finalized,
@@ -129,23 +129,9 @@ def _visible_case_filter_sql(user: dict, prefix: str = "") -> tuple:
     )
 
 
-def _check_quotation_owner(row, user: dict) -> None:
-    """單筆存取（get/update/delete）比照 list_quotations() 既有的擁有者規則
-    （304-306 行）：非 admin/superadmin 只能存取自己名下的報價單，quote_no
-    格式可預測（MQ-YYYYMM-NNN），沒有這道檢查會讓任何登入使用者用猜/列舉
-    quote_no 看到甚至刪掉別的業務的報價單，繞過清單頁刻意做的隱藏
-    （2026-08-24 安全審查修正，IDOR）。2026-08-27：補上 assigned_user_ids
-    判斷，跟 list_quotations() 的可見性規則保持一致。"""
-    if user["role"] in ("superadmin", "admin"):
-        return
-    sp_id   = row["sales_person_id"] if "sales_person_id" in row.keys() else None
-    sp_name = row["sales_person"] if "sales_person" in row.keys() else None
-    owns = (sp_id == user["id"]) or (sp_id is None and sp_name == user["display_name"])
-    if not owns and "assigned_user_ids" in row.keys():
-        assigned = json.loads(row["assigned_user_ids"] or "[]")
-        owns = user["id"] in assigned
-    if not owns:
-        raise HTTPException(403, "無權限存取其他業務的報價單")
+# `_check_quotation_owner()` 於 2026-09-10 抽到 helpers/quotations.py（見該處
+# docstring）——叫料 API 是第三個呼叫點，且新增時漏了這道檢查。本檔案改為
+# 從 helpers 引用，行為完全不變。
 
 
 # ── Case semi-unlock / change-request helpers (2026-08-26) ────────────────────

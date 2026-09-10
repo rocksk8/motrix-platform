@@ -431,7 +431,12 @@
               未收款<span class="tab__cnt" x-text="activeOutstandingItems.length"></span>
             </button>
             <button class="tab" :class="{on:activeTab==='expenses'}" @click="showExpensesTab()">
-              月支出<span class="tab__cnt" x-show="expensesScope==='month' ? monthExpenseTotal : expensesTotals.total" x-text="fmt(expensesScope==='month' ? monthExpenseTotal : expensesTotals.total)"></span>
+              <!-- x-show 條件用「資料載入了沒」而不是金額本身（2026-09-10）：
+                   原本寫 x-show="…? monthExpenseTotal : expensesTotals.total"，
+                   把金額當真值判斷，當月支出剛好是 0 時徽章會整個消失，看起來
+                   像功能壞掉而不是「這個月沒有支出」。改成只要 expensesData
+                   已載入就顯示，$0 會正常顯示成 $0。 -->
+              月支出<span class="tab__cnt" x-show="!!expensesData" x-text="fmt(expensesScope==='month' ? monthExpenseTotal : expensesTotals.total)"></span>
             </button>
             <button class="tab" :class="{on:activeTab==='cases'}" @click="activeTab='cases'">
               案件清單<span class="tab__cnt" x-text="casesAll.length"></span>

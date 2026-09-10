@@ -275,10 +275,19 @@ def ping():
 @router.get("/api/system/version")
 def system_version():
     """Latest overall system version (newest entry in version_manifest.json).
-    Public — used by the login page footer, which has no session token yet."""
+    Public — used by the login page footer, which has no session token yet.
+
+    2026-09-10: read with `utf-8-sig`, not `utf-8`. The file currently has no
+    BOM, but anything that rewrites it from PowerShell (`Set-Content -Encoding
+    UTF8` adds one on PS 5.1) would BOM it, and plain `utf-8` then raises
+    JSONDecodeError on the very first character — swallowed by the except below
+    into a blank version on the login page, with nothing logged. That is exactly
+    how `GET /api/system/deployed-version` broke (commit 1c8f2e8); `utf-8-sig`
+    reads both forms, so there is no reason to leave the second copy of the same
+    trap in place."""
     manifest_path = os.path.join(os.path.dirname(__file__), "..", "version_manifest.json")
     try:
-        with open(manifest_path, encoding="utf-8") as f:
+        with open(manifest_path, encoding="utf-8-sig") as f:
             entries = json.load(f)
         latest = entries[0] if entries else {}
     except Exception:
@@ -728,14 +737,22 @@ _WEBAUTHN_CHALLENGE_TTL_S = 600  # 10 minutes
 
 
 def _webauthn_origin() -> str:
-    """Get WebAuthn origin from system settings; fall back to HTTP localhost if unconfigured."""
+    """Get WebAuthn origin from system settings (key `webauthn_origin`).
+
+    Returns "" when unconfigured — callers must treat that as "not set up yet"
+    and raise 503, NOT fall back to a localhost default: a wrong origin makes
+    the browser reject the credential with an opaque "invalid domain" error
+    that looks like a client bug (2026-09-10, see §12)."""
     from helpers.settings import _get_setting
     val = _get_setting("webauthn_origin")
     return val if val else ""
 
 
 def _webauthn_rp_id() -> str:
-    """Get WebAuthn RP ID from system settings; fall back to localhost if unconfigured."""
+    """Get WebAuthn RP ID from system settings (key `webauthn_rp_id`).
+
+    Returns "" when unconfigured — see `_webauthn_origin()` for why there is
+    deliberately no localhost fallback."""
     from helpers.settings import _get_setting
     val = _get_setting("webauthn_rp_id")
     return val if val else ""

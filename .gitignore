@@ -41,6 +41,10 @@ backend/export_archive/
 # Runtime / error logs
 backend/start_err.txt
 
+# Commit-message drafts（2026-09-10：backend/.commit_msg_webauthn.txt 曾隨
+# commit 0527524 誤入 repo。訊息本身已經在 git 歷史裡，草稿檔留著只是雜訊）
+**/.commit_msg*.txt
+
 # Update-mode local artifacts (per-machine, not app code — see §15)
 deploy_packages/
 backend/rollback_snapshots/

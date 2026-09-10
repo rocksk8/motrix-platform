@@ -15,11 +15,13 @@
   執行前提：在此腳本所在的 git repo 根目錄（或其子目錄）下執行；
   git status 必須乾淨（沒有未 commit 的變更），否則中止。
 
-  【重要】這台開發機的 git repo 根目錄是整個使用者家目錄（C:\Users\hichan），
-  不是 MOTRIX-ERP 專案本身——家目錄底下永遠會有大量跟本專案無關的未追蹤個人
-  檔案。因此本腳本的「git status 必須乾淨」與「git archive 打包」都只會檢查/
-  匯出 MOTRIX-ERP 這個子目錄範圍（用 git pathspec 限定），不會管家目錄其他地方
-  乾不乾淨，也不會把其他地方的內容打包進去。
+  【repo 範圍】本腳本的「git status 必須乾淨」與「git archive 打包」都只涵蓋
+  MOTRIX-ERP 專案目錄範圍（用 git pathspec 限定）。
+  2026-09-10 更正：先前這裡寫「這台開發機的 git repo 根目錄是整個使用者家目錄
+  （C:\Users\hichan）」，那是 MOTRIX-ERP 還在家目錄 repo 底下時的情況；專案已於
+  commit e6bf102 拆成獨立 git repo，$repoRoot 現在就是專案根目錄本身、$relPath
+  恆為空字串（pathspec 等同「整個 repo」）。兩種情況本腳本都能正確運作，但看到
+  「Project path:」那行印出空白時不要以為是壞掉了。
 #>
 
 [CmdletBinding()]
@@ -115,6 +117,42 @@ if (-not $syntaxOk) {
 }
 Write-Host "[OK] 語法檢查通過（共 $($psFiles.Count) 支 .ps1）。" -ForegroundColor Green
 
+# --- Step 2.5: 釘住 Python 直譯器並驗證依賴齊全（2026-09-10 新增）---
+# 為什麼需要這一段：這台機器 PATH 上同時有 4 個 Python（hermes venv、Programs\
+# Python313、WindowsApps shim、AppData\Local\Python\bin 的 PyManager shim），裸
+# 呼叫 `python` 在不同呼叫環境會解析到不同一支。2026-09-10 就踩到——透過部署
+# 儀表板（pythonw 子行程）觸發打包時解析到 pythoncore-3.14-64，那支沒裝
+# python-multipart，於是所有走 Form/File 的端點測試在 fixture 階段就
+# RuntimeError，整套 470 題幾乎全 E；而症狀要往下捲三千行才看得到真正的原因，
+# 當下被誤讀成「測試壞了」。這跟 2026-09-08 的 tar 事故（Unix tar vs 內建
+# tar.exe，commit 549d319）是同一個根因：**在腳本裡呼叫裸執行檔名，等於把
+# 「用哪一支」交給呼叫端的 PATH 決定**。當時的結論只套用到 tar，沒有推廣到
+# Python，這裡補上。
+#
+# 作法：先解析出實際路徑並印出來（之後所有 pytest 呼叫一律用 $pyExe，不再用
+# 裸 python），再跑一次 import 檢查——缺套件就直接 Fail 並指名是哪一支
+# Python、缺什麼，比讓 470 題全 E 好判讀太多。
+$pyCmd = Get-Command python -ErrorAction SilentlyContinue
+if (-not $pyCmd) {
+    Fail "PATH 上找不到 python。請確認開發環境的 Python 可用後再重新執行。"
+}
+$pyExe = $pyCmd.Source
+Write-Host "`n[環境] 測試將使用的 Python：$pyExe"
+& $pyExe -c "import sys; print('        版本：' + sys.version.split()[0])"
+
+Write-Host "[環境] 驗證 requirements.txt 的關鍵套件是否都裝在這一支上..."
+& $pyExe -c "import multipart, fastapi, uvicorn, pydantic, aiofiles, pyotp, qrcode, boto3, openpyxl, PIL, webauthn"
+if ($LASTEXITCODE -ne 0) {
+    Fail @"
+這一支 Python 缺少 backend/requirements.txt 列出的套件（見上方 ImportError）。
+使用的直譯器：$pyExe
+PATH 上有多個 Python 時很容易解析到沒裝依賴的那一支。請確認後擇一處理：
+  1) 對這一支安裝依賴： & "$pyExe" -m pip install -r "$projectRoot\backend\requirements.txt"
+  2) 調整 PATH 順序，讓正確的那一支排在前面，再重新執行本腳本
+"@
+}
+Write-Host "[OK] 依賴齊全。" -ForegroundColor Green
+
 # --- Step 3: 測試必須通過 ---
 # 目前的把關只有「git status 乾淨」，不代表「這次 commit 沒把測試弄壞」——
 # 曾經發生過測試治具過時、既有測試靜默失敗一段時間才被發現的情況。這裡直接
@@ -138,9 +176,22 @@ Write-Host "[OK] 語法檢查通過（共 $($psFiles.Count) 支 .ps1）。" -For
 # 兩邊 pass/fail 清單逐題比對完全一致，且序列 390 秒／平行 166 秒（約
 # 2.35 倍加速）。之後不需要每次都「平行完再序列驗證一次」，那樣會抵銷
 # 平行化的意義——這裡只是一次性把關，不是常態雙跑。
+# 2026-09-10：移除原本對 test_daily_backup_writes_to_s3_and_marker_prevents_rerun
+# 的 --deselect。那題不是真的不穩，是斷言範圍寫太寬（比對整個 fake S3 的物件
+# 總數，會被同一 worker 上較早測試殘留、尚未結束的背景備份執行緒干擾），已改成
+# 只比對每日備份前綴，測試本身修好了就不該再從關卡挖洞跳過它。
+#
+# 2026-09-10：加 --basetemp。%TEMP%\pytest-of-<user>\pytest-current 是 pytest 每次
+# 執行都會重建的符號連結，這台機器上有一個目標讀不到的損壞 reparse point，
+# os.stat() 回 WinError 5（不是「找不到」），pytest 的 cleanup_dead_symlinks 會
+# 在 session 收尾整個炸掉——**測試全過也會回非 0**，而輸出最後一行是
+# PermissionError，很容易被誤讀成測試失敗。指定獨立的 basetemp 可完全繞開；
+# 要根治得用系統管理員權限 rd 掉那個連結（一般權限 Remove-Item/rd/del 全部
+# Access denied，已實測）。
+$pytestTemp = Join-Path $env:TEMP "motrix-pytest-$(Get-Date -Format 'yyyyMMdd_HHmmss')"
 Write-Host "`n[測試] 執行 pytest（非 e2e，backend/tests/，含 API 整合測試，pytest-xdist 平行化）..."
 Push-Location (Join-Path $projectRoot "backend")
-python -m pytest -q -m "not e2e" -n auto --deselect="tests/test_cloud_storage_2026_09_07.py::test_daily_backup_writes_to_s3_and_marker_prevents_rerun"
+& $pyExe -m pytest -q -m "not e2e" -n auto --basetemp="$pytestTemp"
 $testExit = $LASTEXITCODE
 if ($testExit -ne 0) {
     Pop-Location
@@ -149,7 +200,7 @@ if ($testExit -ne 0) {
 Write-Host "[OK] 非 e2e 測試全數通過。" -ForegroundColor Green
 
 Write-Host "`n[測試] 執行 pytest（e2e，真實瀏覽器，失敗僅警告不中止打包）..."
-python -m pytest -q -m "e2e"
+& $pyExe -m pytest -q -m "e2e" --basetemp="${pytestTemp}_e2e"
 $e2eExit = $LASTEXITCODE
 Pop-Location
 if ($e2eExit -ne 0) {
@@ -169,10 +220,19 @@ if (Test-Path $versionManifestPath) {
         $entries = Get-Content $versionManifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
         if ($entries -and $entries.Count -gt 0) {
             $versionLatest = $entries[0]
+            Write-Host "[版本] version_manifest.json 最新一筆：$($versionLatest.version)（$($versionLatest.date)）"
+        } else {
+            Write-Host "[WARN] version_manifest.json 解析成功但沒有任何條目，版本標籤留空。" -ForegroundColor Yellow
         }
     } catch {
-        Write-Host "[WARN] 無法解析 version_manifest.json，版本標籤留空。" -ForegroundColor Yellow
+        Write-Host "[WARN] 無法解析 version_manifest.json（$($_.Exception.Message)），版本標籤留空。" -ForegroundColor Yellow
     }
+} else {
+    # 2026-09-10：原本這個 else 分支不存在——檔案找不到時會靜默留 null、不印
+    # 任何東西，deploy_manifest.json 的 version_manifest_latest 就變成 null，
+    # 事後完全看不出是「檔案沒找到」還是「解析失敗」。2026-09-10 那兩份部署包
+    # 就是 null（見 WEEKLY-AUDIT §E-5）。這裡補上，讓靜默失敗變成看得見的警告。
+    Write-Host "[WARN] 找不到 $versionManifestPath，版本標籤留空。" -ForegroundColor Yellow
 }
 
 # --- Step 5: 用 git archive 匯出乾淨快照 ---

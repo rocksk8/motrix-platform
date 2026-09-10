@@ -15,6 +15,30 @@ SQL_SETTLE_STATUS = (
 )
 
 
+def _check_quotation_owner(row, user: dict) -> None:
+    """單筆存取（get/update/delete）比照 list_quotations() 既有的擁有者規則：非
+    admin/superadmin 只能存取自己名下的報價單，quote_no 格式可預測
+    （MQ-YYYYMM-NNN），沒有這道檢查會讓任何登入使用者用猜/列舉 quote_no 看到
+    甚至刪掉別的業務的報價單，繞過清單頁刻意做的隱藏（2026-08-24 安全審查
+    修正，IDOR）。2026-08-27：補上 assigned_user_ids 判斷，跟 list_quotations()
+    的可見性規則保持一致。
+
+    2026-09-10：從 routers/quotations.py 抽到 helpers/——`routers/material_orders.py`
+    （叫料 API）是第三個需要這道檢查的呼叫點，且當初新增時漏了它、把同一個
+    IDOR 又開了一次。放在 helpers 讓之後任何「用 quote_no 直接取單筆」的新
+    端點都能直接引用，不必再各自重寫或忘記寫。"""
+    if user["role"] in ("superadmin", "admin"):
+        return
+    sp_id   = row["sales_person_id"] if "sales_person_id" in row.keys() else None
+    sp_name = row["sales_person"] if "sales_person" in row.keys() else None
+    owns = (sp_id == user["id"]) or (sp_id is None and sp_name == user["display_name"])
+    if not owns and "assigned_user_ids" in row.keys():
+        assigned = json.loads(row["assigned_user_ids"] or "[]")
+        owns = user["id"] in assigned
+    if not owns:
+        raise HTTPException(403, "無權限存取其他業務的報價單")
+
+
 def norm_at(s: str) -> str:
     """統一時間格式（部分表用 'YYYY-MM-DDTHH:MM:SS[.ffffff]'，部分用空白分隔且無
     微秒），確保跨來源合併排序正確。2026-08-28：抽成共用函式——原本 dashboard.py

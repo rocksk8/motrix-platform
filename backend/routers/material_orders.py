@@ -8,7 +8,8 @@ from fastapi import APIRouter, HTTPException, Header, Body
 
 from db import get_db
 from helpers import (
-    _require_user, _audit, save_quotation_json, user_has_module,
+    _require_user, _tok, _audit, save_quotation_json, user_has_module,
+    _check_quotation_owner, SQL_DEAL_TAG,
 )
 
 router = APIRouter()
@@ -40,7 +41,7 @@ def update_material_orders(quote_no: str,
     """更新案件的叫料清單（案件財務應付子項目）。
 
     驗證：
-    - 用戶有報價單寫入權限
+    - 用戶有報價單寫入權限，且是這張單的可見範圍內（比照其他單筆端點的 IDOR 防護）
     - 案件未結案（deal_tag ≠ '已結案'）
 
     流程：
@@ -49,31 +50,41 @@ def update_material_orders(quote_no: str,
     - 保存到 data_json，同步 updated_at
 
     2026-09-10：新增功能，支持已付/待付區分供應商催款。
+    2026-09-10（同日修復）：初版有四個缺陷，見 §12 同日條目——①漏 conn.commit()
+    導致整支端點回 200 但資料庫完全沒寫入②save_quotation_json() 參數錯位，把
+    user_id 當成 status、把中文說明當成 updated_at③_audit() 傳錯簽名（第一個
+    參數是 token 不是 conn），例外被 audit 內部 try 吞掉、稽核從來沒寫成功
+    ④已結案守門讀 data_json 的 'deal_tag'，但那裡的鍵叫 'dealTag'、權威來源
+    是資料表欄位，等於守門是死碼。另補上遺漏的擁有者檢查（IDOR）。
     """
     user = _require_user(authorization)
     conn = get_db()
 
     try:
-        # 1. 檢查報價單存在 + 寫入權限
+        # 1. 檢查報價單存在 + 讀出權威的 deal_tag（欄位優先，pre-v6 舊列回退
+        #    data_json.dealTag——這正是 SQL_DEAL_TAG 存在的原因，勿改回裸欄位）
         q = conn.execute(
-            "SELECT data_json FROM quotations WHERE quote_no=?",
+            f"SELECT data_json, sales_person_id, sales_person, assigned_user_ids, "
+            f"{SQL_DEAL_TAG} AS deal_tag FROM quotations WHERE quote_no=?",
             (quote_no,)
         ).fetchone()
         if not q:
             raise HTTPException(404, f"報價單 {quote_no} 不存在")
 
+        # 2. 擁有者檢查：非 admin+ 不能碰別的業務的案件（quote_no 可列舉）
+        _check_quotation_owner(q, user)
+
         data = json.loads(q["data_json"] or "{}")
 
-        # 2. 權限檢查：只有 admin+ 或有報價單編輯模組的使用者可以修改叫料
+        # 3. 權限檢查：只有 admin+ 或有報價單編輯模組的使用者可以修改叫料
         if user["role"] not in ("superadmin", "admin") and not user_has_module(user, "project_manage"):
             raise HTTPException(403, "權限不足：只有管理員或專案經理可以修改叫料")
 
-        # 3. 檢查案件狀態
-        deal_tag = data.get("deal_tag", "")
-        if deal_tag == "已結案":
+        # 4. 檢查案件狀態
+        if (q["deal_tag"] or "") == "已結案":
             raise HTTPException(400, "已結案案件無法修改叫料")
 
-        # 4. 驗證叫料邏輯
+        # 5. 驗證叫料邏輯
         for mo in body.materialOrders:
             if mo.quantity < 0 or mo.unitPrice < 0 or mo.totalPrice < 0:
                 raise HTTPException(400, f"數量、單價、小計不能為負 ({mo.itemName})")
@@ -96,21 +107,22 @@ def update_material_orders(quote_no: str,
                 if not mo.paidDate:
                     raise HTTPException(400, f"部分/完全已付必須填寫日期 ({mo.itemName})")
 
-        # 5. 保存到 data_json
+        # 6. 保存到 data_json
         if not data.get("caseRecord"):
             data["caseRecord"] = {}
 
-        data["caseRecord"]["materialOrders"] = [mo.dict() for mo in body.materialOrders]
+        data["caseRecord"]["materialOrders"] = [mo.model_dump() for mo in body.materialOrders]
 
-        # 6. 寫入 DB
-        save_quotation_json(
-            conn, quote_no, data, user["id"],
-            f"更新叫料清單（{len(body.materialOrders)} 項）"
-        )
+        # 7. 寫入 DB —— save_quotation_json() 只組 UPDATE、不 commit，呼叫端
+        #    必須自己 commit（比照 routers/quotations.py:1310 附近既有寫法）。
+        #    第 4 個位置參數是 status 不是 user_id，這裡刻意只傳三個參數，
+        #    不要動到報價單本身的 status 欄位。
+        save_quotation_json(conn, quote_no, data)
+        conn.commit()
 
-        # 7. 稽核記錄
-        _audit(conn, f"quotations/{quote_no}", "material_orders_update",
-               user["id"], f"新增/更新 {len(body.materialOrders)} 筆叫料")
+        # 8. 稽核記錄（第一個參數是 token，不是連線）
+        _audit(_tok(authorization), 'material_orders.update', 'quotation', quote_no,
+               f"更新叫料清單（{len(body.materialOrders)} 項）")
 
         return {
             "status": "ok",
@@ -124,26 +136,38 @@ def update_material_orders(quote_no: str,
 
 @router.get("/api/quotations/{quote_no}/material-orders")
 def get_material_orders(quote_no: str, authorization: str = Header(None)):
-    """取得案件的叫料清單。"""
+    """取得案件的叫料清單。
+
+    權限比照同一批資料的既有端點（`GET /api/quotations/{quote_no}` 本來就會把
+    整包 data_json 含 caseRecord.materialOrders 回給同樣的使用者）：只要求登入
+    ＋擁有者檢查，不另外加 `financial_view`——同一份資料透過既有端點本來就
+    拿得到，只擋這一支是假的安全感（比照 `finance-summary` 端點的同款決策）。
+    但擁有者檢查不能省，那是真的會擋掉別的業務的案件。
+    """
     user = _require_user(authorization)
     conn = get_db()
 
     try:
         q = conn.execute(
-            "SELECT data_json FROM quotations WHERE quote_no=?",
+            "SELECT data_json, sales_person_id, sales_person, assigned_user_ids "
+            "FROM quotations WHERE quote_no=?",
             (quote_no,)
         ).fetchone()
         if not q:
             raise HTTPException(404, f"報價單 {quote_no} 不存在")
+        _check_quotation_owner(q, user)
 
         data = json.loads(q["data_json"] or "{}")
         orders = data.get("caseRecord", {}).get("materialOrders", [])
 
+        # 用 .get() 取值：這份清單是自由格式 JSON，早期資料或人工修過的
+        # data_json 不保證每筆都有 totalPrice/paidAmount，直接 o["totalPrice"]
+        # 會讓整支查詢端點 500。
         return {
             "quoteNo": quote_no,
             "materialOrders": orders,
-            "totalAmount": sum(o["totalPrice"] for o in orders) if orders else 0,
-            "paidAmount": sum(o["paidAmount"] for o in orders if o.get("paidAmount")) if orders else 0,
+            "totalAmount": sum(float(o.get("totalPrice") or 0) for o in orders),
+            "paidAmount": sum(float(o.get("paidAmount") or 0) for o in orders),
         }
 
     finally:
