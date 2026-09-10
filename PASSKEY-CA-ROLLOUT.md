@@ -1,20 +1,20 @@
 # Passkey 啟用 — 憑證與 CA 佈署步驟書
 
-> ## 🔵 執行進度（2026-09-10 22:15 更新，**做到一半，未完成**）
+> ## 🔵 執行進度（2026-09-10 22:20 更新，**第 2、3 步已完成，卡在第 4 步**）
 >
 > | 步驟 | 狀態 | 實際結果 |
 > |------|------|---------|
 > | 1 前置確認 | ✅ 完成 | 見下方「前置確認的實測結果」——**發現交接檔漏了一件事** |
-> | 2 部署最新程式碼 | ⬜ **未執行** | 用 `deploy_packages\` 底下 **`built_at` 最新的那一包**（每包的 `deploy_manifest.json` 記著 `commit_short` 與 `built_at`，那才是權威；資料夾名只是方便閱讀）。**刻意不寫死包名或 commit**——包名含建置時間戳、commit 又會被「更新這份文件」本身改掉，而這份 .md 自己也在部署包裡，寫死哪一種都會變成「包內文件指向上一個包」的先有雞先有蛋（2026-09-10 來回踩了三次）。該包涵蓋正式機 `2471747` 之後的**全部** commit：營運報表期別與季範圍、全系統稽核三項、稽核後續、報價單單號競態、`???` 假單號與後端單號守門、flaky e2e 根因、慢請求記錄。打包關卡 563 非 e2e + 8 e2e 全過、System32 tar、exit 0。**比它舊的包一律不要再用。** 正式機仍是 `2471747` |
-> | 3 重產憑證 | ✅ 完成 | SAN 已變成 `localhost, motrix.internal, 172.16.10.177, 127.0.0.1`；舊憑證備份在 `backend\certs\backup_20260910_144802\`。**⚠️ 服務尚未重啟，執行中的 uvicorn（PID 2760）仍載入舊憑證**——所以瀏覽器現在拿到的還是沒有 motrix.internal 的那張 |
-> | 4 取出根 CA | ⬜ 未執行 | `rootCA.pem` 在正式機 `C:\Users\Motrix\AppData\Local\mkcert\`，尚未複製出來分發 |
-> | 5 各機器裝 CA | 🟡 只做了正式機 | 正式機已裝（指紋 `A9AF974F0BD6CE35B47CDB95CAA5E2B324DAE61C`，LocalMachine\Root 與 CurrentUser\Root 都有）。**其他電腦都還沒裝** |
+> | 2 部署最新程式碼 | ✅ **完成** | 2026-09-10 **22:05:54 已套用 commit `37bd985`**（實測 `GET /api/system/deployed-version` 確認；`/api/ping` 200、63ms）。涵蓋 `2471747` 之後的全部改動。 |
+> | 3 重產憑證 | ✅ **完成（已生效）** | 第 2 步的重啟讓 uvicorn 載入新憑證。**實測交握取得的 SAN = `DNS:localhost, DNS:motrix.internal, IP:172.16.10.177, IP:127.0.0.1`**，有效期至 2028-12-10。舊憑證備份仍在 `backend\certs\backup_20260910_144802\`。（先前這裡的「服務尚未重啟、仍載入舊憑證」警告已解除。） |
+> | 4 取出根 CA | ⬜ **未執行（下一步）** | 執行 `powershell -ExecutionPolicy Bypass -File backend\tools\fetch_root_ca.ps1`（2026-09-10 新增）。它用 `Get-Credential` 原生輸入框要密碼、成功後存成 DPAPI 加密的 `%USERPROFILE%\motrix_cred.xml`，**之後再跑就不用再輸入密碼**；對正式機只做讀取。**⚠️ 這一步無法用免帳密的方式取代**——已實測：正式機 TLS 交握只送葉憑證（1 張，不含 CA），開發機也沒有任何 rootCA 副本、憑證存放區裡也沒有這張 mkcert CA。 |
+> | 5 各機器裝 CA | 🟡 只做了正式機 | 正式機已裝（指紋 `A9AF974F0BD6CE35B47CDB95CAA5E2B324DAE61C`，LocalMachine\Root 與 CurrentUser\Root 都有）。**每台電腦要做兩件事，缺一不可**：(a) `certutil -addstore -f Root rootCA.pem` (b) 能解析 `motrix.internal`（主網卡 DNS 是 8.8.8.8 的機器解析不到，最省事是加 hosts）。只做 (a) 不做 (b)，瀏覽器依然連不上 `https://motrix.internal:666`。 |
 > | 6 驗證安全內容 | ⬜ 未執行 | 要等第 2、3 步的重啟與第 5 步完成 |
 > | 7 設定 RP ID | ⬜ 未執行 | `configured:false`，端點仍回 503（**這是目前正確的狀態，別急著填**） |
 > | 8 系統網址 | ⬜ 未執行 | |
 > | 9 端對端實測 | ⬜ 未執行 | |
 >
-> **下一步就是第 2 步**：把上表指定的那一包用部署儀表板套用上去。那次重啟會讓
+> **下一步是第 4 步**：在開發機執行 `powershell -ExecutionPolicy Bypass -File backend\tools\fetch_root_ca.ps1`，把根 CA 取回來（會跳出密碼輸入框，之後存成加密憑證檔就不用再打）。
 > uvicorn 載入已經產好的新憑證，第 3 步才算真正生效。新憑證涵蓋舊憑證的全部名稱
 > （172.16.10.177 / localhost / 127.0.0.1）再加 motrix.internal，所以重啟只會變好不會變壞。
 >
