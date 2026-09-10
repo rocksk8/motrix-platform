@@ -63,6 +63,7 @@ from .email_notify import (
     notify_dev_case_relink_request,
     notify_case_stage_deadline,
     notify_case_stage_deadline_manager,
+    notify_case_project_overdue,
     notify_dev_case_stale,
     notify_shipping_submitted,
     notify_shipping_next_tier,
