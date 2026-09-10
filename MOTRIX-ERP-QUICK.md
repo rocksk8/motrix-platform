@@ -2,6 +2,8 @@
 
 > 允碩整合集創（統編 60575481）｜ Tel: 04-3610-6566 ｜ info@miactw.com  
 > 文件版本：**2026-08-20**（承攬商匯款申請＋發票開立簽核單，DB v45/v46，見 §12）
+> **🔴 2026-09-11 待決策（有時效性）**：要不要改用 Let's Encrypt 公開憑證、把 RP ID 換成 `erp.miactw.com`——見 **§3.3c** 與 §11 對應列，計畫書 [`LETSENCRYPT-PUBLIC-CERT-PLAN.md`](LETSENCRYPT-PUBLIC-CERT-PLAN.md)。**換 RP ID 會讓所有既有 Passkey 失效且無法救回，現在只有 1～2 張是成本最低的時刻，越拖越貴。**
+>
 > **2026-09-10 新增互補文件**：[`WEEKLY-AUDIT-2026-09-07_2026-09-10.md`](WEEKLY-AUDIT-2026-09-07_2026-09-10.md)——本週 82 個 commit 的逐模組拆解、異常時間軸（含每個異常的起點 commit 與根因檔案:行號）、12 項排查排程 checklist、已驗證缺陷清冊、未部署差異。**正式機出事時先看那份定位，再回來這裡看行為規格。**
 >
 > **§2/§7/§11/§13 已於 2026-09-01 依實際程式碼盤點（`db.py` CURRENT_VERSION=68、`git log` 最新 commit `8f40e4e`）補齊落後內容，§12 逐日 changelog 本身仍是最新的**（本文件是持續累積的活文件，不是單一時間點快照）；同日新增互補文件 `MOTRIX-ERP-ARCHITECTURE-MAP.md`（架構地圖＋建議＋踩坑索引）
@@ -45,7 +47,8 @@
 | 2026-08-01 | `backend/setup_autostart_task.ps1`、`backend/setup_heartbeat_task.ps1` 兩個部署排程設定腳本，正式機有（§1.1／§1.2 有描述其行為）、這台開發機完全沒有檔案 | ✅ 2026-08-08 已解決——透過 RDP 連上正式機，原始檔案改名 `.orig` 保留後貼回內容逐行 diff 校正一致（差異細節見 `DR-SOP.md` §3 第 1 點），已 commit 進 git 並隨這次更新包一併部署 |
 | 2026-08-01 | 已知程式碼未 commit 進 git（`git log` 停在較舊的提交，工作區有大量未 commit 變更）；正式機的程式碼版本與 git 歷史的對應關係目前不明 | ✅ 已於合併正式機更新模式匯出檔案時一併 commit（見 §12 2026-08-01j）；正式機仍無 git，日後版本比對仍需靠 §15 `deploy_manifest.json` 記的 commit 值 |
 | 2026-08-05 | 本文件與程式碼（`main.py` CORS 白名單／`email_notify.py` 與 `system.py` 的 email base_url 預設值／`notification-settings.html` 預設值）長期記載正式機區網位址為 `172.16.11.211:666`，實際上是 `172.16.10.177:666`（使用者於本次對話中指正並確認為固定 IP，非 DHCP 動態配發；已用 `curl` 實測連線成功） | ✅ 本次一併修正上述 5 處程式碼與 §1 位址表 |
-| 2026-09-10 14:28 | **兩邊同時有 Claude session 在動同一個功能（WebAuthn）**：開發機這邊已打包好 `20260910_142806_625b0d6`（內含 `routers/system.py` 的 WebAuthn 設定端點改動）正要部署，使用者即時告知「正式機 Claude 正在跑 webauthn」才停手。若已套用，會直接覆蓋正式機上那個 session 正在改的檔案並重啟服務。**部署包已保留未套用**，等兩邊協調後再處理。正式機當下 `/api/system/webauthn-config-status` 仍是 `configured:false`，代表對方尚未成功寫入設定 | 🔶 **進行中**——需先確認正式機那邊改了哪些檔案、有沒有進 git；兩邊的 WebAuthn 改動需合併而非互相覆蓋 |
+| 2026-09-10 14:28 | **兩邊同時有 Claude session 在動同一個功能（WebAuthn）**：開發機這邊已打包好 `20260910_142806_625b0d6`（內含 `routers/system.py` 的 WebAuthn 設定端點改動）正要部署，使用者即時告知「正式機 Claude 正在跑 webauthn」才停手。若已套用，會直接覆蓋正式機上那個 session 正在改的檔案並重啟服務。**部署包已保留未套用**，等兩邊協調後再處理。正式機當下 `/api/system/webauthn-config-status` 仍是 `configured:false`，代表對方尚未成功寫入設定 | 🟡 **事實上已被覆蓋，但從未查證**——2026-09-10 21:49~2026-09-11 00:59 正式機又從本 repo 連續套用四輪（`37bd985`→`0da86bf`→`4ffe190`→`34e0ce1`，每輪修 Passkey 路上的一個坑，見 §3.3c）。**正式機那個 session 到底改了哪些檔案、有沒有進 git，始終沒有人去確認**；若它有未進 git 的改動，已隨這四輪 `apply_update.ps1` Step 3 一併覆蓋掉。保留未套用的 `20260910_142806_625b0d6` 部署包已無意義（內容早被後續版本涵蓋），可刪。**這正是 §14.3d 交接協定（`AGENT-HANDOFF-TEMPLATE.md`）要防的情境——當時兩邊都沒留交接檔** |
+| 2026-09-11 | **正式機的 `system_settings` 有兩個關鍵值不在 git 裡**：`webauthn_rp_id`=`motrix.internal`／`webauthn_origin`=`https://motrix.internal:666`（2026-09-11 由 superadmin 於 `company-profile-settings.html` 填入）。重建環境或還原舊 db 時這兩個值會整個消失，Passkey 端點會回到 503 而看起來像壞掉 | 🟢 已記錄於此（§14 第 4 項本來就提醒過這類設定不在 git）；另**「系統網址」設定是否已改成 `https://motrix.internal:666` 仍未確認**（通知信連結讀的是它），見 `PASSKEY-CA-ROLLOUT.md` 第 8 步 |
 | 2026-08-20 | 開發機當時無法連線，承攬商匯款申請／發票開立簽核單功能（DB v45/v46，見 §12）直接在正式機開發，開發機完全沒有這批程式碼 | ✅ 2026-08-23 已回推：`verify_manifest.py` 核對 43/43 相符、開發機本機啟動 server 驗證 `/api/ping`＋schema_version=52 正常後 `git commit`（累計至第 42 輪 2026-08-23q，DB 已到 v52，非僅 v45/v46） |
 
 ---
@@ -57,8 +60,12 @@
 | 開發啟動 | `backend\start.bat` |
 | 更新後重啟 | `backend\restart.bat` |
 | 本機 | http://localhost:666 |
-| 區網 | http://172.16.10.177:666 |
+| 區網（IP） | **https://172.16.10.177:666**（2026-09-10 起正式機已是 HTTPS，見 §3.3c；憑證 SAN 含此 IP，但**瀏覽器仍會警告簽發者不受信任**，除非該台裝了 mkcert 根 CA） |
+| 區網（網域） | **https://motrix.internal:666** ← **Passkey 只在這個位址能用**（RP ID 綁的是它）；前提是該台①裝了 mkcert 根 CA ②解析得到 `motrix.internal` |
 | SQLite | `backend\motrix_erp.db`（WAL 模式） |
+
+> ⏳ **這張表的網域欄位有可能整批改掉**：`LETSENCRYPT-PUBLIC-CERT-PLAN.md` 若採用，全站改走
+> `https://erp.miactw.com:666`，上面兩個 https 位址都會變成「憑證主機名不符」。決策點見 §11 與 §3.3c。
 
 ```
 依賴關係：
@@ -218,6 +225,65 @@ setup（POST /api/auth/totp/setup）→ 產生密鑰，totp_enabled 仍是 0
 | 停用 | 需重新輸入目前密碼確認（比照既有敏感操作慣例），不需再帶驗證碼 |
 | 登入第二階段防暴力破解 | 每個 challenge 最多 5 次錯誤即作廢（需重新輸入密碼），錯誤同時也計入既有 per-IP 登入鎖定 |
 | Demo 帳號 | 不支援（`auth_login()` 的 demo 分支在檢查 totp 之前就已回傳，設計上就不會走到） |
+
+### §3.3c · Passkey／WebAuthn 與 HTTPS 憑證（2026-09-11 起實際可用）
+
+> 兩份專門文件：`PASSKEY-CA-ROLLOUT.md`（自簽 CA 那條路，**已執行完畢**）／
+> `LETSENCRYPT-PUBLIC-CERT-PLAN.md`（公開憑證那條路，**規劃完成、尚未執行，是下一個決策點**）。
+> 本節只寫「現在是什麼狀態」與「碰它之前要知道的事」，步驟細節看那兩份。
+
+**目前狀態（2026-09-11 01:20 實測）**
+
+| 項目 | 值 |
+|------|-----|
+| 憑證 | mkcert 自簽，SAN = `DNS:localhost, DNS:motrix.internal, IP:172.16.10.177, IP:127.0.0.1`，有效期至 2028-12-10；舊憑證備份在正式機 `backend\certs\backup_20260910_144802\` |
+| 根 CA 指紋 | `A9AF974F0BD6CE35B47CDB95CAA5E2B324DAE61C`（正式機 `%LOCALAPPDATA%\mkcert\`；**`rootCA-key.pem` 絕對不能離開正式機**） |
+| 已裝 CA 的機器 | **只有正式機與開發機兩台**。其他同事的電腦要用 Passkey，每台都得做兩件事：①`certutil -addstore -f Root rootCA.pem` ②能解析 `motrix.internal`（兩台的主網卡 DNS 都是 8.8.8.8，不是 Peplink，所以是加 hosts 解決的） |
+| RP ID / Origin | `motrix.internal` / `https://motrix.internal:666`（存 `system_settings`，**不在 git 裡**） |
+| 用戶端一鍵設定 | `backend/tools/setup_passkey_client.ps1`（裝 CA＋加 hosts，需系統管理員）；`fetch_root_ca.ps1` 從正式機取回 CA |
+| 實測 | 使用者已可註冊 Passkey **並用 Passkey 登入**；自動化 e2e `backend/tests/test_e2e_passkey_2026_09_11.py`（CDP 虛擬認證器）覆蓋整條路 |
+
+**⏳ 動 RP ID 之前必讀——這是本模組唯一不可逆的操作**
+
+`webauthn_credentials` **刻意沒有存 `rp_id` 欄位**（見 `routers/system.py::set_webauthn_config` 註解），
+所以系統查不出哪張憑證屬於哪個 RP。**一旦改動 RP ID，所有既有 Passkey 全部失效且無法救回**——
+沒有補救、沒有遷移，只能請每個人重新註冊，而失效的舊列還會留在裝置清單裡永遠驗不過（要手動刪）。
+`PATCH /api/settings/webauthn-config` 會回報受影響張數並寫進稽核，但那只是告知，不是防護。
+
+> **結論：越晚換越貴。** 現在全公司只有 1～2 張 Passkey，這是換 RP ID 成本最低的時刻。
+> 使用者先前提過「未來會有 VPN、主機可能變更網路環境」——而 `motrix.internal` 是一個
+> 只在內網有意義的名字，那個未來一到就會被迫換。
+
+**下一個決策點：要不要改用 Let's Encrypt 公開憑證（`LETSENCRYPT-PUBLIC-CERT-PLAN.md`）**
+
+| | 現況（自簽 CA） | 改用 `erp.miactw.com` |
+|---|---|---|
+| 每台使用者要做的事 | 裝 CA＋管理員密碼＋要解析得到 `motrix.internal`（macOS 沒有對應腳本） | **什麼都不用做**，Windows/macOS/iOS/Android/Firefox 全部開箱即用 |
+| 換網段／加 VPN／換辦公室 | RP ID 被迫換 → 既有 Passkey 全滅 | 不受影響（RP ID 綁主機名，不綁 IP） |
+| 代價 | — | ①內網 IP `172.16.10.177` 會出現在公開 DNS ②**所有人必須改用新網址**，舊的 IP／`motrix.internal` 位址會跳憑證主機名不符 ③憑證 90 天到期，續期失敗＝全站 HTTPS 壞掉＝Passkey 全部不能用 |
+
+技術前提都已實測確認：`miactw.com` 的 DNS 在 Cloudflare（有 API）、`erp.miactw.com` 未被佔用、
+用 **DNS-01** 驗證所以正式機**不需要對外開放任何連接埠**。續期腳本 `backend/tools/letsencrypt_renew.ps1`
+已寫好（比對憑證有變動才動作、用 fullchain、覆蓋前備份、`-InstallSchedule` 建每日排程）
+但**尚未執行**——步驟 1、2（Cloudflare 加 A 記錄、建 API Token）與步驟 3（正式機簽憑證）都需要人操作。
+
+> 順序不可顛倒：**先把憑證弄乾淨，最後才改 RP ID**。反過來做只會得到一個「看起來啟用了
+> 但不能用」的 Passkey，比誠實地回 503 更難查。
+
+**踩過的坑（四個根因，每一個都讓 Passkey「功能上線但從來沒真的能用」）**
+
+| 根因 | 為什麼拖這麼久才發現 |
+|------|-------------------|
+| `base64.b64decode()` 解 base64url（`a1f56e9`） | 前端送的是去 padding 的 base64url，每次都丟 `Incorrect padding`，被上層 `except Exception` 收斂成籠統的「認證器驗證失敗」 |
+| credential 缺 `type` 欄位（`4ffe190`） | py_webauthn 驗 `type` 必須是 `"public-key"`，前端沒送、後端模型也沒宣告，**兩邊都要改** |
+| `login.html` 有兩個 `init()`（`34e0ce1`） | JS 物件實字重複鍵後者勝出且**無任何警告**，`checkWebauthnConfig()` 從來沒被呼叫，Passkey 按鈕永遠不顯示——註冊得起來卻永遠登不進去 |
+| `verified.sign_count` 屬性不存在（`34e0ce1`） | py_webauthn 3.0.0 的認證結果叫 `new_sign_count`，只有註冊結果才叫 `sign_count`；每次登入丟 AttributeError 被收斂成 401 |
+
+**共同教訓**：這四個 bug 能一路存活，是因為 Passkey 一直卡在更前面的環節（RP ID 未設、憑證未生效），
+**從來沒有人真的走到那一步**——功能上線但從未被端到端驗證過的典型代價。最後是靠 CDP 虛擬認證器
+把整條路自動走完才當場抓到後兩個。另外 `34e0ce1` 同時補上 W3C 7.2 的前提：只有新舊簽章計數
+至少一邊不為 0 時，計數沒前進才算複製徵兆——Windows Hello 與 iCloud/Google 同步的 passkey
+都不實作計數器、永遠回 0，少了這個前提它們每次登入都會被誤判成重放攻擊。
 
 ### §3.4 · 角色與模組
 
@@ -1155,7 +1221,8 @@ xlsx-0.18.5.full.min.js     （SheetJS）
 
 | 優先 | 項目 |
 |------|------|
-| ✅ | ~~區網 HTTPS／反向代理~~（`https_setup.ps1`，uvicorn 原生 TLS 自簽憑證，2026-08-27 commit `d7b8ee9`）——**但正式機尚未實際執行 mkcert 產證＋重啟這個手動步驟**，即工具已就緒但未真正啟用，見 `HTTPS-DEPLOY-CHECKLIST.md`；下次處理前先在正式機確認 `backend/certs/` 是否有內容 |
+| ✅ | ~~區網 HTTPS／反向代理~~（`https_setup.ps1`，uvicorn 原生 TLS 自簽憑證，2026-08-27 commit `d7b8ee9`）——**2026-09-11 更正：正式機早已是 HTTPS**（本文件先前記載「尚未執行」已過時，該落差本身是 2026-09-08 事故的間接成因，見 §12 同日條目）；2026-09-10 又以 `-ExtraNames motrix.internal -Force` 重產憑證，SAN 與 CA 詳情見 **§3.3c** |
+| 🔴 | **待決策（有時效性，越拖成本越高）：要不要改用 Let's Encrypt 公開受信任憑證＋把 RP ID 換成 `erp.miactw.com`**，見 [`LETSENCRYPT-PUBLIC-CERT-PLAN.md`](LETSENCRYPT-PUBLIC-CERT-PLAN.md)（2026-09-11 規劃完成，**尚未執行**）。**做**：每台裝 CA／改 hosts 這件事整個消失（含 macOS、手機、Firefox），日後換網段或加 VPN 也不會讓 Passkey 全滅。**不做**：維持自簽 CA，每台新電腦都要人跑一次 `setup_passkey_client.ps1`，且未來網路環境一變動就被迫換 RP ID。**時效性來源**：換 RP ID 會讓**所有既有 Passkey 失效且無法救回**（`webauthn_credentials` 沒存 rp_id），目前只有 1～2 張是成本最低的時刻，累積幾十張後再換會非常痛。**卡在哪**：步驟 1～3（Cloudflare 加 A 記錄、建 API Token、正式機簽憑證）都必須由人操作；`backend/tools/letsencrypt_renew.ps1` 已寫好待用。**若決定不做，請直接在這一列寫明「決定維持自簽」與日期**，別讓它懸著 |
 | ✅ | ~~死碼 JS 清除~~（21 個死碼 .js 已刪，`frontend/js/` 僅剩 2 個有效檔） |
 | ✅ | ~~關鍵 API 自動化測試~~（2026-09-01 更正：早已遠超 48 tests，現為 `backend/tests/` 45 個測試檔，累計 300+ 題，近期為 308/308 全過） |
 | ✅ | ~~文件拆 `CHANGELOG.md` 與本速查分離~~（已完成，見根目錄 `CHANGELOG.md`） |
@@ -1176,7 +1243,7 @@ xlsx-0.18.5.full.min.js     （SheetJS）
 | 🟢 | 災難復原（DR）從未實際演練過，`DR-SOP.md` §6 演練紀錄表完全空白，RTO 目前僅為估計值 |
 | ✅ | ~~QR 登入手機端免密碼~~（2026-09-08 已實作，見 §12 同日條目——手機瀏覽器已有效 session 時自動核准，沒有則退回既有密碼手動輸入／瀏覽器自動填入密碼兩層） |
 | ✅ | ~~`build_deploy_package.ps1` 打包關卡用 `pytest-xdist` 平行化~~（2026-09-09 已實作，見 §12 同日條目——動手前先驗證序列/`-n auto` 兩邊 470 題非 e2e 測試 pass/fail 清單完全一致，序列 390 秒→平行 166 秒，約 2.35 倍加速） |
-| ✅ | ~~WebAuthn/Passkey 裝置綁定登入~~（**2026-09-09 已實作**，見 §12 同日「深夜」條目——後端新表＋端點、`login.html` 登入按鈕、`change-password.html` 裝置管理卡片；2026-09-10 `f8198e9` 再把 RP ID／Origin 改成 `system_settings` 可設定，未設定時四個端點回 503。**⚠️ 正式機目前仍不可用**：唯一的設定入口 `company-profile-settings.html` 在 `aeefcc6`，尚未部署，見 `WEEKLY-AUDIT-2026-09-07_2026-09-10.md` §F）。以下保留當初的設計討論紀錄：<br>**（原待開發內容）**——使用者原始需求是想綁定電腦/手機 MAC 位址做「認得這台裝置、快速放行」，查證後瀏覽器沒有任何 JS API 能讀取 MAC（隱私限制，非我們沒做），且 MAC 軟體層可偽造本來就不可靠。改用業界正規解法：裝置的安全晶片（Face ID/指紋/TPM）產生一組無法匯出/複製的金鑰跟帳號綁定，之後那台裝置生物辨識一下即可登入或核准 QR 請求，比 MAC 位址安全非常多。**尚未評估技術方案細節**——前端需串接瀏覽器 WebAuthn API（`navigator.credentials.create/get`），後端需新增 credential 註冊/驗證端點與公鑰儲存（新表，例如 `webauthn_credentials`），且要設計跟現有密碼／TOTP／QR session 三種登入路徑如何並存、要不要能列出/命名/撤銷已註冊裝置。下次要動手前應先進 Plan Mode 完整設計，比照 QR 核准功能與 TOTP 當初的作法（見 [[feedback_check_existing_before_building]]，認證流程設計優先權高於一般功能）。 |
+| ✅ | ~~WebAuthn/Passkey 裝置綁定登入~~（**2026-09-09 已實作**，見 §12 同日「深夜」條目——後端新表＋端點、`login.html` 登入按鈕、`change-password.html` 裝置管理卡片；2026-09-10 `f8198e9` 再把 RP ID／Origin 改成 `system_settings` 可設定，未設定時四個端點回 503。**🟢 2026-09-11 起正式機實際可用**——使用者已實測「註冊 Passkey → 用 Passkey 登入」全通；中間修掉四個讓它「上線但從來沒能用」的根因，現況、限制與 RP ID 不可逆警告一律見 **§3.3c**）。以下保留當初的設計討論紀錄：<br>**（原待開發內容）**——使用者原始需求是想綁定電腦/手機 MAC 位址做「認得這台裝置、快速放行」，查證後瀏覽器沒有任何 JS API 能讀取 MAC（隱私限制，非我們沒做），且 MAC 軟體層可偽造本來就不可靠。改用業界正規解法：裝置的安全晶片（Face ID/指紋/TPM）產生一組無法匯出/複製的金鑰跟帳號綁定，之後那台裝置生物辨識一下即可登入或核准 QR 請求，比 MAC 位址安全非常多。**尚未評估技術方案細節**——前端需串接瀏覽器 WebAuthn API（`navigator.credentials.create/get`），後端需新增 credential 註冊/驗證端點與公鑰儲存（新表，例如 `webauthn_credentials`），且要設計跟現有密碼／TOTP／QR session 三種登入路徑如何並存、要不要能列出/命名/撤銷已註冊裝置。下次要動手前應先進 Plan Mode 完整設計，比照 QR 核准功能與 TOTP 當初的作法（見 [[feedback_check_existing_before_building]]，認證流程設計優先權高於一般功能）。 |
 | ✅ | ~~案件財務新增獨立「應收應付」模組＋精算雜支單號欄位~~（2026-09-09 已實作，見 §12 同日條目與 §7.16——新增 `GET /api/quotations/{quote_no}/finance-summary` 彙總端點，未新增任何資料表/欄位；精算「額外支出」新增 `docNo` 欄位，因 settlement 整包存 `data_json` 故後端零改動） |
 | ✅ | ~~案件執行期限與超期提醒通知~~（**2026-09-10 已實作**，見 §12 同日條目——`caseRecord.projectTimeline` 存 data_json 無 schema 異動；`daily_tasks.py:1092-1135::_check_case_project_timeline_deadline()` 沿用既有每日排程而非另起 job；通知對象為所有 admin/superadmin；**重寄週期實作為每 7 天，非當初討論的 10 天**，計時點為超期天數分桶 `days_overdue // 7`）。以下保留當初的需求討論紀錄：<br>**（原待開發內容）**——案件管理「案件資訊」分頁需要新增「案件執行日期區間」欄位（start_date / end_date，類似預計交期的概念），當案件實際進度超過設定期限時自動觸發通知流程：(1) **超期當天寄一次電郵通知**給該案件的超級管理員與專案執行人；(2) **之後每 10 天重複寄一次**提醒尚未完結，直到案件狀態改為已結案為止。**背景需求**：實務上案件常因客戶延遲或內部進度調整而超期，長期無人追蹤就容易成為幽靈案件，需要一個被動提醒機制。**細節待評估**：(1) 日期欄位是否要新增到資料表或繼續存在 `data_json`（後者零改動，但搜尋/聚合較麻煩）；(2) 通知的「執行人」欄位定義（是 `executor`、還是 `assigned_user_ids` 任一人、還是需要新增一個獨立的 `deadline_notify_users` 欄位）；(3) 10 天的計時點是「案件建立時」、「超期當天」還是「上一次寄信」（影響時間複雜度與誤發機率）；(4) 通知內容格式與語言；(5) 是否需要在案件頁面顯示「距離期限剩餘天數」的倒數。排程觸發機制可沿用既有 `heartbeat_job.py`（正式機每 5 分鐘執行一次），或另起一個獨立的 `deadline_check_job.py`（見 §1.1）。**計劃**：先釐清上述需求細節，再評估是否需 DB migration。 |
 | ✅ | ~~營運報表當月與當年度數據獨立分開顯示~~（**2026-09-09 已實作**：`56e52b3` 當月/當年度應收獨立檢視、不再跟隨 period-bar，新增 `test_reports_receivables_monthly.py`；`6bfcafb` 首頁當月收支完整修正＋部門篩選；2026-09-10 `f8198e9` 補上月支出頁籤徽章依 scope 顯示（`reports.html:434`）。同一批連帶修掉「首頁與營運報表對同一個數字有兩套歸月邏輯」的分岔，見 §12 2026-09-09）。以下保留當初的需求討論紀錄：<br>**（原待開發內容）**——目前營運報表的應收未收、已收已支等數字似乎是當年度與當月混在一起（或至少沒有明確區隔），需求是把「當月」的應收未收／已收已支獨立顯示，跟「當年度」的數字做出區隔，不要混算或混排在一起。**併同影響**：營運報表下方的分頁（tabs）內容也要一併比照，跟當年度視圖分開顯示，而不是共用同一份彙總。**細節待評估**（目前 `frontend/js/reports.js` 現有的月/年篩選邏輯、後端 `routers/reports.py` 對應的查詢與彙總方式），token 足夠時再展開設計，先記錄需求方向。 |
@@ -1195,6 +1262,74 @@ xlsx-0.18.5.full.min.js     （SheetJS）
 > 未紀錄；同期間 `CHANGELOG.md` 09-08／09-09 兩天完全空白。已於本日補回，並新增
 > [`WEEKLY-AUDIT-2026-09-07_2026-09-10.md`](WEEKLY-AUDIT-2026-09-07_2026-09-10.md)
 > ——帶「模組／檔案:行號／是否在正式機」座標的本週稽核索引，出事時先看那份。
+
+### 2026-09-11（凌晨 01:05）— Let's Encrypt 公開憑證方案（`bbdd166`／`428e511`，規劃完成**尚未執行**，DB 無異動）
+
+起因是使用者問「能否讓瀏覽器點一下 PASSKEY 就自動下載並執行憑證安裝，Windows、macOS 都可以」。
+**答案是不行**——任何網頁都無法把憑證寫進系統信任存放區，這是 Windows 與 macOS 共同的安全邊界，
+不是缺功能（可以的話，任何網站都能讓你信任它偽造的憑證）。能做到最接近的就是
+`setup_passkey_client.ps1` 已經在做的「下載 → 執行 → 輸入管理員密碼」。
+
+**但這個需求有另一個解法：把「需要裝 CA」整件事消滅掉。** 實測 `miactw.com` 的 DNS 在 Cloudflare
+（`maria`／`cameron.ns.cloudflare.com`）、`erp.miactw.com` 目前是 NXDOMAIN、DNS-01 驗證不需要正式機
+對外開放任何連接埠——三個前提都成立，所以可以簽一張全世界瀏覽器本來就信任的憑證。
+
+- **新增 `LETSENCRYPT-PUBLIC-CERT-PLAN.md`**：7 個步驟、每一步的驗證方式、切換代價、長期要盯的三件事
+- **新增 `backend/tools/letsencrypt_renew.ps1`**（228 行）。四個刻意的設計決定：
+  ①比對「服務中的憑證」與「Posh-ACME 手上的憑證」，有變動才動作
+  ②用 **fullchain** 而非單張葉憑證（少了中繼憑證有些客戶端會驗不過）
+  ③**不呼叫 `restart.bat`**——它前景跑 uvicorn 且以 `pause` 結尾，排程會永遠不返回；改沿用
+  `apply_update.ps1` 的「只停服、讓 autostart crash-restart 迴圈接手」
+  ④`-InstallSchedule` 會檢查 `POSHACME_HOME` 是否為機器層級變數：Posh-ACME 預設存在
+  `%LOCALAPPDATA%`，排程以 SYSTEM 跑會看不到個人帳號簽的憑證，變成**「每天都成功執行但什麼都沒做」
+  直到 90 天後全站 HTTPS 一起壞掉**
+- 重啟後刻意對 `https://erp.miactw.com:666/api/ping` 而非 localhost 驗一次——要驗的正是
+  「憑證對這個名字有效且簽發者公開受信任」
+- **`PASSKEY-CA-ROLLOUT.md` 進度表更新為實況**：先前停在「第 2、3 步完成，卡在第 4 步」，
+  實際上 4～7、9 步都做完了。第 5 步改標「正式機＋開發機」（其他同事的電腦尚未處理），
+  第 8 步系統網址標**待確認**（沒有依據說它改過，這一步最容易被忘記）
+
+**尚未執行，決策點見 §11 那一列與 §3.3c。** DNS 記錄與正式機上的動作都需要人操作。
+
+### 2026-09-11（深夜接續）— Passkey 從「上線但從來沒能用」到真的能用（`a1f56e9`→`4ffe190`→`34e0ce1`，DB 無異動）
+
+四個根因，**每一個都足以讓整條路走不通**，詳細列表與共同教訓見 **§3.3c**。這裡只記過程中真正該記住的事：
+
+- **`a1f56e9` base64url**：`base64.b64decode()` 解不了前端送的去 padding base64url，每次丟
+  `Incorrect padding`，被上層 `except Exception` 收斂成籠統的「認證器驗證失敗」，畫面完全看不出原因
+  ——**是靠正式機 `server.log` 才定位到的**。順帶統一前端編碼器：`login.html` 用標準 base64、
+  `change-password.html` 用 base64url，同一個協定兩個頁面兩種格式，正是本專案一再吃虧的漂移模式
+- **`4ffe190` credential 缺 `type`**：⚠️ **這一輪的真正教訓在測試**——上一輪的端點測試只斷言
+  「錯誤不是 padding」，太寬鬆；padding 修好之後測試照樣綠，使用者卻還是拿到「認證器驗證失敗」，
+  等於測試沒守住它該守的東西，還讓人以為修完了。改成把已知的結構性錯誤**全部列為不允許**
+  （padding／unexpected type／missing required／not a json object／unable to decode credential），
+  只有「真的走到密碼學驗證才失敗」才算通過
+- **`34e0ce1` 用 CDP 虛擬認證器把整條路自動走完**，當場抓到兩個純人工往返碰不到的 bug——
+  四輪來回都停在註冊，**沒有人真的走到「登入頁按 Passkey」那一步**。新增
+  `backend/tests/test_e2e_passkey_2026_09_11.py`。測試設計上踩到的坑記在該檔檔頭：
+  ①測 `excludeCredentials` 不能靠「第二張要註冊成功」，它本來就該失敗
+  ②Passkey 登入必須在**同一個 browser context** 裡做（虛擬認證器的憑證綁在 context 上）
+  ③uvicorn 用 port 0 抽到 1723（PPTP）時 Chrome 回 `ERR_UNSAFE_PORT`，改成自己在 20000 以上挑
+  ④完成訊號改看 ok/err 出現而非 busy 變 false——點擊沒生效時 busy 從頭到尾是 false，
+  **「什麼都沒發生」會被判成「順利完成」**
+
+### 2026-09-10（最深夜 23:38）— 打包直譯器守門改成「先自己找對的那一支」（`35ec7a8`／`0da86bf`，DB 無異動）
+
+同日稍早（見下方 2026-09-10「後續修復」條目）加的直譯器守門**擋是對的，但只解析 PATH 上的第一支
+python，缺套件就直接 Fail**。問題是這台機器有 4 支 Python，「第一支」是誰完全取決於呼叫端環境：
+我自己的 shell 解析到依賴齊全的 3.11.15 所以一直能跑，**使用者自己的 PowerShell 解析到
+WindowsApps 那支 stub 就直接 Fail**——同一支腳本一個能跑一個不能，而使用者除了手動改 PATH 沒別的辦法。
+
+改成把候選逐一試過去（`python`／`python3` 的所有 PATH 命中，加上專案內常見 venv 位置），挑第一支
+依賴齊全的來用；全都不合格才 Fail，**並列出每一支各缺什麼**。仍然印出實際選中的路徑——守門的原意
+是可追溯，不是為了擋人。
+
+⚠️ **`0da86bf`：新加的探測迴圈立刻踩到 PS 5.1 原生執行檔 stderr 地雷（本專案第 5 次）**。
+腳本開頭是 `$ErrorActionPreference = "Stop"`，迴圈用 `2>&1` 收 python 的 ImportError 來判斷缺哪個套件
+——但在 `Stop` 之下，原生執行檔只要往 stderr 輸出任何東西就會被 promote 成終止型 `NativeCommandError`，
+**即使那正是我們預期要發生的事**。結果是選對了直譯器卻在下一支候選就整個腳本中止。
+前四次分別是 pip install／tar／db 備份／mkcert，記憶檔與本文件都有記載，**寫這段修正時卻沒套用**。
+呼叫原生執行檔的迴圈前後要切 `Continue` 再還原。
 
 ### 2026-09-10（最終）— 慢請求記錄（DB 無異動）
 

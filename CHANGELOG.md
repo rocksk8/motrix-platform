@@ -5,6 +5,98 @@
 
 ---
 
+### 2026-09-11（凌晨 01:05）— Let's Encrypt 公開憑證方案：把「每台裝 CA」這件事整個消滅掉
+
+**起點是一個問「能不能自動化」的需求，答案是不能，但問題本身有解。**
+
+使用者問：能否讓瀏覽器點一下 PASSKEY 就自動下載並執行憑證安裝，Windows、macOS 都可以。
+
+**不行，而且這不是缺功能。** 任何網頁都無法把憑證寫進系統信任存放區 —— 這是 Windows 與 macOS 共同的安全邊界。可以的話，任何網站都能讓你信任它偽造的憑證。在自簽憑證的前提下，兩個平台能做到最接近的版本就是「下載檔案 → 執行 → 輸入管理員密碼」，那正是 `setup_passkey_client.ps1` 已經在做的事。
+
+**但這個需求有另一條路：不要讓使用者裝 CA，改用全世界瀏覽器本來就信任的憑證。**
+
+三個前提都實測確認過：
+
+| 前提 | 實測 |
+|---|---|
+| 網域在可控的 DNS 商 | ✅ `miactw.com` 在 Cloudflare（`maria`／`cameron.ns.cloudflare.com`），有 API |
+| 子網域未被佔用 | ✅ `erp.miactw.com` 目前是 NXDOMAIN |
+| 主機不需要對外開放 | ✅ 用 **DNS-01** 驗證，Let's Encrypt **不會**來連你的主機 |
+
+第三點是關鍵。一般印象中「申請憑證要開 80 埠讓對方來驗」那是 HTTP-01；DNS-01 只需要證明你控制 DNS 區域，正式機永遠不必暴露在網際網路上。
+
+**順帶解掉兩個既有隱憂**
+
+1. **RP ID 未來被迫變更的風險。** 目前 RP ID 是 `motrix.internal`，一個只在內網有意義的名字。使用者提過「未來會有 VPN、主機可能變更網路環境」—— 那個未來一到就得換名，而**換 RP ID 會讓所有既有 Passkey 失效且無法救回**（`webauthn_credentials` 刻意沒存 rp_id）。改用 `erp.miactw.com` 之後，換網段、加 VPN、換辦公室都不影響。
+2. **每台機器要能解析 `motrix.internal` 的問題。** 現在必須改 DNS 指向 Peplink 或手動加 hosts（兩台機器的主網卡 DNS 都是 8.8.8.8，都曾解析失敗）。公開 DNS 上的名字任何機器用任何 DNS 都解析得到。
+
+**新增 `backend/tools/letsencrypt_renew.ps1`（228 行）**，四個刻意的設計決定：
+
+- 比對「服務中的憑證」與「Posh-ACME 手上的憑證」，**有變動才動作**
+- 用 **fullchain** 而非單張葉憑證 —— 少了中繼憑證，有些客戶端會驗不過
+- **不呼叫 `restart.bat`**：它前景跑 uvicorn 且以 `pause` 結尾，排程會永遠不返回。改為沿用 `apply_update.ps1` 的「只停服、讓 autostart crash-restart 迴圈接手」
+- `-InstallSchedule` 會檢查 `POSHACME_HOME` 是否為機器層級變數。Posh-ACME 預設把憑證存在 `%LOCALAPPDATA%`，排程若以 SYSTEM 跑會看不到個人帳號簽的憑證 —— 那會變成**「每天都成功執行但什麼都沒做」，直到 90 天後全站 HTTPS 一起壞掉**
+
+重啟後刻意對 `https://erp.miactw.com:666/api/ping` 而非 localhost 驗一次：要驗的正是「憑證對這個名字有效，且簽發者公開受信任」。
+
+**文件同時寫明這次切換的代價**，不能只講好處：LE 憑證只涵蓋 `erp.miactw.com` 一個名字（Let's Encrypt 不可能為私有 IP 或不存在於公開 DNS 的名字簽發），切換後用 `172.16.10.177` 或 `motrix.internal` 存取都會跳憑證主機名不符警告，**所有人必須改用新網址、更新書籤**。沒有事先講的話，第二天早上會收到一整批「系統壞了」。
+
+另外把 `PASSKEY-CA-ROLLOUT.md` 的進度表更新為實況 —— 它還停在「第 2、3 步完成，卡在第 4 步」，但 4～7、9 步其實都做完了。文件與現實脫節正是本專案一再吃虧的地方。
+
+**尚未執行。** DNS 記錄與正式機上的動作都需要人操作；決策點記在 `MOTRIX-ERP-QUICK.md` §3.3c 與 §11。
+
+---
+
+### 2026-09-11（深夜接續）— Passkey 從「功能上線但從來沒能用」到真的能用
+
+四個根因，**每一個都足以讓整條路走不通**。它們能一路存活到現在，是因為 Passkey 一直卡在更前面的環節（RP ID 未設定、憑證未生效），**從來沒有人真的走到那一步** —— 功能上線但從未被端到端驗證過的典型代價。
+
+**① `a1f56e9` base64url 解碼**
+
+`routers/auth.py` 的 register/complete 與 login/complete 用 `base64.b64decode()` 解 rawId。那是標準 base64 解碼器：不認得 base64url 的 `-` 和 `_`，又要求 padding 長度正確。而前端產出的正是「base64url 且把 `=` 全部去掉」的格式，所以每一次都丟 `binascii.Error: Incorrect padding`。
+
+錯誤被上層的 `except Exception` 收斂成一句籠統的「認證器驗證失敗」，畫面上完全看不出真正原因 —— **是靠正式機 `server.log` 裡的 `WebAuthn registration failed: Incorrect padding` 才定位到的。**
+
+順帶統一前端編碼器：`login.html` 回傳標準 base64、`change-password.html` 是 base64url —— 同一個協定、兩個頁面、兩種格式。後端現在兩種都吃得下，但這正是本專案一再吃虧的漂移模式，統一成 WebAuthn 慣用的 base64url。測試 11 題（8 種長度參數化，padding 需求隨長度 mod 3 變化，只測一種會漏掉真正出事的）。
+
+**② `4ffe190` credential 缺 `type` 欄位**
+
+padding 修好後，正式機 log 的錯誤變成 `Credential had unexpected type`。py_webauthn 會驗 `type` 必須是 `"public-key"`，而前端送的 body 根本沒有這個欄位，後端兩個模型也沒宣告它 —— 就算前端有送，`body.dict()` 也不會帶過去。**兩邊都要改。**
+
+> ⚠️ **這一輪的真正教訓在測試。** 上一輪的端點測試只斷言「錯誤不是 padding」—— 太寬鬆。padding 修好之後測試照樣綠，使用者卻還是拿到「認證器驗證失敗」，等於測試沒有守住它該守的東西，我還因此以為修完了。改成把已知的結構性錯誤全部列為不允許（padding／unexpected type／missing required／not a json object／unable to decode credential），**只有「真的走到密碼學驗證才失敗」才算通過**。
+
+**③④ `34e0ce1` 用 CDP 虛擬認證器把整條路自動走完**
+
+前面四輪來回都停在註冊，**沒有人真的走到「登入頁按 Passkey」那一步**。把註冊 → 重複註冊被擋 → Passkey 登入整條路自動化之後，當場抓到兩個純人工往返碰不到的 bug：
+
+- **`login.html` 有兩個 `init()`**。JS 物件實字重複鍵是後者勝出，**而且不會有任何警告**。`checkWebauthnConfig()` 從來沒被呼叫過，`webauthnConfigured` 永遠是 false，「或使用 Passkey 登入」按鈕永遠不顯示 —— 註冊得起來卻永遠登不進去。
+- **`verified.sign_count` 這個屬性不存在**。py_webauthn 3.0.0 的認證結果叫 `new_sign_count`，只有註冊結果才叫 `sign_count`。每次登入丟 AttributeError，被概括的 `except Exception` 收斂成一句 401「認證失敗」。同一段補上 W3C 7.2 的前提：只有新舊計數至少一邊不為 0 時，計數沒前進才算複製徵兆 —— **Windows Hello、iCloud／Google 同步的 passkey 都不實作計數器、永遠回 0**，少了這個前提它們每次登入都會被誤判成重放攻擊。
+
+新增 `backend/tests/test_e2e_passkey_2026_09_11.py`。測試設計上踩到、記在檔頭的坑：測 `excludeCredentials` 不能靠「第二張要註冊成功」（它本來就該失敗）；Passkey 登入必須在同一個 browser context 裡做（虛擬認證器的憑證綁在 context 上）；uvicorn 用 port 0 抽到 1723（PPTP）時 Chrome 回 `ERR_UNSAFE_PORT`；完成訊號改看 ok/err 出現而非 busy 變 false —— **點擊沒生效時 busy 從頭到尾是 false，「什麼都沒發生」會被判成「順利完成」**。
+
+**使用者已實測確認：可以註冊 Passkey，也可以用 Passkey 登入。**
+
+---
+
+### 2026-09-10（最深夜 23:38）— 打包直譯器守門從「只擋」改成「先自己找對的那一支」
+
+同日稍早加的直譯器守門**擋是對的**（總比 470 題全 E 好判讀），但它只解析 PATH 上的第一支 python，缺套件就直接 Fail。問題是這台機器有 4 支 Python，「第一支」是誰完全取決於呼叫端的環境：
+
+| 路徑 | 版本 | 狀況 |
+|---|---|---|
+| `...\hermes-agent\venv\...\python.exe` | 3.11.15 | 依賴齊全 |
+| `...\Programs\Python\Python313\python.exe` | 3.13.3 | 缺 pyotp |
+| `...\Microsoft\WindowsApps\python.exe` | (stub) | — |
+| `...\AppData\Local\Python\bin\python.exe` | 3.14.5 | 缺 multipart |
+
+我自己的 shell 解析到第一支所以一直能跑，**使用者自己的 PowerShell 解析到 WindowsApps 那支就直接 Fail** —— 同一支腳本一個能跑一個不能，而使用者除了手動改 PATH 沒有別的辦法。
+
+改成把候選逐一試過去，挑第一支依賴齊全的來用；全都不合格才 Fail，**而且列出每一支各缺什麼**。仍然印出實際選中的路徑 —— 守門的原意是可追溯，不是為了擋人。
+
+> ⚠️ **`0da86bf`：新加的探測迴圈立刻踩到 PS 5.1 原生執行檔 stderr 地雷（本專案第 5 次）。** 腳本開頭是 `$ErrorActionPreference = "Stop"`，迴圈用 `2>&1` 收 python 的 ImportError 來判斷缺哪個套件 —— 但在 `Stop` 之下，原生執行檔只要往 stderr 輸出任何東西就會被 promote 成終止型 `NativeCommandError`，**即使那正是我們預期要發生的事**。結果是選對了直譯器卻在下一支候選就整個腳本中止。前四次分別是 pip install／tar／db 備份／mkcert，記憶檔與 QUICK.md 都有記載，**我寫這段修正時卻沒套用**。
+
+---
+
 ### 2026-09-10（最終）— 慢請求記錄：不做沒根據的改動，改做看得見
 
 **先更正一個我自己提出的錯誤判斷。** 前一輪把「真人存報價單可能卡 30 秒」歸因於 commit 之後那幾筆 notification／audit_log／module activity 寫入，並打算把它們移出請求路徑。做了**逐段計時的可控實驗**後證實那是錯的：
