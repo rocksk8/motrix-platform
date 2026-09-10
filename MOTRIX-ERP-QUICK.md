@@ -1217,7 +1217,16 @@ xlsx-0.18.5.full.min.js     （SheetJS）
 - **`reports.html:434` 月支出徽章**：原本 `x-show` 拿金額當真值，當月支出剛好 0 時整個徽章消失，看起來像功能壞掉。改成 `x-show="!!expensesData"`（依資料載入與否判斷），$0 正常顯示成 $0。
 - **清掉誤入 repo 的 `backend/.commit_msg_webauthn.txt`**（`0527524` 連同 commit message 草稿一起提交），`.gitignore` 加 `**/.commit_msg*.txt` 防再犯。
 - **更新 `build_deploy_package.ps1` 檔頭過時說明**：仍寫「這台開發機的 git repo 根目錄是整個使用者家目錄」，但專案已於 `e6bf102` 拆成獨立 repo、`$relPath` 恆為空字串（所以打包時「Project path:」印出空白是正常的，不是壞掉）。
-- 驗證：全套非 e2e **502 passed / exit 0**；`build_deploy_package.ps1` 改完後 BOM（`EF BB BF`）與 CRLF 皆保留、PSParser 語法檢查 0 errors。**這批同樣尚未部署。**
+- 驗證：全套非 e2e **502 passed / exit 0**；`build_deploy_package.ps1` 改完後 BOM（`EF BB BF`）與 CRLF 皆保留、PSParser 語法檢查 0 errors。
+
+### 2026-09-10（打包實測）— tar 路徑歧義第三次踩到，這次徹底解決（commit `d2ff23f`）
+
+- **被上一條剛加的關卡當場抓到**：實際跑 `build_deploy_package.ps1` 打包 `2ea463f` 時直接重現 `/usr/bin/tar: Cannot connect to C: resolve failed` → `[FAIL] tar 解壓失敗（exit code 128）`。這正是 `549d319`（09-08）修過、`942e3c4`（09-10 00:29）又改回去的那個 bug。
+- **`942e3c4` 的理由不成立**：它寫「確保與 git archive 生成的 tar 格式完全兼容」才改回優先挑 Git 的 msys/GNU tar，但 git archive 產生的是標準 POSIX tar，Windows 內建 bsdtar（實測 3.8.8）讀得好好的。這台機器 `where tar` 其實就是 System32 的 bsdtar，是腳本刻意優先挑 Git tar 才踩到。
+- **修法（兩個獨立的歧義來源一起處理，只修一個都還會壞）**：①**用哪一支 tar**——改回優先 `%SystemRoot%\System32\tar.exe` 並寫完整路徑，不受 PATH 順序影響；沒有內建 bsdtar 的舊系統才退回 Git tar，且那條路徑補 `--force-local` 明確告訴 GNU tar「冒號不是主機名」②**傳什麼形式的路徑**——反正已經 `Push-Location $pkgDir` 了，改傳相對檔名而非 `C:\...` 絕對路徑，讓 `-f host:path` 遠端磁帶機語法從根本上咬不到。並印出實際使用的解壓工具路徑，跟同批加的 Python 直譯器守門同一個做法。
+- **這件事本身就是本週最大教訓的實證**：先前 11:28/11:31 那兩份包能成功解壓，代表這個失敗是**環境相依**的——真正保護你的不是「這次跑得過」，而是三層防護（`git archive` exit code／`tar` exit code／解壓後驗證 `backend`、`frontend` 目錄存在）。這次被第二層擋下，沒有再產出一份空殼部署包。失敗留下的空殼包 `20260910_134108_2ea463f` 已刪除。
+- **完整打包流程實測通過**：語法檢查 5 支 OK → 直譯器守門（3.11.15，依賴齊全）→ 非 e2e **502 passed** → e2e **4 passed** → 版本標籤 `2026-09-10d`（不再是 null）→ 解壓工具 `C:\WINDOWS\System32\tar.exe` → 產出 `20260910_134616_d2ff23f`（backend 174／frontend 74）→ **exit 0**。
+- **部署交接**：包已備妥、儀表板已看得到它、WinRM 可達，只差輸入正式機密碼那一步（憑證未儲存，設計上就不落地）。詳見 `WEEKLY-AUDIT-2026-09-07_2026-09-10.md`「部署交接」。
 
 ### 2026-09-10 — 月支出頁籤、WebAuthn 可設定化、案件專案期間超期通知（DB 無異動）
 
