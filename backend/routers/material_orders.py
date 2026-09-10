@@ -1,4 +1,15 @@
-"""叫料（材料訂購）管理端點 — 案件財務應付子項目（2026-09-10）。"""
+"""叫料（材料訂購）管理端點 — 案件財務應付子項目（2026-09-10）。
+
+⚠️ **現況：後端-only 半成品，沒有任何前端。** 全 repo grep `materialOrders`
+只會命中 `main.py`（掛載）、本檔、以及 `backend/db_migration_plan.md`（規劃
+文件，且其描述與實際實作不符，該檔開頭有對照表）。規劃中的「案件財務應付
+分頁 → 叫料清單卡片」尚未實作，所以這兩支端點目前沒有任何使用者會經過的
+入口，只能用 API 直接呼叫。要接手前端之前，先讀
+`WEEKLY-AUDIT-2026-09-07_2026-09-10.md` §E-1。
+
+資料落點：`quotations.data_json` 的 `caseRecord.materialOrders`（陣列），
+無 schema 異動、沒有獨立資料表——所以「叫料」查不到專屬 migration 是正常的。
+"""
 import json
 from typing import List, Optional
 from datetime import datetime

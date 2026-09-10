@@ -50,6 +50,15 @@ EVENT_GROUPS = [
     ("案件與到期提醒", [
         ("case_stage_deadline", "案件執行進度即將到期"),
         ("case_stage_deadline_manager", "案件執行進度即將到期（我是部門主管，通知我部門成員的案件進度）"),
+        # 2026-09-10 補登：f8198e9 新增「案件專案期間超期」通知時，
+        # email_notify.py::notify_case_project_overdue() 直接呼叫
+        # _admin_emails("case_project_overdue")，但這個 key 沒有一起加進來——
+        # is_enabled() 是精確字串比對，key 不在這裡不會報錯，只是使用者
+        # 在「使用者管理 → 通知偏好」永遠看不到這個選項，也就永遠關不掉，
+        # 症狀跟 2026-08-28 那次 case_change_request(ed) 打錯字一模一樣。
+        # 同一輪已把 test_notification_prefs_coverage.py 從「只驗一個 key」
+        # 改成掃描 email_notify.py 全部呼叫端，之後再漏就會被測試擋下。
+        ("case_project_overdue", "案件專案期間已超期（每日檢查，超期當天寄一次、之後每 7 天一次）"),
         ("warranty_expiry",     "設備保固即將到期"),
         ("dev_case_stale",      "業務開發案件逾期未跟進"),
     ]),

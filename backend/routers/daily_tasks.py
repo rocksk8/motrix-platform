@@ -1089,10 +1089,42 @@ def _check_project_deadline() -> None:
     pass
 
 
+def _prune_case_project_guard_keys(live_keys: set) -> None:
+    """清掉不再需要的 `caseproj_notif.*` guard key（2026-09-10 新增）。
+
+    這些 key 每個超期案件、每個 7 天區間各寫一列進 `system_settings`，原本
+    寫進去就永遠不刪——案件結案、期限被改正、案件被刪除之後，舊 key 全部
+    留著；一個超期兩年的案件光自己就會累積約 104 列。這個專案已經為同一種
+    「只寫不刪、預期會自然停止但其實不會」的模式付過代價：`module_versions`
+    曾長到 626,725 列、約佔 301MB 資料庫裡的 270MB（見 db.py `_m035` 的
+    註解）。與其等它長大，不如在每次掃描結束時順手收斂。
+
+    保留規則：只留「目前仍超期的案件、且是本次算出來的當前區間」那些 key。
+    比當前更早的區間永遠不會再被查詢（判斷式只問「這個區間寄過沒」），留著
+    沒有任何作用，所以一併刪掉——結果是每個超期案件最多只佔 1 列。
+    """
+    conn = get_db()
+    try:
+        existing = [r["key"] for r in conn.execute(
+            "SELECT key FROM system_settings WHERE key LIKE 'caseproj_notif.%'"
+        ).fetchall()]
+        stale = [k for k in existing if k not in live_keys]
+        if stale:
+            conn.executemany("DELETE FROM system_settings WHERE key=?", [(k,) for k in stale])
+            conn.commit()
+            _logger.info("Pruned %d stale caseproj_notif guard keys", len(stale))
+    except Exception as exc:
+        # 收斂失敗不該讓整個每日檢查掛掉——通知本身已經寄出去了
+        _logger.warning("_prune_case_project_guard_keys failed: %s", exc)
+    finally:
+        conn.close()
+
+
 def _check_case_project_timeline_deadline() -> None:
     """Scan active cases; notify admin if case project endDate is overdue. Re-send every 7 days."""
     today = _date.today()
     today_str = today.isoformat()
+    live_guard_keys = set()
     try:
         conn = get_db()
         rows = conn.execute("""
@@ -1119,10 +1151,15 @@ def _check_case_project_timeline_deadline() -> None:
             days_overdue = (today - end_date).days
             bucket = days_overdue // 7  # day 0-6 → bucket 0, day 7-13 → bucket 1, etc.
             guard_key = f"caseproj_notif.{row['quote_no']}.{bucket}"
+            live_guard_keys.add(guard_key)
             if _get_setting(guard_key):
                 continue  # already sent for this 7-day bucket
 
             _set_setting(guard_key, today_str)
+            # 這裡刻意用 threading.Thread 而非 db.spawn_bg_thread()：本函式是
+            # 排程觸發、不掛在任何 request 上，contextvar 本來就該是預設值，
+            # 屬於 MOTRIX-ERP-QUICK.md §3.5 明列的例外 (a)。不要「順手改成
+            # spawn_bg_thread」——那會讓它去複製一個根本不存在的 request context。
             threading.Thread(
                 target=notify_case_project_overdue,
                 args=(row["quote_no"], row["customer_name"] or "", row["project_name"] or "",
@@ -1130,6 +1167,7 @@ def _check_case_project_timeline_deadline() -> None:
                 daemon=True,
             ).start()
 
+        _prune_case_project_guard_keys(live_guard_keys)
         _logger.info("Case project timeline deadline check complete for %s", today_str)
     except Exception as exc:
         _logger.warning("_check_case_project_timeline_deadline failed: %s", exc)

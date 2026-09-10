@@ -1,5 +1,21 @@
 # DB 遷移計畫 — 2026-09-10
 
+> ⚠️ **2026-09-10 補註：這是「動工前的規劃」，兩項都已實作，但實際做法跟這裡寫的不一樣。**
+> 讀這份文件找程式碼位置會找錯地方，以下是實際落點：
+>
+> | 本文規劃 | 實際實作 |
+> |---------|---------|
+> | 叫料端點放 `routers/quotations.py` | 另開 `routers/material_orders.py`（獨立 router，`main.py` 掛載） |
+> | 叫料驗證邏輯放 `helpers/quotations.py` | 驗證直接寫在端點內（pydantic model + inline 檢查） |
+> | 叫料前端卡片、Modal、表格 | **完全沒做**——目前是後端-only 半成品，全 repo grep `materialOrders` 只命中後端三處 |
+> | 案件期限用新排程 `deadline_check_job.py` ＋ `setup_deadline_check_task.ps1` | 沿用既有每日排程，`routers/daily_tasks.py::_check_case_project_timeline_deadline()`，不需要新排程工作 |
+> | 案件期限改 `routers/dev_crm.py` | 未改該檔；欄位存 `data_json`，前端直接寫入既有案件存檔流程 |
+> | 重寄週期「每 7 天」 | 一致（§11 當初討論寫的是 10 天，最後實作為 7 天） |
+>
+> 叫料 API 上線時另有六個缺陷（漏 `conn.commit()` 等），已於同日修復並補上
+> 7 題測試，詳見 `WEEKLY-AUDIT-2026-09-07_2026-09-10.md` §E-1。
+> **未來若要接續開發叫料前端，先讀那一節再動手。**
+
 ## 待實裝功能
 
 ### 1. 案件應付新增「叫料」欄位 (v70)

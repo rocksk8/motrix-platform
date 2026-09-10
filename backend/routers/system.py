@@ -704,13 +704,58 @@ def set_pdf_base_path_setting(body: dict = Body(...), authorization: str = Heade
 
 
 # ── WebAuthn RP ID / Origin settings ──────────────────────────────────────────
+# 2026-09-10（f8198e9）從環境變數改成這裡的 system_settings 可動態設定。
+# 這兩個值填錯的代價特別高，所以下面的驗證不是形式主義：
+#   - RP ID 必須是「純網域名稱」（不含 scheme／port／路徑）
+#   - Origin 必須是完整來源（scheme://host[:port]）
+#   - Origin 的 host 必須等於 RP ID，或是它的子網域
+# 任何一條不成立，瀏覽器只會丟一句沒有上下文的 "invalid domain"／
+# SecurityError，看起來像前端壞掉——而這正是 f8198e9 這次改動想消滅的症狀。
+# 與其讓使用者在瀏覽器主控台猜，不如在存檔當下就擋掉並說清楚哪裡不對。
+
+def _validate_webauthn_pair(rp_id: str, origin: str) -> None:
+    """RP ID／Origin 的格式與相依關係檢查，不合規直接 400。"""
+    import re as _re
+    from urllib.parse import urlparse as _urlparse
+
+    if _re.search(r"[:/]", rp_id):
+        raise HTTPException(400, f"RP ID 只能是網域名稱本身，不要含 http(s):// 或連接埠（收到：{rp_id}）")
+    if not _re.fullmatch(r"[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*", rp_id):
+        raise HTTPException(400, f"RP ID 不是合法的網域名稱（收到：{rp_id}）")
+
+    parsed = _urlparse(origin)
+    if parsed.scheme not in ("https", "http") or not parsed.hostname:
+        raise HTTPException(400, f"Origin 必須是完整來源，例如 https://erp.example.local:666（收到：{origin}）")
+    if parsed.path not in ("", "/") or parsed.query or parsed.fragment:
+        raise HTTPException(400, f"Origin 不可包含路徑或查詢字串（收到：{origin}）")
+
+    host = parsed.hostname.lower()
+    rp = rp_id.lower()
+    if host != rp and not host.endswith("." + rp):
+        raise HTTPException(
+            400,
+            f"Origin 的主機（{host}）必須等於 RP ID（{rp}）或是它的子網域，"
+            f"否則瀏覽器會拒絕註冊 Passkey。"
+        )
+    # localhost 是 WebAuthn 規格唯一允許走 http 的例外；其餘一律要 https，
+    # 否則瀏覽器同樣直接拒絕（這台正式機本來就已經是 HTTPS，見 §1）。
+    if parsed.scheme == "http" and host != "localhost":
+        raise HTTPException(400, "除了 localhost 之外，Origin 必須是 https://（瀏覽器規格要求）")
+
 
 @router.get("/api/settings/webauthn-config")
 def get_webauthn_config(authorization: str = Header(None)):
     _require_user(authorization, require_superadmin=True)
+    conn = get_db()
+    try:
+        cred_count = conn.execute("SELECT COUNT(*) AS c FROM webauthn_credentials").fetchone()["c"]
+    finally:
+        conn.close()
     return {
         "rp_id": _get_setting("webauthn_rp_id") or "",
-        "origin": _get_setting("webauthn_origin") or ""
+        "origin": _get_setting("webauthn_origin") or "",
+        # 讓設定頁能提醒「改了會讓現有 N 張 Passkey 失效」——見下方 PATCH 的說明
+        "credentialCount": cred_count,
     }
 
 
@@ -721,13 +766,34 @@ def set_webauthn_config(body: dict = Body(...), authorization: str = Header(None
     origin = (body.get("origin") or "").strip()
     if (rp_id and not origin) or (origin and not rp_id):
         raise HTTPException(400, "RP ID 與 Origin 必須同時設定或同時清空")
+    if rp_id:
+        _validate_webauthn_pair(rp_id, origin)
+
+    # 既有 Passkey 是被瀏覽器綁在「註冊當下那個 RP ID」上的，而
+    # `webauthn_credentials`（db.py _m073）刻意沒有存 rp_id 欄位——
+    # 也就是說改動 RP ID 之後，所有既有憑證會在下次登入時直接失效，
+    # 而且系統這邊查不出它們原本屬於哪個 RP。這裡不擋（第一次設定時
+    # 本來就必須能寫入，而且 superadmin 有權決定），但把受影響張數
+    # 回傳並寫進稽核，讓「使用者突然說 Passkey 全部不能用了」這種
+    # 回報有跡可循。
+    previous_rp = _get_setting("webauthn_rp_id") or ""
+    invalidated = 0
+    if previous_rp and previous_rp != rp_id:
+        conn = get_db()
+        try:
+            invalidated = conn.execute("SELECT COUNT(*) AS c FROM webauthn_credentials").fetchone()["c"]
+        finally:
+            conn.close()
+
     _set_setting("webauthn_rp_id", rp_id)
     _set_setting("webauthn_origin", origin)
-    _audit(_tok(authorization), "settings.webauthn_config.update", "settings", "webauthn",
-           f"rp_id={rp_id}, origin={origin}" if rp_id else "（清空）")
+    detail = f"rp_id={rp_id}, origin={origin}" if rp_id else "（清空）"
+    if invalidated:
+        detail += f"；RP ID 由 {previous_rp} 變更，既有 {invalidated} 張 Passkey 將失效"
+    _audit(_tok(authorization), "settings.webauthn_config.update", "settings", "webauthn", detail)
     notify_module_activity("系統設定", "變更 WebAuthn 設定", actor.get("display_name") or actor["username"],
                             f"rp_id={rp_id}" if rp_id else "（清空）", "notification-settings.html")
-    return {"ok": True}
+    return {"ok": True, "invalidatedCredentials": invalidated}
 
 
 # ── Backup retention settings ─────────────────────────────────────────────────
