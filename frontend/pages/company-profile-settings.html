@@ -174,6 +174,42 @@
                  style="font-size:13px;margin-top:12px;font-weight:600"></div>
           </div>
         </div>
+
+        <!-- WebAuthn 網域設定 -->
+        <div class="ns-card">
+          <div class="ns-card-head">
+            <div class="ns-card-head-title">Passkey / WebAuthn 網域設定</div>
+            <span x-show="webauthnSaved" x-transition style="font-size:12px;color:#16A34A;font-weight:600">已儲存</span>
+          </div>
+          <div class="ns-card-body">
+            <div class="ns-desc">
+              設定 WebAuthn Relying Party 識別資訊。<strong>RP ID 必須是 DNS 可解析的網域名稱</strong>（不支援 IP 位址），且必須指向本伺服器。兩個欄位必須同時填入或同時清空。
+            </div>
+            <div class="ns-row full">
+              <div class="ns-field">
+                <label>RP ID（例：motrix.internal）</label>
+                <input type="text" x-model="webauthnRpId" placeholder="motrix.internal" @input="webauthnModified = true">
+              </div>
+            </div>
+            <div class="ns-row full">
+              <div class="ns-field">
+                <label>Origin（例：https://motrix.internal:666）</label>
+                <input type="text" x-model="webauthnOrigin" placeholder="https://motrix.internal:666" @input="webauthnModified = true">
+              </div>
+            </div>
+
+            <div class="ns-actions">
+              <button class="btn btn-primary" @click="saveWebauthnConfig()" :disabled="webauthnSaving">
+                <span x-show="!webauthnSaving">儲存設定</span>
+                <span x-show="webauthnSaving">儲存中…</span>
+              </button>
+            </div>
+
+            <div x-show="webauthnMsg" x-text="webauthnMsg" x-transition
+                 :style="webauthnIsError ? 'color:#DC2626' : 'color:#16A34A'"
+                 style="font-size:13px;margin-top:12px;font-weight:600"></div>
+          </div>
+        </div>
       </div>
     </template>
 
@@ -192,6 +228,13 @@
         saved: false,
         msg: '',
         isError: false,
+        webauthnRpId: '',
+        webauthnOrigin: '',
+        webauthnSaving: false,
+        webauthnSaved: false,
+        webauthnMsg: '',
+        webauthnIsError: false,
+        webauthnModified: false,
 
         get isSuperadmin() { return this.session.role === 'superadmin' },
 
@@ -205,6 +248,47 @@
             const data = await r.json()
             this.cfg = { ...this.cfg, ...data }
           }
+          if (this.isSuperadmin) {
+            await this.loadWebauthnConfig()
+          }
+        },
+
+        async loadWebauthnConfig() {
+          const r = await fetch('/api/settings/webauthn-config', {
+            headers: { Authorization: 'Bearer ' + this.session.token }
+          })
+          if (r.ok) {
+            const data = await r.json()
+            this.webauthnRpId = data.rp_id || ''
+            this.webauthnOrigin = data.origin || ''
+          }
+        },
+
+        async saveWebauthnConfig() {
+          const rpId = (this.webauthnRpId || '').trim()
+          const origin = (this.webauthnOrigin || '').trim()
+          if ((rpId === '') !== (origin === '')) {
+            this.webauthnMsg = '必須同時填入或同時清空兩個欄位'
+            this.webauthnIsError = true
+            setTimeout(() => this.webauthnMsg = '', 4000)
+            return
+          }
+          this.webauthnSaving = true; this.webauthnMsg = ''
+          const r = await fetch('/api/settings/webauthn-config', {
+            method: 'PATCH',
+            headers: { Authorization: 'Bearer ' + this.session.token, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ rp_id: rpId || null, origin: origin || null }),
+          })
+          this.webauthnSaving = false
+          if (r.ok) {
+            this.webauthnMsg = '設定已儲存'; this.webauthnIsError = false
+            this.webauthnSaved = true; this.webauthnModified = false
+            setTimeout(() => this.webauthnSaved = false, 3000)
+          } else {
+            const d = await r.json().catch(() => ({}))
+            this.webauthnMsg = d.detail || '儲存失敗'; this.webauthnIsError = true
+          }
+          setTimeout(() => this.webauthnMsg = '', 4000)
         },
 
         async save() {
