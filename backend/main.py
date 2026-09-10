@@ -3,6 +3,7 @@ MOTRIX ERP — FastAPI 後端
 執行：uvicorn main:app --reload --port 666 --host 0.0.0.0
 """
 import os
+import time
 import logging
 from datetime import datetime
 
@@ -75,6 +76,39 @@ _MUST_CHANGE_PW_ALLOWED = {
     "/api/auth/change-password",
     "/api/ping",
 }
+
+
+# 慢請求記錄（2026-09-10）
+#
+# 起因：追 flaky e2e 時發現 db.py 的 `sqlite3.connect(path, timeout=30)` 表示任何
+# 一次寫入在鎖被佔住時最多會等 30 秒。逐段計時證實卡的是主 INSERT/commit 本身
+# （不是 commit 後那幾筆 notification/audit 寫入——那是當時的錯誤推論），也就是
+# SQLite 單一寫入者的本質，不是哪一段程式碼寫錯。
+#
+# 接著把可能長時間佔鎖的地方全查過一遍：`reset_demo_db()` 的 VACUUM 只動 demo
+# 那個獨立檔案、另一個 VACUUM 在 migration 裡（啟動時跑一次）、三處 BEGIN
+# IMMEDIATE 都是刻意的短交易。**正式路徑沒有任何東西會長時間佔住寫入鎖**，
+# 所以沒有對寫入路徑動刀——那會是沒有根據的改動。
+#
+# 但這種事真的發生時是完全看不見的（使用者只覺得「這次存檔特別久」，不會回報，
+# 也沒有任何紀錄）。這條 middleware 就是那道保險：超過門檻只寫一行 log，不改變
+# 任何行為。日後若有人回報「存報價單偶爾要等很久」，先看 server.log 裡的
+# `SLOW REQUEST`——有紀錄就是真的撞到鎖，沒有就要往別的方向查。
+_SLOW_REQUEST_SECONDS = float(os.environ.get("MOTRIX_SLOW_REQUEST_SECONDS", "5"))
+
+
+@app.middleware("http")
+async def slow_request_log(request: Request, call_next):
+    _t0 = time.monotonic()
+    response = await call_next(request)
+    _elapsed = time.monotonic() - _t0
+    if _elapsed >= _SLOW_REQUEST_SECONDS and request.url.path.startswith("/api/"):
+        logger.warning(
+            "SLOW REQUEST %.1fs  %s %s  status=%s"
+            "（DB 寫入鎖等待上限 30s，見 db.py::_connect）",
+            _elapsed, request.method, request.url.path, response.status_code,
+        )
+    return response
 
 
 @app.middleware("http")

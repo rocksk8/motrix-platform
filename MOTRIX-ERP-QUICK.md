@@ -1196,6 +1196,21 @@ xlsx-0.18.5.full.min.js     （SheetJS）
 > [`WEEKLY-AUDIT-2026-09-07_2026-09-10.md`](WEEKLY-AUDIT-2026-09-07_2026-09-10.md)
 > ——帶「模組／檔案:行號／是否在正式機」座標的本週稽核索引，出事時先看那份。
 
+### 2026-09-10（最終）— 慢請求記錄（DB 無異動）
+
+**先更正**：前一輪說「存報價單可能卡 30 秒」是 commit 後那幾筆 notification／audit 寫入造成的
+——**錯的**。逐段計時（另一條連線握鎖 6 秒）：`_audit` 0.01s、`notify_module_activity` 0.03s、
+**主 INSERT/commit 6.17s**。卡的是主寫入，SQLite 單一寫入者的本質，移走那幾筆沒有幫助。
+
+查完所有可能長時間佔鎖的地方——`reset_demo_db()` 的 VACUUM 只動 demo 獨立檔案、另一個 VACUUM
+在 migration、三處 `BEGIN IMMEDIATE` 都是刻意短交易——**正式路徑沒有長時間佔鎖的東西**，
+所以沒有對寫入路徑動刀。
+
+改做**可觀測性**：`main.py::slow_request_log`，超過門檻（預設 5s，環境變數
+`MOTRIX_SLOW_REQUEST_SECONDS` 可調）的 `/api/*` 請求寫一行 `SLOW REQUEST`，不改變行為。
+**日後有人回報「存報價單偶爾要等很久」，先看 `server.log` 的 `SLOW REQUEST`**——
+有紀錄就是真的撞到鎖，沒有就往別的方向查。測試 4 題（含端到端持鎖情境）。
+
 ### 2026-09-10（追到底）— flaky e2e 完整真相（DB 無異動）
 
 **方法**：先加強測試自己的診斷再說，不要繼續猜。原 dump 只有 approver 那一頁的資訊，
