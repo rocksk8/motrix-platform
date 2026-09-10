@@ -1085,6 +1085,28 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
     write_net_summary(ws_month, r_i,
                        data.get("monthIncomeTotal", 0), data.get("monthExpenseTotal", 0), "當月")
 
+    # ── Sheet 4b-2: 本季收支（2026-09-10）──────────────────────────────────
+    # 只有匯出時帶了 quarter 參數才會有這張表（畫面上期別切在「季報」時前端才送）。
+    # 刻意「加一張」而不是「取代當月那張」：當月/本季/今年度三種口徑並存，跟畫面上
+    # 三個範圍鈕一致，也不改變既有不帶 quarter 的匯出結果。
+    _q = data.get("expenseQuarter")
+    if _q:
+        ws_q = wb.create_sheet("本季收支")
+        ws_q.sheet_view.showGridLines = False
+        for i, w in enumerate(income_cols, 1):
+            ws_q.column_dimensions[get_column_letter(i)].width = w
+        ws_q.merge_cells(f"A1:{get_column_letter(len(income_hdrs))}1")
+        c = ws_q["A1"]
+        c.value = f"{data.get('expensesYear', '')} 年第 {_q} 季收支明細"
+        c.font  = mk(bold=True, size=12, color=C_WHITE)
+        c.fill  = fill(C_DARK)
+        c.alignment = al("center")
+        ws_q.row_dimensions[1].height = 26
+        r_q = write_income_table(ws_q, 3, data.get("quarterIncomeItems") or [], "本季收入明細")
+        r_q = write_expense_table(ws_q, r_q, data.get("quarterExpenseItems") or [], "本季支出明細")
+        write_net_summary(ws_q, r_q,
+                          data.get("quarterIncomeTotal", 0), data.get("quarterExpenseTotal", 0), "本季")
+
     # ── Sheet 4c: 今年度收支 ────────────────────────────────────────────────
     ws_year = wb.create_sheet("今年度收支")
     ws_year.sheet_view.showGridLines = False
@@ -1737,6 +1759,50 @@ def _build_report_html(data: dict, period_label: str, gen_at: str) -> str:
             year_expense_items.append({**it, "cat": cat})
     year_expense_items.sort(key=lambda x: x.get("date") or "", reverse=True)
 
+    # ── 本季收支段落（2026-09-10）──────────────────────────────────────────
+    # 只有匯出時帶了 quarter 參數才產生，沒帶就是空字串（既有不帶 quarter 的
+    # 匯出結果完全不變）。組在 f-string 之外，因為裡面要條件分支。
+    quarter_section_html = ""
+    _q = data.get("expenseQuarter")
+    if _q:
+        q_income  = data.get("quarterIncomeItems") or []
+        q_expense = data.get("quarterExpenseItems") or []
+        q_in_tot  = data.get("quarterIncomeTotal", 0)
+        q_ex_tot  = data.get("quarterExpenseTotal", 0)
+        q_title   = f'{data.get("expensesYear", "")} 年第 {_q} 季收支明細'
+        q_income_html = (
+            "<table><thead>"
+            + tbl_hdr("案件號", "客戶", "專案", "業務員", "款項", "應收金額", "收款日",
+                      "實收金額", "手續費", "實收淨額", "發票號碼")
+            + "</thead><tbody>" + income_rows_html(q_income) + income_sum_row(q_income)
+            + "</tbody></table>"
+        ) if q_income else (
+            '<p style="color:#6B7280;font-size:9pt;padding:8px 0;font-style:italic">本季尚無收款紀錄。</p>'
+        )
+        q_expense_html = (
+            "<table><thead>"
+            + tbl_hdr("日期", "類別", "關聯案件", "說明", "金額", "發票/收據附件")
+            + "</thead><tbody>" + expense_rows_html(q_expense) + "</tbody></table>"
+        ) if q_expense else (
+            '<p style="color:#6B7280;font-size:9pt;padding:8px 0;font-style:italic">本季尚無支出明細資料。</p>'
+        )
+        quarter_section_html = f"""
+<!-- 本季收支（2026-09-10） -->
+<div class="page-break"></div>
+<div class="section-title" style="background:#111827">{q_title}</div>
+<h3 style="margin:8px 0 8px;font-size:10pt;color:#15803D;border-bottom:1px solid #BBF7D0;padding-bottom:4px">本季收入明細（共 {len(q_income)} 筆）</h3>
+{q_income_html}
+<h3 style="margin:16px 0 8px;font-size:10pt;color:#7C3AED;border-bottom:1px solid #DDD6FE;padding-bottom:4px">本季支出明細（共 {len(q_expense)} 筆）</h3>
+{q_expense_html}
+<table style="margin-top:10px"><tbody>
+<tr class="sum-row">
+  <td>本季收入合計</td><td class="r">NT$ {q_in_tot:,}</td>
+  <td>本季支出合計</td><td class="r">NT$ {q_ex_tot:,}</td>
+  <td>本季淨額</td><td class="r"><b>NT$ {q_in_tot - q_ex_tot:,}</b></td>
+</tr>
+</tbody></table>
+"""
+
     # sales rows
     sp_rows = ""
     for sp in data["salesPerf"]:
@@ -2045,7 +2111,7 @@ tr.in-period{{background:#EFF6FF}}
   <td>當月淨額</td><td class="r"><b>NT$ {data.get("monthIncomeTotal",0) - data.get("monthExpenseTotal",0):,}</b></td>
 </tr>
 </tbody></table>
-
+{quarter_section_html}
 <!-- 今年度收支（2026-08-30） -->
 <div class="page-break"></div>
 <div class="section-title" style="background:#111827">{data.get("expensesYear","")}年度收支總表</div>
@@ -2172,6 +2238,7 @@ def report_excel(
     period: Optional[str] = Query(None),
     department_id: Optional[int] = Query(None),
     expense_month: Optional[str] = Query(None),
+    quarter: Optional[int] = Query(None),
     authorization: str = Header(None),
 ):
     u = _require_user(authorization)
@@ -2181,8 +2248,10 @@ def report_excel(
     label, d0, d1 = _parse_period(period)
     data   = _augment_with_targets(_collect(d0, d1, department_id), d0)
     data["arAging"] = _compute_ar_aging()
+    # quarter 有帶才會多出「本季收支」工作表／段落（2026-09-10）；不帶時輸出與
+    # 先前完全一致。畫面上期別切在「季報」時前端才會送這個參數。
     data.update(_build_income_expense_scopes(
-        int(d0[:4]), expense_month or date.today().strftime("%Y-%m"), department_id
+        int(d0[:4]), expense_month or date.today().strftime("%Y-%m"), department_id, quarter
     ))
     gen_at = datetime.now().strftime("%Y-%m-%d %H:%M")
     xlsx   = _build_excel(data, label, gen_at)
@@ -2203,6 +2272,7 @@ def report_pdf(
     period: Optional[str] = Query(None),
     department_id: Optional[int] = Query(None),
     expense_month: Optional[str] = Query(None),
+    quarter: Optional[int] = Query(None),
     authorization: str = Header(None),
 ):
     u = _require_user(authorization)
@@ -2212,8 +2282,10 @@ def report_pdf(
     label, d0, d1 = _parse_period(period)
     data   = _augment_with_targets(_collect(d0, d1, department_id), d0)
     data["arAging"] = _compute_ar_aging()
+    # quarter 有帶才會多出「本季收支」工作表／段落（2026-09-10）；不帶時輸出與
+    # 先前完全一致。畫面上期別切在「季報」時前端才會送這個參數。
     data.update(_build_income_expense_scopes(
-        int(d0[:4]), expense_month or date.today().strftime("%Y-%m"), department_id
+        int(d0[:4]), expense_month or date.today().strftime("%Y-%m"), department_id, quarter
     ))
     gen_at = datetime.now().strftime("%Y-%m-%d %H:%M")
     try:

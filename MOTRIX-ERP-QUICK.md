@@ -1196,6 +1196,24 @@ xlsx-0.18.5.full.min.js     （SheetJS）
 > [`WEEKLY-AUDIT-2026-09-07_2026-09-10.md`](WEEKLY-AUDIT-2026-09-07_2026-09-10.md)
 > ——帶「模組／檔案:行號／是否在正式機」座標的本週稽核索引，出事時先看那份。
 
+### 2026-09-10（最後）— 匯出補上「季」範圍（DB 無異動）
+
+接續上一條。**匯出先前完全不吃期別的季**——`period` 給 `YYYY-Qn` 也只產「當月收支」「今年度收支」
+兩塊。兩支匯出端點（`/api/reports/financial/excel`、`/pdf`）新增 `quarter` 參數，帶了才多一張
+**「本季收支」工作表**／**本季收支段落**；沿用既有 `write_income_table`／`write_expense_table`／
+`write_net_summary` 與 PDF 的 `income_rows_html`／`expense_rows_html`，不另寫版面。
+
+**刻意「加一張」而不是「取代當月那張」**：當月／本季／今年度三種口徑並存（跟畫面上三個範圍鈕一致），
+不帶 `quarter` 時輸出與先前完全相同。前端 `exportFile()` 在 `expensesScope === 'quarter'` 時才送。
+
+**驗證**：用真實資料實際產檔——Excel 多出「本季收支」（39 列），季收入 498,440／季支出 307,472
+與該季三個月加總相符；真跑 Edge 產出 913KB PDF；再用 Playwright 開同一份 HTML 截圖肉眼複查版面。
+測試 3 題，全套非 e2e **535 passed**／e2e **5 passed**。
+
+⚠️ 寫測試踩到的：**手搭假 `data` dict 餵 `_build_report_html()` 會 `KeyError`**（少了
+`totalReceivable`），且會隨程式演進失效。比照 `test_reports_export_expenses.py` 慣例改用真實
+`_collect()` 組資料，只是不呼叫 `_html_to_pdf()`（那才需要 Edge）。
+
 ### 2026-09-10（更晚）— 營運報表期別不同步修復＋新增「季」範圍（DB 無異動）
 
 **症狀**：使用者回報「營運報表切換月／季／年時財務資料不會跟著切換」。

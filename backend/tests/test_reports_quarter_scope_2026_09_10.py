@@ -306,3 +306,113 @@ def test_month_expense_slice_still_prefix_matches():
     assert all("cat" in it for it in many["items"])
     dates = [it["date"] for it in many["items"]]
     assert dates == sorted(dates, reverse=True)
+
+
+# ── ⑥ Excel／PDF 匯出的季範圍（2026-09-10 後續補上） ─────────────────────────
+#
+# 匯出原本完全不吃期別的「季」：不論 period 是 YYYY-Qn 還是 YYYY-MM，都只產
+# 「當月收支」與「今年度收支」兩塊。這裡驗證新增的 quarter 參數。
+# 慣例比照 test_reports_export_expenses.py：Excel 走完整 HTTP 端點（openpyxl
+# 純 Python，不需外部依賴）；PDF 只測 _build_report_html() 產生的字串本身
+# （真的轉檔需要 Edge headless）。
+
+def _seed_quarter_export_data(conn):
+    """Q3 內外各一筆已收款，供匯出內容比對。"""
+    _insert_case(conn, "MQ-EXP-AUG", "2026-08-01",
+                 [{"id": 1, "type": "訂金", "pct": 100, "amount": 130000,
+                   "received": True, "receivedAt": "2026-08-12T00:00:00"}])
+    _insert_case(conn, "MQ-EXP-DEC", "2026-12-01",
+                 [{"id": 1, "type": "訂金", "pct": 100, "amount": 777000,
+                   "received": True, "receivedAt": "2026-12-12T00:00:00"}])
+
+
+def test_excel_export_gains_quarter_sheet(client, make_user):
+    """帶 quarter 的 Excel 匯出多一張「本季收支」工作表，內容是該季的收入；
+    不帶 quarter 時完全沒有這張表（既有匯出結果零變化）。"""
+    import io as _io
+    import db
+    import openpyxl
+
+    with_user, with_pw = make_user(username="q_exp_with", role="admin")
+    without_user, without_pw = make_user(username="q_exp_without", role="admin")
+
+    conn = db.get_db()
+    try:
+        _seed_quarter_export_data(conn)
+        conn.commit()
+    finally:
+        conn.close()
+
+    # 帶 quarter
+    token = _login(client, with_user, with_pw)
+    r = client.get("/api/reports/financial/excel?period=2026-Q3&expense_month=2026-09&quarter=3",
+                   headers=_auth(token))
+    assert r.status_code == 200, r.text
+    wb = openpyxl.load_workbook(_io.BytesIO(r.content))
+    assert "本季收支" in wb.sheetnames, f"應有『本季收支』工作表，實際 {wb.sheetnames}"
+    ws = wb["本季收支"]
+    assert "第 3 季" in str(ws["A1"].value), ws["A1"].value
+    flat = "\n".join(
+        str(c.value) for row in ws.iter_rows() for c in row if c.value is not None
+    )
+    assert "MQ-EXP-AUG" in flat, "Q3 內的案件應出現在本季收支表"
+    assert "MQ-EXP-DEC" not in flat, "Q4 的案件不應出現在本季收支表"
+
+    # 不帶 quarter（另一個使用者，避開 _check_export_rate 的 per-user 冷卻）
+    token2 = _login(client, without_user, without_pw)
+    r2 = client.get("/api/reports/financial/excel?period=2026-Q3&expense_month=2026-09",
+                    headers=_auth(token2))
+    assert r2.status_code == 200, r2.text
+    wb2 = openpyxl.load_workbook(_io.BytesIO(r2.content))
+    assert "本季收支" not in wb2.sheetnames, \
+        f"不帶 quarter 不該有『本季收支』工作表，實際 {wb2.sheetnames}"
+    # 既有兩張表都還在
+    assert "當月收支" in wb2.sheetnames and "今年度收支" in wb2.sheetnames
+
+
+def test_excel_export_quarter_rejects_bad_value(client, make_user):
+    """匯出端點的 quarter 同樣受 _validate_quarter 保護。"""
+    username, password = make_user(role="admin")
+    token = _login(client, username, password)
+    r = client.get("/api/reports/financial/excel?period=2026-Q3&quarter=9", headers=_auth(token))
+    assert r.status_code == 400, r.text
+
+
+def test_report_html_gains_quarter_section(client, make_user):
+    """_build_report_html()：帶 quarter 時多出本季收支段落與合計列；不帶時完全
+    不出現「本季」字樣。比照 test_reports_export_expenses.py 的慣例，資料用真實
+    `_collect()` 組（不手搭 dict——欄位一漏就是 KeyError，而且會隨程式演進失效），
+    只是不呼叫 _html_to_pdf()（真的轉檔需要 Edge headless）。"""
+    from datetime import datetime
+    import db
+    from routers import reports
+
+    make_user(role="admin")
+    conn = db.get_db()
+    try:
+        _insert_case(conn, "MQ-HTML-AUG", "2026-08-01",
+                     [{"id": 1, "type": "訂金", "pct": 100, "amount": 50000,
+                       "received": True, "receivedAt": "2026-08-10T00:00:00"}])
+        conn.commit()
+    finally:
+        conn.close()
+
+    gen_at = datetime.now().strftime("%Y-%m-%d %H:%M")
+    label, d0, d1 = reports._parse_period("2026-Q3")
+
+    def _data(quarter):
+        d = reports._augment_with_targets(reports._collect(d0, d1, None), d0)
+        d["arAging"] = reports._compute_ar_aging()
+        d.update(reports._build_income_expense_scopes(2026, "2026-09", None, quarter))
+        return d
+
+    # 不帶 quarter
+    html_plain = reports._build_report_html(_data(None), label, gen_at)
+    assert "本季" not in html_plain, "不帶 quarter 時不該出現任何『本季』字樣"
+
+    # 帶 quarter
+    html_q = reports._build_report_html(_data(3), label, gen_at)
+    assert "第 3 季收支明細" in html_q
+    assert "本季收入合計" in html_q and "本季支出合計" in html_q and "本季淨額" in html_q
+    assert "MQ-HTML-AUG" in html_q, "Q3 內的收款應出現在本季段落"
+    assert "50,000" in html_q
