@@ -431,7 +431,7 @@
               未收款<span class="tab__cnt" x-text="activeOutstandingItems.length"></span>
             </button>
             <button class="tab" :class="{on:activeTab==='expenses'}" @click="showExpensesTab()">
-              月支出<span class="tab__cnt" x-show="expensesTotals.total" x-text="fmt(expensesTotals.total)"></span>
+              月支出<span class="tab__cnt" x-show="expensesScope==='month' ? monthExpenseTotal : expensesTotals.total" x-text="fmt(expensesScope==='month' ? monthExpenseTotal : expensesTotals.total)"></span>
             </button>
             <button class="tab" :class="{on:activeTab==='cases'}" @click="activeTab='cases'">
               案件清單<span class="tab__cnt" x-text="casesAll.length"></span>

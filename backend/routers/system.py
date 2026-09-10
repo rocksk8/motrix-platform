@@ -703,6 +703,33 @@ def set_pdf_base_path_setting(body: dict = Body(...), authorization: str = Heade
     return {"ok": True}
 
 
+# ── WebAuthn RP ID / Origin settings ──────────────────────────────────────────
+
+@router.get("/api/settings/webauthn-config")
+def get_webauthn_config(authorization: str = Header(None)):
+    _require_user(authorization, require_superadmin=True)
+    return {
+        "rp_id": _get_setting("webauthn_rp_id") or "",
+        "origin": _get_setting("webauthn_origin") or ""
+    }
+
+
+@router.patch("/api/settings/webauthn-config")
+def set_webauthn_config(body: dict = Body(...), authorization: str = Header(None)):
+    actor = _require_user(authorization, require_superadmin=True)
+    rp_id = (body.get("rp_id") or "").strip()
+    origin = (body.get("origin") or "").strip()
+    if (rp_id and not origin) or (origin and not rp_id):
+        raise HTTPException(400, "RP ID 與 Origin 必須同時設定或同時清空")
+    _set_setting("webauthn_rp_id", rp_id)
+    _set_setting("webauthn_origin", origin)
+    _audit(_tok(authorization), "settings.webauthn_config.update", "settings", "webauthn",
+           f"rp_id={rp_id}, origin={origin}" if rp_id else "（清空）")
+    notify_module_activity("系統設定", "變更 WebAuthn 設定", actor.get("display_name") or actor["username"],
+                            f"rp_id={rp_id}" if rp_id else "（清空）", "notification-settings.html")
+    return {"ok": True}
+
+
 # ── Backup retention settings ─────────────────────────────────────────────────
 # 2026-09-01：本機/雲端備份保留天數原本寫死在 archive.py（見該檔 _BACKUP_RETENTION_
 # DEFAULT 註解），使用者要求可調整避免雲端空間被逐年累積的每日/週備份塞爆，改成
@@ -1047,3 +1074,15 @@ def put_role_labels(body: RoleLabelsBody, authorization: str = Header(None)):
     _audit(_tok(authorization), "settings.role_labels.update", "settings",
            "role_labels", json.dumps(labels, ensure_ascii=False))
     return labels
+
+
+# ── WebAuthn config status (public, no auth) ──────────────────────────────────
+
+@router.get("/api/system/webauthn-config-status")
+def get_webauthn_config_status():
+    """Public endpoint: check whether WebAuthn RP ID and Origin are configured.
+    Used by login.html and change-password.html to show/hide Passkey buttons."""
+    rp_id = _get_setting("webauthn_rp_id") or ""
+    origin = _get_setting("webauthn_origin") or ""
+    configured = bool(rp_id.strip() and origin.strip())
+    return {"configured": configured}

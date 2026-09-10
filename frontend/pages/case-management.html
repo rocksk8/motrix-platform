@@ -821,6 +821,21 @@
                   </div>
                 </div>
 
+                <div class="cm-section-title">專案期間</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+                  <div class="fi-group">
+                    <label class="fi-label">開始日期</label>
+                    <input class="fi" type="date" x-model="cr.caseRecord.projectTimeline.startDate" @input="setDirty()">
+                  </div>
+                  <div class="fi-group">
+                    <label class="fi-label">預計結束日期</label>
+                    <input class="fi" type="date" x-model="cr.caseRecord.projectTimeline.endDate" @input="setDirty()">
+                  </div>
+                </div>
+                <div x-show="cr.caseRecord.projectTimeline.endDate && cr.dealTag !== '已結案'" style="font-size:12px;padding:10px;background:#F0FDF4;border-radius:var(--radius);color:#15803D;margin-bottom:12px">
+                  <span x-show="daysUntilDeadline() > 0" x-text="'剩餘 ' + daysUntilDeadline() + ' 天'"></span>
+                  <span x-show="daysUntilDeadline() <= 0" x-text="'已超期 ' + Math.abs(daysUntilDeadline()) + ' 天'" style="color:#DC2626;background:#FEF2F2"></span>
+                </div>
                 <div class="cm-section-title">收款管理</div>
                 <div class="pay-kpi-row">
                   <div class="pay-kpi">

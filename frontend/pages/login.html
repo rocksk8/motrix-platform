@@ -177,7 +177,7 @@
     }
   </style>
 </head>
-<body x-data="loginPage()">
+<body x-data="loginPage()" @load="init()">
 
   <div class="login-wrap">
     <div class="logo-area">
@@ -232,7 +232,7 @@
           <span x-text="loading ? '驗證中…' : '登入'"></span>
         </button>
 
-        <button type="button" @click="startWebauthnLogin()" class="btn-secondary" :disabled="loading">
+        <button type="button" @click="startWebauthnLogin()" class="btn-secondary" :disabled="loading" x-show="webauthnConfigured">
           或使用 Passkey 登入
         </button>
       </form>
@@ -301,6 +301,7 @@
       loading:  false,
       error:    '',
       systemVersion: '',
+      webauthnConfigured: false,
       totpStep: false,
       totpCode: '',
       challengeToken: '',
@@ -308,6 +309,18 @@
       qrPollTimer: null,
       webauthnStep: false,
       webauthnChallenge: '',
+
+      async init() {
+        this.checkWebauthnConfig()
+      },
+
+      async checkWebauthnConfig() {
+        try {
+          const r = await fetch('/api/system/webauthn-config-status')
+          const data = await r.json().catch(() => ({}))
+          this.webauthnConfigured = !!data.configured
+        } catch {}
+      },
 
       async login() {
         this.error = ''

@@ -21,6 +21,7 @@ from helpers import (
     notify_daily_task_overdue_manager,
     notify_daily_task_edited, notify_warranty_expiry, notify_range_task_deadline, _warranty_expiry,
     notify_case_stage_deadline, notify_case_stage_deadline_manager,
+    notify_case_project_overdue,
     notify_module_activity,
     _get_setting, _set_setting, notify_approval_reminder, _workdays_elapsed,
 )
@@ -1088,6 +1089,52 @@ def _check_project_deadline() -> None:
     pass
 
 
+def _check_case_project_timeline_deadline() -> None:
+    """Scan active cases; notify admin if case project endDate is overdue. Re-send every 7 days."""
+    today = _date.today()
+    today_str = today.isoformat()
+    try:
+        conn = get_db()
+        rows = conn.execute("""
+            SELECT quote_no, customer_name, project_name,
+                   json_extract(data_json, '$.caseRecord.projectTimeline.endDate') AS end_date_json
+            FROM quotations
+            WHERE COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') != '已結案'
+              AND json_extract(data_json, '$.caseRecord.projectTimeline.endDate') IS NOT NULL
+        """).fetchall()
+        conn.close()
+
+        for row in rows:
+            try:
+                end_date_str = (row["end_date_json"] or "").strip('"')
+                if not end_date_str:
+                    continue
+                end_date = _date.fromisoformat(end_date_str)
+            except Exception:
+                continue
+
+            if end_date >= today:
+                continue  # not yet overdue
+
+            days_overdue = (today - end_date).days
+            bucket = days_overdue // 7  # day 0-6 → bucket 0, day 7-13 → bucket 1, etc.
+            guard_key = f"caseproj_notif.{row['quote_no']}.{bucket}"
+            if _get_setting(guard_key):
+                continue  # already sent for this 7-day bucket
+
+            _set_setting(guard_key, today_str)
+            threading.Thread(
+                target=notify_case_project_overdue,
+                args=(row["quote_no"], row["customer_name"] or "", row["project_name"] or "",
+                      end_date_str, days_overdue),
+                daemon=True,
+            ).start()
+
+        _logger.info("Case project timeline deadline check complete for %s", today_str)
+    except Exception as exc:
+        _logger.warning("_check_case_project_timeline_deadline failed: %s", exc)
+
+
 _WARR_THRESHOLDS = (7, 30)  # days — must be in ascending order
 
 
@@ -1291,6 +1338,7 @@ def schedule_overdue_check() -> None:
         _check_warranty_expiry()
         _check_range_task_deadline()
         _check_case_stage_deadline()
+        _check_case_project_timeline_deadline()
         _check_project_deadline()
         _check_approval_reminders()
 
@@ -1305,6 +1353,7 @@ def schedule_overdue_check() -> None:
             _check_overdue_and_notify()
             _check_warranty_expiry()
             _check_case_stage_deadline()
+            _check_case_project_timeline_deadline()
             _check_project_deadline()
             _check_approval_reminders()
             return
@@ -1323,6 +1372,7 @@ def schedule_overdue_check() -> None:
         _check_warranty_expiry()
         _check_range_task_deadline()
         _check_case_stage_deadline()
+        _check_case_project_timeline_deadline()
         _check_project_deadline()
         _check_approval_reminders()
         _logger.info("Startup catch-up complete, processed up to %s", yesterday)

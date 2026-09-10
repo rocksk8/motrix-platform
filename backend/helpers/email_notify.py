@@ -1365,3 +1365,31 @@ def notify_module_activity(module_label: str, action_label: str,
         f'</div></body></html>'
     )
     _async_send(to, f"[MOTRIX] {module_label} — {action_label}", html)
+
+
+def notify_case_project_overdue(
+    quote_no: str,
+    customer_name: str,
+    project_name: str,
+    end_date: str,
+    days_overdue: int,
+) -> None:
+    """案件專案期間已超期 → 所有 admin/superadmin"""
+    to = _admin_emails("case_project_overdue")
+    if not to:
+        return
+    case_page = f"{_base_url()}/pages/case-management.html?quote={quote_no}"
+    if days_overdue == 0:
+        badge_text, badge_color = "今日超期", "#DC2626"
+        intro = f"案件「{project_name}」（客戶：{customer_name}）預計於 {end_date} 完成，今日已超期。"
+    else:
+        badge_text, badge_color = f"已超期 {days_overdue} 天", "#DC2626"
+        intro = f"案件「{project_name}」（客戶：{customer_name}）預計於 {end_date} 完成，已超期 {days_overdue} 天。"
+    html = _build_html(
+        "案件專案期間已超期", badge_text, badge_color,
+        [("案件號", quote_no), ("客戶", customer_name), ("專案名稱", project_name or "（未填）"), ("預計結束日期", end_date)],
+        "", case_page,
+        intro=intro,
+        button_text="前往案件管理",
+    )
+    _async_send(to, f"【MOTRIX】案件專案期間已超期 — {project_name or quote_no}（已超期 {days_overdue} 天）", html)

@@ -677,6 +677,9 @@ function app() {
       if (!this.cr.caseRecord.roles) {
         this.cr.caseRecord.roles = { filler: '', sales: '', executor: '' }
       }
+      if (!this.cr.caseRecord.projectTimeline) {
+        this.cr.caseRecord.projectTimeline = { startDate: '', endDate: '', status: 'on_track' }
+      }
 
       this.cr.caseRecord.materials.forEach(mat => {
         if (!mat.devices) mat.devices = []
@@ -1777,6 +1780,16 @@ function app() {
       if (s === 'expired')  return '已過保'
       if (s === 'expiring') return '即將到期'
       return '保固中'
+    },
+
+    daysUntilDeadline() {
+      const endDate = this.cr.caseRecord?.projectTimeline?.endDate
+      if (!endDate) return 0
+      const deadline = new Date(endDate)
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      deadline.setHours(0, 0, 0, 0)
+      return Math.round((deadline - today) / 86400000)
     },
 
     // ── 承攬商派發 methods ──────────────────────────────────────────────────────

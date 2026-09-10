@@ -721,13 +721,24 @@ def totp_disable(body: TotpDisableIn, authorization: str = Header(None)):
 
 from webauthn.helpers.structs import PublicKeyCredentialDescriptor, PublicKeyCredentialType, AuthenticatorTransport
 
-_WEBAUTHN_ORIGIN = os.environ.get("WEBAUTHN_ORIGIN", "http://localhost:5000")
-_WEBAUTHN_RP_ID = os.environ.get("WEBAUTHN_RP_ID", "localhost")
-
 _webauthn_lock = threading.Lock()
 # challenge_token -> {"user_id": int, "challenge": bytes, "expires": monotonic_time}
 _webauthn_challenges: dict = {}
 _WEBAUTHN_CHALLENGE_TTL_S = 600  # 10 minutes
+
+
+def _webauthn_origin() -> str:
+    """Get WebAuthn origin from system settings; fall back to HTTP localhost if unconfigured."""
+    from helpers.settings import _get_setting
+    val = _get_setting("webauthn_origin")
+    return val if val else ""
+
+
+def _webauthn_rp_id() -> str:
+    """Get WebAuthn RP ID from system settings; fall back to localhost if unconfigured."""
+    from helpers.settings import _get_setting
+    val = _get_setting("webauthn_rp_id")
+    return val if val else ""
 
 
 def _store_webauthn_challenge(challenge: bytes) -> str:
@@ -754,6 +765,11 @@ def _retrieve_webauthn_challenge(token: str) -> Optional[bytes]:
 def webauthn_register_begin(authorization: str = Header(None)):
     """已登入使用者開始 Passkey 註冊流程。回傳 W3C WebAuthn registration options
     JSON，以及 challenge_token 供前端在 complete 時回傳。"""
+    rp_id = _webauthn_rp_id()
+    origin = _webauthn_origin()
+    if not rp_id or not origin:
+        raise HTTPException(status_code=503, detail="尚未設定 WebAuthn 網域，請聯繫管理員")
+
     user = _require_user(authorization)
     conn = get_db()
     try:
@@ -773,7 +789,7 @@ def webauthn_register_begin(authorization: str = Header(None)):
     ]
 
     options = generate_registration_options(
-        rp_id=_WEBAUTHN_RP_ID,
+        rp_id=rp_id,
         rp_name="MOTRIX 專案管理系統",
         user_id=str(user["id"]).encode("utf-8"),
         user_name=user["username"],
@@ -819,8 +835,8 @@ def webauthn_register_complete(body: WebauthnRegisterCompleteIn, authorization: 
             verified = verify_registration_response(
                 credential=body.dict(),
                 expected_challenge=challenge,
-                expected_origin=_WEBAUTHN_ORIGIN,
-                expected_rp_id=_WEBAUTHN_RP_ID,
+                expected_origin=_webauthn_origin(),
+                expected_rp_id=_webauthn_rp_id(),
             )
             public_key_bytes = verified.credential_public_key
             conn.execute(
@@ -848,6 +864,10 @@ def webauthn_register_complete(body: WebauthnRegisterCompleteIn, authorization: 
 def webauthn_login_begin(body: WebauthnLoginBeginIn):
     """未登入時開始 Passkey 登入：查該帳號已註冊的 credential 清單、回傳
     authentication options JSON 與 challenge_token。統一錯誤響應避免用戶枚舉。"""
+    rp_id = _webauthn_rp_id()
+    if not rp_id:
+        raise HTTPException(status_code=503, detail="尚未設定 WebAuthn 網域，請聯繫管理員")
+
     conn = get_db()
     try:
         user_row = conn.execute(
@@ -875,7 +895,7 @@ def webauthn_login_begin(body: WebauthnLoginBeginIn):
         ]
 
         options = generate_authentication_options(
-            rp_id=_WEBAUTHN_RP_ID,
+            rp_id=rp_id,
             allow_credentials=allow_credentials,
         )
         challenge_token = _store_webauthn_challenge(options.challenge)
@@ -927,8 +947,8 @@ def webauthn_login_complete(body: WebauthnLoginCompleteIn, request: Request):
             verified = verify_authentication_response(
                 credential=body.dict(),
                 expected_challenge=challenge,
-                expected_origin=_WEBAUTHN_ORIGIN,
-                expected_rp_id=_WEBAUTHN_RP_ID,
+                expected_origin=_webauthn_origin(),
+                expected_rp_id=_webauthn_rp_id(),
                 credential_public_key=cred_row["public_key"],
                 credential_current_sign_count=cred_row["sign_count"],
             )
