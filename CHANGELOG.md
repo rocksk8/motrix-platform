@@ -5,6 +5,73 @@
 
 ---
 
+### 2026-09-10 — 月支出顯示修正、WebAuthn 設定可配置化、案件超期通知
+
+**四項重要改動，已部署到正式機 commit 9b0ad79**
+
+#### Workstream B — 營運報表月支出頁籤顯示修正
+- **問題**：`reports.html` 頁籤徽章寫死顯示年度總額 (`expensesTotals.total`)，跟同頁其他地方的月/年度 `expensesScope` 切換邏輯不一致
+- **修正**：`reports.html:434` 改為依 `expensesScope` 判斷，使用同頁 592 行的正確邏輯：`expensesScope==='month' ? monthExpenseTotal : expensesTotals.total`
+- **檔案**：`frontend/pages/reports.html:434`
+
+#### Workstream C — WebAuthn RP ID / Origin 改為系統可設定
+- **背景**：原本 `WEBAUTHN_RP_ID`/`WEBAUTHN_ORIGIN` 寫死在環境變數，預設值是 `localhost` 與 `http://localhost:5000`，正式機用 IP 位址服務會導致 Passkey 「invalid domain」 error
+- **架構變更**：環境變數 → `system_settings` 表可動態配置
+  - `backend/routers/auth.py:724-725` 刪除常數，改用 `_webauthn_rp_id()` / `_webauthn_origin()` 動態取值
+  - 四個 WebAuthn 端點（register/login begin/complete）在未設定時回傳 503「尚未設定 WebAuthn 網域」
+- **新增後端 API**：
+  - `PATCH /api/settings/webauthn-config` — superadmin 可設定 RP ID / Origin（`backend/routers/system.py`）
+  - `GET /api/settings/webauthn-config` — superadmin 可查詢現有設定
+  - `GET /api/system/webauthn-config-status` — 公開端點，前端用來判斷是否顯示 Passkey 按鈕
+- **前端改動**：
+  - `login.html` / `change-password.html`：未設定時隱藏 Passkey 按鈕，顯示「尚未設定 WebAuthn 網域」提示
+  - 新增 `checkWebauthnConfig()` 方法在頁面初始化時檢查配置狀態
+- **檔案**：
+  - `backend/routers/auth.py`（724-725, 764-800, 835-839, 863-904, 946-951）
+  - `backend/routers/system.py`（新增 707-741）
+  - `backend/main.py`（60-63，加入公開端點清單）
+  - `frontend/pages/login.html`（180, 235, 300-322）
+  - `frontend/pages/change-password.html`（217-218, 207-214）
+
+#### Workstream D — 案件「專案期間」+ 超期通知新功能
+- **需求**：案件資訊新增「專案期間」欄位，超過期限每天通知一次，之後每 7 天提醒一次
+- **資料結構**：`caseRecord.projectTimeline = {startDate, endDate, status}` 存在 `data_json`（無 schema 異動）
+- **前端**（案件管理）：
+  - `case-management.js:679` — `ensureCaseRecord()` 加入預設值初始化
+  - `case-management.html:824` — 新增「專案期間」區塊（開始日期、預計結束日期、倒數/超期天數顯示）
+  - `case-management.js` 新增 `daysUntilDeadline()` 方法計算剩餘/超期天數
+- **後端排程**：
+  - `daily_tasks.py` 新增 `_check_case_project_timeline_deadline()` — 每日檢查超期案件
+  - 超期當天寄一次，之後每 7 天寄一次（guard key: `caseproj_notif.{quote_no}.{days_overdue // 7}`）
+  - 已掛進 `schedule_overdue_check()` 的 `_daily_run()` 與 `_startup_catchup()` 兩處
+- **通知**：
+  - `email_notify.py` 新增 `notify_case_project_overdue()` 函式，發送給所有 admin/superadmin
+  - 郵件包含：案件號、客戶名、專案名、預計結束日期、超期天數
+- **檔案**：
+  - `frontend/js/case-management.js`（679, 1785-1795）
+  - `frontend/pages/case-management.html`（824-837）
+  - `backend/routers/daily_tasks.py`（24, 1084-1127, 1342-1343, 1356, 1373）
+  - `backend/helpers/email_notify.py`（1378-1404）
+  - `backend/helpers/__init__.py`（65，導出新函式）
+
+#### 部署記錄
+- **Commit 歷史**：
+  - `f8198e9` — 四項功能改動
+  - `9b0ad79` — 修正 `notify_case_project_overdue` 導出缺漏
+- **測試**：正式機部署前所有改動已通過基本語法檢查
+- **正式機驗證**：commit 9b0ad79 已成功套用，版本追蹤檔已更新，健康檢查通過
+- **使用者操作**：
+  - **WebAuthn 設定**：以 superadmin 身份進入 `company-profile-settings.html`，填入內部 DNS 解析的域名作為 RP ID 與 Origin（需先配置 DNS 指向正式機 IP 172.16.10.177）
+  - **案件超期**：系統每日自動檢查，超期案件的 admin/superadmin 會收到郵件通知
+
+#### 其他備註
+- 營運報表修正後，月支出頁籤徽章會正確反應當月/全年度選擇，不再固定顯示年度總額
+- WebAuthn 改動不需要重啟服務即生效（讀 DB，非快取常數）
+- 案件超期通知倚賴既有的每日排程機制，無需額外設定
+- 資料庫無 schema 異動（所有新欄位存在 `data_json` JSON 欄位內）
+
+---
+
 ### 2026-09-07（緊急修復）— 修復 conftest.py 雲端備份隔離死碼，曾讓測試假資料寫進真實 G: 磁碟機
 
 - 背景：這次系統性複查測試基礎建設時發現，`backend/tests/conftest.py` 的 `_app` fixture 原本對 `archive.py` 的隔離設定——patch `archive._ARCHIVE_BASE`／`_REALTIME_DIR`／`_WEEKLY_DIR`／`_DAILY_DIR`／`_UPLOADS_MIRROR_DIR` 五個大寫模組常數——其實早就是死碼：現在的 `archive.py` 已經改成 `_archive_base()`／`_realtime_dir()` 等會動態掃描 A-Z 磁碟機代號、尋找公司雲端硬碟掛載點的**函式**（見 2026-09-07 稍早的「雲端備份目標可插拔」重構），conftest.py 卻沒有跟著更新，導致這五行 patch 對現在的程式碼結構完全不起作用
