@@ -1196,6 +1196,45 @@ xlsx-0.18.5.full.min.js     （SheetJS）
 > [`WEEKLY-AUDIT-2026-09-07_2026-09-10.md`](WEEKLY-AUDIT-2026-09-07_2026-09-10.md)
 > ——帶「模組／檔案:行號／是否在正式機」座標的本週稽核索引，出事時先看那份。
 
+### 2026-09-10（更晚）— 營運報表期別不同步修復＋新增「季」範圍（DB 無異動）
+
+**症狀**：使用者回報「營運報表切換月／季／年時財務資料不會跟著切換」。
+**後端一直是對的**（`_collect()` 的 `periodCases`/`periodReceived`/`periodNet` 實測隨期別變動），
+壞在前端狀態同步。
+
+**根因**：「本期收支」KPI 區塊與 `recv`／`out`／`expenses` 三個分頁走的是獨立的
+`/api/reports/expenses-monthly`、`/api/reports/receivables-monthly` 兩支資料流。
+`56e52b3`（2026-09-09，刻意讓 recv/out 不跟隨 period-bar）與 `6bfcafb` 只在 `reports.js::init()`
+同步過一次期別，**`prevPeriod()`／`nextPeriod()`／`switchType()` 以及 period-bar 的年/月/季下拉
+全都沒跟上**——這三個函式自初始 commit 至今從未被改過。結果整頁只有「本期新成案」「本期收款」
+兩張卡片真的會跟著期別切。
+
+**修法（四項）**
+
+1. **同步點收斂到 `loadData()` 開頭單一處**（新增 `_syncSubPeriods()`）——所有切期別的路徑最後
+   都會走到這裡，日後新增觸發點不必再記得補。三個手拼快取鍵的呼叫點收斂成
+   `_expensesKey()`／`_receivablesKey()`（鍵欄位漂移正是本 bug 成因）。
+2. **兩支端點新增 `quarter` 參數**（1-4；範圍外 400，非整數由 FastAPI 型別轉換擋成 422）。
+   `_month_expense_slice()` 抽成 `_months_expense_slice()` 供季共用——**刻意維持月份前綴字串
+   比對而非日期區間比對**，`details` 的 `date` 不保證是完整 `YYYY-MM-DD`，改區間會靜默丟資料。
+3. **季是純增量欄位**：不傳 `quarter` 時回空集合，`month*`／`year*` 行為零變化，
+   Excel／PDF／每月結算寄信等既有呼叫端不受影響（有測試釘住）。
+4. 畫面文字改用 `_scopePick()`／`scopeLabel` 統一取值，消掉 7 處只處理兩種範圍的 ternary。
+
+**⚠️ 過程中被新增的 e2e 抓到一個競態（修 A 才浮出來的 B）**：`loadExpenses()`／`loadReceivables()`
+原本在**回應抵達時**才算快取鍵，期別若在請求飛行途中被切走（7 月→8 月按很快），會把 7 月的資料
+貼上 8 月的鍵，之後守門看鍵相符便不再重載，畫面**永遠**卡在舊月份。已改為發出請求當下就算好鍵
+並隨這次請求走、過期回應直接丟棄；`loadData()` 本身同一類競態一併處理。
+
+**測試**：新增 `test_reports_quarter_scope_2026_09_10.py`（9 題）＋ e2e
+`test_e2e_reports_period_sync_2026_09_10.py`（1 題，真實瀏覽器切月報 7→8→季報 Q3→年報）。
+**該 e2e 已用「還原前端修改後重跑」驗證確實抓得到本 bug**（切到 2026-07 時當月收入停在 0）。
+全套非 e2e **532 passed**／e2e **5 passed**。
+
+**已知未處理**：①Excel／PDF 匯出仍走既有 `expense_month` 參數、不含季範圍（行為與修復前一致）
+②既有 `test_login_create_submit_approve_smoke` 在 18 輪中偶發 1 次逾時（等「預覽後簽核」按鈕），
+與本次改動無關，另案。
+
 ### 2026-09-10（本輪稽核）— 補回落後文件＋修掉四項已上正式機的缺陷（DB 無異動）
 
 - **背景**：使用者要求把本週（09-07~09-10，82 個 commit）的更新逐模組拆解、標出每個異常從哪裡開始、有沒有上正式機，並把排查排程全部跑一遍。盤點過程中發現的東西比預期嚴重，整理成 `WEEKLY-AUDIT-2026-09-07_2026-09-10.md`（§A~§H），本條目只記處置。

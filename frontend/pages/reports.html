@@ -305,26 +305,26 @@
             </div>
           </div>
           <div style="font-size:10px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em;font-family:LINE Seed TW_OTF, sans-serif;margin-bottom:8px;display:flex;align-items:center;gap:8px">
-            <span>當月收支</span>
+            <span x-text="scopeLabel + '收支'"></span>
             <span style="flex:1;height:1px;background:var(--border-light)"></span>
           </div>
           <div class="kpi-grid" style="margin-bottom:10px">
             <div class="kpi-card green">
-              <div class="kpi-card__lbl">當月收入</div>
-              <div class="kpi-card__val" x-text="fmt(monthIncomeTotal)"></div>
+              <div class="kpi-card__lbl" x-text="scopeLabel + '收入'"></div>
+              <div class="kpi-card__val" x-text="fmt(activeIncomeTotal)"></div>
             </div>
             <div class="kpi-card orange">
-              <div class="kpi-card__lbl">當月支出</div>
-              <div class="kpi-card__val" x-text="fmt(monthExpenseTotal)"></div>
+              <div class="kpi-card__lbl" x-text="scopeLabel + '支出'"></div>
+              <div class="kpi-card__val" x-text="fmt(activeExpenseTotal)"></div>
             </div>
-            <div class="kpi-card" :class="(monthIncomeTotal - monthExpenseTotal) >= 0 ? 'green' : 'red'">
-              <div class="kpi-card__lbl">當月淨現流</div>
-              <div class="kpi-card__val" x-text="fmt(monthIncomeTotal - monthExpenseTotal)"></div>
+            <div class="kpi-card" :class="netScopeAmount >= 0 ? 'green' : 'red'">
+              <div class="kpi-card__lbl" x-text="scopeLabel + '淨現流'"></div>
+              <div class="kpi-card__val" x-text="fmt(netScopeAmount)"></div>
             </div>
             <div class="kpi-card" x-show="receivablesData">
-              <div class="kpi-card__lbl">當月未收</div>
-              <div class="kpi-card__val" x-text="fmt(receivablesData?.monthOutstandingTotal || 0)" style="color:var(--alert)"></div>
-              <div style="font-size:11px;color:var(--text-dim);margin-top:4px" x-text="receivablesData?.monthOutstandingItems?.length || 0" style="color:var(--text-dim)"></div>
+              <div class="kpi-card__lbl" x-text="receivablesScopeLabel + '未收'"></div>
+              <div class="kpi-card__val" style="color:var(--alert)" x-text="fmt(activeOutstandingTotal)"></div>
+              <div class="kpi-card__sub" x-text="activeOutstandingItems.length + ' 筆'"></div>
             </div>
           </div>
           <div style="font-size:10px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em;font-family:LINE Seed TW_OTF, sans-serif;margin-bottom:8px;display:flex;align-items:center;gap:8px">
@@ -466,13 +466,31 @@
           </button>
           </div>
 
-          <!-- recv/out 分頁共用的「當月/今年度」切換鈕 -->
+          <!-- recv/out 分頁共用的「當月/本季/今年度」切換鈕（2026-09-10 加入本季）。
+               預設跟隨頂部 period-bar，見 reports.js::_syncSubPeriods()；這裡可臨時覆寫 -->
           <div x-show="activeTab==='recv' || activeTab==='out'" style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
             <button class="period-type-btn" :class="{on:receivablesScope==='month'}" @click="receivablesScope='month'; loadReceivables()">當月</button>
+            <button class="period-type-btn" :class="{on:receivablesScope==='quarter'}" @click="receivablesScope='quarter'; loadReceivables()">本季</button>
             <button class="period-type-btn" :class="{on:receivablesScope==='year'}" @click="receivablesScope='year'; loadReceivables()">今年度</button>
             <template x-if="receivablesScope==='month'">
               <input type="month" x-model="receivablesMonth" @change="loadReceivables()"
                      style="padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;background:#fff">
+            </template>
+            <template x-if="receivablesScope==='quarter'">
+              <span style="display:flex;gap:6px">
+                <select x-model.number="receivablesYear" @change="loadReceivables()"
+                        style="padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;background:#fff">
+                  <template x-for="y in caseListYears" :key="y">
+                    <option :value="y" x-text="y"></option>
+                  </template>
+                </select>
+                <select x-model.number="receivablesQuarter" @change="loadReceivables()"
+                        style="padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;background:#fff">
+                  <template x-for="q in [1,2,3,4]" :key="q">
+                    <option :value="q" x-text="'第 ' + q + ' 季'"></option>
+                  </template>
+                </select>
+              </span>
             </template>
             <template x-if="receivablesScope==='year'">
               <select x-model.number="receivablesYear" @change="loadReceivables()"
@@ -569,11 +587,28 @@
           <div x-show="activeTab==='expenses'" class="panel">
             <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
               <button class="period-type-btn" :class="{on:expensesScope==='month'}" @click="expensesScope='month'; loadExpenses()">當月</button>
+              <button class="period-type-btn" :class="{on:expensesScope==='quarter'}" @click="expensesScope='quarter'; loadExpenses()">本季</button>
               <button class="period-type-btn" :class="{on:expensesScope==='year'}" @click="expensesScope='year'; loadExpenses()">今年度</button>
 
               <template x-if="expensesScope==='month'">
                 <input type="month" x-model="expensesMonth" @change="loadExpenses()"
                        style="padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;background:#fff">
+              </template>
+              <template x-if="expensesScope==='quarter'">
+                <span style="display:flex;gap:6px">
+                  <select x-model.number="expensesYear" @change="loadExpenses()"
+                          style="padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;background:#fff">
+                    <template x-for="y in caseListYears" :key="y">
+                      <option :value="y" x-text="y"></option>
+                    </template>
+                  </select>
+                  <select x-model.number="expensesQuarter" @change="loadExpenses()"
+                          style="padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;background:#fff">
+                    <template x-for="q in [1,2,3,4]" :key="q">
+                      <option :value="q" x-text="'第 ' + q + ' 季'"></option>
+                    </template>
+                  </select>
+                </span>
               </template>
               <template x-if="expensesScope==='year'">
                 <select x-model.number="expensesYear" @change="loadExpenses()"
@@ -589,15 +624,15 @@
             <!-- 收入/支出/淨額 KPI -->
             <div style="display:flex;gap:12px;margin-bottom:18px;flex-wrap:wrap">
               <div style="flex:1;min-width:140px;padding:12px 16px;border:1px solid var(--border-light);border-radius:var(--radius);background:#F0FDF4">
-                <div style="font-size:11px;color:var(--text-dim)" x-text="(expensesScope==='month'?'當月':'今年度') + '收入合計'"></div>
-                <div style="font-size:18px;font-weight:700;color:#15803D;font-family:LINE Seed TW_OTF, sans-serif" x-text="fmt(expensesScope==='month'?monthIncomeTotal:yearIncomeTotal)"></div>
+                <div style="font-size:11px;color:var(--text-dim)" x-text="scopeLabel + '收入合計'"></div>
+                <div style="font-size:18px;font-weight:700;color:#15803D;font-family:LINE Seed TW_OTF, sans-serif" x-text="fmt(activeIncomeTotal)"></div>
               </div>
               <div style="flex:1;min-width:140px;padding:12px 16px;border:1px solid var(--border-light);border-radius:var(--radius);background:#FAF5FF">
-                <div style="font-size:11px;color:var(--text-dim)" x-text="(expensesScope==='month'?'當月':'今年度') + '支出合計'"></div>
-                <div style="font-size:18px;font-weight:700;color:#7C3AED;font-family:LINE Seed TW_OTF, sans-serif" x-text="fmt(expensesScope==='month'?monthExpenseTotal:expensesTotals.total)"></div>
+                <div style="font-size:11px;color:var(--text-dim)" x-text="scopeLabel + '支出合計'"></div>
+                <div style="font-size:18px;font-weight:700;color:#7C3AED;font-family:LINE Seed TW_OTF, sans-serif" x-text="fmt(activeExpenseTotal)"></div>
               </div>
               <div style="flex:1;min-width:140px;padding:12px 16px;border:1px solid var(--border-light);border-radius:var(--radius);background:#F9FAFB">
-                <div style="font-size:11px;color:var(--text-dim)" x-text="(expensesScope==='month'?'當月':'今年度') + '淨額'"></div>
+                <div style="font-size:11px;color:var(--text-dim)" x-text="scopeLabel + '淨額'"></div>
                 <div style="font-size:18px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif"
                      :style="netScopeAmount >= 0 ? 'color:#15803D' : 'color:#DC2626'" x-text="fmt(netScopeAmount)"></div>
               </div>
@@ -635,9 +670,9 @@
 
             <!-- 收入明細 -->
             <div class="cm-section-title" style="margin-bottom:8px;font-size:13px;font-weight:700;font-family:var(--font-zh)"
-                 x-text="(expensesScope==='month'?'當月':'今年度') + '收入明細（' + activeIncomeItems.length + ' 筆）'"></div>
+                 x-text="scopeLabel + '收入明細（' + activeIncomeItems.length + ' 筆）'"></div>
             <template x-if="!expensesLoading && activeIncomeItems.length === 0">
-              <div class="empty-state" x-text="(expensesScope==='month'?'當月':'此年度') + '尚無收款紀錄'"></div>
+              <div class="empty-state" x-text="scopeLabel + '尚無收款紀錄'"></div>
             </template>
             <template x-if="activeIncomeItems.length > 0">
               <table class="data-table" style="margin-bottom:20px">
@@ -669,7 +704,7 @@
             <!-- 支出明細 -->
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap">
               <span class="cm-section-title" style="margin:0;font-size:13px;font-weight:700;font-family:var(--font-zh)"
-                    x-text="(expensesScope==='month'?'當月':'今年度') + '支出明細（' + filteredExpenseItems.length + ' 筆）'"></span>
+                    x-text="scopeLabel + '支出明細（' + filteredExpenseItems.length + ' 筆）'"></span>
               <button class="period-type-btn" :class="{on:expensesFilter==='all'}" @click="expensesFilter='all'">全部</button>
               <button class="period-type-btn" :class="{on:expensesFilter==='contractor'}" @click="expensesFilter='contractor'">承攬商派發</button>
               <button class="period-type-btn" :class="{on:expensesFilter==='equipment'}" @click="expensesFilter='equipment'">設備進貨</button>
@@ -677,7 +712,7 @@
               <button class="period-type-btn" :class="{on:expensesFilter==='other'}" @click="expensesFilter='other'">其他支出</button>
             </div>
             <template x-if="!expensesLoading && filteredExpenseItems.length === 0">
-              <div class="empty-state" x-text="(expensesScope==='month'?'當月':'此年度') + '尚無支出明細資料'"></div>
+              <div class="empty-state" x-text="scopeLabel + '尚無支出明細資料'"></div>
             </template>
             <template x-if="filteredExpenseItems.length > 0">
               <table class="data-table">

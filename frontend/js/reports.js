@@ -66,21 +66,26 @@ function reportsApp() {
     trendLoaded:  false,
 
     // ── 收支報表（原「月支出」，2026-08-30 重構為《當月收支》/《今年度收支》）──
-    expensesScope:     'month', // month/year — 畫面上目前顯示哪個範圍
+    expensesScope:     'month', // month/quarter/year — 畫面上目前顯示哪個範圍
     expensesYear:      new Date().getFullYear(),
     expensesMonth:     new Date().toISOString().slice(0, 7),  // 'YYYY-MM'，當月範圍用
+    expensesQuarter:   Math.ceil((new Date().getMonth() + 1) / 3),  // 1-4，季範圍用
     expensesData:      null,
     expensesLoading:   false,
-    expensesLoadedFor: null,   // 記錄已載入資料對應的年度+月份，切換時判斷要不要重打 API
+    expensesLoadedFor: null,   // 記錄已載入資料對應的範圍+年+月+季，切換時判斷要不要重打 API
+    expensesInflight:  null,   // 飛行中請求對應的同款鍵（避免同一期別被重複請求）
     expensesFilter:    'all',  // all/contractor/equipment/material/other，支出明細的類別篩選 chip
 
-    // ── 應收報表（recv/out 分頁，2026-09-09 從 period-bar 切換為獨立「當月/今年度」）──
-    receivablesScope:     'month', // month/year
+    // ── 應收報表（recv/out 分頁）。2026-09-09 一度改成完全獨立於 period-bar，
+    //    2026-09-10 改回「預設跟隨 period-bar、分頁上的選擇器可臨時覆寫」──
+    receivablesScope:     'month', // month/quarter/year
     receivablesYear:      new Date().getFullYear(),
     receivablesMonth:     new Date().toISOString().slice(0, 7),  // 'YYYY-MM'
+    receivablesQuarter:   Math.ceil((new Date().getMonth() + 1) / 3),  // 1-4
     receivablesData:      null,
     receivablesLoading:   false,
     receivablesLoadedFor: null,
+    receivablesInflight:  null,
 
     // ── 案件清單依月份區分（2026-08-26）─────────────────────────────────────
     caseListYear:         new Date().getFullYear(),
@@ -227,17 +232,37 @@ function reportsApp() {
     get monthIncomeTotal()  { return (this.expensesData || {}).monthIncomeTotal  || 0 },
     get yearIncomeItems()   { return (this.expensesData || {}).yearIncomeItems   || [] },
     get yearIncomeTotal()   { return (this.expensesData || {}).yearIncomeTotal   || 0 },
-    // 目前選取範圍（當月/今年度）對應的收入/支出明細＋淨額，畫面統一透過這幾個 getter 讀取
-    get activeIncomeItems() { return this.expensesScope === 'month' ? this.monthIncomeItems : this.yearIncomeItems },
+    get quarterExpenseItems() { return (this.expensesData || {}).quarterExpenseItems || [] },
+    get quarterExpenseTotal() { return (this.expensesData || {}).quarterExpenseTotal || 0 },
+    get quarterIncomeItems()  { return (this.expensesData || {}).quarterIncomeItems  || [] },
+    get quarterIncomeTotal()  { return (this.expensesData || {}).quarterIncomeTotal  || 0 },
+    // 目前選取範圍（當月/本季/今年度）對應的收入/支出明細＋淨額，畫面統一透過這幾個
+    // getter 讀取。三個範圍一律用 _scopePick() 選欄位，避免像先前只有兩種範圍時到處
+    // 寫 ternary、加第三種就得逐處補（漏一處就是靜默顯示錯範圍的數字）。
+    _scopePick(scope, m, q, y) {
+      if (scope === 'quarter') return q
+      if (scope === 'year')    return y
+      return m
+    },
+    get scopeLabel() {
+      return this._scopePick(this.expensesScope, '當月', '本季', '今年度')
+    },
+    get activeIncomeItems() {
+      return this._scopePick(this.expensesScope, this.monthIncomeItems, this.quarterIncomeItems, this.yearIncomeItems)
+    },
+    get activeIncomeTotal() {
+      return this._scopePick(this.expensesScope, this.monthIncomeTotal, this.quarterIncomeTotal, this.yearIncomeTotal)
+    },
+    get activeExpenseTotal() {
+      return this._scopePick(this.expensesScope, this.monthExpenseTotal, this.quarterExpenseTotal, this.expensesTotals.total) || 0
+    },
     get filteredExpenseItems() {
-      var items = this.expensesScope === 'month' ? this.monthExpenseItems : this.yearExpenseItemsAll
+      var items = this._scopePick(this.expensesScope, this.monthExpenseItems, this.quarterExpenseItems, this.yearExpenseItemsAll)
       if (this.expensesFilter === 'all') return items
       return items.filter(function(x) { return x.cat === this.expensesFilter }, this)
     },
     get netScopeAmount() {
-      var income  = this.expensesScope === 'month' ? this.monthIncomeTotal  : this.yearIncomeTotal
-      var expense = this.expensesScope === 'month' ? this.monthExpenseTotal : this.expensesTotals.total
-      return income - (expense || 0)
+      return this.activeIncomeTotal - this.activeExpenseTotal
     },
 
     // ── 應收報表（recv/out 分頁，2026-09-09）───────────────────────────────────
@@ -247,8 +272,23 @@ function reportsApp() {
     get yearReceivableItems()   { return (this.receivablesData || {}).yearReceivableItems || [] },
     get yearCollectedItems()    { return (this.receivablesData || {}).yearCollectedItems || [] },
     get yearOutstandingItems()  { return (this.receivablesData || {}).yearOutstandingItems || [] },
-    get activeCollectedItems()  { return this.receivablesScope === 'month' ? this.monthCollectedItems : this.yearCollectedItems },
-    get activeOutstandingItems(){ return this.receivablesScope === 'month' ? this.monthOutstandingItems : this.yearOutstandingItems },
+    get quarterCollectedItems()   { return (this.receivablesData || {}).quarterCollectedItems || [] },
+    get quarterOutstandingItems() { return (this.receivablesData || {}).quarterOutstandingItems || [] },
+    get receivablesScopeLabel() {
+      return this._scopePick(this.receivablesScope, '當月', '本季', '今年度')
+    },
+    get activeCollectedItems() {
+      return this._scopePick(this.receivablesScope, this.monthCollectedItems, this.quarterCollectedItems, this.yearCollectedItems)
+    },
+    get activeOutstandingItems() {
+      return this._scopePick(this.receivablesScope, this.monthOutstandingItems, this.quarterOutstandingItems, this.yearOutstandingItems)
+    },
+    // 「本期收支」KPI 區塊的未收款卡片：跟著同一個範圍走，不再固定讀 month*
+    get activeOutstandingTotal() {
+      var d = this.receivablesData || {}
+      return this._scopePick(this.receivablesScope,
+        d.monthOutstandingTotal, d.quarterOutstandingTotal, d.yearOutstandingTotal) || 0
+    },
 
     expensesCatLabel(cat) {
       return { contractor: '承攬商派發', equipment: '設備進貨', material: '料件進貨', other: '其他支出' }[cat] || cat
@@ -374,12 +414,58 @@ function reportsApp() {
       return new Date(d.getTime() - tz).toISOString().slice(0, 10)
     },
 
+    // ── 期別同步 ──────────────────────────────────────────────────────────────
+    // 頂部 period-bar（月/季/年）是全頁唯一的期別主控。「本期收支」KPI 區塊與
+    // 「已收款／未收款／月支出」三個分頁各自有獨立資料流（/expenses-monthly、
+    // /receivables-monthly），2026-09-09 那批改動只在 init() 同步過一次期別，
+    // prevPeriod()/nextPeriod()/switchType() 以及 period-bar 的年/月/季下拉都
+    // 沒跟上，導致上方期別怎麼切、下方金額都釘在真實當月不動（2026-09-10 回報）。
+    // 同步點刻意放在 loadData() 開頭這一個地方——所有切期別的路徑最後都會走到
+    // 這裡，往後新增觸發點也不必再記得補一次。使用者仍可用分頁上的選擇器臨時
+    // 覆寫範圍，覆寫效力維持到下次動 period-bar 或部門篩選為止。
+    _syncSubPeriods() {
+      var scope = this.periodType === 'year' ? 'year'
+                : this.periodType === 'quarter' ? 'quarter' : 'month'
+      var mo = this.year + '-' + String(this.month).padStart(2, '0')
+      this.expensesScope    = scope
+      this.expensesYear     = this.year
+      this.expensesMonth    = mo
+      this.expensesQuarter  = this.quarter
+      this.receivablesScope   = scope
+      this.receivablesYear    = this.year
+      this.receivablesMonth   = mo
+      this.receivablesQuarter = this.quarter
+    },
+    // 快取鍵：三個呼叫點（loadExpenses/showExpensesTab/_ensureSubPeriodData）過去
+    // 各自手拼一次字串，欄位一多就會漂移——收斂成單一來源。
+    _expensesKey() {
+      return [this.expensesScope, this.expensesYear, this.expensesMonth,
+              this.expensesQuarter, this.departmentId || ''].join(':')
+    },
+    _receivablesKey() {
+      return [this.receivablesScope, this.receivablesYear, this.receivablesMonth,
+              this.receivablesQuarter, this.departmentId || ''].join(':')
+    },
+    // 兩支子資料流的載入守門。除了「已載入的期別」之外還要看「飛行中的期別」，
+    // 否則同一個期別會被連打兩次（loadData 一次、切分頁再一次）。真正關鍵的是
+    // 搭配 loadExpenses()/loadReceivables() 裡的過期回應丟棄機制，見那邊註解。
+    _ensureSubPeriodData() {
+      var ek = this._expensesKey()
+      if (this.expensesLoadedFor !== ek && this.expensesInflight !== ek) this.loadExpenses()
+      var rk = this._receivablesKey()
+      if (this.receivablesLoadedFor !== rk && this.receivablesInflight !== rk) this.loadReceivables()
+    },
+
     // ── Load preview data ─────────────────────────────────────────────────────
     async loadData() {
       if (!this.isAdminPlus()) {
         if (!this.hasCashierAccess()) this.error = '僅管理員以上可存取營運報表功能'
         return
       }
+      this._syncSubPeriods()
+      // 期別/部門連續切換時同樣會有兩個請求在飛，晚發早到的舊回應不能蓋掉新的
+      // （理由與處理方式同 loadExpenses()）。
+      var reqKey = this.periodParam + ':' + (this.departmentId || '')
       this.loading = true
       this.error   = ''
       this.data    = null
@@ -392,12 +478,16 @@ function reportsApp() {
           var j = await res.json().catch(function () { return {} })
           throw new Error(j.detail || '載入失敗')
         }
-        this.data = await res.json()
-        if (this.activeTab === 'expenses') this.loadExpenses()
+        var payload = await res.json()
+        if (reqKey !== this.periodParam + ':' + (this.departmentId || '')) return
+        this.data = payload
+        // 「本期收支」KPI 區塊在任何分頁都看得到（不只 expenses 分頁），所以這兩份
+        // 子資料流一律確保跟上目前期別，不再只在 expenses 分頁時才載入。
+        this._ensureSubPeriodData()
       } catch (e) {
-        this.error = e.message || '載入錯誤'
+        if (reqKey === this.periodParam + ':' + (this.departmentId || '')) this.error = e.message || '載入錯誤'
       } finally {
-        this.loading = false
+        if (reqKey === this.periodParam + ':' + (this.departmentId || '')) this.loading = false
       }
     },
 
@@ -930,18 +1020,15 @@ function reportsApp() {
           this.quarter = Math.ceil(t.month / 3)
         }
       } catch (_) {}
+      // 期別同步＋子資料流載入都由 loadData() 內部統一處理（見 _syncSubPeriods()），
+      // 這裡不再各自拼一次年月字串——原本那份手拼版本正是 2026-09-10 期別不同步
+      // 的根因所在（只有 init 做了、切期別的路徑沒做）。年月一律用本地時區字串
+      // 拼接，不用 toISOString()（UTC，台灣 UTC+8 每天 00:00-08:00 會誤判成前一天）。
+      this.expensesLoadedFor    = null
+      this.receivablesLoadedFor = null
       this.loadData()
       this.loadOrgTree()
       if (this.activeTab === 'cashier') this.showCashierTab()
-      // 設置當月並加載當月收支（非異步等待，但自動刷新當月數據）
-      this.expensesYear = this.year
-      this.expensesMonth = this.year + '-' + String(this.month).padStart(2, '0')
-      this.expensesLoadedFor = null  // 清除快取，強制重新載入
-      this.loadExpenses()
-      // 修復 receivablesMonth UTC bug（跟 expensesMonth 同樣的本地時區字串拼接 + 清快取）
-      this.receivablesYear = this.year
-      this.receivablesMonth = this.year + '-' + String(this.month).padStart(2, '0')
-      this.receivablesLoadedFor = null
       var self = this
       // Re-init charts when data changes and charts tab is active (e.g. period change)
       this.$watch('data', function(newData) {
@@ -959,55 +1046,66 @@ function reportsApp() {
 
     showExpensesTab() {
       this.activeTab = 'expenses'
-      var key = this.expensesYear + ':' + this.expensesMonth + ':' + (this.departmentId || '')
-      if (this.expensesLoadedFor !== key) {
-        this.loadExpenses()
-        // 同步加載應收明細，確保兩邊月份對齊
-        this.receivablesYear = this.expensesYear
-        this.receivablesMonth = this.expensesMonth
-        this.receivablesLoadedFor = null
-        this.loadReceivables()
-      }
+      this._ensureSubPeriodData()
     },
 
+    // 期別連續切換（例如 7 月 → 8 月按很快）會讓兩個請求同時在飛。快取鍵一定要在
+    // 「發出請求當下」就算好並跟著這一次請求走：原本是在回應抵達時才算，若期別在
+    // 飛行途中被切走，就會把 7 月的資料貼上 8 月的鍵，之後 _ensureSubPeriodData()
+    // 看鍵相符便不再重載，畫面永遠卡在舊月份。這正是 e2e 測試偶發抓到的競態。
     async loadExpenses() {
-      this.expensesLoading = true
+      var key = this._expensesKey()
+      var qs = '?year=' + this.expensesYear + '&month=' + this.expensesMonth +
+               (this.expensesScope === 'quarter' ? '&quarter=' + this.expensesQuarter : '') +
+               (this.departmentId ? '&department_id=' + this.departmentId : '')
+      this.expensesInflight = key
+      this.expensesLoading  = true
       try {
-        var qs = '?year=' + this.expensesYear + '&month=' + this.expensesMonth +
-                 (this.departmentId ? '&department_id=' + this.departmentId : '')
         var res = await fetch('/api/reports/expenses-monthly' + qs, {
           headers: { Authorization: 'Bearer ' + this._token() }
         })
         if (!res.ok) throw new Error('支出明細載入失敗')
-        this.expensesData      = await res.json()
-        this.expensesLoadedFor = this.expensesYear + ':' + this.expensesMonth + ':' + (this.departmentId || '')
+        var payload = await res.json()
+        // 期別已經被切走 → 這份回應過期了，丟棄（切走的那一次自己會發新請求）
+        if (key !== this._expensesKey()) return
+        this.expensesData      = payload
+        this.expensesLoadedFor = key
       } catch (e) {
-        alert('支出明細載入失敗：' + (e.message || e))
+        if (key === this._expensesKey()) alert('支出明細載入失敗：' + (e.message || e))
+      } finally {
+        if (this.expensesInflight === key) this.expensesInflight = null
+        if (key === this._expensesKey()) this.expensesLoading = false
       }
-      this.expensesLoading = false
     },
 
     showReceivablesTab(tab) {
       this.activeTab = tab
-      var key = this.receivablesYear + ':' + this.receivablesMonth + ':' + (this.departmentId || '')
-      if (this.receivablesLoadedFor !== key) this.loadReceivables()
+      this._ensureSubPeriodData()
     },
 
+    // 過期回應丟棄機制同 loadExpenses()，理由見該函式註解。
     async loadReceivables() {
-      this.receivablesLoading = true
+      var key = this._receivablesKey()
+      var qs = '?year=' + this.receivablesYear + '&month=' + this.receivablesMonth +
+               (this.receivablesScope === 'quarter' ? '&quarter=' + this.receivablesQuarter : '') +
+               (this.departmentId ? '&department_id=' + this.departmentId : '')
+      this.receivablesInflight = key
+      this.receivablesLoading  = true
       try {
-        var qs = '?year=' + this.receivablesYear + '&month=' + this.receivablesMonth +
-                 (this.departmentId ? '&department_id=' + this.departmentId : '')
         var res = await fetch('/api/reports/receivables-monthly' + qs, {
           headers: { Authorization: 'Bearer ' + this._token() }
         })
         if (!res.ok) throw new Error('應收明細載入失敗')
-        this.receivablesData      = await res.json()
-        this.receivablesLoadedFor = this.receivablesYear + ':' + this.receivablesMonth + ':' + (this.departmentId || '')
+        var payload = await res.json()
+        if (key !== this._receivablesKey()) return
+        this.receivablesData      = payload
+        this.receivablesLoadedFor = key
       } catch (e) {
-        alert('應收明細載入失敗：' + (e.message || e))
+        if (key === this._receivablesKey()) alert('應收明細載入失敗：' + (e.message || e))
+      } finally {
+        if (this.receivablesInflight === key) this.receivablesInflight = null
+        if (key === this._receivablesKey()) this.receivablesLoading = false
       }
-      this.receivablesLoading = false
     },
 
     async showArTab() {

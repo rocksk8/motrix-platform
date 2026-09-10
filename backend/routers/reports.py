@@ -3136,20 +3136,60 @@ def _collect_unreceived_items(d0: str, d1: str, department_id: Optional[int] = N
     return items
 
 
-def _month_expense_slice(expenses: dict, month: str) -> dict:
-    """從 _collect_expenses() 回傳的年度資料裡截出單一月份的支出明細＋合計
+def _months_expense_slice(expenses: dict, months) -> dict:
+    """從 _collect_expenses() 回傳的年度資料裡截出「若干個月份」的支出明細＋合計
     （details 逐筆本來就帶 date，直接篩選即可，不必另外查資料庫）。呼叫端
-    要自行確保傳入的 expenses 是 month 所屬年度算出來的（見呼叫點）。"""
+    要自行確保傳入的 expenses 是這些月份所屬年度算出來的（見呼叫點）。
+
+    2026-09-10：從 _month_expense_slice() 抽出，讓「季」範圍共用同一套截取邏輯，
+    不必再寫第二份。刻意維持原本的「月份前綴字串比對」而非日期區間比對——
+    details 的 date 欄位長度並非保證是完整 YYYY-MM-DD，改用區間比對會讓只有
+    YYYY-MM 的資料被靜默丟掉，行為就不再等價了。"""
+    want = set(months)
     flat = []
     for cat, rows_ in (expenses.get("details") or {}).items():
         for it in rows_:
-            if (it.get("date") or "")[:7] == month:
+            if (it.get("date") or "")[:7] in want:
                 flat.append({**it, "cat": cat})
     flat.sort(key=lambda x: x.get("date") or "", reverse=True)
     return {"items": flat, "total": sum(it["amount"] for it in flat)}
 
 
-def _build_income_expense_scopes(year: int, month: str, department_id: Optional[int] = None) -> dict:
+def _month_expense_slice(expenses: dict, month: str) -> dict:
+    """單一月份版本（行為與 2026-08-30 起完全一致，現為 _months_expense_slice 的包裝）。"""
+    return _months_expense_slice(expenses, [month])
+
+
+def _quarter_months(year: int, quarter: int) -> list:
+    """某年某季涵蓋的三個 YYYY-MM 月份字串。"""
+    ms = (quarter - 1) * 3 + 1
+    return [f"{year}-{m:02d}" for m in range(ms, ms + 3)]
+
+
+def _quarter_range(year: int, quarter: int):
+    """某年某季的起訖日期（含頭含尾，YYYY-MM-DD）。"""
+    ms = (quarter - 1) * 3 + 1
+    me = ms + 2
+    return f"{year}-{ms:02d}-01", f"{year}-{me:02d}-{monthrange(year, me)[1]:02d}"
+
+
+def _validate_quarter(quarter):
+    """季參數驗證：None（不使用季範圍）或 1-4，其餘一律 400。比照
+    _parse_period()／_build_income_expense_scopes() 既有的參數驗證慣例，
+    不讓 ValueError 漏到 main.py 全域 handler 變成通用 500。"""
+    if quarter is None:
+        return None
+    try:
+        q = int(quarter)
+    except (TypeError, ValueError):
+        raise HTTPException(400, f"quarter 參數格式錯誤（{quarter}），需為 1-4")
+    if q not in (1, 2, 3, 4):
+        raise HTTPException(400, f"quarter 參數格式錯誤（{quarter}），需為 1-4")
+    return q
+
+
+def _build_income_expense_scopes(year: int, month: str, department_id: Optional[int] = None,
+                                 quarter: Optional[int] = None) -> dict:
     """組出《當月收支》《今年度收支》兩張報表（2026-08-30 新增）要用的資料，
     直接回傳可攤平進 _build_excel()/_build_report_html() 的 data dict 片段，
     避免每個呼叫端（畫面查詢／Excel／PDF／每月結算寄信）各自拼裝一次容易
@@ -3179,6 +3219,27 @@ def _build_income_expense_scopes(year: int, month: str, department_id: Optional[
     year_income  = _collect_income_items(y0, y1, department_id)
     month_unreceived = _collect_unreceived_items(m0, m1, department_id)
 
+    # 「季」範圍（2026-09-10）：只有呼叫端明確指定 quarter 時才計算，沒指定就回
+    # 空集合——月/年兩套欄位的行為完全不變，既有呼叫端（Excel／PDF／每月結算
+    # 寄信）不傳 quarter，多花的成本是零。季一定落在 year 之內，所以直接沿用
+    # 上面已經算好的 expenses_annual，不必再查一次資料庫。
+    #
+    # 註：quarterUnreceived* 目前沒有任何前端讀取（month 版的 monthUnreceived*
+    # 同樣是 6bfcafb 留下的未接線欄位——「當月未收」卡片最後接的是 receivables
+    # 那邊的成案月份口徑，不是這裡的 expectedReceiptDate 現金流口徑）。刻意仍
+    # 補上季版本維持三個範圍欄位對稱：範圍之間行為不一致，正是這次期別 bug 的
+    # 同一類根因，之後誰要接現金流口徑時三個範圍都現成可用。
+    quarter = _validate_quarter(quarter)
+    if quarter:
+        q0, q1 = _quarter_range(year, quarter)
+        quarter_slice      = _months_expense_slice(expenses_annual, _quarter_months(year, quarter))
+        quarter_income     = _collect_income_items(q0, q1, department_id)
+        quarter_unreceived = _collect_unreceived_items(q0, q1, department_id)
+    else:
+        quarter_slice      = {"items": [], "total": 0}
+        quarter_income     = []
+        quarter_unreceived = []
+
     return {
         "year":              year,
         "expensesYear":      year,
@@ -3194,6 +3255,14 @@ def _build_income_expense_scopes(year: int, month: str, department_id: Optional[
         "yearIncomeItems":   year_income,
         "yearIncomeTotal":   sum(i["amount"] for i in year_income),
         "yearIncomeNet":     sum(i["netAmount"] or 0 for i in year_income),
+        "expenseQuarter":        quarter,
+        "quarterExpenseItems":   quarter_slice["items"],
+        "quarterExpenseTotal":   quarter_slice["total"],
+        "quarterIncomeItems":    quarter_income,
+        "quarterIncomeTotal":    sum(i["amount"] for i in quarter_income),
+        "quarterIncomeNet":      sum(i["netAmount"] or 0 for i in quarter_income),
+        "quarterUnreceivedItems": quarter_unreceived,
+        "quarterUnreceivedTotal": sum(i["amount"] for i in quarter_unreceived),
     }
 
 
@@ -3337,6 +3406,7 @@ def _collect_expenses(year: int, department_id: Optional[int] = None) -> dict:
 @router.get("/api/reports/expenses-monthly")
 def report_expenses_monthly(year: int = Query(None), month: str = Query(None),
                              department_id: Optional[int] = Query(None),
+                             quarter: Optional[int] = Query(None),
                              authorization: str = Header(None)):
     """2026-08-30：除了既有的年度月支出矩陣＋全年逐筆明細（供「今年度收支」
     使用）之外，額外帶出「當月」（month，預設今天所屬月份）的收入／支出
@@ -3349,7 +3419,7 @@ def report_expenses_monthly(year: int = Query(None), month: str = Query(None),
     today = date.today()
     year  = year or today.year
     month = month or today.strftime("%Y-%m")
-    return _build_income_expense_scopes(year, month, department_id)
+    return _build_income_expense_scopes(year, month, department_id, quarter)
 
 
 def _collect_receivable_items(department_id: Optional[int] = None) -> list:
@@ -3417,7 +3487,8 @@ def _collect_receivable_items(department_id: Optional[int] = None) -> list:
   return all_items
 
 
-def _build_receivables_scopes(year: int, month: str, department_id: Optional[int] = None) -> dict:
+def _build_receivables_scopes(year: int, month: str, department_id: Optional[int] = None,
+                              quarter: Optional[int] = None) -> dict:
   """2026-09-09：按成案月份分組的應收報表（當月/當年度）。月份格式 YYYY-MM；
   跟 _build_income_expense_scopes() 一樣回傳 month* 與 year* 雙套欄位，讓前端
   能獨立切換「當月/今年度」檢視。
@@ -3445,6 +3516,17 @@ def _build_receivables_scopes(year: int, month: str, department_id: Optional[int
   year_collected  = [i for i in year_items if i["received"]]
   year_outstanding = [i for i in year_items if not i["received"]]
 
+  # 「季」範圍（2026-09-10）：分組依據跟月/年兩套完全一致，都是 wonMonth（成案
+  # 月份）而不是 quoteDate/receivedAt，維持本函式 docstring 描述的「流量」口徑。
+  quarter = _validate_quarter(quarter)
+  if quarter:
+    q_months = set(_quarter_months(year, quarter))
+    quarter_items = [i for i in all_items if i["wonMonth"] in q_months]
+  else:
+    quarter_items = []
+  quarter_collected   = [i for i in quarter_items if i["received"]]
+  quarter_outstanding = [i for i in quarter_items if not i["received"]]
+
   return {
     "receivablesYear":         year,
     "receivablesMonth":        month,
@@ -3460,12 +3542,20 @@ def _build_receivables_scopes(year: int, month: str, department_id: Optional[int
     "yearCollectedTotal":      sum(i["amount"] for i in year_collected),
     "yearOutstandingItems":    year_outstanding,
     "yearOutstandingTotal":    sum(i["amount"] for i in year_outstanding),
+    "receivablesQuarter":        quarter,
+    "quarterReceivableItems":    quarter_items,
+    "quarterReceivableTotal":    sum(i["amount"] for i in quarter_items),
+    "quarterCollectedItems":     quarter_collected,
+    "quarterCollectedTotal":     sum(i["amount"] for i in quarter_collected),
+    "quarterOutstandingItems":   quarter_outstanding,
+    "quarterOutstandingTotal":   sum(i["amount"] for i in quarter_outstanding),
   }
 
 
 @router.get("/api/reports/receivables-monthly")
 def report_receivables_monthly(year: int = Query(None), month: str = Query(None),
                                 department_id: Optional[int] = Query(None),
+                                quarter: Optional[int] = Query(None),
                                 authorization: str = Header(None)):
   """2026-09-09：應收明細表（當月/當年度獨立檢視）。供 `reports.html` recv/out
   分頁新增的「當月/今年度」切換鈕使用，取代目前硬卡在頂部 period-bar 的期間邏輯。
@@ -3476,4 +3566,4 @@ def report_receivables_monthly(year: int = Query(None), month: str = Query(None)
   today = date.today()
   year  = year or today.year
   month = month or today.strftime("%Y-%m")
-  return _build_receivables_scopes(year, month, department_id)
+  return _build_receivables_scopes(year, month, department_id, quarter)
