@@ -393,9 +393,9 @@ def _render_pdf_via_edge(html_content: str, virtual_time_budget: int = None) -> 
     需要這個旗標讓 headless 把頁面內部的計時器/Promise 佇列往前推進足夠時間
     再截圖轉檔。一般靜態頁面（完整規劃書 PDF）不需要，維持 None 走原本的
     --run-all-compositor-stages-before-draw。"""
-    edge = _get_edge_path()
     tmp_html = tmp_pdf = None
     try:
+        edge = _get_edge_path()
         with tempfile.NamedTemporaryFile(mode="w", suffix=".html", encoding="utf-8", delete=False) as f:
             f.write(html_content)
             tmp_html = f.name
