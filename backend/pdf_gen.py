@@ -2254,12 +2254,19 @@ def _case_closing_report_data(quote_no: str) -> dict:
             closed_at = r["at"]
 
     # 收款明細：跟 reports.py::_collect() 用同一套 payment_item_amounts() 換算，
-    # 避免另外重寫一次 pct→金額的公式又跟其他報表的數字兜不起來
+    # 避免另外重寫一次 pct→金額的公式又跟其他報表的數字兜不起來。
+    #
+    # 2026-09-10：`pretax` 先前漏傳。該參數是 2026-08-28 為了「已核准稅額沖銷
+    # （taxExempt=True）的款項只剩未稅金額應收」而加的，當時掃過 reports.py／
+    # dashboard.py 的 12 個呼叫點卻沒掃到本檔，導致結案報表 PDF 對已沖銷款項
+    # 顯示含稅金額，跟畫面／Excel／營運報表同一筆案件兩個數字。helpers 那邊
+    # docstring 說的「拿不到 pretax 就維持舊行為」不適用於這裡——SELECT 本來
+    # 就有撈 pretax（見上方查詢），純粹是漏接。
     total = row["total"] or 0
     pay   = (cr.get("payment") or {}).get("items", [])
     payment_rows = []
     if pay:
-        amounts = payment_item_amounts(total, pay)
+        amounts = payment_item_amounts(total, pay, row["pretax"])
         for idx, pi in enumerate(pay):
             amt = amounts[idx]
             payment_rows.append({

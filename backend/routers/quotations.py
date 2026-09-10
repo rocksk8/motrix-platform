@@ -850,6 +850,13 @@ def delete_quotation_signed_file(quote_no: str, file_id: str, authorization: str
 
 @router.post("/api/quotations", status_code=201)
 def create_quotation(body: QuotationIn, authorization: str = Header(None)):
+    # 2026-09-10 稽核發現：本檔 45 支寫入端點裡，只有這一支沒有 _require_user()，
+    # 而且「誰建立的」是讀 body.created_by（client 送什麼就存什麼／通知什麼），
+    # 跟 customers.py／shipping_notes.py 一律從 session 取的慣例不一致。
+    # middleware 已保證有有效 session，所以缺的不是登入檢查而是「拿到真正的身分」
+    # ——沒有它，建立者與活動通知的操作者都可以被任意冒名。
+    # body.created_by 欄位保留不刪（前端仍會送），但一律以 session 為準。
+    user = _require_user(authorization)
     q   = body.data
     now = datetime.now().isoformat()
     month = datetime.now().strftime("%Y%m")
@@ -888,7 +895,7 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
             tot.get("directMarginPct", 0), tot.get("netMarginPct", 0),
             q.get("salesPerson"), sp_id, q.get("quoteDate"), q.get("validDays", 30),
             json.dumps(q, ensure_ascii=False),
-            now, now, body.created_by, deal_tag, settle_status,
+            now, now, user["username"], deal_tag, settle_status,
         ))
 
     try:
@@ -954,7 +961,7 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
 
     spawn_bg_thread(_backup_quotation, args=(qno,))
     _audit(_tok(authorization), 'quotation.create', 'quotation', qno, f"{qno}（{q.get('customerName','')}）")
-    notify_module_activity("報價單", "建立", body.created_by or "",
+    notify_module_activity("報價單", "建立", user.get("display_name") or user["username"],
                             f"{qno}（{q.get('customerName','')}）", "quotations.html")
     return {"quote_no": qno, "created_at": now}
 

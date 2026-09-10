@@ -55,6 +55,14 @@ function reportsApp() {
     t100Preview:      null,   // {count, totalAmount, events:[...]}，未確認事件預覽
     t100Previewing:   false,
     t100Confirming:   false,
+    // 已確認清單＋反確認（2026-09-10 稽核補上）：後端 /t100-export/confirmed 與
+    // /unconfirm 早就存在，unconfirm 的 docstring 自己寫著是「標記錯誤時的救援
+    // 手段」，但畫面上一直沒有入口——使用者按下「確認已匯入」是批次操作，按錯
+    // 之後只能改資料庫。這幾個狀態就是把那道門補上。
+    t100Confirmed:        [],
+    t100ConfirmedLoading: false,
+    t100ConfirmedOpen:    false,
+    t100Unconfirming:     '',   // 正在反確認的 sourceType:sourceKey
 
     // 銀行對帳單比對（連同標記已匯款 Modal）2026-08-31 搬到出納模組
     // frontend/js/cashier.js（財務/出納權限分工，見那邊同一輪改動），
@@ -1137,6 +1145,52 @@ function reportsApp() {
       this.activeTab = 't100'
       if (!this.t100Preview) this.loadT100Preview()
       if (!this.t100Config) this.loadT100Config()
+      if (!this.t100Confirmed.length) this.loadT100Confirmed()
+    },
+
+    // 已確認清單：預設帶目前日期區間，區間留空時後端回最近 500 筆
+    async loadT100Confirmed() {
+      this.t100ConfirmedLoading = true
+      try {
+        var qs = '?start=' + this.t100Start + '&end=' + this.t100End
+        var res = await fetch('/api/reports/t100-export/confirmed' + qs, {
+          headers: { Authorization: 'Bearer ' + this._token() }
+        })
+        if (!res.ok) {
+          var j = await res.json().catch(function () { return {} })
+          throw new Error(j.detail || '載入失敗')
+        }
+        this.t100Confirmed = await res.json()
+      } catch (e) {
+        alert('已確認清單載入失敗：' + (e.message || e))
+      } finally {
+        this.t100ConfirmedLoading = false
+      }
+    },
+
+    // 反確認：撤銷單筆「已匯入」標記，該事件會在下次涵蓋其日期的匯出/預覽重新出現
+    async unconfirmT100(row) {
+      if (!confirm('撤銷這筆的「已匯入 T100」標記？\n\n' + row.date + '　' + row.summary +
+                   '\n\n撤銷後它會在下次涵蓋這個日期的匯出／預覽重新出現，' +
+                   '如果 T100 那邊其實已經匯入過，會造成重複匯入。')) return
+      this.t100Unconfirming = row.sourceType + ':' + row.sourceKey
+      try {
+        var res = await fetch('/api/reports/t100-export/unconfirm', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this._token() },
+          body: JSON.stringify({ sourceType: row.sourceType, sourceKey: row.sourceKey }),
+        })
+        if (!res.ok) {
+          var j = await res.json().catch(function () { return {} })
+          throw new Error(j.detail || '撤銷失敗')
+        }
+        await this.loadT100Confirmed()
+        this.loadT100Preview()
+      } catch (e) {
+        alert('撤銷已匯入標記失敗：' + (e.message || e))
+      } finally {
+        this.t100Unconfirming = ''
+      }
     },
 
     // 科目代號設定完成度（視覺化提示用，非阻擋匯出的硬性檢查）：核心科目
@@ -1624,6 +1678,7 @@ function reportsApp() {
         var result = await res.json()
         alert('已標記 ' + result.confirmedCount + ' 筆事件為已匯入')
         this.loadT100Preview()
+        this.loadT100Confirmed()
       } catch (e) {
         alert('確認已匯入失敗：' + (e.message || e))
       } finally {

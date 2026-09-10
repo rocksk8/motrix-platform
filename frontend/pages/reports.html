@@ -1520,6 +1520,52 @@
               <div class="empty-hint" style="font-size:11px;color:var(--text-dim);padding:16px;text-align:center;background:var(--bg-subtle,#FAFAF8);border-radius:var(--radius-lg)" x-show="t100Preview && !t100Preview.count">目前這個區間沒有待確認的事件（可能是還沒有金流事件，或已經全部確認過了）。</div>
             </div>
 
+            <!-- 已確認清單＋反確認（2026-09-10 補上）：後端 /t100-export/confirmed
+                 與 /unconfirm 早就存在，但一直沒有畫面入口——「確認已匯入」是一次
+                 標記一整個區間的批次操作，按錯之後原本只能改資料庫。 -->
+            <div style="margin-bottom:14px">
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+                <div class="cm-section-title" style="margin:0;font-size:13px">已確認匯入的事件</div>
+                <span style="font-size:11px;color:var(--text-dim)" x-text="'（' + t100Confirmed.length + ' 筆）'"></span>
+                <button class="btn-ghost btn-sm" @click="t100ConfirmedOpen = !t100ConfirmedOpen; if (t100ConfirmedOpen) loadT100Confirmed()"
+                        x-text="t100ConfirmedOpen ? '收合' : '展開檢視／反確認'"></button>
+                <button class="btn-ghost btn-sm" x-show="t100ConfirmedOpen" @click="loadT100Confirmed()"
+                        :disabled="t100ConfirmedLoading" x-text="t100ConfirmedLoading ? '載入中…' : '依上方日期區間重新查詢'"></button>
+              </div>
+              <div x-show="t100ConfirmedOpen" x-cloak>
+                <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;line-height:1.6">
+                  這些事件已被標記為「已匯入 T100」，因此不會再出現在待確認清單與匯出檔中。
+                  若是誤按確認，可在此撤銷；撤銷後該筆會在下次涵蓋其日期的預覽／匯出重新出現。
+                </div>
+                <table class="data-table" x-show="t100Confirmed.length">
+                  <thead><tr><th>日期</th><th>類型</th><th>摘要</th><th class="r">金額</th><th>確認者</th><th>確認時間</th><th></th></tr></thead>
+                  <tbody>
+                    <template x-for="c in t100Confirmed" :key="c.sourceType + c.sourceKey">
+                      <tr>
+                        <td class="mono" x-text="c.date"></td>
+                        <td>
+                          <span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600"
+                                :style="c.sourceType === 'quotation_payment' ? 'background:#DCFCE7;color:var(--success)' : 'background:#FEE2E2;color:var(--danger)'"
+                                x-text="c.sourceType === 'quotation_payment' ? '收款' : '付款'"></span>
+                        </td>
+                        <td x-text="c.summary"></td>
+                        <td class="r mono" x-text="fmt(c.amount)"></td>
+                        <td x-text="c.confirmedBy"></td>
+                        <td class="mono" style="font-size:11px" x-text="(c.confirmedAt || '').replace('T', ' ').slice(0, 16)"></td>
+                        <td class="r">
+                          <button class="btn-ghost btn-sm" @click="unconfirmT100(c)"
+                                  :disabled="t100Unconfirming === c.sourceType + ':' + c.sourceKey"
+                                  x-text="t100Unconfirming === c.sourceType + ':' + c.sourceKey ? '撤銷中…' : '反確認'"></button>
+                        </td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+                <div class="empty-hint" style="font-size:11px;color:var(--text-dim);padding:16px;text-align:center;background:var(--bg-subtle,#FAFAF8);border-radius:var(--radius-lg)"
+                     x-show="!t100ConfirmedLoading && !t100Confirmed.length">這個日期區間內沒有已確認的事件。</div>
+              </div>
+            </div>
+
             <div x-show="t100ConfigOpen" x-cloak style="margin-top:4px">
               <template x-if="!t100Config">
                 <div style="font-size:12px;color:var(--text-dim)">載入中…</div>

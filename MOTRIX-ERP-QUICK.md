@@ -1196,6 +1196,29 @@ xlsx-0.18.5.full.min.js     （SheetJS）
 > [`WEEKLY-AUDIT-2026-09-07_2026-09-10.md`](WEEKLY-AUDIT-2026-09-07_2026-09-10.md)
 > ——帶「模組／檔案:行號／是否在正式機」座標的本週稽核索引，出事時先看那份。
 
+### 2026-09-10（稽核）— 全系統模組串接與邏輯排查（DB 無異動）
+
+10 個步驟的機械化比對（腳本產出，非人工翻閱）。**確認無問題的部分**：前端 452 個 fetch 呼叫點
+對 468 支路由**零斷點**；schema **零漂移**（實際建新 DB 逐表逐欄比對，71 表/57 索引/v73 一致）；
+demo 隔離無破口；簽核代理 5 routers/10 呼叫點全部傳 `conn`；sidebar 與 9 個徽章模組完整。
+
+**修掉三項**
+
+1. **`pdf_gen.py::_case_closing_report_data()` 漏傳 `pretax`**（13 個存活呼叫點中唯一漏的）。
+   已核准稅額沖銷的款項，結案報表 PDF 顯示含稅、其他報表顯示未稅。2026-08-28 那輪掃了
+   reports.py／dashboard.py 的 12 個呼叫點，沒掃到 pdf_gen.py。
+2. **`POST /api/quotations` 建立者取自 request body**——該檔 45 支寫入端點裡唯一沒有
+   `_require_user()` 的，改為以 session 為準。**刻意不加角色限制**（那是 business policy）。
+3. **T100「已確認清單／反確認」有後端無前端**（`accounting_export.py:461/495`）。
+   「確認已匯入」是批次操作，按錯之後原本只能改資料庫。已補 UI。
+
+**⚠️ 新增防呆 `test_router_registration_2026_09_10.py`**：`routers/projects.py` 的 19 支端點在
+`6089a8f` 下線後檔案留著但 main.py 不再 include，架構地圖卻寫「僅保留舊 API 供內部沿用」
+——實際上全部 404。現在「哪些 router 刻意不註冊」是一份明確白名單，兩個方向都不會再無聲發生。
+
+**待決策未動**：`/api/cashier/summary` 死碼、`/api/company/search` 前端沒接、
+`projects.py` 592 行死碼檔案是否刪除。
+
 ### 2026-09-10（最後）— 匯出補上「季」範圍（DB 無異動）
 
 接續上一條。**匯出先前完全不吃期別的季**——`period` 給 `YYYY-Qn` 也只產「當月收支」「今年度收支」

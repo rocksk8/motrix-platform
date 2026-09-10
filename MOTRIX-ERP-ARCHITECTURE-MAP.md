@@ -120,9 +120,14 @@ SQLite (WAL)  motrix_erp.db（正式）+ motrix_erp_demo.db（demo 隔離）
 
 重點：序號級庫存（`stock_items`）與批次進貨（`batch_no`）＋安全庫存水位燈號（2026-08-28 新增）已是相對成熟的進銷存邏輯；扣庫存掛勾在出貨單核准與設備登載兩處（`_sync_device_stock()`）。**2026-09-01 新增**：`stock_batches` 批次表頭補上供應商/發票號/付款狀態（`is_paid`/`paid_by`/`paid_at`，比照承攬商匯款申請模式），既有批次回填但 `is_paid` 預設 0（過去從未追蹤，非假設已付款）；`qty`/`total_cost` 仍即時從 `stock_items` 群組加總不信任表頭快取。這是 §2.7 財務憑證下游 `accounting_export.py` 的第三個事件來源。
 
-### 2.10 專案管理 `projects.py` (592行)
-- 前端：無獨立頁面（2026-08-26 `_m062_case_project_merge` 已併入案件管理，`projects.html` 已刪除，僅保留舊 API 供內部沿用）
-- 資料表：`projects`、`project_logs`
+### 2.10 專案管理 `projects.py` (592行) — ⛔ **已下線，整個檔案是死碼**
+- 前端：無獨立頁面（2026-08-26 `_m062_case_project_merge` 已併入案件管理，`projects.html` 已刪除）
+- 資料表：`projects`、`project_logs`（表還在，沒有任何現役程式碼讀寫）
+- **⚠️ 2026-09-10 稽核更正**：本節原本寫「僅保留舊 API 供內部沿用」，**那是錯的**。
+  `projects.py` 定義了 19 支端點，但 `main.py` 既沒有 `from routers import projects`
+  也沒有 `include_router(projects.router)`（commit `6089a8f` 下線時一併移除），
+  所以那 19 支 API **全部回 404**，不是「保留可用」。前端也確認沒有任何呼叫。
+  這個檔案是純死碼，改它不會有任何效果——要動「專案」相關功能請去案件管理。
 - 重點：**已被案件管理吸收**，之後若在文件或程式碼看到「專案」一詞，先確認是不是在講已併入 case-stage-board 的東西，不要重新開發。
 
 ### 2.11 網路架構規劃書 `network_plans.py` (338行，DB v64，2026-08-26 新增)

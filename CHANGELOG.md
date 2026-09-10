@@ -5,6 +5,44 @@
 
 ---
 
+### 2026-09-10（稽核）— 全系統模組串接與邏輯排查，修掉三項
+
+使用者要求「按步驟逐步排查各模組系統串接跟邏輯，是否都有正確及遺漏」。以 10 個步驟做**機械化比對**（不是人工翻閱程式碼），每一項發現都附 `檔案:行號`。
+
+**稽核方法**
+
+| 步驟 | 方法 | 結果 |
+|---|---|---|
+| 前端↔後端 API | 452 個 fetch 呼叫點 vs 468 支已註冊路由雙向比對 | ✅ 零斷點 |
+| Router 註冊 | 檔案／import／include 三方比對 | ⚠️ 1 項 |
+| 頁面↔Sidebar | 53 頁 vs 導覽與 9 個徽章模組 | ✅ 完整 |
+| 權限守門 | 486 個 handler AST 分析 | ⚠️ 1 項 |
+| 漏 commit | 寫入 SQL vs commit 掃描 | ✅ 5 個警示全誤判 |
+| demo 隔離 | 繞過 `get_db`／裸 `threading.Thread`／寫檔未判 `is_demo_mode` | ✅ 無破口 |
+| 通知事件 key | 既有 ast 覆蓋測試 | ✅ 通過 |
+| Schema 漂移 | **實際建一個全新 DB**，與既有 DB 逐表逐欄比對 | ✅ 完全一致 |
+| 金額換算／簽核代理 | 全呼叫點一致性 | ⚠️ 1 項 |
+
+**修掉三項**
+
+1. **`pdf_gen.py::_case_closing_report_data()` 漏傳 `pretax`** — 13 個存活呼叫點中唯一漏的。2026-08-28 新增這個參數時掃了 reports.py／dashboard.py 的 12 個呼叫點，沒掃到 pdf_gen.py。後果：已核准稅額沖銷（`taxExempt`）的款項，結案報表 PDF 顯示**含稅**、畫面／Excel／營運報表顯示**未稅**，同一筆案件兩個數字。helpers 那句「拿不到 pretax 就維持舊行為」不適用——該函式的 SQL 本來就 SELECT 了 `pretax`，純粹漏接。
+
+2. **`POST /api/quotations` 建立者取自 request body** — `quotations.py` 的 45 支寫入端點裡**唯一**沒有 `_require_user()` 的。`created_by` 與活動通知的操作者都直接用 `body.created_by`（client 送什麼算什麼），對照 `customers.py:84`／`shipping_notes.py:192` 一律從 session 取。已改為以 session 為準。**刻意不加角色限制**——「哪些角色可以建報價單」是 business policy 不是 bug，留給使用者決定。
+
+3. **T100 傳票匯出的「已確認清單」與「反確認」有後端無前端** — `accounting_export.py:461/495` 早就存在，`unconfirm` 的 docstring 自己寫著是「標記錯誤時的**救援手段**」，但前端只接了 vouchers/preview/confirm。「確認已匯入 T100（排除下次匯出）」是一次標記整個日期區間的批次操作，按錯之後畫面上沒有任何回復方式。已補上可展開的已確認清單與逐筆反確認。
+
+**另補一道防呆**：`test_router_registration_2026_09_10.py` 把「哪些 router 刻意不註冊」變成明確白名單。起因是 `routers/projects.py` 的 19 支端點在 `6089a8f` 下線後檔案留著、main.py 不再 include，架構地圖卻寫成「僅保留舊 API 供內部沿用」——實際上**全部 404**。現在新增 router 忘了 include 會被擋，要下線則必須來白名單補一筆寫明原因。架構地圖 §2.10 同步更正。
+
+**驗證**：三項修復的測試都先「**還原修改再跑一次**」確認會紅才算數（PDF 那項紅在 1,050,000 vs 1,025,000、身分那項紅在存成被冒名的 `q_victim`、T100 那項紅在找不到「展開檢視／反確認」按鈕）。T100 新 UI 另用 Playwright 截圖肉眼複查版面。全套非 e2e **541 passed**／e2e **6 passed**。
+
+**待使用者決策、本次未動**
+
+- `/api/cashier/summary` 死碼（僅自身測試引用，內容是 `payable-queue` + `receivable-queue` 的合併版）
+- `/api/company/search` 後端做好前端沒接（使用者只能用統編查，不能用公司名模糊搜尋）
+- `projects.py` 592 行死碼檔案是否刪除
+
+---
+
 ### 2026-09-10（最後）— 營運報表 Excel／PDF 匯出補上「季」範圍
 
 接續同日 `6b9ec5c` 的畫面修復。**匯出先前完全不吃期別的季**：不論 `period` 是 `YYYY-Qn` 還是 `YYYY-MM`，都只產「當月收支」與「今年度收支」兩塊，季報的匯出檔內容跟月報一模一樣。
