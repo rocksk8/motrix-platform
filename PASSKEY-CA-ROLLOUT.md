@@ -1,22 +1,28 @@
 # Passkey 啟用 — 憑證與 CA 佈署步驟書
 
-> ## 🔵 執行進度（2026-09-10 22:20 更新，**第 2、3 步已完成，卡在第 4 步**）
+> ## 🟢 執行進度（2026-09-11 01:20 更新，**全部完成，Passkey 已可實際使用**）
 >
 > | 步驟 | 狀態 | 實際結果 |
 > |------|------|---------|
 > | 1 前置確認 | ✅ 完成 | 見下方「前置確認的實測結果」——**發現交接檔漏了一件事** |
-> | 2 部署最新程式碼 | ✅ **完成** | 2026-09-10 **22:05:54 已套用 commit `37bd985`**（實測 `GET /api/system/deployed-version` 確認；`/api/ping` 200、63ms）。涵蓋 `2471747` 之後的全部改動。 |
-> | 3 重產憑證 | ✅ **完成（已生效）** | 第 2 步的重啟讓 uvicorn 載入新憑證。**實測交握取得的 SAN = `DNS:localhost, DNS:motrix.internal, IP:172.16.10.177, IP:127.0.0.1`**，有效期至 2028-12-10。舊憑證備份仍在 `backend\certs\backup_20260910_144802\`。（先前這裡的「服務尚未重啟、仍載入舊憑證」警告已解除。） |
-> | 4 取出根 CA | ⬜ **未執行（下一步）** | 執行 `powershell -ExecutionPolicy Bypass -File backend\tools\fetch_root_ca.ps1`（2026-09-10 新增）。它用 `Get-Credential` 原生輸入框要密碼、成功後存成 DPAPI 加密的 `%USERPROFILE%\motrix_cred.xml`，**之後再跑就不用再輸入密碼**；對正式機只做讀取。**⚠️ 這一步無法用免帳密的方式取代**——已實測：正式機 TLS 交握只送葉憑證（1 張，不含 CA），開發機也沒有任何 rootCA 副本、憑證存放區裡也沒有這張 mkcert CA。 |
-> | 5 各機器裝 CA | 🟡 只做了正式機 | 正式機已裝（指紋 `A9AF974F0BD6CE35B47CDB95CAA5E2B324DAE61C`，LocalMachine\Root 與 CurrentUser\Root 都有）。**每台電腦要做兩件事，缺一不可**：(a) `certutil -addstore -f Root rootCA.pem` (b) 能解析 `motrix.internal`（主網卡 DNS 是 8.8.8.8 的機器解析不到，最省事是加 hosts）。只做 (a) 不做 (b)，瀏覽器依然連不上 `https://motrix.internal:666`。 |
-> | 6 驗證安全內容 | ⬜ 未執行 | 要等第 2、3 步的重啟與第 5 步完成 |
-> | 7 設定 RP ID | ⬜ 未執行 | `configured:false`，端點仍回 503（**這是目前正確的狀態，別急著填**） |
-> | 8 系統網址 | ⬜ 未執行 | |
-> | 9 端對端實測 | ⬜ 未執行 | |
+> | 2 部署最新程式碼 | ✅ 完成 | 目前正式機是 **`34e0ce1`**（2026-09-11 套用）。中間經過 `37bd985` → `0da86bf` → `4ffe190` → `34e0ce1` 數輪，每一輪都是修 Passkey 路上的一個坑。 |
+> | 3 重產憑證 | ✅ 完成 | 交握取得的 SAN = `DNS:localhost, DNS:motrix.internal, IP:172.16.10.177, IP:127.0.0.1`，有效期至 2028-12-10。舊憑證備份在 `backend\certs\backup_20260910_144802\`。 |
+> | 4 取出根 CA | ✅ 完成 | `fetch_root_ca.ps1` 執行成功，根 CA 已取回開發機，並存下 DPAPI 加密的 `%USERPROFILE%\motrix_cred.xml`（之後跑 WinRM 工具不用再輸密碼）。 |
+> | 5 各機器裝 CA | 🟡 正式機 + 開發機 | 兩台都已裝（指紋 `A9AF974F0BD6CE35B47CDB95CAA5E2B324DAE61C`）且都能解析 `motrix.internal`。**其他同事的電腦尚未處理**——每台要做兩件事，缺一不可：(a) `certutil -addstore -f Root rootCA.pem` (b) 能解析 `motrix.internal`。⚠️ 若採用 `LETSENCRYPT-PUBLIC-CERT-PLAN.md` 的方案，**這一步整個不需要做**。 |
+> | 6 驗證安全內容 | ✅ 完成 | 開發機瀏覽器實測 `platformAuthenticator: True`、`isSecureContext: true`。 |
+> | 7 設定 RP ID | ✅ 完成 | RP ID = `motrix.internal`，Origin = `https://motrix.internal:666`。 |
+> | 8 系統網址 | ⬜ **待確認** | 通知信裡的連結讀的是這個設定。請 superadmin 到通知設定頁確認是否已改成 `https://motrix.internal:666`——沒改的話寄出去的信仍指向舊位址（這一步最容易被忘記）。 |
+> | 9 端對端實測 | ✅ **完成（2026-09-11）** | 使用者實測：可以註冊 Passkey，**也可以用 Passkey 登入**。在 `34e0ce1` 之前登入從來沒成功過（`login.html` 有兩個 `init()` 互相覆蓋、後端用了 py_webauthn 不存在的 `verified.sign_count`），詳見該 commit。另有自動化 e2e `backend/tests/test_e2e_passkey_2026_09_11.py` 覆蓋整條路。 |
 >
-> **下一步是第 4 步**：在開發機執行 `powershell -ExecutionPolicy Bypass -File backend\tools\fetch_root_ca.ps1`，把根 CA 取回來（會跳出密碼輸入框，之後存成加密憑證檔就不用再打）。
-> uvicorn 載入已經產好的新憑證，第 3 步才算真正生效。新憑證涵蓋舊憑證的全部名稱
-> （172.16.10.177 / localhost / 127.0.0.1）再加 motrix.internal，所以重啟只會變好不會變壞。
+> **目前狀態**：Passkey 在「已裝 CA 且解析得到 `motrix.internal`」的電腦上可正常使用。
+>
+> **下一個決策點不在這份文件裡**：要不要改用公開受信任憑證，見
+> **`LETSENCRYPT-PUBLIC-CERT-PLAN.md`**。那條路可以讓第 5 步（每台裝 CA + 改 DNS）
+> 整個消失，Windows／macOS／手機／Firefox 全部開箱即用，代價是所有人要改用
+> `https://erp.miactw.com:666` 這個新網址。
+>
+> ⏳ **RP ID 越晚換越貴**：改動 RP ID 會讓**所有既有 Passkey 失效且無法救回**
+> （`webauthn_credentials` 刻意沒存 rp_id）。現在只有 1～2 張，成本最低。
 >
 > ### 前置確認的實測結果（第 1 步）
 >
