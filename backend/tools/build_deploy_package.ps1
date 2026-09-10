@@ -132,25 +132,60 @@ Write-Host "[OK] 語法檢查通過（共 $($psFiles.Count) 支 .ps1）。" -For
 # 作法：先解析出實際路徑並印出來（之後所有 pytest 呼叫一律用 $pyExe，不再用
 # 裸 python），再跑一次 import 檢查——缺套件就直接 Fail 並指名是哪一支
 # Python、缺什麼，比讓 470 題全 E 好判讀太多。
-$pyCmd = Get-Command python -ErrorAction SilentlyContinue
-if (-not $pyCmd) {
+# 2026-09-10 再修：原本這裡只做「解析出第一支 python → 缺套件就 Fail」。
+# 擋是對的（總比 470 題全 E 好判讀），但這台機器 PATH 上有 4 支 Python，
+# 「第一支」是誰完全取決於呼叫端的環境——我自己的 shell 解析到裝好依賴的
+# venv、使用者自己的 PowerShell 解析到 WindowsApps 的 3.14 stub，同一支腳本
+# 一個能跑一個不能，而使用者除了手動改 PATH 沒有別的辦法。
+#
+# 改成：把候選逐一試過去，挑第一支「依賴齊全」的來用；全都不合格才 Fail，
+# 而且列出每一支各缺什麼。仍然印出實際選中的路徑（守門的原意是可追溯，
+# 不是為了擋人）。
+$depCheck = "import multipart, fastapi, uvicorn, pydantic, aiofiles, pyotp, qrcode, boto3, openpyxl, PIL, webauthn"
+
+$candidates = @()
+$candidates += @(Get-Command python -All -ErrorAction SilentlyContinue | ForEach-Object { $_.Source })
+$candidates += @(Get-Command python3 -All -ErrorAction SilentlyContinue | ForEach-Object { $_.Source })
+# 專案內或常見的 venv 位置（PATH 上沒有時的後備）
+foreach ($v in @("$projectRoot\venv\Scripts\python.exe",
+                 "$projectRoot\.venv\Scripts\python.exe",
+                 "$projectRoot\backend\venv\Scripts\python.exe")) {
+    if (Test-Path $v) { $candidates += $v }
+}
+$candidates = @($candidates | Where-Object { $_ -and (Test-Path $_) } | Select-Object -Unique)
+
+if ($candidates.Count -eq 0) {
     Fail "PATH 上找不到 python。請確認開發環境的 Python 可用後再重新執行。"
 }
-$pyExe = $pyCmd.Source
-Write-Host "`n[環境] 測試將使用的 Python：$pyExe"
-& $pyExe -c "import sys; print('        版本：' + sys.version.split()[0])"
 
-Write-Host "[環境] 驗證 requirements.txt 的關鍵套件是否都裝在這一支上..."
-& $pyExe -c "import multipart, fastapi, uvicorn, pydantic, aiofiles, pyotp, qrcode, boto3, openpyxl, PIL, webauthn"
-if ($LASTEXITCODE -ne 0) {
+Write-Host "`n[環境] 找到 $($candidates.Count) 支 Python，逐一檢查依賴..."
+$pyExe = $null
+$report = @()
+foreach ($c in $candidates) {
+    $ver = (& $c -c "import sys; print(sys.version.split()[0])" 2>$null)
+    $out = (& $c -c $depCheck 2>&1)
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host ("        [OK]   {0,-8} {1}" -f $ver, $c) -ForegroundColor Green
+        if (-not $pyExe) { $pyExe = $c }
+    } else {
+        $missing = ($out | Select-String -Pattern "No module named '([^']+)'" |
+                    ForEach-Object { $_.Matches[0].Groups[1].Value }) -join ", "
+        if (-not $missing) { $missing = "無法執行" }
+        Write-Host ("        [缺]   {0,-8} {1}  ← 缺 {2}" -f $ver, $c, $missing)
+        $report += "  $c  (缺 $missing)"
+    }
+}
+
+if (-not $pyExe) {
     Fail @"
-這一支 Python 缺少 backend/requirements.txt 列出的套件（見上方 ImportError）。
-使用的直譯器：$pyExe
-PATH 上有多個 Python 時很容易解析到沒裝依賴的那一支。請確認後擇一處理：
-  1) 對這一支安裝依賴： & "$pyExe" -m pip install -r "$projectRoot\backend\requirements.txt"
-  2) 調整 PATH 順序，讓正確的那一支排在前面，再重新執行本腳本
+所有找到的 Python 都缺少 backend/requirements.txt 列出的套件：
+$($report -join "`n")
+請對其中一支安裝依賴後重試，例如：
+  & "$($candidates[0])" -m pip install -r "$projectRoot\backend\requirements.txt"
 "@
 }
+
+Write-Host "[環境] 測試將使用：$pyExe" -ForegroundColor Green
 Write-Host "[OK] 依賴齊全。" -ForegroundColor Green
 
 # --- Step 3: 測試必須通過 ---
