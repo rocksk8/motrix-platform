@@ -251,18 +251,45 @@ if ($LASTEXITCODE -ne 0) {
     Fail "git archive 失敗（exit code $LASTEXITCODE），部署包可能不完整，已中止。"
 }
 
-# 改用 Git 內建的 Unix 風格 tar（通常在 Program Files\Git\usr\bin\tar.exe），
-# 確保與 git archive 生成的 tar 格式完全兼容。
-$gitPaths = @(
-    "C:\Program Files\Git\usr\bin\tar.exe",
-    "C:\Program Files (x86)\Git\usr\bin\tar.exe"
-)
-$tarExe = $gitPaths | Where-Object { Test-Path $_ } | Select-Object -First 1
-if (-not $tarExe) {
-    $tarExe = "tar.exe"  # Fallback to PATH
+# === 解壓：這一段在 2026-09-08~09-10 之間來回改過三次，動之前先讀完 ===
+#
+# 這裡有「兩個」互相獨立的路徑歧義來源，只處理其中一個都還是會壞：
+#
+# (1) 用哪一支 tar。這台機器上同時存在 Windows 內建的 bsdtar
+#     （%SystemRoot%\System32\tar.exe）與 Git for Windows 的 msys/GNU tar
+#     （C:\Program Files\Git\usr\bin\tar.exe）。549d319（09-08）因為 Unix tar
+#     把 C:\ 誤判成遠端主機而改用 System32 tar；942e3c4（09-10）又以「與
+#     git archive 格式相容」為由改回優先挑 Git tar——但 git archive 產生的是
+#     標準 POSIX tar，bsdtar 讀得好好的，這個理由並不成立，改回去之後
+#     `/usr/bin/tar: Cannot connect to C: resolve failed` 立刻重現。
+#     結論：優先用 System32 的 bsdtar，且寫完整路徑（不受 PATH 順序影響）。
+#
+# (2) 傳給 tar 的路徑長什麼樣。就算挑對了 tar，只要傳的是 C:\... 這種含冒號的
+#     絕對路徑，老式 tar 的 `-f host:path` 遠端磁帶機語法就有機會再咬一次。
+#     反正下面本來就 Push-Location 進 $pkgDir 了，直接傳相對檔名，讓這個問題
+#     從根本上不存在——兩支 tar 都吃得下。
+#
+# 兩個都處理掉之後，就算日後 PATH 或 Git 安裝位置變動也不會再踩到。
+$tarExe = Join-Path $env:SystemRoot "System32\tar.exe"
+if (-not (Test-Path $tarExe)) {
+    # 極少數環境沒有內建 bsdtar（Windows 10 1803 以前）才退回 Git tar。
+    # 這條路徑要加 --force-local，明確告訴 GNU tar「檔名裡的冒號不是主機名」。
+    $gitPaths = @(
+        "C:\Program Files\Git\usr\bin\tar.exe",
+        "C:\Program Files (x86)\Git\usr\bin\tar.exe"
+    )
+    $tarExe = $gitPaths | Where-Object { Test-Path $_ } | Select-Object -First 1
+    if (-not $tarExe) {
+        Fail "找不到可用的 tar（既沒有 $env:SystemRoot\System32\tar.exe，也沒有 Git for Windows 的 tar）。"
+    }
+    $tarExtraArgs = @("--force-local")
+} else {
+    $tarExtraArgs = @()
 }
+$tarName = Split-Path $tarPath -Leaf
+Write-Host "      解壓工具：$tarExe"
 Push-Location $pkgDir
-& $tarExe -xf $tarPath
+& $tarExe @tarExtraArgs -xf $tarName
 if ($LASTEXITCODE -ne 0) {
     Pop-Location
     Fail "tar 解壓失敗（exit code $LASTEXITCODE），部署包不完整，已中止。"
