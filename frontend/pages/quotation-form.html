@@ -775,7 +775,7 @@
         報價單
       </a>
       <span style="color:var(--border-light)">/</span>
-      <span class="form-quote-no" x-text="q.quoteNo"></span>
+      <span class="form-quote-no" x-text="q.quoteNo || '（儲存後自動編號）'"></span>
       <template x-if="session.role === 'superadmin'">
         <div class="status-wrap-admin badge"
              :class="{'badge--draft':q.status==='草稿','badge--pending':q.status==='待審核','badge--approved':q.status==='已核准','badge--sent':q.status==='已送出','badge--warning':q.status==='已取消','badge--rejected':q.status==='已拒絕'}"
@@ -2348,8 +2348,11 @@
           this._lastUpdatedAt = d.updated_at || d.created_at || this._lastUpdatedAt
           this._saveConflict = false
           if (isNew) {
-            // Backend may assign a different number if provisional was taken concurrently
-            if (d.quote_no && d.quote_no !== this.q.quoteNo) {
+            // 單號一律以後端回傳的為準（前端載入時拿到的只是 peek，不保證還在；
+            // 拿不到時前端根本不填，由後端派號）。2026-09-10：這裡原本只在
+            // 「後端派的號碼跟前端手上的不同」時才回填＋改網址，導致前端號碼為空
+            // 時網址永遠補不上 ?id=，重新整理就開成一張新的空白單。
+            if (d.quote_no) {
               this.q.quoteNo = d.quote_no
               history.replaceState(null, '', '?id=' + d.quote_no)
             }
@@ -2563,11 +2566,13 @@
       },
 
       async saveDraft() {
-        if (!this.q.quoteNo) {
-          const ym  = new Date().toISOString().slice(0,7).replace('-','')
-          this.q.quoteNo = `MQ-${ym}-001`
-        }
-        if (!new URLSearchParams(window.location.search).has('id')) {
+        // 2026-09-10：原本這裡在 quoteNo 為空時會寫死 `MQ-{ym}-001` 當暫用號。
+        // 那個值幾乎一定已經被別人用掉，後端撞號後改派下一號，畫面上看到的號碼
+        // 就跟實際建立的那張對不起來（已用可控實驗重現：把 /api/next-quote-no
+        // 拖慢超過載入時的逾時，畫面顯示的單號在資料庫裡根本不存在）。
+        // 改成：拿不到號就交給後端派（create_quotation 收到空值本來就會自己算），
+        // 存檔回應再把真正的號碼回填。前端不再自己猜號。
+        if (!new URLSearchParams(window.location.search).has('id') && this.q.quoteNo) {
           history.replaceState(null, '', '?id=' + this.q.quoteNo)
         }
         const wasNew = this.isNewRecord
@@ -3311,13 +3316,27 @@ window.addEventListener('load',function(){
         } else {
           // ── 新增模式：每次由 API 派發單號 ──
           try {
+            // 2026-09-10：原本 3 秒。這支要查 quotations 全表的 MAX(序號)，
+            // 資料量大或機器忙的時候 3 秒不夠，一逾時就讓 quoteNo 留空，
+            // 而舊版 saveDraft() 遇到空值會寫死 001 送出（見該函式註解）。
+            // 放寬到 10 秒，跟本頁其他 API 呼叫一致。
             const _nc = new AbortController()
-            setTimeout(() => _nc.abort(), 3000)
+            setTimeout(() => _nc.abort(), 10000)
             const res = await fetch(`${this.API}/next-quote-no`, { signal: _nc.signal, headers: { Authorization: 'Bearer ' + this.session.token } })
-            if (res.ok) this.q.quoteNo = (await res.json()).quote_no
+            const _peeked = res.ok ? (await res.json()).quote_no : ''
+            // ⚠️ 這個 peek 是非同步的，可能在使用者已經按下存檔／送審**之後**才回來。
+            // 直接指派會把存檔回應剛回填的「真正的單號」蓋成新 peek 到的下一號
+            // ——畫面顯示 MQ-YYYYMM-002、資料庫其實是 001，簽核的人照畫面上的號碼
+            // 開就會開到一張不存在的單。已用可控實驗重現（6 次中 2 次）。
+            // 所以只有在「還沒有號碼、而且還是沒存過的新單」時才採用 peek 結果。
+            if (_peeked && !this.q.quoteNo && this.isNewRecord !== false) {
+              this.q.quoteNo = _peeked
+            }
           } catch(e) {}
           if (!this.q.quoteNo) {
-            this.toast('無法取得報價單號，請確認後端連線')
+            // 拿不到號不擋作業：存檔時由後端派號，畫面顯示「儲存後自動編號」
+            // （見 .form-quote-no 的 x-text）。
+            this.toast('暫時取不到報價單號，儲存時會自動編號')
           }
           this.isNewRecord = true
           this.q.paymentTerms = this._defaultPaymentTerms

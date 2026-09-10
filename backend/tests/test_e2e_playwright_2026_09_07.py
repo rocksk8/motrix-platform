@@ -105,9 +105,13 @@ def test_login_create_submit_approve_smoke(live_server, make_user):
 
             page1.click('button:has-text("申請送出審核")')
             page1.click('button:has-text("確認送出")')
+            # 2026-09-10：原本只等「有內容」，但畫面在還沒拿到號碼時會顯示
+            # 「（儲存後自動編號）」佔位字（見 quotation-form.html，取代舊版
+            # 「拿不到號就寫死 MQ-{ym}-001」的危險行為），那也算有內容，會讓這裡
+            # 在真正的號碼回填前就往下走。改成等真正的單號出現。
             page1.wait_for_function(
-                "document.querySelector('.form-quote-no')?.textContent?.trim().length > 0",
-                timeout=10000,
+                "document.querySelector('.form-quote-no')?.textContent?.includes('MQ-')",
+                timeout=15000,
             )
 
             quote_no = page1.locator(".form-quote-no").inner_text().strip()
@@ -157,14 +161,21 @@ def test_login_create_submit_approve_smoke(live_server, make_user):
 
             _t_goto = time.time()
             page2.goto(f"{live_server}/pages/quotation-form.html?id={quote_no}")
-            # 30 秒（已知這條測試偶爾會在這裡逾時，2026-09-07 兩輪觀察）：第一次
-            # 只在整批 400+ 測試中間跑過一次時逾時過（當時 10 秒→20 秒），但同一天
-            # 稍晚又在「單獨只跑這個檔案的 2 個測試」這種輕量情境下逾時過一次，
-            # 代表不是單純「系統忙碌時才會慢」，根因還沒有抓到（懷疑跟 SQLite WAL
-            # 模式下 approve 端點需要讀 quotations + tiered_approval 解析時偶發的
-            # 鎖等待有關，但沒有實際證實）。目前的因應是持續加大這一處等待時限
-            # 吸收，而不是照下修——之後若又觀察到逾時，先確認是不是同一個點卡住，
-            # 而非重新從頭排查整條路徑。
+            # ✅ 2026-09-10 根因已找到並修復（先前這裡寫「根因還沒有抓到」、
+            # 靠不斷加大時限吸收，那個推測方向 —— SQLite WAL 鎖等待 —— 是錯的）。
+            #
+            # 真正的原因在前端：quotation-form.html 載入時會非同步打
+            # /api/next-quote-no 取號，那個回應可能在使用者按下送審**之後**才回來，
+            # 直接指派就把存檔回應剛回填的真正單號蓋成新 peek 到的下一號。畫面顯示
+            # MQ-YYYYMM-002、資料庫其實只有 001，於是這裡的 approver 照畫面上的號碼
+            # 開，開到一張不存在的單，自然等不到簽核按鈕。
+            # 已用可控實驗重現（修復前 6 次中 2 次、修復後 8 次 0 次），完整 e2e
+            # 連跑 6 輪全綠。修法見 quotation-form.html 該處的 `_peeked` 守門。
+            #
+            # 時限維持 30 秒即可（不需要再往上加）。若日後又在這裡逾時，先看下面的
+            # 診斷 dump 印出的 `quotation-form.html?id=` 與 log 裡的
+            # `approval tiers load — quote=` 是不是同一個單號 —— 不同就是同類的
+            # 單號競態又回來了，相同才是別的問題。
             try:
                 page2.wait_for_selector('button:has-text("預覽後簽核")', timeout=30000)
             except Exception:

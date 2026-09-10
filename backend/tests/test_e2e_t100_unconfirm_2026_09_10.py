@@ -111,9 +111,14 @@ def test_t100_confirm_then_unconfirm_from_ui(live_server, make_user):
                 ".find(e => e.innerText.includes('展開檢視／反確認'));"
                 "return !!b; }", timeout=20000)
 
-            # 展開已確認清單，應該看得到剛剛那筆
+            # 展開已確認清單，應該看得到剛剛那筆。等「值真的出現」而不是只等元素
+            # 存在——按鈕會先於資料列渲染，只等按鈕會讀到空表格（2026-09-10 實測）。
             entry.click()
             page.wait_for_selector('button:has-text("反確認")', timeout=20000)
+            page.wait_for_function(
+                "() => document.body.innerText.includes('MQ-T100E2E-001')"
+                " || document.body.innerText.includes('T100測客')",
+                timeout=20000)
             confirmed_txt = page.locator("table.data-table").last.inner_text()
             assert "T100測客" in confirmed_txt or "MQ-T100E2E-001" in confirmed_txt, \
                 f"已確認清單看不到剛確認的事件：{confirmed_txt[:300]}"

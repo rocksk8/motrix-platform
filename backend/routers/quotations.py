@@ -942,8 +942,40 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
         appr = q.get("approval") or {}
         try:
             appr = _build_approval_tiers_and_notify(q, appr, qno, is_new_submission=True)
-        except UnresolvedManagerError as e:
-            raise HTTPException(400, str(e))
+        except Exception as e:
+            # 2026-09-10：這裡原本只捕捉 UnresolvedManagerError 轉成 400 就直接拋，
+            # 但上面的 INSERT 早就 commit 了——使用者看到「送出審核失敗」，資料庫卻
+            # 留下一張 status='待審核'、完全沒有簽核層級的孤兒單：它會出現在清單裡、
+            # 永遠簽不掉，而使用者以為沒建成、再按一次就又多一張（單號還會往後跳）。
+            # 已用可控實驗重現（申請人未歸屬部門時送審）。
+            #
+            # 建不出簽核流程就不該留下這張單：補償性刪除剛剛建立的那筆再往外拋。
+            # 刪除範圍嚴格限定在本次請求剛 INSERT 的 qno，不會動到任何既有資料。
+            try:
+                _cleanup = get_db()
+                _cleanup.execute("DELETE FROM quotations WHERE quote_no=?", (qno,))
+                _cleanup.execute("DELETE FROM case_stages WHERE quote_no=?", (qno,))
+                # 序號也要跟著收回，否則送審失敗幾次之後，第一張成功的單會變成
+                # MQ-YYYYMM-003 之類的，使用者會問「001、002 跑去哪了」。
+                # 不是單純把 seq 減一（併發下會踩到別人剛拿的號），而是依**實際還
+                # 留在資料庫裡的報價單**重算——自我修復，而且最壞情況只是跟同時
+                # 進行中的另一筆撞號，那條路徑本來就有 IntegrityError 重試。
+                _cleanup.execute(
+                    "UPDATE quote_seq SET seq = ("
+                    "  SELECT COALESCE(MAX(CAST(SUBSTR(quote_no, 11, 3) AS INTEGER)), 0)"
+                    "  FROM quotations WHERE quote_no GLOB ? AND LENGTH(quote_no) = 13"
+                    ") WHERE month = ?",
+                    (f"MQ-{month}-???", month)
+                )
+                _cleanup.commit()
+                _cleanup.close()
+                logger.warning("create_quotation 送審失敗，已回收剛建立的 %s：%s", qno, e)
+            except Exception:
+                # 連回收都失敗才是真的留下孤兒，這種情況要看得到
+                logger.exception("create_quotation 送審失敗且回收 %s 也失敗", qno)
+            if isinstance(e, UnresolvedManagerError):
+                raise HTTPException(400, str(e))
+            raise
         _conn2 = get_db()
         # 3b 收尾追加修正（2026-08-23）：不能直接 json.dumps(q, ...) 整包覆寫——
         # q.caseRecord.stages 仍是 client 送來的原始（可能已作廢）id，上面已經把
