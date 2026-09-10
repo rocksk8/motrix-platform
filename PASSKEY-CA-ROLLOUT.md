@@ -1,6 +1,47 @@
 # Passkey 啟用 — 憑證與 CA 佈署步驟書
 
-> 產出：2026-09-10｜狀態：**尚未執行，待確認**
+> ## 🔵 執行進度（2026-09-10 14:55 更新，**做到一半，未完成**）
+>
+> | 步驟 | 狀態 | 實際結果 |
+> |------|------|---------|
+> | 1 前置確認 | ✅ 完成 | 見下方「前置確認的實測結果」——**發現交接檔漏了一件事** |
+> | 2 部署最新程式碼 | ⬜ **未執行** | 部署包已備妥 `deploy_packages\20260910_145349_35938fd`（523 非e2e + 4 e2e 全過、exit 0），但**還沒套用到正式機**。正式機仍是 `2471747` |
+> | 3 重產憑證 | ✅ 完成 | SAN 已變成 `localhost, motrix.internal, 172.16.10.177, 127.0.0.1`；舊憑證備份在 `backend\certs\backup_20260910_144802\`。**⚠️ 服務尚未重啟，執行中的 uvicorn（PID 2760）仍載入舊憑證**——所以瀏覽器現在拿到的還是沒有 motrix.internal 的那張 |
+> | 4 取出根 CA | ⬜ 未執行 | `rootCA.pem` 在正式機 `C:\Users\Motrix\AppData\Local\mkcert\`，尚未複製出來分發 |
+> | 5 各機器裝 CA | 🟡 只做了正式機 | 正式機已裝（指紋 `A9AF974F0BD6CE35B47CDB95CAA5E2B324DAE61C`，LocalMachine\Root 與 CurrentUser\Root 都有）。**其他電腦都還沒裝** |
+> | 6 驗證安全內容 | ⬜ 未執行 | 要等第 2、3 步的重啟與第 5 步完成 |
+> | 7 設定 RP ID | ⬜ 未執行 | `configured:false`，端點仍回 503（**這是目前正確的狀態，別急著填**） |
+> | 8 系統網址 | ⬜ 未執行 | |
+> | 9 端對端實測 | ⬜ 未執行 | |
+>
+> **下一步就是第 2 步**：把 `20260910_145349_35938fd` 用部署儀表板套用上去。那次重啟會讓
+> uvicorn 載入已經產好的新憑證，第 3 步才算真正生效。新憑證涵蓋舊憑證的全部名稱
+> （172.16.10.177 / localhost / 127.0.0.1）再加 motrix.internal，所以重啟只會變好不會變壞。
+>
+> ### 前置確認的實測結果（第 1 步）
+>
+> | 項目 | 實測 |
+> |------|------|
+> | mkcert | `C:\Users\Motrix\Desktop\V9.0\backend\tools\mkcert.exe` |
+> | CAROOT | `C:\Users\Motrix\AppData\Local\mkcert\`（`rootCA.pem` 1655 bytes、`rootCA-key.pem` 2484 bytes） |
+> | **DNS（重要）** | **正式機自己也解析不到 `motrix.internal`**——主網卡 DNS 設的是 `8.8.8.8`，不是 Peplink。交接檔用 `nslookup motrix.internal 172.16.10.1` 驗證，那是**指定**問路由器、繞過了機器本身的 DNS 設定。開發機同樣是 `8.8.8.8`。已在正式機 hosts 加一行解決，但**每台要用 Passkey 的電腦都要處理** |
+> | 服務 | port 666 由 PID 2760 監聽中，健康 |
+>
+> ### 執行中踩到、已修正到步驟書裡的兩件事
+>
+> 1. **`mkcert -install` 在 WinRM 遠端 session 下會失敗**：`ERROR: add cert: failed adding cert: The request is not supported.`
+>    改用 `certutil -addstore -f Root <rootCA.pem>` 成功（`.NET X509Store` 直接寫入也可以）。
+>    第 5 步本來就是寫 `certutil`，這裡確認了它是可行的那條路。使用者在自己機器上
+>    互動式執行 `mkcert -install` 應該沒問題，但腳本化一律用 `certutil` 比較保險。
+> 2. **PS 5.1 原生執行檔 stderr 地雷（本專案第 4 次）**：`mkcert` 往 stderr 印一行
+>    `Note: the local CA is not installed...`，在 `$ErrorActionPreference = "Stop"` 底下
+>    被 `2>&1` 包成 `NativeCommandError` 直接中止腳本——即使指令本身成功（憑證確實產出來了）。
+>    先前 pip install / tar / db備份 各踩過一次。呼叫原生執行檔前後要把 `ErrorActionPreference`
+>    切成 `Continue`。
+>
+> ---
+>
+> 產出：2026-09-10｜原始狀態：尚未執行，待確認
 > 目標：讓 `https://motrix.internal:666` 在瀏覽器是「乾淨的鎖頭」，Passkey／WebAuthn 才能真正啟用。
 > 相關：`MOTRIX-ERP-QUICK.md` §3.3b（TOTP）／§14.3d（兩機交接）／`backend/tools/https_setup.ps1`
 
