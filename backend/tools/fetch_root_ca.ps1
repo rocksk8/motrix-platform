@@ -69,14 +69,33 @@ if (-not $cred) {
     # 被管線重新導向時會卡死；換成一般 Read-Host 又會把密碼原樣回顯進輸出。
     # 兩件都在 _dashboard_remote.ps1 實測過，這裡沿用它的結論：
     # [Console]::In.ReadLine() 讀一行純文字，不經過遮罩機制也不會回顯。
-    Write-Host "[1/3] 請輸入正式機（$ProdUser@$ProdHost）的密碼後按 Enter（輸入時不會顯示）："
-    $plainPw = [Console]::In.ReadLine()
-    if ([string]::IsNullOrWhiteSpace($plainPw)) {
-        Write-Host "`n[中止] 沒有讀到密碼。"
-        exit 1
+    # 兩種輸入情境要用不同做法，用 IsInputRedirected 分流：
+    #
+    #   互動主控台（人在鍵盤前打字）→ $Host.UI.ReadLineAsSecureString()
+    #       會遮罩，密碼不會出現在螢幕與捲動紀錄裡。
+    #   stdin 被管線導向（自動化）  → [Console]::In.ReadLine()
+    #       遮罩機制在這種情境會直接卡死（_dashboard_remote.ps1 2026-09-08 實測）。
+    #
+    # 先前這裡一律用 ReadLine() 並在提示寫「輸入時不會顯示」——那句只在管線情境
+    # 成立，人工打字時密碼其實會直接顯示在螢幕上。2026-09-10 修正。
+    Write-Host "[1/3] 請輸入正式機（$ProdUser@$ProdHost）的密碼後按 Enter："
+    if ([Console]::IsInputRedirected) {
+        Write-Host "      （偵測到管線輸入）"
+        $plainPw = [Console]::In.ReadLine()
+        if ([string]::IsNullOrWhiteSpace($plainPw)) {
+            Write-Host "`n[中止] 沒有讀到密碼。"
+            exit 1
+        }
+        $securePw = ConvertTo-SecureString -String $plainPw -AsPlainText -Force
+        $plainPw = $null   # 盡早丟掉明文
+    } else {
+        Write-Host "      （輸入時不會顯示）"
+        $securePw = $Host.UI.ReadLineAsSecureString()
+        if (-not $securePw -or $securePw.Length -eq 0) {
+            Write-Host "`n[中止] 沒有讀到密碼。"
+            exit 1
+        }
     }
-    $securePw = ConvertTo-SecureString -String $plainPw -AsPlainText -Force
-    $plainPw = $null   # 盡早丟掉明文
     $cred = New-Object System.Management.Automation.PSCredential($ProdUser, $securePw)
 }
 
