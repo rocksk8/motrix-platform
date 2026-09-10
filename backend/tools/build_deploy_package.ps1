@@ -159,6 +159,13 @@ if ($candidates.Count -eq 0) {
 }
 
 Write-Host "`n[環境] 找到 $($candidates.Count) 支 Python，逐一檢查依賴..."
+# ⚠️ PS 5.1 原生執行檔 stderr 地雷（本專案第 5 次，前四次是 pip install／tar／
+# db備份／mkcert）：$ErrorActionPreference = "Stop" 之下，只要原生執行檔往
+# stderr 輸出任何東西、又用 2>&1 收進來，PowerShell 就會把它 promote 成終止型
+# NativeCommandError——即使那正是我們**預期**會發生的事（這裡就是要靠 ImportError
+# 判斷缺套件）。這個迴圈本來就會故意跑出 traceback，所以必須先切成 Continue。
+$prevEAP = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
 $pyExe = $null
 $report = @()
 foreach ($c in $candidates) {
@@ -175,6 +182,8 @@ foreach ($c in $candidates) {
         $report += "  $c  (缺 $missing)"
     }
 }
+
+$ErrorActionPreference = $prevEAP
 
 if (-not $pyExe) {
     Fail @"
