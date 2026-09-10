@@ -485,7 +485,9 @@
       },
 
       _b64ToUint8Array(b64) {
-        const binary = atob(b64)
+        // WebAuthn 使用 URL-safe base64（用 - 和 _ 替代 + 和 /），轉換為標準 base64
+        const std64 = b64.replace(/-/g, '+').replace(/_/g, '/')
+        const binary = atob(std64)
         const bytes = new Uint8Array(binary.length)
         for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
         return bytes
