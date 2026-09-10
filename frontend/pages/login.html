@@ -177,7 +177,12 @@
     }
   </style>
 </head>
-<body x-data="loginPage()" @load="init()">
+<!-- Alpine 3 會自動呼叫 x-data 物件上的 init()，所以這裡刻意不寫 x-init。
+     實測（2026-09-11）：加了 x-init="init()" 會讓 init() 在載入時跑**兩次**
+     ——自動那次一次、x-init 一次——連帶把版本查詢與既有 session 檢查都做兩遍。
+     原本這裡是 `@load="init()"`：那是無效的（load 事件只在 window 上觸發、
+     不會冒泡到 body），但因為有自動呼叫所以看不出來，屬於誤導性的死碼。 -->
+<body x-data="loginPage()">
 
   <div class="login-wrap">
     <div class="logo-area">
@@ -310,10 +315,12 @@
       webauthnStep: false,
       webauthnChallenge: '',
 
-      async init() {
-        this.checkWebauthnConfig()
-      },
-
+      // 2026-09-11：這裡原本還有一個 `async init() { this.checkWebauthnConfig() }`，
+      // 但物件實字下面第二個 init()（抓版本號＋檢查既有 session 的那個）把它整個
+      // 覆蓋掉了——JS 的重複鍵是後者勝出，而且**不會有任何警告**。
+      // 後果：`checkWebauthnConfig()` 從來沒被呼叫過，`webauthnConfigured` 永遠
+      // 是 false，「或使用 Passkey 登入」按鈕永遠不顯示。也就是 Passkey 註冊得
+      // 起來，卻永遠登不進去。已把這一行併進下面那個唯一的 init()。
       async checkWebauthnConfig() {
         try {
           const r = await fetch('/api/system/webauthn-config-status')
@@ -433,9 +440,13 @@
           this.challengeToken = data.challengeToken
           const opts = data.options
 
-          // Convert challenge and user.id to Uint8Array if they're strings
+          // 後端回傳的 options 裡，所有二進位欄位都是 base64 字串，瀏覽器要的是
+          // ArrayBuffer——每一個都要轉，漏一個就是一句看不懂的 TypeError。
+          // 2026-09-11：`opts.user` 只存在於**註冊**用的 options；認證
+          // （generate_authentication_options）不帶 user，原本直接讀 opts.user.id
+          // 會丟 "Cannot read properties of undefined"。加上存在性判斷。
           if (typeof opts.challenge === 'string') opts.challenge = this._b64ToUint8Array(opts.challenge)
-          if (typeof opts.user.id === 'string') opts.user.id = this._b64ToUint8Array(opts.user.id)
+          if (opts.user && typeof opts.user.id === 'string') opts.user.id = this._b64ToUint8Array(opts.user.id)
           if (opts.allowCredentials) {
             opts.allowCredentials = opts.allowCredentials.map(c => ({
               ...c, id: typeof c.id === 'string' ? this._b64ToUint8Array(c.id) : c.id
@@ -535,6 +546,9 @@
       },
 
       async init() {
+        // 唯一的 init()——不要再新增第二個（見 checkWebauthnConfig 上方的說明）
+        this.checkWebauthnConfig()
+
         fetch('/api/system/version')
           .then(res => res.ok ? res.json() : null)
           .then(data => { if (data && data.version) this.systemVersion = data.version })

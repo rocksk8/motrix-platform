@@ -998,7 +998,19 @@ def webauthn_login_complete(body: WebauthnLoginCompleteIn, request: Request):
                 credential_current_sign_count=cred_row["sign_count"],
             )
 
-            if verified.sign_count <= cred_row["sign_count"]:
+            # py_webauthn 的**認證**結果欄位叫 `new_sign_count`；只有**註冊**結果
+            # （VerifiedRegistration）才叫 `sign_count`。2026-09-11：這裡原本寫
+            # `verified.sign_count`，於是每次登入都丟 AttributeError，被下面那個
+            # 概括的 `except Exception` 收斂成一句 401「認證失敗」——換句話說
+            # Passkey 登入從來沒有成功過，而畫面上完全看不出原因，只有 server.log
+            # 裡一行 `'VerifiedAuthentication' object has no attribute 'sign_count'`。
+            new_count = verified.new_sign_count
+
+            # W3C WebAuthn §7.2 step 21：只有在「新舊計數至少一邊不是 0」的前提下，
+            # 計數沒有前進才算認證器被複製的徵兆。很多平台認證器根本不實作計數器
+            # （Windows Hello、iCloud／Google 同步的 passkey 都是），永遠回 0；
+            # 少了這個前提，那些認證器**每一次**登入都會被誤判成重放攻擊。
+            if (new_count or cred_row["sign_count"]) and new_count <= cred_row["sign_count"]:
                 conn.close()
                 logger.warning("WebAuthn replay attack detected: user=%s cred_id=%d", body.username, cred_row["id"])
                 _audit("", "auth.webauthn_replay_detected", "user", body.username, "重放攻擊被阻止")
@@ -1006,7 +1018,7 @@ def webauthn_login_complete(body: WebauthnLoginCompleteIn, request: Request):
 
             conn.execute(
                 "UPDATE webauthn_credentials SET sign_count=?, last_used_at=? WHERE id=?",
-                (verified.sign_count, datetime.now().isoformat(), cred_row["id"])
+                (new_count, datetime.now().isoformat(), cred_row["id"])
             )
 
             user_full = conn.execute(
