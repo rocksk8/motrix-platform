@@ -141,7 +141,7 @@ Write-Host "[OK] 語法檢查通過（共 $($psFiles.Count) 支 .ps1）。" -For
 # 改成：把候選逐一試過去，挑第一支「依賴齊全」的來用；全都不合格才 Fail，
 # 而且列出每一支各缺什麼。仍然印出實際選中的路徑（守門的原意是可追溯，
 # 不是為了擋人）。
-$depCheck = "import multipart, fastapi, uvicorn, pydantic, aiofiles, pyotp, qrcode, boto3, openpyxl, PIL, webauthn"
+$depCheck = "import multipart, fastapi, uvicorn, pydantic, aiofiles, pyotp, qrcode, boto3, openpyxl, PIL, webauthn, cryptography"
 
 $candidates = @()
 $candidates += @(Get-Command python -All -ErrorAction SilentlyContinue | ForEach-Object { $_.Source })

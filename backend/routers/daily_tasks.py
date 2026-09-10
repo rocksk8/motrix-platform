@@ -3,8 +3,9 @@ Supports once-off and weekly recurring tasks (per-day occurrence tracking).
 """
 import calendar
 import json
+import os
 import threading
-from datetime import date as _date, timedelta as _timedelta, datetime
+from datetime import date as _date, timedelta as _timedelta, datetime, timezone as _timezone
 from typing import Optional, List
 
 import csv as _csv
@@ -22,6 +23,7 @@ from helpers import (
     notify_daily_task_edited, notify_warranty_expiry, notify_range_task_deadline, _warranty_expiry,
     notify_case_stage_deadline, notify_case_stage_deadline_manager,
     notify_case_project_overdue,
+    notify_cert_expiry,
     notify_module_activity,
     _get_setting, _set_setting, notify_approval_reminder, _workdays_elapsed,
 )
@@ -1230,6 +1232,137 @@ def _check_warranty_expiry() -> None:
         _logger.warning("_check_warranty_expiry failed: %s", exc)
 
 
+# ── HTTPS 憑證到期檢查（2026-09-11）──────────────────────────────────────────
+# 在此之前這件事完全沒有任何監控。目前服務中的是 mkcert 自簽憑證、2028-12-10
+# 到期（星期日），而 mkcert 不會自己更新——到期後的第一個上班日，全公司的
+# Passkey 會一起失效，而那時候不會有人記得「mkcert」是什麼。
+#
+# 門檻依「憑證總效期」自動切換，不必有人在換憑證來源時記得回來改常數：
+#   mkcert 自簽 ≈ 822 天 → 要手動重產，得早點講
+#   Let's Encrypt = 90 天，Posh-ACME 在剩 30 天時就會自動續期
+#     → 剩 21 天還沒換掉，代表自動續期已經失敗，那才是真警報。
+#       若對 LE 沿用 60 天門檻，每張憑證都會在一切正常的情況下誤報一次，
+#       而狼來了的告警等於沒有告警。
+_CERT_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "certs", "cert.pem"
+)
+_CERT_LONG_LIVED_DAYS   = 180              # 總效期超過此天數 → 視為手動簽發
+_CERT_THRESHOLDS_MANUAL = (0, 7, 21, 60)   # 必須遞增
+_CERT_THRESHOLDS_ACME   = (0, 1, 7, 21)
+
+
+def _read_serving_cert(path: str = None) -> Optional[dict]:
+    """讀出目前服務中的憑證資訊；沒有憑證檔（純 HTTP 模式）時回傳 None。
+
+    刻意讀檔而不是對自己開一條 TLS 連線：`start.bat`／`autostart.bat` 載入的
+    就是這個檔（`if exist certs\\cert.pem` 才加 --ssl-* 參數），讀檔沒有網路
+    依賴、不受服務當下狀態影響，測試也不必真的起一個 TLS server。
+    """
+    path = path or _CERT_PATH
+    if not os.path.exists(path):
+        return None
+    try:
+        from cryptography import x509
+        from cryptography.hazmat.primitives import hashes as _hashes
+
+        with open(path, "rb") as fh:
+            cert = x509.load_pem_x509_certificate(fh.read())
+
+        # cryptography 42+ 把 not_valid_after 標為 deprecated，改用 *_utc；
+        # 舊版沒有那個屬性，兩邊都接以免升級/降級任一方向都會炸。
+        not_after = getattr(cert, "not_valid_after_utc", None)
+        if not_after is None:
+            not_after = cert.not_valid_after.replace(tzinfo=_timezone.utc)
+        not_before = getattr(cert, "not_valid_before_utc", None)
+        if not_before is None:
+            not_before = cert.not_valid_before.replace(tzinfo=_timezone.utc)
+
+        try:
+            issuer_cn = cert.issuer.get_attributes_for_oid(
+                x509.oid.NameOID.COMMON_NAME)[0].value
+        except Exception:
+            issuer_cn = ""
+
+        today = datetime.now(_timezone.utc).date()
+        return {
+            "not_after":   not_after.date().isoformat(),
+            "days_left":   (not_after.date() - today).days,
+            "total_days":  (not_after.date() - not_before.date()).days,
+            "issuer_cn":   issuer_cn,
+            "fingerprint": cert.fingerprint(_hashes.SHA256()).hex()[:16],
+            "path":        path,
+        }
+    except Exception as exc:
+        _logger.warning("_read_serving_cert(%s) failed: %s", path, exc)
+        return None
+
+
+def _prune_cert_guard_keys(live_keys: set) -> None:
+    """只保留本次算出來的 guard key，其餘 `cert_notif.*` 一律刪掉。
+
+    理由同 `_prune_case_project_guard_keys()`：換一張憑證就換一組 fingerprint，
+    舊的 key 永遠不會再被查詢；而比當前更早的門檻也不會再被問（剩餘天數只會
+    遞減）。不收斂的話這裡會重演 `module_versions` 那種「只寫不刪」的長期累積。
+    結果是這個前綴在 system_settings 裡最多只佔 1 列。
+    """
+    conn = get_db()
+    try:
+        existing = [r["key"] for r in conn.execute(
+            "SELECT key FROM system_settings WHERE key LIKE 'cert_notif.%'"
+        ).fetchall()]
+        stale = [k for k in existing if k not in live_keys]
+        if stale:
+            conn.executemany(
+                "DELETE FROM system_settings WHERE key=?", [(k,) for k in stale])
+            conn.commit()
+    except Exception as exc:
+        _logger.warning("_prune_cert_guard_keys failed: %s", exc)
+    finally:
+        conn.close()
+
+
+def _check_cert_expiry() -> None:
+    """每日檢查 HTTPS 憑證剩餘天數；每個門檻各寄一次，已過期後每 7 天重寄。"""
+    try:
+        info = _read_serving_cert()
+        if info is None:
+            return  # 純 HTTP 模式（或憑證檔讀不到），沒有到期日要顧
+
+        days_left  = info["days_left"]
+        is_acme    = info["total_days"] <= _CERT_LONG_LIVED_DAYS
+        thresholds = _CERT_THRESHOLDS_ACME if is_acme else _CERT_THRESHOLDS_MANUAL
+
+        if days_left > thresholds[-1]:
+            _prune_cert_guard_keys(set())   # 還很遠，順手把舊憑證留下的 key 收掉
+            return
+
+        if days_left < 0:
+            bucket = f"exp{(-days_left) // 7}"       # 過期後每 7 天重寄一次
+        else:
+            bucket = next(str(t) for t in thresholds if days_left <= t)
+
+        guard_key = f"cert_notif.{info['fingerprint']}_{bucket}"
+        if _get_setting(guard_key):
+            _prune_cert_guard_keys({guard_key})
+            return
+
+        _set_setting(guard_key, _date.today().isoformat())
+        # 同 _check_case_project_timeline_deadline()：排程觸發、不掛在任何 request
+        # 上，刻意用 threading.Thread 而非 db.spawn_bg_thread()（§3.5 例外 (a)）。
+        threading.Thread(
+            target=notify_cert_expiry,
+            args=(days_left, info["not_after"], info["issuer_cn"], info["path"], is_acme),
+            daemon=True,
+        ).start()
+        _logger.warning(
+            "HTTPS cert expiring: %s days left (expires %s, issuer=%s)",
+            days_left, info["not_after"], info["issuer_cn"],
+        )
+        _prune_cert_guard_keys({guard_key})
+    except Exception as exc:
+        _logger.warning("_check_cert_expiry failed: %s", exc)
+
+
 # ── 簽核逾期催辦（2026-08-21）────────────────────────────────────────────────
 # 報價單／承攬商匯款申請／開票申請憑據三張表的 approval JSON 形狀完全相同
 # （{requestedBy, requestedAt, tiers:[{approvers:[{username,status}]}], currentTier}），
@@ -1379,6 +1512,7 @@ def schedule_overdue_check() -> None:
         _check_case_project_timeline_deadline()
         _check_project_deadline()
         _check_approval_reminders()
+        _check_cert_expiry()
 
     def _startup_catchup():
         """Process every day from (last_check + 1) through yesterday in order."""
@@ -1394,6 +1528,7 @@ def schedule_overdue_check() -> None:
             _check_case_project_timeline_deadline()
             _check_project_deadline()
             _check_approval_reminders()
+            _check_cert_expiry()
             return
 
         # Advance day-by-day through any gap
@@ -1413,6 +1548,7 @@ def schedule_overdue_check() -> None:
         _check_case_project_timeline_deadline()
         _check_project_deadline()
         _check_approval_reminders()
+        _check_cert_expiry()
         _logger.info("Startup catch-up complete, processed up to %s", yesterday)
 
     # Always run catch-up on startup (the guard inside prevents duplicate emails)

@@ -5,6 +5,65 @@
 
 ---
 
+### 2026-09-11（白天）— 憑證到期告警：唯一一件「一定會發生、而且完全沒人在看」的事
+
+**先記決策：Cloudflare 兩條路都排除。**
+
+| 方案 | 為什麼不做 |
+|---|---|
+| Cloudflare Origin CA 憑證 | 它的根 CA **不在任何瀏覽器／OS 的信任清單裡**（設計如此——那是給「Cloudflare proxy ↔ 你的主機」那一段用的）。要用就得每台裝 Cloudflare 的根，等於回到現在 mkcert 的處境一台都沒少，還改成信任一個不是自己控制的第三方根。**解決不了原本的問題** |
+| Cloudflare Tunnel + Access | 唯一的獨門好處是「從公司外面能用 ERP」。代價：①對外網路一斷，坐在辦公室裡也連不上 ②全部 ERP 流量在 Cloudflare 邊緣解密 ③正式機多一個不在 git 的常駐服務 ④Access 會在 ERP 自己的登入頁之前再插一層登入。而**規劃中的 VPN 解的是同一個問題**，且沒有這四項代價 |
+
+錢完全不是因素（要用的都在免費額度內）。若之後要重開這個討論，前提是「VPN 確定不做」。
+
+---
+
+**接著是這輪真正動手的東西。**
+
+目前服務中的憑證是 mkcert 自簽、**2028-12-10 到期**，而 mkcert 不會自己更新。到期日是星期日，隔天上班全公司的 Passkey 會一起失效——而那時候不會有人記得「mkcert」這三個字，更不會有人想到要去看 `backend\certs\`。
+
+在這之前，**這件事沒有任何監控**。`letsencrypt_renew.ps1` 的 `[警告]` 只寫進 log，而「往 log 寫」正是這件事現在的失敗模式。
+
+**新增 `routers/daily_tasks.py::_check_cert_expiry()`**，掛進既有的每日 08:00 排程（含錯過補跑）。
+
+**① 門檻依「憑證總效期」自動切換 —— 這是整個設計裡最刻意的一點**
+
+| 憑證種類 | 判斷依據 | 門檻 |
+|---|---|---|
+| 手動簽發（mkcert，822 天） | 總效期 > 180 天 | 60 / 21 / 7 天 |
+| ACME 自動續期（LE，90 天） | 總效期 ≤ 180 天 | 21 / 7 / 1 天 |
+
+理由：Posh-ACME 要到「剩 30 天」才會續期。**若對 LE 沿用 60 天門檻，每一張憑證都會在一切正常的情況下誤報一次**，大約每 90 天一次。狼來了的告警等於沒有告警，而這個告警存在的唯一目的，就是在好幾百天後的某一天真的叫得動人。
+
+反過來，LE 剩 21 天還沒換掉，代表自動續期**已經失敗過一輪**，那才是真警報。
+
+**② 讀檔，不對自己開 TLS 連線**
+
+`start.bat`／`autostart.bat` 是 `if exist certs\cert.pem` 才加 `--ssl-*` 參數，uvicorn 載入的就是那個檔。讀檔沒有網路依賴、不受服務當下狀態影響，測試也不必真的起一個 TLS server。憑證檔不存在（純 HTTP 模式，也是憑證出事時的緊急退路）就安靜跳過。
+
+**③ 信裡直接寫「該怎麼修」，而且依簽發者分兩種**
+
+mkcert → 重跑 `https_setup.ps1 -ExtraNames motrix.internal -Force` ＋ 重啟，並註明「同事電腦上的 CA 不用動、Passkey 也不會失效」。
+LE → 查排程工作、查 `letsencrypt_renew.log`、查 Cloudflare token 是否失效。
+
+同時把影響範圍講清楚，免得收信的人以為「憑證過期＝系統掛了」而驚動所有人：**Passkey 完全不能用；密碼／TOTP／QR 仍可用**（點「進階 → 繼續前往」）；系統與資料不受影響。
+
+**④ guard key 帶 fingerprint，並且收斂**
+
+換一張憑證就換一組 fingerprint，告警自動重置；比當前更早的門檻永遠不會再被查詢，所以一併刪掉。這個前綴在 `system_settings` 裡最多只佔 1 列——理由同 `_prune_case_project_guard_keys()`，本專案已經為「只寫不刪」付過代價（`module_versions` 曾長到 626,725 列、約佔 301MB 資料庫裡的 270MB）。
+
+**⑤ 週邊**
+
+`cert_expiry` 加進 `notification_prefs.py::EVENT_GROUPS`（漏了會被 `test_notification_prefs_coverage.py` 擋下——那正是 `case_project_overdue` 當初踩的坑）。`cryptography` 補進 `requirements.txt` 與打包守門的 `$depCheck`：先前只是 `webauthn` 的傳遞依賴，既然自己 import 了就該明寫。
+
+**實測**：把正式機真的那張憑證抓下來餵進去 → 822 天 / issuer `mkcert MOTRIX\Motrix@Motrix` / 判定手動簽發 → **第一次告警落在 2028-10-11**（到期前 60 天）。開發機沒有 `certs/` → 靜默、不報錯。
+
+**測試 16 題**，並逐一破壞產品邏輯驗證測試真的抓得到：門檻不切換／過期不分桶／guard key 去掉 fingerprint／遠期不收斂——**四個破壞全部變紅**。全套非 e2e **591 passed**。
+
+> ⚠️ **寫測試時自己踩到的坑，值得記在這裡。** 一開始用「重簽一張憑證」來模擬時間經過，但重簽會換掉 fingerprint，而 fingerprint 正是 guard key 的一部分——於是 `test_expired_next_week_resends` 會在 7 天分桶邏輯壞掉的情況下**照樣變綠**，看起來在驗分桶，其實驗的是「換了憑證會重寄」。**跟 `4ffe190` 是同一種錯**：斷言沒有守住它該守的東西。改成用 `fake_cert` fixture 直接控制 `_read_serving_cert()` 的回傳值，把「同一張憑證變舊」與「換了一張新憑證」分成兩個可以獨立控制的維度。是相鄰那題（`test_expired_within_same_week_does_not_resend`）先紅，才把這件事翻出來。
+
+---
+
 ### 2026-09-11（凌晨 01:05）— Let's Encrypt 公開憑證方案：把「每台裝 CA」這件事整個消滅掉
 
 **起點是一個問「能不能自動化」的需求，答案是不能，但問題本身有解。**

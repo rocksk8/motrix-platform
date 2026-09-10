@@ -242,6 +242,16 @@ setup（POST /api/auth/totp/setup）→ 產生密鑰，totp_enabled 仍是 0
 | RP ID / Origin | `motrix.internal` / `https://motrix.internal:666`（存 `system_settings`，**不在 git 裡**） |
 | 用戶端一鍵設定 | `backend/tools/setup_passkey_client.ps1`（裝 CA＋加 hosts，需系統管理員）；`fetch_root_ca.ps1` 從正式機取回 CA |
 | 實測 | 使用者已可註冊 Passkey **並用 Passkey 登入**；自動化 e2e `backend/tests/test_e2e_passkey_2026_09_11.py`（CDP 虛擬認證器）覆蓋整條路 |
+| **到期告警** | ✅ 2026-09-11 新增 `daily_tasks.py::_check_cert_expiry()`——**在那之前完全沒有任何監控**。門檻依憑證總效期自動切換（>180 天視為手動簽發 → 60/21/7 天；否則視為 ACME → 21/7/1 天），過期後每 7 天重寄。以目前這張算，第一次告警是 **2028-10-11**（到期前 60 天） |
+
+**❌ 已排除的替代方案（2026-09-11 決定，不要再重新評估）**
+
+| 方案 | 為什麼不做 |
+|---|---|
+| **Cloudflare Origin CA 憑證** | 它的根 CA **不在任何瀏覽器／OS 信任清單裡**（設計如此，是給 Cloudflare proxy ↔ 主機那一段用的）。要用就得每台裝 Cloudflare 的根 CA，等於回到現在 mkcert 的處境、一台都沒少，還改成信任一個不是自己控制的第三方根。**解決不了原本的問題** |
+| **Cloudflare Tunnel + Access** | 唯一的獨門好處是「從公司外面能用 ERP」，代價是①對外網路一斷，坐在辦公室也連不上②全部 ERP 流量在 Cloudflare 邊緣解密③正式機多一個不在 git 的常駐服務④Access 會在 ERP 登入頁之前再插一層登入。而**使用者規劃中的 VPN 解的是同一個問題**且沒有這四項代價。錢不是因素（該用的方案都在免費額度內） |
+
+> 若之後真的要重開這個討論，前提是「VPN 確定不做」。另外注意：改走 Tunnel **不需要再換一次 RP ID**（RP ID 只認主機名、不含 port），只要改 Origin 設定，既有 Passkey 不會失效。
 
 **⏳ 動 RP ID 之前必讀——這是本模組唯一不可逆的操作**
 
@@ -1222,7 +1232,8 @@ xlsx-0.18.5.full.min.js     （SheetJS）
 | 優先 | 項目 |
 |------|------|
 | ✅ | ~~區網 HTTPS／反向代理~~（`https_setup.ps1`，uvicorn 原生 TLS 自簽憑證，2026-08-27 commit `d7b8ee9`）——**2026-09-11 更正：正式機早已是 HTTPS**（本文件先前記載「尚未執行」已過時，該落差本身是 2026-09-08 事故的間接成因，見 §12 同日條目）；2026-09-10 又以 `-ExtraNames motrix.internal -Force` 重產憑證，SAN 與 CA 詳情見 **§3.3c** |
-| 🔴 | **待決策（有時效性，越拖成本越高）：要不要改用 Let's Encrypt 公開受信任憑證＋把 RP ID 換成 `erp.miactw.com`**，見 [`LETSENCRYPT-PUBLIC-CERT-PLAN.md`](LETSENCRYPT-PUBLIC-CERT-PLAN.md)（2026-09-11 規劃完成，**尚未執行**）。**做**：每台裝 CA／改 hosts 這件事整個消失（含 macOS、手機、Firefox），日後換網段或加 VPN 也不會讓 Passkey 全滅。**不做**：維持自簽 CA，每台新電腦都要人跑一次 `setup_passkey_client.ps1`，且未來網路環境一變動就被迫換 RP ID。**時效性來源**：換 RP ID 會讓**所有既有 Passkey 失效且無法救回**（`webauthn_credentials` 沒存 rp_id），目前只有 1～2 張是成本最低的時刻，累積幾十張後再換會非常痛。**卡在哪**：步驟 1～3（Cloudflare 加 A 記錄、建 API Token、正式機簽憑證）都必須由人操作；`backend/tools/letsencrypt_renew.ps1` 已寫好待用。**若決定不做，請直接在這一列寫明「決定維持自簽」與日期**，別讓它懸著 |
+| 🔴 | **待決策（有時效性，越拖成本越高）：要不要改用 Let's Encrypt 公開受信任憑證＋把 RP ID 換成 `erp.miactw.com`**，見 [`LETSENCRYPT-PUBLIC-CERT-PLAN.md`](LETSENCRYPT-PUBLIC-CERT-PLAN.md)（2026-09-11 規劃完成，**尚未執行**）。**做**：每台裝 CA／改 hosts 這件事整個消失（含 macOS、手機、Firefox），日後換網段或加 VPN 也不會讓 Passkey 全滅。**不做**：維持自簽 CA，每台新電腦都要人跑一次 `setup_passkey_client.ps1`，且未來網路環境一變動就被迫換 RP ID。**時效性來源**：換 RP ID 會讓**所有既有 Passkey 失效且無法救回**（`webauthn_credentials` 沒存 rp_id），目前只有 1～2 張是成本最低的時刻，累積幾十張後再換會非常痛。**卡在哪**：步驟 1～3（Cloudflare 加 A 記錄、建 API Token、正式機簽憑證）都必須由人操作；`backend/tools/letsencrypt_renew.ps1` 已寫好待用。**若決定不做，請直接在這一列寫明「決定維持自簽」與日期**，別讓它懸著。**2026-09-11 已排除 Cloudflare（Origin CA／Tunnel）兩個替代方案**，理由見 §3.3c，不要再重新評估 |
+| ✅ | ~~憑證到期完全沒有監控~~（**2026-09-11 已實作** `daily_tasks.py::_check_cert_expiry()`，門檻依憑證總效期自動切換，見 §3.3c 與 §12 同日條目）。**這是先前完全不存在的一層**：mkcert 憑證 2028-12-10（星期日）到期、不會自己更新，而 `letsencrypt_renew.ps1` 的 `[警告]` 只寫進 log 沒人會看 |
 | ✅ | ~~死碼 JS 清除~~（21 個死碼 .js 已刪，`frontend/js/` 僅剩 2 個有效檔） |
 | ✅ | ~~關鍵 API 自動化測試~~（2026-09-01 更正：早已遠超 48 tests，現為 `backend/tests/` 45 個測試檔，累計 300+ 題，近期為 308/308 全過） |
 | ✅ | ~~文件拆 `CHANGELOG.md` 與本速查分離~~（已完成，見根目錄 `CHANGELOG.md`） |
@@ -1262,6 +1273,36 @@ xlsx-0.18.5.full.min.js     （SheetJS）
 > 未紀錄；同期間 `CHANGELOG.md` 09-08／09-09 兩天完全空白。已於本日補回，並新增
 > [`WEEKLY-AUDIT-2026-09-07_2026-09-10.md`](WEEKLY-AUDIT-2026-09-07_2026-09-10.md)
 > ——帶「模組／檔案:行號／是否在正式機」座標的本週稽核索引，出事時先看那份。
+
+### 2026-09-11（白天）— 憑證到期告警＋放棄 Cloudflare 方案（DB 無異動）
+
+**決策：Cloudflare 兩條路都排除**，理由見 §3.3c 的「已排除的替代方案」表。一句話版本：
+Origin CA 的根不被瀏覽器信任、解決不了原問題；Tunnel 的獨門好處只有「從外面能用」，
+而那正是使用者規劃中的 VPN 要解的事，代價卻多了四項（含**對外斷線時連辦公室內也用不了**）。
+
+**新增 `routers/daily_tasks.py::_check_cert_expiry()`——憑證到期在此之前完全沒有監控。**
+
+- **門檻依「憑證總效期」自動切換**，不必有人在換憑證來源時記得回來改常數：
+  總效期 > 180 天視為手動簽發（mkcert 822 天）→ **60/21/7 天**；否則視為 ACME（LE 90 天）→ **21/7/1 天**。
+  ⚠️ 這一點是刻意的：Posh-ACME 在剩 30 天才續期，**若對 LE 沿用 60 天門檻，每張憑證都會在一切正常時誤報一次**，而狼來了的告警等於沒有告警
+- 過期後每 7 天重寄（沿用 `_check_case_project_timeline_deadline()` 的分桶慣例）
+- **讀檔而不是對自己開 TLS 連線**：`start.bat` 載入的就是 `certs\cert.pem`，讀檔沒有網路依賴、不受服務當下狀態影響，測試也不必真的起一個 TLS server
+- guard key 帶 fingerprint，換憑證自動重置；每次都收斂到最多 1 列（理由同 `_prune_case_project_guard_keys`，本專案已為「只寫不刪」付過 `module_versions` 626,725 列／270MB 的代價）
+- 信裡**依簽發者給不同的修復指示**（mkcert → 重跑 `https_setup.ps1`；LE → 查續期排程與 log）：這封信會在好幾百天後才第一次寄出，那時沒有人會記得 mkcert 或 Posh-ACME 是什麼
+- `cert_expiry` 已加進 `notification_prefs.py::EVENT_GROUPS`（漏了會被 `test_notification_prefs_coverage.py` 擋下——那正是 `case_project_overdue` 當初踩的坑）
+- `cryptography` 補進 `requirements.txt` 與打包守門的 `$depCheck`：先前只是 `webauthn` 的傳遞依賴，既然自己 import 了就該明寫
+
+**實測**：拿正式機真的那張憑證餵進去 → 822 天／issuer `mkcert MOTRIX\Motrix@Motrix`／判定為手動簽發 →
+**第一次告警落在 2028-10-11**（到期前 60 天）。開發機沒有 `certs/` → 靜默、不報錯。
+
+**測試 16 題**，並逐一破壞產品邏輯驗證測試真的抓得到（門檻不切換／過期不分桶／guard key 去掉
+fingerprint／遠期不收斂，四個破壞全部變紅）。全套非 e2e **591 passed**。
+
+> ⚠️ **寫測試時自己踩到、值得記住的坑**：一開始用「重簽一張憑證」來模擬時間經過，
+> 但重簽會換掉 fingerprint，而 fingerprint 正是 guard key 的一部分——`test_expired_next_week_resends`
+> 因此會在 7 天分桶邏輯壞掉的情況下照樣變綠。**跟 `4ffe190` 是同一種錯**（斷言沒守住它該守的東西）。
+> 改成用 `fake_cert` fixture 直接控制 `_read_serving_cert()` 的回傳值，把「同一張憑證變舊」
+> 與「換了一張新憑證」分成兩個可獨立控制的維度。
 
 ### 2026-09-11（凌晨 01:05）— Let's Encrypt 公開憑證方案（`bbdd166`／`428e511`，規劃完成**尚未執行**，DB 無異動）
 

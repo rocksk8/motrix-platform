@@ -1393,3 +1393,79 @@ def notify_case_project_overdue(
         button_text="前往案件管理",
     )
     _async_send(to, f"【MOTRIX】案件專案期間已超期 — {project_name or quote_no}（已超期 {days_overdue} 天）", html)
+
+
+def notify_cert_expiry(
+    days_left: int,
+    not_after: str,
+    issuer_cn: str,
+    cert_path: str,
+    is_acme: bool,
+) -> None:
+    """HTTPS 憑證即將到期／已過期 → 所有 admin/superadmin（2026-09-11）
+
+    刻意把「該怎麼修」直接寫進信裡，而且依簽發者分兩種寫法：這封信會在
+    好幾百天後才第一次寄出，那時候沒有人會記得 mkcert 或 Posh-ACME 是什麼、
+    更不會記得要去翻哪份文件。信裡查得到做法，才不用等到出事當天現學。
+    """
+    to = _admin_emails("cert_expiry")
+    if not to:
+        return
+
+    if days_left < 0:
+        badge_text, badge_color = f"已過期 {-days_left} 天", "#DC2626"
+        intro = (
+            f"正式機的 HTTPS 憑證已於 {not_after} 過期（{-days_left} 天前）。"
+            "Passkey 現在應該已經完全無法使用。"
+        )
+    elif days_left == 0:
+        badge_text, badge_color = "今日到期", "#DC2626"
+        intro = f"正式機的 HTTPS 憑證於今日（{not_after}）到期。"
+    else:
+        badge_text, badge_color = f"剩 {days_left} 天", "#D97706" if days_left > 7 else "#DC2626"
+        intro = f"正式機的 HTTPS 憑證將於 {not_after} 到期，剩下 {days_left} 天。"
+
+    # 影響範圍講清楚，避免收信的人以為「憑證過期＝系統掛了」而驚動所有人
+    impact = (
+        "<b>影響範圍</b>：<br>"
+        "• Passkey／指紋登入 → <b>完全不能用</b>（瀏覽器不再視為安全內容）<br>"
+        "• 密碼登入、TOTP、手機掃 QR → <b>仍可使用</b>，但瀏覽器會跳憑證警告，"
+        "需要點「進階 → 繼續前往」<br>"
+        "• 系統本身與資料 → 不受影響"
+    )
+
+    if is_acme:
+        howto = (
+            "<b>這張是自動續期的憑證（Let's Encrypt）</b>，正常情況下它應該早就自己換好了——"
+            "收到這封信代表<b>自動續期已經失敗</b>。請在正式機檢查："
+            "<br>1. 排程工作「MOTRIX ERP Cert Renew」是否還在、最近一次執行結果為何"
+            "<br>2. <code>backend\\logs\\letsencrypt_renew.log</code> 的錯誤訊息"
+            "<br>3. Cloudflare API Token 是否已失效或被撤銷"
+            "<br>手動補救：以系統管理員執行 "
+            "<code>backend\\tools\\letsencrypt_renew.ps1 -Force</code>"
+        )
+    else:
+        howto = (
+            "<b>這張是自簽憑證（mkcert）</b>，不會自己更新，必須手動重產。"
+            "在正式機以系統管理員執行："
+            "<br><code>backend\\tools\\https_setup.ps1 -ExtraNames motrix.internal -Force</code>"
+            "<br>然後執行 <code>backend\\restart.bat</code> 重啟服務。"
+            "<br>根 CA 本身有效期到 2036-09-07，<b>同事電腦上裝的 CA 不用動</b>；"
+            "重產後 Passkey 也不會失效（RP ID 沒有改變）。"
+        )
+
+    html = _build_html(
+        "HTTPS 憑證即將到期", badge_text, badge_color,
+        [
+            ("到期日", not_after),
+            ("剩餘天數", f"{days_left} 天" if days_left >= 0 else f"已過期 {-days_left} 天"),
+            ("簽發者", issuer_cn or "（不明）"),
+            ("憑證檔", cert_path),
+        ],
+        "", _base_url(),
+        note=f"{impact}<br><br>{howto}",
+        intro=intro,
+        button_text="前往系統",
+    )
+    subject_state = "已過期" if days_left < 0 else f"剩 {days_left} 天"
+    _async_send(to, f"【MOTRIX】HTTPS 憑證{subject_state} — {not_after}", html)

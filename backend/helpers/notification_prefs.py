@@ -71,6 +71,7 @@ EVENT_GROUPS = [
         ("case_closing_report", "案件結案報表 PDF（僅最高管理員）"),
         ("monthly_report",       "每月營運報表"),
         ("module_activity",      "各模組新增／異動通知（建立帳號、案件等一般活動）"),
+        ("cert_expiry",          "HTTPS 憑證即將到期（每日檢查，依憑證種類自動調整提前天數）"),
     ]),
     ("已結案案件解鎖", [
         ("case_close_blocked",   "完結案被防呆機制擋下（未達成前置條件）"),
