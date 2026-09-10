@@ -65,6 +65,24 @@ def test_invalid_pairs_are_rejected(client, su, rp_id, origin, because):
     assert r.status_code == 400, f"{because}：預期 400，實際 {r.status_code} {r.text}"
 
 
+@pytest.mark.parametrize("rp_id,origin", [
+    ("172.16.10.177", "https://172.16.10.177:666"),
+    ("127.0.0.1", "https://127.0.0.1:666"),
+])
+def test_ip_address_rp_id_is_rejected(client, su, rp_id, origin):
+    """IP 位址不能當 RP ID——這是最容易踩到的一種。
+
+    這台正式機平常就是用 172.16.10.177:666 存取，很自然會把 IP 填進去。
+    格式檢查（網域字元、Origin 主機相符）全部都會過，資料也存得進去、
+    前端 Passkey 按鈕還會亮起來（configured=true），但瀏覽器依 W3C 規格
+    要求 RP ID 必須是「可註冊網域後綴」，對 IP 一律拒絕註冊，使用者只會
+    看到一句沒有上下文的 SecurityError。必須先有內部 DNS 名稱。
+    """
+    r = _patch(client, su, rp_id, origin)
+    assert r.status_code == 400, f"IP 當 RP ID 應被擋下，實際 {r.status_code} {r.text}"
+    assert "IP" in r.json()["detail"]
+
+
 def test_both_or_neither(client, su):
     assert _patch(client, su, "erp.local", "").status_code == 400
     assert _patch(client, su, "", "https://erp.local").status_code == 400

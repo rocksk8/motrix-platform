@@ -715,6 +715,7 @@ def set_pdf_base_path_setting(body: dict = Body(...), authorization: str = Heade
 
 def _validate_webauthn_pair(rp_id: str, origin: str) -> None:
     """RP ID／Origin 的格式與相依關係檢查，不合規直接 400。"""
+    import ipaddress as _ipaddress
     import re as _re
     from urllib.parse import urlparse as _urlparse
 
@@ -722,6 +723,24 @@ def _validate_webauthn_pair(rp_id: str, origin: str) -> None:
         raise HTTPException(400, f"RP ID 只能是網域名稱本身，不要含 http(s):// 或連接埠（收到：{rp_id}）")
     if not _re.fullmatch(r"[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*", rp_id):
         raise HTTPException(400, f"RP ID 不是合法的網域名稱（收到：{rp_id}）")
+
+    # IP 位址不能當 RP ID。W3C WebAuthn 規格要求 RP ID 是「可註冊網域後綴」，
+    # IP 位址不具備這個性質，Chrome/Edge/Safari 一律直接拒絕註冊。
+    # 這一條特別容易踩到：這台正式機平常就是用 172.16.10.177:666 存取，
+    # 很自然會想直接把 IP 填進去——填了會存得進資料庫、前端 Passkey 按鈕
+    # 也會亮起來（configured=true），但實際點下去只會拿到一句沒有上下文的
+    # SecurityError，看起來像功能壞掉。必須先有內部 DNS 名稱指向這台機器。
+    try:
+        _ipaddress.ip_address(rp_id)
+    except ValueError:
+        pass  # 不是 IP，正常情況
+    else:
+        raise HTTPException(
+            400,
+            f"RP ID 不能是 IP 位址（收到：{rp_id}）。WebAuthn 規格要求 RP ID 是可註冊的網域"
+            f"後綴，瀏覽器會直接拒絕 IP。請先在內部 DNS 建一個指向這台主機的名稱"
+            f"（例如 erp.miactw.local），再用那個名稱設定。"
+        )
 
     parsed = _urlparse(origin)
     if parsed.scheme not in ("https", "http") or not parsed.hostname:
