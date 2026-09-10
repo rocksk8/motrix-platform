@@ -1226,7 +1226,13 @@ xlsx-0.18.5.full.min.js     （SheetJS）
 - **修法（兩個獨立的歧義來源一起處理，只修一個都還會壞）**：①**用哪一支 tar**——改回優先 `%SystemRoot%\System32\tar.exe` 並寫完整路徑，不受 PATH 順序影響；沒有內建 bsdtar 的舊系統才退回 Git tar，且那條路徑補 `--force-local` 明確告訴 GNU tar「冒號不是主機名」②**傳什麼形式的路徑**——反正已經 `Push-Location $pkgDir` 了，改傳相對檔名而非 `C:\...` 絕對路徑，讓 `-f host:path` 遠端磁帶機語法從根本上咬不到。並印出實際使用的解壓工具路徑，跟同批加的 Python 直譯器守門同一個做法。
 - **這件事本身就是本週最大教訓的實證**：先前 11:28/11:31 那兩份包能成功解壓，代表這個失敗是**環境相依**的——真正保護你的不是「這次跑得過」，而是三層防護（`git archive` exit code／`tar` exit code／解壓後驗證 `backend`、`frontend` 目錄存在）。這次被第二層擋下，沒有再產出一份空殼部署包。失敗留下的空殼包 `20260910_134108_2ea463f` 已刪除。
 - **完整打包流程實測通過**：語法檢查 5 支 OK → 直譯器守門（3.11.15，依賴齊全）→ 非 e2e **502 passed** → e2e **4 passed** → 版本標籤 `2026-09-10d`（不再是 null）→ 解壓工具 `C:\WINDOWS\System32\tar.exe` → 產出 `20260910_134616_d2ff23f`（backend 174／frontend 74）→ **exit 0**。
-- **部署交接**：包已備妥、儀表板已看得到它、WinRM 可達，只差輸入正式機密碼那一步（憑證未儲存，設計上就不落地）。詳見 `WEEKLY-AUDIT-2026-09-07_2026-09-10.md`「部署交接」。
+### 2026-09-10（14:01）— ✅ 已部署正式機：`9b0ad79` → `2471747`
+
+- **部署前先做鏈路一致性確認**（09-08 那晚吃過大虧的地方）：①執行中的儀表板進程（09-10 09:48 啟動）**新於** `deploy_dashboard.py`（09-08 09:54），不是跑舊版進程②`_dashboard_remote.ps1` 的 `ad04397`（先同步 `backend/tools/` 再呼叫）與 `6ee3a6d`（`===EXITCODE=N===` 回傳）都在③部署包裡的工具腳本與工作區逐字相同，差異只在換行且**包是 CRLF+BOM**（Windows 安全形式）④包內 `apply_update.ps1` 的五項修復都在。**建議把這四項固定成部署前的例行檢查。**
+- **套用過程**：db 快照 → Migration 乾跑通過 → 程式碼回滾快照 → 停服 → 套用 → pip install → 健康檢查（第 1 次 `WinError 10061` 服務還在起、第 2 次成功）→ 更新版本追蹤檔，exit 0。健檢逐次記錄與失敗原因都看得見，`1aa1dfb`＋`6ee3a6d` 在實戰中生效。
+- **部署後驗證**：`deployed-version`=`2471747`／`system/version`=`2026-09-10e`（先前卡在 `2026-09-09c`）／`/api/ping` 部署後 +2/+4/+6 分鐘皆 200 無延遲崩潰／叫料 API 回 401 非 404／`webauthn-config-status` = `{"configured":false}`／WebAuthn `login/begin` 回 503 與新測試一致。
+- **端對端功能實測（demo 帳號，§3.5 獨立資料庫，正式資料完全未觸碰）7/7 通過**：PATCH 寫入後 GET 真的讀得回來（證明 `conn.commit()` 修好）、報價單 `status` 改動前後都是「草稿」未被寫成 user_id、`updated_at` 仍是時間格式、`audit_log` 查得到 `material_orders.update`。**刻意不只看 HTTP 200**——叫料 API 原本就是回 200 但什麼都沒寫。
+- **仍待人工**：WebAuthn RP ID／Origin 未設定（`configured:false`），需要先決定內部 DNS 名稱指向 172.16.10.177，再以 superadmin 在 `company-profile-settings.html` 填入；在那之前 Passkey 維持 503，密碼／TOTP／QR 三種登入不受影響。
 
 ### 2026-09-10 — 月支出頁籤、WebAuthn 可設定化、案件專案期間超期通知（DB 無異動）
 
