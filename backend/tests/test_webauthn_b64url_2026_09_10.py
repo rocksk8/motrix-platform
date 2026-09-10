@@ -103,6 +103,7 @@ def test_register_complete_no_longer_fails_on_padding(client, make_user, caplog)
         resp = client.post("/api/auth/webauthn/register/complete", headers=headers, json={
             "challengeToken": challenge_token,
             "id": "dummy",
+            "type": "public-key",
             "rawId": _js_uint8array_to_b64(bytes(range(32))),
             "response": {
                 "clientDataJSON": _js_uint8array_to_b64(b'{"type":"webauthn.create"}'),
@@ -111,7 +112,40 @@ def test_register_complete_no_longer_fails_on_padding(client, make_user, caplog)
         })
 
     assert resp.status_code == 400, resp.text   # 假的簽章本來就該被拒
-    assert "padding" not in caplog.text.lower(), (
-        "又出現 padding 錯誤了——rawId 的解碼沒有走 _b64url_decode：\n"
-        + caplog.text[-500:]
+
+    # 這裡不能只驗「不是 padding 錯誤」——那樣太寬鬆，2026-09-10 就是因此讓
+    # 下一關（缺 `type` 欄位）漏掉：padding 修好之後測試照樣綠，使用者卻還是
+    # 拿到「認證器驗證失敗」。改成把**已知的結構性錯誤**全部列為不允許，
+    # 只有「真的走到密碼學驗證才失敗」才算通過。
+    STRUCTURAL = [
+        "padding",                    # base64 解碼（_b64url_decode）
+        "unexpected type",            # 缺 type 欄位
+        "missing required",           # 缺 id / rawId / response / clientDataJSON…
+        "not a json object",
+        "unable to decode credential",
+    ]
+    low = caplog.text.lower()
+    hit = [k for k in STRUCTURAL if k in low]
+    assert not hit, (
+        f"credential 結構沒送對，卡在 {hit} 而不是密碼學驗證：\n" + caplog.text[-600:]
     )
+
+
+def test_type_defaults_when_client_omits_it(client, make_user):
+    """前端沒送 `type` 時，後端模型的預設值要補上 "public-key"。
+
+    py_webauthn 會驗這個欄位，缺了就丟 InvalidJSONStructure。前端現在已經補送，
+    但舊版前端（瀏覽器快取、或還沒重新整理的分頁）仍可能不送——那種情況不該
+    再讓整條路壞掉。
+    """
+    from routers.auth import WebauthnRegisterCompleteIn, WebauthnLoginCompleteIn
+
+    reg = WebauthnRegisterCompleteIn(
+        challengeToken="t", id="i", rawId="r", response={})
+    assert reg.type == "public-key"
+    assert "type" in reg.dict(), "type 沒有進 dict()，等於沒傳給 py_webauthn"
+
+    log = WebauthnLoginCompleteIn(
+        challengeToken="t", username="u", id="i", rawId="r", response={})
+    assert log.type == "public-key"
+    assert "type" in log.dict()

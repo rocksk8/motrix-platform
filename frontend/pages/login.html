@@ -469,6 +469,9 @@
             challengeToken: this.challengeToken,
             username: this.username,
             id: cred.id,
+            // 同 change-password.html：py_webauthn 會驗 type（恆為 "public-key"），
+            // 少了就是 InvalidJSONStructure。2026-09-10 補。
+            type: cred.type || 'public-key',
             rawId: this._uint8ArrayToB64(new Uint8Array(cred.rawId)),
             response: {
               clientDataJSON: this._uint8ArrayToB64(new Uint8Array(cred.response.clientDataJSON)),

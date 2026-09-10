@@ -247,6 +247,13 @@ class WebauthnRegisterCompleteIn(BaseModel):
     id: str
     rawId: str
     response: dict
+    # 2026-09-10：py_webauthn 的 parse_registration_credential_json() 會驗
+    # `type` 必須是 PublicKeyCredentialType（也就是字串 "public-key"），沒有
+    # 就丟 InvalidJSONStructure("Credential had unexpected type")。這個模型
+    # 原本沒宣告這個欄位，所以就算前端有送，`body.dict()` 也不會帶過去——
+    # 註冊必然失敗。給預設值是為了相容還沒更新的前端（規格上這個值恆為
+    # "public-key"，WebAuthn 目前沒有第二種）。
+    type: str = "public-key"
 
 
 class WebauthnLoginBeginIn(BaseModel):
@@ -259,6 +266,9 @@ class WebauthnLoginCompleteIn(BaseModel):
     id: str
     rawId: str
     response: dict
+    # 同 WebauthnRegisterCompleteIn，登入這條路徑的
+    # parse_authentication_credential_json() 有一模一樣的檢查。
+    type: str = "public-key"
 
 
 class WebauthnCredentialRenameIn(BaseModel):
