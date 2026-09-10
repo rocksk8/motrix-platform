@@ -45,6 +45,7 @@
 | 2026-08-01 | `backend/setup_autostart_task.ps1`、`backend/setup_heartbeat_task.ps1` 兩個部署排程設定腳本，正式機有（§1.1／§1.2 有描述其行為）、這台開發機完全沒有檔案 | ✅ 2026-08-08 已解決——透過 RDP 連上正式機，原始檔案改名 `.orig` 保留後貼回內容逐行 diff 校正一致（差異細節見 `DR-SOP.md` §3 第 1 點），已 commit 進 git 並隨這次更新包一併部署 |
 | 2026-08-01 | 已知程式碼未 commit 進 git（`git log` 停在較舊的提交，工作區有大量未 commit 變更）；正式機的程式碼版本與 git 歷史的對應關係目前不明 | ✅ 已於合併正式機更新模式匯出檔案時一併 commit（見 §12 2026-08-01j）；正式機仍無 git，日後版本比對仍需靠 §15 `deploy_manifest.json` 記的 commit 值 |
 | 2026-08-05 | 本文件與程式碼（`main.py` CORS 白名單／`email_notify.py` 與 `system.py` 的 email base_url 預設值／`notification-settings.html` 預設值）長期記載正式機區網位址為 `172.16.11.211:666`，實際上是 `172.16.10.177:666`（使用者於本次對話中指正並確認為固定 IP，非 DHCP 動態配發；已用 `curl` 實測連線成功） | ✅ 本次一併修正上述 5 處程式碼與 §1 位址表 |
+| 2026-09-10 14:28 | **兩邊同時有 Claude session 在動同一個功能（WebAuthn）**：開發機這邊已打包好 `20260910_142806_625b0d6`（內含 `routers/system.py` 的 WebAuthn 設定端點改動）正要部署，使用者即時告知「正式機 Claude 正在跑 webauthn」才停手。若已套用，會直接覆蓋正式機上那個 session 正在改的檔案並重啟服務。**部署包已保留未套用**，等兩邊協調後再處理。正式機當下 `/api/system/webauthn-config-status` 仍是 `configured:false`，代表對方尚未成功寫入設定 | 🔶 **進行中**——需先確認正式機那邊改了哪些檔案、有沒有進 git；兩邊的 WebAuthn 改動需合併而非互相覆蓋 |
 | 2026-08-20 | 開發機當時無法連線，承攬商匯款申請／發票開立簽核單功能（DB v45/v46，見 §12）直接在正式機開發，開發機完全沒有這批程式碼 | ✅ 2026-08-23 已回推：`verify_manifest.py` 核對 43/43 相符、開發機本機啟動 server 驗證 `/api/ping`＋schema_version=52 正常後 `git commit`（累計至第 42 輪 2026-08-23q，DB 已到 v52，非僅 v45/v46） |
 
 ---
