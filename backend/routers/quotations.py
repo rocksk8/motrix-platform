@@ -1,6 +1,7 @@
 """Quotation CRUD, approval workflow, deal-tag, export endpoints."""
 import json
 import logging
+import re
 import os
 import shutil
 import sqlite3
@@ -393,6 +394,11 @@ class ApprovalActionBody(BaseModel):
 
 
 # ── Quotation sequence ────────────────────────────────────────────────────────
+
+# 正式單號格式：MQ-YYYYMM-NNN（月份 6 碼、序號 3 碼）。用來擋掉 client 送來的
+# 佔位字串／半成品號碼，見 create_quotation()。
+_QUOTE_NO_RE = re.compile(r"^MQ-\d{6}-\d{3}$")
+
 
 def _peek_next_no(conn, month: str) -> str:
     """Compute next available quote number without reserving it in quote_seq.
@@ -877,7 +883,18 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
     )
 
     # Use provisional number from client if provided; otherwise auto-assign
-    qno = body.quote_no or q.get("quoteNo") or _peek_next_no(conn, month)
+    # 2026-09-10：client 送來的單號一律要通過格式驗證才採用，否則視同沒送、由後端派號。
+    # 前端曾經在取不到號時送出佔位字串（`copyToNew()` 的 `MQ-YYYYMM-???`、舊版
+    # `saveDraft()` 的寫死 001），`MQ-202609-???` 這種字串不會跟任何既有單號衝突，
+    # 所以 INSERT 會成功，接著下面解析序號的 int() 就炸成未捕捉的 ValueError → 500，
+    # 使用者只看到「儲存失敗」，複製的內容也救不回來（模板在頁面載入時就清掉了）。
+    # 前端那兩處已分別修掉，但「後端才是單號的權威」這件事要在這裡守住——
+    # 不管哪個 client、哪個版本送什麼過來，格式不對就由後端自己派。
+    _client_no = (body.quote_no or q.get("quoteNo") or "").strip()
+    if _client_no and not _QUOTE_NO_RE.match(_client_no):
+        logger.warning("create_quotation 收到格式不合的單號 %r，改由後端派號", _client_no)
+        _client_no = ""
+    qno = _client_no or _peek_next_no(conn, month)
 
     def _do_insert(no: str):
         q["quoteNo"] = no
@@ -909,8 +926,14 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
             conn.close()
             raise HTTPException(409, "報價單號衝突，請重試")
 
-    # Reserve in quote_seq so future peeks don't repeat this number
-    seq_no = int(qno.split("-")[-1]) if qno.count("-") == 2 else 0
+    # Reserve in quote_seq so future peeks don't repeat this number.
+    # 這裡的 qno 已經過 _QUOTE_NO_RE 驗證（或由 _peek_next_no 產生），序號一定是
+    # 三位數字；仍用 try 兜底，因為「解析單號」不值得讓整支建立端點掛掉。
+    try:
+        seq_no = int(qno.split("-")[-1]) if qno.count("-") == 2 else 0
+    except ValueError:
+        logger.warning("create_quotation 無法從 %r 解析序號，略過 quote_seq 更新", qno)
+        seq_no = 0
     if seq_no:
         conn.execute(
             "INSERT INTO quote_seq (month, seq) VALUES (?, ?) "

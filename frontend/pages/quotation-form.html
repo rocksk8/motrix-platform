@@ -3065,6 +3065,34 @@ window.addEventListener('load',function(){
         setTimeout(() => { msg.style.opacity='0'; msg.style.transition='opacity .4s'; setTimeout(() => msg.remove(), 400) }, 2800)
       },
 
+      /* 取一個新單號填進表單。新增模式與「無號複製」共用同一支，兩邊才會有
+         同一套競態守門（見下方註解）。取不到號不擋作業——存檔時後端會派號。 */
+      async _peekQuoteNo() {
+        try {
+          // 2026-09-10：原本 3 秒。這支要查 quotations 全表的 MAX(序號)，
+          // 資料量大或機器忙的時候 3 秒不夠，一逾時就讓 quoteNo 留空，
+          // 而舊版 saveDraft() 遇到空值會寫死 001 送出（見該函式註解）。
+          // 放寬到 10 秒，跟本頁其他 API 呼叫一致。
+          const _nc = new AbortController()
+          setTimeout(() => _nc.abort(), 10000)
+          const res = await fetch(`${this.API}/next-quote-no`, { signal: _nc.signal, headers: { Authorization: 'Bearer ' + this.session.token } })
+          const _peeked = res.ok ? (await res.json()).quote_no : ''
+          // ⚠️ 這個 peek 是非同步的，可能在使用者已經按下存檔／送審**之後**才回來。
+          // 直接指派會把存檔回應剛回填的「真正的單號」蓋成新 peek 到的下一號
+          // ——畫面顯示 MQ-YYYYMM-002、資料庫其實是 001，簽核的人照畫面上的號碼
+          // 開就會開到一張不存在的單。已用可控實驗重現（修復前 6 次中 2 次）。
+          // 所以只有在「還沒有號碼、而且還是沒存過的新單」時才採用 peek 結果。
+          if (_peeked && !this.q.quoteNo && this.isNewRecord !== false) {
+            this.q.quoteNo = _peeked
+          }
+        } catch(e) {}
+        if (!this.q.quoteNo) {
+          // 拿不到號不擋作業：存檔時由後端派號，畫面顯示「儲存後自動編號」
+          // （見 .form-quote-no 的 x-text）。
+          this.toast('暫時取不到報價單號，儲存時會自動編號')
+        }
+      },
+
       async copyToNew() {
         let newNo = ''
         if (this.backendOnline) {
@@ -3073,13 +3101,15 @@ window.addEventListener('load',function(){
             if (r.ok) newNo = (await r.json()).quote_no
           } catch {}
         }
-        if (!newNo) {
-          const m = new Date()
-          newNo = `MQ-${m.getFullYear()}${String(m.getMonth()+1).padStart(2,'0')}-???`
-        }
+        // 2026-09-10：這裡原本在取不到號時造一個 `MQ-YYYYMM-???` 佔位字串當單號。
+        // 那個字串不會跟任何既有單號衝突，所以後端 INSERT 會成功，接著解析序號的
+        // int('???') 直接炸成 500——使用者只看到「儲存失敗」，而複製的內容在頁面
+        // 載入時就已經從 sessionStorage 清掉，重新整理就再也回不來（實測確認）。
+        // 改成不造假號：沒號碼就用 ?copy=1 帶過去，由新頁面自己取號、
+        // 真的取不到就交給後端在存檔時派（跟一般新增報價單同一條路）。
         const template = {
           ...this.q,
-          quoteNo: newNo,
+          quoteNo: newNo || '',
           quoteDate: new Date().toISOString().slice(0,10),
           status: '草稿',
           approval: null,
@@ -3094,7 +3124,9 @@ window.addEventListener('load',function(){
         }
         template.items = (this.q.items || []).map(it => ({...it, id: this.genId()}))
         sessionStorage.setItem('motrix_copy_template', JSON.stringify(template))
-        window.location.href = `quotation-form.html?id=${newNo}`
+        window.location.href = newNo
+          ? `quotation-form.html?id=${encodeURIComponent(newNo)}`
+          : 'quotation-form.html?copy=1'
       },
 
       /* ─── 案件追蹤 ───────────────────────────────────── */
@@ -3267,15 +3299,23 @@ window.addEventListener('load',function(){
         const editNo  = params.get('id')
 
         // ── 複製模式：從 sessionStorage 載入繼承內容 ──
+        const copyMode = params.get('copy') === '1'
         const copyTemplate = sessionStorage.getItem('motrix_copy_template')
-        if (editNo && copyTemplate) {
+        if ((editNo || copyMode) && copyTemplate) {
           try {
             const t = JSON.parse(copyTemplate)
-            if (t.quoteNo === editNo) {
+            // 有號碼時比對號碼；`?copy=1` 是「複製來源當下取不到號」的無號模式
+            const matches = editNo ? (t.quoteNo === editNo) : (copyMode && !t.quoteNo)
+            if (matches) {
               sessionStorage.removeItem('motrix_copy_template')
               Object.assign(this.q, t)
               this.isNewRecord = true
               this.isDirty = true
+              if (!this.q.quoteNo) {
+                // 無號複製：跟一般新增模式走同一支取號（含晚到覆蓋的守門），
+                // 真的取不到就維持空值，存檔時由後端派號。
+                await this._peekQuoteNo()
+              }
               this.calcTotals()
               this.checkApproval()
               return
@@ -3315,29 +3355,7 @@ window.addEventListener('load',function(){
           }
         } else {
           // ── 新增模式：每次由 API 派發單號 ──
-          try {
-            // 2026-09-10：原本 3 秒。這支要查 quotations 全表的 MAX(序號)，
-            // 資料量大或機器忙的時候 3 秒不夠，一逾時就讓 quoteNo 留空，
-            // 而舊版 saveDraft() 遇到空值會寫死 001 送出（見該函式註解）。
-            // 放寬到 10 秒，跟本頁其他 API 呼叫一致。
-            const _nc = new AbortController()
-            setTimeout(() => _nc.abort(), 10000)
-            const res = await fetch(`${this.API}/next-quote-no`, { signal: _nc.signal, headers: { Authorization: 'Bearer ' + this.session.token } })
-            const _peeked = res.ok ? (await res.json()).quote_no : ''
-            // ⚠️ 這個 peek 是非同步的，可能在使用者已經按下存檔／送審**之後**才回來。
-            // 直接指派會把存檔回應剛回填的「真正的單號」蓋成新 peek 到的下一號
-            // ——畫面顯示 MQ-YYYYMM-002、資料庫其實是 001，簽核的人照畫面上的號碼
-            // 開就會開到一張不存在的單。已用可控實驗重現（6 次中 2 次）。
-            // 所以只有在「還沒有號碼、而且還是沒存過的新單」時才採用 peek 結果。
-            if (_peeked && !this.q.quoteNo && this.isNewRecord !== false) {
-              this.q.quoteNo = _peeked
-            }
-          } catch(e) {}
-          if (!this.q.quoteNo) {
-            // 拿不到號不擋作業：存檔時由後端派號，畫面顯示「儲存後自動編號」
-            // （見 .form-quote-no 的 x-text）。
-            this.toast('暫時取不到報價單號，儲存時會自動編號')
-          }
+          await this._peekQuoteNo()
           this.isNewRecord = true
           this.q.paymentTerms = this._defaultPaymentTerms
         }
