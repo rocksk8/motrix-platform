@@ -12,6 +12,9 @@ badge 同步漏更新、日期字串排序、Alpine reactivity 相關 bug）恰�
 服務不需要瀏覽器引擎），沒裝的環境會直接 skip 整個檔案，不影響
 `build_deploy_package.ps1` 既有的「先跑 pytest 再打包」流程。
 """
+import json
+import os
+import tempfile
 import threading
 import time
 
@@ -95,7 +98,47 @@ def test_login_create_submit_approve_smoke(live_server, make_user):
             # ── 建立者：登入 → 新增報價單 → 送出審核 ──────────────────────
             ctx1 = browser.new_context()
             page1 = ctx1.new_page()
-            page1.on("dialog", lambda d: d.accept())
+            # 建立端跳出的對話框訊息要留著：送審失敗時 confirmSubmit() 會 alert
+            # 『送出審核失敗…』，原本一律 accept 掉，等於把最關鍵的線索丟了。
+            _p1_dialogs = []
+            page1.on("dialog", lambda d: (_p1_dialogs.append(d.message), d.accept()))
+            _p1_console = []
+            page1.on("console", lambda m: _p1_console.append(f"[{m.type}] {m.text[:160]}"))
+
+            # 2026-09-10 追加：建立端（page1）的取號／建立往來也要留證。原本只監測
+            # approver 那一頁，抓到「approver 開了 002、資料庫只有 001」時無從判斷
+            # 這個 002 是怎麼跑到畫面上的。這裡記下每一次 next-quote-no 與
+            # POST /api/quotations 的請求與回應，只在下面失敗時才印。
+            _p1 = []
+
+            def _on_p1_response(resp):
+                u = resp.url
+                if "/api/" in u and "/static/" not in u:
+                    body = ""
+                    if "next-quote-no" in u or u.rstrip("/").endswith("/api/quotations"):
+                        try:
+                            body = (resp.text() or "")[:200]
+                        except Exception as e:
+                            body = f"<讀取失敗 {e}>"
+                    req_body = ""
+                    try:
+                        req_body = (resp.request.post_data or "")[:120]
+                    except Exception:
+                        pass
+                    _p1.append({
+                        "t": time.time(), "method": resp.request.method,
+                        "url": u.split("/api/")[-1], "status": resp.status,
+                        "req": req_body, "resp": body,
+                    })
+
+            _p1_sent = []
+
+            def _on_p1_request(req):
+                if "/api/" in req.url and "/static/" not in req.url:
+                    _p1_sent.append((time.time(), req.method, req.url.split("/api/")[-1]))
+
+            page1.on("request", _on_p1_request)
+            page1.on("response", _on_p1_response)
             _login(page1, live_server, creator_user, creator_pw)
 
             page1.goto(f"{live_server}/pages/quotation-form.html")
@@ -109,12 +152,36 @@ def test_login_create_submit_approve_smoke(live_server, make_user):
             # 「（儲存後自動編號）」佔位字（見 quotation-form.html，取代舊版
             # 「拿不到號就寫死 MQ-{ym}-001」的危險行為），那也算有內容，會讓這裡
             # 在真正的號碼回填前就往下走。改成等真正的單號出現。
+            # 等「存檔真的完成」而不是等畫面上出現 MQ- 字樣：載入時取到的單號一開始
+            # 就在畫面上，等文字等於沒等，會在存檔回應回來前就把（可能不是最終的）
+            # 號碼讀走，然後 ctx1.close() 把還在飛的 POST 一起中止掉——approver 就
+            # 被送去一張不存在的單。2026-09-10 用測試診斷抓到，改成等 Alpine 的
+            # isNewRecord 翻成 false（confirmSubmit() 只有在存檔成功後才會設）。
+            #
+            # 45 秒不是隨便給的：db.py 的 `sqlite3.connect(timeout=30)` 表示任何一次
+            # 寫入在鎖被佔住時最多會等 30 秒。建立報價單在 commit 之後還要再寫
+            # notification／audit_log／module activity 各自開新連線，只要此時有背景
+            # 排程（月報、逾期檢查等，整個 pytest session 期間都在跑）正在寫，
+            # 這支 POST 就會卡滿一輪 30 秒才回來。時限必須容得下它，否則測試會在
+            # 「其實只是慢」的情況下報失敗。
             page1.wait_for_function(
-                "document.querySelector('.form-quote-no')?.textContent?.includes('MQ-')",
-                timeout=15000,
+                "() => { const el = document.querySelector('[x-data]');"
+                " const d = el && window.Alpine && Alpine.$data(el);"
+                " return d && d.isNewRecord === false"
+                "   && (d.q && d.q.quoteNo || '').includes('MQ-'); }",
+                timeout=45000,
             )
 
             quote_no = page1.locator(".form-quote-no").inner_text().strip()
+            # ctx1 等一下就關了，先把建立端的最終狀態留下來給診斷用
+            try:
+                _p1_state = page1.evaluate(
+                    "() => { const el = document.querySelector('[x-data]');"
+                    " const d = el && window.Alpine && Alpine.$data(el); if (!d) return null;"
+                    " return { quoteNo: d.q && d.q.quoteNo, status: d.q && d.q.status,"
+                    "   isNewRecord: d.isNewRecord }; }")
+            except Exception as _e:
+                _p1_state = f"<讀取失敗 {_e}>"
             assert quote_no.startswith("MQ-"), f"未取得有效報價單號，實際: {quote_no!r}"
             ctx1.close()
 
@@ -161,8 +228,10 @@ def test_login_create_submit_approve_smoke(live_server, make_user):
 
             _t_goto = time.time()
             page2.goto(f"{live_server}/pages/quotation-form.html?id={quote_no}")
-            # ✅ 2026-09-10 根因已找到並修復（先前這裡寫「根因還沒有抓到」、
-            # 靠不斷加大時限吸收，那個推測方向 —— SQLite WAL 鎖等待 —— 是錯的）。
+            # ✅ 2026-09-10 根因已找到（先前這裡寫「根因還沒有抓到」）。
+            # ⚠️ 更正：本註解一度寫「SQLite WAL 鎖等待那個推測方向是錯的」——
+            # 那句才是錯的。後續用測試診斷追下去，鎖等待確實是其中一半的原因，
+            # 原作者的直覺是對的，只是當時沒有證據。
             #
             # 真正的原因在前端：quotation-form.html 載入時會非同步打
             # /api/next-quote-no 取號，那個回應可能在使用者按下送審**之後**才回來，
@@ -193,6 +262,91 @@ def test_login_create_submit_approve_smoke(live_server, make_user):
                 print("--- console messages ---")
                 for c in _console:
                     print(" ", c)
+
+                # 2026-09-10 追加：上面那幾項只能看出「頁面有沒有載入」，分辨不了
+                # 三種不同的失敗原因。這三塊各自對應一種，看完就知道該往哪查：
+                #   (a) 資料庫裡到底有哪幾張單、各自有沒有簽核層級
+                #       → 單號對不上＝單號競態；單號對但 tiers 空＝簽核解析出問題
+                #   (b) approver 這一頁的 Alpine 狀態（實際載到哪張單、狀態為何）
+                #       → 跟 (a) 一比就知道是「開錯單」還是「開對單但沒渲染」
+                #   (c) 頁面上真的存在哪些按鈕
+                #       → 全部按鈕都在只差這一顆，才是純渲染／權限問題
+                print("--- (0) 建立端 page1 的取號／建立往來 ---")
+                _t0 = _p1[0]["t"] if _p1 else time.time()
+                for _e1 in _p1:
+                    print(f"  +{_e1['t'] - _t0:6.2f}s  {_e1['method']:<5} {_e1['url']:<28} "
+                          f"{_e1['status']}")
+                    if _e1["req"]:
+                        print(f"           req : {_e1['req']}")
+                    print(f"           resp: {_e1['resp']}")
+                print(f"  page1 最終狀態: {_p1_state}")
+                print(f"  page1 讀到的單號: {quote_no!r}")
+                # 有送出但沒收到回應的請求＝卡在飛行中，這是「沒有 POST 紀錄」的另一種解釋
+                _answered = {(e["method"], e["url"]) for e in _p1}
+                _pending = [x for x in _p1_sent if (x[1], x[2]) not in _answered]
+                print(f"  page1 送出但未收到回應的請求: "
+                      f"{[(m, u) for _t, m, u in _pending] or '（無）'}")
+                print(f"  page1 對話框: {_p1_dialogs}")
+                print("  page1 console:")
+                for _c1 in _p1_console[-15:]:
+                    print(f"    {_c1}")
+
+                print(f"--- (a) 資料庫實際內容（approver 開的是 {quote_no}）---")
+                try:
+                    import db as _db
+                    _c = _db.get_db()
+                    try:
+                        for _r in _c.execute(
+                            "SELECT quote_no, status, "
+                            "json_extract(data_json,'$.approval.tiers') AS tiers, "
+                            "json_extract(data_json,'$.approval.status') AS appr_status "
+                            "FROM quotations ORDER BY quote_no"
+                        ).fetchall():
+                            _t = _r["tiers"]
+                            _n = len(json.loads(_t)) if _t else 0
+                            _mark = " ←approver 開的就是這張" if _r["quote_no"] == quote_no else ""
+                            print(f"  {_r['quote_no']}  status={_r['status']!r} "
+                                  f"approval={_r['appr_status']!r} tiers={_n}{_mark}")
+                        print("  quote_seq:", [dict(_x) for _x in
+                                                _c.execute("SELECT * FROM quote_seq")])
+                        print("  quotations 建立時間:", [
+                            (_x["quote_no"], _x["created_at"]) for _x in
+                            _c.execute("SELECT quote_no, created_at FROM quotations")])
+                    finally:
+                        _c.close()
+                except Exception as _e:
+                    print(f"  (讀資料庫失敗: {_e})")
+
+                print("--- (b) approver 頁面的 Alpine 狀態 ---")
+                try:
+                    _st = page2.evaluate(
+                        "() => { const el = document.querySelector('[x-data]');"
+                        " const d = el && window.Alpine && Alpine.$data(el); if (!d) return null;"
+                        " return { quoteNo: d.q && d.q.quoteNo, status: d.q && d.q.status,"
+                        "   isNewRecord: d.isNewRecord,"
+                        "   tiers: (d.q && d.q.approval && d.q.approval.tiers || []).length,"
+                        "   canApprove: typeof d.canApprove === 'boolean' ? d.canApprove : undefined }; }")
+                    print(f"  {_st}")
+                except Exception as _e:
+                    print(f"  (讀 Alpine 狀態失敗: {_e})")
+
+                print("--- (c) 頁面上現有的按鈕 ---")
+                try:
+                    _btns = page2.evaluate(
+                        "() => [...document.querySelectorAll('button')]"
+                        ".filter(b => b.offsetParent !== null)"
+                        ".map(b => (b.innerText || '').trim().slice(0, 20)).filter(Boolean)")
+                    print(f"  {_btns}")
+                except Exception as _e:
+                    print(f"  (讀按鈕失敗: {_e})")
+
+                try:
+                    _shot = os.path.join(tempfile.gettempdir(),
+                                         f"e2e_smoke_fail_{int(time.time())}.png")
+                    page2.screenshot(path=_shot, full_page=True)
+                    print(f"--- 失敗當下截圖：{_shot}")
+                except Exception as _e:
+                    print(f"  (截圖失敗: {_e})")
                 raise
             page2.click('button:has-text("預覽後簽核")')
             page2.wait_for_selector('button:has-text("確認簽核")', timeout=20000)

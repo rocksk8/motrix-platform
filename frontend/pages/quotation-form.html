@@ -2076,6 +2076,8 @@
       approvalReasons: [],
       autoSaveTimer: null,
       isNewRecord: true,
+      // 開始存檔後就凍結單號，不讓載入時的非同步取號晚到覆蓋（見 apiSave()）
+      _quoteNoFrozen: false,
       session: {},
       backendOnline: false,
       customers: [],
@@ -2330,6 +2332,12 @@
       },
 
       async apiSave(isNew) {
+        // 一旦開始存檔，單號的權威就交給後端回應了：載入時那支非同步取號若在這之後
+        // 才回來，一律不得再寫進 q.quoteNo（見 _peekQuoteNo()）。
+        // 只看「目前有沒有號碼」是不夠的——使用者在取號還沒回來時就按送審的話，
+        // POST 帶著空號送出、後端派了 001，取號這時才回來拿到 002，而 q.quoteNo
+        // 仍是空的（POST 回應還沒到），守門就放行了。2026-09-10 用測試診斷抓到。
+        this._quoteNoFrozen = true
         const data = { ...this.q, tot: this.tot }
         if (!isNew) data._expectedUpdatedAt = this._lastUpdatedAt
         const payload = { quote_no: this.q.quoteNo, status: this.q.status, data, created_by: this.session?.username }
@@ -3082,7 +3090,7 @@ window.addEventListener('load',function(){
           // ——畫面顯示 MQ-YYYYMM-002、資料庫其實是 001，簽核的人照畫面上的號碼
           // 開就會開到一張不存在的單。已用可控實驗重現（修復前 6 次中 2 次）。
           // 所以只有在「還沒有號碼、而且還是沒存過的新單」時才採用 peek 結果。
-          if (_peeked && !this.q.quoteNo && this.isNewRecord !== false) {
+          if (_peeked && !this.q.quoteNo && !this._quoteNoFrozen && this.isNewRecord !== false) {
             this.q.quoteNo = _peeked
           }
         } catch(e) {}
