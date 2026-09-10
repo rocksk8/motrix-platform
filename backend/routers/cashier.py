@@ -139,19 +139,6 @@ def get_receivable_queue(status: str = Query("unreceived"), authorization: str =
         conn.close()
 
 
-@router.get("/api/cashier/summary")
-def get_cashier_summary(authorization: str = Header(None)):
-    user = _require_user(authorization)
-    _require_view_access(user)
-    conn = get_db()
-    try:
-        payable = _payable_queue(conn)
-        receivable = _receivable_queue(conn, "unreceived")
-    finally:
-        conn.close()
-    return {"payableCount": len(payable), "receivableCount": len(receivable)}
-
-
 # ── 執行歷史（已匯款／已收款彙整）＋ Excel 匯出 ─────────────────────────────
 
 def _default_month_range():

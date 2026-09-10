@@ -17,13 +17,14 @@ import re
 
 BE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# 刻意不註冊的 router：{模組名: 原因}
-RETIRED_ROUTERS = {
-    "projects": (
-        "2026-08-26 專案管理併入案件管理（DB v62 _m062_case_project_merge），"
-        "commit 6089a8f 從 main.py 移除註冊。檔案保留但為死碼，19 支端點皆不可達。"
-    ),
-}
+# 刻意保留檔案、但不註冊進 main.py 的 router：{模組名: 原因}
+#
+# 目前是空的——`projects.py`（2026-08-26 專案管理併入案件管理、commit 6089a8f
+# 從 main.py 移除註冊）曾經是唯一一筆，它的 592 行死碼已於 2026-09-10 直接刪除，
+# 所以不需要白名單豁免了。這個機制刻意留著：下次再有「下線但檔案先留著」的情況，
+# 必須來這裡補一筆寫明原因，不會像 projects.py 那樣無聲存在兩週還被架構地圖
+# 寫成「僅保留舊 API 供內部沿用」（實際上 19 支端點全部 404）。
+RETIRED_ROUTERS = {}
 
 
 def _main_src():

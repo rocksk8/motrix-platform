@@ -144,18 +144,6 @@ def test_receivable_queue_requires_admin_or_cashier_and_excludes_received(client
     assert not any(i["quoteNo"] == "MQ-CASH-010" for i in r2.json())
 
 
-def test_cashier_summary_counts(client, make_user):
-    username, password = make_user(role="superadmin")
-    token = _login(client, username, password)
-    _make_approved_voucher(client, token, "MQ-CASH-020")
-    _make_quotation_with_unreceived_item("MQ-CASH-021")
-
-    r = client.get("/api/cashier/summary", headers=_auth(token))
-    assert r.status_code == 200, r.text
-    body = r.json()
-    assert body["payableCount"] >= 1
-    assert body["receivableCount"] >= 1
-
 
 def test_receivable_queue_status_all_includes_received_and_unreceived(client, make_user):
     """v2：status=all 併入 receivables.html 的完整歷史查詢，含已收+未收，

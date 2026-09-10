@@ -1196,6 +1196,28 @@ xlsx-0.18.5.full.min.js     （SheetJS）
 > [`WEEKLY-AUDIT-2026-09-07_2026-09-10.md`](WEEKLY-AUDIT-2026-09-07_2026-09-10.md)
 > ——帶「模組／檔案:行號／是否在正式機」座標的本週稽核索引，出事時先看那份。
 
+### 2026-09-10（稽核後續）— 三項待決策處理完畢（DB 無異動）
+
+1. **刪 `/api/cashier/summary`**（僅自身測試引用，是另兩支的合併版）。
+2. **接上 `/api/company/search`**：客戶／供應商／承攬商三頁新增「公司名稱查詢」。
+   查詢邏輯抽到 **`frontend/static/gov-lookup.js`** 共用（三頁的統編查詢已經各有一份
+   幾乎相同的實作，再加三份必然漂移）；**帶入表單各頁欄位名不同**
+   （customers/suppliers 是 `taxId`、vendor-contractors 是 `tax_id`），所以帶入由各頁
+   自己的 `govApply()` 處理。
+3. **刪 `backend/routers/projects.py`**（592 行死碼）。`projects`/`project_logs` 資料表
+   保留不動。`RETIRED_ROUTERS` 白名單清空但機制留著。
+
+**⚠️ e2e 測試檔變多會互相排擠**：新的 e2e 若用 `parametrize`，每個 param 都會各起一台
+uvicorn 加一個 chromium。實測既有 `test_login_create_submit_approve_smoke` 的偶發失敗率
+因此從 1/18 升到 2/4，把三個 param 併進同一個 browser 後回到 1/4。**新增 e2e 時盡量共用
+browser／live_server。**
+
+**⚠️ 既有 flaky 測試的根因已定位（未修）**：診斷 dump 顯示 approver 開的是
+`MQ-202609-002`、簽核流程卻建在 `MQ-202609-001`——**表單顯示的單號 ≠ 實際存檔的單號**。
+`quotation-form.html` 載入時打 `/api/next-quote-no` 只給 3 秒逾時就讓 `q.quoteNo` 留空，
+`saveDraft()` 遇到空值會寫死 `MQ-{ym}-001` 送出，後端撞號改派下一號再回填。
+要修需決定改哪一端（前端逾時／不要寫死 001／改成後端單一權威派號）。
+
 ### 2026-09-10（稽核）— 全系統模組串接與邏輯排查（DB 無異動）
 
 10 個步驟的機械化比對（腳本產出，非人工翻閱）。**確認無問題的部分**：前端 452 個 fetch 呼叫點

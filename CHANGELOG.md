@@ -5,6 +5,32 @@
 
 ---
 
+### 2026-09-10（稽核後續）— 處理三項待決策：刪死碼、接上公司名稱查詢
+
+使用者裁示「沒用的刪、company/search 接上去、projects.py 刪」。
+
+**1. 刪 `/api/cashier/summary`**（`cashier.py:142`）— 全 repo 只有自己的測試引用，內容是 `payable-queue` + `receivable-queue` 兩支的合併版，而前端分開呼叫那兩支。端點與測試一併移除。
+
+**2. 接上 `/api/company/search`** — 客戶／供應商／承攬商三頁先前都只接了統編查詢，使用者必須先知道確切統編才查得到，想用公司名稱找只能自己去經濟部網站查完再回來貼。
+
+- **新增 `frontend/static/gov-lookup.js` 共用查詢邏輯**：三頁的統編查詢已經各自有一份幾乎一模一樣的實作（連錯誤訊息文字都相同），再加三份必然漂移。
+- 但**帶入表單各頁欄位名不同**（customers/suppliers 是 `taxId`、vendor-contractors 是 `tax_id`，客戶頁還會推斷產業別），所以只共用「查詢＋錯誤對應」，帶入由各頁自己的 `govApply()` 處理。
+- UI 放在既有「政府登記資料查詢」卡片內、統編查詢下方以虛線分隔；結果清單顯示名稱／統編／登記狀態，點一列即帶入。
+
+**3. 刪 `backend/routers/projects.py`**（592 行、19 支端點）— 2026-08-26 專案管理併入案件管理、`6089a8f` 從 main.py 移除註冊後就是死碼。確認過沒有任何 import（`_process_project_photo`/`_photo_root` 在 `photos.py`，`system.py` 是從那邊 import），前端也零呼叫。**`projects`/`project_logs` 資料表保留不動**（歷史資料）。`RETIRED_ROUTERS` 白名單同步清空，機制留著給下次「下線但檔案先留」用。
+
+**測試**：新增 e2e `test_e2e_gov_name_search_2026_09_10.py`，三頁在**同一個 browser／server** 內跑完——不用 `parametrize`，因為每個 param 各起一台 uvicorn 加一個 chromium，會把同批其他 e2e 的等待擠爆（實測既有 `test_login_create_submit_approve_smoke` 的偶發失敗率因此從 1/18 升到 2/4，改成單一 browser 後回到 1/4）。GCIS 是外部政府 API，測試 monkeypatch `dashboard._gcis_get` 回固定資料。已用「還原前端再跑」驗證三頁都會紅，並用 Playwright 截圖肉眼複查版面。全套非 e2e **544 passed**。
+
+**⚠️ 順手定位到既有 flaky 測試的根因**（該測試註解原本寫「根因還沒有抓到」）
+
+診斷 dump 顯示：approver 開的是 `MQ-202609-002`，但簽核流程建在 `MQ-202609-001` —— **表單顯示的單號與實際存檔的單號不一致**。
+
+路徑：`quotation-form.html` 載入時打 `/api/next-quote-no` 只給 **3 秒**（`AbortController`），逾時就讓 `q.quoteNo` 留空；`saveDraft()` 發現空值會**寫死** `MQ-{ym}-001` 當暫用號送出；後端 `create_quotation` 撞號時改派下一號並回傳真正的號碼，前端再回填。慢的時候畫面上的單號會跟實際建立的那張對不起來。
+
+**本輪只定位未修** —— 這屬於報價單建立流程的行為變更，需要決定要改哪一端（拉長/移除前端 3 秒逾時、或不要寫死 001、或改成後端單一權威派號）。
+
+---
+
 ### 2026-09-10（稽核）— 全系統模組串接與邏輯排查，修掉三項
 
 使用者要求「按步驟逐步排查各模組系統串接跟邏輯，是否都有正確及遺漏」。以 10 個步驟做**機械化比對**（不是人工翻閱程式碼），每一項發現都附 `檔案:行號`。

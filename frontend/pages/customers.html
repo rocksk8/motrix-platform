@@ -7,6 +7,7 @@
   <link rel="icon" type="image/png" href="../static/favicon.png">
   <title>客戶管理 — MOTRIX 專案管理系統</title>
   <script src="../static/auth-guard.js"></script>
+  <script src="../static/gov-lookup.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <script src="../static/vendor/xlsx-0.18.5.full.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
@@ -534,6 +535,48 @@
               </button>
             </div>
 
+            <!-- 公司名稱查詢（2026-09-10 補上）：後端 /api/company/search 一直都在，
+                 但三頁都只接了統編查詢——不知道統編就查不到。查詢邏輯共用
+                 static/gov-lookup.js，帶入表單由各頁的 govApply() 處理（欄位名不同）。 -->
+            <div style="margin-top:12px;padding-top:12px;border-top:1px dashed var(--border-light)">
+              <div style="font-size:10px;color:var(--text-dim);margin-bottom:5px;font-family:LINE Seed TW_OTF, sans-serif">
+                公司名稱查詢<span style="margin-left:6px;font-weight:400">— 不知道統編時用這個</span>
+              </div>
+              <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+                <input class="form-input" type="text" x-model="govNameQ"
+                       placeholder="輸入公司名稱關鍵字（至少 2 字）"
+                       style="flex:1;min-width:200px;max-width:280px"
+                       @keydown.enter.prevent="govSearchByName()">
+                <button class="btn btn-ghost btn-sm" @click="govSearchByName()"
+                        :disabled="govSearching || (govNameQ || '').trim().length < 2"
+                        style="flex-shrink:0">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                       :style="govSearching ? 'animation:spin .6s linear infinite' : ''">
+                    <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+                  </svg>
+                  <span x-text="govSearching ? '查詢中…' : '查詢'"></span>
+                </button>
+                <button class="btn btn-ghost btn-sm" x-show="govResults && govResults.length"
+                        @click="govClearResults()" style="flex-shrink:0">清除結果</button>
+              </div>
+              <template x-if="govResults && govResults.length">
+                <div>
+                  <div style="margin-top:8px;border:1px solid var(--border-light);border-radius:var(--radius);background:#fff;max-height:220px;overflow-y:auto">
+                    <template x-for="(g, gi) in govResults" :key="g.taxId + '-' + gi">
+                      <div @click="govPick(g)"
+                           style="padding:8px 12px;border-bottom:1px solid var(--border-light);cursor:pointer;display:flex;gap:10px;align-items:baseline"
+                           onmouseover="this.style.background='#F8F7F4'" onmouseout="this.style.background=''">
+                        <span style="flex:1;font-size:13px" x-text="g.name"></span>
+                        <span style="font-size:11px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.06em" x-text="g.taxId"></span>
+                        <span style="font-size:10px;color:var(--text-dim)" x-text="g.status"></span>
+                      </div>
+                    </template>
+                  </div>
+                  <div style="font-size:10px;color:var(--text-dim);margin-top:4px">點一列即帶入欄位（最多 15 筆）</div>
+                </div>
+              </template>
+            </div>
+
             <!-- 查詢結果訊息 -->
             <div x-show="lookupMsg" style="margin-top:10px;padding:7px 10px;border-radius:4px;font-size:12px;display:flex;align-items:center;gap:6px"
                  :style="lookupOk ? 'background:#F0FDF4;color:#15803D' : 'background:#FEF2F2;color:#DC2626'">
@@ -779,7 +822,10 @@
       salesUsers: [],
       form: {},
       // 統編查詢
+      ...window.MotrixGovLookup.alpineState(),
       taxIdSearch: '',
+      /* 名稱查詢結果帶入：沿用既有 applyGovDataNorm（含產業別推斷） */
+      govApply(d) { this.applyGovDataNorm(d) },
       lookingUp: false,
       lookupTarget: '',   // 'taxId'
       lookupMsg: '',
