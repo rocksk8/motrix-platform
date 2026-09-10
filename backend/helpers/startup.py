@@ -290,7 +290,11 @@ def _sync_module_versions() -> None:
     if not os.path.exists(manifest_path):
         return
     try:
-        with open(manifest_path, encoding="utf-8") as f:
+        # utf-8-sig（2026-09-10）：容忍 BOM。這個檔案目前沒有 BOM，但只要有人用
+        # PowerShell 重寫它（PS 5.1 的 Set-Content -Encoding UTF8 會加 BOM），純
+        # utf-8 會在第一個字元就 JSONDecodeError，整個模組版本同步靜默停擺。
+        # 同一個陷阱已經在 deployed-version 端點上發生過一次（commit 1c8f2e8）。
+        with open(manifest_path, encoding="utf-8-sig") as f:
             entries = json.load(f)
     except Exception:
         logger.exception("_sync_module_versions: failed to load version_manifest.json")

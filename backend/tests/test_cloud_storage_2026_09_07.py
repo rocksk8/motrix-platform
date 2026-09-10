@@ -191,9 +191,19 @@ def test_daily_backup_writes_to_s3_and_marker_prevents_rerun(client, monkeypatch
     assert f"motrix-erp-backups/每日備份/{today}/彙總.json" in fake.objects
     assert f"motrix-erp-backups/每日備份/{today}/.done" in fake.objects
 
-    put_count_before = len(fake.objects)
+    # 2026-09-10：原本斷言的是「整個 fake S3 的物件總數不變」，整套平行跑時偶發
+    # 失敗（實測 501 != 500，單獨跑 18/18 穩定過）——多出來的那一筆不是這支
+    # _daily_backup() 產生的，而是同一個 worker 上較早的測試留下、還沒結束的
+    # 背景備份執行緒（spawn_bg_thread(_backup_quotation, ...) 之類）落到了這一題
+    # monkeypatch 進去的 fake S3 上。這題要證明的是「marker 存在時不重跑每日
+    # 備份」，所以只比對每日備份前綴底下的內容，不管其他來源在同一個 fake 上
+    # 寫了什麼，斷言才會對應它真正的規格。`ee4664a` 當時是在打包腳本裡跳過這
+    # 支測試，等於把關卡挖了個洞；這裡改成修測試本身。
+    prefix = f"motrix-erp-backups/每日備份/{today}/"
+    daily_before = {k: v for k, v in fake.objects.items() if k.startswith(prefix)}
     archive._daily_backup()  # marker 存在，應該直接 return，不重新產生
-    assert len(fake.objects) == put_count_before
+    daily_after = {k: v for k, v in fake.objects.items() if k.startswith(prefix)}
+    assert daily_after == daily_before
 
 
 def test_prune_cloud_backups_deletes_expired_s3_prefix(client, monkeypatch):

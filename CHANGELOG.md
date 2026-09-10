@@ -5,6 +5,21 @@
 
 ---
 
+### 2026-09-10（稍晚）— 本週稽核：補回落後文件＋修掉四項已上正式機的缺陷
+
+**新增 `WEEKLY-AUDIT-2026-09-07_2026-09-10.md`**（根目錄）——本週 82 個 commit 的逐模組拆解、異常時間軸（每筆標到根因檔案:行號）、12 項排查 checklist、缺陷清冊、未部署差異。
+
+- **叫料 API（`routers/material_orders.py`）六個缺陷**，全部已在正式機執行中：漏 `conn.commit()`（端點回 200 但資料庫沒寫）、`save_quotation_json()` 參數錯位會污染 `status` 欄位、`_audit()` 簽名錯誤、已結案守門讀錯 key 成死碼、兩支端點皆缺擁有者檢查（IDOR）、GET 直接索引金額鍵。已全數修復。
+- **`_check_quotation_owner()` 抽到 `helpers/quotations.py`**（第三個呼叫點），`routers/quotations.py` 改為引用，行為不變。
+- **打包測試關卡長期失效**：①PATH 上 4 個 Python，打包解析到沒裝 `python-multipart` 的 3.14 ⇒ 整套測試全 E ②`%TEMP%` 下損壞的 `pytest-current` reparse point 讓 pytest 在 session 收尾拋 `PermissionError`，測試全過也回非 0。後果是 09-10 上線的 `9b0ad79` 沒跑過 pytest。
+- **`requirements.txt` 補 `python-multipart>=0.0.9`**（09-07 `90c6f31` 漏掉）。
+- **`test_webauthn_basic.py` 3 題失敗隨部署上線**（`f8198e9` 改 503 沒同步改測試）已修，另補一題正面驗證 503 行為。
+- **修掉 `ee4664a` 繞過的 flaky 測試本身**（`test_cloud_storage_2026_09_07.py` 斷言範圍太寬，會被其他測試的背景執行緒干擾）。
+- 驗證：全套非 e2e **502 passed / exit 0**，本週第一次完全綠燈。
+- ⚠️ **這批修復與 `aeefcc6` 都尚未部署**；`aeefcc6` 缺席代表正式機 Passkey 目前不可用（後端會回 503，唯一設定入口在該未部署頁面）。
+
+---
+
 ### 2026-09-10 — 月支出顯示修正、WebAuthn 設定可配置化、案件超期通知
 
 **四項重要改動，已部署到正式機 commit 9b0ad79**
@@ -69,6 +84,34 @@
 - WebAuthn 改動不需要重啟服務即生效（讀 DB，非快取常數）
 - 案件超期通知倚賴既有的每日排程機制，無需額外設定
 - 資料庫無 schema 異動（所有新欄位存在 `data_json` JSON 欄位內）
+
+---
+
+### 2026-09-09 — 案件財務應收應付總覽、當月收支六輪修正、WebAuthn/Passkey V1
+
+> 本日條目為 2026-09-10 補記（當日未寫入本檔），細節見 `MOTRIX-ERP-QUICK.md` §12 同日各條目。
+
+- **案件財務「應收應付總覽」**（`4c267ce`）：新增 `GET /api/quotations/{quote_no}/finance-summary`，不新增任何資料表/欄位；`helpers/quotations.py::summarize_payment_items()` 抽成共用（第三個呼叫點）。精算「額外支出」新增 `docNo` 單號欄位，後端零改動（settlement 整包存 data_json）。
+- **精算未完結的額外支出納入月支出**（`c15ef84`）：`dashboard.py` 與 `reports.py` 原本都只撈 `settlement.status='finalized'`，草稿階段填的支出在任何月度數字裡都不存在；同時發現兩處歸月依據早已分岔。抽出 `helpers/quotations.py::settlement_extra_expenses()` 共用。
+- **當月收支一晚六輪**（`3f9755f`→`c063a72`→`3e29ba7`→`c5a5d11`→`da88433`→`6bfcafb`，17:42~22:51）：含一個日期格式造成的跨月污染 bug，以及部門篩選。
+- **營運報表當月/當年度應收獨立檢視**（`56e52b3`）：不再跟隨 period-bar，新增 `test_reports_receivables_monthly.py`。
+- **WebAuthn/Passkey 裝置綁定登入 V1**（`efdb06f`→`0527524`→`4f14c68`→`cce89fe`）：後端新表＋端點、登入頁按鈕、裝置管理卡片、challenge 編碼檢查；`0527524` 同時修掉 `auth.py` 的用戶枚舉漏洞。
+- **打包測試改用 `pytest-xdist` 平行化**（`98f3d7b`）：動手前先驗證序列/`-n auto` 兩邊 470 題 pass/fail 清單逐題一致，390 秒→166 秒。
+- 其他：`507fff3` 部署儀表板開關合併成單一 GUI 小程式；`d03f453` 強制填寫收款日期；`aaeffb2` 業務開發暗黑模式白底修正；`0257fe7` 啟動伺服器改純 PowerShell。
+
+---
+
+### 2026-09-08 — 部署工具鏈連續事故排查（20 次部署嘗試／6 次失敗）與 QR 登入強化
+
+> 本日條目為 2026-09-10 補記（當日未寫入本檔）。完整因果鏈見 `WEEKLY-AUDIT-2026-09-07_2026-09-10.md` §C-1，逐條細節見 `MOTRIX-ERP-QUICK.md` §12 同日各條目。
+
+- **新增本機部署儀表板**（`8144d58`）：`backend/tools/deploy_dashboard.py`／`.html`，只綁 `127.0.0.1`，把「打包→推送→套用→回滾」變成按鈕點選；同批新增 `rollback_update.ps1`、`_dashboard_remote.ps1`、公開端點 `GET /api/system/deployed-version`。
+- **第一次真實使用即連續踩雷**（由外而內）：`_ps_cmd()` 參數名被當成值加引號（`8d83021`）→ Unix `tar` 把 `C:\` 誤判成遠端主機語法且完全沒檢查 exit code、產出空殼部署包（`549d319`）→ 密碼讀取在管線 stdin 下卡死（`ebd182f`）→ 健康檢查連續三次偽陽性、改用 `_healthcheck_ping.py` 取代 curl.exe（`47d0cca`，**根因為合理猜測未證實**）→ 姊妹腳本 `rollback_update.ps1` 沒同步、打包 commit 記錄時機競態（`46fb6b6`）→ **儀表板「假成功」判定**（`Invoke-Command` 吞掉遠端結束碼）與健康檢查失敗原因被 `2>$null` 整個吞掉（`6ee3a6d`）→ 良性 asyncio `ConnectionResetError` 被算成錯誤（`2ea87e8`）。
+- **【當晚最大根因】`ad04397`**：`_dashboard_remote.ps1` 呼叫的是正式機**既有安裝路徑**的 `apply_update.ps1`，PowerShell 進程用的是啟動當下讀進記憶體的內容，複製新檔案不影響本次執行，失敗回滾又會把新檔案蓋回去——**整晚對 `apply_update.ps1` 做的所有內部邏輯修復從未真正執行過**。修法是呼叫前先把套件裡的 `backend/tools/` 同步覆蓋過去。
+- **`apply_update.ps1` 強化**：`-CheckOnly` 乾跑模式（`8f1b623`）、`-SkipAutoRollback`（`88abc2f`）、打包新增 `.ps1` 語法驗證關卡（`ece3c48`）、e2e 測試從硬性關卡分離（`55a98b7`）。
+- **`GET /api/system/deployed-version` 讀檔沒處理 BOM 回傳空物件**（`1c8f2e8`）——PowerShell 寫出的 JSON 帶 BOM，Python 要用 `utf-8-sig`。
+- **TOTP 登入新增手機掃 QR 核准**（`e3717b3`）＋**手機端免密碼核准**（`7596382`）：手機瀏覽器已有有效 session 時自動核准，session token 核對失敗刻意不計入共用鎖定計數器。新增 `test_totp_qr_push_2026_09_08.py`＋e2e 雙 context 測試。
+- **`no_cache_static` 不再誤傷自架 vendor 函式庫**（`03723e8`）：`/static/vendor/` 改長效不可變快取，其餘維持 `no-store`；同時是 flaky e2e 的放大因子之一。
 
 ---
 

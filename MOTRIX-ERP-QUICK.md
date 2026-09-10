@@ -2,6 +2,8 @@
 
 > 允碩整合集創（統編 60575481）｜ Tel: 04-3610-6566 ｜ info@miactw.com  
 > 文件版本：**2026-08-20**（承攬商匯款申請＋發票開立簽核單，DB v45/v46，見 §12）
+> **2026-09-10 新增互補文件**：[`WEEKLY-AUDIT-2026-09-07_2026-09-10.md`](WEEKLY-AUDIT-2026-09-07_2026-09-10.md)——本週 82 個 commit 的逐模組拆解、異常時間軸（含每個異常的起點 commit 與根因檔案:行號）、12 項排查排程 checklist、已驗證缺陷清冊、未部署差異。**正式機出事時先看那份定位，再回來這裡看行為規格。**
+>
 > **§2/§7/§11/§13 已於 2026-09-01 依實際程式碼盤點（`db.py` CURRENT_VERSION=68、`git log` 最新 commit `8f40e4e`）補齊落後內容，§12 逐日 changelog 本身仍是最新的**（本文件是持續累積的活文件，不是單一時間點快照）；同日新增互補文件 `MOTRIX-ERP-ARCHITECTURE-MAP.md`（架構地圖＋建議＋踩坑索引）
 
 ---
@@ -1173,10 +1175,10 @@ xlsx-0.18.5.full.min.js     （SheetJS）
 | 🟢 | 災難復原（DR）從未實際演練過，`DR-SOP.md` §6 演練紀錄表完全空白，RTO 目前僅為估計值 |
 | ✅ | ~~QR 登入手機端免密碼~~（2026-09-08 已實作，見 §12 同日條目——手機瀏覽器已有效 session 時自動核准，沒有則退回既有密碼手動輸入／瀏覽器自動填入密碼兩層） |
 | ✅ | ~~`build_deploy_package.ps1` 打包關卡用 `pytest-xdist` 平行化~~（2026-09-09 已實作，見 §12 同日條目——動手前先驗證序列/`-n auto` 兩邊 470 題非 e2e 測試 pass/fail 清單完全一致，序列 390 秒→平行 166 秒，約 2.35 倍加速） |
-| 📋 | **待開發（2026-09-08 討論，尚未實作）：WebAuthn/Passkey 裝置綁定登入**——使用者原始需求是想綁定電腦/手機 MAC 位址做「認得這台裝置、快速放行」，查證後瀏覽器沒有任何 JS API 能讀取 MAC（隱私限制，非我們沒做），且 MAC 軟體層可偽造本來就不可靠。改用業界正規解法：裝置的安全晶片（Face ID/指紋/TPM）產生一組無法匯出/複製的金鑰跟帳號綁定，之後那台裝置生物辨識一下即可登入或核准 QR 請求，比 MAC 位址安全非常多。**尚未評估技術方案細節**——前端需串接瀏覽器 WebAuthn API（`navigator.credentials.create/get`），後端需新增 credential 註冊/驗證端點與公鑰儲存（新表，例如 `webauthn_credentials`），且要設計跟現有密碼／TOTP／QR session 三種登入路徑如何並存、要不要能列出/命名/撤銷已註冊裝置。下次要動手前應先進 Plan Mode 完整設計，比照 QR 核准功能與 TOTP 當初的作法（見 [[feedback_check_existing_before_building]]，認證流程設計優先權高於一般功能）。 |
+| ✅ | ~~WebAuthn/Passkey 裝置綁定登入~~（**2026-09-09 已實作**，見 §12 同日「深夜」條目——後端新表＋端點、`login.html` 登入按鈕、`change-password.html` 裝置管理卡片；2026-09-10 `f8198e9` 再把 RP ID／Origin 改成 `system_settings` 可設定，未設定時四個端點回 503。**⚠️ 正式機目前仍不可用**：唯一的設定入口 `company-profile-settings.html` 在 `aeefcc6`，尚未部署，見 `WEEKLY-AUDIT-2026-09-07_2026-09-10.md` §F）。以下保留當初的設計討論紀錄：<br>**（原待開發內容）**——使用者原始需求是想綁定電腦/手機 MAC 位址做「認得這台裝置、快速放行」，查證後瀏覽器沒有任何 JS API 能讀取 MAC（隱私限制，非我們沒做），且 MAC 軟體層可偽造本來就不可靠。改用業界正規解法：裝置的安全晶片（Face ID/指紋/TPM）產生一組無法匯出/複製的金鑰跟帳號綁定，之後那台裝置生物辨識一下即可登入或核准 QR 請求，比 MAC 位址安全非常多。**尚未評估技術方案細節**——前端需串接瀏覽器 WebAuthn API（`navigator.credentials.create/get`），後端需新增 credential 註冊/驗證端點與公鑰儲存（新表，例如 `webauthn_credentials`），且要設計跟現有密碼／TOTP／QR session 三種登入路徑如何並存、要不要能列出/命名/撤銷已註冊裝置。下次要動手前應先進 Plan Mode 完整設計，比照 QR 核准功能與 TOTP 當初的作法（見 [[feedback_check_existing_before_building]]，認證流程設計優先權高於一般功能）。 |
 | ✅ | ~~案件財務新增獨立「應收應付」模組＋精算雜支單號欄位~~（2026-09-09 已實作，見 §12 同日條目與 §7.16——新增 `GET /api/quotations/{quote_no}/finance-summary` 彙總端點，未新增任何資料表/欄位；精算「額外支出」新增 `docNo` 欄位，因 settlement 整包存 `data_json` 故後端零改動） |
-| 📋 | **待開發（2026-09-09 討論，尚未實作）：案件執行期限與超期提醒通知**——案件管理「案件資訊」分頁需要新增「案件執行日期區間」欄位（start_date / end_date，類似預計交期的概念），當案件實際進度超過設定期限時自動觸發通知流程：(1) **超期當天寄一次電郵通知**給該案件的超級管理員與專案執行人；(2) **之後每 10 天重複寄一次**提醒尚未完結，直到案件狀態改為已結案為止。**背景需求**：實務上案件常因客戶延遲或內部進度調整而超期，長期無人追蹤就容易成為幽靈案件，需要一個被動提醒機制。**細節待評估**：(1) 日期欄位是否要新增到資料表或繼續存在 `data_json`（後者零改動，但搜尋/聚合較麻煩）；(2) 通知的「執行人」欄位定義（是 `executor`、還是 `assigned_user_ids` 任一人、還是需要新增一個獨立的 `deadline_notify_users` 欄位）；(3) 10 天的計時點是「案件建立時」、「超期當天」還是「上一次寄信」（影響時間複雜度與誤發機率）；(4) 通知內容格式與語言；(5) 是否需要在案件頁面顯示「距離期限剩餘天數」的倒數。排程觸發機制可沿用既有 `heartbeat_job.py`（正式機每 5 分鐘執行一次），或另起一個獨立的 `deadline_check_job.py`（見 §1.1）。**計劃**：先釐清上述需求細節，再評估是否需 DB migration。 |
-| 📋 | **待開發（2026-09-09 討論，尚未實作）：營運報表（reports）當月與當年度數據獨立分開顯示**——目前營運報表的應收未收、已收已支等數字似乎是當年度與當月混在一起（或至少沒有明確區隔），需求是把「當月」的應收未收／已收已支獨立顯示，跟「當年度」的數字做出區隔，不要混算或混排在一起。**併同影響**：營運報表下方的分頁（tabs）內容也要一併比照，跟當年度視圖分開顯示，而不是共用同一份彙總。**細節待評估**（目前 `frontend/js/reports.js` 現有的月/年篩選邏輯、後端 `routers/reports.py` 對應的查詢與彙總方式），token 足夠時再展開設計，先記錄需求方向。 |
+| ✅ | ~~案件執行期限與超期提醒通知~~（**2026-09-10 已實作**，見 §12 同日條目——`caseRecord.projectTimeline` 存 data_json 無 schema 異動；`daily_tasks.py:1092-1135::_check_case_project_timeline_deadline()` 沿用既有每日排程而非另起 job；通知對象為所有 admin/superadmin；**重寄週期實作為每 7 天，非當初討論的 10 天**，計時點為超期天數分桶 `days_overdue // 7`）。以下保留當初的需求討論紀錄：<br>**（原待開發內容）**——案件管理「案件資訊」分頁需要新增「案件執行日期區間」欄位（start_date / end_date，類似預計交期的概念），當案件實際進度超過設定期限時自動觸發通知流程：(1) **超期當天寄一次電郵通知**給該案件的超級管理員與專案執行人；(2) **之後每 10 天重複寄一次**提醒尚未完結，直到案件狀態改為已結案為止。**背景需求**：實務上案件常因客戶延遲或內部進度調整而超期，長期無人追蹤就容易成為幽靈案件，需要一個被動提醒機制。**細節待評估**：(1) 日期欄位是否要新增到資料表或繼續存在 `data_json`（後者零改動，但搜尋/聚合較麻煩）；(2) 通知的「執行人」欄位定義（是 `executor`、還是 `assigned_user_ids` 任一人、還是需要新增一個獨立的 `deadline_notify_users` 欄位）；(3) 10 天的計時點是「案件建立時」、「超期當天」還是「上一次寄信」（影響時間複雜度與誤發機率）；(4) 通知內容格式與語言；(5) 是否需要在案件頁面顯示「距離期限剩餘天數」的倒數。排程觸發機制可沿用既有 `heartbeat_job.py`（正式機每 5 分鐘執行一次），或另起一個獨立的 `deadline_check_job.py`（見 §1.1）。**計劃**：先釐清上述需求細節，再評估是否需 DB migration。 |
+| ✅ | ~~營運報表當月與當年度數據獨立分開顯示~~（**2026-09-09 已實作**：`56e52b3` 當月/當年度應收獨立檢視、不再跟隨 period-bar，新增 `test_reports_receivables_monthly.py`；`6bfcafb` 首頁當月收支完整修正＋部門篩選；2026-09-10 `f8198e9` 補上月支出頁籤徽章依 scope 顯示（`reports.html:434`）。同一批連帶修掉「首頁與營運報表對同一個數字有兩套歸月邏輯」的分岔，見 §12 2026-09-09）。以下保留當初的需求討論紀錄：<br>**（原待開發內容）**——目前營運報表的應收未收、已收已支等數字似乎是當年度與當月混在一起（或至少沒有明確區隔），需求是把「當月」的應收未收／已收已支獨立顯示，跟「當年度」的數字做出區隔，不要混算或混排在一起。**併同影響**：營運報表下方的分頁（tabs）內容也要一併比照，跟當年度視圖分開顯示，而不是共用同一份彙總。**細節待評估**（目前 `frontend/js/reports.js` 現有的月/年篩選邏輯、後端 `routers/reports.py` 對應的查詢與彙總方式），token 足夠時再展開設計，先記錄需求方向。 |
 
 **📖 2026-09-01 新增：`MOTRIX-ERP-ARCHITECTURE-MAP.md`**（專案根目錄）——依實際程式碼盤點（非僅依賴本文件）產出的架構地圖，涵蓋 18 組模組的檔案:行號索引、DB v1→v68 完整演進索引、13 條踩坑教訓彙整、依專業軟體慣例的分優先序建議清單。**與本文件互補、不取代**：本文件仍是行為規格與逐日 changelog 的權威來源；架構地圖是「哪個功能在哪個檔案哪一行」的快速定位索引＋外部視角建議。本次盤點也發現本文件 §7/§13 的 router／migration 數量記載落後實際程式碼，已於本輪一併補齊（見下方 §7.12–§7.15、§13）。
 
@@ -1185,6 +1187,61 @@ xlsx-0.18.5.full.min.js     （SheetJS）
 ## §12 · 變更摘要（最新兩版）
 
 > 完整版本歷史請見 [`CHANGELOG.md`](CHANGELOG.md)（根目錄）
+>
+> **2026-09-10 補記**：本節曾一度停在 2026-09-09 15:57（`f935119`），其後 28 個 commit
+> 未紀錄；同期間 `CHANGELOG.md` 09-08／09-09 兩天完全空白。已於本日補回，並新增
+> [`WEEKLY-AUDIT-2026-09-07_2026-09-10.md`](WEEKLY-AUDIT-2026-09-07_2026-09-10.md)
+> ——帶「模組／檔案:行號／是否在正式機」座標的本週稽核索引，出事時先看那份。
+
+### 2026-09-10（本輪稽核）— 補回落後文件＋修掉四項已上正式機的缺陷（DB 無異動）
+
+- **背景**：使用者要求把本週（09-07~09-10，82 個 commit）的更新逐模組拆解、標出每個異常從哪裡開始、有沒有上正式機，並把排查排程全部跑一遍。盤點過程中發現的東西比預期嚴重，整理成 `WEEKLY-AUDIT-2026-09-07_2026-09-10.md`（§A~§H），本條目只記處置。
+- **正式機實測現況**：`GET /api/system/deployed-version` → `9b0ad79`（2026-09-10 11:32:13 套用）；明文 HTTP 已關閉、只剩 HTTPS；HEAD `aeefcc6` 尚未部署。
+- **叫料 API（`routers/material_orders.py`，09-10 09:35 新增、11:32 上正式機）六個缺陷**，其中最外層那個會遮蔽其餘：①**漏 `conn.commit()`**——`db.py:119` 非 autocommit，`finally` 直接 `close()` 把交易丟掉，端點回 200 但資料庫一個字都沒寫（已用 sqlite 最小重現驗證機制）②`save_quotation_json()` 參數錯位，`user["id"]` 被當成 `status`、中文說明被當成 `updated_at`，補上 commit 之後會直接污染報價單狀態欄位③`_audit(conn, ...)` 傳錯簽名，例外被 audit 內部 `try` 吞掉、稽核從來沒寫成功④已結案守門讀 `data_json['deal_tag']`，但那裡的鍵叫 `dealTag`、權威來源是資料表欄位，等於死碼⑤**兩支端點都沒有擁有者檢查**，`quote_no` 可列舉 ⇒ IDOR，正是 2026-08-24 安全審查修過的同一類問題⑥GET 直接索引 `o["totalPrice"]`，舊資料會 500。
+- **`_check_quotation_owner()` 抽到 `helpers/quotations.py`**：叫料是第三個呼叫點，比照 `summarize_payment_items()`／`settlement_extra_expenses()` 的既有慣例，之後任何「用 quote_no 直接取單筆」的新端點直接引用即可，不必再各自重寫或忘記寫。`routers/quotations.py` 三處呼叫點行為不變。
+- **打包測試關卡長期失效（兩個獨立原因疊在一起）**：①`build_deploy_package.ps1` 用裸 `python` 呼叫 pytest，`where python` 這台機器有 **4 個**，儀表板子行程解析到 `pythoncore-3.14-64`，那支沒裝 `python-multipart` ⇒ 所有 Form/File 端點測試在 fixture 階段 `RuntimeError`，整套幾乎全 E ②`%TEMP%\pytest-of-hichan\pytest-current` 是一個目標讀不到的損壞 reparse point，`os.stat()` 回 `WinError 5` 而不是「找不到」，pytest `cleanup_dead_symlinks` 在 session 收尾整個炸掉——**測試全過也會回非 0**。後果：09-10 10:44 打包 FAIL 之後的兩份部署包沒走儀表板（`deploy_logs` 沒有對應 log），其中 `9b0ad79` 直接上了正式機，`CHANGELOG` 自述「已通過**基本語法檢查**」——即這次上線的版本沒跑過 pytest。
+- **`requirements.txt` 缺 `python-multipart`**（09-07 `90c6f31`「補齊缺漏套件」漏了它）：正式機能跑純粹因為環境早就裝過，任何依 requirements 重建的環境（DR 還原、換機、`apply_update.ps1` 的 pip install）都會缺，症狀是**服務啟動成功、只有上傳類端點 500**，很難第一時間聯想。已補。
+- **`test_webauthn_basic.py` 3 題失敗隨部署上線**：`f8198e9` 把 RP ID/Origin 改成未設定回 503，沒同步改測試；因為關卡已經全紅所以沒被擋下。已加 `webauthn_config` fixture，另補一題正面驗證 503 這個新行為；順手修掉 `routers/auth.py:730-749` 兩處 docstring 寫「fall back to localhost」但實際回 `""` 的落差。
+- **修掉 `ee4664a` 當時繞過的 flaky 測試本身**：`test_daily_backup_writes_to_s3_and_marker_prevents_rerun` 原本斷言「整個 fake S3 物件總數不變」，會被同一 worker 上較早測試留下、還沒結束的背景備份執行緒干擾（實測 501 != 500，單獨跑 18/18 穩定）。改成只比對每日備份前綴——那才是這題真正要證明的規格。在打包腳本裡跳過它等於把關卡挖洞，`build_deploy_package.ps1` 那行現在可以移除。
+- **驗證**：全套非 e2e **502 passed / exit 0**（本週第一次完全綠燈）。新增 `test_material_orders_2026_09_10.py`（7 題，每題都從資料庫讀回來核對而不是只看 HTTP 200——回應本身正是當初最會騙人的東西）。
+- **⚠️ 尚未部署**：這批修復與 `aeefcc6` 都還在開發機。**`aeefcc6` 沒上正式機代表 Passkey 目前不可用**——後端已經會在 RP ID 未設定時回 503，而唯一的設定入口就在那支未部署的頁面裡。
+- **教訓（本週第 4 次踩到同一個模式）**：「PATH 上有多個同名執行檔」已經害過 `tar`（09-08 `549d319`）跟現在的 `python`。凡是在腳本裡呼叫裸執行檔名，都要先問「在別的呼叫環境下會解析到哪一支」，並且**在關卡前面加一道會印出實際路徑的前置檢查**——缺套件的症狀是「470 題全部 E」，要往下捲三千行才看得到真正的 `RuntimeError`。
+
+### 2026-09-10（後續修復）— 打包關卡補上直譯器守門＋清掉四個 P2（DB 無異動）
+
+- **`build_deploy_package.ps1` 新增 Step 2.5「釘住 Python 直譯器並驗證依賴齊全」**：`Get-Command python` 解析出實際路徑→印出路徑與版本→跑一次涵蓋 `requirements.txt` 全部套件的 `import` 檢查，缺任何一個直接 `Fail` 並指名「哪一支直譯器、缺什麼、兩種修法」。之後所有 pytest 呼叫改用 `& $pyExe -m pytest`，不再用裸 `python`。**已用壞/好兩種直譯器各實測一次**（3.14 缺 multipart → exit 1 擋下並印出完整指引；PATH 第一順位 3.11.15 → exit 0 放行），兩次都在 `$ErrorActionPreference="Stop"` 下跑，確認這段沒有用 `2>&1`、不會踩到本專案已知的 PS 5.1 `NativeCommandError` 地雷。
+- **移除 `ee4664a` 對 flaky 測試的 `--deselect`**：測試本身已修好（斷言範圍太寬，改成只比對每日備份前綴），不該再從關卡挖洞。
+- **pytest 加 `--basetemp`**（每次一個時間戳目錄）：繞開 `%TEMP%\pytest-of-hichan\pytest-current` 那個損壞的 reparse point——`os.stat()` 回 `WinError 5` 讓 pytest 收尾拋 `PermissionError`，**測試全過也會回非 0**。⚠️ 這只是繞開，根治要用系統管理員權限 `rd` 掉那個連結（一般權限 `Remove-Item`/`rd`/`del`/`icacls` 全部 Access denied，已實測）。
+- **`version_manifest_latest` 不再靜默變 null**：原本檔案找不到時連 `[WARN]` 都沒有（`Test-Path` 為假就整段跳過），事後無法分辨是「沒找到」還是「解析失敗」。現在三種結果（成功/空陣列/找不到/例外）都會印出來。
+- **BOM 防禦補到第二、三處**：`routers/auth.py::system_version()` 與 `helpers/startup.py::_sync_module_versions()` 都是用純 `utf-8` 讀 `version_manifest.json`，只要有人用 PowerShell（PS 5.1 的 `Set-Content -Encoding UTF8` 會加 BOM）重寫該檔，前者讓登入頁版本號變空白、後者讓模組版本同步靜默停擺，兩處的例外都被 `except` 吞掉。已改 `utf-8-sig`——這是 `1c8f2e8`（`deployed-version` 端點）修過的同一個陷阱的第二、三份副本，屬本專案反覆出現的「同一段邏輯有多份副本」型態。
+- **`reports.html:434` 月支出徽章**：原本 `x-show` 拿金額當真值，當月支出剛好 0 時整個徽章消失，看起來像功能壞掉。改成 `x-show="!!expensesData"`（依資料載入與否判斷），$0 正常顯示成 $0。
+- **清掉誤入 repo 的 `backend/.commit_msg_webauthn.txt`**（`0527524` 連同 commit message 草稿一起提交），`.gitignore` 加 `**/.commit_msg*.txt` 防再犯。
+- **更新 `build_deploy_package.ps1` 檔頭過時說明**：仍寫「這台開發機的 git repo 根目錄是整個使用者家目錄」，但專案已於 `e6bf102` 拆成獨立 repo、`$relPath` 恆為空字串（所以打包時「Project path:」印出空白是正常的，不是壞掉）。
+- 驗證：全套非 e2e **502 passed / exit 0**；`build_deploy_package.ps1` 改完後 BOM（`EF BB BF`）與 CRLF 皆保留、PSParser 語法檢查 0 errors。**這批同樣尚未部署。**
+
+### 2026-09-10 — 月支出頁籤、WebAuthn 可設定化、案件專案期間超期通知（DB 無異動）
+
+- **營運報表月支出頁籤**：`reports.html:434` 徽章寫死年度總額（`expensesTotals.total`），跟同頁其他地方的 `expensesScope` 月/年切換邏輯不一致。改為 `expensesScope==='month' ? monthExpenseTotal : expensesTotals.total`。
+- **WebAuthn RP ID／Origin 改為系統可設定**：原本寫死在環境變數、預設 `localhost`／`http://localhost:5000`，正式機用 IP 服務會讓瀏覽器丟 invalid domain。改存 `system_settings`：`routers/auth.py:730-749` 新增 `_webauthn_rp_id()`／`_webauthn_origin()`，四個 WebAuthn 端點未設定時回 **503**（刻意不留 localhost fallback——錯的 RP ID 會讓錯誤看起來像前端壞掉）；新增 `PATCH/GET /api/settings/webauthn-config`（`routers/system.py:708-741`，superadmin）與公開的 `GET /api/system/webauthn-config-status`（`routers/system.py:1081`，`main.py:62` 加入白名單）；前端未設定時隱藏 Passkey 按鈕。設定 UI 在 `aeefcc6`（`company-profile-settings.html`）。
+- **案件「專案期間」＋超期通知**：`caseRecord.projectTimeline = {startDate, endDate, status}` 存 data_json，無 schema 異動。前端 `case-management.js:680-682`（`ensureCaseRecord()` 預設值）、`case-management.html:824-837`（區塊＋倒數/超期天數）；後端 `routers/daily_tasks.py:1092-1135` 新增 `_check_case_project_timeline_deadline()`，超期當天寄一次、之後每 7 天一次（guard key `caseproj_notif.{quote_no}.{days_overdue // 7}`），已掛進 `_daily_run()` 與 `_startup_catchup()` 兩處；通知 `helpers/email_notify.py:1370-1404::notify_case_project_overdue()` 寄給所有 admin/superadmin。
+- **踩坑**：`f8198e9` 漏了 `helpers/__init__.py` 的匯出，`daily_tasks.py` import 直接炸掉，隔 4 分鐘用 `9b0ad79` 補上——這種「新增 helper 函式忘記加進 `__init__.py`」在本專案不是第一次，新增 `helpers/` 函式後請一併檢查 import 與 `__all__` 兩處。
+- **使用者操作**：WebAuthn 需以 superadmin 進 `company-profile-settings.html` 填入內部 DNS 網域（需先把 DNS 指向 172.16.10.177）；案件超期沿用既有每日排程，無需額外設定。
+
+### 2026-09-10（上午）— 叫料（材料訂購）後端 API＋PDF 返回碼修正（DB 無異動）
+
+- 新增 `backend/routers/material_orders.py`：`PATCH/GET /api/quotations/{quote_no}/material-orders`，叫料清單存 `caseRecord.materialOrders`（data_json，無 schema 異動），欄位結構見 `backend/db_migration_plan.md:9-11`。`83c0a1a` 補上寫入權限檢查（admin+ 或 `project_manage`）。
+- **這批上線時零測試、零前端**，且有六個缺陷（見本日「本輪稽核」條目），已於同日修復並補上 7 題測試。前端 UI 仍未做。
+- `3a9332d` 修 `network_plan_export.py` PDF 生成失敗時的返回碼邏輯。
+- `7c2a276` 一併新增的 `backend/tools/diagnose.ps1` 因編碼問題（本專案已知的 `.ps1` BOM 陷阱）先修語法（`cf5a4d2`）後直接移除（`00f1224`），淨變動為零。
+
+### 2026-09-09（深夜）— 首頁與營運報表「當月收支」一晚六輪修正＋Passkey 前端完成（DB 無異動）
+
+- **當月收支**（17:42→22:51，`frontend/js/reports.js` 改 4 次、`routers/reports.py` 2 次、`routers/dashboard.py` 1 次）：`3f9755f` 應收應付卡片改可點選＋當月收支獨立顯示 → `c063a72` 補初始化時自動載入 → `3e29ba7` 點選後自動捲動到對應細節 → `c5a5d11` **日期格式 bug 導致跨月污染** → `da88433` 邏輯統一＋未收 → `6bfcafb` 完整修正＋部門篩選。底層原因是同日稍早 `c15ef84` 已經記載的那件事：**首頁與營運報表對同一個數字本來就有兩套歸月邏輯**，共用邏輯抽出來之後前端才開始一路對齊。
+- `56e52b3` 營運報表「當月/當年度應收」獨立檢視（不再跟隨 period-bar），對應 §11 2026-09-09 待開發項；新增 `test_reports_receivables_monthly.py`。
+- **WebAuthn/Passkey V1**（`efdb06f`→`0527524`→`4f14c68`→`cce89fe`，17:11~23:19）：後端新表＋端點（`routers/auth.py`，`requirements.txt` 加 `webauthn>=2.1.0`）、`login.html` 登入按鈕、`change-password.html` 裝置管理卡片、challenge 編碼檢查。`0527524` 同時修掉 `auth.py` 的**用戶枚舉漏洞**。對應 §11 2026-09-08 待開發項。
+- `d03f453` 收款標記強制填寫收款日期（`case-management.js`）；`aaeffb2` 業務開發頁面暗黑模式左側列表白底（`dev-crm.html`）。
+- `0257fe7` 啟動伺服器改成純 PowerShell（`start_server.ps1`），可在檔案總管直接點擊執行。
+- `1935c3c`／`942e3c4` 打包腳本兩次修正：git archive 語法錯誤、解壓改回用 Git 內建的 Unix tar（**注意這是 09-08 `549d319` 的反向操作**，前因後果見 `WEEKLY-AUDIT` §C-2，下次動這段之前先讀）。
 
 ### 2026-09-09（稍晚）— 修復：精算未完結的額外支出完全不算進月支出（首頁與營運報表都漏，DB 無異動）
 
@@ -1559,7 +1616,7 @@ python tools/deploy_dashboard.py
 
 - 部署／回滾都是**兩段式確認**：填完資訊按第一次按鈕只會跳出摘要卡片，要再按一次「確認套用」/「確認回滾」才真的執行——這是網頁版的人工安全關卡，等價於 `apply_update.ps1`/`rollback_update.ps1` 原本的 `Read-Host "(y/N)"`（WinRM 遠端執行不支援事後對正在跑的遠端 script block 注入互動輸入，遠端呼叫本身帶 `-Yes` 跳過腳本自己的提示，詳見 §12 2026-09-08 條目）。
 - 手動回滾：按「查詢可回滾的快照」（需帳密，因為快照清單只存在正式機上）→ 選一個時間戳 → 兩段式確認 → 執行 `rollback_update.ps1`（新檔案，照抄 `apply_update.ps1` 健康檢查失敗時的自動回滾邏輯，差別是操作者主動觸發，用於「健康檢查本身通過、但實際操作發現功能邏輯不對」這種 `apply_update.ps1` 自己不會自動回滾的情境）。
-- 目前**還沒有真正跑過一次完整的部署/回滾**（只驗證過 UI 渲染與兩段式確認流程本身），下次需要部署時就是這個工具的第一次真實使用，屆時要留意：Copy-Item -ToSession 傳整個部署包資料夾的實際耗時、WinRM session 逾時設定是否夠長（部署包含完整的 backend/frontend 樹狀結構，檔案數不少）。
+- ~~目前還沒有真正跑過一次完整的部署/回滾~~（**2026-09-10 更正**：截至 09-09 22:16 已累積 **20 次**真實部署嘗試、其中 6 次失敗，逐次因果鏈見 `WEEKLY-AUDIT-2026-09-07_2026-09-10.md` §C-1。⚠️ **但 09-10 那次真正上線的部署沒有走這個儀表板**——`deploy_dashboard_history.json` 裡查不到、`deploy_logs/` 也沒有對應的 build log，代表是直接執行腳本。用儀表板以外的方式部署會同時失去「打包測試關卡」與「歷史紀錄」兩層保障。）
 - **已修復一個第一次真實嘗試就撞到的 bug**：`_ps_cmd()` 原本把參數「名稱」（`-Action`／`-Username`／`-PackagePath`）跟「值」混在同一個 list 裡統一加單引號跳脫，導致 `-Action` 被包成 `'-Action'` 純字串常值，PowerShell 認不出是參數旗標，改去綁定成 `_dashboard_remote.ps1` 第一個位置參數的值，撞上 `ValidateSet` 驗證失敗（`Cannot validate argument on parameter 'Action'`）。改成 `named_args: dict` 的介面——參數名原樣輸出（不加引號，因為是我自己寫死的固定字串）、只有值需要跳脫——並用 dry-run 對照 `ValidateSet` 的假腳本實測過確認修復（含值本身含單引號的情況）。**安全性複查那次沒抓到這個問題**：因為當時只推演了「單引號跳脫本身有沒有正確」，沒有實際跑一次生成的完整指令字串驗證參數綁定，這次靠使用者實際點擊部署按鈕才抓到——教訓是「跳脫邏輯正確」跟「整條指令實際能跑」是兩件不同的事，改動這類組指令字串的程式碼一定要跑一次真實 dry-run，不能只靠推演。
 
 ### §14.4 · 選型資料庫雙機內容核對（API 版，2026-08-10）
