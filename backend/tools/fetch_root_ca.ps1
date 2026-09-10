@@ -7,13 +7,15 @@
   為什麼需要這支腳本（而不是一行 Invoke-Command）：
     這一步一定要連正式機，也就一定要正式機的帳密。把明文密碼寫進指令列是壞
     習慣（會留在指令歷程、工作階段紀錄、甚至聊天視窗裡——這個專案已經發生過
-    兩次「密碼誤打進聊天視窗」）。本腳本改用 Get-Credential 的原生輸入框，
-    並在第一次成功後把憑證存成 DPAPI 加密檔（只有這台機器的這個帳號解得開），
-    之後再跑就不用再打密碼。
+    兩次「密碼誤打進聊天視窗」）。本腳本改成從 STDIN 讀一行，不彈圖形視窗、
+    不進指令列，並在第一次成功後把憑證存成 DPAPI 加密檔（只有這台機器的這個
+    帳號解得開），之後再跑就不用再打密碼。
 
   用法：
     powershell -ExecutionPolicy Bypass -File backend\tools\fetch_root_ca.ps1
     powershell -ExecutionPolicy Bypass -File backend\tools\fetch_root_ca.ps1 -Force   # 忽略既有憑證檔，重新輸入密碼
+
+    密碼從 STDIN 讀（不彈圖形視窗、不出現在指令列）。互動時直接打完按 Enter 即可。
 
   產出：
     <專案根>\..\MOTRIX-ERP-CA\rootCA.pem      取回的根 CA（刻意放在專案外，不會被 git 追蹤）
@@ -59,9 +61,23 @@ if ((Test-Path $credPath) -and -not $Force) {
 }
 
 if (-not $cred) {
-    Write-Host "[1/3] 請在跳出的視窗輸入正式機密碼（帳號已帶入 $ProdUser）"
-    $cred = Get-Credential -UserName $ProdUser -Message "MOTRIX 正式機 ($ProdHost)"
-    if (-not $cred) { Write-Host "`n[中止] 沒有輸入憑證。" ; exit 1 }
+    # 密碼從 STDIN 讀，不走 Get-Credential 的圖形視窗，也不出現在指令列參數。
+    #
+    # 為什麼不用 Get-Credential：這台機器上那個視窗反覆不彈出（2026-09-08 做
+    # 部署儀表板的起因就是這個），非互動情境下更是直接失敗。
+    # 為什麼不用 Read-Host -AsSecureString：它依賴主控台的遮罩輸入機制，stdin
+    # 被管線重新導向時會卡死；換成一般 Read-Host 又會把密碼原樣回顯進輸出。
+    # 兩件都在 _dashboard_remote.ps1 實測過，這裡沿用它的結論：
+    # [Console]::In.ReadLine() 讀一行純文字，不經過遮罩機制也不會回顯。
+    Write-Host "[1/3] 請輸入正式機（$ProdUser@$ProdHost）的密碼後按 Enter（輸入時不會顯示）："
+    $plainPw = [Console]::In.ReadLine()
+    if ([string]::IsNullOrWhiteSpace($plainPw)) {
+        Write-Host "`n[中止] 沒有讀到密碼。"
+        exit 1
+    }
+    $securePw = ConvertTo-SecureString -String $plainPw -AsPlainText -Force
+    $plainPw = $null   # 盡早丟掉明文
+    $cred = New-Object System.Management.Automation.PSCredential($ProdUser, $securePw)
 }
 
 # ── 讀取正式機上的 rootCA.pem（唯讀）───────────────────────────────────────
