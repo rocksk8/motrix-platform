@@ -16,11 +16,35 @@
   用法：
     powershell -ExecutionPolicy Bypass -File https_setup.ps1
     powershell -ExecutionPolicy Bypass -File https_setup.ps1 -Host2 172.16.10.177   # 正式機 IP 變動時可覆寫
+    powershell -ExecutionPolicy Bypass -File https_setup.ps1 -ExtraNames motrix.internal
+    powershell -ExecutionPolicy Bypass -File https_setup.ps1 -ExtraNames motrix.internal -Force
+
+  2026-09-10 新增 -ExtraNames／-Force，起因是 Passkey：
+  正式機的內部 DNS 已加了 motrix.internal -> 172.16.10.177，但既有憑證的 SAN
+  只有 172.16.10.177 / localhost / 127.0.0.1（實測確認），用網域存取一定會出現
+  憑證主機名不符的錯誤。WebAuthn 對「安全內容」很敏感，憑證有錯的頁面是不能
+  指望 navigator.credentials 正常運作的——所以要用 motrix.internal 當 RP ID，
+  就得先把它加進 SAN 重產憑證。
+  另外原本腳本偵測到憑證已存在就直接 exit 0，要重產必須先手動刪檔；-Force
+  改成自動備份舊憑證後重產，少一個容易忘的手動步驟。
+
+  【重要決策點：要不要裝 CA】
+  本腳本刻意不執行 `mkcert -install`（見上方說明），代價是每台電腦第一次連線
+  都會看到「不安全」警告，點「繼續前往」後一般瀏覽功能都正常。但 Passkey／
+  WebAuthn 不一定吃這一套——瀏覽器對憑證有錯的頁面會限制部分高權限 API。
+  如果要正式啟用 Passkey，建議把 mkcert 的根 CA（mkcert -CAROOT 目錄下的
+  rootCA.pem）匯入每台要用 Passkey 的電腦的「受信任的根憑證授權單位」，
+  讓網址列是乾淨的鎖頭而不是警告。這件事會反轉上面那個「不裝 CA」的決策，
+  屬於要人決定的事，本腳本不自作主張。
 #>
 
 [CmdletBinding()]
 param(
-    [string]$Host2 = "172.16.10.177"
+    [string]$Host2 = "172.16.10.177",
+    # 額外要寫進 SAN 的名稱（內部 DNS 網域等），可給多個
+    [string[]]$ExtraNames = @(),
+    # 憑證已存在時自動備份並重產，不用先手動刪檔
+    [switch]$Force
 )
 
 $ErrorActionPreference = "Stop"
@@ -65,18 +89,48 @@ $certFile = Join-Path $CertsDir "cert.pem"
 $keyFile  = Join-Path $CertsDir "key.pem"
 
 if ((Test-Path $certFile) -and (Test-Path $keyFile)) {
-    Info "`n憑證已存在：$certFile"
-    Info "如果要重新產生（例如換過正式機 IP），請先手動刪除 backend\certs\ 底下的檔案再重跑這支腳本。"
-    exit 0
+    if (-not $Force) {
+        Info "`n憑證已存在：$certFile"
+        Info "如果要重新產生（例如換過正式機 IP、或要把新的內部網域加進 SAN），"
+        Info "請加上 -Force（會自動備份舊憑證），或手動刪除 backend\certs\ 底下的檔案再重跑。"
+        Info "`n目前這張憑證的 SAN 可以這樣查："
+        Info "  `$c = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2('$certFile')"
+        Info "  (`$c.Extensions | Where-Object { `$_.Oid.Value -eq '2.5.29.17' }).Format(`$true)"
+        Info "  （用 OID 2.5.29.17 而不是 FriendlyName——中文版 Windows 會把它在地化成「主體別名」，"
+        Info "    用英文字串比對會查不到，誤以為憑證沒有 SAN）"
+        exit 0
+    }
+    $stamp = Get-Date -Format "yyyyMMdd_HHmmss"
+    $backupDir = Join-Path $CertsDir "backup_$stamp"
+    New-Item -ItemType Directory -Force -Path $backupDir | Out-Null
+    Copy-Item $certFile $backupDir -Force
+    Copy-Item $keyFile  $backupDir -Force
+    Ok "舊憑證已備份至：$backupDir"
+    Remove-Item $certFile, $keyFile -Force
 }
 
-Info "`n產生憑證中（SAN：$Host2, localhost, 127.0.0.1）..."
-& $mkcertPath -cert-file $certFile -key-file $keyFile $Host2 localhost 127.0.0.1
+# SAN 清單：正式機 IP + loopback 兩種寫法 + 呼叫端額外指定的名稱（如內部 DNS 網域）
+$sanNames = @($Host2, "localhost", "127.0.0.1") + $ExtraNames | Where-Object { $_ } | Select-Object -Unique
+Info "`n產生憑證中（SAN：$($sanNames -join ', ')）..."
+& $mkcertPath -cert-file $certFile -key-file $keyFile @sanNames
 if ($LASTEXITCODE -ne 0) {
     Fail "mkcert 執行失敗（exit code $LASTEXITCODE）。"
 }
 
 Ok "憑證已產生：`n  $certFile`n  $keyFile"
+
+# 產完立刻把 SAN 印出來核對——這次就是因為沒人查過 SAN，才會一路做到要設定
+# RP ID 時才發現網域根本不在憑證裡。
+try {
+    $newCert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2($certFile)
+    $sanExt = $newCert.Extensions | Where-Object { $_.Oid.Value -eq "2.5.29.17" }
+    if ($sanExt) {
+        Info "`n實際寫入憑證的 SAN（請核對你要的名稱都在裡面）："
+        Info ($sanExt.Format($true))
+    }
+} catch {
+    Info "（無法讀回憑證核對 SAN，不影響憑證本身：$($_.Exception.Message)）"
+}
 
 Write-Host "`n======================================"
 Write-Host "  下一步"
