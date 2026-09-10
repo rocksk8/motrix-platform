@@ -748,6 +748,24 @@ def _webauthn_origin() -> str:
     return val if val else ""
 
 
+def _b64url_decode(data: str) -> bytes:
+    """解 WebAuthn 用的 base64url（沒有 padding）。
+
+    2026-09-10：這裡原本用 `base64.b64decode()`，那是**標準** base64 解碼器——
+    它不認得 base64url 的 `-` 和 `_`（預設當成非字母字元丟掉），又要求 padding
+    長度正確，於是一律丟 `binascii.Error: Incorrect padding`。前端
+    （change-password.html / login.html 的 `_uint8ArrayToB64`）產出的正是
+    「base64url 且把 `=` 全部去掉」的格式，所以**每一次 Passkey 註冊與登入都
+    必定失敗**，而且錯誤被上層的 `except Exception` 收斂成一句籠統的
+    「認證器驗證失敗」，從畫面上完全看不出真正原因（實際是靠正式機 server.log
+    裡的 `WebAuthn registration failed: Incorrect padding` 才找到）。
+
+    這裡順便容忍標準 base64（`+/`）的輸入，避免日後換前端寫法又踩一次。
+    """
+    s = (data or "").strip().replace("+", "-").replace("/", "_")
+    return base64.urlsafe_b64decode(s + "=" * (-len(s) % 4))
+
+
 def _webauthn_rp_id() -> str:
     """Get WebAuthn RP ID from system settings (key `webauthn_rp_id`).
 
@@ -844,7 +862,7 @@ def webauthn_register_complete(body: WebauthnRegisterCompleteIn, authorization: 
         existing_ids = {cred["credential_id"] for cred in existing_creds}
 
         try:
-            cred_raw_id = base64.b64decode(body.rawId)
+            cred_raw_id = _b64url_decode(body.rawId)
             if cred_raw_id in existing_ids:
                 conn.close()
                 raise HTTPException(400, "此認證器已被註冊")
@@ -950,7 +968,7 @@ def webauthn_login_complete(body: WebauthnLoginCompleteIn, request: Request):
             _rl_fail(_client_ip(request), body.username)
             raise HTTPException(401, "帳號不存在或已停用")
 
-        cred_raw_id = base64.b64decode(body.rawId)
+        cred_raw_id = _b64url_decode(body.rawId)
         cred_row = conn.execute(
             "SELECT id, public_key, sign_count FROM webauthn_credentials WHERE user_id=? AND credential_id=?",
             (user_row["id"], cred_raw_id)
