@@ -137,7 +137,7 @@
 
 | 模組 | 職責 |
 |------|------|
-| `db.py` | 連線、`init_db()`、PRAGMA WAL、熱路徑欄位／索引；**2026-09-01 更正：CURRENT_VERSION=68**（本行長期未同步更新，之前記載的 46 已過時；v47–v68 詳細主題見 `MOTRIX-ERP-ARCHITECTURE-MAP.md` §4「資料庫演進索引」，含請款單/組織架構/案件階段正規化/專案併入案件管理/網路架構規劃書/自動化系統選型導覽/安全庫存/簽核代理人等；v32/v33 交換器選型導覽 `switch_guide` 表結構由正式機備份還原重建，詳見 db.py `_m032_switch_guide` 註解） |
+| `db.py` | 連線、`init_db()`、PRAGMA WAL、熱路徑欄位／索引；**2026-09-11 更正：CURRENT_VERSION=74**（本行長期未同步更新，先前記載的 46→68 皆已過時；v69–v74 為 TOTP／WebAuthn 相關，v74 見 §3.3c；v47–v68 詳細主題見 `MOTRIX-ERP-ARCHITECTURE-MAP.md` §4「資料庫演進索引」，含請款單/組織架構/案件階段正規化/專案併入案件管理/網路架構規劃書/自動化系統選型導覽/安全庫存/簽核代理人等；v32/v33 交換器選型導覽 `switch_guide` 表結構由正式機備份還原重建，詳見 db.py `_m032_switch_guide` 註解） |
 | `helpers/` | 密碼、session、audit、notify、settings、弱密碼標記、`save_quotation_json()` |
 | `archive.py` | 即時／每日／週備份；本機 SQLite 快照；**原子 JSON 寫入**（`_atomic_json_write`）；G: fallback |
 | `backup_job.py` | 獨立備份腳本（Windows 工作排程器，不依賴 server） |
@@ -255,10 +255,37 @@ setup（POST /api/auth/totp/setup）→ 產生密鑰，totp_enabled 仍是 0
 
 **⏳ 動 RP ID 之前必讀——這是本模組唯一不可逆的操作**
 
-`webauthn_credentials` **刻意沒有存 `rp_id` 欄位**（見 `routers/system.py::set_webauthn_config` 註解），
-所以系統查不出哪張憑證屬於哪個 RP。**一旦改動 RP ID，所有既有 Passkey 全部失效且無法救回**——
-沒有補救、沒有遷移，只能請每個人重新註冊，而失效的舊列還會留在裝置清單裡永遠驗不過（要手動刪）。
-`PATCH /api/settings/webauthn-config` 會回報受影響張數並寫進稽核，但那只是告知，不是防護。
+**一旦改動 RP ID，所有既有 Passkey 全部失效且無法救回**——綁定在瀏覽器端，不在我們手上，
+沒有補救、沒有遷移，只能請每個人重新註冊。
+
+**2026-09-11（DB v74）補上 `webauthn_credentials.rp_id`**：v73 建表時沒存這個欄位，代價是系統
+**查不出哪張憑證屬於哪個 RP**——只能對使用者說「全部都可能不能用了」，而使用者在裝置清單看到
+的是一張外觀完全正常、實際上永遠驗不過的殭屍憑證，登入失敗也只回一句概括的「認證失敗」。
+補上之後：
+
+| 位置 | 行為 |
+|------|------|
+| `login/begin` | 不把舊 RP ID 的憑證交給瀏覽器；**但對外錯誤訊息與「帳號不存在」完全相同**（照實說會洩漏帳號存在＋有註冊過 Passkey，正是 `0527524` 修掉的用戶枚舉），真相寫進 server.log |
+| `login/complete` | 回**明確原因**（「此 Passkey 是在舊的系統網域下註冊的…請重新註冊」），不再是籠統的「認證失敗」。走到這一步代表對方握有真實 credential_id，不是枚舉探測 |
+| 裝置清單 | 標 `stale`，`change-password.html` 顯示紅色「已失效」徽章與說明；全部失效時卡片徽章顯示「已失效」而非「已設定」 |
+| `PATCH /api/settings/webauthn-config` | 回報**精準張數與人數**（原本是回報全表張數，只有一種 RP ID 時剛好等於正確答案） |
+
+> ⚠️ **這個欄位救不回任何憑證**，它讓失效變成「可見、可通知、可清理」。別把這兩件事搞混。
+>
+> `rp_id=''`（v74 之前的舊資料，來源不明）的取捨是**刻意不對稱**的，兩邊都是「不確定時選傷害較小的那邊」：
+> 登入路徑當成「相符」（不確定時不要把人鎖在門外）、失效張數統計則排除（不要謊報「已失效、無法復原」，
+> 那句話會讓人去刪掉可能還能用的憑證）。正式環境不會有這種列——v74 回填會填好，而 RP ID 沒設定時根本註冊不了。
+
+**❌ 「新舊網域並行過渡期」做不到——查證後放棄**
+
+原本規劃的進階做法是：驗證時逐張比對憑證自己的 rp_id，開一段新舊網址並行的窗口，讓大家慢慢遷移。
+**但這對即將要做的這次切換沒有用**：切到 Let's Encrypt 之後，憑證只涵蓋 `erp.miactw.com` 一個名字
+（LE 不可能為 `motrix.internal` 這種私有名稱簽發），而 uvicorn 只能載入一張憑證——**舊網址在切換的
+同一瞬間就失去有效憑證**，Passkey 在那個 origin 下本來就不會運作。換句話說並行窗口的前提不成立。
+
+要真的並行，得讓兩個名字**同時**各有一張有效憑證（例如另起一個 port 用舊憑證服務），那是為了
+1～2 張 Passkey 而增加的常駐複雜度，不划算。**結論：這次切換就是「所有人重新註冊一次」，
+而 v74 讓這件事至少是說得清楚、看得見、清得掉的。**
 
 > **結論：越晚換越貴。** 現在全公司只有 1～2 張 Passkey，這是換 RP ID 成本最低的時刻。
 > 使用者先前提過「未來會有 VPN、主機可能變更網路環境」——而 `motrix.internal` 是一個
@@ -1232,7 +1259,7 @@ xlsx-0.18.5.full.min.js     （SheetJS）
 | 優先 | 項目 |
 |------|------|
 | ✅ | ~~區網 HTTPS／反向代理~~（`https_setup.ps1`，uvicorn 原生 TLS 自簽憑證，2026-08-27 commit `d7b8ee9`）——**2026-09-11 更正：正式機早已是 HTTPS**（本文件先前記載「尚未執行」已過時，該落差本身是 2026-09-08 事故的間接成因，見 §12 同日條目）；2026-09-10 又以 `-ExtraNames motrix.internal -Force` 重產憑證，SAN 與 CA 詳情見 **§3.3c** |
-| 🔴 | **待決策（有時效性，越拖成本越高）：要不要改用 Let's Encrypt 公開受信任憑證＋把 RP ID 換成 `erp.miactw.com`**，見 [`LETSENCRYPT-PUBLIC-CERT-PLAN.md`](LETSENCRYPT-PUBLIC-CERT-PLAN.md)（2026-09-11 規劃完成，**尚未執行**）。**做**：每台裝 CA／改 hosts 這件事整個消失（含 macOS、手機、Firefox），日後換網段或加 VPN 也不會讓 Passkey 全滅。**不做**：維持自簽 CA，每台新電腦都要人跑一次 `setup_passkey_client.ps1`，且未來網路環境一變動就被迫換 RP ID。**時效性來源**：換 RP ID 會讓**所有既有 Passkey 失效且無法救回**（`webauthn_credentials` 沒存 rp_id），目前只有 1～2 張是成本最低的時刻，累積幾十張後再換會非常痛。**卡在哪**：步驟 1～3（Cloudflare 加 A 記錄、建 API Token、正式機簽憑證）都必須由人操作；`backend/tools/letsencrypt_renew.ps1` 已寫好待用。**若決定不做，請直接在這一列寫明「決定維持自簽」與日期**，別讓它懸著。**2026-09-11 已排除 Cloudflare（Origin CA／Tunnel）兩個替代方案**，理由見 §3.3c，不要再重新評估 |
+| 🔴 | **待決策（有時效性，越拖成本越高）：要不要改用 Let's Encrypt 公開受信任憑證＋把 RP ID 換成 `erp.miactw.com`**，見 [`LETSENCRYPT-PUBLIC-CERT-PLAN.md`](LETSENCRYPT-PUBLIC-CERT-PLAN.md)（2026-09-11 規劃完成，**尚未執行**）。**做**：每台裝 CA／改 hosts 這件事整個消失（含 macOS、手機、Firefox），日後換網段或加 VPN 也不會讓 Passkey 全滅。**不做**：維持自簽 CA，每台新電腦都要人跑一次 `setup_passkey_client.ps1`，且未來網路環境一變動就被迫換 RP ID。**時效性來源**：換 RP ID 會讓**所有既有 Passkey 失效且無法救回**（瀏覽器端綁定，不在我們手上；DB v74 起系統至少查得出是哪幾張，見 §3.3c），目前只有 1～2 張是成本最低的時刻，累積幾十張後再換會非常痛。**卡在哪**：步驟 1～3（Cloudflare 加 A 記錄、建 API Token、正式機簽憑證）都必須由人操作；`backend/tools/letsencrypt_renew.ps1` 已寫好待用。**若決定不做，請直接在這一列寫明「決定維持自簽」與日期**，別讓它懸著。**2026-09-11 已排除 Cloudflare（Origin CA／Tunnel）兩個替代方案**，理由見 §3.3c，不要再重新評估 |
 | ✅ | ~~憑證到期完全沒有監控~~（**2026-09-11 已實作** `daily_tasks.py::_check_cert_expiry()`，門檻依憑證總效期自動切換，見 §3.3c 與 §12 同日條目）。**這是先前完全不存在的一層**：mkcert 憑證 2028-12-10（星期日）到期、不會自己更新，而 `letsencrypt_renew.ps1` 的 `[警告]` 只寫進 log 沒人會看 |
 | ✅ | ~~死碼 JS 清除~~（21 個死碼 .js 已刪，`frontend/js/` 僅剩 2 個有效檔） |
 | ✅ | ~~關鍵 API 自動化測試~~（2026-09-01 更正：早已遠超 48 tests，現為 `backend/tests/` 45 個測試檔，累計 300+ 題，近期為 308/308 全過） |
@@ -1273,6 +1300,29 @@ xlsx-0.18.5.full.min.js     （SheetJS）
 > 未紀錄；同期間 `CHANGELOG.md` 09-08／09-09 兩天完全空白。已於本日補回，並新增
 > [`WEEKLY-AUDIT-2026-09-07_2026-09-10.md`](WEEKLY-AUDIT-2026-09-07_2026-09-10.md)
 > ——帶「模組／檔案:行號／是否在正式機」座標的本週稽核索引，出事時先看那份。
+
+### 2026-09-11（白天，第二輪）— `webauthn_credentials.rp_id`（**DB v74**）
+
+讓「RP ID 變更導致 Passkey 全滅」從一件**查不出、說不清、看不見**的事，變成可見、可通知、可清理。
+行為細節見 §3.3c 的表；這裡只記三個判斷：
+
+- **對外錯誤訊息刻意不講真話**：`login/begin` 在「憑證全部失效」時回的必須跟「帳號不存在」一模一樣，
+  否則等於確認該帳號存在且註冊過 Passkey——`0527524` 修掉的用戶枚舉漏洞就是這種洩漏。真相寫進
+  server.log，並在**登入後**的裝置清單講清楚（那裡沒有枚舉風險）。有一題專門釘住「兩種情境的回應完全相同」
+- **`rp_id=''` 的取捨刻意不對稱**：登入路徑當成相符（不確定時不要把人鎖在門外）、失效統計則排除
+  （不要謊報「已失效、無法復原」，那會讓人去刪掉可能還能用的憑證）。已用測試釘住，免得日後被當 bug 修掉
+- **❌ 放棄「新舊網域並行過渡期」**：查證後發現前提不成立——切到 LE 之後憑證只涵蓋 `erp.miactw.com`，
+  而 uvicorn 只能載一張憑證，**舊網址在切換的同一瞬間就沒有有效憑證**，Passkey 在那個 origin 本來就不會動。
+  詳見 §3.3c
+
+**測試 18 題**（含 migration 升級路徑：回填、未設定時留空、可重複執行、不覆蓋已有值），
+並逐一破壞產品邏輯驗證真的抓得到（不過濾失效憑證／錯誤訊息洩漏帳號存在／把舊資料誤判成失效／
+清單不標 stale／統計退回全表 COUNT，**五個破壞全部變紅**）。全套非 e2e **609 passed**，
+Passkey e2e（CDP 虛擬認證器走完註冊＋登入）**2 passed**。
+
+> 順帶修掉 `_startup_catchup()` 第一次執行分支漏掉的 `_check_range_task_deadline()`——它跟同批
+> 其他檢查一樣是看未來的，不會因補跑歷史而洗版，單純是當初漏了；全新環境第一次啟動當天的區間
+> 工作事項到期提醒會被靜默跳過。另把 §2／§13 記載的 `CURRENT_VERSION` 由 68 更正為 74。
 
 ### 2026-09-11（白天）— 憑證到期告警＋放棄 Cloudflare 方案（DB 無異動）
 
@@ -1875,7 +1925,7 @@ MOTRIX-ERP/
 ├── backup_alerts/                   ← 備份警示（執行期產生）
 ├── backend/
 │   ├── main.py                      ← wiring only；34 個 app.include_router()；3 層 middleware
-│   ├── db.py                        ← schema + 68 個 migrations（CURRENT_VERSION=68，見 §2／完整主題索引見 ARCHITECTURE-MAP §4）
+│   ├── db.py                        ← schema + 74 個 migrations（CURRENT_VERSION=74，見 §2／完整主題索引見 ARCHITECTURE-MAP §4）
 │   ├── version_manifest.json        ← 模組版本紀錄（重啟後同步至 DB module_versions）
 │   ├── helpers/                     ← 11 個檔案（拆自原 helpers.py）
 │   │   ├── __init__.py              ← re-export 全部符號

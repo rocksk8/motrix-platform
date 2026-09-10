@@ -1524,6 +1524,11 @@ def schedule_overdue_check() -> None:
             # First ever run — only process yesterday to avoid spamming historical tasks
             _check_overdue_and_notify()
             _check_warranty_expiry()
+            # 2026-09-11：這一行原本只在下面的「補跑」分支有、這裡沒有，全新環境
+            # 第一次啟動當天的區間工作事項到期提醒會被靜默跳過。它跟同批其他檢查
+            # 一樣是**看未來**的（今天／+3 天），不會因為補跑歷史而洗版，
+            # 沒有理由獨漏——單純是當初漏了。
+            _check_range_task_deadline()
             _check_case_stage_deadline()
             _check_case_project_timeline_deadline()
             _check_project_deadline()

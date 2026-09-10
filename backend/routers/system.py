@@ -788,19 +788,28 @@ def set_webauthn_config(body: dict = Body(...), authorization: str = Header(None
     if rp_id:
         _validate_webauthn_pair(rp_id, origin)
 
-    # 既有 Passkey 是被瀏覽器綁在「註冊當下那個 RP ID」上的，而
-    # `webauthn_credentials`（db.py _m073）刻意沒有存 rp_id 欄位——
-    # 也就是說改動 RP ID 之後，所有既有憑證會在下次登入時直接失效，
-    # 而且系統這邊查不出它們原本屬於哪個 RP。這裡不擋（第一次設定時
-    # 本來就必須能寫入，而且 superadmin 有權決定），但把受影響張數
-    # 回傳並寫進稽核，讓「使用者突然說 Passkey 全部不能用了」這種
-    # 回報有跡可循。
+    # 既有 Passkey 是被瀏覽器綁在「註冊當下那個 RP ID」上的，改動 RP ID 之後
+    # 那些憑證會在下次登入時直接失效，而且**無法救回**（綁定在瀏覽器端，不在
+    # 我們手上）。這裡不擋（第一次設定本來就必須能寫入，superadmin 也有權決定），
+    # 但把受影響的張數與人數回傳、寫進稽核，讓「使用者突然說 Passkey 不能用了」
+    # 這種回報有跡可循。
+    #
+    # 2026-09-11（DB v74）：`webauthn_credentials` 補上 rp_id 欄位之後，這裡從
+    # 「回報全表張數」改成**精準計算真正會失效的那幾張**。原本的作法在只有一種
+    # RP ID 時剛好等於正確答案，但只要出現過兩種以上就會高估——而且說不出是誰的。
     previous_rp = _get_setting("webauthn_rp_id") or ""
     invalidated = 0
+    affected_users = 0
     if previous_rp and previous_rp != rp_id:
         conn = get_db()
         try:
-            invalidated = conn.execute("SELECT COUNT(*) AS c FROM webauthn_credentials").fetchone()["c"]
+            row = conn.execute(
+                "SELECT COUNT(*) AS c, COUNT(DISTINCT user_id) AS u "
+                "FROM webauthn_credentials WHERE rp_id != '' AND rp_id != ?",
+                (rp_id,)
+            ).fetchone()
+            invalidated = row["c"]
+            affected_users = row["u"]
         finally:
             conn.close()
 
@@ -808,11 +817,12 @@ def set_webauthn_config(body: dict = Body(...), authorization: str = Header(None
     _set_setting("webauthn_origin", origin)
     detail = f"rp_id={rp_id}, origin={origin}" if rp_id else "（清空）"
     if invalidated:
-        detail += f"；RP ID 由 {previous_rp} 變更，既有 {invalidated} 張 Passkey 將失效"
+        detail += (f"；RP ID 由 {previous_rp} 變更為 {rp_id or '（清空）'}，"
+                   f"{affected_users} 位使用者的 {invalidated} 張 Passkey 失效（無法復原，須重新註冊）")
     _audit(_tok(authorization), "settings.webauthn_config.update", "settings", "webauthn", detail)
     notify_module_activity("系統設定", "變更 WebAuthn 設定", actor.get("display_name") or actor["username"],
                             f"rp_id={rp_id}" if rp_id else "（清空）", "notification-settings.html")
-    return {"ok": True, "invalidatedCredentials": invalidated}
+    return {"ok": True, "invalidatedCredentials": invalidated, "affectedUsers": affected_users}
 
 
 # ── Backup retention settings ─────────────────────────────────────────────────

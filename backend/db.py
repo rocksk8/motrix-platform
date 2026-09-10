@@ -78,7 +78,7 @@ DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR = os.path.join(
 # （已套用過的 schema_version 不可回頭刪除/重排），data_json.dealWonAt 這個
 # 欄位會留在既有資料裡但目前沒有任何程式碼讀取，之後如果要重新加回「成交時間」
 # 這種概念，不要複用這個欄位名稱免得語意混淆。
-CURRENT_VERSION = 73
+CURRENT_VERSION = 74
 
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
 # execution model) whenever the current request is authenticated as the 'demo'
@@ -2005,6 +2005,46 @@ def _m073_webauthn_credentials(conn):
     conn.commit()
 
 
+def _m074_webauthn_rp_id(conn):
+    """`webauthn_credentials` 補上 `rp_id` 欄位（2026-09-11）。
+
+    v73 建表時刻意沒存 rp_id，代價在 2026-09-11 規劃改用公開憑證時才浮現：
+    Passkey 憑證是被瀏覽器綁在「註冊當下那個 RP ID」上的，一旦 RP ID 變更，
+    所有既有憑證都會失效——**而系統查不出哪一張屬於哪個 RP**，只能：
+
+      - 在設定端點回報「全部 N 張都會失效」（連哪幾張真的受影響都說不準）
+      - 讓使用者在裝置清單看到一張外觀正常、實際上永遠驗不過的殭屍憑證
+      - 登入失敗時只能回一句概括的「認證失敗」
+
+    補上這個欄位之後，上面三件事都能講清楚：失效的憑證查得出來、清單標得出來、
+    登入失敗時能回「此 Passkey 在舊網域註冊，已失效，請重新註冊」。
+
+    ⚠️ **這個欄位救不回已經簽發的憑證**——瀏覽器端的綁定不在我們手上，改了
+    RP ID 就是失效。它讓失效變成「可見、可通知、可清理」，不是讓它可逆。
+    也因此它必須在**下一次變更 RP ID 之前**就位才有意義。
+
+    回填：既有憑證全部是在目前這組設定下註冊的（本表 2026-09-09 才建立，
+    期間 RP ID 只設定過 `motrix.internal` 一次），所以直接回填當前設定值。
+    設定為空時留空字串，代表「不明」——查詢端一律把空值當成「與現行相符」，
+    以免把還能用的憑證誤標成失效。
+    """
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(webauthn_credentials)").fetchall()}
+    if "rp_id" not in cols:
+        conn.execute("ALTER TABLE webauthn_credentials ADD COLUMN rp_id TEXT NOT NULL DEFAULT ''")
+
+    row = conn.execute(
+        "SELECT value_json FROM system_settings WHERE key='webauthn_rp_id'").fetchone()
+    current_rp = ""
+    if row:
+        try:
+            current_rp = json.loads(row["value_json"]) or ""
+        except Exception:
+            current_rp = ""
+    if current_rp:
+        conn.execute("UPDATE webauthn_credentials SET rp_id=? WHERE rp_id=''", (current_rp,))
+    conn.commit()
+
+
 def _m071_paid_bank_account(conn):
     """付款事件新增「MOTRIX 自己是用哪個銀行帳戶付的」欄位（2026-09-01）：
     使用者要求 T100 科目代號要能依銀行帳戶分開設定（一間公司可能有多個銀行
@@ -2993,6 +3033,7 @@ _MIGRATIONS = [
     _m071_paid_bank_account,                        # v71
     _m072_totp,                                     # v72
     _m073_webauthn_credentials,                     # v73
+    _m074_webauthn_rp_id,                           # v74
 ]
 
 

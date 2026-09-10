@@ -884,10 +884,15 @@ def webauthn_register_complete(body: WebauthnRegisterCompleteIn, authorization: 
                 expected_rp_id=_webauthn_rp_id(),
             )
             public_key_bytes = verified.credential_public_key
+            # 2026-09-11（DB v74）：記下這張憑證是在哪個 RP ID 底下註冊的。
+            # 瀏覽器把憑證綁在註冊當下的 RP ID 上，日後 RP ID 一變更，沒存這個
+            # 欄位就查不出哪幾張失效——只能對使用者說「全部都可能不能用了」。
             conn.execute(
-                "INSERT INTO webauthn_credentials (user_id, credential_id, public_key, name, created_at) "
-                "VALUES (?, ?, ?, ?, ?)",
-                (user["id"], cred_raw_id, public_key_bytes, "新Passkey", datetime.now().isoformat()),
+                "INSERT INTO webauthn_credentials "
+                "(user_id, credential_id, public_key, name, created_at, rp_id) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (user["id"], cred_raw_id, public_key_bytes, "新Passkey",
+                 datetime.now().isoformat(), _webauthn_rp_id()),
             )
             conn.commit()
         except HTTPException:
@@ -923,13 +928,32 @@ def webauthn_login_begin(body: WebauthnLoginBeginIn):
             raise HTTPException(404, "無法開始 Passkey 登入")
 
         creds = conn.execute(
-            "SELECT credential_id FROM webauthn_credentials WHERE user_id=?",
+            "SELECT credential_id, rp_id FROM webauthn_credentials WHERE user_id=?",
             (user_row["id"],)
         ).fetchall()
 
-        if not creds:
+        # 只把「在現行 RP ID 下註冊的」憑證交給瀏覽器。rp_id='' 是 v74 之前
+        # 留下的舊資料（來源不明），一律當成相符，以免把還能用的憑證擋掉。
+        usable = [c for c in creds if c["rp_id"] in ("", rp_id)]
+
+        if creds and not usable:
+            # RP ID 變更後的典型狀況：憑證還在，但全部綁在舊網域上。
+            # ⚠️ 對外仍回**同一句**錯誤——這裡若照實說「你的 Passkey 已失效」，
+            # 等於確認了這個帳號存在而且有註冊過 Passkey（`0527524` 修掉的
+            # 用戶枚舉漏洞就是這種洩漏）。真正要讓使用者看到的地方是登入後的
+            # 裝置清單（有 stale 標記），那裡沒有枚舉風險。
+            logger.warning(
+                "WebAuthn login blocked: all %d credential(s) for user_id=%s were "
+                "registered under a different RP ID (current=%s). RP ID 變更後既有 "
+                "Passkey 無法救回，使用者需以密碼登入後重新註冊。",
+                len(creds), user_row["id"], rp_id,
+            )
             raise HTTPException(404, "無法開始 Passkey 登入")
 
+        if not usable:
+            raise HTTPException(404, "無法開始 Passkey 登入")
+
+        creds = usable
         allow_credentials = [
             PublicKeyCredentialDescriptor(
                 type=PublicKeyCredentialType.PUBLIC_KEY,
@@ -980,13 +1004,32 @@ def webauthn_login_complete(body: WebauthnLoginCompleteIn, request: Request):
 
         cred_raw_id = _b64url_decode(body.rawId)
         cred_row = conn.execute(
-            "SELECT id, public_key, sign_count FROM webauthn_credentials WHERE user_id=? AND credential_id=?",
+            "SELECT id, public_key, sign_count, rp_id FROM webauthn_credentials "
+            "WHERE user_id=? AND credential_id=?",
             (user_row["id"], cred_raw_id)
         ).fetchone()
         if not cred_row:
             conn.close()
             _rl_fail(_client_ip(request), body.username)
             raise HTTPException(401, "認證失敗")
+
+        # 2026-09-11（DB v74）：這張憑證是在別的 RP ID 下註冊的 → 一定驗不過。
+        # 走到這裡代表對方握有真實的 credential_id，不是枚舉探測，所以可以講清楚
+        # 原因。少了這一段，py_webauthn 會丟一個關於 rpIdHash 不符的例外，被下面
+        # 那個概括的 except 收斂成一句「認證失敗」——而 2026-09-11 那四個根因
+        # 全都是被這種籠統錯誤蓋掉才拖了那麼久才找到的。
+        if cred_row["rp_id"] and cred_row["rp_id"] != _webauthn_rp_id():
+            conn.close()
+            _rl_fail(_client_ip(request), body.username)
+            logger.warning(
+                "WebAuthn login rejected: credential id=%s registered under rp_id=%s, "
+                "current rp_id=%s", cred_row["id"], cred_row["rp_id"], _webauthn_rp_id(),
+            )
+            raise HTTPException(
+                401,
+                "此 Passkey 是在舊的系統網域下註冊的，因網域變更已失效且無法復原。"
+                "請改用密碼登入後，到「修改密碼」頁重新註冊一張。",
+            )
 
         try:
             verified = verify_authentication_response(
@@ -1048,12 +1091,24 @@ def webauthn_credentials_list(authorization: str = Header(None)):
     conn = get_db()
     try:
         rows = conn.execute(
-            "SELECT id, name, created_at, last_used_at FROM webauthn_credentials WHERE user_id=? ORDER BY created_at DESC",
+            "SELECT id, name, created_at, last_used_at, rp_id FROM webauthn_credentials "
+            "WHERE user_id=? ORDER BY created_at DESC",
             (user["id"],)
         ).fetchall()
     finally:
         conn.close()
-    return [dict(row) for row in rows]
+
+    # 2026-09-11（DB v74）：標出「因系統網域變更而失效」的憑證。
+    # 這是使用者唯一能看懂「為什麼我的 Passkey 突然不能用」的地方——登入前的
+    # 錯誤訊息刻意維持統一（避免用戶枚舉），所以真相只能在這裡講。
+    # rp_id='' 是 v74 之前的舊資料，來源不明，一律不標成失效。
+    current_rp = _webauthn_rp_id()
+    out = []
+    for row in rows:
+        item = dict(row)
+        item["stale"] = bool(current_rp and row["rp_id"] and row["rp_id"] != current_rp)
+        out.append(item)
+    return out
 
 
 @router.patch("/api/auth/webauthn/credentials/{cred_id}")

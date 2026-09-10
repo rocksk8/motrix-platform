@@ -106,10 +106,16 @@ def test_changing_rp_id_reports_invalidated_credential_count(client, su):
     conn = db.get_db()
     try:
         for i in range(3):
+            # 2026-09-11（DB v74）：帶上「註冊當下生效的 RP ID」——真的走註冊 API
+            # 就會是這樣（register/complete 會寫入 _webauthn_rp_id()）。
+            # 這裡原本不帶，於是 rp_id 留空；而空值代表「來源不明」，受影響張數
+            # 的精算刻意把它排除（見 routers/system.py::set_webauthn_config）。
+            # 斷言本身沒有放寬，改的只是讓種進去的資料長得跟真實註冊一樣。
             conn.execute(
                 "INSERT INTO webauthn_credentials (user_id, credential_id, public_key, name, "
-                "sign_count, created_at) VALUES (?,?,?,?,?,?)",
-                (1, f"cred-{i}".encode(), b"pubkey", f"裝置{i}", 0, datetime.now().isoformat()))
+                "sign_count, created_at, rp_id) VALUES (?,?,?,?,?,?,?)",
+                (1, f"cred-{i}".encode(), b"pubkey", f"裝置{i}", 0,
+                 datetime.now().isoformat(), "old.local"))
         conn.commit()
     finally:
         conn.close()
