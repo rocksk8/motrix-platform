@@ -8,8 +8,7 @@ from fastapi import APIRouter, HTTPException, Header, Body
 
 from db import get_db
 from helpers import (
-    _require_user, _audit, _notify, _tok,
-    save_quotation_json, check_quote_write_permission,
+    _require_user, _audit, save_quotation_json, user_has_module,
 )
 
 router = APIRouter()
@@ -64,15 +63,17 @@ def update_material_orders(quote_no: str,
             raise HTTPException(404, f"報價單 {quote_no} 不存在")
 
         data = json.loads(q["data_json"] or "{}")
-        if not check_quote_write_permission(user, data):
-            raise HTTPException(403, "無寫入權限")
 
-        # 2. 檢查案件狀態
+        # 2. 權限檢查：只有 admin+ 或有報價單編輯模組的使用者可以修改叫料
+        if user["role"] not in ("superadmin", "admin") and not user_has_module(user, "project_manage"):
+            raise HTTPException(403, "權限不足：只有管理員或專案經理可以修改叫料")
+
+        # 3. 檢查案件狀態
         deal_tag = data.get("deal_tag", "")
         if deal_tag == "已結案":
             raise HTTPException(400, "已結案案件無法修改叫料")
 
-        # 3. 驗證叫料邏輯
+        # 4. 驗證叫料邏輯
         for mo in body.materialOrders:
             if mo.quantity < 0 or mo.unitPrice < 0 or mo.totalPrice < 0:
                 raise HTTPException(400, f"數量、單價、小計不能為負 ({mo.itemName})")
@@ -95,19 +96,19 @@ def update_material_orders(quote_no: str,
                 if not mo.paidDate:
                     raise HTTPException(400, f"部分/完全已付必須填寫日期 ({mo.itemName})")
 
-        # 4. 保存到 data_json
+        # 5. 保存到 data_json
         if not data.get("caseRecord"):
             data["caseRecord"] = {}
 
         data["caseRecord"]["materialOrders"] = [mo.dict() for mo in body.materialOrders]
 
-        # 5. 寫入 DB
+        # 6. 寫入 DB
         save_quotation_json(
             conn, quote_no, data, user["id"],
             f"更新叫料清單（{len(body.materialOrders)} 項）"
         )
 
-        # 6. 稽核記錄
+        # 7. 稽核記錄
         _audit(conn, f"quotations/{quote_no}", "material_orders_update",
                user["id"], f"新增/更新 {len(body.materialOrders)} 筆叫料")
 
