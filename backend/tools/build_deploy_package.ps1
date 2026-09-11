@@ -197,6 +197,31 @@ $($report -join "`n")
 Write-Host "[環境] 測試將使用：$pyExe" -ForegroundColor Green
 Write-Host "[OK] 依賴齊全。" -ForegroundColor Green
 
+# --- Step 2.6: 後端端點入口檢查（只警告，不擋，2026-09-11 新增）---
+# 本專案已經連續兩次出現「後端上線、前端沒入口」：WebAuthn 的設定頁沒被
+# 部署，端點回 503 卻沒有任何地方能填 RP ID；叫料（material_orders.py）修好
+# 四個缺陷、7 題 API 測試全綠，卻整整一天沒有任何前端呼叫得到它。
+# 兩次都不是「寫錯」，是「寫完忘了另一半」——而純 API 測試對這種缺陷完全無感。
+# 判斷方式是字串比對（路由最後一個非參數片段有沒有出現在 frontend/ 裡），
+# 本來就會有誤判，所以**只印警告、絕不擋打包**——拿它擋打包只會變成
+# 每次都在想辦法繞過。詳見 check_endpoint_entrypoints.py 檔頭。
+Write-Host "`n[入口檢查] 比對後端路由與 frontend/ 的呼叫點..."
+$entryScript = Join-Path $projectRoot "backend\tools\check_endpoint_entrypoints.py"
+if (Test-Path $entryScript) {
+    # PYTHONIOENCODING：這台機器 locale 是 cp932，不指定的話子行程 print 中文會 UnicodeEncodeError
+    $prevIoEnc = $env:PYTHONIOENCODING
+    $env:PYTHONIOENCODING = "utf-8"
+    try {
+        & $pyExe $entryScript | ForEach-Object { Write-Host "  $_" }
+    } catch {
+        Write-Host "  [SKIP] 入口檢查自己壞了，不影響打包：$_" -ForegroundColor DarkYellow
+    } finally {
+        $env:PYTHONIOENCODING = $prevIoEnc
+    }
+} else {
+    Write-Host "  [SKIP] 找不到 check_endpoint_entrypoints.py" -ForegroundColor DarkYellow
+}
+
 # --- Step 3: 測試必須通過 ---
 # 目前的把關只有「git status 乾淨」，不代表「這次 commit 沒把測試弄壞」——
 # 曾經發生過測試治具過時、既有測試靜默失敗一段時間才被發現的情況。這裡直接

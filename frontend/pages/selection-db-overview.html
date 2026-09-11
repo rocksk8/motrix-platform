@@ -173,12 +173,18 @@
           moCats, moProds,
           acCats, acProds,
           gwCats, gwProds,
+          auCats, auProds,
         ] = await Promise.all([
           get('/netarch-guide/generations'), get('/netarch-guide/products'),
           get('/switch-guide/categories'), get('/switch-guide/products'),
           get('/monitor-guide/categories'), get('/monitor-guide/products'),
           get('/access-guide/categories'), get('/access-guide/products'),
           get('/gateway-guide/categories'), get('/gateway-guide/products'),
+          // 自動化系統選型導覽（DB v65，2026-08-26 上線的第七類）在 2026-09-11
+          // 之前一直沒被這頁撈進來，所以它的涵蓋度完全看不到——而
+          // automation-guide.html::applyDeepLink() 早就寫好了接這頁連結的程式碼，
+          // 等於只差這一組 fetch。資料形狀與交換器/監控/門禁/閘道器完全相同
+          get('/automation-guide/categories'), get('/automation-guide/products'),
         ])
 
         const netRowDefs = (netGens || []).map(g => ({ key: g.id, name: g.gen_name + '（' + g.family_code + '）' }))
@@ -186,6 +192,7 @@
         const moRowDefs = (moCats || []).map(c => ({ key: c.code, name: c.name }))
         const acRowDefs = (acCats || []).map(c => ({ key: c.code, name: c.name }))
         const gwRowDefs = (gwCats || []).map(c => ({ key: c.code, name: c.name }))
+        const auRowDefs = (auCats || []).map(c => ({ key: c.code, name: c.name }))
 
         this.sections = [
           { key: 'netarch', title: '網路架構選型導覽', rowLabel: '世代', href: 'netarch-guide.html', paramName: 'generation',
@@ -203,6 +210,9 @@
           { key: 'gateway', title: '閘道器與控制器選型導覽', rowLabel: '分類', href: 'gateway-guide.html', paramName: 'category',
             rows: this.buildRows(gwRowDefs, gwProds || [], 'category_code'),
             totalProducts: (gwProds || []).length },
+          { key: 'automation', title: '自動化系統選型導覽', rowLabel: '分類', href: 'automation-guide.html', paramName: 'category',
+            rows: this.buildRows(auRowDefs, auProds || [], 'category_code'),
+            totalProducts: (auProds || []).length },
         ]
       },
     }

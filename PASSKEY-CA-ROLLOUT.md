@@ -5,7 +5,7 @@
 > | 步驟 | 狀態 | 實際結果 |
 > |------|------|---------|
 > | 1 前置確認 | ✅ 完成 | 見下方「前置確認的實測結果」——**發現交接檔漏了一件事** |
-> | 2 部署最新程式碼 | ✅ 完成 | 目前正式機是 **`34e0ce1`**（2026-09-11 套用）。中間經過 `37bd985` → `0da86bf` → `4ffe190` → `34e0ce1` 數輪，每一輪都是修 Passkey 路上的一個坑。 |
+> | 2 部署最新程式碼 | ✅ 完成 | 目前正式機是 **`06e1409`**（2026-09-11 03:21:39 套用，含 DB v74；本表先前記載的 `34e0ce1` 已過時，2026-09-11 核對部署 log 後更正）。中間經過 `37bd985` → `0da86bf` → `4ffe190` → `34e0ce1` 數輪，每一輪都是修 Passkey 路上的一個坑。 |
 > | 3 重產憑證 | ✅ 完成 | 交握取得的 SAN = `DNS:localhost, DNS:motrix.internal, IP:172.16.10.177, IP:127.0.0.1`，有效期至 2028-12-10。舊憑證備份在 `backend\certs\backup_20260910_144802\`。 |
 > | 4 取出根 CA | ✅ 完成 | `fetch_root_ca.ps1` 執行成功，根 CA 已取回開發機，並存下 DPAPI 加密的 `%USERPROFILE%\motrix_cred.xml`（之後跑 WinRM 工具不用再輸密碼）。 |
 > | 5 各機器裝 CA | 🟡 正式機 + 開發機 | 兩台都已裝（指紋 `A9AF974F0BD6CE35B47CDB95CAA5E2B324DAE61C`）且都能解析 `motrix.internal`。**其他同事的電腦尚未處理**——每台要做兩件事，缺一不可：(a) `certutil -addstore -f Root rootCA.pem` (b) 能解析 `motrix.internal`。⚠️ 若採用 `LETSENCRYPT-PUBLIC-CERT-PLAN.md` 的方案，**這一步整個不需要做**。 |

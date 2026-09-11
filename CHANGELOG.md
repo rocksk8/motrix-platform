@@ -5,6 +5,28 @@
 
 ---
 
+### 2026-09-11（白天，第三輪）— 叫料前端 UI ＋涵蓋度總覽補第七類；順手抓到 `init()` 每次開頁跑兩遍
+
+起點是一次全專案待辦盤點（`MOTRIX-ERP-QUICK.md` ＋ `MOTRIX-ERP-ARCHITECTURE-MAP.md` ＋ `WEEKLY-AUDIT-2026-09-07_2026-09-10.md` 三份合併去重，逐條拿 git／程式碼／部署 log 核對）。結論是**六筆待辦其實早就不存在了**，照著做會白工——清單見 QUICK.md §12 同日條目。
+
+**叫料（材料訂購）終於有入口了。** `routers/material_orders.py` 在 2026-09-10 修好四個缺陷、7 題 API 測試全綠，但整整一天**沒有任何前端呼叫得到它**。新增案件管理「財務」分頁的 `#fin-material-orders` 區塊：品項／數量／單位／單價（小計一律由前端算，後端會用 `abs(小計 − 數量×單價) > 0.01` 擋）、待付／部分已付／已付清三態並在前端先擋一次給看得懂的中文訊息、合計三個 KPI、已結案或無權限時整區唯讀**並寫明是哪一個原因**。存檔走專屬端點而不是 `saveCase()`——後者會覆蓋整份 `data_json`，兩邊同時存會互相蓋掉。
+
+**涵蓋度總覽補上自動化系統選型導覽**（第七類，2026-08-26 上線）。`selection-db-overview.html::loadAll()` 只撈五組就漏了它，而 `automation-guide.html::applyDeepLink()` 早就寫好接這頁深層連結的程式碼，只差那一組 fetch。漏掉不會有任何錯誤訊息、頁面照常渲染，所以加了 e2e 比對六個區塊標題。
+
+**打包新增 Step 2.6「後端端點入口檢查」**（`backend/tools/check_endpoint_entrypoints.py`）。把上面這個已經發生兩次的模式自動化：掃 `backend/routers/*.py` 的 `@router` 路徑，取最後一個非參數片段，到 `frontend/` 所有 .html/.js 找這個字串，找不到就列出來。**刻意只警告、不擋打包**——字串比對本來就會誤判，拿它擋只會變成每次都在想辦法繞過。實測 186 組路由只有 5 組沒有前端呼叫點：`deployed-version` 查證過是部署工具在用（進 ALLOWLIST）；`backup-retention`／`cloud-backup-target`／`edge-path`／`pdf-base-path` 沒查證過是刻意還是也忘了做，放在獨立的 `KNOWN_BASELINE` 用一行帶過，讓新冒出來的才是顯眼的那個。已回頭驗證 `material-orders` 在 HEAD 版的 `frontend/` 出現 0 次，這支檢查當時就會抓到它。
+
+**寫 e2e 的時候抓到三個產品端的真缺陷**，不是測試寫法問題：
+
+1. **`init()` 每次開頁跑兩遍**（最嚴重）。`<body x-data="app()" x-init="init()">`——Alpine 3 本來就會自動呼叫資料物件的 `init()`，加上 `x-init` 寫的那一次剛好兩遍。所有 API 發兩次，而且第二次 `selectCase()` 會把第一次已載好的狀態整個重置：使用者在兩次 init 中間按「＋ 新增項目」，那一列會被默默抹掉。先前看不出來是因為這頁的子清單全是唯讀的，重載一次看不出差別——**是新增可編輯清單才把它逼出來的**。已在 `case-management.js::init()` 加 `_initDone` 守門。全站共 50 個頁面有同樣的 `x-init="init()"` 寫法（其中 14 個是 `x-data="app()"`），本輪只修案件管理，其餘屬獨立課題。跟 `34e0ce1` 那個「`login.html` 有兩個 `init()` 互相覆蓋、`checkWebauthnConfig()` 從來沒被呼叫」是同一個家族的坑，**這已經是第二次**。
+2. **載入回應覆蓋使用者的編輯**。`loadMaterialOrders()` 回應抵達時直接整個覆寫陣列，在途中新增的列會被伺服器版本蓋掉。修法比照 `reports.js::loadExpenses()` 的競態（2026-09-10「更晚」）：發請求當下就記住 quote_no，回應到了先比對，`moDirty` 為真時完全不覆蓋。
+3. **空狀態會閃一下**。分頁列在 `selected` 一設好就出現，`loadMaterialOrders()` 卻在 `selectCase()` 更後面才發出去，中間那段空窗會先閃「尚無叫料項目」再跳「載入中…」。`moLoading` 提前到選案當下就立起來。
+
+另修 `case-management.html` 的精算額外支出明細呼叫了一個**不存在的 `fmt()`**（全 js 只有 `fmtFeedTime` 與一個區域變數同名），只要某筆額外支出有填數量，那一行就會丟 ReferenceError；改用元件實際有的 `caseSettleFmt()`。
+
+**測試**：新增 `test_e2e_material_orders_2026_09_11.py`（2 題）、`test_e2e_selection_overview_2026_09_11.py`（1 題）。前者含一條**確定性**的雙重初始化回歸斷言——數「案件清單 API 被呼叫幾次」必須是 1，比等競態自己重現穩定得多；兩支都用「還原修改再跑一次」驗證過確實會紅。連跑 9 輪不 flaky，且因為少發一半 API，單檔時間從 45 秒降到 13 秒。全套非 e2e **609 passed**／e2e **12 passed**。
+
+---
+
 ### 2026-09-11（白天，第二輪）— `webauthn_credentials.rp_id`（DB v74）：讓「Passkey 全滅」至少說得清楚
 
 Passkey 憑證被瀏覽器綁在「註冊當下那個 RP ID」上。v73 建表時沒存 rp_id，代價在規劃改用公開憑證時才浮現——系統**查不出哪幾張會失效**，於是：
