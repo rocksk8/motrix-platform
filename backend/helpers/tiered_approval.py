@@ -34,15 +34,17 @@ from .settings import _get_setting
 # 設定頁看得到它、同時放進 DEFAULT_UNIFIED_DOC_TYPES 讓它預設走統一流程，之後在
 # 設定頁把它從套用範圍取消勾選就會切成自己的 extra_expense_approval_flow。
 APPROVAL_DOC_TYPES = ["quotation", "shipping", "invoice_voucher", "payment_request",
-                      "contractor_voucher", "extra_expense"]
+                      "contractor_voucher", "extra_expense", "completion"]
 DEFAULT_UNIFIED_DOC_TYPES = {"quotation", "shipping", "invoice_voucher", "payment_request",
-                             "extra_expense"}
+                             "extra_expense", "completion"}
 APPROVAL_DOC_TYPE_LABELS = {
     "quotation":         "報價單",
     "shipping":          "出貨單",
     "invoice_voucher":   "發票開立簽核單",
     "payment_request":   "請款單",
     "contractor_voucher": "承攬商匯款申請",
+    "extra_expense":     "案件額外支出",
+    "completion":        "完工單",
 }
 
 

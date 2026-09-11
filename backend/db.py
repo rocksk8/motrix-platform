@@ -81,7 +81,9 @@ DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR = os.path.join(
 # v76: case_extra_expenses.change_*（已核准後的編輯＝變更申請，核准才生效）＋
 # case_stages.google_calendar_done_event_id / daily_task_id（勾選完成同步行事曆），
 # 2026-09-11 第二輪交辦，見 _m076 docstring 與 MOTRIX-ERP-QUICK.md §5.10／§5.11。
-CURRENT_VERSION = 76
+# v77: completion_notes（完工單，比照 shipping_notes 同構＋工程完工單特有欄位），
+# 2026-09-12 交辦，見 _m077 docstring。
+CURRENT_VERSION = 77
 
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
 # execution model) whenever the current request is authenticated as the 'demo'
@@ -3157,6 +3159,71 @@ def _m076_xe_change_requests_and_stage_done(conn):
     conn.commit()
 
 
+def _m077_completion_notes(conn):
+    """完工單（`completion_notes`）——2026-09-12 交辦。
+
+    使用者：「在案件管理內增加完工單的選項，參考出貨單的形式跟內容建立完工單，
+    一樣走流程申請完工。」所以這張表刻意跟 `shipping_notes` 同構：一個報價單
+    可以有多張完工單（分階段完工／分區完工），走同一套分層簽核，核准後客戶回簽。
+
+    **跟出貨單不一樣的欄位，以及為什麼**（照台灣工程業完工單慣例）：
+
+    | 欄位 | 為什麼要 |
+    |---|---|
+    | `site_address` | 出貨單問的是「送到哪」，完工單問的是「在哪裡施工」，常常不同地點 |
+    | `start_date` / `completion_date` | 完工單的核心就是這兩個日期——保固起算、逾期罰則、工期爭議全看它 |
+    | `site_manager` | 我方現場負責人。出了問題要找得到人，不是找開單的人 |
+    | `recipient` | 客戶方驗收人。回簽欄位簽的就是他 |
+    | `work_summary` | 施工說明／工作摘要，敘述性的，不是逐項清單 |
+    | `test_result` | 測試與檢驗結果。弱電／監控／門禁這類驗收一定要有 |
+    | `warranty_months` | 保固月數。**保固自完工日起算**，所以非得跟完工日放同一張單不可 |
+    | `pending_items` | 遺留事項／待改善。**這欄最重要也最常被省略**——完工不等於零缺失，不留這欄就會變成「先簽了再說」，之後爭議沒有依據 |
+
+    品項 `items_json` 比照出貨單的形狀，多一個 `status`（完成／部分完成／未施作），
+    因為完工單的品項本來就可能不是每一項都 100% 完成——那正是 `pending_items`
+    要對應的東西。
+
+    **刻意不做的**：不自動建立保固追蹤紀錄。保固模組有自己的資料來源與流程，
+    在這裡偷偷塞一筆會變成兩套來源打架；先把 `warranty_months` 存好、PDF 上印
+    出保固起訖，要不要接進保固追蹤之後另議。
+    """
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS completion_notes (
+            id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            note_no           TEXT    NOT NULL UNIQUE,
+            quote_no          TEXT    NOT NULL,
+            status            TEXT    NOT NULL DEFAULT '草稿',
+            customer_name     TEXT    NOT NULL DEFAULT '',
+            project_name      TEXT    NOT NULL DEFAULT '',
+            site_address      TEXT    NOT NULL DEFAULT '',
+            start_date        TEXT    NOT NULL DEFAULT '',
+            completion_date   TEXT    NOT NULL DEFAULT '',
+            site_manager      TEXT    NOT NULL DEFAULT '',
+            recipient         TEXT    NOT NULL DEFAULT '',
+            items_json        TEXT    NOT NULL DEFAULT '[]',
+            work_summary      TEXT    NOT NULL DEFAULT '',
+            test_result       TEXT    NOT NULL DEFAULT '',
+            warranty_months   INTEGER NOT NULL DEFAULT 12,
+            pending_items     TEXT    NOT NULL DEFAULT '',
+            notes             TEXT    NOT NULL DEFAULT '',
+            data_json         TEXT    NOT NULL DEFAULT '{}',
+            is_signed         INTEGER NOT NULL DEFAULT 0,
+            signed_by         TEXT    NOT NULL DEFAULT '',
+            signed_at         TEXT    NOT NULL DEFAULT '',
+            signed_log        TEXT    NOT NULL DEFAULT '[]',
+            signed_files_json TEXT    NOT NULL DEFAULT '[]',
+            export_count      INTEGER NOT NULL DEFAULT 0,
+            export_log        TEXT    NOT NULL DEFAULT '[]',
+            created_by        TEXT    NOT NULL DEFAULT '',
+            created_at        TEXT    NOT NULL DEFAULT '',
+            updated_at        TEXT    NOT NULL DEFAULT ''
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_completion_notes_quote ON completion_notes(quote_no)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_completion_notes_status ON completion_notes(status)")
+    conn.commit()
+
+
 _MIGRATIONS = [
     _m001_export_columns,        # v1
     _m002_sessions_expires,      # v2
@@ -3234,6 +3301,7 @@ _MIGRATIONS = [
     _m074_webauthn_rp_id,                           # v74
     _m075_case_extra_expenses,                      # v75
     _m076_xe_change_requests_and_stage_done,        # v76
+    _m077_completion_notes,                         # v77
 ]
 
 

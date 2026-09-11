@@ -3336,6 +3336,48 @@ def get_approval_queue(authorization: str = Header(None)):
             "extraExpenseId":      r["id"],
         })
 
+    # 完工單（2026-09-12）：跟出貨單同一種形狀，簽核狀態在 data_json.$.approval。
+    # 佇列上刻意把「未完成項目數」放進 projectName 一起顯示——完工單常常不是每一
+    # 項都 100% 完成，簽核人要先知道自己簽的是不是一張帶缺失的完工單。
+    cn_rows = conn.execute("""
+        SELECT note_no, quote_no, customer_name, project_name, completion_date, created_at,
+               items_json, json_extract(data_json,'$.approval') as approval_json
+        FROM completion_notes
+        WHERE status IN ('待審核','簽核中')
+        ORDER BY id DESC
+    """).fetchall()
+    for r in cn_rows:
+        f = _queue_tier_fields(r["approval_json"])
+        try:
+            cn_items = json.loads(r["items_json"] or "[]")
+        except Exception:
+            cn_items = []
+        real_items = [it for it in cn_items if it.get("type") != "header"]
+        unfinished = sum(1 for it in real_items if it.get("status") in ("部分完成", "未施作"))
+        label = r["project_name"] or ""
+        if unfinished:
+            label = f"{label}（{unfinished} 項未完成）"
+        items.append({
+            "type":                "completion_note",
+            "quoteNo":             r["note_no"],
+            "customer":            r["customer_name"] or "",
+            "projectName":         label,
+            "total":               len(real_items),
+            "quoteDate":           r["completion_date"] or (r["created_at"] or "")[:10],
+            "salesPerson":         "",
+            "requestedBy":         f["requestedBy"],
+            "requestedByDisplay":  f["requestedByDisplay"],
+            "requestedAt":         f["requestedAt"],
+            "isEditApproval":      False,
+            "reasons":             [],
+            "tiers":               f["tiers"],
+            "currentTier":         f["currentTier"],
+            "tierCount":           f["tierCount"],
+            "currentApprovers":    f["currentApprovers"],
+            "linkedQuoteNo":       r["quote_no"],
+            "unfinishedCount":     unfinished,
+        })
+
     # 額外支出「變更申請」（2026-09-11 第二輪，DB v76）：已核准之後的編輯要簽核，
     # 簽核狀態在 change_approval_json 這一欄，跟本體的 approval_json 是兩條獨立的
     # 線（本體維持「已核准」不動，見 case_extra_expenses.py 末段）。**一定要獨立
@@ -3428,6 +3470,11 @@ def get_approval_queue_count(authorization: str = Header(None)):
     ).fetchall()]
     approval_jsons += [r[0] for r in conn.execute(
         "SELECT json_extract(data_json,'$.approval') FROM shipping_notes WHERE status IN ('待審核','簽核中')"
+    ).fetchall()]
+    # 完工單（2026-09-12）：角標數字要跟佇列列表一致，漏掉就會變成「列得出來但
+    # topbar 是 0」——兩邊矛盾比兩邊都沒有更難查
+    approval_jsons += [r[0] for r in conn.execute(
+        "SELECT json_extract(data_json,'$.approval') FROM completion_notes WHERE status IN ('待審核','簽核中')"
     ).fetchall()]
     approval_jsons += [r[0] for r in conn.execute(
         "SELECT json_extract(data_json,'$.approval') FROM payment_requests WHERE status IN ('待審核','簽核中')"

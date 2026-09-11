@@ -1,7 +1,22 @@
-"""2026-09-09：應收明細表（當月/當年度獨立檢視）新端點 `/api/reports/receivables-monthly`
-的規格測試。核心規格是：成案月份必須透過 quote_won_month_map() 取得（防呆處理
-quote_date 缺漏或明顯未來日期），monthReceivableTotal == monthCollectedTotal +
-monthOutstandingTotal 恆成立。"""
+"""應收明細表端點 `/api/reports/receivables-monthly` 的規格測試。
+
+⚠️ **2026-09-12 規格變更：分組口徑從「成案月份」改成「收款日期」。**
+
+原本（2026-09-09 初版）是依成案月份分組。使用者連續兩次回報「案件資訊裡 9/1 已勾
+已收款，營運報表的『已收款』卻是 0」——查證後資料與計算都沒錯，是那筆款項所屬案件
+在 7 月成案，所以錢被算在 7 月。分頁標題只寫「已收款」，看不出它問的其實是「當月
+成案的案子收了多少」。使用者要的是「當月收到多少錢」，於是改成：
+
+    已收款 → receivedAt（錢實際進來那天）
+    未收款 → expectedReceiptDate（預計哪天進來）
+
+`monthReceivableTotal == monthCollectedTotal + monthOutstandingTotal` 這個恆等式
+在改版後仍然成立（兩半各用各的日期挑，但加起來還是那一包）。
+
+缺日期者另外回傳 `undated*` 兩組（不隨期別篩選）——少了那兩組，改口徑之後沒填日期
+的款項會從每一個月份都撈不到。那部分的測試在
+`test_receivables_by_receipt_date_2026_09_12.py`。
+"""
 import json
 from datetime import datetime
 
@@ -38,11 +53,16 @@ def test_month_param_rejects_malformed_month(client, make_user):
     assert r_ok.status_code == 200, r_ok.text
 
 
-def test_grouped_by_won_month_not_receivedat_or_quote_date(client, make_user):
-    """核心規格：成案月份分組依 quote_won_month_map()，不是 quote_date 原始值、
-    也不是 receivedAt。測試情景：quote_date 缺漏（改用 audit_log 成案時間戳成為
-    2026-03），但款項的 receivedAt 是 2026-05，應該出現在 2026-03 的結果裡，
-    查 2026-05 不應看到。"""
+def test_grouped_by_receipt_date_not_won_month(client, make_user):
+    """核心規格（2026-09-12 起）：**依收款日期分組，不是成案月份**。
+
+    測試情景刻意讓兩者不同：這案的成案月份是 2026-03（quote_date 缺漏、改用
+    audit_log 的成案時間戳解析），但款項的 receivedAt 是 2026-05——錢要算在
+    **2026-05**，2026-03 不該看到。
+
+    這支測試在改版前是反過來斷言的（那是 2026-09-09 的規格）。留著 audit_log
+    那段 fixture 是刻意的：它同時證明「就算成案月份解析得出來，也不再用它分組」。
+    """
     import db
 
     username, password = make_user(role="admin")
@@ -80,24 +100,27 @@ def test_grouped_by_won_month_not_receivedat_or_quote_date(client, make_user):
     finally:
         conn.close()
 
-    # 查詢 2026-03 應該能看到這筆款項
-    r = client.get("/api/reports/receivables-monthly?year=2026&month=2026-03", headers=_auth(token))
-    assert r.status_code == 200
-    data = r.json()
-    assert any(it["quoteNo"] == "MQ-WONFALL-001" for it in data.get("monthReceivableItems", [])), \
-        f"該案應該在 2026-03 結果，但看到的 monthReceivableItems={data.get('monthReceivableItems')}"
-
-    # 查詢 2026-05（實際收款月份）應該不看到這筆案件
+    # 查詢 2026-05（實際收款月份）——錢是那個月進來的，就算在那個月
     r = client.get("/api/reports/receivables-monthly?year=2026&month=2026-05", headers=_auth(token))
     assert r.status_code == 200
     data = r.json()
+    assert any(it["quoteNo"] == "MQ-WONFALL-001" for it in data.get("monthCollectedItems", [])), \
+        f"該案應該在 2026-05（收款月份）結果，但看到的 monthCollectedItems={data.get('monthCollectedItems')}"
+
+    # 查詢 2026-03（成案月份）不該再看到它——這正是 2026-09-12 改掉的東西
+    r = client.get("/api/reports/receivables-monthly?year=2026&month=2026-03", headers=_auth(token))
+    assert r.status_code == 200
+    data = r.json()
     assert not any(it["quoteNo"] == "MQ-WONFALL-001" for it in data.get("monthReceivableItems", [])), \
-        f"該案不應該在 2026-05 結果（成案月份是 2026-03），但看到了"
+        f"該案不該再算進 2026-03（成案月份），錢是 2026-05 才收到的"
 
 
 def test_month_receivable_equals_collected_plus_outstanding(client, make_user):
     """驗證 monthReceivableTotal == monthCollectedTotal + monthOutstandingTotal。
-    測試資料：同一個案件、同一個月內成案，混合一筆已收款項和一筆未收款項。"""
+
+    2026-09-12：改成日期口徑之後，這兩半各用各的日期挑——已收看 receivedAt、
+    未收看 expectedReceiptDate。測試資料刻意讓兩者都落在 2026-04，恆等式才有
+    東西可驗（各自落在不同月的情形由 test_different_month_items_do_not_leak 守）。"""
     import db
 
     username, password = make_user(role="admin")
@@ -113,7 +136,7 @@ def test_month_receivable_equals_collected_plus_outstanding(client, make_user):
                         {"id": 1, "type": "訂金", "pct": 50, "amount": 500000,
                          "received": True, "receivedAt": "2026-04-10T00:00:00"},
                         {"id": 2, "type": "驗收款", "pct": 50, "amount": 500000,
-                         "received": False},
+                         "received": False, "expectedReceiptDate": "2026-04-25"},
                     ]
                 }
             },
@@ -144,7 +167,11 @@ def test_month_receivable_equals_collected_plus_outstanding(client, make_user):
 
 
 def test_different_month_items_do_not_leak(client, make_user):
-    """確保跨月資料互不污染：A 月的案件不會誤出現在 B 月的查詢結果。"""
+    """確保跨月資料互不污染：A 月的款項不會誤出現在 B 月的查詢結果。
+
+    2026-09-12：分月依據從 quote_date（成案月份）改成款項自己的日期，所以這裡的
+    兩筆未收款項要各自帶 expectedReceiptDate；沒帶日期的會被歸到 `undated*`
+    那一組（不屬於任何月份），那是另一支測試的守備範圍。"""
     import db
 
     username, password = make_user(role="admin")
@@ -156,7 +183,8 @@ def test_different_month_items_do_not_leak(client, make_user):
         data_json_1 = json.dumps({
             "dealTag": "已成案",
             "caseRecord": {"payment": {"items": [
-                {"id": 1, "type": "訂金", "pct": 100, "amount": 300000, "received": False}
+                {"id": 1, "type": "訂金", "pct": 100, "amount": 300000, "received": False,
+                 "expectedReceiptDate": "2026-03-20"}
             ]}},
         })
         conn.execute(
@@ -170,7 +198,8 @@ def test_different_month_items_do_not_leak(client, make_user):
         data_json_2 = json.dumps({
             "dealTag": "已成案",
             "caseRecord": {"payment": {"items": [
-                {"id": 1, "type": "訂金", "pct": 100, "amount": 400000, "received": False}
+                {"id": 1, "type": "訂金", "pct": 100, "amount": 400000, "received": False,
+                 "expectedReceiptDate": "2026-04-20"}
             ]}},
         })
         conn.execute(

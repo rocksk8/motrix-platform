@@ -279,6 +279,14 @@ function reportsApp() {
     },
 
     // ── 應收報表（recv/out 分頁，2026-09-09）───────────────────────────────────
+    // 缺日期而不屬於任何月份的款項（2026-09-12）。已收款／未收款改用收款日期口徑
+    // 之後，沒填日期的那些會從每一個月份都撈不到——固定顯示在分頁下方，不隨期別
+    // 篩選，也刻意不併進上面的合計（併進去的話同一筆會在每個月被重複計算）
+    get undatedCollectedItems()   { return (this.receivablesData || {}).undatedCollectedItems || [] },
+    get undatedCollectedTotal()   { return (this.receivablesData || {}).undatedCollectedTotal || 0 },
+    get undatedOutstandingItems() { return (this.receivablesData || {}).undatedOutstandingItems || [] },
+    get undatedOutstandingTotal() { return (this.receivablesData || {}).undatedOutstandingTotal || 0 },
+
     get monthReceivableItems()  { return (this.receivablesData || {}).monthReceivableItems || [] },
     get monthCollectedItems()   { return (this.receivablesData || {}).monthCollectedItems || [] },
     get monthOutstandingItems() { return (this.receivablesData || {}).monthOutstandingItems || [] },
