@@ -437,7 +437,18 @@
 
         get isSuperadmin() { return this.session.role === 'superadmin' },
 
+        _initDone: false,
+
         async init() {
+          // ⚠️ 這頁的 <body> 同時有 `x-data="companyProfilePage()"` 與 `x-init="init()"`
+          // ——Alpine 3 本來就會自動呼叫資料物件的 init()，加上 x-init 寫的那一次
+          // **剛好跑兩遍**，而且不會有任何警告。兩遍的後果不只是 API 發兩次：第二次
+          // `_loadSysSettings()` 的回應會晚一步抵達，把使用者這段期間改過的欄位
+          // （備份天數、雲端備份目標…）用伺服器上的舊值蓋回去，**畫面上完全看不出
+          // 發生過什麼事**。這跟 2026-09-11 第三輪在 case-management.js 修掉的是
+          // 同一個坑（那次的紀錄也寫明「全站還有 50 個頁面是同樣寫法」），這是第二頁。
+          if (this._initDone) return
+          this._initDone = true
           this.session = JSON.parse(localStorage.getItem('motrix_session') || '{}')
           if (!this.session.token) { location.replace('login.html'); return }
           const r = await fetch('/api/settings/company-profile', {
