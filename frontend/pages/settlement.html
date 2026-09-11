@@ -973,83 +973,11 @@ function settlementPage() {
       }
     },
 
-    addExtra() {
-      const today = new Date().toISOString().slice(0, 10)
-      this.settlement.extraItems.push({
-        id:          Date.now(),
-        category:    '工時',
-        description: '',
-        qty:         1,
-        unit:        '人天',
-        unitCost:    0,
-        totalCost:   0,
-        note:        '',
-        expenseDate: '',
-        createdDate: today,  // 建立項目的日期，日期未填時用這個
-        docNo:       '',   // 憑證單號（2026-09-09），案件財務總覽也會顯示
-        files:       [],
-        createdBy:   this.session?.user?.display_name || '',  // 填寫人（2026-09-09，案件財務總覽要顯示）
-      })
-    },
-
-    removeExtra(idx) {
-      this.settlement.extraItems.splice(idx, 1)
-      this.calcSummary()
-    },
-
-    async uploadSettlementExtraFiles(idx, evt) {
-      const files = evt?.target?.files
-      if (!files || files.length === 0) return
-      try {
-        // 剛用「新增欄位」加的額外支出項目在存檔前只存在瀏覽器本機，後端還
-        // 沒有這一筆（見 _load_settlement_extra_item()），此時直接用 idx 上傳
-        // 會被 400「額外支出項目索引超出範圍」擋下。先確保目前的 extraItems
-        // 已同步存檔，讓後端的陣列長度／順序跟畫面一致，idx 才會對得上。
-        await this._putSettlement()
-      } catch (e) {
-        this.toast('儲存失敗，無法上傳附件：' + e.message)
-        evt.target.value = ''
-        return
-      }
-      const fd = new FormData()
-      for (const f of files) fd.append('files', f)
-      try {
-        const r = await fetch(`${API}/quotations/${this.quoteNo}/settlement/extra/${idx}/files`, {
-          method:  'POST',
-          headers: { Authorization: 'Bearer ' + this.session.token },
-          body:    fd,
-        })
-        if (!r.ok) { this.toast((await r.json().catch(() => ({}))).detail || '上傳失敗'); return }
-        const body = await r.json()
-        const item = this.settlement.extraItems[idx]
-        if (item) {
-          if (!item.files) item.files = []
-          item.files.push(...body.files)
-        }
-      } catch (e) { this.toast('上傳失敗：' + e.message) }
-      evt.target.value = ''
-    },
-
-    async deleteSettlementExtraFile(idx, fileId) {
-      if (!confirm('確定刪除此附件？')) return
-      try {
-        // 同上傳一樣：若畫面上有其他尚未存檔的欄位新增/刪除異動，先同步存檔
-        // 避免後端陣列順序跟畫面 idx 對不上。
-        await this._putSettlement()
-      } catch (e) {
-        this.toast('儲存失敗，無法刪除附件：' + e.message)
-        return
-      }
-      try {
-        const r = await fetch(`${API}/quotations/${this.quoteNo}/settlement/extra/${idx}/files/${fileId}`, {
-          method:  'DELETE',
-          headers: { Authorization: 'Bearer ' + this.session.token },
-        })
-        if (!r.ok) { this.toast((await r.json().catch(() => ({}))).detail || '刪除失敗'); return }
-        const item = this.settlement.extraItems[idx]
-        if (item && item.files) item.files = item.files.filter(f => f.id !== fileId)
-      } catch (e) { this.toast('刪除失敗：' + e.message) }
-    },
+    // addExtra() / removeExtra() / uploadSettlementExtraFiles() /
+    // deleteSettlementExtraFile() 已於 2026-09-11 移除——額外支出搬到案件管理的
+    // 「額外支出」分頁與 case_extra_expenses 表（DB v75），這一頁不再有編輯入口，
+    // 這四個函式的呼叫者（那張可編輯的表）已經一併拿掉。附件端點改用資料列 id
+    // 定位，見 routers/case_extra_expenses.py。
 
     async previewAttachmentFile(file) {
       try {

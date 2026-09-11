@@ -28,6 +28,7 @@ import uvicorn
 
 
 @pytest.fixture()
+
 def live_server(client):
     """`client` fixture 已經把 db.DB_PATH/DEMO_DB_PATH/uploads 等全部導向這次
     測試專屬的隔離暫存路徑（見 conftest.py）；這裡額外把同一個 `main.app`
@@ -50,6 +51,22 @@ def live_server(client):
     finally:
         server.should_exit = True
         thread.join(timeout=5)
+
+
+
+def _sync_extra_to_table(conn, quote_no):
+    """把剛種進 data_json 的 settlement.extraItems 搬進 case_extra_expenses。
+
+    2026-09-11（migration v75）之後額外支出住在獨立資料表，data_json 裡那份只是
+    唯讀備份、財務總覽不再讀它。用 migration 自己那支搬移函式，欄位對應才不會漂移。"""
+    import db as _db
+    import json as _json
+    row = conn.execute(
+        "SELECT data_json, sales_person FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+    if not row:
+        return
+    _db._move_extra_items_for_quote(
+        conn, quote_no, _json.loads(row["data_json"] or "{}"), row["sales_person"] or "")
 
 
 def _login(page, base_url, username, password):
@@ -497,6 +514,7 @@ def test_case_finance_summary_smoke(live_server, make_user):
         ("MQ-E2EFIN-001", "已送出", "E2E 財務客戶", "E2E 財務專案", 100000, 95238,
          data_json, now, now, "已成案"),
     )
+    _sync_extra_to_table(conn, "MQ-E2EFIN-001")
     conn.commit()
     conn.close()
 

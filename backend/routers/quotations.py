@@ -2961,24 +2961,39 @@ def get_finance_summary(quote_no: str, authorization: str = Header(None)):
         "SELECT request_no, status, stage, amount, created_at FROM payment_requests "
         "WHERE quote_no=? ORDER BY created_at DESC", (quote_no,)
     ).fetchall()]
-    conn.close()
 
     settlement = data.get("settlement") or {}
-    # 精算額外支出完整明細，包括發票文件與填寫人（2026-09-09）：案件財務總覽
-    # 要展示這些，讓使用者知道是誰何時填的、有沒有上傳發票、憑證單號是什麼
+    # 額外支出完整明細，包括發票文件與填寫人：案件財務總覽要展示這些，讓使用者
+    # 知道是誰何時填的、有沒有上傳發票、憑證單號是什麼。
+    #
+    # 2026-09-11：改讀 `case_extra_expenses` 表（DB v75 把資料從
+    # `settlement.extraItems` 搬出來了）。**不能再讀 data_json 那份**——它現在只是
+    # 搬移前的唯讀備份、不會再更新，讀它會讓財務總覽停在搬移當下的舊數字。
+    # 多回 `status` 與 `pending`：送審中的金額照樣計入（使用者指定），但畫面要
+    # 標示出來，不然看數字的人不知道它還可能因駁回而改變。
     extras = [{
-        "category":    ex.get("category", ""),
-        "description": ex.get("description", ""),
-        "docNo":       ex.get("docNo", ""),
-        "totalCost":   float(ex.get("totalCost") or 0),
-        "expenseDate": ex.get("expenseDate", ""),
-        "qty":         ex.get("qty"),
-        "unit":        ex.get("unit", ""),
-        "unitCost":    float(ex.get("unitCost") or 0),
-        "note":        ex.get("note", ""),
-        "createdBy":   ex.get("createdBy", ""),
-        "files":       ex.get("files") or [],
-    } for ex in (settlement.get("extraItems") or [])]
+        "id":          r["id"],
+        "category":    r["category"] or "",
+        "description": r["description"] or "",
+        "docNo":       r["doc_no"] or "",
+        "totalCost":   float(r["total_cost"] or 0),
+        "expenseDate": r["expense_date"] or "",
+        "qty":         r["qty"],
+        "unit":        r["unit"] or "",
+        "unitCost":    float(r["unit_cost"] or 0),
+        "note":        r["note"] or "",
+        "createdBy":   r["created_by_name"] or "",
+        "createdByInferred": bool(r["created_by_inferred"]),
+        "payerName":   r["payer_name"] or "",
+        "status":      r["status"],
+        "pending":     r["status"] != "已核准",
+        "files":       json.loads(r["files_json"] or "[]"),
+    } for r in conn.execute(
+        "SELECT * FROM case_extra_expenses WHERE quote_no=? ORDER BY id", (quote_no,)
+    ).fetchall()]
+    # 2026-09-11：conn 從這裡才關——額外支出改讀 case_extra_expenses 表之後，
+    # 上面那段列表推導需要連線，原本在它之前就 close() 會變成 use-after-close
+    conn.close()
 
     return {
         "quoteNo":    quote_no,
@@ -3001,60 +3016,13 @@ def get_finance_summary(quote_no: str, authorization: str = Header(None)):
     }
 
 
-def _load_settlement_extra_item(conn, no, idx):
-    """比照 _load_payment_item()，定位精算頁「額外支出」清單（data.settlement.
-    extraItems[]）裡的一筆，供發票/收據附件上傳/刪除使用。"""
-    row = conn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (no,)).fetchone()
-    if not row:
-        raise HTTPException(404, "報價單不存在")
-    data  = json.loads(row["data_json"] or "{}")
-    stl   = data.setdefault("settlement", {})
-    items = stl.setdefault("extraItems", [])
-    if idx < 0 or idx >= len(items):
-        raise HTTPException(400, "額外支出項目索引超出範圍")
-    if stl.get("status") == "finalized":
-        raise HTTPException(403, "精算已完結，僅超級管理員可重新修改")
-    return data, items
-
-
-@router.post("/api/quotations/{no}/settlement/extra/{idx}/files", status_code=201)
-async def upload_settlement_extra_files(no: str, idx: int, files: List[UploadFile] = File(...),
-                                        authorization: str = Header(None)):
-    """精算「額外支出」單筆項目的發票/收據附件上傳（多檔，任何登入使用者皆可
-    傳；精算已完結時一律擋下，與 update_settlement() 的完結後鎖定規則一致，
-    但這裡不比照該端點放寬 superadmin 例外——附件是佐證用途，完結後若真的
-    要補件，走 reopenDraft() 重新開啟精算即可）。"""
-    user = _require_user(authorization)
-    conn = get_db()
-    try:
-        data, items = _load_settlement_extra_item(conn, no, idx)
-        new_files = await save_document_files("quotation_settlement_extra", f"{no}_{idx}", files,
-                                              user.get("display_name") or user["username"])
-        items[idx].setdefault("files", [])
-        items[idx]["files"].extend(new_files)
-        saved_at = save_quotation_json(conn, no, data)
-        conn.commit()
-    finally:
-        conn.close()
-    _audit(_tok(authorization), "settlement.upload_extra_files", "quotation", no,
-           f"{no}（{len(new_files)} 個檔案）")
-    return {"ok": True, "added": len(new_files), "files": new_files, "updated_at": saved_at}
-
-
-@router.delete("/api/quotations/{no}/settlement/extra/{idx}/files/{file_id}")
-def delete_settlement_extra_file(no: str, idx: int, file_id: str, authorization: str = Header(None)):
-    _require_user(authorization)
-    conn = get_db()
-    try:
-        data, items = _load_settlement_extra_item(conn, no, idx)
-        existing = items[idx].get("files") or []
-        items[idx]["files"] = delete_document_file("quotation_settlement_extra", f"{no}_{idx}", existing, file_id)
-        saved_at = save_quotation_json(conn, no, data)
-        conn.commit()
-    finally:
-        conn.close()
-    _audit(_tok(authorization), "settlement.delete_extra_file", "quotation", no, no)
-    return {"ok": True, "updated_at": saved_at}
+# ── 精算額外支出的附件端點已移除（2026-09-11）────────────────────────────────
+#
+# 原本這裡有 `_load_settlement_extra_item()` ＋ `/settlement/extra/{idx}/files`
+# 上傳與刪除兩支端點。額外支出搬到 `case_extra_expenses` 表（DB v75）之後，
+# 對應端點改在 `routers/case_extra_expenses.py`，並且**改用資料列 id 定位而不是
+# 陣列索引**——舊版用 idx，額外支出一旦新增/刪除/重排，索引就會指到別筆去。
+# 附件實體檔案的分類也從 "quotation_settlement_extra" 改成 "case_extra_expense"。
 
 
 # ── Approval queue ────────────────────────────────────────────────────────────
@@ -3314,6 +3282,41 @@ def get_approval_queue(authorization: str = Header(None)):
             "actionType":          r["action_type"],
         })
 
+    # 案件額外支出（2026-09-11）：跟其他五種單據一樣進統一佇列，否則送審之後
+    # 簽核人不會在任何地方看到它，只能靠站內通知——那是「送審了但沒人知道要簽」
+    # 的典型來源。tiers 用真實的分層資料（不像 case_change 借用空 tiers 的捷徑），
+    # 因為這個類型走的就是正規的 tiered_approval。
+    xe_rows = conn.execute("""
+        SELECT e.id, e.quote_no, e.description, e.total_cost, e.approval_json,
+               q.customer_name, q.project_name
+        FROM case_extra_expenses e
+        LEFT JOIN quotations q ON q.quote_no = e.quote_no
+        WHERE e.status IN ('待審核','簽核中')
+        ORDER BY e.id DESC
+    """).fetchall()
+    for r in xe_rows:
+        f = _queue_tier_fields(r["approval_json"])
+        items.append({
+            "type":                "extra_expense",
+            "quoteNo":             f"{r['quote_no']}-XE{r['id']}",
+            "customer":            r["customer_name"] or "",
+            "projectName":         r["description"] or "",
+            "total":               r["total_cost"] or 0,
+            "quoteDate":           (f["requestedAt"] or "")[:10],
+            "salesPerson":         "",
+            "requestedBy":         f["requestedBy"],
+            "requestedByDisplay":  f["requestedByDisplay"],
+            "requestedAt":         f["requestedAt"],
+            "isEditApproval":      False,
+            "reasons":             [],
+            "tiers":               f["tiers"],
+            "currentTier":         f["currentTier"],
+            "tierCount":           f["tierCount"],
+            "currentApprovers":    f["currentApprovers"],
+            "linkedQuoteNo":       r["quote_no"],
+            "extraExpenseId":      r["id"],
+        })
+
     conn.close()
 
     groups: dict = defaultdict(list)
@@ -3364,6 +3367,12 @@ def get_approval_queue_count(authorization: str = Header(None)):
     ).fetchall()]
     approval_jsons += [r[0] for r in conn.execute(
         "SELECT json_extract(data_json,'$.approval') FROM payment_requests WHERE status IN ('待審核','簽核中')"
+    ).fetchall()]
+    # 案件額外支出（2026-09-11）：這張表的簽核狀態存在獨立欄位 approval_json，
+    # 不是 data_json 裡的 $.approval，所以直接取欄位；下面那段逐筆比對當層
+    # approver 的邏輯完全共用，不必另外寫一份。
+    approval_jsons += [r[0] for r in conn.execute(
+        "SELECT approval_json FROM case_extra_expenses WHERE status IN ('待審核','簽核中')"
     ).fetchall()]
     # 已結案案件半解鎖變更（2026-08-26）：單層審核，任一 superadmin 皆算「輪到我」，
     # 不像其他文件類型需要比對 tiers 當層 approver username，直接另外加總。

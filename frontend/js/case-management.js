@@ -373,6 +373,44 @@ function app() {
       await this.loadExtraExpenses(quoteNo)
     },
 
+    async xeUploadFiles(i, evt) {
+      const x = this.xe.items[i]
+      const files = evt?.target?.files
+      if (!x.id || !files || !files.length) return
+      const fd = new FormData()
+      for (const f of files) fd.append('files', f)
+      this.xe.busy = true; this.xe.msg = ''
+      try {
+        const r = await fetch(
+          `/api/quotations/${encodeURIComponent(this.selected.quote_no)}/extra-expenses/${x.id}/files`,
+          { method: 'POST', headers: { Authorization: 'Bearer ' + this.session.token }, body: fd })
+        if (!r.ok) {
+          const d = await r.json().catch(() => ({}))
+          this._xeFail('上傳失敗：' + (d.detail || r.status)); return
+        }
+      } catch (e) { this._xeFail('網路錯誤：' + e.message); return }
+      evt.target.value = ''   // 清掉才能重複選同一個檔案
+      this.xe.busy = false
+      await this.loadExtraExpenses(this.selected.quote_no)
+    },
+
+    async xeDeleteFile(i, fileId) {
+      const x = this.xe.items[i]
+      if (!x.id || !confirm('確定刪除這個附件？')) return
+      this.xe.busy = true; this.xe.msg = ''
+      try {
+        const r = await fetch(
+          `/api/quotations/${encodeURIComponent(this.selected.quote_no)}/extra-expenses/${x.id}/files/${fileId}`,
+          { method: 'DELETE', headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (!r.ok) {
+          const d = await r.json().catch(() => ({}))
+          this._xeFail('刪除失敗：' + (d.detail || r.status)); return
+        }
+      } catch (e) { this._xeFail('網路錯誤：' + e.message); return }
+      this.xe.busy = false
+      await this.loadExtraExpenses(this.selected.quote_no)
+    },
+
     async xeDelete(i) {
       const x = this.xe.items[i]
       if (!x.id) { this.xe.items.splice(i, 1); return }   // 還沒存過，直接移除

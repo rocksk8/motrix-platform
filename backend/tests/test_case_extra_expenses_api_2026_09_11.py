@@ -306,3 +306,61 @@ def test_unknown_quote_returns_404(client, make_user):
     username, password = make_user(username="author12", role="admin")
     token = _login(client, username, password)
     assert client.get(_base("MQ-NOPE-999"), headers=_auth(token)).status_code == 404
+
+
+# ── 統一簽核佇列 ────────────────────────────────────────────────────────────
+
+def test_submitted_expense_appears_in_approval_queue(client, make_user, seed_extra_expense):
+    """送審中的額外支出要出現在統一簽核佇列。
+
+    不進佇列的話，送審之後簽核人只會收到站內通知，沒有任何地方列得出「該我簽的」
+    ——那正是「送審了但沒人知道要簽」的典型來源。
+    """
+    approver, approver_pw = make_user(username="xq_appr", role="superadmin")
+    token = _login(client, approver, approver_pw)
+    _make_case("MQ-XQ-001")
+
+    import json as _json
+    exp_id = seed_extra_expense("MQ-XQ-001", total_cost=2500, description="佇列測試用",
+                                status="待審核")
+    import db
+    conn = db.get_db()
+    try:
+        conn.execute(
+            "UPDATE case_extra_expenses SET approval_json=? WHERE id=?",
+            (_json.dumps({"requestedBy": "someone", "requestedByDisplay": "某人",
+                          "requestedAt": "2026-09-11T10:00:00",
+                          "tiers": [{"order": 0, "approvers": [
+                              {"username": approver, "display_name": approver}]}],
+                          "currentTier": 0}, ensure_ascii=False), exp_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    q = client.get("/api/approval-queue", headers=_auth(token))
+    assert q.status_code == 200, q.text
+    items = [it for g in q.json()["queue"] for it in g["items"] if it["type"] == "extra_expense"]
+    assert len(items) == 1, f"額外支出應該出現在佇列，實際 {items}"
+    it = items[0]
+    assert it["extraExpenseId"] == exp_id
+    assert it["linkedQuoteNo"] == "MQ-XQ-001"
+    assert it["total"] == 2500
+    assert it["projectName"] == "佇列測試用"
+    assert it["tierCount"] == 1
+
+    # 計數端點也要算進去，否則側欄徽章不會亮
+    c = client.get("/api/approval-queue/count", headers=_auth(token))
+    assert c.json()["count"] >= 1
+
+
+def test_draft_expense_not_in_queue(client, make_user, seed_extra_expense):
+    """草稿不該出現在佇列——還沒送審的東西不是別人要簽的。"""
+    approver, approver_pw = make_user(username="xq_appr2", role="superadmin")
+    token = _login(client, approver, approver_pw)
+    _make_case("MQ-XQ-002")
+    seed_extra_expense("MQ-XQ-002", total_cost=100, description="草稿", status="草稿")
+
+    q = client.get("/api/approval-queue", headers=_auth(token))
+    items = [it for g in q.json()["queue"] for it in g["items"] if it["type"] == "extra_expense"]
+    assert items == []

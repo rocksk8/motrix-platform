@@ -1871,6 +1871,25 @@
                              x-model="x.note" :disabled="!xeEditable(x)" @input="xeDirty(xi)">
                     </div>
 
+
+                    <!-- 發票／收據附件。刻意不受「已核准不可編輯」限制：補傳憑證是
+                         會計常態，核准後才拿到紙本發票很正常，擋下來只會逼人去改別的欄位。 -->
+                    <div x-show="x.id" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px;padding-top:8px;border-top:1px dashed #E5E7EB">
+                      <span style="font-size:11px;color:var(--text-dim);font-family:var(--font-zh)">發票／收據：</span>
+                      <template x-for="f in (x.files || [])" :key="f.id">
+                        <span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;background:#E0F2FE;color:#0369A1;padding:2px 6px;border-radius:3px">
+                          <span x-text="f.filename"></span>
+                          <button @click="xeDeleteFile(xi, f.id)" title="刪除這個附件"
+                                  style="border:none;background:none;color:#B91C1C;cursor:pointer;padding:0;line-height:1">×</button>
+                        </span>
+                      </template>
+                      <span x-show="!(x.files || []).length" style="font-size:11px;color:var(--text-dim)">尚未上傳</span>
+                      <label style="font-size:11px;color:#1D4ED8;cursor:pointer;border-bottom:1px dashed #93C5FD">
+                        ＋ 上傳
+                        <input type="file" multiple style="display:none" @change="xeUploadFiles(xi, $event)">
+                      </label>
+                    </div>
+
                     <div x-show="x.status === '已駁回' && x.approval && x.approval.rejectReason"
                          style="margin-top:7px;font-size:11px;color:#B91C1C;font-family:var(--font-zh)">
                       駁回原因：<span x-text="x.approval && x.approval.rejectReason"></span>

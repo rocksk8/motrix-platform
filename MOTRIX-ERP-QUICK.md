@@ -763,13 +763,24 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
 | 段 | 內容 | 狀態 |
 |---|---|---|
 | 一 | migration v75 建表＋搬資料＋回填填寫人；存取函式改名；四個讀取端改讀新表 | ✅ `1a43997` |
-| 二 | CRUD／送審 API（新 router）＋`APPROVAL_DOC_TYPES` 加新類型 | ⚠️ 進行中 |
-| 三 | 案件管理新畫面（案件內選單）；精算頁那張表移除 | ⏸ 未開始 |
-| 四 | 簽核設定頁、統一簽核佇列、結案報表 PDF、T100 匯出 | ⏸ 未開始 |
+| 二 | CRUD／送審 API（新 router）＋`APPROVAL_DOC_TYPES` 加新類型 | ✅ `68f6a4a` |
+| 三 | 案件管理新畫面（案件內選單）；精算頁那張表移除 | ✅ `ab1e696` |
+| 四 | finance-summary／結案報表 PDF／附件端點／簽核設定頁／統一簽核佇列 | ✅ 本輪 |
 
-> ⚠️ **第一段完成至第三段完成之前，這個分支不能部署**：資料已經改從新表讀，
-> 但新的填寫入口還沒做——部署下去精算頁那張表會變成「編輯了也不會進報表」。
-> 使用者 2026-09-11 已確認不部署。
+> ✅ **四段都完成了，功能可用**（2026-09-11）。先前「資料已改從新表讀但沒有填寫入口」
+> 那個不能部署的中間狀態已經解除。T100 傳票匯出查證後**不需要改**——
+> `accounting_export.py` 從來沒有讀過額外支出。
+
+**第四段改了哪些讀取端**
+
+| 位置 | 改動 |
+|---|---|
+| `quotations.py::get_finance_summary()` | 改讀新表；多回 `status`／`pending`／`payerName`。⚠️ 連帶把 `conn.close()` 移到查詢之後——原本在它之前就關，改完會變成 use-after-close |
+| `pdf_gen.py::_case_closing_report_data()` | 改讀新表；結案報表多「支出人」與「狀態」兩欄——對外文件要讓看的人知道哪幾筆還沒簽完 |
+| 附件端點 | 從 `/settlement/extra/{idx}/files` 搬到 `/extra-expenses/{id}/files`，**改用資料列 id 而不是陣列索引**（索引會因新增／刪除／重排指到別筆去）。檔案分類 `quotation_settlement_extra` → `case_extra_expense`。**刻意的行為改變**：已核准之後仍可補傳憑證（補憑證是會計常態，核准當下常常還沒拿到紙本發票），但金額與說明仍然鎖住 |
+| `approval-settings.html` | 套用範圍多選加入「案件額外支出」，預設跟統一流程走、取消勾選即獨立 |
+| 統一簽核佇列 | `/approval-queue` 與 `/approval-queue/count` 都加入；前端補 `extra_expense` 的類型標籤、核准／駁回 URL（掛在案件底下，形狀與其他類型不同）與「沒有 PDF 可預覽」的分流 |
+
 
 **實作筆記（第一段）**
 

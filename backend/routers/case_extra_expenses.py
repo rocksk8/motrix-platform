@@ -32,9 +32,9 @@
 """
 import json
 from datetime import datetime
-from typing import Optional
+from typing import List
 
-from fastapi import APIRouter, Body, Header, HTTPException
+from fastapi import APIRouter, Body, File, Header, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from db import get_db
@@ -45,6 +45,7 @@ from helpers import (
     setting_to_active_tiers as _setting_to_active_tiers,
     check_approve_permission, check_reject_permission, check_no_tier_self_approval,
     UnresolvedManagerError, resolve_active_flow_setting,
+    save_document_files, delete_document_file,
 )
 
 router = APIRouter()
@@ -462,3 +463,72 @@ def reject_extra_expense(quote_no: str, exp_id: int, body: dict = Body(default={
         return {"ok": True, "status": "已駁回"}
     finally:
         conn.close()
+
+
+# ── 發票／收據附件 ────────────────────────────────────────────────────────────
+#
+# 取代舊的 `/api/quotations/{no}/settlement/extra/{idx}/files`——那組是用**陣列索引**
+# 定位的，額外支出一旦新增/刪除/重排，索引就會指到別筆去。改成用資料列的 id，
+# 這也是把資料正規化出來的好處之一。
+#
+# 附件不受「已核准不可編輯」限制：**補傳憑證是會計常態**，核准後才拿到紙本發票
+# 是很正常的事，擋下來只會逼人去改別的欄位。但金額、說明那些仍然鎖住。
+
+def _files_of(row) -> list:
+    try:
+        return json.loads(row["files_json"] or "[]")
+    except Exception:
+        return []
+
+
+@router.post("/api/quotations/{quote_no}/extra-expenses/{exp_id}/files", status_code=201)
+async def upload_extra_expense_files(quote_no: str, exp_id: int,
+                                     files: List[UploadFile] = File(...),
+                                     authorization: str = Header(None)):
+    user = _require_user(authorization)
+    conn = get_db()
+    try:
+        _guard_case(conn, quote_no, user)
+        row = _load(conn, quote_no, exp_id)
+        new_files = await save_document_files(
+            "case_extra_expense", f"{quote_no}_{exp_id}", files,
+            user.get("display_name") or user["username"])
+        merged = _files_of(row) + new_files
+        conn.execute(
+            "UPDATE case_extra_expenses SET files_json=?, updated_at=?, updated_by_name=? "
+            "WHERE id=? AND quote_no=?",
+            (json.dumps(merged, ensure_ascii=False),
+             datetime.now().isoformat(timespec="seconds"),
+             user.get("display_name") or user["username"], exp_id, quote_no),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "extra_expense.upload_files", "quotation", quote_no,
+           f"{quote_no} 額外支出 #{exp_id} 上傳 {len(new_files)} 個附件")
+    return {"ok": True, "added": len(new_files), "files": new_files}
+
+
+@router.delete("/api/quotations/{quote_no}/extra-expenses/{exp_id}/files/{file_id}")
+def delete_extra_expense_file(quote_no: str, exp_id: int, file_id: str,
+                              authorization: str = Header(None)):
+    user = _require_user(authorization)
+    conn = get_db()
+    try:
+        _guard_case(conn, quote_no, user)
+        row = _load(conn, quote_no, exp_id)
+        remaining = delete_document_file(
+            "case_extra_expense", f"{quote_no}_{exp_id}", _files_of(row), file_id)
+        conn.execute(
+            "UPDATE case_extra_expenses SET files_json=?, updated_at=?, updated_by_name=? "
+            "WHERE id=? AND quote_no=?",
+            (json.dumps(remaining, ensure_ascii=False),
+             datetime.now().isoformat(timespec="seconds"),
+             user.get("display_name") or user["username"], exp_id, quote_no),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "extra_expense.delete_file", "quotation", quote_no,
+           f"{quote_no} 額外支出 #{exp_id} 刪除附件")
+    return {"ok": True}
