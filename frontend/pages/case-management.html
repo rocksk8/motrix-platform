@@ -760,8 +760,14 @@
               <button class="cm-tab" x-show="canSeeFinancial()" :class="{active: activeTab==='fin'}" @click="activeTab='fin'">財務</button>
               <!-- 額外支出（2026-09-11）：從精算頁搬過來，獨立成一個分頁而不是塞進財務
                    分頁——使用者說的是「案件管理的案件內選單」，而案件內選單就是這排分頁。 -->
+              <!-- 切分頁刻意不重載：selectCase() 選到案件時就已經載過了。兩邊都載會
+                   互相覆蓋——selectCase 的重置（items=[]、loading=true）若在分頁那次
+                   載入之後才跑，畫面會退回「載入中…」且清單清空，實測在全套 e2e 跑
+                   （負載較高、時序被拉開）時穩定重現。
+                   ⚠️ 註解一定要放在標籤外面：HTML 不允許 <tag> 內出現註解，放進去
+                   整個 @click 都不會綁上，分頁點了完全沒反應（本次踩過）。 -->
               <button class="cm-tab" x-show="canSeeFinancial()" :class="{active: activeTab==='xexp'}"
-                      @click="activeTab='xexp'; loadExtraExpenses(selected.quote_no)">
+                      @click="activeTab='xexp'">
                 額外支出
                 <span x-show="xe.pendingCount > 0"
                       style="display:inline-block;margin-left:4px;padding:0 5px;border-radius:8px;background:#FEF3C7;color:#92400E;font-size:10px;font-weight:700"
