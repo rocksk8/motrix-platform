@@ -506,7 +506,7 @@
           <!-- 已收款 -->
           <div x-show="activeTab==='recv'" class="panel">
             <template x-if="activeCollectedItems.length === 0">
-              <div class="empty-state">所選期間無收款紀錄</div>
+              <div class="empty-state">所選期間（依收款日期）無收款紀錄</div>
             </template>
             <template x-if="activeCollectedItems.length > 0">
               <table class="data-table">
@@ -545,12 +545,44 @@
                 </tbody>
               </table>
             </template>
+            <!-- 已收款但沒填收款日期：改用收款日期口徑之後，這些不屬於任何月份，
+                 每一個月都撈不到。固定顯示在這裡，不隨期別篩選、也不併進上面的
+                 合計（併進去同一筆會在每個月被重複計算）。§5.12 同一套作法。 -->
+            <template x-if="undatedCollectedItems.length > 0">
+              <div style="margin-top:18px;border:1px solid #FECACA;border-radius:8px;background:#FEF2F2;padding:12px 14px">
+                <div style="font-size:13px;font-weight:700;color:#B91C1C;font-family:var(--font-zh);margin-bottom:6px"
+                     x-text="'⚠️ 已勾已收款、但沒填收款日期（' + undatedCollectedItems.length + ' 筆，合計 ' + fmt(undatedCollectedTotal) + '）'"></div>
+                <div style="font-size:12px;color:#B91C1C;font-family:var(--font-zh);line-height:1.7;margin-bottom:10px">
+                  這些款項<b>不屬於任何月份</b>，上方任何一個期間都看不到它們。
+                  請到案件管理 → 案件資訊 → 款項明細補上收款日期。
+                </div>
+                <table class="data-table">
+                  <thead><tr>
+                    <th>案件號</th><th>客戶</th><th>專案名稱</th><th>款項類型</th><th class="r">金額</th>
+                  </tr></thead>
+                  <tbody>
+                    <template x-for="it in undatedCollectedItems" :key="it.quoteNo + '-' + it.idx">
+                      <tr>
+                        <td class="mono">
+                          <a :href="'case-management.html?q=' + encodeURIComponent(it.quoteNo)"
+                             style="color:var(--accent);text-decoration:underline" x-text="it.quoteNo"></a>
+                        </td>
+                        <td x-text="it.customer"></td>
+                        <td x-text="it.project"></td>
+                        <td x-text="it.type"></td>
+                        <td class="r mono" x-text="fmt(it.amount)"></td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+              </div>
+            </template>
           </div>
 
           <!-- 未收款 -->
           <div x-show="activeTab==='out'" class="panel">
             <template x-if="activeOutstandingItems.length === 0">
-              <div class="empty-state">所選期間無未收款項目</div>
+              <div class="empty-state">所選期間（依預計收款日）無未收款項目</div>
             </template>
             <template x-if="activeOutstandingItems.length > 0">
               <table class="data-table">
@@ -580,6 +612,41 @@
                   </tr>
                 </tbody>
               </table>
+            </template>
+            <!-- 未收款但沒填預計收款日：同上，改用日期口徑之後這些不屬於任何月份。
+                 實測開發機未收款 7 筆全部沒填預計收款日，少了這一區就等於整個
+                 未收款清單憑空消失。 -->
+            <template x-if="undatedOutstandingItems.length > 0">
+              <div style="margin-top:18px;border:1px solid #FDE68A;border-radius:8px;background:#FFFBEB;padding:12px 14px">
+                <div style="font-size:13px;font-weight:700;color:#92400E;font-family:var(--font-zh);margin-bottom:6px"
+                     x-text="'⚠️ 未收款、但沒填預計收款日（' + undatedOutstandingItems.length + ' 筆，合計 ' + fmt(undatedOutstandingTotal) + '）'"></div>
+                <div style="font-size:12px;color:#92400E;font-family:var(--font-zh);line-height:1.7;margin-bottom:10px">
+                  「未收款」現在依<b>預計收款日</b>分月，這些沒填日期的<b>不屬於任何月份</b>。
+                  補上預計收款日之後就會出現在對應月份裡。
+                </div>
+                <table class="data-table">
+                  <thead><tr>
+                    <th>案件號</th><th>客戶</th><th>專案名稱</th><th class="c">案件進度</th>
+                    <th>款項類型</th><th class="r">應收金額</th><th class="c">成案月份</th>
+                  </tr></thead>
+                  <tbody>
+                    <template x-for="it in undatedOutstandingItems" :key="it.quoteNo + '-' + it.idx">
+                      <tr>
+                        <td class="mono">
+                          <a :href="'case-management.html?q=' + encodeURIComponent(it.quoteNo)"
+                             style="color:var(--accent);text-decoration:underline" x-text="it.quoteNo"></a>
+                        </td>
+                        <td x-text="it.customer"></td>
+                        <td x-text="it.project"></td>
+                        <td class="c"><span class="rb" :class="it.dealTag==='已結案'?'rb-closed':'rb-active'" x-text="it.dealTag"></span></td>
+                        <td x-text="it.type"></td>
+                        <td class="r mono red-txt" x-text="fmt(it.amount)"></td>
+                        <td class="c mono" x-text="it.wonMonth"></td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+              </div>
             </template>
           </div>
 

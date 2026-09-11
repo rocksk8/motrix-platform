@@ -87,9 +87,12 @@ def test_receivables_quarter_equals_sum_of_its_months(client, make_user):
         _insert_case(conn, "MQ-Q3-JUL", "2026-07-05",
                      [{"id": 1, "type": "訂金", "pct": 100, "amount": 100000,
                        "received": True, "receivedAt": "2026-07-20T00:00:00"}])
+        # 2026-09-12：分月依據改成款項自己的日期，未收款看的是 expectedReceiptDate。
+        # 不給日期的話這筆會落到 undated 那組（不屬於任何月份），季合計就對不起來
+        # ——那是刻意的新行為，不是這支測試要驗的東西，所以補上預計收款日。
         _insert_case(conn, "MQ-Q3-AUG", "2026-08-05",
                      [{"id": 1, "type": "訂金", "pct": 100, "amount": 200000,
-                       "received": False}])
+                       "received": False, "expectedReceiptDate": "2026-08-25"}])
         _insert_case(conn, "MQ-Q3-SEP", "2026-09-05",
                      [{"id": 1, "type": "訂金", "pct": 100, "amount": 300000,
                        "received": True, "receivedAt": "2026-09-20T00:00:00"}])

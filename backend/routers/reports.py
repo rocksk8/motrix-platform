@@ -3664,9 +3664,13 @@ def _collect_receivable_items(department_id: Optional[int] = None) -> list:
 
 def _build_receivables_scopes(year: int, month: str, department_id: Optional[int] = None,
                               quarter: Optional[int] = None) -> dict:
-  """2026-09-09：按成案月份分組的應收報表（當月/當年度）。月份格式 YYYY-MM；
-  跟 _build_income_expense_scopes() 一樣回傳 month* 與 year* 雙套欄位，讓前端
-  能獨立切換「當月/今年度」檢視。
+  """應收報表（當月/當年度）。月份格式 YYYY-MM；跟 _build_income_expense_scopes()
+  一樣回傳 month* 與 year* 雙套欄位，讓前端能獨立切換「當月/今年度」檢視。
+
+  ⚠️ **2026-09-12 起改用「收款日期」口徑**（已收款看 receivedAt、未收款看
+  expectedReceiptDate），不再依成案月份分組（2026-09-09 初版是那樣）。改的原因、
+  以及「缺日期者另外回傳 undated* 兩組」的理由，見函式內註解——**那兩組是防止
+  錢無聲消失的關鍵，不要順手拿掉**。
 
   monthReceivableTotal == monthCollectedTotal + monthOutstandingTotal 恆成立（by
   construction），year 版同理。此設計刻意與 _collect() 回傳的 summary.total* 欄位
@@ -3682,25 +3686,52 @@ def _build_receivables_scopes(year: int, month: str, department_id: Optional[int
 
   all_items = _collect_receivable_items(department_id)
 
-  month_items      = [i for i in all_items if i["wonMonth"] == month]
-  month_collected  = [i for i in month_items if i["received"]]
-  month_outstanding = [i for i in month_items if not i["received"]]
+  # 2026-09-12：口徑從「成案月份」改成「收款日期」。
+  #
+  # **為什麼改**：使用者連續兩次回報「案件裡 9/1 已收款，營運報表的已收款卻是 0」。
+  # 查證後資料與計算都沒錯——`MQ-202607-045` 的成案月份是 2026-07，所以那筆 9/1
+  # 收的錢一直被算在 **7 月**。分頁標題只寫「已收款」，沒有人看得出它問的其實是
+  # 「當月成案的案子收了多少」而不是「當月收到多少錢」，而後者才是看這頁的人要的。
+  #
+  # 分組欄位刻意兩半各用各的日期：
+  #   已收款 → receivedAt（錢實際進來的那天）
+  #   未收款 → expectedReceiptDate（預計哪天進來）
+  # `receivable == collected + outstanding` 這個恆等式仍然成立（by construction），
+  # 只是兩半各自用自己的日期挑出來的。
+  #
+  # ⚠️ **缺日期的不能就這樣消失**。實測開發機：未收款 7 筆**全部沒填預計收款日**，
+  # 直接用日期分組會讓它們從每一個月份都撈不到——正是 §5.12 那個「錢無聲消失」
+  # 的坑。所以另外回傳 `undated*` 兩組（不分期別、固定顯示），前端獨立列一區。
+  # 刻意**不併進月份合計**，否則同一筆會在每個月被重複計算。
+  def _recv_month(i):
+    return (i.get("receivedAt") or "")[:7]
+
+  def _due_month(i):
+    return (i.get("expectedReceiptDate") or "")[:7]
+
+  collected_all   = [i for i in all_items if i["received"]]
+  outstanding_all = [i for i in all_items if not i["received"]]
+
+  undated_collected   = [i for i in collected_all if not _recv_month(i)]
+  undated_outstanding = [i for i in outstanding_all if not _due_month(i)]
+
+  month_collected   = [i for i in collected_all if _recv_month(i) == month]
+  month_outstanding = [i for i in outstanding_all if _due_month(i) == month]
+  month_items       = month_collected + month_outstanding
 
   year_str = str(year)
-  year_items      = [i for i in all_items if i["wonMonth"][:4] == year_str]
-  year_collected  = [i for i in year_items if i["received"]]
-  year_outstanding = [i for i in year_items if not i["received"]]
+  year_collected   = [i for i in collected_all if _recv_month(i)[:4] == year_str]
+  year_outstanding = [i for i in outstanding_all if _due_month(i)[:4] == year_str]
+  year_items       = year_collected + year_outstanding
 
-  # 「季」範圍（2026-09-10）：分組依據跟月/年兩套完全一致，都是 wonMonth（成案
-  # 月份）而不是 quoteDate/receivedAt，維持本函式 docstring 描述的「流量」口徑。
   quarter = _validate_quarter(quarter)
   if quarter:
     q_months = set(_quarter_months(year, quarter))
-    quarter_items = [i for i in all_items if i["wonMonth"] in q_months]
+    quarter_collected   = [i for i in collected_all if _recv_month(i) in q_months]
+    quarter_outstanding = [i for i in outstanding_all if _due_month(i) in q_months]
   else:
-    quarter_items = []
-  quarter_collected   = [i for i in quarter_items if i["received"]]
-  quarter_outstanding = [i for i in quarter_items if not i["received"]]
+    quarter_collected, quarter_outstanding = [], []
+  quarter_items = quarter_collected + quarter_outstanding
 
   return {
     "receivablesYear":         year,
@@ -3724,6 +3755,12 @@ def _build_receivables_scopes(year: int, month: str, department_id: Optional[int
     "quarterCollectedTotal":     sum(i["amount"] for i in quarter_collected),
     "quarterOutstandingItems":   quarter_outstanding,
     "quarterOutstandingTotal":   sum(i["amount"] for i in quarter_outstanding),
+    # 缺日期而不屬於任何月份的款項——**不併進上面任何一組合計**，前端獨立顯示。
+    # 少了這兩組，改成日期口徑之後這些錢會從每一個月份都消失（見上方說明）。
+    "undatedCollectedItems":     undated_collected,
+    "undatedCollectedTotal":     sum(i["amount"] for i in undated_collected),
+    "undatedOutstandingItems":   undated_outstanding,
+    "undatedOutstandingTotal":   sum(i["amount"] for i in undated_outstanding),
   }
 
 
