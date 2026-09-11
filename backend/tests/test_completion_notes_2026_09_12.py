@@ -388,3 +388,148 @@ def test_requires_auth_and_admin_to_create(client, make_user):
     assert client.post(BASE, headers=_auth(token), json=_payload()).status_code == 403
     # 但看得到（列表只要求登入，比照出貨單）
     assert client.get(BASE, headers=_auth(token)).status_code == 200
+
+
+# ── 可自訂標題 ＋ 保固可隱藏（2026-09-12 使用者回饋）──────────────────────────
+#
+# 第一版用語全部偏工程（施工地點／工程期間／施工說明／承攬商·工程負責人…），但公司
+# 除了工程還有專案、零組件販售、系統設定、網路架構、防火牆等業務。改成：預設值中性、
+# 每張單可自己覆寫標題、保固期間留空就不印（比照報價單「條件留空就不印」的慣例）。
+
+def test_default_labels_are_business_neutral(client, make_user):
+    """預設用語不能再綁死工程。"""
+    username, password = make_user(username="cn_l1", role="admin")
+    token = _login(client, username, password)
+    _make_case()
+    d = _get(client, token, _create(client, token))
+    lab = d["labels"]
+    assert lab["siteLabel"] == "服務地點"
+    assert lab["sectionSummary"] == "四、執行說明"
+    assert lab["signVendor"] == "執行單位 · 負責人"
+    joined = "".join(lab.values())
+    for word in ("施工", "工程", "承攬商", "業主"):
+        assert word not in joined, f"預設標題不該再出現「{word}」：{lab}"
+
+
+def test_labels_can_be_overridden_per_note(client, make_user):
+    """每一張完工單各自覆寫——不同業務的單子用不同用語，這正是使用者要的。"""
+    username, password = make_user(username="cn_l2", role="admin")
+    token = _login(client, username, password)
+    _make_case()
+    note_no = _create(client, token, labels={
+        "sectionSummary": "四、系統設定說明",
+        "itemColumn": "系統項目 / 設定內容",
+        "siteLabel": "建置環境",
+    })
+    d = _get(client, token, note_no)
+    assert d["labels"]["sectionSummary"] == "四、系統設定說明"
+    assert d["labels"]["itemColumn"] == "系統項目 / 設定內容"
+    assert d["labels"]["siteLabel"] == "建置環境"
+    # 沒覆寫的仍是預設
+    assert d["labels"]["sectionTest"] == "五、測試與檢驗結果"
+    # labelOverrides 只回使用者真正改過的，前端表單才不會被預設值塞滿
+    assert set(d["labelOverrides"]) == {"sectionSummary", "itemColumn", "siteLabel"}
+
+
+def test_blank_label_falls_back_to_default(client, make_user):
+    """留空＝用預設，不是留一個空白標題——標題整個消失只會讓人以為版面壞了。"""
+    username, password = make_user(username="cn_l3", role="admin")
+    token = _login(client, username, password)
+    _make_case()
+    d = _get(client, token, _create(client, token, labels={"sectionItems": "   "}))
+    assert d["labels"]["sectionItems"] == "三、完成項目明細"
+
+
+def test_unknown_or_overlong_label_is_rejected(client, make_user):
+    username, password = make_user(username="cn_l4", role="admin")
+    token = _login(client, username, password)
+    _make_case()
+    r = client.post(BASE, headers=_auth(token), json=_payload(labels={"bogusKey": "x"}))
+    assert r.status_code == 400 and "未知" in r.json()["detail"]
+    r = client.post(BASE, headers=_auth(token), json=_payload(labels={"siteLabel": "字" * 41}))
+    assert r.status_code == 400
+
+
+def test_labels_survive_update_without_clobbering_approval(client, make_user):
+    """編輯時 data_json 要 read-modify-write——整包覆蓋會把 approval 洗掉。
+
+    情境：送審 → 被駁回退回草稿（approval 已被 pop，但其他欄位還在）→ 再編輯。
+    這裡改用「手動塞一段 data_json 的其他內容」來驗證不被清掉，比真的跑一輪簽核短。
+    """
+    username, password = make_user(username="cn_l5", role="superadmin")
+    token = _login(client, username, password)
+    _make_case()
+    note_no = _create(client, token, labels={"siteLabel": "交付地點"})
+
+    import db
+    conn = db.get_db()
+    try:
+        conn.execute("UPDATE completion_notes SET data_json=? WHERE note_no=?",
+                     (json.dumps({"labels": {"siteLabel": "交付地點"},
+                                  "someOtherKey": "不可以被洗掉"}, ensure_ascii=False), note_no))
+        conn.commit()
+    finally:
+        conn.close()
+
+    assert client.put(f"{BASE}/{note_no}", headers=_auth(token),
+                      json=_payload(labels={"siteLabel": "點交地點"})).status_code == 200
+
+    conn = db.get_db()
+    try:
+        dj = json.loads(conn.execute(
+            "SELECT data_json FROM completion_notes WHERE note_no=?", (note_no,)).fetchone()[0])
+    finally:
+        conn.close()
+    assert dj["labels"]["siteLabel"] == "點交地點"
+    assert dj.get("someOtherKey") == "不可以被洗掉", "data_json 被整包覆蓋了"
+
+
+def test_warranty_can_be_hidden_by_leaving_it_blank(client, make_user):
+    """保固月數 0＝這張單不顯示保固（零組件販售、系統設定那類常常沒有保固可言）。
+
+    比照報價單「條件留空就不印」的既有慣例，不另外開一個顯示旗標。
+    """
+    username, password = make_user(username="cn_l6", role="admin")
+    token = _login(client, username, password)
+    _make_case()
+
+    on = _get(client, token, _create(client, token, warranty_months=12))
+    assert on["showWarranty"] is True and on["warrantyEnd"]
+
+    off = _get(client, token, _create(client, token, warranty_months=0))
+    assert off["showWarranty"] is False
+    assert off["warrantyEnd"] == "", "保固關掉時不該還算出迄日"
+
+
+def test_pdf_uses_custom_labels_and_hides_warranty(client, make_user):
+    """PDF 真的要吃到自訂標題，而且保固關掉時那一列不能出現。
+
+    直接組 HTML 檢查字串，不跑 Edge——這裡要驗的是內容有沒有換掉，不是 PDF 產得出來
+    （產得出來由 test_cn_pdf 那支實跑驗證）。
+    """
+    from pdf_gen import _build_completion_html, _completion_note_dict
+    import db
+
+    username, password = make_user(username="cn_l7", role="admin")
+    token = _login(client, username, password)
+    _make_case()
+    note_no = _create(client, token, warranty_months=0, labels={
+        "sectionItems": "三、交付品項明細", "itemColumn": "品名 / 規格",
+        "signVendor": "供應單位 · 負責人", "siteLabel": "交付地點",
+    })
+    conn = db.get_db()
+    try:
+        row = conn.execute("SELECT * FROM completion_notes WHERE note_no=?", (note_no,)).fetchone()
+    finally:
+        conn.close()
+    html = _build_completion_html(_completion_note_dict(row))
+
+    assert "三、交付品項明細" in html and "品名 / 規格" in html
+    assert "供應單位 · 負責人" in html and "交付地點" in html
+    assert "保固期間" not in html, "保固月數 0 時不該印保固那一列"
+    # 舊的工程用語不該再出現
+    for word in ("施工地點", "工程期間", "承攬商 · 工程負責人"):
+        assert word not in html, f"PDF 仍有舊用語「{word}」"
+    # meta 第三欄改成案件名稱（使用者指定），案件編號移到第二區
+    assert "案件名稱：" in html and "關聯報價單" not in html
+    assert "案件編號" in html

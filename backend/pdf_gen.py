@@ -3083,6 +3083,15 @@ def _build_completion_html(n: dict) -> str:
         return (str(s) if s is not None else '').replace('&', '&amp;').replace('<', '&lt;') \
             .replace('>', '&gt;').replace('\n', '<br>')
 
+    # 可自訂標題（2026-09-12）：使用者覆寫值已在 _note_public()/_completion_note_dict()
+    # 疊過預設值，這裡直接用。預設用語刻意中性——公司除了工程還有專案、零組件販售、
+    # 系統設定、網路架構、防火牆等業務，第一版全是「施工」講不通。
+    L = n.get('labels') or {}
+
+    def lab(key, fallback):
+        v = L.get(key)
+        return esc(v) if isinstance(v, str) and v.strip() else fallback
+
     _STATUS_STYLE = {
         '完成':     'color:#15803D;font-weight:600',
         '部分完成': 'color:#B45309;font-weight:600',
@@ -3137,12 +3146,17 @@ def _build_completion_html(n: dict) -> str:
         except ValueError:
             duration = ''
 
-    warranty_line = ''
-    if n.get('warrantyStart') and n.get('warrantyEnd'):
-        warranty_line = (f'{esc(n["warrantyStart"])} ～ {esc(n["warrantyEnd"])}'
-                         f'（{esc(n.get("warrantyMonths", ""))} 個月）')
-    elif n.get('warrantyMonths'):
-        warranty_line = f'{esc(n.get("warrantyMonths"))} 個月（自完工日起算）'
+    # 保固月數留空／填 0 → 整列不印（比照報價單「條件留空就不印」的既有慣例，
+    # 不另外開一個顯示旗標）。零組件販售、系統設定那類單子常常沒有保固可言。
+    warranty_row = ''
+    if n.get('warrantyMonths'):
+        if n.get('warrantyStart') and n.get('warrantyEnd'):
+            warranty_line = (f'{esc(n["warrantyStart"])} ～ {esc(n["warrantyEnd"])}'
+                             f'（{esc(n.get("warrantyMonths", ""))} 個月）')
+        else:
+            warranty_line = f'{esc(n.get("warrantyMonths"))} 個月（自完工日起算）'
+        warranty_row = (f'<div class="row"><span class="label">保固期間</span>'
+                        f'<span class="val">{warranty_line}</span></div>')
 
     is_signed = bool(n.get('isSigned'))
     signed_note = ''
@@ -3230,31 +3244,31 @@ def _build_completion_html(n: dict) -> str:
         '<div class="meta">\n'
         f'  <div><span>完工單號：</span><strong style="font-family:Arial,sans-serif">{esc(n.get("noteNo", ""))}</strong></div>\n'
         f'  <div><span>完工日期：</span>{esc(n.get("completionDate", ""))}</div>\n'
-        f'  <div><span>關聯報價單：</span>{esc(n.get("quoteNo", ""))}</div>\n'
+        f'  <div><span>案件名稱：</span>{esc(n.get("projectName", ""))}</div>\n'
         '</div>\n'
         f'{banner_html}\n'
         '<div class="boxes">\n'
         '  <div class="box">\n'
-        '    <div class="box-title">一、客戶與施工地點</div>\n'
+        f'    <div class="box-title">{lab("sectionCustomer", "一、客戶與服務地點")}</div>\n'
         f'    <div class="row"><span class="label">客戶名稱</span><span class="val">{esc(n.get("customerName", ""))}</span></div>\n'
         f'    <div class="row"><span class="label">驗收人</span><span class="val">{esc(n.get("recipient", ""))}</span></div>\n'
-        f'    <div class="row"><span class="label">施工地點</span><span class="val">{esc(n.get("siteAddress", ""))}</span></div>\n'
+        f'    <div class="row"><span class="label">{lab("siteLabel", "服務地點")}</span><span class="val">{esc(n.get("siteAddress", ""))}</span></div>\n'
         '  </div>\n'
         '  <div class="box">\n'
-        '    <div class="box-title">二、工程期間與保固</div>\n'
-        f'    <div class="row"><span class="label">案件名稱</span><span class="val">{esc(n.get("projectName", ""))}</span></div>\n'
-        f'    <div class="row"><span class="label">施工期間</span><span class="val">'
+        f'    <div class="box-title">{lab("sectionPeriod", "二、執行期間與保固")}</div>\n'
+        f'    <div class="row"><span class="label">案件編號</span><span class="val">{esc(n.get("quoteNo", ""))}</span></div>\n'
+        f'    <div class="row"><span class="label">執行期間</span><span class="val">'
         f'{esc(sd) or "—"} ～ {esc(cd) or "—"}{("　（" + duration + "）") if duration else ""}</span></div>\n'
-        f'    <div class="row"><span class="label">保固期間</span><span class="val">{warranty_line or "—"}</span></div>\n'
-        f'    <div class="row"><span class="label">現場負責人</span><span class="val">{esc(n.get("siteManager", ""))}</span></div>\n'
+        f'    {warranty_row}\n'
+        f'    <div class="row"><span class="label">{lab("managerLabel", "負責人")}</span><span class="val">{esc(n.get("siteManager", ""))}</span></div>\n'
         '  </div>\n'
         '</div>\n'
-        '<div class="section-label">三、完工項目明細</div>\n'
+        f'<div class="section-label">{lab("sectionItems", "三、完成項目明細")}</div>\n'
         '<table>\n'
         '  <thead>\n'
         '    <tr>\n'
         '      <th style="width:28px">#</th>\n'
-        '      <th>工程項目 / 規格說明</th>\n'
+        f'      <th>{lab("itemColumn", "項目 / 規格說明")}</th>\n'
         '      <th class="r" style="width:56px">數量</th>\n'
         '      <th style="width:48px">單位</th>\n'
         '      <th style="width:72px">完成狀態</th>\n'
@@ -3263,19 +3277,19 @@ def _build_completion_html(n: dict) -> str:
         '  </thead>\n'
         f'  <tbody>{item_rows}</tbody>\n'
         '</table>\n'
-        + block('四、施工說明', n.get('workSummary', ''))
-        + block('五、測試與檢驗結果', n.get('testResult', ''))
-        + block('六、遺留事項 / 待改善（完工後仍需處理）', n.get('pendingItems', ''), danger=True)
+        + block(lab('sectionSummary', '四、執行說明'), n.get('workSummary', ''))
+        + block(lab('sectionTest', '五、測試與檢驗結果'), n.get('testResult', ''))
+        + block(lab('sectionPending', '六、待辦與未完成事項'), n.get('pendingItems', ''), danger=True)
         + block('備註', n.get('notes', ''))
         + '<div class="sign">\n'
         '  <div class="sign-box">\n'
-        '    <div class="sign-label">業主驗收 · 簽章蓋印</div>\n'
+        f'    <div class="sign-label">{lab("signOwner", "客戶驗收 · 簽章蓋印")}</div>\n'
         '    <div class="sign-line"></div>\n'
         '    <div class="sign-date">驗收日期：＿＿＿＿＿＿＿＿＿＿</div>\n'
         f'    {signed_note}\n'
         '  </div>\n'
         '  <div class="sign-box">\n'
-        '    <div class="sign-label">承攬商 · 工程負責人</div>\n'
+        f'    <div class="sign-label">{lab("signVendor", "執行單位 · 負責人")}</div>\n'
         '    <div class="sign-line"></div>\n'
         f'    <div class="sign-date">完工日期：{esc(cd) or "＿＿＿＿＿＿＿＿＿＿"}</div>\n'
         '  </div>\n'
@@ -3320,6 +3334,13 @@ def _completion_note_dict(row) -> dict:
     n["isSigned"] = bool(n.get("is_signed"))
     n["signedBy"] = n.get("signed_by", "")
     n["signedAt"] = n.get("signed_at", "")
+    # 可自訂標題：使用者覆寫疊在預設值上，跟 API 走同一支 merged_labels()
+    from routers.completion_notes import merged_labels
+    try:
+        _dj = json.loads(n.get("data_json") or "{}") or {}
+    except Exception:
+        _dj = {}
+    n["labels"] = merged_labels(_dj.get("labels"))
     return n
 
 
