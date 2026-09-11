@@ -668,6 +668,49 @@
               </table>
             </template>
 
+            <!-- ══ 收款資料異常（2026-09-11）══
+                 「已收款」勾選與「收款日期」是兩個獨立欄位，只填一個的話，這筆錢
+                 在收入報表（要 received=true 且 receivedAt 在區間內）與未收報表
+                 （看的是預計收款日）**兩邊都撈不到**——會從所有月報表上無聲消失。
+                 這一區就是把那個狀態變成看得見的。刻意不隨期別篩選：這些款項正是
+                 因為欄位不完整而不屬於任何月份，用期別去篩等於再篩掉一次。
+                 資料源 _collect_payment_anomalies()，另有獨立端點
+                 /api/reports/payment-anomalies。 -->
+            <template x-if="paymentAnomalies.length > 0">
+              <div style="margin-bottom:20px;border:1px solid #FDE68A;border-radius:8px;background:#FFFBEB;padding:12px 14px">
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+                  <span style="font-size:13px;font-weight:700;color:#92400E;font-family:var(--font-zh)"
+                        x-text="'⚠️ 收款資料異常（' + paymentAnomalies.length + ' 筆，合計 ' + fmt(paymentAnomalyTotal) + '）'"></span>
+                </div>
+                <div style="font-size:12px;color:#92400E;font-family:var(--font-zh);line-height:1.7;margin-bottom:10px">
+                  下列款項的「已收款」與「收款日期」只填了其中一個，<b>不會出現在任何月份的收入或未收款項裡</b>。
+                  請到案件管理 → 案件資訊 → 款項明細補齊，補齊後金額就會回到報表上。
+                </div>
+                <table class="data-table">
+                  <thead><tr>
+                    <th>案件號</th><th>客戶</th><th>專案名稱</th><th>款項類型</th>
+                    <th class="r">金額</th><th class="c">收款日</th><th>問題</th>
+                  </tr></thead>
+                  <tbody>
+                    <template x-for="it in paymentAnomalies" :key="it.quoteNo + '-' + it.type + '-' + it.kind">
+                      <tr>
+                        <td class="mono">
+                          <a :href="'case-management.html?q=' + encodeURIComponent(it.quoteNo)"
+                             style="color:var(--accent);text-decoration:underline" x-text="it.quoteNo"></a>
+                        </td>
+                        <td x-text="it.customer"></td>
+                        <td x-text="it.project"></td>
+                        <td class="c" x-text="it.type"></td>
+                        <td class="r mono" x-text="fmt(it.amount)"></td>
+                        <td class="c mono" x-text="it.receivedAt || '—'"></td>
+                        <td style="font-size:11px;color:#92400E" x-text="it.hint"></td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+              </div>
+            </template>
+
             <!-- 收入明細 -->
             <div class="cm-section-title" style="margin-bottom:8px;font-size:13px;font-weight:700;font-family:var(--font-zh)"
                  x-text="scopeLabel + '收入明細（' + activeIncomeItems.length + ' 筆）'"></div>

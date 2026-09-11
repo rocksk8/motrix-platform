@@ -3208,6 +3208,104 @@ def _collect_unreceived_items(d0: str, d1: str, department_id: Optional[int] = N
     return items
 
 
+def _collect_payment_anomalies(department_id: Optional[int] = None) -> list:
+    """「會讓錢從報表上無聲消失」的收款資料異常（2026-09-11 新增）。
+
+    **為什麼需要這支**：使用者回報「案件資訊有一筆 2026/09/01 收款，營運報表當月
+    收入沒有」。查證後報表的計算邏輯是對的——在 db 副本上把那筆設成
+    received=true / receivedAt=2026-09-01，`_collect_income_items()` 與
+    `_collect()` 兩支都撈得到。所以問題一定出在**資料的兩個欄位沒有同時到位**，
+    而這個系統對這種狀態完全沒有任何提示：
+
+    | 狀況 | 收入報表 | 未收報表 | 使用者看到的 |
+    |------|---------|---------|------------|
+    | `received=1` 但 `receivedAt` 空 | ❌ 不屬於任何月份 | ❌（已收，不算未收） | 案件裡是綠色「已收款」 |
+    | `receivedAt` 有值但 `received=0` | ❌（未收） | ❌ 未收看的是 `expectedReceiptDate` | 案件裡看得到收款日期 |
+
+    兩種都是**兩邊都撈不到**——錢就這樣從所有報表上消失，而且沒有任何錯誤訊息。
+    這跟 2026-09-09 修過的「精算未完結的額外支出被月支出漏算」、`_m075` 搬移時
+    抓到的「歸月日期少了兩層 fallback」是同一類坑：**資料形狀不完整時靜默丟棄**。
+
+    所以這支不是修 bug，是**把這個狀態變成看得見的**。金額用
+    `payment_item_amounts()` 算（不重寫 pct 反推公式，理由見該函式 docstring）。
+
+    刻意**不自動修正**（例如「有日期就當作已收」）：勾不勾已收款是人的判斷，
+    系統替使用者決定錢收到了沒有，錯了會比漏算更嚴重。這裡只負責點名。
+    """
+    conn = get_db()
+    rows = conn.execute("""
+        SELECT quote_no, customer_name, project_name, sales_person, sales_person_id,
+               total, pretax,
+               json_extract(data_json,'$.caseRecord') AS cr_json
+        FROM quotations
+        WHERE COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') IN ('已成案','已結案')
+    """).fetchall()
+    dept_by_user = {}
+    if department_id:
+        dept_by_user = {r["id"]: r["department_id"] for r in conn.execute(
+            "SELECT id, department_id FROM users").fetchall()}
+    conn.close()
+
+    items = []
+    for row in rows:
+        if department_id and dept_by_user.get(row["sales_person_id"]) != department_id:
+            continue
+        cr = {}
+        if row["cr_json"]:
+            try:
+                cr = json.loads(row["cr_json"])
+            except Exception:
+                pass
+        pay = (cr.get("payment") or {}).get("items", [])
+        if not pay:
+            continue
+        amounts = payment_item_amounts(row["total"] or 0, pay, row["pretax"])
+        for idx, pi in enumerate(pay):
+            rcvd = bool(pi.get("received"))
+            rat  = (pi.get("receivedAt") or "")[:10]
+            if rcvd and not rat:
+                kind, hint = ("received_no_date",
+                              "已勾「已收款」但沒填收款日期——這筆不屬於任何月份，"
+                              "當月收入與未收款項都撈不到它")
+            elif rat and not rcvd:
+                kind, hint = ("date_not_received",
+                              "填了收款日期但沒勾「已收款」——收入報表不算（未收），"
+                              "未收報表也不算（那邊看的是預計收款日）")
+            else:
+                continue
+            aa = pi.get("actualAmount")
+            items.append({
+                "quoteNo":     row["quote_no"],
+                "customer":    row["customer_name"] or "",
+                "project":     row["project_name"]  or "",
+                "salesPerson": row["sales_person"]  or "",
+                "type":        pi.get("type", f"第{idx+1}期"),
+                "amount":      aa if aa is not None else amounts[idx],
+                "receivedAt":  rat,
+                "received":    rcvd,
+                "kind":        kind,
+                "hint":        hint,
+            })
+    items.sort(key=lambda x: (x["receivedAt"] or "", x["quoteNo"]), reverse=True)
+    return items
+
+
+@router.get("/api/reports/payment-anomalies")
+def report_payment_anomalies(department_id: Optional[int] = Query(None),
+                             authorization: str = Header(None)):
+    """收款資料異常清單（獨立端點，供「應收帳款」頁與任何需要的地方查用）。
+    `/api/reports/expenses-monthly`（收支報表的資料源）也會回同一份，不必多打一次。"""
+    u = _require_user(authorization)
+    if u["role"] not in ("superadmin", "admin"):
+        raise HTTPException(403, "僅管理員以上可存取報表")
+    items = _collect_payment_anomalies(department_id)
+    return {
+        "items": items,
+        "total": sum(i["amount"] for i in items),
+        "count": len(items),
+    }
+
+
 def _months_expense_slice(expenses: dict, months) -> dict:
     """從 _collect_expenses() 回傳的年度資料裡截出「若干個月份」的支出明細＋合計
     （details 逐筆本來就帶 date，直接篩選即可，不必另外查資料庫）。呼叫端
@@ -3290,6 +3388,7 @@ def _build_income_expense_scopes(year: int, month: str, department_id: Optional[
     month_income = _collect_income_items(m0, m1, department_id)
     year_income  = _collect_income_items(y0, y1, department_id)
     month_unreceived = _collect_unreceived_items(m0, m1, department_id)
+    payment_anomalies = _collect_payment_anomalies(department_id)
 
     # 「季」範圍（2026-09-10）：只有呼叫端明確指定 quarter 時才計算，沒指定就回
     # 空集合——月/年兩套欄位的行為完全不變，既有呼叫端（Excel／PDF／每月結算
@@ -3335,6 +3434,11 @@ def _build_income_expense_scopes(year: int, month: str, department_id: Optional[
         "quarterIncomeNet":      sum(i["netAmount"] or 0 for i in quarter_income),
         "quarterUnreceivedItems": quarter_unreceived,
         "quarterUnreceivedTotal": sum(i["amount"] for i in quarter_unreceived),
+        # 收款資料異常（2026-09-11）：刻意**不分期別**——這些款項正是因為欄位不
+        # 完整而不屬於任何月份，用期別去篩等於再篩掉一次，那就又看不見了。
+        # 見 _collect_payment_anomalies() docstring。
+        "paymentAnomalyItems": payment_anomalies,
+        "paymentAnomalyTotal": sum(i["amount"] for i in payment_anomalies),
     }
 
 

@@ -238,6 +238,11 @@ function reportsApp() {
     get monthExpenseTotal() { return (this.expensesData || {}).monthExpenseTotal || 0 },
     get monthIncomeItems()  { return (this.expensesData || {}).monthIncomeItems  || [] },
     get monthIncomeTotal()  { return (this.expensesData || {}).monthIncomeTotal  || 0 },
+    // 收款資料異常（2026-09-11）：刻意**不跟著 expensesScope 切換**——這些款項
+    // 就是因為「已收款」與「收款日期」只填了一個而不屬於任何月份，再用期別去篩
+    // 就又看不見了，那正是這一區要解決的問題本身
+    get paymentAnomalies()    { return (this.expensesData || {}).paymentAnomalyItems || [] },
+    get paymentAnomalyTotal() { return (this.expensesData || {}).paymentAnomalyTotal || 0 },
     get yearIncomeItems()   { return (this.expensesData || {}).yearIncomeItems   || [] },
     get yearIncomeTotal()   { return (this.expensesData || {}).yearIncomeTotal   || 0 },
     get quarterExpenseItems() { return (this.expensesData || {}).quarterExpenseItems || [] },
