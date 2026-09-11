@@ -802,9 +802,10 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
 | GET | /ping | 心跳 |
 | POST | /auth/login | 回傳含 `mustChangePassword`；rate limit 保護；`totp_enabled` 時改回傳 `{totpRequired,challengeToken}`，不核發 session，見 §3.3b |
 | POST | /auth/login/totp | 登入第二階段：`{challenge_token, code}`，`code` 為 6 位數 TOTP 或救援碼；白名單路徑（無 Bearer） |
-| GET | /auth/totp/status | 目前使用者是否已啟用 TOTP（需登入） |
+| GET | /auth/totp/status | 目前使用者是否已啟用 TOTP（需登入）；2026-09-11 新增 `recoveryCodesRemaining` 剩餘救援碼組數（只回組數、不回內容——DB 只存雜湊，明文從一開始就只在產生當下出現一次） |
 | POST | /auth/totp/setup | 產生新密鑰＋QR code（需登入，任何角色） |
 | POST | /auth/totp/enable | `{code}` 驗證後才真正啟用，回傳 10 組一次性救援碼（僅此次可見明文） |
+| POST | /auth/totp/recovery-codes/regenerate | 重新產生 10 組救援碼（2026-09-11）；需 `{password}`（比照 disable 的敏感操作慣例，**不**再要驗證碼——會用這支的情境正是驗證 App 拿不到）；**整組換掉、舊碼全數失效**（非「補足到 10 組」，避免舊清單變成「某幾組還有效但不知道哪幾組」）；未啟用 TOTP 時回 400 |
 | POST | /auth/totp/disable | `{password}` 確認身分後停用 |
 | POST | /auth/logout | |
 | GET | /auth/me | 含 `mustChangePassword`；驗 `expires_at` |
