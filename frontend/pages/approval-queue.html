@@ -707,6 +707,9 @@
           if (item.type === 'payment_request') return '請款單'
           if (item.type === 'case_change') return '已結案案件變更'
           if (item.type === 'extra_expense') return '案件額外支出'
+          // 已核准的額外支出要改內容走這條（DB v76）。標題要跟原單分得開，
+          // 否則簽核人不知道自己簽的是「新增一筆」還是「改一筆已核准的」
+          if (item.type === 'extra_expense_change') return '額外支出變更'
           return '報價單'
         },
 
@@ -752,7 +755,8 @@
 
         async previewItem(item) {
           // 額外支出跟已結案變更一樣沒有 PDF 可預覽
-          if (!item || item.type === 'case_change' || item.type === 'extra_expense') return
+          if (!item || item.type === 'case_change' || item.type === 'extra_expense'
+              || item.type === 'extra_expense_change') return
           this.previewFetching = true
           try {
             const r = await fetch(`${API}${this.apiBase(item)}/${encodeURIComponent(item.quoteNo)}/pdf-download`, {
@@ -908,6 +912,8 @@
           // 形狀跟 apiBase(item) + quoteNo 那套不一樣，另外組。
           const approveUrl = item.type === 'extra_expense'
             ? `${API}/api/quotations/${encodeURIComponent(item.linkedQuoteNo)}/extra-expenses/${item.extraExpenseId}/approve`
+            : item.type === 'extra_expense_change'
+            ? `${API}/api/quotations/${encodeURIComponent(item.linkedQuoteNo)}/extra-expenses/${item.extraExpenseId}/change-request/approve`
             : `${API}${this.apiBase(item)}/${encodeURIComponent(item.quoteNo)}/approve`
           const tiers = item.tiers || []
           const isMultiTier = tiers.length > 0
@@ -1013,8 +1019,13 @@
           this.actioning = true
           try {
             // 額外支出的端點掛在案件底下，形狀不同；駁回原因的欄位名也是 reason 不是 note
-            const isXE = item.type === 'extra_expense'
-            const rejectUrl = isXE
+            // 額外支出（新增）與額外支出變更申請都掛在案件底下，且駁回原因的
+            // 欄位名是 reason 不是 note
+            const isXEC = item.type === 'extra_expense_change'
+            const isXE  = item.type === 'extra_expense' || isXEC
+            const rejectUrl = isXEC
+              ? `${API}/api/quotations/${encodeURIComponent(item.linkedQuoteNo)}/extra-expenses/${item.extraExpenseId}/change-request/reject`
+              : item.type === 'extra_expense'
               ? `${API}/api/quotations/${encodeURIComponent(item.linkedQuoteNo)}/extra-expenses/${item.extraExpenseId}/reject`
               : `${API}${this.apiBase(item)}/${encodeURIComponent(item.quoteNo)}/reject`
             const r = await fetch(rejectUrl, {

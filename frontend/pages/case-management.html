@@ -1878,22 +1878,27 @@
                     </div>
 
 
-                    <!-- 發票／收據附件。刻意不受「已核准不可編輯」限制：補傳憑證是
-                         會計常態，核准後才拿到紙本發票很正常，擋下來只會逼人去改別的欄位。 -->
+                    <!-- 發票／收據附件。⚠️ 2026-09-11 行為變更（使用者交辦）：已核准
+                         之後附件**一併上鎖**。原本刻意開放（「補傳憑證是會計常態」）
+                         的設計被推翻了——核准當下簽核人看到的憑證，跟事後被換掉的
+                         憑證不是同一份。要補憑證改走下面的「變更申請」。 -->
                     <div x-show="x.id" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px;padding-top:8px;border-top:1px dashed #E5E7EB">
                       <span style="font-size:11px;color:var(--text-dim);font-family:var(--font-zh)">發票／收據：</span>
                       <template x-for="f in (x.files || [])" :key="f.id">
                         <span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;background:#E0F2FE;color:#0369A1;padding:2px 6px;border-radius:3px">
                           <span x-text="f.filename"></span>
-                          <button @click="xeDeleteFile(xi, f.id)" title="刪除這個附件"
+                          <button x-show="!xeFilesLocked(x)" @click="xeDeleteFile(xi, f.id)" title="刪除這個附件"
                                   style="border:none;background:none;color:#B91C1C;cursor:pointer;padding:0;line-height:1">×</button>
                         </span>
                       </template>
                       <span x-show="!(x.files || []).length" style="font-size:11px;color:var(--text-dim)">尚未上傳</span>
-                      <label style="font-size:11px;color:#1D4ED8;cursor:pointer;border-bottom:1px dashed #93C5FD">
+                      <label x-show="!xeFilesLocked(x)" style="font-size:11px;color:#1D4ED8;cursor:pointer;border-bottom:1px dashed #93C5FD">
                         ＋ 上傳
                         <input type="file" multiple style="display:none" @change="xeUploadFiles(xi, $event)">
                       </label>
+                      <span x-show="xeFilesLocked(x)" style="font-size:11px;color:var(--text-dim);font-family:var(--font-zh)">
+                        🔒 已核准，附件已上鎖（要補憑證請按「編輯」提出變更申請）
+                      </span>
                     </div>
 
                     <div x-show="x.status === '已駁回' && x.approval && x.approval.rejectReason"
@@ -1912,8 +1917,129 @@
                       <button @click="xeDelete(xi)" :disabled="xe.busy"
                               style="font-size:11px;padding:4px 10px;background:#fff;color:#B91C1C;border:1px solid #FECACA;border-radius:6px;cursor:pointer;font-family:var(--font-zh);margin-left:auto">刪除</button>
                     </div>
-                    <div x-show="!xeEditable(x)" style="margin-top:8px;font-size:11px;color:var(--text-dim);font-family:var(--font-zh)"
-                         x-text="x.status === '已核准' ? '已核准的項目不可修改（金額已計入成本與報表）' : '簽核中，不可修改'"></div>
+                    <!-- 已核准：不能直接改，但可以提變更申請（2026-09-11 交辦）。
+                         簽核中的那段維持原樣——那是另一回事，不該給編輯入口。 -->
+                    <div x-show="!xeEditable(x) && x.status === '已核准' && !xeInChange(x)"
+                         style="display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap">
+                      <span style="font-size:11px;color:var(--text-dim);font-family:var(--font-zh)">
+                        已核准的項目不可直接修改（金額已計入成本與報表）
+                      </span>
+                      <button x-show="xeCanModify(x)" @click="xeStartEdit(xi)" :disabled="xe.busy"
+                              title="修改內容或補傳憑證，送審核准後才會生效"
+                              style="font-size:11px;padding:4px 12px;background:#FFFBEB;color:#B45309;border:1px solid #FDE68A;border-radius:6px;cursor:pointer;font-family:var(--font-zh);font-weight:500">
+                        ✎ 編輯（需審核）
+                      </button>
+                    </div>
+                    <div x-show="!xeEditable(x) && x.status !== '已核准'" style="margin-top:8px;font-size:11px;color:var(--text-dim);font-family:var(--font-zh)">簽核中，不可修改</div>
+                    <!-- ══ 變更申請面板（2026-09-11）══
+                         已核准的項目要改內容就開這一塊。**刻意不是直接在上面那排欄位
+                         上改**：使用者指定「原核准金額不動，核准後才生效」，若在原欄位
+                         上改，畫面看起來就像已經生效了，跟報表數字對不起來。分成兩區
+                         才看得出「目前生效的是多少、提議改成多少」。 -->
+                    <div x-show="xeInChange(x)" x-cloak
+                         style="margin-top:9px;padding:10px;border:1px solid #FDE68A;border-radius:6px;background:#FFFBEB">
+                      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;font-size:11px;font-family:var(--font-zh)">
+                        <span style="font-weight:600;color:#92400E">變更申請</span>
+                        <span x-show="x.changeStatus" style="padding:2px 8px;border-radius:4px;font-weight:600"
+                              :style="xeChangeStatusStyle(x.changeStatus)" x-text="x.changeStatus"></span>
+                        <span x-show="!x.changeStatus" style="color:var(--text-dim)">（尚未儲存）</span>
+                        <span style="color:var(--text-dim)">
+                          目前生效：<b style="font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-secondary)"
+                                       x-text="caseSettleFmt(x.totalCost)"></b>
+                          　→　提議：<b style="font-family:LINE Seed TW_OTF, sans-serif;color:#92400E"
+                                        x-text="caseSettleFmt((x.change||{}).totalCost)"></b>
+                        </span>
+                      </div>
+
+                      <div style="margin-bottom:8px;font-size:11px;color:#92400E;font-family:var(--font-zh)">
+                        簽核通過之前，這筆維持原本的金額與內容，成本與報表數字<b>不會變動</b>。
+                      </div>
+
+                      <template x-if="xeChangeEditable(x)">
+                        <div>
+                          <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:7px">
+                            <select class="fi fi--sm" style="min-width:96px;width:auto"
+                                    x-model="x.change.category" @change="xeChangeDirty(xi)">
+                              <template x-for="c in xe.categories" :key="c">
+                                <option :value="c" x-text="c"></option>
+                              </template>
+                            </select>
+                            <input class="fi fi--sm" type="text" placeholder="品項說明（必填）" style="flex:1;min-width:150px"
+                                   x-model="x.change.description" @input="xeChangeDirty(xi)">
+                            <input class="fi fi--sm" type="number" min="0" step="0.01" placeholder="數量" style="width:74px"
+                                   x-model="x.change.qty" @input="xeChangeRecalc(xi)">
+                            <input class="fi fi--sm" type="text" placeholder="單位" style="width:58px"
+                                   x-model="x.change.unit" @input="xeChangeDirty(xi)">
+                            <input class="fi fi--sm" type="number" min="0" step="0.01" placeholder="單位成本" style="width:104px"
+                                   x-model="x.change.unitCost" @input="xeChangeRecalc(xi)">
+                          </div>
+                          <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">
+                            <input class="fi fi--sm" type="text" list="xe-payer-list" placeholder="支出人（可選或自填）"
+                                   style="width:168px" x-model="x.change.payerName" @input="xeChangePayerInput(xi)">
+                            <input class="fi fi--sm" type="date" style="width:142px" title="支出日期"
+                                   x-model="x.change.expenseDate" @input="xeChangeDirty(xi)">
+                            <input class="fi fi--sm" type="text" placeholder="憑證單號" style="width:130px"
+                                   x-model="x.change.docNo" @input="xeChangeDirty(xi)">
+                            <input class="fi fi--sm" type="text" placeholder="備註" style="flex:1;min-width:120px"
+                                   x-model="x.change.note" @input="xeChangeDirty(xi)">
+                          </div>
+                        </div>
+                      </template>
+
+                      <!-- 送審中：唯讀顯示提議內容，簽核人要看的東西不能還在被改 -->
+                      <template x-if="!xeChangeEditable(x)">
+                        <div style="font-size:11px;color:var(--text-secondary);font-family:var(--font-zh);line-height:1.7">
+                          <div><b x-text="(x.change||{}).description"></b>
+                            <span x-text="'（' + ((x.change||{}).category || '') + '）'"></span></div>
+                          <div>
+                            數量 <span x-text="(x.change||{}).qty"></span>
+                            <span x-text="(x.change||{}).unit"></span>
+                            ×　單位成本 <span x-text="caseSettleFmt((x.change||{}).unitCost)"></span>
+                            <span x-show="(x.change||{}).payerName">　支出人：<span x-text="(x.change||{}).payerName"></span></span>
+                          </div>
+                          <div x-show="(x.change||{}).note">備註：<span x-text="(x.change||{}).note"></span></div>
+                        </div>
+                      </template>
+
+                      <!-- 待核准附件：檔案已經實際存起來了，但核准前不會進正式附件清單，
+                           案件財務、結案報表 PDF 都看不到它 -->
+                      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px;padding-top:8px;border-top:1px dashed #FDE68A">
+                        <span style="font-size:11px;color:#92400E;font-family:var(--font-zh)">待核准附件：</span>
+                        <template x-for="f in xeChangeFiles(x)" :key="f.id">
+                          <span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;background:#FEF3C7;color:#92400E;padding:2px 6px;border-radius:3px">
+                            <span x-text="f.filename"></span>
+                            <button x-show="xeChangeEditable(x)" @click="xeDeleteChangeFile(xi, f.id)" title="刪除這個待核准附件"
+                                    style="border:none;background:none;color:#B91C1C;cursor:pointer;padding:0;line-height:1">×</button>
+                          </span>
+                        </template>
+                        <span x-show="!xeChangeFiles(x).length" style="font-size:11px;color:var(--text-dim)">無</span>
+                        <label x-show="xeChangeEditable(x)" style="font-size:11px;color:#B45309;cursor:pointer;border-bottom:1px dashed #FCD34D">
+                          ＋ 上傳憑證
+                          <input type="file" multiple style="display:none" @change="xeUploadChangeFiles(xi, $event)">
+                        </label>
+                      </div>
+
+                      <div x-show="x.changeStatus === '已駁回' && x.changeApproval && x.changeApproval.rejectReason"
+                           style="margin-top:7px;font-size:11px;color:#B91C1C;font-family:var(--font-zh)">
+                        變更被駁回：<span x-text="x.changeApproval && x.changeApproval.rejectReason"></span>
+                      </div>
+
+                      <div style="display:flex;align-items:center;gap:8px;margin-top:9px;flex-wrap:wrap">
+                        <button x-show="xeChangeEditable(x)" @click="xeSaveChange(xi)" :disabled="xe.busy"
+                                :style="xe.busy ? 'opacity:.45;cursor:default' : 'cursor:pointer'"
+                                style="font-size:11px;padding:4px 12px;background:#fff;color:var(--text-primary);border:1px solid var(--border-light);border-radius:6px;font-family:var(--font-zh)">儲存變更</button>
+                        <button x-show="xeChangeEditable(x)" @click="xeSubmitChange(xi)"
+                                :disabled="x._changeDirty || xe.busy || !x.changeStatus"
+                                :title="x._changeDirty ? '請先儲存變更再送審' : (!x.changeStatus ? '請先儲存變更再送審' : '')"
+                                :style="(x._changeDirty || xe.busy || !x.changeStatus) ? 'opacity:.45;cursor:default' : 'cursor:pointer'"
+                                style="font-size:11px;padding:4px 12px;background:#B45309;color:#fff;border:none;border-radius:6px;font-family:var(--font-zh);font-weight:500">送審變更</button>
+                        <span x-show="!xeChangeEditable(x)" style="font-size:11px;color:#92400E;font-family:var(--font-zh)">
+                          簽核中，要撤銷請先請簽核人駁回
+                        </span>
+                        <button x-show="xeChangeEditable(x)" @click="xeCancelChange(xi)" :disabled="xe.busy"
+                                style="font-size:11px;padding:4px 10px;background:#fff;color:#B91C1C;border:1px solid #FECACA;border-radius:6px;cursor:pointer;font-family:var(--font-zh);margin-left:auto">撤銷變更</button>
+                      </div>
+                    </div>
                   </div>
                 </template>
 

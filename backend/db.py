@@ -78,7 +78,10 @@ DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR = os.path.join(
 # （已套用過的 schema_version 不可回頭刪除/重排），data_json.dealWonAt 這個
 # 欄位會留在既有資料裡但目前沒有任何程式碼讀取，之後如果要重新加回「成交時間」
 # 這種概念，不要複用這個欄位名稱免得語意混淆。
-CURRENT_VERSION = 75
+# v76: case_extra_expenses.change_*（已核准後的編輯＝變更申請，核准才生效）＋
+# case_stages.google_calendar_done_event_id / daily_task_id（勾選完成同步行事曆），
+# 2026-09-11 第二輪交辦，見 _m076 docstring 與 MOTRIX-ERP-QUICK.md §5.10／§5.11。
+CURRENT_VERSION = 76
 
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
 # execution model) whenever the current request is authenticated as the 'demo'
@@ -3111,6 +3114,49 @@ def _m075_case_extra_expenses(conn):
         logger.info("_m075: 搬移 %d 筆額外支出到 case_extra_expenses（data_json 原陣列保留為唯讀備份）", moved)
 
 
+def _m076_xe_change_requests_and_stage_done(conn):
+    """兩件事（2026-09-11 第二輪交辦）：額外支出的「已核准後編輯＝變更申請」，
+    以及案件執行進度「勾選完成」要同步到行事曆。
+
+    **一、`case_extra_expenses` 的三個 change_* 欄位**
+
+    使用者指定：已核准的那筆**金額不動**，編輯內容要等簽核通過才生效。所以不能沿用
+    既有的 `status`/`approval_json`（那兩個一動，報表數字當場就變了，等於沒有簽核）。
+    改成把「提議的新內容」另外存一份，核准的瞬間才覆蓋回本體：
+
+      - `change_status`        '' / 草稿 / 待審核 / 簽核中 / 已駁回
+      - `change_json`          提議的新欄位值 ＋ `addFiles[]`（待核准附件）
+      - `change_approval_json` 變更申請自己的簽核狀態（形狀同 `approval_json`）
+
+    **為什麼用獨立欄位而不是共用 `approval_json`**：一筆已核准的支出可能被改很多次，
+    每次都是一輪獨立簽核。共用一欄的話，變更申請一送出就會蓋掉「這筆原本是誰核准的」
+    ——那正是之後查帳要看的東西。原核准紀錄留在 `approval_json`，歷次變更的結果
+    append 進 `approval_json.changeHistory`。
+
+    **二、`case_stages.google_calendar_done_event_id` / `daily_task_id`**
+
+    既有的 `google_calendar_event_id`（v55）記的是**到期日**事件，跟這次要做的
+    **完成日**事件是兩個不同日期、不同語意的事件，共用一欄會互相覆蓋（設了到期日
+    再勾完成，後者會把前者的事件改成完成日，到期提醒就消失了）。所以另開一欄。
+
+    `daily_task_id` 記的是同步到「每日工作事項」月曆的那一列（使用者要求兩邊都要）。
+    取消勾選要能把它刪掉，沒有 id 就只能靠標題比對去猜，改個標題就對不上了。
+    """
+    for col, ddl in (
+        ("change_status",        "TEXT NOT NULL DEFAULT ''"),
+        ("change_json",          "TEXT NOT NULL DEFAULT '{}'"),
+        ("change_approval_json", "TEXT NOT NULL DEFAULT '{}'"),
+    ):
+        if not _col_exists(conn, "case_extra_expenses", col):
+            conn.execute(f"ALTER TABLE case_extra_expenses ADD COLUMN {col} {ddl}")
+
+    if not _col_exists(conn, "case_stages", "google_calendar_done_event_id"):
+        conn.execute("ALTER TABLE case_stages ADD COLUMN google_calendar_done_event_id TEXT NOT NULL DEFAULT ''")
+    if not _col_exists(conn, "case_stages", "daily_task_id"):
+        conn.execute("ALTER TABLE case_stages ADD COLUMN daily_task_id INTEGER NOT NULL DEFAULT 0")
+    conn.commit()
+
+
 _MIGRATIONS = [
     _m001_export_columns,        # v1
     _m002_sessions_expires,      # v2
@@ -3187,6 +3233,7 @@ _MIGRATIONS = [
     _m073_webauthn_credentials,                     # v73
     _m074_webauthn_rp_id,                           # v74
     _m075_case_extra_expenses,                      # v75
+    _m076_xe_change_requests_and_stage_done,        # v76
 ]
 
 

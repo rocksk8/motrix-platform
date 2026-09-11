@@ -8,6 +8,7 @@ Submodules:
   dates       date arithmetic (_add_months, _warranty_expiry, _workdays_elapsed)
   tiered_approval  shared tiers 依序簽核純邏輯（2026-08-22，四個 router 共用）
   google_calendar  Google 行事曆 push 整合（2026-08-21）
+  case_stage_tasks 案件執行進度勾選完成 → 每日工作事項月曆（2026-09-11）
   startup     server startup checks, Edge path resolution
 """
 
@@ -95,8 +96,13 @@ from .google_calendar import (
     push_event_for_dev_case_stale,
     push_event_for_important_comment,
     push_event_for_case_stage_due,
+    push_event_for_case_stage_done,
     push_event_delete_for_case_stage,
     create_test_event as create_calendar_test_event,
+)
+from .case_stage_tasks import (
+    sync_daily_task_for_case_stage,
+    delete_daily_task_for_case_stage,
 )
 from .uploads import (
     save_document_files,
@@ -157,6 +163,10 @@ __all__ = [
     # google_calendar
     "push_event_for_invoice_voucher", "push_event_for_payment_request", "push_event_for_shipping_note",
     "push_event_for_quotation_won", "create_calendar_test_event",
+    "push_event_for_case_stage_due", "push_event_for_case_stage_done",
+    "push_event_delete_for_case_stage",
+    # case_stage_tasks（執行進度 → 每日工作事項月曆）
+    "sync_daily_task_for_case_stage", "delete_daily_task_for_case_stage",
     # uploads
     "save_document_files", "delete_document_file",
     # startup

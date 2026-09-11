@@ -26,6 +26,8 @@ from helpers import (
     notify_returned, notify_resubmit_requester, notify_settlement_finalized,
     notify_module_activity, push_event_for_quotation_won, push_event_for_important_comment,
     push_event_for_case_stage_due, push_event_delete_for_case_stage,
+    push_event_for_case_stage_done,
+    sync_daily_task_for_case_stage, delete_daily_task_for_case_stage,
     check_approve_permission, check_reject_permission, check_no_tier_self_approval,
     resolve_tier_approvers, UnresolvedManagerError, resolve_active_flow_setting,
     save_document_files, delete_document_file,
@@ -2149,7 +2151,7 @@ def update_case_stage(quote_no: str, stage_id: int, body: dict = Body(...), auth
     的 x-model 直接綁定欄位＋renderGantt() 的 on_date_change。不加任何自動邏輯（例如
     done=true 不自動填 doneAt）——維持跟現有前端行為一致，各欄位互相獨立。第二階段
     CRUD 端點，已由前端實際呼叫（見 create_case_stage() docstring）。"""
-    _require_user(authorization)
+    user = _require_user(authorization)
     conn = get_db()
     _deny_if_case_locked_unsupported(conn, quote_no, authorization, op="案件階段-編輯")
     sr = _get_stage_row(conn, quote_no, stage_id)
@@ -2161,6 +2163,7 @@ def update_case_stage(quote_no: str, stage_id: int, body: dict = Body(...), auth
     if "doneAt" in body:    updates["done_at"]    = body.get("doneAt") or ""
     if "startDate" in body: updates["start_date"] = body.get("startDate") or ""
     if "dueDate" in body:   updates["due_date"]   = body.get("dueDate") or ""
+    was_done = bool(sr["done"])
     if updates:
         updates["updated_at"] = datetime.now().isoformat()
         sql = "UPDATE case_stages SET " + ", ".join(f"{k}=?" for k in updates) + " WHERE id=?"
@@ -2169,6 +2172,15 @@ def update_case_stage(quote_no: str, stage_id: int, body: dict = Body(...), auth
         _sync_stages_to_json(conn, quote_no)
         if "due_date" in updates:
             spawn_bg_thread(push_event_for_case_stage_due, args=(stage_id,))
+        # 勾選/取消勾選完成 → 兩張行事曆都要同步（2026-09-11 交辦第 3 項）。
+        # `done_at` 單獨被改（已勾選的情況下改完成日期）也要重推，否則行事曆上
+        # 留的是舊日期。兩支都是 fire-and-forget，失敗只記 log，不擋勾選本身。
+        done_changed = ("done" in updates and bool(updates["done"]) != was_done)
+        if done_changed or ("done_at" in updates and bool(updates.get("done", was_done))):
+            actor_name = user.get("display_name") or user["username"]
+            spawn_bg_thread(push_event_for_case_stage_done, args=(stage_id,))
+            spawn_bg_thread(sync_daily_task_for_case_stage,
+                            args=(stage_id, user["username"], actor_name))
     sr = _get_stage_row(conn, quote_no, stage_id)
     result = _serialize_stage(conn, sr)
     conn.close()
@@ -2187,6 +2199,9 @@ def delete_case_stage(quote_no: str, stage_id: int, authorization: str = Header(
     if not sr:
         conn.close(); raise HTTPException(404, "階段不存在")
     calendar_event_id = sr["google_calendar_event_id"] or ""
+    # 完成日事件與月曆鏡射也要一起收掉，否則階段刪了行事曆上還留著（DB v76）
+    done_event_id = (sr["google_calendar_done_event_id"] or "") if "google_calendar_done_event_id" in sr.keys() else ""
+    stage_task_id = (sr["daily_task_id"] or 0) if "daily_task_id" in sr.keys() else 0
     conn.execute("DELETE FROM case_stages WHERE id=?", (stage_id,))
     siblings = conn.execute("SELECT id, depends_on FROM case_stages WHERE quote_no=?", (quote_no,)).fetchall()
     for s in siblings:
@@ -2200,6 +2215,10 @@ def delete_case_stage(quote_no: str, stage_id: int, authorization: str = Header(
     conn.close()
     if calendar_event_id:
         spawn_bg_thread(push_event_delete_for_case_stage, args=(calendar_event_id,))
+    if done_event_id:
+        spawn_bg_thread(push_event_delete_for_case_stage, args=(done_event_id,))
+    if stage_task_id:
+        spawn_bg_thread(delete_daily_task_for_case_stage, args=(stage_task_id,))
     return {"ok": True}
 
 
@@ -3317,6 +3336,51 @@ def get_approval_queue(authorization: str = Header(None)):
             "extraExpenseId":      r["id"],
         })
 
+    # 額外支出「變更申請」（2026-09-11 第二輪，DB v76）：已核准之後的編輯要簽核，
+    # 簽核狀態在 change_approval_json 這一欄，跟本體的 approval_json 是兩條獨立的
+    # 線（本體維持「已核准」不動，見 case_extra_expenses.py 末段）。**一定要獨立
+    # 列進佇列**——借用上面那個 extra_expense 類型的話，簽核人按下核准會打到本體
+    # 的 /approve，那支看到 status 已經是「已核准」就 409，變更永遠簽不掉。
+    xec_rows = conn.execute("""
+        SELECT e.id, e.quote_no, e.description, e.total_cost, e.change_json,
+               e.change_approval_json, q.customer_name, q.project_name
+        FROM case_extra_expenses e
+        LEFT JOIN quotations q ON q.quote_no = e.quote_no
+        WHERE e.change_status IN ('待審核','簽核中')
+        ORDER BY e.id DESC
+    """).fetchall()
+    for r in xec_rows:
+        f = _queue_tier_fields(r["change_approval_json"])
+        try:
+            chg = json.loads(r["change_json"] or "{}")
+        except Exception:
+            chg = {}
+        items.append({
+            "type":                "extra_expense_change",
+            "quoteNo":             f"{r['quote_no']}-XE{r['id']}改",
+            "customer":            r["customer_name"] or "",
+            # 佇列上一眼就要看得出「改什麼、從多少變多少」，只放新說明的話簽核人
+            # 得自己去案件裡翻舊值
+            "projectName":         f"{chg.get('description') or r['description'] or ''}"
+                                   f"（原 NT$ {float(r['total_cost'] or 0):,.0f}）",
+            "total":               chg.get("totalCost") or 0,
+            "quoteDate":           (f["requestedAt"] or "")[:10],
+            "salesPerson":         "",
+            "requestedBy":         f["requestedBy"],
+            "requestedByDisplay":  f["requestedByDisplay"],
+            "requestedAt":         f["requestedAt"],
+            "isEditApproval":      True,
+            "reasons":             [],
+            "tiers":               f["tiers"],
+            "currentTier":         f["currentTier"],
+            "tierCount":           f["tierCount"],
+            "currentApprovers":    f["currentApprovers"],
+            "linkedQuoteNo":       r["quote_no"],
+            "extraExpenseId":      r["id"],
+            "previousTotal":       r["total_cost"] or 0,
+            "pendingFileCount":    len(chg.get("addFiles") or []),
+        })
+
     conn.close()
 
     groups: dict = defaultdict(list)
@@ -3373,6 +3437,12 @@ def get_approval_queue_count(authorization: str = Header(None)):
     # approver 的邏輯完全共用，不必另外寫一份。
     approval_jsons += [r[0] for r in conn.execute(
         "SELECT approval_json FROM case_extra_expenses WHERE status IN ('待審核','簽核中')"
+    ).fetchall()]
+    # 額外支出變更申請（2026-09-11，DB v76）：另一欄、另一輪簽核，角標要一起算，
+    # 否則佇列頁列得出來但 topbar 數字是 0（兩邊矛盾比兩邊都沒有更難查）
+    approval_jsons += [r[0] for r in conn.execute(
+        "SELECT change_approval_json FROM case_extra_expenses "
+        "WHERE change_status IN ('待審核','簽核中')"
     ).fetchall()]
     # 已結案案件半解鎖變更（2026-08-26）：單層審核，任一 superadmin 皆算「輪到我」，
     # 不像其他文件類型需要比對 tiers 當層 approver username，直接另外加總。
