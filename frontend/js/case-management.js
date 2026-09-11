@@ -608,6 +608,224 @@ function app() {
       await this.loadExtraExpenses(this.selected.quote_no)
     },
 
+    // ── 完工單（2026-09-12）────────────────────────────────────────────────
+    //
+    // 使用者交辦：「在案件管理內增加完工單的選項，參考出貨單的形式跟內容建立完工單，
+    // 一樣走流程申請完工。」所以這一整段刻意比照上面的出貨單：同一套狀態機、同一套
+    // 分層簽核、同一套回簽。欄位差異與理由見 backend/db.py::_m077_completion_notes()。
+    //
+    // ⚠️ 後端 list 端點回的是 `{items: [...]}`（新端點的慣例），不是出貨單那種裸陣列，
+    //    照抄 `= await r.json()` 會拿到一個物件、畫面永遠空白且沒有任何錯誤。
+    completionNotes: [],
+    completionNotesLoading: false,
+    showCompletionModal: false,
+    completionForm: null,
+    editCompletionNoteNo: '',
+    completionSaving: false,
+    completionMsg: '',
+    completionPreviewFetching: false,
+
+    async loadCompletionNotes(quoteNo) {
+      if (!quoteNo) return
+      // 比照 loadExtraExpenses()：記住發請求當下是哪張單，回應抵達時再比對。
+      // 少了這道守門，切案件切太快就會把 A 案的完工單畫在 B 案底下
+      this._cnReqFor = quoteNo
+      this.completionNotesLoading = true
+      try {
+        const r = await fetch(`/api/completion-notes?quote_no=${encodeURIComponent(quoteNo)}`, {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (this._cnReqFor !== quoteNo) return
+        if (r.ok) this.completionNotes = (await r.json()).items || []
+      } catch {}
+      this.completionNotesLoading = false
+    },
+
+    _blankCompletionForm() {
+      const today = new Date().toISOString().slice(0, 10)
+      return {
+        quote_no: this.selected?.quote_no || '',
+        site_address: '',
+        start_date: '',
+        completion_date: today,
+        site_manager: this.session.displayName || this.session.username || '',
+        recipient: '',
+        work_summary: '',
+        test_result: '',
+        warranty_months: 12,
+        pending_items: '',
+        notes: '',
+        items: [],
+      }
+    },
+
+    newCompletionNote() {
+      this.editCompletionNoteNo = ''
+      this.completionForm = this._blankCompletionForm()
+      this.completionMsg = ''
+      this.showCompletionModal = true
+    },
+
+    async editCompletionNote(n) {
+      this.completionMsg = ''
+      try {
+        const r = await fetch(`/api/completion-notes/${n.noteNo}`, {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (!r.ok) { alert('讀取失敗'); return }
+        const d = await r.json()
+        this.editCompletionNoteNo = d.noteNo
+        this.completionForm = {
+          quote_no: d.quoteNo,
+          site_address: d.siteAddress || '',
+          start_date: d.startDate || '',
+          completion_date: d.completionDate || '',
+          site_manager: d.siteManager || '',
+          recipient: d.recipient || '',
+          work_summary: d.workSummary || '',
+          test_result: d.testResult || '',
+          warranty_months: d.warrantyMonths ?? 12,
+          pending_items: d.pendingItems || '',
+          notes: d.notes || '',
+          items: d.items || [],
+        }
+        this.showCompletionModal = true
+      } catch (e) { alert('網路錯誤：' + e.message) }
+    },
+
+    cnAddItem() {
+      this.completionForm.items.push(
+        { description: '', qty: 1, unit: '式', status: '完成', notes: '' })
+    },
+    cnAddHeader() {
+      this.completionForm.items.push({ type: 'header', description: '' })
+    },
+    cnRemoveItem(i) { this.completionForm.items.splice(i, 1) },
+
+    // 有沒有沒做完的項目——存檔前要提醒把遺留事項寫清楚，否則完工單簽下去等於
+    // 承認全部做完，日後爭議沒有依據
+    cnUnfinished(form) {
+      return (form?.items || []).filter(
+        it => it.type !== 'header' && (it.status === '部分完成' || it.status === '未施作')).length
+    },
+
+    async saveCompletionNote() {
+      const f = this.completionForm
+      if (!f) return
+      this.completionSaving = true; this.completionMsg = ''
+      const body = {
+        quote_no: f.quote_no,
+        site_address: f.site_address || '',
+        start_date: f.start_date || '',
+        completion_date: f.completion_date || '',
+        site_manager: f.site_manager || '',
+        recipient: f.recipient || '',
+        work_summary: f.work_summary || '',
+        test_result: f.test_result || '',
+        warranty_months: Number(f.warranty_months) || 0,
+        pending_items: f.pending_items || '',
+        notes: f.notes || '',
+        items: f.items || [],
+      }
+      const method = this.editCompletionNoteNo ? 'PUT' : 'POST'
+      const url = this.editCompletionNoteNo
+        ? `/api/completion-notes/${this.editCompletionNoteNo}`
+        : '/api/completion-notes'
+      try {
+        const r = await fetch(url, {
+          method,
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify(body)
+        })
+        if (!r.ok) {
+          this.completionMsg = (await r.json().catch(() => ({}))).detail || '儲存失敗'
+          this.completionSaving = false; return
+        }
+        this.showCompletionModal = false
+        await this.loadCompletionNotes(this.selected?.quote_no)
+      } catch (e) { this.completionMsg = '網路錯誤：' + e.message }
+      this.completionSaving = false
+    },
+
+    async deleteCompletionNote(n) {
+      if (!confirm(`確定刪除完工單「${n.noteNo}」？`)) return
+      await this._cnAction(n, '', 'DELETE', '刪除失敗')
+    },
+
+    async submitCompletionNote(n) {
+      const unfinished = n.unfinishedCount || 0
+      const warn = unfinished
+        ? `\n\n⚠️ 這張單有 ${unfinished} 項未完成，請確認「遺留事項」已寫清楚。`
+        : ''
+      if (!confirm(`確定送出完工單「${n.noteNo}」申請完工？${warn}`)) return
+      await this._cnAction(n, '/submit', 'POST', '送出失敗')
+    },
+
+    async approveCompletionNote(n) {
+      if (!confirm(`確定簽核完工單「${n.noteNo}」？`)) return
+      await this._cnAction(n, '/approve', 'POST', '簽核失敗', {})
+    },
+
+    async rejectCompletionNote(n) {
+      const note = prompt(`退回完工單「${n.noteNo}」，可填寫退回原因（選填）：`)
+      if (note === null) return
+      await this._cnAction(n, '/reject', 'POST', '退回失敗', { note })
+    },
+
+    async revokeCompletionApproval(n) {
+      const note = prompt(`撤銷完工單「${n.noteNo}」的核准？將退回草稿。\n\n可填寫撤銷原因（選填）：`)
+      if (note === null) return
+      await this._cnAction(n, '/revoke-approval', 'POST', '撤銷失敗', { note })
+    },
+
+    async toggleCompletionSigned(n, action) {
+      const msg = action === 'sign'
+        ? `確定標記完工單「${n.noteNo}」客戶已驗收簽回？`
+        : `確定取消完工單「${n.noteNo}」的驗收標記？`
+      if (!confirm(msg)) return
+      const note = action === 'sign' ? (prompt('備註（選填，例如驗收人姓名或方式）：') || '') : ''
+      await this._cnAction(n, '/signed-toggle', 'POST', '操作失敗', { action, note })
+    },
+
+    // 六個動作的差別只有路徑與 body，抽出來免得複製六份各自漂移
+    async _cnAction(n, path, method, failMsg, body) {
+      try {
+        const opts = { method, headers: { Authorization: 'Bearer ' + this.session.token } }
+        if (body !== undefined) {
+          opts.headers['Content-Type'] = 'application/json'
+          opts.body = JSON.stringify(body)
+        }
+        const r = await fetch(`/api/completion-notes/${n.noteNo}${path}`, opts)
+        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || failMsg); return }
+        await this.loadCompletionNotes(this.selected?.quote_no)
+      } catch (e) { alert('網路錯誤：' + e.message) }
+    },
+
+    async previewCompletionPdf(n) {
+      this.completionPreviewFetching = true
+      try {
+        const r = await fetch(`/api/completion-notes/${n.noteNo}/pdf-download`, {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || 'PDF 產生失敗'); return }
+        const blob = await r.blob()
+        const url = URL.createObjectURL(blob)
+        window.open(url, '_blank')
+        setTimeout(() => URL.revokeObjectURL(url), 60000)
+        fetch(`/api/completion-notes/${n.noteNo}/export?mode=preview`, {
+          method: 'POST', headers: { Authorization: 'Bearer ' + this.session.token }
+        }).catch(() => {})
+      } catch (e) { alert('網路錯誤：' + e.message) }
+      this.completionPreviewFetching = false
+    },
+
+    _completionStatusLabel(s) { return s || '草稿' },
+    _completionStatusClass(s) {
+      if (s === '已核准') return 'badge-green'
+      if (s === '待審核' || s === '簽核中') return 'badge-amber'
+      return 'badge-gray'
+    },
+
     // ── 叫料（材料訂購）────────────────────────────────────────────────────
     async loadMaterialOrders(quoteNo) {
       if (!quoteNo) return
@@ -1062,6 +1280,7 @@ function app() {
         this.caseUpdates = []
         this.newComment = ''
         this.shippingNotes = []
+        this.completionNotes = []
         this.showShippingModal = false
         this._shippingLogOpen = {}
         this.shippingContactOptions = []

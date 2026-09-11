@@ -704,6 +704,7 @@
           if (item.type === 'contractor_voucher') return '匯款申請'
           if (item.type === 'invoice_voucher') return '開票申請憑據'
           if (item.type === 'shipping_note') return '出貨單'
+          if (item.type === 'completion_note') return '完工單'
           if (item.type === 'payment_request') return '請款單'
           if (item.type === 'case_change') return '已結案案件變更'
           if (item.type === 'extra_expense') return '案件額外支出'
@@ -717,6 +718,7 @@
           if (item?.type === 'contractor_voucher') return 'cv'
           if (item?.type === 'invoice_voucher') return 'iv'
           if (item?.type === 'shipping_note') return 'sn'
+          if (item?.type === 'completion_note') return 'sn'
           if (item?.type === 'payment_request') return 'pr'
           if (item?.type === 'case_change') return 'cc'
           return 'quotation'
@@ -726,6 +728,7 @@
           if (item?.type === 'contractor_voucher') return '/api/contractor-vouchers'
           if (item?.type === 'invoice_voucher') return '/api/invoice-vouchers'
           if (item?.type === 'shipping_note') return '/api/shipping-notes'
+          if (item?.type === 'completion_note') return '/api/completion-notes'
           if (item?.type === 'payment_request') return '/api/payment-requests'
           return '/api/quotations'
         },
