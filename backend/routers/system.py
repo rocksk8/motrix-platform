@@ -867,8 +867,13 @@ def set_backup_retention_setting(body: BackupRetentionBody, authorization: str =
 # 已知磁碟機代號會漂移）或 S3 相容物件儲存（AWS S3／Backblaze B2 等，見
 # cloud_storage.py）。**憑證一律不存這裡**——走 boto3 標準憑證鏈（環境變數／
 # ~/.aws/credentials／instance profile），這裡只存 bucket/endpoint/region/prefix
-# 這類非機密設定值，無對應前端頁面（比照 edge-path/pdf-base-path 等技術設定慣例，
-# 透過 API 直接調整）。
+# 2026-09-11 更正：這段原本寫「這類非機密設定值，無對應前端頁面（比照
+# edge-path/pdf-base-path 等技術設定慣例，透過 API 直接調整）」——**那不是慣例，
+# 是還沒做**。把「還沒做」寫成「慣例」之後，四支設定端點就這樣一直沒有入口，
+# 直到打包新增的入口檢查（check_endpoint_entrypoints.py）把它們掃出來。
+# 現在四支都有畫面了：company-profile-settings.html 的「系統技術設定」區塊
+# （備份保留天數／PDF 存檔根目錄／Edge 路徑／雲端備份目標），superadmin 限定，
+# e2e 見 tests/test_e2e_system_settings_ui_2026_09_11.py。
 
 class CloudBackupS3Body(BaseModel):
     bucket: str = ""

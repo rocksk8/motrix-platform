@@ -49,16 +49,18 @@ ALLOWLIST = {
     "deployed-version": "部署工具在用（deploy_dashboard.py:258、check_prod_drift.ps1），不是給人點的",
 }
 
-# 2026-09-11 第一次掃描時就已經沒有前端入口的端點。**沒有查證過它們是刻意的
-# 還是也忘了做**，所以不放進 ALLOWLIST（那等於宣稱「確定不需要」），但也不跟
-# 新冒出來的混在一起報——否則每次打包都跳同樣四行，很快就沒人看了。
-# 查清楚之後請往上搬進 ALLOWLIST 並補理由，或補上前端然後把它從這裡刪掉。
-KNOWN_BASELINE = {
-    "backup-retention": "備份保留天數設定，GET/PATCH 都只能用 API 打",
-    "cloud-backup-target": "雲端備份目標切換；QUICK.md §8.0 寫的操作方式就是直接打 API",
-    "edge-path": "Edge 瀏覽器路徑設定（PDF 產生用）",
-    "pdf-base-path": "PDF 存檔根目錄設定",
-}
+# 「第一次掃描時就已經沒有前端入口、但還沒查證是刻意還是忘了做」的端點放這裡。
+# 不放進 ALLOWLIST（那等於宣稱「確定不需要」），也不跟新冒出來的混在一起報
+# ——否則每次打包都跳同樣幾行，很快就沒人看了。
+#
+# 2026-09-11 首次掃描時有四筆：backup-retention／cloud-backup-target／edge-path／
+# pdf-base-path。查證後發現**四個都是系統真的在讀的設定，只是沒有管理介面**，
+# 使用者決定四個全補，已於同日完成（company-profile-settings.html 的「系統技術設定」
+# 區塊），所以這份清單現在是空的——這才是它該有的樣子。
+#
+# 日後若又出現一批「還沒查清楚」的，往這裡放並寫上查證狀態，查完就搬去 ALLOWLIST
+# 或補前端後刪掉。不要讓它變成長期堆積區。
+KNOWN_BASELINE: dict = {}
 
 
 def _last_literal_segment(path: str) -> str:
