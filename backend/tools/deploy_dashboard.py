@@ -36,6 +36,20 @@ from pydantic import BaseModel
 # urllib3 每次都印的 InsecureRequestWarning，避免洗版這個小工具自己的輸出。
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+# 2026-09-11：所有 subprocess 一律帶這個旗標。本檔正常情況下是由 pythonw.exe
+# 啟動的（桌面捷徑／ctl 小程式都是），**主行程本身沒有主控台**，於是每呼叫一次
+# console 程式（git.exe、powershell.exe）Windows 就會替它配一個新的主控台視窗
+# ——畫面上就是「CMD 視窗一直閃一下又關掉」。`/api/dev-status` 被前端每 15 秒
+# 輪詢一次、而它一次跑 4 個 git，所以閃得特別勤。
+#
+# ⚠️ 先前看不到這個現象，是因為當時的捷徑指向 uv venv 的假 pythonw（實際是
+# console 版 trampoline，見 §14.3c），它帶著一個常駐主控台，子行程直接附掛上去
+# 就不會另開視窗。把捷徑改成真正的 GUI pythonw 之後，常駐視窗沒了，這個一直
+# 存在的缺陷才浮出來——**不是新問題，是原本被那個常駐視窗蓋住了**。
+#
+# `deploy_dashboard_ctl.pyw` 從一開始就有這個旗標，這裡是補齊同一件事。
+CREATE_NO_WINDOW = 0x08000000 if os.name == "nt" else 0
+
 TOOLS_DIR = Path(__file__).resolve().parent
 BACKEND_DIR = TOOLS_DIR.parent
 PROJECT_ROOT = BACKEND_DIR.parent
@@ -84,6 +98,7 @@ def _run_job(job_id: str, action: str, cmd: list, input_text: str = None):
                 encoding="utf-8",
                 errors="replace",
                 cwd=str(PROJECT_ROOT),
+                creationflags=CREATE_NO_WINDOW,
             )
             if input_text is not None:
                 proc.stdin.write(input_text)
@@ -227,6 +242,7 @@ def dev_status():
             return subprocess.run(
                 ["git", *args], cwd=str(PROJECT_ROOT), capture_output=True, text=True,
                 encoding="utf-8", errors="replace", timeout=10,
+                creationflags=CREATE_NO_WINDOW,
             ).stdout.strip()
         except Exception:
             return ""
@@ -452,6 +468,7 @@ def list_snapshots(body: SnapshotsIn):
         proc = subprocess.run(
             cmd, input=body.password + "\n", capture_output=True, text=True,
             encoding="utf-8", errors="replace", cwd=str(PROJECT_ROOT), timeout=60,
+            creationflags=CREATE_NO_WINDOW,
         )
     except subprocess.TimeoutExpired:
         return JSONResponse(status_code=504, content={"detail": "連線正式機逾時"})
@@ -492,6 +509,7 @@ def log_tail(body: LogTailIn):
         proc = subprocess.run(
             cmd, input=body.password + "\n", capture_output=True, text=True,
             encoding="utf-8", errors="replace", cwd=str(PROJECT_ROOT), timeout=60,
+            creationflags=CREATE_NO_WINDOW,
         )
     except subprocess.TimeoutExpired:
         return JSONResponse(status_code=504, content={"detail": "連線正式機逾時"})
@@ -528,6 +546,7 @@ def check_only(body: CheckOnlyIn):
         proc = subprocess.run(
             cmd, input=body.password + "\n", capture_output=True, text=True,
             encoding="utf-8", errors="replace", cwd=str(PROJECT_ROOT), timeout=60,
+            creationflags=CREATE_NO_WINDOW,
         )
     except subprocess.TimeoutExpired:
         return JSONResponse(status_code=504, content={"detail": "連線正式機逾時"})

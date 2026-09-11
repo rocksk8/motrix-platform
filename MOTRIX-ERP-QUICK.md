@@ -2466,6 +2466,31 @@ Get-CimInstance Win32_Process -Filter "Name='conhost.exe'" | ForEach-Object {
   if ($p -match 'python') { "有主控台：conhost $($_.ProcessId) <- $p" } }
 ```
 
+**⚠️ 第二半：`deploy_dashboard.py` 的 subprocess 一律要帶 `CREATE_NO_WINDOW`**
+
+把捷徑改成真正的 GUI `pythonw` 之後，使用者回報「不定期一直跳 CMD 的快速關閉
+視窗」。那不是新缺陷，是**原本被那個常駐主控台蓋住的舊缺陷浮出來**：
+
+- 主行程由 `pythonw` 啟動 → **自己沒有主控台**
+- 每次呼叫 console 程式（`git.exe`、`powershell.exe`）而沒帶 `CREATE_NO_WINDOW`
+  → Windows 就替那個子行程配一個新主控台 → 畫面上閃一下又關掉
+- `/api/dev-status` 被前端 `setInterval(refreshDevStatus, 15000)` 每 15 秒輪詢，
+  而它一次跑 **4 個 git**，所以閃得特別勤
+
+`deploy_dashboard_ctl.pyw` 從一開始就有這個旗標，`deploy_dashboard.py` 則是
+一個都沒有。已補齊 5 處（部署/回滾 job 的 Popen ×1、dev-status 的 git ×1、
+`_dashboard_remote.ps1` 遠端呼叫 ×3）。
+
+**驗證方式**（直接驗機制，不要靠數 conhost——conhost 的父行程是 `git.exe`
+而不是伺服器本身，git 又立刻結束，數不到，會得到假綠燈；實測踩過）：
+
+```python
+# 由 pythonw 執行；子行程用 console 版 python.exe
+PROBE = "import ctypes,sys; sys.exit(1 if ctypes.windll.kernel32.GetConsoleWindow() else 0)"
+subprocess.run([PY, "-c", PROBE]).returncode                      # → 1（有主控台，會閃）
+subprocess.run([PY, "-c", PROBE], creationflags=0x08000000).returncode  # → 0（沒有）
+```
+
 也可以照舊直接手動啟動：
 
 ```
