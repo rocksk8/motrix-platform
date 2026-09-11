@@ -135,6 +135,19 @@ function app() {
     finShowPayDetail: false,
     finShowExtraDetail: false,
 
+    // ── 叫料（材料訂購，前端 2026-09-11 補上）──
+    // 後端端點 2026-09-10 就上線，但一直沒有任何呼叫點，見
+    // routers/material_orders.py 檔頭與 WEEKLY-AUDIT §E-1。
+    // 存檔刻意走專屬端點而不是併進 saveCase()：saveCase() 會覆蓋整份
+    // data_json，兩邊同時存會互相蓋掉；且叫料的權限與已結案規則由後端
+    // 那支端點自己守，跟案件整包存檔不一樣。
+    materialOrders: [],
+    moLoading: false,
+    moSaving: false,
+    moDirty: false,
+    moMsg: '',
+    moMsgError: false,
+
     // ── 承攬商匯款申請 ──
     contractorVouchers: [],
     contractorVouchersLoading: false,
@@ -224,7 +237,183 @@ function app() {
     finOutstandingItems() { return (this.finReceivable()?.items || []).filter(it => !it.received) },
     finUnpaidVouchers()   { return (this.finPayable()?.vouchers || []).filter(v => v.status === '已核准' && !v.isPaid) },
 
+    // ── 叫料（材料訂購）────────────────────────────────────────────────────
+    async loadMaterialOrders(quoteNo) {
+      if (!quoteNo) return
+      // 發出請求的當下就記住是哪張單，回應抵達時再比對一次——比照 reports.js
+      // 的 loadExpenses()／loadReceivables() 競態修法（§12 2026-09-10「更晚」）。
+      // 這裡實測抓到過同一類問題：財務分頁一打開就發 GET，使用者在回應回來前
+      // 按「＋ 新增項目」，回應抵達時 this.materialOrders = [...] 會把剛新增的
+      // 那一列整個蓋掉，而且畫面上不會有任何錯誤，人只會覺得「按了沒反應」。
+      // 刻意不在這裡清空 materialOrders／moDirty：切換案件時 selectCase() 已經
+      // 清過一次，這裡再清一次的話，「載入尚未回來就被呼叫第二次」會在使用者
+      // 已經打字之後同步把畫面清掉，連下面的 moDirty 守門都來不及擋
+      this._moReqFor = quoteNo
+      this.moLoading = true
+      try {
+        const r = await fetch(`/api/quotations/${encodeURIComponent(quoteNo)}/material-orders`, {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        // 已經切到別的案件：這份回應過期，丟掉（不然會把別張單的叫料貼上來）
+        if (this._moReqFor !== quoteNo) return
+        // 使用者已經動手編輯：保留他打的東西，不要用伺服器版本覆蓋
+        if (r.ok && this.moDirty) { this.moLoading = false; return }
+        if (r.ok) {
+          // 這份清單是自由格式 JSON（早期資料或人工改過的 data_json 不保證
+          // 欄位齊全），跟後端 GET 端點同款作法：每個欄位都給預設值，
+          // 不然 x-model 綁到 undefined 會讓整列輸入框變成不受控
+          this.materialOrders = ((await r.json()).materialOrders || []).map(o => ({
+            itemId:     o.itemId || this._moNewId(),
+            itemName:   o.itemName || '',
+            quantity:   Number(o.quantity) || 0,
+            unit:       o.unit || '',
+            unitPrice:  Number(o.unitPrice) || 0,
+            totalPrice: Number(o.totalPrice) || 0,
+            paidStatus: ['pending', 'partial', 'paid'].includes(o.paidStatus) ? o.paidStatus : 'pending',
+            paidAmount: Number(o.paidAmount) || 0,
+            paidDate:   o.paidDate || '',
+            notes:      o.notes || ''
+          }))
+        }
+      } catch {}
+      this.moLoading = false
+    },
+
+    // crypto.randomUUID() 在 HTTP 明文頁面下不存在（非安全上下文），正式機是
+    // HTTPS 但開發機偶爾用 http://localhost 開，所以留一條退路
+    _moNewId() {
+      if (window.crypto && crypto.randomUUID) return crypto.randomUUID()
+      return 'mo-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10)
+    },
+
+    // 權限條件跟後端 PATCH 端點一致（admin+ 或 project_manage 模組），外加
+    // 已結案擋下來。前端擋不是安全機制，是不要讓使用者填完才被退回
+    moCanEdit() {
+      if (this.cr?.dealTag === '已結案') return false
+      const m = this.session.modules || []
+      return ['superadmin', 'admin'].includes(this.session.role) || m.includes('project_manage')
+    },
+
+    moTotals() {
+      let total = 0, paid = 0
+      for (const m of this.materialOrders) {
+        total += Number(m.totalPrice) || 0
+        paid  += Number(m.paidAmount) || 0
+      }
+      return { total, paid, unpaid: total - paid }
+    },
+
+    moAddItem() {
+      this.materialOrders.push({
+        itemId: this._moNewId(), itemName: '', quantity: 1, unit: '', unitPrice: 0,
+        totalPrice: 0, paidStatus: 'pending', paidAmount: 0, paidDate: '', notes: ''
+      })
+      this.moDirty = true
+      this.moMsg = ''
+    },
+
+    moRemoveItem(i) {
+      this.materialOrders.splice(i, 1)
+      this.moDirty = true
+      this.moMsg = ''
+    },
+
+    // 小計一律由這裡算、使用者不能手填——後端會用
+    // abs(totalPrice - 數量×單價) > 0.01 直接回 400。
+    // 刻意不把 m.quantity / m.unitPrice 正規化寫回去：使用者打到一半的
+    // 「1.」會被改成「1」，游標跳掉很難打字；正規化留到 moSave() 送出前做
+    moRecalc(i) {
+      const m = this.materialOrders[i]
+      const q = Number(m.quantity) || 0
+      const p = Number(m.unitPrice) || 0
+      m.totalPrice = Math.round(q * p * 100) / 100
+      if (m.paidStatus === 'paid') m.paidAmount = m.totalPrice
+      else if (m.paidStatus === 'pending') { m.paidAmount = 0; m.paidDate = '' }
+      this.moDirty = true
+    },
+
+    moOnStatusChange(i) {
+      const m = this.materialOrders[i]
+      const today = new Date().toISOString().slice(0, 10)
+      if (m.paidStatus === 'pending') { m.paidAmount = 0; m.paidDate = '' }
+      else {
+        if (!m.paidDate) m.paidDate = today
+        if (m.paidStatus === 'paid') m.paidAmount = Number(m.totalPrice) || 0
+      }
+      this.moDirty = true
+    },
+
+    async moSave() {
+      if (this.moSaving) return
+      const quoteNo = this.selected?.quote_no
+      if (!quoteNo) return
+
+      // 送出前正規化＋先擋一次。後端這些規則都會再驗一次，這裡擋只是為了
+      // 給看得懂的中文訊息（後端回的 detail 會指名項目，但撞到才看到）
+      const payload = []
+      for (const m of this.materialOrders) {
+        const name = (m.itemName || '').trim()
+        if (!name) { this.moMsgError = true; this.moMsg = '有項目還沒填名稱'; return }
+        const quantity  = Math.max(0, Number(m.quantity) || 0)
+        const unitPrice = Math.max(0, Number(m.unitPrice) || 0)
+        const totalPrice = Math.round(quantity * unitPrice * 100) / 100
+        let paidAmount = 0
+        let paidDate = null
+        if (m.paidStatus === 'paid') {
+          paidAmount = totalPrice
+          paidDate = m.paidDate || ''
+        } else if (m.paidStatus === 'partial') {
+          paidAmount = Math.round((Number(m.paidAmount) || 0) * 100) / 100
+          paidDate = m.paidDate || ''
+          if (paidAmount > totalPrice) { this.moMsgError = true; this.moMsg = `「${name}」的已付金額大於小計`; return }
+        }
+        if (m.paidStatus !== 'pending' && !paidDate) {
+          this.moMsgError = true; this.moMsg = `「${name}」標為已付，必須填已付日期`; return
+        }
+        payload.push({
+          itemId: m.itemId || this._moNewId(), itemName: name,
+          quantity, unit: (m.unit || '').trim(), unitPrice, totalPrice,
+          paidStatus: m.paidStatus, paidAmount,
+          paidDate: m.paidStatus === 'pending' ? null : paidDate,
+          notes: (m.notes || '').trim()
+        })
+      }
+
+      this.moSaving = true
+      this.moMsg = ''
+      try {
+        const r = await fetch(`/api/quotations/${encodeURIComponent(quoteNo)}/material-orders`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify({ materialOrders: payload })
+        })
+        if (r.ok) {
+          this.moDirty = false
+          this.moMsgError = false
+          this.moMsg = '已儲存'
+          setTimeout(() => { if (!this.moDirty) this.moMsg = '' }, 2500)
+        } else {
+          const d = await r.json().catch(() => ({}))
+          this.moMsgError = true
+          this.moMsg = '儲存失敗：' + (d.detail || r.status)
+        }
+      } catch (e) {
+        this.moMsgError = true
+        this.moMsg = '網路錯誤：' + e.message
+      }
+      this.moSaving = false
+    },
+
     async init() {
+      // Alpine 3 會自動呼叫資料物件上的 init()，而 case-management.html 的
+      // <body> 又寫了一次 x-init="init()"，所以整個 init() 每次開頁都跑兩遍：
+      // 所有 API 都發兩次，並且第二次 selectCase() 會把第一次已經載好的狀態
+      // 整個重置。先前看不出來是因為這頁的子清單全部是唯讀的，重載一次
+      // 看不出差別；2026-09-11 新增可編輯的叫料清單後才暴露——使用者在兩次
+      // init 中間按「＋新增項目」，那一列會被第二次載入默默抹掉。
+      // 這裡只修本頁；全站共 50 個頁面有同樣的 x-init 寫法，屬於独立課題。
+      if (this._initDone) return
+      this._initDone = true
       window.addEventListener('resize', () => { this.isMobileView = window.innerWidth <= 767 })
       const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
       if (!s.token) { location.href = 'login.html'; return }
@@ -515,12 +704,21 @@ function app() {
         this.financeSummary = null
         this.finShowRecvDetail = false
         this.finShowPayDetail = false
+        this.materialOrders = []
+        this.moDirty = false
+        this.moMsg = ''
+        // 載入旗標在這裡就先立起來，不要等到下面真的呼叫 loadMaterialOrders()：
+        // 分頁列在 selected 一設好就出現，中間那一小段空窗期會先把「尚無叫料
+        // 項目」閃出來、再跳成「載入中…」、最後才是真正的結果，看起來像清單被
+        // 清空了一次
+        this.moLoading = true
         this._loadCaseTasks(quoteNo)
         this.loadDispatches(quoteNo)
         this.loadContractorVouchers(quoteNo)
         this.loadInvoiceVouchers(quoteNo)
         this.loadPaymentRequests(quoteNo)
         this.loadFinanceSummary(quoteNo)
+        this.loadMaterialOrders(quoteNo)
       } catch {}
     },
 

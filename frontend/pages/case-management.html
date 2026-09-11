@@ -1910,7 +1910,12 @@
                             <!-- 數量×單位價（簡摘版） -->
                             <template x-if="ex.qty">
                               <div style="font-size:9px;color:var(--text-dim);margin-top:4px;font-family:LINE Seed TW_OTF, sans-serif">
-                                <span x-text="ex.qty + ' × ' + (ex.unit || '個') + ' @ NT$' + fmt(ex.unitCost)"></span>
+                                <!-- 原本呼叫 fmt()，但這個元件從來沒有 fmt() 這個方法
+                                     （全 js 只有 fmtFeedTime 與一個區域變數 fmt），
+                                     只要某筆額外支出有填數量、這一行就會丟
+                                     ReferenceError。改用元件實際有的 caseSettleFmt()，
+                                     它自帶 NT$ 前綴所以把字串裡原本的 '@ NT$' 收掉 -->
+                                <span x-text="ex.qty + ' × ' + (ex.unit || '個') + ' @ ' + caseSettleFmt(ex.unitCost)"></span>
                               </div>
                             </template>
                           </div>
@@ -1930,6 +1935,105 @@
                       </div>
                     </div>
                   </template>
+                </div>
+
+                <!-- ══ 叫料（材料訂購）══ 前端 2026-09-11 補上
+                     後端 routers/material_orders.py 在 2026-09-10 就上線並修過四個
+                     缺陷，但全 repo 找不到任何呼叫點——修好的是一支沒有入口的 API，
+                     見 WEEKLY-AUDIT-2026-09-07_2026-09-10.md §E-1。
+                     資料落在 caseRecord.materialOrders（data_json，無獨立資料表），
+                     存檔走專屬端點而不是整包 saveCase()：那支會覆蓋整份 data_json，
+                     兩邊同時存會互相蓋掉，且已結案/權限的守門規則不一樣。
+                     金額刻意不併進上方「應付總額」——那個數字的定義是承攬商匯款
+                     申請，叫料是另一條支出來源，混進去會讓總覽跟 /finance-summary
+                     算出來的數字對不起來。 -->
+                <div id="fin-material-orders" style="margin-bottom:24px">
+                  <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+                    <span class="cm-section-title" style="margin-bottom:0">叫料（材料訂購）</span>
+                    <span x-show="moLoading" style="font-size:11px;color:var(--text-dim);font-family:var(--font-zh)">載入中…</span>
+                    <button x-show="moCanEdit()" @click="moAddItem()"
+                            style="font-size:11px;padding:4px 10px;background:#EFF6FF;color:#1D4ED8;border:1px solid #BFDBFE;border-radius:6px;cursor:pointer;font-family:var(--font-zh);font-weight:500;white-space:nowrap">
+                      ＋ 新增項目
+                    </button>
+                  </div>
+
+                  <!-- 合計：叫料自己的三個數字，跟上方應收應付分開看 -->
+                  <div x-show="materialOrders.length > 0" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px">
+                    <div class="cm-kpi__pill">
+                      <span class="cm-kpi__val" x-text="caseSettleFmt(moTotals().total)"></span>
+                      <span class="cm-kpi__lbl">叫料總額（<span style="font-family:LINE Seed TW_OTF, sans-serif" x-text="materialOrders.length"></span> 項）</span>
+                    </div>
+                    <div class="cm-kpi__pill success">
+                      <span class="cm-kpi__val" x-text="caseSettleFmt(moTotals().paid)"></span>
+                      <span class="cm-kpi__lbl">已付</span>
+                    </div>
+                    <div class="cm-kpi__pill" :class="moTotals().unpaid > 0 ? 'danger' : ''">
+                      <span class="cm-kpi__val" x-text="caseSettleFmt(moTotals().unpaid)"></span>
+                      <span class="cm-kpi__lbl">未付</span>
+                    </div>
+                  </div>
+
+                  <template x-if="!moLoading && materialOrders.length === 0">
+                    <div style="text-align:center;padding:28px 20px;color:var(--text-dim);font-family:var(--font-zh);font-size:12px;border:1px dashed var(--border-light);border-radius:8px;background:#FCFCFB">
+                      <span x-show="moCanEdit()">尚無叫料項目，按上方「＋ 新增項目」開始登記</span>
+                      <span x-show="!moCanEdit()">尚無叫料項目</span>
+                    </div>
+                  </template>
+
+                  <template x-for="(m, mi) in materialOrders" :key="m.itemId">
+                    <div style="border:1px solid #E5E7EB;border-radius:6px;padding:9px;margin-bottom:7px;background:#FAFAF9">
+                      <!-- 第一列：品項、數量×單位、單價、小計（小計一律由前端算，
+                           後端會用 abs(totalPrice - 數量×單價) > 0.01 擋回來） -->
+                      <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:7px">
+                        <input class="fi fi--sm" type="text" placeholder="項目名稱（如：交換器）" style="flex:1;min-width:130px"
+                               x-model="m.itemName" :disabled="!moCanEdit()" @input="moDirty = true">
+                        <input class="fi fi--sm" type="number" min="0" step="0.01" placeholder="數量" style="width:74px"
+                               x-model="m.quantity" :disabled="!moCanEdit()" @input="moRecalc(mi)">
+                        <input class="fi fi--sm" type="text" placeholder="單位" style="width:56px"
+                               x-model="m.unit" :disabled="!moCanEdit()" @input="moDirty = true">
+                        <input class="fi fi--sm" type="number" min="0" step="0.01" placeholder="單價" style="width:96px"
+                               x-model="m.unitPrice" :disabled="!moCanEdit()" @input="moRecalc(mi)">
+                        <span style="font-family:LINE Seed TW_OTF, sans-serif;font-weight:600;color:#92400E;min-width:96px;text-align:right;font-size:12px"
+                              x-text="caseSettleFmt(m.totalPrice)"></span>
+                        <button x-show="moCanEdit()" @click="moRemoveItem(mi)" title="刪除這一項"
+                                style="border:none;background:none;color:#B91C1C;cursor:pointer;font-size:15px;line-height:1;padding:0 4px">×</button>
+                      </div>
+                      <!-- 第二列：付款狀態。三種狀態的欄位規則由後端強制
+                           （待付不能有金額/日期、部分或已付必須有日期），這裡先擋一次
+                           並給明確訊息，不要讓使用者撞到原始 400 -->
+                      <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">
+                        <select class="fi fi--sm" style="width:104px" x-model="m.paidStatus"
+                                :disabled="!moCanEdit()" @change="moOnStatusChange(mi)">
+                          <option value="pending">待付</option>
+                          <option value="partial">部分已付</option>
+                          <option value="paid">已付清</option>
+                        </select>
+                        <input class="fi fi--sm" type="number" min="0" step="0.01" placeholder="已付金額" style="width:104px"
+                               x-model="m.paidAmount" :disabled="!moCanEdit() || m.paidStatus !== 'partial'"
+                               @input="moDirty = true">
+                        <input class="fi fi--sm" type="date" style="width:142px"
+                               x-model="m.paidDate" :disabled="!moCanEdit() || m.paidStatus === 'pending'"
+                               @input="moDirty = true">
+                        <input class="fi fi--sm" type="text" placeholder="備註（供應商、單號…）" style="flex:1;min-width:130px"
+                               x-model="m.notes" :disabled="!moCanEdit()" @input="moDirty = true">
+                      </div>
+                    </div>
+                  </template>
+
+                  <div x-show="moCanEdit() && materialOrders.length > 0" style="display:flex;align-items:center;gap:10px;margin-top:10px">
+                    <button @click="moSave()" :disabled="moSaving || !moDirty"
+                            :style="(moSaving || !moDirty) ? 'opacity:.45;cursor:default' : 'cursor:pointer'"
+                            style="font-size:12px;padding:5px 14px;background:#1D4ED8;color:#fff;border:none;border-radius:6px;font-family:var(--font-zh);font-weight:500">
+                      <span x-show="!moSaving">儲存叫料</span>
+                      <span x-show="moSaving">儲存中…</span>
+                    </button>
+                    <span x-show="moMsg" style="font-size:11px;font-family:var(--font-zh)"
+                          :style="moMsgError ? 'color:#B91C1C' : 'color:var(--success)'" x-text="moMsg"></span>
+                  </div>
+
+                  <!-- 唯讀原因要寫出來：只把輸入框反灰、不說為什麼，使用者會以為壞了 -->
+                  <div x-show="!moCanEdit() && materialOrders.length > 0" style="margin-top:8px;font-size:11px;color:var(--text-dim);font-family:var(--font-zh)"
+                       x-text="cr.dealTag === '已結案' ? '案件已結案，叫料清單為唯讀。' : '你沒有叫料的編輯權限（需要管理員或專案經理）。'"></div>
                 </div>
 
                 <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px">

@@ -1,11 +1,15 @@
 """叫料（材料訂購）管理端點 — 案件財務應付子項目（2026-09-10）。
 
-⚠️ **現況：後端-only 半成品，沒有任何前端。** 全 repo grep `materialOrders`
-只會命中 `main.py`（掛載）、本檔、以及 `backend/db_migration_plan.md`（規劃
-文件，且其描述與實際實作不符，該檔開頭有對照表）。規劃中的「案件財務應付
-分頁 → 叫料清單卡片」尚未實作，所以這兩支端點目前沒有任何使用者會經過的
-入口，只能用 API 直接呼叫。要接手前端之前，先讀
-`WEEKLY-AUDIT-2026-09-07_2026-09-10.md` §E-1。
+前端於 2026-09-11 補上：案件管理「財務」分頁的 `#fin-material-orders` 區塊
+（`frontend/pages/case-management.html`）＋ `case-management.js` 的
+`loadMaterialOrders()`／`moSave()`／`moRecalc()`。端對端測試
+`tests/test_e2e_material_orders_2026_09_11.py`（2 題，真實瀏覽器）釘住整條路。
+
+> **這支端點曾經整整一天是「後端好好的、但沒有任何入口」**：2026-09-10 修好
+> 四個缺陷、7 題 API 測試全綠，但全 repo 沒有任何前端呼叫得到它，見
+> `WEEKLY-AUDIT-2026-09-07_2026-09-10.md` §E-1。純 API 測試對這種缺陷完全
+> 無感——這是本專案第二次踩到（第一次是 WebAuthn 設定頁沒部署、端點回 503
+> 卻沒有地方能填 RP ID）。
 
 資料落點：`quotations.data_json` 的 `caseRecord.materialOrders`（陣列），
 無 schema 異動、沒有獨立資料表——所以「叫料」查不到專屬 migration 是正常的。
