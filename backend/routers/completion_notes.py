@@ -89,6 +89,7 @@ class CompletionNoteIn(BaseModel):
     completion_date: Optional[str]  = ''
     site_manager:    Optional[str]  = ''
     recipient:       Optional[str]  = ''
+    contact_phone:   Optional[str]  = ''
     customer_name:   Optional[str]  = ''
     project_name:    Optional[str]  = ''
     items:           Optional[list] = []
@@ -150,6 +151,7 @@ def _note_public(row, include_items: bool = True) -> dict:
         "completionDate":  d.get("completion_date") or "",
         "siteManager":     d.get("site_manager") or "",
         "recipient":       d.get("recipient") or "",
+        "contactPhone":    d.get("contact_phone") or "",
         "workSummary":     d.get("work_summary") or "",
         "testResult":      d.get("test_result") or "",
         "warrantyMonths":  d.get("warranty_months") or 0,
@@ -252,12 +254,14 @@ def create_completion_note(body: CompletionNoteIn, authorization: str = Header(N
         conn.execute(
             "INSERT INTO completion_notes "
             "(note_no, quote_no, status, customer_name, project_name, site_address, start_date, "
-            " completion_date, site_manager, recipient, items_json, work_summary, test_result, "
-            " warranty_months, pending_items, notes, data_json, created_by, created_at, updated_at) "
-            "VALUES (?,?,'草稿',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            " completion_date, site_manager, recipient, contact_phone, items_json, work_summary, "
+            " test_result, warranty_months, pending_items, notes, data_json, created_by, "
+            " created_at, updated_at) "
+            "VALUES (?,?,'草稿',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (note_no, body.quote_no, customer_name, project_name, body.site_address or "",
              body.start_date or "", body.completion_date or "", body.site_manager or "",
-             body.recipient or "", json.dumps(body.items or [], ensure_ascii=False),
+             body.recipient or "", body.contact_phone or "",
+             json.dumps(body.items or [], ensure_ascii=False),
              body.work_summary or "", body.test_result or "",
              int(body.warranty_months or 0), body.pending_items or "", body.notes or "",
              json.dumps({"labels": body.labels or {}}, ensure_ascii=False),
@@ -293,13 +297,14 @@ def update_completion_note(note_no: str, body: CompletionNoteIn, authorization: 
         dj["labels"] = body.labels or {}
         conn.execute(
             "UPDATE completion_notes SET customer_name=?, project_name=?, site_address=?, "
-            " start_date=?, completion_date=?, site_manager=?, recipient=?, items_json=?, "
-            " work_summary=?, test_result=?, warranty_months=?, pending_items=?, notes=?, "
-            " data_json=?, updated_at=? "
+            " start_date=?, completion_date=?, site_manager=?, recipient=?, contact_phone=?, "
+            " items_json=?, work_summary=?, test_result=?, warranty_months=?, pending_items=?, "
+            " notes=?, data_json=?, updated_at=? "
             "WHERE note_no=?",
             (body.customer_name or "", body.project_name or "", body.site_address or "",
              body.start_date or "", body.completion_date or "", body.site_manager or "",
-             body.recipient or "", json.dumps(body.items or [], ensure_ascii=False),
+             body.recipient or "", body.contact_phone or "",
+             json.dumps(body.items or [], ensure_ascii=False),
              body.work_summary or "", body.test_result or "", int(body.warranty_months or 0),
              body.pending_items or "", body.notes or "",
              json.dumps(dj, ensure_ascii=False), now, note_no),
