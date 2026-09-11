@@ -22,9 +22,11 @@ def test_scope_defaults_and_editing(client, make_user):
     r = client.get("/api/settings/approval-flow-scope", headers=_auth(token))
     assert r.status_code == 200, r.text
     scope = r.json()
+    # 2026-09-11 新增 extra_expense（案件額外支出送審）。預設 True＝跟著統一流程走，
+    # 對應使用者要的「共用分層簽核並可獨立設定」——要獨立就在設定頁把它取消勾選。
     assert scope == {
         "quotation": True, "shipping": True, "invoice_voucher": True,
-        "payment_request": True, "contractor_voucher": False,
+        "payment_request": True, "contractor_voucher": False, "extra_expense": True,
     }, scope
 
     # 2) put some tiers into the unified flow

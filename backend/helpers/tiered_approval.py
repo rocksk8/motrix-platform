@@ -29,8 +29,14 @@ from .settings import _get_setting
 # scope 沒有記錄某個 doc_type 時，套用這裡的預設分組——對應 2026-08-24 統一前後的
 # 既有事實：報價單／出貨單／發票開立簽核單／請款單預設走統一流程，承攬商匯款申請
 # 預設維持獨立（本來就有自己的 contractor_voucher_approval_flow）。
-APPROVAL_DOC_TYPES = ["quotation", "shipping", "invoice_voucher", "payment_request", "contractor_voucher"]
-DEFAULT_UNIFIED_DOC_TYPES = {"quotation", "shipping", "invoice_voucher", "payment_request"}
+# 2026-09-11 新增 "extra_expense"（案件額外支出送審）。使用者要的是「共用分層簽核
+# 並可獨立設定」——這兩件事在現有機制裡剛好就是：列進 APPROVAL_DOC_TYPES 讓簽核
+# 設定頁看得到它、同時放進 DEFAULT_UNIFIED_DOC_TYPES 讓它預設走統一流程，之後在
+# 設定頁把它從套用範圍取消勾選就會切成自己的 extra_expense_approval_flow。
+APPROVAL_DOC_TYPES = ["quotation", "shipping", "invoice_voucher", "payment_request",
+                      "contractor_voucher", "extra_expense"]
+DEFAULT_UNIFIED_DOC_TYPES = {"quotation", "shipping", "invoice_voucher", "payment_request",
+                             "extra_expense"}
 APPROVAL_DOC_TYPE_LABELS = {
     "quotation":         "報價單",
     "shipping":          "出貨單",
