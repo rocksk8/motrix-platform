@@ -199,8 +199,14 @@ def test_pending_amount_is_warned_but_still_counted(live_server, make_user, seed
 
 
 @pytest.mark.e2e
-def test_approved_row_is_readonly(live_server, make_user, seed_extra_expense):
-    """已核准的不給改——金額已經進了成本與報表。"""
+def test_approved_row_is_readonly_with_locked_files_and_edit_button(
+        live_server, make_user, seed_extra_expense):
+    """已核准的那一列：欄位唯讀、**附件上鎖**、而且要有「編輯（需審核）」入口。
+
+    2026-09-11 第二輪交辦。附件上鎖那一條在同一天內被翻過兩次（先開放補傳憑證、
+    再推翻），所以這裡把「看得到鎖定說明」也一起釘住——只擋後端而畫面照樣給上傳
+    按鈕的話，使用者會一直按、一直收到 409。
+    """
     username, password = make_user(username="e2e_xe5", role="superadmin")
     _seed_case("MQ-XEUI-005")
     seed_extra_expense("MQ-XEUI-005", total_cost=800, description="已核准",
@@ -213,7 +219,26 @@ def test_approved_row_is_readonly(live_server, make_user, seed_extra_expense):
             _login(page, live_server, username, password)
             _open_tab(page, live_server, "MQ-XEUI-005")
             assert page.is_disabled(f"{PANEL} input[placeholder='品項說明（必填）']")
-            assert "已核准的項目不可修改" in page.locator(PANEL).inner_text()
+            body = page.locator(PANEL).inner_text()
+            assert "已核准的項目不可直接修改" in body
+            assert "附件已上鎖" in body, "畫面要說得出為什麼不能傳，不能只在後端擋"
+            # ⚠️ 一定要加 `:visible`：Alpine 的 x-show 是 display:none，元素還留在
+            #    DOM 裡，`.count()` 照樣數得到——單看 count 會得到一個假的綠燈。
+            #    另外 has-text 是子字串比對，「＋ 上傳憑證」也會被「＋ 上傳」匹配到，
+            #    所以這裡只問「看得見的上傳入口有幾個」（答案必須是 0）。
+            assert page.locator(f"{PANEL} label:has-text('＋ 上傳'):visible").count() == 0
+
+            # 按下編輯 → 變更申請面板打開，且明講核准前數字不變
+            page.click(f"{PANEL} button:has-text('編輯（需審核）')")
+            page.wait_for_selector(f"{PANEL} button:has-text('送審變更')", timeout=45000)
+            panel = page.locator(PANEL).inner_text()
+            assert "變更申請" in panel
+            assert "不會變動" in panel, "要明講核准前成本與報表數字不動"
+            # 補憑證的入口改在變更申請裡（待核准附件）
+            assert page.locator(f"{PANEL} label:has-text('＋ 上傳憑證'):visible").count() == 1
+            # 變更申請面板裡的欄位才是可編輯的那一組
+            assert not page.is_disabled(
+                f"{PANEL} input[placeholder='品項說明（必填）'] >> nth=1")
         finally:
             browser.close()
 
@@ -257,3 +282,86 @@ def test_settlement_page_points_to_new_location_and_uses_new_total(
             assert not errors, f"頁面有 JS 錯誤：{errors}"
         finally:
             browser.close()
+
+
+@pytest.mark.e2e
+def test_change_request_round_trip_in_browser(live_server, make_user, seed_extra_expense):
+    """變更申請的完整來回：編輯 → 儲存 → 送審 → 生效。
+
+    純 API 測試蓋不到的地方在**綁定**：變更面板的欄位綁的是 `x.change.*`，而
+    `x.change` 是按下「編輯」當下才由 `xeStartEdit()` 建出來的。這種東西寫錯不會
+    有任何錯誤訊息，只會安靜地送出空值——本專案已經在同一個坑摔過三次（WebAuthn
+    設定頁、叫料、系統技術設定）。所以這裡從瀏覽器一路按到底，最後回頭查資料庫
+    確認**本體真的被改成新值**。
+    """
+    username, password = make_user(username="e2e_xec", role="superadmin")
+    _seed_case("MQ-XEUI-007")
+    exp_id = seed_extra_expense("MQ-XEUI-007", total_cost=800, description="原始品項",
+                                qty=1, unit_cost=800, status="已核准",
+                                expense_date="2026-08-03")
+    # 沒有簽核層 → 送審即生效，這條測的是畫面能不能把值送到底，不是簽核分層本身
+    _set_empty_approval_flow()
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page()
+        errors = []
+        page.on("pageerror", lambda e: errors.append(str(e)))
+        # 送審那顆按鈕會跳 confirm()，不接的話 Playwright 預設會 dismiss，
+        # 整個流程就會安靜地停在原地（測試看起來只是「沒生效」）
+        page.on("dialog", lambda d: d.accept())
+        try:
+            _login(page, live_server, username, password)
+            _open_tab(page, live_server, "MQ-XEUI-007")
+
+            page.click(f"{PANEL} button:has-text('編輯（需審核）')")
+            page.wait_for_selector(f"{PANEL} button:has-text('送審變更')", timeout=45000)
+
+            # 變更面板是第二組欄位（第一組是唯讀的現行值）
+            page.fill(f"{PANEL} input[placeholder='品項說明（必填）'] >> nth=1", "改過的品項")
+            page.fill(f"{PANEL} input[placeholder='單位成本'] >> nth=1", "1250")
+            page.click(f"{PANEL} button:has-text('儲存變更')")
+            page.wait_for_selector(f"{PANEL} :text('已存草稿')", timeout=45000)
+
+            # 存草稿階段：本體完全沒被動到
+            assert _xe_row(exp_id)["total_cost"] == 800, "存草稿不該改到本體金額"
+            assert _xe_row(exp_id)["description"] == "原始品項"
+
+            page.click(f"{PANEL} button:has-text('送審變更')")
+            page.wait_for_selector(f"{PANEL} :text('生效')", timeout=45000)
+        finally:
+            browser.close()
+
+    assert not errors, f"頁面有 JS 錯誤：{errors}"
+    row = _xe_row(exp_id)
+    assert row["description"] == "改過的品項", "畫面上打的值要真的送到後端"
+    assert row["total_cost"] == 1250
+    assert (row["change_status"] or "") == "", "生效後變更申請要清空"
+
+
+def _xe_row(exp_id):
+    import db
+    conn = db.get_db()
+    try:
+        return dict(conn.execute(
+            "SELECT * FROM case_extra_expenses WHERE id=?", (exp_id,)).fetchone())
+    finally:
+        conn.close()
+
+
+def _set_empty_approval_flow():
+    """完全沒有簽核層（含關掉「申請人部門主管自動簽核」那一層，見
+    test_case_extra_expenses_api_2026_09_11.py 的同名函式說明）。"""
+    import db
+    conn = db.get_db()
+    try:
+        conn.execute(
+            "INSERT INTO system_settings (key, value_json, updated_at) VALUES (?,?,?) "
+            "ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json",
+            ("unified_approval_flow",
+             json.dumps({"tiers": [], "includeSubmitterManagerTier": False}),
+             "2026-01-01T00:00:00"),
+        )
+        conn.commit()
+    finally:
+        conn.close()

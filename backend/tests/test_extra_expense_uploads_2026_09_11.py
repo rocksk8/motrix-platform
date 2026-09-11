@@ -7,9 +7,12 @@
 
 **兩個刻意改掉的行為，不是漏測**：
 
-1. 舊版「精算完結後一律擋下上傳」→ **新版不擋**。補傳憑證是會計常態：核准後才拿到
-   紙本發票很正常，擋下來只會逼人去改別的欄位或請管理員解鎖。金額、說明那些仍然
-   鎖住（`EDITABLE_STATUSES` 只有草稿與已駁回），只有附件放行。
+1. 附件在「已核准」之後**上鎖**（2026-09-11 第二輪交辦）。這一條在同一天內翻過兩次：
+   舊版「精算完結後一律擋下」→ 第一輪改成「核准後仍可補傳憑證」（理由是補憑證是
+   會計常態）→ 使用者推翻，改回上鎖。**推翻的理由**：核准當下簽核人看到的憑證，
+   跟事後被換掉的憑證不是同一份，等於簽核簽了一個會變的東西。補憑證的路徑改走
+   「變更申請」——新檔案先存成待核准附件，簽核通過才併進正式清單
+   （見 `test_xe_change_request_2026_09_11.py`）。
 2. 舊版「索引超出範圍回 400」→ **新版不存在的 id 回 404**，語意更準確。
 
 附件的實體檔案分類也從 `quotation_settlement_extra` 改成 `case_extra_expense`。
@@ -81,7 +84,10 @@ def test_upload_multiple_files_at_once(client, make_user, seed_extra_expense):
     username, password = make_user(username="xef2", role="admin")
     token = _login(client, username, password)
     _make_case()
-    exp_id = seed_extra_expense("MQ-XEF-001", total_cost=1000, description="多檔")
+    # fixture 的 status 預設是「已核准」，而已核准之後附件已上鎖（見模組 docstring
+    # 第 1 點），所以這裡要明確種成草稿才測得到「一次傳多檔」本身
+    exp_id = seed_extra_expense("MQ-XEF-001", total_cost=1000, description="多檔",
+                                status="草稿")
 
     r = _upload(client, token, exp_id, names=("a.pdf", "b.pdf", "c.pdf"))
     assert r.status_code == 201, r.text
@@ -97,12 +103,13 @@ def test_unknown_id_returns_404_not_400(client, make_user):
     assert r.status_code == 404, r.text
 
 
-def test_upload_still_allowed_after_approval(client, make_user, seed_extra_expense):
-    """**刻意的行為改變**：已核准之後仍然可以補傳憑證。
+def test_upload_locked_after_approval(client, make_user, seed_extra_expense):
+    """**刻意的行為改變（2026-09-11 第二輪，翻掉同日第一輪的決定）**：已核准之後
+    附件跟金額一起上鎖。
 
-    舊版是「精算完結後一律擋下」。但補傳憑證是會計常態——核准當下常常還沒拿到
-    紙本發票，擋下來只會逼人去改別的欄位或請管理員解鎖。金額與說明仍然鎖住
-    （見 `case_extra_expenses.py` 的 EDITABLE_STATUSES），只有附件放行。
+    第一輪開放核准後補傳憑證，理由是「補憑證是會計常態」。使用者推翻了它——核准
+    當下簽核人看到的憑證，跟事後被換掉的憑證不是同一份。補憑證改走變更申請
+    （`test_xe_change_request_2026_09_11.py::test_pending_change_files_are_not_visible_until_approved`）。
     """
     username, password = make_user(username="xef4", role="admin")
     token = _login(client, username, password)
@@ -111,9 +118,14 @@ def test_upload_still_allowed_after_approval(client, make_user, seed_extra_expen
                                 status="已核准")
 
     r = _upload(client, token, exp_id)
-    assert r.status_code == 201, "已核准的項目仍然要能補傳憑證"
+    assert r.status_code == 409, "已核准的項目不可再上傳附件"
+    assert "上鎖" in r.json()["detail"], "訊息要指出改走變更申請，不能只說不可修改"
 
-    # 但金額還是不能改
+    # 刪除既有附件同樣上鎖——只擋上傳等於還是能把憑證弄不見
+    r_del = client.delete(f"{_files_url(exp_id)}/anything", headers=_auth(token))
+    assert r_del.status_code == 409, "已核准的附件也不可刪除"
+
+    # 金額當然仍然不能改
     r2 = client.patch(f"/api/quotations/MQ-XEF-001/extra-expenses/{exp_id}",
                       headers=_auth(token),
                       json={"description": "偷改", "qty": 1, "unitCost": 99999})

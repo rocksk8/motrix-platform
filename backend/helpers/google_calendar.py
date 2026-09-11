@@ -332,8 +332,10 @@ def push_event_for_quotation_won(quote_no: str) -> None:
         cname = row["customer_name"] or ""
         pname = row["project_name"] or ""
         total = row["total"] or 0
+        # 2026-09-11：標題補上**案件名稱**。使用者要的是在行事曆上一眼看出「哪個案子
+        # 怎麼了」，原本只有單號＋客戶，案件名稱藏在 description 裡，月檢視根本看不到。
         event_id = _create_event_with_retry(
-            f"報價單成案 — {quote_no}（{cname}）",
+            f"報價單成案 — {pname or quote_no}（{cname}｜{quote_no}）",
             f"報價單 {quote_no} 已標記為「已成案」。\n客戶：{cname}\n案件名稱：{pname}\n金額（含稅）：NT$ {total:,.0f}",
             date.today(),
         )
@@ -451,6 +453,82 @@ def push_event_delete_for_case_stage(event_id: str) -> None:
         logger.info("push_event_delete_for_case_stage: deleted event %s", event_id)
     except Exception as exc:
         logger.warning("push_event_delete_for_case_stage(%r) failed: %s", event_id, exc)
+
+
+# ── 2026-09-11：案件執行進度「勾選完成」（第二個需要 upsert 的事件類型）─────────
+#
+# 使用者交辦：「案件管理執行進度勾選進單確認、叫料出貨這些或是手動打上的選項，
+# 只要有勾選，要同步於行事曆標註，例如當日勾選客戶驗收，行事曆要增加案件名稱＋
+# 進度在行事曆上。」
+#
+# ⚠️ **刻意不共用 `google_calendar_event_id`**：那一欄記的是**到期日**事件
+# （push_event_for_case_stage_due()），跟這裡的**完成日**事件是兩個不同日期、
+# 不同語意的東西。共用一欄的話，設了到期日再勾完成，後者會把前者的事件改成
+# 完成日，到期提醒就這樣無聲消失了。所以 DB v76 另開
+# `google_calendar_done_event_id`。
+#
+# 事件日期用 `done_at`（勾選當下前端自動填今天，使用者也可以改成實際完成日），
+# 不是「勾選這個動作發生的時間」——補登的話兩者會差很多天。
+
+def push_event_for_case_stage_done(stage_id: int) -> None:
+    try:
+        from db import get_db
+        conn = get_db()
+        row = conn.execute("""
+            SELECT cs.id, cs.label, cs.done, cs.done_at, cs.quote_no,
+                   cs.google_calendar_done_event_id,
+                   q.customer_name, q.project_name
+            FROM case_stages cs JOIN quotations q ON q.quote_no = cs.quote_no
+            WHERE cs.id=?
+        """, (stage_id,)).fetchone()
+        if not row:
+            conn.close()
+            return
+
+        existing_id = row["google_calendar_done_event_id"] or ""
+        cname = row["customer_name"] or ""
+        pname = row["project_name"] or ""
+        case_name = pname or row["quote_no"]
+        stage_label = row["label"] or "執行階段"
+
+        # 取消勾選 → 事件刪掉。留著的話行事曆會顯示一件其實沒完成的事，
+        # 比沒有紀錄更糟
+        if not row["done"]:
+            if existing_id:
+                _delete_event_with_retry(existing_id)
+                conn.execute(
+                    "UPDATE case_stages SET google_calendar_done_event_id='' WHERE id=?",
+                    (stage_id,))
+                conn.commit()
+            conn.close()
+            return
+
+        done_at_str = (row["done_at"] or "").strip()
+        try:
+            event_date = date.fromisoformat(done_at_str[:10]) if done_at_str else date.today()
+        except ValueError:
+            event_date = date.today()
+
+        # 使用者指定的格式：案件名稱 ＋ 進度
+        summary = f"{case_name}｜{stage_label} 完成"
+        description = (
+            f"案件執行進度「{stage_label}」已勾選完成。\n"
+            f"案件名稱：{pname or '（未填）'}\n客戶：{cname}\n"
+            f"案件編號：{row['quote_no']}\n完成日期：{done_at_str or event_date.isoformat()}"
+        )
+
+        if existing_id:
+            event_id = _update_event_with_retry(existing_id, summary, description, event_date)
+        else:
+            event_id = _create_event_with_retry(summary, description, event_date)
+
+        conn.execute("UPDATE case_stages SET google_calendar_done_event_id=? WHERE id=?",
+                     (event_id, stage_id))
+        conn.commit()
+        conn.close()
+        logger.info("push_event_for_case_stage_done: %s -> event %s", stage_id, event_id)
+    except Exception as exc:
+        logger.warning("push_event_for_case_stage_done(%r) failed: %s", stage_id, exc)
 
 
 def push_event_for_important_comment(update_id, quote_no: str, content: str, author_display: str) -> None:

@@ -265,7 +265,18 @@ function app() {
           const d = await r.json()
           // 有未存檔的新列（id 為 null）就不要整包覆蓋，保留使用者打到一半的東西
           const drafts = this.xe.items.filter(i => !i.id)
-          this.xe.items = (d.items || []).map(i => ({ ...i, _dirty: false })).concat(drafts)
+          const prev = Object.fromEntries(this.xe.items.filter(i => i.id).map(i => [i.id, i]))
+          this.xe.items = (d.items || []).map(i => {
+            const p = prev[i.id]
+            // 變更申請面板：伺服器上還沒有這筆變更申請（changeStatus 空）、但使用者
+            // 正在本機填 → 保留他打到一半的內容。少了這道守門，任何一次背景重載
+            // 都會把輸入中的東西清空，而且畫面上不會有任何錯誤（同一天內已經在
+            // 叫料與系統設定兩處各踩過一次同樣的競態）
+            if (p && p._editing && !i.changeStatus) {
+              return { ...i, _dirty: false, _editing: true, change: p.change, _changeDirty: p._changeDirty }
+            }
+            return { ...i, _dirty: false, _editing: !!i.changeStatus, _changeDirty: false }
+          }).concat(drafts)
           this.xe.categories = d.categories || []
           this.xe.totalAmount = d.totalAmount || 0
           this.xe.totalPending = d.totalPending || 0
@@ -428,6 +439,173 @@ function app() {
       } catch (e) { this._xeFail('網路錯誤：' + e.message); return }
       this.xe.busy = false
       await this.loadExtraExpenses(quoteNo)
+    },
+
+    // ── 額外支出：已核准之後的變更申請（2026-09-11）──────────────────────────
+    //
+    // 使用者交辦：已核准後附件上鎖，要改內容得按「編輯」走審核，而且**原核准金額
+    // 不動、核准後才生效**。所以這裡刻意分成兩區：上面那排欄位永遠顯示「目前生效
+    // 的值」（唯讀），變更申請是另一塊面板，填的是「提議的新值」。使用者一眼就能
+    // 對照改了什麼——如果直接讓人在原欄位上改，畫面看起來就像已經生效了。
+
+    xeCanModify(x) {
+      // 後端才是最終權威（_can_modify）；這裡擋是為了不要讓人填完才被 403 退回
+      if (['superadmin', 'admin'].includes(this.session.role)) return true
+      return !!x.createdBy && x.createdBy === this.session.username
+    },
+
+    // 附件上鎖：已核准就不能再上傳/刪除。要補憑證請走變更申請的「待核准附件」
+    xeFilesLocked(x) { return x.status === '已核准' },
+
+    xeInChange(x)        { return !!x._editing || !!x.changeStatus },
+    xeChangeEditable(x)  { return !x.changeStatus || x.changeStatus === '草稿' || x.changeStatus === '已駁回' },
+    xeChangeFiles(x)     { return (x.change && x.change.addFiles) || [] },
+
+    xeChangeStatusStyle(s) {
+      if (s === '已駁回') return 'background:#FEE2E2;color:#B91C1C'
+      if (s === '草稿')   return 'background:#F3F4F6;color:#6B7280'
+      return 'background:#FEF3C7;color:#92400E'   // 待審核／簽核中
+    },
+
+    xeStartEdit(i) {
+      const x = this.xe.items[i]
+      if (!this.xeCanModify(x)) { this._xeFail('只有填寫人本人或管理員可以提出變更申請'); return }
+      if (!x.change || !Object.keys(x.change).length) {
+        // 從目前生效的值開一份提議，使用者只要改動到的欄位
+        x.change = {
+          category: x.category, description: x.description, qty: x.qty, unit: x.unit,
+          unitCost: x.unitCost, totalCost: x.totalCost, note: x.note,
+          expenseDate: x.expenseDate, docNo: x.docNo,
+          payerUsername: x.payerUsername, payerName: x.payerName, addFiles: [],
+        }
+      }
+      x._editing = true
+      x._changeDirty = false
+      this.xe.msg = ''
+    },
+
+    xeChangeDirty(i) { this.xe.items[i]._changeDirty = true; this.xe.msg = '' },
+
+    xeChangeRecalc(i) {
+      const c = this.xe.items[i].change
+      c.totalCost = Math.round((Number(c.qty) || 0) * (Number(c.unitCost) || 0) * 100) / 100
+      this.xeChangeDirty(i)
+    },
+
+    xeChangePayerInput(i) {
+      const c = this.xe.items[i].change
+      const hit = (this.selectableUsers || []).find(
+        u => (u.display_name || u.username) === (c.payerName || '').trim())
+      c.payerUsername = hit ? hit.username : ''
+      this.xeChangeDirty(i)
+    },
+
+    _xeChangeBase(x) {
+      return `/api/quotations/${encodeURIComponent(this.selected.quote_no)}/extra-expenses/${x.id}/change-request`
+    },
+
+    async xeSaveChange(i) {
+      const x = this.xe.items[i]
+      const c = x.change || {}
+      if (!(c.description || '').trim()) { this._xeFail('請先填品項說明'); return }
+      this.xe.busy = true; this.xe.msg = ''
+      try {
+        const r = await fetch(this._xeChangeBase(x), {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify({
+            category: c.category, description: (c.description || '').trim(),
+            qty: Number(c.qty) || 0, unit: (c.unit || '').trim(),
+            unitCost: Number(c.unitCost) || 0, note: (c.note || '').trim(),
+            expenseDate: c.expenseDate || '', docNo: (c.docNo || '').trim(),
+            payerUsername: c.payerUsername || '', payerName: (c.payerName || '').trim(),
+          }),
+        })
+        if (!r.ok) {
+          const d = await r.json().catch(() => ({}))
+          this._xeFail('儲存失敗：' + (d.detail || r.status)); return
+        }
+        this.xe.msgError = false; this.xe.msg = '變更申請已存草稿，按「送審」才會進簽核'
+      } catch (e) { this._xeFail('網路錯誤：' + e.message); return }
+      this.xe.busy = false
+      await this.loadExtraExpenses(this.selected.quote_no)
+    },
+
+    async xeSubmitChange(i) {
+      const x = this.xe.items[i]
+      const c = x.change || {}
+      if (x._changeDirty) { this._xeFail('請先儲存變更申請再送審'); return }
+      if (!x.changeStatus) { this._xeFail('請先儲存變更申請再送審'); return }
+      const oldA = Math.round(x.totalCost || 0).toLocaleString()
+      const newA = Math.round(c.totalCost || 0).toLocaleString()
+      if (!confirm(`確定送審這筆變更申請？\n\n${c.description}\nNT$ ${oldA} → NT$ ${newA}\n\n`
+                 + `核准之前，這筆額外支出維持原本的 NT$ ${oldA}，報表數字不會變動。`)) return
+      this.xe.busy = true; this.xe.msg = ''
+      try {
+        const r = await fetch(`${this._xeChangeBase(x)}/submit`, {
+          method: 'POST', headers: { Authorization: 'Bearer ' + this.session.token } })
+        const d = await r.json().catch(() => ({}))
+        if (!r.ok) { this._xeFail('送審失敗：' + (d.detail || r.status)); return }
+        this.xe.msgError = false
+        this.xe.msg = d.autoApproved ? '未設定簽核層，變更已直接生效' : '變更申請已送審'
+      } catch (e) { this._xeFail('網路錯誤：' + e.message); return }
+      this.xe.busy = false
+      await this.loadExtraExpenses(this.selected.quote_no)
+    },
+
+    async xeCancelChange(i) {
+      const x = this.xe.items[i]
+      // 還沒送到後端的，純粹關掉面板就好
+      if (!x.changeStatus) { x._editing = false; x.change = {}; x._changeDirty = false; return }
+      if (!confirm('確定撤銷這筆變更申請？已上傳的待核准附件會一併刪除。')) return
+      this.xe.busy = true; this.xe.msg = ''
+      try {
+        const r = await fetch(this._xeChangeBase(x), {
+          method: 'DELETE', headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (!r.ok) {
+          const d = await r.json().catch(() => ({}))
+          this._xeFail('撤銷失敗：' + (d.detail || r.status)); return
+        }
+      } catch (e) { this._xeFail('網路錯誤：' + e.message); return }
+      this.xe.busy = false
+      await this.loadExtraExpenses(this.selected.quote_no)
+    },
+
+    async xeUploadChangeFiles(i, evt) {
+      const x = this.xe.items[i]
+      const files = evt?.target?.files
+      if (!files || !files.length) return
+      if (!x.changeStatus) { this._xeFail('請先按「儲存變更」建立草稿，再上傳待核准附件'); evt.target.value = ''; return }
+      const fd = new FormData()
+      for (const f of files) fd.append('files', f)
+      this.xe.busy = true; this.xe.msg = ''
+      try {
+        const r = await fetch(`${this._xeChangeBase(x)}/files`, {
+          method: 'POST', headers: { Authorization: 'Bearer ' + this.session.token }, body: fd })
+        if (!r.ok) {
+          const d = await r.json().catch(() => ({}))
+          this._xeFail('上傳失敗：' + (d.detail || r.status)); return
+        }
+      } catch (e) { this._xeFail('網路錯誤：' + e.message); return }
+      evt.target.value = ''   // 清掉才能重複選同一個檔案
+      this.xe.busy = false
+      await this.loadExtraExpenses(this.selected.quote_no)
+    },
+
+    async xeDeleteChangeFile(i, fileId) {
+      const x = this.xe.items[i]
+      if (!confirm('確定刪除這個待核准附件？')) return
+      this.xe.busy = true; this.xe.msg = ''
+      try {
+        const r = await fetch(`${this._xeChangeBase(x)}/files/${fileId}`, {
+          method: 'DELETE', headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (!r.ok) {
+          const d = await r.json().catch(() => ({}))
+          this._xeFail('刪除失敗：' + (d.detail || r.status)); return
+        }
+      } catch (e) { this._xeFail('網路錯誤：' + e.message); return }
+      this.xe.busy = false
+      await this.loadExtraExpenses(this.selected.quote_no)
     },
 
     // ── 叫料（材料訂購）────────────────────────────────────────────────────

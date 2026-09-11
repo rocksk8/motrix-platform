@@ -160,7 +160,62 @@ def test_s3_fields_appear_only_when_s3_selected(live_server, make_user):
             page.select_option(f"{CLOUD_CARD} select", "s3")
             page.wait_for_selector(f"{CLOUD_CARD} :text('Bucket')", timeout=10000)
 
+            # ⚠️ **不要把斷言打在那句錯誤訊息上當唯一證據**（2026-09-11 偶發紅，單檔
+            # 連跑 5 輪卻全綠）。`saveCloudTarget()` 設完 `cloudMsg` 之後有
+            # `setTimeout(() => this.cloudMsg = '', 5000)`——訊息 **5 秒後會自己消失**，
+            # 原本卻等 10 秒。只要第一次輪詢落在它消失之後，就變成「等一個已經死掉的
+            # 元素」，再等多久都沒有用。**會自我銷毀的東西沒辦法可靠地斷言。**
+            #
+            # 真正不會過期的證據是「**儲存請求根本沒送出去**」——那才是這條驗證要保證
+            # 的契約。訊息降為輔助資訊。
+            #
+            # （偶發的根因另有其一：這頁的雙重初始化會讓第二次 `_loadSysSettings()`
+            #   晚一步把使用者改過的欄位蓋回舊值，見 test_init_runs_exactly_once。）
+            saves = []
+            page.on("request", lambda r: saves.append(r.url)
+                    if "cloud-backup-target" in r.url and r.method in ("PUT", "PATCH") else None)
+
             page.click(f"{CLOUD_CARD} button:has-text('儲存設定')")
-            page.wait_for_selector(f"{CLOUD_CARD} :text('Bucket 為必填')", timeout=10000)
+            page.wait_for_timeout(700)   # 留時間讓「不該送出的請求」真的送出來
+            assert not saves, f"Bucket 沒填就不該送出儲存請求，實際送了 {saves}"
+
+            if page.locator(f"{CLOUD_CARD} :text('Bucket 為必填')").count() == 0:
+                print("（註）驗證訊息已自動消失，未能觀察到；本題以「請求未送出」為準")
+        finally:
+            browser.close()
+
+
+@pytest.mark.e2e
+def test_init_runs_exactly_once(live_server, make_user):
+    """開一次頁面，設定 API 只能被打一次。
+
+    `<body x-data="companyProfilePage()" x-init="init()">` —— Alpine 3 本來就會自動
+    呼叫資料物件的 `init()`，`x-init` 再寫一次就**剛好跑兩遍**，而且完全沒有警告。
+    兩遍的後果不只是多發一次請求：第二次 `_loadSysSettings()` 的回應晚一步抵達，
+    會把使用者這段期間改過的欄位用伺服器上的舊值**無聲蓋回去**——這正是
+    2026-09-11 這支檔案偶發紅（單檔連跑 5 輪卻全綠）的根因之一。
+
+    跟 2026-09-11 第三輪在 `case-management.js` 修掉的是同一個坑；當時的紀錄就寫明
+    「全站還有 50 個頁面是同樣寫法」，這是第二頁。
+
+    **刻意數請求次數，而不是等競態自己重現**：競態要靠時序碰巧才看得到，
+    次數是確定性的——修掉前一定是 2、修掉後一定是 1（實測過兩邊）。
+    """
+    username, password = make_user(username="e2e_sys5", role="superadmin")
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page()
+        try:
+            _login(page, live_server, username, password)
+            hits = []
+            page.on("request", lambda r: hits.append(r.url)
+                    if "/api/settings/backup-retention" in r.url else None)
+            page.goto(f"{live_server}{PAGE}")
+            page.wait_for_selector(RET_CARD, timeout=45000)
+            page.wait_for_timeout(1200)   # 第二次 init 若存在，這段時間一定跑得完
+            assert len(hits) == 1, (
+                f"init() 應該只跑一次，實際打了 {len(hits)} 次設定 API"
+                "（body 同時有 x-data 與 x-init 就會跑兩遍）")
         finally:
             browser.close()

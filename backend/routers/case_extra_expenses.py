@@ -106,7 +106,26 @@ def _row_to_dict(r) -> dict:
         "updatedByName": r["updated_by_name"],
         "status":        r["status"],
         "approval":      approval,
+        # 變更申請（DB v76）——已核准之後的編輯走這條，核准才生效，見本檔末段
+        "changeStatus":   _col(r, "change_status", ""),
+        "change":         _jcol(r, "change_json"),
+        "changeApproval": _jcol(r, "change_approval_json"),
     }
+
+
+def _col(r, name, default=None):
+    """sqlite3.Row 取欄位，欄位不存在時回 default（migration 還沒跑到的保險）。"""
+    try:
+        return r[name]
+    except (IndexError, KeyError):
+        return default
+
+
+def _jcol(r, name) -> dict:
+    try:
+        return json.loads(_col(r, name) or "{}")
+    except Exception:
+        return {}
 
 
 def _load(conn, quote_no: str, exp_id: int):
@@ -471,14 +490,26 @@ def reject_extra_expense(quote_no: str, exp_id: int, body: dict = Body(default={
 # 定位的，額外支出一旦新增/刪除/重排，索引就會指到別筆去。改成用資料列的 id，
 # 這也是把資料正規化出來的好處之一。
 #
-# 附件不受「已核准不可編輯」限制：**補傳憑證是會計常態**，核准後才拿到紙本發票
-# 是很正常的事，擋下來只會逼人去改別的欄位。但金額、說明那些仍然鎖住。
+# ⚠️ **2026-09-11 行為變更（使用者交辦）**：已核准之後**附件一併上鎖**，不能再上傳
+# 或刪除。原本刻意開放（「補傳憑證是會計常態」）的設計被推翻了——理由是核准當下
+# 簽核人看到的憑證，跟事後被換掉的憑證不是同一份，等於簽核簽了個會變的東西。
+# 要在核准後補憑證，改走下面的「變更申請」：新檔案先存成待核准附件，簽核通過的
+# 那一刻才併進正式附件清單（`_apply_change()`）。
 
 def _files_of(row) -> list:
     try:
         return json.loads(row["files_json"] or "[]")
     except Exception:
         return []
+
+
+def _guard_files_editable(row):
+    """附件是否還能動。已核准就一律擋，訊息要明確指向變更申請這條路——
+    只回一句「不可修改」的話，使用者只會以為系統壞了。"""
+    if row["status"] == "已核准":
+        raise HTTPException(
+            409, "這筆額外支出已核准，附件已上鎖。要補憑證請按「編輯」提出變更申請，"
+                 "新附件會在簽核通過後一併生效")
 
 
 @router.post("/api/quotations/{quote_no}/extra-expenses/{exp_id}/files", status_code=201)
@@ -490,6 +521,7 @@ async def upload_extra_expense_files(quote_no: str, exp_id: int,
     try:
         _guard_case(conn, quote_no, user)
         row = _load(conn, quote_no, exp_id)
+        _guard_files_editable(row)
         new_files = await save_document_files(
             "case_extra_expense", f"{quote_no}_{exp_id}", files,
             user.get("display_name") or user["username"])
@@ -517,6 +549,7 @@ def delete_extra_expense_file(quote_no: str, exp_id: int, file_id: str,
     try:
         _guard_case(conn, quote_no, user)
         row = _load(conn, quote_no, exp_id)
+        _guard_files_editable(row)
         remaining = delete_document_file(
             "case_extra_expense", f"{quote_no}_{exp_id}", _files_of(row), file_id)
         conn.execute(
@@ -532,3 +565,415 @@ def delete_extra_expense_file(quote_no: str, exp_id: int, file_id: str,
     _audit(_tok(authorization), "extra_expense.delete_file", "quotation", quote_no,
            f"{quote_no} 額外支出 #{exp_id} 刪除附件")
     return {"ok": True}
+
+
+# ── 變更申請：已核准之後的編輯 ────────────────────────────────────────────────
+#
+# 使用者交辦（2026-09-11 第二輪）：「額外支出上傳照片功能已核准要上鎖，增加編輯
+# 按鈕，編輯需要審核。」並明確指定**原核准金額不動，核准後才生效**。
+#
+# 所以這裡刻意**不是**「把狀態退回草稿再改」——那樣做的話，人一按編輯，報表上的
+# 成本當場就變了，簽核變成事後追認。改成：提議的新內容存在 `change_json`，本體
+# 的 `status`／金額完全不動，簽核通過的那一刻才由 `_apply_change()` 覆蓋回去。
+#
+# **狀態機**（`change_status`，跟本體的 `status` 是兩條獨立的線）
+#
+#     （無）──存草稿──▶ 草稿 ──submit──▶ 待審核 ──▶ 簽核中 ──approve──▶ 套用並清空
+#                        ▲                              │
+#                        └────── 已駁回 ◀────reject──────┘
+#
+# 附件：新檔案在草稿階段就實際落地（存在同一個文件資料夾），但只記在
+# `change_json.addFiles`，**不進 `files_json`**，所以核准前不會出現在正式附件清單、
+# 也不會被結案報表撈到。撤銷或駁回後撤銷時，實體檔案一併刪掉，不留孤兒檔。
+#
+# 刻意**不支援**「刪除已核准的既有附件」：已經被簽核人看過、已計入成本的憑證不該
+# 被單方面移除，語意跟「已核准的項目不可刪除」一致（要移除請找最高管理員）。
+
+CHANGE_EDITABLE = ("", "草稿", "已駁回")
+
+
+def _change_of(row) -> dict:
+    return _jcol(row, "change_json")
+
+
+def _proposal_from(body: ExtraExpenseIn, keep_files: list) -> dict:
+    """把送進來的欄位組成提議內容。金額一律後端算（同 `_recalc()` 的理由）。"""
+    return {
+        "category":      body.category or "其他",
+        "description":   (body.description or "").strip(),
+        "qty":           float(body.qty or 0),
+        "unit":          (body.unit or "").strip(),
+        "unitCost":      float(body.unitCost or 0),
+        "totalCost":     _recalc(body),
+        "note":          (body.note or "").strip(),
+        "expenseDate":   (body.expenseDate or "").strip(),
+        "docNo":         (body.docNo or "").strip(),
+        "payerUsername": (body.payerUsername or "").strip(),
+        "payerName":     (body.payerName or "").strip(),
+        "addFiles":      keep_files,
+    }
+
+
+def _clear_change(conn, quote_no: str, exp_id: int):
+    conn.execute(
+        "UPDATE case_extra_expenses SET change_status='', change_json='{}', "
+        "change_approval_json='{}' WHERE id=? AND quote_no=?", (exp_id, quote_no))
+
+
+def _discard_pending_files(quote_no: str, exp_id: int, change: dict):
+    """撤銷／駁回後撤銷時刪掉待核准附件的實體檔案。失敗不擋流程——留一個孤兒檔
+    比讓使用者撤銷不掉好。"""
+    files = change.get("addFiles") or []
+    for f in list(files):
+        try:
+            delete_document_file("case_extra_expense", f"{quote_no}_{exp_id}", files, f.get("id"))
+        except Exception:
+            pass
+
+
+def _apply_change(conn, row, change: dict, actor_display: str, now: str) -> float:
+    """把核准通過的提議內容覆蓋回本體，並把待核准附件併進正式附件清單。
+
+    原核准紀錄留在 `approval_json`，這次變更的前後值 append 進
+    `approval_json.changeHistory`——查帳要看的是「這筆從多少改成多少、誰核准的」，
+    把 approval_json 整個換掉就查不到了。"""
+    exp_id, quote_no = row["id"], row["quote_no"]
+    total = round(max(0.0, float(change.get("qty") or 0)) *
+                  max(0.0, float(change.get("unitCost") or 0)), 2)
+    merged_files = _files_of(row) + (change.get("addFiles") or [])
+
+    appr = _jcol(row, "approval_json")
+    appr.setdefault("changeHistory", []).append({
+        "at": now, "byDisplay": actor_display,
+        "requestedByDisplay": change.get("requestedByDisplay") or "",
+        "from": {"description": row["description"], "totalCost": row["total_cost"],
+                 "qty": row["qty"], "unitCost": row["unit_cost"],
+                 "category": row["category"], "expenseDate": row["expense_date"],
+                 "docNo": row["doc_no"], "note": row["note"],
+                 "payerName": row["payer_name"]},
+        "to":   {"description": change.get("description"), "totalCost": total,
+                 "qty": change.get("qty"), "unitCost": change.get("unitCost"),
+                 "category": change.get("category"), "expenseDate": change.get("expenseDate"),
+                 "docNo": change.get("docNo"), "note": change.get("note"),
+                 "payerName": change.get("payerName")},
+        "addedFiles": [f.get("filename") for f in (change.get("addFiles") or [])],
+    })
+
+    conn.execute(
+        "UPDATE case_extra_expenses SET category=?, description=?, qty=?, unit=?, "
+        " unit_cost=?, total_cost=?, note=?, expense_date=?, doc_no=?, "
+        " payer_username=?, payer_name=?, files_json=?, updated_at=?, updated_by_name=?, "
+        " approval_json=?, change_status='', change_json='{}', change_approval_json='{}' "
+        "WHERE id=? AND quote_no=?",
+        (change.get("category") or "其他", change.get("description") or "",
+         float(change.get("qty") or 0), change.get("unit") or "",
+         float(change.get("unitCost") or 0), total, change.get("note") or "",
+         change.get("expenseDate") or "", change.get("docNo") or "",
+         change.get("payerUsername") or "", change.get("payerName") or "",
+         json.dumps(merged_files, ensure_ascii=False), now, actor_display,
+         json.dumps(appr, ensure_ascii=False), exp_id, quote_no),
+    )
+    return total
+
+
+@router.put("/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request")
+def upsert_change_request(quote_no: str, exp_id: int, body: ExtraExpenseIn = Body(...),
+                          authorization: str = Header(None)):
+    """建立／更新變更申請草稿。只有**已核准**的項目才走這條；草稿與已駁回本來就
+    可以直接編輯（`update_extra_expense()`），不需要繞一圈。"""
+    user = _require_user(authorization)
+    _validate(body)
+    conn = get_db()
+    try:
+        _guard_case(conn, quote_no, user)
+        row = _load(conn, quote_no, exp_id)
+        if row["status"] != "已核准":
+            raise HTTPException(409, f"「{row['status']}」狀態請直接編輯，不需要提變更申請")
+        if not _can_modify(row, user):
+            raise HTTPException(403, "只有填寫人本人或管理員可以提出變更申請")
+        cs = _col(row, "change_status", "") or ""
+        if cs not in CHANGE_EDITABLE:
+            raise HTTPException(409, f"已有一筆變更申請在「{cs}」，請先完成或撤銷它")
+
+        # 已駁回後再修改：沿用同一批待核准附件，不要讓使用者重傳一次
+        proposal = _proposal_from(body, (_change_of(row).get("addFiles") or []))
+        now = datetime.now().isoformat(timespec="seconds")
+        conn.execute(
+            "UPDATE case_extra_expenses SET change_status='草稿', change_json=?, "
+            "change_approval_json='{}' WHERE id=? AND quote_no=?",
+            (json.dumps(proposal, ensure_ascii=False), exp_id, quote_no))
+        conn.commit()
+        _audit(_tok(authorization), "extra_expense.change_draft", "quotation", quote_no,
+               f"{quote_no} 額外支出 #{exp_id} 變更申請草稿"
+               f"（NT$ {float(row['total_cost'] or 0):,.0f} → NT$ {proposal['totalCost']:,.0f}）")
+        return {"ok": True, "changeStatus": "草稿", "totalCost": proposal["totalCost"],
+                "updatedAt": now}
+    finally:
+        conn.close()
+
+
+@router.delete("/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request")
+def cancel_change_request(quote_no: str, exp_id: int, authorization: str = Header(None)):
+    """撤銷變更申請（草稿或已駁回）。待核准附件的實體檔案一併刪除。
+    送審中的要撤銷請先請簽核人駁回——否則簽核人手上的東西會憑空消失。"""
+    user = _require_user(authorization)
+    conn = get_db()
+    try:
+        _guard_case(conn, quote_no, user)
+        row = _load(conn, quote_no, exp_id)
+        cs = _col(row, "change_status", "") or ""
+        if cs not in ("草稿", "已駁回"):
+            raise HTTPException(409, f"「{cs or '無'}」狀態的變更申請不可撤銷")
+        if not _can_modify(row, user):
+            raise HTTPException(403, "只有填寫人本人或管理員可以撤銷變更申請")
+        _discard_pending_files(quote_no, exp_id, _change_of(row))
+        _clear_change(conn, quote_no, exp_id)
+        conn.commit()
+        _audit(_tok(authorization), "extra_expense.change_cancel", "quotation", quote_no,
+               f"{quote_no} 額外支出 #{exp_id} 撤銷變更申請")
+        return {"ok": True}
+    finally:
+        conn.close()
+
+
+@router.post("/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request/files",
+             status_code=201)
+async def upload_change_request_files(quote_no: str, exp_id: int,
+                                      files: List[UploadFile] = File(...),
+                                      authorization: str = Header(None)):
+    """待核准附件：檔案實際落地，但只記在 `change_json.addFiles`，核准後才併進
+    `files_json`。核准前任何讀取端（案件財務、結案報表 PDF）都看不到它。"""
+    user = _require_user(authorization)
+    conn = get_db()
+    try:
+        _guard_case(conn, quote_no, user)
+        row = _load(conn, quote_no, exp_id)
+        cs = _col(row, "change_status", "") or ""
+        if cs not in ("草稿", "已駁回"):
+            raise HTTPException(409, "請先按「編輯」建立變更申請草稿，再上傳附件")
+        if not _can_modify(row, user):
+            raise HTTPException(403, "只有填寫人本人或管理員可以上傳變更申請附件")
+        display = user.get("display_name") or user["username"]
+        new_files = await save_document_files(
+            "case_extra_expense", f"{quote_no}_{exp_id}", files, display)
+        change = _change_of(row)
+        change["addFiles"] = (change.get("addFiles") or []) + new_files
+        conn.execute("UPDATE case_extra_expenses SET change_json=? WHERE id=? AND quote_no=?",
+                     (json.dumps(change, ensure_ascii=False), exp_id, quote_no))
+        conn.commit()
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "extra_expense.change_upload_files", "quotation", quote_no,
+           f"{quote_no} 額外支出 #{exp_id} 變更申請上傳 {len(new_files)} 個待核准附件")
+    return {"ok": True, "added": len(new_files), "files": new_files}
+
+
+@router.delete("/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request/files/{file_id}")
+def delete_change_request_file(quote_no: str, exp_id: int, file_id: str,
+                               authorization: str = Header(None)):
+    user = _require_user(authorization)
+    conn = get_db()
+    try:
+        _guard_case(conn, quote_no, user)
+        row = _load(conn, quote_no, exp_id)
+        cs = _col(row, "change_status", "") or ""
+        if cs not in ("草稿", "已駁回"):
+            raise HTTPException(409, "送審中的變更申請不可增刪附件")
+        if not _can_modify(row, user):
+            raise HTTPException(403, "只有填寫人本人或管理員可以刪除變更申請附件")
+        change = _change_of(row)
+        change["addFiles"] = delete_document_file(
+            "case_extra_expense", f"{quote_no}_{exp_id}", change.get("addFiles") or [], file_id)
+        conn.execute("UPDATE case_extra_expenses SET change_json=? WHERE id=? AND quote_no=?",
+                     (json.dumps(change, ensure_ascii=False), exp_id, quote_no))
+        conn.commit()
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "extra_expense.change_delete_file", "quotation", quote_no,
+           f"{quote_no} 額外支出 #{exp_id} 刪除變更申請待核准附件")
+    return {"ok": True}
+
+
+@router.post("/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request/submit")
+def submit_change_request(quote_no: str, exp_id: int, authorization: str = Header(None)):
+    """送審變更申請。簽核流程沿用同一個文件類型 `extra_expense`（簽核設定頁不必
+    多一個分頁——「改一筆已核准的支出」跟「新增一筆支出」該由同一批人把關）。
+
+    沒有設定任何簽核層時直接套用，理由同 `submit_extra_expense()`。"""
+    user = _require_user(authorization)
+    conn = get_db()
+    try:
+        _guard_case(conn, quote_no, user)
+        row = _load(conn, quote_no, exp_id)
+        cs = _col(row, "change_status", "") or ""
+        if cs not in ("草稿", "已駁回"):
+            raise HTTPException(409, f"「{cs or '無'}」狀態的變更申請不可送審")
+        if not _can_modify(row, user):
+            raise HTTPException(403, "只有填寫人本人或管理員可以送審變更申請")
+        change = _change_of(row)
+        if not (change.get("description") or "").strip():
+            raise HTTPException(400, "變更申請缺少品項說明，請重新編輯")
+
+        flow_setting = resolve_active_flow_setting("extra_expense")
+        try:
+            tiers = _setting_to_active_tiers(flow_setting, conn, user["username"])
+        except UnresolvedManagerError as e:
+            raise HTTPException(400, str(e))
+
+        now = datetime.now().isoformat(timespec="seconds")
+        display = user.get("display_name") or user["username"]
+        old_total = float(row["total_cost"] or 0)
+        new_total = float(change.get("totalCost") or 0)
+        label = f"{change.get('description')}（NT$ {old_total:,.0f} → NT$ {new_total:,.0f}）"
+
+        if not tiers:
+            change["requestedByDisplay"] = display
+            total = _apply_change(conn, row, change, display, now)
+            conn.commit()
+            _audit(_tok(authorization), "extra_expense.change_auto_apply", "quotation", quote_no,
+                   f"{quote_no} 額外支出 #{exp_id} {label}：未設定簽核層，變更直接生效")
+            return {"ok": True, "changeStatus": "", "applied": True,
+                    "autoApproved": True, "totalCost": total}
+
+        approval = {
+            "requestedBy":        user["username"],
+            "requestedByDisplay": display,
+            "requestedAt":        now,
+            "tiers":              tiers,
+            "currentTier":        0,
+        }
+        conn.execute(
+            "UPDATE case_extra_expenses SET change_status='待審核', change_approval_json=? "
+            "WHERE id=? AND quote_no=?",
+            (json.dumps(approval, ensure_ascii=False), exp_id, quote_no))
+        conn.commit()
+
+        for a in (tiers[0].get("approvers") or []):
+            _notify(a["username"], "extra_expense_change_request", str(exp_id), quote_no,
+                    f"案件 {quote_no} 的額外支出變更申請 {label} 需要您簽核")
+        _audit(_tok(authorization), "extra_expense.change_submit", "quotation", quote_no,
+               f"{quote_no} 額外支出 #{exp_id} 變更申請 {label} 送審", {"tierCount": len(tiers)})
+        return {"ok": True, "changeStatus": "待審核", "tierCount": len(tiers)}
+    finally:
+        conn.close()
+
+
+@router.post("/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request/approve")
+def approve_change_request(quote_no: str, exp_id: int, body: dict = Body(default={}),
+                           authorization: str = Header(None)):
+    """核准當層；全部層都過了才真的套用（`_apply_change()`）。在那之前本體的金額
+    完全不動——這正是使用者要的「原核准金額不動，核准後才生效」。"""
+    user = _require_user(authorization)
+    conn = get_db()
+    try:
+        _guard_case(conn, quote_no, user)
+        row = _load(conn, quote_no, exp_id)
+        cs = _col(row, "change_status", "") or ""
+        if cs not in ("待審核", "簽核中"):
+            raise HTTPException(409, f"「{cs or '無'}」狀態的變更申請不在簽核中")
+
+        appr = _jcol(row, "change_approval_json")
+        tiers = _active_tiers(appr)
+        ct = _current_tier_idx(appr)
+        err = check_no_tier_self_approval(conn, appr, user)
+        if err:
+            raise HTTPException(403, err)
+        check_approve_permission(tiers, ct, user["username"], conn)
+
+        now = datetime.now().isoformat(timespec="seconds")
+        display = user.get("display_name") or user["username"]
+        for a in (tiers[ct].get("approvers") or []):
+            if a.get("username") == user["username"] or not a.get("approvedAt"):
+                a["approvedAt"] = now
+                a["approvedByDisplay"] = display
+                break
+
+        appr["tiers"] = tiers
+        appr["currentTier"] = ct + 1
+        done = appr["currentTier"] >= len(tiers)
+        appr.setdefault("history", []).append(
+            {"at": now, "by": user["username"], "byDisplay": display,
+             "action": "approve", "tier": ct, "comment": (body or {}).get("comment") or ""})
+
+        change = _change_of(row)
+        old_total = float(row["total_cost"] or 0)
+        new_total = float(change.get("totalCost") or 0)
+        label = f"{change.get('description')}（NT$ {old_total:,.0f} → NT$ {new_total:,.0f}）"
+
+        if done:
+            # requestedByDisplay 要在 _apply_change() 的稽核軌跡裡留下，先塞回 change
+            change["requestedByDisplay"] = appr.get("requestedByDisplay") or ""
+            applied_total = _apply_change(conn, row, change, display, now)
+            conn.commit()
+            requester = appr.get("requestedBy")
+            if requester:
+                _notify(requester, "extra_expense_change_approved", str(exp_id), quote_no,
+                        f"案件 {quote_no} 的額外支出變更 {label} 已核准並生效")
+            notify_module_activity("案件管理", "額外支出變更核准", display, f"{quote_no}｜{label}",
+                                   f"case-management.html?q={quote_no}")
+            _audit(_tok(authorization), "extra_expense.change_approve", "quotation", quote_no,
+                   f"{quote_no} 額外支出 #{exp_id} 變更 {label} 第 {ct + 1} 層核准 → 已生效")
+            return {"ok": True, "changeStatus": "", "applied": True, "totalCost": applied_total}
+
+        conn.execute(
+            "UPDATE case_extra_expenses SET change_status='簽核中', change_approval_json=? "
+            "WHERE id=? AND quote_no=?",
+            (json.dumps(appr, ensure_ascii=False), exp_id, quote_no))
+        conn.commit()
+        for a in (tiers[appr["currentTier"]].get("approvers") or []):
+            _notify(a["username"], "extra_expense_change_request", str(exp_id), quote_no,
+                    f"案件 {quote_no} 的額外支出變更申請 {label} 需要您簽核")
+        _audit(_tok(authorization), "extra_expense.change_approve", "quotation", quote_no,
+               f"{quote_no} 額外支出 #{exp_id} 變更 {label} 第 {ct + 1} 層核准 → 簽核中")
+        return {"ok": True, "changeStatus": "簽核中", "currentTier": appr["currentTier"]}
+    finally:
+        conn.close()
+
+
+@router.post("/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request/reject")
+def reject_change_request(quote_no: str, exp_id: int, body: dict = Body(default={}),
+                          authorization: str = Header(None)):
+    """駁回變更申請 → 回到「已駁回」，申請人可以改完再送一次或整個撤銷。
+    本體的金額從頭到尾沒被動過，所以駁回不需要回滾任何東西。"""
+    user = _require_user(authorization)
+    conn = get_db()
+    try:
+        _guard_case(conn, quote_no, user)
+        row = _load(conn, quote_no, exp_id)
+        cs = _col(row, "change_status", "") or ""
+        if cs not in ("待審核", "簽核中"):
+            raise HTTPException(409, f"「{cs or '無'}」狀態的變更申請不在簽核中")
+
+        appr = _jcol(row, "change_approval_json")
+        tiers = _active_tiers(appr)
+        ct = _current_tier_idx(appr)
+        check_reject_permission(tiers, ct, user, conn)
+
+        now = datetime.now().isoformat(timespec="seconds")
+        display = user.get("display_name") or user["username"]
+        reason = ((body or {}).get("reason") or "").strip()
+        appr.setdefault("history", []).append(
+            {"at": now, "by": user["username"], "byDisplay": display,
+             "action": "reject", "tier": ct, "comment": reason})
+        appr["rejectedAt"] = now
+        appr["rejectedByDisplay"] = display
+        appr["rejectReason"] = reason
+
+        conn.execute(
+            "UPDATE case_extra_expenses SET change_status='已駁回', change_approval_json=? "
+            "WHERE id=? AND quote_no=?",
+            (json.dumps(appr, ensure_ascii=False), exp_id, quote_no))
+        conn.commit()
+
+        change = _change_of(row)
+        label = f"{change.get('description')}（NT$ {float(change.get('totalCost') or 0):,.0f}）"
+        requester = appr.get("requestedBy")
+        if requester:
+            _notify(requester, "extra_expense_change_rejected", str(exp_id), quote_no,
+                    f"案件 {quote_no} 的額外支出變更申請 {label} 已被駁回"
+                    + (f"：{reason}" if reason else ""))
+        _audit(_tok(authorization), "extra_expense.change_reject", "quotation", quote_no,
+               f"{quote_no} 額外支出 #{exp_id} 變更申請 {label} 被駁回" + (f"：{reason}" if reason else ""))
+        return {"ok": True, "changeStatus": "已駁回"}
+    finally:
+        conn.close()
