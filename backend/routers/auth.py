@@ -213,6 +213,11 @@ class TotpDisableIn(BaseModel):
     password: str
 
 
+class TotpRegenRecoveryIn(BaseModel):
+    """重新產生救援碼——比照 TotpDisableIn，用目前密碼確認身分。"""
+    password: str
+
+
 class SetUnlockPasswordIn(BaseModel):
     unlock_password: str
 
@@ -498,6 +503,7 @@ def auth_login_totp(body: TotpLoginVerifyIn, request: Request):
     code = (body.code or "").strip()
     ok = False
     used_recovery = False
+    recovery_remaining = None   # 只有這次真的用掉救援碼時才有值
     if code.isdigit() and len(code) == 6:
         ok = pyotp.TOTP(row["totp_secret"]).verify(code, valid_window=1)
     else:
@@ -507,6 +513,7 @@ def auth_login_totp(body: TotpLoginVerifyIn, request: Request):
                 ok = True
                 used_recovery = True
                 codes.pop(i)
+                recovery_remaining = len(codes)
                 conn.execute("UPDATE users SET totp_recovery_codes=? WHERE id=?",
                              (json.dumps(codes, ensure_ascii=False), row["id"]))
                 conn.commit()
@@ -531,7 +538,11 @@ def auth_login_totp(body: TotpLoginVerifyIn, request: Request):
     _rl_clear(ip)
     if used_recovery:
         _audit(result["token"], "auth.totp_recovery_used", "user", row["username"],
-               row["display_name"] or row["username"])
+               f"{row['display_name'] or row['username']}：使用救援碼登入，剩餘 {recovery_remaining} 組")
+        # 2026-09-11：把剩餘組數一起回給前端。救援碼用掉不會有任何提示，使用者
+        # 通常是在最後一組也用完、驗證 App 又不在手邊時才發現被鎖在外面——那時
+        # 已經來不及自助補救（重產端點要先登入）。登入當下就講，還有機會處理。
+        result["recoveryCodesRemaining"] = recovery_remaining
     return result
 
 
@@ -650,12 +661,27 @@ def login_qr_status(challenge: str):
 
 @router.get("/api/auth/totp/status")
 def totp_status(authorization: str = Header(None)):
+    """2026-09-11 新增 `recoveryCodesRemaining`：救援碼是一次性的，用掉就從清單
+    移除，但在這之前**沒有任何地方看得到還剩幾組**——使用者只會在最後一組也用完、
+    驗證 App 又剛好不在手邊時，才發現自己被鎖在外面，而那時已經來不及自助補救
+    （重產端點需要先登入）。回傳剩餘組數讓「修改密碼」頁能提早示警。
+
+    只回組數、不回內容：DB 只存雜湊，明文從一開始就只在產生當下出現一次。"""
     user = _require_user(authorization)
     conn = get_db()
-    row = conn.execute("SELECT COALESCE(totp_enabled,0) AS totp_enabled FROM users WHERE id=?",
-                        (user["id"],)).fetchone()
+    row = conn.execute(
+        "SELECT COALESCE(totp_enabled,0) AS totp_enabled, totp_recovery_codes "
+        "FROM users WHERE id=?", (user["id"],)).fetchone()
     conn.close()
-    return {"enabled": bool(row["totp_enabled"]) if row else False}
+    if not row:
+        return {"enabled": False, "recoveryCodesRemaining": 0}
+    try:
+        remaining = len(json.loads(row["totp_recovery_codes"] or "[]"))
+    except Exception:
+        # 這個欄位是自由格式 JSON，人工改過的資料不該讓整支狀態端點 500——
+        # 回 0 會讓畫面示警「已用罄」，比整頁壞掉好判斷
+        remaining = 0
+    return {"enabled": bool(row["totp_enabled"]), "recoveryCodesRemaining": remaining}
 
 
 @router.post("/api/auth/totp/setup")
@@ -704,6 +730,49 @@ def totp_enable(body: TotpEnableIn, authorization: str = Header(None)):
     _audit(_tok(authorization), "auth.totp_enabled", "user", user["username"],
            user.get("display_name") or user["username"])
     return {"ok": True, "recoveryCodes": recovery_plain}
+
+
+@router.post("/api/auth/totp/recovery-codes/regenerate")
+def totp_regenerate_recovery_codes(body: TotpRegenRecoveryIn, authorization: str = Header(None)):
+    """重新產生 10 組救援碼（2026-09-11 新增）。
+
+    **為什麼需要**：救援碼是一次性的，用一組少一組，用完就再也沒有「驗證 App
+    不在手邊」時的退路。先前唯一的補救方式是停用 TOTP 再重新啟用一輪——那會
+    連帶把密鑰也換掉，等於要重掃一次 QR code，成本高到沒人會主動做，結果就是
+    大家用到剩最後一組也不處理。這支端點讓補充救援碼跟密鑰脫鉤。
+
+    **語意是「整組換掉」不是「補到 10 組」**：舊的救援碼在這次呼叫後全部失效。
+    理由是印出來/存起來的那張舊清單，使用者無從知道其中哪幾組還有效——若採
+    「補足」語意，新舊混在一起會讓人以為舊清單整張都還能用。回應會明講這件事。
+
+    **要求目前密碼**：比照同檔 totp_disable()／verify-unlock 的敏感操作慣例。
+    不另外要求驗證碼——會呼叫這支的情境正是「驗證 App 拿不到」，再要一次
+    驗證碼等於把唯一的出口也堵住。已登入的 session ＋ 密碼是這裡的兩道。
+
+    **必須已啟用 TOTP**：沒啟用時救援碼沒有任何意義，回 400 而不是默默產生一組
+    永遠用不到的碼。
+    """
+    user = _require_user(authorization)
+    conn = get_db()
+    row = conn.execute(
+        "SELECT password_hash, COALESCE(totp_enabled,0) AS totp_enabled FROM users WHERE id=?",
+        (user["id"],)).fetchone()
+    if not row or not _verify_pw(body.password, row["password_hash"]):
+        conn.close()
+        raise HTTPException(400, "密碼不正確")
+    if not row["totp_enabled"]:
+        conn.close()
+        raise HTTPException(400, "尚未啟用兩步驟驗證，沒有救援碼可以重新產生")
+
+    recovery_plain  = [secrets.token_hex(4) for _ in range(10)]
+    recovery_hashed = [_hash_pw(c) for c in recovery_plain]
+    conn.execute("UPDATE users SET totp_recovery_codes=? WHERE id=?",
+                 (json.dumps(recovery_hashed, ensure_ascii=False), user["id"]))
+    conn.commit()
+    conn.close()
+    _audit(_tok(authorization), "auth.totp_recovery_regenerated", "user", user["username"],
+           f"{user.get('display_name') or user['username']}：重新產生 10 組救援碼，舊的全部失效")
+    return {"ok": True, "recoveryCodes": recovery_plain, "replacedPrevious": True}
 
 
 @router.post("/api/auth/totp/disable")

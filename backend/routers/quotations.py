@@ -233,7 +233,8 @@ def _notify_case_change_requested_bg(quote_no: str, summary: str, requester_disp
     )
 
 
-def _deny_if_case_locked_unsupported(conn, quote_no: str, authorization: str = None) -> None:
+def _deny_if_case_locked_unsupported(conn, quote_no: str, authorization: str = None,
+                                     op: str = "") -> None:
     """給不支援排隊審核的細項端點（案件執行階段的新增/編輯/刪除/排序/加入
     負責人/移除負責人/前置階段/新增拜訪/編輯拜訪/刪除拜訪共 10 支，加上款項
     稅額沖銷申請/撤銷/核准 3 支，合計 13 支）用：已結案案件
@@ -245,14 +246,24 @@ def _deny_if_case_locked_unsupported(conn, quote_no: str, authorization: str = N
     半解鎖排隊審核的涵蓋範圍」時沒有任何實際使用頻率數據可看——這裡補上一筆
     audit_log（action='case.locked_edit_denied'），純記錄用途，不影響回應內容，
     之後累積一段時間就能看出這道限制實際被撞到的頻率，用數據而非猜測決定
-    要不要擴大範圍。"""
+    要不要擴大範圍。
+
+    2026-09-11：補上 `op` 操作標籤。先前只記單號，查得出「這道牆被撞了幾次」，
+    查不出「該優先開放哪幾支」——而後者才是當初要收集數據來決定的事。13 個
+    呼叫點各自傳入自己的標籤（例如「案件階段-新增」「稅額沖銷-核准」），
+    detail 格式為 `{單號} 已結案，此操作不支援排隊審核，直接擋下｜操作：{標籤}`。
+    前綴保持不變，舊紀錄仍可一起統計，只是沒有標籤那一段。"""
     row = conn.execute("SELECT deal_tag FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
     if not row:
         raise HTTPException(404, f"報價單 {quote_no} 不存在")
     if (row["deal_tag"] or "") == "已結案":
         if authorization:
-            _audit(_tok(authorization), "case.locked_edit_denied", "quotation", quote_no,
-                   f"{quote_no} 已結案，此操作不支援排隊審核，直接擋下")
+            # 前綴刻意保持原樣，讓 2026-08-28 起累積的舊紀錄仍可一起統計；
+            # 操作標籤接在後面，用「｜操作：」分隔，之後要分組只要 split 一次
+            detail = f"{quote_no} 已結案，此操作不支援排隊審核，直接擋下"
+            if op:
+                detail += f"｜操作：{op}"
+            _audit(_tok(authorization), "case.locked_edit_denied", "quotation", quote_no, detail)
         raise HTTPException(
             403,
             "案件已結案並鎖定，此操作不支援於已結案案件（如需修正請透過案件資料整體編輯，"
@@ -2112,7 +2123,7 @@ def create_case_stage(quote_no: str, body: dict = Body(...), authorization: str 
     docstring 更正紀錄，本行原誤留 Phase 2 剛新增時「尚未接進」的舊字樣）。"""
     _require_user(authorization)
     conn = get_db()
-    _deny_if_case_locked_unsupported(conn, quote_no, authorization)
+    _deny_if_case_locked_unsupported(conn, quote_no, authorization, op="案件階段-新增")
     max_order = conn.execute(
         "SELECT COALESCE(MAX(sort_order), -1) m FROM case_stages WHERE quote_no=?", (quote_no,)
     ).fetchone()["m"]
@@ -2140,7 +2151,7 @@ def update_case_stage(quote_no: str, stage_id: int, body: dict = Body(...), auth
     CRUD 端點，已由前端實際呼叫（見 create_case_stage() docstring）。"""
     _require_user(authorization)
     conn = get_db()
-    _deny_if_case_locked_unsupported(conn, quote_no, authorization)
+    _deny_if_case_locked_unsupported(conn, quote_no, authorization, op="案件階段-編輯")
     sr = _get_stage_row(conn, quote_no, stage_id)
     if not sr:
         conn.close(); raise HTTPException(404, "階段不存在")
@@ -2171,7 +2182,7 @@ def delete_case_stage(quote_no: str, stage_id: int, authorization: str = Header(
     （見 create_case_stage() docstring）。"""
     _require_user(authorization)
     conn = get_db()
-    _deny_if_case_locked_unsupported(conn, quote_no, authorization)
+    _deny_if_case_locked_unsupported(conn, quote_no, authorization, op="案件階段-刪除")
     sr = _get_stage_row(conn, quote_no, stage_id)
     if not sr:
         conn.close(); raise HTTPException(404, "階段不存在")
@@ -2199,7 +2210,7 @@ def reorder_case_stages(quote_no: str, body: dict = Body(...), authorization: st
     _require_user(authorization)
     ordered_ids = body.get("orderedIds") or []
     conn = get_db()
-    _deny_if_case_locked_unsupported(conn, quote_no, authorization)
+    _deny_if_case_locked_unsupported(conn, quote_no, authorization, op="案件階段-排序")
     valid_ids = {r["id"] for r in conn.execute(
         "SELECT id FROM case_stages WHERE quote_no=?", (quote_no,)
     ).fetchall()}
@@ -2223,7 +2234,7 @@ def add_stage_assignee(quote_no: str, stage_id: int, body: dict = Body(...), aut
     if not username:
         raise HTTPException(400, "請提供 username")
     conn = get_db()
-    _deny_if_case_locked_unsupported(conn, quote_no, authorization)
+    _deny_if_case_locked_unsupported(conn, quote_no, authorization, op="案件階段-加入負責人")
     sr = _get_stage_row(conn, quote_no, stage_id)
     if not sr:
         conn.close(); raise HTTPException(404, "階段不存在")
@@ -2246,7 +2257,7 @@ def remove_stage_assignee(quote_no: str, stage_id: int, username: str, authoriza
     點，已由前端實際呼叫（見 create_case_stage() docstring）。"""
     _require_user(authorization)
     conn = get_db()
-    _deny_if_case_locked_unsupported(conn, quote_no, authorization)
+    _deny_if_case_locked_unsupported(conn, quote_no, authorization, op="案件階段-移除負責人")
     sr = _get_stage_row(conn, quote_no, stage_id)
     if not sr:
         conn.close(); raise HTTPException(404, "階段不存在")
@@ -2268,7 +2279,7 @@ def toggle_stage_dependency(quote_no: str, stage_id: int, candidate_id: int, aut
     第二階段 CRUD 端點，已由前端實際呼叫（見 create_case_stage() docstring）。"""
     _require_user(authorization)
     conn = get_db()
-    _deny_if_case_locked_unsupported(conn, quote_no, authorization)
+    _deny_if_case_locked_unsupported(conn, quote_no, authorization, op="案件階段-前置階段")
     sr = _get_stage_row(conn, quote_no, stage_id)
     if not sr:
         conn.close(); raise HTTPException(404, "階段不存在")
@@ -2298,7 +2309,7 @@ def add_stage_visit(quote_no: str, stage_id: int, body: dict = Body(...), author
     已由前端實際呼叫（見 create_case_stage() docstring）。"""
     _require_user(authorization)
     conn = get_db()
-    _deny_if_case_locked_unsupported(conn, quote_no, authorization)
+    _deny_if_case_locked_unsupported(conn, quote_no, authorization, op="拜訪紀錄-新增")
     sr = _get_stage_row(conn, quote_no, stage_id)
     if not sr:
         conn.close(); raise HTTPException(404, "階段不存在")
@@ -2322,7 +2333,7 @@ def update_stage_visit(quote_no: str, stage_id: int, visit_id: int, body: dict =
     第二階段 CRUD 端點，已由前端實際呼叫（見 create_case_stage() docstring）。"""
     _require_user(authorization)
     conn = get_db()
-    _deny_if_case_locked_unsupported(conn, quote_no, authorization)
+    _deny_if_case_locked_unsupported(conn, quote_no, authorization, op="拜訪紀錄-編輯")
     sr = _get_stage_row(conn, quote_no, stage_id)
     if not sr:
         conn.close(); raise HTTPException(404, "階段不存在")
@@ -2351,7 +2362,7 @@ def delete_stage_visit(quote_no: str, stage_id: int, visit_id: int, authorizatio
     已由前端實際呼叫（見 create_case_stage() docstring）。"""
     _require_user(authorization)
     conn = get_db()
-    _deny_if_case_locked_unsupported(conn, quote_no, authorization)
+    _deny_if_case_locked_unsupported(conn, quote_no, authorization, op="拜訪紀錄-刪除")
     sr = _get_stage_row(conn, quote_no, stage_id)
     if not sr:
         conn.close(); raise HTTPException(404, "階段不存在")
@@ -2695,7 +2706,7 @@ def request_payment_writeoff(no: str, idx: int, body: WriteOffRequestIn, authori
         raise HTTPException(403, "僅管理員可申請沖銷")
     conn = get_db()
     try:
-        _deny_if_case_locked_unsupported(conn, no, authorization)
+        _deny_if_case_locked_unsupported(conn, no, authorization, op="稅額沖銷-申請")
         data, pits = _load_payment_item(conn, no, idx)
         item = pits[idx]
         if item.get("writeOffStatus") == "pending":
@@ -2727,7 +2738,7 @@ def cancel_payment_writeoff(no: str, idx: int, authorization: str = Header(None)
         raise HTTPException(403, "僅管理員可取消沖銷申請")
     conn = get_db()
     try:
-        _deny_if_case_locked_unsupported(conn, no, authorization)
+        _deny_if_case_locked_unsupported(conn, no, authorization, op="稅額沖銷-撤銷")
         data, pits = _load_payment_item(conn, no, idx)
         item = pits[idx]
         if item.get("writeOffStatus") != "pending":
@@ -2756,7 +2767,7 @@ def approve_payment_writeoff(no: str, idx: int, body: WriteOffApproveIn, authori
         raise HTTPException(403, "僅最高管理者可審核沖銷申請")
     conn = get_db()
     try:
-        _deny_if_case_locked_unsupported(conn, no, authorization)
+        _deny_if_case_locked_unsupported(conn, no, authorization, op="稅額沖銷-核准")
         data, pits = _load_payment_item(conn, no, idx)
         item = pits[idx]
         if item.get("writeOffStatus") != "pending":
@@ -2950,24 +2961,39 @@ def get_finance_summary(quote_no: str, authorization: str = Header(None)):
         "SELECT request_no, status, stage, amount, created_at FROM payment_requests "
         "WHERE quote_no=? ORDER BY created_at DESC", (quote_no,)
     ).fetchall()]
-    conn.close()
 
     settlement = data.get("settlement") or {}
-    # 精算額外支出完整明細，包括發票文件與填寫人（2026-09-09）：案件財務總覽
-    # 要展示這些，讓使用者知道是誰何時填的、有沒有上傳發票、憑證單號是什麼
+    # 額外支出完整明細，包括發票文件與填寫人：案件財務總覽要展示這些，讓使用者
+    # 知道是誰何時填的、有沒有上傳發票、憑證單號是什麼。
+    #
+    # 2026-09-11：改讀 `case_extra_expenses` 表（DB v75 把資料從
+    # `settlement.extraItems` 搬出來了）。**不能再讀 data_json 那份**——它現在只是
+    # 搬移前的唯讀備份、不會再更新，讀它會讓財務總覽停在搬移當下的舊數字。
+    # 多回 `status` 與 `pending`：送審中的金額照樣計入（使用者指定），但畫面要
+    # 標示出來，不然看數字的人不知道它還可能因駁回而改變。
     extras = [{
-        "category":    ex.get("category", ""),
-        "description": ex.get("description", ""),
-        "docNo":       ex.get("docNo", ""),
-        "totalCost":   float(ex.get("totalCost") or 0),
-        "expenseDate": ex.get("expenseDate", ""),
-        "qty":         ex.get("qty"),
-        "unit":        ex.get("unit", ""),
-        "unitCost":    float(ex.get("unitCost") or 0),
-        "note":        ex.get("note", ""),
-        "createdBy":   ex.get("createdBy", ""),
-        "files":       ex.get("files") or [],
-    } for ex in (settlement.get("extraItems") or [])]
+        "id":          r["id"],
+        "category":    r["category"] or "",
+        "description": r["description"] or "",
+        "docNo":       r["doc_no"] or "",
+        "totalCost":   float(r["total_cost"] or 0),
+        "expenseDate": r["expense_date"] or "",
+        "qty":         r["qty"],
+        "unit":        r["unit"] or "",
+        "unitCost":    float(r["unit_cost"] or 0),
+        "note":        r["note"] or "",
+        "createdBy":   r["created_by_name"] or "",
+        "createdByInferred": bool(r["created_by_inferred"]),
+        "payerName":   r["payer_name"] or "",
+        "status":      r["status"],
+        "pending":     r["status"] != "已核准",
+        "files":       json.loads(r["files_json"] or "[]"),
+    } for r in conn.execute(
+        "SELECT * FROM case_extra_expenses WHERE quote_no=? ORDER BY id", (quote_no,)
+    ).fetchall()]
+    # 2026-09-11：conn 從這裡才關——額外支出改讀 case_extra_expenses 表之後，
+    # 上面那段列表推導需要連線，原本在它之前就 close() 會變成 use-after-close
+    conn.close()
 
     return {
         "quoteNo":    quote_no,
@@ -2990,60 +3016,13 @@ def get_finance_summary(quote_no: str, authorization: str = Header(None)):
     }
 
 
-def _load_settlement_extra_item(conn, no, idx):
-    """比照 _load_payment_item()，定位精算頁「額外支出」清單（data.settlement.
-    extraItems[]）裡的一筆，供發票/收據附件上傳/刪除使用。"""
-    row = conn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (no,)).fetchone()
-    if not row:
-        raise HTTPException(404, "報價單不存在")
-    data  = json.loads(row["data_json"] or "{}")
-    stl   = data.setdefault("settlement", {})
-    items = stl.setdefault("extraItems", [])
-    if idx < 0 or idx >= len(items):
-        raise HTTPException(400, "額外支出項目索引超出範圍")
-    if stl.get("status") == "finalized":
-        raise HTTPException(403, "精算已完結，僅超級管理員可重新修改")
-    return data, items
-
-
-@router.post("/api/quotations/{no}/settlement/extra/{idx}/files", status_code=201)
-async def upload_settlement_extra_files(no: str, idx: int, files: List[UploadFile] = File(...),
-                                        authorization: str = Header(None)):
-    """精算「額外支出」單筆項目的發票/收據附件上傳（多檔，任何登入使用者皆可
-    傳；精算已完結時一律擋下，與 update_settlement() 的完結後鎖定規則一致，
-    但這裡不比照該端點放寬 superadmin 例外——附件是佐證用途，完結後若真的
-    要補件，走 reopenDraft() 重新開啟精算即可）。"""
-    user = _require_user(authorization)
-    conn = get_db()
-    try:
-        data, items = _load_settlement_extra_item(conn, no, idx)
-        new_files = await save_document_files("quotation_settlement_extra", f"{no}_{idx}", files,
-                                              user.get("display_name") or user["username"])
-        items[idx].setdefault("files", [])
-        items[idx]["files"].extend(new_files)
-        saved_at = save_quotation_json(conn, no, data)
-        conn.commit()
-    finally:
-        conn.close()
-    _audit(_tok(authorization), "settlement.upload_extra_files", "quotation", no,
-           f"{no}（{len(new_files)} 個檔案）")
-    return {"ok": True, "added": len(new_files), "files": new_files, "updated_at": saved_at}
-
-
-@router.delete("/api/quotations/{no}/settlement/extra/{idx}/files/{file_id}")
-def delete_settlement_extra_file(no: str, idx: int, file_id: str, authorization: str = Header(None)):
-    _require_user(authorization)
-    conn = get_db()
-    try:
-        data, items = _load_settlement_extra_item(conn, no, idx)
-        existing = items[idx].get("files") or []
-        items[idx]["files"] = delete_document_file("quotation_settlement_extra", f"{no}_{idx}", existing, file_id)
-        saved_at = save_quotation_json(conn, no, data)
-        conn.commit()
-    finally:
-        conn.close()
-    _audit(_tok(authorization), "settlement.delete_extra_file", "quotation", no, no)
-    return {"ok": True, "updated_at": saved_at}
+# ── 精算額外支出的附件端點已移除（2026-09-11）────────────────────────────────
+#
+# 原本這裡有 `_load_settlement_extra_item()` ＋ `/settlement/extra/{idx}/files`
+# 上傳與刪除兩支端點。額外支出搬到 `case_extra_expenses` 表（DB v75）之後，
+# 對應端點改在 `routers/case_extra_expenses.py`，並且**改用資料列 id 定位而不是
+# 陣列索引**——舊版用 idx，額外支出一旦新增/刪除/重排，索引就會指到別筆去。
+# 附件實體檔案的分類也從 "quotation_settlement_extra" 改成 "case_extra_expense"。
 
 
 # ── Approval queue ────────────────────────────────────────────────────────────
@@ -3303,6 +3282,41 @@ def get_approval_queue(authorization: str = Header(None)):
             "actionType":          r["action_type"],
         })
 
+    # 案件額外支出（2026-09-11）：跟其他五種單據一樣進統一佇列，否則送審之後
+    # 簽核人不會在任何地方看到它，只能靠站內通知——那是「送審了但沒人知道要簽」
+    # 的典型來源。tiers 用真實的分層資料（不像 case_change 借用空 tiers 的捷徑），
+    # 因為這個類型走的就是正規的 tiered_approval。
+    xe_rows = conn.execute("""
+        SELECT e.id, e.quote_no, e.description, e.total_cost, e.approval_json,
+               q.customer_name, q.project_name
+        FROM case_extra_expenses e
+        LEFT JOIN quotations q ON q.quote_no = e.quote_no
+        WHERE e.status IN ('待審核','簽核中')
+        ORDER BY e.id DESC
+    """).fetchall()
+    for r in xe_rows:
+        f = _queue_tier_fields(r["approval_json"])
+        items.append({
+            "type":                "extra_expense",
+            "quoteNo":             f"{r['quote_no']}-XE{r['id']}",
+            "customer":            r["customer_name"] or "",
+            "projectName":         r["description"] or "",
+            "total":               r["total_cost"] or 0,
+            "quoteDate":           (f["requestedAt"] or "")[:10],
+            "salesPerson":         "",
+            "requestedBy":         f["requestedBy"],
+            "requestedByDisplay":  f["requestedByDisplay"],
+            "requestedAt":         f["requestedAt"],
+            "isEditApproval":      False,
+            "reasons":             [],
+            "tiers":               f["tiers"],
+            "currentTier":         f["currentTier"],
+            "tierCount":           f["tierCount"],
+            "currentApprovers":    f["currentApprovers"],
+            "linkedQuoteNo":       r["quote_no"],
+            "extraExpenseId":      r["id"],
+        })
+
     conn.close()
 
     groups: dict = defaultdict(list)
@@ -3353,6 +3367,12 @@ def get_approval_queue_count(authorization: str = Header(None)):
     ).fetchall()]
     approval_jsons += [r[0] for r in conn.execute(
         "SELECT json_extract(data_json,'$.approval') FROM payment_requests WHERE status IN ('待審核','簽核中')"
+    ).fetchall()]
+    # 案件額外支出（2026-09-11）：這張表的簽核狀態存在獨立欄位 approval_json，
+    # 不是 data_json 裡的 $.approval，所以直接取欄位；下面那段逐筆比對當層
+    # approver 的邏輯完全共用，不必另外寫一份。
+    approval_jsons += [r[0] for r in conn.execute(
+        "SELECT approval_json FROM case_extra_expenses WHERE status IN ('待審核','簽核中')"
     ).fetchall()]
     # 已結案案件半解鎖變更（2026-08-26）：單層審核，任一 superadmin 皆算「輪到我」，
     # 不像其他文件類型需要比對 tiers 當層 approver username，直接另外加總。

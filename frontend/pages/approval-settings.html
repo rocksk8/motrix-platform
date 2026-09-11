@@ -394,13 +394,17 @@
       return {
         session: {},
         // 五種文件類型可各自選擇走統一流程（true）或獨立設定（false）
-        docTypeOrder: ['quotation', 'shipping', 'invoice_voucher', 'payment_request', 'contractor_voucher'],
+        // 2026-09-11 新增 extra_expense（案件額外支出）。後端 APPROVAL_DOC_TYPES 已註冊，
+        // 這裡是讓它出現在「套用範圍」多選與獨立設定區塊。
+        docTypeOrder: ['quotation', 'shipping', 'invoice_voucher', 'payment_request',
+                       'contractor_voucher', 'extra_expense'],
         docTypeMeta: {
           quotation:          '報價單',
           shipping:           '出貨單',
           invoice_voucher:    '發票開立簽核單',
           payment_request:    '請款單',
           contractor_voucher: '承攬商匯款申請',
+          extra_expense:      '案件額外支出',
         },
         scope:       {},      // {quotation:bool, shipping:bool, ...}
         scopeSaving: false,

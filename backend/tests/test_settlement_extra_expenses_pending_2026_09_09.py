@@ -14,6 +14,22 @@ import json
 from datetime import date
 
 
+
+def _sync_extra_to_table(conn, quote_no):
+    """把剛種進 data_json 的 settlement.extraItems 搬進 case_extra_expenses。
+
+    2026-09-11（migration v75）之後額外支出住在獨立資料表，data_json 裡那份只是
+    唯讀備份、報表不再讀它。用 migration 自己那支搬移函式，欄位對應與歸月的
+    fallback 才不會跟正式路徑漂移。"""
+    import db as _db
+    import json as _json
+    row = conn.execute(
+        "SELECT data_json, sales_person FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+    if not row:
+        return
+    _db._move_extra_items_for_quote(
+        conn, quote_no, _json.loads(row["data_json"] or "{}"), row["sales_person"] or "")
+
 def _login(client, username, password):
     r = client.post("/api/auth/login", json={"username": username, "password": password})
     assert r.status_code == 200, r.text
@@ -38,6 +54,7 @@ def _make_case(quote_no, settlement, edit_history=None):
              json.dumps(data, ensure_ascii=False),
              "2026-01-01T00:00:00", "2026-01-01T00:00:00", "已成案"),
         )
+        _sync_extra_to_table(conn, quote_no)
         conn.commit()
     finally:
         conn.close()
@@ -71,7 +88,11 @@ def test_draft_settlement_extra_counts_toward_monthly_expenses(client, make_user
     total, details = _month_other_total(client, token, int(mo[:4]), mo)
     assert total == 8000, "草稿精算的額外支出也要計入當月"
     row = next(d for d in details if "吊車運費" in d["desc"])
-    assert row["pending"] is True, "精算未完結要標示 pending，讓報表看得出數字還會變"
+    # 2026-09-11 語意變更：`pending` 從「精算未完結」改成「送審未核准」。
+    # 額外支出搬到獨立資料表並接上簽核之後，精算的草稿/完結狀態不再決定這個旗標——
+    # 這一筆是搬移過來的（視為已核准），所以 pending=False。真正的 pending 情境
+    # 見 test_unapproved_extra_counts_but_is_flagged_pending()。
+    assert row["pending"] is False, "已核准的項目不該被標成 pending"
     assert "AB12345678" in row["desc"], "單號要帶進明細，會計才對得回實體憑證"
 
 
@@ -150,3 +171,24 @@ def test_dashboard_monthly_matches_reports_for_draft_extra(client, make_user):
     assert reports_total == 12000
     assert dash_row["other"] == reports_total, \
         f"首頁與營運報表的當月其他支出必須一致：dashboard={dash_row['other']} reports={reports_total}"
+
+
+def test_unapproved_extra_counts_but_is_flagged_pending(client, make_user, seed_extra_expense):
+    """送審中的額外支出**照樣算進當月支出**，但要標 pending（2026-09-11 使用者指定的規則）。
+
+    兩邊都重要：
+      - 不算進去 → 當月已經花掉的錢在報表上消失，正是 2026-09-09 修過的問題
+      - 不標 pending → 看報表的人不知道這個數字還可能被駁回而改變
+    """
+    username, password = make_user(role="superadmin")
+    token = _login(client, username, password)
+    mo = _this_month()
+    _make_case("MQ-EXP-PENDING", settlement={"status": "draft", "extraItems": []})
+    seed_extra_expense("MQ-EXP-PENDING", total_cost=4200, category="外包",
+                       description="臨時外包工", expense_date=f"{mo}-09",
+                       status="待審核")
+
+    total, details = _month_other_total(client, token, int(mo[:4]), mo)
+    assert total == 4200, "送審中的項目也要計入當月支出"
+    row = next(d for d in details if "臨時外包工" in d["desc"])
+    assert row["pending"] is True, "尚未核准要標 pending，讓看報表的人知道數字還會變"

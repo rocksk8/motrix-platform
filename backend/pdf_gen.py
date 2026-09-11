@@ -2237,6 +2237,24 @@ def _case_closing_report_data(quote_no: str) -> dict:
     cr  = d.get("caseRecord") or {}
     settlement = d.get("settlement") or {}
 
+    # 2026-09-11：額外支出搬到 case_extra_expenses 表（DB v75）。結案報表是對外／
+    # 存查用的最終文件，**不能再讀 data_json 的 settlement.extraItems**——那份現在
+    # 只是搬移前的唯讀備份、不會再更新，讀它會讓報表停在搬移當下的舊數字。
+    # 帶 status 出來是為了在報表上標示「送審中」：這些金額已計入成本（使用者指定），
+    # 但對外文件必須讓看的人知道它還沒完成簽核。
+    settlement["extraItems"] = [{
+        "category":    r2["category"] or "",
+        "description": r2["description"] or "",
+        "totalCost":   float(r2["total_cost"] or 0),
+        "expenseDate": r2["expense_date"] or "",
+        "docNo":       r2["doc_no"] or "",
+        "status":      r2["status"],
+        "payerName":   r2["payer_name"] or "",
+        "files":       json.loads(r2["files_json"] or "[]"),
+    } for r2 in conn.execute(
+        "SELECT * FROM case_extra_expenses WHERE quote_no=? ORDER BY id", (quote_no,)
+    ).fetchall()]
+
     # 成案日期／結案日期：取 audit_log 裡 deal_tag.change 事件的最新一次時間戳
     # （比 quote_date 更能反映案件實際進度，跟 quote_won_month_map 同一套精神）
     won_at = closed_at = ""
@@ -2484,14 +2502,18 @@ def _build_case_closing_html(data: dict) -> str:
         f'<td class="r">{money(ex.get("totalCost")) if ex.get("totalCost") else "—"}</td>'
         f'<td class="c">{esc(ex.get("expenseDate")) or "—"}</td>'
         f'<td class="c">{esc(ex.get("docNo")) or "—"}</td>'
+        f'<td class="c">{esc(ex.get("payerName")) or "—"}</td>'
+        # 未核准的要在對外文件上標出來——金額已計入，但看報表的人有權知道它還沒簽完
+        f'<td class="c">{esc(ex.get("status")) or "—"}</td>'
         f'<td>{esc("、".join(f.get("filename","") for f in (ex.get("files") or []))) or "—"}</td></tr>'
         for ex in (s.get("extraItems") or [])
     )
-    _no_extra_row = '<tr><td colspan="6" class="c" style="color:#9CA3AF">無額外支出資料</td></tr>'
+    _no_extra_row = '<tr><td colspan="8" class="c" style="color:#9CA3AF">無額外支出資料</td></tr>'
     extras_section = (
         f'<div class="section-label">{next(_cn_nums)}、額外支出明細</div>'
-        '<table><thead><tr><th style="width:100px">類別</th><th>說明</th><th class="r" style="width:110px">金額</th>'
-        '<th style="width:90px">支出日期</th><th style="width:100px">單號</th><th>發票/收據附件</th></tr></thead>'
+        '<table><thead><tr><th style="width:90px">類別</th><th>說明</th><th class="r" style="width:100px">金額</th>'
+        '<th style="width:88px">支出日期</th><th style="width:92px">單號</th>'
+        '<th style="width:84px">支出人</th><th style="width:72px">狀態</th><th>發票/收據附件</th></tr></thead>'
         f'<tbody>{extra_rows_html or _no_extra_row}</tbody></table>'
     ) if s.get("extraItems") else ""
 

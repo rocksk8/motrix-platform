@@ -23,7 +23,7 @@ from fastapi.responses import StreamingResponse
 from db import get_db
 from helpers import (
     _require_user, _tok, _audit, _warranty_expiry, _get_edge_path, _get_setting, _set_setting,
-    payment_item_amounts, summarize_payment_items, settlement_extra_expenses, quote_won_month_map,
+    payment_item_amounts, summarize_payment_items, case_extra_expenses, quote_won_month_map,
     user_has_module, EDGE_PDF_SEMAPHORE,
 )
 from routers.vendor_contractors import _dispatch_row
@@ -3423,21 +3423,18 @@ def _collect_expenses(year: int, department_id: Optional[int] = None) -> dict:
     # **精算還在草稿階段填的額外支出完全不會出現在月支出裡**。實際作業順序是
     # 支出當下就先填進精算表單、案件全部結束後才做完結，中間可能隔好幾個月，
     # 這段期間當月已經花掉的錢在報表上等於不存在。改成只要填了就算，歸月與
-    # pending 旗標的判斷邏輯集中在 helpers.settlement_extra_expenses()（同一支
+    # pending 旗標的判斷邏輯集中在 helpers.case_extra_expenses()（同一支
     # 也給 dashboard.py 用，兩邊過去各寫一份、連歸月依據都不一樣）。
+    # 2026-09-11：改從 case_extra_expenses 表取（migration v75 把資料搬出 data_json）。
+    # conn 移到迴圈之後才關——新的 helper 要讀表。
     quote_rows = conn.execute(
-        "SELECT quote_no, customer_name, data_json FROM quotations "
-        "WHERE json_extract(data_json,'$.settlement.extraItems') IS NOT NULL"
+        "SELECT DISTINCT e.quote_no AS quote_no, q.customer_name AS customer_name "
+        "FROM case_extra_expenses e LEFT JOIN quotations q ON q.quote_no = e.quote_no"
     ).fetchall()
-    conn.close()
     for r in quote_rows:
-        try:
-            data = json.loads(r["data_json"] or "{}")
-        except Exception:
-            continue
         if not _quote_in_department(r["quote_no"]):
             continue
-        for ex in settlement_extra_expenses(data):
+        for ex in case_extra_expenses(conn, r["quote_no"]):
             if ex["month"] not in monthly:
                 continue
             monthly[ex["month"]]["other"] += ex["cost"]
@@ -3453,6 +3450,8 @@ def _collect_expenses(year: int, department_id: Optional[int] = None) -> dict:
                 # 誤以為是已定稿的數字
                 "pending": ex["pending"],
             })
+
+    conn.close()
 
     monthly_items = []
     totals = {"contractor": 0, "equipment": 0, "material": 0, "other": 0, "total": 0}

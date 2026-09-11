@@ -437,157 +437,28 @@
         </div>
       </div>
 
-      <!-- ── 二、額外支出 ── -->
+      <!-- ── 二、額外支出（2026-09-11 起搬到案件管理）── -->
+      <!-- 這張表原本可以在這裡直接編輯，資料存在 settlement.extraItems。
+           2026-09-11 依使用者交辦搬到「案件管理 → 額外支出」分頁並接上送審，
+           資料也搬進 case_extra_expenses 表（DB v75）。
+           **這裡必須移除而不是留著唯讀**：資料已經改從新表讀，留著一張還能按的
+           表單會變成「編輯了也不會進報表」，比拿掉更難察覺。 -->
       <div class="stl-card">
         <div class="stl-card__head">
           <div class="stl-card__title">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v16m8-8H4"/></svg>
-            二、額外支出（報價外品項、工時、差旅等）
+            二、額外支出
           </div>
-          <template x-if="settlement.status !== 'finalized'">
-            <button class="btn btn-ghost btn-sm" @click="addExtra()">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v16m8-8H4"/></svg>
-              新增欄位
-            </button>
-          </template>
         </div>
-        <div :class="settlement.status === 'finalized' ? 'locked-overlay' : ''">
-          <template x-if="settlement.extraItems.length === 0">
-            <div style="padding:24px;text-align:center;color:var(--text-dim);font-size:12px">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="display:block;margin:0 auto 8px;opacity:.35"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-              尚未新增額外支出項目
-              <template x-if="settlement.status !== 'finalized'">
-                <div>
-                  <button class="btn btn-ghost btn-sm" style="margin-top:8px" @click="addExtra()">
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v16m8-8H4"/></svg>
-                    新增第一筆
-                  </button>
-                </div>
-              </template>
-            </div>
-          </template>
-          <template x-if="settlement.extraItems.length > 0">
-            <div style="overflow-x:auto">
-              <table class="stl-table">
-                <thead>
-                  <tr>
-                    <th style="width:28px">#</th>
-                    <th style="width:90px">類別</th>
-                    <th style="min-width:200px">品項說明</th>
-                    <th style="width:70px">數量</th>
-                    <th style="width:70px">單位</th>
-                    <th style="width:110px">單位成本 (NT$)</th>
-                    <th style="width:110px">小計 (NT$)</th>
-                    <th style="min-width:100px">備註</th>
-                    <th style="width:110px">支出日期</th>
-                    <th style="width:120px">單號</th>
-                    <th style="min-width:160px">發票/收據</th>
-                    <th style="width:28px"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <template x-for="(ex, idx) in settlement.extraItems" :key="ex.id">
-                    <tr>
-                      <td style="text-align:center;color:var(--text-dim);font-size:11px;font-family:LINE Seed TW_OTF, sans-serif" x-text="idx+1"></td>
-                      <td>
-                        <select class="stl-input" x-model="ex.category"
-                                :disabled="settlement.status === 'finalized'"
-                                @change="calcSummary()"
-                                style="padding:5px 6px;font-size:11px">
-                          <option>工時</option>
-                          <option>材料</option>
-                          <option>差旅</option>
-                          <option>運費</option>
-                          <option>安裝</option>
-                          <option>外包</option>
-                          <option>其他</option>
-                        </select>
-                      </td>
-                      <td>
-                        <input class="stl-input" type="text" x-model="ex.description"
-                               :disabled="settlement.status === 'finalized'"
-                               placeholder="說明，例如：工程師出差工時 2 天" @input="calcSummary()">
-                      </td>
-                      <td>
-                        <input class="stl-input num" type="number" min="0" step="any"
-                               x-model.number="ex.qty"
-                               :disabled="settlement.status === 'finalized'"
-                               @input="calcExtraCost(ex); calcSummary()" style="width:60px">
-                      </td>
-                      <td>
-                        <input class="stl-input" type="text" x-model="ex.unit"
-                               :disabled="settlement.status === 'finalized'"
-                               placeholder="人天/式…" style="width:60px" @input="calcSummary()">
-                      </td>
-                      <td>
-                        <input class="stl-input num" type="number" min="0" step="any"
-                               x-model.number="ex.unitCost"
-                               :disabled="settlement.status === 'finalized'"
-                               @input="calcExtraCost(ex); calcSummary()">
-                      </td>
-                      <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-weight:600;color:#92400E">
-                        <span x-text="ex.totalCost > 0 ? fmt(ex.totalCost) : '—'"></span>
-                      </td>
-                      <td>
-                        <input class="stl-input" type="text" x-model="ex.note"
-                               :disabled="settlement.status === 'finalized'"
-                               placeholder="備註…" @input="calcSummary()">
-                      </td>
-                      <td>
-                        <input class="stl-input" type="date" x-model="ex.expenseDate"
-                               :disabled="settlement.status === 'finalized'"
-                               style="width:120px">
-                      </td>
-                      <td>
-                        <!-- 單號（2026-09-09）：發票/收據/請購單號等憑證編號，自由文字
-                             （不套用 validate_invoice_no() 的統一發票格式檢查——這裡收的
-                             不只統一發票，收據/自製憑單/廠商出貨單號都可能填進來）。 -->
-                        <input class="stl-input" type="text" x-model="ex.docNo"
-                               :disabled="settlement.status === 'finalized'"
-                               placeholder="憑證單號…" style="width:110px">
-                      </td>
-                      <td>
-                        <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap">
-                          <template x-for="f in (ex.files||[])" :key="f.id">
-                            <span style="display:flex;align-items:center;gap:4px;font-size:11px;background:#F3F4F6;border-radius:4px;padding:2px 6px">
-                              <a href="javascript:void(0)" @click="previewAttachmentFile(f)" style="color:var(--accent);text-decoration:underline" x-text="f.filename"></a>
-                              <template x-if="settlement.status !== 'finalized'">
-                                <button @click="deleteSettlementExtraFile(idx, f.id)" style="border:none;background:none;color:var(--danger,#DC2626);cursor:pointer;font-size:11px;padding:0 2px">×</button>
-                              </template>
-                            </span>
-                          </template>
-                          <template x-if="settlement.status !== 'finalized'">
-                            <label style="padding:2px 8px;font-size:10px;border:1px solid var(--border);background:#fff;color:var(--text-secondary);border-radius:4px;cursor:pointer;white-space:nowrap">
-                              + 上傳
-                              <input type="file" multiple accept=".jpg,.jpeg,.png,.pdf" style="display:none" @change="uploadSettlementExtraFiles(idx, $event)">
-                            </label>
-                          </template>
-                        </div>
-                      </td>
-                      <td>
-                        <template x-if="settlement.status !== 'finalized'">
-                          <button style="background:none;border:none;cursor:pointer;color:#D1D5DB;padding:4px;line-height:0;border-radius:4px"
-                                  @click="removeExtra(idx)"
-                                  @mouseenter="$el.style.color='#DC2626'"
-                                  @mouseleave="$el.style.color='#D1D5DB'"
-                                  title="刪除此項">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 18L18 6M6 6l12 12"/></svg>
-                          </button>
-                        </template>
-                      </td>
-                    </tr>
-                  </template>
-                </tbody>
-                <tfoot>
-                  <tr style="background:#FEF9C3;font-weight:600">
-                    <td colspan="6" style="border-top:1.5px solid #FDE68A;padding:10px;text-align:right;font-size:11px;color:#92400E">額外支出小計</td>
-                    <td style="border-top:1.5px solid #FDE68A;text-align:right;font-family:LINE Seed TW_OTF, sans-serif;color:#92400E" x-text="'NT$ ' + fmt(summary.extraTotal)"></td>
-                    <td colspan="4" style="border-top:1.5px solid #FDE68A"></td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-          </template>
+        <div style="padding:20px;text-align:center;color:var(--text-secondary);font-size:13px;line-height:1.8">
+          額外支出已移到 <b>案件管理 → 額外支出</b> 分頁，並加上填寫人、支出人與送審流程。
+          <div style="font-size:12px;color:var(--text-dim);margin-top:6px">
+            原本填在這裡的資料都已經搬過去，不會遺失。下方「成本彙總」仍會把額外支出算進去。
+          </div>
+          <a class="btn btn-ghost btn-sm" style="margin-top:12px;text-decoration:none"
+             :href="'case-management.html?q=' + (quoteNo || '')">
+            前往案件管理的額外支出 ▶
+          </a>
         </div>
       </div>
 
@@ -852,9 +723,12 @@ function settlementPage() {
       finalizedAt:  '',
       finalizedBy:  '',
       items:      [],
-      extraItems: [],
+      extraItems: [],   // 搬移前的唯讀備份，僅供比對，不再用於計算或編輯
       memo: '',
     },
+    // 額外支出（case_extra_expenses 表）總額與未核准金額，loadExtraExpenseTotals() 填
+    xeTotal: 0,
+    xePending: 0,
 
     dispatches: [],  // 承攬商派發（唯讀，即時從 /api/contractor-dispatches 讀取，不隨精算存檔凍結）
     _frozenSummary: null,  // 精算完結當下寫入 data_json 的 summary 快照，供比對是否已過期
@@ -966,12 +840,29 @@ function settlementPage() {
         // 記錄原始 tot 資料用於比較
         this._origTot = d.tot || {}
         await this.loadDispatches()
+        await this.loadExtraExpenseTotals()   // 成本彙總要用到，必須在 calcSummary 之前
         this.calcSummary()
       } catch(e) {
         this.toast('載入失敗：' + e.message)
       } finally {
         this.loading = false
       }
+    },
+
+    // 額外支出總額（含送審中）與其中尚未核准的金額，來源是 case_extra_expenses 表。
+    // 這一頁只讀不寫——編輯入口已移到案件管理的「額外支出」分頁。
+    async loadExtraExpenseTotals() {
+      if (!this.quoteNo) return
+      try {
+        const r = await fetch(`/api/quotations/${encodeURIComponent(this.quoteNo)}/extra-expenses`, {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (r.ok) {
+          const d = await r.json()
+          this.xeTotal = d.totalAmount || 0
+          this.xePending = d.totalPending || 0
+        }
+      } catch {}
     },
 
     async loadDispatches() {
@@ -1043,7 +934,11 @@ function settlementPage() {
         : (quotedPretax > 0 ? origDirectProfit / quotedPretax * 100 : 0)
 
       const itemActualTotal = this.settlement.items.reduce((s, i) => s + (i.actualTotalCost || 0), 0)
-      const extraTotal      = this.settlement.extraItems.reduce((s, e) => s + (e.totalCost || 0), 0)
+      // 2026-09-11：額外支出搬到 case_extra_expenses 表（DB v75），改用從 API 取回的
+      // 總額。**不能再用 settlement.extraItems 算**——那份陣列現在只是搬移前的唯讀
+      // 備份、不會再更新，拿它算成本會停在搬移當下的舊數字。含送審中的金額
+      // （使用者指定：送審中照樣算進成本，但畫面要提醒）。
+      const extraTotal      = this.xeTotal
       const dispatchTotal   = this.dispatchTotal()
       const totalActualCost = itemActualTotal + extraTotal + dispatchTotal
       const grossProfit     = quotedPretax - totalActualCost
@@ -1078,83 +973,11 @@ function settlementPage() {
       }
     },
 
-    addExtra() {
-      const today = new Date().toISOString().slice(0, 10)
-      this.settlement.extraItems.push({
-        id:          Date.now(),
-        category:    '工時',
-        description: '',
-        qty:         1,
-        unit:        '人天',
-        unitCost:    0,
-        totalCost:   0,
-        note:        '',
-        expenseDate: '',
-        createdDate: today,  // 建立項目的日期，日期未填時用這個
-        docNo:       '',   // 憑證單號（2026-09-09），案件財務總覽也會顯示
-        files:       [],
-        createdBy:   this.session?.user?.display_name || '',  // 填寫人（2026-09-09，案件財務總覽要顯示）
-      })
-    },
-
-    removeExtra(idx) {
-      this.settlement.extraItems.splice(idx, 1)
-      this.calcSummary()
-    },
-
-    async uploadSettlementExtraFiles(idx, evt) {
-      const files = evt?.target?.files
-      if (!files || files.length === 0) return
-      try {
-        // 剛用「新增欄位」加的額外支出項目在存檔前只存在瀏覽器本機，後端還
-        // 沒有這一筆（見 _load_settlement_extra_item()），此時直接用 idx 上傳
-        // 會被 400「額外支出項目索引超出範圍」擋下。先確保目前的 extraItems
-        // 已同步存檔，讓後端的陣列長度／順序跟畫面一致，idx 才會對得上。
-        await this._putSettlement()
-      } catch (e) {
-        this.toast('儲存失敗，無法上傳附件：' + e.message)
-        evt.target.value = ''
-        return
-      }
-      const fd = new FormData()
-      for (const f of files) fd.append('files', f)
-      try {
-        const r = await fetch(`${API}/quotations/${this.quoteNo}/settlement/extra/${idx}/files`, {
-          method:  'POST',
-          headers: { Authorization: 'Bearer ' + this.session.token },
-          body:    fd,
-        })
-        if (!r.ok) { this.toast((await r.json().catch(() => ({}))).detail || '上傳失敗'); return }
-        const body = await r.json()
-        const item = this.settlement.extraItems[idx]
-        if (item) {
-          if (!item.files) item.files = []
-          item.files.push(...body.files)
-        }
-      } catch (e) { this.toast('上傳失敗：' + e.message) }
-      evt.target.value = ''
-    },
-
-    async deleteSettlementExtraFile(idx, fileId) {
-      if (!confirm('確定刪除此附件？')) return
-      try {
-        // 同上傳一樣：若畫面上有其他尚未存檔的欄位新增/刪除異動，先同步存檔
-        // 避免後端陣列順序跟畫面 idx 對不上。
-        await this._putSettlement()
-      } catch (e) {
-        this.toast('儲存失敗，無法刪除附件：' + e.message)
-        return
-      }
-      try {
-        const r = await fetch(`${API}/quotations/${this.quoteNo}/settlement/extra/${idx}/files/${fileId}`, {
-          method:  'DELETE',
-          headers: { Authorization: 'Bearer ' + this.session.token },
-        })
-        if (!r.ok) { this.toast((await r.json().catch(() => ({}))).detail || '刪除失敗'); return }
-        const item = this.settlement.extraItems[idx]
-        if (item && item.files) item.files = item.files.filter(f => f.id !== fileId)
-      } catch (e) { this.toast('刪除失敗：' + e.message) }
-    },
+    // addExtra() / removeExtra() / uploadSettlementExtraFiles() /
+    // deleteSettlementExtraFile() 已於 2026-09-11 移除——額外支出搬到案件管理的
+    // 「額外支出」分頁與 case_extra_expenses 表（DB v75），這一頁不再有編輯入口，
+    // 這四個函式的呼叫者（那張可編輯的表）已經一併拿掉。附件端點改用資料列 id
+    // 定位，見 routers/case_extra_expenses.py。
 
     async previewAttachmentFile(file) {
       try {

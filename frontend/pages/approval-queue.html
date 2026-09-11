@@ -706,6 +706,7 @@
           if (item.type === 'shipping_note') return '出貨單'
           if (item.type === 'payment_request') return '請款單'
           if (item.type === 'case_change') return '已結案案件變更'
+          if (item.type === 'extra_expense') return '案件額外支出'
           return '報價單'
         },
 
@@ -750,7 +751,8 @@
         },
 
         async previewItem(item) {
-          if (!item || item.type === 'case_change') return
+          // 額外支出跟已結案變更一樣沒有 PDF 可預覽
+          if (!item || item.type === 'case_change' || item.type === 'extra_expense') return
           this.previewFetching = true
           try {
             const r = await fetch(`${API}${this.apiBase(item)}/${encodeURIComponent(item.quoteNo)}/pdf-download`, {
@@ -902,6 +904,11 @@
             }
             return
           }
+          // 額外支出的端點掛在案件底下（/quotations/{no}/extra-expenses/{id}/approve），
+          // 形狀跟 apiBase(item) + quoteNo 那套不一樣，另外組。
+          const approveUrl = item.type === 'extra_expense'
+            ? `${API}/api/quotations/${encodeURIComponent(item.linkedQuoteNo)}/extra-expenses/${item.extraExpenseId}/approve`
+            : `${API}${this.apiBase(item)}/${encodeURIComponent(item.quoteNo)}/approve`
           const tiers = item.tiers || []
           const isMultiTier = tiers.length > 0
           const isLastTier  = isMultiTier && (item.currentTier ?? 0) === tiers.length - 1
@@ -913,7 +920,7 @@
           if (!confirm(confirmMsg)) return
           this.actioning = true
           try {
-            const r = await fetch(`${API}${this.apiBase(item)}/${encodeURIComponent(item.quoteNo)}/approve`, {
+            const r = await fetch(approveUrl, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
               body: JSON.stringify({ approvedByDisplay: this.session.displayName || this.session.username })
@@ -1005,10 +1012,15 @@
           }
           this.actioning = true
           try {
-            const r = await fetch(`${API}${this.apiBase(item)}/${encodeURIComponent(item.quoteNo)}/reject`, {
+            // 額外支出的端點掛在案件底下，形狀不同；駁回原因的欄位名也是 reason 不是 note
+            const isXE = item.type === 'extra_expense'
+            const rejectUrl = isXE
+              ? `${API}/api/quotations/${encodeURIComponent(item.linkedQuoteNo)}/extra-expenses/${item.extraExpenseId}/reject`
+              : `${API}${this.apiBase(item)}/${encodeURIComponent(item.quoteNo)}/reject`
+            const r = await fetch(rejectUrl, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
-              body: JSON.stringify({ note: this.rejectNote })
+              body: JSON.stringify(isXE ? { reason: this.rejectNote } : { note: this.rejectNote })
             })
             if (!r.ok) {
               const err = await r.json().catch(() => ({}))

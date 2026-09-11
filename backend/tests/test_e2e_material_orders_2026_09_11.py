@@ -157,7 +157,11 @@ def test_material_orders_panel_round_trip(live_server, make_user):
             )
 
             page.click(f'{MO_PANEL} button:has-text("儲存叫料")')
-            page.wait_for_selector(f'{MO_PANEL} :text("已儲存")', timeout=15000)
+            # 時限放寬到 45 秒：整個 pytest session 期間有背景排程（月報、逾期檢查等）
+            # 在寫 db，SQLite 寫鎖被佔住時 db.py 的 connect(timeout=30) 最多會等 30 秒，
+            # 存檔這支 PATCH 就會卡滿一輪才回來。單檔跑不會遇到、全套跑才會——
+            # 比照 test_e2e_playwright_2026_09_07.py 既有的同款處理。
+            page.wait_for_selector(f'{MO_PANEL} :text("已儲存")', timeout=45000)
 
             # 落地檢查：不只看畫面，直接回頭查 data_json
             saved = _read_material_orders(quote_no)
@@ -222,7 +226,11 @@ def test_material_orders_paid_status_rules_enforced_in_ui(live_server, make_user
             assert page.input_value(f'{MO_PANEL} input[type="date"]') != ""
 
             page.click(f'{MO_PANEL} button:has-text("儲存叫料")')
-            page.wait_for_selector(f'{MO_PANEL} :text("已儲存")', timeout=15000)
+            # 時限放寬到 45 秒：整個 pytest session 期間有背景排程（月報、逾期檢查等）
+            # 在寫 db，SQLite 寫鎖被佔住時 db.py 的 connect(timeout=30) 最多會等 30 秒，
+            # 存檔這支 PATCH 就會卡滿一輪才回來。單檔跑不會遇到、全套跑才會——
+            # 比照 test_e2e_playwright_2026_09_07.py 既有的同款處理。
+            page.wait_for_selector(f'{MO_PANEL} :text("已儲存")', timeout=45000)
 
             saved = _read_material_orders(quote_no)
             assert saved[0]["paidStatus"] == "paid"
