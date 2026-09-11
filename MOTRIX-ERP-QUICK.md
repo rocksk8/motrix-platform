@@ -2432,6 +2432,40 @@ Get-Credential -UserName "Motrix" | Export-Clixml -Path "$env:USERPROFILE\motrix
 
 **開關方式（2026-09-09 起）**：桌面捷徑「MOTRIX 部署儀表板」→ `backend/tools/deploy_dashboard_ctl.pyw`，一個 tkinter 小視窗，只有「開啟」「關閉」兩顆按鈕＋狀態燈（每 1.5 秒用 TCP 連 127.0.0.1:8765 判定，不靠任何會被系統語系影響的指令輸出）。開啟＝背景以 `pythonw.exe` 拉起 `deploy_dashboard.py`（無主控台視窗，輸出全進 `tools/deploy_dashboard_run.log`），起來後自動開瀏覽器；關閉＝二次確認後找 8765 的監聽者 `taskkill`，且**只殺 python 系列行程**，被別的程式佔用時寧可不動手也不誤殺。取代了原本的 `deploy_dashboard_start.bat`／`deploy_dashboard_stop.bat`（`91a80c8` 新增、2026-09-09 合併後刪除；改 Python GUI 順帶擺脫 .bat 檔不能寫中文的 codepage 限制，見 feedback_windows_locale_encoding_pitfall）。
 
+**⚠️ 桌面捷徑一定要指向「真的」GUI 版 pythonw.exe（2026-09-11 修）**
+
+桌面捷徑「MOTRIX 部署儀表板」原本指向
+`AppData\Local\hermes\hermes-agent\venv\Scripts\pythonw.exe`，結果**每次開啟都會多跳
+一個 CMD 主控台視窗**。根因不在這個專案的程式碼，而在那個 venv：
+
+```
+venv\Scripts\python.exe   45,568 bytes  SHA256 ADBF666C...
+venv\Scripts\pythonw.exe  45,568 bytes  SHA256 ADBF666C...   ← 位元組完全相同
+```
+
+那是 **uv 建 venv 時放的 trampoline**，`pythonw.exe` 只是 `python.exe` 改個檔名，
+仍然是 console 版——所以就算叫 pythonw 也會配一個主控台，`ctl` 再用
+`sys.executable` 旁邊的 pythonw 去起 server 時同樣帶著主控台。
+（`ctl` 的 `CREATE_NO_WINDOW` 擋不住，主控台是 trampoline 自己配的。）
+
+**現在的設定**：捷徑 TargetPath 改成
+`C:\Users\hichan\AppData\Local\Programs\Python\Python313\pythonw.exe`
+（系統 Python 3.13，有真正的 GUI 版 pythonw，且 tkinter／fastapi／uvicorn／requests／
+urllib3／pydantic 都齊全，實測儀表板六支唯讀端點在 3.13 下全部 200）。
+Arguments 與 WorkingDirectory 維持不變。
+
+**檢查方式**（換機器或重建 venv 後值得跑一次）：
+
+```powershell
+# 兩者 hash 相同 = 那個 pythonw 是假的，用它會跳主控台
+(Get-FileHash "$venv\Scripts\python.exe").Hash -eq (Get-FileHash "$venv\Scripts\pythonw.exe").Hash
+
+# 開起來之後確認沒有 conhost 掛在 python 底下
+Get-CimInstance Win32_Process -Filter "Name='conhost.exe'" | ForEach-Object {
+  $p = (Get-CimInstance Win32_Process -Filter "ProcessId=$($_.ParentProcessId)").Name
+  if ($p -match 'python') { "有主控台：conhost $($_.ProcessId) <- $p" } }
+```
+
 也可以照舊直接手動啟動：
 
 ```
