@@ -2925,11 +2925,14 @@
                   <div style="flex:1">
                     <span class="cm-section-title" style="margin-bottom:0">完工單管理</span>
                   </div>
-                  <button x-show="['superadmin','admin'].includes(session.role)"
-                          class="btn-add" @click="newCompletionNote()" style="padding:5px 12px;font-size:12px">
+                  <!-- 比照報價單：清單在這裡，填寫在獨立頁面（completion-note-form.html）。
+                       2026-09-12 使用者指定「用報價單的方式去建立，一個頁面做填寫」。 -->
+                  <a x-show="['superadmin','admin'].includes(session.role)"
+                     :href="'completion-note-form.html?q=' + encodeURIComponent(selected.quote_no)"
+                     class="btn-add" style="padding:5px 12px;font-size:12px;text-decoration:none;display:inline-flex;align-items:center;gap:5px">
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 4v16m8-8H4"/></svg>
                     新增完工單
-                  </button>
+                  </a>
                 </div>
 
                 <div x-show="completionNotesLoading" style="text-align:center;padding:30px;color:var(--text-dim);font-size:12px">載入中…</div>
@@ -2968,11 +2971,13 @@
 
                       <button @click="previewCompletionPdf(n)" :disabled="completionPreviewFetching"
                               style="font-size:11px;padding:4px 10px;background:#fff;color:var(--text-primary);border:1px solid var(--border-light);border-radius:6px;cursor:pointer;font-family:var(--font-zh)">預覽 PDF</button>
+                      <a :href="'completion-note-form.html?no=' + encodeURIComponent(n.noteNo)"
+                         style="font-size:11px;padding:4px 10px;background:#fff;color:var(--text-secondary);border:1px solid var(--border-light);border-radius:6px;font-family:var(--font-zh);text-decoration:none">開啟</a>
 
                       <template x-if="n.status === '草稿' && ['superadmin','admin'].includes(session.role)">
                         <span style="display:flex;gap:8px">
-                          <button @click="editCompletionNote(n)"
-                                  style="font-size:11px;padding:4px 10px;background:#fff;color:var(--text-primary);border:1px solid var(--border-light);border-radius:6px;cursor:pointer;font-family:var(--font-zh)">編輯</button>
+                          <a :href="'completion-note-form.html?no=' + encodeURIComponent(n.noteNo)"
+                             style="font-size:11px;padding:4px 10px;background:#fff;color:var(--text-primary);border:1px solid var(--border-light);border-radius:6px;cursor:pointer;font-family:var(--font-zh);text-decoration:none">編輯</a>
                           <button @click="submitCompletionNote(n)"
                                   style="font-size:11px;padding:4px 12px;background:#1D4ED8;color:#fff;border:none;border-radius:6px;cursor:pointer;font-family:var(--font-zh);font-weight:500">申請完工</button>
                           <button @click="deleteCompletionNote(n)"
@@ -4034,93 +4039,6 @@ void 0
   <script src="../static/notif.js"></script>
 
   <script src="../static/sidebar.js"></script>
-<!-- ══ 完工單 建立／編輯 Modal（2026-09-12）══ -->
-<div x-show="showCompletionModal" x-cloak
-     style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:900;display:flex;align-items:center;justify-content:center;padding:20px"
-     @click.self="showCompletionModal=false">
-  <div style="background:#fff;border-radius:12px;width:960px;max-width:96vw;max-height:92vh;overflow:auto;padding:24px 28px">
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
-      <span style="font-size:16px;font-weight:700;font-family:var(--font-zh)"
-            x-text="editCompletionNoteNo ? ('編輯完工單 ' + editCompletionNoteNo) : '新增完工單'"></span>
-      <button @click="showCompletionModal=false" style="margin-left:auto;border:none;background:none;font-size:20px;cursor:pointer;color:var(--text-dim)">×</button>
-    </div>
-
-    <template x-if="completionForm">
-      <div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-bottom:12px">
-          <div><span class="fi-label">施工地點</span>
-            <input class="fi fi--sm" type="text" x-model="completionForm.site_address" placeholder="例如：台中市西屯區…"></div>
-          <div><span class="fi-label">客戶驗收人</span>
-            <input class="fi fi--sm" type="text" x-model="completionForm.recipient"></div>
-          <div><span class="fi-label">現場負責人（我方）</span>
-            <input class="fi fi--sm" type="text" x-model="completionForm.site_manager"></div>
-        </div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:14px">
-          <div><span class="fi-label">開工日期</span>
-            <input class="fi fi--sm" type="date" x-model="completionForm.start_date"></div>
-          <div><span class="fi-label">完工日期（必填）</span>
-            <input class="fi fi--sm" type="date" x-model="completionForm.completion_date"></div>
-          <div><span class="fi-label">保固月數（自完工日起算）</span>
-            <input class="fi fi--sm" type="number" min="0" max="600" x-model="completionForm.warranty_months"></div>
-        </div>
-
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-          <span class="cm-section-title" style="margin:0">完工項目</span>
-          <button @click="cnAddItem()" style="font-size:11px;padding:3px 10px;background:#EFF6FF;color:#1D4ED8;border:1px solid #BFDBFE;border-radius:6px;cursor:pointer;font-family:var(--font-zh)">＋ 項目</button>
-          <button @click="cnAddHeader()" style="font-size:11px;padding:3px 10px;background:#fff;color:var(--text-secondary);border:1px solid var(--border-light);border-radius:6px;cursor:pointer;font-family:var(--font-zh)">＋ 分段標題</button>
-        </div>
-        <template x-for="(it, i) in completionForm.items" :key="i">
-          <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;flex-wrap:wrap">
-            <template x-if="it.type === 'header'">
-              <input class="fi fi--sm" type="text" style="flex:1;min-width:200px;background:#EFF6FF" x-model="it.description" placeholder="分段標題（例如：一樓監控系統）">
-            </template>
-            <template x-if="it.type !== 'header'">
-              <span style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;flex:1">
-                <input class="fi fi--sm" type="text" style="flex:1;min-width:180px" x-model="it.description" placeholder="工程項目 / 規格說明">
-                <input class="fi fi--sm" type="number" style="width:74px" x-model="it.qty" placeholder="數量">
-                <input class="fi fi--sm" type="text" style="width:58px" x-model="it.unit" placeholder="單位">
-                <select class="fi fi--sm" style="width:104px" x-model="it.status">
-                  <option value="完成">完成</option>
-                  <option value="部分完成">部分完成</option>
-                  <option value="未施作">未施作</option>
-                </select>
-                <input class="fi fi--sm" type="text" style="flex:1;min-width:110px" x-model="it.notes" placeholder="備註">
-              </span>
-            </template>
-            <button @click="cnRemoveItem(i)" style="border:none;background:none;color:#B91C1C;cursor:pointer;font-size:16px;padding:0 4px">×</button>
-          </div>
-        </template>
-
-        <!-- 有未完成項目就把遺留事項那欄推到使用者面前。完工單簽下去等於承認全部
-             做完，沒寫清楚的缺失日後沒有依據 -->
-        <div x-show="cnUnfinished(completionForm) > 0"
-             style="margin:10px 0;padding:8px 12px;border-radius:6px;background:#FFFBEB;border:1px solid #FDE68A;font-size:12px;color:#92400E;font-family:var(--font-zh)">
-          ⚠️ 有 <b x-text="cnUnfinished(completionForm)"></b> 項未完成，請在下方「遺留事項」寫清楚待處理內容與預計完成時間。
-        </div>
-
-        <div style="margin-top:12px"><span class="fi-label">施工說明 / 工作摘要</span>
-          <textarea class="fi fi--sm" rows="3" x-model="completionForm.work_summary" style="width:100%"></textarea></div>
-        <div style="margin-top:10px"><span class="fi-label">測試與檢驗結果</span>
-          <textarea class="fi fi--sm" rows="3" x-model="completionForm.test_result" style="width:100%"></textarea></div>
-        <div style="margin-top:10px"><span class="fi-label">遺留事項 / 待改善</span>
-          <textarea class="fi fi--sm" rows="3" x-model="completionForm.pending_items" style="width:100%"
-                    placeholder="完工後仍需處理的項目、預計完成時間"></textarea></div>
-        <div style="margin-top:10px"><span class="fi-label">備註</span>
-          <textarea class="fi fi--sm" rows="2" x-model="completionForm.notes" style="width:100%"></textarea></div>
-
-        <div x-show="completionMsg" style="margin-top:10px;font-size:12px;color:#B91C1C;font-family:var(--font-zh)" x-text="completionMsg"></div>
-
-        <div style="display:flex;gap:10px;margin-top:16px;justify-content:flex-end">
-          <button @click="showCompletionModal=false"
-                  style="font-size:12px;padding:6px 16px;background:#fff;color:var(--text-secondary);border:1px solid var(--border-light);border-radius:6px;cursor:pointer;font-family:var(--font-zh)">取消</button>
-          <button @click="saveCompletionNote()" :disabled="completionSaving"
-                  style="font-size:12px;padding:6px 18px;background:#1D4ED8;color:#fff;border:none;border-radius:6px;cursor:pointer;font-family:var(--font-zh);font-weight:500"
-                  x-text="completionSaving ? '儲存中…' : '儲存'"></button>
-        </div>
-      </div>
-    </template>
-  </div>
-</div>
 
 </body>
 </html>

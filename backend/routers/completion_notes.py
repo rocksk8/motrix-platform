@@ -44,6 +44,43 @@ router = APIRouter()
 # 填「完成」，現場就會被迫把沒做完的東西也勾完成，遺留事項那欄就永遠是空的。
 ITEM_STATUSES = ("完成", "部分完成", "未施作")
 
+# ── 可自訂標題（2026-09-12 使用者回饋）────────────────────────────────────────
+#
+# 第一版的用語全部偏工程（施工地點、工程期間、施工說明、承攬商·工程負責人…），
+# 但公司除了工程還有專案、零組件販售、系統設定、網路架構、防火牆等業務，那些單子
+# 用「施工」講不通。所以：
+#
+#   1. **預設值改成中性用語**（服務地點／執行期間／完成項目／執行說明…）
+#   2. 每一張完工單都可以自己覆寫這些標題（前端另備幾組預設可一鍵套用）
+#
+# **存在 `data_json.labels` 而不是開新欄位**：這些純粹是列印用的字串，永遠整包
+# 讀寫、不會被查詢或彙總，正是 data_json 適合放的東西。（額外支出當初要正規化
+# 出來，是因為每一列需要各自的簽核狀態與稽核軌跡，跟這裡不是同一種需求。）
+DEFAULT_LABELS = {
+    "sectionCustomer": "一、客戶與服務地點",
+    "sectionPeriod":   "二、執行期間與保固",
+    "sectionItems":    "三、完成項目明細",
+    "sectionSummary":  "四、執行說明",
+    "sectionTest":     "五、測試與檢驗結果",
+    "sectionPending":  "六、待辦與未完成事項",
+    "itemColumn":      "項目 / 規格說明",
+    "siteLabel":       "服務地點",
+    "managerLabel":    "負責人",
+    "signOwner":       "客戶驗收 · 簽章蓋印",
+    "signVendor":      "執行單位 · 負責人",
+}
+_LABEL_MAX = 40
+
+
+def merged_labels(raw: dict) -> dict:
+    """使用者覆寫值疊在預設值上。空字串視為「沒覆寫」而不是「標題留白」——
+    列印時標題整個消失只會讓人以為版面壞了。"""
+    out = dict(DEFAULT_LABELS)
+    for k, v in (raw or {}).items():
+        if k in DEFAULT_LABELS and isinstance(v, str) and v.strip():
+            out[k] = v.strip()
+    return out
+
 
 class CompletionNoteIn(BaseModel):
     quote_no:        str
@@ -60,6 +97,8 @@ class CompletionNoteIn(BaseModel):
     warranty_months: Optional[int]  = 12
     pending_items:   Optional[str]  = ''
     notes:           Optional[str]  = ''
+    # 只接受 DEFAULT_LABELS 裡有的鍵，其餘忽略（見 _validate()）
+    labels:          Optional[dict] = None
 
 
 def _require_admin(user: dict):
@@ -78,7 +117,9 @@ def _warranty_range(completion_date: str, months: int) -> tuple:
     永遠是空字串、畫面與 PDF 都只是「沒顯示」而不會報錯——測試才抓出來。所以
     現在只吞 `ValueError`（完工日格式不合法，屬預期情況），型別錯不再靜默。"""
     raw = (completion_date or "").strip()[:10]
-    if not raw:
+    # 月數 0／留空＝這張單不談保固（比照報價單「條件留空就不印」）。此時連起算日
+    # 都不該回——回一個「保固 2026-09-10 ～ 2026-09-10」比留白更容易被誤讀。
+    if not raw or int(months or 0) <= 0:
         return "", ""
     from datetime import date as _date
     from helpers.dates import _add_months
@@ -94,7 +135,8 @@ def _note_public(row, include_items: bool = True) -> dict:
     案件管理前端吃的是同一種形狀）。"""
     d = dict(row)
     items = json.loads(d.get("items_json") or "[]")
-    approval = (json.loads(d.get("data_json") or "{}") or {}).get("approval") or {}
+    _dj = json.loads(d.get("data_json") or "{}") or {}
+    approval = _dj.get("approval") or {}
     w_start, w_end = _warranty_range(d.get("completion_date") or "", d.get("warranty_months") or 0)
     out = {
         "id":              d["id"],
@@ -113,6 +155,10 @@ def _note_public(row, include_items: bool = True) -> dict:
         "warrantyMonths":  d.get("warranty_months") or 0,
         "warrantyStart":   w_start,
         "warrantyEnd":     w_end,
+        # 保固留空／填 0 = 完工單上不顯示保固那一列（比照報價單「條件留空就不印」）
+        "showWarranty":    bool(d.get("warranty_months") or 0),
+        "labels":          merged_labels(_dj.get("labels")),
+        "labelOverrides":  _dj.get("labels") or {},
         "pendingItems":    d.get("pending_items") or "",
         "notes":           d.get("notes") or "",
         "itemCount":       len(items),
@@ -148,6 +194,11 @@ def _validate(body: CompletionNoteIn):
         st = it.get("status")
         if st and st not in ITEM_STATUSES:
             raise HTTPException(400, f"完工狀態必須是：{'／'.join(ITEM_STATUSES)}")
+    for k, v in (body.labels or {}).items():
+        if k not in DEFAULT_LABELS:
+            raise HTTPException(400, f"未知的標題欄位：{k}")
+        if not isinstance(v, str) or len(v) > _LABEL_MAX:
+            raise HTTPException(400, f"標題「{k}」需為 {_LABEL_MAX} 字以內的文字")
 
 
 # ── CRUD ──────────────────────────────────────────────────────────────────────
@@ -203,12 +254,13 @@ def create_completion_note(body: CompletionNoteIn, authorization: str = Header(N
             "(note_no, quote_no, status, customer_name, project_name, site_address, start_date, "
             " completion_date, site_manager, recipient, items_json, work_summary, test_result, "
             " warranty_months, pending_items, notes, data_json, created_by, created_at, updated_at) "
-            "VALUES (?,?,'草稿',?,?,?,?,?,?,?,?,?,?,?,?,?,'{}',?,?,?)",
+            "VALUES (?,?,'草稿',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (note_no, body.quote_no, customer_name, project_name, body.site_address or "",
              body.start_date or "", body.completion_date or "", body.site_manager or "",
              body.recipient or "", json.dumps(body.items or [], ensure_ascii=False),
              body.work_summary or "", body.test_result or "",
              int(body.warranty_months or 0), body.pending_items or "", body.notes or "",
+             json.dumps({"labels": body.labels or {}}, ensure_ascii=False),
              user["username"], now, now),
         )
         conn.commit()
@@ -228,22 +280,29 @@ def update_completion_note(note_no: str, body: CompletionNoteIn, authorization: 
     _validate(body)
     conn = get_db()
     try:
-        row = conn.execute("SELECT status FROM completion_notes WHERE note_no=?", (note_no,)).fetchone()
+        row = conn.execute(
+            "SELECT status, data_json FROM completion_notes WHERE note_no=?", (note_no,)).fetchone()
         if not row:
             raise HTTPException(404, "完工單不存在")
         if row["status"] != "草稿":
             raise HTTPException(409, "僅草稿狀態可編輯")
         now = datetime.now().isoformat()
+        # ⚠️ read-modify-write：data_json 裡除了 labels 還有 approval（被駁回退回草稿
+        # 的單子仍留著歷史），整包覆蓋會把它清掉
+        dj = json.loads(row["data_json"] or "{}") or {}
+        dj["labels"] = body.labels or {}
         conn.execute(
             "UPDATE completion_notes SET customer_name=?, project_name=?, site_address=?, "
             " start_date=?, completion_date=?, site_manager=?, recipient=?, items_json=?, "
-            " work_summary=?, test_result=?, warranty_months=?, pending_items=?, notes=?, updated_at=? "
+            " work_summary=?, test_result=?, warranty_months=?, pending_items=?, notes=?, "
+            " data_json=?, updated_at=? "
             "WHERE note_no=?",
             (body.customer_name or "", body.project_name or "", body.site_address or "",
              body.start_date or "", body.completion_date or "", body.site_manager or "",
              body.recipient or "", json.dumps(body.items or [], ensure_ascii=False),
              body.work_summary or "", body.test_result or "", int(body.warranty_months or 0),
-             body.pending_items or "", body.notes or "", now, note_no),
+             body.pending_items or "", body.notes or "",
+             json.dumps(dj, ensure_ascii=False), now, note_no),
         )
         conn.commit()
     finally:

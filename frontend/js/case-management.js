@@ -616,13 +616,10 @@ function app() {
     //
     // ⚠️ 後端 list 端點回的是 `{items: [...]}`（新端點的慣例），不是出貨單那種裸陣列，
     //    照抄 `= await r.json()` 會拿到一個物件、畫面永遠空白且沒有任何錯誤。
+    // 清單在案件管理、填寫在獨立頁面 completion-note-form.html（比照報價單清單與
+    // 報價單表單的分工）。所以這裡**只留清單與狀態動作**，不再有表單狀態。
     completionNotes: [],
     completionNotesLoading: false,
-    showCompletionModal: false,
-    completionForm: null,
-    editCompletionNoteNo: '',
-    completionSaving: false,
-    completionMsg: '',
     completionPreviewFetching: false,
 
     async loadCompletionNotes(quoteNo) {
@@ -639,112 +636,6 @@ function app() {
         if (r.ok) this.completionNotes = (await r.json()).items || []
       } catch {}
       this.completionNotesLoading = false
-    },
-
-    _blankCompletionForm() {
-      const today = new Date().toISOString().slice(0, 10)
-      return {
-        quote_no: this.selected?.quote_no || '',
-        site_address: '',
-        start_date: '',
-        completion_date: today,
-        site_manager: this.session.displayName || this.session.username || '',
-        recipient: '',
-        work_summary: '',
-        test_result: '',
-        warranty_months: 12,
-        pending_items: '',
-        notes: '',
-        items: [],
-      }
-    },
-
-    newCompletionNote() {
-      this.editCompletionNoteNo = ''
-      this.completionForm = this._blankCompletionForm()
-      this.completionMsg = ''
-      this.showCompletionModal = true
-    },
-
-    async editCompletionNote(n) {
-      this.completionMsg = ''
-      try {
-        const r = await fetch(`/api/completion-notes/${n.noteNo}`, {
-          headers: { Authorization: 'Bearer ' + this.session.token }
-        })
-        if (!r.ok) { alert('讀取失敗'); return }
-        const d = await r.json()
-        this.editCompletionNoteNo = d.noteNo
-        this.completionForm = {
-          quote_no: d.quoteNo,
-          site_address: d.siteAddress || '',
-          start_date: d.startDate || '',
-          completion_date: d.completionDate || '',
-          site_manager: d.siteManager || '',
-          recipient: d.recipient || '',
-          work_summary: d.workSummary || '',
-          test_result: d.testResult || '',
-          warranty_months: d.warrantyMonths ?? 12,
-          pending_items: d.pendingItems || '',
-          notes: d.notes || '',
-          items: d.items || [],
-        }
-        this.showCompletionModal = true
-      } catch (e) { alert('網路錯誤：' + e.message) }
-    },
-
-    cnAddItem() {
-      this.completionForm.items.push(
-        { description: '', qty: 1, unit: '式', status: '完成', notes: '' })
-    },
-    cnAddHeader() {
-      this.completionForm.items.push({ type: 'header', description: '' })
-    },
-    cnRemoveItem(i) { this.completionForm.items.splice(i, 1) },
-
-    // 有沒有沒做完的項目——存檔前要提醒把遺留事項寫清楚，否則完工單簽下去等於
-    // 承認全部做完，日後爭議沒有依據
-    cnUnfinished(form) {
-      return (form?.items || []).filter(
-        it => it.type !== 'header' && (it.status === '部分完成' || it.status === '未施作')).length
-    },
-
-    async saveCompletionNote() {
-      const f = this.completionForm
-      if (!f) return
-      this.completionSaving = true; this.completionMsg = ''
-      const body = {
-        quote_no: f.quote_no,
-        site_address: f.site_address || '',
-        start_date: f.start_date || '',
-        completion_date: f.completion_date || '',
-        site_manager: f.site_manager || '',
-        recipient: f.recipient || '',
-        work_summary: f.work_summary || '',
-        test_result: f.test_result || '',
-        warranty_months: Number(f.warranty_months) || 0,
-        pending_items: f.pending_items || '',
-        notes: f.notes || '',
-        items: f.items || [],
-      }
-      const method = this.editCompletionNoteNo ? 'PUT' : 'POST'
-      const url = this.editCompletionNoteNo
-        ? `/api/completion-notes/${this.editCompletionNoteNo}`
-        : '/api/completion-notes'
-      try {
-        const r = await fetch(url, {
-          method,
-          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
-          body: JSON.stringify(body)
-        })
-        if (!r.ok) {
-          this.completionMsg = (await r.json().catch(() => ({}))).detail || '儲存失敗'
-          this.completionSaving = false; return
-        }
-        this.showCompletionModal = false
-        await this.loadCompletionNotes(this.selected?.quote_no)
-      } catch (e) { this.completionMsg = '網路錯誤：' + e.message }
-      this.completionSaving = false
     },
 
     async deleteCompletionNote(n) {
