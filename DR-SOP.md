@@ -71,7 +71,7 @@
    - `MOTRIX ERP Server Autostart`：目前缺對應腳本，見 §3 第 1 點——這一步在缺口補上前無法照抄，需要人工依 QUICK §1.1 描述的行為重寫
    - `MOTRIX ERP Daily Backup`：執行 `backend\setup_backup_task.ps1`（已修正為動態偵測 Python 路徑，兩台機器都能直接用）
    - `MOTRIX ERP Heartbeat`：同樣缺對應腳本，見 §3 第 1 點
-3. 確認 `main.py` 的 CORS `allow_origins` 白名單是否需要更新（新機器 IP 若跟舊的 `172.16.10.177` 不同，需要改 code 重新部署——見 QUICK §11 已知風險）
+3. 確認 CORS 白名單（**2026-09-11 起不用再改 code**）：新機器 IP 若跟舊的 `172.16.10.177` 不同，設環境變數 `MOTRIX_CORS_ORIGINS`（逗號分隔）即可，不必重新打包。⚙️ **一旦設了就完全取代預設清單、不是附加**，設錯會讓前端打不到自己的 API；不設則沿用原本寫死的六筆（行為跟以前完全一樣）。見 `main.py::_resolve_cors_origins()`
 
 ### Step 5 — 驗證
 
@@ -88,7 +88,7 @@
 | ~~補回 `setup_autostart_task.ps1`/`setup_heartbeat_task.ps1`~~ | ✅ 2026-08-08 已完成並跟正式機實際版本校對一致，見 §3 第 1 點 |
 | ~~`uploads/` 納入備份範圍~~ | ✅ 2026-08-08 已完成，見 §3 第 2 點 |
 | ~~PDF 存檔納入備份範圍~~ | ✅ 2026-09-07 已完成，見 §3 第 2 點 |
-| CORS 白名單改用環境變數 | 避免換機器/換 IP 就要改 code 重新部署（呼應顧問審視時提過的一般性建議） |
+| ~~CORS 白名單改用環境變數~~ | ✅ **2026-09-11 已實作**：`MOTRIX_CORS_ORIGINS`，未設定時行為與改動前逐字相同；測試 `test_cors_origins_env_2026_09_11.py`（5 題，含「真的有接進 CORSMiddleware」的接線驗證） |
 | 找第二台機器（哪怕只是備用硬體，不必常駐開機）| 把「全新環境安裝」這件事的時間從「臨時採購+安裝」壓縮到「開機+還原資料」|
 
 ## 6 · 演練紀錄

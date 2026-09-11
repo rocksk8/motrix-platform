@@ -346,3 +346,36 @@ def test_locked_edit_denial_is_audit_logged(client, make_user):
     assert r2.status_code == 200, r2.text
     actions = [it["action"] for it in r2.json()["items"]]
     assert "case.locked_edit_denied" in actions
+
+
+def test_locked_edit_denial_records_which_operation(client, make_user):
+    """2026-09-11 新增：擋下的那筆 audit_log 必須寫出**是哪一支操作**被擋。
+
+    為什麼這件事重要：2026-08-28 加這道記錄的目的是「用數據而非猜測決定要不要
+    擴大半解鎖的涵蓋範圍」，但當時 detail 只有單號——查得出這道牆被撞了幾次，
+    查不出該優先開放哪幾支，而後者才是要決定的事。13 個呼叫點現在各自帶
+    `op=` 標籤。這支測試同時釘住兩件事：標籤真的有寫進去，且不同端點寫的是
+    不同標籤（避免日後新增呼叫點時複製貼上忘了改）。"""
+    username, password = make_user(role="admin")
+    token = _login(client, username, password)
+    _make_closed_case("MQ-CCR-AUDIT-002")
+
+    # 兩支不同的端點，期望產生兩種不同的標籤
+    assert client.post("/api/quotations/MQ-CCR-AUDIT-002/stages",
+                       headers=_auth(token), json={"label": "新階段"}).status_code == 403
+    assert client.patch("/api/quotations/MQ-CCR-AUDIT-002/stages/reorder",
+                        headers=_auth(token), json={"order": []}).status_code == 403
+
+    items = client.get("/api/audit-log", headers=_auth(token)).json()["items"]
+    # 訊息寫在 target_label 不是 detail——_audit() 的第 5 個位置參數是
+    # target_label，detail 是 dict（這批呼叫都沒傳，實際存的是 "{}"）
+    details = [it.get("target_label") or "" for it in items
+               if it["action"] == "case.locked_edit_denied"
+               and it.get("target_id") == "MQ-CCR-AUDIT-002"]
+    assert len(details) >= 2, f"應該有兩筆被擋紀錄，實際 {len(details)}：{details}"
+
+    ops = {d.split("｜操作：", 1)[1] for d in details if "｜操作：" in d}
+    assert ops == {"案件階段-新增", "案件階段-排序"}, f"標籤不如預期：{ops}"
+    # 前綴保持原樣，2026-08-28 起累積的舊紀錄才能跟新紀錄一起統計
+    assert all(d.startswith("MQ-CCR-AUDIT-002 已結案，此操作不支援排隊審核，直接擋下")
+               for d in details), details

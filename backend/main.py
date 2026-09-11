@@ -30,18 +30,49 @@ FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")
 
 app = FastAPI(title="MOTRIX ERP API", version="1.0.0")
 
+_DEFAULT_CORS_ORIGINS = [
+    "http://localhost:666",
+    "http://127.0.0.1:666",
+    "http://172.16.10.177:666",
+    # 2026-08-27：正式機導入 HTTPS 後（見 backend/tools/https_setup.ps1），
+    # 保留原本 http 三筆是因為開發機仍是明文運作，共用同一份 main.py
+    "https://localhost:666",
+    "https://127.0.0.1:666",
+    "https://172.16.10.177:666",
+]
+
+
+def _resolve_cors_origins(env_value: str = None) -> list:
+    """決定 CORS 白名單：有設 `MOTRIX_CORS_ORIGINS` 就用它（逗號分隔），否則用預設。
+
+    2026-09-11：先前這份清單是直接寫死在 `add_middleware()` 呼叫裡，換機器或換 IP
+    就得改程式碼重新部署（`DR-SOP.md` §5 長期列為待改進）。改成環境變數之後，
+    **未設定時的行為與改動前逐字相同**——預設值就是原本那六筆，不是空清單，
+    所以忘了設環境變數不會把所有人擋在外面。
+
+    ⚠️ 這是安全邊界，不是一般設定：`MOTRIX_CORS_ORIGINS` 一旦設了就**完全取代**
+    預設清單（不是附加），設錯會讓正式機的前端打不到自己的 API。設定格式範例：
+        MOTRIX_CORS_ORIGINS=https://erp.miactw.com:666,https://172.16.10.177:666
+
+    註：目前 `motrix.internal`（正式機 2026-09-11 起的正式網址）**不在預設清單裡**。
+    今天沒事是因為前端跟 API 由同一個 FastAPI 服務提供、屬同源請求，CORS 根本不會
+    介入；但若哪天前端被拆到別的來源，這裡要記得補。
+    """
+    raw = os.getenv("MOTRIX_CORS_ORIGINS") if env_value is None else env_value
+    parsed = [o.strip() for o in (raw or "").split(",") if o.strip()]
+    return parsed or list(_DEFAULT_CORS_ORIGINS)
+
+
+_cors_origins = _resolve_cors_origins()
+logger.info(
+    "CORS allow_origins（%s）：%s",
+    "來自 MOTRIX_CORS_ORIGINS" if os.getenv("MOTRIX_CORS_ORIGINS") else "預設值",
+    ", ".join(_cors_origins),
+)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:666",
-        "http://127.0.0.1:666",
-        "http://172.16.10.177:666",
-        # 2026-08-27：正式機導入 HTTPS 後（見 backend/tools/https_setup.ps1），
-        # 保留原本 http 三筆是因為開發機仍是明文運作，共用同一份 main.py
-        "https://localhost:666",
-        "https://127.0.0.1:666",
-        "https://172.16.10.177:666",
-    ],
+    allow_origins=_cors_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
