@@ -193,60 +193,61 @@ def summarize_payment_items(total: float, pay_items: list, pretax: float = None)
     }
 
 
-def settlement_extra_expenses(data: dict) -> list:
-    """把一張報價單的精算「額外支出」攤成月度支出彙總用的逐筆資料。
+def case_extra_expenses(conn, quote_no: str) -> list:
+    """把一張案件的額外支出攤成月度支出彙總用的逐筆資料（讀 `case_extra_expenses` 表）。
 
-    2026-09-09 修：`dashboard.py::dashboard_monthly()` 與
-    `reports.py::_collect_expenses()` 原本各自只撈
-    `settlement.status='finalized'` 的案件，代表**精算還在草稿階段的額外支出
-    完全不會出現在任何月度支出數字裡**。但實際作業順序是「支出當下就先填進
-    精算表單，案件整個結束後才做精算完結」，中間可能隔好幾個月——這段期間
-    當月已經花掉的錢在報表與首頁上等於憑空消失，使用者是看著當月數字對不上
-    才發現的。改成**只要填了就算**，不再要求精算完結。
+    2026-09-11 從 `settlement_extra_expenses(data)` 改名並改讀新表（migration v75
+    把資料從 `settlement.extraItems` 搬出來了）。**改名是刻意的**：若沿用舊名只改
+    實作，任何漏改的呼叫端會安靜地拿到空陣列，報表數字直接歸零卻不會報錯。
+
+    以下是從舊版保留下來、仍然成立的規則——
+
+    2026-09-09 修：`dashboard.py::dashboard_monthly()` 與 `reports.py::_collect_expenses()`
+    原本只撈 `settlement.status='finalized'` 的案件，代表**精算還在草稿階段的額外支出
+    完全不會出現在任何月度支出數字裡**。但實際作業順序是「支出當下就先填，案件整個
+    結束後才做精算完結」，中間可能隔好幾個月——這段期間當月已經花掉的錢在報表與首頁
+    上等於憑空消失。改成**只要填了就算**。
 
     歸月日期依序取：
-      1. `expenseDate`（憑證日期，最準；2026-09-01 起精算表單就有這個欄位）
-      2. `createdDate`（項目建立日期，2026-09-09 起記錄，代表當時的時間）
-      3. 精算完結時間（只有已完結的案件才有）
-      4. 最後一次精算存檔時間（草稿也有，但用項目建立時間比較準）
-    四者都沒有就跳過——真的無從判斷是哪個月，硬塞會污染月報。
+      1. `expense_date`（憑證日期，最準）
+      2. `created_at`（填寫日期）
+    兩者都沒有就跳過——真的無從判斷是哪個月，硬塞會污染月報。
+    （舊版還會退回精算完結／最後存檔時間，新表每一筆一定有 created_at，不需要那兩層。）
 
-    每筆帶 `pending`（精算尚未完結）旗標：這些金額仍可能被改動，呼叫端要讓
-    使用者看得出來，不要讓人以為是已定稿的數字。
+    **`pending` 的定義 2026-09-11 改了**：舊版是「精算尚未完結」，現在是
+    **「送審尚未核准」**（status 不是「已核准」）。使用者指定的規則是
+    **送審中的項目照樣算進成本，但畫面要提醒還沒簽完**——所以這裡照樣回傳金額，
+    由呼叫端決定怎麼標示。不要因為 pending 就把它濾掉，那會讓當月數字又對不上，
+    正是 2026-09-09 修過的那個問題。
     """
-    settlement = data.get("settlement") or {}
-    items = settlement.get("extraItems") or []
-    if not items:
-        return []
+    rows = conn.execute(
+        "SELECT category, description, total_cost, expense_date, created_at, doc_no, "
+        "       files_json, status "
+        "FROM case_extra_expenses WHERE quote_no=? ORDER BY id", (quote_no,)
+    ).fetchall()
 
-    finalized_at = last_saved_at = ""
-    for h in (data.get("editHistory") or []):
-        htype = h.get("type") or ""
-        if htype == "settlement_finalized":
-            finalized_at = h.get("at") or finalized_at
-        if htype in ("settlement_finalized", "settlement_draft"):
-            last_saved_at = h.get("at") or last_saved_at
-
-    pending = settlement.get("status") != "finalized"
     out = []
-    for it in items:
-        cost = float(it.get("totalCost") or 0)
+    for r in rows:
+        cost = float(r["total_cost"] or 0)
         if not cost:
             continue
-        item_date = it.get("expenseDate") or it.get("createdDate") or finalized_at or last_saved_at or ""
+        item_date = (r["expense_date"] or r["created_at"] or "").strip()
         if not item_date:
             continue
+        try:
+            files = json.loads(r["files_json"] or "[]")
+        except Exception:
+            files = []
         out.append({
             "date":     item_date[:10],
             "month":    item_date[:7],
             "cost":     cost,
-            "category": it.get("category") or "其他",
-            # 精算表單存的欄位是 description（見 settlement.html::addExtra()）；
-            # name/desc 是更早期的欄位名，留著相容舊資料
-            "desc":     it.get("description") or it.get("name") or it.get("desc") or "",
-            "docNo":    it.get("docNo") or "",
-            "files":    it.get("files") or [],
-            "pending":  pending,
+            "category": r["category"] or "其他",
+            "desc":     r["description"] or "",
+            "docNo":    r["doc_no"] or "",
+            "files":    files,
+            "status":   r["status"],
+            "pending":  r["status"] != "已核准",
         })
     return out
 

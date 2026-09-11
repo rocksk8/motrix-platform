@@ -7,6 +7,22 @@ PDF 產生本身需要 Edge headless（本機測試環境沒有，見既有 test
 import json
 
 
+
+def _sync_extra_to_table(conn, quote_no):
+    """把剛種進 data_json 的 settlement.extraItems 搬進 case_extra_expenses。
+
+    2026-09-11（migration v75）之後額外支出住在獨立資料表，data_json 裡那份只是
+    唯讀備份、報表不再讀它。用 migration 自己那支搬移函式，欄位對應與歸月的
+    fallback 才不會跟正式路徑漂移。"""
+    import db as _db
+    import json as _json
+    row = conn.execute(
+        "SELECT data_json, sales_person FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+    if not row:
+        return
+    _db._move_extra_items_for_quote(
+        conn, quote_no, _json.loads(row["data_json"] or "{}"), row["sales_person"] or "")
+
 def _login(client, username, password):
     r = client.post("/api/auth/login", json={"username": username, "password": password})
     assert r.status_code == 200, r.text
@@ -41,6 +57,7 @@ def _make_closed_quotation(quote_no):
             (quote_no, "已送出", "測試客戶", "測試專案", 50000, 47619, data_json,
              "2026-01-01T00:00:00", "2026-01-01T00:00:00", "已結案", "finalized"),
         )
+        _sync_extra_to_table(conn, quote_no)
         conn.commit()
     finally:
         conn.close()

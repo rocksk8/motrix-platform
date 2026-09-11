@@ -10,7 +10,7 @@ from fastapi import APIRouter, HTTPException, Header, Query
 
 from db import get_db
 from helpers import (_require_user, _warranty_expiry, payment_item_amounts, norm_at,
-                     settlement_extra_expenses)
+                     case_extra_expenses)
 from routers.dev_crm import _can_access_case
 from routers.vendor_contractors import _dispatch_row
 
@@ -495,26 +495,24 @@ def dashboard_expenses_monthly(department_id: Optional[int] = Query(None), autho
     # 的案件，草稿階段填的額外支出完全不算；(b) 一律用精算完結時間歸月，連
     # reports.py 2026-09-02 已經改用 expenseDate（憑證日期）的修正都沒同步過來，
     # 所以首頁「本月支出」跟營運報表的同一個數字本來就對不起來。兩處統一改用
-    # helpers.settlement_extra_expenses()。
+    # helpers.case_extra_expenses()。
+    # 2026-09-11：額外支出搬到 case_extra_expenses 表（migration v75），改成直接
+    # 從那張表取有資料的案件，不再掃 data_json 的 json_extract。conn 也因此必須
+    # 撐到迴圈結束才關——新的 helper 要讀表。
     quote_rows = conn.execute(
-        "SELECT quote_no, data_json FROM quotations "
-        "WHERE json_extract(data_json,'$.settlement.extraItems') IS NOT NULL"
+        "SELECT DISTINCT quote_no FROM case_extra_expenses"
     ).fetchall()
-    conn.close()
     for r in quote_rows:
         if not _quote_in_department(r["quote_no"]):
             continue
-        try:
-            data = json.loads(r["data_json"] or "{}")
-        except Exception:
-            continue
-        for ex in settlement_extra_expenses(data):
+        for ex in case_extra_expenses(conn, r["quote_no"]):
             if ex["month"] not in expenses:
                 continue
             expenses[ex["month"]]["other"] += ex["cost"]
             other_breakdown[ex["month"]][ex["category"]] = (
                 other_breakdown[ex["month"]].get(ex["category"], 0) + ex["cost"]
             )
+    conn.close()
 
     items = []
     for mo in month_list:

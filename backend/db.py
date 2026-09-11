@@ -78,7 +78,7 @@ DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR = os.path.join(
 # （已套用過的 schema_version 不可回頭刪除/重排），data_json.dealWonAt 這個
 # 欄位會留在既有資料裡但目前沒有任何程式碼讀取，之後如果要重新加回「成交時間」
 # 這種概念，不要複用這個欄位名稱免得語意混淆。
-CURRENT_VERSION = 74
+CURRENT_VERSION = 75
 
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
 # execution model) whenever the current request is authenticated as the 'demo'
@@ -2959,6 +2959,158 @@ def _m041_gateway_guide(conn):
 
 
 # Ordered list — index+1 is the migration version number.
+def _move_extra_items_for_quote(conn, quote_no, data, sales_person=""):
+    """把一張報價單 data_json 裡的 `settlement.extraItems[]` 搬進 `case_extra_expenses`。
+
+    從 `_m075_case_extra_expenses()` 抽出來的單筆版本，理由是**測試也需要同一套邏輯**
+    ——歸月日期的四層 fallback 若在測試裡另外複製一份，兩邊遲早會漂移，而漂移的後果
+    是「報表數字對不上」這種很難追的問題。回傳搬移筆數。
+    """
+    stl = (data.get("settlement") or {})
+    items = stl.get("extraItems") or []
+    if not items:
+        return 0
+
+    # 推定填寫人：精算完結人 → 業務 → 留空
+    inferred = (stl.get("finalizedBy") or "").strip() or (sales_person or "").strip()
+
+    # ⚠️ 歸月日期的 fallback 必須跟舊的 settlement_extra_expenses() 一致，
+    # 否則搬完之後這些錢會從月支出報表整筆消失。實測開發機 7 筆既有資料裡
+    # **有 6 筆 expenseDate 與 createdDate 都是空的**，全靠 editHistory 的
+    # 精算存檔時間歸月——少了這一層，7,990 元會無聲蒸發，正是 2026-09-09
+    # 修過的那一類問題（當月花掉的錢在報表上憑空不見）。
+    finalized_at = last_saved_at = ""
+    for h in (data.get("editHistory") or []):
+        htype = h.get("type") or ""
+        if htype == "settlement_finalized":
+            finalized_at = h.get("at") or finalized_at
+        if htype in ("settlement_finalized", "settlement_draft"):
+            last_saved_at = h.get("at") or last_saved_at
+
+    moved = 0
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        created = ((it.get("createdDate") or "").strip()
+                   or (it.get("expenseDate") or "").strip()
+                   or finalized_at or last_saved_at or "")[:10]
+        real_by = (it.get("createdBy") or "").strip()
+        conn.execute(
+            "INSERT INTO case_extra_expenses "
+            "(quote_no, category, description, qty, unit, unit_cost, total_cost, note, "
+            " expense_date, doc_no, files_json, created_by_name, created_by_inferred, "
+            " created_at, updated_at, status, approval_json) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (
+                quote_no,
+                (it.get("category") or "其他"),
+                # description 是精算表單現行的欄位名；name/desc 是更早期的欄位名，
+            # 舊的 settlement_extra_expenses() 有這層 fallback，搬移時必須一起帶過來，
+            # 否則舊資料的品項說明會整欄變空白（報表明細只剩類別，對不回憑證）
+            (it.get("description") or it.get("name") or it.get("desc") or ""),
+                float(it.get("qty") or 0),
+                (it.get("unit") or ""),
+                float(it.get("unitCost") or 0),
+                float(it.get("totalCost") or 0),
+                (it.get("note") or ""),
+                (it.get("expenseDate") or ""),
+                (it.get("docNo") or ""),
+                json.dumps(it.get("files") or [], ensure_ascii=False),
+                real_by or inferred,
+                0 if real_by else (1 if inferred else 0),
+                created,
+                created,
+                "已核准",
+                json.dumps({"migrated": True,
+                            "note": "2026-09-11 從 settlement.extraItems 搬移，"
+                                    "建立時尚無送審機制，一律視為已核准"},
+                           ensure_ascii=False),
+            ),
+        )
+        moved += 1
+    return moved
+
+
+def _m075_case_extra_expenses(conn):
+    """額外支出從 `settlement.extraItems`（data_json）正規化成 `case_extra_expenses` 表（2026-09-11）。
+
+    **為什麼要正規化**：使用者交辦把額外支出從精算頁搬到案件管理，並要求「填寫需送審」
+    與記錄「填寫日期／更動日期」。送審狀態與更動軌跡塞在 data_json 的陣列裡會很難查
+    （沒有 id 可掛簽核狀態、改一筆要整包重寫、歷史無從追）——比照 `case_stages`
+    當初從 data_json 正規化出來的前例，直接建表。規格見 `MOTRIX-ERP-QUICK.md` §5.10。
+
+    **這支 migration 會搬資料，不只是建表**。既有 `settlement.extraItems[]` 全部搬進新表，
+    搬完之後**刻意保留** data_json 裡的原陣列不刪除：
+
+      - 萬一新表出問題，原始資料還在，救得回來
+      - 但所有讀取端都已改讀新表（`helpers/quotations.py::case_extra_expenses()`），
+        原陣列從此是**唯讀的歷史備份，不再被任何程式碼寫入**
+      - 清掉它是之後確認新流程穩定後的獨立動作，不在這支 migration 裡做
+
+    **搬過來的資料一律標成「已核准」**：它們是在送審機制存在之前就建立並計入成本的，
+    若標成「待審核」會讓所有既有案件突然冒出一堆待簽核項目、並在核准前從成本裡消失，
+    是憑空製造的混亂。`approval_json` 記 `migrated: True` 以便日後區分。
+
+    **填寫人回填（使用者指定要回填）**：既有資料沒有記錄誰建立的——`settlement.html`
+    寫入 `createdBy` 時取的是 `this.session?.user?.display_name`，那個路徑在這個專案的
+    session 結構裡不存在（其他地方都是 `this.session.displayName`），所以**實測 7 筆
+    既有項目，createdBy 有值的是 0 筆**。既然沒有真實紀錄，回填只能用推定：
+
+      精算完結人 `settlement.finalizedBy` → 報價單業務 `sales_person` → 留空
+
+    推定的一律把 `created_by_inferred` 設為 1，畫面上要標示「（推定）」。
+    **不要把推定值當成事實**——這是回填，不是還原。
+    """
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS case_extra_expenses (
+            id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+            quote_no           TEXT NOT NULL,
+            category           TEXT NOT NULL DEFAULT '其他',
+            description        TEXT NOT NULL DEFAULT '',
+            qty                REAL NOT NULL DEFAULT 1,
+            unit               TEXT NOT NULL DEFAULT '',
+            unit_cost          REAL NOT NULL DEFAULT 0,
+            total_cost         REAL NOT NULL DEFAULT 0,
+            note               TEXT NOT NULL DEFAULT '',
+            expense_date       TEXT NOT NULL DEFAULT '',
+            doc_no             TEXT NOT NULL DEFAULT '',
+            files_json         TEXT NOT NULL DEFAULT '[]',
+            created_by         TEXT NOT NULL DEFAULT '',
+            created_by_name    TEXT NOT NULL DEFAULT '',
+            created_by_inferred INTEGER NOT NULL DEFAULT 0,
+            payer_username     TEXT NOT NULL DEFAULT '',
+            payer_name         TEXT NOT NULL DEFAULT '',
+            created_at         TEXT NOT NULL DEFAULT '',
+            updated_at         TEXT NOT NULL DEFAULT '',
+            updated_by_name    TEXT NOT NULL DEFAULT '',
+            status             TEXT NOT NULL DEFAULT '草稿',
+            approval_json      TEXT NOT NULL DEFAULT '{}'
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_case_extra_exp_quote ON case_extra_expenses(quote_no)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_case_extra_exp_status ON case_extra_expenses(status)")
+
+    # 已經搬過就不要再搬一次（migration 本身要可重跑）
+    if conn.execute("SELECT 1 FROM case_extra_expenses LIMIT 1").fetchone():
+        return
+
+    rows = conn.execute(
+        "SELECT quote_no, data_json, sales_person FROM quotations "
+        "WHERE json_extract(data_json,'$.settlement.extraItems') IS NOT NULL"
+    ).fetchall()
+
+    moved = 0
+    for r in rows:
+        try:
+            data = json.loads(r["data_json"] or "{}")
+        except Exception:
+            continue
+        moved += _move_extra_items_for_quote(conn, r["quote_no"], data, r["sales_person"])
+
+    if moved:
+        logger.info("_m075: 搬移 %d 筆額外支出到 case_extra_expenses（data_json 原陣列保留為唯讀備份）", moved)
+
+
 _MIGRATIONS = [
     _m001_export_columns,        # v1
     _m002_sessions_expires,      # v2
@@ -3034,6 +3186,7 @@ _MIGRATIONS = [
     _m072_totp,                                     # v72
     _m073_webauthn_credentials,                     # v73
     _m074_webauthn_rp_id,                           # v74
+    _m075_case_extra_expenses,                      # v75
 ]
 
 

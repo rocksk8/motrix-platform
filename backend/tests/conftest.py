@@ -142,3 +142,42 @@ def make_user():
         return username, password
 
     return _make
+
+
+@pytest.fixture()
+def seed_extra_expense():
+    """直接在 `case_extra_expenses` 表種一筆額外支出（2026-09-11，migration v75 之後）。
+
+    在那之前額外支出是存在 `quotations.data_json` 的 `settlement.extraItems[]` 裡，
+    所以舊測試都是「組一包 settlement 塞進 data_json」。資料搬到獨立表之後那個做法
+    種出來的東西報表讀不到——不是測試壞了，是資料的家換了。這個 fixture 讓所有
+    相關測試走同一條路徑，不必各自拼 INSERT。
+
+    `status` 預設「已核准」：多數測試關心的是金額有沒有被算進報表，而不是簽核流程；
+    要測「送審中也要照樣計入成本、但標記 pending」時才明確傳其他狀態。
+    """
+    import db
+
+    def _seed(quote_no, *, total_cost=0, category="其他", description="",
+              expense_date="", created_at="", doc_no="", files=None,
+              status="已核准", created_by_name="", payer_name="", qty=1, unit="", unit_cost=0):
+        import json as _json
+        conn = db.get_db()
+        try:
+            cur = conn.execute(
+                "INSERT INTO case_extra_expenses "
+                "(quote_no, category, description, qty, unit, unit_cost, total_cost, "
+                " expense_date, doc_no, files_json, created_by_name, payer_name, "
+                " created_at, updated_at, status) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (quote_no, category, description, qty, unit, unit_cost, total_cost,
+                 expense_date, doc_no, _json.dumps(files or [], ensure_ascii=False),
+                 created_by_name, payer_name, created_at or expense_date,
+                 created_at or expense_date, status),
+            )
+            conn.commit()
+            return cur.lastrowid
+        finally:
+            conn.close()
+
+    return _seed
