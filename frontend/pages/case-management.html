@@ -758,6 +758,15 @@
               <button class="cm-tab" :class="{active: activeTab==='shipping'}" @click="activeTab='shipping'; loadShippingNotes(selected.quote_no)">出貨單</button>
               <button class="cm-tab" :class="{active: activeTab==='feed'}" @click="activeTab='feed'; loadCaseUpdates(selected.quote_no)">動態</button>
               <button class="cm-tab" x-show="canSeeFinancial()" :class="{active: activeTab==='fin'}" @click="activeTab='fin'">財務</button>
+              <!-- 額外支出（2026-09-11）：從精算頁搬過來，獨立成一個分頁而不是塞進財務
+                   分頁——使用者說的是「案件管理的案件內選單」，而案件內選單就是這排分頁。 -->
+              <button class="cm-tab" x-show="canSeeFinancial()" :class="{active: activeTab==='xexp'}"
+                      @click="activeTab='xexp'; loadExtraExpenses(selected.quote_no)">
+                額外支出
+                <span x-show="xe.pendingCount > 0"
+                      style="display:inline-block;margin-left:4px;padding:0 5px;border-radius:8px;background:#FEF3C7;color:#92400E;font-size:10px;font-weight:700"
+                      x-text="xe.pendingCount"></span>
+              </button>
             </div>
 
             <!-- Tab content -->
@@ -1767,6 +1776,128 @@
                 </div>
               </div><!-- /info -->
               </div><!-- /exec -->
+
+
+              <!-- ══ 額外支出 Tab（2026-09-11）══
+                   資料在 case_extra_expenses 表（DB v75），不再是精算的 data_json 陣列。
+                   規格見 MOTRIX-ERP-QUICK.md §5.10。 -->
+              <div id="xe-panel" x-show="activeTab==='xexp' && canSeeFinancial()">
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+                  <span class="cm-section-title" style="margin-bottom:0">額外支出</span>
+                  <span x-show="xe.loading" style="font-size:11px;color:var(--text-dim);font-family:var(--font-zh)">載入中…</span>
+                  <button x-show="!xe.loading" @click="xeAdd()"
+                          style="font-size:11px;padding:4px 10px;background:#EFF6FF;color:#1D4ED8;border:1px solid #BFDBFE;border-radius:6px;cursor:pointer;font-family:var(--font-zh);font-weight:500;white-space:nowrap">
+                    ＋ 新增支出
+                  </button>
+                </div>
+
+                <div x-show="!xe.loading && xe.items.length > 0" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:12px">
+                  <div class="cm-kpi__pill">
+                    <span class="cm-kpi__val" x-text="caseSettleFmt(xe.totalAmount)"></span>
+                    <span class="cm-kpi__lbl">支出總額（<span style="font-family:LINE Seed TW_OTF, sans-serif" x-text="xe.items.length"></span> 筆）</span>
+                  </div>
+                  <div class="cm-kpi__pill" :class="xe.totalPending > 0 ? 'warning' : ''">
+                    <span class="cm-kpi__val" x-text="caseSettleFmt(xe.totalPending)"></span>
+                    <span class="cm-kpi__lbl">尚未核准</span>
+                  </div>
+                </div>
+
+                <!-- 送審中的金額照樣算進總額（使用者指定），但一定要提醒還沒簽完，
+                     否則看數字的人不知道它還可能被駁回而改變 -->
+                <div x-show="xe.totalPending > 0" style="margin-bottom:12px;padding:8px 12px;border-radius:6px;background:#FFFBEB;border:1px solid #FDE68A;font-size:12px;color:#92400E;font-family:var(--font-zh)">
+                  ⚠️ 其中 <b x-text="caseSettleFmt(xe.totalPending)"></b> 尚未完成簽核。
+                  這些金額<b>已經計入上方總額與成本</b>，但仍可能因駁回而改變。
+                </div>
+
+                <div x-show="xe.msg" style="margin-bottom:10px;font-size:12px;font-family:var(--font-zh)"
+                     :style="xe.msgError ? 'color:#B91C1C' : 'color:var(--success)'" x-text="xe.msg"></div>
+
+                <template x-if="!xe.loading && xe.items.length === 0">
+                  <div style="text-align:center;padding:28px 20px;color:var(--text-dim);font-family:var(--font-zh);font-size:12px;border:1px dashed var(--border-light);border-radius:8px;background:#FCFCFB">
+                    尚無額外支出，按上方「＋ 新增支出」開始登記
+                  </div>
+                </template>
+
+                <template x-for="(x, xi) in xe.items" :key="x.id">
+                  <div style="border:1px solid #E5E7EB;border-radius:6px;padding:10px;margin-bottom:8px;background:#FAFAF9">
+                    <!-- 第一列：狀態、填寫人、日期 -->
+                    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;font-size:11px;color:var(--text-dim);font-family:var(--font-zh)">
+                      <span style="padding:2px 8px;border-radius:4px;font-weight:600"
+                            :style="xeStatusStyle(x.status)" x-text="x.status"></span>
+                      <span>填寫人：<b style="color:var(--text-secondary)" x-text="x.createdByName || '—'"></b>
+                        <!-- 既有資料的填寫人是搬移時推定回填的，不是真的知道是誰。
+                             標出來，不要讓人把推定值當成事實 -->
+                        <span x-show="x.createdByInferred" style="color:#B45309">（推定）</span>
+                      </span>
+                      <span>填寫日期：<span x-text="(x.createdAt || '—').slice(0,10)"></span></span>
+                      <span x-show="x.updatedAt && x.updatedAt !== x.createdAt">
+                        更動：<span x-text="(x.updatedAt || '').slice(0,16).replace('T',' ')"></span>
+                        <span x-show="x.updatedByName" x-text="'（' + x.updatedByName + '）'"></span>
+                      </span>
+                      <span style="margin-left:auto;font-family:LINE Seed TW_OTF, sans-serif;font-weight:700;color:#92400E;font-size:13px"
+                            x-text="caseSettleFmt(x.totalCost)"></span>
+                    </div>
+
+                    <!-- 第二列：品項。類別欄用 min-width 讓它隨內容長，不再寫死寬度 -->
+                    <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:7px">
+                      <select class="fi fi--sm" style="min-width:96px;width:auto" x-model="x.category"
+                              :disabled="!xeEditable(x)" @change="xeDirty(xi)">
+                        <template x-for="c in xe.categories" :key="c">
+                          <option :value="c" x-text="c"></option>
+                        </template>
+                      </select>
+                      <input class="fi fi--sm" type="text" placeholder="品項說明（必填）" style="flex:1;min-width:150px"
+                             x-model="x.description" :disabled="!xeEditable(x)" @input="xeDirty(xi)">
+                      <input class="fi fi--sm" type="number" min="0" step="0.01" placeholder="數量" style="width:74px"
+                             x-model="x.qty" :disabled="!xeEditable(x)" @input="xeRecalc(xi)">
+                      <input class="fi fi--sm" type="text" placeholder="單位" style="width:58px"
+                             x-model="x.unit" :disabled="!xeEditable(x)" @input="xeDirty(xi)">
+                      <input class="fi fi--sm" type="number" min="0" step="0.01" placeholder="單位成本" style="width:104px"
+                             x-model="x.unitCost" :disabled="!xeEditable(x)" @input="xeRecalc(xi)">
+                    </div>
+
+                    <!-- 第三列：支出人（可選可自由文字）、日期、單號、備註 -->
+                    <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">
+                      <!-- datalist：可以從清單挑，也可以直接打字。挑清單時記下 username，
+                           日後才做得了「某人代墊多少」的彙總；自由文字只留名字 -->
+                      <input class="fi fi--sm" type="text" list="xe-payer-list" placeholder="支出人（可選或自填）"
+                             style="width:168px" x-model="x.payerName"
+                             :disabled="!xeEditable(x)" @input="xePayerInput(xi)">
+                      <input class="fi fi--sm" type="date" style="width:142px" title="支出日期"
+                             x-model="x.expenseDate" :disabled="!xeEditable(x)" @input="xeDirty(xi)">
+                      <input class="fi fi--sm" type="text" placeholder="憑證單號" style="width:130px"
+                             x-model="x.docNo" :disabled="!xeEditable(x)" @input="xeDirty(xi)">
+                      <input class="fi fi--sm" type="text" placeholder="備註" style="flex:1;min-width:120px"
+                             x-model="x.note" :disabled="!xeEditable(x)" @input="xeDirty(xi)">
+                    </div>
+
+                    <div x-show="x.status === '已駁回' && x.approval && x.approval.rejectReason"
+                         style="margin-top:7px;font-size:11px;color:#B91C1C;font-family:var(--font-zh)">
+                      駁回原因：<span x-text="x.approval && x.approval.rejectReason"></span>
+                    </div>
+
+                    <div x-show="xeEditable(x)" style="display:flex;align-items:center;gap:8px;margin-top:9px;flex-wrap:wrap">
+                      <button @click="xeSave(xi)" :disabled="!x._dirty || xe.busy"
+                              :style="(!x._dirty || xe.busy) ? 'opacity:.45;cursor:default' : 'cursor:pointer'"
+                              style="font-size:11px;padding:4px 12px;background:#fff;color:var(--text-primary);border:1px solid var(--border-light);border-radius:6px;font-family:var(--font-zh)">儲存</button>
+                      <button @click="xeSubmit(xi)" :disabled="x._dirty || xe.busy || !x.id"
+                              :title="x._dirty ? '請先儲存再送審' : ''"
+                              :style="(x._dirty || xe.busy) ? 'opacity:.45;cursor:default' : 'cursor:pointer'"
+                              style="font-size:11px;padding:4px 12px;background:#1D4ED8;color:#fff;border:none;border-radius:6px;font-family:var(--font-zh);font-weight:500">送審</button>
+                      <button @click="xeDelete(xi)" :disabled="xe.busy"
+                              style="font-size:11px;padding:4px 10px;background:#fff;color:#B91C1C;border:1px solid #FECACA;border-radius:6px;cursor:pointer;font-family:var(--font-zh);margin-left:auto">刪除</button>
+                    </div>
+                    <div x-show="!xeEditable(x)" style="margin-top:8px;font-size:11px;color:var(--text-dim);font-family:var(--font-zh)"
+                         x-text="x.status === '已核准' ? '已核准的項目不可修改（金額已計入成本與報表）' : '簽核中，不可修改'"></div>
+                  </div>
+                </template>
+
+                <datalist id="xe-payer-list">
+                  <template x-for="u in selectableUsers" :key="u.id">
+                    <option :value="u.display_name || u.username"></option>
+                  </template>
+                </datalist>
+              </div>
 
               <!-- ══ 財務 Tab ══ -->
               <div x-show="activeTab==='fin' && canSeeFinancial()">

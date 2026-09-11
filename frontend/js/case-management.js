@@ -148,6 +148,17 @@ function app() {
     moMsg: '',
     moMsgError: false,
 
+    // ── 額外支出（2026-09-11，從精算頁搬過來）──
+    // 資料在 case_extra_expenses 表（DB v75），不再是 settlement.extraItems。
+    // loading 預設 true：分頁列在 selected 一設好就出現，若預設 false 會先閃一下
+    // 空狀態再跳載入中——叫料那一區踩過同一個坑。
+    xe: {
+      loading: true, busy: false, items: [], categories: [],
+      totalAmount: 0, totalPending: 0, pendingCount: 0,
+      msg: '', msgError: false,
+    },
+
+
     // ── 承攬商匯款申請 ──
     contractorVouchers: [],
     contractorVouchersLoading: false,
@@ -236,6 +247,150 @@ function app() {
     // 明細本來就看得到，這裡重複列一次只會讓畫面變長
     finOutstandingItems() { return (this.finReceivable()?.items || []).filter(it => !it.received) },
     finUnpaidVouchers()   { return (this.finPayable()?.vouchers || []).filter(v => v.status === '已核准' && !v.isPaid) },
+
+    // ── 額外支出（2026-09-11）────────────────────────────────────────────────
+    async loadExtraExpenses(quoteNo) {
+      if (!quoteNo) return
+      // 比照 loadMaterialOrders()：發請求當下記住是哪張單，回應抵達時再比對。
+      // 沒有這道守門，使用者在回應飛行途中新增的那一列會被蓋掉（同一天內
+      // 在叫料與系統設定兩處各踩過一次）
+      this._xeReqFor = quoteNo
+      this.xe.loading = true
+      try {
+        const r = await fetch(`/api/quotations/${encodeURIComponent(quoteNo)}/extra-expenses`, {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (this._xeReqFor !== quoteNo) return
+        if (r.ok) {
+          const d = await r.json()
+          // 有未存檔的新列（id 為 null）就不要整包覆蓋，保留使用者打到一半的東西
+          const drafts = this.xe.items.filter(i => !i.id)
+          this.xe.items = (d.items || []).map(i => ({ ...i, _dirty: false })).concat(drafts)
+          this.xe.categories = d.categories || []
+          this.xe.totalAmount = d.totalAmount || 0
+          this.xe.totalPending = d.totalPending || 0
+          this.xe.pendingCount = d.pendingCount || 0
+        }
+      } catch {}
+      this.xe.loading = false
+    },
+
+    // 可編輯狀態：草稿與已駁回。已核准的金額已經進了成本與報表，簽核中的改了
+    // 簽核就失去意義——後端也會擋，這裡擋是為了不要讓人填完才被退回
+    xeEditable(x) { return !x.id || x.status === '草稿' || x.status === '已駁回' },
+
+    xeStatusStyle(status) {
+      if (status === '已核准') return 'background:#DCFCE7;color:#15803D'
+      if (status === '已駁回') return 'background:#FEE2E2;color:#B91C1C'
+      if (status === '草稿')   return 'background:#F3F4F6;color:#6B7280'
+      return 'background:#FEF3C7;color:#92400E'   // 待審核／簽核中
+    },
+
+    xeDirty(i) { this.xe.items[i]._dirty = true; this.xe.msg = '' },
+
+    // 小計只算給畫面即時顯示用；真正的值以後端算的為準（後端不吃前端傳的金額）
+    xeRecalc(i) {
+      const x = this.xe.items[i]
+      x.totalCost = Math.round((Number(x.qty) || 0) * (Number(x.unitCost) || 0) * 100) / 100
+      this.xeDirty(i)
+    },
+
+    // 支出人「可選可自由文字」：打的字剛好等於某位使用者的顯示名就一併記下
+    // username（之後才做得了「某人代墊多少」的彙總），否則只留純文字
+    xePayerInput(i) {
+      const x = this.xe.items[i]
+      const hit = (this.selectableUsers || []).find(
+        u => (u.display_name || u.username) === (x.payerName || '').trim())
+      x.payerUsername = hit ? hit.username : ''
+      this.xeDirty(i)
+    },
+
+    xeAdd() {
+      this.xe.items.push({
+        id: null, category: (this.xe.categories[0] || '其他'), description: '',
+        qty: 1, unit: '', unitCost: 0, totalCost: 0, note: '',
+        expenseDate: new Date().toISOString().slice(0, 10), docNo: '',
+        payerUsername: '', payerName: '',
+        createdByName: this.session.displayName || this.session.username || '',
+        createdByInferred: false, createdAt: '', updatedAt: '', updatedByName: '',
+        status: '草稿', approval: {}, _dirty: true,
+      })
+      this.xe.msg = ''
+    },
+
+    _xeBody(x) {
+      return {
+        category: x.category, description: (x.description || '').trim(),
+        qty: Number(x.qty) || 0, unit: (x.unit || '').trim(),
+        unitCost: Number(x.unitCost) || 0, note: (x.note || '').trim(),
+        expenseDate: x.expenseDate || '', docNo: (x.docNo || '').trim(),
+        payerUsername: x.payerUsername || '', payerName: (x.payerName || '').trim(),
+      }
+    },
+
+    _xeFail(msg) { this.xe.msgError = true; this.xe.msg = msg; this.xe.busy = false },
+
+    async xeSave(i) {
+      const x = this.xe.items[i]
+      if (!(x.description || '').trim()) { this._xeFail('請先填品項說明'); return }
+      const quoteNo = this.selected?.quote_no
+      if (!quoteNo) return
+      this.xe.busy = true; this.xe.msg = ''
+      const base = `/api/quotations/${encodeURIComponent(quoteNo)}/extra-expenses`
+      try {
+        const r = await fetch(x.id ? `${base}/${x.id}` : base, {
+          method: x.id ? 'PATCH' : 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify(this._xeBody(x)),
+        })
+        if (!r.ok) {
+          const d = await r.json().catch(() => ({}))
+          this._xeFail('儲存失敗：' + (d.detail || r.status)); return
+        }
+        this.xe.msgError = false; this.xe.msg = '已儲存'
+        setTimeout(() => { if (this.xe.msg === '已儲存') this.xe.msg = '' }, 2500)
+      } catch (e) { this._xeFail('網路錯誤：' + e.message); return }
+      this.xe.busy = false
+      await this.loadExtraExpenses(quoteNo)
+    },
+
+    async xeSubmit(i) {
+      const x = this.xe.items[i]
+      if (!x.id) { this._xeFail('請先儲存再送審'); return }
+      if (!confirm(`確定送審這筆額外支出？\n\n${x.description}　NT$ ${Math.round(x.totalCost || 0).toLocaleString()}\n\n送審後在簽核完成前不能修改。`)) return
+      const quoteNo = this.selected?.quote_no
+      this.xe.busy = true; this.xe.msg = ''
+      try {
+        const r = await fetch(
+          `/api/quotations/${encodeURIComponent(quoteNo)}/extra-expenses/${x.id}/submit`,
+          { method: 'POST', headers: { Authorization: 'Bearer ' + this.session.token } })
+        const d = await r.json().catch(() => ({}))
+        if (!r.ok) { this._xeFail('送審失敗：' + (d.detail || r.status)); return }
+        this.xe.msgError = false
+        this.xe.msg = d.autoApproved ? '未設定簽核層，已直接核准' : '已送審'
+      } catch (e) { this._xeFail('網路錯誤：' + e.message); return }
+      this.xe.busy = false
+      await this.loadExtraExpenses(quoteNo)
+    },
+
+    async xeDelete(i) {
+      const x = this.xe.items[i]
+      if (!x.id) { this.xe.items.splice(i, 1); return }   // 還沒存過，直接移除
+      if (!confirm(`確定刪除「${x.description}」？`)) return
+      const quoteNo = this.selected?.quote_no
+      this.xe.busy = true; this.xe.msg = ''
+      try {
+        const r = await fetch(
+          `/api/quotations/${encodeURIComponent(quoteNo)}/extra-expenses/${x.id}`,
+          { method: 'DELETE', headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (!r.ok) {
+          const d = await r.json().catch(() => ({}))
+          this._xeFail('刪除失敗：' + (d.detail || r.status)); return
+        }
+      } catch (e) { this._xeFail('網路錯誤：' + e.message); return }
+      this.xe.busy = false
+      await this.loadExtraExpenses(quoteNo)
+    },
 
     // ── 叫料（材料訂購）────────────────────────────────────────────────────
     async loadMaterialOrders(quoteNo) {
@@ -707,6 +862,8 @@ function app() {
         this.materialOrders = []
         this.moDirty = false
         this.moMsg = ''
+        this.xe = { ...this.xe, loading: true, items: [], totalAmount: 0,
+                    totalPending: 0, pendingCount: 0, msg: '', busy: false }
         // 載入旗標在這裡就先立起來，不要等到下面真的呼叫 loadMaterialOrders()：
         // 分頁列在 selected 一設好就出現，中間那一小段空窗期會先把「尚無叫料
         // 項目」閃出來、再跳成「載入中…」、最後才是真正的結果，看起來像清單被
@@ -719,6 +876,7 @@ function app() {
         this.loadPaymentRequests(quoteNo)
         this.loadFinanceSummary(quoteNo)
         this.loadMaterialOrders(quoteNo)
+        this.loadExtraExpenses(quoteNo)
       } catch {}
     },
 

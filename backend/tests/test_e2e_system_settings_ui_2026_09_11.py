@@ -9,6 +9,11 @@
 所以用真實瀏覽器驗一條完整來回：改值 → 儲存 → 重新載入頁面後值還在。
 
 需要 `playwright`（見 `test_e2e_playwright_2026_09_07.py` 檔頭說明）。
+
+⚠️ 等待時限一律 45 秒：這四張卡片要等 `_loadSysSettings()` 的四支 GET 都回來才
+渲染，而整個 pytest session 期間有背景排程在寫 db，SQLite 寫鎖被佔住時
+`db.py` 的 `connect(timeout=30)` 最多會等 30 秒。單檔跑碰不到、全套跑才會——
+比照 `test_e2e_playwright_2026_09_07.py` 既有的同款處理。
 """
 import threading
 import time
@@ -68,7 +73,7 @@ def test_all_four_cards_render_for_superadmin(live_server, make_user):
         try:
             _login(page, live_server, username, password)
             page.goto(f"{live_server}{PAGE}")
-            page.wait_for_selector(RET_CARD, timeout=20000)
+            page.wait_for_selector(RET_CARD, timeout=45000)
 
             body = page.locator("main").inner_text()
             for title in ("備份保留天數", "PDF 存檔根目錄", "Edge 瀏覽器路徑", "雲端備份目標"):
@@ -89,7 +94,7 @@ def test_backup_retention_round_trip(live_server, make_user):
         try:
             _login(page, live_server, username, password)
             page.goto(f"{live_server}{PAGE}")
-            page.wait_for_selector(RET_CARD, timeout=20000)
+            page.wait_for_selector(RET_CARD, timeout=45000)
 
             page.fill(f"{RET_CARD} input[type='number'] >> nth=0", "45")
             page.click(f"{RET_CARD} button:has-text('儲存設定')")
@@ -109,7 +114,7 @@ def test_backup_retention_round_trip(live_server, make_user):
 
             # 重新載入畫面也要看得到新值（證明 GET 那半也接上了）
             page.reload()
-            page.wait_for_selector(RET_CARD, timeout=20000)
+            page.wait_for_selector(RET_CARD, timeout=45000)
             assert page.input_value(f"{RET_CARD} input[type='number'] >> nth=0") == "45"
         finally:
             browser.close()
@@ -127,7 +132,7 @@ def test_retention_out_of_range_is_blocked_with_field_name(live_server, make_use
         try:
             _login(page, live_server, username, password)
             page.goto(f"{live_server}{PAGE}")
-            page.wait_for_selector(RET_CARD, timeout=20000)
+            page.wait_for_selector(RET_CARD, timeout=45000)
 
             page.fill(f"{RET_CARD} input[type='number'] >> nth=2", "99999")
             page.click(f"{RET_CARD} button:has-text('儲存設定')")
@@ -148,7 +153,7 @@ def test_s3_fields_appear_only_when_s3_selected(live_server, make_user):
         try:
             _login(page, live_server, username, password)
             page.goto(f"{live_server}{PAGE}")
-            page.wait_for_selector(CLOUD_CARD, timeout=20000)
+            page.wait_for_selector(CLOUD_CARD, timeout=45000)
 
             assert "Bucket" not in page.locator(CLOUD_CARD).inner_text()
 
