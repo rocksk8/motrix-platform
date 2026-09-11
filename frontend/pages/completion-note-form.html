@@ -18,12 +18,6 @@
       box-shadow:0 1px 4px rgba(0,0,0,.06);
     }
     .cnf-body { margin-left: var(--sidebar-w); margin-top: calc(var(--topbar-h) + 52px); padding: 0 28px 60px; }
-    .cnf-tabs { display:flex; gap:2px; border-bottom:1px solid var(--border-light); margin:18px 0 22px; flex-wrap:wrap }
-    .cnf-tab {
-      padding:9px 18px; font-size:13px; font-family:var(--font-zh); cursor:pointer;
-      background:none; border:none; border-bottom:2px solid transparent; color:var(--text-secondary);
-    }
-    .cnf-tab.active { color:var(--text-main); font-weight:600; border-bottom-color:var(--text-main) }
     .cnf-card { border:1px solid var(--border-light); border-radius:10px; padding:20px 22px; margin-bottom:18px; background:#fff }
     .cnf-card-title { font-size:13px; font-weight:700; font-family:var(--font-zh); margin-bottom:14px; color:var(--text-main) }
     .cnf-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px }
@@ -82,15 +76,10 @@
           目前狀態為「<span x-text="status"></span>」，只有草稿可以編輯。要修改請先退回草稿。
         </div>
 
-        <div class="cnf-tabs">
-          <button class="cnf-tab" :class="{active: tab==='basic'}"  @click="tab='basic'">基本資料</button>
-          <button class="cnf-tab" :class="{active: tab==='items'}"  @click="tab='items'">完成項目</button>
-          <button class="cnf-tab" :class="{active: tab==='desc'}"   @click="tab='desc'">說明與驗收</button>
-          <button class="cnf-tab" :class="{active: tab==='labels'}" @click="tab='labels'">單據用語</button>
-        </div>
-
-        <!-- ══ 基本資料 ══ -->
-        <div x-show="tab==='basic'">
+        <!-- 2026-09-12 使用者指定：**不要分頁**，整合成一頁逐條往下改善。
+             原本是四個可切換分頁，實際填寫時一直在切來切去，反而比往下捲慢。 -->
+        <div style="height:18px"></div>
+        <div>
           <div class="cnf-card">
             <div class="cnf-card-title">客戶與地點</div>
             <div class="cnf-grid">
@@ -100,11 +89,14 @@
                 <input class="cnf-in" type="text" x-model="form.project_name" :disabled="!editable()" @input="dirty=true"></div>
               <div><span class="cnf-lbl">客戶名稱</span>
                 <input class="cnf-in" type="text" x-model="form.customer_name" :disabled="!editable()" @input="dirty=true"></div>
-              <div><span class="cnf-lbl">客戶驗收人</span>
+              <div><span class="cnf-lbl">客戶驗收人 / 聯絡人</span>
                 <input class="cnf-in" type="text" x-model="form.recipient" :disabled="!editable()" @input="dirty=true"></div>
+              <div><span class="cnf-lbl">聯絡電話</span>
+                <input class="cnf-in" type="text" x-model="form.contact_phone" :disabled="!editable()" @input="dirty=true"></div>
               <div style="grid-column:1/-1"><span class="cnf-lbl" x-text="labels.siteLabel"></span>
                 <input class="cnf-in" type="text" x-model="form.site_address" :disabled="!editable()" @input="dirty=true"
-                       placeholder="例如：台中市西屯區… / 遠端連線 / 客戶機房"></div>
+                       placeholder="例如：台中市西屯區… / 遠端連線 / 客戶機房">
+                <div class="cnf-hint" x-show="prefilled">地址與聯絡人已從報價單帶入，可直接修改。</div></div>
             </div>
           </div>
 
@@ -139,7 +131,7 @@
         </div>
 
         <!-- ══ 完成項目 ══ -->
-        <div x-show="tab==='items'">
+        <div>
           <div class="cnf-card">
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap">
               <span class="cnf-card-title" style="margin:0" x-text="labels.sectionItems"></span>
@@ -179,7 +171,7 @@
 
             <div x-show="unfinishedCount() > 0"
                  style="margin-top:14px;padding:10px 14px;border-radius:6px;background:#FFFBEB;border:1px solid #FDE68A;font-size:12px;color:#92400E;font-family:var(--font-zh)">
-              ⚠️ 有 <b x-text="unfinishedCount()"></b> 項未完成。請到「說明與驗收」分頁的
+              ⚠️ 有 <b x-text="unfinishedCount()"></b> 項未完成。請在下方
               「<span x-text="labels.sectionPending"></span>」寫清楚待處理內容與預計完成時間
               ——這張單簽下去等於承認全部完成，沒寫清楚的缺失日後沒有依據。
             </div>
@@ -187,7 +179,7 @@
         </div>
 
         <!-- ══ 說明與驗收 ══ -->
-        <div x-show="tab==='desc'">
+        <div>
           <div class="cnf-card">
             <div class="cnf-card-title" x-text="labels.sectionSummary"></div>
             <textarea class="cnf-in" rows="4" x-model="form.work_summary" :disabled="!editable()" @input="dirty=true"
@@ -213,12 +205,11 @@
         </div>
 
         <!-- ══ 單據用語 ══ -->
-        <div x-show="tab==='labels'">
+        <div>
           <div class="cnf-card">
-            <div class="cnf-card-title">套用一組預設用語</div>
+            <div class="cnf-card-title">單據用語</div>
             <div class="cnf-hint" style="margin-bottom:12px">
-              公司的業務不只工程——專案、零組件販售、系統設定、網路架構、防火牆等等，
-              用「施工」講不通。選一組最接近的，再視需要逐欄微調；<b>每一張完工單各自獨立</b>。
+              依據案件類型選取適合的完工單，再視需要逐欄微調。
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap">
               <template x-for="p in presets" :key="p.key">
@@ -250,12 +241,12 @@
   function completionNoteForm() {
     return {
       session: {}, loading: true, busy: false, dirty: false,
-      tab: 'basic', msg: '', msgError: false,
+      msg: '', msgError: false, prefilled: false,
       noteNo: '', status: '草稿',
       defaults: {}, labels: {},
       form: {
         quote_no: '', customer_name: '', project_name: '', site_address: '',
-        start_date: '', completion_date: '', site_manager: '', recipient: '',
+        start_date: '', completion_date: '', site_manager: '', recipient: '', contact_phone: '',
         items: [], work_summary: '', test_result: '', warranty_months: 12,
         pending_items: '', notes: '', labels: {},
       },
@@ -347,7 +338,8 @@
           this.form = {
             quote_no: d.quoteNo, customer_name: d.customerName, project_name: d.projectName,
             site_address: d.siteAddress, start_date: d.startDate, completion_date: d.completionDate,
-            site_manager: d.siteManager, recipient: d.recipient, items: d.items || [],
+            site_manager: d.siteManager, recipient: d.recipient,
+            contact_phone: d.contactPhone || '', items: d.items || [],
             work_summary: d.workSummary, test_result: d.testResult,
             warranty_months: d.warrantyMonths, pending_items: d.pendingItems,
             notes: d.notes, labels: Object.assign({}, d.labelOverrides || {}),
@@ -364,8 +356,15 @@
                                 { headers: this._auth() })
           if (r.ok) {
             const q = await r.json()
-            this.form.customer_name = q.customer_name || q.customerName || ''
-            this.form.project_name  = q.project_name  || q.projectName  || ''
+            const d = q.data || {}
+            this.form.customer_name = q.customer_name || d.customerName || ''
+            this.form.project_name  = q.project_name  || d.projectName  || ''
+            // 地址與聯絡人一併帶進來（使用者指定）——報價單的送貨地址就是實際
+            // 服務／交付的地點，聯絡人也是同一位，讓人重打一次只會打錯
+            this.form.site_address  = d.deliveryAddress || ''
+            this.form.recipient     = d.contactName || ''
+            this.form.contact_phone = d.contactPhone || ''
+            this.prefilled = !!(this.form.site_address || this.form.recipient)
           }
         } catch {}
         this.form.completion_date = new Date().toISOString().slice(0, 10)
@@ -423,7 +422,7 @@
       applyPreset(key) {
         this.form.labels = Object.assign({}, this._presetData[key] || {})
         this._syncLabels(); this.dirty = true
-        this.msgError = false; this.msg = '已套用預設用語，記得按儲存'
+        this.msgError = false; this.msg = '已套用，記得按儲存'
       },
       resetLabels() { this.form.labels = {}; this._syncLabels(); this.dirty = true },
 
@@ -434,7 +433,8 @@
         return {
           quote_no: f.quote_no, customer_name: f.customer_name, project_name: f.project_name,
           site_address: f.site_address, start_date: f.start_date, completion_date: f.completion_date,
-          site_manager: f.site_manager, recipient: f.recipient, items: f.items,
+          site_manager: f.site_manager, recipient: f.recipient,
+          contact_phone: f.contact_phone, items: f.items,
           work_summary: f.work_summary, test_result: f.test_result,
           warranty_months: Number(f.warranty_months) || 0,
           pending_items: f.pending_items, notes: f.notes,

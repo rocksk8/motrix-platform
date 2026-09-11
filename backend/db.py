@@ -83,7 +83,8 @@ DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR = os.path.join(
 # 2026-09-11 第二輪交辦，見 _m076 docstring 與 MOTRIX-ERP-QUICK.md §5.10／§5.11。
 # v77: completion_notes（完工單，比照 shipping_notes 同構＋工程完工單特有欄位），
 # 2026-09-12 交辦，見 _m077 docstring。
-CURRENT_VERSION = 77
+# v78: completion_notes.contact_phone（完工單帶入報價單聯絡人電話），2026-09-12。
+CURRENT_VERSION = 78
 
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
 # execution model) whenever the current request is authenticated as the 'demo'
@@ -3224,6 +3225,22 @@ def _m077_completion_notes(conn):
     conn.commit()
 
 
+def _m078_completion_contact_phone(conn):
+    """完工單加 `contact_phone`（2026-09-12）。
+
+    使用者要求「基本資料可拉報價單的地址包含聯絡人」——報價單的聯絡人資訊是
+    `contactName` / `contactPhone` / `contactEmail` 三件套，完工單原本只有
+    `recipient`（驗收人姓名），少了電話。完工單是會交到客戶手上、之後可能要回頭
+    聯絡的文件，只有名字沒有電話等於還要再去翻報價單。
+
+    **開欄位而不是塞 data_json**：這是業務資料不是版面設定（標題那組是後者，所以
+    放 data_json）。日後若要「查某支電話關聯哪些完工單」也查得到。
+    """
+    if not _col_exists(conn, "completion_notes", "contact_phone"):
+        conn.execute("ALTER TABLE completion_notes ADD COLUMN contact_phone TEXT NOT NULL DEFAULT ''")
+    conn.commit()
+
+
 _MIGRATIONS = [
     _m001_export_columns,        # v1
     _m002_sessions_expires,      # v2
@@ -3302,6 +3319,7 @@ _MIGRATIONS = [
     _m075_case_extra_expenses,                      # v75
     _m076_xe_change_requests_and_stage_done,        # v76
     _m077_completion_notes,                         # v77
+    _m078_completion_contact_phone,                 # v78
 ]
 
 

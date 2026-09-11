@@ -3251,7 +3251,9 @@ def _build_completion_html(n: dict) -> str:
         '  <div class="box">\n'
         f'    <div class="box-title">{lab("sectionCustomer", "一、客戶與服務地點")}</div>\n'
         f'    <div class="row"><span class="label">客戶名稱</span><span class="val">{esc(n.get("customerName", ""))}</span></div>\n'
-        f'    <div class="row"><span class="label">驗收人</span><span class="val">{esc(n.get("recipient", ""))}</span></div>\n'
+        f'    <div class="row"><span class="label">驗收人</span><span class="val">'
+        f'{esc(n.get("recipient", ""))}'
+        f'{("　" + esc(n.get("contactPhone", ""))) if n.get("contactPhone") else ""}</span></div>\n'
         f'    <div class="row"><span class="label">{lab("siteLabel", "服務地點")}</span><span class="val">{esc(n.get("siteAddress", ""))}</span></div>\n'
         '  </div>\n'
         '  <div class="box">\n'
@@ -3325,6 +3327,7 @@ def _completion_note_dict(row) -> dict:
     n["startDate"] = n.get("start_date", "")
     n["completionDate"] = n.get("completion_date", "")
     n["siteManager"] = n.get("site_manager", "")
+    n["contactPhone"] = n.get("contact_phone", "")
     n["workSummary"] = n.get("work_summary", "")
     n["testResult"] = n.get("test_result", "")
     n["pendingItems"] = n.get("pending_items", "")
