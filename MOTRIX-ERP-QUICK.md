@@ -785,7 +785,7 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
   - **門禁系統選型導覽**：`access-guide.html`；檢視 `access_guide` 模組旗標或 admin+（`cAccessG` 旗標）；編輯需 `access_guide_edit` 或 superadmin；選型資料庫第五個上線的類別（2026-08-09），資料形狀同上（元件分類×場域情境矩陣），第一批資料為 UniFi Access
   - **自動化系統選型導覽**：`automation-guide.html`；檢視 `automation_guide` 模組旗標或 admin+；編輯需 `automation_guide_edit` 或 superadmin；DB v65，2026-08-26 起選型資料庫第七類，資料形狀同交換器/監控/門禁（情境×分類矩陣），見 §7.14。**本文件先前完全未記載此類別，2026-09-01 補上**
   - 上述類別在**歷史紀錄**（`audit-log.html`）與**版本紀錄**（`module-versions.html`）皆已比照其餘模組補上對應的 optgroup／actionLabel／色碼（teal 色系＋🧭 圖示，共用同一識別色，強調同屬一個產品線而非各自獨立模組）
-  - **涵蓋度總覽**（2026-08-09）：`selection-db-overview.html`；admin+ 限定，無獨立模組旗標；彙總「品牌/型號目錄」型類別（不含場域選型導覽——資料形狀是情境×分層文字建議而非品牌目錄）在各世代/分類底下的品牌數與產品數，紅/黃/綠三色標示完全空白／偏薄弱／足夠；**不新增後端 API**，純前端呼叫既有各類別 GET 端點彙總而成；**是否已納入自動化系統選型導覽（第七類）尚未查證，之後碰這頁時先確認**
+  - **涵蓋度總覽**（2026-08-09）：`selection-db-overview.html`；admin+ 限定，無獨立模組旗標；彙總「品牌/型號目錄」型類別（不含場域選型導覽——資料形狀是情境×分層文字建議而非品牌目錄）在各世代/分類底下的品牌數與產品數，紅/黃/綠三色標示完全空白／偏薄弱／足夠；**不新增後端 API**，純前端呼叫既有各類別 GET 端點彙總而成。**2026-09-11 查證：先前確實漏了自動化系統選型導覽（第七類，2026-08-26 上線），已補**——`loadAll()` 原本只撈 netarch／switch／monitor／access／gateway 五組，而 `automation-guide.html::applyDeepLink()` 早就寫好接這頁深層連結的程式碼，只差那一組 fetch。**漏掉不會有任何錯誤訊息、頁面照常渲染**，所以新增第八類時務必同時補這頁；e2e `test_e2e_selection_overview_2026_09_11.py` 會比對六個區塊標題，漏了就紅
 - **簽核設定**：`approval-settings.html`；superadmin 限定；2026-08-28 起單一頁面涵蓋全部五種文件類型（報價單／出貨單／發票開立簽核單／請款單／承攬商匯款申請）——頁面上方是套用範圍多選選單，勾選的類型共用「統一簽核流程設定」，取消勾選的類型各自在同一頁展開獨立編輯區塊；不再有各自獨立的 `shipping-approval-settings.html`／`invoice-voucher-approval-settings.html`（`contractor-voucher-approval-settings.html` 仍保留獨立頁面，見 §12 2026-08-28）；出貨單本身不是獨立 sidebar 項目，掛在「案件管理」頁面內的「出貨單」分頁，沿用 `case_manage`/`cCM`/`sb-mod-case`
 - **簽核代理人**（2026-08-28，DB v67）：`approval-delegates.html`；任何人可自助委託簽核權限給他人，superadmin 可代替他人設定；核心解析 `helpers/tiered_approval.py::active_delegators_for()`，見 §7.13
 - **組織架構**：`org-structure.html`；DB v48，處→部門二層；`manager_user_id` 已接入簽核流程動態解析（§4.1 已更正舊註記）
@@ -1139,6 +1139,23 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
 
 前端 `inventory.html`：工具列新增「採購建議」按鈕（`lowStockCount > 0` 才顯示，跟既有「低於安全庫存」篩選 chip 同一組判斷條件），開啟 Modal 顯示清單與預估總金額；純唯讀，不含下單/標記已處理等狀態追蹤（v1 刻意收斂範圍）。
 
+### §7.20 · 叫料（材料訂購）（後端 2026-09-10、前端 2026-09-11，DB 無異動）
+
+| Method | Path | 說明 |
+|--------|------|------|
+| GET | /quotations/{no}/material-orders | 回 `{quoteNo, materialOrders, totalAmount, paidAmount}`；只要求登入＋擁有者檢查 |
+| PATCH | /quotations/{no}/material-orders | **整包覆蓋**（無增量更新）；需 admin+ 或 `project_manage` 模組；已結案回 400 |
+
+資料落在 `quotations.data_json` 的 `caseRecord.materialOrders`，**沒有獨立資料表**——查不到專屬 migration 是正常的。後端逐筆驗證的三條規則（`routers/material_orders.py` 第 5 步）前端也各擋一次，只為了給看得懂的中文訊息：
+
+```
+小計必須等於 數量 × 單價（容差 0.01）  → 所以小計一律由前端算，不讓使用者手填
+pending      → 已付金額必須 0、日期必須空
+partial/paid → 0 ≤ 已付金額 ≤ 小計，且日期必填（paid 時已付金額 = 小計）
+```
+
+前端入口：案件管理「財務」分頁的 `#fin-material-orders` 區塊（`case-management.js` 的 `loadMaterialOrders()`／`moSave()`／`moRecalc()`／`moCanEdit()`）。**存檔刻意不併進 `saveCase()`**：那支會覆蓋整份 `data_json`，兩邊同時存會互相蓋掉，且已結案與權限的守門規則不一樣。**金額也刻意不計入財務總覽的「應付總額」**——那個數字的定義是承攬商匯款申請，混進去會跟 `/finance-summary` 算出來的對不起來。e2e `test_e2e_material_orders_2026_09_11.py`。
+
 ---
 
 ## §8 · 備份與還原
@@ -1276,7 +1293,7 @@ xlsx-0.18.5.full.min.js     （SheetJS）
 | 🟡 | **已結案案件解鎖/半解鎖（2026-08-26 新增，範圍刻意收斂，非完整涵蓋）**：新增 `case-unlock`/`case-lock` 讓已結案案件進入「半解鎖」狀態，僅 8 個端點（案件記錄整包存檔／款項標記收款／款項發票附件／叫料附件／叫料發票附件共 8 支）支援半解鎖期間排隊等 superadmin 審核套用；案件執行階段細項端點（10 支）與款項稅額沖銷（3 支）刻意不支援排隊，已結案時一律直接 403（不論是否半解鎖），需要修正時只能透過案件資料整體編輯或聯繫最高管理員直接校正。之後若要擴大涵蓋範圍，比照 `case_record_update` 的「暫存 payload_json、核准時重放同一段套用邏輯」模式即可，見 db.py `_m061_case_semi_unlock()` docstring。 |
 | ✅ | ~~PDF 存檔（報價單/出貨單/勞報單）未納入雲端備份範圍~~（2026-09-07 新增 `archive.py::_mirror_pdf_archives()`，沿用 `_mirror_uploads()` 抽出的共用鏡像邏輯，涵蓋 6 類 PDF：報價單/出貨單/承攬商匯款申請/開票申請憑據/請款單/結案報表，見 §8.1） |
 | 🟢 | CORS 白名單寫死 IP，未改用環境變數，換機器/換 IP 需改 code 重新部署，見 `DR-SOP.md` §5 |
-| 🟢 | `routers/projects.py`（592行）自 2026-08-26 專案併入案件管理後已無任何前端流程掛載，是否整個移除尚未決定 |
+| ✅ | ~~`routers/projects.py`（592行）自 2026-08-26 專案併入案件管理後已無任何前端流程掛載，是否整個移除尚未決定~~（**檔案早已在 `6bd04ca`「稽核後續三項——刪死碼」刪除，本列與架構地圖 §2.10／§5 長期記載為「仍在、尚未清理」，2026-09-11 核對檔案系統後更正**。要看內容去 git 歷史） |
 | 🟡 | 多分公司架構＋自動核版更新規劃中，未列入排程，見 `MULTI-BRANCH-AUTO-UPDATE-DESIGN.md`（2026-08-31，4 項待決事項） |
 | 🟢 | 災難復原（DR）從未實際演練過，`DR-SOP.md` §6 演練紀錄表完全空白，RTO 目前僅為估計值 |
 | ✅ | ~~QR 登入手機端免密碼~~（2026-09-08 已實作，見 §12 同日條目——手機瀏覽器已有效 session 時自動核准，沒有則退回既有密碼手動輸入／瀏覽器自動填入密碼兩層） |
@@ -1286,7 +1303,7 @@ xlsx-0.18.5.full.min.js     （SheetJS）
 | ✅ | ~~案件執行期限與超期提醒通知~~（**2026-09-10 已實作**，見 §12 同日條目——`caseRecord.projectTimeline` 存 data_json 無 schema 異動；`daily_tasks.py:1092-1135::_check_case_project_timeline_deadline()` 沿用既有每日排程而非另起 job；通知對象為所有 admin/superadmin；**重寄週期實作為每 7 天，非當初討論的 10 天**，計時點為超期天數分桶 `days_overdue // 7`）。以下保留當初的需求討論紀錄：<br>**（原待開發內容）**——案件管理「案件資訊」分頁需要新增「案件執行日期區間」欄位（start_date / end_date，類似預計交期的概念），當案件實際進度超過設定期限時自動觸發通知流程：(1) **超期當天寄一次電郵通知**給該案件的超級管理員與專案執行人；(2) **之後每 10 天重複寄一次**提醒尚未完結，直到案件狀態改為已結案為止。**背景需求**：實務上案件常因客戶延遲或內部進度調整而超期，長期無人追蹤就容易成為幽靈案件，需要一個被動提醒機制。**細節待評估**：(1) 日期欄位是否要新增到資料表或繼續存在 `data_json`（後者零改動，但搜尋/聚合較麻煩）；(2) 通知的「執行人」欄位定義（是 `executor`、還是 `assigned_user_ids` 任一人、還是需要新增一個獨立的 `deadline_notify_users` 欄位）；(3) 10 天的計時點是「案件建立時」、「超期當天」還是「上一次寄信」（影響時間複雜度與誤發機率）；(4) 通知內容格式與語言；(5) 是否需要在案件頁面顯示「距離期限剩餘天數」的倒數。排程觸發機制可沿用既有 `heartbeat_job.py`（正式機每 5 分鐘執行一次），或另起一個獨立的 `deadline_check_job.py`（見 §1.1）。**計劃**：先釐清上述需求細節，再評估是否需 DB migration。 |
 | ✅ | ~~營運報表當月與當年度數據獨立分開顯示~~（**2026-09-09 已實作**：`56e52b3` 當月/當年度應收獨立檢視、不再跟隨 period-bar，新增 `test_reports_receivables_monthly.py`；`6bfcafb` 首頁當月收支完整修正＋部門篩選；2026-09-10 `f8198e9` 補上月支出頁籤徽章依 scope 顯示（`reports.html:434`）。同一批連帶修掉「首頁與營運報表對同一個數字有兩套歸月邏輯」的分岔，見 §12 2026-09-09）。以下保留當初的需求討論紀錄：<br>**（原待開發內容）**——目前營運報表的應收未收、已收已支等數字似乎是當年度與當月混在一起（或至少沒有明確區隔），需求是把「當月」的應收未收／已收已支獨立顯示，跟「當年度」的數字做出區隔，不要混算或混排在一起。**併同影響**：營運報表下方的分頁（tabs）內容也要一併比照，跟當年度視圖分開顯示，而不是共用同一份彙總。**細節待評估**（目前 `frontend/js/reports.js` 現有的月/年篩選邏輯、後端 `routers/reports.py` 對應的查詢與彙總方式），token 足夠時再展開設計，先記錄需求方向。 |
 
-| 🔴 | **使用者回報（2026-09-10，尚未查證）：營運報表切換「月／季／年」時，對應的財務資料不會跟著切換。** 期別選擇器換了，但底下的數字沒有跟著重算——需要確認是前端沒有重新請求（`frontend/js/reports.js` 的 period-bar 事件沒接到某些區塊）、還是後端 `routers/reports.py` 收到了期別參數但某些彙總沒套用。**這一項要優先看**：2026-09-09 那晚才因為「當月收支」一路改了六輪（見 §12 同日「深夜」條目），底層原因就是首頁與營運報表對同一個數字有兩套歸月邏輯；`56e52b3` 又把「當月/當年度應收」改成獨立檢視、不再跟隨 period-bar。這次回報的很可能就是那批改動的副作用——**查的時候先讀 `56e52b3` 與 `6bfcafb` 的 diff**，確認哪些區塊是「刻意不跟隨 period-bar」、哪些是真的漏接。 |
+| ✅ | ~~使用者回報（2026-09-10）：營運報表切換「月／季／年」時，對應的財務資料不會跟著切換~~（**當天稍晚就修好了，本列長期誤記為「尚未查證」，2026-09-11 更正**）。根因與修法見 §12「2026-09-10（更晚）」條目：後端一直是對的，壞在前端 `reports.js` 的 `prevPeriod()`／`nextPeriod()`／`switchType()` 三個函式從初始 commit 起就沒跟上期別同步，修法是把同步收斂到 `loadData()` 開頭單一處（`_syncSubPeriods()`）。測試 `test_reports_quarter_scope_2026_09_10.py`（9 題）＋ e2e `test_e2e_reports_period_sync_2026_09_10.py`（1 題，已用「還原修改重跑」驗證抓得到）。同一批還修掉一個請求飛行中切期別會讓畫面永遠卡在舊月份的競態。 |
 
 **📖 2026-09-01 新增：`MOTRIX-ERP-ARCHITECTURE-MAP.md`**（專案根目錄）——依實際程式碼盤點（非僅依賴本文件）產出的架構地圖，涵蓋 18 組模組的檔案:行號索引、DB v1→v68 完整演進索引、13 條踩坑教訓彙整、依專業軟體慣例的分優先序建議清單。**與本文件互補、不取代**：本文件仍是行為規格與逐日 changelog 的權威來源；架構地圖是「哪個功能在哪個檔案哪一行」的快速定位索引＋外部視角建議。本次盤點也發現本文件 §7/§13 的 router／migration 數量記載落後實際程式碼，已於本輪一併補齊（見下方 §7.12–§7.15、§13）。
 
@@ -1300,6 +1317,60 @@ xlsx-0.18.5.full.min.js     （SheetJS）
 > 未紀錄；同期間 `CHANGELOG.md` 09-08／09-09 兩天完全空白。已於本日補回，並新增
 > [`WEEKLY-AUDIT-2026-09-07_2026-09-10.md`](WEEKLY-AUDIT-2026-09-07_2026-09-10.md)
 > ——帶「模組／檔案:行號／是否在正式機」座標的本週稽核索引，出事時先看那份。
+
+### 2026-09-11（白天，第三輪）— 叫料前端 UI ＋涵蓋度總覽補第七類，路上抓到三個真缺陷（DB 無異動）
+
+起點是一次全專案待辦盤點（QUICK.md ＋架構地圖＋週稽核三份合併去重、逐條拿
+git／程式碼／部署 log 核對），結論是**六筆待辦其實早就不存在了**，照著做會白工。
+清掉那六筆之後，依序做完「可立即動工」的兩項。
+
+**① 叫料（材料訂購）前端 UI**——`routers/material_orders.py` 2026-09-10 修好四個
+缺陷、7 題 API 測試全綠，但**全 repo 沒有任何前端呼叫得到它**（`case-management.js`
+裡的「叫料出貨」只是階段標籤字串）。新增案件管理「財務」分頁的
+`#fin-material-orders` 區塊：品項/數量/單位/單價（小計一律前端算，後端會用
+`abs(小計 − 數量×單價) > 0.01` 擋）、待付／部分已付／已付清三態、合計三個 KPI、
+已結案或無權限時整區唯讀**並寫明原因**。存檔走專屬端點而非 `saveCase()`——後者會
+覆蓋整份 `data_json`，兩邊同時存會互相蓋掉。
+
+**② 涵蓋度總覽補上自動化系統選型導覽**——`selection-db-overview.html::loadAll()`
+只撈五組，漏了 2026-08-26 上線的第七類。諷刺的是 `automation-guide.html::applyDeepLink()`
+早就寫好接這頁深層連結的程式碼，只差那一組 fetch。**漏掉不會有任何錯誤訊息**，
+所以新增第八類時務必同時補這頁。
+
+**③ 打包新增 Step 2.6「後端端點入口檢查」**（`backend/tools/check_endpoint_entrypoints.py`，
+只警告不擋）——把「後端上線、前端沒入口」這個已經發生兩次的模式自動化：掃
+`backend/routers/*.py` 的 `@router` 路徑，取最後一個非參數片段（`material-orders`、
+`purchase-suggestions`…），到 `frontend/` 所有 .html/.js 找這個字串，找不到就列出來。
+**刻意只警告**：字串比對本來就會誤判，拿它擋打包只會變成每次都在想辦法繞過。
+實測 186 組路由只有 5 組沒有前端呼叫點，噪音很低。其中 `deployed-version` 查證過是
+部署工具在用，進 `ALLOWLIST`；另外四組（`backup-retention`／`cloud-backup-target`／
+`edge-path`／`pdf-base-path`）**沒查證過是刻意還是也忘了做**，所以放在獨立的
+`KNOWN_BASELINE` 只用一行帶過，不跟新冒出來的混在一起——否則每次打包都跳同樣四行，
+很快就沒人看了。查清楚後請往上搬進 `ALLOWLIST` 並補理由，或補上前端然後從那裡刪掉。
+（已回頭驗證：`material-orders` 在 HEAD 版的 `frontend/` 出現 0 次，這支檢查當時就會抓到它。）
+
+**寫 e2e 的時候抓到的三個真缺陷**（都不是測試寫法問題，是產品的）：
+
+| 缺陷 | 症狀與根因 |
+|------|-----------|
+| **`init()` 每次開頁跑兩遍**（最嚴重） | `<body x-data="app()" x-init="init()">` ——**Alpine 3 本來就會自動呼叫資料物件的 `init()`**，加上 `x-init` 寫的那一次剛好兩遍。所有 API 發兩次，而且第二次 `selectCase()` 會把第一次已載好的狀態整個重置：使用者在兩次 init 中間按「＋ 新增項目」，那一列會被**默默抹掉**。先前看不出來是因為這頁的子清單全是唯讀的，重載一次看不出差別。已在 `case-management.js::init()` 加 `_initDone` 進入守門。**全站共 50 個頁面有同樣的 `x-init="init()"` 寫法**（其中 14 個是 `x-data="app()"`），本輪只修案件管理這一頁，其餘屬獨立課題。跟 `34e0ce1` 那個「`login.html` 有兩個 `init()` 互相覆蓋」是同一個家族的坑，這已經是第二次 |
+| 載入回應覆蓋使用者的編輯 | `loadMaterialOrders()` 的回應抵達時直接 `this.materialOrders = [...]`，在途中新增的列會被伺服器版本蓋掉。修法比照 `reports.js` 的 `loadExpenses()` 競態（§12 2026-09-10「更晚」）：發請求當下記住 quote_no，回應到了先比對，並在 `moDirty` 為真時完全不覆蓋 |
+| 空狀態會閃一下 | 分頁列在 `selected` 一設好就出現，但 `loadMaterialOrders()` 在 `selectCase()` 更後面才發出去，中間那段空窗會先閃「尚無叫料項目」再跳「載入中…」。`moLoading` 提前到選案當下就立起來 |
+
+另修 `case-management.html` 精算額外支出明細呼叫了一個**不存在的 `fmt()`**（全 js 只有
+`fmtFeedTime` 與一個區域變數），只要某筆額外支出有填數量，那一行就丟 ReferenceError；
+改用元件實際有的 `caseSettleFmt()`。
+
+**測試**：新增 `test_e2e_material_orders_2026_09_11.py`（2 題）與
+`test_e2e_selection_overview_2026_09_11.py`（1 題）。前者含一條**確定性**的雙重初始化
+回歸斷言——數「案件清單 API 被呼叫幾次」必須是 1，比等競態重現穩定（還原守門後實測
+必紅）；後者比對六個區塊標題，還原修改後實測必紅。連跑 9 輪不flaky，且因為少發一半
+API，單檔時間從 45 秒降到 13 秒。全套非 e2e **609 passed**／e2e **12 passed**。
+
+**本輪更正的六筆文件落差**：①§11「營運報表月/季/年不同步、尚未查證」其實當天稍晚就修好
+②週稽核「套用 `20260910_145349_35938fd`」早被後續 8 個部署包涵蓋 ③Passkey 步驟書寫正式機
+`34e0ce1`、實際是 `06e1409` ④`pytest-current` 損壞連結已不存在 ⑤`routers/projects.py`
+早在 `6bd04ca` 就刪了 ⑥涵蓋度總覽「是否含自動化、尚未查證」已查證並補上。
 
 ### 2026-09-11（白天，第二輪）— `webauthn_credentials.rp_id`（**DB v74**）
 

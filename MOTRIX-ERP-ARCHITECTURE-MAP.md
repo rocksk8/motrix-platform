@@ -128,6 +128,7 @@ SQLite (WAL)  motrix_erp.db（正式）+ motrix_erp_demo.db（demo 隔離）
   也沒有 `include_router(projects.router)`（commit `6089a8f` 下線時一併移除），
   所以那 19 支 API **全部回 404**，不是「保留可用」。前端也確認沒有任何呼叫。
   這個檔案是純死碼，改它不會有任何效果——要動「專案」相關功能請去案件管理。
+- **✅ 2026-09-11 更正：這個檔案已經不存在了**——`6bd04ca`（稽核後續三項——刪死碼）就已刪除，`backend/routers/` 底下找不到 `projects.py`。本節與 §5 表格、QUICK.md §11 三處都曾長期記載為「仍在、尚未清理」。以下保留當時的盤點紀錄供查 git 歷史時參考。
 - 重點：**已被案件管理吸收**，之後若在文件或程式碼看到「專案」一詞，先確認是不是在講已併入 case-stage-board 的東西，不要重新開發。
 
 ### 2.11 網路架構規劃書 `network_plans.py` (338行，DB v64，2026-08-26 新增)
@@ -234,7 +235,7 @@ SQLite (WAL)  motrix_erp.db（正式）+ motrix_erp_demo.db（demo 隔離）
 | 🟡 | 災難復原（DR）從未實際演練過 | `DR-SOP.md` §6 演練紀錄表完全空白——備份機制本身做得不錯，但「整台機器硬體故障」情境下能否真的在估計時間內重建，從未驗證過，RTO 目前只是估計值 |
 | 🟢 | PDF 存檔未納入雲端備份範圍 | 報價單/出貨單/勞報單 PDF 目前不在 `_mirror_uploads()` 涵蓋範圍內，`DR-SOP.md` §5 已列為待改進，可沿用同一套機制擴充 |
 | 🟢 | CORS 白名單寫死 IP，未改用環境變數 | 換機器/換 IP 需要改 code 重新部署，`DR-SOP.md` §5 已列為待改進 |
-| 🟢 | `routers/projects.py`（592行）疑似死碼 | 2026-08-26 專案管理併入案件管理後刻意保留檔案本體「當歷史/備用程式碼」，不再掛載於任何前端流程；文件自己標註「之後確認不需要可整個移除」，目前仍在，尚未清理 |
+| ✅ | ~~`routers/projects.py`（592行）疑似死碼~~ | **檔案已在 `6bd04ca` 刪除**，2026-09-11 核對檔案系統後更正（本列與 §2.10、QUICK.md §11 都曾誤記為仍在） |
 | 🟢 | 報表/儀表板部門篩選覆蓋不全 | activity-feed 目前只有「案件留言板」區塊套用部門篩選，其餘活動來源尚未涵蓋 |
 | — | QUICK.md 文件落後程式碼 | 本次盤點發現的具體落差：§7 API 清單缺 cashier/case_action_items/list_prefs/uploads/network_plans/approval_delegates/automation_guide/org_structure 共 8 個 router 的完整記載（部分僅存在於 memory 而非 QUICK.md 正文）；§13 目錄結構仍寫 "42 個 migrations"（實際 68）；文件版本標記 2026-08-20（實際程式碼到 2026-09-01）。**§11 表格本身也有已過時卻未更新的標記（如 HTTPS 那筆）**——下次要依 §11 判斷前，先查 `git log --oneline -5 -- <相關檔案>` 再下結論，不要只信文件 |
 | 🟢 | 無自動化 CI（GitHub Actions 等） | 純本機 `pytest` + 打包前置檢查，單人開發下夠用，多人協作時會是缺口 |
