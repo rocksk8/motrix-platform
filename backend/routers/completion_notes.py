@@ -101,6 +101,9 @@ class CompletionNoteIn(BaseModel):
     notes:           Optional[str]  = ''
     # 只接受 DEFAULT_LABELS 裡有的鍵，其餘忽略（見 _validate()）
     labels:          Optional[dict] = None
+    # 樂觀鎖（2026-09-14）：載入時拿到的 updated_at，存檔時送回來比對。
+    # **選填**——舊前端／其他呼叫端不送就維持原本行為，不會因為這個欄位壞掉。
+    expected_updated_at: Optional[str] = None
 
 
 def _require_admin(user: dict):
@@ -294,11 +297,19 @@ def update_completion_note(note_no: str, body: CompletionNoteIn, authorization: 
     conn = get_db()
     try:
         row = conn.execute(
-            "SELECT status, data_json FROM completion_notes WHERE note_no=?", (note_no,)).fetchone()
+            "SELECT status, data_json, updated_at FROM completion_notes WHERE note_no=?",
+            (note_no,)).fetchone()
         if not row:
             raise HTTPException(404, "完工單不存在")
         if row["status"] != "草稿":
             raise HTTPException(409, "僅草稿狀態可編輯")
+        # 同時編輯保護（2026-09-14 使用者要求）：兩個人同時開同一張完工單時，
+        # 後存的人不該把先存的人的內容無聲蓋掉。比照報價單／案件資料既有的作法
+        # ——不是鎖，而是「你看到的版本已經過期了，請重新載入」。
+        # 進入畫面時的警示由 `edit-presence.js` 負責（那是提早知道，這是最後防線）。
+        if (body.expected_updated_at and row["updated_at"]
+                and body.expected_updated_at != row["updated_at"]):
+            raise HTTPException(409, "完工單已被其他人更新，請重新載入後再存")
         now = datetime.now().isoformat()
         # ⚠️ read-modify-write：data_json 裡除了 labels 還有 approval（被駁回退回草稿
         # 的單子仍留著歷史），整包覆蓋會把它清掉

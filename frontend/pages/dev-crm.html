@@ -386,40 +386,15 @@
       .dc-form-row, .dc-form-row.triple { grid-template-columns: 1fr; }
     }
 
-    /* 暗黑模式：左側列表樣式 */
-    :root[data-theme="dark"] .dc-list {
-      background: #1A1A1A; border-right-color: #2A2A2A;
-    }
-    :root[data-theme="dark"] .dc-list__head {
-      background: #111; border-bottom-color: #2A2A2A;
-    }
-    :root[data-theme="dark"] .dc-search {
-      background: #1E1E1E; border-color: #2A2A2A; color: #F5F4F0;
-    }
-    :root[data-theme="dark"] .dc-search:focus {
-      background: #222; border-color: #2563EB;
-    }
-    :root[data-theme="dark"] .dc-search::placeholder {
-      color: #555;
-    }
-    :root[data-theme="dark"] .dc-chip {
-      background: #1E1E1E; border-color: #2A2A2A; color: #999;
-    }
-    :root[data-theme="dark"] .dc-chip:hover {
-      background: #222; border-color: #333;
-    }
-    :root[data-theme="dark"] .dc-chip.on {
-      background: var(--accent); border-color: var(--accent); color: #fff;
-    }
-    :root[data-theme="dark"] .dc-case-card {
-      background: #1A1A1A; border-color: #2A2A2A;
-    }
-    :root[data-theme="dark"] .dc-case-card:hover {
-      background: #222;
-    }
-    :root[data-theme="dark"] .dc-case-card.selected {
-      background: #1E3A5F; border-color: #2563EB; border-left-color: #2563EB;
-    }
+    /* 深色模式：**刻意不在這裡寫任何色彩覆寫**（2026-09-14）。
+       全站深色模式是對 body 的非 chrome 子元素套 `filter: invert(1) hue-rotate(180deg)`
+       （見 style.css「DARK MODE」區塊），不是另一套色票。這裡原本有 11 條
+       `:root[data-theme="dark"] .dc-xxx { background: #1A1A1A … }` 手寫深色覆寫，
+       等於在「會被整片反轉」的內容上再塗一次深色——反轉後全部變成淺色，使用者看到
+       的就是「業務開發在深色模式下左側列表與新增案件那一區是白的」。
+       正確作法是什麼都不寫：淺色底 #FAFAF9 被反轉後自然就是深色。
+       頁內若真的需要「在深色模式下長得不一樣」，請先確認那個元素**不在反轉範圍內**
+       （只有 .topbar／.sidebar／.sidebar-overlay 不會被反轉）。 */
   </style>
 </head>
 <body>

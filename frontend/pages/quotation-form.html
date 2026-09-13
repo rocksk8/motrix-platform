@@ -2951,6 +2951,8 @@ window.addEventListener('load',function(){
         Object.assign(this.q, row.data)
         this.q.quoteNo = row.data.quoteNo || this.q.quoteNo
         this._lastUpdatedAt = row.updated_at || null
+        // 同時編輯警示（2026-09-14）：載到哪一張就回報哪一張，有別人在編會跳警示條
+        if (window.MotrixPresence) window.MotrixPresence.start('quotation', this.q.quoteNo)
         // 回簽相關欄位是 SQL 熱欄位，不在 data_json 裡（見 routers/quotations.py
         // get_quotation()），Object.assign(this.q, row.data) 不會帶到，要另外接
         this.q.isSigned = !!row.is_signed
@@ -3355,7 +3357,12 @@ window.addEventListener('load',function(){
                 const matched = this.allUsers.find(u => (u.displayName || u.username) === this.q.salesPerson)
                 if (matched) this.q.salesPersonUsername = matched.username
               }
+              this._lastUpdatedAt = row.updated_at || null
               loaded = true
+              // 同時編輯警示（2026-09-14）：編輯模式一載入就回報，有別人在編會跳警示條。
+              // ⚠️ 這裡是 `?id=` 的載入路徑，跟 loadQuote() 是兩條——當初只在 loadQuote()
+              // 掛 hook，實測（e2e 兩個瀏覽器）才發現開啟編輯根本不會經過那一條。
+              if (window.MotrixPresence) window.MotrixPresence.start('quotation', editNo)
             } else if (res.status === 401) { this.logout && this.logout(); return }
           } catch(e) {}
           if (!loaded) {
@@ -3419,6 +3426,7 @@ window.addEventListener('load',function(){
   }
   </script>
   <script src="../static/notif.js"></script>
+  <script src="../static/edit-presence.js"></script>
   <script src="../static/sidebar.js"></script>
 </body>
 </html>

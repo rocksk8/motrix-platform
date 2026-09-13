@@ -383,7 +383,8 @@
 </div>
 
 <script src="../static/notif.js"></script>
-<script src="../static/sidebar.js"></script>
+<script src="../static/edit-presence.js"></script>
+  <script src="../static/sidebar.js"></script>
 <script>
 const API = '/api'
 
@@ -622,6 +623,8 @@ function networkPlanForm() {
         const r = await fetch(`${API}/network-plans/${id}`, { headers: this._auth() })
         if (!r.ok) { this.errMsg = (await r.json().catch(() => ({}))).detail || '找不到規劃書'; return }
         this.plan = await r.json()
+        // 同時編輯警示（2026-09-14）
+        if (this.plan.id && window.MotrixPresence) window.MotrixPresence.start('network_plan', this.plan.id)
         for (const tab of this.DATA_TABS) {
           if (!Array.isArray(this.plan.data[tab.key])) this.plan.data[tab.key] = []
         }

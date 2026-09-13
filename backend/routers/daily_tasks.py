@@ -1507,6 +1507,28 @@ def _check_approval_reminders() -> None:
         _logger.warning("_check_approval_reminders failed: %s", exc)
 
 
+def _prune_request_log(keep_days: int = 90) -> None:
+    """清掉 90 天前的操作軌跡（2026-09-14，DB v80）。
+
+    這張表每個人每次操作都寫一列，不設保留期限的話它會變成整個資料庫裡最大的一張，
+    備份也跟著變大。90 天的取捨：**足夠回頭查「上個月那筆資料是誰改的」**，又不會
+    讓一份本質上是觀測資料的東西無限累積。要調整就改這個參數。
+
+    同時也是隱私上的分寸——逐條行為紀錄留越久，外洩時的代價越大。
+    """
+    from datetime import datetime as _dt, timedelta as _td
+    cutoff = (_dt.now() - _td(days=keep_days)).isoformat()
+    try:
+        conn = get_db()
+        cur = conn.execute("DELETE FROM user_request_log WHERE at < ?", (cutoff,))
+        conn.commit()
+        conn.close()
+        if cur.rowcount:
+            _logger.info("操作軌跡清理：刪除 %d 筆 %d 天前的紀錄", cur.rowcount, keep_days)
+    except Exception as e:
+        _logger.warning("_prune_request_log failed: %s", e)
+
+
 def schedule_overdue_check() -> None:
     """Call once on server startup. Repeats daily at 08:00.
     On startup: immediately processes ALL missed days since last check (catch-up),
@@ -1522,6 +1544,7 @@ def schedule_overdue_check() -> None:
         _check_project_deadline()
         _check_approval_reminders()
         _check_cert_expiry()
+        _prune_request_log()
 
     def _startup_catchup():
         """Process every day from (last_check + 1) through yesterday in order."""

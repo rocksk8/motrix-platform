@@ -127,6 +127,42 @@ _MUST_CHANGE_PW_ALLOWED = {
 # `SLOW REQUEST`——有紀錄就是真的撞到鎖，沒有就要往別的方向查。
 _SLOW_REQUEST_SECONDS = float(os.environ.get("MOTRIX_SLOW_REQUEST_SECONDS", "5"))
 
+# 在線時間統計（2026-09-14，DB v79）
+#
+# 「這段時間人在線上」的認定：兩次請求之間的間隔在 _ACTIVITY_GAP_MAX 以內就整段
+# 算進在線時數，超過就視為中間離開過、只重新起算不補空白。門檻取 600 秒是因為
+# 上面那段 `idle_secs > 300` 的節流：last_active 最快也要 300 秒才寫一次，門檻若
+# 也設 300 會卡在邊界上，一半的請求會被判成「離開過」。
+#
+# ⚠️ 這是「活躍時間」不是「登入時長」——開著分頁去開會不會被算進去（沒有請求就
+# 沒有累加）。要改成後者得改用心跳，那會讓每個閒置分頁每分鐘打一次伺服器。
+_ACTIVITY_GAP_MAX = 600
+
+
+def _record_user_activity(user_id: int, now_dt, gap_seconds: float) -> None:
+    """把這一段間隔累加進當天的在線時數（見 db.py::_m079_user_activity）。
+
+    寫入失敗一律吞掉：這是統計資料，不該讓它擋下任何一個正常請求。
+    """
+    if gap_seconds <= 0 or gap_seconds > _ACTIVITY_GAP_MAX:
+        return
+    day = now_dt.strftime("%Y-%m-%d")
+    now_iso = now_dt.isoformat()
+    try:
+        ac = get_db()
+        ac.execute(
+            "INSERT INTO user_activity_daily (user_id, day, active_seconds, first_seen_at, last_seen_at) "
+            "VALUES (?,?,?,?,?) "
+            "ON CONFLICT(user_id, day) DO UPDATE SET "
+            "  active_seconds = active_seconds + excluded.active_seconds, "
+            "  last_seen_at   = excluded.last_seen_at",
+            (user_id, day, int(gap_seconds), now_iso, now_iso),
+        )
+        ac.commit()
+        ac.close()
+    except Exception:
+        pass
+
 
 @app.middleware("http")
 async def slow_request_log(request: Request, call_next):
@@ -160,6 +196,66 @@ async def no_cache_static(request: Request, call_next):
         response.headers["Pragma"] = "no-cache"
         response.headers["Expires"] = "0"
     return response
+
+
+# 逐條操作軌跡（2026-09-14，DB v80）
+#
+# 只記「人的行為」：輪詢類端點一律跳過，否則每個開著的分頁每分鐘就會塞進好幾列，
+# 真正有意義的動作會被淹掉。這份清單是用「前端會自動定時打」當標準挑的，不是
+# 用「不重要」——例如 /api/auth/me 是每次開頁都打的守門請求，記它等於重複記頁面。
+_TRAIL_SKIP_PREFIXES = (
+    "/api/ping",
+    "/api/auth/me",
+    "/api/notifications",
+    "/api/audit-log/module-counts",
+    "/api/online-users",
+    "/api/system/version",
+    "/api/system/deployed-version",
+    "/api/now",
+    "/api/uploads/",          # 圖片/附件載入，一頁可能幾十個
+    "/api/photo-token",
+)
+
+# 同一個人對同一支端點的連續請求，這個秒數內只記一次。
+# 防的是自動存檔（1.5 秒防抖）與搜尋輸入這類「一個動作打很多次」的情況。
+_TRAIL_DEDUPE_SECONDS = 30
+
+
+def _record_request_trail(user_id: int, now_dt, method: str, path: str,
+                          referer: str, status: int) -> None:
+    """把一次請求記進操作軌跡。失敗一律吞掉——這是觀測資料，不該擋下正常請求。"""
+    for skip in _TRAIL_SKIP_PREFIXES:
+        if path.startswith(skip):
+            return
+    page = ""
+    if referer:
+        try:
+            page = referer.split("?")[0].rstrip("/").split("/")[-1] or ""
+        except Exception:
+            page = ""
+    now_iso = now_dt.isoformat()
+    try:
+        tc = get_db()
+        last = tc.execute(
+            "SELECT at FROM user_request_log WHERE user_id=? AND method=? AND path=? "
+            "ORDER BY id DESC LIMIT 1", (user_id, method, path)
+        ).fetchone()
+        if last:
+            try:
+                if (now_dt - datetime.fromisoformat(last["at"])).total_seconds() < _TRAIL_DEDUPE_SECONDS:
+                    tc.close()
+                    return
+            except Exception:
+                pass
+        tc.execute(
+            "INSERT INTO user_request_log (user_id, at, method, path, page, status) "
+            "VALUES (?,?,?,?,?,?)",
+            (user_id, now_iso, method, path, page, int(status or 0)),
+        )
+        tc.commit()
+        tc.close()
+    except Exception:
+        pass
 
 
 @app.middleware("http")
@@ -227,6 +323,9 @@ async def auth_middleware(request: Request, call_next):
                 uc.close()
             except Exception:
                 pass
+            # 在線時間統計（2026-09-14）：沿用同一個節流點，不額外增加寫入頻率——
+            # 每 5 分鐘一列 UPDATE，跟原本就在做的 last_active 同一個數量級。
+            _record_user_activity(row["id"], now_dt, idle_secs)
     else:
         # First request after migration — stamp last_active without any check
         try:
@@ -245,7 +344,12 @@ async def auth_middleware(request: Request, call_next):
                 "code": "must_change_password",
             },
         )
-    return await call_next(request)
+    response = await call_next(request)
+    # 操作軌跡（2026-09-14）：記在**回應之後**才拿得到狀態碼——被擋下來的操作
+    # （403/404）跟成功的一樣重要，甚至更重要。
+    _record_request_trail(row["id"], now_dt, request.method, path,
+                          request.headers.get("Referer", ""), response.status_code)
+    return response
 
 
 # Registered last = outermost: applies security headers to all responses (incl. 401/403)

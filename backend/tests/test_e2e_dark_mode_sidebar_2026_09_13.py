@@ -183,3 +183,39 @@ def test_probe_catches_the_original_regression(live_server, make_user):
                 f"上面那支『量到是深色』的測試也就不能當成證據。")
         finally:
             browser.close()
+
+
+@pytest.mark.e2e
+def test_dev_crm_list_panel_paints_dark(live_server, make_user):
+    """業務開發的左側案件列表在深色模式下要是深的（2026-09-14 使用者回報）。
+
+    這頁原本自己寫了 11 條 `:root[data-theme="dark"]` 手寫深色覆寫，被全站的反轉
+    濾鏡再翻一次 → 整片變白。**這種錯誤只有量像素看得到**：computed style 讀到的
+    是作者寫的 `#1A1A1A`（看起來完全正確），畫出來卻是 `#E5E5E5`。
+
+    結構面的守門在 `test_dark_mode_chrome_structure_2026_09_13.py`
+    （掃頁面有沒有自己的深色色票），這裡是最終畫面的驗收。
+    """
+    username, password = make_user(username="e2e_dark_dc", role="superadmin")
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        context = browser.new_context(viewport={"width": 1440, "height": 900})
+        context.add_init_script(
+            "try { localStorage.setItem('motrix_theme', 'dark') } catch (e) {}")
+        page = context.new_page()
+        try:
+            _login(page, live_server, username, password)
+            page.goto(f"{live_server}/pages/dev-crm.html")
+            page.wait_for_selector(".dc-list", timeout=10000)
+            page.wait_for_timeout(200)
+            png = page.locator(".dc-list").screenshot()
+            img = Image.open(io.BytesIO(png)).convert("RGB")
+            raw = img.tobytes()
+            lums = [round(0.299 * raw[i] + 0.587 * raw[i + 1] + 0.114 * raw[i + 2])
+                    for i in range(0, len(raw), 3)]
+            median = statistics.median(lums)
+            assert median <= DARK_MAX, (
+                f"業務開發的案件列表在深色模式下亮度 {median}（深色應 ≤ {DARK_MAX}）"
+                f"——通常是頁面自己寫了 :root[data-theme=\"dark\"] 的深色覆寫，被反轉成淺色")
+        finally:
+            browser.close()

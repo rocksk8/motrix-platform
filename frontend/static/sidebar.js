@@ -204,6 +204,82 @@
   }
 
   // ── Topbar ─────────────────────────────────────────────────────────────────
+  // ── 在線成員（2026-09-14，僅最高管理者）─────────────────────────────────
+  //
+  // 使用者要求「右上角可顯示在線成員跟數量」。刻意做成**輪詢 /api/online-users**
+  // 而不是心跳或 WebSocket：
+  //   ①「在線」的資料來源是 sessions.last_active，那個欄位本來就在更新，不需要
+  //     為了這個功能讓每個閒置分頁定時打伺服器
+  //   ② 這是內網 ERP，60 秒的延遲對「誰在線上」完全夠用，不值得為它常駐連線
+  // 精度上限就是 last_active 的節流（5 分鐘），所以剛登入的人最慢 5 分鐘後才出現，
+  // 這一點寫在下拉選單的說明文字裡，免得有人以為是壞掉。
+  function buildOnlineWidget() {
+    if (!sa) return ''
+    return '<div id="tb-online-wrap" style="position:relative">'
+      + '<button class="topbar__btn" id="tb-online-btn" title="在線成員" style="color:#888;border-color:#333;font-size:11px">'
+      + '<span style="width:7px;height:7px;border-radius:50%;background:#22C55E;display:inline-block;margin-right:5px"></span>'
+      + '在線 <span id="tb-online-count" style="font-family:LINE Seed TW_OTF, sans-serif;font-weight:700;margin-left:3px">–</span>'
+      + '</button>'
+      + '<div id="tb-online-pop" style="display:none;position:absolute;top:calc(100% + 6px);right:0;width:280px;background:#fff;'
+      + 'border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.13);z-index:999;overflow:hidden">'
+      + '<div style="padding:11px 16px;border-bottom:1px solid var(--border-light);font-size:13px;font-weight:600;color:var(--text-main)">目前在線</div>'
+      + '<div id="tb-online-list" style="max-height:320px;overflow-y:auto"></div>'
+      + '<div style="padding:8px 16px;border-top:1px solid var(--border-light);font-size:10px;color:var(--text-dim);line-height:1.7">'
+      + '依最後活動時間判定（5 分鐘內），最慢 5 分鐘更新一次</div>'
+      + '<a href="' + pg('online-stats.html') + '" style="display:block;padding:9px 16px;text-align:center;font-size:12px;color:var(--accent);border-top:1px solid var(--border-light);text-decoration:none;font-weight:500">查看在線時數統計 →</a>'
+      + '</div></div>'
+  }
+
+  function _roleLabel(r) {
+    return { superadmin: '最高管理者', admin: '管理員', sales: '業務', engineer: '工程師', viewer: '檢視者' }[r] || r
+  }
+
+  function refreshOnlineWidget() {
+    if (!sa) return
+    var btn = document.getElementById('tb-online-btn')
+    if (!btn) return
+    fetch('/api/online-users', { headers: { Authorization: 'Bearer ' + s.token } })
+      .then(function (r) { return r.ok ? r.json() : null })
+      .then(function (d) {
+        if (!d) return
+        var cnt = document.getElementById('tb-online-count')
+        if (cnt) cnt.textContent = d.count
+        var list = document.getElementById('tb-online-list')
+        if (!list) return
+        if (!d.users.length) {
+          list.innerHTML = '<div style="padding:20px;text-align:center;font-size:12px;color:var(--text-dim)">目前沒有其他人在線</div>'
+          return
+        }
+        list.innerHTML = d.users.map(function (u) {
+          var mins = Math.floor(u.secondsAgo / 60)
+          var ago = mins <= 0 ? '剛剛' : mins + ' 分鐘前'
+          return '<div style="padding:9px 16px;border-bottom:1px solid var(--border-light);display:flex;align-items:center;gap:8px">'
+            + '<span style="width:7px;height:7px;border-radius:50%;background:#22C55E;flex:0 0 auto"></span>'
+            + '<div style="min-width:0;flex:1">'
+            + '<div style="font-size:12px;color:var(--text-main);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'
+            + esc(u.displayName) + '<span style="color:var(--text-dim);font-size:10px;margin-left:6px">' + esc(_roleLabel(u.role)) + '</span></div>'
+            + '<div style="font-size:10px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif">' + ago + '</div>'
+            + '</div></div>'
+        }).join('')
+      })
+      .catch(function () {})
+  }
+
+  function bindOnlineWidget() {
+    var btn = document.getElementById('tb-online-btn')
+    var pop = document.getElementById('tb-online-pop')
+    if (!btn || !pop) return
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation()
+      pop.style.display = pop.style.display === 'none' ? 'block' : 'none'
+      if (pop.style.display === 'block') refreshOnlineWidget()
+    })
+    document.addEventListener('click', function (e) {
+      if (!document.getElementById('tb-online-wrap')) return
+      if (!document.getElementById('tb-online-wrap').contains(e.target)) pop.style.display = 'none'
+    })
+  }
+
   function buildTopbar() {
     var el = document.getElementById('app-topbar')
     if (!el) return
@@ -257,6 +333,7 @@
       + '<span id="tb-display-name" style="font-size:12px;color:#888;font-family:LINE Seed TW_OTF, sans-serif">' + esc(dn) + '</span>'
       + buildFontCtrl()
       + buildThemeToggle()
+      + buildOnlineWidget()
       + bell
       + '<a href="' + cpHref + '" class="topbar__btn" style="text-decoration:none;color:#888;border-color:#333;font-size:11px">修改密碼</a>'
       + '<button class="topbar__btn" onclick="motrixLogout()" style="color:#888;border-color:#333;font-size:11px">登出</button>'
@@ -265,6 +342,9 @@
 
     // Process Alpine directives in the injected topbar (notifStore x-data)
     if (window.Alpine && window.Alpine.initTree) window.Alpine.initTree(el)
+    bindOnlineWidget()
+    refreshOnlineWidget()
+    if (sa) setInterval(refreshOnlineWidget, 60000)
   }
 
   // ── Sidebar ─────────────────────────────────────────────────────────────────
@@ -298,6 +378,7 @@
     dash:  '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
     bdev:  '<path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/>',
     appr:  '<path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>',
+    apprhist: '<path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 106 5.3L3 8"/><path d="M12 7v5l3 2"/>',
     wlog:  '<path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>',
     quote: '<path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414A1 1 0 0119 9.414V19a2 2 0 01-2 2z"/>',
     cust:  '<path d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0"/>',
@@ -341,6 +422,7 @@
     'quotations.html':         'quotation',
     'quotation-form.html':     'quotation',
     'approval-queue.html':     'quotation',
+    'approval-history.html':   'quotation',
     'case-management.html':    'case_manage',
     'case-stage-board.html':   'case_manage',
     'customers.html':          'customer',
@@ -419,6 +501,7 @@
         + '<span id="sb-approval-badge" style="display:none;background:#DC2626;color:#fff;font-size:9px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;padding:1px 5px;border-radius:8px;margin-left:auto;min-width:16px;text-align:center;line-height:1.6"></span>'
         + '</a>' : ''),
       ni(pg('approval-delegates.html'), 'appr', '簽核代理人', ['approval-delegates.html'], cQ || sa || ad),
+      ni(pg('approval-history.html'), 'apprhist', '簽核歷史', ['approval-history.html'], cQ || sa || ad),
       ni(pg('case-management.html'), 'case_', '案件管理', ['case-management.html'],                   cCM,  'sb-mod-case'),
       ni(pg('case-stage-board.html'),'case_', '案件執行看板', ['case-stage-board.html'],               cCM),
       sec('廠商與採購', cCu || cPr),
@@ -471,6 +554,7 @@
       ni(pg('audit-log.html'),         'hist',  '歷史紀錄',   ['audit-log.html'],         ad),
       ni(pg('shipping-export-history.html'), 'hist', '出貨單歷史紀錄', ['shipping-export-history.html'], ad),
       ni(pg('module-versions.html'),  'ver',   '版本紀錄',   ['module-versions.html'],               ad),
+      ni(pg('online-stats.html'),     'hist',  '在線時數統計', ['online-stats.html'],              sa),
       ni(pg('schema-status.html'),    'schema', 'Schema 狀態', ['schema-status.html'],               sa),
     ].filter(Boolean).join('')
 

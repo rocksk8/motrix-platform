@@ -25,6 +25,7 @@ topbar／sidebar／sidebar-overlay 本來就是深色，所以被寫在排除清
 import glob
 import io
 import os
+import re
 from html.parser import HTMLParser
 
 ROOT = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
@@ -102,4 +103,36 @@ def test_dark_mode_rule_still_uses_direct_child_selector():
         "style.css 的深色模式選擇器變了，找不到：\n  " + expected
         + "\n若深色模式已改用別的機制，請一併確認 "
           "test_chrome_elements_are_direct_children_of_body 的前提是否仍成立。"
+    )
+
+
+# ── 頁面不得自己寫深色色票（2026-09-14 新增）──────────────────────────────
+#
+# 起因：使用者回報「業務開發在深色模式下、新增案件那一區還是白的」。根因不是
+# 結構，而是 `dev-crm.html` 自己寫了 11 條
+# `:root[data-theme="dark"] .dc-list { background: #1A1A1A … }` 手寫深色覆寫。
+#
+# 全站深色模式是**反轉濾鏡**，不是另一套色票：在會被整片反轉的內容上再塗一次深色，
+# 反轉後就變成淺色——寫得越「對」，結果越白。正確作法是什麼都不寫，讓淺色底被反轉。
+#
+# 例外只有一種：**本來就不在反轉範圍內**的元素（.topbar／.sidebar／.sidebar-overlay），
+# 或整頁都不套反轉的獨立頁面。要破例請在下面白名單補一筆並寫明原因。
+
+DARK_OVERRIDE_ALLOWED = {}
+
+_COMMENT_RE = re.compile(r"/\*.*?\*/|<!--.*?-->", re.S)
+
+
+def test_pages_do_not_define_their_own_dark_palette():
+    offenders = []
+    for path in PAGES:
+        src = _COMMENT_RE.sub("", io.open(path, encoding="utf-8").read())   # 註解裡提到不算
+        hits = len(re.findall(r':root\[data-theme="dark"\]', src))
+        if hits and os.path.basename(path) not in DARK_OVERRIDE_ALLOWED:
+            offenders.append(f"{os.path.basename(path)}：{hits} 條 :root[data-theme=\"dark\"] 覆寫")
+    assert not offenders, (
+        "這些頁面自己寫了深色色票，但全站深色模式是反轉濾鏡——手寫的深色會被反轉成"
+        "淺色，症狀正好相反（越『正確』越白）：\n  " + "\n  ".join(offenders)
+        + "\n修法：刪掉那些覆寫，讓淺色底被反轉即可；真的要破例請在本檔 "
+          "DARK_OVERRIDE_ALLOWED 補一筆並寫明原因。"
     )

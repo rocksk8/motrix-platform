@@ -417,6 +417,14 @@
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
               預覽
             </button>
+            <!-- 轉簽（2026-09-14）：限最高管理者。刻意放在這裡而不是藏進選單——
+                 會用到它的情境是「這張卡住了」，卡住的時候人是在找出口，不是在翻選單。 -->
+            <button id="aq-reassign-btn" x-show="canReassign(selected)" class="btn btn-sm" @click="openReassign()"
+                    style="font-size:12px;color:#B45309;background:#FFFBEB;border:1px solid #FDE68A;border-radius:var(--radius);padding:6px 10px;display:inline-flex;align-items:center;gap:5px;cursor:pointer">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 7h12m0 0l-4-4m4 4l-4 4M16 17H4m0 0l4 4m-4-4l4-4"/></svg>
+              轉簽
+            </button>
+
             <!-- Can approve: my turn in steps, OR (no steps + superadmin + not self) -->
             <template x-if="canApprove(selected)">
               <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -546,6 +554,124 @@
           </div>
         </div>
 
+        <!-- ── 送審詳情（2026-09-14 使用者要求：要看得到哪個案件、什麼內容、
+             夾帶哪些檔案、編修後的結果）───────────────────────────────────── -->
+        <div class="aq-section" x-show="detail">
+          <div class="aq-section-title">
+            <span x-text="detail?.title || '送審內容'"></span>
+            <span x-show="detailLoading" style="font-size:11px;color:var(--text-dim);margin-left:8px">載入中…</span>
+          </div>
+
+          <!-- 哪個案件 -->
+          <div class="aq-info-grid" x-show="detail?.case">
+            <div class="aq-info-row">
+              <span class="aq-info-label">案件編號</span>
+              <span class="aq-info-value" x-text="detail?.case?.quoteNo || '—'"></span>
+            </div>
+            <div class="aq-info-row">
+              <span class="aq-info-label">客戶</span>
+              <span class="aq-info-value" x-text="detail?.case?.customerName || '—'"></span>
+            </div>
+            <div class="aq-info-row">
+              <span class="aq-info-label">案件名稱</span>
+              <span class="aq-info-value" x-text="detail?.case?.projectName || '—'"></span>
+            </div>
+            <div class="aq-info-row" x-show="detail?.case?.dealTag">
+              <span class="aq-info-label">案件進度</span>
+              <span class="aq-info-value" x-text="detail?.case?.dealTag"></span>
+            </div>
+          </div>
+
+          <!-- 送審了什麼 -->
+          <div class="aq-info-grid" style="margin-top:10px" x-show="(detail?.fields||[]).length">
+            <template x-for="f in (detail?.fields||[])" :key="f.label">
+              <div class="aq-info-row">
+                <span class="aq-info-label" x-text="f.label"></span>
+                <span class="aq-info-value" style="white-space:pre-wrap" x-text="f.value"></span>
+              </div>
+            </template>
+          </div>
+
+          <!-- 明細 -->
+          <div style="margin-top:12px" x-show="(detail?.items||[]).length">
+            <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px"
+                 x-text="'明細（' + (detail?.items||[]).length + ' 項）'"></div>
+            <table style="width:100%;border-collapse:collapse;font-size:12px">
+              <template x-for="(it, i) in (detail?.items||[])" :key="i">
+                <tr style="border-bottom:1px solid var(--border-light)">
+                  <td style="padding:5px 8px;color:var(--text-dim);width:26px" x-text="i+1"></td>
+                  <td style="padding:5px 8px" x-text="it.name || it.description || it.item || '—'"></td>
+                  <td style="padding:5px 8px;text-align:right;white-space:nowrap"
+                      x-text="(it.qty ?? it.quantity ?? '') + (it.unit ? ' ' + it.unit : '')"></td>
+                  <td style="padding:5px 8px;text-align:right;white-space:nowrap;font-family:LINE Seed TW_OTF, sans-serif"
+                      x-text="it.amount != null ? Number(it.amount).toLocaleString() : (it.subtotal != null ? Number(it.subtotal).toLocaleString() : '')"></td>
+                </tr>
+              </template>
+            </table>
+          </div>
+
+          <!-- 夾帶檔案（圖片直接預覽，其餘點開） -->
+          <div style="margin-top:12px" x-show="(detail?.files||[]).length">
+            <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px"
+                 x-text="'夾帶檔案（' + (detail?.files||[]).length + '）'"></div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap">
+              <template x-for="f in (detail?.files||[])" :key="f.id">
+                <div style="border:1px solid var(--border-light);border-radius:6px;padding:6px;width:140px">
+                  <template x-if="f.kind === 'image'">
+                    <img :src="f.dataUrl || fileUrls[f.id] || ''" @click="openFile(f)"
+                         style="width:100%;height:84px;object-fit:cover;border-radius:4px;cursor:zoom-in;background:#F3F4F6">
+                  </template>
+                  <template x-if="f.kind !== 'image'">
+                    <div @click="openFile(f)"
+                         style="height:84px;display:flex;align-items:center;justify-content:center;background:#F3F4F6;border-radius:4px;cursor:pointer;font-size:22px"
+                         x-text="f.kind === 'pdf' ? '📄' : '📎'"></div>
+                  </template>
+                  <div style="font-size:11px;margin-top:5px;word-break:break-all;line-height:1.5">
+                    <a href="javascript:void(0)" @click="openFile(f)"
+                       style="color:var(--accent);text-decoration:underline" x-text="f.name"></a>
+                  </div>
+                  <div style="font-size:10px;color:var(--text-dim)" x-show="f.uploadedBy"
+                       x-text="f.uploadedBy"></div>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <!-- 編修後的結果 -->
+          <div style="margin-top:12px" x-show="detail?.changes">
+            <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px"
+                 x-text="detail?.changes?.label || '變更內容'"></div>
+            <div style="display:flex;gap:12px;flex-wrap:wrap">
+              <div x-show="detail?.changes?.before" style="flex:1;min-width:220px;border:1px solid var(--border-light);border-radius:6px;padding:10px">
+                <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">原本</div>
+                <template x-for="(v, k) in (detail?.changes?.before || {})" :key="k">
+                  <div style="font-size:12px;display:flex;gap:8px;padding:2px 0">
+                    <span style="color:var(--text-dim);min-width:52px" x-text="k"></span>
+                    <span x-text="v === null || v === undefined || v === '' ? '—' : v"></span>
+                  </div>
+                </template>
+              </div>
+              <div style="flex:1;min-width:220px;border:1px solid #BBF7D0;background:#F0FDF4;border-radius:6px;padding:10px">
+                <div style="font-size:11px;color:#15803D;margin-bottom:6px">核准後</div>
+                <template x-for="(v, k) in (detail?.changes?.after || {})" :key="k">
+                  <div style="font-size:12px;display:flex;gap:8px;padding:2px 0">
+                    <span style="color:var(--text-dim);min-width:52px" x-text="k"></span>
+                    <span style="word-break:break-all"
+                          x-text="v === null || v === undefined || v === '' ? '—' : (typeof v === 'object' ? JSON.stringify(v) : v)"></span>
+                  </div>
+                </template>
+              </div>
+            </div>
+            <div style="margin-top:8px" x-show="(detail?.changes?.files||[]).length">
+              <div style="font-size:11px;color:var(--text-dim);margin-bottom:4px">變更附帶的檔案</div>
+              <template x-for="f in (detail?.changes?.files||[])" :key="f.id">
+                <a href="javascript:void(0)" @click="openFile(f)"
+                   style="font-size:12px;color:var(--accent);text-decoration:underline;margin-right:10px" x-text="f.name"></a>
+              </template>
+            </div>
+          </div>
+        </div>
+
         <!-- Reasons -->
         <div class="aq-section" x-show="(selected?.reasons||[]).length > 0">
           <div class="aq-section-title">審核原因</div>
@@ -580,6 +706,16 @@
                       <div class="aq-step-label" x-text="a.displayName || a.username"></div>
                       <div class="aq-step-sublabel"
                            x-text="approverSublabel(tier, idx, a, selected?.currentTier ?? 0)"></div>
+                      <!-- 轉簽註記（2026-09-14）：使用者要求「註明原因跟註記這筆簽核」。
+                           原因若只留在資料庫與簽核歷史，正在簽的人還是不知道為什麼
+                           輪到自己——就顯示在他名字底下。 -->
+                      <template x-if="a.reassignedFrom">
+                        <div class="aq-step-sublabel" style="color:#B45309">
+                          ↔ 轉簽自 <span x-text="a.reassignedFromDisplay || a.reassignedFrom"></span>
+                          <span x-text="'（' + (a.reassignedBy || '') + ' ' + (a.reassignedAt || '').slice(0, 10) + '）'"></span>
+                          ・原因：<span x-text="a.reassignReason"></span>
+                        </div>
+                      </template>
                     </div>
                   </template>
                 </div>
@@ -688,6 +824,14 @@
         totalPending: 0,
         myDelegatedFor: [],  // 我目前正在代理誰的簽核權限（2026-08-28，見 get_approval_queue() 說明）
         selected: null,
+        detail: null,
+        detailLoading: false,
+        reassignModal: false,
+        reassignTo: '',
+        reassignReason: '',
+        reassignError: '',
+        reassignCandidates: [],
+        fileUrls: {},
         loading: true,
         actioning: false,
         rejectModalOpen: false,
@@ -827,6 +971,7 @@
             if (this.selected) {
               const found = this.queue.flatMap(g => g.items).find(i => i.quoteNo === this.selected.quoteNo)
               this.selected = found || null
+          this.loadDetail(this.selected)
             }
           } catch (e) {
             console.error(e)
@@ -835,8 +980,125 @@
           }
         },
 
+        // ── 轉簽（2026-09-14 使用者要求）─────────────────────────────────
+        // 只有最高管理者、而且是有分層簽核的單據類型才給——額外支出的簽核名單
+        // 存在自己的欄位、已結案變更是「任一 superadmin 皆可」本來就不會卡人，
+        // 兩者都不支援（後端也擋）。
+        canReassign(item) {
+          if (!item) return false
+          if (this.session.role !== 'superadmin') return false
+          return ['quotation', 'contractor_voucher', 'invoice_voucher',
+                  'payment_request', 'shipping_note', 'completion_note'].includes(item.type)
+        },
+
+        async openReassign() {
+          this.reassignTo = ''
+          this.reassignReason = ''
+          this.reassignError = ''
+          this.reassignModal = true
+          if (this.reassignCandidates.length) return
+          try {
+            const r = await fetch(`${API}/api/users`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+            if (!r.ok) return
+            const users = await r.json()
+            const LABEL = { superadmin: '最高管理者', admin: '管理員', sales: '業務',
+                            engineer: '工程師', viewer: '檢視者' }
+            this.reassignCandidates = (Array.isArray(users) ? users : (users.items || []))
+              .filter(u => u.active !== 0 && u.active !== false)
+              .map(u => ({ username: u.username, displayName: u.displayName || u.display_name || u.username,
+                           roleLabel: LABEL[u.role] || u.role }))
+          } catch (e) {}
+        },
+
+        async doReassign() {
+          this.reassignError = ''
+          if (!this.reassignTo) { this.reassignError = '請選擇要轉給誰'; return }
+          if (!this.reassignReason.trim()) { this.reassignError = '請填寫轉簽原因'; return }
+          this.actioning = true
+          try {
+            const r = await fetch(`${API}/api/approval-queue/reassign`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+              body: JSON.stringify({
+                type: this.selected.type,
+                id: this.selected.quoteNo,
+                to_username: this.reassignTo,
+                reason: this.reassignReason.trim(),
+              }),
+            })
+            const d = await r.json().catch(() => ({}))
+            if (!r.ok) { this.reassignError = d.detail || ('轉簽失敗（' + r.status + '）'); return }
+            this.reassignModal = false
+            this._toast('✓ 已轉簽給 ' + (d.toDisplay || this.reassignTo), '#B45309')
+            // 這個元件的重整叫 loadQueue()——先前寫成 this.load() 會安靜地丟
+            // TypeError（被 catch 吃掉、對話框已經關了所以錯誤訊息也看不到），
+            // 結果是轉簽其實成功了，但畫面上的簽核人沒換，人會以為沒生效
+            const keep = this.selected && this.selected.quoteNo
+            await this.loadQueue()
+            const again = (this.queue || []).find(it => it.quoteNo === keep)
+            if (again) this.selectItem(again)
+          } catch (e) {
+            this.reassignError = '轉簽失敗：' + e.message
+          } finally {
+            this.actioning = false
+          }
+        },
+
         selectItem(item) {
           this.selected = item
+          this.loadDetail(item)
+        },
+
+        // ── 送審詳情（2026-09-14）─────────────────────────────────────────
+        // 清單刻意不帶這些資料（明細／檔案／變更內容）：佇列一次可能上百筆，每筆
+        // 都去讀 items_json／files_json／payload_json 會讓開啟簽核佇列變慢，而使用者
+        // 一次只看一筆。切換項目時先清空，避免上一筆的內容殘留在畫面上被誤讀。
+        async loadDetail(item) {
+          this.detail = null
+          this.fileUrls = {}
+          if (!item) return
+          const id = item.type === 'case_change' ? item.changeRequestId
+                   : item.type === 'extra_expense' ? item.extraExpenseId
+                   : item.quoteNo
+          if (!id) return
+          this.detailLoading = true
+          try {
+            const url = API + '/api/approval-queue/detail?type=' + encodeURIComponent(item.type)
+                      + '&id=' + encodeURIComponent(id)
+            const r = await fetch(url, { headers: { Authorization: 'Bearer ' + this.session.token } })
+            if (r.ok) {
+              this.detail = await r.json()
+              this._prefetchImages()
+            }
+          } catch (e) { /* 詳情拿不到不該讓整個佇列爆掉，清單仍可正常簽核 */ }
+          this.detailLoading = false
+        },
+
+        // 圖片要能直接顯示縮圖 → 先換簽章 URL（/api/uploads 需要 pt 簽章）
+        async _prefetchImages() {
+          for (const f of (this.detail?.files || [])) {
+            if (f.kind !== 'image' || !f.path || f.dataUrl) continue
+            try {
+              const r = await fetch(API + '/api/photo-token?path=' + encodeURIComponent(f.path),
+                                    { headers: { Authorization: 'Bearer ' + this.session.token } })
+              if (!r.ok) continue
+              const d = await r.json()
+              this.fileUrls[f.id] = API + '/api/uploads/' + f.path + '?pt=' + encodeURIComponent(d.token)
+            } catch (e) {}
+          }
+        },
+
+        async openFile(f) {
+          if (f.dataUrl) {
+            // 只開 data:image/ ——這個欄位（存簿封面）是建立單據時由前端送進來的
+            // 字串，若混進 javascript: 之類的 scheme，點下去就是在本站原點執行腳本。
+            // 後端也擋一次（見 approval_queue_detail），兩邊都擋。
+            if (!/^data:image\//i.test(f.dataUrl)) return
+            window.open(f.dataUrl, '_blank')
+            return
+          }
+          if (!f.path) return
+          await this.previewFile({ path: f.path, filename: f.name })
         },
 
         // 目前登入者本人，或目前正在代理簽核權限的委託人（見 myDelegatedFor）
@@ -1067,6 +1329,43 @@
       }
     }
   </script>
+  <!-- ── 轉簽對話框（2026-09-14）─────────────────────────────────────────── -->
+  <div x-show="reassignModal" x-cloak
+       style="position:fixed;inset:0;background:rgba(0,0,0,.38);z-index:600;display:flex;align-items:center;justify-content:center;padding:20px"
+       @click.self="reassignModal = false">
+    <div style="background:#fff;border-radius:12px;max-width:440px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.22)">
+      <div style="padding:16px 20px;border-bottom:1px solid var(--border-light);font-size:15px;font-weight:600">
+        轉簽這一筆
+      </div>
+      <div style="padding:18px 20px">
+        <div style="font-size:12px;color:var(--text-dim);line-height:1.9;margin-bottom:14px">
+          目前卡在
+          <b x-text="(selected?.currentApprovers || []).map(a => a.displayName || a.username).join('、') || '（未指定）'"></b>
+          身上。轉簽只會換掉<b>當層還沒簽的那個人</b>，已經簽過的與後面幾層不動。
+        </div>
+        <div style="margin-bottom:12px">
+          <label style="font-size:11px;color:var(--text-dim);display:block;margin-bottom:4px">轉給誰 *</label>
+          <select id="aq-reassign-to" class="fi" x-model="reassignTo" style="width:100%">
+            <option value="">請選擇</option>
+            <template x-for="u in reassignCandidates" :key="u.username">
+              <option :value="u.username" x-text="(u.displayName || u.username) + '（' + u.roleLabel + '）'"></option>
+            </template>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:11px;color:var(--text-dim);display:block;margin-bottom:4px">轉簽原因 *（會留在這筆簽核與簽核歷史上）</label>
+          <textarea id="aq-reassign-reason" class="fi" x-model="reassignReason" rows="3" style="width:100%;resize:vertical"
+                    placeholder="例如：原簽核人出差兩週，由副手代為處理"></textarea>
+        </div>
+        <div id="aq-reassign-error" x-show="reassignError" style="margin-top:10px;font-size:12px;color:var(--danger)" x-text="reassignError"></div>
+      </div>
+      <div style="padding:12px 20px;border-top:1px solid var(--border-light);display:flex;justify-content:flex-end;gap:8px">
+        <button class="btn btn-secondary btn-sm" @click="reassignModal = false">取消</button>
+        <button id="aq-reassign-confirm" class="btn btn-primary btn-sm" @click="doReassign()" :disabled="actioning">確認轉簽</button>
+      </div>
+    </div>
+  </div>
+
   <script src="../static/notif.js"></script>
   <script src="../static/sidebar.js"></script>
 </body>

@@ -86,7 +86,18 @@ def _open_finance_tab(page, base_url, quote_no, expect="empty"):
     page.click('.cm-tab:has-text("財務")')
     page.wait_for_selector(MO_PANEL, timeout=20000)
     if expect == "empty":
-        page.wait_for_selector(f'{MO_PANEL} :text("尚無叫料項目")', timeout=20000)
+        # 2026-09-14：只等空狀態文字**出現**還是會假通過。滿載的機器上實測到
+        # 這個順序——空狀態閃了一下 → 這裡的等待通過 → 畫面跳回「載入中…」→
+        # 呼叫端的斷言讀到的是載入中的面板。改成等「安定下來」的狀態：空狀態
+        # 文字在場**而且**載入指示已經消失，兩個條件同時成立才算載完。
+        page.wait_for_function(
+            """() => {
+                 const el = document.querySelector('#fin-material-orders');
+                 if (!el) return false;
+                 const t = el.innerText || '';
+                 return t.includes('尚無叫料項目') && !t.includes('載入中');
+               }""",
+            timeout=20000)
     else:
         page.wait_for_selector(f'{MO_PANEL} input[placeholder="{ITEM_NAME_PH}"]', timeout=20000)
 
@@ -123,8 +134,14 @@ def test_material_orders_panel_round_trip(live_server, make_user):
         browser = p.chromium.launch()
         page = browser.new_page()
         case_list_calls = []
+        mo_calls = []
         page.on("request", lambda r: case_list_calls.append(r.url)
                 if "/api/quotations?deal_tag=" in r.url else None)
+        page.on("request", lambda r: mo_calls.append(r.url)
+                if "/material-orders" in r.url and r.method == "GET" else None)
+        api_calls = []
+        page.on("request", lambda r: api_calls.append(r.method + " " + r.url)
+                if "/api/" in r.url else None)
         try:
             _login(page, live_server, username, password)
             _open_finance_tab(page, live_server, quote_no)
@@ -137,11 +154,26 @@ def test_material_orders_panel_round_trip(live_server, make_user):
             # 第二次 selectCase() 會把使用者剛新增的叫料列默默重置掉（實測會造成
             # 這支測試每六輪假失敗兩次）。用「案件清單 API 被呼叫幾次」釘它，
             # 比等競態重現穩定。修法見 case-management.js::init() 的 _initDone 守門。
+            # 同一個理由的另一半：叫料清單也只能載一次。切財務分頁刻意不重載
+            # （case-management.html:774），第二次載入回來時會把使用者剛打的那
+            # 一列蓋掉。這條也是上面那個假等待真正想抓的東西——面板之所以會
+            # 跳回「載入中…」，就是有人又發了第二次。
+            assert len(mo_calls) == 1, (
+                f"叫料清單應該只載一次，實際發了 {len(mo_calls)} 次：{mo_calls}\n"
+                f"案件清單 API {len(case_list_calls)} 次；所有 API 請求：\n"
+                + "\n".join(api_calls))
             assert len(case_list_calls) == 1, (
                 f"init() 應該只跑一次，但案件清單 API 被呼叫了 {len(case_list_calls)} 次")
 
             page.click(f'{MO_PANEL} button:has-text("＋ 新增項目")')
-            page.fill(f'{MO_PANEL} input[placeholder="{ITEM_NAME_PH}"]', "24埠 PoE 交換器")
+            try:
+                page.fill(f'{MO_PANEL} input[placeholder="{ITEM_NAME_PH}"]', "24埠 PoE 交換器")
+            except Exception as exc:                      # noqa: BLE001 — 只為了補上下文
+                raise AssertionError(
+                    "按了「新增項目」卻等不到輸入框。案件清單 API "
+                    + str(len(case_list_calls)) + " 次、叫料 API " + str(len(mo_calls))
+                    + " 次；面板內容："
+                    + page.locator(MO_PANEL).inner_text()) from exc
             page.fill(f'{MO_PANEL} input[placeholder="數量"]', "3")
             page.fill(f'{MO_PANEL} input[placeholder="單位"]', "台")
             page.fill(f'{MO_PANEL} input[placeholder="單價"]', "12500")
@@ -207,6 +239,11 @@ def test_material_orders_paid_status_rules_enforced_in_ui(live_server, make_user
     with sync_playwright() as p:
         browser = p.chromium.launch()
         page = browser.new_page()
+        # 失敗時看得到原因：全套跑的時候這支偶發逾時，而 Playwright 的 TimeoutError
+        # 只會說「等了 45 秒」，不會說當下畫面在什麼狀態、API 是不是回了 400／500。
+        bad = []
+        page.on("response", lambda r: bad.append(f"{r.status} {r.url}") if r.status >= 400 else None)
+        page.on("pageerror", lambda e: bad.append("PAGEERROR: " + str(e)))
         try:
             _login(page, live_server, username, password)
             _open_finance_tab(page, live_server, quote_no)
@@ -230,7 +267,13 @@ def test_material_orders_paid_status_rules_enforced_in_ui(live_server, make_user
             # 在寫 db，SQLite 寫鎖被佔住時 db.py 的 connect(timeout=30) 最多會等 30 秒，
             # 存檔這支 PATCH 就會卡滿一輪才回來。單檔跑不會遇到、全套跑才會——
             # 比照 test_e2e_playwright_2026_09_07.py 既有的同款處理。
-            page.wait_for_selector(f'{MO_PANEL} :text("已儲存")', timeout=45000)
+            try:
+                page.wait_for_selector(f'{MO_PANEL} :text("已儲存")', timeout=45000)
+            except Exception as exc:                      # noqa: BLE001 — 只為了補上下文
+                raise AssertionError(
+                    "等不到「已儲存」。面板當下內容：\n"
+                    + page.locator(MO_PANEL).inner_text()
+                    + "\n失敗的請求／頁面錯誤：" + repr(bad)) from exc
 
             saved = _read_material_orders(quote_no)
             assert saved[0]["paidStatus"] == "paid"

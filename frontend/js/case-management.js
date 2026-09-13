@@ -142,7 +142,10 @@ function app() {
     // data_json，兩邊同時存會互相蓋掉；且叫料的權限與已結案規則由後端
     // 那支端點自己守，跟案件整包存檔不一樣。
     materialOrders: [],
-    moLoading: false,
+    // 預設 true：面板只在 !moLoading 時才渲染「尚無叫料項目」，一旦預設 false，
+    // 任何「還沒開始載入」的瞬間都會對使用者說「沒有資料」——那是還沒查就先
+    // 回答。額外支出的 xe.loading 本來就是 true，這裡跟它對齊。
+    moLoading: true,
     moSaving: false,
     moDirty: false,
     moMsg: '',
@@ -1137,6 +1140,8 @@ function app() {
         if (!r.ok) return
         const data = await r.json()
         this.selected = data
+        // 同時編輯警示（2026-09-14）：切換案件時自動釋放前一張、回報這一張
+        if (window.MotrixPresence) window.MotrixPresence.start('case', quoteNo)
         // 分頁/檢視狀態必須在任何 await 之前就重設完（2026-09-09 修）：
         // this.selected 一設定，分頁列就立刻渲染給使用者點；但下面
         // _seedDefaultStagesIfEmpty() 對全新案件會連打 5 次建立階段的 API，
@@ -1145,6 +1150,16 @@ function app() {
         // 被彈回的機率越高。這幾個都是純檢視狀態，提前重設沒有副作用。
         this.activeTab = 'biz'
         this.execSubTab = 'progress'
+        // 叫料的狀態也屬於「必須在 await 之前重設完」那一類（2026-09-14 修）：
+        // selected 一設定分頁列就渲染出來，使用者可以立刻點「財務」，而下面
+        // ensureCaseRecord()／_seedDefaultStagesIfEmpty() 是會發網路請求的 await
+        // ——原本 moLoading 要等到那之後才立起來，這段空窗期點進財務分頁就會看到
+        // 「尚無叫料項目」，接著才跳成「載入中…」。全套測試偶發的紅燈就是它
+        // （test_e2e_material_orders_2026_09_11.py，約 1/5 機率）。
+        this.materialOrders = []
+        this.moDirty = false
+        this.moMsg = ''
+        this.moLoading = true
         this.cr.dealTag = data.data?.dealTag || data.deal_tag || '已成案'
         this.cr.caseRecord = data.data?.caseRecord || null
         await this.ensureCaseRecord()
@@ -1185,16 +1200,9 @@ function app() {
         this.financeSummary = null
         this.finShowRecvDetail = false
         this.finShowPayDetail = false
-        this.materialOrders = []
-        this.moDirty = false
-        this.moMsg = ''
+        // 叫料的四個旗標已經在 await 之前重設過了（見上面），這裡不再重複
         this.xe = { ...this.xe, loading: true, items: [], totalAmount: 0,
                     totalPending: 0, pendingCount: 0, msg: '', busy: false }
-        // 載入旗標在這裡就先立起來，不要等到下面真的呼叫 loadMaterialOrders()：
-        // 分頁列在 selected 一設好就出現，中間那一小段空窗期會先把「尚無叫料
-        // 項目」閃出來、再跳成「載入中…」、最後才是真正的結果，看起來像清單被
-        // 清空了一次
-        this.moLoading = true
         this._loadCaseTasks(quoteNo)
         this.loadDispatches(quoteNo)
         this.loadContractorVouchers(quoteNo)

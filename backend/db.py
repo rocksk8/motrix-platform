@@ -84,7 +84,7 @@ DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR = os.path.join(
 # v77: completion_notes（完工單，比照 shipping_notes 同構＋工程完工單特有欄位），
 # 2026-09-12 交辦，見 _m077 docstring。
 # v78: completion_notes.contact_phone（完工單帶入報價單聯絡人電話），2026-09-12。
-CURRENT_VERSION = 78
+CURRENT_VERSION = 81
 
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
 # execution model) whenever the current request is authenticated as the 'demo'
@@ -3241,6 +3241,112 @@ def _m078_completion_contact_phone(conn):
     conn.commit()
 
 
+def _m079_user_activity(conn):
+    """在線時間統計（2026-09-14 使用者要求：「右上角顯示在線成員與數量，並統計每個
+    成員在線上的時間，這些數據只有超級管理員看得到」）。
+
+    **為什麼是「每人每天一列」而不是逐次登入的區間表**：需求是「累計時數」，
+    而 session 可以同時多個（同一個人電腦＋手機）、可以被閒置逾時砍掉、也可能
+    整天不登出。區間表要處理重疊與未關閉的區間，查詢時還得逐段相加；每天一列的
+    累加器把那些問題都留在寫入端，查詢就只是 SUM。
+
+    **秒數怎麼來**：`main.py::auth_middleware` 每次請求都會算「距離上次活躍多久」，
+    那個差值本來就是既有的閒置判斷在用的。差值在門檻內就視為這段時間人在線上、
+    累加進當天；超過門檻代表中間離開過，只重新起算、不補那段空白。
+    上限在 `_ACTIVITY_GAP_MAX`（main.py），避免把「昨天關電腦、今天才回來」算成
+    連續在線。
+
+    `day` 存台灣本地日期字串（比照全系統其他時間欄位一律用 `datetime.now()`），
+    不是 UTC——報表是給人看的，跨日要以人的作息為準。
+    """
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS user_activity_daily (
+            user_id        INTEGER NOT NULL,
+            day            TEXT    NOT NULL,
+            active_seconds INTEGER NOT NULL DEFAULT 0,
+            first_seen_at  TEXT    NOT NULL DEFAULT '',
+            last_seen_at   TEXT    NOT NULL DEFAULT '',
+            PRIMARY KEY (user_id, day)
+        )
+    """)
+    # 報表一律以「日期區間 + 全部使用者」查詢，day 放前面才吃得到索引
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_user_activity_day ON user_activity_daily(day, user_id)")
+    conn.commit()
+
+
+def _m080_user_request_log(conn):
+    """逐條操作軌跡（2026-09-14 使用者要求：「在線時數統計，同步能看使用者點了
+    什麼看了什麼，逐條紀錄」）。
+
+    **跟既有 `audit_log` 的分工**：`audit_log` 記的是「**改了什麼**」（建立/修改/
+    刪除，帶實體與摘要，是業務稽核用的），這張表記的是「**去過哪裡、點了什麼**」
+    ——包含純檢視的 GET。兩者不合併：audit_log 的每一列都要有業務語意，塞進 GET
+    會把它稀釋成流水帳，反而讓真正的稽核查不動。
+
+    **`page` 欄位來自 Referer**：瀏覽器的 fetch 會自動帶上，等於免費拿到「使用者
+    當時站在哪一頁」，不必去每個頁面插埋點。取不到就留空。
+
+    **刻意不記的東西**：
+    - 輪詢類端點（通知、模組紅點、在線名單、ping…）——那是機器行為不是人的行為，
+      記了只會把軌跡淹掉，見 main.py `_TRAIL_SKIP_PREFIXES`
+    - 請求內容（body / query 值）——軌跡是「誰在什麼時候看了哪一頁、動了哪個資源」，
+      把內容也記下來等於在資料庫裡多存一份業務資料的副本，外洩風險與價值不成比例
+    - 密碼、token 一類自然也不會進來（只存 method + path）
+
+    **保留期限**：`daily_tasks.py::_prune_request_log()` 每天清掉 90 天前的資料。
+    這種表不設上限就會變成資料庫裡最大的一張。
+    """
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS user_request_log (
+            id      INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            at      TEXT    NOT NULL,
+            method  TEXT    NOT NULL,
+            path    TEXT    NOT NULL,
+            page    TEXT    NOT NULL DEFAULT '',
+            status  INTEGER NOT NULL DEFAULT 0
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_request_log_user_at ON user_request_log(user_id, at)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_request_log_at ON user_request_log(at)")
+    conn.commit()
+
+
+def _m081_edit_presence(conn):
+    """同時編輯警示（2026-09-14 使用者要求：「如果有兩個人同時進入報價單、或是修改
+    同一個表格的內容，需跳出警示，避免兩人同時修改損失一方資料」）。
+
+    **這是第二道，不是第一道**。第一道早就有：存檔時比對 `updated_at`，對不上就
+    409「已被其他人更新，請重新載入後再存」（報價單／案件資料／款項／規劃書／
+    業務開發案／派工單都有）。那道保證**資料不會被無聲覆蓋**，但使用者是在打完
+    20 分鐘的字之後才知道白做了——這張表補的是「一進去就知道有人在編」。
+
+    **刻意做成 presence 而不是 lock**：
+    - 鎖需要處理「誰來解鎖」——人關了分頁、當機、下班沒關，鎖就卡在那裡，最後
+      一定要做「強制解鎖」，而強制解鎖又會回到「兩個人同時編」的原點
+    - 這間公司同時線上的人數是個位數，衝突罕見但代價高；「看得到彼此」已經足夠
+      讓人先喊一聲，不需要用鎖把流程綁死
+    - 真的搶著存，還有第一道 409 擋著資料
+
+    `last_seen_at` 由前端心跳更新（30 秒一次），超過 `_PRESENCE_TTL` 沒更新就視為
+    離開——不必依賴「關閉頁面時要記得通知伺服器」這種一定會漏的事件。
+    """
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS edit_presence (
+            doc_type     TEXT    NOT NULL,
+            doc_id       TEXT    NOT NULL,
+            user_id      INTEGER NOT NULL,
+            username     TEXT    NOT NULL DEFAULT '',
+            display_name TEXT    NOT NULL DEFAULT '',
+            started_at   TEXT    NOT NULL DEFAULT '',
+            last_seen_at TEXT    NOT NULL DEFAULT '',
+            PRIMARY KEY (doc_type, doc_id, user_id)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_edit_presence_doc ON edit_presence(doc_type, doc_id, last_seen_at)")
+    conn.commit()
+
+
 _MIGRATIONS = [
     _m001_export_columns,        # v1
     _m002_sessions_expires,      # v2
@@ -3320,6 +3426,9 @@ _MIGRATIONS = [
     _m076_xe_change_requests_and_stage_done,        # v76
     _m077_completion_notes,                         # v77
     _m078_completion_contact_phone,                 # v78
+    _m079_user_activity,                            # v79
+    _m080_user_request_log,                         # v80
+    _m081_edit_presence,                            # v81
 ]
 
 

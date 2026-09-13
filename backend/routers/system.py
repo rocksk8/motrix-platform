@@ -4,7 +4,7 @@ import json
 import os
 import secrets
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional, List
 
 from fastapi import APIRouter, HTTPException, Header, Body, UploadFile, File
@@ -1189,3 +1189,289 @@ def get_webauthn_config_status():
     origin = _get_setting("webauthn_origin") or ""
     configured = bool(rp_id.strip() and origin.strip())
     return {"configured": configured}
+
+
+# ── 在線成員與在線時數（2026-09-14，DB v79）─────────────────────────────────
+#
+# 使用者要求：「右上角可顯示在線成員跟數量，並且後台統計每個成員（含管理員、
+# 最高管理者）在線上的時間，這些數據只有最高管理者看得到」。
+#
+# 兩支端點都限 superadmin：在線名單本身就是「誰在不在」的行蹤資訊，時數更是。
+# 累加寫在 `main.py::auth_middleware`（沿用既有的 last_active 節流點），這裡只讀。
+
+_ONLINE_WINDOW_SECONDS = 300   # 與 main.py 的 last_active 節流同步：最久 5 分鐘寫一次
+
+
+@router.get("/api/online-users")
+def list_online_users(authorization: str = Header(None)):
+    """目前在線的成員與人數（限最高管理者）。
+
+    「在線」＝該帳號任一 session 的 `last_active` 在 5 分鐘內。用 sessions 而不是
+    另做心跳：心跳會讓每個閒置分頁固定打伺服器，而 `last_active` 本來就在更新。
+
+    ⚠️ 時間精度的取捨：`last_active` 每 5 分鐘才寫一次（main.py 的節流），所以剛
+    登入的人最慢 5 分鐘後才會出現在名單上、離開的人最多晚 5 分鐘才消失。要更即時
+    就得縮短節流（每次請求都寫），那是用資料庫寫入量換秒級精度，目前不划算。
+    """
+    _require_user(authorization, require_superadmin=True)
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            "SELECT u.id, u.username, u.display_name, u.role, "
+            "       MAX(s.last_active) AS last_active, COUNT(*) AS session_count "
+            "FROM sessions s JOIN users u ON u.id = s.user_id "
+            "WHERE u.active=1 AND s.last_active IS NOT NULL AND s.last_active != '' "
+            "GROUP BY u.id ORDER BY last_active DESC"
+        ).fetchall()
+    finally:
+        conn.close()
+
+    now = datetime.now()
+    online = []
+    for r in rows:
+        try:
+            secs = (now - datetime.fromisoformat(r["last_active"])).total_seconds()
+        except Exception:
+            continue
+        if secs <= _ONLINE_WINDOW_SECONDS:
+            online.append({
+                "userId": r["id"],
+                "username": r["username"],
+                "displayName": r["display_name"] or r["username"],
+                "role": r["role"],
+                "lastActive": r["last_active"],
+                "secondsAgo": int(secs),
+                "sessionCount": r["session_count"],
+            })
+    return {"count": len(online), "windowSeconds": _ONLINE_WINDOW_SECONDS, "users": online}
+
+
+@router.get("/api/user-activity")
+def user_activity_stats(start: Optional[str] = None, end: Optional[str] = None,
+                        authorization: str = Header(None)):
+    """每位成員的在線時數統計（限最高管理者）。
+
+    `start`／`end` 是 `YYYY-MM-DD`（含），預設當月。回傳每人合計與逐日明細。
+
+    **統計的是「活躍時間」不是「登入時長」**：開著分頁去開會不會被算進去（沒有
+    請求就沒有累加），見 `main.py::_record_user_activity` 的說明。這一點寫在回傳
+    的 `note` 欄位裡，前端直接顯示，免得有人拿它當出勤紀錄。
+    """
+    _require_user(authorization, require_superadmin=True)
+    today = datetime.now()
+    start = (start or today.strftime("%Y-%m-01"))[:10]
+    end = (end or today.strftime("%Y-%m-%d"))[:10]
+
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            "SELECT a.user_id, a.day, a.active_seconds, u.username, u.display_name, u.role "
+            "FROM user_activity_daily a JOIN users u ON u.id = a.user_id "
+            "WHERE a.day >= ? AND a.day <= ? "
+            "ORDER BY a.day",
+            (start, end),
+        ).fetchall()
+    finally:
+        conn.close()
+
+    by_user = {}
+    for r in rows:
+        u = by_user.setdefault(r["user_id"], {
+            "userId": r["user_id"],
+            "username": r["username"],
+            "displayName": r["display_name"] or r["username"],
+            "role": r["role"],
+            "totalSeconds": 0,
+            "days": {},
+        })
+        u["totalSeconds"] += r["active_seconds"] or 0
+        u["days"][r["day"]] = (u["days"].get(r["day"]) or 0) + (r["active_seconds"] or 0)
+
+    items = sorted(by_user.values(), key=lambda x: x["totalSeconds"], reverse=True)
+    return {
+        "start": start,
+        "end": end,
+        "items": items,
+        "note": "統計的是有實際操作的「活躍時間」，不是分頁開著的時間；每 5 分鐘累計一次。",
+    }
+
+
+# 路徑 → 人看得懂的標籤（2026-09-14）。只列常見的；沒對到的就原樣顯示路徑，
+# 刻意不做成「猜」的邏輯——猜錯的標籤比看得懂的原始路徑更誤導。
+_TRAIL_LABELS = [
+    ("/api/quotations",            "報價單／案件"),
+    ("/api/dev-cases",             "業務開發"),
+    ("/api/customers",             "客戶管理"),
+    ("/api/suppliers",             "供應商"),
+    ("/api/vendor-contractors",    "承攬商"),
+    ("/api/parts",                 "料號"),
+    ("/api/inventory",             "庫存"),
+    ("/api/completion-notes",      "完工單"),
+    ("/api/shipping-notes",        "出貨單"),
+    ("/api/invoice-vouchers",      "開票申請"),
+    ("/api/payment-requests",      "請款單"),
+    ("/api/contractor-vouchers",   "承攬商匯款"),
+    ("/api/reports",               "營運報表"),
+    ("/api/cashier",               "出納"),
+    ("/api/work-logs",             "工作日誌"),
+    ("/api/daily-tasks",           "每日工作事項"),
+    ("/api/network-plans",         "網路架構規劃書"),
+    ("/api/users",                 "使用者管理"),
+    ("/api/settings",              "系統設定"),
+    ("/api/audit-log",             "歷史紀錄"),
+    ("/api/user-activity",         "在線時數統計"),
+]
+
+_METHOD_LABELS = {"GET": "檢視", "POST": "新增／執行", "PUT": "修改",
+                  "PATCH": "修改", "DELETE": "刪除"}
+
+
+def _trail_label(path: str) -> str:
+    for prefix, label in _TRAIL_LABELS:
+        if path.startswith(prefix):
+            return label
+    return ""
+
+
+@router.get("/api/user-activity/trail")
+def user_activity_trail(user: Optional[str] = None, start: Optional[str] = None,
+                        end: Optional[str] = None, limit: int = 200,
+                        before_id: Optional[int] = None,
+                        authorization: str = Header(None)):
+    """逐條操作軌跡（限最高管理者）——誰、什麼時候、在哪一頁、動了哪個資源。
+
+    2026-09-14 使用者要求「在線時數統計，同步能看使用者點了什麼看了什麼，逐條紀錄」。
+
+    參數：`user`（帳號，不給就是全部人）、`start`／`end`（`YYYY-MM-DD`，含）、
+    `limit`（上限 500）、`before_id`（往前翻頁，傳上一頁最後一筆的 id）。
+
+    回傳的 `label` 是人看得懂的模組名，對不到就留空由前端顯示原始路徑——
+    **不猜**：猜錯的標籤比原始路徑更誤導。`status` 一併回傳，被擋下來的操作
+    （403/404）跟成功的一樣重要。
+    """
+    _require_user(authorization, require_superadmin=True)
+    limit = max(1, min(int(limit or 200), 500))
+
+    sql = ("SELECT r.id, r.at, r.method, r.path, r.page, r.status, "
+           "       u.username, u.display_name, u.role "
+           "FROM user_request_log r JOIN users u ON u.id = r.user_id WHERE 1=1")
+    params: list = []
+    if user:
+        sql += " AND u.username = ?"
+        params.append(user)
+    if start:
+        sql += " AND r.at >= ?"
+        params.append(start[:10] + "T00:00:00")
+    if end:
+        sql += " AND r.at <= ?"
+        params.append(end[:10] + "T23:59:59")
+    if before_id:
+        sql += " AND r.id < ?"
+        params.append(int(before_id))
+    sql += " ORDER BY r.id DESC LIMIT ?"
+    params.append(limit)
+
+    conn = get_db()
+    try:
+        rows = conn.execute(sql, params).fetchall()
+    finally:
+        conn.close()
+
+    items = [{
+        "id": r["id"],
+        "at": r["at"],
+        "username": r["username"],
+        "displayName": r["display_name"] or r["username"],
+        "role": r["role"],
+        "method": r["method"],
+        "methodLabel": _METHOD_LABELS.get(r["method"], r["method"]),
+        "path": r["path"],
+        "label": _trail_label(r["path"]),
+        "page": r["page"],
+        "status": r["status"],
+    } for r in rows]
+    return {
+        "items": items,
+        "nextBeforeId": items[-1]["id"] if len(items) == limit else None,
+        "note": "輪詢類請求（通知、紅點、在線名單等）不記錄；同一支端點 30 秒內的連續請求只記一次。",
+    }
+
+
+# ── 同時編輯警示（2026-09-14，DB v81）───────────────────────────────────────
+#
+# 第一道防線（存檔時比對 updated_at 回 409）早就存在；這裡補的是「一進去就知道
+# 有人在編」，讓人來得及先喊一聲，而不是打完字才發現白做。
+#
+# 任何登入者都可以回報與查詢——這不是敏感資料，而且**擋住查詢反而讓功能失效**：
+# 看不到別人在編，就等於沒有警示。
+
+_PRESENCE_TTL = 90          # 秒：超過沒心跳就視為離開（前端每 30 秒送一次）
+
+
+class EditPresenceIn(BaseModel):
+    doc_type: str
+    doc_id: str
+
+
+def _active_presence(conn, doc_type: str, doc_id: str, exclude_user_id: int = None):
+    cutoff = (datetime.now() - timedelta(seconds=_PRESENCE_TTL)).isoformat()
+    rows = conn.execute(
+        "SELECT user_id, username, display_name, started_at, last_seen_at "
+        "FROM edit_presence WHERE doc_type=? AND doc_id=? AND last_seen_at >= ? "
+        "ORDER BY started_at",
+        (doc_type, doc_id, cutoff),
+    ).fetchall()
+    return [{
+        "userId": r["user_id"],
+        "username": r["username"],
+        "displayName": r["display_name"] or r["username"],
+        "startedAt": r["started_at"],
+        "lastSeenAt": r["last_seen_at"],
+    } for r in rows if not exclude_user_id or r["user_id"] != exclude_user_id]
+
+
+@router.post("/api/edit-presence")
+def edit_presence_heartbeat(body: EditPresenceIn, authorization: str = Header(None)):
+    """回報「我正在編這份文件」，並取回目前還有誰在編（不含自己）。
+
+    前端每 30 秒送一次（`edit-presence.js`），超過 `_PRESENCE_TTL`(90s) 沒更新就
+    視為離開——**不依賴「關頁面時要記得通知伺服器」**，那種事件在當機、斷網、
+    直接關電腦時一定收不到。`DELETE` 只是讓正常離開更即時，不是正確性的依賴。
+    """
+    user = _require_user(authorization)
+    doc_type = (body.doc_type or "").strip()[:40]
+    doc_id = (body.doc_id or "").strip()[:80]
+    if not doc_type or not doc_id:
+        raise HTTPException(400, "缺少 doc_type / doc_id")
+
+    now = datetime.now().isoformat()
+    conn = get_db()
+    try:
+        conn.execute(
+            "INSERT INTO edit_presence (doc_type, doc_id, user_id, username, display_name, "
+            "started_at, last_seen_at) VALUES (?,?,?,?,?,?,?) "
+            "ON CONFLICT(doc_type, doc_id, user_id) DO UPDATE SET last_seen_at=excluded.last_seen_at",
+            (doc_type, doc_id, user["id"], user["username"],
+             user["display_name"] or user["username"], now, now),
+        )
+        conn.commit()
+        others = _active_presence(conn, doc_type, doc_id, exclude_user_id=user["id"])
+    finally:
+        conn.close()
+    return {"docType": doc_type, "docId": doc_id, "others": others, "ttlSeconds": _PRESENCE_TTL}
+
+
+@router.delete("/api/edit-presence")
+def edit_presence_release(body: EditPresenceIn, authorization: str = Header(None)):
+    """離開編輯畫面時主動釋放（讓其他人更快看到警示消失）。"""
+    user = _require_user(authorization)
+    conn = get_db()
+    try:
+        conn.execute(
+            "DELETE FROM edit_presence WHERE doc_type=? AND doc_id=? AND user_id=?",
+            ((body.doc_type or "").strip()[:40], (body.doc_id or "").strip()[:80], user["id"]),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return {"ok": True}

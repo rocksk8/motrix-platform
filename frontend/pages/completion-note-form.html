@@ -242,7 +242,9 @@
     return {
       session: {}, loading: true, busy: false, dirty: false,
       msg: '', msgError: false, prefilled: false,
-      noteNo: '', status: '草稿',
+      noteNo: '',
+      status: '草稿',
+      _lastUpdatedAt: '',   // 樂觀鎖：load() 讀入、save() 送出比對（2026-09-14）
       defaults: {}, labels: {},
       form: {
         quote_no: '', customer_name: '', project_name: '', site_address: '',
@@ -316,6 +318,8 @@
         if (!this.session.token) { location.replace('login.html'); return }
         const p = new URLSearchParams(location.search)
         this.noteNo = p.get('no') || ''
+        // 同時編輯警示（2026-09-14）：既有完工單才需要（新建的還沒有單號）
+        if (this.noteNo && window.MotrixPresence) window.MotrixPresence.start('completion_note', this.noteNo)
         this.form.quote_no = p.get('q') || ''
         if (this.noteNo) await this.load()
         else await this.prefillFromCase()
@@ -334,6 +338,9 @@
           if (!r.ok) { this._fail('讀取失敗'); return }
           const d = await r.json()
           this.status = d.status
+          // 樂觀鎖（2026-09-14）：記住載入當下的版本，存檔時送回去比對；
+          // 中間被別人改過就會收到 409，而不是無聲蓋掉對方的內容
+          this._lastUpdatedAt = d.updatedAt || d.updated_at || ''
           this.defaults = d.labels || {}
           this.form = {
             quote_no: d.quoteNo, customer_name: d.customerName, project_name: d.projectName,
@@ -439,6 +446,7 @@
           warranty_months: Number(f.warranty_months) || 0,
           pending_items: f.pending_items, notes: f.notes,
           labels: f.labels || {},
+          expected_updated_at: this._lastUpdatedAt || null,
         }
       },
 
@@ -498,6 +506,7 @@
   }
   </script>
   <script src="../static/notif.js"></script>
+  <script src="../static/edit-presence.js"></script>
   <script src="../static/sidebar.js"></script>
 </body>
 </html>

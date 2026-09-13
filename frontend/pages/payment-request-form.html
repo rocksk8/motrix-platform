@@ -335,7 +335,8 @@
 </div>
 
 <script src="../static/notif.js"></script>
-<script src="../static/sidebar.js"></script>
+<script src="../static/edit-presence.js"></script>
+  <script src="../static/sidebar.js"></script>
 <script>
 const API = '/api'
 function paymentRequestForm() {
@@ -451,6 +452,8 @@ function paymentRequestForm() {
       if (editId) {
         this.isNew = false
         this.q.requestNo = editId
+        // 同時編輯警示（2026-09-14）
+        if (editId && window.MotrixPresence) window.MotrixPresence.start('payment_request', editId)
         const ok = await this.reload()
         if (!ok) return
       } else {
