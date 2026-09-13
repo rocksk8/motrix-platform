@@ -16,8 +16,12 @@
       var s=JSON.parse(localStorage.getItem('motrix_session')||'{}')
       var r=s.role||'',m=Array.isArray(s.modules)?s.modules:(typeof s.modules==='string'?JSON.parse(s.modules||'[]'):[])
       if(!s.token){location.replace('pages/login.html');return}
+      // 2026-09-13（模組權限稽核）：補上 'dashboard'。側欄判斷首頁能不能進是
+      // `canDash = sa || ad || finance || quotation || dashboard`，這裡卻漏了
+      // dashboard——勾了「儀表板」模組的人照樣被踢去案件管理，兩邊對不齊。
       var ok=r==='superadmin'||r==='admin'
              ||m.indexOf('finance')>=0||m.indexOf('quotation')>=0
+             ||m.indexOf('dashboard')>=0
       if(!ok){location.replace('pages/case-management.html');return}
     }catch(e){location.replace('pages/login.html')}
   })()

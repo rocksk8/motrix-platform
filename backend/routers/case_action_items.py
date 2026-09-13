@@ -13,7 +13,7 @@ from fastapi import APIRouter, HTTPException, Header, Body
 from db import get_db
 from helpers import (
     _require_user, _tok, _audit, notify_module_activity,
-    resolve_department_manager, resolve_division_manager,
+    resolve_department_manager, resolve_division_manager, guard_case_access,
 )
 
 router = APIRouter()
@@ -45,6 +45,28 @@ def _case_approver_ids(conn, quote_no: str):
     )
 
 
+def _guard_action_item_case(conn, quote_no: str, user: dict) -> None:
+    """案件代辦的存取守門（2026-09-13 模組權限稽核）。
+
+    `quote_no` 可列舉，這批端點先前只要求登入 → 任何人都讀寫得了別人案件的代辦。
+    但**不能直接套一般的擁有者規則**：這個功能的兩階段簽核對象是該案業務的部門
+    主管與處主管，他們幾乎不會是該案業務、也不會在 `assigned_user_ids` 裡——直接
+    擋掉等於讓主管無法建立/檢視自己要簽核的項目。所以先判斷「是不是這張案件的
+    簽核對象」，是的話直通，其餘才走 `guard_case_access()`。
+
+    ⚠️ 順序不能反：`guard_case_access()` 擋下來時會順手關掉連線，先呼叫它就沒有
+    連線可以再查主管是誰了。
+    """
+    modules = json.loads(user.get("modules") or "[]")
+    if (user["role"] == "superadmin"
+            or "project_approve_eng" in modules or "project_approve_biz" in modules):
+        return
+    dept_mgr_id, div_mgr_id = _case_approver_ids(conn, quote_no)
+    if user["id"] in (dept_mgr_id, div_mgr_id) and user["id"] is not None:
+        return
+    guard_case_access(conn, quote_no, user, allow_module="case_manage")
+
+
 def _serialize(r, can_eng=False, can_biz=False) -> dict:
     return {
         "id":             r["id"],
@@ -70,6 +92,9 @@ def list_case_action_items(quote_no: str, authorization: str = Header(None)):
     modules = json.loads(user.get("modules") or "[]")
     is_super = user["role"] == "superadmin"
     conn = get_db()
+    # 2026-09-13（模組權限稽核）：見 _guard_action_item_case()。approve 有自己的
+    # 主管判斷，不重複擋。
+    _guard_action_item_case(conn, quote_no, user)
     dept_mgr_id, div_mgr_id = _case_approver_ids(conn, quote_no)
     can_eng = is_super or "project_approve_eng" in modules or user["id"] == dept_mgr_id
     can_biz = is_super or "project_approve_biz" in modules or user["id"] == div_mgr_id
@@ -88,6 +113,7 @@ def create_case_action_item(quote_no: str, body: dict = Body(...), authorization
     if not text:
         raise HTTPException(400, "代辦事項內容不得為空")
     conn = get_db()
+    _guard_action_item_case(conn, quote_no, user)
     if not conn.execute("SELECT 1 FROM quotations WHERE quote_no=?", (quote_no,)).fetchone():
         conn.close(); raise HTTPException(404, "案件不存在")
     max_order = conn.execute(
@@ -110,8 +136,9 @@ def create_case_action_item(quote_no: str, body: dict = Body(...), authorization
 
 @router.put("/api/quotations/{quote_no}/action-items/{item_id}")
 def update_case_action_item(quote_no: str, item_id: int, body: dict = Body(...), authorization: str = Header(None)):
-    _require_user(authorization)
+    user = _require_user(authorization)
     conn = get_db()
+    _guard_action_item_case(conn, quote_no, user)
     row = conn.execute(
         "SELECT * FROM case_action_items WHERE id=? AND quote_no=?", (item_id, quote_no)
     ).fetchone()

@@ -289,7 +289,9 @@ def _make_open_case(quote_no, all_stages_done=True, payment_received=True, pendi
 
 
 def test_close_case_blocked_when_stage_incomplete(client, make_user):
-    username, password = make_user(role="admin")
+    # 2026-09-13（使用者裁示）：完結案限最高管理者，這四題的行為者跟著改成
+    # superadmin；擋下來的理由（進度／款項／單據／精算）與角色無關。
+    username, password = make_user(role="superadmin")
     token = _login(client, username, password)
     _make_open_case("MQ-CLOSE-001", all_stages_done=False)
 
@@ -300,7 +302,9 @@ def test_close_case_blocked_when_stage_incomplete(client, make_user):
 
 
 def test_close_case_blocked_when_payment_unpaid(client, make_user):
-    username, password = make_user(role="admin")
+    # 2026-09-13（使用者裁示）：完結案限最高管理者，這四題的行為者跟著改成
+    # superadmin；擋下來的理由（進度／款項／單據／精算）與角色無關。
+    username, password = make_user(role="superadmin")
     token = _login(client, username, password)
     _make_open_case("MQ-CLOSE-002", payment_received=False)
 
@@ -311,7 +315,9 @@ def test_close_case_blocked_when_payment_unpaid(client, make_user):
 
 
 def test_close_case_blocked_when_related_doc_pending(client, make_user):
-    username, password = make_user(role="admin")
+    # 2026-09-13（使用者裁示）：完結案限最高管理者，這四題的行為者跟著改成
+    # superadmin；擋下來的理由（進度／款項／單據／精算）與角色無關。
+    username, password = make_user(role="superadmin")
     token = _login(client, username, password)
     _make_open_case("MQ-CLOSE-003", pending_voucher=True)
 
@@ -322,7 +328,9 @@ def test_close_case_blocked_when_related_doc_pending(client, make_user):
 
 
 def test_close_case_succeeds_when_all_conditions_met(client, make_user):
-    username, password = make_user(role="admin")
+    # 2026-09-13（使用者裁示）：完結案限最高管理者，這四題的行為者跟著改成
+    # superadmin；擋下來的理由（進度／款項／單據／精算）與角色無關。
+    username, password = make_user(role="superadmin")
     token = _login(client, username, password)
     _make_open_case("MQ-CLOSE-004")
 

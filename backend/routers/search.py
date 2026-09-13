@@ -7,7 +7,7 @@ from typing import Optional
 from fastapi import APIRouter, Header, Query
 
 from db import get_db
-from helpers import _require_user
+from helpers import _require_user, user_has_module
 from routers.dev_crm import _can_access_case
 
 router = APIRouter()
@@ -24,10 +24,17 @@ def global_search(q: str = Query(..., min_length=1), authorization: str = Header
     like = f"%{q}%"
     conn = get_db()
 
-    customers = conn.execute(
-        "SELECT id, code, name FROM customers WHERE name LIKE ? OR code LIKE ? "
-        "ORDER BY name LIMIT ?", (like, like, _LIMIT)
-    ).fetchall()
+    # 2026-09-13（模組權限稽核）：各分類的可見性「復用該模組既有規則」是這支檔案
+    # 的原則（見檔頭）。`/api/customers`／`/api/parts` 這輪起有了模組檢查，這裡跟著
+    # 補上，否則全域搜尋會變成繞過模組檢查的側門。比照既有的 suppliers 寫法——
+    # 沒權限就回空清單，不是 403：搜尋框是多分類的，其中一類沒權限不該讓整個框壞掉。
+    customers = []
+    if is_admin or any(user_has_module(u, k) for k in
+                       ("customer", "case_manage", "dev_crm", "procurement")):
+        customers = conn.execute(
+            "SELECT id, code, name FROM customers WHERE name LIKE ? OR code LIKE ? "
+            "ORDER BY name LIMIT ?", (like, like, _LIMIT)
+        ).fetchall()
 
     suppliers = []
     if is_admin:  # 比照 /api/suppliers：非 admin+ 不回傳資料
@@ -56,11 +63,13 @@ def global_search(q: str = Query(..., min_length=1), authorization: str = Header
         ).fetchall()
         dev_cases = [r for r in rows if _can_access_case(u, r)][:_LIMIT]
 
-    parts = conn.execute(
-        "SELECT part_no, name, brand FROM parts WHERE active=1 "
-        "AND (part_no LIKE ? OR name LIKE ? OR brand LIKE ?) "
-        "ORDER BY id DESC LIMIT ?", (like, like, like, _LIMIT)
-    ).fetchall()
+    parts = []
+    if is_admin or any(user_has_module(u, k) for k in ("procurement", "case_manage")):
+        parts = conn.execute(
+            "SELECT part_no, name, brand FROM parts WHERE active=1 "
+            "AND (part_no LIKE ? OR name LIKE ? OR brand LIKE ?) "
+            "ORDER BY id DESC LIMIT ?", (like, like, like, _LIMIT)
+        ).fetchall()
 
     conn.close()
 

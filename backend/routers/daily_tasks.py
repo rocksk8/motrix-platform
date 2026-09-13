@@ -25,7 +25,7 @@ from helpers import (
     notify_case_project_overdue,
     notify_cert_expiry,
     notify_module_activity,
-    _get_setting, _set_setting, notify_approval_reminder, _workdays_elapsed,
+    _get_setting, _set_setting, notify_approval_reminder, _workdays_elapsed, require_any_module,
 )
 
 router = APIRouter()
@@ -295,6 +295,7 @@ def list_daily_tasks(
     authorization: str = Header(None),
 ):
     user = _require_user(authorization)
+    require_any_module(user, ('daily_task', 'case_manage'), "每日工作事項")
     conn = get_db()
     uf_sql, uf_params = _user_filter_sql(user, username)
     cn_sql    = " AND case_no=?" if case_no else ""
@@ -382,6 +383,7 @@ def list_daily_tasks(
 @router.get("/api/daily-tasks/{task_id}")
 def get_daily_task(task_id: int, occurrence_date: Optional[str] = None, authorization: str = Header(None)):
     user = _require_user(authorization)
+    require_any_module(user, ('daily_task', 'case_manage'), "每日工作事項")
     conn = get_db()
     row = conn.execute(
         "SELECT * FROM daily_tasks WHERE id=? AND is_deleted=0", (task_id,)
@@ -402,6 +404,7 @@ def get_daily_task(task_id: int, occurrence_date: Optional[str] = None, authoriz
 @router.post("/api/daily-tasks", status_code=201)
 def create_daily_task(body: DailyTaskIn, authorization: str = Header(None)):
     user = _require_user(authorization)
+    require_any_module(user, ('daily_task', 'case_manage'), "每日工作事項")
     if user["role"] != "superadmin":
         raise HTTPException(403, "僅最高管理者可建立工作事項")
     if not body.title.strip():
@@ -454,6 +457,7 @@ def create_daily_task(body: DailyTaskIn, authorization: str = Header(None)):
 @router.put("/api/daily-tasks/{task_id}")
 def update_daily_task(task_id: int, body: DailyTaskIn, authorization: str = Header(None)):
     user = _require_user(authorization)
+    require_any_module(user, ('daily_task', 'case_manage'), "每日工作事項")
     if user["role"] != "superadmin":
         raise HTTPException(403, "僅最高管理者可修改工作事項")
     rec_type = body.recurrence_type or "once"
@@ -533,6 +537,7 @@ def update_daily_task(task_id: int, body: DailyTaskIn, authorization: str = Head
 @router.delete("/api/daily-tasks/{task_id}")
 def delete_daily_task(task_id: int, authorization: str = Header(None)):
     user = _require_user(authorization)
+    require_any_module(user, ('daily_task', 'case_manage'), "每日工作事項")
     if user["role"] != "superadmin":
         raise HTTPException(403, "僅最高管理者可刪除工作事項")
     conn = get_db()
@@ -564,6 +569,7 @@ def get_task_history(
     """Return paginated list of all past occurrences + completions for a task.
     Works even when the task is soft-deleted (history preservation)."""
     user = _require_user(authorization)
+    require_any_module(user, ('daily_task', 'case_manage'), "每日工作事項")
     conn = get_db()
     row = conn.execute("SELECT * FROM daily_tasks WHERE id=?", (task_id,)).fetchone()
     if not row:
@@ -670,6 +676,7 @@ def get_task_history(
 def get_task_edit_log(task_id: int, authorization: str = Header(None)):
     """Return the edit history for a task (field-level diff records)."""
     user = _require_user(authorization)
+    require_any_module(user, ('daily_task', 'case_manage'), "每日工作事項")
     conn = get_db()
     row = conn.execute("SELECT * FROM daily_tasks WHERE id=?", (task_id,)).fetchone()
     if not row:
@@ -714,6 +721,7 @@ def get_task_edit_log(task_id: int, authorization: str = Header(None)):
 def export_task_history(task_id: int, authorization: str = Header(None)):
     """Stream all occurrences + completions as UTF-8-BOM CSV (Excel-compatible)."""
     user = _require_user(authorization)
+    require_any_module(user, ('daily_task', 'case_manage'), "每日工作事項")
     conn = get_db()
     row = conn.execute("SELECT * FROM daily_tasks WHERE id=?", (task_id,)).fetchone()
     if not row:
@@ -792,6 +800,7 @@ def export_task_history(task_id: int, authorization: str = Header(None)):
 @router.patch("/api/daily-tasks/{task_id}/complete")
 def complete_daily_task(task_id: int, body: TaskCompletionIn, authorization: str = Header(None)):
     user = _require_user(authorization)
+    require_any_module(user, ('daily_task', 'case_manage'), "每日工作事項")
     conn = get_db()
     row = conn.execute(
         "SELECT * FROM daily_tasks WHERE id=? AND is_deleted=0", (task_id,)

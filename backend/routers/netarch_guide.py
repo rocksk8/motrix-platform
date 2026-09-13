@@ -9,7 +9,7 @@ from datetime import datetime
 from fastapi import APIRouter, Body, HTTPException, Header
 
 from db import get_db
-from helpers import _require_user, _tok, _audit, notify_module_activity
+from helpers import _require_user, _tok, _audit, notify_module_activity, require_any_module
 
 router = APIRouter()
 
@@ -18,7 +18,8 @@ _EDIT_MODULE = "netarch_guide_edit"
 
 @router.get("/api/netarch-guide/families")
 def list_families(authorization: str = Header(None)):
-    _require_user(authorization)
+    user = _require_user(authorization)
+    require_any_module(user, ('netarch_guide', 'netarch_guide_edit'), "網路架構選型導覽")
     conn = get_db()
     rows = conn.execute("SELECT * FROM netarch_families ORDER BY sort_order, code").fetchall()
     conn.close()
@@ -86,7 +87,8 @@ def delete_family(code: str, authorization: str = Header(None)):
 
 @router.get("/api/netarch-guide/generations")
 def list_generations(authorization: str = Header(None)):
-    _require_user(authorization)
+    user = _require_user(authorization)
+    require_any_module(user, ('netarch_guide', 'netarch_guide_edit'), "網路架構選型導覽")
     conn = get_db()
     rows = conn.execute("SELECT * FROM netarch_generations ORDER BY sort_order, id").fetchall()
     conn.close()
@@ -166,7 +168,8 @@ def delete_generation(gen_id: int, authorization: str = Header(None)):
 
 @router.get("/api/netarch-guide/products")
 def list_products(authorization: str = Header(None)):
-    _require_user(authorization)
+    user = _require_user(authorization)
+    require_any_module(user, ('netarch_guide', 'netarch_guide_edit'), "網路架構選型導覽")
     conn = get_db()
     rows = conn.execute("SELECT * FROM netarch_products ORDER BY sort_order, id").fetchall()
     conn.close()

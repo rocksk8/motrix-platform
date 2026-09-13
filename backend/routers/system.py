@@ -15,7 +15,7 @@ from helpers import (
     _require_user, _tok, _audit, _get_setting, _set_setting, _get_edge_path,
     _filter_live_notifications, notify_module_activity,
     approval_flow_setting_key, APPROVAL_DOC_TYPES, DEFAULT_UNIFIED_DOC_TYPES,
-    APPROVAL_DOC_TYPE_LABELS,
+    APPROVAL_DOC_TYPE_LABELS, require_any_module,
 )
 from helpers.quotations import _steps_to_tiers
 from photos import _process_project_photo, _photo_root
@@ -401,7 +401,8 @@ def list_work_logs(
     case_no:  Optional[str] = None,
     authorization: str = Header(None),
 ):
-    _require_user(authorization)
+    user = _require_user(authorization)
+    require_any_module(user, ('work_log', 'case_manage'), "工作日誌")
     conn = get_db()
     sql = """
         SELECT w.id, w.log_date, w.user_id, w.content, w.hours, w.created_at,
@@ -518,6 +519,7 @@ async def upload_work_log_photos(
     authorization: str = Header(None),
 ):
     user = _require_user(authorization)
+    require_any_module(user, ('work_log', 'case_manage'), "工作日誌")
     conn = get_db()
     row = conn.execute("SELECT * FROM work_logs WHERE id=?", (wid,)).fetchone()
     if not row:
@@ -562,6 +564,7 @@ async def upload_work_log_photos(
 @router.delete("/api/work-logs/{wid}/photos/{photo_id}")
 def delete_work_log_photo(wid: int, photo_id: str, authorization: str = Header(None)):
     user = _require_user(authorization)
+    require_any_module(user, ('work_log', 'case_manage'), "工作日誌")
     conn = get_db()
     row  = conn.execute("SELECT * FROM work_logs WHERE id=?", (wid,)).fetchone()
     if not row:

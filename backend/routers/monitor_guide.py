@@ -9,7 +9,7 @@ from datetime import datetime
 from fastapi import APIRouter, Body, HTTPException, Header
 
 from db import get_db
-from helpers import _require_user, _tok, _audit, notify_module_activity
+from helpers import _require_user, _tok, _audit, notify_module_activity, require_any_module
 
 router = APIRouter()
 
@@ -18,7 +18,8 @@ _EDIT_MODULE = "monitor_guide_edit"
 
 @router.get("/api/monitor-guide/scenarios")
 def list_scenarios(authorization: str = Header(None)):
-    _require_user(authorization)
+    user = _require_user(authorization)
+    require_any_module(user, ('monitor_guide', 'monitor_guide_edit'), "監控系統選型導覽")
     conn = get_db()
     rows = conn.execute("SELECT * FROM monitor_scenarios ORDER BY sort_order, code").fetchall()
     conn.close()
@@ -86,7 +87,8 @@ def delete_scenario(code: str, authorization: str = Header(None)):
 
 @router.get("/api/monitor-guide/categories")
 def list_categories(authorization: str = Header(None)):
-    _require_user(authorization)
+    user = _require_user(authorization)
+    require_any_module(user, ('monitor_guide', 'monitor_guide_edit'), "監控系統選型導覽")
     conn = get_db()
     rows = conn.execute("SELECT * FROM monitor_categories ORDER BY sort_order, code").fetchall()
     conn.close()
@@ -163,7 +165,8 @@ def delete_category(code: str, authorization: str = Header(None)):
 
 @router.get("/api/monitor-guide/fit")
 def list_fit(authorization: str = Header(None)):
-    _require_user(authorization)
+    user = _require_user(authorization)
+    require_any_module(user, ('monitor_guide', 'monitor_guide_edit'), "監控系統選型導覽")
     conn = get_db()
     rows = conn.execute("SELECT * FROM monitor_fit ORDER BY sort_order, id").fetchall()
     conn.close()
@@ -239,7 +242,8 @@ def delete_fit(fit_id: int, authorization: str = Header(None)):
 
 @router.get("/api/monitor-guide/products")
 def list_products(authorization: str = Header(None)):
-    _require_user(authorization)
+    user = _require_user(authorization)
+    require_any_module(user, ('monitor_guide', 'monitor_guide_edit'), "監控系統選型導覽")
     conn = get_db()
     rows = conn.execute("SELECT * FROM monitor_products ORDER BY sort_order, id").fetchall()
     conn.close()

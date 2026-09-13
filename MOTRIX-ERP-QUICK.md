@@ -1,7 +1,9 @@
 # MOTRIX ERP — 開發快速參考
 
 > 允碩整合集創（統編 60575481）｜ Tel: 04-3610-6566 ｜ info@miactw.com  
-> 文件版本：**2026-09-12**（已收款改收款日期口徑＋完工單模組，**DB v77**，見 §5.12 後續段落／§5.13 與 §12 最新一則）
+> 文件版本：**2026-09-13**（深色模式側欄修正＋模組權限盤點，DB 無異動，見 §12 最新兩則）
+>
+> **2026-09-13 新增互補文件**：[`MODULE-AUDIT-2026-09-13.md`](MODULE-AUDIT-2026-09-13.md)——模組機制的三方（權限目錄／側欄／後端）逐 key 對照，七項已修、五項待決策。**動權限／模組相關的東西之前先看那份**，§3.4 只是摘要。
 > **🔴 2026-09-11 待決策（有時效性）**：要不要改用 Let's Encrypt 公開憑證、把 RP ID 換成 `erp.miactw.com`——見 **§3.3c** 與 §11 對應列，計畫書 [`LETSENCRYPT-PUBLIC-CERT-PLAN.md`](LETSENCRYPT-PUBLIC-CERT-PLAN.md)。**換 RP ID 會讓所有既有 Passkey 失效且無法救回，現在只有 1～2 張是成本最低的時刻，越拖越貴。**
 >
 > **2026-09-10 新增互補文件**：[`WEEKLY-AUDIT-2026-09-07_2026-09-10.md`](WEEKLY-AUDIT-2026-09-07_2026-09-10.md)——本週 82 個 commit 的逐模組拆解、異常時間軸（含每個異常的起點 commit 與根因檔案:行號）、12 項排查排程 checklist、已驗證缺陷清冊、未部署差異。**正式機出事時先看那份定位，再回來這裡看行為規格。**
@@ -244,6 +246,18 @@ setup（POST /api/auth/totp/setup）→ 產生密鑰，totp_enabled 仍是 0
 | 實測 | 使用者已可註冊 Passkey **並用 Passkey 登入**；自動化 e2e `backend/tests/test_e2e_passkey_2026_09_11.py`（CDP 虛擬認證器）覆蓋整條路 |
 | **到期告警** | ✅ 2026-09-11 新增 `daily_tasks.py::_check_cert_expiry()`——**在那之前完全沒有任何監控**。門檻依憑證總效期自動切換（>180 天視為手動簽發 → 60/21/7 天；否則視為 ACME → 21/7/1 天），過期後每 7 天重寄。以目前這張算，第一次告警是 **2028-10-11**（到期前 60 天） |
 
+> **2026-09-13 使用者回報的「Passkey 又失效」＝網址問題**（不是憑證、不是 RP ID、
+> 也不是 Windows Hello）。當天逐項驗過開發機：mkcert 根 CA 在 LocalMachine\Root 且
+> 指紋相符、hosts 有 `172.16.10.177 motrix.internal`、正式機憑證 SAN 含
+> `motrix.internal` 有效到 2028、`webauthn-config-status` 為 `configured:true`、
+> 正式機為該帳號存了 2 張憑證且都在現行 RP ID 下，而**本機 Windows Hello 裡那張
+> `motrix.internal / jeff` 的 credentialId 與伺服器手上的第 2 張完全相同**。
+> 也就是說兩邊都好好的，失敗的是入口——**只有 `https://motrix.internal:666` 這個
+> origin 能用**；用 IP、`localhost` 或 `http://` 進去，瀏覽器在
+> `navigator.credentials.get()` 就會擋。下次再遇到「Passkey 失效」，**先確認網址**，
+> 那是成本最低也最常中的一項（通知信的 `base_url` 目前仍是 `http://172.16.10.177:666`，
+> 從信裡點連結進去就會踩到）。
+
 **❌ 已排除的替代方案（2026-09-11 決定，不要再重新評估）**
 
 | 方案 | 為什麼不做 |
@@ -324,14 +338,23 @@ setup（POST /api/auth/totp/setup）→ 產生密鑰，totp_enabled 仍是 0
 
 ### §3.4 · 角色與模組
 
+> **2026-09-13 全面盤點：[`MODULE-AUDIT-2026-09-13.md`](MODULE-AUDIT-2026-09-13.md)**
+> ——三方（權限目錄／側欄／後端）逐 key 對照、七項已修、五項待決策。動模組機制前先看那份。
+
 ```
 superadmin > admin > sales > engineer > viewer
 ```
 
+**先記住這一句**：模組決定「**看得到什麼**」，角色與端點內的檢查決定「**能做什麼**」。
+35 個可授權模組裡後端真的會擋的只有 19 個（含 7 個 `*_guide_edit`），其餘只影響側欄顯示；
+前端沒有任何頁面層守門（`auth-guard.js` 只驗 session），**任何登入者手打網址都開得了任何頁**，
+所以不該被看到的資料一定要在端點上擋。新增模組時三邊（`users.html` 目錄／`sidebar.js`／
+後端檢查）要一起補，`test_module_keys_consistency_2026_09_13.py` 會擋下只補一邊的情況。
+
 | 角色重點 | 說明 |
 |----------|------|
-| `engineer` | 預設無 `financial_view`，不可看金額／財務 |
-| 模組例 | `project_manage` · `project_approve_eng` · `project_approve_biz` · `financial_view` · `reports` · `work_log` · `daily_task` |
+| `engineer` | 預設無 `financial_view`，不可看金額／財務（**注意：這是前端顯示偏好，API 照樣回金額**，見稽核 §4） |
+| 模組例 | `project_manage`（＝案件叫料－修改，2026-09-13 補回目錄） · `project_approve_eng` · `project_approve_biz` · `financial_view` · `reports` · `work_log` · `daily_task` |
 | 報價列表過濾 | 非 admin+ 用 `sales_person_id=自己id OR (sales_person_id IS NULL AND sales_person=display_name)` |
 | **稽核記錄** | `GET /api/audit-log` 限 **admin+**；viewer/sales/engineer 呼叫回 403 |
 | **工作日誌** | `PUT/DELETE /api/work-logs/{id}`：非 admin 只能修改/刪除**自己**的日誌 |
@@ -558,7 +581,17 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
 - **未成案 / 已成案**（設為）：限 admin+ 操作
 - **已成案**：報價單須先完成簽核（`status=='已送出'`）才可標記，否則 400（前後端雙重 guard，2026-08-05b）
 - **已成案 → 其他（降級）**：限 **admin+**（前後端雙重 guard）
+- **已結案（完結案）**：限 **superadmin**（2026-09-13 使用者裁示；前端「完結案」按鈕與
+  「全部進度完成」的自動提示同步只給 superadmin）。先前是 admin+，與「已結案只有
+  superadmin 能降級」不對稱——按得下去的人比按得回來的人多
 - **已結案 → 其他**：限 **superadmin**
+- **完結案前置條件（五項，任一未達成即 400 並通知相關簽核人＋最高管理員）**：
+  ①執行管理進度 100% ②款項明細全部收齊 ③相關單據簽核完成（報價單／承攬商匯款申請／
+  開票申請憑據／出貨單／請款單／**完工單**）④**成本精算已完結**（`settlement.status=='finalized'`）
+  ⑤**額外支出無送審中**。③的完工單與④⑤是 2026-09-13 使用者裁示「結案前要確認案件進度、
+  精算等這些全數完成」時補的——完工單是 DB v77 才有的模組，當初沒跟著加進清單。
+  沒有精算資料／沒有階段／沒有款項的舊案件一律視為「無需檢查」，不會因為後來才有的
+  欄位而永遠結不了案
 - UI revert：取消確認時用 `$nextTick` 回滾 `_prevDealTag`
 
 ### §5.2b · 報價清單動態徽章（quotations.html）
@@ -1646,6 +1679,7 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 | No-cache | `.html` / `.css` / `.js` 皆 no-store |
 | Excel | SheetJS（2026-09-07 起自架，客戶／供應商／料號／承攬商等頁面匯出入用） |
 | XSS 防護 | 動態插入 API 資料一律用 DOM API，**禁止 innerHTML 插入非靜態內容** |
+| 深色模式 | 全站色彩反轉濾鏡（不是另一套色票）。**`.topbar`／`.sidebar`／`.sidebar-overlay` 必須是 `<body>` 的直接子元素**——排除清單寫成 `body > *:not(.topbar):not(.sidebar):not(.sidebar-overlay)`，多包一層容器就對不上，整條側欄會被反轉成白底，而且容器有了 `filter` 會依 CSS 規範變成其中 `position:fixed` 元素的 containing block。新頁面照抄既有頁面骨架即可；違規由 `backend/tests/test_dark_mode_chrome_structure_2026_09_13.py` 擋下（見 §12 2026-09-13） |
 
 **外部函式庫自架（2026-09-07）**：正式機是純內網部署（172.16.10.177，無對外網路依賴設計），先前 Alpine.js／Chart.js／SortableJS／frappe-gantt／SheetJS 全部從 `cdn.jsdelivr.net` 載入，若辦公室對外網路中斷或 CDN 被擋，整套 ERP 會直接打不開——這對一個刻意做成內網系統的應用是不必要的外部單點故障。已全部改成本機靜態檔案，`frontend/static/vendor/`：
 
@@ -1677,6 +1711,10 @@ xlsx-0.18.5.full.min.js     （SheetJS）
 
 | 優先 | 項目 |
 |------|------|
+| 🟠 | **每案資料的 IDOR 面還沒收完**（2026-09-13 模組權限盤點，見 [`MODULE-AUDIT-2026-09-13.md`](MODULE-AUDIT-2026-09-13.md) §4）。`routers/quotations.py` 裡還有一批端點只要求登入、沒有 `_check_quotation_owner()`：案件階段（`/stages`、`/stages/{id}/visits`）、更新紀錄（`/updates`）、案件鎖定（`/case-lock`、`/case-unlock`）、款項與叫料的附件上傳／刪除、`/export`、三支 PDF 下載。**這次只修了金額面最重的 `settlement`／`finance-summary`**。其餘要一起改，前提是先確認「被指派的協作者」這條線在每個流程都成立（例如現場工程師是不是都會被指派到案件）——那是流程問題，不是技術問題 |
+| 🟠 | **`financial_view` 是顯示偏好、不是權限**：全系統只在 `case-management.js:214` 被讀，`/api/sales-orders`／`settlement`／`finance-summary` 等照樣回金額。團隊已知且刻意（`get_finance_summary()` docstring：「只擋這一支會是假的安全感」）。若要讓它變成真的權限，得一次處理所有回傳金額的端點，並先決定 viewer/engineer 到底該不該看到毛利 |
+| 🟡 | **`GET /api/sales-orders` 任何登入者可讀**（含 `net_margin_pct`）。頁面 2026-09-13 已改成導向頁，端點還在。要嘛比照報表加模組檢查，要嘛確認只剩內部用途後下線 |
+| 🟡 | **16 個模組後端完全不讀**，等於只是側欄開關（2026-09-13 盤點）。要嘛承認它們是「介面偏好」並在 UI 上講清楚，要嘛逐一補後端檢查。現況介於兩者之間，最容易讓人誤以為「勾掉＝擋掉」 |
 | ✅ | ~~區網 HTTPS／反向代理~~（`https_setup.ps1`，uvicorn 原生 TLS 自簽憑證，2026-08-27 commit `d7b8ee9`）——**2026-09-11 更正：正式機早已是 HTTPS**（本文件先前記載「尚未執行」已過時，該落差本身是 2026-09-08 事故的間接成因，見 §12 同日條目）；2026-09-10 又以 `-ExtraNames motrix.internal -Force` 重產憑證，SAN 與 CA 詳情見 **§3.3c** |
 | 🔴 | **待決策（有時效性，越拖成本越高）：要不要改用 Let's Encrypt 公開受信任憑證＋把 RP ID 換成 `erp.miactw.com`**，見 [`LETSENCRYPT-PUBLIC-CERT-PLAN.md`](LETSENCRYPT-PUBLIC-CERT-PLAN.md)（2026-09-11 規劃完成，**尚未執行**）。**做**：每台裝 CA／改 hosts 這件事整個消失（含 macOS、手機、Firefox），日後換網段或加 VPN 也不會讓 Passkey 全滅。**不做**：維持自簽 CA，每台新電腦都要人跑一次 `setup_passkey_client.ps1`，且未來網路環境一變動就被迫換 RP ID。**時效性來源**：換 RP ID 會讓**所有既有 Passkey 失效且無法救回**（瀏覽器端綁定，不在我們手上；DB v74 起系統至少查得出是哪幾張，見 §3.3c），目前只有 1～2 張是成本最低的時刻，累積幾十張後再換會非常痛。**卡在哪**：步驟 1～3（Cloudflare 加 A 記錄、建 API Token、正式機簽憑證）都必須由人操作；`backend/tools/letsencrypt_renew.ps1` 已寫好待用。**若決定不做，請直接在這一列寫明「決定維持自簽」與日期**，別讓它懸著。**2026-09-11 已排除 Cloudflare（Origin CA／Tunnel）兩個替代方案**，理由見 §3.3c，不要再重新評估 |
 | ✅ | ~~憑證到期完全沒有監控~~（**2026-09-11 已實作** `daily_tasks.py::_check_cert_expiry()`，門檻依憑證總效期自動切換，見 §3.3c 與 §12 同日條目）。**這是先前完全不存在的一層**：mkcert 憑證 2028-12-10（星期日）到期、不會自己更新，而 `letsencrypt_renew.ps1` 的 `[警告]` 只寫進 log 沒人會看 |
@@ -1722,6 +1760,133 @@ xlsx-0.18.5.full.min.js     （SheetJS）
 > 未紀錄；同期間 `CHANGELOG.md` 09-08／09-09 兩天完全空白。已於本日補回，並新增
 > [`WEEKLY-AUDIT-2026-09-07_2026-09-10.md`](WEEKLY-AUDIT-2026-09-07_2026-09-10.md)
 > ——帶「模組／檔案:行號／是否在正式機」座標的本週稽核索引，出事時先看那份。
+
+### 2026-09-13（第五輪）— 解鎖複查＋結案規則（使用者裁示，DB 無異動）
+
+- **解鎖維持全開**：使用者裁示「誰都可以改動，但都需要審核」。稽核時一度把
+  `case-unlock`/`case-lock` 一起收成擁有者規則，已還原；半解鎖期間的附件上傳改用
+  `_guard_case(..., skip_if_semi_unlocked=True)`——**已結案且半解鎖**放行任何人（每筆
+  變更都排進待審核），**未結案**的案件沒有那道審核，維持擁有者規則。
+- **`GET /api/case-changes/{change_id}` 補守門**：`change_id` 是小整數流水號、回的是整包
+  變更內容，先前只要求登入。另放行提出申請本人；核准/駁回維持僅 superadmin。
+- **完結案限最高管理者**（使用者裁示）：後端 `update_deal_tag()` 擋下，前端「完結案」
+  按鈕與「全部進度完成」自動提示同步只給 superadmin。先前是 admin+，與「已結案只有
+  superadmin 能降級」不對稱。
+- **完結案前置條件從三項擴充為五項**（使用者裁示「結案前要確認案件進度、精算等這些
+  全數完成」）：新增④**成本精算已完結**⑤**額外支出無送審中**，並把**完工單**補進③的
+  單據清單——它是 DB v77 才有的模組，當初沒跟著加，等於完工單還在簽核中也結得了案。
+  沒有精算／階段／款項資料的舊案件一律視為「無需檢查」。
+- **半解鎖期間的變更寄信給最高管理者**：查證後確認**原本就有**
+  （`_create_case_change_request()` → `notify_case_change_requested()`，只寄 superadmin），
+  這次補上測試釘住——攔在 `_send` 上驗收件人，不是攔上層函式。
+
+### 2026-09-13（第四輪）— 照裁示順序收尾：憑證流金額、單據 IDOR、頁面層守門（DB 無異動）
+
+**解鎖流程複查**（使用者要求）：`test_case_semi_unlock.py` 14 題全綠、核准仍限
+superadmin，但抓到三件事——①`GET /api/case-changes/{change_id}` 只要求登入，而
+`change_id` 是小整數流水號、回的是整包變更內容（已補守門，另放行提出申請本人）
+②解鎖/上鎖的 docstring 還寫著「任何登入使用者皆可觸發」（2026-08-26 使用者裁示），
+與收斂後的行為對不上——**這是唯一一處推翻使用者先前明確裁示的改動**，來龍去脈
+已寫進 docstring，要還原只要拿掉那一行 `_guard_case()` ③叫料附件放行 `case_manage`、
+款項發票附件卻是純擁有者，同一個排隊審核家族一嚴一鬆，已統一。
+
+見 [`MODULE-AUDIT-2026-09-13.md`](MODULE-AUDIT-2026-09-13.md) §3.9～§3.10。
+
+- **巡視補漏**：第一輪只掃了 `quotations.py`，再巡一次發現同一種每案 IDOR 還在
+  案件代辦、完工單、出貨單、三種憑證流、網路架構規劃書與**全域搜尋**（最容易被
+  忘記的側門：它自己一套查詢，不經過任何 router 的檢查）。守門搬進
+  `helpers/quotations.py::guard_case_access()` 供八支 router 共用。
+- **憑證流與額外支出的金額可視**：原本卡在「套下去會擋到非管理員的簽核人」。
+  解法是把例外寫清楚——**本單簽核人**（含代理人）與**額外支出的填寫人**看得到
+  自己那幾筆，其餘人要 `financial_view`。清單用**過濾**而不是整支 403，否則
+  非管理員簽核人連簽核佇列都打不開。
+- **單據詳情 IDOR**：`GET /{voucher_no}`、PDF 下載、發票附件先前只要求登入，
+  而單號可預測。
+- **前端頁面層守門**：沿用側欄自己的顯示條件（不另外維護對照表），沒有權限就
+  **就地顯示「你沒有這個頁面的權限」**。⚠️ 原本寫成導回首頁，實測發現
+  `index.html` 自己也有守門，兩邊一搭是無限迴圈；順手修掉 index 那道漏了
+  `dashboard` 模組的問題。
+
+**兩個差點上線的錯配**（由新的守門測試當天抓到）：簽核佇列（模組 `quotation`）
+讀不到待簽單據、`inventory` 模組打不開庫存管理頁——都是「擋錯人」，使用者看到
+一片 403 而後端測試全綠（測試多半用 admin，admin 直通模組檢查）。
+
+**一個假綠燈**：新寫的守門測試裡混進兩個看不見的退格字元，讓它永遠匹配不到、
+永遠綠。修掉後用「把 bug 種回去」實測兩題都會紅、還原後又全綠。
+
+
+### 2026-09-13（第三輪）— 依裁示收緊權限：IDOR、財務金額、模組後端檢查（DB 無異動）
+
+使用者對稽核報告 §4 的五項待決策裁示：①其餘 IDOR 一起收 ②viewer／engineer 不該
+看到金額 ③`/api/sales-orders` 加模組檢查 ④16 個模組逐一補後端檢查 ⑤`cashier` 保留。
+細節見 [`MODULE-AUDIT-2026-09-13.md`](MODULE-AUDIT-2026-09-13.md) §3.8。
+
+| 做了什麼 | 內容 |
+|---|---|
+| 每案 IDOR（28 支） | 新增 `quotations.py::_guard_case()`：案件階段／拜訪／動態／鎖定／協作者／簽回檔案／款項與叫料附件／匯出／三支 PDF。PDF 額外放行**簽核人與其代理人**（不然簽核人看不到單） |
+| 財務金額 | 新增 `helpers/auth.py::can_see_financial()`，規則與前端 `canSeeFinancial()` 逐字相同；套在成本精算 GET/PUT、應收應付總覽、銷售訂單 |
+| 模組後端檢查 | 新增 `require_any_module()`，依「該 API **所有消費頁面**所屬模組的聯集」套到 15 個 router。聯集是掃前端原始碼算出來的——只認單一模組會把跨模組使用路徑打死（例：`/api/parts` 同時服務料號主檔與案件叫料） |
+
+**⚠️ 一個依實測改掉的決定**：案件「執行面」額外放行 `case_manage` 模組，沒有用純
+擁有者規則。理由是開發機 26 張報價單裡 `assigned_user_ids` **有值的是 0 張**——
+「指派協作者」實務上沒人在用，純擁有者規則會讓 `engineer` 角色對**全部案件**的存取
+權變成 0。金額面（精算、應收應付、發票檔案）仍是純擁有者規則。等指派被落實，把
+`allow_module="case_manage"` 拿掉即可收回。
+
+**刻意不套的例外**：快速拓樸圖 preview／pdf 是無狀態繪圖工具（不讀不寫資料表），
+擋它只會擋掉畫圖，不會保護到任何資料。
+
+**上線後使用者會察覺的改變**（部署前務必先講）：
+1. 只有「儀表板」的帳號（viewer／服務帳號）打不開料號、客戶、每日工作事項、選型導覽
+2. 工程師沒有「財務金額可視」就看不到案件成本與毛利（先前後端照回，只有畫面藏起來）
+3. 非該案業務／協作者、且沒有「案件管理」模組的人，打不開別人案件的執行進度
+
+### 2026-09-13（第二輪）— 模組權限盤點：七項對接斷點（DB 無異動）
+
+完整報告：**[`MODULE-AUDIT-2026-09-13.md`](MODULE-AUDIT-2026-09-13.md)**（含五項待決策）。
+「模組」同時活在權限目錄（`users.html`）、側欄（`sidebar.js`）、後端檢查三個地方，
+而**沒有任何東西在確保三邊對得起來**——盤出來七項全部是無聲漂移：
+
+| 修了什麼 | 症狀 |
+|---|---|
+| 🔴 精算 IDOR | `GET/PUT …/settlement` 與 `finance-summary` 只要求登入，`quote_no` 可列舉 → 任何登入者（含 viewer、automation 服務帳號）可讀、可**覆寫**任何案件的成本精算。改用既有的 `_check_quotation_owner()` |
+| 🟠 `reports`／`finance` 形同虛設 | 目錄勾得到、側欄會顯示營運報表，但 11 支報表端點只認 admin+ → 勾了進去整頁 403。新增 `_require_reports_access()`（比照 `cashier.py::_require_view_access`）。**不是放寬**：現有持有者全是 admin+ |
+| 🔴 `project_manage` 勾不到 | 後端拿它擋修改叫料，key 卻在 2026-08-26 被移出目錄 → 新帳號永久 403。補回目錄，標籤改為「案件叫料－修改」 |
+| 🟠 網路架構規劃書 | 前端 `canEdit` 放行 admin、後端要 superadmin／`netplan_edit`（0 人持有）→ 四個 admin 看得到按鈕、按了必 403。前端改成與後端對齊 |
+| 🟡 死 key `sales` | 只在角色樣板與 `_SUPERADMIN_MODULES`，全系統沒有任何地方讀 |
+| 🟡 `_SUPERADMIN_MODULES` 不同步 | 缺 `case_manage`／`reports`／`cashier`／`work_log`／`daily_task` 與七個選型導覽 |
+| 🟡 `finance` 紅點與 `sales-orders.html` | 後端算了一個月的通知數字前端沒有元素可顯示（依附的側欄項目 2026-08-31 退役）；`sales-orders.html` 當初「退役」只移除側欄連結，活頁面與 API 還在、且已無人維護 → 紅點掛回營運報表，該頁比照 `receivables.html` 改成導向頁 |
+
+**測試**：新增 13 題非 e2e（結構守門 5＋行為 8）。守門那 5 題用 HEAD 內容重跑，
+①④⑤確實會紅。行為題的觀測點刻意放在下游（外人被擋後**資料真的沒被改到**），不是只看回傳碼。
+
+### 2026-09-13 — 深色模式 15 頁側欄是白底（DB 無異動）
+
+使用者回報「部分頁面在黑暗模式下，左側的選單列表是白背景」。
+
+**根因**：深色模式是對 `body` 的非 chrome 子元素套 `filter: invert(1) hue-rotate(180deg)`，
+排除清單是 **`body > *:not(.topbar):not(.sidebar):not(.sidebar-overlay)`——直接子元素選擇器**。
+有 15 頁把 `<aside class="sidebar">` 包進 `<div class="app-shell">`（其餘 36 頁是 body 直下），
+排除就對不上：被反轉的是 `.app-shell`，側欄整片跟著翻成白底深字。同一層問題還有第二個
+後果沒被發現——容器有了 `filter` 會變成子孫 `position:fixed` 的 containing block，那 15 頁在
+深色模式下側欄與頁內 Modal 是以 `.app-shell` 而不是 viewport 定位。
+
+**受影響的 15 頁**：`access-guide`／`automation-guide`／`case-management`／`dev-crm`／
+`env-guide`／`gateway-guide`／`inventory`／`monitor-guide`／`netarch-guide`／`parts`／
+`procurement`／`reports`／`sales-orders`／`selection-db-overview`／`switch-guide`。
+
+**修法**：把那 15 頁的 `<aside class="sidebar">` 移回 `<body>` 直下（`.app-shell` 全站沒有
+任何 CSS，純粹是個版面容器，留著只包 `<main>`），每頁留一行註解寫明為什麼不能再包進去。
+**刻意不用「在 CSS 裡再反轉一次抵銷」**：`hue-rotate` 是近似矩陣、來回兩次顏色會偏，而且
+那只蓋掉顏色、fixed 定位仍然是壞的。
+
+**測試（兩支互補）**：
+- `test_dark_mode_chrome_structure_2026_09_13.py`——靜態掃描全部 51 頁的祖先鏈，非 e2e、
+  每次都跑。已驗證把 `reports.html` 改回舊結構它會紅（不是空跑就綠）。
+- `test_e2e_dark_mode_sidebar_2026_09_13.py`——**截圖量像素中位數**。必須量像素：`filter`
+  是繪製階段的效果，**不會改變 computed style**，側欄被畫成白底時 `getComputedStyle` 讀到
+  的仍然是 `rgb(17,17,17)`，斷言 background-color 是典型假綠燈。另含負向控制：在瀏覽器裡
+  把側欄重新包回 `.app-shell`，亮度必須從 17 翻到 238，證明探針量得到差異。
 
 ### 2026-09-12 — 已收款改收款日期口徑＋完工單模組（**DB v77**）
 

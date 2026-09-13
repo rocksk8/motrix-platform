@@ -35,10 +35,52 @@ from helpers import (
     check_approve_permission, check_reject_permission, check_no_tier_self_approval,
     UnresolvedManagerError, resolve_active_flow_setting,
     save_document_files, delete_document_file,
+    guard_case_access, require_any_module,
+
+    can_see_financial, is_document_approver,
 )
 from pdf_gen import generate_invoice_voucher_pdf_bytes, _generate_invoice_voucher_pdf
 
 router = APIRouter()
+
+def _guard_voucher(conn, row, user):
+    """單據層級守門（2026-09-13 模組權限稽核第四輪）。
+
+    先前 `GET /{voucher_no}`、PDF 下載與檔案上傳/刪除都只要求登入，而單號是可預測的
+    （前綴＋年月＋流水號），等於任何已登入帳號都能把別人案件的單據與金額撈出來。
+
+    兩道：
+    1. **案件層**——比照其他每案端點（`guard_case_access`）：案件業務／協作者／
+       具案件管理模組／本單簽核人（含代理人）。
+    2. **金額層**——`can_see_financial()`（使用者裁示：viewer／engineer 不該看到
+       金額）。**本單簽核人例外**：看不到金額就沒辦法判斷該不該簽，擋他等於讓
+       簽核流程停擺。
+    """
+    # 找不到母案件時不要變成 404：單據本身存在、只是母案件被刪或資料異常，
+    # 對使用者顯示「報價單不存在」只會更難查。退回模組層級判斷。
+    if conn.execute("SELECT 1 FROM quotations WHERE quote_no=?", (row["quote_no"],)).fetchone():
+        guard_case_access(conn, row["quote_no"], user,
+                          allow_module="case_manage", allow_approver=True)
+    else:
+        require_any_module(user, ('case_manage', 'finance', 'cashier', 'quotation'), "開票憑證")
+    if not can_see_financial(user) and not is_document_approver(row["data_json"], user, conn):
+        try:
+            conn.close()
+        except Exception:
+            pass
+        raise HTTPException(403, "此帳號沒有檢視財務金額的權限（需要「財務金額可視」模組）")
+
+
+def _visible_rows(rows, user, conn):
+    """清單過濾：沒有財務可視權的人，只看得到「自己要簽的那幾張」。
+
+    直接整支 403 會讓非管理員的簽核人連簽核佇列都打不開（他們正是要在那裡看到
+    待簽單據）；整批放行又違背「viewer／engineer 不該看到金額」。折衷是過濾。
+    """
+    if can_see_financial(user):
+        return rows
+    return [r for r in rows if is_document_approver(r["data_json"], user, conn)]
+
 
 
 # ── Models ────────────────────────────────────────────────────────────────────
@@ -154,14 +196,23 @@ def _quote_remaining(conn, quote_no: str):
 
 @router.get("/api/invoice-vouchers")
 def list_invoice_vouchers(quote_no: Optional[str] = None, authorization: str = Header(None)):
-    _require_user(authorization)
+    # 2026-09-13（模組權限稽核）：帶 quote_no 就是「讀某一張案件的開票憑證」——
+    # `quote_no` 可列舉，先前只要求登入等於任何人都撈得到別人案件的單據與金額。
+    # 不帶 quote_no 是跨案件總覽，改為管理員或具相關模組的人才看得到。
+    user = _require_user(authorization)
     conn = get_db()
+    if quote_no:
+        guard_case_access(conn, quote_no, user, allow_module="case_manage")
+    else:
+        # `quotation` 也要收：簽核佇列（模組 quotation）就是用這支載入待簽的單據
+        require_any_module(user, ('case_manage', 'finance', 'cashier', 'quotation'), "開票憑證")
     if quote_no:
         rows = conn.execute(
             "SELECT * FROM invoice_vouchers WHERE quote_no=? ORDER BY created_at DESC", (quote_no,)
         ).fetchall()
     else:
         rows = conn.execute("SELECT * FROM invoice_vouchers ORDER BY created_at DESC LIMIT 200").fetchall()
+    rows = _visible_rows(rows, user, conn)
     conn.close()
     return [_voucher_public(r, include_snapshot=False) for r in rows]
 
@@ -170,8 +221,9 @@ def list_invoice_vouchers(quote_no: Optional[str] = None, authorization: str = H
 def get_invoice_voucher_remaining(quote_no: str, authorization: str = Header(None)):
     """建立開票申請前，前端要顯示「剩餘可申請金額／品項數量」用——必須註冊在
     /{voucher_no} 之前，否則 FastAPI 會把 'remaining' 當成 voucher_no 吃掉。"""
-    _require_user(authorization)
+    user = _require_user(authorization)
     conn = get_db()
+    guard_case_access(conn, quote_no, user, allow_module="case_manage")
     info = _quote_remaining(conn, quote_no)
     conn.close()
     if info is None:
@@ -181,9 +233,13 @@ def get_invoice_voucher_remaining(quote_no: str, authorization: str = Header(Non
 
 @router.get("/api/invoice-vouchers/{voucher_no}")
 def get_invoice_voucher(voucher_no: str, authorization: str = Header(None)):
-    _require_user(authorization)
+    user = _require_user(authorization)
     conn = get_db()
     row = conn.execute("SELECT * FROM invoice_vouchers WHERE voucher_no=?", (voucher_no,)).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(404, "單據不存在")
+    _guard_voucher(conn, row, user)
     conn.close()
     if not row:
         raise HTTPException(404, f"憑據 {voucher_no} 不存在")
@@ -596,9 +652,13 @@ def reject_invoice_voucher(voucher_no: str, body: dict = Body(default={}), autho
 
 @router.get("/api/invoice-vouchers/{voucher_no}/pdf-download")
 def download_invoice_voucher_pdf(voucher_no: str, authorization: str = Header(None)):
-    _require_user(authorization)
+    user = _require_user(authorization)
     conn = get_db()
-    row = conn.execute("SELECT voucher_no FROM invoice_vouchers WHERE voucher_no=?", (voucher_no,)).fetchone()
+    row = conn.execute("SELECT voucher_no, quote_no, data_json FROM invoice_vouchers WHERE voucher_no=?", (voucher_no,)).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(404, "單據不存在")
+    _guard_voucher(conn, row, user)
     conn.close()
     if not row:
         raise HTTPException(404, "憑據不存在")
@@ -650,10 +710,14 @@ async def upload_invoice_voucher_issued_files(voucher_no: str, files: List[Uploa
     實際開立的內容（例如發票影本）。不限制狀態，草稿/簽核中也能先留存。"""
     user = _require_user(authorization)
     conn = get_db()
-    row = conn.execute("SELECT issued_files_json FROM invoice_vouchers WHERE voucher_no=?", (voucher_no,)).fetchone()
+    row = conn.execute(
+        "SELECT issued_files_json, quote_no, data_json FROM invoice_vouchers WHERE voucher_no=?",
+        (voucher_no,)
+    ).fetchone()
     if not row:
         conn.close()
         raise HTTPException(404, "憑據不存在")
+    _guard_voucher(conn, row, user)
     existing = json.loads(row["issued_files_json"] or "[]")
     new_files = await save_document_files("invoice_vouchers", voucher_no, files,
                                           user.get("display_name") or user["username"])
@@ -672,10 +736,14 @@ async def upload_invoice_voucher_issued_files(voucher_no: str, files: List[Uploa
 def delete_invoice_voucher_issued_file(voucher_no: str, file_id: str, authorization: str = Header(None)):
     user = _require_user(authorization)
     conn = get_db()
-    row = conn.execute("SELECT issued_files_json FROM invoice_vouchers WHERE voucher_no=?", (voucher_no,)).fetchone()
+    row = conn.execute(
+        "SELECT issued_files_json, quote_no, data_json FROM invoice_vouchers WHERE voucher_no=?",
+        (voucher_no,)
+    ).fetchone()
     if not row:
         conn.close()
         raise HTTPException(404, "憑據不存在")
+    _guard_voucher(conn, row, user)
     existing = json.loads(row["issued_files_json"] or "[]")
     remaining = delete_document_file("invoice_vouchers", voucher_no, existing, file_id)
     now = datetime.now().isoformat()

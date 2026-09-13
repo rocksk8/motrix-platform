@@ -19,7 +19,10 @@ def _auth(token):
 
 
 def test_seed_data_present(client, make_user):
-    user, pw = make_user(username="viewer1", role="viewer")
+    # 2026-09-13（模組權限稽核第二輪）：讀取端點現在要求「自動化系統選型導覽」
+    # 檢視模組（或編輯模組）。權限目錄裡本來就有這個可勾選項，先前後端沒有讀，
+    # 等於勾掉也照樣看得到——這次補上，所以測試帳號要帶模組。
+    user, pw = make_user(username="viewer1", role="viewer", modules=["automation_guide"])
     token = _login(client, user, pw)
 
     r = client.get("/api/automation-guide/scenarios", headers=_auth(token))
@@ -36,11 +39,30 @@ def test_seed_data_present(client, make_user):
     assert r.json() == []
 
 
-def test_view_requires_login_but_not_edit_module(client, make_user):
-    user, pw = make_user(username="eng1", role="engineer")
+def test_view_requires_view_module_but_not_edit_module(client, make_user):
+    """檢視只需要**檢視**模組，不需要編輯模組——這是這支測試原本要守的重點。
+
+    2026-09-13 改動：原本的規格是「檢視只要登入就好」，後端完全不讀
+    `automation_guide` 這個檢視模組（雖然權限目錄一直提供它、側欄也一直用它決定
+    要不要顯示選單）。使用者裁示「逐一補後端檢查」後，檢視需要檢視模組或編輯模組。
+    """
+    user, pw = make_user(username="eng1", role="engineer", modules=["automation_guide"])
     token = _login(client, user, pw)
     r = client.get("/api/automation-guide/categories", headers=_auth(token))
     assert r.status_code == 200, r.text
+
+    # 沒有任何導覽模組的帳號讀不到（先前這行會是 200）
+    nobody, nobody_pw = make_user(username="eng1_nomod", role="engineer", modules=["case_manage"])
+    token2 = _login(client, nobody, nobody_pw)
+    assert client.get("/api/automation-guide/categories",
+                      headers=_auth(token2)).status_code == 403
+
+    # 只有編輯模組的帳號仍讀得到——否則會變成「改得動卻讀不到」
+    editor, editor_pw = make_user(username="eng1_editonly", role="engineer",
+                                  modules=["automation_guide_edit"])
+    token3 = _login(client, editor, editor_pw)
+    assert client.get("/api/automation-guide/categories",
+                      headers=_auth(token3)).status_code == 200
 
 
 def test_edit_requires_superadmin_or_edit_module(client, make_user):

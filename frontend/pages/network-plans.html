@@ -226,10 +226,18 @@
         this.loading = false
       },
 
+      // 2026-09-13（模組權限稽核）：拿掉 `role === 'admin'`。後端
+      // `routers/network_plans.py` 的新增/修改/刪除是
+      // `_require_user(..., require_superadmin=True, module='netplan_edit')`
+      // ——admin 沒有 `netplan_edit` 一律 403。原本這裡放行 admin，等於讓四個
+      // 管理員帳號看得到「新增規劃書」按鈕、按下去必定失敗（目前 netplan_edit
+      // 持有人數是 0，所以每一次都會踩到）。改成與後端逐字對齊，也跟七個選型
+      // 導覽的 `canEdit = superadmin || *_guide_edit` 同一個慣例。
+      // 要讓某個 admin 能編，去「使用者管理」勾「網路架構規劃書－新增修改刪除」。
       get canEdit() {
         const role = this.session.role || ''
         const mods = this.session.modules || []
-        return role === 'superadmin' || role === 'admin' || mods.indexOf('netplan_edit') >= 0
+        return role === 'superadmin' || mods.indexOf('netplan_edit') >= 0
       },
 
       async load() {

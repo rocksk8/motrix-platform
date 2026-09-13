@@ -32,7 +32,8 @@ from helpers import (
     resolve_tier_approvers, UnresolvedManagerError, resolve_active_flow_setting,
     save_document_files, delete_document_file,
     notify_case_close_blocked, notify_case_change_requested,
-    norm_at, active_delegators_for, user_has_module, validate_invoice_no,
+    norm_at, active_delegators_for, user_has_module, can_see_financial,
+    validate_invoice_no,
     summarize_payment_items,
 )
 import helpers.uploads as _uploads_mod
@@ -233,6 +234,100 @@ def _notify_case_change_requested_bg(quote_no: str, summary: str, requester_disp
         quote_no, row["customer_name"] or "" if row else "",
         row["project_name"] or "" if row else "", summary, requester_display,
     )
+
+
+def _require_financial_view(user: dict) -> None:
+    """案件財務金額的檢視權（2026-09-13 使用者裁示：viewer／engineer 不該看到）。
+
+    規則與前端 `case-management.js::canSeeFinancial()` 逐字相同，見
+    `helpers/auth.py::can_see_financial()`——這裡不自己寫判斷式，避免兩邊漂移。
+    """
+    if not can_see_financial(user):
+        raise HTTPException(403, "此帳號沒有檢視財務金額的權限（需要「財務金額可視」模組）")
+
+
+def _safe_close(conn) -> None:
+    try:
+        conn.close()
+    except Exception:
+        pass
+
+
+def _is_case_approver(data_json: str, user: dict, conn) -> bool:
+    """這個人是否出現在這張單的簽核名單裡（任何一層）或本人就是送審申請人。
+
+    含「目前有效的簽核代理人」——代理人在簽核路徑上處處被視同本人
+    （`check_approve_permission()` 等），檢視權限沒有理由是例外。
+    """
+    try:
+        appr = (json.loads(data_json or "{}") or {}).get("approval") or {}
+    except Exception:
+        return False
+    names = {a["username"] for tier in (_active_tiers(appr) or [])
+             for a in (tier.get("approvers") or []) if a.get("username")}
+    if appr.get("requestedBy"):
+        names.add(appr["requestedBy"])
+    if user["username"] in names:
+        return True
+    try:
+        return bool(set(active_delegators_for(conn, user["username"])) & names)
+    except Exception:
+        return False
+
+
+def _guard_case(conn, quote_no: str, user: dict, *, allow_approver: bool = False,
+                allow_module: str = None, skip_if_semi_unlocked: bool = False):
+    """取單＋擁有者檢查，給所有「用 quote_no 直接操作單一案件」的端點共用。
+
+    2026-09-13（模組權限稽核第二輪）：`quote_no` 是可列舉的（`MQ-YYYYMM-NNN`），
+    沒有這道檢查就是 IDOR——2026-08-24 修過報價單本體、2026-09-10 修過叫料、
+    2026-09-11 額外支出上線時就內建，但**案件階段／拜訪紀錄／更新紀錄／案件
+    鎖定／附件上傳刪除／匯出紀錄／三支 PDF 一直沒有**，任何已登入帳號都能讀寫
+    別人的案件。這支把那批補齊，規則與既有端點完全一致（admin+ 直通，否則必須
+    是該案業務或 `assigned_user_ids` 裡的協作者）。
+
+    `allow_approver=True`：簽核路徑上的人（含代理人）也放行。給報價單 PDF 下載用
+    ——簽核人要看得到單據才簽得下去，而他通常既不是業務也不在協作者名單裡。
+
+    `allow_module="case_manage"`：**案件執行面**（階段、拜訪紀錄、動態更新、叫料
+    附件、案件鎖定、匯出紀錄、兩支案件報表 PDF）額外放行具該模組的人。
+
+    ⚠️ **為什麼執行面不用純擁有者規則**——2026-09-13 實測開發機資料庫：26 張報價單
+    裡 `assigned_user_ids` 有值的是 **0 張**，也就是「指派協作者」這個機制實務上
+    從來沒被使用過。純擁有者規則下，`engineer` 角色（永遠不會是 sales_person）
+    對**全部 26 張案件的存取權都是 0**——現場工程師會完全無法開啟任何案件的執行
+    進度與拜訪紀錄。金額面（精算、應收應付、發票檔案）維持純擁有者規則不放寬。
+    等哪天「指派協作者」真的被落實，就可以把這條 `case_manage` 放行拿掉，回到
+    純擁有者規則；那一天之前，拿掉等於停掉工程師的案件管理。
+    """
+    q = conn.execute(
+        "SELECT sales_person_id, sales_person, assigned_user_ids, data_json, "
+        "deal_tag, case_semi_unlocked FROM quotations WHERE quote_no=?", (quote_no,)
+    ).fetchone()
+    if not q:
+        # 擋下來時由這裡負責關連線：呼叫端清一色是「conn = get_db() → 一連串操作
+        # → conn.close()」的直線寫法，沒有 try/finally，守門若直接往外丟例外，
+        # 那條連線要等 GC 才會被回收。集中在這裡處理，28 個呼叫端就不必各自包一層。
+        _safe_close(conn)
+        raise HTTPException(404, f"報價單 {quote_no} 不存在")
+    # 2026-09-13（使用者裁示）：**已結案且半解鎖**的案件上，誰都可以改動——因為
+    # 半解鎖期間的每一筆變更/上傳都會排進待審核、由 superadmin 決定要不要套用
+    # （`_gate_case_edit()`／`_check_case_gate()`）。把關在審核，不在入口。
+    # 只有這個狀態例外：未結案的案件沒有那道審核，維持擁有者規則。
+    if (skip_if_semi_unlocked and (q["deal_tag"] or "") == "已結案"
+            and q["case_semi_unlocked"]):
+        return q
+    try:
+        _check_quotation_owner(q, user)
+    except HTTPException:
+        allowed = (
+            (allow_module and user_has_module(user, allow_module))
+            or (allow_approver and _is_case_approver(q["data_json"], user, conn))
+        )
+        if not allowed:
+            _safe_close(conn)
+            raise
+    return q
 
 
 def _deny_if_case_locked_unsupported(conn, quote_no: str, authorization: str = None,
@@ -752,6 +847,7 @@ def update_case_assigned_users(quote_no: str, body: dict = Body(...), authorizat
         raise HTTPException(403, "僅管理員可設定成員分配")
     user_ids = [int(uid) for uid in (body.get('user_ids') or []) if uid]
     conn = get_db()
+    _guard_case(conn, quote_no, user, allow_module="case_manage")
     row = conn.execute("SELECT quote_no FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
     if not row:
         conn.close(); raise HTTPException(404, "案件不存在")
@@ -831,6 +927,7 @@ async def upload_quotation_signed_files(quote_no: str, files: List[UploadFile] =
     """報價單回簽附件上傳（多檔）——任何登入使用者皆可補傳。"""
     user = _require_user(authorization)
     conn = get_db()
+    _guard_case(conn, quote_no, user)
     row = conn.execute("SELECT signed_files_json FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
     if not row:
         conn.close()
@@ -852,6 +949,7 @@ async def upload_quotation_signed_files(quote_no: str, files: List[UploadFile] =
 def delete_quotation_signed_file(quote_no: str, file_id: str, authorization: str = Header(None)):
     user = _require_user(authorization)
     conn = get_db()
+    _guard_case(conn, quote_no, user)
     row = conn.execute("SELECT signed_files_json FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
     if not row:
         conn.close()
@@ -1303,21 +1401,49 @@ def _case_close_block_reasons(conn, quote_no: str, d: dict):
     if unpaid:
         reasons.append(f"款項明細尚有 {len(unpaid)} 期未收齊")
 
+    # ④ 成本精算必須已完結（2026-09-13 使用者裁示：「結案前要確認案件進度、精算等
+    # 這些全數完成」）。結案之後案件就鎖定了，精算還停在草稿等於把一張永遠算不完
+    # 的帳鎖進去——要再動只能走半解鎖＋逐筆審核。
+    # 判斷沿用既有的熱路徑欄位口徑（`settle_status`／`data_json.settlement.status`），
+    # 不自己另外定義一套。完全沒有精算資料的案件視為「無需檢查」，比照①②的作法
+    # ——舊案件不該因為一個後來才有的欄位而永遠結不了案。
+    settlement = (d.get("settlement") or {})
+    if settlement and (settlement.get("status") or "") != "finalized":
+        reasons.append("成本精算尚未完結")
+
+    # ⑤ 額外支出不可停在送審中（2026-09-13 一併補上）：那是還沒定案的成本，
+    # 結案後才核准會讓已結案案件的成本事後改變。
+    try:
+        pending_xe = conn.execute(
+            "SELECT COUNT(*) c FROM case_extra_expenses WHERE quote_no=? AND status='待審核'",
+            (quote_no,)
+        ).fetchone()["c"]
+    except Exception:
+        pending_xe = 0          # 舊環境還沒有這張表（DB v75 之前）
+    if pending_xe:
+        reasons.append(f"額外支出尚有 {pending_xe} 筆送審中")
+
     # ③ 相關單據簽核流程全部完成（報價單本身＋承攬商匯款申請／開票申請憑據／
-    # 出貨單／請款單，四種 tiers 簽核機制皆不可處於待審核/簽核中）
+    # 出貨單／請款單／完工單，五種 tiers 簽核機制皆不可處於待審核/簽核中）
+    # 2026-09-13：補上「完工單」——它是 DB v77（2026-09-12）才有的模組，當初這份
+    # 清單沒有跟著加，等於完工單還在簽核中也結得了案。
     doc_checks = [
         ("報價單",       "quotations"),
         ("承攬商匯款申請", "contractor_payment_vouchers"),
         ("開票申請憑據",   "invoice_vouchers"),
         ("出貨單",       "shipping_notes"),
         ("請款單",       "payment_requests"),
+        ("完工單",       "completion_notes"),
     ]
     for label, table in doc_checks:
-        rows = conn.execute(
-            f"SELECT json_extract(data_json,'$.approval') ap FROM {table} "
-            f"WHERE quote_no=? AND status IN ('待審核','簽核中')",
-            (quote_no,)
-        ).fetchall()
+        try:
+            rows = conn.execute(
+                f"SELECT json_extract(data_json,'$.approval') ap FROM {table} "
+                f"WHERE quote_no=? AND status IN ('待審核','簽核中')",
+                (quote_no,)
+            ).fetchall()
+        except Exception:
+            continue           # 該模組的表還不存在（migration 尚未跑到）
         if rows:
             reasons.append(f"{label}尚有 {len(rows)} 筆簽核中")
             for r in rows:
@@ -1340,6 +1466,13 @@ def update_deal_tag(quote_no: str, body: QuotationDealTagUpdate, authorization: 
     # 未成案 / 已成案 限管理員以上
     if body.deal_tag in ("未成案", "已成案") and user["role"] not in ("superadmin", "admin"):
         raise HTTPException(403, "僅管理員以上可標記「未成案」或「已成案」")
+    # 2026-09-13（使用者裁示）：**完結案只有最高管理者能按**。
+    # 結案是這套系統裡最不可逆的動作——案件從此鎖定、只能走半解鎖＋逐筆審核才能
+    # 再動，還會啟動保固追蹤期。原本 admin 就能按（跟「已成案」同一層），與
+    # 「已結案只有 superadmin 能降級」的既有規則不對稱：一般管理員按得下去、
+    # 卻沒有人能把它按回來（只有 superadmin 可以）。統一成兩邊都是 superadmin。
+    if body.deal_tag == "已結案" and user["role"] != "superadmin":
+        raise HTTPException(403, "僅最高管理者可完結案件")
     conn = get_db()
     row = conn.execute(
         "SELECT data_json, customer_name, project_name, status FROM quotations WHERE quote_no=?", (quote_no,)
@@ -1508,11 +1641,17 @@ def _sync_device_stock(conn, quote_no: str, old_devices: list, new_devices: list
 
 @router.post("/api/quotations/{quote_no}/case-unlock")
 def unlock_case(quote_no: str, authorization: str = Header(None)):
-    """已結案案件解鎖為「半解鎖」狀態（2026-08-26）：任何登入使用者皆可觸發
-    （2026-08-26 使用者透過 AskUserQuestion 確認，比照既有附件上傳「任何人皆
-    可傳」的最寬鬆權限慣例），解鎖本身立即生效、不需審核；半解鎖期間的每一筆
-    變更/上傳才需要 superadmin 審核（見 _gate_case_edit()／_check_case_gate()）。
-    只對 deal_tag='已結案' 的案件有意義，其他狀態呼叫這支端點沒有實質作用。"""
+    """已結案案件解鎖為「半解鎖」狀態（2026-08-26）。解鎖本身立即生效、不需審核；
+    半解鎖期間的每一筆變更/上傳才需要 superadmin 審核（見 _gate_case_edit()／
+    _check_case_gate()）。只對 deal_tag='已結案' 的案件有意義。
+
+    **權限：任何登入使用者皆可觸發**——2026-08-26 使用者裁示，2026-09-13 模組權限
+    稽核時再次確認：「誰都可以改動，但都需要審核」。把關點在審核，不在入口。
+
+    這是這波權限收斂裡**刻意保留的例外**。2026-09-13 曾一度把它一起收成擁有者
+    規則（跟其他每案端點一致），複查時發現那推翻了使用者已經裁示過的設計，已還原。
+    對應地，半解鎖期間的附件上傳/刪除也用 `_guard_case(..., skip_if_semi_unlocked=True)`
+    對這個狀態放行——**未結案**的案件沒有那道審核，仍維持擁有者規則。"""
     user = _require_user(authorization)
     conn = get_db()
     row = conn.execute("SELECT deal_tag, customer_name, project_name FROM quotations WHERE quote_no=?",
@@ -1551,8 +1690,8 @@ def _notify_case_unlocked_bg(quote_no: str, customer: str, project: str, unlocke
 
 @router.post("/api/quotations/{quote_no}/case-lock")
 def lock_case(quote_no: str, authorization: str = Header(None)):
-    """將半解鎖案件重新上鎖（2026-08-26），權限比照解鎖——任何登入使用者皆可
-    觸發。重新上鎖不會影響既有的 pending 待審核記錄（case_change_requests 仍
+    """將半解鎖案件重新上鎖（2026-08-26），權限比照解鎖——任何登入使用者皆可觸發
+    （見 unlock_case() 的說明）。重新上鎖不會影響既有的 pending 待審核記錄（case_change_requests 仍
     保留，superadmin 之後還是能在簽核佇列核准/拒絕；核准時 _apply_case_change_
     request() 不檢查當下是否半解鎖，避免上鎖動作意外卡住既有審核流程）。"""
     user = _require_user(authorization)
@@ -1841,12 +1980,24 @@ def _apply_case_change_request(conn, req, approver: dict, authorization: str) ->
 
 @router.get("/api/case-changes/{change_id}")
 def get_case_change_request(change_id: int, authorization: str = Header(None)):
-    _require_user(authorization)
+    """半解鎖期間某一筆待審核變更的完整內容。
+
+    2026-09-13（模組權限稽核，解鎖流程複查）：`change_id` 是**小整數流水號**，比
+    `quote_no` 更好猜，而回傳的是 `SELECT *`——payload 裡是那張案件的完整變更內容
+    （案件資訊快照、款項金額等）。先前只要求登入，等於把「已結案案件的變更內容」
+    開給任何人一個一個試。改成比照案件本身的規則：走 `_guard_case()`，另外放行
+    **提出這筆申請的人**（他本來就看得到自己送出的東西）。核准/駁回維持僅
+    superadmin，不受影響。
+    """
+    user = _require_user(authorization)
     conn = get_db()
     row = conn.execute("SELECT * FROM case_change_requests WHERE id=?", (change_id,)).fetchone()
-    conn.close()
     if not row:
+        conn.close()
         raise HTTPException(404, "找不到此筆變更申請")
+    if (row["requested_by"] or "") != user["username"]:
+        _guard_case(conn, row["quote_no"], user, allow_module="case_manage")
+    conn.close()
     return dict(row)
 
 
@@ -2107,8 +2258,9 @@ def list_case_stages_normalized(quote_no: str, authorization: str = Header(None)
     case_stage_visits。第二階段（CRUD 端點）新增後，這個端點仍然是唯讀查詢，尚未接
     進任何現有頁面/流程；`caseRecord.stages` JSON 欄位仍是唯一的讀寫來源，前端還沒
     有任何頁面呼叫這一系列新端點。"""
-    _require_user(authorization)
+    user = _require_user(authorization)
     conn = get_db()
+    _guard_case(conn, quote_no, user, allow_module="case_manage")
     stage_rows = conn.execute(
         "SELECT * FROM case_stages WHERE quote_no=? ORDER BY sort_order, id",
         (quote_no,),
@@ -2123,8 +2275,9 @@ def create_case_stage(quote_no: str, body: dict = Body(...), authorization: str 
     """新增階段，對應 case-management.js::addStage()。第二階段 CRUD 端點，2026-08-23
     Phase 3b/4 起已由 case-management.js／quotation-form.html 實際呼叫（見 2026-09-07
     docstring 更正紀錄，本行原誤留 Phase 2 剛新增時「尚未接進」的舊字樣）。"""
-    _require_user(authorization)
+    user = _require_user(authorization)
     conn = get_db()
+    _guard_case(conn, quote_no, user, allow_module="case_manage")
     _deny_if_case_locked_unsupported(conn, quote_no, authorization, op="案件階段-新增")
     max_order = conn.execute(
         "SELECT COALESCE(MAX(sort_order), -1) m FROM case_stages WHERE quote_no=?", (quote_no,)
@@ -2153,6 +2306,7 @@ def update_case_stage(quote_no: str, stage_id: int, body: dict = Body(...), auth
     CRUD 端點，已由前端實際呼叫（見 create_case_stage() docstring）。"""
     user = _require_user(authorization)
     conn = get_db()
+    _guard_case(conn, quote_no, user, allow_module="case_manage")
     _deny_if_case_locked_unsupported(conn, quote_no, authorization, op="案件階段-編輯")
     sr = _get_stage_row(conn, quote_no, stage_id)
     if not sr:
@@ -2192,8 +2346,9 @@ def delete_case_stage(quote_no: str, stage_id: int, authorization: str = Header(
     """刪除階段，同時清掉同案件其他階段 dependsOn 裡對它的參照，對應
     case-management.js::removeStage()。第二階段 CRUD 端點，已由前端實際呼叫
     （見 create_case_stage() docstring）。"""
-    _require_user(authorization)
+    user = _require_user(authorization)
     conn = get_db()
+    _guard_case(conn, quote_no, user, allow_module="case_manage")
     _deny_if_case_locked_unsupported(conn, quote_no, authorization, op="案件階段-刪除")
     sr = _get_stage_row(conn, quote_no, stage_id)
     if not sr:
@@ -2226,9 +2381,10 @@ def delete_case_stage(quote_no: str, stage_id: int, authorization: str = Header(
 def reorder_case_stages(quote_no: str, body: dict = Body(...), authorization: str = Header(None)):
     """依 orderedIds 陣列順序重寫 sort_order，對應拖曳重排（dragOver/dragEnd）的最終
     結果。第二階段 CRUD 端點，已由前端實際呼叫（見 create_case_stage() docstring）。"""
-    _require_user(authorization)
+    user = _require_user(authorization)
     ordered_ids = body.get("orderedIds") or []
     conn = get_db()
+    _guard_case(conn, quote_no, user, allow_module="case_manage")
     _deny_if_case_locked_unsupported(conn, quote_no, authorization, op="案件階段-排序")
     valid_ids = {r["id"] for r in conn.execute(
         "SELECT id FROM case_stages WHERE quote_no=?", (quote_no,)
@@ -2248,11 +2404,12 @@ def reorder_case_stages(quote_no: str, body: dict = Body(...), authorization: st
 def add_stage_assignee(quote_no: str, stage_id: int, body: dict = Body(...), authorization: str = Header(None)):
     """加入負責人，對應 case-management.js::addStageAssignee()。第二階段 CRUD 端點，
     已由前端實際呼叫（見 create_case_stage() docstring）。"""
-    _require_user(authorization)
+    user = _require_user(authorization)
     username = body.get("username")
     if not username:
         raise HTTPException(400, "請提供 username")
     conn = get_db()
+    _guard_case(conn, quote_no, user, allow_module="case_manage")
     _deny_if_case_locked_unsupported(conn, quote_no, authorization, op="案件階段-加入負責人")
     sr = _get_stage_row(conn, quote_no, stage_id)
     if not sr:
@@ -2274,8 +2431,9 @@ def add_stage_assignee(quote_no: str, stage_id: int, body: dict = Body(...), aut
 def remove_stage_assignee(quote_no: str, stage_id: int, username: str, authorization: str = Header(None)):
     """移除負責人，對應 case-management.js::removeStageAssignee()。第二階段 CRUD 端
     點，已由前端實際呼叫（見 create_case_stage() docstring）。"""
-    _require_user(authorization)
+    user = _require_user(authorization)
     conn = get_db()
+    _guard_case(conn, quote_no, user, allow_module="case_manage")
     _deny_if_case_locked_unsupported(conn, quote_no, authorization, op="案件階段-移除負責人")
     sr = _get_stage_row(conn, quote_no, stage_id)
     if not sr:
@@ -2296,8 +2454,9 @@ def toggle_stage_dependency(quote_no: str, stage_id: int, candidate_id: int, aut
     """切換依賴關係：已存在就移除，不存在就先做防環檢查（DFS，邏輯照搬
     wouldCreateCycle()）再加入。對應 case-management.js::toggleStageDependency()。
     第二階段 CRUD 端點，已由前端實際呼叫（見 create_case_stage() docstring）。"""
-    _require_user(authorization)
+    user = _require_user(authorization)
     conn = get_db()
+    _guard_case(conn, quote_no, user, allow_module="case_manage")
     _deny_if_case_locked_unsupported(conn, quote_no, authorization, op="案件階段-前置階段")
     sr = _get_stage_row(conn, quote_no, stage_id)
     if not sr:
@@ -2326,8 +2485,9 @@ def toggle_stage_dependency(quote_no: str, stage_id: int, candidate_id: int, aut
 def add_stage_visit(quote_no: str, stage_id: int, body: dict = Body(...), authorization: str = Header(None)):
     """新增拜訪紀錄，對應 case-management.js::addVisit()。第二階段 CRUD 端點，
     已由前端實際呼叫（見 create_case_stage() docstring）。"""
-    _require_user(authorization)
+    user = _require_user(authorization)
     conn = get_db()
+    _guard_case(conn, quote_no, user, allow_module="case_manage")
     _deny_if_case_locked_unsupported(conn, quote_no, authorization, op="拜訪紀錄-新增")
     sr = _get_stage_row(conn, quote_no, stage_id)
     if not sr:
@@ -2350,8 +2510,9 @@ def add_stage_visit(quote_no: str, stage_id: int, body: dict = Body(...), author
 def update_stage_visit(quote_no: str, stage_id: int, visit_id: int, body: dict = Body(...), authorization: str = Header(None)):
     """局部更新拜訪紀錄欄位，對應 v.visitDate/v.visitPeople/v.note 的 x-model 綁定。
     第二階段 CRUD 端點，已由前端實際呼叫（見 create_case_stage() docstring）。"""
-    _require_user(authorization)
+    user = _require_user(authorization)
     conn = get_db()
+    _guard_case(conn, quote_no, user, allow_module="case_manage")
     _deny_if_case_locked_unsupported(conn, quote_no, authorization, op="拜訪紀錄-編輯")
     sr = _get_stage_row(conn, quote_no, stage_id)
     if not sr:
@@ -2379,8 +2540,9 @@ def update_stage_visit(quote_no: str, stage_id: int, visit_id: int, body: dict =
 def delete_stage_visit(quote_no: str, stage_id: int, visit_id: int, authorization: str = Header(None)):
     """刪除拜訪紀錄，對應 case-management.js::removeVisit()。第二階段 CRUD 端點，
     已由前端實際呼叫（見 create_case_stage() docstring）。"""
-    _require_user(authorization)
+    user = _require_user(authorization)
     conn = get_db()
+    _guard_case(conn, quote_no, user, allow_module="case_manage")
     _deny_if_case_locked_unsupported(conn, quote_no, authorization, op="拜訪紀錄-刪除")
     sr = _get_stage_row(conn, quote_no, stage_id)
     if not sr:
@@ -2400,6 +2562,7 @@ def delete_stage_visit(quote_no: str, stage_id: int, visit_id: int, authorizatio
 def record_export(quote_no: str, mode: str = "external", authorization: str = Header(None)):
     user = _require_user(authorization)
     conn = get_db()
+    _guard_case(conn, quote_no, user, allow_module="case_manage")
     row  = conn.execute("SELECT export_count, export_log FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
     if not row:
         conn.close()
@@ -2530,6 +2693,7 @@ async def upload_payment_item_invoice_files(no: str, idx: int, files: List[Uploa
     子資料夾），避免混淆。"""
     user = _require_user(authorization)
     conn = get_db()
+    _guard_case(conn, no, user, allow_module="case_manage", skip_if_semi_unlocked=True)
     try:
         data, pits = _load_payment_item(conn, no, idx)
         label = pits[idx].get('label', f'第{idx+1}期')
@@ -2562,6 +2726,7 @@ async def upload_payment_item_invoice_files(no: str, idx: int, files: List[Uploa
 def delete_payment_item_invoice_file(no: str, idx: int, file_id: str, authorization: str = Header(None)):
     user = _require_user(authorization)
     conn = get_db()
+    _guard_case(conn, no, user, allow_module="case_manage", skip_if_semi_unlocked=True)
     try:
         data, pits = _load_payment_item(conn, no, idx)
         if _check_case_gate(conn, no):
@@ -2604,6 +2769,7 @@ async def upload_material_files(no: str, idx: int, files: List[UploadFile] = Fil
     傳）——例如到貨憑證、包裝清單，供部分出貨是跟料件一起出的情境留存證明。"""
     user = _require_user(authorization)
     conn = get_db()
+    _guard_case(conn, no, user, allow_module="case_manage", skip_if_semi_unlocked=True)
     try:
         data, mats = _load_material_item(conn, no, idx)
         name = mats[idx].get("name") or f"第{idx+1}項"
@@ -2636,6 +2802,7 @@ async def upload_material_files(no: str, idx: int, files: List[UploadFile] = Fil
 def delete_material_file(no: str, idx: int, file_id: str, authorization: str = Header(None)):
     user = _require_user(authorization)
     conn = get_db()
+    _guard_case(conn, no, user, allow_module="case_manage", skip_if_semi_unlocked=True)
     try:
         data, mats = _load_material_item(conn, no, idx)
         if _check_case_gate(conn, no):
@@ -2665,6 +2832,7 @@ async def upload_material_invoice_files(no: str, idx: int, files: List[UploadFil
     只是那邊掛在款項而這裡掛在叫料料件）。任何登入使用者皆可傳，多檔。"""
     user = _require_user(authorization)
     conn = get_db()
+    _guard_case(conn, no, user, allow_module="case_manage", skip_if_semi_unlocked=True)
     try:
         data, mats = _load_material_item(conn, no, idx)
         name = mats[idx].get("name") or f"第{idx+1}項"
@@ -2697,6 +2865,7 @@ async def upload_material_invoice_files(no: str, idx: int, files: List[UploadFil
 def delete_material_invoice_file(no: str, idx: int, file_id: str, authorization: str = Header(None)):
     user = _require_user(authorization)
     conn = get_db()
+    _guard_case(conn, no, user, allow_module="case_manage", skip_if_semi_unlocked=True)
     try:
         data, mats = _load_material_item(conn, no, idx)
         if _check_case_gate(conn, no):
@@ -2825,14 +2994,22 @@ class SettlementIn(BaseModel):
 
 @router.get("/api/quotations/{quote_no}/settlement")
 def get_settlement(quote_no: str, authorization: str = Header(None)):
-    _require_user(authorization)
+    # 2026-09-13（模組權限稽核）：原本只要求登入。`quote_no` 可列舉
+    # （MQ-YYYYMM-NNN），等於任何已登入帳號都能讀到**任何**案件的成本、毛利
+    # 與精算明細——跟 2026-08-24 修掉的報價單 IDOR 是同一種洞，只是漏在這支。
+    # 改用跟同一批資料既有端點一致的擁有者規則（admin+ 直通、否則必須是
+    # 該案業務或被指派的協作者），見 helpers/quotations.py::_check_quotation_owner。
+    user = _require_user(authorization)
     conn = get_db()
     row = conn.execute(
-        "SELECT data_json FROM quotations WHERE quote_no=?", (quote_no,)
+        "SELECT data_json, sales_person_id, sales_person, assigned_user_ids "
+        "FROM quotations WHERE quote_no=?", (quote_no,)
     ).fetchone()
     conn.close()
     if not row:
         raise HTTPException(404, f"報價單 {quote_no} 不存在")
+    _check_quotation_owner(row, user)
+    _require_financial_view(user)
     data = json.loads(row["data_json"] or "{}")
     return {"settlement": data.get("settlement", None), "items": data.get("items", []),
             "tot": data.get("tot", {}), "customerName": data.get("customerName", ""),
@@ -2845,11 +3022,22 @@ def update_settlement(quote_no: str, body: SettlementIn, authorization: str = He
     now  = datetime.now().isoformat()
     conn = get_db()
     row = conn.execute(
-        "SELECT data_json, customer_name FROM quotations WHERE quote_no=?", (quote_no,)
+        "SELECT data_json, customer_name, sales_person_id, sales_person, assigned_user_ids "
+        "FROM quotations WHERE quote_no=?", (quote_no,)
     ).fetchone()
     if not row:
         conn.close()
         raise HTTPException(404, f"報價單 {quote_no} 不存在")
+    # 2026-09-13（模組權限稽核）：這支原本只要求登入——任何已登入帳號（含 viewer
+    # 與 automation 服務帳號）都能覆寫**任何**案件的成本精算，只有 finalized 之後
+    # 才收斂成「僅 superadmin」。這是全系統唯一一個「寫入」層級的缺口，補上與
+    # GET 相同的擁有者檢查。
+    try:
+        _check_quotation_owner(row, user)
+        _require_financial_view(user)
+    except HTTPException:
+        conn.close()
+        raise
     data = json.loads(row["data_json"] or "{}")
     existing_settlement = data.get("settlement") or {}
     if existing_settlement.get("status") == "finalized" and user["role"] != "superadmin":
@@ -2907,18 +3095,28 @@ def get_finance_summary(quote_no: str, authorization: str = Header(None)):
       應付**。這個清單沒有已付/未付狀態欄位，硬把它當應付等於憑空發明一個
       系統從來沒追蹤過的狀態。
     - 權限比照同一批資料的既有端點（`get_settlement()`／
-      `list_contractor_vouchers()`／`list_invoice_vouchers()`）只要求登入即可，
-      財務可見性由前端 `canSeeFinancial()` 把關。這裡不另外加 `financial_view`
-      檢查——同一份資料透過上述既有端點本來就拿得到，只擋這一支會是假的安全感。
+      `list_contractor_vouchers()`／`list_invoice_vouchers()`）。這裡不另外加
+      `financial_view` 檢查——同一份資料透過上述既有端點本來就拿得到，只擋這一支
+      會是假的安全感；`financial_view` 是**顯示偏好**（前端 `canSeeFinancial()`），
+      不是權限邊界。
+      2026-09-13（模組權限稽核）：`get_settlement()` 那支補上了擁有者檢查，這支
+      跟著補——「比照既有端點」指的是同一套擁有者規則，不是「都不擋」。
     """
-    _require_user(authorization)
+    user = _require_user(authorization)
     conn = get_db()
     row = conn.execute(
-        "SELECT total, pretax, data_json FROM quotations WHERE quote_no=?", (quote_no,)
+        "SELECT total, pretax, data_json, sales_person_id, sales_person, assigned_user_ids "
+        "FROM quotations WHERE quote_no=?", (quote_no,)
     ).fetchone()
     if not row:
         conn.close()
         raise HTTPException(404, f"報價單 {quote_no} 不存在")
+    try:
+        _check_quotation_owner(row, user)
+        _require_financial_view(user)
+    except HTTPException:
+        conn.close()
+        raise
 
     data  = json.loads(row["data_json"] or "{}")
     total = float(row["total"] or 0)
@@ -3770,13 +3968,15 @@ def list_case_updates(quote_no: str, authorization: str = Header(None)):
     different formats (some 'T'-separated with microseconds, dev_logs space-separated
     without), and ASCII ' ' < 'T' meant dev_log entries always sorted as "older" than any
     same-day entry from the other sources regardless of actual time. See norm_at() docstring."""
-    _require_user(authorization)
+    # 2026-09-13：這支原本呼叫了兩次 _require_user()（開頭一次不取回傳值、
+    # 下面再一次取 user），合併成一次。
+    user = _require_user(authorization)
     conn = get_db()
+    _guard_case(conn, quote_no, user, allow_module="case_manage")
     row = conn.execute("SELECT quote_no FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
     if not row:
         conn.close()
         raise HTTPException(404, "報價單不存在")
-    user = _require_user(authorization)
 
     dn_map = {r["username"]: (r["display_name"] or r["username"])
               for r in conn.execute("SELECT username, display_name FROM users").fetchall()}
@@ -3899,6 +4099,7 @@ def post_case_update(quote_no: str, body: dict = Body(...), authorization: str =
     if not content:
         raise HTTPException(400, "內容不得為空")
     conn = get_db()
+    _guard_case(conn, quote_no, user, allow_module="case_manage")
     qrow = conn.execute(
         "SELECT customer_name, project_name FROM quotations WHERE quote_no=?", (quote_no,)
     ).fetchone()
@@ -3967,8 +4168,9 @@ def delete_case_update(quote_no: str, uid: int, authorization: str = Header(None
 @router.get("/api/quotations/{quote_no}/pdf-download")
 def download_quotation_pdf(quote_no: str, internal: bool = False, authorization: str = Header(None)):
     """後端 Edge Headless 產生 PDF 並直接下載（internal=true 含成本），避免 macOS/瀏覽器列印頁首干擾。"""
-    _require_user(authorization)
+    user = _require_user(authorization)
     conn = get_db()
+    _guard_case(conn, quote_no, user, allow_approver=True)
     row  = conn.execute("SELECT quote_no FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
     conn.close()
     if not row:
@@ -3995,8 +4197,9 @@ def download_quotation_pdf(quote_no: str, internal: bool = False, authorization:
 def download_case_closing_report_pdf(quote_no: str, authorization: str = Header(None)):
     """案件結案報表 PDF（含財務數據／支出／收入／收款／執行進度／損益分析），
     僅限已結案案件；含成本與毛利等內部機密資訊，不對外提供。"""
-    _require_user(authorization)
+    user = _require_user(authorization)
     conn = get_db()
+    _guard_case(conn, quote_no, user, allow_approver=True, allow_module="case_manage")
     row = conn.execute(
         "SELECT COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') AS deal_tag "
         "FROM quotations WHERE quote_no=?", (quote_no,)
@@ -4028,8 +4231,9 @@ def download_project_execution_report_pdf(quote_no: str, authorization: str = He
     """專案執行報告 PDF（執行進度／叫料管控／代辦事項／工作日誌／動態彙整，
     2026-08-26 專案管理併入案件管理），任何案件狀態下皆可下載，不像結案報表
     限已結案案件。"""
-    _require_user(authorization)
+    user = _require_user(authorization)
     conn = get_db()
+    _guard_case(conn, quote_no, user, allow_approver=True, allow_module="case_manage")
     row = conn.execute("SELECT 1 FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
     conn.close()
     if not row:

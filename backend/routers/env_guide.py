@@ -9,7 +9,7 @@ from typing import Optional
 from fastapi import APIRouter, Body, HTTPException, Header
 
 from db import get_db
-from helpers import _require_user, _tok, _audit, notify_module_activity
+from helpers import _require_user, _tok, _audit, notify_module_activity, require_any_module
 
 router = APIRouter()
 
@@ -18,7 +18,8 @@ _EDIT_MODULE = "env_guide_edit"
 
 @router.get("/api/env-guide/environments")
 def list_environments(authorization: str = Header(None)):
-    _require_user(authorization)
+    user = _require_user(authorization)
+    require_any_module(user, ('env_guide', 'env_guide_edit'), "場域選型導覽")
     conn = get_db()
     rows = conn.execute(
         "SELECT * FROM env_guide_environments ORDER BY sort_order, code"
@@ -102,7 +103,8 @@ def delete_environment(code: str, authorization: str = Header(None)):
 
 @router.get("/api/env-guide/recommendations")
 def list_recommendations(authorization: str = Header(None)):
-    _require_user(authorization)
+    user = _require_user(authorization)
+    require_any_module(user, ('env_guide', 'env_guide_edit'), "場域選型導覽")
     conn = get_db()
     rows = conn.execute(
         "SELECT * FROM env_guide_recommendations ORDER BY sort_order, id"
@@ -187,7 +189,8 @@ def delete_recommendation(rec_id: int, authorization: str = Header(None)):
 
 @router.get("/api/env-guide/links")
 def list_links(authorization: str = Header(None)):
-    _require_user(authorization)
+    user = _require_user(authorization)
+    require_any_module(user, ('env_guide', 'env_guide_edit'), "場域選型導覽")
     conn = get_db()
     rows = conn.execute("SELECT * FROM env_guide_links ORDER BY sort_order, id").fetchall()
     conn.close()

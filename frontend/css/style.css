@@ -103,6 +103,13 @@
   background: #0A0A0A;
 }
 
+/* ⚠️ 這個排除清單是 `body > *` 的**直接子元素**選擇器——.topbar/.sidebar/.sidebar-overlay
+   一旦被包進任何容器（例如過去 15 頁的 <div class="app-shell">），排除就失效：容器被反轉，
+   側欄整片變成白底深字，而且因為容器有 filter，側欄的 position:fixed 會改以容器為定位基準。
+   2026-09-13 已把那 15 頁的 <aside class="sidebar"> 移回 body 直下，並以
+   `backend/tests/test_dark_mode_chrome_structure_2026_09_13.py` 把這個結構前提變成會紅的測試
+   （刻意不用「再反轉一次抵銷」的寫法：hue-rotate 不是嚴格可逆的矩陣，來回兩次顏色會偏，
+   而且那樣只蓋掉顏色問題、fixed 定位仍然是壞的）。 */
 :root[data-theme="dark"] body > *:not(.topbar):not(.sidebar):not(.sidebar-overlay) {
   filter: invert(1) hue-rotate(180deg);
 }

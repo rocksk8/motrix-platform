@@ -14,7 +14,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Header, Body
 
 from db import get_db, next_entity_code
-from helpers import _require_user, _tok, _audit, notify_module_activity
+from helpers import _require_user, _tok, _audit, notify_module_activity, require_any_module
 
 router = APIRouter()
 
@@ -28,7 +28,8 @@ def _require_admin(user: dict):
 
 @router.get("/api/inventory/parts-summary")
 def parts_summary(q: Optional[str] = None, category: Optional[str] = None, authorization: str = Header(None)):
-    _require_user(authorization)
+    user = _require_user(authorization)
+    require_any_module(user, ('inventory', 'procurement', 'case_manage', 'netplan_edit'), "庫存管理")
     conn = get_db()
     parts_rows = conn.execute("SELECT part_no, name, brand, unit, category, safety_stock FROM parts WHERE active=1").fetchall()
     counts = conn.execute(
@@ -127,7 +128,8 @@ def purchase_suggestions(authorization: str = Header(None)):
     排序），查無進貨紀錄則供應商留空、單價退回 `parts.cost`（料件標準成本）。
     只回傳目前在紅燈或黃燈區間、且已設定安全庫存（>0）的料號。
     """
-    _require_user(authorization)
+    user = _require_user(authorization)
+    require_any_module(user, ('inventory', 'procurement', 'case_manage', 'netplan_edit'), "庫存管理")
     conn = get_db()
     parts_rows = conn.execute(
         "SELECT part_no, name, brand, unit, category, cost, safety_stock "
@@ -188,7 +190,8 @@ def list_stock_items(
     q:             Optional[str] = None,
     authorization: str           = Header(None),
 ):
-    _require_user(authorization)
+    user = _require_user(authorization)
+    require_any_module(user, ('inventory', 'procurement', 'case_manage', 'netplan_edit'), "庫存管理")
     conn = get_db()
     sql = "SELECT * FROM stock_items WHERE 1=1"
     params = []
@@ -220,7 +223,8 @@ def list_stock_items(
 def get_last_paid_bank_account(supplier_id: Optional[int] = None, authorization: str = Header(None)):
     """查這個供應商上一次「標記已付款」用的銀行帳戶，供標記 Modal 開啟時預帶值。
     見 accounting_export.py 檔頭「標記已付款/已收款時的銀行帳戶預設值」說明。"""
-    _require_user(authorization)
+    user = _require_user(authorization)
+    require_any_module(user, ('inventory', 'procurement', 'case_manage', 'netplan_edit'), "庫存管理")
     if not supplier_id:
         return {"name": "", "acctCode": ""}
     conn = get_db()
@@ -239,6 +243,7 @@ def get_last_paid_bank_account(supplier_id: Optional[int] = None, authorization:
 @router.post("/api/inventory/batches", status_code=201)
 def create_batch(body: dict = Body(...), authorization: str = Header(None)):
     user = _require_user(authorization)
+    require_any_module(user, ('inventory', 'procurement', 'case_manage', 'netplan_edit'), "庫存管理")
     _require_admin(user)
 
     part_no = (body.get("part_no") or body.get("partNo") or "").strip()
@@ -311,7 +316,8 @@ def create_batch(body: dict = Body(...), authorization: str = Header(None)):
 
 @router.get("/api/inventory/batches")
 def list_batches(authorization: str = Header(None)):
-    _require_user(authorization)
+    user = _require_user(authorization)
+    require_any_module(user, ('inventory', 'procurement', 'case_manage', 'netplan_edit'), "庫存管理")
     conn = get_db()
     # qty/total_cost 刻意即時從 stock_items 群組加總，不信任 stock_batches 裡
     # 快取的值（表本身也沒存這兩欄）——避免跟人工調整（adjust_stock_item）脫鉤，
@@ -335,7 +341,8 @@ def list_batches(authorization: str = Header(None)):
 
 @router.get("/api/inventory/batches/{batch_no}")
 def get_batch(batch_no: str, authorization: str = Header(None)):
-    _require_user(authorization)
+    user = _require_user(authorization)
+    require_any_module(user, ('inventory', 'procurement', 'case_manage', 'netplan_edit'), "庫存管理")
     conn = get_db()
     rows = conn.execute("SELECT * FROM stock_items WHERE batch_no=? ORDER BY id", (batch_no,)).fetchall()
     header = conn.execute("SELECT * FROM stock_batches WHERE batch_no=?", (batch_no,)).fetchone()
@@ -352,6 +359,7 @@ def update_batch_header(batch_no: str, body: dict = Body(...), authorization: st
     已標記已付款的批次仍可編輯這些欄位（供應商/發票號屬於補登資料，不是
     財務金額，不比照憑證流「已核准鎖定」的邏輯）。"""
     user = _require_user(authorization)
+    require_any_module(user, ('inventory', 'procurement', 'case_manage', 'netplan_edit'), "庫存管理")
     _require_admin(user)
     conn = get_db()
     header = conn.execute("SELECT * FROM stock_batches WHERE batch_no=?", (batch_no,)).fetchone()
@@ -389,6 +397,7 @@ def toggle_batch_paid(batch_no: str, body: dict = Body(...), authorization: str 
     paid-toggle 慣例），供 T100 傳票匯出（accounting_export.py）作為現金
     基礎的付款事件來源。"""
     user = _require_user(authorization)
+    require_any_module(user, ('inventory', 'procurement', 'case_manage', 'netplan_edit'), "庫存管理")
     _require_admin(user)
     action = body.get("action")
     if action not in ("pay", "unpay"):
@@ -433,6 +442,7 @@ def toggle_batch_paid(batch_no: str, body: dict = Body(...), authorization: str 
 @router.post("/api/inventory/stock-items/{item_id}/adjust")
 def adjust_stock_item(item_id: int, body: dict = Body(...), authorization: str = Header(None)):
     user = _require_user(authorization)
+    require_any_module(user, ('inventory', 'procurement', 'case_manage', 'netplan_edit'), "庫存管理")
     _require_admin(user)
     action = (body.get("action") or "").strip()
     if action not in ("void", "return_to_stock", "edit_note"):
@@ -486,6 +496,7 @@ def adjust_stock_item(item_id: int, body: dict = Body(...), authorization: str =
 @router.delete("/api/inventory/stock-items/{item_id}")
 def delete_stock_item(item_id: int, authorization: str = Header(None)):
     user = _require_user(authorization)
+    require_any_module(user, ('inventory', 'procurement', 'case_manage', 'netplan_edit'), "庫存管理")
     _require_admin(user)
     conn = get_db()
     row = conn.execute("SELECT * FROM stock_items WHERE id=?", (item_id,)).fetchone()

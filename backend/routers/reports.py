@@ -41,6 +41,27 @@ _export_times: dict = {}
 _export_lock = threading.Lock()
 
 
+def _require_reports_access(u: dict) -> None:
+    """營運報表的存取權（2026-09-13 模組權限稽核）。
+
+    在此之前這 11 支端點一律只認 `role in ("superadmin","admin")`，**完全沒有讀
+    `reports` 模組**——但 `users.html` 的權限目錄一直提供「營運報表」這個可勾選
+    模組，側欄也用 `cRpt || cCash || cFi` 決定要不要顯示營運報表入口。結果是：
+    把「營運報表」勾給一個業務，他會看到選單、點進去、然後**每一支 API 都 403**，
+    畫面上只有一片載入失敗，沒有任何地方說得出原因。
+
+    這裡讓後端認 `reports` 與 `finance` 兩個模組，跟側欄的顯示條件對齊；作法比照
+    同一個財務區的既有先例 `routers/cashier.py::_require_view_access()`
+    （admin+ 或 cashier 或 finance）。`cashier` 不放進來：出納的資料在 cashier.py
+    自己那幾支端點，這裡是整份營運報表（含稅務匯出、現金部位、客戶歷史）。
+    `bank-reconcile` 維持 admin+ 或 cashier 不變——那是對帳「動作」不是報表查閱。
+    """
+    if (u["role"] not in ("superadmin", "admin")
+            and not user_has_module(u, "reports")
+            and not user_has_module(u, "finance")):
+        raise HTTPException(403, "僅管理員、或具『營運報表』／『應收帳款』模組的使用者可存取報表")
+
+
 def _check_export_rate(user_id: int, fmt: str) -> None:
     """Raise 429 if this user exported this format within the cooldown window."""
     cooldown = _PDF_COOLDOWN if fmt == "pdf" else _EXCEL_COOLDOWN
@@ -2226,8 +2247,7 @@ def report_json(
     authorization: str = Header(None),
 ):
     u = _require_user(authorization)
-    if u["role"] not in ("superadmin", "admin"):
-        raise HTTPException(403, "僅管理員以上可存取報表")
+    _require_reports_access(u)
     label, d0, d1 = _parse_period(period)
     data = _augment_with_targets(_collect(d0, d1, department_id), d0)
     return {"period": period, "periodLabel": label, "dateStart": d0, "dateEnd": d1, **data}
@@ -2242,8 +2262,7 @@ def report_excel(
     authorization: str = Header(None),
 ):
     u = _require_user(authorization)
-    if u["role"] not in ("superadmin", "admin"):
-        raise HTTPException(403, "僅管理員以上可存取報表")
+    _require_reports_access(u)
     _check_export_rate(u["id"], "excel")
     label, d0, d1 = _parse_period(period)
     data   = _augment_with_targets(_collect(d0, d1, department_id), d0)
@@ -2276,8 +2295,7 @@ def report_pdf(
     authorization: str = Header(None),
 ):
     u = _require_user(authorization)
-    if u["role"] not in ("superadmin", "admin"):
-        raise HTTPException(403, "僅管理員以上可存取報表")
+    _require_reports_access(u)
     _check_export_rate(u["id"], "pdf")
     label, d0, d1 = _parse_period(period)
     data   = _augment_with_targets(_collect(d0, d1, department_id), d0)
@@ -2392,8 +2410,7 @@ def get_ar_aging(authorization: str = Header(None)):
     注意：無顯式到期日時以報價日計算帳齡，為管理用途的近似值。
     """
     u = _require_user(authorization)
-    if u["role"] not in ("superadmin", "admin"):
-        raise HTTPException(403, "財務報告僅管理員以上可查閱")
+    _require_reports_access(u)
     return _compute_ar_aging()
 
 
@@ -2455,8 +2472,7 @@ def get_cash_position(authorization: str = Header(None)):
     不是逐月現金流預測——系統目前沒有結構化的預計收款/付款日期欄位，見 _compute_cash_position() docstring。
     """
     u = _require_user(authorization)
-    if u["role"] not in ("superadmin", "admin"):
-        raise HTTPException(403, "財務報告僅管理員以上可查閱")
+    _require_reports_access(u)
     return _compute_cash_position()
 
 
@@ -2607,8 +2623,7 @@ def tax_export_excel(
 ):
     """銷項發票清單匯出（Excel），供記帳士/營業稅申報使用。不篩選 year 時匯出全部。"""
     u = _require_user(authorization)
-    if u["role"] not in ("superadmin", "admin"):
-        raise HTTPException(403, "財務報告僅管理員以上可查閱")
+    _require_reports_access(u)
     _check_export_rate(u["id"], "excel")
     rows = _collect_tax_invoices(year, month)
     label = "全部區間"
@@ -2765,8 +2780,7 @@ async def bank_reconcile(file: UploadFile = File(...), authorization: str = Head
 def customer_history(authorization: str = Header(None)):
     """全時期客戶交易歷史彙整：每位客戶的報價/成案/收款聚合視圖。"""
     u = _require_user(authorization)
-    if u["role"] not in ("superadmin", "admin"):
-        raise HTTPException(403, "財務報告僅管理員以上可查閱")
+    _require_reports_access(u)
 
     conn = get_db()
     rows = conn.execute("""
@@ -3006,8 +3020,7 @@ def schedule_monthly_report() -> None:
 def monthly_trend(months: int = 12, authorization: str = Header(None)):
     """近 N 月 MoM 趨勢：新成案件數、合約金額、實收金額、收入加權平均毛利率。"""
     u = _require_user(authorization)
-    if u["role"] not in ("superadmin", "admin"):
-        raise HTTPException(403, "財務報告僅管理員以上可查閱")
+    _require_reports_access(u)
 
     months = min(max(months, 1), 36)
     today  = date.today()
@@ -3296,8 +3309,7 @@ def report_payment_anomalies(department_id: Optional[int] = Query(None),
     """收款資料異常清單（獨立端點，供「應收帳款」頁與任何需要的地方查用）。
     `/api/reports/expenses-monthly`（收支報表的資料源）也會回同一份，不必多打一次。"""
     u = _require_user(authorization)
-    if u["role"] not in ("superadmin", "admin"):
-        raise HTTPException(403, "僅管理員以上可存取報表")
+    _require_reports_access(u)
     items = _collect_payment_anomalies(department_id)
     return {
         "items": items,
@@ -3589,8 +3601,7 @@ def report_expenses_monthly(year: int = Query(None), month: str = Query(None),
     明細，收入沒有），供畫面上「月支出」頁籤拆成《當月收支》《今年度收支》
     兩塊各自獨立顯示。"""
     u = _require_user(authorization)
-    if u["role"] not in ("superadmin", "admin"):
-        raise HTTPException(403, "僅管理員以上可存取報表")
+    _require_reports_access(u)
     today = date.today()
     year  = year or today.year
     month = month or today.strftime("%Y-%m")
@@ -3773,8 +3784,7 @@ def report_receivables_monthly(year: int = Query(None), month: str = Query(None)
   分頁新增的「當月/今年度」切換鈕使用，取代目前硬卡在頂部 period-bar 的期間邏輯。
   僅 admin+ 可存取。"""
   u = _require_user(authorization)
-  if u["role"] not in ("superadmin", "admin"):
-    raise HTTPException(403, "僅管理員以上可存取報表")
+  _require_reports_access(u)
   today = date.today()
   year  = year or today.year
   month = month or today.strftime("%Y-%m")

@@ -40,6 +40,7 @@ from pydantic import BaseModel
 from db import get_db
 from helpers import (
     _require_user, _tok, _audit, _notify, _check_quotation_owner,
+    can_see_financial, is_document_approver,
     notify_module_activity,
     active_tiers as _active_tiers, current_tier_idx as _current_tier_idx,
     setting_to_active_tiers as _setting_to_active_tiers,
@@ -187,6 +188,17 @@ def list_extra_expenses(quote_no: str, authorization: str = Header(None)):
         rows = conn.execute(
             "SELECT * FROM case_extra_expenses WHERE quote_no=? ORDER BY id", (quote_no,)
         ).fetchall()
+        # 2026-09-13（模組權限稽核）：額外支出是成本金額，套用與精算相同的
+        # 「財務金額可視」規則（使用者裁示：viewer／engineer 不該看到）。
+        # **兩個例外**，否則這個功能的兩種主角會被自己的權限鎖死：
+        #   ①自己填的那幾筆——現場花錢的人本來就該看得到自己報的帳
+        #   ②這張單的簽核人——看不到金額就沒辦法判斷該不該簽
+        # 合計同步只算看得到的那幾筆，避免「清單 3 筆、合計卻是 8 筆的金額」
+        # 這種更難解釋的畫面。
+        if not can_see_financial(user):
+            rows = [r for r in rows
+                    if (r["created_by"] or "") == user["username"]
+                    or is_document_approver(_col(r, "approval_json", ""), user, conn)]
         items = [_row_to_dict(r) for r in rows]
         total = sum(float(i["totalCost"] or 0) for i in items)
         pending = sum(float(i["totalCost"] or 0) for i in items if i["status"] != "已核准")

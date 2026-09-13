@@ -10,7 +10,8 @@ from fastapi import APIRouter, HTTPException, Header, Query
 
 from db import get_db
 from helpers import (_require_user, _warranty_expiry, payment_item_amounts, norm_at,
-                     case_extra_expenses)
+                     case_extra_expenses, user_has_module, can_see_financial,
+                     require_any_module)
 from routers.dev_crm import _can_access_case
 from routers.vendor_contractors import _dispatch_row
 
@@ -543,7 +544,8 @@ def list_devices(
     deal_tag:      Optional[str] = None,
     authorization: str           = Header(None),
 ):
-    _require_user(authorization)
+    user = _require_user(authorization)
+    require_any_module(user, ('equipment', 'case_manage'), "設備登載／保固")
     conn = get_db()
     sql = """
         SELECT quote_no, customer_name, project_name,
@@ -608,7 +610,20 @@ def list_devices(
 
 @router.get("/api/sales-orders")
 def list_sales_orders(authorization: str = Header(None)):
-    _require_user(authorization)
+    """已成案／已結案案件清單（含金額與毛利率）。
+
+    2026-09-13（模組權限稽核）：原本只要求登入。這支回的是全公司成案金額與
+    **毛利率**，而它的頁面 `sales-orders.html` 在 2026-08-31（`87e16cb`）就已退役
+    ——端點卻留著沒有任何模組檢查，等於任何登入者（含 viewer、automation 服務
+    帳號）都撈得到。依使用者裁示補上兩道：①`finance` 模組或 admin+（比照
+    `cashier.py::_require_view_access()`，`finance` 這個模組的標籤本來就是
+    「應收帳款／銷售訂單」）②財務金額可視（viewer／engineer 不該看到金額）。
+    """
+    user = _require_user(authorization)
+    if user["role"] not in ("superadmin", "admin") and not user_has_module(user, "finance"):
+        raise HTTPException(403, "僅管理員或具『應收帳款／銷售訂單』模組的使用者可查閱")
+    if not can_see_financial(user):
+        raise HTTPException(403, "此帳號沒有檢視財務金額的權限（需要「財務金額可視」模組）")
     conn = get_db()
     rows = conn.execute("""
         SELECT quote_no, customer_name, project_name, total, pretax, quote_date, sales_person,
@@ -856,7 +871,8 @@ def list_materials_summary(
     customer:      Optional[str] = None,
     authorization: str           = Header(None),
 ):
-    _require_user(authorization)
+    user = _require_user(authorization)
+    require_any_module(user, ('procurement', 'case_manage'), "供應商／料號／採購")
     conn = get_db()
     rows = conn.execute("""
         SELECT quote_no, customer_name,

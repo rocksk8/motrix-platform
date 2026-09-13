@@ -29,7 +29,7 @@ from fastapi import APIRouter, Body, HTTPException, Header, UploadFile, File
 from fastapi.responses import Response
 
 from db import get_db, next_entity_code
-from helpers import _require_user, _tok, _audit, notify_module_activity
+from helpers import _require_user, _tok, _audit, notify_module_activity, guard_case_access
 from network_plan_export import build_plan_excel, build_plan_pdf_bytes, parse_plan_excel
 from network_plan_topology import build_topology_svg
 
@@ -94,8 +94,10 @@ def get_network_plan(plan_id: int, authorization: str = Header(None)):
 def get_network_plan_by_case(quote_no: str, authorization: str = Header(None)):
     """供案件詳情頁查詢是否已有綁定的規劃書；查無資料回 404（前端據此顯示
     「建立規劃書」而非「開啟規劃書」按鈕）。"""
-    _require_user(authorization)
+    # 2026-09-13（模組權限稽核）：`quote_no` 可列舉，先前只要求登入。
+    user = _require_user(authorization)
     conn = get_db()
+    guard_case_access(conn, quote_no, user, allow_module="case_manage")
     row = conn.execute("SELECT * FROM network_plans WHERE quote_no=?", (quote_no,)).fetchone()
     conn.close()
     if not row:

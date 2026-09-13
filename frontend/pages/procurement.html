@@ -46,9 +46,12 @@
   <header id="app-topbar" class="topbar"></header>
 <div class="sidebar-overlay" id="sidebar-overlay"></div>
 
-<div class="app-shell">
+<!-- 側欄必須是 <body> 的直接子元素：深色模式的反轉濾鏡排除清單只認直接子元素
+     （style.css「DARK MODE」區塊的 body > *:not(.sidebar)），包進 .app-shell
+     裡會連同整個側欄一起被反轉成白底，且 position:fixed 會改以該容器定位。 -->
+<aside class="sidebar" id="app-sidebar"></aside>
 
-  <aside class="sidebar" id="app-sidebar"></aside>
+<div class="app-shell">
 
   <main class="page-main">
 

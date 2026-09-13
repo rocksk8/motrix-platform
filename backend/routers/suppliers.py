@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Header
 from pydantic import BaseModel
 
 from db import get_db, next_entity_code, spawn_bg_thread
-from helpers import _require_user, _tok, _audit, notify_module_activity
+from helpers import _require_user, _tok, _audit, notify_module_activity, require_any_module
 from archive import _backup_suppliers
 
 router = APIRouter()
@@ -24,6 +24,7 @@ class SupplierIn(BaseModel):
 @router.get("/api/suppliers")
 def list_suppliers(authorization: str = Header(None)):
     user = _require_user(authorization)
+    require_any_module(user, ('customer', 'procurement', 'inventory'), "供應商管理")
     if user["role"] not in ("superadmin", "admin"):
         return []
     conn = get_db()
@@ -47,6 +48,7 @@ def list_suppliers(authorization: str = Header(None)):
 @router.post("/api/suppliers")
 def create_supplier(body: SupplierIn, authorization: str = Header(None)):
     user = _require_user(authorization)
+    require_any_module(user, ('customer', 'procurement', 'inventory'), "供應商管理")
     now = datetime.now().isoformat()
     conn = get_db()
     try:
@@ -73,7 +75,8 @@ def create_supplier(body: SupplierIn, authorization: str = Header(None)):
 
 @router.put("/api/suppliers/{sid}")
 def update_supplier(sid: int, body: SupplierIn, authorization: str = Header(None)):
-    _require_user(authorization)
+    user = _require_user(authorization)
+    require_any_module(user, ('customer', 'procurement', 'inventory'), "供應商管理")
     now = datetime.now().isoformat()
     conn = get_db()
     if not conn.execute("SELECT id FROM suppliers WHERE id=?", (sid,)).fetchone():
@@ -94,6 +97,7 @@ def update_supplier(sid: int, body: SupplierIn, authorization: str = Header(None
 @router.delete("/api/suppliers/{sid}")
 def delete_supplier(sid: int, authorization: str = Header(None)):
     user = _require_user(authorization)
+    require_any_module(user, ('customer', 'procurement', 'inventory'), "供應商管理")
     conn = get_db()
     row = conn.execute("SELECT name FROM suppliers WHERE id=?", (sid,)).fetchone()
     if not row:
@@ -113,6 +117,7 @@ def delete_supplier(sid: int, authorization: str = Header(None)):
 @router.patch("/api/suppliers/{sid}/visits")
 def update_supplier_visits(sid: int, body: dict, authorization: str = Header(None)):
     user = _require_user(authorization)
+    require_any_module(user, ('customer', 'procurement', 'inventory'), "供應商管理")
     conn = get_db()
     row = conn.execute(
         "SELECT name, data_json, updated_at FROM suppliers WHERE id=?", (sid,)

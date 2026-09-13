@@ -456,9 +456,12 @@
   <header id="app-topbar" class="topbar"></header>
 <div class="sidebar-overlay" id="sidebar-overlay"></div>
 
-<div class="app-shell">
+<!-- 側欄必須是 <body> 的直接子元素：深色模式的反轉濾鏡排除清單只認直接子元素
+     （style.css「DARK MODE」區塊的 body > *:not(.sidebar)），包進 .app-shell
+     裡會連同整個側欄一起被反轉成白底，且 position:fixed 會改以該容器定位。 -->
+<aside class="sidebar" id="app-sidebar"></aside>
 
-  <aside class="sidebar" id="app-sidebar"></aside>
+<div class="app-shell">
 
   <main class="main" style="padding:0;overflow:hidden">
     <div class="cm-layout">
@@ -682,8 +685,12 @@
                   <span class="save-label" :class="saveStatus" x-text="saveMsg"></span>
                 </div>
 
-                <!-- Complete case button (已成案 only) -->
-                <template x-if="cr.dealTag === '已成案'">
+                <!-- Complete case button (已成案 only)
+                     2026-09-13（使用者裁示）：**只有最高管理者看得到**。結案是全系統
+                     最不可逆的動作（案件從此鎖定，要再動只能走半解鎖＋逐筆審核，
+                     還會啟動保固追蹤期），而且原本就只有 superadmin 能把它降級回來
+                     ——按得下去的人比按得回來的人多，本來就不對稱。後端同步擋。 -->
+                <template x-if="cr.dealTag === '已成案' && session.role === 'superadmin'">
                   <button class="btn-close-case" @click="closeCaseAction()">完結案</button>
                 </template>
 

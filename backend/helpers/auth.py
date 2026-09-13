@@ -13,10 +13,20 @@ from db import get_db
 
 logger = logging.getLogger(__name__)
 
+# 首次安裝時建立的管理員帳號拿到的模組清單（helpers/startup.py）。
+#
+# 2026-09-13（模組權限稽核）：這份清單長期與 `users.html` 的 superadmin 樣板不同步
+# ——缺 `case_manage`／`reports`／`cashier`／`work_log`／`daily_task` 與七個選型導覽，
+# 卻多一個全系統沒有任何地方會讀的死 key `sales`。superadmin 在側欄與後端幾乎都走
+# 角色直通，所以看不出症狀，但「第一個管理員帳號的模組清單」本來就該是那份樣板的
+# 鏡像，不同步只是等著誤導下一個人。兩邊要一起改。
 _SUPERADMIN_MODULES = [
-    "dashboard", "quotation", "customer", "sales",
-    "procurement", "inventory", "equipment", "finance", "settings",
-    "project_approve_eng", "project_approve_biz", "financial_view",
+    "dashboard", "quotation", "case_manage", "customer",
+    "procurement", "inventory", "equipment", "finance", "reports", "cashier",
+    "settings", "project_approve_eng", "project_approve_biz", "financial_view",
+    "work_log", "daily_task",
+    "env_guide", "netarch_guide", "switch_guide", "monitor_guide",
+    "access_guide", "gateway_guide", "automation_guide",
 ]
 
 _LEGACY_WEAK_PASSWORDS = (
@@ -104,6 +114,47 @@ def user_has_module(user: dict, key: str) -> bool:
         return key in json.loads(user.get("modules") or "[]")
     except Exception:
         return False
+
+
+def require_any_module(user: dict, keys, label: str) -> None:
+    """模組層級的存取檢查：admin+ 直通，其餘必須至少持有 `keys` 其中一個。
+
+    2026-09-13（模組權限稽核第二輪，使用者裁示「逐一補後端檢查」）：在此之前
+    35 個可授權模組裡有 16 個**後端完全沒有讀**，等於只是側欄的顯示開關——
+    勾掉只是看不到入口，手打網址與直接打 API 完全不受影響。
+
+    `keys` 收多個值是因為同一批資料常被好幾個模組的頁面共用（實測結果，見
+    MODULE-AUDIT-2026-09-13.md §3.8 的消費者對照表）：例如 `/api/parts` 同時被
+    料號主檔（`procurement`）與案件管理的叫料（`case_manage`）呼叫，只認一個
+    模組會把另一邊打死。規則是「該 API 的所有消費頁面所屬模組的聯集」——比
+    現況（誰登入都能打）嚴格，又不會擋掉任何一條既有的使用路徑。
+    """
+    if user["role"] in ("superadmin", "admin"):
+        return
+    if any(user_has_module(user, k) for k in keys):
+        return
+    raise HTTPException(403, f"權限不足：需要「{label}」模組")
+
+
+def can_see_financial(user: dict) -> bool:
+    """能不能看到案件層級的財務金額（成本、毛利、應收應付總覽）。
+
+    2026-09-13（模組權限稽核第二輪）：`financial_view` 在此之前**只是前端的顯示
+    偏好**——`case-management.js::canSeeFinancial()` 拿它藏 KPI 金額、財務分頁與
+    額外支出分頁，但後端照樣把金額回給任何打得到那支 API 的人。使用者裁示
+    「viewer／engineer 不該看到」，所以把同一條規則搬到後端成為真的權限。
+
+    規則與前端逐字相同（`superadmin`／`admin`／`sales` 三種角色，或持有
+    `financial_view` 模組），兩邊不一致的話使用者會看到「畫面有欄位、值卻是錯誤」
+    這種更難查的狀態。
+
+    ⚠️ 目前施加在**案件財務總覽**那幾支（成本精算、應收應付總覽、銷售訂單清單）。
+    額外支出與三種憑證流（承攬商付款／開票／請款）仍是角色＋簽核流程把關——那些
+    端點上有非管理員的簽核人，直接套這條規則會把簽核人擋在門外，要動得先理清
+    「簽核人是否一定看得到金額」，見 MODULE-AUDIT-2026-09-13.md §4。
+    """
+    return (user["role"] in ("superadmin", "admin", "sales")
+            or user_has_module(user, "financial_view"))
 
 
 def _require_user(authorization: str, require_superadmin: bool = False, module: str = None) -> dict:

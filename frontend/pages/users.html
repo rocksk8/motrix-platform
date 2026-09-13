@@ -711,9 +711,13 @@
   </div>
 
   <script>
+  // 2026-09-13（模組權限稽核）：拿掉 'sales'——它只存在於這兩份樣板與後端的
+  // `_SUPERADMIN_MODULES`，**側欄、後端、其他前端都沒有任何地方讀它**，純粹
+  // 是歷史殘留，留著只會讓人以為勾了它有意義。既有帳號身上那幾筆不去動
+  // （沒有任何行為依賴它，清掉要跑 migration，不值得）。
   const ROLE_MODULES = {
-    superadmin: ['dashboard','quotation','case_manage','customer','sales','procurement','inventory','equipment','finance','reports','settings','project_approve_eng','project_approve_biz','financial_view','work_log','daily_task','env_guide','netarch_guide','switch_guide','monitor_guide','access_guide','gateway_guide','automation_guide','cashier'],
-    admin:      ['dashboard','quotation','case_manage','customer','sales','procurement','inventory','equipment','finance','reports','project_approve_eng','project_approve_biz','financial_view','work_log','daily_task','env_guide','netarch_guide','switch_guide','monitor_guide','access_guide','gateway_guide','automation_guide','cashier'],
+    superadmin: ['dashboard','quotation','case_manage','customer','procurement','inventory','equipment','finance','reports','settings','project_approve_eng','project_approve_biz','financial_view','work_log','daily_task','env_guide','netarch_guide','switch_guide','monitor_guide','access_guide','gateway_guide','automation_guide','cashier'],
+    admin:      ['dashboard','quotation','case_manage','customer','procurement','inventory','equipment','finance','reports','project_approve_eng','project_approve_biz','financial_view','work_log','daily_task','env_guide','netarch_guide','switch_guide','monitor_guide','access_guide','gateway_guide','automation_guide','cashier'],
     sales:      ['dashboard','quotation','case_manage','customer','financial_view','project_approve_biz','work_log','daily_task'],
     engineer:   ['dashboard','case_manage','project_approve_eng','equipment','work_log','daily_task'],
     viewer:     ['dashboard'],
@@ -790,6 +794,14 @@
         {key:'dev_crm',              label:'業務開發 CRM',     group:'業務'},
         {key:'quotation',            label:'報價單／簽核佇列', group:'業務'},
         {key:'case_manage',          label:'案件管理',         group:'業務'},
+        // 2026-09-13（模組權限稽核）：`project_manage` 補回目錄。它是「專案管理」
+        // 時代留下的 key，2026-08-26 專案管理併入案件管理時從這份目錄移除，
+        // 但 `routers/material_orders.py` 至今仍拿它擋「修改叫料」——結果是這個
+        // 權限只剩 9 個舊帳號靠歷史殘值持有，**任何新建帳號都永遠拿不到、一改
+        // 叫料就 403，而且畫面上沒有任何地方勾得到**。key 維持原名不改（改名要
+        // 跑 migration，且那 9 個帳號會瞬間失去權限），只把標籤改成它今天實際
+        // 在管的事情。
+        {key:'project_manage',       label:'案件叫料－修改',   group:'業務'},
         {key:'customer',             label:'客戶管理',         group:'業務'},
         {key:'financial_view',       label:'財務金額可視',     group:'財務'},
         {key:'finance',              label:'應收帳款／銷售訂單', group:'財務'},

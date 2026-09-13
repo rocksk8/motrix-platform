@@ -7,7 +7,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Header, Body
 
 from db import get_db
-from helpers import _require_user, _tok, _audit, notify_module_activity
+from helpers import _require_user, _tok, _audit, notify_module_activity, require_any_module
 
 router = APIRouter()
 
@@ -40,12 +40,19 @@ def _next_part_no(conn, prefix: str) -> str:
 
 
 @router.get("/api/parts/categories")
-def list_part_categories():
+def list_part_categories(authorization: str = Header(None)):
+    # 2026-09-13：這兩支讀取端點原本連 `authorization` 參數都沒有（僅靠 main.py 的
+    # auth_middleware 擋未登入），所以也就沒有任何模組檢查。補上參數才有 user 可判斷。
+    require_any_module(_require_user(authorization), ('procurement', 'case_manage', 'inventory'),
+                       "供應商／料號／採購")
     return {"items": PART_CATEGORIES}
 
 
 @router.get("/api/parts")
-def list_parts(q: Optional[str] = None, category: Optional[str] = None):
+def list_parts(q: Optional[str] = None, category: Optional[str] = None,
+               authorization: str = Header(None)):
+    require_any_module(_require_user(authorization), ('procurement', 'case_manage', 'inventory'),
+                       "供應商／料號／採購")
     conn = get_db()
     rows = conn.execute("SELECT * FROM parts ORDER BY id DESC").fetchall()
     conn.close()
@@ -65,6 +72,7 @@ def list_parts(q: Optional[str] = None, category: Optional[str] = None):
 @router.post("/api/parts", status_code=201)
 def create_part(body: dict = Body(...), authorization: str = Header(None)):
     user = _require_user(authorization)
+    require_any_module(user, ('procurement', 'case_manage', 'inventory'), "供應商／料號／採購")
     conn = get_db()
     try:
         now = datetime.now().isoformat()
@@ -111,7 +119,8 @@ def create_part(body: dict = Body(...), authorization: str = Header(None)):
 
 @router.put("/api/parts/{part_id}")
 def update_part(part_id: int, body: dict = Body(...), authorization: str = Header(None)):
-    _require_user(authorization)
+    user = _require_user(authorization)
+    require_any_module(user, ('procurement', 'case_manage', 'inventory'), "供應商／料號／採購")
     conn = get_db()
     try:
         row = conn.execute("SELECT part_no, name, safety_stock FROM parts WHERE id=?", (part_id,)).fetchone()
@@ -151,6 +160,7 @@ def update_part(part_id: int, body: dict = Body(...), authorization: str = Heade
 @router.delete("/api/parts/{part_id}")
 def delete_part(part_id: int, authorization: str = Header(None)):
     user = _require_user(authorization)
+    require_any_module(user, ('procurement', 'case_manage', 'inventory'), "供應商／料號／採購")
     conn = get_db()
     try:
         row = conn.execute("SELECT part_no, name FROM parts WHERE id=?", (part_id,)).fetchone()

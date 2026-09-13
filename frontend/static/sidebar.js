@@ -356,8 +356,11 @@
     'network-plans.html':      'netplan_edit',
     'network-plan-form.html':  'netplan_edit',
     'topology-quick.html':     'netplan_edit',
+    // 這兩頁 2026-08-31（87e16cb）已退役成導向頁，留著對應只是為了舊書籤
+    // 進來時仍能把 finance 模組標成已讀（導向前會先跑到這段）。
     'receivables.html':        'finance',
     'sales-orders.html':       'finance',
+    'reports.html':            'finance',
     'work-log.html':           'work_log',
     'daily-tasks.html':        'daily_task',
     'env-guide.html':          'env_guide',
@@ -372,8 +375,23 @@
 
   var _SB_BADGE_STYLE = 'display:none;background:var(--accent);color:#fff;font-size:9px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;padding:1px 5px;border-radius:8px;margin-left:auto;min-width:16px;text-align:center;line-height:1.6'
 
+  // 2026-09-13（模組權限稽核）：頁面層守門的資料來源。
+  //
+  // 在此之前前端**沒有任何頁面層檢查**——`auth-guard.js` 只驗 session，沒有某個
+  // 模組的人手打網址照樣打得開那一頁（只是資料會被 API 擋成一片 403，畫面看起來
+  // 像壞掉而不是像沒權限）。
+  //
+  // 刻意不另外維護一份「頁面→模組」對照表：那會跟下面 ni() 的顯示條件漂移，而
+  // 漂移的症狀就是這次盤點抓到的那一堆。改成**直接沿用同一組條件**——側欄決定
+  // 不顯示某個項目時，順手把它的頁面記下來，渲染完再看使用者現在是不是正站在
+  // 其中一頁上。條件只有一份，不可能對不齊。
+  var _deniedPages = []
+
   function ni(href, icKey, label, activeNames, show, badgeId) {
-    if (show === false) return ''
+    if (show === false) {
+      _deniedPages = _deniedPages.concat(activeNames || [])
+      return ''
+    }
     var bspan = badgeId ? '<span id="' + badgeId + '" style="' + _SB_BADGE_STYLE + '"></span>' : ''
     return '<a href="' + href + '" class="nav__item' + act(activeNames) + '" title="' + esc(label) + '">'
       + '<svg class="nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">' + ic[icKey] + '</svg>'
@@ -415,7 +433,13 @@
       ni(pg('warranty.html'),        'warr',  '保固追蹤', ['warranty.html'], cEq,  'sb-mod-warranty'),
       ni(pg('network-plans.html'),   'netplan', '網路架構規劃書', ['network-plans.html', 'network-plan-form.html', 'topology-quick.html'], cNetPlan, 'sb-mod-netplan'),
       sec('財務', cFi || cRpt || cCash),
-      ni(pg('reports.html'),         'rpt',   '營運報表', ['reports.html', 'cashier.html'],          cRpt || cCash || cFi),
+      // 2026-09-13（模組權限稽核）：補上 badge id。`finance` 模組的紅點原本掛在
+      // 'sb-mod-finance' / 'sb-mod-sales-orders' 這兩個 id 上，而它們所屬的
+      // 應收帳款／銷售訂單兩個側欄項目在 2026-08-31（87e16cb）退役後就不再渲染
+      // ——後端 `_MODULE_ACTION_PREFIXES['finance']` 照樣在算 payment./sales_order./
+      // settlement. 三種異動的數量，前端卻永遠找不到元素可以顯示，等於這個模組的
+      // 通知數字靜靜消失了。那些內容現在都在營運報表頁，紅點就掛回這裡。
+      ni(pg('reports.html'),         'rpt',   '營運報表', ['reports.html', 'cashier.html'],          cRpt || cCash || cFi, 'sb-mod-finance'),
       sec('勞務管理', cCon || cPay),
       ni(pg('contractors.html'),     'contl', '外包名冊', ['contractors.html'],                      cCon),
       ni(pg('payslips.html'),        'paysl', '勞報單',   ['payslips.html', 'payslip-form.html'],    cPay),
@@ -452,6 +476,35 @@
 
     var el = document.getElementById('app-sidebar')
     if (el) el.innerHTML = html
+
+    // 使用者正站在一個「側欄判定他不該看到」的頁面上 → 顯示沒有權限，而不是
+    // 把頁面內容留在那裡讓 API 一路 403（看起來像壞掉，不像沒權限）。
+    //
+    // **刻意不導轉**：`index.html` 自己也有一道守門（非 admin 且沒有 finance／
+    // quotation 模組就導去 case-management.html），導轉會直接做出迴圈——
+    // 只有「儀表板」模組的檢視者會在 index ⇄ case-management 之間無限跳。
+    // 只處理側欄真的列過的頁面（`_deniedPages` 來自 ni() 的顯示條件），
+    // 沒列過的頁面一律放行：寧可漏擋也不要把人鎖在門外，資料那層 API 會擋。
+    if (_deniedPages.indexOf(file) >= 0) _showNoPermission()
+  }
+
+  function _showNoPermission() {
+    var main = document.querySelector('main')
+    var html =
+      '<div id="no-module-notice" style="max-width:520px;margin:64px auto;text-align:center;' +
+      'font-family:LINE Seed TW_OTF, sans-serif">' +
+      '<div style="font-size:40px;margin-bottom:12px">🔒</div>' +
+      '<div style="font-size:17px;font-weight:600;margin-bottom:8px">你沒有這個頁面的權限</div>' +
+      '<div style="font-size:13px;color:var(--text-dim);line-height:1.9">' +
+      '這一頁需要對應的模組權限，請洽系統管理員在「使用者管理」中開通。<br>' +
+      '左側選單中的項目才是你目前可以使用的功能。</div></div>'
+    if (main) {
+      main.innerHTML = html
+    } else {
+      var d = document.createElement('div')
+      d.innerHTML = html
+      document.body.appendChild(d)
+    }
   }
 
   // ── Mobile toggle ──────────────────────────────────────────────────────────
@@ -550,7 +603,7 @@
     customer:    ['sb-mod-customer'],
     procurement: ['sb-mod-suppliers', 'sb-mod-vendor', 'sb-mod-parts', 'sb-mod-procurement'],
     equipment:   ['sb-mod-equipment', 'sb-mod-warranty'],
-    finance:     ['sb-mod-finance', 'sb-mod-sales-orders'],
+    finance:     ['sb-mod-finance'],   // 2026-09-13：'sb-mod-sales-orders' 隨 sales-orders.html 退役移除
     work_log:    ['sb-mod-worklog'],
     daily_task:  ['sb-mod-daily-task'],
   }

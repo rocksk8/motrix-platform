@@ -25,14 +25,14 @@ from .auth import (
     _write_initial_credentials,
     _require_user,
     _tok,
-    user_has_module,
+    user_has_module, can_see_financial, require_any_module,
 )
 from .settings import _get_setting, _set_setting
 from .audit import _notify, _audit, _filter_live_notifications, _purge_notifications
 from .quotations import (
     SQL_DEAL_TAG, SQL_SETTLE_STATUS, quote_hot_fields, save_quotation_json, _steps_to_tiers,
     payment_item_amounts, summarize_payment_items, case_extra_expenses,
-    quote_won_month_map, norm_at, validate_invoice_no, _check_quotation_owner,
+    quote_won_month_map, norm_at, validate_invoice_no, _check_quotation_owner, guard_case_access, is_document_approver,
 )
 from .dates import _add_months, _warranty_expiry, _workdays_elapsed
 from .tiered_approval import (
@@ -122,7 +122,7 @@ from .startup import (
 
 __all__ = [
     # auth
-    "_SUPERADMIN_MODULES", "_hash", "_hash_pw", "_verify_pw",
+    "_SUPERADMIN_MODULES", "_hash", "_hash_pw", "_verify_pw", "can_see_financial", "require_any_module",
     "_LEGACY_WEAK_PASSWORDS", "_CREDENTIALS_FILE", "MIN_PASSWORD_LEN", "DEMO_TOKEN_PREFIX",
     "is_weak_password", "_write_initial_credentials", "_require_user", "_tok",
     # settings
@@ -132,7 +132,7 @@ __all__ = [
     # quotations
     "SQL_DEAL_TAG", "SQL_SETTLE_STATUS", "quote_hot_fields", "save_quotation_json",
     "payment_item_amounts", "summarize_payment_items", "case_extra_expenses",
-    "quote_won_month_map", "norm_at", "validate_invoice_no", "_check_quotation_owner",
+    "quote_won_month_map", "norm_at", "validate_invoice_no", "_check_quotation_owner", "guard_case_access", "is_document_approver",
     # dates
     "_add_months", "_warranty_expiry", "_workdays_elapsed",
     "active_tiers", "current_tier_idx", "setting_to_active_tiers",

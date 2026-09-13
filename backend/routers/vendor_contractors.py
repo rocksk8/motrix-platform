@@ -8,7 +8,7 @@ from fastapi import APIRouter, Body, File, HTTPException, Header, UploadFile
 from pydantic import BaseModel, Field, ConfigDict
 
 from db import get_db, next_entity_code
-from helpers import _require_user, _tok, _audit, notify_module_activity
+from helpers import _require_user, _tok, _audit, notify_module_activity, require_any_module
 from helpers.quotations import save_quotation_json
 from helpers.uploads import save_document_files, delete_document_file
 from routers.contractors import _stamp_passbook
@@ -168,6 +168,7 @@ def list_vendor_contractors(
     authorization: str = Header(None)
 ):
     user = _require_user(authorization)
+    require_any_module(user, ('procurement', 'case_manage', 'contractor_list'), "承攬商管理")
     if user["role"] not in ("superadmin", "admin"):
         return []
     conn = get_db()
@@ -191,7 +192,8 @@ def list_vendor_contractors(
 @router.get("/api/vendor-contractors/selectable")
 def list_vendors_selectable(authorization: str = Header(None)):
     """輕量列表供案件管理下拉選單使用（所有登入者皆可讀）。"""
-    _require_user(authorization)
+    user = _require_user(authorization)
+    require_any_module(user, ('procurement', 'case_manage', 'contractor_list'), "承攬商管理")
     conn = get_db()
     rows = conn.execute(
         "SELECT id, name, contact_name, phone FROM vendor_contractors WHERE active=1 ORDER BY name"
@@ -203,7 +205,8 @@ def list_vendors_selectable(authorization: str = Header(None)):
 
 @router.get("/api/vendor-contractors/{vid}")
 def get_vendor_contractor(vid: int, authorization: str = Header(None)):
-    _require_user(authorization)
+    user = _require_user(authorization)
+    require_any_module(user, ('procurement', 'case_manage', 'contractor_list'), "承攬商管理")
     conn = get_db()
     row = conn.execute("SELECT * FROM vendor_contractors WHERE id=?", (vid,)).fetchone()
     conn.close()
@@ -215,6 +218,7 @@ def get_vendor_contractor(vid: int, authorization: str = Header(None)):
 @router.post("/api/vendor-contractors", status_code=201)
 def create_vendor_contractor(body: VendorContractorIn, authorization: str = Header(None)):
     user = _require_user(authorization)
+    require_any_module(user, ('procurement', 'case_manage', 'contractor_list'), "承攬商管理")
     if user["role"] not in ("superadmin", "admin"):
         raise HTTPException(403, "需要管理員權限")
     now = datetime.now().isoformat()
@@ -242,6 +246,7 @@ def create_vendor_contractor(body: VendorContractorIn, authorization: str = Head
 @router.put("/api/vendor-contractors/{vid}")
 def update_vendor_contractor(vid: int, body: VendorContractorIn, authorization: str = Header(None)):
     user = _require_user(authorization)
+    require_any_module(user, ('procurement', 'case_manage', 'contractor_list'), "承攬商管理")
     if user["role"] not in ("superadmin", "admin"):
         raise HTTPException(403, "需要管理員權限")
     now = datetime.now().isoformat()
@@ -282,6 +287,7 @@ def update_vendor_contractor(vid: int, body: VendorContractorIn, authorization: 
 @router.patch("/api/vendor-contractors/{vid}/active")
 def toggle_vendor_active(vid: int, authorization: str = Header(None)):
     user = _require_user(authorization)
+    require_any_module(user, ('procurement', 'case_manage', 'contractor_list'), "承攬商管理")
     if user["role"] not in ("superadmin", "admin"):
         raise HTTPException(403, "需要管理員權限")
     conn = get_db()
@@ -303,7 +309,8 @@ def toggle_vendor_active(vid: int, authorization: str = Header(None)):
 
 @router.get("/api/vendor-contractors/{vid}/passbook")
 def get_vendor_passbook(vid: int, authorization: str = Header(None)):
-    _require_user(authorization)
+    user = _require_user(authorization)
+    require_any_module(user, ('procurement', 'case_manage', 'contractor_list'), "承攬商管理")
     conn = get_db()
     row = conn.execute("SELECT data_json FROM vendor_contractors WHERE id=?", (vid,)).fetchone()
     conn.close()
@@ -319,6 +326,7 @@ def get_vendor_passbook(vid: int, authorization: str = Header(None)):
 @router.put("/api/vendor-contractors/{vid}/passbook")
 def upload_vendor_passbook(vid: int, body: dict = Body(...), authorization: str = Header(None)):
     user = _require_user(authorization)
+    require_any_module(user, ('procurement', 'case_manage', 'contractor_list'), "承攬商管理")
     if user["role"] not in ("superadmin", "admin"):
         raise HTTPException(403, "需要管理員權限")
     passbook = body.get("bank_passbook", "")
@@ -351,6 +359,7 @@ def upload_vendor_passbook(vid: int, body: dict = Body(...), authorization: str 
 @router.delete("/api/vendor-contractors/{vid}")
 def delete_vendor_contractor(vid: int, authorization: str = Header(None)):
     user = _require_user(authorization)
+    require_any_module(user, ('procurement', 'case_manage', 'contractor_list'), "承攬商管理")
     if user["role"] not in ("superadmin", "admin"):
         raise HTTPException(403, "需要管理員權限")
     conn = get_db()
@@ -377,6 +386,7 @@ def delete_vendor_contractor(vid: int, authorization: str = Header(None)):
 @router.patch("/api/vendor-contractors/{vid}/visits")
 def update_vendor_visits(vid: int, body: dict, authorization: str = Header(None)):
     user = _require_user(authorization)
+    require_any_module(user, ('procurement', 'case_manage', 'contractor_list'), "承攬商管理")
     conn = get_db()
     row = conn.execute(
         "SELECT name, data_json, updated_at FROM vendor_contractors WHERE id=?", (vid,)
@@ -410,7 +420,8 @@ def update_vendor_visits(vid: int, body: dict, authorization: str = Header(None)
 
 @router.get("/api/contractor-dispatches")
 def list_dispatches(quote_no: Optional[str] = None, authorization: str = Header(None)):
-    _require_user(authorization)
+    user = _require_user(authorization)
+    require_any_module(user, ('procurement', 'case_manage', 'contractor_list'), "承攬商管理")
     conn = get_db()
     if quote_no:
         rows = conn.execute(
@@ -431,7 +442,8 @@ def list_dispatches(quote_no: Optional[str] = None, authorization: str = Header(
 
 @router.get("/api/contractor-dispatches/{did}")
 def get_dispatch(did: int, authorization: str = Header(None)):
-    _require_user(authorization)
+    user = _require_user(authorization)
+    require_any_module(user, ('procurement', 'case_manage', 'contractor_list'), "承攬商管理")
     conn = get_db()
     row = conn.execute(
         "SELECT d.*, v.name AS vendor_name FROM contractor_dispatches d "
@@ -447,6 +459,7 @@ def get_dispatch(did: int, authorization: str = Header(None)):
 @router.post("/api/contractor-dispatches", status_code=201)
 def create_dispatch(body: DispatchIn, authorization: str = Header(None)):
     user = _require_user(authorization)
+    require_any_module(user, ('procurement', 'case_manage', 'contractor_list'), "承攬商管理")
     _require_admin(user)
     now = datetime.now().isoformat()
     items = body.items_json or []
@@ -497,6 +510,7 @@ def update_dispatch(did: int, body: DispatchIn, authorization: str = Header(None
     已經送出去、甚至已經執行的財務文件。修法比照 delete_dispatch() 同一套判斷：
     偵測到已有對應的匯款申請就直接 409 擋下，要改請先撤銷/處理該申請。"""
     user = _require_user(authorization)
+    require_any_module(user, ('procurement', 'case_manage', 'contractor_list'), "承攬商管理")
     _require_admin(user)
     now = datetime.now().isoformat()
     items = body.items_json or []
@@ -540,6 +554,7 @@ def update_dispatch(did: int, body: DispatchIn, authorization: str = Header(None
 @router.delete("/api/contractor-dispatches/{did}")
 def delete_dispatch(did: int, authorization: str = Header(None)):
     user = _require_user(authorization)
+    require_any_module(user, ('procurement', 'case_manage', 'contractor_list'), "承攬商管理")
     if user["role"] not in ("superadmin", "admin"):
         raise HTTPException(403, "需要管理員權限")
     conn = get_db()
@@ -571,6 +586,7 @@ async def upload_dispatch_files(did: int, files: List[UploadFile] = File(...),
     quotations.py::upload_material_files 的存法）——存承攬商提供的原始報價
     文件本身，跟 items_json 拆解後的品項明細是分開的兩件事。"""
     user = _require_user(authorization)
+    require_any_module(user, ('procurement', 'case_manage', 'contractor_list'), "承攬商管理")
     _require_admin(user)
     conn = get_db()
     try:
@@ -602,6 +618,7 @@ async def upload_dispatch_files(did: int, files: List[UploadFile] = File(...),
 @router.delete("/api/contractor-dispatches/{did}/files/{file_id}")
 def delete_dispatch_file(did: int, file_id: str, authorization: str = Header(None)):
     user = _require_user(authorization)
+    require_any_module(user, ('procurement', 'case_manage', 'contractor_list'), "承攬商管理")
     _require_admin(user)
     conn = get_db()
     try:
@@ -637,6 +654,7 @@ async def upload_dispatch_invoice_files(did: int, files: List[UploadFile] = File
     避免混用。存入 invoice_files_json，會在產生匯款申請當下一併凍結進
     snapshot_json（見 contractor_vouchers.py::create_contractor_voucher）。"""
     user = _require_user(authorization)
+    require_any_module(user, ('procurement', 'case_manage', 'contractor_list'), "承攬商管理")
     _require_admin(user)
     conn = get_db()
     try:
@@ -668,6 +686,7 @@ async def upload_dispatch_invoice_files(did: int, files: List[UploadFile] = File
 @router.delete("/api/contractor-dispatches/{did}/invoice-files/{file_id}")
 def delete_dispatch_invoice_file(did: int, file_id: str, authorization: str = Header(None)):
     user = _require_user(authorization)
+    require_any_module(user, ('procurement', 'case_manage', 'contractor_list'), "承攬商管理")
     _require_admin(user)
     conn = get_db()
     try:
@@ -707,6 +726,7 @@ def accept_dispatch(did: int, body: dict, authorization: str = Header(None)):
     action=accepted          — 確認驗收（admin+，來源：pending_acceptance），記錄驗收人與時間
     """
     user = _require_user(authorization)
+    require_any_module(user, ('procurement', 'case_manage', 'contractor_list'), "承攬商管理")
     if user["role"] not in ("superadmin", "admin"):
         raise HTTPException(403, "需要管理員權限")
     action = body.get("action", "")
@@ -750,6 +770,7 @@ def import_dispatch_to_quote(did: int, authorization: str = Header(None)):
     """將派發報價品項以「外包成本」方式附加至報價單的品項清單。
     僅限報價單為草稿（status='草稿'）狀態；已送出需先在報價單頁面解鎖。"""
     user = _require_user(authorization)
+    require_any_module(user, ('procurement', 'case_manage', 'contractor_list'), "承攬商管理")
     conn = get_db()
     # Load dispatch
     drow = conn.execute(

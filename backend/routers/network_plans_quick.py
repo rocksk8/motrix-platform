@@ -21,10 +21,15 @@ from network_plan_topology import build_topology_svg
 
 router = APIRouter()
 
+# 2026-09-13（模組權限稽核第二輪）：這支 router 的兩個端點**刻意不套模組檢查**。
+# 它們是無狀態的繪圖工具（吃前端傳來的 JSON、回 SVG/PDF，不讀也不寫任何資料表），
+# 擋它不會保護到任何資料，只會擋掉使用者畫圖。模組檢查的目的是資料可見性，
+# 不是「凡是端點都要掛一道」。見 MODULE-AUDIT-2026-09-13.md §3.8 ④。
+
 
 @router.post("/api/network-plans-quick/preview")
 def preview_quick_topology(body: dict = Body(...), authorization: str = Header(None)):
-    _require_user(authorization)
+    user = _require_user(authorization)
     data = body.get("data") or {}
     try:
         result = build_topology_svg(data)
@@ -35,7 +40,7 @@ def preview_quick_topology(body: dict = Body(...), authorization: str = Header(N
 
 @router.post("/api/network-plans-quick/pdf")
 def export_quick_topology_pdf(body: dict = Body(...), authorization: str = Header(None)):
-    _require_user(authorization)
+    user = _require_user(authorization)
     data = body.get("data") or {}
     title = (body.get("title") or "").strip()
     floor_tag = (body.get("floorTag") or "").strip()

@@ -123,7 +123,7 @@ function notifStore() {
           customer:   ['sb-mod-customer'],
           procurement:['sb-mod-suppliers', 'sb-mod-vendor', 'sb-mod-parts', 'sb-mod-procurement'],
           equipment:  ['sb-mod-equipment', 'sb-mod-warranty'],
-          finance:    ['sb-mod-finance', 'sb-mod-sales-orders'],
+          finance:    ['sb-mod-finance'],   // 2026-09-13：見 sidebar.js 同一張表
           work_log:   ['sb-mod-worklog'],
           daily_task: ['sb-mod-daily-task'],
         }

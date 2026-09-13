@@ -61,7 +61,11 @@ def test_action_item_two_stage_approval(client, make_user):
     eng_user, eng_pw = make_user(username="eng_mgr", role="engineer")
     biz_user, biz_pw = make_user(username="biz_mgr", role="sales")
     sales_user, _ = make_user(username="salesperson", role="sales")
-    outsider, outsider_pw = make_user(username="outsider", role="engineer")
+    # 2026-09-13（模組權限稽核）：帶 `case_manage`——新增代辦事項不再是「任何登入者
+    # 皆可」，而是「碰得到這張案件的人」（該案業務／協作者／具案件管理模組／該案的
+    # 簽核主管）。實際用 UI 建立的工程師帳號本來就會帶這個模組。
+    outsider, outsider_pw = make_user(username="outsider", role="engineer",
+                                      modules=["case_manage"])
 
     conn = db.get_db()
     try:
@@ -80,11 +84,19 @@ def test_action_item_two_stage_approval(client, make_user):
     biz_token = _login(client, biz_user, biz_pw)
     outsider_token = _login(client, outsider, outsider_pw)
 
-    # 新增代辦事項（任何登入者皆可，比照原專案管理寬鬆權限）
+    # 新增代辦事項（具案件管理模組即可，不必是該案業務——原專案管理的寬鬆權限，
+    # 2026-09-13 起收斂成「碰得到這張案件的人」）
     r = client.post("/api/quotations/MQ-PJM-001/action-items", headers=_auth(outsider_token),
                      json={"text": "確認防火牆規則"})
     assert r.status_code == 201, r.text
     item_id = r.json()["id"]
+
+    # 反向：完全沒有案件管理模組、也不是該案任何角色的人，連新增都不行
+    nobody, nobody_pw = make_user(username="pjm_nobody", role="viewer", modules=["dashboard"])
+    r = client.post("/api/quotations/MQ-PJM-001/action-items",
+                     headers=_auth(_login(client, nobody, nobody_pw)),
+                     json={"text": "路人甲"})
+    assert r.status_code == 403, r.text
 
     # 業務主管不能先簽第二階段
     r = client.patch(f"/api/quotations/MQ-PJM-001/action-items/{item_id}/approve",
@@ -186,7 +198,13 @@ def test_assigned_user_can_see_case_visibility(client, make_user):
 # ── 工作日誌照片上傳/刪除 ─────────────────────────────────────────────────────
 
 def test_work_log_photo_upload_and_delete(client, make_user):
-    username, password = make_user(username="wl_user", role="engineer")
+    # 2026-09-13（模組權限稽核第二輪）：`/api/quotations/{no}/updates` 現在要求
+    # 擁有者、協作者，或**具 `case_manage` 模組**的人——沒有這個模組的帳號讀不到
+    # 別人案件的動態。這裡補上模組，是因為實際用 UI 建立的工程師帳號本來就會
+    # 帶 `case_manage`（users.html::ROLE_MODULES.engineer），modules=[] 的帳號
+    # 在正式環境不存在。
+    username, password = make_user(username="wl_user", role="engineer",
+                                   modules=["case_manage", "work_log"])
     _make_case("MQ-PJM-003")
     token = _login(client, username, password)
 
@@ -227,7 +245,13 @@ def test_work_log_photo_upload_and_delete(client, make_user):
 # ── 工作日誌「聯絡事項」結構化欄位（2026-08-26，動態發布更新新增） ────────────
 
 def test_work_log_contact_type_roundtrip(client, make_user):
-    username, password = make_user(username="wl_user2", role="engineer")
+    # 2026-09-13（模組權限稽核第二輪）：`/api/quotations/{no}/updates` 現在要求
+    # 擁有者、協作者，或**具 `case_manage` 模組**的人——沒有這個模組的帳號讀不到
+    # 別人案件的動態。這裡補上模組，是因為實際用 UI 建立的工程師帳號本來就會
+    # 帶 `case_manage`（users.html::ROLE_MODULES.engineer），modules=[] 的帳號
+    # 在正式環境不存在。
+    username, password = make_user(username="wl_user2", role="engineer",
+                                   modules=["case_manage", "work_log"])
     _make_case("MQ-PJM-005")
     token = _login(client, username, password)
 

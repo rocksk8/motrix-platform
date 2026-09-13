@@ -1572,6 +1572,9 @@ function app() {
 
     _checkAllStagesDone() {
       if (this.cr.dealTag !== '已成案') return
+      // 2026-09-13：完結案限最高管理者，其他人跳這個提示只會得到 403，
+      // 按了失敗比沒看到提示更令人困惑。
+      if ((this.session?.role || '') !== 'superadmin') return
       const stages = this.cr.caseRecord?.stages || []
       if (!stages.length) return
       if (!stages.every(s => s.done)) { this._allDonePrompted = false; return }

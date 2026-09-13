@@ -35,6 +35,7 @@ from helpers import (
     check_approve_permission, check_reject_permission, check_no_tier_self_approval,
     UnresolvedManagerError, resolve_active_flow_setting,
     save_document_files, delete_document_file,
+    guard_case_access, require_any_module,
 )
 from pdf_gen import generate_completion_pdf_bytes
 
@@ -207,8 +208,16 @@ def _validate(body: CompletionNoteIn):
 
 @router.get("/api/completion-notes")
 def list_completion_notes(quote_no: Optional[str] = None, authorization: str = Header(None)):
-    _require_user(authorization)
+    # 2026-09-13（模組權限稽核）：帶 quote_no 就是「讀某一張案件的完工單」——
+    # `quote_no` 可列舉，先前只要求登入等於任何人都撈得到別人案件的單據與金額。
+    # 不帶 quote_no 是跨案件總覽，改為管理員或具相關模組的人才看得到。
+    user = _require_user(authorization)
     conn = get_db()
+    if quote_no:
+        guard_case_access(conn, quote_no, user, allow_module="case_manage")
+    else:
+        # `quotation` 也要收：簽核佇列（模組 quotation）就是用這支載入待簽的單據
+        require_any_module(user, ('case_manage', 'quotation'), "完工單")
     try:
         if quote_no:
             rows = conn.execute(

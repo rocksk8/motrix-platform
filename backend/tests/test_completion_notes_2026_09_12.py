@@ -382,12 +382,20 @@ def test_approval_does_not_touch_stock(client, make_user):
 
 def test_requires_auth_and_admin_to_create(client, make_user):
     assert client.get(BASE).status_code in (401, 403)
-    username, password = make_user(username="cn_eng", role="engineer")
+    # 2026-09-13（模組權限稽核）：帳號補上 `case_manage`——實際用 UI 建立的工程師
+    # 帳號本來就會帶（users.html::ROLE_MODULES.engineer），而完工單清單現在要求
+    # 「具案件管理模組」才看得到（不帶 quote_no 是跨案件總覽）。
+    username, password = make_user(username="cn_eng", role="engineer",
+                                   modules=["case_manage"])
     token = _login(client, username, password)
     _make_case()
     assert client.post(BASE, headers=_auth(token), json=_payload()).status_code == 403
-    # 但看得到（列表只要求登入，比照出貨單）
+    # 但看得到（列表不要求 admin，比照出貨單）
     assert client.get(BASE, headers=_auth(token)).status_code == 200
+
+    # 反向：沒有案件管理模組的帳號連清單都看不到（先前這行會是 200）
+    u2, p2 = make_user(username="cn_nomod", role="viewer", modules=["dashboard"])
+    assert client.get(BASE, headers=_auth(_login(client, u2, p2))).status_code == 403
 
 
 # ── 可自訂標題 ＋ 保固可隱藏（2026-09-12 使用者回饋）──────────────────────────
