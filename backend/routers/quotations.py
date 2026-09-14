@@ -3634,6 +3634,36 @@ def _queue_tier_fields(approval_json_raw: str) -> dict:
     }
 
 
+def _queue_visible_to(user: dict, item: dict, delegated_for) -> bool:
+    """這一筆待簽核文件該不該讓這個人看到（2026-09-15 使用者要求）。
+
+    「簽核佇列除了管理員以上都只能看到自己的簽核佇列卡在哪邊」。所以非 admin 的
+    可見範圍是兩種，其餘一律看不到：
+
+    1. **自己送審的**——他要知道自己的單子卡在哪一關、卡在誰身上
+    2. **簽核鏈裡有自己的**（含代理他人時的被代理人）——比對的是**所有層**而不是
+       只有當前層：只比當前層的話，下一關才輪到的人看不到即將輪到自己的單，
+       已經簽過的人也看不到後面卡住了，兩種都會讓人誤以為「沒我的事」
+
+    為什麼過濾放在這裡、而且只有一份：這支端點一路長到 8 種單據類型，每種各寫一
+    段 WHERE 條件的話，下一次新增類型時漏掉的那一種就是全開的——而「漏了會外洩」
+    的規則必須是預設安全。集中成一條規則、套在組裝好的 items 上，新類型自動被蓋到。
+
+    `tiers` 為空的類型（case_change 是「任一 superadmin 皆可審核」的單層設計）對
+    非 admin 只會落在第 1 條，這是對的：他不可能是它的簽核人。
+    """
+    if (user.get("role") or "") in ("superadmin", "admin"):
+        return True
+    mine = {user.get("username") or ""} | set(delegated_for or [])
+    if item.get("requestedBy") in mine:
+        return True
+    for tier in item.get("tiers") or []:
+        for ap in (tier.get("approvers") or []):
+            if (ap.get("username") or "") in mine:
+                return True
+    return False
+
+
 @router.get("/api/approval-queue")
 def get_approval_queue(authorization: str = Header(None)):
     """2026-08-21 起合併三種待簽核文件類型：報價單、承攬商匯款申請、開票申請
@@ -3990,6 +4020,11 @@ def get_approval_queue(authorization: str = Header(None)):
         })
 
     conn.close()
+
+    # 權限過濾（2026-09-15）：管理員以上看全部，其他人只看自己送審的與簽核鏈裡
+    # 有自己的。過濾在分組**之前**——分組之後才過濾會留下空的群組，畫面上會出現
+    # 「某某人 0 件」這種列。
+    items = [it for it in items if _queue_visible_to(user, it, my_delegated_for)]
 
     groups: dict = defaultdict(list)
     for item in items:

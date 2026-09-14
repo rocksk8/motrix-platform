@@ -525,15 +525,22 @@
 
     <!-- ─── 跟我有關的變動（2026-09-14 從頁面下方的小區塊提升為主要區塊）───
          資料來源 /api/dashboard/activity-feed，已經依權限過濾過
-         （非 admin 只會看到 sales_person_id 是自己的那些）。 -->
-    <section class="h-sec">
+         （非 admin 只會看到 sales_person_id 是自己的那些；2026-09-15 起進出物料
+         也只剩自己動過的，見 dashboard.py 第 6 段的說明）。
+
+         2026-09-15 使用者要求「如果沒有就不顯示」：一筆都沒有時整個區塊收掉，
+         不留篩選鈕與空狀態。對權限最小的使用者來說，本來就沒有東西可看的區塊
+         留在那裡只是在提示「有東西但你看不到」。
+         **判斷用 activityFeed 而不是 filteredFeed**：切到某個模組剛好沒有異動時，
+         那是「這個模組沒動靜」，區塊要留著（下面的空狀態負責講），不是整塊消失。 -->
+    <section class="h-sec" x-show="loading || activityFeed.length > 0">
       <div class="h-wrap">
         <div class="h-head">
           <div>
             <h2 class="h-title">最近的變動</h2>
             <p class="h-sub">報價單、案件進度、業務開發與出貨的異動，依時間新到舊</p>
           </div>
-          <a href="pages/audit-log.html" class="h-more">完整歷史紀錄
+          <a href="pages/audit-log.html" class="h-more" x-show="canAuditLog">完整歷史紀錄
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
           </a>
         </div>
@@ -924,6 +931,13 @@ feedCount(key) {
       get canDevCrm() {
         const r = this.session.role; const m = this.session.modules || []
         return r === 'superadmin' || r === 'admin' || m.includes('dev_crm')
+      },
+      // 2026-09-15：「完整歷史紀錄」連到 audit-log.html，而那頁是 admin+／audit_log
+      // 模組限定。沒有權限的人看到連結、點進去卻是「你沒有這個頁面的權限」，等於
+      // 系統在邀請他去撞牆——權限管制要連入口一起管，不能只擋後端。
+      get canAuditLog() {
+        const r = this.session.role; const m = this.session.modules || []
+        return r === 'superadmin' || r === 'admin' || m.includes('audit_log')
       },
 
       get currentMonthAmount() {

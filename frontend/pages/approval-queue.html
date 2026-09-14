@@ -394,10 +394,16 @@
 
     <div class="aq-title-row">
       <span class="aq-title">簽核佇列</span>
+      <!-- 2026-09-15：非管理員只會拿到「自己送審的＋簽核鏈裡有自己的」
+           （後端 quotations.py::_queue_visible_to）。副標要講出這件事，否則數字
+           跟別人講的對不上時，會被當成系統漏單而不是權限範圍。 -->
       <span class="aq-title-sub"
             x-text="loading ? '載入中…'
-                    : (totalPending > 0 ? '共 ' + totalPending + ' 件待簽核，依「輪不輪到我」與停留天數排列'
-                                        : '目前沒有待簽核項目')"></span>
+                    : (totalPending > 0
+                        ? '共 ' + totalPending + ' 件待簽核，依「輪不輪到我」與停留天數排列'
+                          + (isAdmin ? '' : '（僅顯示你送審的與需要你簽核的）')
+                        : (isAdmin ? '目前沒有待簽核項目'
+                                   : '你送審的單據都簽完了，也沒有需要你簽核的項目'))"></span>
     </div>
 
     <!-- 壓力帶（andon）：三個數字＋一條停留天數比例條，取代原本的標題列。
@@ -977,6 +983,12 @@
     function approvalQueueApp() {
       return {
         session: {},
+        // 管理員以上拿到的是全公司的佇列，其他人只有「自己送審的＋需要自己簽的」
+        // （後端 quotations.py::_queue_visible_to 決定，這裡只是拿來調整說明文字，
+        // **不是**權限判斷本身——真正的過濾在後端）。
+        get isAdmin() {
+          return ['superadmin', 'admin'].includes(this.session.role)
+        },
         queue: [],
         totalPending: 0,
         drawerOpen: false,   // 詳情抽屜（原本是常駐右欄）

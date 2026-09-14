@@ -1120,13 +1120,30 @@ def dashboard_activity_feed(limit: int = Query(30, ge=1, le=100),
                 "detail": "", "link": link, "at": norm_at(r["at"]),
             })
 
-    # 6. 進出物料（序號級庫存異動，比照 /api/devices・/api/materials-summary 開放給所有已登入使用者）
+    # 6. 進出物料（序號級庫存異動）
+    #
+    # 2026-09-15 使用者要求「沒有權限的使用者，最近的變動只能看到自己的」。
+    # 這一段原本對**所有登入者全開**（原註解：「比照 /api/devices・
+    # /api/materials-summary 開放給所有已登入使用者」）——但那兩支回的是「有哪些
+    # 料號、還剩幾個」，這裡回的是「**誰**把哪一個序號用到哪一個案子」，那是人的
+    # 行為軌跡，不是庫存數字。上面五個來源每一個都有逐筆過濾，只有這一段沒有，
+    # 結果是一個只有 dashboard 模組的檢視者，在首頁就能看到全公司的料件流向。
+    #
+    # 有庫存／設備模組的人看全部（那本來就是他們的工作範圍），其他人只看自己動過
+    # 的；自己沒動過就一筆都不會出現。
     # consumed_by/created_by 存的就是操作者顯示名稱字串（見 inventory.py），非 user id，不需再 join users
+    can_inventory = is_admin or "inventory" in mods or "equipment" in mods
     st_rows = conn.execute("""
         SELECT id, part_no, serial_no, status, quote_no, updated_at, consumed_by, created_by
         FROM stock_items ORDER BY updated_at DESC LIMIT 40
     """).fetchall()
     for r in st_rows:
+        if not can_inventory:
+            # 比對顯示名稱是這張表唯一可用的歸屬依據（沒有 user id 欄位）。
+            # 名稱為空的紀錄一律不給——無法證明是自己的，就不是自己的。
+            actor = r["consumed_by"] or r["created_by"] or ""
+            if not actor or actor != u["display_name"]:
+                continue
         items.append({
             "id": f"st_{r['id']}", "source": "stock", "moduleLabel": "進出物料",
             "actor": r["consumed_by"] or r["created_by"] or "",
