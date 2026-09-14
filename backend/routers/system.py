@@ -886,6 +886,120 @@ def set_backup_retention_setting(body: BackupRetentionBody, authorization: str =
     return {"ok": True}
 
 
+# ── 報價條款組（2026-09-14 使用者交辦）────────────────────────────────────────
+#
+# 使用者裁示：「報價單可以增加付款條件的選項，名稱也可以自定義，例如純購料，
+# 他有自己的付款條件、驗收標準、保固條件，可由報價人手動點選方塊做切換，
+# 只有超級管理員可以點選設為預設付款條件的功能跟建立，像是完工單內單據用語
+# 這樣的選項」。
+#
+# 形狀：`system_settings.quote_terms_presets = {presets: [...], defaultKey: "..."}`
+# 每一組 = {key, name, paymentTerms, deliveryTerms, acceptanceTerms,
+#           warrantyTerms, afterSales}
+#
+# **報價單存的是文字不是 key**（前端切換時把五段文字複製進 data_json）：
+# 已經開出去的報價單長什麼樣就是什麼樣，不能因為有人事後改了條款組內容
+# 或把那組刪掉，就讓歷史單據的條款跟著變。這跟同日做的「單據原始版本存檔」
+# 是同一個判準。`termsPresetKey` 只當「這張單是從哪一組起手的」的線索，
+# 用來做「與該組不同」的比對提示，不是資料來源。
+#
+# 讀取端點**不限 superadmin**——報價人要用它切換；寫入才限 superadmin。
+
+_TERMS_FIELDS = ("paymentTerms", "deliveryTerms", "acceptanceTerms",
+                 "warrantyTerms", "afterSales")
+
+
+class QuoteTermsPreset(BaseModel):
+    key:             str = ""
+    name:            str
+    paymentTerms:    str = ""
+    deliveryTerms:   str = ""
+    acceptanceTerms: str = ""
+    warrantyTerms:   str = ""
+    afterSales:      str = ""
+
+
+class QuoteTermsPresetsBody(BaseModel):
+    presets:    List[QuoteTermsPreset]
+    defaultKey: str = ""
+
+
+def _quote_terms_presets() -> dict:
+    """目前設定；沒設定過時回傳空清單（前端會退回它內建的 DEFAULT_TERMS）。
+
+    **不在這裡自動種一組預設**：前端 `quotation-form.html` 本來就有一份
+    `DEFAULT_TERMS` 當作「沒有任何設定時」的內容，後端再種一份就變成兩個
+    事實來源，而且兩邊一旦分岔沒有任何地方會報錯。沒設定＝維持改動前的行為。
+    """
+    raw = _get_setting("quote_terms_presets", {}) or {}
+    if not isinstance(raw, dict):
+        return {"presets": [], "defaultKey": ""}
+    presets = raw.get("presets")
+    if not isinstance(presets, list):
+        presets = []
+    return {"presets": presets, "defaultKey": raw.get("defaultKey") or ""}
+
+
+@router.get("/api/settings/quote-terms-presets")
+def get_quote_terms_presets(authorization: str = Header(None)):
+    """報價人要靠它切換條款組，所以只要求登入（內容不是機密，是公司對外條款）。"""
+    _require_user(authorization)
+    return _quote_terms_presets()
+
+
+@router.put("/api/settings/quote-terms-presets")
+def set_quote_terms_presets(body: QuoteTermsPresetsBody, authorization: str = Header(None)):
+    """整組覆寫（建立／改名／改內容／刪除／設預設都走這一支）。
+
+    整組覆寫而不是逐筆 CRUD：這份設定最多十來組、只有 superadmin 會動、
+    而且前端本來就是把整份清單抓下來編輯。逐筆 CRUD 要多三支端點與一組
+    併發處理，換不到任何東西。
+    """
+    actor = _require_user(authorization, require_superadmin=True)
+
+    if len(body.presets) > 30:
+        raise HTTPException(400, "條款組最多 30 組")
+
+    seen, cleaned = set(), []
+    for p in body.presets:
+        name = (p.name or "").strip()
+        if not name:
+            raise HTTPException(400, "條款組名稱不可空白")
+        if len(name) > 30:
+            raise HTTPException(400, f"條款組名稱過長（{name[:10]}…），上限 30 字")
+        key = (p.key or "").strip() or uuid.uuid4().hex[:8]
+        if key in seen:
+            raise HTTPException(400, f"條款組 key 重複：{key}")
+        seen.add(key)
+        item = {"key": key, "name": name}
+        for f in _TERMS_FIELDS:
+            v = getattr(p, f) or ""
+            if len(v) > 5000:
+                raise HTTPException(400, f"「{name}」的{f}內容過長（上限 5000 字）")
+            item[f] = v
+        cleaned.append(item)
+
+    default_key = (body.defaultKey or "").strip()
+    if default_key and default_key not in seen:
+        # 刪掉了被設為預設的那一組 → 靜默落到第一組，而不是留一個指向不存在
+        # 的 key（那會讓新報價單完全拿不到預設條款，而且看不出為什麼）
+        default_key = ""
+    if not default_key and cleaned:
+        default_key = cleaned[0]["key"]
+
+    value = {"presets": cleaned, "defaultKey": default_key}
+    _set_setting("quote_terms_presets", value)
+    default_name = next((p["name"] for p in cleaned if p["key"] == default_key), "（無）")
+    _audit(_tok(authorization), "settings.quote_terms_presets.update", "settings",
+           "quote_terms_presets",
+           f"報價條款組共 {len(cleaned)} 組，預設為「{default_name}」")
+    notify_module_activity("系統設定", "變更報價條款組",
+                            actor.get("display_name") or actor["username"],
+                            f"{len(cleaned)} 組，預設「{default_name}」",
+                            "quotation-form.html")
+    return value
+
+
 # ── Cloud backup storage target（2026-09-07，架構地圖 §6.4）────────────────────
 # 選擇備份要寫去哪裡：本機掛載的雲端硬碟磁碟機（預設，沿用 archive.py 既有邏輯，
 # 已知磁碟機代號會漂移）或 S3 相容物件儲存（AWS S3／Backblaze B2 等，見

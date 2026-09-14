@@ -1841,7 +1841,7 @@ xlsx-0.18.5.full.min.js     （SheetJS）
 | ✅ | ~~模組權限要真的擋住、未開啟的連模組名稱都不顯示~~（**2026-09-14 當天施作完成**，DB v84）。`require_any_module()` 從「admin+ 直通」改成**只有 superadmin 直通**；`sidebar.js` 二十幾個 `mods.indexOf(x) >= 0 || ad` 收斂成一支 `has(x)`，另外兩種非模組放行（`|| eng`、`|| role !== 'viewer'`）也一併拿掉。分組名稱不需額外處理——`renderMainNav()` 本來就會過濾 `items` 為空的分組，所以整組沒權限時連分組名稱都不出現。**四個原本沒有 key 只能靠角色寫死的頁面，依使用者裁示『沒有對應模組 key 也建立就沒有這個問題』新建了 key**：`audit_log`／`shipping_export_log`／`module_versions`／`selection_overview`；網路架構規劃書同樣只有 `netplan_edit` 沒有檢視 key，補上 `netplan`（目錄從 35 → 40 個 key）。**DB v84 先回填再取消直通**，所以沒有人憑空少掉今天看得到的東西。詳見 §12 同日條目與 [`MODULE-AUDIT-2026-09-13.md`](MODULE-AUDIT-2026-09-13.md) §6。 |
 | ✅ | ~~已結案變更申請「核准後會套用的內容」直接把 raw JSON 倒給人看~~（**2026-09-14 當天施作完成**，DB 無異動）。新增 `routers/quotations.py::_summarize_case_change()`，六種 `action_type` 各自產生可讀的 before／after（欄位中文名＋前後值），**只列有變動的欄位**；回傳形狀沿用額外支出那條路徑，前端 `approval-queue.html` 一行都不用改。**路上抓到一件比可讀性更嚴重的事**：`approve_case_change()` 對 `case_record_update` 的第一個動作是 `new_case_record["stages"] = cr.get("stages")`——**payload 裡的 stages 根本不會被套用**（階段有自己的專屬端點），而原本的畫面把它整包印在「核准後會套用的內容」底下，等於告訴審核者一件不會發生的事。摘要刻意不收 stages，並有一題測試釘住。內部欄位（`writeOffRequestedAt`、`invoiceFiles[].path`）一律不外流。**使用者要求的「其他地方也這樣顯示」已掃過**：全前端只有 `approval-queue.html:819` 一處在畫面上做 `JSON.stringify`，就是這一塊的 fallback；稽核紀錄頁根本不渲染 `detail` 欄位；額外支出變更申請本來就是逐欄對照。測試 `test_case_change_summary_2026_09_14.py`（12 題）。 |
 | ✅ | ~~完工單「單據用語」與「逐欄調整」要移到頁面最上面~~（**2026-09-14 當天施作完成**）。兩張卡搬到整頁最前面，提示語改成「請先選這裡，再往下填」。**順手處理了那個「換個位置還是會發生」的問題**：`applyPreset()` 是整批覆寫不是合併，所以已經逐欄微調過的內容會被吃掉——現在偵測到有自訂值時會先 `confirm()` 問一聲（`confirm` 是這頁既有慣例，送審／預覽都在用）。純前端，無後端異動。 |
-| 🟠 | **報價單付款條件改成可切換的「條款組」（2026-09-14 交辦，尚未施作）**。使用者裁示：「報價單可以增加付款條件的選項，名稱也可以自定義，例如純購料，他有自己的付款條件、驗收標準、保固條件，可由報價人手動點選方塊做切換，只有超級管理員可以點選設為預設付款條件的功能跟建立，像是完工單內單據用語這樣的選項」。**一組＝{名稱, 付款條件, 驗收標準, 保固條件}**，報價人在表單上點方塊切換整組；建立／編輯／設為預設限 superadmin。**可直接沿用的前例**：完工單「單據用語」（`routers/completion_notes.py::DEFAULT_LABELS`／`merged_labels()` ＋ `completion-note-form.html` 的 `presets` 一鍵套用＋逐欄微調），那套的形狀跟這裡幾乎一樣——差別只在完工單的 preset 寫死在前端，這裡的條款組要可由 superadmin 建立，所以得存 `system_settings`（例如 `quote_terms_presets`）而不是寫死。**現況**：目前只有單一預設值 `system_settings.default_payment_terms`（GET/PUT `/api/settings/payment-terms`，見 `routers/system.py:643`），而且報價單表單已經有「報價條件與預設不同」的比對邏輯（`quotation-form.html::_defaultPaymentTerms`）——**改成多組之後那個比對要一起改**，否則切到非預設組會被誤判成「被改過」。**動工前要決定的**：①驗收標準與保固條件目前存在哪（要先查報價單 data_json 有沒有既有欄位，沒有的話是新欄位）②既有報價單沿用哪一組（建議留一組「（既有）」不可刪的相容組，別回填舊資料）③條款組被改掉或刪掉時，已經開出去的報價單要不要跟著變（**應該不要**——比照本輪單據版本存檔的同一個理由：已送出的那份長什麼樣就是什麼樣，所以切換時應把三段文字**複製進單據自己的 data_json**，只存組別 key 會讓歷史單據的內容隨設定變動）。 |
+| ✅ | ~~報價單付款條件改成可切換的「條款組」~~（**2026-09-14 當天施作完成**，DB 無異動）。`system_settings.quote_terms_presets = {presets:[...], defaultKey}`，每組含名稱＋付款條件／交貨條件／驗收標準／保固條件／售後服務五段文字。報價單「報價條件」區塊上方一排方塊可切換，★ 是新增報價單時自動帶入的那組；superadmin 另有「管理條款組」可建立／改名／改內容／刪除／設預設，且可「以目前表單內容新增一組」。**報價單存的是複製過去的文字、不是指向設定的 key**——已開出去的單不會因為有人事後改了條款組而跟著變（跟同日「單據原始版本存檔」同一個判準）。`termsPresetKey` 只當「從哪一組起手」的線索，用來做「與該組不同」的提示。**`checkApproval()` 的比對基準一併改成目前選中的那組**——不改的話切到「純購料」會整組被判定成條件被改過，這功能一用就報警。測試：後端 14 題＋e2e 3 題。 |
 | ✅ | ~~營運報表的業務員績效讀錯欄位~~（**2026-09-14 當天施作完成**，DB 無異動）。新增 `routers/reports.py::_case_sales_owner()`：優先 `caseRecord.roles.sales`，沒填才退回 `sales_person_id`／`sales_person`。**舊案件刻意不回填**——那個欄位當初沒人填，補一個猜測值只會製造假資料。`roles.sales` 存的是顯示名稱字串，唯一反查得到帳號就用 id 當 key（改名後仍歸同一人）；**同名的一律不猜**（`_build_name_index()` 把同名的值設成 None，退回名字分組——那至少是「兩個同名的人被合成一列」這種看得出來的錯，不是靜默算錯人）；反查不到（離職刪帳號、打錯字）仍以那個名字歸屬，不會默默掉回開單者。**年度目標達成率一併改用同一組 key**——那兩張表是並排看的，一邊算業務負責、另一邊算開單者會對不起來。測試 `test_reports_sales_owner_2026_09_14.py`（11 題）。<br>⚠️ **部門彙總與 `department_id` 篩選仍依 `sales_person_id`**，沒有跟著改：那條線會影響整份報表的取數範圍，改動面遠大於這次交辦，而且要先決定「案件的部門是跟著開單者還是跟著業務負責」。**若兩張表的部門數字對不上，原因就在這裡。** |
 | 🟠 | **每案資料的 IDOR 面還沒收完**（2026-09-13 模組權限盤點，見 [`MODULE-AUDIT-2026-09-13.md`](MODULE-AUDIT-2026-09-13.md) §4）。`routers/quotations.py` 裡還有一批端點只要求登入、沒有 `_check_quotation_owner()`：案件階段（`/stages`、`/stages/{id}/visits`）、更新紀錄（`/updates`）、案件鎖定（`/case-lock`、`/case-unlock`）、款項與叫料的附件上傳／刪除、`/export`、三支 PDF 下載。**這次只修了金額面最重的 `settlement`／`finance-summary`**。其餘要一起改，前提是先確認「被指派的協作者」這條線在每個流程都成立（例如現場工程師是不是都會被指派到案件）——那是流程問題，不是技術問題 |
 | 🟡 | **`financial_view` 是顯示偏好、不是權限**：全系統只在 `case-management.js:214` 被讀，`/api/sales-orders`／`settlement`／`finance-summary` 等照樣回金額。團隊已知且刻意（`get_finance_summary()` docstring：「只擋這一支會是假的安全感」）。若要讓它變成真的權限，得一次處理所有回傳金額的端點，並先決定 viewer/engineer 到底該不該看到毛利 <br>**⚠️ 2026-09-14 部分解決**：admin 直通已取消，模組檢查現在對所有非 superadmin 生效（DB v84，見 §12 第十二輪）。本列剩下的是**金額欄位**要不要也納入模組制這個未決問題——那跟「哪些頁面看得到」是兩條線。 |
@@ -1895,6 +1895,49 @@ xlsx-0.18.5.full.min.js     （SheetJS）
 > 未紀錄；同期間 `CHANGELOG.md` 09-08／09-09 兩天完全空白。已於本日補回，並新增
 > [`WEEKLY-AUDIT-2026-09-07_2026-09-10.md`](WEEKLY-AUDIT-2026-09-07_2026-09-10.md)
 > ——帶「模組／檔案:行號／是否在正式機」座標的本週稽核索引，出事時先看那份。
+
+### 2026-09-14（第十五輪）— 報價條款組：付款／驗收／保固可成組切換（DB 無異動）
+
+使用者裁示：「報價單可以增加付款條件的選項，名稱也可以自定義，例如純購料，
+他有自己的付款條件、驗收標準、保固條件，可由報價人手動點選方塊做切換，只有
+超級管理員可以點選設為預設付款條件的功能跟建立，像是完工單內單據用語這樣的選項」。
+
+**形狀**：`system_settings.quote_terms_presets = {presets: [...], defaultKey: "..."}`，
+每組 = `{key, name, paymentTerms, deliveryTerms, acceptanceTerms, warrantyTerms, afterSales}`。
+
+| 端點 | 權限 | 說明 |
+|---|---|---|
+| `GET /api/settings/quote-terms-presets` | **登入即可** | 報價人要靠它切換；限 superadmin 等於這功能只有 superadmin 用得到，而它是做給報價人的 |
+| `PUT /api/settings/quote-terms-presets` | superadmin | 整組覆寫（建立／改名／改內容／刪除／設預設都走這一支） |
+
+**三個刻意的設計決定**：
+
+1. **報價單存的是複製過去的文字，不是指向設定的 key**。已經開出去的單不能因為
+   有人事後改了條款組、或把那組刪掉而跟著變——跟同日「單據原始版本存檔」同一個
+   判準。`termsPresetKey` 只當「從哪一組起手」的線索。
+2. **後端不自動種一組預設**。前端 `quotation-form.html` 本來就有 `DEFAULT_TERMS`
+   當「沒有任何設定時」的內容，後端再種一份就變成兩個事實來源，而且一旦分岔
+   不會有任何地方報錯。沒設定＝維持改動前的行為。
+3. **刪掉被設為預設的那組時 `defaultKey` 自我修復**（落到第一組）。留一個指向
+   不存在的 key 會讓新報價單完全拿不到預設條款，而畫面上看不出為什麼。
+
+**`checkApproval()` 的比對基準一併改掉**：原本一律比 `DEFAULT_TERMS`，有了條款組
+之後切到「純購料」會整組被判定成「條件已修改」而觸發簽核提示——**這功能一用就報警**。
+現在以目前選中的那組為基準，提示文字也改成「與條款組「純購料」不同」。
+
+#### e2e 抓到一個單元測試照不到的 bug
+
+寫完之後語法檢查過、後端 14 題全綠，但 e2e 一跑就紅：`termsPresetKey` 設對了、
+付款條件卻還是舊的。根因是 `init()` 新增模式分支裡那行**無條件**的
+`this.q.paymentTerms = this._defaultPaymentTerms`，把稍早套用的整組條款又蓋回去。
+已把套用移進那個分支，並保留「沒有任何條款組時走舊的單欄位預設」這條退路。
+**這就是為什麼這種前端行為要有 e2e**——語法檢查與後端測試都照不到它。
+
+測試：`test_quote_terms_presets_2026_09_14.py`（14 題）＋
+`test_e2e_quote_terms_presets_2026_09_14.py`（3 題：預設組自動帶入／點方塊五欄
+整組換掉／切換不得觸發假的簽核提示）。全套 **993 passed**。
+
+---
 
 ### 2026-09-14（第十四輪）— 完工單用語搬到最上面＋業務員績效改讀業務負責（DB 無異動）
 

@@ -1585,6 +1585,39 @@
       <!-- 五、報價條件 -->
       <div class="form-section">
         <div class="section-title"><div class="section-num">五</div>報價條件</div>
+
+        <!-- 條款組（2026-09-14）：不同性質的案子有各自的付款/驗收/保固條件，
+             例如「純購料」跟「工程」差很多。點方塊整組套用，superadmin 可建立
+             與設為預設。比照完工單「單據用語」的一鍵套用＋逐欄微調。 -->
+        <div x-show="termsPresets.length || session.role === 'superadmin'"
+             style="margin-bottom:14px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+            <span style="font-size:11px;color:var(--text-dim)">條款組</span>
+            <span x-show="termsPresets.length" style="font-size:11px;color:var(--text-dim)">
+              — 點一下整組套用，之後仍可逐欄微調
+            </span>
+            <button x-show="session.role === 'superadmin'" type="button"
+                    class="btn btn-ghost btn-sm" style="margin-left:auto"
+                    @click="openTermsManager()">管理條款組</button>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <template x-for="p in termsPresets" :key="p.key">
+              <button type="button" @click="applyTermsPreset(p.key)"
+                      style="padding:6px 14px;font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;font-weight:600;border-radius:6px;cursor:pointer;transition:background .12s,border-color .12s"
+                      :style="q.termsPresetKey === p.key
+                        ? 'background:#0A0A0A;color:#F5F4F0;border:1px solid #0A0A0A'
+                        : 'background:#fff;color:#4A4744;border:1px solid var(--border-light)'">
+                <span x-text="p.name"></span>
+                <span x-show="p.key === termsDefaultKey" title="新增報價單時的預設"
+                      style="font-size:10px;opacity:.7"> ★</span>
+              </button>
+            </template>
+            <span x-show="!termsPresets.length" style="font-size:11px;color:var(--text-dim);padding:6px 0">
+              尚未建立任何條款組——目前使用系統內建條款。
+            </span>
+          </div>
+        </div>
+
         <div class="form-grid" style="gap:14px">
           <div class="form-group">
             <label class="form-label" style="display:flex;align-items:center;justify-content:space-between;gap:8px">
@@ -1862,6 +1895,57 @@
       </template>
 
     </div><!-- /form-right -->
+  </div>
+
+  <!-- ══ 條款組管理 Modal（superadmin，2026-09-14）══ -->
+  <div class="modal-overlay" x-show="termsManageOpen" x-transition
+       @click.self="termsManageOpen=false" style="display:none">
+    <div class="modal-box" style="max-width:780px">
+      <div class="modal-head">
+        <span class="modal-head__title">管理條款組</span>
+        <button class="modal-close" @click="termsManageOpen=false">×</button>
+      </div>
+      <div style="padding:16px 18px;max-height:70vh;overflow:auto">
+        <div style="font-size:11px;color:var(--text-dim);margin-bottom:12px;line-height:1.7">
+          每一組包含付款條件、交貨條件、驗收標準、保固條件、售後服務五段文字。
+          <b>★ 是新增報價單時自動帶入的那一組。</b><br>
+          ⚠️ 改這裡<b>不會動到任何已經開出去的報價單</b>——報價單存的是當下複製過去的文字，
+          不是指向這裡的連結。
+        </div>
+
+        <template x-for="(p, i) in termsDraft" :key="p.key">
+          <div style="border:1px solid var(--border-light);border-radius:6px;padding:12px;margin-bottom:10px">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+              <input class="form-input" style="max-width:220px" type="text" maxlength="30"
+                     x-model="p.name" placeholder="組名，例如：純購料">
+              <button type="button" class="btn btn-ghost btn-sm"
+                      @click="termsDraftDefault = p.key"
+                      :style="termsDraftDefault === p.key ? 'color:#B45309;font-weight:700' : ''"
+                      x-text="termsDraftDefault === p.key ? '★ 預設' : '設為預設'"></button>
+              <button type="button" class="btn btn-ghost btn-sm" style="margin-left:auto;color:#B91C1C"
+                      @click="removeTermsPreset(i)">刪除</button>
+            </div>
+            <template x-for="f in termsFieldDefs" :key="f.key">
+              <div style="margin-bottom:6px">
+                <label class="form-label" style="font-size:11px" x-text="f.label"></label>
+                <textarea class="form-textarea" rows="2" x-model="p[f.key]"
+                          style="font-size:12px"></textarea>
+              </div>
+            </template>
+          </div>
+        </template>
+
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+          <button type="button" class="btn btn-ghost btn-sm" @click="addTermsPresetFromForm()">
+            以目前表單內容新增一組
+          </button>
+          <button type="button" class="btn btn-primary btn-sm" style="margin-left:auto"
+                  @click="saveTermsPresets()" :disabled="termsSaving">
+            <span x-text="termsSaving ? '儲存中…' : '儲存'"></span>
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- ══ PDF 預覽 Modal ══ -->
@@ -2211,6 +2295,7 @@
         approval: null,
         isSigned: false, signedBy: '', signedAt: '', signedLog: [], signedFiles: [],
 
+        termsPresetKey: '',   // 這張單是從哪一組條款起手的（線索，不是資料來源）
         paymentTerms: DEFAULT_TERMS.paymentTerms,
         deliveryTerms: DEFAULT_TERMS.deliveryTerms,
         acceptanceTerms: DEFAULT_TERMS.acceptanceTerms,
@@ -2228,6 +2313,23 @@
       },
       exportLogModal: false,
       exporting: false,
+
+      // ── 條款組（2026-09-14）────────────────────────────────────────────
+      // `termsPresets` 是設定裡的清單；**報價單本身存的是複製過去的文字**，
+      // 不是指向這裡的 key——改了設定不會動到已開出去的單（見後端 docstring）。
+      termsPresets: [],
+      termsDefaultKey: '',
+      termsManageOpen: false,
+      termsSaving: false,
+      termsDraft: [],
+      termsDraftDefault: '',
+      termsFieldDefs: [
+        { key: 'paymentTerms',    label: '付款條件' },
+        { key: 'deliveryTerms',   label: '交貨條件' },
+        { key: 'acceptanceTerms', label: '驗收標準' },
+        { key: 'warrantyTerms',   label: '保固條件' },
+        { key: 'afterSales',      label: '售後服務' },
+      ],
       // 存檔版本索引（2026-09-14）。單獨向 /versions 取，不塞進 q——它是衍生資料，
       // 會被存檔流程整包送回後端，混進 q 會讓每次存檔都把它再寫一遍。
       docVersions: [],
@@ -2336,19 +2438,19 @@
         const taxRate = this.q.taxRate !== undefined ? this.q.taxRate : 5
         if (taxRate < 5)
           reasons.push(`調整營業稅額為 ${taxRate}%（標準 5%）`)
-        const termsChanged = []
-        if ((this.q.paymentTerms || '').trim() !== (this._defaultPaymentTerms || DEFAULT_TERMS.paymentTerms).trim())
-          termsChanged.push('付款條件')
-        if ((this.q.deliveryTerms || '').trim() !== DEFAULT_TERMS.deliveryTerms.trim())
-          termsChanged.push('交貨條件')
-        if ((this.q.acceptanceTerms || '').trim() !== DEFAULT_TERMS.acceptanceTerms.trim())
-          termsChanged.push('驗收標準')
-        if ((this.q.warrantyTerms || '').trim() !== DEFAULT_TERMS.warrantyTerms.trim())
-          termsChanged.push('保固條件')
-        if ((this.q.afterSales || '').trim() !== DEFAULT_TERMS.afterSales.trim())
-          termsChanged.push('售後服務')
-        if (termsChanged.length > 0)
-          reasons.push(`報價條件已修改，非預設內容（${termsChanged.join('、')}）`)
+        // 2026-09-14：比對基準改成「目前選中的條款組」，沒選才用系統內建值。
+        // 原本一律比 DEFAULT_TERMS——有了條款組之後，切到「純購料」會被整組
+        // 判定成「條件被改過」而觸發簽核提示，等於這個功能一用就報警。
+        const _base = this._termsBaseline()
+        const termsChanged = this.termsFieldDefs
+          .filter(f => (this.q[f.key] || '').trim() !== (_base[f.key] || '').trim())
+          .map(f => f.label)
+        if (termsChanged.length > 0) {
+          const _p = this._presetByKey(this.q.termsPresetKey)
+          reasons.push(_p
+            ? `報價條件已修改，與條款組「${_p.name}」不同（${termsChanged.join('、')}）`
+            : `報價條件已修改，非預設內容（${termsChanged.join('、')}）`)
+        }
         this.approvalReasons = reasons
         this.needsApproval = reasons.length > 0
       },
@@ -2445,6 +2547,122 @@
         } catch(e) {
           console.warn('API 儲存失敗（後端未啟動）', e.message)
           return false
+        }
+      },
+
+      // ── 條款組 ────────────────────────────────────────────────────────
+
+      async loadTermsPresets() {
+        try {
+          const r = await fetch(`${this.API}/settings/quote-terms-presets`, {
+            headers: { Authorization: 'Bearer ' + this.session.token },
+          })
+          if (!r.ok) return
+          const d = await r.json()
+          this.termsPresets = Array.isArray(d.presets) ? d.presets : []
+          this.termsDefaultKey = d.defaultKey || ''
+        } catch {}
+      },
+
+      _presetByKey(key) {
+        return this.termsPresets.find(p => p.key === key) || null
+      },
+
+      // 目前這張單「應該長什麼樣」的基準：選了哪一組就以那組為準，沒選就用
+      // 系統內建的 DEFAULT_TERMS（＋後端的單欄位預設付款條件）。
+      // checkApproval() 的「與預設不同」比對就靠這個——否則切到非預設組會
+      // 被誤判成「條件被改過」，那正是這個功能最容易踩到的坑。
+      _termsBaseline() {
+        const p = this._presetByKey(this.q.termsPresetKey)
+        if (p) return p
+        return {
+          paymentTerms:    this._defaultPaymentTerms || DEFAULT_TERMS.paymentTerms,
+          deliveryTerms:   DEFAULT_TERMS.deliveryTerms,
+          acceptanceTerms: DEFAULT_TERMS.acceptanceTerms,
+          warrantyTerms:   DEFAULT_TERMS.warrantyTerms,
+          afterSales:      DEFAULT_TERMS.afterSales,
+        }
+      },
+
+      applyTermsPreset(key, silent = false) {
+        const p = this._presetByKey(key)
+        if (!p) return
+        if (!silent) {
+          // 已經改過內容時先問一聲——套用是整組覆寫，不是合併
+          const base = this._termsBaseline()
+          const dirtyFields = this.termsFieldDefs.filter(f =>
+            (this.q[f.key] || '').trim() !== (base[f.key] || '').trim())
+          if (dirtyFields.length &&
+              !confirm(`套用「${p.name}」會覆蓋你已經改過的內容（${dirtyFields.map(f => f.label).join('、')}），確定嗎？`))
+            return
+        }
+        for (const f of this.termsFieldDefs) this.q[f.key] = p[f.key] || ''
+        this.q.termsPresetKey = p.key
+        this.setDirty(); this.checkApproval()
+        if (!silent) this.toast(`已套用「${p.name}」`)
+      },
+
+      openTermsManager() {
+        // 深拷貝——在 modal 裡改到一半按叉叉不該影響外面已載入的清單
+        this.termsDraft = JSON.parse(JSON.stringify(this.termsPresets))
+        this.termsDraftDefault = this.termsDefaultKey
+        this.termsManageOpen = true
+      },
+
+      addTermsPresetFromForm() {
+        // 「建立」的語意：使用者在表單上把文字調好，再存成一組。
+        // 空白 key 由後端派，這裡先給一個暫時的，讓 x-for 的 :key 穩定。
+        const tmp = 'new_' + Math.random().toString(36).slice(2, 10)
+        const item = { key: tmp, name: '' }
+        for (const f of this.termsFieldDefs) item[f.key] = this.q[f.key] || ''
+        this.termsDraft.push(item)
+      },
+
+      removeTermsPreset(i) {
+        const p = this.termsDraft[i]
+        if (!confirm(`確定刪除條款組「${p.name || '（未命名）'}」？\n已經開出去的報價單不受影響。`)) return
+        this.termsDraft.splice(i, 1)
+        if (this.termsDraftDefault === p.key) this.termsDraftDefault = ''
+      },
+
+      async saveTermsPresets() {
+        if (this.termsDraft.some(p => !(p.name || '').trim())) {
+          alert('每一組都要有名稱'); return
+        }
+        this.termsSaving = true
+        try {
+          const res = await fetch(`${this.API}/settings/quote-terms-presets`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json',
+                       Authorization: 'Bearer ' + this.session.token },
+            body: JSON.stringify({
+              // 暫時 key（new_xxx）送空字串，讓後端派一個穩定的
+              presets: this.termsDraft.map(p => ({
+                ...p, key: String(p.key || '').startsWith('new_') ? '' : p.key,
+              })),
+              defaultKey: String(this.termsDraftDefault || '').startsWith('new_')
+                ? '' : this.termsDraftDefault,
+            }),
+          })
+          if (!res.ok) {
+            let msg = '儲存失敗'
+            try { const e = await res.json(); msg = e.detail || msg } catch {}
+            alert(msg); return
+          }
+          const d = await res.json()
+          this.termsPresets = d.presets || []
+          this.termsDefaultKey = d.defaultKey || ''
+          // 目前這張單選中的那組可能被改名或刪掉——刪掉就讓它變成「未選」，
+          // 已經填在表單裡的文字不動（那是這張單自己的內容）
+          if (this.q.termsPresetKey && !this._presetByKey(this.q.termsPresetKey))
+            this.q.termsPresetKey = ''
+          this.termsManageOpen = false
+          this.checkApproval()
+          this.toast('✓ 條款組已更新')
+        } catch {
+          alert('儲存失敗，請確認後端伺服器是否在線')
+        } finally {
+          this.termsSaving = false
         }
       },
 
@@ -3434,6 +3652,10 @@ window.addEventListener('load',function(){
           }
         } catch(e) {}
 
+        // 條款組（2026-09-14）。一定要在讀取既有報價單之前載入完成——
+        // checkApproval() 的比對基準要靠它，而且新單要自動套用預設那一組。
+        await this.loadTermsPresets()
+
         // ── 從 URL 讀取報價單號 ──
         const params  = new URLSearchParams(window.location.search)
         const editNo  = params.get('id')
@@ -3505,7 +3727,18 @@ window.addEventListener('load',function(){
           // ── 新增模式：每次由 API 派發單號 ──
           await this._peekQuoteNo()
           this.isNewRecord = true
-          this.q.paymentTerms = this._defaultPaymentTerms
+          // 預設條款組（2026-09-14）。**一定要在這個分支裡**：原本這裡是
+          // 無條件 `q.paymentTerms = _defaultPaymentTerms`，把稍早套用的整組
+          // 條款又蓋回去——實測時 `termsPresetKey` 有設好、付款條件卻還是舊的，
+          // 就是踩到這一行。只影響新增模式；編輯既有報價單時上面的
+          // `Object.assign(this.q, row.data)` 會用那張單自己存的條款，
+          // **歷史單據不該因為預設組改過而跟著變**。
+          if (this.termsDefaultKey) {
+            this.applyTermsPreset(this.termsDefaultKey, true)
+          } else {
+            // 沒有任何條款組時維持改動前的行為（單欄位預設付款條件）
+            this.q.paymentTerms = this._defaultPaymentTerms
+          }
         }
 
         this.calcTotals()
