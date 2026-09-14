@@ -41,6 +41,16 @@
 
   function pg(f) { return inPg ? f : 'pages/' + f }
   function esc(t) { return String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') }
+  // 頂欄顯示的頁面名稱（2026-09-14）。
+  // 各頁的 <title> 格式是「頁名 — MOTRIX 專案管理系統」，直接取前半段；
+  // **刻意不另外維護一份 file → label 對照表**，那種表跟頁面遲早會對不起來。
+  // 首頁的 title 是倒過來的（「MOTRIX 專案管理系統 — 營運儀表板」），
+  // 切出來是系統名，正好就是首頁該顯示的東西。
+  function _pageName() {
+    var t = (document.title || '').split('\u2014')[0].trim()
+    return t || 'MOTRIX 專案管理系統'
+  }
+
   function act(names) {
     for (var i = 0; i < names.length; i++) {
       if (file === names[i]) return ' active'
@@ -327,7 +337,7 @@
       + ' onerror="this.replaceWith(Object.assign(document.createElement(\'span\'),{textContent:\'MOTRIX\',style:\'color:#F5F4F0;font-family:LINE Seed TW_OTF, sans-serif;font-weight:700;font-size:15px;letter-spacing:.08em\'}))">'
       + '</a>'
       + '<div class="topbar__divider"></div>'
-      + '<span class="topbar__title">Motrix 專案管理系統</span>'
+      + '<span class="topbar__title">' + esc(_pageName()) + '</span>'
       + buildGlobalSearch()
       + '<div class="topbar__right">'
       + '<span id="tb-display-name" style="font-size:12px;color:#888;font-family:LINE Seed TW_OTF, sans-serif">' + esc(dn) + '</span>'

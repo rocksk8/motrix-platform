@@ -223,6 +223,20 @@ body {
   letter-spacing: .14em;
   text-transform: uppercase;
   color: var(--text-on-dark-dim);
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  letter-spacing: -.005em;
+}
+/* 2026-09-14：頂欄現在顯示「目前頁面名稱」，前面配一條直立紅色標記
+   （官網 28×3 在 60px 頂欄裡的緊湊變體）。這讓 31 頁本來沒有任何標頭的頁面
+   也有一致的頁面識別，不用逐頁去動它們各自不同的版面結構。 */
+.topbar__title::before {
+  content: '';
+  width: var(--v4-mark-h);
+  height: 14px;
+  background: var(--accent);
+  flex: none;
 }
 
 .topbar__right {

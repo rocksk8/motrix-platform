@@ -443,7 +443,9 @@
         <a href="pages/env-guide.html" class="h-nav__link">選型資料庫</a>
         <a href="pages/customers.html" class="h-nav__link">客戶</a>
         <a href="pages/devices.html" class="h-nav__link">設備</a>
-        <a href="pages/receivables.html" class="h-nav__link" x-show="canFinance">應收帳款</a>
+        <!-- 2026-09-14：移除「應收帳款」導覽項。它與「營運報表」實際上是同一頁：
+             receivables.html → cashier.html → reports.html?tab=cashier（兩層導向）。
+             側欄（sidebar.js:525）本來就只列營運報表，這裡跟它對齊。 -->
         <a href="pages/reports.html" class="h-nav__link" x-show="canFinance">營運報表</a>
 
         <div class="h-nav__tools">
