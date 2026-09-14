@@ -155,8 +155,12 @@ def test_detail_shows_staged_files_of_case_change(client, make_user):
             "INSERT INTO case_change_requests (quote_no, action_type, summary, payload_json, "
             "staged_files_json, status, requested_by, requested_by_display, requested_at) "
             "VALUES (?,?,?,?,?,?,?,?,?)",
-            (quote_no, "material_files", "補上叫料照片",
-             json.dumps({"materialIdx": 0, "note": "補件"}, ensure_ascii=False),
+            # 2026-09-14 更正：原本用的 "material_files" **不在 approve_case_change()
+            # 支援的類型裡**（真的送出去會撞「未知的變更類型」500），而當時的斷言
+            # 驗的是「payload 被原樣回傳」——等於把後來要修掉的那個 bug 固化成規格。
+            # 改用真實類型，並改驗可讀摘要（見 test_case_change_summary_2026_09_14.py）。
+            (quote_no, "material_file_upload", "補上叫料照片",
+             json.dumps({"idx": 0}, ensure_ascii=False),
              json.dumps(staged, ensure_ascii=False), "pending", "eng_d", "工程師丁",
              "2026-09-14T10:00:00"),
         )
@@ -169,7 +173,14 @@ def test_detail_shows_staged_files_of_case_change(client, make_user):
                    headers=_auth(_login(client, u, p))).json()
     assert [f["name"] for f in d["files"]] == ["補件照片.png"], d["files"]
     assert d["files"][0]["kind"] == "image"
-    assert d["changes"]["after"]["note"] == "補件", d["changes"]
+    # 摘要要講得出「這次要做什麼、動到哪一項、帶了哪些檔案」，而不是倒 payload
+    after = d["changes"]["after"]
+    assert "叫料項目 #1" in after["動作"], after
+    assert after["檔案數"] == 1
+    assert "補件照片.png" in after["檔案"]
+    # 只驗**摘要**裡沒有實體路徑；`files` 陣列本來就帶 path（前端靠它開檔），
+    # 那是既有設計、不是這次要改的東西
+    assert "staged/2026/photo.png" not in json.dumps(d["changes"], ensure_ascii=False),         "檔案的實體路徑不該出現在變更摘要裡"
 
 
 def test_detail_shows_quotation_items_and_last_edit(client, make_user):

@@ -1839,7 +1839,7 @@ xlsx-0.18.5.full.min.js     （SheetJS）
 | 優先 | 項目 |
 |------|------|
 | ✅ | ~~模組權限要真的擋住、未開啟的連模組名稱都不顯示~~（**2026-09-14 當天施作完成**，DB v84）。`require_any_module()` 從「admin+ 直通」改成**只有 superadmin 直通**；`sidebar.js` 二十幾個 `mods.indexOf(x) >= 0 || ad` 收斂成一支 `has(x)`，另外兩種非模組放行（`|| eng`、`|| role !== 'viewer'`）也一併拿掉。分組名稱不需額外處理——`renderMainNav()` 本來就會過濾 `items` 為空的分組，所以整組沒權限時連分組名稱都不出現。**四個原本沒有 key 只能靠角色寫死的頁面，依使用者裁示『沒有對應模組 key 也建立就沒有這個問題』新建了 key**：`audit_log`／`shipping_export_log`／`module_versions`／`selection_overview`；網路架構規劃書同樣只有 `netplan_edit` 沒有檢視 key，補上 `netplan`（目錄從 35 → 40 個 key）。**DB v84 先回填再取消直通**，所以沒有人憑空少掉今天看得到的東西。詳見 §12 同日條目與 [`MODULE-AUDIT-2026-09-13.md`](MODULE-AUDIT-2026-09-13.md) §6。 |
-| 🟠 | **已結案變更申請「核准後會套用的內容」直接把 raw JSON 倒給人看（2026-09-14 交辦，尚未施作）**。使用者附截圖：`case_record_update` 的待審內容整包 `{"stages":[...],"payment":{...}}` 原樣印在畫面上，包含 `writeOffRequestedAt`、`invoiceFiles[].path` 這種內部欄位，**審核者根本無法從中判斷要不要核准**。要改成可讀的變更摘要（欄位中文名 ＋ 前後值），資料結構可沿用本輪新做的 `_summarize_quote_changes()`（`routers/quotations.py`）。**使用者同時要求檢查是否有其他地方也這樣顯示**——至少要掃：簽核佇列的送審內容、案件變更申請、額外支出變更申請、稽核紀錄頁的 `detail` 欄位。 |
+| ✅ | ~~已結案變更申請「核准後會套用的內容」直接把 raw JSON 倒給人看~~（**2026-09-14 當天施作完成**，DB 無異動）。新增 `routers/quotations.py::_summarize_case_change()`，六種 `action_type` 各自產生可讀的 before／after（欄位中文名＋前後值），**只列有變動的欄位**；回傳形狀沿用額外支出那條路徑，前端 `approval-queue.html` 一行都不用改。**路上抓到一件比可讀性更嚴重的事**：`approve_case_change()` 對 `case_record_update` 的第一個動作是 `new_case_record["stages"] = cr.get("stages")`——**payload 裡的 stages 根本不會被套用**（階段有自己的專屬端點），而原本的畫面把它整包印在「核准後會套用的內容」底下，等於告訴審核者一件不會發生的事。摘要刻意不收 stages，並有一題測試釘住。內部欄位（`writeOffRequestedAt`、`invoiceFiles[].path`）一律不外流。**使用者要求的「其他地方也這樣顯示」已掃過**：全前端只有 `approval-queue.html:819` 一處在畫面上做 `JSON.stringify`，就是這一塊的 fallback；稽核紀錄頁根本不渲染 `detail` 欄位；額外支出變更申請本來就是逐欄對照。測試 `test_case_change_summary_2026_09_14.py`（12 題）。 |
 | 🟡 | **完工單「單據用語」與「逐欄調整」要移到頁面最上面（2026-09-14 交辦，尚未施作）**。使用者裁示：「避免員工都選完最後再重來」。現況這兩張卡片在 `completion-note-form.html` 的分頁最下方（約 207 行起），而用語 preset 一按下去會整批覆寫所有標題欄位——填完整張單才發現要換用語，等於前面白填。**純版面調整、無後端異動**：把「單據用語」與「逐欄調整」兩張 `cnf-card` 搬到該分頁最前面即可。⚠️ 順手確認 `applyPreset()` 會不會覆蓋使用者已經逐欄微調過的值——若會，移到最前面之後仍可能發生「先微調、再按 preset、微調被吃掉」，那是同一個問題換個位置發生。 |
 | 🟠 | **報價單付款條件改成可切換的「條款組」（2026-09-14 交辦，尚未施作）**。使用者裁示：「報價單可以增加付款條件的選項，名稱也可以自定義，例如純購料，他有自己的付款條件、驗收標準、保固條件，可由報價人手動點選方塊做切換，只有超級管理員可以點選設為預設付款條件的功能跟建立，像是完工單內單據用語這樣的選項」。**一組＝{名稱, 付款條件, 驗收標準, 保固條件}**，報價人在表單上點方塊切換整組；建立／編輯／設為預設限 superadmin。**可直接沿用的前例**：完工單「單據用語」（`routers/completion_notes.py::DEFAULT_LABELS`／`merged_labels()` ＋ `completion-note-form.html` 的 `presets` 一鍵套用＋逐欄微調），那套的形狀跟這裡幾乎一樣——差別只在完工單的 preset 寫死在前端，這裡的條款組要可由 superadmin 建立，所以得存 `system_settings`（例如 `quote_terms_presets`）而不是寫死。**現況**：目前只有單一預設值 `system_settings.default_payment_terms`（GET/PUT `/api/settings/payment-terms`，見 `routers/system.py:643`），而且報價單表單已經有「報價條件與預設不同」的比對邏輯（`quotation-form.html::_defaultPaymentTerms`）——**改成多組之後那個比對要一起改**，否則切到非預設組會被誤判成「被改過」。**動工前要決定的**：①驗收標準與保固條件目前存在哪（要先查報價單 data_json 有沒有既有欄位，沒有的話是新欄位）②既有報價單沿用哪一組（建議留一組「（既有）」不可刪的相容組，別回填舊資料）③條款組被改掉或刪掉時，已經開出去的報價單要不要跟著變（**應該不要**——比照本輪單據版本存檔的同一個理由：已送出的那份長什麼樣就是什麼樣，所以切換時應把三段文字**複製進單據自己的 data_json**，只存組別 key 會讓歷史單據的內容隨設定變動）。 |
 | 🟡 | **營運報表的業務員績效讀錯欄位（2026-09-14 交辦，尚未施作）**。應改讀案件管理「人員角色」裡的**業務負責**欄位（`data_json.caseRecord.roles.sales`），而不是目前用的報價單 `salesPerson`／`sales_person_id`。兩者在實務上會不一致：報價單的業務是「開單的人」，案件的業務負責才是「這個案子歸誰的績效」。⚠️ `caseRecord.roles.sales` 存的是**顯示名稱字串**不是 username（見本輪截圖實例：`"roles":{"filler":"黃玉龍","sales":"高晟耀","executor":"黃玉龍"}`），要先決定怎麼對應到帳號（改存 username？還是查 `display_name` 反查？後者遇到改名或同名會失準），以及**舊資料沒有這個欄位時要 fallback 到誰**。 |
@@ -1895,6 +1895,48 @@ xlsx-0.18.5.full.min.js     （SheetJS）
 > 未紀錄；同期間 `CHANGELOG.md` 09-08／09-09 兩天完全空白。已於本日補回，並新增
 > [`WEEKLY-AUDIT-2026-09-07_2026-09-10.md`](WEEKLY-AUDIT-2026-09-07_2026-09-10.md)
 > ——帶「模組／檔案:行號／是否在正式機」座標的本週稽核索引，出事時先看那份。
+
+### 2026-09-14（第十三輪）— 已結案變更申請改成可讀摘要（DB 無異動）
+
+使用者附截圖交辦：簽核佇列的「核准後會套用的內容」整包印出
+`{"stages":[...],"payment":{"items":[{...,"writeOffRequestedAt":"...",
+"invoiceFiles":[{"path":"..."}]}]}}`，**審核者根本無法從中判斷要不要核准**。
+
+根因單純：`approval_queue_detail()` 對 `case_change` 是
+`out["changes"] = {"after": payload}`——把 `payload_json` 整包丟給前端，而前端對
+物件值是 `JSON.stringify()`。
+
+**但這件事不只是難讀，是會誤導**：`approve_case_change()` 處理
+`case_record_update` 的第一行是 `new_case_record["stages"] = cr.get("stages")`
+——payload 裡的 stages **根本不會被套用**（案件階段有自己的專屬端點，見 §7.2）。
+把它印在「核准後會套用的內容」底下，是告訴審核者一件不會發生的事。
+
+新增 `_summarize_case_change()`，六種 `action_type` 各自產出可讀的 before／after：
+
+| action_type | 摘要內容 |
+|---|---|
+| `case_record_update` | 攤平成「合約·交貨地址」「角色·業務負責」「款項 #1·金額」這類標籤，**只列有變動的欄位**；沒有可辨識變動時明講，而不是倒一堆 JSON |
+| `payment_mark` | 只列這次申請真的動到的欄位（已收款／收款日期／發票號碼…），含前後值 |
+| `*_upload` | 「於 叫料項目 #3 新增附件」＋檔名與數量（不給實體路徑） |
+| `*_delete` | 「刪除 款項 #1 的發票附件」＋被刪檔案的檔名 |
+| 未知類型 | 講清楚「這個類型還沒有可讀摘要，請開案件頁確認」——**不是**退回倒 raw JSON |
+
+攤平刻意不收：`stages`（不會被套用）、`writeOffStatus`／`writeOffRequestedAt`／
+`invoiceFiles[].path` 這類內部欄位；`materials`／`devices` 只收筆數
+（逐項展開會比 raw JSON 還長，而要核的是「有沒有變動」）。
+
+回傳形狀沿用額外支出那條既有路徑（`{label, before, after}`），所以
+`approval-queue.html` 的渲染一行都不用改。
+
+**使用者要求的「檢查是否有其他地方也這樣顯示」**：掃過全前端，畫面上做
+`JSON.stringify` 的只有 `approval-queue.html:819` 一處，就是這一塊的 fallback
+（後端現在一律送純量，不會再觸發）；稽核紀錄頁根本不渲染 `detail` 欄位；
+額外支出變更申請本來就是逐欄對照。沒有第二處。
+
+測試 `test_case_change_summary_2026_09_14.py`（12 題，含「stages 只改不算變動」
+與「未知類型不得倒 raw payload」兩題反向守門）。全套 965 passed。
+
+---
 
 ### 2026-09-14（第十二輪）— 取消 admin 直通，模組權限對管理員也生效（**DB v84**）
 

@@ -4828,6 +4828,193 @@ def _case_header(conn, quote_no: str) -> dict:
             "projectName": row["project_name"] or "", "dealTag": row["deal_tag"] or ""}
 
 
+# ── 已結案變更申請的可讀摘要（2026-09-14 使用者交辦）────────────────────────
+#
+# 原本這裡是 `{"after": payload, "before": None}`——把 `payload_json` 整包丟給前端，
+# 而前端對物件值是 `JSON.stringify()`，所以簽核畫面上直接出現一大段
+# `{"stages":[...],"payment":{"items":[{...}]}}`，裡面混著 `writeOffRequestedAt`、
+# `invoiceFiles[].path` 這種內部欄位。**審核者根本無法從中判斷要不要核准。**
+#
+# ⚠️ 而且不只是難讀——是**會誤導**：`approve_case_change()` 對
+# `case_record_update` 的第一件事就是 `new_case_record["stages"] = cr.get("stages")`，
+# 也就是 **payload 裡的 stages 根本不會被套用**（階段有自己的專屬端點）。
+# 把它印在「核准後會套用的內容」底下，等於告訴審核者一件不會發生的事。
+# 所以下面的攤平**刻意不收 stages**。
+
+_CASE_SCALAR_LABELS = {
+    "contract.deliveryAddress": "合約·交貨地址",
+    "contract.deliveryTerms":   "合約·交貨條件",
+    "contract.contactPerson":   "合約·聯絡人",
+    "contract.contactPhone":    "合約·聯絡電話",
+    "contract.contractNote":    "合約·備註",
+    "roles.filler":             "角色·填表人",
+    "roles.sales":              "角色·業務負責",
+    "roles.executor":           "角色·執行負責",
+    "projectTimeline.startDate": "專案期間·起日",
+    "projectTimeline.endDate":   "專案期間·迄日",
+    "projectTimeline.status":    "專案期間·狀態",
+    "notes":                    "備註",
+    "warrantyNote":             "保固說明",
+}
+
+# 款項每一期要攤平出來比對的欄位（只挑審核時真的需要看的，
+# writeOff*／invoiceFiles 這類內部欄位不收）
+_PAYMENT_ITEM_LABELS = {
+    "type":         "類型",
+    "amount":       "金額",
+    "pct":          "比例(%)",
+    "received":     "已收款",
+    "receivedAt":   "收款日期",
+    "invoiceNo":    "發票號碼",
+    "invoiceDate":  "發票日期",
+    "actualAmount": "實收金額",
+    "feeAmount":    "手續費",
+    "note":         "備註",
+}
+
+
+def _dig_path(d, path):
+    cur = d
+    for part in path.split("."):
+        if not isinstance(cur, dict):
+            return None
+        cur = cur.get(part)
+    return cur
+
+
+def _flatten_case_record(cr: dict) -> dict:
+    """把 caseRecord 攤平成「可讀標籤 → 純量值」，供逐欄比對。
+
+    刻意只收審核時真的要看的東西：合約、角色、專案期間、備註，以及款項每一期
+    的金額與收款狀態。`stages` 不收（核准時會被現有值覆蓋，見上方說明），
+    `materials`／`devices` 只收筆數（逐項展開會比 raw JSON 還長，而真正要核的是
+    「有沒有變動」——真要看細節請開案件頁）。
+    """
+    out = {}
+    if not isinstance(cr, dict):
+        return out
+
+    for path, label in _CASE_SCALAR_LABELS.items():
+        v = _dig_path(cr, path)
+        if v not in (None, ""):
+            out[label] = v
+
+    items = ((cr.get("payment") or {}).get("items")
+             if isinstance(cr.get("payment"), dict) else None)
+    if isinstance(items, list):
+        for i, it in enumerate(items):
+            if not isinstance(it, dict):
+                continue
+            for k, lbl in _PAYMENT_ITEM_LABELS.items():
+                v = it.get(k)
+                if v in (None, ""):
+                    continue
+                if k == "received":
+                    v = "是" if v else "否"
+                out[f"款項 #{i + 1}·{lbl}"] = v
+
+    for key, label in (("materials", "叫料項目數"), ("devices", "設備登載數")):
+        arr = cr.get(key)
+        if isinstance(arr, list):
+            out[label] = len(arr)
+    return out
+
+
+def _diff_flat(before: dict, after: dict):
+    """回傳 (before_shown, after_shown)：只留有差異的欄位，兩邊 key 對齊。"""
+    keys = sorted(set(before) | set(after))
+    b, a = {}, {}
+    for k in keys:
+        ov, nv = before.get(k), after.get(k)
+        if ov == nv:
+            continue
+        b[k] = "—" if ov in (None, "") else ov
+        a[k] = "—" if nv in (None, "") else nv
+    return b, a
+
+
+def _idx_label(payload: dict, noun: str) -> str:
+    idx = payload.get("idx")
+    return f"{noun} #{idx + 1}" if isinstance(idx, int) and idx >= 0 else noun
+
+
+def _summarize_case_change(action_type: str, payload: dict, cr: dict,
+                           staged_files: list) -> dict:
+    """把一筆已結案變更申請整理成簽核人看得懂的 before/after。
+
+    回傳的形狀跟額外支出那條路徑一致（`{label, before, after}`），所以前端
+    approval-queue.html 的渲染完全不用改。
+    """
+    if action_type == "case_record_update":
+        new_cr = (payload.get("case_record") or {}) if isinstance(payload, dict) else {}
+        before, after = _diff_flat(_flatten_case_record(cr), _flatten_case_record(new_cr))
+        if not after:
+            return {"label": "核准後會套用的內容",
+                    "before": None,
+                    "after": {"（無可辨識的欄位變動）":
+                              "申請內容與目前案件資料相同，或變動落在不列入比對的欄位"
+                              "（案件執行階段由專屬流程處理，不會透過這張申請套用）"}}
+        return {"label": "核准後會套用的內容（僅列出有變動的欄位）",
+                "before": before, "after": after}
+
+    if action_type == "payment_mark":
+        body = (payload.get("body") or {}) if isinstance(payload, dict) else {}
+        idx = payload.get("idx")
+        items = ((cr.get("payment") or {}).get("items")
+                 if isinstance(cr.get("payment"), dict) else []) or []
+        cur = items[idx] if isinstance(idx, int) and 0 <= idx < len(items) else {}
+        before, after = {}, {}
+        for k, lbl in _PAYMENT_ITEM_LABELS.items():
+            if k not in body:
+                continue
+            ov, nv = cur.get(k), body.get(k)
+            if k == "received":
+                ov = "是" if ov else "否"
+                nv = "是" if nv else "否"
+            before[lbl] = "—" if ov in (None, "") else ov
+            after[lbl] = "—" if nv in (None, "") else nv
+        return {"label": f"核准後會套用的內容（{_idx_label(payload, '款項')}）",
+                "before": before or None, "after": after or {"（無欄位變動）": "—"}}
+
+    if action_type in ("payment_invoice_upload", "material_file_upload",
+                       "material_invoice_upload"):
+        noun = {"payment_invoice_upload": "款項",
+                "material_file_upload": "叫料項目",
+                "material_invoice_upload": "叫料項目"}[action_type]
+        what = "發票附件" if "invoice" in action_type else "附件"
+        return {"label": "核准後會套用的內容",
+                "before": None,
+                "after": {"動作": f"於 {_idx_label(payload, noun)} 新增{what}",
+                          "檔案數": len(staged_files or []),
+                          "檔案": "、".join(
+                              (f.get("filename") or "") for f in (staged_files or [])) or "—"}}
+
+    if action_type in ("payment_invoice_delete", "material_file_delete",
+                       "material_invoice_delete"):
+        noun = "款項" if action_type == "payment_invoice_delete" else "叫料項目"
+        what = "發票附件" if "invoice" in action_type else "附件"
+        field = ("invoiceFiles" if "invoice" in action_type else "files")
+        idx = payload.get("idx")
+        arr = (((cr.get("payment") or {}).get("items") or [])
+               if action_type == "payment_invoice_delete" else (cr.get("materials") or []))
+        name = "—"
+        if isinstance(idx, int) and 0 <= idx < len(arr):
+            for f in (arr[idx].get(field) or []):
+                if f.get("id") == payload.get("file_id"):
+                    name = f.get("filename") or f.get("id") or "—"
+                    break
+        return {"label": "核准後會套用的內容",
+                "before": {"目前附件": name},
+                "after": {"動作": f"刪除 {_idx_label(payload, noun)} 的{what}",
+                          "檔案": name}}
+
+    # 未知類型：不要再倒 raw JSON，至少講清楚這是什麼
+    return {"label": "核准後會套用的內容",
+            "before": None,
+            "after": {"變更類型": action_type,
+                      "說明": "這個變更類型還沒有可讀摘要，請開啟案件頁確認後再核准"}}
+
+
 def _guard_queue_detail(conn, user: dict, quote_no: str, approval_raw=None) -> None:
     """簽核佇列詳情的存取守門（2026-09-14 自動安全掃描後補上）。
 
@@ -4984,8 +5171,22 @@ def approval_queue_detail(type: str, id: str, authorization: str = Header(None))
                 payload = json.loads(r["payload_json"] or "{}")
             except Exception:
                 payload = {}
-            if payload:
-                out["changes"] = {"label": "核准後會套用的內容", "after": payload, "before": None}
+            # 2026-09-14：原本是 `{"after": payload}`——整包 payload_json 丟給前端，
+            # 畫面上直接變成一大段 raw JSON（見 _summarize_case_change() 說明）。
+            _cr_now = {}
+            try:
+                _q = conn.execute("SELECT data_json FROM quotations WHERE quote_no=?",
+                                   (r["quote_no"],)).fetchone()
+                if _q:
+                    _cr_now = (json.loads(_q["data_json"] or "{}") or {}).get("caseRecord") or {}
+            except Exception:
+                _cr_now = {}
+            try:
+                _staged = json.loads(r["staged_files_json"] or "[]")
+            except Exception:
+                _staged = []
+            out["changes"] = _summarize_case_change(
+                r["action_type"] or "", payload, _cr_now, _staged)
 
         elif type in ("invoice_voucher", "payment_request", "contractor_voucher"):
             table, key = {
