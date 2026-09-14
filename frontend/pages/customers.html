@@ -173,11 +173,11 @@
   <div class="page-main" :class="{'pr-96': !!selectedId}" style="transition:padding-right .22s">
 
     <!-- 頁頭 -->
-    <div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:20px">
-      <div>
-        <div style="font-size:11px;color:var(--text-dim);margin-bottom:4px">業務管理</div>
-        <h1 style="font-size:20px;font-weight:700">客戶管理</h1>
-        <p style="font-size:12px;color:var(--text-secondary);margin-top:4px" x-text="`共 ${filtered.length} 筆客戶資料`"></p>
+    <div class="pg">
+      <div class="pg__l">
+        <div class="pg__eyebrow">業務管理</div>
+        <h1 class="pg__t">客戶管理</h1>
+<p style="font-size:12px;color:var(--text-secondary);margin-top:4px" x-text="`共 ${filtered.length} 筆客戶資料`"></p>
       </div>
       <button class="btn btn-primary" @click="openCreate()">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v16m8-8H4"/></svg>
@@ -259,7 +259,7 @@
                 <template x-if="(c.tags&&c.tags.length) || c.alias">
                   <div style="display:flex;flex-wrap:wrap;gap:3px">
                     <template x-for="t in (c.tags&&c.tags.length ? c.tags : (c.alias?[c.alias]:[]))" :key="t">
-                      <span x-text="t" style="font-size:10px;background:#EFF6FF;color:#1D4ED8;padding:1px 6px;border-radius:3px;white-space:nowrap;font-family:var(--font-zh)"></span>
+                      <span x-text="t" style="font-size:10px;background:var(--accent-light);color:var(--accent-hover);padding:1px 6px;border-radius:3px;white-space:nowrap;font-family:var(--font-zh)"></span>
                     </template>
                   </div>
                 </template>
@@ -335,7 +335,7 @@
             <span class="detail-label">內部標籤</span>
             <div style="display:flex;flex-wrap:wrap;gap:4px">
               <template x-for="t in (selectedCustomer.tags&&selectedCustomer.tags.length ? selectedCustomer.tags : (selectedCustomer.alias?[selectedCustomer.alias]:[]))" :key="t">
-                <span x-text="t" style="font-size:11px;background:#EFF6FF;color:#1D4ED8;padding:2px 8px;border-radius:3px;font-family:var(--font-zh)"></span>
+                <span x-text="t" style="font-size:11px;background:var(--accent-light);color:var(--accent-hover);padding:2px 8px;border-radius:3px;font-family:var(--font-zh)"></span>
               </template>
             </div>
           </div>
@@ -451,7 +451,7 @@
       <div class="modal-body" style="padding:28px 24px">
         <template x-if="importing">
           <div style="text-align:center;padding:20px 0">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#2563EB" stroke-width="2" style="animation:spin .8s linear infinite;margin-bottom:12px"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#C8102E" stroke-width="2" style="animation:spin .8s linear infinite;margin-bottom:12px"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>
             <div style="font-size:13px;color:var(--text-secondary)">匯入中，請稍候…</div>
           </div>
         </template>
@@ -462,9 +462,9 @@
                 <div style="font-size:28px;font-weight:700;color:#15803D;font-family:LINE Seed TW_OTF, sans-serif" x-text="importResults.created"></div>
                 <div style="font-size:11px;color:#15803D;margin-top:4px">新增</div>
               </div>
-              <div style="text-align:center;padding:14px;background:#EFF6FF;border-radius:var(--radius)">
-                <div style="font-size:28px;font-weight:700;color:#1D4ED8;font-family:LINE Seed TW_OTF, sans-serif" x-text="importResults.updated"></div>
-                <div style="font-size:11px;color:#1D4ED8;margin-top:4px">更新</div>
+              <div style="text-align:center;padding:14px;background:var(--accent-light);border-radius:var(--radius)">
+                <div style="font-size:28px;font-weight:700;color:var(--accent-hover);font-family:LINE Seed TW_OTF, sans-serif" x-text="importResults.updated"></div>
+                <div style="font-size:11px;color:var(--accent-hover);margin-top:4px">更新</div>
               </div>
               <div style="text-align:center;padding:14px;background:#FEF2F2;border-radius:var(--radius)">
                 <div style="font-size:28px;font-weight:700;color:#DC2626;font-family:LINE Seed TW_OTF, sans-serif" x-text="importResults.failed"></div>

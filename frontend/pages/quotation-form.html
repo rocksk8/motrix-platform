@@ -255,13 +255,13 @@
     .drag-handle:hover { opacity: 1; background: #EEECEA; }
     tr:hover .drag-handle { opacity: .85; }
     .drag-handle:active { cursor: grabbing; }
-    .sortable-ghost td { background: #EFF6FF !important; opacity: .5; }
+    .sortable-ghost td { background: var(--accent-light) !important; opacity: .5; }
     .sortable-chosen { box-shadow: 0 2px 16px rgba(0,0,0,.12); }
     .is-locked .drag-handle { display: none !important; }
     /* ── 標題行 ── */
-    tr.item-header-row td { background: #EFF6FF; border-top: 2px solid #BFDBFE; border-bottom: 1px solid #BFDBFE; }
+    tr.item-header-row td { background: var(--accent-light); border-top: 2px solid #BFDBFE; border-bottom: 1px solid #BFDBFE; }
     tr.item-header-row:hover td { background: #E0EEFF; }
-    .cell-textarea.header-desc { font-weight: 700; font-size: 13px; color: #1D4ED8; width: 100%; }
+    .cell-textarea.header-desc { font-weight: 700; font-size: 13px; color: var(--accent-hover); width: 100%; }
     tr.item-header-row td:not(:first-child):not(:last-child) { padding: 0 2px; }
     tr.item-header-row td input,
     tr.item-header-row td select,
@@ -826,7 +826,7 @@
           <select :value="q.dealTag"
                   @change="onDealTagChange($event.target.value)"
                   style="padding:4px 6px;font-size:11px;border:1px solid var(--border-light);border-radius:4px;background:#fff;color:var(--text-primary);font-family:var(--font-zh);cursor:pointer;outline:none;max-width:96px"
-                  :style="q.dealTag==='未成案' ? 'color:#DC2626;border-color:#FCA5A5' : q.dealTag==='已提供' ? 'color:#2563EB;border-color:#93C5FD' : ''">
+                  :style="q.dealTag==='未成案' ? 'color:#DC2626;border-color:#FCA5A5' : q.dealTag==='已提供' ? 'color:var(--accent);border-color:#93C5FD' : ''">
             <option value="">未標記</option>
             <option value="未提供">未提供</option>
             <option value="已提供">已提供</option>
@@ -1177,10 +1177,10 @@
                    style="position:absolute;z-index:200;left:0;right:0;top:calc(100% + 2px);background:#fff;border:1.5px solid #E5E7EB;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.10);max-height:200px;overflow-y:auto">
                 <template x-for="(c,i) in customerSuggestions" :key="c._type+c.id">
                   <div @click="selectCustomer(c)" @mouseenter="customerDropIdx=i"
-                       :style="i===customerDropIdx?'background:#EFF6FF':''"
+                       :style="i===customerDropIdx?'background:var(--accent-light)':''"
                        style="padding:7px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid #F3F4F6;display:flex;align-items:center;gap:6px">
                     <span style="font-size:10px;padding:1px 5px;border-radius:3px;flex-shrink:0;font-family:LINE Seed TW_OTF, sans-serif"
-                          :style="c._type==='supplier' ? 'background:#F3E8FF;color:#7C3AED' : 'background:#DBEAFE;color:#1D4ED8'"
+                          :style="c._type==='supplier' ? 'background:#F3E8FF;color:#7C3AED' : 'background:#DBEAFE;color:var(--accent-hover)'"
                           x-text="c._type==='supplier' ? '供應商' : '客戶'"></span>
                     <span x-text="c.name"></span>
                   </div>
@@ -1192,7 +1192,7 @@
                 <span style="color:#16a34a;display:flex;align-items:center;gap:3px">
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg>
                   已連結客戶管理
-                  <a :href="'customers.html'" style="color:#2563EB;text-decoration:none;margin-left:4px">查看 →</a>
+                  <a :href="'customers.html'" style="color:var(--accent);text-decoration:none;margin-left:4px">查看 →</a>
                 </span>
               </template>
               <template x-if="!q.customerId && q.supplierId">
@@ -1226,10 +1226,10 @@
           <div style="margin-bottom:10px;position:relative">
             <button type="button" @click="showContactPicker=!showContactPicker"
                     style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-family:var(--font-zh);color:var(--accent);background:none;border:1px solid #DBEAFE;border-radius:5px;padding:4px 10px;cursor:pointer;transition:all .12s"
-                    :style="showContactPicker ? 'background:#EFF6FF;border-color:#93C5FD' : 'background:#fff'">
+                    :style="showContactPicker ? 'background:var(--accent-light);border-color:#93C5FD' : 'background:#fff'">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87m-4-12a4 4 0 010 7.75"/></svg>
               選擇聯絡人
-              <span style="font-family:LINE Seed TW_OTF, sans-serif;background:#DBEAFE;color:#1D4ED8;padding:1px 6px;border-radius:3px;font-size:10px;font-weight:600" x-text="contactOptions.length + ' 筆'"></span>
+              <span style="font-family:LINE Seed TW_OTF, sans-serif;background:#DBEAFE;color:var(--accent-hover);padding:1px 6px;border-radius:3px;font-size:10px;font-weight:600" x-text="contactOptions.length + ' 筆'"></span>
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" :style="showContactPicker ? 'transform:rotate(180deg)' : ''" style="transition:transform .15s;flex-shrink:0"><path d="M6 9l6 6 6-6"/></svg>
             </button>
             <div x-show="showContactPicker" @click.outside="showContactPicker=false"
@@ -1463,7 +1463,7 @@
             新增品項
           </button>
           <button class="btn btn-ghost btn-sm" @click="addHeader()"
-                  style="color:#1D4ED8;border-color:#BFDBFE;background:#EFF6FF">
+                  style="color:var(--accent-hover);border-color:#BFDBFE;background:var(--accent-light)">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h10"/></svg>
             新增區段標題
           </button>
@@ -1843,7 +1843,7 @@
               </div>
             </template>
             <template x-if="q.dealTag !== '未成案' && q.status !== '已送出' && q.status !== '已確認'">
-              <div style="margin-bottom:12px;padding:7px 12px;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:5px;font-size:11px;color:#1E40AF;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.03em"
+              <div style="margin-bottom:12px;padding:7px 12px;background:var(--accent-light);border:1px solid #BFDBFE;border-radius:5px;font-size:11px;color:#1E40AF;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.03em"
                    x-text="'⚠ 此為報價單預覽稿（目前狀態：' + (q.status || '草稿') + '），尚未正式生效，請勿對外發送或引用'">
               </div>
             </template>

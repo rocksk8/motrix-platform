@@ -28,7 +28,7 @@
     .mono{font-family:LINE Seed TW_OTF, sans-serif;font-size:11px;letter-spacing:.03em}
     .st{display:inline-flex;padding:2px 8px;border-radius:4px;font-size:11px;font-family:LINE Seed TW_OTF, sans-serif;font-weight:600}
     .st-plan{background:#F0EEE9;color:#6B7280}
-    .st-confirmed{background:#DBEAFE;color:#1D4ED8}
+    .st-confirmed{background:#DBEAFE;color:var(--accent-hover)}
     .st-delivered{background:#DCFCE7;color:#15803D}
     .empty{text-align:center;padding:60px 20px;color:var(--text-dim)}
     @keyframes spin{to{transform:rotate(360deg)}}
@@ -52,12 +52,12 @@
   <aside class="sidebar" id="app-sidebar"></aside>
 
   <div class="page-main">
-    <div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px">
-      <div>
-        <div style="font-size:11px;color:var(--text-dim);margin-bottom:4px">設備管理</div>
-        <h1 style="font-size:20px;font-weight:700">網路架構規劃書</h1>
-        <p style="font-size:12px;color:var(--text-secondary);margin-top:4px">WAN／VLAN／IP／交換器／防火牆／無線／線路配置的完整規劃文件，可匯出 Excel／PDF 給客戶</p>
-      </div>
+    <div class="pg">
+      <div class="pg__l">
+        <div class="pg__eyebrow">設備管理</div>
+        <h1 class="pg__t">網路架構規劃書</h1>
+        <p class="pg__s">WAN／VLAN／IP／交換器／防火牆／無線／線路配置的完整規劃文件，可匯出 Excel／PDF 給客戶</p>
+</div>
       <div style="display:flex;gap:8px">
         <a href="topology-quick.html" class="btn btn-ghost" style="text-decoration:none">快速拓樸圖（不建立規劃書）</a>
         <button class="btn btn-primary" @click="openCreateModal()" x-show="canEdit">新增規劃書</button>

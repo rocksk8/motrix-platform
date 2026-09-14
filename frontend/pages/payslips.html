@@ -28,7 +28,7 @@
     .tag{display:inline-flex;padding:2px 8px;border-radius:3px;font-size:11px;font-family:LINE Seed TW_OTF, sans-serif}
     .tag-exported{background:#ECFDF5;color:#059669}
     .tag-draft{background:#F3F4F6;color:#6B7280}
-    .itype{display:inline-flex;padding:1px 7px;border-radius:3px;font-size:11px;font-family:LINE Seed TW_OTF, sans-serif;background:#EFF6FF;color:#2563EB}
+    .itype{display:inline-flex;padding:1px 7px;border-radius:3px;font-size:11px;font-family:LINE Seed TW_OTF, sans-serif;background:var(--accent-light);color:var(--accent)}
     .exp-chip{display:inline-flex;padding:1px 7px;border-radius:10px;font-size:10px;font-family:LINE Seed TW_OTF, monospace;background:#F0EEE9;color:var(--text-dim);border:1px solid var(--border-light);cursor:pointer;margin-left:4px}
     .exp-chip:hover{background:#e8f0fe;border-color:#93c5fd;color:var(--accent)}
     .detail-pane{position:fixed;right:0;top:var(--topbar-h);width:380px;height:calc(100vh - var(--topbar-h));background:#fff;border-left:1px solid var(--border-light);box-shadow:var(--shadow-lg);z-index:100;display:flex;flex-direction:column;transform:translateX(100%);transition:transform .22s ease}
@@ -73,11 +73,11 @@
 <div class="page-main" :style="selectedId ? 'padding-right:400px' : ''">
 
   <!-- 頁頭 -->
-  <div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:20px">
-    <div>
-      <div style="font-size:11px;color:var(--text-dim);margin-bottom:4px">勞務管理</div>
-      <h1 style="font-size:20px;font-weight:700">勞報單</h1>
-      <p style="font-size:12px;color:var(--text-secondary);margin-top:4px" x-text="`共 ${total} 筆記錄`"></p>
+  <div class="pg">
+      <div class="pg__l">
+        <div class="pg__eyebrow">勞務管理</div>
+        <h1 class="pg__t">勞報單</h1>
+<p style="font-size:12px;color:var(--text-secondary);margin-top:4px" x-text="`共 ${total} 筆記錄`"></p>
     </div>
     <a href="payslip-form.html" class="btn btn-primary">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v16m8-8H4"/></svg>

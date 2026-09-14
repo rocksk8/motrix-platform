@@ -50,9 +50,16 @@
   --text-on-dark:   #F5F4F0;
   --text-on-dark-dim: #8A8A8A;
 
-  --accent:  #2563EB;
-  --accent-light: #EFF6FF;
-  --accent-hover: #1D4ED8;
+  /* 2026-09-14：主色由藍 #2563EB 改為官網紅 #C8102E（UI-REDESIGN-PLAN §2.3 丙案）。
+     紅色同時是系統的 danger 色，因此「主要動作 vs 危險動作」一律**靠形狀區分、不靠色相**：
+       .btn-primary  實心紅          ← 主要動作
+       .btn-reject   白底 2px 粗紅框  ← 不可逆的重大動作
+       .btn-danger   淺紅底 1px 細框  ← 一般刪除
+     對比實測：#C8102E 對站內底色 --white #F5F4F0 為 5.35:1、對純白 5.88:1，
+     白字疊 #C8102E 為 5.88:1，紅字疊 --accent-light 為 5.03:1，全數過 AA 4.5:1。 */
+  --accent:  #C8102E;
+  --accent-light: #FBE9EC;
+  --accent-hover: #A60D26;
   --success: #15803D;  /* 2026-08-28：原 #16A34A 對白底僅 3.30:1，未達 WCAG AA 文字 4.5:1（KPI 數字/
                           狀態文字等小字級直接用到此變數的場合會不過）；改用站內既有徽章文字慣用的較深綠
                           （#15803D，多處硬編碼已在用），對白底 5.02:1 過關，也讓全站綠色統一成同一色階 */
@@ -62,7 +69,11 @@
   --warning: #92400E;  /* 2026-08-28：原 #D97706 對白底僅 3.19:1，未達 AA；改用站內既有徽章文字慣用的
                           較深琥珀（#92400E），對白底 7.09:1 過關 */
   --warning-light: #FFFBEB;
-  --danger:  #DC2626;
+  --danger:  #B91C1C;  /* 2026-09-14：原 #DC2626 對站內主底色 --white #F5F4F0 只有 4.39:1，
+                          未達 AA 4.5:1（2026-08-28 那輪的三個修正應是對純白 #FFF 算的，
+                          #DC2626 對純白是 4.83:1 剛好過，對奶白底就不過了）；
+                          改 #B91C1C 後對奶白 5.88:1、對 --danger-light #FEF2F2 5.91:1。
+                          丙案下 danger 多半以「框線＋文字」呈現，文字色必須自己站得住。 */
   --danger-light: #FEF2F2;
   --danger-border: #FECACA;
   --danger-hover-bg: #FEE2E2;
@@ -82,6 +93,38 @@
 
   --font-en: 'LINE Seed TW_OTF', system-ui, sans-serif;
   --font-zh: 'LINE Seed TW_OTF', system-ui, sans-serif;
+
+  /* ─── 官網 v4 設計語彙對照層（2026-09-14，介面轉換計畫 §3 階段 0）───────────
+     來源：C:\Users\hichan\Desktop\MIAC官網(最終)\v4\css\v4.css
+     計畫書：docs/UI-REDESIGN-PLAN.md　參考稿：docs/system-home-mockup.html
+
+     這一批**只新增、不改任何既有 token 的值**，而且目前沒有任何規則引用它們，
+     所以加進來的當下畫面必須零變化——若截圖有差異，代表改錯了地方。
+     後續各階段逐步把元件改成引用這裡，才會真的看到變化。
+
+     ⚠️ 字級階梯是官網的尺度（body 16.5px），那是單頁瀏覽用的。
+     ERP 的密集表格/表單維持現行 11～13px，**不要拿 --v4-body 去套 .data-table**；
+     這組只給首頁與各頁的段落標題、導言使用。 */
+
+  --v4-rail:   rgba(26,29,33,.07);            /* ASML 式直向網格線 */
+  --v4-max:    1200px;                        /* 內容最大寬 */
+  --v4-gutter: clamp(20px, 4vw, 48px);        /* 內容左右留白 */
+  --v4-sec:    clamp(48px, 6vw, 84px);        /* 段落上下留白 */
+  --v4-ease:   cubic-bezier(.2,.6,.2,1);      /* 官網統一的緩動曲線 */
+
+  --v4-mark-w: 28px;                          /* 段落標題上方的標記條 */
+  --v4-mark-h: 3px;
+
+  --v4-h1:   clamp(34px, 4.2vw, 54px);
+  --v4-h2:   clamp(26px, 2.8vw, 38px);
+  --v4-h3:   clamp(18px, 1.5vw, 21px);
+  --v4-lead: clamp(16px, 1.3vw, 18.5px);
+  --v4-body: 16.5px;
+  --v4-sm:   15px;
+  --v4-xs:   13px;
+
+  --v4-kicker-ls: .14em;                      /* 英文小標的字距 */
+  --v4-head-ls:   -.01em;                     /* 大標的負字距 */
 }
 
 /* ─── DARK MODE（全站色彩反轉，Topbar/Sidebar/相片/Logo 排除，見 sidebar.js motrixToggleTheme） ───
@@ -110,12 +153,17 @@
    `backend/tests/test_dark_mode_chrome_structure_2026_09_13.py` 把這個結構前提變成會紅的測試
    （刻意不用「再反轉一次抵銷」的寫法：hue-rotate 不是嚴格可逆的矩陣，來回兩次顏色會偏，
    而且那樣只蓋掉顏色問題、fixed 定位仍然是壞的）。 */
-:root[data-theme="dark"] body > *:not(.topbar):not(.sidebar):not(.sidebar-overlay) {
+/* 2026-09-14：排除清單新增 .h-hero / .h-band（首頁的深色主視覺與深色三欄帶）。
+   理由跟 .topbar / .sidebar 完全相同：它們本來就是深色的，該在兩種模式下都維持深色；
+   不排除的話反轉濾鏡會把它們變成亮塊，成為深色模式下全頁唯二的白底區塊。
+   ↑ 新增時記得同步更新 backend/tests/test_dark_mode_chrome_structure_2026_09_13.py
+     （那支測試會比對這串選擇器字面，並檢查這些元素是不是 body 直下）。 */
+:root[data-theme="dark"] body > *:not(.topbar):not(.sidebar):not(.sidebar-overlay):not(.h-hero):not(.h-band) {
   filter: invert(1) hue-rotate(180deg);
 }
 
-:root[data-theme="dark"] body > *:not(.topbar):not(.sidebar):not(.sidebar-overlay) img,
-:root[data-theme="dark"] body > *:not(.topbar):not(.sidebar):not(.sidebar-overlay) video {
+:root[data-theme="dark"] body > *:not(.topbar):not(.sidebar):not(.sidebar-overlay):not(.h-hero):not(.h-band) img,
+:root[data-theme="dark"] body > *:not(.topbar):not(.sidebar):not(.sidebar-overlay):not(.h-hero):not(.h-band) video {
   filter: invert(1) hue-rotate(180deg);
 }
 
@@ -347,17 +395,26 @@ body {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
-  margin-bottom: 24px;
-  padding-bottom: 20px;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 22px;
+  padding-bottom: 18px;
   border-bottom: 1px solid var(--border-light);
 }
 
+/* 2026-09-14：還在用 .page-header 的頁面也跟著拿到 v4 語彙（標題上方 28×3 紅色標記、
+   負字距、加粗），**不用改任何一頁的標記**。新頁面請用 .pg / .pg__t 那一組。 */
 .page-header__title {
-  font-size: 22px;
-  font-weight: 600;
+  font-size: clamp(19px, 1.8vw, 23px);
+  font-weight: 700;
   color: var(--text-primary);
-  letter-spacing: -.02em;
-  line-height: 1.2;
+  letter-spacing: var(--v4-head-ls);
+  line-height: 1.25;
+}
+.page-header__title::before {
+  content: ''; display: block;
+  width: var(--v4-mark-w); height: var(--v4-mark-h);
+  background: var(--accent); margin-bottom: 11px;
 }
 
 .page-header__sub {
@@ -365,6 +422,61 @@ body {
   color: var(--text-secondary);
   margin-top: 4px;
   font-family: var(--font-en);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   v4 共用標頭（UI-REDESIGN-PLAN §3 階段 3，2026-09-14）
+
+   各頁原本的標頭是 inline style 手寫的，每頁一份、彼此微妙不同。
+   這組類別把官網 v4 的標頭語彙（28×3 紅色標記、眩標、負字距大標）
+   收成一处，頁面只要換成這組 class，之後調整一次全站跟著變。
+
+   結構：
+     <div class="pg">
+       <div class="pg__l">
+         <div class="pg__eyebrow">系統設定</div>
+         <h1 class="pg__t">使用者管理</h1>
+         <p class="pg__s">管理系統帳號、角色與存取權限</p>
+       </div>
+       <div class="pg__a">…按鈕…</div>
+     </div>
+   ═══════════════════════════════════════════════════════ */
+.pg {
+  display: flex; align-items: flex-end; justify-content: space-between;
+  gap: 16px; flex-wrap: wrap;
+  margin-bottom: 22px; padding-bottom: 18px;
+  border-bottom: 1px solid var(--border-light);
+}
+.pg__l { min-width: 0; }
+.pg__eyebrow {
+  font-family: var(--font-en); font-size: 11px; font-weight: 600;
+  letter-spacing: .12em; text-transform: uppercase;
+  color: var(--accent); margin-bottom: 9px;
+}
+/* 官網的 28×3 標記。沒有眩標時直接長在標題上方，
+   有眩標時由眩標背負（兩條紅會重複）。 */
+.pg__eyebrow::before,
+.pg__l > .pg__t:first-child::before {
+  content: ''; display: block;
+  width: var(--v4-mark-w); height: var(--v4-mark-h);
+  background: var(--accent); margin-bottom: 11px;
+}
+.pg__t {
+  font-size: clamp(19px, 1.8vw, 23px); font-weight: 700;
+  line-height: 1.25; letter-spacing: var(--v4-head-ls);
+  color: var(--text-primary);
+}
+.pg__s { font-size: 12.5px; line-height: 1.7; color: var(--text-secondary); margin-top: 5px; max-width: 68ch; }
+.pg__a { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+/* 區塊小標題（頁內分段用，比 .pg__t 小一級） */
+.sec-t {
+  font-size: 15px; font-weight: 700; color: var(--text-primary);
+  line-height: 1.35; margin-bottom: 12px;
+}
+.sec-t::before {
+  content: ''; display: block; width: 20px; height: var(--v4-mark-h);
+  background: var(--accent); margin-bottom: 9px;
 }
 
 /* ─── ALERT BANNER ─── */
@@ -497,7 +609,7 @@ body {
 .stat-tag--success { background: var(--success-light); color: var(--success); }
 .stat-tag--danger  { background: var(--danger-light);  color: var(--danger);  }
 .stat-tag--warning { background: var(--warning-light); color: var(--warning); }
-.stat-tag--accent  { background: var(--accent-light);  color: var(--accent);  }
+.stat-tag--accent  { background: #ECFEFF; color: #0E7490;  }  /* 同 .badge--sent：與 --danger 撞色，改用自有青色 */
 
 /* ─── CASH FLOW BAR ─── */
 .cashflow-card {
@@ -702,7 +814,12 @@ body {
 .badge--pending  { background: #FEF9C3; color: #A16207; }
 .badge--signing  { background: #DBEAFE; color: #1D4ED8; }
 .badge--approved { background: var(--success-light); color: var(--success); }
-.badge--sent     { background: var(--accent-light);  color: var(--accent); }
+.badge--sent     { background: #ECFEFF; color: #0E7490; }  /* 2026-09-14：原本吃 var(--accent-light)/var(--accent)。
+                                                                 主色由藍改紅之後，「已送出」變成紅底紅字，跟
+                                                                 .badge--danger「逾期」長得幾乎一樣（實際截圖確認）。
+                                                                 狀態徽章是一組**狀態序列**（草稿→待審核→簽核中→
+                                                                 已送出→已核准），本來就不該跟品牌主色連動，改用
+                                                                 自有的青色；對比 5.15:1 過 AA。 */
 .badge--done     { background: #F0F0F0; color: #4B4B4B; }
 .badge--danger    { background: var(--danger-light);  color: var(--danger); }
 .badge--rejected  { background: #FEE2E2; color: #DC2626; border: 1px solid #FECACA; }
@@ -727,12 +844,14 @@ body {
   border-radius: var(--radius);
   font-size: 12px;
   font-family: var(--font-zh);
-  font-weight: 500;
+  font-weight: 600;                 /* 2026-09-14：借官網 v4 的字重，尺寸刻意不動——
+                                       v4 的 .btn 是 12px 22px / 15px，那是單頁瀏覽的尺度，
+                                       套到 ERP 的密集工具列會整排爆版（見計畫書 §2.2 註） */
   border: none;
   cursor: pointer;
   white-space: nowrap;
   text-decoration: none;
-  transition: all .12s;
+  transition: all .12s var(--v4-ease);
 }
 .btn:disabled { opacity: .55; cursor: not-allowed; }
 
@@ -754,8 +873,13 @@ body {
    ——刻意比一般列表危險按鈕更醒目，因為代表不可逆的重大動作，不套用 .btn-danger 的淺色路線 */
 .btn-approve { background: #15803D; color: #fff; border: 1px solid #15803D; }
 .btn-approve:hover:not(:disabled) { background: #166534; border-color: #166534; }
-.btn-reject { background: var(--danger); color: #fff; border: 1px solid var(--danger); }
-.btn-reject:hover:not(:disabled) { background: #B91C1C; border-color: #B91C1C; }
+/* 2026-09-14：原本是實心 var(--danger)。主色改紅之後，實心紅＝主要動作，
+   這顆若維持實心就與「新增/儲存」長得一樣。改成白底 2px 粗紅框＋粗體——
+   比 .btn-danger 的淺色路線更重（維持原註解「代表不可逆的重大動作」的意圖），
+   又不會被誤認成主要動作。實測 #9F1239 實心對 #C8102E 實心只有 1.36:1，
+   所以「換一個更深的紅」這條路不通，必須換形狀。 */
+.btn-reject { background: #fff; color: var(--danger); border: 2px solid var(--danger); font-weight: 700; }
+.btn-reject:hover:not(:disabled) { background: var(--danger-light); }
 .btn-reject-final { background: #1C1917; color: #fff; border: 1px solid #1C1917; }
 .btn-reject-final:hover:not(:disabled) { background: #000; border-color: #000; }
 

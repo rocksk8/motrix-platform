@@ -54,7 +54,7 @@
     .data-table tr:last-child td{border-bottom:none}
     .data-table tr:hover td{background:#FDFCFA}
     .data-table .sum-row td{background:#111827!important;color:#fff;font-weight:600;border-bottom:none}
-    .data-table tr.in-period td{background:#EFF6FF}
+    .data-table tr.in-period td{background:var(--accent-light)}
     .mono{font-family:LINE Seed TW_OTF, sans-serif;font-size:11px}
     .r{text-align:right}.c{text-align:center}
     .green-txt{color:var(--success);font-weight:600}
@@ -2100,7 +2100,7 @@
 
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
           <div class="stl-section" style="margin:0;border:0;padding:0">業務員個人配額（選填）</div>
-          <button type="button" @click="addSpTarget()" style="padding:4px 12px;border:1px solid var(--accent);background:#EFF6FF;color:var(--accent);border-radius:var(--radius);font-size:11px;font-family:var(--font-zh);cursor:pointer">+ 新增業務員</button>
+          <button type="button" @click="addSpTarget()" style="padding:4px 12px;border:1px solid var(--accent);background:var(--accent-light);color:var(--accent);border-radius:var(--radius);font-size:11px;font-family:var(--font-zh);cursor:pointer">+ 新增業務員</button>
         </div>
         <template x-for="(sp, i) in targetForm.salesperson" :key="i">
           <div class="tgt-sp-row">

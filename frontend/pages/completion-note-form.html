@@ -29,7 +29,7 @@
     .cnf-hint { font-size:11px; color:var(--text-dim); margin-top:5px; line-height:1.6; font-family:var(--font-zh) }
     .cnf-btn { padding:7px 15px; border-radius:6px; font-size:12px; cursor:pointer; font-family:var(--font-zh);
                border:1px solid var(--border-light); background:#fff; color:var(--text-primary) }
-    .cnf-btn--primary { background:#1D4ED8; color:#fff; border:none; font-weight:500 }
+    .cnf-btn--primary { background:var(--accent-hover); color:#fff; border:none; font-weight:500 }
     .cnf-btn--warn { background:#B45309; color:#fff; border:none; font-weight:500 }
     .cnf-btn:disabled { opacity:.45; cursor:default }
     .cnf-item-row { display:flex; align-items:center; gap:7px; margin-bottom:7px; flex-wrap:wrap }
@@ -147,7 +147,7 @@
               <div class="cnf-item-row">
                 <span style="width:22px;text-align:center;color:var(--text-dim);font-size:11px" x-text="it.type==='header' ? '§' : (realIdx(i))"></span>
                 <template x-if="it.type === 'header'">
-                  <input class="cnf-in" type="text" style="flex:1;min-width:220px;background:#EFF6FF"
+                  <input class="cnf-in" type="text" style="flex:1;min-width:220px;background:var(--accent-light)"
                          x-model="it.description" :disabled="!editable()" @input="dirty=true"
                          placeholder="分段標題（例如：一、核心網路設備）">
                 </template>

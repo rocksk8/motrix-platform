@@ -35,7 +35,9 @@ PAGES = sorted(glob.glob(os.path.join(ROOT, "frontend", "pages", "*.html"))) + \
 STYLE_CSS = os.path.join(ROOT, "frontend", "css", "style.css")
 
 # 深色模式排除清單裡的 class（與 style.css 的選擇器一一對應）
-CHROME_CLASSES = {"topbar", "sidebar", "sidebar-overlay"}
+# 2026-09-14：首頁的深色主視覺與深色三欄帶一併納入——它們也是「本來就深色、
+# 兩種模式都不該被反轉」的區塊，同樣只有在 body 直下時排除清單才會生效。
+CHROME_CLASSES = {"topbar", "sidebar", "sidebar-overlay", "h-hero", "h-band"}
 
 # HTML 規範中不需要（也不能）有結束標籤的元素，解析時不入堆疊
 VOID = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link",
@@ -98,7 +100,8 @@ def test_dark_mode_rule_still_uses_direct_child_selector():
     這裡會紅——提醒回來確認上面那條結構規則還需不需要，而不是讓它默默變成
     一條沒人記得為什麼存在的規定。"""
     css = io.open(STYLE_CSS, encoding="utf-8").read()
-    expected = ':root[data-theme="dark"] body > *:not(.topbar):not(.sidebar):not(.sidebar-overlay)'
+    expected = (':root[data-theme="dark"] body > *'
+                ':not(.topbar):not(.sidebar):not(.sidebar-overlay):not(.h-hero):not(.h-band)')
     assert expected in css, (
         "style.css 的深色模式選擇器變了，找不到：\n  " + expected
         + "\n若深色模式已改用別的機制，請一併確認 "

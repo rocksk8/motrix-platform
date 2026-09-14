@@ -79,11 +79,11 @@
 <div class="page-main" style="transition:padding-right .22s">
 
   <!-- 頁頭 -->
-  <div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:20px">
-    <div>
-      <div style="font-size:11px;color:var(--text-dim);margin-bottom:4px">外包廠商</div>
-      <h1 style="font-size:20px;font-weight:700">承攬商管理</h1>
-      <p style="font-size:12px;color:var(--text-secondary);margin-top:4px" x-text="`共 ${vendors.length} 家承攬商`"></p>
+  <div class="pg">
+      <div class="pg__l">
+        <div class="pg__eyebrow">外包廠商</div>
+        <h1 class="pg__t">承攬商管理</h1>
+<p style="font-size:12px;color:var(--text-secondary);margin-top:4px" x-text="`共 ${vendors.length} 家承攬商`"></p>
     </div>
     <button class="btn btn-primary" @click="openNew()">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v16m8-8H4"/></svg>
@@ -516,7 +516,7 @@
               <div style="font-size:24px;font-weight:700;color:var(--success)" x-text="importResults.created"></div>
               <div style="font-size:11px;color:var(--text-secondary);margin-top:2px">新增</div>
             </div>
-            <div style="text-align:center;padding:14px;background:#EFF6FF;border-radius:8px">
+            <div style="text-align:center;padding:14px;background:var(--accent-light);border-radius:8px">
               <div style="font-size:24px;font-weight:700;color:var(--accent)" x-text="importResults.updated"></div>
               <div style="font-size:11px;color:var(--text-secondary);margin-top:2px">更新</div>
             </div>

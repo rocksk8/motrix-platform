@@ -73,11 +73,11 @@
 <div class="page-main" :style="selectedId ? 'padding-right:400px' : ''">
 
   <!-- 頁頭 -->
-  <div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:20px">
-    <div>
-      <div style="font-size:11px;color:var(--text-dim);margin-bottom:4px">勞務管理</div>
-      <h1 style="font-size:20px;font-weight:700">外包名冊</h1>
-      <p style="font-size:12px;color:var(--text-secondary);margin-top:4px" x-text="`共 ${contractors.length} 位外包人員`"></p>
+  <div class="pg">
+      <div class="pg__l">
+        <div class="pg__eyebrow">勞務管理</div>
+        <h1 class="pg__t">外包名冊</h1>
+<p style="font-size:12px;color:var(--text-secondary);margin-top:4px" x-text="`共 ${contractors.length} 位外包人員`"></p>
     </div>
     <button class="btn btn-primary" @click="openNew()">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v16m8-8H4"/></svg>

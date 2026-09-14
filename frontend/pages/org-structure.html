@@ -175,12 +175,12 @@
   <aside class="sidebar" id="app-sidebar"></aside>
 
   <div class="org-main">
-    <div class="page-header" style="margin-bottom:24px">
-      <div>
-        <div style="font-size:11px;color:var(--text-dim);margin-bottom:4px">系統設定</div>
-        <h1 style="font-size:20px;font-weight:700">組織架構設定</h1>
-        <p style="font-size:12px;color:var(--text-secondary);margin-top:4px">管理處／部門，供使用者管理頁面分組顯示使用</p>
-      </div>
+    <div class="pg">
+      <div class="pg__l">
+        <div class="pg__eyebrow">系統設定</div>
+        <h1 class="pg__t">組織架構設定</h1>
+        <p class="pg__s">管理處／部門，供使用者管理頁面分組顯示使用</p>
+</div>
       <div style="display:flex;gap:8px;align-items:center">
         <div class="view-toggle">
           <button :class="{active: viewMode==='list'}" @click="viewMode='list'">清單檢視</button>

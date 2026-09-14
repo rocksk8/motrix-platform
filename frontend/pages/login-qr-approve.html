@@ -86,8 +86,8 @@
       transition: border-color .15s, box-shadow .15s;
     }
     .form-input:focus {
-      border-color: #2563EB;
-      box-shadow: 0 0 0 3px rgba(37,99,235,.15);
+      border-color: #C8102E;
+      box-shadow: 0 0 0 3px rgba(200,16,46,.18);
     }
     .form-input::placeholder { color: #444; }
     .form-input.error { border-color: #DC2626; }
@@ -102,7 +102,10 @@
     .btn-login {
       width: 100%;
       padding: 12px;
-      background: #2563EB;
+      /* 這兩頁是登入前的獨立頁，刻意不載入 css/style.css（沒有 session，也不要側欄／頂欄），
+         所以不能用 CSS 變數——解析不到會整個沒有背景色，登入鈕會變成只剩文字。
+         色值與 style.css 的 --accent / --accent-hover 同步，改色票時這兩頁要一起改。 */
+      background: #C8102E;
       color: #fff;
       border: none;
       border-radius: 7px;
@@ -117,7 +120,7 @@
       justify-content: center;
       gap: 8px;
     }
-    .btn-login:hover { background: #1D4ED8; }
+    .btn-login:hover { background: #A60D26; }
     .btn-login:disabled { opacity: .5; cursor: not-allowed; }
     .spinner {
       width: 14px; height: 14px;

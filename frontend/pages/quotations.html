@@ -23,7 +23,7 @@
     .search-input:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(37,99,235,.08); }
     .action-btn { display:inline-flex; align-items:center; gap:6px; padding:7px 14px; border-radius:var(--radius); font-size:12px; font-family:var(--font-zh); cursor:pointer; border:none; transition:all .12s; }
     .action-btn--primary { background:var(--accent); color:#fff; }
-    .action-btn--primary:hover { background:#1D4ED8; }
+    .action-btn--primary:hover { background:var(--accent-hover); }
     .action-btn--ghost { background:#fff; color:var(--text-secondary); border:1px solid var(--border-light); }
     .action-btn--ghost:hover { border-color:#C8C4BC; }
     .row-actions { display:flex; gap:4px; opacity:0; transition:opacity .12s; }
@@ -32,7 +32,7 @@
     .drag-handle:hover { opacity: 1; background: #EEECEA; }
     tr:hover .drag-handle { opacity: .85; }
     .drag-handle:active { cursor: grabbing; }
-    .sortable-ghost td { background: #EFF6FF !important; opacity: .5; }
+    .sortable-ghost td { background: var(--accent-light) !important; opacity: .5; }
     .sortable-chosen { box-shadow: 0 2px 16px rgba(0,0,0,.12); }
     .summary-row { display:flex; gap:24px; margin-bottom:20px; padding:14px 20px; background:#fff; border:1px solid var(--border-light); border-radius:var(--radius-lg); }
     .summary-item { display:flex; flex-direction:column; gap:2px; }
@@ -238,7 +238,7 @@
                   <select @change="trySetLost(q.quote_no, $event.target.value, q)"
                           :value="q.deal_tag || ''"
                           style="padding:3px 6px;font-size:11px;border:1px solid var(--border-light);border-radius:4px;background:#fff;font-family:var(--font-zh);cursor:pointer;outline:none;max-width:86px;transition:border-color .12s"
-                          :style="q.deal_tag==='未成案' ? 'color:#DC2626;border-color:#FCA5A5' : q.deal_tag==='已提供' ? 'color:#2563EB;border-color:#93C5FD' : q.deal_tag==='未提供' ? 'color:#6B7280' : 'color:var(--text-dim)'">
+                          :style="q.deal_tag==='未成案' ? 'color:#DC2626;border-color:#FCA5A5' : q.deal_tag==='已提供' ? 'color:var(--accent);border-color:#93C5FD' : q.deal_tag==='未提供' ? 'color:#6B7280' : 'color:var(--text-dim)'">
                     <option value="">未標記</option>
                     <option value="未提供">未提供</option>
                     <option value="已提供">已提供</option>
@@ -321,7 +321,7 @@
                   placeholder="例：報價偏高、預算凍結、競爭對手得標…"
                   rows="3"
                   style="width:100%;resize:vertical;border:1px solid #D1D5DB;border-radius:6px;padding:8px 10px;font-size:12px;font-family:var(--font-zh);color:#111;outline:none;box-sizing:border-box;transition:border-color .12s"
-                  @focus="$el.style.borderColor='#2563EB'" @blur="$el.style.borderColor='#D1D5DB'"></textarea>
+                  @focus="$el.style.borderColor='#C8102E'" @blur="$el.style.borderColor='#D1D5DB'"></textarea>
       </div>
       <div style="display:flex;gap:10px;justify-content:flex-end">
         <button @click="cancelLost()"

@@ -21,7 +21,7 @@
     }
     .btn:disabled { opacity: .45; cursor: not-allowed; }
     .btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
-    .btn-primary:hover:not(:disabled) { background: #1D4ED8; border-color: #1D4ED8; }
+    .btn-primary:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); }
     .btn-ghost { background: #fff; color: var(--text-secondary); border-color: var(--border-light); }
     .btn-ghost:hover:not(:disabled) { background: #F5F4F0; }
     .btn-success { background: #059669; color: #fff; border-color: #059669; }
@@ -208,7 +208,7 @@
     }
     .dc-converted-link {
       font-size: 11px; padding: 3px 10px; border-radius: 7px;
-      background: #EFF6FF; color: #1D4ED8; font-weight: 600;
+      background: var(--accent-light); color: var(--accent-hover); font-weight: 600;
       text-decoration: none; display: inline-flex; align-items: center; gap: 4px;
     }
     .dc-converted-link:hover { background: #DBEAFE; }
@@ -895,7 +895,7 @@
                   style="position:absolute;z-index:200;left:0;right:0;top:calc(100% + 2px);background:#fff;border:1.5px solid #E5E7EB;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.10);max-height:200px;overflow-y:auto">
                   <template x-for="(c,i) in customerSuggestions" :key="c.id">
                     <div @click="selectCaseCustomer(c)" @mouseenter="customerDropIdx=i"
-                      :style="i===customerDropIdx?'background:#EFF6FF':''"
+                      :style="i===customerDropIdx?'background:var(--accent-light)':''"
                       style="padding:7px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid #F3F4F6"
                       x-text="c.name"></div>
                   </template>
