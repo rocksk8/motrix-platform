@@ -75,6 +75,97 @@
     .cm-view-toggle { display:inline-flex; padding:2px; background:#F0EFEB; border-radius:7px; gap:2px; margin-bottom:10px; }
     .cm-view-toggle button { border:none; background:transparent; font-family:var(--font-zh); font-size:11px; font-weight:600; padding:5px 11px; border-radius:5px; color:var(--text-dim); cursor:pointer; }
     .cm-view-toggle button.active { background:#fff; color:var(--text-primary); box-shadow:0 1px 2px rgba(0,0,0,.08); }
+    /* ── 關卡矩陣（2026-09-14）──────────────────────────────────────────
+       系統對「完結案」已經定義了五項前置條件（§5.2），但它們散在五個頁籤裡，
+       而且只有在按下「完結案」被 400 擋下來時才看得到。這個檢視把五關攤成
+       欄位、一案一列，並用「最接近結案」當預設排序——那是既有畫面完全給不出、
+       而且最會改變行動順序的資訊。
+
+       判定來自 /api/quotations/gate-matrix，跟擋下完結案是同一份後端程式碼，
+       所以「5/5 可結案」等於「現在按下去不會被擋」。 */
+    .cm-matrix {
+      height: calc(100vh - var(--topbar-h));
+      overflow: auto;
+      padding: 16px 20px 28px;
+      background: var(--white);
+    }
+    .cm-matrix__head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+    .cm-matrix__title { font-size: 15px; font-weight: 700; display: inline-flex; align-items: center; gap: 8px; }
+    .cm-matrix__title::before { content: ''; width: var(--v4-mark-h); height: 14px; background: var(--accent); flex: none; }
+    .cm-matrix__sub { font-size: 11.5px; color: var(--text-dim); }
+
+    /* 到期帶：點任一段就篩出那一段的案件 */
+    .cm-due {
+      display: flex; align-items: stretch;
+      border: 1px solid var(--border-light); border-radius: var(--radius);
+      overflow: hidden; margin-bottom: 14px; background: var(--white);
+    }
+    .cm-due__seg {
+      flex: 1; min-width: 0; padding: 8px 6px; text-align: center; cursor: pointer;
+      border-right: 1px solid var(--border-light); background: transparent;
+      font-family: var(--font-zh);
+    }
+    .cm-due__seg:last-child { border-right: none; }
+    .cm-due__seg:hover { background: var(--icon-btn-bg); }
+    .cm-due__seg.on { outline: 2px solid var(--accent); outline-offset: -2px; }
+    .cm-due__seg--past  { background: var(--danger-light); }
+    .cm-due__seg--today { background: var(--warning-light); }
+    .cm-due__k { font-size: 10px; color: var(--text-dim); letter-spacing: .04em; }
+    .cm-due__n {
+      font-size: 16px; font-weight: 700; line-height: 1.2;
+      font-family: var(--font-en); font-variant-numeric: tabular-nums;
+    }
+    .cm-due__seg--past .cm-due__n  { color: var(--danger); }
+    .cm-due__seg--today .cm-due__n { color: var(--warning); }
+    .cm-due__seg--zero .cm-due__n  { color: var(--border-light); }
+    .cm-due__l { font-size: 10px; color: var(--text-dim); }
+
+    .cm-mtools { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+    .cm-mtools__lbl { font-size: 11.5px; color: var(--text-dim); margin-right: 2px; }
+
+    .cm-mtx-scroll { overflow-x: auto; border: 1px solid var(--border-light); border-radius: var(--radius); }
+    table.cm-mtx { border-collapse: collapse; width: 100%; min-width: 1000px; background: var(--white); }
+    table.cm-mtx th {
+      font-size: 10.5px; font-weight: 700; letter-spacing: .06em; color: var(--text-dim);
+      text-align: left; padding: 9px 10px; white-space: nowrap;
+      border-bottom: 1px solid var(--border-light); background: var(--icon-btn-bg);
+      position: sticky; top: 0; z-index: 1;
+    }
+    table.cm-mtx th.cm-gate-h { text-align: center; border-left: 1px solid var(--border-light); }
+    table.cm-mtx th.cm-gate-h span {
+      display: block; font-weight: 400; letter-spacing: 0; font-size: 10px; opacity: .75; margin-top: 1px;
+    }
+    table.cm-mtx td { padding: 8px 10px; border-bottom: 1px solid var(--border-light); vertical-align: middle; }
+    table.cm-mtx tbody tr { cursor: pointer; }
+    table.cm-mtx tbody tr:hover { background: var(--icon-btn-bg); }
+    table.cm-mtx tbody tr:last-child td { border-bottom: none; }
+    /* 整列不染色（會蓋掉格子裡的燈號），異常只用最左緣 3px 的脊表示——
+       長表格上下捲動時它是唯一還看得見的訊號。 */
+    td.cm-mtx__spine { width: 3px; padding: 0 !important; }
+    td.cm-gate { text-align: center; border-left: 1px solid var(--border-light); width: 96px; }
+    .cm-gatecell { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+    .cm-gatecell__v {
+      font-size: 11.5px; font-weight: 600; display: flex; align-items: center; gap: 4px;
+      font-family: var(--font-en); font-variant-numeric: tabular-nums; white-space: nowrap;
+    }
+    .cm-gatecell--na .cm-gatecell__v { color: var(--text-dim); font-weight: 400; }
+    .cm-gatecell .vm-bar { width: 54px; }
+    .cm-mtx__no {
+      font-size: 12.5px; font-weight: 700;
+      font-family: var(--font-en); font-variant-numeric: tabular-nums;
+    }
+    .cm-mtx__cust { font-size: 12px; color: var(--text-secondary); margin-top: 1px; }
+    .cm-mtx__amt {
+      font-size: 12.5px; font-weight: 600; text-align: right; white-space: nowrap;
+      font-family: var(--font-en); font-variant-numeric: tabular-nums;
+    }
+    .cm-mtx__ready { font-size: 11px; font-weight: 700; white-space: nowrap; }
+    .cm-mtx__due {
+      font-size: 11.5px; white-space: nowrap;
+      font-family: var(--font-en); font-variant-numeric: tabular-nums;
+    }
+    .cm-mtx__empty { padding: 30px 16px; text-align: center; font-size: 12.5px; color: var(--text-dim); }
+
 
     /* 看板檢視——側欄只有 300px 放不下橫向多欄，改成依狀態分組、垂直堆疊呈現，
        同一眼掃過三個分類，卡片沿用既有 .cm-card 樣式，不用另外做一套。 */
@@ -505,7 +596,119 @@
 <div class="app-shell">
 
   <main class="main" style="padding:0;overflow:hidden">
-    <div class="cm-layout">
+    <!-- ── 關卡矩陣檢視（2026-09-14）：全寬，取代兩欄版面 ── -->
+    <div class="cm-matrix" x-show="caseViewMode==='matrix'" x-cloak>
+      <div class="cm-matrix__head">
+        <span class="cm-matrix__title">案件關卡矩陣</span>
+        <span class="cm-matrix__sub"
+              x-text="gmLoaded ? matrixRows.length + ' / ' + gateMatrix.length + ' 件　·　五關全過即可完結案'
+                               : '載入中…'"></span>
+        <div class="cm-view-toggle" style="margin-bottom:0;margin-left:auto">
+          <button :class="{active: caseViewMode==='list'}"   @click="caseViewMode='list'">清單</button>
+          <button :class="{active: caseViewMode==='board'}"  @click="caseViewMode='board'">看板</button>
+          <button :class="{active: caseViewMode==='matrix'}" @click="switchToMatrix()">矩陣</button>
+        </div>
+      </div>
+
+      <!-- 到期帶：資料來自 gate-matrix 一併回傳的階段到期資訊，不必另外打 stage-board -->
+      <div class="cm-due" x-show="gmLoaded">
+        <template x-for="b in matrixDue" :key="b.key">
+          <button type="button" class="cm-due__seg"
+                  :class="{
+                    /* 0 件時不上底色——紅底配一個 0 會把視線拉過去看一件沒事的事 */
+                    'cm-due__seg--past':  b.key==='overdue' && b.n > 0,
+                    'cm-due__seg--today': b.key==='today' && b.n > 0,
+                    'cm-due__seg--zero':  b.n===0,
+                    on: gmDue===b.key
+                  }"
+                  @click="gmDue = (gmDue===b.key ? '' : b.key)">
+            <span class="cm-due__k" x-text="b.k"></span>
+            <span class="cm-due__n" x-text="b.n"></span>
+            <span class="cm-due__l" x-text="b.l"></span>
+          </button>
+        </template>
+      </div>
+
+      <div class="cm-mtools">
+        <span class="cm-mtools__lbl">排序</span>
+        <button type="button" class="aq-sort" :class="{on: gmSort==='ready'}"  @click="gmSort='ready'">最接近結案</button>
+        <button type="button" class="aq-sort" :class="{on: gmSort==='stuck'}"  @click="gmSort='stuck'">卡最久</button>
+        <button type="button" class="aq-sort" :class="{on: gmSort==='amount'}" @click="gmSort='amount'">金額</button>
+        <span class="cm-mtools__lbl" style="margin-left:10px">只看</span>
+        <button type="button" class="aq-sort" :class="{on: gmFilter==='ready'}"    @click="gmFilter = gmFilter==='ready'?'':'ready'">可結案</button>
+        <button type="button" class="aq-sort" :class="{on: gmFilter==='settling'}" @click="gmFilter = gmFilter==='settling'?'':'settling'">待精算</button>
+        <button type="button" class="aq-sort" :class="{on: gmFilter==='mine'}"     @click="gmFilter = gmFilter==='mine'?'':'mine'">我負責的</button>
+      </div>
+
+      <div class="cm-mtx-scroll">
+        <table class="cm-mtx">
+          <thead>
+            <tr>
+              <th class="cm-mtx__spine" aria-hidden="true"></th>
+              <th>案件</th>
+              <th style="text-align:right">合約金額</th>
+              <th>負責</th>
+              <template x-for="g in gateHeads" :key="g.key">
+                <th class="cm-gate-h"><span x-text="g.label" style="font-weight:700;font-size:10.5px;letter-spacing:.06em;display:block"></span><span x-text="g.hint"></span></th>
+              </template>
+              <th style="border-left:1px solid var(--border-light)">下一到期</th>
+              <th style="text-align:right">結案</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="row in matrixRows" :key="row.quoteNo">
+              <tr @click="openFromMatrix(row.quoteNo)">
+                <td class="cm-mtx__spine" :style="'background:' + rowSpine(row)"></td>
+                <td>
+                  <div class="cm-mtx__no" x-text="row.quoteNo"></div>
+                  <div class="cm-mtx__cust"
+                       x-text="(row.customerName || '(未填客戶)') + (row.projectName ? '　|　' + row.projectName : '')"></div>
+                </td>
+                <td class="cm-mtx__amt" x-text="canSeeFinancial() ? (row.total||0).toLocaleString() : '—'"></td>
+                <td>
+                  <span class="vm-person" x-show="row.salesPerson">
+                    <span class="vm-person__av" x-text="(row.salesPerson||'').charAt(0)"></span>
+                    <span x-text="row.salesPerson"></span>
+                  </span>
+                  <span x-show="!row.salesPerson" style="font-size:11.5px;color:var(--text-dim)">—</span>
+                </td>
+                <template x-for="g in row.gates" :key="g.key">
+                  <td class="cm-gate">
+                    <span class="cm-gatecell" :class="{'cm-gatecell--na': g.state==='na'}" :title="g.reason || ''">
+                      <span class="cm-gatecell__v">
+                        <span class="vm-lamp" :class="'vm-lamp--' + gateTone(g)"></span>
+                        <span x-text="g.value"></span>
+                      </span>
+                      <span class="vm-bar">
+                        <i class="vm-bar__fill" :class="'vm-bar__fill--' + gateTone(g)"
+                           :style="'width:' + Math.round((g.ratio == null ? 1 : g.ratio) * 100) + '%'"></i>
+                      </span>
+                    </span>
+                  </td>
+                </template>
+                <td class="cm-mtx__due"
+                    :style="row.stageOverdue > 0 ? 'color:var(--danger);font-weight:700'
+                            : (row.nextDue === today ? 'color:var(--warning);font-weight:700' : 'color:var(--text-secondary)')"
+                    x-text="dueText(row)"></td>
+                <td style="text-align:right">
+                  <span class="cm-mtx__ready"
+                        :style="row.canClose ? 'color:var(--success)' : 'color:var(--text-dim)'"
+                        x-text="readyText(row)"></span>
+                </td>
+              </tr>
+            </template>
+            <tr x-show="gmLoaded && matrixRows.length === 0">
+              <td colspan="11" class="cm-mtx__empty">沒有符合條件的案件</td>
+            </tr>
+            <tr x-show="!gmLoaded">
+              <td colspan="11" class="cm-mtx__empty">載入中…</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="cm-layout" x-show="caseViewMode!=='matrix'">
 
       <!-- ── 左側：案件列表 ── -->
       <div class="cm-list" :class="{'mob-hidden': selected && isMobileView}">
@@ -523,6 +726,7 @@
             <div class="cm-view-toggle" style="margin-bottom:0;margin-left:auto">
               <button :class="{active: caseViewMode==='list'}" @click="caseViewMode='list'">清單</button>
               <button :class="{active: caseViewMode==='board'}" @click="caseViewMode='board'">看板</button>
+              <button :class="{active: caseViewMode==='matrix'}" @click="switchToMatrix()">矩陣</button>
             </div>
           </div>
           <div class="cm-list__search">
