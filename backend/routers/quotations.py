@@ -2208,9 +2208,25 @@ def _move_staged_files(staged_files: list, subfolder: str, doc_no: str) -> list:
     return moved
 
 
-def _apply_case_change_request(conn, req, approver: dict, authorization: str) -> dict:
+def _apply_case_change_request(conn, req, approver: dict, authorization: str,
+                                deferred_audits: list) -> dict:
     """superadmin 核准後真正套用一筆 case_change_requests。呼叫端負責在成功
     回傳後把該筆記錄標記 approved 並 commit；這裡只處理「套用效果」本身，
+
+    ⚠️ **這裡不可以直接呼叫 `_audit()`／`_notify()`**（2026-09-15 修復）。
+    使用者回報「簽核佇列按下簽核後系統卡死十幾秒」，實測是 **32.8 秒**：
+
+        save_quotation_json(conn, ...)   # 只 execute、不 commit → conn 持有寫鎖
+        _audit(...)                      # get_db() 另開一條連線寫入 → 撞自己的鎖
+
+    SQLite 同時只允許一個 writer，而 `db.py::_connect()` 是 `connect(timeout=30)`，
+    所以第二條連線會等到逾時；更糟的是 `_audit()` 的 `except` 會把逾時例外吞掉，
+    **稽核紀錄同時被靜默丟掉**——畫面顯示核准成功，事後卻查不到是誰核准的。
+
+    這跟 2026-09-10 `create_quotation` 踩過的是同一個坑（見該函式註解）。
+    改成把要寫的稽核項目 append 進 `deferred_audits`，由呼叫端在 commit 之後
+    統一寫出。`_sync_device_stock()` 沿用傳進去的同一條 `conn`，不受影響。
+
     邏輯分別對應 8 個「暫存待審」端點原本會做的事（見各端點 docstring）。
     找不到對應報價單或索引超出範圍時 raise HTTPException，呼叫端會讓整個
     審核動作失敗（不會標記 approved），避免留下「已核准但沒套用」的不一致。
@@ -2244,8 +2260,9 @@ def _apply_case_change_request(conn, req, approver: dict, authorization: str) ->
         save_quotation_json(conn, quote_no, data)
         if stock_conflicts:
             result["stockConflicts"] = stock_conflicts
-        _audit(_tok(authorization), 'case.update', 'quotation', quote_no, f"{label}（半解鎖審核通過套用）",
-               {"stockConflicts": stock_conflicts} if stock_conflicts else None)
+        deferred_audits.append(('case.update', 'quotation', quote_no,
+                                f"{label}（半解鎖審核通過套用）",
+                                {"stockConflicts": stock_conflicts} if stock_conflicts else None))
 
     elif action_type == "payment_mark":
         idx = payload["idx"]
@@ -2277,7 +2294,8 @@ def _apply_case_change_request(conn, req, approver: dict, authorization: str) ->
         if "invoiceDate" in body:
             pits[idx]["invoiceDate"] = body["invoiceDate"]
         save_quotation_json(conn, quote_no, data)
-        _audit(_tok(authorization), 'payment.mark', 'quotation', quote_no, f"{label}（半解鎖審核通過套用）")
+        deferred_audits.append(('payment.mark', 'quotation', quote_no,
+                                f"{label}（半解鎖審核通過套用）", None))
 
     elif action_type in ("payment_invoice_upload", "material_file_upload", "material_invoice_upload"):
         idx = payload["idx"]
@@ -2293,8 +2311,8 @@ def _apply_case_change_request(conn, req, approver: dict, authorization: str) ->
         arr[idx].setdefault(field, [])
         arr[idx][field].extend(moved)
         save_quotation_json(conn, quote_no, data)
-        _audit(_tok(authorization), f'{action_type}.approved', 'quotation', quote_no,
-               f"{label}（半解鎖審核通過套用，{len(moved)} 個檔案）")
+        deferred_audits.append((f'{action_type}.approved', 'quotation', quote_no,
+                                f"{label}（半解鎖審核通過套用，{len(moved)} 個檔案）", None))
 
     elif action_type in ("payment_invoice_delete", "material_file_delete", "material_invoice_delete"):
         idx = payload["idx"]
@@ -2310,8 +2328,8 @@ def _apply_case_change_request(conn, req, approver: dict, authorization: str) ->
         existing = arr[idx].get(field) or []
         arr[idx][field] = delete_document_file(subfolder, f"{quote_no}_{idx}", existing, file_id)
         save_quotation_json(conn, quote_no, data)
-        _audit(_tok(authorization), f'{action_type}.approved', 'quotation', quote_no,
-               f"{label}（半解鎖審核通過套用）")
+        deferred_audits.append((f'{action_type}.approved', 'quotation', quote_no,
+                                f"{label}（半解鎖審核通過套用）", None))
 
     else:
         raise HTTPException(500, f"未知的變更類型：{action_type}")
@@ -2363,8 +2381,14 @@ def approve_case_change(change_id: int, authorization: str = Header(None)):
     if self_msg:
         conn.close()
         raise HTTPException(403, self_msg)
+    # 稽核延後到 commit 之後才寫（2026-09-15）——見
+    # `_apply_case_change_request()` docstring：在這條 conn 還握著寫鎖時
+    # 另開連線寫 audit_log，會撞上 SQLite 單一 writer 等滿 30 秒 busy_timeout，
+    # 而且例外被 `_audit()` 吞掉，稽核紀錄直接消失。實測 32.8 秒。
+    deferred_audits: list = []
     try:
-        apply_result = _apply_case_change_request(conn, req, user, authorization)
+        apply_result = _apply_case_change_request(conn, req, user, authorization,
+                                                  deferred_audits)
     except HTTPException:
         conn.close()
         raise
@@ -2374,6 +2398,9 @@ def approve_case_change(change_id: int, authorization: str = Header(None)):
                  (approver_display, now, change_id))
     conn.commit()
     conn.close()
+    # 到這裡寫鎖已經放掉，`_audit()` 自己那條連線才進得去
+    for action, target_type, target_id, target_label, detail in deferred_audits:
+        _audit(_tok(authorization), action, target_type, target_id, target_label, detail)
     spawn_bg_thread(_backup_quotation, args=(req["quote_no"],))
     _notify(req["requested_by"], "case_change_decided", req["quote_no"], req["quote_no"],
             f"您對已結案案件 {req['quote_no']} 提出的變更「{req['summary']}」已由 {approver_display} 核准套用")

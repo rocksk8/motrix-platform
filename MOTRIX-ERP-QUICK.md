@@ -1838,7 +1838,7 @@ xlsx-0.18.5.full.min.js     （SheetJS）
 
 | 優先 | 項目 |
 |------|------|
-| 🔴 | **簽核佇列按下簽核後系統卡死十幾秒（2026-09-15 回報，尚未查證）**。情境是**已結案案件的變更申請簽核**。**最可能的根因已經有線索**：QUICK 記過「整個 pytest session 期間有背景排程在寫 db，SQLite 寫鎖被佔住時 `db.py` 的 `connect(timeout=30)` 最多會等 30 秒」——正式機的背景排程（每日備份 02:00／每 2 小時的 Timer、每日 08:00 的九種檢查）同樣會長時間持有寫鎖，而「卡十幾秒然後自己好」正是等鎖的形狀，不是當掉。**查證方式**：①在正式機重現時同時看 `logs/server.log` 的慢請求記錄（2026-09-10 已加，見 §12）②`approve_case_change()` 這條路徑本身也要看：它在同一個請求裡做 `_sync_device_stock()`＋`save_quotation_json()`＋`_audit()`＋`notify_*()`，而後兩者各自**另開連線**，在外層交易還沒 commit 時開第二條寫連線正是 2026-09-10 記載過的自我死鎖形狀（`create_quotation` 踩過同一個坑）。**先查②**，那是程式碼裡就能證實的，不必等重現。 |
+| ✅ | ~~簽核佇列按下簽核後系統卡死十幾秒~~（**2026-09-15 當天查明並修復**，DB 無異動）。**實測 32.8 秒**，比回報的還久。根因正是預判的那個——而且是這個 codebase **第二次**踩到同一個坑（2026-09-10 `create_quotation` 是第一次）：`_apply_case_change_request()` 做完 `save_quotation_json(conn, ...)`（只 execute、不 commit → conn 持有寫鎖）之後直接 `_audit()`，而 `_audit()` 用 `get_db()` **另開一條連線寫入**，撞上 SQLite 單一 writer，等滿 `connect(timeout=30)` 才放棄。**更糟的是 `_audit()` 的 `except` 會把逾時例外吞掉**——畫面顯示核准成功、稽核紀錄卻不存在，事後查不到是誰核准的。修法：四處 `_audit` 改成 append 進 `deferred_audits`，由呼叫端在 commit 之後統一寫出。**32.8 秒 → 5.1 秒**（整個測試檔）。**使用者要求的「檢查別的區域有沒有一樣的狀態」已做**：新增 AST 靜態掃描守門測試`test_write_lock_deadlock_guard_2026_09_15.py`，掃 routers/helpers/main 全部函式。初掃 27 個命中，逐一核對後 26 個是誤報（`_set_setting()` 自己開自己 commit、43 支 `notify_*` 全部只讀不寫），**真正的只有這一處**，已修。守門測試已用「拿 git 上修復前的檔案直接掃」證明抓得到（4 處全中），修復後 0 處。 |
 | 🟠 | **最高管理者需要簽核的項目沒有出現在簽核佇列（2026-09-15 回報，尚未查證）**。回報情境：公司有兩位 superadmin，其中一位需要簽核的單據在他的簽核佇列裡看不到。**查證起點**：`GET /api/approval-queue`（`routers/quotations.py:3610`）組佇列的條件——要確認它是用「當層簽核人名單含我」還是「角色是 superadmin」在篩；以及已結案變更申請（`case_change`）那類**單層、任一 superadmin 審核**的單據有沒有被納進佇列查詢（那類沒有 `tiers`，很容易在只看 tiers 的查詢裡整批漏掉）。⚠️ 這一項跟上面那項是**不同**的問題，不要混在一起修。 |
 | 🟡 | **掃一遍「給人看的畫面上有沒有原始代碼值」（2026-09-15 交辦）**。起因：變更申請摘要出現「專案期間·狀態 `on_track`」。**那一處當天已修**（`_CASE_VALUE_LABELS` 值對照，未知值原樣顯示不硬猜）。使用者要求把同類問題排入檢查名單——要掃的是「後端把 enum／狀態碼直接送到前端顯示」，至少包含：案件代辦 `status`（`done`／`stage1_done`，`case-management.js:1462` 已有對照）、`settlement.status`（`finalized`／`draft`）、`change_status`、`writeOffStatus`（`approved`／`pending`）、`dealTag` 與各單據 `status` 的英文值。判準是**畫面上會不會出現底線命名的英文**，不是後端存什麼。 |
 | ✅ | ~~模組權限要真的擋住、未開啟的連模組名稱都不顯示~~（**2026-09-14 當天施作完成**，DB v84）。`require_any_module()` 從「admin+ 直通」改成**只有 superadmin 直通**；`sidebar.js` 二十幾個 `mods.indexOf(x) >= 0 || ad` 收斂成一支 `has(x)`，另外兩種非模組放行（`|| eng`、`|| role !== 'viewer'`）也一併拿掉。分組名稱不需額外處理——`renderMainNav()` 本來就會過濾 `items` 為空的分組，所以整組沒權限時連分組名稱都不出現。**四個原本沒有 key 只能靠角色寫死的頁面，依使用者裁示『沒有對應模組 key 也建立就沒有這個問題』新建了 key**：`audit_log`／`shipping_export_log`／`module_versions`／`selection_overview`；網路架構規劃書同樣只有 `netplan_edit` 沒有檢視 key，補上 `netplan`（目錄從 35 → 40 個 key）。**DB v84 先回填再取消直通**，所以沒有人憑空少掉今天看得到的東西。詳見 §12 同日條目與 [`MODULE-AUDIT-2026-09-13.md`](MODULE-AUDIT-2026-09-13.md) §6。 |
@@ -1898,6 +1898,56 @@ xlsx-0.18.5.full.min.js     （SheetJS）
 > 未紀錄；同期間 `CHANGELOG.md` 09-08／09-09 兩天完全空白。已於本日補回，並新增
 > [`WEEKLY-AUDIT-2026-09-07_2026-09-10.md`](WEEKLY-AUDIT-2026-09-07_2026-09-10.md)
 > ——帶「模組／檔案:行號／是否在正式機」座標的本週稽核索引，出事時先看那份。
+
+### 2026-09-15（第二輪）— 簽核卡死 32.8 秒：同一個坑踩第二次（DB 無異動）
+
+使用者回報「簽核佇列按下簽核後系統卡死十幾秒，內容是已結案案件簽核」。
+實測是 **32.8 秒**，而且**稽核紀錄同時被靜默丟掉**。
+
+#### 根因：這個 codebase 第二次踩到同一個形狀
+
+```
+save_quotation_json(conn, ...)   # 只 execute、不 commit → conn 持有寫鎖
+_audit(...)                      # get_db() 另開一條連線寫入 → 撞自己的鎖
+```
+
+SQLite 同時只允許一個 writer，`db.py::_connect()` 是 `connect(timeout=30)`，
+所以第二條連線會等滿 30 秒；而 `_audit()` 的 `except` 會把逾時例外吞掉，
+**使用者看到的是卡住然後「核准成功」，但事後查不到是誰核准的**。
+
+第一次是 2026-09-10 的 `create_quotation()`——`_build_approval_tiers_and_notify()`
+裡的 `_notify()` 同樣另開連線，通知被靜默丟掉（見該函式註解）。
+
+**修法**：`_apply_case_change_request()` 裡四處 `_audit()` 改成 append 進
+`deferred_audits`，由 `approve_case_change()` 在 `conn.commit()` 之後統一寫出。
+`_sync_device_stock()` 用的是傳進去的同一條 conn，不受影響。
+測試檔耗時 **136.6 秒 → 5.1 秒**。
+
+#### 使用者要求的「檢查別的區域有沒有一樣的狀態」
+
+寫成**守門測試**而不是一次性掃描（`test_write_lock_deadlock_guard_2026_09_15.py`）：
+AST 靜態掃 `routers/`＋`helpers/`＋`main.py` 全部函式，找「寫了還沒 commit 就
+跨連線再寫」。**刻意不執行任何程式碼**——真跑起來要等 30 秒才看得到症狀，
+那種測試沒人會留著。
+
+初掃 27 個命中，**逐一核對後 26 個是誤報**，兩個判準太寬：
+
+| 誤報來源 | 為什麼不算 |
+|---|---|
+| `_set_setting()`（18 處，整個 system.py） | 它自己 `get_db()`、自己 commit、自己 close，是完整的一次交易，不會把鎖留給呼叫端 |
+| `notify_*` 前綴（8 處） | 核對過 `helpers/email_notify.py` 全部 43 支：只查收件人 email（**讀**）然後開執行緒寄信，**一支都沒有寫 db**。WAL 下 reader 不會被 writer 擋 |
+
+**真正的違規只有一處**，就是上面修掉的那個。守門測試已用「拿 git 上修復前的
+`quotations.py` 直接掃」證明抓得到（4 處全中），修復後 0 處——**新寫的守門測試
+一定要先證明它會紅**（MODULE-AUDIT §5 的教訓）。
+
+> 附帶記錄一個目前不是 bug、但值得知道的事：那些 `notify_*` 在 commit 前讀到的是
+> **尚未提交的舊狀態**。現在它們只讀使用者 email 所以沒差；日後若有人讓它們去讀
+> 剛剛寫入的單據內容，就會讀到舊值。
+
+全套 **1003 passed**。
+
+---
 
 ### 2026-09-15 — 打包不再把整台機器吃滿（DB 無異動）
 
