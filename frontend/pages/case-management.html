@@ -22,7 +22,8 @@
     /* ── Left panel ── */
     .cm-list { width:300px; min-width:300px; border-right:1px solid var(--border-light); display:flex; flex-direction:column; background:#FAFAF9; overflow:hidden; }
     .cm-list__head { padding:14px 14px 0; background:#fff; border-bottom:1px solid var(--border-light); }
-    .cm-list__title-row { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+    .cm-list__title-row { display:flex; align-items:center; gap:8px; margin-bottom:10px; }
+    .cm-list__count--danger { background:var(--danger-light); color:var(--danger); }
     /* 2026-09-14：左欄標頭是這頁的實質標題，加上直立紅色標記
        （官網 28×3 的緊湊變體），不動雙欄版面結構。 */
     .cm-list__title { font-size:13px; font-weight:700; color:var(--text-primary); font-family:var(--font-zh);; display:inline-flex; align-items:center; gap:8px}
@@ -31,7 +32,7 @@
     .cm-list__search { position:relative; margin-bottom:10px; }
     .cm-list__search-icon { position:absolute; left:9px; top:50%; transform:translateY(-50%); color:var(--text-dim); pointer-events:none; }
     .cm-list__search-input { width:100%; padding:7px 10px 7px 32px; font-size:12px; border:1px solid var(--border-light); border-radius:6px; font-family:var(--font-zh); background:#F9FAFB; outline:none; transition:border-color .12s; box-sizing:border-box; }
-    .cm-list__search-input:focus { border-color:var(--accent); background:#fff; box-shadow:0 0 0 3px rgba(37,99,235,.08); }
+    .cm-list__search-input:focus { border-color:var(--accent); background:#fff; box-shadow:0 0 0 3px rgba(200,16,46,.10); }
     .cm-list__tabs { display:flex; padding:0 2px; }
     .cm-list__tab { font-size:11px; font-family:var(--font-zh); padding:6px 12px; border:none; background:none; color:var(--text-dim); cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px; transition:all .1s; }
     .cm-list__tab.active { color:var(--accent); border-bottom-color:var(--accent); font-weight:600; }
@@ -68,13 +69,7 @@
 
     /* 視覺化改版（2026-08-23）：摘要總覽卡片，沿用 case-stage-board.html 既有的
        .board-summary 大數字卡片語彙，側欄只有 300px 寬，這裡用 2 欄版本。 */
-    .cm-summary { display:grid; grid-template-columns:repeat(2,1fr); gap:1px; background:var(--border-light); border:1px solid var(--border-light); border-radius:8px; overflow:hidden; margin-bottom:10px; }
-    .cm-summary__cell { background:#fff; padding:9px 11px; }
-    .cm-summary__num { font-size:18px; font-weight:800; line-height:1; color:var(--text-primary); font-family:LINE Seed TW_OTF, sans-serif; }
-    .cm-summary__num.danger { color:var(--danger); }
-    .cm-summary__num.warning { color:var(--warning); }
-    .cm-summary__num.success { color:var(--success); }
-    .cm-summary__label { margin-top:3px; font-size:9.5px; color:var(--text-secondary); font-family:var(--font-zh); }
+    /* 2026-09-14：.cm-summary 那 4 格統計已移除（與頁籤徽章重複），樣式一併刪掉不留死碼。 */
 
     /* 清單／看板切換 */
     .cm-view-toggle { display:inline-flex; padding:2px; background:#F0EFEB; border-radius:7px; gap:2px; margin-bottom:10px; }
@@ -487,19 +482,20 @@
       <!-- ── 左側：案件列表 ── -->
       <div class="cm-list" :class="{'mob-hidden': selected && isMobileView}">
         <div class="cm-list__head">
+          <!-- 2026-09-14 重排：原本這裡疊了 6 列（標題／4 格統計／清單看板切換／
+               搜尋／排序／狀態頁籤）才看到案件清單。那 4 格統計跟下方頁籤徽章重複：
+               總案件數≈各頁籤加總、進行中≈「已成案」、待精算是**完全相同的運算式**。
+               只有「已逾期階段」是獨有訊息，收進標題列的徽章；
+               清單/看板切換併進標題列、排序併進搜尋列。6 列變 3 列。 -->
           <div class="cm-list__title-row">
             <span class="cm-list__title">案件管理</span>
             <span class="cm-list__count" x-text="filteredCases.length + ' 件'"></span>
-          </div>
-          <div class="cm-summary">
-            <div class="cm-summary__cell"><div class="cm-summary__num" x-text="summaryTotal()"></div><div class="cm-summary__label">總案件數</div></div>
-            <div class="cm-summary__cell"><div class="cm-summary__num success" x-text="summaryActive()"></div><div class="cm-summary__label">進行中</div></div>
-            <div class="cm-summary__cell"><div class="cm-summary__num danger" x-text="summaryOverdue()"></div><div class="cm-summary__label">已逾期階段</div></div>
-            <div class="cm-summary__cell"><div class="cm-summary__num warning" x-text="summarySettling()"></div><div class="cm-summary__label">待精算</div></div>
-          </div>
-          <div class="cm-view-toggle">
-            <button :class="{active: caseViewMode==='list'}" @click="caseViewMode='list'">清單</button>
-            <button :class="{active: caseViewMode==='board'}" @click="caseViewMode='board'">看板</button>
+            <span class="cm-list__count cm-list__count--danger" x-show="summaryOverdue() > 0"
+                  x-text="'逾期 ' + summaryOverdue()"></span>
+            <div class="cm-view-toggle" style="margin-bottom:0;margin-left:auto">
+              <button :class="{active: caseViewMode==='list'}" @click="caseViewMode='list'">清單</button>
+              <button :class="{active: caseViewMode==='board'}" @click="caseViewMode='board'">看板</button>
+            </div>
           </div>
           <div class="cm-list__search">
             <svg class="cm-list__search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>

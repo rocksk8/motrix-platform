@@ -565,7 +565,9 @@
     var html = [
       sec('主選單'),
       ni(up + 'index.html',          'dash',  '儀表板',   ['index.html', ''],                       canDash),
-      sec('業務', cDev || cQ || cCM),
+      // 2026-09-14：只留真正的業務項目（開發、報價、簽核）。
+      // 案件管理拆到下方獨立分組，理由見那邊註解。
+      sec('業務', cDev || cQ),
       ni(pg('dev-crm.html'),         'bdev',  '業務開發', ['dev-crm.html'],                          cDev, 'sb-mod-dev-crm'),
       ni(pg('quotations.html'),      'quote', '報價單',   ['quotations.html', 'quotation-form.html'], cQ,   'sb-mod-quotation'),
       // 2026-09-14：改走 ni()，否則不會被記錄進上方選單的分組資料
@@ -573,6 +575,11 @@
          '<span id="sb-approval-badge" style="display:none;background:#DC2626;color:#fff;font-size:9px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;padding:1px 6px;border-radius:9px;margin-left:auto"></span>'),
       ni(pg('approval-delegates.html'), 'appr', '簽核代理人', ['approval-delegates.html'], cQ || sa || ad),
       ni(pg('approval-history.html'), 'apprhist', '簽核歷史', ['approval-history.html'], cQ || sa || ad),
+      // ── 案件：成案之後的執行與財務（2026-09-14 從「業務」拆出來）──
+      // 拆出來的原因：cCM 包含 eng（工程師），而 cQ / cDev 不包含。
+      // 舊分法下，一個沒有任何模組的工程師會看到一個叫「業務」的分組，
+      // 裡面只有這兩項——名叫業務卻沒有半個業務項目。
+      sec('案件', cCM),
       ni(pg('case-management.html'), 'case_', '案件管理', ['case-management.html'],                   cCM,  'sb-mod-case'),
       ni(pg('case-stage-board.html'),'case_', '案件執行看板', ['case-stage-board.html'],               cCM),
       sec('廠商與採購', cCu || cPr),
