@@ -19,6 +19,7 @@ from helpers import (
 )
 from helpers.quotations import _steps_to_tiers
 from photos import _process_project_photo, _photo_root
+import trail
 
 router = APIRouter()
 
@@ -1406,6 +1407,20 @@ def user_activity_stats(start: Optional[str] = None, end: Optional[str] = None,
             "ORDER BY a.day",
             (start, end),
         ).fetchall()
+        # 2026-09-15：軌跡的成員篩選要能選到**每一個**使用者，所以名單走 users 表
+        # 而不是上面那批有時數的人——沒有活躍時數但有操作紀錄（或這段期間請假）的
+        # 人，本來就選不到，而那常常正是想查的人。停用帳號一併列出：離職前做了
+        # 什麼是最需要查的。
+        members = [{
+            "userId": r["id"],
+            "username": r["username"],
+            "displayName": r["display_name"] or r["username"],
+            "role": r["role"],
+            "active": bool(r["active"]),
+        } for r in conn.execute(
+            "SELECT id, username, display_name, role, active FROM users "
+            "ORDER BY active DESC, display_name, username"
+        ).fetchall()]
     finally:
         conn.close()
 
@@ -1427,45 +1442,18 @@ def user_activity_stats(start: Optional[str] = None, end: Optional[str] = None,
         "start": start,
         "end": end,
         "items": items,
+        "members": members,
         "note": "統計的是有實際操作的「活躍時間」，不是分頁開著的時間；每 5 分鐘累計一次。",
     }
 
 
-# 路徑 → 人看得懂的標籤（2026-09-14）。只列常見的；沒對到的就原樣顯示路徑，
-# 刻意不做成「猜」的邏輯——猜錯的標籤比看得懂的原始路徑更誤導。
-_TRAIL_LABELS = [
-    ("/api/quotations",            "報價單／案件"),
-    ("/api/dev-cases",             "業務開發"),
-    ("/api/customers",             "客戶管理"),
-    ("/api/suppliers",             "供應商"),
-    ("/api/vendor-contractors",    "承攬商"),
-    ("/api/parts",                 "料號"),
-    ("/api/inventory",             "庫存"),
-    ("/api/completion-notes",      "完工單"),
-    ("/api/shipping-notes",        "出貨單"),
-    ("/api/invoice-vouchers",      "開票申請"),
-    ("/api/payment-requests",      "請款單"),
-    ("/api/contractor-vouchers",   "承攬商匯款"),
-    ("/api/reports",               "營運報表"),
-    ("/api/cashier",               "出納"),
-    ("/api/work-logs",             "工作日誌"),
-    ("/api/daily-tasks",           "每日工作事項"),
-    ("/api/network-plans",         "網路架構規劃書"),
-    ("/api/users",                 "使用者管理"),
-    ("/api/settings",              "系統設定"),
-    ("/api/audit-log",             "歷史紀錄"),
-    ("/api/user-activity",         "在線時數統計"),
-]
-
 _METHOD_LABELS = {"GET": "檢視", "POST": "新增／執行", "PUT": "修改",
                   "PATCH": "修改", "DELETE": "刪除"}
 
-
-def _trail_label(path: str) -> str:
-    for prefix, label in _TRAIL_LABELS:
-        if path.startswith(prefix):
-            return label
-    return ""
+# 同一個人、同一句說明、這個秒數內相鄰的紀錄，回傳時併成一列（帶 `repeat` 次數）。
+# 寫入端從 2026-09-15 起就收斂了，這道是給**已經存在的舊資料**用的：軌跡保留 90
+# 天，不併的話接下來三個月每開一張案件都還是六列一模一樣的字。
+_TRAIL_MERGE_SECONDS = 60
 
 
 @router.get("/api/user-activity/trail")
@@ -1473,16 +1461,18 @@ def user_activity_trail(user: Optional[str] = None, start: Optional[str] = None,
                         end: Optional[str] = None, limit: int = 200,
                         before_id: Optional[int] = None,
                         authorization: str = Header(None)):
-    """逐條操作軌跡（限最高管理者）——誰、什麼時候、在哪一頁、動了哪個資源。
+    """逐條操作軌跡（限最高管理者）——誰、什麼時候、在哪一頁、做了什麼。
 
-    2026-09-14 使用者要求「在線時數統計，同步能看使用者點了什麼看了什麼，逐條紀錄」。
+    2026-09-14 使用者要求「在線時數統計，同步能看使用者點了什麼看了什麼，逐條紀錄」；
+    2026-09-15 追加「用更直覺的語言，而且要能篩選每個使用者」。
 
     參數：`user`（帳號，不給就是全部人）、`start`／`end`（`YYYY-MM-DD`，含）、
     `limit`（上限 500）、`before_id`（往前翻頁，傳上一頁最後一筆的 id）。
 
-    回傳的 `label` 是人看得懂的模組名，對不到就留空由前端顯示原始路徑——
-    **不猜**：猜錯的標籤比原始路徑更誤導。`status` 一併回傳，被擋下來的操作
-    （403/404）跟成功的一樣重要。
+    每一筆的 `summary` 是一句人話（「送審出貨單 #7」），`kind` 是檢視／變更／
+    刪除／簽核／匯出，`resultLabel` 把 HTTP 狀態碼翻成「成功」「沒有權限（被
+    擋下）」。翻譯規則在 `trail.py`，原則是**不猜**：對不到就原樣顯示路徑。
+    `path` 仍然照原樣回傳——畫面上可以開起來對照，出事時要查的是原始事實。
     """
     _require_user(authorization, require_superadmin=True)
     limit = max(1, min(int(limit or 200), 500))
@@ -1512,24 +1502,60 @@ def user_activity_trail(user: Optional[str] = None, start: Optional[str] = None,
     finally:
         conn.close()
 
-    items = [{
-        "id": r["id"],
-        "at": r["at"],
-        "username": r["username"],
-        "displayName": r["display_name"] or r["username"],
-        "role": r["role"],
-        "method": r["method"],
-        "methodLabel": _METHOD_LABELS.get(r["method"], r["method"]),
-        "path": r["path"],
-        "label": _trail_label(r["path"]),
-        "page": r["page"],
-        "status": r["status"],
-    } for r in rows]
+    # 翻頁游標取**原始**最後一筆的 id：下面會藏掉雜訊、併掉重複，顯示的列數比
+    # 撈出來的少，拿併完的清單算游標會讓「載入更早的紀錄」跳過還沒看過的資料。
+    next_before_id = rows[-1]["id"] if len(rows) == limit else None
+
+    items = []
+    for r in rows:
+        # 寫入端（main.py）從 2026-09-15 起就不記這些了，但 90 天內的舊資料還在。
+        if trail.should_skip(r["path"]):
+            continue
+        d = trail.describe(r["method"], r["path"])
+        prev = items[-1] if items else None
+        # 時間比對的基準固定是群組裡**最新**那一筆（prev["at"] 不改寫）：若改成每次
+        # 跟前一筆比，每 59 秒發生一次的相同動作會一路串下去併成一列，把「這個人
+        # 十分鐘內開了同一張案件十次」這件事藏起來。
+        if (prev and prev["username"] == r["username"] and prev["summary"] == d["summary"]
+                and _within(prev["at"], r["at"], _TRAIL_MERGE_SECONDS)):
+            prev["repeat"] += 1
+            continue
+        items.append({
+            "id": r["id"],
+            "at": r["at"],
+            "username": r["username"],
+            "displayName": r["display_name"] or r["username"],
+            "role": r["role"],
+            "method": r["method"],
+            "methodLabel": _METHOD_LABELS.get(r["method"], r["method"]),
+            "path": r["path"],
+            "summary": d["summary"],
+            "kind": d["kind"],
+            "kindLabel": d["kindLabel"],
+            "module": d["module"],
+            "label": d["module"],         # 舊欄位名，保留給既有呼叫端
+            "page": r["page"],
+            "pageLabel": trail.page_label(r["page"]),
+            "status": r["status"],
+            "resultLabel": trail.status_label(r["status"]),
+            "ok": trail.status_ok(r["status"]),
+            "repeat": 1,
+        })
     return {
         "items": items,
-        "nextBeforeId": items[-1]["id"] if len(items) == limit else None,
-        "note": "輪詢類請求（通知、紅點、在線名單等）不記錄；同一支端點 30 秒內的連續請求只記一次。",
+        "nextBeforeId": next_before_id,
+        "note": "只記人的操作：輪詢、心跳、下拉選單與欄位偏好這類頁面自動發出的請求不記；"
+                "一次點擊連帶打出的多支請求算一次。",
     }
+
+
+def _within(later_iso: str, earlier_iso: str, seconds: int) -> bool:
+    """兩個時間戳是不是差在 `seconds` 以內（解析失敗就當成不是，寧可多列一行）。"""
+    try:
+        return abs((datetime.fromisoformat(later_iso)
+                    - datetime.fromisoformat(earlier_iso)).total_seconds()) <= seconds
+    except Exception:
+        return False
 
 
 # ── 同時編輯警示（2026-09-14，DB v81）───────────────────────────────────────

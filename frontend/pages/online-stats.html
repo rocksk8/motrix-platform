@@ -46,6 +46,19 @@
     .os-table td.num { text-align: right; font-family: 'LINE Seed TW_OTF', sans-serif; }
     .os-track { background: var(--border-light); border-radius: 4px; height: 7px; min-width: 60px; }
     .os-fill { background: var(--accent); border-radius: 4px; height: 7px; }
+    /* 操作軌跡的「類型」標籤：一眼分出只是看看、動了資料、還是刪掉了東西 */
+    .os-kind {
+      display: inline-block; font-size: 10px; font-weight: 600;
+      padding: 2px 7px; border-radius: 10px; white-space: nowrap;
+    }
+    .os-rep {
+      display: inline-block; margin-left: 6px; font-size: 10px; color: var(--text-dim);
+      font-family: 'LINE Seed TW_OTF', sans-serif;
+    }
+    .os-raw {
+      font-family: 'LINE Seed TW_OTF', sans-serif; font-size: 10px;
+      color: var(--text-dim); word-break: break-all; margin-top: 2px;
+    }
   </style>
 </head>
 <body x-data="onlineStatsPage()" x-cloak>
@@ -110,7 +123,7 @@
       </thead>
       <tbody>
         <template x-for="(it, i) in items" :key="it.userId">
-          <tr @click="openTrail(it)" style="cursor:pointer"
+          <tr @click="selectMember(trailUser === it.username ? '' : it.username)" style="cursor:pointer"
               :style="trailUser === it.username ? 'background:var(--accent-light)' : ''">
             <td x-text="i + 1" style="color:var(--text-dim)"></td>
             <td x-text="it.displayName"></td>
@@ -132,56 +145,78 @@
 
     <!-- ── 逐條操作軌跡（2026-09-14 使用者要求）────────────────────────────── -->
     <div style="margin-top:28px">
-      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">
         <h2 style="font-size:15px;font-weight:600;margin:0">操作軌跡</h2>
-        <span style="font-size:12px;color:var(--text-dim)"
-              x-text="trailUser ? ('僅顯示 ' + trailUser) : '全部成員'"></span>
-        <button class="btn btn-secondary btn-sm" x-show="trailUser" @click="openTrail(null)">顯示全部</button>
+        <!-- 成員篩選走 members（users 表全部人），不是上面那張表的成員——沒有活躍
+             時數但有操作紀錄的人，在舊版點不到，而那常常正是要查的人。 -->
+        <label for="os-member" style="font-size:11px;color:var(--text-dim)">成員</label>
+        <select id="os-member" class="fi" style="width:210px;font-size:12px"
+                x-model="trailUser" @change="reloadTrail()">
+          <option value="">全部成員</option>
+          <template x-for="m in members" :key="m.userId">
+            <option :value="m.username" x-text="memberOption(m)"></option>
+          </template>
+        </select>
+        <button class="btn btn-secondary btn-sm" x-show="trailUser" @click="selectMember('')">顯示全部</button>
         <button class="btn btn-secondary btn-sm" @click="loadTrail()">重新整理</button>
+        <label style="font-size:11px;color:var(--text-dim);display:flex;align-items:center;gap:5px;cursor:pointer">
+          <input type="checkbox" x-model="showPaths"> 顯示原始路徑
+        </label>
         <span style="font-size:11px;color:var(--text-dim);margin-left:auto" x-text="trailNote"></span>
       </div>
 
       <div class="os-note" style="background:#F1F5F9;border-color:#CBD5E1;color:#334155">
         <span>🕒</span>
         <span>
-          逐條紀錄使用者看了哪一頁、動了哪個資源（含被擋下來的操作）。
-          輪詢類請求不記錄；同一支端點 30 秒內的連續請求只算一次；保留 90 天後自動清除。
+          逐條紀錄每個人做了什麼（含被擋下來的操作）。只記人的操作——輪詢、同時編輯
+          心跳、下拉選單與欄位偏好這類頁面自動發出的請求不記；<strong>一次點擊連帶打出的
+          多支請求算一次</strong>，重複的會併成一列並在後面標 × 次數。保留 90 天後自動清除。
         </span>
       </div>
 
       <table class="os-table">
         <thead>
           <tr>
-            <th style="width:150px">時間</th>
+            <th style="width:120px">時間</th>
             <th style="width:110px">成員</th>
-            <th style="width:90px">動作</th>
-            <th style="width:140px">模組</th>
-            <th>資源</th>
-            <th style="width:150px">所在頁面</th>
-            <th style="width:60px;text-align:right">結果</th>
+            <th style="width:56px">類型</th>
+            <th>做了什麼</th>
+            <th style="width:140px">在哪一頁</th>
+            <th style="width:130px;text-align:right">結果</th>
           </tr>
         </thead>
         <tbody>
           <template x-for="t in trail" :key="t.id">
             <tr>
-              <td style="font-family:LINE Seed TW_OTF, sans-serif;font-size:12px" x-text="fmtTime(t.at)"></td>
+              <td style="font-family:LINE Seed TW_OTF, sans-serif;font-size:12px;white-space:nowrap"
+                  x-text="fmtTime(t.at)"></td>
               <td x-text="t.displayName"></td>
-              <td x-text="t.methodLabel"
-                  :style="t.method === 'DELETE' ? 'color:var(--danger)' : (t.method === 'GET' ? 'color:var(--text-secondary)' : 'color:var(--accent)')"></td>
-              <td x-text="t.label || '—'"></td>
-              <td style="font-family:LINE Seed TW_OTF, sans-serif;font-size:11px;color:var(--text-secondary);word-break:break-all"
-                  x-text="t.path"></td>
-              <td style="font-size:11px;color:var(--text-dim)" x-text="t.page || '—'"></td>
-              <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-size:12px"
-                  :style="t.status >= 400 ? 'color:var(--danger);font-weight:600' : 'color:var(--text-dim)'"
-                  x-text="t.status"></td>
+              <td><span class="os-kind" :style="kindStyle(t.kind)" x-text="t.kindLabel"></span></td>
+              <td>
+                <span x-text="t.summary"
+                      :style="t.kind === 'delete' ? 'color:var(--danger);font-weight:500' : ''"></span>
+                <span class="os-rep" x-show="t.repeat > 1" x-text="'× ' + t.repeat"></span>
+                <!-- 人話是給人看的，原始路徑是查問題用的：預設收起來，要對照時再打開 -->
+                <div class="os-raw" x-show="showPaths" x-text="t.method + ' ' + t.path"></div>
+              </td>
+              <td style="font-size:11px;color:var(--text-dim)" x-text="t.pageLabel || '—'"></td>
+              <td style="text-align:right;font-size:11px"
+                  :style="t.ok ? 'color:var(--text-dim)' : 'color:var(--danger);font-weight:600'"
+                  x-text="t.resultLabel"></td>
             </tr>
           </template>
         </tbody>
       </table>
 
-      <div x-show="trail.length === 0" style="padding:30px;text-align:center;color:var(--text-dim);font-size:13px">
+      <!-- 這一頁撈回來的 200 筆有可能整批都是 90 天內的舊雜訊（被讀取端藏起來），
+           那時候還有更早的資料可以翻，不能說「沒有紀錄」。 -->
+      <div x-show="trail.length === 0 && !trailNextId"
+           style="padding:30px;text-align:center;color:var(--text-dim);font-size:13px">
         這個期間沒有操作紀錄
+      </div>
+      <div x-show="trail.length === 0 && trailNextId"
+           style="padding:20px;text-align:center;color:var(--text-dim);font-size:12px">
+        這一批都是系統自動發出的請求（已隱藏），按下面的按鈕看更早的紀錄
       </div>
       <div style="text-align:center;margin-top:14px" x-show="trailNextId">
         <button class="btn btn-secondary btn-sm" @click="loadTrail(true)">載入更早的紀錄</button>
@@ -232,12 +267,35 @@
         trailUser: '',
         trailNextId: null,
         trailNote: '',
+        members: [],
+        showPaths: false,
 
-        openTrail(it) {
-          this.trailUser = it ? it.username : ''
+        // 上面時數表的列跟下面的下拉選單是同一個狀態（trailUser），點列＝選人。
+        selectMember(username) {
+          this.trailUser = username || ''
+          this.reloadTrail()
+        },
+
+        reloadTrail() {
           this.trail = []
           this.trailNextId = null
           this.loadTrail()
+        },
+
+        memberOption(m) {
+          const role = this.roleLabel(m.role)
+          return m.displayName + '（' + role + (m.active ? '' : '・已停用') + '）'
+        },
+
+        // 類型的顏色：檢視最淡、刪除最重。深色模式是全站反轉濾鏡，這裡照常給淺色。
+        kindStyle(kind) {
+          return ({
+            view:    'background:#F1F5F9;color:#475569',
+            change:  'background:#EFF6FF;color:#1D4ED8',
+            delete:  'background:#FEF2F2;color:#B91C1C',
+            approve: 'background:#F5F3FF;color:#6D28D9',
+            export:  'background:#ECFDF5;color:#047857',
+          })[kind] || 'background:#F1F5F9;color:#475569'
         },
 
         async loadTrail(more = false) {
@@ -254,9 +312,18 @@
           } catch (e) {}
         },
 
+        // 「今天 20:13」比「09-15 20:13:45」好認：看軌跡的人在意的是「剛剛」還是
+        // 「上週」，秒數只有在查同一分鐘內的連續動作時才有用，那時可以開原始路徑。
         fmtTime(iso) {
           if (!iso) return ''
-          return iso.replace('T', ' ').slice(5, 19)
+          const d = new Date(iso)
+          if (isNaN(d.getTime())) return iso.replace('T', ' ').slice(5, 19)
+          const hm = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0')
+          const dayOf = x => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime()
+          const days = Math.round((dayOf(new Date()) - dayOf(d)) / 86400000)
+          if (days === 0) return '今天 ' + hm
+          if (days === 1) return '昨天 ' + hm
+          return (d.getMonth() + 1) + '/' + d.getDate() + ' ' + hm
         },
 
         async loadOnline() {
@@ -273,8 +340,9 @@
             if (!r.ok) { this.items = []; return }
             const d = await r.json()
             this.items = d.items || []
+            this.members = d.members || []
           } catch (e) { this.items = [] }
-          this.loadTrail()
+          this.reloadTrail()
         },
 
         thisMonth() {

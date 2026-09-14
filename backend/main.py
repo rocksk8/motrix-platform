@@ -20,6 +20,7 @@ from helpers import (
     _sync_module_versions, DEMO_TOKEN_PREFIX,
 )
 from archive import _ensure_archive_dirs, _schedule_weekly, _schedule_daily
+import trail
 
 from routers import auth, quotations, customers, suppliers, parts, dashboard, system, reports, contractors, payslips, daily_tasks, module_versions, vendor_contractors, dev_crm, env_guide, netarch_guide, switch_guide, shipping_notes, inventory, search, monitor_guide, access_guide, gateway_guide, automation_guide, contractor_vouchers, invoice_vouchers, org_structure, payment_requests, list_prefs, case_action_items, uploads, network_plans, network_plans_quick, approval_delegates, cashier, accounting_export, material_orders, case_extra_expenses, completion_notes
 
@@ -200,33 +201,17 @@ async def no_cache_static(request: Request, call_next):
 
 # 逐條操作軌跡（2026-09-14，DB v80）
 #
-# 只記「人的行為」：輪詢類端點一律跳過，否則每個開著的分頁每分鐘就會塞進好幾列，
-# 真正有意義的動作會被淹掉。這份清單是用「前端會自動定時打」當標準挑的，不是
-# 用「不重要」——例如 /api/auth/me 是每次開頁都打的守門請求，記它等於重複記頁面。
-_TRAIL_SKIP_PREFIXES = (
-    "/api/ping",
-    "/api/auth/me",
-    "/api/notifications",
-    "/api/audit-log/module-counts",
-    "/api/online-users",
-    "/api/system/version",
-    "/api/system/deployed-version",
-    "/api/now",
-    "/api/uploads/",          # 圖片/附件載入，一頁可能幾十個
-    "/api/photo-token",
-)
-
-# 同一個人對同一支端點的連續請求，這個秒數內只記一次。
-# 防的是自動存檔（1.5 秒防抖）與搜尋輸入這類「一個動作打很多次」的情況。
-_TRAIL_DEDUPE_SECONDS = 30
-
-
+# 只記「人的行為」：輪詢與開頁自動打的端點一律跳過，否則每個開著的分頁每分鐘就會
+# 塞進好幾列，真正有意義的動作會被淹掉。
+#
+# 2026-09-15：「哪些不記」「一次點擊打出的一串請求怎麼收斂」都搬到 `trail.py`
+# ——讀取端（routers/system.py 的軌跡端點）要用同一份清單把舊資料也一起藏起來，
+# 兩邊各存一份遲早不同步，而不同步的那一刻讀取端就會露出這裡決定不要的東西。
 def _record_request_trail(user_id: int, now_dt, method: str, path: str,
                           referer: str, status: int) -> None:
     """把一次請求記進操作軌跡。失敗一律吞掉——這是觀測資料，不該擋下正常請求。"""
-    for skip in _TRAIL_SKIP_PREFIXES:
-        if path.startswith(skip):
-            return
+    if trail.should_skip(path):
+        return
     page = ""
     if referer:
         try:
@@ -236,13 +221,24 @@ def _record_request_trail(user_id: int, now_dt, method: str, path: str,
     now_iso = now_dt.isoformat()
     try:
         tc = get_db()
-        last = tc.execute(
-            "SELECT at FROM user_request_log WHERE user_id=? AND method=? AND path=? "
-            "ORDER BY id DESC LIMIT 1", (user_id, method, path)
-        ).fetchone()
+        # 開一張案件會同時撈 base + finance-summary + material-orders + …，那是
+        # 一次點擊而不是六次。同一個群組在去重秒數內只留第一筆（見
+        # trail.collapse_group 的說明，包含為什麼不能只用 LIKE 前綴比對）。
+        group = trail.collapse_group(method, path)
+        if group:
+            last = tc.execute(
+                "SELECT at FROM user_request_log WHERE user_id=? AND method=? "
+                "AND (path=? OR path LIKE ?) ORDER BY id DESC LIMIT 1",
+                (user_id, method, group[0], group[0] + "/%")
+            ).fetchone()
+        else:
+            last = tc.execute(
+                "SELECT at FROM user_request_log WHERE user_id=? AND method=? AND path=? "
+                "ORDER BY id DESC LIMIT 1", (user_id, method, path)
+            ).fetchone()
         if last:
             try:
-                if (now_dt - datetime.fromisoformat(last["at"])).total_seconds() < _TRAIL_DEDUPE_SECONDS:
+                if (now_dt - datetime.fromisoformat(last["at"])).total_seconds() < trail.DEDUPE_SECONDS:
                     tc.close()
                     return
             except Exception:

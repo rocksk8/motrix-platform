@@ -185,8 +185,11 @@ def test_trail_records_what_a_user_looked_at(client, make_user):
     paths = [i["path"] for i in body["items"]]
     assert "/api/customers" in paths, paths
     assert "/api/parts" in paths, paths
-    labels = {i["path"]: i["label"] for i in body["items"]}
-    assert labels.get("/api/customers") == "客戶管理", labels
+    # 2026-09-15：模組名從「客戶管理」改成「客戶」，因為它現在會被組進一整句
+    # （「查看客戶清單」）。觀測點跟著改成那句話——它才是畫面上真正顯示的東西。
+    summaries = {i["path"]: i["summary"] for i in body["items"]}
+    assert summaries.get("/api/customers") == "查看客戶清單", summaries
+    assert summaries.get("/api/parts") == "查看料號清單", summaries
 
 
 def test_trail_skips_polling_endpoints(client, make_user):
@@ -265,6 +268,139 @@ def test_trail_prune_keeps_recent_and_drops_old(client, make_user):
     ats = [r["at"] for r in rows]
     assert all(a >= (datetime.now() - timedelta(days=91)).isoformat() for a in ats), ats
     assert len(ats) >= 1, "近期的紀錄被一起清掉了"
+
+
+# ── 人話 + 篩選每個使用者（2026-09-15 使用者要求）─────────────────────────────
+#
+# 「在更直覺的語言，在線時數統計的操作軌跡，要能篩選每個使用者」。
+# 三件事要釘住：①每列是一句人話而不是路徑＋狀態碼；②頁面自己打的請求不進來；
+# ③收斂「一次點擊的連鎖請求」時，不能把真正的動作藏進去。
+
+def test_trail_summary_is_a_human_sentence(client, make_user):
+    """每一列要能直接讀出「誰做了什麼、結果如何」。"""
+    su, sp = make_user(username="tr_lang", role="superadmin")
+    tok = _login(client, su, sp)
+    client.get("/api/customers", headers=_auth(tok))
+
+    body = client.get("/api/user-activity/trail?user=tr_lang", headers=_auth(tok)).json()
+    rows = [i for i in body["items"] if i["path"] == "/api/customers"]
+    assert rows, body["items"]
+    row = rows[0]
+    assert row["summary"] == "查看客戶清單", row
+    assert row["kindLabel"] == "檢視", row
+    assert row["resultLabel"] == "成功", row
+    assert row["ok"] is True, row
+
+
+def test_trail_blocked_attempt_says_why_in_words(client, make_user):
+    """被擋下來的那一列要寫「沒有權限」，而不是丟一個 403 給人自己查。"""
+    su, sp = make_user(username="tr_words_su", role="superadmin")
+    u, p = make_user(username="tr_words", role="viewer", modules=["dashboard"])
+    assert client.get("/api/parts", headers=_auth(_login(client, u, p))).status_code == 403
+
+    body = client.get("/api/user-activity/trail?user=tr_words",
+                      headers=_auth(_login(client, su, sp))).json()
+    rows = [i for i in body["items"] if i["path"] == "/api/parts"]
+    assert rows, body["items"]
+    assert rows[0]["resultLabel"] == "沒有權限（被擋下）", rows[0]
+    assert rows[0]["ok"] is False, rows[0]
+    assert rows[0]["kindLabel"] == "檢視", rows[0]
+
+
+def test_trail_skips_requests_the_page_fires_by_itself(client, make_user):
+    """心跳、紅點、下拉選單資料、欄位偏好都是頁面自己打的，不是人做的動作。
+
+    斷言裡刻意包含一筆**應該要留下**的請求：只檢查「雜訊不在」的話，整張軌跡
+    是空的（例如記錄功能整個壞掉）也會過。
+    """
+    su, sp = make_user(username="tr_auto", role="superadmin")
+    tok = _login(client, su, sp)
+
+    client.get("/api/customers", headers=_auth(tok))                      # 人做的
+    client.post("/api/edit-presence", json={"doc_type": "quotation", "doc_id": "MQ-AUTO-1"},
+                headers=_auth(tok))                                       # 同時編輯心跳
+    client.get("/api/approval-queue/count", headers=_auth(tok))           # 側欄紅點
+    client.get("/api/users/selectable", headers=_auth(tok))               # 下拉選單資料
+    client.get("/api/list-prefs/quotations", headers=_auth(tok))          # 欄位偏好
+
+    body = client.get("/api/user-activity/trail?user=tr_auto", headers=_auth(tok)).json()
+    paths = [i["path"] for i in body["items"]]
+    assert "/api/customers" in paths, paths
+    noisy = [p for p in paths
+             if p.startswith(("/api/edit-presence", "/api/approval-queue/count",
+                              "/api/list-prefs")) or p.endswith("/selectable")]
+    assert not noisy, f"頁面自動發的請求被記進軌跡：{noisy}"
+
+
+def test_trail_collapses_one_click_fanout_into_one_row(client, make_user):
+    """開一張案件會連帶撈 base + 財務彙總 + 材料採購 + 額外支出——那是一次點擊。"""
+    su, sp = make_user(username="tr_fanout", role="superadmin")
+    tok = _login(client, su, sp)
+    q = "MQ-209901-001"        # 單號不存在也沒差：軌跡記的是「誰對誰做了什麼」
+    for suffix in ("", "/finance-summary", "/material-orders", "/extra-expenses"):
+        client.get(f"/api/quotations/{q}{suffix}", headers=_auth(tok))
+
+    items = client.get("/api/user-activity/trail?user=tr_fanout", headers=_auth(tok)).json()["items"]
+    opened = [i for i in items if i["summary"] == f"開啟報價單／案件 {q}"]
+    assert len(opened) == 1, [i["summary"] for i in items]
+
+
+def test_trail_never_hides_a_real_action_inside_the_open_record_row():
+    """收斂只吃「開頁順手撈的子資源」白名單；動作與敏感資源一律自己一列。
+
+    直接測 `trail.py` 的規則：這條規則漏掉一項就會把事情藏起來（把「看了某人的
+    身分證影像」併進「開啟外包人員 #3」），所以逐項釘住，不繞 HTTP。
+    """
+    import trail
+
+    assert trail.collapse_group("GET", "/api/quotations/MQ-202607-047") is not None
+    assert trail.collapse_group("GET", "/api/quotations/MQ-202607-047/finance-summary") is not None
+
+    for method, path in [
+        ("GET", "/api/contractors/3/id-card"),              # 身分證影像
+        ("GET", "/api/vendor-contractors/3/passbook"),      # 存摺影像
+        ("GET", "/api/completion-notes/12/pdf-download"),   # 下載
+        ("POST", "/api/quotations/MQ-202607-047/approve"),  # 簽核
+        ("DELETE", "/api/dev-logs/503"),                    # 刪除
+    ]:
+        assert trail.collapse_group(method, path) is None, path
+
+    assert trail.describe("GET", "/api/contractors/3/id-card")["summary"] \
+        == "查看外包人員 #3 的身分證影像"
+    assert trail.describe("GET", "/api/completion-notes/12/pdf-download")["kind"] == "export"
+    assert trail.describe("POST", "/api/users/9/unlock-password")["summary"] == "解鎖使用者 #9 的密碼"
+
+
+def test_trail_filter_shows_only_the_chosen_member(client, make_user):
+    """篩選某個人時，只能看到那個人的紀錄（全部成員時兩個人都要在）。"""
+    a_u, a_p = make_user(username="flt_a", role="admin")
+    b_u, b_p = make_user(username="flt_b", role="admin")
+    su, sp = make_user(username="flt_su", role="superadmin")
+    client.get("/api/customers", headers=_auth(_login(client, a_u, a_p)))
+    client.get("/api/parts", headers=_auth(_login(client, b_u, b_p)))
+    tok = _login(client, su, sp)
+
+    only_a = client.get("/api/user-activity/trail?user=flt_a", headers=_auth(tok)).json()["items"]
+    assert only_a, "篩選後不該是空的"
+    assert {i["username"] for i in only_a} == {"flt_a"}, [i["username"] for i in only_a]
+
+    everyone = {i["username"] for i in
+                client.get("/api/user-activity/trail", headers=_auth(tok)).json()["items"]}
+    assert {"flt_a", "flt_b"} <= everyone, everyone
+
+
+def test_member_list_covers_everyone_not_just_people_with_hours(client, make_user):
+    """下拉選單要能選到「這段期間沒有時數」的人——那常常正是想查的那個人。"""
+    su, sp = make_user(username="mem_super", role="superadmin")
+    make_user(username="mem_quiet", role="sales")        # 建好就沒再動過
+    tok = _login(client, su, sp)
+
+    body = client.get("/api/user-activity", headers=_auth(tok)).json()
+    with_hours = {i["username"] for i in body["items"]}
+    members = {m["username"] for m in body["members"]}
+    assert "mem_quiet" not in with_hours, "這個帳號本來就不該有活躍時數"
+    assert "mem_quiet" in members, members
+    assert "mem_super" in members, members
 
 
 # ── 同時編輯警示（2026-09-14 使用者要求）──────────────────────────────────────
