@@ -2017,9 +2017,12 @@ function app() {
           st.done ? 'stage-done' : '',
           (!st.done && this.stageIsOverdue(st)) ? 'stage-overdue' : '',
         ].filter(Boolean).join(' ')
+        // 2026-09-14：標籤前面加上起日（MM/DD）。甘特圖被縮放貼進簡報或
+        // 列印時，時間軸刻度往往先糊掉，標籤自己帶日期才讀得出來。
+        const _md = (d) => (d || '').slice(5, 10).replace('-', '/')
         return {
           id:           String(st.id),
-          name:         st.label || '（未命名階段）',
+          name:         (_md(start) ? _md(start) + ' ' : '') + (st.label || '（未命名階段）'),
           start, end,
           progress:     st.done ? 100 : 0,
           dependencies: (st.dependsOn || []).map(String).join(','),
@@ -2114,9 +2117,43 @@ function app() {
       this.ganttExporting = true
       try {
         const rect = svg.getBoundingClientRect()
-        const w = Math.ceil(svg.getAttribute('width')  || rect.width)
+        const fullW = Math.ceil(svg.getAttribute('width')  || rect.width)
         const h = Math.ceil(svg.getAttribute('height') || rect.height)
         const TITLE_H = 46
+
+        // 裁掉左右空白（2026-09-14）
+        // Frappe Gantt 的 setup_gantt_dates() 會自己把日期範圍撐開：
+        // 週／日檔位前後各加 1 個月、月檔位往前補到年初再往後加 1 整年。
+        // 所以一張 60 天的案件會畫成 2600px 以上，中間大半是空網格。
+        // 壓縮的正解是裁掉那段空白，而不是把整張圖縮小——縮小會連日期
+        // 刻度一起糊掉，那正是要避免的事。
+        let cropX = 0, cropW = fullW, cropH = h
+        if (this.ganttTrim) {
+          const bars = svg.querySelectorAll('.bar-wrapper .bar, .bar-wrapper .bar-invalid')
+          let minX = null, maxX = null, maxY = null
+          bars.forEach(b => {
+            const x  = parseFloat(b.getAttribute('x') || 'NaN')
+            const y  = parseFloat(b.getAttribute('y') || 'NaN')
+            const bw = parseFloat(b.getAttribute('width')  || '0')
+            const bh = parseFloat(b.getAttribute('height') || '0')
+            if (!isNaN(x)) {
+              if (minX === null || x < minX) minX = x
+              if (maxX === null || x + bw > maxX) maxX = x + bw
+            }
+            if (!isNaN(y) && (maxY === null || y + bh > maxY)) maxY = y + bh
+          })
+          if (minX !== null && maxX !== null && maxX > minX) {
+            // 左右留白刻意不對稱：長條的 x/width 只涵蓋長條本身，**不含畫在
+            // 右側的標籤文字**，所以右邊要多留，否則最後一個階段的標籤會被切。
+            const PAD_L = 60, PAD_R = 240
+            cropX = Math.max(0, Math.floor(minX - PAD_L))
+            cropW = Math.min(fullW - cropX, Math.ceil(maxX - minX + PAD_L + PAD_R))
+          }
+          // SVG 高度是「列數 × 列高」的固定值，兩三個階段的案件下方會留一大片
+          // 空列，一起裁掉。
+          if (maxY !== null) cropH = Math.min(h, Math.ceil(maxY + 40))
+        }
+        const w = cropW
 
         const clone = svg.cloneNode(true)
         const src = svg.querySelectorAll('*')
@@ -2131,7 +2168,7 @@ function app() {
           dst[i].setAttribute('style', css)
         }
         clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
-        clone.setAttribute('width', w)
+        clone.setAttribute('width', fullW)
         clone.setAttribute('height', h)
 
         const data = new XMLSerializer().serializeToString(clone)
@@ -2145,11 +2182,11 @@ function app() {
         const SCALE = 2
         const cv = document.createElement('canvas')
         cv.width  = w * SCALE
-        cv.height = (h + TITLE_H) * SCALE
+        cv.height = (cropH + TITLE_H) * SCALE
         const ctx = cv.getContext('2d')
         ctx.scale(SCALE, SCALE)
         ctx.fillStyle = '#FFFFFF'
-        ctx.fillRect(0, 0, w, h + TITLE_H)
+        ctx.fillRect(0, 0, w, cropH + TITLE_H)
 
         // 抬頭：匯出的圖要自己說得清楚是哪張案子、哪天匯出的
         const sel = this.selected || {}
@@ -2159,10 +2196,11 @@ function app() {
         ctx.fillStyle = '#767676'
         ctx.font = '11px "LINE Seed TW_OTF", system-ui, sans-serif'
         const modeLabel = { Day: '日', Week: '週', Month: '月' }[this.ganttEffectiveMode] || ''
-        ctx.fillText('執行進度甘特圖・' + modeLabel + '檔位・匯出於 ' +
-                     new Date().toLocaleString('zh-TW'), 16, 39)
+        ctx.fillText('執行進度甘特圖・' + modeLabel + '檔位'
+                     + '・匯出於 ' + new Date().toLocaleString('zh-TW'), 16, 39)
 
-        ctx.drawImage(img, 0, TITLE_H, w, h)
+        // 只畫裁切範圍那一段（來源 x 從 cropX 起算）
+        ctx.drawImage(img, cropX, 0, cropW, cropH, 0, TITLE_H, cropW, cropH)
 
         const mime = fmt === 'jpg' ? 'image/jpeg' : 'image/png'
         const blob = await new Promise(r => cv.toBlob(r, mime, 0.92))
@@ -2178,6 +2216,8 @@ function app() {
       this.ganttExporting = false
     },
     ganttExporting: false,
+    ganttTrim: true,   // 匯出時裁掉前後空白。固定啟用：沒有人會想要一張大半是空白的圖，
+                       // 不用多一個選項去問
 
     async addVisit(stageIdx) {
       const st = this.cr.caseRecord.stages[stageIdx]
