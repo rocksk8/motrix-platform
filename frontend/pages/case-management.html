@@ -239,6 +239,14 @@
     .attendee-select:focus { border-color:var(--accent); }
     .stage-view-btn { padding:6px 14px; border:1px solid var(--border-light); border-radius:6px; background:#fff; color:var(--text-secondary); font-size:12px; font-family:var(--font-zh); cursor:pointer; }
     .stage-view-btn.active { background:var(--accent); border-color:var(--accent); color:#fff; }
+    /* 2026-09-14：甘特圖工具列 */
+    .gantt-bar { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:10px; }
+    .gantt-modes { display:inline-flex; padding:2px; background:#F0EFEB; border-radius:7px; gap:2px; }
+    .gantt-mode { border:none; background:transparent; font-family:var(--font-zh); font-size:11px;
+                  font-weight:600; padding:5px 12px; border-radius:5px; color:var(--text-dim); cursor:pointer; }
+    .gantt-mode.active { background:#fff; color:var(--text-primary); box-shadow:0 1px 2px rgba(0,0,0,.08); }
+    .gantt-span { font-size:11px; color:var(--text-dim); font-family:var(--font-zh); }
+    .gantt-export { margin-left:auto; display:flex; gap:6px; }
     #stage-gantt-chart .gantt .bar { fill:var(--accent); }
     #stage-gantt-chart .gantt .bar-progress { fill:rgba(0,0,0,.18); }
     #stage-gantt-chart .gantt .bar-invalid { fill:transparent; stroke:#D1D5DB; stroke-dasharray:2,2; }
@@ -1279,6 +1287,24 @@
                       尚未設定任何階段的日期，請先到清單視圖展開階段設定起訖日期
                     </div>
                   </template>
+                  <!-- 2026-09-14：檔位切換 + 匯出。
+                       原本 view_mode 寫死 'Day'，跨半年的案件會拉出好幾千 px 寬。 -->
+                  <div class="gantt-bar">
+                    <div class="gantt-modes">
+                      <template x-for="m in [{v:'auto',l:'\u81ea\u52d5'},{v:'Day',l:'\u65e5'},{v:'Week',l:'\u9031'},{v:'Month',l:'\u6708'}]" :key="m.v">
+                        <button class="gantt-mode" :class="{active: ganttView === m.v}"
+                                @click="setGanttView(m.v)" x-text="m.l"></button>
+                      </template>
+                    </div>
+                    <span class="gantt-span" x-show="ganttView === 'auto'"
+                          x-text="'\u8de8\u5e45 ' + _ganttSpanDays(_ganttTasks()) + ' \u5929\uff0c\u81ea\u52d5\u7528' + ({Day:'\u65e5',Week:'\u9031',Month:'\u6708'}[ganttEffectiveMode] || '') + '\u6a94\u4f4d'"></span>
+                    <div class="gantt-export">
+                      <button class="btn-add" @click="exportGanttImage('png')" :disabled="ganttExporting">
+                        <span x-text="ganttExporting ? '\u532f\u51fa\u4e2d\u2026' : '\u532f\u51fa PNG'"></span>
+                      </button>
+                      <button class="btn-add" @click="exportGanttImage('jpg')" :disabled="ganttExporting">匯出 JPG</button>
+                    </div>
+                  </div>
                   <div id="stage-gantt-chart" x-ref="ganttContainer" style="margin-bottom:18px;overflow-x:auto"></div>
                   <div style="font-size:11px;color:var(--text-dim);font-family:var(--font-zh);margin-bottom:14px">
                     可直接拖曳長條調整日期；前置階段依賴請到清單視圖的「詳細設定」設定

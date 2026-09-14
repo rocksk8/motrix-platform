@@ -2032,14 +2032,44 @@ function app() {
       })
     },
 
+    // ── 甘特圖檔位（2026-09-14）────────────────────────────────────────
+    // 原本 view_mode 寫死 'Day'：跨半年的案件會拉出好幾千 px 寬，只能一直
+    // 橫向捲、看不到全貌。改成依實際跨幅自動選，使用者可手動覆寫。
+    ganttView: 'auto',
+    _ganttSpanDays(tasks) {
+      if (!tasks || !tasks.length) return 0
+      let min = null, max = null
+      tasks.forEach(t => {
+        const s = new Date(t.start), e = new Date(t.end)
+        if (!min || s < min) min = s
+        if (!max || e > max) max = e
+      })
+      return Math.round((max - min) / 86400000)
+    },
+    _autoGanttMode(tasks) {
+      const d = this._ganttSpanDays(tasks)
+      if (d <= 45)  return 'Day'
+      if (d <= 180) return 'Week'
+      return 'Month'
+    },
+    get ganttEffectiveMode() {
+      if (this.ganttView !== 'auto') return this.ganttView
+      return this._autoGanttMode(this._ganttTasks())
+    },
+    setGanttView(v) {
+      this.ganttView = v
+      this.renderGantt()
+    },
+
     renderGantt() {
       const el = this.$refs.ganttContainer
       if (!el || typeof Gantt === 'undefined') return
       const tasks = this._ganttTasks()
       el.innerHTML = ''
       if (!tasks.length) return
+      const mode = this.ganttView === 'auto' ? this._autoGanttMode(tasks) : this.ganttView
       this._ganttInstance = new Gantt(el, tasks, {
-        view_mode: 'Day',
+        view_mode: mode,
         on_date_change: (task, start, end) => {
           const st = (this.cr.caseRecord?.stages || []).find(s => String(s.id) === task.id)
           if (!st) return
@@ -2066,6 +2096,89 @@ function app() {
         },
       })
     },
+    // ── 甘特圖匯出 PNG / JPG（2026-09-14）──────────────────────────────
+    // Frappe Gantt 畫的是 SVG，但顏色與字體全部來自外部 CSS。直接
+    // XMLSerializer 序列化出來的 SVG 沒有那些樣式，畫到 canvas 上會變成
+    // 沒有顏色的黑白線稿——**必須把 computed style 逐一 inline 回克隆節點**。
+    // 這是整件事唯一的難處，不是多寫幾行 canvas 就好。
+    //
+    // 深色模式下匯出的仍是淺色版：整站深色是繪製階段的 invert 濾鏡，
+    // getComputedStyle 讀到的是作者值。對匯出圖來說這正是我們要的。
+    _SVG_STYLE_PROPS: ['fill','fill-opacity','stroke','stroke-width','stroke-dasharray',
+                       'opacity','font-family','font-size','font-weight','text-anchor',
+                       'dominant-baseline','visibility'],
+    async exportGanttImage(fmt) {
+      const el = this.$refs.ganttContainer
+      const svg = el && el.querySelector('svg')
+      if (!svg) { this.toast && this.toast('目前沒有可匯出的甘特圖'); return }
+      this.ganttExporting = true
+      try {
+        const rect = svg.getBoundingClientRect()
+        const w = Math.ceil(svg.getAttribute('width')  || rect.width)
+        const h = Math.ceil(svg.getAttribute('height') || rect.height)
+        const TITLE_H = 46
+
+        const clone = svg.cloneNode(true)
+        const src = svg.querySelectorAll('*')
+        const dst = clone.querySelectorAll('*')
+        for (let i = 0; i < src.length; i++) {
+          const cs = getComputedStyle(src[i])
+          let css = ''
+          for (const prop of this._SVG_STYLE_PROPS) {
+            const v = cs.getPropertyValue(prop)
+            if (v) css += prop + ':' + v + ';'
+          }
+          dst[i].setAttribute('style', css)
+        }
+        clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
+        clone.setAttribute('width', w)
+        clone.setAttribute('height', h)
+
+        const data = new XMLSerializer().serializeToString(clone)
+        const img = new Image()
+        await new Promise((res, rej) => {
+          img.onload = res; img.onerror = rej
+          img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(data)
+        })
+
+        // 2 倍取樣，列印或貼進簡報才不會糊
+        const SCALE = 2
+        const cv = document.createElement('canvas')
+        cv.width  = w * SCALE
+        cv.height = (h + TITLE_H) * SCALE
+        const ctx = cv.getContext('2d')
+        ctx.scale(SCALE, SCALE)
+        ctx.fillStyle = '#FFFFFF'
+        ctx.fillRect(0, 0, w, h + TITLE_H)
+
+        // 抬頭：匯出的圖要自己說得清楚是哪張案子、哪天匯出的
+        const sel = this.selected || {}
+        ctx.fillStyle = '#1A1D21'
+        ctx.font = '600 15px "LINE Seed TW_OTF", system-ui, sans-serif'
+        ctx.fillText((sel.customer_name || '') + '　' + (sel.quote_no || ''), 16, 24)
+        ctx.fillStyle = '#767676'
+        ctx.font = '11px "LINE Seed TW_OTF", system-ui, sans-serif'
+        const modeLabel = { Day: '日', Week: '週', Month: '月' }[this.ganttEffectiveMode] || ''
+        ctx.fillText('執行進度甘特圖・' + modeLabel + '檔位・匯出於 ' +
+                     new Date().toLocaleString('zh-TW'), 16, 39)
+
+        ctx.drawImage(img, 0, TITLE_H, w, h)
+
+        const mime = fmt === 'jpg' ? 'image/jpeg' : 'image/png'
+        const blob = await new Promise(r => cv.toBlob(r, mime, 0.92))
+        const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, '')
+        const a = document.createElement('a')
+        a.href = URL.createObjectURL(blob)
+        a.download = '甘特圖_' + (sel.quote_no || 'case') + '_' + stamp + '.' + fmt
+        document.body.appendChild(a); a.click(); a.remove()
+        setTimeout(() => URL.revokeObjectURL(a.href), 4000)
+      } catch (e) {
+        console.error('gantt export:', e)
+      }
+      this.ganttExporting = false
+    },
+    ganttExporting: false,
+
     async addVisit(stageIdx) {
       const st = this.cr.caseRecord.stages[stageIdx]
       if (!st) return
