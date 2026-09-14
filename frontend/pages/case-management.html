@@ -130,17 +130,23 @@
     .tag-closed { display:inline-flex; align-items:center; gap:4px; padding:3px 10px; border-radius:5px; font-size:11px; font-weight:600; font-family:var(--font-zh); background:#F5F3FF; color:#6D28D9; border:1px solid #C4B5FD; }
 
     /* KPI pills */
-    .cm-kpi { display:flex; align-items:center; gap:8px; padding:4px 20px 12px; flex-wrap:wrap; }
-    .cm-kpi__pill { display:inline-flex; flex-direction:column; padding:6px 12px; background:#F9FAFB; border:1px solid var(--border-light); border-radius:8px; min-width:86px; }
-    .cm-kpi__val { font-size:13px; font-weight:700; font-family:LINE Seed TW_OTF, sans-serif; color:var(--text-primary); line-height:1; }
-    .cm-kpi__lbl { font-size:9px; color:var(--text-dim); font-family:LINE Seed TW_OTF, sans-serif; letter-spacing:.06em; text-transform:uppercase; margin-top:3px; }
+    /* 2026-09-14：原本是 4 張有框小卡單獨一列，加上下方的 meta 列，
+       光標頭就疊了 4 層。改成無框、以分隔線區隔的數字帶，並跟 meta 併成同一列。 */
+    .cm-headline { display:flex; align-items:center; gap:18px; padding:2px 20px 12px; flex-wrap:wrap; }
+    .cm-kpi { display:flex; align-items:stretch; gap:0; flex-wrap:wrap; }
+    .cm-kpi__pill { display:inline-flex; flex-direction:column; justify-content:center; padding:0 16px; min-width:86px; border-left:1px solid var(--border-light); }
+    .cm-kpi__pill:first-child { border-left:0; padding-left:0; }
+    .cm-kpi__val { font-size:15px; font-weight:700; font-family:LINE Seed TW_OTF, sans-serif; color:var(--text-primary); line-height:1.15; letter-spacing:-.01em; }
+    .cm-kpi__lbl { font-size:9.5px; color:var(--text-dim); font-family:LINE Seed TW_OTF, sans-serif; letter-spacing:.06em; margin-top:4px; }
+    /* 配色規則：紅色只留給真正的異常。
+       已收款 = 錢進來了 → 綠；未收款 > 0 是**正常狀態**（還沒收完而已）→ 琥珀；
+       合約金額與執行進度是中性事實，完成才轉綠。 */
     .cm-kpi__pill.success .cm-kpi__val { color:var(--success); }
-    .cm-kpi__pill.accent  .cm-kpi__val { color:var(--accent); }
     .cm-kpi__pill.warning .cm-kpi__val { color:var(--warning); }
     .cm-kpi__pill.danger  .cm-kpi__val { color:var(--danger); }
 
     /* Meta */
-    .cm-meta { display:flex; align-items:center; gap:16px; padding:0 20px 10px; font-size:11px; color:var(--text-dim); font-family:LINE Seed TW_OTF, sans-serif; flex-wrap:wrap; }
+    .cm-meta { display:flex; align-items:center; gap:16px; padding:0; font-size:11px; color:var(--text-dim); font-family:LINE Seed TW_OTF, sans-serif; flex-wrap:wrap; flex:1; min-width:0; }
     .cm-meta__lbl { color:var(--text-dim); }
     .cm-meta__val { color:var(--text-secondary); font-weight:500; margin-left:4px; }
 
@@ -722,27 +728,27 @@
                       x-text="selected.project_name"></span>
               </div>
 
-              <!-- Row 3: KPI pills -->
+              <!-- Row 3（2026-09-14 合併）：數字帶 + meta 同一列 -->
+              <div class="cm-headline">
               <div class="cm-kpi">
                 <div class="cm-kpi__pill" x-show="canSeeFinancial()">
                   <span class="cm-kpi__val" x-text="'NT$ ' + (totalWithTax()||0).toLocaleString()"></span>
                   <span class="cm-kpi__lbl">合約金額</span>
                 </div>
-                <div class="cm-kpi__pill" :class="receivedPct()===100 ? 'success' : receivedPct()>0 ? 'accent' : ''" x-show="canSeeFinancial()">
+                <div class="cm-kpi__pill" :class="receivedPct()>0 ? 'success' : ''" x-show="canSeeFinancial()">
                   <span class="cm-kpi__val" x-text="'NT$ ' + receivedTotal().toLocaleString()"></span>
                   <span class="cm-kpi__lbl">已收款（<span x-text="receivedPct()"></span>%）</span>
                 </div>
-                <div class="cm-kpi__pill" :class="outstandingTotal()>0 ? 'danger' : 'success'" x-show="canSeeFinancial()">
+                <div class="cm-kpi__pill" :class="outstandingTotal()>0 ? 'warning' : 'success'" x-show="canSeeFinancial()">
                   <span class="cm-kpi__val" x-text="'NT$ ' + outstandingTotal().toLocaleString()"></span>
                   <span class="cm-kpi__lbl">未收款</span>
                 </div>
-                <div class="cm-kpi__pill" :class="caseProgressPct()===100 ? 'success' : caseProgressPct()>0 ? 'accent' : ''">
+                <div class="cm-kpi__pill" :class="caseProgressPct()===100 ? 'success' : ''">
                   <span class="cm-kpi__val" x-text="caseProgressPct() + '%'"></span>
                   <span class="cm-kpi__lbl">執行進度</span>
                 </div>
-              </div>
+              </div><!-- /.cm-kpi -->
 
-              <!-- Row 3: meta + log toggle -->
               <div class="cm-meta">
                 <span><span class="cm-meta__lbl">報價日期</span><span class="cm-meta__val" x-text="(selected.quote_date||selected.created_at||'').slice(0,10)||'—'"></span></span>
                 <span><span class="cm-meta__lbl">負責業務</span><span class="cm-meta__val" x-text="selected.sales_person||'—'"></span></span>
@@ -751,7 +757,8 @@
                 <button @click="showLog=!showLog"
                         style="margin-left:auto;font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;background:none;border:none;cursor:pointer;color:var(--text-dim);padding:0;text-decoration:underline;flex-shrink:0"
                         x-text="showLog ? '收起操作紀錄' : '操作紀錄 ▸'"></button>
-              </div>
+              </div><!-- /.cm-meta -->
+              </div><!-- /.cm-headline -->
 
               <!-- Collapsible log -->
               <template x-if="showLog">
