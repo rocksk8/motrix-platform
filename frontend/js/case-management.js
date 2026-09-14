@@ -1511,6 +1511,36 @@ function app() {
       }
     },
 
+    // 報價單 → 案件合約資訊的欄位對照。contactPerson/contactPhone 在報價單
+    // 是 contactName/contactPhone；contractNote 報價單沒有對應欄位，維持案件自填。
+    _quoteContractFields() {
+      const q = (this.selected && this.selected.data) || {}
+      return {
+        deliveryAddress: q.deliveryAddress || '',
+        deliveryTerms:   q.deliveryTerms   || '',
+        contactPerson:   q.contactName     || '',
+        contactPhone:    q.contactPhone    || '',
+      }
+    },
+    _fillContractFromQuote(target) {
+      const src = this._quoteContractFields()
+      // 只填空的欄位——不覆蓋案件上已經有的值
+      Object.keys(src).forEach(k => { if (src[k] && !target[k]) target[k] = src[k] })
+    },
+    get quoteContractAvailable() {
+      return Object.values(this._quoteContractFields()).some(v => !!v)
+    },
+    pullContractFromQuote() {
+      const c = this.cr.caseRecord && this.cr.caseRecord.contract
+      if (!c) return
+      const src = this._quoteContractFields()
+      const filled = Object.keys(src).filter(k => src[k] && !c[k])
+      if (!filled.length) { alert('報價單上沒有可帶入的欄位，或案件這邊都已經有值了。'); return }
+      this._fillContractFromQuote(c)
+      this.setDirty && this.setDirty()
+      this.dirty = true
+    },
+
     ensureCaseRecord() {
       if (!this.cr.caseRecord) {
         this.cr.caseRecord = {
@@ -1531,6 +1561,12 @@ function app() {
       if (!this.cr.caseRecord.devices)   this.cr.caseRecord.devices   = []
       if (!this.cr.caseRecord.contract) {
         this.cr.caseRecord.contract = { deliveryAddress: '', deliveryTerms: '', contactPerson: '', contactPhone: '', contractNote: '' }
+        // 第一次建立時從報價單帶入（2026-09-14 使用者交辦「合約資訊要能根據
+        // 報價單內容連動」）。**單向、只帶一次**：案件成立後現場條件本來就
+        // 可能跟報價當時不同，雙向同步會讓改案件反過來改到已經簽核的報價單；
+        // 每次開啟都覆蓋則會把現場修正洗掉。已存在的案件用下面那顆
+        // pullContractFromQuote() 手動帶，不在載入時偷偷補寫。
+        this._fillContractFromQuote(this.cr.caseRecord.contract)
       }
       if (!this.cr.caseRecord.roles) {
         this.cr.caseRecord.roles = { filler: '', sales: '', executor: '' }

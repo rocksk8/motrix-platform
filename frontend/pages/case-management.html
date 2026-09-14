@@ -1081,7 +1081,18 @@
               <!-- ══ 案件資訊 Tab ══ -->
               <div x-show="activeTab==='biz'">
 
-                <div class="cm-section-title">合約資訊</div>
+                <div class="cm-section-title">
+                  合約資訊
+                  <!-- 已存在的案件用這顆手動帶（2026-09-14）。新建案件在
+                       ensureCaseRecord() 就帶過了，不會重複問。只填空欄位，
+                       不覆蓋案件這邊已經改過的值。 -->
+                  <button type="button" class="aq-sort" x-show="quoteContractAvailable"
+                          @click="pullContractFromQuote()"
+                          style="margin-left:auto;font-weight:400"
+                          title="從這張報價單帶入交貨地址、交貨條件與聯絡人——只填空白欄位，不覆蓋已經有的值">
+                    從報價單帶入
+                  </button>
+                </div>
                 <!-- 四欄網格：地址與交貨條件各佔兩欄，聯絡人與電話各佔一欄
                      （內容就那麼短，給滿寬只是製造空白與框線噪音），備註跨滿。 -->
                 <div class="cm-fgrid cm-fgrid--contract">
