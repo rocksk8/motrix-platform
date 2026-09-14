@@ -30,11 +30,26 @@
       gap: 12px;
       padding: 0 24px;
     }
+    /* 2026-09-14：這頁的工具列是 position:fixed 的52px 帶，放不下 .pg 那種
+       「眩標 + 28×3 標記 + 大標題」的完整標頭（插在它上面會被蓋住）。
+       改用緊湊變體：紅色標記轉成直立的 3×14 細條貼在標題左側，
+       保留「紅色重點緊鄰標題」這個識別，不動它的版面結構。 */
     .mv-toolbar__title {
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
       font-size: 16px;
       font-weight: 700;
+      letter-spacing: -.01em;
       color: var(--text-main);
       margin-right: 4px;
+    }
+    .mv-toolbar__title::before {
+      content: '';
+      width: var(--v4-mark-h);
+      height: 14px;
+      background: var(--accent);
+      flex: none;
     }
     .mv-view-toggle {
       display: flex;

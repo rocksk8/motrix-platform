@@ -58,17 +58,12 @@
   <aside class="sidebar" id="app-sidebar"></aside>
 
   <main class="os-main">
-    <div class="page-header">
-      <h1 class="page-title">在線時數統計</h1>
-    </div>
-
-    <div class="os-note">
-      <span>ℹ️</span>
-      <span>
-        這裡統計的是**有實際操作的活躍時間**，不是分頁開著的時間——開著畫面去開會不會被算進去。
-        系統每 5 分鐘累計一次，因此當天的數字最多會少算 5 分鐘。<br>
-        這份資料只有最高管理者看得到。
-      </span>
+    <div class="pg">
+      <div class="pg__l">
+        <div class="pg__eyebrow">系統設定</div>
+        <h1 class="pg__t">在線時數統計</h1>
+        <p class="pg__s">只統計有實際操作的活躍時間，每 5 分鐘累計一次</p>
+      </div>
     </div>
 
     <div class="os-online">
@@ -192,7 +187,18 @@
         <button class="btn btn-secondary btn-sm" @click="loadTrail(true)">載入更早的紀錄</button>
       </div>
     </div>
-  </main>
+  
+    <!-- 2026-09-14：說明從資料前面移到後面。這頁的重點是數字，
+         一進來先讀三行說明才看到資料是本末倒置。 -->
+    <div class="os-note">
+      <span>ℹ️</span>
+      <span>
+        這裡統計的是**有實際操作的活躍時間**，不是分頁開著的時間——開著畫面去開會不會被算進去。
+        系統每 5 分鐘累計一次，因此當天的數字最多會少算 5 分鐘。<br>
+        這份資料只有最高管理者看得到。
+      </span>
+    </div>
+</main>
 
   <script src="../static/notif.js"></script>
   <script>
