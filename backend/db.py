@@ -36,6 +36,15 @@ DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR = os.path.join(
     os.path.dirname(__file__), "_demo_case_closing_pdf_archive")
 
 # Increment this whenever a new _mNNN function is added to _MIGRATIONS.
+# ⚠️ 新增 migration 是「三個動作」，少任何一個都不會報錯：
+#   ① 寫 _mNNN_xxx(conn)（冪等：ALTER 前先檢查、建表用 IF NOT EXISTS）
+#   ② 加進下面的 _MIGRATIONS 清單（位置＝版號，只能往後接、不可插隊或刪除）
+#   ③ 把這行下面的 CURRENT_VERSION 加一
+# 漏掉③的症狀是**完全沒有症狀**：_run_migrations() 第一行 current >=
+# CURRENT_VERSION 就直接 return，migration 從頭到尾沒被呼叫、log 不會有任何
+# 一行、伺服器照常起來，只有實際去 INSERT 新欄位時才炸。2026-09-14 v82 就是
+# 這樣漏的，靠重啟真伺服器＋PRAGMA table_info 才發現。改完請實際重啟一次並
+# 確認 log 有印出 'DB migration NN/NN: _mNNN_xxx'。
 # v32/v33 (switch_guide tables + specs_json column) were initially missing
 # from this checkout — reconstructed 2026-08-01 by reverse-engineering the
 # actual schema off a production DB backup (see _m032_switch_guide docstring).
@@ -84,6 +93,13 @@ DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR = os.path.join(
 # v77: completion_notes（完工單，比照 shipping_notes 同構＋工程完工單特有欄位），
 # 2026-09-12 交辦，見 _m077 docstring。
 # v78: completion_notes.contact_phone（完工單帶入報價單聯絡人電話），2026-09-12。
+# v79: user_activity（在線時數統計），2026-09-13。
+# v80: user_request_log（操作軌跡），2026-09-13。
+# v81: edit_presence（同時編輯偵測），2026-09-13。
+# v82: case_updates.files_json / dev_logs.files_json（案件動態與業務開發記錄
+# 的附件，2026-09-14）——兩張表都是 TEXT NOT NULL DEFAULT '[]'，存
+# save_document_files() 回傳的清單。刪附件限 admin+，見 routers/quotations.py
+# 與 routers/dev_crm.py 的 DELETE .../files/{file_id}。
 CURRENT_VERSION = 82
 
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool

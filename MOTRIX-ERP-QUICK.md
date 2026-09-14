@@ -1673,6 +1673,13 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 
 **還原優先序**：本機 `db_backups` 整庫 → 雲端 `motrix_erp.db` → JSON 重建（最後手段）
 
+> ⚠️ **最後手段目前只重建得出 8/76 張表**（2026-09-14 稽核，見第十輪）。
+> `archive.py::_daily_backup()` 的 `tables` 只匯出報價單／客戶／供應商／料號／專案／
+> 稽核紀錄／通知／模組版本，**不含** `users`、`system_settings`、`payslips`、
+> 業務開發（`dev_*`）與三種憑證流。前兩層（整庫複製）涵蓋全部資料，所以這不是
+> 資料遺失風險；但如果真的走到第三層，請預期上述模組要另外處理。
+> 追蹤點：`backend/tests/test_system_audit_2026_09_14.py` 的 `xfail(strict=True)`。
+
 ---
 
 ## §9 · 前端規範
@@ -1773,6 +1780,46 @@ xlsx-0.18.5.full.min.js     （SheetJS）
 > 未紀錄；同期間 `CHANGELOG.md` 09-08／09-09 兩天完全空白。已於本日補回，並新增
 > [`WEEKLY-AUDIT-2026-09-07_2026-09-10.md`](WEEKLY-AUDIT-2026-09-07_2026-09-10.md)
 > ——帶「模組／檔案:行號／是否在正式機」座標的本週稽核索引，出事時先看那份。
+
+### 2026-09-14（第十輪）— 跨層稽核測試、回簽附件刪除權限補洞、必要點註記（DB 無異動）
+
+分支 `fix/system-audit-2026-09-14`（自 develop 拉出）。使用者交辦：
+「做一個測試的程式確認每個模組串接跟備份、安全邏輯、組織邏輯都正確，
+最後在每個必要點做備註，讓未來編寫更為流暢」。
+
+#### 一、新增 `backend/tests/test_system_audit_2026_09_14.py`
+
+跨層稽核，跟著每次 pytest 跑。設計理由與白名單的意義寫在
+[維護規則 §跨層一致性稽核](#跨層一致性稽核2026-09-14)，不在這裡重複。
+四個區塊：**A 備份涵蓋**、**B 路由守門**、**C 模組串接（刻意不做）**、**D 組織邏輯**。
+
+C 區塊**刻意留空並附說明**：`test_module_keys_consistency_2026_09_13.py` 已經
+完整覆蓋模組串接，而且比臨時寫的更周全。寫這支的過程中我一度斷言
+`_SUPERADMIN_MODULES` 應該等於 `allModules` 並照著改了 `helpers/auth.py`，
+**打破了那支既有測試守著的真正不變量**（該樣板要等於前端的 superadmin 角色樣板，
+不是「全部模組」）。改動已 `git checkout` 還原，三題重複的模組測試也移除。
+→ **動手改之前先確認有沒有既有測試在守同一件事。**
+
+#### 二、⚠️ 稽核當下掃出來的兩件事
+
+| # | 項目 | 處置 |
+|---|------|------|
+| 1 | `DELETE /api/shipping-notes/{no}/signed-files/{id}` 與完工單同名端點**只有 `_require_user()`**——任何登入者都能刪掉任何單據的回簽附件，且連實體檔案一起移除、不可復原 | **已修**：補 admin+，與同日動態附件同一標準。兩支的 docstring 都寫了「在此之前是什麼狀態」 |
+| 2 | 每日 JSON 匯出只涵蓋 **8/76** 張表 | **未修，已追蹤**：整庫複製有保護到資料，但 §8.3 的最後手段目前重建不出 `users`／`system_settings`／`payslips`／dev-CRM／三種憑證流。用 `xfail(strict=True)` 釘住，補進匯出後會 XPASS 提醒回來拿掉標記 |
+
+第 1 項是**這一輪才補上的安全修正**，比 master 上一個部署包
+`20260914_165325_6118944` **晚**——要含這項修正必須重新打包。
+
+#### 三、必要點註記（讓未來編寫更順）
+
+| 位置 | 註記內容 |
+|------|---------|
+| `db.py` CURRENT_VERSION 上方 | 新增 migration 是**三個動作**，漏掉第③個（版號加一）**完全沒有症狀**：`_run_migrations()` 第一行就 return、log 一行都不印。v82 就是這樣漏的。並補上 v79–v82 的版本歷史 |
+| `archive.py` 每日備份 `tables` dict | 為什麼只有 8 張、要補怎麼補、以及稽核測試**直接解析這個 dict 的原始碼**（不是複製清單），所以格式要維持單行一組 |
+| `style.css` `.vm-bar` | `display:block` 不能拿掉：多數寫在 `<span>` 上，inline 吃不到寬高會整條消失；flex 容器裡的那幾處剛好被 blockification 救起來，所以症狀是「某幾頁看不到、某幾頁正常」 |
+| 稽核測試 `_GUARD_CALL` | 新守門函式請沿用 `require_*`／`_guard_*` 命名；取別的名字會讓那支端點被誤判成「沒有守門」 |
+| 兩支回簽附件 DELETE | 修補前的狀態、為什麼標準訂在 admin+ |
+| 架構地圖 `tests/` 那行 | 從過期的「45 個測試檔／300+ 題」更新為實際的 **114 個測試檔、874 題** |
 
 ### 2026-09-14（第九輪）— 視覺化語彙推到其餘模組、報表補數值、動態附件（**DB v82**）
 
@@ -3463,7 +3510,9 @@ MOTRIX-ERP/
 │   │                                   audit_account_permissions.py · https_setup.ps1 · local_research_pipeline.py
 │   ├── motrix_erp.db（正式）+ motrix_erp_demo.db（demo 隔離）
 │   ├── db_backups/YYYY-MM-DD/（30天）+ quotation_instant/（G: fallback）
-│   ├── tests/                       ← 45 個測試檔（累計 300+ 題，近期 308/308 全過）
+│   ├── tests/                       ← 114 個測試檔、874 題（2026-09-14 實際 collect 數）
+│   │                                   其中 test_system_audit_2026_09_14.py 是「跨層稽核」
+│   │                                   （備份涵蓋／守門缺漏／角色字串／組織外鍵），見 §12 同日條目
 │   └── routers/（34 個檔案，主檔/財務/簽核/選型資料庫/系統支援五大類，完整清單與行號見 ARCHITECTURE-MAP §2）
 │       ├── 主檔：auth／customers／suppliers／parts／inventory／org_structure
 │       ├── 業務流程：quotations（全庫最大）／dev_crm／shipping_notes／case_action_items／daily_tasks／payslips
@@ -3828,6 +3877,47 @@ powershell -ExecutionPolicy Bypass -File "C:\Users\Motrix\Desktop\V9.0\backend\t
 2. **本檔 §12** — 在最新版本區塊加入摘要行。
 
 > **⚠️ 伺服器重啟後**，`_sync_module_versions()` 自動將 manifest 條目同步至 DB `module_versions` 表（UPDATE 邏輯同步修改過的欄位，不影響使用者手動新增的條目）。若修改了已存在條目的 `time` 或 `content`，下次重啟即生效。**DB v35 起 `(module, version)` 已有 UNIQUE 限制**，`INSERT OR IGNORE` 才真正名副其實——v35 之前這個限制不存在，代表每次重啟都會把整份 manifest 重複插入一次，長期下來會讓 `module_versions` 表無限增生（正式機曾實測膨脹到 626,725 列僅 143 種組合，佔掉每日備份 300+MB 中的絕大部分），已修復並清理。
+
+### 跨層一致性稽核（2026-09-14）
+
+**`backend/tests/test_system_audit_2026_09_14.py`** —— 跟著每次 pytest 跑，
+不驗證任何功能「做得對不對」，只驗證**跨層的對應關係有沒有漂掉**。
+這類缺陷的共同特徵是「每一邊單獨看都正確、合起來才是錯的」，逐功能的測試照不到。
+
+| 守什麼 | 漂掉的症狀 |
+|--------|-----------|
+| 每張資料表都要明確決定要不要進每日 JSON 匯出 | 平常沒事；要用 §8.3 的最後手段還原時，才發現那張表從來沒被匯出過 |
+| 每支路由都要呼叫守門函式（16 支公開端點列成白名單） | 端點上線、測試全綠，因為沒有人針對「它應該要擋」寫題 |
+| DELETE 端點要檢查角色或擁有者，不能只有「有登入就好」 | 任何登入者都刪得掉別人的東西，而且不可復原 |
+| 程式與資料庫裡的角色字串都必須是已知角色 | `role == 'superadmn'` 這種拼錯不會報錯，只會讓那道檢查**永遠不成立** |
+| 組織階層外鍵（users→departments→divisions、部門主管） | 部門篩選讓人默默消失、主管簽核找不到人，而不是報錯 |
+
+模組串接**不在這支裡**——`test_module_keys_consistency_2026_09_13.py` 已經完整
+覆蓋，而且比臨時寫的更周全（它還守著「擋錯人」：某模組的頁面呼叫到不接受該模組
+的 API，畫面一片 403 而後端測試全綠，因為測試多半用 admin 帳號、admin 直通）。
+
+**白名單的意義是讓下一個新增項目變紅，不是讓測試變綠。** 看到紅燈時該做的是判斷
+「這個新項目應該進清單，還是應該修程式」。
+
+**寫這支測試當下抓到的兩件事**：
+
+1. `DELETE /api/shipping-notes/{no}/signed-files/{id}` 與完工單的同名端點，
+   在此之前**只有 `_require_user()`**——任何登入者都能刪掉任何單據的回簽附件，
+   而且會連實體檔案一起移除。已補 admin+（與同日新增的動態附件同一個標準）。
+2. 每日 JSON 匯出只涵蓋 **8/76** 張表。整庫複製那一層有保護到，所以不是資料
+   遺失風險；但 §8.3 的「還原優先序」把 JSON 列為最後手段，而那個最後手段目前
+   重建不出 `users`／`system_settings`／`payslips`／業務開發／三種憑證流。
+   已用一支 `xfail(strict=True)` 把這個落差變成會被追蹤的東西——補進匯出之後
+   那題會 XPASS 提醒回來拿掉標記。
+
+> **這支測試自己也差點犯同一類錯**：初稿寫死守門函式名稱去掃，誤報 5 支 T100 端點
+> （它們有自己的 `_require_t100_admin`）；又誤判 `financial_view`／
+> `project_approve_eng` 沒有後端檢查（前者有專屬 helper、後者寫成 `'x' in modules`）；
+> 還一度斷言 `_SUPERADMIN_MODULES` 應該等於 `allModules` 並照著去「修」
+> `helpers/auth.py`，**打破了既有測試守著的真正不變量**（那份樣板要等於前端的
+> superadmin 角色樣板），改動已還原。
+> 教訓：**動手改之前先確認有沒有既有測試在守同一件事**，既有的那份通常比臨時
+> 想出來的斷言更清楚為什麼要這樣。
 
 ### 其他維護提醒
 
