@@ -4061,21 +4061,44 @@ def get_approval_queue_count(authorization: str = Header(None)):
     # 不像其他文件類型需要比對 tiers 當層 approver username，直接另外加總。
     ccr_count = 0
     if u["role"] == "superadmin":
+        # 2026-09-15 修正：原本是 `WHERE status='pending'` 全部算進來，**沒有排除
+        # 自己送的**。自己送的自己簽不掉（`check_no_tier_self_approval()` 會擋，
+        # 佇列頁的 `canApprove()` 也回 false），所以那會變成一個**永遠清不掉的
+        # 紅點**——使用者看到角標有數字、點進佇列卻沒有待我簽核的項目。
         ccr_count = conn.execute(
-            "SELECT COUNT(*) c FROM case_change_requests WHERE status='pending'"
+            "SELECT COUNT(*) c FROM case_change_requests "
+            "WHERE status='pending' AND COALESCE(requested_by,'') != ?",
+            (my_username,)
         ).fetchone()["c"]
     conn.close()
     count = ccr_count
+    is_sa = u["role"] == "superadmin"
     for approval_json in approval_jsons:
         try:
             appr    = json.loads(approval_json or "{}")
             tiers   = _active_tiers(appr)
             ct_idx  = _current_tier_idx(appr)
-            if tiers and ct_idx < len(tiers):
-                approvers = tiers[ct_idx].get("approvers") or []
-                if any(a.get("username") in my_usernames and a.get("status") != "approved"
-                       for a in approvers):
-                    count += 1
+            if tiers:
+                if ct_idx < len(tiers):
+                    approvers = tiers[ct_idx].get("approvers") or []
+                    if any(a.get("username") in my_usernames and a.get("status") != "approved"
+                           for a in approvers):
+                        count += 1
+            elif is_sa and (appr.get("requestedBy") or "") != my_username:
+                # 2026-09-15 修正：**沒有簽核層設定**的單據原本被整批跳過
+                # （原碼是 `if tiers and ct_idx < len(tiers)`）。
+                # 沒有 tiers 時的規則是「任一 superadmin 皆可簽核」——
+                # `approve_quotation()` 的 no-tier 分支就是這樣走的
+                # （`detail_status = "超級管理員簽核"`），佇列頁的 `canApprove()`
+                # 也是這樣判（`// No tiers: superadmin, not self`）。
+                # 漏掉的結果是**佇列列得出來、topbar 卻是 0**，正是使用者回報的
+                # 「需要我簽核但簽核佇列未顯示」。
+                #
+                # ⚠️ 這裡刻意跟前端 `canApprove()` 一致：自己送的一律不算。
+                # 後端 `check_no_tier_self_approval()` 另有「唯一在職 superadmin
+                # 可自簽」的逃生條款，但前端不會給按鈕，角標跟著後端算反而會
+                # 製造一個按不下去的紅點。
+                count += 1
         except Exception:
             pass
     return {"count": count}

@@ -1839,7 +1839,7 @@ xlsx-0.18.5.full.min.js     （SheetJS）
 | 優先 | 項目 |
 |------|------|
 | ✅ | ~~簽核佇列按下簽核後系統卡死十幾秒~~（**2026-09-15 當天查明並修復**，DB 無異動）。**實測 32.8 秒**，比回報的還久。根因正是預判的那個——而且是這個 codebase **第二次**踩到同一個坑（2026-09-10 `create_quotation` 是第一次）：`_apply_case_change_request()` 做完 `save_quotation_json(conn, ...)`（只 execute、不 commit → conn 持有寫鎖）之後直接 `_audit()`，而 `_audit()` 用 `get_db()` **另開一條連線寫入**，撞上 SQLite 單一 writer，等滿 `connect(timeout=30)` 才放棄。**更糟的是 `_audit()` 的 `except` 會把逾時例外吞掉**——畫面顯示核准成功、稽核紀錄卻不存在，事後查不到是誰核准的。修法：四處 `_audit` 改成 append 進 `deferred_audits`，由呼叫端在 commit 之後統一寫出。**32.8 秒 → 5.1 秒**（整個測試檔）。**使用者要求的「檢查別的區域有沒有一樣的狀態」已做**：新增 AST 靜態掃描守門測試`test_write_lock_deadlock_guard_2026_09_15.py`，掃 routers/helpers/main 全部函式。初掃 27 個命中，逐一核對後 26 個是誤報（`_set_setting()` 自己開自己 commit、43 支 `notify_*` 全部只讀不寫），**真正的只有這一處**，已修。守門測試已用「拿 git 上修復前的檔案直接掃」證明抓得到（4 處全中），修復後 0 處。 |
-| 🟠 | **最高管理者需要簽核的項目沒有出現在簽核佇列（2026-09-15 回報，尚未查證）**。回報情境：公司有兩位 superadmin，其中一位需要簽核的單據在他的簽核佇列裡看不到。**查證起點**：`GET /api/approval-queue`（`routers/quotations.py:3610`）組佇列的條件——要確認它是用「當層簽核人名單含我」還是「角色是 superadmin」在篩；以及已結案變更申請（`case_change`）那類**單層、任一 superadmin 審核**的單據有沒有被納進佇列查詢（那類沒有 `tiers`，很容易在只看 tiers 的查詢裡整批漏掉）。⚠️ 這一項跟上面那項是**不同**的問題，不要混在一起修。 |
+| ✅ | ~~最高管理者需要簽核的項目沒有出現在簽核佇列~~（**2026-09-15 當天查明並修復**，DB 無異動）。**佇列頁其實列得出來，是 topbar 角標是 0**——所以使用者根本不會想到要去看，症狀就表現成「沒顯示」。`/api/approval-queue` 與 `/api/approval-queue/count` 是**兩段各自獨立的查詢**，沒有任何東西在守它們一致。抓到兩個方向相反的缺陷：①**少算**：count 端點的迴圈是 `if tiers and ct_idx < len(tiers)`，**沒有簽核層設定的單據整批被跳過**——而那種情況的規則是「任一 superadmin 皆可簽核」（`approve_quotation()` 的 no-tier 分支、前端 `canApprove()` 都是這樣判）。②**多算**：已結案變更申請是 `WHERE status='pending'` 全部算，沒排除自己送的，而自己送的自己簽不掉 → **一個永遠清不掉的紅點**。新增 `test_approval_queue_badge_consistency_2026_09_15.py`（5 題），守的不變量是**角標數字必須等於佇列裡 `canApprove()` 為真的項目數**——程式碼裡已經有兩則註解在講這件事，但一直是靠人工記得補。 |
 | 🟡 | **掃一遍「給人看的畫面上有沒有原始代碼值」（2026-09-15 交辦）**。起因：變更申請摘要出現「專案期間·狀態 `on_track`」。**那一處當天已修**（`_CASE_VALUE_LABELS` 值對照，未知值原樣顯示不硬猜）。使用者要求把同類問題排入檢查名單——要掃的是「後端把 enum／狀態碼直接送到前端顯示」，至少包含：案件代辦 `status`（`done`／`stage1_done`，`case-management.js:1462` 已有對照）、`settlement.status`（`finalized`／`draft`）、`change_status`、`writeOffStatus`（`approved`／`pending`）、`dealTag` 與各單據 `status` 的英文值。判準是**畫面上會不會出現底線命名的英文**，不是後端存什麼。 |
 | ✅ | ~~模組權限要真的擋住、未開啟的連模組名稱都不顯示~~（**2026-09-14 當天施作完成**，DB v84）。`require_any_module()` 從「admin+ 直通」改成**只有 superadmin 直通**；`sidebar.js` 二十幾個 `mods.indexOf(x) >= 0 || ad` 收斂成一支 `has(x)`，另外兩種非模組放行（`|| eng`、`|| role !== 'viewer'`）也一併拿掉。分組名稱不需額外處理——`renderMainNav()` 本來就會過濾 `items` 為空的分組，所以整組沒權限時連分組名稱都不出現。**四個原本沒有 key 只能靠角色寫死的頁面，依使用者裁示『沒有對應模組 key 也建立就沒有這個問題』新建了 key**：`audit_log`／`shipping_export_log`／`module_versions`／`selection_overview`；網路架構規劃書同樣只有 `netplan_edit` 沒有檢視 key，補上 `netplan`（目錄從 35 → 40 個 key）。**DB v84 先回填再取消直通**，所以沒有人憑空少掉今天看得到的東西。詳見 §12 同日條目與 [`MODULE-AUDIT-2026-09-13.md`](MODULE-AUDIT-2026-09-13.md) §6。 |
 | ✅ | ~~已結案變更申請「核准後會套用的內容」直接把 raw JSON 倒給人看~~（**2026-09-14 當天施作完成**，DB 無異動）。新增 `routers/quotations.py::_summarize_case_change()`，六種 `action_type` 各自產生可讀的 before／after（欄位中文名＋前後值），**只列有變動的欄位**；回傳形狀沿用額外支出那條路徑，前端 `approval-queue.html` 一行都不用改。**路上抓到一件比可讀性更嚴重的事**：`approve_case_change()` 對 `case_record_update` 的第一個動作是 `new_case_record["stages"] = cr.get("stages")`——**payload 裡的 stages 根本不會被套用**（階段有自己的專屬端點），而原本的畫面把它整包印在「核准後會套用的內容」底下，等於告訴審核者一件不會發生的事。摘要刻意不收 stages，並有一題測試釘住。內部欄位（`writeOffRequestedAt`、`invoiceFiles[].path`）一律不外流。**使用者要求的「其他地方也這樣顯示」已掃過**：全前端只有 `approval-queue.html:819` 一處在畫面上做 `JSON.stringify`，就是這一塊的 fallback；稽核紀錄頁根本不渲染 `detail` 欄位；額外支出變更申請本來就是逐欄對照。測試 `test_case_change_summary_2026_09_14.py`（12 題）。 |
@@ -1898,6 +1898,38 @@ xlsx-0.18.5.full.min.js     （SheetJS）
 > 未紀錄；同期間 `CHANGELOG.md` 09-08／09-09 兩天完全空白。已於本日補回，並新增
 > [`WEEKLY-AUDIT-2026-09-07_2026-09-10.md`](WEEKLY-AUDIT-2026-09-07_2026-09-10.md)
 > ——帶「模組／檔案:行號／是否在正式機」座標的本週稽核索引，出事時先看那份。
+
+### 2026-09-15（第三輪）— 簽核角標跟佇列對不上（DB 無異動）
+
+使用者回報「我跟另一位是最高管理者，需要我簽核但簽核佇列未顯示」。
+
+**查下去發現佇列頁其實列得出來——是 topbar 的角標是 0。** 使用者不會沒事點進
+簽核佇列翻，角標沒數字就等於沒發生，症狀自然表現成「沒顯示」。
+
+根因是 `/api/approval-queue`（列表）與 `/api/approval-queue/count`（角標）是
+**兩段各自獨立的查詢**。程式碼裡已經有兩則註解在講這個風險——
+「角標數字要跟佇列列表一致，漏掉就會變成『列得出來但 topbar 是 0』，
+兩邊矛盾比兩邊都沒有更難查」——但一直是靠每次新增單據類型時人工記得補。
+抓到兩個**方向相反**的缺陷：
+
+| | 缺陷 | 後果 |
+|---|---|---|
+| ① 少算 | count 的迴圈是 `if tiers and ct_idx < len(tiers)`，**沒有簽核層設定的單據整批被跳過** | 那種情況的規則是「任一 superadmin 皆可簽核」（`approve_quotation()` 的 no-tier 分支、前端 `canApprove()` 都這樣判）。佇列列得出來、角標 0 ← **使用者回報的就是這個** |
+| ② 多算 | 已結案變更申請是 `WHERE status='pending'` 全部算，**沒排除自己送的** | 自己送的自己簽不掉（`check_no_tier_self_approval()` 擋、`canApprove()` 也回 false）→ 一個**永遠清不掉的紅點** |
+
+修法：count 端點補上 no-tier 分支（`elif is_sa and requestedBy != me`）並在
+`case_change_requests` 的查詢加上 `AND requested_by != ?`。
+
+⚠️ no-tier 這段刻意跟**前端** `canApprove()` 一致：自己送的一律不算。後端
+`check_no_tier_self_approval()` 另有「唯一在職 superadmin 可自簽」的逃生條款，
+但前端不會給按鈕——角標跟著後端算反而會製造一個按不下去的紅點。
+
+新增 `test_approval_queue_badge_consistency_2026_09_15.py`（5 題），守的不變量是
+**角標數字必須等於佇列裡 `canApprove()` 為真的項目數**，並把前端那份
+`canApprove()` 規則照抄成 Python 版當基準——兩邊的規則本來就必須一樣。
+全套 **1008 passed**。
+
+---
 
 ### 2026-09-15（第二輪）— 簽核卡死 32.8 秒：同一個坑踩第二次（DB 無異動）
 
