@@ -1779,6 +1779,8 @@ xlsx-0.18.5.full.min.js     （SheetJS）
 分支 `feature/ui-v4-redesign`，**master 未動**（仍停在 `cb387c5`，即正式機版本）。
 完整設計決策與現況盤點見 [`UI-REDESIGN-PLAN.md`](UI-REDESIGN-PLAN.md)。
 
+> **要改這批東西的人先看這裡**：[ §9 調整索引](UI-REDESIGN-PLAN.md)——列出「想改 X 就去搜尋 Y」的對照表（刻意不寫行號，行號會過期），並標出四個改了就會出事的地方。
+
 #### 一、側欄退役，全站改上方分組導覽（mega-menu）
 
 使用者裁示改採計畫書 §2.1 的**選項 C**（原先裁示 B）。槓桿點是兩個 token：

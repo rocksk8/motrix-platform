@@ -325,3 +325,77 @@
   （解析不到會沒有背景色，登入鈕只剩文字）。已改回字面色值並加註。
 - `module-versions.html`／`payslip-form.html` 的 HTML 標籤各有一處錯配，
   **在 `git HEAD` 就存在**，不是這次造成的（瀏覽器容忍，先不動）。
+
+---
+
+## §9 · 調整索引（2026-09-14 改版後，要動哪裡看這裡）
+
+**不寫行號**——行號會過期。每一列給的是可以直接搜尋的字串。
+改動點附近都有 `2026-09-14` 開頭的註解說明「為什麼是現在這樣」，動手前先讀那段。
+
+### 版面骨架
+
+| 想改什麼 | 檔案 | 搜尋 |
+|---|---|---|
+| 導覽列高度／頂欄高度／內容上方偏移 | `frontend/css/style.css` | `--topbar-h:` |
+| 側欄復活（把 0px 改回 220px 即可，其餘自動） | `frontend/css/style.css` | `--sidebar-w` |
+| 上方選單的外觀（底色、字級、下拉面板、hover） | `frontend/css/style.css` | `.mnav {` |
+| 選單分組與項目（新增模組、改分組、改權限條件） | `frontend/static/sidebar.js` | `sec('案件'` 附近整段 `buildSidebar()` |
+| 頂欄顯示的頁面名稱怎麼來的 | `frontend/static/sidebar.js` | `_pageName()` |
+| 頁面標頭樣式（眉標／28×3 紅標記／標題／副標） | `frontend/css/style.css` | `.pg__eyebrow` |
+
+> ⚠️ 選單項目一律走 `ni()`。**不要再手寫 `<a>`**——簽核佇列與每日工作事項原本
+> 是手寫的，改版時差點整個從選單消失（見 `sidebar.js` 該處註解）。
+
+### 配色
+
+| 想改什麼 | 檔案 | 搜尋 |
+|---|---|---|
+| 主色（按鈕／連結／標記／作用中狀態） | `frontend/css/style.css` | `--accent:` |
+| 深色模式下紅色偏粉的補償值 | `frontend/css/style.css` | `--accent-hover: #AF4040` |
+| 狀態色（成功／警告／危險） | `frontend/css/style.css` | `--success:` |
+
+> ⚠️ 改主色前先讀 `--accent` 上方的整段註解。三件事會連動：
+> ① **按鈕靠形狀區分不靠色相**（實心／粗框／淺底細框），因為主色與 danger 同色系；
+> ② **狀態徽章不可以吃 `var(--accent)`**（`.badge--sent` 曾因此與「逾期」撞色）；
+> ③ 新色一律要對站內底色 `--white #F5F4F0` 重算對比，**不是對純白**——
+> `--danger` 當初就是對純白算才漏掉沒過 AA。
+>
+> ⚠️ 深色模式是 **invert 濾鏡**不是第二套色票。補償值是「畫出來的反推值」，
+> 直接填你想要的顏色會得到完全不同的結果。改的時候連註解一起看。
+
+### 儀表板／營運報表
+
+| 想改什麼 | 檔案 | 搜尋 |
+|---|---|---|
+| 動態的模組篩選（增減模組、改名稱、改順序） | `frontend/index.html` | `feedFilters` |
+| 動態顯示幾筆 | `frontend/index.html` | `filteredFeed.slice(0, 20)` |
+| 營運報表一進去落在哪個頁籤 | `frontend/js/reports.js` | `activeTab: 'charts'` |
+
+> 動態的資料來源是 `/api/dashboard/activity-feed`，後端已依權限過濾。
+> `feedFilters` 的 `sources` 對應後端回傳的 `source` 欄位（業務開發有兩種：
+> `dev_log` 與 `dev_case`）。
+
+### 案件管理
+
+| 想改什麼 | 檔案 | 搜尋 |
+|---|---|---|
+| 甘特圖檔位自動切換的門檻（45 天／180 天） | `frontend/js/case-management.js` | `_autoGanttMode` |
+| 甘特圖匯出的左右留白 | `frontend/js/case-management.js` | `PAD_L` |
+| 甘特圖匯出的解析度倍率 | `frontend/js/case-management.js` | `const SCALE` |
+| 階段標籤的日期格式 | `frontend/js/case-management.js` | `const _md` |
+| 分頁深連結可接受的值 | `frontend/js/case-management.js` | `_initTabFromUrl` |
+
+> ⚠️ 匯出時**必須**把 computed style inline 回克隆的 SVG，否則畫出來是沒有顏色的
+> 黑白線稿（樣式來自外部 CSS，序列化不會帶）。
+>
+> ⚠️ 選案件時那行 `this.activeTab = 'biz'` **不要拿掉**——它是 2026-09-09 修過的
+> bug（全新案件建立階段期間會把人彈回第一個分頁）。深連結是用 `_pendingUrlTab`
+> 在它之後才套。
+
+### 兩個容易重蹈的坑
+
+1. **`login.html` / `login-qr-approve.html` 不載入 `css/style.css`**，
+   所以那兩頁**不能用 CSS 變數**——解析不到會整個沒有背景色，登入鈕只剩文字。
+   色票改動要手動同步那兩頁的字面值。
+2. **手動跑 pytest 要帶 `--basetemp`**，否則測試全過也會回非 0（見 §11）。

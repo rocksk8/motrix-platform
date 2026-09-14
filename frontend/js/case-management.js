@@ -2049,6 +2049,10 @@ function app() {
       })
       return Math.round((max - min) / 86400000)
     },
+    // 【可調】檔位切換門檻。想讓它更早/更晚跳到週或月檔位，改這兩個數字就好，
+    // 其餘邏輯不用動。判斷依據是「所有階段的最早起日到最晚迄日」的天數跨幅。
+    //   Day  約 30px/天 → 45 天上限約 1400px，還放得進一般螢幕
+    //   Week 約 156px/週 → 180 天上限約 4000px，需要橫向捲但仍讀得出來
     _autoGanttMode(tasks) {
       const d = this._ganttSpanDays(tasks)
       if (d <= 45)  return 'Day'

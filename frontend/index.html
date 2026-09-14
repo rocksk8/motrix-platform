@@ -543,6 +543,8 @@
           </a>
         </div>
 
+        <!-- 【可調】篩選按鈕由 dashboard() 的 feedFilters 陣列驅動（搜尋 feedFilters）。
+             要增減模組、改名稱、調順序都在那個陣列，這段標記不用動。 -->
         <div class="feed-filter">
           <template x-for="f in feedFilters" :key="f.key">
             <button class="feed-chip" :class="{ 'is-on': feedFilter === f.key }"
