@@ -17,7 +17,145 @@ function app() {
     caseSortPref: { sortMode: '', sortDir: 'desc', customOrder: [] },
     _caseSortable: null,
     listTab: 'all',
-    caseViewMode: 'list',
+    caseViewMode: 'list',   // 'list' | 'board' | 'matrix'
+    // ═══ 關卡矩陣（2026-09-14）══════════════════════════════════════════
+    // 五項完結案前置條件（§5.2）原本散在五個頁籤，而且只有在按下「完結案」
+    // 被 400 擋下來時才看得到。資料來自 /api/quotations/gate-matrix，那支
+    // 端點跟擋下完結案用的是同一份判定（_case_close_gates），所以矩陣上的
+    // 「5/5 可結案」等於「現在按下去不會被擋」。
+    gateMatrix: [],
+    gmLoaded: false,
+    gmSort: 'ready',     // 'ready' | 'stuck' | 'amount'
+    gmFilter: '',        // '' | 'ready' | 'settling' | 'mine'
+    gmDue: '',           // '' | 'overdue' | 'today' | 'week' | 'month' | 'none'
+    today: new Date().toISOString().slice(0, 10),
+
+    gateHeads: [
+      { key: 'progress',     label: '進度', hint: '階段完成' },
+      { key: 'payment',      label: '收款', hint: '款項收齊' },
+      { key: 'documents',    label: '單據', hint: '簽核完成' },
+      { key: 'settlement',   label: '精算', hint: '已完結' },
+      { key: 'extraExpense', label: '變更', hint: '無送審中' },
+    ],
+
+    // 切到矩陣時才抓。**刻意不在 loadCases() 就一起抓**：矩陣是另一個檢視，
+    // 多數時候不會用到，而它每件案子要跑十幾次查詢。
+    async switchToMatrix() {
+      this.caseViewMode = 'matrix'
+      if (!this.gmLoaded) await this.loadGateMatrix()
+    },
+
+    async loadGateMatrix() {
+      try {
+        const r = await fetch('/api/quotations/gate-matrix', {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (r.ok) {
+          const d = await r.json()
+          this.gateMatrix = d.items || []
+          if (d.today) this.today = d.today
+        }
+      } catch (_e) {}
+      // 放在 finally 之外刻意寫成「不管成功失敗都標記載入過」——否則失敗時
+      // 表格會永遠停在「載入中…」，比空清單更難判斷發生什麼事。
+      this.gmLoaded = true
+    },
+
+    // 燈號：關卡的三種狀態直接對應色階。na 是「這件案子沒有這一關」，
+    // 畫成空心灰而不是紅燈——舊案件沒有階段/款項/精算資料是正常的。
+    // 2026-09-14 修正：blocked 一律是琥珀，不是紅。共通語彙裡 crit 的定義是
+    // 「逾期／退回」，「未達成」是 warn——一個做到 2/5 階段的案子是進行中，
+    // 不是異常。只有真的有逾期階段時，進度那一關才轉紅。
+    // （原本寫成 progress/extraExpense 一律 crit，違反自己訂的色階規則。）
+    gateTone(g, row) {
+      if (!g) return 'idle'
+      if (g.state === 'ok') return 'ok'
+      if (g.state === 'na') return 'idle'
+      if (g.key === 'progress' && row && row.stageOverdue > 0) return 'crit'
+      return 'warn'
+    },
+
+    // 整列不染色，只在最左緣留一條脊，取這一列最嚴重的訊號
+    rowSpine(row) {
+      if (!row) return 'var(--border-light)'
+      if (row.stageOverdue > 0) return 'var(--danger)'
+      if (row.canClose) return 'var(--success)'
+      return row.blockedCount > 0 ? 'var(--warning)' : 'var(--border-light)'
+    },
+
+    readyText(row) {
+      if (!row) return ''
+      if (row.canClose) return row.readyCount + '/5 可結案'
+      if (row.blockedCount === 1) return '差 ' + row.blockedLabels[0]
+      return row.readyCount + '/5'
+    },
+
+    dueText(row) {
+      if (!row) return '—'
+      if (row.stageOverdue > 0) {
+        return row.nextDue ? row.nextDue.slice(5) + ' 逾期 ' + row.stageOverdue + ' 項'
+                           : '逾期 ' + row.stageOverdue + ' 項'
+      }
+      if (!row.nextDue) return '—'
+      if (row.nextDue === this.today) return row.nextDue.slice(5) + ' 今日'
+      return row.nextDue.slice(5) + (row.nextDueLabel ? ' ' + row.nextDueLabel : '')
+    },
+
+    _dueBucket(row) {
+      if (row.stageOverdue > 0) return 'overdue'
+      if (!row.nextDue) return 'none'
+      if (row.nextDue === this.today) return 'today'
+      const days = Math.round((new Date(row.nextDue) - new Date(this.today)) / 86400000)
+      if (days < 0) return 'overdue'
+      return days <= 7 ? 'week' : days <= 30 ? 'month' : 'none'
+    },
+
+    get matrixDue() {
+      const def = [
+        { key: 'overdue', k: '已逾期', l: '件' },
+        { key: 'today',   k: '今日到期', l: '件' },
+        { key: 'week',    k: '7 天內', l: '件' },
+        { key: 'month',   k: '8–30 天', l: '件' },
+        { key: 'none',    k: '無排定到期', l: '件' },
+      ]
+      return def.map(b => ({
+        ...b,
+        n: this.gateMatrix.filter(r => this._dueBucket(r) === b.key).length,
+      }))
+    },
+
+    get matrixRows() {
+      const me = this.session.displayName || this.session.username || ''
+      let rows = this.gateMatrix.filter(r => {
+        if (this.gmDue && this._dueBucket(r) !== this.gmDue) return false
+        if (this.gmFilter === 'ready' && !r.canClose) return false
+        if (this.gmFilter === 'mine' && r.salesPerson !== me) return false
+        if (this.gmFilter === 'settling') {
+          const s = (r.gates || []).find(g => g.key === 'settlement')
+          if (!s || s.state !== 'blocked') return false
+        }
+        const q = (this.search || '').trim().toLowerCase()
+        if (q && !(r.quoteNo || '').toLowerCase().includes(q)
+              && !(r.customerName || '').toLowerCase().includes(q)
+              && !(r.projectName || '').toLowerCase().includes(q)) return false
+        return true
+      })
+      const by = {
+        // 預設排序。這是既有畫面完全給不出、而且最會改變行動順序的資訊：
+        // 先把差一步的收掉，再去處理卡住的。
+        ready:  (a, b) => (b.canClose - a.canClose) || (b.readyCount - a.readyCount)
+                          || (a.blockedCount - b.blockedCount),
+        stuck:  (a, b) => (b.stageOverdue - a.stageOverdue) || (b.blockedCount - a.blockedCount),
+        amount: (a, b) => (b.total || 0) - (a.total || 0),
+      }
+      return rows.slice().sort(by[this.gmSort] || by.ready)
+    },
+
+    // 點一列回到既有的五頁籤詳情頁——矩陣是它的上層索引，不是取代它
+    async openFromMatrix(quoteNo) {
+      this.caseViewMode = 'list'
+      await this.selectCase(quoteNo)
+    },
     stageBoardItems: [],
     search: '',
     unreadOnly: false,
@@ -1373,6 +1511,36 @@ function app() {
       }
     },
 
+    // 報價單 → 案件合約資訊的欄位對照。contactPerson/contactPhone 在報價單
+    // 是 contactName/contactPhone；contractNote 報價單沒有對應欄位，維持案件自填。
+    _quoteContractFields() {
+      const q = (this.selected && this.selected.data) || {}
+      return {
+        deliveryAddress: q.deliveryAddress || '',
+        deliveryTerms:   q.deliveryTerms   || '',
+        contactPerson:   q.contactName     || '',
+        contactPhone:    q.contactPhone    || '',
+      }
+    },
+    _fillContractFromQuote(target) {
+      const src = this._quoteContractFields()
+      // 只填空的欄位——不覆蓋案件上已經有的值
+      Object.keys(src).forEach(k => { if (src[k] && !target[k]) target[k] = src[k] })
+    },
+    get quoteContractAvailable() {
+      return Object.values(this._quoteContractFields()).some(v => !!v)
+    },
+    pullContractFromQuote() {
+      const c = this.cr.caseRecord && this.cr.caseRecord.contract
+      if (!c) return
+      const src = this._quoteContractFields()
+      const filled = Object.keys(src).filter(k => src[k] && !c[k])
+      if (!filled.length) { alert('報價單上沒有可帶入的欄位，或案件這邊都已經有值了。'); return }
+      this._fillContractFromQuote(c)
+      this.setDirty && this.setDirty()
+      this.dirty = true
+    },
+
     ensureCaseRecord() {
       if (!this.cr.caseRecord) {
         this.cr.caseRecord = {
@@ -1393,6 +1561,12 @@ function app() {
       if (!this.cr.caseRecord.devices)   this.cr.caseRecord.devices   = []
       if (!this.cr.caseRecord.contract) {
         this.cr.caseRecord.contract = { deliveryAddress: '', deliveryTerms: '', contactPerson: '', contactPhone: '', contractNote: '' }
+        // 第一次建立時從報價單帶入（2026-09-14 使用者交辦「合約資訊要能根據
+        // 報價單內容連動」）。**單向、只帶一次**：案件成立後現場條件本來就
+        // 可能跟報價當時不同，雙向同步會讓改案件反過來改到已經簽核的報價單；
+        // 每次開啟都覆蓋則會把現場修正洗掉。已存在的案件用下面那顆
+        // pullContractFromQuote() 手動帶，不在載入時偷偷補寫。
+        this._fillContractFromQuote(this.cr.caseRecord.contract)
       }
       if (!this.cr.caseRecord.roles) {
         this.cr.caseRecord.roles = { filler: '', sales: '', executor: '' }
@@ -2777,31 +2951,75 @@ function app() {
     async postComment() {
       const content = this.newComment.trim()
       if (!content || this.postingComment) return
-      // 有選照片、填執行時數、選聯絡事項類型、改過日期、或指定記錄對象 → 當成
-      // 工作日誌（結構化欄位＋可上傳照片），走 work_logs；純文字 → 維持原本
-      // 輕量留言（case_updates，含「標記為重要」＋ Google 行事曆同步），
-      // 2026-08-26 新增結構化欄位，2026-08-30 補上日期／記錄對象兩個觸發條件。
+      // 填執行時數、選聯絡事項類型、改過日期、或指定記錄對象 → 當成工作日誌
+      // （那些是工作日誌才有的結構化欄位），走 work_logs；否則維持輕量留言
+      // （case_updates，含「標記為重要」＋ Google 行事曆同步）。
+      //
+      // 2026-09-14：**照片不再是觸發條件**。在那之前只要選了照片就會被改存成
+      // 工作日誌——附件本身跟「這是不是一筆工時記錄」無關，卻悄悄換掉了紀錄
+      // 種類，而且換過去就失去「標記為重要」與行事曆同步。case_updates 現在
+      // 自己支援附件（DB v82），這個轉向沒有必要了。
       const isBackdated = this.newCommentLogDate !== new Date().toISOString().slice(0, 10)
-      if (this.newCommentPhotos.length > 0 || this.newCommentHours || this.newCommentContactType ||
+      if (this.newCommentHours || this.newCommentContactType ||
           isBackdated || this.newCommentUserId) {
         await this.postWorkLogEntry(content)
         return
       }
       this.postingComment = true
       try {
+        // multipart：文字與附件同一個請求送出，不會有「留言貼了、圖沒上去」
+        // 的半完成狀態。不要自己設 Content-Type——boundary 要讓瀏覽器帶。
+        const fd = new FormData()
+        fd.append('content', content)
+        fd.append('important', this.newCommentImportant ? 'true' : 'false')
+        this.newCommentPhotos.forEach(f => fd.append('files', f))
         const r = await fetch(`/api/quotations/${encodeURIComponent(this.selected.quote_no)}/updates`, {
           method: 'POST',
-          headers: { Authorization: 'Bearer ' + this.session.token, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ content, important: this.newCommentImportant })
+          headers: { Authorization: 'Bearer ' + this.session.token },
+          body: fd
         })
         if (r.ok) {
           const item = await r.json()
           this.caseUpdates.unshift(item)
           this.newComment = ''
           this.newCommentImportant = false
+          this.newCommentPhotos = []
+          if (this.$refs.commentPhotoInput) this.$refs.commentPhotoInput.value = ''
+        } else {
+          const err = await r.json().catch(() => ({}))
+          alert('留言失敗：' + (err.detail || r.status))
         }
-      } catch {}
+      } catch (e) {
+        alert('網路錯誤：' + e.message)
+      }
       this.postingComment = false
+    },
+
+    // 附件刪除限 admin+（2026-09-14 使用者裁示）——抽掉附件是只改證據、
+    // 留下文字，跟「刪掉自己整則留言」不是同一件事。
+    canDeleteAttachment() {
+      return ['superadmin', 'admin'].includes(this.session.role)
+    },
+    async deleteCommentFile(update, file) {
+      if (!this.canDeleteAttachment()) return
+      if (!confirm(`確定刪除附件「${file.filename}」？此動作無法復原。`)) return
+      try {
+        const r = await fetch(
+          `/api/quotations/${encodeURIComponent(this.selected.quote_no)}/updates/${update.id}/files/${file.id}`,
+          { method: 'DELETE', headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (r.ok) {
+          update.files = (await r.json()).files || []
+        } else {
+          const err = await r.json().catch(() => ({}))
+          alert('刪除失敗：' + (err.detail || r.status))
+        }
+      } catch (e) { alert('網路錯誤：' + e.message) }
+    },
+    fileUrl(f) {
+      return `/api/uploads/${f.path}?pt=${encodeURIComponent(this.session.token)}`
+    },
+    isImageFile(f) {
+      return /\.(jpe?g|png)$/i.test(f.filename || f.path || '')
     },
 
     async postWorkLogEntry(content) {

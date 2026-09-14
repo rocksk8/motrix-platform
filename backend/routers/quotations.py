@@ -14,7 +14,7 @@ from urllib.parse import quote as urlquote
 
 logger = logging.getLogger(__name__)
 
-from fastapi import APIRouter, Body, HTTPException, Header, UploadFile, File
+from fastapi import APIRouter, Body, Form, HTTPException, Header, UploadFile, File
 from fastapi.responses import Response
 from pydantic import BaseModel
 
@@ -820,6 +820,95 @@ def get_last_received_bank_account(customerName: Optional[str] = None, authoriza
     return {"name": best_name, "acctCode": best_code}
 
 
+# ⚠️ 這支必須定義在 @router.get("/api/quotations/{quote_no}") **之前**——
+# FastAPI 依定義順序比對，排在後面的話 GET /api/quotations/gate-matrix 會先
+# 命中 {quote_no} 這條、被當成一個叫 gate-matrix 的單號而回 404（看起來就像
+# 端點沒生效）。上面的 stage-board / last-received-bank-account 也是同樣理由
+# 排在這裡。
+@router.get("/api/quotations/gate-matrix")
+def gate_matrix(authorization: str = Header(None)):
+    """已成案／已結案案件的「完結案五關卡」一次攤平回傳，供案件管理的關卡矩陣使用
+    （案件管理視覺化改版，2026-09-14，見 docs/module-viz-mockup.html §02）。
+
+    五個關卡的判定**完全來自 _case_close_gates()**，跟 update_deal_tag() 擋下完結案
+    用的是同一份程式碼——矩陣說「5/5 可結案」就等於「現在按下去不會被 400 擋掉」。
+    這件事是這支端點存在的唯一理由：那五個條件散在五個頁籤裡，跨案件比較等於開五次。
+
+    順便帶上階段到期資訊（逾期數／下一個到期日），這樣矩陣右側那兩欄不必再打一次
+    /api/quotations/stage-board。權限篩選比照該端點，沿用 _visible_case_filter_sql()。
+
+    唯讀，不觸發任何通知。**效能**：每件案件約 15 次 SQLite 查詢（六張單據表各兩次
+    ＋階段＋額外支出兩次），開發機 26 件實測整支約 40ms；本機 SQLite 讀取是微秒級，
+    真正會痛的是前端把 500 筆整包拉回去篩（見 QUICK.md §12 第八輪的檢索骨架那段），
+    不是這裡。案件量長到數百件以上時再考慮改成 GROUP BY 批次預取。
+    """
+    user = _require_user(authorization)
+    conn = get_db()
+    today = datetime.now().strftime("%Y-%m-%d")
+    sql = (
+        f"SELECT quote_no, customer_name, project_name, sales_person, total, "
+        f"data_json, {SQL_DEAL_TAG} as deal_tag "
+        f"FROM quotations WHERE {SQL_DEAL_TAG} IN ('已成案', '已結案')"
+    )
+    params: list = []
+    if user["role"] not in ("superadmin", "admin"):
+        frag, fparams = _visible_case_filter_sql(user)
+        sql += frag
+        params.extend(fparams)
+    sql += " ORDER BY quote_no DESC"
+    rows = conn.execute(sql, params).fetchall()
+
+    items = []
+    for r in rows:
+        try:
+            d = json.loads(r["data_json"] or "{}")
+        except Exception:
+            d = {}
+        gates = _case_close_gates(conn, r["quote_no"], d)
+        blocked = [g for g in gates if g["state"] == "blocked"]
+
+        # 階段到期：逾期數與下一個未完成階段的到期日。用同一次查詢取回，
+        # 呼叫端就不必為了右邊兩欄再打一次 stage-board。
+        st = conn.execute(
+            "SELECT "
+            "  SUM(CASE WHEN done=0 AND due_date != '' AND due_date < ? THEN 1 ELSE 0 END) overdue, "
+            "  MIN(CASE WHEN done=0 AND due_date != '' THEN due_date END) next_due "
+            "FROM case_stages WHERE quote_no=?",
+            (today, r["quote_no"])
+        ).fetchone()
+        next_due = st["next_due"] or None
+        next_label = None
+        if next_due:
+            nxt = conn.execute(
+                "SELECT label FROM case_stages WHERE quote_no=? AND done=0 AND due_date=? "
+                "ORDER BY sort_order LIMIT 1", (r["quote_no"], next_due)
+            ).fetchone()
+            next_label = (nxt["label"] if nxt else "") or ""
+
+        items.append({
+            "quoteNo":      r["quote_no"],
+            "customerName": r["customer_name"] or "",
+            "projectName":  r["project_name"] or "",
+            "salesPerson":  r["sales_person"] or "",
+            "total":        r["total"] or 0,
+            "dealTag":      r["deal_tag"] or "",
+            "gates":        gates,
+            # readyCount 刻意只數 ok，不把 na 算進去：na 是「這件案子沒有這一關」，
+            # 併進去會讓一件什麼都沒建的空案件顯示成 5/5，那是最危險的誤導。
+            # canClose 才是「按下去不會被擋」的那個判斷（＝沒有任何 blocked）。
+            "readyCount":   sum(1 for g in gates if g["state"] == "ok"),
+            "naCount":      sum(1 for g in gates if g["state"] == "na"),
+            "blockedCount": len(blocked),
+            "canClose":     not blocked,
+            "blockedLabels": [g["label"] for g in blocked],
+            "stageOverdue": st["overdue"] or 0,
+            "nextDue":      next_due,
+            "nextDueLabel": next_label,
+        })
+    conn.close()
+    return {"items": items, "today": today}
+
+
 @router.get("/api/quotations/{quote_no}")
 def get_quotation(quote_no: str, authorization: str = Header(None)):
     user = _require_user(authorization)
@@ -1377,66 +1466,94 @@ def recall_quotation(quote_no: str, authorization: str = Header(None)):
     return {"quote_no": quote_no, "status": "草稿"}
 
 
-def _case_close_block_reasons(conn, quote_no: str, d: dict):
-    """完結案三項前置條件檢查（2026-08-25 使用者提出，見 QUICK.md §11 🔴最優先
-    那一列）。回傳 (reasons, pending_usernames)：reasons 非空時應擋下完結案；
-    pending_usernames 是③相關單據簽核人（①②沒有對應的「簽核人」概念，維持
-    空清單，通知只會落到最高管理員，見 notify_case_close_blocked() docstring）。"""
-    reasons = []
-    pending_usernames: list = []
+# ── 完結案五關卡（2026-09-14 重構）──────────────────────────────────────
+# 原本只有 _case_close_block_reasons() 回傳一串字串，夠用來擋結案，但畫不出
+# 「哪一關過了、過到什麼程度」的矩陣（案件管理視覺化改版，見
+# docs/module-viz-mockup.html §02）。
+#
+# **刻意不另外寫一份給矩陣用的判定**：那五個條件是整套系統裡最容易悄悄漂移的
+# 東西（③的清單就漏過一次「完工單」，見下方註解），兩份實作遲早會對不上，
+# 而且對不上的症狀是「矩陣說可以結案、按下去被 400 擋掉」這種最難查的那種。
+# 所以改成：_case_close_gates() 是唯一的判定，_case_close_block_reasons()
+# 從它的結果推出 reasons，對既有呼叫端（update_deal_tag）的行為完全不變。
+#
+# 關卡狀態三種：
+#   ok      已達成
+#   blocked 未達成 → 會擋下完結案
+#   na      不適用（沒有階段／沒有款項／沒有精算資料的舊案件）。
+#           **na 不是 blocked**——舊案件不該因為一個後來才有的欄位而永遠結不了案，
+#           這是①②④原本就有的語意，矩陣上必須畫成空心灰而不是紅燈。
+
+_CLOSE_DOC_TABLES = [
+    ("報價單",         "quotations"),
+    ("承攬商匯款申請",  "contractor_payment_vouchers"),
+    ("開票申請憑據",    "invoice_vouchers"),
+    ("出貨單",         "shipping_notes"),
+    ("請款單",         "payment_requests"),
+    # 2026-09-13：補上「完工單」——它是 DB v77（2026-09-12）才有的模組，當初這份
+    # 清單沒有跟著加，等於完工單還在簽核中也結得了案。
+    ("完工單",         "completion_notes"),
+]
+
+
+def _case_close_gates(conn, quote_no: str, d: dict) -> list:
+    """完結案前置條件，回傳五個關卡的結構化狀態（順序＝結案檢查順序）。
+
+    每個關卡：{key, label, state, value, ratio, reason, pendingUsernames}
+      value  給人看的短字串（「7/9」「3/5 期」「已完結」）
+      ratio  0..1，畫進度條用；na 時為 None
+      reason state=='blocked' 時的擋下理由，直接就是原本 reasons 的那一句
+    """
+    gates = []
 
     # ① 執行管理進度 100%（沒有任何階段視為「無需檢查」，不算未達成）
-    stage_row = conn.execute(
+    row = conn.execute(
         "SELECT COUNT(*) total, SUM(CASE WHEN done=1 THEN 1 ELSE 0 END) done "
         "FROM case_stages WHERE quote_no=?", (quote_no,)
     ).fetchone()
-    total = stage_row["total"] or 0
-    done  = stage_row["done"] or 0
-    if total > 0 and done < total:
-        reasons.append(f"執行管理進度尚未 100%（{done}/{total}）")
+    total = row["total"] or 0
+    done = row["done"] or 0
+    if total == 0:
+        gates.append({"key": "progress", "label": "進度", "state": "na",
+                      "value": "無階段", "ratio": None, "reason": None,
+                      "pendingUsernames": []})
+    else:
+        blocked = done < total
+        gates.append({
+            "key": "progress", "label": "進度",
+            "state": "blocked" if blocked else "ok",
+            "value": f"{done}/{total}", "ratio": done / total,
+            "reason": f"執行管理進度尚未 100%（{done}/{total}）" if blocked else None,
+            "pendingUsernames": [],
+        })
 
     # ② 款項明細全部收齊（沒有任何期別視為「無需檢查」）
     items = ((d.get("caseRecord") or {}).get("payment") or {}).get("items") or []
-    unpaid = [it for it in items if not it.get("received")]
-    if unpaid:
-        reasons.append(f"款項明細尚有 {len(unpaid)} 期未收齊")
+    if not items:
+        gates.append({"key": "payment", "label": "收款", "state": "na",
+                      "value": "無款項", "ratio": None, "reason": None,
+                      "pendingUsernames": []})
+    else:
+        unpaid = [it for it in items if not it.get("received")]
+        recv = len(items) - len(unpaid)
+        gates.append({
+            "key": "payment", "label": "收款",
+            "state": "blocked" if unpaid else "ok",
+            "value": f"{recv}/{len(items)} 期", "ratio": recv / len(items),
+            "reason": f"款項明細尚有 {len(unpaid)} 期未收齊" if unpaid else None,
+            "pendingUsernames": [],
+        })
 
-    # ④ 成本精算必須已完結（2026-09-13 使用者裁示：「結案前要確認案件進度、精算等
-    # 這些全數完成」）。結案之後案件就鎖定了，精算還停在草稿等於把一張永遠算不完
-    # 的帳鎖進去——要再動只能走半解鎖＋逐筆審核。
-    # 判斷沿用既有的熱路徑欄位口徑（`settle_status`／`data_json.settlement.status`），
-    # 不自己另外定義一套。完全沒有精算資料的案件視為「無需檢查」，比照①②的作法
-    # ——舊案件不該因為一個後來才有的欄位而永遠結不了案。
-    settlement = (d.get("settlement") or {})
-    if settlement and (settlement.get("status") or "") != "finalized":
-        reasons.append("成本精算尚未完結")
-
-    # ⑤ 額外支出不可停在送審中（2026-09-13 一併補上）：那是還沒定案的成本，
-    # 結案後才核准會讓已結案案件的成本事後改變。
-    try:
-        pending_xe = conn.execute(
-            "SELECT COUNT(*) c FROM case_extra_expenses WHERE quote_no=? AND status='待審核'",
-            (quote_no,)
-        ).fetchone()["c"]
-    except Exception:
-        pending_xe = 0          # 舊環境還沒有這張表（DB v75 之前）
-    if pending_xe:
-        reasons.append(f"額外支出尚有 {pending_xe} 筆送審中")
-
-    # ③ 相關單據簽核流程全部完成（報價單本身＋承攬商匯款申請／開票申請憑據／
-    # 出貨單／請款單／完工單，五種 tiers 簽核機制皆不可處於待審核/簽核中）
-    # 2026-09-13：補上「完工單」——它是 DB v77（2026-09-12）才有的模組，當初這份
-    # 清單沒有跟著加，等於完工單還在簽核中也結得了案。
-    doc_checks = [
-        ("報價單",       "quotations"),
-        ("承攬商匯款申請", "contractor_payment_vouchers"),
-        ("開票申請憑據",   "invoice_vouchers"),
-        ("出貨單",       "shipping_notes"),
-        ("請款單",       "payment_requests"),
-        ("完工單",       "completion_notes"),
-    ]
-    for label, table in doc_checks:
+    # ③ 相關單據簽核流程全部完成（五種 tiers 簽核機制皆不可處於待審核/簽核中）
+    doc_total = 0
+    doc_pending = 0
+    doc_reasons = []
+    pending_usernames: list = []
+    for label, table in _CLOSE_DOC_TABLES:
         try:
+            tot = conn.execute(
+                f"SELECT COUNT(*) c FROM {table} WHERE quote_no=?", (quote_no,)
+            ).fetchone()["c"]
             rows = conn.execute(
                 f"SELECT json_extract(data_json,'$.approval') ap FROM {table} "
                 f"WHERE quote_no=? AND status IN ('待審核','簽核中')",
@@ -1444,8 +1561,10 @@ def _case_close_block_reasons(conn, quote_no: str, d: dict):
             ).fetchall()
         except Exception:
             continue           # 該模組的表還不存在（migration 尚未跑到）
+        doc_total += tot
         if rows:
-            reasons.append(f"{label}尚有 {len(rows)} 筆簽核中")
+            doc_pending += len(rows)
+            doc_reasons.append(f"{label}尚有 {len(rows)} 筆簽核中")
             for r in rows:
                 try:
                     appr = json.loads(r["ap"] or "{}")
@@ -1457,7 +1576,94 @@ def _case_close_block_reasons(conn, quote_no: str, d: dict):
                     for a in (tiers[ct].get("approvers") or []):
                         if a.get("status") != "approved" and a.get("username"):
                             pending_usernames.append(a["username"])
-    return reasons, list(dict.fromkeys(pending_usernames))
+    if doc_total == 0:
+        gates.append({"key": "documents", "label": "單據", "state": "na",
+                      "value": "無單據", "ratio": None, "reason": None,
+                      "pendingUsernames": []})
+    else:
+        signed = doc_total - doc_pending
+        gates.append({
+            "key": "documents", "label": "單據",
+            "state": "blocked" if doc_pending else "ok",
+            "value": f"{signed}/{doc_total}", "ratio": signed / doc_total,
+            # reason 保留逐表拆開的原句（「出貨單尚有 2 筆簽核中」），
+            # 合成一句會讓使用者不知道要去哪個模組找
+            "reason": "；".join(doc_reasons) if doc_reasons else None,
+            "pendingUsernames": list(dict.fromkeys(pending_usernames)),
+        })
+
+    # ④ 成本精算必須已完結（2026-09-13 使用者裁示）。結案之後案件就鎖定了，
+    # 精算還停在草稿等於把一張永遠算不完的帳鎖進去。判斷沿用既有熱路徑欄位口徑
+    # （data_json.settlement.status），完全沒有精算資料的案件視為「無需檢查」。
+    settlement = (d.get("settlement") or {})
+    if not settlement:
+        gates.append({"key": "settlement", "label": "精算", "state": "na",
+                      "value": "未建", "ratio": None, "reason": None,
+                      "pendingUsernames": []})
+    else:
+        finalized = (settlement.get("status") or "") == "finalized"
+        gates.append({
+            "key": "settlement", "label": "精算",
+            "state": "ok" if finalized else "blocked",
+            "value": "已完結" if finalized else "草稿",
+            "ratio": 1.0 if finalized else 0.5,
+            "reason": None if finalized else "成本精算尚未完結",
+            "pendingUsernames": [],
+        })
+
+    # ⑤ 額外支出不可停在送審中（2026-09-13 一併補上）：那是還沒定案的成本，
+    # 結案後才核准會讓已結案案件的成本事後改變。
+    try:
+        xe_total = conn.execute(
+            "SELECT COUNT(*) c FROM case_extra_expenses WHERE quote_no=?", (quote_no,)
+        ).fetchone()["c"]
+        xe_pending = conn.execute(
+            "SELECT COUNT(*) c FROM case_extra_expenses WHERE quote_no=? AND status='待審核'",
+            (quote_no,)
+        ).fetchone()["c"]
+    except Exception:
+        xe_total = xe_pending = None    # 舊環境還沒有這張表（DB v75 之前）
+    if xe_total is None or xe_total == 0:
+        gates.append({"key": "extraExpense", "label": "變更", "state": "na",
+                      "value": "無", "ratio": None, "reason": None,
+                      "pendingUsernames": []})
+    else:
+        gates.append({
+            "key": "extraExpense", "label": "變更",
+            "state": "blocked" if xe_pending else "ok",
+            "value": f"{xe_pending} 送審" if xe_pending else "無送審中",
+            "ratio": 0.0 if xe_pending else 1.0,
+            "reason": f"額外支出尚有 {xe_pending} 筆送審中" if xe_pending else None,
+            "pendingUsernames": [],
+        })
+
+    return gates
+
+
+def _case_close_block_reasons(conn, quote_no: str, d: dict):
+    """完結案前置條件檢查（2026-08-25 使用者提出，見 QUICK.md §11）。
+    回傳 (reasons, pending_usernames)：reasons 非空時應擋下完結案；
+    pending_usernames 是③相關單據簽核人（①②④⑤沒有對應的「簽核人」概念，
+    維持空清單，通知只會落到最高管理員，見 notify_case_close_blocked() docstring）。
+
+    2026-09-14：判定本體搬到 _case_close_gates()，這裡只做投影。
+    ③的 reason 在關卡裡是用「；」把逐表的句子接起來的，這裡拆回獨立項目，
+    維持原本「每個模組一句」的 reasons 形狀。
+
+    ⚠️ **唯一的行為差異是 reasons 的排列順序**（內容與 pending_usernames
+    逐字相同，已用 git HEAD 的舊實作對開發機 26 件案件全部比對過）：
+    舊版是 ①進度 ②收款 ④精算 ⑤額外支出 ③單據——③被擠到最後是當初插入
+    ④⑤ 時的副作用，不是刻意的；新版照文件編號排成 ①②③④⑤，跟關卡矩陣的
+    欄位順序一致，使用者看到的擋下訊息與矩陣才會是同一個讀法。"""
+    gates = _case_close_gates(conn, quote_no, d)
+    reasons = []
+    pending_usernames: list = []
+    for g in gates:
+        if g["state"] != "blocked":
+            continue
+        reasons.extend((g["reason"] or "").split("；"))
+        pending_usernames.extend(g["pendingUsernames"])
+    return [r for r in reasons if r], list(dict.fromkeys(pending_usernames))
 
 
 @router.patch("/api/quotations/{quote_no}/deal-tag")
@@ -3984,12 +4190,17 @@ def list_case_updates(quote_no: str, authorization: str = Header(None)):
 
     # 1. Manual comments
     for c in conn.execute(
-        "SELECT id, author, content, type, created_at FROM case_updates "
+        "SELECT id, author, content, type, created_at, files_json FROM case_updates "
         "WHERE quote_no=? ORDER BY created_at DESC", (quote_no,)
     ).fetchall():
+        try:
+            c_files = json.loads(c["files_json"] or "[]")
+        except Exception:
+            c_files = []
         results.append({
             "id": c["id"],
             "source": "comment",
+            "files": c_files,
             "author": c["author"],
             "authorDisplay": dn_map.get(c["author"], c["author"]),
             "content": c["content"],
@@ -4092,12 +4303,29 @@ def list_case_updates(quote_no: str, authorization: str = Header(None)):
 
 
 @router.post("/api/quotations/{quote_no}/updates", status_code=201)
-def post_case_update(quote_no: str, body: dict = Body(...), authorization: str = Header(None)):
+async def post_case_update(quote_no: str,
+                           content: str = Form(""),
+                           important: str = Form(""),
+                           files: List[UploadFile] = File(default=[]),
+                           authorization: str = Header(None)):
+    """案件動態留言（2026-09-14 起可附照片／檔案）。
+
+    **改成 multipart 而不是另開一支補傳端點**（使用者裁示）：一次請求送出，
+    不會出現「文字存了、檔案失敗」這種半完成狀態——留言板的那一則已經貼出去
+    了，附件卻沒上去，使用者只能再貼一則說「補圖」。
+
+    `important` 走 Form 會是字串，"true"/"1"/"on" 都當真；沿用瀏覽器 FormData
+    的慣例，不要求前端自己轉。
+
+    照片會壓上「上傳者 · 日期時間 · GPS」浮水印（使用者裁示），PDF 不動，
+    見 helpers/uploads.py::save_document_files() 的 watermark_by。
+    """
     user = _require_user(authorization)
-    content = (body.get("content") or "").strip()
-    important = bool(body.get("important"))
-    if not content:
-        raise HTTPException(400, "內容不得為空")
+    content = (content or "").strip()
+    important = str(important).strip().lower() in ("1", "true", "on", "yes")
+    # 附件自己就是內容——只傳圖不打字是合理的用法，不該被「內容不得為空」擋下
+    if not content and not files:
+        raise HTTPException(400, "請輸入內容或至少上傳一個檔案")
     conn = get_db()
     _guard_case(conn, quote_no, user, allow_module="case_manage")
     qrow = conn.execute(
@@ -4108,10 +4336,20 @@ def post_case_update(quote_no: str, body: dict = Body(...), authorization: str =
         raise HTTPException(404, "報價單不存在")
     now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     update_type = "important" if important else "comment"
+    saved_files = []
+    if files:
+        # 存檔在 INSERT 之前：檔案存失敗（格式/大小）就整批擋下，不會留下
+        # 一則沒有附件的留言讓使用者以為傳成功了
+        saved_files = await save_document_files(
+            "case_updates", quote_no, files,
+            user.get("display_name") or user["username"],
+            watermark_by=user.get("display_name") or user["username"],
+        )
     cur = conn.execute(
-        "INSERT INTO case_updates (quote_no, author, content, type, created_at) "
-        "VALUES (?,?,?,?,?)",
-        (quote_no, user["username"], content, update_type, now),
+        "INSERT INTO case_updates (quote_no, author, content, type, created_at, files_json) "
+        "VALUES (?,?,?,?,?,?)",
+        (quote_no, user["username"], content, update_type, now,
+         json.dumps(saved_files, ensure_ascii=False)),
     )
     new_id = cur.lastrowid
     conn.commit()
@@ -4135,6 +4373,7 @@ def post_case_update(quote_no: str, body: dict = Body(...), authorization: str =
     return {
         "id": new_id,
         "source": "comment",
+        "files": saved_files,
         "author": user["username"],
         "authorDisplay": author_display,
         "content": content,
@@ -4149,7 +4388,7 @@ def delete_case_update(quote_no: str, uid: int, authorization: str = Header(None
     user = _require_user(authorization)
     conn = get_db()
     row = conn.execute(
-        "SELECT id, author FROM case_updates WHERE id=? AND quote_no=?", (uid, quote_no)
+        "SELECT id, author, files_json FROM case_updates WHERE id=? AND quote_no=?", (uid, quote_no)
     ).fetchone()
     if not row:
         conn.close()
@@ -4157,12 +4396,52 @@ def delete_case_update(quote_no: str, uid: int, authorization: str = Header(None
     if user["role"] not in ("superadmin", "admin") and user["username"] != row["author"]:
         conn.close()
         raise HTTPException(403, "只能刪除自己的留言")
+    # 留言刪掉，它的附件也要從磁碟上清掉——否則 uploads/ 會留下永遠沒人引用的
+    # 孤兒檔案，而且 archive.py::_mirror_uploads() 只增不減，會一路跟著進雲端備份
+    try:
+        for f in json.loads(row["files_json"] or "[]"):
+            full = os.path.join(_uploads_mod.UPLOADS_ROOT, f.get("path", ""))
+            if f.get("path") and os.path.isfile(full):
+                os.remove(full)
+    except Exception:
+        pass
     conn.execute("DELETE FROM case_updates WHERE id=?", (uid,))
     conn.commit()
     conn.close()
     notify_module_activity("案件留言板", "刪除留言", user.get("display_name") or user["username"],
                             quote_no, "case-management.html")
     return {"ok": True}
+
+
+@router.delete("/api/quotations/{quote_no}/updates/{uid}/files/{file_id}")
+def delete_case_update_file(quote_no: str, uid: int, file_id: str,
+                            authorization: str = Header(None)):
+    """刪除動態留言的單一附件——**限 admin 以上**（2026-09-14 使用者裁示）。
+
+    跟「刪整則留言」的權限刻意不同：整則留言發文者自己就能收回（那是撤回自己
+    說過的話），但單獨抽掉一張附件是**只改證據、留下文字**，等於事後修改已經
+    被別人看過的內容。這種事留給管理員。
+    """
+    user = _require_user(authorization)
+    if user["role"] not in ("superadmin", "admin"):
+        raise HTTPException(403, "僅管理員以上可刪除附件")
+    conn = get_db()
+    _guard_case(conn, quote_no, user, allow_module="case_manage")
+    row = conn.execute(
+        "SELECT id, files_json FROM case_updates WHERE id=? AND quote_no=?", (uid, quote_no)
+    ).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(404, "留言不存在")
+    existing = json.loads(row["files_json"] or "[]")
+    remaining = delete_document_file("case_updates", quote_no, existing, file_id)
+    conn.execute("UPDATE case_updates SET files_json=? WHERE id=?",
+                 (json.dumps(remaining, ensure_ascii=False), uid))
+    conn.commit()
+    conn.close()
+    _audit(_tok(authorization), "case_update.delete_file", "quotation", quote_no,
+           f"{quote_no} 留言 #{uid} 刪除附件")
+    return {"ok": True, "files": remaining}
 
 
 @router.get("/api/quotations/{quote_no}/pdf-download")

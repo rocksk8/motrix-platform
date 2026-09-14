@@ -34,9 +34,56 @@
     .btn-icon { padding: 4px 10px; font-size: 15px; line-height: 1; }
 
     /* ── prefix dc- (dev-crm) to avoid conflict with style.css ── */
+    /* ── 開發漏斗帶（2026-09-14）────────────────────────────────────────
+       原本「接洽成效總覽」「案件責任分布」掛在 x-show="!selectedCase"——
+       選了案件之後整組統計消失，正在看某個案子時最需要對照的整體節奏
+       反而看不到。漏斗帶改成常駐，而且它本身就是篩選器。
+       洽談中→成案→未成案 是真的有方向的流程，用箭頭是有意義的。 */
+    .dc-shell { display: flex; flex-direction: column; height: calc(100vh - var(--topbar-h)); }
+    .dc-funnel {
+      display: flex; align-items: stretch; gap: 6px; flex-wrap: wrap;
+      padding: 10px 14px; background: var(--white);
+      border-bottom: 1px solid var(--border-light); flex: 0 0 auto;
+    }
+    .dc-funnel__s {
+      flex: 1 1 130px; min-width: 0; cursor: pointer; text-align: left;
+      border: 1px solid var(--border-light); border-radius: var(--radius);
+      background: var(--white); padding: 7px 11px; font-family: var(--font-zh);
+    }
+    .dc-funnel__s:hover { border-color: var(--ghost-hover-border); }
+    .dc-funnel__s.on { outline: 2px solid var(--accent); outline-offset: -2px; }
+    .dc-funnel__s.won { background: var(--success-light); border-color: var(--success-border); }
+    .dc-funnel__s.rate { border-style: dashed; cursor: default; }
+    .dc-funnel__s.rate:hover { border-color: var(--border-light); }
+    .dc-funnel__v {
+      display: block; font-size: 20px; font-weight: 700; line-height: 1.1;
+      font-family: var(--font-en); font-variant-numeric: tabular-nums;
+    }
+    .dc-funnel__l { display: block; font-size: 11.5px; color: var(--text-secondary); margin-top: 2px; }
+    .dc-funnel__l small { display: block; font-size: 10.5px; color: var(--text-dim); }
+    .dc-funnel__arrow { display: grid; place-items: center; color: var(--border-light); font-size: 13px; flex: 0 0 auto; }
+    @media (max-width: 767px) { .dc-funnel__arrow { display: none; } }
+
+    /* 卡片上的接觸溫度：條越長＝越久沒更新，顏色跟著跨門檻換。
+       紅色那一段就是既有的 isStale()（洽談中且逾 30 天）。 */
+    .dc-temp { margin: 0 0 6px; }
+    .dc-temp__d {
+      font-size: 10px; font-weight: 700; margin-top: 3px; display: block;
+      font-family: var(--font-en); font-variant-numeric: tabular-nums;
+    }
+    .dc-sortbtn {
+      font-family: var(--font-zh); font-size: 10.5px; padding: 2px 7px;
+      border-radius: 4px; border: 1px solid var(--border-light);
+      background: var(--white); color: var(--text-secondary); cursor: pointer;
+    }
+    .dc-sortbtn:hover { border-color: var(--ghost-hover-border); }
+    .dc-sortbtn.on { background: var(--text-primary); color: var(--text-on-dark); border-color: var(--text-primary); }
+
     .dc-layout {
       display: flex;
-      height: calc(100vh - var(--topbar-h));
+      /* 2026-09-14：高度交給 .dc-shell 這層 flex column 分配，
+         上面多了常駐的漏斗帶，寫死 100vh 會把版面推出畫面。 */
+      flex: 1; min-height: 0;
       overflow: hidden;
     }
 
@@ -411,7 +458,40 @@
 
 <div class="app-shell">
   <main class="main" style="padding:0;overflow:hidden">
-  <div x-data="devCrmPage()" x-init="init()" class="dc-layout">
+  <div x-data="devCrmPage()" x-init="init()" class="dc-shell">
+  <!-- ── 開發漏斗帶（常駐，本身就是篩選器）── -->
+  <div class="dc-funnel">
+    <button type="button" class="dc-funnel__s" :class="{on: filterStatus==='洽談中'}"
+            @click="filterStatus = (filterStatus==='洽談中' ? '' : '洽談中')">
+      <span class="dc-funnel__v" style="color:var(--warning)" x-text="caseCount('洽談中')"></span>
+      <span class="dc-funnel__l">洽談中
+        <small x-text="staleCount > 0 ? staleCount + ' 件逾 30 天未更新' : '都在 30 天內更新過'"></small>
+      </span>
+    </button>
+    <span class="dc-funnel__arrow" aria-hidden="true">→</span>
+    <button type="button" class="dc-funnel__s won" :class="{on: filterStatus==='成案'}"
+            @click="filterStatus = (filterStatus==='成案' ? '' : '成案')">
+      <span class="dc-funnel__v" style="color:var(--success)" x-text="caseCount('成案')"></span>
+      <span class="dc-funnel__l">成案<small>已連結報價單</small></span>
+    </button>
+    <span class="dc-funnel__arrow" aria-hidden="true">→</span>
+    <button type="button" class="dc-funnel__s" :class="{on: filterStatus==='未成案'}"
+            @click="filterStatus = (filterStatus==='未成案' ? '' : '未成案')">
+      <span class="dc-funnel__v" style="color:var(--text-dim)" x-text="caseCount('未成案')"></span>
+      <span class="dc-funnel__l">未成案<small>已結束</small></span>
+    </button>
+    <button type="button" class="dc-funnel__s" :class="{on: filterStatus==='暫擱置'}"
+            @click="filterStatus = (filterStatus==='暫擱置' ? '' : '暫擱置')">
+      <span class="dc-funnel__v" style="color:var(--text-dim)" x-text="caseCount('暫擱置')"></span>
+      <span class="dc-funnel__l">暫擱置<small>等條件成熟</small></span>
+    </button>
+    <div class="dc-funnel__s rate">
+      <span class="dc-funnel__v" x-text="winRate"></span>
+      <span class="dc-funnel__l">成案率<small>成案 ÷（成案＋未成案）</small></span>
+    </div>
+  </div>
+
+  <div class="dc-layout">
 
     <!-- ── 左欄：案件列表 ── -->
     <div class="dc-list" :class="{'show': mobileListOpen}">
@@ -425,14 +505,30 @@
         </div>
         <input class="dc-search" type="text" placeholder="搜尋案件或客戶…"
                x-model="searchQ" @input.debounce.400ms="loadCases()">
-        <div class="dc-chips">
-          <span class="dc-chip" :class="{on: filterStatus===''}" @click="filterStatus=''">
-            全部(不含未成案) <b x-text="caseCount('')"></b>
-          </span>
-          <span class="dc-chip talk" :class="{on: filterStatus==='洽談中'}" @click="filterStatus='洽談中'">洽談中</span>
-          <span class="dc-chip won"  :class="{on: filterStatus==='成案'}"   @click="filterStatus='成案'">成案</span>
-          <span class="dc-chip lost" :class="{on: filterStatus==='未成案'}" @click="filterStatus='未成案'">未成案</span>
-          <span class="dc-chip hold" :class="{on: filterStatus==='暫擱置'}" @click="filterStatus='暫擱置'">暫擱置</span>
+        <!-- 2026-09-14：狀態 chips 移除——上方漏斗帶的每一段就是狀態篩選器，
+             兩個控制項綁同一個 filterStatus，而且 chips 那組沒有數字、資訊量
+             比較少。這一排改放使用者真正缺的：人員與排序。 -->
+        <div style="display:flex;gap:5px;margin-top:8px">
+          <select class="dc-select" style="flex:1;font-size:11px;padding:5px 6px"
+                  x-model="filterPerson" @change="savePersonPref()">
+            <option value="">所有人員</option>
+            <option value="__me__">只看我負責的</option>
+            <template x-for="n in personOptions" :key="n">
+              <option :value="n" x-text="n"></option>
+            </template>
+          </select>
+        </div>
+        <div style="display:flex;gap:5px;margin-top:6px;align-items:center">
+          <select class="dc-select" style="flex:1;font-size:11px;padding:5px 6px"
+                  x-model="sortPref.sortMode" @change="saveSort()">
+            <option value="updated">最後更新</option>
+            <option value="created">建立日期</option>
+            <option value="name">案件名稱</option>
+            <option value="customer">客戶名稱</option>
+          </select>
+          <button type="button" class="dc-sortbtn" @click="toggleSortDir()"
+                  :title="sortPref.sortMode === 'updated' && sortPref.sortDir === 'asc' ? '最久沒動的排最前面' : ''"
+                  x-text="sortPref.sortDir === 'asc' ? '↑ 由舊到新' : '↓ 由新到舊'"></button>
         </div>
         <div style="display:flex;gap:5px;margin-top:8px">
           <select class="dc-select" style="flex:1;font-size:11px;padding:5px 6px" x-model="filterYear">
@@ -478,14 +574,26 @@
              style="text-align:center;padding:30px;font-size:12px;color:var(--text-dim)">無符合案件</div>
 
         <template x-for="c in filteredCases" :key="c.id">
+          <!-- 2026-09-14：左緣改成接觸溫度（三階），不再是「逾期/未讀」二選一的
+               紅或琥珀。未讀是另一個軸，保留為下方的徽章。 -->
           <div class="dc-case-card" :class="{selected: selectedCase && selectedCase.id === c.id}"
-               :style="isStale(c) ? 'border-left:3px solid #DC2626;background:#FEF2F2' : (isUnread(c) ? 'border-left:3px solid #D97706;background:#FFFBEB' : '')"
+               :style="(hasTemp(c) ? 'border-left:3px solid ' + tempColor(c) + ';' : '')
+                       + (isUnread(c) ? 'background:#FFFBEB' : '')"
                @click="selectCase(c)">
-            <template x-if="isStale(c)">
-              <span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;background:#FEE2E2;color:#991B1B;border:1px solid #FCA5A5;display:inline-block;margin-bottom:3px;margin-right:4px"
-                    x-text="'⚠ 超過' + staleDays(c) + '天未更新'"></span>
+            <template x-if="hasTemp(c)">
+              <div class="dc-temp">
+                <span class="vm-bar">
+                  <i class="vm-bar__fill" :class="'vm-bar__fill--' + tempTone(c)"
+                     :style="'width:' + tempPct(c) + '%'"></i>
+                </span>
+                <span class="dc-temp__d" :class="'vm-age--' + (tempTone(c)==='crit' ? 'stale' : tempTone(c)==='warn' ? 'warm' : 'fresh')"
+                      x-text="tempText(c)"></span>
+              </div>
             </template>
-            <template x-if="!isStale(c) && isUnread(c)">
+            <!-- 2026-09-14：原本這裡有一個「⚠ 超過 N 天未更新」徽章，
+                 跟上面的溫度條講同一件事且更不精確（只有過/沒過 30 天兩種），
+                 移除。溫度條本身就帶天數。 -->
+            <template x-if="isUnread(c)">
               <span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;background:#FEF3C7;color:#92400E;border:1px solid #FDE68A;display:inline-block;margin-bottom:3px">有更新</span>
             </template>
             <div class="dc-case-card__name" x-text="c.caseName"></div>
@@ -815,6 +923,18 @@
                    style="font-size:11px;color:#D97706;margin-bottom:10px;font-family:var(--font-zh)">
                 ⚠ 代他人填寫，儲存後需主管審核
               </div>
+              <!-- 附件（2026-09-14，DB v82）。編輯既有記錄時不顯示：那支 PUT
+                   端點沒有改成 multipart，附件要換走「刪掉再重傳」，不是整筆覆寫。 -->
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px" x-show="!editingLogId">
+                <label style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--text-secondary);font-family:var(--font-zh);cursor:pointer">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                  <span x-text="logFiles.length ? `已選 ${logFiles.length} 個檔案` : '附加照片／PDF'"></span>
+                  <input type="file" accept="image/jpeg,image/png,application/pdf" multiple
+                         style="display:none" x-ref="logFileInput" @change="onLogFilesSelected($event)">
+                </label>
+                <button class="btn btn-ghost btn-sm" x-show="logFiles.length"
+                        @click="logFiles=[]; if($refs.logFileInput) $refs.logFileInput.value=''">清除</button>
+              </div>
               <div style="display:flex;gap:8px;justify-content:flex-end">
                 <button class="btn btn-ghost btn-sm" @click="cancelLogForm()">取消</button>
                 <button class="btn btn-primary btn-sm" @click="saveLog()" :disabled="logSaving">
@@ -848,6 +968,30 @@
                 </div>
                 <div class="dc-log-card__content" x-text="log.content"></div>
                 <div class="dc-log-card__next" x-show="log.nextAction" x-text="log.nextAction"></div>
+                <!-- 附件：圖片出縮圖、PDF 出檔名連結。刪除鈕只給 admin+ -->
+                <template x-if="(log.files||[]).length > 0">
+                  <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;align-items:flex-start">
+                    <template x-for="f in log.files" :key="f.id">
+                      <div style="position:relative">
+                        <template x-if="isLogImage(f)">
+                          <a :href="logFileUrl(f)" target="_blank" :title="f.filename">
+                            <img :src="logFileUrl(f)" loading="lazy"
+                                 style="width:68px;height:68px;object-fit:cover;border-radius:6px;border:1px solid var(--border-light);display:block">
+                          </a>
+                        </template>
+                        <template x-if="!isLogImage(f)">
+                          <a :href="logFileUrl(f)" target="_blank"
+                             style="display:flex;align-items:center;gap:5px;padding:6px 10px;border:1px solid var(--border-light);border-radius:6px;font-size:11px;color:var(--text-secondary);text-decoration:none;background:#fff;max-width:180px">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>
+                            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" x-text="f.filename"></span>
+                          </a>
+                        </template>
+                        <button x-show="isAdmin" @click.stop="deleteLogFile(log, f)" title="刪除附件（限管理員）"
+                                style="position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;border:1px solid var(--border-light);background:#fff;color:var(--text-dim);font-size:11px;line-height:1;cursor:pointer;padding:0">×</button>
+                      </div>
+                    </template>
+                  </div>
+                </template>
                 <div class="dc-log-card__foot">
                   <span x-text="log.logByName"></span>
                   <span style="color:var(--border-light)">·</span>
@@ -867,6 +1011,7 @@
         </div>
       </template>
     </div><!-- /dc-right -->
+    </div><!-- /dc-layout -->
 
     <!-- ── Modal：新增/編輯案件 ── -->
     <div class="dc-modal-bg" x-show="showCaseModal" x-cloak @click.self="showCaseModal=false">
@@ -1139,6 +1284,7 @@
 
 <script src="../static/notif.js"></script>
 <script src="../static/sidebar.js"></script>
+<script src="../static/list-sort.js"></script>
 <script>
 function devCrmPage() {
   return {
@@ -1155,6 +1301,107 @@ function devCrmPage() {
     filterYear: '',
     filterMonth: '',
     staleOnly: false,
+    // ═══ 接觸溫度與漏斗（2026-09-14）═══════════════════════════════════
+    // 業務開發的核心變數是接觸頻率：一個案子會不會死，看的是上次聯絡到現在
+    // 多久。系統早就算得出來（isStale＝洽談中且逾 30 天），但它只是清單上方
+    // 一條警示列。這裡把「距上次更新幾天」升格成卡片上的第一視覺編碼。
+    //
+    // 用 updatedAt 當觀測點是對的：POST /dev-cases/{id}/logs 新增開發記錄時
+    // 會一併 UPDATE dev_cases SET updated_at（dev_crm.py 那支的最後一行），
+    // 所以「有接觸」一定會反映在這個欄位上。措辭沿用頁面既有的「未更新」
+    // 而不是「未接觸」——編輯案件、改狀態也會動到它，那不全然是接觸。
+    // ── 人員篩選與排序偏好（2026-09-14 使用者交辦）──────────────────
+    // 「可區分業務是誰，單純看負責案件，順序可以手動選擇多種排序並記錄使用者習慣」。
+    //
+    // 偏好存兩個地方，刻意分開：
+    //   排序     → user_list_prefs（GET/PUT /api/list-prefs/dev-crm，跨裝置跟著帳號）
+    //   人員篩選 → localStorage（那張表的 schema 只有 sortMode/sortDir/customOrder，
+    //              沒有放篩選條件的地方；為了記一個下拉選單去動 DB schema 不划算。
+    //              這一頁本來就已經用 localStorage 記 motrix_devcrm_read_at。）
+    filterPerson: '',
+    sortPref: { sortMode: 'updated', sortDir: 'desc', customOrder: [] },
+
+    // 業務與企劃都算「負責」——使用者要的是「這個人手上有哪些案子」，
+    // 不是「這個人掛在哪個欄位」。
+    get personOptions() {
+      const set = new Set()
+      this.cases.forEach(c => {
+        (c.salesPersonNames || []).forEach(n => n && set.add(n))
+        ;(c.plannerNames || []).forEach(n => n && set.add(n))
+      })
+      return [...set].sort((a, b) => a.localeCompare(b, 'zh-Hant'))
+    },
+
+    _matchPerson(c) {
+      if (!this.filterPerson) return true
+      const names = [...(c.salesPersonNames || []), ...(c.plannerNames || [])]
+      if (this.filterPerson === '__me__') {
+        const me = this.session.displayName || this.session.username || ''
+        return !!me && names.includes(me)
+      }
+      return names.includes(this.filterPerson)
+    },
+
+    _sortGetters: {
+      updated:  c => c.updatedAt || c.createdAt || '',
+      created:  c => c.createdAt || '',
+      name:     c => c.caseName || '',
+      customer: c => c.customerName || '',
+    },
+
+    async savePersonPref() {
+      try { localStorage.setItem('motrix_devcrm_person', this.filterPerson) } catch (_e) {}
+    },
+    async saveSort() {
+      if (typeof saveListPref === 'function') {
+        await saveListPref(this.token, 'dev-crm', this.sortPref)
+      }
+    },
+    async toggleSortDir() {
+      this.sortPref.sortDir = this.sortPref.sortDir === 'asc' ? 'desc' : 'asc'
+      await this.saveSort()
+    },
+    async loadPrefs() {
+      try { this.filterPerson = localStorage.getItem('motrix_devcrm_person') || '' } catch (_e) {}
+      if (typeof loadListPref === 'function') {
+        const p = await loadListPref(this.token, 'dev-crm')
+        // 沒存過時後端回 sortMode:''，那不是合法的排序欄位——保留預設的
+        // 'updated'，否則 applyListSort 找不到 getter 會原樣返回、排序看起來壞掉。
+        if (p && p.sortMode && this._sortGetters[p.sortMode]) {
+          this.sortPref.sortMode = p.sortMode
+        }
+        if (p && p.sortDir) this.sortPref.sortDir = p.sortDir
+      }
+    },
+
+    tempSort: 'recent',   // 'recent' | 'coldest'
+
+    // 溫度只對「還在追」的案子有意義。成案／未成案已經結束了，
+    // 它們冷不冷不是這一頁要催的事。
+    hasTemp(c) { return c && (c.status === '洽談中' || c.status === '暫擱置') },
+
+    tempTone(c) {
+      const d = this._daysSince(c && c.updatedAt)
+      return d > 30 ? 'crit' : d > 7 ? 'warn' : 'ok'
+    },
+    // 條長＝冷度，60 天封頂。封頂是為了讓 40 天跟 200 天在視覺上都「很長」，
+    // 不會因為一個放了兩年的案子把其他人的條壓成看不見。
+    tempPct(c) { return Math.min(100, Math.round(this._daysSince(c && c.updatedAt) / 60 * 100)) },
+    tempColor(c) {
+      if (!this.hasTemp(c)) return 'transparent'
+      const t = this.tempTone(c)
+      return t === 'crit' ? 'var(--danger)' : t === 'warn' ? 'var(--warning)' : 'var(--success)'
+    },
+    tempText(c) {
+      const d = this._daysSince(c && c.updatedAt)
+      return d === 0 ? '今日更新' : d + ' 天未更新'
+    },
+
+    get winRate() {
+      const won = this.caseCount('成案')
+      const lost = this.caseCount('未成案')
+      return (won + lost) ? Math.round(won / (won + lost) * 100) + '%' : '—'
+    },
     unreadOnly: false,
 
     selectedCase: null,
@@ -1209,14 +1456,18 @@ function devCrmPage() {
     },
 
     get filteredCases() {
-      return this.cases.filter(c => {
+      const rows = this.cases.filter(c => {
         const matchStatus = this.filterStatus ? c.status === this.filterStatus : c.status !== '未成案'
         const matchYear   = !this.filterYear  || (c.createdAt || '').slice(0, 4) === this.filterYear
         const matchMonth  = !this.filterMonth || (c.createdAt || '').slice(5, 7) === this.filterMonth
         const matchStale  = !this.staleOnly   || this.isStale(c)
         const matchUnread = !this.unreadOnly  || this.isUnread(c)
-        return matchStatus && matchYear && matchMonth && matchStale && matchUnread
+        const matchPerson = this._matchPerson(c)
+        return matchStatus && matchYear && matchMonth && matchStale && matchUnread && matchPerson
       })
+      return typeof applyListSort === 'function'
+        ? applyListSort(rows, this.sortPref, this._sortGetters, c => String(c.id))
+        : rows
     },
 
     get staleCount() {
@@ -1281,6 +1532,7 @@ function devCrmPage() {
           localStorage.setItem('motrix_devcrm_read_at', this.readAt)
         }
       } catch (_e) {}
+      await this.loadPrefs()
       await Promise.all([this.loadCases(), this.loadUsers(), this.loadCustomers()])
       if (this.isAdmin) this.loadPendingCount()
       this.loadActivityStats()
@@ -1581,18 +1833,44 @@ function devCrmPage() {
       this.editingLogId = null
     },
 
+    logFiles: [],
+    onLogFilesSelected(e) { this.logFiles = Array.from(e.target.files || []) },
+    // 附件刪除限 admin+（2026-09-14 使用者裁示）：代填的記錄要經管理員審核，
+    // 審核過了還能讓原建立者悄悄抽換附件的話，那道審核就沒有意義。
+    async deleteLogFile(log, f) {
+      if (!this.isAdmin) return
+      if (!confirm(`確定刪除附件「${f.filename}」？此動作無法復原。`)) return
+      const r = await fetch(`/api/dev-logs/${log.id}/files/${f.id}`, { method: 'DELETE', headers: this._h() })
+      if (r.ok) { log.files = (await r.json()).files || [] }
+      else { const d = await r.json().catch(() => ({})); this._toast(d.detail || '刪除失敗') }
+    },
+    logFileUrl(f) { return `/api/uploads/${f.path}?pt=${encodeURIComponent(this.token)}` },
+    isLogImage(f) { return /\.(jpe?g|png)$/i.test(f.filename || f.path || '') },
+
     async saveLog() {
       if (!this.logForm.log_date) { this._toast('請填寫記錄日期'); return }
-      if (!this.logForm.content.trim()) { this._toast('請填寫記錄內容'); return }
+      if (!this.logForm.content.trim() && !this.logFiles.length) {
+        this._toast('請填寫記錄內容或上傳附件'); return
+      }
       this.logSaving = true
       try {
         const url = this.editingLogId
           ? '/api/dev-logs/' + this.editingLogId
           : '/api/dev-cases/' + this.selectedCase.id + '/logs'
-        const r = await fetch(url, {
-          method: this.editingLogId ? 'PUT' : 'POST',
-          headers: this._h(), body: JSON.stringify(this.logForm),
-        })
+        // 新增走 multipart（可帶附件、一次送出）；編輯維持既有的 JSON PUT
+        // ——那支端點沒有改，附件要換走「刪掉再上傳」而不是整筆覆寫
+        let r
+        if (this.editingLogId) {
+          r = await fetch(url, { method: 'PUT', headers: this._h(), body: JSON.stringify(this.logForm) })
+        } else {
+          const fd = new FormData()
+          Object.entries(this.logForm).forEach(([k, v]) => fd.append(k, v == null ? '' : v))
+          this.logFiles.forEach(f => fd.append('files', f))
+          // 不要自己設 Content-Type——multipart 的 boundary 要讓瀏覽器帶
+          const h = this._h()
+          delete h['Content-Type']
+          r = await fetch(url, { method: 'POST', headers: h, body: fd })
+        }
         if (!r.ok) { const d = await r.json(); this._toast(d.detail || '儲存失敗'); return }
         const saved = await r.json()
         if (this.editingLogId) {
@@ -1603,6 +1881,7 @@ function devCrmPage() {
         }
         this.showLogForm = false
         this.editingLogId = null
+        this.logFiles = []
         if (saved.needsApproval) {
           this.pendingCount++
           this._toast('記錄已建立（代他人填寫，已送主管審核）')

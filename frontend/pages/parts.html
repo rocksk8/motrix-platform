@@ -40,6 +40,32 @@
     .modal-footer{display:flex;justify-content:flex-end;gap:8px;margin-top:20px}
     .empty-state{text-align:center;padding:48px;color:var(--text-dim);font-size:13px}
     .loading-text{text-align:center;padding:40px;color:var(--text-dim);font-size:13px}
+    /* ── 分類籤（2026-09-14）── */
+    .pt-cats{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+    .pt-cat{display:flex;align-items:baseline;gap:7px;padding:5px 11px;border-radius:var(--radius);
+            border:1px solid var(--border-light);background:#fff;cursor:pointer;font-family:var(--font-zh)}
+    .pt-cat:hover{border-color:var(--ghost-hover-border)}
+    .pt-cat.on{background:var(--text-primary);border-color:var(--text-primary)}
+    .pt-cat.on .pt-cat__n,.pt-cat.on .pt-cat__l{color:var(--text-on-dark)}
+    .pt-cat.on small{color:var(--text-on-dark);opacity:.7}
+    /* 件數 0 的正規類別淡化但不隱藏——「有這個類別但還沒有料號」是有用的資訊 */
+    .pt-cat.is-empty{opacity:.55}
+    .pt-cat.is-orphan{border-style:dashed;border-color:var(--warning)}
+    .pt-cat__n{font-size:14px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;
+               font-variant-numeric:tabular-nums;color:var(--text-primary);line-height:1}
+    .pt-cat__l{font-size:11.5px;color:var(--text-secondary);line-height:1.3}
+    .pt-cat__l small{display:block;font-size:9.5px;color:var(--text-dim);
+                     font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.04em}
+
+    /* ── 可排序表頭 ── */
+    .pt-sortable{cursor:pointer;user-select:none;white-space:nowrap}
+    .pt-sortable:hover{color:var(--text-primary)}
+    .pt-sortable::after{content:'';display:inline-block;width:0;height:0;margin-left:5px;
+                        border-left:3.5px solid transparent;border-right:3.5px solid transparent;
+                        opacity:.25;border-bottom:4px solid currentColor}
+    .pt-sortable.asc::after{opacity:1;border-bottom:4px solid var(--accent);border-top:0}
+    .pt-sortable.desc::after{opacity:1;border-top:4px solid var(--accent);border-bottom:0}
+
     .stock-badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;font-family:LINE Seed TW_OTF, sans-serif}
     .stock-badge.ok{background:#DCFCE7;color:#15803D}
     .stock-badge.zero{background:#F0EEE9;color:var(--text-dim)}
@@ -73,10 +99,6 @@
         <span class="search-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg></span>
         <input class="search-input" type="search" placeholder="搜尋料號 / 品名 / 廠牌…" x-model="search">
       </div>
-      <select class="filter-select" style="padding:7px 10px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;font-family:var(--font-zh);outline:none" x-model="filterCat">
-        <option value="">全部類別</option>
-        <template x-for="c in categories" :key="c"><option :value="c" x-text="c"></option></template>
-      </select>
       <div style="margin-left:auto;font-size:12px;color:var(--text-dim)" x-text="filtered.length + ' 項料號'"></div>
       <input type="file" x-ref="importFile" accept=".xlsx,.xls,.csv" style="display:none" @change="handleImport($event)">
       <button class="btn btn-ghost" @click="$refs.importFile.click()" style="font-size:11px">
@@ -93,6 +115,39 @@
       </button>
     </div>
 
+    <!-- ── 分類籤（2026-09-14 重新設計）──────────────────────────────
+         原本分類是一個下拉選單，而且**這一頁有兩份不同的分類清單**：
+         編輯視窗的下拉來自後端 PART_CATEGORIES（6 個正規類別，各帶料號
+         前綴，用來自動編號），但篩選下拉是從「實際存過的值」推出來的，
+         所以任何打錯或一次性的值（開發機裡就有一個 test2）會混進篩選清單、
+         看起來像正式類別。
+
+         改成籤列，並把兩份清單的差異直接顯示出來：
+           · 正規類別照主檔順序排，帶料號前綴（前綴驅動自動編號，
+             原本在清單上完全看不到）與件數
+           · 用過但不在主檔裡的值單獨標成「未納入主檔」，看得見才修得掉
+           · 件數為 0 的正規類別仍然顯示（淡色），這樣才知道「有這個類別
+             但還沒有料號」，下拉選單做不到這件事 -->
+    <div class="pt-cats">
+      <button type="button" class="pt-cat" :class="{on: filterCat===''}" @click="filterCat=''">
+        <span class="pt-cat__n" x-text="items.length"></span>
+        <span class="pt-cat__l">全部</span>
+      </button>
+      <template x-for="c in catChips" :key="c.key">
+        <button type="button" class="pt-cat"
+                :class="{on: filterCat===c.key, 'is-empty': c.count===0, 'is-orphan': c.orphan}"
+                @click="filterCat = (filterCat===c.key ? '' : c.key)"
+                :title="c.orphan ? '這個值不在料號類別主檔裡，新增料號時選不到它' : (c.prefix ? '料號前綴 ' + c.prefix + '-' : '')">
+          <span class="pt-cat__n" x-text="c.count"></span>
+          <span class="pt-cat__l">
+            <span x-text="c.label"></span>
+            <small x-show="c.prefix" x-text="c.prefix"></small>
+            <small x-show="c.orphan" style="color:var(--warning)">未納入主檔</small>
+          </span>
+        </button>
+      </template>
+    </div>
+
     <div class="panel">
       <div class="loading-text" x-show="loading">載入中…</div>
       <template x-if="!loading">
@@ -100,15 +155,19 @@
           <div class="table-scroll">
           <table class="data-table" x-show="filtered.length > 0">
             <thead>
+              <!-- 2026-09-14：表頭改成可排序。這一頁原本**完全沒有排序**
+                   ——10 個欄位、順序固定是 API 的 id DESC，要找「最貴的」或
+                   「在庫掛零的」只能自己一列一列看。偏好存 user_list_prefs
+                   （list_key 'parts'），跟著帳號跨裝置。 -->
               <tr>
-                <th>料號</th>
-                <th>品名</th>
-                <th>廠牌/型號</th>
-                <th>類別</th>
+                <th class="pt-sortable" :class="sortCls('part_no')"   @click="toggleSort('part_no')">料號</th>
+                <th class="pt-sortable" :class="sortCls('name')"      @click="toggleSort('name')">品名</th>
+                <th class="pt-sortable" :class="sortCls('brand')"     @click="toggleSort('brand')">廠牌/型號</th>
+                <th class="pt-sortable" :class="sortCls('category')"  @click="toggleSort('category')">類別</th>
                 <th>單位</th>
-                <th style="text-align:right">在庫</th>
-                <th style="text-align:right">成本</th>
-                <th style="text-align:right">定價</th>
+                <th class="pt-sortable r" :class="sortCls('stock')"      @click="toggleSort('stock')" style="text-align:right">在庫</th>
+                <th class="pt-sortable r" :class="sortCls('cost')"       @click="toggleSort('cost')" style="text-align:right">成本</th>
+                <th class="pt-sortable r" :class="sortCls('list_price')" @click="toggleSort('list_price')" style="text-align:right">定價</th>
                 <th>備注</th>
                 <th>操作</th>
               </tr>
@@ -335,15 +394,73 @@ function app() {
       const used = this.items.map(p => (p.brand || '').split('/')[0].trim()).filter(Boolean)
       return [...new Set([...this.brandPresets, ...used])].sort()
     },
+    // ── 分類籤（2026-09-14）────────────────────────────────────────
+    // 正規類別（categoryOptions，來自後端 PART_CATEGORIES）照主檔順序排在前面，
+    // 用過但不在主檔裡的值排在後面並標記出來。原本的下拉是從實際存過的值
+    // 推出來的，兩者混在一起分不出哪個是正式類別。
+    get catChips() {
+      const used = {}
+      let none = 0
+      this.items.forEach(p => {
+        const c = (p.category || '').trim()
+        if (!c) { none++; return }
+        used[c] = (used[c] || 0) + 1
+      })
+      const canonical = (this.categoryOptions || []).map(c => ({
+        key: c.name, label: c.name, prefix: c.prefix || '',
+        count: used[c.name] || 0, orphan: false,
+      }))
+      const known = new Set(canonical.map(c => c.key))
+      const orphans = Object.keys(used).filter(k => !known.has(k)).sort()
+        .map(k => ({ key: k, label: k, prefix: '', count: used[k], orphan: true }))
+      const chips = [...canonical, ...orphans]
+      // 未分類放最後：它不是一個類別，是「還沒歸類」
+      if (none) chips.push({ key: '__none__', label: '未分類', prefix: '', count: none, orphan: false })
+      return chips
+    },
+
+    // ── 排序（2026-09-14）──────────────────────────────────────────
+    // 這一頁原本完全沒有排序，順序固定是 API 的 id DESC。
+    sortPref: { sortMode: '', sortDir: 'asc', customOrder: [] },
+    get _sortGetters() {
+      const self = this
+      return {
+        part_no:    p => (p.part_no || ''),
+        name:       p => (p.name || ''),
+        brand:      p => (p.brand || ''),
+        category:   p => (p.category || ''),
+        // 在庫不是 parts 表的欄位，是另外查出來的即時數量——排序要用同一個
+        // 來源，不然畫面顯示 0 卻排在最前面
+        stock:      p => self.stockCount(p.part_no) || 0,
+        cost:       p => (p.cost || 0),
+        list_price: p => (p.list_price || 0),
+      }
+    },
+    sortCls(k) { return this.sortPref.sortMode === k ? this.sortPref.sortDir : '' },
+    async toggleSort(k) {
+      if (this.sortPref.sortMode === k) {
+        this.sortPref.sortDir = this.sortPref.sortDir === 'asc' ? 'desc' : 'asc'
+      } else {
+        // 換欄位時預設方向依型別：文字由 A→Z、數字由大→小（找最貴/最多才是常見需求）
+        this.sortPref.sortMode = k
+        this.sortPref.sortDir = ['stock', 'cost', 'list_price'].includes(k) ? 'desc' : 'asc'
+      }
+      if (typeof saveListPref === 'function') await saveListPref(this.session.token, 'parts', this.sortPref)
+    },
+
     get filtered() {
       let list = this.items
-      if (this.filterCat) list = list.filter(p => p.category === this.filterCat)
+      if (this.filterCat === '__none__') list = list.filter(p => !(p.category || '').trim())
+      else if (this.filterCat) list = list.filter(p => p.category === this.filterCat)
       const q = this.search.trim().toLowerCase()
       if (q) list = list.filter(p =>
         (p.part_no||'').toLowerCase().includes(q) ||
         (p.name||'').toLowerCase().includes(q) ||
         (p.brand||'').toLowerCase().includes(q)
       )
+      if (this.sortPref.sortMode && typeof applyListSort === 'function') {
+        list = applyListSort(list, this.sortPref, this._sortGetters, p => String(p.id))
+      }
       return list
     },
 
@@ -351,6 +468,14 @@ function app() {
       const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
       if (!s.token) { location.href = 'login.html'; return }
       this.session = s
+      // 排序偏好跟著帳號（user_list_prefs），不是瀏覽器
+      if (typeof loadListPref === 'function') {
+        const pf = await loadListPref(s.token, 'parts')
+        if (pf && pf.sortMode && this._sortGetters[pf.sortMode]) {
+          this.sortPref.sortMode = pf.sortMode
+          this.sortPref.sortDir = pf.sortDir || 'asc'
+        }
+      }
       try {
         const r = await fetch(`${API}/auth/me`, { headers: { Authorization: 'Bearer ' + s.token } })
         if (!r.ok) { location.href = 'login.html'; return }
@@ -550,5 +675,6 @@ function app() {
 </script>
   <script src="../static/notif.js"></script>
   <script src="../static/sidebar.js"></script>
+  <script src="../static/list-sort.js"></script>
 </body>
 </html>

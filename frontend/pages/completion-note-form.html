@@ -263,7 +263,7 @@
         { key: 'itemColumn',      name: '項目欄名', placeholder: '項目 / 規格說明' },
         { key: 'siteLabel',       name: '地點欄名', placeholder: '服務地點' },
         { key: 'managerLabel',    name: '負責人欄名', placeholder: '負責人' },
-        { key: 'signOwner',       name: '客戶簽章欄', placeholder: '客戶驗收 · 簽章蓋印' },
+        { key: 'signOwner',       name: '客戶簽章欄', placeholder: '客戶驗收 · 簽章' },
         { key: 'signVendor',      name: '我方簽章欄', placeholder: '執行單位 · 負責人' },
       ],
 
@@ -281,35 +281,35 @@
           sectionItems: '三、完工項目明細', sectionSummary: '四、施工說明',
           sectionTest: '五、測試與檢驗結果', sectionPending: '六、遺留事項 / 待改善',
           itemColumn: '工程項目 / 規格說明', siteLabel: '施工地點', managerLabel: '現場負責人',
-          signOwner: '業主驗收 · 簽章蓋印', signVendor: '承攬商 · 工程負責人',
+          signOwner: '業主驗收 · 簽章', signVendor: '承攬商 · 工程負責人',
         },
         system: {
           sectionCustomer: '一、客戶與建置環境', sectionPeriod: '二、建置期間與保固',
           sectionItems: '三、建置項目明細', sectionSummary: '四、系統設定說明',
           sectionTest: '五、功能測試與驗證結果', sectionPending: '六、待調整與未完成項目',
           itemColumn: '系統項目 / 設定內容', siteLabel: '建置環境', managerLabel: '負責工程師',
-          signOwner: '客戶驗收 · 簽章蓋印', signVendor: '建置單位 · 負責人',
+          signOwner: '客戶驗收 · 簽章', signVendor: '建置單位 · 負責人',
         },
         supply: {
           sectionCustomer: '一、客戶與交付地點', sectionPeriod: '二、交付期間與保固',
           sectionItems: '三、交付品項明細', sectionSummary: '四、交付說明',
           sectionTest: '五、點交與檢驗結果', sectionPending: '六、待補品項',
           itemColumn: '品名 / 規格', siteLabel: '交付地點', managerLabel: '交付負責人',
-          signOwner: '客戶點收 · 簽章蓋印', signVendor: '供應單位 · 負責人',
+          signOwner: '客戶點收 · 簽章', signVendor: '供應單位 · 負責人',
         },
         network: {
           sectionCustomer: '一、客戶與部署環境', sectionPeriod: '二、部署期間與保固',
           sectionItems: '三、部署項目明細', sectionSummary: '四、架構與設定說明',
           sectionTest: '五、連線與資安測試結果', sectionPending: '六、待調整項目',
           itemColumn: '設備 / 設定項目', siteLabel: '部署環境', managerLabel: '負責工程師',
-          signOwner: '客戶驗收 · 簽章蓋印', signVendor: '建置單位 · 負責人',
+          signOwner: '客戶驗收 · 簽章', signVendor: '建置單位 · 負責人',
         },
         service: {
           sectionCustomer: '一、客戶與服務地點', sectionPeriod: '二、服務期間',
           sectionItems: '三、服務項目明細', sectionSummary: '四、服務說明',
           sectionTest: '五、處理結果', sectionPending: '六、待追蹤事項',
           itemColumn: '服務項目 / 內容', siteLabel: '服務地點', managerLabel: '服務工程師',
-          signOwner: '客戶確認 · 簽章蓋印', signVendor: '服務單位 · 負責人',
+          signOwner: '客戶確認 · 簽章', signVendor: '服務單位 · 負責人',
         },
       },
 
@@ -386,7 +386,7 @@
           sectionItems: '三、完成項目明細', sectionSummary: '四、執行說明',
           sectionTest: '五、測試與檢驗結果', sectionPending: '六、待辦與未完成事項',
           itemColumn: '項目 / 規格說明', siteLabel: '服務地點', managerLabel: '負責人',
-          signOwner: '客戶驗收 · 簽章蓋印', signVendor: '執行單位 · 負責人',
+          signOwner: '客戶驗收 · 簽章', signVendor: '執行單位 · 負責人',
         }
         const out = Object.assign({}, base, this.defaults)
         for (const k in (this.form.labels || {})) {

@@ -29,6 +29,11 @@
 
     .wb{display:inline-flex;align-items:center;padding:2px 8px;border-radius:4px;font-size:11px;font-family:LINE Seed TW_OTF, sans-serif;font-weight:600}
     .wb-expired{background:var(--danger-light);color:var(--danger)}
+    .wb-q{background:var(--orange-light);color:var(--orange)}
+    /* 壓力帶的段在這一頁是可點的篩選器（共用的 .vm-andon__seg 是純顯示） */
+    .wb-seg{border:none;cursor:pointer;text-align:left;font-family:var(--font-zh)}
+    .wb-seg:hover{background:var(--icon-btn-bg)}
+    .wb-seg.on{outline:2px solid var(--accent);outline-offset:-2px}
     .wb-soon{background:var(--warning-light);color:var(--warning)}
     .wb-ok{background:var(--success-light);color:var(--success)}
     .wb-none{background:#F3F4F6;color:#6B7280}
@@ -98,37 +103,30 @@
       </div>
     </div>
 
-    <!-- Stats strip -->
-    <div class="stat-strip">
-      <div class="stat-pill">
-        <div>
-          <div class="stat-pill__val" x-text="devices.length"></div>
-          <div class="stat-pill__lbl">設備總數</div>
-        </div>
-      </div>
-      <div class="stat-pill">
-        <div>
-          <div class="stat-pill__val" style="color:var(--danger)" x-text="stats.expired"></div>
-          <div class="stat-pill__lbl">保固已過期</div>
-        </div>
-      </div>
-      <div class="stat-pill">
-        <div>
-          <div class="stat-pill__val" style="color:var(--warning)" x-text="stats.soon"></div>
-          <div class="stat-pill__lbl">30 天內到期</div>
-        </div>
-      </div>
-      <div class="stat-pill">
-        <div>
-          <div class="stat-pill__val" style="color:var(--success)" x-text="stats.ok"></div>
-          <div class="stat-pill__lbl">保固中</div>
-        </div>
-      </div>
-      <div class="stat-pill">
-        <div>
-          <div class="stat-pill__val" x-text="stats.none"></div>
-          <div class="stat-pill__lbl">無保固紀錄</div>
-        </div>
+    <!-- ── 到期時效壓力帶（2026-09-14）──────────────────────────────
+         原本這裡是「5 個統計數字」加下方「5 個分頁」，兩組控制項顯示完全
+         相同的 5 個數。收成一條帶子：每一段自己就是篩選器，右邊再加一條
+         比例條——數字說「有幾台」，比例條說「佔多少」，那是兩件事。 -->
+    <div class="vm-andon" style="margin-bottom:14px">
+      <button type="button" class="vm-andon__seg wb-seg" :class="{on: statusTab===''}"
+              @click="statusTab=''">
+        <span class="vm-andon__val" x-text="devices.length"></span>
+        <span class="vm-andon__lbl">設備總數<small>全部顯示</small></span>
+      </button>
+      <template x-for="b in WB_BUCKETS" :key="b.key">
+        <button type="button" class="vm-andon__seg wb-seg" :class="{on: statusTab===b.key}"
+                @click="statusTab = (statusTab === b.key ? '' : b.key)">
+          <span class="vm-andon__val" :style="'color:' + b.color" x-text="stats[b.key]"></span>
+          <span class="vm-andon__lbl"><span x-text="b.label"></span><small x-text="b.sub"></small></span>
+        </button>
+      </template>
+      <div class="vm-andon__bar">
+        <span class="vm-andon__track"
+              :title="WB_BUCKETS.map(b => b.label + ' ' + stats[b.key] + ' 台').join('／')">
+          <template x-for="b in WB_BUCKETS" :key="b.key">
+            <i :style="'width:' + wbPct(b.key) + '%;background:' + b.color"></i>
+          </template>
+        </span>
       </div>
     </div>
 
@@ -138,25 +136,6 @@
         <svg class="search-icon" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
         <input class="search-input" type="text" placeholder="搜尋設備名稱、SN、客戶…" x-model.debounce.300="search">
       </div>
-    </div>
-
-    <!-- Tabs -->
-    <div class="tab-bar">
-      <button class="tab" :class="{on: statusTab===''}" @click="statusTab=''">
-        全部 <span class="tab__cnt" x-text="devices.length"></span>
-      </button>
-      <button class="tab" :class="{on: statusTab==='expired'}" @click="statusTab='expired'">
-        已過期 <span class="tab__cnt" x-text="stats.expired"></span>
-      </button>
-      <button class="tab" :class="{on: statusTab==='soon'}" @click="statusTab='soon'">
-        即將到期 <span class="tab__cnt" x-text="stats.soon"></span>
-      </button>
-      <button class="tab" :class="{on: statusTab==='ok'}" @click="statusTab='ok'">
-        保固中 <span class="tab__cnt" x-text="stats.ok"></span>
-      </button>
-      <button class="tab" :class="{on: statusTab==='none'}" @click="statusTab='none'">
-        無紀錄 <span class="tab__cnt" x-text="stats.none"></span>
-      </button>
     </div>
 
     <!-- Loading -->
@@ -274,9 +253,27 @@
       },
 
       get stats() {
-        const out = { expired: 0, soon: 0, ok: 0, none: 0 }
+        const out = { expired: 0, soon: 0, q: 0, ok: 0, none: 0 }
         for (const d of this.devices) out[this.wbKey(d)]++
         return out
+      },
+
+      // ── 時效壓力帶（2026-09-14）────────────────────────────────────
+      // 原本頁面上「5 個統計數字」與「5 個分頁」顯示的是完全相同的 5 個數，
+      // 兩組控制項、兩份同樣的資訊。收成一條帶子：每一段自己就是篩選器，
+      // 而且多了一條比例條看得出整體結構。
+      WB_BUCKETS: [
+        { key: 'expired', label: '已過期',   sub: '需立即處理', color: 'var(--danger)' },
+        { key: 'soon',    label: '30 天內',  sub: '準備續約',   color: 'var(--warning)' },
+        { key: 'q',       label: '90 天內',  sub: '可提前接觸', color: 'var(--orange)' },
+        { key: 'ok',      label: '保固中',   sub: '無須動作',   color: 'var(--success)' },
+        { key: 'none',    label: '無紀錄',   sub: '缺保固資料', color: 'var(--text-dim)' },
+      ],
+      wbPct(key) {
+        const t = this.devices.length
+        if (!t) return 0
+        const n = this.stats[key] || 0
+        return n ? Math.max(2, Math.round(n / t * 100)) : 0
       },
 
       get filtered() {
@@ -331,18 +328,22 @@
       },
       collapseAll() { this.expanded = {} },
 
+      // 2026-09-14：補一個 90 天級距。原本只有「30 天內」一個預警桶——
+      // 到期前 30 天才知道等於沒有準備時間，續約報價與客戶決策都不只 30 天。
+      // 級距跟首頁參考稿的時效分級一致（已逾期／近期／90 天內）。
       wbKey(d) {
         const dl = d.daysLeft
         if (dl === null || dl === undefined) return 'none'
         if (dl < 0)   return 'expired'
         if (dl <= 30) return 'soon'
+        if (dl <= 90) return 'q'
         return 'ok'
       },
       wbLabel(d) {
         const dl = d.daysLeft
         if (dl === null || dl === undefined) return '無紀錄'
         if (dl < 0)   return '已過期 ' + Math.abs(dl) + ' 天'
-        if (dl <= 30) return dl + ' 天後到期'
+        if (dl <= 90) return dl + ' 天後到期'
         return '保固中'
       },
 

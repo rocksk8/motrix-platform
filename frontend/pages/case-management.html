@@ -75,6 +75,97 @@
     .cm-view-toggle { display:inline-flex; padding:2px; background:#F0EFEB; border-radius:7px; gap:2px; margin-bottom:10px; }
     .cm-view-toggle button { border:none; background:transparent; font-family:var(--font-zh); font-size:11px; font-weight:600; padding:5px 11px; border-radius:5px; color:var(--text-dim); cursor:pointer; }
     .cm-view-toggle button.active { background:#fff; color:var(--text-primary); box-shadow:0 1px 2px rgba(0,0,0,.08); }
+    /* ── 關卡矩陣（2026-09-14）──────────────────────────────────────────
+       系統對「完結案」已經定義了五項前置條件（§5.2），但它們散在五個頁籤裡，
+       而且只有在按下「完結案」被 400 擋下來時才看得到。這個檢視把五關攤成
+       欄位、一案一列，並用「最接近結案」當預設排序——那是既有畫面完全給不出、
+       而且最會改變行動順序的資訊。
+
+       判定來自 /api/quotations/gate-matrix，跟擋下完結案是同一份後端程式碼，
+       所以「5/5 可結案」等於「現在按下去不會被擋」。 */
+    .cm-matrix {
+      height: calc(100vh - var(--topbar-h));
+      overflow: auto;
+      padding: 16px 20px 28px;
+      background: var(--white);
+    }
+    .cm-matrix__head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+    .cm-matrix__title { font-size: 15px; font-weight: 700; display: inline-flex; align-items: center; gap: 8px; }
+    .cm-matrix__title::before { content: ''; width: var(--v4-mark-h); height: 14px; background: var(--accent); flex: none; }
+    .cm-matrix__sub { font-size: 11.5px; color: var(--text-dim); }
+
+    /* 到期帶：點任一段就篩出那一段的案件 */
+    .cm-due {
+      display: flex; align-items: stretch;
+      border: 1px solid var(--border-light); border-radius: var(--radius);
+      overflow: hidden; margin-bottom: 14px; background: var(--white);
+    }
+    .cm-due__seg {
+      flex: 1; min-width: 0; padding: 8px 6px; text-align: center; cursor: pointer;
+      border-right: 1px solid var(--border-light); background: transparent;
+      font-family: var(--font-zh);
+    }
+    .cm-due__seg:last-child { border-right: none; }
+    .cm-due__seg:hover { background: var(--icon-btn-bg); }
+    .cm-due__seg.on { outline: 2px solid var(--accent); outline-offset: -2px; }
+    .cm-due__seg--past  { background: var(--danger-light); }
+    .cm-due__seg--today { background: var(--warning-light); }
+    .cm-due__k { font-size: 10px; color: var(--text-dim); letter-spacing: .04em; }
+    .cm-due__n {
+      font-size: 16px; font-weight: 700; line-height: 1.2;
+      font-family: var(--font-en); font-variant-numeric: tabular-nums;
+    }
+    .cm-due__seg--past .cm-due__n  { color: var(--danger); }
+    .cm-due__seg--today .cm-due__n { color: var(--warning); }
+    .cm-due__seg--zero .cm-due__n  { color: var(--border-light); }
+    .cm-due__l { font-size: 10px; color: var(--text-dim); }
+
+    .cm-mtools { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+    .cm-mtools__lbl { font-size: 11.5px; color: var(--text-dim); margin-right: 2px; }
+
+    .cm-mtx-scroll { overflow-x: auto; border: 1px solid var(--border-light); border-radius: var(--radius); }
+    table.cm-mtx { border-collapse: collapse; width: 100%; min-width: 1000px; background: var(--white); }
+    table.cm-mtx th {
+      font-size: 10.5px; font-weight: 700; letter-spacing: .06em; color: var(--text-dim);
+      text-align: left; padding: 9px 10px; white-space: nowrap;
+      border-bottom: 1px solid var(--border-light); background: var(--icon-btn-bg);
+      position: sticky; top: 0; z-index: 1;
+    }
+    table.cm-mtx th.cm-gate-h { text-align: center; border-left: 1px solid var(--border-light); }
+    table.cm-mtx th.cm-gate-h span {
+      display: block; font-weight: 400; letter-spacing: 0; font-size: 10px; opacity: .75; margin-top: 1px;
+    }
+    table.cm-mtx td { padding: 8px 10px; border-bottom: 1px solid var(--border-light); vertical-align: middle; }
+    table.cm-mtx tbody tr { cursor: pointer; }
+    table.cm-mtx tbody tr:hover { background: var(--icon-btn-bg); }
+    table.cm-mtx tbody tr:last-child td { border-bottom: none; }
+    /* 整列不染色（會蓋掉格子裡的燈號），異常只用最左緣 3px 的脊表示——
+       長表格上下捲動時它是唯一還看得見的訊號。 */
+    td.cm-mtx__spine { width: 3px; padding: 0 !important; }
+    td.cm-gate { text-align: center; border-left: 1px solid var(--border-light); width: 96px; }
+    .cm-gatecell { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+    .cm-gatecell__v {
+      font-size: 11.5px; font-weight: 600; display: flex; align-items: center; gap: 4px;
+      font-family: var(--font-en); font-variant-numeric: tabular-nums; white-space: nowrap;
+    }
+    .cm-gatecell--na .cm-gatecell__v { color: var(--text-dim); font-weight: 400; }
+    .cm-gatecell .vm-bar { width: 54px; }
+    .cm-mtx__no {
+      font-size: 12.5px; font-weight: 700;
+      font-family: var(--font-en); font-variant-numeric: tabular-nums;
+    }
+    .cm-mtx__cust { font-size: 12px; color: var(--text-secondary); margin-top: 1px; }
+    .cm-mtx__amt {
+      font-size: 12.5px; font-weight: 600; text-align: right; white-space: nowrap;
+      font-family: var(--font-en); font-variant-numeric: tabular-nums;
+    }
+    .cm-mtx__ready { font-size: 11px; font-weight: 700; white-space: nowrap; }
+    .cm-mtx__due {
+      font-size: 11.5px; white-space: nowrap;
+      font-family: var(--font-en); font-variant-numeric: tabular-nums;
+    }
+    .cm-mtx__empty { padding: 30px 16px; text-align: center; font-size: 12.5px; color: var(--text-dim); }
+
 
     /* 看板檢視——側欄只有 300px 放不下橫向多欄，改成依狀態分組、垂直堆疊呈現，
        同一眼掃過三個分類，卡片沿用既有 .cm-card 樣式，不用另外做一套。 */
@@ -133,9 +224,22 @@
     /* 2026-09-14：原本是 4 張有框小卡單獨一列，加上下方的 meta 列，
        光標頭就疊了 4 層。改成無框、以分隔線區隔的數字帶，並跟 meta 併成同一列。 */
     .cm-headline { display:flex; align-items:center; gap:18px; padding:2px 20px 12px; flex-wrap:wrap; }
-    .cm-kpi { display:flex; align-items:stretch; gap:0; flex-wrap:wrap; }
+    /* 2026-09-14：原本是四顆並排的數字（合約金額／已收款／未收款／執行進度），
+       但**已收 + 未收 = 合約**——三個數字在講同一件事，而且三個都用同樣的字級
+       與權重，等於沒有主從。改成「一個主數字 + 兩條量表」：金額是事實，
+       收款與進度是比例，比例本來就該用長條而不是再來一個數字。
+       未收款沒有消失，它退到量表下方當附註——它是正常狀態，不是第二個主角。 */
+    .cm-kpi { display:flex; align-items:center; gap:0; flex-wrap:wrap; }
     .cm-kpi__pill { display:inline-flex; flex-direction:column; justify-content:center; padding:0 16px; min-width:86px; border-left:1px solid var(--border-light); }
     .cm-kpi__pill:first-child { border-left:0; padding-left:0; }
+    .cm-kpi__gauge {
+      display:flex; flex-direction:column; justify-content:center; gap:4px;
+      padding:0 16px; min-width:170px; border-left:1px solid var(--border-light);
+    }
+    .cm-kpi__gtop { display:flex; align-items:baseline; gap:6px; flex-wrap:wrap; }
+    .cm-kpi__gname { font-size:9.5px; color:var(--text-dim); font-family:LINE Seed TW_OTF, sans-serif; letter-spacing:.06em; }
+    .cm-kpi__gpct { font-size:14px; font-weight:700; font-family:LINE Seed TW_OTF, sans-serif; line-height:1; letter-spacing:-.01em; }
+    .cm-kpi__gsub { font-size:10px; color:var(--text-dim); font-family:LINE Seed TW_OTF, sans-serif; margin-left:auto; }
     .cm-kpi__val { font-size:15px; font-weight:700; font-family:LINE Seed TW_OTF, sans-serif; color:var(--text-primary); line-height:1.15; letter-spacing:-.01em; }
     .cm-kpi__lbl { font-size:9.5px; color:var(--text-dim); font-family:LINE Seed TW_OTF, sans-serif; letter-spacing:.06em; margin-top:4px; }
     /* 配色規則：紅色只留給真正的異常。
@@ -181,7 +285,24 @@
     .pay-strip__val { font-size:14px; font-weight:700; color:var(--text-primary); }
     .pay-strip__bar { flex:1; min-width:120px; }
     .pay-strip__pct { font-size:11.5px; color:var(--text-secondary); white-space:nowrap; }
-    .cm-section-title { display:flex; align-items:center; gap:10px; font-size:11px; font-weight:700; font-family:LINE Seed TW_OTF, sans-serif; color:var(--text-dim); text-transform:uppercase; letter-spacing:.08em; margin-bottom:14px; }
+    .cm-section-title { display:flex; align-items:center; gap:10px; font-size:12.5px; font-weight:700; font-family:var(--font-zh); color:var(--text-primary); letter-spacing:0; margin:22px 0 12px; }
+    .cm-section-title:first-child { margin-top:0; }
+
+    /* 欄寬反映內容長度，不是一律滿寬。justify-content:start 讓短欄位
+       靠左收好，右側留白是刻意的——比撐出 750px 的空框乾淨。 */
+    .cm-fgrid { display:grid; gap:12px 14px; margin-bottom:12px; align-items:end; }
+    .cm-fgrid--contract { grid-template-columns:repeat(4, minmax(0,1fr)); }
+    .cm-fgrid--contract > :nth-child(1),
+    .cm-fgrid--contract > :nth-child(2) { grid-column:span 2; }
+    .cm-fgrid--contract > :nth-child(5) { grid-column:1 / -1; }
+    .cm-fgrid--people { grid-template-columns:repeat(3, minmax(0,240px)); justify-content:start; margin-bottom:20px; }
+    .cm-fgrid--dates  { grid-template-columns:repeat(2, minmax(0,200px)); justify-content:start; }
+    @media (max-width:900px) {
+      .cm-fgrid--contract { grid-template-columns:repeat(2, minmax(0,1fr)); }
+      .cm-fgrid--contract > :nth-child(1),
+      .cm-fgrid--contract > :nth-child(2) { grid-column:1 / -1; }
+      .cm-fgrid--people { grid-template-columns:repeat(2, minmax(0,1fr)); }
+    }
     .cm-section-title::after { content:''; flex:1; height:1px; background:var(--border-light); }
     .cm-subtabs { display:flex; margin:-20px -20px 0; padding:0 20px; background:#F7F6F3; border-bottom:1px solid var(--border-light); flex-shrink:0; overflow-x:auto; -webkit-overflow-scrolling:touch; }
     .cm-subtabs::-webkit-scrollbar { height:3px; }
@@ -505,7 +626,119 @@
 <div class="app-shell">
 
   <main class="main" style="padding:0;overflow:hidden">
-    <div class="cm-layout">
+    <!-- ── 關卡矩陣檢視（2026-09-14）：全寬，取代兩欄版面 ── -->
+    <div class="cm-matrix" x-show="caseViewMode==='matrix'" x-cloak>
+      <div class="cm-matrix__head">
+        <span class="cm-matrix__title">案件關卡矩陣</span>
+        <span class="cm-matrix__sub"
+              x-text="gmLoaded ? matrixRows.length + ' / ' + gateMatrix.length + ' 件　·　五關全過即可完結案'
+                               : '載入中…'"></span>
+        <div class="cm-view-toggle" style="margin-bottom:0;margin-left:auto">
+          <button :class="{active: caseViewMode==='list'}"   @click="caseViewMode='list'">清單</button>
+          <button :class="{active: caseViewMode==='board'}"  @click="caseViewMode='board'">看板</button>
+          <button :class="{active: caseViewMode==='matrix'}" @click="switchToMatrix()">矩陣</button>
+        </div>
+      </div>
+
+      <!-- 到期帶：資料來自 gate-matrix 一併回傳的階段到期資訊，不必另外打 stage-board -->
+      <div class="cm-due" x-show="gmLoaded">
+        <template x-for="b in matrixDue" :key="b.key">
+          <button type="button" class="cm-due__seg"
+                  :class="{
+                    /* 0 件時不上底色——紅底配一個 0 會把視線拉過去看一件沒事的事 */
+                    'cm-due__seg--past':  b.key==='overdue' && b.n > 0,
+                    'cm-due__seg--today': b.key==='today' && b.n > 0,
+                    'cm-due__seg--zero':  b.n===0,
+                    on: gmDue===b.key
+                  }"
+                  @click="gmDue = (gmDue===b.key ? '' : b.key)">
+            <span class="cm-due__k" x-text="b.k"></span>
+            <span class="cm-due__n" x-text="b.n"></span>
+            <span class="cm-due__l" x-text="b.l"></span>
+          </button>
+        </template>
+      </div>
+
+      <div class="cm-mtools">
+        <span class="cm-mtools__lbl">排序</span>
+        <button type="button" class="aq-sort" :class="{on: gmSort==='ready'}"  @click="gmSort='ready'">最接近結案</button>
+        <button type="button" class="aq-sort" :class="{on: gmSort==='stuck'}"  @click="gmSort='stuck'">卡最久</button>
+        <button type="button" class="aq-sort" :class="{on: gmSort==='amount'}" @click="gmSort='amount'">金額</button>
+        <span class="cm-mtools__lbl" style="margin-left:10px">只看</span>
+        <button type="button" class="aq-sort" :class="{on: gmFilter==='ready'}"    @click="gmFilter = gmFilter==='ready'?'':'ready'">可結案</button>
+        <button type="button" class="aq-sort" :class="{on: gmFilter==='settling'}" @click="gmFilter = gmFilter==='settling'?'':'settling'">待精算</button>
+        <button type="button" class="aq-sort" :class="{on: gmFilter==='mine'}"     @click="gmFilter = gmFilter==='mine'?'':'mine'">我負責的</button>
+      </div>
+
+      <div class="cm-mtx-scroll">
+        <table class="cm-mtx">
+          <thead>
+            <tr>
+              <th class="cm-mtx__spine" aria-hidden="true"></th>
+              <th>案件</th>
+              <th style="text-align:right">合約金額</th>
+              <th>負責</th>
+              <template x-for="g in gateHeads" :key="g.key">
+                <th class="cm-gate-h"><span x-text="g.label" style="font-weight:700;font-size:10.5px;letter-spacing:.06em;display:block"></span><span x-text="g.hint"></span></th>
+              </template>
+              <th style="border-left:1px solid var(--border-light)">下一到期</th>
+              <th style="text-align:right">結案</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="row in matrixRows" :key="row.quoteNo">
+              <tr @click="openFromMatrix(row.quoteNo)">
+                <td class="cm-mtx__spine" :style="'background:' + rowSpine(row)"></td>
+                <td>
+                  <div class="cm-mtx__no" x-text="row.quoteNo"></div>
+                  <div class="cm-mtx__cust"
+                       x-text="(row.customerName || '(未填客戶)') + (row.projectName ? '　|　' + row.projectName : '')"></div>
+                </td>
+                <td class="cm-mtx__amt" x-text="canSeeFinancial() ? (row.total||0).toLocaleString() : '—'"></td>
+                <td>
+                  <span class="vm-person" x-show="row.salesPerson">
+                    <span class="vm-person__av" x-text="(row.salesPerson||'').charAt(0)"></span>
+                    <span x-text="row.salesPerson"></span>
+                  </span>
+                  <span x-show="!row.salesPerson" style="font-size:11.5px;color:var(--text-dim)">—</span>
+                </td>
+                <template x-for="g in row.gates" :key="g.key">
+                  <td class="cm-gate">
+                    <span class="cm-gatecell" :class="{'cm-gatecell--na': g.state==='na'}" :title="g.reason || ''">
+                      <span class="cm-gatecell__v">
+                        <span class="vm-lamp" :class="'vm-lamp--' + gateTone(g, row)"></span>
+                        <span x-text="g.value"></span>
+                      </span>
+                      <span class="vm-bar">
+                        <i class="vm-bar__fill" :class="'vm-bar__fill--' + gateTone(g, row)"
+                           :style="'width:' + Math.round((g.ratio == null ? 1 : g.ratio) * 100) + '%'"></i>
+                      </span>
+                    </span>
+                  </td>
+                </template>
+                <td class="cm-mtx__due"
+                    :style="row.stageOverdue > 0 ? 'color:var(--danger);font-weight:700'
+                            : (row.nextDue === today ? 'color:var(--warning);font-weight:700' : 'color:var(--text-secondary)')"
+                    x-text="dueText(row)"></td>
+                <td style="text-align:right">
+                  <span class="cm-mtx__ready"
+                        :style="row.canClose ? 'color:var(--success)' : 'color:var(--text-dim)'"
+                        x-text="readyText(row)"></span>
+                </td>
+              </tr>
+            </template>
+            <tr x-show="gmLoaded && matrixRows.length === 0">
+              <td colspan="11" class="cm-mtx__empty">沒有符合條件的案件</td>
+            </tr>
+            <tr x-show="!gmLoaded">
+              <td colspan="11" class="cm-mtx__empty">載入中…</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="cm-layout" x-show="caseViewMode!=='matrix'">
 
       <!-- ── 左側：案件列表 ── -->
       <div class="cm-list" :class="{'mob-hidden': selected && isMobileView}">
@@ -523,6 +756,7 @@
             <div class="cm-view-toggle" style="margin-bottom:0;margin-left:auto">
               <button :class="{active: caseViewMode==='list'}" @click="caseViewMode='list'">清單</button>
               <button :class="{active: caseViewMode==='board'}" @click="caseViewMode='board'">看板</button>
+              <button :class="{active: caseViewMode==='matrix'}" @click="switchToMatrix()">矩陣</button>
             </div>
           </div>
           <div class="cm-list__search">
@@ -757,25 +991,37 @@
                   <span class="cm-kpi__val" x-text="'NT$ ' + (totalWithTax()||0).toLocaleString()"></span>
                   <span class="cm-kpi__lbl">合約金額</span>
                 </div>
-                <div class="cm-kpi__pill" :class="receivedPct()>0 ? 'success' : ''" x-show="canSeeFinancial()">
-                  <span class="cm-kpi__val" x-text="'NT$ ' + receivedTotal().toLocaleString()"></span>
-                  <span class="cm-kpi__lbl">已收款（<span x-text="receivedPct()"></span>%）</span>
+                <div class="cm-kpi__gauge" x-show="canSeeFinancial()">
+                  <div class="cm-kpi__gtop">
+                    <span class="cm-kpi__gname">收款</span>
+                    <span class="cm-kpi__gpct" :style="receivedPct()>=100 ? 'color:var(--success)' : ''"
+                          x-text="receivedPct() + '%'"></span>
+                    <span class="cm-kpi__gsub"
+                          x-text="'已收 ' + receivedTotal().toLocaleString() + '　未收 ' + outstandingTotal().toLocaleString()"></span>
+                  </div>
+                  <span class="vm-bar">
+                    <i class="vm-bar__fill" :class="receivedPct()>=100 ? 'vm-bar__fill--ok' : 'vm-bar__fill--warn'"
+                       :style="'width:' + Math.min(100, receivedPct()) + '%'"></i>
+                  </span>
                 </div>
-                <div class="cm-kpi__pill" :class="outstandingTotal()>0 ? 'warning' : 'success'" x-show="canSeeFinancial()">
-                  <span class="cm-kpi__val" x-text="'NT$ ' + outstandingTotal().toLocaleString()"></span>
-                  <span class="cm-kpi__lbl">未收款</span>
-                </div>
-                <div class="cm-kpi__pill" :class="caseProgressPct()===100 ? 'success' : ''">
-                  <span class="cm-kpi__val" x-text="caseProgressPct() + '%'"></span>
-                  <span class="cm-kpi__lbl">執行進度</span>
+                <div class="cm-kpi__gauge">
+                  <div class="cm-kpi__gtop">
+                    <span class="cm-kpi__gname">執行進度</span>
+                    <span class="cm-kpi__gpct" :style="caseProgressPct()===100 ? 'color:var(--success)' : ''"
+                          x-text="caseProgressPct() + '%'"></span>
+                    <span class="cm-kpi__gsub"
+                          x-text="(cr.caseRecord?.stages||[]).filter(s=>s.done).length + ' / ' + (cr.caseRecord?.stages||[]).length + ' 階段完成'"></span>
+                  </div>
+                  <span class="vm-bar">
+                    <i class="vm-bar__fill" :class="caseProgressPct()===100 ? 'vm-bar__fill--ok' : 'vm-bar__fill--warn'"
+                       :style="'width:' + Math.min(100, caseProgressPct()) + '%'"></i>
+                  </span>
                 </div>
               </div><!-- /.cm-kpi -->
 
               <div class="cm-meta">
                 <span><span class="cm-meta__lbl">報價日期</span><span class="cm-meta__val" x-text="(selected.quote_date||selected.created_at||'').slice(0,10)||'—'"></span></span>
                 <span><span class="cm-meta__lbl">負責業務</span><span class="cm-meta__val" x-text="selected.sales_person||'—'"></span></span>
-                <span><span class="cm-meta__lbl">施工階段</span><span class="cm-meta__val"
-                      x-text="(cr.caseRecord?.stages||[]).filter(s=>s.done).length + ' / ' + (cr.caseRecord?.stages||[]).length + ' 完成'"></span></span>
                 <button @click="showLog=!showLog"
                         style="margin-left:auto;font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;background:none;border:none;cursor:pointer;color:var(--text-dim);padding:0;text-decoration:underline;flex-shrink:0"
                         x-text="showLog ? '收起操作紀錄' : '操作紀錄 ▸'"></button>
@@ -835,8 +1081,21 @@
               <!-- ══ 案件資訊 Tab ══ -->
               <div x-show="activeTab==='biz'">
 
-                <div class="cm-section-title">合約資訊</div>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+                <div class="cm-section-title">
+                  合約資訊
+                  <!-- 已存在的案件用這顆手動帶（2026-09-14）。新建案件在
+                       ensureCaseRecord() 就帶過了，不會重複問。只填空欄位，
+                       不覆蓋案件這邊已經改過的值。 -->
+                  <button type="button" class="aq-sort" x-show="quoteContractAvailable"
+                          @click="pullContractFromQuote()"
+                          style="margin-left:auto;font-weight:400"
+                          title="從這張報價單帶入交貨地址、交貨條件與聯絡人——只填空白欄位，不覆蓋已經有的值">
+                    從報價單帶入
+                  </button>
+                </div>
+                <!-- 四欄網格：地址與交貨條件各佔兩欄，聯絡人與電話各佔一欄
+                     （內容就那麼短，給滿寬只是製造空白與框線噪音），備註跨滿。 -->
+                <div class="cm-fgrid cm-fgrid--contract">
                   <div class="fi-group">
                     <label class="fi-label">交貨 / 安裝地址</label>
                     <input class="fi" type="text" placeholder="地址" x-model="cr.caseRecord.contract.deliveryAddress" @input="setDirty()">
@@ -860,7 +1119,8 @@
                 </div>
 
                 <div class="cm-section-title">人員角色</div>
-                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px">
+                <!-- 三個下拉裝的是人名，給 1fr 會各撐到 500px；上限 240px 就夠 -->
+                <div class="cm-fgrid cm-fgrid--people">
                   <div class="fi-group">
                     <label class="fi-label">填單人</label>
                     <select class="fi" x-model="cr.caseRecord.roles.filler" @change="setDirty()">
@@ -891,7 +1151,7 @@
                 </div>
 
                 <div class="cm-section-title">專案期間</div>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+                <div class="cm-fgrid cm-fgrid--dates">
                   <div class="fi-group">
                     <label class="fi-label">開始日期</label>
                     <input class="fi" type="date" x-model="cr.caseRecord.projectTimeline.startDate" @input="setDirty()">
@@ -3161,13 +3421,14 @@
                     </label>
                     <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--text-secondary);font-family:var(--font-zh);cursor:pointer">
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
-                      <span x-text="newCommentPhotos.length > 0 ? `已選 ${newCommentPhotos.length} 張照片` : '附加照片'"></span>
-                      <input type="file" accept="image/*" multiple style="display:none" @change="onCommentPhotosSelected($event)">
+                      <span x-text="newCommentPhotos.length > 0 ? `已選 ${newCommentPhotos.length} 個檔案` : '附加照片／PDF'"></span>
+                      <input type="file" accept="image/jpeg,image/png,application/pdf" multiple style="display:none"
+                             x-ref="commentPhotoInput" @change="onCommentPhotosSelected($event)">
                     </label>
                     <span x-show="postingComment" style="font-size:11px;color:var(--text-dim);font-family:var(--font-zh)">發送中…</span>
-                    <button @click="postComment()" :disabled="!newComment.trim() || postingComment"
+                    <button @click="postComment()" :disabled="(!newComment.trim() && newCommentPhotos.length === 0) || postingComment"
                             style="padding:5px 16px;font-size:12px;font-weight:600;border-radius:6px;border:none;cursor:pointer;font-family:var(--font-zh);transition:background .12s"
-                            :style="newComment.trim() && !postingComment ? 'background:var(--accent);color:#fff' : 'background:#E5E7EB;color:#9CA3AF;cursor:not-allowed'">
+                            :style="(newComment.trim() || newCommentPhotos.length) && !postingComment ? 'background:var(--accent);color:#fff' : 'background:#E5E7EB;color:#9CA3AF;cursor:not-allowed'">
                       發布更新
                     </button>
                   </div>
@@ -3223,6 +3484,34 @@
                                 <img :src="photoUrl(p.path)" loading="lazy"
                                      style="width:72px;height:72px;object-fit:cover;border-radius:6px;border:1px solid var(--border-light)">
                               </a>
+                            </template>
+                          </div>
+                        </template>
+                        <!-- 留言／業務開發記錄自己的附件（DB v82，2026-09-14）。
+                             圖片出縮圖、PDF 出檔名連結——PDF 沒有縮圖可出，
+                             硬塞一個灰色方塊不會比檔名更好認。
+                             刪除鈕只給 admin+（使用者裁示）。 -->
+                        <template x-if="(item.files||[]).length > 0">
+                          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;align-items:flex-start">
+                            <template x-for="f in item.files" :key="f.id">
+                              <div style="position:relative">
+                                <template x-if="isImageFile(f)">
+                                  <a :href="fileUrl(f)" target="_blank" :title="f.filename">
+                                    <img :src="fileUrl(f)" loading="lazy"
+                                         style="width:72px;height:72px;object-fit:cover;border-radius:6px;border:1px solid var(--border-light);display:block">
+                                  </a>
+                                </template>
+                                <template x-if="!isImageFile(f)">
+                                  <a :href="fileUrl(f)" target="_blank"
+                                     style="display:flex;align-items:center;gap:5px;padding:6px 10px;border:1px solid var(--border-light);border-radius:6px;font-size:11px;color:var(--text-secondary);text-decoration:none;background:#fff;max-width:190px">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>
+                                    <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" x-text="f.filename"></span>
+                                  </a>
+                                </template>
+                                <button x-show="canDeleteAttachment()" @click.stop="deleteCommentFile(item, f)"
+                                        title="刪除附件（限管理員）"
+                                        style="position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;border:1px solid var(--border-light);background:#fff;color:var(--text-dim);font-size:11px;line-height:1;cursor:pointer;padding:0">×</button>
+                              </div>
                             </template>
                           </div>
                         </template>

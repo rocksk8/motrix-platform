@@ -19,14 +19,30 @@
       min-height: calc(100vh - var(--topbar-h));
       background: var(--white);
     }
-    .ah-bar { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 16px; }
-    .ah-field { display: flex; flex-direction: column; gap: 4px; }
-    .ah-field label { font-size: 11px; color: var(--text-dim); }
+    /* 2026-09-14：上方「範圍」原本是「標籤＋下拉方框」，下方月份卻已經是籤列
+       ——同一頁兩種語言。範圍改用同一組籤，搜尋改成跟其他清單頁一致的
+       內嵌圖示搜尋框，label 移除（placeholder 已經講得比 label 更清楚）。 */
+    .ah-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+    .ah-search {
+      display: flex; align-items: center; gap: 7px; flex: 1; min-width: 240px;
+      border: 1px solid var(--border-light); border-radius: var(--radius);
+      background: #fff; padding: 0 10px;
+    }
+    .ah-search:focus-within { border-color: var(--ghost-hover-border); }
+    .ah-search svg { color: var(--text-dim); flex-shrink: 0; }
+    .ah-search input {
+      flex: 1; min-width: 0; border: none; outline: none; background: transparent;
+      font-size: 12px; font-family: var(--font-zh); padding: 7px 0; color: var(--text-primary);
+    }
     .ah-months { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
     .ah-month {
-      border: 1px solid var(--border); border-radius: 18px; padding: 4px 12px;
+      /* --border 是側欄用的深色 #2A2A2A，套在白底籤上會是一圈黑框；
+         這裡要的是淺色分隔線 */
+      border: 1px solid var(--border-light); border-radius: 18px; padding: 4px 12px;
       font-size: 12px; cursor: pointer; background: #fff; display: inline-flex; gap: 6px; align-items: center;
+      font-family: var(--font-zh); color: var(--text-secondary);
     }
+    .ah-month:hover { border-color: var(--ghost-hover-border); }
     .ah-month.on { border-color: var(--accent); color: var(--accent); background: var(--accent-light); }
     .ah-month .n { font-family: 'LINE Seed TW_OTF', sans-serif; color: var(--text-dim); font-size: 11px; }
     .ah-table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -54,20 +70,22 @@
     </div>
 
     <div class="ah-bar">
-      <div class="ah-field">
-        <label>範圍</label>
-        <select id="ah-scope" class="fi" x-model="scope" @change="reload()" style="min-width:150px">
-          <option value="mine">我簽核的</option>
-          <option value="all" x-show="isAdmin">全公司</option>
-        </select>
-      </div>
-      <div class="ah-field" style="flex:1;min-width:220px">
-        <label>搜尋（案件編號、客戶、備註、簽核人都能打）</label>
-        <input id="ah-q" class="fi" type="text" x-model="q" @keydown.enter="reload()"
-               placeholder="例如：MQ-202609-001、台積電、金額有誤、corbin">
+      <!-- 範圍：跟下方月份同一組籤。
+           id 留在籤上而不是留一個隱藏的 <select>——隱藏的元素讓
+           `option[value=all]:visible` 這種斷言對任何人都回 0，測試會永遠綠，
+           等於把守門的那一題變成擺設。 -->
+      <span id="ah-scope-mine" class="ah-month" :class="{on: scope === 'mine'}"
+            @click="scope='mine'; reload()">我簽核的</span>
+      <span id="ah-scope-all" class="ah-month" x-show="isAdmin" :class="{on: scope === 'all'}"
+            @click="scope='all'; reload()">全公司</span>
+
+      <div class="ah-search">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <input id="ah-q" type="text" x-model="q" @keydown.enter="reload()"
+               placeholder="搜尋案件編號、客戶、備註、簽核人…">
       </div>
       <button id="ah-search" class="btn btn-primary btn-sm" @click="reload()">搜尋</button>
-      <button id="ah-clear" class="btn btn-secondary btn-sm" @click="q=''; month=''; reload()">清除條件</button>
+      <button id="ah-clear" class="btn btn-ghost btn-sm" @click="q=''; month=''; reload()">清除條件</button>
     </div>
 
     <!-- 每個月簽了幾筆：點一下就只看那個月 -->

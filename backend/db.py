@@ -84,7 +84,7 @@ DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR = os.path.join(
 # v77: completion_notes（完工單，比照 shipping_notes 同構＋工程完工單特有欄位），
 # 2026-09-12 交辦，見 _m077 docstring。
 # v78: completion_notes.contact_phone（完工單帶入報價單聯絡人電話），2026-09-12。
-CURRENT_VERSION = 81
+CURRENT_VERSION = 82
 
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
 # execution model) whenever the current request is authenticated as the 'demo'
@@ -3312,6 +3312,33 @@ def _m080_user_request_log(conn):
     conn.commit()
 
 
+def _m082_feed_attachments(conn):
+    """案件動態留言與業務開發記錄可附照片／檔案（2026-09-14 使用者要求：
+    「業務開發跟案件的動態都要有上傳照片或是檔案的功能」）。
+
+    **為什麼是 JSON 欄位而不是獨立的附件表**：這兩處的附件沒有任何「跨紀錄查詢」
+    的需求——不會有人問「這張照片還被哪幾則留言引用」。附件永遠隨著它所屬的那
+    一則留言／記錄一起讀、一起刪，生命週期完全綁定。開一張表要多一次 JOIN、
+    多一組外鍵維護，換不到任何查詢能力。這跟 `_m078` 決定「開欄位不塞 data_json」
+    的判準是同一個：**看有沒有跨列查詢的需求**，不是看資料長得複雜不複雜。
+    報價單／出貨單／開票憑據三處的回簽附件（2026-08-24）也是存 JSON 欄位，
+    這裡沿用同一個慣例與同一組 helpers/uploads.py 函式。
+
+    欄位存的是 save_document_files() 回傳的 metadata 陣列
+    （id/filename/path/size/mime/uploadedBy/uploadedAt），實體檔案在 uploads/
+    底下，由既有的 /api/uploads/{file_path:path} 簽名 URL 端點提供讀取，
+    archive.py::_mirror_uploads() 會自動納入雲端備份。
+
+    DEFAULT '[]' 而不是允許 NULL：讀取端一律 json.loads，少一個 None 分支。
+    """
+    for table in ("case_updates", "dev_logs"):
+        if not _col_exists(conn, table, "files_json"):
+            conn.execute(
+                f"ALTER TABLE {table} ADD COLUMN files_json TEXT NOT NULL DEFAULT '[]'"
+            )
+    conn.commit()
+
+
 def _m081_edit_presence(conn):
     """同時編輯警示（2026-09-14 使用者要求：「如果有兩個人同時進入報價單、或是修改
     同一個表格的內容，需跳出警示，避免兩人同時修改損失一方資料」）。
@@ -3429,6 +3456,7 @@ _MIGRATIONS = [
     _m079_user_activity,                            # v79
     _m080_user_request_log,                         # v80
     _m081_edit_presence,                            # v81
+    _m082_feed_attachments,                         # v82
 ]
 
 

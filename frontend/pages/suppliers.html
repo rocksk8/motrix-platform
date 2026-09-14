@@ -12,6 +12,22 @@
   <script src="../static/vendor/xlsx-0.18.5.full.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <style>
+    /* ── 分類籤（2026-09-14）── */
+    .cs-cats{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:12px}
+    .cs-cats__t{font-size:10.5px;color:var(--text-dim);letter-spacing:.06em;margin-right:1px}
+    .cs-cats__sep{width:1px;align-self:stretch;background:var(--border-light);margin:0 6px}
+    .cs-cat{display:flex;align-items:baseline;gap:6px;padding:4px 10px;border-radius:var(--radius);
+            border:1px solid var(--border-light);background:#fff;cursor:pointer;font-family:var(--font-zh)}
+    .cs-cat:hover{border-color:var(--ghost-hover-border)}
+    .cs-cat.on{background:var(--text-primary);border-color:var(--text-primary)}
+    .cs-cat.on .cs-cat__n,.cs-cat.on .cs-cat__l{color:var(--text-on-dark)}
+    /* 件數 0 的選項淡化但不隱藏：「這個分類存在但還沒有資料」是有用的資訊，
+       下拉選單做不到——要選下去才發現是空的。 */
+    .cs-cat.is-empty{opacity:.5}
+    .cs-cat.is-orphan{border-style:dashed;border-color:var(--warning)}
+    .cs-cat__n{font-size:13px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;
+               font-variant-numeric:tabular-nums;color:var(--text-primary);line-height:1}
+    .cs-cat__l{font-size:11.5px;color:var(--text-secondary);line-height:1.2}
     .page-main {
       margin-left: var(--sidebar-w);
       margin-top: var(--topbar-h);
@@ -103,20 +119,31 @@
       </button>
     </div>
 
+    <!-- ── 供應商類型籤（2026-09-14）──────────────────────────────
+         原本是一個下拉：看得到有哪些類型，看不出每一類有幾家。類型資料本來
+         就在 data_json.category，清單畫面沒有用上而已。 -->
+    <div class="cs-cats">
+      <button type="button" class="cs-cat" :class="{on: filterCategory===''}" @click="filterCategory=''">
+        <span class="cs-cat__n" x-text="suppliers.length"></span>
+        <span class="cs-cat__l">全部</span>
+      </button>
+      <template x-for="c in categoryChips" :key="c.key">
+        <button type="button" class="cs-cat"
+                :class="{on: filterCategory===c.key, 'is-empty': c.count===0, 'is-orphan': c.orphan}"
+                @click="filterCategory = (filterCategory===c.key ? '' : c.key)"
+                :title="c.orphan ? '這個值不在類型清單裡，新增供應商時選不到它' : ''">
+          <span class="cs-cat__n" x-text="c.count"></span>
+          <span class="cs-cat__l" x-text="c.label"></span>
+        </button>
+      </template>
+    </div>
+
     <!-- 搜尋 + 篩選 -->
     <div class="search-bar">
       <div class="search-wrap">
         <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
         <input class="search-input" type="text" x-model="search" placeholder="搜尋公司名稱、簡稱、統編、聯絡人…">
       </div>
-      <select class="form-select" x-model="filterCategory" style="width:140px;font-size:12px">
-        <option value="">全部類型</option>
-        <option>原廠</option>
-        <option>代理商</option>
-        <option>製造商</option>
-        <option>服務商</option>
-        <option>其他</option>
-      </select>
       <input type="file" x-ref="importFile" accept=".xlsx,.xls,.csv" style="display:none" @change="handleImport($event)">
       <div style="margin-left:auto;display:flex;gap:6px">
         <button class="btn btn-ghost" @click="$refs.importFile.click()" style="font-size:11px">
@@ -732,6 +759,28 @@
       suppliers: [],
       search: '',
       filterCategory: '',
+      // ── 分類籤（2026-09-14）──────────────────────────────────────
+      // 正規選項沿用畫面原本那組寫死的下拉值，件數由實際資料算；資料裡有、
+      // 但不在正規清單裡的值另外標成虛線框——看得見才修得掉。
+      _catChips(list, options, pick) {
+        const used = {}
+        let none = 0
+        ;(list || []).forEach(it => {
+          const v = (pick(it) || '').trim()
+          if (!v) { none++; return }
+          used[v] = (used[v] || 0) + 1
+        })
+        const chips = options.map(o => ({ key: o, label: o, count: used[o] || 0, orphan: false }))
+        const known = new Set(options)
+        Object.keys(used).filter(k => !known.has(k)).sort()
+          .forEach(k => chips.push({ key: k, label: k, count: used[k], orphan: true }))
+        if (none) chips.push({ key: '__none__', label: '未填', count: none, orphan: false })
+        return chips
+      },
+      SUPPLIER_CATEGORIES: ['原廠', '代理商', '製造商', '服務商', '其他'],
+      get categoryChips() {
+        return this._catChips(this.suppliers, this.SUPPLIER_CATEGORIES, s => s.category)
+      },
       showModal: false,
       isDirty: false,
       editingId: null,
@@ -924,7 +973,8 @@
           (s.tags||[]).some(t => t.toLowerCase().includes(q)) ||
           (s.contacts||[]).some(ct => (ct.name||'').toLowerCase().includes(q))
         )
-        if (this.filterCategory) list = list.filter(s => s.category === this.filterCategory)
+        if (this.filterCategory === '__none__') list = list.filter(s => !(s.category || '').trim())
+        else if (this.filterCategory) list = list.filter(s => s.category === this.filterCategory)
         return list
       },
 

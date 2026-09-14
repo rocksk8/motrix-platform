@@ -1505,3 +1505,159 @@ body.sidebar-lock { overflow: hidden; }
   display: flex; gap: 8px; justify-content: flex-end;
   flex-shrink: 0; flex-wrap: wrap;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   視覺化管理共通語彙（2026-09-14，docs/module-viz-mockup.html §00）
+   ---------------------------------------------------------------------------
+   簽核佇列／案件管理／業務開發三頁共用同一套狀態編碼。規則只有一條，但很重要：
+
+     **品牌紅 --accent 不參與狀態編碼。**
+
+   理由是踩過的：2026-09-14 主色由藍改紅之後，吃 var(--accent) 的狀態徽章
+   （.badge--sent／.stat-tag--accent）變成紅底紅字，跟「逾期」幾乎分不出來
+   （見 §12 第六輪，那是實際截圖才看到的）。狀態序列本來就不該跟品牌主色連動，
+   所以這裡一律走 --success／--warning／--danger／--text-dim 四階，
+   --accent 只留給「目前輪到你」這一個游標位置（.vm-ladder__dot--cur）。
+
+   四階語意在三頁都一樣：
+     ok   達成／新鮮（今日、0–1 天）
+     warn 進行中／該注意（2–3 天）
+     crit 逾期／退回／卡住（≥ 4 天）
+     idle **不適用**——不是「沒做」。舊案件沒有精算/階段/款項時系統本來就
+          視為無需檢查（見 §5.2 完結案前置條件），畫成紅燈是錯的。
+
+   深色模式不必另外處理：本站深色模式是 body 直接子元素的 invert 濾鏡
+   （見本檔 :root[data-theme="dark"] 區塊），這裡只要用既有 token 就會跟著轉。
+   ⚠️ 別在這一區寫死 #RRGGBB 以外的顏色格式，也別自己加 filter。
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── 燈號：最小的狀態單位，8px 圓點 ── */
+.vm-lamp {
+  width: 8px; height: 8px; border-radius: 50%;
+  display: inline-block; flex: 0 0 auto;
+  background: var(--border-light);
+}
+.vm-lamp--ok   { background: var(--success); }
+.vm-lamp--warn { background: var(--warning); }
+.vm-lamp--crit { background: var(--danger); }
+.vm-lamp--idle { background: var(--border-light); }
+
+/* ── 狀態籤：燈號 + 文字 ── */
+.vm-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11px; font-weight: 500; line-height: 1.5;
+  padding: 2px 7px; border-radius: 4px;
+  border: 1px solid transparent; white-space: nowrap;
+}
+.vm-chip--ok   { background: var(--success-light); color: var(--success); border-color: var(--success-border); }
+.vm-chip--warn { background: var(--warning-light); color: var(--warning); border-color: #FDE68A; }
+.vm-chip--crit { background: var(--danger-light);  color: var(--danger);  border-color: var(--danger-border); }
+.vm-chip--idle { background: var(--icon-btn-bg);   color: var(--text-dim); border-color: var(--border-light); }
+
+/* ── 時效文字色：只上色不加底，用在「停留 N 天」這種數字上 ── */
+.vm-age--fresh { color: var(--success); }
+.vm-age--warm  { color: var(--warning); }
+.vm-age--stale { color: var(--danger); }
+
+/* ── 簽核階梯：●─●─○ 走到第幾層一眼看完 ──
+   實心＝已簽、空心＝還沒輪到、紅圈＝現在這一層（唯一用到 --accent 的地方）。
+   尺寸刻意做小（8px 點／16px 橫槓），要能塞進清單列而不是只能放在詳情頁。 */
+.vm-ladder { display: inline-flex; align-items: center; vertical-align: middle; }
+.vm-ladder__dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  display: block; flex: 0 0 auto;
+  border: 1.5px solid var(--border-light);
+  background: var(--white);
+}
+.vm-ladder__dot--done { background: var(--success); border-color: var(--success); }
+.vm-ladder__dot--rej  { background: var(--danger);  border-color: var(--danger); }
+.vm-ladder__dot--cur  {
+  width: 11px; height: 11px;
+  background: var(--white);
+  border: 2.5px solid var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-light);
+}
+.vm-ladder__rung {
+  width: 16px; height: 1.5px; display: block; flex: 0 0 auto;
+  background: var(--border-light);
+}
+.vm-ladder__rung--done { background: var(--success); }
+
+/* ── 狀態脊：列／卡最左緣 3px 直條 ──
+   整列染色會蓋掉列內其他燈號，所以異常只用最左邊這條表示；
+   長清單上下捲動時它是唯一還看得見的訊號。 */
+.vm-spine { width: 3px; align-self: stretch; flex: 0 0 auto; background: var(--border-light); }
+.vm-spine--ok   { background: var(--success); }
+.vm-spine--warn { background: var(--warning); }
+.vm-spine--crit { background: var(--danger); }
+.vm-spine--idle { background: var(--border-light); }
+
+/* ── 微進度條：3px，只表示比例，不放文字 ── */
+/* display:block 不可省略——這個類別常掛在 <span> 上，inline 元素吃不到
+   width/height，條會整個消失。在 flex 容器裡剛好會被 blockify 而看起來正常，
+   所以只在非 flex 的容器裡現形（實際踩過：業務開發卡片的溫度條）。 */
+.vm-bar { display: block; width: 100%; height: 3px; border-radius: 2px; background: var(--border-light); overflow: hidden; }
+.vm-bar__fill { display: block; height: 100%; background: var(--text-dim); }
+.vm-bar__fill--ok   { background: var(--success); }
+.vm-bar__fill--warn { background: var(--warning); }
+.vm-bar__fill--crit { background: var(--danger); }
+.vm-bar__fill--idle { background: var(--border-light); }
+
+/* ── 泳道標頭：一條細線把同一時效級距的項目框起來 ── */
+.vm-lane { margin-bottom: 14px; }
+.vm-lane__head { display: flex; align-items: center; gap: 7px; margin-bottom: 7px; }
+.vm-lane__title {
+  font-size: 11px; font-weight: 700; letter-spacing: .06em;
+  color: var(--text-secondary);
+}
+.vm-lane__title--ok   { color: var(--success); }
+.vm-lane__title--warn { color: var(--warning); }
+.vm-lane__title--crit { color: var(--danger); }
+.vm-lane__rule { flex: 1; height: 1px; background: var(--border-light); }
+.vm-lane__count {
+  font-size: 11px; color: var(--text-dim);
+  font-family: var(--font-en); font-variant-numeric: tabular-nums;
+}
+
+/* ── 人員標記：頭像圓 + 名字，用在「卡在誰身上」 ── */
+.vm-person { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--text-secondary); }
+.vm-person__av {
+  width: 19px; height: 19px; border-radius: 50%; flex: 0 0 auto;
+  background: var(--icon-btn-bg); color: var(--text-secondary);
+  display: grid; place-items: center;
+  font-size: 10px; font-weight: 700;
+}
+
+/* ── 壓力帶（andon）：頁面頂端的負載總覽，取代純標題列 ── */
+.vm-andon {
+  display: flex; align-items: stretch; gap: 1px;
+  background: var(--border-light);
+  border: 1px solid var(--border-light); border-radius: var(--radius);
+  overflow: hidden;
+}
+.vm-andon__seg {
+  display: flex; align-items: center; gap: 9px;
+  padding: 10px 14px; background: var(--white); min-width: 0;
+}
+.vm-andon__seg--mine { background: var(--accent-light); }
+.vm-andon__seg--crit { background: var(--danger-light); }
+.vm-andon__val {
+  font-family: var(--font-en); font-variant-numeric: tabular-nums;
+  font-size: 21px; font-weight: 700; line-height: 1;
+}
+.vm-andon__seg--mine .vm-andon__val { color: var(--accent); }
+.vm-andon__seg--crit .vm-andon__val { color: var(--danger); }
+.vm-andon__lbl { font-size: 11.5px; color: var(--text-secondary); line-height: 1.3; }
+.vm-andon__lbl small { display: block; font-size: 10.5px; color: var(--text-dim); }
+.vm-andon__bar { flex: 1; min-width: 60px; display: flex; align-items: center; padding: 0 14px; background: var(--white); }
+.vm-andon__track {
+  width: 100%; height: 8px; border-radius: 4px; overflow: hidden;
+  display: flex; gap: 1px; background: var(--border-light);
+}
+.vm-andon__track > i { display: block; height: 100%; }
+
+@media (max-width: 767px) {
+  .vm-andon { flex-wrap: wrap; }
+  .vm-andon__seg { flex: 1 1 40%; }
+  .vm-andon__bar { flex: 1 1 100%; padding: 10px 14px; }
+}

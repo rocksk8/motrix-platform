@@ -134,6 +134,68 @@
     .chart-2col{display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:16px}
     .chart-full{margin-bottom:16px}
     .chart-card{background:#fff;border:1px solid var(--border-light);border-radius:var(--radius-lg);padding:18px}
+    /* ── 本期財務快照（2026-09-14）── */
+    .fsnap { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px; }
+    @media (max-width: 860px) { .fsnap { grid-template-columns: 1fr; } }
+    .fsnap__col {
+      background: #fff; border: 1px solid var(--border-light);
+      border-radius: var(--radius-lg); padding: 12px 16px 14px;
+    }
+    .fsnap__h { display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+    .fsnap__title { font-size: 12.5px; font-weight: 700; color: var(--text-primary); }
+    .fsnap__net {
+      margin-left: auto; font-size: 12.5px; font-weight: 700;
+      font-family: LINE Seed TW_OTF, sans-serif; font-variant-numeric: tabular-nums;
+    }
+    .fsnap__net.pos { color: var(--success); }
+    .fsnap__net.neg { color: var(--danger); }
+    .fsnap__row { display: flex; align-items: center; gap: 10px; margin-bottom: 7px; }
+    .fsnap__lbl { font-size: 11.5px; color: var(--text-secondary); width: 30px; flex: 0 0 auto; }
+    .fsnap__track {
+      flex: 1; min-width: 0; height: 10px; border-radius: 5px;
+      background: var(--icon-btn-bg); overflow: hidden; display: block;
+    }
+    .fsnap__track > i { display: block; height: 100%; border-radius: 5px; }
+    .fsnap__v {
+      flex: 0 0 auto; min-width: 108px; text-align: right;
+      font-size: 12.5px; font-weight: 600; color: var(--text-primary);
+      font-family: LINE Seed TW_OTF, sans-serif; font-variant-numeric: tabular-nums;
+    }
+    .fsnap__v--na { font-weight: 400; color: var(--text-dim); font-size: 11.5px; }
+    .fsnap__note { font-size: 10.5px; color: var(--text-dim); margin-top: 8px; }
+
+    /* ── 圖表數值明細（2026-09-14）──────────────────────────────────
+       圖只讀得出量級，讀不出數字。這張表就是圖的「表格檢視」：同一組數字，
+       另一種讀法。文字一律用文字色，識別交給欄頭那顆小色塊——數值本身
+       染成系列色會讓整張表變得很吵，而且色盲讀者拿不到任何資訊。 */
+    .cdata { margin-top: 10px; border-top: 1px solid var(--border-light); padding-top: 8px; overflow-x: auto; }
+    .cdata__t { width: 100%; border-collapse: collapse; font-size: 11px; }
+    .cdata__t th, .cdata__t td { padding: 4px 8px; white-space: nowrap; }
+    .cdata__t thead th {
+      font-weight: 700; color: var(--text-dim); text-align: right;
+      border-bottom: 1px solid var(--border-light);
+    }
+    .cdata__t thead th:first-child { text-align: left; }
+    .cdata__t tbody th {
+      font-weight: 500; color: var(--text-secondary); text-align: left;
+      border-bottom: 1px solid var(--border-light);
+    }
+    .cdata__t tbody td {
+      text-align: right; color: var(--text-primary);
+      font-family: LINE Seed TW_OTF, sans-serif; font-variant-numeric: tabular-nums;
+      border-bottom: 1px solid var(--border-light);
+    }
+    .cdata__t tbody tr:last-child th, .cdata__t tbody tr:last-child td { border-bottom: none; }
+    .cdata__t tbody tr:hover td, .cdata__t tbody tr:hover th { background: var(--icon-btn-bg); }
+    .cdata__sw { display: inline-block; width: 7px; height: 7px; border-radius: 2px; margin-right: 5px; vertical-align: 1px; }
+    .cdata-toggle { display: flex; justify-content: flex-end; margin-bottom: 8px; }
+    .cdata-toggle button {
+      font-family: var(--font-zh); font-size: 11.5px; padding: 3px 10px;
+      border-radius: var(--radius); border: 1px solid var(--border-light);
+      background: #fff; color: var(--text-secondary); cursor: pointer;
+    }
+    .cdata-toggle button:hover { border-color: var(--ghost-hover-border); color: var(--text-primary); }
+
     .chart-card__title{font-size:10px;font-weight:600;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.06em;text-transform:uppercase;color:var(--text-dim);margin-bottom:14px}
     @media(max-width:800px){.chart-2col{grid-template-columns:1fr}}
     @media(max-width:767px){
@@ -1379,7 +1441,77 @@
           </div>
 
           <!-- 圖表分析 -->
+          <!-- 2026-09-14：每張圖下方補一張數值明細表（使用者交辦「圖表也要顯示
+               金額跟內容」）。數字不另外算一份——_buildXChart() 在畫圖的同時把
+               自己用的那組數字寫進 chartTables，表跟圖必然一致。 -->
           <div x-show="activeTab==='charts'">
+            <!-- ── 本期財務快照（2026-09-14）：圖表分頁的第一眼 ──────────────
+                 使用者要的是「進來先看到這期的收入支出與應收應付」。刻意用
+                 純 HTML 長條而不是再開一個 Chart.js 實例：只有四個數值，
+                 canvas 換來的只有這一頁已經踩過的尺寸/動畫時序問題。
+                 兩組各自縮放——收支是流量、應收應付是存量，量綱不同，
+                 共用比例尺會讓其中一組永遠貼邊。 -->
+            <div class="fsnap">
+              <div class="fsnap__col">
+                <div class="fsnap__h">
+                  <span class="fsnap__title" x-text="scopeLabel + '收支'"></span>
+                  <span class="fsnap__net" :class="netScopeAmount >= 0 ? 'pos' : 'neg'"
+                        x-text="(netScopeAmount >= 0 ? '淨流入 ' : '淨流出 ') + fmt(Math.abs(netScopeAmount))"></span>
+                </div>
+                <div class="fsnap__row">
+                  <span class="fsnap__lbl">收入</span>
+                  <span class="fsnap__track">
+                    <i style="background:var(--success)" :style="'width:' + _barPct(activeIncomeTotal, flowMax) + '%;background:var(--success)'"></i>
+                  </span>
+                  <span class="fsnap__v" x-text="fmt(activeIncomeTotal)"></span>
+                </div>
+                <div class="fsnap__row">
+                  <span class="fsnap__lbl">支出</span>
+                  <span class="fsnap__track">
+                    <i :style="'width:' + _barPct(activeExpenseTotal, flowMax) + '%;background:var(--warning)'"></i>
+                  </span>
+                  <span class="fsnap__v" x-text="fmt(activeExpenseTotal)"></span>
+                </div>
+              </div>
+
+              <div class="fsnap__col">
+                <div class="fsnap__h">
+                  <span class="fsnap__title">未結部位</span>
+                  <span class="fsnap__net" x-show="payableKnown" :class="netPosition >= 0 ? 'pos' : 'neg'"
+                        x-text="'淨部位 ' + fmt(netPosition)"></span>
+                </div>
+                <div class="fsnap__row">
+                  <span class="fsnap__lbl">應收</span>
+                  <span class="fsnap__track">
+                    <i x-show="payableKnown"
+                       :style="'width:' + _barPct(kpiReceivableTotal, stockMax) + '%;background:var(--success)'"></i>
+                  </span>
+                  <span class="fsnap__v" x-show="payableKnown" x-text="fmt(kpiReceivableTotal)"></span>
+                  <span class="fsnap__v fsnap__v--na" x-show="!payableKnown"
+                        x-text="payableSnapDenied ? '無出納權限' : '載入中…'"></span>
+                </div>
+                <div class="fsnap__row">
+                  <span class="fsnap__lbl">應付</span>
+                  <span class="fsnap__track">
+                    <i x-show="payableKnown"
+                       :style="'width:' + _barPct(kpiPayableTotal, stockMax) + '%;background:var(--warning)'"></i>
+                  </span>
+                  <!-- 沒載到／沒權限時顯示狀態文字，不顯示 0——0 會被讀成
+                       「這期沒有任何應付」，那是假資訊 -->
+                  <span class="fsnap__v" x-show="payableKnown" x-text="fmt(kpiPayableTotal)"></span>
+                  <span class="fsnap__v fsnap__v--na" x-show="!payableKnown"
+                        x-text="payableSnapDenied ? '無出納權限' : '載入中…'"></span>
+                </div>
+                <div class="fsnap__note" x-show="payableKnown"
+                     x-text="'承攬商待匯款 ' + payable.length + ' 筆　·　客戶未收款 ' + receivable.filter(i => !i.received).length + ' 筆'"></div>
+              </div>
+            </div>
+
+            <div class="cdata-toggle">
+              <button type="button" @click="showChartData = !showChartData"
+                      x-text="showChartData ? '收合數值明細 ▴' : '展開數值明細 ▾'"></button>
+            </div>
+
             <!-- 近 12 月成案趨勢 + 案件狀態分佈 -->
             <div class="chart-2col">
               <div class="chart-card">
@@ -1387,12 +1519,68 @@
                 <div style="position:relative;height:240px">
                   <canvas id="rpt-chart-trend"></canvas>
                 </div>
+              <template x-if="showChartData && chartTables.trend.rows.length">
+                <div class="cdata">
+                  <table class="cdata__t">
+                    <thead>
+                      <tr>
+                        <th></th>
+                        <template x-for="(c, ci) in chartTables.trend.cols" :key="ci">
+                          <th>
+                            <span class="cdata__sw" x-show="chartTables.trend.colors[ci]"
+                                  :style="'background:' + chartTables.trend.colors[ci]"></span>
+                            <span x-text="c"></span>
+                          </th>
+                        </template>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <template x-for="(r, ri) in chartTables.trend.rows" :key="ri">
+                        <tr>
+                          <th x-text="r.label"></th>
+                          <template x-for="(v, vi) in r.values" :key="vi">
+                            <td x-text="v"></td>
+                          </template>
+                        </tr>
+                      </template>
+                    </tbody>
+                  </table>
+                </div>
+              </template>
               </div>
               <div class="chart-card">
                 <div class="chart-card__title">案件狀態分佈</div>
                 <div style="position:relative;height:240px">
                   <canvas id="rpt-chart-status"></canvas>
                 </div>
+              <template x-if="showChartData && chartTables.status.rows.length">
+                <div class="cdata">
+                  <table class="cdata__t">
+                    <thead>
+                      <tr>
+                        <th></th>
+                        <template x-for="(c, ci) in chartTables.status.cols" :key="ci">
+                          <th>
+                            <span class="cdata__sw" x-show="chartTables.status.colors[ci]"
+                                  :style="'background:' + chartTables.status.colors[ci]"></span>
+                            <span x-text="c"></span>
+                          </th>
+                        </template>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <template x-for="(r, ri) in chartTables.status.rows" :key="ri">
+                        <tr>
+                          <th x-text="r.label"></th>
+                          <template x-for="(v, vi) in r.values" :key="vi">
+                            <td x-text="v"></td>
+                          </template>
+                        </tr>
+                      </template>
+                    </tbody>
+                  </table>
+                </div>
+              </template>
               </div>
             </div>
             <!-- 業務員績效比較 -->
@@ -1401,6 +1589,34 @@
               <div style="position:relative" :style="{height: Math.max(180, salesPerf.length * 52) + 'px'}">
                 <canvas id="rpt-chart-sales"></canvas>
               </div>
+              <template x-if="showChartData && chartTables.sales.rows.length">
+                <div class="cdata">
+                  <table class="cdata__t">
+                    <thead>
+                      <tr>
+                        <th></th>
+                        <template x-for="(c, ci) in chartTables.sales.cols" :key="ci">
+                          <th>
+                            <span class="cdata__sw" x-show="chartTables.sales.colors[ci]"
+                                  :style="'background:' + chartTables.sales.colors[ci]"></span>
+                            <span x-text="c"></span>
+                          </th>
+                        </template>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <template x-for="(r, ri) in chartTables.sales.rows" :key="ri">
+                        <tr>
+                          <th x-text="r.label"></th>
+                          <template x-for="(v, vi) in r.values" :key="vi">
+                            <td x-text="v"></td>
+                          </template>
+                        </tr>
+                      </template>
+                    </tbody>
+                  </table>
+                </div>
+              </template>
             </div>
             <!-- 年度目標達成率 -->
             <div class="chart-full chart-card" x-show="achievement && achievement.hasTargets">
@@ -1408,6 +1624,34 @@
               <div style="position:relative;height:220px">
                 <canvas id="rpt-chart-target"></canvas>
               </div>
+              <template x-if="showChartData && chartTables.target.rows.length">
+                <div class="cdata">
+                  <table class="cdata__t">
+                    <thead>
+                      <tr>
+                        <th></th>
+                        <template x-for="(c, ci) in chartTables.target.cols" :key="ci">
+                          <th>
+                            <span class="cdata__sw" x-show="chartTables.target.colors[ci]"
+                                  :style="'background:' + chartTables.target.colors[ci]"></span>
+                            <span x-text="c"></span>
+                          </th>
+                        </template>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <template x-for="(r, ri) in chartTables.target.rows" :key="ri">
+                        <tr>
+                          <th x-text="r.label"></th>
+                          <template x-for="(v, vi) in r.values" :key="vi">
+                            <td x-text="v"></td>
+                          </template>
+                        </tr>
+                      </template>
+                    </tbody>
+                  </table>
+                </div>
+              </template>
             </div>
             <!-- 毛利率比較 -->
             <div class="chart-card" x-show="marginCases.length > 0">
@@ -1415,6 +1659,34 @@
               <div style="position:relative;height:200px">
                 <canvas id="rpt-chart-margin"></canvas>
               </div>
+              <template x-if="showChartData && chartTables.margin.rows.length">
+                <div class="cdata">
+                  <table class="cdata__t">
+                    <thead>
+                      <tr>
+                        <th></th>
+                        <template x-for="(c, ci) in chartTables.margin.cols" :key="ci">
+                          <th>
+                            <span class="cdata__sw" x-show="chartTables.margin.colors[ci]"
+                                  :style="'background:' + chartTables.margin.colors[ci]"></span>
+                            <span x-text="c"></span>
+                          </th>
+                        </template>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <template x-for="(r, ri) in chartTables.margin.rows" :key="ri">
+                        <tr>
+                          <th x-text="r.label"></th>
+                          <template x-for="(v, vi) in r.values" :key="vi">
+                            <td x-text="v"></td>
+                          </template>
+                        </tr>
+                      </template>
+                    </tbody>
+                  </table>
+                </div>
+              </template>
             </div>
             <template x-if="!casesAll.length">
               <div class="empty-state">尚無案件資料，切換期間後重新載入以顯示圖表</div>
