@@ -67,7 +67,7 @@ DEFAULT_LABELS = {
     "itemColumn":      "項目 / 規格說明",
     "siteLabel":       "服務地點",
     "managerLabel":    "負責人",
-    "signOwner":       "客戶驗收 · 簽章蓋印",
+    "signOwner":       "客戶驗收 · 簽章",
     "signVendor":      "執行單位 · 負責人",
 }
 _LABEL_MAX = 40
