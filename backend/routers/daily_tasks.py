@@ -1389,7 +1389,22 @@ def _check_cert_expiry() -> None:
 
 _BACKUP_STALE_HOURS = 36        # 每日備份的容許間隔（正常 24h，留一天的餘裕）
 _DISK_FREE_MIN_PCT  = 10        # 剩餘空間低於此百分比 → 告警
-_DISK_FREE_MIN_GB   = 20        # 或剩餘絕對量低於此 GB → 告警（大碟用百分比會太晚）
+# 2026-09-15：20 → 50 GB。這兩個門檻是 AND（見 _check_disk_space 的說明），所以在
+# 1 TB 的碟上百分比那關永遠先滿足，實際的觸發點就是這個絕對值。20 GB 對一台
+# 「每跑一次測試就寫 3～4 GB」的開發機來說太晚——剩 20 GB 時只剩五次測試的餘裕，
+# 而且備份寫不進去通常會先發作。
+_DISK_FREE_MIN_GB   = 50        # 或剩餘絕對量低於此 GB → 告警（大碟用百分比會太晚）
+
+# 測試暫存總量超過這個值就寄信。**這條跟剩餘空間無關**：2026-09-15 實測 84 個
+# `motrix-pytest-*` 目錄吃掉 136 GB，而碟上還剩 293 GB——剩餘空間的門檻不管怎麼調
+# 都不會響（調到會響的程度就等於天天誤報）。照不到這種事的原因不是門檻太鬆，是
+# 「只看剩多少」永遠看不到「有東西在無聲累積」。
+_TEMP_BLOAT_MIN_GB  = 20
+
+# 這些前綴是測試／打包留下的暫存，清掉一律安全。`motrix-*` 是帶時間戳或標籤的
+# pytest basetemp——名字每次都不一樣，所以沒有任何機制會覆蓋或清除它；
+# `pytest-of-*` 是 pytest 自己的預設 basetemp，它會輪替只留最新 3 份。
+_TEMP_BLOAT_PREFIXES = ("motrix-pytest", "motrix-bench", "pytest-of-")
 
 
 def _latest_audit_at(conn, actions: tuple) -> Optional[datetime]:
@@ -1534,6 +1549,73 @@ def _check_disk_space() -> None:
                                 for p in problems))
     except Exception as exc:
         _logger.warning("_check_disk_space failed: %s", exc)
+
+
+def _temp_bloat_dirs() -> list:
+    """列出 `%TEMP%` 底下的測試／打包暫存目錄與各自大小，大的在前。
+
+    回傳 `[{name, path, gb}]`。掃不到或沒有權限的目錄一律跳過——這是觀測用的
+    數字，不該因為某個子目錄讀不到就整支壞掉。
+    """
+    import tempfile
+    base = tempfile.gettempdir()
+    out = []
+    try:
+        entries = list(os.scandir(base))
+    except OSError:
+        return out
+    for e in entries:
+        try:
+            if not e.is_dir(follow_symlinks=False):
+                continue
+        except OSError:
+            continue
+        if not e.name.startswith(_TEMP_BLOAT_PREFIXES):
+            continue
+        total = 0
+        for root, _dirs, files in os.walk(e.path, onerror=lambda _e: None):
+            for f in files:
+                try:
+                    total += os.stat(os.path.join(root, f)).st_size
+                except OSError:
+                    continue
+        out.append({"name": e.name, "path": e.path, "bytes": total,
+                    "gb": round(total / (1024 ** 3), 2)})
+    # 比大小一律用原始 bytes：`gb` 是顯示用的，先四捨五入再加總會把一堆
+    # 小於 5 MB 的目錄全算成 0。
+    out.sort(key=lambda x: x["bytes"], reverse=True)
+    return out
+
+
+def _check_temp_bloat() -> None:
+    """每日檢查測試暫存是否無聲累積；超過 `_TEMP_BLOAT_MIN_GB` 就寄信。一天一封。
+
+    為什麼要獨立於剩餘空間告警：那支只會在「快滿了」才叫，而這種累積在一顆 1 TB
+    的碟上可以吃掉 136 GB 都還離「快滿了」很遠（2026-09-15 實測）。等它把碟吃滿
+    才叫，症狀會先表現成「測試跑不起來」或「備份寫不進去」，很難聯想到這裡。
+    """
+    try:
+        dirs = _temp_bloat_dirs()
+        total_raw_gb = sum(d["bytes"] for d in dirs) / (1024 ** 3)
+        total_gb = round(total_raw_gb, 1)
+        guard_key = "temp_bloat_last_notified"
+        if total_raw_gb < _TEMP_BLOAT_MIN_GB:
+            if _get_setting(guard_key):
+                _set_setting(guard_key, "")
+            return
+
+        today = _date.today().isoformat()
+        if _get_setting(guard_key) == today:
+            return
+        _set_setting(guard_key, today)
+
+        threading.Thread(target=notify_disk_space_low, args=([],),
+                         kwargs={"temp_bloat": dirs, "temp_total_gb": total_gb},
+                         daemon=True).start()
+        _logger.error("測試暫存佔用告警：共 %s GB，%s 個目錄（最大：%s）",
+                      total_gb, len(dirs), dirs[0]["name"] if dirs else "-")
+    except Exception as exc:
+        _logger.warning("_check_temp_bloat failed: %s", exc)
 
 
 # ── 簽核逾期催辦（2026-08-21）────────────────────────────────────────────────
@@ -1710,6 +1792,7 @@ def schedule_overdue_check() -> None:
         _check_cert_expiry()
         _check_backup_freshness()
         _check_disk_space()
+        _check_temp_bloat()
         _prune_request_log()
 
     def _startup_catchup():
@@ -1734,6 +1817,7 @@ def schedule_overdue_check() -> None:
             _check_cert_expiry()
             _check_backup_freshness()
             _check_disk_space()
+            _check_temp_bloat()
             return
 
         # Advance day-by-day through any gap
@@ -1756,6 +1840,7 @@ def schedule_overdue_check() -> None:
         _check_cert_expiry()
         _check_backup_freshness()
         _check_disk_space()
+        _check_temp_bloat()
         _logger.info("Startup catch-up complete, processed up to %s", yesterday)
 
     # Always run catch-up on startup (the guard inside prevents duplicate emails)

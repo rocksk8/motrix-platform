@@ -314,6 +314,36 @@ if ($e2eExit -ne 0) {
     Write-Host "[OK] e2e 測試也全數通過。" -ForegroundColor Green
 }
 
+# 2026-09-15：測試暫存跑完就自己刪。
+#
+# 上面那個 --basetemp 的名字帶時間戳，**每次執行都是新目錄**，所以 pytest 不會
+# 覆蓋、也沒有任何機制會清——一次打包留下 3～4 GB（實測：非 e2e 那半 3.1 GB／
+# 8,627 個檔，絕大多數是測試期間真的產生的單據 PDF）。2026-09-14 一次清出
+# 190 GB、2026-09-15 又清出 136 GB（84 個目錄），全部都是這樣累積的。
+#
+# 只在**測試通過**時刪：失敗時那些檔案是唯一的現場（哪張單的 PDF 沒產出、
+# 哪個 DB 狀態不對），刪掉就只剩一行 assert 訊息可以看。非 e2e 失敗會在上面
+# 直接 Fail 中止，走不到這裡；這裡處理的是 e2e。
+$tempsToClean = @($pytestTemp)
+if ($e2eExit -eq 0) { $tempsToClean += "${pytestTemp}_e2e" }
+else { Write-Host "  e2e 失敗，保留其測試暫存供追查：${pytestTemp}_e2e" -ForegroundColor DarkGray }
+foreach ($tp in $tempsToClean) {
+    if (Test-Path -LiteralPath $tp) {
+        $freedMB = 0
+        try {
+            $freedMB = [math]::Round((Get-ChildItem -LiteralPath $tp -Recurse -File -Force -ErrorAction SilentlyContinue |
+                                      Measure-Object -Property Length -Sum).Sum / 1MB, 0)
+        } catch { }
+        # rd 比 Remove-Item 快非常多（一次打包有上萬個小檔）
+        cmd /c rd /s /q "$tp" 2>$null
+        if (Test-Path -LiteralPath $tp) {
+            Write-Host "  [WARN] 測試暫存刪不掉（可能有檔案被佔用）：$tp" -ForegroundColor Yellow
+        } else {
+            Write-Host "  已清除測試暫存（釋出約 $freedMB MB）：$tp" -ForegroundColor DarkGray
+        }
+    }
+}
+
 # 測試跑完就把優先權還回去——後面的 git archive / robocopy 是 IO 為主，
 # 壓著它只是讓打包變慢，沒有好處。
 if ($prevPriority) {

@@ -78,6 +78,35 @@ def _app(tmp_path_factory):
     archive._ALERT_DIR = str(base / "backup_alerts")
     archive._UPLOADS_DIR = str(base / "uploads")  # empty — don't let tests read the real uploads/
 
+    # PDF 存檔目錄：**session 級**的安全網，跟下面 client fixture 那份 per-test
+    # patch 是兩件事，兩個都要。
+    #
+    # 為什麼 per-test 不夠（2026-09-15 實測）：結案報表等 PDF 是
+    # `spawn_bg_thread(_generate_case_closing_pdf, ...)` 在背景產生的
+    # （routers/quotations.py），Edge headless 渲染要好幾秒，寫檔時那一題早就結束、
+    # monkeypatch 也已經還原——於是那條執行緒讀到的又是專案裡的真實存檔路徑。
+    # 症狀就是 `結案報表PDF/` 裡一直多出 `MQ-CLOSE-004_..._tester_N.pdf`。
+    # 這裡用直接賦值（不是 monkeypatch）：整個 session 都不會被還原掉，晚到的
+    # 執行緒也只會落在暫存區。
+    pdf_base = base / "pdf_archive"
+    pdf_base.mkdir()
+    import pdf_gen
+    for _const, _sub in (
+        ("_PDF_BASE_DEFAULT", "報價單PDF"),
+        ("_SHIPPING_PDF_BASE_DEFAULT", "出貨單PDF"),
+        ("_CONTRACTOR_VOUCHER_PDF_BASE_DEFAULT", "承攬商匯款申請PDF"),
+        ("_INVOICE_VOUCHER_PDF_BASE_DEFAULT", "開票申請憑據PDF"),
+        ("_PAYMENT_REQUEST_PDF_BASE_DEFAULT", "請款單PDF"),
+        ("_CASE_CLOSING_PDF_BASE_DEFAULT", "結案報表PDF"),
+        ("DEMO_PDF_ARCHIVE_DIR", "demo_報價單PDF"),
+        ("DEMO_SHIPPING_PDF_ARCHIVE_DIR", "demo_出貨單PDF"),
+        ("DEMO_CONTRACTOR_VOUCHER_PDF_ARCHIVE_DIR", "demo_承攬商匯款申請PDF"),
+        ("DEMO_INVOICE_VOUCHER_PDF_ARCHIVE_DIR", "demo_開票申請憑據PDF"),
+        ("DEMO_PAYMENT_REQUEST_PDF_ARCHIVE_DIR", "demo_請款單PDF"),
+        ("DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR", "demo_結案報表PDF"),
+    ):
+        setattr(pdf_gen, _const, str(pdf_base / _sub))
+
     main = importlib.import_module("main")  # runs the real startup sequence now, isolated
     return main.app
 
@@ -126,6 +155,42 @@ def client(_app, tmp_path, monkeypatch):
     # §12 2026-09-01 entries for the feature that surfaced it).
     import routers.reports as reports_module
     monkeypatch.setattr(reports_module, "_export_times", {})
+
+    # pdf_gen.py 的 6 類 PDF 存檔目錄（報價單／出貨單／承攬商匯款申請／開票申請
+    # 憑據／請款單／結案報表）各自算自己的路徑，跟上面 uploads/photos 一樣**不受
+    # 任何既有 patch 影響**——這是 2026-09-07 那批隔離修正唯一漏掉的一個。
+    #
+    # 2026-09-15 查出來的後果有三層：
+    #   ① 測試真的把 PDF 寫進專案根目錄的真實存檔：`報價單PDF` 1,181 檔裡有 136 個
+    #      `MQ-TEST-*`／`MQ-CLOSE-004`／`_tester` 的測試產物，最早 2026-08-26；
+    #      `結案報表PDF` 136 檔裡有 53 個。
+    #   ② 那些測試檔接著被每日備份鏡像到**公司雲端存檔**（G: 的 PDF存檔鏡像 864 檔
+    #      裡有 120 個測試檔，橫跨 5 個類別）——測試垃圾進了正式憑據的備份。
+    #   ③ 每跑一次測試，`archive._mirror_pdf_archives()` 都會把那 1,617 個**真實**
+    #      PDF 複製進該次的測試暫存（每個 xdist worker 一份），一次完整測試 3.5 GB
+    #      ——這是 `%TEMP%` 累積到 136 GB 的主因。
+    #
+    # patch 模組常數而不是 getter：有幾題自己會 monkeypatch getter
+    # （test_pdf_archive_mirror_2026_09_07.py），改常數不會跟它們互相打到。
+    # demo 那組常數是 `from db import ...` **by value** 綁進 pdf_gen 的，所以要
+    # patch `pdf_gen` 上的名字，patch `db` 上的沒有用（同 conftest 開頭的說明）。
+    import pdf_gen
+    _pdf_dirs = {
+        "_PDF_BASE_DEFAULT":                          "報價單PDF",
+        "_SHIPPING_PDF_BASE_DEFAULT":                 "出貨單PDF",
+        "_CONTRACTOR_VOUCHER_PDF_BASE_DEFAULT":       "承攬商匯款申請PDF",
+        "_INVOICE_VOUCHER_PDF_BASE_DEFAULT":          "開票申請憑據PDF",
+        "_PAYMENT_REQUEST_PDF_BASE_DEFAULT":          "請款單PDF",
+        "_CASE_CLOSING_PDF_BASE_DEFAULT":             "結案報表PDF",
+        "DEMO_PDF_ARCHIVE_DIR":                       "demo_報價單PDF",
+        "DEMO_SHIPPING_PDF_ARCHIVE_DIR":              "demo_出貨單PDF",
+        "DEMO_CONTRACTOR_VOUCHER_PDF_ARCHIVE_DIR":    "demo_承攬商匯款申請PDF",
+        "DEMO_INVOICE_VOUCHER_PDF_ARCHIVE_DIR":       "demo_開票申請憑據PDF",
+        "DEMO_PAYMENT_REQUEST_PDF_ARCHIVE_DIR":       "demo_請款單PDF",
+        "DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR":          "demo_結案報表PDF",
+    }
+    for _const, _sub in _pdf_dirs.items():
+        monkeypatch.setattr(pdf_gen, _const, str(tmp_path / "pdf_archive" / _sub))
 
     from fastapi.testclient import TestClient
     return TestClient(_app)

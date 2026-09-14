@@ -1526,13 +1526,18 @@ def notify_backup_stale(stale: list, threshold_hours: int) -> None:
     _async_send(to, "【MOTRIX】⚠️ 備份已超過 %d 小時沒有成功執行" % threshold_hours, html)
 
 
-def notify_disk_space_low(problems: list) -> None:
-    """磁碟空間不足 → 所有 admin/superadmin（2026-09-14）
+def notify_disk_space_low(problems: list, temp_bloat: list = None,
+                          temp_total_gb: float = 0) -> None:
+    """磁碟空間不足／測試暫存累積 → 所有 admin/superadmin（2026-09-14）
 
-    `problems` 是 [{label, path, free_gb, total_gb, free_pct}]。
+    `problems` 是 [{label, path, free_gb, total_gb, free_pct}]；
+    `temp_bloat` 是 [{name, path, gb}]（2026-09-15 新增）。
 
     值得單獨寄一封的理由：磁碟滿掉的第一個症狀通常不是「磁碟滿了」，而是
     備份寫不進去、測試跑不起來、PDF 產不出來——很難第一時間聯想到空間。
+
+    **兩種觸發共用一封信與同一個通知偏好 key**（`disk_space_low`）：對收信的人來說
+    這是同一件事（空間被吃掉了，要去清），分成兩個開關只會讓人多關一個。
     """
     to = _admin_emails("disk_space_low")
     if not to:
@@ -1541,7 +1546,34 @@ def notify_disk_space_low(problems: list) -> None:
     rows = [(p["label"],
              f"剩餘 {p['free_gb']} GB / 共 {p['total_gb']} GB（{p['free_pct']}%）— {p['path']}")
             for p in problems]
+
+    # 只有測試暫存過大、磁碟還很寬裕時，標題不能寫「空間不足」——那是假訊息，
+    # 收信的人會照著去清正式資料。
+    if not problems and temp_bloat:
+        rows = [(d["name"], f"{d['gb']} GB — {d['path']}") for d in temp_bloat[:12]]
+        if len(temp_bloat) > 12:
+            rows.append(("…", f"另有 {len(temp_bloat) - 12} 個目錄"))
+        html = _build_html(
+            "測試暫存佔用過大", f"共 {temp_total_gb} GB 可清除", "#D97706",
+            rows, "", _base_url(),
+            intro=("測試與打包留下的暫存目錄累積到需要處理的程度了。"
+                   "磁碟剩餘空間本身還正常——這封信是在它變成問題之前先講。"),
+            note=("<b>這些目錄清掉一律安全</b>：它們是 pytest 每次執行的暫存"
+                  "（`--basetemp`），名字帶時間戳或標籤，所以每跑一次就多一份、"
+                  "不會被覆蓋也沒有任何機制會清。"
+                  "<br><br>清除方式：<code>rd /s /q \"%TEMP%\\motrix-pytest-*\"</code>"
+                  "（或直接刪上面列出的資料夾）。"
+                  "<br><br><b>為什麼會這麼大</b>：測試期間「PDF 存檔鏡像」是真的在產生"
+                  "PDF，一次完整測試會寫出上萬個單據 PDF（約 3.5 GB）。"),
+            button_text="前往系統",
+        )
+        _async_send(to, f"【MOTRIX】測試暫存佔用 {temp_total_gb} GB（可安全清除）", html)
+        return
+
     worst = min(p["free_gb"] for p in problems)
+    if temp_bloat:
+        rows.append(("測試暫存（可清除）",
+                     f"共 {temp_total_gb} GB，{len(temp_bloat)} 個目錄 — %TEMP%\\motrix-pytest-*"))
 
     html = _build_html(
         "磁碟空間不足", f"最低剩餘 {worst} GB", "#D97706" if worst > 5 else "#DC2626",
@@ -1552,7 +1584,8 @@ def notify_disk_space_low(problems: list) -> None:
             "（寫不進去、而且可能只留下一行 log），其次是 PDF 產生與檔案上傳。"
             "等到症狀出現時，往往已經漏掉好幾天的備份。"
             "<br><br><b>可以安全清掉的東西</b>："
-            "<br>• <code>%TEMP%\\motrix-pytest-*</code> — 測試暫存，每跑一次 1～2 GB，不會自己清"
+            "<br>• <code>%TEMP%\\motrix-pytest-*</code> — 測試暫存，每跑一次 3～4 GB，"
+            "名字每次都不同所以不會被覆蓋、也沒有任何機制會清（2026-09-15 實測一次清出 136 GB）"
             "<br>• <code>backend\\db_backups\\pre_update_*</code> — 部署前快照，"
             "系統每天會自動只留最新 5 份（2026-09-14 起），手動刪更舊的也安全"
             "<br>• <code>backend\\rollback_snapshots\\</code> — 只保留最新 5 份，更舊的可刪"
