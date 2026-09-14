@@ -505,14 +505,30 @@
         </div>
         <input class="dc-search" type="text" placeholder="搜尋案件或客戶…"
                x-model="searchQ" @input.debounce.400ms="loadCases()">
-        <div class="dc-chips">
-          <span class="dc-chip" :class="{on: filterStatus===''}" @click="filterStatus=''">
-            全部(不含未成案) <b x-text="caseCount('')"></b>
-          </span>
-          <span class="dc-chip talk" :class="{on: filterStatus==='洽談中'}" @click="filterStatus='洽談中'">洽談中</span>
-          <span class="dc-chip won"  :class="{on: filterStatus==='成案'}"   @click="filterStatus='成案'">成案</span>
-          <span class="dc-chip lost" :class="{on: filterStatus==='未成案'}" @click="filterStatus='未成案'">未成案</span>
-          <span class="dc-chip hold" :class="{on: filterStatus==='暫擱置'}" @click="filterStatus='暫擱置'">暫擱置</span>
+        <!-- 2026-09-14：狀態 chips 移除——上方漏斗帶的每一段就是狀態篩選器，
+             兩個控制項綁同一個 filterStatus，而且 chips 那組沒有數字、資訊量
+             比較少。這一排改放使用者真正缺的：人員與排序。 -->
+        <div style="display:flex;gap:5px;margin-top:8px">
+          <select class="dc-select" style="flex:1;font-size:11px;padding:5px 6px"
+                  x-model="filterPerson" @change="savePersonPref()">
+            <option value="">所有人員</option>
+            <option value="__me__">只看我負責的</option>
+            <template x-for="n in personOptions" :key="n">
+              <option :value="n" x-text="n"></option>
+            </template>
+          </select>
+        </div>
+        <div style="display:flex;gap:5px;margin-top:6px;align-items:center">
+          <select class="dc-select" style="flex:1;font-size:11px;padding:5px 6px"
+                  x-model="sortPref.sortMode" @change="saveSort()">
+            <option value="updated">最後更新</option>
+            <option value="created">建立日期</option>
+            <option value="name">案件名稱</option>
+            <option value="customer">客戶名稱</option>
+          </select>
+          <button type="button" class="dc-sortbtn" @click="toggleSortDir()"
+                  :title="sortPref.sortMode === 'updated' && sortPref.sortDir === 'asc' ? '最久沒動的排最前面' : ''"
+                  x-text="sortPref.sortDir === 'asc' ? '↑ 由舊到新' : '↓ 由新到舊'"></button>
         </div>
         <div style="display:flex;gap:5px;margin-top:8px">
           <select class="dc-select" style="flex:1;font-size:11px;padding:5px 6px" x-model="filterYear">
@@ -1232,6 +1248,7 @@
 
 <script src="../static/notif.js"></script>
 <script src="../static/sidebar.js"></script>
+<script src="../static/list-sort.js"></script>
 <script>
 function devCrmPage() {
   return {
@@ -1257,6 +1274,70 @@ function devCrmPage() {
     // 會一併 UPDATE dev_cases SET updated_at（dev_crm.py 那支的最後一行），
     // 所以「有接觸」一定會反映在這個欄位上。措辭沿用頁面既有的「未更新」
     // 而不是「未接觸」——編輯案件、改狀態也會動到它，那不全然是接觸。
+    // ── 人員篩選與排序偏好（2026-09-14 使用者交辦）──────────────────
+    // 「可區分業務是誰，單純看負責案件，順序可以手動選擇多種排序並記錄使用者習慣」。
+    //
+    // 偏好存兩個地方，刻意分開：
+    //   排序     → user_list_prefs（GET/PUT /api/list-prefs/dev-crm，跨裝置跟著帳號）
+    //   人員篩選 → localStorage（那張表的 schema 只有 sortMode/sortDir/customOrder，
+    //              沒有放篩選條件的地方；為了記一個下拉選單去動 DB schema 不划算。
+    //              這一頁本來就已經用 localStorage 記 motrix_devcrm_read_at。）
+    filterPerson: '',
+    sortPref: { sortMode: 'updated', sortDir: 'desc', customOrder: [] },
+
+    // 業務與企劃都算「負責」——使用者要的是「這個人手上有哪些案子」，
+    // 不是「這個人掛在哪個欄位」。
+    get personOptions() {
+      const set = new Set()
+      this.cases.forEach(c => {
+        (c.salesPersonNames || []).forEach(n => n && set.add(n))
+        ;(c.plannerNames || []).forEach(n => n && set.add(n))
+      })
+      return [...set].sort((a, b) => a.localeCompare(b, 'zh-Hant'))
+    },
+
+    _matchPerson(c) {
+      if (!this.filterPerson) return true
+      const names = [...(c.salesPersonNames || []), ...(c.plannerNames || [])]
+      if (this.filterPerson === '__me__') {
+        const me = this.session.displayName || this.session.username || ''
+        return !!me && names.includes(me)
+      }
+      return names.includes(this.filterPerson)
+    },
+
+    _sortGetters: {
+      updated:  c => c.updatedAt || c.createdAt || '',
+      created:  c => c.createdAt || '',
+      name:     c => c.caseName || '',
+      customer: c => c.customerName || '',
+    },
+
+    async savePersonPref() {
+      try { localStorage.setItem('motrix_devcrm_person', this.filterPerson) } catch (_e) {}
+    },
+    async saveSort() {
+      if (typeof saveListPref === 'function') {
+        await saveListPref(this.token, 'dev-crm', this.sortPref)
+      }
+    },
+    async toggleSortDir() {
+      this.sortPref.sortDir = this.sortPref.sortDir === 'asc' ? 'desc' : 'asc'
+      await this.saveSort()
+    },
+    async loadPrefs() {
+      try { this.filterPerson = localStorage.getItem('motrix_devcrm_person') || '' } catch (_e) {}
+      if (typeof loadListPref === 'function') {
+        const p = await loadListPref(this.token, 'dev-crm')
+        // 沒存過時後端回 sortMode:''，那不是合法的排序欄位——保留預設的
+        // 'updated'，否則 applyListSort 找不到 getter 會原樣返回、排序看起來壞掉。
+        if (p && p.sortMode && this._sortGetters[p.sortMode]) {
+          this.sortPref.sortMode = p.sortMode
+        }
+        if (p && p.sortDir) this.sortPref.sortDir = p.sortDir
+      }
+    },
+
     tempSort: 'recent',   // 'recent' | 'coldest'
 
     // 溫度只對「還在追」的案子有意義。成案／未成案已經結束了，
@@ -1339,14 +1420,18 @@ function devCrmPage() {
     },
 
     get filteredCases() {
-      return this.cases.filter(c => {
+      const rows = this.cases.filter(c => {
         const matchStatus = this.filterStatus ? c.status === this.filterStatus : c.status !== '未成案'
         const matchYear   = !this.filterYear  || (c.createdAt || '').slice(0, 4) === this.filterYear
         const matchMonth  = !this.filterMonth || (c.createdAt || '').slice(5, 7) === this.filterMonth
         const matchStale  = !this.staleOnly   || this.isStale(c)
         const matchUnread = !this.unreadOnly  || this.isUnread(c)
-        return matchStatus && matchYear && matchMonth && matchStale && matchUnread
+        const matchPerson = this._matchPerson(c)
+        return matchStatus && matchYear && matchMonth && matchStale && matchUnread && matchPerson
       })
+      return typeof applyListSort === 'function'
+        ? applyListSort(rows, this.sortPref, this._sortGetters, c => String(c.id))
+        : rows
     },
 
     get staleCount() {
@@ -1411,6 +1496,7 @@ function devCrmPage() {
           localStorage.setItem('motrix_devcrm_read_at', this.readAt)
         }
       } catch (_e) {}
+      await this.loadPrefs()
       await Promise.all([this.loadCases(), this.loadUsers(), this.loadCustomers()])
       if (this.isAdmin) this.loadPendingCount()
       this.loadActivityStats()
