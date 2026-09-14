@@ -2,11 +2,13 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="../static/favicon.png">
-  <title>採購管理 — MOTRIX 營運管理系統</title>
-  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-  <link rel="stylesheet" href="../css/style.css">
+  <title>採購管理 — MOTRIX 專案管理系統</title>
+  <script src="../static/auth-guard.js"></script>
+  <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <style>
     [x-cloak]{display:none!important}
     .page-main{margin-left:var(--sidebar-w);margin-top:var(--topbar-h);padding:28px 32px;min-height:calc(100vh - var(--topbar-h));background:var(--white)}
@@ -21,10 +23,12 @@
     .search-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text-dim);pointer-events:none}
     .search-input{width:100%;padding:8px 11px 8px 34px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;background:#fff;outline:none;box-sizing:border-box}
     .search-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(37,99,235,.08)}
-    .tab-bar{display:flex;gap:2px;margin-bottom:16px;border-bottom:1px solid var(--border-light)}
-    .tab{padding:7px 16px;font-size:12px;font-family:var(--font-zh);cursor:pointer;border:none;background:none;color:var(--text-secondary);border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .1s}
-    .tab:hover{color:var(--text-primary)}
-    .tab.on{color:var(--accent);border-bottom-color:var(--accent);font-weight:600}
+    /* 流程帶的段在這一頁是可點的篩選器（共用的 .vm-andon__seg 是純顯示） */
+    .pc-seg{border:none;cursor:pointer;text-align:left;font-family:var(--font-zh)}
+    .pc-seg:hover{background:var(--icon-btn-bg)}
+    .pc-seg.on{outline:2px solid var(--accent);outline-offset:-2px}
+    .pc-arrow{display:grid;place-items:center;background:var(--white);color:var(--border-light);font-size:13px;padding:0 2px}
+    @media (max-width:767px){.pc-arrow{display:none}}
     .tab__cnt{font-family:LINE Seed TW_OTF, sans-serif;font-size:10px;font-weight:600;margin-left:4px;padding:1px 5px;border-radius:8px;background:#F0EEE9}
     .tab.on .tab__cnt{background:var(--accent-light);color:var(--accent)}
     .panel{background:#fff;border:1px solid var(--border-light);border-radius:var(--radius-lg);overflow:hidden}
@@ -48,28 +52,57 @@
   <header id="app-topbar" class="topbar"></header>
 <div class="sidebar-overlay" id="sidebar-overlay"></div>
 
-<div class="app-shell">
+<!-- 側欄必須是 <body> 的直接子元素：深色模式的反轉濾鏡排除清單只認直接子元素
+     （style.css「DARK MODE」區塊的 body > *:not(.sidebar)），包進 .app-shell
+     裡會連同整個側欄一起被反轉成白底，且 position:fixed 會改以該容器定位。 -->
+<aside class="sidebar" id="app-sidebar"></aside>
 
-  <aside class="sidebar" id="app-sidebar"></aside>
+<div class="app-shell">
 
   <main class="page-main">
 
-    <div class="stat-strip">
-      <div class="stat-pill">
-        <div class="stat-pill__val" x-text="items.length">—</div>
-        <div class="stat-pill__lbl">叫料項目</div>
+    <div class="pg">
+      <div class="pg__l">
+        <div class="pg__eyebrow">廠商與採購</div>
+        <h1 class="pg__t">採購管理</h1>
+        <p class="pg__s">叫料需求與採購進度追蹤</p>
       </div>
-      <div class="stat-pill warn">
-        <div class="stat-pill__val" x-text="items.filter(m=>m.status==='pending').length">—</div>
-        <div class="stat-pill__lbl">待採購</div>
-      </div>
-      <div class="stat-pill" style="--val-color:#1E40AF">
-        <div class="stat-pill__val" style="color:#1E40AF" x-text="items.filter(m=>m.status==='ordered').length">—</div>
-        <div class="stat-pill__lbl">已下單待料</div>
-      </div>
-      <div class="stat-pill success">
-        <div class="stat-pill__val" x-text="items.filter(m=>m.status==='arrived').length">—</div>
-        <div class="stat-pill__lbl">已到料</div>
+    </div>
+
+    <!-- ── 叫料流程帶（2026-09-14）────────────────────────────────────
+         原本這裡是「4 個統計數字」加下方「4 個分頁」，顯示完全相同的 4 個數，
+         連 items.filter(...) 那串運算式都各寫了兩次。收成一條帶子：每一段
+         自己就是篩選器。待採購→已下單待料→已到料是真的有方向的流程，
+         所以用箭頭；「叫料項目」是總數不在流程上，放最前面當清除鍵。 -->
+    <div class="vm-andon" style="margin-bottom:14px">
+      <button type="button" class="vm-andon__seg pc-seg" :class="{on: tab==='all'}" @click="tab='all'">
+        <span class="vm-andon__val" x-text="items.length"></span>
+        <span class="vm-andon__lbl">叫料項目<small>全部顯示</small></span>
+      </button>
+      <button type="button" class="vm-andon__seg pc-seg" :class="{on: tab==='pending'}"
+              @click="tab = (tab==='pending' ? 'all' : 'pending')">
+        <span class="vm-andon__val" style="color:var(--warning)" x-text="statusCount('pending')"></span>
+        <span class="vm-andon__lbl">待採購<small>尚未下單</small></span>
+      </button>
+      <span class="pc-arrow" aria-hidden="true">→</span>
+      <button type="button" class="vm-andon__seg pc-seg" :class="{on: tab==='ordered'}"
+              @click="tab = (tab==='ordered' ? 'all' : 'ordered')">
+        <span class="vm-andon__val" style="color:var(--orange)" x-text="statusCount('ordered')"></span>
+        <span class="vm-andon__lbl">已下單待料<small>等供應商出貨</small></span>
+      </button>
+      <span class="pc-arrow" aria-hidden="true">→</span>
+      <button type="button" class="vm-andon__seg pc-seg" :class="{on: tab==='arrived'}"
+              @click="tab = (tab==='arrived' ? 'all' : 'arrived')">
+        <span class="vm-andon__val" style="color:var(--success)" x-text="statusCount('arrived')"></span>
+        <span class="vm-andon__lbl">已到料<small>可領用</small></span>
+      </button>
+      <div class="vm-andon__bar">
+        <span class="vm-andon__track"
+              :title="'待採購 ' + statusCount('pending') + '／已下單 ' + statusCount('ordered') + '／已到料 ' + statusCount('arrived')">
+          <i :style="'width:' + statusPct('pending') + '%;background:var(--warning)'"></i>
+          <i :style="'width:' + statusPct('ordered') + '%;background:var(--orange)'"></i>
+          <i :style="'width:' + statusPct('arrived') + '%;background:var(--success)'"></i>
+        </span>
       </div>
     </div>
 
@@ -79,21 +112,6 @@
         <input class="search-input" type="search" placeholder="搜尋品名 / 型號 / 案件號 / 客戶…" x-model="search">
       </div>
       <div style="margin-left:auto;font-size:12px;color:var(--text-dim)" x-text="filtered.length + ' 筆'"></div>
-    </div>
-
-    <div class="tab-bar">
-      <button class="tab" :class="tab==='all' && 'on'" @click="tab='all'">
-        全部 <span class="tab__cnt" x-text="items.length"></span>
-      </button>
-      <button class="tab" :class="tab==='pending' && 'on'" @click="tab='pending'">
-        待採購 <span class="tab__cnt" x-text="items.filter(m=>m.status==='pending').length"></span>
-      </button>
-      <button class="tab" :class="tab==='ordered' && 'on'" @click="tab='ordered'">
-        待到料 <span class="tab__cnt" x-text="items.filter(m=>m.status==='ordered').length"></span>
-      </button>
-      <button class="tab" :class="tab==='arrived' && 'on'" @click="tab='arrived'">
-        已到料 <span class="tab__cnt" x-text="items.filter(m=>m.status==='arrived').length"></span>
-      </button>
     </div>
 
     <div class="panel">
@@ -168,6 +186,15 @@ function app() {
     loading: true,
     items: [],
     search: '',
+    // 2026-09-14：原本 items.filter(m=>m.status==='xxx').length 在畫面上
+    // 每個狀態各寫兩次（統計條一次、分頁一次），共八串。抽成方法。
+    statusCount(st) { return this.items.filter(m => m.status === st).length },
+    statusPct(st) {
+      const t = this.items.length
+      if (!t) return 0
+      const n = this.statusCount(st)
+      return n ? Math.max(2, Math.round(n / t * 100)) : 0
+    },
     tab: 'all',
 
     get filtered() {

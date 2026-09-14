@@ -1,5 +1,7 @@
 """External email notifications via SMTP (Gmail App Password)."""
+import html as _html
 import logging
+import os
 import smtplib
 import threading
 from email.encoders import encode_base64 as _encode_b64
@@ -9,8 +11,36 @@ from email.mime.text import MIMEText
 from urllib.parse import quote as _pct_quote
 
 from .settings import _get_setting
+from .notification_prefs import is_enabled as _pref_enabled
 
 logger = logging.getLogger(__name__)
+
+
+def _is_production_install() -> bool:
+    """正式機身分守門，比照 apply_update.ps1／setup_autostart_task.ps1 既有的
+    「只認 C:\\Users\\Motrix\\Desktop\\V9.0 這個安裝路徑」慣例——這支檔案自己的
+    絕對路徑若不在 \\V9.0\\ 底下，就一律視為開發/測試環境。"""
+    here = os.path.abspath(__file__).replace("/", "\\")
+    return "\\V9.0\\" in here
+
+
+_PRODUCTION_INSTALL = _is_production_install()
+
+
+def _smtp_send_blocked(subject: str) -> bool:
+    """2026-08-27 新增的硬性防呆：開發機啟動 dev server 時，既有的「簽核逾期催辦」
+    啟動排程曾經意外對真實同仁寄出真實催辦信（見 _apply_dev_subject_prefix 的
+    dev_mode 機制——那套是 2026-08-26 針對同類事故加的軟性提醒，只會在 subject
+    加註文字，需要手動開啟且不會真的擋下寄送，這次同一種事故又發生了一次，代表
+    「預設關閉、需要手動開啟」的軟性方案不夠）。這裡改成預設硬擋：只要目前執行的
+    程式碼不是安裝在正式機路徑（_is_production_install()），無論 email_notify 設定
+    的 enabled／dev_mode 開關怎麼設，一律不會真的呼叫 SMTP 寄信，只會記錄
+    log 供除錯查看內容。要在開發機真的測試寄信，請直接用真實的正式機環境測試，
+    不要在本機開發環境啟動會觸發背景排程的完整 dev server。"""
+    if _PRODUCTION_INSTALL:
+        return False
+    logger.warning("email BLOCKED — not running from production install path (dev/test environment); subject: %r", subject)
+    return True
 
 _STYLE = """
 body{font-family:Arial,sans-serif;background:#F5F5F0;margin:0;padding:24px}
@@ -47,7 +77,7 @@ def _build_html(title: str, badge_text: str, badge_color: str,
         f'{title} <span class="badge" style="background:{badge_color}">{badge_text}</span></div>'
         f'{intro_html}{row_html}{note_html}'
         f'<a href="{link}" class="btn" style="display:inline-block;margin-top:22px;padding:10px 22px;background:#1D4ED8;color:#ffffff !important;border-radius:7px;text-decoration:none;font-size:14px;font-weight:600">{button_text}</a>'
-        f'<div class="foot">本郵件由 MOTRIX 營運管理系統自動發送，請勿直接回覆。'
+        f'<div class="foot">本郵件由 MOTRIX 專案管理系統自動發送，請勿直接回覆。'
         f'如有疑問，請聯絡系統管理員。</div>'
         f'</div></body></html>'
     )
@@ -58,27 +88,47 @@ def _cfg() -> dict:
 
 
 def _base_url() -> str:
-    return (_cfg().get("base_url") or "http://172.16.11.211:666").rstrip("/")
+    # 2026-08-27：預設值改 https（見 backend/tools/https_setup.ps1）——但這只影響
+    # 「從未存過設定值」的情況，正式機若已經存過 http 版本，這裡的預設值改變不會
+    # 回溯更新既有設定，套用 HTTPS 後需要 superadmin 手動去通知設定頁更新一次。
+    return (_cfg().get("base_url") or "https://172.16.10.177:666").rstrip("/")
 
 
-def _admin_emails() -> list:
-    """Return emails of active admin/superadmin users who have email configured."""
+_DEV_SUBJECT_PREFIX = "【開發機測試】"
+
+
+def _apply_dev_subject_prefix(cfg: dict, subject: str) -> str:
+    """開發機測試模式（system_settings.email_notify.dev_mode，2026-08-26 新增）：
+    這是存在各機器自己 SQLite DB 裡的設定值，不隨 git 部署流程移動，正式機的
+    DB 不會被這個設定影響，只要開發機自己開啟即可，避免開發機測試觸發的通知信
+    被收件人誤認為正式環境的真實通知（見一次啟動開發伺服器後不慎寄出正式逾期
+    提醒信給真實同仁的事故）。"""
+    if not cfg.get("dev_mode"):
+        return subject
+    if subject.startswith(_DEV_SUBJECT_PREFIX):
+        return subject
+    return f"{_DEV_SUBJECT_PREFIX}{subject}"
+
+
+def _admin_emails(event_key: str = None) -> list:
+    """Return emails of active admin/superadmin users who have email configured
+    and have not muted event_key (see helpers/notification_prefs.py)."""
     try:
         from db import get_db
         conn = get_db()
         rows = conn.execute(
-            "SELECT email FROM users "
+            "SELECT email, notification_muted FROM users "
             "WHERE active=1 AND role IN ('admin','superadmin') "
             "AND email IS NOT NULL AND email != ''",
         ).fetchall()
         conn.close()
-        return [r["email"] for r in rows]
+        return [r["email"] for r in rows if _pref_enabled(r["notification_muted"], event_key)]
     except Exception as exc:
         logger.warning("_admin_emails failed: %s", exc)
         return []
 
 
-def _lookup_emails(usernames: list) -> list:
+def _lookup_emails(usernames: list, event_key: str = None) -> list:
     if not usernames:
         return []
     try:
@@ -86,11 +136,12 @@ def _lookup_emails(usernames: list) -> list:
         conn = get_db()
         ph = ",".join("?" * len(usernames))
         rows = conn.execute(
-            f"SELECT email FROM users WHERE username IN ({ph}) AND active=1 AND email!=''",
+            f"SELECT email, notification_muted FROM users "
+            f"WHERE username IN ({ph}) AND active=1 AND email!=''",
             usernames,
         ).fetchall()
         conn.close()
-        return [r["email"] for r in rows if r["email"]]
+        return [r["email"] for r in rows if r["email"] and _pref_enabled(r["notification_muted"], event_key)]
     except Exception as exc:
         logger.warning("_lookup_emails failed: %s", exc)
         return []
@@ -100,6 +151,9 @@ def _send(to_addrs: list, subject: str, html: str) -> None:
     cfg = _cfg()
     if not cfg.get("enabled"):
         return
+    subject = _apply_dev_subject_prefix(cfg, subject)
+    if _smtp_send_blocked(subject):
+        return
     if not to_addrs:
         logger.warning("email skipped — recipient list empty; subject: %r", subject)
         return
@@ -107,7 +161,7 @@ def _send(to_addrs: list, subject: str, html: str) -> None:
     port = int(cfg.get("smtp_port", 587))
     user = cfg.get("smtp_user", "")
     pw   = cfg.get("smtp_password", "")
-    from_name = cfg.get("from_name", "MOTRIX營運系統")
+    from_name = cfg.get("from_name", "MOTRIX專案管理系統")
     if not user or not pw:
         logger.warning("email skipped — SMTP credentials not configured; subject: %r", subject)
         return
@@ -137,13 +191,16 @@ def _send_raising(to_addrs: list, subject: str, html: str) -> None:
     cfg = _cfg()
     if not cfg.get("enabled"):
         raise RuntimeError("Email 通知功能未啟用")
+    subject = _apply_dev_subject_prefix(cfg, subject)
+    if _smtp_send_blocked(subject):
+        raise RuntimeError("非正式機環境，已擋下寄送（見 _smtp_send_blocked 說明）")
     if not to_addrs:
         raise RuntimeError("收件人清單為空")
     host = cfg.get("smtp_host", "smtp.gmail.com")
     port = int(cfg.get("smtp_port", 587))
     user = cfg.get("smtp_user", "")
     pw   = cfg.get("smtp_password", "")
-    from_name = cfg.get("from_name", "MOTRIX營運系統")
+    from_name = cfg.get("from_name", "MOTRIX專案管理系統")
     if not user or not pw:
         raise RuntimeError("SMTP 帳號或應用程式密碼未設定")
     msg = MIMEMultipart("alternative")
@@ -163,7 +220,7 @@ def _send_raising(to_addrs: list, subject: str, html: str) -> None:
 
 def notify_approval_request(quote_no: str, customer: str, approver_usernames: list) -> None:
     """新報價/改版送審 → 通知當層簽核人"""
-    to = _lookup_emails(approver_usernames)
+    to = _lookup_emails(approver_usernames, "approval_request")
     if not to:
         logger.warning("notify_approval_request: 簽核人 %s 皆無設定 email（quote_no=%r）", approver_usernames, quote_no)
         return
@@ -180,7 +237,7 @@ def notify_approval_request(quote_no: str, customer: str, approver_usernames: li
 def notify_next_tier(quote_no: str, customer: str, tier_no: int,
                      total_tiers: int, approver_usernames: list) -> None:
     """前層通過，下一層簽核通知"""
-    to = _lookup_emails(approver_usernames)
+    to = _lookup_emails(approver_usernames, "next_tier")
     if not to:
         logger.warning("notify_next_tier: 第 %d 層簽核人 %s 皆無設定 email（quote_no=%r）", tier_no, approver_usernames, quote_no)
         return
@@ -198,7 +255,7 @@ def notify_next_tier(quote_no: str, customer: str, tier_no: int,
 def notify_approved(quote_no: str, customer: str,
                     approved_by: str, requester_username: str) -> None:
     """全員簽核完成 → 通知申請人 + admin_emails"""
-    to = list(set(_lookup_emails([requester_username]) + _admin_emails()))
+    to = list(set(_lookup_emails([requester_username], "approved") + _admin_emails("approved")))
     if not to:
         logger.warning("notify_approved: 申請人 %r 及所有管理員皆無設定 email（quote_no=%r）", requester_username, quote_no)
         return
@@ -215,7 +272,7 @@ def notify_approved(quote_no: str, customer: str,
 def notify_returned(quote_no: str, new_quote_no: str, customer: str,
                     note: str, requester_username: str) -> None:
     """退回修改 → 通知申請人"""
-    to = _lookup_emails([requester_username])
+    to = _lookup_emails([requester_username], "returned")
     if not to:
         logger.warning("notify_returned: 申請人 %r 無設定 email（quote_no=%r）", requester_username, quote_no)
         return
@@ -230,11 +287,347 @@ def notify_returned(quote_no: str, new_quote_no: str, customer: str,
     _async_send(to, f"【MOTRIX】報價單退回修改 — {quote_no}（{customer}）", html)
 
 
+def notify_shipping_submitted(note_no: str, customer: str, approver_usernames: list) -> None:
+    """出貨單送審 → 通知當層簽核人"""
+    to = _lookup_emails(approver_usernames, "shipping_submitted")
+    if not to:
+        logger.warning("notify_shipping_submitted: 簽核人 %s 皆無設定 email（note_no=%r）", approver_usernames, note_no)
+        return
+    page = f"{_base_url()}/pages/shipping-notes.html?no={note_no}"
+    html = _build_html(
+        "出貨單簽核申請", "待您審核", "#2F6FD6",
+        [("出貨單號", note_no), ("客戶名稱", customer)],
+        "", page,
+        intro="您好，以下出貨單已進入簽核流程，敬請於系統中完成審核作業。",
+        button_text="前往審核出貨單",
+    )
+    _async_send(to, f"【MOTRIX】出貨單待審核 — {note_no}（{customer}）", html)
+
+
+def notify_shipping_next_tier(note_no: str, customer: str, tier_no: int,
+                              total_tiers: int, approver_usernames: list) -> None:
+    """前層通過，出貨單下一層簽核通知"""
+    to = _lookup_emails(approver_usernames, "shipping_next_tier")
+    if not to:
+        logger.warning("notify_shipping_next_tier: 第 %d 層簽核人 %s 皆無設定 email（note_no=%r）",
+                       tier_no, approver_usernames, note_no)
+        return
+    page = f"{_base_url()}/pages/shipping-notes.html?no={note_no}"
+    html = _build_html(
+        "出貨單簽核流程通知", "輪到您審核", "#2F6FD6",
+        [("出貨單號", note_no), ("客戶名稱", customer),
+         ("目前進度", f"第 {tier_no} 層審核（共 {total_tiers} 層）")],
+        "", page,
+        intro=f"您好，前層審核已完成，出貨單現已進入第 {tier_no} 層審核階段，敬請登入系統完成審核。",
+        button_text="前往審核出貨單",
+    )
+    _async_send(to, f"【MOTRIX】出貨單審核通知（第 {tier_no}/{total_tiers} 層）— {note_no}（{customer}）", html)
+
+
+def notify_shipping_approved(note_no: str, customer: str, approved_by: str, requester_username: str) -> None:
+    """出貨單全員簽核完成 → 通知申請人"""
+    to = _lookup_emails([requester_username], "shipping_approved")
+    if not to:
+        logger.warning("notify_shipping_approved: 申請人 %r 無設定 email（note_no=%r）", requester_username, note_no)
+        return
+    page = f"{_base_url()}/pages/shipping-notes.html?no={note_no}"
+    html = _build_html(
+        "出貨單審核完成", "已核准", "#16A34A",
+        [("出貨單號", note_no), ("客戶名稱", customer), ("核准人", approved_by)],
+        "", page,
+        intro="您好，以下出貨單已完成審核並核准。",
+        button_text="前往查看出貨單",
+    )
+    _async_send(to, f"【MOTRIX】出貨單已核准 — {note_no}（{customer}）", html)
+
+
+def notify_shipping_returned(note_no: str, customer: str, note: str, requester_username: str) -> None:
+    """出貨單退回 → 通知申請人"""
+    to = _lookup_emails([requester_username], "shipping_returned")
+    if not to:
+        logger.warning("notify_shipping_returned: 申請人 %r 無設定 email（note_no=%r）", requester_username, note_no)
+        return
+    page = f"{_base_url()}/pages/shipping-notes.html?no={note_no}"
+    html = _build_html(
+        "出貨單退回通知", "請修改後重新送審", "#DC2626",
+        [("出貨單號", note_no), ("客戶名稱", customer)],
+        "", page,
+        intro="您好，您送出的出貨單經審核後，因需要調整已退回，請參閱下方備註後完成修改並重新送審。",
+        note=note,
+        button_text="前往修改出貨單",
+    )
+    _async_send(to, f"【MOTRIX】出貨單已退回 — {note_no}（{customer}）", html)
+
+
+def notify_contractor_voucher_submitted(voucher_no: str, vendor_name: str, approver_usernames: list) -> None:
+    """承攬商匯款申請送審 → 通知當層簽核人"""
+    to = _lookup_emails(approver_usernames, "contractor_voucher_submitted")
+    if not to:
+        logger.warning("notify_contractor_voucher_submitted: 簽核人 %s 皆無設定 email（voucher_no=%r）",
+                       approver_usernames, voucher_no)
+        return
+    page = f"{_base_url()}/pages/case-management.html"
+    html = _build_html(
+        "承攬商匯款申請簽核申請", "待您審核", "#2F6FD6",
+        [("申請單號", voucher_no), ("承攬商", vendor_name)],
+        "", page,
+        intro="您好，以下承攬商匯款申請已進入簽核流程，敬請於系統中完成審核作業。",
+        button_text="前往審核",
+    )
+    _async_send(to, f"【MOTRIX】承攬商匯款申請待審核 — {voucher_no}（{vendor_name}）", html)
+
+
+def notify_contractor_voucher_next_tier(voucher_no: str, vendor_name: str, tier_no: int,
+                                        total_tiers: int, approver_usernames: list) -> None:
+    """前層通過，承攬商匯款申請下一層簽核通知"""
+    to = _lookup_emails(approver_usernames, "contractor_voucher_next_tier")
+    if not to:
+        logger.warning("notify_contractor_voucher_next_tier: 第 %d 層簽核人 %s 皆無設定 email（voucher_no=%r）",
+                       tier_no, approver_usernames, voucher_no)
+        return
+    page = f"{_base_url()}/pages/case-management.html"
+    html = _build_html(
+        "承攬商匯款申請簽核流程通知", "輪到您審核", "#2F6FD6",
+        [("申請單號", voucher_no), ("承攬商", vendor_name),
+         ("目前進度", f"第 {tier_no} 層審核（共 {total_tiers} 層）")],
+        "", page,
+        intro=f"您好，前層審核已完成，承攬商匯款申請現已進入第 {tier_no} 層審核階段，敬請登入系統完成審核。",
+        button_text="前往審核",
+    )
+    _async_send(to, f"【MOTRIX】承攬商匯款申請審核通知（第 {tier_no}/{total_tiers} 層）— {voucher_no}（{vendor_name}）", html)
+
+
+def notify_contractor_voucher_approved(voucher_no: str, vendor_name: str, approved_by: str,
+                                       requester_username: str) -> None:
+    """承攬商匯款申請全員簽核完成 → 通知申請人"""
+    to = _lookup_emails([requester_username], "contractor_voucher_approved")
+    if not to:
+        logger.warning("notify_contractor_voucher_approved: 申請人 %r 無設定 email（voucher_no=%r）",
+                       requester_username, voucher_no)
+        return
+    page = f"{_base_url()}/pages/case-management.html"
+    html = _build_html(
+        "承攬商匯款申請審核完成", "已核准", "#16A34A",
+        [("申請單號", voucher_no), ("承攬商", vendor_name), ("核准人", approved_by)],
+        "", page,
+        intro="您好，以下承攬商匯款申請已完成審核並核准，可提供財務單位辦理匯款。",
+        button_text="前往查看",
+    )
+    _async_send(to, f"【MOTRIX】承攬商匯款申請已核准 — {voucher_no}（{vendor_name}）", html)
+
+
+def notify_contractor_voucher_returned(voucher_no: str, vendor_name: str, note: str,
+                                       requester_username: str) -> None:
+    """承攬商匯款申請退回 → 通知申請人"""
+    to = _lookup_emails([requester_username], "contractor_voucher_returned")
+    if not to:
+        logger.warning("notify_contractor_voucher_returned: 申請人 %r 無設定 email（voucher_no=%r）",
+                       requester_username, voucher_no)
+        return
+    page = f"{_base_url()}/pages/case-management.html"
+    html = _build_html(
+        "承攬商匯款申請退回通知", "請修改後重新送審", "#DC2626",
+        [("申請單號", voucher_no), ("承攬商", vendor_name)],
+        "", page,
+        intro="您好，您送出的承攬商匯款申請經審核後，因需要調整已退回，請參閱下方備註後完成修改並重新送審。",
+        note=note,
+        button_text="前往修改",
+    )
+    _async_send(to, f"【MOTRIX】承攬商匯款申請已退回 — {voucher_no}（{vendor_name}）", html)
+
+
+def notify_invoice_voucher_submitted(voucher_no: str, customer: str, approver_usernames: list) -> None:
+    """開票申請憑據送審 → 通知當層簽核人"""
+    to = _lookup_emails(approver_usernames, "invoice_voucher_submitted")
+    if not to:
+        logger.warning("notify_invoice_voucher_submitted: 簽核人 %s 皆無設定 email（voucher_no=%r）",
+                       approver_usernames, voucher_no)
+        return
+    page = f"{_base_url()}/pages/case-management.html"
+    html = _build_html(
+        "開票申請憑據簽核申請", "待您審核", "#2F6FD6",
+        [("憑據單號", voucher_no), ("客戶名稱", customer)],
+        "", page,
+        intro="您好，以下開票申請憑據已進入簽核流程，敬請於系統中完成審核作業。",
+        button_text="前往審核",
+    )
+    _async_send(to, f"【MOTRIX】開票申請憑據待審核 — {voucher_no}（{customer}）", html)
+
+
+def notify_invoice_voucher_next_tier(voucher_no: str, customer: str, tier_no: int,
+                                     total_tiers: int, approver_usernames: list) -> None:
+    """前層通過，開票申請憑據下一層簽核通知"""
+    to = _lookup_emails(approver_usernames, "invoice_voucher_next_tier")
+    if not to:
+        logger.warning("notify_invoice_voucher_next_tier: 第 %d 層簽核人 %s 皆無設定 email（voucher_no=%r）",
+                       tier_no, approver_usernames, voucher_no)
+        return
+    page = f"{_base_url()}/pages/case-management.html"
+    html = _build_html(
+        "開票申請憑據簽核流程通知", "輪到您審核", "#2F6FD6",
+        [("憑據單號", voucher_no), ("客戶名稱", customer),
+         ("目前進度", f"第 {tier_no} 層審核（共 {total_tiers} 層）")],
+        "", page,
+        intro=f"您好，前層審核已完成，開票申請憑據現已進入第 {tier_no} 層審核階段，敬請登入系統完成審核。",
+        button_text="前往審核",
+    )
+    _async_send(to, f"【MOTRIX】開票申請憑據審核通知（第 {tier_no}/{total_tiers} 層）— {voucher_no}（{customer}）", html)
+
+
+def notify_invoice_voucher_approved(voucher_no: str, customer: str, approved_by: str,
+                                    requester_username: str) -> None:
+    """開票申請憑據全員簽核完成 → 通知申請人"""
+    to = _lookup_emails([requester_username], "invoice_voucher_approved")
+    if not to:
+        logger.warning("notify_invoice_voucher_approved: 申請人 %r 無設定 email（voucher_no=%r）",
+                       requester_username, voucher_no)
+        return
+    page = f"{_base_url()}/pages/case-management.html"
+    html = _build_html(
+        "開票申請憑據審核完成", "已核准", "#16A34A",
+        [("憑據單號", voucher_no), ("客戶名稱", customer), ("核准人", approved_by)],
+        "", page,
+        intro="您好，以下開票申請憑據已完成審核並核准，可提供財務單位辦理開立發票。",
+        button_text="前往查看",
+    )
+    _async_send(to, f"【MOTRIX】開票申請憑據已核准 — {voucher_no}（{customer}）", html)
+
+
+def notify_invoice_voucher_returned(voucher_no: str, customer: str, note: str,
+                                    requester_username: str) -> None:
+    """開票申請憑據退回 → 通知申請人"""
+    to = _lookup_emails([requester_username], "invoice_voucher_returned")
+    if not to:
+        logger.warning("notify_invoice_voucher_returned: 申請人 %r 無設定 email（voucher_no=%r）",
+                       requester_username, voucher_no)
+        return
+    page = f"{_base_url()}/pages/case-management.html"
+    html = _build_html(
+        "開票申請憑據退回通知", "請修改後重新送審", "#DC2626",
+        [("憑據單號", voucher_no), ("客戶名稱", customer)],
+        "", page,
+        intro="您好，您送出的開票申請憑據經審核後，因需要調整已退回，請參閱下方備註後完成修改並重新送審。",
+        note=note,
+        button_text="前往修改",
+    )
+    _async_send(to, f"【MOTRIX】開票申請憑據已退回 — {voucher_no}（{customer}）", html)
+
+
+def notify_payment_request_submitted(request_no: str, customer: str, approver_usernames: list) -> None:
+    """請款單送審 → 通知當層簽核人"""
+    to = _lookup_emails(approver_usernames, "payment_request_submitted")
+    if not to:
+        logger.warning("notify_payment_request_submitted: 簽核人 %s 皆無設定 email（request_no=%r）",
+                       approver_usernames, request_no)
+        return
+    page = f"{_base_url()}/pages/case-management.html"
+    html = _build_html(
+        "請款單簽核申請", "待您審核", "#2F6FD6",
+        [("請款單號", request_no), ("客戶名稱", customer)],
+        "", page,
+        intro="您好，以下請款單已進入簽核流程，敬請於系統中完成審核作業。",
+        button_text="前往審核",
+    )
+    _async_send(to, f"【MOTRIX】請款單待審核 — {request_no}（{customer}）", html)
+
+
+def notify_payment_request_next_tier(request_no: str, customer: str, tier_no: int,
+                                     total_tiers: int, approver_usernames: list) -> None:
+    """前層通過，請款單下一層簽核通知"""
+    to = _lookup_emails(approver_usernames, "payment_request_next_tier")
+    if not to:
+        logger.warning("notify_payment_request_next_tier: 第 %d 層簽核人 %s 皆無設定 email（request_no=%r）",
+                       tier_no, approver_usernames, request_no)
+        return
+    page = f"{_base_url()}/pages/case-management.html"
+    html = _build_html(
+        "請款單簽核流程通知", "輪到您審核", "#2F6FD6",
+        [("請款單號", request_no), ("客戶名稱", customer),
+         ("目前進度", f"第 {tier_no} 層審核（共 {total_tiers} 層）")],
+        "", page,
+        intro=f"您好，前層審核已完成，請款單現已進入第 {tier_no} 層審核階段，敬請登入系統完成審核。",
+        button_text="前往審核",
+    )
+    _async_send(to, f"【MOTRIX】請款單審核通知（第 {tier_no}/{total_tiers} 層）— {request_no}（{customer}）", html)
+
+
+def notify_payment_request_approved(request_no: str, customer: str, approved_by: str,
+                                    requester_username: str) -> None:
+    """請款單全員簽核完成 → 通知申請人"""
+    to = _lookup_emails([requester_username], "payment_request_approved")
+    if not to:
+        logger.warning("notify_payment_request_approved: 申請人 %r 無設定 email（request_no=%r）",
+                       requester_username, request_no)
+        return
+    page = f"{_base_url()}/pages/case-management.html"
+    html = _build_html(
+        "請款單審核完成", "已核准", "#16A34A",
+        [("請款單號", request_no), ("客戶名稱", customer), ("核准人", approved_by)],
+        "", page,
+        intro="您好，以下請款單已完成審核並核准。",
+        button_text="前往查看",
+    )
+    _async_send(to, f"【MOTRIX】請款單已核准 — {request_no}（{customer}）", html)
+
+
+def notify_payment_request_returned(request_no: str, customer: str, note: str,
+                                    requester_username: str) -> None:
+    """請款單退回 → 通知申請人"""
+    to = _lookup_emails([requester_username], "payment_request_returned")
+    if not to:
+        logger.warning("notify_payment_request_returned: 申請人 %r 無設定 email（request_no=%r）",
+                       requester_username, request_no)
+        return
+    page = f"{_base_url()}/pages/case-management.html"
+    html = _build_html(
+        "請款單退回通知", "請修改後重新送審", "#DC2626",
+        [("請款單號", request_no), ("客戶名稱", customer)],
+        "", page,
+        intro="您好，您送出的請款單經審核後，因需要調整已退回，請參閱下方備註後完成修改並重新送審。",
+        note=note,
+        button_text="前往修改",
+    )
+    _async_send(to, f"【MOTRIX】請款單已退回 — {request_no}（{customer}）", html)
+
+
+def notify_approval_reminder(doc_type_label: str, doc_no: str, desc: str, days_elapsed: int,
+                             approver_usernames: list, also_superadmin: bool = False) -> None:
+    """簽核逾期催辦（2026-08-21，2026-08-24 補上出貨單，2026-08-25 收斂收件人）：
+    報價單／承攬商匯款申請／開票申請憑據／出貨單共用同一支——卡在簽核柱列超過
+    工作日 1/3/5 天時由 routers/daily_tasks.py 的每日排程呼叫。days_elapsed 決定
+    badge 文字/顏色的嚴重度分級；also_superadmin 為真時額外加上最高管理員收件人
+    （3 天門檻起）——只通知 superadmin，不是全部 admin，避免一般 admin 被灌爆。
+    統一連到簽核佇列頁（四種文件現在都在同一頁），不用像其他通知一樣依文件類型
+    分開連結。"""
+    to = list(set(_lookup_emails(approver_usernames, "approval_reminder")
+                  + (_superadmin_emails("approval_reminder") if also_superadmin else [])))
+    if not to:
+        logger.warning("notify_approval_reminder: %s %r 的簽核人 %s 及管理員皆無設定 email（also_superadmin=%s）",
+                       doc_type_label, doc_no, approver_usernames, also_superadmin)
+        return
+    if days_elapsed >= 5:
+        badge, color = f"已逾期 {days_elapsed} 個工作日，急件", "#DC2626"
+    elif days_elapsed >= 3:
+        badge, color = f"已逾期 {days_elapsed} 個工作日，已通知管理員", "#EA580C"
+    else:
+        badge, color = f"已逾期 {days_elapsed} 個工作日", "#D97706"
+    page = f"{_base_url()}/pages/approval-queue.html"
+    html = _build_html(
+        f"{doc_type_label}簽核逾期提醒", badge, color,
+        [("單號", doc_no), ("內容", desc), ("已等待", f"{days_elapsed} 個工作日")],
+        "", page,
+        intro=f"您好，以下{doc_type_label}已送出審核，但等待您簽核已超過 {days_elapsed} 個工作日，敬請儘速於系統中完成審核作業。"
+              + ("目前已同步通知系統管理員協助處理。" if also_superadmin else ""),
+        button_text="前往簽核佇列",
+    )
+    _async_send(to, f"【MOTRIX】{doc_type_label}簽核逾期提醒（{days_elapsed} 個工作日）— {doc_no}", html)
+
+
 def notify_resubmit_requester(new_quote_no: str, original_quote_no: str,
                               customer: str, requester_username: str,
                               approver_names: list) -> None:
     """退回改版重新送審 → 確認信給申請人"""
-    to = _lookup_emails([requester_username])
+    to = _lookup_emails([requester_username], "resubmit_requester")
     if not to:
         logger.warning("notify_resubmit_requester: 申請人 %r 無設定 email（quote_no=%r）",
                        requester_username, new_quote_no)
@@ -255,7 +648,7 @@ def notify_daily_task_assigned(task_id: int, title: str, task_date: str,
                                assignee_usernames: list,
                                description: str = '') -> None:
     """工作事項指派 → 通知被指派人"""
-    to = _lookup_emails(assignee_usernames)
+    to = _lookup_emails(assignee_usernames, "daily_task_assigned")
     if not to:
         logger.warning("notify_daily_task_assigned: 指派對象 %s 皆無設定 email（task_id=%d）",
                        assignee_usernames, task_id)
@@ -276,7 +669,7 @@ def notify_daily_task_assigned(task_id: int, title: str, task_date: str,
 def notify_dev_case_delete_request(case_id: int, case_name: str,
                                    requester_display: str, reason: str = '') -> None:
     """業務開發案件刪除申請 → 通知所有最高管理者審核"""
-    to = _superadmin_emails()
+    to = _superadmin_emails("dev_case_delete_request")
     if not to:
         logger.warning("notify_dev_case_delete_request: 無最高管理者 email（case_id=%d）", case_id)
         return
@@ -293,6 +686,27 @@ def notify_dev_case_delete_request(case_id: int, case_name: str,
     _async_send(to, f"【MOTRIX】業務開發案件刪除申請 — {case_name}", html)
 
 
+def notify_dev_case_relink_request(case_id: int, case_name: str, requester_display: str,
+                                   target_quote_no: str = '', reason: str = '') -> None:
+    """業務開發案件報價單連結異動申請（改連結或清空連結）→ 通知所有最高管理者審核"""
+    to = _superadmin_emails("dev_case_relink_request")
+    if not to:
+        logger.warning("notify_dev_case_relink_request: 無最高管理者 email（case_id=%d）", case_id)
+        return
+    crm_page = f"{_base_url()}/pages/dev-crm.html"
+    action_desc = f"改為連結至 {target_quote_no}" if target_quote_no else "解除連結（清空報價單號）"
+    rows = [("案件名稱", case_name), ("申請人", requester_display), ("異動內容", action_desc)]
+    if reason and reason.strip():
+        rows.append(("申請原因", reason.strip()))
+    html = _build_html(
+        "業務開發案件報價單連結異動申請", "請盡速審核", "#DC2626",
+        rows, "", crm_page,
+        intro=f"{requester_display} 申請異動業務開發案件的報價單連結，請最高管理者登入系統審核。",
+        button_text="前往審核",
+    )
+    _async_send(to, f"【MOTRIX】業務開發案件連結異動申請 — {case_name}", html)
+
+
 def notify_daily_task_completed(task_id: int, title: str, task_date: str,
                                 completed_by_username: str, completed_by_display: str,
                                 report: str,
@@ -302,7 +716,7 @@ def notify_daily_task_completed(task_id: int, title: str, task_date: str,
     """工作事項完成回報 → 通知指定主管；未指定則通知所有 admin/superadmin。
     is_edit=True 時使用「已修改」格式並顯示修改前後對照。"""
     if supervisor_usernames:
-        to = _lookup_emails(supervisor_usernames)
+        to = _lookup_emails(supervisor_usernames, "daily_task_completed")
         if not to:
             logger.warning(
                 "notify_daily_task_completed: 指定主管均無設定 email，信件略過"
@@ -310,7 +724,7 @@ def notify_daily_task_completed(task_id: int, title: str, task_date: str,
             )
             return
     else:
-        to = _admin_emails()
+        to = _admin_emails("daily_task_completed")
     if not to:
         logger.warning("notify_daily_task_completed: 無有效收件人（task_id=%d）", task_id)
         return
@@ -335,7 +749,7 @@ def notify_daily_task_completed(task_id: int, title: str, task_date: str,
             f'font-size:12px;color:#15803D;font-weight:600;margin-bottom:4px">修改後</div>'
             f'<div class="val"><strong style="white-space:pre-wrap">{new_text}</strong></div>'
             f'<a href="{task_page}" class="btn" style="display:inline-block;margin-top:22px;padding:10px 22px;background:#1D4ED8;color:#ffffff !important;border-radius:7px;text-decoration:none;font-size:14px;font-weight:600">前往查看回報</a>'
-            f'<div class="foot">本郵件由 MOTRIX 營運管理系統自動發送，請勿直接回覆。如有疑問，請聯絡系統管理員。</div>'
+            f'<div class="foot">本郵件由 MOTRIX 專案管理系統自動發送，請勿直接回覆。如有疑問，請聯絡系統管理員。</div>'
             f'</div></body></html>'
         )
         _async_send(to, f"【MOTRIX】工作事項回報已修改 — {name} · {title}（{task_date}）", html)
@@ -359,16 +773,16 @@ def notify_daily_task_overdue(task_id: int, title: str, task_date: str,
                               assignee_username: str, assignee_display: str,
                               supervisor_usernames: list = None) -> None:
     """逾期未完成工作事項 → 通知被指派人 + 指定主管（若有），否則通知所有 admin/superadmin"""
-    assignee_to = _lookup_emails([assignee_username])
+    assignee_to = _lookup_emails([assignee_username], "daily_task_overdue")
     if supervisor_usernames:
-        mgr_to = _lookup_emails(supervisor_usernames)
+        mgr_to = _lookup_emails(supervisor_usernames, "daily_task_overdue")
         if not mgr_to:
             logger.warning(
                 "notify_daily_task_overdue: 指定主管均無設定 email（task_id=%d, supervisors=%s）",
                 task_id, supervisor_usernames,
             )
     else:
-        mgr_to = _admin_emails()
+        mgr_to = _admin_emails("daily_task_overdue")
     to = list({*assignee_to, *mgr_to})
     if not to:
         logger.warning(
@@ -391,6 +805,35 @@ def notify_daily_task_overdue(task_id: int, title: str, task_date: str,
     _async_send(to, f"【MOTRIX】工作事項逾期未完成 — {name} · {title}（{task_date}）", html)
 
 
+def notify_daily_task_overdue_manager(task_id: int, title: str, task_date: str,
+                                       assignee_username: str, assignee_display: str,
+                                       department_id: int) -> None:
+    """逾期未完成工作事項 → 額外通知負責人所屬部門的主管（2026-08-22g）。
+    獨立事件 key（daily_task_overdue_manager），跟指派人自己收到的
+    daily_task_overdue 分開訂閱/取消訂閱，且跟任務本身的 supervisors
+    欄位（既有的、逐任務手動指定的主管清單）是兩條互不相關的路徑——
+    這裡走的是組織架構（departments.manager_user_id），department_id
+    是空值或部門沒有主管時直接安靜跳過，不當錯誤處理（純通知性質，
+    不像簽核路由那樣需要擋下流程）。"""
+    to = _department_manager_emails(department_id, "daily_task_overdue_manager")
+    if not to:
+        return
+    task_page = f"{_base_url()}/pages/daily-tasks.html"
+    name = assignee_display or assignee_username
+    html = _build_html(
+        "部門成員工作事項逾期未完成", "請關注處理", "#DC2626",
+        [
+            ("執行日期",   task_date),
+            ("工作事項",   title),
+            ("負責人員",   name),
+        ],
+        "", task_page,
+        intro=f"您部門的 {name} 負責的以下工作事項於 {task_date} 截止日前尚未完成回報，請關注處理狀況。",
+        button_text="前往查看工作事項",
+    )
+    _async_send(to, f"【MOTRIX】部門成員工作事項逾期未完成 — {name} · {title}（{task_date}）", html)
+
+
 def notify_range_task_deadline(
     task_id: int,
     title: str,
@@ -401,13 +844,13 @@ def notify_range_task_deadline(
     supervisor_usernames: list = None,
 ) -> None:
     """區間工作事項即將到期 → 指派人 + 主管"""
-    assignee_to = _lookup_emails([assignee_username])
+    assignee_to = _lookup_emails([assignee_username], "range_task_deadline")
     if supervisor_usernames:
-        mgr_to = _lookup_emails(supervisor_usernames)
+        mgr_to = _lookup_emails(supervisor_usernames, "range_task_deadline")
         if not mgr_to:
-            mgr_to = _admin_emails()
+            mgr_to = _admin_emails("range_task_deadline")
     else:
-        mgr_to = _admin_emails()
+        mgr_to = _admin_emails("range_task_deadline")
     to = list({*assignee_to, *mgr_to})
     if not to:
         return
@@ -431,6 +874,107 @@ def notify_range_task_deadline(
     _async_send(to, f"【MOTRIX】區間工作事項即將到期 — {name} · {title}（{end_date}）", html)
 
 
+def notify_case_stage_deadline(
+    quote_no: str,
+    stage_label: str,
+    due_date: str,
+    days_left: int,
+    assignee_username: str,
+    assignee_display: str,
+    customer_name: str = "",
+    project_name: str = "",
+    supervisor_usernames: list = None,
+) -> None:
+    """案件執行進度階段即將到期／已逾期 → 負責人 + 主管（無則 admin）"""
+    assignee_to = _lookup_emails([assignee_username], "case_stage_deadline")
+    if supervisor_usernames:
+        mgr_to = _lookup_emails(supervisor_usernames, "case_stage_deadline")
+        if not mgr_to:
+            mgr_to = _admin_emails("case_stage_deadline")
+    else:
+        mgr_to = _admin_emails("case_stage_deadline")
+    to = list({*assignee_to, *mgr_to})
+    if not to:
+        return
+    case_page = f"{_base_url()}/pages/case-management.html?q={quote_no}"
+    name  = assignee_display or assignee_username
+    label = f"{customer_name}{'／' if customer_name and project_name else ''}{project_name}" or quote_no
+    if days_left <= 0:
+        badge_text, badge_color = "已逾期", "#DC2626"
+        intro = (f"{name} 負責的案件「{label}」執行進度階段「{stage_label}」"
+                 f"已於 {due_date} 到期尚未完成，請盡速確認處理狀況。")
+    else:
+        badge_text, badge_color = f"剩餘 {days_left} 天", "#D97706"
+        intro = (f"{name} 負責的案件「{label}」執行進度階段「{stage_label}」"
+                 f"將於 {due_date} 到期，尚餘 {days_left} 天，請儘早確認進度。")
+    html = _build_html(
+        "案件執行進度即將到期", badge_text, badge_color,
+        [("案件單號", quote_no), ("階段", stage_label), ("到期日期", due_date), ("負責人員", name)],
+        "", case_page,
+        intro=intro,
+        button_text="前往案件管理",
+    )
+    _async_send(to, f"【MOTRIX】案件執行進度到期提醒 — {name} · {label} · {stage_label}", html)
+
+
+def notify_case_stage_deadline_manager(
+    quote_no: str,
+    stage_label: str,
+    due_date: str,
+    days_left: int,
+    assignee_username: str,
+    assignee_display: str,
+    department_id: int,
+    customer_name: str = "",
+    project_name: str = "",
+) -> None:
+    """案件執行進度階段即將到期／已逾期 → 額外通知負責人所屬部門的主管（案件/專案管理延伸，2026-08-22）。
+    比照 notify_daily_task_overdue_manager 的既有原則：獨立事件 key，跟負責人自己收到的
+    case_stage_deadline 分開訂閱/取消訂閱；department_id 是空值或部門沒有主管時安靜跳過，
+    純通知性質，不擋流程。"""
+    to = _department_manager_emails(department_id, "case_stage_deadline_manager")
+    if not to:
+        return
+    case_page = f"{_base_url()}/pages/case-management.html?q={quote_no}"
+    name  = assignee_display or assignee_username
+    label = f"{customer_name}{'／' if customer_name and project_name else ''}{project_name}" or quote_no
+    if days_left <= 0:
+        badge_text, badge_color = "已逾期", "#DC2626"
+        intro = (f"您部門的 {name} 負責的案件「{label}」執行進度階段「{stage_label}」"
+                 f"已於 {due_date} 到期尚未完成，請關注處理狀況。")
+    else:
+        badge_text, badge_color = f"剩餘 {days_left} 天", "#D97706"
+        intro = (f"您部門的 {name} 負責的案件「{label}」執行進度階段「{stage_label}」"
+                 f"將於 {due_date} 到期，尚餘 {days_left} 天，請儘早關注。")
+    html = _build_html(
+        "部門成員案件執行進度即將到期", badge_text, badge_color,
+        [("案件單號", quote_no), ("階段", stage_label), ("到期日期", due_date), ("負責人員", name)],
+        "", case_page,
+        intro=intro,
+        button_text="前往案件管理",
+    )
+    _async_send(to, f"【MOTRIX】部門成員案件進度到期提醒 — {name} · {label} · {stage_label}", html)
+
+
+def notify_dev_case_stale(case_id: int, case_name: str, customer_name: str,
+                           days_since_update: int, usernames: list) -> None:
+    """業務開發案件洽談中超過 30 天未更新 → 通知業務開發/專案規劃人員 + admin/superadmin"""
+    to = _lookup_emails(usernames, "dev_case_stale")
+    if not to:
+        logger.warning("notify_dev_case_stale: 無有效收件人（case_id=%d）", case_id)
+        return
+    crm_page = f"{_base_url()}/pages/dev-crm.html"
+    html = _build_html(
+        "業務開發案件逾期未跟進", f"{days_since_update} 天未更新", "#DC2626",
+        [("案件名稱", case_name), ("客戶", customer_name or "（未指定）"),
+         ("狀態", "洽談中"), ("未更新天數", f"{days_since_update} 天")],
+        "", crm_page,
+        intro=f"案件「{case_name}」仍在洽談中，已 {days_since_update} 天未新增開發記錄或更新狀態，請確認後續跟進進度。",
+        button_text="前往業務開發",
+    )
+    _async_send(to, f"【MOTRIX】業務開發案件逾期提醒 — {case_name}", html)
+
+
 def notify_daily_task_edited(
     task_id: int,
     title: str,
@@ -442,7 +986,7 @@ def notify_daily_task_edited(
 ) -> None:
     """工作事項編輯 → 通知指定主管；未指定則通知所有 admin/superadmin"""
     if supervisor_usernames:
-        to = _lookup_emails(supervisor_usernames)
+        to = _lookup_emails(supervisor_usernames, "daily_task_edited")
         if not to:
             logger.warning(
                 "notify_daily_task_edited: 指定主管均無設定 email，信件略過"
@@ -450,7 +994,7 @@ def notify_daily_task_edited(
             )
             return
     else:
-        to = _admin_emails()
+        to = _admin_emails("daily_task_edited")
     if not to:
         logger.warning("notify_daily_task_edited: 無有效收件人（task_id=%d）", task_id)
         return
@@ -477,7 +1021,7 @@ def notify_daily_task_edited(
         f'font-size:12px;color:#5B21B6;font-weight:600">異動欄位</div>'
         f'{change_lines}'
         f'<a href="{task_page}" class="btn" style="display:inline-block;margin-top:22px;padding:10px 22px;background:#1D4ED8;color:#ffffff !important;border-radius:7px;text-decoration:none;font-size:14px;font-weight:600">前往查看工作事項</a>'
-        f'<div class="foot">本郵件由 MOTRIX 營運管理系統自動發送，請勿直接回覆。'
+        f'<div class="foot">本郵件由 MOTRIX 專案管理系統自動發送，請勿直接回覆。'
         f'如有疑問，請聯絡系統管理員。</div>'
         f'</div></body></html>'
     )
@@ -493,7 +1037,7 @@ def notify_warranty_expiry(
     sales_person: str,
 ) -> None:
     """保固即將到期 → 業務員 + 管理員"""
-    to = list(dict.fromkeys(_lookup_emails([sales_person]) + _admin_emails()))
+    to = list(dict.fromkeys(_lookup_emails([sales_person], "warranty_expiry") + _admin_emails("warranty_expiry")))
     if not to:
         logger.warning("notify_warranty_expiry: 無有效收件人（quote_no=%r）", quote_no)
         return
@@ -521,7 +1065,7 @@ def notify_warranty_expiry(
 
 def notify_settlement_finalized(quote_no: str, customer: str, finalized_by: str) -> None:
     """精算完結 → 通知 admin_emails"""
-    to = _admin_emails()
+    to = _admin_emails("settlement_finalized")
     if not to:
         logger.warning("notify_settlement_finalized: 所有管理員皆無設定 email（quote_no=%r）", quote_no)
         return
@@ -535,23 +1079,152 @@ def notify_settlement_finalized(quote_no: str, customer: str, finalized_by: str)
     _async_send(to, f"【MOTRIX】成本精算完結 — {quote_no}（{customer}）", html)
 
 
+def notify_case_closing_report(quote_no: str, customer: str, project: str, pdf_bytes: bytes) -> None:
+    """案件標記已結案 → 自動寄送內部結案報表 PDF 給最高管理員（2026-08-25）。
+    報表含成本/毛利等內部機密資訊，只寄 superadmin（不比照 notify_settlement_finalized
+    發給全部 admin），由 pdf_gen.py::_generate_case_closing_pdf() 產生 PDF 成功後呼叫。"""
+    to = _superadmin_emails("case_closing_report")
+    if not to:
+        logger.warning("notify_case_closing_report: 無 superadmin email 收件人（quote_no=%r）", quote_no)
+        return
+    if not pdf_bytes:
+        logger.warning("notify_case_closing_report: PDF 內容為空，略過寄送（quote_no=%r）", quote_no)
+        return
+    case_page = f"{_base_url()}/pages/case-management.html?q={quote_no}"
+    label = f"{customer}{'／' + project if project else ''}" or quote_no
+    html = _build_html(
+        "案件結案報表", "已產生", "#7C3AED",
+        [("報價單號", quote_no), ("客戶名稱", customer), ("專案名稱", project or "（未填寫）")],
+        "", case_page,
+        intro=f"案件「{label}」已標記結案，系統已自動產生內部結案報表 PDF（含收入/成本/損益分析等內部財務資訊），詳見附件，僅供內部留存查核使用。",
+        button_text="前往查看案件",
+    )
+    attachments = [(f"{quote_no}_結案報表.pdf", pdf_bytes, "application/pdf")]
+    threading.Thread(
+        target=_send_with_attachments,
+        args=(to, f"【MOTRIX】案件結案報表 — {quote_no}（{customer}）", html, attachments),
+        daemon=True,
+    ).start()
+
+
+def notify_case_close_blocked(quote_no: str, customer: str, project: str,
+                              reasons: list, pending_usernames: list) -> None:
+    """完結案防呆擋下（2026-08-26）：三項前置條件（執行進度100%／款項全收齊／
+    相關單據簽核完成）任一未達成時，完結案動作被擋下，通知尚未完成該項的
+    簽核人（pending_usernames，可能為空——例如款項未收齊沒有對應的「簽核人」
+    概念）＋最高管理員（不論如何都通知，即使 pending_usernames 已涵蓋所有
+    superadmin，重複的 email 由呼叫端 set() 去重）。"""
+    to = list(set(_lookup_emails(pending_usernames, "case_close_blocked")
+                  + _superadmin_emails("case_close_blocked")))
+    if not to:
+        logger.warning("notify_case_close_blocked: 無收件人（quote_no=%r）", quote_no)
+        return
+    case_page = f"{_base_url()}/pages/case-management.html?q={quote_no}"
+    label = f"{customer}{'／' + project if project else ''}" or quote_no
+    html = _build_html(
+        "完結案被擋下", "尚未達成前置條件", "#DC2626",
+        [("報價單號", quote_no), ("客戶名稱", customer), ("專案名稱", project or "（未填寫）"),
+         ("未達成項目", "、".join(reasons))],
+        "", case_page,
+        intro=f"案件「{label}」嘗試完結案時被系統擋下，因為尚有前置條件未達成，請盡速處理相關項目後再次嘗試完結案。",
+        button_text="前往查看案件",
+    )
+    _async_send(to, f"【MOTRIX】完結案被擋下 — {quote_no}（{customer}）", html)
+
+
+def notify_case_change_requested(quote_no: str, customer: str, project: str,
+                                 summary: str, requester_display: str) -> None:
+    """已結案案件半解鎖期間的變更/上傳請求（2026-08-26）→ 通知最高管理員審核
+    （routers/quotations.py 新增的 8 個「暫存待審」端點共用這支）。只寄
+    superadmin，跟 notify_case_closing_report 一樣的收件範圍取捨——已結案
+    案件的異動審核屬於高權限操作，不比照一般附件上傳（任何人可傳）發給全部
+    admin。"""
+    to = _superadmin_emails("case_change_requested")
+    if not to:
+        logger.warning("notify_case_change_requested: 無 superadmin email 收件人（quote_no=%r）", quote_no)
+        return
+    queue_page = f"{_base_url()}/pages/approval-queue.html"
+    label = f"{customer}{'／' + project if project else ''}" or quote_no
+    html = _build_html(
+        "已結案案件變更待審核", "待審核", "#7C3AED",
+        [("報價單號", quote_no), ("客戶名稱", customer), ("申請人", requester_display),
+         ("變更內容", summary)],
+        "", queue_page,
+        intro=f"已結案案件「{label}」目前處於半解鎖狀態，{requester_display} 提出以下變更，需最高管理員於簽核佇列審核後才會套用。",
+        button_text="前往簽核佇列",
+    )
+    _async_send(to, f"【MOTRIX】已結案案件變更待審核 — {quote_no}（{customer}）", html)
+
+
 # ── Monthly report ────────────────────────────────────────────────────────────
 
-def _superadmin_emails() -> list:
+def _superadmin_emails(event_key: str = None) -> list:
     """Return emails of active superadmin users; fallback to all admin/superadmin."""
     try:
         from db import get_db
         conn = get_db()
         rows = conn.execute(
-            "SELECT email FROM users "
+            "SELECT email, notification_muted FROM users "
             "WHERE active=1 AND role='superadmin' "
             "AND email IS NOT NULL AND email != ''",
         ).fetchall()
         conn.close()
-        emails = [r["email"] for r in rows]
-        return emails if emails else _admin_emails()
+        emails = [r["email"] for r in rows if _pref_enabled(r["notification_muted"], event_key)]
+        return emails if emails else _admin_emails(event_key)
     except Exception as exc:
         logger.warning("_superadmin_emails failed: %s", exc)
+        return []
+
+
+def _monthly_report_recipient_emails() -> list:
+    """每月營運報表收件人（2026-08-27 起可設定，取代原本寫死只寄 superadmin）。
+    settings key 從未寫入過（superadmin 還沒按過一次「儲存」）時，沿用舊行為寄給
+    superadmin，避免上線當下設定值是空的、突然沒人收到信；一旦 superadmin 存過
+    一次（即使存的是空清單），就完全照設定值決定收件人，不再 fallback。"""
+    raw = _get_setting("monthly_report_recipients")
+    if raw is None:
+        return _superadmin_emails("monthly_report")
+    user_ids = raw.get("userIds") or []
+    if not user_ids:
+        return []
+    try:
+        from db import get_db
+        conn = get_db()
+        placeholders = ",".join("?" * len(user_ids))
+        rows = conn.execute(
+            f"SELECT email, notification_muted FROM users "
+            f"WHERE active=1 AND id IN ({placeholders}) "
+            f"AND email IS NOT NULL AND email != ''",
+            user_ids,
+        ).fetchall()
+        conn.close()
+        return [r["email"] for r in rows if _pref_enabled(r["notification_muted"], "monthly_report")]
+    except Exception as exc:
+        logger.warning("_monthly_report_recipient_emails failed: %s", exc)
+        return []
+
+
+def _department_manager_emails(department_id: int, event_key: str = None) -> list:
+    """Return the email of a department's current manager (empty list if the
+    department has no manager set, the manager account has no email, or the
+    manager has muted event_key). 2026-08-22g：處/部門組織架構的通知路由，
+    比照 _superadmin_emails() 的寫法，只是收件人改成查 departments.manager_user_id。"""
+    if not department_id:
+        return []
+    try:
+        from db import get_db
+        conn = get_db()
+        row = conn.execute("""
+            SELECT u.email, u.notification_muted FROM departments d
+            JOIN users u ON u.id = d.manager_user_id
+            WHERE d.id=? AND u.active=1 AND u.email IS NOT NULL AND u.email != ''
+        """, (department_id,)).fetchone()
+        conn.close()
+        if not row or not _pref_enabled(row["notification_muted"], event_key):
+            return []
+        return [row["email"]]
+    except Exception as exc:
+        logger.warning("_department_manager_emails failed: %s", exc)
         return []
 
 
@@ -562,6 +1235,9 @@ def _send_with_attachments(to_addrs: list, subject: str, html: str, attachments:
     cfg = _cfg()
     if not cfg.get("enabled"):
         return
+    subject = _apply_dev_subject_prefix(cfg, subject)
+    if _smtp_send_blocked(subject):
+        return
     if not to_addrs:
         logger.warning("email skipped — recipient list empty; subject: %r", subject)
         return
@@ -569,7 +1245,7 @@ def _send_with_attachments(to_addrs: list, subject: str, html: str, attachments:
     port = int(cfg.get("smtp_port", 587))
     user = cfg.get("smtp_user", "")
     pw   = cfg.get("smtp_password", "")
-    from_name = cfg.get("from_name", "MOTRIX營運系統")
+    from_name = cfg.get("from_name", "MOTRIX專案管理系統")
     if not user or not pw:
         logger.warning("email skipped — SMTP credentials not configured; subject: %r", subject)
         return
@@ -609,8 +1285,8 @@ def _send_with_attachments(to_addrs: list, subject: str, html: str, attachments:
 
 def notify_monthly_report(period_label: str, period_str: str,
                           excel_bytes: bytes, pdf_bytes: bytes) -> None:
-    """每月營運報表 → 寄送 Excel + PDF 附件給 superadmin 使用者"""
-    to = _superadmin_emails()
+    """每月營運報表 → 寄送 Excel + PDF 附件給設定的收件人（見 _monthly_report_recipient_emails）"""
+    to = _monthly_report_recipient_emails()
     if not to:
         logger.warning("notify_monthly_report: 無 superadmin email 收件人（period=%r）", period_str)
         return
@@ -626,7 +1302,7 @@ def notify_monthly_report(period_label: str, period_str: str,
         f'<div class="lbl">報表期間</div><div class="val">{period_label}</div>'
         f'<div class="lbl">附件格式</div><div class="val">Excel（.xlsx）+ PDF</div>'
         f'<a href="{base}/pages/reports.html" class="btn" style="display:inline-block;margin-top:22px;padding:10px 22px;background:#1D4ED8;color:#ffffff !important;border-radius:7px;text-decoration:none;font-size:14px;font-weight:600">前往線上報表系統</a>'
-        f'<div class="foot">本郵件由 MOTRIX 營運管理系統每月自動寄送，請勿直接回覆。'
+        f'<div class="foot">本郵件由 MOTRIX 專案管理系統每月自動寄送，請勿直接回覆。'
         f'如有疑問，請聯絡系統管理員。</div>'
         f'</div></body></html>'
     )
@@ -658,24 +1334,138 @@ def notify_monthly_report(period_label: str, period_str: str,
 
 def notify_module_activity(module_label: str, action_label: str,
                            actor: str, item_label: str,
-                           page_path: str = "") -> None:
-    """Non-blocking email to all admin/superadmin when a new item is created in any module."""
-    to = _admin_emails()
+                           page_path: str = "", detail: str = "") -> None:
+    """Non-blocking email to all admin/superadmin when a new item is created in any module.
+
+    detail: optional full free-text body (comment / log content / note ...). Always rendered
+    in full, never truncated — the point is recipients can read the whole thing in the email
+    itself without having to log into the system. Pass the real content here instead of
+    folding a truncated snippet into item_label."""
+    to = _admin_emails("module_activity")
     if not to:
         return
     base = _base_url()
     link = f"{base}/pages/{page_path}" if page_path else base
+    detail_html = ""
+    if detail and detail.strip():
+        detail_esc = _html.escape(detail.strip()).replace("\n", "<br>")
+        detail_html = f'<div class="lbl">內容</div><div class="val" style="white-space:pre-wrap">{detail_esc}</div>'
     html = (
         f'<!DOCTYPE html><html lang="zh-Hant"><head><meta charset="UTF-8">'
         f'<style>{_STYLE}</style></head><body><div class="card">'
         f'<div style="font-size:18px;font-weight:700;color:#1a1a1a;margin-bottom:16px;">'
-        f'MOTRIX系統通知 <span class="badge" style="background:#2563EB">{module_label}</span></div>'
-        f'<div class="intro"><b>{actor}</b> 在 <b>{module_label}</b> 執行了 <b>{action_label}</b>。</div>'
-        f'<div class="lbl">項目</div><div class="val">{item_label}</div>'
+        f'MOTRIX系統通知 <span class="badge" style="background:#2563EB">{_html.escape(module_label)}</span></div>'
+        f'<div class="intro"><b>{_html.escape(actor)}</b> 在 <b>{_html.escape(module_label)}</b> 執行了 <b>{_html.escape(action_label)}</b>。</div>'
+        f'<div class="lbl">項目</div><div class="val">{_html.escape(item_label)}</div>'
+        f'{detail_html}'
         f'<a href="{link}" class="btn" style="display:inline-block;margin-top:22px;'
         f'padding:10px 22px;background:#1D4ED8;color:#ffffff !important;border-radius:7px;'
         f'text-decoration:none;font-size:14px;font-weight:600">前往系統查看</a>'
-        f'<div class="foot">本郵件由 MOTRIX 營運管理系統自動發送，請勿直接回覆。</div>'
+        f'<div class="foot">本郵件由 MOTRIX 專案管理系統自動發送，請勿直接回覆。</div>'
         f'</div></body></html>'
     )
     _async_send(to, f"[MOTRIX] {module_label} — {action_label}", html)
+
+
+def notify_case_project_overdue(
+    quote_no: str,
+    customer_name: str,
+    project_name: str,
+    end_date: str,
+    days_overdue: int,
+) -> None:
+    """案件專案期間已超期 → 所有 admin/superadmin"""
+    to = _admin_emails("case_project_overdue")
+    if not to:
+        return
+    case_page = f"{_base_url()}/pages/case-management.html?quote={quote_no}"
+    if days_overdue == 0:
+        badge_text, badge_color = "今日超期", "#DC2626"
+        intro = f"案件「{project_name}」（客戶：{customer_name}）預計於 {end_date} 完成，今日已超期。"
+    else:
+        badge_text, badge_color = f"已超期 {days_overdue} 天", "#DC2626"
+        intro = f"案件「{project_name}」（客戶：{customer_name}）預計於 {end_date} 完成，已超期 {days_overdue} 天。"
+    html = _build_html(
+        "案件專案期間已超期", badge_text, badge_color,
+        [("案件號", quote_no), ("客戶", customer_name), ("專案名稱", project_name or "（未填）"), ("預計結束日期", end_date)],
+        "", case_page,
+        intro=intro,
+        button_text="前往案件管理",
+    )
+    _async_send(to, f"【MOTRIX】案件專案期間已超期 — {project_name or quote_no}（已超期 {days_overdue} 天）", html)
+
+
+def notify_cert_expiry(
+    days_left: int,
+    not_after: str,
+    issuer_cn: str,
+    cert_path: str,
+    is_acme: bool,
+) -> None:
+    """HTTPS 憑證即將到期／已過期 → 所有 admin/superadmin（2026-09-11）
+
+    刻意把「該怎麼修」直接寫進信裡，而且依簽發者分兩種寫法：這封信會在
+    好幾百天後才第一次寄出，那時候沒有人會記得 mkcert 或 Posh-ACME 是什麼、
+    更不會記得要去翻哪份文件。信裡查得到做法，才不用等到出事當天現學。
+    """
+    to = _admin_emails("cert_expiry")
+    if not to:
+        return
+
+    if days_left < 0:
+        badge_text, badge_color = f"已過期 {-days_left} 天", "#DC2626"
+        intro = (
+            f"正式機的 HTTPS 憑證已於 {not_after} 過期（{-days_left} 天前）。"
+            "Passkey 現在應該已經完全無法使用。"
+        )
+    elif days_left == 0:
+        badge_text, badge_color = "今日到期", "#DC2626"
+        intro = f"正式機的 HTTPS 憑證於今日（{not_after}）到期。"
+    else:
+        badge_text, badge_color = f"剩 {days_left} 天", "#D97706" if days_left > 7 else "#DC2626"
+        intro = f"正式機的 HTTPS 憑證將於 {not_after} 到期，剩下 {days_left} 天。"
+
+    # 影響範圍講清楚，避免收信的人以為「憑證過期＝系統掛了」而驚動所有人
+    impact = (
+        "<b>影響範圍</b>：<br>"
+        "• Passkey／指紋登入 → <b>完全不能用</b>（瀏覽器不再視為安全內容）<br>"
+        "• 密碼登入、TOTP、手機掃 QR → <b>仍可使用</b>，但瀏覽器會跳憑證警告，"
+        "需要點「進階 → 繼續前往」<br>"
+        "• 系統本身與資料 → 不受影響"
+    )
+
+    if is_acme:
+        howto = (
+            "<b>這張是自動續期的憑證（Let's Encrypt）</b>，正常情況下它應該早就自己換好了——"
+            "收到這封信代表<b>自動續期已經失敗</b>。請在正式機檢查："
+            "<br>1. 排程工作「MOTRIX ERP Cert Renew」是否還在、最近一次執行結果為何"
+            "<br>2. <code>backend\\logs\\letsencrypt_renew.log</code> 的錯誤訊息"
+            "<br>3. Cloudflare API Token 是否已失效或被撤銷"
+            "<br>手動補救：以系統管理員執行 "
+            "<code>backend\\tools\\letsencrypt_renew.ps1 -Force</code>"
+        )
+    else:
+        howto = (
+            "<b>這張是自簽憑證（mkcert）</b>，不會自己更新，必須手動重產。"
+            "在正式機以系統管理員執行："
+            "<br><code>backend\\tools\\https_setup.ps1 -ExtraNames motrix.internal -Force</code>"
+            "<br>然後執行 <code>backend\\restart.bat</code> 重啟服務。"
+            "<br>根 CA 本身有效期到 2036-09-07，<b>同事電腦上裝的 CA 不用動</b>；"
+            "重產後 Passkey 也不會失效（RP ID 沒有改變）。"
+        )
+
+    html = _build_html(
+        "HTTPS 憑證即將到期", badge_text, badge_color,
+        [
+            ("到期日", not_after),
+            ("剩餘天數", f"{days_left} 天" if days_left >= 0 else f"已過期 {-days_left} 天"),
+            ("簽發者", issuer_cn or "（不明）"),
+            ("憑證檔", cert_path),
+        ],
+        "", _base_url(),
+        note=f"{impact}<br><br>{howto}",
+        intro=intro,
+        button_text="前往系統",
+    )
+    subject_state = "已過期" if days_left < 0 else f"剩 {days_left} 天"
+    _async_send(to, f"【MOTRIX】HTTPS 憑證{subject_state} — {not_after}", html)

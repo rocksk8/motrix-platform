@@ -1,3 +1,12 @@
+// 依字串 hash 對應固定色盤，跟 daily-tasks.html 的 _avatarColor 用同一組色碼與演算法，
+// 讓同一位負責人在甘特圖／每日工作事項月曆／看板三處的顏色一致。
+const _GANTT_COLORS = ['#2563EB','#7C3AED','#DB2777','#D97706','#16A34A','#0891B2','#DC2626','#9333EA']
+function _avatarColor(u) {
+  let h = 0
+  for (let i = 0; i < u.length; i++) h = (h * 31 + u.charCodeAt(i)) | 0
+  return _GANTT_COLORS[Math.abs(h) % _GANTT_COLORS.length]
+}
+
 function app() {
   return {
       isMobileView: window.innerWidth <= 767,
@@ -5,17 +14,168 @@ function app() {
     loading: true,
     cases: [],
     filteredCases: [],
+    caseSortPref: { sortMode: '', sortDir: 'desc', customOrder: [] },
+    _caseSortable: null,
     listTab: 'all',
+    caseViewMode: 'list',   // 'list' | 'board' | 'matrix'
+    // ═══ 關卡矩陣（2026-09-14）══════════════════════════════════════════
+    // 五項完結案前置條件（§5.2）原本散在五個頁籤，而且只有在按下「完結案」
+    // 被 400 擋下來時才看得到。資料來自 /api/quotations/gate-matrix，那支
+    // 端點跟擋下完結案用的是同一份判定（_case_close_gates），所以矩陣上的
+    // 「5/5 可結案」等於「現在按下去不會被擋」。
+    gateMatrix: [],
+    gmLoaded: false,
+    gmSort: 'ready',     // 'ready' | 'stuck' | 'amount'
+    gmFilter: '',        // '' | 'ready' | 'settling' | 'mine'
+    gmDue: '',           // '' | 'overdue' | 'today' | 'week' | 'month' | 'none'
+    today: new Date().toISOString().slice(0, 10),
+
+    gateHeads: [
+      { key: 'progress',     label: '進度', hint: '階段完成' },
+      { key: 'payment',      label: '收款', hint: '款項收齊' },
+      { key: 'documents',    label: '單據', hint: '簽核完成' },
+      { key: 'settlement',   label: '精算', hint: '已完結' },
+      { key: 'extraExpense', label: '變更', hint: '無送審中' },
+    ],
+
+    // 切到矩陣時才抓。**刻意不在 loadCases() 就一起抓**：矩陣是另一個檢視，
+    // 多數時候不會用到，而它每件案子要跑十幾次查詢。
+    async switchToMatrix() {
+      this.caseViewMode = 'matrix'
+      if (!this.gmLoaded) await this.loadGateMatrix()
+    },
+
+    async loadGateMatrix() {
+      try {
+        const r = await fetch('/api/quotations/gate-matrix', {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (r.ok) {
+          const d = await r.json()
+          this.gateMatrix = d.items || []
+          if (d.today) this.today = d.today
+        }
+      } catch (_e) {}
+      // 放在 finally 之外刻意寫成「不管成功失敗都標記載入過」——否則失敗時
+      // 表格會永遠停在「載入中…」，比空清單更難判斷發生什麼事。
+      this.gmLoaded = true
+    },
+
+    // 燈號：關卡的三種狀態直接對應色階。na 是「這件案子沒有這一關」，
+    // 畫成空心灰而不是紅燈——舊案件沒有階段/款項/精算資料是正常的。
+    // 2026-09-14 修正：blocked 一律是琥珀，不是紅。共通語彙裡 crit 的定義是
+    // 「逾期／退回」，「未達成」是 warn——一個做到 2/5 階段的案子是進行中，
+    // 不是異常。只有真的有逾期階段時，進度那一關才轉紅。
+    // （原本寫成 progress/extraExpense 一律 crit，違反自己訂的色階規則。）
+    gateTone(g, row) {
+      if (!g) return 'idle'
+      if (g.state === 'ok') return 'ok'
+      if (g.state === 'na') return 'idle'
+      if (g.key === 'progress' && row && row.stageOverdue > 0) return 'crit'
+      return 'warn'
+    },
+
+    // 整列不染色，只在最左緣留一條脊，取這一列最嚴重的訊號
+    rowSpine(row) {
+      if (!row) return 'var(--border-light)'
+      if (row.stageOverdue > 0) return 'var(--danger)'
+      if (row.canClose) return 'var(--success)'
+      return row.blockedCount > 0 ? 'var(--warning)' : 'var(--border-light)'
+    },
+
+    readyText(row) {
+      if (!row) return ''
+      if (row.canClose) return row.readyCount + '/5 可結案'
+      if (row.blockedCount === 1) return '差 ' + row.blockedLabels[0]
+      return row.readyCount + '/5'
+    },
+
+    dueText(row) {
+      if (!row) return '—'
+      if (row.stageOverdue > 0) {
+        return row.nextDue ? row.nextDue.slice(5) + ' 逾期 ' + row.stageOverdue + ' 項'
+                           : '逾期 ' + row.stageOverdue + ' 項'
+      }
+      if (!row.nextDue) return '—'
+      if (row.nextDue === this.today) return row.nextDue.slice(5) + ' 今日'
+      return row.nextDue.slice(5) + (row.nextDueLabel ? ' ' + row.nextDueLabel : '')
+    },
+
+    _dueBucket(row) {
+      if (row.stageOverdue > 0) return 'overdue'
+      if (!row.nextDue) return 'none'
+      if (row.nextDue === this.today) return 'today'
+      const days = Math.round((new Date(row.nextDue) - new Date(this.today)) / 86400000)
+      if (days < 0) return 'overdue'
+      return days <= 7 ? 'week' : days <= 30 ? 'month' : 'none'
+    },
+
+    get matrixDue() {
+      const def = [
+        { key: 'overdue', k: '已逾期', l: '件' },
+        { key: 'today',   k: '今日到期', l: '件' },
+        { key: 'week',    k: '7 天內', l: '件' },
+        { key: 'month',   k: '8–30 天', l: '件' },
+        { key: 'none',    k: '無排定到期', l: '件' },
+      ]
+      return def.map(b => ({
+        ...b,
+        n: this.gateMatrix.filter(r => this._dueBucket(r) === b.key).length,
+      }))
+    },
+
+    get matrixRows() {
+      const me = this.session.displayName || this.session.username || ''
+      let rows = this.gateMatrix.filter(r => {
+        if (this.gmDue && this._dueBucket(r) !== this.gmDue) return false
+        if (this.gmFilter === 'ready' && !r.canClose) return false
+        if (this.gmFilter === 'mine' && r.salesPerson !== me) return false
+        if (this.gmFilter === 'settling') {
+          const s = (r.gates || []).find(g => g.key === 'settlement')
+          if (!s || s.state !== 'blocked') return false
+        }
+        const q = (this.search || '').trim().toLowerCase()
+        if (q && !(r.quoteNo || '').toLowerCase().includes(q)
+              && !(r.customerName || '').toLowerCase().includes(q)
+              && !(r.projectName || '').toLowerCase().includes(q)) return false
+        return true
+      })
+      const by = {
+        // 預設排序。這是既有畫面完全給不出、而且最會改變行動順序的資訊：
+        // 先把差一步的收掉，再去處理卡住的。
+        ready:  (a, b) => (b.canClose - a.canClose) || (b.readyCount - a.readyCount)
+                          || (a.blockedCount - b.blockedCount),
+        stuck:  (a, b) => (b.stageOverdue - a.stageOverdue) || (b.blockedCount - a.blockedCount),
+        amount: (a, b) => (b.total || 0) - (a.total || 0),
+      }
+      return rows.slice().sort(by[this.gmSort] || by.ready)
+    },
+
+    // 點一列回到既有的五頁籤詳情頁——矩陣是它的上層索引，不是取代它
+    async openFromMatrix(quoteNo) {
+      this.caseViewMode = 'list'
+      await this.selectCase(quoteNo)
+    },
+    stageBoardItems: [],
     search: '',
+    unreadOnly: false,
+    readAt: null,
+    caseActivity: {},
     selected: null,
     activeTab: 'biz',
+    execSubTab: 'progress',
     cr: { dealTag: '已成案', caseRecord: null },
     dirty: false,
     saving: false,
     saveStatus: '',
     saveMsg: '',
     _autoSaveTimer: null,
+    writeoffModal: { open: false, idx: null, mode: 'request', reason: '' },
     dragFromIdx: null,
+    _openStageDetail: {},
+    _newStageAssignee: {},
+    stageView: 'list',
+    _ganttInstance: null,
     showImportModal: false,
     importMode: 'materials',
     importSelectedItems: {},
@@ -30,11 +190,18 @@ function app() {
     _devHoverGroupId: null,  // group ID when hovering group header → add-to-group mode
     _devHoverStart: 0,       // timestamp when we entered _devDragOverId
     _devGroupTarget: null,   // 'dev_X' confirmed for grouping after 900ms hover
-    linkedProjectId: null,
-    showCreateProjectModal: false,
-    newProjectName: '',
-    creatingProject: false,
     selectableUsers: [],
+
+    // ── 代辦事項（2026-08-26 專案管理併入案件管理）──
+    caseActionItems: [],
+    caseActionItemsLoading: false,
+    newActionItemText: '',
+    addingActionItem: false,
+
+    // ── 專案資訊（成員分配）──
+    assignedUserIds: [],
+    assignedUsersSaving: false,
+    exportingProjectReport: false,
 
     caseTasks: [],
     caseTasksLoading: false,
@@ -50,10 +217,23 @@ function app() {
     caseUpdates: [],
     updatesLoading: false,
     newComment: '',
+    newCommentImportant: false,
+    newCommentPhotos: [],
+    newCommentHours: '',
+    newCommentContactType: '',
+    newCommentContactTypeCustom: '',
+    newCommentLogDate: new Date().toISOString().slice(0, 10),
+    newCommentUserId: '',   // 空字串＝記錄人＝目前登入者，見 postWorkLogEntry()
     postingComment: false,
+    _ptCache: {},
+    feedCalMode:    false,
+    feedCalYear:    new Date().getFullYear(),
+    feedCalMonth:   new Date().getMonth() + 1,
+    feedCalSelDate: '',
 
     // ── 承攬商派發 ──
     vendors: [],
+    contractorRoster: [],
     dispatches: [],
     dispatchesLoading: false,
     showDispatchModal: false,
@@ -61,10 +241,12 @@ function app() {
     dispatchSaving: false,
     dispatchForm: {},
     dispatchMsg: '',
+    _newDispatchPersonnelId: '',
 
     // ── 出貨單 ──
     shippingNotes: [],
     shippingNotesLoading: false,
+    snSortPref: { sortMode: '', sortDir: 'desc', customOrder: [] },
     showShippingModal: false,
     editShippingNoteNo: null,
     shippingSaving: false,
@@ -77,15 +259,100 @@ function app() {
     shippingPreviewBlobUrl: '',
     shippingPreviewFetching: false,
     shippingPreviewNote: null,
+    _partsOptions: null,
+    serialPicker: { show: false, itemIdx: null, partNo: '', options: [], selected: [], loading: false, error: '' },
+
+    // ── 案件財務總覽（應收應付，2026-09-09）──
+    // 後端一支 /finance-summary 端點算完，不在前端把 contractorVouchers /
+    // paymentItems() 等既有陣列再加總一次——同一個案件的「還有多少沒收/沒付」
+    // 若在前後端各算一份，遲早會因為其中一邊漏改（例如 taxExempt 沖銷折算）
+    // 而對不起來，見 helpers/quotations.py::summarize_payment_items() 說明。
+    financeSummary: null,
+    financeSummaryLoading: false,
+    finShowRecvDetail: false,
+    finShowPayDetail: false,
+    finShowExtraDetail: false,
+
+    // ── 叫料（材料訂購，前端 2026-09-11 補上）──
+    // 後端端點 2026-09-10 就上線，但一直沒有任何呼叫點，見
+    // routers/material_orders.py 檔頭與 WEEKLY-AUDIT §E-1。
+    // 存檔刻意走專屬端點而不是併進 saveCase()：saveCase() 會覆蓋整份
+    // data_json，兩邊同時存會互相蓋掉；且叫料的權限與已結案規則由後端
+    // 那支端點自己守，跟案件整包存檔不一樣。
+    materialOrders: [],
+    // 預設 true：面板只在 !moLoading 時才渲染「尚無叫料項目」，一旦預設 false，
+    // 任何「還沒開始載入」的瞬間都會對使用者說「沒有資料」——那是還沒查就先
+    // 回答。額外支出的 xe.loading 本來就是 true，這裡跟它對齊。
+    moLoading: true,
+    moSaving: false,
+    moDirty: false,
+    moMsg: '',
+    moMsgError: false,
+
+    // ── 額外支出（2026-09-11，從精算頁搬過來）──
+    // 資料在 case_extra_expenses 表（DB v75），不再是 settlement.extraItems。
+    // loading 預設 true：分頁列在 selected 一設好就出現，若預設 false 會先閃一下
+    // 空狀態再跳載入中——叫料那一區踩過同一個坑。
+    xe: {
+      loading: true, busy: false, items: [], categories: [],
+      totalAmount: 0, totalPending: 0, pendingCount: 0,
+      msg: '', msgError: false,
+    },
+
+
+    // ── 承攬商匯款申請 ──
+    contractorVouchers: [],
+    contractorVouchersLoading: false,
+    cvPreviewModal: false,
+    cvPreviewBlobUrl: '',
+    cvPreviewVoucher: null,
+    cvPreviewFetching: false,
+    // ── 標記已匯款 Modal（2026-08-31 新增，原本用 prompt() 只能填備註，
+    // 沒有地方填實際匯款日期，一律誤記成操作當下的系統時間）
+    payVoucherModal: false,
+    payVoucherTarget: null,
+    payVoucherDate: '',
+    payVoucherNote: '',
+    payVoucherBankAcctCode: '',
+    payVoucherSaving: false,
+    // T100 傳票匯出設定裡的銀行帳戶清單（2026-09-01 新增），標記已匯款/已收款
+    // 時挑選要用哪個帳戶；每次開啟標記 Modal 都重抓最新清單，見
+    // loadT100BankAccounts()
+    t100BankAccounts: [],
+    t100DefaultBankAcctCode: '',   // 2026-09-02 新增：系統預設銀行帳戶，見 _resolveDefaultBankAccount()
+    // ── 產生匯款申請 Modal（2026-08-31 新增，讓應付款日期在產生申請當下就能
+    // 直接填/改，不用先跳去編輯派發紀錄）
+    createVoucherModal: false,
+    createVoucherDispatch: null,
+    createVoucherPayableDate: '',
+    createVoucherSaving: false,
+
+    // ── 開票申請憑據 ──
+    invoiceVouchers: [],
+    invoiceVouchersLoading: false,
+    ivSortPref: { sortMode: '', sortDir: 'desc', customOrder: [] },
+    ivPreviewModal: false,
+    ivPreviewBlobUrl: '',
+    ivPreviewVoucher: null,
+    ivPreviewFetching: false,
+    ivCreateModal: false,
+    ivRemaining: null,
+    ivRemainingLoading: false,
+    ivMode: 'amount',
+    ivAmountInput: 0,
+    ivItemSelections: {},
+    ivSubmitting: false,
+
+    // ── 請款單 ──（建立/編輯/簽核/PDF 已整頁化，見 payment-request-form.html，
+    // 這裡只保留清單載入與排序）
+    paymentRequests: [],
+    paymentRequestsLoading: false,
+    prListSortPref: { sortMode: '', sortDir: 'desc', customOrder: [] },
+    _subSortables: {},
 
     canSeeFinancial() {
       const m = this.session.modules || []
       return m.includes('financial_view') || ['superadmin','admin','sales'].includes(this.session.role)
-    },
-
-    canManageProject() {
-      const m = this.session.modules || []
-      return m.includes('project_manage') || ['superadmin','admin'].includes(this.session.role)
     },
 
     caseSettlement()    { return this.selected?.data?.settlement || null },
@@ -96,7 +363,699 @@ function app() {
     caseSettleMemo()    { return this.caseSettlement()?.memo || '' },
     caseSettleFmt(n)    { return 'NT$ ' + (Math.round(n || 0)).toLocaleString() },
 
+    // ── 應收應付總覽（2026-09-09）──────────────────────────────────────────
+    async loadFinanceSummary(quoteNo) {
+      if (!quoteNo) return
+      this.financeSummaryLoading = true
+      this.financeSummary = null
+      try {
+        const r = await fetch(`/api/quotations/${encodeURIComponent(quoteNo)}/finance-summary`, {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (r.ok) this.financeSummary = await r.json()
+      } catch {}
+      this.financeSummaryLoading = false
+    },
+    finReceivable()  { return this.financeSummary?.receivable || null },
+    finPayable()     { return this.financeSummary?.payable || null },
+    finRelatedDocs() { return this.financeSummary?.relatedDocuments || { invoiceVouchers: [], paymentRequests: [] } },
+    finExtrasTotal() { return this.financeSummary?.settlementExtras?.total || 0 },
+    // 精算額外支出逐筆（含 2026-09-09 新增的單號）：資料源就是精算頁「二、額外
+    // 支出」那張表，精算不論草稿或已完結都會列出來——使用者的作業順序是支出
+    // 當下就先填、案件結束才做精算完結，只列已完結的等於當月看不到剛花的錢
+    finExtraItems()  { return this.financeSummary?.settlementExtras?.items || [] },
+    // 未收款項清單：只給總覽的展開明細用，已收的那些在「案件資訊」Tab 的款項
+    // 明細本來就看得到，這裡重複列一次只會讓畫面變長
+    finOutstandingItems() { return (this.finReceivable()?.items || []).filter(it => !it.received) },
+    finUnpaidVouchers()   { return (this.finPayable()?.vouchers || []).filter(v => v.status === '已核准' && !v.isPaid) },
+
+    // ── 額外支出（2026-09-11）────────────────────────────────────────────────
+    async loadExtraExpenses(quoteNo) {
+      if (!quoteNo) return
+      // 比照 loadMaterialOrders()：發請求當下記住是哪張單，回應抵達時再比對。
+      // 沒有這道守門，使用者在回應飛行途中新增的那一列會被蓋掉（同一天內
+      // 在叫料與系統設定兩處各踩過一次）
+      this._xeReqFor = quoteNo
+      this.xe.loading = true
+      try {
+        const r = await fetch(`/api/quotations/${encodeURIComponent(quoteNo)}/extra-expenses`, {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (this._xeReqFor !== quoteNo) return
+        if (r.ok) {
+          const d = await r.json()
+          // 有未存檔的新列（id 為 null）就不要整包覆蓋，保留使用者打到一半的東西
+          const drafts = this.xe.items.filter(i => !i.id)
+          const prev = Object.fromEntries(this.xe.items.filter(i => i.id).map(i => [i.id, i]))
+          this.xe.items = (d.items || []).map(i => {
+            const p = prev[i.id]
+            // 變更申請面板：伺服器上還沒有這筆變更申請（changeStatus 空）、但使用者
+            // 正在本機填 → 保留他打到一半的內容。少了這道守門，任何一次背景重載
+            // 都會把輸入中的東西清空，而且畫面上不會有任何錯誤（同一天內已經在
+            // 叫料與系統設定兩處各踩過一次同樣的競態）
+            if (p && p._editing && !i.changeStatus) {
+              return { ...i, _dirty: false, _editing: true, change: p.change, _changeDirty: p._changeDirty }
+            }
+            return { ...i, _dirty: false, _editing: !!i.changeStatus, _changeDirty: false }
+          }).concat(drafts)
+          this.xe.categories = d.categories || []
+          this.xe.totalAmount = d.totalAmount || 0
+          this.xe.totalPending = d.totalPending || 0
+          this.xe.pendingCount = d.pendingCount || 0
+        }
+      } catch {}
+      this.xe.loading = false
+    },
+
+    // 可編輯狀態：草稿與已駁回。已核准的金額已經進了成本與報表，簽核中的改了
+    // 簽核就失去意義——後端也會擋，這裡擋是為了不要讓人填完才被退回
+    xeEditable(x) { return !x.id || x.status === '草稿' || x.status === '已駁回' },
+
+    xeStatusStyle(status) {
+      if (status === '已核准') return 'background:#DCFCE7;color:#15803D'
+      if (status === '已駁回') return 'background:#FEE2E2;color:#B91C1C'
+      if (status === '草稿')   return 'background:#F3F4F6;color:#6B7280'
+      return 'background:#FEF3C7;color:#92400E'   // 待審核／簽核中
+    },
+
+    xeDirty(i) { this.xe.items[i]._dirty = true; this.xe.msg = '' },
+
+    // 小計只算給畫面即時顯示用；真正的值以後端算的為準（後端不吃前端傳的金額）
+    xeRecalc(i) {
+      const x = this.xe.items[i]
+      x.totalCost = Math.round((Number(x.qty) || 0) * (Number(x.unitCost) || 0) * 100) / 100
+      this.xeDirty(i)
+    },
+
+    // 支出人「可選可自由文字」：打的字剛好等於某位使用者的顯示名就一併記下
+    // username（之後才做得了「某人代墊多少」的彙總），否則只留純文字
+    xePayerInput(i) {
+      const x = this.xe.items[i]
+      const hit = (this.selectableUsers || []).find(
+        u => (u.display_name || u.username) === (x.payerName || '').trim())
+      x.payerUsername = hit ? hit.username : ''
+      this.xeDirty(i)
+    },
+
+    xeAdd() {
+      this.xe.items.push({
+        id: null, category: (this.xe.categories[0] || '其他'), description: '',
+        qty: 1, unit: '', unitCost: 0, totalCost: 0, note: '',
+        expenseDate: new Date().toISOString().slice(0, 10), docNo: '',
+        payerUsername: '', payerName: '',
+        createdByName: this.session.displayName || this.session.username || '',
+        createdByInferred: false, createdAt: '', updatedAt: '', updatedByName: '',
+        status: '草稿', approval: {}, _dirty: true,
+      })
+      this.xe.msg = ''
+    },
+
+    _xeBody(x) {
+      return {
+        category: x.category, description: (x.description || '').trim(),
+        qty: Number(x.qty) || 0, unit: (x.unit || '').trim(),
+        unitCost: Number(x.unitCost) || 0, note: (x.note || '').trim(),
+        expenseDate: x.expenseDate || '', docNo: (x.docNo || '').trim(),
+        payerUsername: x.payerUsername || '', payerName: (x.payerName || '').trim(),
+      }
+    },
+
+    _xeFail(msg) { this.xe.msgError = true; this.xe.msg = msg; this.xe.busy = false },
+
+    async xeSave(i) {
+      const x = this.xe.items[i]
+      if (!(x.description || '').trim()) { this._xeFail('請先填品項說明'); return }
+      const quoteNo = this.selected?.quote_no
+      if (!quoteNo) return
+      this.xe.busy = true; this.xe.msg = ''
+      const base = `/api/quotations/${encodeURIComponent(quoteNo)}/extra-expenses`
+      try {
+        const r = await fetch(x.id ? `${base}/${x.id}` : base, {
+          method: x.id ? 'PATCH' : 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify(this._xeBody(x)),
+        })
+        if (!r.ok) {
+          const d = await r.json().catch(() => ({}))
+          this._xeFail('儲存失敗：' + (d.detail || r.status)); return
+        }
+        this.xe.msgError = false; this.xe.msg = '已儲存'
+        setTimeout(() => { if (this.xe.msg === '已儲存') this.xe.msg = '' }, 2500)
+      } catch (e) { this._xeFail('網路錯誤：' + e.message); return }
+      this.xe.busy = false
+      await this.loadExtraExpenses(quoteNo)
+    },
+
+    async xeSubmit(i) {
+      const x = this.xe.items[i]
+      if (!x.id) { this._xeFail('請先儲存再送審'); return }
+      if (!confirm(`確定送審這筆額外支出？\n\n${x.description}　NT$ ${Math.round(x.totalCost || 0).toLocaleString()}\n\n送審後在簽核完成前不能修改。`)) return
+      const quoteNo = this.selected?.quote_no
+      this.xe.busy = true; this.xe.msg = ''
+      try {
+        const r = await fetch(
+          `/api/quotations/${encodeURIComponent(quoteNo)}/extra-expenses/${x.id}/submit`,
+          { method: 'POST', headers: { Authorization: 'Bearer ' + this.session.token } })
+        const d = await r.json().catch(() => ({}))
+        if (!r.ok) { this._xeFail('送審失敗：' + (d.detail || r.status)); return }
+        this.xe.msgError = false
+        this.xe.msg = d.autoApproved ? '未設定簽核層，已直接核准' : '已送審'
+      } catch (e) { this._xeFail('網路錯誤：' + e.message); return }
+      this.xe.busy = false
+      await this.loadExtraExpenses(quoteNo)
+    },
+
+    async xeUploadFiles(i, evt) {
+      const x = this.xe.items[i]
+      const files = evt?.target?.files
+      if (!x.id || !files || !files.length) return
+      const fd = new FormData()
+      for (const f of files) fd.append('files', f)
+      this.xe.busy = true; this.xe.msg = ''
+      try {
+        const r = await fetch(
+          `/api/quotations/${encodeURIComponent(this.selected.quote_no)}/extra-expenses/${x.id}/files`,
+          { method: 'POST', headers: { Authorization: 'Bearer ' + this.session.token }, body: fd })
+        if (!r.ok) {
+          const d = await r.json().catch(() => ({}))
+          this._xeFail('上傳失敗：' + (d.detail || r.status)); return
+        }
+      } catch (e) { this._xeFail('網路錯誤：' + e.message); return }
+      evt.target.value = ''   // 清掉才能重複選同一個檔案
+      this.xe.busy = false
+      await this.loadExtraExpenses(this.selected.quote_no)
+    },
+
+    async xeDeleteFile(i, fileId) {
+      const x = this.xe.items[i]
+      if (!x.id || !confirm('確定刪除這個附件？')) return
+      this.xe.busy = true; this.xe.msg = ''
+      try {
+        const r = await fetch(
+          `/api/quotations/${encodeURIComponent(this.selected.quote_no)}/extra-expenses/${x.id}/files/${fileId}`,
+          { method: 'DELETE', headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (!r.ok) {
+          const d = await r.json().catch(() => ({}))
+          this._xeFail('刪除失敗：' + (d.detail || r.status)); return
+        }
+      } catch (e) { this._xeFail('網路錯誤：' + e.message); return }
+      this.xe.busy = false
+      await this.loadExtraExpenses(this.selected.quote_no)
+    },
+
+    async xeDelete(i) {
+      const x = this.xe.items[i]
+      if (!x.id) { this.xe.items.splice(i, 1); return }   // 還沒存過，直接移除
+      if (!confirm(`確定刪除「${x.description}」？`)) return
+      const quoteNo = this.selected?.quote_no
+      this.xe.busy = true; this.xe.msg = ''
+      try {
+        const r = await fetch(
+          `/api/quotations/${encodeURIComponent(quoteNo)}/extra-expenses/${x.id}`,
+          { method: 'DELETE', headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (!r.ok) {
+          const d = await r.json().catch(() => ({}))
+          this._xeFail('刪除失敗：' + (d.detail || r.status)); return
+        }
+      } catch (e) { this._xeFail('網路錯誤：' + e.message); return }
+      this.xe.busy = false
+      await this.loadExtraExpenses(quoteNo)
+    },
+
+    // ── 額外支出：已核准之後的變更申請（2026-09-11）──────────────────────────
+    //
+    // 使用者交辦：已核准後附件上鎖，要改內容得按「編輯」走審核，而且**原核准金額
+    // 不動、核准後才生效**。所以這裡刻意分成兩區：上面那排欄位永遠顯示「目前生效
+    // 的值」（唯讀），變更申請是另一塊面板，填的是「提議的新值」。使用者一眼就能
+    // 對照改了什麼——如果直接讓人在原欄位上改，畫面看起來就像已經生效了。
+
+    xeCanModify(x) {
+      // 後端才是最終權威（_can_modify）；這裡擋是為了不要讓人填完才被 403 退回
+      if (['superadmin', 'admin'].includes(this.session.role)) return true
+      return !!x.createdBy && x.createdBy === this.session.username
+    },
+
+    // 附件上鎖：已核准就不能再上傳/刪除。要補憑證請走變更申請的「待核准附件」
+    xeFilesLocked(x) { return x.status === '已核准' },
+
+    xeInChange(x)        { return !!x._editing || !!x.changeStatus },
+    xeChangeEditable(x)  { return !x.changeStatus || x.changeStatus === '草稿' || x.changeStatus === '已駁回' },
+    xeChangeFiles(x)     { return (x.change && x.change.addFiles) || [] },
+
+    xeChangeStatusStyle(s) {
+      if (s === '已駁回') return 'background:#FEE2E2;color:#B91C1C'
+      if (s === '草稿')   return 'background:#F3F4F6;color:#6B7280'
+      return 'background:#FEF3C7;color:#92400E'   // 待審核／簽核中
+    },
+
+    xeStartEdit(i) {
+      const x = this.xe.items[i]
+      if (!this.xeCanModify(x)) { this._xeFail('只有填寫人本人或管理員可以提出變更申請'); return }
+      if (!x.change || !Object.keys(x.change).length) {
+        // 從目前生效的值開一份提議，使用者只要改動到的欄位
+        x.change = {
+          category: x.category, description: x.description, qty: x.qty, unit: x.unit,
+          unitCost: x.unitCost, totalCost: x.totalCost, note: x.note,
+          expenseDate: x.expenseDate, docNo: x.docNo,
+          payerUsername: x.payerUsername, payerName: x.payerName, addFiles: [],
+        }
+      }
+      x._editing = true
+      x._changeDirty = false
+      this.xe.msg = ''
+    },
+
+    xeChangeDirty(i) { this.xe.items[i]._changeDirty = true; this.xe.msg = '' },
+
+    xeChangeRecalc(i) {
+      const c = this.xe.items[i].change
+      c.totalCost = Math.round((Number(c.qty) || 0) * (Number(c.unitCost) || 0) * 100) / 100
+      this.xeChangeDirty(i)
+    },
+
+    xeChangePayerInput(i) {
+      const c = this.xe.items[i].change
+      const hit = (this.selectableUsers || []).find(
+        u => (u.display_name || u.username) === (c.payerName || '').trim())
+      c.payerUsername = hit ? hit.username : ''
+      this.xeChangeDirty(i)
+    },
+
+    _xeChangeBase(x) {
+      return `/api/quotations/${encodeURIComponent(this.selected.quote_no)}/extra-expenses/${x.id}/change-request`
+    },
+
+    async xeSaveChange(i) {
+      const x = this.xe.items[i]
+      const c = x.change || {}
+      if (!(c.description || '').trim()) { this._xeFail('請先填品項說明'); return }
+      this.xe.busy = true; this.xe.msg = ''
+      try {
+        const r = await fetch(this._xeChangeBase(x), {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify({
+            category: c.category, description: (c.description || '').trim(),
+            qty: Number(c.qty) || 0, unit: (c.unit || '').trim(),
+            unitCost: Number(c.unitCost) || 0, note: (c.note || '').trim(),
+            expenseDate: c.expenseDate || '', docNo: (c.docNo || '').trim(),
+            payerUsername: c.payerUsername || '', payerName: (c.payerName || '').trim(),
+          }),
+        })
+        if (!r.ok) {
+          const d = await r.json().catch(() => ({}))
+          this._xeFail('儲存失敗：' + (d.detail || r.status)); return
+        }
+        this.xe.msgError = false; this.xe.msg = '變更申請已存草稿，按「送審」才會進簽核'
+      } catch (e) { this._xeFail('網路錯誤：' + e.message); return }
+      this.xe.busy = false
+      await this.loadExtraExpenses(this.selected.quote_no)
+    },
+
+    async xeSubmitChange(i) {
+      const x = this.xe.items[i]
+      const c = x.change || {}
+      if (x._changeDirty) { this._xeFail('請先儲存變更申請再送審'); return }
+      if (!x.changeStatus) { this._xeFail('請先儲存變更申請再送審'); return }
+      const oldA = Math.round(x.totalCost || 0).toLocaleString()
+      const newA = Math.round(c.totalCost || 0).toLocaleString()
+      if (!confirm(`確定送審這筆變更申請？\n\n${c.description}\nNT$ ${oldA} → NT$ ${newA}\n\n`
+                 + `核准之前，這筆額外支出維持原本的 NT$ ${oldA}，報表數字不會變動。`)) return
+      this.xe.busy = true; this.xe.msg = ''
+      try {
+        const r = await fetch(`${this._xeChangeBase(x)}/submit`, {
+          method: 'POST', headers: { Authorization: 'Bearer ' + this.session.token } })
+        const d = await r.json().catch(() => ({}))
+        if (!r.ok) { this._xeFail('送審失敗：' + (d.detail || r.status)); return }
+        this.xe.msgError = false
+        this.xe.msg = d.autoApproved ? '未設定簽核層，變更已直接生效' : '變更申請已送審'
+      } catch (e) { this._xeFail('網路錯誤：' + e.message); return }
+      this.xe.busy = false
+      await this.loadExtraExpenses(this.selected.quote_no)
+    },
+
+    async xeCancelChange(i) {
+      const x = this.xe.items[i]
+      // 還沒送到後端的，純粹關掉面板就好
+      if (!x.changeStatus) { x._editing = false; x.change = {}; x._changeDirty = false; return }
+      if (!confirm('確定撤銷這筆變更申請？已上傳的待核准附件會一併刪除。')) return
+      this.xe.busy = true; this.xe.msg = ''
+      try {
+        const r = await fetch(this._xeChangeBase(x), {
+          method: 'DELETE', headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (!r.ok) {
+          const d = await r.json().catch(() => ({}))
+          this._xeFail('撤銷失敗：' + (d.detail || r.status)); return
+        }
+      } catch (e) { this._xeFail('網路錯誤：' + e.message); return }
+      this.xe.busy = false
+      await this.loadExtraExpenses(this.selected.quote_no)
+    },
+
+    async xeUploadChangeFiles(i, evt) {
+      const x = this.xe.items[i]
+      const files = evt?.target?.files
+      if (!files || !files.length) return
+      if (!x.changeStatus) { this._xeFail('請先按「儲存變更」建立草稿，再上傳待核准附件'); evt.target.value = ''; return }
+      const fd = new FormData()
+      for (const f of files) fd.append('files', f)
+      this.xe.busy = true; this.xe.msg = ''
+      try {
+        const r = await fetch(`${this._xeChangeBase(x)}/files`, {
+          method: 'POST', headers: { Authorization: 'Bearer ' + this.session.token }, body: fd })
+        if (!r.ok) {
+          const d = await r.json().catch(() => ({}))
+          this._xeFail('上傳失敗：' + (d.detail || r.status)); return
+        }
+      } catch (e) { this._xeFail('網路錯誤：' + e.message); return }
+      evt.target.value = ''   // 清掉才能重複選同一個檔案
+      this.xe.busy = false
+      await this.loadExtraExpenses(this.selected.quote_no)
+    },
+
+    async xeDeleteChangeFile(i, fileId) {
+      const x = this.xe.items[i]
+      if (!confirm('確定刪除這個待核准附件？')) return
+      this.xe.busy = true; this.xe.msg = ''
+      try {
+        const r = await fetch(`${this._xeChangeBase(x)}/files/${fileId}`, {
+          method: 'DELETE', headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (!r.ok) {
+          const d = await r.json().catch(() => ({}))
+          this._xeFail('刪除失敗：' + (d.detail || r.status)); return
+        }
+      } catch (e) { this._xeFail('網路錯誤：' + e.message); return }
+      this.xe.busy = false
+      await this.loadExtraExpenses(this.selected.quote_no)
+    },
+
+    // ── 完工單（2026-09-12）────────────────────────────────────────────────
+    //
+    // 使用者交辦：「在案件管理內增加完工單的選項，參考出貨單的形式跟內容建立完工單，
+    // 一樣走流程申請完工。」所以這一整段刻意比照上面的出貨單：同一套狀態機、同一套
+    // 分層簽核、同一套回簽。欄位差異與理由見 backend/db.py::_m077_completion_notes()。
+    //
+    // ⚠️ 後端 list 端點回的是 `{items: [...]}`（新端點的慣例），不是出貨單那種裸陣列，
+    //    照抄 `= await r.json()` 會拿到一個物件、畫面永遠空白且沒有任何錯誤。
+    // 清單在案件管理、填寫在獨立頁面 completion-note-form.html（比照報價單清單與
+    // 報價單表單的分工）。所以這裡**只留清單與狀態動作**，不再有表單狀態。
+    completionNotes: [],
+    completionNotesLoading: false,
+    completionPreviewFetching: false,
+
+    async loadCompletionNotes(quoteNo) {
+      if (!quoteNo) return
+      // 比照 loadExtraExpenses()：記住發請求當下是哪張單，回應抵達時再比對。
+      // 少了這道守門，切案件切太快就會把 A 案的完工單畫在 B 案底下
+      this._cnReqFor = quoteNo
+      this.completionNotesLoading = true
+      try {
+        const r = await fetch(`/api/completion-notes?quote_no=${encodeURIComponent(quoteNo)}`, {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (this._cnReqFor !== quoteNo) return
+        if (r.ok) this.completionNotes = (await r.json()).items || []
+      } catch {}
+      this.completionNotesLoading = false
+    },
+
+    async deleteCompletionNote(n) {
+      if (!confirm(`確定刪除完工單「${n.noteNo}」？`)) return
+      await this._cnAction(n, '', 'DELETE', '刪除失敗')
+    },
+
+    async submitCompletionNote(n) {
+      const unfinished = n.unfinishedCount || 0
+      const warn = unfinished
+        ? `\n\n⚠️ 這張單有 ${unfinished} 項未完成，請確認「遺留事項」已寫清楚。`
+        : ''
+      if (!confirm(`確定送出完工單「${n.noteNo}」申請完工？${warn}`)) return
+      await this._cnAction(n, '/submit', 'POST', '送出失敗')
+    },
+
+    async approveCompletionNote(n) {
+      if (!confirm(`確定簽核完工單「${n.noteNo}」？`)) return
+      await this._cnAction(n, '/approve', 'POST', '簽核失敗', {})
+    },
+
+    async rejectCompletionNote(n) {
+      const note = prompt(`退回完工單「${n.noteNo}」，可填寫退回原因（選填）：`)
+      if (note === null) return
+      await this._cnAction(n, '/reject', 'POST', '退回失敗', { note })
+    },
+
+    async revokeCompletionApproval(n) {
+      const note = prompt(`撤銷完工單「${n.noteNo}」的核准？將退回草稿。\n\n可填寫撤銷原因（選填）：`)
+      if (note === null) return
+      await this._cnAction(n, '/revoke-approval', 'POST', '撤銷失敗', { note })
+    },
+
+    async toggleCompletionSigned(n, action) {
+      const msg = action === 'sign'
+        ? `確定標記完工單「${n.noteNo}」客戶已驗收簽回？`
+        : `確定取消完工單「${n.noteNo}」的驗收標記？`
+      if (!confirm(msg)) return
+      const note = action === 'sign' ? (prompt('備註（選填，例如驗收人姓名或方式）：') || '') : ''
+      await this._cnAction(n, '/signed-toggle', 'POST', '操作失敗', { action, note })
+    },
+
+    // 六個動作的差別只有路徑與 body，抽出來免得複製六份各自漂移
+    async _cnAction(n, path, method, failMsg, body) {
+      try {
+        const opts = { method, headers: { Authorization: 'Bearer ' + this.session.token } }
+        if (body !== undefined) {
+          opts.headers['Content-Type'] = 'application/json'
+          opts.body = JSON.stringify(body)
+        }
+        const r = await fetch(`/api/completion-notes/${n.noteNo}${path}`, opts)
+        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || failMsg); return }
+        await this.loadCompletionNotes(this.selected?.quote_no)
+      } catch (e) { alert('網路錯誤：' + e.message) }
+    },
+
+    async previewCompletionPdf(n) {
+      this.completionPreviewFetching = true
+      try {
+        const r = await fetch(`/api/completion-notes/${n.noteNo}/pdf-download`, {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || 'PDF 產生失敗'); return }
+        const blob = await r.blob()
+        const url = URL.createObjectURL(blob)
+        window.open(url, '_blank')
+        setTimeout(() => URL.revokeObjectURL(url), 60000)
+        fetch(`/api/completion-notes/${n.noteNo}/export?mode=preview`, {
+          method: 'POST', headers: { Authorization: 'Bearer ' + this.session.token }
+        }).catch(() => {})
+      } catch (e) { alert('網路錯誤：' + e.message) }
+      this.completionPreviewFetching = false
+    },
+
+    _completionStatusLabel(s) { return s || '草稿' },
+    _completionStatusClass(s) {
+      if (s === '已核准') return 'badge-green'
+      if (s === '待審核' || s === '簽核中') return 'badge-amber'
+      return 'badge-gray'
+    },
+
+    // ── 叫料（材料訂購）────────────────────────────────────────────────────
+    async loadMaterialOrders(quoteNo) {
+      if (!quoteNo) return
+      // 發出請求的當下就記住是哪張單，回應抵達時再比對一次——比照 reports.js
+      // 的 loadExpenses()／loadReceivables() 競態修法（§12 2026-09-10「更晚」）。
+      // 這裡實測抓到過同一類問題：財務分頁一打開就發 GET，使用者在回應回來前
+      // 按「＋ 新增項目」，回應抵達時 this.materialOrders = [...] 會把剛新增的
+      // 那一列整個蓋掉，而且畫面上不會有任何錯誤，人只會覺得「按了沒反應」。
+      // 刻意不在這裡清空 materialOrders／moDirty：切換案件時 selectCase() 已經
+      // 清過一次，這裡再清一次的話，「載入尚未回來就被呼叫第二次」會在使用者
+      // 已經打字之後同步把畫面清掉，連下面的 moDirty 守門都來不及擋
+      this._moReqFor = quoteNo
+      this.moLoading = true
+      try {
+        const r = await fetch(`/api/quotations/${encodeURIComponent(quoteNo)}/material-orders`, {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        // 已經切到別的案件：這份回應過期，丟掉（不然會把別張單的叫料貼上來）
+        if (this._moReqFor !== quoteNo) return
+        // 使用者已經動手編輯：保留他打的東西，不要用伺服器版本覆蓋
+        if (r.ok && this.moDirty) { this.moLoading = false; return }
+        if (r.ok) {
+          // 這份清單是自由格式 JSON（早期資料或人工改過的 data_json 不保證
+          // 欄位齊全），跟後端 GET 端點同款作法：每個欄位都給預設值，
+          // 不然 x-model 綁到 undefined 會讓整列輸入框變成不受控
+          this.materialOrders = ((await r.json()).materialOrders || []).map(o => ({
+            itemId:     o.itemId || this._moNewId(),
+            itemName:   o.itemName || '',
+            quantity:   Number(o.quantity) || 0,
+            unit:       o.unit || '',
+            unitPrice:  Number(o.unitPrice) || 0,
+            totalPrice: Number(o.totalPrice) || 0,
+            paidStatus: ['pending', 'partial', 'paid'].includes(o.paidStatus) ? o.paidStatus : 'pending',
+            paidAmount: Number(o.paidAmount) || 0,
+            paidDate:   o.paidDate || '',
+            notes:      o.notes || ''
+          }))
+        }
+      } catch {}
+      this.moLoading = false
+    },
+
+    // crypto.randomUUID() 在 HTTP 明文頁面下不存在（非安全上下文），正式機是
+    // HTTPS 但開發機偶爾用 http://localhost 開，所以留一條退路
+    _moNewId() {
+      if (window.crypto && crypto.randomUUID) return crypto.randomUUID()
+      return 'mo-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10)
+    },
+
+    // 權限條件跟後端 PATCH 端點一致（admin+ 或 project_manage 模組），外加
+    // 已結案擋下來。前端擋不是安全機制，是不要讓使用者填完才被退回
+    moCanEdit() {
+      if (this.cr?.dealTag === '已結案') return false
+      const m = this.session.modules || []
+      return ['superadmin', 'admin'].includes(this.session.role) || m.includes('project_manage')
+    },
+
+    moTotals() {
+      let total = 0, paid = 0
+      for (const m of this.materialOrders) {
+        total += Number(m.totalPrice) || 0
+        paid  += Number(m.paidAmount) || 0
+      }
+      return { total, paid, unpaid: total - paid }
+    },
+
+    moAddItem() {
+      this.materialOrders.push({
+        itemId: this._moNewId(), itemName: '', quantity: 1, unit: '', unitPrice: 0,
+        totalPrice: 0, paidStatus: 'pending', paidAmount: 0, paidDate: '', notes: ''
+      })
+      this.moDirty = true
+      this.moMsg = ''
+    },
+
+    moRemoveItem(i) {
+      this.materialOrders.splice(i, 1)
+      this.moDirty = true
+      this.moMsg = ''
+    },
+
+    // 小計一律由這裡算、使用者不能手填——後端會用
+    // abs(totalPrice - 數量×單價) > 0.01 直接回 400。
+    // 刻意不把 m.quantity / m.unitPrice 正規化寫回去：使用者打到一半的
+    // 「1.」會被改成「1」，游標跳掉很難打字；正規化留到 moSave() 送出前做
+    moRecalc(i) {
+      const m = this.materialOrders[i]
+      const q = Number(m.quantity) || 0
+      const p = Number(m.unitPrice) || 0
+      m.totalPrice = Math.round(q * p * 100) / 100
+      if (m.paidStatus === 'paid') m.paidAmount = m.totalPrice
+      else if (m.paidStatus === 'pending') { m.paidAmount = 0; m.paidDate = '' }
+      this.moDirty = true
+    },
+
+    moOnStatusChange(i) {
+      const m = this.materialOrders[i]
+      const today = new Date().toISOString().slice(0, 10)
+      if (m.paidStatus === 'pending') { m.paidAmount = 0; m.paidDate = '' }
+      else {
+        if (!m.paidDate) m.paidDate = today
+        if (m.paidStatus === 'paid') m.paidAmount = Number(m.totalPrice) || 0
+      }
+      this.moDirty = true
+    },
+
+    async moSave() {
+      if (this.moSaving) return
+      const quoteNo = this.selected?.quote_no
+      if (!quoteNo) return
+
+      // 送出前正規化＋先擋一次。後端這些規則都會再驗一次，這裡擋只是為了
+      // 給看得懂的中文訊息（後端回的 detail 會指名項目，但撞到才看到）
+      const payload = []
+      for (const m of this.materialOrders) {
+        const name = (m.itemName || '').trim()
+        if (!name) { this.moMsgError = true; this.moMsg = '有項目還沒填名稱'; return }
+        const quantity  = Math.max(0, Number(m.quantity) || 0)
+        const unitPrice = Math.max(0, Number(m.unitPrice) || 0)
+        const totalPrice = Math.round(quantity * unitPrice * 100) / 100
+        let paidAmount = 0
+        let paidDate = null
+        if (m.paidStatus === 'paid') {
+          paidAmount = totalPrice
+          paidDate = m.paidDate || ''
+        } else if (m.paidStatus === 'partial') {
+          paidAmount = Math.round((Number(m.paidAmount) || 0) * 100) / 100
+          paidDate = m.paidDate || ''
+          if (paidAmount > totalPrice) { this.moMsgError = true; this.moMsg = `「${name}」的已付金額大於小計`; return }
+        }
+        if (m.paidStatus !== 'pending' && !paidDate) {
+          this.moMsgError = true; this.moMsg = `「${name}」標為已付，必須填已付日期`; return
+        }
+        payload.push({
+          itemId: m.itemId || this._moNewId(), itemName: name,
+          quantity, unit: (m.unit || '').trim(), unitPrice, totalPrice,
+          paidStatus: m.paidStatus, paidAmount,
+          paidDate: m.paidStatus === 'pending' ? null : paidDate,
+          notes: (m.notes || '').trim()
+        })
+      }
+
+      this.moSaving = true
+      this.moMsg = ''
+      try {
+        const r = await fetch(`/api/quotations/${encodeURIComponent(quoteNo)}/material-orders`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify({ materialOrders: payload })
+        })
+        if (r.ok) {
+          this.moDirty = false
+          this.moMsgError = false
+          this.moMsg = '已儲存'
+          setTimeout(() => { if (!this.moDirty) this.moMsg = '' }, 2500)
+        } else {
+          const d = await r.json().catch(() => ({}))
+          this.moMsgError = true
+          this.moMsg = '儲存失敗：' + (d.detail || r.status)
+        }
+      } catch (e) {
+        this.moMsgError = true
+        this.moMsg = '網路錯誤：' + e.message
+      }
+      this.moSaving = false
+    },
+
+    // ── 分頁狀態進 URL（2026-09-14）───────────────────────────────────
+    // 原本重新整理或把連結貼給同事，都會跳回第一個分頁。營運報表已經有
+    // ?tab= 的深連結模式，這裡比照。
+    // 刻意不改那 8 個 inline @click（每個都還帶自己的載入呼叫，逐一改容易漏），
+    // 改用 $watch 集中處理。
+    _pendingUrlTab: null,
+    _initTabFromUrl() {
+      var t = new URLSearchParams(location.search).get('tab')
+      var valid = ['biz','exec','dispatch','shipping','completion','feed','fin','xexp']
+      // 只記下來，不直接套：選案件時會把 activeTab 重設成 'biz'（那行是刻意的，
+      // 見 selectCase 的註解），所以要在重設之後才套，而且只套第一次。
+      if (t && valid.indexOf(t) >= 0) this._pendingUrlTab = t
+      var self = this
+      this.$watch('activeTab', function (v) {
+        var u = new URL(location.href)
+        u.searchParams.set('tab', v)
+        history.replaceState(null, '', u)
+      })
+    },
+
     async init() {
+      this._initTabFromUrl()
+      // Alpine 3 會自動呼叫資料物件上的 init()，而 case-management.html 的
+      // <body> 又寫了一次 x-init="init()"，所以整個 init() 每次開頁都跑兩遍：
+      // 所有 API 都發兩次，並且第二次 selectCase() 會把第一次已經載好的狀態
+      // 整個重置。先前看不出來是因為這頁的子清單全部是唯讀的，重載一次
+      // 看不出差別；2026-09-11 新增可編輯的叫料清單後才暴露——使用者在兩次
+      // init 中間按「＋新增項目」，那一列會被第二次載入默默抹掉。
+      // 這裡只修本頁；全站共 50 個頁面有同樣的 x-init 寫法，屬於独立課題。
+      if (this._initDone) return
+      this._initDone = true
       window.addEventListener('resize', () => { this.isMobileView = window.innerWidth <= 767 })
       const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
       if (!s.token) { location.href = 'login.html'; return }
@@ -105,12 +1064,23 @@ function app() {
         const r = await fetch('/api/auth/me', { headers: { Authorization: 'Bearer ' + s.token } })
         if (!r.ok) { location.href = 'login.html'; return }
         const me = await r.json()
-        this.session.displayName = me.display_name
+        this.session.displayName = me.displayName
+        this.session.id = me.userId
       } catch {}
       try {
         const ru = await fetch('/api/users/selectable', { headers: { Authorization: 'Bearer ' + s.token } })
         if (ru.ok) this.selectableUsers = await ru.json()
       } catch {}
+      try {
+        const stored = localStorage.getItem('motrix_casemgmt_read_at')
+        if (stored) {
+          this.readAt = stored
+        } else {
+          this.readAt = new Date().toISOString()
+          localStorage.setItem('motrix_casemgmt_read_at', this.readAt)
+        }
+      } catch {}
+      this.caseSortPref = await loadListPref(s.token, 'case_list')
       await this.loadCases()
       this.loadVendors()
       const _qp = new URLSearchParams(location.search).get('q')
@@ -134,6 +1104,83 @@ function app() {
       } catch {}
       this.loading = false
       this.filterCases()
+      this.loadCaseActivity()
+      this.loadStageBoardSummary()
+    },
+
+    // 視覺化改版（2026-08-23）：摘要總覽卡片的「已逾期階段」數字需要跨案件的
+    // 階段到期資訊，這份資料 case-stage-board.html 已經在用（stage_board() 回傳
+    // 的 items 就含 dueDate/done/overdue），這裡直接重用同一支既有 API，不用
+    // 新增後端端點。只在案件管理頁載入時抓一次，不影響既有的 cases/filterCases。
+    async loadStageBoardSummary() {
+      try {
+        const r = await fetch('/api/quotations/stage-board', {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (r.ok) this.stageBoardItems = (await r.json()).items || []
+      } catch {}
+    },
+
+    summaryTotal()   { return this.cases.length },
+    summaryActive()  { return this.cases.filter(c => c.deal_tag === '已成案').length },
+    summaryOverdue() { return this.stageBoardItems.filter(i => i.overdue).length },
+    summarySettling(){ return this.cases.filter(c => c.settle_status === 'draft').length },
+
+    // 看板檢視分欄：跟清單分頁的定義完全一致，只是同時攤開而非切換——待精算優先
+    // （呼應既有「待精算」分頁的定義，settle_status 是跟 deal_tag 獨立的另一個軸，
+    // 一個案件可能同時是「已成案」又「待精算」，看板需要互斥分欄，所以待精算優先
+    // 分類，其餘才依 deal_tag 分成進行中/已結案）。
+    boardColumns() {
+      const q = this.search.trim().toLowerCase()
+      let pool = !q ? this.cases : this.cases.filter(c =>
+        (c.quote_no || '').toLowerCase().includes(q) ||
+        (c.customer_name || '').toLowerCase().includes(q) ||
+        (c.project_name  || '').toLowerCase().includes(q)
+      )
+      if (this.unreadOnly) pool = pool.filter(c => this.isUnread(c))
+      const settling = [], active = [], closed = []
+      for (const c of pool) {
+        if (c.settle_status === 'draft') settling.push(c)
+        else if (c.deal_tag === '已結案') closed.push(c)
+        else active.push(c)
+      }
+      return [
+        { key: '待精算', label: '待精算', dot: '#FCD34D', items: settling },
+        { key: '進行中', label: '進行中', dot: '#4ADE80', items: active },
+        { key: '已結案', label: '已結案', dot: '#C4B5FD', items: closed },
+      ]
+    },
+
+    async loadCaseActivity() {
+      const quoteNos = this.cases.map(c => c.quote_no).filter(Boolean)
+      if (!quoteNos.length) { this.caseActivity = {}; return }
+      try {
+        const r = await fetch('/api/quotations/case-activity', {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + this.session.token, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ quote_nos: quoteNos }),
+        })
+        if (r.ok) this.caseActivity = await r.json()
+      } catch {}
+    },
+
+    isUnread(c) {
+      const ts = this.caseActivity[c.quote_no]
+      if (!this.readAt || !ts) return false
+      const u = new Date(ts.replace(' ', 'T'))
+      if (isNaN(u)) return false
+      return u.getTime() > new Date(this.readAt).getTime()
+    },
+
+    unreadCount() {
+      return this.cases.filter(c => this.isUnread(c)).length
+    },
+
+    markAllRead() {
+      this.readAt = new Date().toISOString()
+      try { localStorage.setItem('motrix_casemgmt_read_at', this.readAt) } catch {}
+      this.unreadOnly = false
+      this.filterCases()
     },
 
     filterCases() {
@@ -145,6 +1192,9 @@ function app() {
       } else {
         list = list.filter(c => c.deal_tag === this.listTab)
       }
+      if (this.unreadOnly) {
+        list = list.filter(c => this.isUnread(c))
+      }
       if (this.search.trim()) {
         const q = this.search.trim().toLowerCase()
         list = list.filter(c =>
@@ -153,7 +1203,91 @@ function app() {
           (c.project_name  || '').toLowerCase().includes(q)
         )
       }
-      this.filteredCases = list
+      this.filteredCases = applyListSort(list, this.caseSortPref, {
+        quote_date:    c => c.quote_date || c.created_at || '',
+        total:         c => c.total || 0,
+        customer_name: c => c.customer_name || '',
+      }, c => c.quote_no)
+      this.$nextTick(() => this.initCaseSortable())
+    },
+
+    async setCaseSortMode(mode) {
+      this.caseSortPref.sortMode = mode
+      this.filterCases()
+      await saveListPref(this.session.token, 'case_list', this.caseSortPref)
+    },
+    async toggleCaseSortDir() {
+      this.caseSortPref.sortDir = this.caseSortPref.sortDir === 'asc' ? 'desc' : 'asc'
+      this.filterCases()
+      await saveListPref(this.session.token, 'case_list', this.caseSortPref)
+    },
+    initCaseSortable() {
+      const body = this.$refs.caseListBody
+      if (!body || typeof Sortable === 'undefined') return
+      if (this._caseSortable) { this._caseSortable.destroy(); this._caseSortable = null }
+      if (this.caseSortPref.sortMode !== 'custom') return
+      this._caseSortable = Sortable.create(body, {
+        animation: 150,
+        handle: '.drag-handle',
+        ghostClass: 'sortable-ghost',
+        chosenClass: 'sortable-chosen',
+        onEnd: async () => {
+          const visibleIds = [...body.querySelectorAll('.cm-card[data-quote-no]')].map(el => el.dataset.quoteNo)
+          const rest = this.caseSortPref.customOrder.filter(id => !visibleIds.includes(id))
+          this.caseSortPref.customOrder = [...visibleIds, ...rest]
+          await saveListPref(this.session.token, 'case_list', this.caseSortPref)
+        }
+      })
+    },
+
+    // ── 案件內單據子清單排序（出貨單/開票憑據/請款單，2026-08-24）───────────────
+    // 三個子清單的排序偏好各自獨立，list_key 帶上 quote_no 前綴（見 loadShippingNotes
+    // /loadInvoiceVouchers/loadPaymentRequests 載入時機），避免跨案件互相污染。
+    _subListMeta: {
+      sn:     { pref: 'snSortPref',     dataKey: 'shippingNotes',   ref: 'snListBody', idField: 'noteNo',
+                fields: { shipDate: n => n.shipDate || '', createdAt: n => n.createdAt || '' } },
+      iv:     { pref: 'ivSortPref',     dataKey: 'invoiceVouchers', ref: 'ivListBody', idField: 'voucherNo',
+                fields: { createdAt: v => v.createdAt || '', totalAmount: v => v.totalAmount || 0 } },
+      prList: { pref: 'prListSortPref', dataKey: 'paymentRequests', ref: 'prListBody', idField: 'requestNo',
+                fields: { createdAt: v => v.createdAt || '', amount: v => v.amount || 0 } },
+    },
+    _sortedSubList(kind) {
+      const meta = this._subListMeta[kind]
+      return applyListSort(this[meta.dataKey] || [], this[meta.pref], meta.fields, item => item[meta.idField])
+    },
+    sortedShippingNotes()   { return this._sortedSubList('sn') },
+    sortedInvoiceVouchers() { return this._sortedSubList('iv') },
+    sortedPaymentRequests() { return this._sortedSubList('prList') },
+
+    async setSubListSortMode(kind, mode) {
+      const meta = this._subListMeta[kind]
+      this[meta.pref].sortMode = mode
+      this.$nextTick(() => this._initSubListSortable(kind))
+      await saveListPref(this.session.token, `${kind}:${this.selected.quote_no}`, this[meta.pref])
+    },
+    async toggleSubListSortDir(kind) {
+      const meta = this._subListMeta[kind]
+      this[meta.pref].sortDir = this[meta.pref].sortDir === 'asc' ? 'desc' : 'asc'
+      await saveListPref(this.session.token, `${kind}:${this.selected.quote_no}`, this[meta.pref])
+    },
+    _initSubListSortable(kind) {
+      const meta = this._subListMeta[kind]
+      const body = this.$refs[meta.ref]
+      if (!body || typeof Sortable === 'undefined') return
+      if (this._subSortables[kind]) { this._subSortables[kind].destroy(); this._subSortables[kind] = null }
+      if (this[meta.pref].sortMode !== 'custom') return
+      this._subSortables[kind] = Sortable.create(body, {
+        animation: 150,
+        handle: '.drag-handle',
+        ghostClass: 'sortable-ghost',
+        chosenClass: 'sortable-chosen',
+        onEnd: async () => {
+          const visibleIds = [...body.querySelectorAll('[data-item-id]')].map(el => el.dataset.itemId)
+          const rest = (this[meta.pref].customOrder || []).filter(id => !visibleIds.includes(id))
+          this[meta.pref].customOrder = [...visibleIds, ...rest]
+          await saveListPref(this.session.token, `${kind}:${this.selected.quote_no}`, this[meta.pref])
+        }
+      })
     },
 
     async selectCase(quoteNo) {
@@ -165,39 +1299,86 @@ function app() {
         if (!r.ok) return
         const data = await r.json()
         this.selected = data
+        // 同時編輯警示（2026-09-14）：切換案件時自動釋放前一張、回報這一張
+        if (window.MotrixPresence) window.MotrixPresence.start('case', quoteNo)
+        // 分頁/檢視狀態必須在任何 await 之前就重設完（2026-09-09 修）：
+        // this.selected 一設定，分頁列就立刻渲染給使用者點；但下面
+        // _seedDefaultStagesIfEmpty() 對全新案件會連打 5 次建立階段的 API，
+        // 這段期間如果使用者已經切到別的分頁（例如「財務」），原本寫在 await
+        // 之後的 activeTab='biz' 會把人硬彈回「案件資訊」——階段建立越慢、
+        // 被彈回的機率越高。這幾個都是純檢視狀態，提前重設沒有副作用。
+        this.activeTab = 'biz'
+        // 深連結 ?tab=：只在載入後第一次選案件時套用，之後切案件維持回到「案件資訊」
+        if (this._pendingUrlTab) { this.activeTab = this._pendingUrlTab; this._pendingUrlTab = null }
+        this.execSubTab = 'progress'
+        // 叫料的狀態也屬於「必須在 await 之前重設完」那一類（2026-09-14 修）：
+        // selected 一設定分頁列就渲染出來，使用者可以立刻點「財務」，而下面
+        // ensureCaseRecord()／_seedDefaultStagesIfEmpty() 是會發網路請求的 await
+        // ——原本 moLoading 要等到那之後才立起來，這段空窗期點進財務分頁就會看到
+        // 「尚無叫料項目」，接著才跳成「載入中…」。全套測試偶發的紅燈就是它
+        // （test_e2e_material_orders_2026_09_11.py，約 1/5 機率）。
+        this.materialOrders = []
+        this.moDirty = false
+        this.moMsg = ''
+        this.moLoading = true
         this.cr.dealTag = data.data?.dealTag || data.deal_tag || '已成案'
         this.cr.caseRecord = data.data?.caseRecord || null
-        this.ensureCaseRecord()
+        await this.ensureCaseRecord()
+        await this._seedDefaultStagesIfEmpty()
         this.dirty = false
         this.saveStatus = ''
         this.saveMsg = ''
-        this.activeTab = 'biz'
         this.showLog = false
         this.showImportModal = false
         this._allDonePrompted = false
         this._syncWarrantyDate = ''
         this._syncWarrantyMonths = 12
         this._openDevGroups = {}
+        this.stageView = 'list'
         this._devDragId = null
         this._devDragOverId = null
         this._devInsertBeforeId = null
         this._devHoverGroupId = null
         this._devGroupTarget = null
         this._devHoverStart = 0
-        this.linkedProjectId = null
+        this.caseActionItems = []
+        this.assignedUserIds = data.assigned_user_ids || []
         this.caseTasks = []
         this.caseUpdates = []
         this.newComment = ''
         this.shippingNotes = []
+        this.completionNotes = []
         this.showShippingModal = false
         this._shippingLogOpen = {}
         this.shippingContactOptions = []
         this.showShippingContactPicker = false
         this.closeShippingPreview()
-        // 背景查詢是否已有關聯專案
-        this._checkLinkedProject(quoteNo)
+        this.contractorVouchers = []
+        this.closeContractorVoucherPreview()
+        this.invoiceVouchers = []
+        this.closeInvoiceVoucherPreview()
+        this.paymentRequests = []
+        this.financeSummary = null
+        this.finShowRecvDetail = false
+        this.finShowPayDetail = false
+        // 叫料的四個旗標已經在 await 之前重設過了（見上面），這裡不再重複
+        this.xe = { ...this.xe, loading: true, items: [], totalAmount: 0,
+                    totalPending: 0, pendingCount: 0, msg: '', busy: false }
         this._loadCaseTasks(quoteNo)
         this.loadDispatches(quoteNo)
+        // 2026-09-14：這三個原本是「點分頁才載」，但分頁上的數量徽章要在沒點過
+        // 之前就正確——沒載入時綁 .length 會顯示 0，看起來像「這案子沒有出貨單」，
+        // 比沒有徽章更糟。兩個 loader 都是單純 GET、無副作用（不會標記已讀），
+        // 這裡本來就已經並行打 8 個端點，多這三個是邊際成本。
+        this.loadShippingNotes(quoteNo)
+        this.loadCompletionNotes(quoteNo)
+        this.loadCaseUpdates(quoteNo)
+        this.loadContractorVouchers(quoteNo)
+        this.loadInvoiceVouchers(quoteNo)
+        this.loadPaymentRequests(quoteNo)
+        this.loadFinanceSummary(quoteNo)
+        this.loadMaterialOrders(quoteNo)
+        this.loadExtraExpenses(quoteNo)
       } catch {}
     },
 
@@ -214,72 +1395,163 @@ function app() {
       this.caseTasksLoading = false
     },
 
-    async _checkLinkedProject(quoteNo) {
+    // ── 代辦事項（2026-08-26 專案管理併入案件管理，取代原本跳去 projects.html
+    //    的 goToProject()/createProjectFromCase()）──
+    async loadCaseActionItems() {
+      if (!this.selected) return
+      this.caseActionItemsLoading = true
       try {
-        const r = await fetch(`/api/projects?case_no=${encodeURIComponent(quoteNo)}`, {
+        const r = await fetch(`/api/quotations/${this.selected.quote_no}/action-items`, {
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
-        if (!r.ok) return
-        const d = await r.json()
-        this.linkedProjectId = d.items?.length > 0 ? d.items[0].id : null
+        if (r.ok) this.caseActionItems = (await r.json()).items || []
       } catch {}
+      this.caseActionItemsLoading = false
     },
 
-    async goToProject() {
-      if (!this.selected) return
-      if (this.linkedProjectId) {
-        location.href = `projects.html?id=${this.linkedProjectId}`
-        return
-      }
-      // 非管理員直接導到專案列表過濾此案件
-      if (!this.canManageProject()) {
-        location.href = `projects.html?caseNo=${this.selected.quote_no}`
-        return
-      }
-      // 管理員：預填名稱後開啟建立 Modal
-      this.newProjectName = this.selected.project_name || this.selected.customer_name || ''
-      this.showCreateProjectModal = true
-    },
-
-    async createProjectFromCase() {
-      if (!this.newProjectName.trim() || !this.selected) return
-      this.creatingProject = true
+    async addActionItem() {
+      const text = this.newActionItemText.trim()
+      if (!text || !this.selected) return
+      this.addingActionItem = true
       try {
-        const r = await fetch('/api/projects', {
+        const r = await fetch(`/api/quotations/${this.selected.quote_no}/action-items`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
-          body: JSON.stringify({
-            name: this.newProjectName.trim(),
-            status: '進行中',
-            description: `由案件 ${this.selected.quote_no} 轉入`,
-            linked_cases: [this.selected.quote_no],
-          })
+          body: JSON.stringify({ text })
         })
-        if (!r.ok) { alert('建立失敗：' + (await r.json()).detail); return }
-        const d = await r.json()
-        this.showCreateProjectModal = false
-        location.href = `projects.html?id=${d.id}`
+        if (!r.ok) { alert('新增失敗：' + (await r.json()).detail); return }
+        this.newActionItemText = ''
+        await this.loadCaseActionItems()
       } catch(e) {
         alert('發生錯誤：' + e.message)
       } finally {
-        this.creatingProject = false
+        this.addingActionItem = false
       }
+    },
+
+    async deleteActionItem(itemId) {
+      if (!this.selected || !confirm('確定刪除此代辦事項？')) return
+      try {
+        const r = await fetch(`/api/quotations/${this.selected.quote_no}/action-items/${itemId}`, {
+          method: 'DELETE',
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (!r.ok) { alert('刪除失敗：' + (await r.json()).detail); return }
+        await this.loadCaseActionItems()
+      } catch(e) {
+        alert('發生錯誤：' + e.message)
+      }
+    },
+
+    async approveActionItem(itemId, stage) {
+      if (!this.selected) return
+      try {
+        const r = await fetch(`/api/quotations/${this.selected.quote_no}/action-items/${itemId}/approve`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify({ stage })
+        })
+        if (!r.ok) { alert('確認失敗：' + (await r.json()).detail); return }
+        await this.loadCaseActionItems()
+      } catch(e) {
+        alert('發生錯誤：' + e.message)
+      }
+    },
+
+    actionItemStatusLabel(item) {
+      if (item.status === 'done') return '✓ 已完成'
+      if (item.status === 'stage1_done') return '工程已確認，待業務確認'
+      return '待確認'
+    },
+
+    // ── 專案資訊（成員分配，取代原 PATCH /api/projects/{id}/assigned-users）──
+    toggleAssignedUser(userId) {
+      const i = this.assignedUserIds.indexOf(userId)
+      if (i >= 0) this.assignedUserIds.splice(i, 1)
+      else this.assignedUserIds.push(userId)
+    },
+
+    async saveAssignedUsers() {
+      if (!this.selected) return
+      this.assignedUsersSaving = true
+      try {
+        const r = await fetch(`/api/quotations/${this.selected.quote_no}/assigned-users`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify({ user_ids: this.assignedUserIds })
+        })
+        if (!r.ok) { alert('儲存失敗：' + (await r.json()).detail); return }
+      } catch(e) {
+        alert('發生錯誤：' + e.message)
+      } finally {
+        this.assignedUsersSaving = false
+      }
+    },
+
+    // ── 專案執行報告匯出 ──
+    async exportProjectReport() {
+      if (!this.selected || this.exportingProjectReport) return
+      this.exportingProjectReport = true
+      try {
+        const r = await fetch(`/api/quotations/${this.selected.quote_no}/project-report-pdf`, {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (!r.ok) { alert('匯出失敗：' + (await r.json()).detail); return }
+        const blob = await r.blob()
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `${this.selected.quote_no}_專案執行報告.pdf`
+        a.click()
+        URL.revokeObjectURL(url)
+      } catch(e) {
+        alert('發生錯誤：' + e.message)
+      } finally {
+        this.exportingProjectReport = false
+      }
+    },
+
+    // 報價單 → 案件合約資訊的欄位對照。contactPerson/contactPhone 在報價單
+    // 是 contactName/contactPhone；contractNote 報價單沒有對應欄位，維持案件自填。
+    _quoteContractFields() {
+      const q = (this.selected && this.selected.data) || {}
+      return {
+        deliveryAddress: q.deliveryAddress || '',
+        deliveryTerms:   q.deliveryTerms   || '',
+        contactPerson:   q.contactName     || '',
+        contactPhone:    q.contactPhone    || '',
+      }
+    },
+    _fillContractFromQuote(target) {
+      const src = this._quoteContractFields()
+      // 只填空的欄位——不覆蓋案件上已經有的值
+      Object.keys(src).forEach(k => { if (src[k] && !target[k]) target[k] = src[k] })
+    },
+    get quoteContractAvailable() {
+      return Object.values(this._quoteContractFields()).some(v => !!v)
+    },
+    pullContractFromQuote() {
+      const c = this.cr.caseRecord && this.cr.caseRecord.contract
+      if (!c) return
+      const src = this._quoteContractFields()
+      const filled = Object.keys(src).filter(k => src[k] && !c[k])
+      if (!filled.length) { alert('報價單上沒有可帶入的欄位，或案件這邊都已經有值了。'); return }
+      this._fillContractFromQuote(c)
+      this.setDirty && this.setDirty()
+      this.dirty = true
     },
 
     ensureCaseRecord() {
       if (!this.cr.caseRecord) {
         this.cr.caseRecord = {
-          stages: [
-            { id: 1, label: '訂單確認', done: false, doneAt: '', visits: [] },
-            { id: 2, label: '叫料出貨', done: false, doneAt: '', visits: [] },
-            { id: 3, label: '施工安裝', done: false, doneAt: '', visits: [] },
-            { id: 4, label: '客戶驗收', done: false, doneAt: '', visits: [] },
-            { id: 5, label: '尾款結清', done: false, doneAt: '', visits: [] },
-          ],
+          // stages 正規化 Phase 3b（2026-08-23）：不再本地寫死 5 個帶假 id 的階段物件——
+          // 一旦切到 stages 專屬端點，假 id 對伺服器來說根本不存在，操作會 404。真正的
+          // 5 個預設階段改由 _seedDefaultStagesIfEmpty() 透過 API 建立，取得真實 id。
+          stages: [],
           payment: { items: [
-            { id: 1, type: '訂金款', pct: 30, received: false, receivedAt: '', invoiceNo: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' },
-            { id: 2, type: '交貨款', pct: 30, received: false, receivedAt: '', invoiceNo: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' },
-            { id: 3, type: '驗收款', pct: 40, received: false, receivedAt: '', invoiceNo: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' },
+            { id: 1, type: '訂金款', pct: 30, received: false, receivedAt: '', expectedReceiptDate: '', invoiceNo: '', invoiceDate: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' },
+            { id: 2, type: '交貨款', pct: 30, received: false, receivedAt: '', expectedReceiptDate: '', invoiceNo: '', invoiceDate: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' },
+            { id: 3, type: '驗收款', pct: 40, received: false, receivedAt: '', expectedReceiptDate: '', invoiceNo: '', invoiceDate: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' },
           ], note: '' },
           materials: [], devices: [], warrantyNote: '', notes: '',
         }
@@ -289,9 +1561,18 @@ function app() {
       if (!this.cr.caseRecord.devices)   this.cr.caseRecord.devices   = []
       if (!this.cr.caseRecord.contract) {
         this.cr.caseRecord.contract = { deliveryAddress: '', deliveryTerms: '', contactPerson: '', contactPhone: '', contractNote: '' }
+        // 第一次建立時從報價單帶入（2026-09-14 使用者交辦「合約資訊要能根據
+        // 報價單內容連動」）。**單向、只帶一次**：案件成立後現場條件本來就
+        // 可能跟報價當時不同，雙向同步會讓改案件反過來改到已經簽核的報價單；
+        // 每次開啟都覆蓋則會把現場修正洗掉。已存在的案件用下面那顆
+        // pullContractFromQuote() 手動帶，不在載入時偷偷補寫。
+        this._fillContractFromQuote(this.cr.caseRecord.contract)
       }
       if (!this.cr.caseRecord.roles) {
         this.cr.caseRecord.roles = { filler: '', sales: '', executor: '' }
+      }
+      if (!this.cr.caseRecord.projectTimeline) {
+        this.cr.caseRecord.projectTimeline = { startDate: '', endDate: '', status: 'on_track' }
       }
 
       this.cr.caseRecord.materials.forEach(mat => {
@@ -307,20 +1588,44 @@ function app() {
             : []
           delete st.visitDate; delete st.visitPeople; delete st.note
         }
+        if (st.startDate  === undefined) st.startDate  = ''
+        if (st.dueDate    === undefined) st.dueDate    = ''
+        if (!st.assignedTo) st.assignedTo = []
+        if (!st.dependsOn)  st.dependsOn  = []
       })
 
       if (!this.cr.caseRecord.payment) {
         this.cr.caseRecord.payment = { items: [
-          { id: 1, type: '訂金款', pct: 30, amount: null, received: false, receivedAt: '', invoiceNo: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' },
-          { id: 2, type: '交貨款', pct: 30, amount: null, received: false, receivedAt: '', invoiceNo: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' },
-          { id: 3, type: '驗收款', pct: 40, amount: null, received: false, receivedAt: '', invoiceNo: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' },
+          { id: 1, type: '訂金款', pct: 30, amount: null, received: false, receivedAt: '', expectedReceiptDate: '', invoiceNo: '', invoiceDate: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' },
+          { id: 2, type: '交貨款', pct: 30, amount: null, received: false, receivedAt: '', expectedReceiptDate: '', invoiceNo: '', invoiceDate: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' },
+          { id: 3, type: '驗收款', pct: 40, amount: null, received: false, receivedAt: '', expectedReceiptDate: '', invoiceNo: '', invoiceDate: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' },
         ], note: '' }
       } else if (!this.cr.caseRecord.payment.items) {
         this.cr.caseRecord.payment = { items: [
-          { id: 1, type: '訂金款', pct: 30, amount: null, received: false, receivedAt: '', invoiceNo: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' },
-          { id: 2, type: '交貨款', pct: 30, amount: null, received: false, receivedAt: '', invoiceNo: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' },
-          { id: 3, type: '驗收款', pct: 40, amount: null, received: false, receivedAt: '', invoiceNo: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' },
+          { id: 1, type: '訂金款', pct: 30, amount: null, received: false, receivedAt: '', expectedReceiptDate: '', invoiceNo: '', invoiceDate: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' },
+          { id: 2, type: '交貨款', pct: 30, amount: null, received: false, receivedAt: '', expectedReceiptDate: '', invoiceNo: '', invoiceDate: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' },
+          { id: 3, type: '驗收款', pct: 40, amount: null, received: false, receivedAt: '', expectedReceiptDate: '', invoiceNo: '', invoiceDate: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' },
         ], note: this.cr.caseRecord.payment.note || '' }
+      }
+    },
+
+    // stages 正規化 Phase 3b（2026-08-23）：案件目前完全沒有階段時（新案件、或早期
+    // 資料從未經過 quotation-form.html／case-management.html 任何一份預設模板寫入
+    // 過），透過 stages 端點依序建立 5 個預設階段，取得真實 id。selectCase() 載入完
+    // 成後呼叫一次；ensureCaseRecord() 補齊其他欄位形狀之後才會執行到這裡。
+    async _seedDefaultStagesIfEmpty() {
+      if (!this.selected || !this.cr.caseRecord) return
+      if ((this.cr.caseRecord.stages || []).length > 0) return
+      const labels = ['訂單確認', '叫料出貨', '施工安裝', '客戶驗收', '尾款結清']
+      for (const label of labels) {
+        try {
+          const r = await fetch(`/api/quotations/${this.selected.quote_no}/stages`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+            body: JSON.stringify({ label })
+          })
+          if (r.ok) this.cr.caseRecord.stages.push(await r.json())
+        } catch {}
       }
     },
 
@@ -340,6 +1645,7 @@ function app() {
       return Math.round(this.totalWithTax() * (+items[idx]?.pct || 0) / 100)
     },
 
+    // 未稅原價：不受沖銷影響，永遠是該筆款項依報價單稅率換算的未稅基準
     itemAmountPretax(idx) {
       const items  = this.paymentItems()
       const total  = this.totalWithTax()
@@ -349,7 +1655,16 @@ function app() {
       return Math.round(pretax * (+items[idx]?.pct || 0) / 100)
     },
 
-    itemAmountTax(idx) { return this.itemAmountWithTax(idx) - this.itemAmountPretax(idx) },
+    itemAmountTax(idx) {
+      if (this.paymentItems()[idx]?.taxExempt) return 0
+      return this.itemAmountWithTax(idx) - this.itemAmountPretax(idx)
+    },
+
+    // 該筆款項實際應收／已收金額：已核准沖銷免稅 → 客戶只付未稅價，稅額不再收取
+    itemAmountReceivable(idx) {
+      const items = this.paymentItems()
+      return items[idx]?.taxExempt ? this.itemAmountPretax(idx) : this.itemAmountWithTax(idx)
+    },
 
     _setItemAmount(items, idx, withTax) {
       // 規範值：直接存含稅整數，pct 作為百分比 input 顯示用
@@ -424,7 +1739,7 @@ function app() {
     },
 
     receivedTotal() {
-      return this.paymentItems().reduce((s, p, i) => p.received ? s + this.itemAmountWithTax(i) : s, 0)
+      return this.paymentItems().reduce((s, p, i) => p.received ? s + this.itemAmountReceivable(i) : s, 0)
     },
     receivedPct() {
       return this.paymentItems().reduce((s, p) => p.received ? s + (+p.pct || 0) : s, 0)
@@ -435,16 +1750,18 @@ function app() {
     netReceivedTotal() {
       return this.paymentItems().reduce((s, p, i) => {
         if (!p.received) return s
-        const base = p.actualAmount != null ? +p.actualAmount : this.itemAmountWithTax(i)
+        const base = p.actualAmount != null ? +p.actualAmount : this.itemAmountReceivable(i)
         return s + base - (+p.feeAmount || 0)
       }, 0)
     },
-    outstandingTotal() { return Math.max(0, this.totalWithTax() - this.receivedTotal()) },
+    outstandingTotal() {
+      return Math.max(0, this.paymentItems().reduce((s, p, i) => p.received ? s : s + this.itemAmountReceivable(i), 0))
+    },
     outstandingPct()   { return Math.max(0, 100 - this.receivedPct()) },
 
     addPaymentItem() {
       const items = this.cr.caseRecord.payment.items
-      items.push({ id: Date.now(), type: '進度款', pct: 0, received: false, receivedAt: '', invoiceNo: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' })
+      items.push({ id: Date.now(), type: '進度款', pct: 0, received: false, receivedAt: '', expectedReceiptDate: '', invoiceNo: '', invoiceDate: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' })
       this.setDirty()
     },
     removePaymentItem(idx) {
@@ -467,6 +1784,9 @@ function app() {
 
     _checkAllStagesDone() {
       if (this.cr.dealTag !== '已成案') return
+      // 2026-09-13：完結案限最高管理者，其他人跳這個提示只會得到 403，
+      // 按了失敗比沒看到提示更令人困惑。
+      if ((this.session?.role || '') !== 'superadmin') return
       const stages = this.cr.caseRecord?.stages || []
       if (!stages.length) return
       if (!stages.every(s => s.done)) { this._allDonePrompted = false; return }
@@ -481,6 +1801,23 @@ function app() {
 
     async saveCaseRecord() {
       if (!this.selected) return
+      if (this.cr.dealTag === '已結案' && !this.selected.case_semi_unlocked) {
+        // 已結案且未解鎖：後端會直接 403，這裡先擋下避免每次 @input 觸發的
+        // 防抖自動存檔都跑一趟網路請求、又跳出令人困惑的「儲存失敗」。
+        this.dirty = false
+        this.saveStatus = 'error'
+        this.saveMsg = '案件已結案並鎖定，請先解鎖'
+        return
+      }
+      // 驗證：已收款項必須填入收款日期
+      const payItems = this.cr.caseRecord.payment?.items || []
+      for (const item of payItems) {
+        if (item.received && !item.receivedAt) {
+          this.saveStatus = 'error'
+          this.saveMsg = `${item.type || '款項'}：已標記收款但未填入收款日期，請補填`
+          return
+        }
+      }
       this.saving = true
       try {
         const r = await fetch('/api/quotations/' + this.selected.quote_no + '/case-record', {
@@ -490,9 +1827,29 @@ function app() {
         })
         if (r.ok) {
           this.dirty = false
-          this.saveStatus = 'saved'
-          this.saveMsg = '已儲存'
-          setTimeout(() => { if (!this.dirty) { this.saveStatus = ''; this.saveMsg = '' } }, 2000)
+          const res = await r.json().catch(() => ({}))
+          if (res.pending) {
+            // 已結案案件半解鎖期間：此次存檔不會立即生效，已排隊等最高管理員審核
+            // （見 backend/routers/quotations.py::_gate_case_edit()）。
+            this.saveStatus = 'dirty'
+            this.saveMsg = '已送出，待最高管理員審核後套用'
+            this.saving = false
+            return
+          }
+          const conflicts = res.stockConflicts || []
+          if (conflicts.length) {
+            // 序號已登載到案件，但庫存系統裡這些序號其實卡在別的狀態（已出貨/已安裝於
+            // 別案件等）——不擋存檔，但要讓使用者看到，不然庫存跟案件記錄會無聲分岔
+            this.saveStatus = 'dirty'
+            this.saveMsg = `已儲存，但 ${conflicts.length} 個序號庫存狀態衝突（${conflicts.map(c => c.sn + ':' + c.stockStatus).join('、')}）`
+          } else {
+            this.saveStatus = 'saved'
+            this.saveMsg = '已儲存'
+            setTimeout(() => { if (!this.dirty) { this.saveStatus = ''; this.saveMsg = '' } }, 2000)
+          }
+          // 款項明細（勾已收款/實收金額/手續費）就是在這支存的，財務 Tab 的
+          // 應收應付總覽必須跟著重算，否則會停在存檔前的舊數字
+          this.loadFinanceSummary(this.selected?.quote_no)
         } else {
           this.saveStatus = 'error'
           this.saveMsg = '儲存失敗'
@@ -502,6 +1859,76 @@ function app() {
         this.saveMsg = '網路錯誤'
       }
       this.saving = false
+    },
+
+    openWriteoffModal(idx, mode) {
+      this.writeoffModal = { open: true, idx, mode, reason: '', msg: '' }
+    },
+
+    async _postWriteoff(idx, path, body) {
+      const quoteNo = this.selected.quote_no
+      const r = await fetch(`/api/quotations/${quoteNo}/payment/${idx}/${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+        body: JSON.stringify(body || {})
+      })
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}))
+        return { ok: false, msg: err.detail || '操作失敗' }
+      }
+      return { ok: true }
+    },
+
+    async submitWriteoffModal() {
+      const { idx, mode, reason } = this.writeoffModal
+      if (!reason.trim()) return
+      const item = this.paymentItems()[idx]
+      const me = this.session.displayName || this.session.username || ''
+      let res
+      if (mode === 'request') {
+        res = await this._postWriteoff(idx, 'request-writeoff', { reason })
+        if (res.ok) {
+          item.writeOffStatus = 'pending'
+          item.writeOffReason = reason
+          item.writeOffRequestedBy = me
+          item.writeOffRequestedAt = new Date().toISOString()
+        }
+      } else {
+        res = await this._postWriteoff(idx, 'approve-writeoff', { approve: false, reject_reason: reason })
+        if (res.ok) {
+          item.writeOffStatus = 'rejected'
+          item.writeOffRejectReason = reason
+        }
+      }
+      if (res.ok) {
+        this.writeoffModal.open = false
+      } else {
+        this.writeoffModal.msg = res.msg
+      }
+    },
+
+    async cancelWriteoff(idx) {
+      const item = this.paymentItems()[idx]
+      const res = await this._postWriteoff(idx, 'cancel-writeoff')
+      if (res.ok) {
+        for (const k of ['writeOffStatus', 'writeOffReason', 'writeOffRequestedBy', 'writeOffRequestedAt']) delete item[k]
+      } else {
+        alert(res.msg)
+      }
+    },
+
+    async approveWriteoff(idx) {
+      const item = this.paymentItems()[idx]
+      const me = this.session.displayName || this.session.username || ''
+      const res = await this._postWriteoff(idx, 'approve-writeoff', { approve: true })
+      if (res.ok) {
+        item.writeOffStatus = 'approved'
+        item.taxExempt = true
+        item.writeOffApprovedBy = me
+        item.writeOffApprovedAt = new Date().toISOString()
+      } else {
+        alert(res.msg)
+      }
     },
 
     async closeCaseAction() {
@@ -534,8 +1961,47 @@ function app() {
           const idx = this.cases.findIndex(c => c.quote_no === this.selected.quote_no)
           if (idx !== -1) this.cases[idx].deal_tag = tag
           this.filterCases()
+        } else {
+          // 完結案防呆機制（2026-08-25/26）擋下時會回 400 + 說明未達成的前置
+          // 條件，不能靜默吞掉，不然使用者只會看到「完結案」按鈕沒反應。
+          const err = await r.json().catch(() => ({}))
+          alert(err.detail || '操作失敗，請稍後再試')
         }
-      } catch {}
+      } catch {
+        alert('網路錯誤，請稍後再試')
+      }
+    },
+
+    async unlockCase() {
+      if (!this.selected) return
+      if (!confirm('確認解鎖此已結案案件？\n\n解鎖後將進入「半解鎖」狀態，之後對案件記錄的變更/上傳需最高管理員於簽核佇列審核通過後才會套用。')) return
+      try {
+        const r = await fetch(`/api/quotations/${this.selected.quote_no}/case-unlock`, {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (r.ok) {
+          this.selected.case_semi_unlocked = 1
+        } else {
+          alert((await r.json().catch(() => ({}))).detail || '解鎖失敗')
+        }
+      } catch (e) { alert('網路錯誤：' + e.message) }
+    },
+
+    async lockCase() {
+      if (!this.selected) return
+      if (!confirm('確認重新上鎖此案件？\n\n上鎖後將無法再變更案件記錄，需再次解鎖才能繼續編輯（既有待審核項目不受影響）。')) return
+      try {
+        const r = await fetch(`/api/quotations/${this.selected.quote_no}/case-lock`, {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (r.ok) {
+          this.selected.case_semi_unlocked = 0
+        } else {
+          alert((await r.json().catch(() => ({}))).detail || '上鎖失敗')
+        }
+      } catch (e) { alert('網路錯誤：' + e.message) }
     },
 
     caseProgressPct() {
@@ -544,22 +2010,424 @@ function app() {
       return Math.round(stages.filter(s => s.done).length / stages.length * 100)
     },
 
-    addStage() {
-      this.ensureCaseRecord()
-      this.cr.caseRecord.stages.push({ id: Date.now(), label: '新階段', done: false, doneAt: '', visits: [] })
-      this.setDirty()
+    _firstUndoneStageId() {
+      const stages = this.cr.caseRecord?.stages || []
+      const s = stages.find(s => !s.done)
+      return s ? s.id : null
     },
-    removeStage(idx)  { this.cr.caseRecord.stages.splice(idx, 1); this.setDirty() },
-    addVisit(stageIdx) {
-      const st = this.cr.caseRecord.stages[stageIdx]
-      if (!st.visits) st.visits = []
-      st.visits.push({ id: Date.now(), visitDate: '', visitPeople: '', note: '' })
-      this.setDirty()
+    stageSegClass(st) {
+      if (st.done) return 'stage-segbar__seg--done'
+      if (this.stageIsOverdue(st)) return 'stage-segbar__seg--overdue'   // 逾期優先於「目前/未來」
+      if (st.id === this._firstUndoneStageId()) return 'stage-segbar__seg--current'
+      return 'stage-segbar__seg--future'
     },
-    removeVisit(stageIdx, visitIdx) {
+    stageSegTooltip(st) {
+      const status = st.done
+        ? ('已完成' + (st.doneAt ? '（' + st.doneAt + '）' : ''))
+        : (this.stageIsOverdue(st)
+            ? ('已逾期' + (st.dueDate ? '（到期 ' + st.dueDate + '）' : ''))
+            : (st.dueDate ? ('到期日 ' + st.dueDate) : '未設定到期日'))
+      return (st.label || '（未命名階段）') + ' — ' + status
+    },
+
+    // stages 正規化 Phase 3b（2026-08-23）：以下階段相關函式改成直接呼叫 stages 專屬
+    // 端點即時送出，不再靠本地陣列變更 + setDirty() 整包 debounce 存檔。成功後用伺服器
+    // 回應 Object.assign 覆蓋本地物件，確保跟資料庫一致；失敗用 alert()（比照本檔既有
+    // 慣例，例如 createProjectFromCase()）。materials/devices/payment/contract/roles
+    // 等其他 caseRecord 欄位不受影響，仍走 setDirty()/saveCaseRecord() 整包存檔。
+    _stagesApiBase() { return `/api/quotations/${this.selected.quote_no}/stages` },
+    _authHeaders(json) {
+      const h = { Authorization: 'Bearer ' + this.session.token }
+      if (json) h['Content-Type'] = 'application/json'
+      return h
+    },
+
+    async addStage() {
+      if (!this.selected) return
+      await this.ensureCaseRecord()
+      try {
+        const r = await fetch(this._stagesApiBase(), {
+          method: 'POST', headers: this._authHeaders(true), body: JSON.stringify({ label: '新階段' })
+        })
+        if (!r.ok) { alert('新增階段失敗'); return }
+        this.cr.caseRecord.stages.push(await r.json())
+      } catch (e) { alert('發生錯誤：' + e.message) }
+    },
+    async removeStage(idx) {
+      const stages = this.cr.caseRecord.stages
+      const st = stages[idx]
+      if (!st) return
+      try {
+        const r = await fetch(`${this._stagesApiBase()}/${st.id}`, { method: 'DELETE', headers: this._authHeaders() })
+        if (!r.ok) { alert('刪除失敗'); return }
+        stages.splice(idx, 1)
+        stages.forEach(s => { if (s.dependsOn) s.dependsOn = s.dependsOn.filter(id => id !== st.id) })
+      } catch (e) { alert('發生錯誤：' + e.message) }
+    },
+
+    toggleStageDetail(id) { this._openStageDetail[id] = !this._openStageDetail[id] },
+
+    stageIsOverdue(st) {
+      if (st.done || !st.dueDate) return false
+      return st.dueDate < new Date().toISOString().slice(0,10)
+    },
+
+    otherStages(stageId) {
+      return (this.cr.caseRecord?.stages || []).filter(s => s.id !== stageId)
+    },
+
+    // 通用階段欄位更新（label/done/doneAt/startDate/dueDate），取代原本靠 setDirty() 觸發
+    // 的整包存檔；成功後額外呼叫 _checkAllStagesDone()（原本是 setDirty() 順帶觸發的）。
+    async updateStage(st, fields) {
+      try {
+        const r = await fetch(`${this._stagesApiBase()}/${st.id}`, {
+          method: 'PUT', headers: this._authHeaders(true), body: JSON.stringify(fields)
+        })
+        if (!r.ok) { alert('儲存失敗'); return }
+        Object.assign(st, await r.json())
+        this._checkAllStagesDone()
+      } catch (e) { alert('發生錯誤：' + e.message) }
+    },
+
+    async addStageAssignee(st, username) {
+      if (!username) return
+      try {
+        const r = await fetch(`${this._stagesApiBase()}/${st.id}/assignees`, {
+          method: 'POST', headers: this._authHeaders(true), body: JSON.stringify({ username })
+        })
+        if (r.ok) Object.assign(st, await r.json())
+      } catch {}
+    },
+    async removeStageAssignee(st, username) {
+      try {
+        const r = await fetch(`${this._stagesApiBase()}/${st.id}/assignees/${encodeURIComponent(username)}`, {
+          method: 'DELETE', headers: this._authHeaders()
+        })
+        if (r.ok) Object.assign(st, await r.json())
+      } catch {}
+    },
+
+    wouldCreateCycle(stageId, candidateId) {
+      // 若讓 stageId 依賴 candidateId，順著 dependsOn 追下去會不會繞回 stageId 自己。
+      // 純前端快速預檢，伺服器端 toggle_stage_dependency 仍是最終權威判斷（見下方 400 處理）。
+      if (stageId === candidateId) return true
+      const byId = Object.fromEntries((this.cr.caseRecord?.stages || []).map(s => [s.id, s]))
+      const seen = new Set()
+      const dfs = (id) => {
+        if (id === stageId) return true
+        if (seen.has(id)) return false
+        seen.add(id)
+        return ((byId[id]?.dependsOn) || []).some(dfs)
+      }
+      return dfs(candidateId)
+    },
+
+    async toggleStageDependency(st, candidateId) {
+      const has = (st.dependsOn || []).includes(candidateId)
+      if (!has && this.wouldCreateCycle(st.id, candidateId)) {
+        alert('這樣設定會讓階段之間互相循環依賴，請重新選擇前置階段')
+        return
+      }
+      try {
+        const r = await fetch(`${this._stagesApiBase()}/${st.id}/depends-on/${candidateId}`, {
+          method: 'POST', headers: this._authHeaders()
+        })
+        if (!r.ok) {
+          const err = await r.json().catch(() => ({}))
+          alert(err.detail || '設定失敗')
+          return
+        }
+        Object.assign(st, await r.json())
+      } catch (e) { alert('發生錯誤：' + e.message) }
+    },
+
+    switchToTimeline() {
+      this.stageView = 'timeline'
+      this.$nextTick(() => this.renderGantt())
+    },
+
+    _userDisplay(username) {
+      return (this.selectableUsers.find(u => u.username === username)?.display_name) || username
+    },
+
+    _ganttTasks() {
+      const stages = this.cr.caseRecord?.stages || []
+      const byId   = Object.fromEntries(stages.map(s => [String(s.id), s]))
+      const today  = new Date().toISOString().slice(0,10)
+      const addDays = (dateStr, n) => {
+        const d = new Date(dateStr + 'T00:00:00')
+        d.setDate(d.getDate() + n)
+        return d.toISOString().slice(0,10)
+      }
+      return stages.map(st => {
+        // 日期來源優先順序（2026-08-24）：
+        // 1. 「前往日期」visits 記錄的最早～最晚——施工類階段常有好幾筆前往記錄，
+        //    這是最能反映真實施作期間的來源，已完成的話終點改用完成日期（可能
+        //    比最後一次前往晚幾天才正式結案）。
+        // 2. 完成日期 doneAt（單日）——使用者實際會填、最準確的次要來源。
+        // 3. 起始/到期日期 startDate/dueDate——實務上幾乎沒人填，只靠它們會讓
+        //    已完成的階段全部退回「今天」擠成一團（跨案時間軸同一個問題的根因，
+        //    這裡是同一套邏輯的單案版）。
+        const visitDates = (st.visits || []).map(v => v.visitDate).filter(Boolean).sort()
+        let start, end
+        if (visitDates.length) {
+          start = visitDates[0]
+          end   = (st.done && st.doneAt) ? st.doneAt : visitDates[visitDates.length - 1]
+        } else if (st.done && st.doneAt) {
+          start = st.doneAt
+          end   = st.doneAt
+        } else {
+          start = st.startDate || st.dueDate || today
+          end   = st.dueDate   || st.startDate || addDays(start, 1)
+        }
+        if (end < start) end = start
+        if (start === end) end = addDays(start, 1)
+        const assignedTo  = st.assignedTo || []
+        const primary     = assignedTo[0] || ''
+        // 依主要負責人（assignedTo 第一位）hash 出固定色階 index，供 CSS .stage-c0~c7 上色
+        const idx = primary ? _GANTT_COLORS.indexOf(_avatarColor(primary)) : -1
+        const classes = [
+          idx >= 0 ? ('stage-c' + idx) : 'stage-unassigned',
+          st.done ? 'stage-done' : '',
+          (!st.done && this.stageIsOverdue(st)) ? 'stage-overdue' : '',
+        ].filter(Boolean).join(' ')
+        // 2026-09-14：標籤前面加上起日（MM/DD）。甘特圖被縮放貼進簡報或
+        // 列印時，時間軸刻度往往先糊掉，標籤自己帶日期才讀得出來。
+        const _md = (d) => (d || '').slice(5, 10).replace('-', '/')
+        return {
+          id:           String(st.id),
+          name:         (_md(start) ? _md(start) + ' ' : '') + (st.label || '（未命名階段）'),
+          start, end,
+          progress:     st.done ? 100 : 0,
+          dependencies: (st.dependsOn || []).map(String).join(','),
+          custom_class: classes,
+          _assignedNames: assignedTo.map(u => this._userDisplay(u)),
+          _dependsNames:  (st.dependsOn || []).map(id => byId[String(id)]?.label).filter(Boolean),
+          _done: !!st.done,
+          _overdue: !st.done && this.stageIsOverdue(st),
+        }
+      })
+    },
+
+    // ── 甘特圖檔位（2026-09-14）────────────────────────────────────────
+    // 原本 view_mode 寫死 'Day'：跨半年的案件會拉出好幾千 px 寬，只能一直
+    // 橫向捲、看不到全貌。改成依實際跨幅自動選，使用者可手動覆寫。
+    ganttView: 'auto',
+    _ganttSpanDays(tasks) {
+      if (!tasks || !tasks.length) return 0
+      let min = null, max = null
+      tasks.forEach(t => {
+        const s = new Date(t.start), e = new Date(t.end)
+        if (!min || s < min) min = s
+        if (!max || e > max) max = e
+      })
+      return Math.round((max - min) / 86400000)
+    },
+    // 【可調】檔位切換門檻。想讓它更早/更晚跳到週或月檔位，改這兩個數字就好，
+    // 其餘邏輯不用動。判斷依據是「所有階段的最早起日到最晚迄日」的天數跨幅。
+    //   Day  約 30px/天 → 45 天上限約 1400px，還放得進一般螢幕
+    //   Week 約 156px/週 → 180 天上限約 4000px，需要橫向捲但仍讀得出來
+    _autoGanttMode(tasks) {
+      const d = this._ganttSpanDays(tasks)
+      if (d <= 45)  return 'Day'
+      if (d <= 180) return 'Week'
+      return 'Month'
+    },
+    get ganttEffectiveMode() {
+      if (this.ganttView !== 'auto') return this.ganttView
+      return this._autoGanttMode(this._ganttTasks())
+    },
+    setGanttView(v) {
+      this.ganttView = v
+      this.renderGantt()
+    },
+
+    renderGantt() {
+      const el = this.$refs.ganttContainer
+      if (!el || typeof Gantt === 'undefined') return
+      const tasks = this._ganttTasks()
+      el.innerHTML = ''
+      if (!tasks.length) return
+      const mode = this.ganttView === 'auto' ? this._autoGanttMode(tasks) : this.ganttView
+      this._ganttInstance = new Gantt(el, tasks, {
+        view_mode: mode,
+        on_date_change: (task, start, end) => {
+          const st = (this.cr.caseRecord?.stages || []).find(s => String(s.id) === task.id)
+          if (!st) return
+          const fmt = d => (d instanceof Date ? d : new Date(d)).toISOString().slice(0,10)
+          this.updateStage(st, { startDate: fmt(start), dueDate: fmt(end) })
+        },
+        custom_popup_html: (task) => {
+          const statusChip = task._done
+            ? '<span class="gantt-pop-chip gantt-pop-chip--done">已完成</span>'
+            : (task._overdue ? '<span class="gantt-pop-chip gantt-pop-chip--overdue">已逾期</span>' : '')
+          const assignees = (task._assignedNames && task._assignedNames.length)
+            ? task._assignedNames.map(n => `<span class="gantt-pop-av">${n}</span>`).join('')
+            : '<span class="gantt-pop-empty">尚未指派</span>'
+          const depends = (task._dependsNames && task._dependsNames.length)
+            ? `<div class="gantt-pop-row"><span class="gantt-pop-lbl">前置階段</span>${task._dependsNames.map(n => `<span class="gantt-pop-av">${n}</span>`).join('')}</div>`
+            : ''
+          return `
+            <div class="gantt-pop">
+              <div class="gantt-pop-title">${task.name}${statusChip}</div>
+              <div class="gantt-pop-row"><span class="gantt-pop-lbl">日期</span>${task.start} ~ ${task.end}</div>
+              <div class="gantt-pop-row"><span class="gantt-pop-lbl">負責人</span>${assignees}</div>
+              ${depends}
+            </div>`
+        },
+      })
+    },
+    // ── 甘特圖匯出 PNG / JPG（2026-09-14）──────────────────────────────
+    // Frappe Gantt 畫的是 SVG，但顏色與字體全部來自外部 CSS。直接
+    // XMLSerializer 序列化出來的 SVG 沒有那些樣式，畫到 canvas 上會變成
+    // 沒有顏色的黑白線稿——**必須把 computed style 逐一 inline 回克隆節點**。
+    // 這是整件事唯一的難處，不是多寫幾行 canvas 就好。
+    //
+    // 深色模式下匯出的仍是淺色版：整站深色是繪製階段的 invert 濾鏡，
+    // getComputedStyle 讀到的是作者值。對匯出圖來說這正是我們要的。
+    _SVG_STYLE_PROPS: ['fill','fill-opacity','stroke','stroke-width','stroke-dasharray',
+                       'opacity','font-family','font-size','font-weight','text-anchor',
+                       'dominant-baseline','visibility'],
+    async exportGanttImage(fmt) {
+      const el = this.$refs.ganttContainer
+      const svg = el && el.querySelector('svg')
+      if (!svg) { this.toast && this.toast('目前沒有可匯出的甘特圖'); return }
+      this.ganttExporting = true
+      try {
+        const rect = svg.getBoundingClientRect()
+        const fullW = Math.ceil(svg.getAttribute('width')  || rect.width)
+        const h = Math.ceil(svg.getAttribute('height') || rect.height)
+        const TITLE_H = 46
+
+        // 裁掉左右空白（2026-09-14）
+        // Frappe Gantt 的 setup_gantt_dates() 會自己把日期範圍撐開：
+        // 週／日檔位前後各加 1 個月、月檔位往前補到年初再往後加 1 整年。
+        // 所以一張 60 天的案件會畫成 2600px 以上，中間大半是空網格。
+        // 壓縮的正解是裁掉那段空白，而不是把整張圖縮小——縮小會連日期
+        // 刻度一起糊掉，那正是要避免的事。
+        let cropX = 0, cropW = fullW, cropH = h
+        if (this.ganttTrim) {
+          const bars = svg.querySelectorAll('.bar-wrapper .bar, .bar-wrapper .bar-invalid')
+          let minX = null, maxX = null, maxY = null
+          bars.forEach(b => {
+            const x  = parseFloat(b.getAttribute('x') || 'NaN')
+            const y  = parseFloat(b.getAttribute('y') || 'NaN')
+            const bw = parseFloat(b.getAttribute('width')  || '0')
+            const bh = parseFloat(b.getAttribute('height') || '0')
+            if (!isNaN(x)) {
+              if (minX === null || x < minX) minX = x
+              if (maxX === null || x + bw > maxX) maxX = x + bw
+            }
+            if (!isNaN(y) && (maxY === null || y + bh > maxY)) maxY = y + bh
+          })
+          if (minX !== null && maxX !== null && maxX > minX) {
+            // 左右留白刻意不對稱：長條的 x/width 只涵蓋長條本身，**不含畫在
+            // 右側的標籤文字**，所以右邊要多留，否則最後一個階段的標籤會被切。
+            const PAD_L = 60, PAD_R = 240
+            cropX = Math.max(0, Math.floor(minX - PAD_L))
+            cropW = Math.min(fullW - cropX, Math.ceil(maxX - minX + PAD_L + PAD_R))
+          }
+          // SVG 高度是「列數 × 列高」的固定值，兩三個階段的案件下方會留一大片
+          // 空列，一起裁掉。
+          if (maxY !== null) cropH = Math.min(h, Math.ceil(maxY + 40))
+        }
+        const w = cropW
+
+        const clone = svg.cloneNode(true)
+        const src = svg.querySelectorAll('*')
+        const dst = clone.querySelectorAll('*')
+        for (let i = 0; i < src.length; i++) {
+          const cs = getComputedStyle(src[i])
+          let css = ''
+          for (const prop of this._SVG_STYLE_PROPS) {
+            const v = cs.getPropertyValue(prop)
+            if (v) css += prop + ':' + v + ';'
+          }
+          dst[i].setAttribute('style', css)
+        }
+        clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
+        clone.setAttribute('width', fullW)
+        clone.setAttribute('height', h)
+
+        const data = new XMLSerializer().serializeToString(clone)
+        const img = new Image()
+        await new Promise((res, rej) => {
+          img.onload = res; img.onerror = rej
+          img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(data)
+        })
+
+        // 2 倍取樣，列印或貼進簡報才不會糊
+        const SCALE = 2
+        const cv = document.createElement('canvas')
+        cv.width  = w * SCALE
+        cv.height = (cropH + TITLE_H) * SCALE
+        const ctx = cv.getContext('2d')
+        ctx.scale(SCALE, SCALE)
+        ctx.fillStyle = '#FFFFFF'
+        ctx.fillRect(0, 0, w, cropH + TITLE_H)
+
+        // 抬頭：匯出的圖要自己說得清楚是哪張案子、哪天匯出的
+        const sel = this.selected || {}
+        ctx.fillStyle = '#1A1D21'
+        ctx.font = '600 15px "LINE Seed TW_OTF", system-ui, sans-serif'
+        ctx.fillText((sel.customer_name || '') + '　' + (sel.quote_no || ''), 16, 24)
+        ctx.fillStyle = '#767676'
+        ctx.font = '11px "LINE Seed TW_OTF", system-ui, sans-serif'
+        const modeLabel = { Day: '日', Week: '週', Month: '月' }[this.ganttEffectiveMode] || ''
+        ctx.fillText('執行進度甘特圖・' + modeLabel + '檔位'
+                     + '・匯出於 ' + new Date().toLocaleString('zh-TW'), 16, 39)
+
+        // 只畫裁切範圍那一段（來源 x 從 cropX 起算）
+        ctx.drawImage(img, cropX, 0, cropW, cropH, 0, TITLE_H, cropW, cropH)
+
+        const mime = fmt === 'jpg' ? 'image/jpeg' : 'image/png'
+        const blob = await new Promise(r => cv.toBlob(r, mime, 0.92))
+        const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, '')
+        const a = document.createElement('a')
+        a.href = URL.createObjectURL(blob)
+        a.download = '甘特圖_' + (sel.quote_no || 'case') + '_' + stamp + '.' + fmt
+        document.body.appendChild(a); a.click(); a.remove()
+        setTimeout(() => URL.revokeObjectURL(a.href), 4000)
+      } catch (e) {
+        console.error('gantt export:', e)
+      }
+      this.ganttExporting = false
+    },
+    ganttExporting: false,
+    ganttTrim: true,   // 匯出時裁掉前後空白。固定啟用：沒有人會想要一張大半是空白的圖，
+                       // 不用多一個選項去問
+
+    async addVisit(stageIdx) {
       const st = this.cr.caseRecord.stages[stageIdx]
-      if (st.visits) st.visits.splice(visitIdx, 1)
-      this.setDirty()
+      if (!st) return
+      try {
+        const r = await fetch(`${this._stagesApiBase()}/${st.id}/visits`, {
+          method: 'POST', headers: this._authHeaders(true), body: JSON.stringify({})
+        })
+        if (!r.ok) { alert('新增記錄失敗'); return }
+        Object.assign(st, await r.json())
+      } catch (e) { alert('發生錯誤：' + e.message) }
+    },
+    async removeVisit(stageIdx, visitIdx) {
+      const st = this.cr.caseRecord.stages[stageIdx]
+      const visit = st?.visits?.[visitIdx]
+      if (!st || !visit) return
+      try {
+        const r = await fetch(`${this._stagesApiBase()}/${st.id}/visits/${visit.id}`, {
+          method: 'DELETE', headers: this._authHeaders()
+        })
+        if (!r.ok) { alert('刪除失敗'); return }
+        st.visits.splice(visitIdx, 1)
+      } catch (e) { alert('發生錯誤：' + e.message) }
+    },
+    async updateVisit(st, visit) {
+      try {
+        const r = await fetch(`${this._stagesApiBase()}/${st.id}/visits/${visit.id}`, {
+          method: 'PUT', headers: this._authHeaders(true),
+          body: JSON.stringify({ visitDate: visit.visitDate, visitPeople: visit.visitPeople, note: visit.note })
+        })
+        if (r.ok) Object.assign(st, await r.json())
+      } catch {}
     },
     stageTotalVisits(st) { return (st.visits || []).filter(v => v.visitDate || v.note).length },
     stageTotalPeople(st) { return (st.visits || []).reduce((s, v) => s + (+v.visitPeople || 0), 0) },
@@ -573,7 +2441,17 @@ function app() {
       stages.splice(idx, 0, moved)
       this.dragFromIdx = idx
     },
-    dragEnd() { this.dragFromIdx = null; this.setDirty() },
+    async dragEnd() {
+      this.dragFromIdx = null
+      const stages = this.cr.caseRecord?.stages || []
+      if (!this.selected || !stages.length) return
+      try {
+        await fetch(`${this._stagesApiBase()}/reorder`, {
+          method: 'PATCH', headers: this._authHeaders(true),
+          body: JSON.stringify({ orderedIds: stages.map(s => s.id) })
+        })
+      } catch {}
+    },
 
     addMaterial() {
       this.ensureCaseRecord()
@@ -666,7 +2544,8 @@ function app() {
           }
         })
       })
-      this.activeTab = 'devices'
+      this.activeTab = 'exec'
+      this.execSubTab = 'devices'
       this.setDirty()
     },
     autoSyncDevice(mat, mi) {
@@ -957,6 +2836,16 @@ function app() {
       return '保固中'
     },
 
+    daysUntilDeadline() {
+      const endDate = this.cr.caseRecord?.projectTimeline?.endDate
+      if (!endDate) return 0
+      const deadline = new Date(endDate)
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      deadline.setHours(0, 0, 0, 0)
+      return Math.round((deadline - today) / 86400000)
+    },
+
     // ── 承攬商派發 methods ──────────────────────────────────────────────────────
 
     // ── 動態 Tab ──────────────────────────────────────────────────────────────
@@ -965,6 +2854,8 @@ function app() {
       if (!quoteNo) return
       this.updatesLoading = true
       this.caseUpdates = []
+      this.feedCalMode = false
+      this.feedCalSelDate = ''
       try {
         const r = await fetch(`/api/quotations/${encodeURIComponent(quoteNo)}/updates`, {
           headers: { Authorization: 'Bearer ' + this.session.token }
@@ -974,23 +2865,203 @@ function app() {
       this.updatesLoading = false
     },
 
+    // ── 動態 Tab：月曆總覽（依已載入的 caseUpdates 統計每日筆數，點日期篩選） ──
+    toggleFeedCalMode() {
+      this.feedCalMode = !this.feedCalMode
+      if (!this.feedCalMode) this.feedCalSelDate = ''
+    },
+    feedCalPrevMonth() {
+      this.feedCalMonth--
+      if (this.feedCalMonth < 1) { this.feedCalMonth = 12; this.feedCalYear-- }
+    },
+    feedCalNextMonth() {
+      this.feedCalMonth++
+      if (this.feedCalMonth > 12) { this.feedCalMonth = 1; this.feedCalYear++ }
+    },
+    feedCalDays() {
+      const year = this.feedCalYear, month = this.feedCalMonth
+      const _ld = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+      const todayStr = _ld(new Date())
+      const first    = new Date(year, month - 1, 1)
+      const daysInM  = new Date(year, month, 0).getDate()
+      const startDow = first.getDay()
+      const startPad = startDow === 0 ? 6 : startDow - 1
+      const cells = []
+      for (let i = startPad; i > 0; i--) {
+        const d = new Date(year, month - 1, 1 - i)
+        cells.push({ date: _ld(d), day: d.getDate(), inMonth: false, isToday: false })
+      }
+      for (let i = 1; i <= daysInM; i++) {
+        const s = `${year}-${String(month).padStart(2,'0')}-${String(i).padStart(2,'0')}`
+        cells.push({ date: s, day: i, inMonth: true, isToday: s === todayStr })
+      }
+      let nxt = 1
+      while (cells.length < 42) {
+        const d = new Date(year, month, nxt++)
+        cells.push({ date: _ld(d), day: d.getDate(), inMonth: false, isToday: false })
+      }
+      return cells
+    },
+    feedCalCount(date) {
+      return this.caseUpdates.filter(it => (it.created_at || '').replace('T',' ').slice(0,10) === date).length
+    },
+    filteredFeedItems() {
+      if (!this.feedCalSelDate) return this.caseUpdates
+      return this.caseUpdates.filter(it => (it.created_at || '').replace('T',' ').slice(0,10) === this.feedCalSelDate)
+    },
+
+    onCommentPhotosSelected(e) {
+      this.newCommentPhotos = Array.from(e.target.files || [])
+    },
+
+    // 工作日誌照片簽章 URL（跟 projects.html 既有的 photoUrl()/_ptCache 同一套
+    // 作法：短效期 pt token，抓回來前先回 1x1 透明圖，避免完整 session token
+    // 外洩到網址列/瀏覽器歷史）。
+    photoUrl(path) {
+      if (!path) return ''
+      const now = Math.floor(Date.now() / 1000)
+      const cached = this._ptCache[path]
+      if (cached && cached.exp > now) {
+        return `/api/uploads/${path}?pt=${cached.pt}`
+      }
+      if (!this._ptCache[path + '_fetching']) {
+        this._ptCache[path + '_fetching'] = true
+        fetch(`/api/photo-token?path=${encodeURIComponent(path)}`, {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        }).then(r => r.ok ? r.json() : null).then(d => {
+          if (d && d.token) {
+            this._ptCache = {
+              ...this._ptCache,
+              [path]: { pt: d.token, exp: now + (d.ttl || 3600) - 60 },
+              [path + '_fetching']: false,
+            }
+          }
+        }).catch(() => { this._ptCache[path + '_fetching'] = false })
+      }
+      return 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBTAA7'
+    },
+
+    // 聯絡事項選單非「其他」時直接用選項文字，選「其他」時用自訂輸入
+    resolvedContactType() {
+      return this.newCommentContactType === '其他'
+        ? this.newCommentContactTypeCustom.trim()
+        : this.newCommentContactType
+    },
+
     async postComment() {
       const content = this.newComment.trim()
       if (!content || this.postingComment) return
+      // 填執行時數、選聯絡事項類型、改過日期、或指定記錄對象 → 當成工作日誌
+      // （那些是工作日誌才有的結構化欄位），走 work_logs；否則維持輕量留言
+      // （case_updates，含「標記為重要」＋ Google 行事曆同步）。
+      //
+      // 2026-09-14：**照片不再是觸發條件**。在那之前只要選了照片就會被改存成
+      // 工作日誌——附件本身跟「這是不是一筆工時記錄」無關，卻悄悄換掉了紀錄
+      // 種類，而且換過去就失去「標記為重要」與行事曆同步。case_updates 現在
+      // 自己支援附件（DB v82），這個轉向沒有必要了。
+      const isBackdated = this.newCommentLogDate !== new Date().toISOString().slice(0, 10)
+      if (this.newCommentHours || this.newCommentContactType ||
+          isBackdated || this.newCommentUserId) {
+        await this.postWorkLogEntry(content)
+        return
+      }
       this.postingComment = true
       try {
+        // multipart：文字與附件同一個請求送出，不會有「留言貼了、圖沒上去」
+        // 的半完成狀態。不要自己設 Content-Type——boundary 要讓瀏覽器帶。
+        const fd = new FormData()
+        fd.append('content', content)
+        fd.append('important', this.newCommentImportant ? 'true' : 'false')
+        this.newCommentPhotos.forEach(f => fd.append('files', f))
         const r = await fetch(`/api/quotations/${encodeURIComponent(this.selected.quote_no)}/updates`, {
           method: 'POST',
-          headers: { Authorization: 'Bearer ' + this.session.token, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ content })
+          headers: { Authorization: 'Bearer ' + this.session.token },
+          body: fd
         })
         if (r.ok) {
           const item = await r.json()
           this.caseUpdates.unshift(item)
           this.newComment = ''
+          this.newCommentImportant = false
+          this.newCommentPhotos = []
+          if (this.$refs.commentPhotoInput) this.$refs.commentPhotoInput.value = ''
+        } else {
+          const err = await r.json().catch(() => ({}))
+          alert('留言失敗：' + (err.detail || r.status))
         }
-      } catch {}
+      } catch (e) {
+        alert('網路錯誤：' + e.message)
+      }
       this.postingComment = false
+    },
+
+    // 附件刪除限 admin+（2026-09-14 使用者裁示）——抽掉附件是只改證據、
+    // 留下文字，跟「刪掉自己整則留言」不是同一件事。
+    canDeleteAttachment() {
+      return ['superadmin', 'admin'].includes(this.session.role)
+    },
+    async deleteCommentFile(update, file) {
+      if (!this.canDeleteAttachment()) return
+      if (!confirm(`確定刪除附件「${file.filename}」？此動作無法復原。`)) return
+      try {
+        const r = await fetch(
+          `/api/quotations/${encodeURIComponent(this.selected.quote_no)}/updates/${update.id}/files/${file.id}`,
+          { method: 'DELETE', headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (r.ok) {
+          update.files = (await r.json()).files || []
+        } else {
+          const err = await r.json().catch(() => ({}))
+          alert('刪除失敗：' + (err.detail || r.status))
+        }
+      } catch (e) { alert('網路錯誤：' + e.message) }
+    },
+    fileUrl(f) {
+      return `/api/uploads/${f.path}?pt=${encodeURIComponent(this.session.token)}`
+    },
+    isImageFile(f) {
+      return /\.(jpe?g|png)$/i.test(f.filename || f.path || '')
+    },
+
+    async postWorkLogEntry(content) {
+      this.postingComment = true
+      try {
+        const uid = this.newCommentUserId ? Number(this.newCommentUserId) : this.session.id
+        const r = await fetch('/api/work-logs', {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + this.session.token, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            log_date: this.newCommentLogDate || new Date().toISOString().slice(0, 10),
+            user_id: uid, content,
+            hours: this.newCommentHours || 8, case_no: this.selected.quote_no,
+            contact_type: this.resolvedContactType(),
+          })
+        })
+        if (!r.ok) { alert('新增工作日誌失敗：' + (await r.json()).detail); return }
+        const { id } = await r.json()
+        if (this.newCommentPhotos.length > 0) {
+          const fd = new FormData()
+          this.newCommentPhotos.forEach(f => fd.append('files', f))
+          const rp = await fetch(`/api/work-logs/${id}/photos`, {
+            method: 'POST',
+            headers: { Authorization: 'Bearer ' + this.session.token },
+            body: fd
+          })
+          if (!rp.ok) alert('照片上傳失敗：' + (await rp.json()).detail)
+        }
+        this.newComment = ''
+        this.newCommentImportant = false
+        this.newCommentPhotos = []
+        this.newCommentHours = ''
+        this.newCommentContactType = ''
+        this.newCommentContactTypeCustom = ''
+        this.newCommentLogDate = new Date().toISOString().slice(0, 10)
+        this.newCommentUserId = ''
+        await this.loadCaseUpdates(this.selected.quote_no)
+      } catch(e) {
+        alert('發生錯誤：' + e.message)
+      } finally {
+        this.postingComment = false
+      }
     },
 
     async deleteUpdate(uid) {
@@ -1027,6 +3098,12 @@ function app() {
         })
         if (r.ok) this.vendors = await r.json()
       } catch {}
+      try {
+        const r2 = await fetch('/api/contractors/selectable', {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (r2.ok) this.contractorRoster = await r2.json()
+      } catch {}
     },
 
     async loadDispatches(quoteNo) {
@@ -1043,7 +3120,21 @@ function app() {
     },
 
     dispatchTotalCost() {
-      return this.dispatches.reduce((s, d) => s + (d.totalAmount || 0), 0)
+      // 承攬商含稅合計 + 外包名單人員金額（不計稅），與精算頁面「承攬商派發成本」算法一致
+      return this.dispatches
+        .filter(d => d.status !== 'cancelled')
+        .reduce((s, d) => s + (d.grandTotal || 0), 0)
+    },
+
+    // 財務 Tab 顯示的精算結果是完結當下凍結的 caseSettleSummary().dispatchTotal 快照，
+    // 跟 dispatchTotalCost() 目前即時計算值比對——不一致代表承攬商派發在精算完結後
+    // 又被異動過，此頁數字尚未反映最新狀況（見 settlement.html dispatchStale() 同一邏輯）
+    financeDispatchStale() {
+      if (this.caseSettleStatus() !== 'finalized') return null
+      const frozen = Math.round(this.caseSettleSummary().dispatchTotal || 0)
+      const live   = Math.round(this.dispatchTotalCost() || 0)
+      if (frozen === live) return null
+      return { frozen, live, diff: live - frozen }
     },
 
     _blankDispatchForm() {
@@ -1054,16 +3145,65 @@ function app() {
         dispatch_date: today,
         scope: '',
         notes: '',
+        invoice_no: '',
+        payable_date: '',
         status: this._quoteStatusToDispatch(this.selected?.status || ''),
         tax_rate: 0.05,
-        items: []
+        items: [],
+        personnel: []
       }
+    },
+
+    // 本地日期字串（YYYY-MM-DD），不要用 new Date().toISOString().slice(0,10)——
+    // toISOString() 是 UTC 時間，台灣 UTC+8 在本地每天 00:00–08:00 之間會被
+    // 誤判成前一天（比照 static/sidebar.js::_localISOString() 同款修法）。
+    _localDateStr(d) {
+      d = d || new Date()
+      const tz = d.getTimezoneOffset() * 60000
+      return new Date(d.getTime() - tz).toISOString().slice(0, 10)
+    },
+
+    // 2026-08-31（財務/出納權限分工）：是否具備指定模組——session.modules 是
+    // 登入當下 /api/auth/login、/api/auth/me 回傳的已解析陣列（不是 JSON 字串）。
+    hasModule(key) {
+      return (this.session.modules || []).includes(key)
+    },
+
+    canMarkPayment() {
+      return ['superadmin', 'admin'].includes(this.session.role) || this.hasModule('cashier')
+    },
+
+    // ── Modal 誤觸關閉保護（2026-08-31 新增）：backdrop 點外面／Esc／× 這三個
+    // 「容易誤觸」的關閉路徑，改成先跳原生 confirm() 警示，取消就留在原本
+    // 填寫到一半的頁面，不會直接歸零關閉；表單底部明確標示「取消」的按鈕
+    // 維持原樣不用二次確認（那本來就是使用者主動放棄的明確意圖）。
+    _confirmDiscardForm() {
+      return confirm('表單尚未儲存，確定要關閉嗎？目前輸入的內容將會遺失。')
+    },
+    closeDispatchModalGuarded() {
+      if (this._confirmDiscardForm()) this.showDispatchModal = false
+    },
+    closeWriteoffModalGuarded() {
+      if (this._confirmDiscardForm()) this.writeoffModal.open = false
+    },
+    closeShippingModalGuarded() {
+      if (this._confirmDiscardForm()) this.showShippingModal = false
+    },
+    closePayVoucherModalGuarded() {
+      if (this._confirmDiscardForm()) this.payVoucherModal = false
+    },
+    closeCreateVoucherModalGuarded() {
+      if (this._confirmDiscardForm()) this.createVoucherModal = false
+    },
+    closeInvoiceVoucherModalGuarded() {
+      if (this._confirmDiscardForm()) this.closeInvoiceVoucherModal()
     },
 
     openNewDispatch() {
       this.editDispatchId = null
       this.dispatchForm = this._blankDispatchForm()
       this.dispatchMsg = ''
+      this._newDispatchPersonnelId = ''
       this.showDispatchModal = true
     },
 
@@ -1075,12 +3215,35 @@ function app() {
         dispatch_date: d.dispatchDate || '',
         scope: d.scope || '',
         notes: d.notes || '',
+        invoice_no: d.invoiceNo || '',
+        payable_date: d.payableDate || '',
         status: d.status || 'draft',
         tax_rate: d.taxRate !== undefined ? d.taxRate : 0.05,
-        items: JSON.parse(JSON.stringify(d.items || []))
+        items: JSON.parse(JSON.stringify(d.items || [])),
+        personnel: JSON.parse(JSON.stringify(d.personnel || [])),
+        _expectedUpdatedAt: d.updatedAt || ''
       }
       this.dispatchMsg = ''
+      this._newDispatchPersonnelId = ''
       this.showDispatchModal = true
+    },
+
+    addDispatchPersonnel() {
+      const cid = Number(this._newDispatchPersonnelId)
+      if (!cid) return
+      if ((this.dispatchForm.personnel || []).some(p => p.id === cid)) { this._newDispatchPersonnelId = ''; return }
+      const c = this.contractorRoster.find(x => x.id === cid)
+      if (!c) return
+      this.dispatchForm.personnel.push({ id: c.id, name: c.name, amount: 0, note: '' })
+      this._newDispatchPersonnelId = ''
+    },
+
+    removeDispatchPersonnel(idx) {
+      this.dispatchForm.personnel.splice(idx, 1)
+    },
+
+    _dispatchPersonnelTotal() {
+      return (this.dispatchForm.personnel || []).reduce((s, p) => s + (+p.amount || 0), 0)
     },
 
     addDispatchItem() {
@@ -1107,18 +3270,26 @@ function app() {
     },
 
     async saveDispatch() {
-      if (!this.dispatchForm.vendor_id) { this.dispatchMsg = '請選擇承攬商'; return }
+      if (!this.dispatchForm.vendor_id && !(this.dispatchForm.personnel || []).length) {
+        this.dispatchMsg = '請至少選擇承攬商或外包名單人員其中一項'; return
+      }
       this.dispatchSaving = true; this.dispatchMsg = ''
       const body = {
         quote_no: this.dispatchForm.quote_no,
-        vendor_id: Number(this.dispatchForm.vendor_id),
+        vendor_id: this.dispatchForm.vendor_id ? Number(this.dispatchForm.vendor_id) : null,
         dispatch_date: this.dispatchForm.dispatch_date || '',
         scope: this.dispatchForm.scope || '',
         notes: this.dispatchForm.notes || '',
+        invoice_no: this.dispatchForm.invoice_no || '',
+        payable_date: this.dispatchForm.payable_date || '',
         status: this.dispatchForm.status || 'draft',
         tax_rate: parseFloat(this.dispatchForm.tax_rate) || 0,
-        items_json: this.dispatchForm.items || []
+        items_json: this.dispatchForm.items || [],
+        personnel_json: (this.dispatchForm.personnel || []).map(p => ({
+          id: p.id, name: p.name, amount: +p.amount || 0, note: p.note || ''
+        }))
       }
+      if (this.editDispatchId) body.expectedUpdatedAt = this.dispatchForm._expectedUpdatedAt || ''
       const method = this.editDispatchId ? 'PUT' : 'POST'
       const url    = this.editDispatchId
         ? `/api/contractor-dispatches/${this.editDispatchId}`
@@ -1137,7 +3308,7 @@ function app() {
     },
 
     async deleteDispatch(d) {
-      if (!confirm(`確定刪除派發給「${d.vendorName}」的紀錄？`)) return
+      if (!confirm(`確定刪除派發給「${this._dispatchLabel(d)}」的紀錄？`)) return
       try {
         const r = await fetch(`/api/contractor-dispatches/${d.id}`, {
           method: 'DELETE',
@@ -1150,7 +3321,7 @@ function app() {
 
     async importDispatchToQuote(d) {
       if (!d.items || d.items.length === 0) { alert('此派發紀錄沒有報價品項'); return }
-      if (!confirm(`確定將「${d.vendorName}」共 ${d.items.length} 筆品項匯入至報價單？\n（報價單必須處於草稿狀態）`)) return
+      if (!confirm(`確定將「${this._dispatchLabel(d)}」共 ${d.items.length} 筆品項匯入至報價單？\n（報價單必須處於草稿狀態）`)) return
       try {
         const r = await fetch(`/api/contractor-dispatches/${d.id}/import-to-quote`, {
           method: 'POST',
@@ -1168,6 +3339,7 @@ function app() {
       if (!quoteNo) return
       this.shippingNotesLoading = true
       this.shippingNotes = []
+      this.snSortPref = await loadListPref(this.session.token, `sn:${quoteNo}`)
       try {
         const r = await fetch(`/api/shipping-notes?quote_no=${encodeURIComponent(quoteNo)}`, {
           headers: { Authorization: 'Bearer ' + this.session.token }
@@ -1175,6 +3347,7 @@ function app() {
         if (r.ok) this.shippingNotes = await r.json()
       } catch {}
       this.shippingNotesLoading = false
+      this.$nextTick(() => this._initSubListSortable('sn'))
     },
 
     _blankShippingForm() {
@@ -1288,6 +3461,61 @@ function app() {
       this.shippingForm.items.splice(idx, 1)
     },
 
+    async _loadPartsOptions() {
+      if (this._partsOptions) return this._partsOptions
+      try {
+        const r = await fetch('/api/parts', { headers: { Authorization: 'Bearer ' + this.session.token } })
+        this._partsOptions = r.ok ? ((await r.json()).items || []) : []
+      } catch { this._partsOptions = [] }
+      return this._partsOptions
+    },
+
+    async openSerialPicker(idx) {
+      const it = this.shippingForm.items[idx]
+      this.serialPicker = {
+        show: true, itemIdx: idx, partNo: it.part_no || '',
+        options: [], selected: [...(it.serials || [])], loading: false, error: ''
+      }
+      await this._loadPartsOptions()
+      if (this.serialPicker.partNo) await this._loadSerialOptions()
+    },
+
+    async _loadSerialOptions() {
+      if (!this.serialPicker.partNo) { this.serialPicker.options = []; return }
+      this.serialPicker.loading = true; this.serialPicker.error = ''
+      try {
+        const r = await fetch(`/api/inventory/stock-items?part_no=${encodeURIComponent(this.serialPicker.partNo)}&status=in_stock`,
+          { headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (r.ok) { const d = await r.json(); this.serialPicker.options = d.items || [] }
+        else { this.serialPicker.error = '讀取庫存序號失敗' }
+      } catch { this.serialPicker.error = '網路錯誤' }
+      this.serialPicker.loading = false
+    },
+
+    onSerialPickerPartChange() {
+      this.serialPicker.selected = []
+      this._loadSerialOptions()
+    },
+
+    toggleSerialPick(sn) {
+      const i = this.serialPicker.selected.indexOf(sn)
+      if (i >= 0) this.serialPicker.selected.splice(i, 1)
+      else this.serialPicker.selected.push(sn)
+    },
+
+    applySerialPicker() {
+      const it = this.shippingForm.items[this.serialPicker.itemIdx]
+      if (this.serialPicker.partNo && this.serialPicker.selected.length) {
+        it.part_no = this.serialPicker.partNo
+        it.serials = [...this.serialPicker.selected]
+        it.qty = this.serialPicker.selected.length
+      } else {
+        delete it.part_no
+        delete it.serials
+      }
+      this.serialPicker.show = false
+    },
+
     async saveShippingNote() {
       this.shippingSaving = true; this.shippingMsg = ''
       const body = {
@@ -1366,6 +3594,20 @@ function app() {
       } catch (e) { alert('網路錯誤：' + e.message) }
     },
 
+    async revokeShippingApproval(n) {
+      const note = prompt(`撤銷出貨單「${n.noteNo}」的核准？將退回草稿，且已扣的庫存序號會自動歸還可出貨狀態。\n\n可填寫撤銷原因（選填）：`)
+      if (note === null) return
+      try {
+        const r = await fetch(`/api/shipping-notes/${n.noteNo}/revoke-approval`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify({ note })
+        })
+        if (!r.ok) { alert((await r.json()).detail || '撤銷失敗'); return }
+        await this.loadShippingNotes(this.selected?.quote_no)
+      } catch (e) { alert('網路錯誤：' + e.message) }
+    },
+
     async toggleSigned(n, action) {
       const msg = action === 'sign'
         ? `確定標記出貨單「${n.noteNo}」已回簽？`
@@ -1381,6 +3623,29 @@ function app() {
         if (!r.ok) { alert((await r.json()).detail || '操作失敗'); return }
         await this.loadShippingNotes(this.selected?.quote_no)
       } catch (e) { alert('網路錯誤：' + e.message) }
+    },
+
+    closingReportDownloading: false,
+    async downloadClosingReportPdf() {
+      if (!this.selected) return
+      const quoteNo = this.selected.quote_no
+      this.closingReportDownloading = true
+      try {
+        const r = await fetch(`/api/quotations/${quoteNo}/closing-report-pdf`, {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '結案報表產生失敗'); return }
+        const blob = await r.blob()
+        const url  = URL.createObjectURL(blob)
+        const a    = document.createElement('a')
+        a.href     = url
+        a.download = `${quoteNo}_結案報表.pdf`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        setTimeout(() => URL.revokeObjectURL(url), 1000)
+      } catch (e) { alert('下載失敗：' + e.message) }
+      finally { this.closingReportDownloading = false }
     },
 
     async downloadShippingPdf(n) {
@@ -1434,6 +3699,786 @@ function app() {
     },
 
     _shippingStatusClass(s) {
+      return { '草稿': 'badge--draft', '待審核': 'badge--pending', '簽核中': 'badge--signing', '已核准': 'badge--approved' }[s] || ''
+    },
+
+    // ── 承攬商匯款申請 ──────────────────────────────────────────────────────────
+
+    async loadContractorVouchers(quoteNo) {
+      if (!quoteNo) return
+      this.contractorVouchersLoading = true
+      this.contractorVouchers = []
+      try {
+        const r = await fetch(`/api/contractor-vouchers?quote_no=${encodeURIComponent(quoteNo)}`, {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (r.ok) this.contractorVouchers = await r.json()
+      } catch {}
+      this.contractorVouchersLoading = false
+    },
+
+    _dispatchVoucher(d) {
+      return this.contractorVouchers.find(v => v.dispatchId === d.id) || null
+    },
+
+    createContractorVoucher(d) {
+      this.createVoucherDispatch = d
+      this.createVoucherPayableDate = d.payableDate || ''
+      this.createVoucherModal = true
+    },
+
+    async confirmCreateContractorVoucher() {
+      const d = this.createVoucherDispatch
+      if (!d) return
+      this.createVoucherSaving = true
+      try {
+        const r = await fetch('/api/contractor-vouchers', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify({ dispatch_id: d.id, payable_date: this.createVoucherPayableDate || null })
+        })
+        if (!r.ok) { alert((await r.json()).detail || '建立失敗'); this.createVoucherSaving = false; return }
+        this.createVoucherModal = false
+        this.createVoucherDispatch = null
+        await this.loadDispatches(this.selected?.quote_no)
+        await this.loadContractorVouchers(this.selected?.quote_no)
+      } catch (e) { alert('網路錯誤：' + e.message) }
+      this.createVoucherSaving = false
+    },
+
+    async deleteContractorVoucher(v) {
+      if (!confirm(`確定刪除匯款申請「${v.voucherNo}」？`)) return
+      try {
+        const r = await fetch(`/api/contractor-vouchers/${v.voucherNo}`, {
+          method: 'DELETE',
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (r.ok) await this.loadContractorVouchers(this.selected?.quote_no)
+        else alert((await r.json()).detail || '刪除失敗')
+      } catch (e) { alert('網路錯誤：' + e.message) }
+    },
+
+    async submitContractorVoucher(v) {
+      if (!confirm(`確定送出匯款申請「${v.voucherNo}」進行簽核？`)) return
+      try {
+        const r = await fetch(`/api/contractor-vouchers/${v.voucherNo}/submit`, {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (!r.ok) { alert((await r.json()).detail || '送出失敗'); return }
+        await this.loadContractorVouchers(this.selected?.quote_no)
+      } catch (e) { alert('網路錯誤：' + e.message) }
+    },
+
+    async approveContractorVoucher(v) {
+      if (!confirm(`確定簽核匯款申請「${v.voucherNo}」？`)) return
+      try {
+        const r = await fetch(`/api/contractor-vouchers/${v.voucherNo}/approve`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify({})
+        })
+        if (!r.ok) { alert((await r.json()).detail || '簽核失敗'); return }
+        await this.loadContractorVouchers(this.selected?.quote_no)
+      } catch (e) { alert('網路錯誤：' + e.message) }
+    },
+
+    async rejectContractorVoucher(v) {
+      const note = prompt(`退回匯款申請「${v.voucherNo}」，可填寫退回原因（選填）：`)
+      if (note === null) return
+      try {
+        const r = await fetch(`/api/contractor-vouchers/${v.voucherNo}/reject`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify({ note })
+        })
+        if (!r.ok) { alert((await r.json()).detail || '退回失敗'); return }
+        await this.loadContractorVouchers(this.selected?.quote_no)
+      } catch (e) { alert('網路錯誤：' + e.message) }
+    },
+
+    async revokeContractorVoucherApproval(v) {
+      const note = prompt(`撤銷匯款申請「${v.voucherNo}」的核准？將退回草稿。\n\n可填寫撤銷原因（選填）：`)
+      if (note === null) return
+      try {
+        const r = await fetch(`/api/contractor-vouchers/${v.voucherNo}/revoke-approval`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify({ note })
+        })
+        if (!r.ok) { alert((await r.json()).detail || '撤銷失敗'); return }
+        await this.loadContractorVouchers(this.selected?.quote_no)
+      } catch (e) { alert('網路錯誤：' + e.message) }
+    },
+
+    async loadT100BankAccounts() {
+      // 2026-09-02：改成每次開啟標記 Modal 都重抓（不再 cache-once），確保跟
+      // 案件管理／出納／庫存管理三處標記畫面共用同一份最新清單——superadmin
+      // 在 T100 設定頁新增/修改銀行帳戶後，其他人下一次開啟標記視窗立刻看得到，
+      // 不用重新整理整頁（使用者要求「要能互相連動」）。GET 這支很輕量，
+      // 每次重抓成本可忽略。
+      try {
+        const r = await fetch('/api/settings/t100-export-config', { headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (r.ok) {
+          const d = await r.json()
+          this.t100BankAccounts = d.bankAccounts || []
+          this.t100DefaultBankAcctCode = d.defaultBankAccountCode || ''
+        }
+      } catch {}
+    },
+
+    // 銀行帳戶預設值（2026-09-02 新增，比照 reports.js 同款 helper）：①這個
+    // 對象上次標記用的帳戶 ②系統預設帳戶 ③兩者都沒有就空白。
+    async _resolveDefaultBankAccount(lastUsedUrl) {
+      if (lastUsedUrl) {
+        try {
+          const r = await fetch(lastUsedUrl, { headers: { Authorization: 'Bearer ' + this.session.token } })
+          if (r.ok) {
+            const d = await r.json()
+            if (d.acctCode) return d.acctCode
+          }
+        } catch {}
+      }
+      return this.t100DefaultBankAcctCode || ''
+    },
+
+    onPayVoucherBankChange() {
+      this._payVoucherBankName = (this.t100BankAccounts.find(b => b.acctCode === this.payVoucherBankAcctCode) || {}).name || ''
+    },
+
+    async toggleContractorVoucherPaid(v, action) {
+      // 標記已匯款需要填實際匯款日期（不一定等於操作當下），改走 Modal；
+      // 取消已匯款不涉及日期，維持原本 confirm() 快速操作。
+      if (action === 'pay') {
+        this.payVoucherTarget = v
+        this.payVoucherDate = this._localDateStr()
+        this.payVoucherNote = ''
+        this.payVoucherBankAcctCode = ''
+        this._payVoucherBankName = ''
+        this.payVoucherModal = true
+        await this.loadT100BankAccounts()
+        const url = v.vendorId ? `/api/contractor-vouchers/last-paid-bank-account?vendor_id=${v.vendorId}` : ''
+        this.payVoucherBankAcctCode = await this._resolveDefaultBankAccount(url)
+        this.onPayVoucherBankChange()
+        return
+      }
+      if (!confirm(`確定取消匯款申請「${v.voucherNo}」的已匯款標記？`)) return
+      try {
+        const r = await fetch(`/api/contractor-vouchers/${v.voucherNo}/paid-toggle`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify({ action: 'unpay', note: '' })
+        })
+        if (!r.ok) { alert((await r.json()).detail || '操作失敗'); return }
+        await this.loadContractorVouchers(this.selected?.quote_no)
+        this.loadFinanceSummary(this.selected?.quote_no)   // 已付/未付數字會變
+      } catch (e) { alert('網路錯誤：' + e.message) }
+    },
+
+    async confirmPayVoucher() {
+      const v = this.payVoucherTarget
+      if (!v || !this.payVoucherDate) return
+      this.payVoucherSaving = true
+      try {
+        const r = await fetch(`/api/contractor-vouchers/${v.voucherNo}/paid-toggle`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify({
+            action: 'pay', paid_at: this.payVoucherDate, note: this.payVoucherNote,
+            bankAccountCode: this.payVoucherBankAcctCode, bankAccountName: this._payVoucherBankName || '',
+          })
+        })
+        if (!r.ok) { alert((await r.json()).detail || '操作失敗'); this.payVoucherSaving = false; return }
+        this.payVoucherModal = false
+        this.payVoucherTarget = null
+        await this.loadContractorVouchers(this.selected?.quote_no)
+        this.loadFinanceSummary(this.selected?.quote_no)   // 已付/未付數字會變
+      } catch (e) { alert('網路錯誤：' + e.message) }
+      this.payVoucherSaving = false
+    },
+
+    async downloadContractorVoucherPdf(v) {
+      try {
+        fetch(`/api/contractor-vouchers/${v.voucherNo}/export?mode=external`, {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        }).catch(() => {})
+        const r = await fetch(`/api/contractor-vouchers/${v.voucherNo}/pdf-download`, {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || 'PDF 產生失敗'); return }
+        const blob = await r.blob()
+        const url  = URL.createObjectURL(blob)
+        const a    = document.createElement('a')
+        a.href     = url
+        a.download = `${v.voucherNo}.pdf`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        setTimeout(() => URL.revokeObjectURL(url), 1000)
+      } catch (e) { alert('下載失敗：' + e.message) }
+    },
+
+    async previewContractorVoucherPdf(v) {
+      this.cvPreviewFetching = true
+      try {
+        const r = await fetch(`/api/contractor-vouchers/${v.voucherNo}/pdf-download`, {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || 'PDF 產生失敗'); this.cvPreviewFetching = false; return }
+        const blob = await r.blob()
+        this.cvPreviewBlobUrl = URL.createObjectURL(blob)
+        this.cvPreviewVoucher = v
+        this.cvPreviewModal = true
+      } catch (e) { alert('預覽失敗：' + e.message) }
+      this.cvPreviewFetching = false
+    },
+
+    closeContractorVoucherPreview() {
+      if (this.cvPreviewBlobUrl) URL.revokeObjectURL(this.cvPreviewBlobUrl)
+      this.cvPreviewBlobUrl = ''
+      this.cvPreviewModal = false
+      this.cvPreviewVoucher = null
+    },
+
+    _cvStatusLabel(s) {
+      return { '草稿': '草稿', '待審核': '待審核', '簽核中': '簽核中', '已核准': '已核准' }[s] || s
+    },
+
+    _cvStatusClass(s) {
+      return { '草稿': 'badge--draft', '待審核': 'badge--pending', '簽核中': 'badge--signing', '已核准': 'badge--approved' }[s] || ''
+    },
+
+    // ── 開票申請憑據 ────────────────────────────────────────────────────────────
+
+    async loadInvoiceVouchers(quoteNo) {
+      if (!quoteNo) return
+      this.invoiceVouchersLoading = true
+      this.invoiceVouchers = []
+      this.ivSortPref = await loadListPref(this.session.token, `iv:${quoteNo}`)
+      try {
+        const r = await fetch(`/api/invoice-vouchers?quote_no=${encodeURIComponent(quoteNo)}`, {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (r.ok) this.invoiceVouchers = await r.json()
+      } catch {}
+      this.invoiceVouchersLoading = false
+      this.$nextTick(() => this._initSubListSortable('iv'))
+    },
+
+    async openInvoiceVoucherModal() {
+      if (this.dirty) { alert('款項明細有未儲存的修改，請先儲存後再申請開票憑據'); return }
+      this.ivMode = 'amount'
+      this.ivAmountInput = 0
+      this.ivItemSelections = {}
+      this.ivRemaining = null
+      this.ivCreateModal = true
+      this.ivRemainingLoading = true
+      try {
+        const r = await fetch(`/api/invoice-vouchers/remaining?quote_no=${encodeURIComponent(this.selected.quote_no)}`, {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (r.ok) this.ivRemaining = await r.json()
+        else { alert((await r.json()).detail || '載入額度失敗'); this.ivCreateModal = false }
+      } catch (e) { alert('網路錯誤：' + e.message); this.ivCreateModal = false }
+      this.ivRemainingLoading = false
+    },
+
+    closeInvoiceVoucherModal() {
+      this.ivCreateModal = false
+    },
+
+    async openNetworkPlan() {
+      const quoteNo = this.selected.quote_no
+      try {
+        const r = await fetch(`/api/quotations/${encodeURIComponent(quoteNo)}/network-plan`, {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (r.ok) {
+          const d = await r.json()
+          location.href = `network-plan-form.html?id=${d.id}`
+          return
+        }
+        if (r.status !== 404) { alert((await r.json().catch(() => ({}))).detail || '查詢失敗'); return }
+      } catch (e) { alert('網路錯誤：' + e.message); return }
+
+      const mods = this.session.modules || []
+      const canEdit = ['superadmin', 'admin'].includes(this.session.role) || mods.indexOf('netplan_edit') >= 0
+      if (!canEdit) { alert('此案件尚無網路架構規劃書'); return }
+      if (!confirm('此案件尚無網路架構規劃書，是否建立一份？')) return
+      try {
+        const cr = await fetch('/api/network-plans', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify({ quoteNo })
+        })
+        if (!cr.ok) { alert((await cr.json().catch(() => ({}))).detail || '建立失敗'); return }
+        const d = await cr.json()
+        location.href = `network-plan-form.html?id=${d.id}`
+      } catch (e) { alert('網路錯誤：' + e.message) }
+    },
+
+    ivToggleItem(it) {
+      if (this.ivItemSelections[it.itemId]) {
+        delete this.ivItemSelections[it.itemId]
+      } else {
+        const qty = it.remainingQty
+        this.ivItemSelections[it.itemId] = { qty, amount: Math.round(qty * (it.unitPrice || 0)) }
+      }
+    },
+
+    ivItemQtyChanged(it) {
+      const sel = this.ivItemSelections[it.itemId]
+      if (!sel) return
+      if (sel.qty > it.remainingQty) sel.qty = it.remainingQty
+      if (sel.qty < 0) sel.qty = 0
+      sel.amount = Math.round(sel.qty * (it.unitPrice || 0))
+    },
+
+    // 按品項模式下，使用者輸入的金額比照報價單品項本身的慣例是「未稅」，
+    // 跟「剩餘可申請金額」（含稅，來自 quoteTotal）不是同一個基準，比較前
+    // 必須先用這張報價單自己的稅率（quoteTotal/quotePretax）換算成含稅。
+    _ivTaxRatio() {
+      const p = this.ivRemaining?.quotePretax || 0
+      return p > 0 ? (this.ivRemaining.quoteTotal / p) : 1
+    },
+
+    ivAmountPretax() {
+      const ratio = this._ivTaxRatio()
+      return ratio > 0 ? Math.round((this.ivAmountInput || 0) / ratio) : (this.ivAmountInput || 0)
+    },
+    ivAmountTax() {
+      return (this.ivAmountInput || 0) - this.ivAmountPretax()
+    },
+
+    ivSelectedTotal() {
+      // 未稅小計（品項金額欄位本身的加總）
+      return Object.values(this.ivItemSelections).reduce((sum, s) => sum + (Number(s.amount) || 0), 0)
+    },
+    ivSelectedGrossTotal() {
+      // 含稅小計，才能跟剩餘可申請金額（含稅）比較
+      return Math.round(this.ivSelectedTotal() * this._ivTaxRatio())
+    },
+    ivSelectedTax() {
+      return this.ivSelectedGrossTotal() - this.ivSelectedTotal()
+    },
+
+    async submitInvoiceVoucherCreate() {
+      if (!this.ivRemaining) return
+      let body
+      if (this.ivMode === 'amount') {
+        if (!this.ivAmountInput || this.ivAmountInput <= 0) { alert('請輸入申請金額'); return }
+        if (this.ivAmountInput > this.ivRemaining.remainingAmount) { alert('超過剩餘可申請金額'); return }
+        body = { quote_no: this.selected.quote_no, scope: 'amount', amount: this.ivAmountInput }
+      } else {
+        const items = Object.entries(this.ivItemSelections).map(([itemId, sel]) => ({
+          itemId: Number(itemId), qty: sel.qty, amount: sel.amount
+        }))
+        if (items.length === 0) { alert('請至少選擇一項品項'); return }
+        if (this.ivSelectedGrossTotal() > this.ivRemaining.remainingAmount) { alert('超過剩餘可申請金額'); return }
+        body = { quote_no: this.selected.quote_no, scope: 'items', items }
+      }
+      if (!confirm('確定送出建立開票申請憑據？')) return
+      this.ivSubmitting = true
+      try {
+        const r = await fetch('/api/invoice-vouchers', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify(body)
+        })
+        if (!r.ok) { alert((await r.json()).detail || '建立失敗'); this.ivSubmitting = false; return }
+        this.ivCreateModal = false
+        await this.loadInvoiceVouchers(this.selected?.quote_no)
+      } catch (e) { alert('網路錯誤：' + e.message) }
+      this.ivSubmitting = false
+    },
+
+    async deleteInvoiceVoucher(v) {
+      if (!confirm(`確定刪除開票申請憑據「${v.voucherNo}」？`)) return
+      try {
+        const r = await fetch(`/api/invoice-vouchers/${v.voucherNo}`, {
+          method: 'DELETE',
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (r.ok) await this.loadInvoiceVouchers(this.selected?.quote_no)
+        else alert((await r.json()).detail || '刪除失敗')
+      } catch (e) { alert('網路錯誤：' + e.message) }
+    },
+
+    async submitInvoiceVoucher(v) {
+      if (!confirm(`確定送出開票申請憑據「${v.voucherNo}」進行簽核？`)) return
+      try {
+        const r = await fetch(`/api/invoice-vouchers/${v.voucherNo}/submit`, {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (!r.ok) { alert((await r.json()).detail || '送出失敗'); return }
+        await this.loadInvoiceVouchers(this.selected?.quote_no)
+      } catch (e) { alert('網路錯誤：' + e.message) }
+    },
+
+    async approveInvoiceVoucher(v) {
+      if (!confirm(`確定簽核開票申請憑據「${v.voucherNo}」？`)) return
+      try {
+        const r = await fetch(`/api/invoice-vouchers/${v.voucherNo}/approve`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify({})
+        })
+        if (!r.ok) { alert((await r.json()).detail || '簽核失敗'); return }
+        await this.loadInvoiceVouchers(this.selected?.quote_no)
+      } catch (e) { alert('網路錯誤：' + e.message) }
+    },
+
+    async rejectInvoiceVoucher(v) {
+      const note = prompt(`退回開票申請憑據「${v.voucherNo}」，可填寫退回原因（選填）：`)
+      if (note === null) return
+      try {
+        const r = await fetch(`/api/invoice-vouchers/${v.voucherNo}/reject`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify({ note })
+        })
+        if (!r.ok) { alert((await r.json()).detail || '退回失敗'); return }
+        await this.loadInvoiceVouchers(this.selected?.quote_no)
+      } catch (e) { alert('網路錯誤：' + e.message) }
+    },
+
+    async revokeInvoiceVoucherApproval(v) {
+      const note = prompt(`撤銷開票申請憑據「${v.voucherNo}」的核准？將退回草稿。\n\n可填寫撤銷原因（選填）：`)
+      if (note === null) return
+      try {
+        const r = await fetch(`/api/invoice-vouchers/${v.voucherNo}/revoke-approval`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify({ note })
+        })
+        if (!r.ok) { alert((await r.json()).detail || '撤銷失敗'); return }
+        await this.loadInvoiceVouchers(this.selected?.quote_no)
+      } catch (e) { alert('網路錯誤：' + e.message) }
+    },
+
+    async downloadInvoiceVoucherPdf(v) {
+      try {
+        fetch(`/api/invoice-vouchers/${v.voucherNo}/export?mode=external`, {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        }).catch(() => {})
+        const r = await fetch(`/api/invoice-vouchers/${v.voucherNo}/pdf-download`, {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || 'PDF 產生失敗'); return }
+        const blob = await r.blob()
+        const url  = URL.createObjectURL(blob)
+        const a    = document.createElement('a')
+        a.href     = url
+        a.download = `${v.voucherNo}.pdf`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        setTimeout(() => URL.revokeObjectURL(url), 1000)
+      } catch (e) { alert('下載失敗：' + e.message) }
+    },
+
+    async previewInvoiceVoucherPdf(v) {
+      this.ivPreviewFetching = true
+      try {
+        const r = await fetch(`/api/invoice-vouchers/${v.voucherNo}/pdf-download`, {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || 'PDF 產生失敗'); this.ivPreviewFetching = false; return }
+        const blob = await r.blob()
+        this.ivPreviewBlobUrl = URL.createObjectURL(blob)
+        this.ivPreviewVoucher = v
+        this.ivPreviewModal = true
+      } catch (e) { alert('預覽失敗：' + e.message) }
+      this.ivPreviewFetching = false
+    },
+
+    closeInvoiceVoucherPreview() {
+      if (this.ivPreviewBlobUrl) URL.revokeObjectURL(this.ivPreviewBlobUrl)
+      this.ivPreviewBlobUrl = ''
+      this.ivPreviewModal = false
+      this.ivPreviewVoucher = null
+    },
+
+    _ivStatusLabel(s) {
+      return { '草稿': '草稿', '待審核': '待審核', '簽核中': '簽核中', '已核准': '已核准' }[s] || s
+    },
+
+    _ivStatusClass(s) {
+      return { '草稿': 'badge--draft', '待審核': 'badge--pending', '簽核中': 'badge--signing', '已核准': 'badge--approved' }[s] || ''
+    },
+
+    // ── 附件（回簽/已開立檔案）共用 helper ──────────────────────────────────
+    // 點擊即時在新分頁開啟（瀏覽器原生顯示圖片/PDF），不用另外刻預覽元件；
+    // 連結需要簽名短效 token 才能通過 /api/uploads 的存取檢查。
+    async previewAttachmentFile(file) {
+      try {
+        const r = await fetch(`/api/photo-token?path=${encodeURIComponent(file.path)}`, {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (!r.ok) { alert('取得檔案連結失敗'); return }
+        const { token } = await r.json()
+        window.open(`/api/uploads/${file.path}?pt=${encodeURIComponent(token)}`, '_blank')
+      } catch (e) { alert('開啟檔案失敗：' + e.message) }
+    },
+
+    async uploadShippingSignedFiles(note, evt) {
+      const files = evt?.target?.files
+      if (!files || files.length === 0) return
+      const fd = new FormData()
+      for (const f of files) fd.append('files', f)
+      try {
+        const r = await fetch(`/api/shipping-notes/${note.noteNo}/signed-files`, {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + this.session.token },
+          body: fd
+        })
+        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '上傳失敗'); return }
+        await this.loadShippingNotes(this.selected?.quote_no)
+      } catch (e) { alert('上傳失敗：' + e.message) }
+      evt.target.value = ''
+    },
+
+    async deleteShippingSignedFile(note, fileId) {
+      if (!confirm('確定刪除此附件？')) return
+      try {
+        const r = await fetch(`/api/shipping-notes/${note.noteNo}/signed-files/${fileId}`, {
+          method: 'DELETE',
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '刪除失敗'); return }
+        await this.loadShippingNotes(this.selected?.quote_no)
+      } catch (e) { alert('刪除失敗：' + e.message) }
+    },
+
+    async uploadInvoiceVoucherIssuedFiles(v, evt) {
+      const files = evt?.target?.files
+      if (!files || files.length === 0) return
+      const fd = new FormData()
+      for (const f of files) fd.append('files', f)
+      try {
+        const r = await fetch(`/api/invoice-vouchers/${v.voucherNo}/issued-files`, {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + this.session.token },
+          body: fd
+        })
+        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '上傳失敗'); return }
+        await this.loadInvoiceVouchers(this.selected?.quote_no)
+      } catch (e) { alert('上傳失敗：' + e.message) }
+      evt.target.value = ''
+    },
+
+    async uploadPaymentItemInvoiceFiles(idx, evt) {
+      const files = evt?.target?.files
+      if (!files || files.length === 0) return
+      const fd = new FormData()
+      for (const f of files) fd.append('files', f)
+      try {
+        const r = await fetch(`/api/quotations/${this.selected.quote_no}/payment/${idx}/invoice-files`, {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + this.session.token },
+          body: fd
+        })
+        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '上傳失敗'); return }
+        const body = await r.json()
+        if (body.pending) { alert(body.message || '已送出，待最高管理員審核後套用'); return }
+        const item = this.paymentItems()[idx]
+        if (item) {
+          if (!item.invoiceFiles) item.invoiceFiles = []
+          item.invoiceFiles.push(...body.files)
+        }
+      } catch (e) { alert('上傳失敗：' + e.message) }
+      evt.target.value = ''
+    },
+
+    async deletePaymentItemInvoiceFile(idx, fileId) {
+      if (!confirm('確定刪除此附件？')) return
+      try {
+        const r = await fetch(`/api/quotations/${this.selected.quote_no}/payment/${idx}/invoice-files/${fileId}`, {
+          method: 'DELETE',
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '刪除失敗'); return }
+        const body = await r.json()
+        if (body.pending) { alert(body.message || '已送出，待最高管理員審核後套用'); return }
+        const item = this.paymentItems()[idx]
+        if (item && item.invoiceFiles) item.invoiceFiles = item.invoiceFiles.filter(f => f.id !== fileId)
+      } catch (e) { alert('刪除失敗：' + e.message) }
+    },
+
+    async uploadMaterialFiles(idx, evt) {
+      const files = evt?.target?.files
+      if (!files || files.length === 0) return
+      const fd = new FormData()
+      for (const f of files) fd.append('files', f)
+      try {
+        const r = await fetch(`/api/quotations/${this.selected.quote_no}/materials/${idx}/files`, {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + this.session.token },
+          body: fd
+        })
+        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '上傳失敗'); return }
+        const body = await r.json()
+        if (body.pending) { alert(body.message || '已送出，待最高管理員審核後套用'); return }
+        const mat = (this.cr.caseRecord.materials || [])[idx]
+        if (mat) {
+          if (!mat.files) mat.files = []
+          mat.files.push(...body.files)
+        }
+      } catch (e) { alert('上傳失敗：' + e.message) }
+      evt.target.value = ''
+    },
+
+    async deleteMaterialFile(idx, fileId) {
+      if (!confirm('確定刪除此附件？')) return
+      try {
+        const r = await fetch(`/api/quotations/${this.selected.quote_no}/materials/${idx}/files/${fileId}`, {
+          method: 'DELETE',
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '刪除失敗'); return }
+        const body = await r.json()
+        if (body.pending) { alert(body.message || '已送出，待最高管理員審核後套用'); return }
+        const mat = (this.cr.caseRecord.materials || [])[idx]
+        if (mat && mat.files) mat.files = mat.files.filter(f => f.id !== fileId)
+      } catch (e) { alert('刪除失敗：' + e.message) }
+    },
+
+    async uploadMaterialInvoiceFiles(idx, evt) {
+      const files = evt?.target?.files
+      if (!files || files.length === 0) return
+      const fd = new FormData()
+      for (const f of files) fd.append('files', f)
+      try {
+        const r = await fetch(`/api/quotations/${this.selected.quote_no}/materials/${idx}/invoice-files`, {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + this.session.token },
+          body: fd
+        })
+        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '上傳失敗'); return }
+        const body = await r.json()
+        if (body.pending) { alert(body.message || '已送出，待最高管理員審核後套用'); return }
+        const mat = (this.cr.caseRecord.materials || [])[idx]
+        if (mat) {
+          if (!mat.invoiceFiles) mat.invoiceFiles = []
+          mat.invoiceFiles.push(...body.files)
+        }
+      } catch (e) { alert('上傳失敗：' + e.message) }
+      evt.target.value = ''
+    },
+
+    async deleteMaterialInvoiceFile(idx, fileId) {
+      if (!confirm('確定刪除此發票附件？')) return
+      try {
+        const r = await fetch(`/api/quotations/${this.selected.quote_no}/materials/${idx}/invoice-files/${fileId}`, {
+          method: 'DELETE',
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '刪除失敗'); return }
+        const body = await r.json()
+        if (body.pending) { alert(body.message || '已送出，待最高管理員審核後套用'); return }
+        const mat = (this.cr.caseRecord.materials || [])[idx]
+        if (mat && mat.invoiceFiles) mat.invoiceFiles = mat.invoiceFiles.filter(f => f.id !== fileId)
+      } catch (e) { alert('刪除失敗：' + e.message) }
+    },
+
+    async uploadDispatchFiles(d, evt) {
+      const files = evt?.target?.files
+      if (!files || files.length === 0) return
+      const fd = new FormData()
+      for (const f of files) fd.append('files', f)
+      try {
+        const r = await fetch(`/api/contractor-dispatches/${d.id}/files`, {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + this.session.token },
+          body: fd
+        })
+        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '上傳失敗'); return }
+        const body = await r.json()
+        if (!d.files) d.files = []
+        d.files.push(...body.files)
+      } catch (e) { alert('上傳失敗：' + e.message) }
+      evt.target.value = ''
+    },
+
+    async deleteDispatchFile(d, fileId) {
+      if (!confirm('確定刪除此報價附件？')) return
+      try {
+        const r = await fetch(`/api/contractor-dispatches/${d.id}/files/${fileId}`, {
+          method: 'DELETE',
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '刪除失敗'); return }
+        if (d.files) d.files = d.files.filter(f => f.id !== fileId)
+      } catch (e) { alert('刪除失敗：' + e.message) }
+    },
+
+    async uploadDispatchInvoiceFiles(d, evt) {
+      const files = evt?.target?.files
+      if (!files || files.length === 0) return
+      const fd = new FormData()
+      for (const f of files) fd.append('files', f)
+      try {
+        const r = await fetch(`/api/contractor-dispatches/${d.id}/invoice-files`, {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + this.session.token },
+          body: fd
+        })
+        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '上傳失敗'); return }
+        const body = await r.json()
+        if (!d.invoiceFiles) d.invoiceFiles = []
+        d.invoiceFiles.push(...body.files)
+      } catch (e) { alert('上傳失敗：' + e.message) }
+      evt.target.value = ''
+    },
+
+    async deleteDispatchInvoiceFile(d, fileId) {
+      if (!confirm('確定刪除此廠商發票？')) return
+      try {
+        const r = await fetch(`/api/contractor-dispatches/${d.id}/invoice-files/${fileId}`, {
+          method: 'DELETE',
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '刪除失敗'); return }
+        if (d.invoiceFiles) d.invoiceFiles = d.invoiceFiles.filter(f => f.id !== fileId)
+      } catch (e) { alert('刪除失敗：' + e.message) }
+    },
+
+    async deleteInvoiceVoucherIssuedFile(v, fileId) {
+      if (!confirm('確定刪除此附件？')) return
+      try {
+        const r = await fetch(`/api/invoice-vouchers/${v.voucherNo}/issued-files/${fileId}`, {
+          method: 'DELETE',
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '刪除失敗'); return }
+        await this.loadInvoiceVouchers(this.selected?.quote_no)
+      } catch (e) { alert('刪除失敗：' + e.message) }
+    },
+
+    // ── 請款單 ──────────────────────────────────────────────────────────────
+    async loadPaymentRequests(quoteNo) {
+      if (!quoteNo) return
+      this.paymentRequestsLoading = true
+      this.paymentRequests = []
+      this.prListSortPref = await loadListPref(this.session.token, `prList:${quoteNo}`)
+      try {
+        const r = await fetch(`/api/payment-requests?quote_no=${encodeURIComponent(quoteNo)}`, {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (r.ok) this.paymentRequests = await r.json()
+      } catch {}
+      this.paymentRequestsLoading = false
+      this.$nextTick(() => this._initSubListSortable('prList'))
+    },
+
+    _prStatusLabel(s) {
+      return { '草稿': '草稿', '待審核': '待審核', '簽核中': '簽核中', '已核准': '已核准' }[s] || s
+    },
+
+    _prStatusClass(s) {
       return { '草稿': 'badge--draft', '待審核': 'badge--pending', '簽核中': 'badge--signing', '已核准': 'badge--approved' }[s] || ''
     },
 
@@ -1500,8 +4545,12 @@ function app() {
       return this._dispatchSubtotal() + this._dispatchTaxAmount()
     },
 
-    _dispatchStatusLabel(s) {
-      return { draft: '草稿', sent: '已送出', confirmed: '已確認', pending_acceptance: '待驗收', accepted: '已驗收', completed: '完工', cancelled: '已取消' }[s] || s
+    _dispatchGrandTotal() {
+      return this._dispatchTotalWithTax() + this._dispatchPersonnelTotal()
+    },
+
+    _dispatchLabel(d) {
+      return d.vendorName || '外包人員（點工）'
     },
 
     _dispatchStatusClass(s) {
@@ -1509,7 +4558,7 @@ function app() {
     },
 
     async markPendingAcceptance(d) {
-      if (!confirm(`確定將「${d.vendorName}」標記為待驗收？`)) return
+      if (!confirm(`確定將「${this._dispatchLabel(d)}」標記為待驗收？`)) return
       try {
         const r = await fetch(`/api/contractor-dispatches/${d.id}/accept`, {
           method: 'PATCH',
@@ -1522,7 +4571,7 @@ function app() {
     },
 
     async acceptDispatch(d) {
-      if (!confirm(`確定驗收「${d.vendorName}」的工程？\n驗收後將記錄您的姓名與時間。`)) return
+      if (!confirm(`確定驗收「${this._dispatchLabel(d)}」的工程？\n驗收後將記錄您的姓名與時間。`)) return
       try {
         const r = await fetch(`/api/contractor-dispatches/${d.id}/accept`, {
           method: 'PATCH',

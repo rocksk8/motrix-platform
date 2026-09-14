@@ -1,28 +1,49 @@
 """Quotation CRUD, approval workflow, deal-tag, export endpoints."""
 import json
 import logging
+import re
+import os
+import shutil
 import sqlite3
 import threading
+import uuid
 from collections import defaultdict
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 from urllib.parse import quote as urlquote
 
 logger = logging.getLogger(__name__)
 
-from fastapi import APIRouter, Body, HTTPException, Header
+from fastapi import APIRouter, Body, Form, HTTPException, Header, UploadFile, File
 from fastapi.responses import Response
 from pydantic import BaseModel
 
 from db import get_db, spawn_bg_thread
 from helpers import (
-    _require_user, _tok, _audit, _notify, _get_setting,
+    _require_user, _tok, _audit, _notify, _purge_notifications, _check_quotation_owner,
     quote_hot_fields, save_quotation_json, _steps_to_tiers, SQL_DEAL_TAG, SQL_SETTLE_STATUS,
     notify_approval_request, notify_next_tier, notify_approved,
     notify_returned, notify_resubmit_requester, notify_settlement_finalized,
+    notify_module_activity, push_event_for_quotation_won, push_event_for_important_comment,
+    push_event_for_case_stage_due, push_event_delete_for_case_stage,
+    push_event_for_case_stage_done,
+    sync_daily_task_for_case_stage, delete_daily_task_for_case_stage,
+    check_approve_permission, check_reject_permission, check_no_tier_self_approval,
+    resolve_tier_approvers, UnresolvedManagerError, resolve_active_flow_setting,
+    save_document_files, delete_document_file,
+    notify_case_close_blocked, notify_case_change_requested,
+    norm_at, active_delegators_for, user_has_module, can_see_financial,
+    validate_invoice_no,
+    summarize_payment_items,
 )
+import helpers.uploads as _uploads_mod
+from helpers.uploads import _effective_subfolder
 from archive import _backup_quotation
-from pdf_gen import _generate_quotation_pdf, generate_pdf_bytes
+from pdf_gen import (
+    _generate_quotation_pdf, generate_pdf_bytes,
+    _generate_case_closing_pdf, generate_case_closing_pdf_bytes,
+    generate_project_execution_report_pdf_bytes,
+)
 
 router = APIRouter()
 
@@ -41,28 +62,31 @@ def _next_revision_no(quote_no: str) -> str:
     return f'{base}-R{rev}'
 
 
-def _setting_to_active_tiers(setting: dict) -> list:
-    """Convert settings format (tiers or old steps) → list of active tier dicts with status fields."""
-    tiers = setting.get("tiers") or []
+def _setting_to_active_tiers(setting: dict, conn, requester_username: str = None) -> list:
+    """Convert settings format (tiers or old steps) → list of active tier dicts with status fields.
+    Kept as quotations.py's own copy (not the shared helpers/tiered_approval.py version) because of
+    the legacy `steps` back-compat above — but the department/division/submitter-manager resolution
+    logic is shared via resolve_tier_approvers(), not reimplemented here, so both copies stay in sync
+    on that behavior. 系統內建「申請人部門主管自動簽核」層（2026-08-22i）跟共用版一致，預設插入。
+
+    ⚠️ 2026-08-28 修正（跟 helpers/tiered_approval.py::setting_to_active_tiers() 同步）：
+    過濾條件改成看「展開後」的解析結果，不是設定裡原始的 approver 項目數——後者
+    對 department_manager/division_manager 一定恆真，若解析到的主管剛好就是申請人
+    自己（resolve_tier_approvers() 會靜默排除以避免自簽），先前會留下一個
+    approvers:[] 的空層卡死流程（任何人都無法通過該層）。"""
+    tiers = list(setting.get("tiers") or [])
     if not tiers:
         tiers = _steps_to_tiers(setting.get("steps") or [])
-    return [
-        {
-            "order": t.get("order", i),
-            "approvers": [
-                {
-                    "userId":      a.get("userId"),
-                    "username":    a["username"],
-                    "displayName": a.get("displayName", a["username"]),
-                    "status":      "pending",
-                    "approvedAt":  None,
-                }
-                for a in (t.get("approvers") or [])
-            ],
-        }
-        for i, t in enumerate(tiers)
-        if (t.get("approvers") or [])
-    ]
+    if setting.get("includeSubmitterManagerTier", True):
+        tiers = [{"approvers": [{"sourceType": "submitter_manager"}]}] + tiers
+    result = []
+    for t in tiers:
+        if not (t.get("approvers") or []):
+            continue
+        resolved = resolve_tier_approvers(conn, t, requester_username)
+        if resolved:
+            result.append({"order": len(result), "approvers": resolved})
+    return result
 
 
 def _active_tiers(appr: dict) -> list:
@@ -95,6 +119,352 @@ def _current_tier_idx(appr: dict) -> int:
     return ct
 
 
+def _visible_case_filter_sql(user: dict, prefix: str = "") -> tuple:
+    """回傳 (sql_fragment, params)：非 admin/superadmin 只能看自己名下業務歸屬的案件，
+    或被 assigned_user_ids 勾選分配的案件（2026-08-27 起，接上原本只存欄位、沒實際
+    拿來過濾可見性的 assigned_user_ids——見 quotations.py::update_case_assigned_users()
+    /case-management.html 成員分配 UI）。json_each() 是 SQLite JSON1 擴充函式，
+    daily_tasks.py 的 json_each(assigned_to) 已在用同一招。prefix 是 SQL 別名前綴
+    （例如 stage_board() JOIN case_stages 後用 'q.'），unaliased 查詢留空字串即可。"""
+    return (
+        f" AND ({prefix}sales_person_id=? OR ({prefix}sales_person_id IS NULL AND {prefix}sales_person=?)"
+        f" OR EXISTS (SELECT 1 FROM json_each({prefix}assigned_user_ids) WHERE value=?))",
+        [user["id"], user["display_name"], user["id"]],
+    )
+
+
+# `_check_quotation_owner()` 於 2026-09-10 抽到 helpers/quotations.py（見該處
+# docstring）——叫料 API 是第三個呼叫點，且新增時漏了這道檢查。本檔案改為
+# 從 helpers 引用，行為完全不變。
+
+
+# ── Case semi-unlock / change-request helpers (2026-08-26) ────────────────────
+# 已結案案件解鎖後的「半解鎖」機制：deal_tag='已結案' 時，quotations 表
+# case_semi_unlocked 欄位若為 0，_gate_case_edit() 涵蓋的端點一律 403；若為 1，
+# 這些端點不直接套用變更，而是寫入 case_change_requests 一筆 pending 記錄、
+# 背景寄信通知最高管理員，回傳 pending 回應給前端；等 superadmin 於簽核佇列
+# 核准後才由 _apply_case_change_request() 真正套用。涵蓋範圍與設計取捨（哪些
+# 端點刻意不支援排隊、一律直接 403）見 db.py _m061_case_semi_unlock() docstring。
+
+def _check_case_gate(conn, quote_no: str) -> bool:
+    """已結案且未半解鎖 → 403；已結案且已半解鎖 → True（呼叫端應改走
+    _create_case_change_request() 排隊，不要直接套用變更）；案件未結案 →
+    False（照常繼續，不受任何限制）。"""
+    row = conn.execute(
+        "SELECT deal_tag, case_semi_unlocked FROM quotations WHERE quote_no=?", (quote_no,)
+    ).fetchone()
+    if not row:
+        raise HTTPException(404, f"報價單 {quote_no} 不存在")
+    if (row["deal_tag"] or "") != "已結案":
+        return False
+    if not row["case_semi_unlocked"]:
+        raise HTTPException(403, "案件已結案並鎖定，請先解鎖（半解鎖）後再操作")
+    return True
+
+
+def _create_case_change_request(conn, quote_no: str, user: dict, authorization: str,
+                                action_type: str, summary: str, payload: dict,
+                                staged_files: list = None) -> int:
+    now = datetime.now().isoformat()
+    cur = conn.execute(
+        "INSERT INTO case_change_requests "
+        "(quote_no, action_type, summary, payload_json, staged_files_json, status, "
+        " requested_by, requested_by_display, requested_at) "
+        "VALUES (?,?,?,?,?,'pending',?,?,?)",
+        (quote_no, action_type, summary, json.dumps(payload, ensure_ascii=False),
+         json.dumps(staged_files or [], ensure_ascii=False),
+         user["username"], user.get("display_name") or user["username"], now),
+    )
+    conn.commit()
+    change_id = cur.lastrowid
+    requester_display = user.get("display_name") or user["username"]
+    spawn_bg_thread(_notify_case_change_requested_bg, args=(quote_no, summary, requester_display))
+    _audit(_tok(authorization), "case.change_requested", "quotation", quote_no,
+           f"{quote_no}（待審核 #{change_id}：{summary}）")
+    return change_id
+
+
+def _gate_case_edit(conn, quote_no: str, user: dict, authorization: str, action_type: str,
+                    summary: str, payload: dict, staged_files: list = None):
+    """簡化版：payload 已完整（不需要事後補 staged_files，例如 case_record_update／
+    payment_mark 這種純 JSON body 的異動），一次做完「檢查 + 建立待審核記錄」。
+    回傳 (gated, change_id)——gated=True 時呼叫端應立即回傳 pending 回應，不要
+    再執行實際變更；gated=False 時比照原本邏輯繼續。需要先建立記錄取得 id
+    才能存放暫存檔案的上傳類端點，改用 _check_case_gate() +
+    _create_case_change_request() 兩段式呼叫（見 upload_material_files() 等）。
+
+    case_record_update 特別處理（2026-08-26 自我審查發現的合併去重）：
+    `update_case_record()` 是每次欄位編輯 1.5 秒防抖自動存檔都會呼叫的端點，
+    半解鎖期間若每次都新建一筆待審核記錄，編輯個幾分鐘就會在佇列裡疊出幾十筆
+    近乎重複的記錄（且各自是「當下那一刻」的完整 caseRecord 快照）；更嚴重的
+    是若 superadmin 沒有嚴格照時間先後核准，核准較舊的一筆會用當時的舊快照
+    整包蓋掉已經核准過的較新內容，等於資料倒退。修法：同一張案件若已有一筆
+    `pending` 的 case_record_update，後續存檔直接更新那一筆的內容/時間戳，
+    不新建、不重複寄信——核准時永遠拿到最新一次編輯的完整內容，佇列裡也只會
+    看到一筆。"""
+    if not _check_case_gate(conn, quote_no):
+        return False, None
+    if action_type == "case_record_update":
+        existing = conn.execute(
+            "SELECT id FROM case_change_requests WHERE quote_no=? AND action_type=? AND status='pending'",
+            (quote_no, action_type),
+        ).fetchone()
+        if existing:
+            now = datetime.now().isoformat()
+            conn.execute(
+                "UPDATE case_change_requests SET summary=?, payload_json=?, requested_by=?, "
+                "requested_by_display=?, requested_at=? WHERE id=?",
+                (summary, json.dumps(payload, ensure_ascii=False), user["username"],
+                 user.get("display_name") or user["username"], now, existing["id"]),
+            )
+            conn.commit()
+            return True, existing["id"]
+    change_id = _create_case_change_request(conn, quote_no, user, authorization,
+                                             action_type, summary, payload, staged_files)
+    return True, change_id
+
+
+def _notify_case_change_requested_bg(quote_no: str, summary: str, requester_display: str) -> None:
+    conn = get_db()
+    row = conn.execute(
+        "SELECT customer_name, project_name FROM quotations WHERE quote_no=?", (quote_no,)
+    ).fetchone()
+    conn.close()
+    notify_case_change_requested(
+        quote_no, row["customer_name"] or "" if row else "",
+        row["project_name"] or "" if row else "", summary, requester_display,
+    )
+
+
+def _require_financial_view(user: dict) -> None:
+    """案件財務金額的檢視權（2026-09-13 使用者裁示：viewer／engineer 不該看到）。
+
+    規則與前端 `case-management.js::canSeeFinancial()` 逐字相同，見
+    `helpers/auth.py::can_see_financial()`——這裡不自己寫判斷式，避免兩邊漂移。
+    """
+    if not can_see_financial(user):
+        raise HTTPException(403, "此帳號沒有檢視財務金額的權限（需要「財務金額可視」模組）")
+
+
+def _safe_close(conn) -> None:
+    try:
+        conn.close()
+    except Exception:
+        pass
+
+
+def _is_case_approver(data_json: str, user: dict, conn) -> bool:
+    """這個人是否出現在這張單的簽核名單裡（任何一層）或本人就是送審申請人。
+
+    含「目前有效的簽核代理人」——代理人在簽核路徑上處處被視同本人
+    （`check_approve_permission()` 等），檢視權限沒有理由是例外。
+    """
+    try:
+        appr = (json.loads(data_json or "{}") or {}).get("approval") or {}
+    except Exception:
+        return False
+    names = {a["username"] for tier in (_active_tiers(appr) or [])
+             for a in (tier.get("approvers") or []) if a.get("username")}
+    if appr.get("requestedBy"):
+        names.add(appr["requestedBy"])
+    if user["username"] in names:
+        return True
+    try:
+        return bool(set(active_delegators_for(conn, user["username"])) & names)
+    except Exception:
+        return False
+
+
+def _guard_case(conn, quote_no: str, user: dict, *, allow_approver: bool = False,
+                allow_module: str = None, skip_if_semi_unlocked: bool = False):
+    """取單＋擁有者檢查，給所有「用 quote_no 直接操作單一案件」的端點共用。
+
+    2026-09-13（模組權限稽核第二輪）：`quote_no` 是可列舉的（`MQ-YYYYMM-NNN`），
+    沒有這道檢查就是 IDOR——2026-08-24 修過報價單本體、2026-09-10 修過叫料、
+    2026-09-11 額外支出上線時就內建，但**案件階段／拜訪紀錄／更新紀錄／案件
+    鎖定／附件上傳刪除／匯出紀錄／三支 PDF 一直沒有**，任何已登入帳號都能讀寫
+    別人的案件。這支把那批補齊，規則與既有端點完全一致（admin+ 直通，否則必須
+    是該案業務或 `assigned_user_ids` 裡的協作者）。
+
+    `allow_approver=True`：簽核路徑上的人（含代理人）也放行。給報價單 PDF 下載用
+    ——簽核人要看得到單據才簽得下去，而他通常既不是業務也不在協作者名單裡。
+
+    `allow_module="case_manage"`：**案件執行面**（階段、拜訪紀錄、動態更新、叫料
+    附件、案件鎖定、匯出紀錄、兩支案件報表 PDF）額外放行具該模組的人。
+
+    ⚠️ **為什麼執行面不用純擁有者規則**——2026-09-13 實測開發機資料庫：26 張報價單
+    裡 `assigned_user_ids` 有值的是 **0 張**，也就是「指派協作者」這個機制實務上
+    從來沒被使用過。純擁有者規則下，`engineer` 角色（永遠不會是 sales_person）
+    對**全部 26 張案件的存取權都是 0**——現場工程師會完全無法開啟任何案件的執行
+    進度與拜訪紀錄。金額面（精算、應收應付、發票檔案）維持純擁有者規則不放寬。
+    等哪天「指派協作者」真的被落實，就可以把這條 `case_manage` 放行拿掉，回到
+    純擁有者規則；那一天之前，拿掉等於停掉工程師的案件管理。
+    """
+    q = conn.execute(
+        "SELECT sales_person_id, sales_person, assigned_user_ids, data_json, "
+        "deal_tag, case_semi_unlocked FROM quotations WHERE quote_no=?", (quote_no,)
+    ).fetchone()
+    if not q:
+        # 擋下來時由這裡負責關連線：呼叫端清一色是「conn = get_db() → 一連串操作
+        # → conn.close()」的直線寫法，沒有 try/finally，守門若直接往外丟例外，
+        # 那條連線要等 GC 才會被回收。集中在這裡處理，28 個呼叫端就不必各自包一層。
+        _safe_close(conn)
+        raise HTTPException(404, f"報價單 {quote_no} 不存在")
+    # 2026-09-13（使用者裁示）：**已結案且半解鎖**的案件上，誰都可以改動——因為
+    # 半解鎖期間的每一筆變更/上傳都會排進待審核、由 superadmin 決定要不要套用
+    # （`_gate_case_edit()`／`_check_case_gate()`）。把關在審核，不在入口。
+    # 只有這個狀態例外：未結案的案件沒有那道審核，維持擁有者規則。
+    if (skip_if_semi_unlocked and (q["deal_tag"] or "") == "已結案"
+            and q["case_semi_unlocked"]):
+        return q
+    try:
+        _check_quotation_owner(q, user)
+    except HTTPException:
+        allowed = (
+            (allow_module and user_has_module(user, allow_module))
+            or (allow_approver and _is_case_approver(q["data_json"], user, conn))
+        )
+        if not allowed:
+            _safe_close(conn)
+            raise
+    return q
+
+
+def _deny_if_case_locked_unsupported(conn, quote_no: str, authorization: str = None,
+                                     op: str = "") -> None:
+    """給不支援排隊審核的細項端點（案件執行階段的新增/編輯/刪除/排序/加入
+    負責人/移除負責人/前置階段/新增拜訪/編輯拜訪/刪除拜訪共 10 支，加上款項
+    稅額沖銷申請/撤銷/核准 3 支，合計 13 支）用：已結案案件
+    一律 403，不論是否半解鎖都不例外（設計取捨見 db.py migration docstring —
+    需要修正時請透過已支援排隊審核的案件資料整體編輯/款項標記收款/附件上傳
+    端點處理，或聯繫最高管理員直接校正）。
+
+    2026-08-28：這道 403 牆原本被擋下時完全不留紀錄，之後要評估「是否該擴大
+    半解鎖排隊審核的涵蓋範圍」時沒有任何實際使用頻率數據可看——這裡補上一筆
+    audit_log（action='case.locked_edit_denied'），純記錄用途，不影響回應內容，
+    之後累積一段時間就能看出這道限制實際被撞到的頻率，用數據而非猜測決定
+    要不要擴大範圍。
+
+    2026-09-11：補上 `op` 操作標籤。先前只記單號，查得出「這道牆被撞了幾次」，
+    查不出「該優先開放哪幾支」——而後者才是當初要收集數據來決定的事。13 個
+    呼叫點各自傳入自己的標籤（例如「案件階段-新增」「稅額沖銷-核准」），
+    detail 格式為 `{單號} 已結案，此操作不支援排隊審核，直接擋下｜操作：{標籤}`。
+    前綴保持不變，舊紀錄仍可一起統計，只是沒有標籤那一段。"""
+    row = conn.execute("SELECT deal_tag FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+    if not row:
+        raise HTTPException(404, f"報價單 {quote_no} 不存在")
+    if (row["deal_tag"] or "") == "已結案":
+        if authorization:
+            # 前綴刻意保持原樣，讓 2026-08-28 起累積的舊紀錄仍可一起統計；
+            # 操作標籤接在後面，用「｜操作：」分隔，之後要分組只要 split 一次
+            detail = f"{quote_no} 已結案，此操作不支援排隊審核，直接擋下"
+            if op:
+                detail += f"｜操作：{op}"
+            _audit(_tok(authorization), "case.locked_edit_denied", "quotation", quote_no, detail)
+        raise HTTPException(
+            403,
+            "案件已結案並鎖定，此操作不支援於已結案案件（如需修正請透過案件資料整體編輯，"
+            "或聯繫最高管理員）",
+        )
+
+
+def _exclude_requester(tiers: list, requester: str) -> list:
+    """Drop the requester from tier approver lists — a submitter must never end up
+    required to approve their own quotation. Tiers left with no approvers after
+    removal are dropped entirely so the flow skips straight past them."""
+    if not requester:
+        return tiers
+    result = []
+    for t in tiers:
+        approvers = [a for a in (t.get("approvers") or []) if a.get("username") != requester]
+        if approvers:
+            result.append({**t, "approvers": approvers})
+    return result
+
+
+def _build_approval_tiers_and_notify(q: dict, appr: dict, quote_no: str, is_new_submission: bool) -> dict:
+    """Attach approval tiers built from global settings (requester excluded) if not
+    already present on `appr`, then send approval-request notifications for a
+    first-time submission. Shared by create_quotation() (direct create+submit, no
+    draft step) and update_quotation() (draft → 待審核) so both submission paths
+    build tiers and notify identically."""
+    if not appr.get("tiers") and not appr.get("steps"):
+        flow_setting = resolve_active_flow_setting("quotation")
+        requester_uname = appr.get("requestedBy") or ""
+        _tconn = get_db()
+        try:
+            active_tiers = _setting_to_active_tiers(flow_setting, _tconn, requester_uname)
+        finally:
+            _tconn.close()
+        _before_ct = len(active_tiers)
+        active_tiers = _exclude_requester(active_tiers, requester_uname)
+        if len(active_tiers) != _before_ct:
+            logger.warning("approval tiers self-excluded — quote=%r requester=%r before=%d after=%d",
+                           quote_no, requester_uname, _before_ct, len(active_tiers))
+        logger.warning("approval tiers load — quote=%r is_new=%r flow_tiers=%d active_tiers=%d",
+                       quote_no, is_new_submission, len(flow_setting.get("tiers") or []), len(active_tiers))
+        if active_tiers:
+            appr["tiers"]       = active_tiers
+            appr["currentTier"] = 0
+    else:
+        logger.warning("approval tiers already present — quote=%r tiers_count=%d",
+                       quote_no, len(appr.get("tiers") or appr.get("steps") or []))
+    q["approval"] = appr
+    if is_new_submission:
+        tiers        = _active_tiers(appr)
+        cname        = q.get("customerName") or ""
+        is_revision  = bool(q.get("returnInfo"))
+        if appr.get("isEditApproval"):
+            label = "（解鎖改版）"
+        elif is_revision:
+            label = "（退回改版）"
+        else:
+            label = ""
+        requester = appr.get("requestedBy") or ""
+
+        ct_idx       = appr.get("currentTier", 0)
+        _appr_names  = []   # usernames — for email lookup
+        _appr_labels = []   # display names — for requester confirmation copy
+        if tiers and ct_idx < len(tiers):
+            pending = [a for a in (tiers[ct_idx].get("approvers") or [])
+                       if a.get("status") != "approved"]
+            if ct_idx == 0:
+                msg = f"報價單 {quote_no}{label}（{cname}）需要您簽核"
+                for a in pending:
+                    _notify(a["username"], "approval_request", quote_no, quote_no, msg)
+                    _appr_names.append(a["username"])
+                    _appr_labels.append(a.get("displayName") or a["username"])
+                notify_approval_request(quote_no, cname, _appr_names)
+            else:
+                msg = (f"報價單 {quote_no}{label}（{cname}）"
+                       f"輪到您簽核（第 {ct_idx + 1} 層 / 共 {len(tiers)} 層）")
+                for a in pending:
+                    _notify(a["username"], "approval_request", quote_no, quote_no, msg)
+                    _appr_names.append(a["username"])
+                    _appr_labels.append(a.get("displayName") or a["username"])
+                notify_next_tier(quote_no, cname, ct_idx + 1, len(tiers), _appr_names)
+        elif not tiers:
+            msg = f"報價單 {quote_no}{label}（{cname}）需要您簽核"
+            _conn = get_db()
+            admins = _conn.execute(
+                "SELECT username FROM users WHERE role='superadmin' AND active=1"
+            ).fetchall()
+            _conn.close()
+            for adm in admins:
+                if adm["username"] != requester:
+                    _notify(adm["username"], "approval_request", quote_no, quote_no, msg)
+                    _appr_names.append(adm["username"])
+                    _appr_labels.append(adm["username"])
+            notify_approval_request(quote_no, cname, _appr_names)
+
+        # If this is a resubmission after rejection, also send confirmation to requester
+        if is_revision and requester:
+            orig_no = (q.get("returnInfo") or {}).get("originalQuoteNo") or quote_no
+            notify_resubmit_requester(quote_no, orig_no, cname, requester, _appr_labels)
+
+    return appr
+
+
 # ── Models ────────────────────────────────────────────────────────────────────
 
 class QuotationIn(BaseModel):
@@ -117,12 +487,26 @@ class CaseRecordUpdate(BaseModel):
     case_record: dict = {}
 
 
+class WriteOffRequestIn(BaseModel):
+    reason: Optional[str] = ''
+
+
+class WriteOffApproveIn(BaseModel):
+    approve: bool
+    reject_reason: Optional[str] = ''
+
+
 class ApprovalActionBody(BaseModel):
     approvedByDisplay: Optional[str] = None
     note:              Optional[str]  = None
 
 
 # ── Quotation sequence ────────────────────────────────────────────────────────
+
+# 正式單號格式：MQ-YYYYMM-NNN（月份 6 碼、序號 3 碼）。用來擋掉 client 送來的
+# 佔位字串／半成品號碼，見 create_quotation()。
+_QUOTE_NO_RE = re.compile(r"^MQ-\d{6}-\d{3}$")
+
 
 def _peek_next_no(conn, month: str) -> str:
     """Compute next available quote number without reserving it in quote_seq.
@@ -176,44 +560,63 @@ def list_quotations(
 ):
     user   = _require_user(authorization)
     conn   = get_db()
-    sql    = (
-        "SELECT id, quote_no, status, customer_name, project_name, total, pretax, "
+    today = datetime.now().strftime("%Y-%m-%d")
+    select_cols = (
+        "id, quote_no, status, customer_name, project_name, total, pretax, "
         "direct_margin_pct, net_margin_pct, sales_person, quote_date, valid_days, "
         f"{SQL_DEAL_TAG} as deal_tag, "
         "created_at, updated_at, "
         "COALESCE(json_array_length(json_extract(data_json, '$.editHistory')), 0) as edit_count, "
         "json_extract(data_json, '$.editHistory') as edit_history_json, "
         f"{SQL_SETTLE_STATUS} as settle_status, "
-        "json_extract(data_json, '$.caseRecord.stages') as stages_json "
-        "FROM quotations WHERE 1=1"
+        # Phase 5（2026-08-23）：改查 case_stages 表取代解析 caseRecord.stages JSON——
+        # 正規化橋樑（3a/3b/v52）已保證這張表對每個有執行進度的案件都是權威、完整的
+        # 來源，相關子查詢直接在 SQL 層取出第一個未完成階段的 label，不用整包 JSON
+        # 撈出來在 Python 裡逐列解析、迴圈找。
+        "(SELECT label FROM case_stages WHERE quote_no=quotations.quote_no AND done=0 "
+        " ORDER BY sort_order LIMIT 1) as current_stage, "
+        # 案件清單卡片進度徽章用（視覺化改版，2026-08-24）：階段總數／完成數／逾期數。
+        "(SELECT COUNT(*) FROM case_stages WHERE quote_no=quotations.quote_no) as stage_total, "
+        "(SELECT COUNT(*) FROM case_stages WHERE quote_no=quotations.quote_no AND done=1) as stage_done, "
+        "(SELECT COUNT(*) FROM case_stages WHERE quote_no=quotations.quote_no AND done=0 "
+        " AND due_date != '' AND due_date < ?) as stage_overdue"
     )
+    # select_params 只服務上面 SELECT 子句裡的相關子查詢（stage_overdue 的 today），跟
+    # where_sql 的 params 分開放——SELECT 子句在 SQL 字串裡排在 WHERE 之前，它的 ? 佔位
+    # 符必須排在 params 前面；但下面的 COUNT 查詢是另一支獨立 SQL，沒有這個子查詢，不吃
+    # select_params，兩者共用一個 list 會讓 COUNT 查詢的 ? 數量對不上而 500。
+    select_params = [today]
+    # where_sql 獨立累積，不再用字串搜尋從完整 SQL 裡「切」出 WHERE 片段——上面
+    # SELECT 子句裡的相關子查詢自己就帶了 " AND"/" ORDER BY"，字串搜尋版的作法
+    # 會切到子查詢內部而不是真正的外層 WHERE，導致 COUNT 查詢直接用了不存在的欄位
+    # 名稱（2026-08-23 Phase 5 上線後、下一次改動時發現並修正的 bug，過程中造成
+    # /api/quotations 短暫 500）。
+    where_sql = ""
     params = []
     if user["role"] not in ("superadmin", "admin"):
-        sql += " AND (sales_person_id=? OR (sales_person_id IS NULL AND sales_person=?))"
-        params.extend([user["id"], user["display_name"]])
+        frag, fparams = _visible_case_filter_sql(user)
+        where_sql += frag
+        params.extend(fparams)
     if status:
-        sql += " AND status=?"; params.append(status)
+        where_sql += " AND status=?"; params.append(status)
     if customer:
-        sql += " AND customer_name LIKE ?"; params.append(f"%{customer}%")
+        where_sql += " AND customer_name LIKE ?"; params.append(f"%{customer}%")
     if month:
-        sql += " AND quote_no LIKE ?"; params.append(f"MQ-{month}%")
+        where_sql += " AND quote_no LIKE ?"; params.append(f"MQ-{month}%")
     if deal_tag:
         tags = [t.strip() for t in deal_tag.split(",")]
-        sql += f" AND {SQL_DEAL_TAG} IN (" + ",".join("?" * len(tags)) + ")"
+        where_sql += f" AND {SQL_DEAL_TAG} IN (" + ",".join("?" * len(tags)) + ")"
         params.extend(tags)
-    sql += " ORDER BY id DESC LIMIT ? OFFSET ?"
-    params += [limit, offset]
-    rows  = conn.execute(sql, params).fetchall()
+    sql = f"SELECT {select_cols} FROM quotations WHERE 1=1{where_sql} ORDER BY id DESC LIMIT ? OFFSET ?"
+    rows  = conn.execute(sql, select_params + params + [limit, offset]).fetchall()
     count = conn.execute(
-        "SELECT COUNT(*) FROM quotations WHERE 1=1" + sql[sql.find(" AND"):sql.find(" ORDER")],
-        params[:-2]
-    ).fetchone()[0] if params[:-2] else conn.execute("SELECT COUNT(*) FROM quotations").fetchone()[0]
+        "SELECT COUNT(*) FROM quotations WHERE 1=1" + where_sql, params
+    ).fetchone()[0]
     conn.close()
     items = []
     for r in rows:
         row = dict(r)
         eh_json     = row.pop("edit_history_json", None)
-        stages_json = row.pop("stages_json", None)
         edit_last = None
         if eh_json:
             try:
@@ -229,36 +632,437 @@ def list_quotations(
             except Exception:
                 pass
         row["edit_last"] = edit_last
-        current_stage = None
-        if stages_json:
-            try:
-                for s in json.loads(stages_json):
-                    if not s.get("done"):
-                        current_stage = s.get("label") or s.get("name")
-                        break
-            except Exception:
-                pass
-        row["current_stage"] = current_stage
         items.append(row)
     return {"total": count, "items": items}
 
 
+@router.get("/api/quotations/stage-board")
+def stage_board(department_id: Optional[int] = None, authorization: str = Header(None)):
+    """攤平所有已成案案件的執行進度階段（quotations.data_json.caseRecord.stages），
+    每個「案件×階段」回傳一筆，供跨案看板/時間軸使用（案件跨案視覺化，2026-08-23）。
+    查詢邏輯比照 daily_tasks.py::_check_case_stage_deadline() 的既有查詢，唯讀，
+    不觸發任何通知。另外回傳 caseLifecycle（依 quoteNo）供跨案時間軸畫出「業務開發→
+    報價單成立→案件成立」前置歷程（2026-08-23e）——不重複塞進每個 stage item，
+    跟 items 平行回傳一份。
+
+    department_id（2026-08-28 新增）：比照 dashboard.py 既有慣例，依案件負責業務員
+    （q.sales_person_id）所屬部門篩選——沒有回填 sales_person_id 的舊案件會被篩掉，
+    這點跟 dashboard.py 的既有落差一致，非本次新增的缺陷。"""
+    user = _require_user(authorization)
+    conn = get_db()
+    dn_map = {
+        r["username"]: (r["display_name"] or r["username"])
+        for r in conn.execute("SELECT username, display_name FROM users").fetchall()
+    }
+    # Phase 5（2026-08-23）：改成直接 JOIN case_stages 表，取代撈整包 caseRecord.stages
+    # JSON 再用 Python 迴圈攤平——正規化橋樑（3a/3b/v52）已保證這張表對每個有執行進度
+    # 的案件都是權威、完整的來源。JOIN 天生就是「每個案件 x 每個階段」一列，跟原本
+    # Python 攤平的結果結構完全對等；只有真的有 case_stages 列的案件才會出現，跟原本
+    # `json_extract(...) IS NOT NULL` 的篩選語意一致。
+    sql = (
+        f"SELECT q.quote_no, q.customer_name, q.project_name, q.sales_person, q.sales_person_id, "
+        f"q.created_at, cs.id AS stage_id, cs.label, cs.start_date, cs.due_date, cs.done_at, cs.done, "
+        f"cs.depends_on, cs.assigned_to, "
+        # 跨案時間軸區間顯示用（2026-08-24）：階段的「前往日期」記錄範圍——這是
+        # 施工類階段實際會累積多筆日期的地方，用最早～最晚前往日期當作長條的
+        # 起訖區間，比單一個完成日期更能呈現真實施作期間。
+        f"(SELECT MIN(visit_date) FROM case_stage_visits WHERE stage_id=cs.id AND visit_date != '') AS visit_start, "
+        f"(SELECT MAX(visit_date) FROM case_stage_visits WHERE stage_id=cs.id AND visit_date != '') AS visit_end "
+        f"FROM quotations q JOIN case_stages cs ON cs.quote_no = q.quote_no "
+        f"WHERE {SQL_DEAL_TAG} = '已成案'"
+    )
+    params = []
+    if user["role"] not in ("superadmin", "admin"):
+        frag, fparams = _visible_case_filter_sql(user, prefix="q.")
+        sql += frag
+        params.extend(fparams)
+    sql += " ORDER BY q.quote_no, cs.sort_order"
+    rows = conn.execute(sql, params).fetchall()
+
+    if department_id:
+        dept_by_user = {r["id"]: r["department_id"] for r in conn.execute("SELECT id, department_id FROM users").fetchall()}
+        rows = [r for r in rows if r["sales_person_id"] and dept_by_user.get(r["sales_person_id"]) == department_id]
+
+    dev_map = {
+        r["converted_quote_no"]: {
+            "devStart": (r["created_at"] or "")[:10] or None,
+            "devEnd":   (r["updated_at"] or "")[:10] or None,
+        }
+        for r in conn.execute(
+            "SELECT converted_quote_no, created_at, updated_at FROM dev_cases "
+            "WHERE converted_quote_no IS NOT NULL AND converted_quote_no != ''"
+        ).fetchall()
+    }
+    case_started_map = {
+        r["quote_no"]: r["became_case_at"][:10]
+        for r in conn.execute(
+            "SELECT target_id AS quote_no, MIN(at) AS became_case_at FROM audit_log "
+            "WHERE action='deal_tag.change' AND json_extract(detail,'$.to')='已成案' "
+            "GROUP BY target_id"
+        ).fetchall()
+    }
+    conn.close()
+
+    case_lifecycle = {}
+    for row in rows:
+        qno = row["quote_no"]
+        dev = dev_map.get(qno) or {}
+        case_lifecycle[qno] = {
+            "devStart":       dev.get("devStart"),
+            "devEnd":         dev.get("devEnd"),
+            "quoteCreatedAt": (row["created_at"] or "")[:10] or None,
+            "caseStartedAt":  case_started_map.get(qno),
+        }
+
+    today = datetime.now().strftime("%Y-%m-%d")
+    items = []
+    for row in rows:
+        due = row["due_date"] or ""
+        done = bool(row["done"])
+        overdue = (not done) and bool(due) and due < today
+        assigned = [u for u in json.loads(row["assigned_to"] or "[]") if u]
+        items.append({
+            "quoteNo":       row["quote_no"],
+            "customerName":  row["customer_name"] or "",
+            "projectName":   row["project_name"] or "",
+            "salesPerson":   row["sales_person"] or "",
+            "stageId":       row["stage_id"],
+            "stageLabel":    row["label"] or "（未命名階段）",
+            "startDate":     row["start_date"] or "",
+            "dueDate":       due,
+            "doneAt":        row["done_at"] or "",
+            "visitStart":    row["visit_start"] or "",
+            "visitEnd":      row["visit_end"] or "",
+            "done":          done,
+            "overdue":       overdue,
+            "dependsOn":     json.loads(row["depends_on"] or "[]"),
+            "assignedTo":    assigned,
+            "assignedNames": [dn_map.get(u, u) for u in assigned],
+        })
+    return {"items": items, "caseLifecycle": case_lifecycle}
+
+
+@router.post("/api/quotations/case-activity")
+def case_activity(body: dict = Body(...), authorization: str = Header(None)):
+    """Return latest case_updates/work_logs/daily_task_completions activity time per quote_no
+    (for案件管理 list's「有新動態」unread indicator; these three sources don't touch quotations.updated_at)."""
+    user = _require_user(authorization)
+    quote_nos = [q for q in (body.get("quote_nos") or []) if q]
+    if not quote_nos:
+        return {}
+    conn = get_db()
+    try:
+        if user["role"] not in ("superadmin", "admin"):
+            ph = ",".join("?" * len(quote_nos))
+            frag, fparams = _visible_case_filter_sql(user)
+            allowed = conn.execute(
+                f"SELECT quote_no FROM quotations WHERE quote_no IN ({ph}){frag}",
+                quote_nos + fparams,
+            ).fetchall()
+            quote_nos = [r["quote_no"] for r in allowed]
+            if not quote_nos:
+                return {}
+        ph = ",".join("?" * len(quote_nos))
+        rows = conn.execute(
+            f"""
+            SELECT quote_no, MAX(ts) as latest FROM (
+                SELECT quote_no, created_at as ts FROM case_updates WHERE quote_no IN ({ph})
+                UNION ALL
+                SELECT case_no as quote_no, created_at as ts FROM work_logs WHERE case_no IN ({ph})
+                UNION ALL
+                SELECT dt.case_no as quote_no, dtc.completed_at as ts
+                FROM daily_task_completions dtc JOIN daily_tasks dt ON dt.id = dtc.task_id
+                WHERE dt.case_no IN ({ph}) AND dtc.completed_at != ''
+            )
+            GROUP BY quote_no
+            """,
+            quote_nos + quote_nos + quote_nos,
+        ).fetchall()
+        return {r["quote_no"]: r["latest"] for r in rows}
+    finally:
+        conn.close()
+
+
+@router.get("/api/quotations/last-received-bank-account")
+def get_last_received_bank_account(customerName: Optional[str] = None, authorization: str = Header(None)):
+    """查這個客戶上一次「標記已收款」用的銀行帳戶，供出納分頁標記收款 Modal
+    開啟時預帶值。見 accounting_export.py 檔頭「標記已付款/已收款時的銀行帳戶
+    預設值」說明。⚠️ 必須在 GET /api/quotations/{quote_no} 之前註冊，否則
+    "last-received-bank-account" 會被當成 quote_no 吃掉。
+
+    案件沒有正規化的客戶 id（customerId 只在報價單建立時從客戶下拉挑選才會
+    有值，很多舊案件是純打字輸入客戶名稱），這裡直接用 quotations 熱路徑欄位
+    customer_name 比對——跟其他所有「依客戶彙總」的既有邏輯（如 §7 帳齡分析／
+    客戶歷史）用的是同一個欄位，口徑一致。全表掃描 data_json 找收款品項，比照
+    reports.py::_collect_tax_invoices() 同一套既有做法，這個資料量級可接受。"""
+    _require_user(authorization)
+    if not customerName:
+        return {"name": "", "acctCode": ""}
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT data_json FROM quotations WHERE customer_name=?", (customerName,)
+    ).fetchall()
+    conn.close()
+    best_at, best_name, best_code = "", "", ""
+    for row in rows:
+        try:
+            data = json.loads(row["data_json"] or "{}")
+        except Exception:
+            continue
+        items = ((data.get("caseRecord") or {}).get("payment") or {}).get("items") or []
+        for it in items:
+            code = it.get("bankAccountCode") or ""
+            if not (it.get("received") and code):
+                continue
+            at = it.get("receivedAt") or ""
+            if at > best_at:
+                best_at, best_name, best_code = at, it.get("bankAccountName") or "", code
+    return {"name": best_name, "acctCode": best_code}
+
+
+# ⚠️ 這支必須定義在 @router.get("/api/quotations/{quote_no}") **之前**——
+# FastAPI 依定義順序比對，排在後面的話 GET /api/quotations/gate-matrix 會先
+# 命中 {quote_no} 這條、被當成一個叫 gate-matrix 的單號而回 404（看起來就像
+# 端點沒生效）。上面的 stage-board / last-received-bank-account 也是同樣理由
+# 排在這裡。
+@router.get("/api/quotations/gate-matrix")
+def gate_matrix(authorization: str = Header(None)):
+    """已成案／已結案案件的「完結案五關卡」一次攤平回傳，供案件管理的關卡矩陣使用
+    （案件管理視覺化改版，2026-09-14，見 docs/module-viz-mockup.html §02）。
+
+    五個關卡的判定**完全來自 _case_close_gates()**，跟 update_deal_tag() 擋下完結案
+    用的是同一份程式碼——矩陣說「5/5 可結案」就等於「現在按下去不會被 400 擋掉」。
+    這件事是這支端點存在的唯一理由：那五個條件散在五個頁籤裡，跨案件比較等於開五次。
+
+    順便帶上階段到期資訊（逾期數／下一個到期日），這樣矩陣右側那兩欄不必再打一次
+    /api/quotations/stage-board。權限篩選比照該端點，沿用 _visible_case_filter_sql()。
+
+    唯讀，不觸發任何通知。**效能**：每件案件約 15 次 SQLite 查詢（六張單據表各兩次
+    ＋階段＋額外支出兩次），開發機 26 件實測整支約 40ms；本機 SQLite 讀取是微秒級，
+    真正會痛的是前端把 500 筆整包拉回去篩（見 QUICK.md §12 第八輪的檢索骨架那段），
+    不是這裡。案件量長到數百件以上時再考慮改成 GROUP BY 批次預取。
+    """
+    user = _require_user(authorization)
+    conn = get_db()
+    today = datetime.now().strftime("%Y-%m-%d")
+    sql = (
+        f"SELECT quote_no, customer_name, project_name, sales_person, total, "
+        f"data_json, {SQL_DEAL_TAG} as deal_tag "
+        f"FROM quotations WHERE {SQL_DEAL_TAG} IN ('已成案', '已結案')"
+    )
+    params: list = []
+    if user["role"] not in ("superadmin", "admin"):
+        frag, fparams = _visible_case_filter_sql(user)
+        sql += frag
+        params.extend(fparams)
+    sql += " ORDER BY quote_no DESC"
+    rows = conn.execute(sql, params).fetchall()
+
+    items = []
+    for r in rows:
+        try:
+            d = json.loads(r["data_json"] or "{}")
+        except Exception:
+            d = {}
+        gates = _case_close_gates(conn, r["quote_no"], d)
+        blocked = [g for g in gates if g["state"] == "blocked"]
+
+        # 階段到期：逾期數與下一個未完成階段的到期日。用同一次查詢取回，
+        # 呼叫端就不必為了右邊兩欄再打一次 stage-board。
+        st = conn.execute(
+            "SELECT "
+            "  SUM(CASE WHEN done=0 AND due_date != '' AND due_date < ? THEN 1 ELSE 0 END) overdue, "
+            "  MIN(CASE WHEN done=0 AND due_date != '' THEN due_date END) next_due "
+            "FROM case_stages WHERE quote_no=?",
+            (today, r["quote_no"])
+        ).fetchone()
+        next_due = st["next_due"] or None
+        next_label = None
+        if next_due:
+            nxt = conn.execute(
+                "SELECT label FROM case_stages WHERE quote_no=? AND done=0 AND due_date=? "
+                "ORDER BY sort_order LIMIT 1", (r["quote_no"], next_due)
+            ).fetchone()
+            next_label = (nxt["label"] if nxt else "") or ""
+
+        items.append({
+            "quoteNo":      r["quote_no"],
+            "customerName": r["customer_name"] or "",
+            "projectName":  r["project_name"] or "",
+            "salesPerson":  r["sales_person"] or "",
+            "total":        r["total"] or 0,
+            "dealTag":      r["deal_tag"] or "",
+            "gates":        gates,
+            # readyCount 刻意只數 ok，不把 na 算進去：na 是「這件案子沒有這一關」，
+            # 併進去會讓一件什麼都沒建的空案件顯示成 5/5，那是最危險的誤導。
+            # canClose 才是「按下去不會被擋」的那個判斷（＝沒有任何 blocked）。
+            "readyCount":   sum(1 for g in gates if g["state"] == "ok"),
+            "naCount":      sum(1 for g in gates if g["state"] == "na"),
+            "blockedCount": len(blocked),
+            "canClose":     not blocked,
+            "blockedLabels": [g["label"] for g in blocked],
+            "stageOverdue": st["overdue"] or 0,
+            "nextDue":      next_due,
+            "nextDueLabel": next_label,
+        })
+    conn.close()
+    return {"items": items, "today": today}
+
+
 @router.get("/api/quotations/{quote_no}")
 def get_quotation(quote_no: str, authorization: str = Header(None)):
-    _require_user(authorization)
+    user = _require_user(authorization)
     conn = get_db()
     row  = conn.execute("SELECT * FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
     conn.close()
     if not row:
         raise HTTPException(404, f"報價單 {quote_no} 不存在")
+    _check_quotation_owner(row, user)
     result = dict(row)
     result["data"] = json.loads(result.pop("data_json", "{}"))
     result["data"]["status"] = result["status"]   # DB column is authoritative
+    result["signed_log"] = json.loads(result.get("signed_log") or "[]")
+    result["signed_files"] = json.loads(result.pop("signed_files_json", None) or "[]")
+    result["assigned_user_ids"] = json.loads(result.get("assigned_user_ids") or "[]")
     return result
+
+
+@router.patch("/api/quotations/{quote_no}/assigned-users")
+def update_case_assigned_users(quote_no: str, body: dict = Body(...), authorization: str = Header(None)):
+    """案件成員分配（2026-08-26 專案管理併入案件管理，取代原
+    PATCH /api/projects/{id}/assigned-users），比照原端點僅 admin+ 可設定。"""
+    user = _require_user(authorization)
+    if user['role'] not in ('superadmin', 'admin'):
+        raise HTTPException(403, "僅管理員可設定成員分配")
+    user_ids = [int(uid) for uid in (body.get('user_ids') or []) if uid]
+    conn = get_db()
+    _guard_case(conn, quote_no, user, allow_module="case_manage")
+    row = conn.execute("SELECT quote_no FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+    if not row:
+        conn.close(); raise HTTPException(404, "案件不存在")
+    conn.execute("UPDATE quotations SET assigned_user_ids=? WHERE quote_no=?",
+                 (json.dumps(user_ids, ensure_ascii=False), quote_no))
+    conn.commit()
+    conn.close()
+    _audit(_tok(authorization), 'case.assign', 'quotation', quote_no, f"分配 {len(user_ids)} 位成員")
+    notify_module_activity("案件管理", "設定成員分配", user.get("display_name") or user["username"],
+                            f"{quote_no}（{len(user_ids)} 位成員）", "case-management.html")
+    return {"ok": True}
+
+
+@router.post("/api/quotations/{quote_no}/signed-toggle")
+def toggle_quotation_signed(quote_no: str, body: dict = Body(...), authorization: str = Header(None)):
+    """報價單客戶回簽（2026-08-24 新增，比照 shipping_notes.py 既有的
+    signed-toggle 端點邏輯，唯一差別是報價單的終態是「已送出」而非
+    出貨單／開票申請憑據的「已核准」）。"""
+    user = _require_user(authorization)
+    if user["role"] not in ("superadmin", "admin"):
+        raise HTTPException(403, "需要管理員權限")
+    action = (body or {}).get("action", "")
+    note   = (body or {}).get("note", "")
+    if action not in ("sign", "unsign"):
+        raise HTTPException(400, "action 必須為 sign 或 unsign")
+    conn = get_db()
+    row = conn.execute(
+        "SELECT status, is_signed, signed_log FROM quotations WHERE quote_no=?", (quote_no,)
+    ).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(404, "報價單不存在")
+    if row["status"] != "已送出":
+        conn.close()
+        raise HTTPException(409, "僅已送出狀態可標記回簽")
+    is_signed = bool(row["is_signed"])
+    if action == "sign" and is_signed:
+        conn.close()
+        raise HTTPException(409, "已回簽，無需重複標記")
+    if action == "unsign" and not is_signed:
+        conn.close()
+        raise HTTPException(409, "尚未回簽")
+
+    now = datetime.now().isoformat()
+    log = json.loads(row["signed_log"] or "[]")
+    log.append({
+        "at":          now,
+        "username":    user["username"],
+        "userDisplay": user.get("display_name") or user["username"],
+        "action":      "signed" if action == "sign" else "unsigned",
+        "note":        note,
+    })
+    if action == "sign":
+        conn.execute(
+            "UPDATE quotations SET is_signed=1, signed_by=?, signed_at=?, signed_log=?, updated_at=? "
+            "WHERE quote_no=?",
+            (user.get("display_name") or user["username"], now, json.dumps(log, ensure_ascii=False), now, quote_no)
+        )
+    else:
+        conn.execute(
+            "UPDATE quotations SET is_signed=0, signed_by='', signed_at='', signed_log=?, updated_at=? "
+            "WHERE quote_no=?",
+            (json.dumps(log, ensure_ascii=False), now, quote_no)
+        )
+    conn.commit()
+    conn.close()
+    _audit(_tok(authorization), f"quotation.{action}", "quotation", quote_no, quote_no, {"note": note})
+    notify_module_activity("報價單", "已回簽" if action == "sign" else "取消回簽",
+                            user.get("display_name") or user["username"], quote_no, "quotation-form.html",
+                            detail=note or "")
+    return {"ok": True, "is_signed": action == "sign", "signed_log": log}
+
+
+@router.post("/api/quotations/{quote_no}/signed-files", status_code=201)
+async def upload_quotation_signed_files(quote_no: str, files: List[UploadFile] = File(...),
+                                        authorization: str = Header(None)):
+    """報價單回簽附件上傳（多檔）——任何登入使用者皆可補傳。"""
+    user = _require_user(authorization)
+    conn = get_db()
+    _guard_case(conn, quote_no, user)
+    row = conn.execute("SELECT signed_files_json FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(404, "報價單不存在")
+    existing = json.loads(row["signed_files_json"] or "[]")
+    new_files = await save_document_files("quotations", quote_no, files, user.get("display_name") or user["username"])
+    all_files = existing + new_files
+    now = datetime.now().isoformat()
+    conn.execute("UPDATE quotations SET signed_files_json=?, updated_at=? WHERE quote_no=?",
+                 (json.dumps(all_files, ensure_ascii=False), now, quote_no))
+    conn.commit()
+    conn.close()
+    _audit(_tok(authorization), "quotation.upload_signed_files", "quotation", quote_no,
+           f"{quote_no}（{len(new_files)} 個檔案）")
+    return {"ok": True, "added": len(new_files), "files": new_files}
+
+
+@router.delete("/api/quotations/{quote_no}/signed-files/{file_id}")
+def delete_quotation_signed_file(quote_no: str, file_id: str, authorization: str = Header(None)):
+    user = _require_user(authorization)
+    conn = get_db()
+    _guard_case(conn, quote_no, user)
+    row = conn.execute("SELECT signed_files_json FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(404, "報價單不存在")
+    existing = json.loads(row["signed_files_json"] or "[]")
+    remaining = delete_document_file("quotations", quote_no, existing, file_id)
+    now = datetime.now().isoformat()
+    conn.execute("UPDATE quotations SET signed_files_json=?, updated_at=? WHERE quote_no=?",
+                 (json.dumps(remaining, ensure_ascii=False), now, quote_no))
+    conn.commit()
+    conn.close()
+    _audit(_tok(authorization), "quotation.delete_signed_file", "quotation", quote_no, quote_no)
+    return {"ok": True}
 
 
 @router.post("/api/quotations", status_code=201)
 def create_quotation(body: QuotationIn, authorization: str = Header(None)):
+    # 2026-09-10 稽核發現：本檔 45 支寫入端點裡，只有這一支沒有 _require_user()，
+    # 而且「誰建立的」是讀 body.created_by（client 送什麼就存什麼／通知什麼），
+    # 跟 customers.py／shipping_notes.py 一律從 session 取的慣例不一致。
+    # middleware 已保證有有效 session，所以缺的不是登入檢查而是「拿到真正的身分」
+    # ——沒有它，建立者與活動通知的操作者都可以被任意冒名。
+    # body.created_by 欄位保留不刪（前端仍會送），但一律以 session 為準。
+    user = _require_user(authorization)
     q   = body.data
     now = datetime.now().isoformat()
     month = datetime.now().strftime("%Y%m")
@@ -279,7 +1083,18 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
     )
 
     # Use provisional number from client if provided; otherwise auto-assign
-    qno = body.quote_no or q.get("quoteNo") or _peek_next_no(conn, month)
+    # 2026-09-10：client 送來的單號一律要通過格式驗證才採用，否則視同沒送、由後端派號。
+    # 前端曾經在取不到號時送出佔位字串（`copyToNew()` 的 `MQ-YYYYMM-???`、舊版
+    # `saveDraft()` 的寫死 001），`MQ-202609-???` 這種字串不會跟任何既有單號衝突，
+    # 所以 INSERT 會成功，接著下面解析序號的 int() 就炸成未捕捉的 ValueError → 500，
+    # 使用者只看到「儲存失敗」，複製的內容也救不回來（模板在頁面載入時就清掉了）。
+    # 前端那兩處已分別修掉，但「後端才是單號的權威」這件事要在這裡守住——
+    # 不管哪個 client、哪個版本送什麼過來，格式不對就由後端自己派。
+    _client_no = (body.quote_no or q.get("quoteNo") or "").strip()
+    if _client_no and not _QUOTE_NO_RE.match(_client_no):
+        logger.warning("create_quotation 收到格式不合的單號 %r，改由後端派號", _client_no)
+        _client_no = ""
+    qno = _client_no or _peek_next_no(conn, month)
 
     def _do_insert(no: str):
         q["quoteNo"] = no
@@ -297,7 +1112,7 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
             tot.get("directMarginPct", 0), tot.get("netMarginPct", 0),
             q.get("salesPerson"), sp_id, q.get("quoteDate"), q.get("validDays", 30),
             json.dumps(q, ensure_ascii=False),
-            now, now, body.created_by, deal_tag, settle_status,
+            now, now, user["username"], deal_tag, settle_status,
         ))
 
     try:
@@ -311,28 +1126,110 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
             conn.close()
             raise HTTPException(409, "報價單號衝突，請重試")
 
-    # Reserve in quote_seq so future peeks don't repeat this number
-    seq_no = int(qno.split("-")[-1]) if qno.count("-") == 2 else 0
+    # Reserve in quote_seq so future peeks don't repeat this number.
+    # 這裡的 qno 已經過 _QUOTE_NO_RE 驗證（或由 _peek_next_no 產生），序號一定是
+    # 三位數字；仍用 try 兜底，因為「解析單號」不值得讓整支建立端點掛掉。
+    try:
+        seq_no = int(qno.split("-")[-1]) if qno.count("-") == 2 else 0
+    except ValueError:
+        logger.warning("create_quotation 無法從 %r 解析序號，略過 quote_seq 更新", qno)
+        seq_no = 0
     if seq_no:
         conn.execute(
             "INSERT INTO quote_seq (month, seq) VALUES (?, ?) "
             "ON CONFLICT(month) DO UPDATE SET seq=MAX(seq, excluded.seq)",
             (month, seq_no)
         )
+    # caseRecord.stages 正規化 Phase 3a（2026-08-23）：新建報價單也可能挾帶
+    # caseRecord.stages（例如複製既有案件、或 quotation-form.html 自己的
+    # ensureCaseRecord() 產生的階段），同一 conn 內、commit 前一併同步進新表，
+    # 邏輯與 update_quotation()/update_case_record() 完全一致。
+    cr = q.get("caseRecord")
+    if isinstance(cr, dict) and isinstance(cr.get("stages"), list):
+        _sync_json_stages_to_table(conn, qno, cr["stages"])
+        # 3b 收尾追加修正（2026-08-23）：合併後有些階段可能拿到新的真實 id，立刻
+        # 寫回 data_json，前端下一次讀到的 id 才會跟 case_stages 表一致。
+        _sync_stages_to_json(conn, qno, updated_at=now)
     conn.commit()
     conn.close()
+
+    # Direct create+submit (new record sent straight to 待審核 with no draft step first)
+    # never goes through update_quotation()'s PUT path, so it needs the same tier-building
+    # + notification logic run here once the final quote_no is known. Must run AFTER the
+    # INSERT above is committed and its connection closed: _build_approval_tiers_and_notify()
+    # calls _notify(), which opens its own separate connection to write+commit — doing that
+    # while this function's own `conn` still held an uncommitted write transaction open
+    # self-deadlocked SQLite's single writer (each connection blocks the other until
+    # busy_timeout, silently dropping the notification) during pre-deploy testing.
+    if body.status == "待審核":
+        appr = q.get("approval") or {}
+        try:
+            appr = _build_approval_tiers_and_notify(q, appr, qno, is_new_submission=True)
+        except Exception as e:
+            # 2026-09-10：這裡原本只捕捉 UnresolvedManagerError 轉成 400 就直接拋，
+            # 但上面的 INSERT 早就 commit 了——使用者看到「送出審核失敗」，資料庫卻
+            # 留下一張 status='待審核'、完全沒有簽核層級的孤兒單：它會出現在清單裡、
+            # 永遠簽不掉，而使用者以為沒建成、再按一次就又多一張（單號還會往後跳）。
+            # 已用可控實驗重現（申請人未歸屬部門時送審）。
+            #
+            # 建不出簽核流程就不該留下這張單：補償性刪除剛剛建立的那筆再往外拋。
+            # 刪除範圍嚴格限定在本次請求剛 INSERT 的 qno，不會動到任何既有資料。
+            try:
+                _cleanup = get_db()
+                _cleanup.execute("DELETE FROM quotations WHERE quote_no=?", (qno,))
+                _cleanup.execute("DELETE FROM case_stages WHERE quote_no=?", (qno,))
+                # 序號也要跟著收回，否則送審失敗幾次之後，第一張成功的單會變成
+                # MQ-YYYYMM-003 之類的，使用者會問「001、002 跑去哪了」。
+                # 不是單純把 seq 減一（併發下會踩到別人剛拿的號），而是依**實際還
+                # 留在資料庫裡的報價單**重算——自我修復，而且最壞情況只是跟同時
+                # 進行中的另一筆撞號，那條路徑本來就有 IntegrityError 重試。
+                _cleanup.execute(
+                    "UPDATE quote_seq SET seq = ("
+                    "  SELECT COALESCE(MAX(CAST(SUBSTR(quote_no, 11, 3) AS INTEGER)), 0)"
+                    "  FROM quotations WHERE quote_no GLOB ? AND LENGTH(quote_no) = 13"
+                    ") WHERE month = ?",
+                    (f"MQ-{month}-???", month)
+                )
+                _cleanup.commit()
+                _cleanup.close()
+                logger.warning("create_quotation 送審失敗，已回收剛建立的 %s：%s", qno, e)
+            except Exception:
+                # 連回收都失敗才是真的留下孤兒，這種情況要看得到
+                logger.exception("create_quotation 送審失敗且回收 %s 也失敗", qno)
+            if isinstance(e, UnresolvedManagerError):
+                raise HTTPException(400, str(e))
+            raise
+        _conn2 = get_db()
+        # 3b 收尾追加修正（2026-08-23）：不能直接 json.dumps(q, ...) 整包覆寫——
+        # q.caseRecord.stages 仍是 client 送來的原始（可能已作廢）id，上面已經把
+        # 正確版本同步進 data_json 了。改成讀回目前資料庫現有的 data_json，只patch
+        # approval 這個欄位，其餘（含剛修正好的 caseRecord.stages）維持不動。
+        _row2 = _conn2.execute("SELECT data_json FROM quotations WHERE quote_no=?", (qno,)).fetchone()
+        _data2 = json.loads(_row2["data_json"] or "{}") if _row2 else dict(q)
+        _data2["approval"] = appr
+        _conn2.execute(
+            "UPDATE quotations SET data_json=? WHERE quote_no=?",
+            (json.dumps(_data2, ensure_ascii=False), qno)
+        )
+        _conn2.commit()
+        _conn2.close()
+
     spawn_bg_thread(_backup_quotation, args=(qno,))
     _audit(_tok(authorization), 'quotation.create', 'quotation', qno, f"{qno}（{q.get('customerName','')}）")
+    notify_module_activity("報價單", "建立", user.get("display_name") or user["username"],
+                            f"{qno}（{q.get('customerName','')}）", "quotations.html")
     return {"quote_no": qno, "created_at": now}
 
 
 @router.put("/api/quotations/{quote_no}")
 def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Header(None)):
+    user = _require_user(authorization)
     q   = body.data
     now = datetime.now().isoformat()
 
     # consume unlock-edit flag before any processing
     is_unlock_edit = bool(q.pop("_isUnlockEdit", False))
+    expected_updated_at = q.pop("_expectedUpdatedAt", None)
 
     new_status = body.status or q.get("status", "草稿")
 
@@ -381,72 +1278,12 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
             _chk.close()
             _old_status = (_old["status"] if _old else "草稿")
             is_new_submission = _old_status not in ("待審核", "簽核中")
-        if not appr.get("tiers") and not appr.get("steps"):
-            flow_setting = _get_setting("approval_flow", {"tiers": []}) or {}
-            active_tiers = _setting_to_active_tiers(flow_setting)
-            logger.warning("approval tiers load — quote=%r is_new=%r flow_tiers=%d active_tiers=%d",
-                           quote_no, is_new_submission, len(flow_setting.get("tiers") or []), len(active_tiers))
-            if active_tiers:
-                appr["tiers"]       = active_tiers
-                appr["currentTier"] = 0
-        else:
-            logger.warning("approval tiers already present — quote=%r tiers_count=%d",
-                           quote_no, len(appr.get("tiers") or appr.get("steps") or []))
-        q["approval"] = appr
-        if is_new_submission:
-            tiers        = _active_tiers(appr)
-            cname        = q.get("customerName") or ""
-            is_revision  = bool(q.get("returnInfo"))
-            if appr.get("isEditApproval"):
-                label = "（解鎖改版）"
-            elif is_revision:
-                label = "（退回改版）"
-            else:
-                label = ""
-            requester = appr.get("requestedBy") or ""
-
-            ct_idx       = appr.get("currentTier", 0)
-            _appr_names  = []   # usernames — for email lookup
-            _appr_labels = []   # display names — for requester confirmation copy
-            if tiers and ct_idx < len(tiers):
-                pending = [a for a in (tiers[ct_idx].get("approvers") or [])
-                           if a.get("status") != "approved"]
-                if ct_idx == 0:
-                    msg = f"報價單 {quote_no}{label}（{cname}）需要您簽核"
-                    for a in pending:
-                        _notify(a["username"], "approval_request", quote_no, quote_no, msg)
-                        _appr_names.append(a["username"])
-                        _appr_labels.append(a.get("displayName") or a["username"])
-                    notify_approval_request(quote_no, cname, _appr_names)
-                else:
-                    msg = (f"報價單 {quote_no}{label}（{cname}）"
-                           f"輪到您簽核（第 {ct_idx + 1} 層 / 共 {len(tiers)} 層）")
-                    for a in pending:
-                        _notify(a["username"], "approval_request", quote_no, quote_no, msg)
-                        _appr_names.append(a["username"])
-                        _appr_labels.append(a.get("displayName") or a["username"])
-                    notify_next_tier(quote_no, cname, ct_idx + 1, len(tiers), _appr_names)
-            elif not tiers:
-                msg = f"報價單 {quote_no}{label}（{cname}）需要您簽核"
-                _conn = get_db()
-                admins = _conn.execute(
-                    "SELECT username FROM users WHERE role='superadmin' AND active=1"
-                ).fetchall()
-                _conn.close()
-                for adm in admins:
-                    if adm["username"] != requester:
-                        _notify(adm["username"], "approval_request", quote_no, quote_no, msg)
-                        _appr_names.append(adm["username"])
-                        _appr_labels.append(adm["username"])
-                notify_approval_request(quote_no, cname, _appr_names)
-
-            # If this is a resubmission after rejection, also send confirmation to requester
-            if is_revision and requester:
-                orig_no = (q.get("returnInfo") or {}).get("originalQuoteNo") or quote_no
-                notify_resubmit_requester(quote_no, orig_no, cname, requester, _appr_labels)
+        try:
+            appr = _build_approval_tiers_and_notify(q, appr, quote_no, is_new_submission)
+        except UnresolvedManagerError as e:
+            raise HTTPException(400, str(e))
 
     tot = q.get("tot", {})
-    deal_tag, settle_status = quote_hot_fields(q)
 
     conn = get_db()
 
@@ -456,17 +1293,42 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
     ).fetchone() if sp_name else None
     sp_id = sp_row["id"] if sp_row else None
 
-    existing = conn.execute("SELECT id, status FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+    existing = conn.execute(
+        "SELECT id, status, deal_tag, settle_status, updated_at, sales_person_id, sales_person "
+        "FROM quotations WHERE quote_no=?", (quote_no,)
+    ).fetchone()
     if not existing:
         conn.close()
         raise HTTPException(404, f"報價單 {quote_no} 不存在")
+    try:
+        _check_quotation_owner(existing, user)
+    except HTTPException:
+        conn.close()
+        raise
     if existing["status"] == "已拒絕":
         conn.close()
         raise HTTPException(403, "已拒絕結案的報價單不可修改")
+    # 樂觀鎖（選填）：草稿階段沒有狀態鎖保護，兩人同時編輯同一張草稿會後寫覆蓋
+    # 前寫且完全沒有提示。自動存檔（autoSave）跟手動存檔共用這支端點，衝突時
+    # 一律回 409，讓呼叫端自行決定要不要提示使用者或重新載入。
+    if expected_updated_at and existing["updated_at"] and expected_updated_at != existing["updated_at"]:
+        conn.close()
+        raise HTTPException(409, "報價單已被其他人更新，請重新載入後再存")
     _LOCKED = ("待審核", "簽核中", "已送出", "已成案", "已結案")
     if existing["status"] in _LOCKED and not is_unlock_edit:
         conn.close()
         raise HTTPException(403, f"報價單狀態為「{existing['status']}」，請透過正式流程操作或解鎖後修改")
+    # dealTag／settlement.status 只能透過各自的專用端點（PATCH /deal-tag、
+    # PATCH /settlement）異動，兩邊都有完整的狀態機檢查（已成案需先簽核完成、
+    # 已成案降級需 admin+、已結案不可逆轉等）。這支端點是編輯報價單「內容」用
+    # 的通用存檔，client 送來的 body 完全可能挾帶跟現況不同的 dealTag/
+    # settlement.status（不論是前端沒清乾淨的舊資料、還是刻意構造的請求），
+    # 若不在這裡攔截，等於讓這支端點繞過另外兩支端點的所有規則。一律強制沿用
+    # 資料庫現有值，忽略 client 送來的異動。
+    deal_tag, settle_status = existing["deal_tag"] or "", existing["settle_status"] or ""
+    q["dealTag"] = deal_tag
+    if isinstance(q.get("settlement"), dict):
+        q["settlement"]["status"] = settle_status
     conn.execute("""
         UPDATE quotations SET
           status=?, customer_name=?, project_name=?,
@@ -483,6 +1345,18 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
         json.dumps(q, ensure_ascii=False), now, deal_tag, settle_status,
         quote_no,
     ))
+    # caseRecord.stages 正規化 Phase 3a（2026-08-23）：quotation-form.html::apiSave()
+    # 走的是這支整包存檔端點，跟 update_case_record() 是完全分開的路徑，一樣可能
+    # 挾帶 caseRecord.stages（例如它自己那份較舊、欄位不全的 ensureCaseRecord()
+    # 產生的階段）。邏輯與 update_case_record() 完全比照：送了 stages 就整批同步
+    # 回 case_stages/case_stage_visits，沒送這個 key 才維持表內現有值不動。
+    cr = q.get("caseRecord")
+    if isinstance(cr, dict) and isinstance(cr.get("stages"), list):
+        _sync_json_stages_to_table(conn, quote_no, cr["stages"])
+        # 3b 收尾追加修正（2026-08-23）：合併後有些階段可能拿到新的真實 id，立刻
+        # 寫回 data_json，前端下一次讀到的 id 才會跟 case_stages 表一致。updated_at
+        # 沿用上面 UPDATE 已經用掉的同一個 now，不產生第二個時間戳，樂觀鎖不受影響。
+        _sync_stages_to_json(conn, quote_no, updated_at=now)
     conn.commit()
     conn.close()
     spawn_bg_thread(_backup_quotation, args=(quote_no,))
@@ -542,6 +1416,8 @@ def update_status(quote_no: str, body: QuotationStatusUpdate, authorization: str
     action_map = {'待審核': 'quotation.submit', '已送出': 'quotation.approve'}
     action = action_map.get(body.status, 'quotation.status_change')
     _audit(_tok(authorization), action, 'quotation', quote_no, f"{quote_no}（{cname}）", {'status': body.status})
+    notify_module_activity("報價單", f"狀態變更為「{body.status}」", user.get("display_name") or user["username"],
+                            f"{quote_no}（{cname}）", "quotations.html")
     if body.status == '已送出':
         try:
             actor_u = _require_user(authorization)
@@ -585,7 +1461,209 @@ def recall_quotation(quote_no: str, authorization: str = Header(None)):
     conn.close()
     _audit(_tok(authorization), "quotation.recall", "quotation", quote_no,
            f"{quote_no}（{cname}）已由申請人收回草稿")
+    notify_module_activity("報價單", "收回草稿", user.get("display_name") or user["username"],
+                            f"{quote_no}（{cname}）", "quotations.html")
     return {"quote_no": quote_no, "status": "草稿"}
+
+
+# ── 完結案五關卡（2026-09-14 重構）──────────────────────────────────────
+# 原本只有 _case_close_block_reasons() 回傳一串字串，夠用來擋結案，但畫不出
+# 「哪一關過了、過到什麼程度」的矩陣（案件管理視覺化改版，見
+# docs/module-viz-mockup.html §02）。
+#
+# **刻意不另外寫一份給矩陣用的判定**：那五個條件是整套系統裡最容易悄悄漂移的
+# 東西（③的清單就漏過一次「完工單」，見下方註解），兩份實作遲早會對不上，
+# 而且對不上的症狀是「矩陣說可以結案、按下去被 400 擋掉」這種最難查的那種。
+# 所以改成：_case_close_gates() 是唯一的判定，_case_close_block_reasons()
+# 從它的結果推出 reasons，對既有呼叫端（update_deal_tag）的行為完全不變。
+#
+# 關卡狀態三種：
+#   ok      已達成
+#   blocked 未達成 → 會擋下完結案
+#   na      不適用（沒有階段／沒有款項／沒有精算資料的舊案件）。
+#           **na 不是 blocked**——舊案件不該因為一個後來才有的欄位而永遠結不了案，
+#           這是①②④原本就有的語意，矩陣上必須畫成空心灰而不是紅燈。
+
+_CLOSE_DOC_TABLES = [
+    ("報價單",         "quotations"),
+    ("承攬商匯款申請",  "contractor_payment_vouchers"),
+    ("開票申請憑據",    "invoice_vouchers"),
+    ("出貨單",         "shipping_notes"),
+    ("請款單",         "payment_requests"),
+    # 2026-09-13：補上「完工單」——它是 DB v77（2026-09-12）才有的模組，當初這份
+    # 清單沒有跟著加，等於完工單還在簽核中也結得了案。
+    ("完工單",         "completion_notes"),
+]
+
+
+def _case_close_gates(conn, quote_no: str, d: dict) -> list:
+    """完結案前置條件，回傳五個關卡的結構化狀態（順序＝結案檢查順序）。
+
+    每個關卡：{key, label, state, value, ratio, reason, pendingUsernames}
+      value  給人看的短字串（「7/9」「3/5 期」「已完結」）
+      ratio  0..1，畫進度條用；na 時為 None
+      reason state=='blocked' 時的擋下理由，直接就是原本 reasons 的那一句
+    """
+    gates = []
+
+    # ① 執行管理進度 100%（沒有任何階段視為「無需檢查」，不算未達成）
+    row = conn.execute(
+        "SELECT COUNT(*) total, SUM(CASE WHEN done=1 THEN 1 ELSE 0 END) done "
+        "FROM case_stages WHERE quote_no=?", (quote_no,)
+    ).fetchone()
+    total = row["total"] or 0
+    done = row["done"] or 0
+    if total == 0:
+        gates.append({"key": "progress", "label": "進度", "state": "na",
+                      "value": "無階段", "ratio": None, "reason": None,
+                      "pendingUsernames": []})
+    else:
+        blocked = done < total
+        gates.append({
+            "key": "progress", "label": "進度",
+            "state": "blocked" if blocked else "ok",
+            "value": f"{done}/{total}", "ratio": done / total,
+            "reason": f"執行管理進度尚未 100%（{done}/{total}）" if blocked else None,
+            "pendingUsernames": [],
+        })
+
+    # ② 款項明細全部收齊（沒有任何期別視為「無需檢查」）
+    items = ((d.get("caseRecord") or {}).get("payment") or {}).get("items") or []
+    if not items:
+        gates.append({"key": "payment", "label": "收款", "state": "na",
+                      "value": "無款項", "ratio": None, "reason": None,
+                      "pendingUsernames": []})
+    else:
+        unpaid = [it for it in items if not it.get("received")]
+        recv = len(items) - len(unpaid)
+        gates.append({
+            "key": "payment", "label": "收款",
+            "state": "blocked" if unpaid else "ok",
+            "value": f"{recv}/{len(items)} 期", "ratio": recv / len(items),
+            "reason": f"款項明細尚有 {len(unpaid)} 期未收齊" if unpaid else None,
+            "pendingUsernames": [],
+        })
+
+    # ③ 相關單據簽核流程全部完成（五種 tiers 簽核機制皆不可處於待審核/簽核中）
+    doc_total = 0
+    doc_pending = 0
+    doc_reasons = []
+    pending_usernames: list = []
+    for label, table in _CLOSE_DOC_TABLES:
+        try:
+            tot = conn.execute(
+                f"SELECT COUNT(*) c FROM {table} WHERE quote_no=?", (quote_no,)
+            ).fetchone()["c"]
+            rows = conn.execute(
+                f"SELECT json_extract(data_json,'$.approval') ap FROM {table} "
+                f"WHERE quote_no=? AND status IN ('待審核','簽核中')",
+                (quote_no,)
+            ).fetchall()
+        except Exception:
+            continue           # 該模組的表還不存在（migration 尚未跑到）
+        doc_total += tot
+        if rows:
+            doc_pending += len(rows)
+            doc_reasons.append(f"{label}尚有 {len(rows)} 筆簽核中")
+            for r in rows:
+                try:
+                    appr = json.loads(r["ap"] or "{}")
+                except Exception:
+                    appr = {}
+                tiers = _active_tiers(appr)
+                ct = _current_tier_idx(appr)
+                if tiers and ct < len(tiers):
+                    for a in (tiers[ct].get("approvers") or []):
+                        if a.get("status") != "approved" and a.get("username"):
+                            pending_usernames.append(a["username"])
+    if doc_total == 0:
+        gates.append({"key": "documents", "label": "單據", "state": "na",
+                      "value": "無單據", "ratio": None, "reason": None,
+                      "pendingUsernames": []})
+    else:
+        signed = doc_total - doc_pending
+        gates.append({
+            "key": "documents", "label": "單據",
+            "state": "blocked" if doc_pending else "ok",
+            "value": f"{signed}/{doc_total}", "ratio": signed / doc_total,
+            # reason 保留逐表拆開的原句（「出貨單尚有 2 筆簽核中」），
+            # 合成一句會讓使用者不知道要去哪個模組找
+            "reason": "；".join(doc_reasons) if doc_reasons else None,
+            "pendingUsernames": list(dict.fromkeys(pending_usernames)),
+        })
+
+    # ④ 成本精算必須已完結（2026-09-13 使用者裁示）。結案之後案件就鎖定了，
+    # 精算還停在草稿等於把一張永遠算不完的帳鎖進去。判斷沿用既有熱路徑欄位口徑
+    # （data_json.settlement.status），完全沒有精算資料的案件視為「無需檢查」。
+    settlement = (d.get("settlement") or {})
+    if not settlement:
+        gates.append({"key": "settlement", "label": "精算", "state": "na",
+                      "value": "未建", "ratio": None, "reason": None,
+                      "pendingUsernames": []})
+    else:
+        finalized = (settlement.get("status") or "") == "finalized"
+        gates.append({
+            "key": "settlement", "label": "精算",
+            "state": "ok" if finalized else "blocked",
+            "value": "已完結" if finalized else "草稿",
+            "ratio": 1.0 if finalized else 0.5,
+            "reason": None if finalized else "成本精算尚未完結",
+            "pendingUsernames": [],
+        })
+
+    # ⑤ 額外支出不可停在送審中（2026-09-13 一併補上）：那是還沒定案的成本，
+    # 結案後才核准會讓已結案案件的成本事後改變。
+    try:
+        xe_total = conn.execute(
+            "SELECT COUNT(*) c FROM case_extra_expenses WHERE quote_no=?", (quote_no,)
+        ).fetchone()["c"]
+        xe_pending = conn.execute(
+            "SELECT COUNT(*) c FROM case_extra_expenses WHERE quote_no=? AND status='待審核'",
+            (quote_no,)
+        ).fetchone()["c"]
+    except Exception:
+        xe_total = xe_pending = None    # 舊環境還沒有這張表（DB v75 之前）
+    if xe_total is None or xe_total == 0:
+        gates.append({"key": "extraExpense", "label": "變更", "state": "na",
+                      "value": "無", "ratio": None, "reason": None,
+                      "pendingUsernames": []})
+    else:
+        gates.append({
+            "key": "extraExpense", "label": "變更",
+            "state": "blocked" if xe_pending else "ok",
+            "value": f"{xe_pending} 送審" if xe_pending else "無送審中",
+            "ratio": 0.0 if xe_pending else 1.0,
+            "reason": f"額外支出尚有 {xe_pending} 筆送審中" if xe_pending else None,
+            "pendingUsernames": [],
+        })
+
+    return gates
+
+
+def _case_close_block_reasons(conn, quote_no: str, d: dict):
+    """完結案前置條件檢查（2026-08-25 使用者提出，見 QUICK.md §11）。
+    回傳 (reasons, pending_usernames)：reasons 非空時應擋下完結案；
+    pending_usernames 是③相關單據簽核人（①②④⑤沒有對應的「簽核人」概念，
+    維持空清單，通知只會落到最高管理員，見 notify_case_close_blocked() docstring）。
+
+    2026-09-14：判定本體搬到 _case_close_gates()，這裡只做投影。
+    ③的 reason 在關卡裡是用「；」把逐表的句子接起來的，這裡拆回獨立項目，
+    維持原本「每個模組一句」的 reasons 形狀。
+
+    ⚠️ **唯一的行為差異是 reasons 的排列順序**（內容與 pending_usernames
+    逐字相同，已用 git HEAD 的舊實作對開發機 26 件案件全部比對過）：
+    舊版是 ①進度 ②收款 ④精算 ⑤額外支出 ③單據——③被擠到最後是當初插入
+    ④⑤ 時的副作用，不是刻意的；新版照文件編號排成 ①②③④⑤，跟關卡矩陣的
+    欄位順序一致，使用者看到的擋下訊息與矩陣才會是同一個讀法。"""
+    gates = _case_close_gates(conn, quote_no, d)
+    reasons = []
+    pending_usernames: list = []
+    for g in gates:
+        if g["state"] != "blocked":
+            continue
+        reasons.extend((g["reason"] or "").split("；"))
+        pending_usernames.extend(g["pendingUsernames"])
+    return [r for r in reasons if r], list(dict.fromkeys(pending_usernames))
 
 
 @router.patch("/api/quotations/{quote_no}/deal-tag")
@@ -594,14 +1672,45 @@ def update_deal_tag(quote_no: str, body: QuotationDealTagUpdate, authorization: 
     # 未成案 / 已成案 限管理員以上
     if body.deal_tag in ("未成案", "已成案") and user["role"] not in ("superadmin", "admin"):
         raise HTTPException(403, "僅管理員以上可標記「未成案」或「已成案」")
+    # 2026-09-13（使用者裁示）：**完結案只有最高管理者能按**。
+    # 結案是這套系統裡最不可逆的動作——案件從此鎖定、只能走半解鎖＋逐筆審核才能
+    # 再動，還會啟動保固追蹤期。原本 admin 就能按（跟「已成案」同一層），與
+    # 「已結案只有 superadmin 能降級」的既有規則不對稱：一般管理員按得下去、
+    # 卻沒有人能把它按回來（只有 superadmin 可以）。統一成兩邊都是 superadmin。
+    if body.deal_tag == "已結案" and user["role"] != "superadmin":
+        raise HTTPException(403, "僅最高管理者可完結案件")
     conn = get_db()
-    row = conn.execute("SELECT data_json, customer_name FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+    row = conn.execute(
+        "SELECT data_json, customer_name, project_name, status FROM quotations WHERE quote_no=?", (quote_no,)
+    ).fetchone()
     if not row:
         conn.close()
         raise HTTPException(404, f"報價單 {quote_no} 不存在")
     cname = row['customer_name'] or ''
+    pname = row['project_name'] or ''
     d = json.loads(row["data_json"] or "{}")
     old_tag = d.get("dealTag", "")
+    # 已成案 需先完成簽核（報價單狀態為「已送出」）
+    if body.deal_tag == "已成案" and row["status"] != "已送出":
+        conn.close()
+        raise HTTPException(400, "報價單需完成簽核（狀態為「已送出」）才能標記為「已成案」")
+    # 已結案只能從「已成案」進入（§5.2 狀態圖：已結案僅案件管理「完結案」，
+    # 不可從未提供/已提供/未成案直接跳過去），避免繞過已成案那一步的簽核前置
+    if body.deal_tag == "已結案" and old_tag != "已成案":
+        conn.close()
+        raise HTTPException(400, "案件須先標記為「已成案」才能結案")
+    # 完結案防呆（2026-08-25 使用者提出、2026-08-26 施作）：①執行管理進度100%
+    # ②款項明細全部收齊③相關單據（報價單/承攬商匯款申請/開票申請憑據/出貨單/
+    # 請款單）簽核流程全部完成，三項須同時達成才能完結案；任一未達成直接 400
+    # 擋下，並通知尚未完成該項的簽核人＋最高管理員（見 _case_close_block_reasons()）。
+    if body.deal_tag == "已結案":
+        reasons, pending_usernames = _case_close_block_reasons(conn, quote_no, d)
+        if reasons:
+            conn.close()
+            spawn_bg_thread(notify_case_close_blocked, args=(quote_no, cname, pname, reasons, pending_usernames))
+            _audit(_tok(authorization), 'case.close_blocked', 'quotation', quote_no,
+                   f"{quote_no}（{cname}）完結案被擋下", {"reasons": reasons})
+            raise HTTPException(400, "尚有前置條件未達成，無法完結案：" + "；".join(reasons))
     # 已成案 → 降級 限管理員以上
     if old_tag == "已成案" and body.deal_tag != "已成案" and user["role"] not in ("superadmin", "admin"):
         conn.close()
@@ -620,6 +1729,10 @@ def update_deal_tag(quote_no: str, body: QuotationDealTagUpdate, authorization: 
     conn.close()
     _audit(_tok(authorization), 'deal_tag.change', 'quotation', quote_no,
            f"{quote_no}（{cname}）", {'from': old_tag, 'to': body.deal_tag})
+    notify_module_activity("報價單", f"案件進度變更為「{body.deal_tag}」", user.get("display_name") or user["username"],
+                            f"{quote_no}（{cname}）", "quotations.html")
+    if body.deal_tag == '已成案' and old_tag != '已成案':
+        spawn_bg_thread(push_event_for_quotation_won, args=(quote_no,))
     if body.deal_tag == '已結案':
         try:
             actor_u = _require_user(authorization)
@@ -627,31 +1740,190 @@ def update_deal_tag(quote_no: str, body: QuotationDealTagUpdate, authorization: 
         except Exception:
             actor_name = ""
         spawn_bg_thread(_generate_quotation_pdf, args=(quote_no, actor_name, '結案'))
+        spawn_bg_thread(_generate_case_closing_pdf, args=(quote_no, actor_name, '結案報表'))
     return {"ok": True}
 
 
 @router.delete("/api/quotations/{quote_no}")
 def delete_quotation(quote_no: str, authorization: str = Header(None)):
-    _require_user(authorization)
+    user = _require_user(authorization)
     conn = get_db()
-    row = conn.execute("SELECT customer_name, status FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+    row = conn.execute(
+        "SELECT customer_name, status, sales_person_id, sales_person FROM quotations WHERE quote_no=?",
+        (quote_no,)
+    ).fetchone()
     if not row:
         conn.close()
         raise HTTPException(404, f"報價單 {quote_no} 不存在")
+    try:
+        _check_quotation_owner(row, user)
+    except HTTPException:
+        conn.close()
+        raise
     if row["status"] != "草稿":
         conn.close()
         raise HTTPException(403, f"只有草稿狀態的報價單可以刪除（目前狀態：{row['status']}）")
     cname = row['customer_name'] or ''
     conn.execute("DELETE FROM quotations WHERE quote_no=?", (quote_no,))
+    # dev_cases 跟 quotations 之間沒有 FK——刪除前先找出所有轉建連結指到這張單的
+    # 業務開發案件，清空連結並退回「洽談中」，避免懸空參照（converted_quote_no
+    # 指向一張已經不存在的報價單）
+    orphaned = conn.execute(
+        "SELECT id, case_name FROM dev_cases WHERE converted_quote_no=?", (quote_no,)
+    ).fetchall()
+    if orphaned:
+        conn.execute(
+            "UPDATE dev_cases SET converted_quote_no='', status='洽談中', updated_at=? "
+            "WHERE converted_quote_no=?",
+            (datetime.now().isoformat(), quote_no),
+        )
     conn.commit()
     conn.close()
+    _purge_notifications(quote_no, ['approval_request', 'approval_returned',
+                                     'approval_rejected', 'case_stage_deadline', 'approval_reminder'])
     _audit(_tok(authorization), 'quotation.delete', 'quotation', quote_no, f"{quote_no}（{cname}）")
+    for c in orphaned:
+        _audit(_tok(authorization), 'dev_case.unlink_deleted_quote', 'dev_case', str(c['id']),
+               f"{c['case_name']}：連結的報價單 {quote_no} 已刪除，自動解除連結")
+    notify_module_activity("報價單", "刪除", user.get("display_name") or user["username"],
+                            f"{quote_no}（{cname}）", "quotations.html")
     return {"ok": True}
+
+
+def _sync_device_stock(conn, quote_no: str, old_devices: list, new_devices: list, user: dict) -> list:
+    """設備登載 devices[] 的序號若對應到庫存序號，隨案件資料整包存檔一併同步扣/還庫存。
+
+    devices[] 沒有獨立端點（addDevice/removeDevice/onMaterialArrived/syncMaterialsToDevices 四處
+    都是純前端陣列操作，見 case-management.js），所以在這裡對新舊陣列做序號 diff，而不是新增專屬
+    端點——現有設備多半沒有對應庫存來源，序號在 stock_items 裡完全找不到就略過，不擋存檔。與出貨單
+    核准（Phase B）是各自獨立的扣庫存來源，並非要求先出貨才能登載。
+
+    但序號如果「有」對應到 stock_items、只是狀態不是 in_stock（例如已經被出貨單核准扣成
+    shipped、或已經被別的案件登載成 installed）——這不是「這序號沒有庫存來源」，而是這序號已經
+    被別處認領了。這種情況不能比照「完全找不到」一樣悄悄放過，否則案件記錄顯示已登載、庫存系統
+    卻卡在別的狀態，兩邊會無聲分岔且沒有人知道。這裡不擋存檔（維持原本「不擋」的設計），但會把
+    這些衝突收集起來回傳給呼叫端，由 API 回應告知前端。
+
+    回傳：衝突清單 [{sn, deviceId, stockStatus}]。
+    """
+    now   = datetime.now().isoformat()
+    actor = user.get("display_name") or user["username"]
+    old_by_id = {d.get("id"): d for d in old_devices if d.get("id") is not None}
+    new_by_id = {d.get("id"): d for d in new_devices if d.get("id") is not None}
+    conflicts = []
+
+    for did, dev in new_by_id.items():
+        sn = (dev.get("sn") or "").strip()
+        old_sn = (old_by_id.get(did) or {}).get("sn", "").strip() if old_by_id.get(did) else ""
+        if not sn or sn == old_sn:
+            continue
+        srow = conn.execute(
+            "SELECT id, status FROM stock_items WHERE serial_no=? ORDER BY id LIMIT 1", (sn,)
+        ).fetchone()
+        if not srow:
+            continue  # 序號不在庫存系統裡追蹤，維持原本不擋存檔的行為
+        if srow["status"] != "in_stock":
+            conflicts.append({"sn": sn, "deviceId": str(did), "stockStatus": srow["status"]})
+            continue
+        conn.execute("""
+            UPDATE stock_items
+            SET status='installed', quote_no=?, case_device_id=?, consumed_at=?, consumed_by=?, updated_at=?
+            WHERE id=?
+        """, (quote_no, str(did), now, actor, now, srow["id"]))
+
+    for did, old_dev in old_by_id.items():
+        old_sn = (old_dev.get("sn") or "").strip()
+        new_sn = (new_by_id.get(did) or {}).get("sn", "").strip() if new_by_id.get(did) else ""
+        if not old_sn or old_sn == new_sn:
+            continue
+        conn.execute("""
+            UPDATE stock_items
+            SET status='in_stock', quote_no='', case_device_id='', consumed_at='', consumed_by='', updated_at=?
+            WHERE serial_no=? AND status='installed' AND case_device_id=?
+        """, (now, old_sn, str(did)))
+
+    return conflicts
+
+
+@router.post("/api/quotations/{quote_no}/case-unlock")
+def unlock_case(quote_no: str, authorization: str = Header(None)):
+    """已結案案件解鎖為「半解鎖」狀態（2026-08-26）。解鎖本身立即生效、不需審核；
+    半解鎖期間的每一筆變更/上傳才需要 superadmin 審核（見 _gate_case_edit()／
+    _check_case_gate()）。只對 deal_tag='已結案' 的案件有意義。
+
+    **權限：任何登入使用者皆可觸發**——2026-08-26 使用者裁示，2026-09-13 模組權限
+    稽核時再次確認：「誰都可以改動，但都需要審核」。把關點在審核，不在入口。
+
+    這是這波權限收斂裡**刻意保留的例外**。2026-09-13 曾一度把它一起收成擁有者
+    規則（跟其他每案端點一致），複查時發現那推翻了使用者已經裁示過的設計，已還原。
+    對應地，半解鎖期間的附件上傳/刪除也用 `_guard_case(..., skip_if_semi_unlocked=True)`
+    對這個狀態放行——**未結案**的案件沒有那道審核，仍維持擁有者規則。"""
+    user = _require_user(authorization)
+    conn = get_db()
+    row = conn.execute("SELECT deal_tag, customer_name, project_name FROM quotations WHERE quote_no=?",
+                       (quote_no,)).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(404, f"報價單 {quote_no} 不存在")
+    if (row["deal_tag"] or "") != "已結案":
+        conn.close()
+        raise HTTPException(400, "只有已結案的案件才需要解鎖")
+    now = datetime.now().isoformat()
+    display = user.get("display_name") or user["username"]
+    conn.execute(
+        "UPDATE quotations SET case_semi_unlocked=1, case_semi_unlocked_by=?, case_semi_unlocked_at=? "
+        "WHERE quote_no=?",
+        (display, now, quote_no),
+    )
+    conn.commit()
+    conn.close()
+    _audit(_tok(authorization), "case.semi_unlock", "quotation", quote_no,
+           f"{quote_no}（{row['customer_name'] or ''}）解鎖為半解鎖狀態")
+    notify_module_activity("案件管理", "解鎖為半解鎖狀態", display,
+                            f"{quote_no}（{row['customer_name'] or ''}）", "case-management.html")
+    spawn_bg_thread(_notify_case_unlocked_bg, args=(quote_no, row["customer_name"] or "",
+                                                    row["project_name"] or "", display))
+    return {"ok": True, "caseSemiUnlocked": True, "caseSemiUnlockedBy": display, "caseSemiUnlockedAt": now}
+
+
+def _notify_case_unlocked_bg(quote_no: str, customer: str, project: str, unlocked_by_display: str) -> None:
+    notify_case_change_requested(
+        quote_no, customer, project,
+        f"案件已由 {unlocked_by_display} 解鎖為半解鎖狀態，之後的變更/上傳將陸續送審",
+        unlocked_by_display,
+    )
+
+
+@router.post("/api/quotations/{quote_no}/case-lock")
+def lock_case(quote_no: str, authorization: str = Header(None)):
+    """將半解鎖案件重新上鎖（2026-08-26），權限比照解鎖——任何登入使用者皆可觸發
+    （見 unlock_case() 的說明）。重新上鎖不會影響既有的 pending 待審核記錄（case_change_requests 仍
+    保留，superadmin 之後還是能在簽核佇列核准/拒絕；核准時 _apply_case_change_
+    request() 不檢查當下是否半解鎖，避免上鎖動作意外卡住既有審核流程）。"""
+    user = _require_user(authorization)
+    conn = get_db()
+    row = conn.execute("SELECT deal_tag, customer_name FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(404, f"報價單 {quote_no} 不存在")
+    conn.execute(
+        "UPDATE quotations SET case_semi_unlocked=0, case_semi_unlocked_by='', case_semi_unlocked_at='' "
+        "WHERE quote_no=?",
+        (quote_no,),
+    )
+    conn.commit()
+    conn.close()
+    display = user.get("display_name") or user["username"]
+    _audit(_tok(authorization), "case.semi_lock", "quotation", quote_no,
+           f"{quote_no}（{row['customer_name'] or ''}）重新上鎖")
+    notify_module_activity("案件管理", "重新上鎖", display,
+                            f"{quote_no}（{row['customer_name'] or ''}）", "case-management.html")
+    return {"ok": True, "caseSemiUnlocked": False}
 
 
 @router.patch("/api/quotations/{quote_no}/case-record")
 def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str = Header(None)):
-    _require_user(authorization)
+    user = _require_user(authorization)
     conn = get_db()
     row = conn.execute(
         "SELECT id, customer_name, project_name, data_json, updated_at FROM quotations WHERE quote_no=?",
@@ -667,19 +1939,836 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
         raise HTTPException(409, "案件資料已被其他人更新，請重新載入後再存")
     label = f"{quote_no}（{row['customer_name'] or ''}{'／' if row['project_name'] else ''}{row['project_name'] or ''}）"
     data = json.loads(row["data_json"] or "{}")
-    data["caseRecord"] = body.case_record or {}
+
+    # 2026-08-31（安全稽核發現）：這支整包存檔端點原本完全沒有角色檢查——
+    # 案件管理頁面的款項明細（勾選已收款／填實收金額／手續費）就是走這支，
+    # 不是走有 admin+ 門檻的 mark_payment（PATCH .../payment/{idx}，只有
+    # receivables.html 在用），任何登入使用者都能在案件管理頁面直接改動
+    # 金流狀態。這支端點同時承載材料/合約條款/角色等其他任何登入使用者都
+    # 該能編輯的欄位，不能整支端點都要求 admin+；改成只在真的偵測到
+    # received/actualAmount/feeAmount 這幾個金流欄位有變動時才擋，偵測到就
+    # 整筆拒絕（不寫入任何欄位），不做「只還原金流欄位、其餘正常存檔」的
+    # 靜默處理——使用者已確認採「拒絕整筆」，避免使用者不知情下被悄悄改回
+    # 舊值。比對用 item["id"]（新增/編輯款項期別時前端固定會帶，見
+    # case-management.js::addPaymentItem()）配對新舊品項，不能用陣列索引位置
+    # 比對——sales/engineer 本來就能自行新增/刪除/調整款項期別（跟「標記
+    # 已收款」是完全不同的動作），若用位置比對，光是筆數改變（新增一期
+    # 款項）就會被整支擋下，變成非 admin/出納完全不能編輯款項明細，不是
+    # 這次要的效果。新增的品項若一開始就帶 received=true 仍視為違規擋下。
+    if user["role"] not in ("superadmin", "admin") and not user_has_module(user, "cashier"):
+        old_items = ((data.get("caseRecord") or {}).get("payment") or {}).get("items") or []
+        new_items = ((body.case_record or {}).get("payment") or {}).get("items") or []
+        old_by_id = {it.get("id"): it for it in old_items if it.get("id") is not None}
+        payment_changed = False
+        for new_it in new_items:
+            old_it = old_by_id.get(new_it.get("id"))
+            if old_it is None:
+                if new_it.get("received"):
+                    payment_changed = True
+                    break
+                continue
+            if any(old_it.get(f) != new_it.get(f) for f in ("received", "actualAmount", "feeAmount")):
+                payment_changed = True
+                break
+        if payment_changed:
+            conn.close()
+            raise HTTPException(403, "款項收款狀態需由管理員或出納標記")
+
+    # 2026-09-02（反派/國稅局視角複查發現）：這支整包存檔端點是案件管理財務
+    # Tab 填發票號碼的實際主要路徑（mark_payment() 的 invoiceNo 驗證只涵蓋
+    # receivables.html 出納快速登錄那條路，這裡才是大多數人真正在用的地方），
+    # 過去完全沒有走到格式/重複驗證，等於前面加的防呆對最常用的入口沒有生效。
+    # 用 item id 比對排除自己這筆（見 validate_invoice_no() docstring 說明
+    # 為什麼不能用陣列位置）。
+    new_items_for_inv = ((body.case_record or {}).get("payment") or {}).get("items") or []
+    old_items_for_inv = ((data.get("caseRecord") or {}).get("payment") or {}).get("items") or []
+    old_inv_by_id = {it.get("id"): it.get("invoiceNo") for it in old_items_for_inv if it.get("id") is not None}
+    for new_it in new_items_for_inv:
+        new_inv = new_it.get("invoiceNo")
+        if new_it.get("id") is not None and old_inv_by_id.get(new_it.get("id")) == new_inv:
+            continue  # 未變動，不必重新驗證
+        validate_invoice_no(conn, new_inv, exclude_quote_no=quote_no, exclude_item_id=new_it.get("id"))
+
+    gated, change_id = _gate_case_edit(
+        conn, quote_no, user, authorization, "case_record_update",
+        f"{label} 更新案件記錄（材料/款項/角色/合約等）", {"case_record": body.case_record or {}},
+    )
+    if gated:
+        conn.close()
+        return {"ok": True, "pending": True, "changeRequestId": change_id,
+                "message": "案件已結案並處於半解鎖狀態，此變更已送出，待最高管理員審核通過後才會套用"}
+    old_devices = (data.get("caseRecord") or {}).get("devices") or []
+    new_devices = (body.case_record or {}).get("devices") or []
+    # caseRecord.stages 正規化（2026-08-23，3a 新增／3b 上線後修正；2026-08-24 停用
+    # 整包 stages 同步）：case-management.js 的階段操作（label/done/日期/負責人/
+    # 前置階段/前往記錄）已全部改走 Phase 2 的 granular 端點即時寫入，且每個 granular
+    # 端點寫完都會呼叫 `_sync_stages_to_json()` 把結果同步回 data_json——這條整包
+    # 存檔路徑（`saveCaseRecord()`）現在只用來存 materials/payment/contract/roles 等
+    # 其他欄位。過去這裡會信任 client 送來的 `stages` 陣列並整批覆寫回 case_stages，
+    # 原意是怕忽略掉這個欄位會讓伺服器值變舊，但反而造成真正的資料損毀：使用者
+    # 用 granular 端點剛存好的日期／負責人，一旦頁面上任何其他欄位（材料、付款…）
+    # 觸發這條 1.5 秒防抖的整包存檔，就會被瀏覽器記憶體裡「這次載入當下」的舊
+    # `stages` 快照蓋回空值（2026-08-24 案件執行看板日期消失回報，追出的根因）。
+    # 一律改成忽略 client 送來的 `stages`，永遠保留伺服器現有值——因為 granular
+    # 端點已經確保 data_json.caseRecord.stages 隨時是最新的，不需要也不該再讓這條
+    # 路徑覆寫。
+    new_case_record = body.case_record or {}
+    new_case_record["stages"] = (data.get("caseRecord") or {}).get("stages") or []
+    data["caseRecord"] = new_case_record
+    stock_conflicts = []
+    if new_devices != old_devices:
+        stock_conflicts = _sync_device_stock(conn, quote_no, old_devices, new_devices, user)
     now = save_quotation_json(conn, quote_no, data)
     conn.commit()
     conn.close()
     spawn_bg_thread(_backup_quotation, args=(quote_no,))
     _audit(_tok(authorization), 'case.update', 'quotation', quote_no, label)
-    return {"ok": True, "updated_at": now}
+    return {"ok": True, "updated_at": now, "stockConflicts": stock_conflicts}
+
+
+# ── Case change request approve/reject (2026-08-26) ────────────────────────────
+
+def _cleanup_staged_files(staged_files: list) -> None:
+    """拒絕核准時清掉暫存檔案（含空資料夾），套用時搬移失敗或找不到檔案都
+    靜默略過——不能因為殘留的暫存檔清不掉就讓審核動作整個失敗。"""
+    for f in staged_files or []:
+        try:
+            full = os.path.join(_uploads_mod.UPLOADS_ROOT, f["path"])
+            if os.path.isfile(full):
+                os.remove(full)
+            d = os.path.dirname(full)
+            if os.path.isdir(d) and not os.listdir(d):
+                os.rmdir(d)
+        except Exception:
+            pass
+
+
+def _move_staged_files(staged_files: list, subfolder: str, doc_no: str) -> list:
+    """核准套用上傳類變更時，把暫存於 uploads/_pending_case_changes/{change_id}/
+    的檔案搬進正式路徑（跟 helpers/uploads.py::save_document_files() 存檔時
+    產生的路徑格式一致），回傳更新過 path 的 metadata 陣列。"""
+    eff_subfolder = _effective_subfolder(subfolder)
+    dest_dir = os.path.join(_uploads_mod.UPLOADS_ROOT, eff_subfolder, doc_no)
+    os.makedirs(dest_dir, exist_ok=True)
+    moved = []
+    src_dirs = set()
+    for f in staged_files or []:
+        src = os.path.join(_uploads_mod.UPLOADS_ROOT, f["path"])
+        src_dirs.add(os.path.dirname(src))
+        ext = os.path.splitext(f["path"])[1]
+        fname = uuid.uuid4().hex[:16] + ext
+        dest_rel = f"{eff_subfolder}/{doc_no}/{fname}"
+        dest_full = os.path.join(_uploads_mod.UPLOADS_ROOT, dest_rel)
+        if os.path.isfile(src):
+            shutil.move(src, dest_full)
+        new_meta = dict(f)
+        new_meta["path"] = dest_rel
+        moved.append(new_meta)
+    for d in src_dirs:
+        try:
+            if os.path.isdir(d) and not os.listdir(d):
+                os.rmdir(d)
+        except Exception:
+            pass
+    return moved
+
+
+def _apply_case_change_request(conn, req, approver: dict, authorization: str) -> dict:
+    """superadmin 核准後真正套用一筆 case_change_requests。呼叫端負責在成功
+    回傳後把該筆記錄標記 approved 並 commit；這裡只處理「套用效果」本身，
+    邏輯分別對應 8 個「暫存待審」端點原本會做的事（見各端點 docstring）。
+    找不到對應報價單或索引超出範圍時 raise HTTPException，呼叫端會讓整個
+    審核動作失敗（不會標記 approved），避免留下「已核准但沒套用」的不一致。
+    回傳 dict 供呼叫端附加到 API 回應（目前只有 case_record_update 可能帶
+    stockConflicts——即時存檔路徑 update_case_record() 會把這個資訊回傳給
+    當下操作的使用者看，這裡改成 superadmin 事後核准套用，同樣不能讓衝突
+    悄悄消失，至少寫進 audit_log detail 並回傳給呼叫端）。"""
+    quote_no    = req["quote_no"]
+    action_type = req["action_type"]
+    payload     = json.loads(req["payload_json"] or "{}")
+    staged_files = json.loads(req["staged_files_json"] or "[]")
+    row = conn.execute(
+        "SELECT customer_name, project_name, data_json FROM quotations WHERE quote_no=?", (quote_no,)
+    ).fetchone()
+    if not row:
+        raise HTTPException(404, f"報價單 {quote_no} 不存在")
+    label = f"{quote_no}（{row['customer_name'] or ''}）"
+    data = json.loads(row["data_json"] or "{}")
+    cr = data.setdefault("caseRecord", {})
+    result: dict = {}
+
+    if action_type == "case_record_update":
+        old_devices = cr.get("devices") or []
+        new_case_record = payload.get("case_record") or {}
+        new_devices = new_case_record.get("devices") or []
+        new_case_record["stages"] = cr.get("stages") or []
+        data["caseRecord"] = new_case_record
+        stock_conflicts = []
+        if new_devices != old_devices:
+            stock_conflicts = _sync_device_stock(conn, quote_no, old_devices, new_devices, approver)
+        save_quotation_json(conn, quote_no, data)
+        if stock_conflicts:
+            result["stockConflicts"] = stock_conflicts
+        _audit(_tok(authorization), 'case.update', 'quotation', quote_no, f"{label}（半解鎖審核通過套用）",
+               {"stockConflicts": stock_conflicts} if stock_conflicts else None)
+
+    elif action_type == "payment_mark":
+        idx = payload["idx"]
+        body = payload["body"] or {}
+        pits = cr.setdefault("payment", {}).setdefault("items", [])
+        if idx < 0 or idx >= len(pits):
+            raise HTTPException(400, "款項索引超出範圍")
+        if "received" in body:
+            is_rcv = bool(body["received"])
+            pits[idx]["received"]   = is_rcv
+            pits[idx]["receivedAt"] = body.get("receivedAt", "") if is_rcv else ""
+            pits[idx]["receivedBy"] = body.get("receivedBy", "") if is_rcv else ""
+            if is_rcv:
+                pits[idx]["actualAmount"] = body.get("actualAmount")
+                pits[idx]["feeAmount"]    = body.get("feeAmount") or 0
+                pits[idx]["feeNote"]      = body.get("feeNote", "")
+                pits[idx]["note"]         = body.get("note", "")
+                # 收款進了 MOTRIX 自己哪個銀行帳戶（選填，2026-09-01 新增，供 T100
+                # 傳票匯出依銀行帳戶分開設定科目代號用；跟其他欄位一樣直接存
+                # data_json，不需要 migration，見 db.py::_m071_paid_bank_account docstring）
+                pits[idx]["bankAccountName"] = body.get("bankAccountName", "")
+                pits[idx]["bankAccountCode"] = body.get("bankAccountCode", "")
+            else:
+                for k in ("actualAmount", "feeAmount", "feeNote", "note", "bankAccountName", "bankAccountCode"):
+                    pits[idx].pop(k, None)
+        if "invoiceNo" in body:
+            validate_invoice_no(conn, body["invoiceNo"], exclude_quote_no=quote_no, exclude_idx=idx)
+            pits[idx]["invoiceNo"] = body["invoiceNo"]
+        if "invoiceDate" in body:
+            pits[idx]["invoiceDate"] = body["invoiceDate"]
+        save_quotation_json(conn, quote_no, data)
+        _audit(_tok(authorization), 'payment.mark', 'quotation', quote_no, f"{label}（半解鎖審核通過套用）")
+
+    elif action_type in ("payment_invoice_upload", "material_file_upload", "material_invoice_upload"):
+        idx = payload["idx"]
+        if action_type == "payment_invoice_upload":
+            arr, field, subfolder = cr.setdefault("payment", {}).setdefault("items", []), "invoiceFiles", "quotation_payment_items"
+        elif action_type == "material_file_upload":
+            arr, field, subfolder = cr.setdefault("materials", []), "files", "quotation_materials"
+        else:
+            arr, field, subfolder = cr.setdefault("materials", []), "invoiceFiles", "quotation_materials_invoices"
+        if idx < 0 or idx >= len(arr):
+            raise HTTPException(400, "索引超出範圍")
+        moved = _move_staged_files(staged_files, subfolder, f"{quote_no}_{idx}")
+        arr[idx].setdefault(field, [])
+        arr[idx][field].extend(moved)
+        save_quotation_json(conn, quote_no, data)
+        _audit(_tok(authorization), f'{action_type}.approved', 'quotation', quote_no,
+               f"{label}（半解鎖審核通過套用，{len(moved)} 個檔案）")
+
+    elif action_type in ("payment_invoice_delete", "material_file_delete", "material_invoice_delete"):
+        idx = payload["idx"]
+        file_id = payload["file_id"]
+        if action_type == "payment_invoice_delete":
+            arr, field, subfolder = cr.setdefault("payment", {}).setdefault("items", []), "invoiceFiles", "quotation_payment_items"
+        elif action_type == "material_file_delete":
+            arr, field, subfolder = cr.setdefault("materials", []), "files", "quotation_materials"
+        else:
+            arr, field, subfolder = cr.setdefault("materials", []), "invoiceFiles", "quotation_materials_invoices"
+        if idx < 0 or idx >= len(arr):
+            raise HTTPException(400, "索引超出範圍")
+        existing = arr[idx].get(field) or []
+        arr[idx][field] = delete_document_file(subfolder, f"{quote_no}_{idx}", existing, file_id)
+        save_quotation_json(conn, quote_no, data)
+        _audit(_tok(authorization), f'{action_type}.approved', 'quotation', quote_no,
+               f"{label}（半解鎖審核通過套用）")
+
+    else:
+        raise HTTPException(500, f"未知的變更類型：{action_type}")
+
+    return result
+
+
+@router.get("/api/case-changes/{change_id}")
+def get_case_change_request(change_id: int, authorization: str = Header(None)):
+    """半解鎖期間某一筆待審核變更的完整內容。
+
+    2026-09-13（模組權限稽核，解鎖流程複查）：`change_id` 是**小整數流水號**，比
+    `quote_no` 更好猜，而回傳的是 `SELECT *`——payload 裡是那張案件的完整變更內容
+    （案件資訊快照、款項金額等）。先前只要求登入，等於把「已結案案件的變更內容」
+    開給任何人一個一個試。改成比照案件本身的規則：走 `_guard_case()`，另外放行
+    **提出這筆申請的人**（他本來就看得到自己送出的東西）。核准/駁回維持僅
+    superadmin，不受影響。
+    """
+    user = _require_user(authorization)
+    conn = get_db()
+    row = conn.execute("SELECT * FROM case_change_requests WHERE id=?", (change_id,)).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(404, "找不到此筆變更申請")
+    if (row["requested_by"] or "") != user["username"]:
+        _guard_case(conn, row["quote_no"], user, allow_module="case_manage")
+    conn.close()
+    return dict(row)
+
+
+@router.post("/api/case-changes/{change_id}/approve")
+def approve_case_change(change_id: int, authorization: str = Header(None)):
+    """已結案案件半解鎖期間的變更/上傳，僅最高管理者可核准（比照已結案案件本身
+    的解鎖/降級規則）。核准成功才標記 approved 並 commit——_apply_case_change_
+    request() 內任何 HTTPException 都會讓這支端點直接回傳錯誤、不落資料庫，
+    避免「顯示已核准但其實沒套用」的不一致狀態。"""
+    user = _require_user(authorization)
+    if user["role"] != "superadmin":
+        raise HTTPException(403, "僅最高管理者可審核已結案案件的變更申請")
+    conn = get_db()
+    req = conn.execute("SELECT * FROM case_change_requests WHERE id=?", (change_id,)).fetchone()
+    if not req:
+        conn.close()
+        raise HTTPException(404, "找不到此筆變更申請")
+    if req["status"] != "pending":
+        conn.close()
+        raise HTTPException(409, f"此筆變更申請已經是「{req['status']}」狀態")
+    self_msg = check_no_tier_self_approval(conn, {"requestedBy": req["requested_by"]}, user)
+    if self_msg:
+        conn.close()
+        raise HTTPException(403, self_msg)
+    try:
+        apply_result = _apply_case_change_request(conn, req, user, authorization)
+    except HTTPException:
+        conn.close()
+        raise
+    now = datetime.now().isoformat()
+    approver_display = user.get("display_name") or user["username"]
+    conn.execute("UPDATE case_change_requests SET status='approved', decided_by=?, decided_at=? WHERE id=?",
+                 (approver_display, now, change_id))
+    conn.commit()
+    conn.close()
+    spawn_bg_thread(_backup_quotation, args=(req["quote_no"],))
+    _notify(req["requested_by"], "case_change_decided", req["quote_no"], req["quote_no"],
+            f"您對已結案案件 {req['quote_no']} 提出的變更「{req['summary']}」已由 {approver_display} 核准套用")
+    return {"ok": True, "status": "approved", **(apply_result or {})}
+
+
+@router.post("/api/case-changes/{change_id}/reject")
+def reject_case_change(change_id: int, body: dict = Body(default={}), authorization: str = Header(None)):
+    user = _require_user(authorization)
+    if user["role"] != "superadmin":
+        raise HTTPException(403, "僅最高管理者可審核已結案案件的變更申請")
+    conn = get_db()
+    req = conn.execute("SELECT * FROM case_change_requests WHERE id=?", (change_id,)).fetchone()
+    if not req:
+        conn.close()
+        raise HTTPException(404, "找不到此筆變更申請")
+    if req["status"] != "pending":
+        conn.close()
+        raise HTTPException(409, f"此筆變更申請已經是「{req['status']}」狀態")
+    self_msg = check_no_tier_self_approval(conn, {"requestedBy": req["requested_by"]}, user)
+    if self_msg:
+        conn.close()
+        raise HTTPException(403, self_msg)
+    reason = (body or {}).get("reason") or ""
+    _cleanup_staged_files(json.loads(req["staged_files_json"] or "[]"))
+    now = datetime.now().isoformat()
+    approver_display = user.get("display_name") or user["username"]
+    conn.execute(
+        "UPDATE case_change_requests SET status='rejected', decided_by=?, decided_at=?, reject_reason=? WHERE id=?",
+        (approver_display, now, reason, change_id),
+    )
+    conn.commit()
+    conn.close()
+    _audit(_tok(authorization), "case.change_rejected", "quotation", req["quote_no"],
+           f"{req['quote_no']}（拒絕變更 #{change_id}：{req['summary']}）", {"reason": reason})
+    _notify(req["requested_by"], "case_change_decided", req["quote_no"], req["quote_no"],
+            f"您對已結案案件 {req['quote_no']} 提出的變更「{req['summary']}」已由 {approver_display} 拒絕"
+            + (f"（原因：{reason}）" if reason else ""))
+    return {"ok": True, "status": "rejected"}
+
+
+def _serialize_stage(conn, sr) -> dict:
+    visit_rows = conn.execute(
+        "SELECT id, visit_date, visit_people, note FROM case_stage_visits "
+        "WHERE stage_id=? ORDER BY id",
+        (sr["id"],),
+    ).fetchall()
+    return {
+        "id":         sr["id"],
+        "label":      sr["label"],
+        "sortOrder":  sr["sort_order"],
+        "done":       bool(sr["done"]),
+        "doneAt":     sr["done_at"],
+        "startDate":  sr["start_date"],
+        "dueDate":    sr["due_date"],
+        "assignedTo": json.loads(sr["assigned_to"] or "[]"),
+        "dependsOn":  json.loads(sr["depends_on"] or "[]"),
+        "visits": [
+            {"id": v["id"], "visitDate": v["visit_date"], "visitPeople": v["visit_people"], "note": v["note"]}
+            for v in visit_rows
+        ],
+    }
+
+
+def _get_stage_row(conn, quote_no: str, stage_id: int):
+    """查一個階段，順便確認它真的屬於這個 quote_no（避免猜 id 跨案件竄改）。查無資料回傳 None。"""
+    return conn.execute(
+        "SELECT * FROM case_stages WHERE id=? AND quote_no=?", (stage_id, quote_no)
+    ).fetchone()
+
+
+def _sync_stages_to_json(conn, quote_no: str, updated_at: str = None) -> str | None:
+    """Phase 3a（2026-08-23）：把 case_stages/case_stage_visits 目前的內容重建回
+    quotations.data_json.caseRecord.stages，讓 JSON 在前端還沒切換到新端點的過渡期
+    間持續保持最新——list_quotations()/stage_board()/dashboard.py/daily_tasks.py
+    這四個既有讀取點完全不用改就能繼續正常運作。掛在 Phase 2 那 10 個變更端點的
+    commit 之後呼叫。只動 caseRecord.stages 這個欄位，caseRecord 其他 key（
+    payment/devices/materials/roles）與 quotations 其他欄位維持原樣不動。
+    3b 收尾追加修正（2026-08-23）：`_sync_json_stages_to_table()` 合併完可能產生
+    新的真實 id，呼叫端（`update_case_record`/`create_quotation`/`update_quotation`）
+    在那之後也會呼叫這裡把新 id 立刻寫回 `data_json`。可選傳入 `updated_at`
+    沿用呼叫端已經算好的同一個時間戳記，避免同一次請求裡把 `updated_at` 又悄悄
+    往後推一次、讓回傳給前端的樂觀鎖時間戳跟資料庫實際值對不上。回傳實際寫入的
+    時間戳（查無此單則回傳 None）。"""
+    row = conn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+    if not row:
+        return None
+    data = json.loads(row["data_json"] or "{}")
+    stage_rows = conn.execute(
+        "SELECT * FROM case_stages WHERE quote_no=? ORDER BY sort_order, id", (quote_no,)
+    ).fetchall()
+    stages_json = []
+    for sr in stage_rows:
+        visit_rows = conn.execute(
+            "SELECT visit_date, visit_people, note FROM case_stage_visits WHERE stage_id=? ORDER BY id",
+            (sr["id"],),
+        ).fetchall()
+        stages_json.append({
+            "id":         sr["id"],
+            "label":      sr["label"],
+            "done":       bool(sr["done"]),
+            "doneAt":     sr["done_at"],
+            "startDate":  sr["start_date"],
+            "dueDate":    sr["due_date"],
+            "assignedTo": json.loads(sr["assigned_to"] or "[]"),
+            "dependsOn":  json.loads(sr["depends_on"] or "[]"),
+            "visits": [
+                {"visitDate": v["visit_date"], "visitPeople": v["visit_people"], "note": v["note"]}
+                for v in visit_rows
+            ],
+        })
+    data.setdefault("caseRecord", {})["stages"] = stages_json
+    result_ts = save_quotation_json(conn, quote_no, data, updated_at=updated_at)
+    conn.commit()
+    return result_ts
+
+
+def _sync_json_stages_to_table(conn, quote_no: str, stages_from_json: list) -> None:
+    """Phase 3a（2026-08-23）反向同步，**3b 上線後複查發現嚴重回歸並於同日修正**：
+    原始版本每次都整批 DELETE quote_no 底下全部 case_stages 再重新 INSERT，
+    `id` 是 AUTOINCREMENT，每次重建一定拿到全新的 id，跟 db.py 的 Phase 1
+    backfill migration（一次性、當時還沒有任何前端會引用這些 id）邏輯相同沒問題；
+    但 3b 上線後 `case-management.js` 的階段操作全部直接用 `st.id` 打 granular
+    端點（`PUT .../stages/{id}` 等），而 `saveCaseRecord()` 仍然是**整包**送出
+    `caseRecord`（含 `stages`，即使這次只改了 materials/payment 等無關欄位）—
+    一旦這個整包存檔把 `stages` 傳進來，舊版邏輯就會把使用者手上還在用的
+    `st.id` 全部作廢換成新 id，且沒有把新 id 回寫進 `data_json`，導致使用者
+    緊接著點任何一個階段操作都會 404。已用 scratch DB 重現：`create_quotation`
+    建立階段後緊接著 `GET` 看到的還是舊 id、`update_case_record` 存一次無關的
+    `materials` 就讓原本能用的 `st.id` 直接消失。
+
+    修正為**id-preserving 差異合併**：傳入陣列裡 `id` 已存在於這個 quote_no
+    現有 `case_stages` 的，原地 UPDATE（id 不變，`dependsOn`/`visits` 刻意不動——
+    3b 之後這兩塊只透過各自的專用端點異動，整包存檔送來的可能是還沒更新的舊值，
+    覆寫反而有清空風險）；不存在的視為新階段才 INSERT 並依舊邏輯 remap
+    `dependsOn`／建立 `visits`；現有列若這次陣列裡完全沒出現，視為使用者刪除，
+    整批重建的語意維持不變一併 DELETE（`ON DELETE CASCADE` 清掉其 visits）。
+    呼叫端記得**接著呼叫 `_sync_stages_to_json()`** 把這次可能新產生的真實 id
+    立刻寫回 `data_json`，前端下一次讀到的就是跟表一致的 id，不會停留在舊值。
+    呼叫端負責 commit，這裡不 commit。"""
+    existing_ids = {r["id"] for r in conn.execute(
+        "SELECT id FROM case_stages WHERE quote_no=?", (quote_no,)
+    ).fetchall()}
+    now = datetime.now().isoformat()
+    id_map = {}
+    new_stages = []
+    seen_ids = set()
+
+    for idx, st in enumerate(stages_from_json):
+        old_id = st.get("id")
+        if old_id in existing_ids:
+            conn.execute("""
+                UPDATE case_stages SET
+                    label=?, sort_order=?, done=?, done_at=?, start_date=?, due_date=?,
+                    assigned_to=?, updated_at=?
+                WHERE id=?
+            """, (
+                st.get("label") or "", idx,
+                1 if st.get("done") else 0, st.get("doneAt") or "",
+                st.get("startDate") or "", st.get("dueDate") or "",
+                json.dumps(st.get("assignedTo") or [], ensure_ascii=False),
+                now, old_id,
+            ))
+            final_id = old_id
+        else:
+            cur = conn.execute("""
+                INSERT INTO case_stages
+                    (quote_no, label, sort_order, done, done_at, start_date, due_date,
+                     assigned_to, depends_on, created_at, updated_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?)
+            """, (
+                quote_no, st.get("label") or "", idx,
+                1 if st.get("done") else 0, st.get("doneAt") or "",
+                st.get("startDate") or "", st.get("dueDate") or "",
+                json.dumps(st.get("assignedTo") or [], ensure_ascii=False),
+                "[]", now, now,
+            ))
+            final_id = cur.lastrowid
+            new_stages.append((final_id, st))
+        if old_id is not None:
+            id_map[old_id] = final_id
+        seen_ids.add(final_id)
+
+    for gone_id in existing_ids - seen_ids:
+        conn.execute("DELETE FROM case_stages WHERE id=?", (gone_id,))
+
+    for final_id, st in new_stages:
+        remapped = [id_map[d] for d in (st.get("dependsOn") or []) if d in id_map]
+        if remapped:
+            conn.execute("UPDATE case_stages SET depends_on=? WHERE id=?",
+                         (json.dumps(remapped, ensure_ascii=False), final_id))
+        for v in (st.get("visits") or []):
+            conn.execute("""
+                INSERT INTO case_stage_visits (stage_id, visit_date, visit_people, note, created_at)
+                VALUES (?,?,?,?,?)
+            """, (final_id, v.get("visitDate") or "", int(v.get("visitPeople") or 0), v.get("note") or "", now))
+
+
+def _would_create_cycle(conn, quote_no: str, stage_id: int, candidate_id: int) -> bool:
+    """DFS 防環檢查，邏輯照搬 case-management.js 的 wouldCreateCycle()：若讓 stage_id
+    依賴 candidate_id，順著 dependsOn 追下去會不會繞回 stage_id 自己。範圍限定在同一
+    quote_no 底下的 case_stages。"""
+    if stage_id == candidate_id:
+        return True
+    rows = conn.execute("SELECT id, depends_on FROM case_stages WHERE quote_no=?", (quote_no,)).fetchall()
+    depends_map = {r["id"]: json.loads(r["depends_on"] or "[]") for r in rows}
+    seen = set()
+
+    def dfs(cur_id):
+        if cur_id == stage_id:
+            return True
+        if cur_id in seen:
+            return False
+        seen.add(cur_id)
+        return any(dfs(d) for d in depends_map.get(cur_id, []))
+
+    return dfs(candidate_id)
+
+
+@router.get("/api/quotations/{quote_no}/stages")
+def list_case_stages_normalized(quote_no: str, authorization: str = Header(None)):
+    """caseRecord.stages 正規化第一階段的驗證端點（2026-08-23）——查 case_stages/
+    case_stage_visits。第二階段（CRUD 端點）新增後，這個端點仍然是唯讀查詢，尚未接
+    進任何現有頁面/流程；`caseRecord.stages` JSON 欄位仍是唯一的讀寫來源，前端還沒
+    有任何頁面呼叫這一系列新端點。"""
+    user = _require_user(authorization)
+    conn = get_db()
+    _guard_case(conn, quote_no, user, allow_module="case_manage")
+    stage_rows = conn.execute(
+        "SELECT * FROM case_stages WHERE quote_no=? ORDER BY sort_order, id",
+        (quote_no,),
+    ).fetchall()
+    stages = [_serialize_stage(conn, sr) for sr in stage_rows]
+    conn.close()
+    return {"items": stages}
+
+
+@router.post("/api/quotations/{quote_no}/stages", status_code=201)
+def create_case_stage(quote_no: str, body: dict = Body(...), authorization: str = Header(None)):
+    """新增階段，對應 case-management.js::addStage()。第二階段 CRUD 端點，2026-08-23
+    Phase 3b/4 起已由 case-management.js／quotation-form.html 實際呼叫（見 2026-09-07
+    docstring 更正紀錄，本行原誤留 Phase 2 剛新增時「尚未接進」的舊字樣）。"""
+    user = _require_user(authorization)
+    conn = get_db()
+    _guard_case(conn, quote_no, user, allow_module="case_manage")
+    _deny_if_case_locked_unsupported(conn, quote_no, authorization, op="案件階段-新增")
+    max_order = conn.execute(
+        "SELECT COALESCE(MAX(sort_order), -1) m FROM case_stages WHERE quote_no=?", (quote_no,)
+    ).fetchone()["m"]
+    now = datetime.now().isoformat()
+    cur = conn.execute("""
+        INSERT INTO case_stages
+            (quote_no, label, sort_order, done, done_at, start_date, due_date,
+             assigned_to, depends_on, created_at, updated_at)
+        VALUES (?,?,?,0,'','','','[]','[]',?,?)
+    """, (quote_no, body.get("label") or "", max_order + 1, now, now))
+    new_id = cur.lastrowid
+    conn.commit()
+    _sync_stages_to_json(conn, quote_no)
+    sr = _get_stage_row(conn, quote_no, new_id)
+    result = _serialize_stage(conn, sr)
+    conn.close()
+    return result
+
+
+@router.put("/api/quotations/{quote_no}/stages/{stage_id}")
+def update_case_stage(quote_no: str, stage_id: int, body: dict = Body(...), authorization: str = Header(None)):
+    """局部更新階段欄位（label/done/doneAt/startDate/dueDate），對應 case-management.html
+    的 x-model 直接綁定欄位＋renderGantt() 的 on_date_change。不加任何自動邏輯（例如
+    done=true 不自動填 doneAt）——維持跟現有前端行為一致，各欄位互相獨立。第二階段
+    CRUD 端點，已由前端實際呼叫（見 create_case_stage() docstring）。"""
+    user = _require_user(authorization)
+    conn = get_db()
+    _guard_case(conn, quote_no, user, allow_module="case_manage")
+    _deny_if_case_locked_unsupported(conn, quote_no, authorization, op="案件階段-編輯")
+    sr = _get_stage_row(conn, quote_no, stage_id)
+    if not sr:
+        conn.close(); raise HTTPException(404, "階段不存在")
+    updates = {}
+    if "label" in body:     updates["label"]      = body.get("label") or ""
+    if "done" in body:      updates["done"]       = 1 if body.get("done") else 0
+    if "doneAt" in body:    updates["done_at"]    = body.get("doneAt") or ""
+    if "startDate" in body: updates["start_date"] = body.get("startDate") or ""
+    if "dueDate" in body:   updates["due_date"]   = body.get("dueDate") or ""
+    was_done = bool(sr["done"])
+    if updates:
+        updates["updated_at"] = datetime.now().isoformat()
+        sql = "UPDATE case_stages SET " + ", ".join(f"{k}=?" for k in updates) + " WHERE id=?"
+        conn.execute(sql, list(updates.values()) + [stage_id])
+        conn.commit()
+        _sync_stages_to_json(conn, quote_no)
+        if "due_date" in updates:
+            spawn_bg_thread(push_event_for_case_stage_due, args=(stage_id,))
+        # 勾選/取消勾選完成 → 兩張行事曆都要同步（2026-09-11 交辦第 3 項）。
+        # `done_at` 單獨被改（已勾選的情況下改完成日期）也要重推，否則行事曆上
+        # 留的是舊日期。兩支都是 fire-and-forget，失敗只記 log，不擋勾選本身。
+        done_changed = ("done" in updates and bool(updates["done"]) != was_done)
+        if done_changed or ("done_at" in updates and bool(updates.get("done", was_done))):
+            actor_name = user.get("display_name") or user["username"]
+            spawn_bg_thread(push_event_for_case_stage_done, args=(stage_id,))
+            spawn_bg_thread(sync_daily_task_for_case_stage,
+                            args=(stage_id, user["username"], actor_name))
+    sr = _get_stage_row(conn, quote_no, stage_id)
+    result = _serialize_stage(conn, sr)
+    conn.close()
+    return result
+
+
+@router.delete("/api/quotations/{quote_no}/stages/{stage_id}")
+def delete_case_stage(quote_no: str, stage_id: int, authorization: str = Header(None)):
+    """刪除階段，同時清掉同案件其他階段 dependsOn 裡對它的參照，對應
+    case-management.js::removeStage()。第二階段 CRUD 端點，已由前端實際呼叫
+    （見 create_case_stage() docstring）。"""
+    user = _require_user(authorization)
+    conn = get_db()
+    _guard_case(conn, quote_no, user, allow_module="case_manage")
+    _deny_if_case_locked_unsupported(conn, quote_no, authorization, op="案件階段-刪除")
+    sr = _get_stage_row(conn, quote_no, stage_id)
+    if not sr:
+        conn.close(); raise HTTPException(404, "階段不存在")
+    calendar_event_id = sr["google_calendar_event_id"] or ""
+    # 完成日事件與月曆鏡射也要一起收掉，否則階段刪了行事曆上還留著（DB v76）
+    done_event_id = (sr["google_calendar_done_event_id"] or "") if "google_calendar_done_event_id" in sr.keys() else ""
+    stage_task_id = (sr["daily_task_id"] or 0) if "daily_task_id" in sr.keys() else 0
+    conn.execute("DELETE FROM case_stages WHERE id=?", (stage_id,))
+    siblings = conn.execute("SELECT id, depends_on FROM case_stages WHERE quote_no=?", (quote_no,)).fetchall()
+    for s in siblings:
+        depends = json.loads(s["depends_on"] or "[]")
+        if stage_id in depends:
+            depends = [d for d in depends if d != stage_id]
+            conn.execute("UPDATE case_stages SET depends_on=? WHERE id=?",
+                         (json.dumps(depends, ensure_ascii=False), s["id"]))
+    conn.commit()
+    _sync_stages_to_json(conn, quote_no)
+    conn.close()
+    if calendar_event_id:
+        spawn_bg_thread(push_event_delete_for_case_stage, args=(calendar_event_id,))
+    if done_event_id:
+        spawn_bg_thread(push_event_delete_for_case_stage, args=(done_event_id,))
+    if stage_task_id:
+        spawn_bg_thread(delete_daily_task_for_case_stage, args=(stage_task_id,))
+    return {"ok": True}
+
+
+@router.patch("/api/quotations/{quote_no}/stages/reorder")
+def reorder_case_stages(quote_no: str, body: dict = Body(...), authorization: str = Header(None)):
+    """依 orderedIds 陣列順序重寫 sort_order，對應拖曳重排（dragOver/dragEnd）的最終
+    結果。第二階段 CRUD 端點，已由前端實際呼叫（見 create_case_stage() docstring）。"""
+    user = _require_user(authorization)
+    ordered_ids = body.get("orderedIds") or []
+    conn = get_db()
+    _guard_case(conn, quote_no, user, allow_module="case_manage")
+    _deny_if_case_locked_unsupported(conn, quote_no, authorization, op="案件階段-排序")
+    valid_ids = {r["id"] for r in conn.execute(
+        "SELECT id FROM case_stages WHERE quote_no=?", (quote_no,)
+    ).fetchall()}
+    now = datetime.now().isoformat()
+    for idx, sid in enumerate(ordered_ids):
+        if sid in valid_ids:
+            conn.execute("UPDATE case_stages SET sort_order=?, updated_at=? WHERE id=? AND quote_no=?",
+                         (idx, now, sid, quote_no))
+    conn.commit()
+    _sync_stages_to_json(conn, quote_no)
+    conn.close()
+    return {"ok": True}
+
+
+@router.post("/api/quotations/{quote_no}/stages/{stage_id}/assignees")
+def add_stage_assignee(quote_no: str, stage_id: int, body: dict = Body(...), authorization: str = Header(None)):
+    """加入負責人，對應 case-management.js::addStageAssignee()。第二階段 CRUD 端點，
+    已由前端實際呼叫（見 create_case_stage() docstring）。"""
+    user = _require_user(authorization)
+    username = body.get("username")
+    if not username:
+        raise HTTPException(400, "請提供 username")
+    conn = get_db()
+    _guard_case(conn, quote_no, user, allow_module="case_manage")
+    _deny_if_case_locked_unsupported(conn, quote_no, authorization, op="案件階段-加入負責人")
+    sr = _get_stage_row(conn, quote_no, stage_id)
+    if not sr:
+        conn.close(); raise HTTPException(404, "階段不存在")
+    assigned = json.loads(sr["assigned_to"] or "[]")
+    if username not in assigned:
+        assigned.append(username)
+        conn.execute("UPDATE case_stages SET assigned_to=?, updated_at=? WHERE id=?",
+                     (json.dumps(assigned, ensure_ascii=False), datetime.now().isoformat(), stage_id))
+        conn.commit()
+        _sync_stages_to_json(conn, quote_no)
+    sr = _get_stage_row(conn, quote_no, stage_id)
+    result = _serialize_stage(conn, sr)
+    conn.close()
+    return result
+
+
+@router.delete("/api/quotations/{quote_no}/stages/{stage_id}/assignees/{username}")
+def remove_stage_assignee(quote_no: str, stage_id: int, username: str, authorization: str = Header(None)):
+    """移除負責人，對應 case-management.js::removeStageAssignee()。第二階段 CRUD 端
+    點，已由前端實際呼叫（見 create_case_stage() docstring）。"""
+    user = _require_user(authorization)
+    conn = get_db()
+    _guard_case(conn, quote_no, user, allow_module="case_manage")
+    _deny_if_case_locked_unsupported(conn, quote_no, authorization, op="案件階段-移除負責人")
+    sr = _get_stage_row(conn, quote_no, stage_id)
+    if not sr:
+        conn.close(); raise HTTPException(404, "階段不存在")
+    assigned = [u for u in json.loads(sr["assigned_to"] or "[]") if u != username]
+    conn.execute("UPDATE case_stages SET assigned_to=?, updated_at=? WHERE id=?",
+                 (json.dumps(assigned, ensure_ascii=False), datetime.now().isoformat(), stage_id))
+    conn.commit()
+    _sync_stages_to_json(conn, quote_no)
+    sr = _get_stage_row(conn, quote_no, stage_id)
+    result = _serialize_stage(conn, sr)
+    conn.close()
+    return result
+
+
+@router.post("/api/quotations/{quote_no}/stages/{stage_id}/depends-on/{candidate_id}")
+def toggle_stage_dependency(quote_no: str, stage_id: int, candidate_id: int, authorization: str = Header(None)):
+    """切換依賴關係：已存在就移除，不存在就先做防環檢查（DFS，邏輯照搬
+    wouldCreateCycle()）再加入。對應 case-management.js::toggleStageDependency()。
+    第二階段 CRUD 端點，已由前端實際呼叫（見 create_case_stage() docstring）。"""
+    user = _require_user(authorization)
+    conn = get_db()
+    _guard_case(conn, quote_no, user, allow_module="case_manage")
+    _deny_if_case_locked_unsupported(conn, quote_no, authorization, op="案件階段-前置階段")
+    sr = _get_stage_row(conn, quote_no, stage_id)
+    if not sr:
+        conn.close(); raise HTTPException(404, "階段不存在")
+    if not _get_stage_row(conn, quote_no, candidate_id):
+        conn.close(); raise HTTPException(404, "前置階段不存在")
+    depends = json.loads(sr["depends_on"] or "[]")
+    if candidate_id in depends:
+        depends = [d for d in depends if d != candidate_id]
+    else:
+        if _would_create_cycle(conn, quote_no, stage_id, candidate_id):
+            conn.close()
+            raise HTTPException(400, "這樣設定會讓階段之間互相循環依賴，請重新選擇前置階段")
+        depends.append(candidate_id)
+    conn.execute("UPDATE case_stages SET depends_on=?, updated_at=? WHERE id=?",
+                 (json.dumps(depends, ensure_ascii=False), datetime.now().isoformat(), stage_id))
+    conn.commit()
+    _sync_stages_to_json(conn, quote_no)
+    sr = _get_stage_row(conn, quote_no, stage_id)
+    result = _serialize_stage(conn, sr)
+    conn.close()
+    return result
+
+
+@router.post("/api/quotations/{quote_no}/stages/{stage_id}/visits", status_code=201)
+def add_stage_visit(quote_no: str, stage_id: int, body: dict = Body(...), authorization: str = Header(None)):
+    """新增拜訪紀錄，對應 case-management.js::addVisit()。第二階段 CRUD 端點，
+    已由前端實際呼叫（見 create_case_stage() docstring）。"""
+    user = _require_user(authorization)
+    conn = get_db()
+    _guard_case(conn, quote_no, user, allow_module="case_manage")
+    _deny_if_case_locked_unsupported(conn, quote_no, authorization, op="拜訪紀錄-新增")
+    sr = _get_stage_row(conn, quote_no, stage_id)
+    if not sr:
+        conn.close(); raise HTTPException(404, "階段不存在")
+    now = datetime.now().isoformat()
+    conn.execute("""
+        INSERT INTO case_stage_visits (stage_id, visit_date, visit_people, note, created_at)
+        VALUES (?,?,?,?,?)
+    """, (stage_id, body.get("visitDate") or "", int(body.get("visitPeople") or 0), body.get("note") or "", now))
+    conn.execute("UPDATE case_stages SET updated_at=? WHERE id=?", (now, stage_id))
+    conn.commit()
+    _sync_stages_to_json(conn, quote_no)
+    sr = _get_stage_row(conn, quote_no, stage_id)
+    result = _serialize_stage(conn, sr)
+    conn.close()
+    return result
+
+
+@router.put("/api/quotations/{quote_no}/stages/{stage_id}/visits/{visit_id}")
+def update_stage_visit(quote_no: str, stage_id: int, visit_id: int, body: dict = Body(...), authorization: str = Header(None)):
+    """局部更新拜訪紀錄欄位，對應 v.visitDate/v.visitPeople/v.note 的 x-model 綁定。
+    第二階段 CRUD 端點，已由前端實際呼叫（見 create_case_stage() docstring）。"""
+    user = _require_user(authorization)
+    conn = get_db()
+    _guard_case(conn, quote_no, user, allow_module="case_manage")
+    _deny_if_case_locked_unsupported(conn, quote_no, authorization, op="拜訪紀錄-編輯")
+    sr = _get_stage_row(conn, quote_no, stage_id)
+    if not sr:
+        conn.close(); raise HTTPException(404, "階段不存在")
+    vr = conn.execute("SELECT id FROM case_stage_visits WHERE id=? AND stage_id=?", (visit_id, stage_id)).fetchone()
+    if not vr:
+        conn.close(); raise HTTPException(404, "拜訪紀錄不存在")
+    fields = {}
+    if "visitDate" in body:   fields["visit_date"]   = body.get("visitDate") or ""
+    if "visitPeople" in body: fields["visit_people"] = int(body.get("visitPeople") or 0)
+    if "note" in body:        fields["note"]         = body.get("note") or ""
+    if fields:
+        sql = "UPDATE case_stage_visits SET " + ", ".join(f"{k}=?" for k in fields) + " WHERE id=?"
+        conn.execute(sql, list(fields.values()) + [visit_id])
+        conn.execute("UPDATE case_stages SET updated_at=? WHERE id=?", (datetime.now().isoformat(), stage_id))
+        conn.commit()
+        _sync_stages_to_json(conn, quote_no)
+    sr = _get_stage_row(conn, quote_no, stage_id)
+    result = _serialize_stage(conn, sr)
+    conn.close()
+    return result
+
+
+@router.delete("/api/quotations/{quote_no}/stages/{stage_id}/visits/{visit_id}")
+def delete_stage_visit(quote_no: str, stage_id: int, visit_id: int, authorization: str = Header(None)):
+    """刪除拜訪紀錄，對應 case-management.js::removeVisit()。第二階段 CRUD 端點，
+    已由前端實際呼叫（見 create_case_stage() docstring）。"""
+    user = _require_user(authorization)
+    conn = get_db()
+    _guard_case(conn, quote_no, user, allow_module="case_manage")
+    _deny_if_case_locked_unsupported(conn, quote_no, authorization, op="拜訪紀錄-刪除")
+    sr = _get_stage_row(conn, quote_no, stage_id)
+    if not sr:
+        conn.close(); raise HTTPException(404, "階段不存在")
+    vr = conn.execute("SELECT id FROM case_stage_visits WHERE id=? AND stage_id=?", (visit_id, stage_id)).fetchone()
+    if not vr:
+        conn.close(); raise HTTPException(404, "拜訪紀錄不存在")
+    conn.execute("DELETE FROM case_stage_visits WHERE id=?", (visit_id,))
+    conn.execute("UPDATE case_stages SET updated_at=? WHERE id=?", (datetime.now().isoformat(), stage_id))
+    conn.commit()
+    _sync_stages_to_json(conn, quote_no)
+    conn.close()
+    return {"ok": True}
 
 
 @router.post("/api/quotations/{quote_no}/export")
 def record_export(quote_no: str, mode: str = "external", authorization: str = Header(None)):
     user = _require_user(authorization)
     conn = get_db()
+    _guard_case(conn, quote_no, user, allow_module="case_manage")
     row  = conn.execute("SELECT export_count, export_log FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
     if not row:
         conn.close()
@@ -706,7 +2795,16 @@ def record_export(quote_no: str, mode: str = "external", authorization: str = He
 
 @router.patch("/api/quotations/{no}/payment/{idx}")
 def mark_payment(no: str, idx: int, body: dict, authorization: str = Header(None)):
-    _require_user(authorization)
+    """2026-08-31（安全稽核發現）：標記款項收款/取消收款是本檔案裡少數完全沒有
+    角色門檻的金流寫入端點——任何登入使用者（含 viewer）原本都能標記任意案件
+    的任意期款項為已收款、任意填實收金額/手續費。比照同檔案 request_payment_
+    writeoff()/cancel_payment_writeoff() 同款 admin+ 門檻補上。純改 invoiceNo
+    （登錄發票號碼，不影響金額/收款狀態）維持原本任何登入使用者皆可，跟其他
+    模組「發票號碼」這類單純登錄用途的欄位一致寬鬆。"""
+    user = _require_user(authorization)
+    touches_receipt = "received" in body or "actualAmount" in body or "feeAmount" in body
+    if touches_receipt and user["role"] not in ("superadmin", "admin") and not user_has_module(user, "cashier"):
+        raise HTTPException(403, "僅管理員或出納可標記收款狀態")
     conn = get_db()
     try:
         row = conn.execute("SELECT data_json, updated_at FROM quotations WHERE quote_no=?", (no,)).fetchone()
@@ -721,6 +2819,16 @@ def mark_payment(no: str, idx: int, body: dict, authorization: str = Header(None
         pits = pay.setdefault("items", [])
         if idx < 0 or idx >= len(pits):
             raise HTTPException(400, "款項索引超出範圍")
+        if "invoiceNo" in body:
+            validate_invoice_no(conn, body["invoiceNo"], exclude_quote_no=no, exclude_idx=idx)
+        gated, change_id = _gate_case_edit(
+            conn, no, user, authorization, "payment_mark",
+            f"{no} 第{idx+1}期款項標記（{'收款' if body.get('received') else '取消收款'}）",
+            {"idx": idx, "body": dict(body)},
+        )
+        if gated:
+            return {"ok": True, "pending": True, "changeRequestId": change_id,
+                    "message": "案件已結案並處於半解鎖狀態，此變更已送出，待最高管理員審核通過後才會套用"}
         if "received" in body:
             is_rcv = bool(body["received"])
             pits[idx]["received"]   = is_rcv
@@ -731,11 +2839,25 @@ def mark_payment(no: str, idx: int, body: dict, authorization: str = Header(None
                 pits[idx]["feeAmount"]    = body.get("feeAmount") or 0
                 pits[idx]["feeNote"]      = body.get("feeNote", "")
                 pits[idx]["note"]         = body.get("note", "")
+                # 收款進了 MOTRIX 自己哪個銀行帳戶（選填，2026-09-01 新增，供 T100
+                # 傳票匯出依銀行帳戶分開設定科目代號用；跟其他欄位一樣直接存
+                # data_json，不需要 migration，見 db.py::_m071_paid_bank_account docstring）
+                pits[idx]["bankAccountName"] = body.get("bankAccountName", "")
+                pits[idx]["bankAccountCode"] = body.get("bankAccountCode", "")
             else:
-                for k in ("actualAmount", "feeAmount", "feeNote", "note"):
+                for k in ("actualAmount", "feeAmount", "feeNote", "note", "bankAccountName", "bankAccountCode"):
                     pits[idx].pop(k, None)
         if "invoiceNo" in body:
             pits[idx]["invoiceNo"] = body["invoiceNo"]
+        if "invoiceDate" in body:
+            # 統一發票「開立日期」（2026-09-02 新增，跟 invoiceNo 同一格填寫，選填）
+            # ——法定上決定這張發票屬於哪個申報期別的日期，跟 receivedAt（款項實際
+            # 入帳日）是兩件事：稅務匯出（reports.py::_collect_tax_invoices()）的
+            # 期別篩選改用這個欄位，缺漏才退回 receivedAt；T100 現金基礎傳票
+            # （accounting_export.py）刻意仍用 receivedAt 當傳票日期（現金基礎會計
+            # 要跟銀行實際入帳日一致，不能改用開立日期，否則傳票日期會跟銀行對帳
+            # 單對不上）。直接存 data_json，不需要 migration。
+            pits[idx]["invoiceDate"] = body["invoiceDate"]
         now = save_quotation_json(conn, no, data)
         conn.commit()
     finally:
@@ -748,7 +2870,326 @@ def mark_payment(no: str, idx: int, body: dict, authorization: str = Header(None
         else ('標記收款' if body.get('received') else '取消收款')
     )
     _audit(_tok(authorization), 'payment.mark', 'quotation', no, f"{no} {label}（{action_detail}）")
+    notify_module_activity("報價單", action_detail, user.get("display_name") or user["username"],
+                            f"{no} {label}", "quotations.html")
     return {"ok": True, "updated_at": now}
+
+
+def _load_payment_item(conn, no, idx):
+    row = conn.execute("SELECT data_json, updated_at FROM quotations WHERE quote_no=?", (no,)).fetchone()
+    if not row:
+        raise HTTPException(404, "報價單不存在")
+    data = json.loads(row["data_json"] or "{}")
+    cr   = data.setdefault("caseRecord", {})
+    pay  = cr.setdefault("payment", {})
+    pits = pay.setdefault("items", [])
+    if idx < 0 or idx >= len(pits):
+        raise HTTPException(400, "款項索引超出範圍")
+    return data, pits
+
+
+@router.post("/api/quotations/{no}/payment/{idx}/invoice-files", status_code=201)
+async def upload_payment_item_invoice_files(no: str, idx: int, files: List[UploadFile] = File(...),
+                                            authorization: str = Header(None)):
+    """款項明細逐期發票掃描檔上傳（2026-08-24 新增，多檔，任何登入使用者皆可
+    傳）——跟報價單本身的「客戶回簽」附件是兩回事：那個是整張報價單送出後
+    客戶簽回的證明，這裡是每一期款項（訂金款/進度款/驗收款等）各自對應的
+    發票影本，比照 mark_payment() 既有的 invoiceNo 文字欄位所在位置，只是
+    多存實際檔案。存放路徑跟報價單本身的回簽附件分開（quotation_payment_items
+    子資料夾），避免混淆。"""
+    user = _require_user(authorization)
+    conn = get_db()
+    _guard_case(conn, no, user, allow_module="case_manage", skip_if_semi_unlocked=True)
+    try:
+        data, pits = _load_payment_item(conn, no, idx)
+        label = pits[idx].get('label', f'第{idx+1}期')
+        if _check_case_gate(conn, no):
+            change_id = _create_case_change_request(
+                conn, no, user, authorization, "payment_invoice_upload",
+                f"{no} {label} 上傳發票附件（{len(files)} 個檔案）", {"idx": idx},
+            )
+            new_files = await save_document_files(f"_pending_case_changes/{change_id}", f"{no}_{idx}", files,
+                                                  user.get("display_name") or user["username"])
+            conn.execute("UPDATE case_change_requests SET staged_files_json=? WHERE id=?",
+                         (json.dumps(new_files, ensure_ascii=False), change_id))
+            conn.commit()
+            return {"ok": True, "pending": True, "changeRequestId": change_id,
+                    "message": "案件已結案並處於半解鎖狀態，此上傳已送出，待最高管理員審核通過後才會套用"}
+        new_files = await save_document_files("quotation_payment_items", f"{no}_{idx}", files,
+                                              user.get("display_name") or user["username"])
+        pits[idx].setdefault("invoiceFiles", [])
+        pits[idx]["invoiceFiles"].extend(new_files)
+        saved_at = save_quotation_json(conn, no, data)
+        conn.commit()
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "payment.upload_invoice_files", "quotation", no,
+           f"{no} {label}（{len(new_files)} 個檔案）")
+    return {"ok": True, "added": len(new_files), "files": new_files, "updated_at": saved_at}
+
+
+@router.delete("/api/quotations/{no}/payment/{idx}/invoice-files/{file_id}")
+def delete_payment_item_invoice_file(no: str, idx: int, file_id: str, authorization: str = Header(None)):
+    user = _require_user(authorization)
+    conn = get_db()
+    _guard_case(conn, no, user, allow_module="case_manage", skip_if_semi_unlocked=True)
+    try:
+        data, pits = _load_payment_item(conn, no, idx)
+        if _check_case_gate(conn, no):
+            label = pits[idx].get('label', f'第{idx+1}期')
+            change_id = _create_case_change_request(
+                conn, no, user, authorization, "payment_invoice_delete",
+                f"{no} {label} 刪除發票附件", {"idx": idx, "file_id": file_id},
+            )
+            return {"ok": True, "pending": True, "changeRequestId": change_id,
+                    "message": "案件已結案並處於半解鎖狀態，此刪除已送出，待最高管理員審核通過後才會套用"}
+        existing = pits[idx].get("invoiceFiles") or []
+        pits[idx]["invoiceFiles"] = delete_document_file("quotation_payment_items", f"{no}_{idx}", existing, file_id)
+        saved_at = save_quotation_json(conn, no, data)
+        conn.commit()
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "payment.delete_invoice_file", "quotation", no, no)
+    return {"ok": True, "updated_at": saved_at}
+
+
+def _load_material_item(conn, no, idx):
+    """比照 _load_payment_item()，定位叫料管控清單（cr.caseRecord.materials[]，
+    跟出貨單 shipping_notes 是完全不同的資料，這裡是報價單 JSON 裡的料件
+    到料追蹤）裡的一筆。"""
+    row = conn.execute("SELECT data_json, updated_at FROM quotations WHERE quote_no=?", (no,)).fetchone()
+    if not row:
+        raise HTTPException(404, "報價單不存在")
+    data = json.loads(row["data_json"] or "{}")
+    cr   = data.setdefault("caseRecord", {})
+    mats = cr.setdefault("materials", [])
+    if idx < 0 or idx >= len(mats):
+        raise HTTPException(400, "料件索引超出範圍")
+    return data, mats
+
+
+@router.post("/api/quotations/{no}/materials/{idx}/files", status_code=201)
+async def upload_material_files(no: str, idx: int, files: List[UploadFile] = File(...),
+                                authorization: str = Header(None)):
+    """叫料管控單筆料件附件上傳（2026-08-24 新增，多檔，任何登入使用者皆可
+    傳）——例如到貨憑證、包裝清單，供部分出貨是跟料件一起出的情境留存證明。"""
+    user = _require_user(authorization)
+    conn = get_db()
+    _guard_case(conn, no, user, allow_module="case_manage", skip_if_semi_unlocked=True)
+    try:
+        data, mats = _load_material_item(conn, no, idx)
+        name = mats[idx].get("name") or f"第{idx+1}項"
+        if _check_case_gate(conn, no):
+            change_id = _create_case_change_request(
+                conn, no, user, authorization, "material_file_upload",
+                f"{no} {name} 上傳附件（{len(files)} 個檔案）", {"idx": idx},
+            )
+            new_files = await save_document_files(f"_pending_case_changes/{change_id}", f"{no}_{idx}", files,
+                                                  user.get("display_name") or user["username"])
+            conn.execute("UPDATE case_change_requests SET staged_files_json=? WHERE id=?",
+                         (json.dumps(new_files, ensure_ascii=False), change_id))
+            conn.commit()
+            return {"ok": True, "pending": True, "changeRequestId": change_id,
+                    "message": "案件已結案並處於半解鎖狀態，此上傳已送出，待最高管理員審核通過後才會套用"}
+        new_files = await save_document_files("quotation_materials", f"{no}_{idx}", files,
+                                              user.get("display_name") or user["username"])
+        mats[idx].setdefault("files", [])
+        mats[idx]["files"].extend(new_files)
+        saved_at = save_quotation_json(conn, no, data)
+        conn.commit()
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "material.upload_files", "quotation", no,
+           f"{no} {name}（{len(new_files)} 個檔案）")
+    return {"ok": True, "added": len(new_files), "files": new_files, "updated_at": saved_at}
+
+
+@router.delete("/api/quotations/{no}/materials/{idx}/files/{file_id}")
+def delete_material_file(no: str, idx: int, file_id: str, authorization: str = Header(None)):
+    user = _require_user(authorization)
+    conn = get_db()
+    _guard_case(conn, no, user, allow_module="case_manage", skip_if_semi_unlocked=True)
+    try:
+        data, mats = _load_material_item(conn, no, idx)
+        if _check_case_gate(conn, no):
+            name = mats[idx].get("name") or f"第{idx+1}項"
+            change_id = _create_case_change_request(
+                conn, no, user, authorization, "material_file_delete",
+                f"{no} {name} 刪除附件", {"idx": idx, "file_id": file_id},
+            )
+            return {"ok": True, "pending": True, "changeRequestId": change_id,
+                    "message": "案件已結案並處於半解鎖狀態，此刪除已送出，待最高管理員審核通過後才會套用"}
+        existing = mats[idx].get("files") or []
+        mats[idx]["files"] = delete_document_file("quotation_materials", f"{no}_{idx}", existing, file_id)
+        saved_at = save_quotation_json(conn, no, data)
+        conn.commit()
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "material.delete_file", "quotation", no, no)
+    return {"ok": True, "updated_at": saved_at}
+
+
+@router.post("/api/quotations/{no}/materials/{idx}/invoice-files", status_code=201)
+async def upload_material_invoice_files(no: str, idx: int, files: List[UploadFile] = File(...),
+                                        authorization: str = Header(None)):
+    """叫料管控單筆料件的發票附件上傳（2026-08-25 新增，獨立於既有的到貨憑證/
+    包裝清單附件——存在 mats[idx]['invoiceFiles']，跟 mats[idx]['files']
+    是兩個各自獨立的清單，比照款項收款項目 item.invoiceFiles 的既有慣例，
+    只是那邊掛在款項而這裡掛在叫料料件）。任何登入使用者皆可傳，多檔。"""
+    user = _require_user(authorization)
+    conn = get_db()
+    _guard_case(conn, no, user, allow_module="case_manage", skip_if_semi_unlocked=True)
+    try:
+        data, mats = _load_material_item(conn, no, idx)
+        name = mats[idx].get("name") or f"第{idx+1}項"
+        if _check_case_gate(conn, no):
+            change_id = _create_case_change_request(
+                conn, no, user, authorization, "material_invoice_upload",
+                f"{no} {name} 上傳發票附件（{len(files)} 個檔案）", {"idx": idx},
+            )
+            new_files = await save_document_files(f"_pending_case_changes/{change_id}", f"{no}_{idx}", files,
+                                                  user.get("display_name") or user["username"])
+            conn.execute("UPDATE case_change_requests SET staged_files_json=? WHERE id=?",
+                         (json.dumps(new_files, ensure_ascii=False), change_id))
+            conn.commit()
+            return {"ok": True, "pending": True, "changeRequestId": change_id,
+                    "message": "案件已結案並處於半解鎖狀態，此上傳已送出，待最高管理員審核通過後才會套用"}
+        new_files = await save_document_files("quotation_materials_invoices", f"{no}_{idx}", files,
+                                              user.get("display_name") or user["username"])
+        mats[idx].setdefault("invoiceFiles", [])
+        mats[idx]["invoiceFiles"].extend(new_files)
+        saved_at = save_quotation_json(conn, no, data)
+        conn.commit()
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "material.upload_invoice_files", "quotation", no,
+           f"{no} {name}（{len(new_files)} 個檔案）")
+    return {"ok": True, "added": len(new_files), "files": new_files, "updated_at": saved_at}
+
+
+@router.delete("/api/quotations/{no}/materials/{idx}/invoice-files/{file_id}")
+def delete_material_invoice_file(no: str, idx: int, file_id: str, authorization: str = Header(None)):
+    user = _require_user(authorization)
+    conn = get_db()
+    _guard_case(conn, no, user, allow_module="case_manage", skip_if_semi_unlocked=True)
+    try:
+        data, mats = _load_material_item(conn, no, idx)
+        if _check_case_gate(conn, no):
+            name = mats[idx].get("name") or f"第{idx+1}項"
+            change_id = _create_case_change_request(
+                conn, no, user, authorization, "material_invoice_delete",
+                f"{no} {name} 刪除發票附件", {"idx": idx, "file_id": file_id},
+            )
+            return {"ok": True, "pending": True, "changeRequestId": change_id,
+                    "message": "案件已結案並處於半解鎖狀態，此刪除已送出，待最高管理員審核通過後才會套用"}
+        existing = mats[idx].get("invoiceFiles") or []
+        mats[idx]["invoiceFiles"] = delete_document_file("quotation_materials_invoices", f"{no}_{idx}", existing, file_id)
+        saved_at = save_quotation_json(conn, no, data)
+        conn.commit()
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "material.delete_invoice_file", "quotation", no, no)
+    return {"ok": True, "updated_at": saved_at}
+
+
+@router.post("/api/quotations/{no}/payment/{idx}/request-writeoff")
+def request_payment_writeoff(no: str, idx: int, body: WriteOffRequestIn, authorization: str = Header(None)):
+    """admin+ 申請將該筆收款的稅額沖銷（歸零），需 superadmin 審核。"""
+    user = _require_user(authorization)
+    if user["role"] not in ("superadmin", "admin"):
+        raise HTTPException(403, "僅管理員可申請沖銷")
+    conn = get_db()
+    try:
+        _deny_if_case_locked_unsupported(conn, no, authorization, op="稅額沖銷-申請")
+        data, pits = _load_payment_item(conn, no, idx)
+        item = pits[idx]
+        if item.get("writeOffStatus") == "pending":
+            raise HTTPException(409, "此筆款項已有待審核的沖銷申請")
+        if item.get("taxExempt"):
+            raise HTTPException(409, "此筆款項已完成沖銷")
+        requester_display = user.get("display_name") or user["username"]
+        now = datetime.now().isoformat()
+        item["writeOffStatus"]      = "pending"
+        item["writeOffReason"]      = body.reason or ''
+        item["writeOffRequestedBy"] = requester_display
+        item["writeOffRequestedAt"] = now
+        saved_at = save_quotation_json(conn, no, data)
+        conn.commit()
+    finally:
+        conn.close()
+    spawn_bg_thread(_backup_quotation, args=(no,))
+    label = item.get('label', f'第{idx+1}期')
+    _audit(_tok(authorization), 'payment.writeoff_request', 'quotation', no, f"{no} {label} 申請沖銷")
+    notify_module_activity("報價單", "申請沖銷", requester_display, f"{no} {label}", "quotations.html")
+    return {"ok": True, "updated_at": saved_at}
+
+
+@router.post("/api/quotations/{no}/payment/{idx}/cancel-writeoff")
+def cancel_payment_writeoff(no: str, idx: int, authorization: str = Header(None)):
+    """申請人本人或 superadmin 取消待審核的沖銷申請。"""
+    user = _require_user(authorization)
+    if user["role"] not in ("superadmin", "admin"):
+        raise HTTPException(403, "僅管理員可取消沖銷申請")
+    conn = get_db()
+    try:
+        _deny_if_case_locked_unsupported(conn, no, authorization, op="稅額沖銷-撤銷")
+        data, pits = _load_payment_item(conn, no, idx)
+        item = pits[idx]
+        if item.get("writeOffStatus") != "pending":
+            raise HTTPException(409, "此筆款項無待審核的沖銷申請")
+        requester_display = user.get("display_name") or user["username"]
+        if user["role"] != "superadmin" and item.get("writeOffRequestedBy") != requester_display:
+            raise HTTPException(403, "只能取消自己發出的沖銷申請")
+        for k in ("writeOffStatus", "writeOffReason", "writeOffRequestedBy", "writeOffRequestedAt"):
+            item.pop(k, None)
+        saved_at = save_quotation_json(conn, no, data)
+        conn.commit()
+    finally:
+        conn.close()
+    spawn_bg_thread(_backup_quotation, args=(no,))
+    label = item.get('label', f'第{idx+1}期')
+    _audit(_tok(authorization), 'payment.writeoff_cancel', 'quotation', no, f"{no} {label} 取消沖銷申請")
+    notify_module_activity("報價單", "取消沖銷申請", requester_display, f"{no} {label}", "quotations.html")
+    return {"ok": True, "updated_at": saved_at}
+
+
+@router.post("/api/quotations/{no}/payment/{idx}/approve-writeoff")
+def approve_payment_writeoff(no: str, idx: int, body: WriteOffApproveIn, authorization: str = Header(None)):
+    """superadmin 審核沖銷申請 — approve=True 生效（稅額歸零）；False 駁回。"""
+    user = _require_user(authorization)
+    if user["role"] != "superadmin":
+        raise HTTPException(403, "僅最高管理者可審核沖銷申請")
+    conn = get_db()
+    try:
+        _deny_if_case_locked_unsupported(conn, no, authorization, op="稅額沖銷-核准")
+        data, pits = _load_payment_item(conn, no, idx)
+        item = pits[idx]
+        if item.get("writeOffStatus") != "pending":
+            raise HTTPException(409, "此筆款項無待審核的沖銷申請")
+        approver_display = user.get("display_name") or user["username"]
+        now = datetime.now().isoformat()
+        if body.approve:
+            item["writeOffStatus"]    = "approved"
+            item["writeOffApprovedBy"] = approver_display
+            item["writeOffApprovedAt"] = now
+            item["taxExempt"] = True
+            action_detail = "核准沖銷"
+        else:
+            item["writeOffStatus"]       = "rejected"
+            item["writeOffRejectReason"] = body.reject_reason or ''
+            item["writeOffApprovedBy"]   = approver_display
+            item["writeOffApprovedAt"]   = now
+            action_detail = "駁回沖銷申請"
+        saved_at = save_quotation_json(conn, no, data)
+        conn.commit()
+    finally:
+        conn.close()
+    spawn_bg_thread(_backup_quotation, args=(no,))
+    label = item.get('label', f'第{idx+1}期')
+    _audit(_tok(authorization), 'payment.writeoff_approve' if body.approve else 'payment.writeoff_reject',
+           'quotation', no, f"{no} {label}（{action_detail}）")
+    notify_module_activity("報價單", action_detail, approver_display, f"{no} {label}", "quotations.html")
+    return {"ok": True, "updated_at": saved_at, "approved": body.approve}
 
 
 # ── Settlement ────────────────────────────────────────────────────────────────
@@ -759,14 +3200,22 @@ class SettlementIn(BaseModel):
 
 @router.get("/api/quotations/{quote_no}/settlement")
 def get_settlement(quote_no: str, authorization: str = Header(None)):
-    _require_user(authorization)
+    # 2026-09-13（模組權限稽核）：原本只要求登入。`quote_no` 可列舉
+    # （MQ-YYYYMM-NNN），等於任何已登入帳號都能讀到**任何**案件的成本、毛利
+    # 與精算明細——跟 2026-08-24 修掉的報價單 IDOR 是同一種洞，只是漏在這支。
+    # 改用跟同一批資料既有端點一致的擁有者規則（admin+ 直通、否則必須是
+    # 該案業務或被指派的協作者），見 helpers/quotations.py::_check_quotation_owner。
+    user = _require_user(authorization)
     conn = get_db()
     row = conn.execute(
-        "SELECT data_json FROM quotations WHERE quote_no=?", (quote_no,)
+        "SELECT data_json, sales_person_id, sales_person, assigned_user_ids "
+        "FROM quotations WHERE quote_no=?", (quote_no,)
     ).fetchone()
     conn.close()
     if not row:
         raise HTTPException(404, f"報價單 {quote_no} 不存在")
+    _check_quotation_owner(row, user)
+    _require_financial_view(user)
     data = json.loads(row["data_json"] or "{}")
     return {"settlement": data.get("settlement", None), "items": data.get("items", []),
             "tot": data.get("tot", {}), "customerName": data.get("customerName", ""),
@@ -779,11 +3228,22 @@ def update_settlement(quote_no: str, body: SettlementIn, authorization: str = He
     now  = datetime.now().isoformat()
     conn = get_db()
     row = conn.execute(
-        "SELECT data_json, customer_name FROM quotations WHERE quote_no=?", (quote_no,)
+        "SELECT data_json, customer_name, sales_person_id, sales_person, assigned_user_ids "
+        "FROM quotations WHERE quote_no=?", (quote_no,)
     ).fetchone()
     if not row:
         conn.close()
         raise HTTPException(404, f"報價單 {quote_no} 不存在")
+    # 2026-09-13（模組權限稽核）：這支原本只要求登入——任何已登入帳號（含 viewer
+    # 與 automation 服務帳號）都能覆寫**任何**案件的成本精算，只有 finalized 之後
+    # 才收斂成「僅 superadmin」。這是全系統唯一一個「寫入」層級的缺口，補上與
+    # GET 相同的擁有者檢查。
+    try:
+        _check_quotation_owner(row, user)
+        _require_financial_view(user)
+    except HTTPException:
+        conn.close()
+        raise
     data = json.loads(row["data_json"] or "{}")
     existing_settlement = data.get("settlement") or {}
     if existing_settlement.get("status") == "finalized" and user["role"] != "superadmin":
@@ -822,12 +3282,223 @@ def update_settlement(quote_no: str, body: SettlementIn, authorization: str = He
     return {"ok": True, "updated_at": now}
 
 
+# ── 案件財務總覽（應收應付，2026-09-09）────────────────────────────────────────
+
+@router.get("/api/quotations/{quote_no}/finance-summary")
+def get_finance_summary(quote_no: str, authorization: str = Header(None)):
+    """案件管理－財務 Tab「應收應付總覽」用：把一個案件的錢一次算完回傳。
+
+    這些數字原本散在四個地方，從來沒有一個畫面把它們並排看過：應收在
+    `data_json.caseRecord.payment.items[]`（案件資訊 Tab 的款項明細）、應付在
+    `contractor_payment_vouchers`（承攬商 Tab）、開票申請在 `invoice_vouchers`、
+    請款單在 `payment_requests`（各自的子清單）。
+
+    **刻意不做的事**：
+    - `invoice_vouchers`／`payment_requests` 只回唯讀清單，**不併進應收合計**。
+      它們是「開票／要款」流程文件，金額範圍（scope='amount'|'items'）跟收款
+      排程的期別不是一對一對應，合併會變成同一筆錢被算兩次。
+    - 精算「額外支出」（`settlement.extraItems[]`）只回小計供參考，**不計入
+      應付**。這個清單沒有已付/未付狀態欄位，硬把它當應付等於憑空發明一個
+      系統從來沒追蹤過的狀態。
+    - 權限比照同一批資料的既有端點（`get_settlement()`／
+      `list_contractor_vouchers()`／`list_invoice_vouchers()`）。這裡不另外加
+      `financial_view` 檢查——同一份資料透過上述既有端點本來就拿得到，只擋這一支
+      會是假的安全感；`financial_view` 是**顯示偏好**（前端 `canSeeFinancial()`），
+      不是權限邊界。
+      2026-09-13（模組權限稽核）：`get_settlement()` 那支補上了擁有者檢查，這支
+      跟著補——「比照既有端點」指的是同一套擁有者規則，不是「都不擋」。
+    """
+    user = _require_user(authorization)
+    conn = get_db()
+    row = conn.execute(
+        "SELECT total, pretax, data_json, sales_person_id, sales_person, assigned_user_ids "
+        "FROM quotations WHERE quote_no=?", (quote_no,)
+    ).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(404, f"報價單 {quote_no} 不存在")
+    try:
+        _check_quotation_owner(row, user)
+        _require_financial_view(user)
+    except HTTPException:
+        conn.close()
+        raise
+
+    data  = json.loads(row["data_json"] or "{}")
+    total = float(row["total"] or 0)
+    pay_items = ((data.get("caseRecord") or {}).get("payment") or {}).get("items") or []
+    receivable = summarize_payment_items(total, pay_items, row["pretax"])
+
+    # ── 應付：承攬商匯款申請 ──────────────────────────────────────────────
+    # 「已核准未匯款」才是真正該付而未付的錢；還在簽核流程裡的只回筆數當提醒，
+    # 不計入未付合計（金額還可能被退回或改動）。is_paid 跟 status 是兩個獨立
+    # 狀態（見 db.py::_m045_contractor_payment_vouchers），不要用 status 推論
+    # 有沒有付款。
+    approved_unpaid = approved_paid = pending_total = 0
+    pending_count = 0
+    vouchers = []
+    for v in conn.execute(
+        "SELECT * FROM contractor_payment_vouchers WHERE quote_no=? ORDER BY created_at DESC",
+        (quote_no,),
+    ).fetchall():
+        snap   = json.loads(v["snapshot_json"] or "{}")
+        amount = float(snap.get("grandTotal") or 0)
+        status = v["status"] or "草稿"
+        paid   = bool(v["is_paid"])
+        if status == "已核准" and paid:
+            approved_paid += amount
+        elif status == "已核准":
+            approved_unpaid += amount
+        else:
+            pending_total += amount
+            pending_count += 1
+        vouchers.append({
+            "voucherNo":   v["voucher_no"],
+            "vendorName":  snap.get("vendorName", ""),
+            "status":      status,
+            "grandTotal":  amount,
+            "payableDate": snap.get("payableDate", ""),
+            "isPaid":      paid,
+            "paidAt":      v["paid_at"] or "",
+            "createdAt":   v["created_at"] or "",
+        })
+
+    # ── 關聯文件（唯讀清單，不併入合計，理由見 docstring）──────────────────
+    invoice_vouchers = [{
+        "voucherNo": r["voucher_no"],
+        "status":    r["status"] or "草稿",
+        "amount":    float(r["amount"] or 0),
+        "createdAt": r["created_at"] or "",
+    } for r in conn.execute(
+        "SELECT voucher_no, status, amount, created_at FROM invoice_vouchers "
+        "WHERE quote_no=? ORDER BY created_at DESC", (quote_no,)
+    ).fetchall()]
+
+    payment_requests = [{
+        "requestNo": r["request_no"],
+        "status":    r["status"] or "草稿",
+        "stage":     r["stage"] or "",
+        "amount":    float(r["amount"] or 0),
+        "createdAt": r["created_at"] or "",
+    } for r in conn.execute(
+        "SELECT request_no, status, stage, amount, created_at FROM payment_requests "
+        "WHERE quote_no=? ORDER BY created_at DESC", (quote_no,)
+    ).fetchall()]
+
+    settlement = data.get("settlement") or {}
+    # 額外支出完整明細，包括發票文件與填寫人：案件財務總覽要展示這些，讓使用者
+    # 知道是誰何時填的、有沒有上傳發票、憑證單號是什麼。
+    #
+    # 2026-09-11：改讀 `case_extra_expenses` 表（DB v75 把資料從
+    # `settlement.extraItems` 搬出來了）。**不能再讀 data_json 那份**——它現在只是
+    # 搬移前的唯讀備份、不會再更新，讀它會讓財務總覽停在搬移當下的舊數字。
+    # 多回 `status` 與 `pending`：送審中的金額照樣計入（使用者指定），但畫面要
+    # 標示出來，不然看數字的人不知道它還可能因駁回而改變。
+    extras = [{
+        "id":          r["id"],
+        "category":    r["category"] or "",
+        "description": r["description"] or "",
+        "docNo":       r["doc_no"] or "",
+        "totalCost":   float(r["total_cost"] or 0),
+        "expenseDate": r["expense_date"] or "",
+        "qty":         r["qty"],
+        "unit":        r["unit"] or "",
+        "unitCost":    float(r["unit_cost"] or 0),
+        "note":        r["note"] or "",
+        "createdBy":   r["created_by_name"] or "",
+        "createdByInferred": bool(r["created_by_inferred"]),
+        "payerName":   r["payer_name"] or "",
+        "status":      r["status"],
+        "pending":     r["status"] != "已核准",
+        "files":       json.loads(r["files_json"] or "[]"),
+    } for r in conn.execute(
+        "SELECT * FROM case_extra_expenses WHERE quote_no=? ORDER BY id", (quote_no,)
+    ).fetchall()]
+    # 2026-09-11：conn 從這裡才關——額外支出改讀 case_extra_expenses 表之後，
+    # 上面那段列表推導需要連線，原本在它之前就 close() 會變成 use-after-close
+    conn.close()
+
+    return {
+        "quoteNo":    quote_no,
+        "receivable": receivable,
+        "payable": {
+            "approvedUnpaidTotal": approved_unpaid,
+            "approvedPaidTotal":   approved_paid,
+            "pendingTotal":        pending_total,
+            "pendingCount":        pending_count,
+            "vouchers":            vouchers,
+        },
+        "relatedDocuments": {
+            "invoiceVouchers": invoice_vouchers,
+            "paymentRequests": payment_requests,
+        },
+        "settlementExtras": {
+            "total": sum(e["totalCost"] for e in extras),
+            "items": extras,
+        },
+    }
+
+
+# ── 精算額外支出的附件端點已移除（2026-09-11）────────────────────────────────
+#
+# 原本這裡有 `_load_settlement_extra_item()` ＋ `/settlement/extra/{idx}/files`
+# 上傳與刪除兩支端點。額外支出搬到 `case_extra_expenses` 表（DB v75）之後，
+# 對應端點改在 `routers/case_extra_expenses.py`，並且**改用資料列 id 定位而不是
+# 陣列索引**——舊版用 idx，額外支出一旦新增/刪除/重排，索引就會指到別筆去。
+# 附件實體檔案的分類也從 "quotation_settlement_extra" 改成 "case_extra_expense"。
+
+
 # ── Approval queue ────────────────────────────────────────────────────────────
+
+def _queue_tier_fields(approval_json_raw: str) -> dict:
+    """三種文件類型（報價單／承攬商匯款申請／開票申請憑據）的 approval 欄位
+    形狀完全相同（tiers/currentTier，見 §5.3／§5.9），可共用同一段換算邏輯。"""
+    try:
+        appr = json.loads(approval_json_raw or "{}")
+    except Exception:
+        appr = {}
+    tiers  = _active_tiers(appr)
+    ct_idx = _current_tier_idx(appr)
+    cur_tier_approvers = tiers[ct_idx].get("approvers") or [] if tiers and ct_idx < len(tiers) else []
+    return {
+        "appr":               appr,
+        "requestedBy":        appr.get("requestedBy") or "",
+        "requestedByDisplay": appr.get("requestedByDisplay") or appr.get("requestedBy") or "",
+        "requestedAt":        appr.get("requestedAt") or "",
+        "tiers":              tiers,
+        "currentTier":        ct_idx,
+        "tierCount":          len(tiers),
+        "currentApprovers":   cur_tier_approvers,
+    }
+
 
 @router.get("/api/approval-queue")
 def get_approval_queue(authorization: str = Header(None)):
-    _require_user(authorization)
+    """2026-08-21 起合併三種待簽核文件類型：報價單、承攬商匯款申請、開票申請
+    憑據；2026-08-24 補上出貨單（§5.8 的舊功能，統一佇列蓋上去時漏掉）與請款單
+    （新增單據類型，見 routers/payment_requests.py）。刻意
+    沿用報價單既有的欄位名稱（quoteNo/customer/projectName/total/quoteDate/
+    salesPerson）承載各類型的資料，讓既有前端列表渲染邏輯幾乎不用改，只多一個
+    `type` 欄位供前端分流動作按鈕與連結（見 approval-queue.html）。承攬商匯款
+    申請／開票申請憑據／出貨單都沒有「拒絕結案」這種永久終止端點（只有報價單
+    有），前端會依 type 隱藏該按鈕。2026-08-26 補上 type='case_change'（已結案
+    案件半解鎖期間的變更/上傳待審核，見 case_change_requests 表）——這類項目不是
+    真正的多層 tiers 簽核，是單層「任一 superadmin 皆可審核」，approve/reject
+    走獨立端點 POST /api/case-changes/{id}/approve|reject，不是既有的
+    quotation 簽核端點，前端需依 type 分流。
+
+    2026-08-28：額外回傳 myDelegatedFor（目前使用者正在代理誰的簽核權限，見
+    approval_delegates 表／active_delegators_for()）——check_approve_permission()
+    後端早就支援代理人真的能完成簽核動作，但這個佇列列表／canApprove() 前端
+    判斷原本只比對 currentApprovers 的 username 是否等於自己，代理人登入後完全
+    看不到任何項目被標成「輪到我」、核准/退回按鈕也不會出現，等於代理人設定了
+    也沒用（除非剛好知道確切單號直接開頁面）。前端 canApprove()/myPendingCount
+    要一併比對這份清單。"""
+    user = _require_user(authorization)
     conn = get_db()
+    my_delegated_for = sorted(active_delegators_for(conn, user["username"]))
+    items = []
+
     rows = conn.execute("""
         SELECT quote_no, customer_name, project_name, total, quote_date, sales_person,
                json_extract(data_json,'$.approval') as approval_json
@@ -835,36 +3506,328 @@ def get_approval_queue(authorization: str = Header(None)):
         WHERE status IN ('待審核','簽核中')
         ORDER BY id DESC
     """).fetchall()
-    conn.close()
-
-    items = []
     for r in rows:
-        try:
-            appr = json.loads(r["approval_json"] or "{}")
-        except Exception:
-            appr = {}
-        tiers   = _active_tiers(appr)
-        ct_idx  = _current_tier_idx(appr)
-        cur_tier_approvers = []
-        if tiers and ct_idx < len(tiers):
-            cur_tier_approvers = tiers[ct_idx].get("approvers") or []
+        f = _queue_tier_fields(r["approval_json"])
         items.append({
+            "type":                "quotation",
             "quoteNo":             r["quote_no"],
             "customer":            r["customer_name"] or "",
             "projectName":         r["project_name"] or "",
             "total":               r["total"] or 0,
             "quoteDate":           r["quote_date"] or "",
             "salesPerson":         r["sales_person"] or "",
-            "requestedBy":         appr.get("requestedBy") or "",
-            "requestedByDisplay":  appr.get("requestedByDisplay") or appr.get("requestedBy") or "",
-            "requestedAt":         appr.get("requestedAt") or "",
-            "isEditApproval":      appr.get("isEditApproval", False),
-            "reasons":             appr.get("reasons") or [],
-            "tiers":               tiers,
-            "currentTier":         ct_idx,
-            "tierCount":           len(tiers),
-            "currentApprovers":    cur_tier_approvers,
+            "requestedBy":         f["requestedBy"],
+            "requestedByDisplay":  f["requestedByDisplay"],
+            "requestedAt":         f["requestedAt"],
+            "isEditApproval":      f["appr"].get("isEditApproval", False),
+            "reasons":             f["appr"].get("reasons") or [],
+            "tiers":               f["tiers"],
+            "currentTier":         f["currentTier"],
+            "tierCount":           f["tierCount"],
+            "currentApprovers":    f["currentApprovers"],
         })
+
+    cv_rows = conn.execute("""
+        SELECT voucher_no, quote_no, snapshot_json, created_at,
+               json_extract(data_json,'$.approval') as approval_json
+        FROM contractor_payment_vouchers
+        WHERE status IN ('待審核','簽核中')
+        ORDER BY id DESC
+    """).fetchall()
+    for r in cv_rows:
+        f = _queue_tier_fields(r["approval_json"])
+        try:
+            snap = json.loads(r["snapshot_json"] or "{}")
+        except Exception:
+            snap = {}
+        items.append({
+            "type":                "contractor_voucher",
+            "quoteNo":             r["voucher_no"],
+            "customer":            snap.get("vendorName") or "外包人員點工",
+            "projectName":         f"關聯案件 {r['quote_no']}",
+            "total":               snap.get("grandTotal", 0),
+            "quoteDate":           (r["created_at"] or "")[:10],
+            "salesPerson":         "",
+            "requestedBy":         f["requestedBy"],
+            "requestedByDisplay":  f["requestedByDisplay"],
+            "requestedAt":         f["requestedAt"],
+            "isEditApproval":      False,
+            "reasons":             [],
+            "tiers":               f["tiers"],
+            "currentTier":         f["currentTier"],
+            "tierCount":           f["tierCount"],
+            "currentApprovers":    f["currentApprovers"],
+            "linkedQuoteNo":       r["quote_no"],
+            # 2026-08-30：使用者要求簽核佇列連同申請單本身都要顯示應付款日期／
+            # 匯款帳戶／存簿圖檔／廠商發票，這裡直接從凍結快照帶出，不用簽核人員
+            # 另外點開案件管理才看得到匯款要用的資訊。
+            "payableDate":         snap.get("payableDate") or "",
+            "bankName":            snap.get("bankName") or "",
+            "bankBranch":          snap.get("bankBranch") or "",
+            "bankAccountName":     snap.get("bankAccountName") or "",
+            "bankAccountNumber":   snap.get("bankAccountNumber") or "",
+            "bankPassbookImage":   snap.get("bankPassbookImage") or "",
+            "invoiceFiles":        snap.get("invoiceFiles") or [],
+        })
+
+    iv_rows = conn.execute("""
+        SELECT voucher_no, quote_no, amount, snapshot_json, created_at,
+               json_extract(data_json,'$.approval') as approval_json
+        FROM invoice_vouchers
+        WHERE status IN ('待審核','簽核中')
+        ORDER BY id DESC
+    """).fetchall()
+    for r in iv_rows:
+        f = _queue_tier_fields(r["approval_json"])
+        try:
+            snap = json.loads(r["snapshot_json"] or "{}")
+        except Exception:
+            snap = {}
+        items.append({
+            "type":                "invoice_voucher",
+            "quoteNo":             r["voucher_no"],
+            "customer":            snap.get("customerName") or "",
+            "projectName":         snap.get("projectName") or f"關聯案件 {r['quote_no']}",
+            "total":               r["amount"] or 0,
+            "quoteDate":           (r["created_at"] or "")[:10],
+            "salesPerson":         "",
+            "requestedBy":         f["requestedBy"],
+            "requestedByDisplay":  f["requestedByDisplay"],
+            "requestedAt":         f["requestedAt"],
+            "isEditApproval":      False,
+            "reasons":             [],
+            "tiers":               f["tiers"],
+            "currentTier":         f["currentTier"],
+            "tierCount":           f["tierCount"],
+            "currentApprovers":    f["currentApprovers"],
+            "linkedQuoteNo":       r["quote_no"],
+        })
+
+    sn_rows = conn.execute("""
+        SELECT note_no, quote_no, customer_name, project_name, items_json, ship_date, created_at,
+               json_extract(data_json,'$.approval') as approval_json
+        FROM shipping_notes
+        WHERE status IN ('待審核','簽核中')
+        ORDER BY id DESC
+    """).fetchall()
+    for r in sn_rows:
+        f = _queue_tier_fields(r["approval_json"])
+        try:
+            item_count = len(json.loads(r["items_json"] or "[]"))
+        except Exception:
+            item_count = 0
+        items.append({
+            "type":                "shipping_note",
+            "quoteNo":             r["note_no"],
+            "customer":            r["customer_name"] or "",
+            "projectName":         r["project_name"] or "",
+            "total":               item_count,
+            "quoteDate":           r["ship_date"] or (r["created_at"] or "")[:10],
+            "salesPerson":         "",
+            "requestedBy":         f["requestedBy"],
+            "requestedByDisplay":  f["requestedByDisplay"],
+            "requestedAt":         f["requestedAt"],
+            "isEditApproval":      False,
+            "reasons":             [],
+            "tiers":               f["tiers"],
+            "currentTier":         f["currentTier"],
+            "tierCount":           f["tierCount"],
+            "currentApprovers":    f["currentApprovers"],
+            "linkedQuoteNo":       r["quote_no"],
+        })
+
+    pr_rows = conn.execute("""
+        SELECT request_no, quote_no, amount, snapshot_json, created_at,
+               json_extract(data_json,'$.approval') as approval_json
+        FROM payment_requests
+        WHERE status IN ('待審核','簽核中')
+        ORDER BY id DESC
+    """).fetchall()
+    for r in pr_rows:
+        f = _queue_tier_fields(r["approval_json"])
+        try:
+            snap = json.loads(r["snapshot_json"] or "{}")
+        except Exception:
+            snap = {}
+        items.append({
+            "type":                "payment_request",
+            "quoteNo":             r["request_no"],
+            "customer":            snap.get("customerName") or "",
+            "projectName":         snap.get("projectName") or f"關聯案件 {r['quote_no']}",
+            "total":               r["amount"] or 0,
+            "quoteDate":           (r["created_at"] or "")[:10],
+            "salesPerson":         "",
+            "requestedBy":         f["requestedBy"],
+            "requestedByDisplay":  f["requestedByDisplay"],
+            "requestedAt":         f["requestedAt"],
+            "isEditApproval":      False,
+            "reasons":             [],
+            "tiers":               f["tiers"],
+            "currentTier":         f["currentTier"],
+            "tierCount":           f["tierCount"],
+            "currentApprovers":    f["currentApprovers"],
+            "linkedQuoteNo":       r["quote_no"],
+        })
+
+    ccr_rows = conn.execute("""
+        SELECT id, quote_no, action_type, summary, requested_by, requested_by_display, requested_at
+        FROM case_change_requests
+        WHERE status='pending'
+        ORDER BY id DESC
+    """).fetchall()
+    for r in ccr_rows:
+        cust = conn.execute(
+            "SELECT customer_name, project_name FROM quotations WHERE quote_no=?", (r["quote_no"],)
+        ).fetchone()
+        items.append({
+            # 刻意留空 tiers（跟既有「無 tiers 設定時任一 superadmin 皆可簽核」
+            # 的 fallback 語意共用同一套前端 canApprove() 判斷——不是真正的多層
+            # 循序簽核，是單層「任一 superadmin」，用空 tiers 借用既有邏輯最簡單，
+            # 不需要另外構造「這層有 N 個 approvers 但誰簽都算數」的新語意。
+            "type":                "case_change",
+            "quoteNo":             f"{r['quote_no']}-CCR{r['id']}",
+            "customer":            (cust["customer_name"] if cust else "") or "",
+            "projectName":         r["summary"] or "",
+            "total":               0,
+            "quoteDate":           (r["requested_at"] or "")[:10],
+            "salesPerson":         "",
+            "requestedBy":         r["requested_by"] or "",
+            "requestedByDisplay":  r["requested_by_display"] or r["requested_by"] or "",
+            "requestedAt":         r["requested_at"] or "",
+            "isEditApproval":      False,
+            "reasons":             [],
+            "tiers":               [],
+            "currentTier":         0,
+            "tierCount":           0,
+            "currentApprovers":    [],
+            "linkedQuoteNo":       r["quote_no"],
+            "changeRequestId":     r["id"],
+            "actionType":          r["action_type"],
+        })
+
+    # 案件額外支出（2026-09-11）：跟其他五種單據一樣進統一佇列，否則送審之後
+    # 簽核人不會在任何地方看到它，只能靠站內通知——那是「送審了但沒人知道要簽」
+    # 的典型來源。tiers 用真實的分層資料（不像 case_change 借用空 tiers 的捷徑），
+    # 因為這個類型走的就是正規的 tiered_approval。
+    xe_rows = conn.execute("""
+        SELECT e.id, e.quote_no, e.description, e.total_cost, e.approval_json,
+               q.customer_name, q.project_name
+        FROM case_extra_expenses e
+        LEFT JOIN quotations q ON q.quote_no = e.quote_no
+        WHERE e.status IN ('待審核','簽核中')
+        ORDER BY e.id DESC
+    """).fetchall()
+    for r in xe_rows:
+        f = _queue_tier_fields(r["approval_json"])
+        items.append({
+            "type":                "extra_expense",
+            "quoteNo":             f"{r['quote_no']}-XE{r['id']}",
+            "customer":            r["customer_name"] or "",
+            "projectName":         r["description"] or "",
+            "total":               r["total_cost"] or 0,
+            "quoteDate":           (f["requestedAt"] or "")[:10],
+            "salesPerson":         "",
+            "requestedBy":         f["requestedBy"],
+            "requestedByDisplay":  f["requestedByDisplay"],
+            "requestedAt":         f["requestedAt"],
+            "isEditApproval":      False,
+            "reasons":             [],
+            "tiers":               f["tiers"],
+            "currentTier":         f["currentTier"],
+            "tierCount":           f["tierCount"],
+            "currentApprovers":    f["currentApprovers"],
+            "linkedQuoteNo":       r["quote_no"],
+            "extraExpenseId":      r["id"],
+        })
+
+    # 完工單（2026-09-12）：跟出貨單同一種形狀，簽核狀態在 data_json.$.approval。
+    # 佇列上刻意把「未完成項目數」放進 projectName 一起顯示——完工單常常不是每一
+    # 項都 100% 完成，簽核人要先知道自己簽的是不是一張帶缺失的完工單。
+    cn_rows = conn.execute("""
+        SELECT note_no, quote_no, customer_name, project_name, completion_date, created_at,
+               items_json, json_extract(data_json,'$.approval') as approval_json
+        FROM completion_notes
+        WHERE status IN ('待審核','簽核中')
+        ORDER BY id DESC
+    """).fetchall()
+    for r in cn_rows:
+        f = _queue_tier_fields(r["approval_json"])
+        try:
+            cn_items = json.loads(r["items_json"] or "[]")
+        except Exception:
+            cn_items = []
+        real_items = [it for it in cn_items if it.get("type") != "header"]
+        unfinished = sum(1 for it in real_items if it.get("status") in ("部分完成", "未施作"))
+        label = r["project_name"] or ""
+        if unfinished:
+            label = f"{label}（{unfinished} 項未完成）"
+        items.append({
+            "type":                "completion_note",
+            "quoteNo":             r["note_no"],
+            "customer":            r["customer_name"] or "",
+            "projectName":         label,
+            "total":               len(real_items),
+            "quoteDate":           r["completion_date"] or (r["created_at"] or "")[:10],
+            "salesPerson":         "",
+            "requestedBy":         f["requestedBy"],
+            "requestedByDisplay":  f["requestedByDisplay"],
+            "requestedAt":         f["requestedAt"],
+            "isEditApproval":      False,
+            "reasons":             [],
+            "tiers":               f["tiers"],
+            "currentTier":         f["currentTier"],
+            "tierCount":           f["tierCount"],
+            "currentApprovers":    f["currentApprovers"],
+            "linkedQuoteNo":       r["quote_no"],
+            "unfinishedCount":     unfinished,
+        })
+
+    # 額外支出「變更申請」（2026-09-11 第二輪，DB v76）：已核准之後的編輯要簽核，
+    # 簽核狀態在 change_approval_json 這一欄，跟本體的 approval_json 是兩條獨立的
+    # 線（本體維持「已核准」不動，見 case_extra_expenses.py 末段）。**一定要獨立
+    # 列進佇列**——借用上面那個 extra_expense 類型的話，簽核人按下核准會打到本體
+    # 的 /approve，那支看到 status 已經是「已核准」就 409，變更永遠簽不掉。
+    xec_rows = conn.execute("""
+        SELECT e.id, e.quote_no, e.description, e.total_cost, e.change_json,
+               e.change_approval_json, q.customer_name, q.project_name
+        FROM case_extra_expenses e
+        LEFT JOIN quotations q ON q.quote_no = e.quote_no
+        WHERE e.change_status IN ('待審核','簽核中')
+        ORDER BY e.id DESC
+    """).fetchall()
+    for r in xec_rows:
+        f = _queue_tier_fields(r["change_approval_json"])
+        try:
+            chg = json.loads(r["change_json"] or "{}")
+        except Exception:
+            chg = {}
+        items.append({
+            "type":                "extra_expense_change",
+            "quoteNo":             f"{r['quote_no']}-XE{r['id']}改",
+            "customer":            r["customer_name"] or "",
+            # 佇列上一眼就要看得出「改什麼、從多少變多少」，只放新說明的話簽核人
+            # 得自己去案件裡翻舊值
+            "projectName":         f"{chg.get('description') or r['description'] or ''}"
+                                   f"（原 NT$ {float(r['total_cost'] or 0):,.0f}）",
+            "total":               chg.get("totalCost") or 0,
+            "quoteDate":           (f["requestedAt"] or "")[:10],
+            "salesPerson":         "",
+            "requestedBy":         f["requestedBy"],
+            "requestedByDisplay":  f["requestedByDisplay"],
+            "requestedAt":         f["requestedAt"],
+            "isEditApproval":      True,
+            "reasons":             [],
+            "tiers":               f["tiers"],
+            "currentTier":         f["currentTier"],
+            "tierCount":           f["tierCount"],
+            "currentApprovers":    f["currentApprovers"],
+            "linkedQuoteNo":       r["quote_no"],
+            "extraExpenseId":      r["id"],
+            "previousTotal":       r["total_cost"] or 0,
+            "pendingFileCount":    len(chg.get("addFiles") or []),
+        })
+
+    conn.close()
 
     groups: dict = defaultdict(list)
     for item in items:
@@ -881,29 +3844,74 @@ def get_approval_queue(authorization: str = Header(None)):
         })
     queue.sort(key=lambda g: g["items"][0]["requestedAt"] if g["items"] else "")
 
-    return {"queue": queue, "total": len(items)}
+    return {"queue": queue, "total": len(items), "myDelegatedFor": my_delegated_for}
 
 
 @router.get("/api/approval-queue/count")
 def get_approval_queue_count(authorization: str = Header(None)):
-    """輕量端點：回傳目前輪到當前用戶簽核的報價單數量。"""
+    """輕量端點：回傳目前輪到當前用戶簽核的項目數量（報價單＋承攬商匯款申請＋
+    開票申請憑據＋出貨單，2026-08-21 起合併前三者、2026-08-24 補上出貨單）。
+    每一頁 topbar 都會呼叫這支（static/notif.js），刻意維持跟原本一樣的輕量
+    寫法（只挑 approval_json 一欄），不要拖累全站每頁的載入速度。
+
+    2026-08-28：一併算進「我目前代理誰」（見 get_approval_queue() 同一則
+    2026-08-28 說明），否則代理人這段期間看到的側邊欄角標數字仍然是 0，
+    跟佇列頁面本身修好後的狀態矛盾。"""
     u = _require_user(authorization)
     my_username = u["username"]
     conn = get_db()
-    rows = conn.execute(
-        "SELECT json_extract(data_json,'$.approval') as approval_json "
-        "FROM quotations WHERE status IN ('待審核','簽核中')"
-    ).fetchall()
+    my_delegated_for = active_delegators_for(conn, my_username)
+    my_usernames = {my_username} | my_delegated_for
+    approval_jsons = [r[0] for r in conn.execute(
+        "SELECT json_extract(data_json,'$.approval') FROM quotations WHERE status IN ('待審核','簽核中')"
+    ).fetchall()]
+    approval_jsons += [r[0] for r in conn.execute(
+        "SELECT json_extract(data_json,'$.approval') FROM contractor_payment_vouchers "
+        "WHERE status IN ('待審核','簽核中')"
+    ).fetchall()]
+    approval_jsons += [r[0] for r in conn.execute(
+        "SELECT json_extract(data_json,'$.approval') FROM invoice_vouchers WHERE status IN ('待審核','簽核中')"
+    ).fetchall()]
+    approval_jsons += [r[0] for r in conn.execute(
+        "SELECT json_extract(data_json,'$.approval') FROM shipping_notes WHERE status IN ('待審核','簽核中')"
+    ).fetchall()]
+    # 完工單（2026-09-12）：角標數字要跟佇列列表一致，漏掉就會變成「列得出來但
+    # topbar 是 0」——兩邊矛盾比兩邊都沒有更難查
+    approval_jsons += [r[0] for r in conn.execute(
+        "SELECT json_extract(data_json,'$.approval') FROM completion_notes WHERE status IN ('待審核','簽核中')"
+    ).fetchall()]
+    approval_jsons += [r[0] for r in conn.execute(
+        "SELECT json_extract(data_json,'$.approval') FROM payment_requests WHERE status IN ('待審核','簽核中')"
+    ).fetchall()]
+    # 案件額外支出（2026-09-11）：這張表的簽核狀態存在獨立欄位 approval_json，
+    # 不是 data_json 裡的 $.approval，所以直接取欄位；下面那段逐筆比對當層
+    # approver 的邏輯完全共用，不必另外寫一份。
+    approval_jsons += [r[0] for r in conn.execute(
+        "SELECT approval_json FROM case_extra_expenses WHERE status IN ('待審核','簽核中')"
+    ).fetchall()]
+    # 額外支出變更申請（2026-09-11，DB v76）：另一欄、另一輪簽核，角標要一起算，
+    # 否則佇列頁列得出來但 topbar 數字是 0（兩邊矛盾比兩邊都沒有更難查）
+    approval_jsons += [r[0] for r in conn.execute(
+        "SELECT change_approval_json FROM case_extra_expenses "
+        "WHERE change_status IN ('待審核','簽核中')"
+    ).fetchall()]
+    # 已結案案件半解鎖變更（2026-08-26）：單層審核，任一 superadmin 皆算「輪到我」，
+    # 不像其他文件類型需要比對 tiers 當層 approver username，直接另外加總。
+    ccr_count = 0
+    if u["role"] == "superadmin":
+        ccr_count = conn.execute(
+            "SELECT COUNT(*) c FROM case_change_requests WHERE status='pending'"
+        ).fetchone()["c"]
     conn.close()
-    count = 0
-    for r in rows:
+    count = ccr_count
+    for approval_json in approval_jsons:
         try:
-            appr    = json.loads(r["approval_json"] or "{}")
+            appr    = json.loads(approval_json or "{}")
             tiers   = _active_tiers(appr)
             ct_idx  = _current_tier_idx(appr)
             if tiers and ct_idx < len(tiers):
                 approvers = tiers[ct_idx].get("approvers") or []
-                if any(a.get("username") == my_username and a.get("status") != "approved"
+                if any(a.get("username") in my_usernames and a.get("status") != "approved"
                        for a in approvers):
                     count += 1
         except Exception:
@@ -930,35 +3938,13 @@ def approve_quotation(quote_no: str, body: ApprovalActionBody, authorization: st
 
     if tiers:
         ct_idx = _current_tier_idx(appr)
-        if ct_idx >= len(tiers):
+        ok, status_code, err_msg = check_approve_permission(tiers, ct_idx, user["username"], conn=conn)
+        if not ok:
             conn.close()
-            raise HTTPException(400, "所有層已完成")
+            raise HTTPException(status_code, err_msg)
         tier      = tiers[ct_idx]
         approvers = tier.get("approvers") or []
-
-        # sequential order within tier: must be a member first
-        is_in_tier = any(a["username"] == user["username"] for a in approvers)
-        if not is_in_tier:
-            pending_names = "、".join(
-                a.get("displayName") or a["username"] for a in approvers if a.get("status") != "approved"
-            ) or "（無待簽核人員）"
-            conn.close()
-            raise HTTPException(403, f"此層需由以下人員簽核：{pending_names}")
-
-        # enforce sequential order: only the first unapproved approver may sign
-        first_pending = next(
-            (a for a in approvers if a.get("status") != "approved"),
-            None
-        )
-        if not first_pending:
-            conn.close()
-            raise HTTPException(400, "此層所有簽核人員已完成")
-
-        if first_pending["username"] != user["username"]:
-            next_name = first_pending.get("displayName") or first_pending["username"]
-            conn.close()
-            raise HTTPException(403, f"請等待 {next_name} 先完成簽核（簽核順序固定）")
-
+        first_pending = next((a for a in approvers if a.get("status") != "approved"), None)
         my_entry = first_pending
 
         my_entry["status"]     = "approved"
@@ -989,14 +3975,15 @@ def approve_quotation(quote_no: str, body: ApprovalActionBody, authorization: st
         if user["role"] != "superadmin":
             conn.close()
             raise HTTPException(403, "僅超級管理員可執行此操作")
-        if appr.get("requestedBy") == user["username"]:
-            conn.close()
-            raise HTTPException(403, "申請人不得自行審核")
         # If global approval_flow has tiers configured, block the no-tier fallback.
         # This prevents a quotation submitted before flow was set (tiers missing)
         # from being approved without going through the flow.
-        _global_flow   = _get_setting("approval_flow", {"tiers": []}) or {}
-        _global_tiers  = _setting_to_active_tiers(_global_flow)
+        _global_flow   = resolve_active_flow_setting("quotation")
+        try:
+            _global_tiers = _setting_to_active_tiers(_global_flow, conn, appr.get("requestedBy"))
+        except UnresolvedManagerError as e:
+            conn.close()
+            raise HTTPException(400, str(e))
         if _global_tiers:
             conn.close()
             raise HTTPException(
@@ -1004,6 +3991,10 @@ def approve_quotation(quote_no: str, body: ApprovalActionBody, authorization: st
                 "系統已設定簽核流程，此報價單缺少簽核層資料。"
                 "請請申請人收回並重新送審，以套用最新簽核設定"
             )
+        self_block_msg = check_no_tier_self_approval(conn, appr, user)
+        if self_block_msg:
+            conn.close()
+            raise HTTPException(403, self_block_msg)
         all_done      = True
         detail_status = "超級管理員簽核"
 
@@ -1048,18 +4039,11 @@ def reject_quotation(quote_no: str, body: ApprovalActionBody, authorization: str
     appr  = d.get("approval") or {}
     tiers = _active_tiers(appr)
 
-    if tiers:
-        ct_idx    = _current_tier_idx(appr)
-        tier      = tiers[ct_idx] if ct_idx < len(tiers) else {}
-        approvers = tier.get("approvers") or []
-        is_in_tier = any(a["username"] == user["username"] for a in approvers)
-        if not is_in_tier and user["role"] != "superadmin":
-            conn.close()
-            raise HTTPException(403, "無退回權限（非當層簽核人員）")
-    else:
-        if user["role"] != "superadmin":
-            conn.close()
-            raise HTTPException(403, "僅超級管理員可執行此操作")
+    ct_idx = _current_tier_idx(appr)
+    ok, status_code, err_msg = check_reject_permission(tiers, ct_idx, user, conn=conn)
+    if not ok:
+        conn.close()
+        raise HTTPException(status_code, err_msg)
 
     new_no = _next_revision_no(quote_no)
     note   = body.note or ""
@@ -1184,14 +4168,21 @@ def reject_final_quotation(quote_no: str, body: ApprovalActionBody, authorizatio
 
 @router.get("/api/quotations/{quote_no}/updates")
 def list_case_updates(quote_no: str, authorization: str = Header(None)):
-    """Return merged activity feed: manual comments + work_logs + daily_task completions."""
-    _require_user(authorization)
+    """Return merged activity feed: manual comments + work_logs + daily_task completions
+    + dev_logs + dev_case_status. 2026-08-28: every source's created_at is normalized via
+    norm_at() before the final string-sort — the five source tables store timestamps in
+    different formats (some 'T'-separated with microseconds, dev_logs space-separated
+    without), and ASCII ' ' < 'T' meant dev_log entries always sorted as "older" than any
+    same-day entry from the other sources regardless of actual time. See norm_at() docstring."""
+    # 2026-09-13：這支原本呼叫了兩次 _require_user()（開頭一次不取回傳值、
+    # 下面再一次取 user），合併成一次。
+    user = _require_user(authorization)
     conn = get_db()
+    _guard_case(conn, quote_no, user, allow_module="case_manage")
     row = conn.execute("SELECT quote_no FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
     if not row:
         conn.close()
         raise HTTPException(404, "報價單不存在")
-    user = _require_user(authorization)
 
     dn_map = {r["username"]: (r["display_name"] or r["username"])
               for r in conn.execute("SELECT username, display_name FROM users").fetchall()}
@@ -1199,36 +4190,45 @@ def list_case_updates(quote_no: str, authorization: str = Header(None)):
 
     # 1. Manual comments
     for c in conn.execute(
-        "SELECT id, author, content, type, created_at FROM case_updates "
+        "SELECT id, author, content, type, created_at, files_json FROM case_updates "
         "WHERE quote_no=? ORDER BY created_at DESC", (quote_no,)
     ).fetchall():
+        try:
+            c_files = json.loads(c["files_json"] or "[]")
+        except Exception:
+            c_files = []
         results.append({
             "id": c["id"],
             "source": "comment",
+            "files": c_files,
             "author": c["author"],
             "authorDisplay": dn_map.get(c["author"], c["author"]),
             "content": c["content"],
-            "created_at": c["created_at"],
+            "created_at": norm_at(c["created_at"]),
             "canDelete": (user["username"] == c["author"]
                           or user["role"] in ("superadmin", "admin")),
+            "important": c["type"] == "important",
         })
 
     # 2. Work logs tagged with this case
     for w in conn.execute(
-        "SELECT w.id, w.log_date, w.content, w.hours, w.created_at, "
+        "SELECT w.id, w.log_date, w.content, w.hours, w.created_at, w.photos, w.contact_type, "
         "u.username, u.display_name "
         "FROM work_logs w LEFT JOIN users u ON u.id=w.user_id "
         "WHERE w.case_no=?", (quote_no,)
     ).fetchall():
         results.append({
             "id": f"wl_{w['id']}",
+            "workLogId": w["id"],
             "source": "work_log",
             "author": w["username"] or "",
             "authorDisplay": w["display_name"] or w["username"] or "未知",
             "content": w["content"],
             "logDate": w["log_date"],
             "hours": w["hours"],
-            "created_at": w["created_at"],
+            "contactType": w["contact_type"] or "",
+            "created_at": norm_at(w["created_at"]),
+            "photos": json.loads(w["photos"] or "[]"),
             "canDelete": False,
         })
 
@@ -1248,9 +4248,54 @@ def list_case_updates(quote_no: str, authorization: str = Header(None)):
             "content": dt["report"] or f"完成工作事項：{dt['title']}",
             "taskTitle": dt["title"],
             "occurrenceDate": dt["occurrence_date"],
-            "created_at": dt["completed_at"] or "",
+            "created_at": norm_at(dt["completed_at"] or ""),
             "canDelete": False,
         })
+
+    # 4. Dev-CRM 開發記錄 + 案件狀態變更（業務開發轉建此報價單時才有）
+    dev_case = conn.execute(
+        "SELECT id FROM dev_cases WHERE converted_quote_no=? AND is_deleted=0", (quote_no,)
+    ).fetchone()
+    if dev_case:
+        case_id = dev_case["id"]
+        for dl in conn.execute(
+            "SELECT dl.id, dl.log_date, dl.channel, dl.content, dl.next_action, dl.created_at, "
+            "lu.username AS log_username, lu.display_name AS log_display, "
+            "cu.username AS created_username, cu.display_name AS created_display "
+            "FROM dev_logs dl "
+            "LEFT JOIN users lu ON lu.id = dl.log_by "
+            "LEFT JOIN users cu ON cu.id = dl.created_by "
+            "WHERE dl.case_id=? AND dl.needs_approval=0", (case_id,)
+        ).fetchall():
+            content = dl["content"] or ""
+            if dl["next_action"]:
+                content += f"\n→ 下一步：{dl['next_action']}"
+            results.append({
+                "id": f"dcl_{dl['id']}",
+                "source": "dev_log",
+                "author": dl["log_username"] or dl["created_username"] or "",
+                "authorDisplay": dl["log_display"] or dl["log_username"]
+                                 or dl["created_display"] or dl["created_username"] or "未知",
+                "content": content,
+                "channel": dl["channel"] or "",
+                "logDate": dl["log_date"],
+                "created_at": norm_at(dl["created_at"]),
+                "canDelete": False,
+            })
+        for al in conn.execute(
+            "SELECT id, username, display_name, target_label, at FROM audit_log "
+            "WHERE target_type='dev_case' AND target_id=? AND action='dev_case.status'",
+            (str(case_id),)
+        ).fetchall():
+            results.append({
+                "id": f"dcs_{al['id']}",
+                "source": "dev_case_status",
+                "author": al["username"] or "",
+                "authorDisplay": al["display_name"] or al["username"] or "未知",
+                "content": al["target_label"] or "",
+                "created_at": norm_at(al["at"]),
+                "canDelete": False,
+            })
 
     conn.close()
     results.sort(key=lambda x: (x.get("created_at") or ""), reverse=True)
@@ -1258,20 +4303,53 @@ def list_case_updates(quote_no: str, authorization: str = Header(None)):
 
 
 @router.post("/api/quotations/{quote_no}/updates", status_code=201)
-def post_case_update(quote_no: str, body: dict = Body(...), authorization: str = Header(None)):
+async def post_case_update(quote_no: str,
+                           content: str = Form(""),
+                           important: str = Form(""),
+                           files: List[UploadFile] = File(default=[]),
+                           authorization: str = Header(None)):
+    """案件動態留言（2026-09-14 起可附照片／檔案）。
+
+    **改成 multipart 而不是另開一支補傳端點**（使用者裁示）：一次請求送出，
+    不會出現「文字存了、檔案失敗」這種半完成狀態——留言板的那一則已經貼出去
+    了，附件卻沒上去，使用者只能再貼一則說「補圖」。
+
+    `important` 走 Form 會是字串，"true"/"1"/"on" 都當真；沿用瀏覽器 FormData
+    的慣例，不要求前端自己轉。
+
+    照片會壓上「上傳者 · 日期時間 · GPS」浮水印（使用者裁示），PDF 不動，
+    見 helpers/uploads.py::save_document_files() 的 watermark_by。
+    """
     user = _require_user(authorization)
-    content = (body.get("content") or "").strip()
-    if not content:
-        raise HTTPException(400, "內容不得為空")
+    content = (content or "").strip()
+    important = str(important).strip().lower() in ("1", "true", "on", "yes")
+    # 附件自己就是內容——只傳圖不打字是合理的用法，不該被「內容不得為空」擋下
+    if not content and not files:
+        raise HTTPException(400, "請輸入內容或至少上傳一個檔案")
     conn = get_db()
-    if not conn.execute("SELECT 1 FROM quotations WHERE quote_no=?", (quote_no,)).fetchone():
+    _guard_case(conn, quote_no, user, allow_module="case_manage")
+    qrow = conn.execute(
+        "SELECT customer_name, project_name FROM quotations WHERE quote_no=?", (quote_no,)
+    ).fetchone()
+    if not qrow:
         conn.close()
         raise HTTPException(404, "報價單不存在")
     now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    update_type = "important" if important else "comment"
+    saved_files = []
+    if files:
+        # 存檔在 INSERT 之前：檔案存失敗（格式/大小）就整批擋下，不會留下
+        # 一則沒有附件的留言讓使用者以為傳成功了
+        saved_files = await save_document_files(
+            "case_updates", quote_no, files,
+            user.get("display_name") or user["username"],
+            watermark_by=user.get("display_name") or user["username"],
+        )
     cur = conn.execute(
-        "INSERT INTO case_updates (quote_no, author, content, type, created_at) "
-        "VALUES (?,?,?,?,?)",
-        (quote_no, user["username"], content, "comment", now),
+        "INSERT INTO case_updates (quote_no, author, content, type, created_at, files_json) "
+        "VALUES (?,?,?,?,?,?)",
+        (quote_no, user["username"], content, update_type, now,
+         json.dumps(saved_files, ensure_ascii=False)),
     )
     new_id = cur.lastrowid
     conn.commit()
@@ -1284,14 +4362,24 @@ def post_case_update(quote_no: str, body: dict = Body(...), authorization: str =
         c2.close()
     except Exception:
         pass
+    author_display = (dn_row["display_name"] if dn_row else None) or user["username"]
+    case_label = quote_no
+    if qrow["customer_name"] or qrow["project_name"]:
+        case_label = f"{quote_no}（{qrow['customer_name'] or ''}{'／' if qrow['customer_name'] and qrow['project_name'] else ''}{qrow['project_name'] or ''}）"
+    notify_module_activity("案件留言板", "新增留言", author_display, case_label,
+                            "case-management.html", detail=content)
+    if important:
+        spawn_bg_thread(push_event_for_important_comment, args=(new_id, quote_no, content, author_display))
     return {
         "id": new_id,
         "source": "comment",
+        "files": saved_files,
         "author": user["username"],
-        "authorDisplay": (dn_row["display_name"] if dn_row else None) or user["username"],
+        "authorDisplay": author_display,
         "content": content,
         "created_at": now,
         "canDelete": True,
+        "important": important,
     }
 
 
@@ -1300,7 +4388,7 @@ def delete_case_update(quote_no: str, uid: int, authorization: str = Header(None
     user = _require_user(authorization)
     conn = get_db()
     row = conn.execute(
-        "SELECT id, author FROM case_updates WHERE id=? AND quote_no=?", (uid, quote_no)
+        "SELECT id, author, files_json FROM case_updates WHERE id=? AND quote_no=?", (uid, quote_no)
     ).fetchone()
     if not row:
         conn.close()
@@ -1308,17 +4396,60 @@ def delete_case_update(quote_no: str, uid: int, authorization: str = Header(None
     if user["role"] not in ("superadmin", "admin") and user["username"] != row["author"]:
         conn.close()
         raise HTTPException(403, "只能刪除自己的留言")
+    # 留言刪掉，它的附件也要從磁碟上清掉——否則 uploads/ 會留下永遠沒人引用的
+    # 孤兒檔案，而且 archive.py::_mirror_uploads() 只增不減，會一路跟著進雲端備份
+    try:
+        for f in json.loads(row["files_json"] or "[]"):
+            full = os.path.join(_uploads_mod.UPLOADS_ROOT, f.get("path", ""))
+            if f.get("path") and os.path.isfile(full):
+                os.remove(full)
+    except Exception:
+        pass
     conn.execute("DELETE FROM case_updates WHERE id=?", (uid,))
     conn.commit()
     conn.close()
+    notify_module_activity("案件留言板", "刪除留言", user.get("display_name") or user["username"],
+                            quote_no, "case-management.html")
     return {"ok": True}
+
+
+@router.delete("/api/quotations/{quote_no}/updates/{uid}/files/{file_id}")
+def delete_case_update_file(quote_no: str, uid: int, file_id: str,
+                            authorization: str = Header(None)):
+    """刪除動態留言的單一附件——**限 admin 以上**（2026-09-14 使用者裁示）。
+
+    跟「刪整則留言」的權限刻意不同：整則留言發文者自己就能收回（那是撤回自己
+    說過的話），但單獨抽掉一張附件是**只改證據、留下文字**，等於事後修改已經
+    被別人看過的內容。這種事留給管理員。
+    """
+    user = _require_user(authorization)
+    if user["role"] not in ("superadmin", "admin"):
+        raise HTTPException(403, "僅管理員以上可刪除附件")
+    conn = get_db()
+    _guard_case(conn, quote_no, user, allow_module="case_manage")
+    row = conn.execute(
+        "SELECT id, files_json FROM case_updates WHERE id=? AND quote_no=?", (uid, quote_no)
+    ).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(404, "留言不存在")
+    existing = json.loads(row["files_json"] or "[]")
+    remaining = delete_document_file("case_updates", quote_no, existing, file_id)
+    conn.execute("UPDATE case_updates SET files_json=? WHERE id=?",
+                 (json.dumps(remaining, ensure_ascii=False), uid))
+    conn.commit()
+    conn.close()
+    _audit(_tok(authorization), "case_update.delete_file", "quotation", quote_no,
+           f"{quote_no} 留言 #{uid} 刪除附件")
+    return {"ok": True, "files": remaining}
 
 
 @router.get("/api/quotations/{quote_no}/pdf-download")
 def download_quotation_pdf(quote_no: str, internal: bool = False, authorization: str = Header(None)):
     """後端 Edge Headless 產生 PDF 並直接下載（internal=true 含成本），避免 macOS/瀏覽器列印頁首干擾。"""
-    _require_user(authorization)
+    user = _require_user(authorization)
     conn = get_db()
+    _guard_case(conn, quote_no, user, allow_approver=True)
     row  = conn.execute("SELECT quote_no FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
     conn.close()
     if not row:
@@ -1339,3 +4470,632 @@ def download_quotation_pdf(quote_no: str, internal: bool = False, authorization:
         media_type="application/pdf",
         headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded}"}
     )
+
+
+@router.get("/api/quotations/{quote_no}/closing-report-pdf")
+def download_case_closing_report_pdf(quote_no: str, authorization: str = Header(None)):
+    """案件結案報表 PDF（含財務數據／支出／收入／收款／執行進度／損益分析），
+    僅限已結案案件；含成本與毛利等內部機密資訊，不對外提供。"""
+    user = _require_user(authorization)
+    conn = get_db()
+    _guard_case(conn, quote_no, user, allow_approver=True, allow_module="case_manage")
+    row = conn.execute(
+        "SELECT COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') AS deal_tag "
+        "FROM quotations WHERE quote_no=?", (quote_no,)
+    ).fetchone()
+    conn.close()
+    if not row:
+        raise HTTPException(404, "報價單不存在")
+    if row["deal_tag"] != "已結案":
+        raise HTTPException(400, "案件尚未結案，無結案報表可供下載")
+    try:
+        pdf_bytes = generate_case_closing_pdf_bytes(quote_no)
+    except ValueError as e:
+        raise HTTPException(503, str(e))
+    except Exception as e:
+        raise HTTPException(500, f"結案報表 PDF 產生失敗：{e}")
+    _audit(_tok(authorization), "quotation.export_closing_report", "quotation", quote_no,
+           f"{quote_no} 結案報表 PDF 下載", {"via": "server"})
+    fname = f"{quote_no}_結案報表.pdf"
+    encoded = urlquote(fname)
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded}"}
+    )
+
+
+@router.get("/api/quotations/{quote_no}/project-report-pdf")
+def download_project_execution_report_pdf(quote_no: str, authorization: str = Header(None)):
+    """專案執行報告 PDF（執行進度／叫料管控／代辦事項／工作日誌／動態彙整，
+    2026-08-26 專案管理併入案件管理），任何案件狀態下皆可下載，不像結案報表
+    限已結案案件。"""
+    user = _require_user(authorization)
+    conn = get_db()
+    _guard_case(conn, quote_no, user, allow_approver=True, allow_module="case_manage")
+    row = conn.execute("SELECT 1 FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+    conn.close()
+    if not row:
+        raise HTTPException(404, "報價單不存在")
+    try:
+        pdf_bytes = generate_project_execution_report_pdf_bytes(quote_no)
+    except ValueError as e:
+        raise HTTPException(503, str(e))
+    except Exception as e:
+        raise HTTPException(500, f"專案執行報告 PDF 產生失敗：{e}")
+    _audit(_tok(authorization), "quotation.export_project_report", "quotation", quote_no,
+           f"{quote_no} 專案執行報告 PDF 下載", {"via": "server"})
+    fname = f"{quote_no}_專案執行報告.pdf"
+    encoded = urlquote(fname)
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded}"}
+    )
+
+
+# ── 簽核佇列的送審詳情（2026-09-14）──────────────────────────────────────────
+#
+# 使用者要求：「簽核佇列內的送審資料要詳細，例如夾帶檔案，要顯示哪個案件什麼內容，
+# 如果是檔案可顯示預覽，編修後的結果」。
+#
+# 佇列清單維持原樣（八種單據共用同一組欄位，前端渲染邏輯不用動）；詳情另開一支
+# **依 type 分流**的端點。不把這些塞進清單的理由：清單一次可能上百筆，每筆都去讀
+# items_json／files_json／payload_json 會讓開啟簽核佇列變慢，而使用者一次只看一筆。
+
+def _file_entries(raw) -> list:
+    """把各表存的檔案 JSON 正規化成前端可預覽的格式。
+
+    各模組的檔案結構不完全一樣（有的 `filename` 有的 `name`，路徑鍵也不同），
+    這裡統一成 `{name, path, kind}`；`kind` 讓前端決定是直接內嵌預覽（圖片）、
+    開新分頁（PDF）還是只給下載連結。
+    """
+    try:
+        arr = json.loads(raw or "[]")
+    except Exception:
+        return []
+    if not isinstance(arr, list):
+        return []
+    out = []
+    for f in arr:
+        if not isinstance(f, dict):
+            continue
+        name = f.get("filename") or f.get("name") or ""
+        path = f.get("path") or f.get("filePath") or ""
+        if not path:
+            continue
+        low = (name or path).lower()
+        kind = ("image" if low.endswith((".jpg", ".jpeg", ".png", ".gif", ".webp"))
+                else "pdf" if low.endswith(".pdf") else "file")
+        out.append({"id": f.get("id") or path, "name": name or path.split("/")[-1],
+                    "path": path, "kind": kind,
+                    "uploadedBy": f.get("uploadedBy") or f.get("by") or "",
+                    "uploadedAt": f.get("uploadedAt") or f.get("at") or ""})
+    return out
+
+
+def _case_header(conn, quote_no: str) -> dict:
+    row = conn.execute(
+        "SELECT quote_no, customer_name, project_name, " + SQL_DEAL_TAG + " AS deal_tag "
+        "FROM quotations WHERE quote_no=?", (quote_no,)
+    ).fetchone()
+    if not row:
+        return {"quoteNo": quote_no, "customerName": "", "projectName": "", "dealTag": ""}
+    return {"quoteNo": row["quote_no"], "customerName": row["customer_name"] or "",
+            "projectName": row["project_name"] or "", "dealTag": row["deal_tag"] or ""}
+
+
+def _guard_queue_detail(conn, user: dict, quote_no: str, approval_raw=None) -> None:
+    """簽核佇列詳情的存取守門（2026-09-14 自動安全掃描後補上）。
+
+    這支端點原本只要求登入——理由是「跟佇列清單一致」。**那個理由站不住腳**：清單
+    只有單號／客戶／金額摘要，詳情卻回傳完整內容（明細、附件路徑、變更 payload、
+    匯款帳戶），而 `id` 是可預測的單號或小整數。這正是同日模組權限稽核花了一整輪
+    收掉的那種 IDOR，不該在新端點上又開一次。
+
+    放行順序（先寬後嚴，因為簽核人往往不是案件的人）：
+    1. **這張單據自己的簽核人**（含代理人）——他本來就該看得到要簽的東西，
+       而他通常既不是該案業務也不在協作者名單裡
+    2. 其餘走一般的每案規則 `_guard_case()`（admin+／該案業務／協作者／案件管理模組），
+       案件本身的簽核人也在裡面（allow_approver）
+    """
+    if approval_raw and _is_case_approver(approval_raw, user, conn):
+        return
+    _guard_case(conn, quote_no, user, allow_module="case_manage", allow_approver=True)
+
+
+def _can_see_queue_money(conn, user: dict, approval_raw=None) -> bool:
+    """能不能看到這筆的金額。
+
+    規則與憑證流一致（見 `routers/contractor_vouchers.py::_guard_voucher`）：
+    `can_see_financial()` 或**本單簽核人**。簽核人例外是必要的——看不到金額就沒辦法
+    判斷該不該簽，擋他等於讓簽核流程停擺。
+    """
+    if can_see_financial(user):
+        return True
+    return bool(approval_raw and _is_case_approver(approval_raw, user, conn))
+
+
+_MONEY_LABELS = {"金額", "單價", "小計", "總金額", "存簿封面"}
+
+
+def _mask_money(out: dict) -> None:
+    """沒有財務檢視權時，把金額欄位換成說明字串而不是直接拿掉。
+
+    直接拿掉會讓畫面看起來像「這張單沒有金額」——那比看不到更容易誤判。
+    """
+    out["fields"] = [
+        f if f["label"] not in _MONEY_LABELS
+        else {"label": f["label"], "value": "（無財務檢視權限）"}
+        for f in out.get("fields") or []
+    ]
+    masked_items = []
+    for it in out.get("items") or []:
+        if isinstance(it, dict):
+            it = {k: v for k, v in it.items()
+                  if k not in ("amount", "subtotal", "unitPrice", "unit_cost", "price", "total")}
+        masked_items.append(it)
+    out["items"] = masked_items
+    out["moneyMasked"] = True
+
+
+@router.get("/api/approval-queue/detail")
+def approval_queue_detail(type: str, id: str, authorization: str = Header(None)):
+    """一筆待簽核項目的完整內容：屬於哪個案件、送審了什麼、夾帶哪些檔案、改了什麼。
+
+    權限比照佇列清單本身（登入即可）——**刻意一致**：看得到清單卻點不開內容，
+    簽核人就得跑去各模組頁面翻，等於這個佇列白做。真正的動作權限（核准/退回）
+    仍由各自的端點把關。
+    """
+    user = _require_user(authorization)
+    conn = get_db()
+    try:
+        out = {"type": type, "id": id, "title": id, "fields": [], "items": [],
+               "files": [], "changes": None, "case": None}
+        approval_raw = None
+
+        if type == "completion_note":
+            r = conn.execute("SELECT * FROM completion_notes WHERE note_no=?", (id,)).fetchone()
+            if not r:
+                raise HTTPException(404, "完工單不存在")
+            approval_raw = r["data_json"]
+            _guard_queue_detail(conn, user, r["quote_no"], approval_raw)
+            out["case"] = _case_header(conn, r["quote_no"])
+            out["title"] = "完工單 " + r["note_no"]
+            out["fields"] = [
+                {"label": "服務地點", "value": r["site_address"] or "—"},
+                {"label": "執行期間", "value": (r["start_date"] or "—") + " ~ " + (r["completion_date"] or "—")},
+                {"label": "負責人", "value": r["site_manager"] or "—"},
+                {"label": "客戶驗收人", "value": r["recipient"] or "—"},
+                {"label": "保固月數", "value": str(r["warranty_months"] or 0)},
+                {"label": "執行說明", "value": r["work_summary"] or "—"},
+                {"label": "測試與檢驗", "value": r["test_result"] or "—"},
+                {"label": "遺留事項", "value": r["pending_items"] or "—"},
+            ]
+            try:
+                out["items"] = json.loads(r["items_json"] or "[]")
+            except Exception:
+                out["items"] = []
+            out["files"] = _file_entries(r["signed_files_json"])
+
+        elif type == "extra_expense":
+            r = conn.execute("SELECT * FROM case_extra_expenses WHERE id=?", (id,)).fetchone()
+            if not r:
+                raise HTTPException(404, "額外支出不存在")
+            approval_raw = r["approval_json"]
+            _guard_queue_detail(conn, user, r["quote_no"], approval_raw)
+            out["case"] = _case_header(conn, r["quote_no"])
+            out["title"] = "額外支出 #" + str(r["id"])
+            out["fields"] = [
+                {"label": "類別", "value": r["category"] or "—"},
+                {"label": "項目", "value": r["description"] or "—"},
+                {"label": "數量", "value": (str(r["qty"]) + " " + (r["unit"] or "")).strip()},
+                {"label": "單價", "value": format(r["unit_cost"] or 0, ",.0f")},
+                {"label": "小計", "value": format(r["total_cost"] or 0, ",.0f")},
+                {"label": "支出日期", "value": r["expense_date"] or "—"},
+                {"label": "單據號碼", "value": r["doc_no"] or "—"},
+                {"label": "支出人", "value": r["payer_name"] or "—"},
+                {"label": "填寫人", "value": r["created_by_name"] or "—"},
+                {"label": "備註", "value": r["note"] or "—"},
+            ]
+            out["files"] = _file_entries(r["files_json"])
+            # 「編修後的結果」：已核准的額外支出要改內容必須走變更申請，
+            # change_json 裡就是改完會變成什麼樣子——簽核人要看的正是這個對照。
+            if (r["change_status"] or "") not in ("", "none"):
+                try:
+                    chg = json.loads(r["change_json"] or "{}")
+                except Exception:
+                    chg = {}
+                if chg:
+                    out["changes"] = {
+                        "label": "變更申請（核准後會套用的內容）",
+                        "before": {"項目": r["description"], "數量": r["qty"],
+                                   "單價": r["unit_cost"], "小計": r["total_cost"],
+                                   "備註": r["note"]},
+                        "after": {"項目": chg.get("description"), "數量": chg.get("qty"),
+                                  "單價": chg.get("unit_cost"), "小計": chg.get("total_cost"),
+                                  "備註": chg.get("note")},
+                        "files": _file_entries(json.dumps(chg.get("files") or [])),
+                    }
+
+        elif type == "case_change":
+            r = conn.execute("SELECT * FROM case_change_requests WHERE id=?", (id,)).fetchone()
+            if not r:
+                raise HTTPException(404, "變更申請不存在")
+            # 已結案案件的變更申請是單層「任一 superadmin 審核」，沒有 tiers 可比對，
+            # 所以只走一般每案規則；申請人本人也看得到自己送出的東西。
+            if (r["requested_by"] or "") != user["username"]:
+                _guard_queue_detail(conn, user, r["quote_no"], None)
+            out["case"] = _case_header(conn, r["quote_no"])
+            out["title"] = "已結案案件變更 #" + str(r["id"])
+            out["fields"] = [
+                {"label": "變更類型", "value": r["action_type"] or "—"},
+                {"label": "摘要", "value": r["summary"] or "—"},
+                {"label": "申請人", "value": r["requested_by_display"] or r["requested_by"] or "—"},
+                {"label": "申請時間", "value": r["requested_at"] or "—"},
+            ]
+            # 半解鎖期間上傳的檔案是「暫存」的——核准後才會真的掛進案件，
+            # 所以簽核人必須在這裡就看得到，不然他是在盲簽。
+            out["files"] = _file_entries(r["staged_files_json"])
+            try:
+                payload = json.loads(r["payload_json"] or "{}")
+            except Exception:
+                payload = {}
+            if payload:
+                out["changes"] = {"label": "核准後會套用的內容", "after": payload, "before": None}
+
+        elif type in ("invoice_voucher", "payment_request", "contractor_voucher"):
+            table, key = {
+                "invoice_voucher":    ("invoice_vouchers", "voucher_no"),
+                "payment_request":    ("payment_requests", "request_no"),
+                "contractor_voucher": ("contractor_payment_vouchers", "voucher_no"),
+            }[type]
+            r = conn.execute("SELECT * FROM " + table + " WHERE " + key + "=?", (id,)).fetchone()
+            if not r:
+                raise HTTPException(404, "單據不存在")
+            keys = r.keys()
+            approval_raw = r["data_json"] if "data_json" in keys else None
+            _guard_queue_detail(conn, user, r["quote_no"], approval_raw)
+            out["case"] = _case_header(conn, r["quote_no"])
+            try:
+                snap = json.loads(r["snapshot_json"] or "{}")
+            except Exception:
+                snap = {}
+            amount = r["amount"] if "amount" in keys and r["amount"] is not None else (snap.get("grandTotal") or 0)
+            out["fields"] = [
+                {"label": "金額", "value": format(amount or 0, ",.0f")},
+                {"label": "範圍", "value": (r["scope"] if "scope" in keys else "") or "—"},
+                {"label": "建立者", "value": r["created_by"] or "—"},
+                {"label": "建立時間", "value": r["created_at"] or "—"},
+            ]
+            if "stage" in keys and r["stage"]:
+                out["fields"].append({"label": "請款範圍", "value": r["stage"]})
+            if snap.get("vendorName"):
+                out["fields"].insert(0, {"label": "承攬商", "value": snap["vendorName"]})
+            out["items"] = snap.get("items") or []
+            files = []
+            if "issued_files_json" in keys:
+                files += _file_entries(r["issued_files_json"])
+            files += _file_entries(json.dumps(snap.get("invoiceFiles") or []))
+            passbook = snap.get("bankPassbookImage") or ""
+            # 只接受 data:image/ ——這個欄位是建立單據時由前端送進來的字串，
+            # 若混進 `javascript:` 之類的 scheme，簽核人點下去就是在本站原點執行腳本
+            # （2026-09-14 自動安全掃描 finding #2；前端也擋一次，兩邊都擋）
+            if isinstance(passbook, str) and passbook.lower().startswith("data:image/"):
+                files.append({"id": "passbook", "name": "存簿封面", "kind": "image",
+                              "path": "", "dataUrl": passbook,
+                              "uploadedBy": "", "uploadedAt": ""})
+            out["files"] = files
+
+        elif type == "shipping_note":
+            r = conn.execute("SELECT * FROM shipping_notes WHERE note_no=?", (id,)).fetchone()
+            if not r:
+                raise HTTPException(404, "出貨單不存在")
+            approval_raw = r["data_json"]
+            _guard_queue_detail(conn, user, r["quote_no"], approval_raw)
+            out["case"] = _case_header(conn, r["quote_no"])
+            out["title"] = "出貨單 " + r["note_no"]
+            out["fields"] = [
+                {"label": "出貨日期", "value": r["ship_date"] or "—"},
+                {"label": "收件人", "value": r["recipient"] or "—"},
+                {"label": "送貨地址", "value": r["delivery_address"] or "—"},
+                {"label": "備註", "value": r["notes"] or "—"},
+            ]
+            try:
+                out["items"] = json.loads(r["items_json"] or "[]")
+            except Exception:
+                out["items"] = []
+            out["files"] = _file_entries(r["signed_files_json"])
+
+        elif type == "quotation":
+            r = conn.execute(
+                "SELECT quote_no, customer_name, project_name, total, quote_date, sales_person, "
+                "data_json, signed_files_json FROM quotations WHERE quote_no=?", (id,)).fetchone()
+            if not r:
+                raise HTTPException(404, "報價單不存在")
+            approval_raw = r["data_json"]
+            _guard_queue_detail(conn, user, r["quote_no"], approval_raw)
+            out["case"] = _case_header(conn, r["quote_no"])
+            out["title"] = "報價單 " + r["quote_no"]
+            try:
+                d = json.loads(r["data_json"] or "{}")
+            except Exception:
+                d = {}
+            out["fields"] = [
+                {"label": "報價日期", "value": r["quote_date"] or "—"},
+                {"label": "業務", "value": r["sales_person"] or "—"},
+                {"label": "總金額", "value": format(r["total"] or 0, ",.0f")},
+                {"label": "付款條件", "value": d.get("paymentTerms") or "—"},
+            ]
+            out["items"] = d.get("items") or []
+            out["files"] = _file_entries(r["signed_files_json"])
+            # 解鎖編輯後的再簽核：簽核人要知道「這次改了什麼」才簽得下去
+            hist = d.get("editHistory") or []
+            if isinstance(hist, list) and hist:
+                last = hist[-1] if isinstance(hist[-1], dict) else {}
+                out["changes"] = {
+                    "label": "最近一次編修（第 " + str(last.get("rev", "?")) + " 版）",
+                    "after": {"編修人": last.get("byDisplay") or last.get("by"),
+                              "時間": last.get("at"), "類型": last.get("type")},
+                    "before": None,
+                }
+        else:
+            raise HTTPException(400, "不支援的類型：" + str(type))
+
+        # 金額遮蔽：規則與憑證流一致（見 _can_see_queue_money）
+        if not _can_see_queue_money(conn, user, approval_raw):
+            _mask_money(out)
+            out["files"] = [f for f in out["files"] if f.get("id") != "passbook"]
+
+        return out
+    finally:
+        conn.close()
+
+
+# ── 轉簽（2026-09-14 使用者要求）────────────────────────────────────────────
+#
+# 「簽核代理人，增加最高權限人可以轉簽簽核佇列的內容，要註明原因跟註記這筆簽核」。
+#
+# 與既有「簽核代理人」（`approval_delegates`）的分工：
+#   - 代理人是**事前、長期**的授權（某人請假期間由某人代簽，範圍是那個人的全部簽核）
+#   - 轉簽是**事後、單筆**的處置（這一張卡住了，改由另一個人簽）
+# 兩者都需要——只有代理人的話，臨時卡單只能等；只有轉簽的話，請假期間每張都要人工轉。
+#
+# **原因是必填**：轉簽等於把一筆待辦從 A 身上拿走塞給 B，沒有理由就是無從追究的
+# 權限變更。原因會寫進單據的 approval.reassignLog、audit_log，並顯示在簽核佇列詳情
+# 與簽核歷史裡——三個地方都看得到同一句話。
+
+class ReassignIn(BaseModel):
+    type: str
+    id: str
+    to_username: str
+    reason: str
+    from_username: Optional[str] = None
+
+
+_REASSIGN_TABLES = {
+    "quotation":          ("quotations", "quote_no"),
+    "contractor_voucher": ("contractor_payment_vouchers", "voucher_no"),
+    "invoice_voucher":    ("invoice_vouchers", "voucher_no"),
+    "payment_request":    ("payment_requests", "request_no"),
+    "shipping_note":      ("shipping_notes", "note_no"),
+    "completion_note":    ("completion_notes", "note_no"),
+}
+
+
+@router.post("/api/approval-queue/reassign")
+def reassign_approval(body: ReassignIn, authorization: str = Header(None)):
+    """把某一筆待簽核轉給別人（限最高管理者）。
+
+    只動**當層尚未簽核**的那個人：已經簽過的不能被換掉（那會讓簽核紀錄失真），
+    後面幾層也不動（那是簽核流程設定的事，不是單筆處置）。
+
+    `extra_expense`／`case_change` 不支援：前者的簽核名單存在自己的欄位、後者是
+    單層「任一 superadmin 皆可」本來就不會卡在特定人身上。要支援得各自處理，
+    等真的有需求再說——**現在硬做只會多兩條沒人走過的路徑**。
+    """
+    user = _require_user(authorization, require_superadmin=True)
+    reason = (body.reason or "").strip()
+    if not reason:
+        raise HTTPException(400, "請填寫轉簽原因")
+    if body.type not in _REASSIGN_TABLES:
+        raise HTTPException(400, "此類型不支援轉簽：" + str(body.type))
+    to_username = (body.to_username or "").strip()
+    if not to_username:
+        raise HTTPException(400, "請選擇要轉給誰")
+
+    table, key = _REASSIGN_TABLES[body.type]
+    conn = get_db()
+    try:
+        target = conn.execute(
+            "SELECT username, display_name FROM users WHERE username=? AND active=1",
+            (to_username,)).fetchone()
+        if not target:
+            raise HTTPException(404, "找不到該使用者或帳號已停用")
+
+        row = conn.execute(
+            "SELECT " + key + " AS doc_no, quote_no, status, data_json FROM " + table +
+            " WHERE " + key + "=?", (body.id,)).fetchone()
+        if not row:
+            raise HTTPException(404, "單據不存在")
+        if (row["status"] or "") not in ("待審核", "簽核中"):
+            raise HTTPException(409, "只有待審核／簽核中的單據可以轉簽（目前：" + (row["status"] or "") + "）")
+
+        data = json.loads(row["data_json"] or "{}")
+        appr = data.get("approval") or {}
+        tiers = _active_tiers(appr)
+        if not tiers:
+            raise HTTPException(400, "這張單沒有分層簽核資料，無法轉簽")
+        ct = _current_tier_idx(appr)
+        if ct >= len(tiers):
+            raise HTTPException(400, "所有層級都已完成簽核")
+
+        approvers = tiers[ct].get("approvers") or []
+        # 指定 from 就換那個人，否則換「當層第一個還沒簽的人」——後者是實務上的
+        # 「這張卡在誰身上」，也是佇列畫面顯示的那個人。
+        idx = None
+        for i, a in enumerate(approvers):
+            if a.get("status") == "approved":
+                continue
+            if body.from_username and a.get("username") != body.from_username:
+                continue
+            idx = i
+            break
+        if idx is None:
+            raise HTTPException(400, "當層沒有可轉簽的待簽核人員")
+
+        old = approvers[idx]
+        if old.get("username") == to_username:
+            raise HTTPException(400, "轉簽對象與原簽核人相同")
+
+        now = datetime.now().isoformat()
+        actor = user.get("display_name") or user["username"]
+        approvers[idx] = {
+            **old,
+            "username": target["username"],
+            "displayName": target["display_name"] or target["username"],
+            "status": old.get("status") or "pending",
+            # 註記留在這一筆簽核上：簽核佇列詳情與 PDF 都讀得到，不必回頭翻 audit
+            "reassignedFrom": old.get("username"),
+            "reassignedFromDisplay": old.get("displayName") or old.get("username"),
+            "reassignedBy": actor,
+            "reassignedAt": now,
+            "reassignReason": reason,
+        }
+        tiers[ct]["approvers"] = approvers
+        log = appr.get("reassignLog")
+        if not isinstance(log, list):
+            log = []
+        log.append({"at": now, "by": actor, "tier": ct + 1,
+                    "from": old.get("username"), "fromDisplay": old.get("displayName") or old.get("username"),
+                    "to": target["username"], "toDisplay": target["display_name"] or target["username"],
+                    "reason": reason})
+        appr["reassignLog"] = log
+        appr["tiers"] = tiers
+        data["approval"] = appr
+
+        if table == "quotations":
+            save_quotation_json(conn, row["doc_no"], data)
+        else:
+            conn.execute("UPDATE " + table + " SET data_json=?, updated_at=? WHERE " + key + "=?",
+                         (json.dumps(data, ensure_ascii=False), now, body.id))
+        conn.commit()
+    finally:
+        conn.close()
+
+    _audit(_tok(authorization), "approval.reassign", body.type, body.id,
+           body.id + "：" + (old.get("displayName") or old.get("username") or "") + " → "
+           + (target["display_name"] or target["username"]),
+           {"from": old.get("username"), "to": to_username, "reason": reason,
+            "tier": ct + 1, "docType": body.type})
+    # 被轉到的人要知道自己多了一張要簽的單，否則這張會靜靜卡在他的佇列裡
+    _notify(to_username, "approval_request", body.id, row["quote_no"] or body.id,
+            actor + " 將「" + body.id + "」的簽核轉給你（原因：" + reason + "）")
+
+    return {"ok": True, "to": to_username,
+            "toDisplay": target["display_name"] or target["username"],
+            "reason": reason, "tier": ct + 1}
+
+
+@router.get("/api/approval-history")
+def approval_history(month: Optional[str] = None, q: Optional[str] = None,
+                     scope: str = "mine", actor: Optional[str] = None,
+                     limit: int = 200, offset: int = 0,
+                     authorization: str = Header(None)):
+    """簽核歷史：回頭看每個月簽核了哪些內容，可搜尋案件與內容（2026-09-14）。
+
+    **建在既有的 `audit_log` 上，不另外開表**——簽核動作本來就每一筆都寫了 audit
+    （動作、單號、含客戶名的標籤、備註），再開一張表等於同一件事記兩次，而兩份紀錄
+    遲早會對不起來。缺的只是一支查得動的端點。
+
+    `scope`：
+      - `mine`（預設）任何人都能看**自己**簽過什麼
+      - `all` 限 admin+：整間公司的簽核歷史
+
+    `q` 同時比對單號、標籤（含客戶名）、備註內容與簽核人，這樣「搜尋案件」與
+    「搜尋簽核內容」是同一個輸入框——使用者不必先想清楚自己要搜哪一種。
+    """
+    user = _require_user(authorization)
+    if scope == "all" and user["role"] not in ("superadmin", "admin"):
+        raise HTTPException(403, "僅管理員以上可查看全公司的簽核歷史")
+    limit = max(1, min(int(limit or 200), 500))
+    offset = max(0, int(offset or 0))
+
+    sql = ("SELECT at, username, display_name, action, target_type, target_id, target_label, detail "
+           "FROM audit_log WHERE (action LIKE '%.approve' OR action LIKE '%.reject' "
+           "OR action LIKE '%.reject_final' OR action = 'approval.reassign')")
+    params: list = []
+    if scope != "all":
+        sql += " AND username = ?"
+        params.append(user["username"])
+    elif actor:
+        sql += " AND username = ?"
+        params.append(actor)
+    if month:
+        # 格式守門：`int(month[5:7])` 直接吃使用者輸入的話，`?month=2026` 之類的
+        # 亂打會是 500（ValueError 冒到框架外），那是伺服器錯誤的顏色，但錯的是請求
+        if not re.match(r"^\d{4}-\d{2}$", month[:7]):
+            raise HTTPException(400, "month 格式須為 YYYY-MM")
+        y, m = int(month[:4]), int(month[5:7])
+        if not 1 <= m <= 12:
+            raise HTTPException(400, "month 格式須為 YYYY-MM")
+        sql += " AND at >= ? AND at < ?"
+        params.append(month[:7] + "-01T00:00:00")
+        params.append(("%04d-%02d-01T00:00:00" % (y + 1, 1)) if m == 12
+                      else ("%04d-%02d-01T00:00:00" % (y, m + 1)))
+    if q:
+        like = "%" + q.strip() + "%"
+        sql += (" AND (target_id LIKE ? OR target_label LIKE ? OR detail LIKE ? "
+                "OR username LIKE ? OR display_name LIKE ?)")
+        params += [like] * 5
+    sql += " ORDER BY id DESC LIMIT ? OFFSET ?"
+    params += [limit, offset]
+
+    conn = get_db()
+    try:
+        rows = conn.execute(sql, params).fetchall()
+        # 每月統計：套用除了 `month` 與分頁以外的同一組條件——月份籤是導覽用的，
+        # 帶著搜尋字串時它要回答的是「我搜的這個東西出現在哪幾個月」，所以 `q`
+        # 要一起套；`month` 本身當然不能套，不然點下去只會剩自己那一格。
+        msql = ("SELECT substr(at,1,7) AS ym, COUNT(*) AS c FROM audit_log "
+                "WHERE (action LIKE '%.approve' OR action LIKE '%.reject' "
+                "OR action LIKE '%.reject_final' OR action = 'approval.reassign')")
+        mparams: list = []
+        if scope != "all":
+            msql += " AND username = ?"
+            mparams.append(user["username"])
+        elif actor:
+            msql += " AND username = ?"
+            mparams.append(actor)
+        if q:
+            msql += (" AND (target_id LIKE ? OR target_label LIKE ? OR detail LIKE ? "
+                     "OR username LIKE ? OR display_name LIKE ?)")
+            mparams += ["%" + q.strip() + "%"] * 5
+        msql += " GROUP BY ym ORDER BY ym DESC LIMIT 24"
+        months = [{"month": r["ym"], "count": r["c"]} for r in conn.execute(msql, mparams).fetchall()]
+    finally:
+        conn.close()
+
+    ACTION_LABELS = {"approve": "核准", "reject": "退回", "reject_final": "拒絕結案",
+                     "reassign": "轉簽"}
+    items = []
+    for r in rows:
+        act = (r["action"] or "").split(".")[-1]
+        try:
+            detail = json.loads(r["detail"] or "{}")
+        except Exception:
+            detail = {}
+        items.append({
+            "at": r["at"],
+            "username": r["username"],
+            "displayName": r["display_name"] or r["username"],
+            "action": act,
+            "actionLabel": ACTION_LABELS.get(act, act),
+            "docType": r["target_type"] or "",
+            "docNo": r["target_id"] or "",
+            "label": r["target_label"] or "",
+            "note": detail.get("note") or detail.get("reason") or "",
+            "detail": detail,
+        })
+    return {"items": items, "months": months, "scope": scope,
+            "hasMore": len(items) == limit}

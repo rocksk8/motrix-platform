@@ -1,0 +1,1561 @@
+<meta charset="utf-8">
+<title>MOTRIX 視覺化作業台</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Inter:wght@400;500;600;700&display=swap">
+<style>
+/* ═══════════════════════════════════════════════════════════════════════════
+   MOTRIX 專案管理系統 — 簽核佇列／案件管理／業務開發 版面排版提案
+   ---------------------------------------------------------------------------
+   這是排版參考稿，畫面上的客戶名、人名、數字全為示意資料。
+   色票與圓角沿用 frontend/css/style.css 既有 token（--white #F5F4F0、
+   --accent #C8102E、--success #15803D、--warning #92400E、--danger #B91C1C、
+   --radius 6px），單據類型色沿用 approval-queue.html 既有的 .aq-type-* 值。
+
+   ⚠ 字體：本稿用 Google Fonts 僅為了在任何機器上開起來一致。正式頁面
+   **不可**引入 Google Fonts（內網不保證連外，失敗時瀏覽器靜默退回系統字體），
+   上線時換回 LINE Seed TW_OTF。見 docs/UI-REDESIGN-PLAN.md。
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root{
+  /* 底色與筆畫：奶白系，灰階往暖偏一階，跟品牌紅同一個溫度 */
+  --ground:#F5F4F0;  --surface:#FFFFFF;  --surface-2:#FAF9F5;  --surface-3:#F1EFE9;
+  --ink:#0A0A0A;     --ink-2:#4B4A46;    --ink-3:#767676;
+  --rule:#E5E3DE;    --rule-2:#D4D1C9;
+
+  /* 品牌紅：只給品牌與主要動作。**不做狀態色**——這是 2026-09-14 那輪
+     踩過的坑（狀態徽章吃 var(--accent) 之後「已送出」跟「逾期」長得一樣）。 */
+  --brand:#C8102E;   --brand-soft:#FBE9EC;  --brand-ink:#8E0B20;
+
+  /* 燈號：獨立於品牌色的一組語意色，三個模組共用同一套 */
+  --ok:#15803D;   --ok-soft:#F0FDF4;   --ok-rule:#BBF7D0;
+  --warn:#92400E; --warn-soft:#FFFBEB; --warn-rule:#FDE68A;
+  --crit:#B91C1C; --crit-soft:#FEF2F2; --crit-rule:#FECACA;
+  --idle:#767676; --idle-soft:#F1F0EC; --idle-rule:#E0DDD6;
+
+  /* 單據類型色（沿用 approval-queue.html 既有值，不新造） */
+  --t-quotation:#4338CA; --t-quotation-bg:#EEF2FF;
+  --t-cv:#92400E;        --t-cv-bg:#FEF3C7;
+  --t-iv:#065F46;        --t-iv-bg:#D1FAE5;
+  --t-sn:#155E75;        --t-sn-bg:#CFFAFE;
+  --t-pr:#9A3412;        --t-pr-bg:#FFEDD5;
+  --t-cc:#6D28D9;        --t-cc-bg:#EDE9FE;
+
+  --radius:6px; --radius-lg:10px;
+  --sans:'Noto Sans TC','LINE Seed TW_OTF',system-ui,'PingFang TC','Microsoft JhengHei',sans-serif;
+  --num:'Inter','Noto Sans TC',system-ui,sans-serif;
+  --shadow-sm:0 1px 3px rgba(20,18,12,.07);
+  --shadow:0 4px 16px rgba(20,18,12,.10);
+}
+
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ground:#121211;  --surface:#1B1B19;  --surface-2:#212120;  --surface-3:#2A2A27;
+    --ink:#F2F0EA;     --ink-2:#BEBBB3;    --ink-3:#8E8B83;
+    --rule:#2F2F2B;    --rule-2:#3C3C37;
+    --brand:#FF5C5C;   --brand-soft:#2C1618;  --brand-ink:#FF8A8A;
+    --ok:#4ADE80;   --ok-soft:#12261A;   --ok-rule:#1E4430;
+    --warn:#FBBF24; --warn-soft:#2A2110; --warn-rule:#4A3A16;
+    --crit:#F87171; --crit-soft:#2B1414; --crit-rule:#4C2020;
+    --idle:#8E8B83; --idle-soft:#232321; --idle-rule:#34342F;
+    --t-quotation:#A5B4FC; --t-quotation-bg:#1E1E35;
+    --t-cv:#FCD34D;        --t-cv-bg:#2E2410;
+    --t-iv:#6EE7B7;        --t-iv-bg:#0F2A22;
+    --t-sn:#67E8F9;        --t-sn-bg:#0E2830;
+    --t-pr:#FDBA74;        --t-pr-bg:#2E1E10;
+    --t-cc:#C4B5FD;        --t-cc-bg:#231A38;
+    --shadow-sm:0 1px 3px rgba(0,0,0,.4);
+    --shadow:0 4px 16px rgba(0,0,0,.5);
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#121211;  --surface:#1B1B19;  --surface-2:#212120;  --surface-3:#2A2A27;
+  --ink:#F2F0EA;     --ink-2:#BEBBB3;    --ink-3:#8E8B83;
+  --rule:#2F2F2B;    --rule-2:#3C3C37;
+  --brand:#FF5C5C;   --brand-soft:#2C1618;  --brand-ink:#FF8A8A;
+  --ok:#4ADE80;   --ok-soft:#12261A;   --ok-rule:#1E4430;
+  --warn:#FBBF24; --warn-soft:#2A2110; --warn-rule:#4A3A16;
+  --crit:#F87171; --crit-soft:#2B1414; --crit-rule:#4C2020;
+  --idle:#8E8B83; --idle-soft:#232321; --idle-rule:#34342F;
+  --t-quotation:#A5B4FC; --t-quotation-bg:#1E1E35;
+  --t-cv:#FCD34D;        --t-cv-bg:#2E2410;
+  --t-iv:#6EE7B7;        --t-iv-bg:#0F2A22;
+  --t-sn:#67E8F9;        --t-sn-bg:#0E2830;
+  --t-pr:#FDBA74;        --t-pr-bg:#2E1E10;
+  --t-cc:#C4B5FD;        --t-cc-bg:#231A38;
+  --shadow-sm:0 1px 3px rgba(0,0,0,.4);
+  --shadow:0 4px 16px rgba(0,0,0,.5);
+}
+
+*,*::before,*::after{ box-sizing:border-box }
+body{
+  margin:0; background:var(--ground); color:var(--ink);
+  font-family:var(--sans); font-size:14px; line-height:1.65;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{ max-width:1320px; margin:0 auto; padding-inline:20px; padding-block:0 72px }
+@media (max-width:640px){ .wrap{ padding-inline:16px } }
+
+/* ── 頁首 ───────────────────────────────────────────────────────────── */
+.masthead{ padding-block:48px 28px; border-bottom:1px solid var(--rule) }
+.brandline{
+  display:flex; align-items:center; gap:10px; margin-bottom:18px;
+}
+.brandline .mark{ width:3px; height:26px; background:var(--brand); border-radius:1px }
+.brandline .nm{ font-weight:700; letter-spacing:.02em; font-size:13px }
+.brandline .sep{ color:var(--rule-2) }
+.brandline .sub{ font-size:12px; color:var(--ink-3); letter-spacing:.06em }
+h1{
+  font-size:clamp(28px,4vw,42px); line-height:1.2; margin:0 0 14px;
+  letter-spacing:-.02em; font-weight:700; text-wrap:balance;
+}
+.lead{ font-size:16px; color:var(--ink-2); max-width:60ch; margin:0 0 22px }
+.lead b{ color:var(--ink); font-weight:500 }
+.notice{
+  display:inline-flex; align-items:center; gap:8px; font-size:12px;
+  color:var(--warn); background:var(--warn-soft); border:1px solid var(--warn-rule);
+  border-radius:var(--radius); padding:6px 11px;
+}
+
+/* ── 章節導覽 ───────────────────────────────────────────────────────── */
+.secnav{
+  position:sticky; top:0; z-index:40; background:color-mix(in srgb,var(--ground) 92%, transparent);
+  backdrop-filter:blur(8px); border-bottom:1px solid var(--rule);
+  margin-bottom:0;
+}
+.secnav__in{
+  max-width:1320px; margin:0 auto; padding-inline:20px;
+  display:flex; gap:2px; overflow-x:auto; scrollbar-width:thin;
+}
+.secnav a{
+  flex:0 0 auto; padding:12px 14px; font-size:12.5px; color:var(--ink-3);
+  text-decoration:none; border-bottom:2px solid transparent; white-space:nowrap;
+  font-weight:500;
+}
+.secnav a:hover{ color:var(--ink) }
+.secnav a .no{ font-family:var(--num); font-size:11px; color:var(--rule-2); margin-right:6px }
+.secnav a:focus-visible{ outline:2px solid var(--brand); outline-offset:-2px }
+
+/* ── 章節 ───────────────────────────────────────────────────────────── */
+section{ padding-block:56px; border-bottom:1px solid var(--rule) }
+section:last-of-type{ border-bottom:none }
+.eyebrow{
+  display:flex; align-items:baseline; gap:10px; margin-bottom:10px;
+  font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:var(--ink-3);
+}
+.eyebrow .no{
+  font-family:var(--num); font-weight:700; font-size:11px; color:var(--brand);
+  letter-spacing:.04em;
+}
+h2{ font-size:clamp(21px,2.6vw,28px); margin:0 0 10px; letter-spacing:-.01em; font-weight:700; text-wrap:balance }
+h3{ font-size:15px; margin:34px 0 10px; font-weight:700; letter-spacing:-.005em }
+.sec-lead{ font-size:15px; color:var(--ink-2); max-width:64ch; margin:0 0 24px }
+
+/* 現況問題：不是卡片，用左側細線列 */
+.probs{ display:grid; gap:0; margin:0 0 26px; border-left:2px solid var(--rule-2) }
+.prob{ padding:7px 0 7px 14px; font-size:13.5px; color:var(--ink-2) }
+.prob b{ color:var(--ink); font-weight:700 }
+.prob code{ font-family:var(--num); font-size:12px; background:var(--surface-3); padding:1px 5px; border-radius:3px }
+
+/* 版面示意框 */
+.screen{
+  background:var(--surface); border:1px solid var(--rule); border-radius:var(--radius-lg);
+  box-shadow:var(--shadow-sm); overflow:hidden; margin-bottom:18px;
+}
+.screen__bar{
+  display:flex; align-items:center; gap:10px; padding:8px 14px;
+  border-bottom:1px solid var(--rule); background:var(--surface-2);
+  font-size:11px; color:var(--ink-3); letter-spacing:.08em; text-transform:uppercase;
+}
+.screen__bar .dots{ display:flex; gap:4px }
+.screen__bar .dots i{ width:7px; height:7px; border-radius:50%; background:var(--rule-2); display:block }
+.screen__body{ padding:16px }
+@media (max-width:640px){ .screen__body{ padding:12px } }
+
+/* 註解 */
+.notes{ display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); margin-top:4px }
+.note{ font-size:13px; color:var(--ink-2); padding-left:26px; position:relative; line-height:1.6 }
+.note .cn{
+  position:absolute; left:0; top:2px; width:18px; height:18px; border-radius:50%;
+  background:var(--ink); color:var(--ground); font-family:var(--num); font-size:10.5px;
+  font-weight:700; display:grid; place-items:center;
+}
+.note b{ color:var(--ink) }
+.cn-inline{
+  display:inline-grid; place-items:center; width:16px; height:16px; border-radius:50%;
+  background:var(--ink); color:var(--ground); font-family:var(--num); font-size:9.5px;
+  font-weight:700; vertical-align:middle;
+}
+
+/* ── 共用元件：燈號、徽章、階梯、溫度條 ─────────────────────────────── */
+.lamp{ width:8px; height:8px; border-radius:50%; display:inline-block; flex:0 0 auto }
+.lamp.ok{ background:var(--ok) } .lamp.warn{ background:var(--warn) }
+.lamp.crit{ background:var(--crit) } .lamp.idle{ background:var(--idle-rule) }
+
+.chip{
+  display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:500;
+  padding:2px 7px; border-radius:4px; border:1px solid transparent; white-space:nowrap;
+}
+.chip.ok{ background:var(--ok-soft); color:var(--ok); border-color:var(--ok-rule) }
+.chip.warn{ background:var(--warn-soft); color:var(--warn); border-color:var(--warn-rule) }
+.chip.crit{ background:var(--crit-soft); color:var(--crit); border-color:var(--crit-rule) }
+.chip.idle{ background:var(--idle-soft); color:var(--ink-3); border-color:var(--idle-rule) }
+.chip.q{ background:var(--t-quotation-bg); color:var(--t-quotation) }
+.chip.cv{ background:var(--t-cv-bg); color:var(--t-cv) }
+.chip.iv{ background:var(--t-iv-bg); color:var(--t-iv) }
+.chip.sn{ background:var(--t-sn-bg); color:var(--t-sn) }
+.chip.pr{ background:var(--t-pr-bg); color:var(--t-pr) }
+.chip.cc{ background:var(--t-cc-bg); color:var(--t-cc) }
+
+.num{ font-family:var(--num); font-variant-numeric:tabular-nums }
+
+/* 簽核階梯 */
+.ladder{ display:inline-flex; align-items:center; gap:0; vertical-align:middle }
+.ladder i{
+  width:8px; height:8px; border-radius:50%; display:block; flex:0 0 auto;
+  border:1.5px solid var(--rule-2); background:var(--surface);
+}
+.ladder i.done{ background:var(--ok); border-color:var(--ok) }
+.ladder i.cur{
+  background:var(--surface); border-color:var(--brand); border-width:2.5px;
+  width:11px; height:11px; box-shadow:0 0 0 3px var(--brand-soft);
+}
+.ladder i.rej{ background:var(--crit); border-color:var(--crit) }
+.ladder .rung{ width:16px; height:1.5px; background:var(--rule-2); display:block; flex:0 0 auto }
+.ladder .rung.done{ background:var(--ok) }
+
+/* 溫度條 */
+.temp{ height:4px; border-radius:2px; background:var(--rule); overflow:hidden; display:block }
+.temp i{ display:block; height:100% }
+.temp i.hot{ background:var(--ok) } .temp i.warm{ background:var(--warn) } .temp i.cold{ background:var(--crit) }
+
+/* 進度微條 */
+.mbar{ width:100%; height:3px; background:var(--rule); border-radius:2px; overflow:hidden }
+.mbar i{ display:block; height:100% }
+.mbar i.ok{ background:var(--ok) } .mbar i.warn{ background:var(--warn) }
+.mbar i.crit{ background:var(--crit) } .mbar i.idle{ background:var(--rule-2) }
+
+/* 迷你按鈕 */
+.mbtn{
+  font-family:var(--sans); font-size:11.5px; font-weight:500; padding:4px 10px;
+  border-radius:var(--radius); border:1px solid var(--rule-2); background:var(--surface);
+  color:var(--ink-2); cursor:pointer; white-space:nowrap;
+}
+.mbtn:hover{ border-color:var(--ink-3); color:var(--ink) }
+.mbtn:focus-visible{ outline:2px solid var(--brand); outline-offset:1px }
+.mbtn.on{ background:var(--ink); color:var(--ground); border-color:var(--ink) }
+.mbtn.primary{ background:var(--brand); border-color:var(--brand); color:#fff }
+.mbtn.reject{ background:var(--surface); border:2px solid var(--brand); color:var(--brand-ink); padding:3px 9px }
+
+/* ── §0 共通語彙 ────────────────────────────────────────────────────── */
+.legend{
+  display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:0;
+  border:1px solid var(--rule); border-radius:var(--radius-lg); overflow:hidden;
+  background:var(--surface);
+}
+.legend__cell{ padding:16px 18px; border-right:1px solid var(--rule) }
+.legend__cell:last-child{ border-right:none }
+@media (max-width:960px){ .legend__cell{ border-right:none; border-bottom:1px solid var(--rule) } }
+.legend__t{ font-size:12px; font-weight:700; margin-bottom:4px }
+.legend__d{ font-size:12.5px; color:var(--ink-3); line-height:1.55 }
+.legend__row{ display:flex; align-items:center; gap:8px; margin:8px 0 0; flex-wrap:wrap }
+
+/* ── §1 簽核跑道 ────────────────────────────────────────────────────── */
+.andon{
+  display:flex; align-items:stretch; gap:1px; border-radius:var(--radius);
+  overflow:hidden; border:1px solid var(--rule); margin-bottom:14px; background:var(--rule);
+}
+.andon__seg{ padding:10px 14px; background:var(--surface-2); display:flex; align-items:center; gap:9px; min-width:0 }
+.andon__seg.mine{ background:var(--brand-soft) }
+.andon__seg.crit{ background:var(--crit-soft) }
+.andon__v{ font-family:var(--num); font-size:21px; font-weight:700; line-height:1 }
+.andon__seg.mine .andon__v{ color:var(--brand-ink) }
+.andon__seg.crit .andon__v{ color:var(--crit) }
+.andon__l{ font-size:11.5px; color:var(--ink-2); line-height:1.3 }
+.andon__l small{ display:block; color:var(--ink-3); font-size:10.5px }
+.andon__bar{ flex:1; min-width:60px; background:var(--surface-2); display:flex; align-items:center; padding:0 14px }
+.andon__bar .track{ width:100%; height:8px; border-radius:4px; overflow:hidden; display:flex; gap:1px; background:var(--rule) }
+.andon__bar .track i{ display:block; height:100% }
+
+.runway{ display:grid; grid-template-columns:1.35fr 1fr; gap:16px }
+@media (max-width:900px){ .runway{ grid-template-columns:1fr } }
+.rw-col__head{
+  display:flex; align-items:center; gap:8px; padding-bottom:8px; margin-bottom:10px;
+  border-bottom:1px solid var(--rule);
+}
+.rw-col__t{ font-size:12.5px; font-weight:700 }
+.rw-col__c{ font-family:var(--num); font-size:11px; color:var(--ink-3) }
+.rw-col__tools{ margin-left:auto; display:flex; gap:4px }
+
+.lane{ margin-bottom:14px }
+.lane__head{ display:flex; align-items:center; gap:7px; margin-bottom:7px }
+.lane__t{ font-size:11px; font-weight:700; letter-spacing:.06em }
+.lane__t.crit{ color:var(--crit) } .lane__t.warn{ color:var(--warn) } .lane__t.ok{ color:var(--ok) }
+.lane__rule{ flex:1; height:1px; background:var(--rule) }
+
+.acard{
+  display:grid; grid-template-columns:3px 1fr; gap:0; background:var(--surface);
+  border:1px solid var(--rule); border-radius:var(--radius); overflow:hidden; margin-bottom:7px;
+}
+.acard:hover{ border-color:var(--rule-2); box-shadow:var(--shadow-sm) }
+.acard__spine{ background:var(--idle-rule) }
+.acard__spine.crit{ background:var(--crit) }
+.acard__spine.warn{ background:var(--warn) }
+.acard__spine.ok{ background:var(--ok) }
+.acard__in{ padding:9px 12px; min-width:0 }
+.acard__r1{ display:flex; align-items:center; gap:7px; flex-wrap:wrap; margin-bottom:3px }
+.acard__no{ font-family:var(--num); font-size:12.5px; font-weight:700; letter-spacing:-.01em }
+.acard__age{ margin-left:auto; font-family:var(--num); font-size:11px; font-weight:700 }
+.acard__age.crit{ color:var(--crit) } .acard__age.warn{ color:var(--warn) } .acard__age.ok{ color:var(--ok) }
+.acard__r2{ font-size:12.5px; color:var(--ink-2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+.acard__r3{ display:flex; align-items:center; gap:10px; margin-top:6px; flex-wrap:wrap }
+.acard__amt{ font-family:var(--num); font-size:12.5px; font-weight:600 }
+.acard__flow{ display:flex; align-items:center; gap:7px; font-size:11px; color:var(--ink-3) }
+.acard__act{ margin-left:auto; display:flex; gap:5px }
+
+.qrow{
+  display:flex; align-items:center; gap:9px; padding:7px 10px; border-radius:var(--radius);
+  border:1px solid transparent; font-size:12px;
+}
+.qrow:hover{ background:var(--surface-2); border-color:var(--rule) }
+.qrow__no{ font-family:var(--num); font-size:12px; font-weight:600; flex:0 0 auto }
+.qrow__who{ color:var(--ink-3); font-size:11.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+.qrow__age{ margin-left:auto; font-family:var(--num); font-size:11px; color:var(--ink-3); flex:0 0 auto }
+.blockgrp{ margin-bottom:12px }
+.blockgrp__head{
+  display:flex; align-items:center; gap:7px; font-size:11.5px; font-weight:700;
+  color:var(--ink-2); padding:5px 10px; background:var(--surface-3); border-radius:var(--radius);
+  margin-bottom:4px;
+}
+.blockgrp__head .n{ margin-left:auto; font-family:var(--num); font-size:11px; color:var(--ink-3); font-weight:500 }
+.blockgrp__head .dwell{ font-family:var(--num); font-size:10.5px; color:var(--crit); font-weight:700 }
+
+.typestrip{ display:flex; gap:6px; flex-wrap:wrap; margin-top:14px; padding-top:12px; border-top:1px solid var(--rule) }
+.typestrip__i{
+  display:flex; align-items:center; gap:6px; font-size:11px; padding:4px 9px;
+  border-radius:var(--radius); border:1px solid var(--rule); background:var(--surface-2);
+}
+.typestrip__i .n{ font-family:var(--num); font-weight:700 }
+.typestrip__i .sw{ width:3px; height:12px; border-radius:1px }
+
+/* ── §2 關卡矩陣 ────────────────────────────────────────────────────── */
+.mtx-tools{ display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-bottom:12px }
+.mtx-tools .lbl{ font-size:11.5px; color:var(--ink-3); margin-right:2px }
+.mtx-scroll{ overflow-x:auto; border:1px solid var(--rule); border-radius:var(--radius) }
+table.mtx{ border-collapse:collapse; width:100%; min-width:940px; background:var(--surface) }
+table.mtx th{
+  font-size:10.5px; font-weight:700; letter-spacing:.07em; color:var(--ink-3);
+  text-align:left; padding:9px 10px; border-bottom:1px solid var(--rule);
+  background:var(--surface-2); white-space:nowrap; position:sticky; top:0;
+}
+table.mtx th.gate-h{ text-align:center; border-left:1px solid var(--rule) }
+table.mtx th.gate-h span{ display:block; font-weight:400; letter-spacing:0; font-size:10px; opacity:.75; margin-top:1px }
+table.mtx td{ padding:8px 10px; border-bottom:1px solid var(--rule); vertical-align:middle }
+table.mtx tbody tr:hover{ background:var(--surface-2) }
+table.mtx tbody tr:last-child td{ border-bottom:none }
+td.gate{ text-align:center; border-left:1px solid var(--rule); width:92px }
+.gatecell{ display:flex; flex-direction:column; align-items:center; gap:3px }
+.gatecell .gv{ font-family:var(--num); font-size:11.5px; font-weight:600; display:flex; align-items:center; gap:4px }
+.gatecell .mbar{ width:52px }
+.gatecell.is-idle .gv{ color:var(--ink-3); font-weight:400 }
+.mtx__spine{ width:3px; padding:0 !important; border-bottom:1px solid var(--rule) }
+.mtx__no{ font-family:var(--num); font-size:12.5px; font-weight:700 }
+.mtx__cust{ font-size:12px; color:var(--ink-2); margin-top:1px }
+.mtx__amt{ font-family:var(--num); font-size:12.5px; font-weight:600; text-align:right; white-space:nowrap }
+.mtx__ready{ font-size:11px; font-weight:700; white-space:nowrap }
+.mtx__due{ font-size:11.5px; white-space:nowrap; font-family:var(--num) }
+.mtx__person{
+  display:inline-flex; align-items:center; gap:5px; font-size:11.5px; color:var(--ink-2);
+}
+.mtx__person .av{
+  width:19px; height:19px; border-radius:50%; background:var(--surface-3); color:var(--ink-2);
+  display:grid; place-items:center; font-size:10px; font-weight:700; flex:0 0 auto;
+}
+.duestrip{
+  display:flex; align-items:stretch; gap:0; border:1px solid var(--rule); border-radius:var(--radius);
+  overflow:hidden; margin-bottom:14px; background:var(--surface);
+}
+.duestrip__d{
+  flex:1; padding:8px 6px; text-align:center; border-right:1px solid var(--rule); min-width:0;
+}
+.duestrip__d:last-child{ border-right:none }
+.duestrip__d.past{ background:var(--crit-soft) }
+.duestrip__d.today{ background:var(--warn-soft) }
+.duestrip__dd{ font-size:10px; color:var(--ink-3); letter-spacing:.04em; font-family:var(--num) }
+.duestrip__n{ font-family:var(--num); font-size:16px; font-weight:700; line-height:1.2 }
+.duestrip__d.past .duestrip__n{ color:var(--crit) }
+.duestrip__d.today .duestrip__n{ color:var(--warn) }
+.duestrip__d.zero .duestrip__n{ color:var(--rule-2) }
+.duestrip__lbl{ font-size:10px; color:var(--ink-3) }
+
+/* ── §3 開發漏斗 ────────────────────────────────────────────────────── */
+.funnel{ display:flex; align-items:stretch; gap:8px; margin-bottom:16px; flex-wrap:wrap }
+.funnel__s{
+  flex:1 1 150px; border:1px solid var(--rule); border-radius:var(--radius);
+  padding:11px 13px; background:var(--surface); position:relative; min-width:0;
+}
+.funnel__s .t{ font-size:11.5px; color:var(--ink-3); margin-bottom:3px }
+.funnel__s .v{ font-family:var(--num); font-size:24px; font-weight:700; line-height:1 }
+.funnel__s .d{ font-size:11px; color:var(--ink-3); margin-top:5px }
+.funnel__s .d b.up{ color:var(--ok) } .funnel__s .d b.dn{ color:var(--crit) }
+.funnel__arrow{ display:grid; place-items:center; color:var(--rule-2); font-size:14px; flex:0 0 auto }
+@media (max-width:760px){ .funnel__arrow{ display:none } }
+.funnel__s.won{ border-color:var(--ok-rule); background:var(--ok-soft) }
+.funnel__s.won .v{ color:var(--ok) }
+.funnel__s.rate{ border-style:dashed }
+
+.kanban{ display:grid; grid-template-columns:repeat(3,1fr); gap:12px }
+@media (max-width:860px){ .kanban{ grid-template-columns:1fr } }
+.kcol__head{
+  display:flex; align-items:center; gap:7px; padding:7px 10px; border-radius:var(--radius);
+  background:var(--surface-3); margin-bottom:8px;
+}
+.kcol__t{ font-size:12px; font-weight:700 }
+.kcol__n{ font-family:var(--num); font-size:11px; color:var(--ink-3); margin-left:auto }
+.dcard{
+  background:var(--surface); border:1px solid var(--rule); border-radius:var(--radius);
+  padding:9px 11px; margin-bottom:7px;
+}
+.dcard:hover{ border-color:var(--rule-2); box-shadow:var(--shadow-sm) }
+.dcard__nm{ font-size:13px; font-weight:600; line-height:1.4; margin-bottom:2px }
+.dcard__cust{ font-size:11.5px; color:var(--ink-3); margin-bottom:7px }
+.dcard__meta{ display:flex; align-items:center; gap:8px; margin-top:7px; flex-wrap:wrap }
+.dcard__days{ font-family:var(--num); font-size:11px; font-weight:700 }
+.dcard__days.hot{ color:var(--ok) } .dcard__days.warm{ color:var(--warn) } .dcard__days.cold{ color:var(--crit) }
+.dcard__ch{ display:flex; gap:3px; margin-left:auto }
+.dcard__ch i{
+  width:16px; height:16px; border-radius:3px; background:var(--surface-3); display:grid;
+  place-items:center; font-size:9px; color:var(--ink-3); font-style:normal;
+}
+.dcard__next{
+  font-size:11.5px; color:var(--ink-2); margin-top:7px; padding-top:7px;
+  border-top:1px dashed var(--rule); display:flex; gap:6px; align-items:baseline;
+}
+.dcard__next .k{ font-size:10px; color:var(--ink-3); letter-spacing:.06em; flex:0 0 auto }
+.dcard__people{ display:flex; gap:3px }
+.dcard__people .av{
+  width:18px; height:18px; border-radius:50%; background:var(--surface-3); color:var(--ink-2);
+  display:grid; place-items:center; font-size:9.5px; font-weight:700;
+}
+
+.loadgrid{ display:grid; grid-template-columns:1.1fr 1fr; gap:20px; margin-top:22px }
+@media (max-width:860px){ .loadgrid{ grid-template-columns:1fr } }
+.loadrow{ display:grid; grid-template-columns:64px 1fr 54px; gap:10px; align-items:center; margin-bottom:7px }
+.loadrow__n{ font-size:12px; color:var(--ink-2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+.loadrow__b{ display:flex; height:14px; border-radius:3px; overflow:hidden; background:var(--rule); gap:1px }
+.loadrow__b i{ display:block; height:100% }
+.loadrow__b i.talk{ background:var(--warn) } .loadrow__b i.won{ background:var(--ok) }
+.loadrow__b i.cold{ background:var(--crit) } .loadrow__b i.hold{ background:var(--rule-2) }
+.loadrow__v{ font-family:var(--num); font-size:11.5px; color:var(--ink-3); text-align:right }
+.spark{ display:flex; align-items:flex-end; gap:4px; height:56px; margin-top:6px }
+.spark__b{ flex:1; display:flex; flex-direction:column; justify-content:flex-end; align-items:center; gap:3px }
+.spark__b .bar{ width:100%; background:var(--rule-2); border-radius:2px 2px 0 0 }
+.spark__b.cur .bar{ background:var(--brand) }
+.spark__b .lb{ font-size:9px; color:var(--ink-3); font-family:var(--num) }
+.spark__b .vv{ font-size:9.5px; color:var(--ink-3); font-family:var(--num); font-weight:600 }
+
+/* ── §4 索引 ───────────────────────────────────────────────────────── */
+.idx{ display:grid; grid-template-columns:210px 1fr; gap:16px }
+@media (max-width:820px){ .idx{ grid-template-columns:1fr } }
+.facet{ border-right:1px solid var(--rule); padding-right:16px }
+@media (max-width:820px){ .facet{ border-right:none; padding-right:0; border-bottom:1px solid var(--rule); padding-bottom:14px } }
+.facet__g{ margin-bottom:16px }
+.facet__t{
+  font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--ink-3);
+  margin-bottom:6px; font-weight:700;
+}
+.facet__i{
+  display:flex; align-items:center; gap:7px; font-size:12px; padding:3px 6px;
+  border-radius:4px; color:var(--ink-2); cursor:pointer;
+}
+.facet__i:hover{ background:var(--surface-2) }
+.facet__i.on{ background:var(--ink); color:var(--ground) }
+.facet__i.on .facet__n{ color:var(--ground); opacity:.7 }
+.facet__n{ margin-left:auto; font-family:var(--num); font-size:11px; color:var(--ink-3) }
+.facet__box{ width:11px; height:11px; border:1px solid var(--rule-2); border-radius:3px; flex:0 0 auto }
+.facet__i.on .facet__box{ background:var(--ground); border-color:var(--ground) }
+
+.searchbar{
+  display:flex; align-items:center; gap:10px; padding:9px 13px; border:1px solid var(--rule-2);
+  border-radius:var(--radius); background:var(--surface); cursor:text; margin-bottom:12px;
+}
+.searchbar:hover{ border-color:var(--ink-3) }
+.searchbar__ph{ color:var(--ink-3); font-size:13px; flex:1 }
+.searchbar__kbd{
+  font-family:var(--num); font-size:10.5px; color:var(--ink-3); border:1px solid var(--rule);
+  border-radius:4px; padding:2px 6px; background:var(--surface-2);
+}
+.views{ display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px }
+.view{
+  display:inline-flex; align-items:center; gap:6px; font-size:11.5px; padding:4px 10px;
+  border-radius:99px; border:1px solid var(--rule-2); background:var(--surface); color:var(--ink-2);
+  cursor:pointer;
+}
+.view.on{ background:var(--brand); border-color:var(--brand); color:#fff }
+.view .n{ font-family:var(--num); font-size:10.5px; opacity:.7 }
+
+.yeargrp{ border:1px solid var(--rule); border-radius:var(--radius); margin-bottom:6px; background:var(--surface) }
+.yeargrp__h{
+  display:flex; align-items:center; gap:9px; padding:9px 12px; cursor:pointer; font-size:12.5px;
+}
+.yeargrp__h .y{ font-family:var(--num); font-weight:700 }
+.yeargrp__h .n{ margin-left:auto; font-family:var(--num); font-size:11px; color:var(--ink-3) }
+.yeargrp__h .caret{ color:var(--ink-3); font-size:10px; transition:transform .15s }
+.yeargrp.open .yeargrp__h .caret{ transform:rotate(90deg) }
+.yeargrp__b{ display:none; border-top:1px solid var(--rule); padding:6px }
+.yeargrp.open .yeargrp__b{ display:block }
+.yrow{
+  display:grid; grid-template-columns:110px 1fr auto auto; gap:10px; align-items:center;
+  padding:6px 8px; font-size:12px; border-radius:4px;
+}
+.yrow:hover{ background:var(--surface-2) }
+.yrow .no{ font-family:var(--num); font-weight:600 }
+.yrow .amt{ font-family:var(--num); color:var(--ink-3) }
+
+/* 命令面板 */
+.palette-mask{
+  position:fixed; inset:0; background:rgba(12,10,8,.45); backdrop-filter:blur(2px);
+  z-index:90; display:none; padding:80px 16px 16px;
+}
+.palette-mask.open{ display:block }
+.palette{
+  max-width:560px; margin:0 auto; background:var(--surface); border:1px solid var(--rule-2);
+  border-radius:var(--radius-lg); box-shadow:var(--shadow); overflow:hidden;
+}
+.palette__in{ display:flex; align-items:center; gap:10px; padding:13px 16px; border-bottom:1px solid var(--rule) }
+.palette__q{ font-size:15px; flex:1 }
+.palette__q .cursor{ display:inline-block; width:1.5px; height:16px; background:var(--brand); vertical-align:-3px; animation:blink 1.1s steps(1) infinite }
+@keyframes blink{ 50%{ opacity:0 } }
+@media (prefers-reduced-motion:reduce){ .palette__q .cursor{ animation:none } }
+.palette__body{ max-height:60vh; overflow-y:auto; padding:6px }
+.pgrp__t{
+  font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--ink-3);
+  padding:8px 10px 4px; font-weight:700;
+}
+.pitem{ display:flex; align-items:center; gap:10px; padding:7px 10px; border-radius:var(--radius); font-size:13px }
+.pitem:hover,.pitem.sel{ background:var(--surface-3) }
+.pitem__no{ font-family:var(--num); font-weight:600; font-size:12.5px; flex:0 0 auto }
+.pitem__d{ color:var(--ink-3); font-size:11.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+.pitem__tail{ margin-left:auto; font-size:11px; color:var(--ink-3); flex:0 0 auto }
+.palette__foot{
+  display:flex; gap:14px; padding:8px 16px; border-top:1px solid var(--rule);
+  font-size:11px; color:var(--ink-3); background:var(--surface-2);
+}
+.palette__foot kbd{
+  font-family:var(--num); font-size:10px; border:1px solid var(--rule-2); border-radius:3px;
+  padding:1px 4px; background:var(--surface);
+}
+
+/* 規模表 */
+.scale-scroll{ overflow-x:auto }
+table.scale{ border-collapse:collapse; width:100%; min-width:600px; font-size:13px; margin-top:8px }
+table.scale th{
+  text-align:left; font-size:10.5px; letter-spacing:.08em; text-transform:uppercase;
+  color:var(--ink-3); padding:8px 10px; border-bottom:1px solid var(--rule-2);
+}
+table.scale td{ padding:9px 10px; border-bottom:1px solid var(--rule); vertical-align:top }
+table.scale td.n{ font-family:var(--num); font-variant-numeric:tabular-nums; white-space:nowrap }
+table.scale tr:last-child td{ border-bottom:none }
+table.scale code{ font-family:var(--num); font-size:11.5px; background:var(--surface-3); padding:1px 5px; border-radius:3px }
+.cap{ font-size:12px; color:var(--ink-3); margin-top:10px; max-width:70ch }
+
+/* 落地順序 */
+.steps{ display:grid; gap:0; counter-reset:s }
+.step{
+  display:grid; grid-template-columns:34px 1fr; gap:14px; padding:14px 0;
+  border-bottom:1px solid var(--rule);
+}
+.step:last-child{ border-bottom:none }
+.step__n{
+  font-family:var(--num); font-size:12px; font-weight:700; color:var(--brand);
+  border:1px solid var(--brand); border-radius:50%; width:26px; height:26px;
+  display:grid; place-items:center; margin-top:1px;
+}
+.step__t{ font-size:14px; font-weight:700; margin-bottom:3px }
+.step__d{ font-size:13px; color:var(--ink-2); line-height:1.6 }
+.step__d code{ font-family:var(--num); font-size:12px; background:var(--surface-3); padding:1px 5px; border-radius:3px }
+.step__tag{
+  display:inline-block; font-size:10.5px; padding:1px 7px; border-radius:3px; margin-left:8px;
+  background:var(--surface-3); color:var(--ink-3); vertical-align:1px; font-weight:500;
+}
+.step__tag.fe{ background:var(--t-quotation-bg); color:var(--t-quotation) }
+.step__tag.be{ background:var(--t-cv-bg); color:var(--t-cv) }
+
+footer{ padding-block:30px 10px; font-size:12px; color:var(--ink-3); border-top:1px solid var(--rule) }
+</style>
+
+<div class="wrap">
+  <header class="masthead">
+    <div class="brandline">
+      <span class="mark"></span>
+      <span class="nm">MOTRIX 專案管理系統</span>
+      <span class="sep">·</span>
+      <span class="sub">介面排版提案</span>
+    </div>
+    <h1>簽核佇列、案件管理、業務開發<br>改成看得見狀態的作業台</h1>
+    <p class="lead">
+      這三頁現在是同一個骨架：<b>左清單＋右詳情</b>。清單只排「有哪些」，狀態要點進去才知道，
+      所以它們都在回答「我可以打開什麼」，而不是<b>「現在什麼卡住了、該先動哪一件」</b>。
+      這份稿子照視覺化管理的作法重排：<b>異常先浮出來、時效用顏色編碼、責任歸屬直接標在畫面上</b>，
+      並把長期案件量變大之後的檢索骨架一起設計進去。
+    </p>
+    <span class="notice">畫面上的客戶名、人名、金額全為示意資料；欄位名稱與流程規則取自系統實際實作</span>
+  </header>
+</div>
+
+<nav class="secnav" aria-label="章節">
+  <div class="secnav__in">
+    <a href="#lang"><span class="no">00</span>共通語彙</a>
+    <a href="#approval"><span class="no">01</span>簽核佇列</a>
+    <a href="#case"><span class="no">02</span>案件管理</a>
+    <a href="#dev"><span class="no">03</span>業務開發</a>
+    <a href="#index"><span class="no">04</span>長期索引</a>
+    <a href="#rollout"><span class="no">05</span>落地順序</a>
+  </div>
+</nav>
+
+<div class="wrap">
+
+<!-- ═══════════ 00 共通語彙 ═══════════ -->
+<section id="lang">
+  <div class="eyebrow"><span class="no">00</span><span>三頁共用的一套編碼</span></div>
+  <h2>先把「顏色代表什麼」定死</h2>
+  <p class="sec-lead">
+    視覺化管理能成立的前提是同一個顏色在哪一頁都代表同一件事。
+    系統剛把主色從藍改成品牌紅，因此有一條規則必須寫在最前面：<b>品牌紅不參與狀態編碼</b>——
+    這是實際截圖才發現的問題（狀態徽章吃了 <code>var(--accent)</code> 之後，「已送出」跟「逾期」長得幾乎一樣）。
+  </p>
+
+  <div class="legend">
+    <div class="legend__cell">
+      <div class="legend__t">時效色階（停留多久）</div>
+      <div class="legend__d">顏色由「在這個狀態待了幾天」決定，不是由單據類型或金額決定。</div>
+      <div class="legend__row">
+        <span class="chip ok"><span class="lamp ok"></span>今日 0–1 天</span>
+        <span class="chip warn"><span class="lamp warn"></span>2–3 天</span>
+        <span class="chip crit"><span class="lamp crit"></span>逾時 ≥ 4 天</span>
+      </div>
+    </div>
+    <div class="legend__cell">
+      <div class="legend__t">關卡燈號（條件過了沒）</div>
+      <div class="legend__d">綠＝已達成、琥珀＝進行中、紅＝逾期或退回、空心灰＝此案不適用。</div>
+      <div class="legend__row">
+        <span class="chip ok">達成</span>
+        <span class="chip warn">進行中</span>
+        <span class="chip crit">逾期／退回</span>
+        <span class="chip idle">不適用</span>
+      </div>
+    </div>
+    <div class="legend__cell">
+      <div class="legend__t">品牌紅 <span class="num" style="opacity:.6">#C8102E</span></div>
+      <div class="legend__d">只用在品牌標記、主要動作鈕、以及「目前輪到你」這一個游標位置。不當狀態色。</div>
+      <div class="legend__row">
+        <button class="mbtn primary" type="button">核准</button>
+        <button class="mbtn reject" type="button">退回草稿</button>
+        <span class="ladder"><i class="done"></i><span class="rung done"></span><i class="cur"></i></span>
+      </div>
+    </div>
+    <div class="legend__cell">
+      <div class="legend__t">責任標記</div>
+      <div class="legend__d">每一個等待中的東西都標出「卡在誰身上」，不只標出它在第幾層。</div>
+      <div class="legend__row">
+        <span class="mtx__person"><span class="av">陳</span>陳彥廷</span>
+        <span class="chip idle">停留 6 天</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ 01 簽核佇列 ═══════════ -->
+<section id="approval">
+  <div class="eyebrow"><span class="no">01</span><span>approval-queue.html</span></div>
+  <h2>簽核跑道</h2>
+  <p class="sec-lead">
+    簽核佇列目前<b>依申請人分組</b>。但申請人不是決定我要不要動手的那個軸——
+    決定的是「是不是輪到我」跟「這張單卡多久了」。這一版把軸換掉。
+  </p>
+
+  <div class="probs">
+    <div class="prob"><b>分組軸錯了。</b>依申請人分組，等於要我先認人再認事；而「輪到我簽」的判斷（<code>canApprove()</code>）跟申請人無關。</div>
+    <div class="prob"><b>看不到積壓。</b>送審時間只印成一行 <code>09/11 14:32</code>，沒有任何地方告訴我「這張卡了 6 天」，也沒有跨張比較。</div>
+    <div class="prob"><b>卡在誰身上要點開才知道。</b><code>waitingForText()</code> 已經算得出「等待林佩瑜簽核（第 2/3 層）」，但這句話只出現在右側詳情裡。</div>
+    <div class="prob"><b>右半邊常態是空的。</b>沒選任何單時，一半畫面是「📋 選取左側項目以查看詳情」。</div>
+  </div>
+
+  <div class="screen">
+    <div class="screen__bar"><span class="dots"><i></i><i></i><i></i></span>簽核佇列 — 版面示意</div>
+    <div class="screen__body">
+
+      <!-- andon 壓力帶 -->
+      <div class="andon">
+        <div class="andon__seg mine">
+          <span class="andon__v num">4</span>
+          <span class="andon__l">待我簽核<small>其中 2 件已逾時</small></span>
+        </div>
+        <div class="andon__seg">
+          <span class="andon__v num">9</span>
+          <span class="andon__l">流程中<small>等其他簽核人</small></span>
+        </div>
+        <div class="andon__seg crit">
+          <span class="andon__v num">3</span>
+          <span class="andon__l">全站逾時<small>停留 ≥ 4 天</small></span>
+        </div>
+        <div class="andon__bar">
+          <span class="track" role="img" aria-label="停留天數分布：今日 6 件、2-3 天 4 件、逾時 3 件">
+            <i style="width:46%;background:var(--ok)"></i>
+            <i style="width:31%;background:var(--warn)"></i>
+            <i style="width:23%;background:var(--crit)"></i>
+          </span>
+        </div>
+      </div>
+
+      <div class="runway">
+        <!-- 左：待我簽核 -->
+        <div>
+          <div class="rw-col__head">
+            <span class="lamp crit"></span>
+            <span class="rw-col__t">待我簽核</span>
+            <span class="rw-col__c">4 件</span>
+            <span class="rw-col__tools">
+              <button class="mbtn on" type="button">依停留</button>
+              <button class="mbtn" type="button">依金額</button>
+            </span>
+          </div>
+
+          <div class="lane">
+            <div class="lane__head"><span class="lane__t crit">逾時 ≥ 4 天</span><span class="lane__rule"></span><span class="rw-col__c">2</span></div>
+
+            <div class="acard">
+              <div class="acard__spine crit"></div>
+              <div class="acard__in">
+                <div class="acard__r1">
+                  <span class="acard__no">MQ-202609-014</span>
+                  <span class="chip q">報價單</span>
+                  <span class="acard__age crit num">停留 7 天</span>
+                </div>
+                <div class="acard__r2">宏昇科技 ｜ 二廠監控系統汰換</div>
+                <div class="acard__r3">
+                  <span class="acard__amt">NT$ 1,284,600</span>
+                  <span class="acard__flow">
+                    <span class="ladder"><i class="done"></i><span class="rung done"></span><i class="cur"></i><span class="rung"></span><i></i></span>
+                    第 2/3 層 · 輪到你
+                  </span>
+                  <span class="acard__act">
+                    <button class="mbtn primary" type="button">核准</button>
+                    <button class="mbtn reject" type="button">退回</button>
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div class="acard">
+              <div class="acard__spine crit"></div>
+              <div class="acard__in">
+                <div class="acard__r1">
+                  <span class="acard__no">MQ-202608-031</span>
+                  <span class="chip cv">匯款申請</span>
+                  <span class="acard__age crit num">停留 5 天</span>
+                </div>
+                <div class="acard__r2">立群電子 ｜ 廠區弱電工程 — 承攬商 昱勝工程行</div>
+                <div class="acard__r3">
+                  <span class="acard__amt">NT$ 386,000</span>
+                  <span class="acard__flow">
+                    <span class="ladder"><i class="done"></i><span class="rung done"></span><i class="cur"></i></span>
+                    第 2/2 層 · 輪到你
+                  </span>
+                  <span class="acard__act">
+                    <button class="mbtn primary" type="button">核准</button>
+                    <button class="mbtn reject" type="button">退回</button>
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="lane">
+            <div class="lane__head"><span class="lane__t warn">2–3 天</span><span class="lane__rule"></span><span class="rw-col__c">1</span></div>
+            <div class="acard">
+              <div class="acard__spine warn"></div>
+              <div class="acard__in">
+                <div class="acard__r1">
+                  <span class="acard__no">MQ-202609-009</span>
+                  <span class="chip sn">出貨單</span>
+                  <span class="acard__age warn num">停留 3 天</span>
+                </div>
+                <div class="acard__r2">永基醫療 ｜ 門診區門禁擴充</div>
+                <div class="acard__r3">
+                  <span class="acard__amt num">12 項</span>
+                  <span class="acard__flow">
+                    <span class="ladder"><i class="cur"></i><span class="rung"></span><i></i></span>
+                    第 1/2 層 · 輪到你
+                  </span>
+                  <span class="acard__act">
+                    <button class="mbtn primary" type="button">核准</button>
+                    <button class="mbtn reject" type="button">退回</button>
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="lane">
+            <div class="lane__head"><span class="lane__t ok">今日送審</span><span class="lane__rule"></span><span class="rw-col__c">1</span></div>
+            <div class="acard">
+              <div class="acard__spine ok"></div>
+              <div class="acard__in">
+                <div class="acard__r1">
+                  <span class="acard__no">MQ-202609-021</span>
+                  <span class="chip pr">請款單</span>
+                  <span class="acard__age ok num">今日 09:42</span>
+                </div>
+                <div class="acard__r2">台興物流 ｜ 冷鏈倉儲網路建置（驗收款）</div>
+                <div class="acard__r3">
+                  <span class="acard__amt">NT$ 940,800</span>
+                  <span class="acard__flow">
+                    <span class="ladder"><i class="cur"></i><span class="rung"></span><i></i><span class="rung"></span><i></i></span>
+                    第 1/3 層 · 輪到你
+                  </span>
+                  <span class="acard__act">
+                    <button class="mbtn primary" type="button">核准</button>
+                    <button class="mbtn reject" type="button">退回</button>
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 右：流程中 -->
+        <div>
+          <div class="rw-col__head">
+            <span class="lamp idle"></span>
+            <span class="rw-col__t">流程中（等別人）</span>
+            <span class="rw-col__c">9 件</span>
+            <span class="rw-col__tools"><button class="mbtn on" type="button">依卡住的人</button></span>
+          </div>
+
+          <div class="blockgrp">
+            <div class="blockgrp__head">
+              <span class="mtx__person"><span class="av">林</span>林佩瑜</span>
+              <span class="dwell num">最久 6 天</span>
+              <span class="n">4 件</span>
+            </div>
+            <div class="qrow"><span class="lamp crit"></span><span class="qrow__no">MQ-202609-006</span><span class="chip q">報價單</span><span class="qrow__who">群邦精密</span><span class="qrow__age">6 天</span></div>
+            <div class="qrow"><span class="lamp warn"></span><span class="qrow__no">MQ-202609-011</span><span class="chip iv">開票憑據</span><span class="qrow__who">中鼎工程</span><span class="qrow__age">3 天</span></div>
+            <div class="qrow"><span class="lamp ok"></span><span class="qrow__no">MQ-202609-019</span><span class="chip cv">匯款申請</span><span class="qrow__who">安泰科技</span><span class="qrow__age">1 天</span></div>
+            <div class="qrow"><span class="lamp ok"></span><span class="qrow__no">MQ-202609-022</span><span class="chip sn">完工單</span><span class="qrow__who">永基醫療</span><span class="qrow__age">今日</span></div>
+          </div>
+
+          <div class="blockgrp">
+            <div class="blockgrp__head">
+              <span class="mtx__person"><span class="av">黃</span>黃俊祥</span>
+              <span class="dwell num">最久 4 天</span>
+              <span class="n">3 件</span>
+            </div>
+            <div class="qrow"><span class="lamp crit"></span><span class="qrow__no">MQ-202608-027</span><span class="chip cc">結案變更</span><span class="qrow__who">新利實業</span><span class="qrow__age">4 天</span></div>
+            <div class="qrow"><span class="lamp warn"></span><span class="qrow__no">MQ-202609-013</span><span class="chip pr">請款單</span><span class="qrow__who">宏昇科技</span><span class="qrow__age">2 天</span></div>
+            <div class="qrow"><span class="lamp ok"></span><span class="qrow__no">MQ-202609-020</span><span class="chip q">報價單</span><span class="qrow__who">台興物流</span><span class="qrow__age">今日</span></div>
+          </div>
+
+          <div class="blockgrp">
+            <div class="blockgrp__head">
+              <span class="mtx__person"><span class="av">蔡</span>蔡孟儒</span>
+              <span class="dwell num" style="color:var(--warn)">最久 2 天</span>
+              <span class="n">2 件</span>
+            </div>
+            <div class="qrow"><span class="lamp warn"></span><span class="qrow__no">MQ-202609-016</span><span class="chip cv">匯款申請</span><span class="qrow__who">立群電子</span><span class="qrow__age">2 天</span></div>
+            <div class="qrow"><span class="lamp ok"></span><span class="qrow__no">MQ-202609-023</span><span class="chip q">報價單</span><span class="qrow__who">安泰科技</span><span class="qrow__age">今日</span></div>
+          </div>
+
+          <div class="typestrip">
+            <span class="typestrip__i"><span class="sw" style="background:var(--t-quotation)"></span>報價單 <span class="n">5</span></span>
+            <span class="typestrip__i"><span class="sw" style="background:var(--t-cv)"></span>匯款申請 <span class="n">3</span></span>
+            <span class="typestrip__i"><span class="sw" style="background:var(--t-iv)"></span>開票憑據 <span class="n">1</span></span>
+            <span class="typestrip__i"><span class="sw" style="background:var(--t-sn)"></span>出貨／完工單 <span class="n">2</span></span>
+            <span class="typestrip__i"><span class="sw" style="background:var(--t-pr)"></span>請款單 <span class="n">2</span></span>
+            <span class="typestrip__i"><span class="sw" style="background:var(--t-cc)"></span>結案變更 <span class="n">1</span></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <div class="note"><span class="cn">1</span><b>壓力帶取代標題列。</b>「待我簽核／流程中／全站逾時」三個數字加一條比例條，一眼看完今天的負載。比例條的三段就是時效色階，跟下面的泳道同一套顏色。</div>
+    <div class="note"><span class="cn">2</span><b>主軸換成「輪不輪得到我」。</b>左欄是我真的能動手的（大卡片、核准／退回直接放在卡上，不用先開詳情）；右欄是等別人的（緊湊列，只要知道卡在誰身上）。</div>
+    <div class="note"><span class="cn">3</span><b>泳道＝停留天數。</b>逾時的自動排最上面。這是唯一會讓人改變動作順序的資訊，所以它決定排序，不是類型也不是金額。</div>
+    <div class="note"><span class="cn">4</span><b>階梯微圖。</b><code>tiers[]／currentTier</code> 本來就有，畫成 ●─●─○ 三點，實心＝已簽、空心＝未到、紅圈＝現在這一層。列表上就看得出流程走到哪。</div>
+    <div class="note"><span class="cn">5</span><b>右欄依「卡住的人」分組。</b>要催件的時候，要找的是人不是單；分組標頭直接寫這個人最久那件卡了幾天。</div>
+    <div class="note"><span class="cn">6</span><b>詳情改成抽屜。</b>點卡片從右側滑出覆蓋層，不常駐佔半個畫面——佇列空的時候不該有半頁的「請選取項目」。</div>
+  </div>
+</section>
+
+<!-- ═══════════ 02 案件管理 ═══════════ -->
+<section id="case">
+  <div class="eyebrow"><span class="no">02</span><span>case-management.html</span></div>
+  <h2>案件關卡矩陣</h2>
+  <p class="sec-lead">
+    系統對「完結案」已經定義了<b>五項前置條件</b>（執行進度 100%、款項收齊、單據簽核完成、成本精算完結、無額外支出送審中）。
+    那份清單本身就是一套現成的視覺化管理指標——但現在它只在按下「完結案」被擋下來的時候才會出現。
+    這一版把五個關卡攤成表格欄位，<b>一案一列、一關一格</b>。
+  </p>
+
+  <div class="probs">
+    <div class="prob"><b>要查五個地方才知道一件事。</b>進度在「執行進度」頁籤、收款在「案件資訊」、單據在各自子頁籤、精算在「財務」——五個關卡散在五處，跨案件比較等於開五次。</div>
+    <div class="prob"><b>跨案的到期資訊沒有出口。</b><code>/api/quotations/stage-board</code> 已經回傳每個案件每個階段的 <code>dueDate／done／overdue</code>，目前只被用來算左上角一個「已逾期 N」的數字。</div>
+    <div class="prob"><b>清單卡片資訊太薄。</b>單號、客戶、業務、金額、<code>stage_done/stage_total</code>——看不出哪一件快能結案、哪一件卡住。</div>
+  </div>
+
+  <div class="screen">
+    <div class="screen__bar"><span class="dots"><i></i><i></i><i></i></span>案件管理 — 版面示意</div>
+    <div class="screen__body">
+
+      <!-- 到期帶 -->
+      <div class="duestrip">
+        <div class="duestrip__d past">
+          <div class="duestrip__dd">已逾期</div>
+          <div class="duestrip__n">4</div>
+          <div class="duestrip__lbl">階段</div>
+        </div>
+        <div class="duestrip__d today">
+          <div class="duestrip__dd">09/14 今日</div>
+          <div class="duestrip__n">2</div>
+          <div class="duestrip__lbl">到期</div>
+        </div>
+        <div class="duestrip__d">
+          <div class="duestrip__dd">09/15 一</div><div class="duestrip__n">1</div><div class="duestrip__lbl">階段</div>
+        </div>
+        <div class="duestrip__d zero">
+          <div class="duestrip__dd">09/16 二</div><div class="duestrip__n">0</div><div class="duestrip__lbl">階段</div>
+        </div>
+        <div class="duestrip__d">
+          <div class="duestrip__dd">09/17 三</div><div class="duestrip__n">3</div><div class="duestrip__lbl">階段</div>
+        </div>
+        <div class="duestrip__d zero">
+          <div class="duestrip__dd">09/18 四</div><div class="duestrip__n">0</div><div class="duestrip__lbl">階段</div>
+        </div>
+        <div class="duestrip__d">
+          <div class="duestrip__dd">09/19 五</div><div class="duestrip__n">2</div><div class="duestrip__lbl">階段</div>
+        </div>
+        <div class="duestrip__d">
+          <div class="duestrip__dd">下週</div><div class="duestrip__n">6</div><div class="duestrip__lbl">階段</div>
+        </div>
+      </div>
+
+      <div class="mtx-tools">
+        <span class="lbl">排序</span>
+        <button class="mbtn on" type="button" data-sort="ready">最接近結案</button>
+        <button class="mbtn" type="button" data-sort="stuck">卡最久</button>
+        <button class="mbtn" type="button" data-sort="amount">金額</button>
+        <span class="lbl" style="margin-left:10px">只看</span>
+        <button class="mbtn" type="button">有逾期階段</button>
+        <button class="mbtn" type="button">待精算</button>
+        <button class="mbtn" type="button">我負責的</button>
+      </div>
+
+      <div class="mtx-scroll">
+        <table class="mtx" id="gateTable">
+          <thead>
+            <tr>
+              <th class="mtx__spine" aria-hidden="true"></th>
+              <th>案件</th>
+              <th style="text-align:right">合約金額</th>
+              <th>負責</th>
+              <th class="gate-h">進度<span>階段完成</span></th>
+              <th class="gate-h">收款<span>款項收齊</span></th>
+              <th class="gate-h">單據<span>簽核完成</span></th>
+              <th class="gate-h">精算<span>已完結</span></th>
+              <th class="gate-h">變更<span>無送審中</span></th>
+              <th style="border-left:1px solid var(--rule)">下一到期</th>
+              <th style="text-align:right">結案</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr data-ready="4" data-stuck="2" data-amount="2860000">
+              <td class="mtx__spine" style="background:var(--ok)"></td>
+              <td><div class="mtx__no">MQ-202605-008</div><div class="mtx__cust">中鼎工程 ｜ 中科廠區網路建置</div></td>
+              <td class="mtx__amt">2,860,000</td>
+              <td><span class="mtx__person"><span class="av">陳</span>陳彥廷</span></td>
+              <td class="gate"><span class="gatecell"><span class="gv"><span class="lamp ok"></span>9/9</span><span class="mbar"><i class="ok" style="width:100%"></i></span></span></td>
+              <td class="gate"><span class="gatecell"><span class="gv"><span class="lamp ok"></span>100%</span><span class="mbar"><i class="ok" style="width:100%"></i></span></span></td>
+              <td class="gate"><span class="gatecell"><span class="gv"><span class="lamp ok"></span>6/6</span><span class="mbar"><i class="ok" style="width:100%"></i></span></span></td>
+              <td class="gate"><span class="gatecell"><span class="gv"><span class="lamp ok"></span>已完結</span><span class="mbar"><i class="ok" style="width:100%"></i></span></span></td>
+              <td class="gate is-idle"><span class="gatecell"><span class="gv"><span class="lamp idle"></span>無</span><span class="mbar"><i class="idle" style="width:100%"></i></span></span></td>
+              <td class="mtx__due" style="color:var(--ink-3)">—</td>
+              <td style="text-align:right"><span class="mtx__ready" style="color:var(--ok)">5/5 可結案</span></td>
+            </tr>
+
+            <tr data-ready="3" data-stuck="9" data-amount="1284600">
+              <td class="mtx__spine" style="background:var(--crit)"></td>
+              <td><div class="mtx__no">MQ-202606-012</div><div class="mtx__cust">宏昇科技 ｜ 二廠監控系統汰換</div></td>
+              <td class="mtx__amt">1,284,600</td>
+              <td><span class="mtx__person"><span class="av">林</span>林佩瑜</span></td>
+              <td class="gate"><span class="gatecell"><span class="gv"><span class="lamp crit"></span>7/9</span><span class="mbar"><i class="crit" style="width:78%"></i></span></span></td>
+              <td class="gate"><span class="gatecell"><span class="gv"><span class="lamp warn"></span>60%</span><span class="mbar"><i class="warn" style="width:60%"></i></span></span></td>
+              <td class="gate"><span class="gatecell"><span class="gv"><span class="lamp warn"></span>3/4</span><span class="mbar"><i class="warn" style="width:75%"></i></span></span></td>
+              <td class="gate"><span class="gatecell"><span class="gv"><span class="lamp warn"></span>草稿</span><span class="mbar"><i class="warn" style="width:50%"></i></span></span></td>
+              <td class="gate is-idle"><span class="gatecell"><span class="gv"><span class="lamp idle"></span>無</span><span class="mbar"><i class="idle" style="width:100%"></i></span></span></td>
+              <td class="mtx__due" style="color:var(--crit);font-weight:700">09/05 逾期 9 天</td>
+              <td style="text-align:right"><span class="mtx__ready" style="color:var(--ink-3)">1/5</span></td>
+            </tr>
+
+            <tr data-ready="2" data-stuck="0" data-amount="940800">
+              <td class="mtx__spine" style="background:var(--warn)"></td>
+              <td><div class="mtx__no">MQ-202607-003</div><div class="mtx__cust">台興物流 ｜ 冷鏈倉儲網路建置</div></td>
+              <td class="mtx__amt">940,800</td>
+              <td><span class="mtx__person"><span class="av">黃</span>黃俊祥</span></td>
+              <td class="gate"><span class="gatecell"><span class="gv"><span class="lamp warn"></span>4/5</span><span class="mbar"><i class="warn" style="width:80%"></i></span></span></td>
+              <td class="gate"><span class="gatecell"><span class="gv"><span class="lamp warn"></span>30%</span><span class="mbar"><i class="warn" style="width:30%"></i></span></span></td>
+              <td class="gate"><span class="gatecell"><span class="gv"><span class="lamp warn"></span>2/3</span><span class="mbar"><i class="warn" style="width:67%"></i></span></span></td>
+              <td class="gate is-idle"><span class="gatecell"><span class="gv"><span class="lamp idle"></span>未建</span><span class="mbar"><i class="idle" style="width:100%"></i></span></span></td>
+              <td class="gate is-idle"><span class="gatecell"><span class="gv"><span class="lamp idle"></span>無</span><span class="mbar"><i class="idle" style="width:100%"></i></span></span></td>
+              <td class="mtx__due" style="color:var(--warn);font-weight:700">09/14 今日</td>
+              <td style="text-align:right"><span class="mtx__ready" style="color:var(--ink-3)">0/5</span></td>
+            </tr>
+
+            <tr data-ready="4" data-stuck="1" data-amount="386000">
+              <td class="mtx__spine" style="background:var(--warn)"></td>
+              <td><div class="mtx__no">MQ-202604-019</div><div class="mtx__cust">立群電子 ｜ 廠區弱電工程</div></td>
+              <td class="mtx__amt">386,000</td>
+              <td><span class="mtx__person"><span class="av">蔡</span>蔡孟儒</span></td>
+              <td class="gate"><span class="gatecell"><span class="gv"><span class="lamp ok"></span>6/6</span><span class="mbar"><i class="ok" style="width:100%"></i></span></span></td>
+              <td class="gate"><span class="gatecell"><span class="gv"><span class="lamp ok"></span>100%</span><span class="mbar"><i class="ok" style="width:100%"></i></span></span></td>
+              <td class="gate"><span class="gatecell"><span class="gv"><span class="lamp warn"></span>4/5</span><span class="mbar"><i class="warn" style="width:80%"></i></span></span></td>
+              <td class="gate"><span class="gatecell"><span class="gv"><span class="lamp ok"></span>已完結</span><span class="mbar"><i class="ok" style="width:100%"></i></span></span></td>
+              <td class="gate is-idle"><span class="gatecell"><span class="gv"><span class="lamp idle"></span>無</span><span class="mbar"><i class="idle" style="width:100%"></i></span></span></td>
+              <td class="mtx__due" style="color:var(--ink-3)">—</td>
+              <td style="text-align:right"><span class="mtx__ready" style="color:var(--warn)">4/5 差單據</span></td>
+            </tr>
+
+            <tr data-ready="3" data-stuck="0" data-amount="1720000">
+              <td class="mtx__spine" style="background:var(--warn)"></td>
+              <td><div class="mtx__no">MQ-202608-002</div><div class="mtx__cust">永基醫療 ｜ 門診區門禁擴充</div></td>
+              <td class="mtx__amt">1,720,000</td>
+              <td><span class="mtx__person"><span class="av">王</span>王詩涵</span></td>
+              <td class="gate"><span class="gatecell"><span class="gv"><span class="lamp warn"></span>3/7</span><span class="mbar"><i class="warn" style="width:43%"></i></span></span></td>
+              <td class="gate"><span class="gatecell"><span class="gv"><span class="lamp ok"></span>100%</span><span class="mbar"><i class="ok" style="width:100%"></i></span></span></td>
+              <td class="gate"><span class="gatecell"><span class="gv"><span class="lamp ok"></span>3/3</span><span class="mbar"><i class="ok" style="width:100%"></i></span></span></td>
+              <td class="gate"><span class="gatecell"><span class="gv"><span class="lamp ok"></span>已完結</span><span class="mbar"><i class="ok" style="width:100%"></i></span></span></td>
+              <td class="gate"><span class="gatecell"><span class="gv"><span class="lamp crit"></span>1 送審</span><span class="mbar"><i class="crit" style="width:100%"></i></span></span></td>
+              <td class="mtx__due" style="color:var(--ink-2)">09/17 三</td>
+              <td style="text-align:right"><span class="mtx__ready" style="color:var(--ink-3)">3/5</span></td>
+            </tr>
+
+            <tr data-ready="1" data-stuck="0" data-amount="512000">
+              <td class="mtx__spine" style="background:var(--idle-rule)"></td>
+              <td><div class="mtx__no">MQ-202609-004</div><div class="mtx__cust">安泰科技 ｜ 辦公室網路翻新</div></td>
+              <td class="mtx__amt">512,000</td>
+              <td><span class="mtx__person"><span class="av">陳</span>陳彥廷</span></td>
+              <td class="gate"><span class="gatecell"><span class="gv"><span class="lamp warn"></span>1/5</span><span class="mbar"><i class="warn" style="width:20%"></i></span></span></td>
+              <td class="gate"><span class="gatecell"><span class="gv"><span class="lamp warn"></span>30%</span><span class="mbar"><i class="warn" style="width:30%"></i></span></span></td>
+              <td class="gate"><span class="gatecell"><span class="gv"><span class="lamp ok"></span>1/1</span><span class="mbar"><i class="ok" style="width:100%"></i></span></span></td>
+              <td class="gate is-idle"><span class="gatecell"><span class="gv"><span class="lamp idle"></span>未建</span><span class="mbar"><i class="idle" style="width:100%"></i></span></span></td>
+              <td class="gate is-idle"><span class="gatecell"><span class="gv"><span class="lamp idle"></span>無</span><span class="mbar"><i class="idle" style="width:100%"></i></span></span></td>
+              <td class="mtx__due" style="color:var(--ink-2)">09/19 五</td>
+              <td style="text-align:right"><span class="mtx__ready" style="color:var(--ink-3)">0/5</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <div class="note"><span class="cn">1</span><b>五關卡＝五個欄位。</b>欄位順序照結案檢查的順序（進度→收款→單據→精算→變更）。整列五格全綠，右邊才會亮「5/5 可結案」——那句話等同「現在按完結案不會被擋」。</div>
+    <div class="note"><span class="cn">2</span><b>空心灰是「不適用」，不是「沒做」。</b>系統對沒有精算／沒有階段／沒有款項的舊案件本來就視為無需檢查；矩陣必須把這個語意畫出來，否則舊案件會滿排紅燈。</div>
+    <div class="note"><span class="cn">3</span><b>預設排序是「最接近結案」。</b>這是既有畫面完全給不出的資訊，也是最會改變行動的排序——先把差一步的收掉，再處理卡住的。</div>
+    <div class="note"><span class="cn">4</span><b>到期帶用既有 API。</b><code>stage-board</code> 回傳的 <code>dueDate/overdue</code> 直接彙總成「已逾期／今日／未來 7 天」，點某一格就篩出那天到期的案件。</div>
+    <div class="note"><span class="cn">5</span><b>左緣狀態脊。</b>整列不染色（會蓋掉格子的燈號），只在最左邊留 3px 的脊，取該列最嚴重的燈號，讓長表格上下捲動時異常仍然浮得出來。</div>
+    <div class="note"><span class="cn">6</span><b>詳情不消失。</b>點一列仍然進現有的五頁籤詳情頁（<code>?no=&amp;tab=</code> 深連結已經做好了），矩陣是它的上層索引，不是取代它。</div>
+  </div>
+</section>
+
+<!-- ═══════════ 03 業務開發 ═══════════ -->
+<section id="dev">
+  <div class="eyebrow"><span class="no">03</span><span>dev-crm.html</span></div>
+  <h2>開發漏斗與接觸溫度</h2>
+  <p class="sec-lead">
+    業務開發的核心變數是<b>接觸頻率</b>：一個案子會不會死，看的是上次聯絡到現在多久。
+    系統已經算得出這件事（<code>isStale()</code>＝洽談中且逾 30 天未更新），但它目前只是清單上方一條警示列。
+    這一版把「距上次接觸幾天」升格成第一視覺編碼。
+  </p>
+
+  <div class="probs">
+    <div class="prob"><b>統計在選了案件之後就消失。</b>「接洽成效總覽」「案件責任分布」掛在 <code>x-show="!selectedCase"</code>——正在看某個案子時，最需要對照的整體節奏反而看不到。</div>
+    <div class="prob"><b>狀態是主編碼、溫度是附註。</b>狀態（洽談中／成案／未成案／暫擱置）決定顏色，但同樣是「洽談中」，3 天前聯絡過跟 60 天沒動的，該做的事完全不同。</div>
+    <div class="prob"><b>通路資料沒有出口。</b>每筆記錄都存了通路（電話／Line／Email／面訪／視訊），只在明細裡印成一個小標籤，看不出某個客戶是「只用 Line 聊過」還是「跑過三次面訪」。</div>
+  </div>
+
+  <div class="screen">
+    <div class="screen__bar"><span class="dots"><i></i><i></i><i></i></span>業務開發 — 版面示意</div>
+    <div class="screen__body">
+
+      <div class="funnel">
+        <div class="funnel__s">
+          <div class="t">洽談中</div><div class="v">62</div>
+          <div class="d"><b class="dn">14</b> 件逾 30 天未接觸</div>
+        </div>
+        <div class="funnel__arrow">→</div>
+        <div class="funnel__s won">
+          <div class="t">成案</div><div class="v">18</div>
+          <div class="d">本季 <b class="up">+5</b></div>
+        </div>
+        <div class="funnel__arrow">→</div>
+        <div class="funnel__s">
+          <div class="t">未成案</div><div class="v">10</div>
+          <div class="d">最常見原因：預算未編</div>
+        </div>
+        <div class="funnel__s">
+          <div class="t">暫擱置</div><div class="v">4</div>
+          <div class="d">平均擱置 48 天</div>
+        </div>
+        <div class="funnel__s rate">
+          <div class="t">成案率</div><div class="v">64<span style="font-size:15px">%</span></div>
+          <div class="d">成案 ÷（成案＋未成案）</div>
+        </div>
+      </div>
+
+      <div class="kanban">
+        <!-- 洽談中 -->
+        <div>
+          <div class="kcol__head"><span class="lamp warn"></span><span class="kcol__t">洽談中</span><span class="kcol__n">62 · 依接觸溫度排</span></div>
+
+          <div class="dcard">
+            <span class="temp"><i class="cold" style="width:100%"></i></span>
+            <div class="dcard__nm" style="margin-top:8px">南科二期 無線網路涵蓋評估</div>
+            <div class="dcard__cust">群邦精密</div>
+            <div class="dcard__meta">
+              <span class="dcard__days cold num">62 天未接觸</span>
+              <span class="dcard__people"><span class="av">陳</span><span class="av">王</span></span>
+              <span class="dcard__ch"><i title="Line">L</i><i title="電話">話</i></span>
+            </div>
+            <div class="dcard__next"><span class="k">下一步</span><span>等客戶年度預算核定，10 月再追</span></div>
+          </div>
+
+          <div class="dcard">
+            <span class="temp"><i class="cold" style="width:100%"></i></span>
+            <div class="dcard__nm" style="margin-top:8px">新竹總部 門禁整合案</div>
+            <div class="dcard__cust">安泰科技</div>
+            <div class="dcard__meta">
+              <span class="dcard__days cold num">41 天未接觸</span>
+              <span class="dcard__people"><span class="av">黃</span></span>
+              <span class="dcard__ch"><i title="面訪">訪</i><i title="Email">M</i></span>
+            </div>
+            <div class="dcard__next"><span class="k">下一步</span><span>補一版含門禁主機的報價</span></div>
+          </div>
+
+          <div class="dcard">
+            <span class="temp"><i class="warm" style="width:62%"></i></span>
+            <div class="dcard__nm" style="margin-top:8px">物流中心 監控汰換</div>
+            <div class="dcard__cust">台興物流</div>
+            <div class="dcard__meta">
+              <span class="dcard__days warm num">18 天未接觸</span>
+              <span class="dcard__people"><span class="av">蔡</span><span class="av">林</span></span>
+              <span class="dcard__ch"><i title="視訊">視</i><i title="Line">L</i><i title="電話">話</i></span>
+            </div>
+            <div class="dcard__next"><span class="k">下一步</span><span>約 9/20 現場複勘</span></div>
+          </div>
+
+          <div class="dcard">
+            <span class="temp"><i class="hot" style="width:22%"></i></span>
+            <div class="dcard__nm" style="margin-top:8px">廠務系統 網路架構規劃</div>
+            <div class="dcard__cust">中鼎工程</div>
+            <div class="dcard__meta">
+              <span class="dcard__days hot num">2 天前接觸</span>
+              <span class="dcard__people"><span class="av">陳</span></span>
+              <span class="dcard__ch"><i title="面訪">訪</i></span>
+            </div>
+            <div class="dcard__next"><span class="k">下一步</span><span>本週五出初版架構圖</span></div>
+          </div>
+        </div>
+
+        <!-- 成案 -->
+        <div>
+          <div class="kcol__head"><span class="lamp ok"></span><span class="kcol__t">成案</span><span class="kcol__n">18 · 依成案日排</span></div>
+
+          <div class="dcard">
+            <span class="temp"><i class="hot" style="width:14%"></i></span>
+            <div class="dcard__nm" style="margin-top:8px">冷鏈倉儲網路建置</div>
+            <div class="dcard__cust">台興物流</div>
+            <div class="dcard__meta">
+              <span class="chip ok">已連結 MQ-202607-003</span>
+            </div>
+            <div class="dcard__next"><span class="k">成案</span><span>07/22 · 開發 → 報價歷時 34 天</span></div>
+          </div>
+
+          <div class="dcard">
+            <span class="temp"><i class="hot" style="width:9%"></i></span>
+            <div class="dcard__nm" style="margin-top:8px">門診區門禁擴充</div>
+            <div class="dcard__cust">永基醫療</div>
+            <div class="dcard__meta">
+              <span class="chip ok">已連結 MQ-202608-002</span>
+            </div>
+            <div class="dcard__next"><span class="k">成案</span><span>08/06 · 開發 → 報價歷時 21 天</span></div>
+          </div>
+
+          <div class="dcard">
+            <span class="temp"><i class="warm" style="width:40%"></i></span>
+            <div class="dcard__nm" style="margin-top:8px">辦公室網路翻新</div>
+            <div class="dcard__cust">安泰科技</div>
+            <div class="dcard__meta">
+              <span class="chip warn">連結異動審核中</span>
+            </div>
+            <div class="dcard__next"><span class="k">待辦</span><span>等最高管理員審核連結變更</span></div>
+          </div>
+        </div>
+
+        <!-- 已結束 -->
+        <div>
+          <div class="kcol__head"><span class="lamp idle"></span><span class="kcol__t">未成案 ／ 暫擱置</span><span class="kcol__n">14</span></div>
+
+          <div class="dcard">
+            <div class="dcard__nm">舊廠區 監控擴充</div>
+            <div class="dcard__cust">新利實業</div>
+            <div class="dcard__meta">
+              <span class="chip idle">未成案</span>
+              <span class="dcard__days num" style="color:var(--ink-3)">結束於 06/28</span>
+            </div>
+            <div class="dcard__next"><span class="k">原因</span><span>客戶改採原廠方案</span></div>
+          </div>
+
+          <div class="dcard">
+            <div class="dcard__nm">分公司 無線網路改善</div>
+            <div class="dcard__cust">立群電子</div>
+            <div class="dcard__meta">
+              <span class="chip idle">暫擱置</span>
+              <span class="dcard__days num" style="color:var(--ink-3)">擱置 73 天</span>
+            </div>
+            <div class="dcard__next"><span class="k">解除條件</span><span>新廠房確定進駐時間後重啟</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 常駐統計 -->
+      <div class="loadgrid">
+        <div>
+          <h3 style="margin-top:0">人員案件負載</h3>
+          <div class="loadrow">
+            <span class="loadrow__n">陳彥廷</span>
+            <span class="loadrow__b"><i class="talk" style="width:44%"></i><i class="cold" style="width:14%"></i><i class="won" style="width:28%"></i><i class="hold" style="width:14%"></i></span>
+            <span class="loadrow__v">22 件</span>
+          </div>
+          <div class="loadrow">
+            <span class="loadrow__n">林佩瑜</span>
+            <span class="loadrow__b"><i class="talk" style="width:52%"></i><i class="cold" style="width:22%"></i><i class="won" style="width:18%"></i><i class="hold" style="width:8%"></i></span>
+            <span class="loadrow__v">19 件</span>
+          </div>
+          <div class="loadrow">
+            <span class="loadrow__n">黃俊祥</span>
+            <span class="loadrow__b"><i class="talk" style="width:38%"></i><i class="cold" style="width:31%"></i><i class="won" style="width:23%"></i><i class="hold" style="width:8%"></i></span>
+            <span class="loadrow__v">17 件</span>
+          </div>
+          <div class="loadrow">
+            <span class="loadrow__n">蔡孟儒</span>
+            <span class="loadrow__b"><i class="talk" style="width:60%"></i><i class="cold" style="width:8%"></i><i class="won" style="width:24%"></i><i class="hold" style="width:8%"></i></span>
+            <span class="loadrow__v">14 件</span>
+          </div>
+          <div class="loadrow">
+            <span class="loadrow__n">王詩涵</span>
+            <span class="loadrow__b"><i class="talk" style="width:47%"></i><i class="cold" style="width:18%"></i><i class="won" style="width:29%"></i><i class="hold" style="width:6%"></i></span>
+            <span class="loadrow__v">12 件</span>
+          </div>
+          <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:10px;font-size:11px;color:var(--ink-3)">
+            <span style="display:inline-flex;align-items:center;gap:5px"><span class="lamp warn"></span>洽談中</span>
+            <span style="display:inline-flex;align-items:center;gap:5px"><span class="lamp crit"></span>洽談中逾 30 天</span>
+            <span style="display:inline-flex;align-items:center;gap:5px"><span class="lamp ok"></span>成案</span>
+            <span style="display:inline-flex;align-items:center;gap:5px"><span class="lamp idle"></span>未成案／擱置</span>
+          </div>
+        </div>
+
+        <div>
+          <h3 style="margin-top:0">近 8 週接洽次數</h3>
+          <div class="spark">
+            <span class="spark__b"><span class="vv num">11</span><span class="bar" style="height:34px"></span><span class="lb">7/21</span></span>
+            <span class="spark__b"><span class="vv num">16</span><span class="bar" style="height:50px"></span><span class="lb">7/28</span></span>
+            <span class="spark__b"><span class="vv num">9</span><span class="bar" style="height:28px"></span><span class="lb">8/04</span></span>
+            <span class="spark__b"><span class="vv num">14</span><span class="bar" style="height:44px"></span><span class="lb">8/11</span></span>
+            <span class="spark__b"><span class="vv num">21</span><span class="bar" style="height:66px"></span><span class="lb">8/18</span></span>
+            <span class="spark__b"><span class="vv num">18</span><span class="bar" style="height:56px"></span><span class="lb">8/25</span></span>
+            <span class="spark__b"><span class="vv num">12</span><span class="bar" style="height:38px"></span><span class="lb">9/01</span></span>
+            <span class="spark__b cur"><span class="vv num">7</span><span class="bar" style="height:22px"></span><span class="lb">本週</span></span>
+          </div>
+          <h3>近 30 天通路分布</h3>
+          <div class="loadrow"><span class="loadrow__n">電話</span><span class="loadrow__b"><i class="talk" style="width:38%"></i></span><span class="loadrow__v">34 次</span></div>
+          <div class="loadrow"><span class="loadrow__n">Line</span><span class="loadrow__b"><i class="talk" style="width:31%"></i></span><span class="loadrow__v">28 次</span></div>
+          <div class="loadrow"><span class="loadrow__n">面訪</span><span class="loadrow__b"><i class="won" style="width:19%"></i></span><span class="loadrow__v">17 次</span></div>
+          <div class="loadrow"><span class="loadrow__n">Email</span><span class="loadrow__b"><i class="talk" style="width:9%"></i></span><span class="loadrow__v">8 次</span></div>
+          <div class="loadrow"><span class="loadrow__n">視訊</span><span class="loadrow__b"><i class="talk" style="width:3%"></i></span><span class="loadrow__v">3 次</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <div class="note"><span class="cn">1</span><b>卡片頂緣的溫度條就是天數。</b>條越長＝越久沒接觸，顏色跟著跨門檻換（≤7 綠／8–30 琥珀／&gt;30 紅，紅色那條就是既有的 <code>isStale()</code>）。同一欄裡冷的排在最上面。</div>
+    <div class="note"><span class="cn">2</span><b>漏斗帶取代分頁 chips。</b>洽談中 → 成案 → 未成案 是真的有方向的流程，用箭頭是有意義的；成案率放在同一列，不必另開報表。</div>
+    <div class="note"><span class="cn">3</span><b>統計常駐。</b>人員負載與 8 週趨勢移到看板下方常駐，不再綁在「沒選案件」才顯示。</div>
+    <div class="note"><span class="cn">4</span><b>通路變成卡片上的小圖標。</b>那一排小方塊是這個案子實際用過的通路——「只用 Line 聊過」跟「跑過三次面訪」在列表上就分得出來。</div>
+    <div class="note"><span class="cn">5</span><b>「下一步」提到卡片正面。</b><code>next_action</code> 欄位本來就存在，它是這一頁唯一直接告訴人該做什麼的欄位，不該埋在明細裡。</div>
+    <div class="note"><span class="cn">6</span><b>人員負載條分四段。</b>特別把「洽談中逾 30 天」從「洽談中」拆出來——一個人手上 19 件、其中 22% 是冷掉的，這是分案時要看的訊號。</div>
+  </div>
+</section>
+
+<!-- ═══════════ 04 索引 ═══════════ -->
+<section id="index">
+  <div class="eyebrow"><span class="no">04</span><span>長期案件量的檢索骨架</span></div>
+  <h2>案件越積越多之後，怎麼找得到</h2>
+  <p class="sec-lead">
+    上面三個版面都是為「現在要動的那幾十件」設計的。但案件只會單向累積：
+    今天資料庫裡是 <span class="num">26</span> 張報價單、<span class="num">90</span> 件業務開發案、<span class="num">499</span> 筆開發記錄，
+    十年後同樣的節奏是<b>十倍以上</b>。檢索必須跟看板分開設計，而且要先解決一個現在就存在的天花板。
+  </p>
+
+  <h3>先講會先撞到的牆</h3>
+  <div class="scale-scroll">
+    <table class="scale">
+      <thead>
+        <tr><th>資料</th><th>目前量</th><th>10 年推估</th><th>目前實作的上限</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>報價單／案件</td>
+          <td class="n">26</td>
+          <td class="n">~250</td>
+          <td>案件管理寫死 <code>limit=500</code> 一次全量拉回，篩選、排序、分頁全在瀏覽器做</td>
+        </tr>
+        <tr>
+          <td>業務開發案件</td>
+          <td class="n">90</td>
+          <td class="n">~900</td>
+          <td><code>GET /api/dev-cases</code> <b>完全沒有 limit／offset</b>，永遠回全量；前端再做全部篩選</td>
+        </tr>
+        <tr>
+          <td>開發記錄</td>
+          <td class="n">499</td>
+          <td class="n">~5,000</td>
+          <td>每選一個案件才抓該案記錄，這條沒問題</td>
+        </tr>
+        <tr>
+          <td>案件階段</td>
+          <td class="n">49</td>
+          <td class="n">~1,300</td>
+          <td><code>stage-board</code> 攤平回傳「案件×階段」全量，沒有時間範圍參數</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="cap">
+    這不是現在的缺陷——幾十筆的時候全量拉回反而最簡單、最不會出錯。但上面三個版面都要跨案件彙總，
+    等於把這個模式再往上壓一層，所以<b>伺服器端篩選＋分頁應該跟版面一起做</b>，不要等到卡了才回頭改。
+    另外 <code>/api/quotations</code> 目前只認 <code>status／customer／month／deal_tag</code>，
+    缺「業務員」與「跨欄關鍵字」，排序也寫死 <code>ORDER BY id DESC</code>——facet 篩選要用的話這三項要補。
+  </p>
+
+  <h3>三層檢索</h3>
+  <div class="probs" style="border-left-color:var(--brand)">
+    <div class="prob"><b>第一層 · 作業區（少量、每天看）</b>：上面那三個看板。只放「還沒結束」的東西，量天生有上限——手上同時進行的案件不會因為做十年就變十倍。</div>
+    <div class="prob"><b>第二層 · 檢索區（全量、偶爾查）</b>：facet 篩選＋年份摺疊的歷史清單。設計目標是「三次點擊之內收斂到 20 筆以內」。</div>
+    <div class="prob"><b>第三層 · 直達（已知單號）</b>：全域命令面板。知道單號或客戶名的時候，不該經過任何清單。</div>
+  </div>
+
+  <div class="screen">
+    <div class="screen__bar"><span class="dots"><i></i><i></i><i></i></span>檢索區 — 版面示意</div>
+    <div class="screen__body">
+      <div class="idx">
+        <!-- facet -->
+        <aside class="facet">
+          <div class="facet__g">
+            <div class="facet__t">年度</div>
+            <div class="facet__i on"><span class="facet__box"></span>2026<span class="facet__n">25</span></div>
+            <div class="facet__i"><span class="facet__box"></span>2025<span class="facet__n">—</span></div>
+          </div>
+          <div class="facet__g">
+            <div class="facet__t">狀態</div>
+            <div class="facet__i"><span class="facet__box"></span>執行中<span class="facet__n">5</span></div>
+            <div class="facet__i on"><span class="facet__box"></span>已結案<span class="facet__n">9</span></div>
+            <div class="facet__i"><span class="facet__box"></span>報價中<span class="facet__n">7</span></div>
+            <div class="facet__i"><span class="facet__box"></span>未成案<span class="facet__n">5</span></div>
+          </div>
+          <div class="facet__g">
+            <div class="facet__t">負責業務</div>
+            <div class="facet__i"><span class="facet__box"></span>陳彥廷<span class="facet__n">9</span></div>
+            <div class="facet__i"><span class="facet__box"></span>林佩瑜<span class="facet__n">6</span></div>
+            <div class="facet__i"><span class="facet__box"></span>黃俊祥<span class="facet__n">5</span></div>
+            <div class="facet__i"><span class="facet__box"></span>蔡孟儒<span class="facet__n">4</span></div>
+          </div>
+          <div class="facet__g">
+            <div class="facet__t">金額級距</div>
+            <div class="facet__i"><span class="facet__box"></span>&lt; 30 萬<span class="facet__n">7</span></div>
+            <div class="facet__i"><span class="facet__box"></span>30–100 萬<span class="facet__n">9</span></div>
+            <div class="facet__i"><span class="facet__box"></span>100–300 萬<span class="facet__n">8</span></div>
+            <div class="facet__i"><span class="facet__box"></span>&gt; 300 萬<span class="facet__n">2</span></div>
+          </div>
+          <div class="facet__g">
+            <div class="facet__t">關卡</div>
+            <div class="facet__i"><span class="facet__box"></span>有逾期階段<span class="facet__n">4</span></div>
+            <div class="facet__i"><span class="facet__box"></span>款項未收齊<span class="facet__n">6</span></div>
+            <div class="facet__i"><span class="facet__box"></span>待精算<span class="facet__n">3</span></div>
+          </div>
+        </aside>
+
+        <!-- 結果 -->
+        <div>
+          <div class="searchbar" id="openPalette" role="button" tabindex="0" aria-label="開啟全域搜尋示意">
+            <span aria-hidden="true" style="color:var(--ink-3)">⌕</span>
+            <span class="searchbar__ph">搜尋單號、客戶、專案名、發票號、承攬商…</span>
+            <span class="searchbar__kbd">Ctrl K</span>
+          </div>
+
+          <div class="views">
+            <span class="view on">已結案 · 2026 <span class="n">9</span></span>
+            <span class="view">我的進行中 <span class="n">5</span></span>
+            <span class="view">本月到期階段 <span class="n">8</span></span>
+            <span class="view">差一步可結案 <span class="n">2</span></span>
+            <span class="view" style="border-style:dashed;color:var(--ink-3)">＋ 儲存目前條件</span>
+          </div>
+
+          <div class="yeargrp open">
+            <div class="yeargrp__h"><span class="caret">▸</span><span class="y">2026</span><span>已結案</span><span class="n">9 件 · NT$ 12,480,000</span></div>
+            <div class="yeargrp__b">
+              <div class="yrow"><span class="no">MQ-202605-008</span><span>中鼎工程 ｜ 中科廠區網路建置</span><span class="amt">2,860,000</span><span class="chip ok">已結案</span></div>
+              <div class="yrow"><span class="no">MQ-202604-019</span><span>立群電子 ｜ 廠區弱電工程</span><span class="amt">386,000</span><span class="chip ok">已結案</span></div>
+              <div class="yrow"><span class="no">MQ-202603-011</span><span>新利實業 ｜ 舊廠區監控擴充</span><span class="amt">1,240,000</span><span class="chip ok">已結案</span></div>
+              <div class="yrow"><span class="no">MQ-202602-006</span><span>安泰科技 ｜ 一樓機房整併</span><span class="amt">723,500</span><span class="chip ok">已結案</span></div>
+              <div class="yrow" style="color:var(--ink-3);justify-content:center;display:block;text-align:center;padding:8px">… 另外 5 件</div>
+            </div>
+          </div>
+          <div class="yeargrp">
+            <div class="yeargrp__h"><span class="caret">▸</span><span class="y">2025</span><span>已結案</span><span class="n">— 件 · 系統上線前</span></div>
+            <div class="yeargrp__b"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <div class="note"><span class="cn">1</span><b>每個篩選條件都帶筆數。</b>沒有筆數的篩選器，使用者要靠試的；帶了筆數就能先看出「這條路收不收斂」。筆數要跟著已選條件連動重算。</div>
+    <div class="note"><span class="cn">2</span><b>儲存檢視重用既有機制。</b><code>user_list_prefs</code>（<code>GET/PUT /api/list-prefs/{list_key}</code>）現在存排序偏好，把篩選條件一起存進去就是「儲存的檢視」，不必新開資料表。</div>
+    <div class="note"><span class="cn">3</span><b>歷史按年摺疊、預設全收合。</b>年份列本身帶件數與金額合計——很多時候要找的答案（去年做了幾件、多少錢）在展開之前就得到了。</div>
+    <div class="note"><span class="cn">4</span><b>命令面板跨模組。</b>打「台興」要同時回報價單、案件、業務開發案、客戶、承攬商，分組列出。點下面的搜尋列可以看示意。</div>
+    <div class="note"><span class="cn">5</span><b>單號是最強索引，別擋在清單後面。</b><code>MQ-YYYYMM-NNN</code> 本身帶年月，輸入前綴就能當年月篩選用；面板要支援輸入部分單號直接跳轉。</div>
+    <div class="note"><span class="cn">6</span><b>看板只放「還沒結束」的。</b>作業區的量天生有上限，結案後自動離開看板、進入檢索區——這是讓三個看板十年後還能用的關鍵，不是靠分頁。</div>
+  </div>
+</section>
+
+<!-- ═══════════ 05 落地順序 ═══════════ -->
+<section id="rollout">
+  <div class="eyebrow"><span class="no">05</span><span>可獨立上線、可回退</span></div>
+  <h2>落地順序</h2>
+  <p class="sec-lead">
+    照「先做不必動後端的、再做要動後端的」排。每一階段自己就是可上線狀態，不必等下一階段。
+  </p>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step__n">1</div>
+      <div>
+        <div class="step__t">共通語彙進 <code>style.css</code><span class="step__tag fe">前端</span></div>
+        <div class="step__d">燈號、時效色階、階梯、溫度條、狀態脊做成共用 class，三頁共用一份。只新增不改既有 token，畫面零變化，可先合。</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step__n">2</div>
+      <div>
+        <div class="step__t">簽核跑道<span class="step__tag fe">前端</span></div>
+        <div class="step__d">分組軸從申請人換成「輪不輪到我」，泳道依停留天數。所需資料 <code>canApprove()／waitingForText()／tiers／requestedAt</code> 全部已經在前端手上，<b>後端零改動</b>。</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step__n">3</div>
+      <div>
+        <div class="step__t">關卡矩陣<span class="step__tag fe">前端</span><span class="step__tag be">後端小改</span></div>
+        <div class="step__d">進度、單據、精算三格用 <code>/api/quotations</code> 現有欄位與 <code>stage-board</code> 就畫得出來；收款百分比與「額外支出送審中」目前在案件詳情才算得到，需要補進列表 API。</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step__n">4</div>
+      <div>
+        <div class="step__t">開發漏斗與溫度<span class="step__tag fe">前端</span></div>
+        <div class="step__d">溫度＝<code>updatedAt</code> 距今天數，既有 <code>isStale()</code> 就是紅色門檻。統計從 <code>x-show="!selectedCase"</code> 解綁、移到常駐區。通路圖標需要 <code>dev_logs</code> 的通路彙總，可在案件列表 API 帶一個 <code>channels[]</code>。</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step__n">5</div>
+      <div>
+        <div class="step__t">檢索骨架<span class="step__tag be">後端為主</span></div>
+        <div class="step__d"><code>/api/dev-cases</code> 補 <code>limit／offset</code>；<code>/api/quotations</code> 補業務員篩選、跨欄關鍵字、排序參數與 facet 筆數；<code>user_list_prefs</code> 擴充成儲存檢視。前端接 facet 面板、年份摺疊、命令面板。</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  MOTRIX 專案管理系統 · 介面排版提案 · 2026-09-14　｜　示意資料，非實際客戶與金額
+</footer>
+</div>
+
+<!-- 命令面板示意 -->
+<div class="palette-mask" id="paletteMask" role="dialog" aria-modal="true" aria-label="全域搜尋示意">
+  <div class="palette">
+    <div class="palette__in">
+      <span aria-hidden="true" style="color:var(--ink-3)">⌕</span>
+      <span class="palette__q">台興<span class="cursor"></span></span>
+      <button class="mbtn" type="button" id="paletteClose">關閉</button>
+    </div>
+    <div class="palette__body">
+      <div class="pgrp__t">案件</div>
+      <div class="pitem sel"><span class="pitem__no">MQ-202607-003</span><span class="pitem__d">台興物流 ｜ 冷鏈倉儲網路建置</span><span class="pitem__tail">執行中 · 4/5 關</span></div>
+      <div class="pgrp__t">報價單</div>
+      <div class="pitem"><span class="pitem__no">MQ-202609-021</span><span class="pitem__d">台興物流 ｜ 驗收款請款單</span><span class="pitem__tail">簽核中</span></div>
+      <div class="pitem"><span class="pitem__no">MQ-202605-014</span><span class="pitem__d">台興物流 ｜ 倉儲擴充評估</span><span class="pitem__tail">未成案</span></div>
+      <div class="pgrp__t">業務開發</div>
+      <div class="pitem"><span class="pitem__no">DC-088</span><span class="pitem__d">物流中心 監控汰換</span><span class="pitem__tail">洽談中 · 18 天未接觸</span></div>
+      <div class="pgrp__t">客戶</div>
+      <div class="pitem"><span class="pitem__no">C-0042</span><span class="pitem__d">台興物流股份有限公司</span><span class="pitem__tail">往來 3 案 · NT$ 4.1M</span></div>
+    </div>
+    <div class="palette__foot">
+      <span><kbd>↑</kbd><kbd>↓</kbd> 移動</span><span><kbd>Enter</kbd> 開啟</span><span><kbd>Esc</kbd> 關閉</span>
+      <span style="margin-left:auto">輸入 <kbd>MQ-2026</kbd> 可當年月篩選</span>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  /* 關卡矩陣排序示意：示範「最接近結案」這個既有畫面給不出的排序 */
+  var table = document.getElementById('gateTable');
+  var btns = document.querySelectorAll('[data-sort]');
+  btns.forEach(function (b) {
+    b.addEventListener('click', function () {
+      btns.forEach(function (x) { x.classList.remove('on'); });
+      b.classList.add('on');
+      var key = b.getAttribute('data-sort');
+      var body = table.tBodies[0];
+      var rows = Array.prototype.slice.call(body.rows);
+      rows.sort(function (x, y) {
+        var a = +x.dataset[key], c = +y.dataset[key];
+        return c - a;
+      });
+      rows.forEach(function (r) { body.appendChild(r); });
+    });
+  });
+
+  /* 命令面板示意 */
+  var mask = document.getElementById('paletteMask');
+  var open = document.getElementById('openPalette');
+  var close = document.getElementById('paletteClose');
+  function show() { mask.classList.add('open'); }
+  function hide() { mask.classList.remove('open'); }
+  open.addEventListener('click', show);
+  open.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); show(); }
+  });
+  close.addEventListener('click', hide);
+  mask.addEventListener('click', function (e) { if (e.target === mask) hide(); });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') hide();
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); show(); }
+  });
+})();
+</script>

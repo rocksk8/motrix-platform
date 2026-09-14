@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="../static/favicon.png">
+  <title>組織架構設定 — MOTRIX 專案管理系統</title>
+  <script src="../static/auth-guard.js"></script>
+  <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
+  <style>
+    .org-main {
+      margin-left: var(--sidebar-w);
+      margin-top: var(--topbar-h);
+      padding: 28px 32px;
+      min-height: calc(100vh - var(--topbar-h));
+      background: var(--white);
+    }
+    .modal-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,.45);
+      z-index: 200;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .modal-box {
+      background: #fff;
+      border-radius: var(--radius-lg);
+      width: 100%;
+      max-width: 420px;
+      box-shadow: var(--shadow-lg);
+      overflow: hidden;
+    }
+    .modal-head {
+      display: flex;
+      align-items: center;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border-light);
+      gap: 10px;
+    }
+    .modal-head__title { font-size: 14px; font-weight: 600; flex: 1; }
+    .modal-body { padding: 20px; }
+    .modal-foot { padding: 14px 20px; border-top: 1px solid var(--border-light); display: flex; justify-content: flex-end; gap: 8px; }
+    .form-group { margin-bottom: 14px; }
+    .form-label {
+      display: block;
+      font-size: 10px;
+      font-family: 'LINE Seed TW_OTF', sans-serif;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      font-weight: 500;
+      margin-bottom: 5px;
+    }
+    .form-label .req { color: var(--danger); }
+    .form-input, .form-select {
+      width: 100%;
+      padding: 9px 11px;
+      border: 1px solid var(--border-light);
+      border-radius: var(--radius);
+      font-size: 13px;
+      font-family: var(--font-zh);
+      color: var(--text-primary);
+      background: #fff;
+      outline: none;
+      transition: border-color .12s, box-shadow .12s;
+    }
+    .form-input:focus, .form-select:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(37,99,235,.08);
+    }
+    .form-hint { font-size: 10px; color: var(--text-dim); margin-top: 3px; }
+    .form-hint.error { color: var(--danger); }
+    .div-panel { border-bottom: 1px solid var(--border-light); }
+    .div-panel:last-child { border-bottom: none; }
+    .div-head {
+      display: flex; align-items: center; gap: 8px;
+      padding: 14px 16px; cursor: pointer; background: #FAFAF8;
+    }
+    .dept-row {
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px 16px 10px 34px; border-top: 1px solid #F0EEE9;
+    }
+    .dept-row:hover { background: #FDFCFA; }
+
+    .view-toggle {
+      display: inline-flex; border: 1px solid var(--border-light); border-radius: var(--radius);
+      overflow: hidden; background: #fff;
+    }
+    .view-toggle button {
+      border: none; background: none; cursor: pointer;
+      font-size: 12px; font-family: var(--font-zh); color: var(--text-secondary);
+      padding: 7px 14px;
+    }
+    .view-toggle button.active { background: var(--accent); color: #fff; }
+    .view-toggle button + button { border-left: 1px solid var(--border-light); }
+
+    .chart-view { padding: 24px 20px 32px; }
+
+    /* 稽核彙總列 */
+    .chart-summary {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      gap: 1px;
+      background: var(--border-light);
+      border: 1px solid var(--border-light);
+      border-radius: 10px;
+      overflow: hidden;
+      margin-bottom: 28px;
+    }
+    .chart-summary__cell { background: #fff; padding: 14px 16px; }
+    .chart-summary__num { font-size: 22px; font-weight: 800; line-height: 1; color: var(--text-primary); }
+    .chart-summary__num.warn { color: var(--warning); }
+    .chart-summary__label { margin-top: 5px; font-size: 11px; color: var(--text-secondary); }
+
+    .chart-tree { display: flex; flex-direction: column; gap: 36px; }
+    .chart-division { position: relative; }
+
+    .chart-band {
+      display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+      background: #fff; border: 1px solid var(--border-light); border-left: 4px solid var(--accent);
+      border-radius: 10px; padding: 13px 16px; cursor: pointer;
+      box-shadow: 0 1px 2px rgba(0,0,0,.04);
+      transition: border-color .15s, box-shadow .15s;
+    }
+    .chart-band:hover { border-color: var(--accent); box-shadow: 0 2px 6px rgba(0,0,0,.06); }
+    .chart-band__name { font-size: 15px; font-weight: 700; color: var(--text-primary); }
+    .chart-band__meta { font-size: 11.5px; color: var(--text-secondary); margin-top: 2px; }
+    .chart-band__manager { margin-left: auto; }
+
+    .chart-chip {
+      display: inline-flex; align-items: center; gap: 5px;
+      font-size: 11px; font-weight: 600; padding: 4px 10px 4px 8px; border-radius: 999px;
+      white-space: nowrap;
+    }
+    .chart-chip--manager { background: var(--accent-light); color: var(--accent); }
+    .chart-chip--vacant  { background: #FFFBEB; color: #92400E; border: 1px solid #FDE68A; }
+    .chart-chip__dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+
+    .chart-stem { width: 2px; height: 20px; background: var(--border-light); margin: 0 auto; }
+
+    .chart-dept-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 18px; padding-top: 20px;
+    }
+    .chart-dept-grid.multi { border-top: 2px solid var(--border-light); }
+    .chart-dept-col { position: relative; }
+    .chart-dept-col::before {
+      content: ''; position: absolute; top: -20px; left: 50%;
+      width: 2px; height: 20px; background: var(--border-light); transform: translateX(-50%);
+    }
+    .chart-dept-grid:not(.multi) .chart-dept-col::before { display: none; }
+
+    .chart-dept-card {
+      background: #FAFAF8; border: 1px solid var(--border-light); border-radius: 10px;
+      padding: 12px 14px; cursor: pointer;
+      transition: border-color .15s, box-shadow .15s, transform .15s;
+    }
+    .chart-dept-card:hover { border-color: var(--accent); box-shadow: 0 2px 6px rgba(0,0,0,.06); transform: translateY(-1px); }
+    .chart-dept-card__name { font-size: 13px; font-weight: 700; color: var(--text-primary); }
+    .chart-dept-card__count { margin-top: 3px; font-size: 11px; color: var(--text-secondary); }
+    .chart-dept-card__count b { color: var(--text-primary); font-weight: 700; }
+    .chart-dept-card .chart-chip { margin-top: 9px; }
+  </style>
+</head>
+
+<body x-data="orgStructurePage()" x-init="init()">
+
+    <header id="app-topbar" class="topbar"></header>
+<div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+  <aside class="sidebar" id="app-sidebar"></aside>
+
+  <div class="org-main">
+    <div class="pg">
+      <div class="pg__l">
+        <div class="pg__eyebrow">系統設定</div>
+        <h1 class="pg__t">組織架構設定</h1>
+        <p class="pg__s">管理處／部門，供使用者管理頁面分組顯示使用</p>
+</div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <div class="view-toggle">
+          <button :class="{active: viewMode==='list'}" @click="viewMode='list'">清單檢視</button>
+          <button :class="{active: viewMode==='chart'}" @click="viewMode='chart'">組織圖</button>
+        </div>
+        <template x-if="isSuperAdmin">
+          <button class="btn btn-ghost" @click="window.location.href='users.html'">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5m7-7l-7 7 7 7"/></svg>
+            返回使用者管理
+          </button>
+        </template>
+        <template x-if="isSuperAdmin">
+          <button class="btn btn-primary" @click="openDivisionCreate()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v16m8-8H4"/></svg>
+            新增處
+          </button>
+        </template>
+      </div>
+    </div>
+
+    <div x-show="!isSuperAdmin"
+         style="background:#FEF3C7;border:1px solid #FDE68A;border-radius:8px;padding:14px 18px;margin-bottom:20px;font-size:12px;color:#92400E">
+      ⚠ 僅超級管理員可管理組織架構
+    </div>
+
+    <div class="panel" style="padding:0;overflow:hidden" x-show="viewMode==='list'">
+      <div x-show="orgTree.length === 0" style="padding:32px;text-align:center;font-size:12px;color:var(--text-dim)">
+        尚未建立任何處，點擊右上角「新增處」開始設定組織架構。
+      </div>
+      <template x-for="div in orgTree" :key="div.id">
+        <div class="div-panel">
+          <div class="div-head" @click="toggleDiv(div.id)">
+            <span x-text="isDivOpen(div.id) ? '▾' : '▸'" style="color:var(--text-dim);width:10px;display:inline-block"></span>
+            <span style="font-size:14px;font-weight:700" x-text="div.name"></span>
+            <span style="font-size:11px;color:var(--text-dim)"
+                  x-text="div.departments.length + ' 個部門・' + divisionMemberCount(div) + ' 人'"></span>
+            <template x-if="div.managerName">
+              <span style="font-size:10px;background:var(--accent-light);color:var(--accent);padding:1px 7px;border-radius:10px" x-text="'處級主管：' + div.managerName"></span>
+            </template>
+            <div style="margin-left:auto;display:flex;gap:6px" @click.stop>
+              <button class="btn btn-ghost btn-sm" @click="openDepartmentCreate(div.id)" x-show="isSuperAdmin">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v16m8-8H4"/></svg>
+                新增部門
+              </button>
+              <button class="btn btn-ghost btn-sm" @click="openDivisionEdit(div)" x-show="isSuperAdmin">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+              </button>
+              <button class="btn btn-danger btn-sm" @click="deleteDivision(div)" x-show="isSuperAdmin">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+              </button>
+            </div>
+          </div>
+          <template x-if="isDivOpen(div.id)">
+            <div>
+              <div x-show="div.departments.length === 0" style="padding:10px 16px 10px 34px;font-size:12px;color:var(--text-dim)">
+                此處尚無部門
+              </div>
+              <template x-for="dept in div.departments" :key="dept.id">
+                <div>
+                  <div class="dept-row" @click="toggleDeptMembers(dept.id)" style="cursor:pointer">
+                    <span x-text="isDeptMembersOpen(dept.id) ? '▾' : '▸'" style="color:var(--text-dim);width:10px;display:inline-block"></span>
+                    <span style="font-size:13px;font-weight:600" x-text="dept.name"></span>
+                    <span style="font-size:11px;color:var(--text-dim)" x-text="dept.memberCount + ' 人'"></span>
+                    <template x-if="dept.managerName">
+                      <span style="font-size:10px;background:var(--accent-light);color:var(--accent);padding:1px 7px;border-radius:10px" x-text="'主管：' + dept.managerName"></span>
+                    </template>
+                    <div style="margin-left:auto;display:flex;gap:6px" @click.stop>
+                      <button class="btn btn-ghost btn-sm" @click="openDepartmentEdit(dept, div.id)" x-show="isSuperAdmin">
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                        編輯
+                      </button>
+                      <button class="btn btn-danger btn-sm" @click="deleteDepartment(dept)" x-show="isSuperAdmin">
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                      </button>
+                    </div>
+                  </div>
+                  <template x-if="isDeptMembersOpen(dept.id)">
+                    <div style="padding:10px 16px 12px 50px;background:#FCFBF9;border-top:1px solid #F0EEE9">
+                      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">
+                        <template x-for="m in membersOf(dept.id)" :key="m.id">
+                          <span style="display:inline-flex;align-items:center;gap:5px;padding:3px 5px 3px 10px;border-radius:14px;background:#EFEDE7;font-size:11px">
+                            <span x-text="m.displayName || m.username"></span>
+                            <button @click="removeMember(m)" x-show="isSuperAdmin" title="移出部門"
+                                    style="border:none;background:none;cursor:pointer;color:var(--text-dim);font-size:13px;line-height:1;padding:2px 4px">×</button>
+                          </span>
+                        </template>
+                        <span x-show="membersOf(dept.id).length === 0" style="font-size:11px;color:var(--text-dim)">尚無成員</span>
+                      </div>
+                      <div style="display:flex;gap:6px" x-show="isSuperAdmin">
+                        <select class="form-select" x-model.number="addMemberSelection[dept.id]" style="font-size:12px;max-width:260px">
+                          <option :value="0">選擇要加入的使用者…</option>
+                          <template x-for="u in availableUsersFor(dept.id)" :key="u.id">
+                            <option :value="u.id" x-text="(u.displayName || u.username) + (u.departmentName ? '（目前：' + u.departmentName + '）' : '')"></option>
+                          </template>
+                        </select>
+                        <button class="btn btn-ghost btn-sm" @click="addMember(dept.id)">加入部門</button>
+                      </div>
+                    </div>
+                  </template>
+                </div>
+              </template>
+            </div>
+          </template>
+        </div>
+      </template>
+    </div>
+
+    <div class="panel chart-view" x-show="viewMode==='chart'">
+      <div x-show="orgTree.length === 0" style="padding:32px;text-align:center;font-size:12px;color:var(--text-dim)">
+        尚未建立任何處，點擊「清單檢視」開始設定組織架構。
+      </div>
+      <template x-if="orgTree.length > 0">
+        <div>
+          <div class="chart-summary">
+            <div class="chart-summary__cell">
+              <div class="chart-summary__num" x-text="orgTree.length"></div>
+              <div class="chart-summary__label">處</div>
+            </div>
+            <div class="chart-summary__cell">
+              <div class="chart-summary__num" x-text="chartTotalDepartments"></div>
+              <div class="chart-summary__label">部門</div>
+            </div>
+            <div class="chart-summary__cell">
+              <div class="chart-summary__num" x-text="chartTotalMembers"></div>
+              <div class="chart-summary__label">總人數</div>
+            </div>
+            <div class="chart-summary__cell">
+              <div class="chart-summary__num" :class="{warn: chartUnmanagedCount > 0}" x-text="chartUnmanagedCount"></div>
+              <div class="chart-summary__label">未設主管單位</div>
+            </div>
+          </div>
+
+          <div class="chart-tree">
+            <template x-for="div in orgTree" :key="div.id">
+              <div class="chart-division">
+                <div class="chart-band" @click="openChartDivisionMembers(div)">
+                  <div>
+                    <div class="chart-band__name" x-text="div.name"></div>
+                    <div class="chart-band__meta" x-text="div.departments.length + ' 個部門・' + divisionMemberCount(div) + ' 人'"></div>
+                  </div>
+                  <div class="chart-band__manager">
+                    <template x-if="div.managerName">
+                      <span class="chart-chip chart-chip--manager"><span class="chart-chip__dot"></span><span x-text="'處主管：' + div.managerName"></span></span>
+                    </template>
+                    <template x-if="!div.managerName">
+                      <span class="chart-chip chart-chip--vacant"><span class="chart-chip__dot"></span>尚未設定處主管</span>
+                    </template>
+                  </div>
+                </div>
+                <template x-if="div.departments.length > 0">
+                  <div>
+                    <div class="chart-stem"></div>
+                    <div class="chart-dept-grid" :class="{multi: div.departments.length > 1}">
+                      <template x-for="dept in div.departments" :key="dept.id">
+                        <div class="chart-dept-col">
+                          <div class="chart-dept-card" @click="openChartDeptMembers(dept)">
+                            <div class="chart-dept-card__name" x-text="dept.name"></div>
+                            <div class="chart-dept-card__count"><b x-text="dept.memberCount"></b> 人</div>
+                            <template x-if="dept.managerName">
+                              <span class="chart-chip chart-chip--manager"><span class="chart-chip__dot"></span><span x-text="dept.managerName"></span></span>
+                            </template>
+                            <template x-if="!dept.managerName">
+                              <span class="chart-chip chart-chip--vacant"><span class="chart-chip__dot"></span>尚未設定主管</span>
+                            </template>
+                          </div>
+                        </div>
+                      </template>
+                    </div>
+                  </div>
+                </template>
+              </div>
+            </template>
+          </div>
+        </div>
+      </template>
+    </div>
+  </div>
+
+  <!-- ══ 處 Modal ══ -->
+  <div class="modal-overlay" x-show="showDivModal" x-transition style="display:none">
+    <div class="modal-box">
+      <div class="modal-head">
+        <span class="modal-head__title" x-text="divForm.id ? '編輯處' : '新增處'"></span>
+        <button class="modal-close" @click="showDivModal=false">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">處名稱 <span class="req">*</span></label>
+          <input class="form-input" type="text" x-model="divForm.name" placeholder="例：業務處、工程處">
+        </div>
+        <div class="form-group">
+          <label class="form-label">排序</label>
+          <input class="form-input" type="number" x-model.number="divForm.sortOrder">
+        </div>
+        <div class="form-group">
+          <label class="form-label">處級主管 <span style="color:var(--text-dim);font-size:9px">（先預留，未來供簽核路由使用）</span></label>
+          <select class="form-select" x-model.number="divForm.managerUserId">
+            <option :value="null">未指定</option>
+            <template x-for="u in selectableUsers" :key="u.id">
+              <option :value="u.id" x-text="u.display_name || u.username"></option>
+            </template>
+          </select>
+        </div>
+        <div class="form-hint error" x-show="formError" x-text="formError"></div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-ghost" @click="showDivModal=false">取消</button>
+        <button class="btn btn-primary" @click="saveDivision()">
+          <span x-text="divForm.id ? '儲存變更' : '建立'"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ 部門 Modal ══ -->
+  <div class="modal-overlay" x-show="showDeptModal" x-transition style="display:none">
+    <div class="modal-box">
+      <div class="modal-head">
+        <span class="modal-head__title" x-text="deptForm.id ? '編輯部門' : '新增部門'"></span>
+        <button class="modal-close" @click="showDeptModal=false">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">所屬處 <span class="req">*</span></label>
+          <select class="form-select" x-model.number="deptForm.divisionId">
+            <template x-for="div in orgTree" :key="div.id">
+              <option :value="div.id" x-text="div.name"></option>
+            </template>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">部門名稱 <span class="req">*</span></label>
+          <input class="form-input" type="text" x-model="deptForm.name" placeholder="例：業務一部">
+        </div>
+        <div class="form-group">
+          <label class="form-label">排序</label>
+          <input class="form-input" type="number" x-model.number="deptForm.sortOrder">
+        </div>
+        <div class="form-group">
+          <label class="form-label">部門主管 <span style="color:var(--text-dim);font-size:9px">（先預留，未來供簽核路由使用）</span></label>
+          <select class="form-select" x-model.number="deptForm.managerUserId">
+            <option :value="null">未指定</option>
+            <template x-for="u in selectableUsers" :key="u.id">
+              <option :value="u.id" x-text="u.display_name || u.username"></option>
+            </template>
+          </select>
+        </div>
+        <div class="form-hint error" x-show="formError" x-text="formError"></div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-ghost" @click="showDeptModal=false">取消</button>
+        <button class="btn btn-primary" @click="saveDepartment()">
+          <span x-text="deptForm.id ? '儲存變更' : '建立'"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ 組織圖：成員清單 Modal ══ -->
+  <div class="modal-overlay" x-show="showChartMembersModal" x-transition style="display:none" @click.self="showChartMembersModal=false">
+    <div class="modal-box">
+      <div class="modal-head">
+        <span class="modal-head__title" x-text="chartMembersTitle"></span>
+        <button class="modal-close" @click="showChartMembersModal=false">×</button>
+      </div>
+      <div class="modal-body">
+        <div style="display:flex;flex-wrap:wrap;gap:6px">
+          <template x-for="m in chartMembersList" :key="m.id">
+            <span style="display:inline-flex;align-items:center;padding:4px 12px;border-radius:14px;background:#EFEDE7;font-size:12px" x-text="m.displayName || m.username"></span>
+          </template>
+          <span x-show="chartMembersList.length === 0" style="font-size:12px;color:var(--text-dim)">尚無成員</span>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-ghost" @click="showChartMembersModal=false">關閉</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  function orgStructurePage() {
+    return {
+      session: {},
+      viewMode: 'list',
+      orgTree: [],
+      users: [],
+      selectableUsers: [],
+      divOpenState: {},
+      deptMembersOpenState: {},
+      addMemberSelection: {},
+      showDivModal: false,
+      showDeptModal: false,
+      showChartMembersModal: false,
+      chartMembersTitle: '',
+      chartMembersList: [],
+      formError: '',
+      divForm:  { id: null, name: '', sortOrder: 0, managerUserId: null },
+      deptForm: { id: null, divisionId: null, name: '', sortOrder: 0, managerUserId: null },
+
+      get isSuperAdmin() { return this.session.role === 'superadmin' },
+
+      isDivOpen(id) { return this.divOpenState[id] !== false },
+      toggleDiv(id) { this.divOpenState[id] = !this.isDivOpen(id) },
+
+      isDeptMembersOpen(id) { return !!this.deptMembersOpenState[id] },
+      toggleDeptMembers(id) { this.deptMembersOpenState[id] = !this.isDeptMembersOpen(id) },
+
+      divisionMemberCount(div) {
+        return div.departments.reduce((sum, d) => sum + (d.memberCount || 0), 0)
+      },
+
+      get chartTotalDepartments() {
+        return this.orgTree.reduce((sum, d) => sum + d.departments.length, 0)
+      },
+      get chartTotalMembers() {
+        return this.orgTree.reduce((sum, d) => sum + this.divisionMemberCount(d), 0)
+      },
+      get chartUnmanagedCount() {
+        let n = 0
+        for (const div of this.orgTree) {
+          if (!div.managerName) n++
+          for (const dept of div.departments) {
+            if (!dept.managerName) n++
+          }
+        }
+        return n
+      },
+
+      // 停用帳號不列入成員清單／人數（department_id 資料仍保留，重新啟用後自動恢復顯示）
+      membersOf(deptId) {
+        return this.users.filter(u => u.departmentId === deptId && u.active)
+      },
+
+      availableUsersFor(deptId) {
+        return this.users.filter(u => u.departmentId !== deptId && u.active)
+      },
+
+      openChartDeptMembers(dept) {
+        this.chartMembersTitle = dept.name
+        this.chartMembersList  = this.membersOf(dept.id)
+        this.showChartMembersModal = true
+      },
+
+      openChartDivisionMembers(div) {
+        const deptIds = div.departments.map(d => d.id)
+        this.chartMembersTitle = div.name
+        this.chartMembersList  = this.users.filter(u => deptIds.includes(u.departmentId) && u.active)
+        this.showChartMembersModal = true
+      },
+
+      _headers() {
+        return {
+          'Content-Type':  'application/json',
+          'Authorization': 'Bearer ' + (this.session.token || '')
+        }
+      },
+
+      async loadOrgTree() {
+        const r = await fetch('/api/org/tree', { headers: this._headers() })
+        if (r.ok) this.orgTree = await r.json()
+      },
+
+      async loadSelectableUsers() {
+        const r = await fetch('/api/users/selectable', { headers: this._headers() })
+        if (r.ok) this.selectableUsers = await r.json()
+      },
+
+      async loadUsers() {
+        const r = await fetch('/api/users', { headers: this._headers() })
+        if (r.ok) this.users = await r.json()
+      },
+
+      openDivisionCreate() {
+        this.divForm = { id: null, name: '', sortOrder: 0, managerUserId: null }
+        this.formError = ''
+        this.showDivModal = true
+      },
+
+      openDivisionEdit(div) {
+        this.divForm = { id: div.id, name: div.name, sortOrder: div.sortOrder, managerUserId: div.managerUserId || null }
+        this.formError = ''
+        this.showDivModal = true
+      },
+
+      async saveDivision() {
+        const name = (this.divForm.name || '').trim()
+        if (!name) { this.formError = '請輸入處名稱'; return }
+        const url    = this.divForm.id ? '/api/org/divisions/' + this.divForm.id : '/api/org/divisions'
+        const method = this.divForm.id ? 'PUT' : 'POST'
+        const r = await fetch(url, {
+          method, headers: this._headers(),
+          body: JSON.stringify({
+            name,
+            sort_order: this.divForm.sortOrder || 0,
+            manager_user_id: this.divForm.managerUserId || null,
+          })
+        })
+        if (!r.ok) { this.formError = (await r.json().catch(()=>({}))).detail || '儲存失敗'; return }
+        this.showDivModal = false
+        await this.loadOrgTree()
+        this.toast(this.divForm.id ? '處已更新' : '處已建立')
+      },
+
+      async deleteDivision(div) {
+        if (!confirm(`確定要刪除「${div.name}」？`)) return
+        const r = await fetch('/api/org/divisions/' + div.id, { method: 'DELETE', headers: this._headers() })
+        if (!r.ok) { alert((await r.json().catch(()=>({}))).detail || '刪除失敗'); return }
+        await this.loadOrgTree()
+        this.toast('處已刪除')
+      },
+
+      openDepartmentCreate(divisionId) {
+        this.deptForm = { id: null, divisionId, name: '', sortOrder: 0, managerUserId: null }
+        this.formError = ''
+        this.showDeptModal = true
+      },
+
+      openDepartmentEdit(dept, divisionId) {
+        this.deptForm = {
+          id: dept.id, divisionId, name: dept.name,
+          sortOrder: dept.sortOrder, managerUserId: dept.managerUserId || null
+        }
+        this.formError = ''
+        this.showDeptModal = true
+      },
+
+      async saveDepartment() {
+        const name = (this.deptForm.name || '').trim()
+        if (!name) { this.formError = '請輸入部門名稱'; return }
+        if (!this.deptForm.divisionId) { this.formError = '請選擇所屬處'; return }
+        const url    = this.deptForm.id ? '/api/org/departments/' + this.deptForm.id : '/api/org/departments'
+        const method = this.deptForm.id ? 'PUT' : 'POST'
+        const r = await fetch(url, {
+          method, headers: this._headers(),
+          body: JSON.stringify({
+            division_id: this.deptForm.divisionId,
+            name,
+            sort_order: this.deptForm.sortOrder || 0,
+            manager_user_id: this.deptForm.managerUserId || null,
+          })
+        })
+        if (!r.ok) { this.formError = (await r.json().catch(()=>({}))).detail || '儲存失敗'; return }
+        this.showDeptModal = false
+        await this.loadOrgTree()
+        this.toast(this.deptForm.id ? '部門已更新' : '部門已建立')
+      },
+
+      async deleteDepartment(dept) {
+        if (!confirm(`確定要刪除「${dept.name}」？`)) return
+        const r = await fetch('/api/org/departments/' + dept.id, { method: 'DELETE', headers: this._headers() })
+        if (!r.ok) { alert((await r.json().catch(()=>({}))).detail || '刪除失敗'); return }
+        await this.loadOrgTree()
+        this.toast('部門已刪除')
+      },
+
+      async addMember(deptId) {
+        const uid = this.addMemberSelection[deptId]
+        if (!uid) return
+        const r = await fetch('/api/users/' + uid, {
+          method: 'PUT', headers: this._headers(),
+          body: JSON.stringify({ department_id: deptId })
+        })
+        if (!r.ok) { alert((await r.json().catch(()=>({}))).detail || '加入失敗'); return }
+        this.addMemberSelection[deptId] = 0
+        await Promise.all([this.loadUsers(), this.loadOrgTree()])
+        this.toast('已加入部門')
+      },
+
+      async removeMember(user) {
+        if (!confirm(`確定要將「${user.displayName || user.username}」移出部門？`)) return
+        const r = await fetch('/api/users/' + user.id, {
+          method: 'PUT', headers: this._headers(),
+          body: JSON.stringify({ department_id: 0 })
+        })
+        if (!r.ok) { alert((await r.json().catch(()=>({}))).detail || '移除失敗'); return }
+        await Promise.all([this.loadUsers(), this.loadOrgTree()])
+        this.toast('已移出部門')
+      },
+
+      logout() {
+        fetch('/api/auth/logout', { method:'POST', headers: this._headers() }).catch(()=>{})
+        localStorage.removeItem('motrix_session')
+        window.location.href = 'login.html'
+      },
+
+      toast(msg) {
+        const el = document.createElement('div')
+        el.textContent = msg
+        el.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#0A0A0A;color:#F5F4F0;padding:8px 18px;border-radius:6px;font-size:12px;z-index:999;font-family:LINE Seed TW_OTF, sans-serif;box-shadow:0 4px 12px rgba(0,0,0,.2)'
+        document.body.appendChild(el)
+        setTimeout(() => el.remove(), 2500)
+      },
+
+      async init() {
+        const s = localStorage.getItem('motrix_session')
+        if (!s) { window.location.href = 'login.html'; return }
+        try {
+          this.session = JSON.parse(s)
+          if (!this.session.token) { window.location.href = 'login.html'; return }
+        } catch(e) { window.location.href = 'login.html'; return }
+
+        const res = await fetch('/api/auth/me', {
+          headers: {'Authorization': 'Bearer ' + this.session.token}
+        })
+        if (!res.ok) {
+          localStorage.removeItem('motrix_session')
+          window.location.href = 'login.html'; return
+        }
+        await Promise.all([this.loadOrgTree(), this.loadSelectableUsers(), this.loadUsers()])
+      }
+    }
+  }
+  </script>
+  <script src="../static/notif.js"></script>
+  <script src="../static/sidebar.js"></script>
+</body>
+</html>

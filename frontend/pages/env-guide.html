@@ -2,12 +2,14 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="../static/favicon.png">
-  <title>場域選型導覽 — MOTRIX 營運管理系統</title>
-  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <link rel="stylesheet" href="../css/style.css">
+  <title>場域選型導覽 — MOTRIX 專案管理系統</title>
+  <script src="../static/auth-guard.js"></script>
+  <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
+  <script src="../static/vendor/xlsx-0.18.5.full.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <style>
     [x-cloak]{display:none!important}
     .page-main{margin-left:var(--sidebar-w);margin-top:var(--topbar-h);padding:0;min-height:calc(100vh - var(--topbar-h));overflow:hidden;background:var(--white)}
@@ -23,11 +25,6 @@
     .field-input:focus{border-color:var(--accent)}
     textarea.field-input{resize:vertical;min-height:2.4em}
     .modal-footer{display:flex;justify-content:flex-end;gap:.5rem;margin-top:1rem}
-    .mbtn{border:1px solid var(--border-light);background:#fff;color:var(--text-secondary);font:inherit;font-size:.82rem;font-weight:600;padding:.42rem .9rem;border-radius:var(--radius);cursor:pointer}
-    .mbtn:hover{color:var(--text-primary);border-color:var(--accent)}
-    .mbtn.pri{background:var(--accent);border-color:var(--accent);color:#fff}
-    .mbtn.pri:hover{background:#1D4ED8}
-    .mbtn:disabled{opacity:.6;cursor:default}
 
     /* ── 簡易瀏覽：場域方塊＋分層卡片，跟網路架構選型導覽同一套（MOTRIX 系統配色，不受 ◐ 深色切換影響） ── */
     .sv-body{height:calc(100vh - var(--topbar-h) - 3.6rem);overflow:auto;padding:1rem 1.2rem;background:var(--white)}
@@ -85,16 +82,19 @@
     .envg[data-th="light"]{
       --bg:#F5F4F0; --bg2:#fff; --bg3:#F0EEE9; --line:#E5E3DE; --line2:#EDEBE6;
       --tx:#0A0A0A; --tx2:#6B6B6B; --tx3:#9A9A9A;
-      --acc:#2563EB; --t1:#9A9A9A; --t2:#16A34A; --t3:#7C3AED;
+      --acc:var(--accent); --t1:#9A9A9A; --t2:#16A34A; --t3:#7C3AED;
       --warn:#D97706; --warnbg:#FFFBEB; --crit:#DC2626; --critbg:#FEF2F2; --gap:#EA580C;
-      --g-a:#2563EB; --g-b:#0D9488; --g-c:#16A34A; --g-d:#EA580C; --g-e:#7C3AED; --g-x:#9A9A9A;
+      --g-a:var(--accent); --g-b:#0D9488; --g-c:#16A34A; --g-d:#EA580C; --g-e:#7C3AED; --g-x:#9A9A9A;
     }
     .envg *{box-sizing:border-box}
     .envg code,.envg .mono{font-family:ui-monospace,"SF Mono",Consolas,monospace}
 
     .envg .envg-hd{position:sticky;top:0;z-index:40;background:var(--bg2);border-bottom:1px solid var(--line);padding:.6rem 1rem}
     .envg .hrow{display:flex;align-items:center;gap:.8rem;flex-wrap:wrap}
-    .envg h1{margin:0;font-size:1.08rem;font-weight:700;letter-spacing:.01em;white-space:nowrap}
+    /* 2026-09-14：這頁有自己一套容器與色票（.envg），且 .envg-hd 是 sticky，
+       不適合插完整 .pg 標頭；同樣用緊湊的直立紅色標記。 */
+    .envg h1{margin:0;font-size:1.08rem;font-weight:700;letter-spacing:.01em;white-space:nowrap;display:inline-flex;align-items:center;gap:.55rem}
+    .envg h1::before{content:'';width:var(--v4-mark-h);height:16px;background:var(--accent);flex:none}
     .envg h1 span{color:var(--tx3);font-weight:400;font-size:.85rem;margin-left:.4rem}
     .envg .spacer{flex:1}
     .envg .tabs{display:flex;background:var(--bg3);border:1px solid var(--line);border-radius:.5rem;padding:.15rem;gap:.15rem}
@@ -238,9 +238,12 @@
   <header id="app-topbar" class="topbar"></header>
   <div class="sidebar-overlay" id="sidebar-overlay"></div>
 
-  <div class="app-shell">
-    <aside class="sidebar" id="app-sidebar"></aside>
+  <!-- 側欄必須是 <body> 的直接子元素：深色模式的反轉濾鏡排除清單只認直接子元素
+       （style.css「DARK MODE」區塊的 body > *:not(.sidebar)），包進 .app-shell
+       裡會連同整個側欄一起被反轉成白底，且 position:fixed 會改以該容器定位。 -->
+  <aside class="sidebar" id="app-sidebar"></aside>
 
+  <div class="app-shell">
     <main class="page-main">
 
       <!-- .envg 為深色調容器，瀏覽／管理模式共用同一套殼與配色 -->

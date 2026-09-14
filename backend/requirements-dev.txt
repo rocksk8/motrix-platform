@@ -1,0 +1,27 @@
+# Dev/test-only dependencies -- not needed to run the ERP service in
+# production, keep these out of requirements.txt. See MOTRIX-ERP-QUICK.md
+# SS9 for the full (Chinese) rationale. Comments here are kept ASCII-only
+# on purpose -- some requirements-file parsers (e.g. pip-audit) guess the
+# file's text encoding from the OS locale instead of assuming UTF-8, and
+# non-ASCII comments broke that on this Windows dev machine (cp932 locale).
+
+# playwright: real-browser E2E smoke test (test_e2e_playwright_2026_09_07.py).
+# After installing, also run: playwright install chromium
+# Environments without it get pytest.importorskip-based auto-skip for that
+# one test file; doesn't affect anything else or build_deploy_package.ps1's
+# "run pytest before packaging" gate.
+playwright>=1.40.0
+
+# beautifulsoup4/requests: only used by tools/local_research_pipeline.py, a
+# standalone one-off research script -- main.py never imports anything under
+# tools/. Found missing from every requirements file during a 2026-09-07
+# dependency-hygiene pass.
+beautifulsoup4>=4.12.0
+requests>=2.31.0
+
+# pytest-xdist: parallelizes the non-e2e pytest gate in
+# build_deploy_package.ps1 ("-n auto"). Verified 2026-09-09 that
+# backend/tests/conftest.py's per-test tmp_path isolation (no hardcoded
+# paths/ports) holds up under multiple worker processes -- sequential and
+# -n auto runs produced identical pass/fail results.
+pytest-xdist>=3.5.0

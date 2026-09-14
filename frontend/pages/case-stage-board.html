@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="../static/favicon.png">
+  <title>案件執行看板 — MOTRIX 專案管理系統</title>
+  <script src="../static/auth-guard.js"></script>
+  <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
+  <style>
+    [x-cloak] { display: none !important; }
+
+    .board-main {
+      margin-left: var(--sidebar-w);
+      margin-top: var(--topbar-h);
+      padding: 28px 32px;
+      min-height: calc(100vh - var(--topbar-h));
+      background: var(--white);
+    }
+
+    .toolbar { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+    .field {
+      display:flex; align-items:center; gap:6px;
+      background:#fff; border:1px solid var(--border-light); border-radius:var(--radius);
+      padding:6px 11px; font-size:12px; color:var(--text-secondary); font-family:var(--font-zh);
+    }
+    .field select, .field input {
+      border:none; background:none; font-family:var(--font-zh); font-size:12px; color:var(--text-primary); outline:none;
+    }
+    .field input { width:130px; }
+
+    .view-toggle {
+      display: inline-flex; border: 1px solid var(--border-light); border-radius: var(--radius);
+      overflow: hidden; background: #fff;
+    }
+    .view-toggle button {
+      border: none; background: none; cursor: pointer;
+      font-size: 12px; font-family: var(--font-zh); color: var(--text-secondary);
+      padding: 7px 14px;
+    }
+    .view-toggle button.active { background: var(--accent); color: #fff; }
+    .view-toggle button + button { border-left: 1px solid var(--border-light); }
+
+    .toggle-chip {
+      border:1px solid var(--border-light); border-radius:var(--radius); background:#fff;
+      font-size:12px; font-family:var(--font-zh); color:var(--text-secondary); cursor:pointer; padding:7px 14px;
+    }
+    .toggle-chip.active { background:var(--accent); border-color:var(--accent); color:#fff; }
+
+    /* ── 稽核彙總列 ── */
+    .board-summary {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 1px;
+      background: var(--border-light); border: 1px solid var(--border-light); border-radius: 10px;
+      overflow: hidden; margin: 20px 0 24px;
+    }
+    .board-summary__cell { background: #fff; padding: 14px 16px; }
+    .board-summary__num { font-size: 22px; font-weight: 800; line-height: 1; color: var(--text-primary); }
+    .board-summary__num.danger { color: var(--danger); }
+    .board-summary__num.warn { color: var(--warning); }
+    .board-summary__label { margin-top: 5px; font-size: 11px; color: var(--text-secondary); }
+
+    /* ── 看板 ── */
+    .board { display:grid; grid-template-columns:repeat(5, minmax(200px,1fr)); gap:14px; overflow-x:auto; padding-bottom:4px; }
+    .board--flex { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+    .board-col__head { display:flex; align-items:center; gap:7px; padding:0 2px 10px; }
+    .board-col__dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+    .board-col__title { font-size:12.5px; font-weight:700; color:var(--text-primary); }
+    .board-col__count { margin-left:auto; font-size:11px; color:var(--text-dim); font-weight:600; }
+    .board-col__badge { margin-left:6px; font-size:9.5px; font-weight:700; padding:1px 6px; border-radius:10px; background:#FEE2E2; color:var(--danger); }
+    .board-col__body { display:flex; flex-direction:column; gap:8px; min-height:40px; }
+
+    .stage-board-card {
+      position:relative;
+      background:#fff; border:1px solid var(--border-light); border-radius:10px; padding:11px 13px; cursor:pointer;
+      transition:border-color .15s, box-shadow .15s, transform .15s;
+    }
+    .stage-board-card:hover { border-color:var(--accent); box-shadow:0 2px 6px rgba(0,0,0,.06); transform:translateY(-1px); }
+    /* 快速指派彈窗開啟時，卡片本身要疊到同欄後面卡片之上，不然彈窗會被下一張卡蓋住
+       （.stage-board-card 彼此都是 position:relative 但沒設 z-index，預設依 DOM 順序疊
+       放，後面的卡片會蓋掉前面卡片裡 position:absolute 的 .assign-pop）。 */
+    .stage-board-card--assigning { z-index:30; }
+    .stage-board-card__case { font-size:10.5px; color:var(--text-dim); font-weight:600; }
+    .stage-board-card__stage { font-size:13px; font-weight:700; color:var(--text-primary); margin-top:2px; }
+    .stage-board-card__foot { display:flex; align-items:center; justify-content:space-between; margin-top:9px; gap:6px; }
+    .stage-board-card__date { font-size:11px; color:var(--text-secondary); font-variant-numeric:tabular-nums; white-space:nowrap; }
+    .stage-board-card__date.danger { color:var(--danger); font-weight:700; }
+    .stage-board-card__date.warn { color:var(--warning); font-weight:700; }
+
+    .who { display:flex; align-items:center; gap:6px; font-size:11px; color:var(--text-secondary); overflow:hidden; cursor:pointer; border-radius:6px; padding:2px 4px; margin:-2px -4px; }
+    .who:hover { background:#F5F3EE; }
+    .who__name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .who__name--fallback { color:var(--text-dim); font-style:italic; }
+    .avatar-dot { width:18px; height:18px; border-radius:50%; flex-shrink:0; display:inline-flex; align-items:center; justify-content:center; font-size:9px; font-weight:700; color:#fff; }
+    .avatar-dot.unassigned { background:#F0EEE9; color:var(--text-dim); border:1px dashed var(--border-light); }
+
+    /* ── 快速指派彈出選單（看板卡片點「未指派」時彈出） ── */
+    .assign-pop {
+      position:absolute; z-index:20; top:calc(100% + 4px); left:11px; right:11px;
+      background:#fff; border:1px solid var(--border-light); border-radius:8px;
+      box-shadow:0 6px 18px rgba(0,0,0,.12); padding:6px; max-height:220px; overflow-y:auto;
+    }
+    .assign-pop__title { font-size:10px; color:var(--text-dim); padding:4px 6px 6px; }
+    .assign-pop__item {
+      display:block; width:100%; text-align:left; border:none; background:none; cursor:pointer;
+      font-family:var(--font-zh); font-size:12px; color:var(--text-primary);
+      padding:6px 7px; border-radius:6px;
+    }
+    .assign-pop__item:hover { background:var(--accent); color:#fff; }
+
+    .board-empty { padding:32px; text-align:center; font-size:12px; color:var(--text-dim); }
+
+    /* ── 跨案時間軸（2026-08-24 重寫：自建純 HTML/CSS 版面，取代 frappe-gantt。
+       每個案件一行，用真實日期（已完成階段用「完成日期」done_at，未完成階段用
+       到期/起始日期，兩者都沒有才算未排程）把長條放在共用的日期軸上；長條寬度、
+       排列全部是預先算好的資料，不用等畫面渲染完再回頭量測 DOM 調整位置，也不
+       依賴任何第三方圖表庫的內部座標系統，不會再有位置對不齊的問題）── */
+    .tl-scroll { overflow-x:auto; border:1px solid var(--border-light); border-radius:10px; background:#fff; }
+    .tl-header { display:flex; position:sticky; top:0; background:#fff; border-bottom:1px solid var(--border-light); z-index:3; }
+    .tl-header__case { flex:0 0 220px; position:sticky; left:0; background:#fff; z-index:4; border-right:1px solid var(--border-light); }
+    .tl-header__axis { position:relative; height:30px; }
+    .tl-header__tick {
+      position:absolute; top:0; height:100%; display:flex; align-items:center;
+      font-size:10px; color:var(--text-dim); border-left:1px solid var(--border-light);
+      padding-left:5px; white-space:nowrap; font-family:LINE Seed TW_OTF, sans-serif;
+    }
+    .tl-today-line { position:absolute; top:0; bottom:0; width:1px; background:var(--danger); opacity:.5; z-index:1; }
+
+    .tl-row { display:flex; border-bottom:1px solid #F0EFEB; }
+    .tl-row:last-child { border-bottom:none; }
+    .tl-row__case {
+      flex:0 0 220px; position:sticky; left:0; background:#fff; z-index:2;
+      padding:10px 12px; border-right:1px solid var(--border-light);
+      display:flex; flex-direction:column; gap:6px; justify-content:center;
+    }
+    .tl-row__title { font-size:12.5px; font-weight:700; color:var(--text-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:196px; }
+    .tl-row__meta { font-size:10px; color:var(--text-dim); }
+    .tl-row__undated { display:flex; flex-wrap:wrap; gap:4px; }
+    .tl-row__axis { position:relative; }
+
+    .tl-pill, .tl-chip {
+      font-size:10.5px; font-family:var(--font-zh); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+      cursor:pointer; border:1px solid transparent; border-radius:20px;
+    }
+    .tl-pill {
+      position:absolute; height:22px; display:flex; align-items:center; padding:0 9px;
+      transition:opacity .15s;
+    }
+    .tl-pill:hover, .tl-chip:hover { opacity:.8; }
+    .tl-chip { display:inline-flex; align-items:center; padding:3px 9px; }
+    .tl-pill--milestone { background:#475569; color:#fff; }
+    .tl-chip--done { background:#DCFCE7; color:#15803D; }
+    .tl-chip--current { background:var(--accent-light); color:var(--accent); border-color:var(--accent); }
+    .tl-chip--future { background:#F3F4F6; color:var(--text-dim); }
+    .tl-chip--overdue { background:#FEE2E2; color:var(--danger); border-color:var(--danger); }
+  </style>
+</head>
+
+<body x-data="caseStageBoardPage()" x-init="init()">
+
+  <header id="app-topbar" class="topbar"></header>
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+  <aside class="sidebar" id="app-sidebar"></aside>
+
+  <div class="board-main">
+    <div class="pg">
+      <div class="pg__l">
+        <div class="pg__eyebrow">案件管理</div>
+        <h1 class="pg__t">案件執行看板</h1>
+        <p class="pg__s">跨案件彙總所有已成案案件的執行進度階段，卡片／長條點擊可前往該案件</p>
+</div>
+      <div class="toolbar">
+        <div class="field">
+          <span>部門</span>
+          <select x-model="departmentId" @change="loadStageBoard()">
+            <option value="">全部部門</option>
+            <template x-for="d in allDepartments" :key="d.id">
+              <option :value="d.id" x-text="d.divisionName + ' / ' + d.name"></option>
+            </template>
+          </select>
+        </div>
+        <div class="field">
+          <span>業務員</span>
+          <select x-model="salesFilter">
+            <option value="">全部</option>
+            <template x-for="s in salesPersonOptions" :key="s">
+              <option :value="s" x-text="s"></option>
+            </template>
+          </select>
+        </div>
+        <div class="field">
+          <input type="text" x-model="searchQ" placeholder="搜尋客戶／案件…">
+        </div>
+        <button type="button" class="toggle-chip" :class="{active: onlyMine}" @click="onlyMine = !onlyMine">只看我的</button>
+        <div class="view-toggle">
+          <button type="button" :class="{active: viewMode==='board'}" @click="viewMode='board'">看板</button>
+          <button type="button" :class="{active: viewMode==='timeline'}" @click="viewMode='timeline'; $nextTick(() => _measureTimelineWidth())">跨案時間軸</button>
+          <button type="button" :class="{active: viewMode==='people'}" @click="viewMode='people'">依人力</button>
+        </div>
+      </div>
+    </div>
+
+    <div x-show="!loading && items.length === 0" class="board-empty">
+      目前沒有進行中的案件執行階段（僅統計已成案且有設定執行階段的案件）
+    </div>
+
+    <template x-if="items.length > 0">
+      <div>
+        <div class="board-summary">
+          <div class="board-summary__cell">
+            <div class="board-summary__num" x-text="summary.caseCount"></div>
+            <div class="board-summary__label">進行中案件</div>
+          </div>
+          <div class="board-summary__cell">
+            <div class="board-summary__num" :class="{danger: summary.overdue > 0}" x-text="summary.overdue"></div>
+            <div class="board-summary__label">已逾期階段</div>
+          </div>
+          <div class="board-summary__cell">
+            <div class="board-summary__num" :class="{warn: summary.soon > 0}" x-text="summary.soon"></div>
+            <div class="board-summary__label">3 天內到期</div>
+          </div>
+          <div class="board-summary__cell">
+            <div class="board-summary__num" :class="{warn: summary.unassigned > 0}" x-text="summary.unassigned"></div>
+            <div class="board-summary__label">未指派負責人</div>
+          </div>
+        </div>
+
+        <!-- ══ 看板 ══ -->
+        <div x-show="viewMode==='board'">
+          <div class="board">
+            <template x-for="col in boardColumns" :key="col.key">
+              <div>
+                <div class="board-col__head">
+                  <span class="board-col__dot" :style="{background: col.color}"></span>
+                  <span class="board-col__title" x-text="col.label"></span>
+                  <span class="board-col__count" x-text="bucketed[col.key].length"></span>
+                </div>
+                <div class="board-col__body">
+                  <template x-for="it in bucketed[col.key]" :key="it.quoteNo + '-' + it.stageId">
+                    <div class="stage-board-card" :class="{'stage-board-card--assigning': assigningKey === stageKey(it)}"
+                         :style="it.done ? 'opacity:.65' : ''" @click="openCase(it.quoteNo)">
+                      <div class="stage-board-card__case" x-text="it.quoteNo + '・' + (it.customerName || it.projectName || '')"></div>
+                      <div class="stage-board-card__stage" x-text="it.stageLabel"></div>
+                      <div class="stage-board-card__foot">
+                        <span class="who" @click.stop="toggleAssign(it)" title="點擊指派負責人">
+                          <template x-if="it.assignedNames.length">
+                            <span class="avatar-dot" :style="{background: avatarColorFor(it)}" x-text="it.assignedNames[0][0]"></span>
+                          </template>
+                          <template x-if="!it.assignedNames.length">
+                            <span class="avatar-dot unassigned">？</span>
+                          </template>
+                          <span class="who__name" :class="{'who__name--fallback': !it.assignedNames.length}"
+                                x-text="it.assignedNames.length ? it.assignedNames.join('、') : (it.salesPerson ? ('業務代管：' + it.salesPerson) : '未指派')"></span>
+                        </span>
+                        <span class="stage-board-card__date" :class="{danger: it.overdue, warn: !it.overdue && !it.done && col.key==='today'}"
+                              x-text="it.done ? ('✓ ' + it.dueDate) : (it.dueDate || '—')"></span>
+                      </div>
+                      <div class="assign-pop" x-show="assigningKey === stageKey(it)" x-cloak @click.stop @click.outside="assigningKey = null">
+                        <div class="assign-pop__title">指派負責人</div>
+                        <template x-for="u in selectableUsers" :key="u.username">
+                          <button type="button" class="assign-pop__item" @click="quickAssign(it, u.username)" x-text="u.display_name || u.username"></button>
+                        </template>
+                        <div x-show="!selectableUsers.length" style="font-size:11px;color:var(--text-dim);padding:6px 7px">無可指派人員</div>
+                      </div>
+                    </div>
+                  </template>
+                  <div x-show="bucketed[col.key].length === 0" style="padding:10px;text-align:center;font-size:11px;color:var(--text-dim)">無</div>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <!-- ══ 跨案時間軸 ══ -->
+        <div x-show="viewMode==='timeline'" x-cloak>
+          <div style="font-size:11px;color:var(--text-dim);margin-bottom:10px">
+            長條依「完成日期」或「到期日期」排列；還沒有任何日期的階段列在案件名稱下方。點擊可前往該案件。
+          </div>
+          <template x-if="timelineScale">
+            <div class="tl-scroll" x-ref="tlScroll">
+              <div class="tl-header" :style="{width: (220 + timelineScale.width) + 'px'}">
+                <div class="tl-header__case"></div>
+                <div class="tl-header__axis" :style="{width: timelineScale.width + 'px'}">
+                  <template x-for="tick in timelineTicks" :key="tick.date">
+                    <div class="tl-header__tick" :style="{left: tick.x + 'px'}" x-text="tick.label"></div>
+                  </template>
+                  <div class="tl-today-line" :style="{left: _dateToX(_todayStr()) + 'px', height: (timelineRows.length * 100) + '%'}"></div>
+                </div>
+              </div>
+              <template x-for="row in timelineRows" :key="row.quoteNo">
+                <div class="tl-row">
+                  <div class="tl-row__case">
+                    <div class="tl-row__title" x-text="row.customerName || row.projectName || row.quoteNo"></div>
+                    <div class="tl-row__meta" x-text="row.quoteNo"></div>
+                    <div class="tl-row__undated" x-show="row.undated.length">
+                      <template x-for="st in row.undated" :key="st.stageId">
+                        <span class="tl-chip" :class="tlChipClass(st, row)" :title="tlChipTooltip(st)"
+                              @click="openCase(row.quoteNo)" x-text="st.stageLabel"></span>
+                      </template>
+                    </div>
+                  </div>
+                  <div class="tl-row__axis" :style="{width: timelineScale.width + 'px', height: row.rowHeight + 'px'}">
+                    <template x-for="p in row.points" :key="p.label + p.date">
+                      <div class="tl-pill" :class="p.type==='milestone' ? 'tl-pill--milestone' : tlChipClass(p.st, row)"
+                           :style="{left: p.x + 'px', top: (p.lane * 26) + 'px', width: p.width + 'px'}"
+                           :title="p.type==='milestone' ? (p.label + ' ' + p.date) : tlPillTooltip(p)"
+                           @click="openCase(row.quoteNo)">
+                        <span x-text="p.label"></span>
+                      </div>
+                    </template>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </template>
+          <div x-show="!timelineRows.length" class="board-empty">目前沒有進行中的案件執行階段</div>
+        </div>
+
+        <!-- ══ 依人力 ══ -->
+        <div x-show="viewMode==='people'" x-cloak>
+          <div class="board board--flex">
+            <template x-for="col in assigneeColumns" :key="col.key">
+              <div>
+                <div class="board-col__head">
+                  <span class="board-col__dot" :style="{background: col.key==='__unassigned__' ? '#9CA3AF' : _avatarColor(col.key)}"></span>
+                  <span class="board-col__title" x-text="col.label"></span>
+                  <span class="board-col__count" x-text="col.items.length"></span>
+                  <span class="board-col__badge" x-show="col.overdueCount>0" x-text="col.overdueCount + ' 逾期'"></span>
+                </div>
+                <div class="board-col__body">
+                  <template x-for="it in col.items" :key="col.key + '-' + it.quoteNo + '-' + it.stageId">
+                    <div class="stage-board-card" :class="{'stage-board-card--assigning': assigningKey === stageKey(it)}"
+                         :style="it.done ? 'opacity:.65' : ''" @click="openCase(it.quoteNo)">
+                      <div class="stage-board-card__case" x-text="it.quoteNo + '・' + (it.customerName || it.projectName || '')"></div>
+                      <div class="stage-board-card__stage" x-text="it.stageLabel"></div>
+                      <div class="stage-board-card__foot">
+                        <span class="who" @click.stop="toggleAssign(it)" title="點擊指派負責人">
+                          <template x-if="it.assignedNames.length">
+                            <span class="avatar-dot" :style="{background: avatarColorFor(it)}" x-text="it.assignedNames[0][0]"></span>
+                          </template>
+                          <template x-if="!it.assignedNames.length">
+                            <span class="avatar-dot unassigned">？</span>
+                          </template>
+                          <span class="who__name" :class="{'who__name--fallback': !it.assignedNames.length}"
+                                x-text="it.assignedNames.length ? it.assignedNames.join('、') : (it.salesPerson ? ('業務代管：' + it.salesPerson) : '未指派')"></span>
+                        </span>
+                        <span class="stage-board-card__date" :class="{danger: it.overdue}"
+                              x-text="it.done ? ('✓ ' + it.dueDate) : (it.dueDate || '—')"></span>
+                      </div>
+                      <div class="assign-pop" x-show="assigningKey === stageKey(it)" x-cloak @click.stop @click.outside="assigningKey = null">
+                        <div class="assign-pop__title">指派負責人</div>
+                        <template x-for="u in selectableUsers" :key="u.username">
+                          <button type="button" class="assign-pop__item" @click="quickAssign(it, u.username)" x-text="u.display_name || u.username"></button>
+                        </template>
+                        <div x-show="!selectableUsers.length" style="font-size:11px;color:var(--text-dim);padding:6px 7px">無可指派人員</div>
+                      </div>
+                    </div>
+                  </template>
+                  <div x-show="col.items.length === 0" style="padding:10px;text-align:center;font-size:11px;color:var(--text-dim)">無</div>
+                </div>
+              </div>
+            </template>
+            <div x-show="!assigneeColumns.length" class="board-empty">目前沒有任何指派紀錄</div>
+          </div>
+        </div>
+      </div>
+    </template>
+  </div>
+
+  <script>
+  const _GANTT_COLORS = ['#2563EB','#7C3AED','#DB2777','#D97706','#16A34A','#0891B2','#DC2626','#9333EA']
+  function _avatarColor(u) {
+    let h = 0
+    for (let i = 0; i < u.length; i++) h = (h * 31 + u.charCodeAt(i)) | 0
+    return _GANTT_COLORS[Math.abs(h) % _GANTT_COLORS.length]
+  }
+
+  function caseStageBoardPage() {
+    return {
+      session: {},
+      loading: true,
+      items: [],
+      caseLifecycle: {},
+      viewMode: 'board',
+      salesFilter: '',
+      searchQ: '',
+      departmentId: '',
+      orgTree: [],
+
+      get allDepartments() {
+        const out = []
+        for (const div of this.orgTree) {
+          for (const dept of (div.departments || [])) out.push({ id: dept.id, name: dept.name, divisionName: div.name })
+        }
+        return out
+      },
+      onlyMine: false,
+      selectableUsers: [],
+      assigningKey: null,
+      timelineContainerWidth: 900,
+
+      boardColumns: [
+        { key: 'overdue',  label: '已逾期',      color: 'var(--danger)' },
+        { key: 'today',    label: '今日到期',    color: 'var(--warning)' },
+        { key: 'soon',     label: '3 天內到期',  color: '#F5C97A' },
+        { key: 'ongoing',  label: '進行中',      color: 'var(--text-dim)' },
+        { key: 'done',     label: '已完成',      color: 'var(--success)' },
+      ],
+
+      get salesPersonOptions() {
+        return [...new Set(this.items.map(i => i.salesPerson).filter(Boolean))].sort()
+      },
+
+      get filteredItems() {
+        const q = this.searchQ.trim().toLowerCase()
+        return this.items.filter(it => {
+          if (this.salesFilter && it.salesPerson !== this.salesFilter) return false
+          if (this.onlyMine && !it.assignedTo.includes(this.session.username)) return false
+          if (q && !(it.quoteNo.toLowerCase().includes(q) || (it.customerName||'').toLowerCase().includes(q) || (it.projectName||'').toLowerCase().includes(q))) return false
+          return true
+        })
+      },
+
+      get assigneeColumns() {
+        const byPerson = {}
+        for (const it of this.filteredItems) {
+          const people = it.assignedTo.length ? it.assignedTo : ['__unassigned__']
+          for (const uname of people) (byPerson[uname] ||= []).push(it)
+        }
+        const sortItems = (arr) => [...arr].sort((a, b) => (a.dueDate || '9999-99-99').localeCompare(b.dueDate || '9999-99-99'))
+        const people = Object.keys(byPerson).filter(k => k !== '__unassigned__')
+          .sort((a, b) => this._userDisplay(a).localeCompare(this._userDisplay(b), 'zh-Hant'))
+        const cols = people.map(uname => ({
+          key: uname, label: this._userDisplay(uname),
+          items: sortItems(byPerson[uname]),
+          overdueCount: byPerson[uname].filter(i => i.overdue).length,
+        }))
+        if (byPerson['__unassigned__']) {
+          cols.push({
+            key: '__unassigned__', label: '未指派',
+            items: sortItems(byPerson['__unassigned__']),
+            overdueCount: byPerson['__unassigned__'].filter(i => i.overdue).length,
+          })
+        }
+        return cols
+      },
+
+      _todayStr() { return new Date().toISOString().slice(0,10) },
+      _addDays(dateStr, n) { const d = new Date(dateStr + 'T00:00:00'); d.setDate(d.getDate()+n); return d.toISOString().slice(0,10) },
+
+      bucketOf(it) {
+        if (it.done) return 'done'
+        if (it.overdue) return 'overdue'
+        const today = this._todayStr()
+        if (!it.dueDate) return 'ongoing'
+        if (it.dueDate === today) return 'today'
+        if (it.dueDate <= this._addDays(today, 3)) return 'soon'
+        return 'ongoing'
+      },
+
+      get bucketed() {
+        const out = { overdue: [], today: [], soon: [], ongoing: [], done: [] }
+        for (const it of this.filteredItems) out[this.bucketOf(it)].push(it)
+        return out
+      },
+
+      get summary() {
+        const items = this.filteredItems
+        return {
+          caseCount:  new Set(items.filter(i => !i.done).map(i => i.quoteNo)).size,
+          overdue:    items.filter(i => i.overdue).length,
+          soon:       items.filter(i => !i.done && !i.overdue && (this.bucketOf(i) === 'today' || this.bucketOf(i) === 'soon')).length,
+          unassigned: items.filter(i => !i.done && i.assignedNames.length === 0).length,
+        }
+      },
+
+      avatarColorFor(it) {
+        return it.assignedTo.length ? _avatarColor(it.assignedTo[0]) : '#9CA3AF'
+      },
+
+      openCase(quoteNo) {
+        location.href = 'case-management.html?q=' + encodeURIComponent(quoteNo)
+      },
+
+      stageKey(it) { return it.quoteNo + '-' + it.stageId },
+
+      toggleAssign(it) {
+        const key = this.stageKey(it)
+        this.assigningKey = (this.assigningKey === key) ? null : key
+      },
+
+      async quickAssign(it, username) {
+        this.assigningKey = null
+        try {
+          const r = await fetch(`/api/quotations/${it.quoteNo}/stages/${it.stageId}/assignees`, {
+            method: 'POST',
+            headers: { ...this._headers(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username }),
+          })
+          if (!r.ok) { alert('指派失敗'); return }
+          const updated = await r.json()
+          it.assignedTo = updated.assignedTo || []
+          it.assignedNames = it.assignedTo.map(u => this._userDisplay(u))
+        } catch (e) { alert('發生錯誤：' + e.message) }
+      },
+
+      _userDisplay(username) {
+        return (this.selectableUsers.find(u => u.username === username)?.display_name) || username
+      },
+
+      _headers() {
+        return { 'Authorization': 'Bearer ' + (this.session.token || '') }
+      },
+
+      async loadOrgTree() {
+        try {
+          const r = await fetch('/api/org/tree', { headers: this._headers() })
+          if (r.ok) this.orgTree = await r.json()
+        } catch {}
+      },
+
+      async loadStageBoard() {
+        this.loading = true
+        try {
+          const qs = this.departmentId ? ('?department_id=' + this.departmentId) : ''
+          const r = await fetch('/api/quotations/stage-board' + qs, { headers: this._headers() })
+          if (r.ok) {
+            const d = await r.json()
+            this.items = d.items || []
+            this.caseLifecycle = d.caseLifecycle || {}
+          }
+        } catch {}
+        this.loading = false
+      },
+
+      // ── 跨案時間軸（2026-08-24 重寫，取代 frappe-gantt）─────────────────────
+      // 完全用資料算好每個長條的位置／寬度／層數，畫面只是照著資料畫出來——不像
+      // 前一版要等 frappe-gantt 畫完 SVG 才能回頭量 DOM 調整座標，也就不會再有
+      // 「量出來的位置跟畫面實際位置對不上」這類問題。日期來源：已完成的階段用
+      // 「完成日期」doneAt（案件管理頁勾選完成時填的那個日期，最常用、最準）；
+      // 未完成的階段才退回到期/起始日期；兩者都沒有的階段不硬塞進日期軸，改列在
+      // 案件名稱下方的小狀態包（2026-08-24 使用者確認的處理方式）。
+
+      get timelineScale() {
+        const items = this.filteredItems
+        if (!items.length) return null
+        const dates = [this._todayStr()]
+        for (const it of items) {
+          if (it.done && it.doneAt) dates.push(it.doneAt)
+          if (!it.done && it.dueDate) dates.push(it.dueDate)
+          if (it.startDate) dates.push(it.startDate)
+        }
+        for (const qno in this.caseLifecycle) {
+          const lc = this.caseLifecycle[qno]
+          ;[lc.devStart, lc.devEnd, lc.quoteCreatedAt, lc.caseStartedAt].forEach(d => { if (d) dates.push(d) })
+        }
+        dates.sort()
+        const startDate = this._addDays(dates[0], -3)
+        const endDate = this._addDays(dates[dates.length - 1], 7)
+        const totalDays = Math.max(1, Math.round((new Date(endDate) - new Date(startDate)) / 86400000))
+        // px/天自動壓縮成「剛好塞進目前容器寬度」，不用手動捲動就能看到整條時間軸
+        // （案件名稱固定欄 220px 不算在內）；長條本身寬度是照文字量的，不受這個縮放
+        // 影響，天數抓得再密也不會讓文字被壓爛，頂多同一列多疊幾層。真的長到極端
+        // （例如橫跨超過一年）才會退回一個下限，讓文字至少還讀得到，允許小幅捲動。
+        const CASE_COL_W = 220
+        const availableWidth = Math.max(300, this.timelineContainerWidth - CASE_COL_W - 4)
+        const pxPerDay = Math.max(3, availableWidth / totalDays)
+        return { startDate, endDate, totalDays, pxPerDay, width: totalDays * pxPerDay }
+      },
+
+      _measureTimelineWidth() {
+        const el = this.$refs.tlScroll
+        if (el && el.clientWidth) this.timelineContainerWidth = el.clientWidth
+      },
+
+      get timelineTicks() {
+        const scale = this.timelineScale
+        if (!scale) return []
+        const ticks = []
+        for (let d = scale.startDate; d <= scale.endDate; d = this._addDays(d, 7)) {
+          ticks.push({ date: d, x: this._dateToX(d), label: d.slice(5).replace('-', '/') })
+        }
+        return ticks
+      },
+
+      _dateToX(dateStr) {
+        const scale = this.timelineScale
+        if (!scale) return 0
+        const days = Math.round((new Date(dateStr + 'T00:00:00') - new Date(scale.startDate + 'T00:00:00')) / 86400000)
+        return days * scale.pxPerDay
+      },
+
+      // 粗估文字寬度決定膠囊最小寬度——中文字寬、其餘窄，寧可估寬一點留白也不要
+      // 重疊。跟前一版不同，這裡是「畫之前」就算好，不用等 DOM 渲染完才能量。
+      _estimateLabelWidth(text) {
+        let w = 22
+        for (const ch of text) w += /[一-鿿]/.test(ch) ? 13 : 7
+        return Math.min(w, 220)
+      },
+
+      get timelineRows() {
+        const scale = this.timelineScale
+        if (!scale) return []
+        const byQuote = {}
+        const order = []
+        for (const it of this.filteredItems) {
+          if (!byQuote[it.quoteNo]) { byQuote[it.quoteNo] = []; order.push(it.quoteNo) }
+          byQuote[it.quoteNo].push(it)
+        }
+        const PILL_ROW_H = 26
+        const MIN_GAP_X = 8
+        return order.map(qno => {
+          const stages = byQuote[qno]
+          const first = stages[0]
+          const firstUndone = stages.find(s => !s.done)
+          const lc = this.caseLifecycle[qno] || {}
+          const points = []
+          if (lc.quoteCreatedAt) points.push({ type: 'milestone', label: '報價單成立', date: lc.quoteCreatedAt })
+          if (lc.caseStartedAt)  points.push({ type: 'milestone', label: '案件成立', date: lc.caseStartedAt })
+          const undated = []
+          stages.forEach(st => {
+            // 區間顯示（2026-08-24）：施工類階段常有好幾筆「前往日期」記錄
+            // （visitStart～visitEnd），用最早～最晚前往日期當長條的真實起訖，
+            // 比單一個完成日期更能呈現實際施作期間；已完成的話終點改用完成
+            // 日期（可能比最後一次前往日期晚幾天才正式結案）。沒有前往記錄
+            // 才退回完成日期或到期/起始日期的單日標記。
+            let dateStart, dateEnd
+            if (st.visitStart) {
+              dateStart = st.visitStart
+              dateEnd = (st.done && st.doneAt) ? st.doneAt : (st.visitEnd || st.visitStart)
+            } else if (st.done && st.doneAt) {
+              dateStart = dateEnd = st.doneAt
+            } else if (st.dueDate || st.startDate) {
+              dateStart = st.startDate || st.dueDate
+              dateEnd = st.dueDate || st.startDate
+            } else {
+              undated.push(st)
+              return
+            }
+            if (dateEnd < dateStart) dateEnd = dateStart
+            points.push({ type: 'stage', st, label: st.stageLabel, date: dateStart, dateEnd })
+          })
+          // 貪婪多層排列（跟前一版邏輯相同，差別是這裡直接算資料，不用等畫完再回
+          // 頭量 DOM）：依日期排序，找第一個不會撞到的層，都撞到就開新層，層數
+          // 不設上限。長條寬度取「文字估寬」跟「真實日期區間換算的像素寬」兩者
+          // 較大的一個——區間夠長就照實際天數畫寬，區間很短或沒有區間（單日／
+          // 里程碑）則保底用文字寬度，不會被壓成看不到字的細線。
+          points.sort((a, b) => a.date.localeCompare(b.date))
+          const laneEndX = []
+          points.forEach(p => {
+            const xStart = this._dateToX(p.date)
+            const xEnd = p.dateEnd ? this._dateToX(p.dateEnd) : xStart
+            const width = Math.max(this._estimateLabelWidth(p.label), xEnd - xStart)
+            let lane = laneEndX.findIndex(endX => xStart >= endX + MIN_GAP_X)
+            if (lane === -1) { lane = laneEndX.length; laneEndX.push(-Infinity) }
+            laneEndX[lane] = xStart + width
+            p.x = xStart; p.width = width; p.lane = lane
+          })
+          return {
+            quoteNo: qno,
+            customerName: first.customerName,
+            projectName: first.projectName,
+            points, undated,
+            currentStageId: firstUndone ? firstUndone.stageId : null,
+            rowHeight: Math.max(1, laneEndX.length) * PILL_ROW_H,
+          }
+        })
+      },
+
+      tlChipClass(st, row) {
+        if (st.done) return 'tl-chip--done'
+        if (st.overdue) return 'tl-chip--overdue'
+        if (st.stageId === row.currentStageId) return 'tl-chip--current'
+        return 'tl-chip--future'
+      },
+
+      tlChipTooltip(st) {
+        const status = st.done
+          ? ('已完成' + (st.doneAt ? '（' + st.doneAt + '）' : ''))
+          : (st.overdue ? '已逾期' : (st.dueDate ? '到期 ' + st.dueDate : '未設定日期'))
+        const who = st.assignedNames.length ? st.assignedNames.join('、') : (st.salesPerson ? '業務代管：' + st.salesPerson : '未指派')
+        return st.stageLabel + ' — ' + status + '｜負責人：' + who
+      },
+
+      // 軸上長條用：跟 tlChipTooltip 差在會把區間（p.date～p.dateEnd）標出來，
+      // 而不是只講完成日期單一天，讓使用者看得出這段是跨好幾天的施作區間。
+      tlPillTooltip(p) {
+        const st = p.st
+        const range = p.dateEnd && p.dateEnd !== p.date ? (p.date + ' ~ ' + p.dateEnd) : p.date
+        const status = st.done ? '已完成' : (st.overdue ? '已逾期' : '進行中')
+        const who = st.assignedNames.length ? st.assignedNames.join('、') : (st.salesPerson ? '業務代管：' + st.salesPerson : '未指派')
+        return st.stageLabel + '（' + range + '）— ' + status + '｜負責人：' + who
+      },
+
+      logout() {
+        fetch('/api/auth/logout', { method:'POST', headers: this._headers() }).catch(()=>{})
+        localStorage.removeItem('motrix_session')
+        window.location.href = 'login.html'
+      },
+
+      async init() {
+        const s = localStorage.getItem('motrix_session')
+        if (!s) { window.location.href = 'login.html'; return }
+        try {
+          this.session = JSON.parse(s)
+          if (!this.session.token) { window.location.href = 'login.html'; return }
+        } catch(e) { window.location.href = 'login.html'; return }
+
+        const res = await fetch('/api/auth/me', { headers: {'Authorization': 'Bearer ' + this.session.token} })
+        if (!res.ok) {
+          localStorage.removeItem('motrix_session')
+          window.location.href = 'login.html'; return
+        }
+        try {
+          const ru = await fetch('/api/users/selectable', { headers: this._headers() })
+          if (ru.ok) this.selectableUsers = await ru.json()
+        } catch {}
+        await this.loadOrgTree()
+        await this.loadStageBoard()
+
+        // 這頁常常開著不關、切去別的分頁編輯案件再切回來看——每次真的重新可見時
+        // 都重抓一次，不然容易看到編輯前的舊資料，誤以為「沒同步」。
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState === 'visible') this.loadStageBoard()
+        })
+
+        // 跨案時間軸的軸線寬度是「自動壓縮塞進容器」算出來的，視窗大小改變（例如
+        // 縮放瀏覽器、側邊欄收合）容器寬度會跟著變，要重新量一次才會重新壓縮。
+        window.addEventListener('resize', () => {
+          if (this.viewMode === 'timeline') this._measureTimelineWidth()
+        })
+      }
+    }
+  }
+  </script>
+  <script src="../static/notif.js"></script>
+  <script src="../static/sidebar.js"></script>
+</body>
+</html>

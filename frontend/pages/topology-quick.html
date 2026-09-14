@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>快速拓樸圖產生器 — MOTRIX ERP</title>
+  <link rel="icon" type="image/png" href="../static/favicon.png">
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
+  <script src="../static/auth-guard.js"></script>
+  <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
+  <style>
+    [x-cloak]{display:none!important}
+    .page-wrap{padding:calc(var(--topbar-h) + 20px) 28px 60px calc(var(--sidebar-w) + 28px);max-width:1400px}
+    .card{background:#fff;border:1px solid var(--border);border-radius:10px;padding:20px 22px;margin-bottom:16px}
+    .card-title{font-size:13px;font-weight:700;color:var(--text-secondary);letter-spacing:.05em;text-transform:uppercase;border-bottom:1px solid var(--border-light);padding-bottom:8px;margin-bottom:14px}
+    .form-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+    .form-group label{display:block;font-size:12px;font-weight:500;color:var(--text-secondary);margin-bottom:4px}
+    .form-group input{width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box}
+    .tab-bar{margin-bottom:16px}
+    .tab-panel-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px}
+    .btn-xs{padding:4px 8px;font-size:11px}
+
+    .grid-table-wrap{overflow-x:auto;border:1px solid var(--border-light);border-radius:8px}
+    .grid-table{width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap}
+    .grid-table thead th{background:#F1F5F9;color:var(--text-secondary);font-weight:700;font-size:11px;
+      padding:7px 6px;text-align:left;white-space:nowrap;border-bottom:2px solid var(--border)}
+    .grid-table tbody td{padding:1px 3px;border-bottom:1px solid var(--border-light)}
+    .grid-table tbody tr:hover td{background:#FAFAF8}
+    .grid-table tbody tr:nth-child(even) td{background:#FCFBF9}
+    .grid-table tbody tr:nth-child(even):hover td{background:#F5F3EF}
+    .grid-idx{color:var(--text-dim);font-family:LINE Seed TW_OTF, monospace;font-size:11px;text-align:center;padding:0 6px!important}
+    .grid-table input[type=text],.grid-table input[type=number]{
+      width:118px;padding:6px 6px;border:1px solid transparent;border-radius:4px;font-size:12px;
+      font-family:inherit;outline:none;box-sizing:border-box;background:transparent;color:#0A0A0A}
+    .grid-table input[type=text]:focus,.grid-table input[type=number]:focus{border-color:var(--accent);background:#fff;box-shadow:0 0 0 2px rgba(37,99,235,.15)}
+    .grid-table select{width:100px;padding:6px 4px;border:1px solid transparent;border-radius:4px;font-size:12px;font-family:inherit;background:transparent;color:#0A0A0A}
+    .grid-table select:focus{border-color:var(--accent);background:#fff}
+    .grid-table td.checkbox-cell{text-align:center;padding:0 4px!important}
+    .row-del{background:none;border:none;color:var(--danger);cursor:pointer;font-size:11px;padding:3px 6px;white-space:nowrap}
+    .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:300;display:flex;align-items:center;justify-content:center;padding:16px}
+    .modal-box{background:#fff;border-radius:12px;width:min(820px,96vw);max-height:none;display:flex;flex-direction:column;padding:20px 22px;box-shadow:0 20px 60px rgba(0,0,0,.4)}
+    .modal-box h3{font-size:15px;font-weight:700;margin-bottom:12px}
+  </style>
+</head>
+<body x-data="topologyQuick()" x-init="init()" x-cloak>
+<header id="app-topbar" class="topbar"></header>
+<div class="sidebar-overlay" id="sidebar-overlay"></div>
+<aside class="sidebar" id="app-sidebar"></aside>
+
+<div class="page-wrap">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+    <div>
+      <a href="network-plans.html" style="font-size:12px;color:var(--accent);text-decoration:none">← 返回規劃書列表</a>
+      <h1 style="font-size:18px;font-weight:700;color:var(--text-main);margin-top:4px">快速拓樸圖產生器</h1>
+      <div style="font-size:11px;color:var(--text-dim);margin-top:2px">
+        不建立規劃書、不寫入資料庫——資料只存在這台瀏覽器（重新整理不會消失，換電腦/清瀏覽器資料則不會保留）。
+        只是想單純畫一張交換器埠位拓樸圖時用這個；若需要完整 WAN／VLAN／IP 等規劃文件，請到「網路架構規劃書」建立。
+      </div>
+    </div>
+    <button class="btn btn-ghost" style="color:#DC2626;border-color:#FCA5A5" @click="clearAll()">清空重新開始</button>
+  </div>
+
+  <div x-show="actionResultMsg" style="color:#15803D;font-size:12px;margin-bottom:10px;padding:8px 12px;background:#F0FDF4;border:1px solid #A7F3D0;border-radius:6px;display:flex;justify-content:space-between;gap:10px;white-space:pre-line">
+    <span x-text="actionResultMsg"></span>
+    <button @click="actionResultMsg=''" style="background:none;border:none;color:#15803D;cursor:pointer;font-weight:700;flex-shrink:0">×</button>
+  </div>
+  <div x-show="errMsg" style="color:var(--danger);font-size:12px;margin-bottom:10px;padding:8px 12px;background:#FEF2F2;border:1px solid #FCA5A5;border-radius:6px" x-text="errMsg"></div>
+
+  <div class="card">
+    <div class="card-title">圖面標題</div>
+    <div class="form-row">
+      <div class="form-group"><label>標題</label><input type="text" x-model="meta.title" @input="dirty()" placeholder="例：海光辦公室 網路埠拓樸圖"></div>
+      <div class="form-group"><label>樓層／範圍標籤</label><input type="text" x-model="meta.floorTag" @input="dirty()" placeholder="例：B1F~3F"></div>
+      <div class="form-group"><label>頁尾文字（留空用預設公司資訊）</label><input type="text" x-model="meta.footer" @input="dirty()"></div>
+    </div>
+  </div>
+
+  <div class="tab-bar" style="display:flex;flex-wrap:wrap;gap:2px;border-bottom:1px solid var(--border-light)">
+    <button class="tab" :class="{on: activeTab==='devices'}" @click="activeTab='devices'">交換器清單</button>
+    <button class="tab" :class="{on: activeTab==='ports'}" @click="activeTab='ports'">埠位對應</button>
+    <button class="tab" :class="{on: activeTab==='preview'}" @click="activeTab='preview'; refreshPreview()">拓樸圖預覽</button>
+  </div>
+
+  <!-- 交換器清單 -->
+  <div x-show="activeTab==='devices'">
+    <div class="card">
+      <div class="tab-panel-head">
+        <div class="card-title" style="border:none;padding:0;margin:0">交換器清單</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="btn btn-ghost btn-xs" @click="openPasteModal('devices')">貼上 Excel 資料</button>
+          <button class="btn btn-ghost btn-xs" @click="addDevice()">+ 新增一列</button>
+        </div>
+      </div>
+      <div class="grid-table-wrap">
+        <table class="grid-table">
+          <thead>
+            <tr>
+              <th style="width:28px">#</th>
+              <template x-for="col in DEVICE_COLUMNS" :key="col.key"><th x-text="col.label"></th></template>
+              <th style="width:44px"></th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="(row, idx) in devices" :key="idx">
+              <tr>
+                <td class="grid-idx" x-text="idx + 1"></td>
+                <template x-for="col in DEVICE_COLUMNS" :key="col.key">
+                  <td>
+                    <select x-show="col.type==='select'" x-model="row[col.key]" @change="dirty()">
+                      <option value=""></option>
+                      <template x-for="opt in col.options||[]" :key="opt"><option :value="opt" x-text="opt"></option></template>
+                    </select>
+                    <input type="checkbox" x-show="col.type==='checkbox'" :checked="!!row[col.key]" @change="row[col.key]=$event.target.checked; dirty()">
+                    <input :type="col.type==='number' ? 'number' : 'text'" x-show="!col.type || col.type==='text' || col.type==='number'"
+                           x-model="row[col.key]" @input="dirty()">
+                  </td>
+                </template>
+                <td><button class="row-del" @click="devices.splice(idx,1); dirty()">刪除</button></td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+        <div x-show="devices.length===0" style="text-align:center;color:var(--text-dim);padding:20px">尚無資料</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 埠位對應 -->
+  <div x-show="activeTab==='ports'">
+    <div class="card">
+      <div class="tab-panel-head">
+        <div class="card-title" style="border:none;padding:0;margin:0">埠位對應</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="btn btn-ghost btn-xs" @click="syncPortsFromDevices()">依交換器清單自動產生缺少的埠列</button>
+          <button class="btn btn-ghost btn-xs" @click="openPasteModal('ports')">貼上 Excel 資料</button>
+          <button class="btn btn-ghost btn-xs" @click="addPort()">+ 新增一列</button>
+        </div>
+      </div>
+      <div style="font-size:11px;color:var(--text-dim);margin:-4px 0 12px">
+        「拓樸圖連線對象」填另一台交換器的名稱＋對方埠號才會自動畫連線；填其他文字（如「ISP路由器」）會畫成外部設備方塊。
+      </div>
+      <div class="grid-table-wrap">
+        <table class="grid-table">
+          <thead>
+            <tr>
+              <th style="width:28px">#</th>
+              <template x-for="col in PORT_COLUMNS" :key="col.key"><th x-text="col.label"></th></template>
+              <th style="width:44px"></th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="(row, idx) in ports" :key="idx">
+              <tr>
+                <td class="grid-idx" x-text="idx + 1"></td>
+                <template x-for="col in PORT_COLUMNS" :key="col.key">
+                  <td>
+                    <select x-show="col.type==='select'" x-model="row[col.key]" @change="dirty()">
+                      <option value=""></option>
+                      <template x-for="opt in col.options||[]" :key="opt"><option :value="opt" x-text="opt"></option></template>
+                    </select>
+                    <input :type="col.type==='number' ? 'number' : 'text'" x-show="!col.type || col.type==='text' || col.type==='number'"
+                           x-model="row[col.key]" @input="dirty()" :list="col.datalist || null">
+                  </td>
+                </template>
+                <td><button class="row-del" @click="ports.splice(idx,1); dirty()">刪除</button></td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+        <div x-show="ports.length===0" style="text-align:center;color:var(--text-dim);padding:20px">尚無資料</div>
+      </div>
+      <datalist id="switchDeviceNames">
+        <template x-for="d in devices.filter(d=>d.name)" :key="d.name"><option :value="d.name"></option></template>
+      </datalist>
+    </div>
+  </div>
+
+  <!-- 拓樸圖預覽 -->
+  <div x-show="activeTab==='preview'">
+    <div class="card">
+      <div class="tab-panel-head">
+        <div class="card-title" style="border:none;padding:0;margin:0">拓樸圖預覽</div>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-ghost btn-xs" @click="refreshPreview()" :disabled="previewLoading">
+            <span x-text="previewLoading ? '產生中…' : '重新產生預覽'"></span>
+          </button>
+          <button class="btn btn-primary btn-xs" @click="downloadPdf()" :disabled="pdfLoading">
+            <span x-text="pdfLoading ? '匯出中…' : '下載 PDF'"></span>
+          </button>
+        </div>
+      </div>
+      <div x-show="previewErr" style="color:var(--danger);font-size:12px;margin-bottom:10px" x-text="previewErr"></div>
+      <div x-show="previewWarnings.length" style="color:#92400E;font-size:12px;margin-bottom:10px;padding:8px 12px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:6px">
+        <div style="font-weight:700;margin-bottom:4px">⚠ 提醒</div>
+        <template x-for="(w,i) in previewWarnings" :key="i"><div style="margin-top:2px" x-text="'・' + w"></div></template>
+      </div>
+      <div x-show="!previewLoading && !previewSvg && !previewErr" style="color:var(--text-dim);font-size:12px;padding:20px;text-align:center">
+        尚無交換器資料，請先在「交換器清單」新增設備並填寫埠數
+      </div>
+      <div style="overflow-x:auto" x-html="previewSvg"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 貼上 Excel 資料 Modal -->
+<div class="modal-overlay" x-show="pasteModalOpen" x-cloak @keydown.escape.window="pasteModalOpen=false">
+  <div class="modal-box" @click.stop>
+    <h3>貼上 Excel 資料 — <span x-text="pasteModalTarget==='devices' ? '交換器清單' : '埠位對應'"></span></h3>
+    <p style="font-size:12px;color:var(--text-dim);line-height:1.6;margin-bottom:10px">
+      在 Excel 選取要貼上的範圍複製，貼到下方文字框（Ctrl+V）。第一列若跟欄位標題相符會自動當標題列比對；
+      沒有標題列則依本分頁欄位由左到右對應。這是<b>新增</b>，加在現有資料最後面，不會覆蓋或刪除既有列。
+    </p>
+    <textarea x-model="pasteModalText" rows="12"
+              style="width:100%;font-family:Consolas,'Courier New',monospace;font-size:12px;padding:8px;border:1px solid var(--border);border-radius:6px;box-sizing:border-box;resize:vertical"
+              placeholder="在此按 Ctrl+V 貼上從 Excel 複製的範圍…"></textarea>
+    <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px">
+      <button class="btn btn-ghost" @click="pasteModalOpen=false">取消</button>
+      <button class="btn btn-primary" @click="confirmPasteImport()">加入表格</button>
+    </div>
+  </div>
+</div>
+
+<script src="../static/notif.js"></script>
+<script src="../static/sidebar.js"></script>
+<script>
+const API = '/api'
+const DRAFT_KEY = 'motrix_topology_quick_draft'
+
+function topologyQuick() {
+  return {
+    session: {},
+    activeTab: 'devices',
+    errMsg: '',
+    actionResultMsg: '',
+
+    meta: { title: '', floorTag: '', footer: '' },
+    devices: [],
+    ports: [],
+
+    DEVICE_COLUMNS: [
+      { key: 'name', label: '設備名稱' },
+      { key: 'model', label: '型號' },
+      { key: 'location', label: '位置' },
+      { key: 'portsCopper', label: 'RJ45 埠數', type: 'number' },
+      { key: 'portsSfp', label: 'SFP 埠數', type: 'number' },
+      { key: 'poe', label: 'PoE 供電', type: 'checkbox' },
+      { key: 'portLayout', label: '拓樸圖埠位排列', type: 'select', options: ['雙排交錯', '單排橫向'] },
+      { key: 'note', label: '備註' },
+    ],
+    PORT_COLUMNS: [
+      { key: 'device', label: '設備名稱', datalist: 'switchDeviceNames' },
+      { key: 'portNo', label: '埠號' },
+      { key: 'portMedia', label: '埠介質', type: 'select', options: ['RJ45', 'SFP'] },
+      { key: 'endpoint', label: '連接對象／端點' },
+      { key: 'portProfile', label: 'Port Profile' },
+      { key: 'linkDevice', label: '拓樸圖連線對象', datalist: 'switchDeviceNames' },
+      { key: 'linkPort', label: '連線對象埠號' },
+      { key: 'note', label: '備註' },
+    ],
+
+    _MAX_COPPER: 96,
+    _MAX_SFP: 32,
+
+    pasteModalOpen: false,
+    pasteModalTarget: 'devices',
+    pasteModalText: '',
+
+    previewSvg: '',
+    previewWarnings: [],
+    previewLoading: false,
+    previewErr: '',
+    pdfLoading: false,
+
+    init() {
+      const s = localStorage.getItem('motrix_session')
+      if (!s) { window.location.href = 'login.html'; return }
+      this.session = JSON.parse(s)
+      this._loadDraft()
+    },
+    _auth() { return { Authorization: 'Bearer ' + this.session.token } },
+
+    _loadDraft() {
+      try {
+        const raw = localStorage.getItem(DRAFT_KEY)
+        if (!raw) return
+        const d = JSON.parse(raw)
+        this.meta = d.meta || { title: '', floorTag: '', footer: '' }
+        this.devices = Array.isArray(d.devices) ? d.devices : []
+        this.ports = Array.isArray(d.ports) ? d.ports : []
+      } catch (e) {}
+    },
+    dirty() {
+      try {
+        localStorage.setItem(DRAFT_KEY, JSON.stringify({ meta: this.meta, devices: this.devices, ports: this.ports }))
+      } catch (e) {}
+    },
+    clearAll() {
+      if (!confirm('確定清空目前所有交換器清單與埠位對應資料？此動作無法復原（僅影響這台瀏覽器的暫存草稿）。')) return
+      this.meta = { title: '', floorTag: '', footer: '' }
+      this.devices = []
+      this.ports = []
+      this.previewSvg = ''
+      this.previewWarnings = []
+      try { localStorage.removeItem(DRAFT_KEY) } catch (e) {}
+      this.actionResultMsg = '已清空'
+    },
+
+    addDevice() { this.devices.push({}); this.dirty() },
+    addPort() { this.ports.push({}); this.dirty() },
+
+    _buildPlanData() {
+      return {
+        devices: this.devices.map(d => ({ ...d, category: '交換器' })),
+        switchPorts: this.ports,
+      }
+    },
+
+    // ── 貼上 Excel 資料（同 network-plan-form.html 的邏輯，簡化成單一目標陣列） ──
+    openPasteModal(target) {
+      this.pasteModalTarget = target
+      this.pasteModalText = ''
+      this.pasteModalOpen = true
+    },
+    _parseTsvGrid(text) {
+      return text.replace(/\r/g, '').split('\n').filter(l => l.length > 0).map(l => l.split('\t'))
+    },
+    confirmPasteImport() {
+      const target = this.pasteModalTarget
+      const columns = target === 'devices' ? this.DEVICE_COLUMNS : this.PORT_COLUMNS
+      const arr = target === 'devices' ? this.devices : this.ports
+      const text = this.pasteModalText
+      this.pasteModalOpen = false
+      if (!text || !text.trim()) return
+      const grid = this._parseTsvGrid(text)
+      if (!grid.length) return
+
+      const firstRow = grid[0].map(c => c.trim())
+      const headerMatches = firstRow.filter(c => columns.some(col => col.label === c)).length
+      const looksLikeHeader = headerMatches >= Math.max(1, Math.ceil(columns.length * 0.3))
+      let colKeys, dataRows
+      if (looksLikeHeader) {
+        colKeys = firstRow.map(c => { const col = columns.find(cc => cc.label === c); return col ? col.key : null })
+        dataRows = grid.slice(1)
+      } else {
+        colKeys = columns.map(c => c.key)
+        dataRows = grid
+      }
+
+      let added = 0
+      for (const cells of dataRows) {
+        if (cells.every(c => !c.trim())) continue
+        const row = {}
+        cells.forEach((raw, i) => {
+          const key = colKeys[i]
+          if (!key) return
+          const v = raw.trim()
+          if (!v) return
+          const col = columns.find(c => c.key === key)
+          if (col && col.type === 'checkbox') row[key] = ['是', 'true', 'TRUE', 'True', '1', 'v', 'V', '✓'].includes(v)
+          else if (col && col.type === 'number') { const n = parseFloat(v); row[key] = Number.isNaN(n) ? v : n }
+          else row[key] = v
+        })
+        if (Object.keys(row).length) { arr.push(row); added++ }
+      }
+      if (added > 0) this.dirty()
+      this.actionResultMsg = added > 0
+        ? `已新增 ${added} 筆資料到「${target === 'devices' ? '交換器清單' : '埠位對應'}」`
+        : '沒有偵測到可用的資料列'
+    },
+
+    // ── 依交換器清單自動產生缺少的埠列（同 network-plan-form.html 的邏輯） ──
+    _portNumOf(raw) {
+      if (raw === null || raw === undefined) return null
+      const m = String(raw).match(/\d+/)
+      return m ? parseInt(m[0], 10) : null
+    },
+    syncPortsFromDevices() {
+      const devs = this.devices.filter(d => (d.name || '').trim())
+      if (!devs.length) { this.actionResultMsg = '「交換器清單」尚無資料，請先新增。'; return }
+      const existing = new Set()
+      for (const r of this.ports) {
+        const dev = (r.device || '').trim()
+        const n = this._portNumOf(r.portNo)
+        if (!dev || n === null) continue
+        existing.add(dev + '|' + (r.portMedia === 'SFP' ? 'sfp' : 'cu') + '|' + n)
+      }
+      let addedCount = 0
+      const clamped = []
+      for (const d of devs) {
+        const name = d.name.trim()
+        let copper = parseInt(d.portsCopper) || 24
+        let sfp = parseInt(d.portsSfp) || 0
+        if (copper > this._MAX_COPPER) { copper = this._MAX_COPPER; clamped.push(name) }
+        if (sfp > this._MAX_SFP) { sfp = this._MAX_SFP; clamped.push(name) }
+        for (let n = 1; n <= copper; n++) {
+          const key = name + '|cu|' + n
+          if (!existing.has(key)) { this.ports.push({ device: name, portNo: String(n), portMedia: 'RJ45' }); existing.add(key); addedCount++ }
+        }
+        for (let n = 1; n <= sfp; n++) {
+          const key = name + '|sfp|' + n
+          if (!existing.has(key)) { this.ports.push({ device: name, portNo: String(n), portMedia: 'SFP' }); existing.add(key); addedCount++ }
+        }
+      }
+      if (addedCount > 0) this.dirty()
+      let msg = addedCount > 0 ? `已新增 ${addedCount} 筆缺少的埠列（既有資料不受影響）` : '目前埠列已完整，沒有需要新增的項目'
+      if (clamped.length) msg += `\n提醒：以下設備埠數超過上限（RJ45 ${this._MAX_COPPER}／SFP ${this._MAX_SFP}），已自動限制：${[...new Set(clamped)].join('、')}`
+      this.actionResultMsg = msg
+    },
+
+    // ── 拓樸圖預覽／PDF ──
+    async refreshPreview() {
+      this.previewLoading = true
+      this.previewErr = ''
+      this.previewWarnings = []
+      try {
+        const r = await fetch(`${API}/network-plans-quick/preview`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json', ...this._auth() },
+          body: JSON.stringify({ data: this._buildPlanData() })
+        })
+        const d = await r.json().catch(() => ({}))
+        if (!r.ok) { this.previewErr = d.detail || '拓樸圖產生失敗'; this.previewLoading = false; return }
+        this.previewSvg = d.svg || ''
+        this.previewWarnings = d.warnings || []
+      } catch (e) { this.previewErr = '網路錯誤：' + e.message }
+      this.previewLoading = false
+    },
+    async downloadPdf() {
+      this.pdfLoading = true
+      try {
+        const r = await fetch(`${API}/network-plans-quick/pdf`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json', ...this._auth() },
+          body: JSON.stringify({ data: this._buildPlanData(), title: this.meta.title, floorTag: this.meta.floorTag, footer: this.meta.footer })
+        })
+        if (!r.ok) { alert('匯出失敗：' + (await r.text())); this.pdfLoading = false; return }
+        const blob = await r.blob()
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = (this.meta.title || '拓樸圖') + '.pdf'
+        a.click()
+        URL.revokeObjectURL(url)
+      } catch (e) { alert('網路錯誤：' + e.message) }
+      this.pdfLoading = false
+    },
+  }
+}
+</script>
+</body>
+</html>

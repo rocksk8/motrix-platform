@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="../static/favicon.png">
+  <title>完工單 - MOTRIX 專案管理系統</title>
+  <script src="../static/auth-guard.js"></script>
+  <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
+  <style>
+    /* 版面比照 quotation-form.html：固定工具列 ＋ 底下可捲動的表單區 */
+    .cnf-toolbar {
+      position: fixed; top: var(--topbar-h); left: var(--sidebar-w); right: 0; height: 52px;
+      background:#fff; border-bottom:1px solid var(--border-light);
+      display:flex; align-items:center; padding:0 28px; gap:10px; z-index:80;
+      box-shadow:0 1px 4px rgba(0,0,0,.06);
+    }
+    .cnf-body { margin-left: var(--sidebar-w); margin-top: calc(var(--topbar-h) + 52px); padding: 0 28px 60px; }
+    .cnf-card { border:1px solid var(--border-light); border-radius:10px; padding:20px 22px; margin-bottom:18px; background:#fff }
+    .cnf-card-title { font-size:13px; font-weight:700; font-family:var(--font-zh); margin-bottom:14px; color:var(--text-main) }
+    .cnf-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px }
+    .cnf-lbl { display:block; font-size:10px; font-family:'LINE Seed TW_OTF',sans-serif; letter-spacing:.08em;
+               text-transform:uppercase; color:#9CA3AF; font-weight:500; margin-bottom:5px }
+    .cnf-in { width:100%; padding:8px 10px; border:1px solid var(--border-light); border-radius:6px;
+              font-size:13px; font-family:var(--font-zh); outline:none; box-sizing:border-box; background:#fff }
+    .cnf-in:focus { border-color:var(--accent) }
+    .cnf-hint { font-size:11px; color:var(--text-dim); margin-top:5px; line-height:1.6; font-family:var(--font-zh) }
+    .cnf-btn { padding:7px 15px; border-radius:6px; font-size:12px; cursor:pointer; font-family:var(--font-zh);
+               border:1px solid var(--border-light); background:#fff; color:var(--text-primary) }
+    .cnf-btn--primary { background:var(--accent-hover); color:#fff; border:none; font-weight:500 }
+    .cnf-btn--warn { background:#B45309; color:#fff; border:none; font-weight:500 }
+    .cnf-btn:disabled { opacity:.45; cursor:default }
+    .cnf-item-row { display:flex; align-items:center; gap:7px; margin-bottom:7px; flex-wrap:wrap }
+    .cnf-badge { padding:2px 9px; border-radius:10px; font-size:11px; font-weight:600 }
+  </style>
+</head>
+
+<body x-data="completionNoteForm()">
+  <!-- ⚠️ 刻意**不加** x-init="init()"：Alpine 3 本來就會自動呼叫資料物件的 init()，
+       再寫一次會跑兩遍，第二次載入的回應會把使用者改到一半的欄位蓋回去（2026-09-11
+       在 case-management.js 與 company-profile-settings.html 各踩過一次，
+       見 backend/tools/check_double_init.py）。 -->
+  <header id="app-topbar" class="topbar"></header>
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+  <aside class="sidebar" id="app-sidebar"></aside>
+
+  <div class="cnf-toolbar">
+    <a :href="'case-management.html?q=' + encodeURIComponent(form.quote_no || '')"
+       class="cnf-btn" style="text-decoration:none;display:inline-flex;align-items:center;gap:5px">← 回案件</a>
+    <span style="font-size:14px;font-weight:700;font-family:'LINE Seed TW_OTF',sans-serif"
+          x-text="noteNo || '新增完工單'"></span>
+    <span class="cnf-badge" :style="statusStyle(status)" x-text="status || '草稿'"></span>
+    <span x-show="unfinishedCount() > 0" class="cnf-badge" style="background:#FEF3C7;color:#92400E"
+          x-text="unfinishedCount() + ' 項未完成'"></span>
+    <span style="flex:1"></span>
+    <span x-show="msg" style="font-size:12px;font-family:var(--font-zh)"
+          :style="msgError ? 'color:#B91C1C' : 'color:var(--success)'" x-text="msg"></span>
+    <button class="cnf-btn" @click="previewPdf()" :disabled="!noteNo || busy">預覽 PDF</button>
+    <button class="cnf-btn cnf-btn--primary" @click="save()" :disabled="busy || !editable()"
+            x-text="busy ? '處理中…' : '儲存'"></button>
+    <button class="cnf-btn cnf-btn--warn" x-show="noteNo && status === '草稿'"
+            @click="submitNote()" :disabled="busy || dirty">
+      申請完工
+    </button>
+  </div>
+
+  <div class="cnf-body">
+    <div x-show="loading" style="padding:40px;text-align:center;color:var(--text-dim);font-size:13px">載入中…</div>
+
+    <template x-if="!loading">
+      <div>
+        <div x-show="!editable()"
+             style="margin-top:16px;padding:10px 14px;border-radius:8px;background:#FFFBEB;border:1px solid #FDE68A;font-size:12px;color:#92400E;font-family:var(--font-zh)">
+          目前狀態為「<span x-text="status"></span>」，只有草稿可以編輯。要修改請先退回草稿。
+        </div>
+
+        <!-- 2026-09-12 使用者指定：**不要分頁**，整合成一頁逐條往下改善。
+             原本是四個可切換分頁，實際填寫時一直在切來切去，反而比往下捲慢。 -->
+        <div style="height:18px"></div>
+        <div>
+          <div class="cnf-card">
+            <div class="cnf-card-title">客戶與地點</div>
+            <div class="cnf-grid">
+              <div><span class="cnf-lbl">案件編號</span>
+                <input class="cnf-in" type="text" :value="form.quote_no" disabled></div>
+              <div><span class="cnf-lbl">案件名稱</span>
+                <input class="cnf-in" type="text" x-model="form.project_name" :disabled="!editable()" @input="dirty=true"></div>
+              <div><span class="cnf-lbl">客戶名稱</span>
+                <input class="cnf-in" type="text" x-model="form.customer_name" :disabled="!editable()" @input="dirty=true"></div>
+              <div><span class="cnf-lbl">客戶驗收人 / 聯絡人</span>
+                <input class="cnf-in" type="text" x-model="form.recipient" :disabled="!editable()" @input="dirty=true"></div>
+              <div><span class="cnf-lbl">聯絡電話</span>
+                <input class="cnf-in" type="text" x-model="form.contact_phone" :disabled="!editable()" @input="dirty=true"></div>
+              <div style="grid-column:1/-1"><span class="cnf-lbl" x-text="labels.siteLabel"></span>
+                <input class="cnf-in" type="text" x-model="form.site_address" :disabled="!editable()" @input="dirty=true"
+                       placeholder="例如：台中市西屯區… / 遠端連線 / 客戶機房">
+                <div class="cnf-hint" x-show="prefilled">地址與聯絡人已從報價單帶入，可直接修改。</div></div>
+            </div>
+          </div>
+
+          <div class="cnf-card">
+            <div class="cnf-card-title">期間與保固</div>
+            <div class="cnf-grid">
+              <div><span class="cnf-lbl">開始日期</span>
+                <input class="cnf-in" type="date" x-model="form.start_date" :disabled="!editable()" @input="dirty=true"></div>
+              <div><span class="cnf-lbl">完成日期（必填）</span>
+                <input class="cnf-in" type="date" x-model="form.completion_date" :disabled="!editable()" @input="dirty=true"></div>
+              <div><span class="cnf-lbl" x-text="labels.managerLabel"></span>
+                <input class="cnf-in" type="text" x-model="form.site_manager" :disabled="!editable()" @input="dirty=true"></div>
+            </div>
+            <div style="margin-top:14px;padding-top:14px;border-top:1px dashed var(--border-light)">
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-family:var(--font-zh)">
+                <input type="checkbox" :checked="form.warranty_months > 0" :disabled="!editable()"
+                       @change="form.warranty_months = $event.target.checked ? 12 : 0; dirty=true">
+                <span>這張單要顯示保固期間</span>
+              </label>
+              <div x-show="form.warranty_months > 0" style="margin-top:10px;max-width:240px">
+                <span class="cnf-lbl">保固月數（自完成日起算）</span>
+                <input class="cnf-in" type="number" min="1" max="600" x-model.number="form.warranty_months"
+                       :disabled="!editable()" @input="dirty=true">
+                <div class="cnf-hint" x-show="warrantyEnd()">保固至 <b x-text="warrantyEnd()"></b></div>
+              </div>
+              <!-- 比照報價單「條件留空就不印」的既有慣例：取消勾選＝月數歸 0＝PDF 不印那一列 -->
+              <div class="cnf-hint" x-show="!(form.warranty_months > 0)">
+                不勾選＝完工單上<b>不會出現</b>保固那一列（零組件販售、系統設定這類單子常常沒有保固可言）。
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ══ 完成項目 ══ -->
+        <div>
+          <div class="cnf-card">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+              <span class="cnf-card-title" style="margin:0" x-text="labels.sectionItems"></span>
+              <button class="cnf-btn" @click="addItem()" :disabled="!editable()">＋ 項目</button>
+              <button class="cnf-btn" @click="addHeader()" :disabled="!editable()">＋ 分段標題</button>
+            </div>
+            <template x-if="form.items.length === 0">
+              <div style="text-align:center;padding:28px;color:var(--text-dim);font-size:12px;font-family:var(--font-zh);border:1px dashed var(--border-light);border-radius:8px">
+                尚無項目，按上方「＋ 項目」開始
+              </div>
+            </template>
+            <template x-for="(it, i) in form.items" :key="i">
+              <div class="cnf-item-row">
+                <span style="width:22px;text-align:center;color:var(--text-dim);font-size:11px" x-text="it.type==='header' ? '§' : (realIdx(i))"></span>
+                <template x-if="it.type === 'header'">
+                  <input class="cnf-in" type="text" style="flex:1;min-width:220px;background:var(--accent-light)"
+                         x-model="it.description" :disabled="!editable()" @input="dirty=true"
+                         placeholder="分段標題（例如：一、核心網路設備）">
+                </template>
+                <template x-if="it.type !== 'header'">
+                  <span style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;flex:1">
+                    <input class="cnf-in" type="text" style="flex:1;min-width:200px" x-model="it.description"
+                           :disabled="!editable()" @input="dirty=true" :placeholder="labels.itemColumn">
+                    <input class="cnf-in" type="number" style="width:80px" x-model="it.qty" :disabled="!editable()" @input="dirty=true" placeholder="數量">
+                    <input class="cnf-in" type="text" style="width:64px" x-model="it.unit" :disabled="!editable()" @input="dirty=true" placeholder="單位">
+                    <select class="cnf-in" style="width:112px" x-model="it.status" :disabled="!editable()" @change="dirty=true">
+                      <option value="完成">完成</option>
+                      <option value="部分完成">部分完成</option>
+                      <option value="未施作">未施作</option>
+                    </select>
+                    <input class="cnf-in" type="text" style="flex:1;min-width:120px" x-model="it.notes" :disabled="!editable()" @input="dirty=true" placeholder="備註">
+                  </span>
+                </template>
+                <button class="cnf-btn" style="color:#B91C1C;border-color:#FECACA" @click="removeItem(i)" :disabled="!editable()">×</button>
+              </div>
+            </template>
+
+            <div x-show="unfinishedCount() > 0"
+                 style="margin-top:14px;padding:10px 14px;border-radius:6px;background:#FFFBEB;border:1px solid #FDE68A;font-size:12px;color:#92400E;font-family:var(--font-zh)">
+              ⚠️ 有 <b x-text="unfinishedCount()"></b> 項未完成。請在下方
+              「<span x-text="labels.sectionPending"></span>」寫清楚待處理內容與預計完成時間
+              ——這張單簽下去等於承認全部完成，沒寫清楚的缺失日後沒有依據。
+            </div>
+          </div>
+        </div>
+
+        <!-- ══ 說明與驗收 ══ -->
+        <div>
+          <div class="cnf-card">
+            <div class="cnf-card-title" x-text="labels.sectionSummary"></div>
+            <textarea class="cnf-in" rows="4" x-model="form.work_summary" :disabled="!editable()" @input="dirty=true"
+                      placeholder="這次做了什麼、範圍到哪裡"></textarea>
+            <div class="cnf-hint">留空的話，這一區不會出現在完工單上。</div>
+          </div>
+          <div class="cnf-card">
+            <div class="cnf-card-title" x-text="labels.sectionTest"></div>
+            <textarea class="cnf-in" rows="4" x-model="form.test_result" :disabled="!editable()" @input="dirty=true"
+                      placeholder="測試項目與結果、驗收標準達成情形"></textarea>
+            <div class="cnf-hint">留空的話，這一區不會出現在完工單上。</div>
+          </div>
+          <div class="cnf-card" style="border-color:#FECACA">
+            <div class="cnf-card-title" style="color:#B91C1C" x-text="labels.sectionPending"></div>
+            <textarea class="cnf-in" rows="3" x-model="form.pending_items" :disabled="!editable()" @input="dirty=true"
+                      placeholder="尚未完成或待改善的項目、預計完成時間"></textarea>
+            <div class="cnf-hint">留空的話不會出現在完工單上；但**有未完成項目時請務必填寫**。</div>
+          </div>
+          <div class="cnf-card">
+            <div class="cnf-card-title">備註</div>
+            <textarea class="cnf-in" rows="2" x-model="form.notes" :disabled="!editable()" @input="dirty=true"></textarea>
+          </div>
+        </div>
+
+        <!-- ══ 單據用語 ══ -->
+        <div>
+          <div class="cnf-card">
+            <div class="cnf-card-title">單據用語</div>
+            <div class="cnf-hint" style="margin-bottom:12px">
+              依據案件類型選取適合的完工單，再視需要逐欄微調。
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <template x-for="p in presets" :key="p.key">
+                <button class="cnf-btn" @click="applyPreset(p.key)" :disabled="!editable()" x-text="p.name"></button>
+              </template>
+              <button class="cnf-btn" @click="resetLabels()" :disabled="!editable()">回到系統預設</button>
+            </div>
+          </div>
+          <div class="cnf-card">
+            <div class="cnf-card-title">逐欄調整</div>
+            <div class="cnf-grid">
+              <template x-for="f in labelFields" :key="f.key">
+                <div>
+                  <span class="cnf-lbl" x-text="f.name"></span>
+                  <input class="cnf-in" type="text" maxlength="40"
+                         x-model="form.labels[f.key]" :placeholder="f.placeholder"
+                         :disabled="!editable()" @input="dirty=true">
+                </div>
+              </template>
+            </div>
+            <div class="cnf-hint">留空＝使用系統預設值（不會變成空白標題）。每欄上限 40 字。</div>
+          </div>
+        </div>
+      </div>
+    </template>
+  </div>
+
+  <script>
+  function completionNoteForm() {
+    return {
+      session: {}, loading: true, busy: false, dirty: false,
+      msg: '', msgError: false, prefilled: false,
+      noteNo: '',
+      status: '草稿',
+      _lastUpdatedAt: '',   // 樂觀鎖：load() 讀入、save() 送出比對（2026-09-14）
+      defaults: {}, labels: {},
+      form: {
+        quote_no: '', customer_name: '', project_name: '', site_address: '',
+        start_date: '', completion_date: '', site_manager: '', recipient: '', contact_phone: '',
+        items: [], work_summary: '', test_result: '', warranty_months: 12,
+        pending_items: '', notes: '', labels: {},
+      },
+
+      labelFields: [
+        { key: 'sectionCustomer', name: '第一區標題', placeholder: '一、客戶與服務地點' },
+        { key: 'sectionPeriod',   name: '第二區標題', placeholder: '二、執行期間與保固' },
+        { key: 'sectionItems',    name: '項目區標題', placeholder: '三、完成項目明細' },
+        { key: 'sectionSummary',  name: '說明區標題', placeholder: '四、執行說明' },
+        { key: 'sectionTest',     name: '測試區標題', placeholder: '五、測試與檢驗結果' },
+        { key: 'sectionPending',  name: '未完成區標題', placeholder: '六、待辦與未完成事項' },
+        { key: 'itemColumn',      name: '項目欄名', placeholder: '項目 / 規格說明' },
+        { key: 'siteLabel',       name: '地點欄名', placeholder: '服務地點' },
+        { key: 'managerLabel',    name: '負責人欄名', placeholder: '負責人' },
+        { key: 'signOwner',       name: '客戶簽章欄', placeholder: '客戶驗收 · 簽章' },
+        { key: 'signVendor',      name: '我方簽章欄', placeholder: '執行單位 · 負責人' },
+      ],
+
+      presets: [
+        { key: 'engineering', name: '工程施工' },
+        { key: 'system',      name: '系統建置／設定' },
+        { key: 'supply',      name: '設備／零組件供應' },
+        { key: 'network',     name: '網路架構／資安' },
+        { key: 'service',     name: '維運服務' },
+      ],
+
+      _presetData: {
+        engineering: {
+          sectionCustomer: '一、客戶與施工地點', sectionPeriod: '二、工程期間與保固',
+          sectionItems: '三、完工項目明細', sectionSummary: '四、施工說明',
+          sectionTest: '五、測試與檢驗結果', sectionPending: '六、遺留事項 / 待改善',
+          itemColumn: '工程項目 / 規格說明', siteLabel: '施工地點', managerLabel: '現場負責人',
+          signOwner: '業主驗收 · 簽章', signVendor: '承攬商 · 工程負責人',
+        },
+        system: {
+          sectionCustomer: '一、客戶與建置環境', sectionPeriod: '二、建置期間與保固',
+          sectionItems: '三、建置項目明細', sectionSummary: '四、系統設定說明',
+          sectionTest: '五、功能測試與驗證結果', sectionPending: '六、待調整與未完成項目',
+          itemColumn: '系統項目 / 設定內容', siteLabel: '建置環境', managerLabel: '負責工程師',
+          signOwner: '客戶驗收 · 簽章', signVendor: '建置單位 · 負責人',
+        },
+        supply: {
+          sectionCustomer: '一、客戶與交付地點', sectionPeriod: '二、交付期間與保固',
+          sectionItems: '三、交付品項明細', sectionSummary: '四、交付說明',
+          sectionTest: '五、點交與檢驗結果', sectionPending: '六、待補品項',
+          itemColumn: '品名 / 規格', siteLabel: '交付地點', managerLabel: '交付負責人',
+          signOwner: '客戶點收 · 簽章', signVendor: '供應單位 · 負責人',
+        },
+        network: {
+          sectionCustomer: '一、客戶與部署環境', sectionPeriod: '二、部署期間與保固',
+          sectionItems: '三、部署項目明細', sectionSummary: '四、架構與設定說明',
+          sectionTest: '五、連線與資安測試結果', sectionPending: '六、待調整項目',
+          itemColumn: '設備 / 設定項目', siteLabel: '部署環境', managerLabel: '負責工程師',
+          signOwner: '客戶驗收 · 簽章', signVendor: '建置單位 · 負責人',
+        },
+        service: {
+          sectionCustomer: '一、客戶與服務地點', sectionPeriod: '二、服務期間',
+          sectionItems: '三、服務項目明細', sectionSummary: '四、服務說明',
+          sectionTest: '五、處理結果', sectionPending: '六、待追蹤事項',
+          itemColumn: '服務項目 / 內容', siteLabel: '服務地點', managerLabel: '服務工程師',
+          signOwner: '客戶確認 · 簽章', signVendor: '服務單位 · 負責人',
+        },
+      },
+
+      async init() {
+        this.session = JSON.parse(localStorage.getItem('motrix_session') || '{}')
+        if (!this.session.token) { location.replace('login.html'); return }
+        const p = new URLSearchParams(location.search)
+        this.noteNo = p.get('no') || ''
+        // 同時編輯警示（2026-09-14）：既有完工單才需要（新建的還沒有單號）
+        if (this.noteNo && window.MotrixPresence) window.MotrixPresence.start('completion_note', this.noteNo)
+        this.form.quote_no = p.get('q') || ''
+        if (this.noteNo) await this.load()
+        else await this.prefillFromCase()
+        this.loading = false
+      },
+
+      _auth(json) {
+        const h = { Authorization: 'Bearer ' + this.session.token }
+        if (json) h['Content-Type'] = 'application/json'
+        return h
+      },
+
+      async load() {
+        try {
+          const r = await fetch(`/api/completion-notes/${this.noteNo}`, { headers: this._auth() })
+          if (!r.ok) { this._fail('讀取失敗'); return }
+          const d = await r.json()
+          this.status = d.status
+          // 樂觀鎖（2026-09-14）：記住載入當下的版本，存檔時送回去比對；
+          // 中間被別人改過就會收到 409，而不是無聲蓋掉對方的內容
+          this._lastUpdatedAt = d.updatedAt || d.updated_at || ''
+          this.defaults = d.labels || {}
+          this.form = {
+            quote_no: d.quoteNo, customer_name: d.customerName, project_name: d.projectName,
+            site_address: d.siteAddress, start_date: d.startDate, completion_date: d.completionDate,
+            site_manager: d.siteManager, recipient: d.recipient,
+            contact_phone: d.contactPhone || '', items: d.items || [],
+            work_summary: d.workSummary, test_result: d.testResult,
+            warranty_months: d.warrantyMonths, pending_items: d.pendingItems,
+            notes: d.notes, labels: Object.assign({}, d.labelOverrides || {}),
+          }
+          this._syncLabels()
+        } catch (e) { this._fail('網路錯誤：' + e.message) }
+      },
+
+      // 新增時把案件的客戶／名稱帶進來，不要讓使用者重打
+      async prefillFromCase() {
+        if (!this.form.quote_no) return
+        try {
+          const r = await fetch(`/api/quotations/${encodeURIComponent(this.form.quote_no)}`,
+                                { headers: this._auth() })
+          if (r.ok) {
+            const q = await r.json()
+            const d = q.data || {}
+            this.form.customer_name = q.customer_name || d.customerName || ''
+            this.form.project_name  = q.project_name  || d.projectName  || ''
+            // 地址與聯絡人一併帶進來（使用者指定）——報價單的送貨地址就是實際
+            // 服務／交付的地點，聯絡人也是同一位，讓人重打一次只會打錯
+            this.form.site_address  = d.deliveryAddress || ''
+            this.form.recipient     = d.contactName || ''
+            this.form.contact_phone = d.contactPhone || ''
+            this.prefilled = !!(this.form.site_address || this.form.recipient)
+          }
+        } catch {}
+        this.form.completion_date = new Date().toISOString().slice(0, 10)
+        this.form.site_manager = this.session.displayName || this.session.username || ''
+        this._syncLabels()
+      },
+
+      // 畫面上顯示的標題＝覆寫值疊在預設值上（跟後端 merged_labels() 同一套規則）
+      _syncLabels() {
+        const base = {
+          sectionCustomer: '一、客戶與服務地點', sectionPeriod: '二、執行期間與保固',
+          sectionItems: '三、完成項目明細', sectionSummary: '四、執行說明',
+          sectionTest: '五、測試與檢驗結果', sectionPending: '六、待辦與未完成事項',
+          itemColumn: '項目 / 規格說明', siteLabel: '服務地點', managerLabel: '負責人',
+          signOwner: '客戶驗收 · 簽章', signVendor: '執行單位 · 負責人',
+        }
+        const out = Object.assign({}, base, this.defaults)
+        for (const k in (this.form.labels || {})) {
+          const v = (this.form.labels[k] || '').trim()
+          if (v) out[k] = v
+        }
+        this.labels = out
+      },
+
+      editable() { return !this.noteNo || this.status === '草稿' },
+      statusStyle(s) {
+        if (s === '已核准') return 'background:#DCFCE7;color:#15803D'
+        if (s === '待審核' || s === '簽核中') return 'background:#FEF3C7;color:#92400E'
+        return 'background:#F3F4F6;color:#6B7280'
+      },
+      realIdx(i) {
+        let n = 0
+        for (let k = 0; k <= i; k++) if (this.form.items[k].type !== 'header') n++
+        return n
+      },
+      unfinishedCount() {
+        return this.form.items.filter(
+          it => it.type !== 'header' && (it.status === '部分完成' || it.status === '未施作')).length
+      },
+      warrantyEnd() {
+        const d = this.form.completion_date, m = Number(this.form.warranty_months) || 0
+        if (!d || !m) return ''
+        const dt = new Date(d + 'T00:00:00')
+        const day = dt.getDate()
+        dt.setDate(1); dt.setMonth(dt.getMonth() + m)
+        const last = new Date(dt.getFullYear(), dt.getMonth() + 1, 0).getDate()
+        dt.setDate(Math.min(day, last))
+        return dt.toISOString().slice(0, 10)
+      },
+
+      addItem() { this.form.items.push({ description: '', qty: 1, unit: '式', status: '完成', notes: '' }); this.dirty = true },
+      addHeader() { this.form.items.push({ type: 'header', description: '' }); this.dirty = true },
+      removeItem(i) { this.form.items.splice(i, 1); this.dirty = true },
+
+      applyPreset(key) {
+        this.form.labels = Object.assign({}, this._presetData[key] || {})
+        this._syncLabels(); this.dirty = true
+        this.msgError = false; this.msg = '已套用，記得按儲存'
+      },
+      resetLabels() { this.form.labels = {}; this._syncLabels(); this.dirty = true },
+
+      _fail(m) { this.msgError = true; this.msg = m; this.busy = false },
+
+      _body() {
+        const f = this.form
+        return {
+          quote_no: f.quote_no, customer_name: f.customer_name, project_name: f.project_name,
+          site_address: f.site_address, start_date: f.start_date, completion_date: f.completion_date,
+          site_manager: f.site_manager, recipient: f.recipient,
+          contact_phone: f.contact_phone, items: f.items,
+          work_summary: f.work_summary, test_result: f.test_result,
+          warranty_months: Number(f.warranty_months) || 0,
+          pending_items: f.pending_items, notes: f.notes,
+          labels: f.labels || {},
+          expected_updated_at: this._lastUpdatedAt || null,
+        }
+      },
+
+      async save() {
+        this.busy = true; this.msg = ''
+        try {
+          const r = await fetch(this.noteNo ? `/api/completion-notes/${this.noteNo}` : '/api/completion-notes', {
+            method: this.noteNo ? 'PUT' : 'POST',
+            headers: this._auth(true), body: JSON.stringify(this._body()),
+          })
+          const d = await r.json().catch(() => ({}))
+          if (!r.ok) { this._fail('儲存失敗：' + (d.detail || r.status)); return }
+          if (!this.noteNo) {
+            this.noteNo = d.note_no
+            history.replaceState({}, '', `completion-note-form.html?no=${d.note_no}`)
+          }
+          this.dirty = false
+          this.msgError = false; this.msg = '已儲存'
+          setTimeout(() => { if (this.msg === '已儲存') this.msg = '' }, 2500)
+          this._syncLabels()
+        } catch (e) { this._fail('網路錯誤：' + e.message); return }
+        this.busy = false
+      },
+
+      async submitNote() {
+        const warn = this.unfinishedCount()
+          ? `\n\n⚠️ 這張單有 ${this.unfinishedCount()} 項未完成，請確認「${this.labels.sectionPending}」已寫清楚。`
+          : ''
+        if (!confirm(`確定送出完工單「${this.noteNo}」申請完工？${warn}`)) return
+        this.busy = true; this.msg = ''
+        try {
+          const r = await fetch(`/api/completion-notes/${this.noteNo}/submit`,
+                                { method: 'POST', headers: this._auth() })
+          const d = await r.json().catch(() => ({}))
+          if (!r.ok) { this._fail('送出失敗：' + (d.detail || r.status)); return }
+          this.status = '待審核'
+          this.msgError = false; this.msg = '已送出，等待簽核'
+        } catch (e) { this._fail('網路錯誤：' + e.message); return }
+        this.busy = false
+      },
+
+      async previewPdf() {
+        if (this.dirty && !confirm('有未儲存的變更，預覽看到的會是已儲存的版本。仍要預覽？')) return
+        this.busy = true
+        try {
+          const r = await fetch(`/api/completion-notes/${this.noteNo}/pdf-download`, { headers: this._auth() })
+          if (!r.ok) { this._fail('PDF 產生失敗'); return }
+          const url = URL.createObjectURL(await r.blob())
+          window.open(url, '_blank')
+          setTimeout(() => URL.revokeObjectURL(url), 60000)
+          fetch(`/api/completion-notes/${this.noteNo}/export?mode=preview`,
+                { method: 'POST', headers: this._auth() }).catch(() => {})
+        } catch (e) { this._fail('網路錯誤：' + e.message); return }
+        this.busy = false
+      },
+    }
+  }
+  </script>
+  <script src="../static/notif.js"></script>
+  <script src="../static/edit-presence.js"></script>
+  <script src="../static/sidebar.js"></script>
+</body>
+</html>

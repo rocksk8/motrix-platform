@@ -2,12 +2,40 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="../static/favicon.png">
-  <title>報價單管理 — MOTRIX 營運管理系統</title>
-  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-  <link rel="stylesheet" href="../css/style.css">
+  <title>報價單管理 — MOTRIX 專案管理系統</title>
+  <script src="../static/auth-guard.js"></script>
+  <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
+  <script src="../static/vendor/sortable-1.15.3.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <style>
+    /* ── 生命週期泳道（2026-09-14，比照簽核佇列的跑道）──────────────────
+       原本 9 個分頁是互斥的：一次只能看一個階段，看不到整條線的形狀，
+       「有 12 張草稿放著沒送審」這種事得自己一個一個分頁點過去數。
+       改成在「全部」時把列表依生命週期分段，並在每列左緣留一條狀態脊。 */
+    tr.ql-row > td:first-child { box-shadow: inset 3px 0 0 var(--ql-spine, transparent); }
+    tr.ql-lane > td {
+      background: var(--icon-btn-bg);
+      padding: 5px 10px !important;
+      border-bottom: 1px solid var(--border-light);
+    }
+    .ql-lane__in { display: flex; align-items: center; gap: 8px; }
+    .ql-lane__t { font-size: 11px; font-weight: 700; letter-spacing: .06em; }
+    .ql-lane__d { font-size: 11px; color: var(--text-dim); }
+    .ql-lane__n {
+      margin-left: auto; font-size: 11px; color: var(--text-dim);
+      font-family: var(--font-en); font-variant-numeric: tabular-nums;
+    }
+    /* 壓力帶的段在這一頁是可點的篩選器（共用的 .vm-andon__seg 是純顯示） */
+    .ql-phase { border:none; cursor:pointer; text-align:left; font-family:var(--font-zh); }
+    .ql-phase:hover { background:var(--icon-btn-bg); }
+    .ql-phase.on { outline:2px solid var(--accent); outline-offset:-2px; }
+    .ql-age {
+      display: block; margin-top: 2px; font-size: 10px;
+      font-family: var(--font-en); font-variant-numeric: tabular-nums;
+    }
     .filter-tabs { display:flex; gap:2px; background:#F0EEE9; padding:3px; border-radius:8px; margin-bottom:20px; }
     .filter-tab  { padding:6px 14px; border-radius:6px; font-size:12px; cursor:pointer; transition:all .12s; border:none; background:transparent; color:var(--text-secondary); font-family:var(--font-zh); }
     .filter-tab.active { background:#fff; color:var(--text-primary); font-weight:600; box-shadow:var(--shadow-sm); }
@@ -20,15 +48,17 @@
     .search-input:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(37,99,235,.08); }
     .action-btn { display:inline-flex; align-items:center; gap:6px; padding:7px 14px; border-radius:var(--radius); font-size:12px; font-family:var(--font-zh); cursor:pointer; border:none; transition:all .12s; }
     .action-btn--primary { background:var(--accent); color:#fff; }
-    .action-btn--primary:hover { background:#1D4ED8; }
+    .action-btn--primary:hover { background:var(--accent-hover); }
     .action-btn--ghost { background:#fff; color:var(--text-secondary); border:1px solid var(--border-light); }
     .action-btn--ghost:hover { border-color:#C8C4BC; }
     .row-actions { display:flex; gap:4px; opacity:0; transition:opacity .12s; }
     tr:hover .row-actions { opacity:1; }
-    .icon-btn { width:28px; height:28px; border-radius:4px; display:flex; align-items:center; justify-content:center; border:1px solid var(--border-light); background:#fff; cursor:pointer; transition:all .12s; }
-    .icon-btn:hover { background:var(--accent-light); border-color:var(--accent); color:var(--accent); }
-    .icon-btn.del:hover { background:var(--danger-light); border-color:var(--danger); color:var(--danger); }
-    .icon-btn svg { width:14px; height:14px; stroke:currentColor; }
+    .drag-handle { cursor: grab; color: var(--text-secondary); opacity: .55; transition: opacity .1s, background .1s; display:inline-flex; align-items:center; justify-content:center; padding: 4px; border-radius: 4px; }
+    .drag-handle:hover { opacity: 1; background: #EEECEA; }
+    tr:hover .drag-handle { opacity: .85; }
+    .drag-handle:active { cursor: grabbing; }
+    .sortable-ghost td { background: var(--accent-light) !important; opacity: .5; }
+    .sortable-chosen { box-shadow: 0 2px 16px rgba(0,0,0,.12); }
     .summary-row { display:flex; gap:24px; margin-bottom:20px; padding:14px 20px; background:#fff; border:1px solid var(--border-light); border-radius:var(--radius-lg); }
     .summary-item { display:flex; flex-direction:column; gap:2px; }
     .summary-item__label { font-size:10px; font-family:var(--font-en); letter-spacing:.08em; text-transform:uppercase; color:var(--text-dim); }
@@ -137,11 +167,49 @@
         <option value="已成案">已成案</option>
         <option value="已結案">已結案</option>
       </select>
+      <select class="search-input" style="max-width:150px;cursor:pointer"
+              :value="sortPref.sortMode" @change="setSortMode($event.target.value)">
+        <option value="">排序：預設</option>
+        <option value="quote_date">排序：報價日期</option>
+        <option value="total">排序：金額</option>
+        <option value="customer_name">排序：客戶名稱</option>
+        <option value="custom">排序：自訂（可拖曳）</option>
+      </select>
+      <button class="action-btn action-btn--ghost" x-show="sortPref.sortMode && sortPref.sortMode !== 'custom'"
+              @click="toggleSortDir()" title="切換正序/倒序">
+        <span x-text="sortPref.sortDir === 'asc' ? '↑ 由小到大' : '↓ 由大到小'"></span>
+      </button>
+    </div>
+
+    <!-- ── 生命週期壓力帶（2026-09-14，比照簽核佇列的跑道）────────────────
+         原本 9 個分頁是互斥的：一次只能看一個階段，看不到整條線的形狀，
+         「有幾張草稿放著沒送審」得自己一個一個分頁點過去數。
+         四段＝草稿→送審中→已送出→已結束，點任一段就篩。 -->
+    <div class="vm-andon" style="margin-bottom:14px" x-show="!loading && quotes.length > 0" x-cloak>
+      <template x-for="ph in LIFECYCLES" :key="ph.key">
+        <button type="button" class="vm-andon__seg ql-phase"
+                :class="{ on: phaseFilter === ph.key }"
+                @click="phaseFilter = (phaseFilter === ph.key ? '' : ph.key); activeTab = 'all'">
+          <span class="vm-andon__val" :style="'color:' + ph.color" x-text="phaseCount(ph.key)"></span>
+          <span class="vm-andon__lbl">
+            <span x-text="ph.label"></span>
+            <small x-text="ph.desc"></small>
+          </span>
+        </button>
+      </template>
+      <div class="vm-andon__bar">
+        <span class="vm-andon__track"
+              :title="LIFECYCLES.map(ph => ph.label + ' ' + phaseCount(ph.key) + ' 件').join('／')">
+          <template x-for="ph in LIFECYCLES" :key="ph.key">
+            <i :style="'width:' + phasePct(ph.key) + '%;background:' + ph.color"></i>
+          </template>
+        </span>
+      </div>
     </div>
 
     <div class="filter-tabs">
       <template x-for="tab in tabs" :key="tab.key">
-        <button class="filter-tab" :class="{active: activeTab === tab.key}" @click="activeTab = tab.key">
+        <button class="filter-tab" :class="{active: activeTab === tab.key}" @click="activeTab = tab.key; phaseFilter = ''">
           <span x-text="tab.label"></span>
           <span x-show="tabCount(tab.key) > 0" style="margin-left:4px;font-size:10px;color:var(--text-dim)" x-text="'(' + tabCount(tab.key) + ')'"></span>
         </button>
@@ -154,6 +222,7 @@
       <table class="data-table">
         <thead>
           <tr>
+            <th x-show="sortPref.sortMode === 'custom'" style="width:24px"></th>
             <th>報價單號</th>
             <th>客戶名稱</th>
             <th>案件名稱</th>
@@ -167,9 +236,20 @@
             <th>操作</th>
           </tr>
         </thead>
-        <tbody>
-          <template x-for="q in filtered" :key="q.quote_no">
-            <tr>
+        <template x-for="lane in displayLanes" :key="lane.key">
+        <tbody x-ref="quotesTbody">
+          <tr class="ql-lane" x-show="lane.header">
+            <td colspan="12">
+              <div class="ql-lane__in">
+                <span class="ql-lane__t" :style="'color:' + lane.color" x-text="lane.label"></span>
+                <span class="ql-lane__d" x-text="lane.desc"></span>
+                <span class="ql-lane__n" x-text="lane.items.length + ' 件'"></span>
+              </div>
+            </td>
+          </tr>
+          <template x-for="q in lane.items" :key="q.quote_no">
+            <tr class="ql-row" :data-quote-no="q.quote_no" :style="'--ql-spine:' + lane.color">
+              <td x-show="sortPref.sortMode === 'custom'" class="drag-handle" style="cursor:grab;text-align:center;color:var(--text-dim)">⠿</td>
               <td>
                 <div style="display:flex;align-items:center;gap:6px">
                   <a :href="'quotation-form.html?id=' + q.quote_no"
@@ -205,6 +285,9 @@
               <td style="font-size:12px;color:var(--text-secondary)" x-text="q.sales_person || '—'"></td>
               <td>
                 <span class="badge" :class="dealDisplayStatus(q).cls" x-text="dealDisplayStatus(q).text"></span>
+                <template x-if="agingOf(q)">
+                  <span class="ql-age" :class="agingOf(q).cls" x-text="agingOf(q).text"></span>
+                </template>
               </td>
               <td>
                 <!-- 已成案/已結案：鎖定顯示，不可在此頁修改 -->
@@ -219,7 +302,7 @@
                   <select @change="trySetLost(q.quote_no, $event.target.value, q)"
                           :value="q.deal_tag || ''"
                           style="padding:3px 6px;font-size:11px;border:1px solid var(--border-light);border-radius:4px;background:#fff;font-family:var(--font-zh);cursor:pointer;outline:none;max-width:86px;transition:border-color .12s"
-                          :style="q.deal_tag==='未成案' ? 'color:#DC2626;border-color:#FCA5A5' : q.deal_tag==='已提供' ? 'color:#2563EB;border-color:#93C5FD' : q.deal_tag==='未提供' ? 'color:#6B7280' : 'color:var(--text-dim)'">
+                          :style="q.deal_tag==='未成案' ? 'color:#DC2626;border-color:#FCA5A5' : q.deal_tag==='已提供' ? 'color:var(--accent);border-color:#93C5FD' : q.deal_tag==='未提供' ? 'color:#6B7280' : 'color:var(--text-dim)'">
                     <option value="">未標記</option>
                     <option value="未提供">未提供</option>
                     <option value="已提供">已提供</option>
@@ -234,6 +317,9 @@
                   <a :href="'quotation-form.html?id=' + q.quote_no" class="icon-btn" title="編輯">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
                   </a>
+                  <button class="icon-btn" title="複製為新報價單" @click.stop="duplicateQuote(q.quote_no)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                  </button>
                   <template x-if="canDelete && q.status === '草稿'">
                     <button class="icon-btn del" title="刪除（僅草稿可刪）" @click.stop="deleteQuote(q.quote_no)">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
@@ -243,6 +329,9 @@
               </td>
             </tr>
           </template>
+        </tbody>
+        </template>
+        <tbody>
           <tr x-show="filtered.length === 0 && !loading && !retrying">
             <td colspan="11" style="text-align:center;padding:40px;color:var(--text-dim)">
               <div style="font-size:32px;opacity:.3;margin-bottom:8px">📄</div>
@@ -299,7 +388,7 @@
                   placeholder="例：報價偏高、預算凍結、競爭對手得標…"
                   rows="3"
                   style="width:100%;resize:vertical;border:1px solid #D1D5DB;border-radius:6px;padding:8px 10px;font-size:12px;font-family:var(--font-zh);color:#111;outline:none;box-sizing:border-box;transition:border-color .12s"
-                  @focus="$el.style.borderColor='#2563EB'" @blur="$el.style.borderColor='#D1D5DB'"></textarea>
+                  @focus="$el.style.borderColor='#C8102E'" @blur="$el.style.borderColor='#D1D5DB'"></textarea>
       </div>
       <div style="display:flex;gap:10px;justify-content:flex-end">
         <button @click="cancelLost()"
@@ -336,6 +425,99 @@
       dealTagLostModal: false,
       dealTagLostInfo: null,
       dealTagLostReason: '',
+
+      sortPref: { sortMode: '', sortDir: 'desc', customOrder: [] },
+      _sortable: null,
+
+      // ═══ 生命週期分段（2026-09-14，比照簽核佇列的跑道）═════════════════
+      // 原本的 9 個分頁是互斥篩選：一次只能看一個階段，看不到整條線的形狀。
+      // 這裡把 status × deal_tag 收斂成四個「人會拿來決定要做什麼」的階段，
+      // 壓力帶顯示比例、表格依階段分段，每列左緣留一條該階段的脊。
+      // 分頁保留不動——它的粒度比較細（已核准/已送出/已確認分得開）。
+      LIFECYCLES: [
+        { key: 'draft',  label: '草稿',   desc: '尚未送審',           color: 'var(--text-dim)' },
+        { key: 'review', label: '送審中', desc: '簽核流程進行中',      color: 'var(--warning)' },
+        { key: 'sent',   label: '已送出', desc: '簽核完成、已對外報價', color: 'var(--success)' },
+        { key: 'closed', label: '已結束', desc: '未成案／已結案／取消', color: '#6D28D9' },  // 沿用 badge--settled 既有的紫
+      ],
+      phaseFilter: '',
+
+      // 判定順序有意義：deal_tag 的終局狀態優先於 status。
+      // 一張「已送出」但 deal_tag 是「未成案」的單子，對人來說是結束了，
+      // 不是還在報價中——這跟 dealDisplayStatus() 的既有邏輯是同一個口徑。
+      lifecycleOf(q) {
+        const s = q.status || ''
+        const tag = q.deal_tag || ''
+        if (tag === '未成案' || tag === '已結案') return 'closed'
+        if (s === '已取消' || s === '已拒絕') return 'closed'
+        if (s === '草稿') return 'draft'
+        if (s === '待審核' || s === '簽核中') return 'review'
+        return 'sent'
+      },
+
+      // 壓力帶的分母刻意用「除了分頁與階段以外的篩選都套用」的集合——
+      // 這樣切分頁不會讓壓力帶跟著縮成一段，它描述的是目前條件下整條線的形狀。
+      get pipelineBase() {
+        const s = (this.search || '').trim().toLowerCase()
+        return this.quotes.filter(q =>
+          (!s || (q.quote_no || '').includes(s)
+              || (q.customer_name || '').toLowerCase().includes(s)
+              || (q.project_name || '').toLowerCase().includes(s))
+          && (!this.filterSales || q.sales_person === this.filterSales)
+          && (!this.filterMonth || (q.quote_date || q.created_at || '').startsWith(this.filterMonth))
+          && (!this.filterDealTag || (q.deal_tag || '') === this.filterDealTag)
+        )
+      },
+      phaseCount(key) { return this.pipelineBase.filter(q => this.lifecycleOf(q) === key).length },
+      phasePct(key) {
+        const t = this.pipelineBase.length
+        return t ? Math.round(this.phaseCount(key) / t * 100) : 0
+      },
+
+      // 只有在「全部」分頁、而且不是拖曳自訂排序時才分段。
+      // 自訂排序要拖曳，Sortable 綁在單一 tbody 上（initSortable 讀 $refs.quotesTbody），
+      // 分成多個 tbody 會讓拖曳跨不過去；分頁已經選定單一階段時分段也沒有意義。
+      get useLanes() {
+        return this.activeTab === 'all' && this.sortPref.sortMode !== 'custom' && !this.phaseFilter
+      },
+
+      get displayLanes() {
+        if (!this.useLanes) {
+          const only = this.LIFECYCLES.find(p => p.key === this.phaseFilter)
+          return [{
+            key: 'flat', header: false, items: this.filtered,
+            color: only ? only.color : 'transparent',
+            label: '', desc: '',
+          }]
+        }
+        return this.LIFECYCLES
+          .map(ph => ({ ...ph, header: true, items: this.filtered.filter(q => this.lifecycleOf(q) === ph.key) }))
+          .filter(l => l.items.length > 0)
+      },
+
+      _daysSince(ts) {
+        if (!ts) return null
+        const d = new Date(String(ts).replace(' ', 'T'))
+        if (isNaN(d)) return null
+        return Math.max(0, Math.floor((Date.now() - d.getTime()) / 86400000))
+      },
+
+      // 只有草稿與送審中要顯示停留天數——那兩個階段「放著不動」本身就是問題；
+      // 已送出之後球在客戶手上，天數不是這一頁該催的事（追蹤有另外的邏輯）。
+      // 門檻分開設：草稿放 7/30 天，送審中放 2/4 天（跟簽核佇列同一組門檻，
+      // 因為那就是同一件事——等人簽）。
+      agingOf(q) {
+        const ph = this.lifecycleOf(q)
+        if (ph !== 'draft' && ph !== 'review') return null
+        const d = this._daysSince(q.updated_at || q.created_at)
+        if (d === null) return null
+        if (ph === 'draft') {
+          return { text: d === 0 ? '今日建立' : d + ' 天未異動',
+                   cls: d > 30 ? 'vm-age--stale' : d > 7 ? 'vm-age--warm' : '' }
+        }
+        return { text: d === 0 ? '今日送審' : '送審 ' + d + ' 天',
+                 cls: d >= 4 ? 'vm-age--stale' : d >= 2 ? 'vm-age--warm' : '' }
+      },
 
       tabs: [
         { key: 'all',    label: '全部(不含未成案)'  },
@@ -386,9 +568,13 @@
       },
 
       get filtered() {
-        return this.quotes.filter(q => {
+        const base = this.quotes.filter(q => {
+          // 階段篩選一旦生效就蓋過分頁：「全部」分頁的定義本來就排除
+          // 未成案/已結案，不繞過的話點壓力帶的「已結束」會得到空清單。
           let matchTab
-          if (this.activeTab === 'all') {
+          if (this.phaseFilter) {
+            matchTab = true
+          } else if (this.activeTab === 'all') {
             matchTab = (q.deal_tag || '') !== '未成案' && (q.deal_tag || '') !== '已結案'
           } else {
             const tab = this.tabs.find(t => t.key === this.activeTab)
@@ -401,8 +587,14 @@
           const matchSales   = !this.filterSales || q.sales_person === this.filterSales
           const matchMonth   = !this.filterMonth || (q.quote_date || q.created_at || '').startsWith(this.filterMonth)
           const matchDealTag = !this.filterDealTag || (q.deal_tag || '') === this.filterDealTag
-          return matchTab && matchSearch && matchSales && matchMonth && matchDealTag
+          const matchPhase   = !this.phaseFilter || this.lifecycleOf(q) === this.phaseFilter
+          return matchTab && matchSearch && matchSales && matchMonth && matchDealTag && matchPhase
         })
+        return applyListSort(base, this.sortPref, {
+          quote_date:    q => q.quote_date || q.created_at || '',
+          total:         q => q.total || 0,
+          customer_name: q => q.customer_name || '',
+        }, q => q.quote_no)
       },
 
       summaryData: { thisMonth: 0, thisMonthTotal: 0, pending: 0, confirmed: 0, avgMargin: '—' },
@@ -539,6 +731,41 @@
         this.toast('報價單已刪除')
       },
 
+      async duplicateQuote(quoteNo) {
+        if (!confirm(`確定要以 ${quoteNo} 為範本複製一張新的草稿報價單？`)) return
+        try {
+          const [rSrc, rNo] = await Promise.all([
+            fetch(`${API}/quotations/${quoteNo}`, { headers: { Authorization: 'Bearer ' + this.session.token } }),
+            fetch(`${API}/next-quote-no`, { headers: { Authorization: 'Bearer ' + this.session.token } }),
+          ])
+          if (!rSrc.ok || !rNo.ok) { this.toast('複製失敗，請重試', '#DC2626'); return }
+          const src   = (await rSrc.json()).data
+          const newNo = (await rNo.json()).quote_no
+          const genId = () => (window.crypto && window.crypto.randomUUID)
+            ? window.crypto.randomUUID()
+            : 'id-' + Date.now() + '-' + Math.random().toString(36).slice(2)
+
+          const template = {
+            ...src,
+            quoteNo: newNo,
+            quoteDate: new Date().toISOString().slice(0, 10),
+            status: '草稿',
+            approval: null,
+            exportCount: 0,
+            exportLog: [],
+            version: 1,
+            // 新單是全新的一筆案子，不可繼承來源單已經跑到哪的執行期資料（與 quotation-form.html 的 copyToNew() 規則一致）
+            dealTag: '',
+            caseRecord: null,
+            settlement: null,
+            editHistory: [],
+          }
+          template.items = (src.items || []).map(it => ({ ...it, id: genId() }))
+          sessionStorage.setItem('motrix_copy_template', JSON.stringify(template))
+          window.location.href = `quotation-form.html?id=${newNo}`
+        } catch { this.toast('網路錯誤，複製失敗', '#DC2626') }
+      },
+
       toast(msg, bg = '#0A0A0A') {
         const el = document.createElement('div')
         el.textContent = msg
@@ -547,26 +774,37 @@
         setTimeout(() => el.remove(), 2500)
       },
 
-      fmtDate(iso) {
-        if (!iso) return ''
-        const d = new Date(iso)
-        const now = new Date()
-        const diff = (now - d) / 1000
-        if (diff < 3600)  return Math.floor(diff / 60) + ' 分鐘前'
-        if (diff < 86400) return Math.floor(diff / 3600) + ' 小時前'
-        return d.toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' })
-      },
-
-      fmtDateFull(iso) {
-        if (!iso) return ''
-        const d = new Date(iso)
-        return d.toLocaleDateString('zh-TW', { year: 'numeric', month: '2-digit', day: '2-digit' }) + ' ' +
-               d.toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })
-      },
-
       logout() {
         fetch('/api/auth/logout', { method:'POST', headers:{ Authorization:'Bearer '+(this.session.token||'') } }).catch(()=>{})
         localStorage.removeItem('motrix_session'); window.location.href = 'login.html'
+      },
+
+      async setSortMode(mode) {
+        this.sortPref.sortMode = mode
+        await saveListPref(this.session.token, 'quotations', this.sortPref)
+        this.$nextTick(() => this.initSortable())
+      },
+      async toggleSortDir() {
+        this.sortPref.sortDir = this.sortPref.sortDir === 'asc' ? 'desc' : 'asc'
+        await saveListPref(this.session.token, 'quotations', this.sortPref)
+      },
+      initSortable() {
+        const tbody = this.$refs.quotesTbody
+        if (!tbody || typeof Sortable === 'undefined') return
+        if (this._sortable) { this._sortable.destroy(); this._sortable = null }
+        if (this.sortPref.sortMode !== 'custom') return
+        this._sortable = Sortable.create(tbody, {
+          animation: 150,
+          handle: '.drag-handle',
+          ghostClass: 'sortable-ghost',
+          chosenClass: 'sortable-chosen',
+          onEnd: async () => {
+            const visibleIds = [...tbody.querySelectorAll('tr[data-quote-no]')].map(tr => tr.dataset.quoteNo)
+            const rest = this.sortPref.customOrder.filter(id => !visibleIds.includes(id))
+            this.sortPref.customOrder = [...visibleIds, ...rest]
+            await saveListPref(this.session.token, 'quotations', this.sortPref)
+          }
+        })
       },
 
       async init() {
@@ -580,6 +818,8 @@
         if (param === 'queue') this.view = 'queue'
         if (window.location.search) history.replaceState(null, '', window.location.pathname)
 
+        this.sortPref = await loadListPref(this.session.token, 'quotations')
+
         const ok = await this.loadQuotes()
         if (!ok || this.quotes.length === 0) {
           this.retrying = true
@@ -587,11 +827,13 @@
           this.retrying = false
           await this.loadQuotes()
         }
+        this.$nextTick(() => this.initSortable())
       }
     }
   }
   </script>
   <script src="../static/notif.js"></script>
   <script src="../static/sidebar.js"></script>
+  <script src="../static/list-sort.js"></script>
 </body>
 </html>

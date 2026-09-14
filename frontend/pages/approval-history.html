@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="../static/favicon.png">
+  <title>簽核歷史 — MOTRIX 專案管理系統</title>
+  <script src="../static/auth-guard.js"></script>
+  <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
+  <!-- 深色模式刻意不在這裡寫任何色彩覆寫：全站是反轉濾鏡，不是另一套色票
+       （見 style.css「DARK MODE」區塊）。 -->
+  <style>
+    .ah-main {
+      margin-left: var(--sidebar-w);
+      margin-top: var(--topbar-h);
+      padding: 28px 32px;
+      min-height: calc(100vh - var(--topbar-h));
+      background: var(--white);
+    }
+    /* 2026-09-14：上方「範圍」原本是「標籤＋下拉方框」，下方月份卻已經是籤列
+       ——同一頁兩種語言。範圍改用同一組籤，搜尋改成跟其他清單頁一致的
+       內嵌圖示搜尋框，label 移除（placeholder 已經講得比 label 更清楚）。 */
+    .ah-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+    .ah-search {
+      display: flex; align-items: center; gap: 7px; flex: 1; min-width: 240px;
+      border: 1px solid var(--border-light); border-radius: var(--radius);
+      background: #fff; padding: 0 10px;
+    }
+    .ah-search:focus-within { border-color: var(--ghost-hover-border); }
+    .ah-search svg { color: var(--text-dim); flex-shrink: 0; }
+    .ah-search input {
+      flex: 1; min-width: 0; border: none; outline: none; background: transparent;
+      font-size: 12px; font-family: var(--font-zh); padding: 7px 0; color: var(--text-primary);
+    }
+    .ah-months { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
+    .ah-month {
+      /* --border 是側欄用的深色 #2A2A2A，套在白底籤上會是一圈黑框；
+         這裡要的是淺色分隔線 */
+      border: 1px solid var(--border-light); border-radius: 18px; padding: 4px 12px;
+      font-size: 12px; cursor: pointer; background: #fff; display: inline-flex; gap: 6px; align-items: center;
+      font-family: var(--font-zh); color: var(--text-secondary);
+    }
+    .ah-month:hover { border-color: var(--ghost-hover-border); }
+    .ah-month.on { border-color: var(--accent); color: var(--accent); background: var(--accent-light); }
+    .ah-month .n { font-family: 'LINE Seed TW_OTF', sans-serif; color: var(--text-dim); font-size: 11px; }
+    .ah-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .ah-table th, .ah-table td {
+      padding: 9px 12px; border-bottom: 1px solid var(--border-light); text-align: left; vertical-align: top;
+    }
+    .ah-table th { font-size: 11px; color: var(--text-dim); font-weight: 600; }
+    .ah-act { font-size: 11px; padding: 2px 8px; border-radius: 10px; white-space: nowrap; }
+    .ah-act.approve { background: #F0FDF4; color: #15803D; border: 1px solid #86EFAC; }
+    .ah-act.reject, .ah-act.reject_final { background: #FEF2F2; color: #B91C1C; border: 1px solid #FECACA; }
+    .ah-act.reassign { background: #FFFBEB; color: #B45309; border: 1px solid #FDE68A; }
+  </style>
+</head>
+<body x-data="approvalHistory()" x-cloak>
+
+  <header id="app-topbar" class="topbar"></header>
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+  <!-- 側欄必須是 <body> 的直接子元素（深色模式反轉排除清單只認直接子元素） -->
+  <aside class="sidebar" id="app-sidebar"></aside>
+
+  <main class="ah-main">
+    <div class="page-header">
+      <h1 class="page-title">簽核歷史</h1>
+    </div>
+
+    <div class="ah-bar">
+      <!-- 範圍：跟下方月份同一組籤。
+           id 留在籤上而不是留一個隱藏的 <select>——隱藏的元素讓
+           `option[value=all]:visible` 這種斷言對任何人都回 0，測試會永遠綠，
+           等於把守門的那一題變成擺設。 -->
+      <span id="ah-scope-mine" class="ah-month" :class="{on: scope === 'mine'}"
+            @click="scope='mine'; reload()">我簽核的</span>
+      <span id="ah-scope-all" class="ah-month" x-show="isAdmin" :class="{on: scope === 'all'}"
+            @click="scope='all'; reload()">全公司</span>
+
+      <div class="ah-search">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <input id="ah-q" type="text" x-model="q" @keydown.enter="reload()"
+               placeholder="搜尋案件編號、客戶、備註、簽核人…">
+      </div>
+      <button id="ah-search" class="btn btn-primary btn-sm" @click="reload()">搜尋</button>
+      <button id="ah-clear" class="btn btn-ghost btn-sm" @click="q=''; month=''; reload()">清除條件</button>
+    </div>
+
+    <!-- 每個月簽了幾筆：點一下就只看那個月 -->
+    <div class="ah-months" x-show="months.length">
+      <span class="ah-month" :class="{on: month === ''}" @click="month=''; reload()">
+        全部<span class="n" x-text="totalCount"></span>
+      </span>
+      <template x-for="m in months" :key="m.month">
+        <span class="ah-month" :class="{on: month === m.month}" @click="month = m.month; reload()">
+          <span x-text="m.month"></span><span class="n" x-text="m.count"></span>
+        </span>
+      </template>
+    </div>
+
+    <table class="ah-table">
+      <thead>
+        <tr>
+          <th style="width:145px">時間</th>
+          <th style="width:90px">動作</th>
+          <th style="width:110px">簽核人</th>
+          <th style="width:160px">單據</th>
+          <th>案件／客戶</th>
+          <th>備註／原因</th>
+        </tr>
+      </thead>
+      <tbody>
+        <template x-for="it in items" :key="it.at + it.docNo + it.action">
+          <tr>
+            <td style="font-family:LINE Seed TW_OTF, sans-serif;font-size:12px" x-text="fmtTime(it.at)"></td>
+            <td><span class="ah-act" :class="it.action" x-text="it.actionLabel"></span></td>
+            <td x-text="it.displayName"></td>
+            <td style="font-family:LINE Seed TW_OTF, sans-serif;font-size:12px" x-text="it.docNo || '—'"></td>
+            <td x-text="it.label || '—'"></td>
+            <td style="color:var(--text-secondary);white-space:pre-wrap" x-text="it.note || '—'"></td>
+          </tr>
+        </template>
+      </tbody>
+    </table>
+
+    <div x-show="!items.length" style="padding:40px;text-align:center;color:var(--text-dim);font-size:13px">
+      這個條件下沒有簽核紀錄
+    </div>
+    <div style="text-align:center;margin-top:14px" x-show="hasMore">
+      <button class="btn btn-secondary btn-sm" @click="loadMore()">載入更早的紀錄</button>
+    </div>
+  </main>
+
+  <script src="../static/notif.js"></script>
+  <script>
+    function approvalHistory() {
+      return {
+        session: JSON.parse(localStorage.getItem('motrix_session') || '{}'),
+        items: [],
+        months: [],
+        scope: 'mine',
+        q: '',
+        month: '',
+        hasMore: false,
+        offset: 0,
+
+        get isAdmin() {
+          return ['superadmin', 'admin'].includes(this.session.role || '')
+        },
+
+        get totalCount() {
+          return this.months.reduce((s, m) => s + m.count, 0)
+        },
+
+        init() { this.reload() },
+
+        _url(offset) {
+          const qs = new URLSearchParams({ scope: this.scope, limit: '200', offset: String(offset) })
+          if (this.q.trim()) qs.set('q', this.q.trim())
+          if (this.month) qs.set('month', this.month)
+          return '/api/approval-history?' + qs.toString()
+        },
+
+        async reload() {
+          this.offset = 0
+          try {
+            const r = await fetch(this._url(0), {
+              headers: { Authorization: 'Bearer ' + this.session.token }
+            })
+            if (!r.ok) { this.items = []; this.months = []; return }
+            const d = await r.json()
+            this.items = d.items || []
+            this.months = d.months || []
+            this.hasMore = !!d.hasMore
+          } catch (e) { this.items = [] }
+        },
+
+        async loadMore() {
+          this.offset += 200
+          try {
+            const r = await fetch(this._url(this.offset), {
+              headers: { Authorization: 'Bearer ' + this.session.token }
+            })
+            if (!r.ok) return
+            const d = await r.json()
+            this.items = this.items.concat(d.items || [])
+            this.hasMore = !!d.hasMore
+          } catch (e) {}
+        },
+
+        fmtTime(iso) {
+          if (!iso) return ''
+          return iso.replace('T', ' ').slice(0, 19)
+        },
+      }
+    }
+  </script>
+  <script src="../static/sidebar.js"></script>
+</body>
+</html>

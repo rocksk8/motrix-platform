@@ -40,6 +40,19 @@
 只作「這個情境大概需要工業級」的起點判斷，**實際專案的精確規格（溫度/IP/認證）一律回頭查
 場域選型導覽對應場域**，不在這裡重新展開一次，避免兩份資料以後各自更新而失準。
 
+**⚠️ 2026-08-10 起，`switch_categories` 混合了兩種不同性質的分類（重要，新增品牌/分類前必讀）：**
+原本 4 個分類（UNMANAGED／SMART_L2PLUS／MANAGED_L3／INDUSTRIAL）是**跨品牌的通用能力分級**，
+任何品牌的產品都可能落在其中一個。2026-08-10 應使用者要求，額外新增了 **7 個 `OMADA_` 開頭的
+分類**（OMADA_CAMPUS／OMADA_AGGREGATION／OMADA_ACCESS_MAX／OMADA_ACCESS_PRO／OMADA_ACCESS_PLUS／
+OMADA_ACCESS／OMADA_AGILE），這 7 個是**單一品牌（TP-Link Omada）自己的官方系列分級**，目前只有
+Omada 型號會落在裡面。這是刻意的設計取捨（見 §5 2026-08-10 條目的使用者選擇），不是誤用：
+- 新增其他品牌的產品時，一律先看該產品的定位是否適合塞進既有 4 個通用分類；只有當品牌自己有一套
+  官方分級、且使用者明確要求保留該分級時，才比照這次做法新增 `品牌前綴_系列名` 的專屬分類
+- 不要把其他品牌的產品硬塞進 `OMADA_` 開頭的分類（即使規格看起來相近），這些分類語意上是
+  Omada 專屬的
+- switch_fit 矩陣（情境×分類適配度）對這 7 個新分類一樣要維護，其語意與原本 4 類相同（某情境
+  適不適合選這個分類的產品），不因為是品牌專屬分類就省略
+
 ---
 
 ## §2 · 目前主力品牌
@@ -72,7 +85,6 @@
 
 ## §4 · 已知缺口／待確認
 
-- MANAGED_L3 分類目前只有 Aruba 一個品牌，UniFi 的對應機種（如 Switch Pro/Enterprise 系列）尚未驗證加入
 - INDUSTRIAL 分類的 Sbjlink 型號沿用 env-guide 已驗證的 RPT-M1810GP-T-X2，未針對「交換器選型」情境
   重新核對是否有更適合一般工業場景（非 AMR 專用）的型號/包裝
 - RETAIL、FACTORY 情境目前只是初版判斷，尚未有實際專案案例驗證，之後有真實案源請回來校正
@@ -81,6 +93,76 @@
 ---
 
 ## §5 · 變更記錄
+
+### 2026-08-10c — 執行既有 patch 腳本，補齊 Netgear／D-Link／Aruba／Peplink 缺口（12 款）
+- 這批是稍早另一次對話已查證但尚未寫入的候選清單（`SWITCH-BRAND-REFERENCE.md` 人工核對用
+  參考表 ＋ `backend/switch_guide_patch_2026-08.py` 寫入腳本），本次對話使用者確認後執行：
+  - **UNMANAGED**（+5）：Netgear GS748PP／GS105PP、D-Link DES-1024A／DES-1016D（皆為 Fast
+    Ethernet 100M，非Gigabit，已在備註標明避免選型標錯速率）、Aruba Instant On 1430 8G PoE
+  - **SMART_L2PLUS**（+3，另2筆因與同日 Omada 擴充重複已自動跳過）：Netgear GS324TPv2、
+    D-Link DGS-1210-26、Aruba Instant On 1930 24G 4SFP+ 195W PoE
+  - **MANAGED_L3**（+3）：Netgear M4300-12X12F（24埠10G中階L3）、Netgear M4500-48XF8C
+    （Netgear最高階核心機種，48×10G/25G+8×100G）、D-Link DGS-1520-52MP（52埠740W PoE現行主力）
+  - Peplink SD Switch 24-Port 併入 SMART_L2PLUS（+1，全系列無非網管/真L3型號，定位為
+    InControl2雲端託管邊緣交換機）
+  - patch 腳本內另 2 筆 TP-Link Omada 型號（SG3428／S7500-24Y4C）因 brand+model 與同日
+    Omada 擴充（見上方「2026-08-10」條目）重複，執行時自動跳過，非資料遺漏
+- 查證過程中本地 AI 初稿曾出現幻覺型號（Netgear「XSM2516T/XSM2528T」、D-Link「DSC-1230/1380/
+  1480」），已在 `SWITCH-BRAND-REFERENCE.md` 標記剔除未採用，只寫入查證屬實的型號
+- `switch_products` 由 120 筆增為 **132 筆**；`SWITCH-BRAND-REFERENCE.md` 之後仍保留作為人工
+  核對參考，`switch_guide_patch_2026-08.py` 已執行過，內建 brand+model 查重可安全重跑但不需要
+  再執行；準備了 `backend/sync_2026-08-10c_brand_gap_fill.py` 供正式機套用更新後執行同步
+
+### 2026-08-10 — Omada 8 大系列全面補齊（Campus/Aggregation/Access Max/Pro/Plus/Access/Agile/工業型），共 75 筆
+- 使用者反映交換器選型導覽裡 Omada 幾乎沒有型號（原本只有 2 款 SMART_L2PLUS），並指名 Omada 官網
+  實際分成 8 個系列（Campus／Aggregation／Access Max／Access Pro／Access Plus／Access／Agile／
+  工業型），要求全部補齊
+- **研究方式**：改用本機研究管道 `backend/tools/local_research_pipeline.py`（RTX 5070 Ti + 本機
+  Ollama qwen3.6），對 omadanetworks.com 8 個系列官方頁面各抓一次，抽出的型號/規格皆為官網真實
+  列出的內容（非模型憑印象生成），品質良好、與 TP-Link 官方型號命名規則（S6500/S7500=Campus、
+  SX=Aggregation/Access Max、SG-M2=Access Pro、SG=Access Plus/Access、ES=Agile、IES=Industrial）
+  完全吻合，Claude 逐筆核對後才寫入資料庫
+- **分類設計決策（詢問使用者後採用）**：既有 `switch_categories` 4 分類是跨品牌通用能力分級，
+  Omada 官方 8 系列與其不是 1:1 對應。詢問使用者是否要犧牲跨品牌比較、換取完整呈現 Omada 官方
+  分級後，使用者選擇後者：新增 7 個 `OMADA_` 前綴專屬分類（OMADA_CAMPUS/OMADA_AGGREGATION/
+  OMADA_ACCESS_MAX/OMADA_ACCESS_PRO/OMADA_ACCESS_PLUS/OMADA_ACCESS/OMADA_AGILE），工業型（IES
+  系列 4 款）例外併入既有的通用 `INDUSTRIAL` 分類（與 Sbjlink/Moxa/Cisco IE-1000/Hirschmann
+  並列比較，因為 Omada 工業款本質上就是「這個通用分類裡的一個品牌」，另開專屬分類反而製造
+  兩個工業交換器分類並存的混淆），詳見 §1 新增的分類設計說明段落
+- 同步新增 35 筆情境×分類適配矩陣（5 情境 × 7 新分類）與 4 筆 INDUSTRIAL 情境適配內容延伸；
+  75 款產品全數依官網描述判斷管理層級（L2+/Static Routing/Stackable L3）與 PoE 預算寫入
+  `specs_json`（統一轉譯為站內慣用中文欄位，不是原始英文 scrape 結果）
+- **`price_note` 全數為「官網未列價格，需洽代理商」**——omadanetworks.com 產品頁本來就不公開
+  牌價，這點與既有 2 款 Omada 條目一致，非本次遺漏
+- 用 `claude` 自動化帳號（見 [[project_motrix_erp]] 2026-08-09 條目）建立臨時 session 呼叫既有
+  CRUD API 寫入，寫完後已清除該 session；資料庫由 45 筆交換器產品增為 120 筆，`switch_categories`
+  由 4 類增為 11 類
+- **待辦**：此為開發機資料，尚未同步到正式機；比照既有慣例（見 SELECTION-DB-INDEX.md §5 教訓），
+  正式機部署套用程式碼更新後，需另外準備一次性同步腳本補這批內容
+
+### 2026-08-09b — UniFi 型號深度擴充（回應「資料不夠充分」的反饋）
+- 使用者反映交換器選型導覽的 UniFi 資料仍不夠充分、型號不完整，比照本文件既有的「同品牌產品線深度
+  擴充」慣例（見 2026-07-30k 條目），一次補齊 UniFi 在 SMART_L2PLUS／MANAGED_L3 兩分類的埠數/世代
+  梯度，全數用 WebSearch 查證 techspecs.ui.com 真實規格與售價：
+  - **SMART_L2PLUS** 新增 2 款：**Flex 2.5G 8 PoE**（US$199＋PSU 另購，8 埠 2.5GbE PoE++，小型
+    但需要 2.5GbE 高速上行的情境）、**24 PoE**（US$488，24 埠標準 L2 網管，同分類目前 UniFi 埠數
+    最多的選項）——連同既有 Switch Lite 8/16 PoE，UniFi 在本分類現有 4 款涵蓋小/中/大埠數
+  - **MANAGED_L3** 新增 1 款：**Pro Max 24 PoE**（US$799~1,136，Pro 24 PoE 的新一代升級款，400W
+    PoE 預算、PoE+++/PoE+/2.5GbE 三種混合埠型）——連同既有 Pro 24 PoE／Enterprise 48 PoE，UniFi
+    在本分類現有 3 款涵蓋中階到高階
+- UniFi 目前未進 UNMANAGED／INDUSTRIAL 兩分類，這是刻意的：UniFi 全線交換器都需透過 UniFi Network
+  App 管理，沒有真正「隨插即用無網管介面」的型號（不符 UNMANAGED 分類定義）；也沒有寬溫導軌工業款
+  （不符 INDUSTRIAL 分類定義），非資料缺漏，是這兩個分類本來就不適合硬塞 UniFi 進去
+
+### 2026-08-09 — MANAGED_L3 補 UniFi（品牌缺口補齊）
+- 使用者提出「新增 UniFi」需求，§4 記錄的「MANAGED_L3 只有 Aruba 一個品牌」缺口這次一併處理
+- 新增 **UniFi Pro 24 PoE**（US$699，24 埠 GbE＋2×10G SFP+，PoE 預算 400W，完整 L3）作為中階代表、
+  **UniFi Enterprise 48 PoE**（US$1,599，48 埠 2.5GbE＋4×10G SFP+，PoE 預算 720W，本分類目前埠數
+  與 PoE 預算最高的選項）作為大型代表，兩款皆用 WebSearch 查證 techspecs.ui.com／官網通路真實規格
+  與售價，非憑印象填入
+- **注意**：Enterprise 48 PoE 在 techspecs.ui.com 已被標記為「Vintage」，`price_note` 已註記提醒
+  下單前向代理商核實現貨/是否已有後續機種，避免報價後才發現停產
+- MANAGED_L3 現有 4 個品牌（Aruba／Cisco／HPE Aruba／Netgear）＋ UniFi，共 5 個品牌可比較
 
 ### 2026-07-30p — 規格比較寬度公式重算
 - 同步修正（詳見 NETARCH-GUIDE-CONTENT.md §5 同日條目）：`compareBoxWidth()` 公式從

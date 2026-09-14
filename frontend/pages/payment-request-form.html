@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>請款單開立 — MOTRIX ERP</title>
+  <link rel="icon" type="image/png" href="../static/favicon.png">
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
+  <script src="../static/auth-guard.js"></script>
+  <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
+  <style>
+    .page-wrap{padding:calc(var(--topbar-h) + 20px) 28px 60px calc(var(--sidebar-w) + 28px);max-width:1140px}
+    .layout{display:grid;grid-template-columns:1fr 340px;gap:24px;align-items:start}
+    @media(max-width:900px){.layout{grid-template-columns:1fr}}
+    .card{background:#fff;border:1px solid var(--border);border-radius:10px;padding:20px 22px;margin-bottom:16px}
+    .card-title{font-size:13px;font-weight:700;color:var(--text-secondary);letter-spacing:.05em;
+                text-transform:uppercase;border-bottom:1px solid var(--border-light);padding-bottom:8px;margin-bottom:14px}
+    .form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+    .form-row.full{grid-template-columns:1fr}
+    .form-group label{display:block;font-size:12px;font-weight:500;color:var(--text-secondary);margin-bottom:4px}
+    .form-group input,.form-group textarea{width:100%;padding:7px 10px;border:1px solid var(--border);
+      border-radius:6px;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box}
+    .form-group input:focus,.form-group textarea:focus{border-color:var(--accent)}
+    .form-group input[readonly]{background:var(--bg-secondary);color:var(--text-secondary)}
+    .req-no{font-family:LINE Seed TW_OTF, monospace;font-size:13px;color:var(--text-dim)}
+    /* 款項類別 / 請款方式 選擇按鈕 */
+    .pill-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+    .pill-btn{padding:8px 14px;border-radius:7px;border:1px solid var(--border-light);background:#fff;
+               color:var(--text-secondary);font-size:12px;font-family:var(--font-zh, inherit);cursor:pointer;font-weight:600}
+    .pill-btn.active{background:#C2410C;color:#fff;border-color:#C2410C}
+    .pill-btn.wide{flex:1;text-align:center}
+    /* 品項挑選表 */
+    .item-row{border:1px solid var(--border-light);border-radius:6px;padding:8px 10px;margin-bottom:6px}
+    .item-row label{display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;margin-bottom:0}
+    .item-sub{display:grid;grid-template-columns:80px 100px 1fr;gap:8px;margin-top:8px;padding-left:26px}
+    .item-sub input{padding:5px 8px;font-size:12px}
+    /* 試算卡 */
+    .calc-card{position:sticky;top:calc(var(--topbar-h) + 16px);background:#fff;
+               border:1px solid var(--border);border-radius:10px;padding:20px 22px}
+    .calc-card h3{font-size:14px;font-weight:700;margin-bottom:14px;color:var(--text-main)}
+    .calc-row{display:flex;justify-content:space-between;align-items:baseline;
+              padding:6px 0;border-bottom:1px solid var(--border-light);font-size:13px}
+    .calc-row:last-child{border-bottom:none}
+    .calc-row.net{font-weight:700;font-size:15px;color:var(--accent);padding-top:10px;margin-top:4px}
+    .calc-row .label{color:var(--text-secondary)}
+    .calc-row .val{font-family:LINE Seed TW_OTF, monospace}
+    .badge{font-size:10px;padding:2px 8px;border-radius:4px;font-weight:600}
+    .sign-mini{font-size:11px;color:var(--text-secondary);padding:4px 0;border-bottom:1px solid var(--border-light);
+               display:flex;justify-content:space-between;gap:8px}
+    .sign-mini:last-child{border-bottom:none}
+    /* PDF Preview Modal */
+    .pv-overlay{position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:300;
+                display:flex;align-items:center;justify-content:center;padding:16px}
+    .pv-modal{background:#fff;border-radius:12px;width:min(900px,96vw);height:90vh;
+              display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.4)}
+    .pv-head{display:flex;justify-content:space-between;align-items:center;
+             padding:14px 20px;border-bottom:1px solid var(--border-light);flex-shrink:0}
+    .pv-title{font-size:14px;font-weight:700;color:var(--text-primary)}
+    .pv-sub{font-size:11px;color:var(--text-dim);margin-top:2px;font-family:LINE Seed TW_OTF, monospace}
+    .pv-close{background:none;border:none;cursor:pointer;color:var(--text-dim);
+              font-size:22px;line-height:1;padding:2px 8px;border-radius:4px;font-family:inherit}
+    .pv-close:hover{background:var(--border-light);color:var(--text-primary)}
+    .pv-body{flex:1;overflow:hidden;background:#525659;position:relative}
+    .pv-spinner{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;
+                justify-content:center;color:#ddd;font-size:13px;gap:10px}
+    .pv-spinner svg{animation:spin 1.2s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .pv-iframe{width:100%;height:100%;border:none;display:block}
+    .pv-foot{display:flex;justify-content:space-between;align-items:center;
+             padding:12px 20px;border-top:1px solid var(--border-light);flex-shrink:0}
+    .export-hist{font-size:11px;color:var(--text-dim)}
+  </style>
+</head>
+<body x-data="paymentRequestForm()" x-init="init()">
+<header id="app-topbar" class="topbar"></header>
+<div class="sidebar-overlay" id="sidebar-overlay"></div>
+<aside class="sidebar" id="app-sidebar"></aside>
+
+<div class="page-wrap">
+  <!-- 頁首 -->
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:8px">
+    <div>
+      <a :href="'case-management.html?q=' + encodeURIComponent(quoteNo)" style="font-size:12px;color:var(--accent);text-decoration:none">← 返回案件</a>
+      <h1 style="font-size:18px;font-weight:700;color:var(--text-main);margin-top:4px">
+        <span x-text="isNew ? '新增請款單' : '編輯請款單'"></span>
+        <span class="req-no" x-show="q.requestNo" x-text="'　' + q.requestNo"></span>
+        <span :class="'badge ' + statusClass()" x-show="q.status" x-text="q.status" style="margin-left:8px;vertical-align:middle"></span>
+      </h1>
+    </div>
+  </div>
+
+  <div x-show="errMsg" style="color:var(--danger);font-size:12px;margin-bottom:14px;padding:8px 12px;background:#FEF2F2;border:1px solid #FCA5A5;border-radius:6px" x-text="errMsg"></div>
+
+  <template x-if="quoteNo">
+    <div class="layout">
+      <!-- 左側表單 -->
+      <div>
+        <!-- 關聯報價單 -->
+        <div class="card">
+          <div class="card-title">一、關聯報價單</div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>報價單號</label>
+              <input type="text" :value="quoteNo" readonly>
+            </div>
+            <div class="form-group">
+              <label>客戶名稱</label>
+              <input type="text" :value="customerName" readonly>
+            </div>
+          </div>
+          <div class="form-row full">
+            <div class="form-group">
+              <label>案件名稱</label>
+              <input type="text" :value="projectName" readonly>
+            </div>
+          </div>
+        </div>
+
+        <!-- 款項類別 -->
+        <div class="card">
+          <div class="card-title">二、款項類別 <span style="color:var(--danger);text-transform:none">*</span></div>
+          <div class="pill-row">
+            <template x-for="s in STAGES" :key="s.value">
+              <button type="button" class="pill-btn wide" :class="q.stage === s.value ? 'active' : ''"
+                      :disabled="!editable" @click="q.stage = s.value; dirty()" x-text="s.label"></button>
+            </template>
+          </div>
+        </div>
+
+        <!-- 請款方式 -->
+        <div class="card">
+          <div class="card-title">三、請款方式</div>
+          <div class="pill-row">
+            <button type="button" class="pill-btn wide" :class="q.scope === 'amount' ? 'active' : ''"
+                    :disabled="!editable" @click="q.scope = 'amount'; dirty()">按金額 / 比例</button>
+            <button type="button" class="pill-btn wide" :class="q.scope === 'items' ? 'active' : ''"
+                    :disabled="!editable" @click="q.scope = 'items'; dirty()">按品項</button>
+          </div>
+
+          <template x-if="q.scope === 'amount'">
+            <div style="margin-top:12px">
+              <div class="form-group">
+                <label>請款比例（%）</label>
+                <input type="number" min="0" max="100" step="0.01" :max="remaining ? remaining.remainingRatioPct : 100"
+                       x-model.number="ratioInput" :disabled="!editable" @input="dirty()"
+                       placeholder="輸入比例自動換算金額，或留空改用下方自訂金額">
+              </div>
+              <div x-show="ratioInput > 0" style="font-size:11px;color:var(--text-dim);margin-bottom:10px">
+                換算請款金額（含稅）約 NT$ <span x-text="ratioToAmount().toLocaleString()"></span>
+              </div>
+              <div x-show="remaining && ratioInput > remaining.remainingRatioPct" style="font-size:11px;color:var(--danger);margin-bottom:10px">超過剩餘可請款比例</div>
+
+              <template x-if="!ratioInput">
+                <div class="form-group">
+                  <label>或直接輸入請款金額（含稅）</label>
+                  <input type="number" min="0" :max="remaining ? remaining.remainingAmount : null"
+                         x-model.number="amountInput" :disabled="!editable" @input="dirty()">
+                  <div x-show="remaining && amountInput > remaining.remainingAmount" style="font-size:11px;color:var(--danger);margin-top:4px">超過剩餘可請款金額</div>
+                </div>
+              </template>
+            </div>
+          </template>
+
+          <template x-if="q.scope === 'items'">
+            <div style="margin-top:12px">
+              <div x-show="remaining && remaining.items.length === 0" style="font-size:12px;color:var(--text-dim);padding:12px 0">此案件報價單無品項可選</div>
+              <template x-for="it in (remaining ? remaining.items.filter(x => x.remainingQty > 0) : [])" :key="it.itemId">
+                <div class="item-row">
+                  <label>
+                    <input type="checkbox" :checked="!!itemSelections[it.itemId]" :disabled="!editable" @change="toggleItem(it)" style="accent-color:#C2410C">
+                    <span style="flex:1" x-text="it.description + (it.brand ? '　' + it.brand : '')"></span>
+                    <span style="font-size:10px;color:var(--text-dim)" x-text="'剩餘 ' + it.remainingQty + ' ' + it.unit"></span>
+                  </label>
+                  <template x-if="itemSelections[it.itemId]">
+                    <div class="item-sub">
+                      <div>
+                        <label style="font-size:10px;color:var(--text-dim)">比例 %</label>
+                        <input type="number" min="0" max="100" step="any" :disabled="!editable"
+                               x-model.number="itemSelections[it.itemId].ratioPct" @input="itemRatioChanged(it)">
+                      </div>
+                      <div>
+                        <label style="font-size:10px;color:var(--text-dim)">數量</label>
+                        <input type="number" min="0.01" :max="it.remainingQty" step="any" :disabled="!editable"
+                               x-model.number="itemSelections[it.itemId].qty" @input="itemQtyChanged(it)">
+                      </div>
+                      <div>
+                        <label style="font-size:10px;color:var(--text-dim)">金額（未稅）</label>
+                        <input type="number" min="0" :disabled="!editable" x-model.number="itemSelections[it.itemId].amount" @input="dirty()">
+                      </div>
+                    </div>
+                  </template>
+                </div>
+              </template>
+              <div x-show="remaining && selectedGrossTotal() > remaining.remainingAmount" style="font-size:11px;color:var(--danger);margin-top:6px">超過剩餘可請款金額</div>
+            </div>
+          </template>
+        </div>
+
+        <!-- 請款條件 -->
+        <div class="card">
+          <div class="card-title">四、請款條件</div>
+          <div class="form-row full">
+            <div class="form-group">
+              <label>付款條件</label>
+              <textarea rows="2" x-model="q.terms.paymentTerms" :disabled="!editable" @input="dirty()" style="resize:vertical"></textarea>
+            </div>
+          </div>
+          <div class="form-row full">
+            <div class="form-group">
+              <label>交貨條件</label>
+              <textarea rows="2" x-model="q.terms.deliveryTerms" :disabled="!editable" @input="dirty()" style="resize:vertical"></textarea>
+            </div>
+          </div>
+          <div class="form-row full">
+            <div class="form-group">
+              <label>驗收標準</label>
+              <textarea rows="2" x-model="q.terms.acceptanceTerms" :disabled="!editable" @input="dirty()" style="resize:vertical"></textarea>
+            </div>
+          </div>
+          <div class="form-row full">
+            <div class="form-group">
+              <label>保固條件</label>
+              <textarea rows="2" x-model="q.terms.warrantyTerms" :disabled="!editable" @input="dirty()" style="resize:vertical"></textarea>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 右側試算 / 操作 -->
+      <div>
+        <div class="calc-card">
+          <h3>額度與試算</h3>
+          <template x-if="remaining">
+            <div>
+              <div class="calc-row"><span class="label">合約總額</span><span class="val" x-text="fmt(remaining.quoteTotal)"></span></div>
+              <div class="calc-row"><span class="label">已請款（不含本單）</span><span class="val" x-text="fmt(remaining.requestedAmount)"></span></div>
+              <div class="calc-row net"><span class="label">剩餘可請款</span><span class="val" x-text="fmt(remaining.remainingAmount) + '（' + remaining.remainingRatioPct.toFixed(1) + '%）'"></span></div>
+            </div>
+          </template>
+
+          <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border-light)">
+            <div class="calc-row"><span class="label">本單未稅小計</span><span class="val" x-text="fmt(currentPretax())"></span></div>
+            <div class="calc-row"><span class="label">營業稅</span><span class="val" x-text="fmt(currentTax())"></span></div>
+            <div class="calc-row net"><span class="label">請款總額（含稅）</span><span class="val" x-text="fmt(currentGross())"></span></div>
+          </div>
+
+          <!-- 簽核歷程 -->
+          <template x-if="approval && approval.tiers && approval.tiers.length">
+            <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border-light)">
+              <div style="font-size:11px;font-weight:600;color:var(--text-dim);letter-spacing:.06em;text-transform:uppercase;margin-bottom:6px">簽核歷程</div>
+              <template x-for="(t, i) in approval.tiers" :key="i">
+                <template x-for="a in (t.approvers || [])" :key="a.username">
+                  <div class="sign-mini">
+                    <span x-text="'第' + (i+1) + '層　' + (a.displayName || a.username)"></span>
+                    <span :style="a.status === 'approved' ? 'color:#059669' : 'color:var(--text-dim)'"
+                          x-text="a.status === 'approved' ? '✓ 已簽核' : '－ 待簽核'"></span>
+                  </div>
+                </template>
+              </template>
+            </div>
+          </template>
+
+          <!-- 操作按鈕 -->
+          <div style="margin-top:18px;display:flex;flex-direction:column;gap:10px">
+            <button class="btn btn-primary" style="width:100%;justify-content:center" x-show="editable"
+                    @click="save()" :disabled="saving">
+              <span x-text="saving ? '儲存中…' : isDirty ? '儲存草稿' : '已儲存'"></span>
+            </button>
+            <button class="btn btn-primary" style="width:100%;justify-content:center;background:#059669;border-color:#059669" x-show="q.status === '草稿' && !isNew"
+                    @click="submitReq()">送出審核</button>
+            <button class="btn btn-primary" style="width:100%;justify-content:center;background:#059669;border-color:#059669"
+                    x-show="q.status === '待審核' || q.status === '簽核中'" @click="approveReq()">簽核</button>
+            <button class="btn btn-ghost" style="width:100%;justify-content:center;color:#DC2626;border-color:#FCA5A5"
+                    x-show="q.status === '待審核' || q.status === '簽核中'" @click="rejectReq()">退回</button>
+            <button class="btn btn-ghost" style="width:100%;justify-content:center;color:#DC2626;border-color:#FCA5A5"
+                    x-show="q.status === '已核准'" @click="revokeReq()">撤銷核准</button>
+            <button class="btn btn-ghost" style="width:100%;justify-content:center"
+                    @click="previewPdf()" :disabled="previewFetching || isNew">
+              <span x-text="previewFetching ? '準備預覽…' : '預覽 / 匯出 PDF'"></span>
+            </button>
+            <button class="btn btn-ghost" style="width:100%;justify-content:center;color:#DC2626;border-color:#FCA5A5"
+                    x-show="q.status === '草稿' && !isNew" @click="deleteReq()">刪除草稿</button>
+          </div>
+
+          <!-- 匯出記錄 -->
+          <div x-show="exportLog.length > 0" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border-light)">
+            <div style="font-size:11px;font-weight:600;color:var(--text-dim);letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px">
+              匯出記錄（共 <span x-text="exportLog.length"></span> 次）
+            </div>
+            <template x-for="(log, i) in exportLog" :key="i">
+              <div class="sign-mini">
+                <span x-text="(log.userDisplay || log.user || '—')"></span>
+                <span style="font-family:LINE Seed TW_OTF, monospace" x-text="(log.at||'').replace('T',' ').slice(0,16)"></span>
+              </div>
+            </template>
+          </div>
+        </div>
+      </div>
+    </div>
+  </template>
+</div>
+
+<!-- PDF 預覽 Modal -->
+<div x-show="previewModal" x-cloak class="pv-overlay" @keydown.escape.window="closePreview()">
+  <div class="pv-modal" @click.stop>
+    <div class="pv-head">
+      <div>
+        <div class="pv-title">請款單 PDF 預覽</div>
+        <div class="pv-sub" x-text="q.requestNo + (customerName ? '　' + customerName : '')"></div>
+      </div>
+      <button class="pv-close" @click="closePreview()">×</button>
+    </div>
+    <div class="pv-body">
+      <div class="pv-spinner" x-show="!previewIframeReady">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#aaa" stroke-width="2">
+          <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83
+                   M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+        </svg>
+        <span>PDF 載入中，請稍候…</span>
+      </div>
+      <iframe x-show="previewBlobUrl" :src="previewBlobUrl" class="pv-iframe" @load="previewIframeReady = true"></iframe>
+    </div>
+    <div class="pv-foot">
+      <div class="export-hist">
+        <span x-show="exportLog.length === 0" style="color:var(--text-dim)">尚未匯出</span>
+        <span x-show="exportLog.length > 0">已匯出 <strong x-text="exportLog.length"></strong> 次</span>
+      </div>
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-ghost" @click="closePreview()">關閉</button>
+        <button class="btn btn-primary" @click="confirmExport()" :disabled="!previewIframeReady">確認匯出（下載 PDF）</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="../static/notif.js"></script>
+<script src="../static/edit-presence.js"></script>
+  <script src="../static/sidebar.js"></script>
+<script>
+const API = '/api'
+function paymentRequestForm() {
+  return {
+    session: {},
+    isNew: true,
+    isDirty: false,
+    saving: false,
+    errMsg: '',
+    quoteNo: '',
+    customerName: '',
+    projectName: '',
+    remaining: null,
+    remainingLoading: false,
+    ratioInput: 0,
+    amountInput: 0,
+    itemSelections: {},
+    approval: null,
+    exportCount: 0,
+    exportLog: [],
+    previewModal: false,
+    previewBlobUrl: '',
+    previewFetching: false,
+    previewIframeReady: false,
+
+    STAGES: [
+      { value: 'full',       label: '全額' },
+      { value: 'deposit',    label: '訂金款' },
+      { value: 'delivery',   label: '交貨款' },
+      { value: 'acceptance', label: '驗收款' },
+      { value: 'final',      label: '尾款' },
+    ],
+
+    q: {
+      requestNo: '', status: '草稿', scope: 'amount', stage: '',
+      amount: 0, pretaxAmount: 0, taxAmount: 0, ratioPct: 0,
+      terms: { paymentTerms: '', deliveryTerms: '', acceptanceTerms: '', warrantyTerms: '' },
+    },
+
+    get editable() { return this.q.status === '草稿' },
+
+    fmt(n) { return 'NT$ ' + (Math.round(n || 0)).toLocaleString() },
+    dirty() { this.isDirty = true },
+
+    statusClass() {
+      return { '草稿': 'badge--draft', '待審核': 'badge--pending', '簽核中': 'badge--signing', '已核准': 'badge--approved' }[this.q.status] || ''
+    },
+
+    _taxRatio() {
+      if (!this.remaining || !this.remaining.quotePretax) return 1
+      return this.remaining.quoteTotal / this.remaining.quotePretax
+    },
+
+    ratioToAmount() {
+      const total = this.remaining ? this.remaining.quoteTotal : 0
+      return Math.round(total * (this.ratioInput || 0) / 100)
+    },
+
+    selectedTotal() {
+      return Object.values(this.itemSelections).reduce((sum, s) => sum + (Number(s.amount) || 0), 0)
+    },
+    selectedGrossTotal() { return Math.round(this.selectedTotal() * this._taxRatio()) },
+    selectedTax() { return this.selectedGrossTotal() - this.selectedTotal() },
+
+    // 目前表單狀態下的即時試算（存檔前的預覽用；實際以後端回傳為準）
+    currentGross() {
+      if (this.q.scope === 'items') return this.selectedGrossTotal()
+      if (this.ratioInput > 0) return this.ratioToAmount()
+      return Math.round(this.amountInput || 0)
+    },
+    currentPretax() {
+      if (this.q.scope === 'items') return this.selectedTotal()
+      const ratio = this._taxRatio()
+      return ratio > 0 ? Math.round(this.currentGross() / ratio) : this.currentGross()
+    },
+    currentTax() { return this.currentGross() - this.currentPretax() },
+
+    toggleItem(it) {
+      if (this.itemSelections[it.itemId]) {
+        delete this.itemSelections[it.itemId]
+      } else {
+        const qty = it.remainingQty
+        this.itemSelections[it.itemId] = { qty, ratioPct: 100, amount: Math.round(qty * (it.unitPrice || 0)) }
+      }
+      this.dirty()
+    },
+    itemQtyChanged(it) {
+      const sel = this.itemSelections[it.itemId]
+      if (!sel) return
+      if (sel.qty > it.remainingQty) sel.qty = it.remainingQty
+      if (sel.qty < 0) sel.qty = 0
+      sel.ratioPct = it.remainingQty > 0 ? +(sel.qty / it.remainingQty * 100).toFixed(2) : 0
+      sel.amount = Math.round(sel.qty * (it.unitPrice || 0))
+      this.dirty()
+    },
+    itemRatioChanged(it) {
+      const sel = this.itemSelections[it.itemId]
+      if (!sel) return
+      if (sel.ratioPct > 100) sel.ratioPct = 100
+      if (sel.ratioPct < 0) sel.ratioPct = 0
+      sel.qty = +(it.remainingQty * (sel.ratioPct || 0) / 100).toFixed(4)
+      sel.amount = Math.round(sel.qty * (it.unitPrice || 0))
+      this.dirty()
+    },
+
+    async init() {
+      const s = localStorage.getItem('motrix_session')
+      if (!s) { window.location.href = 'login.html'; return }
+      this.session = JSON.parse(s)
+
+      const params = new URLSearchParams(window.location.search)
+      const editId = params.get('id')
+      if (editId) {
+        this.isNew = false
+        this.q.requestNo = editId
+        // 同時編輯警示（2026-09-14）
+        if (editId && window.MotrixPresence) window.MotrixPresence.start('payment_request', editId)
+        const ok = await this.reload()
+        if (!ok) return
+      } else {
+        this.quoteNo = params.get('quote_no') || ''
+        if (!this.quoteNo) { this.errMsg = '缺少關聯報價單，請由案件頁面的「申請請款單」進入'; return }
+        await this.loadRemaining()
+      }
+      await this.loadQuoteInfo()
+    },
+
+    async loadQuoteInfo() {
+      if (!this.quoteNo) return
+      try {
+        const r = await fetch(`${API}/quotations/${encodeURIComponent(this.quoteNo)}`, {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (r.ok) {
+          const d = await r.json()
+          this.customerName = d.customer_name || ''
+          this.projectName = d.project_name || ''
+          // 新建請款單時，四、請款條件預設帶入該報價單目前的條款內容（比照後端
+          // _quote_default_terms() 建立當下的行為，但這裡是使用者存檔前就先看到、
+          // 可直接編輯）；編輯既有草稿時 q.terms 已經是這張請款單自己存過的版本
+          // （applyData() 設定），不可被這裡覆蓋掉使用者已修改的內容。
+          if (this.isNew) {
+            const qd = d.data || {}
+            this.q.terms = {
+              paymentTerms:    qd.paymentTerms    || '',
+              deliveryTerms:   qd.deliveryTerms   || '',
+              acceptanceTerms: qd.acceptanceTerms || '',
+              warrantyTerms:   qd.warrantyTerms   || '',
+            }
+          }
+        }
+      } catch (e) {}
+    },
+
+    async loadRemaining() {
+      if (!this.quoteNo) return
+      this.remainingLoading = true
+      try {
+        let url = `${API}/payment-requests/remaining?quote_no=${encodeURIComponent(this.quoteNo)}`
+        if (!this.isNew && this.q.requestNo) url += `&exclude=${encodeURIComponent(this.q.requestNo)}`
+        const r = await fetch(url, { headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (r.ok) {
+          this.remaining = await r.json()
+          for (const [itemId, sel] of Object.entries(this.itemSelections)) {
+            const ri = this.remaining.items.find(x => String(x.itemId) === String(itemId))
+            sel.ratioPct = ri && ri.remainingQty > 0 ? +(sel.qty / ri.remainingQty * 100).toFixed(2) : 0
+          }
+        } else {
+          this.errMsg = (await r.json().catch(() => ({}))).detail || '載入額度失敗'
+        }
+      } catch (e) { this.errMsg = '網路錯誤：' + e.message }
+      this.remainingLoading = false
+    },
+
+    applyData(d) {
+      this.q.requestNo = d.requestNo
+      this.q.status = d.status
+      this.q.scope = d.scope || 'amount'
+      this.q.stage = d.stage || ''
+      this.q.amount = d.amount || 0
+      this.q.pretaxAmount = d.pretaxAmount || 0
+      this.q.taxAmount = d.taxAmount || 0
+      this.q.ratioPct = d.ratioPct || 0
+      this.q.terms = { paymentTerms: '', deliveryTerms: '', acceptanceTerms: '', warrantyTerms: '', ...(d.terms || {}) }
+      this.quoteNo = d.quoteNo
+      this.customerName = d.customerName || ''
+      this.projectName = (d.snapshot && d.snapshot.projectName) || this.projectName
+      this.approval = d.approval || null
+      this.exportCount = d.exportCount || 0
+      this.exportLog = d.exportLog || []
+      this.itemSelections = {}
+      for (const it of (d.selectedItems || [])) {
+        this.itemSelections[it.itemId] = { qty: it.qty, amount: it.amount, ratioPct: 0 }
+      }
+      if (d.scope === 'amount') {
+        this.ratioInput = d.ratioPct || 0
+        this.amountInput = this.ratioInput ? 0 : (d.amount || 0)
+      }
+    },
+
+    async reload() {
+      try {
+        const r = await fetch(`${API}/payment-requests/${this.q.requestNo}`, {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (!r.ok) { this.errMsg = '找不到此請款單'; return false }
+        const d = await r.json()
+        this.applyData(d)
+        await this.loadRemaining()
+        this.isDirty = false
+        return true
+      } catch (e) { this.errMsg = '網路錯誤：' + e.message; return false }
+    },
+
+    buildBody() {
+      this.errMsg = ''
+      if (!this.q.stage) { this.errMsg = '請選擇款項類別'; return null }
+      const base = { scope: this.q.scope, stage: this.q.stage, terms: this.q.terms }
+      if (this.q.scope === 'amount') {
+        if (this.ratioInput > 0) {
+          if (this.remaining && this.ratioInput > this.remaining.remainingRatioPct + 1e-6) { this.errMsg = '超過剩餘可請款比例'; return null }
+          return { ...base, ratio_pct: this.ratioInput }
+        }
+        if (!this.amountInput || this.amountInput <= 0) { this.errMsg = '請輸入請款金額或請款比例'; return null }
+        if (this.remaining && this.amountInput > this.remaining.remainingAmount) { this.errMsg = '超過剩餘可請款金額'; return null }
+        return { ...base, amount: this.amountInput }
+      }
+      const items = Object.entries(this.itemSelections).map(([itemId, sel]) => ({
+        itemId: Number(itemId), qty: sel.qty, amount: sel.amount
+      }))
+      if (items.length === 0) { this.errMsg = '請至少選擇一項品項'; return null }
+      if (this.remaining && this.selectedGrossTotal() > this.remaining.remainingAmount) { this.errMsg = '超過剩餘可請款金額'; return null }
+      return { ...base, items }
+    },
+
+    async save() {
+      const body = this.buildBody()
+      if (!body) return
+      this.saving = true
+      try {
+        let r
+        if (this.isNew) {
+          r = await fetch(`${API}/payment-requests`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+            body: JSON.stringify({ quote_no: this.quoteNo, ...body })
+          })
+        } else {
+          r = await fetch(`${API}/payment-requests/${this.q.requestNo}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+            body: JSON.stringify(body)
+          })
+        }
+        if (!r.ok) { this.errMsg = (await r.json().catch(() => ({}))).detail || '儲存失敗'; this.saving = false; return }
+        const d = await r.json()
+        if (this.isNew) {
+          this.q.requestNo = d.request_no
+          this.isNew = false
+          history.replaceState(null, '', '?id=' + encodeURIComponent(d.request_no))
+        }
+        await this.reload()
+      } catch (e) { this.errMsg = '網路錯誤：' + e.message }
+      this.saving = false
+    },
+
+    async submitReq() {
+      if (this.isDirty) { alert('請先儲存草稿再送出'); return }
+      if (!confirm('確定送出請款單進行簽核？')) return
+      try {
+        const r = await fetch(`${API}/payment-requests/${this.q.requestNo}/submit`, {
+          method: 'POST', headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (!r.ok) { alert((await r.json()).detail || '送出失敗'); return }
+        await this.reload()
+      } catch (e) { alert('網路錯誤：' + e.message) }
+    },
+
+    async approveReq() {
+      if (!confirm('確定簽核此請款單？')) return
+      try {
+        const r = await fetch(`${API}/payment-requests/${this.q.requestNo}/approve`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify({})
+        })
+        if (!r.ok) { alert((await r.json()).detail || '簽核失敗'); return }
+        await this.reload()
+      } catch (e) { alert('網路錯誤：' + e.message) }
+    },
+
+    async rejectReq() {
+      const note = prompt('退回原因（選填）：')
+      if (note === null) return
+      try {
+        const r = await fetch(`${API}/payment-requests/${this.q.requestNo}/reject`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify({ note })
+        })
+        if (!r.ok) { alert((await r.json()).detail || '退回失敗'); return }
+        await this.reload()
+      } catch (e) { alert('網路錯誤：' + e.message) }
+    },
+
+    async revokeReq() {
+      const note = prompt('撤銷核准？將退回草稿。可填寫原因（選填）：')
+      if (note === null) return
+      try {
+        const r = await fetch(`${API}/payment-requests/${this.q.requestNo}/revoke-approval`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify({ note })
+        })
+        if (!r.ok) { alert((await r.json()).detail || '撤銷失敗'); return }
+        await this.reload()
+      } catch (e) { alert('網路錯誤：' + e.message) }
+    },
+
+    async deleteReq() {
+      if (!confirm('確定刪除此請款單草稿？')) return
+      try {
+        const r = await fetch(`${API}/payment-requests/${this.q.requestNo}`, {
+          method: 'DELETE', headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (!r.ok) { alert((await r.json()).detail || '刪除失敗'); return }
+        window.location.href = `case-management.html?q=${encodeURIComponent(this.quoteNo)}`
+      } catch (e) { alert('網路錯誤：' + e.message) }
+    },
+
+    async previewPdf() {
+      if (this.isNew) { this.errMsg = '請先儲存草稿再預覽'; return }
+      if (this.isDirty) { await this.save(); if (this.errMsg) return }
+      this.previewFetching = true
+      this.errMsg = ''
+      try {
+        const r = await fetch(`${API}/payment-requests/${this.q.requestNo}/pdf-download`, {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (!r.ok) { this.errMsg = 'PDF 產生失敗：' + (await r.text()); this.previewFetching = false; return }
+        const blob = await r.blob()
+        this.previewBlobUrl = URL.createObjectURL(blob)
+        this.previewIframeReady = false
+        this.previewModal = true
+      } catch (e) { this.errMsg = '載入失敗：' + e.message }
+      this.previewFetching = false
+    },
+
+    async confirmExport() {
+      if (!this.previewBlobUrl) return
+      const a = document.createElement('a')
+      a.href = this.previewBlobUrl
+      a.download = `${this.q.requestNo}.pdf`
+      a.click()
+      try {
+        const r = await fetch(`${API}/payment-requests/${this.q.requestNo}/export?mode=external`, {
+          method: 'POST', headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (r.ok) {
+          const d = await r.json()
+          this.exportCount = d.export_count
+          this.exportLog = d.log
+        }
+      } catch (e) {}
+      this.closePreview()
+    },
+
+    closePreview() {
+      if (this.previewBlobUrl) { URL.revokeObjectURL(this.previewBlobUrl); this.previewBlobUrl = '' }
+      this.previewModal = false
+      this.previewIframeReady = false
+    },
+  }
+}
+</script>
+</body>
+</html>

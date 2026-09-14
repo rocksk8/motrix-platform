@@ -2,13 +2,15 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="../static/favicon.png">
-  <title>營運報表 — MOTRIX 營運管理系統</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+  <title>營運報表 — MOTRIX 專案管理系統</title>
+  <script src="../static/vendor/chart-4.4.0.umd.min.js"></script>
   <script src="../js/reports.js"></script>
-  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-  <link rel="stylesheet" href="../css/style.css">
+  <script src="../static/auth-guard.js"></script>
+  <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <style>
     [x-cloak]{display:none!important}
     .page-main{margin-left:var(--sidebar-w);margin-top:var(--topbar-h);padding:28px 32px;min-height:calc(100vh - var(--topbar-h));background:var(--white)}
@@ -41,10 +43,6 @@
     .kpi-card.orange .kpi-card__val{color:#D97706}
     .kpi-card.purple .kpi-card__val{color:#7C3AED}
 
-    .tab-bar{display:flex;gap:2px;margin-bottom:16px;border-bottom:1px solid var(--border-light)}
-    .tab{padding:7px 16px;font-size:12px;font-family:var(--font-zh);cursor:pointer;border:none;background:none;color:var(--text-secondary);border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .1s}
-    .tab:hover{color:var(--text-primary)}
-    .tab.on{color:var(--accent);border-bottom-color:var(--accent);font-weight:600}
     .tab__cnt{font-family:LINE Seed TW_OTF, sans-serif;font-size:10px;font-weight:600;margin-left:4px;padding:1px 5px;border-radius:8px;background:#F0EEE9}
     .tab.on .tab__cnt{background:var(--accent-light);color:var(--accent)}
 
@@ -56,7 +54,7 @@
     .data-table tr:last-child td{border-bottom:none}
     .data-table tr:hover td{background:#FDFCFA}
     .data-table .sum-row td{background:#111827!important;color:#fff;font-weight:600;border-bottom:none}
-    .data-table tr.in-period td{background:#EFF6FF}
+    .data-table tr.in-period td{background:var(--accent-light)}
     .mono{font-family:LINE Seed TW_OTF, sans-serif;font-size:11px}
     .r{text-align:right}.c{text-align:center}
     .green-txt{color:var(--success);font-weight:600}
@@ -66,9 +64,42 @@
     .rb-active{background:#DCFCE7;color:#15803D}
     .rb-closed{background:#F3F4F6;color:#374151}
     .rb-fin{background:#EDE9FE;color:#7C3AED}
+    .rb-received{background:var(--success-light);color:var(--success)}
+    .rb-pending{background:#FEF3C7;color:#92400E}
+    .rb-invoiced{background:#ECFDF5;color:#065F46}
 
     .link-btn{background:none;border:none;color:var(--accent);font-size:11px;cursor:pointer;text-decoration:underline;padding:0;font-family:var(--font-zh)}
     .link-btn:hover{opacity:.75}
+
+    /* ── 出納頁籤（2026-08-31 併入本頁）────────────────────────────────────── */
+    .stat-strip{display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap}
+    .stat-pill{display:flex;flex-direction:column;padding:14px 18px;border:1px solid var(--border-light);border-radius:var(--radius-lg);background:#fff;min-width:130px;flex:1;max-width:200px}
+    .stat-pill__val{font-size:22px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;line-height:1;color:var(--text-primary)}
+    .stat-pill__lbl{font-size:10px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.06em;margin-top:4px;text-transform:uppercase}
+    .stat-pill.accent .stat-pill__val{color:var(--accent)}
+    .stat-pill.danger  .stat-pill__val{color:var(--danger)}
+    .stat-pill.success .stat-pill__val{color:var(--success)}
+    .stat-pill.warn    .stat-pill__val{color:#D97706}
+    /* 出納頁籤內部子頁籤，刻意不叫 .tab/.tab-bar（那是本頁頂層頁籤列，
+       style.css 全站共用的 class，同名會互相污染樣式） */
+    .ctabs{display:flex;gap:8px;margin-bottom:18px;border-bottom:1px solid var(--border-light)}
+    .ctab{padding:9px 4px;margin-right:14px;font-size:13px;font-family:var(--font-zh);font-weight:600;color:var(--text-dim);background:none;border:none;border-bottom:2px solid transparent;cursor:pointer}
+    .ctab.on{color:var(--accent);border-bottom-color:var(--accent)}
+    .search-wrap{position:relative;flex:0 0 260px}
+    .search-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text-dim);pointer-events:none}
+    .search-input{width:100%;padding:8px 11px 8px 34px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:var(--font-zh);background:#fff;outline:none;box-sizing:border-box}
+    .alert-bar{display:flex;align-items:center;gap:10px;padding:10px 16px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:var(--radius-lg);margin-bottom:14px;font-size:12px;font-family:var(--font-zh);color:#92400E}
+    .alert-bar svg{flex-shrink:0;color:#D97706}
+    .data-table tr.uninvoiced-row td{background:#FFFBEB}
+    .action-btn{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:var(--radius);font-size:11px;font-family:var(--font-zh);font-weight:500;cursor:pointer;border:1px solid;transition:all .12s}
+    .action-btn.pay{background:#F0FDF4;border-color:#86EFAC;color:#15803D}
+    .action-btn.pay:hover{background:#DCFCE7}
+    .action-btn.unreceive{background:#F9FAFB;border-color:#D1D5DB;color:#6B7280}
+    .action-btn.invoice{background:#FFF7ED;border-color:#FED7AA;color:#C2410C}
+    .summary-bar{display:flex;gap:24px;padding:10px 14px;background:#FAFAF8;border-top:1px solid var(--border-light);font-size:12px;font-family:var(--font-zh);color:var(--text-secondary)}
+    .summary-bar strong{color:var(--text-primary);font-family:LINE Seed TW_OTF, sans-serif}
+    .field-label{font-size:11px;font-family:var(--font-zh);color:var(--text-secondary);margin-bottom:4px;font-weight:500;display:block}
+    .field-input{width:100%;padding:7px 10px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:var(--font-zh);outline:none;box-sizing:border-box;margin-bottom:12px}
 
     /* Achievement (目標達成率) */
     .acv-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px;margin-bottom:22px}
@@ -103,6 +134,68 @@
     .chart-2col{display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:16px}
     .chart-full{margin-bottom:16px}
     .chart-card{background:#fff;border:1px solid var(--border-light);border-radius:var(--radius-lg);padding:18px}
+    /* ── 本期財務快照（2026-09-14）── */
+    .fsnap { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px; }
+    @media (max-width: 860px) { .fsnap { grid-template-columns: 1fr; } }
+    .fsnap__col {
+      background: #fff; border: 1px solid var(--border-light);
+      border-radius: var(--radius-lg); padding: 12px 16px 14px;
+    }
+    .fsnap__h { display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+    .fsnap__title { font-size: 12.5px; font-weight: 700; color: var(--text-primary); }
+    .fsnap__net {
+      margin-left: auto; font-size: 12.5px; font-weight: 700;
+      font-family: LINE Seed TW_OTF, sans-serif; font-variant-numeric: tabular-nums;
+    }
+    .fsnap__net.pos { color: var(--success); }
+    .fsnap__net.neg { color: var(--danger); }
+    .fsnap__row { display: flex; align-items: center; gap: 10px; margin-bottom: 7px; }
+    .fsnap__lbl { font-size: 11.5px; color: var(--text-secondary); width: 30px; flex: 0 0 auto; }
+    .fsnap__track {
+      flex: 1; min-width: 0; height: 10px; border-radius: 5px;
+      background: var(--icon-btn-bg); overflow: hidden; display: block;
+    }
+    .fsnap__track > i { display: block; height: 100%; border-radius: 5px; }
+    .fsnap__v {
+      flex: 0 0 auto; min-width: 108px; text-align: right;
+      font-size: 12.5px; font-weight: 600; color: var(--text-primary);
+      font-family: LINE Seed TW_OTF, sans-serif; font-variant-numeric: tabular-nums;
+    }
+    .fsnap__v--na { font-weight: 400; color: var(--text-dim); font-size: 11.5px; }
+    .fsnap__note { font-size: 10.5px; color: var(--text-dim); margin-top: 8px; }
+
+    /* ── 圖表數值明細（2026-09-14）──────────────────────────────────
+       圖只讀得出量級，讀不出數字。這張表就是圖的「表格檢視」：同一組數字，
+       另一種讀法。文字一律用文字色，識別交給欄頭那顆小色塊——數值本身
+       染成系列色會讓整張表變得很吵，而且色盲讀者拿不到任何資訊。 */
+    .cdata { margin-top: 10px; border-top: 1px solid var(--border-light); padding-top: 8px; overflow-x: auto; }
+    .cdata__t { width: 100%; border-collapse: collapse; font-size: 11px; }
+    .cdata__t th, .cdata__t td { padding: 4px 8px; white-space: nowrap; }
+    .cdata__t thead th {
+      font-weight: 700; color: var(--text-dim); text-align: right;
+      border-bottom: 1px solid var(--border-light);
+    }
+    .cdata__t thead th:first-child { text-align: left; }
+    .cdata__t tbody th {
+      font-weight: 500; color: var(--text-secondary); text-align: left;
+      border-bottom: 1px solid var(--border-light);
+    }
+    .cdata__t tbody td {
+      text-align: right; color: var(--text-primary);
+      font-family: LINE Seed TW_OTF, sans-serif; font-variant-numeric: tabular-nums;
+      border-bottom: 1px solid var(--border-light);
+    }
+    .cdata__t tbody tr:last-child th, .cdata__t tbody tr:last-child td { border-bottom: none; }
+    .cdata__t tbody tr:hover td, .cdata__t tbody tr:hover th { background: var(--icon-btn-bg); }
+    .cdata__sw { display: inline-block; width: 7px; height: 7px; border-radius: 2px; margin-right: 5px; vertical-align: 1px; }
+    .cdata-toggle { display: flex; justify-content: flex-end; margin-bottom: 8px; }
+    .cdata-toggle button {
+      font-family: var(--font-zh); font-size: 11.5px; padding: 3px 10px;
+      border-radius: var(--radius); border: 1px solid var(--border-light);
+      background: #fff; color: var(--text-secondary); cursor: pointer;
+    }
+    .cdata-toggle button:hover { border-color: var(--ghost-hover-border); color: var(--text-primary); }
+
     .chart-card__title{font-size:10px;font-weight:600;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.06em;text-transform:uppercase;color:var(--text-dim);margin-bottom:14px}
     @media(max-width:800px){.chart-2col{grid-template-columns:1fr}}
     @media(max-width:767px){
@@ -143,7 +236,6 @@
     .modal-box{background:#fff;border-radius:12px;width:100%;max-width:620px;max-height:90vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.2)}
     .modal-hd{display:flex;align-items:center;justify-content:space-between;padding:18px 24px;border-bottom:1px solid var(--border-light)}
     .modal-title{font-size:15px;font-weight:700;font-family:var(--font-zh);color:var(--text-primary)}
-    .modal-close{background:none;border:none;font-size:18px;cursor:pointer;color:var(--text-dim);line-height:1;padding:0 4px}
     .modal-body{padding:20px 24px}
     .stl-meta{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
     .stl-kpi{border:1px solid var(--border-light);border-radius:var(--radius);padding:10px 14px;background:#FAFAF8}
@@ -161,12 +253,18 @@
   <header id="app-topbar" class="topbar"></header>
   <div class="sidebar-overlay" id="sidebar-overlay"></div>
 
-  <div class="app-shell">
-    <aside class="sidebar" id="app-sidebar"></aside>
+  <!-- 側欄必須是 <body> 的直接子元素：深色模式的反轉濾鏡排除清單只認直接子元素
+       （style.css「DARK MODE」區塊的 body > *:not(.sidebar)），包進 .app-shell
+       裡會連同整個側欄一起被反轉成白底，且 position:fixed 會改以該容器定位。 -->
+  <aside class="sidebar" id="app-sidebar"></aside>
 
+  <div class="app-shell">
     <main class="page-main">
 
-      <!-- Period bar -->
+      <!-- Period bar（財務報表期間選擇/匯出，僅 admin+；2026-08-31 出納併入
+           本頁後，純 cashier/finance 模組使用者不該看到跟他們無關的期間/
+           匯出控制列，出納自己的執行歷史匯出在出納頁籤裡另有一份） -->
+      <template x-if="isAdminPlus()">
       <div class="period-bar">
         <button class="period-type-btn" :class="{on: periodType==='month'}" @click="switchType('month')">月報</button>
         <button class="period-type-btn" :class="{on: periodType==='quarter'}" @click="switchType('quarter')">季報</button>
@@ -205,6 +303,14 @@
           </select>
         </template>
 
+        <select x-model="departmentId" @change="loadData()"
+                style="padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;background:#fff">
+          <option value="">全部部門</option>
+          <template x-for="d in allDepartments" :key="d.id">
+            <option :value="d.id" x-text="d.divisionName + ' / ' + d.name"></option>
+          </template>
+        </select>
+
         <div class="export-wrap">
           <button class="btn-export excel" @click="exportFile('excel')" :disabled="exporting || !data">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
@@ -216,6 +322,7 @@
           </button>
         </div>
       </div>
+      </template>
 
       <!-- Error -->
       <div x-show="error" class="error-bar" x-text="error"></div>
@@ -223,9 +330,14 @@
       <!-- Loading -->
       <div x-show="loading" class="loading-text">載入中…</div>
 
-      <template x-if="!loading && data">
+      <!-- 2026-08-31：出納併入本頁後，data 只有 admin+ 會載入（cashier/finance
+           模組的非管理職使用者永遠是 null），所以外層 gate 放寬成兩者其一，
+           真正需要 data 的財務 KPI 摘要另外包一層 isAdminPlus() -->
+      <template x-if="!loading && (data || hasCashierAccess())">
         <div>
-          <!-- KPI 摘要（CEO 視角：成長 → 現金流 → 盈利質量 → 風控） -->
+          <!-- KPI 摘要（CEO 視角：成長 → 現金流 → 盈利質量 → 風控），僅 admin+ -->
+          <template x-if="isAdminPlus()">
+          <div>
           <div style="font-size:10px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em;font-family:LINE Seed TW_OTF, sans-serif;margin-bottom:8px;display:flex;align-items:center;gap:8px">
             <span>業績核心</span>
             <span style="flex:1;height:1px;background:var(--border-light)"></span>
@@ -255,6 +367,29 @@
               <div class="kpi-card__lbl">在製訂單 (Backlog)</div>
               <div class="kpi-card__val" x-text="fmt(summary.backlog)"></div>
               <div class="kpi-card__sub">進行中案件未收款合計</div>
+            </div>
+          </div>
+          <div style="font-size:10px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em;font-family:LINE Seed TW_OTF, sans-serif;margin-bottom:8px;display:flex;align-items:center;gap:8px">
+            <span x-text="scopeLabel + '收支'"></span>
+            <span style="flex:1;height:1px;background:var(--border-light)"></span>
+          </div>
+          <div class="kpi-grid" style="margin-bottom:10px">
+            <div class="kpi-card green">
+              <div class="kpi-card__lbl" x-text="scopeLabel + '收入'"></div>
+              <div class="kpi-card__val" x-text="fmt(activeIncomeTotal)"></div>
+            </div>
+            <div class="kpi-card orange">
+              <div class="kpi-card__lbl" x-text="scopeLabel + '支出'"></div>
+              <div class="kpi-card__val" x-text="fmt(activeExpenseTotal)"></div>
+            </div>
+            <div class="kpi-card" :class="netScopeAmount >= 0 ? 'green' : 'red'">
+              <div class="kpi-card__lbl" x-text="scopeLabel + '淨現流'"></div>
+              <div class="kpi-card__val" x-text="fmt(netScopeAmount)"></div>
+            </div>
+            <div class="kpi-card" x-show="receivablesData">
+              <div class="kpi-card__lbl" x-text="receivablesScopeLabel + '未收'"></div>
+              <div class="kpi-card__val" style="color:var(--alert)" x-text="fmt(activeOutstandingTotal)"></div>
+              <div class="kpi-card__sub" x-text="activeOutstandingItems.length + ' 筆'"></div>
             </div>
           </div>
           <div style="font-size:10px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em;font-family:LINE Seed TW_OTF, sans-serif;margin-bottom:8px;display:flex;align-items:center;gap:8px">
@@ -305,8 +440,39 @@
             </span>
           </div>
 
-          <!-- Tabs（CEO 視角：戰略優先 → 財務明細） -->
+          <!-- 精算快照過期警示 -->
+          <div x-show="summary.staleSettlementCount > 0"
+               style="margin-bottom:10px;padding:9px 14px;background:#FEF3C7;border:1px solid #D97706;border-radius:6px;font-size:12px;color:#92400E;display:flex;align-items:center;gap:8px">
+            <span style="font-size:14px">⚠️</span>
+            <span>
+              <strong>精算快照可能已過期：</strong>
+              <span x-text="summary.staleSettlementCount + ' 件'"></span> 已完結案件的承攬商成本在精算完結後又異動，下方毛利/業務員/部門績效可能未反映最新數字——請至個別案件的成本精算頁面確認並視需要重新完結
+            </span>
+          </div>
+
+          <!-- 已成案缺收款期別警示 -->
+          <div x-show="casesWithoutPaymentItems.length > 0"
+               style="margin-bottom:10px;padding:9px 14px;background:#FEF2F2;border:1px solid #DC2626;border-radius:6px;font-size:12px;color:#991B1B;display:flex;align-items:center;gap:8px">
+            <span style="font-size:14px">⚠️</span>
+            <span>
+              <strong>案件缺收款期別：</strong>
+              <span x-text="casesWithoutPaymentItems.length + ' 件'"></span> 已成案/已結案案件沒有填寫收款期別，合約金額不會計入收款率/毛利等統計
+              —
+              <template x-for="cw in casesWithoutPaymentItems.slice(0,4)" :key="cw.quoteNo">
+                <span style="margin-right:4px;font-family:monospace" x-text="cw.quoteNo"></span>
+              </template>
+              <span x-show="casesWithoutPaymentItems.length > 4" x-text="'等 ' + casesWithoutPaymentItems.length + ' 件'"></span>
+            </span>
+          </div>
+          </div>
+          </template>
+
+          <!-- Tabs（CEO 視角：戰略優先 → 財務明細；2026-08-31 出納併入本頁後，
+               以下 12 個既有頁籤整批只給 admin+ 看，非管理職的 cashier/finance
+               模組使用者只看得到最後面的「出納」頁籤，見 reports.js::init() ） -->
           <div class="tab-bar">
+          <template x-if="isAdminPlus()">
+          <span style="display:contents">
             <button class="tab" :class="{on:activeTab==='targets'}" @click="activeTab='targets'">
               🎯 目標達成率
               <span class="tab__cnt"
@@ -323,11 +489,19 @@
             <button class="tab" :class="{on:activeTab==='sales'}" @click="activeTab='sales'">
               業務員績效<span class="tab__cnt" x-text="salesPerf.length"></span>
             </button>
-            <button class="tab" :class="{on:activeTab==='recv'}" @click="activeTab='recv'">
-              本期收款<span class="tab__cnt" x-text="periodItems.length"></span>
+            <button class="tab" :class="{on:activeTab==='recv'}" @click="showReceivablesTab('recv')">
+              已收款<span class="tab__cnt" x-text="activeCollectedItems.length"></span>
             </button>
-            <button class="tab" :class="{on:activeTab==='out'}" @click="activeTab='out'">
-              未收款<span class="tab__cnt" x-text="outstanding.length"></span>
+            <button class="tab" :class="{on:activeTab==='out'}" @click="showReceivablesTab('out')">
+              未收款<span class="tab__cnt" x-text="activeOutstandingItems.length"></span>
+            </button>
+            <button class="tab" :class="{on:activeTab==='expenses'}" @click="showExpensesTab()">
+              <!-- x-show 條件用「資料載入了沒」而不是金額本身（2026-09-10）：
+                   原本寫 x-show="…? monthExpenseTotal : expensesTotals.total"，
+                   把金額當真值判斷，當月支出剛好是 0 時徽章會整個消失，看起來
+                   像功能壞掉而不是「這個月沒有支出」。改成只要 expensesData
+                   已載入就顯示，$0 會正常顯示成 $0。 -->
+              月支出<span class="tab__cnt" x-show="!!expensesData" x-text="fmt(expensesScope==='month' ? monthExpenseTotal : expensesTotals.total)"></span>
             </button>
             <button class="tab" :class="{on:activeTab==='cases'}" @click="activeTab='cases'">
               案件清單<span class="tab__cnt" x-text="casesAll.length"></span>
@@ -344,14 +518,62 @@
             <button class="tab" :class="{on:activeTab==='ar'}" @click="showArTab()">
               帳齡分析<span class="tab__cnt" x-show="arAging" x-text="arAging ? arAging.total.count : ''"></span>
             </button>
+            <button class="tab" :class="{on:activeTab==='cashpos'}" @click="showCashPosTab()">
+              資金水位<span class="tab__cnt" x-show="cashPos" x-text="cashPos ? (cashPos.ar.count + cashPos.ap.count) : ''"></span>
+            </button>
+            <button class="tab" :class="{on:activeTab==='t100'}" @click="showT100Tab()">
+              T100匯出<span class="tab__cnt" x-show="t100Preview && t100Preview.count" x-text="t100Preview ? t100Preview.count : ''"></span>
+            </button>
+          </span>
+          </template>
+          <button class="tab" x-show="hasCashierAccess()" :class="{on:activeTab==='cashier'}" @click="showCashierTab()">
+            出納<span class="tab__cnt" x-show="payable.length" x-text="payable.length"></span>
+          </button>
           </div>
 
-          <!-- 本期收款 -->
-          <div x-show="activeTab==='recv'" class="panel">
-            <template x-if="periodItems.length === 0">
-              <div class="empty-state">本期無收款紀錄</div>
+          <!-- recv/out 分頁共用的「當月/本季/今年度」切換鈕（2026-09-10 加入本季）。
+               預設跟隨頂部 period-bar，見 reports.js::_syncSubPeriods()；這裡可臨時覆寫 -->
+          <div x-show="activeTab==='recv' || activeTab==='out'" style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+            <button class="period-type-btn" :class="{on:receivablesScope==='month'}" @click="receivablesScope='month'; loadReceivables()">當月</button>
+            <button class="period-type-btn" :class="{on:receivablesScope==='quarter'}" @click="receivablesScope='quarter'; loadReceivables()">本季</button>
+            <button class="period-type-btn" :class="{on:receivablesScope==='year'}" @click="receivablesScope='year'; loadReceivables()">今年度</button>
+            <template x-if="receivablesScope==='month'">
+              <input type="month" x-model="receivablesMonth" @change="loadReceivables()"
+                     style="padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;background:#fff">
             </template>
-            <template x-if="periodItems.length > 0">
+            <template x-if="receivablesScope==='quarter'">
+              <span style="display:flex;gap:6px">
+                <select x-model.number="receivablesYear" @change="loadReceivables()"
+                        style="padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;background:#fff">
+                  <template x-for="y in caseListYears" :key="y">
+                    <option :value="y" x-text="y"></option>
+                  </template>
+                </select>
+                <select x-model.number="receivablesQuarter" @change="loadReceivables()"
+                        style="padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;background:#fff">
+                  <template x-for="q in [1,2,3,4]" :key="q">
+                    <option :value="q" x-text="'第 ' + q + ' 季'"></option>
+                  </template>
+                </select>
+              </span>
+            </template>
+            <template x-if="receivablesScope==='year'">
+              <select x-model.number="receivablesYear" @change="loadReceivables()"
+                      style="padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;background:#fff">
+                <template x-for="y in caseListYears" :key="y">
+                  <option :value="y" x-text="y"></option>
+                </template>
+              </select>
+            </template>
+            <span x-show="receivablesLoading" style="font-size:12px;color:var(--text-dim)">載入中…</span>
+          </div>
+
+          <!-- 已收款 -->
+          <div x-show="activeTab==='recv'" class="panel">
+            <template x-if="activeCollectedItems.length === 0">
+              <div class="empty-state">所選期間（依收款日期）無收款紀錄</div>
+            </template>
+            <template x-if="activeCollectedItems.length > 0">
               <table class="data-table">
                 <thead><tr>
                   <th>案件號</th><th>客戶</th><th>專案名稱</th><th>業務員</th>
@@ -360,7 +582,7 @@
                   <th>發票號碼</th><th>備注</th>
                 </tr></thead>
                 <tbody>
-                  <template x-for="it in periodItems" :key="it.quoteNo + '-' + it.idx">
+                  <template x-for="it in activeCollectedItems" :key="it.quoteNo + '-' + it.idx">
                     <tr>
                       <td class="mono" x-text="it.quoteNo"></td>
                       <td x-text="it.customer"></td>
@@ -377,33 +599,65 @@
                     </tr>
                   </template>
                   <tr class="sum-row">
-                    <td colspan="5">合計（<span x-text="periodItems.length"></span> 筆）</td>
-                    <td class="r" x-text="fmt(periodItems.reduce((s,i)=>s+i.amount,0))"></td>
+                    <td colspan="5">合計（<span x-text="activeCollectedItems.length"></span> 筆）</td>
+                    <td class="r" x-text="fmt(activeCollectedItems.reduce((s,i)=>s+i.amount,0))"></td>
                     <td></td>
-                    <td class="r" x-text="fmt(periodItems.reduce((s,i)=>s+(i.actualAmount!==null?i.actualAmount:i.amount),0))"></td>
-                    <td class="r" x-text="fmt(periodItems.reduce((s,i)=>s+(i.feeAmount||0),0))"></td>
-                    <td class="r" x-text="fmt(summary.periodNet)"></td>
+                    <td class="r" x-text="fmt(activeCollectedItems.reduce((s,i)=>s+(i.actualAmount!==null?i.actualAmount:i.amount),0))"></td>
+                    <td class="r" x-text="fmt(activeCollectedItems.reduce((s,i)=>s+(i.feeAmount||0),0))"></td>
+                    <td class="r" x-text="fmt(activeCollectedItems.reduce((s,i)=>s+((i.actualAmount!==null?i.actualAmount:i.amount)-(i.feeAmount||0)),0))"></td>
                     <td colspan="2"></td>
                   </tr>
                 </tbody>
               </table>
             </template>
+            <!-- 已收款但沒填收款日期：改用收款日期口徑之後，這些不屬於任何月份，
+                 每一個月都撈不到。固定顯示在這裡，不隨期別篩選、也不併進上面的
+                 合計（併進去同一筆會在每個月被重複計算）。§5.12 同一套作法。 -->
+            <template x-if="undatedCollectedItems.length > 0">
+              <div style="margin-top:18px;border:1px solid #FECACA;border-radius:8px;background:#FEF2F2;padding:12px 14px">
+                <div style="font-size:13px;font-weight:700;color:#B91C1C;font-family:var(--font-zh);margin-bottom:6px"
+                     x-text="'⚠️ 已勾已收款、但沒填收款日期（' + undatedCollectedItems.length + ' 筆，合計 ' + fmt(undatedCollectedTotal) + '）'"></div>
+                <div style="font-size:12px;color:#B91C1C;font-family:var(--font-zh);line-height:1.7;margin-bottom:10px">
+                  這些款項<b>不屬於任何月份</b>，上方任何一個期間都看不到它們。
+                  請到案件管理 → 案件資訊 → 款項明細補上收款日期。
+                </div>
+                <table class="data-table">
+                  <thead><tr>
+                    <th>案件號</th><th>客戶</th><th>專案名稱</th><th>款項類型</th><th class="r">金額</th>
+                  </tr></thead>
+                  <tbody>
+                    <template x-for="it in undatedCollectedItems" :key="it.quoteNo + '-' + it.idx">
+                      <tr>
+                        <td class="mono">
+                          <a :href="'case-management.html?q=' + encodeURIComponent(it.quoteNo)"
+                             style="color:var(--accent);text-decoration:underline" x-text="it.quoteNo"></a>
+                        </td>
+                        <td x-text="it.customer"></td>
+                        <td x-text="it.project"></td>
+                        <td x-text="it.type"></td>
+                        <td class="r mono" x-text="fmt(it.amount)"></td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+              </div>
+            </template>
           </div>
 
           <!-- 未收款 -->
           <div x-show="activeTab==='out'" class="panel">
-            <template x-if="outstanding.length === 0">
-              <div class="empty-state">目前無未收款項目</div>
+            <template x-if="activeOutstandingItems.length === 0">
+              <div class="empty-state">所選期間（依預計收款日）無未收款項目</div>
             </template>
-            <template x-if="outstanding.length > 0">
+            <template x-if="activeOutstandingItems.length > 0">
               <table class="data-table">
                 <thead><tr>
                   <th>案件號</th><th>客戶</th><th>專案名稱</th><th>業務員</th>
                   <th class="c">案件進度</th><th>款項類型</th>
-                  <th class="r">應收金額</th><th class="c">比例</th><th class="c">報價日期</th>
+                  <th class="r">應收金額</th><th class="c">比例</th><th class="c">成案月份</th>
                 </tr></thead>
                 <tbody>
-                  <template x-for="it in outstanding" :key="it.quoteNo + '-' + it.idx">
+                  <template x-for="it in activeOutstandingItems" :key="it.quoteNo + '-' + it.idx">
                     <tr>
                       <td class="mono" x-text="it.quoteNo"></td>
                       <td x-text="it.customer"></td>
@@ -413,14 +667,251 @@
                       <td x-text="it.type"></td>
                       <td class="r mono red-txt" x-text="fmt(it.amount)"></td>
                       <td class="c mono" x-text="(it.pct||0).toFixed(1) + '%'"></td>
-                      <td class="c mono" x-text="it.quoteDate"></td>
+                      <td class="c mono" x-text="it.wonMonth"></td>
                     </tr>
                   </template>
                   <tr class="sum-row">
                     <td colspan="6">合計未收</td>
-                    <td class="r" x-text="fmt(outstanding.reduce((s,i)=>s+i.amount,0))"></td>
+                    <td class="r" x-text="fmt(activeOutstandingItems.reduce((s,i)=>s+i.amount,0))"></td>
                     <td colspan="2"></td>
                   </tr>
+                </tbody>
+              </table>
+            </template>
+            <!-- 未收款但沒填預計收款日：同上，改用日期口徑之後這些不屬於任何月份。
+                 實測開發機未收款 7 筆全部沒填預計收款日，少了這一區就等於整個
+                 未收款清單憑空消失。 -->
+            <template x-if="undatedOutstandingItems.length > 0">
+              <div style="margin-top:18px;border:1px solid #FDE68A;border-radius:8px;background:#FFFBEB;padding:12px 14px">
+                <div style="font-size:13px;font-weight:700;color:#92400E;font-family:var(--font-zh);margin-bottom:6px"
+                     x-text="'⚠️ 未收款、但沒填預計收款日（' + undatedOutstandingItems.length + ' 筆，合計 ' + fmt(undatedOutstandingTotal) + '）'"></div>
+                <div style="font-size:12px;color:#92400E;font-family:var(--font-zh);line-height:1.7;margin-bottom:10px">
+                  「未收款」現在依<b>預計收款日</b>分月，這些沒填日期的<b>不屬於任何月份</b>。
+                  補上預計收款日之後就會出現在對應月份裡。
+                </div>
+                <table class="data-table">
+                  <thead><tr>
+                    <th>案件號</th><th>客戶</th><th>專案名稱</th><th class="c">案件進度</th>
+                    <th>款項類型</th><th class="r">應收金額</th><th class="c">成案月份</th>
+                  </tr></thead>
+                  <tbody>
+                    <template x-for="it in undatedOutstandingItems" :key="it.quoteNo + '-' + it.idx">
+                      <tr>
+                        <td class="mono">
+                          <a :href="'case-management.html?q=' + encodeURIComponent(it.quoteNo)"
+                             style="color:var(--accent);text-decoration:underline" x-text="it.quoteNo"></a>
+                        </td>
+                        <td x-text="it.customer"></td>
+                        <td x-text="it.project"></td>
+                        <td class="c"><span class="rb" :class="it.dealTag==='已結案'?'rb-closed':'rb-active'" x-text="it.dealTag"></span></td>
+                        <td x-text="it.type"></td>
+                        <td class="r mono red-txt" x-text="fmt(it.amount)"></td>
+                        <td class="c mono" x-text="it.wonMonth"></td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+              </div>
+            </template>
+          </div>
+
+          <!-- 收支報表（原「月支出」，2026-08-30 重構為《當月收支》/《今年度收支》） -->
+          <div x-show="activeTab==='expenses'" class="panel">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+              <button class="period-type-btn" :class="{on:expensesScope==='month'}" @click="expensesScope='month'; loadExpenses()">當月</button>
+              <button class="period-type-btn" :class="{on:expensesScope==='quarter'}" @click="expensesScope='quarter'; loadExpenses()">本季</button>
+              <button class="period-type-btn" :class="{on:expensesScope==='year'}" @click="expensesScope='year'; loadExpenses()">今年度</button>
+
+              <template x-if="expensesScope==='month'">
+                <input type="month" x-model="expensesMonth" @change="loadExpenses()"
+                       style="padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;background:#fff">
+              </template>
+              <template x-if="expensesScope==='quarter'">
+                <span style="display:flex;gap:6px">
+                  <select x-model.number="expensesYear" @change="loadExpenses()"
+                          style="padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;background:#fff">
+                    <template x-for="y in caseListYears" :key="y">
+                      <option :value="y" x-text="y"></option>
+                    </template>
+                  </select>
+                  <select x-model.number="expensesQuarter" @change="loadExpenses()"
+                          style="padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;background:#fff">
+                    <template x-for="q in [1,2,3,4]" :key="q">
+                      <option :value="q" x-text="'第 ' + q + ' 季'"></option>
+                    </template>
+                  </select>
+                </span>
+              </template>
+              <template x-if="expensesScope==='year'">
+                <select x-model.number="expensesYear" @change="loadExpenses()"
+                        style="padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;background:#fff">
+                  <template x-for="y in caseListYears" :key="y">
+                    <option :value="y" x-text="y"></option>
+                  </template>
+                </select>
+              </template>
+              <span x-show="expensesLoading" style="font-size:12px;color:var(--text-dim)">載入中…</span>
+            </div>
+
+            <!-- 收入/支出/淨額 KPI -->
+            <div style="display:flex;gap:12px;margin-bottom:18px;flex-wrap:wrap">
+              <div style="flex:1;min-width:140px;padding:12px 16px;border:1px solid var(--border-light);border-radius:var(--radius);background:#F0FDF4">
+                <div style="font-size:11px;color:var(--text-dim)" x-text="scopeLabel + '收入合計'"></div>
+                <div style="font-size:18px;font-weight:700;color:#15803D;font-family:LINE Seed TW_OTF, sans-serif" x-text="fmt(activeIncomeTotal)"></div>
+              </div>
+              <div style="flex:1;min-width:140px;padding:12px 16px;border:1px solid var(--border-light);border-radius:var(--radius);background:#FAF5FF">
+                <div style="font-size:11px;color:var(--text-dim)" x-text="scopeLabel + '支出合計'"></div>
+                <div style="font-size:18px;font-weight:700;color:#7C3AED;font-family:LINE Seed TW_OTF, sans-serif" x-text="fmt(activeExpenseTotal)"></div>
+              </div>
+              <div style="flex:1;min-width:140px;padding:12px 16px;border:1px solid var(--border-light);border-radius:var(--radius);background:#F9FAFB">
+                <div style="font-size:11px;color:var(--text-dim)" x-text="scopeLabel + '淨額'"></div>
+                <div style="font-size:18px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif"
+                     :style="netScopeAmount >= 0 ? 'color:#15803D' : 'color:#DC2626'" x-text="fmt(netScopeAmount)"></div>
+              </div>
+            </div>
+
+            <!-- 年度月支出趨勢矩陣，只在「今年度」範圍顯示 -->
+            <template x-if="expensesScope==='year' && !expensesLoading && expensesMonthly.length">
+              <table class="data-table" style="margin-bottom:20px">
+                <thead><tr>
+                  <th>月份</th><th class="r">承攬商派發</th><th class="r">設備進貨</th>
+                  <th class="r">料件進貨</th><th class="r">其他支出</th><th class="r">合計</th>
+                </tr></thead>
+                <tbody>
+                  <template x-for="m in expensesMonthly" :key="m.month">
+                    <tr>
+                      <td x-text="m.label"></td>
+                      <td class="r mono" x-text="fmt(m.contractor)"></td>
+                      <td class="r mono" x-text="fmt(m.equipment)"></td>
+                      <td class="r mono" x-text="fmt(m.material)"></td>
+                      <td class="r mono" x-text="fmt(m.other)"></td>
+                      <td class="r mono" style="font-weight:700" x-text="fmt(m.total)"></td>
+                    </tr>
+                  </template>
+                  <tr class="sum-row">
+                    <td>全年合計</td>
+                    <td class="r" x-text="fmt(expensesTotals.contractor)"></td>
+                    <td class="r" x-text="fmt(expensesTotals.equipment)"></td>
+                    <td class="r" x-text="fmt(expensesTotals.material)"></td>
+                    <td class="r" x-text="fmt(expensesTotals.other)"></td>
+                    <td class="r" x-text="fmt(expensesTotals.total)"></td>
+                  </tr>
+                </tbody>
+              </table>
+            </template>
+
+            <!-- ══ 收款資料異常（2026-09-11）══
+                 「已收款」勾選與「收款日期」是兩個獨立欄位，只填一個的話，這筆錢
+                 在收入報表（要 received=true 且 receivedAt 在區間內）與未收報表
+                 （看的是預計收款日）**兩邊都撈不到**——會從所有月報表上無聲消失。
+                 這一區就是把那個狀態變成看得見的。刻意不隨期別篩選：這些款項正是
+                 因為欄位不完整而不屬於任何月份，用期別去篩等於再篩掉一次。
+                 資料源 _collect_payment_anomalies()，另有獨立端點
+                 /api/reports/payment-anomalies。 -->
+            <template x-if="paymentAnomalies.length > 0">
+              <div style="margin-bottom:20px;border:1px solid #FDE68A;border-radius:8px;background:#FFFBEB;padding:12px 14px">
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+                  <span style="font-size:13px;font-weight:700;color:#92400E;font-family:var(--font-zh)"
+                        x-text="'⚠️ 收款資料異常（' + paymentAnomalies.length + ' 筆，合計 ' + fmt(paymentAnomalyTotal) + '）'"></span>
+                </div>
+                <div style="font-size:12px;color:#92400E;font-family:var(--font-zh);line-height:1.7;margin-bottom:10px">
+                  下列款項的「已收款」與「收款日期」只填了其中一個，<b>不會出現在任何月份的收入或未收款項裡</b>。
+                  請到案件管理 → 案件資訊 → 款項明細補齊，補齊後金額就會回到報表上。
+                </div>
+                <table class="data-table">
+                  <thead><tr>
+                    <th>案件號</th><th>客戶</th><th>專案名稱</th><th>款項類型</th>
+                    <th class="r">金額</th><th class="c">收款日</th><th>問題</th>
+                  </tr></thead>
+                  <tbody>
+                    <template x-for="it in paymentAnomalies" :key="it.quoteNo + '-' + it.type + '-' + it.kind">
+                      <tr>
+                        <td class="mono">
+                          <a :href="'case-management.html?q=' + encodeURIComponent(it.quoteNo)"
+                             style="color:var(--accent);text-decoration:underline" x-text="it.quoteNo"></a>
+                        </td>
+                        <td x-text="it.customer"></td>
+                        <td x-text="it.project"></td>
+                        <td class="c" x-text="it.type"></td>
+                        <td class="r mono" x-text="fmt(it.amount)"></td>
+                        <td class="c mono" x-text="it.receivedAt || '—'"></td>
+                        <td style="font-size:11px;color:#92400E" x-text="it.hint"></td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+              </div>
+            </template>
+
+            <!-- 收入明細 -->
+            <div class="cm-section-title" style="margin-bottom:8px;font-size:13px;font-weight:700;font-family:var(--font-zh)"
+                 x-text="scopeLabel + '收入明細（' + activeIncomeItems.length + ' 筆）'"></div>
+            <template x-if="!expensesLoading && activeIncomeItems.length === 0">
+              <div class="empty-state" x-text="scopeLabel + '尚無收款紀錄'"></div>
+            </template>
+            <template x-if="activeIncomeItems.length > 0">
+              <table class="data-table" style="margin-bottom:20px">
+                <thead><tr>
+                  <th>案件號</th><th>客戶</th><th>專案名稱</th><th>業務員</th>
+                  <th>款項類型</th><th class="r">應收金額</th><th class="c">收款日</th>
+                  <th class="r">實收金額</th><th class="r">手續費</th><th class="r">實收淨額</th><th>發票號碼</th>
+                </tr></thead>
+                <tbody>
+                  <template x-for="it in activeIncomeItems" :key="it.quoteNo + '-' + it.type + '-' + it.receivedAt">
+                    <tr>
+                      <td class="mono" x-text="it.quoteNo"></td>
+                      <td x-text="it.customer"></td>
+                      <td x-text="it.project"></td>
+                      <td x-text="it.salesPerson"></td>
+                      <td class="c" x-text="it.type"></td>
+                      <td class="r mono" x-text="fmt(it.amount)"></td>
+                      <td class="c mono" x-text="it.receivedAt"></td>
+                      <td class="r mono" x-text="fmt(it.actualAmount !== null ? it.actualAmount : it.amount)"></td>
+                      <td class="r mono red-txt" x-text="it.feeAmount ? fmt(it.feeAmount) : '—'"></td>
+                      <td class="r mono green-txt" x-text="fmt(it.netAmount)"></td>
+                      <td x-text="it.invoiceNo || '—'"></td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </template>
+
+            <!-- 支出明細 -->
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+              <span class="cm-section-title" style="margin:0;font-size:13px;font-weight:700;font-family:var(--font-zh)"
+                    x-text="scopeLabel + '支出明細（' + filteredExpenseItems.length + ' 筆）'"></span>
+              <button class="period-type-btn" :class="{on:expensesFilter==='all'}" @click="expensesFilter='all'">全部</button>
+              <button class="period-type-btn" :class="{on:expensesFilter==='contractor'}" @click="expensesFilter='contractor'">承攬商派發</button>
+              <button class="period-type-btn" :class="{on:expensesFilter==='equipment'}" @click="expensesFilter='equipment'">設備進貨</button>
+              <button class="period-type-btn" :class="{on:expensesFilter==='material'}" @click="expensesFilter='material'">料件進貨</button>
+              <button class="period-type-btn" :class="{on:expensesFilter==='other'}" @click="expensesFilter='other'">其他支出</button>
+            </div>
+            <template x-if="!expensesLoading && filteredExpenseItems.length === 0">
+              <div class="empty-state" x-text="scopeLabel + '尚無支出明細資料'"></div>
+            </template>
+            <template x-if="filteredExpenseItems.length > 0">
+              <table class="data-table">
+                <thead><tr>
+                  <th class="c">日期</th><th>類別</th><th>關聯案件</th><th>說明</th><th class="r">金額</th>
+                </tr></thead>
+                <tbody>
+                  <template x-for="(it, i) in filteredExpenseItems" :key="it.cat + '-' + it.date + '-' + i">
+                    <tr>
+                      <td class="c mono" x-text="it.date"></td>
+                      <td x-text="expensesCatLabel(it.cat)"></td>
+                      <td class="mono" x-text="it.quoteNo || '—'"></td>
+                      <td>
+                        <span x-text="it.desc"></span>
+                        <!-- 精算尚未完結（2026-09-09）：這筆金額已經計入當月支出，
+                             但精算還沒定稿、數字仍可能被改動，標示出來讓看報表的人
+                             知道，不要以為是已定稿的數字 -->
+                        <template x-if="it.pending">
+                          <span style="margin-left:6px;font-size:10px;padding:1px 5px;border-radius:3px;background:#FEF3C7;color:#92400E;white-space:nowrap">精算未完結</span>
+                        </template>
+                      </td>
+                      <td class="r mono" x-text="fmt(it.amount)"></td>
+                    </tr>
+                  </template>
                 </tbody>
               </table>
             </template>
@@ -428,10 +919,75 @@
 
           <!-- 案件清單 -->
           <div x-show="activeTab==='cases'" class="panel">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+              <template x-if="caseListGroupByMonth">
+                <select x-model.number="caseListYear"
+                        style="padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;background:#fff">
+                  <template x-for="y in caseListYears" :key="y">
+                    <option :value="y" x-text="y + ' 年'"></option>
+                  </template>
+                </select>
+              </template>
+              <button class="period-type-btn" :class="{on:caseListGroupByMonth}" @click="caseListGroupByMonth=true">依月份區分</button>
+              <button class="period-type-btn" :class="{on:!caseListGroupByMonth}" @click="caseListGroupByMonth=false">顯示全部年度</button>
+              <span x-show="caseListGroupByMonth" style="font-size:12px;color:var(--text-dim)" x-text="caseListYear + ' 年共 ' + caseListYearTotal + ' 件已成案/已結案'"></span>
+            </div>
+
             <template x-if="casesAll.length === 0">
               <div class="empty-state">尚無成案資料</div>
             </template>
-            <template x-if="casesAll.length > 0">
+
+            <!-- 依月份區分檢視 -->
+            <template x-if="casesAll.length > 0 && caseListGroupByMonth">
+              <table class="data-table">
+                <thead><tr>
+                  <th>案件號</th><th>客戶</th><th>專案名稱</th><th>業務員</th>
+                  <th class="c">報價日</th><th class="c">進度</th>
+                  <th class="r">合約金額</th><th class="r">預估毛利率</th>
+                  <th class="r">已收款</th><th class="r">收款率</th>
+                  <th class="c">實際毛利率</th><th class="c">精算</th>
+                </tr></thead>
+                <template x-for="mgroup in casesByMonth" :key="mgroup.month">
+                  <tbody>
+                    <template x-if="mgroup.cases.length > 0">
+                      <tr class="sum-row">
+                        <td colspan="6" x-text="caseListYear + ' 年 ' + mgroup.label + '（' + mgroup.cases.length + ' 件）'"></td>
+                        <td class="r" x-text="fmt(mgroup.total)"></td>
+                        <td></td>
+                        <td class="r" x-text="fmt(mgroup.received)"></td>
+                        <td colspan="3"></td>
+                      </tr>
+                    </template>
+                    <template x-for="c in mgroup.cases" :key="c.quoteNo">
+                      <tr>
+                        <td class="mono" x-text="c.quoteNo"></td>
+                        <td x-text="c.customer"></td>
+                        <td x-text="c.project"></td>
+                        <td x-text="c.salesPerson"></td>
+                        <td class="c mono" x-text="c.quoteDate"></td>
+                        <td class="c"><span class="rb" :class="c.dealTag==='已結案'?'rb-closed':'rb-active'" x-text="c.dealTag"></span></td>
+                        <td class="r mono" x-text="fmt(c.total)"></td>
+                        <td class="r mono" x-text="(c.netMarginPct||0).toFixed(1) + '%'"></td>
+                        <td class="r mono" x-text="fmt(c.receivedAmount)"></td>
+                        <td class="r mono" :class="c.collectionRate>=80?'green-txt':c.collectionRate>=50?'orange-txt':'red-txt'" x-text="c.collectionRate.toFixed(1) + '%'"></td>
+                        <td class="c mono" :class="c.actualMarginPct!==null?(c.actualMarginPct>=(c.netMarginPct||0)?'green-txt':'red-txt'):''" x-text="c.actualMarginPct!==null ? c.actualMarginPct.toFixed(1)+'%' : '—'"></td>
+                        <td class="c">
+                          <template x-if="stlCanOpen(c)">
+                            <button class="link-btn" @click="openSettlement(c.quoteNo)">精算</button>
+                          </template>
+                          <template x-if="!stlCanOpen(c)">
+                            <span style="color:var(--text-dim);font-size:11px">—</span>
+                          </template>
+                        </td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </template>
+              </table>
+            </template>
+
+            <!-- 顯示全部年度（不分組，原始平面清單） -->
+            <template x-if="casesAll.length > 0 && !caseListGroupByMonth">
               <table class="data-table">
                 <thead><tr>
                   <th>案件號</th><th>客戶</th><th>專案名稱</th><th>業務員</th>
@@ -498,6 +1054,34 @@
                 </template>
               </tbody>
             </table>
+
+            <!-- 依部門彙總 -->
+            <div style="margin-top:24px">
+              <div style="font-size:13px;font-weight:600;margin-bottom:10px">依部門彙總</div>
+              <div x-show="deptPerf.length === 0" class="empty-state">尚無部門彙總資料</div>
+              <table x-show="deptPerf.length > 0" class="data-table">
+                <thead><tr>
+                  <th>部門</th>
+                  <th class="r">案件數</th>
+                  <th class="r">合約總額</th>
+                  <th class="r">已收款</th>
+                  <th class="r">收款率</th>
+                  <th class="r">預估毛利率</th>
+                </tr></thead>
+                <tbody>
+                  <template x-for="dp in deptPerf" :key="dp.deptName">
+                    <tr>
+                      <td x-text="dp.deptName"></td>
+                      <td class="r mono" x-text="dp.caseCount"></td>
+                      <td class="r mono" x-text="fmt(dp.totalAmount)"></td>
+                      <td class="r mono" x-text="fmt(dp.receivedAmount)"></td>
+                      <td class="r mono" x-text="dp.collectionRate.toFixed(1) + '%'"></td>
+                      <td class="r mono" x-text="dp.avgMarginPct.toFixed(1) + '%'"></td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
           </div>
 
           <!-- 毛利分析 -->
@@ -857,7 +1441,77 @@
           </div>
 
           <!-- 圖表分析 -->
+          <!-- 2026-09-14：每張圖下方補一張數值明細表（使用者交辦「圖表也要顯示
+               金額跟內容」）。數字不另外算一份——_buildXChart() 在畫圖的同時把
+               自己用的那組數字寫進 chartTables，表跟圖必然一致。 -->
           <div x-show="activeTab==='charts'">
+            <!-- ── 本期財務快照（2026-09-14）：圖表分頁的第一眼 ──────────────
+                 使用者要的是「進來先看到這期的收入支出與應收應付」。刻意用
+                 純 HTML 長條而不是再開一個 Chart.js 實例：只有四個數值，
+                 canvas 換來的只有這一頁已經踩過的尺寸/動畫時序問題。
+                 兩組各自縮放——收支是流量、應收應付是存量，量綱不同，
+                 共用比例尺會讓其中一組永遠貼邊。 -->
+            <div class="fsnap">
+              <div class="fsnap__col">
+                <div class="fsnap__h">
+                  <span class="fsnap__title" x-text="scopeLabel + '收支'"></span>
+                  <span class="fsnap__net" :class="netScopeAmount >= 0 ? 'pos' : 'neg'"
+                        x-text="(netScopeAmount >= 0 ? '淨流入 ' : '淨流出 ') + fmt(Math.abs(netScopeAmount))"></span>
+                </div>
+                <div class="fsnap__row">
+                  <span class="fsnap__lbl">收入</span>
+                  <span class="fsnap__track">
+                    <i style="background:var(--success)" :style="'width:' + _barPct(activeIncomeTotal, flowMax) + '%;background:var(--success)'"></i>
+                  </span>
+                  <span class="fsnap__v" x-text="fmt(activeIncomeTotal)"></span>
+                </div>
+                <div class="fsnap__row">
+                  <span class="fsnap__lbl">支出</span>
+                  <span class="fsnap__track">
+                    <i :style="'width:' + _barPct(activeExpenseTotal, flowMax) + '%;background:var(--warning)'"></i>
+                  </span>
+                  <span class="fsnap__v" x-text="fmt(activeExpenseTotal)"></span>
+                </div>
+              </div>
+
+              <div class="fsnap__col">
+                <div class="fsnap__h">
+                  <span class="fsnap__title">未結部位</span>
+                  <span class="fsnap__net" x-show="payableKnown" :class="netPosition >= 0 ? 'pos' : 'neg'"
+                        x-text="'淨部位 ' + fmt(netPosition)"></span>
+                </div>
+                <div class="fsnap__row">
+                  <span class="fsnap__lbl">應收</span>
+                  <span class="fsnap__track">
+                    <i x-show="payableKnown"
+                       :style="'width:' + _barPct(kpiReceivableTotal, stockMax) + '%;background:var(--success)'"></i>
+                  </span>
+                  <span class="fsnap__v" x-show="payableKnown" x-text="fmt(kpiReceivableTotal)"></span>
+                  <span class="fsnap__v fsnap__v--na" x-show="!payableKnown"
+                        x-text="payableSnapDenied ? '無出納權限' : '載入中…'"></span>
+                </div>
+                <div class="fsnap__row">
+                  <span class="fsnap__lbl">應付</span>
+                  <span class="fsnap__track">
+                    <i x-show="payableKnown"
+                       :style="'width:' + _barPct(kpiPayableTotal, stockMax) + '%;background:var(--warning)'"></i>
+                  </span>
+                  <!-- 沒載到／沒權限時顯示狀態文字，不顯示 0——0 會被讀成
+                       「這期沒有任何應付」，那是假資訊 -->
+                  <span class="fsnap__v" x-show="payableKnown" x-text="fmt(kpiPayableTotal)"></span>
+                  <span class="fsnap__v fsnap__v--na" x-show="!payableKnown"
+                        x-text="payableSnapDenied ? '無出納權限' : '載入中…'"></span>
+                </div>
+                <div class="fsnap__note" x-show="payableKnown"
+                     x-text="'承攬商待匯款 ' + payable.length + ' 筆　·　客戶未收款 ' + receivable.filter(i => !i.received).length + ' 筆'"></div>
+              </div>
+            </div>
+
+            <div class="cdata-toggle">
+              <button type="button" @click="showChartData = !showChartData"
+                      x-text="showChartData ? '收合數值明細 ▴' : '展開數值明細 ▾'"></button>
+            </div>
+
             <!-- 近 12 月成案趨勢 + 案件狀態分佈 -->
             <div class="chart-2col">
               <div class="chart-card">
@@ -865,12 +1519,68 @@
                 <div style="position:relative;height:240px">
                   <canvas id="rpt-chart-trend"></canvas>
                 </div>
+              <template x-if="showChartData && chartTables.trend.rows.length">
+                <div class="cdata">
+                  <table class="cdata__t">
+                    <thead>
+                      <tr>
+                        <th></th>
+                        <template x-for="(c, ci) in chartTables.trend.cols" :key="ci">
+                          <th>
+                            <span class="cdata__sw" x-show="chartTables.trend.colors[ci]"
+                                  :style="'background:' + chartTables.trend.colors[ci]"></span>
+                            <span x-text="c"></span>
+                          </th>
+                        </template>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <template x-for="(r, ri) in chartTables.trend.rows" :key="ri">
+                        <tr>
+                          <th x-text="r.label"></th>
+                          <template x-for="(v, vi) in r.values" :key="vi">
+                            <td x-text="v"></td>
+                          </template>
+                        </tr>
+                      </template>
+                    </tbody>
+                  </table>
+                </div>
+              </template>
               </div>
               <div class="chart-card">
                 <div class="chart-card__title">案件狀態分佈</div>
                 <div style="position:relative;height:240px">
                   <canvas id="rpt-chart-status"></canvas>
                 </div>
+              <template x-if="showChartData && chartTables.status.rows.length">
+                <div class="cdata">
+                  <table class="cdata__t">
+                    <thead>
+                      <tr>
+                        <th></th>
+                        <template x-for="(c, ci) in chartTables.status.cols" :key="ci">
+                          <th>
+                            <span class="cdata__sw" x-show="chartTables.status.colors[ci]"
+                                  :style="'background:' + chartTables.status.colors[ci]"></span>
+                            <span x-text="c"></span>
+                          </th>
+                        </template>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <template x-for="(r, ri) in chartTables.status.rows" :key="ri">
+                        <tr>
+                          <th x-text="r.label"></th>
+                          <template x-for="(v, vi) in r.values" :key="vi">
+                            <td x-text="v"></td>
+                          </template>
+                        </tr>
+                      </template>
+                    </tbody>
+                  </table>
+                </div>
+              </template>
               </div>
             </div>
             <!-- 業務員績效比較 -->
@@ -879,6 +1589,34 @@
               <div style="position:relative" :style="{height: Math.max(180, salesPerf.length * 52) + 'px'}">
                 <canvas id="rpt-chart-sales"></canvas>
               </div>
+              <template x-if="showChartData && chartTables.sales.rows.length">
+                <div class="cdata">
+                  <table class="cdata__t">
+                    <thead>
+                      <tr>
+                        <th></th>
+                        <template x-for="(c, ci) in chartTables.sales.cols" :key="ci">
+                          <th>
+                            <span class="cdata__sw" x-show="chartTables.sales.colors[ci]"
+                                  :style="'background:' + chartTables.sales.colors[ci]"></span>
+                            <span x-text="c"></span>
+                          </th>
+                        </template>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <template x-for="(r, ri) in chartTables.sales.rows" :key="ri">
+                        <tr>
+                          <th x-text="r.label"></th>
+                          <template x-for="(v, vi) in r.values" :key="vi">
+                            <td x-text="v"></td>
+                          </template>
+                        </tr>
+                      </template>
+                    </tbody>
+                  </table>
+                </div>
+              </template>
             </div>
             <!-- 年度目標達成率 -->
             <div class="chart-full chart-card" x-show="achievement && achievement.hasTargets">
@@ -886,6 +1624,34 @@
               <div style="position:relative;height:220px">
                 <canvas id="rpt-chart-target"></canvas>
               </div>
+              <template x-if="showChartData && chartTables.target.rows.length">
+                <div class="cdata">
+                  <table class="cdata__t">
+                    <thead>
+                      <tr>
+                        <th></th>
+                        <template x-for="(c, ci) in chartTables.target.cols" :key="ci">
+                          <th>
+                            <span class="cdata__sw" x-show="chartTables.target.colors[ci]"
+                                  :style="'background:' + chartTables.target.colors[ci]"></span>
+                            <span x-text="c"></span>
+                          </th>
+                        </template>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <template x-for="(r, ri) in chartTables.target.rows" :key="ri">
+                        <tr>
+                          <th x-text="r.label"></th>
+                          <template x-for="(v, vi) in r.values" :key="vi">
+                            <td x-text="v"></td>
+                          </template>
+                        </tr>
+                      </template>
+                    </tbody>
+                  </table>
+                </div>
+              </template>
             </div>
             <!-- 毛利率比較 -->
             <div class="chart-card" x-show="marginCases.length > 0">
@@ -893,6 +1659,34 @@
               <div style="position:relative;height:200px">
                 <canvas id="rpt-chart-margin"></canvas>
               </div>
+              <template x-if="showChartData && chartTables.margin.rows.length">
+                <div class="cdata">
+                  <table class="cdata__t">
+                    <thead>
+                      <tr>
+                        <th></th>
+                        <template x-for="(c, ci) in chartTables.margin.cols" :key="ci">
+                          <th>
+                            <span class="cdata__sw" x-show="chartTables.margin.colors[ci]"
+                                  :style="'background:' + chartTables.margin.colors[ci]"></span>
+                            <span x-text="c"></span>
+                          </th>
+                        </template>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <template x-for="(r, ri) in chartTables.margin.rows" :key="ri">
+                        <tr>
+                          <th x-text="r.label"></th>
+                          <template x-for="(v, vi) in r.values" :key="vi">
+                            <td x-text="v"></td>
+                          </template>
+                        </tr>
+                      </template>
+                    </tbody>
+                  </table>
+                </div>
+              </template>
             </div>
             <template x-if="!casesAll.length">
               <div class="empty-state">尚無案件資料，切換期間後重新載入以顯示圖表</div>
@@ -957,11 +1751,570 @@
             </template>
           </div>
 
+          <!-- 資金水位 -->
+          <div x-show="activeTab==='cashpos'" class="panel">
+            <div x-show="cashPosLoading" class="loading-text">資金水位載入中…</div>
+            <template x-if="cashPos && !cashPosLoading">
+              <div>
+                <div class="kpi-grid" style="margin-bottom:14px">
+                  <div class="kpi-card blue">
+                    <div class="kpi-card__lbl">應收帳款（客戶未收款）</div>
+                    <div class="kpi-card__val" x-text="fmt(cashPos.ar.total)"></div>
+                    <div class="kpi-card__sub" x-text="'共 ' + cashPos.ar.count + ' 筆　詳見「帳齡分析」'"></div>
+                  </div>
+                  <div class="kpi-card red">
+                    <div class="kpi-card__lbl">應付帳款（承攬商待匯款）</div>
+                    <div class="kpi-card__val" x-text="fmt(cashPos.ap.total)"></div>
+                    <div class="kpi-card__sub" x-text="'共 ' + cashPos.ap.count + ' 筆（已核准未匯款）'"></div>
+                  </div>
+                  <div class="kpi-card" :class="cashPos.net >= 0 ? 'green' : 'red'">
+                    <div class="kpi-card__lbl">淨部位（應收 − 應付）</div>
+                    <div class="kpi-card__val" x-text="(cashPos.net >= 0 ? '+' : '') + fmt(cashPos.net)"></div>
+                    <div class="kpi-card__sub" x-text="'資料截至 ' + cashPos.asOf"></div>
+                  </div>
+                </div>
+
+                <template x-if="cashPos.ap.items.length > 0">
+                  <div style="margin-bottom:18px">
+                    <div style="font-size:11px;font-weight:600;color:var(--text-secondary);margin-bottom:6px">
+                      應付明細（承攬商匯款申請・已核准未匯款）
+                    </div>
+                    <table class="data-table">
+                      <thead><tr>
+                        <th>申請單號</th><th>案件號</th><th>客戶</th><th>承攬商</th>
+                        <th class="r">金額</th><th class="c">核准時間</th>
+                      </tr></thead>
+                      <tbody>
+                        <template x-for="it in cashPos.ap.items" :key="it.voucherNo">
+                          <tr>
+                            <td class="mono" x-text="it.voucherNo"></td>
+                            <td class="mono" x-text="it.quoteNo"></td>
+                            <td x-text="it.customer"></td>
+                            <td x-text="it.vendorName || '（外包人員點工）'"></td>
+                            <td class="r mono" x-text="fmt(it.amount)"></td>
+                            <td class="c" x-text="it.approvedAt ? new Date(it.approvedAt).toLocaleString('zh-TW') : ''"></td>
+                          </tr>
+                        </template>
+                      </tbody>
+                    </table>
+                  </div>
+                </template>
+
+                <div style="font-size:11px;color:var(--text-dim);margin-top:4px" x-text="'資料截至 ' + cashPos.asOf + '　' + cashPos.note"></div>
+
+                <!-- 銀行對帳單比對已併入出納頁籤（2026-08-31，財務/出納權限分工＋出納併入本頁）-->
+                <div style="margin-top:20px;padding-top:14px;border-top:1px solid var(--border-light);font-size:12px;color:var(--text-dim)">
+                  銀行對帳單比對已併入 <a href="#" @click.prevent="showCashierTab()" style="color:var(--accent)">出納頁籤</a>。
+                </div>
+
+                <!-- 稅務匯出 -->
+                <div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border-light)">
+                  <div class="cm-section-title" style="margin-bottom:8px">稅務匯出（銷項發票清單）</div>
+                  <div style="font-size:11px;color:var(--text-dim);margin-bottom:10px">
+                    匯出已填發票號碼的收款品項，含統一編號/金額/稅額欄位，供記帳士申報使用。
+                  </div>
+                  <div style="display:flex;align-items:center;gap:8px">
+                    <select x-model.number="taxExportYear" style="padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;background:#fff">
+                      <template x-for="y in [2023,2024,2025,2026,2027]" :key="y"><option :value="y" x-text="y + ' 年'"></option></template>
+                    </select>
+                    <select x-model="taxExportMonth" style="padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;background:#fff">
+                      <option value="">整年</option>
+                      <template x-for="m in 12" :key="m"><option :value="m" x-text="m + ' 月'"></option></template>
+                    </select>
+                    <button class="btn-export excel" @click="exportTaxInvoices()" :disabled="taxExporting">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                      <span x-text="taxExporting ? '產製中…' : '匯出 Excel'"></span>
+                    </button>
+                  </div>
+                </div>
+
+              </div>
+            </template>
+          </div>
+
+          <!-- T100（鼎新）傳票批次匯出（2026-09-01 新增，2026-09-02 從「資金水位」拆成獨立頁籤，
+               使用者反映原本埋在資金水位頁籤最底下太隱蔽） -->
+          <div x-show="activeTab==='t100'" class="panel" style="padding:20px">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:14px">
+              <div style="max-width:640px">
+                <div class="cm-section-title" style="margin-bottom:6px">T100（鼎新）傳票批次匯出</div>
+                <div style="font-size:11px;color:var(--text-dim)">
+                  現金基礎：匯出期間內已收款發票（借銀行存款／貸銷貨收入＋銷項稅額）、已匯款承攬商費用（借承攬商費用／貸銀行存款）、已付款料件/設備進貨（借料件設備成本／貸銀行存款），每張傳票借貸自動平衡。
+                  請款單不含在內（尚未實際收款，非金流事件）；進貨批次要先到「庫存管理」頁的「進貨批次」標記已付款才會出現。匯出後請財務用 T100 既有匯入功能核對後手動匯入。
+                </div>
+              </div>
+              <!-- 科目代號設定完成度一眼可見，不用展開設定面板才知道 -->
+              <span style="white-space:nowrap;display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border-radius:999px;font-size:11px;font-weight:600"
+                    :style="t100Config ? (t100ConfigComplete ? 'background:#DCFCE7;color:var(--success)' : 'background:#FEF3C7;color:var(--warning)') : 'background:#F0EEE9;color:var(--text-dim)'"
+                    x-text="!t100Config ? '科目代號讀取中…' : (t100ConfigComplete ? '✓ 科目代號已設定' : '⚠ 科目代號尚未設定完整')"></span>
+            </div>
+
+            <!-- KPI 一覽：待確認事件/金額/已設定銀行帳戶數，切換進頁籤就自動載入 -->
+            <div class="stat-strip">
+              <div class="stat-pill accent">
+                <div class="stat-pill__val" x-text="t100Preview ? t100Preview.count : '—'"></div>
+                <div class="stat-pill__lbl">待確認事件</div>
+              </div>
+              <div class="stat-pill warn">
+                <div class="stat-pill__val" x-text="t100Preview ? fmt(t100Preview.totalAmount) : '—'"></div>
+                <div class="stat-pill__lbl">待確認總金額</div>
+              </div>
+              <div class="stat-pill">
+                <div class="stat-pill__val" x-text="t100Config ? (t100Config.bankAccounts || []).length : '—'"></div>
+                <div class="stat-pill__lbl">已設定銀行帳戶</div>
+              </div>
+            </div>
+
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:12px 14px;background:var(--bg-subtle,#FAFAF8);border:1px solid var(--border-light);border-radius:var(--radius-lg);margin-bottom:14px">
+              <label class="field-label" style="margin:0 2px 0 0">區間</label>
+              <input type="date" x-model="t100Start" style="padding:5px 9px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px">
+              <span style="font-size:12px;color:var(--text-dim)">～</span>
+              <input type="date" x-model="t100End" style="padding:5px 9px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px">
+              <span style="width:1px;align-self:stretch;background:var(--border-light);margin:0 4px"></span>
+              <button class="btn-export excel" @click="exportT100Vouchers()" :disabled="t100Exporting">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                <span x-text="t100Exporting ? '產製中…' : '匯出傳票 Excel'"></span>
+              </button>
+              <button class="btn-ghost btn-sm" @click="loadT100Preview()" :disabled="t100Previewing" x-text="t100Previewing ? '載入中…' : '重新整理預覽'"></button>
+              <button class="btn-ghost btn-sm" @click="toggleT100Config()" x-text="t100ConfigOpen ? '收合科目代號設定' : '展開科目代號設定'" style="margin-left:auto"></button>
+            </div>
+
+            <!-- 預覽表格＋確認已匯入 -->
+            <div x-show="t100Preview" x-cloak style="margin-bottom:14px">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+                <div class="cm-section-title" style="margin:0;font-size:13px">待確認事件明細</div>
+                <button class="btn-primary btn-sm" @click="confirmT100Imported()" :disabled="t100Confirming || !t100Preview || !t100Preview.count" x-text="t100Confirming ? '處理中…' : '確認已匯入 T100（排除下次匯出）'"></button>
+              </div>
+              <table class="data-table" x-show="t100Preview && t100Preview.count">
+                <thead><tr><th>日期</th><th>類型</th><th>摘要</th><th class="r">金額</th></tr></thead>
+                <tbody>
+                  <template x-for="e in (t100Preview ? t100Preview.events : [])" :key="e.sourceType + e.sourceKey">
+                    <tr>
+                      <td class="mono" x-text="e.date"></td>
+                      <td>
+                        <span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600"
+                              :style="e.sourceType === 'quotation_payment' ? 'background:#DCFCE7;color:var(--success)' : 'background:#FEE2E2;color:var(--danger)'"
+                              x-text="e.sourceType === 'quotation_payment' ? '收款' : '付款'"></span>
+                      </td>
+                      <td x-text="e.summary"></td>
+                      <td class="r mono" x-text="fmt(e.amount)"></td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+              <div class="empty-hint" style="font-size:11px;color:var(--text-dim);padding:16px;text-align:center;background:var(--bg-subtle,#FAFAF8);border-radius:var(--radius-lg)" x-show="t100Preview && !t100Preview.count">目前這個區間沒有待確認的事件（可能是還沒有金流事件，或已經全部確認過了）。</div>
+            </div>
+
+            <!-- 已確認清單＋反確認（2026-09-10 補上）：後端 /t100-export/confirmed
+                 與 /unconfirm 早就存在，但一直沒有畫面入口——「確認已匯入」是一次
+                 標記一整個區間的批次操作，按錯之後原本只能改資料庫。 -->
+            <div style="margin-bottom:14px">
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+                <div class="cm-section-title" style="margin:0;font-size:13px">已確認匯入的事件</div>
+                <span style="font-size:11px;color:var(--text-dim)" x-text="'（' + t100Confirmed.length + ' 筆）'"></span>
+                <button class="btn-ghost btn-sm" @click="t100ConfirmedOpen = !t100ConfirmedOpen; if (t100ConfirmedOpen) loadT100Confirmed()"
+                        x-text="t100ConfirmedOpen ? '收合' : '展開檢視／反確認'"></button>
+                <button class="btn-ghost btn-sm" x-show="t100ConfirmedOpen" @click="loadT100Confirmed()"
+                        :disabled="t100ConfirmedLoading" x-text="t100ConfirmedLoading ? '載入中…' : '依上方日期區間重新查詢'"></button>
+              </div>
+              <div x-show="t100ConfirmedOpen" x-cloak>
+                <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;line-height:1.6">
+                  這些事件已被標記為「已匯入 T100」，因此不會再出現在待確認清單與匯出檔中。
+                  若是誤按確認，可在此撤銷；撤銷後該筆會在下次涵蓋其日期的預覽／匯出重新出現。
+                </div>
+                <table class="data-table" x-show="t100Confirmed.length">
+                  <thead><tr><th>日期</th><th>類型</th><th>摘要</th><th class="r">金額</th><th>確認者</th><th>確認時間</th><th></th></tr></thead>
+                  <tbody>
+                    <template x-for="c in t100Confirmed" :key="c.sourceType + c.sourceKey">
+                      <tr>
+                        <td class="mono" x-text="c.date"></td>
+                        <td>
+                          <span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600"
+                                :style="c.sourceType === 'quotation_payment' ? 'background:#DCFCE7;color:var(--success)' : 'background:#FEE2E2;color:var(--danger)'"
+                                x-text="c.sourceType === 'quotation_payment' ? '收款' : '付款'"></span>
+                        </td>
+                        <td x-text="c.summary"></td>
+                        <td class="r mono" x-text="fmt(c.amount)"></td>
+                        <td x-text="c.confirmedBy"></td>
+                        <td class="mono" style="font-size:11px" x-text="(c.confirmedAt || '').replace('T', ' ').slice(0, 16)"></td>
+                        <td class="r">
+                          <button class="btn-ghost btn-sm" @click="unconfirmT100(c)"
+                                  :disabled="t100Unconfirming === c.sourceType + ':' + c.sourceKey"
+                                  x-text="t100Unconfirming === c.sourceType + ':' + c.sourceKey ? '撤銷中…' : '反確認'"></button>
+                        </td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+                <div class="empty-hint" style="font-size:11px;color:var(--text-dim);padding:16px;text-align:center;background:var(--bg-subtle,#FAFAF8);border-radius:var(--radius-lg)"
+                     x-show="!t100ConfirmedLoading && !t100Confirmed.length">這個日期區間內沒有已確認的事件。</div>
+              </div>
+            </div>
+
+            <div x-show="t100ConfigOpen" x-cloak style="margin-top:4px">
+              <template x-if="!t100Config">
+                <div style="font-size:12px;color:var(--text-dim)">載入中…</div>
+              </template>
+              <template x-if="t100Config">
+                <div>
+                  <div style="font-size:11px;color:var(--text-dim);margin-bottom:12px">
+                    科目代號留白時，匯出的 Excel 仍會產出正確的金額/日期/摘要/來源單號，只是科目代號欄位空白，財務可先核對數字，之後再回來補上代號。
+                    <span x-show="_role()!=='superadmin'">（僅 superadmin 可修改，你目前只能檢視）</span>
+                  </div>
+
+                  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px">
+
+                  <!-- 卡片①：銀行帳戶清單（依銀行帳戶分開設定，供標記已付款/收款時選擇；匯出時實際套用的是那筆交易「標記當下」選的帳戶，不是這份清單本身，見說明） -->
+                  <div style="background:#fff;border:1px solid var(--border-light);border-radius:var(--radius-lg);padding:14px 16px">
+                    <div style="font-size:12px;font-weight:700;color:var(--text-primary);margin-bottom:4px">🏦 銀行帳戶清單</div>
+                    <div style="font-size:10px;color:var(--text-dim);margin-bottom:10px;line-height:1.5">維護貴公司所有銀行帳戶＋各自的 T100 科目代號。標記已付款/已收款時（案件管理／出納／庫存管理三處共用同一份清單）會從這裡挑選帳戶——這裡改了，其他頁面下次開啟標記視窗就會看到最新清單；但不會回頭改到已經標記過的舊交易。</div>
+                    <template x-for="(b, bi) in t100Config.bankAccounts" :key="bi">
+                      <div style="display:flex;gap:6px;margin-bottom:6px;align-items:center">
+                        <button type="button" x-show="_role()==='superadmin'"
+                                @click="t100Config.defaultBankAccountCode = (t100Config.defaultBankAccountCode === b.acctCode ? '' : b.acctCode)"
+                                :title="t100Config.defaultBankAccountCode === b.acctCode ? '目前是系統預設帳戶，點一下取消' : '設為系統預設帳戶'"
+                                style="background:none;border:none;cursor:pointer;font-size:15px;padding:2px;line-height:1;flex-shrink:0"
+                                :style="t100Config.defaultBankAccountCode === b.acctCode ? 'color:#D97706' : 'color:var(--border-light)'"
+                                x-text="t100Config.defaultBankAccountCode === b.acctCode ? '★' : '☆'"></button>
+                        <span x-show="_role()!=='superadmin' && t100Config.defaultBankAccountCode === b.acctCode" style="font-size:14px;color:#D97706;flex-shrink:0">★</span>
+                        <input type="text" placeholder="帳戶名稱（如：第一銀行 xxx）" x-model="b.name" :disabled="_role()!=='superadmin'" style="flex:1;padding:5px 9px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px">
+                        <input type="text" placeholder="科目代號" x-model="b.acctCode" :disabled="_role()!=='superadmin'" style="width:100px;padding:5px 9px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px">
+                        <button class="btn-ghost btn-sm" x-show="_role()==='superadmin'" @click="if (t100Config.defaultBankAccountCode === b.acctCode) t100Config.defaultBankAccountCode = ''; t100Config.bankAccounts.splice(bi,1)">刪除</button>
+                      </div>
+                    </template>
+                    <div style="font-size:10px;color:var(--text-dim);margin:-2px 0 8px" x-show="t100Config.bankAccounts && t100Config.bankAccounts.length">點 ☆ 可把該帳戶設為系統預設（標記已付款/已收款時，若該對象沒有上次使用紀錄，會自動帶入這個預設帳戶）</div>
+                    <div x-show="_role()==='superadmin' && (!t100Config.bankAccounts || !t100Config.bankAccounts.length)" style="font-size:11px;color:var(--warning);margin-bottom:6px">⚠ 尚未設定任何銀行帳戶，標記已付款/已收款時將無法選擇帳戶</div>
+                    <button class="btn-ghost btn-sm" x-show="_role()==='superadmin'" @click="t100Config.bankAccounts.push({name:'',acctCode:''})">+ 新增銀行帳戶</button>
+                  </div>
+
+                  <!-- 卡片②：通用科目代號 -->
+                  <div style="background:#fff;border:1px solid var(--border-light);border-radius:var(--radius-lg);padding:14px 16px">
+                    <div style="font-size:12px;font-weight:700;color:var(--text-primary);margin-bottom:10px">📊 通用科目代號</div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+                      <div>
+                        <label style="font-size:10px;color:var(--text-dim);display:block;margin-bottom:2px">銷貨收入</label>
+                        <input type="text" x-model="t100Config.salesRevenueAccount" :disabled="_role()!=='superadmin'" style="width:100%;padding:5px 9px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;box-sizing:border-box">
+                      </div>
+                      <div>
+                        <label style="font-size:10px;color:var(--text-dim);display:block;margin-bottom:2px">銷項稅額</label>
+                        <input type="text" x-model="t100Config.outputTaxAccount" :disabled="_role()!=='superadmin'" style="width:100%;padding:5px 9px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;box-sizing:border-box">
+                      </div>
+                      <div>
+                        <label style="font-size:10px;color:var(--text-dim);display:block;margin-bottom:2px">承攬商費用</label>
+                        <input type="text" x-model="t100Config.contractorExpenseAccount" :disabled="_role()!=='superadmin'" style="width:100%;padding:5px 9px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;box-sizing:border-box">
+                      </div>
+                      <div>
+                        <label style="font-size:10px;color:var(--text-dim);display:block;margin-bottom:2px">部門別（選填）</label>
+                        <input type="text" x-model="t100Config.departmentCode" :disabled="_role()!=='superadmin'" style="width:100%;padding:5px 9px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;box-sizing:border-box">
+                      </div>
+                      <div style="grid-column:1/-1">
+                        <label style="font-size:10px;color:var(--text-dim);display:block;margin-bottom:2px">傳票別</label>
+                        <input type="text" x-model="t100Config.voucherCategory" :disabled="_role()!=='superadmin'" style="width:100%;padding:5px 9px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;box-sizing:border-box">
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- 卡片③：料件/設備成本科目代號（依料件分類分開設定） -->
+                  <div style="background:#fff;border:1px solid var(--border-light);border-radius:var(--radius-lg);padding:14px 16px">
+                    <div style="font-size:12px;font-weight:700;color:var(--text-primary);margin-bottom:10px">📦 料件/設備成本科目代號（依分類）</div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+                      <template x-for="cat in Object.keys(t100Config.inventoryExpenseAccounts)" :key="cat">
+                        <div>
+                          <label style="font-size:10px;color:var(--text-dim);display:block;margin-bottom:2px" x-text="cat"></label>
+                          <input type="text" x-model="t100Config.inventoryExpenseAccounts[cat]" :disabled="_role()!=='superadmin'" style="width:100%;padding:5px 9px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;box-sizing:border-box">
+                        </div>
+                      </template>
+                    </div>
+                  </div>
+
+                  </div>
+
+                  <div style="margin-top:14px" x-show="_role()==='superadmin'">
+                    <button class="btn-primary btn-sm" @click="saveT100Config()" :disabled="t100ConfigSaving" x-text="t100ConfigSaving ? '儲存中…' : '儲存設定'"></button>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <!-- 出納（2026-08-31 併入本頁，原獨立 cashier.html／cashier.js） -->
+          <div x-show="activeTab==='cashier'" class="panel" style="padding:20px">
+            <div class="stat-strip">
+              <div class="stat-pill danger">
+                <div class="stat-pill__val" x-text="fmt(kpiPayableTotal)">—</div>
+                <div class="stat-pill__lbl">待付款總額</div>
+              </div>
+              <div class="stat-pill accent">
+                <div class="stat-pill__val" x-text="fmt(kpiReceivableTotal)">—</div>
+                <div class="stat-pill__lbl">待收款總額</div>
+              </div>
+              <div class="stat-pill success">
+                <div class="stat-pill__val" x-text="fmt(cashierHistoryOutgoingTotal)">—</div>
+                <div class="stat-pill__lbl">本期已匯款</div>
+              </div>
+              <div class="stat-pill success">
+                <div class="stat-pill__val" x-text="fmt(cashierHistoryIncomingTotal)">—</div>
+                <div class="stat-pill__lbl">本期已收款</div>
+              </div>
+              <div class="stat-pill warn">
+                <div class="stat-pill__val" x-text="kpiPayableOverdue + kpiReceivableOverdue">—</div>
+                <div class="stat-pill__lbl">逾期待處理筆數</div>
+              </div>
+            </div>
+
+            <div class="ctabs">
+              <button class="ctab" :class="{on: cashierSub==='payable'}" @click="cashierSub='payable'">
+                待付款<span class="tab__cnt" x-text="payable.length"></span>
+              </button>
+              <button class="ctab" :class="{on: cashierSub==='receivable'}" @click="cashierSub='receivable'">
+                待收款<span class="tab__cnt" x-text="receivable.filter(i=>!i.received).length"></span>
+              </button>
+              <button class="ctab" :class="{on: cashierSub==='history'}" @click="cashierSub='history'">執行歷史</button>
+              <button class="ctab" :class="{on: cashierSub==='bank'}" @click="cashierSub='bank'">銀行對帳單比對</button>
+            </div>
+
+            <!-- 待付款 -->
+            <div x-show="cashierSub==='payable'">
+              <template x-if="payable.length===0">
+                <div class="empty-state">目前沒有待匯款的申請</div>
+              </template>
+              <template x-if="payable.length>0">
+                <div class="panel">
+                  <table class="data-table">
+                    <thead><tr>
+                      <th>申請單號</th><th>關聯案件</th><th>廠商</th>
+                      <th class="r">應付金額</th><th class="c">應付款日期</th><th class="c">動作</th>
+                    </tr></thead>
+                    <tbody>
+                      <template x-for="v in payable" :key="v.voucherNo">
+                        <tr>
+                          <td class="mono" x-text="v.voucherNo"></td>
+                          <td class="mono" x-text="v.quoteNo"></td>
+                          <td x-text="v.vendorName || '（外包人員點工）'"></td>
+                          <td class="r mono" x-text="fmt(v.grandTotal)"></td>
+                          <td class="c mono" :class="isOverdue(v.payableDate) ? 'red-txt' : (isDueSoon(v.payableDate) ? 'orange-txt' : '')"
+                              x-text="v.payableDate || '未指定'"></td>
+                          <td class="c">
+                            <button x-show="canExecuteCashier()" class="action-btn pay" @click="openPayVoucherModal(v)">標記已匯款</button>
+                            <span x-show="!canExecuteCashier()" style="font-size:11px;color:var(--text-dim)">僅檢視</span>
+                          </td>
+                        </tr>
+                      </template>
+                    </tbody>
+                  </table>
+                </div>
+              </template>
+            </div>
+
+            <!-- 待收款（併入 receivables.html 全部功能，2026-08-31） -->
+            <div x-show="cashierSub==='receivable'">
+              <div class="alert-bar" x-show="receivableUninvoicedCount > 0">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+                <span>共 <strong x-text="receivableUninvoicedCount"></strong> 筆款項尚未登錄發票號碼。</span>
+              </div>
+
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+                <div class="search-wrap">
+                  <span class="search-icon">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                  </span>
+                  <input class="search-input" type="search" placeholder="搜尋案件號 / 客戶 / 款項…" x-model="receivableSearch">
+                </div>
+                <button class="period-type-btn" :class="{on:receivableFilterTab==='all'}" @click="receivableFilterTab='all'">全部</button>
+                <button class="period-type-btn" :class="{on:receivableFilterTab==='unreceived'}" @click="receivableFilterTab='unreceived'">未收款</button>
+                <button class="period-type-btn" :class="{on:receivableFilterTab==='received'}" @click="receivableFilterTab='received'">已收款</button>
+                <button class="period-type-btn" :class="{on:receivableFilterTab==='uninvoiced'}" @click="receivableFilterTab='uninvoiced'">未開發票</button>
+                <div style="margin-left:auto;font-size:12px;color:var(--text-dim)" x-text="'共 ' + filteredReceivable.length + ' 筆'"></div>
+              </div>
+
+              <template x-if="filteredReceivable.length===0">
+                <div class="empty-state">沒有符合條件的款項</div>
+              </template>
+              <template x-if="filteredReceivable.length>0">
+                <div class="panel">
+                  <table class="data-table">
+                    <thead><tr>
+                      <th>案件號</th><th>客戶</th><th>業務員</th><th>款項類型</th>
+                      <th class="r">應收金額</th><th class="c">預計收款日</th><th class="c">收款狀態</th>
+                      <th>發票號碼</th><th class="c">動作</th>
+                    </tr></thead>
+                    <tbody>
+                      <template x-for="it in filteredReceivable" :key="it.quoteNo + '-' + it.idx">
+                        <tr :class="!it.invoiceNo && 'uninvoiced-row'">
+                          <td class="mono" x-text="it.quoteNo"></td>
+                          <td x-text="it.customer"></td>
+                          <td x-text="it.salesPerson"></td>
+                          <td x-text="it.type"></td>
+                          <td class="r mono" x-text="fmt(it.amount)"></td>
+                          <td class="c mono" :class="it.overdue ? 'red-txt' : (isDueSoon(it.expectedReceiptDate) ? 'orange-txt' : '')"
+                              x-text="it.expectedReceiptDate || '未指定'"></td>
+                          <td class="c"><span class="rb" :class="it.received ? 'rb-received' : 'rb-pending'" x-text="it.received ? '已收款' : '待收款'"></span></td>
+                          <td>
+                            <template x-if="it.invoiceNo">
+                              <span class="rb rb-invoiced" :style="canExecuteCashier() ? 'cursor:pointer' : ''" @click="canExecuteCashier() && openInvoiceModal(it)" x-text="it.invoiceNo"></span>
+                            </template>
+                            <template x-if="!it.invoiceNo && canExecuteCashier()">
+                              <button class="action-btn invoice" @click="openInvoiceModal(it)">登錄發票</button>
+                            </template>
+                            <span x-show="!it.invoiceNo && !canExecuteCashier()" style="color:var(--text-dim);font-size:11px">未登錄</span>
+                          </td>
+                          <td class="c">
+                            <template x-if="canExecuteCashier() && !it.received">
+                              <button class="action-btn pay" @click="openReceiveModal(it)">標記已收款</button>
+                            </template>
+                            <template x-if="canExecuteCashier() && it.received">
+                              <button class="action-btn unreceive" @click="toggleReceived(it, false)">取消收款</button>
+                            </template>
+                            <span x-show="!canExecuteCashier()" style="font-size:11px;color:var(--text-dim)">僅檢視</span>
+                          </td>
+                        </tr>
+                      </template>
+                    </tbody>
+                  </table>
+                  <div class="summary-bar">
+                    <span>篩選結果合計：<strong x-text="fmt(filteredReceivable.reduce((s,i)=>s+i.amount,0))"></strong></span>
+                    <span>已收：<strong style="color:var(--success)" x-text="fmt(filteredReceivable.filter(i=>i.received).reduce((s,i)=>s+i.amount,0))"></strong></span>
+                    <span>未收：<strong style="color:var(--danger)" x-text="fmt(filteredReceivable.filter(i=>!i.received).reduce((s,i)=>s+i.amount,0))"></strong></span>
+                    <span>未開票：<strong style="color:#D97706" x-text="filteredReceivable.filter(i=>!i.invoiceNo).length + ' 筆'"></strong></span>
+                  </div>
+                </div>
+              </template>
+            </div>
+
+            <!-- 執行歷史（2026-08-31） -->
+            <div x-show="cashierSub==='history'">
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+                <label class="field-label" style="margin:0">起</label>
+                <input type="date" class="field-input" style="width:auto;margin:0" x-model="cashierHistoryStart">
+                <label class="field-label" style="margin:0">迄</label>
+                <input type="date" class="field-input" style="width:auto;margin:0" x-model="cashierHistoryEnd">
+                <button class="period-type-btn" @click="loadCashierHistory()">查詢</button>
+                <button class="btn-export excel" style="margin-left:auto" :disabled="cashierExporting" @click="exportCashierHistory()">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                  <span x-text="cashierExporting ? '匯出中…' : '匯出 Excel'"></span>
+                </button>
+              </div>
+
+              <template x-if="cashierHistoryLoading">
+                <div class="empty-state">載入中…</div>
+              </template>
+              <template x-if="!cashierHistoryLoading">
+                <div>
+                  <div class="stl-section">已匯款明細（共 <span x-text="cashierHistoryOutgoing.length"></span> 筆，合計 <span x-text="fmt(cashierHistoryOutgoingTotal)"></span>）</div>
+                  <template x-if="cashierHistoryOutgoing.length===0">
+                    <div class="empty-state">此區間沒有已匯款紀錄</div>
+                  </template>
+                  <template x-if="cashierHistoryOutgoing.length>0">
+                    <div class="panel" style="margin-bottom:20px">
+                      <table class="data-table">
+                        <thead><tr><th>申請單號</th><th>關聯案件</th><th>廠商</th><th class="r">金額</th><th class="c">匯款日期</th></tr></thead>
+                        <tbody>
+                          <template x-for="v in cashierHistoryOutgoing" :key="v.voucherNo">
+                            <tr>
+                              <td class="mono" x-text="v.voucherNo"></td>
+                              <td class="mono" x-text="v.quoteNo"></td>
+                              <td x-text="v.vendorName || '（外包人員點工）'"></td>
+                              <td class="r mono" x-text="fmt(v.grandTotal)"></td>
+                              <td class="c mono" x-text="v.paidAt ? v.paidAt.slice(0,10) : ''"></td>
+                            </tr>
+                          </template>
+                        </tbody>
+                      </table>
+                    </div>
+                  </template>
+
+                  <div class="stl-section">已收款明細（共 <span x-text="cashierHistoryIncoming.length"></span> 筆，合計 <span x-text="fmt(cashierHistoryIncomingTotal)"></span>）</div>
+                  <template x-if="cashierHistoryIncoming.length===0">
+                    <div class="empty-state">此區間沒有已收款紀錄</div>
+                  </template>
+                  <template x-if="cashierHistoryIncoming.length>0">
+                    <div class="panel">
+                      <table class="data-table">
+                        <thead><tr><th>案件號</th><th>客戶</th><th>業務員</th><th>款項類型</th><th class="r">實收金額</th><th class="c">收款日</th></tr></thead>
+                        <tbody>
+                          <template x-for="it in cashierHistoryIncoming" :key="it.quoteNo + it.type + it.receivedAt">
+                            <tr>
+                              <td class="mono" x-text="it.quoteNo"></td>
+                              <td x-text="it.customer"></td>
+                              <td x-text="it.salesPerson"></td>
+                              <td x-text="it.type"></td>
+                              <td class="r mono" x-text="fmt(it.actualAmount !== null ? it.actualAmount : it.amount)"></td>
+                              <td class="c mono" x-text="it.receivedAt"></td>
+                            </tr>
+                          </template>
+                        </tbody>
+                      </table>
+                    </div>
+                  </template>
+                </div>
+              </template>
+            </div>
+
+            <!-- 銀行對帳單比對（搬自營運報表資金水位頁籤，2026-08-31） -->
+            <div x-show="cashierSub==='bank'">
+              <div style="font-size:11px;color:var(--text-dim);margin-bottom:10px">
+                上傳銀行匯出的 CSV（需含日期與金額欄位），依金額比對目前「已核准未匯款」清單，僅供人工複核，不會自動標記已匯款。
+              </div>
+              <label x-show="canExecuteCashier()" class="action-btn pay" style="cursor:pointer;display:inline-flex">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+                <span x-text="bankReconciling ? '比對中…' : '上傳 CSV 比對'"></span>
+                <input type="file" accept=".csv" style="display:none" :disabled="bankReconciling" @change="uploadBankCsv($event)">
+              </label>
+              <span x-show="!canExecuteCashier()" style="font-size:12px;color:var(--text-dim)">僅出納/管理員可上傳比對</span>
+
+              <template x-if="bankResult">
+                <div style="margin-top:14px">
+                  <div class="kpi-grid">
+                    <div class="kpi-card green">
+                      <div class="kpi-card__lbl">配對成功</div>
+                      <div class="kpi-card__val" x-text="bankResult.matchedCount"></div>
+                    </div>
+                    <div class="kpi-card orange">
+                      <div class="kpi-card__lbl">銀行紀錄未配對</div>
+                      <div class="kpi-card__val" x-text="bankResult.unmatchedBankCount"></div>
+                    </div>
+                    <div class="kpi-card red">
+                      <div class="kpi-card__lbl">仍待匯款（未配對）</div>
+                      <div class="kpi-card__val" x-text="bankResult.unmatchedVouchers.length"></div>
+                    </div>
+                  </div>
+
+                  <div class="panel">
+                    <table class="data-table">
+                      <thead><tr>
+                        <th class="c">銀行日期</th><th class="r">銀行金額</th><th>銀行摘要</th>
+                        <th>配對申請單號</th><th>承攬商</th><th class="c">動作</th>
+                      </tr></thead>
+                      <tbody>
+                        <template x-for="(r, i) in bankResult.bankRows" :key="i">
+                          <tr>
+                            <td class="c" x-text="r.date"></td>
+                            <td class="r mono" x-text="fmt(r.amount)"></td>
+                            <td x-text="r.desc"></td>
+                            <td x-show="r.match" class="mono" x-text="r.match ? (r.match.quoteNo + ' / ' + r.match.voucherNo) : ''"></td>
+                            <td x-show="!r.match" colspan="2" style="color:var(--text-dim)">未找到金額相符的待匯款申請</td>
+                            <td x-show="r.match" x-text="r.match ? r.match.vendorName : ''"></td>
+                            <td class="c">
+                              <button x-show="r.match && !r.match._paid && canExecuteCashier()" class="action-btn pay" @click="openBankPayModal(r)">標記已匯款</button>
+                              <span x-show="r.match && r.match._paid" style="color:#15803D;font-size:11px">✓ 已標記</span>
+                            </td>
+                          </tr>
+                        </template>
+                      </tbody>
+                    </table>
+                  </div>
+                  <div style="font-size:11px;color:var(--text-dim);margin-top:8px" x-text="bankResult.note"></div>
+                </div>
+              </template>
+            </div>
+          </div>
+
         </div>
       </template>
 
-      <!-- 未載入 -->
-      <template x-if="!loading && !data && !error">
+      <!-- 未載入（僅 admin+；cashier/finance 模組使用者 data 永遠是 null 屬於
+           正常狀態，不該看到「點擊載入報表」，他們的內容都在上面出納頁籤裡） -->
+      <template x-if="!loading && !data && !error && isAdminPlus()">
         <div class="empty-state" style="margin-top:40px">
           <p style="margin-bottom:12px;font-size:28px">📊</p>
           <p>點擊下方按鈕載入本期報表</p>
@@ -1019,7 +2372,7 @@
 
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
           <div class="stl-section" style="margin:0;border:0;padding:0">業務員個人配額（選填）</div>
-          <button type="button" @click="addSpTarget()" style="padding:4px 12px;border:1px solid var(--accent);background:#EFF6FF;color:var(--accent);border-radius:var(--radius);font-size:11px;font-family:var(--font-zh);cursor:pointer">+ 新增業務員</button>
+          <button type="button" @click="addSpTarget()" style="padding:4px 12px;border:1px solid var(--accent);background:var(--accent-light);color:var(--accent);border-radius:var(--radius);font-size:11px;font-family:var(--font-zh);cursor:pointer">+ 新增業務員</button>
         </div>
         <template x-for="(sp, i) in targetForm.salesperson" :key="i">
           <div class="tgt-sp-row">
@@ -1048,6 +2401,7 @@
       </div>
     </div>
   </div>
+
 
   <!-- Settlement Modal -->
   <div x-show="settlementModal" class="modal-overlay" @click.self="closeSettlement()">
@@ -1248,6 +2602,109 @@
             </template>
           </div>
         </template>
+      </div>
+    </div>
+  </div>
+
+  <!-- 出納 Modal 群組（2026-08-31 併入本頁，原獨立 cashier.html） -->
+  <div x-show="payVoucherModal" class="modal-overlay" @click.self="payVoucherModal=false">
+    <div class="modal-box" style="max-width:360px">
+      <div class="modal-hd">
+        <div class="modal-title" x-text="'標記已匯款' + (payVoucherTarget ? '　' + payVoucherTarget.voucherNo : '')"></div>
+        <button class="modal-close" @click="payVoucherModal=false">&#10005;</button>
+      </div>
+      <div class="modal-body">
+        <label class="field-label">匯款日期</label>
+        <input type="date" class="field-input" x-model="payVoucherDate">
+        <label class="field-label">匯款銀行帳戶（選填，供 T100 傳票匯出使用）</label>
+        <select class="field-input" x-model="payVoucherBankAcctCode">
+          <option value="">— 未指定 —</option>
+          <template x-for="b in t100BankAccounts" :key="b.acctCode"><option :value="b.acctCode" x-text="b.name"></option></template>
+        </select>
+        <label class="field-label">備註（選填，例如匯款帳號末五碼）</label>
+        <input type="text" class="field-input" x-model="payVoucherNote" placeholder="選填">
+        <div style="display:flex;justify-content:flex-end;gap:8px">
+          <button @click="payVoucherModal=false" :disabled="payVoucherSaving"
+                  style="padding:7px 16px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:var(--font-zh);background:#fff;cursor:pointer">取消</button>
+          <button @click="confirmPayVoucher()" :disabled="payVoucherSaving || !payVoucherDate"
+                  style="padding:7px 16px;border:none;border-radius:var(--radius);font-size:13px;font-weight:600;font-family:var(--font-zh);background:#059669;color:#fff;cursor:pointer"
+                  x-text="payVoucherSaving ? '處理中…' : '確認標記已匯款'"></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div x-show="receiveModal" class="modal-overlay" @click.self="receiveModal=false">
+    <div class="modal-box" style="max-width:360px">
+      <div class="modal-hd">
+        <div class="modal-title" x-text="'標記已收款' + (receiveTarget ? '　' + receiveTarget.quoteNo : '')"></div>
+        <button class="modal-close" @click="receiveModal=false">&#10005;</button>
+      </div>
+      <div class="modal-body">
+        <label class="field-label">收款日期</label>
+        <input type="date" class="field-input" x-model="receiveDate">
+        <label class="field-label">實收金額（含稅）</label>
+        <input type="number" min="0" class="field-input" x-model.number="receiveActualAmount">
+        <label class="field-label">手續費 / 扣款</label>
+        <input type="number" min="0" class="field-input" x-model.number="receiveFeeAmount">
+        <label class="field-label">收款銀行帳戶（選填，供 T100 傳票匯出使用）</label>
+        <select class="field-input" x-model="receiveBankAcctCode">
+          <option value="">— 未指定 —</option>
+          <template x-for="b in t100BankAccounts" :key="b.acctCode"><option :value="b.acctCode" x-text="b.name"></option></template>
+        </select>
+        <label class="field-label">備註（選填）</label>
+        <input type="text" class="field-input" x-model="receiveNote" placeholder="例：匯款轉入、票期兌現…">
+        <div style="display:flex;justify-content:flex-end;gap:8px">
+          <button @click="receiveModal=false" :disabled="receiveSaving"
+                  style="padding:7px 16px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:var(--font-zh);background:#fff;cursor:pointer">取消</button>
+          <button @click="confirmReceive()" :disabled="receiveSaving || !receiveDate"
+                  style="padding:7px 16px;border:none;border-radius:var(--radius);font-size:13px;font-weight:600;font-family:var(--font-zh);background:#059669;color:#fff;cursor:pointer"
+                  x-text="receiveSaving ? '處理中…' : '確認標記已收款'"></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div x-show="invoiceModal.show" class="modal-overlay" @click.self="invoiceModal.show=false">
+    <div class="modal-box" style="max-width:360px">
+      <div class="modal-hd">
+        <div class="modal-title" x-text="'登錄發票號碼' + (invoiceModal.item ? '　' + invoiceModal.item.quoteNo : '')"></div>
+        <button class="modal-close" @click="invoiceModal.show=false">&#10005;</button>
+      </div>
+      <div class="modal-body">
+        <label class="field-label">統一發票號碼</label>
+        <input type="text" class="field-input" x-model="invoiceModal.no" placeholder="AB12345678" @keydown.enter="confirmInvoice()">
+        <div style="font-size:11px;color:var(--text-dim);font-family:var(--font-zh);margin-top:-6px;margin-bottom:12px">留空並儲存可清除發票號碼</div>
+        <label class="field-label">發票開立日期</label>
+        <input type="date" class="field-input" x-model="invoiceModal.date">
+        <div style="font-size:11px;color:var(--text-dim);font-family:var(--font-zh);margin-top:-6px;margin-bottom:12px">供稅務匯出判斷申報期別，跟收款日期是兩回事；留空則沿用收款日期</div>
+        <div style="display:flex;justify-content:flex-end;gap:8px">
+          <button @click="invoiceModal.show=false" style="padding:7px 16px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:var(--font-zh);background:#fff;cursor:pointer">取消</button>
+          <button @click="confirmInvoice()" style="padding:7px 16px;border:none;border-radius:var(--radius);font-size:13px;font-weight:600;font-family:var(--font-zh);background:#059669;color:#fff;cursor:pointer">儲存</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div x-show="bankPayModal" class="modal-overlay" @click.self="bankPayModal=false">
+    <div class="modal-box" style="max-width:360px">
+      <div class="modal-hd">
+        <div class="modal-title" x-text="'標記已匯款' + (bankPayRow && bankPayRow.match ? '　' + bankPayRow.match.voucherNo : '')"></div>
+        <button class="modal-close" @click="bankPayModal=false">&#10005;</button>
+      </div>
+      <div class="modal-body">
+        <label class="field-label">匯款日期</label>
+        <input type="date" class="field-input" x-model="bankPayDate">
+        <div style="font-size:11px;color:var(--text-dim);font-family:var(--font-zh);margin-bottom:12px">
+          銀行對帳單上的日期原文：<span x-text="bankPayRow ? (bankPayRow.date || '（無）') : ''"></span>　請核對後再確認
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:8px">
+          <button @click="bankPayModal=false" :disabled="bankPaySaving"
+                  style="padding:7px 16px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:var(--font-zh);background:#fff;cursor:pointer">取消</button>
+          <button @click="confirmBankPay()" :disabled="bankPaySaving || !bankPayDate"
+                  style="padding:7px 16px;border:none;border-radius:var(--radius);font-size:13px;font-weight:600;font-family:var(--font-zh);background:#059669;color:#fff;cursor:pointer"
+                  x-text="bankPaySaving ? '處理中…' : '確認標記已匯款'"></button>
+        </div>
       </div>
     </div>
   </div>

@@ -2,11 +2,14 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="../static/favicon.png">
-  <title>料號主檔 — MOTRIX 營運管理系統</title>
-  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-  <link rel="stylesheet" href="../css/style.css">
+  <title>料號主檔 — MOTRIX 專案管理系統</title>
+  <script src="../static/auth-guard.js"></script>
+  <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
+  <script src="../static/vendor/xlsx-0.18.5.full.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <style>
     [x-cloak]{display:none!important}
     .page-main{margin-left:var(--sidebar-w);margin-top:var(--topbar-h);padding:28px 32px;min-height:calc(100vh - var(--topbar-h));background:var(--white)}
@@ -24,8 +27,8 @@
     .action-btn{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:var(--radius);font-size:11px;font-weight:500;cursor:pointer;border:1px solid;transition:all .12s}
     .action-btn.edit{background:#EEF2FF;border-color:#C7D2FE;color:#4338CA}
     .action-btn.edit:hover{background:#E0E7FF}
-    .action-btn.del{background:#FEF2F2;border-color:#FECACA;color:#DC2626}
-    .action-btn.del:hover{background:#FEE2E2}
+    .action-btn.del{background:var(--danger-light);border-color:var(--danger-border);color:var(--danger)}
+    .action-btn.del:hover{background:var(--danger-hover-bg)}
     .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;display:flex;align-items:center;justify-content:center}
     .modal-box{background:#fff;border-radius:12px;padding:28px 32px;width:480px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.2)}
     .modal-title{font-size:15px;font-weight:700;font-family:var(--font-zh);color:var(--text-primary);margin-bottom:20px}
@@ -37,6 +40,36 @@
     .modal-footer{display:flex;justify-content:flex-end;gap:8px;margin-top:20px}
     .empty-state{text-align:center;padding:48px;color:var(--text-dim);font-size:13px}
     .loading-text{text-align:center;padding:40px;color:var(--text-dim);font-size:13px}
+    /* ── 分類籤（2026-09-14）── */
+    .pt-cats{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+    .pt-cat{display:flex;align-items:baseline;gap:7px;padding:5px 11px;border-radius:var(--radius);
+            border:1px solid var(--border-light);background:#fff;cursor:pointer;font-family:var(--font-zh)}
+    .pt-cat:hover{border-color:var(--ghost-hover-border)}
+    .pt-cat.on{background:var(--text-primary);border-color:var(--text-primary)}
+    .pt-cat.on .pt-cat__n,.pt-cat.on .pt-cat__l{color:var(--text-on-dark)}
+    .pt-cat.on small{color:var(--text-on-dark);opacity:.7}
+    /* 件數 0 的正規類別淡化但不隱藏——「有這個類別但還沒有料號」是有用的資訊 */
+    .pt-cat.is-empty{opacity:.55}
+    .pt-cat.is-orphan{border-style:dashed;border-color:var(--warning)}
+    .pt-cat__n{font-size:14px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;
+               font-variant-numeric:tabular-nums;color:var(--text-primary);line-height:1}
+    .pt-cat__l{font-size:11.5px;color:var(--text-secondary);line-height:1.3}
+    .pt-cat__l small{display:block;font-size:9.5px;color:var(--text-dim);
+                     font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.04em}
+
+    /* ── 可排序表頭 ── */
+    .pt-sortable{cursor:pointer;user-select:none;white-space:nowrap}
+    .pt-sortable:hover{color:var(--text-primary)}
+    .pt-sortable::after{content:'';display:inline-block;width:0;height:0;margin-left:5px;
+                        border-left:3.5px solid transparent;border-right:3.5px solid transparent;
+                        opacity:.25;border-bottom:4px solid currentColor}
+    .pt-sortable.asc::after{opacity:1;border-bottom:4px solid var(--accent);border-top:0}
+    .pt-sortable.desc::after{opacity:1;border-top:4px solid var(--accent);border-bottom:0}
+
+    .stock-badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;font-family:LINE Seed TW_OTF, sans-serif}
+    .stock-badge.ok{background:#DCFCE7;color:#15803D}
+    .stock-badge.zero{background:#F0EEE9;color:var(--text-dim)}
+    @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 </head>
 <body x-data="app()" x-init="init()" x-cloak>
@@ -44,26 +77,75 @@
   <header id="app-topbar" class="topbar"></header>
 <div class="sidebar-overlay" id="sidebar-overlay"></div>
 
+<!-- 側欄必須是 <body> 的直接子元素：深色模式的反轉濾鏡排除清單只認直接子元素
+     （style.css「DARK MODE」區塊的 body > *:not(.sidebar)），包進 .app-shell
+     裡會連同整個側欄一起被反轉成白底，且 position:fixed 會改以該容器定位。 -->
+<aside class="sidebar" id="app-sidebar"></aside>
+
 <div class="app-shell">
 
-  <aside class="sidebar" id="app-sidebar"></aside>
-
   <main class="page-main">
+
+    <div class="pg">
+      <div class="pg__l">
+        <div class="pg__eyebrow">廠商與採購</div>
+        <h1 class="pg__t">料號主檔</h1>
+        <p class="pg__s">全公司共用的料號、品名與廠牌目錄</p>
+      </div>
+    </div>
 
     <div class="toolbar">
       <div class="search-wrap">
         <span class="search-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg></span>
         <input class="search-input" type="search" placeholder="搜尋料號 / 品名 / 廠牌…" x-model="search">
       </div>
-      <select style="padding:7px 10px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;font-family:var(--font-zh);outline:none" x-model="filterCat">
-        <option value="">全部類別</option>
-        <template x-for="c in categories" :key="c"><option :value="c" x-text="c"></option></template>
-      </select>
       <div style="margin-left:auto;font-size:12px;color:var(--text-dim)" x-text="filtered.length + ' 項料號'"></div>
+      <input type="file" x-ref="importFile" accept=".xlsx,.xls,.csv" style="display:none" @change="handleImport($event)">
+      <button class="btn btn-ghost" @click="$refs.importFile.click()" style="font-size:11px">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+        匯入 Excel
+      </button>
+      <button class="btn btn-ghost" @click="exportExcel()" :disabled="!items.length" style="font-size:11px">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+        匯出 Excel
+      </button>
       <button class="btn btn-primary" @click="openModal(null)">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v16m8-8H4"/></svg>
         新增料號
       </button>
+    </div>
+
+    <!-- ── 分類籤（2026-09-14 重新設計）──────────────────────────────
+         原本分類是一個下拉選單，而且**這一頁有兩份不同的分類清單**：
+         編輯視窗的下拉來自後端 PART_CATEGORIES（6 個正規類別，各帶料號
+         前綴，用來自動編號），但篩選下拉是從「實際存過的值」推出來的，
+         所以任何打錯或一次性的值（開發機裡就有一個 test2）會混進篩選清單、
+         看起來像正式類別。
+
+         改成籤列，並把兩份清單的差異直接顯示出來：
+           · 正規類別照主檔順序排，帶料號前綴（前綴驅動自動編號，
+             原本在清單上完全看不到）與件數
+           · 用過但不在主檔裡的值單獨標成「未納入主檔」，看得見才修得掉
+           · 件數為 0 的正規類別仍然顯示（淡色），這樣才知道「有這個類別
+             但還沒有料號」，下拉選單做不到這件事 -->
+    <div class="pt-cats">
+      <button type="button" class="pt-cat" :class="{on: filterCat===''}" @click="filterCat=''">
+        <span class="pt-cat__n" x-text="items.length"></span>
+        <span class="pt-cat__l">全部</span>
+      </button>
+      <template x-for="c in catChips" :key="c.key">
+        <button type="button" class="pt-cat"
+                :class="{on: filterCat===c.key, 'is-empty': c.count===0, 'is-orphan': c.orphan}"
+                @click="filterCat = (filterCat===c.key ? '' : c.key)"
+                :title="c.orphan ? '這個值不在料號類別主檔裡，新增料號時選不到它' : (c.prefix ? '料號前綴 ' + c.prefix + '-' : '')">
+          <span class="pt-cat__n" x-text="c.count"></span>
+          <span class="pt-cat__l">
+            <span x-text="c.label"></span>
+            <small x-show="c.prefix" x-text="c.prefix"></small>
+            <small x-show="c.orphan" style="color:var(--warning)">未納入主檔</small>
+          </span>
+        </button>
+      </template>
     </div>
 
     <div class="panel">
@@ -73,14 +155,19 @@
           <div class="table-scroll">
           <table class="data-table" x-show="filtered.length > 0">
             <thead>
+              <!-- 2026-09-14：表頭改成可排序。這一頁原本**完全沒有排序**
+                   ——10 個欄位、順序固定是 API 的 id DESC，要找「最貴的」或
+                   「在庫掛零的」只能自己一列一列看。偏好存 user_list_prefs
+                   （list_key 'parts'），跟著帳號跨裝置。 -->
               <tr>
-                <th>料號</th>
-                <th>品名</th>
-                <th>廠牌/型號</th>
-                <th>類別</th>
+                <th class="pt-sortable" :class="sortCls('part_no')"   @click="toggleSort('part_no')">料號</th>
+                <th class="pt-sortable" :class="sortCls('name')"      @click="toggleSort('name')">品名</th>
+                <th class="pt-sortable" :class="sortCls('brand')"     @click="toggleSort('brand')">廠牌/型號</th>
+                <th class="pt-sortable" :class="sortCls('category')"  @click="toggleSort('category')">類別</th>
                 <th>單位</th>
-                <th style="text-align:right">成本</th>
-                <th style="text-align:right">定價</th>
+                <th class="pt-sortable r" :class="sortCls('stock')"      @click="toggleSort('stock')" style="text-align:right">在庫</th>
+                <th class="pt-sortable r" :class="sortCls('cost')"       @click="toggleSort('cost')" style="text-align:right">成本</th>
+                <th class="pt-sortable r" :class="sortCls('list_price')" @click="toggleSort('list_price')" style="text-align:right">定價</th>
                 <th>備注</th>
                 <th>操作</th>
               </tr>
@@ -96,6 +183,7 @@
                     <span x-show="!p.category" style="color:var(--text-dim)">—</span>
                   </td>
                   <td style="font-size:12px;color:var(--text-dim)" x-text="p.unit || '台'"></td>
+                  <td style="text-align:right"><span class="stock-badge" :class="stockCount(p.part_no) > 0 ? 'ok' : 'zero'" x-text="stockCount(p.part_no)"></span></td>
                   <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-size:12px" x-text="p.cost ? 'NT$ ' + Math.round(p.cost).toLocaleString() : '—'"></td>
                   <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-size:12px;font-weight:600" x-text="p.list_price ? 'NT$ ' + Math.round(p.list_price).toLocaleString() : '—'"></td>
                   <td style="font-size:11px;color:var(--text-dim);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" x-text="p.note || '—'"></td>
@@ -121,17 +209,20 @@
 </div>
 
 <!-- 新增/編輯 Modal -->
-<div class="modal-overlay" x-show="modal.show" @click.self="modal.show=false">
+<div class="modal-overlay" x-show="modal.show" @click.self="closeModal()">
   <div class="modal-box" @click.stop>
     <div class="modal-title" x-text="modal.id ? '編輯料號' : '新增料號'"></div>
     <div class="form-grid">
       <div class="field-row">
-        <div class="field-label">料號 <span style="color:var(--danger)">*</span></div>
-        <input class="field-input" type="text" placeholder="EX-U6-PRO" x-model="modal.partNo" :disabled="!!modal.id">
+        <div class="field-label">料號<span x-show="!modal.id" style="color:var(--text-dim);font-weight:400"> （留空依類別自動產生）</span></div>
+        <input class="field-input" type="text" placeholder="留空自動產生，或自行輸入" x-model="modal.partNo" :disabled="!!modal.id">
       </div>
       <div class="field-row">
         <div class="field-label">類別</div>
-        <input class="field-input" type="text" placeholder="網路設備 / 伺服器…" x-model="modal.category">
+        <select class="field-input" x-model="modal.category">
+          <option value="">未分類</option>
+          <template x-for="c in categoryOptions" :key="c.name"><option :value="c.name" x-text="c.name"></option></template>
+        </select>
       </div>
       <div class="field-row" style="grid-column:1/-1">
         <div class="field-label">品名 <span style="color:var(--danger)">*</span></div>
@@ -139,7 +230,57 @@
       </div>
       <div class="field-row" style="grid-column:1/-1">
         <div class="field-label">廠牌 / 型號</div>
-        <input class="field-input" type="text" placeholder="Ubiquiti / U6-Pro" x-model="modal.brand">
+        <div style="display:flex;gap:8px">
+          <select class="field-input" style="flex:0 0 150px" x-model="modal.brandName">
+            <option value="">選擇廠牌</option>
+            <template x-for="b in brandSelectOptions" :key="b"><option :value="b" x-text="b"></option></template>
+          </select>
+          <input class="field-input" type="text" style="flex:1" placeholder="型號，如 C540(4mm)" x-model="modal.brandModel">
+        </div>
+        <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px;align-items:center">
+          <button type="button" @click="showAddBrand=!showAddBrand"
+                  :style="showAddBrand ? 'border-color:var(--accent);color:var(--accent)' : ''"
+                  style="padding:3px 10px;border-radius:4px;font-size:11px;font-family:var(--font-zh);cursor:pointer;border:1px dashed var(--border-light);background:transparent;color:var(--text-dim);transition:all .12s">
+            ⚙ 管理廠牌
+          </button>
+        </div>
+        <div x-show="showAddBrand" style="margin-top:8px;padding:12px;background:#F8F7F4;border:1px solid var(--border-light);border-radius:var(--radius)">
+          <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px">
+            <template x-for="b in brandSelectOptions" :key="b">
+              <span :title="brandPresets.includes(b) ? '' : '此廠牌來自現有料號資料，非手動加入的常用清單；點鉛筆可直接修正這個廠牌值'"
+                    style="background:#fff;border:1px solid var(--border-light);padding:3px 8px;border-radius:4px;font-size:12px;display:inline-flex;align-items:center;gap:5px;font-family:var(--font-zh)">
+                <span x-text="b"></span>
+                <button type="button" x-show="brandPresets.includes(b)" @click="removeBrandPreset(b)"
+                        style="background:none;border:none;cursor:pointer;color:var(--danger);padding:0;font-size:14px;line-height:1;opacity:.8">×</button>
+                <button type="button" x-show="!brandPresets.includes(b)" @click="openBrandFix(b)" title="修正這個廠牌值"
+                        style="background:none;border:none;cursor:pointer;color:var(--text-dim);padding:0;font-size:12px;line-height:1;opacity:.7">✎</button>
+              </span>
+            </template>
+            <span x-show="brandSelectOptions.length===0" style="font-size:11px;color:var(--text-dim)">尚無廠牌，請在下方新增</span>
+          </div>
+          <div x-show="brandFix.show" style="margin-bottom:10px;padding:10px;background:#FFF7ED;border:1px solid #FDBA74;border-radius:var(--radius)">
+            <div style="font-size:12px;font-weight:600;margin-bottom:4px">修正廠牌：<span x-text="brandFix.oldName"></span></div>
+            <div style="font-size:11px;color:var(--text-secondary);margin-bottom:8px">
+              將套用到 <span x-text="brandFix.affected.length"></span> 筆料號：<span x-text="brandFix.affected.map(p=>p.part_no).join('、')"></span>
+            </div>
+            <div style="display:flex;gap:6px">
+              <input type="text" x-model="brandFix.newName" placeholder="輸入正確的廠牌名稱…"
+                     style="flex:1;padding:6px 10px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;font-family:var(--font-zh);outline:none"
+                     @keydown.enter.prevent="saveBrandFix()">
+              <button type="button" class="btn btn-ghost btn-sm" @click="brandFix.show=false" :disabled="brandFix.saving">取消</button>
+              <button type="button" class="btn btn-primary btn-sm" @click="saveBrandFix()" :disabled="brandFix.saving">
+                <span x-text="brandFix.saving ? '套用中…' : '套用'"></span>
+              </button>
+            </div>
+            <div x-show="brandFix.error" style="color:var(--danger);font-size:11px;margin-top:6px" x-text="brandFix.error"></div>
+          </div>
+          <div style="display:flex;gap:6px">
+            <input type="text" x-model="newBrandPreset" placeholder="輸入新廠牌名稱…"
+                   style="flex:1;padding:6px 10px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;font-family:var(--font-zh);outline:none"
+                   @keydown.enter.prevent="addBrandPreset()">
+            <button type="button" class="btn btn-ghost btn-sm" @click="addBrandPreset()">新增</button>
+          </div>
+        </div>
       </div>
       <div class="field-row">
         <div class="field-label">單位</div>
@@ -154,16 +295,74 @@
         <input class="field-input" type="number" placeholder="0" x-model.number="modal.listPrice">
       </div>
       <div class="field-row" style="grid-column:1/-1">
+        <div class="field-label">安全庫存</div>
+        <input class="field-input" type="number" min="0" placeholder="0＝不設定" x-model.number="modal.safetyStock">
+        <div style="font-size:11px;color:var(--text-dim);margin-top:4px">在庫低於此數量時，庫存管理頁會顯示紅燈；低於 1.5 倍時顯示黃燈</div>
+      </div>
+      <div class="field-row" style="grid-column:1/-1">
         <div class="field-label">備注</div>
         <input class="field-input" type="text" placeholder="選填" x-model="modal.note">
       </div>
     </div>
     <div x-show="modal.error" style="color:var(--danger);font-size:12px;margin-top:8px" x-text="modal.error"></div>
     <div class="modal-footer">
-      <button class="btn btn-ghost" @click="modal.show=false">取消</button>
+      <button class="btn btn-ghost" @click="closeModal()">取消</button>
       <button class="btn btn-primary" @click="savePart()" :disabled="modal.saving">
         <span x-text="modal.saving ? '儲存中…' : '儲存'"></span>
       </button>
+    </div>
+  </div>
+</div>
+
+<!-- 匯入結果 Modal -->
+<div class="modal-overlay" x-show="showImportModal" x-transition style="display:none">
+  <div class="modal-box" style="max-width:460px" @click.stop>
+    <div class="modal-head">
+      <span class="modal-head__title">匯入 Excel</span>
+      <button class="modal-close" @click="showImportModal=false" :disabled="importing">×</button>
+    </div>
+    <div class="modal-body" style="padding:28px 24px">
+      <template x-if="importing">
+        <div style="text-align:center;padding:20px 0">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#C8102E" stroke-width="2" style="animation:spin .8s linear infinite;margin-bottom:12px"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>
+          <div style="font-size:13px;color:var(--text-secondary)">匯入中，請稍候…</div>
+        </div>
+      </template>
+      <template x-if="!importing && importResults">
+        <div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px">
+            <div style="text-align:center;padding:14px;background:#F0FDF4;border-radius:var(--radius)">
+              <div style="font-size:28px;font-weight:700;color:#15803D;font-family:LINE Seed TW_OTF, sans-serif" x-text="importResults.created"></div>
+              <div style="font-size:11px;color:#15803D;margin-top:4px">新增</div>
+            </div>
+            <div style="text-align:center;padding:14px;background:var(--accent-light);border-radius:var(--radius)">
+              <div style="font-size:28px;font-weight:700;color:var(--accent-hover);font-family:LINE Seed TW_OTF, sans-serif" x-text="importResults.updated"></div>
+              <div style="font-size:11px;color:var(--accent-hover);margin-top:4px">更新</div>
+            </div>
+            <div style="text-align:center;padding:14px;background:#FEF2F2;border-radius:var(--radius)">
+              <div style="font-size:28px;font-weight:700;color:#DC2626;font-family:LINE Seed TW_OTF, sans-serif" x-text="importResults.failed"></div>
+              <div style="font-size:11px;color:#DC2626;margin-top:4px">失敗</div>
+            </div>
+          </div>
+          <template x-if="importResults.errors.length > 0">
+            <div>
+              <div style="font-size:11px;font-weight:600;color:var(--text-secondary);margin-bottom:6px">錯誤明細</div>
+              <div style="max-height:150px;overflow-y:auto;background:#FEF2F2;border-radius:var(--radius);padding:10px 12px">
+                <template x-for="(e, ei) in importResults.errors" :key="ei">
+                  <div style="font-size:11px;color:#DC2626;margin-bottom:4px;font-family:var(--font-zh)" x-text="e"></div>
+                </template>
+              </div>
+            </div>
+          </template>
+        </div>
+      </template>
+    </div>
+    <div class="modal-foot">
+      <div style="font-size:11px;color:var(--text-dim);flex:1">
+        支援格式：.xlsx / .xls / .csv<br>
+        必填欄位：<strong>品名</strong>；料號相符則自動更新，料號留空則依類別自動產生
+      </div>
+      <button class="btn btn-primary" @click="showImportModal=false" :disabled="importing">確認</button>
     </div>
   </div>
 </div>
@@ -175,22 +374,93 @@ function app() {
     session: {},
     loading: true,
     items: [],
+    categoryOptions: [],
+    stockMap: {},
     search: '',
     filterCat: '',
-    modal: { show: false, id: null, partNo: '', name: '', brand: '', unit: '台', cost: 0, listPrice: 0, category: '', note: '', saving: false, error: '' },
+    modal: { show: false, id: null, partNo: '', name: '', brandName: '', brandModel: '', unit: '台', cost: 0, listPrice: 0, safetyStock: 0, category: '', note: '', saving: false, error: '' },
+    brandPresets: [],
+    showAddBrand: false,
+    newBrandPreset: '',
+    brandFix: { show: false, oldName: '', newName: '', affected: [], saving: false, error: '' },
+    showImportModal: false,
+    importing: false,
+    importResults: null,
 
     get categories() {
       return [...new Set(this.items.map(p => p.category).filter(Boolean))].sort()
     },
+    get brandSelectOptions() {
+      const used = this.items.map(p => (p.brand || '').split('/')[0].trim()).filter(Boolean)
+      return [...new Set([...this.brandPresets, ...used])].sort()
+    },
+    // ── 分類籤（2026-09-14）────────────────────────────────────────
+    // 正規類別（categoryOptions，來自後端 PART_CATEGORIES）照主檔順序排在前面，
+    // 用過但不在主檔裡的值排在後面並標記出來。原本的下拉是從實際存過的值
+    // 推出來的，兩者混在一起分不出哪個是正式類別。
+    get catChips() {
+      const used = {}
+      let none = 0
+      this.items.forEach(p => {
+        const c = (p.category || '').trim()
+        if (!c) { none++; return }
+        used[c] = (used[c] || 0) + 1
+      })
+      const canonical = (this.categoryOptions || []).map(c => ({
+        key: c.name, label: c.name, prefix: c.prefix || '',
+        count: used[c.name] || 0, orphan: false,
+      }))
+      const known = new Set(canonical.map(c => c.key))
+      const orphans = Object.keys(used).filter(k => !known.has(k)).sort()
+        .map(k => ({ key: k, label: k, prefix: '', count: used[k], orphan: true }))
+      const chips = [...canonical, ...orphans]
+      // 未分類放最後：它不是一個類別，是「還沒歸類」
+      if (none) chips.push({ key: '__none__', label: '未分類', prefix: '', count: none, orphan: false })
+      return chips
+    },
+
+    // ── 排序（2026-09-14）──────────────────────────────────────────
+    // 這一頁原本完全沒有排序，順序固定是 API 的 id DESC。
+    sortPref: { sortMode: '', sortDir: 'asc', customOrder: [] },
+    get _sortGetters() {
+      const self = this
+      return {
+        part_no:    p => (p.part_no || ''),
+        name:       p => (p.name || ''),
+        brand:      p => (p.brand || ''),
+        category:   p => (p.category || ''),
+        // 在庫不是 parts 表的欄位，是另外查出來的即時數量——排序要用同一個
+        // 來源，不然畫面顯示 0 卻排在最前面
+        stock:      p => self.stockCount(p.part_no) || 0,
+        cost:       p => (p.cost || 0),
+        list_price: p => (p.list_price || 0),
+      }
+    },
+    sortCls(k) { return this.sortPref.sortMode === k ? this.sortPref.sortDir : '' },
+    async toggleSort(k) {
+      if (this.sortPref.sortMode === k) {
+        this.sortPref.sortDir = this.sortPref.sortDir === 'asc' ? 'desc' : 'asc'
+      } else {
+        // 換欄位時預設方向依型別：文字由 A→Z、數字由大→小（找最貴/最多才是常見需求）
+        this.sortPref.sortMode = k
+        this.sortPref.sortDir = ['stock', 'cost', 'list_price'].includes(k) ? 'desc' : 'asc'
+      }
+      if (typeof saveListPref === 'function') await saveListPref(this.session.token, 'parts', this.sortPref)
+    },
+
     get filtered() {
       let list = this.items
-      if (this.filterCat) list = list.filter(p => p.category === this.filterCat)
+      if (this.filterCat === '__none__') list = list.filter(p => !(p.category || '').trim())
+      else if (this.filterCat) list = list.filter(p => p.category === this.filterCat)
       const q = this.search.trim().toLowerCase()
       if (q) list = list.filter(p =>
         (p.part_no||'').toLowerCase().includes(q) ||
         (p.name||'').toLowerCase().includes(q) ||
         (p.brand||'').toLowerCase().includes(q)
       )
+      if (this.sortPref.sortMode && typeof applyListSort === 'function') {
+        list = applyListSort(list, this.sortPref, this._sortGetters, p => String(p.id))
+      }
       return list
     },
 
@@ -198,12 +468,76 @@ function app() {
       const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
       if (!s.token) { location.href = 'login.html'; return }
       this.session = s
+      // 排序偏好跟著帳號（user_list_prefs），不是瀏覽器
+      if (typeof loadListPref === 'function') {
+        const pf = await loadListPref(s.token, 'parts')
+        if (pf && pf.sortMode && this._sortGetters[pf.sortMode]) {
+          this.sortPref.sortMode = pf.sortMode
+          this.sortPref.sortDir = pf.sortDir || 'asc'
+        }
+      }
       try {
         const r = await fetch(`${API}/auth/me`, { headers: { Authorization: 'Bearer ' + s.token } })
         if (!r.ok) { location.href = 'login.html'; return }
         const me = await r.json(); this.session.displayName = me.display_name
       } catch {}
-      await this.load()
+      this.loadBrandPresets()
+      await Promise.all([this.load(), this.loadStock(), this.loadCategories()])
+    },
+
+    loadBrandPresets() {
+      try {
+        const raw = localStorage.getItem('motrix_part_brand_presets')
+        this.brandPresets = raw ? JSON.parse(raw) : ['VIGI', 'OMADA', 'UNIFI']
+      } catch { this.brandPresets = ['VIGI', 'OMADA', 'UNIFI'] }
+    },
+    saveBrandPresets() {
+      localStorage.setItem('motrix_part_brand_presets', JSON.stringify(this.brandPresets))
+    },
+    addBrandPreset() {
+      const b = this.newBrandPreset.trim()
+      if (b && !this.brandPresets.includes(b)) { this.brandPresets.push(b); this.saveBrandPresets() }
+      this.newBrandPreset = ''
+    },
+    removeBrandPreset(name) {
+      this.brandPresets = this.brandPresets.filter(b => b !== name)
+      this.saveBrandPresets()
+    },
+    openBrandFix(name) {
+      this.brandFix = {
+        show: true, oldName: name, newName: '',
+        affected: this.items.filter(p => (p.brand || '').split('/')[0].trim() === name),
+        saving: false, error: ''
+      }
+    },
+    async saveBrandFix() {
+      const nn = this.brandFix.newName.trim()
+      if (!nn) { this.brandFix.error = '請輸入正確的廠牌名稱'; return }
+      this.brandFix.saving = true; this.brandFix.error = ''
+      try {
+        for (const p of this.brandFix.affected) {
+          const rest = (p.brand || '').split('/').slice(1).map(s => s.trim()).filter(Boolean)
+          const newBrand = [nn, ...rest].join(' / ')
+          const r = await fetch(`${API}/parts/${p.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+            body: JSON.stringify({ partNo: p.part_no, name: p.name, brand: newBrand, unit: p.unit, cost: p.cost, listPrice: p.list_price, category: p.category, note: p.note })
+          })
+          if (!r.ok) throw new Error('更新失敗：' + p.part_no)
+        }
+        await this.load()
+        this.brandFix.show = false
+      } catch (e) {
+        this.brandFix.error = e.message || '更新失敗'
+      }
+      this.brandFix.saving = false
+    },
+
+    async loadCategories() {
+      try {
+        const r = await fetch(`${API}/parts/categories`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (r.ok) { const d = await r.json(); this.categoryOptions = d.items || [] }
+      } catch {}
     },
 
     async load() {
@@ -215,19 +549,43 @@ function app() {
       this.loading = false
     },
 
+    async loadStock() {
+      try {
+        const r = await fetch(`${API}/inventory/parts-summary`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (r.ok) {
+          const d = await r.json()
+          const m = {}
+          for (const s of (d.items || [])) m[s.part_no] = s.inStockCount || 0
+          this.stockMap = m
+        }
+      } catch {}
+    },
+    stockCount(partNo) { return this.stockMap[partNo] || 0 },
+
     openModal(part) {
+      this.showAddBrand = false
+      window.motrixIsDirty = false
       if (part) {
-        this.modal = { show: true, id: part.id, partNo: part.part_no, name: part.name, brand: part.brand || '', unit: part.unit || '台', cost: part.cost || 0, listPrice: part.list_price || 0, category: part.category || '', note: part.note || '', saving: false, error: '' }
+        const [bn, ...rest] = (part.brand || '').split('/')
+        this.modal = { show: true, id: part.id, partNo: part.part_no, name: part.name, brandName: (bn || '').trim(), brandModel: rest.join('/').trim(), unit: part.unit || '台', cost: part.cost || 0, listPrice: part.list_price || 0, safetyStock: part.safety_stock || 0, category: part.category || '', note: part.note || '', saving: false, error: '' }
       } else {
-        this.modal = { show: true, id: null, partNo: '', name: '', brand: '', unit: '台', cost: 0, listPrice: 0, category: '', note: '', saving: false, error: '' }
+        this.modal = { show: true, id: null, partNo: '', name: '', brandName: '', brandModel: '', unit: '台', cost: 0, listPrice: 0, safetyStock: 0, category: '', note: '', saving: false, error: '' }
       }
     },
 
+    closeModal() {
+      if (window.motrixIsDirty && !confirm('您有尚未儲存的輸入內容\n\n確定要放棄變更並關閉嗎？')) return
+      window.motrixIsDirty = false
+      this.modal.show = false
+    },
+
     async savePart() {
-      if (!this.modal.partNo.trim()) { this.modal.error = '料號不得為空'; return }
+      if (this.modal.id && !this.modal.partNo.trim()) { this.modal.error = '料號不得為空'; return }
+      if (!this.modal.id && !this.modal.partNo.trim() && !this.modal.category) { this.modal.error = '請輸入料號，或選擇類別以自動產生'; return }
       if (!this.modal.name.trim())   { this.modal.error = '品名不得為空'; return }
       this.modal.saving = true; this.modal.error = ''
-      const body = { partNo: this.modal.partNo, name: this.modal.name, brand: this.modal.brand, unit: this.modal.unit, cost: this.modal.cost, listPrice: this.modal.listPrice, category: this.modal.category, note: this.modal.note }
+      const brand = [this.modal.brandName, this.modal.brandModel].map(s => (s || '').trim()).filter(Boolean).join(' / ')
+      const body = { partNo: this.modal.partNo, name: this.modal.name, brand, unit: this.modal.unit, cost: this.modal.cost, listPrice: this.modal.listPrice, safetyStock: this.modal.safetyStock, category: this.modal.category, note: this.modal.note }
       const url  = this.modal.id ? `${API}/parts/${this.modal.id}` : `${API}/parts`
       const meth = this.modal.id ? 'PUT' : 'POST'
       try {
@@ -236,6 +594,68 @@ function app() {
         else { const e = await r.json(); this.modal.error = e.detail || '儲存失敗' }
       } catch { this.modal.error = '網路錯誤' }
       this.modal.saving = false
+    },
+
+    exportExcel() {
+      const rows = this.items.map(p => {
+        const [bn, ...rest] = (p.brand || '').split('/')
+        return {
+          '料號': p.part_no || '', '品名': p.name || '',
+          '廠牌': (bn || '').trim(), '型號': rest.join('/').trim(),
+          '類別': p.category || '', '單位': p.unit || '台',
+          '成本(未稅)': p.cost || 0, '定價(含稅)': p.list_price || 0,
+          '備注': p.note || ''
+        }
+      })
+      const ws = XLSX.utils.json_to_sheet(rows)
+      ws['!cols'] = [12,24,12,20,10,8,12,12,24].map(w=>({wch:w}))
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, '料號')
+      XLSX.writeFile(wb, `MOTRIX_料號_${new Date().toISOString().slice(0,10)}.xlsx`)
+    },
+
+    async handleImport(event) {
+      const file = event.target.files[0]
+      if (!file) return
+      event.target.value = ''
+      this.importing = true; this.showImportModal = true; this.importResults = null
+      const results = { created: 0, updated: 0, failed: 0, errors: [] }
+      try {
+        const wb = XLSX.read(await file.arrayBuffer())
+        const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '' })
+        for (let i = 0; i < rows.length; i++) {
+          try {
+            const obj = this._parsePartRow(rows[i])
+            if (!obj.name) { results.failed++; results.errors.push(`第 ${i+2} 行：品名不可空白`); continue }
+            const match = obj.partNo ? this.items.find(p => p.part_no === obj.partNo) : null
+            const body = { partNo: obj.partNo, name: obj.name, brand: obj.brand, unit: obj.unit, cost: obj.cost, listPrice: obj.listPrice, category: obj.category, note: obj.note }
+            const r = await fetch(match ? `${API}/parts/${match.id}` : `${API}/parts`, {
+              method: match ? 'PUT' : 'POST',
+              headers: { 'Content-Type':'application/json', Authorization:`Bearer ${this.session.token}` },
+              body: JSON.stringify(body)
+            })
+            if (r.ok) { match ? results.updated++ : results.created++ }
+            else { const e = await r.json().catch(()=>({})); results.failed++; results.errors.push(`${obj.partNo || obj.name}：${match?'更新':'新增'}失敗（${e.detail || r.status}）`) }
+          } catch(e) { results.failed++; results.errors.push(`第 ${i+2} 行：${e.message}`) }
+        }
+        await this.load()
+      } catch(e) { results.failed++; results.errors.push('檔案解析失敗：' + e.message) }
+      this.importResults = results; this.importing = false
+    },
+
+    _parsePartRow(row) {
+      const n = {}
+      for (const [k, v] of Object.entries(row)) n[k.trim()] = String(v ?? '').trim()
+      const brand = [n['廠牌']||n['brand']||'', n['型號']||n['model']||''].map(s=>s.trim()).filter(Boolean).join(' / ')
+      const toNum = (s) => { const x = parseFloat(String(s).replace(/[^0-9.\-]/g,'')); return isNaN(x) ? 0 : x }
+      return {
+        partNo: n['料號']||n['part_no']||'', name: n['品名']||n['名稱']||n['name']||'',
+        brand, unit: n['單位']||n['unit']||'台',
+        cost: toNum(n['成本(未稅)']||n['成本']||n['cost']||0),
+        listPrice: toNum(n['定價(含稅)']||n['定價']||n['售價']||n['list_price']||0),
+        category: n['類別']||n['分類']||n['category']||'',
+        note: n['備注']||n['備註']||n['note']||''
+      }
     },
 
     async deletePart(part) {
@@ -255,5 +675,6 @@ function app() {
 </script>
   <script src="../static/notif.js"></script>
   <script src="../static/sidebar.js"></script>
+  <script src="../static/list-sort.js"></script>
 </body>
 </html>

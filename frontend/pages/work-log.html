@@ -2,11 +2,13 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="../static/favicon.png">
-  <title>工作日誌 — MOTRIX 營運管理系統</title>
-  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-  <link rel="stylesheet" href="../css/style.css">
+  <title>工作日誌 — MOTRIX 專案管理系統</title>
+  <script src="../static/auth-guard.js"></script>
+  <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <style>
     [x-cloak] { display:none !important; }
 
@@ -91,7 +93,7 @@
     .wl-hours-badge {
       display: inline-block; padding: 2px 8px; border-radius: 4px;
       font-size: 11px; font-weight: 600; font-family: 'LINE Seed TW_OTF', sans-serif;
-      background: #DBEAFE; color: #1D4ED8;
+      background: #DBEAFE; color: var(--accent-hover);
     }
     .wl-content { font-size: 13px; color: var(--text-primary); line-height: 1.6; white-space: pre-wrap; }
     .wl-actions { display: flex; gap: 6px; }

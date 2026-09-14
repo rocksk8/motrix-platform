@@ -9,7 +9,7 @@ from datetime import datetime
 from fastapi import APIRouter, Body, HTTPException, Header
 
 from db import get_db
-from helpers import _require_user, _tok, _audit
+from helpers import _require_user, _tok, _audit, notify_module_activity, require_any_module
 
 router = APIRouter()
 
@@ -18,7 +18,8 @@ _EDIT_MODULE = "switch_guide_edit"
 
 @router.get("/api/switch-guide/scenarios")
 def list_scenarios(authorization: str = Header(None)):
-    _require_user(authorization)
+    user = _require_user(authorization)
+    require_any_module(user, ('switch_guide', 'switch_guide_edit'), "交換器選型導覽")
     conn = get_db()
     rows = conn.execute("SELECT * FROM switch_scenarios ORDER BY sort_order, code").fetchall()
     conn.close()
@@ -27,7 +28,7 @@ def list_scenarios(authorization: str = Header(None)):
 
 @router.post("/api/switch-guide/scenarios", status_code=201)
 def create_scenario(body: dict = Body(...), authorization: str = Header(None)):
-    _require_user(authorization, require_superadmin=True, module=_EDIT_MODULE)
+    actor = _require_user(authorization, require_superadmin=True, module=_EDIT_MODULE)
     code = (body.get("code") or "").strip()
     if not code:
         raise HTTPException(400, "情境代碼不得為空")
@@ -44,6 +45,8 @@ def create_scenario(body: dict = Body(...), authorization: str = Header(None)):
     conn.commit()
     conn.close()
     _audit(_tok(authorization), 'switch_guide.scenario.create', 'switch_scenario', code, body.get('name', ''))
+    notify_module_activity("交換器選型導覽", "建立情境", actor.get("display_name") or actor["username"],
+                            body.get('name', code), "switch-guide.html")
     return {"code": code, "ok": True}
 
 
@@ -67,7 +70,7 @@ def update_scenario(code: str, body: dict = Body(...), authorization: str = Head
 
 @router.delete("/api/switch-guide/scenarios/{code}")
 def delete_scenario(code: str, authorization: str = Header(None)):
-    _require_user(authorization, require_superadmin=True, module=_EDIT_MODULE)
+    actor = _require_user(authorization, require_superadmin=True, module=_EDIT_MODULE)
     conn = get_db()
     row = conn.execute("SELECT name FROM switch_scenarios WHERE code=?", (code,)).fetchone()
     if not row:
@@ -77,12 +80,15 @@ def delete_scenario(code: str, authorization: str = Header(None)):
     conn.commit()
     conn.close()
     _audit(_tok(authorization), 'switch_guide.scenario.delete', 'switch_scenario', code, row['name'])
+    notify_module_activity("交換器選型導覽", "刪除情境", actor.get("display_name") or actor["username"],
+                            row['name'], "switch-guide.html")
     return {"ok": True}
 
 
 @router.get("/api/switch-guide/categories")
 def list_categories(authorization: str = Header(None)):
-    _require_user(authorization)
+    user = _require_user(authorization)
+    require_any_module(user, ('switch_guide', 'switch_guide_edit'), "交換器選型導覽")
     conn = get_db()
     rows = conn.execute("SELECT * FROM switch_categories ORDER BY sort_order, code").fetchall()
     conn.close()
@@ -91,7 +97,7 @@ def list_categories(authorization: str = Header(None)):
 
 @router.post("/api/switch-guide/categories", status_code=201)
 def create_category(body: dict = Body(...), authorization: str = Header(None)):
-    _require_user(authorization, require_superadmin=True, module=_EDIT_MODULE)
+    actor = _require_user(authorization, require_superadmin=True, module=_EDIT_MODULE)
     code = (body.get("code") or "").strip()
     if not code:
         raise HTTPException(400, "分類代碼不得為空")
@@ -112,6 +118,8 @@ def create_category(body: dict = Body(...), authorization: str = Header(None)):
     conn.commit()
     conn.close()
     _audit(_tok(authorization), 'switch_guide.category.create', 'switch_category', code, body.get('name', ''))
+    notify_module_activity("交換器選型導覽", "建立分類", actor.get("display_name") or actor["username"],
+                            body.get('name', code), "switch-guide.html")
     return {"code": code, "ok": True}
 
 
@@ -140,7 +148,7 @@ def update_category(code: str, body: dict = Body(...), authorization: str = Head
 
 @router.delete("/api/switch-guide/categories/{code}")
 def delete_category(code: str, authorization: str = Header(None)):
-    _require_user(authorization, require_superadmin=True, module=_EDIT_MODULE)
+    actor = _require_user(authorization, require_superadmin=True, module=_EDIT_MODULE)
     conn = get_db()
     row = conn.execute("SELECT name FROM switch_categories WHERE code=?", (code,)).fetchone()
     if not row:
@@ -150,12 +158,15 @@ def delete_category(code: str, authorization: str = Header(None)):
     conn.commit()
     conn.close()
     _audit(_tok(authorization), 'switch_guide.category.delete', 'switch_category', code, row['name'])
+    notify_module_activity("交換器選型導覽", "刪除分類", actor.get("display_name") or actor["username"],
+                            row['name'], "switch-guide.html")
     return {"ok": True}
 
 
 @router.get("/api/switch-guide/fit")
 def list_fit(authorization: str = Header(None)):
-    _require_user(authorization)
+    user = _require_user(authorization)
+    require_any_module(user, ('switch_guide', 'switch_guide_edit'), "交換器選型導覽")
     conn = get_db()
     rows = conn.execute("SELECT * FROM switch_fit ORDER BY sort_order, id").fetchall()
     conn.close()
@@ -164,7 +175,7 @@ def list_fit(authorization: str = Header(None)):
 
 @router.post("/api/switch-guide/fit", status_code=201)
 def create_fit(body: dict = Body(...), authorization: str = Header(None)):
-    _require_user(authorization, require_superadmin=True, module=_EDIT_MODULE)
+    actor = _require_user(authorization, require_superadmin=True, module=_EDIT_MODULE)
     scenario_code = (body.get("scenarioCode") or "").strip()
     category_code = (body.get("categoryCode") or "").strip()
     if not scenario_code or not category_code:
@@ -189,6 +200,8 @@ def create_fit(body: dict = Body(...), authorization: str = Header(None)):
     conn.commit()
     conn.close()
     _audit(_tok(authorization), 'switch_guide.fit.create', 'switch_fit', str(new_id), f"{scenario_code} x {category_code}")
+    notify_module_activity("交換器選型導覽", "建立適配矩陣", actor.get("display_name") or actor["username"],
+                            f"{scenario_code} x {category_code}", "switch-guide.html")
     return {"id": new_id, "ok": True}
 
 
@@ -212,7 +225,7 @@ def update_fit(fit_id: int, body: dict = Body(...), authorization: str = Header(
 
 @router.delete("/api/switch-guide/fit/{fit_id}")
 def delete_fit(fit_id: int, authorization: str = Header(None)):
-    _require_user(authorization, require_superadmin=True, module=_EDIT_MODULE)
+    actor = _require_user(authorization, require_superadmin=True, module=_EDIT_MODULE)
     conn = get_db()
     row = conn.execute("SELECT scenario_code, category_code FROM switch_fit WHERE id=?", (fit_id,)).fetchone()
     if not row:
@@ -222,12 +235,15 @@ def delete_fit(fit_id: int, authorization: str = Header(None)):
     conn.commit()
     conn.close()
     _audit(_tok(authorization), 'switch_guide.fit.delete', 'switch_fit', str(fit_id), f"{row['scenario_code']} x {row['category_code']}")
+    notify_module_activity("交換器選型導覽", "刪除適配矩陣", actor.get("display_name") or actor["username"],
+                            f"{row['scenario_code']} x {row['category_code']}", "switch-guide.html")
     return {"ok": True}
 
 
 @router.get("/api/switch-guide/products")
 def list_products(authorization: str = Header(None)):
-    _require_user(authorization)
+    user = _require_user(authorization)
+    require_any_module(user, ('switch_guide', 'switch_guide_edit'), "交換器選型導覽")
     conn = get_db()
     rows = conn.execute("SELECT * FROM switch_products ORDER BY sort_order, id").fetchall()
     conn.close()
@@ -236,7 +252,7 @@ def list_products(authorization: str = Header(None)):
 
 @router.post("/api/switch-guide/products", status_code=201)
 def create_product(body: dict = Body(...), authorization: str = Header(None)):
-    _require_user(authorization, require_superadmin=True, module=_EDIT_MODULE)
+    actor = _require_user(authorization, require_superadmin=True, module=_EDIT_MODULE)
     category_code = (body.get("categoryCode") or "").strip()
     if not category_code:
         raise HTTPException(400, "所屬分類不得為空")
@@ -254,6 +270,8 @@ def create_product(body: dict = Body(...), authorization: str = Header(None)):
     conn.commit()
     conn.close()
     _audit(_tok(authorization), 'switch_guide.product.create', 'switch_product', str(new_id), f"{body.get('brand','')} {body.get('model','')}".strip())
+    notify_module_activity("交換器選型導覽", "建立產品連結", actor.get("display_name") or actor["username"],
+                            f"{body.get('brand','')} {body.get('model','')}".strip(), "switch-guide.html")
     return {"id": new_id, "ok": True}
 
 
@@ -277,7 +295,7 @@ def update_product(prod_id: int, body: dict = Body(...), authorization: str = He
 
 @router.delete("/api/switch-guide/products/{prod_id}")
 def delete_product(prod_id: int, authorization: str = Header(None)):
-    _require_user(authorization, require_superadmin=True, module=_EDIT_MODULE)
+    actor = _require_user(authorization, require_superadmin=True, module=_EDIT_MODULE)
     conn = get_db()
     row = conn.execute("SELECT brand, model FROM switch_products WHERE id=?", (prod_id,)).fetchone()
     if not row:
@@ -287,4 +305,6 @@ def delete_product(prod_id: int, authorization: str = Header(None)):
     conn.commit()
     conn.close()
     _audit(_tok(authorization), 'switch_guide.product.delete', 'switch_product', str(prod_id), f"{row['brand']} {row['model']}".strip())
+    notify_module_activity("交換器選型導覽", "刪除產品連結", actor.get("display_name") or actor["username"],
+                            f"{row['brand']} {row['model']}".strip(), "switch-guide.html")
     return {"ok": True}

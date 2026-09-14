@@ -2,12 +2,14 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="../static/favicon.png">
-  <title>報價單 - MOTRIX 營運管理系統</title>
-  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.3/Sortable.min.js"></script>
-  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-  <link rel="stylesheet" href="../css/style.css">
+  <title>報價單 - MOTRIX 專案管理系統</title>
+  <script src="../static/vendor/sortable-1.15.3.min.js"></script>
+  <script src="../static/auth-guard.js"></script>
+  <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <style>
     @keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
     .spin-icon { animation: spin .8s linear infinite; transform-origin: center; }
@@ -53,21 +55,40 @@
     @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
 
     /* ── 表單主體佈局 ── */
+    /* 2026-09-14：視窗變窄時右側成本分機欄會被推出畫面。
+       根因是左欄寫 `1fr` 而沒有 minmax(0, …)：Grid 欄位的自動最小尺寸
+       是內容的 min-content，而左欄裡那張 .items-table 有 min-width:1080px，
+       所以左欄最小就是 1080px，視窗再窄也不會縮，右邊 310px 直接被擠出去。
+       （表格外層雖然有 overflow-x:auto，但那個 div 本身也不會縮到內容以下，
+        除非明確給 min-width:0。） */
     .form-layout {
       display: grid;
-      grid-template-columns: 1fr 310px;
+      grid-template-columns: minmax(0, 1fr) 310px;
       gap: 0;
       align-items: start;
       margin-left: var(--sidebar-w);
       margin-top: calc(var(--topbar-h) + 52px);
       padding: 24px 28px;
     }
-    .form-left { padding-right: 24px; }
+    .form-left { padding-right: 24px; min-width: 0; }
     .form-right {
       position: sticky;
       top: calc(var(--topbar-h) + 52px + 24px);
       max-height: calc(100vh - var(--topbar-h) - 52px - 48px);
       overflow-y: auto;
+      min-width: 0;
+    }
+
+    /* 真的太窄時（左欄可用寬度已經小於明細表格）改成單欄：
+       成本分機移到下方、取消 sticky，避免場地上用筆電或分屏時看不到成本。 */
+    @media (max-width: 1280px) {
+      .form-layout { grid-template-columns: minmax(0, 1fr); padding: 20px 18px; }
+      .form-left { padding-right: 0; }
+      .form-right {
+        position: static;
+        max-height: none;
+        margin-top: 20px;
+      }
     }
 
     /* ── Print / PDF ── */
@@ -161,13 +182,14 @@
     /* ── 明細表格 ── */
     .items-table {
       width: 100%;
+      min-width: 1080px;
       border-collapse: collapse;
       font-size: 12px;
       margin-bottom: 10px;
     }
     .items-table th {
       padding: 8px 8px;
-      text-align: left;
+      text-align: center;
       font-size: 9px;
       font-family: 'LINE Seed TW_OTF', sans-serif;
       letter-spacing: .08em;
@@ -200,11 +222,13 @@
       color: var(--text-primary);
       background: transparent;
       outline: none;
+      text-align: center;
       transition: all .1s;
     }
     .cell-input:hover { border-color: var(--border-light); background: #fff; }
     .cell-input:focus { border-color: var(--accent); background: #fff; box-shadow: 0 0 0 2px rgba(37,99,235,.08); }
-    .cell-input.num { text-align: right; font-family: 'LINE Seed TW_OTF', sans-serif; }
+    .cell-input.num { font-family: 'LINE Seed TW_OTF', sans-serif; }
+    .cell-input.qty-input { width: auto; min-width: 44px; max-width: 100%; field-sizing: content; }
     .cell-input.internal { background: #FFF8F0; }
     .cell-input.internal:hover { background: #fff; }
     .cell-textarea {
@@ -217,6 +241,7 @@
       color: var(--text-primary);
       background: transparent;
       outline: none;
+      text-align: center;
       transition: border-color .1s, background .1s, box-shadow .1s;
       resize: none;
       overflow: hidden;
@@ -228,33 +253,34 @@
     .cell-textarea:hover { border-color: var(--border-light); background: #fff; }
     .cell-textarea:focus { border-color: var(--accent); background: #fff; box-shadow: 0 0 0 2px rgba(37,99,235,.08); }
     .items-table td.va-top { vertical-align: top; padding-top: 7px; }
-    .cell-display { font-family: 'LINE Seed TW_OTF', sans-serif; font-size: 12px; text-align: right; padding: 5px 7px; color: var(--text-primary); }
+    .cell-display { font-family: 'LINE Seed TW_OTF', sans-serif; font-size: 12px; text-align: center; padding: 5px 7px; color: var(--text-primary); }
     .cell-display.muted { color: var(--text-dim); }
     .margin-warn { color: var(--danger); font-weight: 600; }
     .del-btn {
-      width: 22px; height: 22px;
+      width: 26px; height: 26px;
       border-radius: 4px;
       border: none;
       background: transparent;
-      color: var(--text-dim);
+      color: var(--text-secondary);
       cursor: pointer;
       display: flex; align-items: center; justify-content: center;
       transition: all .1s;
-      opacity: 0;
+      opacity: .55;
     }
     tr:hover .del-btn { opacity: 1; }
     .del-btn:hover { background: var(--danger-light); color: var(--danger); }
     /* ── 拖曳排序 ── */
-    .drag-handle { cursor: grab; color: var(--text-dim); opacity: 0; transition: opacity .1s; display:inline-flex; align-items:center; }
-    tr:hover .drag-handle { opacity: 1; }
+    .drag-handle { cursor: grab; color: var(--text-secondary); opacity: .55; transition: opacity .1s, background .1s; display:inline-flex; align-items:center; padding: 4px; border-radius: 4px; }
+    .drag-handle:hover { opacity: 1; background: #EEECEA; }
+    tr:hover .drag-handle { opacity: .85; }
     .drag-handle:active { cursor: grabbing; }
-    .sortable-ghost td { background: #EFF6FF !important; opacity: .5; }
+    .sortable-ghost td { background: var(--accent-light) !important; opacity: .5; }
     .sortable-chosen { box-shadow: 0 2px 16px rgba(0,0,0,.12); }
     .is-locked .drag-handle { display: none !important; }
     /* ── 標題行 ── */
-    tr.item-header-row td { background: #EFF6FF; border-top: 2px solid #BFDBFE; border-bottom: 1px solid #BFDBFE; }
+    tr.item-header-row td { background: var(--accent-light); border-top: 2px solid #BFDBFE; border-bottom: 1px solid #BFDBFE; }
     tr.item-header-row:hover td { background: #E0EEFF; }
-    .cell-textarea.header-desc { font-weight: 700; font-size: 13px; color: #1D4ED8; width: 100%; }
+    .cell-textarea.header-desc { font-weight: 700; font-size: 13px; color: var(--accent-hover); width: 100%; }
     tr.item-header-row td:not(:first-child):not(:last-child) { padding: 0 2px; }
     tr.item-header-row td input,
     tr.item-header-row td select,
@@ -390,18 +416,10 @@
       color: #15803D;
     }
 
-    /* ── 按鈕群 ── */
-    .btn { display:inline-flex; align-items:center; gap:6px; padding:8px 16px; border-radius:var(--radius); font-size:12px; font-family:var(--font-zh); cursor:pointer; border:none; transition:all .12s; font-weight:500; }
-    .btn-primary   { background:var(--accent);  color:#fff; }
-    .btn-primary:hover { background:#1D4ED8; }
+    /* ── 按鈕群（.btn/.btn-primary/.btn-ghost/.btn-sm 已收斂至共用 style.css） ── */
     .btn-success   { background:var(--success); color:#fff; }
     .btn-success:hover { background:#15803D; }
-    .btn-ghost     { background:#fff; color:var(--text-secondary); border:1px solid var(--border-light); }
-    .btn-ghost:hover { border-color:#C8C4BC; }
     .btn-warning   { background:var(--warning-light); color:var(--warning); border:1px solid #FDE68A; }
-    .btn-approve   { background:#15803D; color:#fff; }
-    .btn-approve:hover { background:#166534; }
-    .btn-sm { padding:6px 12px; font-size:11px; }
     .status-select-admin { appearance:none; -webkit-appearance:none; cursor:pointer; padding-right:16px; border:none; background:transparent; font:inherit; color:inherit; outline:none; }
     .status-wrap-admin { position:relative; display:inline-flex; align-items:center; }
     .status-wrap-admin svg { position:absolute; right:3px; pointer-events:none; opacity:.7; }
@@ -451,18 +469,7 @@
       gap: 10px;
     }
     .modal-head__title { font-size: 13px; font-weight: 600; }
-    .modal-close {
-      margin-left: auto;
-      width: 28px; height: 28px;
-      border-radius: 4px;
-      border: none;
-      background: #F0EEE9;
-      cursor: pointer;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 16px;
-      color: var(--text-secondary);
-    }
-    .modal-close:hover { background: var(--danger-light); color: var(--danger); }
+    .modal-close { margin-left: auto; }
     .modal-body { flex: 1; overflow: auto; padding: 0; }
     .modal-foot { padding: 12px 20px; border-top: 1px solid var(--border-light); display: flex; justify-content: flex-end; gap: 8px; }
 
@@ -569,13 +576,13 @@
       background: var(--black);
       color: var(--white);
       padding: 8px 10px;
-      text-align: left;
+      text-align: center;
       font-size: 11px;
       font-weight: 500;
     }
-    .pdf-items td { padding: 8px 10px; border-bottom: 1px solid #E8E5DF; font-size: 12px; }
+    .pdf-items td { padding: 8px 10px; border-bottom: 1px solid #E8E5DF; font-size: 12px; text-align: center; }
     .pdf-items tr:last-child td { border-bottom: none; }
-    .pdf-items td.r { text-align: right; font-family: 'LINE Seed TW_OTF', sans-serif; }
+    .pdf-items td.r { text-align: center; font-family: 'LINE Seed TW_OTF', sans-serif; }
     .pdf-totals { max-width: 300px; margin-left: auto; border: 1px solid #E8E5DF; border-radius: 4px; overflow: hidden; }
     .pdf-total-row { display: flex; justify-content: space-between; padding: 7px 12px; border-bottom: 1px solid #F0EEE9; font-size: 12px; }
     .pdf-total-row:last-child { border-bottom: none; font-weight: 700; font-size: 14px; background: #F8F7F4; }
@@ -646,29 +653,6 @@
                 style="padding:8px 16px;border-radius:6px;border:none;background:#FEF3C7;color:#92400E;font-size:12px;font-weight:600;cursor:pointer;font-family:LINE Seed TW_OTF, sans-serif;border:1px solid #FDE68A;display:flex;align-items:center;gap:6px">
           <svg x-show="!unlockLoading" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z"/></svg>
           <span x-text="unlockLoading ? '驗證中...' : '確認解鎖'"></span>
-        </button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ══ 導航離開確認 Modal ══ -->
-  <div x-show="showNavModal" x-cloak
-       style="position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center">
-    <div style="background:#fff;border-radius:12px;padding:32px 36px;width:380px;box-shadow:0 24px 64px rgba(0,0,0,.2);font-family:LINE Seed TW_OTF, sans-serif">
-      <div style="font-size:16px;font-weight:700;color:#0A0A0A;margin-bottom:6px">離開報價單？</div>
-      <div style="font-size:13px;color:#6B7280;margin-bottom:28px">目前有未儲存的變更，離開後將會消失。</div>
-      <div style="display:flex;flex-direction:column;gap:10px">
-        <button @click="navSave()"
-                style="padding:12px;border-radius:8px;border:none;background:#0A0A0A;color:#F5F4F0;font-size:13px;font-weight:600;cursor:pointer;font-family:LINE Seed TW_OTF, sans-serif">
-          儲存草稿並離開
-        </button>
-        <button @click="navDiscard()"
-                style="padding:12px;border-radius:8px;border:1.5px solid #E5E7EB;background:#fff;color:#374151;font-size:13px;font-weight:500;cursor:pointer;font-family:LINE Seed TW_OTF, sans-serif">
-          不儲存，直接離開
-        </button>
-        <button @click="navCancel()"
-                style="padding:12px;border-radius:8px;border:none;background:transparent;color:#9CA3AF;font-size:13px;cursor:pointer;font-family:LINE Seed TW_OTF, sans-serif">
-          取消，繼續編輯
         </button>
       </div>
     </div>
@@ -810,7 +794,7 @@
         報價單
       </a>
       <span style="color:var(--border-light)">/</span>
-      <span class="form-quote-no" x-text="q.quoteNo"></span>
+      <span class="form-quote-no" x-text="q.quoteNo || '（儲存後自動編號）'"></span>
       <template x-if="session.role === 'superadmin'">
         <div class="status-wrap-admin badge"
              :class="{'badge--draft':q.status==='草稿','badge--pending':q.status==='待審核','badge--approved':q.status==='已核准','badge--sent':q.status==='已送出','badge--warning':q.status==='已取消','badge--rejected':q.status==='已拒絕'}"
@@ -861,12 +845,13 @@
           <select :value="q.dealTag"
                   @change="onDealTagChange($event.target.value)"
                   style="padding:4px 6px;font-size:11px;border:1px solid var(--border-light);border-radius:4px;background:#fff;color:var(--text-primary);font-family:var(--font-zh);cursor:pointer;outline:none;max-width:96px"
-                  :style="q.dealTag==='未成案' ? 'color:#DC2626;border-color:#FCA5A5' : q.dealTag==='已提供' ? 'color:#2563EB;border-color:#93C5FD' : ''">
+                  :style="q.dealTag==='未成案' ? 'color:#DC2626;border-color:#FCA5A5' : q.dealTag==='已提供' ? 'color:var(--accent);border-color:#93C5FD' : ''">
             <option value="">未標記</option>
             <option value="未提供">未提供</option>
             <option value="已提供">已提供</option>
             <option value="未成案">未成案</option>
-            <option value="已成案">已成案</option>
+            <option value="已成案" :disabled="q.status !== '已送出'"
+                    :title="q.status !== '已送出' ? '需先完成簽核（狀態為已送出）才能標記為已成案' : ''">已成案</option>
           </select>
         </template>
       </div>
@@ -1007,7 +992,7 @@
                         <th style="padding:5px 8px;text-align:left;font-weight:600">品項說明</th>
                         <th style="padding:5px 8px;text-align:left;font-weight:600;width:100px">廠牌 / 型號</th>
                         <th style="padding:5px 8px;text-align:right;font-weight:600;width:55px">數量</th>
-                        <th style="padding:5px 8px;text-align:left;font-weight:600;width:44px">單位</th>
+                        <th style="padding:5px 8px;text-align:left;font-weight:600;width:70px">單位</th>
                         <th style="padding:5px 8px;text-align:right;font-weight:600;width:90px">單價</th>
                       </tr>
                     </thead>
@@ -1071,6 +1056,54 @@
                 @click.stop="cancelUnlock()">
           取消解鎖
         </button>
+      </div>
+
+      <!-- 客戶回簽 -->
+      <div x-show="q.status === '已送出'" style="border:1px solid var(--border-light);border-radius:8px;margin-bottom:18px;overflow:hidden">
+        <div :style="q.isSigned ? 'background:#F0FDF4' : 'background:#FAFAF9'"
+             style="padding:10px 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <span style="font-size:12px;font-weight:700;font-family:var(--font-zh)">客戶回簽</span>
+          <span x-show="q.isSigned" style="font-size:11px;color:#065F46;font-weight:600">✓ 已回簽</span>
+          <span x-show="q.isSigned" style="font-size:11px;color:#374151" x-text="q.signedBy"></span>
+          <span x-show="q.isSigned" style="font-size:11px;color:var(--text-dim)"
+                x-text="q.signedAt ? '· ' + q.signedAt.slice(0,16).replace('T',' ') : ''"></span>
+          <span x-show="!q.isSigned" style="font-size:11px;color:var(--text-dim)">尚未標記回簽</span>
+          <span style="flex:1"></span>
+          <template x-if="['superadmin','admin'].includes(session.role)">
+            <span style="display:flex;gap:6px">
+              <button x-show="!q.isSigned" @click="toggleQuotationSigned('sign')"
+                      style="padding:4px 10px;font-size:11px;border:none;background:#059669;color:#fff;border-radius:5px;cursor:pointer;white-space:nowrap;font-weight:600">標記已回簽</button>
+              <button x-show="q.isSigned" @click="toggleQuotationSigned('unsign')"
+                      style="padding:4px 10px;font-size:11px;border:1px solid var(--border);background:#fff;color:var(--text-secondary);border-radius:5px;cursor:pointer;white-space:nowrap">取消回簽</button>
+            </span>
+          </template>
+        </div>
+        <div style="padding:8px 16px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;border-top:1px solid var(--border-light)">
+          <span style="font-size:11px;color:var(--text-dim);font-family:var(--font-zh)">回簽附件</span>
+          <template x-for="f in (q.signedFiles||[])" :key="f.id">
+            <span style="display:flex;align-items:center;gap:4px;font-size:11px;background:#F3F4F6;border-radius:4px;padding:2px 6px">
+              <a href="javascript:void(0)" @click="previewAttachmentFile(f)" style="color:var(--accent);text-decoration:underline" x-text="f.filename"></a>
+              <button @click="deleteQuotationSignedFile(f.id)" style="border:none;background:none;color:var(--danger);cursor:pointer;font-size:11px;padding:0 2px">×</button>
+            </span>
+          </template>
+          <label style="padding:4px 10px;font-size:11px;border:1px solid var(--border);background:#fff;color:var(--text-secondary);border-radius:5px;cursor:pointer;white-space:nowrap">
+            + 上傳附件
+            <input type="file" multiple accept=".jpg,.jpeg,.png,.pdf" style="display:none" @change="uploadQuotationSignedFiles($event)">
+          </label>
+        </div>
+        <template x-if="(q.signedLog||[]).length > 0">
+          <div style="padding:6px 16px 8px;background:#FAFAF9;border-top:1px solid var(--border-light)">
+            <template x-for="(l, li) in (q.signedLog||[]).slice().reverse()" :key="li">
+              <div style="font-size:11px;color:var(--text-secondary);padding:3px 0;display:flex;gap:8px;flex-wrap:wrap">
+                <span :style="l.action==='signed' ? 'color:#065F46' : 'color:var(--danger)'"
+                      x-text="l.action==='signed' ? '✓ 標記回簽' : '✕ 取消回簽'"></span>
+                <span x-text="l.userDisplay"></span>
+                <span style="color:var(--text-dim)" x-text="(l.at||'').slice(0,16).replace('T',' ')"></span>
+                <span x-show="l.note" style="color:var(--text-dim)" x-text="'－ ' + l.note"></span>
+              </div>
+            </template>
+          </div>
+        </template>
       </div>
 
       <!-- 1. 報價基本資訊-->
@@ -1163,10 +1196,10 @@
                    style="position:absolute;z-index:200;left:0;right:0;top:calc(100% + 2px);background:#fff;border:1.5px solid #E5E7EB;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.10);max-height:200px;overflow-y:auto">
                 <template x-for="(c,i) in customerSuggestions" :key="c._type+c.id">
                   <div @click="selectCustomer(c)" @mouseenter="customerDropIdx=i"
-                       :style="i===customerDropIdx?'background:#EFF6FF':''"
+                       :style="i===customerDropIdx?'background:var(--accent-light)':''"
                        style="padding:7px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid #F3F4F6;display:flex;align-items:center;gap:6px">
                     <span style="font-size:10px;padding:1px 5px;border-radius:3px;flex-shrink:0;font-family:LINE Seed TW_OTF, sans-serif"
-                          :style="c._type==='supplier' ? 'background:#F3E8FF;color:#7C3AED' : 'background:#DBEAFE;color:#1D4ED8'"
+                          :style="c._type==='supplier' ? 'background:#F3E8FF;color:#7C3AED' : 'background:#DBEAFE;color:var(--accent-hover)'"
                           x-text="c._type==='supplier' ? '供應商' : '客戶'"></span>
                     <span x-text="c.name"></span>
                   </div>
@@ -1178,7 +1211,7 @@
                 <span style="color:#16a34a;display:flex;align-items:center;gap:3px">
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg>
                   已連結客戶管理
-                  <a :href="'customers.html'" style="color:#2563EB;text-decoration:none;margin-left:4px">查看 →</a>
+                  <a :href="'customers.html'" style="color:var(--accent);text-decoration:none;margin-left:4px">查看 →</a>
                 </span>
               </template>
               <template x-if="!q.customerId && q.supplierId">
@@ -1212,10 +1245,10 @@
           <div style="margin-bottom:10px;position:relative">
             <button type="button" @click="showContactPicker=!showContactPicker"
                     style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-family:var(--font-zh);color:var(--accent);background:none;border:1px solid #DBEAFE;border-radius:5px;padding:4px 10px;cursor:pointer;transition:all .12s"
-                    :style="showContactPicker ? 'background:#EFF6FF;border-color:#93C5FD' : 'background:#fff'">
+                    :style="showContactPicker ? 'background:var(--accent-light);border-color:#93C5FD' : 'background:#fff'">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87m-4-12a4 4 0 010 7.75"/></svg>
               選擇聯絡人
-              <span style="font-family:LINE Seed TW_OTF, sans-serif;background:#DBEAFE;color:#1D4ED8;padding:1px 6px;border-radius:3px;font-size:10px;font-weight:600" x-text="contactOptions.length + ' 筆'"></span>
+              <span style="font-family:LINE Seed TW_OTF, sans-serif;background:#DBEAFE;color:var(--accent-hover);padding:1px 6px;border-radius:3px;font-size:10px;font-weight:600" x-text="contactOptions.length + ' 筆'"></span>
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" :style="showContactPicker ? 'transform:rotate(180deg)' : ''" style="transition:transform .15s;flex-shrink:0"><path d="M6 9l6 6 6-6"/></svg>
             </button>
             <div x-show="showContactPicker" @click.outside="showContactPicker=false"
@@ -1319,8 +1352,8 @@
                 <th style="width:32px">#</th>
                 <th style="min-width:180px">品名 / 規格說明</th>
                 <th style="min-width:120px">廠牌 / 型號</th>
-                <th style="width:60px">數量</th>
-                <th style="width:60px">單位</th>
+                <th style="min-width:44px">數量</th>
+                <th style="width:100px">單位</th>
                 <template x-if="showCostCols">
                   <th class="internal" style="width:90px">成本單價<br><span style="font-size:8px;font-weight:400;opacity:.7">未稅</span></th>
                 </template>
@@ -1342,7 +1375,7 @@
                   <td style="text-align:center;color:var(--text-dim);font-size:11px;font-family:LINE Seed TW_OTF, sans-serif;padding:0 4px">
                     <div style="display:flex;align-items:center;justify-content:center;gap:1px">
                       <span class="drag-handle" title="拖曳排序">
-                        <svg width="9" height="14" viewBox="0 0 9 14" fill="currentColor">
+                        <svg width="12" height="19" viewBox="0 0 9 14" fill="currentColor">
                           <circle cx="2.5" cy="2" r="1.5"/><circle cx="6.5" cy="2" r="1.5"/>
                           <circle cx="2.5" cy="7" r="1.5"/><circle cx="6.5" cy="7" r="1.5"/>
                           <circle cx="2.5" cy="12" r="1.5"/><circle cx="6.5" cy="12" r="1.5"/>
@@ -1367,21 +1400,16 @@
                               @input="setDirty(); $el.style.height='auto'; $el.style.height=$el.scrollHeight+'px'"
                               x-init="$nextTick(()=>{ $el.style.height='auto'; $el.style.height=$el.scrollHeight+'px' })"></textarea>
                   </td>
-                  <td>
-                    <input class="cell-input num" type="number" min="0" x-model.number="item.qty"
+                  <td style="text-align:center">
+                    <input class="cell-input num qty-input" type="number" min="0" x-model.number="item.qty"
                            x-show="item.type !== 'header'"
                            @input="calcItem(item); setDirty()">
                   </td>
                   <td>
-                    <select class="cell-input" x-model="item.unit" @change="setDirty"
-                            x-show="item.type !== 'header'">
-                      <option>台</option><option>套</option><option>組</option>
-                      <option>式</option><option>個</option><option>批</option>
-                      <option>條</option><option>根</option><option>捲</option>
-                      <option>米</option><option>箱</option><option>包</option>
-                      <option>人月</option><option>人日</option><option>次</option>
-                      <option>年</option><option>月</option><option>式（整批）</option>
-                    </select>
+                    <input class="cell-input" type="text" x-model="item.unit" @change="setDirty"
+                           @focus="$el.dataset.prevUnit = item.unit; item.unit = ''"
+                           @blur="if(!item.unit) item.unit = $el.dataset.prevUnit || ''"
+                           x-show="item.type !== 'header'" list="quote-unit-options" placeholder="單位">
                   </td>
                   <template x-if="showCostCols && item.type !== 'header'">
                     <td class="internal">
@@ -1392,7 +1420,7 @@
                   </template>
                   <template x-if="showCostCols && item.type !== 'header'">
                     <td class="internal">
-                      <div style="display:flex;align-items:center;gap:2px">
+                      <div style="display:flex;align-items:center;justify-content:center;gap:2px">
                         <input class="cell-input num internal" type="number" min="0" max="99.99" step="0.01"
                                :value="parseFloat((item.margin * 100).toFixed(2))"
                                @input="item.margin = parseFloat($event.target.value) / 100; item.unitPriceOverride = false; calcItem(item); setDirty(); checkApproval()"
@@ -1400,7 +1428,7 @@
                         <span style="font-size:11px;color:var(--text-dim)">%</span>
                       </div>
                       <div x-show="item.margin < 0.30 && item.cost > 0"
-                           style="font-size:9px;color:var(--danger);font-weight:600">需審核</div>
+                           style="font-size:9px;color:var(--danger);font-weight:600;text-align:center">需審核</div>
                     </td>
                   </template>
                   <td>
@@ -1439,13 +1467,22 @@
             </tbody>
           </table>
         </div>
+        <datalist id="quote-unit-options">
+          <option value="台"></option><option value="套"></option><option value="組"></option>
+          <option value="式"></option><option value="個"></option><option value="批"></option>
+          <option value="條"></option><option value="根"></option><option value="捲"></option>
+          <option value="米"></option><option value="箱"></option><option value="包"></option>
+          <option value="人月"></option><option value="人日"></option><option value="次"></option>
+          <option value="年"></option><option value="月"></option><option value="式（整批）"></option>
+          <option value="SET"></option><option value="立"></option>
+        </datalist>
         <div style="display:flex;gap:8px;margin-top:6px">
           <button class="btn btn-ghost btn-sm add-item-btn" @click="addItem()">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v16m8-8H4"/></svg>
             新增品項
           </button>
           <button class="btn btn-ghost btn-sm" @click="addHeader()"
-                  style="color:#1D4ED8;border-color:#BFDBFE;background:#EFF6FF">
+                  style="color:var(--accent-hover);border-color:#BFDBFE;background:var(--accent-light)">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h10"/></svg>
             新增區段標題
           </button>
@@ -1550,25 +1587,32 @@
         <div class="section-title"><div class="section-num">五</div>報價條件</div>
         <div class="form-grid" style="gap:14px">
           <div class="form-group">
-            <label class="form-label">付款條件</label>
-            <textarea class="form-textarea" rows="5" x-model="q.paymentTerms" @input="setDirty" style="min-height:100px"></textarea>
+            <label class="form-label" style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+              付款條件
+              <button x-show="session.role === 'superadmin'" type="button"
+                      class="btn btn-ghost btn-sm" @click="saveDefaultPaymentTerms()"
+                      title="將目前這段文字存為之後所有新增報價單的預設付款條件">
+                設為預設付款條件
+              </button>
+            </label>
+            <textarea class="form-textarea" rows="5" x-model="q.paymentTerms" @input="setDirty(); checkApproval()" style="min-height:100px"></textarea>
           </div>
           <div class="form-grid form-grid-2" style="gap:14px">
             <div class="form-group">
               <label class="form-label">交貨條件</label>
-              <textarea class="form-textarea" rows="2" x-model="q.deliveryTerms" @input="setDirty"></textarea>
+              <textarea class="form-textarea" rows="2" x-model="q.deliveryTerms" @input="setDirty(); checkApproval()"></textarea>
             </div>
             <div class="form-group">
               <label class="form-label">驗收標準</label>
-              <textarea class="form-textarea" rows="2" x-model="q.acceptanceTerms" @input="setDirty"></textarea>
+              <textarea class="form-textarea" rows="2" x-model="q.acceptanceTerms" @input="setDirty(); checkApproval()"></textarea>
             </div>
             <div class="form-group">
               <label class="form-label">保固條件</label>
-              <textarea class="form-textarea" rows="2" x-model="q.warrantyTerms" @input="setDirty"></textarea>
+              <textarea class="form-textarea" rows="2" x-model="q.warrantyTerms" @input="setDirty(); checkApproval()"></textarea>
             </div>
             <div class="form-group">
               <label class="form-label">售後服務</label>
-              <textarea class="form-textarea" rows="2" x-model="q.afterSales" @input="setDirty"></textarea>
+              <textarea class="form-textarea" rows="2" x-model="q.afterSales" @input="setDirty(); checkApproval()"></textarea>
             </div>
           </div>
         </div>
@@ -1818,7 +1862,7 @@
               </div>
             </template>
             <template x-if="q.dealTag !== '未成案' && q.status !== '已送出' && q.status !== '已確認'">
-              <div style="margin-bottom:12px;padding:7px 12px;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:5px;font-size:11px;color:#1E40AF;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.03em"
+              <div style="margin-bottom:12px;padding:7px 12px;background:var(--accent-light);border:1px solid #BFDBFE;border-radius:5px;font-size:11px;color:#1E40AF;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.03em"
                    x-text="'⚠ 此為報價單預覽稿（目前狀態：' + (q.status || '草稿') + '），尚未正式生效，請勿對外發送或引用'">
               </div>
             </template>
@@ -1828,7 +1872,7 @@
               <div>
                 <div class="pdf-company-name">允 碩 整 合 集 創 股 份 有 限 公 司</div>
                 <div class="pdf-company-sub">MOTRIX Synergy Integration Corp.</div>
-                <div class="pdf-company-sub" style="margin-top:3px">統一編號：60575481　電話：04-3602-2818　info@miactw.com</div>
+                <div class="pdf-company-sub" style="margin-top:3px">統一編號：60575481　電話：04-3610-6566　info@miactw.com</div>
               </div>
               <div style="text-align:right">
                 <div class="pdf-doc-title">報　價　單</div>
@@ -1877,7 +1921,7 @@
                   <th>品名 / 規格說明</th>
                   <th>廠牌 / 型號</th>
                   <th class="r" style="width:50px">數量</th>
-                  <th style="width:40px">單位</th>
+                  <th style="width:74px">單位</th>
                   <template x-if="previewMode === 'internal'">
                     <th class="r" style="background:#1A1A1A;width:90px">成本單價</th>
                   </template>
@@ -1886,7 +1930,9 @@
                   </template>
                   <th class="r" style="width:100px">單價（未稅額）</th>
                   <th class="r" style="width:110px">金額（未稅）</th>
-                  <th style="width:80px">備註</th>
+                  <template x-if="q.items.some(i => (i.notes||'').trim())">
+                    <th style="width:80px">備註</th>
+                  </template>
                 </tr>
               </thead>
               <tbody>
@@ -1905,7 +1951,9 @@
                     </template>
                     <td class="r" x-text="item.unitPrice ? item.unitPrice.toLocaleString() : ''"></td>
                     <td class="r" x-text="item.amount ? item.amount.toLocaleString() : ''"></td>
-                    <td x-text="item.notes || ''"></td>
+                    <template x-if="q.items.some(i => (i.notes||'').trim())">
+                      <td x-text="item.notes || ''"></td>
+                    </template>
                   </tr>
                 </template>
               </tbody>
@@ -1931,13 +1979,13 @@
             <!-- 簽署欄 -->
             <div class="pdf-sign" style="margin-top:auto;padding-top:16px">
               <div class="pdf-sign-box" style="min-height:120px;display:flex;flex-direction:column">
-                <div class="pdf-sign-label">買方確認 · 簽章蓋印</div>
+                <div class="pdf-sign-label">買方確認 · 簽章</div>
                 <div style="font-size:12px;color:#333;margin-top:6px;flex:1" x-text="q.customerName || ''"></div>
               </div>
             </div>
 
             <div class="pdf-footer">
-              MOTRIX Synergy Integration Corp. 允碩整合集創 ｜ info@miactw.com ｜ Tel: 04-3602-2818 ｜ 統一編號: 60575481
+              MOTRIX Synergy Integration Corp. 允碩整合集創 ｜ info@miactw.com ｜ Tel: 04-3610-6566 ｜ 統一編號: 60575481
             </div>
           </div>
         </div>
@@ -2018,7 +2066,21 @@
   const API = '/api'
   // ── 報價單模板版本：本頁（quotation-form.html）或其邏輯有任何改動都須遞增 ──
   // ── 小改版（欄位微調/樣式/文案）+0.1；大改版（版型結構/新增區塊/流程變更）+1 ──
-  const FORM_VERSION = 'V1.1'
+  const FORM_VERSION = 'V2.0'
+
+  // ── 報價條件預設文字（供「與預設不同」比對用；付款條件另可被後端 settings/payment-terms 覆蓋）──
+  const DEFAULT_TERMS = {
+    paymentTerms: `本專案總價款分三期給付，本報價不含運費與關稅，前述相關衍生費用由買方另行負擔。
+第一期：定金款（總價款50%），買方給付本期款項後，本專案即確認執行，賣方應開立憑證予買方。
+第二期：交貨款（總價款30%），設備運抵買方指定地點並完成硬體點交後，賣方得開立憑證請款，付款方式為賣方提交憑證之次月份25日支付。
+第三期：驗收款（總價款20%），設備安裝、系統設定及缺失改善完成，並經買方驗收合格後，賣方得開立憑證請款，付款方式為賣方提交憑證之次月份25日支付。`,
+    deliveryTerms: '送達買方指定地點；特殊地點或時段另計。',
+    acceptanceTerms: `設備硬體自運抵交貨當日起即進行外觀與數量之點交；系統與安裝之最終驗收，依報價單雙方確認之規格與缺改清單辦理。
+若因非可歸責於賣方之現場因素（如買方場地未備妥、裝潢延宕、原廠及代理商物件/設備到貨延宕等），致部分項目未能即時完成設定或測試，不影響已交付設備及已完成安裝部分之驗收效力。針對不影響系統主要運作功能之輕微瑕疵、文件補正或教育訓練補充，買方不得拒絕簽認驗收單。買賣標的物之利益及危險，自交付時起，均由買受人承受負擔。
+賣方完成設備安裝與基礎設定並通知買方後，買受人應按物之性質，依通常程序從速檢查其所受領之物。如買方對完成內容有疑義，應於賣方通知之日起七日內以書面具體提出；逾期未辦理驗收或怠於為通知者，視為承認其所受領之物並驗收合格。此外，設備或系統若未經正式驗收程序，但買方已逕行投入實際業務營運或使用者，亦視同驗收完成。`,
+    warrantyTerms: '設備依原廠保固公告內容為主。保固期間內之硬體故障，賣方將協助買方聯繫原廠進行處理；惟若屬非設備本身硬體瑕疵（如人為損壞、天災、不當使用、買方自行變更設定、架構等）或需賣方派員至現場排解之技術服務，賣方得另行收取檢修與出勤服務費用。',
+    afterSales: '上班時段電話/E-mail技術支援；到場服務依當時報價計費。',
+  }
 
   function quotationForm() {
     return {
@@ -2026,11 +2088,15 @@
       showCostCols: true,
       isDirty: false,
       lastSaved: null,
+      _lastUpdatedAt: null,   // 樂觀鎖：loadQuote() 讀入、apiSave() 送出比對、成功後更新
+      _saveConflict: false,  // apiSave() 收到 409 時設 true，saveDraft() 據此提示使用者
       previewMode: null,
       needsApproval: false,
       approvalReasons: [],
       autoSaveTimer: null,
       isNewRecord: true,
+      // 開始存檔後就凍結單號，不讓載入時的非同步取號晚到覆蓋（見 apiSave()）
+      _quoteNoFrozen: false,
       session: {},
       backendOnline: false,
       customers: [],
@@ -2040,8 +2106,6 @@
       customerDropIdx: 0,
       contactOptions: [],
       showContactPicker: false,
-      showNavModal: false,
-      pendingNav: null,
       unlocked: false,
       showUnlockModal: false,
       unlockPwd: '',
@@ -2059,6 +2123,7 @@
       rejectFinalNote: '',
       rejectingFinal: false,
       _prevDealTag: '',
+      _defaultPaymentTerms: DEFAULT_TERMS.paymentTerms,  // 送審前比對用；new-record 模式下會被 init() 換成後端目前設定的預設值
 
       q: {
         quoteNo: '',
@@ -2090,17 +2155,13 @@
         discount: 0, showDiscount: false, freight: 0,
         taxRate: 5,
         approval: null,
+        isSigned: false, signedBy: '', signedAt: '', signedLog: [], signedFiles: [],
 
-        paymentTerms: `本專案總價款分三期給付，本報價不含運費與關稅，前述相關衍生費用由買方另行負擔。
-第一期：定金款（總價款50%），買方給付本期款項後，本專案即確認執行，賣方應開立憑證予買方。
-第二期：交貨款（總價款30%），設備運抵買方指定地點並完成硬體點交後，賣方得開立憑證請款，付款方式為賣方提交憑證之次月份25日支付。
-第三期：驗收款（總價款20%），設備安裝、系統設定及缺失改善完成，並經買方驗收合格後，賣方得開立憑證請款，付款方式為賣方提交憑證之次月份25日支付。`,
-        deliveryTerms: '送達買方指定地點；特殊地點或時段另計。',
-        acceptanceTerms: `設備硬體自運抵交貨當日起即進行外觀與數量之點交；系統與安裝之最終驗收，依報價單雙方確認之規格與缺改清單辦理。
-若因非可歸責於賣方之現場因素（如買方場地未備妥、裝潢延宕、原廠及代理商物件/設備到貨延宕等），致部分項目未能即時完成設定或測試，不影響已交付設備及已完成安裝部分之驗收效力。針對不影響系統主要運作功能之輕微瑕疵、文件補正或教育訓練補充，買方不得拒絕簽認驗收單。買賣標的物之利益及危險，自交付時起，均由買受人承受負擔。
-賣方完成設備安裝與基礎設定並通知買方後，買受人應按物之性質，依通常程序從速檢查其所受領之物。如買方對完成內容有疑義，應於賣方通知之日起七日內以書面具體提出；逾期未辦理驗收或怠於為通知者，視為承認其所受領之物並驗收合格。此外，設備或系統若未經正式驗收程序，但買方已逕行投入實際業務營運或使用者，亦視同驗收完成。`,
-        warrantyTerms: '設備依原廠保固公告內容為主。保固期間內之硬體故障，賣方將協助買方聯繫原廠進行處理；惟若屬非設備本身硬體瑕疵（如人為損壞、天災、不當使用、買方自行變更設定、架構等）或需賣方派員至現場排解之技術服務，賣方得另行收取檢修與出勤服務費用。',
-        afterSales: '上班時段電話/E-mail技術支援；到場服務依當時報價計費。',
+        paymentTerms: DEFAULT_TERMS.paymentTerms,
+        deliveryTerms: DEFAULT_TERMS.deliveryTerms,
+        acceptanceTerms: DEFAULT_TERMS.acceptanceTerms,
+        warrantyTerms: DEFAULT_TERMS.warrantyTerms,
+        afterSales: DEFAULT_TERMS.afterSales,
 
         indirectLogistics: 0, indirectInstallation: 0,
         indirectTravel: 0,   indirectWarranty: 0, indirectOther: 0,
@@ -2169,15 +2230,22 @@
         }
       },
 
+      genId() {
+        if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+          return window.crypto.randomUUID()
+        }
+        return 'id-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10)
+      },
+
       addItem() {
-        const id = crypto.randomUUID()
+        const id = this.genId()
         this.q.items.push({ id, description:'', brand:'', qty:1, unit:'台',
           cost:null, margin:0.30, unitPrice:null, unitPriceOverride:false, amount:0, notes:'' })
         this.setDirty()
       },
 
       addHeader() {
-        const id = crypto.randomUUID()
+        const id = this.genId()
         this.q.items.push({ id, type:'header', description:'' })
         this.setDirty()
       },
@@ -2211,6 +2279,19 @@
         const taxRate = this.q.taxRate !== undefined ? this.q.taxRate : 5
         if (taxRate < 5)
           reasons.push(`調整營業稅額為 ${taxRate}%（標準 5%）`)
+        const termsChanged = []
+        if ((this.q.paymentTerms || '').trim() !== (this._defaultPaymentTerms || DEFAULT_TERMS.paymentTerms).trim())
+          termsChanged.push('付款條件')
+        if ((this.q.deliveryTerms || '').trim() !== DEFAULT_TERMS.deliveryTerms.trim())
+          termsChanged.push('交貨條件')
+        if ((this.q.acceptanceTerms || '').trim() !== DEFAULT_TERMS.acceptanceTerms.trim())
+          termsChanged.push('驗收標準')
+        if ((this.q.warrantyTerms || '').trim() !== DEFAULT_TERMS.warrantyTerms.trim())
+          termsChanged.push('保固條件')
+        if ((this.q.afterSales || '').trim() !== DEFAULT_TERMS.afterSales.trim())
+          termsChanged.push('售後服務')
+        if (termsChanged.length > 0)
+          reasons.push(`報價條件已修改，非預設內容（${termsChanged.join('、')}）`)
         this.approvalReasons = reasons
         this.needsApproval = reasons.length > 0
       },
@@ -2218,12 +2299,13 @@
       isCurrentTierApprover() {
         const appr = this.q.approval
         if (!appr) return false
-        if (appr.requestedBy === this.session.username) return false
         const tiers = appr.tiers || []
         if (!tiers.length) {
-          // no configured tiers — fallback: any superadmin except submitter
+          // 無設定簽核層 — 任一超級管理員皆可簽核，含申請人本人；後端會擋下申請人自簽，
+          // 除非申請人是目前唯一在職的超級管理員（見 quotations.py approve_quotation()）
           return this.session.role === 'superadmin'
         }
+        if (appr.requestedBy === this.session.username) return false
         const ct = appr.currentTier ?? 0
         if (ct >= tiers.length) return false
         // sequential within tier: only the first unapproved approver may act
@@ -2269,16 +2351,35 @@
       },
 
       async apiSave(isNew) {
-        const payload = { quote_no: this.q.quoteNo, status: this.q.status, data: { ...this.q, tot: this.tot }, created_by: this.session?.username }
+        // 一旦開始存檔，單號的權威就交給後端回應了：載入時那支非同步取號若在這之後
+        // 才回來，一律不得再寫進 q.quoteNo（見 _peekQuoteNo()）。
+        // 只看「目前有沒有號碼」是不夠的——使用者在取號還沒回來時就按送審的話，
+        // POST 帶著空號送出、後端派了 001，取號這時才回來拿到 002，而 q.quoteNo
+        // 仍是空的（POST 回應還沒到），守門就放行了。2026-09-10 用測試診斷抓到。
+        this._quoteNoFrozen = true
+        const data = { ...this.q, tot: this.tot }
+        if (!isNew) data._expectedUpdatedAt = this._lastUpdatedAt
+        const payload = { quote_no: this.q.quoteNo, status: this.q.status, data, created_by: this.session?.username }
         try {
           const method = isNew ? 'POST' : 'PUT'
           const url    = isNew ? `${this.API}/quotations` : `${this.API}/quotations/${this.q.quoteNo}`
           const res    = await fetch(url, { method, headers:{'Content-Type':'application/json', Authorization:'Bearer '+this.session.token}, body: JSON.stringify(payload) })
+          if (res.status === 409) {
+            // 樂觀鎖衝突：另一個 session 已經存過檔，這次存檔不生效——不要覆蓋使用者
+            // 正在編輯的內容，只標記出來讓 saveDraft() 之類的呼叫端決定怎麼提示
+            this._saveConflict = true
+            return false
+          }
           if (!res.ok) throw new Error(await res.text())
+          const d = await res.json()
+          this._lastUpdatedAt = d.updated_at || d.created_at || this._lastUpdatedAt
+          this._saveConflict = false
           if (isNew) {
-            // Backend may assign a different number if provisional was taken concurrently
-            const d = await res.json()
-            if (d.quote_no && d.quote_no !== this.q.quoteNo) {
+            // 單號一律以後端回傳的為準（前端載入時拿到的只是 peek，不保證還在；
+            // 拿不到時前端根本不填，由後端派號）。2026-09-10：這裡原本只在
+            // 「後端派的號碼跟前端手上的不同」時才回填＋改網址，導致前端號碼為空
+            // 時網址永遠補不上 ?id=，重新整理就開成一張新的空白單。
+            if (d.quote_no) {
               this.q.quoteNo = d.quote_no
               history.replaceState(null, '', '?id=' + d.quote_no)
             }
@@ -2287,6 +2388,25 @@
         } catch(e) {
           console.warn('API 儲存失敗（後端未啟動）', e.message)
           return false
+        }
+      },
+
+      async saveDefaultPaymentTerms() {
+        const text = (this.q.paymentTerms || '').trim()
+        if (!text) { alert('付款條件內容不可空白'); return }
+        if (!confirm('確定要把目前這段文字，存為之後所有「新增報價單」的預設付款條件嗎？\n（已存在的舊報價單不受影響）')) return
+        try {
+          const res = await fetch(`${this.API}/settings/payment-terms`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+            body: JSON.stringify({ text })
+          })
+          if (!res.ok) throw new Error(await res.text())
+          this._defaultPaymentTerms = text
+          this.checkApproval()
+          this.toast('✓ 已更新為預設付款條件')
+        } catch(e) {
+          alert('儲存失敗，請確認後端伺服器是否在線')
         }
       },
 
@@ -2429,7 +2549,7 @@
         } catch(e) { console.warn('建立客戶失敗', e) }
       },
 
-      onDealTagChange(newTag) {
+      async onDealTagChange(newTag) {
         const oldTag = this._prevDealTag || ''
         // Guard: downgrading from 已成案 requires admin+
         if (oldTag === '已成案' && newTag !== '已成案') {
@@ -2445,11 +2565,17 @@
           }
         }
         if (newTag === '已成案') {
+          if (this.q.status !== '已送出') {
+            this.$nextTick(() => { this.q.dealTag = oldTag })
+            alert('報價單需先完成簽核（狀態為「已送出」）才能標記為「已成案」')
+            return
+          }
           if (!confirm(`確認將報價單標記為「已成案」？\n\n確認後案件進度將鎖定，僅能透過「案件管理」頁面完結案件。\n此操作將記錄操作紀錄。`)) {
             this.$nextTick(() => { this.q.dealTag = oldTag })
             return
           }
           this.ensureCaseRecord()
+          await this._seedDefaultStagesIfEmpty()
         }
         this.q.dealTag = newTag
         this._prevDealTag = newTag
@@ -2467,11 +2593,13 @@
       },
 
       async saveDraft() {
-        if (!this.q.quoteNo) {
-          const ym  = new Date().toISOString().slice(0,7).replace('-','')
-          this.q.quoteNo = `MQ-${ym}-001`
-        }
-        if (!new URLSearchParams(window.location.search).has('id')) {
+        // 2026-09-10：原本這裡在 quoteNo 為空時會寫死 `MQ-{ym}-001` 當暫用號。
+        // 那個值幾乎一定已經被別人用掉，後端撞號後改派下一號，畫面上看到的號碼
+        // 就跟實際建立的那張對不起來（已用可控實驗重現：把 /api/next-quote-no
+        // 拖慢超過載入時的逾時，畫面顯示的單號在資料庫裡根本不存在）。
+        // 改成：拿不到號就交給後端派（create_quotation 收到空值本來就會自己算），
+        // 存檔回應再把真正的號碼回填。前端不再自己猜號。
+        if (!new URLSearchParams(window.location.search).has('id') && this.q.quoteNo) {
           history.replaceState(null, '', '?id=' + this.q.quoteNo)
         }
         const wasNew = this.isNewRecord
@@ -2481,7 +2609,14 @@
         if (wasUnlocked) this.q._isUnlockEdit = true
         const ok = await this.apiSave(wasNew).catch(() => false)
         delete this.q._isUnlockEdit
-        if (!ok) { alert('儲存失敗，請確認後端伺服器是否在線'); return }
+        if (!ok) {
+          if (this._saveConflict) {
+            alert('這張報價單已被其他人更新，為避免覆蓋對方的修改，這次儲存未生效。請重新載入頁面後再繼續編輯。')
+          } else {
+            alert('儲存失敗，請確認後端伺服器是否在線')
+          }
+          return
+        }
         this.isDirty = false
         if (this.unlocked) this.unlocked = false
         const now = new Date()
@@ -2567,9 +2702,9 @@
   .pdf-meta-label{color:#888;min-width:80px;flex-shrink:0}
   .pdf-meta-val{color:#0A0A0A;font-weight:500}
   .pdf-items{width:100%;border-collapse:collapse;margin-bottom:16px}
-  .pdf-items th{background:#0A0A0A;color:#F5F4F0;padding:8px 10px;text-align:left;font-size:11px;font-weight:500}
-  .pdf-items th.r,.pdf-items td.r{text-align:right;font-family:LINE Seed TW_OTF, sans-serif}
-  .pdf-items td{padding:8px 10px;border-bottom:1px solid #E8E5DF;font-size:12px}
+  .pdf-items th{background:#0A0A0A;color:#F5F4F0;padding:8px 10px;text-align:center;font-size:11px;font-weight:500}
+  .pdf-items th.r,.pdf-items td.r{text-align:center;font-family:LINE Seed TW_OTF, sans-serif}
+  .pdf-items td{padding:8px 10px;border-bottom:1px solid #E8E5DF;font-size:12px;text-align:center}
   .pdf-items tr:last-child td{border-bottom:none}
   .pdf-items tbody tr:nth-child(even) td{background:#FAFAF8}
   .pdf-totals{max-width:300px;margin-left:auto;border:1px solid #E8E5DF;border-radius:4px;overflow:hidden}
@@ -2674,238 +2809,6 @@ window.addEventListener('load',function(){
           }
         }
         this._buildPrintWin(mode)
-      },
-
-      printPreview() {
-        this._buildPrintWin(this.previewMode)
-      },
-
-      _legacyExportPDF_unused(mode) {
-        const isInternal = (mode === 'internal')
-        const q = this.q, tot = this.tot
-        const itemRows = q.items.map((item, i) => `
-          <tr>
-            <td>${i+1}</td>
-            <td>${item.description || ''}</td>
-            <td>${item.brand || ''}</td>
-            <td style="text-align:right">${item.qty}</td>
-            <td>${item.unit}</td>
-            ${isInternal ? `<td style="text-align:right;background:#FFF8F0">${item.cost ? item.cost.toLocaleString() : ''}</td>` : ''}
-            ${isInternal ? `<td style="text-align:right;background:#FFF8F0">${item.cost ? (item.margin*100).toFixed(2)+'%' : ''}</td>` : ''}
-            <td style="text-align:right">${item.unitPrice ? item.unitPrice.toLocaleString() : ''}</td>
-            <td style="text-align:right">${item.amount ? item.amount.toLocaleString() : ''}</td>
-            <td>${item.notes || ''}</td>
-          </tr>`).join('')
-
-        const html = `<!DOCTYPE html>
-<html lang="zh-Hant">
-<head>
-<meta charset="UTF-8">
-<title></title>
-<style>
-  *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:LINE Seed TW_OTF, serif;font-size:13px;color:#0A0A0A;line-height:1.6;background:#fff}
-  #scale-root{padding:24px 32px}
-  .scale-body{display:block}
-  .sign-spacer{height:32px}
-  @page{
-    size:A4;margin:0 13mm 12mm 13mm;
-    @top-left{content:none}@top-center{content:none}@top-right{content:none}
-    @bottom-left{content:none}@bottom-right{content:none}
-    @bottom-center{content:counter(page);font-family:LINE Seed TW_OTF, sans-serif;font-size:9px;color:#aaa}
-  }
-  @media print{
-    html,body{margin:0;padding:0;background:#fff}
-    #scale-root{padding:15mm 0 0}
-    .sign{page-break-inside:avoid}
-    .totals{page-break-inside:avoid}
-    .terms{page-break-inside:avoid}
-    .cost-summary{page-break-inside:avoid}
-    .footer{page-break-inside:avoid}
-    tr{page-break-inside:avoid}
-    .header{page-break-after:avoid}
-  }
-  /* 頂端標誌線 */
-  .accent-bar{height:3px;background:#0A0A0A;margin-bottom:18px}
-  .header{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:14px;border-bottom:1px solid #0A0A0A;margin-bottom:16px}
-  .co-name{font-size:15px;font-weight:700;letter-spacing:.06em}
-  .co-sub{font-size:10px;color:#888;margin-top:3px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.02em}
-  .doc-title{font-size:24px;font-weight:700;letter-spacing:.24em;text-align:right}
-  .doc-sub{font-size:10px;color:#888;font-family:LINE Seed TW_OTF, sans-serif;margin-top:4px;letter-spacing:.12em;text-align:right}
-  .internal-badge{font-size:9px;color:#DC2626;font-weight:700;letter-spacing:.1em;margin-top:5px;text-align:right}
-  .meta{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-bottom:14px;font-size:12px;background:#FAFAF8;padding:10px 12px;border-radius:4px;border:1px solid #EDEAE4}
-  .meta span{color:#888;font-family:LINE Seed TW_OTF, sans-serif;font-size:11px}
-  .boxes{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px}
-  .box{background:#FAFAF8;border:1px solid #EDEAE4;border-radius:4px;padding:11px 13px}
-  .box-title{font-size:9px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#999;font-weight:600;margin-bottom:8px}
-  .row{display:flex;gap:6px;margin-bottom:4px;font-size:12px}
-  .label{color:#888;min-width:72px;flex-shrink:0;font-size:11px}
-  .val{color:#0A0A0A;font-weight:500}
-  .section-label{font-size:9px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#999;font-weight:600;margin-bottom:7px;display:flex;align-items:center;gap:8px}
-  .section-label::after{content:'';flex:1;height:1px;background:#EDEAE4}
-  table{width:100%;border-collapse:collapse;margin-bottom:14px}
-  thead th{background:#0A0A0A;color:#F5F4F0;padding:8px 9px;text-align:left;font-size:11px;font-weight:500;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.04em}
-  thead th.r{text-align:right}
-  tbody td{padding:8px 9px;border-bottom:1px solid #EDEAE4;font-size:12px}
-  tbody tr:last-child td{border-bottom:none}
-  tbody tr:nth-child(even) td{background:#FAFAF8}
-  .totals{max-width:290px;margin-left:auto;border:1px solid #EDEAE4;border-radius:4px;overflow:hidden;margin-bottom:16px}
-  .total-row{display:flex;justify-content:space-between;padding:7px 13px;border-bottom:1px solid #F0EEE9;font-size:12px}
-  .total-row:last-child{border-bottom:none;font-weight:700;font-size:14px;background:#F5F4F0;border-top:1.5px solid #0A0A0A}
-  .total-row span:last-child{font-family:LINE Seed TW_OTF, sans-serif}
-  .terms{margin-bottom:16px}
-  .terms-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-  .term-block{font-size:11px;color:#444;line-height:1.8}
-  .term-title{font-size:9px;color:#999;font-weight:600;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.1em;text-transform:uppercase;margin-bottom:4px}
-  .sign{max-width:52%;margin-top:0}
-  .sign-box{border:1px solid #EDEAE4;border-radius:4px;padding:16px 18px;min-height:130px;display:flex;flex-direction:column}
-  .sign-label{font-size:9px;color:#999;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px}
-  .sign-company{font-size:12px;color:#333;margin-bottom:0;flex:1}
-  .footer{text-align:center;font-size:10px;color:#999;margin-top:18px;padding-top:12px;border-top:1px solid #EDEAE4;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.04em}
-  .cost-summary{background:#0A0A0A;color:#F5F4F0;border-radius:6px;padding:14px;margin-bottom:16px}
-  .cost-summary h4{font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#555;margin-bottom:10px;font-family:LINE Seed TW_OTF, sans-serif}
-  .cost-row{display:flex;justify-content:space-between;font-size:12px;padding:4px 0;border-bottom:1px solid #1A1A1A}
-  .cost-row:last-child{border-bottom:none}
-  .cost-label{color:#888}
-  .cost-val{font-family:LINE Seed TW_OTF, sans-serif;font-weight:600}
-  .green{color:#4ADE80}.red{color:#F87171}.yellow{color:#FCD34D}
-  @media print{body{padding:0}button{display:none}}
-</style>
-</head>
-<body>
-<div id="scale-root">
-<div class="accent-bar"></div>
-<div class="header">
-  <div>
-    <div class="co-name">允碩整合集創股份有限公司</div>
-    <div class="co-sub">MOTRIX Synergy Integration Corp.</div>
-    <div class="co-sub" style="margin-top:4px">統一編號：60575481　｜　電話：04-3602-2818　｜　info@miactw.com</div>
-  </div>
-  <div>
-    <div class="doc-title">報　價　單</div>
-    ${isInternal ? '<div class="internal-badge">⚠ INTERNAL USE ONLY ‧ 機密，限內部閱覽</div>' : ''}
-  </div>
-</div>
-
-<div class="meta">
-  <div><span>報價編號：</span><strong style="font-family:LINE Seed TW_OTF, sans-serif">${q.quoteNo}</strong></div>
-  <div><span>報價日期：</span>${q.quoteDate}</div>
-  <div><span>有效期限：</span>${q.validDays} 日內</div>
-  <div><span>報　價　人：</span>${q.salesPerson}</div>
-  <div><span>電　　　話：</span>${q.salesPhone}</div>
-  <div><span>E-mail：</span>${q.salesEmail}</div>
-</div>
-
-<div class="scale-body">
-<div class="boxes">
-  <div class="box">
-    <div class="box-title">一、客戶資訊</div>
-    <div class="row"><span class="label">公司名稱</span><span class="val">${q.customerName || ''}</span></div>
-    ${(q.pdfShow||{}).taxId           !== false ? `<div class="row"><span class="label">統一編號</span><span class="val">${q.customerTaxId || ''}</span></div>` : ''}
-    ${(q.pdfShow||{}).contactName     !== false ? `<div class="row"><span class="label">聯絡人</span><span class="val">${q.contactName || ''}</span></div>` : ''}
-    ${(q.pdfShow||{}).contactPhone    !== false ? `<div class="row"><span class="label">電話 / 分機</span><span class="val">${q.contactPhone || ''}</span></div>` : ''}
-    ${(q.pdfShow||{}).contactEmail    !== false ? `<div class="row"><span class="label">E-mail</span><span class="val">${q.contactEmail || ''}</span></div>` : ''}
-    ${(q.pdfShow||{}).contactFax      === true  ? `<div class="row"><span class="label">傳真</span><span class="val">${q.contactFax || ''}</span></div>` : ''}
-    ${(q.pdfShow||{}).deliveryAddress !== false ? `<div class="row"><span class="label">送貨地址</span><span class="val">${q.deliveryAddress || ''}</span></div>` : ''}
-  </div>
-  <div class="box">
-    <div class="box-title">二、案件資訊</div>
-    <div class="row"><span class="label">案件名稱</span><span class="val">${q.projectName || ''}</span></div>
-    <div class="row"><span class="label">交貨地點</span><span class="val">${q.deliveryLocation || ''}</span></div>
-  </div>
-</div>
-
-<div class="section-label">三、項目明細</div>
-<table>
-  <thead>
-    <tr>
-      <th style="width:28px">#</th>
-      <th>品名 / 規格說明</th>
-      <th>廠牌 / 型號</th>
-      <th class="r" style="width:48px">數量</th>
-      <th style="width:38px">單位</th>
-      ${isInternal ? '<th class="r" style="width:88px;background:#1A1A1A">成本單價</th>' : ''}
-      ${isInternal ? '<th class="r" style="width:60px;background:#1A1A1A">毛利率</th>' : ''}
-      <th class="r" style="width:96px">單價（未稅額）</th>
-      <th class="r" style="width:100px">金額（未稅）</th>
-      <th style="width:72px">備註</th>
-    </tr>
-  </thead>
-  <tbody>${itemRows}</tbody>
-</table>
-
-<div class="totals">
-  <div class="total-row"><span>品項小計</span><span>NT$ ${tot.subtotal.toLocaleString()}</span></div>
-  ${q.freight > 0 ? `<div class="total-row"><span>運費</span><span>NT$ ${q.freight.toLocaleString()}</span></div>` : ''}
-  ${q.discount > 0 ? `<div class="total-row"><span style="color:#DC2626">折讓</span><span style="color:#DC2626">-NT$ ${q.discount.toLocaleString()}</span></div>` : ''}
-  <div class="total-row"><span>稅前合計</span><span>NT$ ${tot.pretax.toLocaleString()}</span></div>
-  <div class="total-row"><span>營業稅 ${q.taxRate??5}%</span><span>NT$ ${tot.tax.toLocaleString()}</span></div>
-  <div class="total-row"><span>總　計</span><span>NT$ ${tot.total.toLocaleString()}</span></div>
-</div>
-
-${isInternal ? `
-<div class="cost-summary">
-  <h4>內部成本分析 — INTERNAL ONLY</h4>
-  <div class="cost-row"><span class="cost-label">直接成本（未稅額）</span><span class="cost-val">NT$ ${tot.totalCost.toLocaleString()}</span></div>
-  <div class="cost-row"><span class="cost-label">進項稅額 5%</span><span class="cost-val">NT$ ${tot.inputVat.toLocaleString()}</span></div>
-  <div class="cost-row"><span class="cost-label">直接毛利</span><span class="cost-val ${tot.directMarginPct < 30 ? 'red' : tot.directMarginPct < 40 ? 'yellow' : 'green'}">NT$ ${tot.directProfit.toLocaleString()} (${tot.directMarginPct.toFixed(1)}%)</span></div>
-  <div class="cost-row"><span class="cost-label">管銷分攤（10%）</span><span class="cost-val yellow">NT$ ${tot.adminCost.toLocaleString()}</span></div>
-  <div class="cost-row"><span class="cost-label">公益捐款（1%）</span><span class="cost-val yellow">NT$ ${tot.charityDonation.toLocaleString()}</span></div>
-  <div class="cost-row"><span class="cost-label">間接成本合計</span><span class="cost-val yellow">NT$ ${tot.totalIndirect.toLocaleString()}</span></div>
-  <div class="cost-row"><span class="cost-label">淨利 / 淨利率</span><span class="cost-val ${tot.netMarginPct < 12 ? 'red' : 'green'}">NT$ ${tot.netProfit.toLocaleString()} (${tot.netMarginPct.toFixed(1)}%)</span></div>
-</div>` : ''}
-
-<div class="terms">
-  <div class="section-label" style="margin-bottom:8px">五、報價條件</div>
-  ${(() => {
-    const esc = s => (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>')
-    const block = t => `<div style="margin-bottom:10px"><div class="term-title">${t.title}</div><div class="term-block">${esc(t.text)}</div></div>`
-    const pair = (a, b) => {
-      const aOk = (a.text||'').trim(), bOk = (b.text||'').trim()
-      if (!aOk && !bOk) return ''
-      if (!aOk) return block(b)
-      if (!bOk) return block(a)
-      const useTwoCols = (a.text||'').length <= 300 && (b.text||'').length <= 300
-      if (useTwoCols)
-        return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:4px"><div>${block(a)}</div><div>${block(b)}</div></div>`
-      return block(a) + block(b)
-    }
-    let html = ''
-    if ((q.paymentTerms||'').trim()) html += block({ title: '付款條件', text: q.paymentTerms })
-    html += pair({ title: '交貨條件', text: q.deliveryTerms }, { title: '驗收標準', text: q.acceptanceTerms })
-    html += pair({ title: '保固條件', text: q.warrantyTerms }, { title: '售後服務', text: q.afterSales })
-    return html
-  })()}
-</div>
-
-<div class="sign-spacer"></div>
-</div><!-- /scale-body -->
-
-<div class="sign">
-  <div class="sign-box">
-    <div class="sign-label">買方確認 · 簽章蓋印</div>
-    <div class="sign-company">${q.customerName || ''}</div>
-  </div>
-</div>
-
-<div class="footer">
-  MOTRIX Synergy Integration Corp. 允碩整合集創 ｜ info@miactw.com ｜ Tel: 04-3602-2818 ｜ 統一編號: 60575481
-</div>
-
-<script>
-window.addEventListener('load', function () {
-  document.fonts.ready.then(function () {
-    setTimeout(function () { window.print() }, 400)
-  })
-})
-<\/script>
-</div><!-- /scale-root -->
-</body>
-</html>`
-
-        const win = window.open('', '_blank', 'width=900,height=1100')
-        win.document.write(html)
-        win.document.close()
       },
 
       async approveQuote() {
@@ -3033,7 +2936,13 @@ window.addEventListener('load', function () {
           } : {})
         }
         try {
-          await this.apiSave(this.isNewRecord)
+          const ok = await this.apiSave(this.isNewRecord)
+          if (!ok) {
+            alert(this._saveConflict
+              ? '這張報價單已被其他人更新，為避免覆蓋對方的修改，送審未生效。請重新載入頁面後再試一次。'
+              : '送出審核失敗，請確認後端伺服器是否在線')
+            return
+          }
           this.isNewRecord = false
           this.isDirty = false
           this.submitNote = ''
@@ -3050,16 +2959,87 @@ window.addEventListener('load', function () {
       async loadQuote() {
         const res = await fetch(`${this.API}/quotations/${encodeURIComponent(this.q.quoteNo)}`,
           { headers: { Authorization: 'Bearer ' + this.session.token } })
-        if (!res.ok) return
+        if (!res.ok) {
+          if (res.status === 401) { this.logout(); return }
+          this.toast(res.status === 404
+            ? '找不到此報價單，可能已被刪除或單號有誤'
+            : '報價單載入失敗，請確認後端伺服器連線')
+          return
+        }
         const row = await res.json()
         Object.assign(this.q, row.data)
         this.q.quoteNo = row.data.quoteNo || this.q.quoteNo
+        this._lastUpdatedAt = row.updated_at || null
+        // 同時編輯警示（2026-09-14）：載到哪一張就回報哪一張，有別人在編會跳警示條
+        if (window.MotrixPresence) window.MotrixPresence.start('quotation', this.q.quoteNo)
+        // 回簽相關欄位是 SQL 熱欄位，不在 data_json 裡（見 routers/quotations.py
+        // get_quotation()），Object.assign(this.q, row.data) 不會帶到，要另外接
+        this.q.isSigned = !!row.is_signed
+        this.q.signedBy = row.signed_by || ''
+        this.q.signedAt = row.signed_at || ''
+        this.q.signedLog = row.signed_log || []
+        this.q.signedFiles = row.signed_files || []
         // Ensure all items have a unique id (old quotes may lack id field)
         if (Array.isArray(this.q.items)) {
-          this.q.items.forEach(it => { if (!it.id) it.id = crypto.randomUUID() })
+          this.q.items.forEach(it => { if (!it.id) it.id = this.genId() })
         }
         this.calcTotals()
         this.checkApproval()
+      },
+
+      // ── 客戶回簽 ──────────────────────────────────────────────────────────
+      async toggleQuotationSigned(action) {
+        const note = prompt(action === 'sign' ? '標記客戶已回簽，可填寫備註（選填）：' : '取消回簽標記，可填寫原因（選填）：')
+        if (note === null) return
+        try {
+          const r = await fetch(`${this.API}/quotations/${encodeURIComponent(this.q.quoteNo)}/signed-toggle`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+            body: JSON.stringify({ action, note })
+          })
+          if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '操作失敗'); return }
+          await this.loadQuote()
+        } catch (e) { alert('網路錯誤：' + e.message) }
+      },
+
+      async uploadQuotationSignedFiles(evt) {
+        const files = evt?.target?.files
+        if (!files || files.length === 0) return
+        const fd = new FormData()
+        for (const f of files) fd.append('files', f)
+        try {
+          const r = await fetch(`${this.API}/quotations/${encodeURIComponent(this.q.quoteNo)}/signed-files`, {
+            method: 'POST',
+            headers: { Authorization: 'Bearer ' + this.session.token },
+            body: fd
+          })
+          if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '上傳失敗'); return }
+          await this.loadQuote()
+        } catch (e) { alert('上傳失敗：' + e.message) }
+        evt.target.value = ''
+      },
+
+      async deleteQuotationSignedFile(fileId) {
+        if (!confirm('確定刪除此附件？')) return
+        try {
+          const r = await fetch(`${this.API}/quotations/${encodeURIComponent(this.q.quoteNo)}/signed-files/${fileId}`, {
+            method: 'DELETE',
+            headers: { Authorization: 'Bearer ' + this.session.token }
+          })
+          if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '刪除失敗'); return }
+          await this.loadQuote()
+        } catch (e) { alert('刪除失敗：' + e.message) }
+      },
+
+      async previewAttachmentFile(file) {
+        try {
+          const r = await fetch(`/api/photo-token?path=${encodeURIComponent(file.path)}`, {
+            headers: { Authorization: 'Bearer ' + this.session.token }
+          })
+          if (!r.ok) { alert('取得檔案連結失敗'); return }
+          const { token } = await r.json()
+          window.open(`/api/uploads/${file.path}?pt=${encodeURIComponent(token)}`, '_blank')
+        } catch (e) { alert('開啟檔案失敗：' + e.message) }
       },
 
       async patchStatus(newStatus, sel) {
@@ -3114,6 +3094,34 @@ window.addEventListener('load', function () {
         setTimeout(() => { msg.style.opacity='0'; msg.style.transition='opacity .4s'; setTimeout(() => msg.remove(), 400) }, 2800)
       },
 
+      /* 取一個新單號填進表單。新增模式與「無號複製」共用同一支，兩邊才會有
+         同一套競態守門（見下方註解）。取不到號不擋作業——存檔時後端會派號。 */
+      async _peekQuoteNo() {
+        try {
+          // 2026-09-10：原本 3 秒。這支要查 quotations 全表的 MAX(序號)，
+          // 資料量大或機器忙的時候 3 秒不夠，一逾時就讓 quoteNo 留空，
+          // 而舊版 saveDraft() 遇到空值會寫死 001 送出（見該函式註解）。
+          // 放寬到 10 秒，跟本頁其他 API 呼叫一致。
+          const _nc = new AbortController()
+          setTimeout(() => _nc.abort(), 10000)
+          const res = await fetch(`${this.API}/next-quote-no`, { signal: _nc.signal, headers: { Authorization: 'Bearer ' + this.session.token } })
+          const _peeked = res.ok ? (await res.json()).quote_no : ''
+          // ⚠️ 這個 peek 是非同步的，可能在使用者已經按下存檔／送審**之後**才回來。
+          // 直接指派會把存檔回應剛回填的「真正的單號」蓋成新 peek 到的下一號
+          // ——畫面顯示 MQ-YYYYMM-002、資料庫其實是 001，簽核的人照畫面上的號碼
+          // 開就會開到一張不存在的單。已用可控實驗重現（修復前 6 次中 2 次）。
+          // 所以只有在「還沒有號碼、而且還是沒存過的新單」時才採用 peek 結果。
+          if (_peeked && !this.q.quoteNo && !this._quoteNoFrozen && this.isNewRecord !== false) {
+            this.q.quoteNo = _peeked
+          }
+        } catch(e) {}
+        if (!this.q.quoteNo) {
+          // 拿不到號不擋作業：存檔時由後端派號，畫面顯示「儲存後自動編號」
+          // （見 .form-quote-no 的 x-text）。
+          this.toast('暫時取不到報價單號，儲存時會自動編號')
+        }
+      },
+
       async copyToNew() {
         let newNo = ''
         if (this.backendOnline) {
@@ -3122,36 +3130,49 @@ window.addEventListener('load', function () {
             if (r.ok) newNo = (await r.json()).quote_no
           } catch {}
         }
-        if (!newNo) {
-          const m = new Date()
-          newNo = `MQ-${m.getFullYear()}${String(m.getMonth()+1).padStart(2,'0')}-???`
-        }
+        // 2026-09-10：這裡原本在取不到號時造一個 `MQ-YYYYMM-???` 佔位字串當單號。
+        // 那個字串不會跟任何既有單號衝突，所以後端 INSERT 會成功，接著解析序號的
+        // int('???') 直接炸成 500——使用者只看到「儲存失敗」，而複製的內容在頁面
+        // 載入時就已經從 sessionStorage 清掉，重新整理就再也回不來（實測確認）。
+        // 改成不造假號：沒號碼就用 ?copy=1 帶過去，由新頁面自己取號、
+        // 真的取不到就交給後端在存檔時派（跟一般新增報價單同一條路）。
         const template = {
           ...this.q,
-          quoteNo: newNo,
+          quoteNo: newNo || '',
           quoteDate: new Date().toISOString().slice(0,10),
           status: '草稿',
           approval: null,
           exportCount: 0,
           exportLog: [],
           version: 1,
+          // 新單是全新的一筆案子，不可繼承來源單已經跑到哪的執行期資料
+          dealTag: '',
+          caseRecord: null,
+          settlement: null,
+          editHistory: [],
         }
-        template.items = (this.q.items || []).map(it => ({...it, id: crypto.randomUUID()}))
+        template.items = (this.q.items || []).map(it => ({...it, id: this.genId()}))
         sessionStorage.setItem('motrix_copy_template', JSON.stringify(template))
-        window.location.href = `quotation-form.html?id=${newNo}`
+        window.location.href = newNo
+          ? `quotation-form.html?id=${encodeURIComponent(newNo)}`
+          : 'quotation-form.html?copy=1'
       },
 
       /* ─── 案件追蹤 ───────────────────────────────────── */
       ensureCaseRecord() {
         if (!this.q.caseRecord) {
           this.q.caseRecord = {
-            stages: [
-              { id: 1, label: '訂單確認', done: false, doneAt: '' },
-              { id: 2, label: '叫料到貨', done: false, doneAt: '' },
-              { id: 3, label: '施工安裝', done: false, doneAt: '' },
-              { id: 4, label: '客戶驗收', done: false, doneAt: '' },
-              { id: 5, label: '尾款結清', done: false, doneAt: '' },
-            ],
+            // stages 正規化第四階段（2026-08-23）：不再本地寫死 5 個帶假 id（1-5）、
+            // 缺 startDate/dueDate/assignedTo/dependsOn/visits 欄位的舊版階段物件——
+            // 這份模板一旦透過整包存檔送出，caseRecord.stages 正規化的同步橋樑會把
+            // 這些假 id 存進 case_stages 表；但這裡從未拿回真正的 id，若使用者在這個
+            // 頁面之後又存了第二次（例如改其他欄位），舊邏輯會把假 id 又送一次，
+            // 導致同一批「預設階段」在表裡被當成新階段重複插入、案件管理頁面已經
+            // 記錄的執行進度（勾選、拜訪紀錄等）反而被沖銷。改成跟 case-management.js
+            // 完全一致的做法：stages 初始化空陣列，真正的 5 個預設階段改由
+            // _seedDefaultStagesIfEmpty() 透過 API 建立，一次到位拿到真實 id，
+            // 之後無論存幾次都不會再變動。
+            stages: [],
             payment: { received: 0, invoiced: false, invoiceNo: '', note: '' },
             materials: [],
             devices: [],
@@ -3165,43 +3186,27 @@ window.addEventListener('load', function () {
         if (!this.q.caseRecord.devices)   this.q.caseRecord.devices   = []
       },
 
-      sidebarClick(e) {
-        const a = e.target.closest('a[href]')
-        if (!a) return
-        const href = a.getAttribute('href')
-        if (!href || href === '#') return
-        if (!this.isDirty) return
-        e.preventDefault()
-        e.stopPropagation()
-        this.pendingNav = a.href
-        this.showNavModal = true
-      },
-
-      navGuard(url) {
-        if (!this.isDirty) { window.location.href = url; return }
-        this.pendingNav = url
-        this.showNavModal = true
-      },
-
-      navSave() {
-        this.saveDraft()
-        const url = this.pendingNav
-        this.showNavModal = false
-        this.pendingNav = null
-        setTimeout(() => { window.location.href = url }, 300)
-      },
-
-      navDiscard() {
-        this.isDirty = false
-        const url = this.pendingNav
-        this.showNavModal = false
-        this.pendingNav = null
-        window.location.href = url
-      },
-
-      navCancel() {
-        this.showNavModal = false
-        this.pendingNav = null
+      // stages 正規化第四階段（2026-08-23）：案件目前完全沒有階段時，依序呼叫
+      // Phase 2 的 stages 端點建立 5 個預設階段（跟 case-management.js::
+      // _seedDefaultStagesIfEmpty() 用同一組標籤、同一支端點），取得真實 id，
+      // 避免這個頁面自己再生出一份假 id 模板。呼叫時機要求 this.q.quoteNo 已經
+      // 存在於資料庫（dealTag 能改成「已成案」前提是 status 已經是「已送出」，
+      // 或是讀取既有紀錄，兩種情況 quote_no 都必然已經 create 過），所以不用
+      // 額外處理「案件還沒被建立」的情境。
+      async _seedDefaultStagesIfEmpty() {
+        if (!this.q.quoteNo || !this.q.caseRecord) return
+        if ((this.q.caseRecord.stages || []).length > 0) return
+        const labels = ['訂單確認', '叫料出貨', '施工安裝', '客戶驗收', '尾款結清']
+        for (const label of labels) {
+          try {
+            const r = await fetch(`/api/quotations/${this.q.quoteNo}/stages`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+              body: JSON.stringify({ label })
+            })
+            if (r.ok) this.q.caseRecord.stages.push(await r.json())
+          } catch {}
+        }
       },
 
       async doUnlock() {
@@ -3309,20 +3314,37 @@ window.addEventListener('load', function () {
           if (rs.ok) this.suppliers = await rs.json()
         } catch(e) {}
 
+        // ── 目前後端設定的預設付款條件（不論新增/編輯都要先取得，供「報價條件與預設不同」比對基準）──
+        try {
+          const rp = await fetch(`${this.API}/settings/payment-terms`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+          if (rp.ok) {
+            const d = await rp.json()
+            if ((d.text || '').trim()) this._defaultPaymentTerms = d.text
+          }
+        } catch(e) {}
+
         // ── 從 URL 讀取報價單號 ──
         const params  = new URLSearchParams(window.location.search)
         const editNo  = params.get('id')
 
         // ── 複製模式：從 sessionStorage 載入繼承內容 ──
+        const copyMode = params.get('copy') === '1'
         const copyTemplate = sessionStorage.getItem('motrix_copy_template')
-        if (editNo && copyTemplate) {
+        if ((editNo || copyMode) && copyTemplate) {
           try {
             const t = JSON.parse(copyTemplate)
-            if (t.quoteNo === editNo) {
+            // 有號碼時比對號碼；`?copy=1` 是「複製來源當下取不到號」的無號模式
+            const matches = editNo ? (t.quoteNo === editNo) : (copyMode && !t.quoteNo)
+            if (matches) {
               sessionStorage.removeItem('motrix_copy_template')
               Object.assign(this.q, t)
               this.isNewRecord = true
               this.isDirty = true
+              if (!this.q.quoteNo) {
+                // 無號複製：跟一般新增模式走同一支取號（含晚到覆蓋的守門），
+                // 真的取不到就維持空值，存檔時由後端派號。
+                await this._peekQuoteNo()
+              }
               this.calcTotals()
               this.checkApproval()
               return
@@ -3354,7 +3376,12 @@ window.addEventListener('load', function () {
                 const matched = this.allUsers.find(u => (u.displayName || u.username) === this.q.salesPerson)
                 if (matched) this.q.salesPersonUsername = matched.username
               }
+              this._lastUpdatedAt = row.updated_at || null
               loaded = true
+              // 同時編輯警示（2026-09-14）：編輯模式一載入就回報，有別人在編會跳警示條。
+              // ⚠️ 這裡是 `?id=` 的載入路徑，跟 loadQuote() 是兩條——當初只在 loadQuote()
+              // 掛 hook，實測（e2e 兩個瀏覽器）才發現開啟編輯根本不會經過那一條。
+              if (window.MotrixPresence) window.MotrixPresence.start('quotation', editNo)
             } else if (res.status === 401) { this.logout && this.logout(); return }
           } catch(e) {}
           if (!loaded) {
@@ -3362,21 +3389,17 @@ window.addEventListener('load', function () {
           }
         } else {
           // ── 新增模式：每次由 API 派發單號 ──
-          try {
-            const _nc = new AbortController()
-            setTimeout(() => _nc.abort(), 3000)
-            const res = await fetch(`${this.API}/next-quote-no`, { signal: _nc.signal, headers: { Authorization: 'Bearer ' + this.session.token } })
-            if (res.ok) this.q.quoteNo = (await res.json()).quote_no
-          } catch(e) {}
-          if (!this.q.quoteNo) {
-            this.toast('無法取得報價單號，請確認後端連線')
-          }
+          await this._peekQuoteNo()
           this.isNewRecord = true
+          this.q.paymentTerms = this._defaultPaymentTerms
         }
 
         this.calcTotals()
         this.checkApproval()
-        if (this.q.dealTag === '已成案') this.ensureCaseRecord()
+        if (this.q.dealTag === '已成案') {
+          this.ensureCaseRecord()
+          await this._seedDefaultStagesIfEmpty()
+        }
 
         if (this.lastSaved) {
           const now = new Date()
@@ -3422,6 +3445,7 @@ window.addEventListener('load', function () {
   }
   </script>
   <script src="../static/notif.js"></script>
+  <script src="../static/edit-presence.js"></script>
   <script src="../static/sidebar.js"></script>
 </body>
 </html>

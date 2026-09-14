@@ -2,11 +2,13 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="../static/favicon.png">
-  <title>歷史紀錄 — MOTRIX 營運管理系統</title>
-  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-  <link rel="stylesheet" href="../css/style.css">
+  <title>歷史紀錄 — MOTRIX 專案管理系統</title>
+  <script src="../static/auth-guard.js"></script>
+  <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <style>
     .audit-main {
       margin-left: var(--sidebar-w);
@@ -121,6 +123,26 @@
           <option value="case.update">案件資料更新</option>
           <option value="payment.mark">收款標記</option>
         </optgroup>
+        <optgroup label="承攬商匯款申請">
+          <option value="contractor_voucher.create">建立匯款申請</option>
+          <option value="contractor_voucher.submit">送出審核</option>
+          <option value="contractor_voucher.approve">簽核通過</option>
+          <option value="contractor_voucher.reject">退回</option>
+          <option value="contractor_voucher.revoke_approval">撤銷核准</option>
+          <option value="contractor_voucher.delete">刪除匯款申請</option>
+          <option value="contractor_voucher.export_pdf">匯出 PDF</option>
+          <option value="contractor_voucher.pay">標記已匯款</option>
+          <option value="contractor_voucher.unpay">取消已匯款</option>
+        </optgroup>
+        <optgroup label="開票申請憑據">
+          <option value="invoice_voucher.create">建立開票憑據</option>
+          <option value="invoice_voucher.submit">送出審核</option>
+          <option value="invoice_voucher.approve">簽核通過</option>
+          <option value="invoice_voucher.reject">退回</option>
+          <option value="invoice_voucher.revoke_approval">撤銷核准</option>
+          <option value="invoice_voucher.delete">刪除開票憑據</option>
+          <option value="invoice_voucher.export_pdf">匯出 PDF</option>
+        </optgroup>
         <optgroup label="業務開發">
           <option value="dev_case.create">新增開發案件</option>
           <option value="dev_case.update">更新開發案件</option>
@@ -134,6 +156,74 @@
           <option value="dev_log.update">更新開發紀錄</option>
           <option value="dev_log.delete">刪除開發紀錄</option>
           <option value="dev_log.approve">審核開發紀錄</option>
+        </optgroup>
+        <optgroup label="選型資料庫">
+          <option value="env_guide.environment.create">新增場域</option>
+          <option value="env_guide.environment.update">更新場域</option>
+          <option value="env_guide.environment.delete">刪除場域</option>
+          <option value="env_guide.recommendation.create">新增建議</option>
+          <option value="env_guide.recommendation.update">更新建議</option>
+          <option value="env_guide.recommendation.delete">刪除建議</option>
+          <option value="env_guide.link.create">新增連結</option>
+          <option value="env_guide.link.update">更新連結</option>
+          <option value="env_guide.link.delete">刪除連結</option>
+          <option value="netarch_guide.family.create">新增技術族系</option>
+          <option value="netarch_guide.family.update">更新技術族系</option>
+          <option value="netarch_guide.family.delete">刪除技術族系</option>
+          <option value="netarch_guide.generation.create">新增世代規格</option>
+          <option value="netarch_guide.generation.update">更新世代規格</option>
+          <option value="netarch_guide.generation.delete">刪除世代規格</option>
+          <option value="netarch_guide.product.create">新增產品連結</option>
+          <option value="netarch_guide.product.update">更新產品連結</option>
+          <option value="netarch_guide.product.delete">刪除產品連結</option>
+          <option value="switch_guide.scenario.create">新增情境</option>
+          <option value="switch_guide.scenario.update">更新情境</option>
+          <option value="switch_guide.scenario.delete">刪除情境</option>
+          <option value="switch_guide.category.create">新增分類</option>
+          <option value="switch_guide.category.update">更新分類</option>
+          <option value="switch_guide.category.delete">刪除分類</option>
+          <option value="switch_guide.fit.create">新增適配度</option>
+          <option value="switch_guide.fit.update">更新適配度</option>
+          <option value="switch_guide.fit.delete">刪除適配度</option>
+          <option value="switch_guide.product.create">新增產品</option>
+          <option value="switch_guide.product.update">更新產品</option>
+          <option value="switch_guide.product.delete">刪除產品</option>
+          <option value="monitor_guide.scenario.create">新增情境</option>
+          <option value="monitor_guide.scenario.update">更新情境</option>
+          <option value="monitor_guide.scenario.delete">刪除情境</option>
+          <option value="monitor_guide.category.create">新增分類</option>
+          <option value="monitor_guide.category.update">更新分類</option>
+          <option value="monitor_guide.category.delete">刪除分類</option>
+          <option value="monitor_guide.fit.create">新增適配度</option>
+          <option value="monitor_guide.fit.update">更新適配度</option>
+          <option value="monitor_guide.fit.delete">刪除適配度</option>
+          <option value="monitor_guide.product.create">新增產品</option>
+          <option value="monitor_guide.product.update">更新產品</option>
+          <option value="monitor_guide.product.delete">刪除產品</option>
+          <option value="access_guide.scenario.create">新增情境</option>
+          <option value="access_guide.scenario.update">更新情境</option>
+          <option value="access_guide.scenario.delete">刪除情境</option>
+          <option value="access_guide.category.create">新增分類</option>
+          <option value="access_guide.category.update">更新分類</option>
+          <option value="access_guide.category.delete">刪除分類</option>
+          <option value="access_guide.fit.create">新增適配度</option>
+          <option value="access_guide.fit.update">更新適配度</option>
+          <option value="access_guide.fit.delete">刪除適配度</option>
+          <option value="access_guide.product.create">新增產品</option>
+          <option value="access_guide.product.update">更新產品</option>
+          <option value="access_guide.product.delete">刪除產品</option>
+          <option value="automation_guide.scenario.create">新增情境</option>
+          <option value="automation_guide.scenario.update">更新情境</option>
+          <option value="automation_guide.scenario.delete">刪除情境</option>
+          <option value="automation_guide.category.create">新增分類</option>
+          <option value="automation_guide.category.update">更新分類</option>
+          <option value="automation_guide.category.delete">刪除分類</option>
+          <option value="automation_guide.fit.create">新增適配度</option>
+          <option value="automation_guide.fit.update">更新適配度</option>
+          <option value="automation_guide.fit.delete">刪除適配度</option>
+          <option value="automation_guide.product.create">新增產品</option>
+          <option value="automation_guide.product.update">更新產品</option>
+          <option value="automation_guide.product.delete">刪除產品</option>
         </optgroup>
         <optgroup label="客戶管理">
           <option value="customer.create">新增客戶</option>
@@ -173,6 +263,7 @@
           <option value="project.assign">指派人員</option>
           <option value="project.delete">刪除專案</option>
           <option value="project.log.create">新增工程紀錄</option>
+          <option value="project.log.approve">確認事項簽核</option>
         </optgroup>
         <optgroup label="每日工作事項">
           <option value="daily_task.create">新增工作事項</option>
@@ -205,7 +296,11 @@
           <option value="user.set_daily_task_password">設定任務解鎖密碼</option>
           <option value="quotation.unlock">報價單解鎖密碼</option>
           <option value="daily_task.admin_unlock">每日任務管理解鎖</option>
-          <option value="settings.approval_flow.update">審核流程設定</option>
+          <option value="settings.unified_approval_flow.update">統一簽核設定（報價單/發票/出貨單/請款單）</option>
+          <option value="settings.contractor_voucher_approval_flow.update">匯款申請簽核設定</option>
+          <option value="settings.approval_flow.update">審核流程設定（舊，2026-08-24 前）</option>
+          <option value="settings.invoice_voucher_approval_flow.update">開票憑據簽核設定（舊，2026-08-24 前）</option>
+          <option value="settings.shipping_approval_flow.update">出貨單簽核設定（舊，2026-08-24 前）</option>
           <option value="settings.operating_targets.update">營運目標設定</option>
           <option value="settings.company_profile.update">公司資料設定</option>
           <option value="settings.edge_path.update">邊緣路徑設定</option>
@@ -328,6 +423,24 @@
           // 案件管理
           'case.update':                     '案件資料更新',
           'payment.mark':                    '收款標記',
+          // 承攬商匯款申請
+          'contractor_voucher.create':          '建立匯款申請',
+          'contractor_voucher.submit':          '送出審核',
+          'contractor_voucher.approve':         '簽核通過',
+          'contractor_voucher.reject':          '退回',
+          'contractor_voucher.revoke_approval': '撤銷核准',
+          'contractor_voucher.delete':          '刪除匯款申請',
+          'contractor_voucher.export_pdf':      '匯出 PDF',
+          'contractor_voucher.pay':             '標記已匯款',
+          'contractor_voucher.unpay':           '取消已匯款',
+          // 開票申請憑據
+          'invoice_voucher.create':          '建立開票憑據',
+          'invoice_voucher.submit':          '送出審核',
+          'invoice_voucher.approve':         '簽核通過',
+          'invoice_voucher.reject':          '退回',
+          'invoice_voucher.revoke_approval': '撤銷核准',
+          'invoice_voucher.delete':          '刪除開票憑據',
+          'invoice_voucher.export_pdf':      '匯出 PDF',
           // 業務開發
           'dev_case.create':                 '新增開發案件',
           'dev_case.update':                 '更新開發案件',
@@ -341,6 +454,73 @@
           'dev_log.update':                  '更新開發紀錄',
           'dev_log.delete':                  '刪除開發紀錄',
           'dev_log.approve':                 '審核開發紀錄',
+          // 選型資料庫
+          'env_guide.environment.create':      '新增場域',
+          'env_guide.environment.update':      '更新場域',
+          'env_guide.environment.delete':      '刪除場域',
+          'env_guide.recommendation.create':   '新增建議',
+          'env_guide.recommendation.update':   '更新建議',
+          'env_guide.recommendation.delete':   '刪除建議',
+          'env_guide.link.create':             '新增連結',
+          'env_guide.link.update':             '更新連結',
+          'env_guide.link.delete':             '刪除連結',
+          'netarch_guide.family.create':       '新增技術族系',
+          'netarch_guide.family.update':       '更新技術族系',
+          'netarch_guide.family.delete':       '刪除技術族系',
+          'netarch_guide.generation.create':   '新增世代規格',
+          'netarch_guide.generation.update':   '更新世代規格',
+          'netarch_guide.generation.delete':   '刪除世代規格',
+          'netarch_guide.product.create':      '新增產品連結',
+          'netarch_guide.product.update':      '更新產品連結',
+          'netarch_guide.product.delete':      '刪除產品連結',
+          'switch_guide.scenario.create':      '新增情境',
+          'switch_guide.scenario.update':      '更新情境',
+          'switch_guide.scenario.delete':      '刪除情境',
+          'switch_guide.category.create':      '新增分類',
+          'switch_guide.category.update':      '更新分類',
+          'switch_guide.category.delete':      '刪除分類',
+          'switch_guide.fit.create':           '新增適配度',
+          'switch_guide.fit.update':           '更新適配度',
+          'switch_guide.fit.delete':           '刪除適配度',
+          'switch_guide.product.create':       '新增產品',
+          'switch_guide.product.update':       '更新產品',
+          'switch_guide.product.delete':       '刪除產品',
+          'monitor_guide.scenario.create':     '新增情境',
+          'monitor_guide.scenario.update':     '更新情境',
+          'monitor_guide.scenario.delete':     '刪除情境',
+          'monitor_guide.category.create':     '新增分類',
+          'monitor_guide.category.update':     '更新分類',
+          'monitor_guide.category.delete':     '刪除分類',
+          'monitor_guide.fit.create':          '新增適配度',
+          'monitor_guide.fit.update':          '更新適配度',
+          'monitor_guide.fit.delete':          '刪除適配度',
+          'monitor_guide.product.create':      '新增產品',
+          'monitor_guide.product.update':      '更新產品',
+          'monitor_guide.product.delete':      '刪除產品',
+          'access_guide.scenario.create':      '新增情境',
+          'access_guide.scenario.update':      '更新情境',
+          'access_guide.scenario.delete':      '刪除情境',
+          'access_guide.category.create':      '新增分類',
+          'access_guide.category.update':      '更新分類',
+          'access_guide.category.delete':      '刪除分類',
+          'access_guide.fit.create':           '新增適配度',
+          'access_guide.fit.update':           '更新適配度',
+          'access_guide.fit.delete':           '刪除適配度',
+          'access_guide.product.create':       '新增產品',
+          'access_guide.product.update':       '更新產品',
+          'access_guide.product.delete':       '刪除產品',
+          'automation_guide.scenario.create':  '新增情境',
+          'automation_guide.scenario.update':  '更新情境',
+          'automation_guide.scenario.delete':  '刪除情境',
+          'automation_guide.category.create':  '新增分類',
+          'automation_guide.category.update':  '更新分類',
+          'automation_guide.category.delete':  '刪除分類',
+          'automation_guide.fit.create':       '新增適配度',
+          'automation_guide.fit.update':       '更新適配度',
+          'automation_guide.fit.delete':       '刪除適配度',
+          'automation_guide.product.create':   '新增產品',
+          'automation_guide.product.update':   '更新產品',
+          'automation_guide.product.delete':   '刪除產品',
           // 客戶
           'customer.create':                 '新增客戶',
           'customer.update':                 '更新客戶',
@@ -375,6 +555,7 @@
           'project.assign':                  '指派人員',
           'project.delete':                  '刪除專案',
           'project.log.create':              '新增工程紀錄',
+          'project.log.approve':             '確認事項簽核',
           // 每日工作事項
           'daily_task.create':               '新增工作事項',
           'daily_task.update':               '更新工作事項',
@@ -400,7 +581,11 @@
           'user.set_unlock_password':        '設定報價解鎖密碼',
           'user.set_daily_task_password':    '設定任務解鎖密碼',
           // 系統設定
-          'settings.approval_flow.update':   '審核流程設定',
+          'settings.unified_approval_flow.update': '統一簽核設定（報價單/發票/出貨單/請款單）',
+          'settings.contractor_voucher_approval_flow.update': '匯款申請簽核設定',
+          'settings.approval_flow.update':   '審核流程設定（舊）',
+          'settings.invoice_voucher_approval_flow.update':    '開票憑據簽核設定（舊）',
+          'settings.shipping_approval_flow.update':           '出貨單簽核設定（舊）',
           'settings.operating_targets.update':'營運目標設定',
           'settings.company_profile.update': '公司資料設定',
           'settings.edge_path.update':       '邊緣路徑設定',
@@ -427,6 +612,8 @@
         if (action.startsWith('supplier.'))         return '#fdf4ff'
         if (action.startsWith('vendor.dispatch.'))  return '#fff7ed'
         if (action.startsWith('vendor.'))           return '#ffedd5'
+        if (action.startsWith('contractor_voucher.')) return '#fef3c7'
+        if (action.startsWith('invoice_voucher.'))    return '#f5f3ff'
         if (action.startsWith('dev_case.') || action.startsWith('dev_log.')) return '#eef2ff'
         if (action.startsWith('project.'))          return '#ecfeff'
         if (action.startsWith('daily_task.'))       return '#f0fdf4'
@@ -434,6 +621,7 @@
         if (action.startsWith('payslip.'))          return '#fefce8'
         if (action.startsWith('settings.'))         return '#f1f5f9'
         if (action.startsWith('user.'))             return '#f0f9ff'
+        if (action.startsWith('env_guide.') || action.startsWith('netarch_guide.') || action.startsWith('switch_guide.') || action.startsWith('monitor_guide.') || action.startsWith('access_guide.') || action.startsWith('automation_guide.')) return '#f0fdfa'
         return '#eff6ff'
       },
 
@@ -454,6 +642,8 @@
         if (action.startsWith('supplier.'))         return '#7e22ce'
         if (action.startsWith('vendor.dispatch.'))  return '#c2410c'
         if (action.startsWith('vendor.'))           return '#ea580c'
+        if (action.startsWith('contractor_voucher.')) return '#92400e'
+        if (action.startsWith('invoice_voucher.'))    return '#7c3aed'
         if (action.startsWith('dev_case.') || action.startsWith('dev_log.')) return '#4338ca'
         if (action.startsWith('project.'))          return '#0e7490'
         if (action.startsWith('daily_task.'))       return '#15803d'
@@ -461,6 +651,7 @@
         if (action.startsWith('payslip.'))          return '#854d0e'
         if (action.startsWith('settings.'))         return '#475569'
         if (action.startsWith('user.'))             return '#0369a1'
+        if (action.startsWith('env_guide.') || action.startsWith('netarch_guide.') || action.startsWith('switch_guide.') || action.startsWith('monitor_guide.') || action.startsWith('access_guide.') || action.startsWith('automation_guide.')) return '#0f766e'
         return '#1d4ed8'
       },
 
@@ -478,6 +669,8 @@
         if (action.startsWith('customer.'))         return '#f5f3ff'
         if (action.startsWith('supplier.'))         return '#fdf4ff'
         if (action.startsWith('vendor.'))           return '#ffedd5'
+        if (action.startsWith('contractor_voucher.')) return '#fef3c7'
+        if (action.startsWith('invoice_voucher.'))    return '#f5f3ff'
         if (action.startsWith('dev_case.') || action.startsWith('dev_log.')) return '#eef2ff'
         if (action.startsWith('project.'))          return '#ecfeff'
         if (action.startsWith('daily_task.'))       return '#f0fdf4'
@@ -485,6 +678,7 @@
         if (action.startsWith('payslip.'))          return '#fefce8'
         if (action.startsWith('settings.'))         return '#f1f5f9'
         if (action === 'auth.login')                return '#f3f4f6'
+        if (action.startsWith('env_guide.') || action.startsWith('netarch_guide.') || action.startsWith('switch_guide.') || action.startsWith('monitor_guide.') || action.startsWith('access_guide.') || action.startsWith('automation_guide.')) return '#f0fdfa'
         return '#dbeafe'
       },
 
@@ -510,10 +704,19 @@
         if (action.startsWith('supplier.'))         return '🏢'
         if (action.startsWith('vendor.dispatch.'))  return '🚚'
         if (action.startsWith('vendor.'))           return '🤝'
+        if (action === 'contractor_voucher.pay')    return '💸'
+        if (action === 'contractor_voucher.unpay')  return '↩️'
+        if (action === 'contractor_voucher.approve' || action === 'invoice_voucher.approve') return '✅'
+        if (action === 'contractor_voucher.reject' || action === 'invoice_voucher.reject') return '↩️'
+        if (action === 'contractor_voucher.revoke_approval' || action === 'invoice_voucher.revoke_approval') return '↩️'
+        if (action === 'contractor_voucher.export_pdf' || action === 'invoice_voucher.export_pdf') return '📄'
+        if (action.startsWith('contractor_voucher.')) return '🏦'
+        if (action.startsWith('invoice_voucher.'))    return '🧾'
         if (action === 'dev_case.convert')          return '🔄'
         if (action.startsWith('dev_case.'))         return '💼'
         if (action === 'dev_log.approve')           return '✅'
         if (action.startsWith('dev_log.'))          return '📓'
+        if (action === 'project.log.approve')       return '✅'
         if (action === 'project.log.create')        return '🔧'
         if (action.startsWith('project.'))          return '📐'
         if (action === 'daily_task.complete')       return '✔️'
@@ -528,6 +731,7 @@
         if (action === 'auth.change_password')      return '🔐'
         if (action === 'deal_tag.change')           return '🏷'
         if (action.startsWith('user.'))             return '👥'
+        if (action.startsWith('env_guide.') || action.startsWith('netarch_guide.') || action.startsWith('switch_guide.') || action.startsWith('monitor_guide.') || action.startsWith('access_guide.') || action.startsWith('automation_guide.')) return '🧭'
         return '📝'
       },
 

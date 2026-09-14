@@ -3,6 +3,7 @@ MOTRIX ERP — FastAPI 後端
 執行：uvicorn main:app --reload --port 666 --host 0.0.0.0
 """
 import os
+import time
 import logging
 from datetime import datetime
 
@@ -20,7 +21,7 @@ from helpers import (
 )
 from archive import _ensure_archive_dirs, _schedule_weekly, _schedule_daily
 
-from routers import auth, quotations, customers, suppliers, parts, projects, dashboard, system, reports, contractors, payslips, daily_tasks, module_versions, vendor_contractors, dev_crm, env_guide, netarch_guide, switch_guide, shipping_notes
+from routers import auth, quotations, customers, suppliers, parts, dashboard, system, reports, contractors, payslips, daily_tasks, module_versions, vendor_contractors, dev_crm, env_guide, netarch_guide, switch_guide, shipping_notes, inventory, search, monitor_guide, access_guide, gateway_guide, automation_guide, contractor_vouchers, invoice_vouchers, org_structure, payment_requests, list_prefs, case_action_items, uploads, network_plans, network_plans_quick, approval_delegates, cashier, accounting_export, material_orders, case_extra_expenses, completion_notes
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -29,19 +30,75 @@ FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")
 
 app = FastAPI(title="MOTRIX ERP API", version="1.0.0")
 
+_DEFAULT_CORS_ORIGINS = [
+    "http://localhost:666",
+    "http://127.0.0.1:666",
+    "http://172.16.10.177:666",
+    # 2026-08-27：正式機導入 HTTPS 後（見 backend/tools/https_setup.ps1），
+    # 保留原本 http 三筆是因為開發機仍是明文運作，共用同一份 main.py
+    "https://localhost:666",
+    "https://127.0.0.1:666",
+    "https://172.16.10.177:666",
+]
+
+
+def _resolve_cors_origins(env_value: str = None) -> list:
+    """決定 CORS 白名單：有設 `MOTRIX_CORS_ORIGINS` 就用它（逗號分隔），否則用預設。
+
+    2026-09-11：先前這份清單是直接寫死在 `add_middleware()` 呼叫裡，換機器或換 IP
+    就得改程式碼重新部署（`DR-SOP.md` §5 長期列為待改進）。改成環境變數之後，
+    **未設定時的行為與改動前逐字相同**——預設值就是原本那六筆，不是空清單，
+    所以忘了設環境變數不會把所有人擋在外面。
+
+    ⚠️ 這是安全邊界，不是一般設定：`MOTRIX_CORS_ORIGINS` 一旦設了就**完全取代**
+    預設清單（不是附加），設錯會讓正式機的前端打不到自己的 API。設定格式範例：
+        MOTRIX_CORS_ORIGINS=https://erp.miactw.com:666,https://172.16.10.177:666
+
+    註：目前 `motrix.internal`（正式機 2026-09-11 起的正式網址）**不在預設清單裡**。
+    今天沒事是因為前端跟 API 由同一個 FastAPI 服務提供、屬同源請求，CORS 根本不會
+    介入；但若哪天前端被拆到別的來源，這裡要記得補。
+    """
+    raw = os.getenv("MOTRIX_CORS_ORIGINS") if env_value is None else env_value
+    parsed = [o.strip() for o in (raw or "").split(",") if o.strip()]
+    return parsed or list(_DEFAULT_CORS_ORIGINS)
+
+
+_cors_origins = _resolve_cors_origins()
+logger.info(
+    "CORS allow_origins（%s）：%s",
+    "來自 MOTRIX_CORS_ORIGINS" if os.getenv("MOTRIX_CORS_ORIGINS") else "預設值",
+    ", ".join(_cors_origins),
+)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:666",
-        "http://127.0.0.1:666",
-        "http://172.16.11.211:666",
-    ],
+    allow_origins=_cors_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-_PUBLIC_API_PATHS = {"/api/auth/login", "/api/auth/logout", "/api/ping", "/api/system/version"}
-_IDLE_TIMEOUT_SECONDS = 8 * 3600  # 8 hours
+_PUBLIC_API_PATHS = {
+    "/api/auth/login", "/api/auth/login/totp", "/api/auth/logout",
+    "/api/ping", "/api/system/version",
+    # 2026-09-08：手機掃 QR 核准登入——手機打開確認頁面時完全沒有任何 session，
+    # 這三個端點本身各自用 challenge_token／密碼做驗證，見 routers/auth.py。
+    "/api/auth/login/qr-info", "/api/auth/login/qr-approve", "/api/auth/login/qr-status",
+    # 2026-09-09：WebAuthn/Passkey 未登入登入流程——login/begin 查詢帳號 Passkey 清單，
+    # login/complete 驗證認證器簽名；皆自行驗證，無需 Bearer token。
+    "/api/auth/webauthn/login/begin", "/api/auth/webauthn/login/complete",
+    # 2026-09-08：供本機部署儀表板工具（deploy_dashboard.py）查詢正式機目前
+    # 部署版本用，純讀 commit 資訊，無敏感內容，不需要密碼／session。
+    "/api/system/deployed-version",
+    # 2026-09-10：WebAuthn 設定狀態檢查（未登入時）——login.html 和 change-password.html
+    # 需要知道 WebAuthn 是否已配置，以決定是否顯示 Passkey 登入/註冊按鈕。
+    "/api/system/webauthn-config-status",
+}
+_IDLE_TIMEOUT_SECONDS = 8 * 3600  # 8 hours（一般角色）
+# 2026-08-28 資安優化：superadmin/admin 能看財務/稽核紀錄/使用者管理等敏感資料，
+# 沿用一般角色的 8 小時閒置門檻風險偏高（電腦沒鎖畫面就離開一整個上班日都還有效）；
+# 這兩層角色改用較短的門檻，其餘（last_active 讀寫、300 秒節流寫入、首次補值）邏輯
+# 完全共用下方既有機制，只有超時判斷用的門檻值依角色不同。
+_ADMIN_IDLE_TIMEOUT_SECONDS = 2 * 3600  # 2 hours（superadmin/admin）
 # Allowed while must_change_password=1 (everything else returns 403)
 _MUST_CHANGE_PW_ALLOWED = {
     "/api/auth/login",
@@ -52,15 +109,153 @@ _MUST_CHANGE_PW_ALLOWED = {
 }
 
 
+# 慢請求記錄（2026-09-10）
+#
+# 起因：追 flaky e2e 時發現 db.py 的 `sqlite3.connect(path, timeout=30)` 表示任何
+# 一次寫入在鎖被佔住時最多會等 30 秒。逐段計時證實卡的是主 INSERT/commit 本身
+# （不是 commit 後那幾筆 notification/audit 寫入——那是當時的錯誤推論），也就是
+# SQLite 單一寫入者的本質，不是哪一段程式碼寫錯。
+#
+# 接著把可能長時間佔鎖的地方全查過一遍：`reset_demo_db()` 的 VACUUM 只動 demo
+# 那個獨立檔案、另一個 VACUUM 在 migration 裡（啟動時跑一次）、三處 BEGIN
+# IMMEDIATE 都是刻意的短交易。**正式路徑沒有任何東西會長時間佔住寫入鎖**，
+# 所以沒有對寫入路徑動刀——那會是沒有根據的改動。
+#
+# 但這種事真的發生時是完全看不見的（使用者只覺得「這次存檔特別久」，不會回報，
+# 也沒有任何紀錄）。這條 middleware 就是那道保險：超過門檻只寫一行 log，不改變
+# 任何行為。日後若有人回報「存報價單偶爾要等很久」，先看 server.log 裡的
+# `SLOW REQUEST`——有紀錄就是真的撞到鎖，沒有就要往別的方向查。
+_SLOW_REQUEST_SECONDS = float(os.environ.get("MOTRIX_SLOW_REQUEST_SECONDS", "5"))
+
+# 在線時間統計（2026-09-14，DB v79）
+#
+# 「這段時間人在線上」的認定：兩次請求之間的間隔在 _ACTIVITY_GAP_MAX 以內就整段
+# 算進在線時數，超過就視為中間離開過、只重新起算不補空白。門檻取 600 秒是因為
+# 上面那段 `idle_secs > 300` 的節流：last_active 最快也要 300 秒才寫一次，門檻若
+# 也設 300 會卡在邊界上，一半的請求會被判成「離開過」。
+#
+# ⚠️ 這是「活躍時間」不是「登入時長」——開著分頁去開會不會被算進去（沒有請求就
+# 沒有累加）。要改成後者得改用心跳，那會讓每個閒置分頁每分鐘打一次伺服器。
+_ACTIVITY_GAP_MAX = 600
+
+
+def _record_user_activity(user_id: int, now_dt, gap_seconds: float) -> None:
+    """把這一段間隔累加進當天的在線時數（見 db.py::_m079_user_activity）。
+
+    寫入失敗一律吞掉：這是統計資料，不該讓它擋下任何一個正常請求。
+    """
+    if gap_seconds <= 0 or gap_seconds > _ACTIVITY_GAP_MAX:
+        return
+    day = now_dt.strftime("%Y-%m-%d")
+    now_iso = now_dt.isoformat()
+    try:
+        ac = get_db()
+        ac.execute(
+            "INSERT INTO user_activity_daily (user_id, day, active_seconds, first_seen_at, last_seen_at) "
+            "VALUES (?,?,?,?,?) "
+            "ON CONFLICT(user_id, day) DO UPDATE SET "
+            "  active_seconds = active_seconds + excluded.active_seconds, "
+            "  last_seen_at   = excluded.last_seen_at",
+            (user_id, day, int(gap_seconds), now_iso, now_iso),
+        )
+        ac.commit()
+        ac.close()
+    except Exception:
+        pass
+
+
+@app.middleware("http")
+async def slow_request_log(request: Request, call_next):
+    _t0 = time.monotonic()
+    response = await call_next(request)
+    _elapsed = time.monotonic() - _t0
+    if _elapsed >= _SLOW_REQUEST_SECONDS and request.url.path.startswith("/api/"):
+        logger.warning(
+            "SLOW REQUEST %.1fs  %s %s  status=%s"
+            "（DB 寫入鎖等待上限 30s，見 db.py::_connect）",
+            _elapsed, request.method, request.url.path, response.status_code,
+        )
+    return response
+
+
 @app.middleware("http")
 async def no_cache_static(request: Request, call_next):
     response = await call_next(request)
     p = request.url.path
+    # 2026-09-08 修復：外部函式庫自架後（見 §9「外部函式庫自架」），vendor 目錄下的
+    # 檔案是版本號釘死在檔名裡的第三方函式庫（如 alpine-3.17.1.min.js），跟會頻繁
+    # 覆寫的頁面 .html/.css/.js 完全不同類——版本升級一定會改檔名，同名檔案內容
+    # 保證不變，可以安全長效快取。原本這條規則不分青紅皂白把 .js/.css 全部設成
+    # no-store，CDN 自架前沒差（CDN 自己另外設了快取表頭），自架後這些函式庫變成
+    # 每次換頁都要向本機同一個 uvicorn process 重新要一次，徒增同源請求量與延遲。
+    if p.startswith("/static/vendor/"):
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        return response
     if p.endswith((".html", ".css", ".js")) or p in ("/", ""):
         response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
         response.headers["Pragma"] = "no-cache"
         response.headers["Expires"] = "0"
     return response
+
+
+# 逐條操作軌跡（2026-09-14，DB v80）
+#
+# 只記「人的行為」：輪詢類端點一律跳過，否則每個開著的分頁每分鐘就會塞進好幾列，
+# 真正有意義的動作會被淹掉。這份清單是用「前端會自動定時打」當標準挑的，不是
+# 用「不重要」——例如 /api/auth/me 是每次開頁都打的守門請求，記它等於重複記頁面。
+_TRAIL_SKIP_PREFIXES = (
+    "/api/ping",
+    "/api/auth/me",
+    "/api/notifications",
+    "/api/audit-log/module-counts",
+    "/api/online-users",
+    "/api/system/version",
+    "/api/system/deployed-version",
+    "/api/now",
+    "/api/uploads/",          # 圖片/附件載入，一頁可能幾十個
+    "/api/photo-token",
+)
+
+# 同一個人對同一支端點的連續請求，這個秒數內只記一次。
+# 防的是自動存檔（1.5 秒防抖）與搜尋輸入這類「一個動作打很多次」的情況。
+_TRAIL_DEDUPE_SECONDS = 30
+
+
+def _record_request_trail(user_id: int, now_dt, method: str, path: str,
+                          referer: str, status: int) -> None:
+    """把一次請求記進操作軌跡。失敗一律吞掉——這是觀測資料，不該擋下正常請求。"""
+    for skip in _TRAIL_SKIP_PREFIXES:
+        if path.startswith(skip):
+            return
+    page = ""
+    if referer:
+        try:
+            page = referer.split("?")[0].rstrip("/").split("/")[-1] or ""
+        except Exception:
+            page = ""
+    now_iso = now_dt.isoformat()
+    try:
+        tc = get_db()
+        last = tc.execute(
+            "SELECT at FROM user_request_log WHERE user_id=? AND method=? AND path=? "
+            "ORDER BY id DESC LIMIT 1", (user_id, method, path)
+        ).fetchone()
+        if last:
+            try:
+                if (now_dt - datetime.fromisoformat(last["at"])).total_seconds() < _TRAIL_DEDUPE_SECONDS:
+                    tc.close()
+                    return
+            except Exception:
+                pass
+        tc.execute(
+            "INSERT INTO user_request_log (user_id, at, method, path, page, status) "
+            "VALUES (?,?,?,?,?,?)",
+            (user_id, now_iso, method, path, page, int(status or 0)),
+        )
+        tc.commit()
+        tc.close()
+    except Exception:
+        pass
 
 
 @app.middleware("http")
@@ -90,7 +285,7 @@ async def auth_middleware(request: Request, call_next):
     conn    = get_db()
     try:
         row = conn.execute(
-            "SELECT u.id, COALESCE(u.must_change_password, 0) AS must_change_password, "
+            "SELECT u.id, u.role, COALESCE(u.must_change_password, 0) AS must_change_password, "
             "s.last_active "
             "FROM sessions s JOIN users u ON s.user_id=u.id "
             "WHERE s.token=? AND u.active=1 "
@@ -102,11 +297,14 @@ async def auth_middleware(request: Request, call_next):
     if not row:
         return JSONResponse(status_code=401, content={"detail": "Session 已過期，請重新登入"})
 
+    is_high_priv = row["role"] in ("superadmin", "admin")
+    idle_limit = _ADMIN_IDLE_TIMEOUT_SECONDS if is_high_priv else _IDLE_TIMEOUT_SECONDS
+
     # Idle timeout check (only if last_active is already set)
     la_str = row["last_active"]
     if la_str:
         idle_secs = (now_dt - datetime.fromisoformat(la_str)).total_seconds()
-        if idle_secs > _IDLE_TIMEOUT_SECONDS:
+        if idle_secs > idle_limit:
             # Expire this session
             try:
                 ec = get_db()
@@ -115,7 +313,8 @@ async def auth_middleware(request: Request, call_next):
                 ec.close()
             except Exception:
                 pass
-            return JSONResponse(status_code=401, content={"detail": "閒置超過 8 小時，請重新登入"})
+            limit_label = "2 小時" if is_high_priv else "8 小時"
+            return JSONResponse(status_code=401, content={"detail": f"閒置超過 {limit_label}，請重新登入"})
         if idle_secs > 300:
             try:
                 uc = get_db()
@@ -124,6 +323,9 @@ async def auth_middleware(request: Request, call_next):
                 uc.close()
             except Exception:
                 pass
+            # 在線時間統計（2026-09-14）：沿用同一個節流點，不額外增加寫入頻率——
+            # 每 5 分鐘一列 UPDATE，跟原本就在做的 last_active 同一個數量級。
+            _record_user_activity(row["id"], now_dt, idle_secs)
     else:
         # First request after migration — stamp last_active without any check
         try:
@@ -142,7 +344,12 @@ async def auth_middleware(request: Request, call_next):
                 "code": "must_change_password",
             },
         )
-    return await call_next(request)
+    response = await call_next(request)
+    # 操作軌跡（2026-09-14）：記在**回應之後**才拿得到狀態碼——被擋下來的操作
+    # （403/404）跟成功的一樣重要，甚至更重要。
+    _record_request_trail(row["id"], now_dt, request.method, path,
+                          request.headers.get("Referer", ""), response.status_code)
+    return response
 
 
 # Registered last = outermost: applies security headers to all responses (incl. 401/403)
@@ -209,6 +416,7 @@ _schedule_weekly()
 auth.init_rate_limiting()
 daily_tasks.schedule_overdue_check()
 reports.schedule_monthly_report()
+dev_crm.schedule_dev_case_stale_check()
 _sync_module_versions()
 
 
@@ -216,10 +424,11 @@ _sync_module_versions()
 
 app.include_router(auth.router)
 app.include_router(quotations.router)
+app.include_router(material_orders.router)
+app.include_router(case_extra_expenses.router)
 app.include_router(customers.router)
 app.include_router(suppliers.router)
 app.include_router(parts.router)
-app.include_router(projects.router)
 app.include_router(dashboard.router)
 app.include_router(system.router)
 app.include_router(reports.router)
@@ -232,7 +441,26 @@ app.include_router(dev_crm.router, prefix="/api")
 app.include_router(env_guide.router)
 app.include_router(netarch_guide.router)
 app.include_router(switch_guide.router)
+app.include_router(monitor_guide.router)
+app.include_router(access_guide.router)
+app.include_router(gateway_guide.router)
+app.include_router(automation_guide.router)
 app.include_router(shipping_notes.router)
+app.include_router(completion_notes.router)
+app.include_router(inventory.router)
+app.include_router(search.router)
+app.include_router(contractor_vouchers.router)
+app.include_router(invoice_vouchers.router)
+app.include_router(org_structure.router)
+app.include_router(payment_requests.router)
+app.include_router(list_prefs.router)
+app.include_router(case_action_items.router)
+app.include_router(uploads.router)
+app.include_router(network_plans.router)
+app.include_router(network_plans_quick.router)
+app.include_router(approval_delegates.router)
+app.include_router(cashier.router)
+app.include_router(accounting_export.router)
 
 
 # ── Static frontend ───────────────────────────────────────────────────────────

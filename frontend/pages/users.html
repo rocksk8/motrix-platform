@@ -2,11 +2,13 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="../static/favicon.png">
-  <title>使用者管理 — MOTRIX 營運管理系統</title>
-  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-  <link rel="stylesheet" href="../css/style.css">
+  <title>使用者管理 — MOTRIX 專案管理系統</title>
+  <script src="../static/auth-guard.js"></script>
+  <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <style>
     .users-main {
       margin-left: var(--sidebar-w);
@@ -41,17 +43,6 @@
       gap: 10px;
     }
     .modal-head__title { font-size: 14px; font-weight: 600; flex: 1; }
-    .modal-close {
-      width: 28px; height: 28px;
-      border-radius: 4px;
-      border: none;
-      background: #F0EEE9;
-      cursor: pointer;
-      font-size: 16px;
-      color: var(--text-secondary);
-      display: flex; align-items: center; justify-content: center;
-    }
-    .modal-close:hover { background: #FEF2F2; color: var(--danger); }
     .modal-body { padding: 20px; }
     .modal-foot { padding: 14px 20px; border-top: 1px solid var(--border-light); display: flex; justify-content: flex-end; gap: 8px; }
     /* Form */
@@ -85,15 +76,6 @@
     }
     .form-hint { font-size: 10px; color: var(--text-dim); margin-top: 3px; }
     .form-hint.error { color: var(--danger); }
-    /* Buttons */
-    .btn { display:inline-flex; align-items:center; gap:6px; padding:8px 16px; border-radius:var(--radius); font-size:12px; font-family:var(--font-zh); cursor:pointer; border:none; transition:all .12s; font-weight:500; }
-    .btn-primary  { background:var(--accent);  color:#fff; }
-    .btn-primary:hover { background:#1D4ED8; }
-    .btn-danger   { background:var(--danger-light);  color:var(--danger); border:1px solid #FECACA; }
-    .btn-danger:hover { background:#FEE2E2; }
-    .btn-ghost    { background:#fff; color:var(--text-secondary); border:1px solid var(--border-light); }
-    .btn-ghost:hover { border-color:#C8C4BC; }
-    .btn-sm { padding:5px 11px; font-size:11px; }
     /* Table */
     .data-table { width:100%; border-collapse:collapse; font-size:13px; }
     .data-table th {
@@ -113,7 +95,7 @@
       font-size:11px; font-weight:500; font-family:LINE Seed TW_OTF, sans-serif;
     }
     .role-superadmin { background:#FEF3C7; color:#92400E; }
-    .role-admin      { background:#EFF6FF; color:#1D4ED8; }
+    .role-admin      { background:var(--accent-light); color:var(--accent-hover); }
     .role-sales      { background:#F0FDF4; color:#15803D; }
     .role-engineer   { background:#F5F3FF; color:#7C3AED; }
     .role-viewer     { background:#F3F4F6; color:#4B5563; }
@@ -175,16 +157,22 @@
   <!-- MAIN -->
   <div class="users-main">
     <!-- 頁頭 -->
-    <div class="page-header" style="margin-bottom:24px">
-      <div>
-        <div style="font-size:11px;color:var(--text-dim);margin-bottom:4px">系統設定</div>
-        <h1 style="font-size:20px;font-weight:700">使用者管理</h1>
-        <p style="font-size:12px;color:var(--text-secondary);margin-top:4px">管理系統帳號、角色與存取權限</p>
+    <div class="pg">
+      <div class="pg__l">
+        <div class="pg__eyebrow">系統設定</div>
+        <h1 class="pg__t">使用者管理</h1>
+        <p class="pg__s">管理系統帳號、角色與存取權限</p>
+</div>
+      <div style="display:flex;gap:8px" x-show="isSuperAdmin">
+        <button class="btn btn-ghost" @click="window.location.href='org-structure.html'">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M5 21V7l7-4 7 4v14M9 9h1m-1 4h1m4-4h1m-1 4h1M9 21v-4h6v4"/></svg>
+          組織架構設定
+        </button>
+        <button class="btn btn-primary" @click="openCreate()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v16m8-8H4"/></svg>
+          新增使用者
+        </button>
       </div>
-      <button class="btn btn-primary" @click="openCreate()" x-show="isSuperAdmin">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v16m8-8H4"/></svg>
-        新增使用者
-      </button>
     </div>
 
     <!-- 超管提示 -->
@@ -303,92 +291,140 @@
       </div>
     </div>
 
-    <!-- 使用者列表 -->
+    <!-- 使用者列表：依處/部門分組 -->
+    <div style="margin-bottom:12px;display:flex;align-items:center;gap:10px">
+      <div style="position:relative;flex:1;max-width:320px">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text-dim)">
+          <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+        </svg>
+        <input class="form-input" type="text" x-model="userSearch" placeholder="搜尋帳號／顯示名稱／Email"
+               style="padding-left:30px;font-size:12px">
+      </div>
+      <span style="font-size:11px;color:var(--text-dim)" x-text="users.length + ' 位使用者'"></span>
+    </div>
+
+    <div x-show="isSuperAdmin && orgTree.length === 0"
+         style="background:var(--accent-light);border:1px solid #BFDBFE;border-radius:8px;padding:12px 16px;margin-bottom:12px;font-size:12px;color:var(--accent-hover);display:flex;align-items:center;justify-content:space-between;gap:12px">
+      <span>ⓘ 尚未設定組織架構（處／部門），下方使用者會全部歸類在「未分類」。</span>
+      <button class="btn btn-ghost btn-sm" @click="window.location.href='org-structure.html'" style="white-space:nowrap">前往設定</button>
+    </div>
+
     <div class="panel" style="padding:0;overflow:hidden">
+      <div style="display:flex;padding:10px 12px;background:#FAFAF8;border-bottom:1px solid var(--border-light);font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);gap:12px">
+        <div style="width:190px;flex-shrink:0">帳號</div>
+        <div style="width:100px;flex-shrink:0">顯示名稱</div>
+        <div style="width:160px;flex-shrink:0">E-mail</div>
+        <div style="width:90px;flex-shrink:0">角色</div>
+        <div style="flex:1;min-width:160px">存取模組</div>
+        <div style="width:80px;flex-shrink:0">建立時間</div>
+        <div style="width:46px;flex-shrink:0">狀態</div>
+        <div style="width:180px;flex-shrink:0">操作</div>
+      </div>
       <div class="table-scroll">
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th>帳號</th>
-            <th>顯示名稱</th>
-            <th>E-mail</th>
-            <th>角色</th>
-            <th>存取模組</th>
-            <th>建立時間</th>
-            <th>狀態</th>
-            <th style="width:180px">操作</th>
-          </tr>
-        </thead>
-        <tbody>
-          <template x-for="user in users" :key="user.id">
-            <tr>
-              <td>
-                <div style="display:flex;align-items:center;gap:8px">
+        <template x-for="row in visibleOrgRows" :key="row.key">
+          <div>
+            <!-- 處 header -->
+            <template x-if="row.type==='division'">
+              <div class="org-group-row" @click="divOpen[row.division.id] = !isDivOpen(row.division.id)"
+                   style="display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;background:#F5F4F0;border-bottom:1px solid var(--border-light)">
+                <span x-text="isDivOpen(row.division.id) ? '▾' : '▸'" style="color:var(--text-dim);width:10px;display:inline-block"></span>
+                <span style="font-size:13px;font-weight:700" x-text="row.division.name"></span>
+                <span style="font-size:11px;color:var(--text-dim)" x-text="row.division.departments.length + ' 個部門・' + row.userCount + ' 人'"></span>
+                <template x-if="row.division.managerName">
+                  <span style="font-size:10px;background:var(--accent-light);color:var(--accent);padding:1px 7px;border-radius:10px" x-text="'處級主管：' + row.division.managerName"></span>
+                </template>
+              </div>
+            </template>
+            <!-- 部門 header -->
+            <template x-if="row.type==='department'">
+              <div class="org-group-row" @click="deptOpen[row.department.id] = !isDeptOpen(row.department.id)"
+                   style="display:flex;align-items:center;gap:8px;padding:9px 12px 9px 28px;cursor:pointer;background:#FBFAF8;border-bottom:1px solid var(--border-light)">
+                <span x-text="isDeptOpen(row.department.id) ? '▾' : '▸'" style="color:var(--text-dim);width:10px;display:inline-block"></span>
+                <span style="font-size:12px;font-weight:600" x-text="row.department.name"></span>
+                <span style="font-size:11px;color:var(--text-dim)" x-text="row.userCount + ' 人'"></span>
+                <template x-if="row.department.managerName">
+                  <span style="font-size:10px;background:var(--accent-light);color:var(--accent);padding:1px 7px;border-radius:10px" x-text="'主管：' + row.department.managerName"></span>
+                </template>
+              </div>
+            </template>
+            <!-- 未分類 header -->
+            <template x-if="row.type==='unassigned'">
+              <div class="org-group-row" @click="deptOpen['unassigned'] = !isDeptOpen('unassigned')"
+                   style="display:flex;align-items:center;gap:8px;padding:9px 12px;cursor:pointer;background:#F5F4F0;border-bottom:1px solid var(--border-light)">
+                <span x-text="isDeptOpen('unassigned') ? '▾' : '▸'" style="color:var(--text-dim);width:10px;display:inline-block"></span>
+                <span style="font-size:13px;font-weight:700;color:var(--text-secondary)">未分類</span>
+                <span style="font-size:11px;color:var(--text-dim)" x-text="row.userCount + ' 人'"></span>
+              </div>
+            </template>
+            <!-- 使用者列 -->
+            <template x-if="row.type==='user'">
+              <div style="display:flex;align-items:center;gap:12px;padding:12px;border-bottom:1px solid #F0EEE9"
+                   :style="row.departmentId ? 'padding-left:40px' : 'padding-left:24px'">
+                <div style="width:190px;flex-shrink:0;display:flex;align-items:center;gap:8px">
                   <div style="width:30px;height:30px;border-radius:50%;background:var(--black);color:var(--white);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0"
-                       x-text="(user.displayName||user.username)[0].toUpperCase()"></div>
-                  <span style="font-family:LINE Seed TW_OTF, sans-serif;font-size:13px;font-weight:500" x-text="user.username"></span>
-                  <template x-if="user.username === session.username">
+                       x-text="(row.user.displayName||row.user.username)[0].toUpperCase()"></div>
+                  <span style="font-family:LINE Seed TW_OTF, sans-serif;font-size:13px;font-weight:500" x-text="row.user.username"></span>
+                  <template x-if="row.user.username === session.username">
                     <span style="font-size:9px;background:var(--accent-light);color:var(--accent);padding:1px 6px;border-radius:3px;font-family:LINE Seed TW_OTF, sans-serif">我</span>
                   </template>
                 </div>
-              </td>
-              <td x-text="user.displayName || '—'"></td>
-              <td style="font-size:12px;color:var(--text-secondary)" x-text="user.email || '—'"></td>
-              <td>
-                <span class="role-badge"
-                  :class="{'role-superadmin':user.role==='superadmin','role-admin':user.role==='admin','role-sales':user.role==='sales','role-engineer':user.role==='engineer','role-viewer':user.role==='viewer'}"
-                  x-text="roleLabel(user.role)"></span>
-              </td>
-              <td>
-                <div class="access-row">
+                <div style="width:100px;flex-shrink:0;font-size:13px" x-text="row.user.displayName || '—'"></div>
+                <div style="width:160px;flex-shrink:0;font-size:12px;color:var(--text-secondary)" x-text="row.user.email || '—'"></div>
+                <div style="width:90px;flex-shrink:0">
+                  <span class="role-badge"
+                    :class="{'role-superadmin':row.user.role==='superadmin','role-admin':row.user.role==='admin','role-sales':row.user.role==='sales','role-engineer':row.user.role==='engineer','role-viewer':row.user.role==='viewer'}"
+                    x-text="roleLabel(row.user.role)"></span>
+                </div>
+                <div style="flex:1;min-width:160px" class="access-row">
                   <template x-for="mod in allModules" :key="mod.key">
                     <span class="access-chip"
-                          :class="{on: hasAccess(user, mod.key)}"
+                          :class="{on: hasAccess(row.user, mod.key)}"
                           x-text="mod.label"></span>
                   </template>
                 </div>
-              </td>
-              <td style="font-size:11px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif">
-                <span x-text="formatDate(user.createdAt)"></span>
-              </td>
-              <td>
-                <label class="status-toggle" :title="user.active ? '點擊停用' : '點擊啟用'"
-                       @click.prevent="toggleActive(user)"
-                       x-show="isSuperAdmin && user.username !== 'jeff'">
-                  <input type="checkbox" :checked="user.active" @change="toggleActive(user)">
-                  <span class="slider"></span>
-                </label>
-                <span x-show="!isSuperAdmin || user.username === 'jeff'"
-                      :style="user.active ? 'color:var(--success)' : 'color:var(--text-dim)'"
-                      style="font-size:12px"
-                      x-text="user.active ? '啟用' : '停用'"></span>
-              </td>
-              <td>
-                <div style="display:flex;gap:6px;flex-wrap:wrap">
-                  <button class="btn btn-ghost btn-sm" @click="openEdit(user)"
+                <div style="width:80px;flex-shrink:0;font-size:11px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif">
+                  <span x-text="formatDate(row.user.createdAt)"></span>
+                </div>
+                <div style="width:46px;flex-shrink:0">
+                  <label class="status-toggle" :title="row.user.active ? '點擊停用' : '點擊啟用'"
+                         @click.prevent="toggleActive(row.user)"
+                         x-show="isSuperAdmin && row.user.username !== 'jeff'">
+                    <input type="checkbox" :checked="row.user.active" @change="toggleActive(row.user)">
+                    <span class="slider"></span>
+                  </label>
+                  <span x-show="!isSuperAdmin || row.user.username === 'jeff'"
+                        :style="row.user.active ? 'color:var(--success)' : 'color:var(--text-dim)'"
+                        style="font-size:12px"
+                        x-text="row.user.active ? '啟用' : '停用'"></span>
+                </div>
+                <div style="width:180px;flex-shrink:0;display:flex;gap:6px;flex-wrap:wrap">
+                  <button class="btn btn-ghost btn-sm" @click="openEdit(row.user)"
                           :disabled="!isSuperAdmin">
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
                     編輯
                   </button>
                   <button class="btn btn-ghost btn-sm"
                           x-show="isSuperAdmin"
-                          @click="window.location.href='daily-tasks.html?username='+user.username"
+                          @click="window.location.href='daily-tasks.html?username='+row.user.username"
                           title="查看此使用者的每日工作事項"
                           style="color:#7C3AED;border-color:#C4B5FD;background:#F5F3FF">
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
                     工作事項
                   </button>
                   <button class="btn btn-danger btn-sm"
-                          @click="deleteUser(user)"
-                          x-show="isSuperAdmin && user.username !== 'jeff' && user.username !== session.username">
+                          @click="deleteUser(row.user)"
+                          x-show="isSuperAdmin && row.user.username !== 'jeff' && row.user.username !== session.username">
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
                   </button>
                 </div>
-              </td>
-            </tr>
-          </template>
-        </tbody>
-      </table>
+              </div>
+            </template>
+          </div>
+        </template>
+        <div x-show="visibleOrgRows.length === 0" style="padding:24px;text-align:center;font-size:12px;color:var(--text-dim)">
+          沒有符合搜尋條件的使用者
+        </div>
       </div>
     </div>
   </div>
@@ -421,7 +457,28 @@
           </div>
           <div class="form-group">
             <label class="form-label">電話 <span style="color:var(--text-dim);font-size:9px">（自動帶入報價單）</span></label>
-            <input class="form-input" type="text" x-model="form.phone" placeholder="04-3602-2818">
+            <input class="form-input" type="text" x-model="form.phone" placeholder="04-3610-6566">
+          </div>
+        </div>
+        <!-- 處/部門 -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="form-group">
+            <label class="form-label">處</label>
+            <select class="form-select" x-model.number="form.divisionId" @change="onFormDivisionChange()" style="font-size:12px">
+              <option :value="0">未分類</option>
+              <template x-for="div in orgTree" :key="div.id">
+                <option :value="div.id" x-text="div.name"></option>
+              </template>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">部門</label>
+            <select class="form-select" x-model.number="form.departmentId" :disabled="!form.divisionId" style="font-size:12px">
+              <option :value="0">未分類</option>
+              <template x-for="dept in departmentOptionsForDivision" :key="dept.id">
+                <option :value="dept.id" x-text="dept.name"></option>
+              </template>
+            </select>
           </div>
         </div>
         <!-- 快速套用 -->
@@ -457,23 +514,68 @@
         </div>
         <div class="form-group">
           <label class="form-label">存取模組</label>
-          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
-            <template x-for="mod in allModules" :key="mod.key">
-              <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:12px;padding:5px 10px;border:1px solid var(--border-light);border-radius:4px;background:#fff"
-                     :style="form.modules.includes(mod.key) ? 'border-color:var(--accent);background:var(--accent-light);color:var(--accent)' : ''">
-                <input type="checkbox" style="display:none"
-                       :checked="form.modules.includes(mod.key)"
-                       @change="toggleModule(mod.key)">
-                <span x-text="form.modules.includes(mod.key) ? '✓ ' : ''"></span>
-                <span x-text="mod.label"></span>
-              </label>
+          <div style="margin-top:6px;border:1px solid var(--border-light);border-radius:6px;overflow:hidden">
+            <template x-for="(grp, grpIdx) in moduleGroups" :key="grp.group">
+              <div :style="grpIdx > 0 ? 'border-top:1px solid var(--border-light)' : ''">
+                <div @click="toggleModGroup(grp.group)"
+                     style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;cursor:pointer;background:var(--bg-secondary,#fafafa);font-size:12px;font-weight:600">
+                  <span style="display:flex;align-items:center;gap:6px">
+                    <span x-text="_modGroupOpen[grp.group] ? '▾' : '▸'" style="color:var(--text-dim);width:10px;display:inline-block"></span>
+                    <span x-text="grp.group"></span>
+                  </span>
+                  <span style="font-size:11px;color:var(--text-dim);font-weight:400"
+                        x-text="modGroupSelectedCount(grp.mods) + ' / ' + grp.mods.length"></span>
+                </div>
+                <div x-show="_modGroupOpen[grp.group]" x-cloak
+                     style="display:flex;gap:6px;flex-wrap:wrap;padding:8px 10px">
+                  <template x-for="mod in grp.mods" :key="mod.key">
+                    <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:12px;padding:5px 10px;border:1px solid var(--border-light);border-radius:4px;background:#fff"
+                           :style="form.modules.includes(mod.key) ? 'border-color:var(--accent);background:var(--accent-light);color:var(--accent)' : ''">
+                      <input type="checkbox" style="display:none"
+                             :checked="form.modules.includes(mod.key)"
+                             @change="toggleModule(mod.key)">
+                      <span x-text="form.modules.includes(mod.key) ? '✓ ' : ''"></span>
+                      <span x-text="mod.label"></span>
+                    </label>
+                  </template>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Email 通知偏好 <span style="color:var(--text-dim);font-size:9px">（取消勾選＝不寄該類信件給此帳號）</span></label>
+          <div style="margin-top:6px;border:1px solid var(--border-light);border-radius:6px;overflow:hidden">
+            <template x-for="(grp, grpIdx) in notifyGroups" :key="grp.group">
+              <div :style="grpIdx > 0 ? 'border-top:1px solid var(--border-light)' : ''">
+                <div @click="toggleNotifyGroup(grp.group)"
+                     style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;cursor:pointer;background:var(--bg-secondary,#fafafa);font-size:12px;font-weight:600">
+                  <span style="display:flex;align-items:center;gap:6px">
+                    <span x-text="_notifyGroupOpen[grp.group] ? '▾' : '▸'" style="color:var(--text-dim);width:10px;display:inline-block"></span>
+                    <span x-text="grp.group"></span>
+                  </span>
+                  <span style="font-size:11px;color:var(--text-dim);font-weight:400"
+                        x-text="notifyGroupOnCount(grp.items) + ' / ' + grp.items.length"></span>
+                </div>
+                <div x-show="_notifyGroupOpen[grp.group]" x-cloak
+                     style="display:flex;flex-direction:column;gap:4px;padding:8px 10px">
+                  <template x-for="item in grp.items" :key="item.key">
+                    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;padding:4px 2px">
+                      <input type="checkbox"
+                             :checked="!form.notificationMuted.includes(item.key)"
+                             @change="toggleNotifyType(item.key)">
+                      <span x-text="item.label"></span>
+                    </label>
+                  </template>
+                </div>
+              </div>
             </template>
           </div>
         </div>
         <div class="form-group">
           <label class="form-label" x-text="editingId ? '新密碼（留空不更改）' : '密碼 *'"></label>
           <input class="form-input" type="password" x-model="form.password"
-                 :placeholder="editingId ? '留空則不修改密碼' : '設定密碼（至少 6 碼）'">
+                 :placeholder="editingId ? '留空則不修改密碼' : '設定密碼（至少 8 碼）'">
           <div class="form-hint error" x-show="formError" x-text="formError"></div>
         </div>
         <template x-if="form.password">
@@ -568,16 +670,32 @@
               套用基礎角色預設
             </button>
           </div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap">
-            <template x-for="mod in allModules" :key="mod.key">
-              <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:12px;padding:5px 10px;border:1px solid var(--border-light);border-radius:4px;background:#fff"
-                     :style="crForm.modules.includes(mod.key) ? 'border-color:var(--accent);background:var(--accent-light);color:var(--accent)' : ''">
-                <input type="checkbox" style="display:none"
-                       :checked="crForm.modules.includes(mod.key)"
-                       @change="toggleCrModule(mod.key)">
-                <span x-text="crForm.modules.includes(mod.key) ? '✓ ' : ''"></span>
-                <span x-text="mod.label"></span>
-              </label>
+          <div style="border:1px solid var(--border-light);border-radius:6px;overflow:hidden">
+            <template x-for="(grp, grpIdx) in moduleGroups" :key="grp.group">
+              <div :style="grpIdx > 0 ? 'border-top:1px solid var(--border-light)' : ''">
+                <div @click="toggleCrModGroup(grp.group)"
+                     style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;cursor:pointer;background:var(--bg-secondary,#fafafa);font-size:12px;font-weight:600">
+                  <span style="display:flex;align-items:center;gap:6px">
+                    <span x-text="_crModGroupOpen[grp.group] ? '▾' : '▸'" style="color:var(--text-dim);width:10px;display:inline-block"></span>
+                    <span x-text="grp.group"></span>
+                  </span>
+                  <span style="font-size:11px;color:var(--text-dim);font-weight:400"
+                        x-text="crModGroupSelectedCount(grp.mods) + ' / ' + grp.mods.length"></span>
+                </div>
+                <div x-show="_crModGroupOpen[grp.group]" x-cloak
+                     style="display:flex;gap:6px;flex-wrap:wrap;padding:8px 10px">
+                  <template x-for="mod in grp.mods" :key="mod.key">
+                    <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:12px;padding:5px 10px;border:1px solid var(--border-light);border-radius:4px;background:#fff"
+                           :style="crForm.modules.includes(mod.key) ? 'border-color:var(--accent);background:var(--accent-light);color:var(--accent)' : ''">
+                      <input type="checkbox" style="display:none"
+                             :checked="crForm.modules.includes(mod.key)"
+                             @change="toggleCrModule(mod.key)">
+                      <span x-text="crForm.modules.includes(mod.key) ? '✓ ' : ''"></span>
+                      <span x-text="mod.label"></span>
+                    </label>
+                  </template>
+                </div>
+              </div>
             </template>
           </div>
         </div>
@@ -593,18 +711,61 @@
   </div>
 
   <script>
+  // 2026-09-13（模組權限稽核）：拿掉 'sales'——它只存在於這兩份樣板與後端的
+  // `_SUPERADMIN_MODULES`，**側欄、後端、其他前端都沒有任何地方讀它**，純粹
+  // 是歷史殘留，留著只會讓人以為勾了它有意義。既有帳號身上那幾筆不去動
+  // （沒有任何行為依賴它，清掉要跑 migration，不值得）。
   const ROLE_MODULES = {
-    superadmin: ['dashboard','quotation','case_manage','customer','sales','procurement','inventory','equipment','finance','reports','settings','project_manage','project_approve_eng','project_approve_biz','financial_view','work_log','daily_task','env_guide','netarch_guide'],
-    admin:      ['dashboard','quotation','case_manage','customer','sales','procurement','inventory','equipment','finance','reports','project_manage','project_approve_eng','project_approve_biz','financial_view','work_log','daily_task','env_guide','netarch_guide'],
+    superadmin: ['dashboard','quotation','case_manage','customer','procurement','inventory','equipment','finance','reports','settings','project_approve_eng','project_approve_biz','financial_view','work_log','daily_task','env_guide','netarch_guide','switch_guide','monitor_guide','access_guide','gateway_guide','automation_guide','cashier'],
+    admin:      ['dashboard','quotation','case_manage','customer','procurement','inventory','equipment','finance','reports','project_approve_eng','project_approve_biz','financial_view','work_log','daily_task','env_guide','netarch_guide','switch_guide','monitor_guide','access_guide','gateway_guide','automation_guide','cashier'],
     sales:      ['dashboard','quotation','case_manage','customer','financial_view','project_approve_biz','work_log','daily_task'],
-    engineer:   ['dashboard','case_manage','project_manage','project_approve_eng','equipment','work_log','daily_task'],
+    engineer:   ['dashboard','case_manage','project_approve_eng','equipment','work_log','daily_task'],
     viewer:     ['dashboard'],
+  }
+
+  // 把使用者清單依「處→部門」結構攤平成一組畫面用列（division/department/
+  // unassigned/user 四種 type），跟 Alpine 的展開/收合狀態、搜尋篩選完全分開，
+  // 之後要調整分組規則（例如改成三層、或改成依角色再分一層）只需要改這裡。
+  function buildOrgRows(users, tree) {
+    const rows = []
+    const usersByDept = {}
+    for (const u of users) {
+      const key = u.departmentId || 'unassigned'
+      ;(usersByDept[key] = usersByDept[key] || []).push(u)
+    }
+    // 「X 人」計數只算啟用中帳號（跟 org-structure.html／後端 API 的口徑一致，
+    // 避免兩個頁面數字對不上）；下面的使用者列表列出全部帳號（含停用），
+    // 因為這頁本來就是用來管理全部帳號、含重新啟用停用帳號。
+    const activeCount = list => list.filter(u => u.active).length
+    for (const div of tree) {
+      const divUsers = div.departments.flatMap(d => usersByDept[d.id] || [])
+      rows.push({ type: 'division', key: 'div-' + div.id, division: div, userCount: activeCount(divUsers) })
+      for (const dept of div.departments) {
+        const deptUsers = usersByDept[dept.id] || []
+        rows.push({ type: 'department', key: 'dept-' + dept.id, department: dept, division: div, userCount: activeCount(deptUsers) })
+        for (const u of deptUsers) {
+          rows.push({ type: 'user', key: 'user-' + u.id, user: u, departmentId: dept.id, divisionId: div.id })
+        }
+      }
+    }
+    const unassigned = usersByDept['unassigned'] || []
+    if (unassigned.length > 0) {
+      rows.push({ type: 'unassigned', key: 'unassigned', userCount: activeCount(unassigned) })
+      for (const u of unassigned) {
+        rows.push({ type: 'user', key: 'user-' + u.id, user: u, departmentId: null, divisionId: null })
+      }
+    }
+    return rows
   }
 
   function usersPage() {
     return {
       session:   {},
       users:     [],
+      orgTree:   [],
+      divOpen:   {},   // 處展開狀態，未設定時預設展開（見 isDivOpen）
+      deptOpen:  {},   // 部門展開狀態，未設定時預設展開（見 isDeptOpen）
+      userSearch: '',
       customRoles:       [],
       customRoleMgrOpen: false,
       roleLabels: {superadmin:'超級管理員', admin:'管理員', sales:'業務', engineer:'工程師', viewer:'檢視者'},
@@ -613,9 +774,12 @@
       showModal: false,
       editingId: null,
       formError: '',
+      _modGroupOpen: {},    // 存取模組手風琴展開狀態（編輯使用者 Modal）
+      _notifyGroupOpen: {}, // Email 通知偏好手風琴展開狀態（編輯使用者 Modal）
       showCrModal: false,
       crForm: { editId: null, name: '', baseRole: 'sales', modules: [] },
-      form: { username:'', displayName:'', email:'', phone:'', role:'sales', password:'', confirmPassword:'', modules:[], unlockPassword:'', confirmUnlockPassword:'', dtPassword:'', confirmDtPassword:'' },
+      _crModGroupOpen: {},  // 存取模組手風琴展開狀態（自訂角色 Modal）
+      form: { username:'', displayName:'', email:'', phone:'', role:'sales', password:'', confirmPassword:'', modules:[], notificationMuted:[], unlockPassword:'', confirmUnlockPassword:'', dtPassword:'', confirmDtPassword:'', divisionId:0, departmentId:0 },
       get systemPresets() {
         return [
           {key:'superadmin', label: this.roleLabels.superadmin || '超級管理員'},
@@ -630,27 +794,189 @@
         {key:'dev_crm',              label:'業務開發 CRM',     group:'業務'},
         {key:'quotation',            label:'報價單／簽核佇列', group:'業務'},
         {key:'case_manage',          label:'案件管理',         group:'業務'},
+        // 2026-09-13（模組權限稽核）：`project_manage` 補回目錄。它是「專案管理」
+        // 時代留下的 key，2026-08-26 專案管理併入案件管理時從這份目錄移除，
+        // 但 `routers/material_orders.py` 至今仍拿它擋「修改叫料」——結果是這個
+        // 權限只剩 9 個舊帳號靠歷史殘值持有，**任何新建帳號都永遠拿不到、一改
+        // 叫料就 403，而且畫面上沒有任何地方勾得到**。key 維持原名不改（改名要
+        // 跑 migration，且那 9 個帳號會瞬間失去權限），只把標籤改成它今天實際
+        // 在管的事情。
+        {key:'project_manage',       label:'案件叫料－修改',   group:'業務'},
         {key:'customer',             label:'客戶管理',         group:'業務'},
         {key:'financial_view',       label:'財務金額可視',     group:'財務'},
         {key:'finance',              label:'應收帳款／銷售訂單', group:'財務'},
         {key:'reports',              label:'營運報表',         group:'財務'},
+        {key:'cashier',              label:'出納（標記已匯款/已收款、銀行對帳）', group:'財務'},
         {key:'procurement',          label:'供應商／料號／採購', group:'採購'},
+        {key:'inventory',            label:'庫存管理',         group:'採購'},
         {key:'equipment',            label:'設備登載／保固',   group:'設備'},
-        {key:'project_manage',       label:'專案管理',         group:'專案'},
-        {key:'project_approve_eng',  label:'工程主管確認',     group:'專案'},
-        {key:'project_approve_biz',  label:'業務確認',         group:'專案'},
+        {key:'netplan_edit',         label:'網路架構規劃書－新增修改刪除', group:'網路架構規劃書'},
+        {key:'project_approve_eng',  label:'案件代辦－工程主管確認', group:'專案'},
+        {key:'project_approve_biz',  label:'案件代辦－業務確認',     group:'專案'},
         {key:'work_log',             label:'工作日誌',         group:'工作'},
         {key:'daily_task',           label:'每日工作事項',     group:'工作'},
         {key:'contractor_list',      label:'外包名冊',         group:'勞務'},
         {key:'payslip',              label:'勞報單',           group:'勞務'},
-        {key:'env_guide',            label:'場域選型導覽－檢視', group:'業務'},
-        {key:'env_guide_edit',       label:'場域選型導覽－新增修改刪除', group:'業務'},
-        {key:'netarch_guide',        label:'網路架構選型導覽－檢視', group:'業務'},
-        {key:'netarch_guide_edit',   label:'網路架構選型導覽－新增修改刪除', group:'業務'},
+        {key:'env_guide',            label:'場域選型導覽－檢視', group:'選型資料庫'},
+        {key:'env_guide_edit',       label:'場域選型導覽－新增修改刪除', group:'選型資料庫'},
+        {key:'netarch_guide',        label:'網路架構選型導覽－檢視', group:'選型資料庫'},
+        {key:'netarch_guide_edit',   label:'網路架構選型導覽－新增修改刪除', group:'選型資料庫'},
+        {key:'switch_guide',         label:'交換器選型導覽－檢視', group:'選型資料庫'},
+        {key:'switch_guide_edit',    label:'交換器選型導覽－新增修改刪除', group:'選型資料庫'},
+        {key:'monitor_guide',        label:'監控系統選型導覽－檢視', group:'選型資料庫'},
+        {key:'monitor_guide_edit',   label:'監控系統選型導覽－新增修改刪除', group:'選型資料庫'},
+        {key:'access_guide',         label:'門禁系統選型導覽－檢視', group:'選型資料庫'},
+        {key:'access_guide_edit',    label:'門禁系統選型導覽－新增修改刪除', group:'選型資料庫'},
+        {key:'gateway_guide',        label:'閘道器與控制器選型導覽－檢視', group:'選型資料庫'},
+        {key:'gateway_guide_edit',   label:'閘道器與控制器選型導覽－新增修改刪除', group:'選型資料庫'},
+        {key:'automation_guide',        label:'自動化系統選型導覽－檢視', group:'選型資料庫'},
+        {key:'automation_guide_edit',   label:'自動化系統選型導覽－新增修改刪除', group:'選型資料庫'},
         {key:'settings',             label:'系統設定',         group:'系統'},
       ],
 
+      // 對應 backend/helpers/notification_prefs.py 的 EVENT_GROUPS —— 兩邊修改時要同步
+      allNotifyTypes: [
+        {key:'approval_request',       label:'報價單待審核通知（當層簽核人）', group:'簽核流程'},
+        {key:'next_tier',              label:'報價單進入下一層審核',           group:'簽核流程'},
+        {key:'approved',               label:'報價單審核完成',                 group:'簽核流程'},
+        {key:'returned',               label:'報價單退回修改',                 group:'簽核流程'},
+        {key:'resubmit_requester',     label:'修改版報價單重新送審確認',       group:'簽核流程'},
+        {key:'shipping_submitted',     label:'出貨單待審核通知（當層簽核人）', group:'簽核流程'},
+        {key:'shipping_next_tier',     label:'出貨單進入下一層審核',           group:'簽核流程'},
+        {key:'shipping_approved',      label:'出貨單審核完成',                 group:'簽核流程'},
+        {key:'shipping_returned',      label:'出貨單退回修改',                 group:'簽核流程'},
+        {key:'contractor_voucher_submitted', label:'承攬商匯款申請待審核通知（當層簽核人）', group:'簽核流程'},
+        {key:'contractor_voucher_next_tier', label:'承攬商匯款申請進入下一層審核',           group:'簽核流程'},
+        {key:'contractor_voucher_approved',  label:'承攬商匯款申請審核完成',                 group:'簽核流程'},
+        {key:'contractor_voucher_returned',  label:'承攬商匯款申請退回修改',                 group:'簽核流程'},
+        {key:'invoice_voucher_submitted',    label:'開票申請憑據待審核通知（當層簽核人）',   group:'簽核流程'},
+        {key:'invoice_voucher_next_tier',    label:'開票申請憑據進入下一層審核',             group:'簽核流程'},
+        {key:'invoice_voucher_approved',     label:'開票申請憑據審核完成',                   group:'簽核流程'},
+        {key:'invoice_voucher_returned',     label:'開票申請憑據退回修改',                   group:'簽核流程'},
+        {key:'payment_request_submitted',    label:'請款單待審核通知（當層簽核人）',         group:'簽核流程'},
+        {key:'payment_request_next_tier',    label:'請款單進入下一層審核',                   group:'簽核流程'},
+        {key:'payment_request_approved',     label:'請款單審核完成',                         group:'簽核流程'},
+        {key:'payment_request_returned',     label:'請款單退回修改',                         group:'簽核流程'},
+        {key:'approval_reminder',      label:'簽核逾期催辦提醒（工作日 1/3/5 天分級升級）', group:'簽核流程'},
+        {key:'daily_task_assigned',    label:'工作事項指派通知',   group:'工作事項'},
+        {key:'daily_task_completed',   label:'工作事項完成回報',   group:'工作事項'},
+        {key:'daily_task_overdue',     label:'工作事項逾期未完成', group:'工作事項'},
+        {key:'daily_task_overdue_manager', label:'工作事項逾期未完成（我是部門主管，通知我部門成員的逾期事項）', group:'工作事項'},
+        {key:'daily_task_edited',      label:'工作事項內容已編輯', group:'工作事項'},
+        {key:'range_task_deadline',    label:'區間工作事項即將到期', group:'工作事項'},
+        {key:'case_stage_deadline',    label:'案件執行進度即將到期', group:'案件與到期提醒'},
+        {key:'case_stage_deadline_manager', label:'案件執行進度即將到期（我是部門主管，通知我部門成員的案件進度）', group:'案件與到期提醒'},
+        {key:'warranty_expiry',        label:'設備保固即將到期',     group:'案件與到期提醒'},
+        {key:'dev_case_stale',         label:'業務開發案件逾期未跟進', group:'案件與到期提醒'},
+        {key:'dev_case_delete_request',label:'業務開發案件刪除申請', group:'業務開發審核'},
+        {key:'dev_case_relink_request',label:'業務開發案件連結異動申請', group:'業務開發審核'},
+        {key:'settlement_finalized',   label:'成本精算完結通知',   group:'系統與報表'},
+        {key:'case_closing_report',    label:'案件結案報表 PDF（僅最高管理員）', group:'系統與報表'},
+        {key:'monthly_report',         label:'每月營運報表',       group:'系統與報表'},
+        {key:'module_activity',        label:'各模組新增／異動通知（建立帳號、案件等一般活動）', group:'系統與報表'},
+        {key:'case_close_blocked',     label:'完結案被防呆機制擋下（未達成前置條件）', group:'已結案案件解鎖'},
+        {key:'case_change_requested',  label:'已結案案件半解鎖期間的變更/上傳待審核（僅最高管理員）', group:'已結案案件解鎖'},
+      ],
+
+      get notifyGroups() {
+        const order = [], map = {}
+        for (const it of this.allNotifyTypes) {
+          if (!map[it.group]) { map[it.group] = []; order.push(it.group) }
+          map[it.group].push(it)
+        }
+        return order.map(g => ({ group: g, items: map[g] }))
+      },
+
+      toggleNotifyType(key) {
+        const idx = this.form.notificationMuted.indexOf(key)
+        if (idx >= 0) this.form.notificationMuted.splice(idx, 1)  // 取消靜音（勾選＝接收）
+        else           this.form.notificationMuted.push(key)      // 靜音（取消勾選＝不接收）
+      },
+
+      toggleNotifyGroup(group) {
+        this._notifyGroupOpen[group] = !this._notifyGroupOpen[group]
+      },
+
+      notifyGroupOnCount(items) {
+        return items.filter(it => !this.form.notificationMuted.includes(it.key)).length
+      },
+
       get isSuperAdmin() { return this.session.role === 'superadmin' },
+
+      // ── 處/部門分組顯示 ──────────────────────────────────────────────────
+
+      isDivOpen(id)  { return this.divOpen[id]  !== false },
+      isDeptOpen(id) { return this.deptOpen[id] !== false },
+
+      _matchUser(u, q) {
+        return (u.username||'').toLowerCase().includes(q)
+            || (u.displayName||'').toLowerCase().includes(q)
+            || (u.email||'').toLowerCase().includes(q)
+      },
+
+      get visibleOrgRows() {
+        const rows = buildOrgRows(this.users, this.orgTree)
+        const q = (this.userSearch || '').trim().toLowerCase()
+        if (!q) {
+          const out = []
+          let divOpen = true, deptOpen = true
+          for (const row of rows) {
+            if (row.type === 'division') { divOpen = this.isDivOpen(row.division.id); out.push(row); continue }
+            // 未分類不隸屬任何處，一律不受最後一個處的展開狀態影響
+            if (row.type === 'unassigned') { divOpen = true; deptOpen = this.isDeptOpen('unassigned'); out.push(row); continue }
+            if (!divOpen) continue
+            if (row.type === 'department') { deptOpen = this.isDeptOpen(row.department.id); out.push(row); continue }
+            if (deptOpen) out.push(row)
+          }
+          return out
+        }
+        // 搜尋模式：忽略展開/收合狀態，只保留有命中使用者的處/部門標頭＋命中的使用者列
+        const matchedUsers = rows.filter(r => r.type === 'user' && this._matchUser(r.user, q))
+        const keepDeptIds = new Set(matchedUsers.map(r => r.departmentId).filter(v => v !== null))
+        const keepDivIds  = new Set(matchedUsers.map(r => r.divisionId).filter(v => v !== null))
+        const hasUnassignedMatch = matchedUsers.some(r => r.departmentId === null)
+        return rows.filter(row => {
+          if (row.type === 'division')    return keepDivIds.has(row.division.id)
+          if (row.type === 'department')  return keepDeptIds.has(row.department.id)
+          if (row.type === 'unassigned')  return hasUnassignedMatch
+          return this._matchUser(row.user, q)
+        })
+      },
+
+      get departmentOptionsForDivision() {
+        const div = this.orgTree.find(d => d.id === this.form.divisionId)
+        return div ? div.departments : []
+      },
+
+      onFormDivisionChange() {
+        if (!this.departmentOptionsForDivision.some(d => d.id === this.form.departmentId)) {
+          this.form.departmentId = 0
+        }
+      },
+
+      async loadOrgTree() {
+        const r = await fetch('/api/org/tree', { headers: this._headers() })
+        if (r.ok) this.orgTree = await r.json()
+      },
+
+      // 存取模組依大項（group）分組——原本 25 個 chip 攤平一次全顯示，改成
+      // 手風琴分組後只需展開有在意的大項，減少一次要掃過的數量
+      get moduleGroups() {
+        const order = [], map = {}
+        for (const m of this.allModules) {
+          if (!map[m.group]) { map[m.group] = []; order.push(m.group) }
+          map[m.group].push(m)
+        }
+        return order.map(g => ({ group: g, mods: map[g] }))
+      },
+
+      _initGroupOpenState(selectedMods) {
+        const open = {}
+        for (const { group, mods } of this.moduleGroups) {
+          open[group] = mods.some(m => selectedMods.includes(m.key))
+        }
+        return open
+      },
 
       _headers() {
         return {
@@ -675,16 +1001,19 @@
 
       applyRoleDefaults() {
         this.form.modules = [...(ROLE_MODULES[this.form.role] || [])]
+        this._modGroupOpen = this._initGroupOpenState(this.form.modules)
       },
 
       applyPreset(key) {
         this.form.role    = key
         this.form.modules = [...(ROLE_MODULES[key] || [])]
+        this._modGroupOpen = this._initGroupOpenState(this.form.modules)
       },
 
       applyCustomRole(cr) {
         this.form.role    = cr.baseRole
         this.form.modules = [...(cr.modules || [])]
+        this._modGroupOpen = this._initGroupOpenState(this.form.modules)
       },
 
       get activePresetKey() {
@@ -702,6 +1031,22 @@
         const idx = this.form.modules.indexOf(key)
         if (idx >= 0) this.form.modules.splice(idx, 1)
         else           this.form.modules.push(key)
+      },
+
+      toggleModGroup(group) {
+        this._modGroupOpen[group] = !this._modGroupOpen[group]
+      },
+
+      toggleCrModGroup(group) {
+        this._crModGroupOpen[group] = !this._crModGroupOpen[group]
+      },
+
+      modGroupSelectedCount(mods) {
+        return mods.filter(m => this.form.modules.includes(m.key)).length
+      },
+
+      crModGroupSelectedCount(mods) {
+        return mods.filter(m => this.crForm.modules.includes(m.key)).length
       },
 
       // ── Custom role management ──────────────────────────────────────────────
@@ -735,11 +1080,13 @@
 
       openCrCreate() {
         this.crForm = { editId: null, name: '', baseRole: 'sales', modules: [...ROLE_MODULES.sales] }
+        this._crModGroupOpen = this._initGroupOpenState(this.crForm.modules)
         this.showCrModal = true
       },
 
       openCrEdit(cr) {
         this.crForm = { editId: cr.id, name: cr.name, baseRole: cr.baseRole, modules: [...(cr.modules || [])] }
+        this._crModGroupOpen = this._initGroupOpenState(this.crForm.modules)
         this.showCrModal = true
       },
 
@@ -747,6 +1094,7 @@
 
       applyCrBaseRole() {
         this.crForm.modules = [...(ROLE_MODULES[this.crForm.baseRole] || [])]
+        this._crModGroupOpen = this._initGroupOpenState(this.crForm.modules)
       },
 
       toggleCrModule(key) {
@@ -786,8 +1134,12 @@
         this.editingId = null
         this.form = { username:'', displayName:'', email:'', phone:'', role:'sales',
                       password:'', confirmPassword:'', modules: [...ROLE_MODULES.sales],
-                      unlockPassword:'', confirmUnlockPassword:'', dtPassword:'', confirmDtPassword:'' }
+                      notificationMuted: [],
+                      unlockPassword:'', confirmUnlockPassword:'', dtPassword:'', confirmDtPassword:'',
+                      divisionId: 0, departmentId: 0 }
         this.formError = ''
+        this._modGroupOpen = this._initGroupOpenState(this.form.modules)
+        this._notifyGroupOpen = {}
         this.showModal = true
       },
 
@@ -803,12 +1155,20 @@
           password:               '',
           confirmPassword:        '',
           modules:                [...((user.modules && user.modules.length > 0) ? user.modules : (ROLE_MODULES[user.role] || []))],
+          notificationMuted:      [...(user.notificationMuted || [])],
           unlockPassword:         '',
           confirmUnlockPassword:  '',
           dtPassword:             '',
           confirmDtPassword:      '',
+          divisionId:             user.divisionId || 0,
+          departmentId:           user.departmentId || 0,
         }
         this.formError = ''
+        this._modGroupOpen = this._initGroupOpenState(this.form.modules)
+        this._notifyGroupOpen = {}
+        for (const { group, items } of this.notifyGroups) {
+          this._notifyGroupOpen[group] = items.some(it => this.form.notificationMuted.includes(it.key))
+        }
         this.showModal = true
       },
 
@@ -821,29 +1181,31 @@
         if (!this.form.displayName)              { this.formError = '請填寫顯示名稱'; return }
         if (!this.editingId && !this.form.username) { this.formError = '請填寫帳號'; return }
         if (!this.editingId && !this.form.password) { this.formError = '請設定密碼'; return }
-        if (this.form.password && this.form.password.length < 6) { this.formError = '密碼至少 6 碼'; return }
+        if (this.form.password && this.form.password.length < 8) { this.formError = '密碼至少 8 碼'; return }
         if (this.form.password && this.form.password !== this.form.confirmPassword) {
           this.formError = '兩次密碼不一致'; return
         }
         if (this.form.unlockPassword) {
-          if (this.form.unlockPassword.length < 6) { this.formError = '解鎖密碼至少 6 碼'; return }
+          if (this.form.unlockPassword.length < 8) { this.formError = '解鎖密碼至少 8 碼'; return }
           if (this.form.unlockPassword !== this.form.confirmUnlockPassword) {
             this.formError = '解鎖密碼與確認密碼不一致'; return
           }
         }
         if (this.form.dtPassword) {
-          if (this.form.dtPassword.length < 6) { this.formError = '每日工作事項密碼至少 6 碼'; return }
+          if (this.form.dtPassword.length < 8) { this.formError = '每日工作事項密碼至少 8 碼'; return }
           if (this.form.dtPassword !== this.form.confirmDtPassword) {
             this.formError = '每日工作事項密碼與確認密碼不一致'; return
           }
         }
 
         const payload = {
-          display_name: this.form.displayName,
-          email:        this.form.email,
-          phone:        this.form.phone,
-          role:         this.form.role,
-          modules:      this.form.modules,
+          display_name:        this.form.displayName,
+          email:                this.form.email,
+          phone:                this.form.phone,
+          role:                 this.form.role,
+          modules:              this.form.modules,
+          notification_muted:   this.form.notificationMuted,
+          department_id:        this.form.departmentId || 0,
         }
         if (this.form.password) payload.password = this.form.password
 
@@ -941,7 +1303,7 @@
           localStorage.removeItem('motrix_session')
           window.location.href = 'login.html'; return
         }
-        await Promise.all([this.loadUsers(), this.loadCustomRoles(), this.loadRoleLabels()])
+        await Promise.all([this.loadUsers(), this.loadCustomRoles(), this.loadRoleLabels(), this.loadOrgTree()])
       }
     }
   }

@@ -1,4 +1,16 @@
 /* global Alpine */
+// Chart.js 實例故意放在 Alpine reactive data 之外（見 initCharts() 註解說明原因）
+const _reportCharts = {}
+
+// 金額縮寫。x 軸每個月份下面要印金額（2026-09-14 使用者交辦），
+// 標籤空間只有一行字寬，完整數字會互相疊在一起。
+function _shortMoney(v) {
+  if (!v) return ''
+  if (v >= 100000000) return (v / 100000000).toFixed(2) + ' 億'
+  if (v >= 10000)     return (v / 10000).toFixed(1) + ' 萬'
+  return Math.round(v).toLocaleString()
+}
+
 function reportsApp() {
   return {
     // ── Period state ──────────────────────────────────────────────────────────
@@ -6,6 +18,10 @@ function reportsApp() {
     year:       new Date().getFullYear(),
     month:      new Date().getMonth() + 1,
     quarter:    Math.ceil((new Date().getMonth() + 1) / 3),
+
+    // ── Department filter ────────────────────────────────────────────────────
+    departmentId: '',   // '' = 不篩選
+    orgTree:      [],
 
     // ── UI state ──────────────────────────────────────────────────────────────
     loading:    false,
@@ -27,10 +43,70 @@ function reportsApp() {
     arLoading: false,
     arLoaded:  false,
 
+    // ── 資金水位（應收帳齡 + 應付：承攬商已核准未匯款）
+    cashPos:        null,
+    cashPosLoading: false,
+    cashPosLoaded:  false,
+
+    // ── 稅務匯出（銷項發票清單）
+    taxExportYear:  new Date().getFullYear(),
+    taxExportMonth: '',   // '' = 整年
+    taxExporting:   false,
+
+    // ── T100（鼎新）傳票批次匯出（2026-09-01 新增，見 accounting_export.py）
+    t100Start:        new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10),
+    t100End:          new Date().toISOString().slice(0, 10),
+    t100Exporting:    false,
+    t100ConfigOpen:   false,
+    t100Config:       null,
+    t100ConfigLoaded: false,
+    t100ConfigSaving: false,
+    t100Preview:      null,   // {count, totalAmount, events:[...]}，未確認事件預覽
+    t100Previewing:   false,
+    t100Confirming:   false,
+    // 已確認清單＋反確認（2026-09-10 稽核補上）：後端 /t100-export/confirmed 與
+    // /unconfirm 早就存在，unconfirm 的 docstring 自己寫著是「標記錯誤時的救援
+    // 手段」，但畫面上一直沒有入口——使用者按下「確認已匯入」是批次操作，按錯
+    // 之後只能改資料庫。這幾個狀態就是把那道門補上。
+    t100Confirmed:        [],
+    t100ConfirmedLoading: false,
+    t100ConfirmedOpen:    false,
+    t100Unconfirming:     '',   // 正在反確認的 sourceType:sourceKey
+
+    // 銀行對帳單比對（連同標記已匯款 Modal）2026-08-31 搬到出納模組
+    // frontend/js/cashier.js（財務/出納權限分工，見那邊同一輪改動），
+    // 這裡不再重複維護一份。
+
     // ── Monthly trend
     trendData:    null,
     trendLoading: false,
     trendLoaded:  false,
+
+    // ── 收支報表（原「月支出」，2026-08-30 重構為《當月收支》/《今年度收支》）──
+    expensesScope:     'month', // month/quarter/year — 畫面上目前顯示哪個範圍
+    expensesYear:      new Date().getFullYear(),
+    expensesMonth:     new Date().toISOString().slice(0, 7),  // 'YYYY-MM'，當月範圍用
+    expensesQuarter:   Math.ceil((new Date().getMonth() + 1) / 3),  // 1-4，季範圍用
+    expensesData:      null,
+    expensesLoading:   false,
+    expensesLoadedFor: null,   // 記錄已載入資料對應的範圍+年+月+季，切換時判斷要不要重打 API
+    expensesInflight:  null,   // 飛行中請求對應的同款鍵（避免同一期別被重複請求）
+    expensesFilter:    'all',  // all/contractor/equipment/material/other，支出明細的類別篩選 chip
+
+    // ── 應收報表（recv/out 分頁）。2026-09-09 一度改成完全獨立於 period-bar，
+    //    2026-09-10 改回「預設跟隨 period-bar、分頁上的選擇器可臨時覆寫」──
+    receivablesScope:     'month', // month/quarter/year
+    receivablesYear:      new Date().getFullYear(),
+    receivablesMonth:     new Date().toISOString().slice(0, 7),  // 'YYYY-MM'
+    receivablesQuarter:   Math.ceil((new Date().getMonth() + 1) / 3),  // 1-4
+    receivablesData:      null,
+    receivablesLoading:   false,
+    receivablesLoadedFor: null,
+    receivablesInflight:  null,
+
+    // ── 案件清單依月份區分（2026-08-26）─────────────────────────────────────
+    caseListYear:         new Date().getFullYear(),
+    caseListGroupByMonth: true,
 
     // ── Settlement modal ──────────────────────────────────────────────────────
     settlementModal:   false,
@@ -46,6 +122,61 @@ function reportsApp() {
       salesperson: []
     },
 
+    // ── 出納（2026-08-31 併入營運報表，原獨立的 cashier.html/cashier.js 頁面
+    // 退役成頁內「出納」頁籤，內容/邏輯完全比照原本，只有跟本檔案既有狀態
+    // 衝突的名稱做了改名，見下方各區塊註解）────────────────────────────────────
+    cashierSub:    'payable',   // payable/receivable/history/bank，出納頁籤內部子頁籤
+    cashierLoaded: false,       // 出納頁籤第一次打開時 payable+receivable+history 一次性彙整載入 guard
+
+    payable:    [],
+    receivable: [],   // status=all，含已收+未收全部歷史（併入 receivables.html 用途）
+
+    receivableSearch:    '',
+    receivableFilterTab: 'unreceived',   // all / unreceived / received / uninvoiced
+
+    payVoucherModal:   false,
+    payVoucherTarget:  null,
+    payVoucherDate:    '',
+    payVoucherNote:    '',
+    payVoucherBankAcctCode: '',
+    payVoucherSaving:  false,
+
+    receiveModal:         false,
+    receiveTarget:        null,
+    receiveDate:          '',
+    receiveActualAmount:  null,
+    receiveFeeAmount:     0,
+    receiveNote:          '',
+    receiveBankAcctCode:  '',
+    receiveSaving:        false,
+    // T100 傳票匯出設定裡的銀行帳戶清單（2026-09-01 新增），標記已收款/已匯款
+    // 時挑選要用哪個帳戶；每次開啟標記 Modal 都重抓最新清單，見
+    // loadT100BankAccounts()
+    t100BankAccounts:     [],
+    t100DefaultBankAcctCode: '',   // 2026-09-02 新增：系統預設銀行帳戶，見 _resolveDefaultBankAccount()
+
+    invoiceModal: { show: false, item: null, no: '' },
+
+    // 原 cashier.js 的 historyStart/historyEnd/... 改加 cashier 前綴，避免在
+    // 這支已經很大的共用檔案裡跟「執行歷史」以外的概念混淆
+    cashierHistoryStart:        '',
+    cashierHistoryEnd:          '',
+    cashierHistoryLoading:      false,
+    cashierHistoryOutgoing:     [],
+    cashierHistoryIncoming:     [],
+    cashierHistoryOutgoingTotal: 0,
+    cashierHistoryIncomingTotal: 0,
+    // 原 cashier.js 叫 exporting，這裡本來就有同名的「exporting」給財務報表
+    // 匯出用（見 exportFile()），改名避免互踩
+    cashierExporting: false,
+
+    bankReconciling: false,
+    bankResult:      null,
+    bankPayModal:    false,
+    bankPayRow:      null,
+    bankPayDate:     '',
+    bankPaySaving:   false,
+
     // ── Helpers ───────────────────────────────────────────────────────────────
     get periodParam() {
       if (this.periodType === 'year')    return String(this.year)
@@ -57,9 +188,141 @@ function reportsApp() {
       return this.data.periodLabel || this.periodParam
     },
     get summary()      { return (this.data || {}).summary     || {} },
-    get periodItems()  { return (this.data || {}).periodItems || [] },
-    get outstanding()  { return (this.data || {}).outstanding || [] },
+    get deptPerf()      { return (this.data || {}).deptPerf    || [] },
+    get allDepartments() {
+      var out = []
+      for (var i = 0; i < this.orgTree.length; i++) {
+        var div = this.orgTree[i]
+        for (var j = 0; j < div.departments.length; j++) {
+          var dept = div.departments[j]
+          out.push({ id: dept.id, name: dept.name, divisionName: div.name })
+        }
+      }
+      return out
+    },
     get casesAll()     { return (this.data || {}).casesAll    || [] },
+
+    // ── 案件清單依月份區分 ────────────────────────────────────────────────────
+    get caseListYears() {
+      var years = {}
+      this.casesAll.forEach(function(c) { if (c.quoteDate) years[c.quoteDate.slice(0, 4)] = true })
+      years[String(new Date().getFullYear())] = true
+      return Object.keys(years).sort().reverse()
+    },
+    get casesByMonth() {
+      var year = String(this.caseListYear)
+      var buckets = []
+      for (var m = 1; m <= 12; m++) {
+        buckets.push({ month: m, label: m + '月', cases: [], total: 0, received: 0 })
+      }
+      this.casesAll.forEach(function(c) {
+        if (!c.quoteDate || c.quoteDate.slice(0, 4) !== year) return
+        var m = parseInt(c.quoteDate.slice(5, 7), 10)
+        if (!buckets[m - 1]) return
+        buckets[m - 1].cases.push(c)
+        buckets[m - 1].total    += c.total || 0
+        buckets[m - 1].received += c.receivedAmount || 0
+      })
+      return buckets
+    },
+    get caseListYearTotal() {
+      return this.casesByMonth.reduce(function(s, b) { return s + b.cases.length }, 0)
+    },
+
+    // ── 收支報表 ──────────────────────────────────────────────────────────────
+    get expensesMonthly() { return ((this.expensesData || {}).expenses || {}).monthly || [] },
+    get expensesTotals()  { return ((this.expensesData || {}).expenses || {}).totals  || {} },
+    // 今年度支出明細（逐筆，全部類別），供 filteredExpenseItems 在 expensesScope==='year' 時使用
+    get yearExpenseItemsAll() {
+      var d = ((this.expensesData || {}).expenses || {}).details || {}
+      var cats = ['contractor', 'equipment', 'material', 'other']
+      var out = []
+      cats.forEach(function(cat) {
+        (d[cat] || []).forEach(function(x) { out.push(Object.assign({ cat: cat }, x)) })
+      })
+      out.sort(function(a, b) { return (b.date || '').localeCompare(a.date || '') })
+      return out
+    },
+    get monthExpenseItems() { return (this.expensesData || {}).monthExpenseItems || [] },
+    get monthExpenseTotal() { return (this.expensesData || {}).monthExpenseTotal || 0 },
+    get monthIncomeItems()  { return (this.expensesData || {}).monthIncomeItems  || [] },
+    get monthIncomeTotal()  { return (this.expensesData || {}).monthIncomeTotal  || 0 },
+    // 收款資料異常（2026-09-11）：刻意**不跟著 expensesScope 切換**——這些款項
+    // 就是因為「已收款」與「收款日期」只填了一個而不屬於任何月份，再用期別去篩
+    // 就又看不見了，那正是這一區要解決的問題本身
+    get paymentAnomalies()    { return (this.expensesData || {}).paymentAnomalyItems || [] },
+    get paymentAnomalyTotal() { return (this.expensesData || {}).paymentAnomalyTotal || 0 },
+    get yearIncomeItems()   { return (this.expensesData || {}).yearIncomeItems   || [] },
+    get yearIncomeTotal()   { return (this.expensesData || {}).yearIncomeTotal   || 0 },
+    get quarterExpenseItems() { return (this.expensesData || {}).quarterExpenseItems || [] },
+    get quarterExpenseTotal() { return (this.expensesData || {}).quarterExpenseTotal || 0 },
+    get quarterIncomeItems()  { return (this.expensesData || {}).quarterIncomeItems  || [] },
+    get quarterIncomeTotal()  { return (this.expensesData || {}).quarterIncomeTotal  || 0 },
+    // 目前選取範圍（當月/本季/今年度）對應的收入/支出明細＋淨額，畫面統一透過這幾個
+    // getter 讀取。三個範圍一律用 _scopePick() 選欄位，避免像先前只有兩種範圍時到處
+    // 寫 ternary、加第三種就得逐處補（漏一處就是靜默顯示錯範圍的數字）。
+    _scopePick(scope, m, q, y) {
+      if (scope === 'quarter') return q
+      if (scope === 'year')    return y
+      return m
+    },
+    get scopeLabel() {
+      return this._scopePick(this.expensesScope, '當月', '本季', '今年度')
+    },
+    get activeIncomeItems() {
+      return this._scopePick(this.expensesScope, this.monthIncomeItems, this.quarterIncomeItems, this.yearIncomeItems)
+    },
+    get activeIncomeTotal() {
+      return this._scopePick(this.expensesScope, this.monthIncomeTotal, this.quarterIncomeTotal, this.yearIncomeTotal)
+    },
+    get activeExpenseTotal() {
+      return this._scopePick(this.expensesScope, this.monthExpenseTotal, this.quarterExpenseTotal, this.expensesTotals.total) || 0
+    },
+    get filteredExpenseItems() {
+      var items = this._scopePick(this.expensesScope, this.monthExpenseItems, this.quarterExpenseItems, this.yearExpenseItemsAll)
+      if (this.expensesFilter === 'all') return items
+      return items.filter(function(x) { return x.cat === this.expensesFilter }, this)
+    },
+    get netScopeAmount() {
+      return this.activeIncomeTotal - this.activeExpenseTotal
+    },
+
+    // ── 應收報表（recv/out 分頁，2026-09-09）───────────────────────────────────
+    // 缺日期而不屬於任何月份的款項（2026-09-12）。已收款／未收款改用收款日期口徑
+    // 之後，沒填日期的那些會從每一個月份都撈不到——固定顯示在分頁下方，不隨期別
+    // 篩選，也刻意不併進上面的合計（併進去的話同一筆會在每個月被重複計算）
+    get undatedCollectedItems()   { return (this.receivablesData || {}).undatedCollectedItems || [] },
+    get undatedCollectedTotal()   { return (this.receivablesData || {}).undatedCollectedTotal || 0 },
+    get undatedOutstandingItems() { return (this.receivablesData || {}).undatedOutstandingItems || [] },
+    get undatedOutstandingTotal() { return (this.receivablesData || {}).undatedOutstandingTotal || 0 },
+
+    get monthReceivableItems()  { return (this.receivablesData || {}).monthReceivableItems || [] },
+    get monthCollectedItems()   { return (this.receivablesData || {}).monthCollectedItems || [] },
+    get monthOutstandingItems() { return (this.receivablesData || {}).monthOutstandingItems || [] },
+    get yearReceivableItems()   { return (this.receivablesData || {}).yearReceivableItems || [] },
+    get yearCollectedItems()    { return (this.receivablesData || {}).yearCollectedItems || [] },
+    get yearOutstandingItems()  { return (this.receivablesData || {}).yearOutstandingItems || [] },
+    get quarterCollectedItems()   { return (this.receivablesData || {}).quarterCollectedItems || [] },
+    get quarterOutstandingItems() { return (this.receivablesData || {}).quarterOutstandingItems || [] },
+    get receivablesScopeLabel() {
+      return this._scopePick(this.receivablesScope, '當月', '本季', '今年度')
+    },
+    get activeCollectedItems() {
+      return this._scopePick(this.receivablesScope, this.monthCollectedItems, this.quarterCollectedItems, this.yearCollectedItems)
+    },
+    get activeOutstandingItems() {
+      return this._scopePick(this.receivablesScope, this.monthOutstandingItems, this.quarterOutstandingItems, this.yearOutstandingItems)
+    },
+    // 「本期收支」KPI 區塊的未收款卡片：跟著同一個範圍走，不再固定讀 month*
+    get activeOutstandingTotal() {
+      var d = this.receivablesData || {}
+      return this._scopePick(this.receivablesScope,
+        d.monthOutstandingTotal, d.quarterOutstandingTotal, d.yearOutstandingTotal) || 0
+    },
+
+    expensesCatLabel(cat) {
+      return { contractor: '承攬商派發', equipment: '設備進貨', material: '料件進貨', other: '其他支出' }[cat] || cat
+    },
     get casesPeriod()  { return (this.data || {}).casesPeriod || [] },
     get salesPerf()    { return (this.data || {}).salesPerf   || [] },
     get marginCases()  { return (this.data || {}).marginCases || [] },
@@ -67,6 +330,7 @@ function reportsApp() {
     get targets()       { return (this.data || {}).targets       || {} },
     get achievement()   { return (this.data || {}).achievement   || {} },
     get settleOverdue() { return (this.data || {}).settleOverdue || [] },
+    get casesWithoutPaymentItems() { return (this.data || {}).casesWithoutPaymentItems || [] },
 
     get filteredCusts() {
       var q = this.custSearch.trim().toLowerCase()
@@ -151,38 +415,130 @@ function reportsApp() {
       var s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
       return s.role || ''
     },
+    _modules() {
+      var s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
+      return s.modules || []
+    },
+    _displayName() {
+      var s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
+      return s.displayName || s.username || ''
+    },
+    isAdminPlus() {
+      var r = this._role()
+      return r === 'admin' || r === 'superadmin'
+    },
+    // 2026-08-31：出納併入本頁後的准入判斷——cashier/finance 模組使用者（非
+    // 管理職）只能看到「出納」頁籤，其餘 11 個財務報表頁籤仍只有 admin+ 看得到
+    // （見 init()/showCashierTab()），這兩個 getter 就是那道區隔線。
+    hasCashierAccess() {
+      return this.isAdminPlus() || this._modules().includes('cashier') || this._modules().includes('finance')
+    },
+    canExecuteCashier() {
+      return this.isAdminPlus() || this._modules().includes('cashier')
+    },
+    // 本地日期字串（YYYY-MM-DD），不用 toISOString()（UTC，台灣 UTC+8 每天
+    // 00:00-08:00 之間會誤判成前一天，比照 case-management.js/cashier.js 同款修法）。
+    _localDateStr(d) {
+      d = d || new Date()
+      const tz = d.getTimezoneOffset() * 60000
+      return new Date(d.getTime() - tz).toISOString().slice(0, 10)
+    },
+
+    // ── 期別同步 ──────────────────────────────────────────────────────────────
+    // 頂部 period-bar（月/季/年）是全頁唯一的期別主控。「本期收支」KPI 區塊與
+    // 「已收款／未收款／月支出」三個分頁各自有獨立資料流（/expenses-monthly、
+    // /receivables-monthly），2026-09-09 那批改動只在 init() 同步過一次期別，
+    // prevPeriod()/nextPeriod()/switchType() 以及 period-bar 的年/月/季下拉都
+    // 沒跟上，導致上方期別怎麼切、下方金額都釘在真實當月不動（2026-09-10 回報）。
+    // 同步點刻意放在 loadData() 開頭這一個地方——所有切期別的路徑最後都會走到
+    // 這裡，往後新增觸發點也不必再記得補一次。使用者仍可用分頁上的選擇器臨時
+    // 覆寫範圍，覆寫效力維持到下次動 period-bar 或部門篩選為止。
+    _syncSubPeriods() {
+      var scope = this.periodType === 'year' ? 'year'
+                : this.periodType === 'quarter' ? 'quarter' : 'month'
+      var mo = this.year + '-' + String(this.month).padStart(2, '0')
+      this.expensesScope    = scope
+      this.expensesYear     = this.year
+      this.expensesMonth    = mo
+      this.expensesQuarter  = this.quarter
+      this.receivablesScope   = scope
+      this.receivablesYear    = this.year
+      this.receivablesMonth   = mo
+      this.receivablesQuarter = this.quarter
+    },
+    // 快取鍵：三個呼叫點（loadExpenses/showExpensesTab/_ensureSubPeriodData）過去
+    // 各自手拼一次字串，欄位一多就會漂移——收斂成單一來源。
+    _expensesKey() {
+      return [this.expensesScope, this.expensesYear, this.expensesMonth,
+              this.expensesQuarter, this.departmentId || ''].join(':')
+    },
+    _receivablesKey() {
+      return [this.receivablesScope, this.receivablesYear, this.receivablesMonth,
+              this.receivablesQuarter, this.departmentId || ''].join(':')
+    },
+    // 兩支子資料流的載入守門。除了「已載入的期別」之外還要看「飛行中的期別」，
+    // 否則同一個期別會被連打兩次（loadData 一次、切分頁再一次）。真正關鍵的是
+    // 搭配 loadExpenses()/loadReceivables() 裡的過期回應丟棄機制，見那邊註解。
+    _ensureSubPeriodData() {
+      var ek = this._expensesKey()
+      if (this.expensesLoadedFor !== ek && this.expensesInflight !== ek) this.loadExpenses()
+      var rk = this._receivablesKey()
+      if (this.receivablesLoadedFor !== rk && this.receivablesInflight !== rk) this.loadReceivables()
+    },
 
     // ── Load preview data ─────────────────────────────────────────────────────
     async loadData() {
-      var role = this._role()
-      if (role !== 'admin' && role !== 'superadmin') {
-        this.error = '僅管理員以上可存取營運報表功能'
+      if (!this.isAdminPlus()) {
+        if (!this.hasCashierAccess()) this.error = '僅管理員以上可存取營運報表功能'
         return
       }
+      this._syncSubPeriods()
+      // 期別/部門連續切換時同樣會有兩個請求在飛，晚發早到的舊回應不能蓋掉新的
+      // （理由與處理方式同 loadExpenses()）。
+      var reqKey = this.periodParam + ':' + (this.departmentId || '')
       this.loading = true
       this.error   = ''
       this.data    = null
       try {
-        var res = await fetch('/api/reports/financial?period=' + this.periodParam, {
+        var qs = 'period=' + this.periodParam + (this.departmentId ? '&department_id=' + this.departmentId : '')
+        var res = await fetch('/api/reports/financial?' + qs, {
           headers: { Authorization: 'Bearer ' + this._token() }
         })
         if (!res.ok) {
           var j = await res.json().catch(function () { return {} })
           throw new Error(j.detail || '載入失敗')
         }
-        this.data = await res.json()
+        var payload = await res.json()
+        if (reqKey !== this.periodParam + ':' + (this.departmentId || '')) return
+        this.data = payload
+        // 「本期收支」KPI 區塊在任何分頁都看得到（不只 expenses 分頁），所以這兩份
+        // 子資料流一律確保跟上目前期別，不再只在 expenses 分頁時才載入。
+        this._ensureSubPeriodData()
       } catch (e) {
-        this.error = e.message || '載入錯誤'
+        if (reqKey === this.periodParam + ':' + (this.departmentId || '')) this.error = e.message || '載入錯誤'
       } finally {
-        this.loading = false
+        if (reqKey === this.periodParam + ':' + (this.departmentId || '')) this.loading = false
       }
+    },
+
+    async loadOrgTree() {
+      try {
+        var res = await fetch('/api/org/tree', { headers: { Authorization: 'Bearer ' + this._token() } })
+        if (res.ok) this.orgTree = await res.json()
+      } catch (_) {}
     },
 
     // ── Export ────────────────────────────────────────────────────────────────
     async exportFile(fmt) {
       this.exporting  = true
       this.exportType = fmt
-      var url = '/api/reports/financial/' + fmt + '?period=' + this.periodParam
+      // 期別切在「季報」時多帶 quarter，匯出檔才會有「本季收支」那一頁／工作表
+      // （不帶時輸出與先前完全一致）。expense_month 已由 _syncSubPeriods() 跟著
+      // period-bar 同步，所以月報的匯出本來就會對到畫面上的月份。
+      var url = '/api/reports/financial/' + fmt + '?period=' + this.periodParam +
+                '&expense_month=' + this.expensesMonth +
+                (this.expensesScope === 'quarter' ? '&quarter=' + this.expensesQuarter : '') +
+                (this.departmentId ? '&department_id=' + this.departmentId : '')
       try {
         var res = await fetch(url, {
           headers: { Authorization: 'Bearer ' + this._token() }
@@ -285,13 +641,93 @@ function reportsApp() {
       }
     },
 
-    activeTab: 'targets',
-    _charts:   {},
+    // 2026-09-14：預設從 'targets' 改成 'charts'。年度目標那一頁在沒設定
+    // 目標時是空狀態，一進營運報表看到的是「尚未設定年度目標」。
+    // 改成先看到圖表，其餘 12 個頁籤維持不動當細分用。
+    activeTab: 'charts',
+
+    // ── 圖表數值明細（2026-09-14 使用者交辦：「圖表也要顯示金額跟內容，
+    //    目前只有圖表，沒有詳細資訊」）───────────────────────────────
+    // 數字**不另外算一份**：每張圖的 _buildXChart() 在畫圖的同時把自己用的
+    // 那組數字寫進這裡。另外寫一份彙總遲早會跟圖對不起來，而「表跟圖數字
+    // 不一樣」是報表最傷信任的一種錯。
+    // 形狀統一成 { cols, colors, rows:[{label, values[]}] }，五張圖共用同一段
+    // 表格 markup。values 在這裡就格式化成字串——格式邏輯跟資料放一起。
+    showChartData: true,
+
+    // ── 本期財務快照（2026-09-14 使用者交辦：「營運報表圖表優先顯示當月的
+    //    收入支出跟應收應付」）──────────────────────────────────────────
+    // 收入/支出/未收 這三個主報表載入時就有了；**應付是例外**——payable 原本
+    // 只在切到「出納」分頁時才抓（cashierLoaded guard）。不自己載的話這一格會
+    // 顯示 NT$ 0，那比留白更糟：看起來像「這期沒有任何應付」。所以圖表分頁
+    // 自己抓一次，而且用獨立的 flag，不去動出納分頁那條完整載入的路徑。
+    // 沒有出納權限的人（/api/cashier/payable-queue 會回 403）顯示「無權限」，
+    // 同樣不能假裝是 0。
+    payableSnapLoaded: false,
+    payableSnapDenied: false,
+
+    async _loadPayableSnapshot() {
+      if (this.payableSnapLoaded || this.cashierLoaded) return
+      if (!this.hasCashierAccess()) { this.payableSnapDenied = true; return }
+      // 應收與應付**必須取自同一個來源**（出納佇列）。這一頁在「資金水位」
+      // 已經定義過「淨部位（應收 − 應付）」就是這兩個數字相減，快照沿用同一個
+      // 定義才不會出現兩個都叫「應收」卻不一樣的數字。
+      // （踩過：一開始應收接的是 activeOutstandingTotal——那是應收報表的期別
+      //  範圍數字，跟出納的應收帳款是兩回事，畫面上會變成快照說 0、上方 KPI 卡
+      //  說一百多萬。）
+      try {
+        const [rp, rr] = await Promise.all([
+          fetch('/api/cashier/payable-queue',    { headers: { Authorization: 'Bearer ' + this._token() } }),
+          fetch('/api/cashier/receivable-queue', { headers: { Authorization: 'Bearer ' + this._token() } }),
+        ])
+        if (rp.ok) this.payable = await rp.json()
+        else if (rp.status === 403) this.payableSnapDenied = true
+        if (rr.ok) this.receivable = await rr.json()
+        else if (rr.status === 403) this.payableSnapDenied = true
+      } catch (e) { console.error('payable snapshot:', e) }
+      this.payableSnapLoaded = true
+    },
+
+    get netPosition() { return this.kpiReceivableTotal - this.kpiPayableTotal },
+    get payableKnown() { return !this.payableSnapDenied && (this.payableSnapLoaded || this.cashierLoaded) },
+
+    // 長條各自對「自己這一組」的最大值縮放。收支（流量）與應收應付（存量）
+    // 是兩種不同量綱，共用同一個比例尺會讓其中一組永遠貼著邊——同一張圖上
+    // 兩個尺度正是這一頁趨勢圖已經犯過的錯，不要再犯第二次。
+    // 最小寬度 2% 是讓很小但非零的值看得見；**0 必須回 0**，
+    // 畫一小截長條會被讀成「有一點點」，那是假資訊。
+    _barPct(v, max) {
+      if (!v) return 0
+      return max > 0 ? Math.max(2, Math.round(Math.abs(v) / max * 100)) : 0
+    },
+    get flowMax()  { return Math.max(Math.abs(this.activeIncomeTotal || 0), Math.abs(this.activeExpenseTotal || 0)) },
+    get stockMax() { return Math.max(Math.abs(this.kpiReceivableTotal || 0), Math.abs(this.kpiPayableTotal || 0)) },
+    chartTables: {
+      trend:  { cols: [], colors: [], rows: [] },
+      status: { cols: [], colors: [], rows: [] },
+      sales:  { cols: [], colors: [], rows: [] },
+      target: { cols: [], colors: [], rows: [] },
+      margin: { cols: [], colors: [], rows: [] },
+    },
+    _fmtMoney(v) { return (v == null) ? '—' : 'NT$ ' + Math.round(v).toLocaleString() },
+    _fmtPct(v)   { return (v == null) ? '—' : (Math.round(v * 10) / 10) + '%' },
+    _fmtInt(v)   { return (v == null) ? '—' : Math.round(v).toLocaleString() },
 
     // ── Charts (圖表分析) ──────────────────────────────────────────────────────
+    // Chart.js 實例故意用模組層級的 _reportCharts（見檔案最上方），不放進這個
+    // Alpine 元件的 reactive data：Alpine 會把 x-data 物件底下每個屬性遞迴包成
+    // reactive Proxy，Chart.js 實例內部有大量 getter／循環參照／animation
+    // registry，被 Proxy 包住後會讓內部渲染迴圈行為異常——實測現象是「近12月
+    // 成案趨勢」這張混合長條+雙Y軸圖表，物件內部資料（datasets/scales）完全
+    // 正確，但畫布實際畫出來的內容卻是舊的／不完整的，且對 proxy 包住的 chart
+    // 實例呼叫方法會直接噴 RangeError: Maximum call stack size exceeded（Alpine
+    // 的 reactive getter 對 Chart.js 內部循環結構遞迴到爆堆疊）。同樣邏輯下,
+    // status/sales/target/margin 這幾張比較單純的圖恰好沒踩到會爆的內部程式
+    // 路徑，只有這張最複雜的圖表現出來。frontend/index.html 的 Chart.js 用法
+    // 從頭到尾都不把 chart 實例存進 Alpine data，是同一個坑的正確示範。
     initCharts() {
-      Object.values(this._charts).forEach(function(c) { try { c.destroy() } catch(_) {} })
-      this._charts = {}
+      Object.values(_reportCharts).forEach(function(c) { try { c.destroy() } catch(_) {} })
+      Object.keys(_reportCharts).forEach(function(k) { delete _reportCharts[k] })
       if (!this.data) return
       // Clear any lingering canvas state after destroy
       ;['rpt-chart-trend','rpt-chart-status','rpt-chart-sales','rpt-chart-target','rpt-chart-margin'].forEach(function(id) {
@@ -301,6 +737,16 @@ function reportsApp() {
       Chart.defaults.font.family = "'LINE Seed TW_OTF', sans-serif"
       Chart.defaults.font.size   = 11
       Chart.defaults.color       = '#6B7280'
+      // 關掉全域動畫：trend 這張圖在同一次分頁切換裡會被建立兩次（一次用
+      // casesAll 退回值先畫，_loadTrendData() 抓到真實 receivedAt 資料後再重建
+      // 一次），Chart.js 預設用 requestAnimationFrame 驅動的漸進動畫繪製，第一
+      // 次建立的動畫還沒畫完，第二次 destroy() 就把它砍了，砍掉後那個還沒觸發
+      // 的 rAF callback照樣會在下一影格嘗試繼續畫，此時 ctx 已經被清空，直接
+      // 噴 Uncaught TypeError: Cannot read properties of null (reading 'save')
+      // ——每次切到這個頁籤幾乎都會炸一次，只是不影響其他已經同步畫完的圖，
+      // 不容易被發現。關掉動畫後 Chart.js 在建構/update 當下就同步畫完，不再
+      // 有任何跨越多個影格的未完成繪製，從根本上排除這整類 race。
+      Chart.defaults.animation = false
       try { this._buildTrendChart()  } catch(e) { console.error('trend chart:', e) }
       try { this._buildStatusChart() } catch(e) { console.error('status chart:', e) }
       if (this.salesPerf.length > 0)
@@ -309,6 +755,15 @@ function reportsApp() {
         try { this._buildTargetChart() } catch(e) { console.error('target chart:', e) }
       if (this.marginCases.length > 0)
         try { this._buildMarginChart() } catch(e) { console.error('margin chart:', e) }
+      // 五張圖是在同一輪同步迴圈裡陸續建立的，每建一張、卡片版面就可能因為
+      // 相鄰卡片高度變化再收斂一次，讓 Chart.js 建構當下量到的 canvas 尺寸
+      // 過期（實測會出現座標軸畫對了、長條/線段卻沒畫上去的空白圖）。全部
+      // 建完後再等下一個影格統一補一次 resize，用瀏覽器這時已經穩定的版面
+      // 重新量一次，修正這種殘留的過期尺寸。
+      var self = this
+      requestAnimationFrame(function() {
+        Object.values(_reportCharts).forEach(function(c) { try { c.resize() } catch(_) {} })
+      })
     },
 
     _buildTrendChart() {
@@ -393,10 +848,21 @@ function reportsApp() {
         })
       }
 
-      if (this._charts.trend) {
-        try { this._charts.trend.destroy() } catch(_) {}
+      var self0 = this
+      this.chartTables.trend = {
+        cols:   hasTrend ? ['成案件數', '合約金額', '實收金額'] : ['成案件數', '合約金額'],
+        colors: hasTrend ? ['#2563EB', '#15803D', '#D97706'] : ['#2563EB', '#15803D'],
+        rows:   months.map(function(m) {
+          var vals = [self0._fmtInt(counts[m.key]), self0._fmtMoney(revenues[m.key])]
+          if (hasTrend) vals.push(self0._fmtMoney(collected[m.key]))
+          return { label: m.label, values: vals }
+        }),
       }
-      this._charts.trend = new Chart(el, {
+
+      if (_reportCharts.trend) {
+        try { _reportCharts.trend.destroy() } catch(_) {}
+      }
+      _reportCharts.trend = new Chart(el, {
         type: 'bar',
         data: {
           labels:   months.map(function(m) { return m.label }),
@@ -417,6 +883,21 @@ function reportsApp() {
             }
           },
           scales: {
+            x: {
+              ticks: {
+                font: { size: 10 },
+                autoSkip: false,
+                callback: function(_v, idx) {
+                  var m = months[idx]
+                  if (!m) return ''
+                  var amt = revenues[m.key] || 0
+                  // 第二行是這個月的合約金額。0 元不印「NT$ 0」——一整排 0
+                  // 只是噪音，空白本身就讀得出「這個月沒有」。
+                  return amt ? [m.label, _shortMoney(amt)] : [m.label, '']
+                }
+              },
+              grid: { display: false }
+            },
             yL: {
               type: 'linear', position: 'left', beginAtZero: true,
               ticks: { stepSize: 1, font: { size: 10 } },
@@ -446,7 +927,19 @@ function reportsApp() {
       if (!el) return
       var s = this.summary
       var total = s.totalCases || 0
-      this._charts.status = new Chart(el, {
+      var self1 = this
+      this.chartTables.status = {
+        cols:   ['件數', '佔比'],
+        colors: ['#F59E0B', '#6B7280'],
+        rows:   [
+          { label: '進行中', values: [self1._fmtInt(s.activeCases || 0),
+                                      self1._fmtPct(total ? (s.activeCases || 0) / total * 100 : 0)] },
+          { label: '已結案', values: [self1._fmtInt(s.closedCases || 0),
+                                      self1._fmtPct(total ? (s.closedCases || 0) / total * 100 : 0)] },
+          { label: '合計',   values: [self1._fmtInt(total), '100%'] },
+        ],
+      }
+      _reportCharts.status = new Chart(el, {
         type: 'doughnut',
         data: {
           labels: ['進行中', '已結案'],
@@ -462,7 +955,28 @@ function reportsApp() {
           responsive: true, maintainAspectRatio: false,
           cutout: '65%',
           plugins: {
-            legend: { position: 'bottom', labels: { font: { size: 11 }, padding: 14, usePointStyle: true } },
+            // 圖例直接帶件數與佔比：原本這兩個數字只活在 tooltip 裡，
+            // 圖上就只有兩塊顏色配兩個純文字標籤，等於得滑過去才知道多少件。
+            legend: {
+              position: 'bottom',
+              labels: {
+                font: { size: 11 }, padding: 14, usePointStyle: true,
+                generateLabels: function(chart) {
+                  var ds = chart.data.datasets[0]
+                  return chart.data.labels.map(function(lb, i) {
+                    var v = ds.data[i] || 0
+                    var pct = total > 0 ? Math.round(v / total * 100) : 0
+                    return {
+                      text: lb + '　' + v + ' 件（' + pct + '%）',
+                      fillStyle: ds.backgroundColor[i],
+                      strokeStyle: ds.backgroundColor[i],
+                      pointStyle: 'circle',
+                      index: i
+                    }
+                  })
+                }
+              }
+            },
             tooltip: {
               callbacks: {
                 label: function(ctx) {
@@ -480,7 +994,21 @@ function reportsApp() {
       var el = document.getElementById('rpt-chart-sales')
       if (!el) return
       var sp = this.salesPerf.slice(0, 8)
-      this._charts.sales = new Chart(el, {
+      var self2 = this
+      this.chartTables.sales = {
+        cols:   ['件數', '合約總額', '已收款', '收款率', '平均毛利率'],
+        colors: ['', '#2563EB', '#15803D', '', ''],
+        rows:   sp.map(function(x) {
+          return { label: x.salesPerson, values: [
+            self2._fmtInt(x.caseCount),
+            self2._fmtMoney(x.totalAmount),
+            self2._fmtMoney(x.receivedAmount),
+            self2._fmtPct(x.collectionRate),
+            self2._fmtPct(x.avgMarginPct),
+          ] }
+        }),
+      }
+      _reportCharts.sales = new Chart(el, {
         type: 'bar',
         data: {
           labels: sp.map(function(s) { return s.salesPerson }),
@@ -542,7 +1070,26 @@ function reportsApp() {
         if (!r) return '#E5E7EB'
         return r >= 95 ? '#15803D' : r >= 80 ? '#D97706' : '#DC2626'
       })
-      this._charts.target = new Chart(el, {
+      var self3 = this
+      // 達成率圖上只有一條百分比，目標與實際到底是多少完全看不到——
+      // 這一格正是使用者說「沒有詳細資訊」最明顯的地方。
+      var PCT_KEYS = { collectionRate: 1, avgMarginPct: 1 }
+      this.chartTables.target = {
+        cols:   ['實績', '目標', '達成率'],
+        colors: ['', '', ''],
+        rows:   KEYS.map(function(k, i) {
+          var d = ann[k] || {}
+          var fmt = (k === 'newCases') ? self3._fmtInt
+                  : PCT_KEYS[k]        ? self3._fmtPct
+                  : self3._fmtMoney
+          return { label: LBLS[i], values: [
+            fmt.call(self3, d.actual),
+            fmt.call(self3, d.target),
+            self3._fmtPct(d.rate),
+          ] }
+        }),
+      }
+      _reportCharts.target = new Chart(el, {
         type: 'bar',
         data: {
           labels: LBLS,
@@ -609,7 +1156,21 @@ function reportsApp() {
       var actual = labels.map(function(sp) {
         var v = spMap[sp].act; return v.length ? v.reduce(function(a, b) { return a + b }, 0) / v.length : null
       })
-      this._charts.margin = new Chart(el, {
+      var self4 = this
+      this.chartTables.margin = {
+        cols:   ['預估毛利率', '實際毛利率', '差異'],
+        colors: ['#2563EB', '#15803D', ''],
+        rows:   labels.map(function(lb, i) {
+          var e = estimated[i], a = actual[i]
+          return { label: lb, values: [
+            self4._fmtPct(e),
+            self4._fmtPct(a),
+            // 沒有精算資料時差異不是 0，是「還不知道」——寫 0 會讓人以為準到不差
+            (a == null) ? '—' : ((a - e >= 0 ? '+' : '') + self4._fmtPct(a - e)),
+          ] }
+        }),
+      }
+      _reportCharts.margin = new Chart(el, {
         type: 'bar',
         data: {
           labels: labels,
@@ -644,11 +1205,22 @@ function reportsApp() {
     },
 
     async init() {
-      var role = this._role()
-      if (role !== 'admin' && role !== 'superadmin') {
+      // 2026-08-31：出納模組併入本頁後的准入判斷放寬——admin+ 維持原行為
+      // （全部 12 個財務報表頁籤＋出納頁籤都看得到）；純 cashier/finance 模組
+      // 的非管理職使用者只開放出納頁籤，其餘財務報表資料完全不載入。
+      if (!this.hasCashierAccess()) {
         this.error = '僅管理員以上可存取營運報表功能'
         return
       }
+      if (!this.isAdminPlus()) {
+        this.activeTab = 'cashier'
+        await this.showCashierTab()
+        return
+      }
+      // 極簡深連結支援：cashier.html 退役後改導向 reports.html?tab=cashier，
+      // admin+ 使用者從那個連結進來時直接落在出納頁籤（其餘情況維持預設 targets）。
+      var qsTab = new URLSearchParams(location.search).get('tab')
+      if (qsTab === 'cashier') this.activeTab = 'cashier'
       try {
         var r = await fetch('/api/now')
         if (r.ok) {
@@ -658,7 +1230,18 @@ function reportsApp() {
           this.quarter = Math.ceil(t.month / 3)
         }
       } catch (_) {}
+      // 期別同步＋子資料流載入都由 loadData() 內部統一處理（見 _syncSubPeriods()），
+      // 這裡不再各自拼一次年月字串——原本那份手拼版本正是 2026-09-10 期別不同步
+      // 的根因所在（只有 init 做了、切期別的路徑沒做）。年月一律用本地時區字串
+      // 拼接，不用 toISOString()（UTC，台灣 UTC+8 每天 00:00-08:00 會誤判成前一天）。
+      this.expensesLoadedFor    = null
+      this.receivablesLoadedFor = null
       this.loadData()
+      this.loadOrgTree()
+      if (this.activeTab === 'cashier') this.showCashierTab()
+      // 預設落在圖表頁時要主動觸發一次：圖表是懶建的（原本靠點頁籤才建），
+      // 不呼叫的話畫布會是空的。
+      if (this.activeTab === 'charts') this.showChartsTab()
       var self = this
       // Re-init charts when data changes and charts tab is active (e.g. period change)
       this.$watch('data', function(newData) {
@@ -672,6 +1255,70 @@ function reportsApp() {
     showCustTab() {
       this.activeTab = 'cust'
       if (!this.custLoaded) this.loadCustHistory()
+    },
+
+    showExpensesTab() {
+      this.activeTab = 'expenses'
+      this._ensureSubPeriodData()
+    },
+
+    // 期別連續切換（例如 7 月 → 8 月按很快）會讓兩個請求同時在飛。快取鍵一定要在
+    // 「發出請求當下」就算好並跟著這一次請求走：原本是在回應抵達時才算，若期別在
+    // 飛行途中被切走，就會把 7 月的資料貼上 8 月的鍵，之後 _ensureSubPeriodData()
+    // 看鍵相符便不再重載，畫面永遠卡在舊月份。這正是 e2e 測試偶發抓到的競態。
+    async loadExpenses() {
+      var key = this._expensesKey()
+      var qs = '?year=' + this.expensesYear + '&month=' + this.expensesMonth +
+               (this.expensesScope === 'quarter' ? '&quarter=' + this.expensesQuarter : '') +
+               (this.departmentId ? '&department_id=' + this.departmentId : '')
+      this.expensesInflight = key
+      this.expensesLoading  = true
+      try {
+        var res = await fetch('/api/reports/expenses-monthly' + qs, {
+          headers: { Authorization: 'Bearer ' + this._token() }
+        })
+        if (!res.ok) throw new Error('支出明細載入失敗')
+        var payload = await res.json()
+        // 期別已經被切走 → 這份回應過期了，丟棄（切走的那一次自己會發新請求）
+        if (key !== this._expensesKey()) return
+        this.expensesData      = payload
+        this.expensesLoadedFor = key
+      } catch (e) {
+        if (key === this._expensesKey()) alert('支出明細載入失敗：' + (e.message || e))
+      } finally {
+        if (this.expensesInflight === key) this.expensesInflight = null
+        if (key === this._expensesKey()) this.expensesLoading = false
+      }
+    },
+
+    showReceivablesTab(tab) {
+      this.activeTab = tab
+      this._ensureSubPeriodData()
+    },
+
+    // 過期回應丟棄機制同 loadExpenses()，理由見該函式註解。
+    async loadReceivables() {
+      var key = this._receivablesKey()
+      var qs = '?year=' + this.receivablesYear + '&month=' + this.receivablesMonth +
+               (this.receivablesScope === 'quarter' ? '&quarter=' + this.receivablesQuarter : '') +
+               (this.departmentId ? '&department_id=' + this.departmentId : '')
+      this.receivablesInflight = key
+      this.receivablesLoading  = true
+      try {
+        var res = await fetch('/api/reports/receivables-monthly' + qs, {
+          headers: { Authorization: 'Bearer ' + this._token() }
+        })
+        if (!res.ok) throw new Error('應收明細載入失敗')
+        var payload = await res.json()
+        if (key !== this._receivablesKey()) return
+        this.receivablesData      = payload
+        this.receivablesLoadedFor = key
+      } catch (e) {
+        if (key === this._receivablesKey()) alert('應收明細載入失敗：' + (e.message || e))
+      } finally {
+        if (this.receivablesInflight === key) this.receivablesInflight = null
+        if (key === this._receivablesKey()) this.receivablesLoading = false
+      }
     },
 
     async showArTab() {
@@ -692,6 +1339,554 @@ function reportsApp() {
       }
     },
 
+    async showT100Tab() {
+      // 2026-09-02：T100 匯出從資金水位頁籤拆成獨立頁籤，切換進來時就先預覽
+      // 本期待確認事件＋讀科目代號設定（不用展開設定面板才看得到 KPI 統計），
+      // 不用再多按一次「預覽待確認事件」
+      this.activeTab = 't100'
+      if (!this.t100Preview) this.loadT100Preview()
+      if (!this.t100Config) this.loadT100Config()
+      if (!this.t100Confirmed.length) this.loadT100Confirmed()
+    },
+
+    // 已確認清單：預設帶目前日期區間，區間留空時後端回最近 500 筆
+    async loadT100Confirmed() {
+      this.t100ConfirmedLoading = true
+      try {
+        var qs = '?start=' + this.t100Start + '&end=' + this.t100End
+        var res = await fetch('/api/reports/t100-export/confirmed' + qs, {
+          headers: { Authorization: 'Bearer ' + this._token() }
+        })
+        if (!res.ok) {
+          var j = await res.json().catch(function () { return {} })
+          throw new Error(j.detail || '載入失敗')
+        }
+        this.t100Confirmed = await res.json()
+      } catch (e) {
+        alert('已確認清單載入失敗：' + (e.message || e))
+      } finally {
+        this.t100ConfirmedLoading = false
+      }
+    },
+
+    // 反確認：撤銷單筆「已匯入」標記，該事件會在下次涵蓋其日期的匯出/預覽重新出現
+    async unconfirmT100(row) {
+      if (!confirm('撤銷這筆的「已匯入 T100」標記？\n\n' + row.date + '　' + row.summary +
+                   '\n\n撤銷後它會在下次涵蓋這個日期的匯出／預覽重新出現，' +
+                   '如果 T100 那邊其實已經匯入過，會造成重複匯入。')) return
+      this.t100Unconfirming = row.sourceType + ':' + row.sourceKey
+      try {
+        var res = await fetch('/api/reports/t100-export/unconfirm', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this._token() },
+          body: JSON.stringify({ sourceType: row.sourceType, sourceKey: row.sourceKey }),
+        })
+        if (!res.ok) {
+          var j = await res.json().catch(function () { return {} })
+          throw new Error(j.detail || '撤銷失敗')
+        }
+        await this.loadT100Confirmed()
+        this.loadT100Preview()
+      } catch (e) {
+        alert('撤銷已匯入標記失敗：' + (e.message || e))
+      } finally {
+        this.t100Unconfirming = ''
+      }
+    },
+
+    // 科目代號設定完成度（視覺化提示用，非阻擋匯出的硬性檢查）：核心科目
+    // （銷貨收入/銷項稅額/承攬商費用）與至少一個銀行帳戶都設定了，才算「已設定」。
+    // 料件分類科目代號允許部分留白（可能有些分類真的沒進貨過），不列入判斷。
+    get t100ConfigComplete() {
+      const c = this.t100Config
+      if (!c) return false
+      const coreFilled = c.salesRevenueAccount && c.outputTaxAccount && c.contractorExpenseAccount
+      const hasBank = c.bankAccounts && c.bankAccounts.length > 0 && c.bankAccounts.every(b => b.name && b.acctCode)
+      return !!(coreFilled && hasBank)
+    },
+
+    async showCashPosTab() {
+      this.activeTab = 'cashpos'
+      if (this.cashPosLoaded) return
+      this.cashPosLoading = true
+      try {
+        var res = await fetch('/api/reports/cash-position', {
+          headers: { Authorization: 'Bearer ' + this._token() }
+        })
+        if (!res.ok) throw new Error('資金水位載入失敗')
+        this.cashPos       = await res.json()
+        this.cashPosLoaded = true
+      } catch (e) {
+        alert('資金水位載入失敗：' + (e.message || e))
+      } finally {
+        this.cashPosLoading = false
+      }
+    },
+
+    // ── 出納頁籤（2026-08-31 併入本頁，原 frontend/js/cashier.js 內容原封不動
+    // 搬過來，只改了跟本檔案既有狀態衝突的名稱，見上方 state 區塊註解）────────
+
+    get kpiPayableTotal() {
+      return this.payable.reduce((s, v) => s + (v.grandTotal || 0), 0)
+    },
+    get kpiPayableOverdue() {
+      return this.payable.filter(v => this.isOverdue(v.payableDate)).length
+    },
+    get kpiReceivableTotal() {
+      return this.receivable.filter(i => !i.received).reduce((s, i) => s + (i.amount || 0), 0)
+    },
+    get kpiReceivableOverdue() {
+      return this.receivable.filter(i => i.overdue).length
+    },
+    get filteredReceivable() {
+      let list = this.receivable
+      if (this.receivableFilterTab === 'unreceived') list = list.filter(i => !i.received)
+      if (this.receivableFilterTab === 'received')   list = list.filter(i => i.received)
+      if (this.receivableFilterTab === 'uninvoiced') list = list.filter(i => !i.invoiceNo)
+      const q = this.receivableSearch.trim().toLowerCase()
+      if (q) list = list.filter(i =>
+        (i.quoteNo || '').toLowerCase().includes(q) ||
+        (i.customer || '').toLowerCase().includes(q) ||
+        (i.type || '').toLowerCase().includes(q) ||
+        (i.invoiceNo || '').toLowerCase().includes(q)
+      )
+      return list
+    },
+    get receivableUninvoicedCount() {
+      return this.receivable.filter(i => !i.invoiceNo).length
+    },
+
+    isOverdue(dateStr) {
+      return !!dateStr && dateStr < this._localDateStr()
+    },
+    isDueSoon(dateStr) {
+      if (!dateStr || this.isOverdue(dateStr)) return false
+      const soon = new Date()
+      soon.setDate(soon.getDate() + 7)
+      return dateStr <= this._localDateStr(soon)
+    },
+
+    async showCashierTab() {
+      this.activeTab = 'cashier'
+      if (this.cashierLoaded) return
+      const today = new Date()
+      this.cashierHistoryStart = this._localDateStr(new Date(today.getFullYear(), today.getMonth(), 1))
+      this.cashierHistoryEnd = this._localDateStr(today)
+      await Promise.all([this.loadPayable(), this.loadReceivable(), this.loadCashierHistory()])
+      this.cashierLoaded = true
+    },
+
+    async loadPayable() {
+      try {
+        const r = await fetch('/api/cashier/payable-queue', { headers: { Authorization: 'Bearer ' + this._token() } })
+        if (r.ok) this.payable = await r.json()
+        else if (r.status === 403) this.error = '僅管理員、出納或財務可存取出納功能'
+      } catch (e) { console.error(e) }
+    },
+
+    async loadReceivable() {
+      try {
+        const r = await fetch('/api/cashier/receivable-queue?status=all', { headers: { Authorization: 'Bearer ' + this._token() } })
+        if (r.ok) this.receivable = await r.json()
+        else if (r.status === 403) this.error = '僅管理員、出納或財務可存取出納功能'
+      } catch (e) { console.error(e) }
+    },
+
+    async loadCashierHistory() {
+      this.cashierHistoryLoading = true
+      try {
+        const qs = `?start=${this.cashierHistoryStart}&end=${this.cashierHistoryEnd}`
+        const r = await fetch('/api/cashier/execution-history' + qs, { headers: { Authorization: 'Bearer ' + this._token() } })
+        if (r.ok) {
+          const d = await r.json()
+          this.cashierHistoryOutgoing = d.outgoing || []
+          this.cashierHistoryIncoming = d.incoming || []
+          this.cashierHistoryOutgoingTotal = d.outgoingTotal || 0
+          this.cashierHistoryIncomingTotal = d.incomingTotal || 0
+        }
+      } catch (e) { console.error(e) }
+      this.cashierHistoryLoading = false
+    },
+
+    async exportCashierHistory() {
+      this.cashierExporting = true
+      try {
+        const qs = `?start=${this.cashierHistoryStart}&end=${this.cashierHistoryEnd}`
+        const r = await fetch('/api/cashier/export' + qs, { headers: { Authorization: 'Bearer ' + this._token() } })
+        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '匯出失敗'); this.cashierExporting = false; return }
+        const blob = await r.blob()
+        const a = document.createElement('a')
+        a.href = URL.createObjectURL(blob)
+        a.download = `MOTRIX_出納執行紀錄_${this.cashierHistoryStart}_${this.cashierHistoryEnd}.xlsx`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(a.href)
+      } catch (e) { alert('匯出失敗：' + e.message) }
+      this.cashierExporting = false
+    },
+
+    async loadT100BankAccounts() {
+      // 2026-09-02：改成每次開啟標記 Modal 都重抓（不再 cache-once），確保跟
+      // 案件管理／庫存管理三處標記畫面共用同一份最新清單，見
+      // case-management.js::loadT100BankAccounts() 同款註解。
+      try {
+        const r = await fetch('/api/settings/t100-export-config', { headers: { Authorization: 'Bearer ' + this._token() } })
+        if (r.ok) {
+          const d = await r.json()
+          this.t100BankAccounts = d.bankAccounts || []
+          this.t100DefaultBankAcctCode = d.defaultBankAccountCode || ''
+        }
+      } catch {}
+    },
+
+    _t100BankName(code) {
+      return (this.t100BankAccounts.find(b => b.acctCode === code) || {}).name || ''
+    },
+
+    // 銀行帳戶預設值（2026-09-02 新增）：①這個對象上次標記用的帳戶 ②系統
+    // 預設帳戶 ③兩者都沒有就空白。lastUsedUrl 由呼叫端組好（各自對象不同）。
+    async _resolveDefaultBankAccount(lastUsedUrl) {
+      if (lastUsedUrl) {
+        try {
+          const r = await fetch(lastUsedUrl, { headers: { Authorization: 'Bearer ' + this._token() } })
+          if (r.ok) {
+            const d = await r.json()
+            if (d.acctCode) return d.acctCode
+          }
+        } catch {}
+      }
+      return this.t100DefaultBankAcctCode || ''
+    },
+
+    async openPayVoucherModal(v) {
+      this.payVoucherTarget = v
+      this.payVoucherBankAcctCode = ''
+      this.payVoucherDate = v.payableDate || this._localDateStr()
+      this.payVoucherNote = ''
+      this.payVoucherModal = true
+      await this.loadT100BankAccounts()
+      const url = v.vendorId ? `/api/contractor-vouchers/last-paid-bank-account?vendor_id=${v.vendorId}` : ''
+      this.payVoucherBankAcctCode = await this._resolveDefaultBankAccount(url)
+    },
+
+    async confirmPayVoucher() {
+      const v = this.payVoucherTarget
+      if (!v || !this.payVoucherDate) return
+      this.payVoucherSaving = true
+      try {
+        const r = await fetch(`/api/contractor-vouchers/${v.voucherNo}/paid-toggle`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this._token() },
+          body: JSON.stringify({
+            action: 'pay', paid_at: this.payVoucherDate, note: this.payVoucherNote,
+            bankAccountCode: this.payVoucherBankAcctCode, bankAccountName: this._t100BankName(this.payVoucherBankAcctCode),
+          })
+        })
+        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '操作失敗'); this.payVoucherSaving = false; return }
+        this.payVoucherModal = false
+        this.payVoucherTarget = null
+        await Promise.all([this.loadPayable(), this.loadCashierHistory()])
+      } catch (e) { alert('網路錯誤：' + e.message) }
+      this.payVoucherSaving = false
+    },
+
+    async openReceiveModal(it) {
+      this.receiveTarget = it
+      this.receiveDate = this._localDateStr()
+      this.receiveActualAmount = it.amount
+      this.receiveFeeAmount = 0
+      this.receiveNote = ''
+      this.receiveBankAcctCode = ''
+      this.receiveModal = true
+      await this.loadT100BankAccounts()
+      const url = it.customer ? `/api/quotations/last-received-bank-account?customerName=${encodeURIComponent(it.customer)}` : ''
+      this.receiveBankAcctCode = await this._resolveDefaultBankAccount(url)
+    },
+
+    async confirmReceive() {
+      const it = this.receiveTarget
+      if (!it || !this.receiveDate) return
+      this.receiveSaving = true
+      try {
+        const r = await fetch(`/api/quotations/${encodeURIComponent(it.quoteNo)}/payment/${it.idx}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this._token() },
+          body: JSON.stringify({
+            received: true, receivedAt: this.receiveDate, receivedBy: this._displayName(),
+            actualAmount: this.receiveActualAmount, feeAmount: this.receiveFeeAmount || 0, note: this.receiveNote,
+            bankAccountCode: this.receiveBankAcctCode, bankAccountName: this._t100BankName(this.receiveBankAcctCode),
+          })
+        })
+        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '操作失敗'); this.receiveSaving = false; return }
+        this.receiveModal = false
+        this.receiveTarget = null
+        await Promise.all([this.loadReceivable(), this.loadCashierHistory()])
+      } catch (e) { alert('網路錯誤：' + e.message) }
+      this.receiveSaving = false
+    },
+
+    async toggleReceived(item, received) {
+      if (!confirm(received ? '標記此款項為已收？' : '取消此款項的收款紀錄？')) return
+      try {
+        const r = await fetch(`/api/quotations/${encodeURIComponent(item.quoteNo)}/payment/${item.idx}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this._token() },
+          body: JSON.stringify({ received, receivedAt: '', receivedBy: '' })
+        })
+        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '操作失敗'); return }
+        await this.loadReceivable()
+      } catch (e) { alert('網路錯誤：' + e.message) }
+    },
+
+    openInvoiceModal(item) {
+      this.invoiceModal = { show: true, item, no: item.invoiceNo || '', date: item.invoiceDate || '' }
+    },
+
+    async confirmInvoice() {
+      const item = this.invoiceModal.item
+      if (!item) return
+      try {
+        const r = await fetch(`/api/quotations/${encodeURIComponent(item.quoteNo)}/payment/${item.idx}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this._token() },
+          body: JSON.stringify({ invoiceNo: this.invoiceModal.no.trim(), invoiceDate: this.invoiceModal.date || '' })
+        })
+        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '操作失敗'); return }
+        item.invoiceNo = this.invoiceModal.no.trim()
+        item.invoiceDate = this.invoiceModal.date || ''
+        this.invoiceModal.show = false
+      } catch (e) { alert('網路錯誤：' + e.message) }
+    },
+
+    async uploadBankCsv(evt) {
+      var file = evt.target.files[0]
+      if (!file) return
+      this.bankReconciling = true
+      this.bankResult = null
+      try {
+        var fd = new FormData()
+        fd.append('file', file)
+        var res = await fetch('/api/reports/bank-reconcile', {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + this._token() },
+          body: fd,
+        })
+        if (!res.ok) {
+          var j = await res.json().catch(function () { return {} })
+          throw new Error(j.detail || '比對失敗')
+        }
+        this.bankResult = await res.json()
+      } catch (e) {
+        alert('銀行對帳比對失敗：' + (e.message || e))
+      } finally {
+        this.bankReconciling = false
+        evt.target.value = ''
+      }
+    },
+
+    _guessDateFromBankText(raw) {
+      const s = (raw || '').trim()
+      if (!s) return ''
+      let m = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/)
+      if (m) return this._normalizeYmd(+m[1], +m[2], +m[3])
+      m = s.match(/^(\d{4})(\d{2})(\d{2})(\d{0,6})?$/)
+      if (m) return this._normalizeYmd(+m[1], +m[2], +m[3])
+      // 民國年（台灣銀行常見，例如 115/08/20 = 2026/08/20）
+      m = s.match(/^(\d{2,3})[-/.](\d{1,2})[-/.](\d{1,2})$/)
+      if (m && +m[1] >= 1 && +m[1] <= 200) return this._normalizeYmd(+m[1] + 1911, +m[2], +m[3])
+      return ''
+    },
+
+    _normalizeYmd(y, mo, d) {
+      if (mo < 1 || mo > 12 || d < 1 || d > 31) return ''
+      const dt = new Date(y, mo - 1, d)
+      if (dt.getFullYear() !== y || dt.getMonth() !== mo - 1 || dt.getDate() !== d) return ''
+      return y + '-' + String(mo).padStart(2, '0') + '-' + String(d).padStart(2, '0')
+    },
+
+    openBankPayModal(row) {
+      if (!row || !row.match) return
+      this.bankPayRow = row
+      this.bankPayDate = this._guessDateFromBankText(row.date) || this._localDateStr()
+      this.bankPayModal = true
+    },
+
+    async confirmBankPay() {
+      const row = this.bankPayRow
+      if (!row || !row.match || !this.bankPayDate) return
+      const voucherNo = row.match.voucherNo
+      this.bankPaySaving = true
+      try {
+        var res = await fetch('/api/contractor-vouchers/' + voucherNo + '/paid-toggle', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this._token() },
+          body: JSON.stringify({ action: 'pay', paid_at: this.bankPayDate, note: '銀行對帳單比對後標記' }),
+        })
+        if (!res.ok) {
+          var j = await res.json().catch(function () { return {} })
+          throw new Error(j.detail || '標記失敗')
+        }
+        row.match._paid = true
+        this.bankPayModal = false
+        this.bankPayRow = null
+        await Promise.all([this.loadPayable(), this.loadCashierHistory()])
+      } catch (e) {
+        alert('標記失敗：' + (e.message || e))
+      }
+      this.bankPaySaving = false
+    },
+
+    async exportTaxInvoices() {
+      this.taxExporting = true
+      try {
+        var qs = 'year=' + this.taxExportYear + (this.taxExportMonth ? '&month=' + this.taxExportMonth : '')
+        var res = await fetch('/api/reports/tax-export?' + qs, {
+          headers: { Authorization: 'Bearer ' + this._token() }
+        })
+        if (!res.ok) {
+          var j = await res.json().catch(function () { return {} })
+          throw new Error(j.detail || '匯出失敗')
+        }
+        var blob = await res.blob()
+        var label = this.taxExportYear + (this.taxExportMonth ? ('_' + String(this.taxExportMonth).padStart(2, '0')) : '')
+        var a = document.createElement('a')
+        a.href = URL.createObjectURL(blob)
+        a.download = 'MOTRIX_銷項發票清單_' + label + '.xlsx'
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(a.href)
+      } catch (e) {
+        alert('稅務匯出失敗：' + (e.message || e))
+      } finally {
+        this.taxExporting = false
+      }
+    },
+
+    // ── T100（鼎新）傳票批次匯出 ──────────────────────────────────────────────
+    async loadT100Config() {
+      if (this.t100ConfigLoaded) return
+      try {
+        var res = await fetch('/api/settings/t100-export-config', {
+          headers: { Authorization: 'Bearer ' + this._token() }
+        })
+        if (res.ok) {
+          this.t100Config = await res.json()
+          this.t100ConfigLoaded = true
+        }
+      } catch (e) { /* 靜默失敗，畫面仍可用預設空白值操作 */ }
+    },
+
+    toggleT100Config() {
+      this.t100ConfigOpen = !this.t100ConfigOpen
+      if (this.t100ConfigOpen) this.loadT100Config()
+    },
+
+    async saveT100Config() {
+      if (this._role() !== 'superadmin') return
+      this.t100ConfigSaving = true
+      try {
+        var res = await fetch('/api/settings/t100-export-config', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this._token() },
+          body: JSON.stringify(this.t100Config),
+        })
+        if (!res.ok) {
+          var j = await res.json().catch(function () { return {} })
+          throw new Error(j.detail || '儲存失敗')
+        }
+        alert('已儲存 T100 科目代號設定')
+      } catch (e) {
+        alert('儲存失敗：' + (e.message || e))
+      } finally {
+        this.t100ConfigSaving = false
+      }
+    },
+
+    async exportT100Vouchers() {
+      if (!this.t100Start || !this.t100End || this.t100Start > this.t100End) {
+        alert('請確認起訖日期區間正確')
+        return
+      }
+      this.t100Exporting = true
+      try {
+        var qs = 'start=' + this.t100Start + '&end=' + this.t100End
+        var res = await fetch('/api/reports/t100-export/vouchers?' + qs, {
+          headers: { Authorization: 'Bearer ' + this._token() }
+        })
+        if (!res.ok) {
+          var j = await res.json().catch(function () { return {} })
+          throw new Error(j.detail || '匯出失敗')
+        }
+        var blob = await res.blob()
+        var a = document.createElement('a')
+        a.href = URL.createObjectURL(blob)
+        a.download = 'MOTRIX_T100傳票匯出_' + this.t100Start + '_' + this.t100End + '.xlsx'
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(a.href)
+      } catch (e) {
+        alert('T100 傳票匯出失敗：' + (e.message || e))
+      } finally {
+        this.t100Exporting = false
+      }
+    },
+
+    async loadT100Preview() {
+      if (!this.t100Start || !this.t100End || this.t100Start > this.t100End) {
+        alert('請確認起訖日期區間正確')
+        return
+      }
+      this.t100Previewing = true
+      try {
+        var qs = 'start=' + this.t100Start + '&end=' + this.t100End
+        var res = await fetch('/api/reports/t100-export/preview?' + qs, {
+          headers: { Authorization: 'Bearer ' + this._token() }
+        })
+        if (!res.ok) {
+          var j = await res.json().catch(function () { return {} })
+          throw new Error(j.detail || '預覽失敗')
+        }
+        this.t100Preview = await res.json()
+      } catch (e) {
+        alert('T100 預覽失敗：' + (e.message || e))
+      } finally {
+        this.t100Previewing = false
+      }
+    },
+
+    // 財務人員實際到 T100 匯入後，回來按這顆按鈕標記整批已匯入——標記後這些
+    // 事件會從之後所有匯出/預覽自動排除，避免重複匯入
+    async confirmT100Imported() {
+      if (!this.t100Preview || !this.t100Preview.count) {
+        alert('目前沒有可確認的事件，請先預覽')
+        return
+      }
+      if (!confirm('確認這 ' + this.t100Preview.count + ' 筆事件已經實際匯入 T100？確認後將自動從之後的匯出/預覽排除，避免重複匯入。')) return
+      this.t100Confirming = true
+      try {
+        var res = await fetch('/api/reports/t100-export/confirm', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this._token() },
+          body: JSON.stringify({ start: this.t100Start, end: this.t100End }),
+        })
+        if (!res.ok) {
+          var j = await res.json().catch(function () { return {} })
+          throw new Error(j.detail || '確認失敗')
+        }
+        var result = await res.json()
+        alert('已標記 ' + result.confirmedCount + ' 筆事件為已匯入')
+        this.loadT100Preview()
+        this.loadT100Confirmed()
+      } catch (e) {
+        alert('確認已匯入失敗：' + (e.message || e))
+      } finally {
+        this.t100Confirming = false
+      }
+    },
+
     async _loadTrendData() {
       this.trendLoading = true
       try {
@@ -703,8 +1898,10 @@ function reportsApp() {
           this.trendLoaded = true
           if (this.activeTab === 'charts') {
             var self = this
-            requestAnimationFrame(function() {
-              try { self._buildTrendChart() } catch(e) { console.error('trend rebuild:', e) }
+            this.$nextTick(function() {
+              requestAnimationFrame(function() {
+                try { self._buildTrendChart() } catch(e) { console.error('trend rebuild:', e) }
+              })
             })
           }
         }
@@ -736,18 +1933,26 @@ function reportsApp() {
       return 'NT$ ' + Math.round(n).toLocaleString()
     },
 
-    // Called by the 圖表分析 tab button; uses rAF so layout is done before Chart.js measures canvas
+    // Called by the 圖表分析 tab button. $nextTick waits for Alpine to finish
+    // patching the DOM for this activeTab change (the x-show toggle that
+    // actually reveals the chart cards) — the same pattern already used
+    // elsewhere in this codebase (e.g. case-management.js's
+    // this.$nextTick(() => this._initSubListSortable(...))) before touching
+    // freshly-shown DOM with a third-party library. The extra rAF on top
+    // waits for the browser to actually complete a layout pass, since
+    // Chart.js reads the canvas's rendered size at construction time.
     showChartsTab() {
       this.activeTab = 'charts'
+      this._loadPayableSnapshot()
       if (!this.data) return
       if (!this.trendLoaded && !this.trendLoading) this._loadTrendData()
       var self = this
-      requestAnimationFrame(function() {
+      this.$nextTick(function() {
         requestAnimationFrame(function() {
-          if (Object.keys(self._charts).length === 0) {
+          if (Object.keys(_reportCharts).length === 0) {
             self.initCharts()
           } else {
-            Object.values(self._charts).forEach(function(c) { try { c.resize() } catch(_) {} })
+            Object.values(_reportCharts).forEach(function(c) { try { c.resize() } catch(_) {} })
           }
         })
       })

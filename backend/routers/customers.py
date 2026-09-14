@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Header
 from pydantic import BaseModel
 
 from db import get_db, next_entity_code, spawn_bg_thread
-from helpers import _require_user, _tok, _audit
+from helpers import _require_user, _tok, _audit, notify_module_activity, require_any_module
 from archive import _backup_customers
 
 router = APIRouter()
@@ -23,7 +23,8 @@ class CustomerIn(BaseModel):
 
 @router.get("/api/customers")
 def list_customers(authorization: str = Header(None)):
-    _require_user(authorization)
+    user = _require_user(authorization)
+    require_any_module(user, ('customer', 'case_manage', 'dev_crm', 'procurement'), "客戶管理")
     conn = get_db()
     rows = conn.execute(
         "SELECT id, code, name, tax_id, phone, data_json, created_at, updated_at FROM customers ORDER BY name"
@@ -44,7 +45,8 @@ def list_customers(authorization: str = Header(None)):
 
 @router.get("/api/customers/{cid}")
 def get_customer(cid: int, authorization: str = Header(None)):
-    _require_user(authorization)
+    user = _require_user(authorization)
+    require_any_module(user, ('customer', 'case_manage', 'dev_crm', 'procurement'), "客戶管理")
     conn = get_db()
     row  = conn.execute(
         "SELECT id, code, name, tax_id, phone, data_json, created_at, updated_at FROM customers WHERE id=?", (cid,)
@@ -61,7 +63,8 @@ def get_customer(cid: int, authorization: str = Header(None)):
 
 @router.post("/api/customers")
 def create_customer(body: CustomerIn, authorization: str = Header(None)):
-    _require_user(authorization)
+    user = _require_user(authorization)
+    require_any_module(user, ('customer', 'case_manage', 'dev_crm', 'procurement'), "客戶管理")
     now = datetime.now().isoformat()
     conn = get_db()
     try:
@@ -81,12 +84,15 @@ def create_customer(body: CustomerIn, authorization: str = Header(None)):
     conn.close()
     spawn_bg_thread(_backup_customers)
     _audit(_tok(authorization), 'customer.create', 'customer', body.name, body.name)
+    notify_module_activity("客戶管理", "建立", user.get("display_name") or user["username"],
+                            body.name, "customers.html")
     return {"id": cid, "name": body.name, "code": code}
 
 
 @router.put("/api/customers/{cid}")
 def update_customer(cid: int, body: CustomerIn, authorization: str = Header(None)):
-    _require_user(authorization)
+    user = _require_user(authorization)
+    require_any_module(user, ('customer', 'case_manage', 'dev_crm', 'procurement'), "客戶管理")
     now = datetime.now().isoformat()
     conn = get_db()
     if not conn.execute("SELECT id FROM customers WHERE id=?", (cid,)).fetchone():
@@ -106,7 +112,8 @@ def update_customer(cid: int, body: CustomerIn, authorization: str = Header(None
 
 @router.patch("/api/customers/{cid}/visits")
 def update_customer_visits(cid: int, body: dict, authorization: str = Header(None)):
-    _require_user(authorization)
+    user = _require_user(authorization)
+    require_any_module(user, ('customer', 'case_manage', 'dev_crm', 'procurement'), "客戶管理")
     conn = get_db()
     row = conn.execute(
         "SELECT name, data_json, updated_at FROM customers WHERE id=?", (cid,)
@@ -133,12 +140,17 @@ def update_customer_visits(cid: int, body: dict, authorization: str = Header(Non
     spawn_bg_thread(_backup_customers)
     _audit(_tok(authorization), 'customer.visit.update', 'customer', str(cid),
            f"{cname}（{visit_count} 筆拜訪紀錄）")
+    _latest_visit = d["visits"][-1] if d["visits"] else {}
+    notify_module_activity("客戶管理", "新增拜訪紀錄", user.get("display_name") or user["username"],
+                            f"{cname}{('（' + _latest_visit['date'] + '）') if _latest_visit.get('date') else ''}",
+                            "customers.html", detail=_latest_visit.get("note", ""))
     return {"ok": True, "updated_at": now}
 
 
 @router.delete("/api/customers/{cid}")
 def delete_customer(cid: int, authorization: str = Header(None)):
-    _require_user(authorization)
+    user = _require_user(authorization)
+    require_any_module(user, ('customer', 'case_manage', 'dev_crm', 'procurement'), "客戶管理")
     conn = get_db()
     row = conn.execute("SELECT name FROM customers WHERE id=?", (cid,)).fetchone()
     if not row:
@@ -150,4 +162,6 @@ def delete_customer(cid: int, authorization: str = Header(None)):
     conn.close()
     spawn_bg_thread(_backup_customers)
     _audit(_tok(authorization), 'customer.delete', 'customer', str(cid), cname)
+    notify_module_activity("客戶管理", "刪除", user.get("display_name") or user["username"],
+                            cname, "customers.html")
     return {"ok": True}

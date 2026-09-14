@@ -18,6 +18,8 @@ motrix_erp.db
 
 # Deployment-specific config (per-machine, not app code)
 backend/heartbeat_config.json
+backend/tools/.guide_sync_config.json
+backend/certs/
 
 # Python
 __pycache__/
@@ -29,16 +31,27 @@ venv/
 uploads/
 報價單PDF/
 出貨單PDF/
+開票申請憑據PDF/
+承攬商匯款申請PDF/
+請款單PDF/
+結案報表PDF/
 exports/
 backend/export_archive/
 
 # Runtime / error logs
 backend/start_err.txt
 
+# Commit-message drafts（2026-09-10：backend/.commit_msg_webauthn.txt 曾隨
+# commit 0527524 誤入 repo。訊息本身已經在 git 歷史裡，草稿檔留著只是雜訊）
+**/.commit_msg*.txt
+
 # Update-mode local artifacts (per-machine, not app code — see §15)
 deploy_packages/
 backend/rollback_snapshots/
 backend/.deployed_commit.json
+backend/tools/deploy_dashboard_history.json
+backend/tools/deploy_logs/
+backend/tools/deploy_dashboard_run.log
 
 # Root-level debug/temp files (generated during development)
 /*.txt

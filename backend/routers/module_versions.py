@@ -1,12 +1,13 @@
 """Module version records — per-module changelog stored in DB, synced via daily backup."""
 import json
+import sqlite3
 from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Header
 from pydantic import BaseModel
 
 from db import get_db
-from helpers import _require_user, _audit, _tok
+from helpers import _require_user, _audit, _tok, notify_module_activity
 
 router = APIRouter()
 
@@ -72,12 +73,16 @@ def create_module_version(body: ModuleVersionBody, authorization: str = Header(N
 
     now = datetime.now().isoformat(timespec="seconds")
     conn = get_db()
-    cur = conn.execute(
-        "INSERT INTO module_versions (module, version, updated_at, content, updated_by) "
-        "VALUES (?, ?, ?, ?, ?)",
-        (body.module.strip(), body.version.strip(), now,
-         body.content.strip(), u["display_name"] or u["username"]),
-    )
+    try:
+        cur = conn.execute(
+            "INSERT INTO module_versions (module, version, updated_at, content, updated_by) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (body.module.strip(), body.version.strip(), now,
+             body.content.strip(), u["display_name"] or u["username"]),
+        )
+    except sqlite3.IntegrityError:
+        conn.close()
+        raise HTTPException(409, "此模組已有相同版本號的紀錄，請換一個版本號")
     new_id = cur.lastrowid
     conn.commit()
     conn.close()
@@ -88,6 +93,8 @@ def create_module_version(body: ModuleVersionBody, authorization: str = Header(N
         target_label=f"{body.module} {body.version}",
         detail={"module": body.module, "version": body.version},
     )
+    notify_module_activity("模組版本紀錄", "建立", u["display_name"] or u["username"],
+                            f"{body.module} {body.version}", "")
     return {"id": new_id, "module": body.module, "version": body.version,
             "updated_at": now, "content": body.content, "updated_by": u["display_name"] or u["username"]}
 
@@ -95,7 +102,7 @@ def create_module_version(body: ModuleVersionBody, authorization: str = Header(N
 @router.delete("/api/module-versions/{mvid}", status_code=204)
 def delete_module_version(mvid: int, authorization: str = Header(None)):
     """Delete a version entry. Requires superadmin."""
-    _require_user(authorization, require_superadmin=True)
+    u = _require_user(authorization, require_superadmin=True)
     conn = get_db()
     row = conn.execute("SELECT * FROM module_versions WHERE id=?", (mvid,)).fetchone()
     if not row:
@@ -110,3 +117,5 @@ def delete_module_version(mvid: int, authorization: str = Header(None)):
         target_type="module_version", target_id=str(mvid),
         target_label=f"{row['module']} {row['version']}",
     )
+    notify_module_activity("模組版本紀錄", "刪除", u.get("display_name") or u["username"],
+                            f"{row['module']} {row['version']}", "")

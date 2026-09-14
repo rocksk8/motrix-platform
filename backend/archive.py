@@ -3,29 +3,177 @@ import json
 import os
 import shutil
 import sqlite3
+import string
 import threading
+import time
 import logging
 from datetime import datetime, date, timedelta
 
+import cloud_storage
 from db import get_db, DB_PATH
-from helpers import _cleanup_sessions
+from helpers import _cleanup_sessions, _get_setting
 
 logger = logging.getLogger(__name__)
 
-_ARCHIVE_BASE = r"H:\我的雲端硬碟\系統存檔"
-_REALTIME_DIR = os.path.join(_ARCHIVE_BASE, "即時備份")
-_WEEKLY_DIR   = os.path.join(_ARCHIVE_BASE, "週備份")
-_DAILY_DIR    = os.path.join(_ARCHIVE_BASE, "每日備份")
+# 2026-09-01：保留天數原本寫死在下面各個 _prune_*() 呼叫點（本機30天／雲端每日365天／
+# 雲端週730天／稽核紀錄730天），使用者要求「備份次數跟週期可調整避免檔案過大」，改為
+# 存進 system_settings.backup_retention（見 routers/system.py 的
+# GET/PATCH /api/settings/backup-retention），不用改程式碼重新部署就能調整。
+# cloud_daily_keep_days 預設值同日改為 1825 天（5年）——使用者確認目前雲端每日備份
+# 僅 1.45GB，5年容量無虞，比原本 365 天更符合需求。
+_BACKUP_RETENTION_DEFAULT = {
+    "local_db_keep_days":    30,
+    "cloud_daily_keep_days": 1825,
+    "cloud_weekly_keep_days": 730,
+    "audit_log_keep_days":   730,
+}
 
-# Local always-on paths (independent of H: mount)
+
+def _backup_retention() -> dict:
+    """可調整的備份保留天數設定，供 _daily_backup()/_snapshot_sqlite() 讀取。"""
+    return {**_BACKUP_RETENTION_DEFAULT, **(_get_setting("backup_retention", {}) or {})}
+
+# Google Drive for Desktop's drive letter is NOT stable across reboots/relogins
+# (observed switching G:<->H: repeatedly, see 2026-08-24 note in _ensure_archive_dirs).
+# Rather than hardcode a letter, scan mounted drives each time for the one that
+# actually has this folder, so a letter swap can't silently break cloud backups.
+_ARCHIVE_SUBPATH = os.path.join("我的雲端硬碟", "系統存檔")
+_ARCHIVE_CACHE_TTL = 30  # seconds; avoid rescanning A-Z on every single real-time write
+_archive_base_cache = {"path": None, "checked_at": 0.0}
+
+
+def _detect_archive_base() -> str:
+    """Scan mounted drive letters for one containing 我的雲端硬碟\\系統存檔.
+    Returns the first match, or "" if none is currently mounted/accessible."""
+    for letter in string.ascii_uppercase:
+        candidate = f"{letter}:\\{_ARCHIVE_SUBPATH}"
+        if os.path.isdir(candidate):
+            return candidate
+    return ""
+
+
+def _archive_base() -> str:
+    """Currently valid cloud archive path, or "" if not found on any drive."""
+    cached = _archive_base_cache["path"]
+    if cached and time.monotonic() - _archive_base_cache["checked_at"] < _ARCHIVE_CACHE_TTL:
+        if os.path.isdir(cached):
+            return cached
+    detected = _detect_archive_base()
+    _archive_base_cache["path"] = detected or None
+    _archive_base_cache["checked_at"] = time.monotonic()
+    return detected
+
+
+def _realtime_dir() -> str:
+    return os.path.join(_archive_base(), "即時備份")
+
+
+def _weekly_dir() -> str:
+    return os.path.join(_archive_base(), "週備份")
+
+
+def _daily_dir() -> str:
+    return os.path.join(_archive_base(), "每日備份")
+
+
+def _uploads_mirror_dir() -> str:
+    return os.path.join(_archive_base(), "上傳檔案鏡像")
+
+
+def _pdf_mirror_dir(subdir: str) -> str:
+    return os.path.join(_archive_base(), "PDF存檔鏡像", subdir)
+
+
+# Local always-on paths (independent of cloud drive mount)
 _BACKEND_DIR      = os.path.dirname(os.path.abspath(__file__))
 _PROJECT_ROOT     = os.path.dirname(_BACKEND_DIR)
 _LOCAL_DB_BACKUP  = os.path.join(_BACKEND_DIR, "db_backups")
 _ALERT_DIR        = os.path.join(_PROJECT_ROOT, "backup_alerts")
+_UPLOADS_DIR      = os.path.join(_PROJECT_ROOT, "uploads")
+
+
+def _active_backend() -> str:
+    return cloud_storage.cloud_backup_target().get("backend", "local_drive")
 
 
 def _archive_ok() -> bool:
-    return os.path.isdir(_ARCHIVE_BASE)
+    """"Is the cloud backup destination currently reachable?" — branches on
+    the configured backend (architecture map §6.4, 2026-09-07). Everything
+    below this line that used to check "is the drive mounted" now goes
+    through this, so switching backends doesn't require touching every
+    call site's availability check, only the actual read/write dispatch
+    (see the _cloud_*() helpers below)."""
+    if _active_backend() == "s3":
+        return cloud_storage.s3_available()
+    return bool(_archive_base())
+
+
+# ── Backend-dispatching read/write helpers (2026-09-07) ────────────────────────
+#
+# Each call site still computes its "local_drive" absolute path exactly as
+# before (via _realtime_dir()/_daily_dir()/_weekly_dir()/_uploads_mirror_dir())
+# — that computation, and the existing test monkeypatches of those directory
+# functions, are untouched. These helpers only add a second branch: when
+# `backend == "s3"`, the local absolute path is ignored and an S3 key
+# (relative to the configured prefix, forward-slash separated) is used
+# instead. This keeps 100% of existing "local_drive" behavior byte-for-byte
+# identical (it is, and always was, the production default) while adding the
+# new backend as a strictly additive alternative.
+
+def _cloud_write_json(local_abs_path: str, s3_key: str, data) -> None:
+    if _active_backend() == "s3":
+        cloud_storage.s3_put_bytes(s3_key, json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8"))
+    else:
+        os.makedirs(os.path.dirname(local_abs_path), exist_ok=True)
+        _atomic_json_write(local_abs_path, data)
+
+
+def _cloud_copy_file(local_src: str, local_dest_abs: str, s3_key: str) -> None:
+    if _active_backend() == "s3":
+        cloud_storage.s3_upload_file(local_src, s3_key)
+    else:
+        os.makedirs(os.path.dirname(local_dest_abs), exist_ok=True)
+        shutil.copy2(local_src, local_dest_abs)
+
+
+def _cloud_stat(local_dest_abs: str, s3_key: str):
+    """Returns (size, mtime_epoch) for an existing destination, or None —
+    used by _mirror_uploads() to decide whether a file needs re-copying."""
+    if _active_backend() == "s3":
+        return cloud_storage.s3_stat(s3_key)
+    if not os.path.exists(local_dest_abs):
+        return None
+    st = os.stat(local_dest_abs)
+    return st.st_size, st.st_mtime
+
+
+def _cloud_marker_exists(local_marker_abs: str, s3_key: str) -> bool:
+    if _active_backend() == "s3":
+        return cloud_storage.s3_stat(s3_key) is not None
+    return os.path.exists(local_marker_abs)
+
+
+def _cloud_write_marker(local_marker_abs: str, s3_key: str) -> None:
+    if _active_backend() == "s3":
+        cloud_storage.s3_put_bytes(s3_key, b"")
+    else:
+        os.makedirs(os.path.dirname(local_marker_abs), exist_ok=True)
+        open(local_marker_abs, "w").close()
+
+
+def _cloud_list_top_level(local_dir_abs: str, s3_rel_dir: str) -> list:
+    if _active_backend() == "s3":
+        return cloud_storage.s3_list_prefixes(s3_rel_dir)
+    if not os.path.isdir(local_dir_abs):
+        return []
+    return [n for n in os.listdir(local_dir_abs) if os.path.isdir(os.path.join(local_dir_abs, n))]
+
+
+def _cloud_delete_dir(local_dir_abs: str, s3_rel_dir: str) -> None:
+    if _active_backend() == "s3":
+        cloud_storage.s3_delete_prefix(s3_rel_dir)
+    else:
+        shutil.rmtree(local_dir_abs, ignore_errors=True)
 
 
 def _atomic_json_write(path: str, data) -> None:
@@ -78,7 +226,7 @@ def _write_backup_alert(reason: str, level: str = "WARN") -> None:
             f"原因: {reason}\n"
             f"\n"
             f"請確認：\n"
-            f"1. Google 雲端硬碟是否已掛載為 H: 且可存取「我的雲端硬碟\\系統存檔」\n"
+            f"1. Google 雲端硬碟是否已掛載（任一代號皆可）且可存取「我的雲端硬碟\\系統存檔」\n"
             f"2. 本機 SQLite 快照是否仍存在於 backend\\db_backups\\\n"
             f"3. 處理完成後可刪除本檔；系統會在問題持續時再次寫入\n"
         )
@@ -121,10 +269,14 @@ def _write_backup_alert(reason: str, level: str = "WARN") -> None:
 
 
 def _send_backup_error_email(reason: str, ts: str) -> None:
-    """Send async email to all admin/superadmin on ERROR-level backup failure."""
+    """Send async email to superadmin (最高管理者) on ERROR-level backup failure
+    — 2026-08-24 改用 _superadmin_emails() 而非 _admin_emails()：備份基礎設施出問題
+    （例如雲端硬碟磁碟機代號跑掉）需要有權限處理伺服器/磁碟機掛載的人知道，不是
+    一般 admin 職務範圍；_superadmin_emails() 找不到人時仍會 fallback 回全體
+    admin/superadmin，不會真的寄不出去。"""
     try:
-        from helpers.email_notify import _admin_emails, _async_send
-        to = _admin_emails()
+        from helpers.email_notify import _superadmin_emails, _async_send
+        to = _superadmin_emails()
         if not to:
             return
         html = (
@@ -136,7 +288,7 @@ def _send_backup_error_email(reason: str, ts: str) -> None:
             f"<strong>錯誤原因：</strong><br>{reason}</div>"
             "<p style='color:#374151'>請儘速確認：</p>"
             "<ol style='color:#374151'>"
-            "<li>Google 雲端硬碟是否已掛載為 H:（可存取「我的雲端硬碟/系統存檔」）</li>"
+            "<li>Google 雲端硬碟是否已掛載（任一代號皆可，可存取「我的雲端硬碟/系統存檔」）</li>"
             "<li>本機 SQLite 快照（<code>backend/db_backups/</code>）是否仍存在</li>"
             "<li>伺服器磁碟空間是否不足</li>"
             "</ol>"
@@ -163,22 +315,37 @@ def _clear_backup_alert_if_healthy() -> None:
 
 def _ensure_archive_dirs():
     if not _archive_ok():
+        # 2026-08-24：這個路徑不可用的情境曾經連續三週以上每天觸發（磁碟機代號從
+        # G: 被改成 H: 之後就一直沒偵測到），但過去這裡只寫 WARN（不寄信），只留在
+        # backup_alerts/ 裡沒人主動看，直到使用者要求「備份失敗要寄警示信」才發現。
+        # 整條雲端備份（即時/每日/週+uploads鏡像）全跳過屬於系統性失效，改為
+        # ERROR 等級才會觸發 _send_backup_error_email()，避免同一個問題再度悄悄
+        # 卡好幾週沒人知道。
+        reason = (f"S3 bucket 無法連線（設定：{cloud_storage.cloud_backup_target()['s3'].get('bucket') or '未設定'}）"
+                   if _active_backend() == "s3" else
+                   f"雲端備份路徑不存在或未掛載：任一磁碟機代號下都找不到 {_ARCHIVE_SUBPATH}")
         _write_backup_alert(
-            f"雲端備份路徑不存在或未掛載：{_ARCHIVE_BASE}。"
-            f"即時/每日/週雲端備份已跳過。本機 SQLite 快照仍會寫入 {_LOCAL_DB_BACKUP}。"
+            f"{reason}。即時/每日/週雲端備份已跳過。本機 SQLite 快照仍會寫入 {_LOCAL_DB_BACKUP}。",
+            level="ERROR",
         )
         return
+    if _active_backend() == "s3":
+        # S3 有沒有「資料夾」是假的（key 裡有沒有 "/" 純粹是命名習慣），不需要、
+        # 也不能像本機磁碟機那樣預先 os.makedirs()——略過，直接視為就緒。
+        _clear_backup_alert_if_healthy()
+        return
     for d in [
-        os.path.join(_REALTIME_DIR, "報價單"),
-        os.path.join(_REALTIME_DIR, "客戶"),
-        os.path.join(_REALTIME_DIR, "供應商"),
-        _WEEKLY_DIR,
-        _DAILY_DIR,
+        os.path.join(_realtime_dir(), "報價單"),
+        os.path.join(_realtime_dir(), "客戶"),
+        os.path.join(_realtime_dir(), "供應商"),
+        _weekly_dir(),
+        _daily_dir(),
+        _uploads_mirror_dir(),
     ]:
         try:
             os.makedirs(d, exist_ok=True)
         except Exception as e:
-            _write_backup_alert(f"無法建立備份目錄 {d}: {e}")
+            _write_backup_alert(f"無法建立備份目錄 {d}: {e}", level="ERROR")
             return
     _clear_backup_alert_if_healthy()
 
@@ -215,19 +382,109 @@ def _snapshot_sqlite(also_to_cloud: bool = True):
             )
         if also_to_cloud and _archive_ok():
             try:
-                cloud_day = os.path.join(_DAILY_DIR, today)
-                os.makedirs(cloud_day, exist_ok=True)
-                cloud_dest = os.path.join(cloud_day, "motrix_erp.db")
-                shutil.copy2(dest, cloud_dest)
+                cloud_dest = os.path.join(_daily_dir(), today, "motrix_erp.db")
+                _cloud_copy_file(dest, cloud_dest, f"每日備份/{today}/motrix_erp.db")
             except Exception as e:
-                _write_backup_alert(f"SQLite 快照複製到雲端失敗: {e}")
-        # Prune local snapshots older than 30 days
-        _prune_local_db_backups(keep_days=30)
+                _write_backup_alert(f"SQLite 快照複製到雲端失敗: {e}", level="ERROR")
+        # Prune local snapshots per configured retention (see _backup_retention())
+        _prune_local_db_backups(keep_days=_backup_retention()["local_db_keep_days"])
         return dest
     except Exception as e:
         logger.exception("_snapshot_sqlite failed")
         _write_backup_alert(f"本機 SQLite 快照失敗: {e}", level="ERROR")
         return None
+
+
+def _mirror_directory_incremental(local_root: str, dst_root_abs: str, s3_dir_root: str,
+                                   exclude_demo_dirs: bool = True) -> int:
+    """共用的「按檔案 size+mtime 判斷是否需要複製」鏡像邏輯（2026-09-07 從
+    `_mirror_uploads()` 抽出，供 `_mirror_pdf_archives()` 共用，見該函式與
+    `_mirror_uploads()` 各自的 docstring 說明用途差異）。只複製新增/變動過的
+    檔案，鏡像只增不減；`exclude_demo_dirs=True` 時跳過任何 `_` 開頭的子目錄
+    （demo 隔離資料夾慣例，見 db.py），回傳實際複製的檔案數。"""
+    if not os.path.isdir(local_root):
+        return 0
+    copied = 0
+    for root, dirs, files in os.walk(local_root):
+        if exclude_demo_dirs:
+            dirs[:] = [d for d in dirs if not d.startswith('_demo')]
+        rel_root = os.path.relpath(root, local_root)
+        dst_dir = dst_root_abs if rel_root == '.' else os.path.join(dst_root_abs, rel_root)
+        s3_dir = s3_dir_root if rel_root == '.' else f"{s3_dir_root}/{rel_root.replace(os.sep, '/')}"
+        for fname in files:
+            src = os.path.join(root, fname)
+            dst = os.path.join(dst_dir, fname)
+            s3_key = f"{s3_dir}/{fname}"
+            try:
+                existing = _cloud_stat(dst, s3_key)
+                if existing is not None:
+                    s = os.stat(src)
+                    d_size, d_mtime = existing
+                    if s.st_size == d_size and int(s.st_mtime) <= int(d_mtime):
+                        continue
+                _cloud_copy_file(src, dst, s3_key)
+                copied += 1
+            except Exception:
+                logger.exception("_mirror_directory_incremental failed for %s", src)
+    return copied
+
+
+def _mirror_uploads() -> int:
+    """Incrementally sync uploads/（專案照片等實體檔案）到雲端 _uploads_mirror_dir()。
+
+    這些檔案不在 quotations/customers/... 那幾張表裡，daily/weekly backup 原本完全
+    沒有覆蓋到——db 救得回來，但照片救不回來。跟 JSON 每日備份不同的是，這裡改用
+    「按檔案 size+mtime 判斷是否需要複製」的鏡像做法，而不是每天整包重新複製一份：
+    上傳的照片一旦寫入通常不會再變動，若每天都整份複製，一年下來雲端空間會被同一批
+    照片的 365 份重複拷貝塞滿。只複製新增/變動過的檔案，且鏡像只增不減——即使來源
+    檔案被刪除，鏡像裡的舊副本仍保留（跟每日/週備份「保留歷史」的精神一致）。
+
+    Demo 隔離目錄（uploads/_demo_projects 等，見 db.py）故意跳過：demo 帳號的資料
+    本來就每次登入都會被清空，不是需要保存的真實資料。
+    """
+    copied = _mirror_directory_incremental(_UPLOADS_DIR, _uploads_mirror_dir(), "上傳檔案鏡像")
+    if copied:
+        logger.info("uploads mirror: copied %d new/changed file(s) to %s", copied, _uploads_mirror_dir())
+        _system_audit("backup.uploads_mirror", date.today().isoformat(), {"copied": copied})
+    return copied
+
+
+def _pdf_archive_dirs() -> list:
+    """回傳目前設定生效的 6 類 PDF 存檔目錄 (子資料夾代稱, 實際絕對路徑)。
+    刻意呼叫 pdf_gen.py 的 `_get_*_pdf_base()` 而非直接拼預設路徑——這些
+    base path 可能被 superadmin 透過 `system_settings` 改到公司共用網路磁碟等
+    自訂位置（見 pdf_gen.py 各 getter docstring），備份要跟著實際生效的路徑走，
+    不能假設一定是專案根目錄底下的預設資料夾。背景排程本來就不掛在任何
+    request 上，`is_demo_mode()` 這些 getter 內部的判斷會自然落在預設值 False，
+    跟 `get_db()` 的既有推理一致，永遠拿到正式（非 demo）路徑。"""
+    import pdf_gen
+    return [
+        ("報價單", pdf_gen._get_pdf_base()),
+        ("出貨單", pdf_gen._get_shipping_pdf_base()),
+        ("承攬商匯款申請", pdf_gen._get_contractor_voucher_pdf_base()),
+        ("開票申請憑據", pdf_gen._get_invoice_voucher_pdf_base()),
+        ("請款單", pdf_gen._get_payment_request_pdf_base()),
+        ("結案報表", pdf_gen._get_case_closing_pdf_base()),
+    ]
+
+
+def _mirror_pdf_archives() -> int:
+    """比照 `_mirror_uploads()` 的鏡像邏輯，把 6 類 PDF 存檔目錄（報價單／出貨單／
+    承攬商匯款申請／發票開立簽核單／請款單／結案報表）也納入每日雲端備份範圍
+    （2026-09-07，見 MOTRIX-ERP-QUICK.md §11 已知限制條目）。這些目錄各自在
+    專案根目錄下獨立存在（如 `報價單PDF/`），不在 `uploads/` 底下，過去
+    `_mirror_uploads()` 完全掃不到——只有 quotations 等資料表本身有每日 JSON
+    備份，已經產生好的 PDF 檔案本身從來沒被備份過，DB 救得回來但 PDF 檔案救不回來，
+    跟 uploads 的照片是同一類風險。"""
+    total = 0
+    for subdir, local_dir in _pdf_archive_dirs():
+        copied = _mirror_directory_incremental(local_dir, _pdf_mirror_dir(subdir), f"PDF存檔鏡像/{subdir}")
+        total += copied
+    if total:
+        logger.info("PDF archive mirror: copied %d new/changed file(s) across %d categories",
+                     total, len(_pdf_archive_dirs()))
+        _system_audit("backup.pdf_archive_mirror", date.today().isoformat(), {"copied": total})
+    return total
 
 
 def _prune_audit_log(keep_days: int = 730) -> None:
@@ -243,6 +500,60 @@ def _prune_audit_log(keep_days: int = 730) -> None:
             logger.info("audit_log pruned: %d rows older than %d days removed", deleted, keep_days)
     except Exception:
         logger.exception("_prune_audit_log failed")
+
+
+_SERVER_LOG_PATH = os.path.join(_BACKEND_DIR, "logs", "server.log")
+_SERVER_LOG_MAX_BYTES = 50 * 1024 * 1024  # 50 MB
+_SERVER_LOG_KEEP_GENERATIONS = 5
+
+
+def _rotate_server_log_if_large(
+    log_path: str = None, max_bytes: int = _SERVER_LOG_MAX_BYTES, keep: int = _SERVER_LOG_KEEP_GENERATIONS,
+) -> bool:
+    """`logs/server.log` 是正式機 `autostart.bat` 用 shell `>>` 重導向寫入的
+    （見該檔），不是走 Python `logging` 的 handler——伺服器 24/7 常駐執行，這個
+    檔案完全沒有任何大小上限或輪替機制，長期下來可能把磁碟塞滿（正式機已經
+    踩過一次「表格無限增生塞爆每日備份」的類似事故，見 §12 module_versions
+    62萬列那次）。
+
+    **這裡刻意不能用改檔名輪替（如 server_YYYY-MM-DD.log）**：`apply_update.ps1`
+    的健康檢查（`$logPath = ...` 底下的 `logs/server.log`）寫死讀這個檔名判斷部署是否
+    成功，換了輪替方式會讓那個檢查永遠讀到空/舊檔案，等於整套部署安全機制
+    悄悄失效。改用 copytruncate：先複製目前內容到 `logs/server.log.N`（保留最新
+    `keep` 份，最舊的直接刪除），再原地把 `server.log` truncate 成 0 bytes——
+    `autostart.bat` 裡 `>>` 開的是 append 模式 file handle，每次寫入永遠先 seek
+    到檔案目前結尾再寫，truncate 之後下一次寫入會正確從新的（空的）結尾開始，
+    不需要通知或重啟寫入端。
+
+    **⚠️ 尚未在真正跑著 autostart.bat 的正式機上驗證過**：Windows 上 cmd.exe
+    的 `>>` 重導向所開檔案的共用權限（sharing flags）是否真的允許外部行程同時
+    truncate，這裡沒有實機測試過，只能確保「truncate 失敗就整個放棄、log 檔案
+    維持原樣繼續成長」（不會比現狀更糟，只是輪替沒生效），下次正式機套用後
+    要留意 `logs/server.log` 是否真的有被清空過，見 QUICK.md §12 2026-09-07 條目。
+    回傳是否真的執行了輪替（供呼叫端寫 log/測試斷言用）。"""
+    path = log_path or _SERVER_LOG_PATH
+    try:
+        if not os.path.exists(path) or os.path.getsize(path) < max_bytes:
+            return False
+        log_dir = os.path.dirname(path)
+        # 最舊的直接砍掉（.{keep} 若存在），其餘依序往後遞增一代
+        oldest = f"{path}.{keep}"
+        if os.path.exists(oldest):
+            os.remove(oldest)
+        for gen in range(keep - 1, 0, -1):
+            src = f"{path}.{gen}"
+            if os.path.exists(src):
+                os.replace(src, f"{path}.{gen + 1}")
+        shutil.copy2(path, f"{path}.1")
+        # copytruncate：原地清空，而不是刪除/改名，讓仍持有 append handle 的
+        # 寫入端（autostart.bat 的 `>>`）下一次寫入自然從新的檔案結尾（0）開始
+        with open(path, "r+b") as f:
+            f.truncate(0)
+        logger.info("server.log rotated (was >= %d bytes), kept %d generation(s) under %s", max_bytes, keep, log_dir)
+        return True
+    except Exception:
+        logger.exception("_rotate_server_log_if_large failed — server.log 維持原樣未輪替")
+        return False
 
 
 def _prune_local_db_backups(keep_days: int = 30) -> None:
@@ -265,6 +576,46 @@ def _prune_local_db_backups(keep_days: int = 30) -> None:
         logger.exception("_prune_local_db_backups failed")
 
 
+def _prune_cloud_backups(daily_keep_days: int = 365, weekly_keep_days: int = 730) -> None:
+    """Delete dated folders under 每日備份／週備份 (wherever the cloud drive is
+    currently mounted) once older than the retention window. Mirrors
+    _prune_local_db_backups's safety: only ever deletes a folder whose name
+    parses cleanly as the expected date pattern for that directory
+    (YYYY-MM-DD for daily, YYYY-Wxx for weekly) — anything else (unexpected
+    file/folder name) is left untouched, never guessed at. No-ops entirely if
+    the cloud drive isn't mounted (never operates on a partial/offline view
+    of the archive)."""
+    if not _archive_ok():
+        return
+
+    cutoff_daily = date.today().toordinal() - daily_keep_days
+    try:
+        for name in _cloud_list_top_level(_daily_dir(), "每日備份"):
+            try:
+                d = date.fromisoformat(name)
+            except ValueError:
+                continue
+            if d.toordinal() < cutoff_daily:
+                _cloud_delete_dir(os.path.join(_daily_dir(), name), f"每日備份/{name}")
+                logger.info("Pruned old cloud daily backup dir: %s", name)
+    except Exception:
+        logger.exception("_prune_cloud_backups (daily) failed")
+
+    cutoff_weekly = date.today().toordinal() - weekly_keep_days
+    try:
+        for name in _cloud_list_top_level(_weekly_dir(), "週備份"):
+            try:
+                year_str, week_str = name.split('-W')
+                d = datetime.strptime(f"{year_str} {week_str} 1", "%Y %W %w").date()
+            except (ValueError, IndexError):
+                continue
+            if d.toordinal() < cutoff_weekly:
+                _cloud_delete_dir(os.path.join(_weekly_dir(), name), f"週備份/{name}")
+                logger.info("Pruned old cloud weekly backup dir: %s", name)
+    except Exception:
+        logger.exception("_prune_cloud_backups (weekly) failed")
+
+
 def _backup_quotation(quote_no: str):
     try:
         conn = get_db()
@@ -279,14 +630,14 @@ def _backup_quotation(quote_no: str):
 
     if _archive_ok():
         try:
-            path = os.path.join(_REALTIME_DIR, "報價單", f"{quote_no}.json")
-            _atomic_json_write(path, payload)
+            path = os.path.join(_realtime_dir(), "報價單", f"{quote_no}.json")
+            _cloud_write_json(path, f"即時備份/報價單/{quote_no}.json", payload)
             return
         except Exception as e:
-            logger.exception("_backup_quotation H: write failed for %s", quote_no)
-            _write_backup_alert(f"即時備份報價單失敗（H:）{quote_no}: {e}")
+            logger.exception("_backup_quotation cloud write failed for %s", quote_no)
+            _write_backup_alert(f"即時備份報價單失敗（雲端）{quote_no}: {e}")
 
-    # H: unavailable — write to local instant-backup dir
+    # cloud archive unavailable — write to local instant-backup dir
     try:
         local_dir = os.path.join(_LOCAL_DB_BACKUP, "quotation_instant")
         os.makedirs(local_dir, exist_ok=True)
@@ -309,8 +660,8 @@ def _backup_customers():
             "count": len(rows),
             "data": [dict(r) for r in rows],
         }
-        path = os.path.join(_REALTIME_DIR, "客戶", "clients.json")
-        _atomic_json_write(path, data)
+        path = os.path.join(_realtime_dir(), "客戶", "clients.json")
+        _cloud_write_json(path, "即時備份/客戶/clients.json", data)
     except Exception as e:
         logger.exception("_backup_customers failed")
         _write_backup_alert(f"即時備份客戶失敗: {e}")
@@ -328,30 +679,46 @@ def _backup_suppliers():
             "count": len(rows),
             "data": [dict(r) for r in rows],
         }
-        os.makedirs(os.path.join(_REALTIME_DIR, "供應商"), exist_ok=True)
-        path = os.path.join(_REALTIME_DIR, "供應商", "suppliers.json")
-        _atomic_json_write(path, data)
+        path = os.path.join(_realtime_dir(), "供應商", "suppliers.json")
+        _cloud_write_json(path, "即時備份/供應商/suppliers.json", data)
     except Exception as e:
         logger.exception("_backup_suppliers failed")
         _write_backup_alert(f"即時備份供應商失敗: {e}")
 
 
 def _daily_backup():
-    # Always snapshot SQLite locally first (independent of H:)
+    # Always snapshot SQLite locally first (independent of the cloud drive)
     _snapshot_sqlite(also_to_cloud=True)
+
+    # 同樣不依賴雲端是否可用、也不受下方「今天已經跑過」的 .done 早退影響——
+    # server.log 的成長跟雲端備份完全無關，見 _rotate_server_log_if_large() docstring
+    _rotate_server_log_if_large()
 
     if not _archive_ok():
         _write_backup_alert(
-            f"雲端備份路徑不可用（{_ARCHIVE_BASE}），已略過 JSON 每日備份；"
-            f"本機 SQLite 快照見 {_LOCAL_DB_BACKUP}"
+            f"雲端備份路徑不可用（任一磁碟機代號下都找不到 {_ARCHIVE_SUBPATH}），"
+            f"已略過 JSON 每日備份與 uploads/ 鏡像；本機 SQLite 快照見 {_LOCAL_DB_BACKUP}",
+            level="ERROR",
         )
         return
+
+    try:
+        _mirror_uploads()
+    except Exception:
+        logger.exception("_mirror_uploads failed in daily schedule")
+        _write_backup_alert("uploads/ 雲端鏡像失敗，詳見 server.log", level="ERROR")
+
+    try:
+        _mirror_pdf_archives()
+    except Exception:
+        logger.exception("_mirror_pdf_archives failed in daily schedule")
+        _write_backup_alert("PDF 存檔雲端鏡像失敗，詳見 server.log", level="ERROR")
+
     try:
         today_label = date.today().isoformat()
-        day_dir     = os.path.join(_DAILY_DIR, today_label)
-        os.makedirs(day_dir, exist_ok=True)
-        marker = os.path.join(day_dir, '.done')
-        if os.path.exists(marker):
+        day_dir     = os.path.join(_daily_dir(), today_label)
+        marker      = os.path.join(day_dir, '.done')
+        if _cloud_marker_exists(marker, f"每日備份/{today_label}/.done"):
             _clear_backup_alert_if_healthy()
             return
         conn = get_db()
@@ -371,8 +738,9 @@ def _daily_backup():
         for fname, sql in tables.items():
             try:
                 rows = [dict(r) for r in conn.execute(sql).fetchall()]
-                _atomic_json_write(
+                _cloud_write_json(
                     os.path.join(day_dir, f"{fname}.json"),
+                    f"每日備份/{today_label}/{fname}.json",
                     {"exported_at": now, "count": len(rows), "data": rows},
                 )
                 summary[fname] = len(rows)
@@ -381,12 +749,15 @@ def _daily_backup():
                 summary[fname] = "error"
 
         conn.close()
-        _atomic_json_write(os.path.join(day_dir, '彙總.json'), summary)
-        open(marker, 'w').close()
+        _cloud_write_json(os.path.join(day_dir, '彙總.json'), f"每日備份/{today_label}/彙總.json", summary)
+        _cloud_write_marker(marker, f"每日備份/{today_label}/.done")
         logger.info("Daily backup completed: %s", day_dir)
         _system_audit("backup.daily_ok", today_label, summary)
         _clear_backup_alert_if_healthy()
-        _prune_audit_log(keep_days=730)
+        retention = _backup_retention()
+        _prune_audit_log(keep_days=retention["audit_log_keep_days"])
+        _prune_cloud_backups(daily_keep_days=retention["cloud_daily_keep_days"],
+                              weekly_keep_days=retention["cloud_weekly_keep_days"])
     except Exception as e:
         logger.exception("_daily_backup failed")
         _write_backup_alert(f"每日雲端 JSON 備份失敗: {e}", level="ERROR")
@@ -409,30 +780,30 @@ def _weekly_backup():
         return
     try:
         week_label = date.today().strftime('%Y-W%W')
-        week_dir   = os.path.join(_WEEKLY_DIR, week_label)
-        os.makedirs(week_dir, exist_ok=True)
-        marker = os.path.join(week_dir, '.done')
-        if os.path.exists(marker):
+        week_dir   = os.path.join(_weekly_dir(), week_label)
+        marker     = os.path.join(week_dir, '.done')
+        s3_dir     = f"週備份/{week_label}"
+        if _cloud_marker_exists(marker, f"{s3_dir}/.done"):
             return
         conn = get_db()
         qs   = [dict(r) for r in conn.execute("SELECT * FROM quotations ORDER BY created_at").fetchall()]
         cs   = [dict(r) for r in conn.execute("SELECT * FROM customers ORDER BY id").fetchall()]
         conn.close()
         now  = datetime.now().isoformat()
-        _atomic_json_write(os.path.join(week_dir, '報價單_全部.json'),
+        _cloud_write_json(os.path.join(week_dir, '報價單_全部.json'), f"{s3_dir}/報價單_全部.json",
                            {"exported_at": now, "count": len(qs), "data": qs})
         by_status: dict = {}
         for q in qs:
             s = (q.get('status') or '草稿').replace('/', '-')
             by_status.setdefault(s, []).append(q)
         for status, items in by_status.items():
-            _atomic_json_write(os.path.join(week_dir, f'報價單_{status}.json'),
+            _cloud_write_json(os.path.join(week_dir, f'報價單_{status}.json'), f"{s3_dir}/報價單_{status}.json",
                                {"exported_at": now, "status": status, "count": len(items), "data": items})
-        _atomic_json_write(os.path.join(week_dir, '客戶.json'),
+        _cloud_write_json(os.path.join(week_dir, '客戶.json'), f"{s3_dir}/客戶.json",
                            {"exported_at": now, "count": len(cs), "data": cs})
-        _atomic_json_write(os.path.join(week_dir, '彙總.json'),
+        _cloud_write_json(os.path.join(week_dir, '彙總.json'), f"{s3_dir}/彙總.json",
                            {"week": week_label, "exported_at": now, "quotations": len(qs), "customers": len(cs)})
-        open(marker, 'w').close()
+        _cloud_write_marker(marker, f"{s3_dir}/.done")
         _system_audit("backup.weekly_ok", week_label, {"quotations": len(qs), "customers": len(cs)})
     except Exception as e:
         logger.exception("_weekly_backup failed")

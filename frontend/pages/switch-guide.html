@@ -2,15 +2,22 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="../static/favicon.png">
-  <title>網路交換器選型導覽 — MOTRIX 營運管理系統</title>
-  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-  <link rel="stylesheet" href="../css/style.css">
+  <title>網路交換器選型導覽 — MOTRIX 專案管理系統</title>
+  <script src="../static/auth-guard.js"></script>
+  <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <style>
     [x-cloak]{display:none!important}
     .page-main{margin-left:var(--sidebar-w);margin-top:var(--topbar-h);padding:0;min-height:calc(100vh - var(--topbar-h));overflow:hidden;background:var(--white)}
-    .sg-toolbar{height:48px;box-sizing:border-box;display:flex;align-items:center;gap:10px;padding:0 20px;border-bottom:1px solid var(--border-light);background:#fff}
+    /* 2026-09-14：工具列最左加一條直立紅色標記（官網 28×3 的緊湊變體）。
+   這頁的 body 高度是 calc(100vh - topbar - 48px) 算死的，插完整標頭會破掉。 */
+    .sg-toolbar{height:48px;box-sizing:border-box;display:flex;align-items:center;gap:12px;padding:0 20px;border-bottom:1px solid var(--border-light);background:#fff}
+    .sg-toolbar::before{content:'';width:var(--v4-mark-h);height:18px;background:var(--accent);flex:none}
+    /* 標題與副標原本擠在同一行，讀起來像一句跑掉的話；改成上下兩層 */
+    .sg-toolbar .tb-head{display:flex;flex-direction:column;justify-content:center;gap:1px;min-width:0}
     .sg-toolbar .ttl{font-size:14px;font-weight:700;color:var(--text-primary)}
     .sg-toolbar .sub{font-size:11px;color:var(--text-dim)}
     .sg-body{height:calc(100vh - var(--topbar-h) - 48px);overflow:auto;padding:20px 24px}
@@ -20,6 +27,8 @@
     .fam-tile{border:1px solid var(--border-light);border-radius:var(--radius-lg);background:#fff;padding:16px 18px;cursor:pointer;transition:all .15s;text-align:left}
     .fam-tile:hover{border-color:var(--accent);box-shadow:var(--shadow-sm)}
     .fam-tile.active{border-color:var(--accent);background:var(--accent-light)}
+    .gen-card-highlight{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-light),var(--shadow-sm);animation:catFlash 1.6s ease-in-out 1}
+    @keyframes catFlash{0%{background:var(--accent-light)}100%{background:#fff}}
     .fam-tile .fname{font-size:15px;font-weight:700;color:var(--text-primary);margin-bottom:4px}
     .fam-tile .fdesc{font-size:12px;color:var(--text-secondary);line-height:1.5}
 
@@ -69,6 +78,13 @@
     .prod-search .clr:hover{color:var(--danger)}
     .prod-noresult{color:var(--text-dim);font-size:11px;padding:6px 0}
 
+    /* 全域搜尋（型號／品牌，跨分類直接篩出符合結果） */
+    .gsearch-box{position:relative}
+    .gsearch-box input{width:230px;box-sizing:border-box;padding:6px 26px 6px 10px;font-size:12.5px;font-family:inherit;border:1px solid var(--border-light);border-radius:var(--radius);outline:none;background:#fff;color:var(--text-primary)}
+    .gsearch-box input:focus{border-color:var(--accent)}
+    .gsearch-clr{position:absolute;right:6px;top:50%;transform:translateY(-50%);border:none;background:none;color:var(--text-dim);cursor:pointer;font-size:13px;line-height:1;padding:2px}
+    .gsearch-clr:hover{color:var(--danger)}
+
     /* 規格比較表 */
     .compare-toolbar{display:flex;align-items:center;gap:10px;margin-bottom:12px;padding:8px 12px;background:#FAFAF8;border:1px solid var(--border-light);border-radius:var(--radius)}
     .compare-toggle{display:flex;align-items:center;gap:7px;cursor:pointer;font-size:12.5px;font-weight:600;color:var(--text-primary);user-select:none}
@@ -117,11 +133,6 @@
     .mpanel .mhead{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--border-light);background:#FAFAF8}
     .mpanel .mhead b{font-size:13px;color:var(--text-primary)}
     .mpanel .mhead .n{font-size:11px;color:var(--text-dim);font-family:var(--font-en)}
-    .mibtn{border:1px solid var(--border-light);background:#fff;color:var(--text-secondary);font:inherit;font-size:11px;font-weight:600;padding:5px 12px;border-radius:var(--radius);cursor:pointer}
-    .mibtn:hover{border-color:var(--accent);color:var(--accent)}
-    .mibtn.pri{background:var(--accent);border-color:var(--accent);color:#fff;margin-left:auto}
-    .mibtn.pri:hover{background:#1D4ED8;color:#fff}
-    .mibtn.danger{color:var(--danger);border-color:var(--danger)}
     .mtwrap{overflow-x:auto}
     table.mtable{width:100%;border-collapse:collapse;font-size:12px}
     table.mtable th{text-align:left;padding:8px 12px;color:var(--text-dim);font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;border-bottom:1px solid var(--border-light);background:#fff;white-space:nowrap}
@@ -140,11 +151,6 @@
     .field-input:focus{border-color:var(--accent)}
     textarea.field-input{resize:vertical;min-height:2.4em}
     .modal-footer{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}
-    .mbtn{border:1px solid var(--border-light);background:#fff;color:var(--text-secondary);font:inherit;font-size:12.5px;font-weight:600;padding:7px 14px;border-radius:var(--radius);cursor:pointer}
-    .mbtn:hover{color:var(--text-primary);border-color:var(--accent)}
-    .mbtn.pri{background:var(--accent);border-color:var(--accent);color:#fff}
-    .mbtn.pri:hover{background:#1D4ED8}
-    .mbtn:disabled{opacity:.6;cursor:default}
   </style>
 </head>
 <body x-data="app()" x-init="init()" x-cloak>
@@ -152,15 +158,21 @@
   <header id="app-topbar" class="topbar"></header>
   <div class="sidebar-overlay" id="sidebar-overlay"></div>
 
-  <div class="app-shell">
-    <aside class="sidebar" id="app-sidebar"></aside>
+  <!-- 側欄必須是 <body> 的直接子元素：深色模式的反轉濾鏡排除清單只認直接子元素
+       （style.css「DARK MODE」區塊的 body > *:not(.sidebar)），包進 .app-shell
+       裡會連同整個側欄一起被反轉成白底，且 position:fixed 會改以該容器定位。 -->
+  <aside class="sidebar" id="app-sidebar"></aside>
 
+  <div class="app-shell">
     <main class="page-main">
 
       <div class="sg-toolbar">
-        <span class="ttl">網路交換器選型導覽</span>
-        <span class="sub">行業情境 · 產品分類適配 · 產品連結</span>
-        <div style="margin-left:auto;display:flex;gap:8px">
+        <div class="tb-head"><span class="ttl">網路交換器選型導覽</span><span class="sub">行業情境 · 產品分類適配 · 產品連結</span></div>
+        <div style="margin-left:auto;display:flex;align-items:center;gap:10px">
+          <div class="gsearch-box">
+            <input type="text" placeholder="搜尋型號／品牌，如「SG2210」「Omada」" x-model="globalSearch" @input="if(globalSearch.trim()) browseView='scenario'">
+            <button class="gsearch-clr" x-show="globalSearch" @click="globalSearch=''">✕</button>
+          </div>
           <button class="mibtn" :class="mode==='browse' ? 'pri' : ''" @click="mode='browse'">瀏覽</button>
           <button class="mibtn" :class="mode==='manage' ? 'pri' : ''" x-show="canEdit" @click="mode='manage'">管理</button>
         </div>
@@ -190,10 +202,14 @@
               <div class="empty-hint">請點選上方一個行業情境，查看各產品分類的適配度</div>
             </template>
 
+            <template x-if="activeScenario && globalSearch.trim() && categoriesRankedFor(activeScenario).length===0">
+              <div class="empty-hint">查無符合「<span x-text="globalSearch"></span>」的型號／品牌</div>
+            </template>
+
             <template x-if="activeScenario">
               <div class="gen-row">
                 <template x-for="c in categoriesRankedFor(activeScenario)" :key="c.code">
-                  <div class="gen-card">
+                  <div class="gen-card" :id="'cat-' + c.code" :class="highlightCategory===c.code ? 'gen-card-highlight' : ''">
                     <div class="gh">
                       <div class="gname" x-text="c.name"></div>
                       <span class="fit-badge" :class="fitBadgeClass(fitFor(activeScenario, c.code).fit_level)" x-text="fitFor(activeScenario, c.code).fit_level || '—'"></span>
@@ -218,7 +234,7 @@
                             </button>
                           </div>
                         </div>
-                        <div class="prod-search" x-show="productsFor(c.code).length>3">
+                        <div class="prod-search" x-show="productsFor(c.code).length>3 && !globalSearch.trim()">
                           <input type="text" placeholder="搜尋型號／規格，如「8」「PoE」「24」" x-model="productSearch[c.code]">
                           <button class="clr" x-show="productSearch[c.code]" @click="productSearch[c.code]=''">✕</button>
                         </div>
@@ -597,7 +613,7 @@
   const API = '/api'
   function app() {
     return {
-      session: {}, canEdit: false, mode: 'browse', browseView: 'scenario', activeScenario: null, specsCompareCategoryCode: null, compareShowUniform: false, selectedProductIds: {}, productSearch: {},
+      session: {}, canEdit: false, mode: 'browse', browseView: 'scenario', activeScenario: null, specsCompareCategoryCode: null, compareShowUniform: false, selectedProductIds: {}, productSearch: {}, highlightCategory: null, globalSearch: '',
       scenarios: [], categories: [], fits: [], products: [],
       modal: { show:false, kind:'scenario', id:null, code:'', name:'', description:'',
                keySpecs:'', tags:'', priceRange:'', dependencyNote:'', watchNote:'',
@@ -616,6 +632,27 @@
         } catch {}
         await this.loadAll()
         if (this.scenarios.length) this.activeScenario = this.scenarios[0].code
+        this.applyDeepLink()
+      },
+
+      // 從「涵蓋度總覽」頁點選類別／品牌連結過來時，定位到對應分類卡片並帶入品牌篩選
+      applyDeepLink() {
+        const params = new URLSearchParams(location.search)
+        const catParam = params.get('category')
+        const brandParam = params.get('brand')
+        if (!catParam || !this.categories.find(c => c.code === catParam)) return
+        this.browseView = 'scenario'
+        this.highlightCategory = catParam
+        if (brandParam) this.productSearch[catParam] = brandParam
+        // topbar/sidebar 為非同步注入，會在頁面載入後才觸發一次版面重排，
+        // 太早捲動會被那次重排打斷、把捲動位置沖回原點，因此延後並補一次保險捲動
+        const doScroll = () => {
+          const el = document.getElementById('cat-' + catParam)
+          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' })
+        }
+        setTimeout(doScroll, 250)
+        setTimeout(doScroll, 800)
+        setTimeout(() => { this.highlightCategory = null }, 2800)
       },
 
       async loadAll() {
@@ -641,7 +678,10 @@
       },
       categoriesRankedFor(scenarioCode) {
         const rank = { '適合': 0, '可用': 1, '不建議': 2, '': 3 }
-        return [...this.categories].sort((a, b) => {
+        let cats = [...this.categories]
+        const q = this.globalSearch.trim()
+        if (q) cats = cats.filter(c => this.productsFor(c.code).some(p => this.matchesSearch(p, q)))
+        return cats.sort((a, b) => {
           const la = this.fitFor(scenarioCode, a.code).fit_level || ''
           const lb = this.fitFor(scenarioCode, b.code).fit_level || ''
           return (rank[la] ?? 3) - (rank[lb] ?? 3)
@@ -668,7 +708,7 @@
         })
       },
       filteredProductsFor(catCode) {
-        const q = this.productSearch[catCode]
+        const q = this.globalSearch.trim() ? this.globalSearch : this.productSearch[catCode]
         return this.productsFor(catCode).filter(p => this.matchesSearch(p, q))
       },
 

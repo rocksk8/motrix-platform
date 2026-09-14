@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="../static/favicon.png">
+  <title>Schema 狀態 — MOTRIX 專案管理系統</title>
+  <script src="../static/auth-guard.js"></script>
+  <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
+  <style>
+    .schema-main {
+      margin-left: var(--sidebar-w);
+      margin-top: var(--topbar-h);
+      padding: 28px 32px;
+      min-height: calc(100vh - var(--topbar-h));
+      background: var(--white);
+    }
+    .readonly-note {
+      display: flex; align-items: center; gap: 8px;
+      background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: var(--radius);
+      padding: 8px 14px; font-size: 12px; color: #166534; margin-bottom: 16px;
+    }
+    .schema-summary {
+      display: flex; gap: 24px; flex-wrap: wrap;
+      border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 20px 24px; margin-bottom: 24px; background: var(--bg);
+    }
+    .schema-summary .item { display: flex; flex-direction: column; gap: 4px; }
+    .schema-summary .item .label { font-size: 12px; color: var(--text-dim); }
+    .schema-summary .item .value { font-size: 20px; font-weight: 700; color: var(--text-main); font-family: 'LINE Seed TW_OTF', sans-serif; }
+    .status-pill {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 3px 10px; border-radius: 10px; font-size: 12px; font-weight: 700;
+      width: fit-content;
+    }
+    .status-pill.ok { background: #f0fdf4; color: #166534; }
+    .status-pill.warn { background: #fffbeb; color: #92400e; }
+    .migration-list { display: flex; flex-direction: column; gap: 0; }
+    .mig-item {
+      display: flex; gap: 14px; padding: 12px 0;
+      border-bottom: 1px solid var(--border-light);
+      align-items: flex-start;
+    }
+    .mig-item:last-child { border-bottom: none; }
+    .mig-badge {
+      flex-shrink: 0; min-width: 44px; text-align: center;
+      font-size: 11px; font-weight: 700; font-family: 'LINE Seed TW_OTF', sans-serif;
+      padding: 3px 8px; border-radius: 10px;
+      background: #eef2ff; color: #4338ca;
+    }
+    .mig-body { flex: 1; min-width: 0; }
+    .mig-name { font-size: 13px; font-weight: 600; color: var(--text-main); font-family: 'LINE Seed TW_OTF', sans-serif; }
+    .mig-desc { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+  </style>
+</head>
+<body x-data="schemaStatusApp()" x-init="init()" x-cloak>
+
+    <header id="app-topbar" class="topbar"></header>
+<div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar" id="app-sidebar"></aside>
+
+  <!-- MAIN -->
+  <main class="schema-main">
+    <div class="page-header">
+      <div>
+        <div class="page-header__title">Schema 狀態</div>
+        <div class="page-header__sub">資料庫結構版本與 migration 歷史（唯讀）</div>
+      </div>
+    </div>
+
+    <div class="readonly-note">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      本頁僅供檢視，migration 於伺服器每次啟動時自動套用，此處不提供任何操作。
+    </div>
+
+    <div x-show="!loading" class="schema-summary">
+      <div class="item">
+        <span class="label">目前版本</span>
+        <span class="value" x-text="`${data.currentVersion ?? '—'} / ${data.targetVersion ?? '—'}`"></span>
+      </div>
+      <div class="item">
+        <span class="label">狀態</span>
+        <span class="status-pill" :class="data.upToDate ? 'ok' : 'warn'">
+          <span x-text="data.upToDate ? '✓ 最新' : '⚠ 尚未同步'"></span>
+        </span>
+      </div>
+      <div class="item">
+        <span class="label">最後更新時間</span>
+        <span class="value" style="font-size:14px" x-text="formatAt(data.lastAppliedAt)"></span>
+      </div>
+    </div>
+
+    <div x-show="loading" style="padding:48px;text-align:center;color:var(--text-dim);font-size:13px">載入中…</div>
+
+    <div class="migration-list" x-show="!loading">
+      <template x-for="m in migrationsDesc" :key="m.version">
+        <div class="mig-item">
+          <div class="mig-badge" x-text="'v' + m.version"></div>
+          <div class="mig-body">
+            <div class="mig-name" x-text="m.name"></div>
+            <div class="mig-desc" x-show="m.description" x-text="m.description"></div>
+          </div>
+        </div>
+      </template>
+    </div>
+  </main>
+
+  <script src="../static/notif.js"></script>
+  <script>
+  function schemaStatusApp() {
+    return {
+      API: '',
+      session: {},
+      data: {},
+      loading: false,
+
+      async init() {
+        const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
+        if (!s.token) { location.href = 'login.html'; return }
+        this.session = s
+        await this.load()
+      },
+
+      get migrationsDesc() {
+        return [...(this.data.migrations || [])].reverse()
+      },
+
+      async load() {
+        this.loading = true
+        try {
+          const r = await fetch('/api/system/schema-status', {
+            headers: { Authorization: 'Bearer ' + this.session.token }
+          })
+          if (r.status === 401) { this.logout(); return }
+          if (r.ok) {
+            this.data = await r.json()
+          }
+        } catch(e) {}
+        this.loading = false
+      },
+
+      logout() {
+        const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
+        if (s.token) fetch('/api/auth/logout', { method:'POST', headers:{ Authorization:'Bearer '+s.token } }).catch(()=>{})
+        localStorage.removeItem('motrix_session')
+        location.href = 'login.html'
+      },
+
+      formatAt(at) {
+        if (!at) return '—'
+        const d = new Date(at)
+        return d.toLocaleString('zh-TW', {
+          year: 'numeric', month: '2-digit', day: '2-digit',
+          hour: '2-digit', minute: '2-digit', second: '2-digit'
+        })
+      },
+    }
+  }
+  </script>
+  <script src="../static/sidebar.js"></script>
+</body>
+</html>

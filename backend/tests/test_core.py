@@ -3,9 +3,11 @@ import pytest
 
 from routers.reports import _parse_period, _compute_achievement
 from routers.payslips import _calc, _get_tax_rules
-from helpers.quotations import _steps_to_tiers
+from helpers.quotations import _steps_to_tiers, payment_item_amounts
 from helpers.auth import _hash_pw, _verify_pw, is_weak_password, MIN_PASSWORD_LEN
 from routers.quotations import _active_tiers, _current_tier_idx
+from routers.uploads import _resolve_upload_path, UPLOADS_ROOT
+import archive
 
 
 # ── _parse_period ─────────────────────────────────────────────────────────────
@@ -62,12 +64,13 @@ class TestParsePeriod:
 
 # ── _compute_achievement ──────────────────────────────────────────────────────
 
-def _make_case(quote_date="2026-03-01", total=100_000, received=50_000,
+def _make_case(quote_date="2026-03-01", total=100_000, pretax=None, received=50_000,
                settle_status="finalized", gross_profit=20_000,
                margin_pct=20.0, sales="Alice"):
     return {
         "quoteDate":      quote_date,
         "total":          total,
+        "pretax":         pretax if pretax is not None else total,
         "receivedAmount": received,
         "settleStatus":   settle_status,
         "grossProfit":    gross_profit,
@@ -333,6 +336,82 @@ class TestPasswordHelpers:
         legacy_hash = hashlib.sha256(pw.encode()).hexdigest()
         assert _verify_pw(pw, legacy_hash)
 
+
+# ── _resolve_upload_path (path traversal guard) ────────────────────────────────
+
+class TestResolveUploadPath:
+    def test_normal_path_within_uploads(self):
+        full = _resolve_upload_path("projects/1/photo.jpg")
+        assert full is not None
+        assert full.startswith(UPLOADS_ROOT)
+
+    def test_traversal_to_backend_db_is_blocked(self):
+        assert _resolve_upload_path("..\\backend\\motrix_erp.db") is None
+        assert _resolve_upload_path("../backend/motrix_erp.db") is None
+
+    def test_traversal_to_backend_main_is_blocked(self):
+        assert _resolve_upload_path("../backend/main.py") is None
+
+    def test_deep_traversal_outside_repo_is_blocked(self):
+        assert _resolve_upload_path("../../../../../../Windows/win.ini") is None
+
+
+# ── archive._mirror_uploads (uploads/ → cloud mirror) ───────────────────────
+
+class TestMirrorUploads:
+    def _patch_dirs(self, monkeypatch, tmp_path):
+        uploads = tmp_path / "uploads"
+        mirror = tmp_path / "mirror"
+        uploads.mkdir()
+        monkeypatch.setattr(archive, "_UPLOADS_DIR", str(uploads))
+        monkeypatch.setattr(archive, "_uploads_mirror_dir", lambda: str(mirror))
+        return uploads, mirror
+
+    def test_copies_new_files_preserving_subdirs(self, monkeypatch, tmp_path):
+        uploads, mirror = self._patch_dirs(monkeypatch, tmp_path)
+        (uploads / "projects" / "1").mkdir(parents=True)
+        (uploads / "projects" / "1" / "photo.jpg").write_bytes(b"fake-jpeg-bytes")
+
+        copied = archive._mirror_uploads()
+
+        assert copied == 1
+        mirrored = mirror / "projects" / "1" / "photo.jpg"
+        assert mirrored.exists()
+        assert mirrored.read_bytes() == b"fake-jpeg-bytes"
+
+    def test_skips_unchanged_files_on_rerun(self, monkeypatch, tmp_path):
+        uploads, mirror = self._patch_dirs(monkeypatch, tmp_path)
+        (uploads / "a.jpg").write_bytes(b"data")
+        assert archive._mirror_uploads() == 1
+        assert archive._mirror_uploads() == 0, "unchanged file should not be re-copied"
+
+    def test_recopies_changed_files(self, monkeypatch, tmp_path):
+        uploads, mirror = self._patch_dirs(monkeypatch, tmp_path)
+        f = uploads / "a.jpg"
+        f.write_bytes(b"v1")
+        archive._mirror_uploads()
+        f.write_bytes(b"v2-longer-content")
+        assert archive._mirror_uploads() == 1
+        assert (mirror / "a.jpg").read_bytes() == b"v2-longer-content"
+
+    def test_demo_directories_are_excluded(self, monkeypatch, tmp_path):
+        uploads, mirror = self._patch_dirs(monkeypatch, tmp_path)
+        (uploads / "_demo_projects").mkdir()
+        (uploads / "_demo_projects" / "should-not-sync.jpg").write_bytes(b"demo-only")
+        (uploads / "projects").mkdir()
+        (uploads / "projects" / "real.jpg").write_bytes(b"real-data")
+
+        copied = archive._mirror_uploads()
+
+        assert copied == 1
+        assert (mirror / "projects" / "real.jpg").exists()
+        assert not (mirror / "_demo_projects").exists()
+
+    def test_no_uploads_dir_is_a_noop(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(archive, "_UPLOADS_DIR", str(tmp_path / "does-not-exist"))
+        monkeypatch.setattr(archive, "_uploads_mirror_dir", lambda: str(tmp_path / "mirror"))
+        assert archive._mirror_uploads() == 0
+
     def test_is_weak_too_short(self):
         assert is_weak_password("abc")
         assert is_weak_password("a" * (MIN_PASSWORD_LEN - 1))
@@ -350,3 +429,48 @@ class TestPasswordHelpers:
     def test_strong_password_not_weak(self):
         assert not is_weak_password("Str0ng!Pass#2026")
         assert not is_weak_password("allowtec@666secure")
+
+
+# ── payment_item_amounts (regression for dashboard/reports vs edit-UI drift) ──
+
+class TestPaymentItemAmounts:
+    def test_empty_list(self):
+        assert payment_item_amounts(100_000, []) == []
+
+    def test_prefers_stored_amount_when_present(self):
+        # Mirrors what case-management.js actually saves — the last item balances
+        # the total, and every item ends up with an explicit `amount`.
+        items = [
+            {"pct": 30, "amount": 30_000},
+            {"pct": 30, "amount": 30_000},
+            {"pct": 40, "amount": 40_000},
+        ]
+        assert payment_item_amounts(100_000, items) == [30_000, 30_000, 40_000]
+
+    def test_stored_amounts_sum_exactly_even_if_pct_rounds_oddly(self):
+        # 1/3 + 1/3 + 1/3 of 100 can't split evenly by pct alone — but if the UI
+        # already saved amounts that sum to the total, that must be respected
+        # verbatim rather than recomputed from the (necessarily imprecise) pct.
+        items = [
+            {"pct": 33.33, "amount": 33_333},
+            {"pct": 33.33, "amount": 33_333},
+            {"pct": 33.34, "amount": 33_334},
+        ]
+        amounts = payment_item_amounts(100_000, items)
+        assert amounts == [33_333, 33_333, 33_334]
+        assert sum(amounts) == 100_000
+
+    def test_legacy_rows_without_amount_fall_back_to_pct_first_absorbs(self):
+        # Pre-existing backend convention for rows saved before `amount` existed:
+        # first item absorbs the rounding remainder from the rest.
+        items = [{"pct": 33.33}, {"pct": 33.33}, {"pct": 33.34}]
+        amounts = payment_item_amounts(100_000, items)
+        assert sum(amounts) == 100_000
+        assert amounts[0] == 100_000 - amounts[1] - amounts[2]
+
+    def test_mixed_stored_and_legacy_items(self):
+        items = [{"pct": 50, "amount": 50_000}, {"pct": 50}]
+        assert payment_item_amounts(100_000, items) == [50_000, 50_000]
+
+    def test_single_item_gets_full_total(self):
+        assert payment_item_amounts(100_000, [{"pct": 100}]) == [100_000]

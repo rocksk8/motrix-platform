@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="../static/favicon.png">
+  <title>出貨單歷史紀錄 — MOTRIX 專案管理系統</title>
+  <script src="../static/auth-guard.js"></script>
+  <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
+  <style>
+    .seh-main {
+      margin-left: var(--sidebar-w);
+      margin-top: var(--topbar-h);
+      padding: 28px 32px;
+      min-height: calc(100vh - var(--topbar-h));
+      background: var(--white);
+    }
+    .filter-bar {
+      display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+    .filter-bar input, .filter-bar select {
+      padding: 7px 12px; border: 1px solid var(--border); border-radius: var(--radius);
+      font-size: 13px; color: var(--text-main); background: #fff;
+      font-family: inherit;
+    }
+    .filter-bar input { width: 240px; }
+    .filter-bar select { min-width: 90px; }
+    .seh-list { display: flex; flex-direction: column; gap: 0; }
+    .seh-item {
+      display: flex; gap: 16px; padding: 14px 0;
+      border-bottom: 1px solid var(--border-light);
+      align-items: flex-start;
+    }
+    .seh-item:last-child { border-bottom: none; }
+    .seh-dot {
+      width: 34px; height: 34px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; margin-top: 2px; font-size: 14px;
+      background: var(--accent-light); color: var(--accent);
+    }
+    .seh-body { flex: 1; min-width: 0; }
+    .seh-title {
+      font-size: 13px; font-weight: 600; line-height: 1.4;
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    }
+    .seh-title a { color: var(--accent); text-decoration: none; }
+    .seh-title a:hover { text-decoration: underline; }
+    .seh-sub {
+      font-size: 12px; color: var(--text-secondary); margin-top: 2px;
+    }
+    .seh-meta {
+      font-size: 11px; color: var(--text-dim); margin-top: 4px;
+      display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+    }
+    .seh-time { font-family: 'LINE Seed TW_OTF', sans-serif; }
+    .seh-mode-badge {
+      display: inline-block; padding: 1px 7px; border-radius: 10px;
+      font-size: 10px; font-weight: 700; font-family: 'LINE Seed TW_OTF', sans-serif;
+    }
+    .seh-mode-badge.internal { background: #F5F3FF; color: #7C3AED; }
+    .seh-mode-badge.external { background: #ECFDF5; color: #059669; }
+    .seh-empty {
+      text-align: center; padding: 60px 20px; color: var(--text-dim); font-size: 13px;
+    }
+  </style>
+</head>
+<body x-data="shippingExportHistory()" x-init="init()" x-cloak>
+
+  <header id="app-topbar" class="topbar"></header>
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+  <aside class="sidebar" id="app-sidebar"></aside>
+
+  <main class="seh-main">
+    <div class="page-header">
+      <div>
+        <div class="page-header__title">出貨單歷史紀錄</div>
+        <div class="page-header__sub" x-text="'共 ' + filtered.length + ' 筆匯出紀錄'"></div>
+      </div>
+    </div>
+
+    <div class="filter-bar">
+      <input type="search" placeholder="搜尋單號／客戶／專案…" x-model="q">
+      <select x-model="filterYear">
+        <option value="">年份</option>
+        <template x-for="y in yearOptions" :key="y"><option :value="y" x-text="y + '年'"></option></template>
+      </select>
+      <select x-model="filterMonth">
+        <option value="">月份</option>
+        <template x-for="m in 12" :key="m">
+          <option :value="String(m).padStart(2,'0')" x-text="m + '月'"></option>
+        </template>
+      </select>
+      <button class="btn btn-ghost btn-sm" x-show="q || filterYear || filterMonth"
+              @click="q='';filterYear='';filterMonth=''">清除篩選</button>
+    </div>
+
+    <div x-show="loading" style="padding:60px;text-align:center;color:var(--text-dim)">載入中…</div>
+
+    <div class="seh-list" x-show="!loading">
+      <template x-for="e in filtered" :key="e.noteNo + e.exportedAt + e.count">
+        <div class="seh-item">
+          <div class="seh-dot">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14m0 0l-5-5m5 5l5-5"/><path d="M5 19h14"/></svg>
+          </div>
+          <div class="seh-body">
+            <div class="seh-title">
+              <a :href="'case-management.html?q=' + encodeURIComponent(e.quoteNo)" x-text="e.noteNo"></a>
+              <span class="seh-mode-badge" :class="e.mode==='internal' ? 'internal' : 'external'"
+                    x-text="e.mode==='internal' ? '對內' : '對外'"></span>
+              <span x-show="e.count > 1" style="font-size:11px;color:var(--text-dim)" x-text="'第 ' + e.count + ' 次'"></span>
+            </div>
+            <div class="seh-sub" x-text="[e.customerName, e.projectName].filter(Boolean).join(' ／ ') || '（無客戶／專案資訊）'"></div>
+            <div class="seh-meta">
+              <span class="seh-time" x-text="fmtFull(e.exportedAt)"></span>
+              <span x-show="e.shipDate" x-text="'出貨日 ' + e.shipDate"></span>
+              <span x-show="e.exportedBy" x-text="'匯出人員：' + e.exportedBy"></span>
+            </div>
+          </div>
+        </div>
+      </template>
+      <div class="seh-empty" x-show="filtered.length===0">尚無符合條件的匯出紀錄</div>
+    </div>
+  </main>
+
+  <script src="../static/notif.js"></script>
+  <script src="../static/sidebar.js"></script>
+  <script>
+  function shippingExportHistory() {
+    return {
+      events: [],
+      loading: true,
+      q: '',
+      filterYear: '',
+      filterMonth: '',
+
+      init() {
+        this.load()
+      },
+
+      load() {
+        this.loading = true
+        const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
+        fetch('/api/shipping-notes/export-history', {
+          headers: { Authorization: 'Bearer ' + (s.token || '') }
+        })
+          .then(r => r.ok ? r.json() : Promise.reject(r.status))
+          .then(data => { this.events = data })
+          .catch(e => console.error('load failed:', e))
+          .finally(() => { this.loading = false })
+      },
+
+      get yearOptions() {
+        return [...new Set(this.events.map(e => (e.exportedAt || '').slice(0, 4)).filter(Boolean))].sort().reverse()
+      },
+
+      get filtered() {
+        const kw = this.q.trim().toLowerCase()
+        return this.events.filter(e => {
+          const matchQ = !kw ||
+            (e.noteNo || '').toLowerCase().includes(kw) ||
+            (e.customerName || '').toLowerCase().includes(kw) ||
+            (e.projectName || '').toLowerCase().includes(kw)
+          const matchYear = !this.filterYear || (e.exportedAt || '').slice(0, 4) === this.filterYear
+          const matchMonth = !this.filterMonth || (e.exportedAt || '').slice(5, 7) === this.filterMonth
+          return matchQ && matchYear && matchMonth
+        })
+      },
+
+      fmtFull(iso) {
+        if (!iso) return ''
+        const d = new Date(iso)
+        return d.getFullYear() + '/' +
+          String(d.getMonth() + 1).padStart(2, '0') + '/' +
+          String(d.getDate()).padStart(2, '0') + ' ' +
+          String(d.getHours()).padStart(2, '0') + ':' +
+          String(d.getMinutes()).padStart(2, '0')
+      },
+    }
+  }
+  </script>
+</body>
+</html>

@@ -3,8 +3,9 @@ Supports once-off and weekly recurring tasks (per-day occurrence tracking).
 """
 import calendar
 import json
+import os
 import threading
-from datetime import date as _date, timedelta as _timedelta, datetime
+from datetime import date as _date, timedelta as _timedelta, datetime, timezone as _timezone
 from typing import Optional, List
 
 import csv as _csv
@@ -16,10 +17,15 @@ from pydantic import BaseModel
 
 from db import get_db, spawn_bg_thread
 from helpers import (
-    _require_user, _tok, _audit, _notify,
+    _require_user, _tok, _audit, _notify, _purge_notifications,
     notify_daily_task_assigned, notify_daily_task_completed, notify_daily_task_overdue,
+    notify_daily_task_overdue_manager,
     notify_daily_task_edited, notify_warranty_expiry, notify_range_task_deadline, _warranty_expiry,
-    _get_setting, _set_setting,
+    notify_case_stage_deadline, notify_case_stage_deadline_manager,
+    notify_case_project_overdue,
+    notify_cert_expiry,
+    notify_module_activity,
+    _get_setting, _set_setting, notify_approval_reminder, _workdays_elapsed, require_any_module,
 )
 
 router = APIRouter()
@@ -289,6 +295,7 @@ def list_daily_tasks(
     authorization: str = Header(None),
 ):
     user = _require_user(authorization)
+    require_any_module(user, ('daily_task', 'case_manage'), "每日工作事項")
     conn = get_db()
     uf_sql, uf_params = _user_filter_sql(user, username)
     cn_sql    = " AND case_no=?" if case_no else ""
@@ -376,6 +383,7 @@ def list_daily_tasks(
 @router.get("/api/daily-tasks/{task_id}")
 def get_daily_task(task_id: int, occurrence_date: Optional[str] = None, authorization: str = Header(None)):
     user = _require_user(authorization)
+    require_any_module(user, ('daily_task', 'case_manage'), "每日工作事項")
     conn = get_db()
     row = conn.execute(
         "SELECT * FROM daily_tasks WHERE id=? AND is_deleted=0", (task_id,)
@@ -396,6 +404,7 @@ def get_daily_task(task_id: int, occurrence_date: Optional[str] = None, authoriz
 @router.post("/api/daily-tasks", status_code=201)
 def create_daily_task(body: DailyTaskIn, authorization: str = Header(None)):
     user = _require_user(authorization)
+    require_any_module(user, ('daily_task', 'case_manage'), "每日工作事項")
     if user["role"] != "superadmin":
         raise HTTPException(403, "僅最高管理者可建立工作事項")
     if not body.title.strip():
@@ -448,6 +457,7 @@ def create_daily_task(body: DailyTaskIn, authorization: str = Header(None)):
 @router.put("/api/daily-tasks/{task_id}")
 def update_daily_task(task_id: int, body: DailyTaskIn, authorization: str = Header(None)):
     user = _require_user(authorization)
+    require_any_module(user, ('daily_task', 'case_manage'), "每日工作事項")
     if user["role"] != "superadmin":
         raise HTTPException(403, "僅最高管理者可修改工作事項")
     rec_type = body.recurrence_type or "once"
@@ -527,6 +537,7 @@ def update_daily_task(task_id: int, body: DailyTaskIn, authorization: str = Head
 @router.delete("/api/daily-tasks/{task_id}")
 def delete_daily_task(task_id: int, authorization: str = Header(None)):
     user = _require_user(authorization)
+    require_any_module(user, ('daily_task', 'case_manage'), "每日工作事項")
     if user["role"] != "superadmin":
         raise HTTPException(403, "僅最高管理者可刪除工作事項")
     conn = get_db()
@@ -540,8 +551,11 @@ def delete_daily_task(task_id: int, authorization: str = Header(None)):
     conn.execute("UPDATE daily_tasks SET is_deleted=1, updated_at=? WHERE id=?", (now, task_id))
     conn.commit()
     conn.close()
+    _purge_notifications(str(task_id), ['daily_task'])
     _audit(_tok(authorization), "daily_task.delete", "daily_task", str(task_id),
            f"{row['task_date']} {row['title']}")
+    notify_module_activity("工作事項", "刪除", user.get("display_name") or user["username"],
+                            f"{row['task_date']} {row['title']}", "daily-tasks.html")
     return {"ok": True}
 
 
@@ -555,6 +569,7 @@ def get_task_history(
     """Return paginated list of all past occurrences + completions for a task.
     Works even when the task is soft-deleted (history preservation)."""
     user = _require_user(authorization)
+    require_any_module(user, ('daily_task', 'case_manage'), "每日工作事項")
     conn = get_db()
     row = conn.execute("SELECT * FROM daily_tasks WHERE id=?", (task_id,)).fetchone()
     if not row:
@@ -661,6 +676,7 @@ def get_task_history(
 def get_task_edit_log(task_id: int, authorization: str = Header(None)):
     """Return the edit history for a task (field-level diff records)."""
     user = _require_user(authorization)
+    require_any_module(user, ('daily_task', 'case_manage'), "每日工作事項")
     conn = get_db()
     row = conn.execute("SELECT * FROM daily_tasks WHERE id=?", (task_id,)).fetchone()
     if not row:
@@ -705,6 +721,7 @@ def get_task_edit_log(task_id: int, authorization: str = Header(None)):
 def export_task_history(task_id: int, authorization: str = Header(None)):
     """Stream all occurrences + completions as UTF-8-BOM CSV (Excel-compatible)."""
     user = _require_user(authorization)
+    require_any_module(user, ('daily_task', 'case_manage'), "每日工作事項")
     conn = get_db()
     row = conn.execute("SELECT * FROM daily_tasks WHERE id=?", (task_id,)).fetchone()
     if not row:
@@ -783,6 +800,7 @@ def export_task_history(task_id: int, authorization: str = Header(None)):
 @router.patch("/api/daily-tasks/{task_id}/complete")
 def complete_daily_task(task_id: int, body: TaskCompletionIn, authorization: str = Header(None)):
     user = _require_user(authorization)
+    require_any_module(user, ('daily_task', 'case_manage'), "每日工作事項")
     conn = get_db()
     row = conn.execute(
         "SELECT * FROM daily_tasks WHERE id=? AND is_deleted=0", (task_id,)
@@ -875,6 +893,17 @@ def _check_overdue_and_notify(check_date: Optional[str] = None) -> None:
             r["username"]: (r["display_name"] or r["username"])
             for r in conn.execute("SELECT username, display_name FROM users").fetchall()
         }
+        dept_map = {
+            r["username"]: r["department_id"]
+            for r in conn.execute("SELECT username, department_id FROM users WHERE department_id IS NOT NULL").fetchall()
+        }
+        dept_mgr_username = {
+            r["id"]: r["mgr_username"]
+            for r in conn.execute("""
+                SELECT d.id, u.username AS mgr_username FROM departments d
+                JOIN users u ON u.id = d.manager_user_id WHERE u.active=1
+            """).fetchall()
+        }
 
         for row in tasks:
             assigned = json.loads(row["assigned_to"] or "[]")
@@ -913,6 +942,19 @@ def _check_overdue_and_notify(check_date: Optional[str] = None) -> None:
                         args=(row["id"], row["title"], occ_date, username, display, sup_list),
                         daemon=True,
                     ).start()
+                    # 2026-08-22g：額外通知該成員所屬部門的主管（處/部門組織架構延伸）——
+                    # 跟上面的 supervisors（逐任務手動指定）是兩條獨立路徑，主管等於
+                    # 逾期者本人時不重複通知自己
+                    dept_id = dept_map.get(username)
+                    mgr_username = dept_mgr_username.get(dept_id) if dept_id else None
+                    if mgr_username and mgr_username != username:
+                        _notify(mgr_username, "daily_task_overdue_manager", str(row["id"]), row["title"],
+                                f"部門成員 {display} 負責的工作事項「{row['title']}」於 {occ_date} 截止日前尚未完成回報")
+                        threading.Thread(
+                            target=notify_daily_task_overdue_manager,
+                            args=(row["id"], row["title"], occ_date, username, display, dept_id),
+                            daemon=True,
+                        ).start()
 
         conn.close()
         _logger.info("Daily task overdue check complete for %s", check_date)
@@ -963,6 +1005,183 @@ def _check_range_task_deadline() -> None:
         _logger.info("Range task deadline check complete for %s", today_str)
     except Exception as exc:
         _logger.warning("_check_range_task_deadline failed: %s", exc)
+
+
+def _check_case_stage_deadline() -> None:
+    """Notify assignees of case execution-progress stages (caseRecord.stages, stored in
+    quotations.data_json) due in 3 days or due today, if not yet marked done."""
+    today     = _date.today()
+    today_str = today.isoformat()
+    try:
+        conn = get_db()
+        users   = conn.execute("SELECT id, username, display_name FROM users").fetchall()
+        dn_map  = {u["username"]: (u["display_name"] or u["username"]) for u in users}
+        uid_map = {u["id"]: u["username"] for u in users}
+        dept_map = {
+            r["username"]: r["department_id"]
+            for r in conn.execute("SELECT username, department_id FROM users WHERE department_id IS NOT NULL").fetchall()
+        }
+        dept_mgr_username = {
+            r["id"]: r["mgr_username"]
+            for r in conn.execute("""
+                SELECT d.id, u.username AS mgr_username FROM departments d
+                JOIN users u ON u.id = d.manager_user_id WHERE u.active=1
+            """).fetchall()
+        }
+        # Phase 5（2026-08-23）：改成直接 JOIN case_stages 表，SQL 層就用 done=0 AND
+        # due_date IN (...) 篩出真正要處理的列，取代原本「撈全部已成案案件的整包
+        # stages JSON，Python 迴圈逐一比對到期日」的寫法——正規化橋樑（3a/3b/v52）
+        # 已保證這張表對每個有執行進度的案件都是權威、完整的來源。
+        check_date_3d = (today + _timedelta(days=3)).isoformat()
+        check_date_0  = today_str
+        date_to_type = {check_date_3d: (3, "3d"), check_date_0: (0, "deadline")}
+        rows = conn.execute("""
+            SELECT q.quote_no, q.customer_name, q.project_name, q.sales_person_id,
+                   cs.id AS stage_id, cs.label, cs.due_date, cs.assigned_to
+            FROM case_stages cs
+            JOIN quotations q ON q.quote_no = cs.quote_no
+            WHERE COALESCE(NULLIF(q.deal_tag,''), json_extract(q.data_json,'$.dealTag'), '') = '已成案'
+              AND cs.done = 0
+              AND cs.due_date IN (?, ?)
+        """, (check_date_3d, check_date_0)).fetchall()
+        conn.close()
+
+        for row in rows:
+            days_ahead, notif_type = date_to_type[row["due_date"]]
+            check_date = row["due_date"]
+            assignees = list(json.loads(row["assigned_to"] or "[]"))
+            if not assignees:
+                fallback = uid_map.get(row["sales_person_id"])
+                if fallback:
+                    assignees = [fallback]
+            for username in assignees:
+                if not username:
+                    continue
+                guard_key = f"casestage_notif.{row['quote_no']}.{row['stage_id']}.{username}.{notif_type}"
+                if _get_setting(guard_key):
+                    continue
+                _set_setting(guard_key, today_str)
+                display = dn_map.get(username, username)
+                threading.Thread(
+                    target=notify_case_stage_deadline,
+                    args=(row["quote_no"], row["label"] or "", check_date, days_ahead,
+                          username, display, row["customer_name"] or "", row["project_name"] or "", None),
+                    daemon=True,
+                ).start()
+                _notify(username, "case_stage_deadline", row["quote_no"],
+                        f"{row['quote_no']} · {row['label'] or ''}",
+                        "案件執行進度「" + (row["label"] or "") + "」" +
+                        ("今日到期" if days_ahead == 0 else f"{days_ahead} 天後到期"))
+                # 案件/專案管理延伸（2026-08-22）：額外通知負責人所屬部門的主管，
+                # 跟指派人自己收到的 case_stage_deadline 是兩條獨立路徑
+                dept_id = dept_map.get(username)
+                mgr_username = dept_mgr_username.get(dept_id) if dept_id else None
+                if mgr_username and mgr_username != username:
+                    _notify(mgr_username, "case_stage_deadline_manager", row["quote_no"],
+                            f"{row['quote_no']} · {row['label'] or ''}",
+                            f"部門成員 {display} 負責的案件執行進度「{row['label'] or ''}」" +
+                            ("今日到期" if days_ahead == 0 else f"{days_ahead} 天後到期"))
+                    threading.Thread(
+                        target=notify_case_stage_deadline_manager,
+                        args=(row["quote_no"], row["label"] or "", check_date, days_ahead,
+                              username, display, dept_id, row["customer_name"] or "", row["project_name"] or ""),
+                        daemon=True,
+                    ).start()
+        _logger.info("Case stage deadline check complete for %s", today_str)
+    except Exception as exc:
+        _logger.warning("_check_case_stage_deadline failed: %s", exc)
+
+
+def _check_project_deadline() -> None:
+    """停用（2026-08-26 專案管理併入案件管理）：專案管理業務端點/頁面已下線，
+    projects 表不會再有新的 endDate 被設定，案件本身的階段到期提醒已有對應
+    機制（見同檔 _check_case_stage_deadline()，走 case_stages），不需要重複
+    維護兩套。函式保留空殼是因為既有 3 處呼叫點不用跟著改。"""
+    pass
+
+
+def _prune_case_project_guard_keys(live_keys: set) -> None:
+    """清掉不再需要的 `caseproj_notif.*` guard key（2026-09-10 新增）。
+
+    這些 key 每個超期案件、每個 7 天區間各寫一列進 `system_settings`，原本
+    寫進去就永遠不刪——案件結案、期限被改正、案件被刪除之後，舊 key 全部
+    留著；一個超期兩年的案件光自己就會累積約 104 列。這個專案已經為同一種
+    「只寫不刪、預期會自然停止但其實不會」的模式付過代價：`module_versions`
+    曾長到 626,725 列、約佔 301MB 資料庫裡的 270MB（見 db.py `_m035` 的
+    註解）。與其等它長大，不如在每次掃描結束時順手收斂。
+
+    保留規則：只留「目前仍超期的案件、且是本次算出來的當前區間」那些 key。
+    比當前更早的區間永遠不會再被查詢（判斷式只問「這個區間寄過沒」），留著
+    沒有任何作用，所以一併刪掉——結果是每個超期案件最多只佔 1 列。
+    """
+    conn = get_db()
+    try:
+        existing = [r["key"] for r in conn.execute(
+            "SELECT key FROM system_settings WHERE key LIKE 'caseproj_notif.%'"
+        ).fetchall()]
+        stale = [k for k in existing if k not in live_keys]
+        if stale:
+            conn.executemany("DELETE FROM system_settings WHERE key=?", [(k,) for k in stale])
+            conn.commit()
+            _logger.info("Pruned %d stale caseproj_notif guard keys", len(stale))
+    except Exception as exc:
+        # 收斂失敗不該讓整個每日檢查掛掉——通知本身已經寄出去了
+        _logger.warning("_prune_case_project_guard_keys failed: %s", exc)
+    finally:
+        conn.close()
+
+
+def _check_case_project_timeline_deadline() -> None:
+    """Scan active cases; notify admin if case project endDate is overdue. Re-send every 7 days."""
+    today = _date.today()
+    today_str = today.isoformat()
+    live_guard_keys = set()
+    try:
+        conn = get_db()
+        rows = conn.execute("""
+            SELECT quote_no, customer_name, project_name,
+                   json_extract(data_json, '$.caseRecord.projectTimeline.endDate') AS end_date_json
+            FROM quotations
+            WHERE COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') != '已結案'
+              AND json_extract(data_json, '$.caseRecord.projectTimeline.endDate') IS NOT NULL
+        """).fetchall()
+        conn.close()
+
+        for row in rows:
+            try:
+                end_date_str = (row["end_date_json"] or "").strip('"')
+                if not end_date_str:
+                    continue
+                end_date = _date.fromisoformat(end_date_str)
+            except Exception:
+                continue
+
+            if end_date >= today:
+                continue  # not yet overdue
+
+            days_overdue = (today - end_date).days
+            bucket = days_overdue // 7  # day 0-6 → bucket 0, day 7-13 → bucket 1, etc.
+            guard_key = f"caseproj_notif.{row['quote_no']}.{bucket}"
+            live_guard_keys.add(guard_key)
+            if _get_setting(guard_key):
+                continue  # already sent for this 7-day bucket
+
+            _set_setting(guard_key, today_str)
+            # 這裡刻意用 threading.Thread 而非 db.spawn_bg_thread()：本函式是
+            # 排程觸發、不掛在任何 request 上，contextvar 本來就該是預設值，
+            # 屬於 MOTRIX-ERP-QUICK.md §3.5 明列的例外 (a)。不要「順手改成
+            # spawn_bg_thread」——那會讓它去複製一個根本不存在的 request context。
+            threading.Thread(
+                target=notify_case_project_overdue,
+                args=(row["quote_no"], row["customer_name"] or "", row["project_name"] or "",
+                      end_date_str, days_overdue),
+                daemon=True,
+            ).start()
+
+        _prune_case_project_guard_keys(live_guard_keys)
+        _logger.info("Case project timeline deadline check complete for %s", today_str)
+    except Exception as exc:
+        _logger.warning("_check_case_project_timeline_deadline failed: %s", exc)
 
 
 _WARR_THRESHOLDS = (7, 30)  # days — must be in ascending order
@@ -1022,6 +1241,294 @@ def _check_warranty_expiry() -> None:
         _logger.warning("_check_warranty_expiry failed: %s", exc)
 
 
+# ── HTTPS 憑證到期檢查（2026-09-11）──────────────────────────────────────────
+# 在此之前這件事完全沒有任何監控。目前服務中的是 mkcert 自簽憑證、2028-12-10
+# 到期（星期日），而 mkcert 不會自己更新——到期後的第一個上班日，全公司的
+# Passkey 會一起失效，而那時候不會有人記得「mkcert」是什麼。
+#
+# 門檻依「憑證總效期」自動切換，不必有人在換憑證來源時記得回來改常數：
+#   mkcert 自簽 ≈ 822 天 → 要手動重產，得早點講
+#   Let's Encrypt = 90 天，Posh-ACME 在剩 30 天時就會自動續期
+#     → 剩 21 天還沒換掉，代表自動續期已經失敗，那才是真警報。
+#       若對 LE 沿用 60 天門檻，每張憑證都會在一切正常的情況下誤報一次，
+#       而狼來了的告警等於沒有告警。
+_CERT_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "certs", "cert.pem"
+)
+_CERT_LONG_LIVED_DAYS   = 180              # 總效期超過此天數 → 視為手動簽發
+_CERT_THRESHOLDS_MANUAL = (0, 7, 21, 60)   # 必須遞增
+_CERT_THRESHOLDS_ACME   = (0, 1, 7, 21)
+
+
+def _read_serving_cert(path: str = None) -> Optional[dict]:
+    """讀出目前服務中的憑證資訊；沒有憑證檔（純 HTTP 模式）時回傳 None。
+
+    刻意讀檔而不是對自己開一條 TLS 連線：`start.bat`／`autostart.bat` 載入的
+    就是這個檔（`if exist certs\\cert.pem` 才加 --ssl-* 參數），讀檔沒有網路
+    依賴、不受服務當下狀態影響，測試也不必真的起一個 TLS server。
+    """
+    path = path or _CERT_PATH
+    if not os.path.exists(path):
+        return None
+    try:
+        from cryptography import x509
+        from cryptography.hazmat.primitives import hashes as _hashes
+
+        with open(path, "rb") as fh:
+            cert = x509.load_pem_x509_certificate(fh.read())
+
+        # cryptography 42+ 把 not_valid_after 標為 deprecated，改用 *_utc；
+        # 舊版沒有那個屬性，兩邊都接以免升級/降級任一方向都會炸。
+        not_after = getattr(cert, "not_valid_after_utc", None)
+        if not_after is None:
+            not_after = cert.not_valid_after.replace(tzinfo=_timezone.utc)
+        not_before = getattr(cert, "not_valid_before_utc", None)
+        if not_before is None:
+            not_before = cert.not_valid_before.replace(tzinfo=_timezone.utc)
+
+        try:
+            issuer_cn = cert.issuer.get_attributes_for_oid(
+                x509.oid.NameOID.COMMON_NAME)[0].value
+        except Exception:
+            issuer_cn = ""
+
+        today = datetime.now(_timezone.utc).date()
+        return {
+            "not_after":   not_after.date().isoformat(),
+            "days_left":   (not_after.date() - today).days,
+            "total_days":  (not_after.date() - not_before.date()).days,
+            "issuer_cn":   issuer_cn,
+            "fingerprint": cert.fingerprint(_hashes.SHA256()).hex()[:16],
+            "path":        path,
+        }
+    except Exception as exc:
+        _logger.warning("_read_serving_cert(%s) failed: %s", path, exc)
+        return None
+
+
+def _prune_cert_guard_keys(live_keys: set) -> None:
+    """只保留本次算出來的 guard key，其餘 `cert_notif.*` 一律刪掉。
+
+    理由同 `_prune_case_project_guard_keys()`：換一張憑證就換一組 fingerprint，
+    舊的 key 永遠不會再被查詢；而比當前更早的門檻也不會再被問（剩餘天數只會
+    遞減）。不收斂的話這裡會重演 `module_versions` 那種「只寫不刪」的長期累積。
+    結果是這個前綴在 system_settings 裡最多只佔 1 列。
+    """
+    conn = get_db()
+    try:
+        existing = [r["key"] for r in conn.execute(
+            "SELECT key FROM system_settings WHERE key LIKE 'cert_notif.%'"
+        ).fetchall()]
+        stale = [k for k in existing if k not in live_keys]
+        if stale:
+            conn.executemany(
+                "DELETE FROM system_settings WHERE key=?", [(k,) for k in stale])
+            conn.commit()
+    except Exception as exc:
+        _logger.warning("_prune_cert_guard_keys failed: %s", exc)
+    finally:
+        conn.close()
+
+
+def _check_cert_expiry() -> None:
+    """每日檢查 HTTPS 憑證剩餘天數；每個門檻各寄一次，已過期後每 7 天重寄。"""
+    try:
+        info = _read_serving_cert()
+        if info is None:
+            return  # 純 HTTP 模式（或憑證檔讀不到），沒有到期日要顧
+
+        days_left  = info["days_left"]
+        is_acme    = info["total_days"] <= _CERT_LONG_LIVED_DAYS
+        thresholds = _CERT_THRESHOLDS_ACME if is_acme else _CERT_THRESHOLDS_MANUAL
+
+        if days_left > thresholds[-1]:
+            _prune_cert_guard_keys(set())   # 還很遠，順手把舊憑證留下的 key 收掉
+            return
+
+        if days_left < 0:
+            bucket = f"exp{(-days_left) // 7}"       # 過期後每 7 天重寄一次
+        else:
+            bucket = next(str(t) for t in thresholds if days_left <= t)
+
+        guard_key = f"cert_notif.{info['fingerprint']}_{bucket}"
+        if _get_setting(guard_key):
+            _prune_cert_guard_keys({guard_key})
+            return
+
+        _set_setting(guard_key, _date.today().isoformat())
+        # 同 _check_case_project_timeline_deadline()：排程觸發、不掛在任何 request
+        # 上，刻意用 threading.Thread 而非 db.spawn_bg_thread()（§3.5 例外 (a)）。
+        threading.Thread(
+            target=notify_cert_expiry,
+            args=(days_left, info["not_after"], info["issuer_cn"], info["path"], is_acme),
+            daemon=True,
+        ).start()
+        _logger.warning(
+            "HTTPS cert expiring: %s days left (expires %s, issuer=%s)",
+            days_left, info["not_after"], info["issuer_cn"],
+        )
+        _prune_cert_guard_keys({guard_key})
+    except Exception as exc:
+        _logger.warning("_check_cert_expiry failed: %s", exc)
+
+
+# ── 簽核逾期催辦（2026-08-21）────────────────────────────────────────────────
+# 報價單／承攬商匯款申請／開票申請憑據三張表的 approval JSON 形狀完全相同
+# （{requestedBy, requestedAt, tiers:[{approvers:[{username,status}]}], currentTier}），
+# 但比照這三個 router 各自重複一份 _active_tiers()/_current_tier_idx() 小工具的既有
+# 慣例（quotations.py／contractor_vouchers.py／invoice_vouchers.py 皆有一份幾乎逐字
+# 相同的版本，刻意不跨 router import 以避免循環依賴），這裡也自己放一份。
+
+def _active_tiers(appr: dict) -> list:
+    return appr.get("tiers") or []
+
+
+def _current_tier_idx(appr: dict) -> int:
+    return appr.get("currentTier") or 0
+
+
+_APPROVAL_REMINDER_SOURCES = [
+    {
+        "table": "quotations", "no_col": "quote_no", "label": "報價單",
+        "select_extra": "customer_name, project_name",
+        "desc": lambda row, snap: (row["customer_name"] or "")
+                                   + (("｜" + row["project_name"]) if row["project_name"] else ""),
+    },
+    {
+        "table": "contractor_payment_vouchers", "no_col": "voucher_no", "label": "匯款申請",
+        "select_extra": "snapshot_json",
+        "desc": lambda row, snap: snap.get("vendorName") or "外包人員點工",
+    },
+    {
+        "table": "invoice_vouchers", "no_col": "voucher_no", "label": "開票申請憑據",
+        "select_extra": "snapshot_json",
+        "desc": lambda row, snap: snap.get("customerName") or "",
+    },
+    {
+        "table": "shipping_notes", "no_col": "note_no", "label": "出貨單",
+        "select_extra": "customer_name, project_name",
+        "desc": lambda row, snap: (row["customer_name"] or "")
+                                   + (("｜" + row["project_name"]) if row["project_name"] else ""),
+    },
+    {
+        "table": "payment_requests", "no_col": "request_no", "label": "請款單",
+        "select_extra": "snapshot_json",
+        "desc": lambda row, snap: snap.get("customerName") or "",
+    },
+]
+
+
+def _check_approval_reminders() -> None:
+    """簽核卡在柱列超過工作日 1/3/5 天分級催辦：1、3 天門檻各寄一次，3 天起同步
+    通知全部 superadmin，5 天以上每個工作日都重複寄，直到簽核完成或退回為止。
+    一律從 approval.requestedAt（原始送審時間）起算工作日，不因換層歸零；
+    guard key 帶入 requestedAt，文件退回重新送審後 requestedAt 換新值，催辦
+    倒數會自然重新從 0 天起算，不會被舊一輪的 guard 卡住讓新一輪永遠不寄。
+    工作日計算只排除週六日，不排除國定假日（見 helpers/dates.py _workdays_elapsed
+    docstring，系統目前沒有假日行事曆表可用，屬已知限制）。"""
+    today     = _date.today()
+    today_str = today.isoformat()
+    try:
+        conn = get_db()
+        superadmins = [r["username"] for r in conn.execute(
+            "SELECT username FROM users WHERE role='superadmin' AND active=1"
+        ).fetchall()]
+
+        for src in _APPROVAL_REMINDER_SOURCES:
+            rows = conn.execute(
+                f"SELECT {src['no_col']} AS doc_no, {src['select_extra']}, "
+                f"json_extract(data_json,'$.approval') AS approval_json "
+                f"FROM {src['table']} WHERE status IN ('待審核','簽核中')"
+            ).fetchall()
+            for row in rows:
+                try:
+                    appr = json.loads(row["approval_json"] or "{}")
+                except Exception:
+                    continue
+                requested_at = appr.get("requestedAt") or ""
+                if not requested_at:
+                    continue
+                try:
+                    start_date = _date.fromisoformat(requested_at[:10])
+                except Exception:
+                    continue
+                days_elapsed = _workdays_elapsed(start_date, today)
+                if days_elapsed < 1:
+                    continue
+
+                tiers  = _active_tiers(appr)
+                ct_idx = _current_tier_idx(appr)
+                if tiers and ct_idx < len(tiers):
+                    approvers     = tiers[ct_idx].get("approvers") or []
+                    first_pending = next((a for a in approvers if a.get("status") != "approved"), None)
+                    recipients    = [first_pending["username"]] if first_pending else []
+                elif tiers:
+                    continue  # 所有層皆已完成但 status 尚未更新 — 暫態，略過
+                else:
+                    recipients = list(superadmins)
+                if not recipients:
+                    continue
+
+                snap = {}
+                if "snapshot_json" in row.keys():
+                    try:
+                        snap = json.loads(row["snapshot_json"] or "{}")
+                    except Exception:
+                        snap = {}
+                desc      = src["desc"](row, snap)
+                doc_no    = row["doc_no"]
+                doc_type  = src["label"]
+                guard_base = f"approval_notif.{src['table']}.{doc_no}.{requested_at}"
+
+                def _fire(also_superadmin: bool, dedup_key: str) -> None:
+                    g = f"{guard_base}.{dedup_key}"
+                    if _get_setting(g):
+                        return
+                    _set_setting(g, today_str)
+                    threading.Thread(
+                        target=notify_approval_reminder,
+                        args=(doc_type, doc_no, desc, days_elapsed, recipients, also_superadmin),
+                        daemon=True,
+                    ).start()
+                    notify_targets = list(set(recipients + superadmins)) if also_superadmin else recipients
+                    for u in notify_targets:
+                        _notify(u, "approval_reminder", doc_no, doc_no,
+                                f"{doc_type} {doc_no} 已等待簽核 {days_elapsed} 個工作日，敬請儘速處理")
+
+                if days_elapsed >= 5:
+                    _fire(True, f"5d.{today_str}")
+                elif days_elapsed >= 3:
+                    _fire(True, "3d")
+                else:
+                    _fire(False, "1d")
+        conn.close()
+        _logger.info("Approval reminder check complete for %s", today_str)
+    except Exception as exc:
+        _logger.warning("_check_approval_reminders failed: %s", exc)
+
+
+def _prune_request_log(keep_days: int = 90) -> None:
+    """清掉 90 天前的操作軌跡（2026-09-14，DB v80）。
+
+    這張表每個人每次操作都寫一列，不設保留期限的話它會變成整個資料庫裡最大的一張，
+    備份也跟著變大。90 天的取捨：**足夠回頭查「上個月那筆資料是誰改的」**，又不會
+    讓一份本質上是觀測資料的東西無限累積。要調整就改這個參數。
+
+    同時也是隱私上的分寸——逐條行為紀錄留越久，外洩時的代價越大。
+    """
+    from datetime import datetime as _dt, timedelta as _td
+    cutoff = (_dt.now() - _td(days=keep_days)).isoformat()
+    try:
+        conn = get_db()
+        cur = conn.execute("DELETE FROM user_request_log WHERE at < ?", (cutoff,))
+        conn.commit()
+        conn.close()
+        if cur.rowcount:
+            _logger.info("操作軌跡清理：刪除 %d 筆 %d 天前的紀錄", cur.rowcount, keep_days)
+    except Exception as e:
+        _logger.warning("_prune_request_log failed: %s", e)
+
+
 def schedule_overdue_check() -> None:
     """Call once on server startup. Repeats daily at 08:00.
     On startup: immediately processes ALL missed days since last check (catch-up),
@@ -1032,6 +1539,12 @@ def schedule_overdue_check() -> None:
         _check_overdue_and_notify()
         _check_warranty_expiry()
         _check_range_task_deadline()
+        _check_case_stage_deadline()
+        _check_case_project_timeline_deadline()
+        _check_project_deadline()
+        _check_approval_reminders()
+        _check_cert_expiry()
+        _prune_request_log()
 
     def _startup_catchup():
         """Process every day from (last_check + 1) through yesterday in order."""
@@ -1043,6 +1556,16 @@ def schedule_overdue_check() -> None:
             # First ever run — only process yesterday to avoid spamming historical tasks
             _check_overdue_and_notify()
             _check_warranty_expiry()
+            # 2026-09-11：這一行原本只在下面的「補跑」分支有、這裡沒有，全新環境
+            # 第一次啟動當天的區間工作事項到期提醒會被靜默跳過。它跟同批其他檢查
+            # 一樣是**看未來**的（今天／+3 天），不會因為補跑歷史而洗版，
+            # 沒有理由獨漏——單純是當初漏了。
+            _check_range_task_deadline()
+            _check_case_stage_deadline()
+            _check_case_project_timeline_deadline()
+            _check_project_deadline()
+            _check_approval_reminders()
+            _check_cert_expiry()
             return
 
         # Advance day-by-day through any gap
@@ -1058,6 +1581,11 @@ def schedule_overdue_check() -> None:
 
         _check_warranty_expiry()
         _check_range_task_deadline()
+        _check_case_stage_deadline()
+        _check_case_project_timeline_deadline()
+        _check_project_deadline()
+        _check_approval_reminders()
+        _check_cert_expiry()
         _logger.info("Startup catch-up complete, processed up to %s", yesterday)
 
     # Always run catch-up on startup (the guard inside prevents duplicate emails)

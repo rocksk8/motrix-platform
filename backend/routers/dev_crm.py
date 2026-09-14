@@ -1,30 +1,43 @@
 """業務開發 CRM — 前期案件追蹤 + 開發記錄 (pre-quotation)."""
 import json
-from datetime import datetime
+import logging
+from datetime import datetime, timedelta, date
 from typing import Optional, List
 
-from fastapi import APIRouter, HTTPException, Header
-from pydantic import BaseModel
+from fastapi import APIRouter, File, Form, HTTPException, Header, UploadFile
+from pydantic import BaseModel, Field, ConfigDict
 
 from db import get_db, spawn_bg_thread
 import threading
-from helpers import _require_user, _tok, _audit, notify_module_activity, notify_dev_case_delete_request
+from helpers import (
+    _require_user, _tok, _audit, notify_module_activity, notify_dev_case_delete_request,
+    notify_dev_case_relink_request,
+    _notify, _get_setting, _set_setting, notify_dev_case_stale, _purge_notifications,
+    push_event_for_dev_case_converted, push_event_for_dev_case_stale,
+)
 
 router = APIRouter()
+_logger = logging.getLogger(__name__)
 
-_STATUS_OPTIONS = ["洽談中", "成案", "未成案"]
+_STATUS_OPTIONS = ["洽談中", "成案", "未成案", "暫擱置"]
 _TW_NOW = lambda: datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
 # ── Pydantic models ──────────────────────────────────────────────────────────
 
 class DevCaseIn(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     case_name: str
     customer_name: Optional[str] = ''
     customer_id: Optional[int] = None
     status: Optional[str] = '洽談中'
     sales_persons: Optional[List[int]] = []
     planners: Optional[List[int]] = []
+    # 樂觀鎖（選填，見 update_dev_case）——比照 customers.py/suppliers.py/
+    # vendor_contractors.py 的 expectedUpdatedAt 慣例，camelCase 對外、
+    # snake_case 對內
+    expected_updated_at: Optional[str] = Field(None, alias="expectedUpdatedAt")
 
 
 class DevCaseStatusIn(BaseModel):
@@ -33,6 +46,17 @@ class DevCaseStatusIn(BaseModel):
 
 class DevCaseConvertIn(BaseModel):
     quote_no: str
+
+
+class DevCaseRelinkRequestIn(BaseModel):
+    # 留空＝申請解除連結（清空 converted_quote_no），非空＝申請改連結至該單號
+    quote_no: Optional[str] = ''
+    reason: Optional[str] = ''
+
+
+class DevCaseRelinkApproveIn(BaseModel):
+    approve: bool
+    reject_reason: Optional[str] = ''
 
 
 class DevCaseDeleteRequestIn(BaseModel):
@@ -51,6 +75,12 @@ class DevLogIn(BaseModel):
     content: Optional[str] = ''
     next_action: Optional[str] = ''
     status_snapshot: Optional[str] = ''
+
+
+import os
+
+import helpers.uploads as _uploads_mod
+from helpers.uploads import save_document_files, delete_document_file
 
 
 # ── Permission helpers ────────────────────────────────────────────────────────
@@ -192,6 +222,11 @@ def _case_row(row, umap: dict) -> dict:
         "deleteRequestedBy": row["delete_requested_by"] if "delete_requested_by" in row.keys() else "",
         "deleteRequestedAt": row["delete_requested_at"] if "delete_requested_at" in row.keys() else "",
         "deleteReason": row["delete_reason"] if "delete_reason" in row.keys() else "",
+        "pendingRelink": bool(row["pending_relink"] if "pending_relink" in row.keys() else 0),
+        "relinkRequestedBy": row["relink_requested_by"] if "relink_requested_by" in row.keys() else "",
+        "relinkRequestedAt": row["relink_requested_at"] if "relink_requested_at" in row.keys() else "",
+        "relinkReason": row["relink_reason"] if "relink_reason" in row.keys() else "",
+        "relinkTargetQuoteNo": row["relink_target_quote_no"] if "relink_target_quote_no" in row.keys() else "",
     }
 
 
@@ -213,7 +248,20 @@ def _log_row(row, umap: dict) -> dict:
         "createdById": row["created_by"],
         "createdByName": umap.get(row["created_by"], "") if row["created_by"] else "",
         "createdAt": row["created_at"],
+        "files": _log_files(row),
     }
+
+
+def _log_files(row) -> list:
+    """dev_logs.files_json（DB v82）。舊列沒有這個欄位值時回空陣列——
+    sqlite3.Row 對不存在的欄位會 raise IndexError，所以用 keys() 先判斷，
+    這樣 migration 還沒跑到的環境也不會整支端點噴錯。"""
+    try:
+        if "files_json" not in row.keys():
+            return []
+        return json.loads(row["files_json"] or "[]")
+    except Exception:
+        return []
 
 
 # ── Dev Cases ────────────────────────────────────────────────────────────────
@@ -242,24 +290,6 @@ def list_dev_cases(
         ).fetchall()
         if not _is_admin(user):
             rows = [r for r in rows if _can_access_case(user, r)]
-        return [_case_row(r, umap) for r in rows]
-    finally:
-        conn.close()
-
-
-@router.get("/dev-cases/pending-deletes")
-def list_pending_dev_deletes(authorization: str = Header("")):
-    """最高管理者查看所有待審核刪除申請。"""
-    user = _require_dev(authorization)
-    if user["role"] != "superadmin":
-        raise HTTPException(403, "僅最高管理者可查看刪除申請清單")
-    conn = get_db()
-    try:
-        umap = _user_map(conn)
-        rows = conn.execute(
-            "SELECT * FROM dev_cases WHERE pending_delete=1 AND is_deleted=0"
-            " ORDER BY delete_requested_at DESC"
-        ).fetchall()
         return [_case_row(r, umap) for r in rows]
     finally:
         conn.close()
@@ -307,7 +337,7 @@ def get_dev_case(case_id: int, authorization: str = Header("")):
     user = _require_dev(authorization)
     conn = get_db()
     try:
-        row = conn.execute("SELECT * FROM dev_cases WHERE id=?", (case_id,)).fetchone()
+        row = conn.execute("SELECT * FROM dev_cases WHERE id=? AND is_deleted=0", (case_id,)).fetchone()
         if not row:
             raise HTTPException(404, "案件不存在")
         if not _can_access_case(user, row):
@@ -323,11 +353,15 @@ def update_dev_case(case_id: int, body: DevCaseIn, authorization: str = Header("
     now = _TW_NOW()
     conn = get_db()
     try:
-        row = conn.execute("SELECT * FROM dev_cases WHERE id=?", (case_id,)).fetchone()
+        row = conn.execute("SELECT * FROM dev_cases WHERE id=? AND is_deleted=0", (case_id,)).fetchone()
         if not row:
             raise HTTPException(404, "案件不存在")
         if not _can_access_case(user, row):
             raise HTTPException(403, "無權限修改此案件")
+        # 樂觀鎖：業務開發案件可能有多位業務/企劃同時有編輯權（見 §3.4 sales_persons/
+        # planners），沒有鎖的話兩人同時存檔會後寫覆蓋前寫且完全沒有提示
+        if body.expected_updated_at and row["updated_at"] and body.expected_updated_at != row["updated_at"]:
+            raise HTTPException(409, "案件資料已被其他人更新，請重新載入後再存")
         conn.execute("""
             UPDATE dev_cases
                SET case_name=?, customer_name=?, customer_id=?,
@@ -413,6 +447,8 @@ def cancel_dev_case_delete(case_id: int, authorization: str = Header("")):
         conn.commit()
         _audit(_tok(authorization), "dev_case.delete_cancel", "dev_case",
                str(case_id), row["case_name"])
+        notify_module_activity("業務開發", "取消刪除申請", requester_display,
+                                row["case_name"], "dev-crm.html")
         return {"ok": True}
     finally:
         conn.close()
@@ -444,8 +480,11 @@ def approve_dev_case_delete(case_id: int, body: DevCaseDeleteApproveIn,
                 (now, approver_display, snapshot, case_id),
             )
             conn.commit()
+            _purge_notifications(str(case_id), ['dev_case_stale'])
             _audit(_tok(authorization), "dev_case.delete", "dev_case",
                    str(case_id), row["case_name"])
+            notify_module_activity("業務開發", "核准刪除", user.get("display_name") or user["username"],
+                                    row["case_name"], "dev-crm.html")
             return {"ok": True, "deleted": True}
         else:
             conn.execute(
@@ -456,6 +495,8 @@ def approve_dev_case_delete(case_id: int, body: DevCaseDeleteApproveIn,
             conn.commit()
             _audit(_tok(authorization), "dev_case.delete_reject", "dev_case",
                    str(case_id), row["case_name"])
+            notify_module_activity("業務開發", "退回刪除申請", user.get("display_name") or user["username"],
+                                    row["case_name"], "dev-crm.html")
             return {"ok": True, "deleted": False}
     finally:
         conn.close()
@@ -471,7 +512,7 @@ def update_dev_case_status(
     now = _TW_NOW()
     conn = get_db()
     try:
-        row = conn.execute("SELECT * FROM dev_cases WHERE id=?", (case_id,)).fetchone()
+        row = conn.execute("SELECT * FROM dev_cases WHERE id=? AND is_deleted=0", (case_id,)).fetchone()
         if not row:
             raise HTTPException(404, "案件不存在")
         if not _can_access_case(user, row):
@@ -484,6 +525,8 @@ def update_dev_case_status(
         updated = conn.execute("SELECT * FROM dev_cases WHERE id=?", (case_id,)).fetchone()
         _audit(_tok(authorization), "dev_case.status", "dev_case",
                str(case_id), f"{row['case_name']} → {body.status}")
+        notify_module_activity("業務開發", f"狀態變更為「{body.status}」", user.get("display_name") or user["username"],
+                                row["case_name"], "dev-crm.html")
         return _case_row(updated, _user_map(conn))
     finally:
         conn.close()
@@ -497,20 +540,167 @@ def mark_converted(
     now = _TW_NOW()
     conn = get_db()
     try:
-        row = conn.execute("SELECT * FROM dev_cases WHERE id=?", (case_id,)).fetchone()
+        row = conn.execute("SELECT * FROM dev_cases WHERE id=? AND is_deleted=0", (case_id,)).fetchone()
         if not row:
             raise HTTPException(404, "案件不存在")
         if not _can_access_case(user, row):
             raise HTTPException(403, "無權限修改此案件")
+        if row["converted_quote_no"]:
+            # 已有連結的報價單號，異動／清空一律走審核流程（見 request-relink-quote），
+            # 避免繞過核准直接覆蓋掉已成立的連結。
+            raise HTTPException(409, "此案件已連結報價單，如需異動或解除請透過「修改連結」送審")
+        quote_no = body.quote_no.strip()
+        # quotations 跟 dev_cases 之間沒有 FK 約束，寫入前先確認單號真的存在——
+        # 否則之後這張報價單被刪掉（或單號打錯字從沒對應過任何單），
+        # converted_quote_no 就是一個從一開始就沒有意義的懸空參照。
+        if not conn.execute("SELECT 1 FROM quotations WHERE quote_no=?", (quote_no,)).fetchone():
+            raise HTTPException(400, f"報價單 {quote_no} 不存在，無法連結")
         conn.execute(
             "UPDATE dev_cases SET converted_quote_no=?, status='成案', updated_at=? WHERE id=?",
-            (body.quote_no.strip(), now, case_id),
+            (quote_no, now, case_id),
         )
         conn.commit()
         updated = conn.execute("SELECT * FROM dev_cases WHERE id=?", (case_id,)).fetchone()
         _audit(_tok(authorization), "dev_case.convert", "dev_case",
-               str(case_id), f"{row['case_name']} → {body.quote_no}")
+               str(case_id), f"{row['case_name']} → {quote_no}")
+        notify_module_activity("業務開發", "轉建報價單", user.get("display_name") or user["username"],
+                                f"{row['case_name']} → {quote_no}", "dev-crm.html")
+        spawn_bg_thread(push_event_for_dev_case_converted, args=(case_id,))
         return _case_row(updated, _user_map(conn))
+    finally:
+        conn.close()
+
+
+@router.post("/dev-cases/{case_id}/request-relink-quote", status_code=200)
+def request_dev_case_relink(case_id: int, body: DevCaseRelinkRequestIn,
+                            authorization: str = Header("")):
+    """Admin+ 申請異動（或清空）已連結的報價單號 → 送交最高管理者審核。
+    quote_no 留空即申請「解除連結」——業務案件因報價單被取消等原因需要斷開關聯時使用。"""
+    user = _require_dev(authorization)
+    if not _is_admin(user):
+        raise HTTPException(403, "僅管理員可申請異動報價單連結")
+    now = _TW_NOW()
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT * FROM dev_cases WHERE id=? AND is_deleted=0", (case_id,)
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, "案件不存在")
+        if not row["converted_quote_no"]:
+            raise HTTPException(400, "此案件尚未連結報價單，請使用「轉建報價單」建立連結")
+        if row["pending_relink"]:
+            raise HTTPException(409, "此案件已有待審核的連結異動申請")
+        target = (body.quote_no or '').strip()
+        if target == row["converted_quote_no"]:
+            raise HTTPException(400, "新單號與目前連結相同")
+        if target and not conn.execute(
+            "SELECT 1 FROM quotations WHERE quote_no=?", (target,)
+        ).fetchone():
+            raise HTTPException(400, f"報價單 {target} 不存在，無法連結")
+        requester_display = user.get("display_name") or user["username"]
+        conn.execute(
+            "UPDATE dev_cases SET pending_relink=1, relink_requested_by=?,"
+            " relink_requested_at=?, relink_reason=?, relink_target_quote_no=? WHERE id=?",
+            (requester_display, now, body.reason or '', target, case_id),
+        )
+        conn.commit()
+        _audit(_tok(authorization), "dev_case.relink_request", "dev_case",
+               str(case_id), f"{row['case_name']} → {target or '（解除連結）'}")
+        spawn_bg_thread(
+            notify_dev_case_relink_request,
+            args=(case_id, row["case_name"], requester_display, target, body.reason or ''),
+        )
+        return {"ok": True}
+    finally:
+        conn.close()
+
+
+@router.post("/dev-cases/{case_id}/cancel-relink-quote", status_code=200)
+def cancel_dev_case_relink(case_id: int, authorization: str = Header("")):
+    """管理員取消自己發出的連結異動申請。"""
+    user = _require_dev(authorization)
+    if not _is_admin(user):
+        raise HTTPException(403, "僅管理員可取消連結異動申請")
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT * FROM dev_cases WHERE id=? AND is_deleted=0", (case_id,)
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, "案件不存在")
+        if not row["pending_relink"]:
+            raise HTTPException(409, "此案件無待審核的連結異動申請")
+        requester_display = user.get("display_name") or user["username"]
+        if user["role"] != "superadmin" and row["relink_requested_by"] != requester_display:
+            raise HTTPException(403, "只能取消自己發出的連結異動申請")
+        conn.execute(
+            "UPDATE dev_cases SET pending_relink=0, relink_requested_by='',"
+            " relink_requested_at='', relink_reason='', relink_target_quote_no='' WHERE id=?",
+            (case_id,),
+        )
+        conn.commit()
+        _audit(_tok(authorization), "dev_case.relink_cancel", "dev_case",
+               str(case_id), row["case_name"])
+        notify_module_activity("業務開發", "取消連結異動申請", requester_display,
+                                row["case_name"], "dev-crm.html")
+        return {"ok": True}
+    finally:
+        conn.close()
+
+
+@router.post("/dev-cases/{case_id}/approve-relink-quote", status_code=200)
+def approve_dev_case_relink(case_id: int, body: DevCaseRelinkApproveIn,
+                             authorization: str = Header("")):
+    """最高管理者審核連結異動申請 — approve=True 套用新單號（或清空）；False 退回。
+    清空（解除連結）核准後，案件狀態一併退回「洽談中」——報價單已不存在對應關係，
+    「成案」狀態繼續掛著會誤導其他人以為案件仍有成立中的報價單。"""
+    user = _require_dev(authorization)
+    if user["role"] != "superadmin":
+        raise HTTPException(403, "僅最高管理者可審核連結異動申請")
+    now = _TW_NOW()
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT * FROM dev_cases WHERE id=? AND is_deleted=0", (case_id,)
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, "案件不存在")
+        if not row["pending_relink"]:
+            raise HTTPException(409, "此案件無待審核的連結異動申請")
+        if body.approve:
+            target = row["relink_target_quote_no"] or ''
+            if target and not conn.execute(
+                "SELECT 1 FROM quotations WHERE quote_no=?", (target,)
+            ).fetchone():
+                raise HTTPException(400, f"報價單 {target} 已不存在，無法核准，請申請人取消或重新申請")
+            new_status = "洽談中" if not target else row["status"]
+            conn.execute(
+                "UPDATE dev_cases SET converted_quote_no=?, status=?, pending_relink=0,"
+                " relink_requested_by='', relink_requested_at='', relink_reason='',"
+                " relink_target_quote_no='', updated_at=? WHERE id=?",
+                (target, new_status, now, case_id),
+            )
+            conn.commit()
+            updated = conn.execute("SELECT * FROM dev_cases WHERE id=?", (case_id,)).fetchone()
+            _audit(_tok(authorization), "dev_case.relink_approve", "dev_case",
+                   str(case_id), f"{row['case_name']} → {target or '（解除連結）'}")
+            notify_module_activity("業務開發", "核准連結異動", user.get("display_name") or user["username"],
+                                    row["case_name"], "dev-crm.html")
+            return _case_row(updated, _user_map(conn))
+        else:
+            conn.execute(
+                "UPDATE dev_cases SET pending_relink=0, relink_requested_by='',"
+                " relink_requested_at='', relink_reason='', relink_target_quote_no='' WHERE id=?",
+                (case_id,),
+            )
+            conn.commit()
+            updated = conn.execute("SELECT * FROM dev_cases WHERE id=?", (case_id,)).fetchone()
+            _audit(_tok(authorization), "dev_case.relink_reject", "dev_case",
+                   str(case_id), row["case_name"])
+            notify_module_activity("業務開發", "退回連結異動申請", user.get("display_name") or user["username"],
+                                    row["case_name"], "dev-crm.html")
+            return _case_row(updated, _user_map(conn))
     finally:
         conn.close()
 
@@ -529,6 +719,84 @@ def list_pending_logs(authorization: str = Header("")):
             "SELECT * FROM dev_logs WHERE needs_approval=1 ORDER BY created_at DESC"
         ).fetchall()
         return [_log_row(r, umap) for r in rows]
+    finally:
+        conn.close()
+
+
+@router.get("/dev-crm/activity-stats")
+def dev_crm_activity_stats(authorization: str = Header("")):
+    """跨案件每週／每日接洽成效統計：近 60 天每日筆數、近 8 週週彙總、近 30 天依廠商／
+    通路拆解。僅計入已核准（needs_approval=0）的開發記錄；權限比照 _can_access_case
+    （非 admin 僅計入自己建立或被列為業務/規劃人員的案件）。"""
+    user = _require_dev(authorization)
+    conn = get_db()
+    try:
+        case_rows = conn.execute(
+            "SELECT id, sales_persons, planners, created_by, case_name, customer_name FROM dev_cases WHERE is_deleted=0"
+        ).fetchall()
+        visible_ids = [r["id"] for r in case_rows if _can_access_case(user, r)]
+        if not visible_ids:
+            return {"daily": [], "weekly": [], "byVendor": [], "byChannel": []}
+        case_label = {r["id"]: (r["customer_name"] or r["case_name"] or "未命名案件") for r in case_rows}
+
+        today = date.today()
+        window_start = today - timedelta(days=59)  # 近 60 天（含今天）
+        ph = ",".join("?" * len(visible_ids))
+        rows = conn.execute(
+            f"SELECT log_date, log_by, channel, case_id FROM dev_logs "
+            f"WHERE needs_approval=0 AND case_id IN ({ph}) AND log_date >= ?",
+            visible_ids + [window_start.isoformat()],
+        ).fetchall()
+
+        # 每日筆數（近 60 天，缺資料補 0，避免前端要另外處理稀疏陣列）
+        daily_counts = {}
+        for r in rows:
+            d = (r["log_date"] or "")[:10]
+            daily_counts[d] = daily_counts.get(d, 0) + 1
+        daily = []
+        for i in range(59, -1, -1):
+            d = (today - timedelta(days=i)).isoformat()
+            daily.append({"date": d, "count": daily_counts.get(d, 0)})
+
+        # 每週彙總（近 8 週，週一為週起始，補 0）
+        this_week_start = today - timedelta(days=today.weekday())
+        weekly_counts = {}
+        for item in daily:
+            ws = (date.fromisoformat(item["date"]) - timedelta(
+                days=date.fromisoformat(item["date"]).weekday())).isoformat()
+            weekly_counts[ws] = weekly_counts.get(ws, 0) + item["count"]
+        weekly = []
+        for i in range(7, -1, -1):
+            ws = this_week_start - timedelta(days=7 * i)
+            we = ws + timedelta(days=6)
+            weekly.append({
+                "weekStart": ws.isoformat(),
+                "label": f"{ws.month}/{ws.day}~{we.month}/{we.day}",
+                "count": weekly_counts.get(ws.isoformat(), 0),
+            })
+
+        # 依廠商／通路拆解（近 30 天）
+        recent_start = (today - timedelta(days=29)).isoformat()
+        vendor_counts, ch_counts = {}, {}
+        for r in rows:
+            d = (r["log_date"] or "")[:10]
+            if d < recent_start:
+                continue
+            label = case_label.get(r["case_id"], "未命名案件")
+            vendor_counts[label] = vendor_counts.get(label, 0) + 1
+            ch = r["channel"] or "未分類"
+            ch_counts[ch] = ch_counts.get(ch, 0) + 1
+
+        by_vendor = sorted(
+            [{"name": name, "count": c} for name, c in vendor_counts.items()],
+            key=lambda x: x["count"], reverse=True,
+        )
+        by_channel = sorted(
+            [{"channel": ch, "count": c} for ch, c in ch_counts.items()],
+            key=lambda x: x["count"], reverse=True,
+        )
+
+        return {"daily": daily, "weekly": weekly, "byVendor": by_vendor, "byChannel": by_channel}
     finally:
         conn.close()
 
@@ -554,27 +822,59 @@ def list_dev_logs(case_id: int, authorization: str = Header("")):
 
 
 @router.post("/dev-cases/{case_id}/logs", status_code=201)
-def create_dev_log(case_id: int, body: DevLogIn, authorization: str = Header("")):
+async def create_dev_log(case_id: int,
+                         log_date: str = Form(...),
+                         log_by: int = Form(...),
+                         channel: str = Form(""),
+                         content: str = Form(""),
+                         next_action: str = Form(""),
+                         status_snapshot: str = Form(""),
+                         files: list[UploadFile] = File(default=[]),
+                         authorization: str = Header("")):
+    """新增開發記錄（2026-09-14 起可附照片／檔案）。
+
+    **改成 multipart 而不是另開補傳端點**（使用者裁示）：一次請求送出，不會出現
+    「記錄存了、檔案失敗」的半完成狀態。原本的 DevLogIn pydantic model 仍留著
+    給其他呼叫端用，這一支改讀 Form 欄位——欄位名與型別跟原本的 JSON body
+    一字不差，前端只是改用 FormData 送。
+
+    照片會壓上「上傳者 · 日期時間 · GPS」浮水印（使用者裁示），PDF 不動。
+    """
     user = _require_dev(authorization)
+    body = DevLogIn(log_date=log_date, log_by=log_by, channel=channel,
+                    content=content, next_action=next_action,
+                    status_snapshot=status_snapshot)
     now = _TW_NOW()
     conn = get_db()
     try:
-        case_row_chk = conn.execute("SELECT * FROM dev_cases WHERE id=?", (case_id,)).fetchone()
+        case_row_chk = conn.execute(
+            "SELECT * FROM dev_cases WHERE id=? AND is_deleted=0", (case_id,)
+        ).fetchone()
         if not case_row_chk:
             raise HTTPException(404, "案件不存在")
         if not _can_access_case(user, case_row_chk):
             raise HTTPException(403, "無權限在此案件新增記錄")
         needs_approval = 1 if body.log_by != user["id"] else 0
+        saved_files = []
+        if files:
+            # 存檔在 INSERT 之前：格式/大小不合就整批擋下，不會留下一筆
+            # 沒有附件的記錄讓使用者以為傳成功
+            saved_files = await save_document_files(
+                "dev_logs", str(case_id), files,
+                user.get("display_name") or user["username"],
+                watermark_by=user.get("display_name") or user["username"],
+            )
         cur = conn.execute("""
             INSERT INTO dev_logs
               (case_id, log_date, log_by, channel, content, next_action,
-               status_snapshot, needs_approval, created_by, created_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?)
+               status_snapshot, needs_approval, created_by, created_at, files_json)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?)
         """, (
             case_id, body.log_date, body.log_by,
             body.channel or "", body.content or "",
             body.next_action or "", body.status_snapshot or "",
             needs_approval, user["id"], now,
+            json.dumps(saved_files, ensure_ascii=False),
         ))
         conn.execute("UPDATE dev_cases SET updated_at=? WHERE id=?", (now, case_id))
         conn.commit()
@@ -583,11 +883,19 @@ def create_dev_log(case_id: int, body: DevLogIn, authorization: str = Header("")
         case_name_str = case_row["case_name"] if case_row else str(case_id)
         _audit(_tok(authorization), "dev_log.create", "dev_log",
                str(cur.lastrowid), case_name_str)
+        _detail_lines = []
+        if body.channel:
+            _detail_lines.append(f"聯絡管道：{body.channel}")
+        if body.content:
+            _detail_lines.append(body.content)
+        if body.next_action:
+            _detail_lines.append(f"下一步：{body.next_action}")
         notify_module_activity(
             "業務開發", "新增拜訪記錄",
             user.get("display_name") or user["username"],
-            f"{case_name_str}：{(body.content or '')[:40]}",
+            case_name_str,
             "dev-crm.html",
+            detail="\n".join(_detail_lines),
         )
         _sync_customer_visit(conn, case_id, cur.lastrowid, "upsert", body.dict())
         return _log_row(row, _user_map(conn))
@@ -637,10 +945,50 @@ def delete_dev_log(log_id: int, authorization: str = Header("")):
             raise HTTPException(404, "記錄不存在")
         if row["created_by"] != user["id"] and not _is_admin(user):
             raise HTTPException(403, "僅能刪除自己建立的記錄")
+        # 記錄刪掉，附件也要從磁碟清掉——否則 uploads/ 會留下沒人引用的孤兒檔案，
+        # 而 archive.py::_mirror_uploads() 只增不減，會一路跟著進雲端備份
+        for f in _log_files(row):
+            try:
+                full = os.path.join(_uploads_mod.UPLOADS_ROOT, f.get("path", ""))
+                if f.get("path") and os.path.isfile(full):
+                    os.remove(full)
+            except Exception:
+                pass
         conn.execute("DELETE FROM dev_logs WHERE id=?", (log_id,))
         conn.commit()
         _audit(_tok(authorization), "dev_log.delete", "dev_log", str(log_id), "")
         _sync_customer_visit(conn, row["case_id"], log_id, "delete")
+        case_row = conn.execute("SELECT case_name FROM dev_cases WHERE id=?", (row["case_id"],)).fetchone()
+        notify_module_activity("業務開發", "刪除開發記錄", user.get("display_name") or user["username"],
+                                case_row["case_name"] if case_row else str(row["case_id"]), "dev-crm.html")
+    finally:
+        conn.close()
+
+
+@router.delete("/dev-logs/{log_id}/files/{file_id}")
+def delete_dev_log_file(log_id: int, file_id: str, authorization: str = Header("")):
+    """刪除開發記錄的單一附件——**限 admin 以上**（2026-09-14 使用者裁示）。
+
+    跟「刪整筆記錄」的權限刻意不同：整筆記錄建立者自己就能刪（撤回自己寫的
+    東西），但單獨抽掉一張附件是**只改證據、留下文字**。這在業務開發這一頁
+    特別要緊——代填的記錄要經 admin 審核（needs_approval），審核過了還能讓
+    原建立者悄悄換掉附件的話，那道審核就沒有意義了。
+    """
+    user = _require_dev(authorization)
+    if not _is_admin(user):
+        raise HTTPException(403, "僅管理員以上可刪除附件")
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT * FROM dev_logs WHERE id=?", (log_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, "記錄不存在")
+        existing = _log_files(row)
+        remaining = delete_document_file("dev_logs", str(row["case_id"]), existing, file_id)
+        conn.execute("UPDATE dev_logs SET files_json=? WHERE id=?",
+                     (json.dumps(remaining, ensure_ascii=False), log_id))
+        conn.commit()
+        _audit(_tok(authorization), "dev_log.delete_file", "dev_log", str(log_id), "")
+        return {"ok": True, "files": remaining}
     finally:
         conn.close()
 
@@ -663,6 +1011,161 @@ def approve_dev_log(log_id: int, authorization: str = Header("")):
         conn.commit()
         updated = conn.execute("SELECT * FROM dev_logs WHERE id=?", (log_id,)).fetchone()
         _audit(_tok(authorization), "dev_log.approve", "dev_log", str(log_id), "")
+        case_row = conn.execute("SELECT case_name FROM dev_cases WHERE id=?", (row["case_id"],)).fetchone()
+        notify_module_activity("業務開發", "審核通過開發記錄", user.get("display_name") or user["username"],
+                                case_row["case_name"] if case_row else str(row["case_id"]), "dev-crm.html")
         return _log_row(updated, _user_map(conn))
     finally:
         conn.close()
+
+
+# ── Stale-case notification scheduler (洽談中 > 30 days untouched) ────────────
+
+_STALE_DAYS = 30
+_STALE_RENOTIFY_INTERVAL = 14
+_HOLD_AUTO_CONVERT_DAYS = 180
+
+
+def _check_dev_case_stale() -> None:
+    """洽談中案件超過 30 天未更新 → 通知業務/規劃人員 + 所有 admin/superadmin，
+    之後每 14 天重複提醒直到案件狀態改變或有新開發記錄（重置 updated_at）。"""
+    now = datetime.now()
+    today_str = now.strftime("%Y-%m-%d")
+    try:
+        conn = get_db()
+        users = conn.execute(
+            "SELECT id, username, role FROM users WHERE active=1"
+        ).fetchall()
+        uid_map = {u["id"]: u["username"] for u in users}
+        admin_usernames = [u["username"] for u in users if u["role"] in ("admin", "superadmin")]
+        rows = conn.execute(
+            "SELECT id, case_name, customer_name, sales_persons, planners, created_by, updated_at "
+            "FROM dev_cases WHERE is_deleted=0 AND status='洽談中'"
+        ).fetchall()
+        conn.close()
+
+        for row in rows:
+            try:
+                updated = datetime.strptime(row["updated_at"], "%Y-%m-%d %H:%M:%S")
+            except (ValueError, TypeError):
+                continue
+            days = (now - updated).days
+            if days < _STALE_DAYS:
+                continue
+            bucket = (days - _STALE_DAYS) // _STALE_RENOTIFY_INTERVAL
+            # updated_at 併入 guard key，讓案件重新更新後再次逾期時，
+            # 能取得全新的 key 空間，不會因 bucket 數字重複而永久漏發通知
+            guard_key = f"devcase_stale.{row['id']}.{row['updated_at']}.{bucket}"
+            if _get_setting(guard_key):
+                continue
+            _set_setting(guard_key, today_str)
+
+            try:
+                sp = json.loads(row["sales_persons"] or "[]")
+            except Exception:
+                sp = []
+            try:
+                pl = json.loads(row["planners"] or "[]")
+            except Exception:
+                pl = []
+            usernames = [uid_map[uid] for uid in (sp + pl) if uid in uid_map]
+            if not usernames and row["created_by"] in uid_map:
+                usernames = [uid_map[row["created_by"]]]
+            all_usernames = list(dict.fromkeys(usernames + admin_usernames))
+
+            for username in all_usernames:
+                _notify(username, "dev_case_stale", str(row["id"]), row["case_name"],
+                        f"案件「{row['case_name']}」洽談中已 {days} 天未更新，請確認跟進進度")
+
+            threading.Thread(
+                target=notify_dev_case_stale,
+                args=(row["id"], row["case_name"], row["customer_name"] or "", days, all_usernames),
+                daemon=True,
+            ).start()
+
+            # 行事曆推送用獨立於上面 email 的 guard key（不帶 bucket 編號）：
+            # 只在這次停滯週期第一次跨過 30 天時建一次，跟 email 每 14 天重複的
+            # 頻率脫鉤，避免同一案件在行事曆上疊出好幾個重複事件（2026-08-21g，
+            # 使用者明確要求「只建一次」）。
+            cal_guard_key = f"devcase_stale_cal.{row['id']}.{row['updated_at']}"
+            if not _get_setting(cal_guard_key):
+                _set_setting(cal_guard_key, today_str)
+                threading.Thread(
+                    target=push_event_for_dev_case_stale,
+                    args=(row["id"], row["case_name"], row["customer_name"] or "", days),
+                    daemon=True,
+                ).start()
+        _logger.info("Dev case stale check complete for %s", today_str)
+    except Exception as exc:
+        _logger.warning("_check_dev_case_stale failed: %s", exc)
+
+
+def _check_dev_case_hold_expiry() -> None:
+    """暫擱置案件超過 180 天未更新 → 自動轉為未成案，避免案件無限期卡在暫擱置、
+    篩選與統計持續失真。系統排程動作，不發 email、不站內通知（跟人工手動變更
+    狀態不同——這裡沒有一個負責的操作者可歸因，通知也不會有人回應跟進），
+    僅寫入 audit_log 供事後追查。"""
+    now = datetime.now()
+    now_str = now.strftime("%Y-%m-%d %H:%M:%S")
+    cutoff = (now - timedelta(days=_HOLD_AUTO_CONVERT_DAYS)).strftime("%Y-%m-%d %H:%M:%S")
+    conn = None
+    try:
+        conn = get_db()
+        rows = conn.execute(
+            "SELECT id, case_name FROM dev_cases "
+            "WHERE is_deleted=0 AND status='暫擱置' AND updated_at <= ?",
+            (cutoff,),
+        ).fetchall()
+        for row in rows:
+            conn.execute(
+                "UPDATE dev_cases SET status='未成案', updated_at=? WHERE id=?",
+                (now_str, row["id"]),
+            )
+            conn.execute(
+                "INSERT INTO audit_log "
+                "(at,username,display_name,action,target_type,target_id,target_label,detail) "
+                "VALUES (?,?,?,?,?,?,?,?)",
+                (now.isoformat(), "system", "系統自動", "dev_case.status", "dev_case",
+                 str(row["id"]), f"{row['case_name']} → 未成案",
+                 json.dumps(
+                     {"reason": f"暫擱置逾{_HOLD_AUTO_CONVERT_DAYS}天未更新，自動轉為未成案"},
+                     ensure_ascii=False,
+                 )),
+            )
+        conn.commit()
+        if rows:
+            _logger.info("Dev case hold-expiry auto-converted %d case(s)", len(rows))
+    except Exception as exc:
+        _logger.warning("_check_dev_case_hold_expiry failed: %s", exc)
+    finally:
+        if conn is not None:
+            conn.close()
+
+
+def schedule_dev_case_stale_check() -> None:
+    """啟動時呼叫一次。啟動立即補跑一次，之後每天 08:00 重跑，
+    比照 daily_tasks.schedule_overdue_check() 的排程寫法。
+    排程觸發、不掛在任何 request 上的背景工作，依 §3.5 例外規則直接用
+    threading.Thread／get_db()，不使用 spawn_bg_thread()。"""
+
+    def _next_08() -> float:
+        cur = datetime.now()
+        t08 = cur.replace(hour=8, minute=0, second=0, microsecond=0)
+        if t08 <= cur:
+            t08 += timedelta(days=1)
+        return (t08 - cur).total_seconds()
+
+    def _run_all():
+        _check_dev_case_stale()
+        _check_dev_case_hold_expiry()
+
+    def _loop():
+        _run_all()
+        t = threading.Timer(_next_08(), _loop)
+        t.daemon = True
+        t.start()
+
+    threading.Thread(target=_run_all, daemon=True).start()  # startup catch-up
+    t = threading.Timer(_next_08(), _loop)
+    t.daemon = True
+    t.start()

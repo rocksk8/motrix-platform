@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="../static/favicon.png">
-  <title>登入 — MOTRIX 營運管理系統</title>
-  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <title>登入 — MOTRIX 專案管理系統</title>
+  <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -85,8 +85,8 @@
       transition: border-color .15s, box-shadow .15s;
     }
     .form-input:focus {
-      border-color: #2563EB;
-      box-shadow: 0 0 0 3px rgba(37,99,235,.15);
+      border-color: #C8102E;
+      box-shadow: 0 0 0 3px rgba(200,16,46,.18);
     }
     .form-input::placeholder { color: #444; }
     .form-input.error { border-color: #DC2626; }
@@ -101,7 +101,10 @@
     .btn-login {
       width: 100%;
       padding: 12px;
-      background: #2563EB;
+      /* 這兩頁是登入前的獨立頁，刻意不載入 css/style.css（沒有 session，也不要側欄／頂欄），
+         所以不能用 CSS 變數——解析不到會整個沒有背景色，登入鈕會變成只剩文字。
+         色值與 style.css 的 --accent / --accent-hover 同步，改色票時這兩頁要一起改。 */
+      background: #C8102E;
       color: #fff;
       border: none;
       border-radius: 7px;
@@ -116,7 +119,7 @@
       justify-content: center;
       gap: 8px;
     }
-    .btn-login:hover { background: #1D4ED8; }
+    .btn-login:hover { background: #A60D26; }
     .btn-login:disabled { opacity: .5; cursor: not-allowed; }
     .divider {
       border: none;
@@ -155,8 +158,33 @@
     }
     .eye-btn:hover { color: #888; }
     .pw-wrap { position: relative; }
+    .btn-secondary {
+      width: 100%;
+      padding: 10px;
+      background: none;
+      border: 1px solid #333;
+      color: #999;
+      border-radius: 7px;
+      font-size: 13px;
+      font-family: 'LINE Seed TW_OTF', sans-serif;
+      cursor: pointer;
+      transition: all .12s;
+      margin-top: 8px;
+    }
+    .btn-secondary:hover { color: #ddd; border-color: #444; }
+    .passkey-status {
+      font-size: 12px;
+      color: #666;
+      text-align: center;
+      margin: 14px 0;
+    }
   </style>
 </head>
+<!-- Alpine 3 會自動呼叫 x-data 物件上的 init()，所以這裡刻意不寫 x-init。
+     實測（2026-09-11）：加了 x-init="init()" 會讓 init() 在載入時跑**兩次**
+     ——自動那次一次、x-init 一次——連帶把版本查詢與既有 session 檢查都做兩遍。
+     原本這裡是 `@load="init()"`：那是無效的（load 事件只在 window 上觸發、
+     不會冒泡到 body），但因為有自動呼叫所以看不出來，屬於誤導性的死碼。 -->
 <body x-data="loginPage()">
 
   <div class="login-wrap">
@@ -171,7 +199,7 @@
       <div class="card-title">登入系統</div>
       <div class="card-sub">允碩整合集創 · 內部管理平台</div>
 
-      <form @submit.prevent="login()">
+      <form @submit.prevent="login()" x-show="!totpStep">
         <div class="form-group">
           <label class="form-label">帳號</label>
           <input class="form-input" :class="{error: error}"
@@ -211,12 +239,63 @@
           </template>
           <span x-text="loading ? '驗證中…' : '登入'"></span>
         </button>
+
+        <button type="button" @click="startWebauthnLogin()" class="btn-secondary" :disabled="loading" x-show="webauthnConfigured">
+          或使用 Passkey 登入
+        </button>
+      </form>
+
+      <form @submit.prevent="completeWebauthnLogin()" x-show="webauthnStep">
+        <div class="form-group">
+          <div class="passkey-status">
+            請在認證器上完成驗證…
+          </div>
+          <div class="error-msg" x-show="error">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01"/></svg>
+            <span x-text="error"></span>
+          </div>
+        </div>
+
+        <button type="button" @click="backToLogin()"
+                style="width:100%;background:none;border:none;color:#666;font-size:12px;cursor:pointer;padding:6px">
+          ← 返回重新登入
+        </button>
+      </form>
+
+      <form @submit.prevent="verifyTotp()" x-show="totpStep">
+        <div class="form-group">
+          <label class="form-label">兩步驟驗證碼</label>
+          <input class="form-input" :class="{error: error}"
+                 type="text" inputmode="numeric" x-model="totpCode"
+                 placeholder="請輸入驗證 App 顯示的 6 位數字，或救援碼" autocomplete="one-time-code" autofocus>
+          <div class="error-msg" x-show="error">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01"/></svg>
+            <span x-text="error"></span>
+          </div>
+        </div>
+
+        <button type="submit" class="btn-login" :disabled="loading">
+          <template x-if="loading">
+            <div class="spinner"></div>
+          </template>
+          <span x-text="loading ? '驗證中…' : '驗證'"></span>
+        </button>
+
+        <div x-show="qrCodePng" style="text-align:center;margin-top:22px;padding-top:20px;border-top:1px solid #1E1E1E">
+          <div style="font-size:11px;color:#666;margin-bottom:10px">或用手機相機掃描 QR code 核准登入</div>
+          <img :src="qrCodePng" width="160" height="160" style="border-radius:8px;background:#fff;padding:8px">
+        </div>
+
+        <button type="button" @click="backToLogin()"
+                style="width:100%;margin-top:10px;background:none;border:none;color:#666;font-size:12px;cursor:pointer;padding:6px">
+          ← 返回重新登入
+        </button>
       </form>
 
       <hr class="divider">
       <div class="footer-note">
         如需開立帳號或重設密碼，請聯繫系統管理員<br>
-        <span style="color:#333" x-text="'MOTRIX 營運管理系統 ' + (systemVersion || 'v1.0') + ' · 允碩整合集創'"></span>
+        <span style="color:#333" x-text="'MOTRIX 專案管理系統 ' + (systemVersion || 'v1.0') + ' · 允碩整合集創'"></span>
       </div>
     </div>
   </div>
@@ -230,6 +309,28 @@
       loading:  false,
       error:    '',
       systemVersion: '',
+      webauthnConfigured: false,
+      totpStep: false,
+      totpCode: '',
+      challengeToken: '',
+      qrCodePng: '',
+      qrPollTimer: null,
+      webauthnStep: false,
+      webauthnChallenge: '',
+
+      // 2026-09-11：這裡原本還有一個 `async init() { this.checkWebauthnConfig() }`，
+      // 但物件實字下面第二個 init()（抓版本號＋檢查既有 session 的那個）把它整個
+      // 覆蓋掉了——JS 的重複鍵是後者勝出，而且**不會有任何警告**。
+      // 後果：`checkWebauthnConfig()` 從來沒被呼叫過，`webauthnConfigured` 永遠
+      // 是 false，「或使用 Passkey 登入」按鈕永遠不顯示。也就是 Passkey 註冊得
+      // 起來，卻永遠登不進去。已把這一行併進下面那個唯一的 init()。
+      async checkWebauthnConfig() {
+        try {
+          const r = await fetch('/api/system/webauthn-config-status')
+          const data = await r.json().catch(() => ({}))
+          this.webauthnConfigured = !!data.configured
+        } catch {}
+      },
 
       async login() {
         this.error = ''
@@ -249,23 +350,208 @@
             this.loading = false; return
           }
           const data = await res.json()
-          localStorage.setItem('motrix_session', JSON.stringify({
-            token:       data.token,
-            userId:      data.userId,
-            username:    data.username,
-            displayName: data.displayName,
-            role:        data.role,
-            modules:     data.modules,
-            loginAt:     data.loginAt,
-          }))
-          window.location.href = '../index.html'
+          if (data.totpRequired) {
+            this.challengeToken = data.challengeToken
+            this.qrCodePng      = data.qrCodePng || ''
+            this.totpStep = true
+            this.loading  = false
+            this._startQrPolling()
+            return
+          }
+          this._storeSessionAndRedirect(data)
         } catch(e) {
           this.error   = '連線失敗，請確認伺服器是否啟動'
           this.loading = false
         }
       },
 
+      async verifyTotp() {
+        this.error = ''
+        if (!this.totpCode) { this.error = '請輸入驗證碼'; return }
+        this.loading = true
+        try {
+          const res = await fetch('/api/auth/login/totp', {
+            method:  'POST',
+            headers: {'Content-Type': 'application/json'},
+            body:    JSON.stringify({ challenge_token: this.challengeToken, code: this.totpCode.trim() })
+          })
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}))
+            this.error   = err.detail || '驗證碼不正確'
+            this.loading = false
+            if (res.status === 400) this.backToLogin()  // challenge 逾時/作廢，只能重新登入
+            return
+          }
+          const data = await res.json()
+          this._storeSessionAndRedirect(data)
+        } catch(e) {
+          this.error   = '連線失敗，請確認伺服器是否啟動'
+          this.loading = false
+        }
+      },
+
+      _startQrPolling() {
+        if (this.qrPollTimer) clearInterval(this.qrPollTimer)
+        this.qrPollTimer = setInterval(async () => {
+          try {
+            const res = await fetch('/api/auth/login/qr-status?challenge=' + encodeURIComponent(this.challengeToken))
+            if (!res.ok) {
+              // challenge 逾時/作廢（含錯誤密碼次數過多）——回到重新登入畫面
+              this.backToLogin()
+              return
+            }
+            const data = await res.json()
+            if (data.token) {
+              // 手機已核准，直接完成登入，不用使用者在電腦上按任何東西
+              this._storeSessionAndRedirect(data)
+            }
+            // 否則 { pending: true }，什麼都不做，等下一輪
+          } catch (e) {
+            // 網路暫時抖動，不中斷輪詢，下一輪再試
+          }
+        }, 2000)
+      },
+
+      backToLogin() {
+        if (this.qrPollTimer) { clearInterval(this.qrPollTimer); this.qrPollTimer = null }
+        this.totpStep      = false
+        this.webauthnStep  = false
+        this.totpCode       = ''
+        this.challengeToken = ''
+        this.qrCodePng      = ''
+        this.error          = ''
+        this.password       = ''
+      },
+
+      async startWebauthnLogin() {
+        this.error = ''
+        if (!this.username) { this.error = '請輸入帳號'; return }
+        this.loading = true
+        try {
+          const res = await fetch('/api/auth/webauthn/login/begin', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ username: this.username.trim() })
+          })
+          if (!res.ok) {
+            this.loading = false
+            this.error = '此帳號無法使用 Passkey 登入'
+            return
+          }
+          const data = await res.json()
+          this.webauthnChallenge = data.challengeToken
+          this.challengeToken = data.challengeToken
+          const opts = data.options
+
+          // 後端回傳的 options 裡，所有二進位欄位都是 base64 字串，瀏覽器要的是
+          // ArrayBuffer——每一個都要轉，漏一個就是一句看不懂的 TypeError。
+          // 2026-09-11：`opts.user` 只存在於**註冊**用的 options；認證
+          // （generate_authentication_options）不帶 user，原本直接讀 opts.user.id
+          // 會丟 "Cannot read properties of undefined"。加上存在性判斷。
+          if (typeof opts.challenge === 'string') opts.challenge = this._b64ToUint8Array(opts.challenge)
+          if (opts.user && typeof opts.user.id === 'string') opts.user.id = this._b64ToUint8Array(opts.user.id)
+          if (opts.allowCredentials) {
+            opts.allowCredentials = opts.allowCredentials.map(c => ({
+              ...c, id: typeof c.id === 'string' ? this._b64ToUint8Array(c.id) : c.id
+            }))
+          }
+
+          const cred = await navigator.credentials.get({ publicKey: opts })
+          if (!cred) {
+            this.loading = false
+            this.error = '驗證已取消'
+            return
+          }
+          this.webauthnStep = true
+          this.loading = false
+          this._webauthnCredential = cred
+          await this.completeWebauthnLogin()
+        } catch(e) {
+          this.loading = false
+          this.error = e.message || '驗證失敗'
+        }
+      },
+
+      async completeWebauthnLogin() {
+        this.error = ''
+        this.loading = true
+        try {
+          const cred = this._webauthnCredential
+          if (!cred) { this.error = '缺少認證器回應'; return }
+
+          const body = {
+            challengeToken: this.challengeToken,
+            username: this.username,
+            id: cred.id,
+            // 同 change-password.html：py_webauthn 會驗 type（恆為 "public-key"），
+            // 少了就是 InvalidJSONStructure。2026-09-10 補。
+            type: cred.type || 'public-key',
+            rawId: this._uint8ArrayToB64(new Uint8Array(cred.rawId)),
+            response: {
+              clientDataJSON: this._uint8ArrayToB64(new Uint8Array(cred.response.clientDataJSON)),
+              authenticatorData: this._uint8ArrayToB64(new Uint8Array(cred.response.authenticatorData)),
+              signature: this._uint8ArrayToB64(new Uint8Array(cred.response.signature)),
+              userHandle: cred.response.userHandle ? this._uint8ArrayToB64(new Uint8Array(cred.response.userHandle)) : null
+            }
+          }
+
+          const res = await fetch('/api/auth/webauthn/login/complete', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(body)
+          })
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}))
+            this.error = err.detail || '驗證失敗'
+            this.loading = false
+            return
+          }
+          const data = await res.json()
+          this._storeSessionAndRedirect(data)
+        } catch(e) {
+          this.error = e.message || '連線失敗'
+          this.loading = false
+        }
+      },
+
+      _b64ToUint8Array(b64) {
+        // WebAuthn 使用 URL-safe base64（用 - 和 _ 替代 + 和 /），轉換為標準 base64
+        const std64 = b64.replace(/-/g, '+').replace(/_/g, '/')
+        const binary = atob(std64)
+        const bytes = new Uint8Array(binary.length)
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+        return bytes
+      },
+
+      _uint8ArrayToB64(bytes) {
+        let binary = ''
+        for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i])
+        // 2026-09-10：這裡原本直接回傳 btoa()（標準 base64、含 padding），
+        // 但 change-password.html 的同名函式回傳的是 base64url、去 padding——
+        // 同一個協定兩個頁面兩種格式。後端現在兩種都吃得下（見
+        // routers/auth.py::_b64url_decode），但格式漂移遲早會咬人，統一成
+        // WebAuthn 慣用的 base64url。
+        return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
+      },
+
+      _storeSessionAndRedirect(data) {
+        if (this.qrPollTimer) { clearInterval(this.qrPollTimer); this.qrPollTimer = null }
+        localStorage.setItem('motrix_session', JSON.stringify({
+          token:       data.token,
+          userId:      data.userId,
+          username:    data.username,
+          displayName: data.displayName,
+          role:        data.role,
+          modules:     data.modules,
+          loginAt:     data.loginAt,
+        }))
+        window.location.href = '../index.html'
+      },
+
       async init() {
+        // 唯一的 init()——不要再新增第二個（見 checkWebauthnConfig 上方的說明）
+        this.checkWebauthnConfig()
+
         fetch('/api/system/version')
           .then(res => res.ok ? res.json() : null)
           .then(data => { if (data && data.version) this.systemVersion = data.version })

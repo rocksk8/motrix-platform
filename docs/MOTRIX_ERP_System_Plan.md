@@ -1,4 +1,4 @@
-# MOTRIX 允碩整合集創 — 內部營運管理系統 規劃文件
+# MOTRIX 允碩整合集創 — 內部專案管理系統 規劃文件
 
 > 文件建立：2026-07-09 ｜ 狀態：需求確認完成，可開始第一階段開發
 
@@ -12,7 +12,7 @@
 | 公司英文名 | MARGIN INTEGRATED AGGREGATES |
 | 視覺品牌 | MOTRIX SYNERGY INTEGRATION |
 | 統一編號 | 60575481 |
-| 電話 | 04-3602-2818 |
+| 電話 | 04-3610-6566 |
 | E-mail | info@miactw.com |
 | Logo 檔案 | `C:\Users\hichan\current_logo.png` |
 

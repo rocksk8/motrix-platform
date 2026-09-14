@@ -2,13 +2,32 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="../static/favicon.png">
-  <title>供應商管理 — MOTRIX 營運管理系統</title>
-  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <link rel="stylesheet" href="../css/style.css">
+  <title>供應商管理 — MOTRIX 專案管理系統</title>
+  <script src="../static/auth-guard.js"></script>
+  <script src="../static/gov-lookup.js"></script>
+  <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
+  <script src="../static/vendor/xlsx-0.18.5.full.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <style>
+    /* ── 分類籤（2026-09-14）── */
+    .cs-cats{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:12px}
+    .cs-cats__t{font-size:10.5px;color:var(--text-dim);letter-spacing:.06em;margin-right:1px}
+    .cs-cats__sep{width:1px;align-self:stretch;background:var(--border-light);margin:0 6px}
+    .cs-cat{display:flex;align-items:baseline;gap:6px;padding:4px 10px;border-radius:var(--radius);
+            border:1px solid var(--border-light);background:#fff;cursor:pointer;font-family:var(--font-zh)}
+    .cs-cat:hover{border-color:var(--ghost-hover-border)}
+    .cs-cat.on{background:var(--text-primary);border-color:var(--text-primary)}
+    .cs-cat.on .cs-cat__n,.cs-cat.on .cs-cat__l{color:var(--text-on-dark)}
+    /* 件數 0 的選項淡化但不隱藏：「這個分類存在但還沒有資料」是有用的資訊，
+       下拉選單做不到——要選下去才發現是空的。 */
+    .cs-cat.is-empty{opacity:.5}
+    .cs-cat.is-orphan{border-style:dashed;border-color:var(--warning)}
+    .cs-cat__n{font-size:13px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;
+               font-variant-numeric:tabular-nums;color:var(--text-primary);line-height:1}
+    .cs-cat__l{font-size:11.5px;color:var(--text-secondary);line-height:1.2}
     .page-main {
       margin-left: var(--sidebar-w);
       margin-top: var(--topbar-h);
@@ -28,19 +47,10 @@
     .data-table tr:hover td { background: #FDFCFA; }
     .data-table tr:hover .row-actions { opacity: 1; }
     .row-actions { opacity: 0; display: flex; gap: 6px; transition: opacity .12s; }
-    .btn { display:inline-flex; align-items:center; gap:6px; padding:8px 16px; border-radius:var(--radius); font-size:12px; font-family:var(--font-zh); cursor:pointer; border:none; transition:all .12s; font-weight:500; }
-    .btn-primary  { background:var(--accent); color:#fff; }
-    .btn-primary:hover { background:#1D4ED8; }
-    .btn-ghost    { background:#fff; color:var(--text-secondary); border:1px solid var(--border-light); }
-    .btn-ghost:hover { border-color:#C8C4BC; }
-    .btn-danger   { background:var(--danger-light); color:var(--danger); border:1px solid #FECACA; }
-    .btn-danger:hover { background:#FEE2E2; }
-    .btn-sm { padding:5px 11px; font-size:11px; }
     .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 200; display: flex; align-items: flex-start; justify-content: center; padding: 40px 24px; overflow-y: auto; }
     .modal-box { background: #fff; border-radius: var(--radius-lg); width: 100%; max-width: 680px; box-shadow: var(--shadow-lg); flex-shrink: 0; }
     .modal-head { display: flex; align-items: center; padding: 16px 22px; border-bottom: 1px solid var(--border-light); gap: 10px; }
     .modal-head__title { font-size: 14px; font-weight: 600; flex: 1; }
-    .modal-close { width: 28px; height: 28px; border-radius: 4px; border: none; background: #F0EEE9; cursor: pointer; font-size: 16px; color: var(--text-secondary); display: flex; align-items: center; justify-content: center; }
     .modal-close:hover { background: var(--danger-light); color: var(--danger); }
     .modal-body { padding: 20px 22px; max-height: calc(100vh - 200px); overflow-y: auto; }
     .modal-foot { display: flex; align-items: center; padding: 14px 22px; border-top: 1px solid var(--border-light); gap: 8px; }
@@ -97,16 +107,35 @@
   <div class="page-main" :class="{'pr-96': !!selectedId}" style="transition:padding-right .22s">
 
     <!-- 頁頭 -->
-    <div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:20px">
-      <div>
-        <div style="font-size:11px;color:var(--text-dim);margin-bottom:4px">採購庫存</div>
-        <h1 style="font-size:20px;font-weight:700">供應商管理</h1>
-        <p style="font-size:12px;color:var(--text-secondary);margin-top:4px" x-text="`共 ${filtered.length} 筆供應商資料`"></p>
+    <div class="pg">
+      <div class="pg__l">
+        <div class="pg__eyebrow">採購庫存</div>
+        <h1 class="pg__t">供應商管理</h1>
+<p style="font-size:12px;color:var(--text-secondary);margin-top:4px" x-text="`共 ${filtered.length} 筆供應商資料`"></p>
       </div>
       <button class="btn btn-primary" @click="openCreate()">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v16m8-8H4"/></svg>
         新增供應商
       </button>
+    </div>
+
+    <!-- ── 供應商類型籤（2026-09-14）──────────────────────────────
+         原本是一個下拉：看得到有哪些類型，看不出每一類有幾家。類型資料本來
+         就在 data_json.category，清單畫面沒有用上而已。 -->
+    <div class="cs-cats">
+      <button type="button" class="cs-cat" :class="{on: filterCategory===''}" @click="filterCategory=''">
+        <span class="cs-cat__n" x-text="suppliers.length"></span>
+        <span class="cs-cat__l">全部</span>
+      </button>
+      <template x-for="c in categoryChips" :key="c.key">
+        <button type="button" class="cs-cat"
+                :class="{on: filterCategory===c.key, 'is-empty': c.count===0, 'is-orphan': c.orphan}"
+                @click="filterCategory = (filterCategory===c.key ? '' : c.key)"
+                :title="c.orphan ? '這個值不在類型清單裡，新增供應商時選不到它' : ''">
+          <span class="cs-cat__n" x-text="c.count"></span>
+          <span class="cs-cat__l" x-text="c.label"></span>
+        </button>
+      </template>
     </div>
 
     <!-- 搜尋 + 篩選 -->
@@ -115,14 +144,6 @@
         <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
         <input class="search-input" type="text" x-model="search" placeholder="搜尋公司名稱、簡稱、統編、聯絡人…">
       </div>
-      <select class="form-select" x-model="filterCategory" style="width:140px;font-size:12px">
-        <option value="">全部類型</option>
-        <option>原廠</option>
-        <option>代理商</option>
-        <option>製造商</option>
-        <option>服務商</option>
-        <option>其他</option>
-      </select>
       <input type="file" x-ref="importFile" accept=".xlsx,.xls,.csv" style="display:none" @change="handleImport($event)">
       <div style="margin-left:auto;display:flex;gap:6px">
         <button class="btn btn-ghost" @click="$refs.importFile.click()" style="font-size:11px">
@@ -174,7 +195,7 @@
                 <template x-if="(s.tags&&s.tags.length) || s.alias">
                   <div style="display:flex;flex-wrap:wrap;gap:3px">
                     <template x-for="t in (s.tags&&s.tags.length ? s.tags : (s.alias?[s.alias]:[]))" :key="t">
-                      <span x-text="t" style="font-size:10px;background:#EFF6FF;color:#1D4ED8;padding:1px 6px;border-radius:3px;white-space:nowrap;font-family:var(--font-zh)"></span>
+                      <span x-text="t" style="font-size:10px;background:var(--accent-light);color:var(--accent-hover);padding:1px 6px;border-radius:3px;white-space:nowrap;font-family:var(--font-zh)"></span>
                     </template>
                   </div>
                 </template>
@@ -182,7 +203,7 @@
               </td>
               <td style="font-family:LINE Seed TW_OTF, sans-serif;font-size:12px" x-text="s.taxId || '—'"></td>
               <td>
-                <span style="font-size:11px;padding:2px 8px;border-radius:3px;background:#EFF6FF;color:#1D4ED8"
+                <span style="font-size:11px;padding:2px 8px;border-radius:3px;background:var(--accent-light);color:var(--accent-hover)"
                       x-text="s.category || '—'"></span>
               </td>
               <td>
@@ -245,7 +266,7 @@
             <span class="detail-label">內部標籤</span>
             <div style="display:flex;flex-wrap:wrap;gap:4px">
               <template x-for="t in (selectedSupplier.tags&&selectedSupplier.tags.length ? selectedSupplier.tags : (selectedSupplier.alias?[selectedSupplier.alias]:[]))" :key="t">
-                <span x-text="t" style="font-size:11px;background:#EFF6FF;color:#1D4ED8;padding:2px 8px;border-radius:3px;font-family:var(--font-zh)"></span>
+                <span x-text="t" style="font-size:11px;background:var(--accent-light);color:var(--accent-hover);padding:2px 8px;border-radius:3px;font-family:var(--font-zh)"></span>
               </template>
             </div>
           </div>
@@ -362,7 +383,7 @@
       <div class="modal-body" style="padding:28px 24px">
         <template x-if="importing">
           <div style="text-align:center;padding:20px 0">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#2563EB" stroke-width="2" style="animation:spin .8s linear infinite;margin-bottom:12px"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#C8102E" stroke-width="2" style="animation:spin .8s linear infinite;margin-bottom:12px"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>
             <div style="font-size:13px;color:var(--text-secondary)">匯入中，請稍候…</div>
           </div>
         </template>
@@ -373,9 +394,9 @@
                 <div style="font-size:28px;font-weight:700;color:#15803D;font-family:LINE Seed TW_OTF, sans-serif" x-text="importResults.created"></div>
                 <div style="font-size:11px;color:#15803D;margin-top:4px">新增</div>
               </div>
-              <div style="text-align:center;padding:14px;background:#EFF6FF;border-radius:var(--radius)">
-                <div style="font-size:28px;font-weight:700;color:#1D4ED8;font-family:LINE Seed TW_OTF, sans-serif" x-text="importResults.updated"></div>
-                <div style="font-size:11px;color:#1D4ED8;margin-top:4px">更新</div>
+              <div style="text-align:center;padding:14px;background:var(--accent-light);border-radius:var(--radius)">
+                <div style="font-size:28px;font-weight:700;color:var(--accent-hover);font-family:LINE Seed TW_OTF, sans-serif" x-text="importResults.updated"></div>
+                <div style="font-size:11px;color:var(--accent-hover);margin-top:4px">更新</div>
               </div>
               <div style="text-align:center;padding:14px;background:#FEF2F2;border-radius:var(--radius)">
                 <div style="font-size:28px;font-weight:700;color:#DC2626;font-family:LINE Seed TW_OTF, sans-serif" x-text="importResults.failed"></div>
@@ -443,6 +464,48 @@
                 </svg>
                 查詢
               </button>
+            </div>
+
+            <!-- 公司名稱查詢（2026-09-10 補上）：後端 /api/company/search 一直都在，
+                 但三頁都只接了統編查詢——不知道統編就查不到。查詢邏輯共用
+                 static/gov-lookup.js，帶入表單由各頁的 govApply() 處理（欄位名不同）。 -->
+            <div style="margin-top:12px;padding-top:12px;border-top:1px dashed var(--border-light)">
+              <div style="font-size:10px;color:var(--text-dim);margin-bottom:5px;font-family:LINE Seed TW_OTF, sans-serif">
+                公司名稱查詢<span style="margin-left:6px;font-weight:400">— 不知道統編時用這個</span>
+              </div>
+              <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+                <input class="form-input" type="text" x-model="govNameQ"
+                       placeholder="輸入公司名稱關鍵字（至少 2 字）"
+                       style="flex:1;min-width:200px;max-width:280px"
+                       @keydown.enter.prevent="govSearchByName()">
+                <button class="btn btn-ghost btn-sm" @click="govSearchByName()"
+                        :disabled="govSearching || (govNameQ || '').trim().length < 2"
+                        style="flex-shrink:0">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                       :style="govSearching ? 'animation:spin .6s linear infinite' : ''">
+                    <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+                  </svg>
+                  <span x-text="govSearching ? '查詢中…' : '查詢'"></span>
+                </button>
+                <button class="btn btn-ghost btn-sm" x-show="govResults && govResults.length"
+                        @click="govClearResults()" style="flex-shrink:0">清除結果</button>
+              </div>
+              <template x-if="govResults && govResults.length">
+                <div>
+                  <div style="margin-top:8px;border:1px solid var(--border-light);border-radius:var(--radius);background:#fff;max-height:220px;overflow-y:auto">
+                    <template x-for="(g, gi) in govResults" :key="g.taxId + '-' + gi">
+                      <div @click="govPick(g)"
+                           style="padding:8px 12px;border-bottom:1px solid var(--border-light);cursor:pointer;display:flex;gap:10px;align-items:baseline"
+                           onmouseover="this.style.background='#F8F7F4'" onmouseout="this.style.background=''">
+                        <span style="flex:1;font-size:13px" x-text="g.name"></span>
+                        <span style="font-size:11px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.06em" x-text="g.taxId"></span>
+                        <span style="font-size:10px;color:var(--text-dim)" x-text="g.status"></span>
+                      </div>
+                    </template>
+                  </div>
+                  <div style="font-size:10px;color:var(--text-dim);margin-top:4px">點一列即帶入欄位（最多 15 筆）</div>
+                </div>
+              </template>
             </div>
             <div x-show="lookupMsg" style="margin-top:10px;padding:7px 10px;border-radius:4px;font-size:12px;display:flex;align-items:center;gap:6px"
                  :style="lookupOk ? 'background:#F0FDF4;color:#15803D' : 'background:#FEF2F2;color:#DC2626'">
@@ -696,13 +759,44 @@
       suppliers: [],
       search: '',
       filterCategory: '',
+      // ── 分類籤（2026-09-14）──────────────────────────────────────
+      // 正規選項沿用畫面原本那組寫死的下拉值，件數由實際資料算；資料裡有、
+      // 但不在正規清單裡的值另外標成虛線框——看得見才修得掉。
+      _catChips(list, options, pick) {
+        const used = {}
+        let none = 0
+        ;(list || []).forEach(it => {
+          const v = (pick(it) || '').trim()
+          if (!v) { none++; return }
+          used[v] = (used[v] || 0) + 1
+        })
+        const chips = options.map(o => ({ key: o, label: o, count: used[o] || 0, orphan: false }))
+        const known = new Set(options)
+        Object.keys(used).filter(k => !known.has(k)).sort()
+          .forEach(k => chips.push({ key: k, label: k, count: used[k], orphan: true }))
+        if (none) chips.push({ key: '__none__', label: '未填', count: none, orphan: false })
+        return chips
+      },
+      SUPPLIER_CATEGORIES: ['原廠', '代理商', '製造商', '服務商', '其他'],
+      get categoryChips() {
+        return this._catChips(this.suppliers, this.SUPPLIER_CATEGORIES, s => s.category)
+      },
       showModal: false,
       isDirty: false,
       editingId: null,
       selectedId: null,
       formError: '',
       form: {},
+      ...window.MotrixGovLookup.alpineState(),
       taxIdSearch: '',
+      /* 名稱查詢結果帶入（供應商表單欄位為 name / taxId） */
+      govApply(d) {
+        this.form.name   = d.name  || ''
+        this.form.taxId  = d.taxId || ''
+        this.taxIdSearch = this.form.taxId
+        this.lookupMsg   = `已帶入：${d.name}`
+        this.lookupOk    = true
+      },
       lookingUp: false,
       lookupMsg: '',
       lookupOk: false,
@@ -879,7 +973,8 @@
           (s.tags||[]).some(t => t.toLowerCase().includes(q)) ||
           (s.contacts||[]).some(ct => (ct.name||'').toLowerCase().includes(q))
         )
-        if (this.filterCategory) list = list.filter(s => s.category === this.filterCategory)
+        if (this.filterCategory === '__none__') list = list.filter(s => !(s.category || '').trim())
+        else if (this.filterCategory) list = list.filter(s => s.category === this.filterCategory)
         return list
       },
 

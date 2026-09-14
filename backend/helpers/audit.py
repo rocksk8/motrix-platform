@@ -24,6 +24,49 @@ def _notify(username: str, type_: str, ref_id: str, ref_label: str, message: str
         conn.close()
 
 
+_NOTIF_SOURCE_CHECK = {
+    'approval_request':          "SELECT 1 FROM quotations WHERE quote_no=?",
+    'approval_returned':         "SELECT 1 FROM quotations WHERE quote_no=?",
+    'approval_rejected':         "SELECT 1 FROM quotations WHERE quote_no=?",
+    'case_stage_deadline':       "SELECT 1 FROM quotations WHERE quote_no=?",
+    'shipping_approval_request': "SELECT 1 FROM shipping_notes WHERE note_no=?",
+    'shipping_approved':         "SELECT 1 FROM shipping_notes WHERE note_no=?",
+    'shipping_returned':         "SELECT 1 FROM shipping_notes WHERE note_no=?",
+    'daily_task':                "SELECT 1 FROM daily_tasks WHERE id=? AND is_deleted=0",
+    'project_deadline':          "SELECT 1 FROM projects WHERE code=?",
+    'dev_case_stale':            "SELECT 1 FROM dev_cases WHERE id=? AND is_deleted=0",
+}
+
+
+def _filter_live_notifications(conn, rows: list) -> list:
+    """濾掉來源記錄已刪除/軟刪除的通知列（未知 type 一律放行，不受影響）。"""
+    out = []
+    for r in rows:
+        sql = _NOTIF_SOURCE_CHECK.get(r["type"])
+        if sql and r["ref_id"] and not conn.execute(sql, (r["ref_id"],)).fetchone():
+            continue
+        out.append(r)
+    return out
+
+
+def _purge_notifications(ref_id: str, types: list) -> None:
+    """來源記錄刪除/軟刪除時，主動清掉對應通知列。"""
+    if not ref_id or not types:
+        return
+    conn = get_db()
+    try:
+        ph = ",".join("?" * len(types))
+        conn.execute(
+            f"DELETE FROM notifications WHERE ref_id=? AND type IN ({ph})",
+            [ref_id, *types],
+        )
+        conn.commit()
+    except Exception as e:
+        logger.warning("_purge_notifications failed: %s", e)
+    finally:
+        conn.close()
+
+
 def _audit(
     token: str,
     action: str,

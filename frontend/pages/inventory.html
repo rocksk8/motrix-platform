@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="../static/favicon.png">
+  <title>庫存管理 — MOTRIX 專案管理系統</title>
+  <script src="../static/auth-guard.js"></script>
+  <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
+  <style>
+    [x-cloak]{display:none!important}
+    .page-main{margin-left:var(--sidebar-w);margin-top:var(--topbar-h);padding:28px 32px;min-height:calc(100vh - var(--topbar-h));background:var(--white)}
+    .toolbar{display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap}
+    .search-wrap{position:relative;flex:0 0 280px}
+    .search-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text-dim);pointer-events:none}
+    .search-input{width:100%;padding:8px 11px 8px 34px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;background:#fff;outline:none;box-sizing:border-box}
+    .search-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(37,99,235,.08)}
+    .panel{background:#fff;border:1px solid var(--border-light);border-radius:var(--radius-lg);overflow:hidden}
+    .data-table{width:100%;border-collapse:collapse;font-size:13px}
+    .data-table th{padding:10px 14px;text-align:left;font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);font-weight:500;background:#FAFAF8;border-bottom:1px solid var(--border-light);white-space:nowrap}
+    .data-table td{padding:11px 14px;border-bottom:1px solid #F0EEE9;vertical-align:middle}
+    .data-table tr:last-child td{border-bottom:none}
+    .data-table tr:hover td{background:#FDFCFA}
+    .action-btn{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:var(--radius);font-size:11px;font-weight:500;cursor:pointer;border:1px solid;transition:all .12s}
+    .action-btn.edit{background:#EEF2FF;border-color:#C7D2FE;color:#4338CA}
+    .action-btn.edit:hover{background:#E0E7FF}
+    .action-btn.del{background:var(--danger-light);border-color:var(--danger-border);color:var(--danger)}
+    .action-btn.del:hover{background:var(--danger-hover-bg)}
+    .action-btn.ghost{background:#F0EEE9;border-color:var(--border-light);color:var(--text-secondary)}
+    .action-btn.ghost:hover{background:#E5E2DA}
+    .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;display:flex;align-items:center;justify-content:center}
+    .modal-box{background:#fff;border-radius:12px;padding:28px 32px;width:560px;max-width:95vw;max-height:88vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.2)}
+    .modal-title{font-size:15px;font-weight:700;font-family:var(--font-zh);color:var(--text-primary);margin-bottom:20px}
+    .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .field-row{margin-bottom:0}
+    .field-label{font-size:11px;color:var(--text-secondary);margin-bottom:4px;font-weight:500;font-family:var(--font-zh)}
+    .field-input{width:100%;padding:7px 10px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:var(--font-zh);outline:none;box-sizing:border-box}
+    .field-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(37,99,235,.08)}
+    .modal-footer{display:flex;justify-content:flex-end;gap:8px;margin-top:20px}
+    .empty-state{text-align:center;padding:48px;color:var(--text-dim);font-size:13px}
+    .loading-text{text-align:center;padding:40px;color:var(--text-dim);font-size:13px}
+    .stock-badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;font-family:LINE Seed TW_OTF, sans-serif}
+    .stock-badge.ok{background:#DCFCE7;color:#15803D}
+    .stock-badge.zero{background:#F0EEE9;color:var(--text-dim)}
+    .stock-level-dot{display:inline-block;width:9px;height:9px;border-radius:50%;flex-shrink:0}
+    .stock-level-dot.red{background:#DC2626}
+    .stock-level-dot.yellow{background:#D97706}
+    .stock-level-dot.green{background:#D1D5DB}
+    .serial-row{display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:center;margin-bottom:8px}
+    .status-chip{display:inline-flex;align-items:center;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600}
+    .status-chip.in_stock{background:#DCFCE7;color:#15803D}
+    .status-chip.shipped{background:#DBEAFE;color:var(--accent-hover)}
+    .status-chip.installed{background:#EDE9FE;color:#6D28D9}
+    .status-chip.void{background:#F0EEE9;color:var(--text-dim)}
+    .filter-chip{padding:4px 10px;border-radius:999px;font-size:11px;border:1px solid var(--border-light);cursor:pointer;background:#fff}
+    .filter-chip.active{background:var(--accent);border-color:var(--accent);color:#fff}
+  </style>
+</head>
+<body x-data="app()" x-init="init()" x-cloak>
+
+  <header id="app-topbar" class="topbar"></header>
+<div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+<!-- 側欄必須是 <body> 的直接子元素：深色模式的反轉濾鏡排除清單只認直接子元素
+     （style.css「DARK MODE」區塊的 body > *:not(.sidebar)），包進 .app-shell
+     裡會連同整個側欄一起被反轉成白底，且 position:fixed 會改以該容器定位。 -->
+<aside class="sidebar" id="app-sidebar"></aside>
+
+<div class="app-shell">
+
+  <main class="page-main">
+
+    <div class="pg">
+      <div class="pg__l">
+        <div class="pg__eyebrow">廠商與採購</div>
+        <h1 class="pg__t">庫存管理</h1>
+        <p class="pg__s">現有庫存與安全存量，出貨時自動扣帳</p>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <div class="search-wrap">
+        <span class="search-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg></span>
+        <input class="search-input" type="search" placeholder="搜尋料號 / 品名 / 廠牌…" x-model="search">
+      </div>
+      <select class="filter-select" style="padding:7px 10px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;font-family:var(--font-zh);outline:none" x-model="filterCat">
+        <option value="">全部類別</option>
+        <template x-for="c in categories" :key="c"><option :value="c" x-text="c"></option></template>
+      </select>
+      <button type="button" class="filter-chip" :class="{active: lowStockOnly}" @click="lowStockOnly = !lowStockOnly"
+              x-show="lowStockCount > 0" x-text="'低於安全庫存（' + lowStockCount + '）'"></button>
+      <div style="margin-left:auto;font-size:12px;color:var(--text-dim);display:flex;align-items:center;gap:14px">
+        <span x-text="filtered.length + ' 項料號'"></span>
+        <span>庫存總金額：<strong style="color:var(--text-primary);font-family:LINE Seed TW_OTF, sans-serif" x-text="'NT$ ' + Math.round(totalStockValue).toLocaleString()"></strong></span>
+      </div>
+      <button class="btn btn-ghost" @click="openBatchesModal()">進貨批次（供應商/付款）</button>
+      <button class="btn btn-ghost" @click="openPurchaseSuggestionsModal()" x-show="lowStockCount > 0">採購建議</button>
+      <button class="btn btn-primary" @click="openIntakeModal()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v16m8-8H4"/></svg>
+        進貨
+      </button>
+    </div>
+
+    <div class="panel">
+      <div class="loading-text" x-show="loading">載入中…</div>
+      <template x-if="!loading">
+        <div>
+          <div class="table-scroll">
+          <table class="data-table" x-show="filtered.length > 0">
+            <thead>
+              <tr>
+                <th>料號</th>
+                <th>品名</th>
+                <th>廠牌/型號</th>
+                <th>類別</th>
+                <th style="text-align:center">水位</th>
+                <th style="text-align:right">在庫</th>
+                <th style="text-align:right">在庫金額</th>
+                <th>最近入庫</th>
+                <th style="text-align:right">已出貨</th>
+                <th style="text-align:right">已登載</th>
+                <th style="text-align:right">報廢</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="p in filtered" :key="p.part_no">
+                <tr>
+                  <td><span style="font-family:LINE Seed TW_OTF, sans-serif;font-size:12px;font-weight:600;color:var(--accent)" x-text="p.part_no"></span></td>
+                  <td style="font-size:12px" x-text="p.name || '—'"></td>
+                  <td style="font-size:12px;color:var(--text-secondary)" x-text="p.brand || '—'"></td>
+                  <td>
+                    <span x-show="p.category" style="font-size:11px;padding:2px 8px;border-radius:4px;background:#F0EEE9;color:var(--text-secondary)" x-text="p.category"></span>
+                    <span x-show="!p.category" style="color:var(--text-dim)">—</span>
+                  </td>
+                  <td style="text-align:center">
+                    <span class="stock-level-dot" :class="p.stockLevel"
+                          :title="p.safetyStock > 0 ? ('安全庫存 ' + p.safetyStock + '　目前在庫 ' + p.inStockCount + (p.stockLevel==='red' ? '　低於安全庫存' : p.stockLevel==='yellow' ? '　接近安全庫存' : '')) : '未設定安全庫存'"></span>
+                  </td>
+                  <td style="text-align:right"><span class="stock-badge" :class="p.inStockCount > 0 ? 'ok' : 'zero'" x-text="p.inStockCount"></span></td>
+                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-size:12px;color:var(--text-secondary)" x-text="p.inStockValue ? 'NT$ ' + Math.round(p.inStockValue).toLocaleString() : '—'"></td>
+                  <td style="font-size:11px;color:var(--text-dim)" x-text="fmtDateTime(p.lastInAt)"></td>
+                  <td style="text-align:right;font-size:12px;color:var(--text-secondary)" x-text="p.shippedCount"></td>
+                  <td style="text-align:right;font-size:12px;color:var(--text-secondary)" x-text="p.installedCount"></td>
+                  <td style="text-align:right;font-size:12px;color:var(--text-dim)" x-text="p.voidCount"></td>
+                  <td style="white-space:nowrap">
+                    <button class="action-btn ghost" @click.stop="openDetail(p)">查看序號</button>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+          </div>
+          <div class="empty-state" x-show="filtered.length === 0">
+            <div style="font-size:32px;margin-bottom:10px">📦</div>
+            <div x-show="items.length === 0">尚無庫存料號，點擊「進貨」開始建立</div>
+            <div x-show="items.length > 0 && filtered.length === 0">無符合搜尋條件的料號</div>
+          </div>
+        </div>
+      </template>
+    </div>
+
+  </main>
+</div>
+
+<!-- 進貨 Modal -->
+<div class="modal-overlay" x-show="intake.show" @click.self="closeIntakeModal()" x-cloak>
+  <div class="modal-box" @click.stop>
+    <div class="modal-title">進貨（建立庫存批次）</div>
+    <div class="form-grid">
+      <div class="field-row" style="grid-column:1/-1">
+        <div class="field-label">料號 <span style="color:var(--danger)">*</span></div>
+        <div style="display:flex;gap:8px">
+          <select class="field-input" style="flex:0 0 160px" x-model="intake.brandFilter" @change="intake.partNo=''">
+            <option value="">全部廠牌</option>
+            <template x-for="b in intakeBrandOptions" :key="b"><option :value="b" x-text="b"></option></template>
+          </select>
+          <select class="field-input" style="flex:1" x-model="intake.partNo" @change="onIntakePartChange()">
+            <option value="">請選擇物料</option>
+            <template x-for="pt in intakeFilteredParts" :key="pt.part_no">
+              <option :value="pt.part_no" x-text="intakePartLabel(pt)"></option>
+            </template>
+          </select>
+        </div>
+        <div x-show="intake.brandFilter && intakeFilteredParts.length===0" style="margin-top:5px;font-size:11px;color:var(--text-dim)">此廠牌下無料號</div>
+      </div>
+      <div class="field-row">
+        <div class="field-label">數量</div>
+        <input class="field-input" type="number" min="1" x-model.number="intake.qty" @change="syncSerialRows()">
+      </div>
+      <div class="field-row">
+        <div class="field-label">單位成本（未稅，選填）</div>
+        <input class="field-input" type="number" placeholder="預設帶入料號成本" x-model.number="intake.cost">
+      </div>
+      <div class="field-row">
+        <div class="field-label">供應商（選填）</div>
+        <select class="field-input" x-model.number="intake.supplierId">
+          <option :value="null">— 未指定 —</option>
+          <template x-for="s in suppliers" :key="s.id"><option :value="s.id" x-text="s.name"></option></template>
+        </select>
+      </div>
+      <div class="field-row">
+        <div class="field-label">發票號碼（選填）</div>
+        <input class="field-input" type="text" x-model="intake.invoiceNo">
+      </div>
+      <div class="field-row" style="grid-column:1/-1">
+        <div class="field-label">備注（選填）</div>
+        <input class="field-input" type="text" x-model="intake.note">
+      </div>
+    </div>
+
+    <div style="margin-top:16px;font-size:11px;color:var(--text-secondary);font-weight:600;margin-bottom:8px">序號明細（每台實體設備需輸入實際序號）</div>
+    <template x-for="(row, idx) in intake.serials" :key="idx">
+      <div class="serial-row">
+        <input class="field-input" type="text" placeholder="序號 SN" x-model="row.serial_no">
+        <input class="field-input" type="text" placeholder="MAC（選填）" x-model="row.mac">
+        <button class="action-btn del" @click="intake.serials.splice(idx,1); intake.qty=intake.serials.length" title="移除此列">✕</button>
+      </div>
+    </template>
+    <button class="action-btn ghost" @click="intake.serials.push({serial_no:'',mac:''}); intake.qty=intake.serials.length" style="margin-top:4px">+ 新增一列</button>
+
+    <div x-show="intake.error" style="color:var(--danger);font-size:12px;margin-top:12px" x-text="intake.error"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" @click="closeIntakeModal()">取消</button>
+      <button class="btn btn-primary" @click="saveIntake()" :disabled="intake.saving">
+        <span x-text="intake.saving ? '儲存中…' : '建立批次'"></span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- 序號明細 Modal -->
+<div class="modal-overlay" x-show="detail.show" @click.self="detail.show=false" x-cloak>
+  <div class="modal-box" style="width:640px" @click.stop>
+    <div class="modal-title" x-text="detail.partNo + ' 序號明細'"></div>
+    <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">
+      <span class="filter-chip" :class="detail.filterStatus==='' ? 'active' : ''" @click="detail.filterStatus=''">全部</span>
+      <span class="filter-chip" :class="detail.filterStatus==='in_stock' ? 'active' : ''" @click="detail.filterStatus='in_stock'">在庫</span>
+      <span class="filter-chip" :class="detail.filterStatus==='shipped' ? 'active' : ''" @click="detail.filterStatus='shipped'">已出貨</span>
+      <span class="filter-chip" :class="detail.filterStatus==='installed' ? 'active' : ''" @click="detail.filterStatus='installed'">已登載</span>
+      <span class="filter-chip" :class="detail.filterStatus==='void' ? 'active' : ''" @click="detail.filterStatus='void'">報廢</span>
+    </div>
+    <div class="loading-text" x-show="detail.loading">載入中…</div>
+    <template x-if="!detail.loading">
+      <div>
+        <table class="data-table" x-show="detailFiltered.length > 0">
+          <thead><tr><th>序號</th><th>MAC</th><th>狀態</th><th>批次</th><th>入庫時間</th><th>關聯</th><th>操作</th></tr></thead>
+          <tbody>
+            <template x-for="it in detailFiltered" :key="it.id">
+              <tr>
+                <td style="font-size:12px;font-family:LINE Seed TW_OTF, sans-serif" x-text="it.serial_no"></td>
+                <td style="font-size:12px;color:var(--text-dim)" x-text="it.mac || '—'"></td>
+                <td><span class="status-chip" :class="it.status" x-text="statusLabel(it.status)"></span></td>
+                <td style="font-size:11px;color:var(--text-dim)" x-text="it.batch_no || '—'"></td>
+                <td style="font-size:11px;color:var(--text-dim)" x-text="fmtDateTime(it.created_at)"></td>
+                <td style="font-size:11px;color:var(--text-dim)" x-text="it.shipping_note_no || it.quote_no || '—'"></td>
+                <td style="white-space:nowrap">
+                  <button class="action-btn ghost" x-show="it.status!=='void'" @click="adjustItem(it, 'void')">報廢</button>
+                  <button class="action-btn edit" x-show="it.status!=='in_stock' && it.status!=='void'" @click="adjustItem(it, 'return_to_stock')" style="margin-left:4px">退回庫存</button>
+                  <button class="action-btn del" x-show="it.status==='in_stock'" @click="deleteItem(it)" style="margin-left:4px">刪除</button>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+        <div class="empty-state" x-show="detailFiltered.length === 0">此篩選條件下無序號紀錄</div>
+      </div>
+    </template>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" @click="detail.show=false">關閉</button>
+    </div>
+  </div>
+</div>
+
+<!-- 進貨批次 Modal（供應商/發票/付款狀態，2026-09-01 新增，供 T100 傳票匯出使用） -->
+<div class="modal-overlay" x-show="batches.show" @click.self="batches.show=false" x-cloak>
+  <div class="modal-box" style="width:900px" @click.stop>
+    <div class="modal-title">進貨批次（供應商 / 發票 / 付款狀態）</div>
+    <div style="font-size:11px;color:var(--text-dim);margin-bottom:12px">
+      標記「已付款」的批次會納入 T100 傳票匯出（財務報表 → 資金水位）的現金基礎付款事件；供應商/發票號可事後補登。
+    </div>
+    <div class="loading-text" x-show="batches.loading">載入中…</div>
+    <template x-if="!batches.loading">
+      <div class="table-scroll" style="max-height:60vh;overflow-y:auto">
+        <table class="data-table" x-show="batches.items.length > 0">
+          <thead><tr>
+            <th>批次號</th><th>料號</th><th style="text-align:right">數量</th><th style="text-align:right">金額</th>
+            <th>供應商</th><th>發票號</th><th>付款狀態</th><th>操作</th>
+          </tr></thead>
+          <tbody>
+            <template x-for="b in batches.items" :key="b.batch_no">
+              <tr>
+                <td class="mono" style="font-size:12px" x-text="b.batch_no"></td>
+                <td style="font-size:12px" x-text="b.part_no"></td>
+                <td style="text-align:right;font-size:12px" x-text="b.qty"></td>
+                <td style="text-align:right;font-size:12px;font-family:LINE Seed TW_OTF, sans-serif" x-text="'NT$ ' + Math.round(b.total_cost||0).toLocaleString()"></td>
+                <td style="font-size:12px" x-text="b.supplier_name || '—'"></td>
+                <td style="font-size:12px" x-text="b.invoice_no || '—'"></td>
+                <td>
+                  <span class="stock-badge" :class="b.is_paid ? 'ok' : 'zero'" x-text="b.is_paid ? ('已付款 ' + b.paid_at + (b.paid_bank_account_name ? ('・' + b.paid_bank_account_name) : '')) : '未付款'"></span>
+                </td>
+                <td style="white-space:nowrap">
+                  <button class="action-btn ghost" @click="openBatchEdit(b)">編輯</button>
+                  <button class="action-btn edit" x-show="!b.is_paid" @click="openBatchPayModal(b)" style="margin-left:4px">標記已付款</button>
+                  <button class="action-btn del" x-show="b.is_paid" @click="toggleBatchPaid(b, 'unpay')" style="margin-left:4px">取消已付款</button>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+        <div class="empty-state" x-show="batches.items.length === 0">尚無進貨批次</div>
+      </div>
+    </template>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" @click="batches.show=false">關閉</button>
+    </div>
+  </div>
+</div>
+
+<!-- 採購建議 Modal（2026-09-07 新增，架構地圖 §6.6） -->
+<div class="modal-overlay" x-show="purchaseSuggestions.show" @click.self="purchaseSuggestions.show=false" x-cloak>
+  <div class="modal-box" style="width:920px" @click.stop>
+    <div class="modal-title">採購建議</div>
+    <div style="font-size:11px;color:var(--text-dim);margin-bottom:12px">
+      依安全庫存缺口自動計算，建議量補到「黃燈門檻」（安全庫存 × 1.5）；供應商/單價取自該料號最近一筆進貨紀錄，查無紀錄則單價退回料件標準成本。系統目前沒有追蹤供應商前置時間，僅供估算參考，正式下單前請自行確認交期。
+    </div>
+    <div class="loading-text" x-show="purchaseSuggestions.loading">載入中…</div>
+    <template x-if="!purchaseSuggestions.loading">
+      <div>
+        <div style="display:flex;gap:18px;margin-bottom:12px;font-size:12px;color:var(--text-secondary)">
+          <span>共 <strong x-text="purchaseSuggestions.count"></strong> 項料號建議採購</span>
+          <span>預估總金額：<strong style="color:var(--text-primary);font-family:LINE Seed TW_OTF, sans-serif" x-text="'NT$ ' + Math.round(purchaseSuggestions.totalEstimatedCost).toLocaleString()"></strong></span>
+        </div>
+        <div class="table-scroll" style="max-height:60vh;overflow-y:auto">
+          <table class="data-table" x-show="purchaseSuggestions.items.length > 0">
+            <thead><tr>
+              <th style="text-align:center">水位</th><th>料號</th><th>品名</th><th style="text-align:right">在庫</th>
+              <th style="text-align:right">安全庫存</th><th style="text-align:right">建議採購量</th>
+              <th>上次供應商</th><th style="text-align:right">單價</th><th style="text-align:right">預估金額</th>
+            </tr></thead>
+            <tbody>
+              <template x-for="s in purchaseSuggestions.items" :key="s.part_no">
+                <tr>
+                  <td style="text-align:center"><span class="stock-level-dot" :class="s.stockLevel"></span></td>
+                  <td style="font-family:LINE Seed TW_OTF, sans-serif;font-size:12px;font-weight:600;color:var(--accent)" x-text="s.part_no"></td>
+                  <td style="font-size:12px" x-text="s.name || '—'"></td>
+                  <td style="text-align:right;font-size:12px" x-text="s.inStockCount"></td>
+                  <td style="text-align:right;font-size:12px;color:var(--text-secondary)" x-text="s.safetyStock"></td>
+                  <td style="text-align:right;font-size:13px;font-weight:600;font-family:LINE Seed TW_OTF, sans-serif" x-text="s.suggestedQty"></td>
+                  <td style="font-size:12px" x-text="s.lastSupplierName || '（無進貨紀錄）'"></td>
+                  <td style="text-align:right;font-size:12px;font-family:LINE Seed TW_OTF, sans-serif" x-text="'NT$ ' + Math.round(s.unitCost).toLocaleString()"></td>
+                  <td style="text-align:right;font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-secondary)" x-text="'NT$ ' + Math.round(s.estimatedCost).toLocaleString()"></td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+          <div class="empty-state" x-show="purchaseSuggestions.items.length === 0">目前沒有低於水位的料號，暫無採購建議</div>
+        </div>
+      </div>
+    </template>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" @click="purchaseSuggestions.show=false">關閉</button>
+    </div>
+  </div>
+</div>
+
+<!-- 標記已付款 Modal（2026-09-01 新增，選銀行帳戶供 T100 傳票匯出使用） -->
+<div class="modal-overlay" x-show="batchPay.show" @click.self="batchPay.show=false" x-cloak>
+  <div class="modal-box" @click.stop>
+    <div class="modal-title" x-text="'標記已付款 ' + batchPay.batchNo"></div>
+    <div class="form-grid">
+      <div class="field-row">
+        <div class="field-label">付款日期</div>
+        <input class="field-input" type="date" x-model="batchPay.paidAt">
+      </div>
+      <div class="field-row">
+        <div class="field-label">付款銀行帳戶（選填，供 T100 傳票匯出使用）</div>
+        <select class="field-input" x-model="batchPay.bankAcctCode">
+          <option value="">— 未指定 —</option>
+          <template x-for="b in t100BankAccounts" :key="b.acctCode"><option :value="b.acctCode" x-text="b.name"></option></template>
+        </select>
+      </div>
+    </div>
+    <div x-show="batchPay.error" style="color:var(--danger);font-size:12px;margin-top:12px" x-text="batchPay.error"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" @click="batchPay.show=false">取消</button>
+      <button class="btn btn-primary" @click="confirmBatchPay()" :disabled="batchPay.saving">
+        <span x-text="batchPay.saving ? '處理中…' : '確認標記已付款'"></span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- 編輯批次供應商/發票 Modal -->
+<div class="modal-overlay" x-show="batchEdit.show" @click.self="batchEdit.show=false" x-cloak>
+  <div class="modal-box" @click.stop>
+    <div class="modal-title" x-text="'編輯批次 ' + batchEdit.batchNo"></div>
+    <div class="form-grid">
+      <div class="field-row">
+        <div class="field-label">供應商</div>
+        <select class="field-input" x-model.number="batchEdit.supplierId">
+          <option :value="null">— 未指定 —</option>
+          <template x-for="s in suppliers" :key="s.id"><option :value="s.id" x-text="s.name"></option></template>
+        </select>
+      </div>
+      <div class="field-row">
+        <div class="field-label">發票號碼</div>
+        <input class="field-input" type="text" x-model="batchEdit.invoiceNo">
+      </div>
+      <div class="field-row" style="grid-column:1/-1">
+        <div class="field-label">備注</div>
+        <input class="field-input" type="text" x-model="batchEdit.note">
+      </div>
+    </div>
+    <div x-show="batchEdit.error" style="color:var(--danger);font-size:12px;margin-top:12px" x-text="batchEdit.error"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" @click="batchEdit.show=false">取消</button>
+      <button class="btn btn-primary" @click="saveBatchEdit()" :disabled="batchEdit.saving">
+        <span x-text="batchEdit.saving ? '儲存中…' : '儲存'"></span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = '/api'
+function app() {
+  return {
+    session: {},
+    loading: true,
+    items: [],
+    parts: [],
+    search: '',
+    filterCat: '',
+    lowStockOnly: false,
+    intake: { show: false, partNo: '', partSearch: '', showPartDrop: false, qty: 1, cost: null, supplierId: null, invoiceNo: '', note: '', serials: [{serial_no:'',mac:''}], saving: false, error: '' },
+    detail: { show: false, partNo: '', items: [], loading: false, filterStatus: '' },
+    suppliers: [],
+    batches: { show: false, items: [], loading: false },
+    purchaseSuggestions: { show: false, items: [], count: 0, totalEstimatedCost: 0, loading: false },
+    batchEdit: { show: false, batchNo: '', supplierId: null, invoiceNo: '', note: '', saving: false, error: '' },
+    batchPay: { show: false, batchNo: '', paidAt: '', bankAcctCode: '', saving: false, error: '' },
+    t100BankAccounts: [],
+    t100DefaultBankAcctCode: '',   // 2026-09-02 新增：系統預設銀行帳戶，見 _resolveDefaultBankAccount()
+
+    get categories() {
+      return [...new Set(this.items.map(p => p.category).filter(Boolean))].sort()
+    },
+    get filtered() {
+      let list = this.items
+      if (this.filterCat) list = list.filter(p => p.category === this.filterCat)
+      if (this.lowStockOnly) list = list.filter(p => p.stockLevel === 'red' || p.stockLevel === 'yellow')
+      const q = this.search.trim().toLowerCase()
+      if (q) list = list.filter(p =>
+        (p.part_no||'').toLowerCase().includes(q) ||
+        (p.name||'').toLowerCase().includes(q) ||
+        (p.brand||'').toLowerCase().includes(q)
+      )
+      return list
+    },
+    get lowStockCount() {
+      return this.items.filter(p => p.stockLevel === 'red' || p.stockLevel === 'yellow').length
+    },
+    get detailFiltered() {
+      if (!this.detail.filterStatus) return this.detail.items
+      return this.detail.items.filter(it => it.status === this.detail.filterStatus)
+    },
+    get totalStockValue() {
+      return this.filtered.reduce((sum, p) => sum + (p.inStockValue || 0), 0)
+    },
+    get intakeBrandOptions() {
+      return [...new Set(this.parts.map(p => (p.brand || '').split('/')[0].trim()).filter(Boolean))].sort()
+    },
+    get intakeFilteredParts() {
+      let list = this.parts
+      if (this.intake.brandFilter) list = list.filter(p => (p.brand || '').split('/')[0].trim() === this.intake.brandFilter)
+      return list
+    },
+
+    async init() {
+      const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
+      if (!s.token) { location.href = 'login.html'; return }
+      this.session = s
+      try {
+        const r = await fetch(`${API}/auth/me`, { headers: { Authorization: 'Bearer ' + s.token } })
+        if (!r.ok) { location.href = 'login.html'; return }
+        const me = await r.json(); this.session.displayName = me.display_name
+      } catch {}
+      await Promise.all([this.load(), this.loadParts(), this.loadSuppliers()])
+    },
+
+    async loadSuppliers() {
+      try {
+        const r = await fetch(`${API}/suppliers`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (r.ok) { const d = await r.json(); this.suppliers = d.items || d || [] }
+      } catch {}
+    },
+
+    async load() {
+      this.loading = true
+      try {
+        const r = await fetch(`${API}/inventory/parts-summary`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (r.ok) { const d = await r.json(); this.items = d.items || [] }
+      } catch {}
+      this.loading = false
+    },
+
+    async loadParts() {
+      try {
+        const r = await fetch(`${API}/parts`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (r.ok) { const d = await r.json(); this.parts = d.items || [] }
+      } catch {}
+    },
+
+    statusLabel(s) {
+      return { in_stock: '在庫', shipped: '已出貨', installed: '已登載', void: '報廢' }[s] || s
+    },
+    fmtDateTime(iso) {
+      if (!iso) return '—'
+      return iso.slice(0,16).replace('T',' ')
+    },
+
+    openIntakeModal() {
+      window.motrixIsDirty = false
+      this.intake = { show: true, brandFilter: '', partNo: '', qty: 1, cost: null, supplierId: null, invoiceNo: '', note: '', serials: [{serial_no:'',mac:''}], saving: false, error: '' }
+    },
+    closeIntakeModal() {
+      if (window.motrixIsDirty && !confirm('您有尚未儲存的輸入內容\n\n確定要放棄變更並關閉嗎？')) return
+      window.motrixIsDirty = false
+      this.intake.show = false
+    },
+    intakePartLabel(pt) {
+      const model = (pt.brand || '').split('/').slice(1).join('/').trim()
+      return (model || pt.name) + '（' + pt.part_no + '）'
+    },
+    onIntakePartChange() {
+      const pt = this.parts.find(p => p.part_no === this.intake.partNo)
+      this.intake.cost = pt ? (pt.cost || 0) : null
+    },
+    syncSerialRows() {
+      const n = Math.max(1, this.intake.qty || 1)
+      while (this.intake.serials.length < n) this.intake.serials.push({serial_no:'',mac:''})
+      while (this.intake.serials.length > n) this.intake.serials.pop()
+    },
+
+    async saveIntake() {
+      if (!this.intake.partNo) { this.intake.error = '請選擇料號'; return }
+      const serials = this.intake.serials.filter(s => s.serial_no.trim())
+      if (serials.length === 0) { this.intake.error = '至少需輸入一筆序號'; return }
+      if (serials.length !== this.intake.serials.length) { this.intake.error = '序號不得空白，請填滿或移除空白列'; return }
+      this.intake.saving = true; this.intake.error = ''
+      const body = {
+        part_no: this.intake.partNo, serials, cost: this.intake.cost, note: this.intake.note,
+        supplier_id: this.intake.supplierId || undefined, invoice_no: this.intake.invoiceNo || undefined,
+      }
+      try {
+        const r = await fetch(`${API}/inventory/batches`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token }, body: JSON.stringify(body) })
+        if (r.ok) { await this.load(); this.intake.show = false }
+        else { const e = await r.json(); this.intake.error = e.detail || '儲存失敗' }
+      } catch { this.intake.error = '網路錯誤' }
+      this.intake.saving = false
+    },
+
+    // ── 進貨批次（供應商/發票/付款狀態） ─────────────────────────────────────
+    async openBatchesModal() {
+      this.batches = { show: true, items: [], loading: true }
+      try {
+        const r = await fetch(`${API}/inventory/batches`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (r.ok) { const d = await r.json(); this.batches.items = d.items || [] }
+      } catch {}
+      this.batches.loading = false
+    },
+
+    async openPurchaseSuggestionsModal() {
+      this.purchaseSuggestions = { show: true, items: [], count: 0, totalEstimatedCost: 0, loading: true }
+      try {
+        const r = await fetch(`${API}/inventory/purchase-suggestions`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (r.ok) {
+          const d = await r.json()
+          this.purchaseSuggestions.items = d.items || []
+          this.purchaseSuggestions.count = d.count || 0
+          this.purchaseSuggestions.totalEstimatedCost = d.totalEstimatedCost || 0
+        }
+      } catch {}
+      this.purchaseSuggestions.loading = false
+    },
+
+    async toggleBatchPaid(b, action) {
+      // action==='pay' 改走 openBatchPayModal()（需要選銀行帳戶），這裡只處理 unpay
+      if (!confirm(`確認「取消已付款」批次 ${b.batch_no}？`)) return
+      try {
+        const r = await fetch(`${API}/inventory/batches/${encodeURIComponent(b.batch_no)}/paid-toggle`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify({ action: 'unpay' }),
+        })
+        if (r.ok) { await this.openBatchesModal() }
+        else { const e = await r.json(); alert(e.detail || '操作失敗') }
+      } catch { alert('網路錯誤') }
+    },
+
+    async loadT100BankAccounts() {
+      // 2026-09-02：改成每次開啟標記 Modal 都重抓（不再 cache-once），確保跟
+      // 案件管理／出納三處標記畫面共用同一份最新清單，見
+      // case-management.js::loadT100BankAccounts() 同款註解。
+      try {
+        const r = await fetch(`${API}/settings/t100-export-config`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (r.ok) {
+          const d = await r.json()
+          this.t100BankAccounts = d.bankAccounts || []
+          this.t100DefaultBankAcctCode = d.defaultBankAccountCode || ''
+        }
+      } catch {}
+    },
+
+    // 銀行帳戶預設值（2026-09-02 新增，比照 reports.js 同款 helper）：①這個
+    // 對象上次標記用的帳戶 ②系統預設帳戶 ③兩者都沒有就空白。
+    async _resolveDefaultBankAccount(lastUsedUrl) {
+      if (lastUsedUrl) {
+        try {
+          const r = await fetch(lastUsedUrl, { headers: { Authorization: 'Bearer ' + this.session.token } })
+          if (r.ok) {
+            const d = await r.json()
+            if (d.acctCode) return d.acctCode
+          }
+        } catch {}
+      }
+      return this.t100DefaultBankAcctCode || ''
+    },
+
+    async openBatchPayModal(b) {
+      this.batchPay = { show: true, batchNo: b.batch_no, paidAt: new Date().toISOString().slice(0,10), bankAcctCode: '', saving: false, error: '' }
+      await this.loadT100BankAccounts()
+      const url = b.supplier_id ? `${API}/inventory/batches/last-paid-bank-account?supplier_id=${b.supplier_id}` : ''
+      this.batchPay.bankAcctCode = await this._resolveDefaultBankAccount(url)
+    },
+
+    async confirmBatchPay() {
+      this.batchPay.saving = true; this.batchPay.error = ''
+      const bankName = (this.t100BankAccounts.find(x => x.acctCode === this.batchPay.bankAcctCode) || {}).name || ''
+      try {
+        const r = await fetch(`${API}/inventory/batches/${encodeURIComponent(this.batchPay.batchNo)}/paid-toggle`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify({
+            action: 'pay', paid_at: this.batchPay.paidAt,
+            bankAccountCode: this.batchPay.bankAcctCode, bankAccountName: bankName,
+          }),
+        })
+        if (r.ok) { this.batchPay.show = false; await this.openBatchesModal() }
+        else { const e = await r.json(); this.batchPay.error = e.detail || '操作失敗' }
+      } catch { this.batchPay.error = '網路錯誤' }
+      this.batchPay.saving = false
+    },
+
+    openBatchEdit(b) {
+      this.batchEdit = { show: true, batchNo: b.batch_no, supplierId: b.supplier_id || null, invoiceNo: b.invoice_no || '', note: '', saving: false, error: '' }
+    },
+
+    async saveBatchEdit() {
+      this.batchEdit.saving = true; this.batchEdit.error = ''
+      try {
+        const r = await fetch(`${API}/inventory/batches/${encodeURIComponent(this.batchEdit.batchNo)}`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify({ supplier_id: this.batchEdit.supplierId, invoice_no: this.batchEdit.invoiceNo, note: this.batchEdit.note }),
+        })
+        if (r.ok) { this.batchEdit.show = false; await this.openBatchesModal() }
+        else { const e = await r.json(); this.batchEdit.error = e.detail || '儲存失敗' }
+      } catch { this.batchEdit.error = '網路錯誤' }
+      this.batchEdit.saving = false
+    },
+
+    async openDetail(p) {
+      this.detail = { show: true, partNo: p.part_no, items: [], loading: true, filterStatus: '' }
+      try {
+        const r = await fetch(`${API}/inventory/stock-items?part_no=${encodeURIComponent(p.part_no)}`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (r.ok) { const d = await r.json(); this.detail.items = d.items || [] }
+      } catch {}
+      this.detail.loading = false
+    },
+
+    async adjustItem(it, action) {
+      const label = action === 'void' ? '報廢' : '退回庫存'
+      if (!confirm(`確認將序號「${it.serial_no}」設為「${label}」？`)) return
+      try {
+        const r = await fetch(`${API}/inventory/stock-items/${it.id}/adjust`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token }, body: JSON.stringify({ action }) })
+        if (r.ok) { await this.openDetail({ part_no: this.detail.partNo }); await this.load() }
+      } catch {}
+    },
+
+    async deleteItem(it) {
+      if (!confirm(`確認刪除序號「${it.serial_no}」？此動作無法復原`)) return
+      try {
+        const r = await fetch(`${API}/inventory/stock-items/${it.id}`, { method: 'DELETE', headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (r.ok) { await this.openDetail({ part_no: this.detail.partNo }); await this.load() }
+      } catch {}
+    },
+
+    logout() {
+      fetch(`${API}/auth/logout`, { method:'POST', headers:{ Authorization:'Bearer '+(this.session.token||'') } }).catch(()=>{})
+      localStorage.removeItem('motrix_session'); location.href = 'login.html'
+    }
+  }
+}
+</script>
+  <script src="../static/notif.js"></script>
+  <script src="../static/sidebar.js"></script>
+</body>
+</html>

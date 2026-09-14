@@ -42,7 +42,31 @@ function notifStore() {
       this._sess = JSON.parse(localStorage.getItem('motrix_session') || '{}')
       if (!this._sess.token) return
       if (this._sess.mustChangePassword) return
-      await Promise.all([this._fetchAuditLog(), this._fetchNotifications(), this._fetchApprovalCount(), this._fetchDailyTaskCount(), this._fetchModuleCounts()])
+      await Promise.all([this._fetchAuditLog(), this._fetchNotifications(), this._fetchApprovalCount(), this._fetchDailyTaskCount(), this._fetchModuleCounts(), this._fetchTotpReminder()])
+    },
+
+    async _fetchTotpReminder() {
+      // 架構地圖 §6.2：superadmin/admin 自助啟用 TOTP，非強制——見
+      // routers/auth.py totp_* 端點與 db.py::_m072_totp() docstring。這裡只是
+      // 提醒，每個分頁（sessionStorage）最多彈一次，不會每換頁就再跳出來，
+      // 且刻意不在 change-password.html 本身顯示（那裡就是設定入口，重複無意義）。
+      try {
+        const role = this._sess?.role || ''
+        if (role !== 'superadmin' && role !== 'admin') return
+        const currentFile = window.location.pathname.split('/').pop()
+        if (currentFile === 'change-password.html') return
+        const ssKey = 'motrix_totp_reminder_shown'
+        if (sessionStorage.getItem(ssKey)) return
+        const r = await fetch('/api/auth/totp/status', {
+          headers: { Authorization: 'Bearer ' + this._sess.token }
+        })
+        if (!r.ok) return
+        const d = await r.json()
+        if (d.enabled) return
+        sessionStorage.setItem(ssKey, '1')
+        const isPages = window.location.pathname.includes('/pages/')
+        setTimeout(() => this._showTotpReminderBanner(isPages ? 'change-password.html' : 'pages/change-password.html'), 1400)
+      } catch (e) {}
     },
 
     async _fetchAuditLog() {
@@ -96,11 +120,10 @@ function notifStore() {
           dev_crm:    ['sb-mod-dev-crm'],
           quotation:  ['sb-mod-quotation'],
           case_manage:['sb-mod-case'],
-          projects:   ['sb-mod-projects'],
           customer:   ['sb-mod-customer'],
           procurement:['sb-mod-suppliers', 'sb-mod-vendor', 'sb-mod-parts', 'sb-mod-procurement'],
           equipment:  ['sb-mod-equipment', 'sb-mod-warranty'],
-          finance:    ['sb-mod-finance', 'sb-mod-sales-orders'],
+          finance:    ['sb-mod-finance'],   // 2026-09-13：見 sidebar.js 同一張表
           work_log:   ['sb-mod-worklog'],
           daily_task: ['sb-mod-daily-task'],
         }
@@ -307,6 +330,120 @@ function notifStore() {
           setTimeout(() => el.remove(), 500)
         }
       }, 7000)
+    },
+
+    _showTotpReminderBanner(href) {
+      if (document.getElementById('totp-reminder-banner')) return
+      const el = document.createElement('div')
+      el.id = 'totp-reminder-banner'
+      el.style.cssText = [
+        'position:fixed;top:72px;right:20px',
+        'background:#FFFBEB;border:1.5px solid #D97706',
+        'border-radius:10px;padding:14px 18px',
+        'box-shadow:0 6px 24px rgba(217,119,6,.22)',
+        'z-index:99999;font-family:LINE Seed TW_OTF, sans-serif;max-width:300px',
+        'animation:notif-slide-in .25s ease',
+      ].join(';')
+      const row = document.createElement('div')
+      row.style.cssText = 'display:flex;align-items:flex-start;gap:10px'
+
+      const icon = document.createElement('div')
+      icon.style.cssText = 'color:#B45309;flex-shrink:0;margin-top:1px'
+      icon.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>'
+
+      const body = document.createElement('div')
+      body.style.cssText = 'flex:1'
+
+      const title = document.createElement('div')
+      title.style.cssText = 'font-size:13px;font-weight:600;color:#92400E;margin-bottom:4px'
+      title.textContent = '尚未啟用兩步驟驗證'
+
+      const msg = document.createElement('div')
+      msg.style.cssText = 'font-size:12px;color:#B45309;line-height:1.5'
+      msg.textContent = '密碼外洩時，兩步驟驗證能多一道防線擋下未授權登入，建議管理員帳號啟用。'
+
+      const link = document.createElement('a')
+      link.href = href
+      link.style.cssText = 'display:inline-block;margin-top:8px;font-size:11px;color:#fff;background:#D97706;padding:4px 12px;border-radius:5px;text-decoration:none;font-weight:600'
+      link.textContent = '前往設定 →'
+
+      body.append(title, msg, link)
+
+      const closeBtn = document.createElement('button')
+      closeBtn.style.cssText = 'border:none;background:none;cursor:pointer;color:#C2954D;font-size:20px;line-height:1;padding:0;flex-shrink:0;margin-top:-2px'
+      closeBtn.textContent = '×'
+      closeBtn.addEventListener('click', () => el.remove())
+
+      row.append(icon, body, closeBtn)
+      el.appendChild(row)
+      if (!document.querySelector('#notif-kf')) {
+        const s = document.createElement('style')
+        s.id = 'notif-kf'
+        s.textContent = '@keyframes notif-slide-in{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}'
+        document.head.appendChild(s)
+      }
+      document.body.appendChild(el)
+      setTimeout(() => {
+        if (el.parentNode) {
+          el.style.transition = 'opacity .5s'
+          el.style.opacity = '0'
+          setTimeout(() => el.remove(), 500)
+        }
+      }, 9000)
     }
+  }
+}
+
+/* ── 全域搜尋（topbar）─────────────────────────────────────────────────────
+   跨客戶/供應商/報價單/業務開發案/料號快速查找；後端 GET /api/search 已依各模組
+   既有角色規則過濾，前端不需再判斷可見性。無 ?id= 深連結的清單頁（客戶/供應商/
+   業務開發案/料號）點擊後導向該模組列表頁，只有報價單支援直達單筆。 */
+function globalSearchStore() {
+  const isPages = window.location.pathname.includes('/pages/')
+  const href = (name) => isPages ? name : 'pages/' + name
+  const empty = () => ({ customers: [], suppliers: [], quotations: [], devCases: [], parts: [] })
+
+  return {
+    q:       '',
+    open:    false,
+    loading: false,
+    results: empty(),
+    _sess:   null,
+    _timer:  null,
+
+    init() {
+      this._sess = JSON.parse(localStorage.getItem('motrix_session') || '{}')
+    },
+
+    get hasResults() {
+      const r = this.results
+      return (r.customers.length + r.suppliers.length + r.quotations.length + r.devCases.length + r.parts.length) > 0
+    },
+
+    onInput() {
+      clearTimeout(this._timer)
+      const term = this.q.trim()
+      if (!term) { this.results = empty(); this.open = false; return }
+      this._timer = setTimeout(() => this._search(term), 300)
+    },
+
+    async _search(term) {
+      if (!this._sess?.token) return
+      this.loading = true
+      try {
+        const r = await fetch('/api/search?q=' + encodeURIComponent(term), {
+          headers: { Authorization: 'Bearer ' + this._sess.token }
+        })
+        if (r.ok) { this.results = await r.json(); this.open = true }
+      } catch (e) {} finally { this.loading = false }
+    },
+
+    goCustomer()      { window.location.href = href('customers.html') },
+    goSupplier()      { window.location.href = href('suppliers.html') },
+    goQuotation(no)   { window.location.href = href('quotation-form.html') + '?id=' + encodeURIComponent(no) },
+    goDevCase()       { window.location.href = href('dev-crm.html') },
+    goPart()          { window.location.href = href('parts.html') },
+
+    close() { this.open = false; this.q = ''; this.results = empty() }
   }
 }

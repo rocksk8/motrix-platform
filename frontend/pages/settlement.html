@@ -2,11 +2,13 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="../static/favicon.png">
-  <title>成本精算 — MOTRIX 營運管理系統</title>
-  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-  <link rel="stylesheet" href="../css/style.css">
+  <title>成本精算 — MOTRIX 專案管理系統</title>
+  <script src="../static/auth-guard.js"></script>
+  <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <style>
     [x-cloak]{display:none!important}
 
@@ -124,8 +126,8 @@
     .stl-kpi.highlight-green .stl-kpi__value { color: #15803D; }
     .stl-kpi.highlight-red   { border-color: #FECACA; background: #FFF1F2; }
     .stl-kpi.highlight-red   .stl-kpi__value { color: #DC2626; }
-    .stl-kpi.highlight-blue  { border-color: #BFDBFE; background: #EFF6FF; }
-    .stl-kpi.highlight-blue  .stl-kpi__value { color: #1D4ED8; }
+    .stl-kpi.highlight-blue  { border-color: #BFDBFE; background: var(--accent-light); }
+    .stl-kpi.highlight-blue  .stl-kpi__value { color: var(--accent-hover); }
 
     /* ── 明細對照 bar ── */
     .profit-bar {
@@ -133,18 +135,9 @@
     }
     .profit-bar__fill { height: 100%; border-radius: 5px; transition: width .3s; }
 
-    /* ── 按鈕 ── */
-    .btn { display:inline-flex; align-items:center; gap:6px; padding:8px 16px; border-radius:var(--radius); font-size:12px; font-family:var(--font-zh); cursor:pointer; border:none; transition:all .12s; font-weight:500; }
-    .btn-primary  { background:var(--accent); color:#fff; }
-    .btn-primary:hover { background:#1D4ED8; }
+    /* ── 按鈕（.btn/.btn-primary/.btn-ghost/.btn-danger/.btn-sm/.btn:disabled 已收斂至共用 style.css） ── */
     .btn-success  { background:var(--success); color:#fff; }
     .btn-success:hover { background:#15803D; }
-    .btn-ghost    { background:#fff; color:var(--text-secondary); border:1px solid var(--border-light); }
-    .btn-ghost:hover { border-color:#C8C4BC; }
-    .btn-danger   { background:#FFF1F2; color:#DC2626; border:1px solid #FECACA; }
-    .btn-danger:hover { background:#FEE2E2; }
-    .btn-sm { padding:6px 12px; font-size:11px; }
-    .btn:disabled { opacity:.45; cursor:not-allowed; }
 
     /* ── 額外品項 category badge ── */
     .cat-badge {
@@ -152,7 +145,7 @@
       font-weight: 600; white-space: nowrap;
     }
     .cat-工時       { background:#EDE9FE; color:#6D28D9; }
-    .cat-材料       { background:#DBEAFE; color:#1D4ED8; }
+    .cat-材料       { background:#DBEAFE; color:var(--accent-hover); }
     .cat-差旅       { background:#FEF3C7; color:#92400E; }
     .cat-運費       { background:#D1FAE5; color:#065F46; }
     .cat-安裝       { background:#FCE7F3; color:#9D174D; }
@@ -173,6 +166,11 @@
     .finalized-banner {
       display:flex; align-items:center; gap:12px;
       background:#F0FDF4; border:1px solid #86EFAC; border-radius:8px;
+      padding:12px 16px; margin-bottom:18px;
+    }
+    .stale-banner {
+      display:flex; align-items:center; gap:12px;
+      background:#FFFBEB; border:1px solid #FDE68A; border-radius:8px;
       padding:12px 16px; margin-bottom:18px;
     }
   </style>
@@ -251,6 +249,18 @@
         </div>
       </template>
 
+      <!-- 快照過期警示：承攬商成本在精算完結後又異動 -->
+      <template x-if="settlement.status === 'finalized' && dispatchStale()">
+        <div class="stale-banner">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#92400E" stroke-width="2"><path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+          <div>
+            <div style="font-size:12px;font-weight:600;color:#92400E">承攬商成本自精算完結後已異動，其他頁面顯示的快照可能已過期</div>
+            <div style="font-size:11px;color:#92400E;margin-top:1px"
+                 x-text="'完結當下承攬商派發成本：NT$ ' + fmt(dispatchStale().frozen) + '　目前即時計算：NT$ ' + fmt(dispatchStale().live) + '（' + (dispatchStale().diff>=0?'+':'') + fmt(dispatchStale().diff) + '）　此頁上方數字已是最新即時計算，但案件管理財務Tab／營運報表仍顯示完結當下的舊快照，如需同步請按右上角「重新開啟」後重新完結'"></div>
+          </div>
+        </div>
+      </template>
+
       <!-- ── KPI 彙總 ── -->
       <div class="stl-summary">
         <div class="stl-kpi highlight-blue">
@@ -261,7 +271,7 @@
         <div class="stl-kpi">
           <div class="stl-kpi__label">實際總成本</div>
           <div class="stl-kpi__value" x-text="'NT$ ' + fmt(summary.totalActualCost)"></div>
-          <div class="stl-kpi__sub">品項成本 + 額外支出</div>
+          <div class="stl-kpi__sub">品項成本 + 額外支出 + 承攬商派發</div>
         </div>
         <div :class="summary.grossProfit >= 0 ? 'stl-kpi highlight-green' : 'stl-kpi highlight-red'">
           <div class="stl-kpi__label">真實毛利</div>
@@ -323,8 +333,8 @@
                 <th class="col-orig" style="border-left:2px solid #E5E7EB;width:55px">數量</th>
                 <th class="col-orig" style="width:90px">報價金額</th>
                 <th class="col-actual" style="border-left:2px solid #FDE68A;width:55px">實際數量</th>
-                <th class="col-actual" style="width:90px">實際單位成本</th>
-                <th class="col-actual" style="width:90px">實際總成本</th>
+                <th class="col-actual" style="width:104px">實際單位成本</th>
+                <th class="col-actual" style="width:100px">實際總成本</th>
                 <th></th>
                 <th></th>
               </tr>
@@ -367,9 +377,25 @@
                              @input="calcItemCost(item); calcSummary()"
                              style="width:80px">
                     </div>
+                    <select class="stl-input" x-model="item.actualCostTaxMode"
+                            :disabled="settlement.status === 'finalized'"
+                            @change="calcItemCost(item); calcSummary()"
+                            style="margin-top:3px;font-size:10px;padding:2px 4px;width:100%">
+                      <option value="pretax">未稅</option>
+                      <option value="taxed">含稅5%</option>
+                      <option value="taxed_gross">含稅5%（自動加總）</option>
+                    </select>
                   </td>
                   <td class="col-actual" style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-weight:600">
                     <span x-text="item.actualTotalCost > 0 ? 'NT$ ' + fmt(item.actualTotalCost) : '—'"></span>
+                    <template x-if="item.actualCostTaxMode === 'taxed' && item.actualTotalCost > 0">
+                      <div style="font-size:9px;color:var(--text-dim);font-weight:400"
+                           x-text="'原含稅 NT$ ' + fmt(Math.round((item.actualQty||0) * (item.actualUnitCost||0)))"></div>
+                    </template>
+                    <template x-if="item.actualCostTaxMode === 'taxed_gross' && item.actualTotalCost > 0">
+                      <div style="font-size:9px;color:var(--text-dim);font-weight:400"
+                           x-text="'原未稅 NT$ ' + fmt(Math.round((item.actualQty||0) * (item.actualUnitCost||0)))"></div>
+                    </template>
                   </td>
 
                   <!-- 差異欄 -->
@@ -411,118 +437,77 @@
         </div>
       </div>
 
-      <!-- ── 二、額外支出 ── -->
+      <!-- ── 二、額外支出（2026-09-11 起搬到案件管理）── -->
+      <!-- 這張表原本可以在這裡直接編輯，資料存在 settlement.extraItems。
+           2026-09-11 依使用者交辦搬到「案件管理 → 額外支出」分頁並接上送審，
+           資料也搬進 case_extra_expenses 表（DB v75）。
+           **這裡必須移除而不是留著唯讀**：資料已經改從新表讀，留著一張還能按的
+           表單會變成「編輯了也不會進報表」，比拿掉更難察覺。 -->
       <div class="stl-card">
         <div class="stl-card__head">
           <div class="stl-card__title">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v16m8-8H4"/></svg>
-            二、額外支出（報價外品項、工時、差旅等）
+            二、額外支出
           </div>
-          <template x-if="settlement.status !== 'finalized'">
-            <button class="btn btn-ghost btn-sm" @click="addExtra()">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v16m8-8H4"/></svg>
-              新增欄位
-            </button>
-          </template>
         </div>
-        <div :class="settlement.status === 'finalized' ? 'locked-overlay' : ''">
-          <template x-if="settlement.extraItems.length === 0">
+        <div style="padding:20px;text-align:center;color:var(--text-secondary);font-size:13px;line-height:1.8">
+          額外支出已移到 <b>案件管理 → 額外支出</b> 分頁，並加上填寫人、支出人與送審流程。
+          <div style="font-size:12px;color:var(--text-dim);margin-top:6px">
+            原本填在這裡的資料都已經搬過去，不會遺失。下方「成本彙總」仍會把額外支出算進去。
+          </div>
+          <a class="btn btn-ghost btn-sm" style="margin-top:12px;text-decoration:none"
+             :href="'case-management.html?q=' + (quoteNo || '')">
+            前往案件管理的額外支出 ▶
+          </a>
+        </div>
+      </div>
+
+      <!-- ── 三、承攬商派發成本 ── -->
+      <div class="stl-card">
+        <div class="stl-card__head">
+          <div class="stl-card__title">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M12.5 7a4 4 0 11-8 0 4 4 0 018 0zM20 8v6M23 11h-6"/></svg>
+            三、承攬商派發成本
+          </div>
+          <div style="font-size:11px;color:var(--text-dim)">
+            自動讀取「案件管理／承攬商」分頁，唯讀（已排除已取消的派發）
+          </div>
+        </div>
+        <div>
+          <template x-if="dispatches.length === 0">
             <div style="padding:24px;text-align:center;color:var(--text-dim);font-size:12px">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="display:block;margin:0 auto 8px;opacity:.35"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-              尚未新增額外支出項目
-              <template x-if="settlement.status !== 'finalized'">
-                <div>
-                  <button class="btn btn-ghost btn-sm" style="margin-top:8px" @click="addExtra()">
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v16m8-8H4"/></svg>
-                    新增第一筆
-                  </button>
-                </div>
-              </template>
+              尚無承攬商派發紀錄
             </div>
           </template>
-          <template x-if="settlement.extraItems.length > 0">
+          <template x-if="dispatches.length > 0">
             <div style="overflow-x:auto">
               <table class="stl-table">
                 <thead>
                   <tr>
-                    <th style="width:28px">#</th>
-                    <th style="width:90px">類別</th>
-                    <th style="min-width:200px">品項說明</th>
-                    <th style="width:70px">數量</th>
-                    <th style="width:70px">單位</th>
-                    <th style="width:110px">單位成本 (NT$)</th>
-                    <th style="width:110px">小計 (NT$)</th>
-                    <th style="min-width:100px">備註</th>
-                    <th style="width:28px"></th>
+                    <th style="min-width:160px">承攬商 / 外包人員</th>
+                    <th style="width:110px">派發狀態</th>
+                    <th style="width:130px;text-align:right">金額 (NT$)</th>
                   </tr>
                 </thead>
                 <tbody>
-                  <template x-for="(ex, idx) in settlement.extraItems" :key="ex.id">
-                    <tr>
-                      <td style="text-align:center;color:var(--text-dim);font-size:11px;font-family:LINE Seed TW_OTF, sans-serif" x-text="idx+1"></td>
-                      <td>
-                        <select class="stl-input" x-model="ex.category"
-                                :disabled="settlement.status === 'finalized'"
-                                @change="calcSummary()"
-                                style="padding:5px 6px;font-size:11px">
-                          <option>工時</option>
-                          <option>材料</option>
-                          <option>差旅</option>
-                          <option>運費</option>
-                          <option>安裝</option>
-                          <option>外包</option>
-                          <option>其他</option>
-                        </select>
-                      </td>
-                      <td>
-                        <input class="stl-input" type="text" x-model="ex.description"
-                               :disabled="settlement.status === 'finalized'"
-                               placeholder="說明，例如：工程師出差工時 2 天" @input="calcSummary()">
-                      </td>
-                      <td>
-                        <input class="stl-input num" type="number" min="0" step="any"
-                               x-model.number="ex.qty"
-                               :disabled="settlement.status === 'finalized'"
-                               @input="calcExtraCost(ex); calcSummary()" style="width:60px">
-                      </td>
-                      <td>
-                        <input class="stl-input" type="text" x-model="ex.unit"
-                               :disabled="settlement.status === 'finalized'"
-                               placeholder="人天/式…" style="width:60px" @input="calcSummary()">
-                      </td>
-                      <td>
-                        <input class="stl-input num" type="number" min="0" step="any"
-                               x-model.number="ex.unitCost"
-                               :disabled="settlement.status === 'finalized'"
-                               @input="calcExtraCost(ex); calcSummary()">
-                      </td>
-                      <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-weight:600;color:#92400E">
-                        <span x-text="ex.totalCost > 0 ? fmt(ex.totalCost) : '—'"></span>
-                      </td>
-                      <td>
-                        <input class="stl-input" type="text" x-model="ex.note"
-                               :disabled="settlement.status === 'finalized'"
-                               placeholder="備註…" @input="calcSummary()">
-                      </td>
-                      <td>
-                        <template x-if="settlement.status !== 'finalized'">
-                          <button style="background:none;border:none;cursor:pointer;color:#D1D5DB;padding:4px;line-height:0;border-radius:4px"
-                                  @click="removeExtra(idx)"
-                                  @mouseenter="$el.style.color='#DC2626'"
-                                  @mouseleave="$el.style.color='#D1D5DB'"
-                                  title="刪除此項">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 18L18 6M6 6l12 12"/></svg>
-                          </button>
-                        </template>
-                      </td>
-                    </tr>
+                  <template x-for="d in dispatches" :key="d.id">
+                    <template x-for="row in _dispatchRows(d)">
+                      <tr style="border-bottom:1px solid var(--border-light)">
+                        <td :style="row.isVendor ? 'font-weight:600' : 'color:var(--text-secondary)'">
+                          <span x-text="row.label"></span>
+                          <div x-show="row.isVendor && d.invoiceNo" style="font-weight:400;font-size:10px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif"
+                               x-text="'發票：' + d.invoiceNo"></div>
+                        </td>
+                        <td x-text="row.isVendor ? d.statusLabel : ''" style="color:var(--text-dim);font-size:11px"></td>
+                        <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif" x-text="fmt(row.amount)"></td>
+                      </tr>
+                    </template>
                   </template>
                 </tbody>
                 <tfoot>
                   <tr style="background:#FEF9C3;font-weight:600">
-                    <td colspan="6" style="border-top:1.5px solid #FDE68A;padding:10px;text-align:right;font-size:11px;color:#92400E">額外支出小計</td>
-                    <td style="border-top:1.5px solid #FDE68A;text-align:right;font-family:LINE Seed TW_OTF, sans-serif;color:#92400E" x-text="'NT$ ' + fmt(summary.extraTotal)"></td>
-                    <td colspan="2" style="border-top:1.5px solid #FDE68A"></td>
+                    <td colspan="2" style="border-top:1.5px solid #FDE68A;padding:10px;text-align:right;font-size:11px;color:#92400E">承攬商派發成本小計</td>
+                    <td style="border-top:1.5px solid #FDE68A;text-align:right;font-family:LINE Seed TW_OTF, sans-serif;color:#92400E" x-text="'NT$ ' + fmt(summary.dispatchTotal)"></td>
                   </tr>
                 </tfoot>
               </table>
@@ -531,12 +516,12 @@
         </div>
       </div>
 
-      <!-- ── 三、精算備忘 ── -->
+      <!-- ── 四、精算備忘 ── -->
       <div class="stl-card">
         <div class="stl-card__head">
           <div class="stl-card__title">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-            三、精算備忘
+            四、精算備忘
           </div>
         </div>
         <div class="stl-card__body">
@@ -549,12 +534,12 @@
         </div>
       </div>
 
-      <!-- ── 四、利潤分析明細 ── -->
+      <!-- ── 五、利潤分析明細 ── -->
       <div class="stl-card">
         <div class="stl-card__head">
           <div class="stl-card__title">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 8v8m-4-5v5m-4-2v2M3 20h18"/></svg>
-            四、利潤分析
+            五、利潤分析
           </div>
         </div>
         <div class="stl-card__body">
@@ -619,6 +604,10 @@
                 <tr>
                   <td style="padding:5px 0;color:var(--text-secondary)">額外支出</td>
                   <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;color:#92400E" x-text="'NT$ ' + fmt(summary.extraTotal)"></td>
+                </tr>
+                <tr>
+                  <td style="padding:5px 0;color:var(--text-secondary)">承攬商派發成本</td>
+                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;color:#92400E" x-text="'NT$ ' + fmt(summary.dispatchTotal)"></td>
                 </tr>
                 <tr style="border-top:1px solid #FDE68A">
                   <td style="padding:5px 0;font-weight:600">實際總成本</td>
@@ -734,9 +723,15 @@ function settlementPage() {
       finalizedAt:  '',
       finalizedBy:  '',
       items:      [],
-      extraItems: [],
+      extraItems: [],   // 搬移前的唯讀備份，僅供比對，不再用於計算或編輯
       memo: '',
     },
+    // 額外支出（case_extra_expenses 表）總額與未核准金額，loadExtraExpenseTotals() 填
+    xeTotal: 0,
+    xePending: 0,
+
+    dispatches: [],  // 承攬商派發（唯讀，即時從 /api/contractor-dispatches 讀取，不隨精算存檔凍結）
+    _frozenSummary: null,  // 精算完結當下寫入 data_json 的 summary 快照，供比對是否已過期
 
     summary: {
       quotedPretax:    0,
@@ -747,6 +742,7 @@ function settlementPage() {
       origMarginPct:   0,
       itemActualTotal: 0,
       extraTotal:      0,
+      dispatchTotal:   0,
       totalActualCost: 0,
       grossProfit:     0,
       grossMarginPct:  0,
@@ -800,7 +796,11 @@ function settlementPage() {
           origCost:        it.cost        || 0,
           actualQty:       it.qty         || 0,
           actualUnitCost:  it.cost        || 0,
-          actualTotalCost: Math.round((it.qty || 0) * (it.cost || 0)),
+          // 預設帶入與報價單建立時相同的 5%「非扣抵進項稅」假設（quotation-form.html
+          // calcTotals() 的 inputVat = totalCost×5%），確保未經使用者調整的精算品項
+          // 預估/實際毛利率基準一致，「差異(pp)」欄反映的才是真實成本表現而非公式落差
+          actualCostTaxMode: 'taxed_gross',
+          actualTotalCost: Math.round((it.qty || 0) * (it.cost || 0) * 1.05),
           note:            '',
         }))
 
@@ -813,6 +813,7 @@ function settlementPage() {
           this.settlement.finalizedBy   = saved.finalizedBy || ''
           this.settlement.memo          = saved.memo || ''
           this.settlement.extraItems    = saved.extraItems || []
+          this._frozenSummary           = saved.summary || null
 
           // 合併報價品項（若報價單有新增/刪除品項，以報價單為基準）
           const savedMap = {}
@@ -825,6 +826,7 @@ function settlementPage() {
                 ...oi,
                 actualQty:      si.actualQty      !== undefined ? si.actualQty      : oi.actualQty,
                 actualUnitCost: si.actualUnitCost !== undefined ? si.actualUnitCost : oi.actualUnitCost,
+                actualCostTaxMode: si.actualCostTaxMode || oi.actualCostTaxMode,
                 actualTotalCost:si.actualTotalCost|| oi.actualTotalCost,
                 note:           si.note || '',
               }
@@ -837,6 +839,8 @@ function settlementPage() {
 
         // 記錄原始 tot 資料用於比較
         this._origTot = d.tot || {}
+        await this.loadDispatches()
+        await this.loadExtraExpenseTotals()   // 成本彙總要用到，必須在 calcSummary 之前
         this.calcSummary()
       } catch(e) {
         this.toast('載入失敗：' + e.message)
@@ -845,8 +849,71 @@ function settlementPage() {
       }
     },
 
+    // 額外支出總額（含送審中）與其中尚未核准的金額，來源是 case_extra_expenses 表。
+    // 這一頁只讀不寫——編輯入口已移到案件管理的「額外支出」分頁。
+    async loadExtraExpenseTotals() {
+      if (!this.quoteNo) return
+      try {
+        const r = await fetch(`/api/quotations/${encodeURIComponent(this.quoteNo)}/extra-expenses`, {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (r.ok) {
+          const d = await r.json()
+          this.xeTotal = d.totalAmount || 0
+          this.xePending = d.totalPending || 0
+        }
+      } catch {}
+    },
+
+    async loadDispatches() {
+      try {
+        const r = await fetch(`${API}/contractor-dispatches?quote_no=${encodeURIComponent(this.quoteNo)}`, {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (r.ok) this.dispatches = (await r.json()).filter(d => d.status !== 'cancelled')
+      } catch {}
+    },
+
+    // 承攬商含稅合計 + 外包名單人員（不計稅）＝該筆派發對「實際總成本」的貢獻
+    dispatchTotal() {
+      return this.dispatches.reduce((s, d) => s + (+d.grandTotal || 0), 0)
+    },
+
+    // 精算已完結時，比對完結當下凍結的 dispatchTotal 快照 vs 目前即時計算值；
+    // 承攬商派發在完結後又被異動（新增/取消/改金額）就會不一致，回傳差異供橫幅顯示，
+    // 一致或非完結狀態回傳 null（見 §5.5「精算完結即凍結」設計，此為過期提醒非錯誤）
+    dispatchStale() {
+      if (this.settlement.status !== 'finalized' || !this._frozenSummary) return null
+      const frozen = Math.round(this._frozenSummary.dispatchTotal || 0)
+      const live   = Math.round(this.summary.dispatchTotal || 0)
+      if (frozen === live) return null
+      return { frozen, live, diff: live - frozen }
+    },
+
+    // 展開單筆派發的明細列：有承攬商就先列承攬商、外包人員接續縮排；
+    // 純點工（無承攬商）時外包人員第一筆頂替承攬商列顯示派發狀態
+    _dispatchRows(d) {
+      const personnel = (d.personnel || []).map(p => ({ label: '外包人員：' + p.name, amount: p.amount, isVendor: false }))
+      if (d.vendorId) {
+        return [
+          { label: d.vendorName || '（未命名承攬商）', amount: d.totalWithTax, isVendor: true },
+          ...personnel.map(r => ({ ...r, label: '　' + r.label }))
+        ]
+      }
+      return personnel.map((r, i) => ({ ...r, isVendor: i === 0 }))
+    },
+
     calcItemCost(item) {
-      item.actualTotalCost = Math.round((item.actualQty || 0) * (item.actualUnitCost || 0))
+      const raw = Math.round((item.actualQty || 0) * (item.actualUnitCost || 0))
+      if (item.actualCostTaxMode === 'taxed') {
+        // 含稅5%：供應商發票金額已含稅，扣掉稅額換算回未稅，與報價稅前收入同一基準才能正確比毛利
+        item.actualTotalCost = Math.round(raw / 1.05)
+      } else if (item.actualCostTaxMode === 'taxed_gross') {
+        // 含稅5%（自動加總）：填的是未稅底價，稅金無法扣抵、屬實際支出，加總5%計入真實成本
+        item.actualTotalCost = Math.round(raw * 1.05)
+      } else {
+        item.actualTotalCost = raw
+      }
     },
 
     calcExtraCost(ex) {
@@ -859,12 +926,21 @@ function settlementPage() {
       const quotedTotal  = tot.total    || 0
       const origItemTotal = this.settlement.items.reduce((s, i) => s + (i.origAmount || 0), 0)
       const origTotalCost = this.settlement.items.reduce((s, i) => s + (i.origQty || 0) * (i.origCost || 0), 0)
-      const origDirectProfit = quotedPretax - origTotalCost
-      const origMarginPct = quotedPretax > 0 ? origDirectProfit / quotedPretax * 100 : 0
+      // 直接沿用報價單建立當下已算好的預估毛利（quotation-form.html tot 物件），不在這裡
+      // 重算——重算會漏掉 5% 非扣抵進項稅與 5 個間接成本項目（indirectLogistics 等），
+      // 讓下方「與實際比較」的差異(pp)/差異金額反映的是公式落差而非真實成本表現
+      const origDirectProfit = tot.directProfit != null ? tot.directProfit : (quotedPretax - origTotalCost)
+      const origMarginPct = tot.directMarginPct != null ? tot.directMarginPct
+        : (quotedPretax > 0 ? origDirectProfit / quotedPretax * 100 : 0)
 
       const itemActualTotal = this.settlement.items.reduce((s, i) => s + (i.actualTotalCost || 0), 0)
-      const extraTotal      = this.settlement.extraItems.reduce((s, e) => s + (e.totalCost || 0), 0)
-      const totalActualCost = itemActualTotal + extraTotal
+      // 2026-09-11：額外支出搬到 case_extra_expenses 表（DB v75），改用從 API 取回的
+      // 總額。**不能再用 settlement.extraItems 算**——那份陣列現在只是搬移前的唯讀
+      // 備份、不會再更新，拿它算成本會停在搬移當下的舊數字。含送審中的金額
+      // （使用者指定：送審中照樣算進成本，但畫面要提醒）。
+      const extraTotal      = this.xeTotal
+      const dispatchTotal   = this.dispatchTotal()
+      const totalActualCost = itemActualTotal + extraTotal + dispatchTotal
       const grossProfit     = quotedPretax - totalActualCost
       const grossMarginPct  = quotedPretax > 0 ? grossProfit / quotedPretax * 100 : 0
       const adminCost       = Math.round(quotedPretax * 0.10)
@@ -872,10 +948,11 @@ function settlementPage() {
       const netProfit       = grossProfit - adminCost - charityDonation
       const netMarginPct    = quotedPretax > 0 ? netProfit / quotedPretax * 100 : 0
 
-      const origAdminCost   = Math.round(quotedPretax * 0.10)
-      const origCharity     = Math.round(origDirectProfit * 0.01)
-      const origNetProfit   = origDirectProfit - origAdminCost - origCharity
-      const origNetMarginPct = quotedPretax > 0 ? origNetProfit / quotedPretax * 100 : 0
+      const origAdminCost   = tot.adminCost != null ? tot.adminCost : Math.round(quotedPretax * 0.10)
+      const origCharity     = tot.charityDonation != null ? tot.charityDonation : Math.round(origDirectProfit * 0.01)
+      const origNetProfit   = tot.netProfit != null ? tot.netProfit : (origDirectProfit - origAdminCost - origCharity)
+      const origNetMarginPct = tot.netMarginPct != null ? tot.netMarginPct
+        : (quotedPretax > 0 ? origNetProfit / quotedPretax * 100 : 0)
 
       const profitDiff = netProfit - origNetProfit
 
@@ -886,7 +963,7 @@ function settlementPage() {
         origAdminCost, origCharity,
         origNetProfit:    Math.round(origNetProfit),
         origNetMarginPct: Math.round(origNetMarginPct * 10) / 10,
-        itemActualTotal, extraTotal, totalActualCost,
+        itemActualTotal, extraTotal, dispatchTotal, totalActualCost,
         grossProfit:     Math.round(grossProfit),
         grossMarginPct:  Math.round(grossMarginPct * 10) / 10,
         adminCost, charityDonation,
@@ -896,22 +973,21 @@ function settlementPage() {
       }
     },
 
-    addExtra() {
-      this.settlement.extraItems.push({
-        id:          Date.now(),
-        category:    '工時',
-        description: '',
-        qty:         1,
-        unit:        '人天',
-        unitCost:    0,
-        totalCost:   0,
-        note:        '',
-      })
-    },
+    // addExtra() / removeExtra() / uploadSettlementExtraFiles() /
+    // deleteSettlementExtraFile() 已於 2026-09-11 移除——額外支出搬到案件管理的
+    // 「額外支出」分頁與 case_extra_expenses 表（DB v75），這一頁不再有編輯入口，
+    // 這四個函式的呼叫者（那張可編輯的表）已經一併拿掉。附件端點改用資料列 id
+    // 定位，見 routers/case_extra_expenses.py。
 
-    removeExtra(idx) {
-      this.settlement.extraItems.splice(idx, 1)
-      this.calcSummary()
+    async previewAttachmentFile(file) {
+      try {
+        const r = await fetch(`${API}/photo-token?path=${encodeURIComponent(file.path)}`, {
+          headers: { Authorization: 'Bearer ' + this.session.token },
+        })
+        if (!r.ok) { this.toast('取得檔案連結失敗'); return }
+        const { token } = await r.json()
+        window.open(`${API}/uploads/${file.path}?pt=${encodeURIComponent(token)}`, '_blank')
+      } catch (e) { this.toast('開啟檔案失敗：' + e.message) }
     },
 
     buildPayload() {
@@ -932,6 +1008,7 @@ function settlementPage() {
           origCost:       i.origCost,
           actualQty:      i.actualQty,
           actualUnitCost: i.actualUnitCost,
+          actualCostTaxMode: i.actualCostTaxMode,
           actualTotalCost:i.actualTotalCost,
           note:           i.note,
         })),
@@ -940,17 +1017,22 @@ function settlementPage() {
       }
     },
 
+    async _putSettlement() {
+      this.calcSummary()
+      const res = await fetch(`${API}/quotations/${this.quoteNo}/settlement`, {
+        method:  'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+        body:    JSON.stringify({ settlement: this.buildPayload() }),
+      })
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || '儲存失敗')
+      return res
+    },
+
     async saveDraft() {
       this.saving = true
       try {
-        this.calcSummary()
-        const res = await fetch(`${API}/quotations/${this.quoteNo}/settlement`, {
-          method:  'PUT',
-          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
-          body:    JSON.stringify({ settlement: this.buildPayload() }),
-        })
-        if (res.ok) this.toast('精算草稿已儲存')
-        else        this.toast('儲存失敗')
+        await this._putSettlement()
+        this.toast('精算草稿已儲存')
       } catch(e) { this.toast('儲存失敗：' + e.message) }
       finally { this.saving = false }
     },

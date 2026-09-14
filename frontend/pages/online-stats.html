@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="../static/favicon.png">
+  <title>在線時數統計 — MOTRIX 專案管理系統</title>
+  <script src="../static/auth-guard.js"></script>
+  <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
+  <!-- 深色模式刻意不在這裡寫任何色彩覆寫：全站是反轉濾鏡，不是另一套色票
+       （見 style.css「DARK MODE」區塊與 dev-crm.html 的說明）。 -->
+  <style>
+    .os-main {
+      margin-left: var(--sidebar-w);
+      margin-top: var(--topbar-h);
+      padding: 28px 32px;
+      min-height: calc(100vh - var(--topbar-h));
+      background: var(--white);
+    }
+    .os-note {
+      display: flex; align-items: flex-start; gap: 8px;
+      background: #FEFCE8; border: 1px solid #FDE68A; border-radius: var(--radius);
+      padding: 10px 14px; font-size: 12px; color: #854D0E; margin-bottom: 18px; line-height: 1.8;
+    }
+    .os-bar { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 18px; }
+    .os-field { display: flex; flex-direction: column; gap: 4px; }
+    .os-field label { font-size: 11px; color: var(--text-dim); }
+    .os-online {
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+      border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 14px 18px; margin-bottom: 20px; background: var(--bg);
+    }
+    .os-chip {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: #fff; border: 1px solid var(--border); border-radius: 20px;
+      padding: 4px 12px; font-size: 12px;
+    }
+    .os-dot { width: 7px; height: 7px; border-radius: 50%; background: #22C55E; }
+    .os-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .os-table th, .os-table td {
+      padding: 9px 12px; border-bottom: 1px solid var(--border-light); text-align: left;
+    }
+    .os-table th { font-size: 11px; color: var(--text-dim); font-weight: 600; }
+    .os-table td.num { text-align: right; font-family: 'LINE Seed TW_OTF', sans-serif; }
+    .os-track { background: var(--border-light); border-radius: 4px; height: 7px; min-width: 60px; }
+    .os-fill { background: var(--accent); border-radius: 4px; height: 7px; }
+  </style>
+</head>
+<body x-data="onlineStatsPage()" x-cloak>
+
+  <header id="app-topbar" class="topbar"></header>
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+  <!-- 側欄必須是 <body> 的直接子元素：深色模式的反轉濾鏡排除清單只認直接子元素
+       （style.css「DARK MODE」區塊的 body > *:not(.sidebar)）。 -->
+  <aside class="sidebar" id="app-sidebar"></aside>
+
+  <main class="os-main">
+    <div class="pg">
+      <div class="pg__l">
+        <div class="pg__eyebrow">系統設定</div>
+        <h1 class="pg__t">在線時數統計</h1>
+        <p class="pg__s">只統計有實際操作的活躍時間，每 5 分鐘累計一次</p>
+      </div>
+    </div>
+
+    <div class="os-online">
+      <span style="font-size:13px;font-weight:600">目前在線</span>
+      <span class="os-chip" style="border-color:#86EFAC;background:#F0FDF4">
+        <span class="os-dot"></span><span x-text="online.count + ' 人'"></span>
+      </span>
+      <template x-for="u in online.users" :key="u.userId">
+        <span class="os-chip">
+          <span class="os-dot"></span>
+          <span x-text="u.displayName"></span>
+          <span style="color:var(--text-dim);font-size:10px" x-text="roleLabel(u.role)"></span>
+        </span>
+      </template>
+      <span x-show="online.count === 0" style="font-size:12px;color:var(--text-dim)">目前沒有人在線</span>
+    </div>
+
+    <div class="os-bar">
+      <div class="os-field">
+        <label>起始日期</label>
+        <input class="fi" type="date" x-model="start" @change="load()">
+      </div>
+      <div class="os-field">
+        <label>結束日期</label>
+        <input class="fi" type="date" x-model="end" @change="load()">
+      </div>
+      <button class="btn btn-secondary btn-sm" @click="thisMonth()">本月</button>
+      <button class="btn btn-secondary btn-sm" @click="last30()">近 30 天</button>
+      <span style="font-size:12px;color:var(--text-dim);margin-left:auto"
+            x-text="items.length + ' 位成員有紀錄'"></span>
+    </div>
+
+    <table class="os-table">
+      <thead>
+        <tr>
+          <th style="width:30px">#</th>
+          <th>成員</th>
+          <th>角色</th>
+          <th style="text-align:right">活躍時數</th>
+          <th style="width:180px">佔比</th>
+          <th style="text-align:right">有紀錄天數</th>
+          <th style="text-align:right">日均</th>
+        </tr>
+      </thead>
+      <tbody>
+        <template x-for="(it, i) in items" :key="it.userId">
+          <tr @click="openTrail(it)" style="cursor:pointer"
+              :style="trailUser === it.username ? 'background:var(--accent-light)' : ''">
+            <td x-text="i + 1" style="color:var(--text-dim)"></td>
+            <td x-text="it.displayName"></td>
+            <td x-text="roleLabel(it.role)" style="color:var(--text-secondary)"></td>
+            <td class="num" x-text="fmtHours(it.totalSeconds)"></td>
+            <td>
+              <div class="os-track"><div class="os-fill" :style="`width:${pct(it.totalSeconds)}%`"></div></div>
+            </td>
+            <td class="num" x-text="Object.keys(it.days).length"></td>
+            <td class="num" x-text="fmtHours(it.totalSeconds / Math.max(1, Object.keys(it.days).length))"></td>
+          </tr>
+        </template>
+      </tbody>
+    </table>
+
+    <div x-show="items.length === 0" style="padding:40px;text-align:center;color:var(--text-dim);font-size:13px">
+      這個期間還沒有任何活躍紀錄
+    </div>
+
+    <!-- ── 逐條操作軌跡（2026-09-14 使用者要求）────────────────────────────── -->
+    <div style="margin-top:28px">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px">
+        <h2 style="font-size:15px;font-weight:600;margin:0">操作軌跡</h2>
+        <span style="font-size:12px;color:var(--text-dim)"
+              x-text="trailUser ? ('僅顯示 ' + trailUser) : '全部成員'"></span>
+        <button class="btn btn-secondary btn-sm" x-show="trailUser" @click="openTrail(null)">顯示全部</button>
+        <button class="btn btn-secondary btn-sm" @click="loadTrail()">重新整理</button>
+        <span style="font-size:11px;color:var(--text-dim);margin-left:auto" x-text="trailNote"></span>
+      </div>
+
+      <div class="os-note" style="background:#F1F5F9;border-color:#CBD5E1;color:#334155">
+        <span>🕒</span>
+        <span>
+          逐條紀錄使用者看了哪一頁、動了哪個資源（含被擋下來的操作）。
+          輪詢類請求不記錄；同一支端點 30 秒內的連續請求只算一次；保留 90 天後自動清除。
+        </span>
+      </div>
+
+      <table class="os-table">
+        <thead>
+          <tr>
+            <th style="width:150px">時間</th>
+            <th style="width:110px">成員</th>
+            <th style="width:90px">動作</th>
+            <th style="width:140px">模組</th>
+            <th>資源</th>
+            <th style="width:150px">所在頁面</th>
+            <th style="width:60px;text-align:right">結果</th>
+          </tr>
+        </thead>
+        <tbody>
+          <template x-for="t in trail" :key="t.id">
+            <tr>
+              <td style="font-family:LINE Seed TW_OTF, sans-serif;font-size:12px" x-text="fmtTime(t.at)"></td>
+              <td x-text="t.displayName"></td>
+              <td x-text="t.methodLabel"
+                  :style="t.method === 'DELETE' ? 'color:var(--danger)' : (t.method === 'GET' ? 'color:var(--text-secondary)' : 'color:var(--accent)')"></td>
+              <td x-text="t.label || '—'"></td>
+              <td style="font-family:LINE Seed TW_OTF, sans-serif;font-size:11px;color:var(--text-secondary);word-break:break-all"
+                  x-text="t.path"></td>
+              <td style="font-size:11px;color:var(--text-dim)" x-text="t.page || '—'"></td>
+              <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-size:12px"
+                  :style="t.status >= 400 ? 'color:var(--danger);font-weight:600' : 'color:var(--text-dim)'"
+                  x-text="t.status"></td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+
+      <div x-show="trail.length === 0" style="padding:30px;text-align:center;color:var(--text-dim);font-size:13px">
+        這個期間沒有操作紀錄
+      </div>
+      <div style="text-align:center;margin-top:14px" x-show="trailNextId">
+        <button class="btn btn-secondary btn-sm" @click="loadTrail(true)">載入更早的紀錄</button>
+      </div>
+    </div>
+  
+    <!-- 2026-09-14：說明從資料前面移到後面。這頁的重點是數字，
+         一進來先讀三行說明才看到資料是本末倒置。 -->
+    <div class="os-note">
+      <span>ℹ️</span>
+      <span>
+        這裡統計的是**有實際操作的活躍時間**，不是分頁開著的時間——開著畫面去開會不會被算進去。
+        系統每 5 分鐘累計一次，因此當天的數字最多會少算 5 分鐘。<br>
+        這份資料只有最高管理者看得到。
+      </span>
+    </div>
+</main>
+
+  <script src="../static/notif.js"></script>
+  <script>
+    function onlineStatsPage() {
+      return {
+        session: JSON.parse(localStorage.getItem('motrix_session') || '{}'),
+        online: { count: 0, users: [] },
+        items: [],
+        start: '',
+        end: '',
+
+        // 這一頁只有最高管理者能用；後端兩支端點也都是 superadmin 限定，
+        // 前端這道只是讓非授權者看到的是說明而不是一片載入失敗。
+        init() {
+          if ((this.session.role || '') !== 'superadmin') {
+            document.querySelector('.os-main').innerHTML =
+              '<div style="max-width:520px;margin:64px auto;text-align:center">'
+              + '<div style="font-size:40px;margin-bottom:12px">🔒</div>'
+              + '<div style="font-size:17px;font-weight:600;margin-bottom:8px">你沒有這個頁面的權限</div>'
+              + '<div style="font-size:13px;color:var(--text-dim);line-height:1.9">在線時數統計僅限最高管理者檢視。</div></div>'
+            return
+          }
+          this.thisMonth()
+          this.loadOnline()
+          setInterval(() => this.loadOnline(), 60000)
+        },
+
+        _auth() { return { Authorization: 'Bearer ' + this.session.token } },
+
+        trail: [],
+        trailUser: '',
+        trailNextId: null,
+        trailNote: '',
+
+        openTrail(it) {
+          this.trailUser = it ? it.username : ''
+          this.trail = []
+          this.trailNextId = null
+          this.loadTrail()
+        },
+
+        async loadTrail(more = false) {
+          try {
+            const qs = new URLSearchParams({ start: this.start, end: this.end, limit: '200' })
+            if (this.trailUser) qs.set('user', this.trailUser)
+            if (more && this.trailNextId) qs.set('before_id', this.trailNextId)
+            const r = await fetch(`/api/user-activity/trail?${qs}`, { headers: this._auth() })
+            if (!r.ok) return
+            const d = await r.json()
+            this.trail = more ? this.trail.concat(d.items || []) : (d.items || [])
+            this.trailNextId = d.nextBeforeId
+            this.trailNote = d.note || ''
+          } catch (e) {}
+        },
+
+        fmtTime(iso) {
+          if (!iso) return ''
+          return iso.replace('T', ' ').slice(5, 19)
+        },
+
+        async loadOnline() {
+          try {
+            const r = await fetch('/api/online-users', { headers: this._auth() })
+            if (r.ok) this.online = await r.json()
+          } catch (e) {}
+        },
+
+        async load() {
+          try {
+            const r = await fetch(`/api/user-activity?start=${this.start}&end=${this.end}`,
+                                  { headers: this._auth() })
+            if (!r.ok) { this.items = []; return }
+            const d = await r.json()
+            this.items = d.items || []
+          } catch (e) { this.items = [] }
+          this.loadTrail()
+        },
+
+        thisMonth() {
+          const t = new Date()
+          this.start = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-01`
+          this.end = this._ymd(t)
+          this.load()
+        },
+
+        last30() {
+          const t = new Date()
+          const s = new Date(t.getTime() - 29 * 86400000)
+          this.start = this._ymd(s)
+          this.end = this._ymd(t)
+          this.load()
+        },
+
+        _ymd(d) {
+          return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+        },
+
+        roleLabel(r) {
+          return { superadmin: '最高管理者', admin: '管理員', sales: '業務',
+                   engineer: '工程師', viewer: '檢視者' }[r] || r
+        },
+
+        fmtHours(sec) {
+          const h = Math.floor(sec / 3600)
+          const m = Math.round((sec % 3600) / 60)
+          return h > 0 ? `${h} 小時 ${m} 分` : `${m} 分`
+        },
+
+        pct(sec) {
+          const max = Math.max(...this.items.map(i => i.totalSeconds), 1)
+          return Math.round((sec / max) * 100)
+        },
+      }
+    }
+  </script>
+  <script src="../static/sidebar.js"></script>
+</body>
+</html>

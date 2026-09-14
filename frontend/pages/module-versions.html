@@ -2,11 +2,13 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="../static/favicon.png">
-  <title>版本紀錄 — MOTRIX 營運管理系統</title>
-  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-  <link rel="stylesheet" href="../css/style.css">
+  <title>版本紀錄 — MOTRIX 專案管理系統</title>
+  <script src="../static/auth-guard.js"></script>
+  <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <style>
     :root {
       --mv-left: 240px;
@@ -28,11 +30,26 @@
       gap: 12px;
       padding: 0 24px;
     }
+    /* 2026-09-14：這頁的工具列是 position:fixed 的52px 帶，放不下 .pg 那種
+       「眩標 + 28×3 標記 + 大標題」的完整標頭（插在它上面會被蓋住）。
+       改用緊湊變體：紅色標記轉成直立的 3×14 細條貼在標題左側，
+       保留「紅色重點緊鄰標題」這個識別，不動它的版面結構。 */
     .mv-toolbar__title {
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
       font-size: 16px;
       font-weight: 700;
+      letter-spacing: -.01em;
       color: var(--text-main);
       margin-right: 4px;
+    }
+    .mv-toolbar__title::before {
+      content: '';
+      width: var(--v4-mark-h);
+      height: 14px;
+      background: var(--accent);
+      flex: none;
     }
     .mv-view-toggle {
       display: flex;
@@ -104,7 +121,7 @@
     .mv-mod-item:hover { background: rgba(37,99,235,.04); }
     .mv-mod-item.selected {
       border-left-color: var(--accent);
-      background: #EFF6FF;
+      background: var(--accent-light);
     }
     .mv-mod-item__name {
       font-size: 13px;
@@ -394,7 +411,7 @@
   </style>
 </head>
 <body>
-  <div id="app-topbar"></div>
+  <div id="app-topbar" class="topbar"></div>
   <nav id="app-sidebar" class="sidebar"></nav>
   <div id="sidebar-overlay" class="sidebar-overlay"></div>
 
@@ -606,6 +623,9 @@
     '通知系統':   '#0D9488', '外包名冊':    '#92400E', '勞報單':     '#44403C',
     '系統安全':   '#B91C1C', '系統備份':    '#78350F', '測試框架':    '#166534',
     '版本紀錄':   '#1E40AF',
+    '場域選型導覽': '#0F766E', '網路架構選型導覽': '#0F766E', '交換器選型導覽': '#0F766E',
+    '監控系統選型導覽': '#0F766E', '門禁系統選型導覽': '#0F766E',
+    '選型資料庫':  '#0F766E',
   }
 
   function moduleVersions() {

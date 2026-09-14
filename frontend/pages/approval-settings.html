@@ -2,11 +2,13 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="../static/favicon.png">
-  <title>簽核設定 — MOTRIX 營運管理系統</title>
-  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-  <link rel="stylesheet" href="../css/style.css">
+  <title>簽核設定 — MOTRIX 專案管理系統</title>
+  <script src="../static/auth-guard.js"></script>
+  <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <style>
     .as-main {
       margin-left: var(--sidebar-w);
@@ -75,14 +77,6 @@
       font-family: 'LINE Seed TW_OTF', sans-serif;
     }
     .as-step-actions { display: flex; gap: 4px; flex-shrink: 0; }
-    .as-step-btn {
-      width: 28px; height: 28px; border: 1px solid var(--border);
-      border-radius: 5px; background: var(--white);
-      cursor: pointer; display: flex; align-items: center; justify-content: center;
-      color: var(--text-secondary); transition: background .12s;
-    }
-    .as-step-btn:hover { background: #F3F4F6; }
-    .as-step-btn:disabled { opacity: .35; cursor: default; }
     .as-step-btn.danger:hover { background: #FEF2F2; color: var(--danger); border-color: var(--danger); }
     /* Add user row */
     .as-add-row {
@@ -117,13 +111,26 @@
     }
     .role-superadmin { background: #FEE2E2; color: #991B1B; }
     .role-admin      { background: #FEF3C7; color: #92400E; }
-    .role-sales      { background: #EFF6FF; color: #1E40AF; }
+    .role-sales      { background: var(--accent-light); color: #1E40AF; }
     .role-viewer     { background: #F3F4F6; color: #374151; }
     /* Step arrow between steps */
     .as-step-arrow {
       text-align: center; color: var(--text-dim); font-size: 14px; margin: -4px 0;
     }
-  
+    /* Scope menu (2026-08-28) */
+    .scope-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 14px; border: 1px solid var(--border-light);
+      border-radius: 8px; background: #F8F7F4;
+    }
+    .scope-badge {
+      display: inline-block; padding: 2px 9px; border-radius: 10px;
+      font-size: 10px; font-weight: 700; font-family: 'LINE Seed TW_OTF', sans-serif;
+      flex-shrink: 0;
+    }
+    .scope-badge.on  { background: #F0FDF4; color: #166534; border: 1px solid #BBF7D0; }
+    .scope-badge.off { background: #EEF2FF; color: #3730A3; border: 1px solid #C7D2FE; }
+
   /* -- Mobile RWD -- */
   @media (max-width:767px) {
     .as-main { margin-left:0 !important; padding:14px 12px; }
@@ -141,122 +148,224 @@
   <!-- MAIN -->
   <main class="as-main">
 
-    <div class="as-header">
-      <div>
-        <div class="as-title">簽核流程設定</div>
-        <div class="as-subtitle">設定報價單送出審核後，需依序由哪些人員簽核通過</div>
+    <div class="pg">
+      <div class="pg__l">
+        <div class="pg__eyebrow">系統設定</div>
+        <h1 class="pg__t">簽核流程設定</h1>
+        <p class="pg__s">下方先選擇哪些文件類型共用「統一流程」、哪些改用各自獨立的設定，再分別編輯各自的簽核順序</p>
       </div>
-      <div style="display:flex;gap:8px;align-items:center">
-        <template x-if="session.role !== 'superadmin'">
-          <span style="font-size:12px;color:#B45309;background:#FEF3C7;border:1px solid #FDE68A;border-radius:5px;padding:5px 12px">
-            僅超級管理員可修改設定
-          </span>
-        </template>
-        <button class="btn btn-primary" @click="saveFlow()"
-                :disabled="saving || session.role !== 'superadmin'"
-                x-show="session.role === 'superadmin'">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-          <span x-text="saving ? '儲存中…' : '儲存設定'"></span>
-        </button>
-      </div>
+      <template x-if="session.role !== 'superadmin'">
+        <span style="font-size:12px;color:#B45309;background:#FEF3C7;border:1px solid #FDE68A;border-radius:5px;padding:5px 12px">
+          僅超級管理員可修改設定
+        </span>
+      </template>
     </div>
 
-    <div class="as-card">
+    <!-- 套用範圍選單 -->
+    <div class="as-card" style="margin-bottom:20px">
       <div class="as-card-head">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--accent)"><path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
-        <div class="as-card-head-title">簽核順序</div>
-        <span x-show="steps.length > 0"
-              style="font-size:11px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif"
-              x-text="steps.length + ' 個步驟'"></span>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--accent)"><path d="M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+        <div class="as-card-head-title">簽核流程套用範圍</div>
       </div>
       <div class="as-card-body">
-
         <div class="as-desc">
-          <template x-if="steps.length === 0">
-            <span>目前為<b>預設模式</b>：報價單送出後，由任何超級管理員簽核即可通過。</span>
-          </template>
-          <template x-if="steps.length > 0">
-            <span>目前為<b>自訂順序模式</b>：報價單須依下方設定的順序，由各指定人員依序簽核，全部通過後才送出。</span>
-          </template>
+          勾選＝該文件類型走下方「統一簽核流程設定」；取消勾選＝改用該類型自己的獨立設定（會在下方各自展開一個編輯區塊）。剛從統一流程勾掉的類型，獨立設定會先複製一份目前統一流程的內容作為起點，不會突然變成沒有任何簽核層。
         </div>
-
-        <!-- Mode banner -->
-        <div class="mode-banner" :class="steps.length > 0 ? 'custom' : 'default'">
-          <template x-if="steps.length === 0">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-          </template>
-          <template x-if="steps.length > 0">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
-          </template>
-          <span x-text="steps.length === 0 ? '預設模式（任一超級管理員簽核）' : '自訂順序模式（共 ' + steps.length + ' 個簽核步驟）'"></span>
-        </div>
-
-        <!-- Steps list -->
-        <div class="as-steps" x-show="steps.length > 0">
-          <template x-for="(step, idx) in steps" :key="step._id">
-            <div>
-              <!-- Arrow between steps -->
-              <div class="as-step-arrow" x-show="idx > 0" style="margin-bottom:2px">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
-              </div>
-              <div class="as-step">
-                <div class="as-step-num" x-text="idx + 1"></div>
-                <div class="as-step-info">
-                  <div class="as-step-name" x-text="step.displayName"></div>
-                  <div class="as-step-role">
-                    <span x-text="step.username" style="font-family:LINE Seed TW_OTF, sans-serif"></span>
-                    <span class="role-badge" :class="'role-' + step.role" x-text="roleLabel(step.role)" style="margin-left:5px"></span>
-                  </div>
-                </div>
-                <div class="as-step-actions">
-                  <button class="as-step-btn" title="上移" @click="moveUp(idx)" :disabled="idx===0 || session.role!=='superadmin'">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 15l-6-6-6 6"/></svg>
-                  </button>
-                  <button class="as-step-btn" title="下移" @click="moveDown(idx)" :disabled="idx===steps.length-1 || session.role!=='superadmin'">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
-                  </button>
-                  <button class="as-step-btn danger" title="移除" @click="removeStep(idx)" :disabled="session.role!=='superadmin'">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
-                  </button>
-                </div>
-              </div>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
+          <template x-for="dt in docTypeOrder" :key="dt">
+            <div class="scope-row">
+              <label class="status-toggle" style="margin:0;flex-shrink:0">
+                <input type="checkbox" x-model="scope[dt]" :disabled="session.role!=='superadmin'">
+                <span class="slider"></span>
+              </label>
+              <span style="font-size:13px;font-weight:600;flex:1" x-text="docTypeMeta[dt]"></span>
+              <span class="scope-badge" :class="scope[dt] ? 'on' : 'off'" x-text="scope[dt] ? '統一流程' : '獨立設定'"></span>
             </div>
           </template>
         </div>
-
-        <!-- Empty state -->
-        <div class="as-empty" x-show="steps.length === 0">
-          <div style="font-size:28px;opacity:.25;margin-bottom:6px">📋</div>
-          <div>尚未設定簽核人員，使用預設模式</div>
-          <div style="font-size:12px;margin-top:4px;color:var(--text-dim)">點選下方「新增簽核人員」建立簽核順序</div>
-        </div>
-
-        <!-- Add step row -->
-        <div class="as-add-row" x-show="session.role === 'superadmin'">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--text-dim);flex-shrink:0"><path d="M12 4v16m8-8H4"/></svg>
-          <select x-model="addUserId" style="flex:1;min-width:180px">
-            <option value="">選擇要加入的人員…</option>
-            <template x-for="u in availableUsers" :key="u.id">
-              <option :value="u.id" x-text="u.displayName + ' (' + u.username + ') — ' + roleLabel(u.role)"></option>
-            </template>
-          </select>
-          <button class="btn btn-sm btn-primary" @click="addStep()" :disabled="!addUserId">
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v16m8-8H4"/></svg>
-            新增簽核人員
+        <div style="display:flex;justify-content:flex-end" x-show="session.role === 'superadmin'">
+          <button class="btn btn-primary btn-sm" @click="saveScope()" :disabled="scopeSaving || !_scopeLoaded" :title="!_scopeLoaded ? '套用範圍尚未成功載入' : ''">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+            <span x-text="scopeSaving ? '儲存中…' : '儲存套用範圍'"></span>
           </button>
         </div>
-
-        <!-- Reset to default note -->
-        <div x-show="steps.length > 0 && session.role === 'superadmin'"
-             style="margin-top:12px;text-align:right">
-          <button class="btn btn-ghost btn-sm" @click="resetToDefault()"
-                  style="color:var(--danger);font-size:11px">
-            清除全部，還原為預設模式
-          </button>
-        </div>
-
       </div>
     </div>
+
+    <!-- 各組簽核流程（統一流程一定顯示；獨立設定的類型各自展開一份） -->
+    <template x-for="key in flowSectionKeys" :key="key">
+      <div class="as-card" style="margin-bottom:20px" x-show="flows[key]">
+        <div class="as-card-head">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--accent)"><path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+          <div class="as-card-head-title" x-text="sectionTitle(key)"></div>
+          <span x-show="flows[key] && flows[key].steps.length > 0"
+                style="font-size:11px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif"
+                x-text="flows[key] ? flows[key].steps.length + ' 個步驟' : ''"></span>
+          <template x-if="session.role === 'superadmin'">
+            <button class="btn btn-primary btn-sm" @click="saveFlow(key)" :disabled="flows[key] && flows[key].saving" style="margin-left:4px">
+              <span x-text="(flows[key] && flows[key].saving) ? '儲存中…' : '儲存設定'"></span>
+            </button>
+          </template>
+        </div>
+        <div class="as-card-body" x-show="flows[key]">
+
+          <div class="as-desc">
+            <span x-text="sectionDesc(key)"></span>
+          </div>
+
+          <!-- Mode banner -->
+          <div class="mode-banner" :class="flows[key] && flows[key].steps.length > 0 ? 'custom' : 'default'">
+            <template x-if="flows[key] && flows[key].steps.length === 0">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            </template>
+            <template x-if="flows[key] && flows[key].steps.length > 0">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+            </template>
+            <span x-text="flows[key] && flows[key].steps.length === 0 ? '預設模式（任一超級管理員簽核）' : '自訂順序模式（共 ' + (flows[key] ? flows[key].steps.length : 0) + ' 個簽核步驟）'"></span>
+          </div>
+
+          <!-- 系統內建：申請人部門主管自動簽核（永遠排在最前面，不參與拖曳排序） -->
+          <div style="display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border:1px solid var(--border-light);border-radius:8px;background:#F8F7F4;margin-bottom:16px" x-show="flows[key]">
+            <label class="status-toggle" style="margin-top:1px;flex-shrink:0">
+              <input type="checkbox" x-model="flows[key].includeSubmitterManagerTier" :disabled="session.role!=='superadmin'">
+              <span class="slider"></span>
+            </label>
+            <div>
+              <div style="font-size:12px;font-weight:600">系統內建：申請人部門主管自動簽核（第一層）</div>
+              <div style="font-size:11px;color:var(--text-dim);margin-top:2px">
+                送審時自動查申請人自己所屬部門的主管簽核；申請人本身就是部門主管時改由處主管簽核；申請人本身就是處主管時改由其他超級管理員簽核。取消勾選＝這份單據不套用此規則。
+              </div>
+            </div>
+          </div>
+
+          <!-- Steps list -->
+          <div class="as-steps" x-show="flows[key] && flows[key].steps.length > 0">
+            <template x-for="(step, idx) in (flows[key] ? flows[key].steps : [])" :key="step._id">
+              <div>
+                <!-- Arrow between steps -->
+                <div class="as-step-arrow" x-show="idx > 0" style="margin-bottom:2px">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
+                </div>
+                <div class="as-step" style="flex-direction:column;align-items:stretch;gap:10px">
+                  <div style="display:flex;align-items:center;gap:12px">
+                    <div class="as-step-num" x-text="idx + 1"></div>
+                    <div style="flex:1;font-size:11px;color:var(--text-dim)"
+                         x-text="'第 ' + (idx+1) + ' 層' + (step.approvers.length > 1 ? '・' + step.approvers.length + ' 位簽核人（依序輪流）' : '')"></div>
+                    <div class="as-step-actions">
+                      <button class="as-step-btn" title="上移" @click="moveUp(key, idx)" :disabled="idx===0 || session.role!=='superadmin'">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 15l-6-6-6 6"/></svg>
+                      </button>
+                      <button class="as-step-btn" title="下移" @click="moveDown(key, idx)" :disabled="idx===flows[key].steps.length-1 || session.role!=='superadmin'">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+                      </button>
+                      <button class="as-step-btn danger" title="移除整層" @click="removeStep(key, idx)" :disabled="session.role!=='superadmin'">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                      </button>
+                    </div>
+                  </div>
+
+                  <!-- 這一層目前的簽核人清單（可放多筆，依序輪流，可跨部門/處） -->
+                  <div style="display:flex;flex-direction:column;gap:6px;padding-left:40px">
+                    <template x-for="(ap, apIdx) in step.approvers" :key="ap._aid">
+                      <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;border:1px solid var(--border-light);border-radius:6px;background:#fff">
+                        <span style="font-size:10px;color:var(--text-dim);width:14px;flex-shrink:0" x-text="apIdx + 1"></span>
+                        <template x-if="ap.kind === 'user'">
+                          <div style="flex:1;min-width:0">
+                            <span class="as-step-name" x-text="ap.displayName"></span>
+                            <span style="font-size:11px;color:var(--text-dim);margin-left:4px;font-family:LINE Seed TW_OTF, sans-serif" x-text="ap.username"></span>
+                            <span class="role-badge" :class="'role-' + ap.role" x-text="roleLabel(ap.role)" style="margin-left:5px"></span>
+                          </div>
+                        </template>
+                        <template x-if="ap.kind === 'department_manager'">
+                          <div style="flex:1;min-width:0">
+                            <span x-text="'🏢 ' + departmentLabel(ap.departmentId) + ' 主管（自動）'"></span>
+                            <span :style="currentManagerNameFor(ap.departmentId) ? 'color:var(--text-dim)' : 'color:var(--danger)'"
+                                  style="font-size:11px;margin-left:6px"
+                                  x-text="currentManagerNameFor(ap.departmentId) ? '目前：' + currentManagerNameFor(ap.departmentId) : '⚠ 尚未設定主管，送審時會被擋下'"></span>
+                          </div>
+                        </template>
+                        <template x-if="ap.kind === 'division_manager'">
+                          <div style="flex:1;min-width:0">
+                            <span x-text="'🏛 ' + divisionLabel(ap.divisionId) + ' 處主管（自動）'"></span>
+                            <span :style="currentDivManagerNameFor(ap.divisionId) ? 'color:var(--text-dim)' : 'color:var(--danger)'"
+                                  style="font-size:11px;margin-left:6px"
+                                  x-text="currentDivManagerNameFor(ap.divisionId) ? '目前：' + currentDivManagerNameFor(ap.divisionId) : '⚠ 尚未設定主管，送審時會被擋下'"></span>
+                          </div>
+                        </template>
+                        <button class="as-step-btn danger" title="從這層移除" @click="removeApprover(key, idx, apIdx)" :disabled="session.role!=='superadmin'" style="flex-shrink:0">
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                        </button>
+                      </div>
+                    </template>
+                    <div x-show="step.approvers.length === 0" style="font-size:11px;color:var(--text-dim)">這層還沒有任何簽核人，請從下方加入</div>
+                  </div>
+
+                  <!-- 加入這層的簽核人／自動簽核來源 -->
+                  <div style="display:flex;gap:8px;padding-left:40px" x-show="session.role === 'superadmin'">
+                    <select x-model="step._addKey" style="flex:1;min-width:200px;padding:6px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px">
+                      <option value="">選擇要加入這層的簽核人／自動簽核來源…</option>
+                      <optgroup label="人員">
+                        <template x-for="u in availableUsers" :key="'u'+u.id">
+                          <option :value="'user:' + u.id" x-text="u.displayName + ' (' + u.username + ') — ' + roleLabel(u.role)"></option>
+                        </template>
+                      </optgroup>
+                      <optgroup label="部門主管（自動）">
+                        <template x-for="d in allDepartments" :key="'d'+d.id">
+                          <option :value="'dept:' + d.id" x-text="d.divisionName + ' / ' + d.name + (d.managerName ? '（目前：' + d.managerName + '）' : '（尚未設定主管）')"></option>
+                        </template>
+                      </optgroup>
+                      <optgroup label="處主管（自動）">
+                        <template x-for="v in allDivisions" :key="'v'+v.id">
+                          <option :value="'div:' + v.id" x-text="v.name + (v.managerName ? '（目前：' + v.managerName + '）' : '（尚未設定主管）')"></option>
+                        </template>
+                      </optgroup>
+                    </select>
+                    <button class="btn btn-sm btn-primary" @click="addApproverToStep(key, idx)" :disabled="!step._addKey">加入</button>
+                  </div>
+                </div>
+              </div>
+            </template>
+          </div>
+
+          <!-- Empty state -->
+          <div class="as-empty" x-show="flows[key] && flows[key].steps.length === 0">
+            <div style="font-size:28px;opacity:.25;margin-bottom:6px">📋</div>
+            <div>尚未設定簽核層，使用預設模式</div>
+            <div style="font-size:12px;margin-top:4px;color:var(--text-dim)">點選下方「新增簽核層」建立簽核順序</div>
+          </div>
+
+          <!-- Add tier row -->
+          <div class="as-add-row" x-show="session.role === 'superadmin'">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--text-dim);flex-shrink:0"><path d="M12 4v16m8-8H4"/></svg>
+            <span style="flex:1;font-size:12px;color:var(--text-secondary)">新增一層空白層，再從層卡片內加入簽核人（同一層可放多人，依序輪流，可跨部門/處）</span>
+            <button class="btn btn-sm btn-primary" @click="addStep(key)">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v16m8-8H4"/></svg>
+              新增簽核層
+            </button>
+          </div>
+          <div class="form-hint" x-show="session.role === 'superadmin'" style="margin-top:6px;color:var(--text-dim)">
+            部門／處主管自動簽核：實際簽核人在送審當下即時查詢當時的主管，若屆時沒有指定主管，送審會被擋下並要求先設定主管。
+          </div>
+
+          <!-- Reset to default note -->
+          <div x-show="flows[key] && flows[key].steps.length > 0 && session.role === 'superadmin'"
+               style="margin-top:12px;text-align:right">
+            <button class="btn btn-ghost btn-sm" @click="resetToDefault(key)"
+                    style="color:var(--danger);font-size:11px">
+              清除全部，還原為預設模式
+            </button>
+          </div>
+
+          <!-- 2026-08-28：清除後、尚未按儲存前的明顯提示，避免誤以為清除本身就已生效 -->
+          <div x-show="flows[key] && flows[key].resetPending" x-cloak
+               style="margin-top:12px;padding:10px 14px;background:#FEF3C7;border:1px solid #FCD34D;border-radius:var(--radius);display:flex;align-items:center;gap:8px">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#92400E" stroke-width="2" style="flex-shrink:0"><path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+            <span style="font-size:12px;color:#92400E">已在畫面上清除所有簽核層，<strong>尚未儲存</strong>——請按上方「儲存設定」才會真正套用，否則重新整理後仍是清除前的狀態</span>
+          </div>
+
+        </div>
+      </div>
+    </template>
 
     <!-- Info card -->
     <div style="margin-top:20px;max-width:760px">
@@ -267,10 +376,10 @@
         </div>
         <div class="as-card-body" style="padding:14px 20px">
           <ul style="font-size:12px;color:var(--text-secondary);line-height:2;margin:0;padding-left:18px">
-            <li>報價單送出審核後，系統依此設定生成簽核步驟，並快照當時的設定（修改此頁不影響已在審核中的報價單）</li>
+            <li>每種文件類型依「套用範圍」設定走統一流程或自己的獨立設定，送出審核後系統依當下設定生成簽核步驟，並快照當時的設定（之後修改設定不影響已在審核中的單據）</li>
             <li>每位簽核人員在自己的步驟輪到時，才能在「簽核佇列」頁面執行簽核</li>
             <li>任何步驟皆可由超級管理員退回草稿</li>
-            <li>所有步驟完成後，報價單狀態自動更新為「已送出」並觸發 PDF 備存</li>
+            <li>所有步驟完成後，該單據狀態自動更新為完成狀態（報價單為「已送出」，其餘為「已核准」）</li>
             <li>未設定任何步驟時，回歸預設行為：任一超級管理員皆可簽核</li>
           </ul>
         </div>
@@ -284,12 +393,111 @@
 
     function approvalSettingsApp() {
       return {
-        session:   {},
-        steps:     [],       // [{userId, username, displayName, role, _id}]
+        session: {},
+        // 五種文件類型可各自選擇走統一流程（true）或獨立設定（false）
+        // 2026-09-11 新增 extra_expense（案件額外支出）。後端 APPROVAL_DOC_TYPES 已註冊，
+        // 這裡是讓它出現在「套用範圍」多選與獨立設定區塊。
+        docTypeOrder: ['quotation', 'shipping', 'completion', 'invoice_voucher', 'payment_request',
+                       'contractor_voucher', 'extra_expense'],
+        docTypeMeta: {
+          quotation:          '報價單',
+          shipping:           '出貨單',
+          completion:         '完工單',
+          invoice_voucher:    '發票開立簽核單',
+          payment_request:    '請款單',
+          contractor_voucher: '承攬商匯款申請',
+          extra_expense:      '案件額外支出',
+        },
+        scope:       {},      // {quotation:bool, shipping:bool, ...}
+        scopeSaving: false,
+        _scopeLoaded: false,  // true 只有在成功從後端載入過一次 scope 之後才會是 true
+        // flows.unified 永遠存在；flows[docType] 只在該類型被設成獨立設定時才會建立
+        // 每個 flow = {includeSubmitterManagerTier, steps:[...], saving, resetPending}
+        flows: {},
         allUsers:  [],       // all users from /api/users
-        addUserId: '',
-        saving:    false,
+        orgTree:   [],       // from /api/org/tree
         _idCounter: 0,
+
+        get independentTypes() {
+          return this.docTypeOrder.filter(dt => this.scope[dt] === false)
+        },
+
+        get unifiedTypes() {
+          return this.docTypeOrder.filter(dt => this.scope[dt] !== false)
+        },
+
+        get flowSectionKeys() {
+          return ['unified', ...this.independentTypes]
+        },
+
+        sectionTitle(key) {
+          return key === 'unified' ? '統一簽核流程設定' : (this.docTypeMeta[key] + '獨立簽核設定')
+        },
+
+        sectionDesc(key) {
+          const flow = this.flows[key]
+          const hasCustom = flow && flow.steps.length > 0
+          if (key === 'unified') {
+            const names = this.unifiedTypes.map(dt => this.docTypeMeta[dt])
+            const label = names.length ? names.join('／') : '（目前沒有任何文件類型套用統一流程）'
+            return hasCustom
+              ? `目前為自訂順序模式：${label} 送出後，須依下方設定的順序，由各指定人員依序簽核，全部通過後才送出。`
+              : `目前為預設模式：${label} 送出後，由任何超級管理員簽核即可通過。`
+          }
+          const label = this.docTypeMeta[key]
+          return hasCustom
+            ? `目前為自訂順序模式：${label}送出後，須依下方設定的順序，由各指定人員依序簽核，全部通過後才送出。`
+            : `目前為預設模式：${label}送出後，由任何超級管理員簽核即可通過。`
+        },
+
+        flowUrl(key) {
+          return key === 'unified' ? `${API}/settings/approval-flow` : `${API}/settings/approval-flow/${key}`
+        },
+
+        _blankFlow() {
+          return { includeSubmitterManagerTier: true, steps: [], saving: false, resetPending: false }
+        },
+
+        _ensureFlowSlots(scope) {
+          if (!this.flows.unified) this.flows.unified = this._blankFlow()
+          for (const dt of this.docTypeOrder) {
+            if (scope[dt] === false && !this.flows[dt]) this.flows[dt] = this._blankFlow()
+          }
+        },
+
+        get allDepartments() {
+          const out = []
+          for (const div of this.orgTree) {
+            for (const dept of div.departments) {
+              out.push({ id: dept.id, name: dept.name, managerName: dept.managerName, divisionName: div.name })
+            }
+          }
+          return out
+        },
+
+        get allDivisions() {
+          return this.orgTree.map(div => ({ id: div.id, name: div.name, managerName: div.managerName }))
+        },
+
+        departmentLabel(deptId) {
+          const d = this.allDepartments.find(d => d.id === deptId)
+          return d ? (d.divisionName + ' / ' + d.name) : ('部門 #' + deptId)
+        },
+
+        divisionLabel(divId) {
+          const v = this.allDivisions.find(v => v.id === divId)
+          return v ? v.name : ('處 #' + divId)
+        },
+
+        currentManagerNameFor(deptId) {
+          const d = this.allDepartments.find(d => d.id === deptId)
+          return d ? d.managerName : null
+        },
+
+        currentDivManagerNameFor(divId) {
+          const v = this.allDivisions.find(v => v.id === divId)
+          return v ? v.managerName : null
+        },
 
         get availableUsers() {
           const roleOrder = { superadmin: 0, admin: 1, sales: 2, viewer: 3 }
@@ -306,24 +514,82 @@
           const s = JSON.parse(localStorage.getItem('motrix_session') || 'null')
           if (!s?.token) { location.href = 'login.html'; return }
           this.session = s
-          await Promise.all([this.loadFlow(), this.loadUsers()])
+          this.flows.unified = this._blankFlow()
+          await Promise.all([this.loadScope(), this.loadUsers(), this.loadOrgTree()])
         },
 
-        async loadFlow() {
+        async loadOrgTree() {
           try {
-            const r = await fetch(`${API}/settings/approval-flow`, {
+            const r = await fetch(`${API}/org/tree`, {
+              headers: { Authorization: 'Bearer ' + this.session.token }
+            })
+            if (r.ok) this.orgTree = await r.json()
+          } catch (e) {
+            console.error('loadOrgTree', e)
+          }
+        },
+
+        async loadScope() {
+          try {
+            const r = await fetch(`${API}/settings/approval-flow-scope`, {
+              headers: { Authorization: 'Bearer ' + this.session.token }
+            })
+            if (r.status === 401) { location.href = 'login.html'; return }
+            if (!r.ok) { console.error('loadScope failed:', r.status); return }
+            const scope = await r.json()
+            this._ensureFlowSlots(scope)
+            this.scope = scope
+            // 2026-08-28 code review：只有成功從後端載入過一次，才允許儲存——
+            // 避免載入失敗（scope 還是初始的空物件）時使用者按下儲存，把 PUT
+            // body 送出一份殘缺資料，讓後端把沒帶到的欄位悄悄套用預設值，
+            // 洗掉其他人已經自訂好的套用範圍。
+            this._scopeLoaded = true
+            await this.loadAllFlows()
+          } catch (e) {
+            console.error('loadScope', e)
+          }
+        },
+
+        async loadAllFlows() {
+          await Promise.all(this.flowSectionKeys.map(k => this.loadFlow(k)))
+        },
+
+        async loadFlow(key) {
+          try {
+            const r = await fetch(this.flowUrl(key), {
               headers: { Authorization: 'Bearer ' + this.session.token }
             })
             if (r.status === 401) { location.href = 'login.html'; return }
             const d = await r.json()
-            // API returns { tiers: [{order, approvers:[{userId,username,displayName}]}] }
+            // API returns { tiers: [{order, approvers:[{userId,username,displayName} or {sourceType,departmentId/divisionId}]}] }
             const tiers = d.tiers || []
-            this.steps = tiers.flatMap(tier =>
-              (tier.approvers || []).map(a => ({ ...a, _id: ++this._idCounter }))
-            )
+            this.flows[key] = {
+              includeSubmitterManagerTier: d.includeSubmitterManagerTier !== false,
+              steps: tiers.map(tier => ({
+                _id: ++this._idCounter,
+                _addKey: '',
+                approvers: (tier.approvers || []).map(a => ({ ...a, _aid: ++this._idCounter, kind: a.sourceType || 'user' })),
+              })),
+              saving: false,
+              resetPending: false,
+            }
+            this._patchUserApprovers(key)
           } catch (e) {
-            console.error('loadFlow', e)
+            console.error('loadFlow', key, e)
           }
+        },
+
+        _patchUserApprovers(key) {
+          const flow = this.flows[key]
+          if (!flow) return
+          flow.steps = flow.steps.map(step => ({
+            ...step,
+            approvers: step.approvers.map(ap => {
+              if (ap.kind !== 'user') return ap
+              const u = this.allUsers.find(u => u.id === ap.userId)
+              return u ? { ...ap, role: u.role, displayName: u.displayName } : ap
+            }),
+          }))
         },
 
         async loadUsers() {
@@ -335,69 +601,98 @@
             if (!r.ok) { console.error('loadUsers failed:', r.status); return }
             const d = await r.json()
             this.allUsers = Array.isArray(d) ? d : []
-            // Patch step roles from current user data
-            this.steps = this.steps.map(step => {
-              const u = this.allUsers.find(u => u.id === step.userId)
-              return u ? { ...step, role: u.role, displayName: u.displayName } : step
-            })
+            // Patch each user-kind approver's role/displayName from current user data
+            // (auto-signed department/division-manager approvers have no fixed userId —
+            // the actual signer resolves live at submission time, nothing to patch here)
+            for (const k of Object.keys(this.flows)) this._patchUserApprovers(k)
           } catch (e) {
             console.error('loadUsers', e)
           }
         },
 
-        addStep() {
-          if (!this.addUserId) return
-          const uid = Number(this.addUserId)
-          const user = this.allUsers.find(u => u.id === uid)
-          if (!user) return
-          this.steps.push({
-            _id:         ++this._idCounter,
-            userId:      user.id,
-            username:    user.username,
-            displayName: user.displayName,
-            role:        user.role,
-          })
-          this.addUserId = ''
+        addStep(key) {
+          this.flows[key].steps.push({ _id: ++this._idCounter, approvers: [], _addKey: '' })
         },
 
-        removeStep(idx) {
-          this.steps.splice(idx, 1)
+        addApproverToStep(key, idx) {
+          const step = this.flows[key].steps[idx]
+          const addKey = step._addKey
+          if (!addKey) return
+          const [type, idStr] = addKey.split(':')
+          const id = Number(idStr)
+          let approver
+          if (type === 'user') {
+            const user = this.allUsers.find(u => u.id === id)
+            if (!user) return
+            approver = { kind: 'user', userId: user.id, username: user.username, displayName: user.displayName, role: user.role }
+          } else if (type === 'dept') {
+            approver = { kind: 'department_manager', departmentId: id }
+          } else if (type === 'div') {
+            approver = { kind: 'division_manager', divisionId: id }
+          } else {
+            return
+          }
+          approver._aid = ++this._idCounter
+          step.approvers.push(approver)
+          step._addKey = ''
         },
 
-        moveUp(idx) {
+        removeApprover(key, stepIdx, apIdx) {
+          this.flows[key].steps[stepIdx].approvers.splice(apIdx, 1)
+        },
+
+        removeStep(key, idx) {
+          this.flows[key].steps.splice(idx, 1)
+        },
+
+        moveUp(key, idx) {
           if (idx === 0) return
-          const tmp = this.steps[idx - 1]
-          this.steps[idx - 1] = this.steps[idx]
-          this.steps[idx] = tmp
+          const steps = this.flows[key].steps
+          const tmp = steps[idx - 1]
+          steps[idx - 1] = steps[idx]
+          steps[idx] = tmp
         },
 
-        moveDown(idx) {
-          if (idx === this.steps.length - 1) return
-          const tmp = this.steps[idx + 1]
-          this.steps[idx + 1] = this.steps[idx]
-          this.steps[idx] = tmp
+        moveDown(key, idx) {
+          const steps = this.flows[key].steps
+          if (idx === steps.length - 1) return
+          const tmp = steps[idx + 1]
+          steps[idx + 1] = steps[idx]
+          steps[idx] = tmp
         },
 
-        resetToDefault() {
+        resetToDefault(key) {
           if (!confirm('確定要清除所有簽核步驟，還原為預設模式（任一超級管理員可簽核）？')) return
-          this.steps = []
+          this.flows[key].steps = []
+          // 2026-08-28：清空只是本機畫面狀態，還沒送出儲存——加一個明顯提示，
+          // 避免使用者誤以為「清除」本身就已經生效，接著又順手按了儲存把空
+          // 狀態存進資料庫（這是簽核設定莫名被洗掉最可能的成因，見交接紀錄）。
+          this.flows[key].resetPending = true
         },
 
-        async saveFlow() {
-          if (this.saving) return
-          this.saving = true
+        async saveFlow(key) {
+          const flow = this.flows[key]
+          if (!flow || flow.saving) return
+          const payload = {
+            includeSubmitterManagerTier: flow.includeSubmitterManagerTier,
+            tiers: flow.steps.filter(s => s.approvers.length > 0).map((s, i) => ({
+              order: i,
+              approvers: s.approvers.map(ap =>
+                ap.kind === 'department_manager' ? { sourceType: 'department_manager', departmentId: ap.departmentId } :
+                ap.kind === 'division_manager'   ? { sourceType: 'division_manager', divisionId: ap.divisionId } :
+                { userId: ap.userId, username: ap.username, displayName: ap.displayName }
+              )
+            }))
+          }
+          // 2026-08-28：儲存空的簽核層清單是重大操作（之後任一超級管理員都能簽核所有
+          // 單據），額外多一道跟「清除」按鈕文字不同的確認，避免「清除→順手存檔」
+          // 一步誤觸就把設定洗空。
+          if (payload.tiers.length === 0 && !confirm('即將儲存空的簽核設定，儲存後任一位超級管理員都可以簽核所有單據，確定要儲存嗎？')) {
+            return
+          }
+          flow.saving = true
           try {
-            const payload = {
-              tiers: this.steps.map((s, i) => ({
-                order: i,
-                approvers: [{
-                  userId:      s.userId,
-                  username:    s.username,
-                  displayName: s.displayName,
-                }]
-              }))
-            }
-            const r = await fetch(`${API}/settings/approval-flow`, {
+            const r = await fetch(this.flowUrl(key), {
               method: 'PUT',
               headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
               body: JSON.stringify(payload)
@@ -407,13 +702,46 @@
               alert('儲存失敗：' + (err.detail || r.status))
               return
             }
-            this._toast(this.steps.length > 0
-              ? `✓ 已儲存 ${this.steps.length} 個簽核步驟`
+            flow.resetPending = false
+            this._toast(flow.steps.length > 0
+              ? `✓ 已儲存 ${flow.steps.length} 個簽核步驟`
               : '✓ 已還原為預設模式', '#15803D')
           } catch (e) {
             alert('網路錯誤：' + e.message)
           } finally {
-            this.saving = false
+            flow.saving = false
+          }
+        },
+
+        async saveScope() {
+          if (this.scopeSaving) return
+          if (!this._scopeLoaded) {
+            alert('套用範圍尚未成功載入，無法儲存（避免送出殘缺資料覆蓋掉其他人已設定的內容）。請重新整理頁面後再試一次。')
+            return
+          }
+          this.scopeSaving = true
+          try {
+            const r = await fetch(`${API}/settings/approval-flow-scope`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+              body: JSON.stringify(this.scope)
+            })
+            if (!r.ok) {
+              const err = await r.json().catch(() => ({}))
+              alert('儲存失敗：' + (err.detail || r.status))
+              return
+            }
+            const d = await r.json()
+            this._ensureFlowSlots(this.scope)
+            await this.loadAllFlows()
+            const seeded = d.seededFromUnified || []
+            this._toast(seeded.length
+              ? `✓ 已儲存，${seeded.map(dt => this.docTypeMeta[dt]).join('、')} 已複製統一流程作為起點`
+              : '✓ 已儲存套用範圍', '#15803D')
+          } catch (e) {
+            alert('網路錯誤：' + e.message)
+          } finally {
+            this.scopeSaving = false
           }
         },
 

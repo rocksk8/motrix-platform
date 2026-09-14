@@ -45,23 +45,55 @@
 
   --text-primary:   #0A0A0A;
   --text-secondary: #6B6B6B;
-  --text-dim:       #9A9A9A;
+  --text-dim:       #767676;  /* 2026-08-28：原 #9A9A9A 對白底僅 2.81:1，未達 WCAG AA 文字 4.5:1 門檻；
+                                  改後 4.54:1 過關（全站 969 處引用，改這個變數一次生效，見 WCAG 稽核紀錄） */
   --text-on-dark:   #F5F4F0;
   --text-on-dark-dim: #8A8A8A;
 
-  --accent:  #2563EB;
-  --accent-light: #EFF6FF;
-  --success: #16A34A;
+  /* 2026-09-14：主色由藍 #2563EB 改為官網紅 #C8102E（UI-REDESIGN-PLAN §2.3 丙案）。
+     紅色同時是系統的 danger 色，因此「主要動作 vs 危險動作」一律**靠形狀區分、不靠色相**：
+       .btn-primary  實心紅          ← 主要動作
+       .btn-reject   白底 2px 粗紅框  ← 不可逆的重大動作
+       .btn-danger   淺紅底 1px 細框  ← 一般刪除
+     對比實測：#C8102E 對站內底色 --white #F5F4F0 為 5.35:1、對純白 5.88:1，
+     白字疊 #C8102E 為 5.88:1，紅字疊 --accent-light 為 5.03:1，全數過 AA 4.5:1。 */
+  --accent:  #C8102E;
+  --accent-light: #FBE9EC;
+  --accent-hover: #A60D26;
+  --success: #15803D;  /* 2026-08-28：原 #16A34A 對白底僅 3.30:1，未達 WCAG AA 文字 4.5:1（KPI 數字/
+                          狀態文字等小字級直接用到此變數的場合會不過）；改用站內既有徽章文字慣用的較深綠
+                          （#15803D，多處硬編碼已在用），對白底 5.02:1 過關，也讓全站綠色統一成同一色階 */
   --success-light: #F0FDF4;
-  --warning: #D97706;
+  --success-border: #BBF7D0;
+  --success-hover-bg: #DCFCE7;
+  --warning: #92400E;  /* 2026-08-28：原 #D97706 對白底僅 3.19:1，未達 AA；改用站內既有徽章文字慣用的
+                          較深琥珀（#92400E），對白底 7.09:1 過關 */
   --warning-light: #FFFBEB;
-  --danger:  #DC2626;
+  --danger:  #B91C1C;  /* 2026-09-14：原 #DC2626 對站內主底色 --white #F5F4F0 只有 4.39:1，
+                          未達 AA 4.5:1（2026-08-28 那輪的三個修正應是對純白 #FFF 算的，
+                          #DC2626 對純白是 4.83:1 剛好過，對奶白底就不過了）；
+                          改 #B91C1C 後對奶白 5.88:1、對 --danger-light #FEF2F2 5.91:1。
+                          丙案下 danger 多半以「框線＋文字」呈現，文字色必須自己站得住。 */
   --danger-light: #FEF2F2;
+  --danger-border: #FECACA;
+  --danger-hover-bg: #FEE2E2;
   --orange:  #EA580C;
   --orange-light: #FFF7ED;
 
-  --sidebar-w: 220px;
-  --topbar-h:  60px;
+  --ghost-hover-border: #C8C4BC;
+  --icon-btn-bg: #F0EEE9;
+
+  /* 2026-09-14：側欄退役，導覽全數移到上方（UI-REDESIGN-PLAN §2.1 選項 C）。
+     這兩個 token 是整個改版的槓桿點：全站 52 個檔案用 var(--topbar-h) 當內容
+     上方偏移、60 處用 var(--sidebar-w) 當左側偏移。
+       --sidebar-w 歸零 → 所有 margin-left / left 自動塌掉
+       --topbar-h 改成「頂欄 + 導覽列」的**總高**，所有頁面自動讓出位置
+     ——因此不需要逐頁改版面。
+     --topbar-bar-h 是頂欄自己的高度（以前是 --topbar-h 在兼差）。 */
+  --sidebar-w: 0px;
+  --topbar-bar-h: 60px;
+  --mainnav-h: 44px;
+  --topbar-h:  104px;   /* = --topbar-bar-h + --mainnav-h */
   --radius:    6px;
   --radius-lg: 10px;
   --shadow-sm: 0 1px 3px rgba(0,0,0,.08);
@@ -70,6 +102,101 @@
 
   --font-en: 'LINE Seed TW_OTF', system-ui, sans-serif;
   --font-zh: 'LINE Seed TW_OTF', system-ui, sans-serif;
+
+  /* ─── 官網 v4 設計語彙對照層（2026-09-14，介面轉換計畫 §3 階段 0）───────────
+     來源：C:\Users\hichan\Desktop\MIAC官網(最終)\v4\css\v4.css
+     計畫書：docs/UI-REDESIGN-PLAN.md　參考稿：docs/system-home-mockup.html
+
+     這一批**只新增、不改任何既有 token 的值**，而且目前沒有任何規則引用它們，
+     所以加進來的當下畫面必須零變化——若截圖有差異，代表改錯了地方。
+     後續各階段逐步把元件改成引用這裡，才會真的看到變化。
+
+     ⚠️ 字級階梯是官網的尺度（body 16.5px），那是單頁瀏覽用的。
+     ERP 的密集表格/表單維持現行 11～13px，**不要拿 --v4-body 去套 .data-table**；
+     這組只給首頁與各頁的段落標題、導言使用。 */
+
+  --v4-rail:   rgba(26,29,33,.07);            /* ASML 式直向網格線 */
+  --v4-max:    1200px;                        /* 內容最大寬 */
+  --v4-gutter: clamp(20px, 4vw, 48px);        /* 內容左右留白 */
+  --v4-sec:    clamp(48px, 6vw, 84px);        /* 段落上下留白 */
+  --v4-ease:   cubic-bezier(.2,.6,.2,1);      /* 官網統一的緩動曲線 */
+
+  --v4-mark-w: 28px;                          /* 段落標題上方的標記條 */
+  --v4-mark-h: 3px;
+
+  --v4-h1:   clamp(34px, 4.2vw, 54px);
+  --v4-h2:   clamp(26px, 2.8vw, 38px);
+  --v4-h3:   clamp(18px, 1.5vw, 21px);
+  --v4-lead: clamp(16px, 1.3vw, 18.5px);
+  --v4-body: 16.5px;
+  --v4-sm:   15px;
+  --v4-xs:   13px;
+
+  --v4-kicker-ls: .14em;                      /* 英文小標的字距 */
+  --v4-head-ls:   -.01em;                     /* 大標的負字距 */
+}
+
+/* ─── DARK MODE（全站色彩反轉，Topbar/Sidebar/相片/Logo 排除，見 sidebar.js motrixToggleTheme） ───
+   注意：filter 不可套在 body/html 這種「.topbar/.sidebar/Modal 等 position:fixed 元素的祖先」上，
+   否則會依 CSS 規範讓該祖先變成這些 fixed 元素的 containing block，破壞其相對 viewport 定位
+   （曾造成畫面最上方一條白邊、部分頁面 Modal 跑版）。改為只對 body 的「非 chrome」直接子元素
+   （.topbar/.sidebar/.sidebar-overlay 以外，含各頁 Modal）個別套 filter，topbar/sidebar 完全
+   不套用、不需要再用雙重反轉抵銷。
+   注意：故意不設 color-scheme:dark。大量 .fi 等 input/select 類別只設了 background 沒設 color，
+   一旦 color-scheme:dark，瀏覽器會用原生深色預設文字色（近白）覆蓋這些「作者沒指定 color」的欄位，
+   但 background 仍是作者設的 #fff，兩者疊加會出現「白字疊白底」整個看不見的嚴重 bug。invert filter
+   本身已經能把「白底深字」正確轉成「深底白字」，不需要 color-scheme 幫忙，兩者同時開反而互相打架。 */
+
+:root[data-theme="dark"] body {
+  /* body 本身故意不套 filter（見上方註解），但 body 的預設奶白背景色（--white）完全沒被反轉，
+     只要任何一層子元素背景是透明的（例如 .aq-layout/.aq-left 這種純版面用 div），奶白色就會從
+     縫隙透出來，形成一塊塊「怎麼還是白的」的區域（業務開發/簽核佇列左側欄、成本分機面板等）。
+     直接把 body 背景改成深色即可解決，不需要也不能對 body 加 filter。 */
+  background: #0A0A0A;
+}
+
+/* ⚠️ 這個排除清單是 `body > *` 的**直接子元素**選擇器——.topbar/.sidebar/.sidebar-overlay
+   一旦被包進任何容器（例如過去 15 頁的 <div class="app-shell">），排除就失效：容器被反轉，
+   側欄整片變成白底深字，而且因為容器有 filter，側欄的 position:fixed 會改以容器為定位基準。
+   2026-09-13 已把那 15 頁的 <aside class="sidebar"> 移回 body 直下，並以
+   `backend/tests/test_dark_mode_chrome_structure_2026_09_13.py` 把這個結構前提變成會紅的測試
+   （刻意不用「再反轉一次抵銷」的寫法：hue-rotate 不是嚴格可逆的矩陣，來回兩次顏色會偏，
+   而且那樣只蓋掉顏色問題、fixed 定位仍然是壞的）。 */
+/* 2026-09-14：排除清單新增 .h-hero / .h-band（首頁的深色主視覺與深色三欄帶）。
+   理由跟 .topbar / .sidebar 完全相同：它們本來就是深色的，該在兩種模式下都維持深色；
+   不排除的話反轉濾鏡會把它們變成亮塊，成為深色模式下全頁唯二的白底區塊。
+   ↑ 新增時記得同步更新 backend/tests/test_dark_mode_chrome_structure_2026_09_13.py
+     （那支測試會比對這串選擇器字面，並檢查這些元素是不是 body 直下）。 */
+:root[data-theme="dark"] body > *:not(.topbar):not(.sidebar):not(.sidebar-overlay):not(.h-hero):not(.h-band) {
+  filter: invert(1) hue-rotate(180deg);
+}
+
+/* ── 深色模式的紅色前置補償（2026-09-14）──
+   問題：品牌紅 #C8102E 經過 invert(1) hue-rotate(180deg) 會變成粉紅 #FF9CBA。
+   hue-rotate 是線性矩陣近似、不是真的色相旋轉，對饣和紅特別不準。
+   （舊的藍色主色之所以看不出來，是因為藍剛好比較能來回。）
+
+   實測結論：**這個機制畫不出飽和深紅**——反解回去會超出色域，
+   最接近只能到 #B44333，而且對深底只有 3.55:1 連 AA 都不過。
+   所以不硬湊品牌紅，改成深色主題的通則：強調色提亮、色相從洋紅（350°）
+   移到真正的紅（0°），這才是「看起來是紅不是粉」的關鍵。
+
+   下面的值是**前置補償值**，不是你看到的顏色：濾鏡自反（套兩次回原色），
+   所以想要畫出 X，token 就設成 filter(X)。改這裡的時候請連註解一起看，
+   直接填「想要的紅」會得到完全不同的結果。
+
+   範圍刻意跟濾鏡用同一個選擇器：只覆寫「會被反轉」的那一块。
+   .topbar / .h-hero / .h-band 不在反轉範圍，它們要的是真正的 --accent，
+   不能拿到補償值（否則頂欄那條紅標記會變成奇怪的顏色）。 */
+:root[data-theme="dark"] body > *:not(.topbar):not(.sidebar):not(.sidebar-overlay):not(.h-hero):not(.h-band) {
+  --accent:       #E95555;   /* 畫出來是 #FF6B6B，對深底 7.09:1 */
+  --accent-hover: #AF4040;   /* 畫出來是 #FF9090 */
+  --danger:       #C84949;   /* 畫出來是 #FF8080 */
+}
+
+:root[data-theme="dark"] body > *:not(.topbar):not(.sidebar):not(.sidebar-overlay):not(.h-hero):not(.h-band) img,
+:root[data-theme="dark"] body > *:not(.topbar):not(.sidebar):not(.sidebar-overlay):not(.h-hero):not(.h-band) video {
+  filter: invert(1) hue-rotate(180deg);
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -88,17 +215,22 @@ body {
 .topbar {
   position: fixed;
   top: 0; left: 0; right: 0;
-  height: var(--topbar-h);
+  height: var(--topbar-bar-h);
   background: var(--black);
   display: flex;
   align-items: center;
-  padding: 0 20px 0 0;
+  gap: 12px;
+  /* 2026-09-14：漢堡鈕（.sidebar-toggle）隱藏後左側少了它提供的內距，
+     logo 會貼邊並跟頁名擠在一起；補回左內距與元素間距。 */
+  padding: 0 20px;
   z-index: 100;
   border-bottom: 1px solid var(--border);
 }
 
 .topbar__logo {
-  width: var(--sidebar-w);
+  /* 2026-09-14：原本是 width: var(--sidebar-w)，當初是為了讓 logo 欄寬對齊左側側欄。
+     側欄退役後 --sidebar-w 歸零，logo 會被壓成 0 寬而跟頁名疊在一起。 */
+  width: auto;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -122,12 +254,27 @@ body {
 }
 
 .topbar__title {
-  font-family: var(--font-en);
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: .14em;
-  text-transform: uppercase;
-  color: var(--text-on-dark-dim);
+  /* 2026-09-14：這裡已改成顯示中文頁名，原本那套（英文字體 + uppercase +
+     .14em 大字距）是給英文系統名用的，套在中文上會變成寬鬆的怪東西。 */
+  font-family: var(--font-zh);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -.005em;
+  color: var(--text-on-dark);
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  white-space: nowrap;
+}
+/* 2026-09-14：頂欄現在顯示「目前頁面名稱」，前面配一條直立紅色標記
+   （官網 28×3 在 60px 頂欄裡的緊湊變體）。這讓 31 頁本來沒有任何標頭的頁面
+   也有一致的頁面識別，不用逐頁去動它們各自不同的版面結構。 */
+.topbar__title::before {
+  content: '';
+  width: var(--v4-mark-h);
+  height: 14px;
+  background: var(--accent);
+  flex: none;
 }
 
 .topbar__right {
@@ -295,22 +442,92 @@ body {
   background: var(--white);
 }
 
+
+/* ═══════════════════════════════════════════════════════════════════════
+   上方分組導覽（mega-menu）—— 2026-09-14 取代左側側欄
+   結構由 sidebar.js 的 sec()/ni() 產生，權限邏輯完全沿用原本那一套。
+   整列是白底，且是 <body> 直接子元素但**不在深色排除清單**，
+   所以深色模式會被反轉成深底——這是正確的，跟內容區一致。
+   ═══════════════════════════════════════════════════════════════════════ */
+.sidebar, .sidebar-overlay, .sidebar-toggle { display: none !important; }
+
+.mnav {
+  position: fixed; top: var(--topbar-bar-h); left: 0; right: 0;
+  height: var(--mainnav-h); z-index: 90;
+  background: #fff; border-bottom: 1px solid var(--border-light);
+}
+.mnav__in { display: flex; align-items: stretch; height: 100%; padding: 0 14px; gap: 2px; }
+.mnav__grp { position: relative; display: flex; }
+.mnav__top {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 0 13px; height: 100%;
+  font-family: var(--font-zh); font-size: 13.5px; font-weight: 500;
+  color: var(--text-secondary); white-space: nowrap; cursor: pointer;
+  text-decoration: none; position: relative; transition: color .18s var(--v4-ease);
+}
+.mnav__top svg { width: 9px; height: 9px; opacity: .55; }
+.mnav__grp:hover > .mnav__top, a.mnav__top:hover { color: var(--accent); }
+.mnav__grp.is-on > .mnav__top, a.mnav__top.is-on { color: var(--text-primary); font-weight: 700; }
+.mnav__grp.is-on > .mnav__top::after, a.mnav__top.is-on::after {
+  content: ''; position: absolute; left: 13px; right: 13px; bottom: -1px;
+  height: 2px; background: var(--accent);
+}
+.mnav__panel {
+  position: absolute; top: 100%; left: 0; padding: 14px;
+  background: #fff; border: 1px solid var(--border-light);
+  border-radius: 0 0 var(--radius) var(--radius);
+  box-shadow: 0 18px 44px rgba(20,24,30,.16);
+  opacity: 0; visibility: hidden; transform: translateY(4px);
+  transition: opacity .18s var(--v4-ease), transform .18s var(--v4-ease);
+  z-index: 95;
+}
+.mnav__grp:hover .mnav__panel,
+.mnav__grp:focus-within .mnav__panel { opacity: 1; visibility: visible; transform: none; }
+.mnav__cols { display: flex; gap: 16px; }
+.mnav__col { display: flex; flex-direction: column; min-width: 148px; }
+.mnav__col + .mnav__col { border-left: 1px solid var(--border-light); padding-left: 16px; }
+.mnav__item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 10px; border-radius: 4px;
+  font-family: var(--font-zh); font-size: 13px; color: var(--text-primary);
+  text-decoration: none; white-space: nowrap; transition: .15s var(--v4-ease);
+}
+.mnav__item:hover { background: #F5F4F0; color: var(--accent); }
+.mnav__item.is-on { color: var(--accent); font-weight: 600; }
+
+/* 窄螢幕：横向捲動。捲動容器會裁掉下拉面板，
+   所以只在真的放不下時才啟用。 */
+@media (max-width: 1100px) {
+  .mnav__in { overflow-x: auto; overflow-y: hidden; }
+  .mnav__panel { position: fixed; left: 8px; right: 8px; top: var(--topbar-h); }
+  .mnav__cols { flex-wrap: wrap; }
+}
+
 /* ─── PAGE HEADER ─── */
 .page-header {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
-  margin-bottom: 24px;
-  padding-bottom: 20px;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 22px;
+  padding-bottom: 18px;
   border-bottom: 1px solid var(--border-light);
 }
 
+/* 2026-09-14：還在用 .page-header 的頁面也跟著拿到 v4 語彙（標題上方 28×3 紅色標記、
+   負字距、加粗），**不用改任何一頁的標記**。新頁面請用 .pg / .pg__t 那一組。 */
 .page-header__title {
-  font-size: 22px;
-  font-weight: 600;
+  font-size: clamp(19px, 1.8vw, 23px);
+  font-weight: 700;
   color: var(--text-primary);
-  letter-spacing: -.02em;
-  line-height: 1.2;
+  letter-spacing: var(--v4-head-ls);
+  line-height: 1.25;
+}
+.page-header__title::before {
+  content: ''; display: block;
+  width: var(--v4-mark-w); height: var(--v4-mark-h);
+  background: var(--accent); margin-bottom: 11px;
 }
 
 .page-header__sub {
@@ -318,6 +535,61 @@ body {
   color: var(--text-secondary);
   margin-top: 4px;
   font-family: var(--font-en);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   v4 共用標頭（UI-REDESIGN-PLAN §3 階段 3，2026-09-14）
+
+   各頁原本的標頭是 inline style 手寫的，每頁一份、彼此微妙不同。
+   這組類別把官網 v4 的標頭語彙（28×3 紅色標記、眩標、負字距大標）
+   收成一处，頁面只要換成這組 class，之後調整一次全站跟著變。
+
+   結構：
+     <div class="pg">
+       <div class="pg__l">
+         <div class="pg__eyebrow">系統設定</div>
+         <h1 class="pg__t">使用者管理</h1>
+         <p class="pg__s">管理系統帳號、角色與存取權限</p>
+       </div>
+       <div class="pg__a">…按鈕…</div>
+     </div>
+   ═══════════════════════════════════════════════════════ */
+.pg {
+  display: flex; align-items: flex-end; justify-content: space-between;
+  gap: 16px; flex-wrap: wrap;
+  margin-bottom: 22px; padding-bottom: 18px;
+  border-bottom: 1px solid var(--border-light);
+}
+.pg__l { min-width: 0; }
+.pg__eyebrow {
+  font-family: var(--font-en); font-size: 11px; font-weight: 600;
+  letter-spacing: .12em; text-transform: uppercase;
+  color: var(--accent); margin-bottom: 9px;
+}
+/* 官網的 28×3 標記。沒有眩標時直接長在標題上方，
+   有眩標時由眩標背負（兩條紅會重複）。 */
+.pg__eyebrow::before,
+.pg__l > .pg__t:first-child::before {
+  content: ''; display: block;
+  width: var(--v4-mark-w); height: var(--v4-mark-h);
+  background: var(--accent); margin-bottom: 11px;
+}
+.pg__t {
+  font-size: clamp(19px, 1.8vw, 23px); font-weight: 700;
+  line-height: 1.25; letter-spacing: var(--v4-head-ls);
+  color: var(--text-primary);
+}
+.pg__s { font-size: 12.5px; line-height: 1.7; color: var(--text-secondary); margin-top: 5px; max-width: 68ch; }
+.pg__a { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+/* 區塊小標題（頁內分段用，比 .pg__t 小一級） */
+.sec-t {
+  font-size: 15px; font-weight: 700; color: var(--text-primary);
+  line-height: 1.35; margin-bottom: 12px;
+}
+.sec-t::before {
+  content: ''; display: block; width: 20px; height: var(--v4-mark-h);
+  background: var(--accent); margin-bottom: 9px;
 }
 
 /* ─── ALERT BANNER ─── */
@@ -450,7 +722,7 @@ body {
 .stat-tag--success { background: var(--success-light); color: var(--success); }
 .stat-tag--danger  { background: var(--danger-light);  color: var(--danger);  }
 .stat-tag--warning { background: var(--warning-light); color: var(--warning); }
-.stat-tag--accent  { background: var(--accent-light);  color: var(--accent);  }
+.stat-tag--accent  { background: #ECFEFF; color: #0E7490;  }  /* 同 .badge--sent：與 --danger 撞色，改用自有青色 */
 
 /* ─── CASH FLOW BAR ─── */
 .cashflow-card {
@@ -655,7 +927,12 @@ body {
 .badge--pending  { background: #FEF9C3; color: #A16207; }
 .badge--signing  { background: #DBEAFE; color: #1D4ED8; }
 .badge--approved { background: var(--success-light); color: var(--success); }
-.badge--sent     { background: var(--accent-light);  color: var(--accent); }
+.badge--sent     { background: #ECFEFF; color: #0E7490; }  /* 2026-09-14：原本吃 var(--accent-light)/var(--accent)。
+                                                                 主色由藍改紅之後，「已送出」變成紅底紅字，跟
+                                                                 .badge--danger「逾期」長得幾乎一樣（實際截圖確認）。
+                                                                 狀態徽章是一組**狀態序列**（草稿→待審核→簽核中→
+                                                                 已送出→已核准），本來就不該跟品牌主色連動，改用
+                                                                 自有的青色；對比 5.15:1 過 AA。 */
 .badge--done     { background: #F0F0F0; color: #4B4B4B; }
 .badge--danger    { background: var(--danger-light);  color: var(--danger); }
 .badge--rejected  { background: #FEE2E2; color: #DC2626; border: 1px solid #FECACA; }
@@ -665,6 +942,155 @@ body {
 .badge--lost     { background: #F3F4F6; color: #6B7280; }
 .badge--active   { background: var(--success-light); color: var(--success); }
 .badge--repair   { background: var(--orange-light);  color: var(--orange); }
+
+/* ═══════════════════════════════════════
+   共用按鈕元件（全站規格統一，2026-08-09）
+   各頁若有同名 local class 會依 CSS cascade
+   覆蓋此處規則 —— 逐頁移除 local 重複定義後
+   即統一改吃這裡。
+   ═══════════════════════════════════════ */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: var(--radius);
+  font-size: 12px;
+  font-family: var(--font-zh);
+  font-weight: 600;                 /* 2026-09-14：借官網 v4 的字重，尺寸刻意不動——
+                                       v4 的 .btn 是 12px 22px / 15px，那是單頁瀏覽的尺度，
+                                       套到 ERP 的密集工具列會整排爆版（見計畫書 §2.2 註） */
+  border: none;
+  cursor: pointer;
+  white-space: nowrap;
+  text-decoration: none;
+  transition: all .12s var(--v4-ease);
+}
+.btn:disabled { opacity: .55; cursor: not-allowed; }
+
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
+
+.btn-ghost { background: #fff; color: var(--text-secondary); border: 1px solid var(--border-light); }
+.btn-ghost:hover:not(:disabled) { border-color: var(--ghost-hover-border); }
+
+.btn-danger { background: var(--danger-light); color: var(--danger); border: 1px solid var(--danger-border); }
+.btn-danger:hover:not(:disabled) { background: var(--danger-hover-bg); }
+
+.btn-success { background: var(--success-light); color: var(--success); border: 1px solid var(--success-border); }
+.btn-success:hover:not(:disabled) { background: var(--success-hover-bg); }
+
+.btn-sm { padding: 5px 11px; font-size: 11px; }
+
+/* 簽核流程專用實心按鈕（核准/退回/拒絕結案，quotation-form.html 與 approval-queue.html 共用同一組值）
+   ——刻意比一般列表危險按鈕更醒目，因為代表不可逆的重大動作，不套用 .btn-danger 的淺色路線 */
+.btn-approve { background: #15803D; color: #fff; border: 1px solid #15803D; }
+.btn-approve:hover:not(:disabled) { background: #166534; border-color: #166534; }
+/* 2026-09-14：原本是實心 var(--danger)。主色改紅之後，實心紅＝主要動作，
+   這顆若維持實心就與「新增/儲存」長得一樣。改成白底 2px 粗紅框＋粗體——
+   比 .btn-danger 的淺色路線更重（維持原註解「代表不可逆的重大動作」的意圖），
+   又不會被誤認成主要動作。實測 #9F1239 實心對 #C8102E 實心只有 1.36:1，
+   所以「換一個更深的紅」這條路不通，必須換形狀。 */
+.btn-reject { background: #fff; color: var(--danger); border: 2px solid var(--danger); font-weight: 700; }
+.btn-reject:hover:not(:disabled) { background: var(--danger-light); }
+.btn-reject-final { background: #1C1917; color: #fff; border: 1px solid #1C1917; }
+.btn-reject-final:hover:not(:disabled) { background: #000; border-color: #000; }
+
+/* 小型方型圖示按鈕（取代各頁 .modal-close/.icon-btn/.as-step-btn 等重複定義）
+   熱區固定不小於 28px（.btn-icon--sm 例外，用於已很擁擠的密集列表列） */
+.btn-icon {
+  width: 28px; height: 28px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: var(--radius);
+  border: none;
+  background: var(--icon-btn-bg);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all .12s;
+}
+.btn-icon:hover:not(:disabled) { background: var(--danger-light); color: var(--danger); }
+.btn-icon--ghost { background: transparent; }
+.btn-icon--sm { width: 22px; height: 22px; }
+
+/* Modal 關閉鈕（取代各頁重複定義的 .modal-close，同尺寸規格） */
+.modal-close {
+  width: 28px; height: 28px;
+  border-radius: var(--radius);
+  border: none;
+  background: var(--icon-btn-bg);
+  color: var(--text-secondary);
+  font-size: 16px;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all .12s;
+}
+.modal-close:hover { background: var(--danger-light); color: var(--danger); }
+
+/* 列表列內的外框圖示按鈕（取代 quotations.html 原本的 .icon-btn） */
+.icon-btn { width:28px; height:28px; border-radius:var(--radius); display:flex; align-items:center; justify-content:center; border:1px solid var(--border-light); background:#fff; cursor:pointer; transition:all .12s; }
+.icon-btn:hover { background:var(--accent-light); border-color:var(--accent); color:var(--accent); }
+.icon-btn.del:hover { background:var(--danger-light); border-color:var(--danger); color:var(--danger); }
+.icon-btn svg { width:14px; height:14px; stroke:currentColor; }
+
+/* 簽核設定頁的步驟操作圖示按鈕（取代 approval-settings.html/shipping-approval-settings.html 重複定義） */
+.as-step-btn {
+  width: 28px; height: 28px; border: 1px solid var(--border);
+  border-radius: var(--radius); background: var(--white);
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  color: var(--text-secondary); transition: background .12s;
+}
+.as-step-btn:hover { background: #F3F4F6; }
+.as-step-btn:disabled { opacity: .35; cursor: default; }
+
+/* 底線分頁籤（取代 devices/warranty/procurement/receivables/reports 重複定義的
+   .tab/.tab-bar；現況 markup 一律用 .on 標示選取狀態，不是 .active，沿用既有命名
+   以免要跟著改 5 個頁面的 Alpine :class 綁定） */
+.tab-bar { display: flex; gap: 2px; margin-bottom: 16px; border-bottom: 1px solid var(--border-light); }
+.tab {
+  padding: 7px 16px;
+  font-size: 12px;
+  font-family: var(--font-zh);
+  color: var(--text-secondary);
+  cursor: pointer;
+  border: none;
+  background: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: all .1s;
+}
+.tab:hover { color: var(--text-primary); }
+.tab.on { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+
+/* 篩選／標籤膠囊按鈕（取代各頁 .att-chip/.preset-chip/.ftab/.attendee-chip/.exp-chip 等） */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-family: var(--font-zh);
+  border: 1px solid var(--border-light);
+  background: #fff;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all .12s;
+}
+.chip:hover { border-color: var(--ghost-hover-border); }
+.chip.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+/* 選型導覽頁（netarch-guide/env-guide/switch-guide）共用的小型外框按鈕，
+   取代 3 頁各自重複定義的 .mibtn（行內小按鈕）/.mbtn（Modal 按鈕） */
+.mibtn { border:1px solid var(--border-light); background:#fff; color:var(--text-secondary); font:inherit; font-size:11px; font-weight:600; padding:5px 12px; border-radius:var(--radius); cursor:pointer; }
+.mibtn:hover { border-color:var(--accent); color:var(--accent); }
+.mibtn.pri { background:var(--accent); border-color:var(--accent); color:#fff; margin-left:auto; }
+.mibtn.pri:hover { background:var(--accent-hover); color:#fff; }
+.mibtn.danger { color:var(--danger); border-color:var(--danger); }
+.mbtn { border:1px solid var(--border-light); background:#fff; color:var(--text-secondary); font:inherit; font-size:12.5px; font-weight:600; padding:7px 14px; border-radius:var(--radius); cursor:pointer; }
+.mbtn:hover { color:var(--text-primary); border-color:var(--accent); }
+.mbtn.pri { background:var(--accent); border-color:var(--accent); color:#fff; }
+.mbtn.pri:hover { background:var(--accent-hover); }
+.mbtn:disabled { opacity:.6; cursor:default; }
 
 /* ─── PAYMENT STATUS ─── */
 .pay-status {
@@ -1078,4 +1504,160 @@ body.sidebar-lock { overflow: hidden; }
   border-top: 1px solid var(--border-light);
   display: flex; gap: 8px; justify-content: flex-end;
   flex-shrink: 0; flex-wrap: wrap;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   視覺化管理共通語彙（2026-09-14，docs/module-viz-mockup.html §00）
+   ---------------------------------------------------------------------------
+   簽核佇列／案件管理／業務開發三頁共用同一套狀態編碼。規則只有一條，但很重要：
+
+     **品牌紅 --accent 不參與狀態編碼。**
+
+   理由是踩過的：2026-09-14 主色由藍改紅之後，吃 var(--accent) 的狀態徽章
+   （.badge--sent／.stat-tag--accent）變成紅底紅字，跟「逾期」幾乎分不出來
+   （見 §12 第六輪，那是實際截圖才看到的）。狀態序列本來就不該跟品牌主色連動，
+   所以這裡一律走 --success／--warning／--danger／--text-dim 四階，
+   --accent 只留給「目前輪到你」這一個游標位置（.vm-ladder__dot--cur）。
+
+   四階語意在三頁都一樣：
+     ok   達成／新鮮（今日、0–1 天）
+     warn 進行中／該注意（2–3 天）
+     crit 逾期／退回／卡住（≥ 4 天）
+     idle **不適用**——不是「沒做」。舊案件沒有精算/階段/款項時系統本來就
+          視為無需檢查（見 §5.2 完結案前置條件），畫成紅燈是錯的。
+
+   深色模式不必另外處理：本站深色模式是 body 直接子元素的 invert 濾鏡
+   （見本檔 :root[data-theme="dark"] 區塊），這裡只要用既有 token 就會跟著轉。
+   ⚠️ 別在這一區寫死 #RRGGBB 以外的顏色格式，也別自己加 filter。
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── 燈號：最小的狀態單位，8px 圓點 ── */
+.vm-lamp {
+  width: 8px; height: 8px; border-radius: 50%;
+  display: inline-block; flex: 0 0 auto;
+  background: var(--border-light);
+}
+.vm-lamp--ok   { background: var(--success); }
+.vm-lamp--warn { background: var(--warning); }
+.vm-lamp--crit { background: var(--danger); }
+.vm-lamp--idle { background: var(--border-light); }
+
+/* ── 狀態籤：燈號 + 文字 ── */
+.vm-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11px; font-weight: 500; line-height: 1.5;
+  padding: 2px 7px; border-radius: 4px;
+  border: 1px solid transparent; white-space: nowrap;
+}
+.vm-chip--ok   { background: var(--success-light); color: var(--success); border-color: var(--success-border); }
+.vm-chip--warn { background: var(--warning-light); color: var(--warning); border-color: #FDE68A; }
+.vm-chip--crit { background: var(--danger-light);  color: var(--danger);  border-color: var(--danger-border); }
+.vm-chip--idle { background: var(--icon-btn-bg);   color: var(--text-dim); border-color: var(--border-light); }
+
+/* ── 時效文字色：只上色不加底，用在「停留 N 天」這種數字上 ── */
+.vm-age--fresh { color: var(--success); }
+.vm-age--warm  { color: var(--warning); }
+.vm-age--stale { color: var(--danger); }
+
+/* ── 簽核階梯：●─●─○ 走到第幾層一眼看完 ──
+   實心＝已簽、空心＝還沒輪到、紅圈＝現在這一層（唯一用到 --accent 的地方）。
+   尺寸刻意做小（8px 點／16px 橫槓），要能塞進清單列而不是只能放在詳情頁。 */
+.vm-ladder { display: inline-flex; align-items: center; vertical-align: middle; }
+.vm-ladder__dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  display: block; flex: 0 0 auto;
+  border: 1.5px solid var(--border-light);
+  background: var(--white);
+}
+.vm-ladder__dot--done { background: var(--success); border-color: var(--success); }
+.vm-ladder__dot--rej  { background: var(--danger);  border-color: var(--danger); }
+.vm-ladder__dot--cur  {
+  width: 11px; height: 11px;
+  background: var(--white);
+  border: 2.5px solid var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-light);
+}
+.vm-ladder__rung {
+  width: 16px; height: 1.5px; display: block; flex: 0 0 auto;
+  background: var(--border-light);
+}
+.vm-ladder__rung--done { background: var(--success); }
+
+/* ── 狀態脊：列／卡最左緣 3px 直條 ──
+   整列染色會蓋掉列內其他燈號，所以異常只用最左邊這條表示；
+   長清單上下捲動時它是唯一還看得見的訊號。 */
+.vm-spine { width: 3px; align-self: stretch; flex: 0 0 auto; background: var(--border-light); }
+.vm-spine--ok   { background: var(--success); }
+.vm-spine--warn { background: var(--warning); }
+.vm-spine--crit { background: var(--danger); }
+.vm-spine--idle { background: var(--border-light); }
+
+/* ── 微進度條：3px，只表示比例，不放文字 ── */
+/* display:block 不可省略——這個類別常掛在 <span> 上，inline 元素吃不到
+   width/height，條會整個消失。在 flex 容器裡剛好會被 blockify 而看起來正常，
+   所以只在非 flex 的容器裡現形（實際踩過：業務開發卡片的溫度條）。 */
+.vm-bar { display: block; width: 100%; height: 3px; border-radius: 2px; background: var(--border-light); overflow: hidden; }
+.vm-bar__fill { display: block; height: 100%; background: var(--text-dim); }
+.vm-bar__fill--ok   { background: var(--success); }
+.vm-bar__fill--warn { background: var(--warning); }
+.vm-bar__fill--crit { background: var(--danger); }
+.vm-bar__fill--idle { background: var(--border-light); }
+
+/* ── 泳道標頭：一條細線把同一時效級距的項目框起來 ── */
+.vm-lane { margin-bottom: 14px; }
+.vm-lane__head { display: flex; align-items: center; gap: 7px; margin-bottom: 7px; }
+.vm-lane__title {
+  font-size: 11px; font-weight: 700; letter-spacing: .06em;
+  color: var(--text-secondary);
+}
+.vm-lane__title--ok   { color: var(--success); }
+.vm-lane__title--warn { color: var(--warning); }
+.vm-lane__title--crit { color: var(--danger); }
+.vm-lane__rule { flex: 1; height: 1px; background: var(--border-light); }
+.vm-lane__count {
+  font-size: 11px; color: var(--text-dim);
+  font-family: var(--font-en); font-variant-numeric: tabular-nums;
+}
+
+/* ── 人員標記：頭像圓 + 名字，用在「卡在誰身上」 ── */
+.vm-person { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--text-secondary); }
+.vm-person__av {
+  width: 19px; height: 19px; border-radius: 50%; flex: 0 0 auto;
+  background: var(--icon-btn-bg); color: var(--text-secondary);
+  display: grid; place-items: center;
+  font-size: 10px; font-weight: 700;
+}
+
+/* ── 壓力帶（andon）：頁面頂端的負載總覽，取代純標題列 ── */
+.vm-andon {
+  display: flex; align-items: stretch; gap: 1px;
+  background: var(--border-light);
+  border: 1px solid var(--border-light); border-radius: var(--radius);
+  overflow: hidden;
+}
+.vm-andon__seg {
+  display: flex; align-items: center; gap: 9px;
+  padding: 10px 14px; background: var(--white); min-width: 0;
+}
+.vm-andon__seg--mine { background: var(--accent-light); }
+.vm-andon__seg--crit { background: var(--danger-light); }
+.vm-andon__val {
+  font-family: var(--font-en); font-variant-numeric: tabular-nums;
+  font-size: 21px; font-weight: 700; line-height: 1;
+}
+.vm-andon__seg--mine .vm-andon__val { color: var(--accent); }
+.vm-andon__seg--crit .vm-andon__val { color: var(--danger); }
+.vm-andon__lbl { font-size: 11.5px; color: var(--text-secondary); line-height: 1.3; }
+.vm-andon__lbl small { display: block; font-size: 10.5px; color: var(--text-dim); }
+.vm-andon__bar { flex: 1; min-width: 60px; display: flex; align-items: center; padding: 0 14px; background: var(--white); }
+.vm-andon__track {
+  width: 100%; height: 8px; border-radius: 4px; overflow: hidden;
+  display: flex; gap: 1px; background: var(--border-light);
+}
+.vm-andon__track > i { display: block; height: 100%; }
+
+@media (max-width: 767px) {
+  .vm-andon { flex-wrap: wrap; }
+  .vm-andon__seg { flex: 1 1 40%; }
+  .vm-andon__bar { flex: 1 1 100%; padding: 10px 14px; }
 }

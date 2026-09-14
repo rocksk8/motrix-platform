@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<title>MOTRIX 部署儀表板</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'Microsoft JhengHei', system-ui, sans-serif;
+    background: #0A0A0A;
+    color: #F5F4F0;
+    margin: 0;
+    padding: 24px;
+  }
+  h1 { font-size: 18px; margin: 0 0 20px; }
+  h2 { font-size: 14px; color: #999; margin: 0 0 10px; text-transform: uppercase; letter-spacing: .06em; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+  .card {
+    background: #111; border: 1px solid #222; border-radius: 10px; padding: 18px;
+  }
+  .card.warn { border-color: #DC2626; background: #1A0F0F; }
+  .row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 13px; }
+  .row span:first-child { color: #888; }
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; }
+  .dot.ok { background: #4ADE80; }
+  .dot.bad { background: #F87171; }
+  select, input, button {
+    font-family: inherit; font-size: 13px; padding: 8px 10px;
+    background: #1A1A1A; border: 1px solid #2A2A2A; border-radius: 6px; color: #F5F4F0;
+  }
+  select, input { width: 100%; margin-bottom: 8px; }
+  button {
+    background: #2563EB; border: none; cursor: pointer; font-weight: 600; padding: 9px 16px;
+  }
+  button:hover { background: #1D4ED8; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  button.danger { background: #DC2626; }
+  button.danger:hover { background: #B91C1C; }
+  button.ghost { background: none; border: 1px solid #333; }
+  .log {
+    background: #000; border: 1px solid #222; border-radius: 6px; padding: 10px;
+    font-family: Consolas, monospace; font-size: 12px; height: 220px; overflow-y: auto;
+    white-space: pre-wrap; margin-top: 10px;
+  }
+  .confirm-box {
+    border: 2px solid #DC2626; background: #1A0F0F; border-radius: 8px; padding: 14px; margin-top: 10px;
+  }
+  .hist-row { font-size: 12px; padding: 6px 0; border-bottom: 1px solid #1E1E1E; display: flex; justify-content: space-between; }
+  .badge { font-size: 11px; padding: 2px 8px; border-radius: 10px; }
+  .badge.ok { background: #14532D; color: #4ADE80; }
+  .badge.bad { background: #450A0A; color: #F87171; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+  <h1>MOTRIX ERP 部署儀表板</h1>
+
+  <div class="grid">
+    <div class="card">
+      <h2>開發機</h2>
+      <div class="row"><span>分支</span><span id="devBranch">…</span></div>
+      <div class="row"><span>HEAD</span><span id="devCommit">…</span></div>
+      <div class="row"><span>工作目錄</span><span id="devDirty">…</span></div>
+      <div class="row"><span>領先 origin</span><span id="devAhead">…</span></div>
+    </div>
+    <div class="card" id="prodCard">
+      <h2>正式機（172.16.10.177）<span id="wsIndicator" style="float:right;font-size:11px;color:#666">連線中…</span></h2>
+      <div class="row"><span>健康狀態</span><span id="prodHealth"><span class="dot"></span>…</span></div>
+      <div class="row"><span>目前部署版本</span><span id="prodCommit">…</span></div>
+      <div class="row"><span>最後確認時間</span><span id="prodCheckedAt">…</span></div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px">
+    <h2>1. 打包</h2>
+    <button id="buildBtn" onclick="startBuild()">開始打包（含完整 pytest，約 5-6 分鐘）</button>
+    <div class="log hidden" id="buildLog"></div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px">
+    <h2>2. 部署到正式機</h2>
+    <select id="pkgSelect"></select>
+    <input id="deployUser" placeholder="正式機帳號（例如 Motrix）" value="Motrix">
+    <input id="deployPass" type="password" placeholder="正式機密碼">
+    <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#F59E0B;margin-bottom:8px">
+      <input type="checkbox" id="skipAutoRollback" style="width:auto;margin:0">
+      略過自動回滾（健康檢查失敗也不還原，需人工確認——僅在已確認健康檢查本身不可靠時使用）
+    </label>
+    <button onclick="requestDeploy()">部署</button>
+    <div class="confirm-box hidden" id="deployConfirm"></div>
+    <div class="log hidden" id="deployLog"></div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px">
+    <h2>3. 手動回滾</h2>
+    <input id="rbUser" placeholder="正式機帳號（例如 Motrix）" value="Motrix">
+    <input id="rbPass" type="password" placeholder="正式機密碼">
+    <button class="ghost" onclick="loadSnapshots()">查詢可回滾的快照</button>
+    <select id="snapshotSelect" class="hidden"></select>
+    <button class="danger hidden" id="rollbackBtn" onclick="requestRollback()">回滾</button>
+    <div class="confirm-box hidden" id="rollbackConfirm"></div>
+    <div class="log hidden" id="rollbackLog"></div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px">
+    <h2>4. 查看正式機最近 log（唯讀，不動任何東西）</h2>
+    <input id="logUser" placeholder="正式機帳號（例如 Motrix）" value="Motrix">
+    <input id="logPass" type="password" placeholder="正式機密碼">
+    <button class="ghost" onclick="loadLogTail()">讀取最後 300 行</button>
+    <button class="ghost" onclick="loadCheckOnly()">只測健康檢查機制（-CheckOnly，不部署）</button>
+    <div class="log hidden" id="logTail"></div>
+  </div>
+
+  <div class="card">
+    <h2>歷史紀錄</h2>
+    <div id="historyList"></div>
+  </div>
+
+<script>
+let pendingDeploy = null;
+let pendingRollback = null;
+
+async function refreshDevStatus() {
+  try {
+    const dev = await (await fetch('/api/dev-status')).json();
+    document.getElementById('devBranch').textContent = dev.branch || '?';
+    document.getElementById('devCommit').textContent = dev.commit || '?';
+    document.getElementById('devDirty').textContent = dev.dirty ? '有未 commit 變更' : '乾淨';
+    document.getElementById('devAhead').textContent = dev.aheadOfOrigin === null ? '未知' : (dev.aheadOfOrigin + ' 個 commit');
+  } catch (e) {}
+}
+
+function renderProdStatus(prod) {
+  const dot = prod.paused
+    ? '<span class="dot" style="background:#F59E0B"></span>部署/回滾進行中，暫停查詢'
+    : (prod.healthy ? '<span class="dot ok"></span>正常' : '<span class="dot bad"></span>無回應');
+  document.getElementById('prodHealth').innerHTML = dot;
+  const dep = prod.deployed || {};
+  document.getElementById('prodCommit').textContent = dep.commit_short ? (dep.commit_short + ' (' + (dep.applied_at || '') + ')') : '未知';
+  document.getElementById('prodCheckedAt').textContent = prod.checkedAt || '…';
+}
+
+// ── 正式機狀態：WebSocket 雙向即時連線（2026-09-08 新增）───────────────────
+// 分頁打開就連線，伺服器每 4 秒主動推一次最新健康狀態／部署版本；部署或
+// 回滾 job 剛結束時額外送一個字串要求立即重查一次，不用等下一個週期。
+// 分頁關閉/重新整理時瀏覽器會自動關閉這條連線，伺服器那端的背景檢查迴圈
+// 也會跟著結束，不會留下孤兒輪詢。連線意外中斷（伺服器重啟等）但分頁還
+// 開著時，會自動重試重連。
+let prodWs = null;
+let prodWsRetryTimer = null;
+let prodWsClosedByPage = false;
+
+function connectProdWs() {
+  const indicator = document.getElementById('wsIndicator');
+  prodWs = new WebSocket(`ws://${location.host}/ws/prod-status`);
+  prodWs.onopen = () => { indicator.textContent = '即時連線中'; indicator.style.color = '#4ADE80'; };
+  prodWs.onmessage = (ev) => {
+    try { renderProdStatus(JSON.parse(ev.data)); } catch (e) {}
+  };
+  prodWs.onclose = () => {
+    if (prodWsClosedByPage) return;
+    indicator.textContent = '連線中斷，5 秒後重試…';
+    indicator.style.color = '#F87171';
+    clearTimeout(prodWsRetryTimer);
+    prodWsRetryTimer = setTimeout(connectProdWs, 5000);
+  };
+  prodWs.onerror = () => { try { prodWs.close(); } catch (e) {} };
+}
+
+function requestProdRefreshNow() {
+  if (prodWs && prodWs.readyState === WebSocket.OPEN) prodWs.send('refresh');
+}
+
+window.addEventListener('beforeunload', () => {
+  prodWsClosedByPage = true;
+  clearTimeout(prodWsRetryTimer);
+  if (prodWs) prodWs.close();
+});
+
+async function refreshPackages() {
+  const pkgs = await (await fetch('/api/packages')).json();
+  const sel = document.getElementById('pkgSelect');
+  sel.innerHTML = pkgs.map(p => `<option value="${p.folder}">${p.folder} — ${p.commit_short || '?'} (${p.built_at || '?'})</option>`).join('');
+}
+
+async function refreshHistory() {
+  const hist = await (await fetch('/api/history')).json();
+  document.getElementById('historyList').innerHTML = hist.map(h =>
+    `<div class="hist-row"><span>${h.time} · ${h.action}${h.logPath ? ' · <span style="color:#666">' + h.logPath.split(/[\\/]/).pop() + '</span>' : ''}</span><span class="badge ${h.success ? 'ok' : 'bad'}">${h.success ? '成功' : '失敗'}</span></div>`
+  ).join('') || '<div style="color:#666;font-size:12px">尚無紀錄</div>';
+}
+
+function pollJob(jobId, logElId, onDone) {
+  const logEl = document.getElementById(logElId);
+  logEl.classList.remove('hidden');
+  let since = 0;
+  const timer = setInterval(async () => {
+    const res = await fetch(`/api/jobs/${jobId}?since=${since}`);
+    const data = await res.json();
+    if (data.lines && data.lines.length) {
+      logEl.textContent += data.lines.join('\n') + '\n';
+      logEl.scrollTop = logEl.scrollHeight;
+      since = data.totalLines;
+    }
+    if (data.status === 'succeeded' || data.status === 'failed') {
+      clearInterval(timer);
+      if (onDone) onDone(data.status === 'succeeded');
+      refreshDevStatus();
+      requestProdRefreshNow();
+      refreshHistory();
+    }
+  }, 1500);
+}
+
+async function startBuild() {
+  document.getElementById('buildBtn').disabled = true;
+  const buildLog = document.getElementById('buildLog');
+  buildLog.textContent = '';
+  const { jobId } = await (await fetch('/api/build', { method: 'POST' })).json();
+  pollJob(jobId, 'buildLog', (ok) => {
+    document.getElementById('buildBtn').disabled = false;
+    if (ok) refreshPackages();
+  });
+}
+
+async function requestDeploy() {
+  const pkg = document.getElementById('pkgSelect').value;
+  const username = document.getElementById('deployUser').value.trim();
+  const password = document.getElementById('deployPass').value;
+  const skipAutoRollback = document.getElementById('skipAutoRollback').checked;
+  if (!pkg || !username || !password) { alert('請填完整資訊'); return; }
+
+  const pre = await (await fetch('/api/pre-deploy-check')).json();
+  if (pre.busy) { alert('已經有一個部署/回滾工作正在執行，請等它結束再試'); return; }
+
+  pendingDeploy = { pkg, username, password, skipAutoRollback };
+  const box = document.getElementById('deployConfirm');
+  box.classList.remove('hidden');
+  const warningHtml = pre.warning ? `<div style="color:#F87171;margin-bottom:8px">${pre.warning}</div>` : '';
+  const skipHtml = skipAutoRollback
+    ? `<div style="color:#F59E0B;margin-bottom:8px">⚠️ 已勾選「略過自動回滾」——健康檢查失敗也不會自動還原，新程式碼會留在正式機，需要你自己確認健康狀態、必要時手動回滾。</div>`
+    : '';
+  box.innerHTML = `${warningHtml}${skipHtml}即將把部署包 <b>${pkg}</b> 套用到正式機 172.16.10.177。此操作會停止服務、覆蓋程式碼、可能觸發資料庫 migration。確定要繼續嗎？
+    <div style="margin-top:10px"><button class="danger" onclick="confirmDeploy()">確認套用</button> <button class="ghost" onclick="cancelDeploy()">取消</button></div>`;
+}
+function cancelDeploy() {
+  pendingDeploy = null;
+  document.getElementById('deployConfirm').classList.add('hidden');
+}
+async function confirmDeploy() {
+  document.getElementById('deployConfirm').classList.add('hidden');
+  const { pkg, username, password, skipAutoRollback } = pendingDeploy;
+  document.getElementById('deployPass').value = '';
+  pendingDeploy = null;
+  const deployLog = document.getElementById('deployLog');
+  deployLog.textContent = '';
+  const res = await fetch('/api/deploy', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ package: pkg, username, password, confirm: true, skipAutoRollback })
+  });
+  if (!res.ok) { const e = await res.json(); alert(e.detail || '部署請求失敗'); return; }
+  const { jobId } = await res.json();
+  pollJob(jobId, 'deployLog');
+}
+
+async function loadSnapshots() {
+  const username = document.getElementById('rbUser').value.trim();
+  const password = document.getElementById('rbPass').value;
+  if (!username || !password) { alert('請填正式機帳密'); return; }
+  const res = await fetch('/api/snapshots', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password })
+  });
+  if (!res.ok) { const e = await res.json().catch(() => ({})); alert(e.detail || '查詢失敗'); return; }
+  const snapshots = await res.json();
+  const sel = document.getElementById('snapshotSelect');
+  if (!snapshots.length) { alert('正式機目前沒有任何回滾快照'); return; }
+  sel.innerHTML = snapshots.map(s => `<option value="${s}">${s}</option>`).join('');
+  sel.classList.remove('hidden');
+  document.getElementById('rollbackBtn').classList.remove('hidden');
+}
+
+async function requestRollback() {
+  const snapshotTimestamp = document.getElementById('snapshotSelect').value;
+  const username = document.getElementById('rbUser').value.trim();
+  const password = document.getElementById('rbPass').value;
+
+  const pre = await (await fetch('/api/pre-deploy-check')).json();
+  if (pre.busy) { alert('已經有一個部署/回滾工作正在執行，請等它結束再試'); return; }
+
+  pendingRollback = { snapshotTimestamp, username, password };
+  const box = document.getElementById('rollbackConfirm');
+  box.classList.remove('hidden');
+  const warningHtml = pre.warning ? `<div style="color:#F87171;margin-bottom:8px">${pre.warning}</div>` : '';
+  box.innerHTML = `${warningHtml}即將把正式機回滾到快照 <b>${snapshotTimestamp}</b>（程式碼＋資料庫都會被還原）。確定要繼續嗎？
+    <div style="margin-top:10px"><button class="danger" onclick="confirmRollback()">確認回滾</button> <button class="ghost" onclick="cancelRollback()">取消</button></div>`;
+}
+function cancelRollback() {
+  pendingRollback = null;
+  document.getElementById('rollbackConfirm').classList.add('hidden');
+}
+async function confirmRollback() {
+  document.getElementById('rollbackConfirm').classList.add('hidden');
+  const { snapshotTimestamp, username, password } = pendingRollback;
+  document.getElementById('rbPass').value = '';
+  pendingRollback = null;
+  const rollbackLog = document.getElementById('rollbackLog');
+  rollbackLog.textContent = '';
+  const res = await fetch('/api/rollback', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ snapshotTimestamp, username, password, confirm: true })
+  });
+  if (!res.ok) { const e = await res.json(); alert(e.detail || '回滾請求失敗'); return; }
+  const { jobId } = await res.json();
+  pollJob(jobId, 'rollbackLog');
+}
+
+async function loadLogTail() {
+  const username = document.getElementById('logUser').value.trim();
+  const password = document.getElementById('logPass').value;
+  if (!username || !password) { alert('請填正式機帳密'); return; }
+  const logEl = document.getElementById('logTail');
+  logEl.classList.remove('hidden');
+  logEl.textContent = '讀取中...';
+  const res = await fetch('/api/log-tail', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password, lines: 300 })
+  });
+  document.getElementById('logPass').value = '';
+  if (!res.ok) { const e = await res.json().catch(() => ({})); logEl.textContent = e.detail || '讀取失敗'; return; }
+  const lines = await res.json();
+  logEl.textContent = lines.join('\n') || '（空的）';
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+async function loadCheckOnly() {
+  const username = document.getElementById('logUser').value.trim();
+  const password = document.getElementById('logPass').value;
+  if (!username || !password) { alert('請填正式機帳密'); return; }
+  const logEl = document.getElementById('logTail');
+  logEl.classList.remove('hidden');
+  logEl.textContent = '執行中...';
+  const res = await fetch('/api/check-only', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password })
+  });
+  document.getElementById('logPass').value = '';
+  if (!res.ok) { const e = await res.json().catch(() => ({})); logEl.textContent = e.detail || '執行失敗'; return; }
+  const lines = await res.json();
+  logEl.textContent = lines.join('\n') || '（空的）';
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+refreshDevStatus();
+refreshPackages();
+refreshHistory();
+connectProdWs();
+setInterval(refreshDevStatus, 15000);
+</script>
+</body>
+</html>

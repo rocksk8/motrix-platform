@@ -11,7 +11,7 @@ from PIL import Image, ImageDraw, ImageFont
 from pydantic import BaseModel
 
 from db import get_db
-from helpers import _require_user, _tok, _audit
+from helpers import _require_user, _tok, _audit, notify_module_activity
 
 # 字體路徑（Windows 微軟正黑體，找不到退回預設）
 _FONT_PATH = r"C:\Windows\Fonts\msjhbd.ttc"
@@ -148,6 +148,19 @@ def _row_to_dict(row) -> dict:
     return d
 
 
+@router.get("/api/contractors/selectable")
+def list_contractors_selectable(authorization: str = Header(None)):
+    """輕量列表供案件管理承攬商派發的「外包名單人員」下拉使用（所有登入者皆可讀，
+    比照 vendor-contractors/selectable 的慣例——不含銀行/身分證等敏感欄位）。"""
+    _require_user(authorization)
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT id, name, phone FROM contractors WHERE active=1 ORDER BY name"
+    ).fetchall()
+    conn.close()
+    return [{"id": r["id"], "name": r["name"], "phone": r["phone"] or ""} for r in rows]
+
+
 @router.get("/api/contractors")
 def list_contractors(q: Optional[str] = None, active_only: bool = True,
                      authorization: str = Header(None)):
@@ -192,6 +205,8 @@ def create_contractor(body: ContractorIn, authorization: str = Header(None)):
     conn.commit()
     conn.close()
     _audit(_tok(authorization), 'contractor.create', 'contractor', str(cid), body.name)
+    notify_module_activity("外包名冊", "建立", user.get("display_name") or user["username"],
+                            body.name, "vendor-contractors.html")
     return {"id": cid, "created_at": now}
 
 
@@ -235,7 +250,7 @@ def update_contractor(cid: int, body: ContractorIn, authorization: str = Header(
 
 @router.patch("/api/contractors/{cid}/active")
 def toggle_contractor_active(cid: int, authorization: str = Header(None)):
-    _require_user(authorization, require_superadmin=True)
+    user = _require_user(authorization, require_superadmin=True)
     conn = get_db()
     row = conn.execute("SELECT active, name FROM contractors WHERE id=?", (cid,)).fetchone()
     if not row:
@@ -248,6 +263,8 @@ def toggle_contractor_active(cid: int, authorization: str = Header(None)):
     conn.close()
     action = 'contractor.activate' if new_active else 'contractor.deactivate'
     _audit(_tok(authorization), action, 'contractor', str(cid), row["name"])
+    notify_module_activity("外包名冊", "啟用" if new_active else "停用",
+                            user.get("display_name") or user["username"], row["name"], "vendor-contractors.html")
     return {"active": bool(new_active)}
 
 

@@ -22,15 +22,69 @@ DEMO_DB_PATH = os.path.join(os.path.dirname(__file__), "motrix_erp_demo.db")
 # collide with real filenames (project photos keyed by project id, PDFs keyed
 # by quote_no/slip_no — both restart from 1 in the freshly-reset demo DB).
 DEMO_PROJECT_PHOTOS_DIR  = os.path.join(os.path.dirname(__file__), "..", "uploads", "_demo_projects")
+DEMO_UPLOADS_DIR         = os.path.join(os.path.dirname(__file__), "..", "uploads", "_demo_uploads")
 DEMO_PDF_ARCHIVE_DIR     = os.path.join(os.path.dirname(__file__), "_demo_pdf_archive")
 DEMO_PAYSLIP_ARCHIVE_DIR = os.path.join(os.path.dirname(__file__), "_demo_payslip_archive")
 DEMO_SHIPPING_PDF_ARCHIVE_DIR = os.path.join(os.path.dirname(__file__), "_demo_shipping_pdf_archive")
+DEMO_CONTRACTOR_VOUCHER_PDF_ARCHIVE_DIR = os.path.join(
+    os.path.dirname(__file__), "_demo_contractor_voucher_pdf_archive")
+DEMO_INVOICE_VOUCHER_PDF_ARCHIVE_DIR = os.path.join(
+    os.path.dirname(__file__), "_demo_invoice_voucher_pdf_archive")
+DEMO_PAYMENT_REQUEST_PDF_ARCHIVE_DIR = os.path.join(
+    os.path.dirname(__file__), "_demo_payment_request_pdf_archive")
+DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR = os.path.join(
+    os.path.dirname(__file__), "_demo_case_closing_pdf_archive")
 
 # Increment this whenever a new _mNNN function is added to _MIGRATIONS.
 # v32/v33 (switch_guide tables + specs_json column) were initially missing
 # from this checkout — reconstructed 2026-08-01 by reverse-engineering the
 # actual schema off a production DB backup (see _m032_switch_guide docstring).
-CURRENT_VERSION = 34
+# v45/v46 (contractor_payment_vouchers / invoice_vouchers) added 2026-08-20,
+# written directly on production while the dev machine was unreachable — see
+# MOTRIX-ERP-QUICK.md §12 2026-08-20 entry for the dev-machine backport plan.
+# v47: invoice_vouchers.amount real column, added same day after a redesign
+# (自訂金額/自訂品項+數量 replacing the old fixed-installment-only model).
+# v48: divisions/departments org structure (處/部門), 2026-08-22.
+# v49: divisions.manager_user_id (處級主管), 2026-08-22.
+# v50: projects.department_id, 2026-08-22.
+# v51: case_stages/case_stage_visits (caseRecord.stages 正規化第一階段：唯讀鏡像，
+# 回填既有資料，尚未接進任何讀寫路徑), 2026-08-23.
+# v53: payment_requests（請款單），2026-08-24——同一輪也把報價單／開票申請憑據／
+# 出貨單三組獨立簽核設定統一成 system_settings key 'unified_approval_flow'
+# （見 routers/system.py），不是 schema 變動、不需要獨立 migration。
+# v54: 報價單回簽欄位（新概念，比照 shipping_notes）＋三種單據（報價單/出貨單/
+# 開票申請憑據）補上附件上傳欄位，2026-08-24 同一輪。
+# v57: payment_requests.stage（請款單「款項類別」：全額/訂金款/交貨款/驗收款/
+# 尾款，手動選擇的業務語意標籤），2026-08-24——跟既有 scope（amount/items，決定
+# 金額計算方式）並存，純粹取代客戶端 PDF 上「請款範圍」欄原本顯示的技術性描述
+# （自訂金額(X%)/自訂品項）。
+# v58: 回填既有已成案/已結案報價單的 data_json.dealWonAt（2026-08-24）——首頁
+# 「本月銷售」原本依 quote_date 分組，但 quote_date 是報價單建立當下手動填的
+# 日期，常常跟業務員實際簽下這筆案子的月份對不上，導致當月營收看起來是 0。
+# routers/quotations.py::update_deal_tag() 之後轉為已成案時會即時寫入
+# dealWonAt，這支 migration 只負責把修正前就已成案/已結案的舊資料補上（用
+# updated_at 當最佳可得的成交時間代理值）。
+# v59: 修正 v58 backfill 的值（2026-08-24，同一天使用者實測就回報「銷售收入
+# 趨勢錯誤」）——updated_at 是「最後一次編輯」，案件成案後只要再被動過（哪怕
+# 跟 dealTag 完全無關），updated_at 就會被推遲，導致好幾筆案件被錯誤歸到很久
+# 之後才成交。改用 audit_log 裡 action='deal_tag.change' 的真實事件時間戳
+# （成案當下就寫入、不會被後續無關編輯覆蓋），查不到 audit 紀錄的舊資料則把
+# dealWonAt 拿掉、fallback 回 quote_date。
+# ⚠️ dealWonAt 這整套（v58/v59）已在同一天被 dashboard.py 的下一輪修正取代
+# ——使用者進一步要求「本月銷售」該依實際收款時間（caseRecord.payment.items[].
+# receivedAt）分組，不是案件成交（dealTag 轉已成案）的時間，兩者常常是不同
+# 月份。dashboard_monthly() 已經改用 receivedAt，不再讀 dealWonAt；
+# update_deal_tag() 也已移除寫入。v58/v59 migration 保留純粹是歷史紀錄
+# （已套用過的 schema_version 不可回頭刪除/重排），data_json.dealWonAt 這個
+# 欄位會留在既有資料裡但目前沒有任何程式碼讀取，之後如果要重新加回「成交時間」
+# 這種概念，不要複用這個欄位名稱免得語意混淆。
+# v76: case_extra_expenses.change_*（已核准後的編輯＝變更申請，核准才生效）＋
+# case_stages.google_calendar_done_event_id / daily_task_id（勾選完成同步行事曆），
+# 2026-09-11 第二輪交辦，見 _m076 docstring 與 MOTRIX-ERP-QUICK.md §5.10／§5.11。
+# v77: completion_notes（完工單，比照 shipping_notes 同構＋工程完工單特有欄位），
+# 2026-09-12 交辦，見 _m077 docstring。
+# v78: completion_notes.contact_phone（完工單帶入報價單聯絡人電話），2026-09-12。
+CURRENT_VERSION = 82
 
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
 # execution model) whenever the current request is authenticated as the 'demo'
@@ -129,7 +183,10 @@ def reset_demo_db() -> None:
         finally:
             conn.close()
     init_db(DEMO_DB_PATH)
-    for d in (DEMO_PROJECT_PHOTOS_DIR, DEMO_PDF_ARCHIVE_DIR, DEMO_PAYSLIP_ARCHIVE_DIR, DEMO_SHIPPING_PDF_ARCHIVE_DIR):
+    for d in (DEMO_PROJECT_PHOTOS_DIR, DEMO_UPLOADS_DIR, DEMO_PDF_ARCHIVE_DIR, DEMO_PAYSLIP_ARCHIVE_DIR,
+              DEMO_SHIPPING_PDF_ARCHIVE_DIR, DEMO_CONTRACTOR_VOUCHER_PDF_ARCHIVE_DIR,
+              DEMO_INVOICE_VOUCHER_PDF_ARCHIVE_DIR, DEMO_PAYMENT_REQUEST_PDF_ARCHIVE_DIR,
+              DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR):
         _wipe_dir(d)
 
 
@@ -187,7 +244,8 @@ def init_db(path: str = None):
             active               INTEGER NOT NULL DEFAULT 1,
             created_at           TEXT    NOT NULL,
             unlock_password_hash TEXT    DEFAULT '',
-            must_change_password INTEGER NOT NULL DEFAULT 0
+            must_change_password INTEGER NOT NULL DEFAULT 0,
+            notification_muted   TEXT    DEFAULT '[]'
         );
 
         CREATE TABLE IF NOT EXISTS sessions (
@@ -292,6 +350,21 @@ def init_db(path: str = None):
             FOREIGN KEY (project_id) REFERENCES projects(id)
         );
 
+        CREATE TABLE IF NOT EXISTS project_stages (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id  INTEGER NOT NULL,
+            label       TEXT    NOT NULL DEFAULT '',
+            sort_order  INTEGER NOT NULL DEFAULT 0,
+            done        INTEGER NOT NULL DEFAULT 0,
+            done_at     TEXT    NOT NULL DEFAULT '',
+            start_date  TEXT    NOT NULL DEFAULT '',
+            due_date    TEXT    NOT NULL DEFAULT '',
+            created_at  TEXT    NOT NULL,
+            updated_at  TEXT    NOT NULL,
+            FOREIGN KEY (project_id) REFERENCES projects(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_project_stages_project_id ON project_stages(project_id);
+
         CREATE TABLE IF NOT EXISTS work_logs (
             id         INTEGER PRIMARY KEY AUTOINCREMENT,
             log_date   TEXT    NOT NULL,
@@ -371,13 +444,14 @@ def init_db(path: str = None):
         CREATE TABLE IF NOT EXISTS contractor_dispatches (
             id            INTEGER PRIMARY KEY AUTOINCREMENT,
             quote_no      TEXT    NOT NULL,
-            vendor_id     INTEGER NOT NULL,
+            vendor_id     INTEGER,
             dispatch_date TEXT    DEFAULT '',
             scope         TEXT    DEFAULT '',
             items_json    TEXT    DEFAULT '[]',
             total_amount  REAL    DEFAULT 0,
             status        TEXT    DEFAULT 'draft',
             notes         TEXT    DEFAULT '',
+            invoice_no    TEXT    DEFAULT '',
             created_by    TEXT    DEFAULT '',
             created_at    TEXT,
             updated_at    TEXT,
@@ -423,7 +497,8 @@ def init_db(path: str = None):
             version    TEXT    NOT NULL DEFAULT '',
             updated_at TEXT    NOT NULL,
             content    TEXT    NOT NULL DEFAULT '',
-            updated_by TEXT    NOT NULL DEFAULT ''
+            updated_by TEXT    NOT NULL DEFAULT '',
+            UNIQUE(module, version)
         );
         CREATE INDEX IF NOT EXISTS idx_mv_module
             ON module_versions(module, updated_at);
@@ -433,7 +508,8 @@ def init_db(path: str = None):
     _seed_setting(conn, "company_profile", {
         "name": "允碩整合集創股份有限公司",
         "tax_id": "60575481",
-        "contact_info": "Tel: 04-3602-2818｜info@miactw.com"
+        "contact_info": "Tel: 04-3610-6566｜info@miactw.com",
+        "bank_name": "", "bank_branch": "", "bank_account_name": "", "bank_account_number": "",
     })
     _seed_setting(conn, "tax_rules", {
         "version": "2026",
@@ -463,6 +539,11 @@ def init_db(path: str = None):
 def _col_exists(conn, table: str, col: str) -> bool:
     rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
     return any(r["name"] == col for r in rows)
+
+
+def _col_notnull(conn, table: str, col: str) -> bool:
+    rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+    return any(r["name"] == col and r["notnull"] for r in rows)
 
 
 def _get_version(conn) -> int:
@@ -1035,6 +1116,1152 @@ def _m028_dev_cases_soft_delete(conn):
     conn.commit()
 
 
+def _m042_dev_cases_relink_review(conn):
+    """Add pending-relink review columns to dev_cases — changing or clearing an
+    already-established converted_quote_no now goes through admin+ request →
+    superadmin approve, same shape as _m028_dev_cases_soft_delete's delete flow.
+    An empty relink_target_quote_no is a valid, meaningful value (= unlink)."""
+    for col, defn in [
+        ("pending_relink",         "INTEGER NOT NULL DEFAULT 0"),
+        ("relink_requested_by",    "TEXT    NOT NULL DEFAULT ''"),
+        ("relink_requested_at",    "TEXT    NOT NULL DEFAULT ''"),
+        ("relink_reason",          "TEXT    NOT NULL DEFAULT ''"),
+        ("relink_target_quote_no", "TEXT    NOT NULL DEFAULT ''"),
+    ]:
+        if not _col_exists(conn, "dev_cases", col):
+            conn.execute(f"ALTER TABLE dev_cases ADD COLUMN {col} {defn}")
+    conn.commit()
+
+
+def _m043_notification_prefs(conn):
+    """Per-user email notification opt-out list (see helpers/notification_prefs.py).
+    DEFAULT '[]' means "nothing muted" — SQLite backfills existing rows with the
+    column default on ALTER TABLE ADD COLUMN, so no separate UPDATE is needed and
+    no existing user's email behaviour changes until they explicitly mute something."""
+    if not _col_exists(conn, "users", "notification_muted"):
+        conn.execute("ALTER TABLE users ADD COLUMN notification_muted TEXT DEFAULT '[]'")
+    conn.commit()
+
+
+def _m044_dispatch_invoice_no(conn):
+    """承攬商派發新增發票號碼欄位，比照報價單收款品項 invoiceNo 的自由文字慣例。"""
+    if not _col_exists(conn, "contractor_dispatches", "invoice_no"):
+        conn.execute("ALTER TABLE contractor_dispatches ADD COLUMN invoice_no TEXT DEFAULT ''")
+    conn.commit()
+
+
+def _m045_contractor_payment_vouchers(conn):
+    """Create contractor_payment_vouchers（承攬商匯款申請）：一張申請對應一筆已完工的
+    承攬商派發（dispatch_id UNIQUE，強制 1:1），供財務端核准匯款用。獨立簽核流程
+    （system_settings key 'contractor_voucher_approval_flow'），機制比照出貨單但
+    「已核准」之後額外多一個「已匯款」財務結案標記（is_paid，獨立於 status，比照
+    出貨單「已核准」跟「已回簽」是兩個獨立狀態的做法）。見 routers/contractor_vouchers.py。
+
+    承攬商/銀行帳戶/金額/品項於建立當下寫入 snapshot_json 凍結快照——日後若
+    vendor_contractors 資料異動（改銀行帳戶、改名稱等）不會回頭改到已產生的申請，
+    這點與出貨單品項快照、成本精算 finalized 快照是同一個「已定案文件不隨來源異動」
+    的慣例（見 §5.5 settlement 文件）。"""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS contractor_payment_vouchers (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            voucher_no    TEXT    UNIQUE NOT NULL,
+            dispatch_id   INTEGER UNIQUE NOT NULL REFERENCES contractor_dispatches(id),
+            quote_no      TEXT    NOT NULL,
+            vendor_id     INTEGER REFERENCES vendor_contractors(id),
+            status        TEXT    NOT NULL DEFAULT '草稿',
+            snapshot_json TEXT    NOT NULL DEFAULT '{}',
+            data_json     TEXT    NOT NULL DEFAULT '{}',
+            is_paid       INTEGER NOT NULL DEFAULT 0,
+            paid_by       TEXT    DEFAULT '',
+            paid_at       TEXT    DEFAULT '',
+            paid_log      TEXT    NOT NULL DEFAULT '[]',
+            export_count  INTEGER DEFAULT 0,
+            export_log    TEXT    DEFAULT '[]',
+            created_by    TEXT    DEFAULT '',
+            created_at    TEXT,
+            updated_at    TEXT
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_cpv_quote_no ON contractor_payment_vouchers(quote_no)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_cpv_status ON contractor_payment_vouchers(status)"
+    )
+    conn.commit()
+
+
+def _m046_invoice_vouchers(conn):
+    """Create invoice_vouchers（開票申請憑據）：案件款項明細（quotations.data_json.
+    caseRecord.payment.items[]，本身不是獨立資料表，見 helpers/quotations.py
+    payment_item_amounts()）匯出給財務單位申請開立發票用的獨立單據。scope='single'
+    對應單一 payment_idx；scope='all' 彙整整份收款排程，payment_idx 為 NULL。
+
+    不要求 received=true 才能建立（2026-08-20 起）——部分案件是先開發票才能收款，
+    未收款項目也允許申請，snapshot 內保留 received 旗標供 PDF 標示實際收款狀況。
+    獨立簽核流程（system_settings key 'invoice_voucher_approval_flow'），
+    狀態機比照出貨單（草稿→待審核→簽核中→已核准），核准即定稿，不像承攬商匯款
+    申請多一個「已匯款」財務結案節點——開票申請憑據本身就是最終文件。見
+    routers/invoice_vouchers.py。
+
+    客戶/案件/款項明細於建立當下寫入 snapshot_json 凍結快照，理由同
+    contractor_payment_vouchers：已送出財務的憑據不應該因為之後有人編輯報價單
+    款項明細而回頭改變內容。
+
+    2026-08-20 起 scope 語意已改為 'amount'（自訂金額）/'items'（自訂品項+數量），
+    取代原本的 'single'/'all'（見 _m047_invoice_vouchers_amount 與
+    routers/invoice_vouchers.py），payment_idx 欄位對新資料不再使用但保留不刪，
+    SQLite 不方便中途拿掉欄位，舊資料也還讀得到。"""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS invoice_vouchers (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            voucher_no    TEXT    UNIQUE NOT NULL,
+            quote_no      TEXT    NOT NULL,
+            scope         TEXT    NOT NULL DEFAULT 'single',
+            payment_idx   INTEGER,
+            status        TEXT    NOT NULL DEFAULT '草稿',
+            snapshot_json TEXT    NOT NULL DEFAULT '{}',
+            data_json     TEXT    NOT NULL DEFAULT '{}',
+            export_count  INTEGER DEFAULT 0,
+            export_log    TEXT    DEFAULT '[]',
+            created_by    TEXT    DEFAULT '',
+            created_at    TEXT,
+            updated_at    TEXT
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_iv_quote_no ON invoice_vouchers(quote_no)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_iv_status ON invoice_vouchers(status)"
+    )
+    conn.commit()
+
+
+def _m047_invoice_vouchers_amount(conn):
+    """新增 invoice_vouchers.amount 真實欄位（2026-08-20，使用者實測後重新設計）。
+
+    背景：原本開票申請只能挑一個既有款項期別（scope='single'/'all'），使用者
+    反映很多案件是「先開發票才能收款」，需要能自訂任意金額或自訂品項+數量來
+    申請，且已申請過的金額/品項數量要能從剩餘可開票額度扣除，避免重複請款。
+
+    這個 amount 欄位是「這張申請這次要開多少錢」的唯一權威數字（不論
+    scope='amount' 自訂金額、還是 scope='items' 自訂品項時等於選取品項金額
+    加總），獨立成真實 SQL 欄位是為了能直接用 SUM() 計算「這張報價單目前
+    已申請多少、還剩多少可申請」，不必每次都把所有筆 snapshot_json 解析一遍。
+
+    舊資料（scope='single'/'all' 建立的既有草稿）用當時存的 snapshot_json.items
+    金額加總回填，讓它們一樣正確算進「已申請額度」，不會產生資料落差。"""
+    if not _col_exists(conn, "invoice_vouchers", "amount"):
+        conn.execute("ALTER TABLE invoice_vouchers ADD COLUMN amount REAL NOT NULL DEFAULT 0")
+        for row in conn.execute("SELECT id, snapshot_json FROM invoice_vouchers").fetchall():
+            try:
+                snap = json.loads(row["snapshot_json"] or "{}")
+                total = sum(float(it.get("amount", 0) or 0) for it in (snap.get("items") or []))
+            except Exception:
+                total = 0
+            conn.execute("UPDATE invoice_vouchers SET amount=? WHERE id=?", (total, row["id"]))
+    conn.commit()
+
+
+def _m048_org_structure(conn):
+    """新增處/部門組織架構（2026-08-22）。純組織分類用途，department 上的
+    manager_user_id 先預留給未來「部門主管自動列入簽核」使用，這輪不接
+    tiered_approval.py。"""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS divisions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE,
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS departments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            division_id INTEGER NOT NULL REFERENCES divisions(id),
+            name TEXT NOT NULL,
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            manager_user_id INTEGER REFERENCES users(id),
+            created_at TEXT NOT NULL,
+            UNIQUE(division_id, name)
+        )
+    """)
+    if not _col_exists(conn, "users", "department_id"):
+        conn.execute("ALTER TABLE users ADD COLUMN department_id INTEGER REFERENCES departments(id)")
+    conn.commit()
+
+
+def _m049_division_manager(conn):
+    """新增 divisions.manager_user_id（處級主管，2026-08-22）。使用者回饋現有
+    組織架構只有部門能設主管、處級沒有對應欄位，這裡補齊對稱性，一樣先預留
+    給未來簽核路由使用，這輪不接 tiered_approval.py。"""
+    if not _col_exists(conn, "divisions", "manager_user_id"):
+        conn.execute("ALTER TABLE divisions ADD COLUMN manager_user_id INTEGER REFERENCES users(id)")
+    conn.commit()
+
+
+def _m050_project_department(conn):
+    """新增 projects.department_id（2026-08-22）。案件/專案管理延伸建議的一部分——
+    專案原本指派只到個人（assigned_user_ids），完全沒接組織架構；補上部門欄位讓
+    專案可依部門篩選、逾期通知可升級給部門主管（比照報價單既有的 sales_person_id
+    → department_id 查表模式）。"""
+    if not _col_exists(conn, "projects", "department_id"):
+        conn.execute("ALTER TABLE projects ADD COLUMN department_id INTEGER REFERENCES departments(id)")
+    conn.commit()
+
+
+def _m051_case_stages_normalize(conn):
+    """caseRecord.stages 正規化第一階段（2026-08-23）：新增 case_stages/case_stage_visits
+    唯讀鏡像表，回填既有 quotations.data_json.caseRecord.stages 資料。這輪刻意不接進
+    任何現有讀寫路徑——update_case_record()／case-management.js／quotation-form.html／
+    dashboard.py／daily_tasks.py／stage_board() 全部維持原樣讀寫 JSON；新表只是回填出
+    來的鏡像，供下一輪 CRUD 端點與前端切換使用。dependsOn 陣列裡的舊 JSON id（
+    Date.now() 基底，前端 addStage() 產生）在回填時 remap 成新的關聯式 id。
+    assigned_to/depends_on 刻意維持 JSON text 欄位，不再往下正規化成 join table——
+    這兩個陣列通常只有 1~3 個元素、永遠整組讀寫，沒有跨階段查詢需求。"""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS case_stages (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            quote_no    TEXT    NOT NULL,
+            label       TEXT    NOT NULL DEFAULT '',
+            sort_order  INTEGER NOT NULL DEFAULT 0,
+            done        INTEGER NOT NULL DEFAULT 0,
+            done_at     TEXT    NOT NULL DEFAULT '',
+            start_date  TEXT    NOT NULL DEFAULT '',
+            due_date    TEXT    NOT NULL DEFAULT '',
+            assigned_to TEXT    NOT NULL DEFAULT '[]',
+            depends_on  TEXT    NOT NULL DEFAULT '[]',
+            created_at  TEXT    NOT NULL,
+            updated_at  TEXT    NOT NULL,
+            google_calendar_event_id TEXT NOT NULL DEFAULT ''
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_case_stages_quote_no ON case_stages(quote_no)")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS case_stage_visits (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            stage_id     INTEGER NOT NULL REFERENCES case_stages(id) ON DELETE CASCADE,
+            visit_date   TEXT    NOT NULL DEFAULT '',
+            visit_people INTEGER NOT NULL DEFAULT 0,
+            note         TEXT    NOT NULL DEFAULT '',
+            created_at   TEXT    NOT NULL
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_case_stage_visits_stage_id ON case_stage_visits(stage_id)")
+    conn.commit()
+
+    now = datetime.now().isoformat()
+    rows = conn.execute("""
+        SELECT quote_no, data_json FROM quotations
+        WHERE json_extract(data_json, '$.caseRecord.stages') IS NOT NULL
+    """).fetchall()
+
+    for row in rows:
+        try:
+            data = json.loads(row["data_json"] or "{}")
+        except Exception:
+            continue
+        stages = ((data.get("caseRecord") or {}).get("stages")) or []
+        if not stages:
+            continue
+
+        id_map = {}
+        inserted = []
+        for idx, st in enumerate(stages):
+            cur = conn.execute("""
+                INSERT INTO case_stages
+                    (quote_no, label, sort_order, done, done_at, start_date, due_date,
+                     assigned_to, depends_on, created_at, updated_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?)
+            """, (
+                row["quote_no"],
+                st.get("label") or "",
+                idx,
+                1 if st.get("done") else 0,
+                st.get("doneAt") or "",
+                st.get("startDate") or "",
+                st.get("dueDate") or "",
+                json.dumps(st.get("assignedTo") or [], ensure_ascii=False),
+                "[]",
+                now, now,
+            ))
+            new_id = cur.lastrowid
+            old_id = st.get("id")
+            if old_id is not None:
+                id_map[old_id] = new_id
+            inserted.append((new_id, st))
+
+        for new_id, st in inserted:
+            remapped = [id_map[d] for d in (st.get("dependsOn") or []) if d in id_map]
+            conn.execute("UPDATE case_stages SET depends_on=? WHERE id=?",
+                         (json.dumps(remapped, ensure_ascii=False), new_id))
+            for v in (st.get("visits") or []):
+                conn.execute("""
+                    INSERT INTO case_stage_visits (stage_id, visit_date, visit_people, note, created_at)
+                    VALUES (?,?,?,?,?)
+                """, (
+                    new_id,
+                    v.get("visitDate") or "",
+                    int(v.get("visitPeople") or 0),
+                    v.get("note") or "",
+                    now,
+                ))
+    conn.commit()
+
+
+def _m052_fix_stage_json_ids(conn):
+    """caseRecord.stages 正規化收尾修正（2026-08-23，同日）：v51 的 backfill migration
+    只寫進新的 case_stages 表，刻意沒有回頭修正 quotations.data_json.caseRecord.stages
+    裡的舊 id——v51 上線當時前端還沒有任何地方會引用這些 id，這個設計在當下是安全、
+    正確的。但同一天稍晚 3b 上線後，case-management.js 開始直接拿 data_json 裡的
+    stage id 打 `PUT/DELETE .../stages/{id}` 等 granular 端點；只要一個案件從 v51
+    backfill 之後、到 3b 上線這段期間**完全沒有**透過任何 granular 端點被存過一次，
+    data_json 裡的 id 就還停留在 backfill 前的舊值，跟 case_stages 表的真實 id
+    對不上，使用者一操作階段就會 404（正式機重現：13 個有 case_stages 資料的
+    案件裡 12 個中獎，使用者回報「執行進度儲存失敗」）。
+
+    這個 migration 把 case_stages（含 case_stage_visits）目前的內容，重新鏡射回
+    每個受影響 quote_no 的 data_json.caseRecord.stages——邏輯照搬
+    routers/quotations.py::_sync_stages_to_json()（db.py 不 import router 模組，
+    手動照抄一份，保持邏輯一致）。只動 caseRecord.stages 這個欄位，caseRecord
+    其他 key 與 quotations 其他欄位（含 updated_at）刻意維持原樣不動——這是
+    後端資料一致性修正，不是使用者操作，不該讓任何人手上還開著的頁面因為
+    updated_at 被動了而誤觸樂觀鎖 409。"""
+    quote_nos = [r["quote_no"] for r in conn.execute(
+        "SELECT DISTINCT quote_no FROM case_stages"
+    ).fetchall()]
+    for quote_no in quote_nos:
+        row = conn.execute(
+            "SELECT data_json FROM quotations WHERE quote_no=?", (quote_no,)
+        ).fetchone()
+        if not row:
+            continue
+        try:
+            data = json.loads(row["data_json"] or "{}")
+        except Exception:
+            continue
+        stage_rows = conn.execute(
+            "SELECT * FROM case_stages WHERE quote_no=? ORDER BY sort_order, id", (quote_no,)
+        ).fetchall()
+        stages_json = []
+        for sr in stage_rows:
+            visit_rows = conn.execute(
+                "SELECT visit_date, visit_people, note FROM case_stage_visits "
+                "WHERE stage_id=? ORDER BY id", (sr["id"],),
+            ).fetchall()
+            stages_json.append({
+                "id":         sr["id"],
+                "label":      sr["label"],
+                "done":       bool(sr["done"]),
+                "doneAt":     sr["done_at"],
+                "startDate":  sr["start_date"],
+                "dueDate":    sr["due_date"],
+                "assignedTo": json.loads(sr["assigned_to"] or "[]"),
+                "dependsOn":  json.loads(sr["depends_on"] or "[]"),
+                "visits": [
+                    {"visitDate": v["visit_date"], "visitPeople": v["visit_people"], "note": v["note"]}
+                    for v in visit_rows
+                ],
+            })
+        data.setdefault("caseRecord", {})["stages"] = stages_json
+        conn.execute(
+            "UPDATE quotations SET data_json=? WHERE quote_no=?",
+            (json.dumps(data, ensure_ascii=False), quote_no)
+        )
+    conn.commit()
+
+
+def _m053_payment_requests(conn):
+    """Create payment_requests（請款單，2026-08-24）：案件款項明細
+    （quotations.data_json.caseRecord.payment.items[]）之外，另外提供一種可走
+    簽核流程、對內/對客戶要款用的獨立單據——跟 invoice_vouchers（開票申請憑據）
+    是同一套設計（凍結快照＋依剩餘可請款額度防超收），差異只在多了 terms_json
+    （條款，比照報價單「報價條件」可自由編輯的欄位）跟 ratio_pct（請款比例，
+    UI 輸入捷徑，非唯一權威金額——amount 才是，SUM(amount) 用來算剩餘額度，
+    邏輯詳見 routers/payment_requests.py::_quote_remaining()）。
+
+    簽核流程比照四種單據 2026-08-24 起統一使用的 system_settings key
+    'unified_approval_flow'（見 routers/system.py），不再各自獨立一組。"""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS payment_requests (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            request_no    TEXT    UNIQUE NOT NULL,
+            quote_no      TEXT    NOT NULL,
+            scope         TEXT    NOT NULL DEFAULT 'amount',
+            stage         TEXT    NOT NULL DEFAULT '',
+            status        TEXT    NOT NULL DEFAULT '草稿',
+            ratio_pct     REAL    DEFAULT 0,
+            amount        REAL    NOT NULL DEFAULT 0,
+            terms_json    TEXT    NOT NULL DEFAULT '{}',
+            snapshot_json TEXT    NOT NULL DEFAULT '{}',
+            data_json     TEXT    NOT NULL DEFAULT '{}',
+            export_count  INTEGER DEFAULT 0,
+            export_log    TEXT    DEFAULT '[]',
+            created_by    TEXT    DEFAULT '',
+            created_at    TEXT,
+            updated_at    TEXT
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_pr_quote_no ON payment_requests(quote_no)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_pr_status ON payment_requests(status)"
+    )
+    conn.commit()
+
+
+def _m058_backfill_deal_won_at(conn):
+    """回填既有已成案/已結案報價單的 data_json.dealWonAt（見上方 v58 說明）。
+    只補「目前完全沒有 dealWonAt」的舊資料，且用 UPDATE...WHERE 已經先過濾掉
+    有值的列，重跑一次不會二次覆蓋——冪等。"""
+    rows = conn.execute("""
+        SELECT quote_no, data_json, updated_at, quote_date
+        FROM quotations
+        WHERE COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') IN ('已成案','已結案')
+          AND (json_extract(data_json,'$.dealWonAt') IS NULL OR json_extract(data_json,'$.dealWonAt') = '')
+    """).fetchall()
+    for r in rows:
+        won_at = r["updated_at"] or r["quote_date"] or ""
+        if not won_at:
+            continue
+        data = json.loads(r["data_json"] or "{}")
+        data["dealWonAt"] = won_at
+        conn.execute(
+            "UPDATE quotations SET data_json=? WHERE quote_no=?",
+            (json.dumps(data, ensure_ascii=False), r["quote_no"])
+        )
+    conn.commit()
+
+
+def _m059_fix_deal_won_at_from_audit_log(conn):
+    """修正 v58 用 updated_at 猜的 dealWonAt（見上方 v59 說明）。改用 audit_log
+    裡 action='deal_tag.change'、detail.to='已成案' 的真實事件時間戳——這是每次
+    成案動作當下就寫入、不會被後續無關編輯覆蓋的權威紀錄。取每張報價單最後一次
+    轉為已成案的時間（ORDER BY at ASC 逐筆覆蓋，若曾降級又重新成案以最新一次為
+    準，符合目前狀態）。完全查不到 audit 紀錄的舊資料（例如匯入時就已經是已成案
+    狀態、從未真的呼叫過這支 API）就把 dealWonAt 拿掉，讓查詢邏輯 fallback 回
+    quote_date——沒有真實成交時間可用時，寧可維持舊行為也不要用不可靠的猜測值。
+    冪等：只在算出來的值跟目前不同時才寫入。"""
+    won_events = {}
+    for r in conn.execute(
+        "SELECT at, target_id, detail FROM audit_log WHERE action='deal_tag.change' ORDER BY at ASC"
+    ).fetchall():
+        try:
+            detail = json.loads(r["detail"] or "{}")
+        except Exception:
+            continue
+        if detail.get("to") == "已成案":
+            won_events[r["target_id"]] = r["at"]
+
+    rows = conn.execute("""
+        SELECT quote_no, data_json
+        FROM quotations
+        WHERE COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') IN ('已成案','已結案')
+    """).fetchall()
+    for r in rows:
+        data = json.loads(r["data_json"] or "{}")
+        true_won_at = won_events.get(r["quote_no"])
+        if true_won_at:
+            if data.get("dealWonAt") != true_won_at:
+                data["dealWonAt"] = true_won_at
+                conn.execute("UPDATE quotations SET data_json=? WHERE quote_no=?",
+                             (json.dumps(data, ensure_ascii=False), r["quote_no"]))
+        elif "dealWonAt" in data:
+            data.pop("dealWonAt", None)
+            conn.execute("UPDATE quotations SET data_json=? WHERE quote_no=?",
+                         (json.dumps(data, ensure_ascii=False), r["quote_no"]))
+    conn.commit()
+
+
+def _m060_dispatch_files(conn):
+    """承攬商派發新增 files_json（2026-08-25）：承攬商提供的報價/估價文件
+    附件上傳，比照 _m054_signed_upload_files 的通用附件 JSON 陣列存法，實際
+    檔案存 uploads/contractor_dispatches/{id}/。跟派發本身既有的 items_json/
+    personnel_json（拆解後的品項/人員「內容」）是不同層次——這裡存的是承攬商
+    提供的原始報價文件（PDF/圖檔），供事後核對用。"""
+    if not _col_exists(conn, "contractor_dispatches", "files_json"):
+        conn.execute("ALTER TABLE contractor_dispatches ADD COLUMN files_json TEXT NOT NULL DEFAULT '[]'")
+    conn.commit()
+
+
+def _m061_case_semi_unlock(conn):
+    """已結案案件解鎖／半解鎖機制（2026-08-26）：deal_tag='已結案' 的案件目前
+    完全鎖定（quotations.py 的相關端點沒有例外）；使用者要求能解鎖成「半解鎖」
+    狀態，讓案件記錄（case-record 整包存檔、款項標記收款、款項/叫料附件上傳）
+    可以繼續變更，但每一筆變更/上傳都要先送最高管理員審核通過才真的套用，不能
+    像未結案案件一樣立即生效。
+
+    quotations 新增三欄記錄目前解鎖狀態（任何登入使用者皆可解鎖/重新上鎖，
+    2026-08-26 使用者透過 AskUserQuestion 確認，比照既有附件上傳「任何人皆可
+    傳」的最寬鬆權限慣例）：
+    - case_semi_unlocked：0/1，是否處於半解鎖狀態
+    - case_semi_unlocked_by／case_semi_unlocked_at：最近一次解鎖的操作者/時間
+      （純顯示用，不做權限判斷）
+
+    新表 case_change_requests：半解鎖期間每一筆待審核的變更/上傳請求，
+    action_type 對應 routers/quotations.py 裡新增的 8 個「暫存待審」端點
+    （case_record_update／payment_mark／payment_invoice_upload／
+    payment_invoice_delete／material_file_upload／material_file_delete／
+    material_invoice_upload／material_invoice_delete）。payload_json 存
+    套用該筆變更所需的資料（例如 case_record_update 存整包 caseRecord；
+    上傳類存 idx/field，實際檔案先存進 uploads/_pending_case_changes/{id}/，
+    staged_files_json 記錄暫存路徑，核准時才搬進正式路徑並寫回 data_json，
+    拒絕則直接刪除暫存檔）。status 只有 pending/approved/rejected 三種，
+    approve/reject 只限 superadmin（比照已結案案件本身的解鎖/降級規則）。
+
+    刻意不涵蓋的範圍（2026-08-26 設計取捨，非遺漏）：案件執行階段的細項端點
+    （新增/編輯/刪除/排序/加入負責人/移除負責人/前置階段/新增拜訪/編輯拜訪/
+    刪除拜訪，共 10 支）與款項稅額沖銷申請/撤銷/核准（3 支）——這些端點在
+    案件已結案時一律直接 403 擋下（不論
+    是否半解鎖都不支援），需要修正時請透過 case-record 整包編輯或款項標記
+    收款這幾支已支援排隊審核的端點處理，或聯繫最高管理員直接於資料庫層級
+    校正。之後如果要擴大涵蓋範圍，比照本次 case_record_update 的「暫存
+    payload_json、核准時重放同一段套用邏輯」模式即可，不需要另立新架構。"""
+    if not _col_exists(conn, "quotations", "case_semi_unlocked"):
+        conn.execute("ALTER TABLE quotations ADD COLUMN case_semi_unlocked INTEGER NOT NULL DEFAULT 0")
+    if not _col_exists(conn, "quotations", "case_semi_unlocked_by"):
+        conn.execute("ALTER TABLE quotations ADD COLUMN case_semi_unlocked_by TEXT DEFAULT ''")
+    if not _col_exists(conn, "quotations", "case_semi_unlocked_at"):
+        conn.execute("ALTER TABLE quotations ADD COLUMN case_semi_unlocked_at TEXT DEFAULT ''")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS case_change_requests (
+            id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+            quote_no             TEXT    NOT NULL,
+            action_type          TEXT    NOT NULL,
+            summary              TEXT    NOT NULL DEFAULT '',
+            payload_json         TEXT    NOT NULL DEFAULT '{}',
+            staged_files_json    TEXT    NOT NULL DEFAULT '[]',
+            status               TEXT    NOT NULL DEFAULT 'pending',
+            requested_by         TEXT    NOT NULL DEFAULT '',
+            requested_by_display TEXT    DEFAULT '',
+            requested_at         TEXT,
+            decided_by           TEXT    DEFAULT '',
+            decided_at           TEXT,
+            reject_reason        TEXT    DEFAULT ''
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_ccr_quote_no ON case_change_requests(quote_no)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_ccr_status ON case_change_requests(status)"
+    )
+    conn.commit()
+
+
+def _m062_case_project_merge(conn):
+    """專案管理併入案件管理（2026-08-26）：使用者要求把「專案管理」
+    （projects/project_logs/project_stages）的獨有功能收斂進案件管理，讓
+    案件本身就有代辦事項兩階段簽核、成員分配、工作日誌可上傳照片，不必再
+    跳去另一個模組。
+
+    案件管理原本就有的 case_stages（時間軸）／data_json.caseRecord.materials
+    （叫料）已經是對應功能的超集，不需要新增欄位；這裡只補三個真正缺的能力：
+    - case_action_items：代辦事項正規化表（比照 case_stages 的風格），取代
+      project_logs.action_items 這個 JSON blob 欄位，保留原本「工程主管
+      確認 stage1 → 業務主管確認 stage2」兩階段狀態機（比照
+      routers/projects.py::approve_action_item() 的欄位設計）。
+    - work_logs.photos：既有「動態」分頁合併顯示的 work_logs 目前是純文字，
+      補上照片能力（JSON 陣列，欄位結構比照 project_logs.photos）。
+    - quotations.assigned_user_ids：案件成員分配，取代
+      projects.assigned_user_ids。
+
+    一次性資料搬移（僅此一次，之後 projects/project_logs/project_stages
+    不再由任何前端頁面存取，但刻意不 DROP TABLE，保留作歷史紀錄）：只處理
+    「恰好關聯 1 個案件」的 project（2026-08-26 查證當下的 2 筆全部符合），
+    project_logs 逐筆轉成 work_logs（work_content→content，photos 直接
+    搬），action_items 逐筆轉成 case_action_items。project_stages 這次查
+    證的內容都是空白預設「新階段」、無任何日期/完成狀態，且案件本身已有一
+    份真正在用的 case_stages，為避免時間軸重複顯示混淆，刻意不搬（若之後
+    在其他環境套用這支 migration 時 project_stages 有實質內容，需要另外
+    人工評估是否要補搬，這裡不自動處理）。沒有恰好 1 個關聯案件的
+    project（0 個或多個）一併跳過，資料仍完整保留在原表，不會遺失。"""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS case_action_items (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            quote_no        TEXT    NOT NULL,
+            text            TEXT    NOT NULL DEFAULT '',
+            status          TEXT    NOT NULL DEFAULT 'pending',
+            stage1_approver TEXT    DEFAULT '',
+            stage1_at       TEXT    DEFAULT '',
+            stage2_approver TEXT    DEFAULT '',
+            stage2_at       TEXT    DEFAULT '',
+            sort_order      INTEGER NOT NULL DEFAULT 0,
+            created_at      TEXT    NOT NULL,
+            created_by      TEXT    DEFAULT '',
+            updated_at      TEXT    NOT NULL
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_case_action_items_quote_no ON case_action_items(quote_no)"
+    )
+    if not _col_exists(conn, "work_logs", "photos"):
+        conn.execute("ALTER TABLE work_logs ADD COLUMN photos TEXT NOT NULL DEFAULT '[]'")
+    if not _col_exists(conn, "quotations", "assigned_user_ids"):
+        conn.execute("ALTER TABLE quotations ADD COLUMN assigned_user_ids TEXT NOT NULL DEFAULT '[]'")
+    conn.commit()
+
+    # ── 一次性資料搬移：projects → 對應案件 ──
+    fallback_row = conn.execute(
+        "SELECT id FROM users WHERE role='superadmin' AND active=1 ORDER BY id LIMIT 1"
+    ).fetchone()
+    fallback_uid = fallback_row["id"] if fallback_row else None
+
+    name_to_uid = {
+        r["display_name"]: r["id"]
+        for r in conn.execute(
+            "SELECT id, display_name FROM users WHERE display_name != ''"
+        ).fetchall()
+    }
+
+    now = datetime.now().isoformat()
+    for proj in conn.execute("SELECT * FROM projects").fetchall():
+        linked = json.loads(proj["linked_cases"] or "[]")
+        if len(linked) != 1:
+            continue
+        quote_no = linked[0]
+        if not conn.execute(
+            "SELECT 1 FROM quotations WHERE quote_no=?", (quote_no,)
+        ).fetchone():
+            continue
+
+        assigned = json.loads(proj["assigned_user_ids"] or "[]")
+        if assigned:
+            conn.execute(
+                "UPDATE quotations SET assigned_user_ids=? WHERE quote_no=?",
+                (json.dumps(assigned, ensure_ascii=False), quote_no)
+            )
+
+        for log in conn.execute(
+            "SELECT * FROM project_logs WHERE project_id=? ORDER BY id", (proj["id"],)
+        ).fetchall():
+            author_uid = name_to_uid.get(log["created_by"]) or fallback_uid
+            if author_uid is None:
+                continue
+            content = log["work_content"] or ""
+            if log["created_by"] and log["created_by"] not in name_to_uid:
+                content = f"（原記錄人：{log['created_by']}）\n{content}"
+            conn.execute(
+                "INSERT INTO work_logs (log_date, user_id, content, hours, created_at, created_by, case_no, photos) "
+                "VALUES (?,?,?,?,?,?,?,?)",
+                (log["log_date"], author_uid, content, 8.0, log["created_at"] or now,
+                 author_uid, quote_no, log["photos"] or "[]")
+            )
+            items = json.loads(log["action_items"] or "[]")
+            for idx, item in enumerate(items):
+                conn.execute("""
+                    INSERT INTO case_action_items
+                        (quote_no, text, status, stage1_approver, stage1_at,
+                         stage2_approver, stage2_at, sort_order, created_at, created_by, updated_at)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?)
+                """, (
+                    quote_no, item.get("text") or "", item.get("status") or "pending",
+                    item.get("stage1_approver") or "", item.get("stage1_at") or "",
+                    item.get("stage2_approver") or "", item.get("stage2_at") or "",
+                    idx, log["created_at"] or now, log["created_by"] or "", log["updated_at"] or now,
+                ))
+    conn.commit()
+
+
+def _m063_work_log_contact_type(conn):
+    """work_logs 新增 contact_type（2026-08-26）：案件管理「動態」分頁發布
+    更新時，執行時數（既有 hours 欄位，先前寫死 8 沒有開放填寫）＋聯絡事項
+    類型（新欄位，下拉選單＋「其他」時可輸入自訂文字）補成可用的結構化欄位，
+    讓案件動態顯示的資訊更完整，不再只有一段自由文字。"""
+    if not _col_exists(conn, "work_logs", "contact_type"):
+        conn.execute("ALTER TABLE work_logs ADD COLUMN contact_type TEXT NOT NULL DEFAULT ''")
+    conn.commit()
+
+
+def _m064_network_plans(conn):
+    """新增 network_plans（網路架構規劃書，2026-08-26）：工程師可在系統內填寫
+    一份客戶網路建置案的完整技術規劃文件（WAN／設備清單／VLAN／IP位址配置／
+    PortProfile定義／交換器Port對應／防火牆規則／IP-Port群組／無線SSID／線路
+    幹線／修訂紀錄），並匯出 Excel／PDF 給客戶。完整設計依據見專案根目錄
+    `NETWORK-PLAN-MODULE-DESIGN.md`（已調閱實際業務範本擬定資料模型）。
+
+    quote_no 選填──比照 case_action_items/payment_requests 的慣例，用
+    quotations.quote_no 綁定案件，但這裡刻意允許留空，因為規劃書也常用在
+    還沒有案件的售前評估/巡檢場景（使用者確認的取捨）。一案最多一份規劃書
+    （用 partial unique index 擋重複 quote_no，NULL 不受限），版本管理採
+    「單一文件＋修訂紀錄」而非報價單式 R1/R2 改版鎖定，修訂紀錄存在
+    data_json.revision_log 裡，不另開資料表。
+
+    9+1 大類明細全部收在 data_json 一個欄位裡（陣列＋自由物件），不比照
+    switch_guide 等選型資料庫拆成多張正規化表──跟 quotations/dev_cases
+    的 hot-column + data_json 模式一致，理由是每個案子欄位齊全度差異很大
+    （不是每案都有無線SSID或線路幹線資料），拆表反而每次都要處理一堆全
+    NULL 的列。"""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS network_plans (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            plan_no       TEXT    UNIQUE NOT NULL,
+            quote_no      TEXT,
+            site_name     TEXT    NOT NULL DEFAULT '',
+            contact_name  TEXT    NOT NULL DEFAULT '',
+            contact_phone TEXT    NOT NULL DEFAULT '',
+            status        TEXT    NOT NULL DEFAULT '規劃中',
+            created_by    TEXT    NOT NULL DEFAULT '',
+            updated_by    TEXT    NOT NULL DEFAULT '',
+            created_at    TEXT,
+            updated_at    TEXT,
+            data_json     TEXT    NOT NULL DEFAULT '{}'
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_network_plans_status ON network_plans(status)"
+    )
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_network_plans_quote_no "
+        "ON network_plans(quote_no) WHERE quote_no IS NOT NULL"
+    )
+    conn.commit()
+
+
+def _m065_automation_guide(conn):
+    """Create automation_* tables（自動化系統選型導覽）：倉儲/產線自動化設備分類
+    （AGV／AMR／協作型機械手臂／工業型機械手臂）× 場域情境矩陣式交叉，選型資料庫
+    第七個類別，資料形狀與 switch_guide／monitor_guide／access_guide／gateway_guide
+    相同。見 routers/automation_guide.py 與 automation_guide_seed.py。首批只建立
+    情境/分類骨架＋適配矩陣，品牌/型號/報價留待後續獨立任務用 WebSearch 查證補上
+    （PRODUCTS_JSON 這次是空陣列）。"""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS automation_scenarios (
+            code       TEXT PRIMARY KEY,
+            name       TEXT NOT NULL DEFAULT '',
+            description TEXT NOT NULL DEFAULT '',
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            updated_at TEXT NOT NULL DEFAULT ''
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS automation_categories (
+            code            TEXT PRIMARY KEY,
+            name            TEXT NOT NULL DEFAULT '',
+            key_specs       TEXT NOT NULL DEFAULT '',
+            tags            TEXT NOT NULL DEFAULT '',
+            price_range     TEXT NOT NULL DEFAULT '',
+            dependency_note TEXT NOT NULL DEFAULT '',
+            watch_note      TEXT NOT NULL DEFAULT '',
+            sort_order      INTEGER NOT NULL DEFAULT 0,
+            updated_at      TEXT NOT NULL DEFAULT ''
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS automation_fit (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            scenario_code TEXT NOT NULL REFERENCES automation_scenarios(code) ON DELETE CASCADE,
+            category_code TEXT NOT NULL REFERENCES automation_categories(code) ON DELETE CASCADE,
+            fit_level     TEXT NOT NULL DEFAULT '',
+            fit_note      TEXT NOT NULL DEFAULT '',
+            sort_order    INTEGER NOT NULL DEFAULT 0,
+            updated_at    TEXT NOT NULL DEFAULT ''
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS automation_products (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            category_code TEXT NOT NULL REFERENCES automation_categories(code) ON DELETE CASCADE,
+            brand         TEXT NOT NULL DEFAULT '',
+            model         TEXT NOT NULL DEFAULT '',
+            url           TEXT NOT NULL DEFAULT '',
+            label         TEXT NOT NULL DEFAULT '',
+            price_note    TEXT NOT NULL DEFAULT '',
+            specs_json    TEXT NOT NULL DEFAULT '[]',
+            sort_order    INTEGER NOT NULL DEFAULT 0
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_automation_fit_scenario ON automation_fit(scenario_code)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_automation_fit_category ON automation_fit(category_code)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_automation_prod_category ON automation_products(category_code)")
+
+    if conn.execute("SELECT 1 FROM automation_scenarios LIMIT 1").fetchone():
+        conn.commit()
+        return
+
+    from automation_guide_seed import SCENARIOS_JSON, CATEGORIES_JSON, FIT_JSON, PRODUCTS_JSON
+    now = datetime.now().isoformat()
+    for i, s in enumerate(json.loads(SCENARIOS_JSON)):
+        conn.execute(
+            "INSERT INTO automation_scenarios (code, name, description, sort_order, updated_at) VALUES (?,?,?,?,?)",
+            (s[0], s[1], s[2], i, now),
+        )
+    for i, c in enumerate(json.loads(CATEGORIES_JSON)):
+        conn.execute(
+            "INSERT INTO automation_categories "
+            "(code, name, key_specs, tags, price_range, dependency_note, watch_note, sort_order, updated_at) "
+            "VALUES (?,?,?,?,?,?,?,?,?)",
+            (c[0], c[1], c[2], c[3], c[4], c[5], c[6], i, now),
+        )
+    for i, f in enumerate(json.loads(FIT_JSON)):
+        conn.execute(
+            "INSERT INTO automation_fit (scenario_code, category_code, fit_level, fit_note, sort_order, updated_at) "
+            "VALUES (?,?,?,?,?,?)",
+            (f[0], f[1], f[2], f[3], i, now),
+        )
+    for i, p in enumerate(json.loads(PRODUCTS_JSON)):
+        conn.execute(
+            "INSERT INTO automation_products (category_code, brand, model, url, label, price_note, specs_json, sort_order) "
+            "VALUES (?,?,?,?,?,?,?,?)",
+            (p[0], p[1], p[2], p[3], p[4], p[5], p[6], i),
+        )
+    conn.commit()
+
+
+def _m067_approval_delegates(conn):
+    """簽核代理人機制（2026-08-28，企業管理優化）：目前簽核只有「代理送審」
+    （approval.delegateSubmitter，申請人請人代為送出申請），沒有「代理簽核」——
+    tiers 裡的簽核人若請假，除了 superadmin 外沒有人能代替他完成該層簽核，容易
+    卡住整條簽核鏈（尤其正式機目前 superadmin 只有 jeff/corbin 兩人，見
+    MOTRIX-ERP-QUICK.md §12 相關討論）。
+
+    新表 approval_delegates：一筆＝「delegator_username 把自己的簽核權限在
+    [start_date, end_date] 區間內暫時交給 delegate_username」，可以同時有多筆
+    （例如一人請假期間委託兩個不同的人分擔不同天數）。純粹是「誰可以代替誰在
+    tiers 裡簽核」的授權表，不影響 tiers 本身記錄的原始 approver username——
+    委託人的名字仍照舊出現在 approval.tiers[].approvers[].username，check_approve_
+    permission()/check_reject_permission()（見 helpers/tiered_approval.py）
+    比對時額外允許「目前對這個 username 持有有效代理權的人」通過，是否真的
+    透過代理身分完成的，由呼叫端事後從 _audit() 的操作者本人（非委託人）
+    自然看得出來，不需要另外在 tiers JSON 裡疊一份標記。
+
+    active=0 代表已停用（提早結束代理或設錯了想撤銷），不刪列，保留歷史紀錄。"""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS approval_delegates (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            delegator_username  TEXT    NOT NULL,
+            delegate_username   TEXT    NOT NULL,
+            start_date          TEXT    NOT NULL,
+            end_date            TEXT    NOT NULL,
+            reason              TEXT    DEFAULT '',
+            active              INTEGER NOT NULL DEFAULT 1,
+            created_by          TEXT    DEFAULT '',
+            created_at          TEXT    NOT NULL,
+            updated_at          TEXT    NOT NULL
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_approval_delegates_delegate ON approval_delegates(delegate_username, active)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_approval_delegates_delegator ON approval_delegates(delegator_username)"
+    )
+    conn.commit()
+
+
+def _m072_totp(conn):
+    """使用者帳號新增 TOTP 兩步驟驗證欄位（2026-09-07）：架構地圖 §6.2 建議
+    superadmin 至少加 TOTP（目前只有密碼＋Bearer token 單因子），採自助啟用
+    模式（非強制）——正式機 superadmin 是 jeff/corbin 兩位真人業主，若做成
+    下次登入強制進入設定流程，部署當下他們手邊若沒有先裝好驗證 App 會直接
+    被鎖在外面，屬於會中斷真實業務的風險；改為任何角色都可以自行到帳號設定
+    開啟，`routers/auth.py` 對 admin/superadmin 登入後未開啟時顯示提醒 banner
+    （純前端 UI 提醒，不阻擋操作）。
+
+    - `totp_secret`：base32 密鑰明文存放（TOTP 標準做法就是伺服器保有明文密鑰
+      才能重新計算驗證碼比對，跟密碼雜湊不同，不能做成不可逆雜湊）；未啟用
+      或尚未完成驗證的暫存密鑰也共用此欄位（`totp_enabled=0` 期間視為「設定中
+      尚未生效」，重新呼叫 setup 端點會覆蓋掉舊的暫存值）
+    - `totp_enabled`：0/1，只有走完「輸入一次正確驗證碼」的確認流程才會被設
+      成 1，避免使用者掃了 QR code 但 App 設定錯誤、之後永遠登不進去
+    - `totp_recovery_codes`：JSON 陣列，存 10 組一次性救援碼的雜湊值（比照
+      密碼用 `_hash_pw()`，不存明文），供驗證 App 遺失時（換手機、App 被刪）
+      仍能登入；每組用過就從陣列移除，見 `routers/auth.py` 使用處"""
+    for col, ddl in (
+        ("totp_secret", "TEXT NOT NULL DEFAULT ''"),
+        ("totp_enabled", "INTEGER NOT NULL DEFAULT 0"),
+        ("totp_recovery_codes", "TEXT NOT NULL DEFAULT '[]'"),
+    ):
+        if not _col_exists(conn, "users", col):
+            conn.execute(f"ALTER TABLE users ADD COLUMN {col} {ddl}")
+    conn.commit()
+
+
+def _m073_webauthn_credentials(conn):
+    """使用者帳號新增 WebAuthn/Passkey 裝置綁定登入（2026-09-09）：比照 TOTP
+    的自助啟用模式（非強制），允許使用者在多個裝置（Windows Hello、Touch ID、
+    Yubikey 等）上儲存 Passkey 憑證。
+
+    與 TOTP 不同，Passkey 是每張憑證有自己的生命週期（簽名計數遞增防複製、
+    可個別改名/撤銷），所以獨立建表 `webauthn_credentials` 而非 JSON 陣列存在
+    users 表（比照 `sessions` 表的先例）。不加 FOREIGN KEY 約束（同 sessions）。
+
+    - `credential_id`：W3C 認證器標準定義的憑證 ID（二進位），BLOB 類型並加
+      UNIQUE 約束（全球唯一）
+    - `public_key`：COSE 編碼的公鑰（二進位），由 webauthn 庫回傳並透明儲存
+    - `name`：使用者自定義易讀名稱（"iPhone"、"Windows Hello"），支援改名
+    - `sign_count`：簽名計數，每次成功登入遞增（防重放攻擊偵測用）
+    - `created_at`：憑證建立時間
+    - `last_used_at`：最後一次成功登入時間（用於排序/顯示使用情況）"""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS webauthn_credentials (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id      INTEGER NOT NULL,
+            credential_id BLOB NOT NULL UNIQUE,
+            public_key   BLOB NOT NULL,
+            name         TEXT NOT NULL DEFAULT '',
+            sign_count   INTEGER NOT NULL DEFAULT 0,
+            created_at   TEXT NOT NULL,
+            last_used_at TEXT
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_webauthn_credentials_user_id ON webauthn_credentials(user_id)")
+    conn.commit()
+
+
+def _m074_webauthn_rp_id(conn):
+    """`webauthn_credentials` 補上 `rp_id` 欄位（2026-09-11）。
+
+    v73 建表時刻意沒存 rp_id，代價在 2026-09-11 規劃改用公開憑證時才浮現：
+    Passkey 憑證是被瀏覽器綁在「註冊當下那個 RP ID」上的，一旦 RP ID 變更，
+    所有既有憑證都會失效——**而系統查不出哪一張屬於哪個 RP**，只能：
+
+      - 在設定端點回報「全部 N 張都會失效」（連哪幾張真的受影響都說不準）
+      - 讓使用者在裝置清單看到一張外觀正常、實際上永遠驗不過的殭屍憑證
+      - 登入失敗時只能回一句概括的「認證失敗」
+
+    補上這個欄位之後，上面三件事都能講清楚：失效的憑證查得出來、清單標得出來、
+    登入失敗時能回「此 Passkey 在舊網域註冊，已失效，請重新註冊」。
+
+    ⚠️ **這個欄位救不回已經簽發的憑證**——瀏覽器端的綁定不在我們手上，改了
+    RP ID 就是失效。它讓失效變成「可見、可通知、可清理」，不是讓它可逆。
+    也因此它必須在**下一次變更 RP ID 之前**就位才有意義。
+
+    回填：既有憑證全部是在目前這組設定下註冊的（本表 2026-09-09 才建立，
+    期間 RP ID 只設定過 `motrix.internal` 一次），所以直接回填當前設定值。
+    設定為空時留空字串，代表「不明」——查詢端一律把空值當成「與現行相符」，
+    以免把還能用的憑證誤標成失效。
+    """
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(webauthn_credentials)").fetchall()}
+    if "rp_id" not in cols:
+        conn.execute("ALTER TABLE webauthn_credentials ADD COLUMN rp_id TEXT NOT NULL DEFAULT ''")
+
+    row = conn.execute(
+        "SELECT value_json FROM system_settings WHERE key='webauthn_rp_id'").fetchone()
+    current_rp = ""
+    if row:
+        try:
+            current_rp = json.loads(row["value_json"]) or ""
+        except Exception:
+            current_rp = ""
+    if current_rp:
+        conn.execute("UPDATE webauthn_credentials SET rp_id=? WHERE rp_id=''", (current_rp,))
+    conn.commit()
+
+
+def _m071_paid_bank_account(conn):
+    """付款事件新增「MOTRIX 自己是用哪個銀行帳戶付的」欄位（2026-09-01）：
+    使用者要求 T100 科目代號要能依銀行帳戶分開設定（一間公司可能有多個銀行
+    帳戶，各自對應不同的 T100 銀行存款科目）。
+
+    ⚠️ 這跟 `contractor_payment_vouchers` 既有的 `snapshot_json.bankAccountName/
+    bankAccountNumber` 是完全不同的概念，不要混淆：既有欄位是**承攬商（收款方）
+    的收款帳戶**（建立申請當下凍結快照，用來告訴財務要匯去哪個戶頭）；這裡新增
+    的是**MOTRIX 自己（付款方）用哪個帳戶付出去的**，標記已匯款當下才會知道，
+    無法在建立申請時就預先知道，所以是獨立欄位、獨立時機寫入。
+
+    只加在 `contractor_payment_vouchers`／`stock_batches` 兩張表（今天才新增
+    的低流量 paid-toggle 流程）。報價單款項收款（`quotations.data_json.
+    caseRecord.payment.items[idx]`）走 JSON blob，不需要 migration，直接在
+    `mark_payment()` 多存 `bankAccountName`/`bankAccountCode` 兩個 key 即可，
+    比照既有 `invoiceNo`/`actualAmount` 的做法。"""
+    for col in ("paid_bank_account_name", "paid_bank_account_code"):
+        if not _col_exists(conn, "contractor_payment_vouchers", col):
+            conn.execute(f"ALTER TABLE contractor_payment_vouchers ADD COLUMN {col} TEXT NOT NULL DEFAULT ''")
+        if not _col_exists(conn, "stock_batches", col):
+            conn.execute(f"ALTER TABLE stock_batches ADD COLUMN {col} TEXT NOT NULL DEFAULT ''")
+    conn.commit()
+
+
+def _m070_stock_batches(conn):
+    """進貨批次新增獨立表頭 `stock_batches`（2026-09-01）：`stock_items` 原本
+    沒有獨立批次父表，`batch_no` 只是共用字串，供應商/付款狀態這類「批次層級」
+    屬性完全沒地方放（見 `_m068` 附近文件註解「無獨立 stock_batches 父表」）。
+
+    使用者要求把「料件/設備進貨」納入 T100 傳票匯出（現金基礎），但進貨本身
+    完全沒有「是否已付款」的追蹤——這是本次要補的前置功能，不只是匯出模組
+    的擴充。設計比照 `contractor_payment_vouchers` 既有的 is_paid/paid_by/
+    paid_at 三欄模式。
+
+    一個 `create_batch()` 呼叫只會建立單一 part_no 的一批序號（見
+    `routers/inventory.py::create_batch()`），batch_no 與 part_no 天生 1:1，
+    所以可以安全地把既有資料回填成一筆 stock_batches header。`qty`/
+    `total_cost` 刻意不快取在 header（避免跟之後 `adjust_stock_item()`
+    的人工調整脫鉤），改由呼叫端即時從 `stock_items` 用 batch_no 群組 SUM。
+
+    **⚠️ 回填的既有批次一律預設 `is_paid=0`（未付款）**——系統過去從未追蹤
+    這件事，不能假設「有進貨紀錄＝已付款」，也不能假設「未付款」；這是誠實
+    反映「系統從未知道過」的預設值，財務團隊首次使用這個功能時，需要回頭
+    逐批確認歷史進貨是否已付款（或用批次匯入方式一次性標記，见 §7.18
+    docstring）。"""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS stock_batches (
+            batch_no      TEXT PRIMARY KEY,
+            part_no       TEXT NOT NULL DEFAULT '',
+            supplier_id   INTEGER,
+            supplier_name TEXT NOT NULL DEFAULT '',
+            invoice_no    TEXT NOT NULL DEFAULT '',
+            is_paid       INTEGER NOT NULL DEFAULT 0,
+            paid_by       TEXT NOT NULL DEFAULT '',
+            paid_at       TEXT NOT NULL DEFAULT '',
+            note          TEXT NOT NULL DEFAULT '',
+            created_by    TEXT NOT NULL DEFAULT '',
+            created_at    TEXT NOT NULL DEFAULT '',
+            updated_at    TEXT NOT NULL DEFAULT ''
+        )
+    """)
+    existing = {r["batch_no"] for r in conn.execute("SELECT batch_no FROM stock_batches").fetchall()}
+    rows = conn.execute("""
+        SELECT batch_no, MIN(part_no) AS part_no, MIN(created_by) AS created_by, MIN(created_at) AS created_at
+        FROM stock_items WHERE batch_no != '' GROUP BY batch_no
+    """).fetchall()
+    for r in rows:
+        if r["batch_no"] in existing:
+            continue
+        conn.execute(
+            "INSERT INTO stock_batches (batch_no, part_no, created_by, created_at, updated_at) "
+            "VALUES (?,?,?,?,?)",
+            (r["batch_no"], r["part_no"] or "", r["created_by"] or "", r["created_at"] or "", r["created_at"] or ""),
+        )
+    conn.commit()
+
+
+def _m069_t100_export_confirmations(conn):
+    """T100（鼎新）傳票批次匯出的「已匯入確認」追蹤表（2026-09-01）：使用者要求
+    「匯入由財務單位確認，已匯入自動排除」——匯出 Excel 本身不代表財務真的把
+    這批傳票匯入了 T100（可能匯出後發現資料有誤沒有真的匯入），所以匯出跟
+    「標記已匯入」是兩個獨立動作；只有明確標記過的事件才會在之後的匯出範圍
+    自動排除，避免同一筆事件被財務重複匯入 T100 造成金額灌水。
+
+    source_type/source_key 是這筆事件在原始資料表的穩定識別碼（不用 accounting_
+    export.py 內部產生的 AR0001/AP0002 這種每次匯出重算的流水號，那個不穩定）：
+      - 'quotation_payment' → f"{quote_no}::{invoiceNo}"（invoiceNo 是財務開立
+        發票時填的自由文字欄位，同一張報價單同一個發票號碼理論上只會出現一次）
+      - 'contractor_voucher' → voucher_no（PV-YYYYMM-NNN，全域唯一）
+    UNIQUE(source_type, source_key) 讓「標記已匯入」動作天生冪等，同一筆事件
+    重複標記不會產生兩筆紀錄。"""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS t100_export_confirmations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source_type  TEXT NOT NULL,
+            source_key   TEXT NOT NULL,
+            event_date   TEXT NOT NULL DEFAULT '',
+            amount       REAL NOT NULL DEFAULT 0,
+            summary      TEXT NOT NULL DEFAULT '',
+            confirmed_by TEXT NOT NULL DEFAULT '',
+            confirmed_at TEXT NOT NULL DEFAULT '',
+            UNIQUE(source_type, source_key)
+        )
+    """)
+    conn.commit()
+
+
+def _m068_dispatch_payable_date_invoice_files(conn):
+    """承攬商派發新增應付款日期（payable_date）與廠商發票附件（invoice_files_json）
+    （2026-08-30）：使用者要求填寫派發時可指定這筆款項的應付款日期，並上傳
+    廠商提供的發票（跟既有 invoice_no 純文字發票號碼、files_json 的「承攬商
+    報價/估價文件」是不同概念，各自獨立欄位不要混用）。
+
+    產生匯款申請時（contractor_vouchers.py::create_contractor_voucher）會把
+    這兩個欄位一併寫入 snapshot_json 凍結快照，供簽核佇列／申請單 PDF 顯示，
+    比照既有 bankAccountNumber/bankPassbookImage 凍結快照的做法。"""
+    if not _col_exists(conn, "contractor_dispatches", "payable_date"):
+        conn.execute("ALTER TABLE contractor_dispatches ADD COLUMN payable_date TEXT DEFAULT ''")
+    if not _col_exists(conn, "contractor_dispatches", "invoice_files_json"):
+        conn.execute(
+            "ALTER TABLE contractor_dispatches ADD COLUMN invoice_files_json TEXT NOT NULL DEFAULT '[]'"
+        )
+    conn.commit()
+
+
+def _m066_parts_safety_stock(conn):
+    """parts 新增 safety_stock（2026-08-28，視覺化管理優化：庫存水位燈號）：
+    料號可設定安全庫存量，庫存管理頁依此對比目前在庫數量顯示紅/黃/綠燈號。
+    預設 0＝未設定安全庫存，此時一律顯示綠燈（不強迫每個料號都要設定門檻）。"""
+    if not _col_exists(conn, "parts", "safety_stock"):
+        conn.execute("ALTER TABLE parts ADD COLUMN safety_stock INTEGER NOT NULL DEFAULT 0")
+    conn.commit()
+
+
+def _m057_payment_request_stage(conn):
+    """請款單新增 stage（款項類別：full/deposit/delivery/acceptance/final，
+    2026-08-24）：客戶端請款單 PDF「請款範圍」欄要顯示業務語意的分類（全額/
+    訂金款/交貨款/驗收款/尾款），而不是內部 scope（amount/items）技術性描述。
+    兩個欄位並存，stage 純粹是顯示用標籤，不影響 scope 既有的金額計算方式。"""
+    if not _col_exists(conn, "payment_requests", "stage"):
+        conn.execute("ALTER TABLE payment_requests ADD COLUMN stage TEXT NOT NULL DEFAULT ''")
+    conn.commit()
+
+
+def _m054_signed_upload_files(conn):
+    """已開立出去的單據補上附件上傳能力（2026-08-24，同一輪功能）：報價單
+    回簽、出貨單回簽、開票申請憑據開立，事後都應該能補傳客戶簽回/已開立的
+    掃描檔，未來直接在系統裡查詢當初內容與檔案，不必再翻紙本或問人。
+
+    - quotations：'回簽'對這張表是全新概念（出貨單已有、報價單原本沒有），
+      比照 shipping_notes 既有的 is_signed/signed_by/signed_at/signed_log
+      四欄一起補上，再加 signed_files_json 存檔案清單。
+    - shipping_notes：回簽狀態機已存在，只補 signed_files_json。
+    - invoice_vouchers：沒有「已開立」這個額外狀態機（核准即定稿，見
+      routers/invoice_vouchers.py docstring），只補 issued_files_json 讓
+      已核准的憑據能掛檔案，不新增狀態欄位。
+
+    所有檔案清單欄位存 JSON 陣列 [{id, filename, path, uploadedBy,
+    uploadedAt, size, mime}, ...]，實際檔案存 uploads/{module}/{doc_no}/，
+    比照 routers/projects.py 專案照片既有慣例，複用同一套通用
+    /api/uploads/{file_path:path} 簽名 URL 服務，不另外新增 serving 端點。"""
+    if not _col_exists(conn, "quotations", "is_signed"):
+        conn.execute("ALTER TABLE quotations ADD COLUMN is_signed INTEGER NOT NULL DEFAULT 0")
+    if not _col_exists(conn, "quotations", "signed_by"):
+        conn.execute("ALTER TABLE quotations ADD COLUMN signed_by TEXT DEFAULT ''")
+    if not _col_exists(conn, "quotations", "signed_at"):
+        conn.execute("ALTER TABLE quotations ADD COLUMN signed_at TEXT DEFAULT ''")
+    if not _col_exists(conn, "quotations", "signed_log"):
+        conn.execute("ALTER TABLE quotations ADD COLUMN signed_log TEXT NOT NULL DEFAULT '[]'")
+    if not _col_exists(conn, "quotations", "signed_files_json"):
+        conn.execute("ALTER TABLE quotations ADD COLUMN signed_files_json TEXT NOT NULL DEFAULT '[]'")
+    if not _col_exists(conn, "shipping_notes", "signed_files_json"):
+        conn.execute("ALTER TABLE shipping_notes ADD COLUMN signed_files_json TEXT NOT NULL DEFAULT '[]'")
+    if not _col_exists(conn, "invoice_vouchers", "issued_files_json"):
+        conn.execute("ALTER TABLE invoice_vouchers ADD COLUMN issued_files_json TEXT NOT NULL DEFAULT '[]'")
+    conn.commit()
+
+
+def _m056_user_list_prefs(conn):
+    """每位使用者對各清單（報價單列表／案件管理案件清單／案件內單據子清單…）的
+    排序偏好——排序欄位/正倒序，或拖曳自訂順序（DB v56，2026-08-24）。
+    list_key 用來區分不同清單/範圍：頂層清單固定字串（如 'quotations'／
+    'case_list'），案件內單據子清單則帶上 quote_no 範圍（如
+    'shipping_notes:MQ-202608-001'）——後端完全不解析這個字串的內容，純粹
+    當作 opaque key，範圍規則由前端呼叫端自行決定。"""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS user_list_prefs (
+            username     TEXT    NOT NULL,
+            list_key     TEXT    NOT NULL,
+            sort_mode    TEXT    NOT NULL DEFAULT '',
+            sort_dir     TEXT    NOT NULL DEFAULT 'desc',
+            custom_order TEXT    NOT NULL DEFAULT '[]',
+            updated_at   TEXT    NOT NULL DEFAULT '',
+            PRIMARY KEY (username, list_key)
+        )
+    """)
+    conn.commit()
+
+
+def _m055_case_stage_calendar_event(conn):
+    """案件執行進度階段到期日 → Google 行事曆（2026-08-24，helpers/google_calendar.py
+    擴充第 7 種推送事件）。跟既有 6 種「只建立、不更新」的事件不同，階段到期日
+    常常會被使用者事後調整（延期），這裡需要真正的 upsert 而非每次都新建一筆，
+    所以要記住上一次建立的事件 id 才能之後 PATCH／DELETE，比照
+    quotations/shipping_notes/invoice_vouchers 把 googleCalendarEventId 存進
+    data_json 的既有做法——但 case_stages 是獨立的表沒有 data_json，改開專用欄位。"""
+    if not _col_exists(conn, "case_stages", "google_calendar_event_id"):
+        conn.execute("ALTER TABLE case_stages ADD COLUMN google_calendar_event_id TEXT NOT NULL DEFAULT ''")
+    conn.commit()
+
+
 def _m030_env_guide(conn):
     """Create env_guide_* tables (場域選型導覽): environments, tiered equipment
     recommendations, and vendor links — ported from the standalone 場域選型導覽.html
@@ -1319,7 +2546,834 @@ def _m034_shipping_notes(conn):
     conn.commit()
 
 
+def _has_unique_module_version(conn) -> bool:
+    for idx in conn.execute("PRAGMA index_list(module_versions)").fetchall():
+        if not idx["unique"]:
+            continue
+        cols = [r["name"] for r in conn.execute(f"PRAGMA index_info({idx['name']})").fetchall()]
+        if set(cols) == {"module", "version"}:
+            return True
+    return False
+
+
+def _m035_module_versions_unique_dedup(conn):
+    """Add UNIQUE(module, version) to module_versions and dedupe existing rows.
+
+    Root cause: _sync_module_versions() (helpers/startup.py) runs on every server
+    startup and relies on INSERT OR IGNORE to skip rows that already exist, but
+    without a UNIQUE constraint there was nothing to conflict on — every restart
+    re-inserted the full version_manifest.json (143 entries) as brand-new rows.
+    Confirmed on a production db backup: 626,725 rows for only 143 distinct
+    (module, version) pairs, accounting for ~270MB of a ~301MB database.
+
+    Rebuild the table (SQLite can't ALTER TABLE ADD CONSTRAINT) keeping exactly one
+    row per (module, version): rows created by a real user (updated_by != 'system',
+    see routers/module_versions.py POST endpoint) always win over system-synced
+    duplicates, so zero user-entered content can ever be lost by this cleanup.
+    """
+    if _has_unique_module_version(conn):
+        return
+    conn.executescript("""
+        CREATE TABLE module_versions_new (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            module     TEXT    NOT NULL,
+            version    TEXT    NOT NULL DEFAULT '',
+            updated_at TEXT    NOT NULL,
+            content    TEXT    NOT NULL DEFAULT '',
+            updated_by TEXT    NOT NULL DEFAULT '',
+            UNIQUE(module, version)
+        );
+
+        INSERT OR IGNORE INTO module_versions_new
+            (id, module, version, updated_at, content, updated_by)
+        SELECT id, module, version, updated_at, content, updated_by
+        FROM module_versions
+        WHERE updated_by != 'system'
+        ORDER BY id DESC;
+
+        INSERT OR IGNORE INTO module_versions_new
+            (id, module, version, updated_at, content, updated_by)
+        SELECT id, module, version, updated_at, content, updated_by
+        FROM module_versions
+        WHERE updated_by = 'system'
+        ORDER BY id DESC;
+
+        DROP TABLE module_versions;
+        ALTER TABLE module_versions_new RENAME TO module_versions;
+        CREATE INDEX IF NOT EXISTS idx_mv_module ON module_versions(module, updated_at);
+    """)
+    conn.commit()
+    conn.execute("VACUUM")
+
+
+def _m036_dispatch_personnel(conn):
+    """Add personnel_json to contractor_dispatches — snapshot list of contractors
+    (外包名冊) roster members assigned to this dispatch, e.g. [{"id":1,"name":"..."}].
+    Stored as a self-contained snapshot (same philosophy as items_json) rather than
+    a bare id list, so it survives even if the referenced contractors row is later
+    deleted or renamed."""
+    if not _col_exists(conn, "contractor_dispatches", "personnel_json"):
+        conn.execute(
+            "ALTER TABLE contractor_dispatches ADD COLUMN personnel_json TEXT NOT NULL DEFAULT '[]'"
+        )
+    conn.commit()
+
+
+def _m037_dispatch_vendor_optional(conn):
+    """Make contractor_dispatches.vendor_id nullable — some cases have pure
+    外包名單人員點工 (day-labor personnel) with no 承攬商 at all, so the vendor
+    can no longer be a mandatory field. SQLite can't ALTER a column's NOT NULL
+    constraint directly, so rebuild the table (same recreate-and-swap pattern as
+    _m035/_m014), copying every existing row across unchanged."""
+    if not _col_notnull(conn, "contractor_dispatches", "vendor_id"):
+        return
+    conn.executescript("""
+        CREATE TABLE contractor_dispatches_new (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            quote_no       TEXT    NOT NULL,
+            vendor_id      INTEGER,
+            dispatch_date  TEXT    DEFAULT '',
+            scope          TEXT    DEFAULT '',
+            items_json     TEXT    DEFAULT '[]',
+            personnel_json TEXT    NOT NULL DEFAULT '[]',
+            total_amount   REAL    DEFAULT 0,
+            tax_rate       REAL    DEFAULT 0.05,
+            status         TEXT    DEFAULT 'draft',
+            notes          TEXT    DEFAULT '',
+            created_by     TEXT    DEFAULT '',
+            created_at     TEXT,
+            updated_at     TEXT,
+            accepted_at    TEXT    NOT NULL DEFAULT '',
+            accepted_by    TEXT    NOT NULL DEFAULT '',
+            FOREIGN KEY (vendor_id) REFERENCES vendor_contractors(id)
+        );
+        INSERT INTO contractor_dispatches_new
+            (id, quote_no, vendor_id, dispatch_date, scope, items_json, personnel_json,
+             total_amount, tax_rate, status, notes, created_by, created_at, updated_at,
+             accepted_at, accepted_by)
+        SELECT id, quote_no, vendor_id, dispatch_date, scope, items_json, personnel_json,
+               total_amount, tax_rate, status, notes, created_by, created_at, updated_at,
+               accepted_at, accepted_by
+        FROM contractor_dispatches;
+        DROP TABLE contractor_dispatches;
+        ALTER TABLE contractor_dispatches_new RENAME TO contractor_dispatches;
+        CREATE INDEX IF NOT EXISTS idx_dispatches_quote_no ON contractor_dispatches(quote_no);
+        CREATE INDEX IF NOT EXISTS idx_dispatches_vendor ON contractor_dispatches(vendor_id);
+    """)
+    conn.commit()
+
+
+def _m038_inventory(conn):
+    """Create stock_items table (序號級庫存) — one row per physical unit, keyed by
+    (part_no, serial_no). No stock_batches parent table: a "batch" is just N rows
+    sharing a batch_no string created together at intake — a parent table would
+    only earn its keep if batches needed their own lifecycle (e.g. batch-level
+    approval), which nothing here requires. part_no references parts.part_no
+    without an enforced FK, matching the rest of this schema's convention of not
+    FK-constraining loosely-coupled reference columns."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS stock_items (
+            id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            part_no           TEXT    NOT NULL,
+            serial_no         TEXT    NOT NULL,
+            mac               TEXT    DEFAULT '',
+            status            TEXT    NOT NULL DEFAULT 'in_stock',
+            batch_no          TEXT    DEFAULT '',
+            cost              REAL    DEFAULT 0,
+            note              TEXT    DEFAULT '',
+            shipping_note_no  TEXT    DEFAULT '',
+            quote_no          TEXT    DEFAULT '',
+            case_device_id    TEXT    DEFAULT '',
+            consumed_at       TEXT    DEFAULT '',
+            consumed_by       TEXT    DEFAULT '',
+            created_by        TEXT    DEFAULT '',
+            created_at        TEXT,
+            updated_at        TEXT
+        )
+    """)
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_stock_items_part_serial ON stock_items(part_no, serial_no)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_stock_items_part_status ON stock_items(part_no, status)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_stock_items_batch ON stock_items(batch_no)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_stock_items_shipping_note ON stock_items(shipping_note_no)")
+    conn.commit()
+
+
+def _m039_monitor_guide(conn):
+    """Create monitor_* tables (監控系統選型導覽): 相機分類 × 場域情境矩陣式交叉,
+    選型資料庫第四個類別，資料形狀與 switch_guide 相同（同一種相機形式在不同場域
+    情境下適配度不同，非族系演進、非場域三級）。見 routers/monitor_guide.py 與
+    monitor_guide_seed.py。specs_json 這次直接隨建表加入，不必像 switch_guide
+    當初分兩版 migration 補（那是重建時才發現生產庫已用 ALTER 補過的歷史包袱）。"""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS monitor_scenarios (
+            code       TEXT PRIMARY KEY,
+            name       TEXT NOT NULL DEFAULT '',
+            description TEXT NOT NULL DEFAULT '',
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            updated_at TEXT NOT NULL DEFAULT ''
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS monitor_categories (
+            code            TEXT PRIMARY KEY,
+            name            TEXT NOT NULL DEFAULT '',
+            key_specs       TEXT NOT NULL DEFAULT '',
+            tags            TEXT NOT NULL DEFAULT '',
+            price_range     TEXT NOT NULL DEFAULT '',
+            dependency_note TEXT NOT NULL DEFAULT '',
+            watch_note      TEXT NOT NULL DEFAULT '',
+            sort_order      INTEGER NOT NULL DEFAULT 0,
+            updated_at      TEXT NOT NULL DEFAULT ''
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS monitor_fit (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            scenario_code TEXT NOT NULL REFERENCES monitor_scenarios(code) ON DELETE CASCADE,
+            category_code TEXT NOT NULL REFERENCES monitor_categories(code) ON DELETE CASCADE,
+            fit_level     TEXT NOT NULL DEFAULT '',
+            fit_note      TEXT NOT NULL DEFAULT '',
+            sort_order    INTEGER NOT NULL DEFAULT 0,
+            updated_at    TEXT NOT NULL DEFAULT ''
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS monitor_products (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            category_code TEXT NOT NULL REFERENCES monitor_categories(code) ON DELETE CASCADE,
+            brand         TEXT NOT NULL DEFAULT '',
+            model         TEXT NOT NULL DEFAULT '',
+            url           TEXT NOT NULL DEFAULT '',
+            label         TEXT NOT NULL DEFAULT '',
+            price_note    TEXT NOT NULL DEFAULT '',
+            specs_json    TEXT NOT NULL DEFAULT '[]',
+            sort_order    INTEGER NOT NULL DEFAULT 0
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_monitor_fit_scenario ON monitor_fit(scenario_code)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_monitor_fit_category ON monitor_fit(category_code)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_monitor_prod_category ON monitor_products(category_code)")
+
+    if conn.execute("SELECT 1 FROM monitor_scenarios LIMIT 1").fetchone():
+        conn.commit()
+        return
+
+    from monitor_guide_seed import SCENARIOS_JSON, CATEGORIES_JSON, FIT_JSON, PRODUCTS_JSON
+    now = datetime.now().isoformat()
+    for i, s in enumerate(json.loads(SCENARIOS_JSON)):
+        conn.execute(
+            "INSERT INTO monitor_scenarios (code, name, description, sort_order, updated_at) VALUES (?,?,?,?,?)",
+            (s[0], s[1], s[2], i, now),
+        )
+    for i, c in enumerate(json.loads(CATEGORIES_JSON)):
+        conn.execute(
+            "INSERT INTO monitor_categories "
+            "(code, name, key_specs, tags, price_range, dependency_note, watch_note, sort_order, updated_at) "
+            "VALUES (?,?,?,?,?,?,?,?,?)",
+            (c[0], c[1], c[2], c[3], c[4], c[5], c[6], i, now),
+        )
+    for i, f in enumerate(json.loads(FIT_JSON)):
+        conn.execute(
+            "INSERT INTO monitor_fit (scenario_code, category_code, fit_level, fit_note, sort_order, updated_at) "
+            "VALUES (?,?,?,?,?,?)",
+            (f[0], f[1], f[2], f[3], i, now),
+        )
+    for i, p in enumerate(json.loads(PRODUCTS_JSON)):
+        conn.execute(
+            "INSERT INTO monitor_products (category_code, brand, model, url, label, price_note, specs_json, sort_order) "
+            "VALUES (?,?,?,?,?,?,?,?)",
+            (p[0], p[1], p[2], p[3], p[4], p[5], p[6], i),
+        )
+    conn.commit()
+
+
+def _m040_access_guide(conn):
+    """Create access_* tables (門禁系統選型導覽): 元件分類 × 場域情境矩陣式交叉,
+    選型資料庫第五個類別，資料形狀與 switch_guide／monitor_guide 相同。見
+    routers/access_guide.py 與 access_guide_seed.py。"""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS access_scenarios (
+            code       TEXT PRIMARY KEY,
+            name       TEXT NOT NULL DEFAULT '',
+            description TEXT NOT NULL DEFAULT '',
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            updated_at TEXT NOT NULL DEFAULT ''
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS access_categories (
+            code            TEXT PRIMARY KEY,
+            name            TEXT NOT NULL DEFAULT '',
+            key_specs       TEXT NOT NULL DEFAULT '',
+            tags            TEXT NOT NULL DEFAULT '',
+            price_range     TEXT NOT NULL DEFAULT '',
+            dependency_note TEXT NOT NULL DEFAULT '',
+            watch_note      TEXT NOT NULL DEFAULT '',
+            sort_order      INTEGER NOT NULL DEFAULT 0,
+            updated_at      TEXT NOT NULL DEFAULT ''
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS access_fit (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            scenario_code TEXT NOT NULL REFERENCES access_scenarios(code) ON DELETE CASCADE,
+            category_code TEXT NOT NULL REFERENCES access_categories(code) ON DELETE CASCADE,
+            fit_level     TEXT NOT NULL DEFAULT '',
+            fit_note      TEXT NOT NULL DEFAULT '',
+            sort_order    INTEGER NOT NULL DEFAULT 0,
+            updated_at    TEXT NOT NULL DEFAULT ''
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS access_products (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            category_code TEXT NOT NULL REFERENCES access_categories(code) ON DELETE CASCADE,
+            brand         TEXT NOT NULL DEFAULT '',
+            model         TEXT NOT NULL DEFAULT '',
+            url           TEXT NOT NULL DEFAULT '',
+            label         TEXT NOT NULL DEFAULT '',
+            price_note    TEXT NOT NULL DEFAULT '',
+            specs_json    TEXT NOT NULL DEFAULT '[]',
+            sort_order    INTEGER NOT NULL DEFAULT 0
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_access_fit_scenario ON access_fit(scenario_code)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_access_fit_category ON access_fit(category_code)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_access_prod_category ON access_products(category_code)")
+
+    if conn.execute("SELECT 1 FROM access_scenarios LIMIT 1").fetchone():
+        conn.commit()
+        return
+
+    from access_guide_seed import SCENARIOS_JSON, CATEGORIES_JSON, FIT_JSON, PRODUCTS_JSON
+    now = datetime.now().isoformat()
+    for i, s in enumerate(json.loads(SCENARIOS_JSON)):
+        conn.execute(
+            "INSERT INTO access_scenarios (code, name, description, sort_order, updated_at) VALUES (?,?,?,?,?)",
+            (s[0], s[1], s[2], i, now),
+        )
+    for i, c in enumerate(json.loads(CATEGORIES_JSON)):
+        conn.execute(
+            "INSERT INTO access_categories "
+            "(code, name, key_specs, tags, price_range, dependency_note, watch_note, sort_order, updated_at) "
+            "VALUES (?,?,?,?,?,?,?,?,?)",
+            (c[0], c[1], c[2], c[3], c[4], c[5], c[6], i, now),
+        )
+    for i, f in enumerate(json.loads(FIT_JSON)):
+        conn.execute(
+            "INSERT INTO access_fit (scenario_code, category_code, fit_level, fit_note, sort_order, updated_at) "
+            "VALUES (?,?,?,?,?,?)",
+            (f[0], f[1], f[2], f[3], i, now),
+        )
+    for i, p in enumerate(json.loads(PRODUCTS_JSON)):
+        conn.execute(
+            "INSERT INTO access_products (category_code, brand, model, url, label, price_note, specs_json, sort_order) "
+            "VALUES (?,?,?,?,?,?,?,?)",
+            (p[0], p[1], p[2], p[3], p[4], p[5], p[6], i),
+        )
+    conn.commit()
+
+
+def _m041_gateway_guide(conn):
+    """Create gateway_* tables（閘道器與控制器選型導覽）：閘道器/控制器分類 × 場域情境
+    矩陣式交叉，選型資料庫第六個類別，資料形狀與 switch_guide／monitor_guide／
+    access_guide 相同。與 switch_guide 的邊界：switch_guide 只收「交換器」，本類別
+    收 Omada 的路由/閘道器（Wired/Wi-Fi/4G-5G/整合型）與硬體控制器（OC 系列），
+    兩者是網路架構中不同層級的設備，故獨立成類而非塞進既有交換器分類。見
+    routers/gateway_guide.py 與 gateway_guide_seed.py。"""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS gateway_scenarios (
+            code       TEXT PRIMARY KEY,
+            name       TEXT NOT NULL DEFAULT '',
+            description TEXT NOT NULL DEFAULT '',
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            updated_at TEXT NOT NULL DEFAULT ''
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS gateway_categories (
+            code            TEXT PRIMARY KEY,
+            name            TEXT NOT NULL DEFAULT '',
+            key_specs       TEXT NOT NULL DEFAULT '',
+            tags            TEXT NOT NULL DEFAULT '',
+            price_range     TEXT NOT NULL DEFAULT '',
+            dependency_note TEXT NOT NULL DEFAULT '',
+            watch_note      TEXT NOT NULL DEFAULT '',
+            sort_order      INTEGER NOT NULL DEFAULT 0,
+            updated_at      TEXT NOT NULL DEFAULT ''
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS gateway_fit (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            scenario_code TEXT NOT NULL REFERENCES gateway_scenarios(code) ON DELETE CASCADE,
+            category_code TEXT NOT NULL REFERENCES gateway_categories(code) ON DELETE CASCADE,
+            fit_level     TEXT NOT NULL DEFAULT '',
+            fit_note      TEXT NOT NULL DEFAULT '',
+            sort_order    INTEGER NOT NULL DEFAULT 0,
+            updated_at    TEXT NOT NULL DEFAULT ''
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS gateway_products (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            category_code TEXT NOT NULL REFERENCES gateway_categories(code) ON DELETE CASCADE,
+            brand         TEXT NOT NULL DEFAULT '',
+            model         TEXT NOT NULL DEFAULT '',
+            url           TEXT NOT NULL DEFAULT '',
+            label         TEXT NOT NULL DEFAULT '',
+            price_note    TEXT NOT NULL DEFAULT '',
+            specs_json    TEXT NOT NULL DEFAULT '[]',
+            sort_order    INTEGER NOT NULL DEFAULT 0
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_gateway_fit_scenario ON gateway_fit(scenario_code)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_gateway_fit_category ON gateway_fit(category_code)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_gateway_prod_category ON gateway_products(category_code)")
+
+    if conn.execute("SELECT 1 FROM gateway_scenarios LIMIT 1").fetchone():
+        conn.commit()
+        return
+
+    from gateway_guide_seed import SCENARIOS_JSON, CATEGORIES_JSON, FIT_JSON, PRODUCTS_JSON
+    now = datetime.now().isoformat()
+    for i, s in enumerate(json.loads(SCENARIOS_JSON)):
+        conn.execute(
+            "INSERT INTO gateway_scenarios (code, name, description, sort_order, updated_at) VALUES (?,?,?,?,?)",
+            (s[0], s[1], s[2], i, now),
+        )
+    for i, c in enumerate(json.loads(CATEGORIES_JSON)):
+        conn.execute(
+            "INSERT INTO gateway_categories "
+            "(code, name, key_specs, tags, price_range, dependency_note, watch_note, sort_order, updated_at) "
+            "VALUES (?,?,?,?,?,?,?,?,?)",
+            (c[0], c[1], c[2], c[3], c[4], c[5], c[6], i, now),
+        )
+    for i, f in enumerate(json.loads(FIT_JSON)):
+        conn.execute(
+            "INSERT INTO gateway_fit (scenario_code, category_code, fit_level, fit_note, sort_order, updated_at) "
+            "VALUES (?,?,?,?,?,?)",
+            (f[0], f[1], f[2], f[3], i, now),
+        )
+    for i, p in enumerate(json.loads(PRODUCTS_JSON)):
+        conn.execute(
+            "INSERT INTO gateway_products (category_code, brand, model, url, label, price_note, specs_json, sort_order) "
+            "VALUES (?,?,?,?,?,?,?,?)",
+            (p[0], p[1], p[2], p[3], p[4], p[5], p[6], i),
+        )
+    conn.commit()
+
+
 # Ordered list — index+1 is the migration version number.
+def _move_extra_items_for_quote(conn, quote_no, data, sales_person=""):
+    """把一張報價單 data_json 裡的 `settlement.extraItems[]` 搬進 `case_extra_expenses`。
+
+    從 `_m075_case_extra_expenses()` 抽出來的單筆版本，理由是**測試也需要同一套邏輯**
+    ——歸月日期的四層 fallback 若在測試裡另外複製一份，兩邊遲早會漂移，而漂移的後果
+    是「報表數字對不上」這種很難追的問題。回傳搬移筆數。
+    """
+    stl = (data.get("settlement") or {})
+    items = stl.get("extraItems") or []
+    if not items:
+        return 0
+
+    # 推定填寫人：精算完結人 → 業務 → 留空
+    inferred = (stl.get("finalizedBy") or "").strip() or (sales_person or "").strip()
+
+    # ⚠️ 歸月日期的 fallback 必須跟舊的 settlement_extra_expenses() 一致，
+    # 否則搬完之後這些錢會從月支出報表整筆消失。實測開發機 7 筆既有資料裡
+    # **有 6 筆 expenseDate 與 createdDate 都是空的**，全靠 editHistory 的
+    # 精算存檔時間歸月——少了這一層，7,990 元會無聲蒸發，正是 2026-09-09
+    # 修過的那一類問題（當月花掉的錢在報表上憑空不見）。
+    finalized_at = last_saved_at = ""
+    for h in (data.get("editHistory") or []):
+        htype = h.get("type") or ""
+        if htype == "settlement_finalized":
+            finalized_at = h.get("at") or finalized_at
+        if htype in ("settlement_finalized", "settlement_draft"):
+            last_saved_at = h.get("at") or last_saved_at
+
+    moved = 0
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        created = ((it.get("createdDate") or "").strip()
+                   or (it.get("expenseDate") or "").strip()
+                   or finalized_at or last_saved_at or "")[:10]
+        real_by = (it.get("createdBy") or "").strip()
+        conn.execute(
+            "INSERT INTO case_extra_expenses "
+            "(quote_no, category, description, qty, unit, unit_cost, total_cost, note, "
+            " expense_date, doc_no, files_json, created_by_name, created_by_inferred, "
+            " created_at, updated_at, status, approval_json) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (
+                quote_no,
+                (it.get("category") or "其他"),
+                # description 是精算表單現行的欄位名；name/desc 是更早期的欄位名，
+            # 舊的 settlement_extra_expenses() 有這層 fallback，搬移時必須一起帶過來，
+            # 否則舊資料的品項說明會整欄變空白（報表明細只剩類別，對不回憑證）
+            (it.get("description") or it.get("name") or it.get("desc") or ""),
+                float(it.get("qty") or 0),
+                (it.get("unit") or ""),
+                float(it.get("unitCost") or 0),
+                float(it.get("totalCost") or 0),
+                (it.get("note") or ""),
+                (it.get("expenseDate") or ""),
+                (it.get("docNo") or ""),
+                json.dumps(it.get("files") or [], ensure_ascii=False),
+                real_by or inferred,
+                0 if real_by else (1 if inferred else 0),
+                created,
+                created,
+                "已核准",
+                json.dumps({"migrated": True,
+                            "note": "2026-09-11 從 settlement.extraItems 搬移，"
+                                    "建立時尚無送審機制，一律視為已核准"},
+                           ensure_ascii=False),
+            ),
+        )
+        moved += 1
+    return moved
+
+
+def _m075_case_extra_expenses(conn):
+    """額外支出從 `settlement.extraItems`（data_json）正規化成 `case_extra_expenses` 表（2026-09-11）。
+
+    **為什麼要正規化**：使用者交辦把額外支出從精算頁搬到案件管理，並要求「填寫需送審」
+    與記錄「填寫日期／更動日期」。送審狀態與更動軌跡塞在 data_json 的陣列裡會很難查
+    （沒有 id 可掛簽核狀態、改一筆要整包重寫、歷史無從追）——比照 `case_stages`
+    當初從 data_json 正規化出來的前例，直接建表。規格見 `MOTRIX-ERP-QUICK.md` §5.10。
+
+    **這支 migration 會搬資料，不只是建表**。既有 `settlement.extraItems[]` 全部搬進新表，
+    搬完之後**刻意保留** data_json 裡的原陣列不刪除：
+
+      - 萬一新表出問題，原始資料還在，救得回來
+      - 但所有讀取端都已改讀新表（`helpers/quotations.py::case_extra_expenses()`），
+        原陣列從此是**唯讀的歷史備份，不再被任何程式碼寫入**
+      - 清掉它是之後確認新流程穩定後的獨立動作，不在這支 migration 裡做
+
+    **搬過來的資料一律標成「已核准」**：它們是在送審機制存在之前就建立並計入成本的，
+    若標成「待審核」會讓所有既有案件突然冒出一堆待簽核項目、並在核准前從成本裡消失，
+    是憑空製造的混亂。`approval_json` 記 `migrated: True` 以便日後區分。
+
+    **填寫人回填（使用者指定要回填）**：既有資料沒有記錄誰建立的——`settlement.html`
+    寫入 `createdBy` 時取的是 `this.session?.user?.display_name`，那個路徑在這個專案的
+    session 結構裡不存在（其他地方都是 `this.session.displayName`），所以**實測 7 筆
+    既有項目，createdBy 有值的是 0 筆**。既然沒有真實紀錄，回填只能用推定：
+
+      精算完結人 `settlement.finalizedBy` → 報價單業務 `sales_person` → 留空
+
+    推定的一律把 `created_by_inferred` 設為 1，畫面上要標示「（推定）」。
+    **不要把推定值當成事實**——這是回填，不是還原。
+    """
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS case_extra_expenses (
+            id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+            quote_no           TEXT NOT NULL,
+            category           TEXT NOT NULL DEFAULT '其他',
+            description        TEXT NOT NULL DEFAULT '',
+            qty                REAL NOT NULL DEFAULT 1,
+            unit               TEXT NOT NULL DEFAULT '',
+            unit_cost          REAL NOT NULL DEFAULT 0,
+            total_cost         REAL NOT NULL DEFAULT 0,
+            note               TEXT NOT NULL DEFAULT '',
+            expense_date       TEXT NOT NULL DEFAULT '',
+            doc_no             TEXT NOT NULL DEFAULT '',
+            files_json         TEXT NOT NULL DEFAULT '[]',
+            created_by         TEXT NOT NULL DEFAULT '',
+            created_by_name    TEXT NOT NULL DEFAULT '',
+            created_by_inferred INTEGER NOT NULL DEFAULT 0,
+            payer_username     TEXT NOT NULL DEFAULT '',
+            payer_name         TEXT NOT NULL DEFAULT '',
+            created_at         TEXT NOT NULL DEFAULT '',
+            updated_at         TEXT NOT NULL DEFAULT '',
+            updated_by_name    TEXT NOT NULL DEFAULT '',
+            status             TEXT NOT NULL DEFAULT '草稿',
+            approval_json      TEXT NOT NULL DEFAULT '{}'
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_case_extra_exp_quote ON case_extra_expenses(quote_no)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_case_extra_exp_status ON case_extra_expenses(status)")
+
+    # 已經搬過就不要再搬一次（migration 本身要可重跑）
+    if conn.execute("SELECT 1 FROM case_extra_expenses LIMIT 1").fetchone():
+        return
+
+    rows = conn.execute(
+        "SELECT quote_no, data_json, sales_person FROM quotations "
+        "WHERE json_extract(data_json,'$.settlement.extraItems') IS NOT NULL"
+    ).fetchall()
+
+    moved = 0
+    for r in rows:
+        try:
+            data = json.loads(r["data_json"] or "{}")
+        except Exception:
+            continue
+        moved += _move_extra_items_for_quote(conn, r["quote_no"], data, r["sales_person"])
+
+    if moved:
+        logger.info("_m075: 搬移 %d 筆額外支出到 case_extra_expenses（data_json 原陣列保留為唯讀備份）", moved)
+
+
+def _m076_xe_change_requests_and_stage_done(conn):
+    """兩件事（2026-09-11 第二輪交辦）：額外支出的「已核准後編輯＝變更申請」，
+    以及案件執行進度「勾選完成」要同步到行事曆。
+
+    **一、`case_extra_expenses` 的三個 change_* 欄位**
+
+    使用者指定：已核准的那筆**金額不動**，編輯內容要等簽核通過才生效。所以不能沿用
+    既有的 `status`/`approval_json`（那兩個一動，報表數字當場就變了，等於沒有簽核）。
+    改成把「提議的新內容」另外存一份，核准的瞬間才覆蓋回本體：
+
+      - `change_status`        '' / 草稿 / 待審核 / 簽核中 / 已駁回
+      - `change_json`          提議的新欄位值 ＋ `addFiles[]`（待核准附件）
+      - `change_approval_json` 變更申請自己的簽核狀態（形狀同 `approval_json`）
+
+    **為什麼用獨立欄位而不是共用 `approval_json`**：一筆已核准的支出可能被改很多次，
+    每次都是一輪獨立簽核。共用一欄的話，變更申請一送出就會蓋掉「這筆原本是誰核准的」
+    ——那正是之後查帳要看的東西。原核准紀錄留在 `approval_json`，歷次變更的結果
+    append 進 `approval_json.changeHistory`。
+
+    **二、`case_stages.google_calendar_done_event_id` / `daily_task_id`**
+
+    既有的 `google_calendar_event_id`（v55）記的是**到期日**事件，跟這次要做的
+    **完成日**事件是兩個不同日期、不同語意的事件，共用一欄會互相覆蓋（設了到期日
+    再勾完成，後者會把前者的事件改成完成日，到期提醒就消失了）。所以另開一欄。
+
+    `daily_task_id` 記的是同步到「每日工作事項」月曆的那一列（使用者要求兩邊都要）。
+    取消勾選要能把它刪掉，沒有 id 就只能靠標題比對去猜，改個標題就對不上了。
+    """
+    for col, ddl in (
+        ("change_status",        "TEXT NOT NULL DEFAULT ''"),
+        ("change_json",          "TEXT NOT NULL DEFAULT '{}'"),
+        ("change_approval_json", "TEXT NOT NULL DEFAULT '{}'"),
+    ):
+        if not _col_exists(conn, "case_extra_expenses", col):
+            conn.execute(f"ALTER TABLE case_extra_expenses ADD COLUMN {col} {ddl}")
+
+    if not _col_exists(conn, "case_stages", "google_calendar_done_event_id"):
+        conn.execute("ALTER TABLE case_stages ADD COLUMN google_calendar_done_event_id TEXT NOT NULL DEFAULT ''")
+    if not _col_exists(conn, "case_stages", "daily_task_id"):
+        conn.execute("ALTER TABLE case_stages ADD COLUMN daily_task_id INTEGER NOT NULL DEFAULT 0")
+    conn.commit()
+
+
+def _m077_completion_notes(conn):
+    """完工單（`completion_notes`）——2026-09-12 交辦。
+
+    使用者：「在案件管理內增加完工單的選項，參考出貨單的形式跟內容建立完工單，
+    一樣走流程申請完工。」所以這張表刻意跟 `shipping_notes` 同構：一個報價單
+    可以有多張完工單（分階段完工／分區完工），走同一套分層簽核，核准後客戶回簽。
+
+    **跟出貨單不一樣的欄位，以及為什麼**（照台灣工程業完工單慣例）：
+
+    | 欄位 | 為什麼要 |
+    |---|---|
+    | `site_address` | 出貨單問的是「送到哪」，完工單問的是「在哪裡施工」，常常不同地點 |
+    | `start_date` / `completion_date` | 完工單的核心就是這兩個日期——保固起算、逾期罰則、工期爭議全看它 |
+    | `site_manager` | 我方現場負責人。出了問題要找得到人，不是找開單的人 |
+    | `recipient` | 客戶方驗收人。回簽欄位簽的就是他 |
+    | `work_summary` | 施工說明／工作摘要，敘述性的，不是逐項清單 |
+    | `test_result` | 測試與檢驗結果。弱電／監控／門禁這類驗收一定要有 |
+    | `warranty_months` | 保固月數。**保固自完工日起算**，所以非得跟完工日放同一張單不可 |
+    | `pending_items` | 遺留事項／待改善。**這欄最重要也最常被省略**——完工不等於零缺失，不留這欄就會變成「先簽了再說」，之後爭議沒有依據 |
+
+    品項 `items_json` 比照出貨單的形狀，多一個 `status`（完成／部分完成／未施作），
+    因為完工單的品項本來就可能不是每一項都 100% 完成——那正是 `pending_items`
+    要對應的東西。
+
+    **刻意不做的**：不自動建立保固追蹤紀錄。保固模組有自己的資料來源與流程，
+    在這裡偷偷塞一筆會變成兩套來源打架；先把 `warranty_months` 存好、PDF 上印
+    出保固起訖，要不要接進保固追蹤之後另議。
+    """
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS completion_notes (
+            id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            note_no           TEXT    NOT NULL UNIQUE,
+            quote_no          TEXT    NOT NULL,
+            status            TEXT    NOT NULL DEFAULT '草稿',
+            customer_name     TEXT    NOT NULL DEFAULT '',
+            project_name      TEXT    NOT NULL DEFAULT '',
+            site_address      TEXT    NOT NULL DEFAULT '',
+            start_date        TEXT    NOT NULL DEFAULT '',
+            completion_date   TEXT    NOT NULL DEFAULT '',
+            site_manager      TEXT    NOT NULL DEFAULT '',
+            recipient         TEXT    NOT NULL DEFAULT '',
+            items_json        TEXT    NOT NULL DEFAULT '[]',
+            work_summary      TEXT    NOT NULL DEFAULT '',
+            test_result       TEXT    NOT NULL DEFAULT '',
+            warranty_months   INTEGER NOT NULL DEFAULT 12,
+            pending_items     TEXT    NOT NULL DEFAULT '',
+            notes             TEXT    NOT NULL DEFAULT '',
+            data_json         TEXT    NOT NULL DEFAULT '{}',
+            is_signed         INTEGER NOT NULL DEFAULT 0,
+            signed_by         TEXT    NOT NULL DEFAULT '',
+            signed_at         TEXT    NOT NULL DEFAULT '',
+            signed_log        TEXT    NOT NULL DEFAULT '[]',
+            signed_files_json TEXT    NOT NULL DEFAULT '[]',
+            export_count      INTEGER NOT NULL DEFAULT 0,
+            export_log        TEXT    NOT NULL DEFAULT '[]',
+            created_by        TEXT    NOT NULL DEFAULT '',
+            created_at        TEXT    NOT NULL DEFAULT '',
+            updated_at        TEXT    NOT NULL DEFAULT ''
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_completion_notes_quote ON completion_notes(quote_no)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_completion_notes_status ON completion_notes(status)")
+    conn.commit()
+
+
+def _m078_completion_contact_phone(conn):
+    """完工單加 `contact_phone`（2026-09-12）。
+
+    使用者要求「基本資料可拉報價單的地址包含聯絡人」——報價單的聯絡人資訊是
+    `contactName` / `contactPhone` / `contactEmail` 三件套，完工單原本只有
+    `recipient`（驗收人姓名），少了電話。完工單是會交到客戶手上、之後可能要回頭
+    聯絡的文件，只有名字沒有電話等於還要再去翻報價單。
+
+    **開欄位而不是塞 data_json**：這是業務資料不是版面設定（標題那組是後者，所以
+    放 data_json）。日後若要「查某支電話關聯哪些完工單」也查得到。
+    """
+    if not _col_exists(conn, "completion_notes", "contact_phone"):
+        conn.execute("ALTER TABLE completion_notes ADD COLUMN contact_phone TEXT NOT NULL DEFAULT ''")
+    conn.commit()
+
+
+def _m079_user_activity(conn):
+    """在線時間統計（2026-09-14 使用者要求：「右上角顯示在線成員與數量，並統計每個
+    成員在線上的時間，這些數據只有超級管理員看得到」）。
+
+    **為什麼是「每人每天一列」而不是逐次登入的區間表**：需求是「累計時數」，
+    而 session 可以同時多個（同一個人電腦＋手機）、可以被閒置逾時砍掉、也可能
+    整天不登出。區間表要處理重疊與未關閉的區間，查詢時還得逐段相加；每天一列的
+    累加器把那些問題都留在寫入端，查詢就只是 SUM。
+
+    **秒數怎麼來**：`main.py::auth_middleware` 每次請求都會算「距離上次活躍多久」，
+    那個差值本來就是既有的閒置判斷在用的。差值在門檻內就視為這段時間人在線上、
+    累加進當天；超過門檻代表中間離開過，只重新起算、不補那段空白。
+    上限在 `_ACTIVITY_GAP_MAX`（main.py），避免把「昨天關電腦、今天才回來」算成
+    連續在線。
+
+    `day` 存台灣本地日期字串（比照全系統其他時間欄位一律用 `datetime.now()`），
+    不是 UTC——報表是給人看的，跨日要以人的作息為準。
+    """
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS user_activity_daily (
+            user_id        INTEGER NOT NULL,
+            day            TEXT    NOT NULL,
+            active_seconds INTEGER NOT NULL DEFAULT 0,
+            first_seen_at  TEXT    NOT NULL DEFAULT '',
+            last_seen_at   TEXT    NOT NULL DEFAULT '',
+            PRIMARY KEY (user_id, day)
+        )
+    """)
+    # 報表一律以「日期區間 + 全部使用者」查詢，day 放前面才吃得到索引
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_user_activity_day ON user_activity_daily(day, user_id)")
+    conn.commit()
+
+
+def _m080_user_request_log(conn):
+    """逐條操作軌跡（2026-09-14 使用者要求：「在線時數統計，同步能看使用者點了
+    什麼看了什麼，逐條紀錄」）。
+
+    **跟既有 `audit_log` 的分工**：`audit_log` 記的是「**改了什麼**」（建立/修改/
+    刪除，帶實體與摘要，是業務稽核用的），這張表記的是「**去過哪裡、點了什麼**」
+    ——包含純檢視的 GET。兩者不合併：audit_log 的每一列都要有業務語意，塞進 GET
+    會把它稀釋成流水帳，反而讓真正的稽核查不動。
+
+    **`page` 欄位來自 Referer**：瀏覽器的 fetch 會自動帶上，等於免費拿到「使用者
+    當時站在哪一頁」，不必去每個頁面插埋點。取不到就留空。
+
+    **刻意不記的東西**：
+    - 輪詢類端點（通知、模組紅點、在線名單、ping…）——那是機器行為不是人的行為，
+      記了只會把軌跡淹掉，見 main.py `_TRAIL_SKIP_PREFIXES`
+    - 請求內容（body / query 值）——軌跡是「誰在什麼時候看了哪一頁、動了哪個資源」，
+      把內容也記下來等於在資料庫裡多存一份業務資料的副本，外洩風險與價值不成比例
+    - 密碼、token 一類自然也不會進來（只存 method + path）
+
+    **保留期限**：`daily_tasks.py::_prune_request_log()` 每天清掉 90 天前的資料。
+    這種表不設上限就會變成資料庫裡最大的一張。
+    """
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS user_request_log (
+            id      INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            at      TEXT    NOT NULL,
+            method  TEXT    NOT NULL,
+            path    TEXT    NOT NULL,
+            page    TEXT    NOT NULL DEFAULT '',
+            status  INTEGER NOT NULL DEFAULT 0
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_request_log_user_at ON user_request_log(user_id, at)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_request_log_at ON user_request_log(at)")
+    conn.commit()
+
+
+def _m082_feed_attachments(conn):
+    """案件動態留言與業務開發記錄可附照片／檔案（2026-09-14 使用者要求：
+    「業務開發跟案件的動態都要有上傳照片或是檔案的功能」）。
+
+    **為什麼是 JSON 欄位而不是獨立的附件表**：這兩處的附件沒有任何「跨紀錄查詢」
+    的需求——不會有人問「這張照片還被哪幾則留言引用」。附件永遠隨著它所屬的那
+    一則留言／記錄一起讀、一起刪，生命週期完全綁定。開一張表要多一次 JOIN、
+    多一組外鍵維護，換不到任何查詢能力。這跟 `_m078` 決定「開欄位不塞 data_json」
+    的判準是同一個：**看有沒有跨列查詢的需求**，不是看資料長得複雜不複雜。
+    報價單／出貨單／開票憑據三處的回簽附件（2026-08-24）也是存 JSON 欄位，
+    這裡沿用同一個慣例與同一組 helpers/uploads.py 函式。
+
+    欄位存的是 save_document_files() 回傳的 metadata 陣列
+    （id/filename/path/size/mime/uploadedBy/uploadedAt），實體檔案在 uploads/
+    底下，由既有的 /api/uploads/{file_path:path} 簽名 URL 端點提供讀取，
+    archive.py::_mirror_uploads() 會自動納入雲端備份。
+
+    DEFAULT '[]' 而不是允許 NULL：讀取端一律 json.loads，少一個 None 分支。
+    """
+    for table in ("case_updates", "dev_logs"):
+        if not _col_exists(conn, table, "files_json"):
+            conn.execute(
+                f"ALTER TABLE {table} ADD COLUMN files_json TEXT NOT NULL DEFAULT '[]'"
+            )
+    conn.commit()
+
+
+def _m081_edit_presence(conn):
+    """同時編輯警示（2026-09-14 使用者要求：「如果有兩個人同時進入報價單、或是修改
+    同一個表格的內容，需跳出警示，避免兩人同時修改損失一方資料」）。
+
+    **這是第二道，不是第一道**。第一道早就有：存檔時比對 `updated_at`，對不上就
+    409「已被其他人更新，請重新載入後再存」（報價單／案件資料／款項／規劃書／
+    業務開發案／派工單都有）。那道保證**資料不會被無聲覆蓋**，但使用者是在打完
+    20 分鐘的字之後才知道白做了——這張表補的是「一進去就知道有人在編」。
+
+    **刻意做成 presence 而不是 lock**：
+    - 鎖需要處理「誰來解鎖」——人關了分頁、當機、下班沒關，鎖就卡在那裡，最後
+      一定要做「強制解鎖」，而強制解鎖又會回到「兩個人同時編」的原點
+    - 這間公司同時線上的人數是個位數，衝突罕見但代價高；「看得到彼此」已經足夠
+      讓人先喊一聲，不需要用鎖把流程綁死
+    - 真的搶著存，還有第一道 409 擋著資料
+
+    `last_seen_at` 由前端心跳更新（30 秒一次），超過 `_PRESENCE_TTL` 沒更新就視為
+    離開——不必依賴「關閉頁面時要記得通知伺服器」這種一定會漏的事件。
+    """
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS edit_presence (
+            doc_type     TEXT    NOT NULL,
+            doc_id       TEXT    NOT NULL,
+            user_id      INTEGER NOT NULL,
+            username     TEXT    NOT NULL DEFAULT '',
+            display_name TEXT    NOT NULL DEFAULT '',
+            started_at   TEXT    NOT NULL DEFAULT '',
+            last_seen_at TEXT    NOT NULL DEFAULT '',
+            PRIMARY KEY (doc_type, doc_id, user_id)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_edit_presence_doc ON edit_presence(doc_type, doc_id, last_seen_at)")
+    conn.commit()
+
+
 _MIGRATIONS = [
     _m001_export_columns,        # v1
     _m002_sessions_expires,      # v2
@@ -1355,6 +3409,54 @@ _MIGRATIONS = [
     _m032_switch_guide,                       # v32
     _m033_switch_products_specs,              # v33
     _m034_shipping_notes,                     # v34
+    _m035_module_versions_unique_dedup,       # v35
+    _m036_dispatch_personnel,                 # v36
+    _m037_dispatch_vendor_optional,            # v37
+    _m038_inventory,                           # v38
+    _m039_monitor_guide,                       # v39
+    _m040_access_guide,                        # v40
+    _m041_gateway_guide,                       # v41
+    _m042_dev_cases_relink_review,              # v42
+    _m043_notification_prefs,                   # v43
+    _m044_dispatch_invoice_no,                   # v44
+    _m045_contractor_payment_vouchers,           # v45
+    _m046_invoice_vouchers,                      # v46
+    _m047_invoice_vouchers_amount,                # v47
+    _m048_org_structure,                          # v48
+    _m049_division_manager,                       # v49
+    _m050_project_department,                     # v50
+    _m051_case_stages_normalize,                  # v51
+    _m052_fix_stage_json_ids,                     # v52
+    _m053_payment_requests,                       # v53
+    _m054_signed_upload_files,                    # v54
+    _m055_case_stage_calendar_event,              # v55
+    _m056_user_list_prefs,                        # v56
+    _m057_payment_request_stage,                   # v57
+    _m058_backfill_deal_won_at,                    # v58
+    _m059_fix_deal_won_at_from_audit_log,          # v59
+    _m060_dispatch_files,                          # v60
+    _m061_case_semi_unlock,                        # v61
+    _m062_case_project_merge,                      # v62
+    _m063_work_log_contact_type,                   # v63
+    _m064_network_plans,                           # v64
+    _m065_automation_guide,                        # v65
+    _m066_parts_safety_stock,                      # v66
+    _m067_approval_delegates,                      # v67
+    _m068_dispatch_payable_date_invoice_files,      # v68
+    _m069_t100_export_confirmations,                # v69
+    _m070_stock_batches,                            # v70
+    _m071_paid_bank_account,                        # v71
+    _m072_totp,                                     # v72
+    _m073_webauthn_credentials,                     # v73
+    _m074_webauthn_rp_id,                           # v74
+    _m075_case_extra_expenses,                      # v75
+    _m076_xe_change_requests_and_stage_done,        # v76
+    _m077_completion_notes,                         # v77
+    _m078_completion_contact_phone,                 # v78
+    _m079_user_activity,                            # v79
+    _m080_user_request_log,                         # v80
+    _m081_edit_presence,                            # v81
+    _m082_feed_attachments,                         # v82
 ]
 
 
