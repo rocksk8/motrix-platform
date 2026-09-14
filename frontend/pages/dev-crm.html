@@ -923,6 +923,18 @@
                    style="font-size:11px;color:#D97706;margin-bottom:10px;font-family:var(--font-zh)">
                 ⚠ 代他人填寫，儲存後需主管審核
               </div>
+              <!-- 附件（2026-09-14，DB v82）。編輯既有記錄時不顯示：那支 PUT
+                   端點沒有改成 multipart，附件要換走「刪掉再重傳」，不是整筆覆寫。 -->
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px" x-show="!editingLogId">
+                <label style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--text-secondary);font-family:var(--font-zh);cursor:pointer">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                  <span x-text="logFiles.length ? `已選 ${logFiles.length} 個檔案` : '附加照片／PDF'"></span>
+                  <input type="file" accept="image/jpeg,image/png,application/pdf" multiple
+                         style="display:none" x-ref="logFileInput" @change="onLogFilesSelected($event)">
+                </label>
+                <button class="btn btn-ghost btn-sm" x-show="logFiles.length"
+                        @click="logFiles=[]; if($refs.logFileInput) $refs.logFileInput.value=''">清除</button>
+              </div>
               <div style="display:flex;gap:8px;justify-content:flex-end">
                 <button class="btn btn-ghost btn-sm" @click="cancelLogForm()">取消</button>
                 <button class="btn btn-primary btn-sm" @click="saveLog()" :disabled="logSaving">
@@ -956,6 +968,30 @@
                 </div>
                 <div class="dc-log-card__content" x-text="log.content"></div>
                 <div class="dc-log-card__next" x-show="log.nextAction" x-text="log.nextAction"></div>
+                <!-- 附件：圖片出縮圖、PDF 出檔名連結。刪除鈕只給 admin+ -->
+                <template x-if="(log.files||[]).length > 0">
+                  <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;align-items:flex-start">
+                    <template x-for="f in log.files" :key="f.id">
+                      <div style="position:relative">
+                        <template x-if="isLogImage(f)">
+                          <a :href="logFileUrl(f)" target="_blank" :title="f.filename">
+                            <img :src="logFileUrl(f)" loading="lazy"
+                                 style="width:68px;height:68px;object-fit:cover;border-radius:6px;border:1px solid var(--border-light);display:block">
+                          </a>
+                        </template>
+                        <template x-if="!isLogImage(f)">
+                          <a :href="logFileUrl(f)" target="_blank"
+                             style="display:flex;align-items:center;gap:5px;padding:6px 10px;border:1px solid var(--border-light);border-radius:6px;font-size:11px;color:var(--text-secondary);text-decoration:none;background:#fff;max-width:180px">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>
+                            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" x-text="f.filename"></span>
+                          </a>
+                        </template>
+                        <button x-show="isAdmin" @click.stop="deleteLogFile(log, f)" title="刪除附件（限管理員）"
+                                style="position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;border:1px solid var(--border-light);background:#fff;color:var(--text-dim);font-size:11px;line-height:1;cursor:pointer;padding:0">×</button>
+                      </div>
+                    </template>
+                  </div>
+                </template>
                 <div class="dc-log-card__foot">
                   <span x-text="log.logByName"></span>
                   <span style="color:var(--border-light)">·</span>
@@ -1797,18 +1833,44 @@ function devCrmPage() {
       this.editingLogId = null
     },
 
+    logFiles: [],
+    onLogFilesSelected(e) { this.logFiles = Array.from(e.target.files || []) },
+    // 附件刪除限 admin+（2026-09-14 使用者裁示）：代填的記錄要經管理員審核，
+    // 審核過了還能讓原建立者悄悄抽換附件的話，那道審核就沒有意義。
+    async deleteLogFile(log, f) {
+      if (!this.isAdmin) return
+      if (!confirm(`確定刪除附件「${f.filename}」？此動作無法復原。`)) return
+      const r = await fetch(`/api/dev-logs/${log.id}/files/${f.id}`, { method: 'DELETE', headers: this._h() })
+      if (r.ok) { log.files = (await r.json()).files || [] }
+      else { const d = await r.json().catch(() => ({})); this._toast(d.detail || '刪除失敗') }
+    },
+    logFileUrl(f) { return `/api/uploads/${f.path}?pt=${encodeURIComponent(this.token)}` },
+    isLogImage(f) { return /\.(jpe?g|png)$/i.test(f.filename || f.path || '') },
+
     async saveLog() {
       if (!this.logForm.log_date) { this._toast('請填寫記錄日期'); return }
-      if (!this.logForm.content.trim()) { this._toast('請填寫記錄內容'); return }
+      if (!this.logForm.content.trim() && !this.logFiles.length) {
+        this._toast('請填寫記錄內容或上傳附件'); return
+      }
       this.logSaving = true
       try {
         const url = this.editingLogId
           ? '/api/dev-logs/' + this.editingLogId
           : '/api/dev-cases/' + this.selectedCase.id + '/logs'
-        const r = await fetch(url, {
-          method: this.editingLogId ? 'PUT' : 'POST',
-          headers: this._h(), body: JSON.stringify(this.logForm),
-        })
+        // 新增走 multipart（可帶附件、一次送出）；編輯維持既有的 JSON PUT
+        // ——那支端點沒有改，附件要換走「刪掉再上傳」而不是整筆覆寫
+        let r
+        if (this.editingLogId) {
+          r = await fetch(url, { method: 'PUT', headers: this._h(), body: JSON.stringify(this.logForm) })
+        } else {
+          const fd = new FormData()
+          Object.entries(this.logForm).forEach(([k, v]) => fd.append(k, v == null ? '' : v))
+          this.logFiles.forEach(f => fd.append('files', f))
+          // 不要自己設 Content-Type——multipart 的 boundary 要讓瀏覽器帶
+          const h = this._h()
+          delete h['Content-Type']
+          r = await fetch(url, { method: 'POST', headers: h, body: fd })
+        }
         if (!r.ok) { const d = await r.json(); this._toast(d.detail || '儲存失敗'); return }
         const saved = await r.json()
         if (this.editingLogId) {
@@ -1819,6 +1881,7 @@ function devCrmPage() {
         }
         this.showLogForm = false
         this.editingLogId = null
+        this.logFiles = []
         if (saved.needsApproval) {
           this.pendingCount++
           this._toast('記錄已建立（代他人填寫，已送主管審核）')

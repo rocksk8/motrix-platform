@@ -14,7 +14,7 @@ from urllib.parse import quote as urlquote
 
 logger = logging.getLogger(__name__)
 
-from fastapi import APIRouter, Body, HTTPException, Header, UploadFile, File
+from fastapi import APIRouter, Body, Form, HTTPException, Header, UploadFile, File
 from fastapi.responses import Response
 from pydantic import BaseModel
 
@@ -4190,12 +4190,17 @@ def list_case_updates(quote_no: str, authorization: str = Header(None)):
 
     # 1. Manual comments
     for c in conn.execute(
-        "SELECT id, author, content, type, created_at FROM case_updates "
+        "SELECT id, author, content, type, created_at, files_json FROM case_updates "
         "WHERE quote_no=? ORDER BY created_at DESC", (quote_no,)
     ).fetchall():
+        try:
+            c_files = json.loads(c["files_json"] or "[]")
+        except Exception:
+            c_files = []
         results.append({
             "id": c["id"],
             "source": "comment",
+            "files": c_files,
             "author": c["author"],
             "authorDisplay": dn_map.get(c["author"], c["author"]),
             "content": c["content"],
@@ -4298,12 +4303,29 @@ def list_case_updates(quote_no: str, authorization: str = Header(None)):
 
 
 @router.post("/api/quotations/{quote_no}/updates", status_code=201)
-def post_case_update(quote_no: str, body: dict = Body(...), authorization: str = Header(None)):
+async def post_case_update(quote_no: str,
+                           content: str = Form(""),
+                           important: str = Form(""),
+                           files: List[UploadFile] = File(default=[]),
+                           authorization: str = Header(None)):
+    """案件動態留言（2026-09-14 起可附照片／檔案）。
+
+    **改成 multipart 而不是另開一支補傳端點**（使用者裁示）：一次請求送出，
+    不會出現「文字存了、檔案失敗」這種半完成狀態——留言板的那一則已經貼出去
+    了，附件卻沒上去，使用者只能再貼一則說「補圖」。
+
+    `important` 走 Form 會是字串，"true"/"1"/"on" 都當真；沿用瀏覽器 FormData
+    的慣例，不要求前端自己轉。
+
+    照片會壓上「上傳者 · 日期時間 · GPS」浮水印（使用者裁示），PDF 不動，
+    見 helpers/uploads.py::save_document_files() 的 watermark_by。
+    """
     user = _require_user(authorization)
-    content = (body.get("content") or "").strip()
-    important = bool(body.get("important"))
-    if not content:
-        raise HTTPException(400, "內容不得為空")
+    content = (content or "").strip()
+    important = str(important).strip().lower() in ("1", "true", "on", "yes")
+    # 附件自己就是內容——只傳圖不打字是合理的用法，不該被「內容不得為空」擋下
+    if not content and not files:
+        raise HTTPException(400, "請輸入內容或至少上傳一個檔案")
     conn = get_db()
     _guard_case(conn, quote_no, user, allow_module="case_manage")
     qrow = conn.execute(
@@ -4314,10 +4336,20 @@ def post_case_update(quote_no: str, body: dict = Body(...), authorization: str =
         raise HTTPException(404, "報價單不存在")
     now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     update_type = "important" if important else "comment"
+    saved_files = []
+    if files:
+        # 存檔在 INSERT 之前：檔案存失敗（格式/大小）就整批擋下，不會留下
+        # 一則沒有附件的留言讓使用者以為傳成功了
+        saved_files = await save_document_files(
+            "case_updates", quote_no, files,
+            user.get("display_name") or user["username"],
+            watermark_by=user.get("display_name") or user["username"],
+        )
     cur = conn.execute(
-        "INSERT INTO case_updates (quote_no, author, content, type, created_at) "
-        "VALUES (?,?,?,?,?)",
-        (quote_no, user["username"], content, update_type, now),
+        "INSERT INTO case_updates (quote_no, author, content, type, created_at, files_json) "
+        "VALUES (?,?,?,?,?,?)",
+        (quote_no, user["username"], content, update_type, now,
+         json.dumps(saved_files, ensure_ascii=False)),
     )
     new_id = cur.lastrowid
     conn.commit()
@@ -4341,6 +4373,7 @@ def post_case_update(quote_no: str, body: dict = Body(...), authorization: str =
     return {
         "id": new_id,
         "source": "comment",
+        "files": saved_files,
         "author": user["username"],
         "authorDisplay": author_display,
         "content": content,
@@ -4355,7 +4388,7 @@ def delete_case_update(quote_no: str, uid: int, authorization: str = Header(None
     user = _require_user(authorization)
     conn = get_db()
     row = conn.execute(
-        "SELECT id, author FROM case_updates WHERE id=? AND quote_no=?", (uid, quote_no)
+        "SELECT id, author, files_json FROM case_updates WHERE id=? AND quote_no=?", (uid, quote_no)
     ).fetchone()
     if not row:
         conn.close()
@@ -4363,12 +4396,52 @@ def delete_case_update(quote_no: str, uid: int, authorization: str = Header(None
     if user["role"] not in ("superadmin", "admin") and user["username"] != row["author"]:
         conn.close()
         raise HTTPException(403, "只能刪除自己的留言")
+    # 留言刪掉，它的附件也要從磁碟上清掉——否則 uploads/ 會留下永遠沒人引用的
+    # 孤兒檔案，而且 archive.py::_mirror_uploads() 只增不減，會一路跟著進雲端備份
+    try:
+        for f in json.loads(row["files_json"] or "[]"):
+            full = os.path.join(_uploads_mod.UPLOADS_ROOT, f.get("path", ""))
+            if f.get("path") and os.path.isfile(full):
+                os.remove(full)
+    except Exception:
+        pass
     conn.execute("DELETE FROM case_updates WHERE id=?", (uid,))
     conn.commit()
     conn.close()
     notify_module_activity("案件留言板", "刪除留言", user.get("display_name") or user["username"],
                             quote_no, "case-management.html")
     return {"ok": True}
+
+
+@router.delete("/api/quotations/{quote_no}/updates/{uid}/files/{file_id}")
+def delete_case_update_file(quote_no: str, uid: int, file_id: str,
+                            authorization: str = Header(None)):
+    """刪除動態留言的單一附件——**限 admin 以上**（2026-09-14 使用者裁示）。
+
+    跟「刪整則留言」的權限刻意不同：整則留言發文者自己就能收回（那是撤回自己
+    說過的話），但單獨抽掉一張附件是**只改證據、留下文字**，等於事後修改已經
+    被別人看過的內容。這種事留給管理員。
+    """
+    user = _require_user(authorization)
+    if user["role"] not in ("superadmin", "admin"):
+        raise HTTPException(403, "僅管理員以上可刪除附件")
+    conn = get_db()
+    _guard_case(conn, quote_no, user, allow_module="case_manage")
+    row = conn.execute(
+        "SELECT id, files_json FROM case_updates WHERE id=? AND quote_no=?", (uid, quote_no)
+    ).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(404, "留言不存在")
+    existing = json.loads(row["files_json"] or "[]")
+    remaining = delete_document_file("case_updates", quote_no, existing, file_id)
+    conn.execute("UPDATE case_updates SET files_json=? WHERE id=?",
+                 (json.dumps(remaining, ensure_ascii=False), uid))
+    conn.commit()
+    conn.close()
+    _audit(_tok(authorization), "case_update.delete_file", "quotation", quote_no,
+           f"{quote_no} 留言 #{uid} 刪除附件")
+    return {"ok": True, "files": remaining}
 
 
 @router.get("/api/quotations/{quote_no}/pdf-download")

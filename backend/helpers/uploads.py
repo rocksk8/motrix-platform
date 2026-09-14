@@ -38,13 +38,24 @@ def _effective_subfolder(subfolder: str) -> str:
     return subfolder
 
 
-async def save_document_files(subfolder: str, doc_no: str, files: List[UploadFile], uploaded_by: str) -> list:
+async def save_document_files(subfolder: str, doc_no: str, files: List[UploadFile],
+                              uploaded_by: str, watermark_by: str = '') -> list:
     """存檔 files 到 uploads/{subfolder}/{doc_no}/{uuid}{ext}（demo 帳號會被
     導向 uploads/_demo_uploads/{subfolder}/{doc_no}/，見 _effective_subfolder()），
     回傳新增檔案的 metadata 陣列（呼叫端負責把這份陣列追加進資料庫的 JSON
     欄位）。單一檔案副檔名不在白名單或超過大小上限會直接 raise
     HTTPException(400)——寧可整批擋下讓使用者重新選檔，也不要靜默跳過造成
-    使用者以為傳成功。"""
+    使用者以為傳成功。
+
+    watermark_by（2026-09-14）：給了名字就把**圖片**先過一次
+    photos.py::_process_project_photo()（右下角壓上「上傳者 · 日期時間 · GPS」
+    那條，GPS 只在 EXIF 有的時候才出現），再存檔；PDF 不動。
+    案件動態與業務開發記錄的照片走這條（使用者裁示要加浮水印與當天日期）。
+
+    **import 刻意寫在函式裡面**：這個模組原本的設計就是「單純存檔、不碰浮水印」
+    （見檔頭），module-level import photos 會讓每個只想存 PDF 的呼叫端也被迫
+    載入 Pillow 相依。放在用到的分支裡，沒傳 watermark_by 的呼叫端行為與相依
+    完全不變。"""
     if not files:
         raise HTTPException(400, "請至少選擇一個檔案")
 
@@ -63,6 +74,14 @@ async def save_document_files(subfolder: str, doc_no: str, files: List[UploadFil
             raise HTTPException(400, f"檔案過大：{upload.filename}（單檔上限 20MB）")
         if not raw:
             raise HTTPException(400, f"檔案是空的：{upload.filename}")
+        if watermark_by and ext in ('.jpg', '.jpeg', '.png'):
+            try:
+                from photos import _process_project_photo
+                raw = _process_project_photo(raw, watermark_by)[0]
+            except Exception:
+                # 浮水印失敗不該讓整次上傳失敗——原圖照存，比丟掉使用者的檔案好。
+                # （Pillow 沒裝時 _process_project_photo 本身就會原樣回傳。）
+                pass
         fname = uuid.uuid4().hex[:16] + ext
         with open(os.path.join(save_dir, fname), 'wb') as f:
             f.write(raw)

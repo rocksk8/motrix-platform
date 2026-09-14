@@ -2915,31 +2915,75 @@ function app() {
     async postComment() {
       const content = this.newComment.trim()
       if (!content || this.postingComment) return
-      // 有選照片、填執行時數、選聯絡事項類型、改過日期、或指定記錄對象 → 當成
-      // 工作日誌（結構化欄位＋可上傳照片），走 work_logs；純文字 → 維持原本
-      // 輕量留言（case_updates，含「標記為重要」＋ Google 行事曆同步），
-      // 2026-08-26 新增結構化欄位，2026-08-30 補上日期／記錄對象兩個觸發條件。
+      // 填執行時數、選聯絡事項類型、改過日期、或指定記錄對象 → 當成工作日誌
+      // （那些是工作日誌才有的結構化欄位），走 work_logs；否則維持輕量留言
+      // （case_updates，含「標記為重要」＋ Google 行事曆同步）。
+      //
+      // 2026-09-14：**照片不再是觸發條件**。在那之前只要選了照片就會被改存成
+      // 工作日誌——附件本身跟「這是不是一筆工時記錄」無關，卻悄悄換掉了紀錄
+      // 種類，而且換過去就失去「標記為重要」與行事曆同步。case_updates 現在
+      // 自己支援附件（DB v82），這個轉向沒有必要了。
       const isBackdated = this.newCommentLogDate !== new Date().toISOString().slice(0, 10)
-      if (this.newCommentPhotos.length > 0 || this.newCommentHours || this.newCommentContactType ||
+      if (this.newCommentHours || this.newCommentContactType ||
           isBackdated || this.newCommentUserId) {
         await this.postWorkLogEntry(content)
         return
       }
       this.postingComment = true
       try {
+        // multipart：文字與附件同一個請求送出，不會有「留言貼了、圖沒上去」
+        // 的半完成狀態。不要自己設 Content-Type——boundary 要讓瀏覽器帶。
+        const fd = new FormData()
+        fd.append('content', content)
+        fd.append('important', this.newCommentImportant ? 'true' : 'false')
+        this.newCommentPhotos.forEach(f => fd.append('files', f))
         const r = await fetch(`/api/quotations/${encodeURIComponent(this.selected.quote_no)}/updates`, {
           method: 'POST',
-          headers: { Authorization: 'Bearer ' + this.session.token, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ content, important: this.newCommentImportant })
+          headers: { Authorization: 'Bearer ' + this.session.token },
+          body: fd
         })
         if (r.ok) {
           const item = await r.json()
           this.caseUpdates.unshift(item)
           this.newComment = ''
           this.newCommentImportant = false
+          this.newCommentPhotos = []
+          if (this.$refs.commentPhotoInput) this.$refs.commentPhotoInput.value = ''
+        } else {
+          const err = await r.json().catch(() => ({}))
+          alert('留言失敗：' + (err.detail || r.status))
         }
-      } catch {}
+      } catch (e) {
+        alert('網路錯誤：' + e.message)
+      }
       this.postingComment = false
+    },
+
+    // 附件刪除限 admin+（2026-09-14 使用者裁示）——抽掉附件是只改證據、
+    // 留下文字，跟「刪掉自己整則留言」不是同一件事。
+    canDeleteAttachment() {
+      return ['superadmin', 'admin'].includes(this.session.role)
+    },
+    async deleteCommentFile(update, file) {
+      if (!this.canDeleteAttachment()) return
+      if (!confirm(`確定刪除附件「${file.filename}」？此動作無法復原。`)) return
+      try {
+        const r = await fetch(
+          `/api/quotations/${encodeURIComponent(this.selected.quote_no)}/updates/${update.id}/files/${file.id}`,
+          { method: 'DELETE', headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (r.ok) {
+          update.files = (await r.json()).files || []
+        } else {
+          const err = await r.json().catch(() => ({}))
+          alert('刪除失敗：' + (err.detail || r.status))
+        }
+      } catch (e) { alert('網路錯誤：' + e.message) }
+    },
+    fileUrl(f) {
+      return `/api/uploads/${f.path}?pt=${encodeURIComponent(this.session.token)}`
+    },
+    isImageFile(f) {
+      return /\.(jpe?g|png)$/i.test(f.filename || f.path || '')
     },
 
     async postWorkLogEntry(content) {

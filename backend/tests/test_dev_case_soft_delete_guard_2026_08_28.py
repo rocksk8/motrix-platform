@@ -90,7 +90,9 @@ def test_create_log_on_soft_deleted_case_404s(client, make_user):
     su_token = _login(client, su, su_pw)
     case_id = _create_and_soft_delete_case(client, admin_token, su_token)
 
+    # 2026-09-14：這支端點改收 multipart（開發記錄可附照片／檔案，DB v82），
+    # 所以是 data= 而不是 json=。欄位名與型別跟原本的 JSON body 一字不差。
     r = client.post(f"/api/dev-cases/{case_id}/logs", headers=_auth(admin_token),
-                     json={"log_date": "2026-08-28", "log_by": 1, "channel": "電話",
+                     data={"log_date": "2026-08-28", "log_by": 1, "channel": "電話",
                            "content": "偷加記錄"})
     assert r.status_code == 404, r.text
