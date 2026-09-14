@@ -146,6 +146,13 @@ def test_history_sidebar_entry_and_scope_for_non_admin(live_server, make_user):
             page.goto(f"{live_server}/pages/approval-history.html")
             page.wait_for_selector(".ah-table tbody tr", timeout=10000)
             assert "MQ-AH-101" in page.inner_text(".ah-table")
-            assert page.locator('#ah-scope option[value="all"]:visible').count() == 0
+            # 2026-09-14：範圍改成籤列之後，觀測點跟著搬到**看得見的那個元素**。
+            # 原本是 `#ah-scope option[value="all"]:visible`——隱藏的 <select>
+            # 底下的 option 對任何人都不算 visible，那個斷言會變成永遠成立的
+            # 假綠燈（管理員看得到也照樣綠）。
+            assert page.locator('#ah-scope-all:visible').count() == 0, (
+                "非管理員不該看到「全公司」——後端 scope=all 會 403，畫面留著只會讓人踩空")
+            assert page.locator('#ah-scope-mine:visible').count() == 1, (
+                "反向控制：「我簽核的」必須看得見，否則上面那題可能只是整列都沒渲染")
         finally:
             browser.close()
