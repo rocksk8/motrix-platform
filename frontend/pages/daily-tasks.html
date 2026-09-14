@@ -31,7 +31,9 @@
       border-bottom: 1px solid var(--border-light);
       flex-shrink: 0;
     }
-    .dt-bar-title { font-size: 14px; font-weight: 700; color: var(--text-primary); white-space: nowrap; }
+    /* 2026-09-14：這是這一頁真正的頁面標題，加上直立紅色標記 */
+    .dt-bar-title { font-size: 14px; font-weight: 700; color: var(--text-primary); white-space: nowrap;; display:inline-flex; align-items:center; gap:8px}
+    .dt-bar-title::before{content:'';width:var(--v4-mark-h);height:13px;background:var(--accent);flex:none}
     .dt-bar-sep   { width: 1px; height: 20px; background: var(--border-light); margin: 0 2px; }
     .dt-month-nav { display: flex; align-items: center; gap: 4px; }
     .dt-month-btn {

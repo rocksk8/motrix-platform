@@ -23,7 +23,10 @@
     .cm-list { width:300px; min-width:300px; border-right:1px solid var(--border-light); display:flex; flex-direction:column; background:#FAFAF9; overflow:hidden; }
     .cm-list__head { padding:14px 14px 0; background:#fff; border-bottom:1px solid var(--border-light); }
     .cm-list__title-row { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
-    .cm-list__title { font-size:13px; font-weight:700; color:var(--text-primary); font-family:var(--font-zh); }
+    /* 2026-09-14：左欄標頭是這頁的實質標題，加上直立紅色標記
+       （官網 28×3 的緊湊變體），不動雙欄版面結構。 */
+    .cm-list__title { font-size:13px; font-weight:700; color:var(--text-primary); font-family:var(--font-zh);; display:inline-flex; align-items:center; gap:8px}
+    .cm-list__title::before{content:'';width:var(--v4-mark-h);height:13px;background:var(--accent);flex:none}
     .cm-list__count { font-size:10px; font-family:LINE Seed TW_OTF, sans-serif; font-weight:600; background:#EEECEA; color:var(--text-secondary); padding:2px 8px; border-radius:10px; }
     .cm-list__search { position:relative; margin-bottom:10px; }
     .cm-list__search-icon { position:absolute; left:9px; top:50%; transform:translateY(-50%); color:var(--text-dim); pointer-events:none; }

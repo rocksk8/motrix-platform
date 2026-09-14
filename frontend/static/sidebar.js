@@ -479,21 +479,78 @@
   // 其中一頁上。條件只有一份，不可能對不齊。
   var _deniedPages = []
 
-  function ni(href, icKey, label, activeNames, show, badgeId) {
+  // ── 2026-09-14：側欄退役，改成上方分組下拉選單 ────────────────────────
+  // sec()/ni() 仍然照舊被呼叫（權限旗標、href、active 判定一行都不用改），
+  // 但改成「記錄成結構資料」而不是直接吐側欄 HTML。渲染交給 renderMainNav()。
+  var _navGroups = []
+  var _curGroup = null
+
+  function ni(href, icKey, label, activeNames, show, badgeId, extraBadge) {
     if (show === false) {
       _deniedPages = _deniedPages.concat(activeNames || [])
       return ''
     }
-    var bspan = badgeId ? '<span id="' + badgeId + '" style="' + _SB_BADGE_STYLE + '"></span>' : ''
-    return '<a href="' + href + '" class="nav__item' + act(activeNames) + '" title="' + esc(label) + '">'
-      + '<svg class="nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">' + ic[icKey] + '</svg>'
-      + '<span class="nav__label">' + esc(label) + '</span>'
-      + bspan + '</a>'
+    if (!_curGroup) { _curGroup = { label: '', items: [] }; _navGroups.push(_curGroup) }
+    _curGroup.items.push({
+      href: href,
+      label: label,
+      active: act(activeNames) !== '',
+      badgeId: badgeId || '',
+      extraBadge: extraBadge || ''
+    })
+    return ''
   }
 
   function sec(label, show) {
-    if (show === false) return ''
-    return '<div class="nav__section">' + label + '</div>'
+    if (show === false) { _curGroup = { label: label, items: [], hidden: true }; return '' }
+    _curGroup = { label: label, items: [] }
+    _navGroups.push(_curGroup)
+    return ''
+  }
+
+  // 分組下拉選單。每個 sec() 是一個頂層項目，底下的 ni() 排成多欄面板。
+  // 只有一個子項的分組（例如「主選單／儀表板」）直接當成連結，不開面板。
+  function renderMainNav() {
+    var groups = _navGroups.filter(function (g) { return g.items.length > 0 })
+    if (!groups.length) return
+
+    var html = '<div class="mnav__in">' + groups.map(function (g, gi) {
+      var anyActive = g.items.some(function (it) { return it.active })
+      if (g.items.length === 1) {
+        var it0 = g.items[0]
+        return '<a class="mnav__top' + (it0.active ? ' is-on' : '') + '" href="' + it0.href + '">'
+          + esc(it0.label) + '</a>'
+      }
+      // 一欄最多 6 項，超過就分欄——欄數自適應，不用寫死
+      var per = 6
+      var cols = []
+      for (var i = 0; i < g.items.length; i += per) cols.push(g.items.slice(i, i + per))
+      var panel = '<div class="mnav__panel"><div class="mnav__cols">' + cols.map(function (col) {
+        return '<div class="mnav__col">' + col.map(function (it) {
+          return '<a class="mnav__item' + (it.active ? ' is-on' : '') + '" href="' + it.href + '">'
+            + '<span>' + esc(it.label) + '</span>'
+            + (it.badgeId ? '<span id="' + it.badgeId + '" style="' + _SB_BADGE_STYLE + '"></span>' : '')
+            + it.extraBadge
+            + '</a>'
+        }).join('') + '</div>'
+      }).join('') + '</div></div>'
+      return '<div class="mnav__grp' + (anyActive ? ' is-on' : '') + '" tabindex="0">'
+        + '<span class="mnav__top">' + esc(g.label)
+        + '<svg viewBox="0 0 10 6" fill="none" aria-hidden="true"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>'
+        + '</span>' + panel + '</div>'
+    }).join('') + '</div>'
+
+    var bar = document.getElementById('app-mainnav')
+    if (!bar) {
+      bar = document.createElement('nav')
+      bar.id = 'app-mainnav'
+      bar.className = 'mnav'
+      bar.setAttribute('aria-label', '\u4e3b\u9078\u55ae')
+      var tb = document.getElementById('app-topbar')
+      if (tb && tb.parentNode) tb.parentNode.insertBefore(bar, tb.nextSibling)
+      else document.body.insertBefore(bar, document.body.firstChild)
+    }
+    bar.innerHTML = html
   }
 
   var canDash = sa || ad || mods.indexOf('finance') >= 0 || mods.indexOf('quotation') >= 0 || mods.indexOf('dashboard') >= 0
@@ -505,11 +562,9 @@
       sec('業務', cDev || cQ || cCM),
       ni(pg('dev-crm.html'),         'bdev',  '業務開發', ['dev-crm.html'],                          cDev, 'sb-mod-dev-crm'),
       ni(pg('quotations.html'),      'quote', '報價單',   ['quotations.html', 'quotation-form.html'], cQ,   'sb-mod-quotation'),
-      (cQ ? '<a href="' + pg('approval-queue.html') + '" class="nav__item' + act(['approval-queue.html']) + '" title="簽核佇列">'
-        + '<svg class="nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>'
-        + '<span class="nav__label">簽核佇列</span>'
-        + '<span id="sb-approval-badge" style="display:none;background:#DC2626;color:#fff;font-size:9px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;padding:1px 5px;border-radius:8px;margin-left:auto;min-width:16px;text-align:center;line-height:1.6"></span>'
-        + '</a>' : ''),
+      // 2026-09-14：改走 ni()，否則不會被記錄進上方選單的分組資料
+      ni(pg('approval-queue.html'), 'appr', '\u7c3d\u6838\u4f47\u5217', ['approval-queue.html'], cQ, '',
+         '<span id="sb-approval-badge" style="display:none;background:#DC2626;color:#fff;font-size:9px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;padding:1px 6px;border-radius:9px;margin-left:auto"></span>'),
       ni(pg('approval-delegates.html'), 'appr', '簽核代理人', ['approval-delegates.html'], cQ || sa || ad),
       ni(pg('approval-history.html'), 'apprhist', '簽核歷史', ['approval-history.html'], cQ || sa || ad),
       ni(pg('case-management.html'), 'case_', '案件管理', ['case-management.html'],                   cCM,  'sb-mod-case'),
@@ -538,12 +593,8 @@
       ni(pg('payslips.html'),        'paysl', '勞報單',   ['payslips.html', 'payslip-form.html'],    cPay),
       sec('工作內容', cWL || cDT),
       ni(pg('work-log.html'),        'wlog',  '工作日誌',   ['work-log.html'],                         cWL,  'sb-mod-worklog'),
-      (cDT ? '<a href="' + pg('daily-tasks.html') + '" class="nav__item' + act(['daily-tasks.html']) + '" title="每日工作事項">'
-      + '<svg class="nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">' + ic['dtask'] + '</svg>'
-      + '<span class="nav__label">每日工作事項</span>'
-      + '<span id="sb-dt-badge" style="display:none;background:#7C3AED;color:#fff;font-size:9px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;padding:1px 5px;border-radius:8px;margin-left:auto;min-width:16px;text-align:center;line-height:1.6"></span>'
-      + '<span id="sb-mod-daily-task" style="display:none;background:var(--accent);color:#fff;font-size:9px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;padding:1px 5px;border-radius:8px;margin-left:4px;min-width:16px;text-align:center;line-height:1.6"></span>'
-      + '</a>' : ''),
+      ni(pg('daily-tasks.html'), 'dtask', '\u6bcf\u65e5\u5de5\u4f5c\u4e8b\u9805', ['daily-tasks.html'], cDT, 'sb-mod-daily-task',
+         '<span id="sb-dt-badge" style="display:none;background:#7C3AED;color:#fff;font-size:9px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;padding:1px 6px;border-radius:9px;margin-left:auto"></span>'),
       sec('選型資料庫', cEnvG || cNetG || cSwitchG || cMonitorG || cAccessG || cGatewayG || cAutomationG),
       ni(pg('env-guide.html'),      'envg',    '場域選型導覽',     ['env-guide.html'],     cEnvG),
       ni(pg('netarch-guide.html'),  'netg',    '網路架構選型導覽', ['netarch-guide.html'], cNetG),
@@ -568,8 +619,10 @@
       ni(pg('schema-status.html'),    'schema', 'Schema 狀態', ['schema-status.html'],               sa),
     ].filter(Boolean).join('')
 
+    // 側欄已退役：html 現在恆為空字串，元素留著也不渲染任何東西。
     var el = document.getElementById('app-sidebar')
-    if (el) el.innerHTML = html
+    if (el) el.innerHTML = ''
+    renderMainNav()
 
     // 使用者正站在一個「側欄判定他不該看到」的頁面上 → 顯示沒有權限，而不是
     // 把頁面內容留在那裡讓 API 一路 403（看起來像壞掉，不像沒權限）。

@@ -33,11 +33,13 @@
       top: 0;
       z-index: 1;
     }
+    /* 2026-09-14：左欄標頭是這頁的實質標題，加上直立紅色標記
+       （官網 28×3 的緊湊變體），不動雙欄版面結構。 */
     .aq-left-title {
       font-size: 14px;
       font-weight: 700;
-      color: var(--text-main);
-    }
+      color: var(--text-main);; display:inline-flex; align-items:center; gap:8px}
+    .aq-left-title::before{content:'';width:var(--v4-mark-h);height:13px;background:var(--accent);flex:none}
     .aq-left-sub {
       font-size: 11px;
       color: var(--text-secondary);

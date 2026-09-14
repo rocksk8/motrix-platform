@@ -83,8 +83,17 @@
   --ghost-hover-border: #C8C4BC;
   --icon-btn-bg: #F0EEE9;
 
-  --sidebar-w: 220px;
-  --topbar-h:  60px;
+  /* 2026-09-14：側欄退役，導覽全數移到上方（UI-REDESIGN-PLAN §2.1 選項 C）。
+     這兩個 token 是整個改版的槓桿點：全站 52 個檔案用 var(--topbar-h) 當內容
+     上方偏移、60 處用 var(--sidebar-w) 當左側偏移。
+       --sidebar-w 歸零 → 所有 margin-left / left 自動塌掉
+       --topbar-h 改成「頂欄 + 導覽列」的**總高**，所有頁面自動讓出位置
+     ——因此不需要逐頁改版面。
+     --topbar-bar-h 是頂欄自己的高度（以前是 --topbar-h 在兼差）。 */
+  --sidebar-w: 0px;
+  --topbar-bar-h: 60px;
+  --mainnav-h: 44px;
+  --topbar-h:  104px;   /* = --topbar-bar-h + --mainnav-h */
   --radius:    6px;
   --radius-lg: 10px;
   --shadow-sm: 0 1px 3px rgba(0,0,0,.08);
@@ -183,17 +192,22 @@ body {
 .topbar {
   position: fixed;
   top: 0; left: 0; right: 0;
-  height: var(--topbar-h);
+  height: var(--topbar-bar-h);
   background: var(--black);
   display: flex;
   align-items: center;
-  padding: 0 20px 0 0;
+  gap: 12px;
+  /* 2026-09-14：漢堡鈕（.sidebar-toggle）隱藏後左側少了它提供的內距，
+     logo 會貼邊並跟頁名擠在一起；補回左內距與元素間距。 */
+  padding: 0 20px;
   z-index: 100;
   border-bottom: 1px solid var(--border);
 }
 
 .topbar__logo {
-  width: var(--sidebar-w);
+  /* 2026-09-14：原本是 width: var(--sidebar-w)，當初是為了讓 logo 欄寬對齊左側側欄。
+     側欄退役後 --sidebar-w 歸零，logo 會被壓成 0 寬而跟頁名疊在一起。 */
+  width: auto;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -217,16 +231,17 @@ body {
 }
 
 .topbar__title {
-  font-family: var(--font-en);
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: .14em;
-  text-transform: uppercase;
-  color: var(--text-on-dark-dim);
+  /* 2026-09-14：這裡已改成顯示中文頁名，原本那套（英文字體 + uppercase +
+     .14em 大字距）是給英文系統名用的，套在中文上會變成寬鬆的怪東西。 */
+  font-family: var(--font-zh);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -.005em;
+  color: var(--text-on-dark);
   display: inline-flex;
   align-items: center;
   gap: 9px;
-  letter-spacing: -.005em;
+  white-space: nowrap;
 }
 /* 2026-09-14：頂欄現在顯示「目前頁面名稱」，前面配一條直立紅色標記
    （官網 28×3 在 60px 頂欄裡的緊湊變體）。這讓 31 頁本來沒有任何標頭的頁面
@@ -402,6 +417,67 @@ body {
   min-height: calc(100vh - var(--topbar-h));
   padding: 28px 32px;
   background: var(--white);
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   上方分組導覽（mega-menu）—— 2026-09-14 取代左側側欄
+   結構由 sidebar.js 的 sec()/ni() 產生，權限邏輯完全沿用原本那一套。
+   整列是白底，且是 <body> 直接子元素但**不在深色排除清單**，
+   所以深色模式會被反轉成深底——這是正確的，跟內容區一致。
+   ═══════════════════════════════════════════════════════════════════════ */
+.sidebar, .sidebar-overlay, .sidebar-toggle { display: none !important; }
+
+.mnav {
+  position: fixed; top: var(--topbar-bar-h); left: 0; right: 0;
+  height: var(--mainnav-h); z-index: 90;
+  background: #fff; border-bottom: 1px solid var(--border-light);
+}
+.mnav__in { display: flex; align-items: stretch; height: 100%; padding: 0 14px; gap: 2px; }
+.mnav__grp { position: relative; display: flex; }
+.mnav__top {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 0 13px; height: 100%;
+  font-family: var(--font-zh); font-size: 13.5px; font-weight: 500;
+  color: var(--text-secondary); white-space: nowrap; cursor: pointer;
+  text-decoration: none; position: relative; transition: color .18s var(--v4-ease);
+}
+.mnav__top svg { width: 9px; height: 9px; opacity: .55; }
+.mnav__grp:hover > .mnav__top, a.mnav__top:hover { color: var(--accent); }
+.mnav__grp.is-on > .mnav__top, a.mnav__top.is-on { color: var(--text-primary); font-weight: 700; }
+.mnav__grp.is-on > .mnav__top::after, a.mnav__top.is-on::after {
+  content: ''; position: absolute; left: 13px; right: 13px; bottom: -1px;
+  height: 2px; background: var(--accent);
+}
+.mnav__panel {
+  position: absolute; top: 100%; left: 0; padding: 14px;
+  background: #fff; border: 1px solid var(--border-light);
+  border-radius: 0 0 var(--radius) var(--radius);
+  box-shadow: 0 18px 44px rgba(20,24,30,.16);
+  opacity: 0; visibility: hidden; transform: translateY(4px);
+  transition: opacity .18s var(--v4-ease), transform .18s var(--v4-ease);
+  z-index: 95;
+}
+.mnav__grp:hover .mnav__panel,
+.mnav__grp:focus-within .mnav__panel { opacity: 1; visibility: visible; transform: none; }
+.mnav__cols { display: flex; gap: 16px; }
+.mnav__col { display: flex; flex-direction: column; min-width: 148px; }
+.mnav__col + .mnav__col { border-left: 1px solid var(--border-light); padding-left: 16px; }
+.mnav__item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 10px; border-radius: 4px;
+  font-family: var(--font-zh); font-size: 13px; color: var(--text-primary);
+  text-decoration: none; white-space: nowrap; transition: .15s var(--v4-ease);
+}
+.mnav__item:hover { background: #F5F4F0; color: var(--accent); }
+.mnav__item.is-on { color: var(--accent); font-weight: 600; }
+
+/* 窄螢幕：横向捲動。捲動容器會裁掉下拉面板，
+   所以只在真的放不下時才啟用。 */
+@media (max-width: 1100px) {
+  .mnav__in { overflow-x: auto; overflow-y: hidden; }
+  .mnav__panel { position: fixed; left: 8px; right: 8px; top: var(--topbar-h); }
+  .mnav__cols { flex-wrap: wrap; }
 }
 
 /* ─── PAGE HEADER ─── */

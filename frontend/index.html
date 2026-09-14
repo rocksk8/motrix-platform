@@ -366,7 +366,7 @@
     .h-nav__dot { display: inline-block; min-width: 16px; padding: 0 4px; border-radius: 999px; background: var(--accent); color: #fff; font-size: 10.5px; font-weight: 600; line-height: 16px; text-align: center; margin-left: 4px; }
     .h-nav__tools { display: flex; align-items: center; gap: 8px; margin-left: auto; padding-block: 8px; }
 
-    .h-hero { position: relative; background: var(--black); color: #F5F4F0; overflow: hidden; isolation: isolate; }
+    .h-hero { margin-top: var(--topbar-h); position: relative; background: var(--black); color: #F5F4F0; overflow: hidden; isolation: isolate; }
     .h-hero__grid { position: absolute; inset: 0; z-index: 0; overflow: hidden; }
     .h-hero__grid::before {
       content: ''; position: absolute; left: -60%; right: -60%; bottom: -55%; height: 150%;
@@ -430,40 +430,6 @@
        刻意不放 #app-sidebar 與 .sidebar-overlay——sidebar.js 的 buildSidebar()、
        bindMobileToggle() 都是 `if (!el) return` / `if (el)` 守門，元素不在就整段跳過，
        不會拋錯。內頁 56 頁仍維持側欄（UI-REDESIGN-PLAN §2.1 裁示 B）。 -->
-    <!-- ─── 模組導覽列 ─── -->
-    <nav class="h-nav">
-      <div class="h-wrap h-nav__in">
-        <a href="index.html" class="h-nav__link is-on">儀表板</a>
-        <a href="pages/quotations.html" class="h-nav__link" x-show="canQuotation">報價單</a>
-        <a href="pages/case-management.html" class="h-nav__link">案件管理</a>
-        <a href="pages/approval-queue.html" class="h-nav__link" x-show="canQuotation">
-          簽核佇列<span class="h-nav__dot" x-show="stats.waitingForMe > 0" x-text="stats.waitingForMe"></span>
-        </a>
-        <a href="pages/dev-crm.html" class="h-nav__link" x-show="canDevCrm">業務開發</a>
-        <a href="pages/env-guide.html" class="h-nav__link">選型資料庫</a>
-        <a href="pages/customers.html" class="h-nav__link">客戶</a>
-        <a href="pages/devices.html" class="h-nav__link">設備</a>
-        <!-- 2026-09-14：移除「應收帳款」導覽項。它與「營運報表」實際上是同一頁：
-             receivables.html → cashier.html → reports.html?tab=cashier（兩層導向）。
-             側欄（sidebar.js:525）本來就只列營運報表，這裡跟它對齊。 -->
-        <a href="pages/reports.html" class="h-nav__link" x-show="canFinance">營運報表</a>
-
-        <div class="h-nav__tools">
-          <select x-model="departmentId" @change="onDepartmentChange()"
-                  style="padding:6px 10px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;background:#fff">
-            <option value="">全部部門</option>
-            <template x-for="d in allDepartments" :key="d.id">
-              <option :value="d.id" x-text="d.divisionName + ' / ' + d.name"></option>
-            </template>
-          </select>
-          <a href="pages/quotation-form.html" class="btn btn-primary" style="text-decoration:none">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v16m8-8H4"/></svg>
-            新增報價單
-          </a>
-        </div>
-      </div>
-    </nav>
-
     <!-- ─── 主視覺 ─── -->
     <section class="h-hero">
       <div class="h-hero__grid" aria-hidden="true"></div>
