@@ -654,6 +654,54 @@ function reportsApp() {
     // 形狀統一成 { cols, colors, rows:[{label, values[]}] }，五張圖共用同一段
     // 表格 markup。values 在這裡就格式化成字串——格式邏輯跟資料放一起。
     showChartData: true,
+
+    // ── 本期財務快照（2026-09-14 使用者交辦：「營運報表圖表優先顯示當月的
+    //    收入支出跟應收應付」）──────────────────────────────────────────
+    // 收入/支出/未收 這三個主報表載入時就有了；**應付是例外**——payable 原本
+    // 只在切到「出納」分頁時才抓（cashierLoaded guard）。不自己載的話這一格會
+    // 顯示 NT$ 0，那比留白更糟：看起來像「這期沒有任何應付」。所以圖表分頁
+    // 自己抓一次，而且用獨立的 flag，不去動出納分頁那條完整載入的路徑。
+    // 沒有出納權限的人（/api/cashier/payable-queue 會回 403）顯示「無權限」，
+    // 同樣不能假裝是 0。
+    payableSnapLoaded: false,
+    payableSnapDenied: false,
+
+    async _loadPayableSnapshot() {
+      if (this.payableSnapLoaded || this.cashierLoaded) return
+      if (!this.hasCashierAccess()) { this.payableSnapDenied = true; return }
+      // 應收與應付**必須取自同一個來源**（出納佇列）。這一頁在「資金水位」
+      // 已經定義過「淨部位（應收 − 應付）」就是這兩個數字相減，快照沿用同一個
+      // 定義才不會出現兩個都叫「應收」卻不一樣的數字。
+      // （踩過：一開始應收接的是 activeOutstandingTotal——那是應收報表的期別
+      //  範圍數字，跟出納的應收帳款是兩回事，畫面上會變成快照說 0、上方 KPI 卡
+      //  說一百多萬。）
+      try {
+        const [rp, rr] = await Promise.all([
+          fetch('/api/cashier/payable-queue',    { headers: { Authorization: 'Bearer ' + this._token() } }),
+          fetch('/api/cashier/receivable-queue', { headers: { Authorization: 'Bearer ' + this._token() } }),
+        ])
+        if (rp.ok) this.payable = await rp.json()
+        else if (rp.status === 403) this.payableSnapDenied = true
+        if (rr.ok) this.receivable = await rr.json()
+        else if (rr.status === 403) this.payableSnapDenied = true
+      } catch (e) { console.error('payable snapshot:', e) }
+      this.payableSnapLoaded = true
+    },
+
+    get netPosition() { return this.kpiReceivableTotal - this.kpiPayableTotal },
+    get payableKnown() { return !this.payableSnapDenied && (this.payableSnapLoaded || this.cashierLoaded) },
+
+    // 長條各自對「自己這一組」的最大值縮放。收支（流量）與應收應付（存量）
+    // 是兩種不同量綱，共用同一個比例尺會讓其中一組永遠貼著邊——同一張圖上
+    // 兩個尺度正是這一頁趨勢圖已經犯過的錯，不要再犯第二次。
+    // 最小寬度 2% 是讓很小但非零的值看得見；**0 必須回 0**，
+    // 畫一小截長條會被讀成「有一點點」，那是假資訊。
+    _barPct(v, max) {
+      if (!v) return 0
+      return max > 0 ? Math.max(2, Math.round(Math.abs(v) / max * 100)) : 0
+    },
+    get flowMax()  { return Math.max(Math.abs(this.activeIncomeTotal || 0), Math.abs(this.activeExpenseTotal || 0)) },
+    get stockMax() { return Math.max(Math.abs(this.kpiReceivableTotal || 0), Math.abs(this.kpiPayableTotal || 0)) },
     chartTables: {
       trend:  { cols: [], colors: [], rows: [] },
       status: { cols: [], colors: [], rows: [] },
@@ -1895,6 +1943,7 @@ function reportsApp() {
     // Chart.js reads the canvas's rendered size at construction time.
     showChartsTab() {
       this.activeTab = 'charts'
+      this._loadPayableSnapshot()
       if (!this.data) return
       if (!this.trendLoaded && !this.trendLoading) this._loadTrendData()
       var self = this
