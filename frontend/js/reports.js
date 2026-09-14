@@ -2,6 +2,15 @@
 // Chart.js 實例故意放在 Alpine reactive data 之外（見 initCharts() 註解說明原因）
 const _reportCharts = {}
 
+// 金額縮寫。x 軸每個月份下面要印金額（2026-09-14 使用者交辦），
+// 標籤空間只有一行字寬，完整數字會互相疊在一起。
+function _shortMoney(v) {
+  if (!v) return ''
+  if (v >= 100000000) return (v / 100000000).toFixed(2) + ' 億'
+  if (v >= 10000)     return (v / 10000).toFixed(1) + ' 萬'
+  return Math.round(v).toLocaleString()
+}
+
 function reportsApp() {
   return {
     // ── Period state ──────────────────────────────────────────────────────────
@@ -637,6 +646,25 @@ function reportsApp() {
     // 改成先看到圖表，其餘 12 個頁籤維持不動當細分用。
     activeTab: 'charts',
 
+    // ── 圖表數值明細（2026-09-14 使用者交辦：「圖表也要顯示金額跟內容，
+    //    目前只有圖表，沒有詳細資訊」）───────────────────────────────
+    // 數字**不另外算一份**：每張圖的 _buildXChart() 在畫圖的同時把自己用的
+    // 那組數字寫進這裡。另外寫一份彙總遲早會跟圖對不起來，而「表跟圖數字
+    // 不一樣」是報表最傷信任的一種錯。
+    // 形狀統一成 { cols, colors, rows:[{label, values[]}] }，五張圖共用同一段
+    // 表格 markup。values 在這裡就格式化成字串——格式邏輯跟資料放一起。
+    showChartData: true,
+    chartTables: {
+      trend:  { cols: [], colors: [], rows: [] },
+      status: { cols: [], colors: [], rows: [] },
+      sales:  { cols: [], colors: [], rows: [] },
+      target: { cols: [], colors: [], rows: [] },
+      margin: { cols: [], colors: [], rows: [] },
+    },
+    _fmtMoney(v) { return (v == null) ? '—' : 'NT$ ' + Math.round(v).toLocaleString() },
+    _fmtPct(v)   { return (v == null) ? '—' : (Math.round(v * 10) / 10) + '%' },
+    _fmtInt(v)   { return (v == null) ? '—' : Math.round(v).toLocaleString() },
+
     // ── Charts (圖表分析) ──────────────────────────────────────────────────────
     // Chart.js 實例故意用模組層級的 _reportCharts（見檔案最上方），不放進這個
     // Alpine 元件的 reactive data：Alpine 會把 x-data 物件底下每個屬性遞迴包成
@@ -772,6 +800,17 @@ function reportsApp() {
         })
       }
 
+      var self0 = this
+      this.chartTables.trend = {
+        cols:   hasTrend ? ['成案件數', '合約金額', '實收金額'] : ['成案件數', '合約金額'],
+        colors: hasTrend ? ['#2563EB', '#15803D', '#D97706'] : ['#2563EB', '#15803D'],
+        rows:   months.map(function(m) {
+          var vals = [self0._fmtInt(counts[m.key]), self0._fmtMoney(revenues[m.key])]
+          if (hasTrend) vals.push(self0._fmtMoney(collected[m.key]))
+          return { label: m.label, values: vals }
+        }),
+      }
+
       if (_reportCharts.trend) {
         try { _reportCharts.trend.destroy() } catch(_) {}
       }
@@ -796,6 +835,21 @@ function reportsApp() {
             }
           },
           scales: {
+            x: {
+              ticks: {
+                font: { size: 10 },
+                autoSkip: false,
+                callback: function(_v, idx) {
+                  var m = months[idx]
+                  if (!m) return ''
+                  var amt = revenues[m.key] || 0
+                  // 第二行是這個月的合約金額。0 元不印「NT$ 0」——一整排 0
+                  // 只是噪音，空白本身就讀得出「這個月沒有」。
+                  return amt ? [m.label, _shortMoney(amt)] : [m.label, '']
+                }
+              },
+              grid: { display: false }
+            },
             yL: {
               type: 'linear', position: 'left', beginAtZero: true,
               ticks: { stepSize: 1, font: { size: 10 } },
@@ -825,6 +879,18 @@ function reportsApp() {
       if (!el) return
       var s = this.summary
       var total = s.totalCases || 0
+      var self1 = this
+      this.chartTables.status = {
+        cols:   ['件數', '佔比'],
+        colors: ['#F59E0B', '#6B7280'],
+        rows:   [
+          { label: '進行中', values: [self1._fmtInt(s.activeCases || 0),
+                                      self1._fmtPct(total ? (s.activeCases || 0) / total * 100 : 0)] },
+          { label: '已結案', values: [self1._fmtInt(s.closedCases || 0),
+                                      self1._fmtPct(total ? (s.closedCases || 0) / total * 100 : 0)] },
+          { label: '合計',   values: [self1._fmtInt(total), '100%'] },
+        ],
+      }
       _reportCharts.status = new Chart(el, {
         type: 'doughnut',
         data: {
@@ -841,7 +907,28 @@ function reportsApp() {
           responsive: true, maintainAspectRatio: false,
           cutout: '65%',
           plugins: {
-            legend: { position: 'bottom', labels: { font: { size: 11 }, padding: 14, usePointStyle: true } },
+            // 圖例直接帶件數與佔比：原本這兩個數字只活在 tooltip 裡，
+            // 圖上就只有兩塊顏色配兩個純文字標籤，等於得滑過去才知道多少件。
+            legend: {
+              position: 'bottom',
+              labels: {
+                font: { size: 11 }, padding: 14, usePointStyle: true,
+                generateLabels: function(chart) {
+                  var ds = chart.data.datasets[0]
+                  return chart.data.labels.map(function(lb, i) {
+                    var v = ds.data[i] || 0
+                    var pct = total > 0 ? Math.round(v / total * 100) : 0
+                    return {
+                      text: lb + '　' + v + ' 件（' + pct + '%）',
+                      fillStyle: ds.backgroundColor[i],
+                      strokeStyle: ds.backgroundColor[i],
+                      pointStyle: 'circle',
+                      index: i
+                    }
+                  })
+                }
+              }
+            },
             tooltip: {
               callbacks: {
                 label: function(ctx) {
@@ -859,6 +946,20 @@ function reportsApp() {
       var el = document.getElementById('rpt-chart-sales')
       if (!el) return
       var sp = this.salesPerf.slice(0, 8)
+      var self2 = this
+      this.chartTables.sales = {
+        cols:   ['件數', '合約總額', '已收款', '收款率', '平均毛利率'],
+        colors: ['', '#2563EB', '#15803D', '', ''],
+        rows:   sp.map(function(x) {
+          return { label: x.salesPerson, values: [
+            self2._fmtInt(x.caseCount),
+            self2._fmtMoney(x.totalAmount),
+            self2._fmtMoney(x.receivedAmount),
+            self2._fmtPct(x.collectionRate),
+            self2._fmtPct(x.avgMarginPct),
+          ] }
+        }),
+      }
       _reportCharts.sales = new Chart(el, {
         type: 'bar',
         data: {
@@ -921,6 +1022,25 @@ function reportsApp() {
         if (!r) return '#E5E7EB'
         return r >= 95 ? '#15803D' : r >= 80 ? '#D97706' : '#DC2626'
       })
+      var self3 = this
+      // 達成率圖上只有一條百分比，目標與實際到底是多少完全看不到——
+      // 這一格正是使用者說「沒有詳細資訊」最明顯的地方。
+      var PCT_KEYS = { collectionRate: 1, avgMarginPct: 1 }
+      this.chartTables.target = {
+        cols:   ['實績', '目標', '達成率'],
+        colors: ['', '', ''],
+        rows:   KEYS.map(function(k, i) {
+          var d = ann[k] || {}
+          var fmt = (k === 'newCases') ? self3._fmtInt
+                  : PCT_KEYS[k]        ? self3._fmtPct
+                  : self3._fmtMoney
+          return { label: LBLS[i], values: [
+            fmt.call(self3, d.actual),
+            fmt.call(self3, d.target),
+            self3._fmtPct(d.rate),
+          ] }
+        }),
+      }
       _reportCharts.target = new Chart(el, {
         type: 'bar',
         data: {
@@ -988,6 +1108,20 @@ function reportsApp() {
       var actual = labels.map(function(sp) {
         var v = spMap[sp].act; return v.length ? v.reduce(function(a, b) { return a + b }, 0) / v.length : null
       })
+      var self4 = this
+      this.chartTables.margin = {
+        cols:   ['預估毛利率', '實際毛利率', '差異'],
+        colors: ['#2563EB', '#15803D', ''],
+        rows:   labels.map(function(lb, i) {
+          var e = estimated[i], a = actual[i]
+          return { label: lb, values: [
+            self4._fmtPct(e),
+            self4._fmtPct(a),
+            // 沒有精算資料時差異不是 0，是「還不知道」——寫 0 會讓人以為準到不差
+            (a == null) ? '—' : ((a - e >= 0 ? '+' : '') + self4._fmtPct(a - e)),
+          ] }
+        }),
+      }
       _reportCharts.margin = new Chart(el, {
         type: 'bar',
         data: {
