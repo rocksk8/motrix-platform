@@ -224,9 +224,22 @@
     /* 2026-09-14：原本是 4 張有框小卡單獨一列，加上下方的 meta 列，
        光標頭就疊了 4 層。改成無框、以分隔線區隔的數字帶，並跟 meta 併成同一列。 */
     .cm-headline { display:flex; align-items:center; gap:18px; padding:2px 20px 12px; flex-wrap:wrap; }
-    .cm-kpi { display:flex; align-items:stretch; gap:0; flex-wrap:wrap; }
+    /* 2026-09-14：原本是四顆並排的數字（合約金額／已收款／未收款／執行進度），
+       但**已收 + 未收 = 合約**——三個數字在講同一件事，而且三個都用同樣的字級
+       與權重，等於沒有主從。改成「一個主數字 + 兩條量表」：金額是事實，
+       收款與進度是比例，比例本來就該用長條而不是再來一個數字。
+       未收款沒有消失，它退到量表下方當附註——它是正常狀態，不是第二個主角。 */
+    .cm-kpi { display:flex; align-items:center; gap:0; flex-wrap:wrap; }
     .cm-kpi__pill { display:inline-flex; flex-direction:column; justify-content:center; padding:0 16px; min-width:86px; border-left:1px solid var(--border-light); }
     .cm-kpi__pill:first-child { border-left:0; padding-left:0; }
+    .cm-kpi__gauge {
+      display:flex; flex-direction:column; justify-content:center; gap:4px;
+      padding:0 16px; min-width:170px; border-left:1px solid var(--border-light);
+    }
+    .cm-kpi__gtop { display:flex; align-items:baseline; gap:6px; flex-wrap:wrap; }
+    .cm-kpi__gname { font-size:9.5px; color:var(--text-dim); font-family:LINE Seed TW_OTF, sans-serif; letter-spacing:.06em; }
+    .cm-kpi__gpct { font-size:14px; font-weight:700; font-family:LINE Seed TW_OTF, sans-serif; line-height:1; letter-spacing:-.01em; }
+    .cm-kpi__gsub { font-size:10px; color:var(--text-dim); font-family:LINE Seed TW_OTF, sans-serif; margin-left:auto; }
     .cm-kpi__val { font-size:15px; font-weight:700; font-family:LINE Seed TW_OTF, sans-serif; color:var(--text-primary); line-height:1.15; letter-spacing:-.01em; }
     .cm-kpi__lbl { font-size:9.5px; color:var(--text-dim); font-family:LINE Seed TW_OTF, sans-serif; letter-spacing:.06em; margin-top:4px; }
     /* 配色規則：紅色只留給真正的異常。
@@ -272,7 +285,24 @@
     .pay-strip__val { font-size:14px; font-weight:700; color:var(--text-primary); }
     .pay-strip__bar { flex:1; min-width:120px; }
     .pay-strip__pct { font-size:11.5px; color:var(--text-secondary); white-space:nowrap; }
-    .cm-section-title { display:flex; align-items:center; gap:10px; font-size:11px; font-weight:700; font-family:LINE Seed TW_OTF, sans-serif; color:var(--text-dim); text-transform:uppercase; letter-spacing:.08em; margin-bottom:14px; }
+    .cm-section-title { display:flex; align-items:center; gap:10px; font-size:12.5px; font-weight:700; font-family:var(--font-zh); color:var(--text-primary); letter-spacing:0; margin:22px 0 12px; }
+    .cm-section-title:first-child { margin-top:0; }
+
+    /* 欄寬反映內容長度，不是一律滿寬。justify-content:start 讓短欄位
+       靠左收好，右側留白是刻意的——比撐出 750px 的空框乾淨。 */
+    .cm-fgrid { display:grid; gap:12px 14px; margin-bottom:12px; align-items:end; }
+    .cm-fgrid--contract { grid-template-columns:repeat(4, minmax(0,1fr)); }
+    .cm-fgrid--contract > :nth-child(1),
+    .cm-fgrid--contract > :nth-child(2) { grid-column:span 2; }
+    .cm-fgrid--contract > :nth-child(5) { grid-column:1 / -1; }
+    .cm-fgrid--people { grid-template-columns:repeat(3, minmax(0,240px)); justify-content:start; margin-bottom:20px; }
+    .cm-fgrid--dates  { grid-template-columns:repeat(2, minmax(0,200px)); justify-content:start; }
+    @media (max-width:900px) {
+      .cm-fgrid--contract { grid-template-columns:repeat(2, minmax(0,1fr)); }
+      .cm-fgrid--contract > :nth-child(1),
+      .cm-fgrid--contract > :nth-child(2) { grid-column:1 / -1; }
+      .cm-fgrid--people { grid-template-columns:repeat(2, minmax(0,1fr)); }
+    }
     .cm-section-title::after { content:''; flex:1; height:1px; background:var(--border-light); }
     .cm-subtabs { display:flex; margin:-20px -20px 0; padding:0 20px; background:#F7F6F3; border-bottom:1px solid var(--border-light); flex-shrink:0; overflow-x:auto; -webkit-overflow-scrolling:touch; }
     .cm-subtabs::-webkit-scrollbar { height:3px; }
@@ -676,11 +706,11 @@
                   <td class="cm-gate">
                     <span class="cm-gatecell" :class="{'cm-gatecell--na': g.state==='na'}" :title="g.reason || ''">
                       <span class="cm-gatecell__v">
-                        <span class="vm-lamp" :class="'vm-lamp--' + gateTone(g)"></span>
+                        <span class="vm-lamp" :class="'vm-lamp--' + gateTone(g, row)"></span>
                         <span x-text="g.value"></span>
                       </span>
                       <span class="vm-bar">
-                        <i class="vm-bar__fill" :class="'vm-bar__fill--' + gateTone(g)"
+                        <i class="vm-bar__fill" :class="'vm-bar__fill--' + gateTone(g, row)"
                            :style="'width:' + Math.round((g.ratio == null ? 1 : g.ratio) * 100) + '%'"></i>
                       </span>
                     </span>
@@ -961,25 +991,37 @@
                   <span class="cm-kpi__val" x-text="'NT$ ' + (totalWithTax()||0).toLocaleString()"></span>
                   <span class="cm-kpi__lbl">合約金額</span>
                 </div>
-                <div class="cm-kpi__pill" :class="receivedPct()>0 ? 'success' : ''" x-show="canSeeFinancial()">
-                  <span class="cm-kpi__val" x-text="'NT$ ' + receivedTotal().toLocaleString()"></span>
-                  <span class="cm-kpi__lbl">已收款（<span x-text="receivedPct()"></span>%）</span>
+                <div class="cm-kpi__gauge" x-show="canSeeFinancial()">
+                  <div class="cm-kpi__gtop">
+                    <span class="cm-kpi__gname">收款</span>
+                    <span class="cm-kpi__gpct" :style="receivedPct()>=100 ? 'color:var(--success)' : ''"
+                          x-text="receivedPct() + '%'"></span>
+                    <span class="cm-kpi__gsub"
+                          x-text="'已收 ' + receivedTotal().toLocaleString() + '　未收 ' + outstandingTotal().toLocaleString()"></span>
+                  </div>
+                  <span class="vm-bar">
+                    <i class="vm-bar__fill" :class="receivedPct()>=100 ? 'vm-bar__fill--ok' : 'vm-bar__fill--warn'"
+                       :style="'width:' + Math.min(100, receivedPct()) + '%'"></i>
+                  </span>
                 </div>
-                <div class="cm-kpi__pill" :class="outstandingTotal()>0 ? 'warning' : 'success'" x-show="canSeeFinancial()">
-                  <span class="cm-kpi__val" x-text="'NT$ ' + outstandingTotal().toLocaleString()"></span>
-                  <span class="cm-kpi__lbl">未收款</span>
-                </div>
-                <div class="cm-kpi__pill" :class="caseProgressPct()===100 ? 'success' : ''">
-                  <span class="cm-kpi__val" x-text="caseProgressPct() + '%'"></span>
-                  <span class="cm-kpi__lbl">執行進度</span>
+                <div class="cm-kpi__gauge">
+                  <div class="cm-kpi__gtop">
+                    <span class="cm-kpi__gname">執行進度</span>
+                    <span class="cm-kpi__gpct" :style="caseProgressPct()===100 ? 'color:var(--success)' : ''"
+                          x-text="caseProgressPct() + '%'"></span>
+                    <span class="cm-kpi__gsub"
+                          x-text="(cr.caseRecord?.stages||[]).filter(s=>s.done).length + ' / ' + (cr.caseRecord?.stages||[]).length + ' 階段完成'"></span>
+                  </div>
+                  <span class="vm-bar">
+                    <i class="vm-bar__fill" :class="caseProgressPct()===100 ? 'vm-bar__fill--ok' : 'vm-bar__fill--warn'"
+                       :style="'width:' + Math.min(100, caseProgressPct()) + '%'"></i>
+                  </span>
                 </div>
               </div><!-- /.cm-kpi -->
 
               <div class="cm-meta">
                 <span><span class="cm-meta__lbl">報價日期</span><span class="cm-meta__val" x-text="(selected.quote_date||selected.created_at||'').slice(0,10)||'—'"></span></span>
                 <span><span class="cm-meta__lbl">負責業務</span><span class="cm-meta__val" x-text="selected.sales_person||'—'"></span></span>
-                <span><span class="cm-meta__lbl">施工階段</span><span class="cm-meta__val"
-                      x-text="(cr.caseRecord?.stages||[]).filter(s=>s.done).length + ' / ' + (cr.caseRecord?.stages||[]).length + ' 完成'"></span></span>
                 <button @click="showLog=!showLog"
                         style="margin-left:auto;font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;background:none;border:none;cursor:pointer;color:var(--text-dim);padding:0;text-decoration:underline;flex-shrink:0"
                         x-text="showLog ? '收起操作紀錄' : '操作紀錄 ▸'"></button>
@@ -1040,7 +1082,9 @@
               <div x-show="activeTab==='biz'">
 
                 <div class="cm-section-title">合約資訊</div>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+                <!-- 四欄網格：地址與交貨條件各佔兩欄，聯絡人與電話各佔一欄
+                     （內容就那麼短，給滿寬只是製造空白與框線噪音），備註跨滿。 -->
+                <div class="cm-fgrid cm-fgrid--contract">
                   <div class="fi-group">
                     <label class="fi-label">交貨 / 安裝地址</label>
                     <input class="fi" type="text" placeholder="地址" x-model="cr.caseRecord.contract.deliveryAddress" @input="setDirty()">
@@ -1064,7 +1108,8 @@
                 </div>
 
                 <div class="cm-section-title">人員角色</div>
-                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px">
+                <!-- 三個下拉裝的是人名，給 1fr 會各撐到 500px；上限 240px 就夠 -->
+                <div class="cm-fgrid cm-fgrid--people">
                   <div class="fi-group">
                     <label class="fi-label">填單人</label>
                     <select class="fi" x-model="cr.caseRecord.roles.filler" @change="setDirty()">
@@ -1095,7 +1140,7 @@
                 </div>
 
                 <div class="cm-section-title">專案期間</div>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+                <div class="cm-fgrid cm-fgrid--dates">
                   <div class="fi-group">
                     <label class="fi-label">開始日期</label>
                     <input class="fi" type="date" x-model="cr.caseRecord.projectTimeline.startDate" @input="setDirty()">

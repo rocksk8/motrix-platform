@@ -63,11 +63,16 @@ function app() {
 
     // 燈號：關卡的三種狀態直接對應色階。na 是「這件案子沒有這一關」，
     // 畫成空心灰而不是紅燈——舊案件沒有階段/款項/精算資料是正常的。
-    gateTone(g) {
+    // 2026-09-14 修正：blocked 一律是琥珀，不是紅。共通語彙裡 crit 的定義是
+    // 「逾期／退回」，「未達成」是 warn——一個做到 2/5 階段的案子是進行中，
+    // 不是異常。只有真的有逾期階段時，進度那一關才轉紅。
+    // （原本寫成 progress/extraExpense 一律 crit，違反自己訂的色階規則。）
+    gateTone(g, row) {
       if (!g) return 'idle'
       if (g.state === 'ok') return 'ok'
       if (g.state === 'na') return 'idle'
-      return g.key === 'progress' || g.key === 'extraExpense' ? 'crit' : 'warn'
+      if (g.key === 'progress' && row && row.stageOverdue > 0) return 'crit'
+      return 'warn'
     },
 
     // 整列不染色，只在最左緣留一條脊，取這一列最嚴重的訊號
