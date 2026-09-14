@@ -91,7 +91,10 @@
 
     .envg .envg-hd{position:sticky;top:0;z-index:40;background:var(--bg2);border-bottom:1px solid var(--line);padding:.6rem 1rem}
     .envg .hrow{display:flex;align-items:center;gap:.8rem;flex-wrap:wrap}
-    .envg h1{margin:0;font-size:1.08rem;font-weight:700;letter-spacing:.01em;white-space:nowrap}
+    /* 2026-09-14：這頁有自己一套容器與色票（.envg），且 .envg-hd 是 sticky，
+       不適合插完整 .pg 標頭；同樣用緊湊的直立紅色標記。 */
+    .envg h1{margin:0;font-size:1.08rem;font-weight:700;letter-spacing:.01em;white-space:nowrap;display:inline-flex;align-items:center;gap:.55rem}
+    .envg h1::before{content:'';width:var(--v4-mark-h);height:16px;background:var(--accent);flex:none}
     .envg h1 span{color:var(--tx3);font-weight:400;font-size:.85rem;margin-left:.4rem}
     .envg .spacer{flex:1}
     .envg .tabs{display:flex;background:var(--bg3);border:1px solid var(--line);border-radius:.5rem;padding:.15rem;gap:.15rem}

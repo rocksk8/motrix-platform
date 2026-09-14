@@ -12,7 +12,12 @@
   <style>
     [x-cloak]{display:none!important}
     .page-main{margin-left:var(--sidebar-w);margin-top:var(--topbar-h);padding:0;min-height:calc(100vh - var(--topbar-h));overflow:hidden;background:var(--white)}
-    .sg-toolbar{height:48px;box-sizing:border-box;display:flex;align-items:center;gap:10px;padding:0 20px;border-bottom:1px solid var(--border-light);background:#fff}
+    /* 2026-09-14：工具列最左加一條直立紅色標記（官網 28×3 的緊湊變體）。
+   這頁的 body 高度是 calc(100vh - topbar - 48px) 算死的，插完整標頭會破掉。 */
+    .sg-toolbar{height:48px;box-sizing:border-box;display:flex;align-items:center;gap:12px;padding:0 20px;border-bottom:1px solid var(--border-light);background:#fff}
+    .sg-toolbar::before{content:'';width:var(--v4-mark-h);height:18px;background:var(--accent);flex:none}
+    /* 標題與副標原本擠在同一行，讀起來像一句跑掉的話；改成上下兩層 */
+    .sg-toolbar .tb-head{display:flex;flex-direction:column;justify-content:center;gap:1px;min-width:0}
     .sg-toolbar .ttl{font-size:14px;font-weight:700;color:var(--text-primary)}
     .sg-toolbar .sub{font-size:11px;color:var(--text-dim)}
     .sg-body{height:calc(100vh - var(--topbar-h) - 48px);overflow:auto;padding:20px 24px}
@@ -162,8 +167,7 @@
     <main class="page-main">
 
       <div class="sg-toolbar">
-        <span class="ttl">網路交換器選型導覽</span>
-        <span class="sub">行業情境 · 產品分類適配 · 產品連結</span>
+        <div class="tb-head"><span class="ttl">網路交換器選型導覽</span><span class="sub">行業情境 · 產品分類適配 · 產品連結</span></div>
         <div style="margin-left:auto;display:flex;align-items:center;gap:10px">
           <div class="gsearch-box">
             <input type="text" placeholder="搜尋型號／品牌，如「SG2210」「Omada」" x-model="globalSearch" @input="if(globalSearch.trim()) browseView='scenario'">

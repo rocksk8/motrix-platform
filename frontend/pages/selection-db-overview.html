@@ -12,7 +12,12 @@
   <style>
     [x-cloak]{display:none!important}
     .page-main{margin-left:var(--sidebar-w);margin-top:var(--topbar-h);padding:0;min-height:calc(100vh - var(--topbar-h));overflow:hidden;background:var(--white)}
-    .ov-toolbar{height:48px;box-sizing:border-box;display:flex;align-items:center;gap:10px;padding:0 20px;border-bottom:1px solid var(--border-light);background:#fff}
+    /* 2026-09-14：工具列最左加一條直立紅色標記（官網 28×3 的緊湊變體）。
+   這頁的 body 高度是 calc(100vh - topbar - 48px) 算死的，插完整標頭會破掉。 */
+    .ov-toolbar{height:48px;box-sizing:border-box;display:flex;align-items:center;gap:12px;padding:0 20px;border-bottom:1px solid var(--border-light);background:#fff}
+    .ov-toolbar::before{content:'';width:var(--v4-mark-h);height:18px;background:var(--accent);flex:none}
+    /* 標題與副標原本擠在同一行，讀起來像一句跑掉的話；改成上下兩層 */
+    .ov-toolbar .tb-head{display:flex;flex-direction:column;justify-content:center;gap:1px;min-width:0}
     .ov-toolbar .ttl{font-size:14px;font-weight:700;color:var(--text-primary)}
     .ov-toolbar .sub{font-size:11px;color:var(--text-dim)}
     .ov-body{height:calc(100vh - var(--topbar-h) - 48px);overflow:auto;padding:20px 24px}
@@ -61,8 +66,7 @@
     <main class="page-main">
 
       <div class="ov-toolbar">
-        <span class="ttl">選型資料庫涵蓋度總覽</span>
-        <span class="sub">各類別世代／分類底下的品牌與型號數量，一眼看出哪裡還太薄弱</span>
+        <div class="tb-head"><span class="ttl">選型資料庫涵蓋度總覽</span><span class="sub">各類別世代／分類底下的品牌與型號數量，一眼看出哪裡還太薄弱</span></div>
       </div>
 
       <div class="ov-body">
