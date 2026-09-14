@@ -55,21 +55,40 @@
     @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
 
     /* ── 表單主體佈局 ── */
+    /* 2026-09-14：視窗變窄時右側成本分機欄會被推出畫面。
+       根因是左欄寫 `1fr` 而沒有 minmax(0, …)：Grid 欄位的自動最小尺寸
+       是內容的 min-content，而左欄裡那張 .items-table 有 min-width:1080px，
+       所以左欄最小就是 1080px，視窗再窄也不會縮，右邊 310px 直接被擠出去。
+       （表格外層雖然有 overflow-x:auto，但那個 div 本身也不會縮到內容以下，
+        除非明確給 min-width:0。） */
     .form-layout {
       display: grid;
-      grid-template-columns: 1fr 310px;
+      grid-template-columns: minmax(0, 1fr) 310px;
       gap: 0;
       align-items: start;
       margin-left: var(--sidebar-w);
       margin-top: calc(var(--topbar-h) + 52px);
       padding: 24px 28px;
     }
-    .form-left { padding-right: 24px; }
+    .form-left { padding-right: 24px; min-width: 0; }
     .form-right {
       position: sticky;
       top: calc(var(--topbar-h) + 52px + 24px);
       max-height: calc(100vh - var(--topbar-h) - 52px - 48px);
       overflow-y: auto;
+      min-width: 0;
+    }
+
+    /* 真的太窄時（左欄可用寬度已經小於明細表格）改成單欄：
+       成本分機移到下方、取消 sticky，避免場地上用筆電或分屏時看不到成本。 */
+    @media (max-width: 1280px) {
+      .form-layout { grid-template-columns: minmax(0, 1fr); padding: 20px 18px; }
+      .form-left { padding-right: 0; }
+      .form-right {
+        position: static;
+        max-height: none;
+        margin-top: 20px;
+      }
     }
 
     /* ── Print / PDF ── */

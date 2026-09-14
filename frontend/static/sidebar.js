@@ -47,7 +47,13 @@
   // 首頁的 title 是倒過來的（「MOTRIX 專案管理系統 — 營運儀表板」），
   // 切出來是系統名，正好就是首頁該顯示的東西。
   function _pageName() {
-    var t = (document.title || '').split('\u2014')[0].trim()
+    // 大部分頁面用破折號分隔，但 quotation-form / dev-crm /
+    // completion-note-form 這三頁用的是半形連字號。兩種都要吃，
+    // 否則整串 title 會被當成頁名塞進頂欄、把 logo 蒟掉。
+    var t = (document.title || '')
+    var i = t.indexOf('\u2014')
+    if (i < 0) i = t.indexOf(' - ')
+    t = (i >= 0 ? t.slice(0, i) : t).trim()
     return t || 'MOTRIX 專案管理系統'
   }
 
