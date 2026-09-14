@@ -724,6 +724,16 @@ def _daily_backup():
         conn = get_db()
         now  = datetime.now().isoformat()
 
+        # ⚠️ 這份清單目前只涵蓋 76 張表裡的 8 張。
+        # 不是資料遺失風險——整庫複製（_weekly_db_copy / 雲端鏡像）保護的是全部；
+        # 但 MOTRIX-ERP-QUICK.md §8.3 把「JSON 逐表匯出」列為最後一層還原手段，
+        # 而那一層目前重建不出 users／system_settings／payslips／業務開發（dev_*）
+        # ／三種憑證流。要補的話直接加一行即可（鍵＝檔名、值＝完整 SELECT）。
+        # backend/tests/test_system_audit_2026_09_14.py 會**直接解析這個 dict 的
+        # 原始碼**（不是複製一份清單）比對 sqlite_master：
+        #   ・新增一張表卻沒決定要不要備份 → 該測試變紅，逼你做決定
+        #   ・補進這裡之後 → 追蹤這個落差的 xfail 會 XPASS，提醒回去拿掉標記
+        # 所以格式請維持「"中文檔名": "SELECT * FROM 表名 ..."」單行一組。
         tables = {
             "報價單":     "SELECT * FROM quotations ORDER BY id",
             "客戶":       "SELECT * FROM customers ORDER BY id",

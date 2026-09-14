@@ -1596,6 +1596,11 @@ body.sidebar-lock { overflow: hidden; }
 /* display:block 不可省略——這個類別常掛在 <span> 上，inline 元素吃不到
    width/height，條會整個消失。在 flex 容器裡剛好會被 blockify 而看起來正常，
    所以只在非 flex 的容器裡現形（實際踩過：業務開發卡片的溫度條）。 */
+/* ⚠️ display:block 不能拿掉：.vm-bar 大多寫在 <span> 上（要塞進表格儲存格、
+   卡片標題列這類 inline 上下文），inline 元素吃不到 width/height，整條會
+   直接消失。放在 flex 容器裡的那幾處（例如 .cm-gatecell）剛好被 flex 項目
+   的 blockification 救起來，所以這個 bug 只會在「某幾頁看不到、某幾頁正常」
+   的形式出現。 */
 .vm-bar { display: block; width: 100%; height: 3px; border-radius: 2px; background: var(--border-light); overflow: hidden; }
 .vm-bar__fill { display: block; height: 100%; background: var(--text-dim); }
 .vm-bar__fill--ok   { background: var(--success); }
