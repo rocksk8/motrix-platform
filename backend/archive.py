@@ -686,6 +686,144 @@ def _backup_suppliers():
         _write_backup_alert(f"即時備份供應商失敗: {e}")
 
 
+# 每日 JSON 匯出裡一律不留內嵌影像（2026-09-14）。
+#
+# 為什麼要有這一層：承攬人員把**身分證正反面**與存摺影像以 base64 存在欄位裡，
+# 協力廠商的 data_json、承攬付款憑據的 snapshot_json 又各自把存摺影像包在裡面
+# （snapshot 甚至是包在 personnel[] 陣列中）。實測 5 位承攬人員就是 3.2 MB，
+# 逐表 JSON 每天寫一次、還鏡像到雲端、保留 30 天——等於把一疊身分證掃描件
+# 每天複製一份放到雲端資料夾。
+#
+# 影像本身沒有不見：整庫複製那兩層（本機 db_backups + 雲端 motrix_erp.db）
+# 是完整的 .db 檔。這裡拿掉的是「人看得懂那一份」裡的影像，剩下的欄位照舊。
+#
+# 刻意寫成**一條通則**而不是逐表挑欄位：下一個把圖塞進 JSON 欄位的人
+# 不需要記得回來改這裡。tests/test_system_audit_2026_09_14.py 的
+# test_backup_export_has_no_inline_images 會盯著。
+_INLINE_IMAGE_PREFIX = "data:image/"
+_IMAGE_PLACEHOLDER = "<影像未收錄於 JSON 匯出，請用整庫備份還原>"
+
+
+def _strip_inline_images(value):
+    """遞迴把 data:image/... 的 base64 影像換成佔位字串。
+
+    存成 TEXT 的 JSON 欄位（data_json / snapshot_json）會先 parse 再處理，
+    處理完重新序列化——所以匯出的還是合法 JSON 字串，只是影像被抽掉。
+    parse 不起來就原樣保留，不要為了清影像把資料弄壞。
+    """
+    if isinstance(value, str):
+        if value.startswith(_INLINE_IMAGE_PREFIX):
+            return _IMAGE_PLACEHOLDER
+        if _INLINE_IMAGE_PREFIX in value:
+            try:
+                parsed = json.loads(value)
+            except Exception:
+                return value
+            return json.dumps(_strip_inline_images(parsed), ensure_ascii=False)
+        return value
+    if isinstance(value, dict):
+        return {k: _strip_inline_images(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_strip_inline_images(v) for v in value]
+    return value
+
+
+def _daily_backup_tables() -> dict:
+    """每日 JSON 匯出的 {檔名: SQL}。
+
+    **2026-09-14 從 _daily_backup() 裡搬出來**，理由有兩個：
+      ① `tests/test_system_audit_2026_09_14.py` 原本得用正規表示式去解析
+         函式裡那個 local dict 的原始碼；改成直接 import 呼叫就不可能解析歪掉。
+      ② 測試需要能塞一條壞查詢進去，驗證「單張表失敗時不可以還是報
+         backup.daily_ok」——local 變數沒辦法 monkeypatch。
+
+    新增資料表時請一起決定要不要進來（鍵＝檔名、值＝完整 SELECT）。
+    漏掉會被 test_every_table_is_either_backed_up_or_explicitly_excluded 擋下。
+    ⚠️ 這一層是 §8.3「還原優先序」的**最後手段**（本機整庫 → 雲端整庫 →
+    JSON 重建）。前兩層是整個 .db 檔，涵蓋全部 76 張表；這裡的 41 張是
+    「人看得懂、可以單獨挑出來重建」的那一份。
+    """
+    return {
+        # ── 主檔 ──
+        "報價單":           "SELECT * FROM quotations ORDER BY id",
+        "客戶":             "SELECT * FROM customers ORDER BY id",
+        "供應商":           "SELECT * FROM suppliers ORDER BY id",
+        "料號":             "SELECT * FROM parts ORDER BY id",
+        "專案":             "SELECT * FROM projects ORDER BY id",
+        # ── 帳號與組織（2026-09-14 補）──
+        # 使用者**刻意逐欄列出、略過所有憑證欄位**：password_hash /
+        # unlock_password_hash / daily_task_pw_hash 是雜湊，本身不算祕密，
+        # 但 totp_secret 與 totp_recovery_codes 是**可以直接拿去產生有效
+        # 驗證碼的金鑰**，寫進人看得懂的 JSON 等於把兩階段驗證抄一份出來。
+        # 整庫複製那一層本來就含這些欄位（.db 檔），JSON 這層不需要再抄。
+        # 代價：從 JSON 還原時所有人都要重設密碼、重新綁定 2FA/Passkey——
+        # 走到最後手段本來就該這樣做（來路不明的舊憑證不該直接沿用）。
+        "使用者":           ("SELECT id, username, display_name, role, email, phone, "
+                             "modules, active, created_at, must_change_password, "
+                             "notification_muted, department_id, totp_enabled "
+                             "FROM users ORDER BY id"),
+        "部門":             "SELECT * FROM departments ORDER BY id",
+        "事業處":           "SELECT * FROM divisions ORDER BY id",
+        "簽核代理":         "SELECT * FROM approval_delegates ORDER BY id",
+        # 通行金鑰只留 metadata 用途：告訴管理員「誰原本有綁 Passkey、要通知誰重綁」。
+        "通行金鑰":         "SELECT * FROM webauthn_credentials ORDER BY id",
+        # ── 系統設定 ──
+        # §0 記載過：正式機的 webauthn_rp_id / webauthn_origin 不在 git 裡，
+        # 還原舊 db 時這兩個值會整個消失。這張表是那次事故的直接對策。
+        #
+        # ⚠️ **但這張表裡有真的祕密**，不能直接 SELECT *：
+        #   email_notify.smtp_password       寄信用的 SMTP 密碼
+        #   google_calendar.client_secret    OAuth client secret
+        #   google_calendar.refresh_token    可以無限換取 access token
+        # 這三個跟使用者的 totp_secret 同一個等級——寫進人看得懂的 JSON
+        # 等於把可直接使用的認證素材放進備份資料夾（還會鏡像到雲端）。
+        # 用 json_remove() 只挖掉這幾個欄位，其餘設定（收件人、SMTP 主機、
+        # calendar_id…）照常保留，還原時只要重新填這三個值。
+        # 新增祕密設定時要記得加進來——tests/test_system_audit_2026_09_14.py
+        # 的 test_settings_export_has_no_live_secrets 會掃匯出結果，漏掉會紅。
+        "系統設定":         ("SELECT key, CASE key "
+                             "WHEN 'email_notify' THEN json_remove(value_json, '$.smtp_password') "
+                             "WHEN 'google_calendar' THEN json_remove(value_json, '$.client_secret', '$.refresh_token') "
+                             "ELSE value_json END AS value_json, updated_at "
+                             "FROM system_settings ORDER BY key"),
+        # ── 案件與單據 ──
+        "案件階段":         "SELECT * FROM case_stages ORDER BY id",
+        "案件階段拜訪":     "SELECT * FROM case_stage_visits ORDER BY id",
+        "案件動態":         "SELECT * FROM case_updates ORDER BY id",
+        "案件額外支出":     "SELECT * FROM case_extra_expenses ORDER BY id",
+        "案件變更申請":     "SELECT * FROM case_change_requests ORDER BY id",
+        "案件待辦":         "SELECT * FROM case_action_items ORDER BY id",
+        "出貨單":           "SELECT * FROM shipping_notes ORDER BY id",
+        "完工單":           "SELECT * FROM completion_notes ORDER BY id",
+        "請款單":           "SELECT * FROM payment_requests ORDER BY id",
+        "開票申請憑據":     "SELECT * FROM invoice_vouchers ORDER BY id",
+        "承攬付款憑據":     "SELECT * FROM contractor_payment_vouchers ORDER BY id",
+        "承攬派工":         "SELECT * FROM contractor_dispatches ORDER BY id",
+        "承攬人員":         "SELECT * FROM contractors ORDER BY id",
+        "協力廠商":         "SELECT * FROM vendor_contractors ORDER BY id",
+        "T100匯出確認":     "SELECT * FROM t100_export_confirmations ORDER BY id",
+        # ── 業務開發 ──
+        "業務開發案件":     "SELECT * FROM dev_cases ORDER BY id",
+        "業務開發記錄":     "SELECT * FROM dev_logs ORDER BY id",
+        # ── 工作與日誌 ──
+        "每日工作":         "SELECT * FROM daily_tasks ORDER BY id",
+        "每日工作完成":     "SELECT * FROM daily_task_completions ORDER BY id",
+        "每日工作異動":     "SELECT * FROM daily_task_edit_log ORDER BY id",
+        "工作日誌":         "SELECT * FROM work_logs ORDER BY id",
+        "專案日誌":         "SELECT * FROM project_logs ORDER BY id",
+        "專案階段":         "SELECT * FROM project_stages ORDER BY id",
+        # ── 其他業務資料 ──
+        "薪資單":           "SELECT * FROM payslips ORDER BY id",
+        "網路架構規劃書":   "SELECT * FROM network_plans ORDER BY id",
+        "庫存品項":         "SELECT * FROM stock_items ORDER BY id",
+        "庫存批次":         "SELECT * FROM stock_batches ORDER BY batch_no",  # 無 id 欄
+        # ── 紀錄類 ──
+        "稽核紀錄":         "SELECT * FROM audit_log ORDER BY id",
+        "通知":             "SELECT * FROM notifications ORDER BY id",
+        "模組版本":         "SELECT * FROM module_versions ORDER BY id",
+    }
+
+
 def _daily_backup():
     # Always snapshot SQLite locally first (independent of the cloud drive)
     _snapshot_sqlite(also_to_cloud=True)
@@ -724,30 +862,11 @@ def _daily_backup():
         conn = get_db()
         now  = datetime.now().isoformat()
 
-        # ⚠️ 這份清單目前只涵蓋 76 張表裡的 8 張。
-        # 不是資料遺失風險——整庫複製（_weekly_db_copy / 雲端鏡像）保護的是全部；
-        # 但 MOTRIX-ERP-QUICK.md §8.3 把「JSON 逐表匯出」列為最後一層還原手段，
-        # 而那一層目前重建不出 users／system_settings／payslips／業務開發（dev_*）
-        # ／三種憑證流。要補的話直接加一行即可（鍵＝檔名、值＝完整 SELECT）。
-        # backend/tests/test_system_audit_2026_09_14.py 會**直接解析這個 dict 的
-        # 原始碼**（不是複製一份清單）比對 sqlite_master：
-        #   ・新增一張表卻沒決定要不要備份 → 該測試變紅，逼你做決定
-        #   ・補進這裡之後 → 追蹤這個落差的 xfail 會 XPASS，提醒回去拿掉標記
-        # 所以格式請維持「"中文檔名": "SELECT * FROM 表名 ..."」單行一組。
-        tables = {
-            "報價單":     "SELECT * FROM quotations ORDER BY id",
-            "客戶":       "SELECT * FROM customers ORDER BY id",
-            "供應商":     "SELECT * FROM suppliers ORDER BY id",
-            "料號":       "SELECT * FROM parts ORDER BY id",
-            "專案":       "SELECT * FROM projects ORDER BY id",
-            "稽核紀錄":   "SELECT * FROM audit_log ORDER BY id",
-            "通知":       "SELECT * FROM notifications ORDER BY id",
-            "模組版本":   "SELECT * FROM module_versions ORDER BY id",
-        }
+        tables = _daily_backup_tables()
         summary: dict = {"date": today_label, "exported_at": now}
         for fname, sql in tables.items():
             try:
-                rows = [dict(r) for r in conn.execute(sql).fetchall()]
+                rows = [_strip_inline_images(dict(r)) for r in conn.execute(sql).fetchall()]
                 _cloud_write_json(
                     os.path.join(day_dir, f"{fname}.json"),
                     f"每日備份/{today_label}/{fname}.json",
@@ -762,8 +881,28 @@ def _daily_backup():
         _cloud_write_json(os.path.join(day_dir, '彙總.json'), f"每日備份/{today_label}/彙總.json", summary)
         _cloud_write_marker(marker, f"每日備份/{today_label}/.done")
         logger.info("Daily backup completed: %s", day_dir)
-        _system_audit("backup.daily_ok", today_label, summary)
-        _clear_backup_alert_if_healthy()
+
+        # 單張表匯出失敗**不可以還是報 daily_ok**（2026-09-14）。
+        # 上面那個 per-table try/except 是刻意的：一張表壞掉不該讓其他 40 張
+        # 也備不成。但原本失敗只在 log 留一行、在彙總.json 記一個 "error"，
+        # 然後照樣寫 .done、照樣送 backup.daily_ok——備份頁面顯示綠燈，
+        # 實際上那張表每天都是空的，要還原時才會發現。
+        # （這不是假設：庫存批次 "ORDER BY id" 就是這樣，表存在、語法正確，
+        #  只有執行時才炸。現在 tests/test_system_audit_2026_09_14.py 的
+        #  test_every_backup_query_actually_runs 會先攔下來。）
+        # 用 WARN 不用 ERROR：整庫複製那一層不受影響、沒有資料遺失風險，
+        # 不值得每天寄信給所有管理員；要升級成寄信把 level 改成 "ERROR" 即可。
+        failed = [k for k, v in summary.items() if v == "error"]
+        if failed:
+            _system_audit("backup.daily_partial", today_label, summary)
+            _write_backup_alert(
+                "每日 JSON 匯出有 %d 張表失敗：%s"
+                "（其餘已完成；整庫複製不受影響，但 JSON 還原會少這幾張）"
+                % (len(failed), "、".join(failed)),
+                level="WARN")
+        else:
+            _system_audit("backup.daily_ok", today_label, summary)
+            _clear_backup_alert_if_healthy()
         retention = _backup_retention()
         _prune_audit_log(keep_days=retention["audit_log_keep_days"])
         _prune_cloud_backups(daily_keep_days=retention["cloud_daily_keep_days"],
