@@ -34,9 +34,56 @@
     .btn-icon { padding: 4px 10px; font-size: 15px; line-height: 1; }
 
     /* ── prefix dc- (dev-crm) to avoid conflict with style.css ── */
+    /* ── 開發漏斗帶（2026-09-14）────────────────────────────────────────
+       原本「接洽成效總覽」「案件責任分布」掛在 x-show="!selectedCase"——
+       選了案件之後整組統計消失，正在看某個案子時最需要對照的整體節奏
+       反而看不到。漏斗帶改成常駐，而且它本身就是篩選器。
+       洽談中→成案→未成案 是真的有方向的流程，用箭頭是有意義的。 */
+    .dc-shell { display: flex; flex-direction: column; height: calc(100vh - var(--topbar-h)); }
+    .dc-funnel {
+      display: flex; align-items: stretch; gap: 6px; flex-wrap: wrap;
+      padding: 10px 14px; background: var(--white);
+      border-bottom: 1px solid var(--border-light); flex: 0 0 auto;
+    }
+    .dc-funnel__s {
+      flex: 1 1 130px; min-width: 0; cursor: pointer; text-align: left;
+      border: 1px solid var(--border-light); border-radius: var(--radius);
+      background: var(--white); padding: 7px 11px; font-family: var(--font-zh);
+    }
+    .dc-funnel__s:hover { border-color: var(--ghost-hover-border); }
+    .dc-funnel__s.on { outline: 2px solid var(--accent); outline-offset: -2px; }
+    .dc-funnel__s.won { background: var(--success-light); border-color: var(--success-border); }
+    .dc-funnel__s.rate { border-style: dashed; cursor: default; }
+    .dc-funnel__s.rate:hover { border-color: var(--border-light); }
+    .dc-funnel__v {
+      display: block; font-size: 20px; font-weight: 700; line-height: 1.1;
+      font-family: var(--font-en); font-variant-numeric: tabular-nums;
+    }
+    .dc-funnel__l { display: block; font-size: 11.5px; color: var(--text-secondary); margin-top: 2px; }
+    .dc-funnel__l small { display: block; font-size: 10.5px; color: var(--text-dim); }
+    .dc-funnel__arrow { display: grid; place-items: center; color: var(--border-light); font-size: 13px; flex: 0 0 auto; }
+    @media (max-width: 767px) { .dc-funnel__arrow { display: none; } }
+
+    /* 卡片上的接觸溫度：條越長＝越久沒更新，顏色跟著跨門檻換。
+       紅色那一段就是既有的 isStale()（洽談中且逾 30 天）。 */
+    .dc-temp { margin: 0 0 6px; }
+    .dc-temp__d {
+      font-size: 10px; font-weight: 700; margin-top: 3px; display: block;
+      font-family: var(--font-en); font-variant-numeric: tabular-nums;
+    }
+    .dc-sortbtn {
+      font-family: var(--font-zh); font-size: 10.5px; padding: 2px 7px;
+      border-radius: 4px; border: 1px solid var(--border-light);
+      background: var(--white); color: var(--text-secondary); cursor: pointer;
+    }
+    .dc-sortbtn:hover { border-color: var(--ghost-hover-border); }
+    .dc-sortbtn.on { background: var(--text-primary); color: var(--text-on-dark); border-color: var(--text-primary); }
+
     .dc-layout {
       display: flex;
-      height: calc(100vh - var(--topbar-h));
+      /* 2026-09-14：高度交給 .dc-shell 這層 flex column 分配，
+         上面多了常駐的漏斗帶，寫死 100vh 會把版面推出畫面。 */
+      flex: 1; min-height: 0;
       overflow: hidden;
     }
 
@@ -411,7 +458,40 @@
 
 <div class="app-shell">
   <main class="main" style="padding:0;overflow:hidden">
-  <div x-data="devCrmPage()" x-init="init()" class="dc-layout">
+  <div x-data="devCrmPage()" x-init="init()" class="dc-shell">
+  <!-- ── 開發漏斗帶（常駐，本身就是篩選器）── -->
+  <div class="dc-funnel">
+    <button type="button" class="dc-funnel__s" :class="{on: filterStatus==='洽談中'}"
+            @click="filterStatus = (filterStatus==='洽談中' ? '' : '洽談中')">
+      <span class="dc-funnel__v" style="color:var(--warning)" x-text="caseCount('洽談中')"></span>
+      <span class="dc-funnel__l">洽談中
+        <small x-text="staleCount > 0 ? staleCount + ' 件逾 30 天未更新' : '都在 30 天內更新過'"></small>
+      </span>
+    </button>
+    <span class="dc-funnel__arrow" aria-hidden="true">→</span>
+    <button type="button" class="dc-funnel__s won" :class="{on: filterStatus==='成案'}"
+            @click="filterStatus = (filterStatus==='成案' ? '' : '成案')">
+      <span class="dc-funnel__v" style="color:var(--success)" x-text="caseCount('成案')"></span>
+      <span class="dc-funnel__l">成案<small>已連結報價單</small></span>
+    </button>
+    <span class="dc-funnel__arrow" aria-hidden="true">→</span>
+    <button type="button" class="dc-funnel__s" :class="{on: filterStatus==='未成案'}"
+            @click="filterStatus = (filterStatus==='未成案' ? '' : '未成案')">
+      <span class="dc-funnel__v" style="color:var(--text-dim)" x-text="caseCount('未成案')"></span>
+      <span class="dc-funnel__l">未成案<small>已結束</small></span>
+    </button>
+    <button type="button" class="dc-funnel__s" :class="{on: filterStatus==='暫擱置'}"
+            @click="filterStatus = (filterStatus==='暫擱置' ? '' : '暫擱置')">
+      <span class="dc-funnel__v" style="color:var(--text-dim)" x-text="caseCount('暫擱置')"></span>
+      <span class="dc-funnel__l">暫擱置<small>等條件成熟</small></span>
+    </button>
+    <div class="dc-funnel__s rate">
+      <span class="dc-funnel__v" x-text="winRate"></span>
+      <span class="dc-funnel__l">成案率<small>成案 ÷（成案＋未成案）</small></span>
+    </div>
+  </div>
+
+  <div class="dc-layout">
 
     <!-- ── 左欄：案件列表 ── -->
     <div class="dc-list" :class="{'show': mobileListOpen}">
@@ -478,14 +558,26 @@
              style="text-align:center;padding:30px;font-size:12px;color:var(--text-dim)">無符合案件</div>
 
         <template x-for="c in filteredCases" :key="c.id">
+          <!-- 2026-09-14：左緣改成接觸溫度（三階），不再是「逾期/未讀」二選一的
+               紅或琥珀。未讀是另一個軸，保留為下方的徽章。 -->
           <div class="dc-case-card" :class="{selected: selectedCase && selectedCase.id === c.id}"
-               :style="isStale(c) ? 'border-left:3px solid #DC2626;background:#FEF2F2' : (isUnread(c) ? 'border-left:3px solid #D97706;background:#FFFBEB' : '')"
+               :style="(hasTemp(c) ? 'border-left:3px solid ' + tempColor(c) + ';' : '')
+                       + (isUnread(c) ? 'background:#FFFBEB' : '')"
                @click="selectCase(c)">
-            <template x-if="isStale(c)">
-              <span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;background:#FEE2E2;color:#991B1B;border:1px solid #FCA5A5;display:inline-block;margin-bottom:3px;margin-right:4px"
-                    x-text="'⚠ 超過' + staleDays(c) + '天未更新'"></span>
+            <template x-if="hasTemp(c)">
+              <div class="dc-temp">
+                <span class="vm-bar">
+                  <i class="vm-bar__fill" :class="'vm-bar__fill--' + tempTone(c)"
+                     :style="'width:' + tempPct(c) + '%'"></i>
+                </span>
+                <span class="dc-temp__d" :class="'vm-age--' + (tempTone(c)==='crit' ? 'stale' : tempTone(c)==='warn' ? 'warm' : 'fresh')"
+                      x-text="tempText(c)"></span>
+              </div>
             </template>
-            <template x-if="!isStale(c) && isUnread(c)">
+            <!-- 2026-09-14：原本這裡有一個「⚠ 超過 N 天未更新」徽章，
+                 跟上面的溫度條講同一件事且更不精確（只有過/沒過 30 天兩種），
+                 移除。溫度條本身就帶天數。 -->
+            <template x-if="isUnread(c)">
               <span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;background:#FEF3C7;color:#92400E;border:1px solid #FDE68A;display:inline-block;margin-bottom:3px">有更新</span>
             </template>
             <div class="dc-case-card__name" x-text="c.caseName"></div>
@@ -867,6 +959,7 @@
         </div>
       </template>
     </div><!-- /dc-right -->
+    </div><!-- /dc-layout -->
 
     <!-- ── Modal：新增/編輯案件 ── -->
     <div class="dc-modal-bg" x-show="showCaseModal" x-cloak @click.self="showCaseModal=false">
@@ -1155,6 +1248,43 @@ function devCrmPage() {
     filterYear: '',
     filterMonth: '',
     staleOnly: false,
+    // ═══ 接觸溫度與漏斗（2026-09-14）═══════════════════════════════════
+    // 業務開發的核心變數是接觸頻率：一個案子會不會死，看的是上次聯絡到現在
+    // 多久。系統早就算得出來（isStale＝洽談中且逾 30 天），但它只是清單上方
+    // 一條警示列。這裡把「距上次更新幾天」升格成卡片上的第一視覺編碼。
+    //
+    // 用 updatedAt 當觀測點是對的：POST /dev-cases/{id}/logs 新增開發記錄時
+    // 會一併 UPDATE dev_cases SET updated_at（dev_crm.py 那支的最後一行），
+    // 所以「有接觸」一定會反映在這個欄位上。措辭沿用頁面既有的「未更新」
+    // 而不是「未接觸」——編輯案件、改狀態也會動到它，那不全然是接觸。
+    tempSort: 'recent',   // 'recent' | 'coldest'
+
+    // 溫度只對「還在追」的案子有意義。成案／未成案已經結束了，
+    // 它們冷不冷不是這一頁要催的事。
+    hasTemp(c) { return c && (c.status === '洽談中' || c.status === '暫擱置') },
+
+    tempTone(c) {
+      const d = this._daysSince(c && c.updatedAt)
+      return d > 30 ? 'crit' : d > 7 ? 'warn' : 'ok'
+    },
+    // 條長＝冷度，60 天封頂。封頂是為了讓 40 天跟 200 天在視覺上都「很長」，
+    // 不會因為一個放了兩年的案子把其他人的條壓成看不見。
+    tempPct(c) { return Math.min(100, Math.round(this._daysSince(c && c.updatedAt) / 60 * 100)) },
+    tempColor(c) {
+      if (!this.hasTemp(c)) return 'transparent'
+      const t = this.tempTone(c)
+      return t === 'crit' ? 'var(--danger)' : t === 'warn' ? 'var(--warning)' : 'var(--success)'
+    },
+    tempText(c) {
+      const d = this._daysSince(c && c.updatedAt)
+      return d === 0 ? '今日更新' : d + ' 天未更新'
+    },
+
+    get winRate() {
+      const won = this.caseCount('成案')
+      const lost = this.caseCount('未成案')
+      return (won + lost) ? Math.round(won / (won + lost) * 100) + '%' : '—'
+    },
     unreadOnly: false,
 
     selectedCase: null,

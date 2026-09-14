@@ -1593,7 +1593,10 @@ body.sidebar-lock { overflow: hidden; }
 .vm-spine--idle { background: var(--border-light); }
 
 /* ── 微進度條：3px，只表示比例，不放文字 ── */
-.vm-bar { width: 100%; height: 3px; border-radius: 2px; background: var(--border-light); overflow: hidden; }
+/* display:block 不可省略——這個類別常掛在 <span> 上，inline 元素吃不到
+   width/height，條會整個消失。在 flex 容器裡剛好會被 blockify 而看起來正常，
+   所以只在非 flex 的容器裡現形（實際踩過：業務開發卡片的溫度條）。 */
+.vm-bar { display: block; width: 100%; height: 3px; border-radius: 2px; background: var(--border-light); overflow: hidden; }
 .vm-bar__fill { display: block; height: 100%; background: var(--text-dim); }
 .vm-bar__fill--ok   { background: var(--success); }
 .vm-bar__fill--warn { background: var(--warning); }
