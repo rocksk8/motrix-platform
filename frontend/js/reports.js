@@ -632,7 +632,10 @@ function reportsApp() {
       }
     },
 
-    activeTab: 'targets',
+    // 2026-09-14：預設從 'targets' 改成 'charts'。年度目標那一頁在沒設定
+    // 目標時是空狀態，一進營運報表看到的是「尚未設定年度目標」。
+    // 改成先看到圖表，其餘 12 個頁籤維持不動當細分用。
+    activeTab: 'charts',
 
     // ── Charts (圖表分析) ──────────────────────────────────────────────────────
     // Chart.js 實例故意用模組層級的 _reportCharts（見檔案最上方），不放進這個
@@ -1054,6 +1057,9 @@ function reportsApp() {
       this.loadData()
       this.loadOrgTree()
       if (this.activeTab === 'cashier') this.showCashierTab()
+      // 預設落在圖表頁時要主動觸發一次：圖表是懶建的（原本靠點頁籤才建），
+      // 不呼叫的話畫布會是空的。
+      if (this.activeTab === 'charts') this.showChartsTab()
       var self = this
       // Re-init charts when data changes and charts tab is active (e.g. period change)
       this.$watch('data', function(newData) {
