@@ -1732,6 +1732,8 @@ xlsx-0.18.5.full.min.js     （SheetJS）
 | ✅ | ~~關鍵 API 自動化測試~~（2026-09-01 更正：早已遠超 48 tests，現為 `backend/tests/` 45 個測試檔，累計 300+ 題，近期為 308/308 全過） |
 | ✅ | ~~文件拆 `CHANGELOG.md` 與本速查分離~~（已完成，見根目錄 `CHANGELOG.md`） |
 | ✅ | ~~Git Flow 分支規則~~（`develop` 分支 + `GITFLOW.md` 規範已建立） |
+| 🟠 | **測試暫存不會自己清，會吃掉整顆磁碟**（2026-09-14 記錄）。`pytest` **每跑一次**就在 `%TEMP%` 留下 1～2 GB（`motrix-pytest-*` 與自訂標籤目錄），**不會自動清**；背景 job 另外堆在 `.claude\jobs\<id>\tmp`。**2026-09-14 一次清出 190 GB**。清理規則：job 的 `state.json` 變成 `done` 之後其 `tmp` 可刪，**但 `state.json` 要留**（刪了就沒人知道那個 job 跑過什麼）。目前沒有任何自動機制，也沒有容量告警——磁碟满了會先從「測試跑不起來」或「備份寫不進去」表現出來，很難第一時間聯想到這裡。**跑完一輪大量測試後記得回頭清** |
+| 🟡 | **`develop` 分支實際上已經停用**（2026-09-14 查證）：`git rev-list --left-right --count master...develop` 為 **341 / 0**——develop 落後 master 341 個 commit 且沒有任何獨有內容。下面那列「Git Flow 分支規則已建立」只是「文件寫了」，實務上 **master 才是主幹**。開新分支請直接從 master 開，**不要照 `GITFLOW.md` 寫的從 develop 開**（會把工作基在 341 個 commit 以前的老基底）。要嘛把 develop 跟上來、要嘛在 `GITFLOW.md` 註明已改用 master 主幹制 |
 | 低 | SQLite → PostgreSQL（資料量 > 1 GB 或同時連線數 > 5 時評估） |
 | ✅ | ~~簽核流程尚未整合處/部門組織架構~~（四個 approval-settings 頁面已支援「部門主管自動簽核」層，見 §12 2026-08-22g） |
 | ✅ | ~~通知路由只接了「工作事項逾期未完成」一個事件~~（已擴充到案件執行進度／專案到期兩個事件，`case_stage_deadline_manager`／`project_deadline_manager`，見 §12 2026-08-22k）；報表/儀表板依部門篩選仍只涵蓋 `reports.py`／`dashboard.py`（含新增的 `projectSummary`），activity-feed 仍只有「案件留言板」區塊套用篩選 |
