@@ -10,135 +10,192 @@
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <style>
+    /* ── 版面：2026-09-14 由「左清單＋右詳情」改為「簽核跑道」─────────────
+       原本依**申請人**分組，但決定要不要動手的是 canApprove()（輪不輪到我）
+       與停留天數，兩者都跟申請人無關；而且 waitingForText() 早就算得出
+       「等待某某簽核（第 N/M 層）」，那句話卻只出現在右側詳情裡。
+       改成：上方壓力帶 → 左「待我簽核」（大卡，核准/退回直接在卡上）
+                        → 右「流程中」（緊湊列，依卡在誰身上分組）。
+
+       ⚠️ 詳情抽屜 .aq-drawer 刻意放在 <body> 直下、不放進 .aq-layout：
+       深色模式是對 body 的**直接子元素**套 invert 濾鏡，有 filter 的元素會
+       變成 position:fixed 的 containing block——抽屜若留在 .aq-layout 內，
+       深色模式下整個會偏掉 --topbar-h 的高度（同一個坑 2026-09-13 在側欄
+       踩過一次，見 style.css 排除清單那段註解）。 */
     .aq-layout {
       display: flex;
-      gap: 0;
-      height: calc(100vh - var(--topbar-h));
+      flex-direction: column;
+      gap: 14px;
+      min-height: calc(100vh - var(--topbar-h));
       margin-left: var(--sidebar-w);
       margin-top: var(--topbar-h);
-    }
-    /* Left panel */
-    .aq-left {
-      width: 320px;
-      flex-shrink: 0;
-      border-right: 1px solid var(--border);
-      overflow-y: auto;
-      background: var(--bg);
-    }
-    .aq-left-header {
-      padding: 18px 18px 12px;
-      border-bottom: 1px solid var(--border);
+      padding: 18px 22px 28px;
       background: var(--white);
-      position: sticky;
-      top: 0;
-      z-index: 1;
     }
-    /* 2026-09-14：左欄標頭是這頁的實質標題，加上直立紅色標記
-       （官網 28×3 的緊湊變體），不動雙欄版面結構。 */
-    .aq-left-title {
-      font-size: 14px;
+    .aq-title-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .aq-title {
+      font-size: 15px;
       font-weight: 700;
-      color: var(--text-main);; display:inline-flex; align-items:center; gap:8px}
-    .aq-left-title::before{content:'';width:var(--v4-mark-h);height:13px;background:var(--accent);flex:none}
-    .aq-left-sub {
-      font-size: 11px;
-      color: var(--text-secondary);
-      margin-top: 3px;
-      font-family: 'LINE Seed TW_OTF', sans-serif;
+      color: var(--text-primary);
+      display: inline-flex; align-items: center; gap: 8px;
     }
-    .aq-group {
-      border-bottom: 1px solid var(--border);
+    /* 官網 28x3 紅色段落標記的緊湊變體（沿用改版前左欄標題的作法） */
+    .aq-title::before { content: ''; width: var(--v4-mark-h); height: 14px; background: var(--accent); flex: none; }
+    .aq-title-sub { font-size: 11.5px; color: var(--text-dim); }
+
+    .aq-runway {
+      display: grid;
+      grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+      gap: 18px;
+      align-items: start;
     }
-    .aq-group-header {
-      padding: 10px 18px 8px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      background: var(--white);
+    .aq-col { min-width: 0; }
+    .aq-col__head {
+      display: flex; align-items: center; gap: 8px;
+      padding-bottom: 8px; margin-bottom: 10px;
       border-bottom: 1px solid var(--border-light);
     }
-    .aq-group-name {
-      font-size: 12px;
-      font-weight: 700;
-      color: var(--text-main);
-      flex: 1;
+    .aq-col__title { font-size: 12.5px; font-weight: 700; color: var(--text-primary); }
+    .aq-col__count {
+      font-size: 11px; color: var(--text-dim);
+      font-family: var(--font-en); font-variant-numeric: tabular-nums;
     }
-    .aq-group-badge {
-      background: #EEF2FF;
-      color: #4338CA;
-      font-size: 10px;
-      font-weight: 700;
-      font-family: 'LINE Seed TW_OTF', sans-serif;
-      padding: 2px 7px;
-      border-radius: 10px;
+    .aq-col__tools { margin-left: auto; display: flex; gap: 4px; }
+    .aq-sort {
+      font-family: var(--font-zh); font-size: 11.5px; font-weight: 500;
+      padding: 3px 9px; border-radius: var(--radius);
+      border: 1px solid var(--border-light); background: var(--white);
+      color: var(--text-secondary); cursor: pointer;
     }
-    .aq-item {
-      padding: 10px 18px;
-      cursor: pointer;
-      border-bottom: 1px solid var(--border-light);
-      transition: background .12s;
-    }
-    .aq-item:last-child { border-bottom: none; }
-    .aq-item:hover { background: #F5F3FF; }
-    .aq-item.active { background: #EEF2FF; border-left: 3px solid #6366F1; padding-left: 15px; }
-    .aq-item.mine-turn { border-left: 3px solid #DC2626; background: #FFF7ED; padding-left: 15px; }
-    .aq-item.mine-turn:hover { background: #FEF3C7; }
-    .aq-item.mine-turn.active { background: #FEF3C7; border-left-color: #DC2626; }
-    .aq-item-quote {
-      font-size: 12px;
-      font-weight: 700;
-      color: var(--text-main);
-      font-family: 'LINE Seed TW_OTF', sans-serif;
-    }
-    .aq-item-customer {
-      font-size: 11px;
-      color: var(--text-secondary);
-      margin-top: 2px;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .aq-item-meta {
-      display: flex;
-      gap: 8px;
-      margin-top: 4px;
-      align-items: center;
-    }
-    .aq-item-time {
-      font-size: 10px;
-      color: var(--text-dim);
-      font-family: 'LINE Seed TW_OTF', sans-serif;
-    }
-    .aq-item-amount {
-      font-size: 10px;
-      color: var(--text-secondary);
-      font-family: 'LINE Seed TW_OTF', sans-serif;
-      margin-left: auto;
-    }
-    /* Right panel */
-    .aq-right {
-      flex: 1;
-      overflow-y: auto;
-      padding: 28px 32px;
+    .aq-sort:hover { border-color: var(--ghost-hover-border); color: var(--text-primary); }
+    .aq-sort.on { background: var(--text-primary); color: var(--text-on-dark); border-color: var(--text-primary); }
+
+    /* 待我簽核：大卡。核准／退回直接放在卡上——這裡的項目依定義都是
+       canApprove() 為真，多開一次詳情才能按是純粹的多餘步驟。 */
+    .aq-card {
+      display: flex; align-items: stretch;
       background: var(--white);
+      border: 1px solid var(--border-light);
+      border-radius: var(--radius);
+      overflow: hidden; margin-bottom: 7px; cursor: pointer;
+      transition: box-shadow .12s, border-color .12s;
     }
-    .aq-empty {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      height: 100%;
-      gap: 12px;
-      color: var(--text-dim);
+    .aq-card:hover { border-color: var(--ghost-hover-border); box-shadow: var(--shadow-sm); }
+    .aq-card.active { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-light); }
+    .aq-card__in { padding: 9px 12px; min-width: 0; flex: 1; }
+    .aq-card__r1 { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; margin-bottom: 3px; }
+    .aq-card__no {
+      font-size: 12.5px; font-weight: 700; color: var(--text-primary);
+      font-family: var(--font-en); font-variant-numeric: tabular-nums;
     }
-    .aq-empty-icon {
-      font-size: 42px;
-      opacity: .35;
+    .aq-card__age {
+      margin-left: auto; font-size: 11px; font-weight: 700;
+      font-family: var(--font-en); font-variant-numeric: tabular-nums;
     }
-    .aq-empty-text {
-      font-size: 14px;
+    .aq-card__r2 {
+      font-size: 12.5px; color: var(--text-secondary);
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .aq-card__r3 { display: flex; align-items: center; gap: 10px; margin-top: 7px; flex-wrap: wrap; }
+    .aq-card__amt {
+      font-size: 12.5px; font-weight: 600; color: var(--text-primary);
+      font-family: var(--font-en); font-variant-numeric: tabular-nums;
+    }
+    .aq-card__flow { display: flex; align-items: center; gap: 7px; font-size: 11px; color: var(--text-dim); }
+    .aq-card__act { margin-left: auto; display: flex; gap: 5px; }
+
+    /* 流程中：這些項目我按不了，只需要知道卡在誰身上、卡多久 */
+    .aq-blockgrp { margin-bottom: 12px; }
+    .aq-blockgrp__head {
+      display: flex; align-items: center; gap: 7px;
+      font-size: 11.5px; font-weight: 700; color: var(--text-secondary);
+      padding: 5px 10px; background: var(--icon-btn-bg);
+      border-radius: var(--radius); margin-bottom: 4px;
+    }
+    .aq-blockgrp__dwell {
+      font-size: 10.5px; font-weight: 700;
+      font-family: var(--font-en); font-variant-numeric: tabular-nums;
+    }
+    .aq-blockgrp__n {
+      margin-left: auto; font-size: 11px; font-weight: 500; color: var(--text-dim);
+      font-family: var(--font-en); font-variant-numeric: tabular-nums;
+    }
+    .aq-qrow {
+      display: flex; align-items: center; gap: 9px;
+      padding: 7px 10px; border-radius: var(--radius);
+      border: 1px solid transparent; font-size: 12px; cursor: pointer;
+    }
+    .aq-qrow:hover { background: var(--icon-btn-bg); border-color: var(--border-light); }
+    .aq-qrow.active { background: var(--accent-light); border-color: var(--accent); }
+    .aq-qrow__no {
+      font-size: 12px; font-weight: 600; color: var(--text-primary); flex: 0 0 auto;
+      font-family: var(--font-en); font-variant-numeric: tabular-nums;
+    }
+    .aq-qrow__who {
+      color: var(--text-dim); font-size: 11.5px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .aq-qrow__age {
+      margin-left: auto; font-size: 11px; color: var(--text-dim); flex: 0 0 auto;
+      font-family: var(--font-en); font-variant-numeric: tabular-nums;
+    }
+
+    .aq-typestrip {
+      display: flex; gap: 6px; flex-wrap: wrap;
+      margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border-light);
+    }
+    .aq-typestrip__i {
+      display: flex; align-items: center; gap: 6px; font-size: 11px;
+      padding: 4px 9px; border-radius: var(--radius);
+      border: 1px solid var(--border-light); background: var(--white);
       color: var(--text-secondary);
     }
+    .aq-typestrip__i .n { font-weight: 700; font-family: var(--font-en); font-variant-numeric: tabular-nums; }
+    .aq-typestrip__i .sw { width: 3px; height: 12px; border-radius: 1px; flex: 0 0 auto; }
+
+    .aq-blank {
+      padding: 26px 16px; text-align: center;
+      font-size: 12.5px; color: var(--text-dim);
+      border: 1px dashed var(--border-light); border-radius: var(--radius);
+    }
+    .aq-blank strong {
+      display: block; font-size: 13px; color: var(--text-secondary);
+      margin-bottom: 3px; font-weight: 700;
+    }
+
+    /* ── 詳情抽屜（原 .aq-right 常駐右欄，2026-09-14 改為覆蓋層）──
+       佇列是空的時候不該有半個畫面在寫「請選取左側項目」。
+       位置在 <body> 直下，理由見上方 .aq-layout 的註解。 */
+    .aq-drawer-mask {
+      position: fixed; inset: 0;
+      background: rgba(10, 10, 10, .38);
+      z-index: 120;
+    }
+    .aq-drawer {
+      position: fixed; top: 0; right: 0; bottom: 0;
+      width: min(720px, 94vw);
+      background: var(--white);
+      border-left: 1px solid var(--border-light);
+      box-shadow: var(--shadow-lg);
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      padding: 14px 26px 32px;
+      z-index: 121;
+    }
+    /* 關閉鈕自己佔一列，不用絕對定位——詳情標頭右上角本來就排滿了
+       開啟案件管理／預覽／轉簽／核准／退回，疊上去會蓋住最右邊那顆
+       （實測會壓到「退回草稿」）。 */
+    .aq-drawer__bar {
+      display: flex; justify-content: flex-end;
+      margin-bottom: 6px;
+    }
+    .aq-drawer__close {
+      width: 28px; height: 28px; border-radius: 50%;
+      border: 1px solid var(--border-light); background: var(--white);
+      color: var(--text-secondary); cursor: pointer;
+      display: grid; place-items: center; line-height: 1;
+    }
+    .aq-drawer__close:hover { border-color: var(--ghost-hover-border); color: var(--text-primary); }
     .aq-detail-header {
       display: flex;
       align-items: flex-start;
@@ -152,7 +209,7 @@
     .aq-detail-quote-no {
       font-size: 18px;
       font-weight: 700;
-      color: var(--text-main);
+      color: var(--text-primary);
       font-family: 'LINE Seed TW_OTF', sans-serif;
     }
     .aq-detail-customer {
@@ -195,7 +252,7 @@
     }
     .aq-info-value {
       font-size: 13px;
-      color: var(--text-main);
+      color: var(--text-primary);
       font-weight: 500;
     }
     .aq-reasons {
@@ -255,12 +312,12 @@
       width: 440px; max-width: 96vw; box-shadow: 0 16px 48px rgba(0,0,0,.22);
     }
     .reject-modal h3 {
-      font-size: 16px; font-weight: 700; margin-bottom: 10px; color: var(--text-main);
+      font-size: 16px; font-weight: 700; margin-bottom: 10px; color: var(--text-primary);
     }
     .reject-modal textarea {
       width: 100%; border: 1px solid var(--border); border-radius: var(--radius);
       padding: 9px 12px; font-size: 13px; font-family: inherit; resize: vertical;
-      min-height: 90px; color: var(--text-main);
+      min-height: 90px; color: var(--text-primary);
       box-sizing: border-box;
     }
     .reject-modal textarea:focus { outline: none; border-color: var(--accent); }
@@ -291,7 +348,7 @@
     .aq-step-circle.done    { background: #D1FAE5; color: #065F46; }
     .aq-step-circle.current { background: #6366F1; color: #fff; }
     .aq-step-circle.pending { background: #F3F4F6; color: #9CA3AF; border: 1px solid #E5E7EB; }
-    .aq-step-label { font-size: 13px; color: var(--text-main); font-weight: 500; flex: 1; }
+    .aq-step-label { font-size: 13px; color: var(--text-primary); font-weight: 500; flex: 1; }
     .aq-step-sublabel { font-size: 11px; color: var(--text-dim); margin-top: 1px; }
     .aq-step-status {
       font-size: 10px; font-weight: 600; font-family: 'LINE Seed TW_OTF', sans-serif;
@@ -315,11 +372,11 @@
 
   /* -- Mobile RWD -- */
   @media (max-width:767px) {
-    .aq-layout { flex-direction:column; height:auto; margin-left:0 !important; margin-top:var(--topbar-h); min-height:calc(100vh - var(--topbar-h)); }
-    .aq-left { width:100%; max-height:42vh; border-right:none; border-bottom:1px solid var(--border); }
-    .aq-right { padding:14px 12px; }
-    .aq-left.mob-hidden  { display:none !important; }
-    .aq-right.mob-hidden { display:none !important; }
+    .aq-layout { margin-left:0 !important; padding:14px 12px 24px; }
+    /* 跑道在手機上疊成一欄：先「待我簽核」再「流程中」，順序本來就對 */
+    .aq-runway { grid-template-columns:minmax(0,1fr); gap:22px; }
+    .aq-drawer { width:100vw; padding:16px 14px 28px; border-left:none; }
+    .aq-card__act { width:100%; margin-left:0; }
     .mob-back-aq { display:inline-flex !important; }
   }
   </style>
@@ -335,74 +392,174 @@
   <!-- MAIN -->
   <div class="aq-layout">
 
-    <!-- Left: queue list -->
-    <div class="aq-left" :class="{'mob-hidden': selected && isMobileView}">
-      <div class="aq-left-header">
-        <div class="aq-left-title">待簽核佇列</div>
-        <div class="aq-left-sub" x-text="totalPending > 0 ? '共 ' + totalPending + ' 件待審核，依申請人排列' : '目前沒有待審核項目'"></div>
-      </div>
-      <div x-show="!loading && myPendingCount > 0"
-           style="background:#FEF2F2;border-bottom:1px solid #FECACA;padding:8px 18px;display:flex;align-items:center;gap:8px">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#DC2626" stroke-width="2.5" style="flex-shrink:0"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-        <span style="font-size:12px;font-weight:600;color:#B91C1C;font-family:var(--font-zh)"
-              x-text="'有 ' + myPendingCount + ' 件項目正在等待您簽核'"></span>
-      </div>
-
-      <div x-show="loading" style="padding:24px;text-align:center;font-size:13px;color:var(--text-dim)">載入中…</div>
-
-      <div x-show="!loading && queue.length === 0" style="padding:32px 18px;text-align:center;font-size:13px;color:var(--text-secondary)">
-        <div style="font-size:28px;opacity:.3;margin-bottom:8px">✓</div>
-        所有簽核均已處理完畢
-      </div>
-
-      <template x-for="group in queue" :key="group.requestedBy">
-        <div class="aq-group">
-          <div class="aq-group-header">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--text-secondary)"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-            <span class="aq-group-name" x-text="group.requestedByDisplay || group.requestedBy"></span>
-            <span class="aq-group-badge" x-text="group.count"></span>
-          </div>
-          <template x-for="item in group.items" :key="item.quoteNo">
-            <div class="aq-item"
-                 :class="{
-                   'active': selected?.quoteNo === item.quoteNo,
-                   'mine-turn': canApprove(item)
-                 }"
-                 @click="selectItem(item)">
-              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-                <div class="aq-item-quote" x-text="item.quoteNo"></div>
-                <span class="aq-type-tag" :class="'aq-type-' + typeTagClass(item)"
-                      x-text="docTypeLabel(item)"></span>
-                <template x-if="(item.tiers||[]).length > 0">
-                  <span class="aq-step-badge"
-                        :class="canApprove(item) ? 'my-turn' : 'waiting'"
-                        x-text="'第 ' + ((item.currentTier??0)+1) + '/' + item.tierCount + ' 層'"></span>
-                </template>
-              </div>
-              <div class="aq-item-customer" x-text="item.customer + (item.projectName ? '｜' + item.projectName : '')"></div>
-              <div class="aq-item-meta">
-                <span class="aq-item-time" x-text="item.requestedAt ? new Date(item.requestedAt).toLocaleString('zh-TW',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : ''"></span>
-                <span class="aq-item-amount" x-text="amountDisplay(item)"></span>
-              </div>
-            </div>
-          </template>
-        </div>
-      </template>
+    <div class="aq-title-row">
+      <span class="aq-title">簽核佇列</span>
+      <span class="aq-title-sub"
+            x-text="loading ? '載入中…'
+                    : (totalPending > 0 ? '共 ' + totalPending + ' 件待簽核，依「輪不輪到我」與停留天數排列'
+                                        : '目前沒有待簽核項目')"></span>
     </div>
 
-    <!-- Right: detail -->
-    <div class="aq-right" :class="{'mob-hidden': !selected && isMobileView}">
-
-      <!-- Empty state -->
-      <div class="aq-empty" x-show="!selected">
-        <div class="aq-empty-icon">📋</div>
-        <div class="aq-empty-text">選取左側項目以查看詳情</div>
+    <!-- 壓力帶（andon）：三個數字＋一條停留天數比例條，取代原本的標題列。
+         比例條的三段顏色跟下方泳道是同一套，所以「紅色比較長」跟「逾時泳道比較長」
+         講的是同一件事，不需要另外解讀。 -->
+    <div class="vm-andon" x-show="!loading && totalPending > 0" x-cloak>
+      <div class="vm-andon__seg vm-andon__seg--mine">
+        <span class="vm-andon__val" x-text="myPendingCount"></span>
+        <span class="vm-andon__lbl">待我簽核
+          <small x-text="myOverdueCount > 0 ? '其中 ' + myOverdueCount + ' 件已逾時' : '沒有逾時項目'"></small>
+        </span>
       </div>
+      <div class="vm-andon__seg">
+        <span class="vm-andon__val" x-text="flowItems.length"></span>
+        <span class="vm-andon__lbl">流程中<small>等其他簽核人</small></span>
+      </div>
+      <div class="vm-andon__seg vm-andon__seg--crit">
+        <span class="vm-andon__val" x-text="ageBuckets.crit"></span>
+        <span class="vm-andon__lbl">全站逾時<small>停留 ≥ 4 天</small></span>
+      </div>
+      <div class="vm-andon__bar">
+        <span class="vm-andon__track"
+              :title="'今日 ' + ageBuckets.ok + ' 件／2–3 天 ' + ageBuckets.warn + ' 件／逾時 ' + ageBuckets.crit + ' 件'">
+          <i :style="'width:' + agePct('ok') + '%;background:var(--success)'"></i>
+          <i :style="'width:' + agePct('warn') + '%;background:var(--warning)'"></i>
+          <i :style="'width:' + agePct('crit') + '%;background:var(--danger)'"></i>
+        </span>
+      </div>
+    </div>
 
+    <div class="aq-runway">
+
+      <!-- ── 左欄：待我簽核（canApprove() 為真的項目）───────────────────── -->
+      <section class="aq-col">
+        <div class="aq-col__head">
+          <span class="vm-lamp" :class="myItems.length ? 'vm-lamp--crit' : 'vm-lamp--idle'"></span>
+          <span class="aq-col__title">待我簽核</span>
+          <span class="aq-col__count" x-text="myItems.length + ' 件'"></span>
+          <span class="aq-col__tools" x-show="myItems.length > 1">
+            <button type="button" class="aq-sort" :class="{on: mySort === 'age'}" @click="mySort = 'age'">依停留</button>
+            <button type="button" class="aq-sort" :class="{on: mySort === 'amount'}" @click="mySort = 'amount'">依金額</button>
+          </span>
+        </div>
+
+        <div x-show="loading" class="aq-blank">載入中…</div>
+
+        <div x-show="!loading && myItems.length === 0" class="aq-blank" x-cloak>
+          <strong>沒有輪到你的項目</strong>
+          <span x-text="totalPending > 0 ? '佇列裡的 ' + totalPending + ' 件都在等其他簽核人' : '佇列是空的'"></span>
+        </div>
+
+        <template x-for="lane in myLanes" :key="lane.key">
+          <div class="vm-lane" x-show="lane.items.length" x-cloak>
+            <div class="vm-lane__head">
+              <span class="vm-lane__title" :class="'vm-lane__title--' + lane.key" x-text="lane.label"></span>
+              <span class="vm-lane__rule"></span>
+              <span class="vm-lane__count" x-text="lane.items.length"></span>
+            </div>
+
+            <template x-for="item in lane.items" :key="itemKey(item)">
+              <div class="aq-card"
+                   :class="{active: selected && itemKey(selected) === itemKey(item)}"
+                   @click="selectItem(item)">
+                <span class="vm-spine" :class="'vm-spine--' + ageTone(item)"></span>
+                <div class="aq-card__in">
+                  <div class="aq-card__r1">
+                    <span class="aq-card__no" x-text="item.quoteNo"></span>
+                    <span class="aq-type-tag" :class="'aq-type-' + typeTagClass(item)" x-text="docTypeLabel(item)"></span>
+                    <span class="aq-card__age" :class="'vm-age--' + ageWord(item)" x-text="ageText(item)"></span>
+                  </div>
+                  <div class="aq-card__r2" x-text="item.customer + (item.projectName ? '｜' + item.projectName : '')"></div>
+                  <div class="aq-card__r3">
+                    <span class="aq-card__amt" x-text="amountDisplay(item)"></span>
+                    <span class="aq-card__flow">
+                      <span class="vm-ladder">
+                        <template x-for="(c, ci) in ladderCells(item)" :key="ci">
+                          <span :class="c.kind === 'dot'
+                                        ? 'vm-ladder__dot' + (c.state ? ' vm-ladder__dot--' + c.state : '')
+                                        : 'vm-ladder__rung' + (c.state ? ' vm-ladder__rung--done' : '')"></span>
+                        </template>
+                      </span>
+                      <span x-text="tierText(item)"></span>
+                    </span>
+                    <span class="aq-card__act">
+                      <button type="button" class="btn btn-primary btn-sm"
+                              @click.stop="quickApprove(item)" :disabled="actioning">核准</button>
+                      <button type="button" class="btn btn-reject btn-sm"
+                              @click.stop="quickReject(item)" :disabled="actioning">退回</button>
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </template>
+          </div>
+        </template>
+      </section>
+
+      <!-- ── 右欄：流程中（等別人）依「卡在誰身上」分組 ──────────────────
+           要催件的時候找的是人不是單，所以分組標頭直接寫這個人手上最久那件
+           卡了幾天。 -->
+      <aside class="aq-col">
+        <div class="aq-col__head">
+          <span class="vm-lamp vm-lamp--idle"></span>
+          <span class="aq-col__title">流程中（等別人）</span>
+          <span class="aq-col__count" x-text="flowItems.length + ' 件'"></span>
+        </div>
+
+        <div x-show="!loading && flowItems.length === 0" class="aq-blank" x-cloak>
+          沒有等待其他簽核人的項目
+        </div>
+
+        <template x-for="grp in blockedGroups" :key="grp.key">
+          <div class="aq-blockgrp" x-cloak>
+            <div class="aq-blockgrp__head">
+              <span class="vm-person">
+                <span class="vm-person__av" x-text="initial(grp.display)"></span>
+                <span x-text="grp.display"></span>
+              </span>
+              <span class="aq-blockgrp__dwell" :class="'vm-age--' + toneWord(grp.maxTone)"
+                    x-text="'最久 ' + grp.maxAge"></span>
+              <span class="aq-blockgrp__n" x-text="grp.items.length + ' 件'"></span>
+            </div>
+            <template x-for="item in grp.items" :key="itemKey(item)">
+              <div class="aq-qrow"
+                   :class="{active: selected && itemKey(selected) === itemKey(item)}"
+                   @click="selectItem(item)">
+                <span class="vm-lamp" :class="'vm-lamp--' + ageTone(item)"></span>
+                <span class="aq-qrow__no" x-text="item.quoteNo"></span>
+                <span class="aq-type-tag" :class="'aq-type-' + typeTagClass(item)" x-text="docTypeLabel(item)"></span>
+                <span class="aq-qrow__who" x-text="item.customer"></span>
+                <span class="aq-qrow__age" x-text="ageText(item)"></span>
+              </div>
+            </template>
+          </div>
+        </template>
+
+        <!-- 單據類型分布：色塊沿用各類型既有的 .aq-type-* 色，不另造一套 -->
+        <div class="aq-typestrip" x-show="!loading && totalPending > 0" x-cloak>
+          <template x-for="t in typeCounts" :key="t.key">
+            <span class="aq-typestrip__i">
+              <span class="sw" :style="'background:' + t.color"></span>
+              <span x-text="t.label"></span>
+              <span class="n" x-text="t.count"></span>
+            </span>
+          </template>
+        </div>
+      </aside>
+    </div>
+  </div><!-- /aq-layout -->
+
+  <!-- ── 詳情抽屜。放在 body 直下（非 .aq-layout 內），見 CSS 註解 ── -->
+  <div class="aq-drawer-mask" x-show="drawerOpen && selected" x-cloak @click="closeDrawer()"></div>
+  <aside class="aq-drawer" x-show="drawerOpen && selected" x-cloak @keydown.escape.window="closeDrawer()">
+    <div class="aq-drawer__bar">
+      <button type="button" class="aq-drawer__close" @click="closeDrawer()" aria-label="關閉詳情">✕</button>
+    </div>
+
+      <!-- Detail panel -->
       <!-- Detail panel -->
       <div x-show="selected">
         <div class="aq-detail-header">
-          <button @click="selected=null" class="mob-back-aq" style="display:none;align-items:center;gap:5px;background:none;border:none;cursor:pointer;font-size:13px;color:var(--accent);padding:0;font-family:var(--font-zh)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>列表</button>
+          <button @click="closeDrawer()" class="mob-back-aq" style="display:none;align-items:center;gap:5px;background:none;border:none;cursor:pointer;font-size:13px;color:var(--accent);padding:0;font-family:var(--font-zh)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>列表</button>
           
           <div class="aq-detail-title">
             <div class="aq-detail-quote-no" x-text="selected?.quoteNo"></div>
@@ -751,8 +908,7 @@
         </div>
 
       </div><!-- /detail -->
-    </div><!-- /aq-right -->
-  </div><!-- /aq-layout -->
+  </aside><!-- /aq-drawer -->
 
   <!-- PDF Preview modal -->
   <div x-show="previewModal" x-cloak
@@ -820,10 +976,11 @@
 
     function approvalQueueApp() {
       return {
-      isMobileView: window.innerWidth <= 767,
         session: {},
         queue: [],
         totalPending: 0,
+        drawerOpen: false,   // 詳情抽屜（原本是常駐右欄）
+        mySort: 'age',       // 'age' | 'amount'——「待我簽核」欄的排序
         myDelegatedFor: [],  // 我目前正在代理誰的簽核權限（2026-08-28，見 get_approval_queue() 說明）
         selected: null,
         detail: null,
@@ -844,6 +1001,170 @@
         previewBlobUrl: '',
         previewFetching: false,
         previewItemData: null,
+
+        // ═══ 簽核跑道（2026-09-14）═══════════════════════════════════════
+        // 後端完全沒改：/api/approval-queue 仍然依 requestedBy 分組回傳，
+        // 這裡把它攤平之後改用兩個真正會改變行動的軸重新分組——
+        //   ① 輪不輪到我（canApprove，跟申請人無關）
+        //   ② 停留幾天（requestedAt 距今，原本畫面上完全沒有這個資訊）
+        // 攤平後的 flatItems 也順手修掉一個既有缺陷，見 doReassign() 附近。
+
+        // 同一個單號在不同單據類型底下可能重複（例如報價單與其請款單），
+        // 所以 key 一律是 type + quoteNo，不能只用 quoteNo。
+        itemKey(item) { return item ? (item.type || 'quotation') + '|' + item.quoteNo : '' },
+
+        get flatItems() { return (this.queue || []).flatMap(g => g.items || []) },
+
+        _ageDays(item) {
+          const raw = item && item.requestedAt
+          if (!raw) return 0
+          // 後端回的是 'YYYY-MM-DD HH:MM:SS'，中間的空白在部分瀏覽器會解析失敗，
+          // 比照 dev-crm.html::_daysSince() 既有作法換成 'T'。
+          const d = new Date(String(raw).replace(' ', 'T'))
+          if (isNaN(d)) return 0
+          return Math.max(0, Math.floor((Date.now() - d.getTime()) / 86400000))
+        },
+
+        // 時效色階：三頁共用同一組門檻（docs/module-viz-mockup.html §00）
+        ageTone(item) {
+          const d = this._ageDays(item)
+          return d >= 4 ? 'crit' : d >= 2 ? 'warn' : 'ok'
+        },
+        toneWord(tone) { return tone === 'crit' ? 'stale' : tone === 'warn' ? 'warm' : 'fresh' },
+        ageWord(item)  { return this.toneWord(this.ageTone(item)) },
+
+        ageText(item) {
+          const d = this._ageDays(item)
+          if (d === 0) {
+            const t = item && item.requestedAt
+              ? new Date(String(item.requestedAt).replace(' ', 'T'))
+              : null
+            return t && !isNaN(t)
+              ? '今日 ' + t.toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', hour12: false })
+              : '今日'
+          }
+          return '停留 ' + d + ' 天'
+        },
+
+        get myItems()   { return this.flatItems.filter(i => this.canApprove(i)) },
+        get flowItems() { return this.flatItems.filter(i => !this.canApprove(i)) },
+
+        get myOverdueCount() { return this.myItems.filter(i => this.ageTone(i) === 'crit').length },
+
+        get ageBuckets() {
+          const b = { ok: 0, warn: 0, crit: 0 }
+          this.flatItems.forEach(i => { b[this.ageTone(i)]++ })
+          return b
+        },
+        agePct(key) {
+          const t = this.flatItems.length
+          return t ? Math.round(this.ageBuckets[key] / t * 100) : 0
+        },
+
+        _sortMine(a, b) {
+          if (this.mySort === 'amount') return (b.total || 0) - (a.total || 0)
+          return this._ageDays(b) - this._ageDays(a)   // 久的排前面
+        },
+
+        // 泳道＝停留天數。逾時的自動排最上面——這是唯一會讓人改變處理順序的
+        // 資訊，所以由它決定排列，不是類型也不是金額。
+        get myLanes() {
+          const lanes = [
+            { key: 'crit', label: '逾時 ≥ 4 天',  items: [] },
+            { key: 'warn', label: '2–3 天',       items: [] },
+            { key: 'ok',   label: '今日／昨日送審', items: [] },
+          ]
+          const by = Object.fromEntries(lanes.map(l => [l.key, l]))
+          this.myItems.forEach(i => by[this.ageTone(i)].items.push(i))
+          lanes.forEach(l => l.items.sort((a, b) => this._sortMine(a, b)))
+          return lanes
+        },
+
+        // 卡在誰身上：tiers 型單據取當層第一個未簽的人（跟 canApprove／
+        // waitingForText 的判斷完全一致）；case_change 與沒有流程的預設超管
+        // 情形本來就不指定特定人，歸到「最高管理員」。
+        blockerOf(item) {
+          if (!item) return { key: '__admin__', display: '最高管理員' }
+          if (item.type === 'case_change') return { key: '__admin__', display: '最高管理員' }
+          const tiers = item.tiers || []
+          const cur = item.currentTier ?? 0
+          if (tiers.length > 0 && cur < tiers.length) {
+            const pending = (tiers[cur].approvers || []).find(a => a.status !== 'approved')
+            if (pending) return { key: pending.username, display: pending.displayName || pending.username }
+          }
+          return { key: '__admin__', display: '最高管理員' }
+        },
+
+        get blockedGroups() {
+          const map = new Map()
+          this.flowItems.forEach(item => {
+            const b = this.blockerOf(item)
+            if (!map.has(b.key)) map.set(b.key, { key: b.key, display: b.display, items: [] })
+            map.get(b.key).items.push(item)
+          })
+          const groups = [...map.values()]
+          groups.forEach(g => {
+            g.items.sort((a, b) => this._ageDays(b) - this._ageDays(a))
+            const top = g.items[0]
+            const d = this._ageDays(top)
+            g.maxAge  = d === 0 ? '今日' : d + ' 天'
+            g.maxTone = this.ageTone(top)
+          })
+          // 卡最久的人排最前面——這一欄的用途是催件
+          groups.sort((a, b) => this._ageDays(b.items[0]) - this._ageDays(a.items[0]))
+          return groups
+        },
+
+        // 階梯：把 tiers/currentTier 畫成 ●─●─○。dot 與 rung 交錯成一維陣列，
+        // 讓 x-for 每次迭代都只有一個根元素（Alpine 的 template 要求）。
+        ladderCells(item) {
+          const tiers = item && item.tiers ? item.tiers : []
+          const cur = item && item.currentTier != null ? item.currentTier : 0
+          if (!tiers.length) return [{ kind: 'dot', state: 'cur' }]
+          const cells = []
+          tiers.forEach((_t, i) => {
+            if (i > 0) cells.push({ kind: 'rung', state: i <= cur ? 'done' : '' })
+            cells.push({ kind: 'dot', state: i < cur ? 'done' : i === cur ? 'cur' : '' })
+          })
+          return cells
+        },
+
+        tierText(item) {
+          const tiers = item && item.tiers ? item.tiers : []
+          if (!tiers.length) return item && item.type === 'case_change' ? '最高管理員審核' : '單層審核'
+          const cur = (item.currentTier ?? 0) + 1
+          return '第 ' + cur + '/' + tiers.length + ' 層'
+        },
+
+        initial(name) { return (name || '？').trim().charAt(0) },
+
+        // 類型分布。色票直接取自既有 .aq-type-* 的六個值，不另造一套；
+        // 依 docTypeLabel 分組（extra_expense 系列跟報價單共用 tag class，
+        // 但它們在佇列上是不同的東西，不該併成一格）。
+        get typeCounts() {
+          const color = {
+            quotation: '#4338CA', cv: '#92400E', iv: '#065F46',
+            sn: '#155E75', pr: '#9A3412', cc: '#6D28D9',
+          }
+          const map = new Map()
+          this.flatItems.forEach(i => {
+            const label = this.docTypeLabel(i)
+            if (!map.has(label)) {
+              map.set(label, { key: label, label, color: color[this.typeTagClass(i)] || '#4338CA', count: 0 })
+            }
+            map.get(label).count++
+          })
+          return [...map.values()].sort((a, b) => b.count - a.count)
+        },
+
+        // 卡片上直接核准／退回：這裡的項目依定義都是 canApprove() 為真，
+        // 先開詳情再按是多餘的一步。刻意不動 drawerOpen——快速動作不該
+        // 把抽屜拉開，但 doApprove()/openRejectModal() 都是對 selected 作用，
+        // 所以還是要先把 selected 指過去。
+        quickApprove(item) { this.selected = item; this.doApprove() },
+        quickReject(item)  { this.selected = item; this.openRejectModal() },
+
+        closeDrawer() { this.drawerOpen = false; this.selected = null; this.detail = null },
 
         docTypeLabel(item) {
           if (!item) return ''
@@ -951,7 +1272,6 @@
         },
 
         async init() {
-      window.addEventListener('resize', () => { this.isMobileView = window.innerWidth <= 767 })
           const s = JSON.parse(localStorage.getItem('motrix_session') || 'null')
           if (!s?.token) { location.href = 'login.html'; return }
           this.session = s
@@ -971,7 +1291,8 @@
             this.myDelegatedFor = d.myDelegatedFor || []
             // Keep selection in sync
             if (this.selected) {
-              const found = this.queue.flatMap(g => g.items).find(i => i.quoteNo === this.selected.quoteNo)
+              const key = this.itemKey(this.selected)
+              const found = this.flatItems.find(i => this.itemKey(i) === key)
               this.selected = found || null
           this.loadDetail(this.selected)
             }
@@ -1035,9 +1356,13 @@
             // 這個元件的重整叫 loadQueue()——先前寫成 this.load() 會安靜地丟
             // TypeError（被 catch 吃掉、對話框已經關了所以錯誤訊息也看不到），
             // 結果是轉簽其實成功了，但畫面上的簽核人沒換，人會以為沒生效
-            const keep = this.selected && this.selected.quoteNo
+            const keep = this.selected && this.itemKey(this.selected)
             await this.loadQueue()
-            const again = (this.queue || []).find(it => it.quoteNo === keep)
+            // 既有缺陷（2026-09-14 修）：queue 是「依申請人分組」的陣列，
+            // group 身上沒有 quoteNo 這個欄位，所以原本的
+            // (this.queue||[]).find(it => it.quoteNo === keep) 永遠回 undefined
+            // ——轉簽其實成功了，但畫面不會重新選回那一筆。要先攤平才找得到。
+            const again = this.flatItems.find(it => this.itemKey(it) === keep)
             if (again) this.selectItem(again)
           } catch (e) {
             this.reassignError = '轉簽失敗：' + e.message
@@ -1048,6 +1373,7 @@
 
         selectItem(item) {
           this.selected = item
+          this.drawerOpen = true
           this.loadDetail(item)
         },
 
