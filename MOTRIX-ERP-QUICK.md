@@ -1838,6 +1838,9 @@ xlsx-0.18.5.full.min.js     （SheetJS）
 
 | 優先 | 項目 |
 |------|------|
+| 🔴 | **簽核佇列按下簽核後系統卡死十幾秒（2026-09-15 回報，尚未查證）**。情境是**已結案案件的變更申請簽核**。**最可能的根因已經有線索**：QUICK 記過「整個 pytest session 期間有背景排程在寫 db，SQLite 寫鎖被佔住時 `db.py` 的 `connect(timeout=30)` 最多會等 30 秒」——正式機的背景排程（每日備份 02:00／每 2 小時的 Timer、每日 08:00 的九種檢查）同樣會長時間持有寫鎖，而「卡十幾秒然後自己好」正是等鎖的形狀，不是當掉。**查證方式**：①在正式機重現時同時看 `logs/server.log` 的慢請求記錄（2026-09-10 已加，見 §12）②`approve_case_change()` 這條路徑本身也要看：它在同一個請求裡做 `_sync_device_stock()`＋`save_quotation_json()`＋`_audit()`＋`notify_*()`，而後兩者各自**另開連線**，在外層交易還沒 commit 時開第二條寫連線正是 2026-09-10 記載過的自我死鎖形狀（`create_quotation` 踩過同一個坑）。**先查②**，那是程式碼裡就能證實的，不必等重現。 |
+| 🟠 | **最高管理者需要簽核的項目沒有出現在簽核佇列（2026-09-15 回報，尚未查證）**。回報情境：公司有兩位 superadmin，其中一位需要簽核的單據在他的簽核佇列裡看不到。**查證起點**：`GET /api/approval-queue`（`routers/quotations.py:3610`）組佇列的條件——要確認它是用「當層簽核人名單含我」還是「角色是 superadmin」在篩；以及已結案變更申請（`case_change`）那類**單層、任一 superadmin 審核**的單據有沒有被納進佇列查詢（那類沒有 `tiers`，很容易在只看 tiers 的查詢裡整批漏掉）。⚠️ 這一項跟上面那項是**不同**的問題，不要混在一起修。 |
+| 🟡 | **掃一遍「給人看的畫面上有沒有原始代碼值」（2026-09-15 交辦）**。起因：變更申請摘要出現「專案期間·狀態 `on_track`」。**那一處當天已修**（`_CASE_VALUE_LABELS` 值對照，未知值原樣顯示不硬猜）。使用者要求把同類問題排入檢查名單——要掃的是「後端把 enum／狀態碼直接送到前端顯示」，至少包含：案件代辦 `status`（`done`／`stage1_done`，`case-management.js:1462` 已有對照）、`settlement.status`（`finalized`／`draft`）、`change_status`、`writeOffStatus`（`approved`／`pending`）、`dealTag` 與各單據 `status` 的英文值。判準是**畫面上會不會出現底線命名的英文**，不是後端存什麼。 |
 | ✅ | ~~模組權限要真的擋住、未開啟的連模組名稱都不顯示~~（**2026-09-14 當天施作完成**，DB v84）。`require_any_module()` 從「admin+ 直通」改成**只有 superadmin 直通**；`sidebar.js` 二十幾個 `mods.indexOf(x) >= 0 || ad` 收斂成一支 `has(x)`，另外兩種非模組放行（`|| eng`、`|| role !== 'viewer'`）也一併拿掉。分組名稱不需額外處理——`renderMainNav()` 本來就會過濾 `items` 為空的分組，所以整組沒權限時連分組名稱都不出現。**四個原本沒有 key 只能靠角色寫死的頁面，依使用者裁示『沒有對應模組 key 也建立就沒有這個問題』新建了 key**：`audit_log`／`shipping_export_log`／`module_versions`／`selection_overview`；網路架構規劃書同樣只有 `netplan_edit` 沒有檢視 key，補上 `netplan`（目錄從 35 → 40 個 key）。**DB v84 先回填再取消直通**，所以沒有人憑空少掉今天看得到的東西。詳見 §12 同日條目與 [`MODULE-AUDIT-2026-09-13.md`](MODULE-AUDIT-2026-09-13.md) §6。 |
 | ✅ | ~~已結案變更申請「核准後會套用的內容」直接把 raw JSON 倒給人看~~（**2026-09-14 當天施作完成**，DB 無異動）。新增 `routers/quotations.py::_summarize_case_change()`，六種 `action_type` 各自產生可讀的 before／after（欄位中文名＋前後值），**只列有變動的欄位**；回傳形狀沿用額外支出那條路徑，前端 `approval-queue.html` 一行都不用改。**路上抓到一件比可讀性更嚴重的事**：`approve_case_change()` 對 `case_record_update` 的第一個動作是 `new_case_record["stages"] = cr.get("stages")`——**payload 裡的 stages 根本不會被套用**（階段有自己的專屬端點），而原本的畫面把它整包印在「核准後會套用的內容」底下，等於告訴審核者一件不會發生的事。摘要刻意不收 stages，並有一題測試釘住。內部欄位（`writeOffRequestedAt`、`invoiceFiles[].path`）一律不外流。**使用者要求的「其他地方也這樣顯示」已掃過**：全前端只有 `approval-queue.html:819` 一處在畫面上做 `JSON.stringify`，就是這一塊的 fallback；稽核紀錄頁根本不渲染 `detail` 欄位；額外支出變更申請本來就是逐欄對照。測試 `test_case_change_summary_2026_09_14.py`（12 題）。 |
 | ✅ | ~~完工單「單據用語」與「逐欄調整」要移到頁面最上面~~（**2026-09-14 當天施作完成**）。兩張卡搬到整頁最前面，提示語改成「請先選這裡，再往下填」。**順手處理了那個「換個位置還是會發生」的問題**：`applyPreset()` 是整批覆寫不是合併，所以已經逐欄微調過的內容會被吃掉——現在偵測到有自訂值時會先 `confirm()` 問一聲（`confirm` 是這頁既有慣例，送審／預覽都在用）。純前端，無後端異動。 |
@@ -1895,6 +1898,53 @@ xlsx-0.18.5.full.min.js     （SheetJS）
 > 未紀錄；同期間 `CHANGELOG.md` 09-08／09-09 兩天完全空白。已於本日補回，並新增
 > [`WEEKLY-AUDIT-2026-09-07_2026-09-10.md`](WEEKLY-AUDIT-2026-09-07_2026-09-10.md)
 > ——帶「模組／檔案:行號／是否在正式機」座標的本週稽核索引，出事時先看那份。
+
+### 2026-09-15 — 打包不再把整台機器吃滿（DB 無異動）
+
+使用者回報：「打包的時候 pytest 會把 CPU 跟記憶體吃滿」。量過之後兩個發現：
+
+**① 記憶體從來不是瓶頸，吃滿的是 CPU。** 32 GB 機器上峰值不到 2 GB。
+
+**② 每個 xdist worker 都在 import 當下跑了一次完整備份。** `import main` 是
+module-level 執行（不是 `@app.on_event`），所以 `_schedule_daily()` 的第一件事
+——`_daily_backup()`：整庫 SQLite 快照＋41 張表 JSON＋月備份＋uploads/PDF 鏡像＋
+過期清理——會在**每一個 worker** 跑一次，`_schedule_weekly()` 再來一次週備份，
+`schedule_overdue_check()` 另起執行緒補跑九種檢查。`-n auto` 在 12 執行緒機器上
+開 12 個 worker，等於**同一次測試跑了 12 遍完整備份**。
+
+實測（本機 Ryzen 5 5600X，6 實體核心 / 12 執行緒，940 題非 e2e）：
+
+| 設定 | 時間 | 峰值記憶體 | 峰值行程數 |
+|---|---|---|---|
+| `-n auto`(=12) ＋ 背景排程開著（**原本**） | **274 秒** | 1.86 GB | 33 |
+| `-n auto`(=12) ＋ 背景排程停用 | 185 秒 | 2.20 GB | 37 |
+| `-n 8` ＋ 背景排程停用 | 171 秒 | 1.63 GB | 23 |
+| **`-n 6`（實體核心數）＋ 背景排程停用** | **175 秒** | **1.34 GB** | **20** |
+
+兩項改動：
+
+1. **`conftest.py` 設 `MOTRIX_DISABLE_SCHEDULERS=1`**（`main.py` 讀它決定要不要
+   啟動那五個排程）。正式機與手動啟動都不會設，行為逐字不變。
+   除了快 32%，也一併拆掉 QUICK 記載的 e2e flaky 放大因子——「背景排程整個
+   session 都在寫 db，SQLite 寫鎖被佔住時最多會等 30 秒」。
+2. **`build_deploy_package.ps1` 的 `-n auto` 改成依實體核心數開**
+   （`min(實體核心, 8)`，查不到用 4）。`-n auto` 取的是**邏輯**處理器數，把 12 個
+   worker 塞進 6 個實體核心只會互相搶——**比用 6 個還慢**，記憶體卻多 64%、
+   行程數多 85%。順便把打包行程降到 `BelowNormal`（子行程繼承），時間差不多但
+   打包期間機器還能用——使用者的痛點是「機器不能用」，不是「跑太久」。
+
+**停掉排程之後有一題立刻變紅**，而且紅得有價值：`test_clean_backup_still_reports_ok`
+原本是**靠背景排程的副作用**才綠的——它把 `_snapshot_sqlite` 換成 no-op，卻依賴
+啟動時排程已經先跑過一次真的快照、檔案剛好存在。已改成自己造齊前提。
+
+另修：`test_archived_filename_includes_seconds` 把日期資料夾寫死成 `2026-09-14`，
+跨過午夜就紅（2026-09-15 實際踩到）。改用 `date.today()`。
+
+**變更申請摘要的代碼值**（使用者回報「專案期間·狀態 `on_track`」）：新增
+`_CASE_VALUE_LABELS` 值對照層，已知值翻成中文、**未知值原樣顯示不硬猜**
+（硬翻會讓人以為系統認得它）。同類問題的全站掃描已列入 §11。
+
+---
 
 ### 2026-09-14（第十五輪）— 報價條款組：付款／驗收／保固可成組切換（DB 無異動）
 

@@ -4857,6 +4857,19 @@ _CASE_SCALAR_LABELS = {
     "warrantyNote":             "保固說明",
 }
 
+# 值本身是代碼而不是給人看的字的欄位，要另外翻（2026-09-14 使用者回報：
+# 摘要裡出現「專案期間·狀態 on_track」）。**只翻已知的值**，遇到沒見過的
+# 原樣顯示——硬猜一個中文會讓人以為系統認得它。
+_CASE_VALUE_LABELS = {
+    "projectTimeline.status": {
+        "on_track":  "進行中",
+        "at_risk":   "有風險",
+        "delayed":   "已延遲",
+        "done":      "已完成",
+        "completed": "已完成",
+    },
+}
+
 # 款項每一期要攤平出來比對的欄位（只挑審核時真的需要看的，
 # writeOff*／invoiceFiles 這類內部欄位不收）
 _PAYMENT_ITEM_LABELS = {
@@ -4896,8 +4909,10 @@ def _flatten_case_record(cr: dict) -> dict:
 
     for path, label in _CASE_SCALAR_LABELS.items():
         v = _dig_path(cr, path)
-        if v not in (None, ""):
-            out[label] = v
+        if v in (None, ""):
+            continue
+        vmap = _CASE_VALUE_LABELS.get(path)
+        out[label] = vmap.get(v, v) if vmap else v
 
     items = ((cr.get("payment") or {}).get("items")
              if isinstance(cr.get("payment"), dict) else None)

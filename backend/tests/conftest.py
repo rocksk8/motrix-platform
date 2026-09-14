@@ -38,6 +38,19 @@ def _app(tmp_path_factory):
 
     base = tmp_path_factory.mktemp("motrix_app")
 
+    # 背景排程一律停掉（2026-09-14）。`import main` 是 module-level 執行，
+    # 每個 xdist worker 都會在 import 當下立刻跑一次完整備份（整庫快照＋41 張表
+    # JSON＋月備份＋鏡像＋清理）＋逾期檢查補跑——`-n auto` 在 12 執行緒機器上
+    # 等於**同一次測試跑了 12 遍完整備份**。
+    # 停掉之後不只快，也拆掉了 QUICK.md 記載的 e2e flaky 放大因子：
+    # 「背景排程整個 session 都在寫 db，SQLite 寫鎖被佔住時最多會等 30 秒」。
+    # 必須在 `import main` 之前設好（main.py 是在 import 時就讀這個變數）。
+    #
+    # 需要驗排程本身的測試不受影響——它們是 import 之後自己呼叫那些函式，
+    # 停掉的只有「啟動時自動跑一次」。
+    import os as _os
+    _os.environ["MOTRIX_DISABLE_SCHEDULERS"] = "1"
+
     import db
     db.DB_PATH = str(base / "motrix_erp.db")
     db.DEMO_DB_PATH = str(base / "motrix_erp_demo.db")

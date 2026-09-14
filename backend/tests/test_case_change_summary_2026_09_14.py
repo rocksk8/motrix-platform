@@ -178,3 +178,28 @@ def test_detail_endpoint_returns_summary_not_raw_payload(client, make_user):
     raw = json.dumps(body, ensure_ascii=False)
     for internal in ("writeOffRequestedAt", "invoiceFiles", "quotation_payment_items"):
         assert internal not in raw, f"回應裡還有內部欄位 {internal}"
+
+
+# ── 代碼值不得原樣外流（2026-09-14 使用者回報「專案期間·狀態 on_track」）──────
+
+def test_enum_values_are_translated_not_raw():
+    """摘要是給人看的，不該出現 `on_track` 這種內部代碼。"""
+    flat = rq._flatten_case_record(_cr(projectTimeline={"startDate": "", "endDate": "",
+                                                        "status": "on_track"}))
+    assert flat["專案期間·狀態"] == "進行中"
+    assert "on_track" not in json.dumps(flat, ensure_ascii=False)
+
+
+def test_unknown_enum_value_is_shown_as_is_not_guessed():
+    """沒見過的值原樣顯示——硬翻一個中文會讓人以為系統認得它。"""
+    flat = rq._flatten_case_record(_cr(projectTimeline={"startDate": "", "endDate": "",
+                                                        "status": "some_new_state"}))
+    assert flat["專案期間·狀態"] == "some_new_state"
+
+
+def test_status_change_summary_shows_both_sides_translated():
+    old = _cr(projectTimeline={"startDate": "", "endDate": "", "status": "on_track"})
+    new = _cr(projectTimeline={"startDate": "", "endDate": "", "status": "delayed"})
+    out = rq._summarize_case_change("case_record_update", {"case_record": new}, old, [])
+    assert out["before"]["專案期間·狀態"] == "進行中"
+    assert out["after"]["專案期間·狀態"] == "已延遲"

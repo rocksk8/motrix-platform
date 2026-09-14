@@ -131,7 +131,11 @@ def test_archived_filename_includes_seconds(client, monkeypatch, tmp_path):
         pdf_gen._generate_quotation_pdf("MQ-202609-999", "高晟耀", "修改")
 
     assert len(set(written)) == 3, "三次存檔應產生三個不同檔案，不可互相覆蓋"
-    assert len([f for f in os.listdir(tmp_path / "2026-09-14")]) == 3
+    # ⚠️ 目錄名是 `date.today()`，**不可以寫死日期**——初稿寫死 "2026-09-14"，
+    # 跨過午夜之後這題就紅了（2026-09-15 實際踩到）。
+    from datetime import date as _date
+    day_dir = tmp_path / _date.today().isoformat()
+    assert len(os.listdir(day_dir)) == 3
 
 
 def test_record_doc_version_appends_index_to_data_json(client, tmp_path, monkeypatch):

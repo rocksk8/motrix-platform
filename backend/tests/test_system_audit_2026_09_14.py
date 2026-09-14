@@ -222,6 +222,13 @@ def _run_daily_backup_with(monkeypatch, tmp_path, tables: dict):
     monkeypatch.setattr(archive, "_cloud_write_marker", lambda *a, **k: None)
     monkeypatch.setattr(archive, "_prune_audit_log", lambda **k: None)
     monkeypatch.setattr(archive, "_prune_cloud_backups", lambda **k: None)
+    # 月備份（永久保留層）有自己的測試檔，這題只驗每日那條控制流程。
+    # 不擋的話它會因為上面 `_snapshot_sqlite` 被換成 no-op、找不到當日整庫快照
+    # 而發一則 ERROR 警示，污染這題的 `alerts` 觀測值。
+    # ⚠️ 2026-09-14：這題在「停用背景排程」之前是綠的——因為 `import main` 時
+    # 排程已經先跑過一次真的 _snapshot_sqlite()，檔案剛好存在。**那是靠洩漏的
+    # 全域狀態才綠的**，不是這題自己造出來的前提。
+    monkeypatch.setattr(archive, "_monthly_backup", lambda: None)
     monkeypatch.setattr(archive, "_daily_backup_tables", lambda: tables)
     monkeypatch.setattr(archive, "_system_audit",
                         lambda action, target, detail=None: audits.append(action))

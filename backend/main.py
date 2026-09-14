@@ -411,12 +411,36 @@ flag_weak_passwords()
 init_unlock_passwords()
 _cleanup_sessions()
 _ensure_archive_dirs()
-_schedule_daily()
-_schedule_weekly()
+
+# ── 背景排程（2026-09-14 起可停用）────────────────────────────────────────────
+#
+# `MOTRIX_DISABLE_SCHEDULERS=1` 時整批略過。**只給測試用**，正式機與開發機
+# 手動啟動都不會設這個變數，行為與改動前逐字相同。
+#
+# 為什麼需要：`import main` 是 module-level 執行（不是 @app.on_event），所以
+# **每一個 pytest-xdist worker 都會在 import 當下立刻跑一次完整備份**——
+# `_schedule_daily()` 第一件事就是 `_daily_backup()`：SQLite 整庫快照 ＋ 41 張表
+# JSON 匯出 ＋ 月備份 ＋ uploads/PDF 鏡像 ＋ 過期清理，而 `_schedule_weekly()`
+# 再來一次週備份，`schedule_overdue_check()` 另起執行緒補跑九種檢查。
+# `-n auto` 在 12 執行緒機器上開 12 個 worker，等於**同一次測試跑了 12 遍完整
+# 備份**，純粹是浪費。
+#
+# 而且這不只是慢：QUICK.md 記過「e2e 全套跟單檔結果不同」的根因正是
+# 「整個 pytest session 期間有背景排程在寫 db，SQLite 寫鎖被佔住時
+# `connect(timeout=30)` 最多會等 30 秒」——停掉排程就一併拆掉那個放大因子。
+#
+# 直接呼叫這些函式的測試不受影響（它們 import 之後自己叫），停的只有
+# 「啟動時自動跑一次」。
+if os.getenv("MOTRIX_DISABLE_SCHEDULERS") != "1":
+    _schedule_daily()
+    _schedule_weekly()
+    daily_tasks.schedule_overdue_check()
+    reports.schedule_monthly_report()
+    dev_crm.schedule_dev_case_stale_check()
+else:
+    logger.info("MOTRIX_DISABLE_SCHEDULERS=1 —— 已略過所有背景排程（測試模式）")
+
 auth.init_rate_limiting()
-daily_tasks.schedule_overdue_check()
-reports.schedule_monthly_report()
-dev_crm.schedule_dev_case_stale_check()
 _sync_module_versions()
 
 

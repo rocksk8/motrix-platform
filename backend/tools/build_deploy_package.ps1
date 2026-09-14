@@ -257,10 +257,46 @@ if (Test-Path $entryScript) {
 # PermissionError，很容易被誤讀成測試失敗。指定獨立的 basetemp 可完全繞開；
 # 要根治得用系統管理員權限 rd 掉那個連結（一般權限 Remove-Item/rd/del 全部
 # Access denied，已實測）。
+# 2026-09-15：打包時整台機器被吃滿、其他事做不了。實測（本機 Ryzen 5 5600X，
+# 6 實體核心 / 12 執行緒，940 題非 e2e）：
+#
+#   -n auto(=12) ＋ 背景排程開著   274 秒   峰值 33 個 python 行程   1.86 GB
+#   -n auto(=12) ＋ 背景排程停用   185 秒   峰值 19 個              1.34 GB
+#   -n 8         ＋ 背景排程停用   171 秒   峰值 23 個              1.63 GB
+#   -n 6         ＋ 背景排程停用   175 秒   峰值 20 個              1.34 GB
+#
+# 兩個結論：
+#   ① 記憶體從來不是瓶頸（32 GB 機器上峰值不到 2 GB）——**吃滿的是 CPU**。
+#   ② `-n auto` 取的是**邏輯**處理器數（12），把 12 個 worker 塞進 6 個實體核心
+#      只會互相搶，**比用 6 個還慢**。改成依實體核心數開，快一點、而且留一半
+#      的執行緒給使用者，打包期間機器還能用。
+#
+# 背景排程那一項在 backend/tests/conftest.py（`MOTRIX_DISABLE_SCHEDULERS=1`）——
+# `import main` 是 module-level 執行，每個 worker 都會在 import 當下立刻跑一次
+# 完整備份，等於同一次測試跑了 N 遍。
+$physCores = 0
+try {
+    $physCores = (Get-CimInstance Win32_Processor | Measure-Object -Property NumberOfCores -Sum).Sum
+} catch { $physCores = 0 }
+if (-not $physCores -or $physCores -lt 2) { $physCores = 4 }   # 查不到就用保守值
+$workers = [Math]::Max(2, [Math]::Min($physCores, 8))
+
+# 降到 BelowNormal，子行程（pytest worker）會繼承。**不影響總時間多少**
+# （CPU 本來就吃得滿），但可以讓打包期間滑鼠、瀏覽器、編輯器還跟得上——
+# 使用者回報的痛點是「機器不能用」，不是「跑太久」。
+$prevPriority = $null
+try {
+    $prevPriority = (Get-Process -Id $PID).PriorityClass
+    (Get-Process -Id $PID).PriorityClass = 'BelowNormal'
+    Write-Host "  行程優先權暫時降為 BelowNormal（打包期間機器仍可正常使用）" -ForegroundColor DarkGray
+} catch {
+    Write-Host "  [WARN] 無法調整行程優先權，維持預設（不影響正確性）" -ForegroundColor Yellow
+}
+
 $pytestTemp = Join-Path $env:TEMP "motrix-pytest-$(Get-Date -Format 'yyyyMMdd_HHmmss')"
-Write-Host "`n[測試] 執行 pytest（非 e2e，backend/tests/，含 API 整合測試，pytest-xdist 平行化）..."
+Write-Host "`n[測試] 執行 pytest（非 e2e，backend/tests/，含 API 整合測試，pytest-xdist 平行化，$workers 個 worker）..."
 Push-Location (Join-Path $projectRoot "backend")
-& $pyExe -m pytest -q -m "not e2e" -n auto --basetemp="$pytestTemp"
+& $pyExe -m pytest -q -m "not e2e" -n $workers --basetemp="$pytestTemp"
 $testExit = $LASTEXITCODE
 if ($testExit -ne 0) {
     Pop-Location
@@ -276,6 +312,12 @@ if ($e2eExit -ne 0) {
     Write-Host "[WARN] e2e 測試未全數通過（exit code $e2eExit）——已知這類測試偶爾因系統負載造成瀏覽器渲染逾時，非必然代表程式碼壞掉。繼續打包，但建議事後單獨重跑這個檔案確認（python -m pytest -m e2e -v）。" -ForegroundColor Yellow
 } else {
     Write-Host "[OK] e2e 測試也全數通過。" -ForegroundColor Green
+}
+
+# 測試跑完就把優先權還回去——後面的 git archive / robocopy 是 IO 為主，
+# 壓著它只是讓打包變慢，沒有好處。
+if ($prevPriority) {
+    try { (Get-Process -Id $PID).PriorityClass = $prevPriority } catch { }
 }
 
 # --- Step 4: 讀 version_manifest.json 最新一筆（陣列最前面，新條目永遠插最前面） ---
