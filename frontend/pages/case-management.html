@@ -156,6 +156,11 @@
     .cm-log__row:last-child { border-bottom:none; }
 
     /* Tabs */
+    /* 2026-09-14：分頁數量徽章——不用點進去才知道裡面有沒有東西 */
+    .cm-tab__n { display:inline-block; margin-left:5px; min-width:15px; padding:0 4px; border-radius:8px;
+                 background:var(--icon-btn-bg); color:var(--text-secondary);
+                 font-family:LINE Seed TW_OTF, sans-serif; font-size:9.5px; font-weight:700; line-height:15px; text-align:center; }
+    .cm-tab.active .cm-tab__n { background:var(--accent); color:#fff; }
     .cm-tabs { display:flex; padding:0 20px; border-bottom:1px solid var(--border-light); background:#fff; flex-shrink:0; overflow-x:auto; -webkit-overflow-scrolling:touch; }
     .cm-tabs::-webkit-scrollbar { height:3px; }
     .cm-tabs::-webkit-scrollbar-thumb { background:var(--border-light); border-radius:2px; }
@@ -168,6 +173,14 @@
     .cm-body::-webkit-scrollbar { width:4px; }
     .cm-body::-webkit-scrollbar-thumb { background:var(--border-light); border-radius:2px; }
 
+    /* 2026-09-14：收款摘要帶（取代原本跟標頭重複的 4 格數字） */
+    .pay-strip { display:flex; align-items:center; gap:16px; flex-wrap:wrap; margin-bottom:14px;
+                 padding:10px 14px; background:#FAFAF9; border:1px solid var(--border-light); border-radius:8px; }
+    .pay-strip__item { display:inline-flex; align-items:baseline; gap:8px; }
+    .pay-strip__lbl { font-size:10px; color:var(--text-dim); letter-spacing:.06em; }
+    .pay-strip__val { font-size:14px; font-weight:700; color:var(--text-primary); }
+    .pay-strip__bar { flex:1; min-width:120px; }
+    .pay-strip__pct { font-size:11.5px; color:var(--text-secondary); white-space:nowrap; }
     .cm-section-title { display:flex; align-items:center; gap:10px; font-size:11px; font-weight:700; font-family:LINE Seed TW_OTF, sans-serif; color:var(--text-dim); text-transform:uppercase; letter-spacing:.08em; margin-bottom:14px; }
     .cm-section-title::after { content:''; flex:1; height:1px; background:var(--border-light); }
     .cm-subtabs { display:flex; margin:-20px -20px 0; padding:0 20px; background:#F7F6F3; border-bottom:1px solid var(--border-light); flex-shrink:0; overflow-x:auto; -webkit-overflow-scrolling:touch; }
@@ -782,13 +795,13 @@
             <div class="cm-tabs">
               <button class="cm-tab" :class="{active: activeTab==='biz'}"      @click="activeTab='biz'">案件資訊</button>
               <button class="cm-tab" :class="{active: activeTab==='exec'}"     @click="activeTab='exec'">執行管理</button>
-              <button class="cm-tab" :class="{active: activeTab==='dispatch'}" @click="activeTab='dispatch'">承攬商</button>
-              <button class="cm-tab" :class="{active: activeTab==='shipping'}" @click="activeTab='shipping'; loadShippingNotes(selected.quote_no)">出貨單</button>
+              <button class="cm-tab" :class="{active: activeTab==='dispatch'}" @click="activeTab='dispatch'">承攬商<span class="cm-tab__n" x-show="dispatches.length > 0" x-text="dispatches.length"></span></button>
+              <button class="cm-tab" :class="{active: activeTab==='shipping'}" @click="activeTab='shipping'; loadShippingNotes(selected.quote_no)">出貨單<span class="cm-tab__n" x-show="shippingNotes.length > 0" x-text="shippingNotes.length"></span></button>
               <!-- 完工單（2026-09-12）：比照出貨單，放在它右邊——出貨之後才有完工，
                    順序跟實際流程一致。切分頁時載入，形狀同出貨單。 -->
               <button class="cm-tab" :class="{active: activeTab==='completion'}"
-                      @click="activeTab='completion'; loadCompletionNotes(selected.quote_no)">完工單</button>
-              <button class="cm-tab" :class="{active: activeTab==='feed'}" @click="activeTab='feed'; loadCaseUpdates(selected.quote_no)">動態</button>
+                      @click="activeTab='completion'; loadCompletionNotes(selected.quote_no)">完工單<span class="cm-tab__n" x-show="completionNotes.length > 0" x-text="completionNotes.length"></span></button>
+              <button class="cm-tab" :class="{active: activeTab==='feed'}" @click="activeTab='feed'; loadCaseUpdates(selected.quote_no)">動態<span class="cm-tab__n" x-show="caseUpdates.length > 0" x-text="caseUpdates.length"></span></button>
               <button class="cm-tab" x-show="canSeeFinancial()" :class="{active: activeTab==='fin'}" @click="activeTab='fin'">財務</button>
               <!-- 額外支出（2026-09-11）：從精算頁搬過來，獨立成一個分頁而不是塞進財務
                    分頁——使用者說的是「案件管理的案件內選單」，而案件內選單就是這排分頁。 -->
@@ -884,31 +897,18 @@
                   <span x-show="daysUntilDeadline() <= 0" x-text="'已超期 ' + Math.abs(daysUntilDeadline()) + ' 天'" style="color:#DC2626;background:#FEF2F2"></span>
                 </div>
                 <div class="cm-section-title">收款管理</div>
-                <div class="pay-kpi-row">
-                  <div class="pay-kpi">
-                    <div class="pay-kpi__lbl">合約總額（含稅）</div>
-                    <div class="pay-kpi__val" x-text="'NT$ ' + totalWithTax().toLocaleString()"></div>
-                    <div style="font-size:10px;color:var(--text-dim);margin-top:4px;font-family:LINE Seed TW_OTF, sans-serif"
-                         x-text="'未稅 NT$ ' + totalPretax().toLocaleString()"></div>
-                  </div>
-                  <div class="pay-kpi">
-                    <div class="pay-kpi__lbl">已收款</div>
-                    <div class="pay-kpi__val pay-kpi__val--success" x-text="'NT$ ' + receivedTotal().toLocaleString()"></div>
-                    <div style="font-size:10px;color:var(--success);margin-top:4px;font-family:LINE Seed TW_OTF, sans-serif" x-text="receivedPct() + '%'"></div>
-                  </div>
-                  <div class="pay-kpi">
-                    <div class="pay-kpi__lbl">未收款</div>
-                    <div class="pay-kpi__val" :class="outstandingTotal()>0 ? 'pay-kpi__val--danger' : 'pay-kpi__val--success'"
-                         x-text="'NT$ ' + outstandingTotal().toLocaleString()"></div>
-                    <div style="font-size:10px;margin-top:4px;font-family:LINE Seed TW_OTF, sans-serif"
-                         :style="outstandingTotal()>0 ? 'color:var(--danger)' : 'color:var(--success)'"
-                         x-text="outstandingPct() + '%'"></div>
-                  </div>
-                  <div class="pay-kpi">
-                    <div class="pay-kpi__lbl">收款進度</div>
-                    <div style="margin:8px 0 4px"><div class="prog"><div class="prog__fill prog__fill--green" :style="'width:' + Math.min(receivedPct(),100) + '%'"></div></div></div>
-                    <div style="font-size:11px;font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-secondary)" x-text="receivedPct() + '% 已收'"></div>
-                  </div>
+                <!-- 2026-09-14：原本這裡是 4 格數字（合約總額／已收款／未收款／收款進度），
+                     跟右欄標頭的四個數字完全重複。拿掉重複的三格，只留標頭沒有的兩樣：
+                     未稅金額與收款進度條。 -->
+                <div class="pay-strip">
+                  <span class="pay-strip__item">
+                    <span class="pay-strip__lbl">未稅金額</span>
+                    <span class="pay-strip__val num" x-text="'NT$ ' + totalPretax().toLocaleString()"></span>
+                  </span>
+                  <span class="pay-strip__bar">
+                    <span class="prog"><span class="prog__fill prog__fill--green" :style="'width:' + Math.min(receivedPct(),100) + '%'"></span></span>
+                  </span>
+                  <span class="pay-strip__pct num" x-text="receivedPct() + '% \u5df2\u6536'"></span>
                 </div>
 
                 <template x-if="feeTotal() > 0">

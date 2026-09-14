@@ -887,7 +887,28 @@ function app() {
       this.moSaving = false
     },
 
+    // ── 分頁狀態進 URL（2026-09-14）───────────────────────────────────
+    // 原本重新整理或把連結貼給同事，都會跳回第一個分頁。營運報表已經有
+    // ?tab= 的深連結模式，這裡比照。
+    // 刻意不改那 8 個 inline @click（每個都還帶自己的載入呼叫，逐一改容易漏），
+    // 改用 $watch 集中處理。
+    _pendingUrlTab: null,
+    _initTabFromUrl() {
+      var t = new URLSearchParams(location.search).get('tab')
+      var valid = ['biz','exec','dispatch','shipping','completion','feed','fin','xexp']
+      // 只記下來，不直接套：選案件時會把 activeTab 重設成 'biz'（那行是刻意的，
+      // 見 selectCase 的註解），所以要在重設之後才套，而且只套第一次。
+      if (t && valid.indexOf(t) >= 0) this._pendingUrlTab = t
+      var self = this
+      this.$watch('activeTab', function (v) {
+        var u = new URL(location.href)
+        u.searchParams.set('tab', v)
+        history.replaceState(null, '', u)
+      })
+    },
+
     async init() {
+      this._initTabFromUrl()
       // Alpine 3 會自動呼叫資料物件上的 init()，而 case-management.html 的
       // <body> 又寫了一次 x-init="init()"，所以整個 init() 每次開頁都跑兩遍：
       // 所有 API 都發兩次，並且第二次 selectCase() 會把第一次已經載好的狀態
@@ -1149,6 +1170,8 @@ function app() {
         // 之後的 activeTab='biz' 會把人硬彈回「案件資訊」——階段建立越慢、
         // 被彈回的機率越高。這幾個都是純檢視狀態，提前重設沒有副作用。
         this.activeTab = 'biz'
+        // 深連結 ?tab=：只在載入後第一次選案件時套用，之後切案件維持回到「案件資訊」
+        if (this._pendingUrlTab) { this.activeTab = this._pendingUrlTab; this._pendingUrlTab = null }
         this.execSubTab = 'progress'
         // 叫料的狀態也屬於「必須在 await 之前重設完」那一類（2026-09-14 修）：
         // selected 一設定分頁列就渲染出來，使用者可以立刻點「財務」，而下面
@@ -1205,6 +1228,13 @@ function app() {
                     totalPending: 0, pendingCount: 0, msg: '', busy: false }
         this._loadCaseTasks(quoteNo)
         this.loadDispatches(quoteNo)
+        // 2026-09-14：這三個原本是「點分頁才載」，但分頁上的數量徽章要在沒點過
+        // 之前就正確——沒載入時綁 .length 會顯示 0，看起來像「這案子沒有出貨單」，
+        // 比沒有徽章更糟。兩個 loader 都是單純 GET、無副作用（不會標記已讀），
+        // 這裡本來就已經並行打 8 個端點，多這三個是邊際成本。
+        this.loadShippingNotes(quoteNo)
+        this.loadCompletionNotes(quoteNo)
+        this.loadCaseUpdates(quoteNo)
         this.loadContractorVouchers(quoteNo)
         this.loadInvoiceVouchers(quoteNo)
         this.loadPaymentRequests(quoteNo)
