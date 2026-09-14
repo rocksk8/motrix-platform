@@ -39,23 +39,27 @@ _FRONTEND = _BACKEND.parent / "frontend"
 # A. 備份涵蓋度
 # ══════════════════════════════════════════════════════════════════════
 
-# archive.py::_daily_backup() 匯出成 JSON 的那幾張表。
-# 這裡不是複製一份清單，而是從原始碼解析出來——貼一份的話兩邊一樣會漂掉。
+# archive.py 每日 JSON 匯出的那幾張表。
+# **2026-09-14 改成直接 import 呼叫**：原本是用正規表示式解析 _daily_backup()
+# 裡的 local dict 原始碼（為了避免「複製一份清單」那種必然漂掉的寫法），
+# 但那個 dict 已經抽成模組層級的 archive._daily_backup_tables()，
+# 直接呼叫比解析更不可能歪掉——解析式只要人家改個縮排就會靜默失準。
+def _json_backup_queries() -> dict:
+    import archive
+    return archive._daily_backup_tables()
+
+
 def _json_backup_tables() -> set:
-    src = (_BACKEND / "archive.py").read_text(encoding="utf-8")
-    m = re.search(r"tables = \{(.*?)\n        \}", src, re.S)
-    assert m, "archive.py 的每日備份表格清單找不到了——這支測試的解析方式要跟著改"
-    return set(re.findall(r"FROM\s+(\w+)", m.group(1)))
+    return {t for sql in _json_backup_queries().values()
+            for t in re.findall(r"FROM\s+(\w+)", sql)}
 
 
 # 刻意不進「每日 JSON 匯出」的表，以及理由。
 #
-# ⚠️ 先講清楚整體風險，不要看到這份清單很長就以為資料沒被備份：
-# 每日備份同時會複製**整個 SQLite 檔案**（雲端一份 + 本機 db_backups 一份），
-# 所以這 60 幾張表的資料是有備份的。JSON 匯出是 §8.3「還原優先序」裡的
-# **最後手段**（本機整庫 → 雲端整庫 → JSON 重建），它的價值在於「人看得懂、
-# 可以部分挑出來」。真正的風險是：要走到最後手段那一步時，才發現能重建的
-# 只有 8 張表。
+# **2026-09-14 傍晚更新**：這份清單原本有 68 筆（JSON 只涵蓋 8/76 張表），
+# 現在剩 35 筆——所有業務資料表都已補進 archive.py 的每日匯出，
+# §8.3 的最後手段（JSON 重建）現在真的重建得出一套可用的系統。
+# 留在這裡的兩類都是「重建它沒有意義」，不是「忘了做決定」。
 _NOT_IN_JSON_BACKUP = {
     # ── 選型資料庫（七類導覽）：內容由 sync_*.py 腳本產生，git 裡有來源 ──
     "switch_categories", "switch_products", "switch_scenarios", "switch_fit",
@@ -65,23 +69,17 @@ _NOT_IN_JSON_BACKUP = {
     "automation_categories", "automation_products", "automation_scenarios", "automation_fit",
     "netarch_families", "netarch_generations", "netarch_products",
     "env_guide_environments", "env_guide_links", "env_guide_recommendations",
-    # ── 執行期狀態／快取，重建即可，備份沒有意義 ──
+    # ── 執行期狀態／流水號／軌跡：重建即可，或量太大而價值太低 ──
+    # sessions/login_rate_limit/edit_presence：登入態與鎖，還原後本來就該是空的
+    # schema_version：由 migration 自己寫，抄舊值反而會讓 migration 不跑
+    # quote_seq/payslip_seq：流水號，整庫還原時跟著單據一起回來；
+    #   走到 JSON 重建那一層時要人工對一次最後號碼（單據 JSON 裡看得到）
+    # user_request_log/user_activity_daily：操作軌跡與時數，筆數最大、
+    #   對「把系統救回來」沒有幫助；整庫複製那層仍然有
+    # user_list_prefs：每個人的排序偏好，重設一次就好
     "sessions", "login_rate_limit", "edit_presence", "schema_version",
     "quote_seq", "payslip_seq", "user_request_log", "user_activity_daily",
     "user_list_prefs",
-    # ── 業務資料，但目前只靠「整庫複製」那一層保護（見下方 xfail 測試）──
-    "dev_cases", "dev_logs",
-    "case_stages", "case_stage_visits", "case_updates", "case_extra_expenses",
-    "case_change_requests", "case_action_items",
-    "shipping_notes", "payment_requests", "completion_notes",
-    "invoice_vouchers", "contractor_payment_vouchers", "contractor_dispatches",
-    "contractors", "vendor_contractors",
-    "daily_tasks", "daily_task_completions", "daily_task_edit_log",
-    "work_logs", "project_logs", "project_stages",
-    "network_plans", "stock_items", "stock_batches",
-    "payslips", "users", "departments", "divisions",
-    "approval_delegates", "webauthn_credentials",
-    "system_settings", "t100_export_confirmations",
 }
 
 
@@ -126,26 +124,286 @@ def test_backup_list_has_no_stale_entries(client):
         "——每天的備份都會為它記一筆 error。")
 
 
-@pytest.mark.xfail(reason="已知落差，非本輪要修：JSON 匯出只涵蓋 8/76 張表，"
-                          "其中包含 system_settings、payslips、users 等關鍵資料。"
-                          "整庫複製那層有保護到，但 §8.3 的最後手段實際上重建不出系統。",
-                   strict=True)
-def test_business_critical_tables_are_in_json_backup(client):
-    """這一題**刻意是 xfail**：把「JSON 備份涵蓋度不足」這個已知落差變成
-    看得見、會被追蹤的東西，而不是散落在某份文件裡的一句話。
+def test_every_backup_query_actually_runs(client):
+    """每一條匯出查詢都必須真的跑得起來。
 
-    strict=True 的意思是：哪天有人把這些表補進每日匯出、這題意外變綠了，
-    pytest 會報 XPASS 失敗提醒你回來把這個 xfail 拿掉。落差修好了，
-    標記就該消失。
+    **這題是實際踩到才補的**：`stock_batches` 沒有 `id` 欄位，
+    `... ORDER BY id` 寫下去語法完全正確、表也存在，前面兩題都是綠的，
+    但真正執行時會 OperationalError。而 `_daily_backup()` 對每張表都包了
+    try/except——失敗只會在 log 留一行、在彙總.json 記一個 "error"，
+    **備份照樣顯示完成**。等到要還原才發現那張表每天都是空的。
+
+    所以這題不比對字串，直接把每條 SQL 拿去執行。
+    """
+    import db
+    queries = _json_backup_queries()
+    conn = db.get_db()
+    failed = []
+    try:
+        for fname, sql in queries.items():
+            try:
+                conn.execute(sql).fetchall()
+            except Exception as e:
+                failed.append(f"{fname}: {e}")
+    finally:
+        conn.close()
+    assert not failed, "這些每日備份查詢跑不起來（每天都會靜默記一筆 error）：\n  " + "\n  ".join(failed)
+
+
+def test_business_critical_tables_are_in_json_backup(client):
+    """§8.3 的最後手段（JSON 重建）必須真的重建得出一套可用的系統。
+
+    **這題原本是 `xfail(strict=True)`**，用來追蹤「JSON 匯出只涵蓋 8/76 張表」
+    這個已知落差。2026-09-14 傍晚落差已補（41 張表），XPASS 提醒生效，
+    標記照約定拿掉——xfail 是追蹤用的，不是永久豁免。
 
     `system_settings` 特別要緊：§0 已經記載過「正式機的 webauthn_rp_id /
     webauthn_origin 不在 git 裡，還原舊 db 時這兩個值會整個消失」。
+
+    `users` 在匯出時**刻意略過憑證欄位**（totp_secret／各種 password hash），
+    所以從 JSON 還原後所有人都要重設密碼、重綁 2FA/Passkey；
+    這一題只管「帳號、角色、模組、部門歸屬救不救得回來」。
     """
     backed = _json_backup_tables()
     critical = {"users", "system_settings", "payslips", "dev_cases", "dev_logs",
-                "shipping_notes", "payment_requests", "completion_notes"}
+                "shipping_notes", "payment_requests", "completion_notes",
+                "departments", "divisions", "quotations", "customers",
+                "invoice_vouchers", "contractor_payment_vouchers"}
     missing = critical - backed
     assert not missing, f"關鍵業務資料表不在每日 JSON 匯出裡：{sorted(missing)}"
+
+
+def test_user_export_excludes_credential_columns(client):
+    """使用者匯出不可以夾帶憑證欄位。
+
+    totp_secret 與 totp_recovery_codes 是**可以直接拿去產生有效驗證碼的金鑰**，
+    寫進人看得懂的 JSON 等於把兩階段驗證抄一份出來放在備份資料夾。
+    整庫複製那一層本來就含這些欄位（.db 檔），JSON 這層不需要再抄一份。
+
+    這題守的是「有人為了讓還原更完整，把使用者那行改回 SELECT *」。
+    **不比對 SQL 字串、直接執行後看實際欄位**——`SELECT *` 這種寫法裡
+    根本不會出現欄位名，比對字串會變成永遠綠的假斷言。
+    """
+    import db
+    sql = _json_backup_queries()["使用者"]
+    conn = db.get_db()
+    try:
+        cols = {d[0] for d in conn.execute(sql).description}
+    finally:
+        conn.close()
+    leaked = cols & {"password_hash", "unlock_password_hash", "daily_task_pw_hash",
+                     "totp_secret", "totp_recovery_codes"}
+    assert not leaked, (
+        f"使用者每日 JSON 匯出夾帶了憑證欄位 {sorted(leaked)}——"
+        "備份資料夾會出現可直接使用的認證素材")
+    # 正向控制：確定這條查詢真的有撈到東西，不是因為查空的才「沒有洩漏」
+    assert "username" in cols and "role" in cols
+
+
+def _run_daily_backup_with(monkeypatch, tmp_path, tables: dict):
+    """把 _daily_backup() 跑在一個完全隔離的環境裡，回傳它對外送出的訊號。
+
+    只擋掉「會寫到磁碟/雲端」與「會清掉別人資料」的部分，
+    **控制流程本身完全不動**——這題要驗的就是控制流程。
+    """
+    import archive
+    audits, alerts, cleared = [], [], []
+
+    # _daily_backup() 開頭這兩件事跟 JSON 匯出無關（本機 SQLite 快照、server.log
+    # 輪替），但會寫磁碟也會自己發警示，擋掉才不會污染這題的觀測值
+    monkeypatch.setattr(archive, "_snapshot_sqlite", lambda **k: None)
+    monkeypatch.setattr(archive, "_rotate_server_log_if_large", lambda: None)
+    monkeypatch.setattr(archive, "_archive_ok", lambda: True)
+    monkeypatch.setattr(archive, "_mirror_uploads", lambda: None)
+    monkeypatch.setattr(archive, "_mirror_pdf_archives", lambda: None)
+    monkeypatch.setattr(archive, "_daily_dir", lambda: str(tmp_path))
+    monkeypatch.setattr(archive, "_cloud_marker_exists", lambda *a, **k: False)
+    monkeypatch.setattr(archive, "_cloud_write_json", lambda *a, **k: None)
+    monkeypatch.setattr(archive, "_cloud_write_marker", lambda *a, **k: None)
+    monkeypatch.setattr(archive, "_prune_audit_log", lambda **k: None)
+    monkeypatch.setattr(archive, "_prune_cloud_backups", lambda **k: None)
+    monkeypatch.setattr(archive, "_daily_backup_tables", lambda: tables)
+    monkeypatch.setattr(archive, "_system_audit",
+                        lambda action, target, detail=None: audits.append(action))
+    monkeypatch.setattr(archive, "_write_backup_alert",
+                        lambda reason, level="WARN": alerts.append((level, reason)))
+    monkeypatch.setattr(archive, "_clear_backup_alert_if_healthy",
+                        lambda: cleared.append(True))
+
+    archive._daily_backup()
+    return audits, alerts, cleared
+
+
+def test_partial_backup_failure_is_not_reported_as_ok(client, monkeypatch, tmp_path):
+    """一張表匯出失敗時，不可以還是送出 backup.daily_ok。
+
+    每張表各自包 try/except 是刻意的（一張壞掉不該連累其他 40 張），
+    但原本失敗只在 log 留一行、在彙總.json 記一個 "error"，接著照樣寫 .done、
+    照樣送 backup.daily_ok——**備份頁面顯示綠燈，那張表卻每天都是空的**，
+    要還原才會發現。這是最典型的「備份看起來有在跑」型事故。
+    """
+    audits, alerts, cleared = _run_daily_backup_with(
+        monkeypatch, tmp_path,
+        {"好表": "SELECT * FROM users", "壞表": "SELECT * FROM 這張表不存在"})
+
+    assert "backup.daily_ok" not in audits, "有表匯出失敗卻還是報了 daily_ok"
+    assert "backup.daily_partial" in audits
+    assert alerts, "匯出失敗沒有留下任何警示"
+    assert "壞表" in alerts[0][1], "警示內容要指出是哪張表壞了，否則沒辦法處理"
+    assert not cleared, "匯出有失敗時不該把既有的備份警示清掉"
+
+
+def test_clean_backup_still_reports_ok(client, monkeypatch, tmp_path):
+    """正向控制：全部成功時仍然要送 backup.daily_ok 並清掉舊警示。
+
+    少了這一題，上面那題可以靠「永遠不送 daily_ok」變綠。
+    """
+    audits, alerts, cleared = _run_daily_backup_with(
+        monkeypatch, tmp_path, {"好表": "SELECT * FROM users"})
+
+    assert audits == ["backup.daily_ok"]
+    assert not alerts
+    assert cleared
+
+
+# 欄位／設定鍵名長得像祕密的樣子。
+_SECRET_NAME = re.compile(r"pass(word)?|secret|token|totp|recovery|api_?key|private|credential", re.I)
+
+# 名字命中但其實不是祕密的，逐筆說明理由。
+# 這份清單一樣是「讓下一個新增的變紅」，不是讓測試變綠。
+_SECRET_NAME_OK = {
+    "must_change_password",   # 布林旗標：要不要強迫改密碼，不是密碼本身
+    "totp_enabled",           # 布林旗標：有沒有啟用 2FA，不是金鑰
+    "credential_id",          # Passkey 的公開識別碼（規格上就是可公開的）
+    "public_key",             # 顧名思義
+    "bank_passbook_image",    # 存摺影像欄位，不是密碼；值本身已被
+                              # _strip_inline_images() 換成佔位字串，見下方影像那題
+}
+
+
+def test_backup_export_has_no_credential_columns(client):
+    """**任何一張表**的匯出都不可以夾帶祕密欄位。
+
+    這是 test_user_export_excludes_credential_columns 的一般化版本：
+    不是只盯著 users，而是把 41 條查詢都執行一次、看實際回來的欄位名。
+    新加一張含 token/password 欄位的表時會在這裡紅掉。
+    """
+    import db
+    queries = _json_backup_queries()
+    conn = db.get_db()
+    leaked = []
+    try:
+        for fname, sql in queries.items():
+            cols = [d[0] for d in conn.execute(sql).description]
+            for c in cols:
+                if _SECRET_NAME.search(c) and c not in _SECRET_NAME_OK:
+                    leaked.append(f"{fname}.{c}")
+    finally:
+        conn.close()
+    assert not leaked, (
+        "每日 JSON 匯出夾帶了疑似祕密的欄位：" + str(sorted(leaked))
+        + "\n備份資料夾（以及雲端鏡像）會出現可直接使用的認證素材。"
+          "確定不是祕密的話，請把欄位名加進 _SECRET_NAME_OK 並註明理由。")
+
+
+def test_settings_export_has_no_live_secrets(client):
+    """system_settings 是唯一「祕密藏在值裡面」的表，要往下挖一層。
+
+    smtp_password / client_secret / refresh_token 都住在 value_json 裡，
+    欄位名只有 `value_json`，上面那題掃不到。archive.py 用 json_remove()
+    把它們挖掉，這題確認真的挖乾淨了，而且**新增的祕密設定也會被抓到**。
+    """
+    import db, json as _json
+    sql = _json_backup_queries()["系統設定"]
+    conn = db.get_db()
+    try:
+        rows = conn.execute(sql).fetchall()
+    finally:
+        conn.close()
+
+    assert rows, "系統設定匯出是空的——這題會變成永遠綠的假斷言，先確認查詢是否壞了"
+
+    def walk(obj, path):
+        if isinstance(obj, dict):
+            for k, v in obj.items():
+                if _SECRET_NAME.search(k) and k not in _SECRET_NAME_OK:
+                    yield f"{path}.{k}"
+                yield from walk(v, f"{path}.{k}")
+        elif isinstance(obj, list):
+            for i, v in enumerate(obj):
+                yield from walk(v, f"{path}[{i}]")
+
+    leaked = []
+    for r in rows:
+        key, value_json = r[0], r[1]
+        try:
+            parsed = _json.loads(value_json) if value_json else None
+        except Exception:
+            continue
+        leaked.extend(walk(parsed, key))
+
+    assert not leaked, (
+        "系統設定的每日 JSON 匯出仍帶著祕密：" + str(sorted(leaked))
+        + "\n請在 archive.py::_daily_backup_tables() 的「系統設定」那條"
+          " json_remove() 加上這個路徑。")
+
+
+def test_backup_export_has_no_inline_images(client):
+    """每日 JSON 匯出裡不可以出現 base64 內嵌影像。
+
+    **這題不是為了省空間**（雖然實測從 5.5 MB 降到 1.4 MB）。
+    承攬人員欄位裡放的是**身分證正反面與存摺掃描件**，協力廠商的 data_json、
+    承攬付款憑據的 snapshot_json 也各自包了存摺影像。逐表 JSON 每天寫一份、
+    鏡像到雲端、保留 30 天——等於把一疊身分證掃描件每天複製到雲端資料夾。
+    影像在整庫複製那兩層仍然完整，這裡拿掉的只是「人看得懂那一份」。
+
+    測的是 archive._strip_inline_images() 真的有套上去，而且對三種形態都有效：
+    欄位直接存 data:image、JSON 字串欄位裡包一層、JSON 陣列裡再包一層。
+    """
+    import db, archive
+    queries = _json_backup_queries()
+    conn = db.get_db()
+    offenders = []
+    try:
+        for fname, sql in queries.items():
+            for r in conn.execute(sql).fetchall():
+                row = archive._strip_inline_images(dict(r))
+                blob = json.dumps(row, ensure_ascii=False)
+                if archive._INLINE_IMAGE_PREFIX in blob:
+                    offenders.append(fname)
+                    break
+    finally:
+        conn.close()
+    assert not offenders, (
+        f"這些表的每日 JSON 匯出仍帶著內嵌影像：{sorted(set(offenders))}"
+        "——_strip_inline_images() 沒有涵蓋到它的存放形態")
+
+
+def test_inline_image_stripper_handles_nested_shapes():
+    """_strip_inline_images() 的直接單元測試——三種存放形態都要處理到。
+
+    上一題是拿真實資料掃，資料庫裡剛好沒有某種形態時它就照不到；
+    這題把三種形態寫死，不依賴資料內容。
+    """
+    import archive
+    img = archive._INLINE_IMAGE_PREFIX + "jpeg;base64,/9j/4AAQSkZJRg"
+    out = archive._strip_inline_images({
+        "直接放欄位": img,
+        "JSON字串欄位": json.dumps({"bankPassbookImage": img, "name": "阿郎"},
+                                   ensure_ascii=False),
+        "JSON陣列裡": json.dumps({"personnel": [{"bankPassbookImage": img}]},
+                                 ensure_ascii=False),
+        "不是影像": "data:text/plain;base64,aGVsbG8=",
+        "壞掉的JSON": "{不是合法 JSON" + img,
+    })
+    assert out["直接放欄位"] == archive._IMAGE_PLACEHOLDER
+    assert archive._INLINE_IMAGE_PREFIX not in out["JSON字串欄位"]
+    assert "阿郎" in out["JSON字串欄位"], "剝影像不可以把同一欄的其他資料也弄掉"
+    assert archive._INLINE_IMAGE_PREFIX not in out["JSON陣列裡"]
+    # 非影像的 data: URI 不該被動到
+    assert out["不是影像"] == "data:text/plain;base64,aGVsbG8="
+    # parse 不起來就原樣保留——寧可留著影像，也不要為了清它把資料弄壞
+    assert out["壞掉的JSON"].startswith("{不是合法 JSON")
 
 
 # ══════════════════════════════════════════════════════════════════════
