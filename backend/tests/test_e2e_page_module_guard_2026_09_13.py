@@ -88,7 +88,8 @@ def test_page_with_module_is_not_redirected(live_server, make_user):
         try:
             _login(page, live_server, u, p)
             page.goto(f"{live_server}/pages/parts.html")
-            page.wait_for_selector(".sidebar .nav__item", timeout=10000)
+            # 2026-09-14：側欄退役（display:none），改等上方導覽列的分組標題
+            page.wait_for_selector(".mnav .mnav__top", timeout=10000)
             page.wait_for_timeout(300)   # 給守門一個真的會動作的機會
             assert page.url.endswith("parts.html"), f"有模組卻被導走了：{page.url}"
             assert page.locator("#no-module-notice").count() == 0, "有模組卻被擋"
