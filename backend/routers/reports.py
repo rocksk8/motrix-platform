@@ -145,6 +145,57 @@ def _live_dispatch_totals_by_quote(conn) -> dict:
     return totals
 
 
+def _build_name_index(user_by_id: dict) -> dict:
+    """display_name → user id。**同名的一律不收**（值設成 None）。
+
+    `caseRecord.roles.sales` 存的是顯示名稱字串不是 username，所以要反查。
+    同名時硬猜一個等於把 A 的業績算到 B 頭上——寧可退回用名字分組（那至少
+    是「兩個同名的人被合成一列」這種看得出來的錯，而不是靜默算錯人）。
+    """
+    idx: dict = {}
+    for uid, info in user_by_id.items():
+        name = (info.get("displayName") or "").strip()
+        if not name:
+            continue
+        idx[name] = None if name in idx else uid
+    return idx
+
+
+def _case_sales_owner(cr: dict, row, name_index: dict, user_by_id: dict):
+    """一張案件的業績算誰的 → (key, label)。
+
+    2026-09-14 使用者交辦：「營運報表的業務員績效比較讀取案件管理的人員角色，
+    業務負責的欄位」。兩者在實務上會不一致——**報價單的 `salesPerson` 是「開單
+    的人」，案件管理 `caseRecord.roles.sales` 才是「這個案子歸誰的績效」**。
+
+    優先序：
+      1. `caseRecord.roles.sales`（使用者指定的口徑）。它存的是顯示名稱字串，
+         能唯一反查到帳號就用 id 當 key（改名後仍歸同一人），反查不到或同名
+         就用名字字串當 key——**不要因為反查不到就丟掉這筆歸屬**，那會讓案件
+         默默跑到「開單的人」名下，正好是這次要修的問題。
+      2. 沒填 `roles.sales` 的案件（含所有舊資料）退回原本的
+         `sales_person_id` / `sales_person`。舊案件不回填是刻意的：那個欄位
+         當初沒人填，補一個猜測值只會製造假資料。
+
+    ⚠️ **部門彙總仍然依 `sales_person_id`**，沒有跟著改（見 `_row_dept()`）。
+    那是另一條線：部門篩選會影響整份報表的取數範圍，改動面遠大於這次交辦，
+    而且要先決定「案件的部門是跟著開單者還是跟著業務負責」。已記在 §11。
+    """
+    owner = ((cr.get("roles") or {}).get("sales") or "").strip() if isinstance(cr, dict) else ""
+    if owner:
+        uid = name_index.get(owner)
+        if uid:
+            return ("id", uid), (user_by_id[uid].get("displayName") or owner)
+        return ("name", owner), owner
+
+    spid = row["sales_person_id"] if "sales_person_id" in row.keys() else None
+    if spid and spid in user_by_id:
+        return ("id", spid), (user_by_id[spid].get("displayName")
+                              or (row["sales_person"] or "") or "（未指定）")
+    label = (row["sales_person"] or "") or "（未指定）"
+    return ("name", label), label
+
+
 def _collect(period_start: str, period_end: str, department_id: Optional[int] = None) -> dict:
     conn = get_db()
     rows = conn.execute("""
@@ -179,6 +230,7 @@ def _collect(period_start: str, period_end: str, department_id: Optional[int] = 
     # 業務員手誤填未來日期，被歸錯月份甚至整筆從近N月報表消失」的坑，這裡
     # 一併存進每個 case，讓 _compute_achievement()（年度目標達成率）也能用
     # 同一套邏輯判斷案件算哪一年，不要各自用一半的日期判斷邏輯。
+    name_index = _build_name_index(user_by_id)
     won_month = quote_won_month_map(conn)
     live_dispatch_totals = _live_dispatch_totals_by_quote(conn)
     conn.close()
@@ -252,6 +304,7 @@ def _collect(period_start: str, period_end: str, department_id: Optional[int] = 
 
         qdate = row["quote_date"] or ""
         roles = cr.get("roles") or {}
+        owner_key, owner_label = _case_sales_owner(cr, row, name_index, user_by_id)
         row_dept_id, row_dept_name = _row_dept(row)
         case = {
             "quoteNo":        row["quote_no"],
@@ -264,6 +317,11 @@ def _collect(period_start: str, period_end: str, department_id: Optional[int] = 
             # 被靜默拆成新舊兩個名字、或直接對不上年度目標設定（見 sm/
             # _compute_achievement() 用法）。
             "salesPersonId":  row["sales_person_id"],
+            # 業績歸屬（2026-09-14）：優先案件管理的「業務負責」，見
+            # _case_sales_owner()。`salesPerson`／`salesPersonId` 保留原意
+            # （開單的人），清單與明細仍顯示那個，只有績效彙總改用這組。
+            "ownerKey":       list(owner_key),
+            "ownerName":      owner_label,
             "deptId":         row_dept_id,
             "deptName":       row_dept_name,
             "quoteDate":      qdate,
@@ -290,17 +348,14 @@ def _collect(period_start: str, period_end: str, department_id: Optional[int] = 
         if case["inPeriod"]:
             cases_period.append(case)
 
-    # sales perf — 優先用 salesPersonId 分組（改名後仍歸同一人），查無 id 的
-    # 舊資料才退回 salesPerson 名字字串分組（見 case["salesPersonId"] 註解）
+    # sales perf — 2026-09-14 起依**案件管理的「業務負責」**歸屬
+    # （`caseRecord.roles.sales`），沒填的才退回開單者。解析邏輯集中在
+    # `_case_sales_owner()`，年度目標達成率用的是同一組 key——**兩張表一定要
+    # 用同一套歸屬**，不然同一個人在「業務員績效」與「目標達成率」會算到不同
+    # 案件，而使用者是把這兩張表並排看的。
     sm: dict = {}
     for c in cases_all:
-        spid = c["salesPersonId"]
-        if spid and spid in user_by_id:
-            k = ("id", spid)
-            label = user_by_id[spid]["displayName"] or c["salesPerson"] or "（未指定）"
-        else:
-            label = c["salesPerson"] or "（未指定）"
-            k = ("name", label)
+        k, label = tuple(c["ownerKey"]), c["ownerName"]
         sm.setdefault(k, {"salesPerson": label, "cases": 0, "total": 0, "received": 0,
                           "mRevSum": 0.0, "mProfitSum": 0.0,
                           "amRevSum": 0.0, "amProfitSum": 0.0, "amCnt": 0})
@@ -489,6 +544,23 @@ def _collect(period_start: str, period_end: str, department_id: Optional[int] = 
 
 # ── Achievement computation ───────────────────────────────────────────────────
 
+def _owner_key_of(c: dict) -> tuple:
+    """案件的業績歸屬 key。
+
+    `_collect()` 產出的案件一定有 `ownerKey`（見 `_case_sales_owner()`）。
+    沒有的情況只有一種：直接拿手組的 dict 呼叫 `_compute_achievement()`
+    （單元測試就是這樣用的，它是純函式）。那時退回舊欄位，語意跟改動前相同，
+    不要讓一個防禦性的缺欄位把整個人的業績歸成空。
+    """
+    k = c.get("ownerKey")
+    if k:
+        return tuple(k)
+    spid = c.get("salesPersonId")
+    if spid:
+        return ("id", spid)
+    return ("name", c.get("salesPerson") or "（未指定）")
+
+
 def _compute_achievement(year: int, targets: dict, cases_all: list) -> dict:
     """Compute YTD metrics vs annual targets for a given year.
 
@@ -554,11 +626,16 @@ def _compute_achievement(year: int, targets: dict, cases_all: list) -> dict:
     for sp_t in (targets.get("salesperson") or []):
         sn   = sp_t.get("name") or ""
         sp_id = name_to_id.get(sn)
+        # 2026-09-14：改用跟「業務員績效」同一套歸屬（`ownerKey`，見
+        # `_case_sales_owner()`）。**兩張表必須一致**——使用者是把它們並排看的，
+        # 一邊算「案件的業務負責」、另一邊算「開單的人」，同一個人的兩個數字
+        # 對不起來而且看不出為什麼。
+        # `ownerKey` 是 ("id", uid) 或 ("name", 顯示名稱)，兩種都要比對得到：
+        # 目標設定存的是名字，名字解析得到帳號就比 id，否則比名字。
         if sp_id is not None:
-            sy_c = [c for c in ytd if c.get("salesPersonId") == sp_id
-                    or (not c.get("salesPersonId") and c["salesPerson"] == sn)]
+            sy_c = [c for c in ytd if _owner_key_of(c) in (("id", sp_id), ("name", sn))]
         else:
-            sy_c = [c for c in ytd if c["salesPerson"] == sn]
+            sy_c = [c for c in ytd if _owner_key_of(c) == ("name", sn)]
         sy_r = sum(c["total"] for c in sy_c)
         sp_acv.append({
             "name":          sn,

@@ -79,6 +79,38 @@
         <!-- 2026-09-12 使用者指定：**不要分頁**，整合成一頁逐條往下改善。
              原本是四個可切換分頁，實際填寫時一直在切來切去，反而比往下捲慢。 -->
         <div style="height:18px"></div>
+        <!-- ══ 單據用語 ══
+             2026-09-14 使用者交辦搬到最上面：「避免員工都選完最後再重來」。
+             這兩張卡原本在整頁最下方，而 applyPreset() 會**整批覆寫**所有標題欄位
+             ——填完整張單才發現要換用語，等於前面白填。 -->
+        <div>
+          <div class="cnf-card">
+            <div class="cnf-card-title">單據用語</div>
+            <div class="cnf-hint" style="margin-bottom:12px">
+              <b>請先選這裡，再往下填。</b>依據案件類型選取適合的完工單，再視需要逐欄微調。
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <template x-for="p in presets" :key="p.key">
+                <button class="cnf-btn" @click="applyPreset(p.key)" :disabled="!editable()" x-text="p.name"></button>
+              </template>
+              <button class="cnf-btn" @click="resetLabels()" :disabled="!editable()">回到系統預設</button>
+            </div>
+          </div>
+          <div class="cnf-card">
+            <div class="cnf-card-title">逐欄調整</div>
+            <div class="cnf-grid">
+              <template x-for="f in labelFields" :key="f.key">
+                <div>
+                  <span class="cnf-lbl" x-text="f.name"></span>
+                  <input class="cnf-in" type="text" maxlength="40"
+                         x-model="form.labels[f.key]" :placeholder="f.placeholder"
+                         :disabled="!editable()" @input="dirty=true">
+                </div>
+              </template>
+            </div>
+            <div class="cnf-hint">留空＝使用系統預設值（不會變成空白標題）。每欄上限 40 字。</div>
+          </div>
+        </div>
         <div>
           <div class="cnf-card">
             <div class="cnf-card-title">客戶與地點</div>
@@ -204,35 +236,6 @@
           </div>
         </div>
 
-        <!-- ══ 單據用語 ══ -->
-        <div>
-          <div class="cnf-card">
-            <div class="cnf-card-title">單據用語</div>
-            <div class="cnf-hint" style="margin-bottom:12px">
-              依據案件類型選取適合的完工單，再視需要逐欄微調。
-            </div>
-            <div style="display:flex;gap:8px;flex-wrap:wrap">
-              <template x-for="p in presets" :key="p.key">
-                <button class="cnf-btn" @click="applyPreset(p.key)" :disabled="!editable()" x-text="p.name"></button>
-              </template>
-              <button class="cnf-btn" @click="resetLabels()" :disabled="!editable()">回到系統預設</button>
-            </div>
-          </div>
-          <div class="cnf-card">
-            <div class="cnf-card-title">逐欄調整</div>
-            <div class="cnf-grid">
-              <template x-for="f in labelFields" :key="f.key">
-                <div>
-                  <span class="cnf-lbl" x-text="f.name"></span>
-                  <input class="cnf-in" type="text" maxlength="40"
-                         x-model="form.labels[f.key]" :placeholder="f.placeholder"
-                         :disabled="!editable()" @input="dirty=true">
-                </div>
-              </template>
-            </div>
-            <div class="cnf-hint">留空＝使用系統預設值（不會變成空白標題）。每欄上限 40 字。</div>
-          </div>
-        </div>
       </div>
     </template>
   </div>
@@ -427,6 +430,13 @@
       removeItem(i) { this.form.items.splice(i, 1); this.dirty = true },
 
       applyPreset(key) {
+        // 2026-09-14：這個函式是**整批覆寫**（不是合併），所以已經逐欄微調過的
+        // 內容會被吃掉。把卡片搬到最上面降低了踩到的機率，但沒有消除它——
+        // 使用者仍可能先微調、後來才想換一組。已經有自訂值時先問一聲。
+        const customised = Object.values(this.form.labels || {})
+          .some(v => (v || '').trim() !== '')
+        if (customised &&
+            !confirm('套用這組用語會覆蓋你已經逐欄調整過的標題，確定要套用嗎？')) return
         this.form.labels = Object.assign({}, this._presetData[key] || {})
         this._syncLabels(); this.dirty = true
         this.msgError = false; this.msg = '已套用，記得按儲存'
