@@ -171,6 +171,29 @@
   filter: invert(1) hue-rotate(180deg);
 }
 
+/* ── 深色模式的紅色前置補償（2026-09-14）──
+   問題：品牌紅 #C8102E 經過 invert(1) hue-rotate(180deg) 會變成粉紅 #FF9CBA。
+   hue-rotate 是線性矩陣近似、不是真的色相旋轉，對饣和紅特別不準。
+   （舊的藍色主色之所以看不出來，是因為藍剛好比較能來回。）
+
+   實測結論：**這個機制畫不出飽和深紅**——反解回去會超出色域，
+   最接近只能到 #B44333，而且對深底只有 3.55:1 連 AA 都不過。
+   所以不硬湊品牌紅，改成深色主題的通則：強調色提亮、色相從洋紅（350°）
+   移到真正的紅（0°），這才是「看起來是紅不是粉」的關鍵。
+
+   下面的值是**前置補償值**，不是你看到的顏色：濾鏡自反（套兩次回原色），
+   所以想要畫出 X，token 就設成 filter(X)。改這裡的時候請連註解一起看，
+   直接填「想要的紅」會得到完全不同的結果。
+
+   範圍刻意跟濾鏡用同一個選擇器：只覆寫「會被反轉」的那一块。
+   .topbar / .h-hero / .h-band 不在反轉範圍，它們要的是真正的 --accent，
+   不能拿到補償值（否則頂欄那條紅標記會變成奇怪的顏色）。 */
+:root[data-theme="dark"] body > *:not(.topbar):not(.sidebar):not(.sidebar-overlay):not(.h-hero):not(.h-band) {
+  --accent:       #E95555;   /* 畫出來是 #FF6B6B，對深底 7.09:1 */
+  --accent-hover: #AF4040;   /* 畫出來是 #FF9090 */
+  --danger:       #C84949;   /* 畫出來是 #FF8080 */
+}
+
 :root[data-theme="dark"] body > *:not(.topbar):not(.sidebar):not(.sidebar-overlay):not(.h-hero):not(.h-band) img,
 :root[data-theme="dark"] body > *:not(.topbar):not(.sidebar):not(.sidebar-overlay):not(.h-hero):not(.h-band) video {
   filter: invert(1) hue-rotate(180deg);
