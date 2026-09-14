@@ -100,7 +100,7 @@ DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR = os.path.join(
 # 的附件，2026-09-14）——兩張表都是 TEXT NOT NULL DEFAULT '[]'，存
 # save_document_files() 回傳的清單。刪附件限 admin+，見 routers/quotations.py
 # 與 routers/dev_crm.py 的 DELETE .../files/{file_id}。
-CURRENT_VERSION = 83
+CURRENT_VERSION = 84
 
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
 # execution model) whenever the current request is authenticated as the 'demo'
@@ -3427,6 +3427,94 @@ def _m083_backup_retention_policy(conn):
     conn.commit()
 
 
+def _m084_backfill_role_bypass_modules(conn):
+    """取消「角色直通」之前，把直通實際給出去的權限寫成真的模組（2026-09-14）。
+
+    **這支不是新功能，是為了讓另一個改動不傷人**。2026-09-14 使用者裁示
+    「管理者一樣依據有開權限的內容去顯示，沒開的就不顯示」，於是
+    `helpers/auth.py::require_any_module()` 與 `frontend/static/sidebar.js`
+    同步拿掉了三種不是模組的放行：
+
+        role in (superadmin, admin)  → 只剩 superadmin
+        role == 'engineer'           → 案件管理（sidebar `|| eng`）
+        role != 'viewer'             → 工作日誌／每日工作事項
+
+    直接拿掉會出事：**既有帳號的模組清單早就過時了**，而且正是因為有直通所以
+    沒人發現。開發機實測 4 個 admin 各缺 13～17 個 key，缺的包含營運報表、
+    出納、網路架構規劃書，以及 2026-08／09 才新增的監控／門禁／閘道器／自動化
+    四類選型導覽——那些模組加進了角色樣板，既有帳號卻從來沒有回填。
+    不補就等於這些人隔天上班憑空少掉一半功能。
+
+    **補的範圍刻意等於「直通原本給出去的東西」，不多也不少**：
+
+      admin           ← ROLE_MODULES.admin 角色樣板（= 直通原本讓他看到的範圍）
+      engineer        ← case_manage
+      非 viewer 全部  ← work_log、daily_task
+
+    不用「一律補成角色樣板」的原因：那對 engineer／sales 會**放寬**權限
+    （例如樣板含 equipment，但今天沒有 equipment 模組的工程師是看不到設備登載的），
+    而這次的目的是讓權限變成真的，不是順手多給。
+
+    一律**只增不減**（聯集），不會動到任何人已經被刻意勾掉的東西；
+    已經持有的帳號寫回去的內容跟原本相同，重跑無副作用。
+    """
+    # 與 frontend/pages/users.html 的 ROLE_MODULES.admin 逐字對應。
+    # ⚠️ 兩邊要一起改——這裡是一次性的回填快照，不是執行期的真實來源，
+    #    所以沒有做成共用常數；日後角色樣板變動不需要回頭改這支 migration。
+    admin_template = [
+        "dashboard", "quotation", "case_manage", "customer", "procurement",
+        "inventory", "equipment", "finance", "reports", "project_approve_eng",
+        "project_approve_biz", "financial_view", "work_log", "daily_task",
+        "env_guide", "netarch_guide", "switch_guide", "monitor_guide",
+        "access_guide", "gateway_guide", "automation_guide", "cashier",
+        # 角色樣板之外、但 admin 直通**確實給得到**的項目。不補這些的話，
+        # 取消直通當天 admin 會實際少掉這五個選單入口（核對側欄逐項確認過）：
+        #   netplan            網路架構規劃書（原本側欄寫死 || ad || eng，
+        #                      且只有 netplan_edit 這個 edit key，沒有檢視 key）
+        #   四個稽核／維運頁    原本側欄寫死 || ad，同樣沒有任何 key
+        # ⚠️ 刻意**不**補 *_guide_edit 與 settings：那兩類走的是
+        #    _require_user(require_superadmin=True, module=...)，本來就不放行
+        #    admin（查證過），補了等於憑空放寬權限，不是保留現況。
+        "netplan",
+        "audit_log", "shipping_export_log", "module_versions", "selection_overview",
+    ]
+
+    rows = conn.execute("SELECT id, username, role, modules FROM users").fetchall()
+    changed = 0
+    for r in rows:
+        role = r["role"]
+        if role == "superadmin":
+            continue                     # 全開，不需要也不該動
+        try:
+            have = json.loads(r["modules"] or "[]")
+        except (ValueError, TypeError):
+            have = []
+        if not isinstance(have, list):
+            have = []
+
+        add = []
+        if role == "admin":
+            add += admin_template
+        if role == "engineer":
+            # sidebar 原本那個 "|| eng" 放行給的就是這兩項（cCM 與 cNetPlan）
+            add += ["case_manage", "netplan"]
+        if role != "viewer":
+            add += ["work_log", "daily_task"]
+
+        merged = list(have)
+        for k in add:
+            if k not in merged:
+                merged.append(k)
+        if len(merged) != len(have):
+            conn.execute("UPDATE users SET modules=? WHERE id=?",
+                         (json.dumps(merged, ensure_ascii=False), r["id"]))
+            changed += 1
+            logger.info("v84 回填模組：%s（%s）%d → %d 個",
+                        r["username"], role, len(have), len(merged))
+    conn.commit()
+    logger.info("v84 模組回填完成：%d/%d 個帳號有異動", changed, len(rows))
+
+
 _MIGRATIONS = [
     _m001_export_columns,        # v1
     _m002_sessions_expires,      # v2
@@ -3511,6 +3599,7 @@ _MIGRATIONS = [
     _m081_edit_presence,                            # v81
     _m082_feed_attachments,                         # v82
     _m083_backup_retention_policy,                  # v83
+    _m084_backfill_role_bypass_modules,             # v84
 ]
 
 

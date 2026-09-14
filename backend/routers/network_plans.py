@@ -29,7 +29,13 @@ from fastapi import APIRouter, Body, HTTPException, Header, UploadFile, File
 from fastapi.responses import Response
 
 from db import get_db, next_entity_code
-from helpers import _require_user, _tok, _audit, notify_module_activity, guard_case_access
+from helpers import (_require_user, _tok, _audit, notify_module_activity, guard_case_access,
+                     require_any_module)
+
+# 讀取端點的模組聯集（2026-09-14）：規劃書自己三頁（netplan／netplan_edit）＋
+# 案件管理（`js/case-management.js` 也會打這組 API）。只認 netplan 會把案件管理
+# 那條路徑打死——那正是 MODULE-AUDIT §5 說的「擋錯人」失敗模式。
+_VIEW_MODULES = ('netplan', 'netplan_edit', 'case_manage')
 from network_plan_export import build_plan_excel, build_plan_pdf_bytes, parse_plan_excel
 from network_plan_topology import build_topology_svg
 
@@ -60,7 +66,8 @@ def _plan_public(row) -> dict:
 @router.get("/api/network-plans")
 def list_network_plans(quote_no: Optional[str] = None, status: Optional[str] = None,
                         q: Optional[str] = None, authorization: str = Header(None)):
-    _require_user(authorization)
+    user = _require_user(authorization)
+    require_any_module(user, _VIEW_MODULES, "網路架構規劃書")
     conn = get_db()
     sql = "SELECT * FROM network_plans WHERE 1=1"
     params = []
@@ -81,7 +88,8 @@ def list_network_plans(quote_no: Optional[str] = None, status: Optional[str] = N
 
 @router.get("/api/network-plans/{plan_id}")
 def get_network_plan(plan_id: int, authorization: str = Header(None)):
-    _require_user(authorization)
+    user = _require_user(authorization)
+    require_any_module(user, _VIEW_MODULES, "網路架構規劃書")
     conn = get_db()
     row = conn.execute("SELECT * FROM network_plans WHERE id=?", (plan_id,)).fetchone()
     conn.close()

@@ -27,6 +27,10 @@ _SUPERADMIN_MODULES = [
     "work_log", "daily_task",
     "env_guide", "netarch_guide", "switch_guide", "monitor_guide",
     "access_guide", "gateway_guide", "automation_guide",
+    # 2026-09-14：原本沒有 key、只能靠角色寫死的項目——四個稽核／維運頁，
+    # 以及網路架構規劃書的「檢視」（原本只有 netplan_edit）
+    "netplan",
+    "audit_log", "shipping_export_log", "module_versions", "selection_overview",
 ]
 
 _LEGACY_WEAK_PASSWORDS = (
@@ -117,7 +121,16 @@ def user_has_module(user: dict, key: str) -> bool:
 
 
 def require_any_module(user: dict, keys, label: str) -> None:
-    """模組層級的存取檢查：admin+ 直通，其餘必須至少持有 `keys` 其中一個。
+    """模組層級的存取檢查：**只有 superadmin 直通**，其餘一律必須持有 `keys`
+    其中一個——包含 admin。
+
+    2026-09-14 使用者裁示：「管理者一樣依據有開權限的內容去顯示，沒開的就不顯示，
+    包含模組名稱。超級管理者預設全開，使用者部分看模組內容去檢核，未開啟的直接
+    不顯示」。在此之前 admin 跟 superadmin 一樣直通所有模組檢查，結果是**沒有人
+    發現既有 admin 帳號的模組清單早就過時了**——2026-08／09 陸續新增的模組
+    （監控／門禁／閘道器／自動化選型導覽、出納、網路架構規劃書）加進了角色樣板，
+    但既有帳號從來沒有回填，只是因為 admin 直通所以完全看不出來。
+    DB v84 已把那批帳號補到 admin 角色樣板，取消直通才不會讓人憑空少掉功能。
 
     2026-09-13（模組權限稽核第二輪，使用者裁示「逐一補後端檢查」）：在此之前
     35 個可授權模組裡有 16 個**後端完全沒有讀**，等於只是側欄的顯示開關——
@@ -128,8 +141,14 @@ def require_any_module(user: dict, keys, label: str) -> None:
     料號主檔（`procurement`）與案件管理的叫料（`case_manage`）呼叫，只認一個
     模組會把另一邊打死。規則是「該 API 的所有消費頁面所屬模組的聯集」——比
     現況（誰登入都能打）嚴格，又不會擋掉任何一條既有的使用路徑。
+
+    ⚠️ **最危險的失敗模式不是「該擋沒擋」，是「擋錯人」**（MODULE-AUDIT §5）：
+    某模組的頁面呼叫到一支不接受該模組的 API，使用者看到一片 403，而後端測試
+    全綠——因為**測試多半用 admin 帳號，而 admin 以前直通**。這次取消直通之後
+    那層遮蔽消失了，`test_module_keys_consistency_2026_09_13.py` 的第 ⑦ 題
+    （側欄承諾的模組必須打得開該頁的 API）才真正有意義。
     """
-    if user["role"] in ("superadmin", "admin"):
+    if user["role"] == "superadmin":
         return
     if any(user_has_module(user, k) for k in keys):
         return

@@ -370,9 +370,13 @@ def list_audit_log(
     q:      str = None,
     authorization: str = Header(None),
 ):
+    # 2026-09-14 使用者裁示：這頁原本沒有對應的模組 key，只能靠角色寫死
+    # （`admin` 以上）。既然全站已經改成「未開啟的模組直接不顯示」，就替它
+    # 建一個 key（`audit_log`）——「沒有對應模組 key 也建立就沒有這個問題」。
+    # 好處是它從此跟其他模組一樣可以逐帳號勾選，不用再為了「誰能看稽核紀錄」
+    # 去改程式碼裡的角色判斷式。
     user = _require_user(authorization)
-    if user["role"] not in ("superadmin", "admin"):
-        raise HTTPException(403, "稽核記錄僅管理員以上可查閱")
+    require_any_module(user, ["audit_log"], "歷史紀錄")
     conn = get_db()
     where, params = [], []
     if action:

@@ -124,8 +124,10 @@ def list_shipping_export_history(
 ):
     """出貨單歷史紀錄：把所有出貨單各自的 export_log（既有欄位，record_shipping_export()
     每次匯出時寫入）攤平成「一次匯出＝一筆」事件列表，供專屬歷史頁面搜尋/年月篩選。"""
+    # 2026-09-14：從寫死的 `_require_admin` 改成模組檢查——取消 admin 直通之後，
+    # 「誰能看出貨單匯出歷史」應該由模組勾選決定，而不是綁在角色上。
     user = _require_user(authorization)
-    _require_admin(user)
+    require_any_module(user, ["shipping_export_log"], "出貨單歷史紀錄")
     conn = get_db()
     rows = conn.execute(
         "SELECT note_no, quote_no, customer_name, project_name, ship_date, export_log "

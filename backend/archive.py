@@ -153,7 +153,12 @@ def _archive_reachable() -> bool:
 # 第一次備份就把 marker 寫下去，之後開發機再掛上同一顆碟就會被擋下來）。
 
 _ARCHIVE_OWNER_MARKER = ".motrix_archive_owner"
-_owner_cache = {"ok": None, "checked_at": 0.0, "reason": ""}
+# `base` 是這份判定所屬的存檔根目錄——**快取一定要以路徑為鍵**：這個系統的
+# 磁碟機代號本來就會漂移（見 _detect_archive_base()），換了一顆碟之後沿用上一顆
+# 的所有權判定是錯的。2026-09-14 實測踩到過：一支完全無關的備份測試把
+# `_archive_base` 指到自己的暫存目錄，卻吃到前一題留下的 False，於是 _daily_backup()
+# 在掛鏡像之前就早退——**序列跑綠、平行跑紅**，最難查的那種。
+_owner_cache = {"base": None, "ok": None, "checked_at": 0.0, "reason": ""}
 _OWNER_CACHE_TTL = 300          # 秒；這個檢查要讀檔，不能每次即時備份都做一次
 
 
@@ -185,15 +190,18 @@ def _archive_owner_ok() -> bool:
     if _active_backend() == "s3":
         return True
 
+    base = _archive_base()
+    if not base:
+        return True                         # 碟沒掛上是另一個問題，由 _archive_reachable() 管
+
     now = time.monotonic()
-    if _owner_cache["ok"] is not None and now - _owner_cache["checked_at"] < _OWNER_CACHE_TTL:
+    if (_owner_cache["ok"] is not None
+            and _owner_cache["base"] == base
+            and now - _owner_cache["checked_at"] < _OWNER_CACHE_TTL):
         return _owner_cache["ok"]
 
     verdict, reason = True, ""
     try:
-        base = _archive_base()
-        if not base:
-            return True                     # 碟沒掛上是另一個問題，由 _archive_reachable() 管
         marker_path = os.path.join(base, _ARCHIVE_OWNER_MARKER)
         mine = _archive_instance_id()
 
@@ -224,7 +232,7 @@ def _archive_owner_ok() -> bool:
         logger.warning("_archive_owner_ok check failed (fail-open): %s", e)
         verdict, reason = True, ""
 
-    _owner_cache.update({"ok": verdict, "checked_at": now, "reason": reason})
+    _owner_cache.update({"base": base, "ok": verdict, "checked_at": now, "reason": reason})
     if not verdict:
         _write_backup_alert(reason, level="ERROR")
     return verdict

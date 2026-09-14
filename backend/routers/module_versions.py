@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException, Header
 from pydantic import BaseModel
 
 from db import get_db
-from helpers import _require_user, _audit, _tok, notify_module_activity
+from helpers import _require_user, _audit, _tok, notify_module_activity, require_any_module
 
 router = APIRouter()
 
@@ -33,8 +33,13 @@ class ModuleVersionBody(BaseModel):
 
 @router.get("/api/module-versions")
 def list_module_versions(authorization: str = Header(None)):
-    """Return all version entries grouped by module, newest-first within each group."""
-    _require_user(authorization)
+    """Return all version entries grouped by module, newest-first within each group.
+
+    2026-09-14：補上 `module_versions` 模組檢查。這支原本**只要求登入**，
+    而側欄那一項是寫死 `ad`——典型的「前端藏起來、後端沒擋」，手打網址或直接
+    打 API 完全不受影響。"""
+    user = _require_user(authorization)
+    require_any_module(user, ["module_versions"], "版本紀錄")
     conn = get_db()
     rows = conn.execute(
         "SELECT id, module, version, updated_at, content, updated_by "

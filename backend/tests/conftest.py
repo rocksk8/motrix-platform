@@ -142,10 +142,36 @@ def isolated_archive(client, tmp_path, monkeypatch):
     # 2026-09-14 實測：所有權測試把快取設成 False 之後，同一個 xdist worker 裡
     # 接著跑的月備份測試全部被那個 False 擋掉（序列執行時剛好沒撞到，只有平行
     # 執行才紅，是最難查的那種）。
+    monkeypatch.setitem(archive._owner_cache, "base", None)
     monkeypatch.setitem(archive._owner_cache, "ok", None)
     monkeypatch.setitem(archive._owner_cache, "checked_at", 0.0)
     monkeypatch.setitem(archive._owner_cache, "reason", "")
     return str(base)
+
+
+# 角色預設模組——對應 frontend/pages/users.html 的 ROLE_MODULES，
+# 再加上 2026-09-14 新建的幾個 key（見下方 _make 的說明）。
+_ROLE_DEFAULT_MODULES = {
+    "superadmin": [],          # superadmin 直通，給不給都一樣
+    "admin": [
+        "dashboard", "quotation", "case_manage", "customer", "procurement",
+        "inventory", "equipment", "finance", "reports", "project_approve_eng",
+        "project_approve_biz", "financial_view", "work_log", "daily_task",
+        "env_guide", "netarch_guide", "switch_guide", "monitor_guide",
+        "access_guide", "gateway_guide", "automation_guide", "cashier",
+        "netplan", "audit_log", "shipping_export_log", "module_versions",
+        "selection_overview",
+    ],
+    "sales": [
+        "dashboard", "quotation", "case_manage", "customer", "financial_view",
+        "project_approve_biz", "work_log", "daily_task",
+    ],
+    "engineer": [
+        "dashboard", "case_manage", "project_approve_eng", "equipment",
+        "work_log", "daily_task", "netplan",
+    ],
+    "viewer": ["dashboard"],
+}
 
 
 @pytest.fixture()
@@ -157,14 +183,30 @@ def make_user():
     from helpers.auth import _hash_pw
 
     def _make(username="tester", password="Test-Pass-123", role="admin", modules=None):
+        """`modules=None`（不指定）→ 用該角色的預設模組樣板。
+
+        2026-09-14 改的：在此之前預設是**空陣列**，而當時 `require_any_module()`
+        讓 admin 直通，所以「admin 測試帳號一個模組都沒有」完全看不出問題。
+        取消直通之後這個預設立刻讓 31 題變紅——但那不是產品壞了，是**測試帳號
+        一直都不像真實帳號**：正式機的 admin 都持有完整的角色樣板。
+
+        這正是 MODULE-AUDIT §5 記的那件事：「模組檢查最危險的失敗模式是擋錯人，
+        而後端測試全綠，因為測試多半用 admin 帳號、admin 直通」。那層遮蔽現在
+        沒了，所以測試帳號必須拿真實的模組清單。
+
+        要驗「沒有模組會被擋」的測試請**明確傳 `modules=[]`**——空陣列不是 None，
+        不會被樣板取代。
+        """
         import json
+        if modules is None:
+            modules = _ROLE_DEFAULT_MODULES.get(role, [])
         conn = db.get_db()
         try:
             conn.execute(
                 "INSERT INTO users (username, password_hash, display_name, role, modules, "
                 "active, created_at, must_change_password) VALUES (?,?,?,?,?,1,?,0)",
                 (username, _hash_pw(password), username, role,
-                 json.dumps(modules or []), "2026-01-01T00:00:00"),
+                 json.dumps(modules), "2026-01-01T00:00:00"),
             )
             conn.commit()
         finally:

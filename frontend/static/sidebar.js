@@ -364,31 +364,77 @@
   }
 
   // ── Sidebar ─────────────────────────────────────────────────────────────────
-  var sa  = role === 'superadmin'
-  var ad  = sa || role === 'admin'
-  var eng = role === 'engineer'
-  var cQ   = mods.indexOf('quotation')   >= 0 || ad
-  var cCu  = mods.indexOf('customer')    >= 0 || ad
-  var cPr  = mods.indexOf('procurement') >= 0 || ad
-  var cFi  = mods.indexOf('finance')     >= 0 || ad
-  var cCash = mods.indexOf('cashier')    >= 0 || ad
-  var cCM  = mods.indexOf('case_manage') >= 0 || eng || ad
-  var cEq  = mods.indexOf('equipment')   >= 0 || ad
-  var cInv = mods.indexOf('inventory')   >= 0 || ad
-  var cRpt = mods.indexOf('reports')     >= 0 || ad
-  var cWL  = mods.indexOf('work_log')    >= 0 || role !== 'viewer'
-  var cDT  = mods.indexOf('daily_task')  >= 0 || role !== 'viewer'
-  var cDev = mods.indexOf('dev_crm')     >= 0 || ad
-  var cCon = mods.indexOf('contractor_list') >= 0 || sa
-  var cPay = mods.indexOf('payslip')    >= 0 || sa
-  var cEnvG = mods.indexOf('env_guide')  >= 0 || ad
-  var cNetG = mods.indexOf('netarch_guide') >= 0 || ad
-  var cSwitchG = mods.indexOf('switch_guide') >= 0 || ad
-  var cMonitorG = mods.indexOf('monitor_guide') >= 0 || ad
-  var cAccessG = mods.indexOf('access_guide') >= 0 || ad
-  var cGatewayG = mods.indexOf('gateway_guide') >= 0 || ad
-  var cAutomationG = mods.indexOf('automation_guide') >= 0 || ad
-  var cNetPlan = mods.indexOf('netplan_edit') >= 0 || ad || eng
+  // ── 2026-09-14：取消 admin 直通，全站改成純模組判定 ──────────────────────
+  //
+  // 使用者裁示：「管理者一樣依據有開權限的內容去顯示，沒開的就不顯示，包含模組
+  // 名稱。超級管理者預設全開，使用者部分看模組內容去檢核，未開啟的直接不顯示」。
+  //
+  // 在此之前這 20 幾個旗標一律長成 `mods.indexOf(x) >= 0 || ad`，等於 admin 與
+  // superadmin 看到的東西完全一樣、模組勾選對他們毫無作用。真正的代價不是
+  // 「admin 看得太多」，而是**沒有人發現既有 admin 帳號的模組清單早就過時了**
+  // ——2026-08／09 陸續新增的模組（監控／門禁／閘道器／自動化選型導覽、出納、
+  // 網路架構規劃書）加進了角色樣板，既有帳號卻從來沒補過，只因為 admin 直通
+  // 所以完全看不出來。DB v84 已把那批帳號補齊，這裡才敢把直通拿掉。
+  //
+  // 同一輪也拿掉另外兩種「不是模組」的放行（v84 一併補進對應帳號的模組清單，
+  // 所以沒有人會因此少掉今天看得到的東西）：
+  //   `|| eng`             工程師無條件看到案件管理
+  //   `|| role !== 'viewer'` 非檢視者無條件看到工作日誌／每日工作事項
+  //
+  // **只剩 `sa` 一個直通**，對應「超級管理者預設全開」。
+  //
+  // 分組名稱不需要另外處理：renderMainNav() 已經會過濾掉 items 為空的分組，
+  // 所以整組都沒權限時連分組名稱都不會出現（＝裁示裡的「包含模組名稱」）。
+  //
+  // **只在這一個地方算**（2026-09-14）：原本這段在檔案裡有**兩份**——這裡一份、
+  // `_refreshSession()` 裡再抄一份供「模組被改過就即時重建選單」使用。兩份已經
+  // 漂掉了：下面那份漏了 `cCon`／`cPay`／`cNetPlan` 三個旗標，所以 session 更新
+  // 後那三項會停在舊值。收斂成一支 computeFlags()，兩邊共用。
+  var sa, ad, has
+  var cQ, cCu, cPr, cFi, cCash, cCM, cEq, cInv, cRpt, cWL, cDT, cDev, cCon, cPay
+  var cEnvG, cNetG, cSwitchG, cMonitorG, cAccessG, cGatewayG, cAutomationG, cNetPlan
+  var cAudit, cShipLog, cVer, cOvw, cSet, canDash
+
+  function computeFlags() {
+    sa  = role === 'superadmin'
+    has = function (k) { return sa || mods.indexOf(k) >= 0 }
+    // `ad` 只剩通知鈴鐺在用（那是角色功能不是模組），其餘一律走 has()
+    ad  = sa || role === 'admin'
+
+    cQ   = has('quotation')
+    cCu  = has('customer')
+    cPr  = has('procurement')
+    cFi  = has('finance')
+    cCash = has('cashier')
+    cCM  = has('case_manage')
+    cEq  = has('equipment')
+    cInv = has('inventory')
+    cRpt = has('reports')
+    cWL  = has('work_log')
+    cDT  = has('daily_task')
+    cDev = has('dev_crm')
+    cCon = has('contractor_list')
+    cPay = has('payslip')
+    cEnvG = has('env_guide')
+    cNetG = has('netarch_guide')
+    cSwitchG = has('switch_guide')
+    cMonitorG = has('monitor_guide')
+    cAccessG = has('access_guide')
+    cGatewayG = has('gateway_guide')
+    cAutomationG = has('automation_guide')
+    // 檢視或編輯任一即可看到入口（編輯權當然也看得到）
+    cNetPlan = has('netplan') || has('netplan_edit')
+    // 四個原本沒有模組 key、只能靠角色寫死的稽核／維運頁（2026-09-14 使用者裁示
+    // 「沒有對應模組 key 也建立就沒有這個問題」）
+    cAudit = has('audit_log')
+    cShipLog = has('shipping_export_log')
+    cVer = has('module_versions')
+    cOvw = has('selection_overview')
+    cSet = has('settings')
+
+    canDash = has('dashboard') || has('finance') || has('quotation')
+  }
+  computeFlags()
 
   var ic = {
     dash:  '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
@@ -559,11 +605,10 @@
     bar.innerHTML = html
   }
 
-  var canDash = sa || ad || mods.indexOf('finance') >= 0 || mods.indexOf('quotation') >= 0 || mods.indexOf('dashboard') >= 0
 
   function buildSidebar() {
     var html = [
-      sec('主選單'),
+      sec('主選單', canDash),
       ni(up + 'index.html',          'dash',  '儀表板',   ['index.html', ''],                       canDash),
       // 2026-09-14：只留真正的業務項目（開發、報價、簽核）。
       // 案件管理拆到下方獨立分組，理由見那邊註解。
@@ -573,8 +618,8 @@
       // 2026-09-14：改走 ni()，否則不會被記錄進上方選單的分組資料
       ni(pg('approval-queue.html'), 'appr', '\u7c3d\u6838\u4f47\u5217', ['approval-queue.html'], cQ, '',
          '<span id="sb-approval-badge" style="display:none;background:#DC2626;color:#fff;font-size:9px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;padding:1px 6px;border-radius:9px;margin-left:auto"></span>'),
-      ni(pg('approval-delegates.html'), 'appr', '簽核代理人', ['approval-delegates.html'], cQ || sa || ad),
-      ni(pg('approval-history.html'), 'apprhist', '簽核歷史', ['approval-history.html'], cQ || sa || ad),
+      ni(pg('approval-delegates.html'), 'appr', '簽核代理人', ['approval-delegates.html'], cQ),
+      ni(pg('approval-history.html'), 'apprhist', '簽核歷史', ['approval-history.html'], cQ),
       // ── 案件：成案之後的執行與財務（2026-09-14 從「業務」拆出來）──
       // 拆出來的原因：cCM 包含 eng（工程師），而 cQ / cDev 不包含。
       // 舊分法下，一個沒有任何模組的工程師會看到一個叫「業務」的分組，
@@ -616,8 +661,8 @@
       ni(pg('access-guide.html'),   'accessg',  '門禁系統選型導覽', ['access-guide.html'],  cAccessG),
       ni(pg('gateway-guide.html'),  'gwg',      '閘道器與控制器選型導覽', ['gateway-guide.html'], cGatewayG),
       ni(pg('automation-guide.html'), 'automationg', '自動化系統選型導覽', ['automation-guide.html'], cAutomationG),
-      ni(pg('selection-db-overview.html'), 'ovg', '涵蓋度總覽', ['selection-db-overview.html'], ad),
-      sec('系統'),
+      ni(pg('selection-db-overview.html'), 'ovg', '涵蓋度總覽', ['selection-db-overview.html'], cOvw),
+      sec('系統', sa || cAudit || cShipLog || cVer || cOvw || cSet),
       ni(pg('users.html'),             'users', '使用者管理', ['users.html'],             sa),
       ni(pg('org-structure.html'),     'org',   '組織架構設定', ['org-structure.html'],   sa),
       ni(pg('approval-settings.html'),      'sett',  '簽核設定',   ['approval-settings.html'],      sa),
@@ -625,9 +670,9 @@
       ni(pg('notification-settings.html'), 'ntfy',  '通知設定',   ['notification-settings.html'],  sa),
       ni(pg('google-calendar-settings.html'), 'gcal', 'Google 行事曆設定', ['google-calendar-settings.html'], sa),
       ni(pg('company-profile-settings.html'), 'co',   '公司資料設定',   ['company-profile-settings.html'], sa),
-      ni(pg('audit-log.html'),         'hist',  '歷史紀錄',   ['audit-log.html'],         ad),
-      ni(pg('shipping-export-history.html'), 'hist', '出貨單歷史紀錄', ['shipping-export-history.html'], ad),
-      ni(pg('module-versions.html'),  'ver',   '版本紀錄',   ['module-versions.html'],               ad),
+      ni(pg('audit-log.html'),         'hist',  '歷史紀錄',   ['audit-log.html'],         cAudit),
+      ni(pg('shipping-export-history.html'), 'hist', '出貨單歷史紀錄', ['shipping-export-history.html'], cShipLog),
+      ni(pg('module-versions.html'),  'ver',   '版本紀錄',   ['module-versions.html'],               cVer),
       ni(pg('online-stats.html'),     'hist',  '在線時數統計', ['online-stats.html'],              sa),
       ni(pg('schema-status.html'),    'schema', 'Schema 狀態', ['schema-status.html'],               sa),
     ].filter(Boolean).join('')
@@ -848,32 +893,16 @@
         stored.modules            = d.modules
         stored.mustChangePassword = d.mustChangePassword
         localStorage.setItem('motrix_session', JSON.stringify(stored))
-        // 重新計算 flags 並重建 sidebar
+        // 重新計算 flags 並重建選單。2026-09-14：這裡原本抄了一份跟上面幾乎
+        // 一樣的旗標計算，而且已經漏掉 cCon／cPay／cNetPlan——改成共用
+        // computeFlags()，之後新增模組只會有一個地方要改。
         role = d.role
         mods = Array.isArray(d.modules) ? d.modules : []
-        sa  = role === 'superadmin'
-        ad  = sa || role === 'admin'
-        eng = role === 'engineer'
-        cQ   = mods.indexOf('quotation')   >= 0 || ad
-        cCu  = mods.indexOf('customer')    >= 0 || ad
-        cPr  = mods.indexOf('procurement') >= 0 || ad
-        cFi  = mods.indexOf('finance')     >= 0 || ad
-        cCash = mods.indexOf('cashier')    >= 0 || ad
-        cCM  = mods.indexOf('case_manage') >= 0 || eng || ad
-        cEq  = mods.indexOf('equipment')   >= 0 || ad
-        cInv = mods.indexOf('inventory')   >= 0 || ad
-        cRpt = mods.indexOf('reports')     >= 0 || ad
-        cWL  = mods.indexOf('work_log')    >= 0 || role !== 'viewer'
-        cDT  = mods.indexOf('daily_task')  >= 0 || role !== 'viewer'
-        cDev = mods.indexOf('dev_crm')     >= 0 || ad
-        cEnvG = mods.indexOf('env_guide')  >= 0 || ad
-        cNetG = mods.indexOf('netarch_guide') >= 0 || ad
-        cSwitchG = mods.indexOf('switch_guide') >= 0 || ad
-        cMonitorG = mods.indexOf('monitor_guide') >= 0 || ad
-        cAccessG = mods.indexOf('access_guide') >= 0 || ad
-        cGatewayG = mods.indexOf('gateway_guide') >= 0 || ad
-        cAutomationG = mods.indexOf('automation_guide') >= 0 || ad
-        canDash = sa || ad || mods.indexOf('finance') >= 0 || mods.indexOf('quotation') >= 0 || mods.indexOf('dashboard') >= 0
+        computeFlags()
+        // 重建前要清掉上一輪累積的分組與被擋頁面清單，否則重建會把新舊選單接在一起
+        _navGroups = []
+        _curGroup = null
+        _deniedPages = []
         buildSidebar()
         var dnEl = document.getElementById('tb-display-name')
         if (dnEl) dnEl.textContent = esc(d.displayName || d.username || '')

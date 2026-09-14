@@ -25,7 +25,7 @@ def _reset_owner_cache():
     """所有權檢查有 300 秒 TTL 快取（避免每次即時備份都讀檔），測試裡每次
     改完 marker 都要清掉，否則驗到的是上一題留下的判定。"""
     import archive
-    archive._owner_cache.update({"ok": None, "checked_at": 0.0, "reason": ""})
+    archive._owner_cache.update({"base": None, "ok": None, "checked_at": 0.0, "reason": ""})
 
 
 @pytest.fixture(autouse=True)
@@ -161,3 +161,30 @@ def test_instance_id_is_stable_across_calls(isolated_archive):
     a = archive._archive_instance_id()
     b = archive._archive_instance_id()
     assert a == b and len(a) == 32
+
+
+def test_verdict_cache_is_keyed_by_archive_path(isolated_archive, tmp_path):
+    """換了存檔根目錄就必須重新判定，不能沿用上一顆碟的結論。
+
+    這不是為了測試方便——**這個系統的磁碟機代號本來就會漂移**
+    （`_detect_archive_base()` 每次掃 A–Z 找，見 §8.1），沿用舊判定是真的錯。
+
+    2026-09-14 實測踩到過：一支完全無關的備份鏡像測試把 `_archive_base` 指到
+    自己的暫存目錄，卻吃到前一題留下的 False，於是 `_daily_backup()` 在掛鏡像
+    之前就早退——**序列跑綠、`-n auto` 跑紅**，最難查的那一種。
+    """
+    import archive
+
+    # 第一顆碟：屬於別人 → False
+    with open(_marker(isolated_archive), "w", encoding="utf-8") as f:
+        json.dump({"instance_id": "別台", "machine": "OTHER", "claimed_at": "2026-01-01"}, f)
+    _reset_owner_cache()
+    assert archive._archive_ok() is False
+
+    # 換到另一個乾淨的目錄，**不清快取**——正確行為是重新判定並認領
+    other = tmp_path / "another_drive"
+    other.mkdir()
+    archive._archive_base = lambda: str(other)
+
+    assert archive._archive_ok() is True, "換了存檔目錄卻沿用上一顆碟的判定"
+    assert os.path.isfile(_marker(str(other))), "新目錄應該被認領"

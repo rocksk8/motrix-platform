@@ -60,7 +60,18 @@ def role_templates():
 
 
 def sidebar_keys():
-    return set(re.findall(r"mods\.indexOf\('([a-z_]+)'\)", _read(SIDEBAR_JS)))
+    """側欄實際讀到的模組 key。
+
+    2026-09-14：sidebar.js 取消 admin 直通時，二十幾個
+    "mods.indexOf(x) >= 0 || ad" 收斂成一支 has(x) 輔助函式，所以這裡要同時
+    認得兩種寫法。**只認舊寫法的話這一題會在改完的當下整片變紅，而那是偵測器
+    跟不上、不是功能壞掉**——實測就是這樣（18 個 key 一起紅，含 customer、
+    equipment 這些明明還在用的）。留著舊 pattern 是因為檔案裡其他地方仍在用。
+    """
+    src = _read(SIDEBAR_JS)
+    keys = set(re.findall(r"mods\.indexOf\('([a-z_]+)'\)", src))
+    keys |= set(re.findall(r"(?<![A-Za-z0-9_])has\('([a-z_]+)'\)", src))
+    return keys
 
 
 def frontend_other_keys():
@@ -81,6 +92,20 @@ def backend_keys():
     keys |= set(re.findall(r"module=['\"]([a-z_]+)['\"]", src))
     keys |= set(re.findall(r"['\"]([a-z_]+)['\"]\s+in\s+(?:mods|modules|user_mods)\b", src))
     keys |= set(re.findall(r"_(?:EDIT_)?MODULE\s*=\s*['\"]([a-z_]+)['\"]", src))
+    # 2026-09-14 補上：`require_any_module(user, ('a','b'), "標籤")` 這個形式
+    # **在此之前完全沒有被比對到**——而 2026-09-13 那輪補的 94 處後端檢查全部
+    # 是這個寫法。它們之所以沒被判成「後端沒讀」，純粹是因為同一批 key 剛好
+    # 也出現在其他形式裡（`module=`、`_EDIT_MODULE` 等）。也就是說這支偵測器
+    # 一直在漏看主力寫法，只是剛好沒有暴露出來。
+    # 第二個參數可能是 tuple／list／單一字串，三種都收。
+    for m in re.finditer(r"require_any_module\([^,]+,\s*([\(\[][^)\]]*[\)\]])", src):
+        keys |= set(re.findall(r"['\"]([a-z_]+)['\"]", m.group(1)))
+    keys |= set(re.findall(r"require_any_module\([^,]+,\s*['\"]([a-z_]+)['\"]", src))
+    # 模組清單也可能先抽成模組層級常數再傳進去（例如 network_plans.py 的
+    # `_VIEW_MODULES = ('netplan', 'netplan_edit', 'case_manage')`）——只認
+    # 呼叫點的話那種寫法會被判成「後端沒讀」。
+    for m in re.finditer(r"_[A-Z_]*MODULES?\s*=\s*([\(\[][^)\]]*[\)\]])", src):
+        keys |= set(re.findall(r"['\"]([a-z_]+)['\"]", m.group(1)))
     return keys
 
 

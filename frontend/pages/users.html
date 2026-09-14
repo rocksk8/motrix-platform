@@ -716,7 +716,7 @@
   // 是歷史殘留，留著只會讓人以為勾了它有意義。既有帳號身上那幾筆不去動
   // （沒有任何行為依賴它，清掉要跑 migration，不值得）。
   const ROLE_MODULES = {
-    superadmin: ['dashboard','quotation','case_manage','customer','procurement','inventory','equipment','finance','reports','settings','project_approve_eng','project_approve_biz','financial_view','work_log','daily_task','env_guide','netarch_guide','switch_guide','monitor_guide','access_guide','gateway_guide','automation_guide','cashier'],
+    superadmin: ['dashboard','quotation','case_manage','customer','procurement','inventory','equipment','finance','reports','settings','project_approve_eng','project_approve_biz','financial_view','work_log','daily_task','env_guide','netarch_guide','switch_guide','monitor_guide','access_guide','gateway_guide','automation_guide','cashier','netplan','audit_log','shipping_export_log','module_versions','selection_overview'],
     admin:      ['dashboard','quotation','case_manage','customer','procurement','inventory','equipment','finance','reports','project_approve_eng','project_approve_biz','financial_view','work_log','daily_task','env_guide','netarch_guide','switch_guide','monitor_guide','access_guide','gateway_guide','automation_guide','cashier'],
     sales:      ['dashboard','quotation','case_manage','customer','financial_view','project_approve_biz','work_log','daily_task'],
     engineer:   ['dashboard','case_manage','project_approve_eng','equipment','work_log','daily_task'],
@@ -810,6 +810,10 @@
         {key:'procurement',          label:'供應商／料號／採購', group:'採購'},
         {key:'inventory',            label:'庫存管理',         group:'採購'},
         {key:'equipment',            label:'設備登載／保固',   group:'設備'},
+        // 2026-09-14：這個模組原本**只有 edit key、沒有檢視 key**——側欄那一項
+        // 是寫死 `|| ad || eng`，所以「誰看得到規劃書」根本不可勾選。比照選型
+        // 導覽的 `x_guide` / `x_guide_edit` 兩段式補上檢視 key。
+        {key:'netplan',              label:'網路架構規劃書－檢視', group:'網路架構規劃書'},
         {key:'netplan_edit',         label:'網路架構規劃書－新增修改刪除', group:'網路架構規劃書'},
         {key:'project_approve_eng',  label:'案件代辦－工程主管確認', group:'專案'},
         {key:'project_approve_biz',  label:'案件代辦－業務確認',     group:'專案'},
@@ -832,6 +836,14 @@
         {key:'automation_guide',        label:'自動化系統選型導覽－檢視', group:'選型資料庫'},
         {key:'automation_guide_edit',   label:'自動化系統選型導覽－新增修改刪除', group:'選型資料庫'},
         {key:'settings',             label:'系統設定',         group:'系統'},
+        // 2026-09-14 使用者裁示「沒有對應模組 key 也建立就沒有這個問題」——
+        // 這四頁原本在側欄是寫死 `ad`（admin 以上），沒有任何可勾選的 key，
+        // 所以「未開啟的直接不顯示」這條規則對它們無從套用。建了 key 之後
+        // 它們跟其他模組一樣逐帳號勾選，不用再改程式碼裡的角色判斷式。
+        {key:'audit_log',            label:'歷史紀錄（全系統操作軌跡）', group:'系統'},
+        {key:'shipping_export_log',  label:'出貨單歷史紀錄',   group:'系統'},
+        {key:'module_versions',      label:'版本紀錄',         group:'系統'},
+        {key:'selection_overview',   label:'選型資料庫涵蓋度總覽', group:'系統'},
       ],
 
       // 對應 backend/helpers/notification_prefs.py 的 EVENT_GROUPS —— 兩邊修改時要同步
