@@ -731,7 +731,19 @@ async def upload_completion_signed_files(note_no: str, files: List[UploadFile] =
 
 @router.delete("/api/completion-notes/{note_no}/signed-files/{file_id}")
 def delete_completion_signed_file(note_no: str, file_id: str, authorization: str = Header(None)):
-    _require_user(authorization)
+    """刪除已回簽附件——**限 admin 以上**（2026-09-14 全系統稽核補上）。
+
+    在此之前這支只有 `_require_user()`：**任何登入者都能刪掉任何完工單的回簽
+    附件**，沒有角色、模組或擁有者檢查，而且刪除會連實體檔案一起移除、不可
+    復原。這是 tests/test_system_audit_2026_09_14.py 的「刪除端點必須檢查權限」
+    那一題掃出來的。
+
+    權限標準跟同日新增的動態附件一致（使用者裁示「刪除要 admin+」）：
+    抽掉附件是**只改證據、留下單據本身**，這種事留給管理員。
+    """
+    user = _require_user(authorization)
+    if user["role"] not in ("superadmin", "admin"):
+        raise HTTPException(403, "僅管理員以上可刪除回簽附件")
     conn = get_db()
     try:
         row = conn.execute("SELECT signed_files_json FROM completion_notes WHERE note_no=?",
