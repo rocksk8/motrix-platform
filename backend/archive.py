@@ -6,12 +6,13 @@ import sqlite3
 import string
 import threading
 import time
+import uuid
 import logging
 from datetime import datetime, date, timedelta
 
 import cloud_storage
 from db import get_db, DB_PATH
-from helpers import _cleanup_sessions, _get_setting
+from helpers import _cleanup_sessions, _get_setting, _set_setting
 
 logger = logging.getLogger(__name__)
 
@@ -19,13 +20,30 @@ logger = logging.getLogger(__name__)
 # 雲端週730天／稽核紀錄730天），使用者要求「備份次數跟週期可調整避免檔案過大」，改為
 # 存進 system_settings.backup_retention（見 routers/system.py 的
 # GET/PATCH /api/settings/backup-retention），不用改程式碼重新部署就能調整。
-# cloud_daily_keep_days 預設值同日改為 1825 天（5年）——使用者確認目前雲端每日備份
+# ⚠️ 2026-09-14：預設值已隨新的保留政策改過（每日 60／週 90／月永久），
+# 見下方 _BACKUP_RETENTION_DEFAULT 的說明。以下這段是當時的歷史紀錄：
+# cloud_daily_keep_days 2026-09-01 曾改為 1825 天（5年）——使用者確認目前雲端每日備份
 # 僅 1.45GB，5年容量無虞，比原本 365 天更符合需求。
+# 保留策略（2026-09-14 使用者裁示）——三層各自的角色不同，不要混在一起看：
+#   每日備份  60 天：近期誤刪／誤改的回溯窗口。日常真正會用到的就是這一層。
+#   週備份    90 天：每日層之外多一個粗顆粒的中期窗口。
+#   月備份    永久：長期法遵與歷史查詢用。`cloud_monthly_keep_days = 0` 代表
+#             「永不清除」，_prune_cloud_backups() 讀到 0 會整段跳過。
+# 改小每日／週的天數是刻意的：舊值（每日 1825 天＝5 年、週 730 天）等於把長期
+# 保存這件事壓在「每天一份整庫 .db」上，成本隨資料庫大小線性成長，而真正需要
+# 長期保留的其實是月粒度。長期保存改由月備份層承擔之後，前兩層可以縮短。
+#
+# ⚠️ 上傳檔案鏡像／PDF存檔鏡像**不在這裡**，也永遠不會被任何 prune 邏輯掃到
+# （_prune_cloud_backups() 只走 每日備份／週備份／月備份 三個目錄）——那兩份是
+# 使用者明訂要長久保留的原始憑據。test_backup_retention_policy_2026_09_14.py
+# 有一題專門守這件事，不要為了「順手清一下」把鏡像目錄加進 prune 清單。
 _BACKUP_RETENTION_DEFAULT = {
-    "local_db_keep_days":    30,
-    "cloud_daily_keep_days": 1825,
-    "cloud_weekly_keep_days": 730,
-    "audit_log_keep_days":   730,
+    "local_db_keep_days":     30,
+    "cloud_daily_keep_days":  60,
+    "cloud_weekly_keep_days": 90,
+    "cloud_monthly_keep_days": 0,      # 0 = 永久保留
+    "local_pre_update_keep":  5,       # pre_update_* 快照保留份數（非天數）
+    "audit_log_keep_days":    730,
 }
 
 
@@ -76,6 +94,10 @@ def _daily_dir() -> str:
     return os.path.join(_archive_base(), "每日備份")
 
 
+def _monthly_dir() -> str:
+    return os.path.join(_archive_base(), "月備份")
+
+
 def _uploads_mirror_dir() -> str:
     return os.path.join(_archive_base(), "上傳檔案鏡像")
 
@@ -96,7 +118,7 @@ def _active_backend() -> str:
     return cloud_storage.cloud_backup_target().get("backend", "local_drive")
 
 
-def _archive_ok() -> bool:
+def _archive_reachable() -> bool:
     """"Is the cloud backup destination currently reachable?" — branches on
     the configured backend (architecture map §6.4, 2026-09-07). Everything
     below this line that used to check "is the drive mounted" now goes
@@ -106,6 +128,117 @@ def _archive_ok() -> bool:
     if _active_backend() == "s3":
         return cloud_storage.s3_available()
     return bool(_archive_base())
+
+
+# ── 存檔所有權（2026-09-14）────────────────────────────────────────────────────
+#
+# **要解決的問題**：這個存檔目錄沒有任何「這是誰的」概念。`_detect_archive_base()`
+# 是掃 A–Z 找第一個含 `我的雲端硬碟\系統存檔` 的磁碟機，而 `main.py` 是**無條件**
+# 啟動 `_schedule_daily()`／`_schedule_weekly()`。所以任何跑這份程式碼、又掛著
+# 同一個雲端硬碟的機器（開發機、備援機、DR 還原出來的機器、未來的分公司機）
+# 都會寫進同一組資料夾。兩個實際後果都是**靜默**的：
+#
+#   ① `.done` marker 在雲端。先跑的那台贏，後跑的那台走
+#      `_clear_backup_alert_if_healthy(); return`——**還順手把警示清掉**。
+#      正式機當天沒備份，但備份頁面綠燈、沒有 audit、沒有信。
+#   ② `_snapshot_sqlite()` 的雲端複製不看 marker，第二台會直接覆蓋當天的
+#      `每日備份/{date}/motrix_erp.db`——那是還原優先序的第二層。
+#
+# 這不是假想：2026-09-07「conftest 雲端備份隔離死碼把測試假資料寫進真實 G: 碟」
+# 就是同一類。磁碟機代號本身不是身分，資料夾路徑也不是——要有一個明確的標記。
+#
+# **作法**：存檔根目錄放一個 `.motrix_archive_owner`，內容是這個資料庫的
+# instance id。對不上就整個拒寫並寄信，而不是默默覆蓋別人的備份。
+# 第一次看到沒有 marker 的空存檔目錄時自動認領（正常升級路徑：正式機明天
+# 第一次備份就把 marker 寫下去，之後開發機再掛上同一顆碟就會被擋下來）。
+
+_ARCHIVE_OWNER_MARKER = ".motrix_archive_owner"
+_owner_cache = {"ok": None, "checked_at": 0.0, "reason": ""}
+_OWNER_CACHE_TTL = 300          # 秒；這個檢查要讀檔，不能每次即時備份都做一次
+
+
+def _archive_instance_id() -> str:
+    """本機這套系統的識別碼，存在 system_settings，第一次呼叫時產生。
+
+    綁在**資料庫**上而不是機器名：DR 換機重建時資料庫是跟著還原過去的，
+    識別碼跟著走才對——新機器應該要能接手舊機器的存檔目錄，而不是被自己的
+    防呆擋在門外。反過來說，同一個存檔目錄被兩套**不同的資料庫**寫，
+    才是真正要擋的情況。
+    """
+    iid = _get_setting("archive_instance_id", "")
+    if not iid:
+        iid = uuid.uuid4().hex
+        _set_setting("archive_instance_id", iid)
+    return iid
+
+
+def _archive_owner_ok() -> bool:
+    """存檔目錄是不是屬於這套系統。不是就寫 ERROR 警示並回 False（＝停寫）。
+
+    只支援 local_drive——S3 後端用的是明確指定的 bucket + prefix，本來就不會
+    「掃到別人的」，沒有這個問題。
+
+    **讀不到／寫不進 marker 一律 fail-open**（當作通過，只留 log）：這層是
+    針對罕見情境的防呆，不該因為一次暫時性的 IO 錯誤就把每天的備份整個停掉——
+    那會是拿一個大問題去換一個小問題。
+    """
+    if _active_backend() == "s3":
+        return True
+
+    now = time.monotonic()
+    if _owner_cache["ok"] is not None and now - _owner_cache["checked_at"] < _OWNER_CACHE_TTL:
+        return _owner_cache["ok"]
+
+    verdict, reason = True, ""
+    try:
+        base = _archive_base()
+        if not base:
+            return True                     # 碟沒掛上是另一個問題，由 _archive_reachable() 管
+        marker_path = os.path.join(base, _ARCHIVE_OWNER_MARKER)
+        mine = _archive_instance_id()
+
+        if not os.path.exists(marker_path):
+            # 認領：第一次使用（或使用者刻意刪掉 marker 以轉移所有權）
+            with open(marker_path, "w", encoding="utf-8") as f:
+                json.dump({"instance_id": mine,
+                           "machine": os.environ.get("COMPUTERNAME", ""),
+                           "claimed_at": datetime.now().isoformat()},
+                          f, ensure_ascii=False, indent=2)
+            logger.info("Claimed cloud archive ownership: %s", marker_path)
+        else:
+            with open(marker_path, encoding="utf-8") as f:
+                owner = json.load(f) or {}
+            if owner.get("instance_id") != mine:
+                verdict = False
+                reason = (
+                    f"這個雲端存檔目錄屬於另一套系統"
+                    f"（機器：{owner.get('machine') or '不明'}，"
+                    f"認領於 {owner.get('claimed_at') or '不明'}）。"
+                    f"為避免覆蓋對方的備份、或因為對方已寫下當日 .done 而讓本機"
+                    f"靜默略過備份，**本機的雲端備份已全部停止**（本機 SQLite "
+                    f"快照不受影響，仍會寫入 {_LOCAL_DB_BACKUP}）。"
+                    f"若這台才是正式機、要接手這個存檔目錄，"
+                    f"請刪除 {marker_path} 後重啟服務即可重新認領。"
+                )
+    except Exception as e:
+        logger.warning("_archive_owner_ok check failed (fail-open): %s", e)
+        verdict, reason = True, ""
+
+    _owner_cache.update({"ok": verdict, "checked_at": now, "reason": reason})
+    if not verdict:
+        _write_backup_alert(reason, level="ERROR")
+    return verdict
+
+
+def _archive_ok() -> bool:
+    """雲端備份現在可不可以寫：目的地連得上 **而且** 這個存檔目錄是本機的。
+
+    所有原本只問「碟掛著沒」的呼叫點都走這裡，所以所有權檢查一次就覆蓋到
+    即時／每日／週／月備份與兩組鏡像，不用逐一改呼叫端。
+    """
+    if not _archive_reachable():
+        return False
+    return _archive_owner_ok()
 
 
 # ── Backend-dispatching read/write helpers (2026-09-07) ────────────────────────
@@ -314,6 +447,11 @@ def _clear_backup_alert_if_healthy() -> None:
 
 
 def _ensure_archive_dirs():
+    # 所有權不符時 _archive_owner_ok() 自己已經寫了一則**說明具體原因**的 ERROR
+    # 警示（見該函式）。這裡不能再往下走進「路徑不存在或未掛載」那段，否則會用
+    # 一個完全錯的理由蓋掉真正的原因——碟明明掛得好好的，問題是它是別人的。
+    if _archive_reachable() and not _archive_owner_ok():
+        return
     if not _archive_ok():
         # 2026-08-24：這個路徑不可用的情境曾經連續三週以上每天觸發（磁碟機代號從
         # G: 被改成 H: 之後就一直沒偵測到），但過去這裡只寫 WARN（不寄信），只留在
@@ -340,6 +478,7 @@ def _ensure_archive_dirs():
         os.path.join(_realtime_dir(), "供應商"),
         _weekly_dir(),
         _daily_dir(),
+        _monthly_dir(),
         _uploads_mirror_dir(),
     ]:
         try:
@@ -387,7 +526,9 @@ def _snapshot_sqlite(also_to_cloud: bool = True):
             except Exception as e:
                 _write_backup_alert(f"SQLite 快照複製到雲端失敗: {e}", level="ERROR")
         # Prune local snapshots per configured retention (see _backup_retention())
-        _prune_local_db_backups(keep_days=_backup_retention()["local_db_keep_days"])
+        _ret = _backup_retention()
+        _prune_local_db_backups(keep_days=_ret["local_db_keep_days"],
+                                pre_update_keep=_ret["local_pre_update_keep"])
         return dest
     except Exception as e:
         logger.exception("_snapshot_sqlite failed")
@@ -556,7 +697,23 @@ def _rotate_server_log_if_large(
         return False
 
 
-def _prune_local_db_backups(keep_days: int = 30) -> None:
+def _prune_local_db_backups(keep_days: int = 30, pre_update_keep: int = 5) -> None:
+    """清理 backend/db_backups/ 底下的兩種資料夾——它們的命名規則不同，
+    所以清理規則也不同，這是 2026-09-14 補上的第二種：
+
+    1. `YYYY-MM-DD/`  — 每日排程快照，依 keep_days 天數清除（原本就有）。
+    2. `pre_update_YYYYMMDD_HHMMSS/` — apply_update.ps1 每次套用前留的整庫快照。
+       **原本完全沒有被清到**：上面那個迴圈只刪「檔名 parse 得出日期」的，
+       `pre_update_...` 進 `except ValueError: continue` 就直接跳過了。
+       結果是每部署一次就永久多一份整庫副本——開發機實測累積到 49 份、
+       整個 db_backups 吃掉 1.8 GB，正式機只會更多（那才是真正跑套用的地方）。
+       改成比照 rollback_snapshots 的做法**按份數保留最新 N 份**，不用天數：
+       這些快照的價值來自「最近幾次部署」而不是「最近幾天」，隔了三個月才
+       部署一次的話，用天數會把唯一一份退路也刪掉。
+
+    兩段各自 try/except：pre_update 這段是後加的，不該讓它的意外影響到原本
+    就在運作的每日快照清理。
+    """
     try:
         if not os.path.isdir(_LOCAL_DB_BACKUP):
             return
@@ -575,16 +732,58 @@ def _prune_local_db_backups(keep_days: int = 30) -> None:
     except Exception:
         logger.exception("_prune_local_db_backups failed")
 
+    try:
+        _prune_pre_update_snapshots(keep=pre_update_keep)
+    except Exception:
+        logger.exception("_prune_pre_update_snapshots failed")
 
-def _prune_cloud_backups(daily_keep_days: int = 365, weekly_keep_days: int = 730) -> None:
-    """Delete dated folders under 每日備份／週備份 (wherever the cloud drive is
-    currently mounted) once older than the retention window. Mirrors
+
+_PRE_UPDATE_PREFIX = "pre_update_"
+
+
+def _prune_pre_update_snapshots(keep: int = 5) -> None:
+    """只保留最新 `keep` 份 `pre_update_*` 快照（見 _prune_local_db_backups
+    docstring）。`keep <= 0` 視為「不清理」，不會把全部刪光——這是刻意的
+    防呆：設定值被寫成 0 或空字串時，安全的行為是什麼都不做，而不是把所有
+    部署退路一次刪掉。
+
+    排序用資料夾名稱字串排序即可（`pre_update_YYYYMMDD_HHMMSS` 這個格式的
+    字典序等於時間序），不依賴檔案系統的 mtime——mtime 會被複製/還原動作
+    改掉，名字裡的時間戳才是真的。
+    """
+    if keep <= 0:
+        return
+    if not os.path.isdir(_LOCAL_DB_BACKUP):
+        return
+    snaps = sorted(
+        n for n in os.listdir(_LOCAL_DB_BACKUP)
+        if n.startswith(_PRE_UPDATE_PREFIX)
+        and os.path.isdir(os.path.join(_LOCAL_DB_BACKUP, n))
+    )
+    for name in snaps[:-keep] if len(snaps) > keep else []:
+        shutil.rmtree(os.path.join(_LOCAL_DB_BACKUP, name), ignore_errors=True)
+        logger.info("Pruned old pre-update snapshot: %s", name)
+
+
+def _prune_cloud_backups(daily_keep_days: int = 60, weekly_keep_days: int = 90,
+                         monthly_keep_days: int = 0) -> None:
+    """Delete dated folders under 每日備份／週備份／月備份 (wherever the cloud
+    drive is currently mounted) once older than the retention window. Mirrors
     _prune_local_db_backups's safety: only ever deletes a folder whose name
     parses cleanly as the expected date pattern for that directory
-    (YYYY-MM-DD for daily, YYYY-Wxx for weekly) — anything else (unexpected
-    file/folder name) is left untouched, never guessed at. No-ops entirely if
-    the cloud drive isn't mounted (never operates on a partial/offline view
-    of the archive)."""
+    (YYYY-MM-DD for daily, YYYY-Wxx for weekly, YYYY-MM for monthly) —
+    anything else (unexpected file/folder name) is left untouched, never
+    guessed at. No-ops entirely if the cloud drive isn't mounted (never
+    operates on a partial/offline view of the archive).
+
+    `monthly_keep_days <= 0` 代表**永久保留**（預設值，2026-09-14 使用者裁示
+    「長久只留月備份」），整段直接跳過。
+
+    ⚠️ 這支函式**只**走這三個目錄。`上傳檔案鏡像/` 與 `PDF存檔鏡像/` 是使用者
+    明訂要長久保留的原始憑據（照片、簽回單、各類單據 PDF），任何情況下都不該
+    被這裡掃到——不要因為「順手清一下舊照片」把它們加進來。
+    test_backup_retention_policy_2026_09_14.py 有一題專門守這件事。
+    """
     if not _archive_ok():
         return
 
@@ -614,6 +813,21 @@ def _prune_cloud_backups(daily_keep_days: int = 365, weekly_keep_days: int = 730
                 logger.info("Pruned old cloud weekly backup dir: %s", name)
     except Exception:
         logger.exception("_prune_cloud_backups (weekly) failed")
+
+    if monthly_keep_days <= 0:
+        return          # 永久保留（預設）
+    cutoff_monthly = date.today().toordinal() - monthly_keep_days
+    try:
+        for name in _cloud_list_top_level(_monthly_dir(), "月備份"):
+            try:
+                d = date.fromisoformat(f"{name}-01")     # YYYY-MM → 當月 1 號
+            except ValueError:
+                continue
+            if d.toordinal() < cutoff_monthly:
+                _cloud_delete_dir(os.path.join(_monthly_dir(), name), f"月備份/{name}")
+                logger.info("Pruned old cloud monthly backup dir: %s", name)
+    except Exception:
+        logger.exception("_prune_cloud_backups (monthly) failed")
 
 
 def _backup_quotation(quote_no: str):
@@ -824,6 +1038,105 @@ def _daily_backup_tables() -> dict:
     }
 
 
+def _export_table_json_set(conn, dest_dir_abs: str, s3_prefix: str, now: str) -> dict:
+    """把 _daily_backup_tables() 的每一張表各匯出成一個 JSON 檔到指定目的地，
+    回傳 {表名: 筆數 or "error"} 的 summary。
+
+    抽出來的理由是月備份層（2026-09-14）要寫的內容跟每日備份**完全相同**，
+    只是目的地資料夾不一樣。與其複製一份幾乎一樣的迴圈（兩份會慢慢分岔，
+    然後某天有人只在其中一份加了新表），不如讓兩邊共用同一段——新增資料表
+    時只會有一個地方要改，而 test_system_audit_2026_09_14.py 的
+    `_NOT_IN_JSON_BACKUP` 清單守的也正是這一個地方。
+
+    per-table 的 try/except 是刻意保留的（原本就在 _daily_backup() 裡）：
+    一張表壞掉不該讓其他 40 張也備不成。呼叫端負責看 summary 裡有沒有
+    "error" 並決定要報 daily_ok 還是 daily_partial。
+    """
+    summary: dict = {}
+    for fname, sql in _daily_backup_tables().items():
+        try:
+            rows = [_strip_inline_images(dict(r)) for r in conn.execute(sql).fetchall()]
+            _cloud_write_json(
+                os.path.join(dest_dir_abs, f"{fname}.json"),
+                f"{s3_prefix}/{fname}.json",
+                {"exported_at": now, "count": len(rows), "data": rows},
+            )
+            summary[fname] = len(rows)
+        except Exception:
+            logger.exception("table export %s failed (dest=%s)", fname, s3_prefix)
+            summary[fname] = "error"
+    return summary
+
+
+def _monthly_backup():
+    """月備份（2026-09-14 使用者裁示「長久只留月備份」）——**永久保留**的那一層。
+
+    內容跟每日備份一模一樣（41 張表 JSON ＋ 整份 motrix_erp.db），差別只在
+    目的地是 `月備份/YYYY-MM/` 而且不會被 _prune_cloud_backups() 清除
+    （除非有人把 cloud_monthly_keep_days 設成大於 0 的值）。
+
+    **執行時機是「當月第一次成功的每日備份」**，不是月底也不是 1 號——理由是
+    1 號那天機器有可能沒開、備份有可能失敗，綁死日期會讓整個月直接沒有長期
+    備份且沒人發現。綁在「當月第一次成功」上則不管哪天開機都一定拿得到一份。
+    `.done` marker 在 `月備份/YYYY-MM/.done`，同月不會重複寫。
+
+    由 _daily_backup() 在 JSON 匯出成功之後呼叫；失敗只告警不影響每日那一層
+    （每日層才是日常回溯真正會用到的）。
+    """
+    month_label = date.today().strftime('%Y-%m')
+    month_dir   = os.path.join(_monthly_dir(), month_label)
+    marker      = os.path.join(month_dir, '.done')
+    s3_dir      = f"月備份/{month_label}"
+    if _cloud_marker_exists(marker, f"{s3_dir}/.done"):
+        return
+
+    conn = get_db()
+    try:
+        now     = datetime.now().isoformat()
+        summary = _export_table_json_set(conn, month_dir, s3_dir, now)
+    finally:
+        conn.close()
+
+    summary["month"] = month_label
+    summary["exported_at"] = now
+
+    # 整庫 .db 也要進月備份——JSON 那層刻意不收憑證欄位與內嵌影像（見 §8.3），
+    # 只有整庫檔案是完整的。長期保留的那一份如果只有 JSON，等於長期保留了一份
+    # 殘缺的資料。來源用本機當日快照（_snapshot_sqlite() 在 _daily_backup()
+    # 一開頭就已經跑過，這時一定存在）。
+    today_snapshot = os.path.join(_LOCAL_DB_BACKUP, date.today().isoformat(), "motrix_erp.db")
+    if os.path.isfile(today_snapshot):
+        try:
+            _cloud_copy_file(today_snapshot,
+                             os.path.join(month_dir, "motrix_erp.db"),
+                             f"{s3_dir}/motrix_erp.db")
+            summary["db_snapshot"] = True
+        except Exception as e:
+            summary["db_snapshot"] = False
+            _write_backup_alert(f"月備份整庫複製失敗（{month_label}）: {e}", level="ERROR")
+    else:
+        summary["db_snapshot"] = False
+        _write_backup_alert(
+            f"月備份找不到當日本機 SQLite 快照（{today_snapshot}），"
+            f"{month_label} 這份長期備份只有 JSON、沒有整庫檔案", level="ERROR")
+
+    _cloud_write_json(os.path.join(month_dir, '彙總.json'), f"{s3_dir}/彙總.json", summary)
+
+    failed = [k for k, v in summary.items() if v == "error"]
+    if failed:
+        # 月備份是永久保留的那一份，內容不完整比每日層嚴重得多——**不寫 .done**，
+        # 讓明天的每日備份再試一次，直到這個月真的拿到一份完整的為止。
+        _system_audit("backup.monthly_partial", month_label, summary)
+        _write_backup_alert(
+            "月備份（%s）有 %d 張表匯出失敗：%s。**尚未標記完成**，明日每日備份會再試一次。"
+            % (month_label, len(failed), "、".join(failed)), level="ERROR")
+        return
+
+    _cloud_write_marker(marker, f"{s3_dir}/.done")
+    _system_audit("backup.monthly_ok", month_label, summary)
+    logger.info("Monthly backup completed: %s", month_dir)
+
+
 def _daily_backup():
     # Always snapshot SQLite locally first (independent of the cloud drive)
     _snapshot_sqlite(also_to_cloud=True)
@@ -862,20 +1175,9 @@ def _daily_backup():
         conn = get_db()
         now  = datetime.now().isoformat()
 
-        tables = _daily_backup_tables()
         summary: dict = {"date": today_label, "exported_at": now}
-        for fname, sql in tables.items():
-            try:
-                rows = [_strip_inline_images(dict(r)) for r in conn.execute(sql).fetchall()]
-                _cloud_write_json(
-                    os.path.join(day_dir, f"{fname}.json"),
-                    f"每日備份/{today_label}/{fname}.json",
-                    {"exported_at": now, "count": len(rows), "data": rows},
-                )
-                summary[fname] = len(rows)
-            except Exception:
-                logger.exception("daily_backup table %s failed", fname)
-                summary[fname] = "error"
+        summary.update(_export_table_json_set(
+            conn, day_dir, f"每日備份/{today_label}", now))
 
         conn.close()
         _cloud_write_json(os.path.join(day_dir, '彙總.json'), f"每日備份/{today_label}/彙總.json", summary)
@@ -903,10 +1205,23 @@ def _daily_backup():
         else:
             _system_audit("backup.daily_ok", today_label, summary)
             _clear_backup_alert_if_healthy()
+
+        # 月備份（永久保留層，2026-09-14）——放在每日 JSON 匯出**之後**，因為它
+        # 要複製的整庫快照由本函式開頭的 _snapshot_sqlite() 產生；而且只有每日
+        # 這一層確定寫得進去，月備份才有可能寫得進去。自己有 .done marker，
+        # 同月只會真的做一次，其餘日子是一次 marker 檢查就返回。
+        # 失敗不影響每日層：包在自己的 try 裡，日常回溯靠的是每日層。
+        try:
+            _monthly_backup()
+        except Exception:
+            logger.exception("_monthly_backup failed in daily schedule")
+            _write_backup_alert("月備份（永久保留層）失敗，詳見 server.log", level="ERROR")
+
         retention = _backup_retention()
         _prune_audit_log(keep_days=retention["audit_log_keep_days"])
         _prune_cloud_backups(daily_keep_days=retention["cloud_daily_keep_days"],
-                              weekly_keep_days=retention["cloud_weekly_keep_days"])
+                              weekly_keep_days=retention["cloud_weekly_keep_days"],
+                              monthly_keep_days=retention["cloud_monthly_keep_days"])
     except Exception as e:
         logger.exception("_daily_backup failed")
         _write_backup_alert(f"每日雲端 JSON 備份失敗: {e}", level="ERROR")

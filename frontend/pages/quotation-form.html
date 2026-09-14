@@ -1786,6 +1786,41 @@
         </div>
       </div>
 
+      <!-- 存檔版本（2026-09-14）——建立／簽核／結案等事件當下自動備存的 PDF。
+           跟下方「修改歷程」刻意分成兩塊：這裡的每一筆都是一份**完整快照**
+           （下載回來的是當時那一份，不是用現在的內容重新產生）；下面那塊是
+           欄位層級的異動索引，一般編輯不會產生 PDF。 -->
+      <template x-if="docVersions.length > 0">
+        <div class="form-section" style="margin-top:14px">
+          <div class="section-title">
+            <div class="section-num" style="background:#065F46;font-size:9px">存</div>
+            存檔版本
+            <span style="margin-left:auto;font-size:10px;background:#D1FAE5;color:#065F46;padding:2px 7px;border-radius:4px;border:1px solid #A7F3D0;font-weight:600" x-text="docVersions.length + ' 份'"></span>
+          </div>
+          <div style="font-size:10px;color:var(--text-dim);padding:2px 0 6px">
+            每份都是產生當下的完整單據，之後的修改不會覆蓋它們。
+          </div>
+          <template x-for="v in [...docVersions].reverse()" :key="v.seq">
+            <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #F0EFEB">
+              <div style="min-width:28px;height:20px;background:#ECFDF5;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#065F46;font-family:LINE Seed TW_OTF, sans-serif;flex-shrink:0" x-text="'#'+v.seq"></div>
+              <div style="flex:1;min-width:0">
+                <div style="font-size:11px;font-weight:600;color:var(--text-primary)">
+                  <span x-text="v.event"></span>
+                  <span style="font-weight:400;color:var(--text-secondary)" x-text="v.by ? ' · ' + v.by : ''"></span>
+                </div>
+                <div style="font-size:10px;color:var(--text-dim);margin-top:1px"
+                     x-text="(v.at ? new Date(v.at).toLocaleString('zh-TW',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '') + (v.size ? ' · ' + Math.round(v.size/1024) + ' KB' : '')"></div>
+              </div>
+              <button x-show="v.available" @click="downloadVersion(v)"
+                      style="flex-shrink:0;padding:4px 10px;font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;font-weight:600;background:#fff;color:#065F46;border:1px solid #A7F3D0;border-radius:5px;cursor:pointer">
+                下載
+              </button>
+              <span x-show="!v.available" style="flex-shrink:0;font-size:10px;color:#B91C1C" title="存檔目錄可能被搬移或清理過">檔案已遺失</span>
+            </div>
+          </template>
+        </div>
+      </template>
+
       <!-- 修改歷程 -->
       <template x-if="q.editHistory && q.editHistory.length > 0">
         <div class="form-section" style="margin-top:14px">
@@ -1798,9 +1833,28 @@
             <div style="display:flex;align-items:flex-start;gap:8px;padding:9px 0;border-bottom:1px solid #F0EFEB">
               <div style="min-width:28px;height:20px;background:#F3F4F6;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#374151;font-family:LINE Seed TW_OTF, sans-serif;flex-shrink:0" x-text="'#'+h.rev"></div>
               <div style="flex:1;min-width:0">
-                <div style="font-size:11px;font-weight:600;color:var(--text-primary)" x-text="h.type==='quote_edit' ? '報價單修改' : h.type==='settlement_finalized' ? '成本精算完結' : '成本精算草稿'"></div>
+                <!-- 2026-09-14：新增 quote_update（一般編輯）。原本這裡是三元運算
+                     的預設分支＝「成本精算草稿」，任何未知 type 都會被標成那個，
+                     所以改用 editTypeLabel() 具名對照，未知值顯示原字串而不是猜。 -->
+                <div style="font-size:11px;font-weight:600;color:var(--text-primary)" x-text="editTypeLabel(h.type)"></div>
                 <div style="font-size:10px;color:var(--text-secondary);margin-top:1px" x-text="h.byDisplay || h.by"></div>
                 <div style="font-size:10px;color:var(--text-dim);margin-top:1px" x-text="h.at ? new Date(h.at).toLocaleString('zh-TW',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : ''"></div>
+                <template x-if="h.changes && h.changes.length">
+                  <div style="margin-top:4px;display:flex;flex-direction:column;gap:2px">
+                    <template x-for="(c, ci) in h.changes" :key="ci">
+                      <div style="font-size:10px;color:var(--text-secondary);background:#FAFAF8;border:1px solid #F0EFEB;border-radius:4px;padding:3px 6px;word-break:break-all">
+                        <span style="font-weight:600;color:var(--text-primary)" x-text="c.field"></span>
+                        <template x-if="c.from || c.to">
+                          <span>
+                            <span x-text="c.from || '（空）'" style="text-decoration:line-through;opacity:.65"></span>
+                            <span> → </span>
+                            <span x-text="c.to || '（空）'"></span>
+                          </span>
+                        </template>
+                      </div>
+                    </template>
+                  </div>
+                </template>
               </div>
             </div>
           </template>
@@ -2174,6 +2228,9 @@
       },
       exportLogModal: false,
       exporting: false,
+      // 存檔版本索引（2026-09-14）。單獨向 /versions 取，不塞進 q——它是衍生資料，
+      // 會被存檔流程整包送回後端，混進 q 會讓每次存檔都把它再寫一遍。
+      docVersions: [],
 
       tot: {
         subtotal:0, pretax:0, tax:0, total:0,
@@ -2791,6 +2848,57 @@ window.addEventListener('load',function(){
         }
       },
 
+      editTypeLabel(type) {
+        return ({
+          quote_edit:            '報價單修改（解鎖編輯）',
+          quote_update:          '報價單編輯',
+          settlement_finalized:  '成本精算完結',
+          settlement_draft:      '成本精算草稿',
+        })[type] || (type || '異動')
+      },
+
+      async loadDocVersions() {
+        // 新建中的單據還沒有單號，沒有東西可查
+        if (!this.q.quoteNo || this.isNewRecord) { this.docVersions = []; return }
+        try {
+          const r = await fetch(`${this.API}/quotations/${this.q.quoteNo}/versions`, {
+            headers: { Authorization: 'Bearer ' + this.session.token },
+          })
+          if (!r.ok) { this.docVersions = []; return }
+          const d = await r.json()
+          this.docVersions = Array.isArray(d.versions) ? d.versions : []
+          // history 直接用 q.editHistory 呈現（同一份資料，已經隨單據載入了），
+          // 這裡只取 versions，避免同一份東西有兩個來源、之後不同步。
+        } catch { this.docVersions = [] }
+      },
+
+      async downloadVersion(v) {
+        try {
+          const r = await fetch(
+            `${this.API}/quotations/${this.q.quoteNo}/versions/${v.seq}/download`,
+            { headers: { Authorization: 'Bearer ' + this.session.token } })
+          if (!r.ok) {
+            let msg = '這個版本下載失敗'
+            try { const e = await r.json(); msg = e.detail || msg } catch {}
+            this.toast(msg)
+            // 檔案不在了就順手把清單刷新，讓狀態顯示成「檔案已遺失」
+            this.loadDocVersions()
+            return
+          }
+          const blob = await r.blob()
+          const url  = URL.createObjectURL(blob)
+          const a    = document.createElement('a')
+          a.href     = url
+          a.download = `${this.q.quoteNo}_${v.event}_${(v.at || '').slice(0, 10)}.pdf`
+          document.body.appendChild(a)
+          a.click()
+          document.body.removeChild(a)
+          setTimeout(() => URL.revokeObjectURL(url), 1000)
+        } catch {
+          this.toast('下載失敗，請確認後端連線')
+        }
+      },
+
       showExportLog() {
         if (!['superadmin','admin'].includes(this.session.role)) return
         this.exportLogModal = true
@@ -2972,6 +3080,9 @@ window.addEventListener('load',function(){
         this._lastUpdatedAt = row.updated_at || null
         // 同時編輯警示（2026-09-14）：載到哪一張就回報哪一張，有別人在編會跳警示條
         if (window.MotrixPresence) window.MotrixPresence.start('quotation', this.q.quoteNo)
+        // 存檔版本清單（2026-09-14）。這是載入報價單的**第二條路徑**，跟 init()
+        // 裡的 `?id=` 那條是分開的——presence 當初就漏了其中一條，這裡兩邊都掛。
+        this.loadDocVersions()
         // 回簽相關欄位是 SQL 熱欄位，不在 data_json 裡（見 routers/quotations.py
         // get_quotation()），Object.assign(this.q, row.data) 不會帶到，要另外接
         this.q.isSigned = !!row.is_signed
@@ -3382,6 +3493,9 @@ window.addEventListener('load',function(){
               // ⚠️ 這裡是 `?id=` 的載入路徑，跟 loadQuote() 是兩條——當初只在 loadQuote()
               // 掛 hook，實測（e2e 兩個瀏覽器）才發現開啟編輯根本不會經過那一條。
               if (window.MotrixPresence) window.MotrixPresence.start('quotation', editNo)
+              // 存檔版本清單（2026-09-14）。不 await——它只影響右側一個資訊區塊，
+              // 讓它拖慢整個表單載入沒有道理。
+              this.loadDocVersions()
             } else if (res.status === 401) { this.logout && this.logout(); return }
           } catch(e) {}
           if (!loaded) {

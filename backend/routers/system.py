@@ -839,6 +839,10 @@ class BackupRetentionBody(BaseModel):
     cloud_daily_keep_days: int
     cloud_weekly_keep_days: int
     audit_log_keep_days:   int
+    # 2026-09-14 新增的兩個都給預設值，舊 client 只送原本 4 個欄位仍然能用
+    # （這支端點沒有前端頁面，但打包過的舊腳本／curl 範例可能還在流傳）。
+    cloud_monthly_keep_days: int = 0    # 0 = 永久保留（使用者裁示的預設政策）
+    local_pre_update_keep:   int = 5    # 份數，不是天數
 
 
 @router.get("/api/settings/backup-retention")
@@ -852,13 +856,26 @@ def get_backup_retention_setting(authorization: str = Header(None)):
 def set_backup_retention_setting(body: BackupRetentionBody, authorization: str = Header(None)):
     actor = _require_user(authorization, require_superadmin=True)
     value = body.model_dump()
+    # 三種欄位語意不同，不能再像原本那樣一律套「1～3650 天」：
+    #   *_keep_days      天數，至少 1 天
+    #   cloud_monthly_*  天數，但 0 有特殊意義＝永久保留（預設政策）
+    #   local_pre_update_keep 是「份數」不是天數，上限用 100 份就夠荒謬了
     for label, days in value.items():
-        if days < 1 or days > 3650:
+        if label == "local_pre_update_keep":
+            if days < 0 or days > 100:
+                raise HTTPException(400, f"{label} 需介於 0～100 份之間（0 = 不清理）")
+        elif label == "cloud_monthly_keep_days":
+            if days < 0 or days > 3650:
+                raise HTTPException(400, f"{label} 需介於 0～3650 天之間（0 = 永久保留）")
+        elif days < 1 or days > 3650:
             raise HTTPException(400, f"{label} 需介於 1～3650 天之間")
     _set_setting("backup_retention", value)
+    _monthly_label = ("永久保留" if value["cloud_monthly_keep_days"] <= 0
+                      else f"{value['cloud_monthly_keep_days']}天")
     _audit(_tok(authorization), "settings.backup_retention.update", "settings", "backup_retention",
            f"本機DB快照{value['local_db_keep_days']}天／雲端每日{value['cloud_daily_keep_days']}天／"
-           f"雲端週{value['cloud_weekly_keep_days']}天／稽核紀錄{value['audit_log_keep_days']}天")
+           f"雲端週{value['cloud_weekly_keep_days']}天／雲端月{_monthly_label}／"
+           f"套用前快照{value['local_pre_update_keep']}份／稽核紀錄{value['audit_log_keep_days']}天")
     notify_module_activity("系統設定", "變更備份保留天數", actor.get("display_name") or actor["username"],
                             f"每日{value['cloud_daily_keep_days']}天／週{value['cloud_weekly_keep_days']}天",
                             "notification-settings.html")

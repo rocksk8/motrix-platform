@@ -380,6 +380,73 @@ def _pdf_audit(quote_no: str, success: bool, detail: str = "", actor: str = "", 
         pass
 
 
+# ── 單據版本索引（2026-09-14 使用者要求：「產生當下自動備存一個，如果有編修，
+#    需保留原始單據跟編輯紀錄在系統」）────────────────────────────────────────
+#
+# 存檔的 PDF 本來就一直都在（`{pdf_base}/{YYYY-MM-DD}/` 底下），問題是**系統裡
+# 查不到**：唯一的紀錄在 audit_log 的 `pdf.auto_generate` detail 裡，而 audit_log
+# 有 730 天保留期（archive._prune_audit_log），兩年後索引會消失、檔案卻還在，
+# 等於有備存卻找不到。而且沒有任何頁面列得出「這張單有哪幾個版本」。
+#
+# 改成把索引寫進報價單自己的 data_json.docVersions[]：
+#   ・跟著單據走，單據在索引就在，不受 audit_log 保留期影響
+#   ・自動被每日 JSON 備份與整庫備份收錄（不需要另外處理）
+#   ・不需要新資料表（比照 editHistory 的既有慣例）
+#
+# 路徑**存相對於 PDF base 的相對路徑**，不是絕對路徑——superadmin 可以改
+# `pdf_base_path`（可能指到公司共用網路碟），存絕對路徑會在改設定那天整批失效。
+
+_DOC_VERSION_MAX = 500      # 單張單據的版本索引上限，防病態情況把 data_json 撐爆
+
+
+def _record_doc_version(quote_no: str, action_type: str, actor: str,
+                        pdf_path: str) -> None:
+    """把剛存好的 PDF 追加進 quotations.data_json 的 docVersions[]。
+
+    失敗一律吞掉（只留 log）：PDF 已經實際存在磁碟上了，索引寫不進去是可惜、
+    不是災難，不該讓它把呼叫端的背景執行緒炸掉。
+
+    併發：PDF 產生由 EDGE_PDF_SEMAPHORE 節流，同一張單同時跑兩份的機會很低，
+    但仍用 BEGIN IMMEDIATE 把「讀-改-寫」包成一個寫入交易，避免兩個背景執行緒
+    同時讀到同一份 data_json、後寫的把前一筆版本紀錄蓋掉。
+    """
+    try:
+        base = _get_pdf_base()
+        try:
+            rel = os.path.relpath(pdf_path, base)
+        except ValueError:          # 跨磁碟機時 relpath 會炸
+            rel = os.path.basename(pdf_path)
+
+        conn = get_db()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute(
+                "SELECT data_json FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+            if not row:
+                conn.rollback()
+                return
+            data = json.loads(row["data_json"] or "{}")
+            versions = data.get("docVersions")
+            if not isinstance(versions, list):
+                versions = []
+            versions.append({
+                "seq":       len(versions) + 1,
+                "at":        datetime.now().isoformat(),
+                "event":     action_type,
+                "by":        actor or "",
+                "file":      rel.replace("\\", "/"),
+                "size":      os.path.getsize(pdf_path) if os.path.exists(pdf_path) else 0,
+            })
+            data["docVersions"] = versions[-_DOC_VERSION_MAX:]
+            conn.execute("UPDATE quotations SET data_json=? WHERE quote_no=?",
+                         (json.dumps(data, ensure_ascii=False), quote_no))
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception:
+        logger.exception("_record_doc_version failed for %s", quote_no)
+
+
 def generate_pdf_bytes(quote_no: str, internal: bool = False) -> bytes:
     """Edge Headless 產生 PDF 並以 bytes 回傳（供 API 下載使用）。"""
     edge = _get_edge_path()
@@ -811,23 +878,26 @@ def _generate_quotation_pdf(quote_no: str, actor: str = '', action_type: str = '
                                          show_notice=is_unsettled,
                                          notice_text="本案報價未成立，此份文件僅供存查備存使用，請勿對外提供或引用")
 
-        today   = date.today().strftime('%Y%m%d')
+        # 時間戳到「秒」（2026-09-14 改）——原本只到「日」，靠 `_2`…`_19` 後綴避開
+        # 同日同人的第 2～19 次。**第 20 次會靜默覆蓋掉當天的第一份**：迴圈找不到
+        # 空位時 pdf_path 仍是最初那個 base_name.pdf。對「保留原始單據」來說，被蓋
+        # 掉的偏偏就是最早、最該留的那一份。帶秒數之後不再需要那個後綴迴圈；
+        # 極罕見的同秒撞名仍保留一層數字後綴當保險。
+        stamp   = datetime.now().strftime('%Y%m%d_%H%M%S')
         out_dir = os.path.join(_get_pdf_base(), date.today().isoformat())
         os.makedirs(out_dir, exist_ok=True)
 
-        # build filename: MQ-202507-001_已簽核_20260716_Jeff.pdf
+        # build filename: MQ-202507-001_已簽核_20260716_143052_Jeff.pdf
         if safe_actor:
-            base_name = f"{quote_no}_{action_type}_{today}_{safe_actor}"
+            base_name = f"{quote_no}_{action_type}_{stamp}_{safe_actor}"
         else:
-            base_name = f"{quote_no}_{action_type}_{today}"
+            base_name = f"{quote_no}_{action_type}_{stamp}"
 
         pdf_path = os.path.join(out_dir, f"{base_name}.pdf")
-        if os.path.exists(pdf_path):
-            for n in range(2, 20):
-                candidate = os.path.join(out_dir, f"{base_name}_{n}.pdf")
-                if not os.path.exists(candidate):
-                    pdf_path = candidate
-                    break
+        n = 2
+        while os.path.exists(pdf_path):
+            pdf_path = os.path.join(out_dir, f"{base_name}_{n}.pdf")
+            n += 1
 
         with tempfile.NamedTemporaryFile(
             mode='w', suffix='.html', encoding='utf-8', delete=False
@@ -849,6 +919,7 @@ def _generate_quotation_pdf(quote_no: str, actor: str = '', action_type: str = '
         if os.path.exists(pdf_path) and os.path.getsize(pdf_path) > 0:
             logger.info("PDF saved: %s", pdf_path)
             _pdf_audit(quote_no, True, pdf_path, actor, action_type)
+            _record_doc_version(quote_no, action_type, actor, pdf_path)
         else:
             logger.warning("PDF not created for %s (Edge ran but no output file)", quote_no)
             _pdf_audit(quote_no, False, "Edge 執行完畢但未產生 PDF 檔案", actor, action_type)

@@ -261,7 +261,12 @@ def test_clean_backup_still_reports_ok(client, monkeypatch, tmp_path):
     audits, alerts, cleared = _run_daily_backup_with(
         monkeypatch, tmp_path, {"好表": "SELECT * FROM users"})
 
-    assert audits == ["backup.daily_ok"]
+    # 2026-09-14 起每日備份成功後會接著跑月備份（永久保留層，
+    # archive.py::_monthly_backup()），所以這裡會多一筆 backup.monthly_ok。
+    # 用「有沒有 daily_ok」＋「有沒有任何 *_partial」判斷，不再用完全相等比對——
+    # 相等比對會讓日後每加一層備份就紅一次，而那些都不是這題要守的東西。
+    assert "backup.daily_ok" in audits
+    assert not [a for a in audits if a.endswith("_partial")]
     assert not alerts
     assert cleared
 

@@ -72,6 +72,8 @@ EVENT_GROUPS = [
         ("monthly_report",       "每月營運報表"),
         ("module_activity",      "各模組新增／異動通知（建立帳號、案件等一般活動）"),
         ("cert_expiry",          "HTTPS 憑證即將到期（每日檢查，依憑證種類自動調整提前天數）"),
+        ("backup_stale",         "備份已停止運作（每日檢查，超過 36 小時沒有成功備份）"),
+        ("disk_space_low",       "磁碟空間不足（每日檢查，低於 10% 且低於 20 GB）"),
     ]),
     ("已結案案件解鎖", [
         ("case_close_blocked",   "完結案被防呆機制擋下（未達成前置條件）"),

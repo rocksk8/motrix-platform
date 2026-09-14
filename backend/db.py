@@ -100,7 +100,7 @@ DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR = os.path.join(
 # 的附件，2026-09-14）——兩張表都是 TEXT NOT NULL DEFAULT '[]'，存
 # save_document_files() 回傳的清單。刪附件限 admin+，見 routers/quotations.py
 # 與 routers/dev_crm.py 的 DELETE .../files/{file_id}。
-CURRENT_VERSION = 82
+CURRENT_VERSION = 83
 
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
 # execution model) whenever the current request is authenticated as the 'demo'
@@ -3390,6 +3390,43 @@ def _m081_edit_presence(conn):
     conn.commit()
 
 
+def _m083_backup_retention_policy(conn):
+    """備份保留政策改版（2026-09-14 使用者裁示）——**這支改的是設定值，不是 schema**。
+
+    新政策：每日 60 天、週 90 天、月備份永久保留（新增的一層，見
+    archive.py::_monthly_backup()）。舊預設是每日 1825 天／週 730 天，長期保存
+    壓在「每天一份整庫 .db」上，成本隨資料庫大小線性成長。
+
+    **為什麼需要一支 migration 而不是只改 `_BACKUP_RETENTION_DEFAULT`**：
+    `_backup_retention()` 的作法是 `{**預設, **system_settings 存的值}`——正式機
+    只要曾經呼叫過一次 PATCH /api/settings/backup-retention，那四個舊數字就被
+    固化在 DB 裡，之後改預設值**完全不會生效**，而且不會有任何錯誤訊息。
+    這種「改了沒反應、也不知道為什麼」正是最難查的那種。
+
+    只覆寫這次政策決定的三個 key，其餘（local_db_keep_days／audit_log_keep_days）
+    保留使用者調過的值——那兩個不在這次的裁示範圍內。
+    設定不存在時什麼都不做：那種情況本來就直接吃新的預設值。
+    """
+    row = conn.execute(
+        "SELECT value_json FROM system_settings WHERE key='backup_retention'").fetchone()
+    if not row:
+        return                      # 沒存過 → 直接吃 archive.py 的新預設值
+    try:
+        cur = json.loads(row["value_json"]) or {}
+    except (ValueError, TypeError):
+        return                      # 存的值壞掉 → 不猜，留給 _backup_retention() 的 merge 去處理
+    if not isinstance(cur, dict):
+        return
+    cur["cloud_daily_keep_days"]   = 60
+    cur["cloud_weekly_keep_days"]  = 90
+    cur["cloud_monthly_keep_days"] = 0      # 0 = 永久保留
+    cur.setdefault("local_pre_update_keep", 5)
+    conn.execute(
+        "UPDATE system_settings SET value_json=?, updated_at=? WHERE key='backup_retention'",
+        (json.dumps(cur, ensure_ascii=False), datetime.now().isoformat()))
+    conn.commit()
+
+
 _MIGRATIONS = [
     _m001_export_columns,        # v1
     _m002_sessions_expires,      # v2
@@ -3473,6 +3510,7 @@ _MIGRATIONS = [
     _m080_user_request_log,                         # v80
     _m081_edit_presence,                            # v81
     _m082_feed_attachments,                         # v82
+    _m083_backup_retention_policy,                  # v83
 ]
 
 

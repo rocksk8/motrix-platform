@@ -23,7 +23,7 @@ from helpers import (
     notify_daily_task_edited, notify_warranty_expiry, notify_range_task_deadline, _warranty_expiry,
     notify_case_stage_deadline, notify_case_stage_deadline_manager,
     notify_case_project_overdue,
-    notify_cert_expiry,
+    notify_cert_expiry, notify_backup_stale, notify_disk_space_low,
     notify_module_activity,
     _get_setting, _set_setting, notify_approval_reminder, _workdays_elapsed, require_any_module,
 )
@@ -1372,6 +1372,170 @@ def _check_cert_expiry() -> None:
         _logger.warning("_check_cert_expiry failed: %s", exc)
 
 
+# ── 備份新鮮度與磁碟空間（2026-09-14）──────────────────────────────────────────
+#
+# 這兩支補的是同一個結構性盲區：**備份系統的所有告警都是備份自己發出來的**。
+# archive.py 在雲端碟掉了、某張表匯不出來的時候都會寫 BACKUP_ALERT + 寄信，
+# 但「備份根本沒有跑」這件事沒有任何人會講——排程被停用、Timer 執行緒沒起來、
+# 兩台機器共用同一個雲端資料夾導致其中一台看到 .done 就早退，症狀全部是
+# **一片安靜**：伺服器活著、heartbeat 照打、備份頁面綠燈，只有真的要還原的
+# 那天才會發現最後一份是三個月前的。
+#
+# 磁碟空間同理：滿了之後第一個壞掉的通常是備份（寫不進去）或測試（暫存寫不
+# 進去），而這兩者都不會讓人第一時間聯想到磁碟。
+#
+# 做法比照 _check_cert_expiry()：掛在既有的每日 08:00 排程上，不另起 job；
+# 用 system_settings 當「今天寄過了沒」的 guard，一天最多一封。
+
+_BACKUP_STALE_HOURS = 36        # 每日備份的容許間隔（正常 24h，留一天的餘裕）
+_DISK_FREE_MIN_PCT  = 10        # 剩餘空間低於此百分比 → 告警
+_DISK_FREE_MIN_GB   = 20        # 或剩餘絕對量低於此 GB → 告警（大碟用百分比會太晚）
+
+
+def _latest_audit_at(conn, actions: tuple) -> Optional[datetime]:
+    """回傳 audit_log 裡這幾個 action 最後一次發生的時間，沒有就 None。"""
+    ph = ",".join("?" * len(actions))
+    row = conn.execute(
+        f"SELECT MAX(at) AS at FROM audit_log WHERE action IN ({ph})", actions).fetchone()
+    if not row or not row["at"]:
+        return None
+    try:
+        return datetime.fromisoformat(row["at"])
+    except ValueError:
+        return None
+
+
+def _check_backup_freshness() -> None:
+    """每日檢查「最後一次成功備份」離現在多久；超過 _BACKUP_STALE_HOURS 就寄信。
+
+    分兩條線各自判斷，因為它們的失效原因完全不同：
+      本機 SQLite 快照（`backup.sqlite_snapshot`）——不依賴雲端碟，這條斷掉
+        代表備份程式本身沒在跑（排程被關、Timer 執行緒死掉、服務一直沒起來）。
+      雲端每日 JSON（`backup.daily_ok` / `backup.daily_partial`）——這條斷掉
+        而本機那條還活著，代表雲端目的地出問題，或者**別台機器搶先寫了今天的
+        .done 害這台早退**（見 archive.py `_daily_backup()`）。
+
+    `backup.daily_partial` 也算「有跑」：它代表備份確實執行了、只是有表失敗，
+    那個情境本來就有自己的告警，這裡不重複叫。
+
+    全新環境（audit_log 一筆備份紀錄都沒有）**不告警**——那是還沒跑過第一次，
+    不是壞掉；等第一次跑完之後這支才有意義的基準可以比。
+    """
+    try:
+        conn = get_db()
+        try:
+            local_at = _latest_audit_at(conn, ("backup.sqlite_snapshot",))
+            cloud_at = _latest_audit_at(conn, ("backup.daily_ok", "backup.daily_partial"))
+        finally:
+            conn.close()
+
+        if local_at is None and cloud_at is None:
+            return          # 從來沒備份過 = 全新環境，不是故障
+
+        now = datetime.now()
+        stale = []
+        for label, ts in (("本機 SQLite 快照", local_at), ("雲端每日備份", cloud_at)):
+            if ts is None:
+                stale.append((label, None))
+            else:
+                hours = (now - ts).total_seconds() / 3600
+                if hours > _BACKUP_STALE_HOURS:
+                    stale.append((label, ts))
+
+        guard_key = "backup_stale_last_notified"
+        if not stale:
+            if _get_setting(guard_key):
+                _set_setting(guard_key, "")     # 恢復正常 → 清掉，下次再壞會立刻再寄
+            return
+
+        today = _date.today().isoformat()
+        if _get_setting(guard_key) == today:
+            return                               # 今天已經寄過
+        _set_setting(guard_key, today)
+
+        threading.Thread(
+            target=notify_backup_stale,
+            args=(stale, _BACKUP_STALE_HOURS),
+            daemon=True,
+        ).start()
+        _logger.error("備份新鮮度告警：%s",
+                      "；".join(f"{l}={'從未執行' if t is None else t.isoformat()}"
+                                for l, t in stale))
+    except Exception as exc:
+        _logger.warning("_check_backup_freshness failed: %s", exc)
+
+
+def _disk_targets() -> list:
+    """要監看的磁碟：資料庫所在的磁碟一定要看；雲端存檔目前若掛得起來也看一份
+    （Google Drive 這類同步碟報出來的空間是雲端配額，一樣會滿）。回傳
+    [(標籤, 路徑)]，重複的磁碟機代號只留一份。"""
+    import db as _db
+    targets = [("資料庫與程式碟", os.path.dirname(os.path.abspath(_db.DB_PATH)))]
+    try:
+        import archive
+        base = archive._archive_base()
+        if base:
+            targets.append(("雲端存檔碟", base))
+    except Exception:
+        pass
+
+    seen, out = set(), []
+    for label, path in targets:
+        try:
+            key = os.path.splitdrive(os.path.abspath(path))[0].upper()
+        except Exception:
+            key = path
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append((label, path))
+    return out
+
+
+def _check_disk_space() -> None:
+    """每日檢查磁碟剩餘空間；低於門檻寄信。一天最多一封（同 _check_backup_freshness）。
+
+    兩個門檻取「較寬鬆的那個滿足就算健康」：小碟看百分比、大碟看絕對 GB。
+    只看百分比的話，2 TB 的碟剩 10%（200 GB）就叫太早；只看 GB 的話，
+    256 GB 的系統碟剩 20 GB 其實已經很緊了卻還不叫。
+    """
+    try:
+        import shutil as _shutil
+        problems = []
+        for label, path in _disk_targets():
+            try:
+                usage = _shutil.disk_usage(path)
+            except Exception:
+                continue        # 碟沒掛上／路徑不可用 → 那是備份告警的守備範圍
+            free_gb  = usage.free / (1024 ** 3)
+            free_pct = (usage.free / usage.total * 100) if usage.total else 0
+            if free_gb < _DISK_FREE_MIN_GB and free_pct < _DISK_FREE_MIN_PCT:
+                problems.append({
+                    "label": label, "path": path,
+                    "free_gb": round(free_gb, 1),
+                    "total_gb": round(usage.total / (1024 ** 3), 1),
+                    "free_pct": round(free_pct, 1),
+                })
+
+        guard_key = "disk_low_last_notified"
+        if not problems:
+            if _get_setting(guard_key):
+                _set_setting(guard_key, "")
+            return
+
+        today = _date.today().isoformat()
+        if _get_setting(guard_key) == today:
+            return
+        _set_setting(guard_key, today)
+
+        threading.Thread(target=notify_disk_space_low, args=(problems,), daemon=True).start()
+        _logger.error("磁碟空間告警：%s",
+                      "；".join(f"{p['label']} 剩 {p['free_gb']}GB／{p['free_pct']}%"
+                                for p in problems))
+    except Exception as exc:
+        _logger.warning("_check_disk_space failed: %s", exc)
+
+
 # ── 簽核逾期催辦（2026-08-21）────────────────────────────────────────────────
 # 報價單／承攬商匯款申請／開票申請憑據三張表的 approval JSON 形狀完全相同
 # （{requestedBy, requestedAt, tiers:[{approvers:[{username,status}]}], currentTier}），
@@ -1544,6 +1708,8 @@ def schedule_overdue_check() -> None:
         _check_project_deadline()
         _check_approval_reminders()
         _check_cert_expiry()
+        _check_backup_freshness()
+        _check_disk_space()
         _prune_request_log()
 
     def _startup_catchup():
@@ -1566,6 +1732,8 @@ def schedule_overdue_check() -> None:
             _check_project_deadline()
             _check_approval_reminders()
             _check_cert_expiry()
+            _check_backup_freshness()
+            _check_disk_space()
             return
 
         # Advance day-by-day through any gap
@@ -1586,6 +1754,8 @@ def schedule_overdue_check() -> None:
         _check_project_deadline()
         _check_approval_reminders()
         _check_cert_expiry()
+        _check_backup_freshness()
+        _check_disk_space()
         _logger.info("Startup catch-up complete, processed up to %s", yesterday)
 
     # Always run catch-up on startup (the guard inside prevents duplicate emails)

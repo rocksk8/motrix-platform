@@ -543,7 +543,8 @@
       },
 
       editTypeLabel(type) {
-        if (type === 'quote_edit')          return '報價單編輯'
+        if (type === 'quote_edit')          return '報價單編輯(解鎖)'
+        if (type === 'quote_update')        return '報價單編輯'   // 2026-09-14 新增：一般編輯
         if (type === 'settlement_finalized') return '成本精算(完結)'
         if (type === 'settlement_draft')     return '成本精算'
         return '修改'

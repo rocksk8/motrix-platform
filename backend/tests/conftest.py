@@ -119,6 +119,36 @@ def client(_app, tmp_path, monkeypatch):
 
 
 @pytest.fixture()
+def isolated_archive(client, tmp_path, monkeypatch):
+    """每一題自己一個全新的雲端存檔根目錄，回傳該路徑（str）。
+
+    **為什麼需要這個**：`_app` fixture 建的 archive_base 是 **session 級**的，
+    整個 test session 共用一份。`client` fixture 只換 DB，不換存檔目錄——
+    所以上一題跑完 `_daily_backup()` 留下的 `每日備份/{today}/.done`、
+    `月備份/{YYYY-MM}/.done` 會原封不動留給下一題，讓下一題的備份直接早退，
+    斷言看到的是**別題造成的狀態**。2026-09-14 寫月備份測試時就先踩到：
+    「月備份失敗不寫 .done」那題紅在前一題留下的 marker 上，跟受測邏輯無關。
+
+    只有真的會寫進存檔目錄的測試需要用它；一般 API 測試不必，維持原本的
+    session 共用即可（那些測試根本不碰這個目錄）。
+    """
+    import archive
+    base = tmp_path / "archive_base_isolated"
+    base.mkdir()
+    monkeypatch.setattr(archive, "_archive_base", lambda: str(base))
+    monkeypatch.setattr(archive, "_LOCAL_DB_BACKUP", str(tmp_path / "db_backups_isolated"))
+    # 存檔所有權判定有 300 秒 TTL 快取（archive._archive_owner_ok()）。換了存檔
+    # 根目錄就一定要讓舊判定失效，否則上一題留下的結論會直接套用到這一題——
+    # 2026-09-14 實測：所有權測試把快取設成 False 之後，同一個 xdist worker 裡
+    # 接著跑的月備份測試全部被那個 False 擋掉（序列執行時剛好沒撞到，只有平行
+    # 執行才紅，是最難查的那種）。
+    monkeypatch.setitem(archive._owner_cache, "ok", None)
+    monkeypatch.setitem(archive._owner_cache, "checked_at", 0.0)
+    monkeypatch.setitem(archive._owner_cache, "reason", "")
+    return str(base)
+
+
+@pytest.fixture()
 def make_user():
     """Insert a user directly into the (already-isolated) real DB and return
     (username, password, token-fetching helper info) — avoids depending on

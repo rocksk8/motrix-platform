@@ -40,7 +40,7 @@ import helpers.uploads as _uploads_mod
 from helpers.uploads import _effective_subfolder
 from archive import _backup_quotation
 from pdf_gen import (
-    _generate_quotation_pdf, generate_pdf_bytes,
+    _generate_quotation_pdf, generate_pdf_bytes, _get_pdf_base,
     _generate_case_closing_pdf, generate_case_closing_pdf_bytes,
     generate_project_execution_report_pdf_bytes,
 )
@@ -51,6 +51,115 @@ router = APIRouter()
 # ── Approval tier helpers ─────────────────────────────────────────────────────
 
 import re as _re
+
+# ── 編輯紀錄（2026-09-14 使用者要求：「如果有編修，需保留原始單據跟編輯紀錄
+#    在系統」）────────────────────────────────────────────────────────────────
+#
+# 現況的落差：`editHistory` 原本只有兩個地方會寫——①解鎖編輯（superadmin 改
+# 已送出／已結案的單）②精算存檔。**一般編輯完全沒有紀錄**：草稿階段改了幾次、
+# 誰改的、改了什麼，系統裡查不到任何東西。而且既有的兩處也只記 who/when/type，
+# 不記「改了什麼」，事後只知道「這張單被改過 7 次」。
+#
+# 這裡補上①一般編輯也寫紀錄②紀錄帶欄位層級的變更摘要。
+# 沿用 data_json 裡的 editHistory 陣列（既有慣例），不開新表——這份紀錄永遠
+# 隨著單據一起讀、一起備份，沒有跨單查詢的需求。
+
+# (JSON 路徑, 顯示名稱)；路徑用 "." 分隔，支援巢狀
+_TRACKED_QUOTE_FIELDS = [
+    ("customerName",      "客戶名稱"),
+    ("projectName",       "專案名稱"),
+    ("quoteDate",         "報價日期"),
+    ("validDays",         "有效天數"),
+    ("salesPerson",       "業務"),
+    ("tot.total",         "含稅總額"),
+    ("tot.pretax",        "未稅金額"),
+    ("tot.directMarginPct", "直接毛利率"),
+    ("tot.netMarginPct",  "淨利率"),
+    ("notes",             "備註"),
+    ("contract.deliveryAddress", "交貨地址"),
+    ("contract.deliveryTerms",   "交貨條件"),
+    ("contract.contactPerson",   "聯絡人"),
+    ("contract.contactPhone",    "聯絡電話"),
+    ("caseRecord.roles.sales",    "案件業務負責"),
+    ("caseRecord.roles.executor", "案件執行負責"),
+]
+
+# 比對整包內容時要忽略的鍵：它們本身就是「紀錄」或每次存檔都會變動的欄位，
+# 拿來比對會讓每一次存檔都被判定成「有變更」。
+_DIFF_IGNORE_KEYS = {"editHistory", "docVersions", "approval", "updatedAt", "_expectedUpdatedAt"}
+
+
+def _dig(data, path: str):
+    cur = data
+    for part in path.split("."):
+        if not isinstance(cur, dict):
+            return None
+        cur = cur.get(part)
+    return cur
+
+
+def _fmt_change_value(v) -> str:
+    """把值壓成一行可讀的字串。長內容截斷——這份紀錄是給人看「改了哪裡」的
+    索引，不是完整快照（完整快照是同一批做的 PDF 版本存檔）。"""
+    if v is None:
+        return ""
+    if isinstance(v, (list, dict)):
+        return f"（{len(v)} 項）" if isinstance(v, list) else "（內容）"
+    text = str(v)
+    return text if len(text) <= 60 else text[:57] + "…"
+
+
+def _summarize_quote_changes(old: dict, new: dict) -> list:
+    """回傳 [{field, from, to}]；沒有任何可辨識的變更時回傳 []。
+
+    追蹤清單外的欄位變動不會被逐一列出（那會變成把整份 data_json 抄進紀錄裡），
+    但**也不會被靜默忽略**：整包比對後若確實有差異，補一筆「其他內容」，
+    至少查得到「這個時間點有人動過這張單」。
+    """
+    changes = []
+    for path, label in _TRACKED_QUOTE_FIELDS:
+        o, n = _dig(old, path), _dig(new, path)
+        if o == n:
+            continue
+        changes.append({"field": label,
+                        "from": _fmt_change_value(o),
+                        "to":   _fmt_change_value(n)})
+
+    o_items = old.get("items") if isinstance(old.get("items"), list) else []
+    n_items = new.get("items") if isinstance(new.get("items"), list) else []
+    if o_items != n_items:
+        changes.append({"field": "報價項目",
+                        "from": f"{len(o_items)} 項",
+                        "to":   f"{len(n_items)} 項"})
+
+    if not changes:
+        stripped_old = {k: v for k, v in old.items() if k not in _DIFF_IGNORE_KEYS}
+        stripped_new = {k: v for k, v in new.items() if k not in _DIFF_IGNORE_KEYS}
+        if stripped_old != stripped_new:
+            changes.append({"field": "其他內容", "from": "", "to": ""})
+    return changes
+
+
+def _append_edit_history(q: dict, user: dict, now: str, entry_type: str,
+                         changes: list = None) -> int:
+    """追加一筆編輯紀錄，回傳 rev。就地改 q（呼叫端負責存檔）。"""
+    history = q.get("editHistory")
+    if not isinstance(history, list):
+        history = []
+    rev = len(history) + 1
+    entry = {
+        "rev":       rev,
+        "at":        now,
+        "by":        user["username"],
+        "byDisplay": user.get("display_name") or user["username"],
+        "type":      entry_type,
+    }
+    if changes:
+        entry["changes"] = changes
+    history.append(entry)
+    q["editHistory"] = history
+    return rev
+
 
 def _next_revision_no(quote_no: str) -> str:
     """MQ-202501-001 → MQ-202501-001-R1; MQ-202501-001-R2 → MQ-202501-001-R3"""
@@ -1215,6 +1324,13 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
         _conn2.close()
 
     spawn_bg_thread(_backup_quotation, args=(qno,))
+    # 建立當下自動備存一份 PDF（2026-09-14 使用者要求：「產生當下自動備存一個」）。
+    # 原本只有簽核／已簽核／結案／解鎖編輯四個事件會存 PDF，**建立當下沒有**——
+    # 也就是「原始單據」這一份從來沒被留下來過，之後任何一次修改都無從比對。
+    # 檔名帶到秒、且 _record_doc_version() 會把它記進 data_json.docVersions[]，
+    # 所以這一份存下去之後不會被任何後續版本覆蓋。
+    spawn_bg_thread(_generate_quotation_pdf,
+                    args=(qno, user.get("display_name") or user["username"], '建立'))
     _audit(_tok(authorization), 'quotation.create', 'quotation', qno, f"{qno}（{q.get('customerName','')}）")
     notify_module_activity("報價單", "建立", user.get("display_name") or user["username"],
                             f"{qno}（{q.get('customerName','')}）", "quotations.html")
@@ -1294,7 +1410,10 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
     sp_id = sp_row["id"] if sp_row else None
 
     existing = conn.execute(
-        "SELECT id, status, deal_tag, settle_status, updated_at, sales_person_id, sales_person "
+        # data_json 是 2026-09-14 加進來的：一般編輯要寫「改了什麼」的變更摘要，
+        # 需要拿得到存檔前的內容（見 _summarize_quote_changes()）。
+        "SELECT id, status, deal_tag, settle_status, updated_at, sales_person_id, "
+        "sales_person, data_json "
         "FROM quotations WHERE quote_no=?", (quote_no,)
     ).fetchone()
     if not existing:
@@ -1329,6 +1448,22 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
     q["dealTag"] = deal_tag
     if isinstance(q.get("settlement"), dict):
         q["settlement"]["status"] = settle_status
+
+    # 一般編輯的編輯紀錄（2026-09-14）——解鎖編輯那條路徑上面已經記過了，
+    # 這裡只補「不是解鎖編輯」的一般存檔。
+    # **沒有任何可辨識變更時不寫**：這支端點同時被自動存檔（autoSave）與手動
+    # 存檔呼叫，每次 autoSave 都寫一筆會讓紀錄被無意義的條目淹沒，反而查不到
+    # 真正的修改。_summarize_quote_changes() 找不到追蹤欄位的差異時還會做一次
+    # 整包比對，所以「有改但改到追蹤清單外的欄位」仍然會留下一筆「其他內容」，
+    # 不會被靜默略過。
+    if not is_unlock_edit:
+        try:
+            _old_data = json.loads(existing["data_json"] or "{}")
+        except (ValueError, TypeError):
+            _old_data = {}
+        _changes = _summarize_quote_changes(_old_data, q)
+        if _changes:
+            _append_edit_history(q, user, now, "quote_update", _changes)
     conn.execute("""
         UPDATE quotations SET
           status=?, customer_name=?, project_name=?,
@@ -4467,6 +4602,114 @@ def download_quotation_pdf(quote_no: str, internal: bool = False, authorization:
     encoded = urlquote(fname)
     return Response(
         content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded}"}
+    )
+
+
+# ── 單據版本與編輯紀錄查詢（2026-09-14）──────────────────────────────────────
+
+@router.get("/api/quotations/{quote_no}/versions")
+def list_quotation_versions(quote_no: str, authorization: str = Header(None)):
+    """這張單有哪幾份存檔版本、被誰在什麼時候改過什麼。
+
+    回傳兩條時間軸：
+      `versions` — 每次自動備存的 PDF（建立／修改／簽核／已簽核／結案）。
+                   `available` 標示實體檔案現在還在不在（PDF 存檔目錄是
+                   superadmin 可設定的路徑，可能被搬動或改設定）。
+      `history`  — `editHistory`：誰在什麼時候改了哪些欄位。
+
+    刻意分成兩條而不是合併：PDF 是**完整快照**（可以拿去對帳、給客戶看），
+    編輯紀錄是**欄位層級索引**（查得到改了什麼，但不是一份文件）。硬合成一條
+    會讓人以為每一筆編輯紀錄背後都有對應的 PDF，那不成立——一般編輯不產 PDF。
+    """
+    user = _require_user(authorization)
+    conn = get_db()
+    _guard_case(conn, quote_no, user, allow_approver=True)
+    row = conn.execute(
+        "SELECT data_json FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+    conn.close()
+    if not row:
+        raise HTTPException(404, "報價單不存在")
+
+    data = json.loads(row["data_json"] or "{}")
+    base = _get_pdf_base()
+
+    versions = []
+    for v in (data.get("docVersions") or []):
+        if not isinstance(v, dict):
+            continue
+        rel = str(v.get("file") or "")
+        full = _resolve_archived_pdf(base, rel)
+        versions.append({
+            "seq":       v.get("seq"),
+            "at":        v.get("at", ""),
+            "event":     v.get("event", ""),
+            "by":        v.get("by", ""),
+            "size":      v.get("size", 0),
+            "filename":  os.path.basename(rel),
+            "available": bool(full and os.path.isfile(full)),
+        })
+
+    history = [h for h in (data.get("editHistory") or []) if isinstance(h, dict)]
+    return {"quote_no": quote_no, "versions": versions, "history": history}
+
+
+def _resolve_archived_pdf(base: str, rel: str):
+    """把 docVersions 存的相對路徑解析成絕對路徑，越界就回 None。
+
+    這些值是系統自己寫的、不是使用者輸入，但存檔路徑可被 superadmin 設定成
+    網路碟，而且這個值會經過 data_json（備份、還原、手動修過的資料都可能經手）
+    ——照 routers/uploads.py `_resolve_upload_path()` 的既有慣例一律驗界。
+    """
+    if not rel:
+        return None
+    try:
+        root = os.path.realpath(base)
+        full = os.path.realpath(os.path.join(root, rel.lstrip("/\\")))
+        if os.path.commonpath([full, root]) != root:
+            return None
+        return full
+    except (ValueError, OSError):
+        return None
+
+
+@router.get("/api/quotations/{quote_no}/versions/{seq}/download")
+def download_quotation_version(quote_no: str, seq: int, authorization: str = Header(None)):
+    """下載某一個已存檔的版本（原始 PDF 檔案本身，不是重新產生）。
+
+    **一定要回存檔的那個檔案、不能重新產生**——重新產生拿到的是「現在的內容」，
+    那正好是這個功能要避免的事：要查的是「當時送出去的那一份長什麼樣」。
+    """
+    user = _require_user(authorization)
+    conn = get_db()
+    _guard_case(conn, quote_no, user, allow_approver=True)
+    row = conn.execute(
+        "SELECT data_json FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+    conn.close()
+    if not row:
+        raise HTTPException(404, "報價單不存在")
+
+    data = json.loads(row["data_json"] or "{}")
+    target = next((v for v in (data.get("docVersions") or [])
+                   if isinstance(v, dict) and v.get("seq") == seq), None)
+    if not target:
+        raise HTTPException(404, "找不到這個版本")
+
+    full = _resolve_archived_pdf(_get_pdf_base(), str(target.get("file") or ""))
+    if not full or not os.path.isfile(full):
+        raise HTTPException(
+            404, "這個版本的存檔檔案已不存在（PDF 存檔目錄可能被搬移或清理過）")
+
+    with open(full, "rb") as f:
+        content = f.read()
+    _audit(_tok(authorization), "quotation.download_version", "quotation", quote_no,
+           f"{quote_no} 下載存檔版本 #{seq}（{target.get('event','')}）",
+           {"seq": seq, "file": target.get("file")})
+    fname = os.path.basename(full)
+    encoded = urlquote(fname)
+    return Response(
+        content=content,
         media_type="application/pdf",
         headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded}"}
     )

@@ -1469,3 +1469,97 @@ def notify_cert_expiry(
     )
     subject_state = "已過期" if days_left < 0 else f"剩 {days_left} 天"
     _async_send(to, f"【MOTRIX】HTTPS 憑證{subject_state} — {not_after}", html)
+
+
+def notify_backup_stale(stale: list, threshold_hours: int) -> None:
+    """備份太久沒跑 → 所有 admin/superadmin（2026-09-14）
+
+    `stale` 是 [(標籤, 最後一次成功的 datetime 或 None)]。
+
+    這封信的收件人不見得懂「SQLite 快照」跟「雲端每日 JSON」差在哪，所以信裡
+    直接把「這代表什麼、現在有多少風險、該去看哪裡」講完——比照
+    notify_cert_expiry() 的作法。備份斷掉跟憑證到期一樣，都是那種**隔很久才
+    第一次寄出、寄出時沒有人記得當初怎麼設計的**的告警。
+    """
+    to = _admin_emails("backup_stale")
+    if not to:
+        return
+
+    rows, never = [], False
+    for label, ts in stale:
+        if ts is None:
+            rows.append((label, "⚠️ 查無任何成功紀錄"))
+            never = True
+        else:
+            hours = int((datetime.now() - ts).total_seconds() / 3600)
+            rows.append((label, f"{ts.strftime('%Y-%m-%d %H:%M')}（{hours} 小時前）"))
+
+    intro = (
+        f"系統已超過 {threshold_hours} 小時沒有完成備份。"
+        "這封信不是備份執行失敗的通知（那種會另外寄）——"
+        "而是<b>備份根本沒有被執行</b>，或執行了但沒有留下成功紀錄。"
+    )
+    note = (
+        "<b>現在的風險</b>：從最後一次成功備份到現在的所有異動，"
+        "目前<b>沒有任何一份副本</b>。這段期間若資料庫損毀或誤刪，這些資料救不回來。"
+        "<br><br><b>請依序檢查（正式機）</b>："
+        "<br>1. 排程工作「MOTRIX ERP Daily Backup」是否還在、最近一次執行結果為何"
+        "<br>2. <code>backup_alerts\\BACKUP_ALERT.txt</code> 有沒有內容"
+        "<br>3. 雲端碟是否掛得起來（任一磁碟機代號下要找得到 "
+        "<code>我的雲端硬碟\\系統存檔</code>）"
+        "<br>4. <code>backend\\logs\\server.log</code> 搜尋 <code>_daily_backup</code>"
+        "<br>5. <b>是否有第二台機器掛著同一個雲端資料夾</b>——"
+        "先跑的那台會寫下當日 <code>.done</code>，正式機看到就直接略過、"
+        "而且不會留下任何錯誤紀錄"
+        "<br><br><b>立即補救</b>：在正式機執行 "
+        "<code>python backend\\backup_job.py</code> 手動觸發一次。"
+    )
+    if never:
+        note = ("<b>其中一項查無任何成功紀錄</b>——若這是新安裝或剛還原的環境，"
+                "代表該層備份從未成功執行過，請優先確認排程與雲端碟設定。<br><br>") + note
+
+    html = _build_html(
+        "備份已停止運作", "需要立即處理", "#DC2626",
+        rows, "", _base_url(),
+        note=note, intro=intro, button_text="前往系統",
+    )
+    _async_send(to, "【MOTRIX】⚠️ 備份已超過 %d 小時沒有成功執行" % threshold_hours, html)
+
+
+def notify_disk_space_low(problems: list) -> None:
+    """磁碟空間不足 → 所有 admin/superadmin（2026-09-14）
+
+    `problems` 是 [{label, path, free_gb, total_gb, free_pct}]。
+
+    值得單獨寄一封的理由：磁碟滿掉的第一個症狀通常不是「磁碟滿了」，而是
+    備份寫不進去、測試跑不起來、PDF 產不出來——很難第一時間聯想到空間。
+    """
+    to = _admin_emails("disk_space_low")
+    if not to:
+        return
+
+    rows = [(p["label"],
+             f"剩餘 {p['free_gb']} GB / 共 {p['total_gb']} GB（{p['free_pct']}%）— {p['path']}")
+            for p in problems]
+    worst = min(p["free_gb"] for p in problems)
+
+    html = _build_html(
+        "磁碟空間不足", f"最低剩餘 {worst} GB", "#D97706" if worst > 5 else "#DC2626",
+        rows, "", _base_url(),
+        intro="正式機的磁碟剩餘空間已低於安全水位。",
+        note=(
+            "<b>為什麼要現在處理</b>：磁碟滿掉時最先壞的通常是<b>備份</b>"
+            "（寫不進去、而且可能只留下一行 log），其次是 PDF 產生與檔案上傳。"
+            "等到症狀出現時，往往已經漏掉好幾天的備份。"
+            "<br><br><b>可以安全清掉的東西</b>："
+            "<br>• <code>%TEMP%\\motrix-pytest-*</code> — 測試暫存，每跑一次 1～2 GB，不會自己清"
+            "<br>• <code>backend\\db_backups\\pre_update_*</code> — 部署前快照，"
+            "系統每天會自動只留最新 5 份（2026-09-14 起），手動刪更舊的也安全"
+            "<br>• <code>backend\\rollback_snapshots\\</code> — 只保留最新 5 份，更舊的可刪"
+            "<br>• <code>deploy_packages\\</code>（開發機）— 已套用過的舊部署包"
+            "<br><br><b>不要刪</b>：<code>uploads\\</code>、各類 PDF 存檔目錄、"
+            "<code>backend\\db_backups\\YYYY-MM-DD\\</code> —— 那些是原始憑據與還原來源。"
+        ),
+        button_text="前往系統",
+    )
+    _async_send(to, f"【MOTRIX】磁碟空間不足 — 最低剩餘 {worst} GB", html)
