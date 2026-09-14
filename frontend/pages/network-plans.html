@@ -17,6 +17,12 @@
     .search-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text-dim);pointer-events:none}
     .search-input{width:100%;padding:8px 11px 8px 34px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:var(--font-zh);background:#fff;outline:none;box-sizing:border-box}
     .search-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(37,99,235,.08)}
+    /* 流程帶的段在這一頁是可點的篩選器（共用的 .vm-andon__seg 是純顯示） */
+    .np-seg{border:none;cursor:pointer;text-align:left;font-family:var(--font-zh)}
+    .np-seg:hover{background:var(--icon-btn-bg)}
+    .np-seg.on{outline:2px solid var(--accent);outline-offset:-2px}
+    .np-arrow{display:grid;place-items:center;background:var(--white);color:var(--border-light);font-size:13px;padding:0 2px}
+    @media (max-width:767px){.np-arrow{display:none}}
     .tab__cnt{font-family:LINE Seed TW_OTF, sans-serif;font-size:10px;font-weight:600;margin-left:4px;padding:1px 5px;border-radius:8px;background:#F0EEE9}
     .tab.on .tab__cnt{background:var(--accent-light);color:var(--accent)}
     .panel{background:#fff;border:1px solid var(--border-light);border-radius:var(--radius-lg);overflow:hidden}
@@ -72,11 +78,40 @@
       <span style="font-size:11px;color:var(--text-dim);margin-left:auto;font-family:LINE Seed TW_OTF, sans-serif" x-text="filtered.length + ' 份'"></span>
     </div>
 
-    <div class="tab-bar">
-      <button class="tab" :class="{on: statusTab===''}" @click="statusTab=''">全部<span class="tab__cnt" x-text="plans.length"></span></button>
-      <button class="tab" :class="{on: statusTab==='規劃中'}" @click="statusTab='規劃中'">規劃中<span class="tab__cnt" x-text="plans.filter(p=>p.status==='規劃中').length"></span></button>
-      <button class="tab" :class="{on: statusTab==='已確認'}" @click="statusTab='已確認'">已確認<span class="tab__cnt" x-text="plans.filter(p=>p.status==='已確認').length"></span></button>
-      <button class="tab" :class="{on: statusTab==='已交付'}" @click="statusTab='已交付'">已交付<span class="tab__cnt" x-text="plans.filter(p=>p.status==='已交付').length"></span></button>
+    <!-- ── 規劃書流程帶（2026-09-14）──────────────────────────────────
+         原本是四個只帶數字的分頁：看得到「規劃中 3 份」，看不出三個階段的
+         比例，也看不出東西是不是都卡在第一關。規劃中→已確認→已交付 是真的
+         有方向的流程，所以用箭頭；「全部」放最前面當清除鍵。 -->
+    <div class="vm-andon" style="margin-bottom:14px">
+      <button type="button" class="vm-andon__seg np-seg" :class="{on: statusTab===''}" @click="statusTab=''">
+        <span class="vm-andon__val" x-text="plans.length"></span>
+        <span class="vm-andon__lbl">全部<small>不分階段</small></span>
+      </button>
+      <button type="button" class="vm-andon__seg np-seg" :class="{on: statusTab==='規劃中'}"
+              @click="statusTab = (statusTab==='規劃中' ? '' : '規劃中')">
+        <span class="vm-andon__val" style="color:var(--warning)" x-text="statusCount('規劃中')"></span>
+        <span class="vm-andon__lbl">規劃中<small>尚未定案</small></span>
+      </button>
+      <span class="np-arrow" aria-hidden="true">→</span>
+      <button type="button" class="vm-andon__seg np-seg" :class="{on: statusTab==='已確認'}"
+              @click="statusTab = (statusTab==='已確認' ? '' : '已確認')">
+        <span class="vm-andon__val" style="color:var(--orange)" x-text="statusCount('已確認')"></span>
+        <span class="vm-andon__lbl">已確認<small>待交付</small></span>
+      </button>
+      <span class="np-arrow" aria-hidden="true">→</span>
+      <button type="button" class="vm-andon__seg np-seg" :class="{on: statusTab==='已交付'}"
+              @click="statusTab = (statusTab==='已交付' ? '' : '已交付')">
+        <span class="vm-andon__val" style="color:var(--success)" x-text="statusCount('已交付')"></span>
+        <span class="vm-andon__lbl">已交付<small>已完成</small></span>
+      </button>
+      <div class="vm-andon__bar">
+        <span class="vm-andon__track"
+              :title="'規劃中 ' + statusCount('規劃中') + '／已確認 ' + statusCount('已確認') + '／已交付 ' + statusCount('已交付')">
+          <i :style="'width:' + statusPct('規劃中') + '%;background:var(--warning)'"></i>
+          <i :style="'width:' + statusPct('已確認') + '%;background:var(--orange)'"></i>
+          <i :style="'width:' + statusPct('已交付') + '%;background:var(--success)'"></i>
+        </span>
+      </div>
     </div>
 
     <template x-if="loading">
@@ -207,6 +242,15 @@
       loading: true,
       search: '',
       statusTab: '',
+      // 2026-09-14：plans.filter(p=>p.status==='xxx').length 原本在畫面上
+      // 每個狀態各寫一次；改用流程帶之後還要再算比例，抽成方法。
+      statusCount(st) { return this.plans.filter(p => p.status === st).length },
+      statusPct(st) {
+        const t = this.plans.length
+        if (!t) return 0
+        const n = this.statusCount(st)
+        return n ? Math.max(2, Math.round(n / t * 100)) : 0
+      },
       showCreateModal: false,
       createMode: 'case',
       createForm: { quoteNo: '', siteName: '', contactName: '', contactPhone: '' },
