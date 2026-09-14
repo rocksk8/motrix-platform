@@ -932,6 +932,10 @@ feedCount(key) {
         const r = this.session.role; const m = this.session.modules || []
         return r === 'superadmin' || r === 'admin' || m.includes('dev_crm')
       },
+      get canDashboard() {
+        const r = this.session.role; const m = this.session.modules || []
+        return r === 'superadmin' || r === 'admin' || m.includes('dashboard')
+      },
       // 2026-09-15：「完整歷史紀錄」連到 audit-log.html，而那頁是 admin+／audit_log
       // 模組限定。沒有權限的人看到連結、點進去卻是「你沒有這個頁面的權限」，等於
       // 系統在邀請他去撞牆——權限管制要連入口一起管，不能只擋後端。
@@ -977,7 +981,14 @@ feedCount(key) {
 
         // 無儀表板相關權限 → 導向案件管理頁面（2026-08-26 專案管理併入案件
         // 管理後，案件管理是這類角色最泛用的落地頁）
-        if (!this.canFinance && !this.canQuotation) {
+        //
+        // 2026-09-15：補上 canDashboard。這頁有**兩道**同樣用途的守門——檔案開頭
+        // 那段 inline script 已經在 2026-09-13 補過 dashboard（註解就寫著「勾了
+        // 儀表板模組的人照樣被踢去案件管理，兩邊對不齊」），但這一份沒跟著改，
+        // 所以只勾「儀表板」模組的人會先通過第一關、再被這裡踢走。實測就是這樣：
+        // modules=["dashboard"] 的帳號打開首頁後被導去 case-management.html。
+        // 條件照抄 sidebar.js 的 canDash（dashboard || finance || quotation）。
+        if (!this.canFinance && !this.canQuotation && !this.canDashboard) {
           window.location.replace('pages/case-management.html'); return
         }
 
