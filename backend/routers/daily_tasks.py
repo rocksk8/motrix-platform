@@ -1444,12 +1444,27 @@ def _check_backup_freshness() -> None:
         finally:
             conn.close()
 
-        if local_at is None and cloud_at is None:
+        # 2026-09-15：這台機器刻意不上傳雲端（開發機，見 archive.cloud_archive_enabled）
+        # → 雲端那條線本來就不會有紀錄，拿它當故障會變成每天一封假警報。**本機快照
+        # 那條照舊檢查**：那才是「備份程式有沒有在跑」的指標，跟雲端政策無關。
+        # archive 比照本檔既有慣例在函式內匯入（見 _disk_targets()）。
+        try:
+            import archive as _archive
+            cloud_expected = _archive.cloud_archive_enabled()
+        except Exception:
+            cloud_expected = True       # 判斷不出來就照原本行為檢查，不要靜默少查一條
+
+        if local_at is None and (cloud_at is None and cloud_expected):
             return          # 從來沒備份過 = 全新環境，不是故障
+        if not cloud_expected and local_at is None:
+            return          # 同上：不上傳雲端的機器只看本機那條，它也還沒跑過
 
         now = datetime.now()
         stale = []
-        for label, ts in (("本機 SQLite 快照", local_at), ("雲端每日備份", cloud_at)):
+        lines = [("本機 SQLite 快照", local_at)]
+        if cloud_expected:
+            lines.append(("雲端每日備份", cloud_at))
+        for label, ts in lines:
             if ts is None:
                 stale.append((label, None))
             else:
@@ -1488,7 +1503,9 @@ def _disk_targets() -> list:
     targets = [("資料庫與程式碟", os.path.dirname(os.path.abspath(_db.DB_PATH)))]
     try:
         import archive
-        base = archive._archive_base()
+        # 2026-09-15：不上傳雲端的機器不監看雲端碟。那顆碟滿了不是這台的事，兩台
+        # 都監看只會讓同一件事寄兩封信；而且在開發機上它根本不是備份目的地。
+        base = archive._archive_base() if archive.cloud_archive_enabled() else ""
         if base:
             targets.append(("雲端存檔碟", base))
     except Exception:

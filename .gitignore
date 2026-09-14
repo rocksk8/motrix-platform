@@ -65,3 +65,9 @@ Desktop.ini
 *.bak
 *.bak2
 *.recovered
+
+# 這台機器不上傳雲端存檔的標記（2026-09-15）。**必須是 per-machine 的本機檔案**：
+# 開發機放、正式機不放。打包走 git archive（只含已追蹤內容），所以它永遠不會被
+# 帶到正式機——這正是選用「gitignore 過的檔案」而不是設定值的原因。
+# 見 archive.py::cloud_archive_enabled()
+.no_cloud_archive

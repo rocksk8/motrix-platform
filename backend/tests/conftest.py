@@ -71,6 +71,18 @@ def _app(tmp_path_factory):
     # 讓所有依賴它的 _realtime_dir()/_weekly_dir()/_daily_dir()/_uploads_mirror_dir()/
     # _pdf_mirror_dir() 全部自動跟著隔離，不用每個都個別 patch，也不會再重蹈
     #「archive.py 內部改了實作方式、conftest.py 沒跟著更新」的同一種錯誤。
+    # 「這台機器不上傳雲端」的標記（2026-09-15，archive.cloud_archive_enabled）是
+    # 專案根目錄下一個**真實存在**的檔案——開發機上它就是存在的。測試必須看不到它，
+    # 否則整批雲端備份測試會因為「這台機器的政策」而紅，而不是因為程式碼壞了；
+    # 而且那種紅燈會讓人以為備份功能壞掉。
+    #
+    # 指到 tmp 裡一個不存在的路徑 → 測試環境預設「允許上傳」（維持既有測試的前提）。
+    # 要驗「停用」那條路徑的測試自己在這個路徑建檔案、或設環境變數（見
+    # test_cloud_archive_policy_2026_09_15.py）。環境變數也一併清掉：它的優先序在
+    # 檔案之前，從開發者的 shell 漏進來會讓整批測試莫名其妙地紅。
+    _os.environ.pop("MOTRIX_CLOUD_ARCHIVE", None)
+    archive._NO_CLOUD_MARKER_PATH = str(base / "no_cloud_archive_marker")
+
     archive_base = base / "archive_base"
     archive_base.mkdir()
     archive._archive_base = lambda: str(archive_base)

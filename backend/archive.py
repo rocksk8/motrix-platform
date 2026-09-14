@@ -130,6 +130,57 @@ def _archive_reachable() -> bool:
     return bool(_archive_base())
 
 
+# ── 這台機器要不要上傳雲端（2026-09-15 使用者指示）────────────────────────────
+#
+# 「開發機的所有檔案不上傳雲端，但正式機需要上傳雲端」。
+#
+# **為什麼不能只靠下面的所有權標記**：那個是「防兩台互相覆蓋」的碰撞防護，不是
+# 「這台永不上傳」的政策開關，而且它有兩條會反過來咬人的路徑：
+#   ① marker 不存在時會**自動認領**——Drive 同步異常、有人手動刪掉、重新掛載
+#      都可能讓它消失。開發機一旦認領成功，換成**正式機**被自己的防呆擋住，
+#      雲端備份整個停掉，而且症狀是「沒有錯誤、只是沒有備份」。
+#   ② 讀 marker 失敗時 fail-open（當作通過）→ 開發機就開始寫。
+# 所以政策開關要獨立，而且要在所有權檢查**之前**生效（連認領動作都不做）。
+#
+# 判斷來源，依序：
+#   1. 環境變數 `MOTRIX_CLOUD_ARCHIVE=off`／`on` —— 臨時覆寫，不用改檔案
+#   2. 專案根目錄的 `.no_cloud_archive` 檔案 —— 開發機放這個。它在 `.gitignore`
+#      裡，而 `build_deploy_package.ps1` 是用 `git archive` 打包（只含已追蹤且
+#      已 commit 的內容），所以**這個檔案永遠不會被帶到正式機**。
+#   3. 兩者都沒有 → 允許上傳（維持原本行為）
+#
+# ⚠️ **預設是「允許」而不是「禁止」**，因為兩個方向的風險不對稱：開發機誤傳的代價
+# 是雲端多了垃圾（發現了可以刪）；正式機誤停的代價是備份靜靜消失好幾週——2026-08-24
+# 真的發生過（磁碟機代號從 G: 變成 H: 之後三週沒人發現）。所以要停的那台明確標記，
+# 判斷不出來的一律照傳。
+_NO_CLOUD_MARKER_PATH = os.path.join(_PROJECT_ROOT, ".no_cloud_archive")
+_ENV_CLOUD_FLAG = "MOTRIX_CLOUD_ARCHIVE"
+_cloud_policy_state = {"enabled": None}     # 只為了「狀態變了才寫一次 log」
+
+
+def cloud_archive_enabled() -> bool:
+    """這台機器允不允許寫雲端存檔（含即時／每日／週／月備份與兩組鏡像）。
+
+    **刻意不做快取**：判斷只是一次 `os.path.exists`，而換掉這個檔案就是為了立刻
+    生效——要求使用者重啟服務才算數的開關，在「發現開發機正在污染雲端」那一刻
+    是最沒有用的設計。
+    """
+    raw = (os.environ.get(_ENV_CLOUD_FLAG) or "").strip().lower()
+    if raw in ("off", "0", "false", "no", "disabled"):
+        enabled, why = False, f"環境變數 {_ENV_CLOUD_FLAG}={raw}"
+    elif raw in ("on", "1", "true", "yes", "enabled"):
+        enabled, why = True, f"環境變數 {_ENV_CLOUD_FLAG}={raw}"
+    elif os.path.exists(_NO_CLOUD_MARKER_PATH):
+        enabled, why = False, f"存在 {_NO_CLOUD_MARKER_PATH}"
+    else:
+        enabled, why = True, "未設定任何停用標記（預設允許）"
+
+    if _cloud_policy_state["enabled"] != enabled:
+        _cloud_policy_state["enabled"] = enabled
+        logger.info("雲端存檔政策：%s（%s）", "允許上傳" if enabled else "停止上傳", why)
+    return enabled
+
+
 # ── 存檔所有權（2026-09-14）────────────────────────────────────────────────────
 #
 # **要解決的問題**：這個存檔目錄沒有任何「這是誰的」概念。`_detect_archive_base()`
@@ -187,6 +238,11 @@ def _archive_owner_ok() -> bool:
     針對罕見情境的防呆，不該因為一次暫時性的 IO 錯誤就把每天的備份整個停掉——
     那會是拿一個大問題去換一個小問題。
     """
+    if not cloud_archive_enabled():
+        # 這台機器根本不上傳（開發機）——**連 marker 都不要碰**。自動認領那段
+        # 是這個機制最危險的地方：開發機認領成功就等於把正式機鎖在門外。
+        return False
+
     if _active_backend() == "s3":
         return True
 
@@ -244,6 +300,8 @@ def _archive_ok() -> bool:
     所有原本只問「碟掛著沒」的呼叫點都走這裡，所以所有權檢查一次就覆蓋到
     即時／每日／週／月備份與兩組鏡像，不用逐一改呼叫端。
     """
+    if not cloud_archive_enabled():
+        return False
     if not _archive_reachable():
         return False
     return _archive_owner_ok()
@@ -442,7 +500,20 @@ def _send_backup_error_email(reason: str, ts: str) -> None:
 
 
 def _clear_backup_alert_if_healthy() -> None:
-    """Remove sticky alert file when cloud archive path is healthy."""
+    """Remove sticky alert file when cloud archive path is healthy.
+
+    2026-09-15：這台機器不上傳雲端時也要清。那個警示檔講的是「雲端備份寫不進去」，
+    在一台**刻意不寫雲端**的機器上是過期資訊——留著它會讓人以為有故障要處理。
+    """
+    if not cloud_archive_enabled():
+        alert_path = os.path.join(_ALERT_DIR, "BACKUP_ALERT.txt")
+        try:
+            if os.path.exists(alert_path):
+                os.remove(alert_path)
+                logger.info("本機不上傳雲端存檔 — 清掉過期的 BACKUP_ALERT.txt")
+        except Exception:
+            logger.exception("failed to clear backup alert")
+        return
     if not _archive_ok():
         return
     alert_path = os.path.join(_ALERT_DIR, "BACKUP_ALERT.txt")
@@ -455,6 +526,10 @@ def _clear_backup_alert_if_healthy() -> None:
 
 
 def _ensure_archive_dirs():
+    # 2026-09-15：這台機器不上傳雲端（開發機）→ 什麼都不做，也**不要寫任何警示**。
+    # 這不是故障，是設定；在這裡寄信或留警示檔只會訓練大家忽略這封信。
+    if not cloud_archive_enabled():
+        return
     # 所有權不符時 _archive_owner_ok() 自己已經寫了一則**說明具體原因**的 ERROR
     # 警示（見該函式）。這裡不能再往下走進「路徑不存在或未掛載」那段，否則會用
     # 一個完全錯的理由蓋掉真正的原因——碟明明掛得好好的，問題是它是別人的。
