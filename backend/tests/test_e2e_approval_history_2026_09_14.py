@@ -134,8 +134,14 @@ def test_history_sidebar_entry_and_scope_for_non_admin(live_server, make_user):
         page = browser.new_page()
         try:
             _login(page, live_server, u, p)
-            # 側欄要有入口——功能做了但沒人找得到等於沒做
-            page.wait_for_selector('#app-sidebar a[href*="approval-history.html"]', timeout=10000)
+            # 導覽要有入口——功能做了但沒人找得到等於沒做。
+            # 2026-09-14：側欄退役（display:none），入口搬到上方導覽列 #app-mainnav。
+            # 用 state="attached" 而不是預設的 visible：mega-menu 的第二層
+            # （.mnav__panel）平常是 opacity:0/visibility:hidden，要 hover 或 focus
+            # 才展開，等 visible 會一路等到超時。這裡要確認的是「選單裡有這個入口」，
+            # attached 就是對的觀測點。
+            page.wait_for_selector('#app-mainnav a[href*="approval-history.html"]',
+                                   state="attached", timeout=10000)
 
             page.goto(f"{live_server}/pages/approval-history.html")
             page.wait_for_selector(".ah-table tbody tr", timeout=10000)
