@@ -1673,12 +1673,31 @@ Audit：`backup.daily_ok` · `backup.weekly_ok` · `backup.sqlite_snapshot` · `
 
 **還原優先序**：本機 `db_backups` 整庫 → 雲端 `motrix_erp.db` → JSON 重建（最後手段）
 
-> ⚠️ **最後手段目前只重建得出 8/76 張表**（2026-09-14 稽核，見第十輪）。
-> `archive.py::_daily_backup()` 的 `tables` 只匯出報價單／客戶／供應商／料號／專案／
-> 稽核紀錄／通知／模組版本，**不含** `users`、`system_settings`、`payslips`、
-> 業務開發（`dev_*`）與三種憑證流。前兩層（整庫複製）涵蓋全部資料，所以這不是
-> 資料遺失風險；但如果真的走到第三層，請預期上述模組要另外處理。
-> 追蹤點：`backend/tests/test_system_audit_2026_09_14.py` 的 `xfail(strict=True)`。
+> **JSON 這一層涵蓋 41/76 張表**（2026-09-14 傍晚補齊，原本只有 8 張）。
+> 沒進去的 35 張是刻意的：選型資料庫七類（由 `sync_*.py` 產生、git 裡有來源）、
+> 登入態與鎖、流水號、操作軌跡與時數、個人排序偏好——重建它們沒有意義。
+> 清單與逐項理由在 `backend/tests/test_system_audit_2026_09_14.py`
+> 的 `_NOT_IN_JSON_BACKUP`，新增資料表沒做決定那支會變紅。
+>
+> ⚠️ **從 JSON 還原時，使用者的憑證欄位是刻意不備份的**
+> （`totp_secret`／`totp_recovery_codes`／各種 password hash）——
+> 那些是可以直接拿去產生有效驗證碼的金鑰，不該出現在人看得懂的備份檔裡。
+> 所以走到這一層之後：帳號、角色、模組、部門歸屬都救得回來，
+> 但**所有人都要重設密碼、重新綁定 2FA 與 Passkey**。
+> （前兩層是整個 .db 檔，不受此限。）
+>
+> ⚠️ **JSON 這一層也不收內嵌影像與線上祕密**：
+> ・承攬人員的身分證正反面／存摺掃描件，以及協力廠商 `data_json`、承攬付款憑據
+> 　`snapshot_json` 裡包的存摺影像，一律換成佔位字串（通則式處理，
+> 　見 `archive._strip_inline_images()`）。實測每天 5.5 MB 降到 1.4 MB，
+> 　重點不是省空間，是**不要每天把一疊身分證掃描件複製到雲端資料夾**。
+> ・`system_settings` 的 `email_notify.smtp_password`、
+> 　`google_calendar.client_secret` 與 `refresh_token` 用 `json_remove()` 挖掉，
+> 　其餘設定照常保留。還原後這三個值要重新填。
+> 影像與祕密在前兩層（整庫 .db）都是完整的。
+>
+> 另外：單張表匯出失敗現在會送 `backup.daily_partial` 並留下警示，
+> 不會再像以前那樣照樣報 `backup.daily_ok`。
 
 ---
 
@@ -1820,6 +1839,39 @@ C 區塊**刻意留空並附說明**：`test_module_keys_consistency_2026_09_13.
 | 稽核測試 `_GUARD_CALL` | 新守門函式請沿用 `require_*`／`_guard_*` 命名；取別的名字會讓那支端點被誤判成「沒有守門」 |
 | 兩支回簽附件 DELETE | 修補前的狀態、為什麼標準訂在 admin+ |
 | 架構地圖 `tests/` 那行 | 從過期的「45 個測試檔／300+ 題」更新為實際的 **114 個測試檔、874 題** |
+
+
+#### 四、備份涵蓋度補齊（同日稍晚，接著上面第 2 項做）
+
+上面第 2 項原本標「未修、已追蹤」，同一輪內補完了：**每日 JSON 匯出從 8 張表
+變成 41 張**，§8.3 的最後手段現在真的重建得出一套可用的系統。
+那支 `xfail(strict=True)` 照約定拿掉——xfail 是追蹤用的，不是永久豁免。
+
+沒進去的 35 張都是「重建它沒有意義」：選型資料庫七類（`sync_*.py` 產生、
+git 裡有來源）、登入態與鎖、流水號、操作軌跡與時數、個人排序偏好。
+逐項理由在測試檔的 `_NOT_IN_JSON_BACKUP`。
+
+**使用者那一筆刻意逐欄列出、略過所有憑證欄位**：`password_hash` 之類是雜湊，
+但 `totp_secret` 與 `totp_recovery_codes` 是**可以直接產生有效驗證碼的金鑰**，
+寫進人看得懂的 JSON 等於把兩階段驗證抄一份放在備份資料夾。代價是從 JSON 還原後
+所有人要重設密碼、重綁 2FA/Passkey——走到最後手段本來就該這樣做。
+
+**過程中發現的兩個真問題**：
+
+| # | 問題 | 處置 |
+|---|------|------|
+| 3 | `stock_batches` 沒有 `id` 欄位，`ORDER BY id` 語法正確、表也存在，**只有執行時才炸** | 改 `ORDER BY batch_no`；並新增 `test_every_backup_query_actually_runs`——不比對字串，直接把 41 條 SQL 拿去執行 |
+| 4 | 單張表匯出失敗時，`_daily_backup()` 照樣寫 `.done`、照樣送 `backup.daily_ok`，**備份頁面顯示綠燈但那張表每天都是空的** | 改成有失敗就送 `backup.daily_partial` ＋ 留警示（WARN，不寄信），且不清掉既有警示。兩題測試守著，含「全部成功仍要報 ok」的正向控制 |
+| 5 | `system_settings` 裡有**真的線上祕密**：`email_notify.smtp_password`、`google_calendar.client_secret` 與 `refresh_token`。原本要 `SELECT *` 匯出，等於把可直接使用的認證素材寫進備份資料夾並鏡像到雲端 | 改用 `json_remove()` 只挖掉這三個路徑，其餘設定照常保留。補 `test_settings_export_has_no_live_secrets`——往 `value_json` 裡面挖一層掃，新增的祕密設定也會被抓到 |
+| 6 | 承攬人員欄位裡是**身分證正反面與存摺掃描件**（base64），協力廠商 `data_json`、承攬付款憑據 `snapshot_json` 也各自包了存摺影像。逐表 JSON 每天寫、鏡像雲端、留 30 天＝每天複製一疊身分證掃描件 | 加一條**通則**：`_strip_inline_images()` 遞迴把 `data:image/...` 換成佔位字串（含存成 TEXT 的 JSON 欄位與其中的陣列）。5.5 MB → 1.4 MB。三題測試守著，含不依賴資料內容的單元測試 |
+
+第 3 項正是第 4 項的實例：如果不是順手把查詢真的執行一次，這個壞掉的匯出會
+每天靜默失敗、備份頁面全綠，直到有人要還原庫存批次才發現。
+
+**順手做的重構**：`tables` dict 從 `_daily_backup()` 裡抽成模組層級的
+`archive._daily_backup_tables()`。稽核測試因此不必再用正規表示式解析函式內的
+local dict（改成直接 import 呼叫，不可能解析歪掉），而且測試可以塞一條壞查詢
+進去驗證失敗路徑——local 變數沒辦法 monkeypatch。
 
 ### 2026-09-14（第九輪）— 視覺化語彙推到其餘模組、報表補數值、動態附件（**DB v82**）
 
@@ -3887,6 +3939,11 @@ powershell -ExecutionPolicy Bypass -File "C:\Users\Motrix\Desktop\V9.0\backend\t
 | 守什麼 | 漂掉的症狀 |
 |--------|-----------|
 | 每張資料表都要明確決定要不要進每日 JSON 匯出 | 平常沒事；要用 §8.3 的最後手段還原時，才發現那張表從來沒被匯出過 |
+| 每一條匯出查詢都要真的跑得起來 | 表存在、語法正確，執行時才炸（`ORDER BY id` 但那張表沒有 id）；失敗被 try/except 吞掉，備份頁面照樣綠燈 |
+| 單張表失敗不可以還是報 `backup.daily_ok` | 「備份看起來有在跑」型事故：綠燈跑了好幾個月，要還原才發現那張表每天都是空的 |
+| 使用者匯出不可以夾帶憑證欄位 | `totp_secret` 被抄進人看得懂的 JSON，備份資料夾變成可直接使用的認證素材 |
+| 任何一張表的匯出都不可以夾帶祕密欄位／設定值 | 同上，但發生在下一張新表或下一個新設定上；`system_settings` 的祕密藏在 `value_json` 裡，只看欄位名掃不到 |
+| 匯出裡不可以有 base64 內嵌影像 | 身分證與存摺掃描件每天被複製一份到雲端備份資料夾 |
 | 每支路由都要呼叫守門函式（16 支公開端點列成白名單） | 端點上線、測試全綠，因為沒有人針對「它應該要擋」寫題 |
 | DELETE 端點要檢查角色或擁有者，不能只有「有登入就好」 | 任何登入者都刪得掉別人的東西，而且不可復原 |
 | 程式與資料庫裡的角色字串都必須是已知角色 | `role == 'superadmn'` 這種拼錯不會報錯，只會讓那道檢查**永遠不成立** |
@@ -3904,11 +3961,13 @@ powershell -ExecutionPolicy Bypass -File "C:\Users\Motrix\Desktop\V9.0\backend\t
 1. `DELETE /api/shipping-notes/{no}/signed-files/{id}` 與完工單的同名端點，
    在此之前**只有 `_require_user()`**——任何登入者都能刪掉任何單據的回簽附件，
    而且會連實體檔案一起移除。已補 admin+（與同日新增的動態附件同一個標準）。
-2. 每日 JSON 匯出只涵蓋 **8/76** 張表。整庫複製那一層有保護到，所以不是資料
-   遺失風險；但 §8.3 的「還原優先序」把 JSON 列為最後手段，而那個最後手段目前
-   重建不出 `users`／`system_settings`／`payslips`／業務開發／三種憑證流。
-   已用一支 `xfail(strict=True)` 把這個落差變成會被追蹤的東西——補進匯出之後
-   那題會 XPASS 提醒回來拿掉標記。
+2. 每日 JSON 匯出只涵蓋 **8/76** 張表——§8.3 的最後手段重建不出 `users`／
+   `system_settings`／`payslips`／業務開發／三種憑證流。先用一支
+   `xfail(strict=True)` 把落差變成會被追蹤的東西，**同一輪內補完了**：
+   現在 41 張，xfail 照約定拿掉。補的過程又掃出兩件事：`stock_batches`
+   的 `ORDER BY id` 執行時才會炸（表存在、語法正確，前兩題都是綠的），
+   以及單張表失敗時 `_daily_backup()` 照樣報 `backup.daily_ok`。兩件都已修，
+   並各自補上會紅的測試（含正向控制）。詳見 §12 第十輪第四節。
 
 > **這支測試自己也差點犯同一類錯**：初稿寫死守門函式名稱去掃，誤報 5 支 T100 端點
 > （它們有自己的 `_require_t100_admin`）；又誤判 `financial_view`／
