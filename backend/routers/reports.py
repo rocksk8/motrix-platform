@@ -4,7 +4,6 @@ import io
 import json
 import logging
 import os
-import subprocess
 import tempfile
 import threading
 import time
@@ -24,7 +23,7 @@ from db import get_db
 from helpers import (
     _require_user, _tok, _audit, _warranty_expiry, _get_edge_path, _get_setting, _set_setting,
     payment_item_amounts, summarize_payment_items, case_extra_expenses, quote_won_month_map,
-    user_has_module, EDGE_PDF_SEMAPHORE,
+    user_has_module, run_edge_pdf,
 )
 from routers.vendor_contractors import _dispatch_row
 
@@ -2286,15 +2285,12 @@ def _html_to_pdf(html: str) -> bytes:
             tmp_html = f.name
         with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
             tmp_pdf = f.name
-        with EDGE_PDF_SEMAPHORE:
-            subprocess.run(
-                [edge, "--headless", "--disable-gpu", "--no-sandbox",
-                 f"--print-to-pdf={tmp_pdf}", "--no-pdf-header-footer",
-                 "--run-all-compositor-stages-before-draw",
-                 "file:///" + tmp_html.replace("\\", "/")],
-                timeout=60, check=False,
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-            )
+        run_edge_pdf(
+            [edge, "--headless", "--disable-gpu", "--no-sandbox",
+             f"--print-to-pdf={tmp_pdf}", "--no-pdf-header-footer",
+             "--run-all-compositor-stages-before-draw",
+             "file:///" + tmp_html.replace("\\", "/")]
+        )
         with open(tmp_pdf, "rb") as f:
             data = f.read()
         if not data:

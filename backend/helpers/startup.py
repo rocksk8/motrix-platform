@@ -3,6 +3,7 @@ import json
 import os
 import logging
 import secrets
+import subprocess
 import threading
 from datetime import datetime, date
 
@@ -55,6 +56,45 @@ def _get_edge_path() -> str:
 # 排隊等待輪到自己即可，不會真的失敗，只是慢一點。
 EDGE_PDF_MAX_CONCURRENCY = 3
 EDGE_PDF_SEMAPHORE = threading.BoundedSemaphore(EDGE_PDF_MAX_CONCURRENCY)
+
+# 單次 Edge headless 渲染的時間上限（2026-09-15）。
+#
+# 原本是散在 pdf_gen.py（15 處）與 network_plan_export.py（1 處）的字面值 40，
+# 十六份幾乎一字不差的複製。改成一個具名常數，順便讓機器忙的時候能用環境變數
+# 拉高而不必改程式碼。
+#
+# **為什麼從 40 拉到 120**：40 秒是「Edge 正常啟動＋渲染」的好幾倍，單看一次匯出
+# 綽綽有餘——但它量的是**牆鐘時間**，機器被別的東西吃滿時，光是 Edge 冷啟動就
+# 可能耗掉大半。2026-09-15 打包時 `test_export_excel_and_pdf` 就是這樣倒的：
+# 那一題單獨跑 6 秒過，在 8 個 pytest-xdist worker 一起跑的情況下 40 秒不夠。
+# 正式機同樣會遇到（每日備份／多人同時匯出時），而使用者看到的是一個沒有訊息的
+# 500。拉到 120 秒換到的是「忙的時候慢一點」而不是「忙的時候直接失敗」。
+EDGE_PDF_TIMEOUT_SECONDS = int(os.environ.get("MOTRIX_EDGE_PDF_TIMEOUT", "120"))
+
+
+def run_edge_pdf(cmd: list) -> None:
+    """跑一次 Edge headless 產 PDF：拿 semaphore、限時、逾時不往外丟例外。
+
+    **逾時為什麼是吞掉而不是 raise**：十六個呼叫端在這一行之後全都緊接著同一道
+    檢查——「tmp_pdf 沒產出或是 0 byte 就 raise ValueError」。逾時的結果正是
+    「沒產出」，讓那道既有的檢查去報錯，錯誤路徑只有一條、呼叫端一行都不用改。
+
+    在此之前 `subprocess.TimeoutExpired` 沒有任何一處接（全 repo 搜不到），會一路
+    竄到全域 exception handler 變成「伺服器發生內部錯誤，請聯絡管理員」＋一份
+    traceback，使用者與 log 都看不出是渲染逾時。現在 log 裡會有明確的一行。
+    """
+    with EDGE_PDF_SEMAPHORE:
+        try:
+            subprocess.run(
+                cmd, timeout=EDGE_PDF_TIMEOUT_SECONDS, check=False,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
+        except subprocess.TimeoutExpired:
+            logger.warning(
+                "Edge PDF 渲染逾時（%d 秒）——機器負載過高或該份文件過大；"
+                "可用環境變數 MOTRIX_EDGE_PDF_TIMEOUT 調整上限",
+                EDGE_PDF_TIMEOUT_SECONDS,
+            )
 
 
 # ── Startup routines ──────────────────────────────────────────────────────────

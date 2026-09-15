@@ -1919,6 +1919,45 @@ xlsx-0.18.5.full.min.js     （SheetJS）
 > [`WEEKLY-AUDIT-2026-09-07_2026-09-10.md`](WEEKLY-AUDIT-2026-09-07_2026-09-10.md)
 > ——帶「模組／檔案:行號／是否在正式機」座標的本週稽核索引，出事時先看那份。
 
+### 2026-09-15（第十輪）— 打包被一題 PDF 測試擋下：Edge 並發上限在 xdist 底下失效（DB 無異動）
+
+打包腳本中止：`test_network_plans.py::test_export_excel_and_pdf` 倒在
+`subprocess.TimeoutExpired`，1 failed / 999 passed，**992 秒**。
+
+**那一題單獨跑 6 秒就過**——不是功能壞掉，是 Edge 被塞爆。兩層原因：
+
+1. `EDGE_PDF_SEMAPHORE` 是 **`threading`**.BoundedSemaphore，只管得住同一個行程裡的
+   執行緒。正式機是單一 uvicorn 行程，那裡「同時最多 3 個 Edge」是成立的；但
+   pytest-xdist 是**多行程**，6～8 個 worker 各自持有一份自己的 semaphore，實際上限
+   變成 workers×3＝最多 24 個 `msedge.exe` 同時搶 CPU。
+2. `timeout=40` 量的是**牆鐘時間**。機器被吃滿時，光 Edge 冷啟動就可能耗掉大半。而
+   `subprocess.TimeoutExpired` **全 repo 沒有任何一處接**——正式機真的逾時的話，
+   使用者拿到的是沒有訊息的 500，log 只有一份 traceback，看不出是渲染逾時。
+
+**改動**
+
+| 位置 | 內容 |
+|---|---|
+| `helpers/startup.py` | 新增 `run_edge_pdf()`：semaphore ＋ 逾時 ＋ 逾時寫一行明確的 log。**逾時刻意吞掉不外拋**——16 個呼叫端下一行本來就都有「PDF 沒產出就 raise ValueError」，讓那道既有檢查去報錯，錯誤路徑只留一條 |
+| 同上 | `EDGE_PDF_TIMEOUT_SECONDS`：40 → **120 秒**，可用 `MOTRIX_EDGE_PDF_TIMEOUT` 覆蓋。原本是散在三個檔案的 17 份字面值 |
+| `pdf_gen.py`（15）／`network_plan_export.py`（1）／`routers/reports.py`（1） | 全部收斂成 `run_edge_pdf([...])`；三個檔案的 `import subprocess` 一併移除 |
+| `tests/conftest.py` | xdist 底下把每個 worker 的 Edge 上限壓到 1。**刻意改測試不改產品**：跨行程上限要靠檔案鎖或具名 mutex，那會為了正式機根本不存在的情境（單行程）引進「行程被砍、鎖沒釋放」的新失敗模式 |
+
+**`routers/reports.py` 那處差點漏掉**——第一輪用字面值 `timeout=40` 搜尋掃不到它，
+它寫的是 `60`。是 `test_pdf_concurrency_2026_09_07.py` 紅了才浮出來（那題的 docstring
+本來就列了三個地方）。
+
+**順手把那道守門改成真的守得住**：原本那題比對的是「現有三處 import 的
+`EDGE_PDF_SEMAPHORE` 是不是同一個物件」——**第四處冒出來時它不會紅**，這次差點漏掉
+第三處就是證明。改成兩題：①三個模組走的是同一支 `run_edge_pdf`；②**靜態掃描整個
+backend**，有人自己 `subprocess.run` 去跑 msedge 就紅（排除 `run_edge_pdf` 本人）。
+第二題已用「種一個假的違規檔案」實測會紅。
+
+**結果**：完整非 e2e 套件 **1001 passed / 0 failed，165 秒**——對照修復前的 992 秒。
+六倍的差距就是 24 個 `msedge.exe` 互相搶 CPU 的代價。
+
+---
+
 ### 2026-09-15（第九輪）— 業務開發／案件動態的附件從上線起每一張都是 403（DB 無異動）
 
 使用者回報：「業務開發的上傳照片跟 pdf 功能失效」。

@@ -8,7 +8,7 @@ docstring——每份 PDF 匯出（報價單/出貨單/承攬商匯款申請/發
 import threading
 import time
 
-from helpers import EDGE_PDF_SEMAPHORE, startup
+from helpers import EDGE_PDF_SEMAPHORE, run_edge_pdf, startup
 
 
 def test_semaphore_caps_concurrent_holders():
@@ -48,14 +48,54 @@ def test_semaphore_is_reusable_after_release():
             pass  # 借了就還，重複很多次都不該卡住或報錯
 
 
-def test_pdf_gen_and_network_plan_export_share_the_same_semaphore():
-    """pdf_gen.py／network_plan_export.py／routers/reports.py 三處各自 import
-    的 EDGE_PDF_SEMAPHORE 必須是同一個物件，並發限制才是全站共用一份額度，
-    不是三個各自獨立、加起來反而變相把上限乘以三。"""
+def test_pdf_gen_and_network_plan_export_share_the_same_runner():
+    """pdf_gen.py／network_plan_export.py／routers/reports.py 三處必須走同一支
+    `run_edge_pdf()`，並發限制才是全站共用一份額度，不是三個各自獨立、加起來
+    變相把上限乘以三。
+
+    2026-09-15 改寫：在此之前比對的是三個模組各自 import 的 `EDGE_PDF_SEMAPHORE`
+    是不是同一個物件。Edge 的呼叫（semaphore ＋ 逾時 ＋ 逾時記 log）已收斂進
+    `helpers/startup.py::run_edge_pdf()`，三個模組不再自己持有 semaphore，所以
+    改比對那支函式。
+    """
     import pdf_gen
     import network_plan_export
     import routers.reports as reports_module
 
-    assert pdf_gen.EDGE_PDF_SEMAPHORE is EDGE_PDF_SEMAPHORE
-    assert network_plan_export.EDGE_PDF_SEMAPHORE is EDGE_PDF_SEMAPHORE
-    assert reports_module.EDGE_PDF_SEMAPHORE is EDGE_PDF_SEMAPHORE
+    assert pdf_gen.run_edge_pdf is run_edge_pdf
+    assert network_plan_export.run_edge_pdf is run_edge_pdf
+    assert reports_module.run_edge_pdf is run_edge_pdf
+
+
+def test_no_module_spawns_edge_outside_the_shared_runner():
+    """沒有人繞過 `run_edge_pdf()` 自己 spawn Edge。
+
+    這一題才是真正守得住的那道：上一題只確認「現有三處用的是同一支」，**第四處
+    冒出來時它不會紅**——而 2026-09-15 那次就差點漏掉第三處（`routers/reports.py`
+    的 timeout 寫的是 60 不是 40，用字面值搜尋掃不到它）。這裡直接掃原始碼：
+    有人自己呼叫 subprocess 去跑 msedge，就是繞過了共用的並發上限與逾時處理。
+    """
+    import os
+    import re
+
+    backend = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    offenders = []
+    for root, dirs, files in os.walk(backend):
+        dirs[:] = [d for d in dirs
+                   if d not in ("tests", "rollback_snapshots", "deploy_packages",
+                                "__pycache__", "tools")]
+        for name in files:
+            if not name.endswith(".py"):
+                continue
+            path = os.path.join(root, name)
+            rel = os.path.relpath(path, backend)
+            if rel.replace("\\", "/") == "helpers/startup.py":
+                continue  # run_edge_pdf() 本人，就是那個唯一該碰 subprocess 的地方
+            src = open(path, encoding="utf-8", errors="replace").read()
+            if re.search(r"subprocess\.(run|Popen|call|check_output)", src) and                     re.search(r"--headless|msedge|print-to-pdf", src):
+                offenders.append(rel)
+
+    assert not offenders, (
+        "這些檔案自己 spawn Edge，繞過了 run_edge_pdf() 的並發上限與逾時處理："
+        f"{offenders}"
+    )

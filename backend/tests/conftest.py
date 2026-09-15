@@ -51,6 +51,24 @@ def _app(tmp_path_factory):
     import os as _os
     _os.environ["MOTRIX_DISABLE_SCHEDULERS"] = "1"
 
+    # Edge 並發上限在 xdist 底下要再除以 worker 數（2026-09-15）。
+    #
+    # `EDGE_PDF_SEMAPHORE` 是 **threading**.BoundedSemaphore——只管得住同一個
+    # 行程裡的執行緒。正式機是單一 uvicorn 行程，那裡「同時最多 3 個 Edge」是
+    # 成立的；但 pytest-xdist 是**多行程**，8 個 worker 各自持有一份自己的
+    # semaphore，實際上限變成 8×3＝24 個 msedge.exe 同時搶 CPU。
+    #
+    # 2026-09-15 打包時 `test_export_excel_and_pdf` 就是這樣倒的
+    # （`subprocess.TimeoutExpired`）——那一題單獨跑 6 秒就過。
+    #
+    # **刻意改測試而不是改產品**：跨行程的上限要靠檔案鎖或具名 mutex，那會為了
+    # 一個正式機根本不存在的情境（單行程）引進「行程被砍掉、鎖沒釋放」的新失敗
+    # 模式。這裡把每個 worker 壓到 1，總量回到跟 worker 數同一個量級。
+    if _os.environ.get("PYTEST_XDIST_WORKER"):
+        import threading as _threading
+        import helpers.startup as _startup
+        _startup.EDGE_PDF_SEMAPHORE = _threading.BoundedSemaphore(1)
+
     import db
     db.DB_PATH = str(base / "motrix_erp.db")
     db.DEMO_DB_PATH = str(base / "motrix_erp_demo.db")

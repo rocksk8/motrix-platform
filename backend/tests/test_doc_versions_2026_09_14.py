@@ -116,7 +116,10 @@ def test_archived_filename_includes_seconds(client, monkeypatch, tmp_path):
         written.append(out)
         return None
 
-    monkeypatch.setattr(pdf_gen.subprocess, "run", _fake_run)
+    # 2026-09-15：原本攔的是 `pdf_gen.subprocess.run`。Edge 的呼叫已收斂成
+    # `helpers/startup.py::run_edge_pdf()`（semaphore ＋ 逾時 ＋ 逾時記 log 都在
+    # 裡面，見該處說明），pdf_gen 不再自己碰 subprocess，所以改攔那一支。
+    monkeypatch.setattr(pdf_gen, "run_edge_pdf", _fake_run)
 
     from db import get_db
     conn = get_db()
