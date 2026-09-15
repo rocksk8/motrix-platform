@@ -301,6 +301,17 @@
     .dc-textarea { min-height: 72px; resize: vertical; }
 
     /* log cards */
+    /* 附件縮圖底（2026-09-15）：去背 PNG 的白色字襯在白底上等於看不見
+       ——使用者傳 logo-white.png 上來就是全白一片。棋盤格讓白色內容看得見，
+       同時一眼看得出「這張圖本來就是透明背景」。 */
+    .att-thumb {
+      background-color: #fff;
+      background-image:
+        linear-gradient(45deg, #d5d5d5 25%, transparent 25%, transparent 75%, #d5d5d5 75%),
+        linear-gradient(45deg, #d5d5d5 25%, transparent 25%, transparent 75%, #d5d5d5 75%);
+      background-size: 12px 12px;
+      background-position: 0 0, 6px 6px;
+    }
     .dc-log-card {
       border: 1px solid var(--border-light); border-radius: 10px;
       padding: 14px 16px; margin-bottom: 10px; background: #fff;
@@ -975,8 +986,8 @@
                       <div style="position:relative">
                         <template x-if="isLogImage(f)">
                           <a href="javascript:void(0)" @click="previewAttachmentFile(f)" :title="f.filename">
-                            <img :src="photoUrl(f.path)" loading="lazy"
-                                 style="width:68px;height:68px;object-fit:cover;border-radius:6px;border:1px solid var(--border-light);display:block">
+                            <img :src="photoUrl(f.path)" loading="lazy" class="att-thumb"
+                                 style="width:68px;height:68px;object-fit:contain;border-radius:6px;border:1px solid var(--border-light);display:block">
                           </a>
                         </template>
                         <template x-if="!isLogImage(f)">

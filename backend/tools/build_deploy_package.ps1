@@ -26,7 +26,11 @@
 
 [CmdletBinding()]
 param(
-    [string]$OutDir = ""
+    [string]$OutDir = "",
+    # 保留幾份部署包（2026-09-15 使用者要求：「當第三個打包檔的時候自動刪除第一個
+    # 打包檔，避免重複堆積」）。0 = 不清理。清理在新包**完整產出並通過驗證之後**
+    # 才執行，見 Step 7。
+    [int]$KeepPackages = 2
 )
 
 $ErrorActionPreference = "Stop"
@@ -459,6 +463,43 @@ $manifestPath = Join-Path $pkgDir "deploy_manifest.json"
 $manifest | ConvertTo-Json -Depth 6 | Set-Content -Path $manifestPath -Encoding UTF8
 
 Write-Host "[2/2] 寫入 deploy_manifest.json"
+
+# --- Step 7: 清掉過舊的部署包 ---
+#
+# 2026-09-15 使用者要求：「當第三個打包檔的時候自動刪除第一個打包檔，避免重複堆積」。
+# 一份包約 35 MB，一天打好幾次的話會一直長。
+#
+# 刻意排在最後（新包已完整解壓、通過 backend/frontend 存在性驗證、manifest 也寫好了）
+# ——打包中途失敗時一律走 Fail 直接 exit，永遠不會走到這裡，**不會出現「新包沒做成、
+# 舊包卻被刪掉」**。
+#
+# 只刪名字符合 `yyyyMMdd_HHmmss_<commit>` 的資料夾：這個目錄是使用者自己會進去翻的，
+# 手動放進來的東西（改名留存的包、筆記、複製到一半的資料夾）不能被掃掉。
+# 排序用資料夾名稱而不是 LastWriteTime——名字開頭就是時間戳，字串排序即時間排序，
+# 而 LastWriteTime 會被「複製到隨身碟」之類的動作改掉。
+if ($KeepPackages -gt 0) {
+    $pkgPattern = '^\d{8}_\d{6}_[0-9a-fA-F]{7,40}$'
+    $allPkgs = Get-ChildItem $OutDir -Directory -ErrorAction SilentlyContinue |
+               Where-Object { $_.Name -match $pkgPattern } |
+               Sort-Object Name
+    $stale = @($allPkgs | Select-Object -SkipLast $KeepPackages)
+    if ($stale.Count -gt 0) {
+        Write-Host "`n[清理] 保留最新 $KeepPackages 份，刪除較舊的 $($stale.Count) 份："
+        foreach ($old in $stale) {
+            # 用 Remove-Item 而不是 Step 3 的 `rd`：那裡處理的是 pytest 暫存（數萬個
+            # 小檔，rd 快很多），一份部署包才一千多個檔，差別可以忽略，換來的是不必
+            # 處理 cmd 的引號轉義、失敗時拿得到例外訊息。
+            try {
+                Remove-Item -LiteralPath $old.FullName -Recurse -Force -ErrorAction Stop
+                Write-Host "  已刪除 $($old.Name)" -ForegroundColor DarkGray
+            } catch {
+                # 刪不掉不該讓整次打包失敗——包已經做好了，這只是清理
+                Write-Host "  [WARN] $($old.Name) 刪除失敗（檔案被占用？）：$($_.Exception.Message)" -ForegroundColor Yellow
+            }
+        }
+        Write-Host "  （要保留更多份：-KeepPackages N；完全不清理：-KeepPackages 0）" -ForegroundColor DarkGray
+    }
+}
 
 Write-Host "`n======================================"
 Write-Host "  完成！部署包路徑：" -ForegroundColor Green

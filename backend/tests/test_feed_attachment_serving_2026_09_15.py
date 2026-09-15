@@ -60,10 +60,10 @@ def test_attachment_is_actually_readable_back(client, dev_log_attachment):
     """走完整條路：換 pt → 讀檔，回來的要是磁碟上那個檔本身。
 
     **觀測點不能拿「上傳的原始位元組」來比**：圖片會先過
-    `photos.py::_process_project_photo()` 壓浮水印，出來是重新編碼過的 JPEG
-    （連副檔名都還是 .png，見下一題）。拿原始位元組比會紅在浮水印上，不是紅在
-    讀取路徑上。改比磁碟上的實體檔——只有「端點真的解析到正確的檔案並讀出來」
-    才會相符，端點回空 body 或回錯檔案都會紅。
+    `photos.py::_process_project_photo()` 壓浮水印，是重新編碼過的（格式跟著來源
+    走，見 `test_photo_watermark_formats_2026_09_15.py`）。拿原始位元組比會紅在
+    浮水印上，不是紅在讀取路徑上。改比磁碟上的實體檔——只有「端點真的解析到正確的
+    檔案並讀出來」才會相符，端點回空 body 或回錯檔案都會紅。
     """
     token, f = dev_log_attachment
 

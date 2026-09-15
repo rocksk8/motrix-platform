@@ -36,6 +36,8 @@ def _process_project_photo(image_bytes: bytes, uploader_name: str):
         from PIL.ExifTags import TAGS, GPSTAGS
 
         img = Image.open(io.BytesIO(image_bytes))
+        # 來源格式一定要在任何 convert() 之前抓——convert 出來的新影像 .format 是 None
+        src_format = (img.format or '').upper()
 
         try:
             exif_raw = img._getexif() or {}
@@ -52,8 +54,21 @@ def _process_project_photo(image_bytes: bytes, uploader_name: str):
         except Exception:
             pass
 
-        if img.mode not in ('RGB',):
-            img = img.convert('RGB')
+        # 透明度與輸出格式（2026-09-15 修）。
+        #
+        # 在此之前這裡一律 `convert('RGB')`、最後一律存成 JPEG，造成兩個問題：
+        #
+        # ① **把透明 PNG 毀掉**。RGBA→RGB 是直接把 alpha 丟掉、露出底下的 RGB 值。
+        #    使用者傳 `logo-white.png`（白色字＋透明底）上來，透明處底下的值是白的，
+        #    白字落在白底上＝整個字不見了，畫面上只剩那顆彩色圓環。實測原圖中段有
+        #    5902 個「不透明且接近白」的取樣像素，處理完剩 52 個。
+        # ② 存檔端（helpers/uploads.py、routers/system.py）沿用**上傳時的副檔名**，
+        #    所以會產生「副檔名 .png、內容是 JPEG」的檔案。
+        #
+        # 改成**輸出跟著來源格式走**：PNG 進 PNG 出（alpha 保留），其餘（手機拍的
+        # JPEG）行為與改動前逐字相同。副檔名與內容從此一致，②順帶消失。
+        keep_alpha = src_format == 'PNG'
+        img = img.convert('RGBA' if keep_alpha else 'RGB')
 
         w, h = img.size
         now_str = datetime.now().strftime('%Y-%m-%d %H:%M')
@@ -64,7 +79,12 @@ def _process_project_photo(image_bytes: bytes, uploader_name: str):
 
         strip_h = max(50, h // 12)
         strip   = img.crop((0, h - strip_h, w, h))
-        pixels  = list(strip.getdata())
+        if keep_alpha:
+            # 透明處先疊到白底再取樣。直接讀 RGBA 會拿到「被 alpha 遮住、根本看不見」
+            # 的顏色，挑出來的浮水印對比色是對著一張不存在的圖算的；襯白是因為畫面上
+            # 附件縮圖本來就是放在白底頁面上。
+            strip = Image.alpha_composite(Image.new('RGBA', strip.size, (255, 255, 255, 255)), strip)
+        pixels  = list(strip.convert('RGB').getdata())
         avg_lum = sum(0.299*r + 0.587*g + 0.114*b for r, g, b in pixels) / max(len(pixels), 1)
 
         if avg_lum > 128:
@@ -99,9 +119,12 @@ def _process_project_photo(image_bytes: bytes, uploader_name: str):
         draw.rectangle([x - pad, y - pad, x + tw + pad, y + th + pad], fill=bg_rgba)
         draw.text((x, y), watermark_str, fill=text_color + (255,), font=font)
 
-        result = Image.alpha_composite(img.convert('RGBA'), overlay).convert('RGB')
+        result = Image.alpha_composite(img.convert('RGBA'), overlay)
         buf = io.BytesIO()
-        result.save(buf, format='JPEG', quality=88)
+        if keep_alpha:
+            result.save(buf, format='PNG', optimize=True)
+        else:
+            result.convert('RGB').save(buf, format='JPEG', quality=88)
         return buf.getvalue(), gps_str, watermark_str
 
     except ImportError:

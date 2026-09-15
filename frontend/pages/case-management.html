@@ -548,6 +548,17 @@
   .feed-list::-webkit-scrollbar { width:4px; }
   .feed-list::-webkit-scrollbar-thumb { background:var(--border-light); border-radius:2px; }
   .feed-item { display:flex; gap:12px; }
+  /* 附件縮圖底（2026-09-15）：去背 PNG 的白色字襯在白底上等於看不見
+     ——使用者傳 logo-white.png 上來就是全白一片。棋盤格讓白色內容看得見，
+     同時一眼看得出「這張圖本來就是透明背景」。 */
+  .att-thumb {
+    background-color: #fff;
+    background-image:
+    linear-gradient(45deg, #d5d5d5 25%, transparent 25%, transparent 75%, #d5d5d5 75%),
+    linear-gradient(45deg, #d5d5d5 25%, transparent 25%, transparent 75%, #d5d5d5 75%);
+    background-size: 12px 12px;
+    background-position: 0 0, 6px 6px;
+  }
   .feed-avatar { width:36px; height:36px; min-width:36px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:700; color:#fff; font-family:LINE Seed TW_OTF, sans-serif; flex-shrink:0; margin-top:1px; }
   .feed-bubble { flex:1; background:#F9FAFB; border:1px solid var(--border-light); border-radius:8px; padding:12px 14px; }
   .feed-bubble--comment { background:#fff; border-color:#E0E7FF; }
@@ -3497,8 +3508,8 @@
                               <div style="position:relative">
                                 <template x-if="isImageFile(f)">
                                   <a href="javascript:void(0)" @click="previewAttachmentFile(f)" :title="f.filename">
-                                    <img :src="photoUrl(f.path)" loading="lazy"
-                                         style="width:72px;height:72px;object-fit:cover;border-radius:6px;border:1px solid var(--border-light);display:block">
+                                    <img :src="photoUrl(f.path)" loading="lazy" class="att-thumb"
+                                         style="width:72px;height:72px;object-fit:contain;border-radius:6px;border:1px solid var(--border-light);display:block">
                                   </a>
                                 </template>
                                 <template x-if="!isImageFile(f)">
