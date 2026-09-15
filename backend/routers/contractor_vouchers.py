@@ -27,6 +27,7 @@ from helpers import (
     active_tiers as _active_tiers, current_tier_idx as _current_tier_idx,
     setting_to_active_tiers as _setting_to_active_tiers,
     check_approve_permission, check_reject_permission, check_no_tier_self_approval,
+    cascade_self_tiers, notify_org_chain_notice,
     UnresolvedManagerError, resolve_active_flow_setting, user_has_module,
     guard_case_access, require_any_module,
 
@@ -411,6 +412,13 @@ def submit_contractor_voucher(voucher_no: str, authorization: str = Header(None)
                     f"承攬商匯款申請 {voucher_no}（{vname}）需要您簽核")
             first_tier_usernames.append(a["username"])
 
+    # 知會（2026-09-15）：整條簽核鏈都只有申請人本人時（他已在組織職權頂端），
+    # 最高管理者不再被塞進簽核鏈，改收一則知會通知（仍可隨時以 superadmin 退回）。
+    notify_org_chain_notice(conn, active_tiers, user["username"], voucher_no, voucher_no,
+                            f"承攬商匯款申請 {voucher_no}（{vname}）由 "
+                            f"{user.get('display_name') or user['username']} 依組織職權自行簽核，知會您",
+                            type_="contractor_voucher_approval_notice")
+
     conn.execute(
         "UPDATE contractor_payment_vouchers SET status='待審核', data_json=?, updated_at=? WHERE voucher_no=?",
         (json.dumps(d, ensure_ascii=False), now, voucher_no)
@@ -460,19 +468,26 @@ def approve_contractor_voucher(voucher_no: str, body: dict = Body(default={}), a
         first_pending["approvedAt"] = now
 
         tier_done = all(a.get("status") == "approved" for a in approvers)
+        # 同一人連任多層時一次簽完（2026-09-15，見 helpers/tiered_approval.py::
+        # plan_self_cascade()）：前端跳確認視窗問過才會帶 cascade=true，
+        # 且只吃「剩下未簽核的只有他自己」的連續層，不會替別人做決定。
+        cascaded = (cascade_self_tiers(tiers, ct_idx, user["username"], now, conn=conn)
+                    if (tier_done and (body or {}).get("cascade")) else [])
+        landed = ct_idx + 1 + len(cascaded)
         next_tier_usernames = []
         if tier_done:
-            appr["currentTier"] = ct_idx + 1
-            all_done = (ct_idx + 1) >= len(tiers)
+            appr["currentTier"] = landed
+            all_done = landed >= len(tiers)
             if not all_done:
-                for na in tiers[ct_idx + 1].get("approvers") or []:
+                for na in tiers[landed].get("approvers") or []:
                     _notify(na["username"], "contractor_voucher_approval_request", voucher_no, voucher_no,
-                            f"承攬商匯款申請 {voucher_no}（{vname}）輪到您簽核（第 {ct_idx + 2} 層 / 共 {len(tiers)} 層）")
+                            f"承攬商匯款申請 {voucher_no}（{vname}）輪到您簽核（第 {landed + 1} 層 / 共 {len(tiers)} 層）")
                     next_tier_usernames.append(na["username"])
-                notify_contractor_voucher_next_tier(voucher_no, vname, ct_idx + 2, len(tiers), next_tier_usernames)
+                notify_contractor_voucher_next_tier(voucher_no, vname, landed + 1, len(tiers), next_tier_usernames)
         else:
             all_done = False
         appr["tiers"] = tiers
+        _signed_tier_nos = [x + 1 for x in [ct_idx, *cascaded]]
     else:
         if user["role"] != "superadmin":
             conn.close()
@@ -491,6 +506,7 @@ def approve_contractor_voucher(voucher_no: str, body: dict = Body(default={}), a
             conn.close()
             raise HTTPException(403, self_block_msg)
         all_done = True
+        _signed_tier_nos = []
 
     if all_done:
         appr["approvedBy"]        = user["username"]
@@ -522,7 +538,7 @@ def approve_contractor_voucher(voucher_no: str, body: dict = Body(default={}), a
     conn.close()
     _audit(_tok(authorization), "contractor_voucher.approve", "contractor_payment_voucher", voucher_no,
            f"{voucher_no}（{vname}）", {"allDone": all_done})
-    return {"ok": True, "allDone": all_done}
+    return {"ok": True, "allDone": all_done, "signedTiers": _signed_tier_nos}
 
 
 @router.post("/api/contractor-vouchers/{voucher_no}/revoke-approval")

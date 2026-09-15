@@ -1448,9 +1448,12 @@
 
         canApprove(item) {
           if (!item) return false
-          if (item.requestedBy === this.session.username) return false
           const tiers = item.tiers || []
           if (tiers.length > 0) {
+            // 2026-09-15：有簽核層時**不再一律排除申請人**。組織流程算出來「這一關
+            // 本來就歸他管」的層（他自己是部門/處主管）現在由本人具名簽核，後端
+            // _exclude_requester() 也只保留這種 selfApproval 項目；這裡若照舊擋掉，
+            // 角標會有數字、點進來卻沒有按鈕（2026-09-15 第三輪修過的那種紅點）。
             const cur = item.currentTier ?? 0
             if (cur >= tiers.length) return false
             const approvers = tiers[cur].approvers || []
@@ -1459,6 +1462,7 @@
             return firstPending && this._isMeOrDelegate(firstPending.username)
           }
           // No tiers: superadmin, not self
+          if (item.requestedBy === this.session.username) return false
           return this.session.role === 'superadmin'
         },
 
@@ -1480,11 +1484,14 @@
         },
 
         approverSublabel(tier, tierIdx, a, currentTier) {
-          if (a.status === 'approved') return '已簽核　' + new Date(a.approvedAt).toLocaleString('zh-TW')
+          // 自簽層（組織流程判定這一關歸他管，2026-09-15）標出來，才看得懂
+          // 為什麼申請人自己出現在簽核鏈上
+          const selfTag = a.selfApproval ? '（本人．組織職權）' : ''
+          if (a.status === 'approved') return '已簽核' + selfTag + '　' + new Date(a.approvedAt).toLocaleString('zh-TW')
           if (tierIdx < currentTier) return '已完成'
-          if (tierIdx > currentTier) return '尚未輪到'
+          if (tierIdx > currentTier) return '尚未輪到' + selfTag
           const firstPending = (tier.approvers || []).find(ap => ap.status !== 'approved')
-          return firstPending?.username === a.username ? '等待簽核中' : '等待前一位完成'
+          return (firstPending?.username === a.username ? '等待簽核中' : '等待前一位完成') + selfTag
         },
 
         async doApprove() {
@@ -1525,16 +1532,24 @@
           const isLastTier  = isMultiTier && (item.currentTier ?? 0) === tiers.length - 1
           const willFinish  = !isMultiTier || isLastTier
           const finalStatus = this.isVoucher(item) ? '已核准' : '已送出'
-          const confirmMsg  = willFinish
+          // 同一人連任多層：一次問清楚、一次簽完（2026-09-15）
+          const cascadeNos = window.MotrixApproval.selfCascadeTiers(
+            tiers, item.currentTier ?? 0, this.session.username, this.myDelegatedFor,
+            { completesOnFirst: item.type === 'extra_expense' || item.type === 'extra_expense_change' })
+          const willFinishAll = willFinish ||
+            (cascadeNos.length > 0 && cascadeNos[cascadeNos.length - 1] === tiers.length)
+          let confirmMsg  = willFinishAll
             ? `確認簽核通過 ${this.docTypeLabel(item)} ${item.quoteNo}？\n\n客戶：${item.customer}\n${this.amountLabel(item)}：${this.amountDisplay(item)}\n\n簽核後狀態將更新為「${finalStatus}」。`
             : `確認完成第 ${(item.currentTier ?? 0) + 1} 層簽核（共 ${tiers.length} 層）？\n\n${item.quoteNo}｜${item.customer}`
+          confirmMsg += window.MotrixApproval.cascadeNote(cascadeNos)
           if (!confirm(confirmMsg)) return
           this.actioning = true
           try {
             const r = await fetch(approveUrl, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
-              body: JSON.stringify({ approvedByDisplay: this.session.displayName || this.session.username })
+              body: JSON.stringify({ approvedByDisplay: this.session.displayName || this.session.username,
+                                     cascade: cascadeNos.length > 0 })
             })
             if (!r.ok) {
               const err = await r.json().catch(() => ({}))
@@ -1542,11 +1557,12 @@
               return
             }
             const resp = await r.json()
+            const signedNote = window.MotrixApproval.signedToast(resp.signedTiers)
             if (resp.allDone) {
-              this._toast(`✓ 簽核完成，${finalStatus}`, '#15803D')
+              this._toast(`✓ 簽核完成，${finalStatus}${signedNote}`, '#15803D')
               this.selected = null
             } else {
-              this._toast('✓ 此層已簽核，等待下一層簽核人', '#4338CA')
+              this._toast(`✓ 此層已簽核${signedNote}，等待下一層簽核人`, '#4338CA')
               // Keep selection but refresh so steps update
             }
             await this.loadQueue()
@@ -1706,6 +1722,7 @@
     </div>
   </div>
 
+  <script src="../static/approval-cascade.js"></script>
   <script src="../static/notif.js"></script>
   <script src="../static/sidebar.js"></script>
 </body>

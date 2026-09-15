@@ -794,8 +794,13 @@ function app() {
     },
 
     async approveCompletionNote(n) {
-      if (!confirm(`確定簽核完工單「${n.noteNo}」？`)) return
-      await this._cnAction(n, '/approve', 'POST', '簽核失敗', {})
+      // 同一人連任多層時一次簽完（2026-09-15，見 static/approval-cascade.js）。
+      // 清單資料沒帶 approval.tiers 時算出來是空陣列，行為跟以前一樣。
+      const _appr = n.approval || {}
+      const _casc = window.MotrixApproval.selfCascadeTiers(
+        _appr.tiers || [], _appr.currentTier ?? 0, this.session.username, [])
+      if (!confirm(`確定簽核完工單「${n.noteNo}」？` + window.MotrixApproval.cascadeNote(_casc))) return
+      await this._cnAction(n, '/approve', 'POST', '簽核失敗', { cascade: _casc.length > 0 })
     },
 
     async rejectCompletionNote(n) {
@@ -3568,12 +3573,17 @@ function app() {
     },
 
     async approveShippingNote(n) {
-      if (!confirm(`確定簽核出貨單「${n.noteNo}」？`)) return
+      // 同一人連任多層時一次簽完（2026-09-15，見 static/approval-cascade.js）。
+      // 清單資料沒帶 approval.tiers 時算出來是空陣列，行為跟以前一樣。
+      const _appr = n.approval || {}
+      const _casc = window.MotrixApproval.selfCascadeTiers(
+        _appr.tiers || [], _appr.currentTier ?? 0, this.session.username, [])
+      if (!confirm(`確定簽核出貨單「${n.noteNo}」？` + window.MotrixApproval.cascadeNote(_casc))) return
       try {
         const r = await fetch(`/api/shipping-notes/${n.noteNo}/approve`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
-          body: JSON.stringify({})
+          body: JSON.stringify({ cascade: _casc.length > 0 })
         })
         if (!r.ok) { alert((await r.json()).detail || '簽核失敗'); return }
         await this.loadShippingNotes(this.selected?.quote_no)
@@ -3771,12 +3781,17 @@ function app() {
     },
 
     async approveContractorVoucher(v) {
-      if (!confirm(`確定簽核匯款申請「${v.voucherNo}」？`)) return
+      // 同一人連任多層時一次簽完（2026-09-15，見 static/approval-cascade.js）。
+      // 清單資料沒帶 approval.tiers 時算出來是空陣列，行為跟以前一樣。
+      const _appr = v.approval || {}
+      const _casc = window.MotrixApproval.selfCascadeTiers(
+        _appr.tiers || [], _appr.currentTier ?? 0, this.session.username, [])
+      if (!confirm(`確定簽核匯款申請「${v.voucherNo}」？` + window.MotrixApproval.cascadeNote(_casc))) return
       try {
         const r = await fetch(`/api/contractor-vouchers/${v.voucherNo}/approve`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
-          body: JSON.stringify({})
+          body: JSON.stringify({ cascade: _casc.length > 0 })
         })
         if (!r.ok) { alert((await r.json()).detail || '簽核失敗'); return }
         await this.loadContractorVouchers(this.selected?.quote_no)
@@ -4118,12 +4133,17 @@ function app() {
     },
 
     async approveInvoiceVoucher(v) {
-      if (!confirm(`確定簽核開票申請憑據「${v.voucherNo}」？`)) return
+      // 同一人連任多層時一次簽完（2026-09-15，見 static/approval-cascade.js）。
+      // 清單資料沒帶 approval.tiers 時算出來是空陣列，行為跟以前一樣。
+      const _appr = v.approval || {}
+      const _casc = window.MotrixApproval.selfCascadeTiers(
+        _appr.tiers || [], _appr.currentTier ?? 0, this.session.username, [])
+      if (!confirm(`確定簽核開票申請憑據「${v.voucherNo}」？` + window.MotrixApproval.cascadeNote(_casc))) return
       try {
         const r = await fetch(`/api/invoice-vouchers/${v.voucherNo}/approve`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
-          body: JSON.stringify({})
+          body: JSON.stringify({ cascade: _casc.length > 0 })
         })
         if (!r.ok) { alert((await r.json()).detail || '簽核失敗'); return }
         await this.loadInvoiceVouchers(this.selected?.quote_no)

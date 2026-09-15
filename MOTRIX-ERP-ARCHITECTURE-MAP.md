@@ -154,7 +154,7 @@ SQLite (WAL)  motrix_erp.db（正式）+ motrix_erp_demo.db（demo 隔離）
 - 前端：`org-structure.html`
 - 資料表：`divisions`、`departments`
 - API：`/api/org/*`（`org_structure.py:40-228`）
-- 重點：僅二層（處→部門），`manager_user_id` 目前已接入簽核流程動態解析（`helpers/tiered_approval.py:77-148 resolve_department_manager/resolve_division_manager`），QUICK.md §11 舊版寫「尚未接進簽核」已過時，實際上已完成。
+- 重點：僅二層（處→部門），`manager_user_id` 目前已接入簽核流程動態解析（`helpers/tiered_approval.py:85-183 resolve_department_manager/resolve_division_manager/resolve_submitter_org_chain/submitter_manager_tiers`），QUICK.md §11 舊版寫「尚未接進簽核」已過時，實際上已完成。**2026-09-15 起這兩個欄位就是送審時「內建簽核層」的來源**：部門主管 →（申請人本身就是部門主管時再加）處主管，兩者皆為本人時整條鏈自簽、改知會最高管理者（見 QUICK.md §5.3）——所以主管欄位填錯會直接改變誰要簽核。
 
 ### 2.14 人資 / 薪資 `payslips.py` (445行)
 - 前端：`payslips.html`、`payslip-form.html`

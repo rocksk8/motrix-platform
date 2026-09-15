@@ -45,6 +45,7 @@ from helpers import (
     active_tiers as _active_tiers, current_tier_idx as _current_tier_idx,
     setting_to_active_tiers as _setting_to_active_tiers,
     check_approve_permission, check_reject_permission, check_no_tier_self_approval,
+    plan_self_cascade, notify_org_chain_notice,
     UnresolvedManagerError, resolve_active_flow_setting,
     save_document_files, delete_document_file,
 )
@@ -371,6 +372,12 @@ def submit_extra_expense(quote_no: str, exp_id: int, authorization: str = Header
         for a in (tiers[0].get("approvers") or []):
             _notify(a["username"], "extra_expense_approval_request", str(exp_id), quote_no,
                     f"案件 {quote_no} 的額外支出 {label} 需要您簽核")
+        # 知會（2026-09-15）：整條簽核鏈都只有申請人本人時（他已在組織職權頂端），
+        # 最高管理者不再被塞進簽核鏈，改收一則知會通知（仍可隨時以 superadmin 退回）。
+        notify_org_chain_notice(conn, tiers, user["username"], str(exp_id), quote_no,
+                                f"案件 {quote_no} 的額外支出 {label} 由 "
+                                f"{user.get('display_name') or user['username']} 依組織職權自行簽核，知會您",
+                                type_="extra_expense_approval_notice")
         _audit(_tok(authorization), "extra_expense.submit", "quotation", quote_no,
                f"{quote_no} 額外支出 #{exp_id} {label} 送審", {"tierCount": len(tiers)})
         return {"ok": True, "status": "待審核", "tierCount": len(tiers)}
@@ -398,10 +405,22 @@ def approve_extra_expense(quote_no: str, exp_id: int, body: dict = Body(default=
         appr = json.loads(row["approval_json"] or "{}")
         tiers = _active_tiers(appr)
         ct = _current_tier_idx(appr)
-        err = check_no_tier_self_approval(conn, appr, user)
-        if err:
-            raise HTTPException(403, err)
-        check_approve_permission(tiers, ct, user["username"], conn)
+        # ⚠️ 2026-09-15 修正兩件事：
+        # ① `check_approve_permission()` 的回傳值原本**整個被丟掉**（其他 router 都是
+        #    `ok, code, msg = ...` 再 raise），等於這支端點的當層簽核人檢查形同虛設，
+        #    任何過得了 _guard_case() 的人都簽得掉任何一層。
+        # ② `check_no_tier_self_approval()` 原本無條件套用，但它是「沒有簽核層設定」
+        #    時的 fallback 規則（其他 router 都只在 no-tier 分支呼叫）。有簽核層時
+        #    照樣擋，會讓 2026-09-15 起組織流程算出「申請人本人就是該層主管」的
+        #    自簽層永遠簽不掉。
+        if tiers:
+            ok, status_code, err_msg = check_approve_permission(tiers, ct, user["username"], conn)
+            if not ok:
+                raise HTTPException(status_code, err_msg)
+        else:
+            err = check_no_tier_self_approval(conn, appr, user)
+            if err:
+                raise HTTPException(403, err)
 
         now = datetime.now().isoformat(timespec="seconds")
         display = user.get("display_name") or user["username"]
@@ -410,10 +429,23 @@ def approve_extra_expense(quote_no: str, exp_id: int, body: dict = Body(default=
                 a["approvedAt"] = now
                 a["approvedByDisplay"] = display
                 break
+        # 同一人連任多層時一次簽完（2026-09-15）：這張單的語意是「當層任一人簽即
+        # 過層」，所以往下只要他也是該層簽核人之一就能一起蓋掉（見 plan_self_cascade()
+        # 的 tier_completes_on_first）。前端確認過才會帶 cascade=true。
+        cascaded = (plan_self_cascade(tiers, ct, user["username"], conn=conn,
+                                      tier_completes_on_first=True)
+                    if (body or {}).get("cascade") else [])
+        for ti in cascaded:
+            for a in (tiers[ti].get("approvers") or []):
+                if a.get("username") == user["username"] or not a.get("approvedAt"):
+                    a["approvedAt"] = now
+                    a["approvedByDisplay"] = display
+                    a["cascadedFrom"] = ct
+                    break
 
         # 這一層是否已滿足（沿用既有單據的「當層任一人簽即通過」語意）
         appr["tiers"] = tiers
-        appr["currentTier"] = ct + 1
+        appr["currentTier"] = ct + 1 + len(cascaded)
         done = appr["currentTier"] >= len(tiers)
         status = "已核准" if done else "簽核中"
         appr.setdefault("history", []).append(
@@ -887,10 +919,22 @@ def approve_change_request(quote_no: str, exp_id: int, body: dict = Body(default
         appr = _jcol(row, "change_approval_json")
         tiers = _active_tiers(appr)
         ct = _current_tier_idx(appr)
-        err = check_no_tier_self_approval(conn, appr, user)
-        if err:
-            raise HTTPException(403, err)
-        check_approve_permission(tiers, ct, user["username"], conn)
+        # ⚠️ 2026-09-15 修正兩件事：
+        # ① `check_approve_permission()` 的回傳值原本**整個被丟掉**（其他 router 都是
+        #    `ok, code, msg = ...` 再 raise），等於這支端點的當層簽核人檢查形同虛設，
+        #    任何過得了 _guard_case() 的人都簽得掉任何一層。
+        # ② `check_no_tier_self_approval()` 原本無條件套用，但它是「沒有簽核層設定」
+        #    時的 fallback 規則（其他 router 都只在 no-tier 分支呼叫）。有簽核層時
+        #    照樣擋，會讓 2026-09-15 起組織流程算出「申請人本人就是該層主管」的
+        #    自簽層永遠簽不掉。
+        if tiers:
+            ok, status_code, err_msg = check_approve_permission(tiers, ct, user["username"], conn)
+            if not ok:
+                raise HTTPException(status_code, err_msg)
+        else:
+            err = check_no_tier_self_approval(conn, appr, user)
+            if err:
+                raise HTTPException(403, err)
 
         now = datetime.now().isoformat(timespec="seconds")
         display = user.get("display_name") or user["username"]
@@ -899,9 +943,22 @@ def approve_change_request(quote_no: str, exp_id: int, body: dict = Body(default
                 a["approvedAt"] = now
                 a["approvedByDisplay"] = display
                 break
+        # 同一人連任多層時一次簽完（2026-09-15）：這張單的語意是「當層任一人簽即
+        # 過層」，所以往下只要他也是該層簽核人之一就能一起蓋掉（見 plan_self_cascade()
+        # 的 tier_completes_on_first）。前端確認過才會帶 cascade=true。
+        cascaded = (plan_self_cascade(tiers, ct, user["username"], conn=conn,
+                                      tier_completes_on_first=True)
+                    if (body or {}).get("cascade") else [])
+        for ti in cascaded:
+            for a in (tiers[ti].get("approvers") or []):
+                if a.get("username") == user["username"] or not a.get("approvedAt"):
+                    a["approvedAt"] = now
+                    a["approvedByDisplay"] = display
+                    a["cascadedFrom"] = ct
+                    break
 
         appr["tiers"] = tiers
-        appr["currentTier"] = ct + 1
+        appr["currentTier"] = ct + 1 + len(cascaded)
         done = appr["currentTier"] >= len(tiers)
         appr.setdefault("history", []).append(
             {"at": now, "by": user["username"], "byDisplay": display,

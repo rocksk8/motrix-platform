@@ -112,12 +112,36 @@ def resolve_division_manager(conn, division_id: int) -> Optional[dict]:
     return {"userId": row["id"], "username": row["username"], "displayName": row["display_name"] or row["username"]}
 
 
-def resolve_submitter_manager_chain(conn, requester_username: str) -> dict:
-    """申請人部門主管自動簽核鏈（2026-08-22i）：先查申請人自己的部門主管；
-    若主管就是申請人自己（申請人身兼部門主管），改查該部門所屬處的主管；
-    若處主管也是申請人自己（申請人身兼處主管），改查其他在職的超級管理員
-    （逃生條款，比照 check_no_tier_self_approval 的既有寫法，避免永久卡死）。
-    任一步驟解析不出來就 raise UnresolvedManagerError，訊息說明具體原因。"""
+ORG_ROLE_LABELS = {
+    "department_manager": "部門主管",
+    "division_manager":   "處主管",
+}
+
+
+def resolve_submitter_org_chain(conn, requester_username: str) -> list:
+    """申請人的**組織簽核鏈**，由下往上一層一筆（部門主管 → 處主管），
+    2026-09-15 改版（使用者裁示：「簽核要按照組織流程簽核…他自己簽核兩次，
+    我這邊只做知會」）。
+
+    規則：
+    1. 先解析申請人所屬部門的主管，這是第一層。
+    2. **主管就是申請人本人時不再「跳過換人」，而是由本人簽自己這一層**
+       （回傳的項目帶 `selfApproval=True`），並繼續往上加一層處主管。
+    3. 處主管也是本人（申請人已在組織職權的頂端）→ 鏈到此為止，**不再指派
+       其他超級管理員當簽核人**；改由呼叫端用 `org_chain_notice_usernames()`
+       知會最高管理者（見該函式）。
+    4. 只要某一層解析到的不是本人，該層就是最後一層（有人比他高就由那個人簽，
+       不需要再往上疊）。
+
+    ⚠️ 2026-08-22i~2026-09-14 的舊行為是「身兼主管就往上換人、換到頂就抓一個
+    別的超級管理員」——結果是**高階主管送的單一律落到另一位最高管理者頭上**，
+    而且他自己在組織上的那兩關完全沒有留下簽核紀錄。新行為讓每一關都留痕
+    （本人簽的那幾關標 `selfApproval`），最高管理者退居知會。
+
+    解析不出第一層（沒歸部門／部門被刪／部門沒主管）仍然 raise
+    UnresolvedManagerError 擋下送審——那是組織設定本身缺漏。但**往上那一層
+    解析不到時不擋**（沒有處、處沒設主管）：第一層已經成立，流程不會空掉，
+    為了一個組織架構的缺口擋住所有送審反而更糟。"""
     req = conn.execute(
         "SELECT id, username, department_id FROM users WHERE username=? AND active=1",
         (requester_username,)
@@ -132,25 +156,52 @@ def resolve_submitter_manager_chain(conn, requester_username: str) -> dict:
     mgr = resolve_department_manager(conn, dept["id"])
     if not mgr:
         raise UnresolvedManagerError(f"「{dept['name']}」尚未指定主管（或主管帳號已停用），請聯絡管理員先設定部門主管")
+    chain = [{**mgr, "orgRole": "department_manager", "orgUnit": dept["name"]}]
     if mgr["username"] != requester_username:
-        return mgr
+        return chain
 
-    # 申請人自己就是部門主管 → 改由處主管簽核
+    # 申請人自己就是部門主管 → 他簽自己那一層，再往上加一層處主管
+    div_row = conn.execute("SELECT name FROM divisions WHERE id=?", (dept["division_id"],)).fetchone() \
+        if dept["division_id"] else None
     div_mgr = resolve_division_manager(conn, dept["division_id"]) if dept["division_id"] else None
-    if not div_mgr:
-        raise UnresolvedManagerError(f"申請人是「{dept['name']}」主管，需改由處主管簽核，但該處尚未指定主管（或主管帳號已停用）")
-    if div_mgr["username"] != requester_username:
-        return div_mgr
+    if div_mgr:
+        chain.append({**div_mgr, "orgRole": "division_manager",
+                      "orgUnit": div_row["name"] if div_row else ""})
+    return chain
 
-    # 申請人自己就是處主管 → 改由其他在職超級管理員簽核
-    other_admin = conn.execute(
-        "SELECT id, username, display_name FROM users WHERE role='superadmin' AND active=1 AND username!=? LIMIT 1",
+
+def submitter_manager_tiers(conn, requester_username: str) -> list:
+    """把 resolve_submitter_org_chain() 的組織鏈轉成「一層一個人」的執行期
+    tier approvers 清單（外層 list = 層，內層 list = 該層簽核人）。
+    本人要簽的那幾層標 `selfApproval=True`，供 UI 顯示「您同時為本層簽核人」
+    與 quotations.py::_exclude_requester() 判斷「這一筆不可以被剔除」。"""
+    return [
+        [{**m, "selfApproval": m["username"] == requester_username,
+          "status": "pending", "approvedAt": None}]
+        for m in resolve_submitter_org_chain(conn, requester_username)
+    ]
+
+
+def org_chain_notice_usernames(conn, tiers: list, requester_username: str) -> list:
+    """整份簽核流程**每一層都只有申請人本人**（組織職權已到頂，例如處主管送的單）
+    時，回傳應該「知會」的其他在職超級管理員帳號清單；否則回傳空清單。
+
+    這是 2026-09-15 改版拿掉「抓一個別的超級管理員來簽」之後的補償機制：最高
+    管理者不再被迫當簽核人，但不能因此變成完全不知情——單子送出時發一則知會
+    通知，他仍可用 superadmin 的退回權限介入（check_reject_permission() 允許
+    superadmin 隨時退回）。純判斷、不發通知，發送端見 helpers/audit.py::
+    notify_org_chain_notice()。"""
+    if not requester_username or not tiers:
+        return []
+    for t in tiers:
+        for a in (t.get("approvers") or []):
+            if (a.get("username") or "") != requester_username:
+                return []
+    rows = conn.execute(
+        "SELECT username FROM users WHERE role='superadmin' AND active=1 AND username!=?",
         (requester_username,)
-    ).fetchone()
-    if not other_admin:
-        raise UnresolvedManagerError("申請人是處主管，需改由超級管理員簽核，但找不到其他在職的超級管理員")
-    return {"userId": other_admin["id"], "username": other_admin["username"],
-            "displayName": other_admin["display_name"] or other_admin["username"]}
+    ).fetchall()
+    return [r["username"] for r in rows]
 
 
 def resolve_tier_approvers(conn, tier_setting: dict, requester_username: str = None) -> list:
@@ -166,8 +217,14 @@ def resolve_tier_approvers(conn, tier_setting: dict, requester_username: str = N
     for a in (tier_setting.get("approvers") or []):
         source = a.get("sourceType")
         if source == "submitter_manager":
-            mgr = resolve_submitter_manager_chain(conn, requester_username)
-            resolved.append({**mgr, "status": "pending", "approvedAt": None})
+            # 舊設定相容：內建的「申請人部門主管」層 2026-09-15 起改由
+            # setting_to_active_tiers() 直接展開成組織鏈的多層（見
+            # submitter_manager_tiers()），這個分支只剩下「歷史設定值裡把
+            # submitter_manager 手動塞進自訂層」的情況，取組織鏈第一層
+            # （申請人的部門主管，可能就是本人）。
+            mgr = resolve_submitter_org_chain(conn, requester_username)[0]
+            resolved.append({**mgr, "selfApproval": mgr["username"] == requester_username,
+                             "status": "pending", "approvedAt": None})
         elif source == "department_manager":
             dept_id = a.get("departmentId")
             dept_row = conn.execute("SELECT name FROM departments WHERE id=?", (dept_id,)).fetchone()
@@ -178,12 +235,13 @@ def resolve_tier_approvers(conn, tier_setting: dict, requester_username: str = N
                     f"此層設定為「{dept_name}」主管自動簽核，但目前該部門未指定主管"
                     f"（或主管帳號已停用），請聯絡管理員先設定部門主管"
                 )
-            # 申請人剛好就是這個部門的主管時跳過，不加入這層——比照
-            # _exclude_requester()／submitter_manager 鏈的既有原則：申請人不得
-            # 需要簽核自己的申請（2026-08-24 安全審查修正）。該層若因此變空，
-            # setting_to_active_tiers() 的空層過濾會自然跳過整層。
-            if mgr["username"] != requester_username:
-                resolved.append({**mgr, "status": "pending", "approvedAt": None})
+            # 申請人剛好就是這個部門的主管時**由他本人簽這一層**（標
+            # selfApproval），2026-09-15 起比照組織鏈的新規則。
+            # ⚠️ 2026-08-24～2026-09-14 是「靜默剔除」——結果是這道關卡整層消失
+            # （空層會被 setting_to_active_tiers() 跳過），等於管理員設的一關
+            # 在特定人送審時無聲蒸發，連紀錄都沒有；改成本人具名簽核比較安全。
+            resolved.append({**mgr, "selfApproval": mgr["username"] == requester_username,
+                             "status": "pending", "approvedAt": None})
         elif source == "division_manager":
             div_id = a.get("divisionId")
             div_row = conn.execute("SELECT name FROM divisions WHERE id=?", (div_id,)).fetchone()
@@ -194,8 +252,8 @@ def resolve_tier_approvers(conn, tier_setting: dict, requester_username: str = N
                     f"此層設定為「{div_name}」處主管自動簽核，但目前該處未指定主管"
                     f"（或主管帳號已停用），請聯絡管理員先設定處主管"
                 )
-            if mgr["username"] != requester_username:
-                resolved.append({**mgr, "status": "pending", "approvedAt": None})
+            resolved.append({**mgr, "selfApproval": mgr["username"] == requester_username,
+                             "status": "pending", "approvedAt": None})
         else:
             resolved.append({
                 "userId":      a.get("userId"),
@@ -227,12 +285,17 @@ def setting_to_active_tiers(setting: dict, conn, requester_username: str = None)
     （避免自簽），但這層仍會以「approvers: []」的空層之姿留在回傳結果裡——
     check_approve_permission() 對空層永遠回傳「無待簽核人員」，任何人（含
     superadmin）都無法通過，等同卡死。改成依「展開後」的結果過濾，讓這層照
-    docstring 原意直接跳過，並重新編號 order 讓陣列保持連續。"""
-    tiers = list(setting.get("tiers") or [])
-    if setting.get("includeSubmitterManagerTier", True):
-        tiers = [{"approvers": [{"sourceType": "submitter_manager"}]}] + tiers
+    docstring 原意直接跳過，並重新編號 order 讓陣列保持連續。
+
+    ⚠️ 2026-09-15 改版：內建那一層不再是「一層一個人」，而是展開成申請人的
+    **組織鏈**（部門主管 →（本人身兼部門主管時再加）處主管），見
+    resolve_submitter_org_chain()。一般員工的結果跟以前完全一樣（只有部門主管
+    那一層）；差別只出現在「申請人自己就是主管」的情況。"""
     result = []
-    for t in tiers:
+    if setting.get("includeSubmitterManagerTier", True):
+        for approvers in submitter_manager_tiers(conn, requester_username):
+            result.append({"order": len(result), "approvers": approvers})
+    for t in (setting.get("tiers") or []):
         if not (t.get("approvers") or []):
             continue
         resolved = resolve_tier_approvers(conn, t, requester_username)
@@ -289,6 +352,57 @@ def check_approve_permission(tiers: list, ct_idx: int, username: str, conn=None)
         next_name = fp.get("displayName") or fp["username"]
         return False, 403, f"請等待 {next_name} 先完成簽核（簽核順序固定）"
     return True, None, None
+
+
+def plan_self_cascade(tiers: list, ct_idx: int, username: str, conn=None,
+                      tier_completes_on_first: bool = False) -> list:
+    """同一個人連續當好幾層簽核人時，**從 ct_idx 的下一層起**算出他可以一口氣
+    一起完成的層索引清單（2026-09-15 使用者要求：「某位主管同時為兩層以上簽核人，
+    只要跳通知做確認，可直接簽核兩次以上，避免重複簽核兩次的狀態」）。
+
+    純計算、不改動 tiers。條件刻意保守，只收「簽下去之後這一層一定完成」的層：
+    - 預設語意（報價單／出貨單／請款單…：當層所有人都簽完才換層）：該層**剩下
+      的未簽核人只有他自己**（或他目前代理的人）。若還有別人要簽，往下一層跨過去
+      就等於替別人決定，一律停在這裡。
+    - `tier_completes_on_first=True`（案件額外支出：當層任一人簽即通過）：
+      他是該層簽核人之一即可。
+
+    回傳的是連續的層索引（例：ct_idx=0、回 [1] 代表第 2 層也可以一起簽掉）。"""
+    delegated_for = active_delegators_for(conn, username)
+
+    def _matches(a):
+        return (a.get("username") == username) or (a.get("username") in delegated_for)
+
+    plan = []
+    idx = ct_idx + 1
+    while idx < len(tiers):
+        approvers = (tiers[idx] or {}).get("approvers") or []
+        pending = [a for a in approvers if a.get("status") != "approved"]
+        if not pending:
+            break
+        if tier_completes_on_first:
+            if not any(_matches(a) for a in pending):
+                break
+        elif not all(_matches(a) for a in pending):
+            break
+        plan.append(idx)
+        idx += 1
+    return plan
+
+
+def cascade_self_tiers(tiers: list, ct_idx: int, username: str, now: str, conn=None) -> list:
+    """plan_self_cascade() 的「預設語意」版本 ＋ 實際蓋章：把可以一起簽掉的層
+    裡屬於自己（或被代理人）的未簽核項目標記為 approved，回傳被一併簽掉的層索引。
+    呼叫端只要把 currentTier 推進 `1 + len(回傳值)` 層，其餘（通知下一層、
+    all_done 判定）沿用原本的寫法即可。"""
+    plan = plan_self_cascade(tiers, ct_idx, username, conn=conn)
+    for ti in plan:
+        for a in (tiers[ti].get("approvers") or []):
+            if a.get("status") != "approved":
+                a["status"] = "approved"
+                a["approvedAt"] = now
+                a["cascadedFrom"] = ct_idx
+    return plan
 
 
 def check_reject_permission(tiers: list, ct_idx: int, user: dict, conn=None):

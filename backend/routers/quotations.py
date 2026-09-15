@@ -30,6 +30,7 @@ from helpers import (
     sync_daily_task_for_case_stage, delete_daily_task_for_case_stage,
     check_approve_permission, check_reject_permission, check_no_tier_self_approval,
     resolve_tier_approvers, UnresolvedManagerError, resolve_active_flow_setting,
+    submitter_manager_tiers, cascade_self_tiers, notify_org_chain_notice,
     save_document_files, delete_document_file,
     notify_case_close_blocked, notify_case_change_requested,
     norm_at, active_delegators_for, user_has_module, can_see_financial,
@@ -182,13 +183,17 @@ def _setting_to_active_tiers(setting: dict, conn, requester_username: str = None
     過濾條件改成看「展開後」的解析結果，不是設定裡原始的 approver 項目數——後者
     對 department_manager/division_manager 一定恆真，若解析到的主管剛好就是申請人
     自己（resolve_tier_approvers() 會靜默排除以避免自簽），先前會留下一個
-    approvers:[] 的空層卡死流程（任何人都無法通過該層）。"""
+    approvers:[] 的空層卡死流程（任何人都無法通過該層）。
+
+    ⚠️ 2026-09-15：內建那一層改成展開申請人的**組織鏈**（部門主管 →（本人身兼
+    部門主管時再加）處主管），跟共用版 submitter_manager_tiers() 同一支實作。"""
     tiers = list(setting.get("tiers") or [])
     if not tiers:
         tiers = _steps_to_tiers(setting.get("steps") or [])
-    if setting.get("includeSubmitterManagerTier", True):
-        tiers = [{"approvers": [{"sourceType": "submitter_manager"}]}] + tiers
     result = []
+    if setting.get("includeSubmitterManagerTier", True):
+        for approvers in submitter_manager_tiers(conn, requester_username):
+            result.append({"order": len(result), "approvers": approvers})
     for t in tiers:
         if not (t.get("approvers") or []):
             continue
@@ -480,12 +485,19 @@ def _deny_if_case_locked_unsupported(conn, quote_no: str, authorization: str = N
 def _exclude_requester(tiers: list, requester: str) -> list:
     """Drop the requester from tier approver lists — a submitter must never end up
     required to approve their own quotation. Tiers left with no approvers after
-    removal are dropped entirely so the flow skips straight past them."""
+    removal are dropped entirely so the flow skips straight past them.
+
+    ⚠️ 2026-09-15 例外：標了 `selfApproval` 的項目**不剔除**。那是組織流程算出來
+    「這一關本來就歸他管」的層（他自己是部門/處主管，見 tiered_approval.py::
+    resolve_submitter_org_chain()），使用者裁示這種情況要由本人具名簽核、最高
+    管理者只做知會。這裡剔除掉的話那一層會整層消失，等於關卡無聲蒸發。
+    手動挑人挑到申請人本人的層仍然照舊剔除。"""
     if not requester:
         return tiers
     result = []
     for t in tiers:
-        approvers = [a for a in (t.get("approvers") or []) if a.get("username") != requester]
+        approvers = [a for a in (t.get("approvers") or [])
+                     if a.get("username") != requester or a.get("selfApproval")]
         if approvers:
             result.append({**t, "approvers": approvers})
     return result
@@ -566,6 +578,19 @@ def _build_approval_tiers_and_notify(q: dict, appr: dict, quote_no: str, is_new_
                     _appr_labels.append(adm["username"])
             notify_approval_request(quote_no, cname, _appr_names)
 
+        # 知會（2026-09-15）：整條簽核鏈都只有申請人本人時（他已是組織職權頂端，
+        # 例如處主管解鎖改版自己的報價單），最高管理者不再被塞進簽核鏈當簽核人，
+        # 改成收一則知會通知——他仍可隨時以 superadmin 身分退回。
+        if tiers and requester:
+            _nconn = get_db()
+            try:
+                notify_org_chain_notice(
+                    _nconn, tiers, requester, quote_no, quote_no,
+                    f"報價單 {quote_no}{label}（{cname}）由 "
+                    f"{appr.get('requestedByDisplay') or requester} 依組織職權自行簽核，知會您")
+            finally:
+                _nconn.close()
+
         # If this is a resubmission after rejection, also send confirmation to requester
         if is_revision and requester:
             orig_no = (q.get("returnInfo") or {}).get("originalQuoteNo") or quote_no
@@ -608,6 +633,10 @@ class WriteOffApproveIn(BaseModel):
 class ApprovalActionBody(BaseModel):
     approvedByDisplay: Optional[str] = None
     note:              Optional[str]  = None
+    # 同一個人連續當好幾層簽核人時，前端跳確認視窗問過之後帶 cascade=true，
+    # 後端一次把那幾層一起簽掉（2026-09-15，見 helpers/tiered_approval.py::
+    # plan_self_cascade()）。預設 false：沒問過就不會替使用者多簽。
+    cascade:           Optional[bool] = False
 
 
 # ── Quotation sequence ────────────────────────────────────────────────────────
@@ -4171,17 +4200,23 @@ def approve_quotation(quote_no: str, body: ApprovalActionBody, authorization: st
         my_entry["approvedAt"] = now
 
         tier_done = all(a.get("status") == "approved" for a in approvers)
+        cascaded = []
         if tier_done:
-            appr["currentTier"] = ct_idx + 1
-            all_done = (ct_idx + 1) >= len(tiers)
+            # 同一人連任多層時一次簽完（2026-09-15）：前端確認過才會帶 cascade，
+            # 且只吃「剩下未簽的只有他自己」的連續層，不會替別人做決定。
+            if body.cascade:
+                cascaded = cascade_self_tiers(tiers, ct_idx, user["username"], now, conn=conn)
+            landed = ct_idx + 1 + len(cascaded)
+            appr["currentTier"] = landed
+            all_done = landed >= len(tiers)
             if not all_done:
-                next_tier = tiers[ct_idx + 1]
+                next_tier = tiers[landed]
                 _next_names = []
                 for na in next_tier.get("approvers") or []:
                     _notify(na["username"], "approval_request", quote_no, quote_no,
-                            f"報價單 {quote_no}（{cname}）輪到您簽核（第 {ct_idx + 2} 層 / 共 {len(tiers)} 層）")
+                            f"報價單 {quote_no}（{cname}）輪到您簽核（第 {landed + 1} 層 / 共 {len(tiers)} 層）")
                     _next_names.append(na["username"])
-                notify_next_tier(quote_no, cname, ct_idx + 2, len(tiers), _next_names)
+                notify_next_tier(quote_no, cname, landed + 1, len(tiers), _next_names)
         else:
             all_done = False
 
@@ -4189,7 +4224,9 @@ def approve_quotation(quote_no: str, body: ApprovalActionBody, authorization: st
         appr["tiers"] = tiers
         appr.pop("steps", None)
         appr.pop("currentStep", None)
-        detail_status = f"第 {ct_idx + 1} 層 {my_entry.get('displayName', user['username'])} 已簽核"
+        _signed_tier_nos = [i + 1 for i in [ct_idx, *cascaded]]
+        detail_status = (f"第 {'、'.join(str(n) for n in _signed_tier_nos)} 層 "
+                         f"{my_entry.get('displayName', user['username'])} 已簽核")
     else:
         # no tiers on this quotation — check global settings first
         if user["role"] != "superadmin":
@@ -4217,6 +4254,7 @@ def approve_quotation(quote_no: str, body: ApprovalActionBody, authorization: st
             raise HTTPException(403, self_block_msg)
         all_done      = True
         detail_status = "超級管理員簽核"
+        _signed_tier_nos = []
 
     if all_done:
         appr["approvedBy"]        = user["username"]
@@ -4239,7 +4277,7 @@ def approve_quotation(quote_no: str, body: ApprovalActionBody, authorization: st
     conn.close()
     _audit(_tok(authorization), "quotation.approve", "quotation", quote_no,
            f"{quote_no}（{cname}）", {"allDone": all_done, "status": detail_status})
-    return {"ok": True, "allDone": all_done}
+    return {"ok": True, "allDone": all_done, "signedTiers": _signed_tier_nos}
 
 
 @router.post("/api/quotations/{quote_no}/reject")

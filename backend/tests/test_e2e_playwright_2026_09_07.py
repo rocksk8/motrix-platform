@@ -83,7 +83,8 @@ def test_login_create_submit_approve_smoke(live_server, make_user):
     → 另一位 superadmin 登入 → 開啟同一張報價單 → 簽核 → 狀態變成「已送出」。
     無簽核流程設定時系統規則是「禁止申請人自簽」，所以刻意用兩個不同帳號。
 
-    簽核解析走 `helpers/tiered_approval.py::resolve_submitter_manager_chain()`
+    簽核解析走 `helpers/tiered_approval.py::resolve_submitter_org_chain()`
+    （2026-09-15 前叫 resolve_submitter_manager_chain()，當時回傳單一位簽核人）
     ——申請人部門主管自動簽核鏈是動態解析（非送審當下快照），申請人必須歸屬
     某個部門才解得出來，見該函式 docstring；這裡直接把建立者掛到一個以核准者
     為主管的部門下，讓核准者自然就是解析出來的簽核人。"""

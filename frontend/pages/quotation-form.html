@@ -2464,7 +2464,10 @@
           // 除非申請人是目前唯一在職的超級管理員（見 quotations.py approve_quotation()）
           return this.session.role === 'superadmin'
         }
-        if (appr.requestedBy === this.session.username) return false
+        // 2026-09-15：有簽核層時不再一律排除申請人——組織流程算出「這一關本來就
+        // 歸他管」的層（他自己是部門/處主管）現在由本人具名簽核（後端
+        // _exclude_requester() 只保留這種 selfApproval 項目）。判斷一律以
+        // 「當層第一個未簽核的人是不是我」為準，跟後端 check_approve_permission() 同義。
         const ct = appr.currentTier ?? 0
         if (ct >= tiers.length) return false
         // sequential within tier: only the first unapproved approver may act
@@ -3144,11 +3147,17 @@ window.addEventListener('load',function(){
         }
         const req = this.q.approval
         const reqDisplay = req?.requestedByDisplay || req?.requestedBy || ''
-        if (!confirm(`確認簽核通過此報價單？\n\n申請人：${reqDisplay}\n報價單：${this.q.quoteNo}`)) return
+        // 同一人連任多層時一次簽完（2026-09-15）：確認訊息先講清楚會一併簽掉哪幾層
+        const cascadeNos = window.MotrixApproval.selfCascadeTiers(
+          req?.tiers || [], req?.currentTier ?? 0, this.session.username, [])
+        const confirmMsg = `確認簽核通過此報價單？\n\n申請人：${reqDisplay}\n報價單：${this.q.quoteNo}`
+          + window.MotrixApproval.cascadeNote(cascadeNos)
+        if (!confirm(confirmMsg)) return
         const r = await fetch(`${API}/quotations/${encodeURIComponent(this.q.quoteNo)}/approve`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
-          body: JSON.stringify({ approvedByDisplay: this.session.displayName || this.session.username })
+          body: JSON.stringify({ approvedByDisplay: this.session.displayName || this.session.username,
+                                 cascade: cascadeNos.length > 0 })
         })
         if (!r.ok) {
           const err = await r.json().catch(() => ({ detail: '未知錯誤' }))
@@ -3158,7 +3167,8 @@ window.addEventListener('load',function(){
         const data = await r.json()
         await this.loadQuote()
         const msg = document.createElement('div')
-        msg.textContent = data.allDone ? '✓ 簽核完成，報價單已送出' : '✓ 本層簽核完成，等待下一層簽核'
+        const signedNote = window.MotrixApproval.signedToast(data.signedTiers)
+        msg.textContent = (data.allDone ? '✓ 簽核完成，報價單已送出' : '✓ 本層簽核完成，等待下一層簽核') + signedNote
         msg.style.cssText = 'position:fixed;bottom:32px;left:50%;transform:translateX(-50%);background:#15803D;color:#fff;padding:10px 22px;border-radius:8px;font-size:13px;z-index:99999;font-family:LINE Seed TW_OTF, sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.3)'
         document.body.appendChild(msg)
         setTimeout(() => { msg.style.opacity='0'; msg.style.transition='opacity .4s'; setTimeout(() => msg.remove(), 400) }, 2500)
@@ -3791,6 +3801,7 @@ window.addEventListener('load',function(){
     }
   }
   </script>
+  <script src="../static/approval-cascade.js"></script>
   <script src="../static/notif.js"></script>
   <script src="../static/edit-presence.js"></script>
   <script src="../static/sidebar.js"></script>

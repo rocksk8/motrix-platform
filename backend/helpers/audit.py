@@ -24,12 +24,34 @@ def _notify(username: str, type_: str, ref_id: str, ref_label: str, message: str
         conn.close()
 
 
+def notify_org_chain_notice(conn, tiers: list, requester_username: str,
+                            ref_id: str, ref_label: str, message: str,
+                            type_: str = "approval_notice") -> list:
+    """「知會」通知（2026-09-15）：某張單的簽核鏈**每一層都只有申請人本人**
+    （他已經在組織職權的頂端，例如處主管送自己的單）時，通知其他在職的最高
+    管理者一聲，回傳實際被通知的帳號。
+
+    背景：2026-09-15 之前，這種情況會硬抓一位別的超級管理員當簽核人——使用者
+    的裁示是「他自己簽核兩次，我這邊只做知會」。最高管理者退出簽核鏈之後，
+    這則通知就是他唯一的知情管道（他仍隨時可用 superadmin 權限退回）。
+
+    判斷邏輯放在 tiered_approval.py::org_chain_notice_usernames()（純函式、
+    不碰通知），這裡只負責送——維持該模組「不做 side effect」的既有分工。"""
+    from .tiered_approval import org_chain_notice_usernames
+    names = org_chain_notice_usernames(conn, tiers, requester_username)
+    for u in names:
+        _notify(u, type_, ref_id, ref_label, message)
+    return names
+
+
 _NOTIF_SOURCE_CHECK = {
     'approval_request':          "SELECT 1 FROM quotations WHERE quote_no=?",
+    'approval_notice':           "SELECT 1 FROM quotations WHERE quote_no=?",
     'approval_returned':         "SELECT 1 FROM quotations WHERE quote_no=?",
     'approval_rejected':         "SELECT 1 FROM quotations WHERE quote_no=?",
     'case_stage_deadline':       "SELECT 1 FROM quotations WHERE quote_no=?",
     'shipping_approval_request': "SELECT 1 FROM shipping_notes WHERE note_no=?",
+    'shipping_approval_notice':  "SELECT 1 FROM shipping_notes WHERE note_no=?",
     'shipping_approved':         "SELECT 1 FROM shipping_notes WHERE note_no=?",
     'shipping_returned':         "SELECT 1 FROM shipping_notes WHERE note_no=?",
     'daily_task':                "SELECT 1 FROM daily_tasks WHERE id=? AND is_deleted=0",

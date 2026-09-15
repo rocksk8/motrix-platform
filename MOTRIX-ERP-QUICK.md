@@ -638,6 +638,26 @@ create / put / deal-tag / settlement / payment / case-record / approve / reject
 - 無流程（預設超管）：**禁止申請人自簽**
 - 代理送審：`approval.delegateSubmitter` + `delegateNote` 同步寫入 audit_log
 
+**系統內建組織鏈（2026-09-15 改版，`includeSubmitterManagerTier` 預設開）**
+
+```
+申請人部門主管  ──不是本人──▶ 就這一層，結束
+      │本人
+      ▼
+處主管（該部門所屬處）──不是本人──▶ 第二層，結束
+      │本人
+      ▼
+到頂：兩層都本人自簽 + 送出時知會其他在職 superadmin（approval_notice）
+```
+
+- 本人要簽的層標 `selfApproval:true`；`_exclude_requester()` **不剔除**這種項目
+- 前端 `canApprove()`／`isCurrentTierApprover()` 有簽核層時不再排除申請人
+  （排除規則只留在無簽核層的 superadmin fallback）
+- 自訂層的 `department_manager`／`division_manager` 解析到申請人本人時同樣改為
+  自簽（舊行為是靜默剔除 → 整層消失）
+- 一次簽多層：同一人（或其代理人）連續當好幾層、且「簽下去該層就完成」時，
+  前端在確認視窗講清楚並帶 `cascade:true`，後端 `cascade_self_tiers()` 一次蓋完
+
 ### §5.4 · 案件管理 Tab 結構
 
 | Tab | 內容 |
@@ -1898,6 +1918,62 @@ xlsx-0.18.5.full.min.js     （SheetJS）
 > 未紀錄；同期間 `CHANGELOG.md` 09-08／09-09 兩天完全空白。已於本日補回，並新增
 > [`WEEKLY-AUDIT-2026-09-07_2026-09-10.md`](WEEKLY-AUDIT-2026-09-07_2026-09-10.md)
 > ——帶「模組／檔案:行號／是否在正式機」座標的本週稽核索引，出事時先看那份。
+
+### 2026-09-15（第八輪）— 簽核照組織流程走：身兼主管者自己簽、最高管理者只知會（DB 無異動）
+
+使用者交辦：「當超級管理員解鎖報價單編輯，簽核要按照組織流程簽核…實際要組織流程
+高晟耀他自己簽核兩次，我這邊只做知會，另外…當某位主管同時為兩層以上簽核人，只要跳
+通知做確認，可直接簽核兩次以上，避免重複簽核兩次的狀態」。
+
+**① 組織鏈不再「跳過本人換人簽」**（`helpers/tiered_approval.py::resolve_submitter_org_chain()`）
+
+`corbin` 同時是「策略開發整合中心」部門主管與「總經理辦公室」處主管。舊規則
+（2026-08-22i）是「主管是自己就往上換人，換到頂就抓一個別的 superadmin」——所以他
+解鎖改版自己的報價單時，簽核落到 `jeff` 頭上，而他在組織上的那兩關**完全沒有留下
+紀錄**。新規則見 §5.3 的流程圖：每一關都成立、本人簽的標 `selfApproval`，鏈到頂就
+**知會**其他在職 superadmin（`notifications.type='approval_notice'`，各單據類型各自
+前綴），不再把人硬塞進簽核鏈。
+
+一般員工的鏈**完全沒變**（部門主管不是自己 → 就那一層）。測試裡第一題就是這個回歸
+基準——少了它，後面「多一層」的斷言可以靠「無條件加兩層」變綠。
+
+連帶要一起改的三個地方（少一個就是「角標有數字、點進去沒按鈕」）：
+
+| 位置 | 改動 |
+|---|---|
+| `quotations.py::_exclude_requester()` | 標了 `selfApproval` 的不剔除（剔掉＝整關無聲蒸發） |
+| `approval-queue.html::canApprove()` | 有簽核層時不再一律排除申請人；排除只留在無簽核層的 superadmin fallback |
+| `quotation-form.html::isCurrentTierApprover()` | 同上 |
+
+`test_approval_queue_badge_consistency_2026_09_15.py` 裡那份 `canApprove()` 的 Python
+鏡像同步更新——它存在的理由就是「兩邊規則本來就必須一樣」。
+
+**② 同一人連任多層 → 一次簽完**（`plan_self_cascade()`／`cascade_self_tiers()`）
+
+前端算出「按下去之後還會連續輪到自己幾層」，寫進**原本就有的那個確認視窗**（不多跳
+第二個），使用者確認就帶 `cascade:true`，後端重新驗證後一次蓋完，回傳 `signedTiers`
+讓提示說得出「已一併完成第 1、2 層」。共用判斷在 `static/approval-cascade.js`，
+七個簽核入口共用（佇列頁、報價單、請款單、案件管理的出貨單／完工單／兩種憑據）。
+
+⚠️ **合併條件刻意保守**：只吃「簽下去這一層一定完成」的連續層——該層剩下未簽的只有
+自己（或自己代理的人）。中間夾著別人、或同層還有第二位待簽，一律停在前面；跨過去
+等於替別人做決定。兩題測試專門釘這個邊界。額外支出是「當層任一人簽即過層」的語意，
+用同一支 `plan_self_cascade(tier_completes_on_first=True)`。
+
+**③ 順手修掉的真 bug**（`case_extra_expenses.py`，兩支 approve 端點各一份）
+
+- `check_approve_permission()` 的回傳值**整個被丟掉**——其他六個 router 都是
+  `ok, code, msg = ...` 再 raise，這裡是裸呼叫，等於當層簽核人檢查形同虛設，
+  任何過得了 `_guard_case()` 的人都簽得掉任何一層。
+- `check_no_tier_self_approval()` 原本無條件套用，但它是**無簽核層時**的 fallback
+  規則（其他 router 都只在 no-tier 分支呼叫）。不改的話，①的自簽層在額外支出上
+  永遠簽不掉。
+
+**測試**：新增 `test_org_chain_approval_2026_09_15.py`（10 題）。除了正向控制之外，
+斷言一律挑「成功後才會被寫入的下游欄位」（DB 裡的 status／currentTier／approvedAt），
+不看自己送進去的 request body。
+
+---
 
 ### 2026-09-15（第七輪）— 開發機不上傳雲端、正式機照傳（DB 無異動）
 

@@ -25,9 +25,11 @@ def _login(client, u, p):
 
 
 def _can_approve(item, me: str, role: str) -> bool:
-    """`approval-queue.html::canApprove()` 的 Python 版，逐條對應。"""
-    if item.get("requestedBy") == me:
-        return False
+    """`approval-queue.html::canApprove()` 的 Python 版，逐條對應。
+
+    2026-09-15 同步更新：有簽核層時**不再一律排除申請人**（組織流程判定「這一關
+    歸他管」的自簽層由本人具名簽核，見 tiered_approval.py::resolve_submitter_org_chain()），
+    排除規則只留在無簽核層的 superadmin fallback。"""
     tiers = item.get("tiers") or []
     if tiers:
         cur = item.get("currentTier") or 0
@@ -37,6 +39,8 @@ def _can_approve(item, me: str, role: str) -> bool:
         first_pending = next((a for a in approvers if a.get("status") != "approved"), None)
         return bool(first_pending and first_pending.get("username") == me)
     # 無 tiers：任一 superadmin（且不是自己送的）
+    if item.get("requestedBy") == me:
+        return False
     return role == "superadmin"
 
 

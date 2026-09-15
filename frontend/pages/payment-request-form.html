@@ -334,6 +334,7 @@
   </div>
 </div>
 
+<script src="../static/approval-cascade.js"></script>
 <script src="../static/notif.js"></script>
 <script src="../static/edit-presence.js"></script>
   <script src="../static/sidebar.js"></script>
@@ -616,12 +617,16 @@ function paymentRequestForm() {
     },
 
     async approveReq() {
-      if (!confirm('確定簽核此請款單？')) return
+      // 同一人連任多層時一次簽完（2026-09-15，見 static/approval-cascade.js）
+      const appr = this.approval || {}
+      const cascadeNos = window.MotrixApproval.selfCascadeTiers(
+        appr.tiers || [], appr.currentTier ?? 0, this.session.username, [])
+      if (!confirm('確定簽核此請款單？' + window.MotrixApproval.cascadeNote(cascadeNos))) return
       try {
         const r = await fetch(`${API}/payment-requests/${this.q.requestNo}/approve`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
-          body: JSON.stringify({})
+          body: JSON.stringify({ cascade: cascadeNos.length > 0 })
         })
         if (!r.ok) { alert((await r.json()).detail || '簽核失敗'); return }
         await this.reload()
