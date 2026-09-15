@@ -974,14 +974,14 @@
                     <template x-for="f in log.files" :key="f.id">
                       <div style="position:relative">
                         <template x-if="isLogImage(f)">
-                          <a :href="logFileUrl(f)" target="_blank" :title="f.filename">
-                            <img :src="logFileUrl(f)" loading="lazy"
+                          <a href="javascript:void(0)" @click="previewAttachmentFile(f)" :title="f.filename">
+                            <img :src="photoUrl(f.path)" loading="lazy"
                                  style="width:68px;height:68px;object-fit:cover;border-radius:6px;border:1px solid var(--border-light);display:block">
                           </a>
                         </template>
                         <template x-if="!isLogImage(f)">
-                          <a :href="logFileUrl(f)" target="_blank"
-                             style="display:flex;align-items:center;gap:5px;padding:6px 10px;border:1px solid var(--border-light);border-radius:6px;font-size:11px;color:var(--text-secondary);text-decoration:none;background:#fff;max-width:180px">
+                          <a href="javascript:void(0)" @click="previewAttachmentFile(f)"
+                             style="display:flex;align-items:center;gap:5px;padding:6px 10px;border:1px solid var(--border-light);border-radius:6px;font-size:11px;color:var(--text-secondary);text-decoration:none;background:#fff;max-width:180px;cursor:pointer">
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>
                             <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" x-text="f.filename"></span>
                           </a>
@@ -1844,7 +1844,47 @@ function devCrmPage() {
       if (r.ok) { log.files = (await r.json()).files || [] }
       else { const d = await r.json().catch(() => ({})); this._toast(d.detail || '刪除失敗') }
     },
-    logFileUrl(f) { return `/api/uploads/${f.path}?pt=${encodeURIComponent(this.token)}` },
+    // 附件連結（2026-09-15 修）。原本是 `?pt=${this.token}`——把 **session token**
+    // 當成 `pt` 送出去。`pt` 是 routers/uploads.py 用 HMAC 簽出來的短效簽章
+    // （`{expires}.{sig}`，先跟 `/api/photo-token` 換），跟 session token 是兩種
+    // 完全不同的東西：`_verify_photo_token()` 一 split 就對不上，**每一張附件
+    // 都必定 403**，圖片破圖、PDF 點開是一段 JSON 錯誤。案件動態那邊同一個
+    // commit 犯了同樣的錯，一起修。
+    // 這裡沿用 case-management.js 既有的兩套慣例，沒有另創第三套：
+    //   圖片 → photoUrl()：快取 pt、拿到之前先回 1x1 透明圖
+    //   PDF  → previewAttachmentFile()：點下去才換 token 再開新分頁
+    _ptCache: {},
+    photoUrl(path) {
+      if (!path) return ''
+      const now = Math.floor(Date.now() / 1000)
+      const cached = this._ptCache[path]
+      if (cached && cached.exp > now) {
+        return `/api/uploads/${path}?pt=${cached.pt}`
+      }
+      if (!this._ptCache[path + '_fetching']) {
+        this._ptCache[path + '_fetching'] = true
+        fetch(`/api/photo-token?path=${encodeURIComponent(path)}`, { headers: this._h() })
+          .then(r => r.ok ? r.json() : null).then(d => {
+            if (d && d.token) {
+              // 整個物件換掉才會觸發 Alpine 重新算 :src（改屬性不會）
+              this._ptCache = {
+                ...this._ptCache,
+                [path]: { pt: d.token, exp: now + (d.ttl || 3600) - 60 },
+                [path + '_fetching']: false,
+              }
+            } else { this._ptCache[path + '_fetching'] = false }
+          }).catch(() => { this._ptCache[path + '_fetching'] = false })
+      }
+      return 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBTAA7'
+    },
+    async previewAttachmentFile(f) {
+      try {
+        const r = await fetch(`/api/photo-token?path=${encodeURIComponent(f.path)}`, { headers: this._h() })
+        if (!r.ok) { this._toast('取得檔案連結失敗'); return }
+        const { token } = await r.json()
+        window.open(`/api/uploads/${f.path}?pt=${encodeURIComponent(token)}`, '_blank')
+      } catch (e) { this._toast('開啟檔案失敗：' + e.message) }
+    },
     isLogImage(f) { return /\.(jpe?g|png)$/i.test(f.filename || f.path || '') },
 
     async saveLog() {

@@ -147,6 +147,15 @@ def client(_app, tmp_path, monkeypatch):
     import helpers.uploads as uploads_helper
     monkeypatch.setattr(uploads_helper, "UPLOADS_ROOT", str(tmp_path / "uploads"))
 
+    # routers/uploads.py 算的是**第三份**獨立的 UPLOADS_ROOT（存檔在
+    # helpers/uploads.py，讀檔在這裡）。2026-09-15 補上這一行之前只 patch 了
+    # 存檔那邊，於是「寫進 tmp、讀真實 uploads/」——任何「傳完之後真的讀得
+    # 回來嗎」的測試都必定 404，也就沒有人寫得出來。附件從上線起每一張都
+    # 403（前端把 session token 當成 `pt` 送）能躲過整套測試，這個缺口是原因
+    # 之一：讀取路徑在測試裡根本沒有被走過。
+    import routers.uploads as uploads_router
+    monkeypatch.setattr(uploads_router, "UPLOADS_ROOT", str(tmp_path / "uploads"))
+
     # photos.py computes its own project-photo storage roots independent of
     # archive.py/uploads_helper above too (used by projects.py's project-log
     # photos and, since 2026-08-26, system.py's work-log photos) — redirect

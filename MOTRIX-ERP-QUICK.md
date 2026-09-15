@@ -1919,6 +1919,61 @@ xlsx-0.18.5.full.min.js     （SheetJS）
 > [`WEEKLY-AUDIT-2026-09-07_2026-09-10.md`](WEEKLY-AUDIT-2026-09-07_2026-09-10.md)
 > ——帶「模組／檔案:行號／是否在正式機」座標的本週稽核索引，出事時先看那份。
 
+### 2026-09-15（第九輪）— 業務開發／案件動態的附件從上線起每一張都是 403（DB 無異動）
+
+使用者回報：「業務開發的上傳照片跟 pdf 功能失效」。
+
+**上傳是好的，壞的是讀回來**。`/api/uploads/{path}` 認兩種憑證：`?pt=`（`routers/
+uploads.py` 用 HMAC 簽的短效簽章，形狀是 `{expires}.{sig}`，要先跟 `/api/photo-token`
+換）或 `?token=`／Bearer（session token）。2026-09-14 那批附件功能的兩處前端，把
+**session token 直接當成 `pt`** 送出去：
+
+| 位置 | 寫法 |
+|---|---|
+| `dev-crm.html::logFileUrl()` | `?pt=${this.token}` |
+| `case-management.js::fileUrl()` | `?pt=${this.session.token}` |
+
+`_verify_photo_token()` 第一步 `token.split(".", 1)` 就對不上（session token 是 64 個
+hex、沒有點）→ **每一張附件、每一次載入，必定 403**。使用者看到的是縮圖破圖、PDF
+點開跳出一段 JSON 錯誤。已在正式機（`a31603d`）用不帶登入的 curl 確認：拿一串
+64-hex 當 `pt` 打一個**根本不存在**的路徑，回的是 403 而不是 404——簽章在檔案存在
+與否之前就先被擋下。
+
+**修法：沿用同頁既有的兩套慣例，不另創第三套。** 同一個檔案裡的回簽附件／憑據附件
+本來就走 `previewAttachmentFile()`（點下去才換 token 再開新分頁），工作日誌照片走
+`photoUrl()`（快取 pt、換到之前先回 1x1 透明圖）。動態附件改成圖片走 `photoUrl()`、
+PDF 走 `previewAttachmentFile()`；`fileUrl()`／`logFileUrl()` 直接刪掉，不留一支容易
+誤用的同義函式。`dev-crm.html` 原本沒有這兩支，補上（`_ptCache` 一起）。
+
+**為什麼整套測試沒擋下來**（這格才是重點）：
+
+1. `test_feed_attachments_2026_09_14.py` 八題全綠，但它們只驗到「POST 回傳了 path
+   且該路徑的實體檔案存在」——**沒有任何一題走過讀取端點**。
+2. 而且當時也寫不出來：`conftest.py` 只把 `helpers/uploads.py`（存檔）的
+   `UPLOADS_ROOT` 導到 tmp，`routers/uploads.py`（讀檔）算的是**第三份**獨立的
+   `UPLOADS_ROOT`，沒有被導——寫進 tmp、讀真實 `uploads/`，任何讀回來的測試都必定
+   404。這個缺口本輪一併補上。
+
+**新增測試**（兩支都實測過「還原成修復前的寫法會紅」，不是只確認修完是綠的）：
+
+- `test_feed_attachment_serving_2026_09_15.py`（3 題）：換 pt → 讀檔，比對**磁碟上的
+  實體檔**而不是上傳的原始位元組（圖片會先過浮水印重新編碼，拿原始位元組比會紅在
+  浮水印上、不是紅在讀取路徑上）；另外把「session token 不能當 pt 用」釘成白紙黑字。
+- `test_e2e_feed_attachment_render_2026_09_15.py`（2 題，業務開發＋案件動態各一）：
+  觀測點是 **`img.naturalWidth > 0`**。元素存在不算（破圖的 `<img>` 也存在）、比對
+  `src` 字串更不算（那只是把當初寫錯的那串抄進測試裡）。兩個頁面各自實作了一份附件
+  顯示，所以兩邊各一題——只驗一邊，另一邊會繼續破圖而測試全綠，那正是 09-14 的情形。
+
+**順帶記下、本輪沒動的兩點**（都不影響這次回報的症狀，不在本輪範圍內）：
+
+- 圖片壓完浮水印後 `photos.py` 吐回來的是**重新編碼的 JPEG**，但 `save_document_files()`
+  仍沿用原副檔名與原 `mime`——上傳 `.png` 會存成副檔名 `.png`、內容是 JPEG 的檔案。
+  瀏覽器自己會認，`<img>` 正常顯示（e2e 已實測），只是 metadata 與實體內容不一致。
+- `case-management.html` 工作日誌照片那一塊是 `<a :href="photoUrl(p.path)">`——pt 還沒
+  換回來時 href 是那張 1x1 佔位圖，在那個短窗口內點下去會開到空白圖。既有行為。
+
+---
+
 ### 2026-09-15（第八輪）— 簽核照組織流程走：身兼主管者自己簽、最高管理者只知會（DB 無異動）
 
 使用者交辦：「當超級管理員解鎖報價單編輯，簽核要按照組織流程簽核…實際要組織流程

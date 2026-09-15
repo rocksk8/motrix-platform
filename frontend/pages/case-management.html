@@ -3496,14 +3496,14 @@
                             <template x-for="f in item.files" :key="f.id">
                               <div style="position:relative">
                                 <template x-if="isImageFile(f)">
-                                  <a :href="fileUrl(f)" target="_blank" :title="f.filename">
-                                    <img :src="fileUrl(f)" loading="lazy"
+                                  <a href="javascript:void(0)" @click="previewAttachmentFile(f)" :title="f.filename">
+                                    <img :src="photoUrl(f.path)" loading="lazy"
                                          style="width:72px;height:72px;object-fit:cover;border-radius:6px;border:1px solid var(--border-light);display:block">
                                   </a>
                                 </template>
                                 <template x-if="!isImageFile(f)">
-                                  <a :href="fileUrl(f)" target="_blank"
-                                     style="display:flex;align-items:center;gap:5px;padding:6px 10px;border:1px solid var(--border-light);border-radius:6px;font-size:11px;color:var(--text-secondary);text-decoration:none;background:#fff;max-width:190px">
+                                  <a href="javascript:void(0)" @click="previewAttachmentFile(f)"
+                                     style="display:flex;align-items:center;gap:5px;padding:6px 10px;border:1px solid var(--border-light);border-radius:6px;font-size:11px;color:var(--text-secondary);text-decoration:none;background:#fff;max-width:190px;cursor:pointer">
                                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>
                                     <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" x-text="f.filename"></span>
                                   </a>

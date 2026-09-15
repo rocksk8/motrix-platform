@@ -3020,9 +3020,13 @@ function app() {
         }
       } catch (e) { alert('網路錯誤：' + e.message) }
     },
-    fileUrl(f) {
-      return `/api/uploads/${f.path}?pt=${encodeURIComponent(this.session.token)}`
-    },
+    // fileUrl() 已移除（2026-09-15）：它把 **session token** 當成 `pt` 送給
+    // /api/uploads/，而 `pt` 是 routers/uploads.py 用 HMAC 簽出來的短效簽章
+    // （先跟 `/api/photo-token` 換），兩者形狀不同、必定驗不過——動態附件從
+    // 上線起每一張都是 403。同頁其他附件（回簽／憑據）本來就走
+    // previewAttachmentFile()，工作日誌照片走 photoUrl()，這裡改為沿用同兩支，
+    // 不再留一支容易誤用的同義函式。業務開發記錄（dev-crm.html）同一個 commit
+    // 犯了同樣的錯，已一起修。
     isImageFile(f) {
       return /\.(jpe?g|png)$/i.test(f.filename || f.path || '')
     },
