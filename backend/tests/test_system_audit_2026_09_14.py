@@ -150,6 +150,72 @@ def test_every_backup_query_actually_runs(client):
     assert not failed, "這些每日備份查詢跑不起來（每天都會靜默記一筆 error）：\n  " + "\n  ".join(failed)
 
 
+def test_every_backup_export_is_json_serializable(client):
+    """每一條匯出查詢的結果，都必須真的序列化得出 JSON。
+
+    **這題是 2026-09-16 實際踩到才補的**，踩的正是上一題守不住的那個縫：
+    `webauthn_credentials` 的 credential_id / public_key 是 BLOB，取出來是
+    Python bytes。SQL 跑得起來（上一題全綠）、表也存在（前面幾題也全綠），
+    但 `_cloud_write_json()` 走到 `json.dumps()` 就 TypeError——於是「通行金鑰」
+    每天靜默記一筆 "error"、其餘 40 張照常完成，整件事只在彙總.json 上留一個字。
+
+    上一題的觀測點停在「SQL 執行成功」，離真正的失敗點還差一步。這題把觀測點
+    移到下游，照 `_export_table_json_set()` 的實際路徑走完：
+    `_strip_inline_images()` → `json.dumps()`。
+
+    ⚠️ 這題只有在表裡剛好有資料時才抓得到（空表沒有 bytes 可以炸），所以它擋不住
+    「新增一個 BLOB 欄位」——那是下一題的工作。兩題要一起看。
+    """
+    import archive
+    import db
+    conn = db.get_db()
+    failed = []
+    try:
+        for fname, sql in _json_backup_queries().items():
+            try:
+                rows = [archive._strip_inline_images(dict(r))
+                        for r in conn.execute(sql).fetchall()]
+                json.dumps({"exported_at": "", "count": len(rows), "data": rows},
+                           ensure_ascii=False)
+            except Exception as e:
+                failed.append(f"{fname}: {type(e).__name__}: {e}")
+    finally:
+        conn.close()
+    assert not failed, ("這些每日備份查詢的結果寫不進 JSON（每天靜默記一筆 error、"
+                        "還原時整張表是空的）：\n  " + "\n  ".join(failed))
+
+
+def test_backup_export_selects_no_blob_columns(client):
+    """匯出查詢不得選到任何宣告為 BLOB 的欄位。
+
+    上一題（序列化）依賴表裡剛好有資料——CI 的空庫跑起來是綠的，正式機只要有
+    一個人綁了 Passkey 就炸。這題不看資料、只看 schema：把每條查詢實際選到的
+    欄位（cursor.description），跟來源表宣告成 BLOB 的欄位對一次。
+
+    BLOB 進不了 JSON，而且幾乎都是憑證素材或二進位內容——真要保留就該靠 §8.3
+    前兩層的整庫 .db，不是靠這一層人看得懂的 JSON。
+    """
+    import db
+    conn = db.get_db()
+    offenders = []
+    try:
+        for fname, sql in _json_backup_queries().items():
+            blob_cols = set()
+            for tbl in re.findall(r"FROM\s+(\w+)", sql):
+                for r in conn.execute(f"PRAGMA table_info({tbl})").fetchall():
+                    if "BLOB" in (r["type"] or "").upper():
+                        blob_cols.add(r["name"])
+            if not blob_cols:
+                continue
+            hit = {d[0] for d in conn.execute(sql).description} & blob_cols
+            if hit:
+                offenders.append(f"{fname}: {sorted(hit)}")
+    finally:
+        conn.close()
+    assert not offenders, ("這些匯出查詢選到 BLOB 欄位，json.dumps() 會 TypeError——"
+                           "請逐欄列出、略過二進位欄位：\n  " + "\n  ".join(offenders))
+
+
 def test_business_critical_tables_are_in_json_backup(client):
     """§8.3 的最後手段（JSON 重建）必須真的重建得出一套可用的系統。
 

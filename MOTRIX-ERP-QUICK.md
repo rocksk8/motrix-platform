@@ -1,10 +1,11 @@
 # MOTRIX ERP — 開發快速參考
 
 > 允碩整合集創（統編 60575481）｜ Tel: 04-3610-6566 ｜ info@miactw.com  
-> 文件版本：**2026-09-13**（深色模式側欄修正＋模組權限盤點，DB 無異動，見 §12 最新兩則）
+> 文件版本：**2026-09-16**（通行金鑰備份失敗修復＋Passkey 功能暫緩，DB 無異動，見 §12 最新兩則）
 >
 > **2026-09-13 新增互補文件**：[`MODULE-AUDIT-2026-09-13.md`](MODULE-AUDIT-2026-09-13.md)——模組機制的三方（權限目錄／側欄／後端）逐 key 對照，七項已修、五項待決策。**動權限／模組相關的東西之前先看那份**，§3.4 只是摘要。
-> **🔴 2026-09-11 待決策（有時效性）**：要不要改用 Let's Encrypt 公開憑證、把 RP ID 換成 `erp.miactw.com`——見 **§3.3c** 與 §11 對應列，計畫書 [`LETSENCRYPT-PUBLIC-CERT-PLAN.md`](LETSENCRYPT-PUBLIC-CERT-PLAN.md)。**換 RP ID 會讓所有既有 Passkey 失效且無法救回，現在只有 1～2 張是成本最低的時刻，越拖越貴。**
+> **⚪ 2026-09-11 待決策（時效性已解除）**：要不要改用 Let's Encrypt 公開憑證、把 RP ID 換成 `erp.miactw.com`——見 **§3.3c** 與 §11 對應列，計畫書 [`LETSENCRYPT-PUBLIC-CERT-PLAN.md`](LETSENCRYPT-PUBLIC-CERT-PLAN.md)。
+> **2026-09-16 更新：原本的急迫性（「換 RP ID 會讓既有 Passkey 全部失效，現在只有 1～2 張是成本最低的時刻，越拖越貴」）已不再成立**——Passkey 功能本日起暫緩使用（§12 2026-09-16），沒有人在用，換 RP ID 的失效成本歸零。這件事現在可以純粹按憑證需求決定，不必再被 Passkey 的時效推著走。反過來說：**若日後要恢復 Passkey，順序應該是先把 RP ID 定案再開功能**，否則又會回到「開了之後不敢換」的局面。
 >
 > **2026-09-10 新增互補文件**：[`WEEKLY-AUDIT-2026-09-07_2026-09-10.md`](WEEKLY-AUDIT-2026-09-07_2026-09-10.md)——本週 82 個 commit 的逐模組拆解、異常時間軸（含每個異常的起點 commit 與根因檔案:行號）、12 項排查排程 checklist、已驗證缺陷清冊、未部署差異。**正式機出事時先看那份定位，再回來這裡看行為規格。**
 >
@@ -228,7 +229,16 @@ setup（POST /api/auth/totp/setup）→ 產生密鑰，totp_enabled 仍是 0
 | 登入第二階段防暴力破解 | 每個 challenge 最多 5 次錯誤即作廢（需重新輸入密碼），錯誤同時也計入既有 per-IP 登入鎖定 |
 | Demo 帳號 | 不支援（`auth_login()` 的 demo 分支在檢查 totp 之前就已回傳，設計上就不會走到） |
 
-### §3.3c · Passkey／WebAuthn 與 HTTPS 憑證（2026-09-11 起實際可用）
+### §3.3c · Passkey／WebAuthn 與 HTTPS 憑證（2026-09-11 起實際可用；**Passkey 已於 2026-09-16 暫緩**）
+
+> 🔴 **2026-09-16 起 Passkey 功能暫緩使用（使用者裁示）**，本節以下描述的是
+> **功能開著時**的行為規格，不是現在的畫面。總開關
+> `backend/helpers/auth.py::PASSKEY_ENABLED = False`：所有 `/api/auth/webauthn/*`
+> 與 `/api/settings/webauthn-config` 回 404，三個前端頁面的 Passkey 區塊都不顯示。
+> **是暫停不是移除**——程式碼、`webauthn_credentials` 資料表、既有憑證列全部原樣
+> 保留，改回 `True` 就整組回來（含 55 題被 skip 的測試）。細節見 §12 2026-09-16。
+>
+> 本節的 HTTPS／mkcert CA 部分**不受影響**，那是整站 HTTPS 的基礎，跟 Passkey 無關。
 
 > 兩份專門文件：`PASSKEY-CA-ROLLOUT.md`（自簽 CA 那條路，**已執行完畢**）／
 > `LETSENCRYPT-PUBLIC-CERT-PLAN.md`（公開憑證那條路，**規劃完成、尚未執行，是下一個決策點**）。
@@ -301,9 +311,14 @@ setup（POST /api/auth/totp/setup）→ 產生密鑰，totp_enabled 仍是 0
 1～2 張 Passkey 而增加的常駐複雜度，不划算。**結論：這次切換就是「所有人重新註冊一次」，
 而 v74 讓這件事至少是說得清楚、看得見、清得掉的。**
 
-> **結論：越晚換越貴。** 現在全公司只有 1～2 張 Passkey，這是換 RP ID 成本最低的時刻。
+> ~~**結論：越晚換越貴。** 現在全公司只有 1～2 張 Passkey，這是換 RP ID 成本最低的時刻。~~
 > 使用者先前提過「未來會有 VPN、主機可能變更網路環境」——而 `motrix.internal` 是一個
 > 只在內網有意義的名字，那個未來一到就會被迫換。
+>
+> **2026-09-16 修正**：Passkey 已暫緩使用，沒有人在用，**換 RP ID 的失效成本歸零**，
+> 「越晚換越貴」不再成立。憑證路線現在可以純粹按 HTTPS 需求決定。
+> ⚠️ 但順序有講究：**要恢復 Passkey 的話，先把 RP ID 定案再開功能**，
+> 否則又會回到「開了之後不敢換」的局面。
 
 **下一個決策點：要不要改用 Let's Encrypt 公開憑證（`LETSENCRYPT-PUBLIC-CERT-PLAN.md`）**
 
@@ -1858,6 +1873,8 @@ xlsx-0.18.5.full.min.js     （SheetJS）
 
 | 優先 | 項目 |
 |------|------|
+| ✅ | ~~每日 JSON 匯出「通行金鑰」每天失敗~~（**2026-09-16 當天查明並修復**，DB 無異動）。`webauthn_credentials` 的 `credential_id`／`public_key` 是 BLOB，`SELECT *` 撈出來是 Python `bytes`，`json.dumps()` 直接 TypeError；per-table 的 `try/except` 把它吃成 `"error"`，其餘 40 張照常完成 ⇒ **這張表從進備份清單（2026-09-14）起一天都沒真的匯出過**，而每日備份照樣顯示完成。正式機 `每日備份/2026-09-16/彙總.json` 43 個鍵中只有它是 error。改成逐欄列出、略過兩個 BLOB（那兩欄匯出本來也沒意義：私鑰在使用者的認證器裡）。**既有守門測試是假綠燈**——`test_every_backup_query_actually_runs` 只做 `conn.execute(sql).fetchall()`，BLOB 的 SQL 完全跑得起來，觀測點停在失敗點的上游一步。補兩題：序列化那題照真實路徑走完 `json.dumps()`（⚠️ 只在表裡有資料時抓得到），schema 那題拿 `cursor.description` 對 `PRAGMA table_info` 的 BLOB 欄位（**這題才擋得住日後新增 BLOB 欄位**）。已用「把 bug 放回去」驗證第二題精準變紅而舊題仍綠。**連帶修掉一件沒人發現的事**：`_monthly_backup()` 只要 summary 有 error 就不寫 `.done`，通行金鑰天天失敗 ⇒ **每天重傳一次整個月備份**（41 張 JSON ＋ 8.3 MB 的 db），`月備份/2026-09/` 目錄建於 9-15 而檔案時間戳全是 9-16 00:00 |
+| ⚪ | **Passkey 功能暫緩使用**（2026-09-16 使用者裁示，DB 無異動）。總開關 `backend/helpers/auth.py::PASSKEY_ENABLED = False`：9 支端點回 404、三個前端頁面的 Passkey 區塊都不顯示。**是暫停不是移除**——程式碼、資料表、既有憑證列原樣保留，改回 `True` 就整組回來（含 55 題被 `skipif` 的測試）。⚠️ **守門必須掛成 route dependency**：FastAPI 先解 dependencies、之後才驗 body，寫在函式第一行的話帶 body 的端點會先回 422 並把欄位名列出來，等於在功能關掉的情況下公布介面（已有測試釘住）。⚠️ 停用期間原本用 Passkey 登入的人只能用密碼；恢復前若變更過 RP ID，既有憑證仍然失效。詳見 §12 2026-09-16、§3.3c 開頭告示 |
 | ✅ | ~~簽核佇列按下簽核後系統卡死十幾秒~~（**2026-09-15 當天查明並修復**，DB 無異動）。**實測 32.8 秒**，比回報的還久。根因正是預判的那個——而且是這個 codebase **第二次**踩到同一個坑（2026-09-10 `create_quotation` 是第一次）：`_apply_case_change_request()` 做完 `save_quotation_json(conn, ...)`（只 execute、不 commit → conn 持有寫鎖）之後直接 `_audit()`，而 `_audit()` 用 `get_db()` **另開一條連線寫入**，撞上 SQLite 單一 writer，等滿 `connect(timeout=30)` 才放棄。**更糟的是 `_audit()` 的 `except` 會把逾時例外吞掉**——畫面顯示核准成功、稽核紀錄卻不存在，事後查不到是誰核准的。修法：四處 `_audit` 改成 append 進 `deferred_audits`，由呼叫端在 commit 之後統一寫出。**32.8 秒 → 5.1 秒**（整個測試檔）。**使用者要求的「檢查別的區域有沒有一樣的狀態」已做**：新增 AST 靜態掃描守門測試`test_write_lock_deadlock_guard_2026_09_15.py`，掃 routers/helpers/main 全部函式。初掃 27 個命中，逐一核對後 26 個是誤報（`_set_setting()` 自己開自己 commit、43 支 `notify_*` 全部只讀不寫），**真正的只有這一處**，已修。守門測試已用「拿 git 上修復前的檔案直接掃」證明抓得到（4 處全中），修復後 0 處。 |
 | ✅ | ~~最高管理者需要簽核的項目沒有出現在簽核佇列~~（**2026-09-15 當天查明並修復**，DB 無異動）。**佇列頁其實列得出來，是 topbar 角標是 0**——所以使用者根本不會想到要去看，症狀就表現成「沒顯示」。`/api/approval-queue` 與 `/api/approval-queue/count` 是**兩段各自獨立的查詢**，沒有任何東西在守它們一致。抓到兩個方向相反的缺陷：①**少算**：count 端點的迴圈是 `if tiers and ct_idx < len(tiers)`，**沒有簽核層設定的單據整批被跳過**——而那種情況的規則是「任一 superadmin 皆可簽核」（`approve_quotation()` 的 no-tier 分支、前端 `canApprove()` 都是這樣判）。②**多算**：已結案變更申請是 `WHERE status='pending'` 全部算，沒排除自己送的，而自己送的自己簽不掉 → **一個永遠清不掉的紅點**。新增 `test_approval_queue_badge_consistency_2026_09_15.py`（5 題），守的不變量是**角標數字必須等於佇列裡 `canApprove()` 為真的項目數**——程式碼裡已經有兩則註解在講這件事，但一直是靠人工記得補。 |
 | ✅ | ~~掃一遍「給人看的畫面上有沒有原始代碼值」~~（**2026-09-15 當天掃完**，無其他問題）。起因是變更申請摘要出現「專案期間·狀態 `on_track`」——**那一處是 2026-09-14 新寫的摘要層造成的，已在當天修掉**（`_CASE_VALUE_LABELS` 值對照，未知值原樣顯示不硬猜）。**掃描方法（可重跑）**：先從資料庫撈出所有名稱含 `status` 的欄位＋報價單 `data_json` 裡所有 `*status*` 鍵的**實際 distinct 值**，篩出純 ASCII 的（＝代碼而非中文），得到 9 個；再逐一追到前端顯示端。結論是**其餘全部都有對照**：`contractor_dispatches.status`（後端給 `statusLabel`）、`case_action_items.status`（`actionItemStatusLabel()`）、`stock_items.status`（只判斷與套色）、`settle_status`／`settlement.status`（三元運算顯示「已定稿／草稿」）、`approval.status` 與 approvers `status`（只判斷）、`writeOffStatus`（只判斷）、`project_logs.log_status`（未在畫面顯示）。`network_plans`／`payslips`／`dev_cases` 的 status 本來就存中文。⚠️ `vendor-contractors.html:355` 的 `g.status` 看起來像但**不是**——那是政府統編查詢 API 回的營業狀態，外部資料。**下次新增 enum 欄位時記得同一件事**：判斷基準是「畫面上會不會出現底線命名的英文」，不是後端存什麼。 |
@@ -1871,7 +1888,7 @@ xlsx-0.18.5.full.min.js     （SheetJS）
 | 🟡 | **`GET /api/sales-orders` 任何登入者可讀**（含 `net_margin_pct`）。頁面 2026-09-13 已改成導向頁，端點還在。要嘛比照報表加模組檢查，要嘛確認只剩內部用途後下線 <br>**⚠️ 2026-09-14 部分解決**：admin 直通已取消，模組檢查現在對所有非 superadmin 生效（DB v84，見 §12 第十二輪）。本列剩下的是**金額欄位**要不要也納入模組制這個未決問題——那跟「哪些頁面看得到」是兩條線。 |
 | 🟡 | **16 個模組後端完全不讀**，等於只是側欄開關（2026-09-13 盤點）。要嘛承認它們是「介面偏好」並在 UI 上講清楚，要嘛逐一補後端檢查。現況介於兩者之間，最容易讓人誤以為「勾掉＝擋掉」 <br>**⚠️ 2026-09-14 部分解決**：admin 直通已取消，模組檢查現在對所有非 superadmin 生效（DB v84，見 §12 第十二輪）。本列剩下的是**金額欄位**要不要也納入模組制這個未決問題——那跟「哪些頁面看得到」是兩條線。 |
 | ✅ | ~~區網 HTTPS／反向代理~~（`https_setup.ps1`，uvicorn 原生 TLS 自簽憑證，2026-08-27 commit `d7b8ee9`）——**2026-09-11 更正：正式機早已是 HTTPS**（本文件先前記載「尚未執行」已過時，該落差本身是 2026-09-08 事故的間接成因，見 §12 同日條目）；2026-09-10 又以 `-ExtraNames motrix.internal -Force` 重產憑證，SAN 與 CA 詳情見 **§3.3c** |
-| 🔴 | **待決策（有時效性，越拖成本越高）：要不要改用 Let's Encrypt 公開受信任憑證＋把 RP ID 換成 `erp.miactw.com`**，見 [`LETSENCRYPT-PUBLIC-CERT-PLAN.md`](LETSENCRYPT-PUBLIC-CERT-PLAN.md)（2026-09-11 規劃完成，**尚未執行**）。**做**：每台裝 CA／改 hosts 這件事整個消失（含 macOS、手機、Firefox），日後換網段或加 VPN 也不會讓 Passkey 全滅。**不做**：維持自簽 CA，每台新電腦都要人跑一次 `setup_passkey_client.ps1`，且未來網路環境一變動就被迫換 RP ID。**時效性來源**：換 RP ID 會讓**所有既有 Passkey 失效且無法救回**（瀏覽器端綁定，不在我們手上；DB v74 起系統至少查得出是哪幾張，見 §3.3c），目前只有 1～2 張是成本最低的時刻，累積幾十張後再換會非常痛。**卡在哪**：步驟 1～3（Cloudflare 加 A 記錄、建 API Token、正式機簽憑證）都必須由人操作；`backend/tools/letsencrypt_renew.ps1` 已寫好待用。**若決定不做，請直接在這一列寫明「決定維持自簽」與日期**，別讓它懸著。**2026-09-11 已排除 Cloudflare（Origin CA／Tunnel）兩個替代方案**，理由見 §3.3c，不要再重新評估 |
+| ⚪ | **待決策（2026-09-16 起時效性已解除，見本列末）：要不要改用 Let's Encrypt 公開受信任憑證＋把 RP ID 換成 `erp.miactw.com`**，見 [`LETSENCRYPT-PUBLIC-CERT-PLAN.md`](LETSENCRYPT-PUBLIC-CERT-PLAN.md)（2026-09-11 規劃完成，**尚未執行**）。**做**：每台裝 CA／改 hosts 這件事整個消失（含 macOS、手機、Firefox），日後換網段或加 VPN 也不會讓 Passkey 全滅。**不做**：維持自簽 CA，每台新電腦都要人跑一次 `setup_passkey_client.ps1`，且未來網路環境一變動就被迫換 RP ID。**時效性來源**：換 RP ID 會讓**所有既有 Passkey 失效且無法救回**（瀏覽器端綁定，不在我們手上；DB v74 起系統至少查得出是哪幾張，見 §3.3c），目前只有 1～2 張是成本最低的時刻，累積幾十張後再換會非常痛。**卡在哪**：步驟 1～3（Cloudflare 加 A 記錄、建 API Token、正式機簽憑證）都必須由人操作；`backend/tools/letsencrypt_renew.ps1` 已寫好待用。**若決定不做，請直接在這一列寫明「決定維持自簽」與日期**，別讓它懸著。**2026-09-11 已排除 Cloudflare（Origin CA／Tunnel）兩個替代方案**，理由見 §3.3c，不要再重新評估 <br>**⚠️ 2026-09-16 時效性解除**：Passkey 功能已暫緩使用（§12 同日），沒有人在用 ⇒ **換 RP ID 的失效成本歸零**，「越拖越貴」不再成立。這件事現在可以純粹按 HTTPS／憑證維運需求決定。**但順序有講究：要恢復 Passkey 的話，先把 RP ID 定案再開功能**，否則又會回到「開了之後不敢換」的局面 |
 | ✅ | ~~憑證到期完全沒有監控~~（**2026-09-11 已實作** `daily_tasks.py::_check_cert_expiry()`，門檻依憑證總效期自動切換，見 §3.3c 與 §12 同日條目）。**這是先前完全不存在的一層**：mkcert 憑證 2028-12-10（星期日）到期、不會自己更新，而 `letsencrypt_renew.ps1` 的 `[警告]` 只寫進 log 沒人會看 |
 | ✅ | ~~死碼 JS 清除~~（21 個死碼 .js 已刪，`frontend/js/` 僅剩 2 個有效檔） |
 | ✅ | ~~關鍵 API 自動化測試~~（2026-09-01 更正：早已遠超 48 tests，現為 `backend/tests/` 45 個測試檔，累計 300+ 題，近期為 308/308 全過） |
@@ -1899,7 +1916,7 @@ xlsx-0.18.5.full.min.js     （SheetJS）
 | 🟢 | 災難復原（DR）從未實際演練過，`DR-SOP.md` §6 演練紀錄表完全空白，RTO 目前僅為估計值 |
 | ✅ | ~~QR 登入手機端免密碼~~（2026-09-08 已實作，見 §12 同日條目——手機瀏覽器已有效 session 時自動核准，沒有則退回既有密碼手動輸入／瀏覽器自動填入密碼兩層） |
 | ✅ | ~~`build_deploy_package.ps1` 打包關卡用 `pytest-xdist` 平行化~~（2026-09-09 已實作，見 §12 同日條目——動手前先驗證序列/`-n auto` 兩邊 470 題非 e2e 測試 pass/fail 清單完全一致，序列 390 秒→平行 166 秒，約 2.35 倍加速） |
-| ✅ | ~~WebAuthn/Passkey 裝置綁定登入~~（**2026-09-09 已實作**，見 §12 同日「深夜」條目——後端新表＋端點、`login.html` 登入按鈕、`change-password.html` 裝置管理卡片；2026-09-10 `f8198e9` 再把 RP ID／Origin 改成 `system_settings` 可設定，未設定時四個端點回 503。**🟢 2026-09-11 起正式機實際可用**——使用者已實測「註冊 Passkey → 用 Passkey 登入」全通；中間修掉四個讓它「上線但從來沒能用」的根因，現況、限制與 RP ID 不可逆警告一律見 **§3.3c**）。以下保留當初的設計討論紀錄：<br>**（原待開發內容）**——使用者原始需求是想綁定電腦/手機 MAC 位址做「認得這台裝置、快速放行」，查證後瀏覽器沒有任何 JS API 能讀取 MAC（隱私限制，非我們沒做），且 MAC 軟體層可偽造本來就不可靠。改用業界正規解法：裝置的安全晶片（Face ID/指紋/TPM）產生一組無法匯出/複製的金鑰跟帳號綁定，之後那台裝置生物辨識一下即可登入或核准 QR 請求，比 MAC 位址安全非常多。**尚未評估技術方案細節**——前端需串接瀏覽器 WebAuthn API（`navigator.credentials.create/get`），後端需新增 credential 註冊/驗證端點與公鑰儲存（新表，例如 `webauthn_credentials`），且要設計跟現有密碼／TOTP／QR session 三種登入路徑如何並存、要不要能列出/命名/撤銷已註冊裝置。下次要動手前應先進 Plan Mode 完整設計，比照 QR 核准功能與 TOTP 當初的作法（見 [[feedback_check_existing_before_building]]，認證流程設計優先權高於一般功能）。 |
+| ✅ | ~~WebAuthn/Passkey 裝置綁定登入~~（**2026-09-09 已實作**；**⚪ 2026-09-16 起功能暫緩使用**，見本表頂端該列與 §3.3c 開頭告示——程式碼與資料都保留，開關一開就回來，見 §12 同日「深夜」條目——後端新表＋端點、`login.html` 登入按鈕、`change-password.html` 裝置管理卡片；2026-09-10 `f8198e9` 再把 RP ID／Origin 改成 `system_settings` 可設定，未設定時四個端點回 503。**🟢 2026-09-11 起正式機實際可用**——使用者已實測「註冊 Passkey → 用 Passkey 登入」全通；中間修掉四個讓它「上線但從來沒能用」的根因，現況、限制與 RP ID 不可逆警告一律見 **§3.3c**）。以下保留當初的設計討論紀錄：<br>**（原待開發內容）**——使用者原始需求是想綁定電腦/手機 MAC 位址做「認得這台裝置、快速放行」，查證後瀏覽器沒有任何 JS API 能讀取 MAC（隱私限制，非我們沒做），且 MAC 軟體層可偽造本來就不可靠。改用業界正規解法：裝置的安全晶片（Face ID/指紋/TPM）產生一組無法匯出/複製的金鑰跟帳號綁定，之後那台裝置生物辨識一下即可登入或核准 QR 請求，比 MAC 位址安全非常多。**尚未評估技術方案細節**——前端需串接瀏覽器 WebAuthn API（`navigator.credentials.create/get`），後端需新增 credential 註冊/驗證端點與公鑰儲存（新表，例如 `webauthn_credentials`），且要設計跟現有密碼／TOTP／QR session 三種登入路徑如何並存、要不要能列出/命名/撤銷已註冊裝置。下次要動手前應先進 Plan Mode 完整設計，比照 QR 核准功能與 TOTP 當初的作法（見 [[feedback_check_existing_before_building]]，認證流程設計優先權高於一般功能）。 |
 | ✅ | ~~案件財務新增獨立「應收應付」模組＋精算雜支單號欄位~~（2026-09-09 已實作，見 §12 同日條目與 §7.16——新增 `GET /api/quotations/{quote_no}/finance-summary` 彙總端點，未新增任何資料表/欄位；精算「額外支出」新增 `docNo` 欄位，因 settlement 整包存 `data_json` 故後端零改動） |
 | ✅ | ~~案件執行期限與超期提醒通知~~（**2026-09-10 已實作**，見 §12 同日條目——`caseRecord.projectTimeline` 存 data_json 無 schema 異動；`daily_tasks.py:1092-1135::_check_case_project_timeline_deadline()` 沿用既有每日排程而非另起 job；通知對象為所有 admin/superadmin；**重寄週期實作為每 7 天，非當初討論的 10 天**，計時點為超期天數分桶 `days_overdue // 7`）。以下保留當初的需求討論紀錄：<br>**（原待開發內容）**——案件管理「案件資訊」分頁需要新增「案件執行日期區間」欄位（start_date / end_date，類似預計交期的概念），當案件實際進度超過設定期限時自動觸發通知流程：(1) **超期當天寄一次電郵通知**給該案件的超級管理員與專案執行人；(2) **之後每 10 天重複寄一次**提醒尚未完結，直到案件狀態改為已結案為止。**背景需求**：實務上案件常因客戶延遲或內部進度調整而超期，長期無人追蹤就容易成為幽靈案件，需要一個被動提醒機制。**細節待評估**：(1) 日期欄位是否要新增到資料表或繼續存在 `data_json`（後者零改動，但搜尋/聚合較麻煩）；(2) 通知的「執行人」欄位定義（是 `executor`、還是 `assigned_user_ids` 任一人、還是需要新增一個獨立的 `deadline_notify_users` 欄位）；(3) 10 天的計時點是「案件建立時」、「超期當天」還是「上一次寄信」（影響時間複雜度與誤發機率）；(4) 通知內容格式與語言；(5) 是否需要在案件頁面顯示「距離期限剩餘天數」的倒數。排程觸發機制可沿用既有 `heartbeat_job.py`（正式機每 5 分鐘執行一次），或另起一個獨立的 `deadline_check_job.py`（見 §1.1）。**計劃**：先釐清上述需求細節，再評估是否需 DB migration。 |
 | ✅ | ~~營運報表當月與當年度數據獨立分開顯示~~（**2026-09-09 已實作**：`56e52b3` 當月/當年度應收獨立檢視、不再跟隨 period-bar，新增 `test_reports_receivables_monthly.py`；`6bfcafb` 首頁當月收支完整修正＋部門篩選；2026-09-10 `f8198e9` 補上月支出頁籤徽章依 scope 顯示（`reports.html:434`）。同一批連帶修掉「首頁與營運報表對同一個數字有兩套歸月邏輯」的分岔，見 §12 2026-09-09）。以下保留當初的需求討論紀錄：<br>**（原待開發內容）**——目前營運報表的應收未收、已收已支等數字似乎是當年度與當月混在一起（或至少沒有明確區隔），需求是把「當月」的應收未收／已收已支獨立顯示，跟「當年度」的數字做出區隔，不要混算或混排在一起。**併同影響**：營運報表下方的分頁（tabs）內容也要一併比照，跟當年度視圖分開顯示，而不是共用同一份彙總。**細節待評估**（目前 `frontend/js/reports.js` 現有的月/年篩選邏輯、後端 `routers/reports.py` 對應的查詢與彙總方式），token 足夠時再展開設計，先記錄需求方向。 |
@@ -1918,6 +1935,105 @@ xlsx-0.18.5.full.min.js     （SheetJS）
 > 未紀錄；同期間 `CHANGELOG.md` 09-08／09-09 兩天完全空白。已於本日補回，並新增
 > [`WEEKLY-AUDIT-2026-09-07_2026-09-10.md`](WEEKLY-AUDIT-2026-09-07_2026-09-10.md)
 > ——帶「模組／檔案:行號／是否在正式機」座標的本週稽核索引，出事時先看那份。
+
+### 2026-09-16 — 通行金鑰每天備份失敗（BLOB 進不了 JSON）＋ Passkey 功能暫緩（DB 無異動）
+
+使用者回報「每日 JSON 匯出有 1 張表失敗：通行金鑰」。雲端存檔那份彙總佐證：
+`每日備份/2026-09-16/彙總.json` 共 43 個鍵，**只有「通行金鑰」是 `"error"`**。
+
+#### 一、根因：`SELECT *` 把兩個 BLOB 欄位撈進來，`json.dumps()` 直接 TypeError
+
+`webauthn_credentials` 的 `credential_id` / `public_key` 宣告成 BLOB，
+sqlite3 取出來是 Python `bytes`。`_strip_inline_images()` 只處理 str/dict/list，
+bytes 原樣放行，接著 `_cloud_write_json()` 走到 `json.dumps()` 就爆：
+
+    TypeError: Object of type bytes is not JSON serializable
+
+`_export_table_json_set()` 的 per-table `try/except` 把它吃成 summary 裡的一個
+`"error"`，其餘 40 張照常完成——所以**從這張表進備份清單（2026-09-14）起，
+它一天都沒有真的被匯出過**，而每日備份照樣顯示完成。
+
+改成逐欄列出、略過兩個 BLOB（`archive.py::_daily_backup_tables()`）。這兩欄
+匯出本來也沒有意義：Passkey 私鑰在使用者的認證器裡，備份中的公鑰與憑證 ID
+不能讓任何人登入、也不能重建憑證。這張表在 §8.3 最後手段裡要回答的是
+「誰原本有綁、要通知誰重綁」——`user_id + name + created_at` 就足夠。
+
+#### 二、假綠燈：既有測試的觀測點停在「SQL 跑得起來」
+
+`test_every_backup_query_actually_runs`（2026-09-14 為了 `stock_batches` 沒有
+`id` 欄那次而補的）只做 `conn.execute(sql).fetchall()`。BLOB 的 SQL **完全跑得
+起來**，所以那題一路是綠的，失敗點在它下游一步的序列化。補兩題，一起看才完整：
+
+- `test_every_backup_export_is_json_serializable`——照 `_export_table_json_set()`
+  的真實路徑走完 `_strip_inline_images()` → `json.dumps()`。
+  ⚠️ 只在表裡**剛好有資料**時才抓得到，空庫是綠的。
+- `test_backup_export_selects_no_blob_columns`——不看資料只看 schema，拿
+  `cursor.description` 跟 `PRAGMA table_info` 的 BLOB 欄位對一次。這題才是
+  擋得住「日後有人新增 BLOB 欄位」的那道。
+
+驗證方式是把 bug 放回去再跑：第二題精準紅在
+`通行金鑰: ['credential_id', 'public_key']`，而 `..._actually_runs` 仍然是綠的。
+
+#### 三、連帶後果：月備份每天整份重傳
+
+`_monthly_backup()` 的設計是「summary 裡有 `error` 就**不寫 `.done`**」（永久保留
+的那一層，內容不完整比每日層嚴重）。通行金鑰每天固定失敗 ⇒ `.done` 永遠寫不
+下去 ⇒ **每天重跑一次整個月備份**：41 張 JSON ＋ 8.3 MB 的 `motrix_erp.db`。
+`月備份/2026-09/` 目錄建於 9-15，裡面每個檔案的時間戳卻是 9-16 00:00，正是這個。
+修好第一節之後，當月第一次成功的每日備份就會補上 `.done`，這件事自動停止。
+
+#### 四、Passkey 功能暫緩使用（使用者裁示）
+
+**是暫停不是移除**：程式碼、資料表、既有憑證列全部原樣保留，總開關
+`backend/helpers/auth.py::PASSKEY_ENABLED = False`，改回 `True` 就全部回來。
+
+| 層 | 停用時的行為 |
+|---|---|
+| `routers/auth.py` 7 支 `/api/auth/webauthn/*` | 404 |
+| `routers/system.py` `/api/settings/webauthn-config` GET／PATCH | 404 |
+| `routers/system.py` `/api/system/webauthn-config-status` | 200，`configured:false, enabled:false` |
+| `login.html` | 「或使用 Passkey 登入」按鈕不顯示（吃 `configured`） |
+| `change-password.html` | 整張「Passkey 設備」卡片不顯示（吃 `enabled`） |
+| `company-profile-settings.html` | 整張「網域設定」卡片不顯示（吃設定端點的 404） |
+
+幾個刻意的選擇：
+
+- **回 404 不回 403/503**。503「尚未設定」會讓前端顯示「請聯繫系統管理員填入
+  WebAuthn 設定」，把使用者引去要一個現在不該開的功能；404 等同「沒有這支端點」。
+- **狀態端點不回 404**。三個頁面都靠它決定要不要畫出 Passkey 區塊，得回得了 200。
+  `configured` 一併壓成 false 是給舊版前端的保險（舊頁面只認得這個欄位）。
+- **前端旗標預設 `false`**。停用是目前的常態，先畫出卡片再抽掉會讓人以為功能還在。
+- **`enabled !== false` 而不是 `!!enabled`**。舊後端沒有這個欄位時要維持原行為。
+
+##### ⚠️ 守門必須掛成 route dependency，不能寫在函式第一行
+
+實測踩到：FastAPI 先解 dependencies、**之後**才驗 Pydantic body。守門寫在函式裡
+的話，四支帶 body 的端點在 body 不合格時直接回 **422**，連函式都沒進去——而那個
+422 會把欄位名一併列出：
+
+    {"loc": ["body", "challengeToken"], "msg": "Field required"}, ...
+
+等於在功能已經關掉的情況下，對外確認端點存在並公布它的介面。改掛
+`dependencies=[Depends(_require_passkey_enabled)]` 之後才真的一律 404。
+`test_disabled_endpoints_do_not_leak_schema_via_422` 守著不讓它退回去。
+
+##### 測試：整檔 skipif ＋ 一檔不 skip 的反向驗證
+
+五個既有 Passkey 測試檔（55 題）加 module 層 `skipif(not PASSKEY_ENABLED)`
+——**不是刪掉、也不是 xfail**：xfail 會讓功能恢復後的真實失敗被當成預期失敗吞掉，
+刪掉則是恢復時沒有東西守著。
+
+新增 `tests/test_passkey_disabled_2026_09_16.py`（23 題），**刻意不被開關 skip**：
+那五檔全 skip 之後，端點是被開關擋成 404、還是路由被改壞而不存在，沒有任何一題
+分得出來。每個停用態斷言都配一題 `monkeypatch` 把開關打開的反向斷言，
+包括「`/credentials/{id}` 用**真的存在**的憑證 id 測」——用 `/1` 的話，開關打開時
+也是 404（查無此憑證），跟「功能被關掉」一模一樣，那題就永遠是綠的卻什麼都沒驗到。
+
+`通行金鑰` 仍留在每日 JSON 備份清單裡（末兩題守這件事）：功能關掉了，但表裡記的
+是「誰原本綁過 Passkey」，恢復時要靠它通知誰重綁，那份名單反而是停用期間唯一線索。
+
+⚠️ 停用期間原本用 Passkey 登入的人只能改用密碼。既有憑證列不會被刪，但若停用
+期間變更過 RP ID，恢復後那些憑證仍然是失效的（綁定在瀏覽器端，見 `db.py::_m074`）。
 
 ### 2026-09-15（第十一輪）— 浮水印把去背 PNG 毀掉＋部署包只留兩份（DB 無異動）
 

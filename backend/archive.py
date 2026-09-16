@@ -1063,7 +1063,20 @@ def _daily_backup_tables() -> dict:
         "事業處":           "SELECT * FROM divisions ORDER BY id",
         "簽核代理":         "SELECT * FROM approval_delegates ORDER BY id",
         # 通行金鑰只留 metadata 用途：告訴管理員「誰原本有綁 Passkey、要通知誰重綁」。
-        "通行金鑰":         "SELECT * FROM webauthn_credentials ORDER BY id",
+        #
+        # ⚠️ **不可以 SELECT ***：credential_id / public_key 宣告成 BLOB，
+        # 取出來是 Python bytes，json.dumps() 直接 TypeError，於是這張表
+        # 每天靜默記一筆 "error"、從上線起就沒有真的被匯出過（2026-09-16 修，
+        # 見 §12）。SQL 本身跑得起來，所以 test_every_backup_query_actually_runs
+        # 一路是綠的——觀測點停在「查詢執行成功」，離真正的失敗點還差一步。
+        #
+        # 而且這兩欄匯出本來也沒有意義：Passkey 的私鑰在使用者的裝置／認證器裡，
+        # 備份裡的公鑰與憑證 ID 不能讓任何人登入，也不能拿去重建憑證（重綁一定
+        # 得由本人的裝置重新簽發）。本表在 §8.3 最後手段裡要回答的是「誰原本有綁、
+        # 要通知誰重綁」——user_id + name + created_at 就足夠，二進位欄位純屬負擔。
+        "通行金鑰":         ("SELECT id, user_id, name, sign_count, rp_id, "
+                             "created_at, last_used_at "
+                             "FROM webauthn_credentials ORDER BY id"),
         # ── 系統設定 ──
         # §0 記載過：正式機的 webauthn_rp_id / webauthn_origin 不在 git 裡，
         # 還原舊 db 時這兩個值會整個消失。這張表是那次事故的直接對策。

@@ -21,6 +21,7 @@ from .auth import (
     _CREDENTIALS_FILE,
     MIN_PASSWORD_LEN,
     DEMO_TOKEN_PREFIX,
+    PASSKEY_ENABLED,
     is_weak_password,
     _write_initial_credentials,
     _require_user,

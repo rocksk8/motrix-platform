@@ -7,7 +7,7 @@ import uuid
 from datetime import datetime, timedelta
 from typing import Optional, List
 
-from fastapi import APIRouter, HTTPException, Header, Body, UploadFile, File
+from fastapi import APIRouter, HTTPException, Header, Body, UploadFile, File, Depends
 from pydantic import BaseModel, model_validator
 
 from db import get_db, CURRENT_VERSION, _MIGRATIONS
@@ -721,6 +721,17 @@ def set_pdf_base_path_setting(body: dict = Body(...), authorization: str = Heade
 # SecurityError，看起來像前端壞掉——而這正是 f8198e9 這次改動想消滅的症狀。
 # 與其讓使用者在瀏覽器主控台猜，不如在存檔當下就擋掉並說清楚哪裡不對。
 
+def _require_passkey_enabled() -> None:
+    """Passkey 總開關守門——**轉呼叫** `routers/auth.py` 的同名函式。
+
+    刻意不在這裡複製那三行：開關只能有一個判斷點，兩份遲早會分岔（其中一邊
+    被改成 403、或忘了跟著恢復）。函式內 import 是為了避開 router 之間的
+    模組層相依。開關本身在 `helpers/auth.py::PASSKEY_ENABLED`。
+    """
+    from routers.auth import _require_passkey_enabled as _guard
+    _guard()
+
+
 def _validate_webauthn_pair(rp_id: str, origin: str) -> None:
     """RP ID／Origin 的格式與相依關係檢查，不合規直接 400。"""
     import ipaddress as _ipaddress
@@ -770,7 +781,7 @@ def _validate_webauthn_pair(rp_id: str, origin: str) -> None:
         raise HTTPException(400, "除了 localhost 之外，Origin 必須是 https://（瀏覽器規格要求）")
 
 
-@router.get("/api/settings/webauthn-config")
+@router.get("/api/settings/webauthn-config", dependencies=[Depends(_require_passkey_enabled)])
 def get_webauthn_config(authorization: str = Header(None)):
     _require_user(authorization, require_superadmin=True)
     conn = get_db()
@@ -786,7 +797,7 @@ def get_webauthn_config(authorization: str = Header(None)):
     }
 
 
-@router.patch("/api/settings/webauthn-config")
+@router.patch("/api/settings/webauthn-config", dependencies=[Depends(_require_passkey_enabled)])
 def set_webauthn_config(body: dict = Body(...), authorization: str = Header(None)):
     actor = _require_user(authorization, require_superadmin=True)
     rp_id = (body.get("rp_id") or "").strip()
@@ -1320,11 +1331,23 @@ def put_role_labels(body: RoleLabelsBody, authorization: str = Header(None)):
 @router.get("/api/system/webauthn-config-status")
 def get_webauthn_config_status():
     """Public endpoint: check whether WebAuthn RP ID and Origin are configured.
-    Used by login.html and change-password.html to show/hide Passkey buttons."""
+    Used by login.html and change-password.html to show/hide Passkey buttons.
+
+    2026-09-16：功能總開關關閉時回 `configured:false, enabled:false`。
+    這支**不回 404**——三個前端頁面都靠它決定要不要畫出 Passkey 區塊，回 200
+    才能同時關掉按鈕（`configured`）與整張卡片（`enabled`）。
+
+    停用時 `configured` 一併壓成 false 是刻意的：前端若是舊版（部署不同步、
+    或瀏覽器吃到快取的 HTML），它只認得 `configured`，壓成 false 才能保證
+    按鈕不會冒出來——按下去也只會拿到 404。
+    """
+    from helpers import auth as _auth_helpers
+    if not _auth_helpers.PASSKEY_ENABLED:
+        return {"configured": False, "enabled": False}
     rp_id = _get_setting("webauthn_rp_id") or ""
     origin = _get_setting("webauthn_origin") or ""
     configured = bool(rp_id.strip() and origin.strip())
-    return {"configured": configured}
+    return {"configured": configured, "enabled": True}
 
 
 # ── 在線成員與在線時數（2026-09-14，DB v79）─────────────────────────────────

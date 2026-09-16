@@ -179,7 +179,10 @@
         </div>
 
         <!-- WebAuthn 網域設定 -->
-        <div class="ns-card">
+        <!-- 2026-09-16：Passkey 功能暫緩，整張卡片不顯示。後端
+             /api/settings/webauthn-config 的 GET/PATCH 都回 404，留著只會讓
+             管理員填了存不進去。開關在 backend/helpers/auth.py::PASSKEY_ENABLED。 -->
+        <div class="ns-card" x-show="passkeyFeatureEnabled">
           <div class="ns-card-head">
             <div class="ns-card-head-title">Passkey / WebAuthn 網域設定</div>
             <span x-show="webauthnSaved" x-transition style="font-size:12px;color:#16A34A;font-weight:600">已儲存</span>
@@ -417,6 +420,9 @@
         saved: false,
         msg: '',
         isError: false,
+        // 2026-09-16 Passkey 功能暫緩。預設 false：停用是目前的常態，先畫出
+        // 卡片再抽掉會讓管理員以為還能設定。由 loadWebauthnConfig() 的回應碼決定。
+        passkeyFeatureEnabled: false,
         webauthnRpId: '',
         webauthnOrigin: '',
         webauthnSaving: false,
@@ -584,6 +590,11 @@
           const r = await fetch('/api/settings/webauthn-config', {
             headers: { Authorization: 'Bearer ' + this.session.token }
           })
+          // 2026-09-16 Passkey 功能暫緩：這支停用時回 404，直接拿它當開關訊號，
+          // 不必為了決定一張卡片顯不顯示，再多打一次
+          // /api/system/webauthn-config-status。這支端點一直都存在，
+          // 所以 404 只會是「功能被關掉」，不會是舊版後端沒有這條路由。
+          this.passkeyFeatureEnabled = r.status !== 404
           if (r.ok) {
             const data = await r.json()
             this.webauthnRpId = data.rp_id || ''

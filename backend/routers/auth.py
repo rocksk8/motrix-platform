@@ -13,7 +13,7 @@ from typing import Optional, List
 
 import pyotp
 import qrcode
-from fastapi import APIRouter, HTTPException, Header, Request
+from fastapi import APIRouter, HTTPException, Header, Request, Depends
 from pydantic import BaseModel
 from webauthn import (
     generate_registration_options,
@@ -815,6 +815,33 @@ _webauthn_challenges: dict = {}
 _WEBAUTHN_CHALLENGE_TTL_S = 600  # 10 minutes
 
 
+def _require_passkey_enabled() -> None:
+    """Passkey 功能總開關的守門（2026-09-16 起預設關閉，見 helpers/auth.py）。
+
+    **必須掛成 route dependency（`dependencies=[Depends(...)]`），不能只在函式
+    第一行呼叫**——這是實測踩到的：FastAPI 先解 dependencies，**之後**才驗
+    Pydantic body。寫在函式裡的話，帶 body 的端點（register/complete、
+    login/begin、login/complete、credential rename）在 body 不合格時會先回 422，
+    連函式都沒進去，守門形同不存在。而那個 422 會把欄位名稱一併列出來：
+
+        {"loc": ["body", "challengeToken"], "msg": "Field required"}, ...
+
+    等於在功能「已經關掉」的情況下，對外確認了這支端點存在並公布它的介面。
+    掛成 dependency 之後，四支帶 body 的端點才真的一律 404。
+
+    **刻意讀模組屬性而不是 `from helpers.auth import PASSKEY_ENABLED`**：
+    後者在 import 當下就把值綁死，測試沒辦法把功能暫時打開來驗證兩種狀態，
+    而「停用真的生效」這件事只有兩種狀態都測過才算數
+    （見 tests/test_passkey_disabled_2026_09_16.py 的反向驗證）。
+
+    回 404 不回 403/503：503 會觸發前端「請聯繫管理員設定 WebAuthn 網域」
+    那句話，把使用者引去要一個現在不該開的功能；404 等同「沒有這支端點」。
+    """
+    from helpers import auth as _auth_helpers
+    if not _auth_helpers.PASSKEY_ENABLED:
+        raise HTTPException(status_code=404, detail="Not Found")
+
+
 def _webauthn_origin() -> str:
     """Get WebAuthn origin from system settings (key `webauthn_origin`).
 
@@ -875,7 +902,7 @@ def _retrieve_webauthn_challenge(token: str) -> Optional[bytes]:
         return data["challenge"]
 
 
-@router.post("/api/auth/webauthn/register/begin")
+@router.post("/api/auth/webauthn/register/begin", dependencies=[Depends(_require_passkey_enabled)])
 def webauthn_register_begin(authorization: str = Header(None)):
     """已登入使用者開始 Passkey 註冊流程。回傳 W3C WebAuthn registration options
     JSON，以及 challenge_token 供前端在 complete 時回傳。"""
@@ -918,7 +945,7 @@ def webauthn_register_begin(authorization: str = Header(None)):
     }
 
 
-@router.post("/api/auth/webauthn/register/complete")
+@router.post("/api/auth/webauthn/register/complete", dependencies=[Depends(_require_passkey_enabled)])
 def webauthn_register_complete(body: WebauthnRegisterCompleteIn, authorization: str = Header(None)):
     """完成 Passkey 註冊：驗證認證器回應、儲存公鑰與 credential_id。"""
     user = _require_user(authorization)
@@ -979,7 +1006,7 @@ def webauthn_register_complete(body: WebauthnRegisterCompleteIn, authorization: 
     return {"ok": True}
 
 
-@router.post("/api/auth/webauthn/login/begin")
+@router.post("/api/auth/webauthn/login/begin", dependencies=[Depends(_require_passkey_enabled)])
 def webauthn_login_begin(body: WebauthnLoginBeginIn):
     """未登入時開始 Passkey 登入：查該帳號已註冊的 credential 清單、回傳
     authentication options JSON 與 challenge_token。統一錯誤響應避免用戶枚舉。"""
@@ -1046,7 +1073,7 @@ def webauthn_login_begin(body: WebauthnLoginBeginIn):
         conn.close()
 
 
-@router.post("/api/auth/webauthn/login/complete")
+@router.post("/api/auth/webauthn/login/complete", dependencies=[Depends(_require_passkey_enabled)])
 def webauthn_login_complete(body: WebauthnLoginCompleteIn, request: Request):
     """完成 Passkey 登入：驗證認證器簽名、檢查 sign_count 防重放、發行 session。"""
     # Get and consume challenge
@@ -1153,7 +1180,7 @@ def webauthn_login_complete(body: WebauthnLoginCompleteIn, request: Request):
             conn.close()
 
 
-@router.get("/api/auth/webauthn/credentials")
+@router.get("/api/auth/webauthn/credentials", dependencies=[Depends(_require_passkey_enabled)])
 def webauthn_credentials_list(authorization: str = Header(None)):
     """已登入使用者的 Passkey 清單（名稱、建立日期、最後使用日期）。"""
     user = _require_user(authorization)
@@ -1180,7 +1207,7 @@ def webauthn_credentials_list(authorization: str = Header(None)):
     return out
 
 
-@router.patch("/api/auth/webauthn/credentials/{cred_id}")
+@router.patch("/api/auth/webauthn/credentials/{cred_id}", dependencies=[Depends(_require_passkey_enabled)])
 def webauthn_credential_rename(cred_id: int, body: WebauthnCredentialRenameIn, authorization: str = Header(None)):
     """改名單個 Passkey（如「iPhone」、「Windows Hello」）。"""
     user = _require_user(authorization)
@@ -1204,7 +1231,7 @@ def webauthn_credential_rename(cred_id: int, body: WebauthnCredentialRenameIn, a
     return {"ok": True}
 
 
-@router.delete("/api/auth/webauthn/credentials/{cred_id}")
+@router.delete("/api/auth/webauthn/credentials/{cred_id}", dependencies=[Depends(_require_passkey_enabled)])
 def webauthn_credential_delete(cred_id: int, authorization: str = Header(None)):
     """撤銷單個 Passkey。必須是可用功能——遺失裝置時使用者需要能自己補救。"""
     user = _require_user(authorization)

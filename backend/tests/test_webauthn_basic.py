@@ -12,6 +12,22 @@ from datetime import datetime
 
 import pytest
 
+# ── 2026-09-16：Passkey 功能暫緩使用（使用者裁示）───────────────────────────
+# 整檔 skip，**不是刪掉、也不是 xfail**：程式碼與資料表都原樣留著，開關一開
+# 這些測試就要立刻跟著回來把關。xfail 會讓功能恢復後的真實失敗被當成預期失敗
+# 而靜靜吞掉，刪掉則是恢復時沒有任何東西守著。
+#
+# 開關在 backend/helpers/auth.py::PASSKEY_ENABLED。
+# ⚠️ 「停用本身有沒有生效」由 tests/test_passkey_disabled_2026_09_16.py 驗，
+# 那一檔**不會**被這個開關 skip——否則整組 Passkey 測試全 skip 時，端點是真的
+# 回 404 還是路由根本壞了，沒有任何一題分得出來。
+from helpers.auth import PASSKEY_ENABLED
+
+pytestmark = pytest.mark.skipif(
+    not PASSKEY_ENABLED,
+    reason="Passkey 功能暫緩（backend/helpers/auth.py::PASSKEY_ENABLED=False）")
+
+
 
 @pytest.fixture()
 def webauthn_config():

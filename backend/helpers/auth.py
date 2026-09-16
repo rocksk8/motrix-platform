@@ -51,6 +51,30 @@ MIN_PASSWORD_LEN = 8
 # (the session itself only exists in the isolated demo DB, not the real one).
 DEMO_TOKEN_PREFIX = "DEMO_"
 
+# ── Passkey / WebAuthn 總開關（2026-09-16，使用者裁示「先暫緩不使用」）─────────
+#
+# **這是暫停，不是移除**：程式碼、資料表、既有憑證列全部原樣保留。要恢復功能
+# 只要把這一個值改回 True，不必改動其他任何地方——所有進入點都讀這個常數：
+#
+#   後端  routers/auth.py    8 支 /api/auth/webauthn/* 端點 → 停用時 404
+#         routers/system.py  /api/settings/webauthn-config（GET/PATCH）→ 404
+#                            /api/system/webauthn-config-status → enabled:false
+#   前端  login.html                  「或使用 Passkey 登入」按鈕
+#         change-password.html        整張「Passkey 設備」卡片
+#         company-profile-settings.html  整張「Passkey / WebAuthn 網域設定」卡片
+#         （三處都吃 /api/system/webauthn-config-status，不必各自寫死）
+#   測試  tests/test_webauthn_*.py、tests/test_e2e_passkey_*.py 整檔 skipif，
+#         恢復時測試自動跟著回來（不是刪掉，也不是永久 xfail）
+#
+# 端點回 **404 而不是 403/503**：503「尚未設定」會讓前端顯示「請聯繫管理員設定」
+# 那句話，引導使用者去要一個現在不該被打開的功能；404 則是「這裡沒有這支端點」，
+# 與功能未上線時的外觀一致。
+#
+# ⚠️ 停用期間，原本用 Passkey 登入的人只能改用密碼——恢復前請確認他們知道自己的
+# 密碼。已綁定的憑證列**不會被刪**，但若停用期間變更過 WebAuthn RP ID，
+# 那些憑證在恢復後仍然是失效的（RP ID 綁定在瀏覽器端，見 db.py::_m074）。
+PASSKEY_ENABLED = False
+
 
 # ── Hashing ───────────────────────────────────────────────────────────────────
 
