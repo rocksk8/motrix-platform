@@ -84,6 +84,26 @@ _NOT_IN_JSON_BACKUP = {
     #   ⚠️ 同一批的另外三張表（tender_watches／tenders／tender_hits）**都要備份**，
     #   不要看到 tender_ 開頭就跟著排除——tender_watches 是使用者自己建的搜尋條件，
     #   失去它的症狀是「功能還在，只是不再找到東西」，而且沒有人會發現它不見了。
+    # ── 2026-09-22 · geocode_cache：**排除的理由是隱私，不是「它只是快取」** ──
+    #
+    # ☠️ 這張表裡有 `contractors`（**外包名冊，自然人**）的**住家地址**
+    #    解析出來的經緯度。那張表今天才加上 `contractor_list` 權限
+    #    （`routers/contractors.py` 每一支都要 superadmin 或那個模組），
+    #    **而每日 JSON 備份會上傳到雲端硬碟。**
+    # 🔑 **備份它＝把「某人住家的經緯度」複製到雲端，而那份資料的權限保護
+    #    在備份裡不存在。**
+    #
+    # ⚠️ **「它只是快取」這個理由不成立**，要寫下來免得下一個人用它翻案：
+    #    重建**有**成本 —— 實測 2026-09-22：**147 列**，
+    #    而 `geo.GEOCODE_INTERVAL_SECONDS = 1.1` 的節流 ⇒ **約 2.7 分鐘**，
+    #    且**需要對外連線**（正式機不一定有，而那時地圖會整片空白）。
+    # 📌 真正的取捨是：**重建成本以分鐘計，而洩漏是不可逆的。**
+    #
+    # 📌 **第二道清單（`_BACKUP_OMITTED_ON_PURPOSE`）不要加它**：
+    #    那一道是**欄位**清單，只對「有進備份的表」生效
+    #    ⇒ 一張整個不備份的表放進去是一列指不到東西的資料，
+    #    **而那種列讀起來像一個決定。**
+    "geocode_cache",
     "sessions", "login_rate_limit", "edit_presence", "schema_version",
     "quote_seq", "payslip_seq", "user_request_log", "user_activity_daily",
     "user_list_prefs", "tender_fetch_log",
