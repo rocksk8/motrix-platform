@@ -488,6 +488,89 @@ grep -nE "^def notify_[a-z_]+\(.*(event_key|key)" …              → 0 筆
 
 ---
 
+## §3e · 第 6 輪（細線 6 第 6、7 步）的**事實底稿**
+
+> 🔵 **視窗 D 於 2026-09-21 17:2x 查核，A 尚未出單。**
+> 這一節只放**查過的事實**；設計決定在下面的〈A 要裁的三件〉，**還沒裁**。
+> 📌 D 的查核全部排除了 `rollback_snapshots/` 與 `tests/`（A 踩過那個坑）。
+
+### 🔴 規格對第 6、7 步**只有各一句話**
+
+`SELLABLE-AND-MOBILE-SPEC.md` §T.4 全文就這兩行：
+```
+| 6 | 畫面上看得到命中清單，可標記「有興趣／不相關」 |
+| 7 | 一鍵轉成業務開發 CRM 的案件 ← 圈合起來，這步才是價值 |
+```
+§W.1 只說細線 7「跟細線 6 一樣是一鍵轉成 `dev_case`」，**同樣沒有欄位對應**。
+§T.9「明確不做」五條**沒有一條涉及第 6、7 步**。
+
+**規格沒有寫到的**：標記是二元還是三態（未標記算哪一種）／標記後影不影響通知／
+重複轉換怎麼處理／轉換後 hit 狀態變不變／轉換後如何反查來源。
+
+### `dev_case` 那一端（D 查證）
+
+| 項目 | 事實 |
+|---|---|
+| 建立路徑 | **全域唯一一處** `backend/routers/dev_crm.py:305` |
+| SQL 必填 | NOT NULL 且無預設的只有 `created_at`／`updated_at`（`db.py:1042`） |
+| API 必填 | **只有 `case_name`**（`DevCaseIn`，`dev_crm.py:28`），其餘全 Optional |
+| 🔴 唯一鍵 | **沒有。** `dev_cases` 除 `id` PK 外無任何 UNIQUE |
+| 權限 | `_require_dev()` → superadmin／admin 或 modules 含 `dev_crm` |
+| 副作用 | `_audit` ＋ `notify_module_activity` ＋ 回傳 `_case_row` |
+| 後續 ALTER | 共 13 欄（`_m028` 軟刪除 8、`_m042` relink 5）—— **沒有任何「來源／案源」欄位** |
+
+### 🔴 欄位對照：**四個落不了地**
+
+| `tenders` | → `dev_cases` | |
+|---|---|---|
+| `name` | `case_name`（唯一必填） | ✅ |
+| `org` | `customer_name` | ✅ 型別相容 |
+| — | `customer_id`（FK→`customers.id`） | ⚠️ **標案機關不保證在 `customers` 表裡** |
+| `case_no`／`url`／`deadline`／`budget` | **無對應欄位** | ❌ **四個都落不了地** |
+| — | `sales_persons`／`planners` | ❌ `tenders` 沒有來源 |
+
+### 🔴 「有興趣／不相關」無處可放，**而且標在哪會給出不同答案**
+
+`tender_hits` 現有：`id`／`watch_id`／`tender_id`／`hit_at`／`notified_at`。**沒有欄位可放標記。**
+
+⚠️ **`UNIQUE (watch_id, tender_id)` ⇒ 同一個 tender 被多組 watch 命中會產生多列。**
+**規格沒說標記是標在 hit 還是標在 tender 上 —— 而這兩者在多組 watch 下答案不同。**
+
+### ✅ 系統既有的兩個可沿用形狀（D 查證，**範圍它自己講死了**）
+
+**(a)「一鍵轉換」的完整形狀已經有**：`dev_crm.py:536` `mark_converted`
+（`PATCH /dev-cases/{id}/convert`）
+```
+PATCH 而非 POST
+→ 先查目標存在（註解明寫「否則是懸空參照」）
+→ 已轉換過就 409，要改走 request-relink-quote 審核流程
+→ _audit ＋ notify_module_activity ＋ spawn_bg_thread(push_event…)
+```
+
+**(b) 來源追溯＋冪等的既有案例**：`UNIQUE(source_type, source_key)`
+⚠️ **D 主動把範圍講死**：**全庫只有 `t100_export_confirmations` 一張表用**（`db.py:2164`），
+**是一個既有案例，不是全系統慣例。**
+📌 **A 註**：這句自我設限比情報本身值錢 —— 它擋掉的正是 A 的錯誤族①
+（把一個實例說成慣例，然後據以設計）。
+
+### 🟡 D 標明「推論的，未查證」
+
+1. `dev_cases` 無唯一鍵 ＋ `DevCaseIn` 只要 `case_name`
+   ⇒ **同一標案連點兩次「轉成案件」，DB 與 API 兩層都不會擋**
+   （讀 schema 與 handler 推的，**未實跑兩次呼叫驗證**）
+2. 轉換後無法從 `dev_case` 反查來源標案
+   （依據是 13 個 ALTER 欄位裡沒有來源欄位，**未窮舉所有 router**）
+
+---
+
+### 🔴 A 要裁的三件（**還沒裁，等 B 的規格審查一起看**）
+
+1. **標記標在 `tender_hits` 還是 `tenders`** —— 多組 watch 下答案不同
+2. **轉換的冪等怎麼做** —— `dev_cases` 沒有唯一鍵，而 `t100` 那個形狀只有一個先例
+3. **落不了地的四個欄位**（`case_no`／`url`／`deadline`／`budget`）怎麼辦
+
+---
+
 ## §3d · 使用者裁示產生的兩個待辦（**已定案、未開工**）
 
 > ⚠️ 這**不是**開發單，是兩條已定案的結轉項，開工時才寫成單。
