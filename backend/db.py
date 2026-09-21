@@ -563,11 +563,25 @@ def _col_notnull(conn, table: str, col: str) -> bool:
 
 
 def _get_version(conn) -> int:
-    try:
-        row = conn.execute("SELECT version FROM schema_version WHERE id=1").fetchone()
-        return row["version"] if row else 0
-    except Exception:
-        return 0
+    """目前的 schema 版本。**查不到版本時不可以回 0。**
+
+    🔴 這裡原本整段包在 `try/except Exception: return 0` 裡，理由推測是
+    「新資料庫還沒有 `schema_version` 這張表」。**那個情境到不了**：
+    `init_db()` 在第 217 行就 `CREATE TABLE IF NOT EXISTS schema_version`，
+    而 `_run_migrations()`（唯一的呼叫端）在第 522 行才跑——**中間隔了 305 行**。
+
+    ⇒ 那個 `except` 實際能捕捉到的是 `database is locked`、`file is not a database`、
+    磁碟錯誤這一類，**沒有一種是「這是一個新資料庫」**。
+    ☠️ 而回 `0` 的意思是「**當成全新資料庫，從第 1 支 migration 從頭跑一遍**」——
+    在一個其實有資料、只是當下讀不到的庫上做這件事，**比直接崩潰危險得多**。
+    🔑 **讀不到就要拒絕，不要猜一個看起來最無害的值**：
+    `0` 看起來無害，是因為它在唯一到不了的那個情境裡才是對的。
+
+    📌 `fetchone()` 回 `None` 那一支**是對的，不要動**：表建好了但還沒有那一列，
+    那就是全新資料庫的正當路徑（`schema_version` 沒有 seed 列）。
+    """
+    row = conn.execute("SELECT version FROM schema_version WHERE id=1").fetchone()
+    return row["version"] if row else 0
 
 
 def _set_version(conn, version: int) -> None:
@@ -582,6 +596,34 @@ def _set_version(conn, version: int) -> None:
 def _run_migrations(conn) -> None:
     current = _get_version(conn)
     if current >= CURRENT_VERSION:
+        if current > CURRENT_VERSION:
+            # 🔴 **資料庫比程式碼新。** 這不是假想：
+            # 「部署新版 → 發現問題 → 回退程式碼」之後就是這個狀態。
+            #
+            # ⚠️ **記 WARNING，不丟例外**（A 裁定）。丟例外會讓回退**直接起不來**，
+            # 那是把「新版有一個 bug」變成「什麼都跑不起來」——**嚴格更糟**。
+            # 而靜默 return 的代價是：不認識的欄位會在執行期以各種奇怪的方式冒出來，
+            # **而沒有人會聯想到版本**。⇒ 留痕跡，但不要擋路。
+            #
+            # ⚠️ **兩個數字都要印。** 只印一個的話讀的人無從判斷差多少、
+            # 也無從判斷該往前升還是該把程式碼換回去。
+            #
+            # 🔴 **不可以把 `schema_version` 改小去「修好」它**（U5b 釘這個）。
+            # 那之後就再也看不出這個庫跑過更新的 schema 了——
+            # **把證據改掉比留著問題更糟。**
+            #
+            # 🔑 **而「只記 log 就好」這個裁決有一個前提**：
+            # 目前每一支 migration 都**只加不改**（新增欄位／新增表），
+            # 所以舊程式碼讀不到的新欄位，它就是不讀，不會壞。
+            # ⚠️ **那是 migration 的性質，不是這個引擎的性質。**
+            # 哪天有人寫了 `DROP COLUMN`／`RENAME`，這裡就必須重新裁決——
+            # 守門見 `test_upgrade_path_2026_09_21.py::test_u5c`。
+            logger.warning(
+                "資料庫 schema 版本是 v%d，比這份程式碼認得的 v%d 新 —— "
+                "有些欄位是這份程式碼不認識的。"
+                "（常見成因：部署新版後回退了程式碼，而資料庫已經升上去了）",
+                current, CURRENT_VERSION,
+            )
         return
     for i, fn in enumerate(_MIGRATIONS, start=1):
         if i <= current:
