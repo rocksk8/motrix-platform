@@ -448,6 +448,15 @@ def fetch_detail(url):
     """
     if not url:
         return None, "no url"
+    if not radar_on():
+        # 🔴 **總開關檢查在這個函式裡面，不在呼叫端。**
+        # 今天唯一的呼叫端 `_fetch_details` 在 `run_scan()` 底下（那裡有守），
+        # 所以「目前安全」——但那是**呼叫端剛好都在守衛底下**，不是這個函式安全。
+        # 🔑 一個由呼叫端維持的不變量，會在**下一個呼叫端出現時**失效，
+        # 而那跟 `DEFAULT_SCAN_HOUR` 靠「寫入端剛好擋了範圍」活下來是同一個形狀。
+        # ⚠️ 而這個不變量是「**這台機器不會在沒有人知道的情況下對外連線**」——
+        # 它是整條線最外層的那個承諾，不該取決於是誰叫的。
+        return None, "標案雷達未啟用（需要 MOTRIX_TENDER_RADAR=1）"
     try:
         req = urllib.request.Request(url, headers={
             "User-Agent": USER_AGENT,
