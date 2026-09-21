@@ -165,7 +165,23 @@
                 x-text="mapLoading ? '載入中…'
                         : (info && info.tilesBlocked === true
                            ? '仍要開啟地圖' : '開啟地圖（需要網路）')"></button>
+        <!-- 🔴 定位**要按才發生**：一開頁就跳權限視窗，是替使用者做了
+             一個他沒有要求的決定。而那個視窗按掉之後很難再叫出來。 -->
+        <!-- ⚠️ 用 `btn-ghost` 不是 `btn-secondary`：`.btn-secondary` **只定義在
+             change-password.html 與 login.html 裡**，不在 css/style.css，
+             也不在這一頁的 <style> 裡 ⇒ 寫上去會得到一顆沒有樣式的按鈕，
+             而它**看起來只是「有點怪」**，不會壞掉、不會報錯。
+             🔑 這是今天第二次：上一次是 `.form-input`（同樣是我以為有共用樣式）。 -->
+        <button class="btn btn-sm btn-ghost"
+                @click="userPos ? clearPosition() : usePosition()"
+                :disabled="geoBusy || loading"
+                x-text="geoBusy ? '定位中…' : (userPos ? '不要用我的位置' : '使用我的位置')"></button>
         <button class="btn btn-ghost btn-sm" @click="refresh()" :disabled="loading">重新整理</button>
+      </div>
+      <!-- ⚠️ 定位失敗要說**是哪一種失敗**：拒絕、量不到、逾時、非安全環境，
+           四種的下一步完全不同，而它們都只會讓「離你多遠」那一欄不出現。 -->
+      <div class="mp-panel-body" x-show="geoError" style="padding-top:0">
+        <div class="mp-note warn" x-text="geoError"></div>
       </div>
     </div>
 
@@ -203,10 +219,23 @@
       <table class="table">
         <thead><tr>
           <th>來源</th><th>機關</th><th>名稱</th><th>地點</th>
-          <th style="text-align:right">距離</th><th>截止</th>
+          <th style="text-align:right">離公司</th>
+          <!-- 🔴 **並列，不是取代**：辦公室是穩定的錨點，瀏覽器定位是會變的。
+               沒有定位時整欄不出現 —— 不顯示「—」也不顯示 0。 -->
+          <th style="text-align:right" x-show="hasUserPos">
+            離你<br>
+            <span style="font-size:10px;font-weight:400;opacity:.8"
+                  x-text="accuracyLabel()"></span>
+          </th>
+          <th>截止</th>
         </tr></thead>
         <tbody>
-          <template x-for="p in (info ? info.points : [])" :key="p.source + p.caseNo">
+          <!-- ⚠️ key 原本是 `p.source + p.caseNo`，而 `source` 是**定位服務**
+               （每一筆都是 `nominatim`）、`caseNo` 只有標案才有
+               ⇒ 廠商那幾筆的 key 會**全部相同**，Alpine 只會留一列。
+               📌 加上 index 之後保證唯一。 -->
+          <template x-for="(p, i) in (info ? info.points : [])"
+                    :key="(p.dataset || '?') + '|' + (p.caseNo || p.name || '') + '|' + i">
             <tr>
               <!-- ⚠️ 這一欄原本顯示 `p.source`，而那是**定位服務**（nominatim）
                    不是資料集 —— 對使用者沒有意義。 -->
@@ -239,11 +268,24 @@
                   </span>
                 </template>
               </td>
+              <td style="font-size:12px;text-align:right;white-space:nowrap"
+                  x-show="hasUserPos">
+                <!-- ⚠️ 這裡的「—」與整欄消失不一樣：整欄不出現＝沒有定位，
+                     欄在而顯示「—」＝有定位但這一筆算不出來。 -->
+                <span x-show="p.distanceFromUserKm === null
+                              || p.distanceFromUserKm === undefined">—</span>
+                <span x-show="p.distanceFromUserKm !== null
+                              && p.distanceFromUserKm !== undefined"
+                      :style="precisionIsCoarse(p.precision) ? 'color:var(--warning)' : ''"
+                      x-text="(precisionIsCoarse(p.precision) ? '～' : '')
+                              + p.distanceFromUserKm + ' km'"></span>
+              </td>
               <td style="font-size:12px" x-text="p.deadline || '—'"></td>
             </tr>
           </template>
           <tr x-show="info && info.points.length === 0">
-            <td colspan="6" style="text-align:center;color:var(--text-secondary);padding:18px">
+            <td :colspan="hasUserPos ? 7 : 6"
+                style="text-align:center;color:var(--text-secondary);padding:18px">
               目前沒有可定位的資料。<strong>上面的提示說明了為什麼</strong>。
             </td>
           </tr>
@@ -265,6 +307,9 @@
 function mapPage() {
   return {
     session: {}, token: '', loading: false, info: null, loadError: '',
+    // 🔴 座標只活在這個物件裡：**不存 localStorage**。
+    // 存下來的話，下次開頁會用一個舊位置算距離，而畫面上看不出來它是舊的。
+    userPos: null, geoBusy: false, geoError: '',
     // 四個資料集。`mark` 是畫在標記上的字 —— **那才是分辨的載體**。
     // 🔑 顏色只是輔助：色覺差異的人要看得出來，而**點開才知道等於沒有回答**。
     datasets: [
@@ -306,6 +351,66 @@ function mapPage() {
       await this.refresh()
     },
 
+    //: 這一次的回傳裡到底有沒有用到定位。**以後端說的為準**，
+    //  不是以前端有沒有拿到座標為準——那兩件事會不一致（例如剛按下清除）。
+    get hasUserPos() {
+      return !!(this.info && this.info.userAccuracyM !== null
+                && this.info.userAccuracyM !== undefined)
+    },
+
+    //: 誤差寫成人話。**距離與誤差要一起出現** —— 一個數字不帶它的可信度，
+    //  就會被當成事實（§3n 的核心設計）。
+    accuracyLabel() {
+      const m = this.info && this.info.userAccuracyM
+      if (m === null || m === undefined) return ''
+      return m >= 1000 ? ('定位誤差 ±' + (m / 1000).toFixed(1) + ' 公里')
+                       : ('定位誤差 ±' + Math.round(m) + ' 公尺')
+    },
+
+    usePosition() {
+      this.geoError = ''
+      if (!window.isSecureContext) {
+        // ⚠️ 這是開發機最常撞到的一種：HTTP 上瀏覽器直接拒絕，
+        // 而錯誤訊息長得像「使用者拒絕授權」。**兩者要分開講。**
+        this.geoError = '這個網址不是安全環境（HTTPS 或 localhost），'
+                      + '瀏覽器不會提供定位。正式機是 HTTPS，在那裡可以用。'
+        return
+      }
+      if (!navigator.geolocation) {
+        this.geoError = '這個瀏覽器沒有定位功能。'
+        return
+      }
+      this.geoBusy = true
+      navigator.geolocation.getCurrentPosition(
+        pos => {
+          const c = pos.coords
+          // 🔴 誤差必須大於 0 才送得出去（後端也會擋，422）。
+          // 在這裡就說清楚，使用者才知道為什麼那一欄沒出現。
+          if (!(c.accuracy > 0)) {
+            this.geoBusy = false
+            this.geoError = '瀏覽器沒有給出定位誤差，無法標示可信度。'
+            return
+          }
+          this.userPos = { lat: c.latitude, lon: c.longitude, accuracy: c.accuracy }
+          this.geoBusy = false
+          this.refresh()
+        },
+        err => {
+          this.geoBusy = false
+          const why = { 1: '你拒絕了定位權限（可以在網址列左邊的圖示重新開啟）',
+                        2: '量不到位置（沒有 GPS／Wi-Fi 定位來源）',
+                        3: '定位逾時' }
+          this.geoError = '定位失敗：' + (why[err && err.code] || '不明原因')
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 })
+    },
+
+    clearPosition() {
+      this.userPos = null
+      this.geoError = ''
+      this.refresh()
+    },
+
     async refresh() {
       this.loading = true
       this.loadError = ''
@@ -313,7 +418,17 @@ function mapPage() {
         // ⚠️ 一個都沒勾時送 `none`，**不要送空字串** ——
         // 空字串會被後端當成「沒有指定」，而那跟「我不要任何來源」是兩件事。
         const want = this.picked.length ? this.picked.join(',') : 'none'
-        const r = await fetch('/api/map/points?sources=' + want, { headers: this._h() })
+        // 🔴 **座標走 header，不走 query string。**
+        // 實測（2026-09-22）uvicorn 的 access log 會把整串網址寫進
+        // `logs/server.log`：
+        //   INFO: … "GET /api/map/points?…&lat=24.1657&lon=120.6402… 200 OK
+        // ⇒ 放在網址上等於把使用者的位置永久寫在磁碟上。header 不會進那份紀錄。
+        const headers = this._h()
+        if (this.userPos) {
+          headers['X-Map-Position'] = this.userPos.lat + ',' + this.userPos.lon
+                                    + ',' + this.userPos.accuracy
+        }
+        const r = await fetch('/api/map/points?sources=' + want, { headers })
         if (!r.ok) {
           // ⚠️ 失敗時 info 留 null ⇒ 統計與清單都不渲染。
           // **不要顯示一個全是 0 的畫面**——那會讓「沒載到」看起來像「一切正常且沒東西」。
@@ -394,6 +509,9 @@ function mapPage() {
         })
         window.L.marker([p.lat, p.lon], { icon }).addTo(this._map)
           .bindPopup([d.label + '｜' + (p.name || ''), p.org, p.address || p.location,
+                      (p.distanceFromUserKm === null || p.distanceFromUserKm === undefined)
+                        ? '' : ('離你約 ' + p.distanceFromUserKm + ' km'
+                                + (this.accuracyLabel() ? '（' + this.accuracyLabel() + '）' : '')),
                       (p.distanceFromOfficeKm === null || p.distanceFromOfficeKm === undefined)
                         ? '' : ('約 ' + p.distanceFromOfficeKm + ' km（'
                                 + this.precisionLabel(p.precision) + '）')]

@@ -21,12 +21,16 @@
 ☠️ 「你沒有權限看標案」與「今天沒有標案」在畫面上都是一張沒有點的地圖，
 而那是今天第五個長成那個樣子的成因。
 """
+import logging
+
 from fastapi import APIRouter, Header, HTTPException
 
 from db import db_conn
 from helpers import _require_user
 from helpers import geo
 from helpers import tender_source
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -135,17 +139,52 @@ def _may_see_tenders(user) -> bool:
     return "tender_radar" in mods
 
 
+def _position_from_header(raw):
+    """`X-Map-Position: <lat>,<lon>,<accuracy>` 拆成三個。沒給回三個 `None`。
+
+    ## 🔴 為什麼要有這條路：**query string 會被寫到磁碟上**
+    ⚠️ 這不是推論，是實測（2026-09-22，uvicorn 0.41.0，`--log-level info`）：
+
+    ```
+    INFO:  127.0.0.1:34378 - "GET /api/map/points?sources=tenders
+           &lat=24.1657&lon=120.6402&accuracy=35 HTTP/1.1" 200 OK
+    ```
+
+    正式機的 `autostart.bat` 是 `uvicorn … --log-level info >> logs\server.log 2>&1`
+    ⇒ **每按一次「使用我的位置」，那個人當下的座標就被追加到一個永久檔案裡。**
+
+    ☠️ 而我們原本檢查過的三個地方**全都是乾淨的**：
+    `system_settings` 沒寫、`audit_log` 沒寫、`user_request_log` 存的是
+    `request.url.path`（Starlette 的 `path` **不含** query string）。
+    🔑 〈防護的副作用落在盲側〉：我們把三個想得到的出口都堵了，
+    而漏的是**沒有人列進清單的那一個**——它不在我們的程式碼裡，在 web server 裡。
+
+    📌 header 不會進 access log，也不在 `user_request_log` 的欄位裡
+    （那張表存的是 method／path／page／status）。
+    """
+    if not raw:
+        return None, None, None
+    parts = [p.strip() for p in str(raw).split(",")]
+    if len(parts) != 3:
+        raise HTTPException(422, "X-Map-Position 的格式是 <lat>,<lon>,<accuracy>")
+    return parts[0], parts[1], parts[2]
+
+
 def _user_position(lat, lon, accuracy):
-    """把 query 上的三個參數變成 `((lat, lon), accuracy_m)`，或 `(None, None)`。
+    """把三個參數變成 `((lat, lon), accuracy_m)`，或 `(None, None)`。
 
     ## 🔴 沒給誤差就 422，**不可以預設一個**
     一個編出來的誤差值會被畫成一個圈，而那個圈**看起來跟真的一樣**。
     🔑 「我不知道有多準」與「誤差是 50 公尺」是兩件事，
     而後者是一個**宣稱**——我們沒有資格替瀏覽器做那個宣稱。
 
-    ## 📌 `accuracy=0` 刻意不特判
-    它的語意沒有人裁過（「完美精準」還是「沒量到」？），
-    **而替使用者決定一個沒有人問過的語意，比留著它更糟。**
+    ## 🔴 `accuracy=0` 也是 422（A 2026-09-22 裁定，**改掉我原本的決定**）
+    我原本寫的是「刻意不特判，因為語意沒有人裁過」。⚠️ **那個理由是錯的層級**：
+    ☠️ 真正的問題不是「0 不合理」，是**收下 0 之後畫面會說「誤差約 0 公尺」**，
+    而瀏覽器定位沒有任何情境能宣稱誤差為零（GPS 最佳也是數公尺）。
+    🔑 **一個具體而錯誤的保證，比不顯示誤差更糟。**
+    📌 而它直接繞過 §3n 的核心設計（距離與誤差綁在一起）——
+    綁上去的誤差如果可以是 0，**那個設計就白做了**。
     """
     given = [v for v in (lat, lon, accuracy) if v is not None and v != ""]
     if not given:
@@ -161,14 +200,18 @@ def _user_position(lat, lon, accuracy):
         raise HTTPException(422, "lat／lon／accuracy 必須是數字")
     if not -90.0 <= lat_f <= 90.0 or not -180.0 <= lon_f <= 180.0:
         raise HTTPException(422, f"座標超出範圍：({lat_f}, {lon_f})")
-    if acc_f < 0:
-        raise HTTPException(422, f"accuracy 不可以是負數：{acc_f}")
+    if acc_f <= 0:
+        # ⚠️ `<= 0` 不是 `< 0`：0 與負數走同一條路（見上面的說明）。
+        raise HTTPException(
+            422, f"accuracy 必須大於 0：{acc_f}"
+                 "（瀏覽器定位不可能沒有誤差，0 是一個我們不能替它做的保證）")
     return (lat_f, lon_f), acc_f
 
 
 @router.get("/api/map/points")
 def map_points(sources: str = "tenders",
                lat: str = None, lon: str = None, accuracy: str = None,
+               x_map_position: str = Header(None),
                authorization: str = Header(None)):
     """地圖上的點，以及**所有「為什麼這裡是空的」的理由**。
 
@@ -200,6 +243,22 @@ def map_points(sources: str = "tenders",
     # ⚠️ 後者存的是 `path`，而 **query string 就在 path 裡**
     # ⇒ 「順手記下完整網址」就足以把一個人的位置留在磁碟上，
     # 而那張表**會進每日備份**。
+    # 🔴 **位置優先從 header 讀**，query string 只是相容路徑（見
+    # `_position_from_header` 的說明：query string 會被 uvicorn 寫進
+    # `logs/server.log`，而 header 不會）。前端只走 header。
+    h_lat, h_lon, h_acc = _position_from_header(x_map_position)
+    if h_lat is not None:
+        lat, lon, accuracy = h_lat, h_lon, h_acc
+    elif any(v is not None and v != "" for v in (lat, lon, accuracy)):
+        # ⚠️ **讓不安全的那條路出聲**，不要讓它安靜地可用。
+        # 🔑〈守門被拿掉≠規則被解除〉的反面：留著相容路徑而不留痕跡，
+        # 下一個人會照著 query string 寫，而那次外洩不會有人發現。
+        # 📌 這行**不印座標**——印出來就等於自己做了同一件事。
+        logger.warning(
+            "/api/map/points 收到 query string 形式的座標：那串網址已經被 "
+            "uvicorn 的 access log 寫進 logs/server.log 了。"
+            "請改用 X-Map-Position header。"
+        )
     user_coord, user_accuracy = _user_position(lat, lon, accuracy)
 
     profile = _company_profile()
