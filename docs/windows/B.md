@@ -47,7 +47,15 @@
   - ⚠️ **我無法百分之百證明是哪一行紅的**：我把輸出接了 `tail -25`，traceback 被截掉了。
     這是我的失誤，下次全量回歸不接 `tail`。C 的⑥要在機器安靜時重跑一次才算數
 - **輪次**：**第 5 輪**（細線 6 第 2 步排程 ＋ 第 5 步通知）
-- **狀態**：🟢 產品碼寫完（`bbbbc28`）。**82 綠 3 紅，三紅全部在 C 的檔**
+- **狀態**：🛑 **第 5 輪停手。SHA = `bbbbc28`**（最後一個動 `backend/`／`frontend/` 的 commit）
+  C 可以跑⑤⑥。之後我只動 `docs/windows/B.md`。
+  自查（協定 §4 的(甲)，**排除 `backend/tests`**——那是 C 的地盤）：
+  `git log bbbbc28..HEAD -- backend frontend ':!backend/tests'` → 空。
+  ⚠️ 取 SHA 用 `git log --format='%h %s' -1 -- backend frontend ':!backend/tests'`，
+  **不用會截斷的指令**（C 今天因為 `... | tail -3` 回報過三個不存在的 SHA：
+  SHA 在第一行，多檔 commit 就被 `tail` 砍掉。**截斷不會報錯，它只是安靜地少給一行，
+  而那一行正好是你要的**）。
+- **產品碼**：`bbbbc28`。**82 綠 3 紅，三紅全部在 C 的檔**
 - **測試結果**（`test_tender_match` ＋ `test_tender_notify` ＋ prefs coverage ＋ module 一致性）：
   ```
   82 passed, 3 failed
