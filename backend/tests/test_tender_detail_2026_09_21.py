@@ -556,3 +556,358 @@ def admin_and_watch(client):
     finally:
         conn.close()
     return "boss@example.invalid"
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# 第 6 輪補寫：D20／D21／D22
+#
+# ⚠️ **D20／D21／D22 的後端 B 已經寫完了**，所以這幾題一寫出來就是綠的 ——
+# 步驟②「先寫成紅的」在這一輪對它們做不到。
+# 🔑 **綠燈證明不了守門有沒有咬合**，所以每一題都配一個突變（見 C.md〈第 6 輪⑤〉）。
+# 唯一的例外是 **D21b，它現在是真的紅**。
+# ══════════════════════════════════════════════════════════════════════════
+
+# ── D20：存進去的要是轉址後的最終網址 ────────────────────────────────────
+
+LIST_URL_PREFIX = "/prkms/urlSelector/"
+FINAL_URL_PREFIX = "/tps/QueryTender/"
+FINAL_URL = ("https://web.pcc.gov.tw/tps/QueryTender/query/searchTenderDetail"
+             "?pkPmsMain=NzEzMzIyMDk%3D")
+
+
+def test_d20_premise_list_page_really_gives_the_redirect_form():
+    """D20 的前提：**列表頁給的確實是 `/prkms/urlSelector/` 那一種**。
+
+    ⚠️ 沒有這一題，D20 可能只是在驗一件本來就成立的事 ——
+    列表頁若本來就給最終網址，D20 會永遠綠而什麼都沒守。
+
+    🔑 **否定式斷言（「存進去的不可以是轉址前的」）必須配一個肯定式前提
+    （「來源真的是轉址前的」）**，否則它守的是一個不存在的風險。
+    """
+    from tests.test_tender_match_2026_09_21 import REAL
+    assert LIST_URL_PREFIX in REAL, (
+        f"列表頁樣本裡找不到 {LIST_URL_PREFIX!r} —— D20 的前提不成立，"
+        "D20 與這一題都要重新檢視（可能是對方改版了）"
+    )
+
+
+def test_d20_stored_url_is_the_url_actually_landed_on(client, admin_and_watch,
+                                                      monkeypatch):
+    """§3 D20：列表頁的連結是 302 轉址，**存進 `tenders.url` 的要是轉址後的最終網址**。
+
+    🔑 存錯的話畫面上**完全正常** —— 有連結、可以點、顏色也對，
+    **點下去才知道多繞一次**。又是「錯得很像對的」那一族。
+
+    ## 這一題的最終網址從哪裡來
+
+    轉址**只有在真的去抓那一頁的時候才觀察得到**。而這條線已經有請求預算
+    （D2 每日 20 筆、D3 間隔 2 秒），**另開一支 `resolve_url()` 會讓每一筆多一次
+    請求** —— 那等於用違反 D2／D3 的方式去滿足 D20。
+    ⇒ 必須從**已經發生的那一次請求**裡帶回來（`resp.geturl()`）。B 是這樣做的。
+
+    ⚠️ 觀測點刻意**不是** `fetch_detail` 的回傳值，是 **DB 裡最後存的那個字串** ——
+    使用者點的是那個，不是回傳值。
+    """
+    from tests.test_tender_match_2026_09_21 import REAL
+    from tests.test_tender_notify_2026_09_21 import _sent
+
+    _need(ts, "fetch_detail")
+    monkeypatch.setattr(ts, "fetch_detail",
+                        lambda url, *a, **kw: (_detail_html(), FINAL_URL))
+    _sent(monkeypatch)
+    monkeypatch.setattr(ts, "TENDER_RADAR_ENABLED", True)
+    _spy_fetch(monkeypatch, REAL)
+    _need(ts, "run_scheduled_scan")()
+
+    import db
+    conn = db.get_db()
+    try:
+        rows = conn.execute(
+            "SELECT t.case_no, t.url FROM tenders t "
+            "JOIN tender_hits h ON h.tender_id = t.id").fetchall()
+    finally:
+        conn.close()
+    assert rows, "一筆命中的標案都沒有 —— D20 的前提不成立"
+    for r in rows:
+        assert LIST_URL_PREFIX not in (r["url"] or ""), (
+            f"{r['case_no']} 存的還是轉址前的網址：{r['url']!r} —— "
+            "使用者點了會先到轉址頁，而畫面上看不出任何異常"
+        )
+    assert all(FINAL_URL_PREFIX in (r["url"] or "") for r in rows), (
+        f"有命中的標案沒有存到最終網址。實際：{[r['url'] for r in rows]!r}"
+    )
+
+
+def test_d20b_unfetched_tender_keeps_its_url(client, admin_and_watch,
+                                             monkeypatch):
+    """對照組：**沒抓到詳細頁的那些，網址要留著，不可以被清掉**。
+
+    ⚠️ 沒有這一題，一個「抓不到就把 url 寫成 NULL」的實作會讓 D20 全綠 ——
+    因為 D20 只驗「不可以是轉址前的」，而 `NULL` 確實不是轉址前的。
+    🔑 **否定式斷言擋不住「把欄位清空」這種過關法。**
+    （轉址前的網址點下去照樣到得了頁面，空的點不了。）
+    """
+    from tests.test_tender_match_2026_09_21 import REAL
+    from tests.test_tender_notify_2026_09_21 import _sent
+
+    _need(ts, "fetch_detail")
+    monkeypatch.setattr(ts, "fetch_detail",
+                        lambda url, *a, **kw: (None, "URLError: 連不上"))
+    _sent(monkeypatch)
+    monkeypatch.setattr(ts, "TENDER_RADAR_ENABLED", True)
+    _spy_fetch(monkeypatch, REAL)
+    _need(ts, "run_scheduled_scan")()
+
+    import db
+    conn = db.get_db()
+    try:
+        rows = conn.execute("SELECT case_no, url FROM tenders").fetchall()
+    finally:
+        conn.close()
+    assert rows, "一筆標案都沒存（前提不成立）"
+    for r in rows:
+        assert r["url"], (
+            f"{r['case_no']} 詳細頁抓失敗之後網址變成 {r['url']!r} —— "
+            "拿不到地點不是丟掉連結的理由，那是使用者唯一能自己去看的路"
+        )
+
+
+def test_d20c_success_and_failure_are_distinguishable(monkeypatch):
+    """釘住 `fetch_detail` 的**實際**契約，因為它的 docstring 現在是錯的。
+
+    第二個元素被**一值兩用**了：
+
+        成功 → `(html, "https://…")`    ← 最終網址
+        失敗 → `(None,  "URLError: …")` ← 錯誤訊息
+
+    而 docstring 仍寫著「回 `(html, error)`，**其中一個必為 None**」——
+    **成功的時候兩個都不是 None。**
+
+    ⚠️ 目前唯一的呼叫者用 `if html is None` 判斷，所以**現在沒有壞**。
+    🔑 危險的是**第二個呼叫者**：照 docstring 寫成 `html, err = ...; if err:`
+    的人，會把**每一次成功**都當成錯誤 —— 而那段程式一行都不會噴。
+
+    ⇒ 這一題釘死「**唯一的成敗判別依據是 `html`**」，並要求 docstring 跟著改。
+    （見 C.md〈給彙整〉38：真正的修法是回三元組或具名結果。）
+    """
+    _need(ts, "fetch_detail")
+
+    class _Resp:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def read(self):
+            return "<html>ok</html>".encode("utf-8")
+
+        def geturl(self):
+            return FINAL_URL
+
+    monkeypatch.setattr(ts.urllib.request, "urlopen", lambda *a, **kw: _Resp())
+    html, second = ts.fetch_detail("https://example.invalid/x")
+    assert html is not None, "成功時 html 不可以是 None"
+    assert second == FINAL_URL, (
+        f"成功時第二個元素要是**最終網址**，拿到的是 {second!r} —— "
+        "D20 的來源就是它，換掉它 D20 就沒有東西可存了"
+    )
+
+    def _boom(*a, **kw):
+        raise OSError("連不上")
+
+    monkeypatch.setattr(ts.urllib.request, "urlopen", _boom)
+    html2, second2 = ts.fetch_detail("https://example.invalid/x")
+    assert html2 is None, (
+        "失敗時 html 必須是 None —— 它是**唯一**的成敗判別依據，"
+        "第二個元素不管成功失敗都是字串，分不出來"
+    )
+    assert second2 and not second2.startswith("http"), (
+        f"失敗時第二個元素是 {second2!r}，開頭像個網址 —— "
+        "`_fetch_details` 的 `second.startswith('http')` 會把錯誤訊息寫進 url 欄位"
+    )
+
+
+# ── D21／D22：啟用／停用 ──────────────────────────────────────────────────
+
+def _admin_headers(client, make_user):
+    username, password = make_user(role="superadmin")
+    r = client.post("/api/auth/login",
+                    json={"username": username, "password": password})
+    assert r.status_code == 200, r.text
+    return {"Authorization": "Bearer " + r.json()["token"]}
+
+
+def _new_watch(name, keywords="監視", enabled=1, org=None,
+               budget_min=None, budget_max=None):
+    """直接寫 DB 起一筆條件，回 id。**刻意不經端點** —— 端點正是受測對象。"""
+    import json
+
+    import db
+    conn = db.get_db()
+    try:
+        cur = conn.execute(
+            "INSERT INTO tender_watches (name, keywords, excludes, org, "
+            "budget_min, budget_max, enabled, created_at, updated_at) "
+            "VALUES (?,?,'[]',?,?,?,?,?,?)",
+            (name, json.dumps([keywords], ensure_ascii=False), org,
+             budget_min, budget_max, enabled,
+             "2026-01-01T00:00:00", "2026-01-01T00:00:00"))
+        conn.commit()
+        return cur.lastrowid
+    finally:
+        conn.close()
+
+
+def _watch_row(watch_id):
+    import db
+    conn = db.get_db()
+    try:
+        return conn.execute("SELECT * FROM tender_watches WHERE id=?",
+                            (watch_id,)).fetchone()
+    finally:
+        conn.close()
+
+
+def _keywords_of(row):
+    import json
+    return json.loads(row["keywords"] or "[]")
+
+
+def test_d21_create_accepts_enabled_false(client, make_user):
+    """§3 D21：`enabled` 有欄位、有後端、有「已停用」標籤，**卻沒有地方能改它**。
+
+    UI 那一半我驗不到（由使用者目視），**但端點收不收得到是測得到的**，
+    而那是 UI 能運作的前提。
+    """
+    hdr = _admin_headers(client, make_user)
+    r = client.post("/api/tender-radar/watches", headers=hdr,
+                    json={"name": "停用中的新條件", "keywords": "監視",
+                          "enabled": False})
+    assert r.status_code == 201, r.text
+    row = _watch_row(r.json()["id"])
+    assert row is not None, "條件沒有被建立"
+    assert not row["enabled"], (
+        f"送了 enabled=False 卻存成 {row['enabled']!r} —— 新增時收不到這個欄位"
+    )
+
+
+def test_d21b_toggle_button_sends_only_enabled(client, make_user):
+    """🔴 **前端的「停用／啟用」按鈕只送 `enabled` 一個欄位，而端點收不了。**
+
+    `frontend/pages/tender-radar.html::toggleEnabled()`：
+
+        body: JSON.stringify({ enabled: !w.enabled })
+
+    旁邊的註解寫著「後端保留其餘現值」—— **那句話是錯的**。
+    `update_watch()` 第一件事是
+
+        name = (body.get("name") or "").strip()
+        if not name: raise HTTPException(422, "請填寫條件名稱")
+
+    ⇒ 422。而前端是 `if (r.ok) await this.refresh()`，`catch` 是空的 ——
+    **使用者按下去，畫面沒有任何反應，也沒有任何錯誤訊息。**
+
+    🔑 這跟 D22 是**同一個根因的兩面**：`PUT` 寫的是**整筆覆蓋**，
+    而呼叫它的人當它是**部分更新**。D22 只把 `enabled` 一個欄位補成部分更新，
+    其餘六欄（name／keywords／excludes／org／budget_min／budget_max）
+    **仍然是整筆覆蓋**。
+
+    ⚠️⚠️ 「把那個 422 拿掉」不是修法：`keywords` 會變成 `[]`，
+    而空關鍵字在**新增**時是被明文擋掉的（「會命中所有標案」）——
+    **從 PUT 進去就繞過了那道檢查**。⇒ 要的是部分更新，不是放寬檢查。
+    """
+    hdr = _admin_headers(client, make_user)
+    wid = _new_watch("完整的條件", keywords="監視", enabled=1,
+                     org="桃園市政府", budget_min=100, budget_max=900)
+
+    r = client.put(f"/api/tender-radar/watches/{wid}", headers=hdr,
+                   json={"enabled": False})
+    assert r.status_code == 200, (
+        f"只送 enabled 被擋掉了（{r.status_code}：{r.text}）—— "
+        "前端的停用按鈕就是這樣送的，使用者按下去完全沒有反應"
+    )
+
+    row = _watch_row(wid)
+    assert not row["enabled"], "沒有被停用"
+    assert row["name"] == "完整的條件", (
+        f"名稱被覆寫成 {row['name']!r} —— 使用者只是按了停用"
+    )
+    assert _keywords_of(row) == ["監視"], (
+        f"關鍵字被清成 {row['keywords']!r} —— "
+        "空關鍵字的條件會命中所有標案，而那在新增時是被明文擋掉的"
+    )
+    assert row["org"] == "桃園市政府", f"機關被清成 {row['org']!r}"
+    assert row["budget_min"] == 100 and row["budget_max"] == 900, (
+        f"預算被清成 {row['budget_min']!r}~{row['budget_max']!r}"
+    )
+
+
+def test_d22_editing_a_disabled_watch_keeps_it_disabled(client, make_user):
+    """§3 D22：**編輯一個已停用的條件並儲存，它不可以被自動改回啟用**。
+
+    原本的 `body.get("enabled", True)` 是**靜默的資料改寫** ——
+    使用者只改了個關鍵字，**順便把停用的條件打開了，而沒有任何訊息**。
+
+    🔑 這是〈降級之後它還是會動〉的**寫入版本**：
+    **操作成功了，而它做的不只是你要的那件事。**
+
+    ⚠️ 後果不是「設定沒存到」（那會被發現），是**雷達開始寄使用者早就關掉的
+    那一類標案** —— 而他會以為系統在亂寄，不會想到是自己按了儲存。
+
+    📌 ⑤的突變：改回 `body.get("enabled", True)` → 這一題要精準變紅。
+    """
+    hdr = _admin_headers(client, make_user)
+    wid = _new_watch("停用中的條件", keywords="監視", enabled=0)
+
+    # 只改關鍵字，**body 裡刻意不帶 enabled**（表單以外的呼叫者就是這樣送的）
+    r = client.put(f"/api/tender-radar/watches/{wid}", headers=hdr,
+                   json={"name": "停用中的條件", "keywords": "監視,門禁"})
+    assert r.status_code == 200, r.text
+
+    row = _watch_row(wid)
+    assert _keywords_of(row) == ["監視", "門禁"], (
+        f"關鍵字沒有被改到（{row['keywords']!r}）—— 這一題的前提不成立"
+    )
+    assert not row["enabled"], (
+        "編輯一個**停用中**的條件之後，它被自動改回啟用了 —— "
+        "使用者只是改關鍵字，卻順便把雷達打開了，而且沒有任何訊息。"
+        "⇒ 收不到 `enabled` 要**維持原值**，不要預設 True。"
+    )
+
+
+def test_d22b_explicitly_enabling_still_works(client, make_user):
+    """D22 的對照組：**明確送 `enabled=True` 時要真的打開**。
+
+    ⚠️ 沒有這一題，一個「永遠維持原值、根本不看 `enabled`」的實作會讓 D22 全綠 ——
+    而那會讓使用者**永遠無法把一個停用的條件打開**。
+    🔑 「不要亂改」與「該改的時候要改」是兩件事，兩題都要有。
+    """
+    hdr = _admin_headers(client, make_user)
+    wid = _new_watch("要被啟用的條件", keywords="監視", enabled=0)
+
+    r = client.put(f"/api/tender-radar/watches/{wid}", headers=hdr,
+                   json={"name": "要被啟用的條件", "keywords": "監視",
+                         "enabled": True})
+    assert r.status_code == 200, r.text
+    assert _watch_row(wid)["enabled"], (
+        "明確送了 enabled=True 卻沒有被啟用 —— 使用者無法打開停用的條件"
+    )
+
+
+def test_d22c_explicitly_disabling_still_works(client, make_user):
+    """第二個對照組：**明確送 `enabled=False` 要真的關掉**（表單裡的「狀態」下拉）。
+
+    ⚠️ D22 驗的是「不帶就別動」、D22b 驗的是「帶 True 要開」，
+    **兩題都不會因為「永遠寫 1」而變紅** —— 那會讓下拉選單的「停用」失效。
+    """
+    hdr = _admin_headers(client, make_user)
+    wid = _new_watch("啟用中的條件", keywords="監視", enabled=1)
+
+    r = client.put(f"/api/tender-radar/watches/{wid}", headers=hdr,
+                   json={"name": "啟用中的條件", "keywords": "監視",
+                         "enabled": False})
+    assert r.status_code == 200, r.text
+    assert not _watch_row(wid)["enabled"], (
+        "明確送了 enabled=False 卻沒有被停用 —— 表單的「狀態」下拉是壞的"
+    )

@@ -836,3 +836,122 @@ def test_09c_second_run_same_day_makes_no_external_request(client, monkeypatch):
 #
 # 「既有題數不可少於 **1,129**」是⑥的收斂條件，不是一支測試。
 # 📌 數字寫死在 §3（第 3 輪結案時 `--collect-only` 算的）。
+
+
+# ── 條件 8d～8g：總開關多了一層間接（`radar_on()`）───────────────────────
+#
+# 🔴 **這四題存在的理由，是 `test_08c` 即將守不到它原本守的東西。**
+#
+# A 裁示把實測開關做成 `radar_on()`：字面值 `TENDER_RADAR_ENABLED = False`
+# 留著不動，環境變數放在**讀的那一端**。
+#
+#     def radar_on():
+#         return TENDER_RADAR_ENABLED or os.getenv("MOTRIX_TENDER_RADAR") == "1"
+#
+# 這個形狀是對的（字面值留著 ⇒ 出貨預設仍然看得見、`test_08c` 在任何機器上都綠）。
+# ⚠️ **但它會讓 `test_08c` 守的東西從腳底下被搬走**：
+# 決定會不會對外連線的從此是 `radar_on()`，而 `test_08c` 釘的仍是那個字面值。
+# 有人把 `radar_on()` 寫成 `return True`，**`test_08c` 照樣全綠**。
+#
+# 🔑 **守門沒有被拿掉，是它守的對象被搬走了 —— 而綠燈還在原地。**
+# 這比守門被刪更難發現，因為**兩邊都沒有變**：測試沒變、字面值沒變，
+# 變的是**它們之間的那條線**，而 diff 只看得到檔案。
+#
+# ⇒ 通則：**每引入一層間接（函式／設定／環境變數），就去問一次
+#    「原本守著這個行為的那道門，現在指著的還是決定行為的那個東西嗎」。**
+#
+# 📌 `test_08d` 從此是主的、`test_08c` 是副的：
+#    08d 釘的是**不變量**（決定連外網的東西出貨預設是關的），
+#    08c 釘的是**實作細節**（08d 所讀的那個值）。兩題都留。
+
+def _radar_on():
+    fn = getattr(_src(), "radar_on", None)
+    if fn is None:
+        raise AssertionError(
+            "helpers/tender_source.py 缺少 `radar_on()` —— "
+            "實測開關要走函式，不可以把 `TENDER_RADAR_ENABLED` 的字面值改成 True："
+            "那等於每一個客戶的安裝一裝好就開始連政府網站，而沒有人按過任何按鈕。"
+        )
+    return fn
+
+
+def test_08d_effective_switch_ships_off(monkeypatch):
+    """🔑 **不變量：決定會不會對外連線的那個東西，出貨預設是關的。**
+
+    ⚠️ 這一題刻意 `delenv` ＋ 明寫字面值，**所以它與跑測試那台機器的設定無關**。
+    少了 `delenv`，它會在一台「環境變數設得完全正確」的測試機上變紅，
+    而錯誤訊息會說「出貨預設是開的」—— **出貨預設沒有變，變的是那台機器。
+    一個把人導向錯方向的紅燈，比綠燈還貴。**
+    """
+    monkeypatch.delenv("MOTRIX_TENDER_RADAR", raising=False)
+    monkeypatch.setattr(_src(), "TENDER_RADAR_ENABLED", False)
+    assert _radar_on()() is False, "沒有環境變數、字面值是 False 時，實測開關必須是關的"
+
+
+def test_08e_effective_switch_opens_with_env(monkeypatch):
+    """對照組：**環境變數是 `"1"` 時要真的打開。**
+
+    ⚠️ 沒有這一題，一個 `def radar_on(): return False` 會讓 08d 全綠 ——
+    而那會讓使用者在測試機上**怎麼設都開不起來**，然後去改原始碼的字面值，
+    也就是我們花了一小時擋下來的那個動作。
+    🔑 「不該開的時候不開」與「該開的時候要開」是兩件事。
+    """
+    monkeypatch.setattr(_src(), "TENDER_RADAR_ENABLED", False)
+    monkeypatch.setenv("MOTRIX_TENDER_RADAR", "1")
+    assert _radar_on()() is True, "環境變數 MOTRIX_TENDER_RADAR=1 時實測開關要打開"
+
+
+@pytest.mark.parametrize("value", ["0", "", "false", "no"])
+def test_08f_only_the_exact_value_opens_it(monkeypatch, value):
+    """⚠️ **`MOTRIX_TENDER_RADAR=0` 不可以打開它。**
+
+    寫成 `if os.getenv("MOTRIX_TENDER_RADAR"):` 的話，**`"0"` 是個非空字串 ⇒ 為真**，
+    於是「我明確把它設成 0」會把雷達**打開**。
+    🔑 跟 `0` vs `NULL` 同一族：**字串 `"0"` 的真假值與它的意思相反。**
+    而這個錯誤的方向是**往開的那一邊**，也就是會真的連出去的那一邊。
+    """
+    monkeypatch.setattr(_src(), "TENDER_RADAR_ENABLED", False)
+    monkeypatch.setenv("MOTRIX_TENDER_RADAR", value)
+    assert _radar_on()() is False, (
+        f"MOTRIX_TENDER_RADAR={value!r} 把雷達打開了 —— "
+        "判定要用 `== \"1\"`，不要用真假值"
+    )
+
+
+def test_08g_the_scan_guard_actually_reads_the_effective_switch(client, monkeypatch):
+    """🔴 **這一題才是把 08d 接上真實行為的那一題。**
+
+    08d／08e 只證明 `radar_on()` 自己算得對。**它們不證明有人在用它。**
+    ⚠️ 若 `run_scan` 的守衛仍然直接讀 `TENDER_RADAR_ENABLED`，
+    08d～08f 三題**全部都是綠的**，而環境變數對實際行為**一點作用都沒有** ——
+    使用者會在測試機上設好環境變數、看著畫面顯示「開著」、按下去什麼也沒發生。
+
+    🔑 **「算得對」與「被接上」是兩個問題**（見〈給彙整〉：找得到 ≠ 生效了）。
+    觀測點沿用條件 8 那個計數器：**呼叫次數**，不是「有沒有產生標案」。
+    """
+    mod = _src()
+    calls = _fetch_counter(monkeypatch)
+    monkeypatch.setattr(mod, "TENDER_RADAR_ENABLED", False)   # 字面值維持出貨預設
+    monkeypatch.setenv("MOTRIX_TENDER_RADAR", "1")            # 只靠環境變數開
+    _src("run_scan")()
+    assert len(calls) >= 1, (
+        "字面值關著、環境變數開著時 `run_scan` 沒有抓 —— "
+        "守衛還在直接讀 `TENDER_RADAR_ENABLED`，`radar_on()` 沒有被接上。"
+        "⇒ 這種狀態下 08d～08f 會全綠，而環境變數對行為毫無作用。"
+    )
+
+
+def test_08h_scan_stays_shut_with_no_env_and_false_literal(client, monkeypatch):
+    """08g 的對照組：**兩個都關的時候，一次都不可以抓。**
+
+    ⚠️ 沒有這一題，一個「守衛整個被拿掉」的實作會讓 08g 全綠 ——
+    而那是這條線上最貴的那個失敗：**出貨的安裝會自己連出去。**
+    """
+    mod = _src()
+    calls = _fetch_counter(monkeypatch)
+    monkeypatch.setattr(mod, "TENDER_RADAR_ENABLED", False)
+    monkeypatch.delenv("MOTRIX_TENDER_RADAR", raising=False)
+    _src("run_scan")()
+    assert len(calls) == 0, (
+        f"字面值關著、也沒有環境變數，卻抓了 {len(calls)} 次 —— 守衛沒有生效"
+    )
