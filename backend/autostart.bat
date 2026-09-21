@@ -1,6 +1,21 @@
 @echo off
 chcp 65001 >nul
 set PYTHONUTF8=1
+
+:: === 對外連線的兩個總開關（2026-09-22）=========================
+:: 這兩個是【這台機器的設定】，不是產品的預設值。
+:: 程式碼裡的出貨預設是【關】——那是對客戶的承諾：
+::   一台裝好的機器不會在沒有人知道的情況下連到外面的網站。
+:: 這裡打開，是因為這台是我們自己的正式機。
+::
+:: MOTRIX_TENDER_RADAR=1  每天在設定的時段連政府電子採購網抓標案公告
+:: MOTRIX_GEO=1           把地址送到 OpenStreetMap 換成座標（算距離用）
+::
+:: 要關掉：把下面兩行加上 :: 註解掉，然後重新啟動【排程工作】
+::   （不是重啟 uvicorn——見下面那段說明）
+set MOTRIX_TENDER_RADAR=1
+set MOTRIX_GEO=1
+:: ===============================================================
 cd /d "C:\Users\Motrix\Desktop\V9.0\backend"
 if not exist "C:\Users\Motrix\Desktop\V9.0\backend\logs" mkdir "C:\Users\Motrix\Desktop\V9.0\backend\logs"
 
