@@ -105,6 +105,79 @@ def test_utf8_env_can_delete_a_variable():
     )
 
 
+def test_every_file_that_uses_a_shared_helper_also_imports_it():
+    """🔴 用到 `tests/_*.py` 的東西，就必須在**同一個檔**裡 import 它。
+
+    ## 這一題的來歷：我改了五個檔、只驗了四個
+
+    2026-09-21 我把五個 spawn 點收攏到 `_subproc.py`，
+    其中 `test_tender_notify`（S5）**改了呼叫點而沒加 import**。
+    ⚠️ **pytest 的 collect 抓不到它** —— `NameError` 在函式主體裡，
+    只有那一支測試真的跑起來才會炸。
+    ⇒ 它安靜地進了 commit，**在全量回歸跑到第 1278 題時才紅**。
+
+    🔑 而真正的成因不是「忘了一行 import」，是
+    **我的驗證範圍是憑記憶列的，不是從改動清單推的** ——
+    我改了五個檔，然後跑了「我記得改過的那四個」。
+
+    📌 順帶一個更毒的細節：我先前量過 `test_tender_notify` 在零環境變數下
+    「32 passed」，而**那次量測發生在我改它之前**。
+    我拿一個舊的綠燈去支持一個新的狀態 —— 就是我半小時前才跟 B 講的
+    「**每一個數字都自帶一個會過期的時間戳**」。
+
+    ## ⚠️ 這個檢查很窄，我照實說
+
+    它只比對「`helper(` 這樣的呼叫」與「有沒有 import」。
+    換一種寫法（`getattr`、間接呼叫）就繞過去了。
+    **但它擋的是那個真的發生過的動作**，而且會隨著共用 helper 變多而一起長。
+    （真正的通用解是 pyflakes，而這個環境沒裝，我不為此加相依。）
+
+    ⚠️ **第一版用 regex 找 import，第一跑就誤報**：
+    `test_ports_helper` 用的是**跨行的括號 import**，
+    而 `import[^\\n]*\\bname\\b` 要求名字跟 `import` 在同一行。
+    ⇒ 改成用 `ast` 取 import 名單（那件事 AST 做得精確），
+    只有「有沒有被呼叫」還留著用文字找。
+    🔑 **兩個子問題不必用同一種工具解** —— 硬要統一的那一邊就是誤報的來源。
+    """
+    import ast
+    import re
+    from pathlib import Path
+
+    def _imported_names(tree):
+        names = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom):
+                names.update(a.asname or a.name for a in node.names)
+            elif isinstance(node, ast.Import):
+                names.update((a.asname or a.name).split(".")[0] for a in node.names)
+        return names
+
+    tests_dir = Path(__file__).resolve().parent
+    helpers = {}
+    for path in sorted(tests_dir.glob("_*.py")):
+        if path.name == "__init__.py":
+            continue
+        src = path.read_text(encoding="utf-8")
+        for name in re.findall(r"^def ([a-z]\w+)", src, re.M):
+            helpers[name] = path.name
+    assert helpers, "找不到任何共用 helper —— 這個檢查等於沒在檢查"
+
+    problems = []
+    for path in sorted(tests_dir.glob("test_*.py")):
+        src = path.read_text(encoding="utf-8")
+        tree = ast.parse(src)
+        imported = _imported_names(tree)
+        own = {n.name for n in ast.walk(tree)
+               if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
+        for name, home in helpers.items():
+            if not re.search(r"(?<![\w.])%s\s*\(" % re.escape(name), src):
+                continue
+            if name in imported or name in own:
+                continue
+            problems.append(f"{path.name} 用了 {name}()（來自 {home}）卻沒有 import")
+    assert not problems, "\n  ".join([""] + problems)
+
+
 def test_utf8_env_overrides_a_hostile_parent(monkeypatch):
     """父行程**設了錯的值**時也要壓過去，不是只處理「沒設」。
 

@@ -36,11 +36,11 @@
 要改名跟我說，改的是常數不是邏輯。
 """
 import importlib
-import subprocess
-import sys
 from pathlib import Path
 
 import pytest
+
+from tests._subproc import run_python
 
 
 # ── 契約 ─────────────────────────────────────────────────────────────────────
