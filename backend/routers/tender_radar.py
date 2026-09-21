@@ -2,9 +2,11 @@
 
 搜尋條件的 CRUD、抓回來的標案清單、以及**雷達健康狀態**。
 
-⚠️ **權限沿用 `dev_crm`**（業務開發），不新增模組鍵。
-標案雷達是業務開發管線的最前面一段，看得到業務開發的人就該看得到它；
-新增一個模組鍵會連帶要動權限目錄與側欄，**那不在這一輪的範圍內**。
+⚠️ **模組 key 是 `tender_radar`，不沿用 `dev_crm`**（A 第二十七次裁決）。
+細線 1 第 4 步已把它定為第 9 個套餐 `tender`——沿用別人的 key 會讓
+**套餐名與模組 key 對不上，而那會長出一張對照表，對照表最會腐爛**。
+⚠️ 新增 key 要**三處一起補**（`users.html` 目錄／`sidebar.js`／這裡），
+少一處 `test_module_keys_consistency_2026_09_13.py` 就會紅。
 
 ⚠️ **本輪不做通知**（第 5 步）。`suspect_redesign` 只回旗標、只顯示在畫面上。
 先確認抓回來的東西是對的，再談要不要寄信——
@@ -16,7 +18,7 @@ from datetime import datetime
 from fastapi import APIRouter, Body, Header, HTTPException
 
 from db import get_db
-from helpers import _audit, _require_user, _tok
+from helpers import _audit, _require_user, _tok, require_any_module
 # ⚠️ 走模組不是 `from ... import run_scan`：那會複製走副本，
 # 測試換不掉，而「換不掉」的症狀是計數器永遠 0、那一題永遠綠。
 from helpers import tender_source
@@ -24,11 +26,16 @@ from helpers import tender_source
 router = APIRouter()
 
 
-def _require_dev(authorization: str) -> dict:
+def _require_radar(authorization: str) -> dict:
+    """標案雷達的模組權限。
+
+    ⚠️ **用自己的 key `tender_radar`，不沿用 `dev_crm`**（A 第二十七次裁決）。
+    細線 1 第 4 步已把標案雷達定為第 9 個套餐 `tender`；沿用 `dev_crm` 的話
+    **套餐名與模組 key 對不上，而那會長出一張對照表——對照表最會腐爛**。
+    現在補是三行，等套餐上線再改是一次資料遷移。
+    """
     user = _require_user(authorization)
-    mods = json.loads(user.get("modules") or "[]")
-    if user["role"] not in ("superadmin", "admin") and "dev_crm" not in mods:
-        raise HTTPException(403, "無業務開發模組權限")
+    require_any_module(user, ("tender_radar",), "標案雷達")
     return user
 
 
@@ -81,7 +88,7 @@ def _watch_out(row):
 
 @router.get("/api/tender-radar/watches")
 def list_watches(authorization: str = Header(None)):
-    _require_dev(authorization)
+    _require_radar(authorization)
     conn = get_db()
     try:
         rows = conn.execute(
@@ -93,7 +100,7 @@ def list_watches(authorization: str = Header(None)):
 
 @router.post("/api/tender-radar/watches", status_code=201)
 def create_watch(body: dict = Body(...), authorization: str = Header(None)):
-    user = _require_dev(authorization)
+    user = _require_radar(authorization)
     name = (body.get("name") or "").strip()
     if not name:
         raise HTTPException(422, "請填寫條件名稱")
@@ -125,7 +132,7 @@ def create_watch(body: dict = Body(...), authorization: str = Header(None)):
 @router.put("/api/tender-radar/watches/{watch_id}")
 def update_watch(watch_id: int, body: dict = Body(...),
                  authorization: str = Header(None)):
-    _require_dev(authorization)
+    _require_radar(authorization)
     now = datetime.now().isoformat(timespec="seconds")
     conn = get_db()
     try:
@@ -155,7 +162,7 @@ def update_watch(watch_id: int, body: dict = Body(...),
 
 @router.delete("/api/tender-radar/watches/{watch_id}", status_code=204)
 def delete_watch(watch_id: int, authorization: str = Header(None)):
-    _require_dev(authorization)
+    _require_radar(authorization)
     conn = get_db()
     try:
         row = conn.execute("SELECT name FROM tender_watches WHERE id=?",
@@ -179,7 +186,7 @@ def list_tenders(authorization: str = Header(None)):
     """命中的標案，最近截止的排前面。**沒有截止日的排最後而不是最前面**——
     `NULL` 在 SQLite 的排序裡最小，不處理的話「沒寫截止日」會插到最急的位置。
     """
-    _require_dev(authorization)
+    _require_radar(authorization)
     conn = get_db()
     try:
         rows = conn.execute("""
@@ -208,7 +215,7 @@ def radar_status(authorization: str = Header(None)):
     `NULL`＝抓不到（網站掛了／逾時）／`0`＝認不得（對方改版）／`1`＝正常。
     前兩者的處置相反：掛掉只要等它好，改版要改解析器。
     """
-    _require_dev(authorization)
+    _require_radar(authorization)
     conn = get_db()
     try:
         row = conn.execute(
@@ -252,7 +259,7 @@ def manual_scan(authorization: str = Header(None)):
     手動觸發不是繞過開關的後門。開關管的是「這台機器會不會對外連線」，
     而那個承諾不該因為有人按了按鈕就失效。
     """
-    _require_dev(authorization)
+    _require_radar(authorization)
     result = tender_source.run_scan()
     _audit(_tok(authorization), "tender_radar.scan", "tender_radar", "",
            json.dumps(result, ensure_ascii=False)[:200])

@@ -413,6 +413,7 @@
     cWL  = has('work_log')
     cDT  = has('daily_task')
     cDev = has('dev_crm')
+    cTdr = has('tender_radar')
     cCon = has('contractor_list')
     cPay = has('payslip')
     cEnvG = has('env_guide')
@@ -481,6 +482,7 @@
   // Module → localStorage key map (used to mark current page's module as "seen")
   var _FILE_MODULE = {
     'dev-crm.html':            'dev_crm',
+    'tender-radar.html':       'tender_radar',
     'quotations.html':         'quotation',
     'quotation-form.html':     'quotation',
     'approval-queue.html':     'quotation',
@@ -612,8 +614,9 @@
       ni(up + 'index.html',          'dash',  '儀表板',   ['index.html', ''],                       canDash),
       // 2026-09-14：只留真正的業務項目（開發、報價、簽核）。
       // 案件管理拆到下方獨立分組，理由見那邊註解。
-      sec('業務', cDev || cQ),
+      sec('業務', cDev || cQ || cTdr),
       ni(pg('dev-crm.html'),         'bdev',  '業務開發', ['dev-crm.html'],                          cDev, 'sb-mod-dev-crm'),
+      ni(pg('tender-radar.html'),    'radar', '標案雷達', ['tender-radar.html'],                     cTdr, 'sb-mod-tender-radar'),
       ni(pg('quotations.html'),      'quote', '報價單',   ['quotations.html', 'quotation-form.html'], cQ,   'sb-mod-quotation'),
       // 2026-09-14：改走 ni()，否則不會被記錄進上方選單的分組資料
       ni(pg('approval-queue.html'), 'appr', '\u7c3d\u6838\u4f47\u5217', ['approval-queue.html'], cQ, '',
@@ -803,6 +806,7 @@
   // Module key → sidebar badge element IDs (mirrors modBadge in notif.js)
   var _MOD_BADGES = {
     dev_crm:     ['sb-mod-dev-crm'],
+    tender_radar: ['sb-mod-tender-radar'],
     quotation:   ['sb-mod-quotation'],
     case_manage: ['sb-mod-case'],
     customer:    ['sb-mod-customer'],
