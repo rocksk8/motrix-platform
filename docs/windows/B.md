@@ -29,6 +29,9 @@
 | 2026-09-21 | `backend/helpers/__init__.py` | 條件性 re-export | ✅ **准但預設不動**（STATE §5 第 2 項）。**最後沒有動** —— C 的測試用 `from helpers import licensing as lic`，`helpers/__init__.py` 不需要改。 |
 | 2026-09-21<br>第 2 輪 | `backend/main.py` | 掛授權守門 middleware。位置在 `auth_middleware` **之後**（先確認是誰，再確認這台機器有沒有買）。⚠️ **總開關做完並驗過之後才動這個檔** | ✅ **准**（STATE §5 第三次回覆）。已動，**只新增 53 行、無刪除** |
 | 2026-09-21<br>第 3 輪 | **`backend/db.py`** | 加前置時間欄位與採購建議狀態。**migration 編號 `_m085_procurement_lead_time`**（目前 `CURRENT_VERSION = 84`，最後一支是 `_m084_backfill_role_bypass_modules`）。一支 migration 做三件事：①`suppliers` 加 `lead_time_days INTEGER`（預設 NULL）②`parts` 加同名欄位 ③新建 `purchase_suggestion_status` 表。⚠️ 協定 §3 明寫兩人同時加 migration 會產生兩個 `_m085_`、merge 不衝突、只在執行時撞版本號——**編號在宣告裡講死** | ✅ **准**（A 另查證 `_m085` 零命中、無人在改 `db.py`）。已動 |
+| 2026-09-21<br>第 4 輪 | **`backend/db.py`** | 標案雷達四張表。**migration `_m086_tender_radar`**（`CURRENT_VERSION` 85→86）。A 已在 §3 交付物指派並說「開工吧…四張表」 | ✅ **准**（§3 交付物）。已動，實跑確認 `DB migration 86/86` |
+| 2026-09-21<br>第 4 輪 | **`backend/main.py`** | 掛 `tender_radar.router`。只動 2 行 | ✅ **准**（§3 交付物列了 router） | 
+| 2026-09-21<br>第 4 輪 | **`frontend/static/sidebar.js`** | ⚠️ **等 A 回覆，尚未動。** `tender-radar.html` 沒有側欄入口就只能手打網址。需要三處：`cTender = has('dev_crm')` 一類的旗標、`'tender-radar.html': 'dev_crm'` 的頁面→模組對應、`ni(pg('tender-radar.html'), …)` 的選單項。**A 沒有把 `sidebar.js` 列進 §3 交付物**，所以我停手 | ✅ **准**（`47add8e`，A 承認漏列）。已動，並依裁決**新建 key `tender_radar`** 而不是沿用 `dev_crm` |
 
 ---
 
@@ -43,18 +46,20 @@
     `peak == max_concurrency`（「應該至少有一批真的頂到上限」）在 CPU 被搶時會頂不到
   - ⚠️ **我無法百分之百證明是哪一行紅的**：我把輸出接了 `tail -25`，traceback 被截掉了。
     這是我的失誤，下次全量回歸不接 `tail`。C 的⑥要在機器安靜時重跑一次才算數
-- **狀態**：⏸ **待命**。第 3 輪產品碼完成，等 C 的⑤⑥下結論（A 指示：不要再往前做）
-- **待命期間的兩筆提報已被採納**（A `71fa401`）：
-  ① 解凍清單那條改寫而非劃掉——**「載入了」不等於「跑到了」**。
-     查法記著：`grep -rn LICENSE_GATE_ENABLED tests/` 零命中 ＋ middleware 第一行
-     （`main.py:282`）就是開關關著時的 early return ⇒ 那幾千次呼叫每一次都在第一行
-     return，**第 282 行以下至今沒被執行過一次**。1,111 綠證明的是「關著時無害」，
-     那正是第 2 輪總開關要保證的事——是有價值的證據，只是不是那條在講的那件事。
-     ⚠️ 判斷回歸涵蓋哪個版本，要比對來源檔 mtime 與回歸的**起跑**時間（用耗時回推），
-     不是完成時間。
-  ② 第 4 輪 §10 的 `parse_list` 已改成 `(items, dropped, recognised)`，
-     `recognised` **看結構不看筆數**——`([], 0)` 分不出「今天沒標案」與「它瞎了」。
-- **第 4 輪（細線 6 標案雷達）的單已預寫在 STATE §10，但未發，不開工。**
+- **輪次**：**第 4 輪**（細線 6 標案雷達第 1～3 步）
+- **狀態**：🛑 **第 4 輪停手。SHA = `a18adf9`**（最後一個動 `backend/`／`frontend/` 的 commit）
+  在 C 回報⑤⑥之前，我不再動 `backend/` 或 `frontend/` 任何一個字。
+  ⚠️ 這不是形式：⑥要跑 20 分鐘，受測對象在那 20 分鐘裡被改的話，**⑥的結果就沒有意義**
+  （C 提的方案①，A 採用）。之後只會動 `docs/windows/B.md`——它不在 C 的 `fp()` 範圍、
+  pytest 也不讀它。
+- **C 的 46 題**：**46 passed / 0 failed**（先前 43 紅 3 綠）。
+  ⚠️ **這個數字我上一輪就跑出來了，卻只講在對話裡、沒有寫進這裡，也沒有回報給 A。**
+  A 是對的：**沒有回報不能當成綠燈**——那正是 §5c 那條。這一項記在這裡當教訓。
+- **模組 key 三方一致性**：`test_module_keys_consistency` ＋ `test_module_permission_fixes`
+  ＋ `test_dark_mode_chrome_structure` ＋ C 的 46 題 ＝ **94 題全綠**
+- **全量回歸**：⚠️ **我沒有跑完。** 起跑後 A 派下模組 key 的工作，我**主動砍掉**那一支——
+  它量的是 `7309864`（改模組 key 之前），留著會變成一個**看起來像數字、其實過期**的結果，
+  而且會跟 C 的⑥搶 CPU。⑥是 C 的職責且是權威結果，由它跑。
 - **第 3 輪 commit**：`4edf210` 實作 → `6613224` A 的兩項裁決 → `9c2e70c` 備份登記修補
 - **自我驗證**：29/29（scratchpad 腳本，不進 repo、沒碰 `backend/tests/`）
 - **全量回歸（`-full`，驗 `9c2e70c`）**：
