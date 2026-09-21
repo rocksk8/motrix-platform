@@ -114,8 +114,14 @@
       <div class="mp-panel-body">
         <div class="mp-note warn" x-show="tileError">
           <span>⚠️</span>
-          <div><strong>底圖載不出來</strong>——圖磚需要連到
-            <code>tile.openstreetmap.org</code>。這台機器可能沒有對外連線。
+          <!-- ⚠️ **不要替使用者斷定原因。** 這裡只有一個訊號（圖磚載不出來），
+               而它至少對應兩個成因：沒有對外連線、或瀏覽器的安全政策擋下。
+               🔑 原本這句寫死成「這台機器可能沒有對外連線」——而那會讓人去查網路，
+               **而網路是對的**，於是他會更困惑然後開始懷疑別的東西。
+               ⇒ **訊號數要 ≥ 你敢斷定的成因數。** -->
+          <div><strong>底圖載不出來。</strong>
+            可能是這台機器沒有對外連線，或瀏覽器的安全政策擋下了
+            <code>tile.openstreetmap.org</code>。
             <br>下面的清單與距離<strong>不需要網路</strong>，照常可用。</div>
         </div>
         <div id="mp-canvas"></div>

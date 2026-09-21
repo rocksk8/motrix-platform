@@ -416,7 +416,13 @@ _CSP = (
     "default-src 'self'; "
     "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; "
     "style-src 'self' 'unsafe-inline'; "
-    "img-src 'self' data: blob:; "
+    # 🔴 `https://*.tile.openstreetmap.org` 是給地圖底圖的。
+    # ⚠️ **萬用字元只到子網域，不可以寫成 `*`**：Leaflet 的 `{s}` 會輪替 a/b/c，
+    # 所以需要子網域萬用，**但那跟「允許任何來源的圖片」差了一整個等級**。
+    # 📌 這一行原本沒有它 ⇒ 地圖按下去是一片灰，
+    # **而我寫的錯誤提示會說「這台機器可能沒有對外連線」——那個診斷是錯的。**
+    # 🔑 一個會講錯原因的錯誤訊息比沒有訊息更難查：它會讓人去查網路，而網路是對的。
+    "img-src 'self' data: blob: https://*.tile.openstreetmap.org; "
     "font-src 'self' data:; "
     "connect-src 'self'; "
     "frame-src 'self' blob:; "
