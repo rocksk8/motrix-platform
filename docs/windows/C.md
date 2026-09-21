@@ -617,10 +617,8 @@ STATE §3 自己寫著「**⛔ C 沒做完⑤⑥之前，第 1、2 步不得標�
 `core.autocrlf = true`、`.gitattributes` 不存在、磁碟上的 `.py`／`.html` **全是 LF**
 （`.bat`／`.ps1` 是 CRLF ＋ 該有 BOM 的都有，那部分專案處理得對）。
 
-我在丟棄式 repo 用同一組條件實測：`git checkout -- a.py` 之後 `od -c` 讀到 `code
-`，
-用 `printf 'code
-'` 寫回 LF，指紋才精準復原。
+我在丟棄式 repo 用同一組條件實測：`git checkout -- a.py` 之後 `od -c` 讀到 `code\r\n`，
+用 `printf 'code\n'` 寫回 LF，指紋才精準復原。
 
 **真正的形狀不是「git checkout 會改行尾」，而是**：
 
@@ -643,6 +641,32 @@ STATE §3 自己寫著「**⛔ C 沒做完⑤⑥之前，第 1、2 步不得標�
 **根治要 `.gitattributes`（`*.py text eol=lf`），那是 repo 層級、歸 A。**
 ⚠️ 提醒 A：**改它會重寫整棵樹的位元組**，所以
 ① 不能在任何人跑回歸的時候做，② 做完當天第一次全量回歸要重跑一次當新基準。
+
+#### ⚠️ 附記：我在寫這一條的當下，就同時踩了它，以及另一個
+
+**踩了第一個（CRLF）**：`3368764` 那個 commit 的 `docs/windows/C.md` 顯示
+**674 insertions / 557 deletions**，但真實內容差異只有 **128 行**。
+其餘一千多行全是行尾雜訊 —— 我用 Python 的 `io.open(p, "w")` 寫檔，
+**Windows 上它預設會把 `\n` 翻成 `\r\n`**，把一個原本全 LF 的檔整個轉成 CRLF。
+
+⚠️ **這裡的形狀跟上面那段是鏡像的**：上面講的是「git 把檔案拉回 git 的樣子」，
+這裡是「**我的工具把檔案寫成工具的樣子**」。兩邊都不是惡意、都沒有錯誤訊息，
+而且**都只在有人去比對位元組的時候才看得見**。
+`core.autocrlf=true` **沒有**在 commit 時把它正規化回來（實測 blob 就是 CRLF）。
+
+抽查過：我寫的三個測試檔都是 LF（`Write` 工具寫的），**只有 C.md 中標**
+（Python 腳本寫的）。已轉回 LF，差異縮回 117 insertions / 11 deletions。
+📌 **`docs/windows/STATE.md` 目前也是 CRLF**，那是 A 的檔，同一個原因，請 A 自己處理。
+
+**踩了第二個（heredoc 吃掉跳脫字元）**：我在寫上面那句「`od -c` 讀到 `code\r\n`」時，
+是用 bash heredoc 餵 Python 腳本，`\\r\\n` 被吃掉一層**變成真的 CR+LF 寫進 markdown**
+—— 於是這份文件裡多出一個真的 CR，而且那個**示範例子本身變成錯的**。
+修正時改用 `chr(92)` 組出反斜線。
+
+**寫法上的結論（對所有視窗都適用）**：
+- 用 Python 腳本改檔，一律 `io.open(..., newline="")`（讀寫都要），或直接讀寫 bytes
+- 內容含跳脫字元時**不要用 heredoc 餵腳本**，用 `Write`／`Edit` 工具，或 `chr(92)`
+- **改完用 `git diff --stat` 看一眼**：行數遠大於你實際改的量，就是行尾被整個重寫了
 
 ## 收工檢查表
 
