@@ -485,3 +485,25 @@ backend/archive.py             把 purchase_suggestion_status 登記進每日 JS
 每頁各自帶一份。所以「沿用系統慣例」在這裡指的是**沿用同一組名字與同一組值**，
 不是引用一個全域樣式表——我照後者的假設去查，才會查不到又不覺得奇怪。
 📌 CSS 少一個定義不會報錯、不會紅、不會有 console 訊息，它只是看起來很醜。
+
+## 施作慣例：跑 pytest 一律給 `--basetemp`
+
+```
+python -m pytest ... --basetemp="<自己的 scratchpad>/ptXX"
+```
+
+⚠️ **不給的話，pytest 用 `%TEMP%\pytest-of-hichan\pytest-current`，而那個路徑多個視窗共用。**
+兩個 session 同時跑，一個會清掉另一個正在用的暫存資料庫。
+
+🔑 **這件事最貴的地方是它不會以「衝突」的樣子出現：**
+- 我撞到的是收尾階段 → `PermissionError [WinError 5]` on `pytest-current`，
+  而且 **traceback 把測試結果那一行蓋掉了** ⇒ 我歸成「已知的 pytest 暫存毛病」。
+- C 撞到的是中途 → 暫存 DB 被清掉，噴在**一支完全無關的報表測試**上的
+  `sqlite3.OperationalError`，而且偶發 ⇒ 第一個診斷是「CPU 搶資源」。
+
+**同一個根因、兩個都很合理的錯誤診斷，兩個都不會找到它。**
+⇒ 判準不是「記得加」，是**把它當成指令的一部分**，跟 `-q` 一樣不用想。
+
+📌 給 A 的一筆：這不是 B 一個人的問題，**任何兩個視窗同時跑 pytest 都會中**。
+值得考慮在協定層面規定（或想辦法讓它結構上不可能，我目前沒有夠便宜的作法——
+共用的 `pytest.ini` 反而會讓大家用同一個目錄，更糟）。
