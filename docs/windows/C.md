@@ -79,18 +79,100 @@ pytest 會把 `--basetemp` 指到的目錄**整個刪掉重建**，時機是**�
 
 ## 本輪狀態
 
-- **輪次**：第 1 輪
-- **狀態**：🟥 **驗收測試寫完，27 題全紅、0 題綠** → B 寫碼中（七步的第 ④ 步）
-- **契約來源**：`docs/windows/STATE.md` §5〈本輪最終契約〉＋ §3 的 **11 條**驗收條件
-- **已寫的檔**：`backend/tests/test_licensing_core_2026_09_21.py`（未 commit）
+- **輪次**：**第 3 輪（暖身輪）** —— 供應商前置時間 ＋ 採購建議 ETA／狀態
+- **狀態**：🟡 **測試寫完、⑤做完；4 紅 33 綠。4 個紅全部是同一個命名爭議，等 A 裁決**
+- **⑥全量回歸**：A 指示**先不要跑**，等他確認沒有人會在那 18 分鐘裡動產品碼
+- **本輪的檔**：
+  - `backend/tests/test_procurement_leadtime_2026_09_21.py`（條件 1～8、8b，共 17 題）
+  - `backend/tests/test_system_audit_2026_09_14.py`（條件 **8c**，延伸既有守門，該檔 19 → 20 題）
+- **契約來源**：`docs/windows/STATE.md` §3 的 **11 條**驗收條件
 
-> 2026-09-21 A 第二次回覆後的異動：模組 `license` → **`licensing`**（3 處改名），
-> 驗收條件 8 條 → **11 條**（加 `env` 與雙公鑰），測試 23 題 → **27 題**。
-> A 已說明是在 C 開工後才改規格（`0ea90d6` → `619accb`）且當時沒通知，協定已補一條。
+### 🔴 我沒有讀實作
+
+**這一輪的測試是只讀 `STATE.md` §3 寫出來的。
+我沒有開過 `backend/helpers/procurement.py`，也沒有開過 `backend/routers/inventory.py`。**
+
+②（C 先寫紅測試）先於 ④（B 寫碼）的順序這一輪被打破了，紅燈順序的保證不存在，
+**這句話是這一輪唯一剩下的憑據**，所以它必須是真的。我取得契約的四個來源：
+
+| 我需要知道的 | 我從哪裡拿到 | 算不算讀實作 |
+|---|---|---|
+| 端點路徑、回應欄位、狀態機 | `STATE.md` §3 明文 | 否 |
+| 燈號門檻 `ceil(safety×1.5)`、`items[]` 長相 | **我自己的** `test_purchase_suggestions_2026_09_07.py` | 否 |
+| 狀態端點的 URL | FastAPI route table（`main.app.routes`） | 否，那是介面 |
+| B 實際回的欄位名 | **打 API 看回應**（用完即刪的探針測試） | 否，那是行為 |
+| ⑤突變的接縫名稱與簽名 | `dir()` 與 `inspect.signature` | 否，那是介面 |
+
+**我沒有用過 `inspect.getsource`，也沒有 `cat`／`sed`／`grep` 過那兩個檔的內容。**
 
 ---
 
-## 紅在哪（①之後填，B 靠這段知道「綠」的定義）
+## 第 3 輪 · 跑出來的結果（4 紅 33 綠）
+
+```bash
+cd backend
+python -m pytest tests/test_procurement_leadtime_2026_09_21.py tests/test_system_audit_2026_09_14.py   --basetemp=C:/Users/hichan/AppData/Local/Temp/motrix-pytest-C-adhoc -q
+```
+
+**4 個紅全部是同一件事**，而且**不是功能沒做**：
+
+| | |
+|---|---|
+| §3 明文規定 | `lead_time_days`（snake_case） |
+| B 實際回 | **`leadTimeDays`**（camelCase） |
+
+紅的是 `test_02`、`test_03`、`test_04[7]`、`test_04[30]` —— 全都卡在讀不到那個欄位。
+
+**我沒有改測試去遷就實作。** 我把紅燈訊息改成會自己說明是哪一種不一致，
+現在跑出來直接寫著「不要把這一行改成 camelCase 來讓它變綠」。詳見〈給彙整〉第 11 點。
+
+其餘全部正常：`eta` 回 `2026-09-28`（＝今天 ＋7，正確）、`status`／`orderedAt`／
+`receivedAt` 都在，四個邊界燈號全對。
+
+---
+
+## 第 3 輪 · ⑤反向驗證（四個突變，每一個都精準命中）
+
+**基準線**：套上欄位名別名（把命名那一層拿掉）之後 **17 全綠**。
+⚠️ 這一步是必要的：**已經紅的題目沒辦法拿來做突變測試** —— 突變要證明的是
+「這題會從綠變紅」。別名只活在那個行程裡，測試檔本身沒有被改成遷就實作。
+
+| 突變 | 打在哪個接縫 | 結果 |
+|---|---|---|
+| 料號／供應商優先序對調 | `resolve_lead_time` 兩個參數互換 | **只有 `test_02` 紅**（1 紅 16 綠）|
+| 前置時間未知回 `0` 不回 `None` | `resolve_lead_time` 包一層 | **只有 `test_03` 紅**（1 紅 16 綠）|
+| 狀態轉移永遠放行 | `validate_transition` → `None` | **只有 `test_06` 紅**（1 紅 16 綠）|
+| 開新一輪時沿用舊的 `ordered_at` | `effective_cycle` 只改一個欄位 | **只有 `test_07c` 紅**（1 紅 16 綠）|
+| （8c）把一個刻意略過的欄位從清單移除 | `_BACKUP_OMITTED_ON_PURPOSE` | **只有 `test_backup_export_covers_every_column` 紅** |
+
+§3 只要求兩個突變（條件 2、條件 3），我多做了條件 6、7c 與 8c ——
+那三個是 A 在訊息裡特別點名、或我自己認為最容易假綠的。
+
+### ⚠️ 第四個突變我第一次寫錯了，而錯的樣子是「12 題紅」
+
+`keep_ordered` 第一版我寫成 `return stored_row`，結果 **12 題紅**。
+
+**第一個假設要是「突變寫錯了」，不是「測試不精準」** —— 查下去果然是我錯：
+`stored_row` 在全新料號上是 `None`，等於把每一筆的狀態計算整個打掉。
+我用一個只印輸入輸出的探針查出 `effective_cycle` 的真實形狀
+（回 `{status, ordered_at, ordered_by, received_at, received_by, new_cycle}`），
+改成**只動 `ordered_at` 一個欄位**之後就精準了。
+
+**突變的爆炸半徑太大，本身就是突變寫錯的訊號。**
+
+### 做法：完全沒有碰 B 的檔案
+
+四個突變都是 pytest plugin（`scratchpad/mut_proc.py`）裡的 monkeypatch，
+磁碟上一個位元組都沒動。B 現在 idle 待命，但隨時可能被 A 派回去動那些檔。
+
+⚠️ `routers/inventory.py` 是 `from helpers.procurement import ...` **by value** 綁進來的，
+只換 `helpers.procurement` 上那一份沒有用 —— 跟 `conftest.py` 開頭記的是同一個坑。
+plugin 裡有 `_patch()` 守門：**接縫一個都沒換到就當場 raise**，
+因為「突變沒植入」跟「突變沒被抓到」長得一模一樣。
+
+---
+
+## 【第 1 輪 · 已結案】紅在哪（①之後填，B 靠這段知道「綠」的定義）
 
 **指令**（就是上面〈跑測試的固定指令〉那一條，只是指定單檔）：
 
@@ -157,7 +239,7 @@ ImportError("cannot import name 'licensing' from 'helpers'")。需要的名字�
 **檢查順序**：`malformed → missing → bad_signature → machine_mismatch → expired`。
 簽章一定要排在 `machine`／`expires` 之前 —— **簽章驗過之前 payload 沒有任何一個欄位可信**。
 
-## 反向驗證結果（②之後填）
+## 【第 1 輪 · 已結案】反向驗證結果
 
 > 格式：把什麼放回去 → 哪一題紅了 → 其餘幾題仍綠
 > **只寫「通過」等於沒驗。**
@@ -402,6 +484,60 @@ STATE §3 自己寫著「**⛔ C 沒做完⑤⑥之前，第 1、2 步不得標�
 我傾向 **2**：它不需要任何人記得停手，而且「對不上就重跑」是機器判得出來的條件。
 ⚠️ 但 2 有個前提：**`--basetemp` 要每個視窗一個**（〈給彙整〉第 9 點），
 否則 B 一跑測試就會把 C 的回歸打掉，那比版本漂移更難診斷。
+
+### 11 · 🔴 欄位命名：§3 寫 `lead_time_days`，B 回 `leadTimeDays`（4 題紅，等裁決）
+
+這是本輪唯一的紅，**不是功能沒做**。
+
+**我的判斷是 B 比較對，§3 寫錯了。** 那支端點的既有欄位全是 camelCase
+（`safetyStock`／`inStockCount`／`stockLevel`／`suggestedQty`／`estimatedCost`／
+`orderedAt`／`receivedAt`），B 跟了既有慣例；§3 看起來是直接把**資料庫欄位名**
+抄進了**API 回應規格**。唯一的例外 `part_no` 是既有的歷史遺留。
+
+**但我沒有自己改成 camelCase**，因為 A 的指示是「紅代表理解不一致 ⇒ 回報，
+不要改測試去遷就實作」。**請 A 裁決要改 §3 還是改實作**，我這邊是改一個常數的事
+（`_LEAD_FIELD`）。
+
+⚠️ 若裁定改 §3，記得**同時改 DB 欄位名以外的地方**：`suppliers.lead_time_days` 與
+`parts.lead_time_days` 是資料庫欄位，那兩個**不該**跟著改成 camelCase。
+
+### 12 · 🟠 §3 條件 8c 的前提寫錯了：**備份查詢不是全部 `SELECT *`**
+
+§3 寫「📌 它現在會是綠的（`_daily_backup()` 目前全部 `SELECT *`）」。**實測不是。**
+有兩條查詢本來就是列舉欄位、刻意略過憑證素材：
+
+```
+使用者 (users):              少了 password_hash / daily_task_pw_hash /
+                             unlock_password_hash / totp_secret / totp_recovery_codes
+通行金鑰 (webauthn_credentials): 少了 credential_id / public_key
+```
+
+**照 §3 字面寫成「選到的 ＝ 宣告的」，這題今天就會紅在一個正確的行為上**
+（那些欄位本來就不該進 JSON 備份，`test_business_critical_tables_are_in_json_backup`
+的說明也寫著是刻意的）。
+
+我改成驗 **「宣告的 － 選到的 ＝ 刻意略過的那幾個」，一個不多一個不少**，
+清單寫成 `_BACKUP_OMITTED_ON_PURPOSE` 常數。這樣才真的達到 §3 想要的效果：
+**把「哪些欄位可以不備份」從散在 SQL 裡的沉默決定，變成一個要改就會被看見的清單。**
+
+另外加了一道：清單裡列了、但表上已經不存在的欄位要報錯 ——
+**過期的豁免清單會讓守門對同名的新欄位自動放行**。
+
+### 13 · 🟠 條件 4「用固定日期測」我只做到一半
+
+§3 要求「用固定日期測，**不要用 `date.today()` 當預期值**」。我做不到完整版：
+
+- 這台機器**沒有 `freezegun`**
+- 要 monkeypatch 實作取「今天」的來源，就得先知道它從哪裡取 —— **那要讀實作，本輪禁止**
+
+折衷：用**兩個差很遠的前置時間**（7 與 30）跑同一條路徑，再加「`eta` 不可以等於今天」。
+這擋得住「寫死成常數」與「直接把 eta 填成今天」，**但擋不住「實作與測試用同一個錯的今天」**
+（例如兩邊都用 UTC，而正確答案是本地時間 —— 跨日那幾小時會一起錯）。
+
+**要真的關掉這個缺口，二選一**：① 裝 `freezegun`；
+② 請 B 把「今天」從一個可 monkeypatch 的接縫取（例如 `procurement.today()`）——
+我查過 `compute_eta(lead_time_days, today)` 已經把 `today` 當參數收了，
+所以**呼叫端**傳的是什麼才是關鍵，那一段我沒看也不該看。
 
 ## 收工檢查表
 

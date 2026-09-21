@@ -216,6 +216,80 @@ def test_backup_export_selects_no_blob_columns(client):
                            "請逐欄列出、略過二進位欄位：\n  " + "\n  ".join(offenders))
 
 
+# ── 2026-09-21 第 3 輪 · STATE §3 條件 8c ───────────────────────────────────
+#
+# 刻意不進 JSON 備份的欄位。**全部是憑證素材**——從 JSON 還原後本來就要重設密碼、
+# 重綁 2FA/Passkey（見上面 test_business_critical_tables_are_in_json_backup 的說明）。
+#
+# ⚠️ 這份清單就是這道守門的全部價值所在：它把「哪些欄位可以不備份」從
+# **散在 SQL 裡的沉默決定**變成**一個要改就會被看見的清單**。
+_BACKUP_OMITTED_ON_PURPOSE = {
+    "users": {
+        "password_hash", "daily_task_pw_hash", "unlock_password_hash",
+        "totp_secret", "totp_recovery_codes",
+    },
+    "webauthn_credentials": {"credential_id", "public_key"},
+}
+
+
+def test_backup_export_covers_every_column(client):
+    """每張已備份表的欄位集合，要等於備份查詢實際取出的欄位集合。
+
+    延伸上面 `test_backup_export_selects_no_blob_columns` 的同一個機制
+    （`cursor.description` 對 `PRAGMA table_info`），只是把範圍從「BLOB 欄位」
+    擴到**整個欄位集合**——A 指定「延伸既有的比對，不要新建一套」。
+
+    **這一輪它會是綠的，價值不在這一輪**：它讓「有人把 `SELECT *` 改成列舉欄位、
+    或加了新欄位卻忘了加進列舉」**必須被看見**。漏備份一個欄位不會有任何錯誤訊息，
+    只有還原的那一天才會發現——而那天已經太遲了。
+
+    ⚠️ **開發單說「目前全部 `SELECT *`」，實測不是**（2026-09-21 視窗 C）：
+    `使用者` 與 `通行金鑰` 兩條查詢本來就是列舉欄位、刻意略過憑證素材。
+    所以這題不是「選到的 ＝ 宣告的」，而是
+    **「宣告的 － 選到的 ＝ 刻意略過的那幾個」**，一個不多一個不少。
+    寫成嚴格相等的話，這題今天就會紅在一個**正確**的行為上。
+    """
+    import db
+    conn = db.get_db()
+    offenders = []
+    stale = []
+    try:
+        for fname, sql in _json_backup_queries().items():
+            tables = re.findall(r"FROM\s+(\w+)", sql)
+            if len(tables) != 1:
+                # 多表 JOIN 的查詢對不出「來源表的欄位集合」，跳過但要講出來，
+                # 不要讓它靜靜地不被檢查。
+                offenders.append(f"{fname}: 不是單表查詢（{tables}），這道守門涵蓋不到")
+                continue
+            table = tables[0]
+            declared = {r["name"] for r in
+                        conn.execute(f"PRAGMA table_info({table})").fetchall()}
+            selected = {d[0] for d in conn.execute(sql).description}
+            allowed = _BACKUP_OMITTED_ON_PURPOSE.get(table, set())
+
+            unexpected = declared - selected - allowed
+            if unexpected:
+                offenders.append(
+                    f"{fname} ({table}): {sorted(unexpected)} 沒有被備份，"
+                    "也不在刻意略過清單裡"
+                )
+            # 清單裡列了、但那個欄位早就不存在 ＝ 守門被悄悄放寬了
+            for col in sorted(allowed - declared):
+                stale.append(f"{table}.{col}")
+    finally:
+        conn.close()
+
+    assert not offenders, (
+        "這些欄位不會進每日 JSON 備份，而且不是刻意的——還原時那一欄整欄是空的，"
+        "且不會有任何錯誤訊息：\n  " + "\n  ".join(offenders) +
+        "\n（若確定不該備份，把它加進 _BACKUP_OMITTED_ON_PURPOSE 並寫明理由。）"
+    )
+    assert not stale, (
+        "_BACKUP_OMITTED_ON_PURPOSE 裡這些欄位在表上已經不存在了，"
+        "留著會讓守門對同名的新欄位自動放行：\n  " + "\n  ".join(stale)
+    )
+
+
 def test_business_critical_tables_are_in_json_backup(client):
     """§8.3 的最後手段（JSON 重建）必須真的重建得出一套可用的系統。
 
