@@ -170,6 +170,11 @@
       </div>
     </div>
 
+    <!-- 切換啟用／刪除的錯誤要看得見。沒有這一行的話，後端回 422 時
+         畫面完全沒有反應——而「沒有反應」跟「成功了」長得一模一樣。 -->
+    <div style="font-size:12px;color:var(--danger);margin:0 0 6px"
+         x-show="listError" x-text="listError"></div>
+
     <template x-for="w in watches" :key="w.id">
       <div class="panel tr-panel-body" style="display:flex;justify-content:space-between;gap:12px">
         <div>
@@ -250,7 +255,7 @@ function tenderRadarPage() {
   return {
     session: {}, token: '', loading: false, scanning: false,
     status: null, watches: [], tenders: [], formError: '',
-    schedule: null, scheduleHour: '', scheduleMsg: '',
+    schedule: null, scheduleHour: '', scheduleMsg: '', listError: '',
     form: { id: null, name: '', keywords: '', excludes: '', org: '',
             budgetMin: '', budgetMax: '', enabled: true },
 
@@ -353,14 +358,23 @@ function tenderRadarPage() {
     },
 
     async toggleEnabled(w) {
-      // 只送 `enabled` 一個欄位。後端保留其餘現值，所以這裡不必把整張表單湊齊——
-      // 湊齊反而危險：畫面上的值可能比資料庫舊，會把別人的修改蓋掉。
+      // 只送 `enabled` 一個欄位——後端是部分更新，body 裡沒有的欄位保留現值。
+      // 不把整張表單湊齊是刻意的：畫面上的值可能比資料庫舊，湊齊會蓋掉別人的修改。
+      // ⚠️ 這裡原本是 `catch (_e) {}` ＋ 只在 r.ok 才動作，於是後端回 422 時
+      //    **畫面沒有任何反應，也沒有任何錯誤訊息**——使用者只會以為按鈕壞了。
+      //    「不處理錯誤」與「處理成功」在畫面上長得一模一樣。
+      this.listError = ''
       try {
         const r = await fetch(`/api/tender-radar/watches/${w.id}`,
                               { method: 'PUT', headers: this._h(),
                                 body: JSON.stringify({ enabled: !w.enabled }) })
-        if (r.ok) await this.refresh()
-      } catch (_e) {}
+        if (!r.ok) {
+          const d = await r.json().catch(() => ({}))
+          this.listError = `「${w.name}」切換失敗：${d.detail || r.status}`
+          return
+        }
+        await this.refresh()
+      } catch (_e) { this.listError = `「${w.name}」切換失敗：連線失敗` }
     },
 
     async loadSchedule() {
@@ -386,6 +400,7 @@ function tenderRadarPage() {
     },
 
     async remove(w) {
+      this.listError = ''
       if (!confirm(`確定刪除搜尋條件「${w.name}」？它的命中紀錄也會一起刪除。`)) return
       try {
         const r = await fetch(`/api/tender-radar/watches/${w.id}`,

@@ -133,34 +133,75 @@ def create_watch(body: dict = Body(...), authorization: str = Header(None)):
 @router.put("/api/tender-radar/watches/{watch_id}")
 def update_watch(watch_id: int, body: dict = Body(...),
                  authorization: str = Header(None)):
+    """部分更新：**body 裡沒有的欄位一律保留現值。**
+
+    🔴 這裡原本是「整筆覆蓋」，而呼叫端（含畫面上的啟用／停用鈕）當它是部分更新。
+    兩邊各自都講得通，合起來的結果是：只送 `enabled` 一個欄位 → `name` 變空 → 422，
+    而前端的 `catch` 是空的 ⇒ **使用者按了停用，畫面沒有任何反應，也沒有任何錯誤訊息。**
+
+    ⚠️ 我第一次修這裡時**只把 `enabled` 一個欄位改成保留現值**，另外六個原封不動。
+    當時的註解還把那個失敗形狀完整描述了一遍——**我修掉了那個案例，沒有修那個形狀。**
+    判準應該是「這個修法會不會讓第七個欄位不可能出事」，而不是「這個欄位好了沒」。
+
+    ⚠️ 判準是 `key in body` **不是** `body.get(key)`：後者會把「明確送了空值」
+    （清空機關、清空預算上限）當成「沒有送」，於是使用者清不掉任何欄位。
+    """
     _require_radar(authorization)
     now = datetime.now().isoformat(timespec="seconds")
     conn = get_db()
     try:
-        if not conn.execute("SELECT 1 FROM tender_watches WHERE id=?",
-                            (watch_id,)).fetchone():
+        row = conn.execute(
+            "SELECT name, keywords, excludes, org, budget_min, budget_max, "
+            "enabled FROM tender_watches WHERE id=?", (watch_id,)).fetchone()
+        if not row:
             raise HTTPException(404, "找不到這個搜尋條件")
-        name = (body.get("name") or "").strip()
-        if not name:
-            raise HTTPException(422, "請填寫條件名稱")
-        # 🔴 D22：**收不到 `enabled` 就維持原值，不要預設 `True`。**
-        # 原本 `body.get("enabled", True)` 是**靜默的資料改寫**：
-        # 使用者去改一個關鍵字，順手把一個停用的條件打開了，而**沒有任何訊息**。
+
+        name = row["name"]
+        if "name" in body:
+            name = (body["name"] or "").strip()
+            if not name:
+                raise HTTPException(422, "請填寫條件名稱")
+
+        keywords = row["keywords"]
+        if "keywords" in body:
+            keywords = _json_list(body["keywords"], "keywords")
+            # 與 `create_watch` 逐字相同的一道。
+            # ⚠️ 它原本**只掛在 POST 上**，PUT 沒有 ⇒ 先建一個合法的、再 PUT 清空，
+            # 就得到一個命中所有標案的條件。**驗證要掛在每一個寫入點上，
+            # 不是掛在第一個寫入點上**——放寬 422 去讓按鈕能動會直接打開這個洞。
+            if keywords == "[]":
+                raise HTTPException(
+                    422, "至少要有一個關鍵字，否則這個條件會命中所有標案")
+
+        excludes = row["excludes"]
+        if "excludes" in body:
+            excludes = _json_list(body["excludes"], "excludes")
+
+        org = row["org"]
+        if "org" in body:
+            org = (body["org"] or "").strip() or None   # 空 = 不篩機關
+
+        budget_min = row["budget_min"]
+        if "budgetMin" in body:
+            budget_min = _opt_int(body["budgetMin"], "budgetMin")
+
+        budget_max = row["budget_max"]
+        if "budgetMax" in body:
+            budget_max = _opt_int(body["budgetMax"], "budgetMax")
+
+        # D22：收不到 `enabled` 就維持原值，不要預設 `True`。
+        # `body.get("enabled", True)` 是**靜默的資料改寫**：使用者去改一個關鍵字，
+        # 順手把一個停用的條件打開了，而沒有任何訊息。
         # 🔑 這是〈降級之後它還是會動〉的寫入版本：
         # **操作成功了，而它做的不只是你要的那件事。**
-        row = conn.execute("SELECT enabled FROM tender_watches WHERE id=?",
-                           (watch_id,)).fetchone()
-        enabled = row["enabled"] if row else 1
+        enabled = row["enabled"]
         if "enabled" in body:
-            enabled = 1 if body.get("enabled") else 0
+            enabled = 1 if body["enabled"] else 0
+
         conn.execute(
             "UPDATE tender_watches SET name=?, keywords=?, excludes=?, org=?, "
             "budget_min=?, budget_max=?, enabled=?, updated_at=? WHERE id=?",
-            (name, _json_list(body.get("keywords"), "keywords"),
-             _json_list(body.get("excludes"), "excludes"),
-             (body.get("org") or "").strip() or None,
-             _opt_int(body.get("budgetMin"), "budgetMin"),
-             _opt_int(body.get("budgetMax"), "budgetMax"),
+            (name, keywords, excludes, org, budget_min, budget_max,
              enabled, now, watch_id),
         )
         conn.commit()
