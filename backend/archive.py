@@ -1127,6 +1127,10 @@ def _daily_backup_tables() -> dict:
         "網路架構規劃書":   "SELECT * FROM network_plans ORDER BY id",
         "庫存品項":         "SELECT * FROM stock_items ORDER BY id",
         "庫存批次":         "SELECT * FROM stock_batches ORDER BY batch_no",  # 無 id 欄
+        # 2026-09-21：採購建議的下單／到貨紀錄。**必須進備份**——
+        # 「這個料號是哪天下單的、哪天到貨的」在系統裡沒有第二個來源，
+        # 採購建議本身是即時從庫存算出來的，重算得出清單但重算不出這段歷史。
+        "採購建議狀態":     "SELECT * FROM purchase_suggestion_status ORDER BY part_no",  # 無 id 欄
         # ── 紀錄類 ──
         "稽核紀錄":         "SELECT * FROM audit_log ORDER BY id",
         "通知":             "SELECT * FROM notifications ORDER BY id",
