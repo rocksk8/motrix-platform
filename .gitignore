@@ -3,6 +3,15 @@ backend/.initial_admin_credentials.txt
 **/.env
 **/.env.*
 
+# License：簽發私鑰與客戶金鑰一律不進 git（2026-09-21）
+# 私鑰外洩 = 所有已發出的授權全部形同虛設，而且撤不回來——離線驗證沒有撤銷清單，
+# 每一把已經裝在客戶機器上的金鑰都會繼續有效到它自己的到期日為止。
+# license.key 本身是 per-installation（同 heartbeat_config.json 的性質），
+# 由簽發流程產生後放進客戶機器，不是程式碼的一部分。
+backend/license.key
+backend/tools/_license_private_key*.pem
+**/*_private_key*.pem
+
 # Database & local backups
 backend/motrix_erp.db
 backend/motrix_erp.db-*
