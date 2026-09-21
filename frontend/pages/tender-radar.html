@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="../static/favicon.png">
+  <title>標案雷達 - MOTRIX 專案管理系統</title>
+  <script src="../static/auth-guard.js"></script>
+  <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
+  <style>
+    .btn { display:inline-flex; align-items:center; gap:6px; padding:7px 16px;
+           border-radius:var(--radius); font-size:12px; font-family:var(--font-zh);
+           font-weight:500; cursor:pointer; border:1px solid transparent;
+           white-space:nowrap; text-decoration:none; line-height:1.4; }
+    .btn:disabled { opacity:.45; cursor:not-allowed; }
+    .btn-primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+    .btn-ghost { background:#fff; color:var(--text-secondary); border-color:var(--border-light); }
+    .btn-sm { padding:5px 12px; font-size:11px; }
+
+    /* 前綴 tr- 避免與 style.css 衝突 */
+    .tr-wrap { padding:18px 22px; max-width:1280px; }
+    .tr-health { display:flex; align-items:flex-start; gap:10px; padding:10px 13px;
+                 border-radius:var(--radius); font-size:12px; margin-bottom:16px; }
+    .tr-health.ok       { background:#ECFDF5; color:#065F46; }
+    .tr-health.warn     { background:var(--warning-light); color:var(--warning); }
+    .tr-health.err      { background:var(--danger-light); color:var(--danger); }
+    .tr-health.idle     { background:#F5F4F0; color:var(--text-secondary); }
+    .tr-card { border:1px solid var(--border-light); border-radius:var(--radius);
+               padding:12px 14px; margin-bottom:10px; background:#fff; }
+    .tr-chip { display:inline-block; padding:1px 7px; border-radius:10px; font-size:11px;
+               background:#F5F4F0; color:var(--text-secondary); margin-right:4px; }
+    .tr-chip.ex { background:var(--danger-light); color:var(--danger); }
+    .tr-form-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr));
+                    gap:10px; margin-bottom:10px; }
+    .tr-src { font-size:11px; color:var(--text-dim); margin-top:18px; }
+    @media (max-width:640px) { .tr-wrap { padding:14px 16px; } }
+  </style>
+</head>
+<body>
+
+<header id="app-topbar" class="topbar"></header>
+<div class="sidebar-overlay" id="sidebar-overlay"></div>
+<aside class="sidebar" id="app-sidebar"></aside>
+
+<div class="app-shell">
+  <main class="main">
+  <div x-data="tenderRadarPage()" x-init="init()" class="tr-wrap">
+
+    <h1 class="page-title">標案雷達</h1>
+    <p style="font-size:12px;color:var(--text-secondary);margin-top:4px">
+      依搜尋條件自動比對政府電子採購網的招標公告。本階段只做抓取與比對，**不發送通知**。
+    </p>
+
+    <!-- ⚠️ 健康狀態有四種而不是兩種，而且「抓不到」與「認不得」不可以合併顯示：
+         處置完全相反——掛掉只要等它好，改版要改解析器。
+         把它們顯示成同一句話的話，現場會往錯的方向查。 -->
+    <div class="tr-health" :class="healthClass" x-show="status">
+      <span x-text="healthIcon" style="font-size:15px;line-height:1.2"></span>
+      <div>
+        <div x-text="healthText" style="font-weight:600"></div>
+        <div style="margin-top:2px;opacity:.85">
+          <template x-if="status && status.lastFetchedAt">
+            <span>上次抓取 <span x-text="status.lastFetchedAt"></span>
+              ・丟棄 <span x-text="status.lastDropped"></span> 筆</span>
+          </template>
+          <template x-if="status && !status.lastFetchedAt">
+            <span>尚未執行過</span>
+          </template>
+          <template x-if="status && status.lastError">
+            <span>・<span x-text="status.lastError"></span></span>
+          </template>
+        </div>
+        <div x-show="status && !status.enabled" style="margin-top:4px">
+          ⚠️ 總開關目前是<strong>關閉</strong>的，不會對外連線。
+          要啟用需由管理者在伺服器設定 <code>TENDER_RADAR_ENABLED</code> 並重啟。
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 搜尋條件 ── -->
+    <div style="display:flex;align-items:center;justify-content:space-between;margin:18px 0 8px">
+      <h2 style="font-size:14px;font-weight:600">搜尋條件</h2>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-ghost btn-sm" @click="refresh()" :disabled="loading">重新整理</button>
+        <button class="btn btn-ghost btn-sm" @click="scanNow()"
+                :disabled="scanning || !(status && status.enabled)"
+                :title="status && !status.enabled ? '總開關關閉時不會對外連線' : ''"
+                x-text="scanning ? '掃描中…' : '立即掃描'"></button>
+      </div>
+    </div>
+
+    <div class="tr-card">
+      <div class="tr-form-grid">
+        <div>
+          <label class="form-label">條件名稱</label>
+          <input class="form-input" type="text" x-model="form.name" placeholder="例：監視系統標案">
+        </div>
+        <div>
+          <label class="form-label">關鍵字（逗號分隔，任一中即命中）</label>
+          <input class="form-input" type="text" x-model="form.keywords" placeholder="監視,門禁,監控">
+        </div>
+        <div>
+          <label class="form-label">排除詞（逗號分隔，一中就整筆排除）</label>
+          <input class="form-input" type="text" x-model="form.excludes" placeholder="維護,保養">
+        </div>
+        <div>
+          <label class="form-label">機關（留空＝不篩）</label>
+          <input class="form-input" type="text" x-model="form.org" placeholder="留空 = 所有機關">
+        </div>
+        <div>
+          <label class="form-label">預算下限（留空＝不篩）</label>
+          <input class="form-input" type="number" min="0" x-model="form.budgetMin" placeholder="留空 = 不設下限">
+        </div>
+        <div>
+          <label class="form-label">預算上限（留空＝不篩）</label>
+          <input class="form-input" type="number" min="0" x-model="form.budgetMax" placeholder="留空 = 不設上限">
+        </div>
+      </div>
+      <!-- ⚠️ 「留空 = 不篩」不是廢話：留空被當成 0 的話，「沒設上限」會變成
+           「上限 0 元」——一筆都不會中，而且畫面上看不出任何異常。 -->
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="btn btn-primary btn-sm" @click="save()" x-text="form.id ? '儲存變更' : '新增條件'"></button>
+        <button class="btn btn-ghost btn-sm" x-show="form.id" @click="resetForm()">取消</button>
+        <span style="font-size:11px;color:var(--danger)" x-text="formError"></span>
+      </div>
+    </div>
+
+    <template x-for="w in watches" :key="w.id">
+      <div class="tr-card" style="display:flex;justify-content:space-between;gap:12px">
+        <div>
+          <div style="font-weight:600;font-size:13px">
+            <span x-text="w.name"></span>
+            <span x-show="!w.enabled" class="tr-chip">已停用</span>
+          </div>
+          <div style="margin-top:5px">
+            <template x-for="k in w.keywords" :key="k"><span class="tr-chip" x-text="k"></span></template>
+            <template x-for="x in w.excludes" :key="x"><span class="tr-chip ex" x-text="'排除 ' + x"></span></template>
+          </div>
+          <div style="font-size:11px;color:var(--text-dim);margin-top:5px">
+            機關：<span x-text="w.org || '不篩'"></span>
+            ・預算：<span x-text="(w.budgetMin === null ? '不設下限' : w.budgetMin.toLocaleString()) + ' ~ ' + (w.budgetMax === null ? '不設上限' : w.budgetMax.toLocaleString())"></span>
+          </div>
+        </div>
+        <div style="display:flex;gap:6px;align-items:flex-start">
+          <button class="btn btn-ghost btn-sm" @click="edit(w)">編輯</button>
+          <button class="btn btn-ghost btn-sm" @click="remove(w)">刪除</button>
+        </div>
+      </div>
+    </template>
+    <div class="empty-state" x-show="!loading && watches.length === 0">
+      尚未設定任何搜尋條件。至少要有一個關鍵字，否則雷達不知道要找什麼。
+    </div>
+
+    <!-- ── 命中的標案 ── -->
+    <h2 style="font-size:14px;font-weight:600;margin:22px 0 8px">
+      命中的標案（<span x-text="tenders.length"></span>）
+    </h2>
+    <div class="table-scroll">
+      <table class="data-table" x-show="tenders.length > 0">
+        <thead><tr>
+          <th>機關</th><th>案號</th><th>標案名稱</th>
+          <th style="text-align:right">預算</th><th>公告日</th><th>截止投標</th><th>命中條件</th>
+        </tr></thead>
+        <tbody>
+          <template x-for="t in tenders" :key="t.id + '-' + t.watchId">
+            <tr>
+              <td style="font-size:12px" x-text="t.org"></td>
+              <td style="font-size:12px;font-family:LINE Seed TW_OTF, sans-serif" x-text="t.caseNo"></td>
+              <td style="font-size:12px" x-text="t.name"></td>
+              <!-- ⚠️ 預算用 === null 判斷：0 元是合法金額，
+                   用真假值會把「預算 0 元」顯示成「未公告」。 -->
+              <td style="text-align:right;font-size:12px;font-family:LINE Seed TW_OTF, sans-serif"
+                  x-text="t.budget === null ? '未公告' : t.budget.toLocaleString()"></td>
+              <td style="font-size:12px" x-text="t.publishedAt || '—'"></td>
+              <td style="font-size:12px" x-text="t.deadline || '未公告'"></td>
+              <td style="font-size:12px" x-text="t.watchName"></td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+      <div class="empty-state" x-show="tenders.length === 0">
+        目前沒有命中的標案。
+      </div>
+    </div>
+
+    <!-- 授權條款要求：畫面要標示資料來源（SPEC §T.5 第 6 點） -->
+    <div class="tr-src">資料來源：政府電子採購網（依其著作權聲明重製，已註明出處）</div>
+
+  </div>
+  </main>
+</div>
+
+<script src="../static/notif.js"></script>
+<script src="../static/sidebar.js"></script>
+<script>
+function tenderRadarPage() {
+  return {
+    session: {}, token: '', loading: false, scanning: false,
+    status: null, watches: [], tenders: [], formError: '',
+    form: { id: null, name: '', keywords: '', excludes: '', org: '',
+            budgetMin: '', budgetMax: '' },
+
+    _h() { return { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.token } },
+
+    get healthClass() {
+      if (!this.status) return 'idle'
+      return { ok: 'ok', unrecognised: 'warn', unreachable: 'err', never_run: 'idle' }[this.status.health] || 'idle'
+    },
+    get healthIcon() {
+      if (!this.status) return '·'
+      return { ok: '✓', unrecognised: '!', unreachable: '✕', never_run: '·' }[this.status.health] || '·'
+    },
+    get healthText() {
+      if (!this.status) return ''
+      // ⚠️ 這四句不可以合併。「抓不到」與「認不得」的處置相反：
+      // 前者等它好，後者要改解析器。合併成「抓取失敗」會讓現場查錯方向。
+      return {
+        ok:           '雷達正常',
+        unrecognised: '認不得對方的頁面 —— 對方可能改版了，解析器需要調整',
+        unreachable:  '抓不到對方的網站 —— 連不上／逾時／被擋，解析器沒有問題',
+        never_run:    '尚未執行過掃描',
+      }[this.status.health] || ''
+    },
+
+    async init() {
+      const raw = localStorage.getItem('motrix_session')
+      if (!raw) { location.href = 'login.html'; return }
+      this.session = JSON.parse(raw)
+      this.token = this.session.token || ''
+      const role = this.session.role || ''
+      const mods = Array.isArray(this.session.modules) ? this.session.modules : []
+      if (!(role === 'superadmin' || role === 'admin') && !mods.includes('dev_crm')) {
+        location.href = '../index.html'; return
+      }
+      await this.refresh()
+    },
+
+    async refresh() {
+      this.loading = true
+      try {
+        const [s, w, t] = await Promise.all([
+          fetch('/api/tender-radar/status',  { headers: this._h() }),
+          fetch('/api/tender-radar/watches', { headers: this._h() }),
+          fetch('/api/tender-radar/tenders', { headers: this._h() }),
+        ])
+        if (s.ok) this.status  = await s.json()
+        if (w.ok) this.watches = (await w.json()).items || []
+        if (t.ok) this.tenders = (await t.json()).items || []
+      } catch (_e) {}
+      this.loading = false
+    },
+
+    resetForm() {
+      this.form = { id: null, name: '', keywords: '', excludes: '', org: '',
+                    budgetMin: '', budgetMax: '' }
+      this.formError = ''
+    },
+
+    edit(w) {
+      this.form = {
+        id: w.id, name: w.name,
+        keywords: (w.keywords || []).join(','),
+        excludes: (w.excludes || []).join(','),
+        org: w.org || '',
+        // ⚠️ null → 空字串，不是 0：送回去時空字串才會變回 null（不篩）。
+        budgetMin: w.budgetMin === null ? '' : w.budgetMin,
+        budgetMax: w.budgetMax === null ? '' : w.budgetMax,
+      }
+      this.formError = ''
+    },
+
+    async save() {
+      this.formError = ''
+      const body = {
+        name: this.form.name, keywords: this.form.keywords,
+        excludes: this.form.excludes, org: this.form.org,
+        // 空字串要原樣送出，讓後端判成 null（不篩）。
+        budgetMin: this.form.budgetMin === '' ? null : Number(this.form.budgetMin),
+        budgetMax: this.form.budgetMax === '' ? null : Number(this.form.budgetMax),
+      }
+      const url = this.form.id ? `/api/tender-radar/watches/${this.form.id}`
+                               : '/api/tender-radar/watches'
+      try {
+        const r = await fetch(url, { method: this.form.id ? 'PUT' : 'POST',
+                                     headers: this._h(), body: JSON.stringify(body) })
+        if (!r.ok) {
+          const d = await r.json().catch(() => ({}))
+          this.formError = d.detail || '儲存失敗'
+          return
+        }
+        this.resetForm()
+        await this.refresh()
+      } catch (_e) { this.formError = '連線失敗' }
+    },
+
+    async remove(w) {
+      if (!confirm(`確定刪除搜尋條件「${w.name}」？它的命中紀錄也會一起刪除。`)) return
+      try {
+        const r = await fetch(`/api/tender-radar/watches/${w.id}`,
+                              { method: 'DELETE', headers: this._h() })
+        if (r.ok || r.status === 204) await this.refresh()
+      } catch (_e) {}
+    },
+
+    async scanNow() {
+      this.scanning = true
+      try {
+        const r = await fetch('/api/tender-radar/scan',
+                              { method: 'POST', headers: this._h() })
+        const d = await r.json().catch(() => ({}))
+        if (d.skipped === 'daily_limit') {
+          alert('今天已經抓過了。抓取頻率硬上限是每日一次 —— 這是對政府網站的節制，不是設定值。')
+        } else if (d.skipped === 'disabled') {
+          alert('總開關關閉中，不會對外連線。')
+        }
+        await this.refresh()
+      } catch (_e) { alert('掃描失敗') }
+      this.scanning = false
+    },
+  }
+}
+</script>
+</body>
+</html>

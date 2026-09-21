@@ -100,7 +100,7 @@ DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR = os.path.join(
 # 的附件，2026-09-14）——兩張表都是 TEXT NOT NULL DEFAULT '[]'，存
 # save_document_files() 回傳的清單。刪附件限 admin+，見 routers/quotations.py
 # 與 routers/dev_crm.py 的 DELETE .../files/{file_id}。
-CURRENT_VERSION = 85
+CURRENT_VERSION = 86
 
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
 # execution model) whenever the current request is authenticated as the 'demo'
@@ -3560,6 +3560,77 @@ def _m085_procurement_lead_time(conn):
     conn.commit()
 
 
+def _m086_tender_radar(conn):
+    """標案雷達四張表（2026-09-21，細線 6 第 1～3 步）。
+
+    ⚠️ **`tenders` 的唯一鍵是 `(org, case_no)` 不是 `case_no`。**
+    這不是查證結果（政府案號會不會跨機關重複，我們沒查），是**失敗方向不對稱**：
+      只用 case_no  → 撞號時第二筆**併進第一筆、悄悄消失**，沒有任何訊息
+      (org, case_no) → 撞號時多一列重複，**看得見、可以再收斂**
+    這條線的承諾是「不會漏掉標案」，而 case_no 唯一鍵的失敗模式正好是漏掉標案。
+    **不確定的時候往「最壞只是吵」倒，不要往「最壞是靜默遺失」倒。**
+
+    ⚠️ **`tender_fetch_log.recognised` 可以是 NULL，而 NULL 不等於 0。**
+      NULL  ＝ 根本沒解析（抓不到：逾時／403／連不上）
+      0     ＝ 解析過了，認不得（對方改版）
+      1     ＝ 解析過了，認得
+    兩者的處置相反：改版要改解析器，掛掉只要等它好。把「抓不到」記成 0 的話，
+    現場會照著「對方改版了」的方向去查一個沒有壞掉的解析器。
+    （同一家族的第三個實例，前兩個：前置時間未知、預算沒寫。）
+
+    ⚠️ **`tenders.budget` 可以是 NULL。** 「公告沒寫預算」是 NULL，「預算 0 元」是 0。
+    存成 0 的話，任何設了金額下限的 watch 都會**安靜地漏掉**那些標案。
+    `deadline`／`published_at` 同理：沒寫就是 NULL，不要填今天。
+    """
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS tender_watches (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            name        TEXT    NOT NULL DEFAULT '',
+            keywords    TEXT    NOT NULL DEFAULT '[]',   -- JSON 陣列，OR
+            excludes    TEXT    NOT NULL DEFAULT '[]',   -- JSON 陣列，一中就整筆排除
+            org         TEXT,                            -- NULL = 不篩機關
+            budget_min  INTEGER,                         -- NULL = 不篩下限
+            budget_max  INTEGER,                         -- NULL = 不篩上限
+            enabled     INTEGER NOT NULL DEFAULT 1,
+            created_at  TEXT    DEFAULT '',
+            updated_at  TEXT    DEFAULT ''
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS tenders (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            case_no      TEXT    NOT NULL,
+            org          TEXT    NOT NULL,
+            name         TEXT    NOT NULL DEFAULT '',
+            published_at TEXT,          -- 公告日（已轉西元）；沒寫 = NULL
+            deadline     TEXT,          -- 截止投標（已轉西元）；沒寫 = NULL
+            budget       INTEGER,       -- NULL = 公告沒寫；0 = 真的是 0 元
+            url          TEXT    DEFAULT '',
+            fetched_at   TEXT    DEFAULT '',
+            UNIQUE (org, case_no)
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS tender_hits (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            watch_id   INTEGER NOT NULL,
+            tender_id  INTEGER NOT NULL,
+            hit_at     TEXT    DEFAULT '',
+            UNIQUE (watch_id, tender_id)
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS tender_fetch_log (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            fetched_at TEXT    NOT NULL DEFAULT '',
+            recognised INTEGER,          -- NULL=沒解析 / 0=認不得 / 1=認得
+            dropped    INTEGER NOT NULL DEFAULT 0,
+            error      TEXT    DEFAULT ''
+        )
+    """)
+    conn.commit()
+
+
 _MIGRATIONS = [
     _m001_export_columns,        # v1
     _m002_sessions_expires,      # v2
@@ -3646,6 +3717,7 @@ _MIGRATIONS = [
     _m083_backup_retention_policy,                  # v83
     _m084_backfill_role_bypass_modules,             # v84
     _m085_procurement_lead_time,                    # v85
+    _m086_tender_radar,                             # v86
 ]
 
 
