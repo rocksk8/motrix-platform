@@ -1,0 +1,51 @@
+# 行尾規則（2026-09-21 新增）
+#
+# 為什麼需要這個檔：本 repo `core.autocrlf=true` 而先前沒有 .gitattributes，
+# 於是 git 認為 checkout 該產出 CRLF，而磁碟上的 .py/.html 實際是 LF。
+# 後果：`git checkout -- <某支 .py>` 會把它拉回「git 認為的樣子」＝CRLF，
+# `git diff` 看不出來（會正規化），但**位元組變了、雜湊變了**。
+# 最容易中的是突變測試（改檔 → 跑 → checkout 還原）與任何靠檔案雜湊的比對。
+#
+# ⚠️ 加這個檔是零改寫的：物件庫裡存的本來就全部是 LF
+# （`autocrlf=true` 在存入時就正規化了），所以這些規則只是把
+# 「checkout 該產出什麼」講清楚，產出的位元組與今天完全相同。
+#
+# ⚠️ 不要改成 core.autocrlf=false —— 那會讓 .bat checkout 成 LF，
+# 而本專案有過 .bat 用 LF 導致排程靜默失效、外觀上仍顯示執行成功的前例。
+
+*               text=auto
+
+# 程式碼與文件：LF（與磁碟現況一致）
+*.py            text eol=lf
+*.html          text eol=lf
+*.js            text eol=lf
+*.css           text eol=lf
+*.md            text eol=lf
+*.json          text eol=lf
+*.yml           text eol=lf
+*.yaml          text eol=lf
+*.sql           text eol=lf
+
+# Windows 腳本：CRLF（cmd.exe 與 PowerShell 5.1 需要；.ps1 另需 UTF-8 BOM）
+*.bat           text eol=crlf
+*.cmd           text eol=crlf
+*.ps1           text eol=crlf
+*.vbs           text eol=crlf
+
+# 二進位：不要碰
+*.png           binary
+*.jpg           binary
+*.jpeg          binary
+*.gif           binary
+*.ico           binary
+*.pdf           binary
+*.xlsx          binary
+*.docx          binary
+*.db            binary
+*.7z            binary
+*.zip           binary
+*.pem           binary
+*.key           binary
+*.woff          binary
+*.woff2         binary
+*.ttf           binary
