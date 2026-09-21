@@ -594,6 +594,19 @@ def _col_notnull(conn, table: str, col: str) -> bool:
     return any(r["name"] == col and r["notnull"] for r in rows)
 
 
+def _table_exists(conn, name: str) -> bool:
+    """這張表在不在。**正面查詢，不靠例外。**
+
+    🔑 為什麼要有這個東西：`except sqlite3.OperationalError` 沒辦法分辨
+    「表不存在」與「鎖住／欄位名不對」—— 它們是**同一個例外類別**。
+    ⇒ 想分辨就得在問之前先確認，不能等它爆了再猜它為什麼爆。
+    """
+    return conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+        (name,),
+    ).fetchone() is not None
+
+
 def _get_version(conn) -> int:
     """目前的 schema 版本。**查不到版本時不可以回 0。**
 
@@ -611,7 +624,30 @@ def _get_version(conn) -> int:
 
     📌 `fetchone()` 回 `None` 那一支**是對的，不要動**：表建好了但還沒有那一列，
     那就是全新資料庫的正當路徑（`schema_version` 沒有 seed 列）。
+
+    ## 🔄 2026-09-22 更正：上面的論證留著，**結論換掉**
+    ⚠️ **上面那段推理是對的**（「例外不能拿來判斷這是不是新資料庫」），
+    **只是當時的結論是「那就不判斷」，現在的結論是「換一種方式判斷」。**
+    🔑 〈推翻的證據不會自動支持替代方案〉：
+    「`except` 分辨不了」推翻的是那個 `except`，**沒有推翻「要分辨」本身**。
+
+    改變結論的事實：`_get_version` 現在**不只有 `_run_migrations` 呼叫**——
+    測試與工具腳本會拿一個任意的連線直接問它，而那些連線可能真的沒有那張表。
+    ⇒ 「那個情境到不了」在 2026-09-21 是對的，今天不是了。
+
+    **所以：先正面查 `sqlite_master`（`_table_exists`），表不在才回 0。**
+    ☠️ **不可以退回 `try/except sqlite3.OperationalError: return 0`**——
+    同一個 except 會吞掉「database is locked」「file is not a database」
+    「欄位名不是 version」，而那些的正確反應是**拒絕**，不是回 0。
+    （守門：`tests/test_spec_debts_2026_09_22.py::test_u8b…` 與 `::test_u9…`）
     """
+    if not _table_exists(conn, "schema_version"):
+        # 表不在 ＝ 這個庫從來沒跑過 migration ＝ 全新資料庫。
+        # ⚠️ **這是唯一一種可以回 0 的情況**，而它是被「問出來的」不是「猜出來的」。
+        return 0
+    # 表在 ⇒ 底下任何失敗都**讓它拋**。
+    # 🔴 回 0 的意思是「當成全新資料庫，從第 1 支 migration 從頭跑一遍」——
+    # 在一個其實有資料、只是當下讀不到的庫上做這件事，**比直接崩潰危險得多**。
     row = conn.execute("SELECT version FROM schema_version WHERE id=1").fetchone()
     return row["version"] if row else 0
 
@@ -649,7 +685,13 @@ def _run_migrations(conn) -> None:
             # 所以舊程式碼讀不到的新欄位，它就是不讀，不會壞。
             # ⚠️ **那是 migration 的性質，不是這個引擎的性質。**
             # 哪天有人寫了 `DROP COLUMN`／`RENAME`，這裡就必須重新裁決——
-            # 守門見 `test_upgrade_path_2026_09_21.py::test_u5c`。
+            # 守門見 `tests/test_spec_debts_2026_09_22.py`
+            # `::test_u5c_no_migration_makes_a_column_disappear`。
+            # ⚠️ **這一行原本指向 `test_upgrade_path_2026_09_21.py::test_u5c`，
+            # 而那個檔裡沒有那支測試**——它 2026-09-22 才被寫出來，
+            # 寫這句話的當下**那個守門的人不存在**。
+            # 🔑 一句「已經有人在守」的話，本身不是守門；
+            # 而它比沒有註解更糟，因為下一個人讀到它就不會再去確認。
             logger.warning(
                 "資料庫 schema 版本是 v%d，比這份程式碼認得的 v%d 新 —— "
                 "有些欄位是這份程式碼不認識的。"
@@ -668,6 +710,10 @@ def _run_migrations(conn) -> None:
 
 # ── Individual migrations ─────────────────────────────────────────────────────
 # Each function must be idempotent: check before altering, use IF NOT EXISTS.
+# ⚠️ 這一句從第一天就寫在這裡，而**真的去驗它的東西 2026-09-22 才出現**
+# （`tests/test_spec_debts_2026_09_22.py::test_u10_every_migration_can_be_run_twice`
+# ——它把每一支跑兩次）。在那之前這是一條**沒有人檢查的規定**。
+# 🔑 寫下規則與守住規則是兩件事，而讀起來一模一樣。
 
 def _m001_export_columns(conn):
     if not _col_exists(conn, "quotations", "export_count"):

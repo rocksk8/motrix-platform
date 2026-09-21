@@ -884,3 +884,15 @@ autostart.bat 是無限迴圈 ⇒ 用量由「重啟幾次」決定，不是由�
 ## 恢復施工（§3o，2026-09-22）：動 `db.py`（v89，已佔號）＋ `helpers/geo.py` ＋ `routers/map_points.py` ＋ `frontend/pages/map.html`
 
 ## 佔用宣告：`db.py`（§3i 連線 context manager `db_conn()`）＋ `routers/dashboard.py` 九支，2026-09-22
+
+## 佔用宣告：`db.py` §U8（`_get_version` 讀不到版本時的判斷方式），2026-09-22
+
+- **佔的是**：`_get_version()` 函式本體 ＋ 新增 `_table_exists()` 小 helper
+  （db.py 的鎖我已經持有，這一段是**告訴別人我動的是哪一塊**，不是重新上鎖）
+- **不動**：`_set_version`、`_run_migrations` 的流程、任何一支 `_mNNN`
+- **A 的裁定**：不要用 `except sqlite3.OperationalError: return 0`，
+  **先正面查 `sqlite_master`**；`db.py:597` 的 docstring 論證留著、結論換掉
+- 順手修兩句「宣稱有守門而那個人不存在」（C 抓到的）：
+  `db.py:652` 指向 `test_upgrade_path_2026_09_21.py::test_u5c` —— **那支不在那個檔裡**
+  （實際在 `test_spec_debts_2026_09_22.py`，而且今天才存在）；
+  `db.py:668` 「Each function must be idempotent」—— U10 今天才守住它
