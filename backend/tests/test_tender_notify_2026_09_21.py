@@ -91,6 +91,7 @@ def _spy(monkeypatch, mod, name, result=None):
 def test_s1_scheduled_run_calls_run_scan_once(client, monkeypatch):
     """§3 S1：排程觸發 → `run_scan` 的呼叫次數 == 1。"""
     calls = _spy(monkeypatch, ts, "run_scan")
+    freeze_slot(monkeypatch, ts, 18)
     _need(ts, "run_scheduled_scan")()
     assert len(calls) == 1, f"排程一次應該呼叫 run_scan 一次，實際 {len(calls)} 次"
 
@@ -443,10 +444,34 @@ def _set_first_scan_at(value):
     _set_setting("tender_radar_first_scan_at", value)
 
 
-def _run(monkeypatch, page=None, error=None, enabled=True):
-    """跑一次排程掃描，`fetch_raw` 換成固定回應。"""
+#: 預設凍在 18 點 —— 它同時是預設抓取時段與預設寄信時段（`9,12,15,18` / `18`）。
+#: ⚠️ 凍在 9 點的話會抓但不寄，而這個檔大半在驗「有沒有寄」。
+DEFAULT_TEST_HOUR = 18
+
+
+def _run(monkeypatch, page=None, error=None, enabled=True,
+         hour=DEFAULT_TEST_HOUR):
+    """跑一次排程掃描，`fetch_raw` 換成固定回應。
+
+    ## 🔴 2026-09-21 §3j：**一定要把時間凍住**
+
+    抓取與寄信都改成「按時段」之後，`run_scheduled_scan()` 在非時段時**什麼都不做**
+    ⇒ 這個檔的題目會在一天的大部分時間紅，而紅的訊息是
+    「應該寄 1 封，實際 0 封」—— **看起來像通知功能壞了。**
+
+    🔑 這不是「加個保險」，是**這些題目的前提從「每天一次」變成「在某個時段」**。
+    ⚠️ 凍在 `_run` 裡而不是逐題凍：**逐題凍就是下一個漏掉的人的成因。**
+    """
+    freeze_slot(monkeypatch, ts, hour)
     monkeypatch.setattr(ts, "TENDER_RADAR_ENABLED", enabled)
     _spy(monkeypatch, ts, "fetch_raw", result=(page, error))
+    # 🔴 `fetch_detail` 也要換掉，否則 `parse_list(REAL)` 解出來的**真實網址**
+    # 會被拿去 `urlopen` —— 真的連到政府採購網（NETGUARD 會在收尾時紅）。
+    # ⚠️ 換在這裡而不是逐題換：只有一題記得換，正是這個洞當初的成因。
+    if not hasattr(ts.fetch_detail, "_is_test_stub"):
+        _stub = lambda url, *a, **kw: (None, "測試不抓詳細頁")   # noqa: E731
+        _stub._is_test_stub = True
+        monkeypatch.setattr(ts, "fetch_detail", _stub)
     _need(ts, "run_scheduled_scan")()
 
 

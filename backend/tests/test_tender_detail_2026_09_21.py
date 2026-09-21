@@ -79,6 +79,27 @@ def _need(mod, name):
     return getattr(mod, name)
 
 
+#: 同 notify：18 點同時是預設抓取與預設寄信時段。
+DEFAULT_TEST_HOUR = 18
+
+
+def _run_scan(monkeypatch, hour=DEFAULT_TEST_HOUR):
+    """跑一次排程掃描，**先把時間凍在一個真的存在的時段裡**。
+
+    ## 🔴 §3j 之後這是必要的，不是保險
+
+    `run_scheduled_scan()` 在非時段時什麼都不做 ⇒ 這個檔的題目會在一天的
+    大部分時間紅，而訊息是「沒有抓」—— **看起來像抓取功能壞了。**
+    ⚠️ 集中在這裡而不是逐題凍：**逐題凍就是下一個漏掉的人的成因。**
+    """
+    freeze_slot(monkeypatch, ts, hour)
+    # ⚠️ 這一行刻意直接呼叫，**不要**改成 `_run_scan(...)`：
+    # 我把 8 個呼叫點批次換成 `_run_scan` 時，取代把**這一行也換掉了**
+    # ⇒ 它呼叫自己 ⇒ `RecursionError`。
+    # 🔑 **批次取代的範圍包含你剛剛加進去的那一份。**
+    _need(ts, "run_scheduled_scan")()
+
+
 def _detail_html():
     return DETAIL_FIXTURE.read_text(encoding="utf-8")
 
@@ -228,7 +249,7 @@ def test_d1_detail_fetched_only_for_matched_tenders(client, monkeypatch):
     monkeypatch.setattr(ts, "TENDER_RADAR_ENABLED", True)
     _spy_fetch(monkeypatch, REAL)
     _seed_watch("監視系統", "監視")
-    _need(ts, "run_scheduled_scan")()
+    _run_scan(monkeypatch)
 
     hits = _hit_count()
     assert len(calls) == hits, (
@@ -255,7 +276,7 @@ def test_d2_daily_detail_limit_is_enforced(client, monkeypatch):
     monkeypatch.setattr(ts, "TENDER_RADAR_ENABLED", True)
     _spy_fetch(monkeypatch, REAL)
     _seed_watch("監視系統", "監視")
-    _need(ts, "run_scheduled_scan")()
+    _run_scan(monkeypatch)
 
     assert len(calls) <= 2, f"上限是 2，卻抓了 {len(calls)} 次"
 
@@ -280,7 +301,7 @@ def test_d3_interval_between_detail_fetches(client, monkeypatch):
     monkeypatch.setattr(ts, "TENDER_RADAR_ENABLED", True)
     _spy_fetch(monkeypatch, REAL)
     _seed_watch("監視系統", "監視")
-    _need(ts, "run_scheduled_scan")()
+    _run_scan(monkeypatch)
 
     assert len(calls) >= 2, "這題要至少抓兩次詳細頁才驗得到間隔（前提不成立）"
     assert slept, (
@@ -305,7 +326,7 @@ def test_d4_detail_failure_keeps_the_tender_with_null_location(client, monkeypat
     monkeypatch.setattr(ts, "TENDER_RADAR_ENABLED", True)
     _spy_fetch(monkeypatch, REAL)
     _seed_watch("監視系統", "監視")
-    _need(ts, "run_scheduled_scan")()
+    _run_scan(monkeypatch)
 
     import db
     conn = db.get_db()
@@ -323,7 +344,7 @@ def test_d5_disabled_switch_means_no_detail_fetch(client, monkeypatch):
     """§3 D5：總開關關著時，**詳細頁的抓取次數 == 0**（沿用第 4 輪條件 8 的形狀）。"""
     calls = _detail_spy(monkeypatch)
     monkeypatch.setattr(ts, "TENDER_RADAR_ENABLED", False)
-    _need(ts, "run_scheduled_scan")()
+    _run_scan(monkeypatch)
     assert len(calls) == 0, f"開關關著不該抓詳細頁，實際 {len(calls)} 次"
 
 
@@ -338,11 +359,19 @@ def test_d6_tender_with_location_is_not_refetched(client, monkeypatch):
     _spy_fetch(monkeypatch, REAL)
     _seed_watch("監視系統", "監視")
     run = _need(ts, "run_scheduled_scan")
+    # 🔴 §3j：兩次掃描要落在**不同的時段**，否則第二次會被節流擋掉
+    # ⇒ 那時 D6 會「綠」，而綠的原因是**根本沒有第二次掃描**，
+    #   不是「已有地點的標案沒被重抓」。**同一個綠燈，兩個完全不同的原因。**
+    # ⚠️ 這一題用的是 `run = _need(...)` 再 `run()` 的形式，
+    #   所以我批次把 `_need(ts, "run_scheduled_scan")()` 換成 `_run_scan()` 時
+    #   **抓不到它** —— 判準的形狀又決定了我看得見什麼（今天第二次）。
+    freeze_slot(monkeypatch, ts, 9)
     run()
     first = len(calls)
     assert first >= 1, "第一次就該抓（前提不成立）"
 
     _allow_rerun(monkeypatch)
+    freeze_slot(monkeypatch, ts, 12)      # 換一個時段，讓第二次真的跑得起來
     run()
     assert len(calls) == first, (
         f"已經有地點的標案又被抓了一次（{first} → {len(calls)}）—— 不冪等"
@@ -408,7 +437,7 @@ def _mail_body(monkeypatch):
     _spy_fetch(monkeypatch, REAL)
     _seed_watch("監視系統", "監視")
     _skip_quiet_period(monkeypatch)
-    _need(ts, "run_scheduled_scan")()
+    _run_scan(monkeypatch)
     _assert_mails(mails, 1)          # 先釘住「這是一封寄得出去的真信」
     return mails[0][1] + mails[0][2]
 
@@ -640,7 +669,7 @@ def test_d20_stored_url_is_the_url_actually_landed_on(client, admin_and_watch,
     _sent(monkeypatch)
     monkeypatch.setattr(ts, "TENDER_RADAR_ENABLED", True)
     _spy_fetch(monkeypatch, REAL)
-    _need(ts, "run_scheduled_scan")()
+    _run_scan(monkeypatch)
 
     import db
     conn = db.get_db()
@@ -679,7 +708,7 @@ def test_d20b_unfetched_tender_keeps_its_url(client, admin_and_watch,
     _sent(monkeypatch)
     monkeypatch.setattr(ts, "TENDER_RADAR_ENABLED", True)
     _spy_fetch(monkeypatch, REAL)
-    _need(ts, "run_scheduled_scan")()
+    _run_scan(monkeypatch)
 
     import db
     conn = db.get_db()
@@ -714,6 +743,11 @@ def test_d20c_success_and_failure_are_distinguishable(monkeypatch):
     （見 C.md〈給彙整〉38：真正的修法是回三元組或具名結果。）
     """
     _need(ts, "fetch_detail")
+    # 🔴 `fetch_detail` 現在有 `radar_on()` 守衛（我自己在 NETGUARD 那輪要求的），
+    # 所以這一題要先把雷達打開，否則它會拿到 `(None, ...)`。
+    # 📌 **我加的產品要求讓我自己的另一題紅了** —— 那是對的：
+    #    那一題原本假設「呼叫 `fetch_detail` 就一定會連線」，而那個假設現在不成立。
+    monkeypatch.setattr(ts, "TENDER_RADAR_ENABLED", True)
 
     class _Resp:
         def __enter__(self):
