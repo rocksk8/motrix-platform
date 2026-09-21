@@ -23,6 +23,7 @@ from archive import _ensure_archive_dirs, _schedule_weekly, _schedule_daily
 import trail
 
 from helpers import licensing as license_core
+from helpers import tender_source as tender_radar_source
 from routers import auth, quotations, customers, suppliers, parts, dashboard, system, reports, contractors, payslips, daily_tasks, module_versions, vendor_contractors, dev_crm, env_guide, netarch_guide, switch_guide, shipping_notes, inventory, search, monitor_guide, access_guide, gateway_guide, automation_guide, contractor_vouchers, invoice_vouchers, org_structure, payment_requests, list_prefs, case_action_items, uploads, network_plans, network_plans_quick, approval_delegates, cashier, accounting_export, material_orders, case_extra_expenses, completion_notes, licensing, tender_radar
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -495,6 +496,9 @@ if os.getenv("MOTRIX_DISABLE_SCHEDULERS") != "1":
     daily_tasks.schedule_overdue_check()
     reports.schedule_monthly_report()
     dev_crm.schedule_dev_case_stale_check()
+    # 標案雷達（2026-09-21）。總開關 TENDER_RADAR_ENABLED 預設關，
+    # 關著時 run_scan() 立刻返回、不對外連線——排程照排，但不做事。
+    tender_radar_source.schedule_tender_scan()
 else:
     logger.info("MOTRIX_DISABLE_SCHEDULERS=1 —— 已略過所有背景排程（測試模式）")
 

@@ -100,7 +100,7 @@ DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR = os.path.join(
 # 的附件，2026-09-14）——兩張表都是 TEXT NOT NULL DEFAULT '[]'，存
 # save_document_files() 回傳的清單。刪附件限 admin+，見 routers/quotations.py
 # 與 routers/dev_crm.py 的 DELETE .../files/{file_id}。
-CURRENT_VERSION = 86
+CURRENT_VERSION = 87
 
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
 # execution model) whenever the current request is authenticated as the 'demo'
@@ -3631,6 +3631,33 @@ def _m086_tender_radar(conn):
     conn.commit()
 
 
+def _m087_tender_notify(conn):
+    """標案雷達通知所需的兩個欄位（2026-09-21，細線 6 第 5 步）。
+
+    **`tender_hits.notified_at`**：這一筆命中有沒有寄出去過。
+    ⚠️ **只能在寄信「成功之後」才寫**。在寄信之前寫的話，SMTP 掛掉那一次的標案
+    **永遠不會再出現在任何一封信裡**，而且不會有任何錯誤訊息——
+    那是「安靜地少做一件事」的又一個實例（驗收條件 N12）。
+
+    **`tender_fetch_log.suspected`**：這一次有沒有判定「疑似對方改版」。
+    ⚠️ 這一欄 §3 沒有要求，是我加的，理由是**邊緣觸發需要「上一次是什麼狀態」**：
+    「抓不到」的邊緣可以從既有的 `recognised IS NULL` 推出來，
+    但「疑似改版」推不出來（log 裡只有 `dropped`，沒有當次解出幾筆）。
+    不記的話，對方改版那週會**每天寄一封**——正是 §T.5 #5 在防的「站台掛一週七封信」。
+    ⇒ 兩種告警的邊緣判定因此共用同一個來源（這張表），不必一個看表、一個看設定。
+
+    📌 **首次掃描時間不在這裡**：它存 `system_settings`
+    （`tender_radar_first_scan_at`，走 `helpers/settings.py`）。
+    ⚠️ 不可以從 `tender_fetch_log` 推算——那張表**不進每日 JSON 備份**（第 4 輪裁決），
+    還原之後是空的，7 天純記錄期會**靜默重新開始**。
+    """
+    if not _col_exists(conn, "tender_hits", "notified_at"):
+        conn.execute("ALTER TABLE tender_hits ADD COLUMN notified_at TEXT")
+    if not _col_exists(conn, "tender_fetch_log", "suspected"):
+        conn.execute("ALTER TABLE tender_fetch_log ADD COLUMN suspected INTEGER")
+    conn.commit()
+
+
 _MIGRATIONS = [
     _m001_export_columns,        # v1
     _m002_sessions_expires,      # v2
@@ -3718,6 +3745,7 @@ _MIGRATIONS = [
     _m084_backfill_role_bypass_modules,             # v84
     _m085_procurement_lead_time,                    # v85
     _m086_tender_radar,                             # v86
+    _m087_tender_notify,                            # v87
 ]
 
 

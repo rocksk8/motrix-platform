@@ -46,12 +46,21 @@
 （時區、世紀、格式）都會掉進來。
 """
 import json
+import logging
 import re
+# ⚠️ **`import threading` 走模組，不要 `from threading import Timer`。**
+# 後者會把 Timer 複製進本模組的命名空間，monkeypatch 打不到 ⇒ S3 永遠綠。
+# 跟 `fetch_raw`／`procurement.today` 是同一條（第 4 輪 8b 的教訓）。
+import threading
 import urllib.parse
 import urllib.request
 from datetime import date, timedelta
 
 from db import get_db
+from helpers import notification_prefs
+from helpers.settings import _get_setting, _set_setting
+
+logger = logging.getLogger(__name__)
 
 # ── 總開關 ───────────────────────────────────────────────────────────────────
 #
@@ -77,6 +86,15 @@ _COL_PUBLISHED, _COL_DEADLINE, _COL_BUDGET = 6, 7, 8
 _MIN_COLUMNS = 9
 
 _DATE_SANITY_YEARS = 5
+
+# 純記錄模式：首次成功掃描起 N 天內只抓只存、不寄信（SPEC §T.5 #3）。
+# ⚠️ 起算點是「第一次成功掃描」不是「開關被打開」——常數翻開的時間無法查證，
+# 而**無法查證的起算點在正式機上完全不存在**。
+QUIET_PERIOD_DAYS = 7
+FIRST_SCAN_SETTING = "tender_radar_first_scan_at"
+# ⚠️ 存 system_settings 不是 tender_fetch_log：後者不進每日 JSON 備份，
+# 還原之後是空的 ⇒ 7 天純記錄期會**靜默重新開始**。
+SCAN_HOUR = 8
 _ROC_OFFSET = 1911
 
 _TABLE_RE = re.compile(r"<table\b.*?</table>", re.S | re.I)
@@ -241,7 +259,11 @@ def _parse_row(cells):
         "case_no":   case_no,
         "name":      name,
         "org":       org,
-        "published": published.isoformat() if published else None,
+        # R1（第 5 輪）：這個鍵原本叫 `published`，而 DB 欄位叫 `published_at`。
+        # ⚠️ 兩者在相鄰兩行被讀寫，中間沒有轉換層 —— 同一輪裡兩種寫法，
+        # 下一個人會以為那是有意義的區別。API 那一層的 `publishedAt` 才是
+        # 有意義的不同（跨邊界慣例），這一層沒有。
+        "published_at": published.isoformat() if published else None,
         "deadline":  deadline.isoformat() if deadline else None,
         "budget":    budget,
         "url":       TENDER_SOURCE_URL,
@@ -339,15 +361,15 @@ def _already_fetched_today(conn):
     return (row["c"] if row else 0) > 0
 
 
-def _log_fetch(conn, recognised, dropped, error):
+def _log_fetch(conn, recognised, dropped, error, suspected=None):
     """留下這一次抓取的紀錄。**它是「雷達瞎了沒」唯一的判斷依據。**
 
     `recognised` 三個值不可以混：`NULL`＝根本沒解析、`0`＝解析過認不得、`1`＝認得。
     """
     conn.execute(
-        "INSERT INTO tender_fetch_log (fetched_at, recognised, dropped, error) "
-        "VALUES (?,?,?,?)",
-        (_now_iso(), recognised, dropped, error or ""),
+        "INSERT INTO tender_fetch_log (fetched_at, recognised, dropped, error, suspected) "
+        "VALUES (?,?,?,?,?)",
+        (_now_iso(), recognised, dropped, error or "", suspected),
     )
 
 
@@ -372,22 +394,24 @@ def _store(conn, items):
                 w[key] = []
         watches.append(w)
 
-    now, new_tenders, new_hits = _now_iso(), 0, 0
+    now, new_ids, new_hits = _now_iso(), [], 0
     for item in items:
         cur = conn.execute(
             "INSERT OR IGNORE INTO tenders "
             "(case_no, org, name, published_at, deadline, budget, url, fetched_at) "
             "VALUES (?,?,?,?,?,?,?,?)",
-            (item["case_no"], item["org"], item["name"], item["published"],
+            (item["case_no"], item["org"], item["name"], item["published_at"],
              item["deadline"], item["budget"], item.get("url", ""), now),
         )
-        new_tenders += cur.rowcount or 0
+        inserted = (cur.rowcount or 0) > 0
         row = conn.execute(
             "SELECT id FROM tenders WHERE org=? AND case_no=?",
             (item["org"], item["case_no"]),
         ).fetchone()
         if not row:
             continue
+        if inserted:
+            new_ids.append(row["id"])
         for w in match_watches(item, watches):
             cur = conn.execute(
                 "INSERT OR IGNORE INTO tender_hits (watch_id, tender_id, hit_at) "
@@ -395,7 +419,7 @@ def _store(conn, items):
                 (w["id"], row["id"], now),
             )
             new_hits += cur.rowcount or 0
-    return new_tenders, new_hits
+    return new_ids, new_hits
 
 
 def run_scan():
@@ -423,16 +447,233 @@ def run_scan():
             return {"fetched": True, "error": error, "recognised": None}
 
         items, dropped, recognised = parse_list(html)
-        _log_fetch(conn, 1 if recognised else 0, dropped, "")
-        new_tenders = new_hits = 0
+        suspected = suspect_redesign(len(items), dropped)
+        _log_fetch(conn, 1 if recognised else 0, dropped, "",
+                   suspected=1 if suspected else 0)
+        new_ids, new_hits = ([], 0)
         if recognised:
-            new_tenders, new_hits = _store(conn, items)
+            new_ids, new_hits = _store(conn, items)
         conn.commit()
         return {
             "fetched": True, "error": None, "recognised": recognised,
             "parsed": len(items), "dropped": dropped,
-            "suspect_redesign": suspect_redesign(len(items), dropped),
-            "new_tenders": new_tenders, "new_hits": new_hits,
+            "suspect_redesign": suspected,
+            "new_tenders": len(new_ids), "new_tender_ids": new_ids,
+            "new_hits": new_hits,
         }
     finally:
         conn.close()
+
+# ── 收件人 ───────────────────────────────────────────────────────────────────
+
+# ⚠️ **收件人由各 `notify_*` 自己解析，呼叫端不先過濾。**
+# 這是既有 44 支 `notify_*` 的一致做法（`to = _admin_emails(key); if not to: return`），
+# 而且守門 `test_notification_prefs_coverage.py` 掃的正是那個 `_admin_emails(key)` 呼叫點。
+# 我一度在這裡加了一道「沒有收件人就不呼叫」的閘門，拿掉了——理由見 B.md〈給彙整〉：
+# 那道閘門能讓 N10 綠，但會讓 N1／N3／N5／N6／N9／N11 全紅，
+# 因為 `conftest` 的每測試資料庫只有 demo 帳號、**沒有任何有 email 的 admin**。
+# 兩者只能滿足一個，而慣例那一邊才是對的。
+
+
+# ── 純記錄模式（SPEC §T.5 #3）───────────────────────────────────────────────
+
+def _first_scan_at():
+    raw = _get_setting(FIRST_SCAN_SETTING)
+    return str(raw) if raw else ""
+
+
+def _remember_first_scan(now_iso):
+    """只在**第一次成功掃描**時寫一次。之後不再動它。"""
+    if not _first_scan_at():
+        _set_setting(FIRST_SCAN_SETTING, now_iso)
+
+
+def _in_quiet_period():
+    """首次成功掃描起 N 天內 → 只抓只存、不寄「找到標案」的信。
+
+    ⚠️ **只擋「找到標案」，不擋異常告警。** 純記錄期的用途是「讓使用者先看關鍵字
+    準不準」，而「雷達瞎了」跟關鍵字準不準無關——把它一起擋掉的話，
+    第一週就壞掉的雷達會安靜地壞滿七天。
+    """
+    raw = _first_scan_at()
+    if not raw:
+        return False
+    try:
+        first = date.fromisoformat(raw[:10])
+    except ValueError:
+        logger.warning("%s 的值不是日期：%r", FIRST_SCAN_SETTING, raw)
+        return False
+    return (today() - first).days < QUIET_PERIOD_DAYS
+
+
+# ── 邊緣觸發（SPEC §T.5 #5 vs §T.6 的裁決）──────────────────────────────────
+
+def _previous_alert_state(conn):
+    """上一次抓取是什麼狀態。**從資料庫讀，不是行程記憶體。**
+
+    存在記憶體裡的話，異常期間重啟服務就會重新觸發一次邊緣、再寄一封
+    （驗收條件 N13）。而「服務重啟」在正式機上是常態，不是例外。
+    """
+    row = conn.execute(
+        "SELECT recognised, suspected FROM tender_fetch_log ORDER BY id DESC LIMIT 1"
+    ).fetchone()
+    if not row:
+        return {"failed": False, "suspected": False}
+    return {"failed": row["recognised"] is None,
+            "suspected": bool(row["suspected"])}
+
+
+def _load_new_tenders(tender_ids):
+    """把這一輪新增的標案讀出來給信件用，並回傳要標記的命中 id。"""
+    if not tender_ids:
+        return [], [], []
+    marks = ",".join("?" * len(tender_ids))
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            # `url` 一定要撈：信裡每一筆都要連得回來源，而**授權條款要求註明出處**
+            # （SPEC §T.5 #6）。驗收條件 N11 的觀測點是「傳給寄信函式的參數」，
+            # 所以出處必須在資料裡，不能只在 HTML 樣板裡——樣板在那個觀測點看不到。
+            f"SELECT id, case_no, org, name, published_at, deadline, budget, url "
+            f"FROM tenders WHERE id IN ({marks}) ORDER BY (deadline IS NULL), deadline",
+            tuple(tender_ids),
+        ).fetchall()
+        hits = conn.execute(
+            f"SELECT h.id AS hit_id, w.name AS watch_name FROM tender_hits h "
+            f"JOIN tender_watches w ON w.id = h.watch_id "
+            f"WHERE h.tender_id IN ({marks}) AND (h.notified_at IS NULL OR h.notified_at='')",
+            tuple(tender_ids),
+        ).fetchall()
+    finally:
+        conn.close()
+    return ([dict(r) for r in rows],
+            [r["hit_id"] for r in hits],
+            [r["watch_name"] for r in hits])
+
+
+def _mark_hits_notified(hit_ids):
+    """**只有寄信成功之後才呼叫。**
+
+    在寄信之前標記的話，SMTP 掛掉那一次的標案**永遠不會再出現在任何一封信裡**，
+    而且不會有任何錯誤訊息（驗收條件 N12）。
+    """
+    if not hit_ids:
+        return
+    conn = get_db()
+    try:
+        now = _now_iso()
+        conn.executemany("UPDATE tender_hits SET notified_at=? WHERE id=?",
+                         [(now, h) for h in hit_ids])
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _notify(result, previous):
+    """依這一輪的結果決定要不要寄信。**任何情況都不把例外往外丟。**
+
+    三種事件各自一個 key、各自邊緣觸發：
+      抓不到（`tender_fetch_failed`）／疑似改版（`tender_source_changed`）／
+      找到標案（`tender_found`，每日一封彙總）
+    """
+    from helpers import email_notify
+
+    failed = result.get("error") is not None or result.get("recognised") is None
+    if failed:
+        # 邊緣觸發：只有「從正常進入異常」那一次寄。
+        # 準位觸發的話，站台掛一週就是七封信——**狼來了的告警等於沒有告警**。
+        if not previous["failed"]:
+            try:
+                email_notify.notify_tender_fetch_failed(result.get("error") or "")
+            except Exception:  # noqa: BLE001
+                logger.exception("notify_tender_fetch_failed failed")
+        return
+
+    if result.get("suspect_redesign") and not previous["suspected"]:
+        try:
+            email_notify.notify_tender_source_changed(
+                result.get("parsed", 0), result.get("dropped", 0))
+        except Exception:  # noqa: BLE001
+            logger.exception("notify_tender_source_changed failed")
+
+    # ⚠️ 疑似改版時**仍然照常通知解析成功的那幾筆**：它們通過了形狀驗證，
+    # 是真的標案。因為版面有疑慮就整批不通知的話，**會漏掉真的標案**，
+    # 而「不會漏掉標案」正是這條線的承諾。
+    # ⚠️ **先判斷再記錄，順序不可以顛倒。**
+    # 反過來的話，第一次成功掃描會把起算點設成今天，然後立刻掉進自己剛設的
+    # 靜默期裡——「首次啟用」那一封永遠寄不出去，而那一封正是使用者用來判斷
+    # 關鍵字準不準的依據（純記錄期存在的理由）。
+    quiet = _in_quiet_period()
+    _remember_first_scan(_now_iso())
+    if quiet:
+        return
+    tenders, hit_ids, watch_names = _load_new_tenders(
+        result.get("new_tender_ids") or [])
+    if not tenders:
+        return          # 今天沒有新標案不是異常，不該打擾任何人
+    try:
+        email_notify.notify_tender_found(tenders, watch_names)
+    except Exception:  # noqa: BLE001
+        logger.exception("notify_tender_found failed；已通知標記不會被設定")
+        return          # ⚠️ 不標記——見 _mark_hits_notified 的說明
+    _mark_hits_notified(hit_ids)
+
+
+# ── 排程 ─────────────────────────────────────────────────────────────────────
+
+def run_scheduled_scan():
+    """排程的執行體。**模組層級的具名函式，不是巢狀 closure。**
+
+    既有四支排程的執行體都是 closure（`_loop`／`_run_all`／`_daily_run`），
+    **測試從外面叫不到** ⇒ 只能等 Timer。這裡具名是為了讓它驗得動。
+    """
+    previous = {"failed": False, "suspected": False}
+    try:
+        conn = get_db()
+        try:
+            previous = _previous_alert_state(conn)
+        finally:
+            conn.close()
+    except Exception:  # noqa: BLE001
+        logger.exception("讀取上一次抓取狀態失敗，這一輪以「先前正常」處理")
+
+    result = run_scan()
+    if not result or result.get("skipped"):
+        return result
+    try:
+        _notify(result, previous)
+    except Exception:  # noqa: BLE001
+        logger.exception("標案雷達通知失敗")
+    return result
+
+
+def _seconds_until_next_run():
+    """下一次 08:00。比照 `daily_tasks`／`dev_crm` 既有兩支的作法。"""
+    from datetime import datetime
+    now = datetime.now()
+    nxt = now.replace(hour=SCAN_HOUR, minute=0, second=0, microsecond=0)
+    if nxt <= now:
+        nxt += timedelta(days=1)
+    return max((nxt - now).total_seconds(), 1.0)
+
+
+def schedule_tender_scan():
+    """啟動時呼叫一次：跑一輪，然後排下一次。
+
+    ⚠️ **不可以抄既有四支的形狀。** `archive._schedule_daily` 把工作放在 Timer
+    重排**之前**而且沒包 try——丟一次例外就永遠不會再排，**排程靜默死亡**，
+    而「排程死了」跟「今天沒事做」長得一模一樣。
+    ⇒ 這裡工作包在 `try` 裡，**重排放在 `finally`**：不管發生什麼，下一次一定排得上。
+
+    ⚠️ `threading.Timer` 走模組屬性，`from threading import Timer` 會讓
+    monkeypatch 打不到 ⇒ S3 永遠綠。
+    """
+    try:
+        run_scheduled_scan()
+    except Exception:  # noqa: BLE001
+        logger.exception("run_scheduled_scan failed")
+    finally:
+        t = threading.Timer(_seconds_until_next_run(), schedule_tender_scan)
+        t.daemon = True
+        t.start()
+

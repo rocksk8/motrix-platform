@@ -1596,3 +1596,106 @@ def notify_disk_space_low(problems: list, temp_bloat: list = None,
         button_text="前往系統",
     )
     _async_send(to, f"【MOTRIX】磁碟空間不足 — 最低剩餘 {worst} GB", html)
+
+# ── 標案雷達（2026-09-21，細線 6 第 5 步）────────────────────────────────────
+#
+# ⚠️ **三支獨立函式，event key 寫在函式內部，不是一支帶參數的。**
+# 既有 44 支 `notify_*` 零支把 key 當參數，而這不只是慣例問題：
+# `tests/test_notification_prefs_coverage.py` 是**掃本檔的 `_admin_emails(...)`
+# 呼叫端**來比對 `EVENT_GROUPS`——一支函式帶參數的話，守門掃不出那三個 key，
+# **漏登記不會紅**。慣例跟守門是綁在一起的。
+#
+# ⚠️ 三個 key 也刻意分開：「抓不到」與「疑似改版」的**處置相反**
+# （掛掉等它好、改版要改解析器）。共用一個 key 的話，使用者關掉吵的那個，
+# 就同時關掉了他其實想留的那個。
+
+_TENDER_SOURCE_NOTE = (
+    "資料來源：政府電子採購網（依其著作權聲明重製，已註明出處）。"
+    "本信由標案雷達每日彙總自動寄出，可在「通知設定」關閉。"
+)
+
+
+def notify_tender_found(tenders: list, watch_names: list = None) -> None:
+    """標案雷達命中新標案 → 所有 admin/superadmin。
+
+    ⚠️ **每日一封彙總，不是每筆一封**：命中 40 筆就是信裡 40 列。
+    40 封信會讓收件人把整個事件 key 關掉，**而他關掉之後就再也收不到真正重要的那一筆**。
+    """
+    to = _admin_emails("tender_found")
+    if not to:
+        return
+    rows = []
+    for t in (tenders or [])[:50]:
+        deadline = t.get("deadline") or "未公告"
+        budget = t.get("budget")
+        budget_s = "未公告" if budget is None else f"{budget:,}"
+        rows.append((f"{t.get('org', '')}｜{t.get('case_no', '')}",
+                     f"{t.get('name', '')}<br>截止 {deadline}｜預算 {budget_s}"))
+    more = len(tenders or []) - len(rows)
+    intro = f"標案雷達今天找到 <b>{len(tenders or [])}</b> 筆符合條件的新標案。"
+    if more > 0:
+        intro += f"（信中只列前 {len(rows)} 筆，其餘 {more} 筆請進系統查看）"
+    if watch_names:
+        intro += "　命中條件：" + "、".join(sorted(set(watch_names)))
+    html = _build_html(
+        "標案雷達：新標案", f"{len(tenders or [])} 筆", "#1D4ED8",
+        rows, "", _base_url(), note=_TENDER_SOURCE_NOTE, intro=intro,
+        button_text="前往標案雷達",
+    )
+    _async_send(to, f"【MOTRIX】標案雷達：{len(tenders or [])} 筆新標案", html)
+
+
+def notify_tender_fetch_failed(error: str, since: str = "") -> None:
+    """標案雷達**抓不到對方網站** → 所有 admin/superadmin。
+
+    ⚠️ **只在「進入異常」那一次寄**（邊緣觸發，不是準位觸發）。
+    站台掛一週寄七封信的話，第八天真的壞掉時沒有人會看——
+    **狼來了的告警等於沒有告警。**
+
+    ⚠️ 跟 `notify_tender_source_changed` 是**不同的事件 key**：
+    抓不到只要等它好，改版要改解析器。
+    """
+    to = _admin_emails("tender_fetch_failed")
+    if not to:
+        return
+    rows = [("失敗原因", error or "（未記錄）")]
+    if since:
+        rows.append(("上次成功", since))
+    intro = (
+        "標案雷達連不上政府電子採購網，今天沒有抓到任何標案。"
+        "<b>這通常不需要處理</b>——對方站台維護或網路暫時不通，下次排程會自動再試。"
+        "這封信只在「從正常變成異常」的那一次寄出，連續失敗不會每天寄。"
+    )
+    note = (
+        "如果連續多天都沒有收到標案彙總信，請到系統的標案雷達頁面看「雷達健康狀態」。"
+        + _TENDER_SOURCE_NOTE
+    )
+    html = _build_html("標案雷達：抓不到來源網站", "連線失敗", "#B91C1C",
+                       rows, "", _base_url(), note=note, intro=intro,
+                       button_text="前往標案雷達")
+    _async_send(to, "【MOTRIX】⚠️ 標案雷達抓不到政府電子採購網", html)
+
+
+def notify_tender_source_changed(parsed: int, dropped: int) -> None:
+    """標案雷達**疑似對方改版** → 所有 admin/superadmin。
+
+    解析大量失敗（丟掉的比解出來的多）代表對方頁面結構變了，**解析器要改**。
+    ⚠️ 這跟「抓不到」是兩件事：那邊等它好就行，**這邊不動手就永遠抓不到東西**，
+    而且畫面上看起來一切正常（雷達還在跑、只是每天都 0 筆）。
+    """
+    to = _admin_emails("tender_source_changed")
+    if not to:
+        return
+    total = parsed + dropped
+    rows = [("成功解析", f"{parsed} 筆"), ("解析失敗", f"{dropped} 筆"),
+            ("本次總筆數", f"{total} 筆")]
+    intro = (
+        "標案雷達連得上政府電子採購網，但<b>大部分資料解析不出來</b>，"
+        "多半是對方改了頁面結構。"
+        "<b>這件事不會自己好</b>——在解析器跟著調整之前，雷達每天都會是 0 筆，"
+        "而畫面上看起來一切正常。"
+    )
+    html = _build_html("標案雷達：疑似對方改版", f"丟棄 {dropped} 筆", "#92400E",
+                       rows, "", _base_url(), note=_TENDER_SOURCE_NOTE, intro=intro,
+                       button_text="前往標案雷達")
+    _async_send(to, "【MOTRIX】⚠️ 標案雷達疑似對方網站改版", html)
