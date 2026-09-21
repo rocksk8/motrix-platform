@@ -795,3 +795,12 @@ from datetime import datetime
 🔑 A 把「併進去等於延後一個現行缺陷」這個判斷**明著寫下來**，
 理由是「**順便延後一個現行缺陷，正是最容易在事後看起來很糟的那種決定**」。
 ⇒ 配套：本輪的三件（import／標記順序／裸執行緒）做完**之前**不要開始 SL 系列。
+
+## 恢復施工宣告（§3j）
+
+- **時間**：2026-09-21 22:0x ／ **前一個停工點** `cf38f91`（C 的⑥已對 `5964ce5` 跑完）
+- **本次動**：`backend/helpers/tender_source.py`、`backend/routers/tender_radar.py`
+- **⏸️ 仍不碰**：`email_notify.py`／`daily_tasks.py` —— 等 C 補
+  「`notify_backup_stale` 本體跑得起來」那一題的紅燈（目前無紅燈，依協定不能寫）
+- **⚠️ 會撞到 C**：`_already_fetched_today` → `_already_fetched_this_slot`，
+  三處既有 patch 會變 AttributeError，已告知
