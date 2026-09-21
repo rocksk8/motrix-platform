@@ -8751,7 +8751,144 @@ _m088_tender_detail_fields       db.py:3661     ← location / procurement_type 
 **§3l（地圖）與 §3j（頻率）就算做得再對，升不上去就沒有意義。**
 ⇒ **§3m 插在它們前面。**
 
+---
+
+### 2026-09-21（第八十四次）· ✅ **§3m 的 U6 跑完了：84 → 88 能升，一列資料都沒少**
+
+> **使用者裁示**：「**先跑 §3m，確認能升到正式機再繼續。**」
+
+## ✅ ① 實測結果（A 自己跑的，對正式機備份的**複本**）
+
+```
+來源   G:\...\每日備份\2026-09-21\motrix_erp.db        as-of 20:20
+複本   scratchpad\u6_working.db                      ⚠️ 原檔一個 byte 都沒動
+作法   con = sqlite3.connect(複本); con.row_factory = sqlite3.Row
+       db._run_migrations(con)                       ← 真正的那一支，不是模擬
+
+BEFORE  version=84   76 張表   9,176 列
+AFTER   version=88   81 張表   9,176 列
+RESULT  completed without exception
+```
+
+| 條件 | 結果 |
+|---|---|
+| **U1** 84 → 88 不丟例外 | ✅ |
+| **U2** 既有資料一列都沒少 | ✅ **9,176 → 9,176，零流失** |
+| **U3** 新欄位有正確預設 | ✅ **七欄全部 nullable、無 `NOT NULL`、無 default** |
+| **U7** `_m086` 從無到有建表 | ✅ **四張 `tender_*` 全部建起來（正式機原本一張都沒有）** |
+
+**新增 5 張表**：`purchase_suggestion_status` ＋ `tender_watches`／`tenders`／`tender_hits`／`tender_fetch_log`
+
+### ✅ 讀回來也驗了（schema 對 ≠ app 讀得動）
+
+```
+既有列拿到 NULL 不是 0：  suppliers 27 筆全 NULL（zero=0）／parts 13 筆全 NULL（zero=0）
+讀得回來：                quotations 35 / dev_logs 566 / active users 12 / system_settings 110
+tenders：                 0 筆（新表，正確）
+company_profile：         仍是七鍵、has address = False   ← M1/M2 的前提，實測不是假設
+```
+
+🔑 **「既有列拿到 NULL 不是 0」這一項特別要留** —— **那是 `null ≠ 0` 那一族做對的實例**，
+**而 `_m085` 的 docstring 自己就寫了理由**（「NULL 是未知不是 0，ETA 必須跟著回 null」）。
+
+## ☠️ ② 而 A 的 harness 第一次壞掉，**意外撞出今天最重要的缺陷**
+
+A 第一次跑時**沒有設 `con.row_factory = sqlite3.Row`**（而 `db._connect()` 有設）。
+⇒ `_col_exists` 的 `r["name"]` 丟 `TypeError`。
+🔴 **但真正的問題在更上游**：
+
+```python
+def _get_version(conn) -> int:
+    try:
+        row = conn.execute("SELECT version FROM schema_version WHERE id=1").fetchone()
+        return row["version"] if row else 0
+    except Exception:
+        return 0            # ← 🔴 任何失敗都變成「版本 0」
+```
+
+☠️ **「讀不到版本」被翻譯成「這是一個全新的資料庫」。**
+⇒ **A 的失敗跑真的從 `_m001` 開始重跑了**（traceback 指向 `_m001_export_columns`）。
+
+### 🔴 為什麼這是真的風險，不只是 A 的 harness 問題
+
+**正式路徑永遠走 `_connect()`（有設 `row_factory`）⇒ `TypeError` 那一條在正式機上到不了。**
+🔴 **但 `except Exception` 吃掉的不只那一種**：
+
+| 情境 | `_get_version` 回什麼 | 後果 |
+|---|---|---|
+| 資料庫鎖住 | **0** | 🔴 重跑 88 個 |
+| 檔案部分損壞 | **0** | 🔴 重跑 88 個 |
+| 從 JSON 重建（D 查出 `schema_version` **不在** JSON 備份裡） | **0** | 🔴 重跑 88 個 |
+| 真的是新資料庫 | **0** | ✅ 正確 |
+
+🔑 **而「重跑 88 個」不是無害的** —— D 查出裡面有**會改資料**的
+（`_m007_fix_legacy_display_names`、`_m009_migrate_legacy_visits`），
+**而那些在 35 筆真實報價單、566 筆真實開發記錄上重跑的行為沒有人驗過。**
+
+### 🔴 A 的裁決：`_get_version` 要把「讀不到」與「沒有」分開
+
+- **U8.** 🔴 **`schema_version` 表不存在 → 回 0（新資料庫，正確）**
+- **U9.** 🔴🔴 **表存在但讀取失敗（鎖住／損壞／型別錯）→ 拋出，不可以回 0**
+  🔑 **判準**：**「我不知道」不可以被翻譯成「從零開始」** ——
+  ⚠️ **而那個翻譯的代價是對真實資料重跑 88 個 migration。**
+📌 **這是 `feedback_null_vs_zero` 與「降級之後它還是會動」兩條的交集。**
+
+### 🔑 ③ 而 A 要記自己這一次的形狀
+
+**A 的 harness 沒有複製正式環境的一個設定（`row_factory`），而那個設定決定了整條路徑。**
+☠️ **那正是今天 C 的「綠燈只在量它的那個人的殼裡成立」的同一件事，換成 A 的版本。**
+✅ **但這一次它是有用的** —— **壞掉的 harness 走到了一條正式路徑走不到的分支，而那條分支是真的存在的。**
+🔑 **已進 §6：一個「用錯方式」的測試，有時會走到正確方式走不到的地方。**
+
+## ✅ ④ B 與 D 各自獨立審了那四個 migration，**結論一致**
+
+| | D | B |
+|---|---|---|
+| `ADD COLUMN` 帶 `NOT NULL` | **0 命中**（七個全部無約束） | 同 |
+| `UPDATE`／`DELETE`／資料回填 | **0** | 同 |
+| `CREATE TABLE IF NOT EXISTS` | ✅ 四張全是 | ✅ |
+| 呼叫會演進的 helper | 只有 `_col_exists`（純查詢，語意不會漂移） | **同，而 B 主動標明「它就是那個形狀」** |
+| 交易邊界 | 每跑完一個寫一次版本 ⇒ 失敗停在明確的中間版本 | **同，而 B 指出 `fn()` 與 `_set_version()` 之間有窗口** |
+
+🔑 **B 指出的那個窗口值得收一題**：
+> 「行程若死在 `fn(conn)` 與 `_set_version(conn, i)` 之間，**改動已經落地而版本號還是舊的**
+> ⇒ 重開機會再跑一次同一支。**四支都擋得住重跑，但那是因為我剛好都寫了守衛，不是因為有機制保證。**」
+
+- **U10.** 🔴 **`_MIGRATIONS` 的每一支都必須可重複執行**（連跑兩次結果相同）
+  🔑 **那是一道對所有 migration 都成立的不變量，而現在沒有任何東西在守它。**
+  📌 **正是「『沒壞』與『被防住了』在綠燈上長得一模一樣」。**
+
+## ⚠️ ⑤ 兩個已知的、不在這條路上的風險（記著，本輪不做）
+
+1. 🔴 **`schema_version` 不在每日 JSON 備份的表清單裡**（D 查，`grep -c schema_version archive.py → 0`）
+   ✅ 標準還原不受影響（還原的是 `.db` 整份快照）
+   🔴 **但「從 JSON 重建」那條路會讓 `_get_version` 回 0** ⇒ 接上 U9
+2. **D 自報**：它**沒有**比對「v84 的實際 schema」與「`init_db` ＋ `_m001~_m084` 的預期結果」
+   ✅ **而 A 的 U6 實測把這個缺口補上了** —— **實際的 v84 schema 吃得下那四個 migration。**
+
 ## §6 · 紀律提醒（給所有視窗）
+
+### ☠️ 「我不知道」不可以被翻譯成「從零開始」（2026-09-21，A 的 harness 意外撞出）
+
+```python
+def _get_version(conn) -> int:
+    try:  ...
+    except Exception:
+        return 0      # ← 鎖住／損壞／型別錯／真的是新庫，全部變成 0
+```
+🔴 **而「版本 0」的意思是「對這個資料庫重跑全部 88 個 migration」**，
+**其中包含會改資料的那幾個。**
+📌 **⇒ 讀不到狀態時要拋出，不要回一個「剛好也是合法值」的東西。**
+🔑 這是 `null ≠ 0` 與「降級之後它還是會動」的交集：
+**壞掉會被報修，而「當成新資料庫」會成功地把事情做完。**
+
+### 🔑 一個「用錯方式」的測試，有時會走到正確方式走不到的地方（同日，A）
+
+A 的 harness 漏設 `row_factory`（而 `db._connect()` 有設）⇒ 走到了一條
+**正式路徑到不了、但真實存在**的分支（`_get_version` 回 0 → 從 `_m001` 重跑）。
+📌 **⇒ harness 與正式環境的差異是缺陷，但那個差異偶爾是一台探照燈。**
+⚠️ **前提是你要發現它是 harness 的問題** —— **A 差一點把它當成 migration 壞了。**
+
 
 ### ☠️ 資料的來源 ≠ 故障的位置（2026-09-21，視窗 B 自陳）
 
