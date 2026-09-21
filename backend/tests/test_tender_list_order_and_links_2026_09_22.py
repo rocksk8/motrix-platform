@@ -233,10 +233,8 @@ def test_so4_a_tender_matching_two_watches_appears_once(
 # SO5 / SO6 · 組內次序要可解釋
 # ══════════════════════════════════════════════════════════════════════
 
-@pytest.mark.parametrize("group", ["matched", "unmatched"])
-def test_so5_within_a_group_the_nearest_deadline_comes_first(
-        client, make_user, seeded, group):
-    """🔴 SO5／SO6：同一段內**截止日近的在前，沒有截止日的排最後**。
+def _assert_segment_order(client, make_user, want_matched, label):
+    """某一段內：截止日近的在前，沒有截止日的排最後。
 
     ⚠️ **不可以是資料庫的自然順序** —— 那會隨插入順序漂移，
     而漂移的樣子是「**今天的清單跟昨天不一樣，但沒有人改過東西**」。
@@ -247,20 +245,42 @@ def test_so5_within_a_group_the_nearest_deadline_comes_first(
     """
     hdr = _auth(client, make_user)
     items = _items(_list(client, hdr))
-    want_matched = group == "matched"
     seg = [it for it in items if bool(_matched(it)) == want_matched]
-    assert len(seg) >= 2, f"`{group}` 這一段只有 {len(seg)} 筆，比不出次序"
+    assert len(seg) >= 2, f"`{label}` 這一段只有 {len(seg)} 筆，比不出次序"
 
     deadlines = [it.get("deadline") for it in seg]
     with_d = [d for d in deadlines if d]
     assert with_d == sorted(with_d), (
-        f"`{group}` 段的截止日不是由近到遠：{deadlines}"
+        f"`{label}` 段的截止日不是由近到遠：{deadlines}"
     )
     tail = deadlines[len(with_d):]
     assert all(not d for d in tail), (
-        f"`{group}` 段裡沒有截止日的那幾筆沒有排在最後：{deadlines}\n"
+        f"`{label}` 段裡沒有截止日的那幾筆沒有排在最後：{deadlines}\n"
         "⇒ `NULL` 在 SQLite 裡最小，不處理的話它會插到最急的位置。"
     )
+
+
+def test_so5_the_matched_segment_is_ordered_by_deadline(
+        client, make_user, seeded):
+    """🔴 SO5：**命中區**內部，截止日近的在前、沒有截止日的排最後。
+
+    📌 拆成兩支（SO5／SO6）而不是一支參數化 ——
+    ⚠️ 參數化的話**函式名只有一個**，而規格覆蓋率守門認的是**函式名**
+    ⇒ SO6 會被判定成「規格宣告了而沒有人寫」。
+    🔑 **那個守門是我寫的，而我自己第一版就踩了它。**
+    """
+    _assert_segment_order(client, make_user, True, "matched")
+
+
+def test_so6_the_unmatched_segment_is_ordered_the_same_way(
+        client, make_user, seeded):
+    """🔴 SO6：**未命中區**的次序同 SO5。
+
+    ⚠️ 兩段各自排序，而**不是整份排完再分段** ——
+    整份排完再分段的話，`S-04`（09-25，沒命中）會被推到最前面，
+    那正是 SO1 在擋的事。
+    """
+    _assert_segment_order(client, make_user, False, "unmatched")
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -346,4 +366,33 @@ def test_so10_the_template_guards_the_link_with_a_condition():
     assert guarded, (
         "找不到任何以 `url` 為條件的 `x-if`／`x-show` ——\n"
         "⇒ 那個 `<a>` 沒有被條件包著，空網址會渲染成死連結。"
+    )
+
+
+def test_so7_both_the_tender_name_and_the_organisation_are_clickable():
+    """🟡 SO7：**標案名稱**與**機關名稱**都可點，開啟 `tenders.url`。
+
+    ⚠️ **這是文字比對，弱的**（見檔頭）—— 我只能確認兩個欄位都出現在
+    連結的標記裡，**不能確認渲染出來真的可以點**。
+
+    📌 為什麼兩個都要：使用者在清單上掃的是**機關名稱**（他認得哪些機關
+    常發他做得來的標案），而標案名稱太長、常被截斷。
+    🔑 只做一個的話，**他會去點另一個然後以為壞了**。
+    """
+    assert PAGE.exists(), f"找不到 {PAGE}"
+    text = PAGE.read_text(encoding="utf-8")
+
+    links = text.split("<a ")[1:]
+    assert links, "`tender-radar.html` 裡一個 `<a>` 都沒有 —— SO7 還沒做"
+
+    def _linked(field):
+        return any(field in chunk[:400] for chunk in links)
+
+    assert _linked("t.name") or _linked("tender.name"), (
+        "沒有任何 `<a>` 裡用到標案名稱"
+    )
+    assert _linked("t.org") or _linked("tender.org"), (
+        "沒有任何 `<a>` 裡用到機關名稱 ——\n"
+        "⇒ 使用者在清單上掃的是機關名稱，只做標案名稱的話"
+        "他會去點機關名然後以為壞了。"
     )
