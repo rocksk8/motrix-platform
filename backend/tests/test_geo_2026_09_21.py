@@ -91,6 +91,35 @@ def _geo(name=None):
     return getattr(geo, name) if name else geo
 
 
+@pytest.fixture(autouse=True)
+def _no_tile_probe(monkeypatch):
+    """🔴 **本檔不做圖磚探測** —— 它會真的對 OSM 發一次請求。
+
+    ## 由來：NETGUARD 抓到的，而那不是新行為
+
+    `/api/map/points` 現在每次都會做一次圖磚探測（`tilesBlocked`，§3n 之後加的）。
+    ⇒ M4／M5／M6／M13／M13b 這幾題**直接打那個端點**，於是每一題
+    **都真的連了一次 OSM**。
+
+    📌 **那本來就在發生**，只是 NETGUARD 變嚴之後才照出來 ——
+    🔑 **守門的價值不在它擋下什麼，在它讓「一直在發生的事」變得看得見。**
+
+    ## ⚠️ autouse 而不是逐題加
+
+    逐題加的話，**下一題忘了加的時候症狀會一模一樣地回來** ——
+    而那正是我今天才在 `test_geo_fallback` 修過的同一件事（第三次）。
+
+    ## 📌 這裡 stub 的是 `tiles_blocked` 不是 `urlopen`
+
+    `tiles_blocked` 是**本檔不驗的東西**（它有自己的檔），
+    stub 掉它就沒有任何請求會產生。
+    ⚠️ 而 `urlopen` 那一層留給 NETGUARD —— **若哪天端點多了一個新的對外呼叫，
+    這個 fixture 攔不到它，而 NETGUARD 會。** 兩層是刻意分開的。
+    """
+    if geo is not None and hasattr(geo, "tiles_blocked"):
+        monkeypatch.setattr(geo, "tiles_blocked", lambda: None)
+
+
 def _auth(client, make_user, role="superadmin"):
     username, password = make_user(role=role)
     r = client.post("/api/auth/login",
