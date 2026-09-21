@@ -1,71 +1,47 @@
 """2026-09-21 · 第 4 輪：標案雷達第 1～3 步（設條件、抓得到、比對得出命中）
 
-對應 `docs/windows/STATE.md` §3 **第二版**（`862d48c`）的 **17 條**驗收條件。
+對應 `docs/windows/STATE.md` §3 **`5a866e4`** 版的 **34 條**驗收條件。
+（照協定 §5l 記下 SHA —— 沒有版本號的「我照單寫了」，等於沒說照的是哪一張。）
 
-> ⚠️ 第一版我寫完於 13:49，A 於 13:50:53 把 §3 改成第二版（B 開工前審單，
-> 八項成立、三處規格是錯的）。**本檔已改照第二版。** 條件 1～4、7、7b、7c、9 未動；
-> 條件 5、6 改了，另加 6b／6c／7d／8b／9b／9c。
-
-## 🔴 我沒有讀實作
+## 🔴 我沒有讀解析器
 
 B 還沒寫任何產品碼（`helpers/tender_source.py`／`helpers/tender_match.py`／
-`routers/tender_radar.py` 都不存在），所以「不讀實作」是自然成立的。
-**這是正常的②先於④順序，全紅是預期的起點。**
+`routers/tender_radar.py` 都不存在），所以「不讀實作」自然成立。
+**我讀的是 `fixtures/tender_list_20260921.html`（測試資料，我的領域），不是解析器。**
 
----
+## 🔴 所有 HTML 樣本都是從真實 fixture 切出來的，不是手寫的
 
-## B 要提供的名字
+第一版我手寫了假定結構的 HTML。真實樣本到位之後全部改成**對 fixture 做外科手術**
+（挖掉資料列、清空某一格、把兩格對調…），每一個手術都有 `assert` 守門：
+**`str.replace` 對不上是靜默無效的，而「樣本沒被改到」跟「解析器沒問題」長得一模一樣。**
 
-`helpers/tender_source.py`
+⚠️ 手寫樣本的問題不是「不像」，是**它會把我對結構的誤解變成測試的前提** ——
+然後解析器照著我的誤解寫，兩邊一致而且全綠，直到上正式機。
 
-| 名字 | 形態 | 來源 |
-|------|------|------|
-| `TENDER_RADAR_ENABLED` | `bool`，**預設 `False`** | §3 |
-| `fetch_raw(params)` | 🔴 **`-> (html: str|None, error: str|None)`** | §3 v2（B ①） |
-| `parse_list(html)` | `-> (list[dict], dropped:int, recognised:bool)` | §3 |
-| `run_scan()` | 每日掃描進入點 | ⚠️ C 取的名字 |
-| `suspect_redesign(parsed_count, dropped)` | `-> bool` | ⚠️ C 取的名字 |
+## 這個網站真實的四件事（我掃 fixture 得到的，已寫進 §3）
 
-`helpers/tender_match.py`：⚠️ `match_watches(tender, watches) -> list[dict]`（C 取的名字）
+| 事實 | 為什麼要緊 |
+|---|---|
+| `截止投標`／`預算金額` 在原始 HTML 出現 **0 次** | 被標籤與 `&emsp;` 切開。`recognised` 要先 strip tags → unescape → **去掉所有空白**再比 |
+| **標案名稱是 `<script>` 裡 `pageCode2Img("…")` 的引數** | naive strip tags 會得到一行 JavaScript，**而真名是它的子字串** ⇒ 關鍵字照樣命中、條件 1 照樣綠 |
+| 查詢表單 `tb_03c` **也含**「機關名稱」「標案案號」 | 所以要**四個字樣同時**出現才算認得（表單頁沒有後兩個） |
+| 結果表 `id="tpam"` 共 6 個 `<tr>` ＝ 1 表頭 ＋ **5 筆資料** | 全頁 29 個 `<tr>`，解析器不可以掃全部 `<tr>` |
 
-**欄位一律 snake_case** —— 這些是純函式參數與資料庫欄位，不是 API 回應。
-第 3 輪的教訓是 **API 命名空間 ≠ 資料庫命名空間**，所以刻意不套 camelCase。
-
----
-
-## 這一輪的核心：**三種壞法，三個訊號，不能互相蓋掉**
+## 三種（其實四種）壞法不能互相蓋掉
 
 | 壞法 | 該長什麼樣 | 為什麼容易被合併 |
 |---|---|---|
 | 今天真的沒標案 | `recognised=True, items=[]` | |
-| 對方改版、整頁認不出 | `recognised=False` | **跟上面一樣是 `items=[]`**（7b／7c 必須分開）|
-| 網站掛了／403／逾時 | **記成「抓不到」，不是「不認得」** | 拿到空字串 → 也找不到容器 → 也是 `recognised=False`（7d）|
-| **欄序被對調** | 該筆丟掉並計入 `dropped` | ⚠️ **三個訊號全綠而每一筆資料都是錯的**（6c）|
+| 對方改版整頁認不出 | `recognised=False` | **跟上面一樣是 `items=[]`** |
+| 網站掛了／403／逾時 | 記成「抓不到」 | 空字串 → 也找不到容器 → 也是 `recognised=False` |
+| **欄序對調／名稱是 JS** | 該筆丟掉或正確拆出 | ⚠️ **每個訊號都綠而資料全錯** |
 
-前三種是「雷達安靜」，**第四種是雷達報錯的東西而且看起來很正常** —— 最難發現的那種。
-
-## 條件 8／8b：先證明量尺有刻度，再拿它去量
-
-第 8 題只驗「關著時 `fetch_raw` 沒被呼叫」是**假綠**：若 patch 目標寫錯
-（呼叫端用 `from ... import` 把副本複製走了），計數器**永遠是 0**，第 8 題**永遠綠**。
-⇒ **8b 必須與 8 分開**：開關打開時同一個計數器 ≥ 1。
-
-⚠️ §3 v2 已規定**呼叫端要寫 `tender_source.fetch_raw()` 走模組**，不要 `from ... import`。
-
----
-
-## ⚠️ HTML 樣本是 C 假定的結構，真實樣本必須取代它
-
-下面的 `HTML_*` 常數是我**照一般政府採購網列表頁的長相假定的** —— §3 禁止連真網站，
-總開關也預設關著，我沒有真實樣本。
-
-**樣本與斷言已經分開**：斷言驗的是語意（`recognised` 真假、`dropped` 數字、丟掉哪一筆），
-**不依賴任何特定標籤名** ⇒ **真實樣本進來時只要換這幾個常數，測試一行都不用改。**
-
-誰擷取、什麼時候，見〈給彙整〉第 15 點。**在那之前這幾題驗的是
-「解析器對我假定的結構的行為」，不是「對真實網站的行為」。**
+前三種是「雷達安靜」，**後一種是雷達報錯的東西而且看起來很正常。**
 """
+import html as _html
+import re
 import sqlite3
+from pathlib import Path
 
 import pytest
 
@@ -88,197 +64,279 @@ except Exception as exc:  # noqa: BLE001
 def _src(name=None):
     if src is None:
         raise AssertionError(
-            f"backend/helpers/tender_source.py 還不存在（或 import 失敗）：{_SRC_ERR}。"
-            "需要的名字見本檔開頭的契約表。"
+            f"backend/helpers/tender_source.py 還不存在（或 import 失敗）：{_SRC_ERR}"
         )
     if name and not hasattr(src, name):
-        raise AssertionError(f"helpers/tender_source.py 缺少 `{name}`，見本檔開頭的契約表。")
+        raise AssertionError(f"helpers/tender_source.py 缺少 `{name}`")
     return getattr(src, name) if name else src
 
 
 def _tm(name=None):
     if tmatch is None:
         raise AssertionError(
-            f"backend/helpers/tender_match.py 還不存在（或 import 失敗）：{_MATCH_ERR}。"
-            "需要的名字見本檔開頭的契約表。"
+            f"backend/helpers/tender_match.py 還不存在（或 import 失敗）：{_MATCH_ERR}"
         )
     if name and not hasattr(tmatch, name):
-        raise AssertionError(f"helpers/tender_match.py 缺少 `{name}`，見本檔開頭的契約表。")
+        raise AssertionError(f"helpers/tender_match.py 缺少 `{name}`")
     return getattr(tmatch, name) if name else tmatch
 
 
-# ── HTML 樣本（⚠️ C 假定的結構，見檔頭）────────────────────────────────────
+# ── 從真實 fixture 切樣本（每一刀都有 assert 守門）──────────────────────────
 
-_ROW = ("<tr><td>{case_no}</td><td>{name}</td><td>{org}</td>"
-        "<td>{deadline}</td><td>{budget}</td></tr>")
+FIXTURE = Path(__file__).parent / "fixtures" / "tender_list_20260921.html"
 
-_HEADER = ("<table class='tender_list'>"
-           "<tr><th>案號</th><th>標案名稱</th><th>機關</th><th>截止日</th><th>預算金額</th></tr>")
+_RESULT_TABLE = re.compile(r'<table[^>]*id="tpam"[^>]*>.*?</table\s*>', re.S | re.I)
+_TR = re.compile(r"<tr.*?</tr\s*>", re.S | re.I)
+_TD = re.compile(r"<td[^>]*>(.*?)</td\s*>", re.S | re.I)
+
+# 結果表的欄位順序（我從 fixture 的表頭讀出來的，不是猜的）
+COL_SEQ, COL_ORG, COL_CASE_NAME = 0, 1, 2
+COL_PUBLISHED, COL_DEADLINE, COL_BUDGET = 6, 7, 8
+N_COLS = 10
+N_DATA_ROWS = 5
 
 
-def _page(rows):
-    return "<html><body>" + _HEADER + "".join(rows) + "</table></body></html>"
+def _real_html():
+    return FIXTURE.read_text(encoding="utf-8")
 
 
-HTML_TWO_ROWS = _page([
-    _ROW.format(case_no="A-001", name="網路設備採購案", org="某某市政府",
-                deadline="2026-10-15", budget="1200000"),
-    _ROW.format(case_no="A-002", name="監視系統建置", org="某某縣政府",
-                deadline="2026-10-20", budget="800000"),
-])
+def _split_results(page, expect_rows=None):
+    """回 (table_match, header_row, data_rows)。對不上就當場爆掉。
 
-# 有容器與表頭、零筆資料 ＝「今天真的沒有新標案」
-HTML_EMPTY_LIST = _page([])
+    ⚠️ `expect_rows` 只在切原始 fixture 時給 —— 這支函式也會被用在
+    「已經動過手術」的樣本上，那些樣本的列數本來就不是 5。
+    """
+    m = _RESULT_TABLE.search(page)
+    assert m, "fixture 裡找不到結果表 id='tpam' —— 樣本換過了，這份測試要跟著更新"
+    rows = _TR.findall(m.group())
+    if expect_rows is not None:
+        assert len(rows) == expect_rows, (
+            f"結果表應為 {expect_rows} 列，實際 {len(rows)} 列"
+        )
+    return m, rows[0], rows[1:]
 
-# 沒有列表容器 ＝「對方改版／我們瞎了」
+
+def _rebuild(page, rows):
+    """把結果表的列換成 `rows`，其餘頁面原封不動。"""
+    m, header, data = _split_results(page)
+    tbl = m.group()
+    first, last = data[0], data[-1]
+    head = tbl[: tbl.index(first)]
+    tail = tbl[tbl.rindex(last) + len(last):]
+    return page[: m.start()] + head + "".join(rows) + tail + page[m.end():]
+
+
+def _set_cell(row, idx, inner):
+    """把某一格的內容換掉。格數對不上就爆掉。"""
+    tds = list(_TD.finditer(row))
+    assert len(tds) == N_COLS, f"資料列應有 {N_COLS} 格，實際 {len(tds)}"
+    t = tds[idx]
+    return row[: t.start(1)] + inner + row[t.end(1):]
+
+
+def _get_cell(row, idx):
+    tds = list(_TD.finditer(row))
+    assert len(tds) == N_COLS, f"資料列應有 {N_COLS} 格，實際 {len(tds)}"
+    return tds[idx].group(1)
+
+
+def _swap_cells(row, i, j):
+    a, b = _get_cell(row, i), _get_cell(row, j)
+    assert a != b, "要對調的兩格內容一樣，這個手術等於沒做"
+    return _set_cell(_set_cell(row, i, b), j, a)
+
+
+REAL = _real_html()
+_M, _HEADER, _DATA = _split_results(REAL, expect_rows=1 + N_DATA_ROWS)
+ROW0 = _DATA[0]
+
+# 條件 7b：有容器、零筆資料 ＝「今天真的沒有新標案」
+HTML_EMPTY_RESULTS = _rebuild(REAL, [])
+
+# 條件 7e：查詢表單頁（保留表單，砍掉整張結果表）—— 它**也有 `<table>`**
+HTML_FORM_ONLY = REAL[: _M.start()] + "</body></html>"
+
+# 條件 7c：完全不同的頁面（連表單都沒有）
 HTML_NOT_A_LIST = "<html><body><div class='notice'>系統維護中。</div></body></html>"
 
-# 缺「機關」這個必要欄位（§3 v2：必要欄位 ＝ 案號／名稱／機關）
-HTML_ONE_MISSING_FIELD = _page([
-    _ROW.format(case_no="B-001", name="完整的標案", org="某某市政府",
-                deadline="2026-10-15", budget="500000"),
-    _ROW.format(case_no="B-002", name="缺機關的標案", org="",
-                deadline="2026-10-16", budget="600000"),
+# 只留第一筆（乾淨的基準）
+HTML_ONE_GOOD = _rebuild(REAL, [ROW0])
+
+# 條件 6：缺機關
+HTML_MISSING_ORG = _rebuild(REAL, [_set_cell(ROW0, COL_ORG, "")] + _DATA[1:])
+# 條件 6f：案號與名稱那一格整格空掉
+HTML_MISSING_CASE_NAME = _rebuild(
+    REAL, [_set_cell(ROW0, COL_CASE_NAME, "")] + _DATA[1:])
+# 條件 6b：沒有截止日 —— 仍然要收下
+HTML_NO_DEADLINE = _rebuild(REAL, [_set_cell(ROW0, COL_DEADLINE, "")] + _DATA[1:])
+# 條件 6g：預算空白 → None（不是 0）
+HTML_NO_BUDGET = _rebuild(REAL, [_set_cell(ROW0, COL_BUDGET, "")] + _DATA[1:])
+# 條件 6c：把「機關」與「截止投標」兩格對調 → 形狀不符
+HTML_TRANSPOSED = _rebuild(
+    REAL, [_swap_cells(ROW0, COL_ORG, COL_DEADLINE)] + _DATA[1:])
+# 條件 6e：截止日早於公告日（公告 115/09/21，截止設成 105/01/01）
+HTML_DEADLINE_BEFORE_PUBLISHED = _rebuild(
+    REAL, [_set_cell(ROW0, COL_DEADLINE, "105/01/01")] + _DATA[1:])
+# 條件 6e：距今超過 ±5 年
+HTML_DEADLINE_FAR_FUTURE = _rebuild(
+    REAL, [_set_cell(ROW0, COL_DEADLINE, "199/12/31")] + _DATA[1:])
+# 條件 7：5 筆裡 3 筆缺機關 → dropped 3 > 2.5
+HTML_MOSTLY_DROPPED = _rebuild(REAL, [
+    _DATA[0],
+    _set_cell(_DATA[1], COL_ORG, ""),
+    _set_cell(_DATA[2], COL_ORG, ""),
+    _set_cell(_DATA[3], COL_ORG, ""),
+    _DATA[4],
 ])
 
-# 沒有截止日 —— §3 v2 把截止日移出必要欄位，這一筆要**收下**
-HTML_NO_DEADLINE = _page([
-    _ROW.format(case_no="ND-001", name="沒寫截止日的標案", org="某某市政府",
-                deadline="", budget="500000"),
-])
 
-# ⚠️ 欄序被對調：案號欄放的是機關、機關欄放的是案號。
-# 必要欄位「全都在」、dropped=0、容器也找得到 ⇒ 三個訊號全綠而資料全錯。
-HTML_TRANSPOSED = _page([
-    _ROW.format(case_no="某某市政府", name="欄位對調的標案", org="D-001",
-                deadline="2026-10-15", budget="500000"),
-])
+def _expected_name(row):
+    """從 fixture 直接讀出那一筆的真名（`pageCode2Img("…")` 的引數）。
 
-# 四筆裡三筆缺必要欄位 → dropped=3 > 4/2，應判定疑似改版
-HTML_MOSTLY_DROPPED = _page([
-    _ROW.format(case_no="C-001", name="完整的標案", org="某某市政府",
-                deadline="2026-10-15", budget="500000"),
-    _ROW.format(case_no="", name="缺案號", org="某某市政府",
-                deadline="2026-10-16", budget="600000"),
-    _ROW.format(case_no="C-003", name="", org="某某市政府",
-                deadline="2026-10-17", budget="700000"),
-    _ROW.format(case_no="C-004", name="缺機關", org="",
-                deadline="2026-10-18", budget="800000"),
-])
+    ⚠️ 這是**測試自己**從樣本讀的，跟解析器無關 —— 我沒有讀解析器。
+    """
+    m = re.search(r'pageCode2Img\("([^"]+)"\)', row)
+    assert m, "這一列的名稱不是用 pageCode2Img 產生的，樣本結構變了"
+    return _html.unescape(m.group(1))
+
+
+EXPECTED_NAME_0 = _expected_name(ROW0)
 
 
 def _watch(**over):
-    w = {"id": 1, "name": "預設條件", "keywords": ["網路"], "excludes": [],
+    w = {"id": 1, "name": "預設條件", "keywords": ["監視"], "excludes": [],
          "org": None, "budget_min": None, "budget_max": None, "enabled": 1}
     w.update(over)
     return w
 
 
 def _tender(**over):
-    t = {"case_no": "A-001", "name": "網路設備採購案", "org": "某某市政府",
-         "deadline": "2026-10-15", "budget": 1_200_000,
-         "url": "https://example.invalid/t/A-001"}
+    t = {"case_no": "TYGH115152", "name": EXPECTED_NAME_0,
+         "org": "衛生福利部桃園醫院", "deadline": "2026-09-30",
+         "budget": 2_433_600, "url": "https://example.invalid/t/1"}
     t.update(over)
     return t
 
 
-# ── 條件 1：關鍵字命中 ──────────────────────────────────────────────────────
+# ── 樣本本身的守門（這幾題不碰產品碼，它們保護的是上面那些手術）─────────────
+
+def test_00_fixture_is_the_real_bytes():
+    """fixture 必須是對方網站當時真正送來的位元組。
+
+    ⚠️ `.gitattributes` 的 `*.html text eol=lf` 會把它正規化（90,207 → 88,622 bytes、
+    CRLF 1,585 → 0）。`fixtures/** -text` 擋住了這件事，這題是那條規則的迴歸鎖。
+    **正規化過的樣本不是現實，是現實的正規化版** —— 而那正好打掉它存在的理由。
+    """
+    raw = FIXTURE.read_bytes()
+    crlf = raw.count(b"\r\n")
+    assert len(raw) == 90_207, f"fixture 大小變了：{len(raw)}（原始 90,207）"
+    assert crlf == 1_585, (
+        f"fixture 的 CRLF 剩 {crlf} 處（原始 1,585）—— "
+        "被正規化了，檢查 .gitattributes 的 fixtures/** -text"
+    )
+
+
+def test_00b_surgery_actually_changes_the_sample():
+    """對照組：確認那些「手術」真的改到了東西。
+
+    ⚠️ **沒有這題，所有切出來的樣本都可能跟原樣一模一樣** ——
+    而「樣本沒被改到」跟「解析器把它處理對了」長得一模一樣。
+    """
+    assert HTML_EMPTY_RESULTS != REAL
+    assert HTML_MISSING_ORG != REAL
+    assert HTML_TRANSPOSED != REAL
+    assert len(_TR.findall(_RESULT_TABLE.search(HTML_EMPTY_RESULTS).group())) == 1, (
+        "挖空之後結果表應該只剩表頭"
+    )
+    missing_rows = _split_results(HTML_MISSING_ORG)[2]
+    assert len(missing_rows) == N_DATA_ROWS, (
+        f"清空一格不該改變列數，實際 {len(missing_rows)} 列 —— "
+        "手術把其餘幾列一起砍掉了"
+    )
+    assert "衛生福利部桃園醫院" not in _get_cell(missing_rows[0], COL_ORG), (
+        "機關那一格沒有被清空"
+    )
+
+
+def test_00c_form_page_still_contains_a_table():
+    """條件 7e 的前提：查詢表單頁**確實有 `<table>`**，所以「找得到 table」判不出東西。"""
+    assert re.search(r"<table", HTML_FORM_ONLY, re.I), (
+        "表單頁沒有 table 的話，7e 就驗不到它要驗的東西了"
+    )
+    assert "機關名稱" in HTML_FORM_ONLY, "表單頁應該含『機關名稱』（欄位標籤）"
+    assert 'id="tpam"' not in HTML_FORM_ONLY, "表單頁不該含結果表"
+
+
+# ── 條件 1～4：比對純函式 ───────────────────────────────────────────────────
 
 def test_01_keyword_in_name_matches():
     """§3 條件 1：標案名含關鍵字 → 命中。"""
-    hits = _tm("match_watches")(_tender(name="網路設備採購案"), [_watch(keywords=["網路"])])
+    hits = _tm("match_watches")(_tender(), [_watch(keywords=["監視"])])
     assert [h["id"] for h in hits] == [1], f"應該命中，實際 {hits!r}"
 
 
 def test_01b_keyword_not_in_name_does_not_match():
-    """對照組：關鍵字沒中就不可以命中。
-
-    沒有這一題，一個「永遠回全部 watch」的實作會讓條件 1 全綠。
-    """
-    hits = _tm("match_watches")(_tender(name="辦公家具採購"), [_watch(keywords=["網路"])])
-    assert hits == [], f"關鍵字沒中就不該命中，實際 {hits!r}"
+    """對照組：關鍵字沒中就不可以命中（否則「永遠回全部」也會綠）。"""
+    assert _tm("match_watches")(_tender(name="辦公家具採購"),
+                                [_watch(keywords=["監視"])]) == []
 
 
 def test_01c_multiple_keywords_are_or():
-    """§3：關鍵字是 OR，中任何一個就算。"""
-    assert len(_tm("match_watches")(
-        _tender(name="監視系統建置"), [_watch(keywords=["消防", "監視"])])) == 1
+    """§3：關鍵字是 OR。"""
+    assert len(_tm("match_watches")(_tender(), [_watch(keywords=["消防", "監視"])])) == 1
 
 
 def test_01d_one_tender_can_hit_multiple_watches():
     """§3：一筆標案可命中多個 watch。"""
-    hits = _tm("match_watches")(_tender(name="網路設備採購案"),
-                                [_watch(id=1, keywords=["網路"]),
-                                 _watch(id=2, keywords=["採購"])])
+    hits = _tm("match_watches")(_tender(), [_watch(id=1, keywords=["監視"]),
+                                            _watch(id=2, keywords=["麻醉"])])
     assert sorted(h["id"] for h in hits) == [1, 2], f"兩個都該中，實際 {hits!r}"
 
 
-# ── 條件 2：排除詞 ──────────────────────────────────────────────────────────
-
 def test_02_exclude_word_wins_over_keyword():
-    """§3 條件 2：排除詞一中就整筆排除，**即使關鍵字也命中**。
-
-    這是反向驗證第 1 題的目標；觀測點必須是 `match_watches` 的回傳值。
-    """
-    hits = _tm("match_watches")(_tender(name="網路設備維護案"),
-                                [_watch(keywords=["網路"], excludes=["維護"])])
-    assert hits == [], f"關鍵字中了但排除詞也中了 → 整筆排除，實際 {hits!r}"
+    """§3 條件 2：排除詞一中就整筆排除，**即使關鍵字也命中**。"""
+    hits = _tm("match_watches")(_tender(name="監視系統維護案"),
+                                [_watch(keywords=["監視"], excludes=["維護"])])
+    assert hits == [], f"排除詞中了就整筆排除，實際 {hits!r}"
 
 
 def test_02b_exclude_only_applies_when_present():
-    """對照組：排除詞沒中不可以誤殺。
-
-    只有上一題的話，「有 excludes 就一律排除」的實作也會全綠。
-    """
+    """對照組：排除詞沒中不可以誤殺。"""
     assert len(_tm("match_watches")(
-        _tender(name="網路設備採購案"), [_watch(keywords=["網路"], excludes=["維護"])])) == 1
+        _tender(), [_watch(keywords=["監視"], excludes=["維護"])])) == 1
 
-
-# ── 條件 3：機關沒填＝不篩 ─────────────────────────────────────────────────
 
 def test_03_blank_org_means_no_filter():
-    """§3 條件 3：機關沒填 → **不篩**，不是「篩出 0 筆」。
-
-    ⚠️ 跟 `0` vs `null` 同一家族：「沒填」被當成「篩選值是空字串」的話，
-    結果是安靜地一筆都不回 —— 而那看起來就像「今天沒有符合的標案」。
-    """
-    hits = _tm("match_watches")(_tender(org="某某市政府"),
-                                [_watch(keywords=["網路"], org=None)])
-    assert len(hits) == 1, f"機關沒填不該篩掉任何東西，實際 {hits!r}"
+    """§3 條件 3：機關沒填 → **不篩**（不是篩出 0 筆）。"""
+    assert len(_tm("match_watches")(_tender(), [_watch(org=None)])) == 1
 
 
 def test_03b_org_filter_actually_filters_when_set():
-    """對照組：機關有填的時候要真的篩。"""
-    w = _watch(keywords=["網路"], org="某某市政府")
-    assert len(_tm("match_watches")(_tender(org="某某市政府"), [w])) == 1
+    """對照組：機關有填就要真的篩。"""
+    w = _watch(org="衛生福利部桃園醫院")
+    assert len(_tm("match_watches")(_tender(), [w])) == 1
     assert _tm("match_watches")(_tender(org="別的縣政府"), [w]) == []
 
 
-# ── 條件 4：金額上下限 ──────────────────────────────────────────────────────
-
 @pytest.mark.parametrize("bmin, bmax, budget, hit", [
-    (1_000_000, None, 1_200_000, True),
-    (1_000_000, None,   800_000, False),
-    (None, 1_000_000,   800_000, True),
-    (None, 1_000_000, 1_200_000, False),
-    (None, None,      1_200_000, True),
+    (2_000_000, None, 2_433_600, True),
+    (3_000_000, None, 2_433_600, False),
+    (None, 3_000_000, 2_433_600, True),
+    (None, 2_000_000, 2_433_600, False),
+    (None, None,      2_433_600, True),
 ])
 def test_04_budget_bounds_filter_only_the_side_that_is_set(bmin, bmax, budget, hit):
     """§3 條件 4：上下限只填一邊 → 只篩那一邊。
 
-    ⚠️ 最後一格跟條件 3 同一個陷阱：`None` 被當成 `0` 的話，
-    「沒填下限」變「下限 0」（剛好無害），但「沒填上限」變「上限 0」
+    ⚠️ 最後一格：`None` 被當成 `0` 的話，「沒填上限」會變「上限 0」
     —— **一筆都不會中，而且安靜**。
     """
     hits = _tm("match_watches")(_tender(budget=budget),
-                                [_watch(keywords=["網路"], budget_min=bmin, budget_max=bmax)])
-    assert bool(hits) is hit, (
-        f"min={bmin} max={bmax} budget={budget} → "
-        f"預期{'命中' if hit else '不中'}，實際 {hits!r}"
-    )
+                                [_watch(budget_min=bmin, budget_max=bmax)])
+    assert bool(hits) is hit, f"min={bmin} max={bmax} budget={budget} → 實際 {hits!r}"
 
 
-# ── 條件 5：(機關, 案號) 去重 ──────────────────────────────────────────────
+# ── 條件 5／5b：去重的兩個方向 ─────────────────────────────────────────────
 
 def _cols(table):
     import db
@@ -292,16 +350,15 @@ def _cols(table):
 @pytest.mark.parametrize("table", ["tender_watches", "tenders", "tender_hits",
                                    "tender_fetch_log"])
 def test_05_tables_exist(client, table):
-    """§3：四張新表要存在（含 9b 的 `tender_fetch_log`）。"""
+    """§3：四張新表要存在。"""
     assert _cols(table), f"資料表 {table} 不存在（B 的 migration 還沒做）"
 
 
 def test_05b_same_org_and_case_no_cannot_be_inserted_twice(client):
-    """§3 v2 條件 5：**同機關同案號**被抓兩次 → `tenders` 只有一列。
+    """§3 條件 5：**同機關同案號**被抓兩次 → 只有一列。
 
-    ⚠️ 驗的是**資料庫唯一鍵**，不是寫入函式有沒有先查再寫：
-    「先 SELECT 再 INSERT」在兩次抓取重疊時仍然會插進兩列，
-    唯一鍵才是任何情況下都成立的保證。
+    ⚠️ 驗的是資料庫唯一鍵，不是「先 SELECT 再 INSERT」——
+    後者在兩次抓取重疊時仍然會插進兩列。
     """
     import db
     conn = db.get_db()
@@ -311,21 +368,18 @@ def test_05b_same_org_and_case_no_cannot_be_inserted_twice(client):
         conn.commit()
         with pytest.raises(sqlite3.IntegrityError):
             conn.execute("INSERT INTO tenders (case_no, name, org) VALUES (?,?,?)",
-                         ("DUP-001", "重複的標案（第二次抓到）", "某某市政府"))
+                         ("DUP-001", "第二次抓到", "某某市政府"))
             conn.commit()
     finally:
         conn.close()
 
 
 def test_05c_same_case_no_different_org_is_allowed(client):
-    """§3 v2 條件 5 的**重點**：案號相同但機關不同 → 兩列都要留下。
+    """§3 條件 5b：案號相同但**機關不同** → 兩列都要留下。
 
-    ⚠️ 這題就是把唯一鍵從 `案號` 改成 `(機關, 案號)` 的全部理由（B ④）：
-    案號當鍵而兩個機關剛好撞號時，**第二筆會併進第一筆、悄悄消失**
-    —— 那就是漏掉標案，而這條線的承諾正好是「不會漏掉標案」。
-    `(機關, 案號)` 撞號只是多一列，**看得見**。
-
-    🔑 **不確定的時候往「最壞只是吵」倒，不要往「最壞是靜默遺失」倒。**
+    ⚠️ 只驗上一題的話，一個「唯一鍵只有 `case_no`」的實作會**完整通過**
+    —— 那正是要被防掉的那個實作。
+    🔑 **驗去重要兩個方向：該併的有併、該分的有分。**
     """
     import db
     conn = db.get_db()
@@ -339,10 +393,7 @@ def test_05c_same_case_no_different_org_is_allowed(client):
                          ("SAME-001",)).fetchone()["c"]
     finally:
         conn.close()
-    assert n == 2, (
-        f"同案號不同機關應該是兩筆不同的標案，實際只剩 {n} 筆 —— "
-        "唯一鍵若只有 case_no，第二筆會靜默消失"
-    )
+    assert n == 2, f"同案號不同機關是兩筆不同的標案，實際只剩 {n} 筆"
 
 
 def test_05d_same_watch_tender_pair_cannot_be_recorded_twice(client):
@@ -353,7 +404,7 @@ def test_05d_same_watch_tender_pair_cannot_be_recorded_twice(client):
         conn.execute("INSERT INTO tenders (case_no, name, org) VALUES (?,?,?)",
                      ("HIT-001", "標案", "某某市政府"))
         conn.execute("INSERT INTO tender_watches (name, keywords) VALUES (?,?)",
-                     ("條件一", "網路"))
+                     ("條件一", "監視"))
         conn.commit()
         tid = conn.execute("SELECT id FROM tenders WHERE case_no=?",
                            ("HIT-001",)).fetchone()["id"]
@@ -369,151 +420,227 @@ def test_05d_same_watch_tender_pair_cannot_be_recorded_twice(client):
         conn.close()
 
 
-# ── 條件 6／6b／6c：解析時該丟什麼、該留什麼 ───────────────────────────────
+# ── 解析：真實樣本 ─────────────────────────────────────────────────────────
 
-def test_06_row_missing_required_field_is_dropped_and_counted():
-    """§3 v2 條件 6：必要欄位（**案號／名稱／機關**）缺一 → 整筆丟掉，`dropped` +1。
+def test_06_real_sample_parses_five_rows_cleanly():
+    """真實樣本應該解出 **5 筆**、`dropped=0`、`recognised=True`。
 
-    ⚠️ 觀測點要同時看留下來的筆數**與** `dropped` 的數字：只看 `len(items)` 的話，
-    「丟掉了但沒計數」會是綠的 —— 而 `dropped` 正是條件 7 的唯一輸入。
+    ⚠️ 全頁有 **29** 個 `<tr>`，結果表只有 6 個（1 表頭 ＋ 5 資料）——
+    掃全部 `<tr>` 的解析器會把查詢表單的列也當成標案。
     """
-    items, dropped, recognised = _src("parse_list")(HTML_ONE_MISSING_FIELD)
-    assert recognised is True, "這一頁有列表容器，應該是認得的"
+    items, dropped, recognised = _src("parse_list")(REAL)
+    assert recognised is True, "真實結果頁必須認得"
+    assert dropped == 0, f"真實樣本每一筆都完整，不該丟，實際 dropped={dropped}"
+    assert len(items) == N_DATA_ROWS, (
+        f"應解出 {N_DATA_ROWS} 筆，實際 {len(items)} 筆 —— "
+        "多於 5 筆多半是掃了查詢表單的 <tr>"
+    )
+
+
+def test_06b_missing_required_field_is_dropped_and_counted():
+    """§3 條件 6：必要欄位（案號／名稱／**機關**）缺一 → 整筆丟掉且 `dropped` +1。"""
+    items, dropped, recognised = _src("parse_list")(HTML_MISSING_ORG)
+    assert recognised is True
     assert dropped == 1, f"缺機關那筆要計入 dropped，實際 {dropped}"
-    assert [i["case_no"] for i in items] == ["B-001"], (
-        f"只有完整那筆該留下，實際 {[i.get('case_no') for i in items]!r}"
-    )
+    assert len(items) == N_DATA_ROWS - 1, f"應少一筆，實際 {len(items)}"
 
 
-def test_06_complete_page_drops_nothing():
-    """對照組：完整的頁面不可以丟掉任何一筆。"""
-    items, dropped, recognised = _src("parse_list")(HTML_TWO_ROWS)
-    assert recognised is True
-    assert dropped == 0, f"兩筆都完整，不該丟，實際 dropped={dropped}"
-    assert [i["case_no"] for i in items] == ["A-001", "A-002"]
+def test_06c_missing_case_and_name_cell_is_dropped():
+    """§3 條件 6f：案號與名稱在同一格，任一為空 → 整筆丟掉。"""
+    items, dropped, _ = _src("parse_list")(HTML_MISSING_CASE_NAME)
+    assert dropped == 1, f"案號與名稱那格空了，該筆要丟掉，實際 dropped={dropped}"
+    assert len(items) == N_DATA_ROWS - 1
 
 
-def test_06b_missing_deadline_is_still_accepted_as_none():
-    """§3 v2 條件 6b：**沒有截止日的標案仍然收下**，`deadline` 是 `None`。
+def test_06d_missing_deadline_is_accepted_as_none():
+    """§3 條件 6b：**沒有截止日仍然收下**，`deadline` 是 `None`。
 
-    ⚠️ 第一版把截止日列為必要欄位，那是錯的（A 自承）：
-    「公告沒寫截止日」的標案**解析是成功的**，把它算成解析失敗會
-    **污染 `dropped > 一半` 的訊號** —— 那個訊號是用來判斷「對方是不是改版了」的，
-    被正常資料灌水之後就會誤報。
-
-    ⚠️ 而且 `deadline` 要是 `None` 不是空字串 —— 跟條件 9 的 `0` vs `NULL` 同一家族。
+    ⚠️ 把它算成解析失敗會**污染 `dropped > 一半` 的訊號** ——
+    那個訊號是用來判斷「對方是不是改版了」的，被正常資料灌水之後會誤報，
+    而誤報的告警很快會被當成雜訊。**一個壞掉的欄位定義，會讓一個跟它無關的告警失效。**
     """
-    items, dropped, recognised = _src("parse_list")(HTML_NO_DEADLINE)
-    assert recognised is True
+    items, dropped, _ = _src("parse_list")(HTML_NO_DEADLINE)
     assert dropped == 0, f"沒有截止日不算解析失敗，實際 dropped={dropped}"
-    assert len(items) == 1, f"這一筆要收下，實際 {items!r}"
-    assert items[0]["deadline"] is None, (
-        f"沒寫截止日要是 None，實際 {items[0]['deadline']!r}"
-        "（空字串會讓下游分不出「沒寫」與「寫了空的」）"
+    assert len(items) == N_DATA_ROWS
+    first = items[0]
+    assert first["deadline"] is None, (
+        f"沒寫截止日要是 None，實際 {first['deadline']!r}（空字串會讓下游分不出）"
     )
 
 
-def test_06c_transposed_columns_are_dropped_not_silently_accepted():
-    """§3 v2 條件 6c：**欄序被對調 → 該筆要被丟掉並計入 `dropped`**。
+def test_06e_roc_date_is_converted_to_western():
+    """§3 條件 6d：民國年 `115/09/30` → `2026-09-30`。
 
-    ⚠️ **這是第四種壞法，也是最難發現的一種**（B ②）：
-    對方把表格欄序換了（案號欄變成機關欄）⇒ 必要欄位**全都在**、`dropped=0`、
-    容器也找得到 ⇒ `recognised=True`。
+    ⚠️ B 查證過：`date(115, 9, 30)` 是**合法物件、不丟例外**，距今約 -697,970 天，
+    會被「早就截止」的篩選**安靜濾掉** —— 整批標案消失，而
+    `dropped=0`／`recognised=True`／每個訊號都綠。
+    """
+    items, _, _ = _src("parse_list")(REAL)
+    first = next(i for i in items if i["case_no"] == "TYGH115152")
+    assert first["deadline"] == "2026-09-30", (
+        f"115/09/30 應轉成 2026-09-30，實際 {first['deadline']!r}"
+    )
+    assert first["published"] == "2026-09-21", (
+        f"115/09/21 應轉成 2026-09-21，實際 {first.get('published')!r}"
+    )
 
-    > **三個訊號全綠，而每一筆資料都是錯的。**
-    > 前三種壞法是雷達安靜；**這一種是雷達報錯的東西，而且看起來很正常。**
 
-    這題是反向驗證第 5 題的目標：把形狀驗證拿掉 → 這題必須精準變紅。
+@pytest.mark.parametrize("label", ["deadline_before_published", "far_out_of_range"])
+def test_06f_out_of_range_dates_are_dropped(label):
+    """§3 條件 6e：**上界檢查** —— 截止日早於公告日、或距今超過 ±5 年 → 丟掉。
+
+    🔑 這個上界是**這一類錯誤的通用網子，不只接民國年**：
+    任何把日期算歪的 bug（時區、世紀、格式）都會掉進來。
+    """
+    page = {"deadline_before_published": HTML_DEADLINE_BEFORE_PUBLISHED,
+            "far_out_of_range": HTML_DEADLINE_FAR_FUTURE}[label]
+    items, dropped, _ = _src("parse_list")(page)
+    assert dropped == 1, f"[{label}] 該筆要當解析失敗丟掉，實際 dropped={dropped}"
+    assert len(items) == N_DATA_ROWS - 1
+
+
+def test_06g_budget_thousands_separator_is_parsed():
+    """§3 條件 6g：`2,433,600` → `2433600`。"""
+    items, _, _ = _src("parse_list")(REAL)
+    first = next(i for i in items if i["case_no"] == "TYGH115152")
+    assert first["budget"] == 2_433_600, (
+        f"千分位逗號要去掉並轉成整數，實際 {first['budget']!r}"
+    )
+
+
+def test_06h_blank_budget_is_none_not_zero():
+    """§3 條件 6g 後半：預算空白 → `None` **不是 `0`**。
+
+    ⚠️ 金額區間篩選吃的就是這個欄位。「沒寫」存成 `0` 的話，
+    任何設了下限的 watch 都會**安靜地漏掉**那些標案。
+    """
+    items, dropped, _ = _src("parse_list")(HTML_NO_BUDGET)
+    assert dropped == 0, "沒寫預算不算解析失敗"
+    first = items[0]
+    assert first["budget"] is None, f"空白預算要是 None，實際 {first['budget']!r}"
+    assert first["budget"] != 0
+
+
+def test_06i_name_is_the_javascript_argument_not_the_script_text():
+    """§3 條件 6h：`name` 要**等於** `pageCode2Img("…")` 的引數。
+
+    ⚠️⚠️ **這題是本檔最容易被誤以為已經通過的一題。**
+    標案名稱不是文字節點，是 `<script>` 裡一個函式呼叫的字串引數：
+
+        <script>var hw = Geps3.CNS.pageCode2Img("麻醉部-麻醉深度監視系統傳感器採購案");…</script>
+
+    naive strip tags 會得到整行 JavaScript，**而真名是那串垃圾的子字串** ⇒
+    - 條件 1（關鍵字「監視」命中）**照樣綠**
+    - 「案號與名稱都非空」**照樣綠**
+    - **而資料庫裡每一筆標案名稱都是一行 JavaScript**
+
+    所以這裡驗的是**相等**，不是「包含」，並且明確否定那三個 JS 字樣。
+    """
+    items, _, _ = _src("parse_list")(REAL)
+    first = next(i for i in items if i["case_no"] == "TYGH115152")
+    name = first["name"]
+
+    for bad in ("Geps3", "var hw", "pageCode2Img", "$(", "</script>"):
+        assert bad not in name, (
+            f"name 裡出現 `{bad}` —— 解析器是直接 strip tags 的。"
+            f"實際 name={name[:90]!r}"
+        )
+    assert name == EXPECTED_NAME_0, (
+        f"name 應等於 pageCode2Img 的引數 {EXPECTED_NAME_0!r}，實際 {name!r}"
+    )
+    assert first["case_no"] == "TYGH115152", (
+        f"案號要從同一格拆出來，實際 {first['case_no']!r}"
+    )
+
+
+def test_06j_transposed_columns_are_dropped():
+    """§3 條件 6c：**欄序被對調 → 該筆丟掉**，不可以安靜地收下。
+
+    ⚠️ 必要欄位**全都在**、容器也找得到 —— **每個訊號都綠而資料全錯**。
+    這是反向驗證第 5 題的目標。
     """
     items, dropped, recognised = _src("parse_list")(HTML_TRANSPOSED)
-    assert recognised is True, "容器還在，所以不是『認不得』那種壞法"
+    assert recognised is True, "容器還在，不是『認不得』那種壞法"
     assert dropped == 1, (
-        f"案號欄放的是機關名、機關欄放的是案號 → 形狀不符，該筆要丟掉，"
+        f"機關格放的是日期、截止日格放的是機關名 → 形狀不符，該筆要丟掉，"
         f"實際 dropped={dropped}"
     )
-    assert items == [], f"不可以安靜地收下形狀不符的資料，實際 {items!r}"
+    assert len(items) == N_DATA_ROWS - 1
 
 
-# ── 條件 7：dropped 過半 → 疑似改版 ────────────────────────────────────────
+# ── 條件 7 系列：四種訊號 ──────────────────────────────────────────────────
 
 def test_07_mostly_dropped_raises_suspect_redesign_flag():
-    """§3 條件 7：`dropped` 超過當次總數一半 → 回「疑似對方改版」旗標。
-
-    ⚠️ 這一頁**認得出容器**（`recognised=True`），所以跟 7c 是不同的壞法：
-    **版面還在，但每一列的欄位都對不上了。** 兩者處置不同，不能合併。
-    """
+    """§3 條件 7：`dropped` 超過一半 → 疑似改版旗標。"""
     items, dropped, recognised = _src("parse_list")(HTML_MOSTLY_DROPPED)
     assert recognised is True, "版面還在，應該仍然認得"
-    assert dropped == 3, f"四筆裡三筆缺必要欄位，實際 dropped={dropped}"
-    assert _src("suspect_redesign")(len(items), dropped) is True, (
-        f"4 筆丟了 3 筆（過半）應判定疑似改版，實際 "
-        f"suspect_redesign({len(items)}, {dropped})"
-    )
+    assert dropped == 3, f"5 筆裡 3 筆缺機關，實際 dropped={dropped}"
+    assert _src("suspect_redesign")(len(items), dropped) is True
 
 
-def test_07_healthy_page_is_not_flagged_as_redesign():
-    """對照組：正常的頁面不可以被判成改版。
+def test_07b_healthy_page_is_not_flagged():
+    """對照組：正常頁不可以被判成改版。
 
-    ⚠️ 沒有這題，一個「永遠回 True」的 `suspect_redesign` 會讓上一題全綠，
-    後果是**每天都發一次「疑似改版」** —— 狼來了的告警等於沒有告警。
+    ⚠️ 沒有這題，「永遠回 True」的實作會讓上一題全綠，
+    後果是**每天發一次假警報** —— 狼來了的告警等於沒有告警。
     """
-    items, dropped, _ = _src("parse_list")(HTML_TWO_ROWS)
+    items, dropped, _ = _src("parse_list")(REAL)
     assert _src("suspect_redesign")(len(items), dropped) is False
 
 
-# ── 條件 7b／7c：recognised 看結構不看筆數 ─────────────────────────────────
+def test_07c_empty_results_with_container_is_recognised():
+    """§3 條件 7b：**有容器但零筆** → `recognised=True`（今天沒標案）。
 
-def test_07b_empty_list_with_container_is_recognised():
-    """§3 條件 7b：**有容器但零筆** → `recognised=True, items=[]`（今天沒標案）。
-
-    這是反向驗證第 4 題的目標：把 `recognised` 改成用「筆數 > 0」判定 →
-    **這題必須精準變紅**（筆數是 0，但結構在）。
+    反向驗證第 4 題的目標：把 `recognised` 改成用「筆數 > 0」判定 → 這題必須變紅。
     """
-    items, dropped, recognised = _src("parse_list")(HTML_EMPTY_LIST)
-    assert items == [], f"沒有資料列，items 應為空，實際 {items!r}"
-    assert dropped == 0, f"沒有資料列就沒有東西可丟，實際 {dropped}"
+    items, dropped, recognised = _src("parse_list")(HTML_EMPTY_RESULTS)
+    assert items == [], f"沒有資料列，實際 {items!r}"
+    assert dropped == 0
     assert recognised is True, (
-        "有容器與表頭 → 這是『今天真的沒有新標案』，雷達是好的。"
-        "⚠️ 若回 False，代表 recognised 用筆數判定 —— "
-        "那樣『沒標案』會被誤報成『它瞎了』，每天發一次假警報。"
+        "表頭（機關名稱／標案案號／截止投標／預算金額）都在 → 這是『今天沒標案』。"
+        "⚠️ 回 False 代表用筆數判定 —— 那樣每天都會發一次假警報。"
     )
 
 
-def test_07c_page_without_list_container_is_not_recognised():
-    """§3 條件 7c：**沒有列表容器** → `recognised=False`（它瞎了）。
+def test_07d_page_without_any_list_is_not_recognised():
+    """§3 條件 7c：**完全不同的頁面** → `recognised=False`（它瞎了）。"""
+    items, _, recognised = _src("parse_list")(HTML_NOT_A_LIST)
+    assert recognised is False, "維護公告頁應判定為認不得"
+    assert items == []
 
-    ⚠️ 這條線的價值是「不會漏掉標案」，**瞎掉正好是它唯一不能發生的事**，
-    而失敗的那一側完全無聲。**壞掉會被報修，安靜地少做一件事不會。**
+
+def test_07e_search_form_page_is_not_recognised():
+    """§3 條件 7e：**查詢表單頁**（有 `<table>`、有「機關名稱」）→ `recognised=False`。
+
+    ⚠️ **這題專門擋「用『找得到 table』或『第幾個 table』判定」那種實作。**
+    表單頁 `tb_03c` **也含**「機關名稱」與「標案案號」（那是欄位標籤），
+    所以必須**四個字樣同時**出現才算認得 —— 表單頁沒有「截止投標」「預算金額」。
+
+    ⚠️ 而且四個字樣在原始 HTML 裡是被 `<br>`／`&emsp;` 切開的
+    （`截止投標` 全頁出現 **0** 次），要先 strip tags → unescape → **去掉所有空白**再比。
+    照字面寫成 `'截止投標' in html` 的話，`recognised` **永遠是 False**。
     """
-    items, dropped, recognised = _src("parse_list")(HTML_NOT_A_LIST)
+    items, _, recognised = _src("parse_list")(HTML_FORM_ONLY)
     assert recognised is False, (
-        "沒有列表容器（維護公告頁）應判定為『認不得』。"
-        "⚠️ 若回 True，整頁改版不會被發現 —— 雷達會安靜地永遠回 0 筆。"
+        "查詢表單頁沒有結果表，應判定為認不得。"
+        "⚠️ 回 True 代表判定條件太寬（例如只看有沒有 <table>）"
     )
-    assert items == [], f"認不得的頁面不該生出資料，實際 {items!r}"
+    assert items == []
 
 
-# ── 條件 7d：抓不到 ≠ 不認得 ───────────────────────────────────────────────
+def test_07f_fetch_failure_is_unreachable_not_unrecognised(client, monkeypatch):
+    """§3 條件 7d：**抓取失敗 → 記成「抓不到」不是「不認得」**。
 
-def test_07d_fetch_failure_is_recorded_as_unreachable_not_unrecognised(
-    client, monkeypatch
-):
-    """§3 v2 條件 7d：**抓取失敗（逾時／403／連不上）→ 記成「抓不到」不是「不認得」**。
+    ⚠️ 這是我們上一輪才剛分開、結果在上面一層又合併了一次的東西：
+    `fetch_raw` 舊簽名 `-> str` 沒有辦法表達「我沒拿到」。
+    **處置完全相反**：改版要改解析器，掛掉只要等它好。
 
-    ⚠️ **這是我們上一輪才剛分開、結果在上面一層又合併了一次的東西**（B ①）：
-    `fetch_raw` 舊簽名 `-> str` **沒有辦法表達「我沒拿到」**。網站掛了回空字串 →
-    `parse_list` 同樣找不到容器 → `recognised=False` → **跟「對方改版」一模一樣**。
-
-    **但處置完全相反**：改版要去改解析器，掛掉只要等它好。
-    分不出來的話，每次對方維護我們都會跑去改一個沒有壞的解析器。
-
-    契約：抓不到時 `tender_fetch_log.error` 有值、而 `recognised` 是 **NULL**
-    （不是 `False`）—— 根本沒走到解析那一步。⚠️ C 釘的，見〈給彙整〉第 16 點。
+    契約：`tender_fetch_log.error` 有值、`recognised` 是 **NULL**（不是 `False`）
+    —— 根本沒走到解析那一步。⚠️ C 釘的，見〈給彙整〉。
     """
     mod = _src()
     monkeypatch.setattr(mod, "TENDER_RADAR_ENABLED", True)
     monkeypatch.setattr(mod, "fetch_raw", lambda *a, **kw: (None, "timeout after 15s"))
-
     _src("run_scan")()
 
     import db
@@ -524,113 +651,86 @@ def test_07d_fetch_failure_is_recorded_as_unreachable_not_unrecognised(
         ).fetchone()
     finally:
         conn.close()
-
-    assert row is not None, "抓取失敗也要留下一筆紀錄，否則沒有人知道它失敗過"
-    assert row["error"], f"抓不到要記下原因，實際 error={row['error']!r}"
+    assert row is not None, "抓取失敗也要留紀錄，否則沒有人知道它失敗過"
+    assert row["error"], f"要記下原因，實際 {row['error']!r}"
     assert row["recognised"] is None, (
         f"抓不到就沒走到解析，recognised 應為 NULL，實際 {row['recognised']!r}。"
-        "⚠️ 記成 False 的話，「網站掛了」會被當成「對方改版」——處置完全相反。"
+        "記成 False 的話，「網站掛了」會被當成「對方改版」——處置完全相反。"
     )
 
 
-# ── 條件 8／8b：呼叫次數才是觀測點 ─────────────────────────────────────────
+# ── 條件 8 系列：呼叫次數才是觀測點 ───────────────────────────────────────
 
-def _fetch_counter(monkeypatch, html=HTML_TWO_ROWS):
-    """把 `fetch_raw` 換成計數器，回傳那個計數串列。
-
-    ⚠️ 回傳 **tuple**（§3 v2 的新簽名 `-> (html, error)`）。
-    """
+def _fetch_counter(monkeypatch, page=None):
+    """把 `fetch_raw` 換成計數器。⚠️ 回 **tuple**（`(html, error)`）。"""
     mod = _src()
     calls = []
 
     def _spy(*a, **kw):
         calls.append(a)
-        return (html, None)
+        return (REAL if page is None else page, None)
 
     monkeypatch.setattr(mod, "fetch_raw", _spy)
     return calls
 
 
-def test_08_fetch_is_not_called_when_disabled(client, monkeypatch):
-    """§3 v2 條件 8：開關關著 → `fetch_raw` 的**呼叫次數 == 0**。
+def test_08_fetch_not_called_when_disabled(client, monkeypatch):
+    """§3 條件 8：開關關著 → `fetch_raw` 呼叫次數 == 0。
 
-    ⚠️ 觀測點必須是**呼叫本身**，不可以驗「沒有產生任何標案」——
-    那在「呼叫了但抓回空的」時也成立。
-    **這正是 middleware 那件事：沒產生資料 ≠ 沒被呼叫。**
-
-    它會對外連線，預設就不該是開的。
+    ⚠️ 觀測點必須是**呼叫本身**，不可以驗「沒有產生標案」——
+    那在「呼叫了但抓回空的」時也成立。**沒產生資料 ≠ 沒被呼叫。**
     """
     mod = _src()
     calls = _fetch_counter(monkeypatch)
     monkeypatch.setattr(mod, "TENDER_RADAR_ENABLED", False)
-
     _src("run_scan")()
-    assert len(calls) == 0, (
-        f"開關關著，fetch_raw 不該被呼叫，實際 {len(calls)} 次。"
-        "『呼叫了但不做事』不算 —— 那還是會對外連線。"
-    )
+    assert len(calls) == 0, f"開關關著不該呼叫 fetch_raw，實際 {len(calls)} 次"
 
 
 def test_08b_fetch_is_called_when_enabled(client, monkeypatch):
-    """§3 v2 條件 8b：開關打開 → **同一個計數器 ≥ 1**。
+    """§3 條件 8b：開關打開 → **同一個計數器 ≥ 1**。
 
-    ⚠️ **沒有這題，第 8 題是假綠**：若 patch 目標寫錯（呼叫端用 `from ... import`
-    把副本複製走了），計數器**永遠是 0**，第 8 題**永遠綠**。
-
+    ⚠️ **沒有這題，第 8 題是假綠**：若呼叫端用 `from ... import fetch_raw`
+    複製走副本，計數器**永遠是 0**，第 8 題**永遠綠**。
     🔑 **先證明量尺有刻度，再拿它去量。**
-
-    這題紅的話，第一個要查的不是「開關壞了」，而是
-    **「`run_scan` 是不是根本沒走模組屬性」**（§3 v2 規定呼叫端要寫
-    `tender_source.fetch_raw()`，不要 `from ... import`）。
     """
     mod = _src()
     calls = _fetch_counter(monkeypatch)
     monkeypatch.setattr(mod, "TENDER_RADAR_ENABLED", True)
-
     _src("run_scan")()
     assert len(calls) >= 1, (
-        "開關開著時 fetch_raw 必須真的被呼叫。這題紅的話，第 8 題什麼都沒證明。"
-        "⚠️ 先查呼叫端是不是用了 `from tender_source import fetch_raw` —— "
-        "那會複製走一份副本，monkeypatch 永遠打不到。"
+        "開關開著時 fetch_raw 必須真的被呼叫，否則第 8 題什麼都沒證明。"
+        "⚠️ 先查呼叫端是不是用了 `from tender_source import fetch_raw`。"
     )
 
 
 def test_08c_switch_ships_off_by_default():
-    """§3：總開關**出貨預設 `False`**（比照 `LICENSE_GATE_ENABLED`）。
-
-    ⚠️ 讀的是模組的出貨預設值，不是 monkeypatch 之後的值。
-    """
+    """§3：總開關**出貨預設 `False`**（它會對外連線）。"""
     mod = _src()
     _src("TENDER_RADAR_ENABLED")
     assert mod.TENDER_RADAR_ENABLED is False, (
-        f"出貨預設值是 {mod.TENDER_RADAR_ENABLED!r}，必須是 False —— "
-        "它會對外連線，預設開著等於一上線就開始連對方的網站。"
+        f"出貨預設值是 {mod.TENDER_RADAR_ENABLED!r}，必須是 False"
     )
 
 
-# ── 條件 9／9b／9c ─────────────────────────────────────────────────────────
+# ── 條件 9 系列 ────────────────────────────────────────────────────────────
 
 def test_09_zero_budget_and_missing_budget_are_distinguishable(client):
     """§3 條件 9：預算「0 元」與「公告沒寫」在資料層要分得開。
 
-    ⚠️ 斷言刻意用 `is None` 與 `== 0`，**不是 `assert not budget`** ——
+    ⚠️ 斷言用 `is None` 與 `== 0`，**不是 `assert not budget`** ——
     後者對兩者都會通過，等於沒有在分辨。
-
-    為什麼要緊：金額區間篩選（條件 4）吃的就是這個欄位。「沒寫」被存成 `0` 的話，
-    任何設了下限的 watch 都會**安靜地漏掉**那些標案。
     """
     import db
     cols = _cols("tenders")
     assert "budget" in cols, f"tenders 沒有 budget 欄位；實際 {sorted(cols)}"
-    assert cols["budget"]["notnull"] == 0, (
-        "tenders.budget 必須允許 NULL —— 『公告沒寫』要存得進去，不可以被迫填 0"
-    )
+    assert cols["budget"]["notnull"] == 0, "tenders.budget 必須允許 NULL"
     conn = db.get_db()
     try:
         conn.execute("INSERT INTO tenders (case_no, name, org, budget) VALUES (?,?,?,?)",
                      ("ZERO-001", "零元標案", "某某市政府", 0))
         conn.execute("INSERT INTO tenders (case_no, name, org, budget) VALUES (?,?,?,?)",
-                     ("NULL-001", "沒寫預算的標案", "某某市政府", None))
+                     ("NULL-001", "沒寫預算", "某某市政府", None))
         conn.commit()
         zero = conn.execute("SELECT budget FROM tenders WHERE case_no=?",
                             ("ZERO-001",)).fetchone()["budget"]
@@ -639,20 +739,19 @@ def test_09_zero_budget_and_missing_budget_are_distinguishable(client):
     finally:
         conn.close()
     assert zero == 0, f"「0 元」要存得住，實際 {zero!r}"
-    assert unset is None, f"「公告沒寫」要是 NULL 不是 0，實際 {unset!r}"
+    assert unset is None, f"「沒寫」要是 NULL 不是 0，實際 {unset!r}"
 
 
 def test_09b_fetch_log_records_time_recognised_and_dropped(client, monkeypatch):
-    """§3 v2 條件 9b：跑一次抓取後，`tender_fetch_log` 查得到時間＋認不認得＋`dropped`。
+    """§3 條件 9b：跑一次後 `tender_fetch_log` 查得到時間＋認不認得＋`dropped`。
 
-    ⚠️ **沒有這題，其他十幾條全綠而這件事完全可能沒做**（B ⑥）——
+    ⚠️ **沒有這題，其他三十幾條全綠而這件事完全可能沒做** ——
     而它是「雷達瞎了沒」**唯一**的判斷依據。
-    `recognised` 只存在當次記憶體裡的話，沒有人能回答「它上一次認得嗎」。
+    `recognised` 只活在當次記憶體裡的話，沒有人能回答「它上一次認得嗎」。
     """
     mod = _src()
     monkeypatch.setattr(mod, "TENDER_RADAR_ENABLED", True)
-    _fetch_counter(monkeypatch, html=HTML_ONE_MISSING_FIELD)
-
+    _fetch_counter(monkeypatch, page=HTML_MISSING_ORG)
     _src("run_scan")()
 
     import db
@@ -664,37 +763,31 @@ def test_09b_fetch_log_records_time_recognised_and_dropped(client, monkeypatch):
         ).fetchone()
     finally:
         conn.close()
-
     assert row is not None, "跑完一次抓取要留下一筆紀錄"
     assert row["fetched_at"], f"要記下時間，實際 {row['fetched_at']!r}"
-    assert row["recognised"] == 1, f"這一頁認得出容器，應記成認得，實際 {row['recognised']!r}"
-    assert row["dropped"] == 1, f"這一頁丟了一筆，應記成 1，實際 {row['dropped']!r}"
+    assert row["recognised"] == 1, f"這一頁認得，實際 {row['recognised']!r}"
+    assert row["dropped"] == 1, f"這一頁丟了一筆，實際 {row['dropped']!r}"
 
 
 def test_09c_second_run_same_day_makes_no_external_request(client, monkeypatch):
-    """§3 v2 條件 9c：**同一天連呼叫兩次，第二次不發出任何外部請求**。
+    """§3 條件 9c：**同一天第二次呼叫不發出任何外部請求**。
 
-    ⚠️ **沒人驗它就沒人守它，而這一條是對別人的伺服器的承諾，不是對我們自己的**（B ⑦）。
-    每日一次是硬上限（§3）；寫了而沒有測試的上限，等於沒有上限。
-
-    用第 8 題那個計數器驗 —— 第二次跑完，計數器仍然是 1。
+    ⚠️ **沒人驗它就沒人守它，而這一條是對別人的伺服器的承諾，不是對我們自己的。**
+    每日一次是硬上限；寫了而沒有測試的上限，等於沒有上限。
     """
     mod = _src()
     monkeypatch.setattr(mod, "TENDER_RADAR_ENABLED", True)
     calls = _fetch_counter(monkeypatch)
-
     _src("run_scan")()
     first = len(calls)
     assert first >= 1, "第一次就該真的抓一次，否則這題的觀測點是壞的"
-
     _src("run_scan")()
     assert len(calls) == first, (
-        f"同一天第二次呼叫不該再發外部請求，實際從 {first} 變成 {len(calls)} 次"
+        f"同一天第二次不該再發外部請求，實際從 {first} 變成 {len(calls)} 次"
     )
 
 
 # ── 條件 10 ────────────────────────────────────────────────────────────────
 #
 # 「既有題數不可少於 **1,129**」是⑥的收斂條件，不是一支測試。
-# 📌 數字寫死在 §3 v2（第 3 輪結案時 `--collect-only` 算的）。
-# ⚠️ A 在 1,034 vs 1,084 那次踩過：**沒寫下來的基準，比對的時候只能靠記憶。**
+# 📌 數字寫死在 §3（第 3 輪結案時 `--collect-only` 算的）。
