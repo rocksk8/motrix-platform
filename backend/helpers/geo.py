@@ -158,6 +158,16 @@ TILE_PROBE_TIMEOUT_SECONDS = 3
 #: 探測結果快取多久。⚠️ 每開一次畫面探一次的話，**我們自己就是在濫用對方的服務**
 #: ——而那正是會被封鎖的原因。
 TILE_PROBE_CACHE_SECONDS = 3600
+#: **「不知道」也要快取，但很短。**
+#:
+#: 🔴 原本探測失敗時完全不快取，理由是
+#: 「一次網路抖動不該讓這個訊號整整一小時說『不知道』」——**而那只看了一端**：
+#: ☠️ 如果對方持續不可達，**每一次開地圖都會重探、每一次都等 3 秒**。
+#: 🔑 「為了一個附加訊號讓主要功能變慢」最糟的組合就是這個：**壞掉的時候最慢。**
+#: ⇒ 60 秒同時滿足兩端：抖動 60 秒後就重試，而持續壞掉也不會每次都罰 3 秒。
+#: ⚠️ **必須短於 `TILE_PROBE_CACHE_SECONDS`** ——
+#: 兩個都設 3600 的話就退回「抖動被記一小時」，也就是這個修正的反面。
+TILE_PROBE_UNKNOWN_CACHE_SECONDS = 60
 
 #: `(判定, 時間戳)`；`None` ＝ 還沒探過。
 _TILE_PROBE_CACHE = None
@@ -209,7 +219,11 @@ def tiles_blocked():
     now = time.time()
     if _TILE_PROBE_CACHE is not None:
         verdict, at = _TILE_PROBE_CACHE
-        if now - at < TILE_PROBE_CACHE_SECONDS:
+        # 📌 **「不知道」有自己的（短）有效期。** 用同一個秒數的話，
+        # 一次抖動會讓這個訊號整整一小時說「不知道」。
+        ttl = (TILE_PROBE_UNKNOWN_CACHE_SECONDS if verdict is None
+               else TILE_PROBE_CACHE_SECONDS)
+        if now - at < ttl:
             return verdict
 
     req = urllib.request.Request(TILE_PROBE_URL, headers={"User-Agent": USER_AGENT})
@@ -220,8 +234,8 @@ def tiles_blocked():
             blocked = bool(headers and (headers.get("x-blocked")
                                         or headers.get("X-Blocked")))
     except Exception:  # noqa: BLE001
-        # 探不到 ⇒ 不知道。**不快取「不知道」**：下一次請求要重新試一次，
-        # 否則一次網路抖動會讓這個訊號整整一小時說「不知道」。
+        # 探不到 ⇒ 不知道。**快取，但只快取 60 秒**（見常數的說明）。
+        _TILE_PROBE_CACHE = (None, now)
         return None
 
     _TILE_PROBE_CACHE = (blocked, now)
