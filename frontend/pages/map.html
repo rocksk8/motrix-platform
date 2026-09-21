@@ -333,14 +333,20 @@ function mapPage() {
     },
 
     precisionLabel(p) {
-      return ({ exact: '人工指定', rooftop: '門牌', street: '路段',
-                district: '區級（誤差數公里）' })[p] || '精度未知'
+      return ({ exact: '人工指定', rooftop: '門牌', poi: '機關／建物',
+                street: '路段', district: '區級（誤差數公里）' })[p] || '精度未知'
     },
 
     // 哪些精度算「粗」。判準是「這個距離會不會誤導人」，
     // 而區級與未知都會——**未知也算粗，因為我們沒有理由假設它是細的。**
+    //
+    // 🔴 `'poi'`（具名地物：機關、建物、場所）算**細**，與 `'street'` 同側。
+    // ⚠️ 不加的話它會落到 `else` 那一支被當成粗的 —— 後端新增了一階，
+    // 而前端的判準是「不是這三個就是粗的」⇒ **新的一階自動變成粗的**，
+    // 🔑 那是〈防護的副作用落在盲側〉：白名單式的判準很安全，
+    // **而它的代價是每加一階都要記得回來改，忘了不會有任何提示。**
     precisionIsCoarse(p) {
-      return p !== 'exact' && p !== 'rooftop' && p !== 'street'
+      return p !== 'exact' && p !== 'rooftop' && p !== 'poi' && p !== 'street'
     },
 
     async init() {

@@ -66,8 +66,35 @@ def _throttle():
     _last_call_at = time.time()
 
 
+def _unpack_geocode(got):
+    """把 `geocode()` 的回傳拆成 `(coord, err, info)`，**兩種長度都收**。
+
+    ## ⚠️ 為什麼要容忍兩種長度
+    `geocode` 現在回三個（多了 `info`：Nominatim 的 `class`／`type`／
+    `addresstype`），🔴 **而既有測試裡的假 `geocode` 回的是兩個**
+    （`test_geo_2026_09_21.py` 的 `_geocode_spy`，M4／M5 都用它）。
+    ☠️ 嚴格解包的話那些題會紅，而**紅的樣子會像是我們的 bug**，
+    不是「假物件過期了」——而測試不是我能改的檔。
+
+    📌 沒有 `info` ⇒ `None` ⇒ `classify_precision` 維持 `street`，
+    **退回舊行為，不會往樂觀那一側跑。**
+    """
+    if not isinstance(got, (tuple, list)):
+        return None, "geocode 回傳的形狀不認得", None
+    coord = got[0] if len(got) > 0 else None
+    err = got[1] if len(got) > 1 else None
+    info = got[2] if len(got) > 2 else None
+    return coord, err, info
+
+
 def geocode(address: str):
-    """地址 → `((lat, lon), None)`；失敗回 `(None, "原因")`。
+    """地址 → `((lat, lon), None, info)`；失敗回 `(None, "原因", None)`。
+
+    ⚠️ **第三個值 `info` 是 Nominatim 的分類**（`class`／`type`／`addresstype`），
+    給 `classify_precision()` 用。這裡原本**把整筆回應丟掉只留座標**，
+    ⇒ 命中建物與命中路段在回傳上沒有任何差別，
+    而 `_locate_nominatim` 只好一律回 `street`（R9 的根源）。
+    📌 呼叫端請用 `_unpack_geocode()` 拆，不要直接解包兩個。
 
     🔴 **總開關檢查在這個函式裡面，不在呼叫端。**
     理由與 `tender_source.run_scan()` 相同：開關管的是「**這台機器會不會對外連線**」，
@@ -80,11 +107,11 @@ def geocode(address: str):
     """
     address = (address or "").strip()
     if not address:
-        return None, "沒有地址"
+        return None, "沒有地址", None
     if not geo_on():
         # ⚠️ 這不是錯誤，是**刻意不做**。訊息要講得出「怎麼打開」，
         # 否則實測的人只會看到「查不到」，然後去懷疑地址寫錯了。
-        return None, "地理查詢未啟用（需要 MOTRIX_GEO=1）"
+        return None, "地理查詢未啟用（需要 MOTRIX_GEO=1）", None
 
     params = urllib.parse.urlencode({
         "q": address, "format": "json", "limit": 1, "countrycodes": "tw",
@@ -98,14 +125,15 @@ def geocode(address: str):
     except Exception as exc:                      # noqa: BLE001
         # 把例外的型別帶出來。只回「查詢失敗」的話，
         # 「被封鎖」「逾時」「對方改版」會長成同一句話，而處置完全不同。
-        return None, f"{type(exc).__name__}: {exc}"
+        return None, f"{type(exc).__name__}: {exc}", None
 
     if not rows:
-        return None, "查無此地址"
+        return None, "查無此地址", None
     try:
-        return (float(rows[0]["lat"]), float(rows[0]["lon"])), None
+        row = rows[0]
+        return (float(row["lat"]), float(row["lon"])), None, row
     except (KeyError, TypeError, ValueError) as exc:
-        return None, f"回應格式不認得：{type(exc).__name__}"
+        return None, f"回應格式不認得：{type(exc).__name__}", None
 
 
 #: 已查過的地址 → 結果。**只快取成功的**。
@@ -142,7 +170,7 @@ def geocode_cached(address: str):
         return None, "沒有地址"
     if address in _CACHE:
         return _CACHE[address]
-    coord, err = geocode(address)
+    coord, err, _info = _unpack_geocode(geocode(address))
     if coord is not None:
         _CACHE[address] = (coord, None)
     return coord, err
@@ -263,8 +291,71 @@ def tiles_blocked():
 
 PRECISION_EXACT = "exact"          # 人工填的座標
 PRECISION_ROOFTOP = "rooftop"      # 門牌
+PRECISION_POI = "poi"              # 具名地物（機關、建物、場所）
 PRECISION_STREET = "street"        # 路段
 PRECISION_DISTRICT = "district"    # 縣市＋區（退階的結果）
+
+#: Nominatim 回應裡代表「**一個具體地物**」的 `class`／`addresstype` 值。
+#:
+#: 🔴 **這是一張白名單，不是黑名單。** 判準是「我查到了什麼」，
+#: 不是「我沒查到什麼」——黑名單漏掉一種，那一種就會被標成 `poi`，
+#: 而**錯的方向是往樂觀那一側**：把很粗的座標標成細的
+#: ⇒ 前端不警告 ⇒ **使用者按著一個差好幾公里的圖釘出門。**
+#:
+#: 📌 `place`（city／town／suburb）與 `boundary`（administrative）**刻意不在裡面**：
+#: 它們是行政範圍的中心點，不是地物。
+POI_CLASSES = frozenset({
+    "office", "amenity", "building", "shop", "tourism", "leisure",
+    "man_made", "healthcare", "historic", "craft", "emergency",
+    "military", "aeroway", "railway", "club", "industrial",
+})
+
+
+def classify_precision(info) -> str:
+    """Nominatim 的一筆回應 → 精度。**讀不出來就維持 `street`。**
+
+    ## 🔴 判準是「我查到了什麼」，不是「我用什麼字串查的」
+    A 的限制值得逐字留著：
+    > **不要因為「是用名稱查的」就假設它是地物** ——
+    > 那會讓 `poi` 變成「我用什麼字串查的」而不是「我查到了什麼」。
+
+    ☠️ 用「是不是用名稱查的」來判斷的話，一個查到路口的機關名稱
+    也會被標成建物級，而**畫面上完全看不出來**（只是那個圖釘差幾公里）。
+    """
+    if not isinstance(info, dict):
+        return PRECISION_STREET
+    cls = str(info.get("class") or "").strip().lower()
+    addrtype = str(info.get("addresstype") or "").strip().lower()
+    if cls in POI_CLASSES or addrtype in POI_CLASSES:
+        return PRECISION_POI
+    return PRECISION_STREET
+
+
+#: 被截斷的名稱長什麼樣子。**只看明確標記，不看長度。**
+#:
+#: ⚠️ 「長度超過某個上限就當成被截斷」那一半已經拿掉（A 2026-09-22 裁定）：
+#: 資料裡沒有那個上限（200 筆／158 個相異 `org`，以 `…` 結尾的 **0 個**，
+#: 最長 19 字而長度分布連續、尖峰在 12 不在最大值）
+#: ⇒ 那個常數只能用猜的，而**猜高了它永遠不觸發，猜低了它砍掉合法名稱**。
+TRUNCATION_MARKERS = ("…", "...")
+
+
+def looks_truncated(name) -> bool:
+    """這個名稱看起來是被截斷的嗎。**回真正的 `True`／`False`。**
+
+    ## 它防的不是「查不到」，是「查到錯的」
+    🔑 **查不到會退階（安全），查到錯的不會。**
+    「交通部民用航空局飛航」如果剛好命中某個不相關的地點，
+    我們會得到一個**看起來合理而完全錯誤**的座標——
+    而地圖上那個圖釘**看起來跟正確的一模一樣**。
+
+    📌 資料庫裡現在**一個被截斷的名稱都沒有**，所以這道守門今天不會觸發。
+    〈計數器要有落點〉：一道現在不會觸發的守門必須有一題證明它活著。
+    """
+    text = str(name or "").strip()
+    if not text:
+        return False
+    return any(text.endswith(m) for m in TRUNCATION_MARKERS)
 
 #: 精度由**精確到粗略**的有序序列。**這是單一來源。**
 #:
@@ -272,7 +363,7 @@ PRECISION_DISTRICT = "district"    # 縣市＋區（退階的結果）
 #: 那一邊的測試不會紅，**它只是在驗一個舊的階梯**。
 #: 📌 之後要在 street 與 district 之間插入「機關所在地」那一級時，
 #: 只改這一行。
-PRECISION_ORDER = (PRECISION_EXACT, PRECISION_ROOFTOP,
+PRECISION_ORDER = (PRECISION_EXACT, PRECISION_ROOFTOP, PRECISION_POI,
                    PRECISION_STREET, PRECISION_DISTRICT)
 
 SOURCE_MANUAL = "manual"
@@ -383,11 +474,17 @@ def _locate_tgos(address, **_kw):
 
 
 def _locate_nominatim(address, **_kw):
-    """OSM／Nominatim。回 `((lat, lon), precision)` 或 `None`。"""
-    coord, _err = geocode(address)
+    """OSM／Nominatim。回 `((lat, lon), precision)` 或 `None`。
+
+    🔴 精度由**回應的分類**決定（`classify_precision`），不是一律 `street`。
+    ⚠️ 這裡原本不管命中什麼都回 `PRECISION_STREET`
+    ⇒ `交通部航港局`（建物）與 `台中市西屯區台灣大道三段`（路段中心）
+    **在畫面上是同一種準度**，而誤差差了兩個數量級。
+    """
+    coord, _err, info = _unpack_geocode(geocode(address))
     if coord is None:
         return None
-    return coord, PRECISION_STREET
+    return coord, classify_precision(info)
 
 
 #: 有序退階。**每一階都是模組層屬性**，否則測試沒辦法讓前 N 階失敗，

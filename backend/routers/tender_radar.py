@@ -238,7 +238,8 @@ def delete_watch(watch_id: int, authorization: str = Header(None)):
 # ── 標案與命中 ───────────────────────────────────────────────────────────────
 
 @router.get("/api/tender-radar/tenders")
-def list_tenders(watch: int = None, authorization: str = Header(None)):
+def list_tenders(watch: int = None, q: str = None,
+                 authorization: str = Header(None)):
     """**所有**標案，命中的帶上標籤。最近截止的排前面。
 
     ## 使用者原話
@@ -255,6 +256,28 @@ def list_tenders(watch: int = None, authorization: str = Header(None)):
 
     沒有截止日的排最後而不是最前面——`NULL` 在 SQLite 的排序裡最小，
     不處理的話「沒寫截止日」會插到最急的位置。
+
+    ## 🔴 `?q=` 手動搜尋**在後端**，不在前端
+    前端一個 `Array.filter` 是最自然的做法，⚠️ **而異體字表在 Python 裡**
+    （`tender_match.VARIANT_MAP`）。
+    ☠️ 使用者手打「台中」查不到 `臺中市政府`，**而他剛剛才看到
+    搜尋條件「台中」命中了那一筆** —— 🔑 **同一個字，兩個地方兩種結果。**
+    ⇒ 手動搜尋必須套**同一套**正規化，所以它必須在後端。
+
+    ⚠️ **手動搜尋不可以被存成一筆 watch**：
+    使用者隨手打三個字就會在設定裡長出三個搜尋條件，
+    **然後他每天會收到那三個條件的通知信。**
+
+    ## 📌 `matchedEmptyReason`：三態
+    | 值 | 意思 | 使用者要做的事 |
+    |---|---|---|
+    | `no_watches` | 一個搜尋條件都沒有 | 去**新增**條件 |
+    | `no_hits` | 有條件但沒命中 | 去**改**條件 |
+    | `null` | 有命中 | —— |
+
+    ☠️ 前兩個在畫面上都是一塊空白，**而處置相反**。
+    前端分辨不了：它得再打一支 `watches` API，那是兩次往返加一個競態
+    （中間有人刪掉條件就會講錯話）⇒ 這個訊號必須跟清單同一個回應出來。
     """
     _require_radar(authorization)
     conn = get_db()
@@ -310,11 +333,34 @@ def list_tenders(watch: int = None, authorization: str = Header(None)):
         "matchedWatches": labels.get(r["id"], []),
     } for r in rows]
 
+    # ⚠️ **在 `q` 篩選之前算**：這個訊號問的是「搜尋條件有沒有命中東西」，
+    # 不是「這次的搜尋結果有幾筆」。兩者混在一起的話，
+    # 使用者打一個查無結果的字，畫面會告訴他「你的搜尋條件都沒命中」——
+    # **而那是另一件事，會害他跑去改條件。**
+    if not watches:
+        matched_empty_reason = "no_watches"
+    elif not labels:
+        matched_empty_reason = "no_hits"
+    else:
+        matched_empty_reason = None
+
     if watch is not None:
         # 📌 篩選是**可選的**：不帶參數就是全部（P3）。
         items = [it for it in items
                  if any(w["id"] == watch for w in it["matchedWatches"])]
-    return {"items": items, "source": "資料來源：政府電子採購網"}
+
+    # 🔴 `q` 是**篩選**不是查詢：清空就回到全部，什麼都不留下。
+    # ⚠️ 空字串與沒給參數是同一件事（`?q=` 也是「不篩選」）——
+    # 把空字串當成「查一個空關鍵字」的話會篩掉全部，而畫面上那是「沒有標案」。
+    needle = tender_match.normalize((q or "").strip())
+    if needle:
+        items = [it for it in items
+                 if needle in tender_match.normalize(
+                     " ".join(str(it.get(k) or "")
+                              for k in ("name", "org", "caseNo")))]
+
+    return {"items": items, "source": "資料來源：政府電子採購網",
+            "matchedEmptyReason": matched_empty_reason}
 
 
 # ── 雷達健康狀態 ─────────────────────────────────────────────────────────────

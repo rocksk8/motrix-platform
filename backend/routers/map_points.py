@@ -21,6 +21,7 @@
 ☠️ 「你沒有權限看標案」與「今天沒有標案」在畫面上都是一張沒有點的地圖，
 而那是今天第五個長成那個樣子的成因。
 """
+import json
 import logging
 
 from fastapi import APIRouter, Header, HTTPException
@@ -70,6 +71,29 @@ _DATASETS = {
         "table": "shipping_notes", "address": "delivery_address", "label": "出貨單",
         "modules": ("case_manage", "quotation"),
     },
+    # ── 地址在 `data_json` 裡的兩個來源 ────────────────────────────────
+    # ⚠️ 這兩張表**沒有 address 欄位**（實測：`customers` 與 `suppliers` 的
+    # 欄位只有 id／name／tax_id／phone／data_json／…）⇒ 地址是 JSON 裡的鍵。
+    "customers": {
+        "table": "customers", "label": "客戶",
+        # 從 `routers/customers.py` 讀的，不是從規格抄的。
+        "modules": ("customer", "case_manage", "dev_crm", "procurement"),
+        # 🔴 **一個來源可以產出多個 dataset。**
+        # 發票地址與送貨地址是**兩件事**，不是同一個點的兩個屬性：
+        # 🔑 送貨地址才是業務上**會跑的地方**，發票地址通常是登記地
+        # ⇒ 合併的話「我要去哪裡」這個問題就答不出來。
+        #
+        # 📌 **送貨排在前面**：兩個地址相同時去重留下先出現的那一個，
+        # 而留下「送貨」比留下「發票」更接近使用者想問的事。
+        "json": (("customers_delivery", "deliveryAddress", "客戶（送貨地址）"),
+                 ("customers_invoice", "invoiceAddress", "客戶（發票地址）")),
+    },
+    "suppliers": {
+        "table": "suppliers", "label": "供應商",
+        # 從 `routers/suppliers.py` 讀的。
+        "modules": ("customer", "procurement", "inventory"),
+        "json": (("suppliers", "address", "供應商"),),
+    },
 }
 
 
@@ -97,6 +121,8 @@ def _may_see_dataset(user, name) -> bool:
 def _own_points(name, office, user_coord=None):
     """把一份自有資料的地址畫成點。回 `(points, 沒有地址或定位不到的筆數)`。"""
     spec = _DATASETS[name]
+    if spec.get("json"):
+        return _json_points(name, office, user_coord)
     col = spec["address"]
     # ⚠️ **`with get_db()` 是錯的**：sqlite 連線的 `with` 管的是**交易**，
     # 不是關閉 ⇒ 那個連線永遠不會關。要走 `db_conn()`。
@@ -126,6 +152,66 @@ def _own_points(name, office, user_coord=None):
     return points, missing
 
 
+def _json_points(name, office, user_coord=None):
+    """地址在 `data_json` 裡的來源（客戶／供應商）。
+
+    ## 🔴 一筆壞資料只能拖垮**它自己**
+    ☠️ `data_json` 壞掉或缺鍵的那一筆要落進 `withoutLocation`，
+    **不可以讓整個來源回空或回 500** —— 那會讓其餘十幾筆一起消失，
+    而畫面上那是「**沒有客戶**」。
+    🔑〈讀不到的欄位要拒絕那一筆，不要送空值〉的鄰居：
+    **拒絕那一筆，不是拒絕整批。**
+    ⚠️ 所以這裡**不可以**寫成 `try: … except: return []`。
+
+    ## 📌 `missing` 是**以「筆」為單位**，不是以「地址欄位」為單位
+    一個客戶只填了發票地址、沒填送貨地址，那是**正常的**，不該被算成
+    「定位不到」。⇒ 一整筆**一個點都產不出來**時才 +1。
+    （實測：13 筆客戶裡 9 筆有發票地址、7 筆有送貨地址。）
+    """
+    spec = _DATASETS[name]
+    with db_conn() as conn:
+        rows = conn.execute(
+            f"SELECT id, name, data_json FROM {spec['table']}").fetchall()
+
+    points, missing = [], 0
+    for r in rows:
+        try:
+            data = json.loads(r["data_json"] or "{}")
+        except (TypeError, ValueError):
+            # ⚠️ 只吞**這一筆**的解析錯誤，而且**不靜靜跳過**：
+            # 下面 `made == 0` 會把它算進 `withoutLocation`。
+            data = None
+        if not isinstance(data, dict):
+            data = {}
+
+        seen, made = set(), 0
+        for dataset, key, label in spec["json"]:
+            addr = str(data.get(key) or "").strip()
+            if not addr:
+                continue
+            if addr in seen:
+                # 🔴 兩種地址**相同**時只畫一個點。
+                # ☠️ 不去重的話地圖上會有**完全重疊**的兩個標記，
+                # 而重疊的標記在畫面上**看不出來是兩個**
+                # ⇒ 這個缺陷不會被報修，它只會讓「我有幾個據點」長期答錯。
+                continue
+            seen.add(addr)
+            found = geo.locate_cached(addr)
+            if not found.coord:
+                continue
+            made += 1
+            points.append({
+                "dataset": dataset, "datasetLabel": label,
+                "name": r["name"], "address": addr,
+                "lat": found.coord[0], "lon": found.coord[1],
+                "precision": found.precision, "source": found.source,
+                **_distances(found.coord, office, user_coord),
+            })
+        if not made:
+            missing += 1
+    return points, missing
+
+
 def _may_see_tenders(user) -> bool:
     if (user or {}).get("role") == "superadmin":
         return True
@@ -150,7 +236,7 @@ def _position_from_header(raw):
            &lat=24.1657&lon=120.6402&accuracy=35 HTTP/1.1" 200 OK
     ```
 
-    正式機的 `autostart.bat` 是 `uvicorn … --log-level info >> logs\server.log 2>&1`
+    正式機的 `autostart.bat` 是 `uvicorn … --log-level info >> logs/server.log 2>&1`
     ⇒ **每按一次「使用我的位置」，那個人當下的座標就被追加到一個永久檔案裡。**
 
     ☠️ 而我們原本檢查過的三個地方**全都是乾淨的**：
@@ -250,14 +336,23 @@ def map_points(sources: str = "tenders",
     if h_lat is not None:
         lat, lon, accuracy = h_lat, h_lon, h_acc
     elif any(v is not None and v != "" for v in (lat, lon, accuracy)):
-        # ⚠️ **讓不安全的那條路出聲**，不要讓它安靜地可用。
-        # 🔑〈守門被拿掉≠規則被解除〉的反面：留著相容路徑而不留痕跡，
-        # 下一個人會照著 query string 寫，而那次外洩不會有人發現。
-        # 📌 這行**不印座標**——印出來就等於自己做了同一件事。
+        # 🔴 **直接拒絕，不是警告**（A 2026-09-22 裁定）。
+        # 我原本留著這條路，理由是「C 的 13 題都是那個形狀」。
+        # ⚠️ A 指出那等於**讓測試決定產品的安全形狀**，而
+        # **那 13 題紅是正確的訊號——它們在測一條不該存在的路**。
+        # 🔑 而我自己那句話就是判準：「留著就還是一條可以被下一個人寫進去的路。」
+        #
+        # 📌 訊息要說**改用什麼**，不可以只說「參數不合法」——
+        # 只說不合法的話，下一個人會去查參數格式，而格式是對的。
         logger.warning(
-            "/api/map/points 收到 query string 形式的座標：那串網址已經被 "
-            "uvicorn 的 access log 寫進 logs/server.log 了。"
-            "請改用 X-Map-Position header。"
+            "/api/map/points 收到 query string 形式的座標並已拒絕。"
+            "（那串網址已經被 uvicorn 的 access log 寫進 logs/server.log）"
+        )   # ⚠️ 這行**不印座標**——印出來就等於自己做了同一件事。
+        raise HTTPException(
+            422,
+            "座標不可以放在網址上：uvicorn 的 access log 會把整串 query string "
+            "寫進 logs/server.log（一個永久追加的檔案）。"
+            "請改用 `X-Map-Position: <lat>,<lon>,<accuracy>` header。"
         )
     user_coord, user_accuracy = _user_position(lat, lon, accuracy)
 
@@ -390,6 +485,43 @@ def _company_profile():
     return {**(_get_setting("company_profile", {}) or {})}
 
 
+def _locate_tender(org, place):
+    """一筆標案的定位：**機關名稱 → `location` → 失敗**。回 `(GeoResult, 查的字串)`。
+
+    ## 🔴 為什麼順序是這樣
+    ⚠️ 實測（正式機 `motrix_erp.db`）：
+
+    ```
+    tenders.location   200 筆   filled = 0     相異值只有 [None]
+    tenders.org        200 筆   filled = 200
+    ```
+
+    ☠️ 只讀 `location` 的話**地圖上一個標案點都沒有**，
+    而畫面不會說原因——使用者看到的是一張只有自己廠商的地圖。
+    📌 `withoutLocation` 那個數字**是對的，只是沒有人會去看它**。
+
+    而即使兩個都有值，機關名稱也該排前面：它命中的是**建物級**座標，
+    `location` 只有縣市級。
+
+    ## ⚠️ 被截斷的名稱不查
+    🔑 **查不到會退階（安全），查到錯的不會。**
+    「交通部民用航空局飛航」如果剛好命中某個不相關的地點，
+    我們會得到一個看起來合理而完全錯誤的座標，
+    而地圖上那個圖釘**看起來跟正確的一模一樣**。
+    """
+    org = (org or "").strip()
+    place = (place or "").strip()
+    if org and not geo.looks_truncated(org):
+        found = geo.locate_cached(org)
+        if found.coord:
+            return found, org
+    if place:
+        found = geo.locate_cached(place)
+        if found.coord:
+            return found, place
+    return None, None
+
+
 def _tender_points(office, user_coord=None):
     """標案來源。回 `(points, 沒有地點的筆數)`。
 
@@ -404,16 +536,13 @@ def _tender_points(office, user_coord=None):
     points, missing = [], 0
     for r in rows:
         place = (r["location"] or "").strip()
-        if not place:
-            missing += 1
-            continue
-        found = geo.locate_cached(place)
-        coord = found.coord
-        if not coord:
+        found, used = _locate_tender(r["org"], place)
+        if found is None:
             # ⚠️ 一筆定位失敗不可以拖垮其他筆，而它要歸到「沒有地點」那一欄
             # ——使用者至少看得到它存在，而不是它不存在。
             missing += 1
             continue
+        coord = found.coord
         points.append({
             # 🔴 `dataset`（這個點屬於哪一份資料）與 `source`（誰把地址變成座標）
             # 是**兩件事**，而它們一度搶同一個鍵名：
@@ -425,7 +554,9 @@ def _tender_points(office, user_coord=None):
             "dataset": "tenders",
             "caseNo": r["case_no"], "name": r["name"], "org": r["org"],
             "location": place, "lat": coord[0], "lon": coord[1],
-            "address": place,
+            # 📌 `address` ＝ **實際被拿去查的那個字串**，
+            # 所以退階走到哪一階從回傳上讀得出來，不必去猜內部呼叫了什麼。
+            "address": used,
             "precision": found.precision, "source": found.source,
             "budget": r["budget"], "deadline": r["deadline"], "url": r["url"],
             **_distances(coord, office, user_coord),
