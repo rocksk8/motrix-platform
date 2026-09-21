@@ -65,6 +65,17 @@
         <span>⚠️</span>
         <div>已填辦公室地址，但<strong>定位不到</strong>——地址可能需要調整。</div>
       </div>
+      <!-- 🔴 起算點的精度會傳染給**每一個**距離。
+           辦公室只定到行政區的話，下面每一筆都差同樣的幾公里，
+           而那個誤差**在每一列上看起來都很合理**。 -->
+      <div class="mp-note warn"
+           x-show="info && info.office && precisionIsCoarse(info.office.precision)">
+        <span>⚠️</span>
+        <div><strong>辦公室只定位到「<span x-text="info.office ? precisionLabel(info.office.precision) : ''"></span>」</strong>
+          ——查不到完整門牌，所以起算點是行政區中心，
+          <strong>下面所有的距離都會差幾公里</strong>。
+          <br>可以在公司資料設定直接填經緯度，那會跳過所有查詢。</div>
+      </div>
       <div class="mp-note warn" x-show="info && !info.geoEnabled">
         <span>⚠️</span>
         <div><strong>地理查詢未啟用</strong>，所以沒有任何東西定位得到、距離全部是空的。
@@ -182,9 +193,23 @@
               <td style="font-size:12px" x-text="p.location || '—'"></td>
               <!-- ⚠️ 距離是 null 時顯示「—」不是 0。
                    0 公里的意思是「就在辦公室」，那跟「算不出來」是兩件事。 -->
-              <td style="font-size:12px;text-align:right"
-                  x-text="p.distanceKm === null || p.distanceKm === undefined
-                          ? '—' : p.distanceKm + ' km'"></td>
+              <!-- 「門牌精度」與「行政區精度」**在畫面上都是一個數字**，
+                   而距離可能差好幾公里。一個數字不帶它的可信度，就會被當成事實。
+                   ⚠️ 而「區級」不可以只是括號裡多兩個字——**使用者會略過括號**。
+                   ⇒ 粗的那一種換顏色、加波浪號、並且把精度寫成獨立一行。 -->
+              <td style="font-size:12px;text-align:right;white-space:nowrap">
+                <template x-if="p.distanceKm === null || p.distanceKm === undefined">
+                  <span>—</span>
+                </template>
+                <template x-if="p.distanceKm !== null && p.distanceKm !== undefined">
+                  <span :style="precisionIsCoarse(p.precision) ? 'color:var(--warning)' : ''">
+                    <span x-text="(precisionIsCoarse(p.precision) ? '～' : '')
+                                  + p.distanceKm + ' km'"></span><br>
+                    <span style="font-size:10px;opacity:.85"
+                          x-text="precisionLabel(p.precision)"></span>
+                  </span>
+                </template>
+              </td>
               <td style="font-size:12px" x-text="p.deadline || '—'"></td>
             </tr>
           </template>
@@ -214,6 +239,19 @@ function mapPage() {
     mapOpen: false, mapLoading: false, tileError: false, _map: null,
 
     _h() { return { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.token } },
+
+    // 精度的中文。⚠️ 沒有精度時講「未知」，**不要留白**——
+    // 留白會讓人以為那是最精確的那一種（因為沒有任何警告）。
+    precisionLabel(p) {
+      return ({ exact: '人工指定', rooftop: '門牌', street: '路段',
+                district: '區級（誤差數公里）' })[p] || '精度未知'
+    },
+
+    // 哪些精度算「粗」。判準是「這個距離會不會誤導人」，
+    // 而區級與未知都會——**未知也算粗，因為我們沒有理由假設它是細的。**
+    precisionIsCoarse(p) {
+      return p !== 'exact' && p !== 'rooftop' && p !== 'street'
+    },
 
     async init() {
       const raw = localStorage.getItem('motrix_session')
@@ -299,7 +337,8 @@ function mapPage() {
         window.L.marker([p.lat, p.lon]).addTo(this._map)
           .bindPopup([p.name, p.org, p.location,
                       (p.distanceKm === null || p.distanceKm === undefined)
-                        ? '' : ('約 ' + p.distanceKm + ' km')]
+                        ? '' : ('約 ' + p.distanceKm + ' km（'
+                                + this.precisionLabel(p.precision) + '）')]
                      .filter(Boolean).join('<br>'))
       })
     },
