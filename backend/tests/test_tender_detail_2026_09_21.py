@@ -524,7 +524,13 @@ def _allow_rerun(monkeypatch):
         conn.commit()
     finally:
         conn.close()
-    monkeypatch.setattr(ts, "_already_fetched_today", lambda conn: False)
+    # 📌 **刻意不 patch `_already_fetched_today`**：上面那個 DELETE 已經讓它回 False。
+    # ⚠️ 而它即將改名為 `_already_fetched_this_slot`（§3j，語意從「今天」變「這個時段」）
+    # ⇒ 留著 patch 的話，改名當天這一題會變 `AttributeError`，
+    #   **而錯誤訊息會指向測試，不指向那個改名**。
+    # 🔑 這一行能刪掉的**前提是抓取側的標記仍然存放在 `tender_fetch_log`**。
+    #    若哪天它搬到 `system_settings`（像通知側那樣），上面那個 DELETE 就清不到它，
+    #    這幾題會紅 —— **那時候紅的是對的，去看標記搬到哪裡了。**
 
 
 def _skip_quiet_period(monkeypatch):

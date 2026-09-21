@@ -373,7 +373,9 @@ def _allow_rerun_today(monkeypatch):
         conn.commit()
     finally:
         conn.close()
-    monkeypatch.setattr(ts, "_already_fetched_today", lambda conn: False)
+    # 📌 不 patch `_already_fetched_today`：上面那個 DELETE 已經讓它回 False。
+    # ⚠️ 它即將改名（§3j）⇒ 留著會在改名當天變 AttributeError。
+    # 🔑 前提是抓取側標記仍存放在 `tender_fetch_log`；搬走的話這幾題會紅，而那是對的。
 
 
 def _assert_mails(calls, n):
@@ -559,7 +561,7 @@ def test_n9_already_notified_tender_not_in_later_emails(
         conn.commit()
     finally:
         conn.close()
-    monkeypatch.setattr(ts, "_already_fetched_today", lambda conn: False)
+    # 📌 同上：DELETE 已經讓真實的那支回 False，不需要 patch。
 
     _run(monkeypatch, page=_five_hit_page())
     if len(mails) > 1:
