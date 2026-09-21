@@ -190,6 +190,23 @@ def purchase_suggestions(authorization: str = Header(None)):
             "SELECT * FROM purchase_suggestion_status"
         ).fetchall()
     }
+    # 「還有 N 家供應商只有舊的『標準交期』文字、沒有可計算的天數」。
+    # 退休舊欄位的時機要由資料決定不是由感覺決定，N 歸零那天才安全（STATE §3）。
+    # ⚠️ 這一頁要顯示它的理由跟供應商頁不同：供應商頁是「去哪裡修」，
+    # 這裡是「為什麼下面那排 eta 是未知」——症狀出現的地方。
+    # ⚠️ 判定用 `lead_time_days IS NULL`（SQL NULL），不是真假值：
+    # 0 是合法的「現貨當天可出」，用真假值會把已經填好 0 的算成「還沒填」，
+    # 那個 N 就永遠歸不了零，而 N 正是退休判準。
+    legacy_lead_time_suppliers = 0
+    for r in conn.execute(
+        "SELECT data_json FROM suppliers WHERE lead_time_days IS NULL"
+    ).fetchall():
+        try:
+            extra = json.loads(r["data_json"] or "{}")
+        except (ValueError, TypeError):
+            continue
+        if str(extra.get("leadTime") or "").strip():
+            legacy_lead_time_suppliers += 1
     conn.close()
 
     today = procurement.today()   # 接縫：測試換掉 helpers.procurement.today 就能驗 eta
@@ -233,7 +250,9 @@ def purchase_suggestions(authorization: str = Header(None)):
         })
     result.sort(key=lambda r: (r["stockLevel"] != "red", -r["estimatedCost"]))
     total_estimated_cost = round(sum(r["estimatedCost"] for r in result), 2)
-    return {"items": result, "count": len(result), "totalEstimatedCost": total_estimated_cost}
+    return {"items": result, "count": len(result),
+            "totalEstimatedCost": total_estimated_cost,
+            "legacyLeadTimeSuppliers": legacy_lead_time_suppliers}
 
 
 def _below_yellow_threshold(conn, part_no: str) -> bool:

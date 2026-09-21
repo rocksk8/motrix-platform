@@ -333,6 +333,17 @@
           <span>共 <strong x-text="purchaseSuggestions.count"></strong> 項料號建議採購</span>
           <span>預估總金額：<strong style="color:var(--text-primary);font-family:LINE Seed TW_OTF, sans-serif" x-text="'NT$ ' + Math.round(purchaseSuggestions.totalEstimatedCost).toLocaleString()"></strong></span>
         </div>
+        <!-- 這個數字擺在這一頁，是因為下面那排「預計到貨」顯示「未知」的列，
+             多半就是它造成的 —— 症狀在這裡，原因在供應商頁。
+             N 歸零那天，舊的「標準交期」文字欄位才可以安全退休。 -->
+        <div x-show="purchaseSuggestions.legacyLeadTimeSuppliers > 0"
+             style="font-size:12px;color:var(--warning);background:var(--warning-light);
+                    padding:6px 9px;border-radius:4px;margin-bottom:12px">
+          還有 <strong x-text="purchaseSuggestions.legacyLeadTimeSuppliers"></strong>
+          家供應商只填了舊的「標準交期」文字、沒有可計算的天數 ——
+          它們的料號算不出預計到貨日。
+          <a href="suppliers.html" style="color:var(--warning);text-decoration:underline">前往供應商管理填寫</a>
+        </div>
         <div class="table-scroll" style="max-height:60vh;overflow-y:auto">
           <table class="data-table" x-show="purchaseSuggestions.items.length > 0">
             <thead><tr>
@@ -594,7 +605,8 @@ function app() {
     },
 
     async openPurchaseSuggestionsModal() {
-      this.purchaseSuggestions = { show: true, items: [], count: 0, totalEstimatedCost: 0, loading: true }
+      this.purchaseSuggestions = { show: true, items: [], count: 0, totalEstimatedCost: 0,
+                                   legacyLeadTimeSuppliers: 0, loading: true }
       try {
         const r = await fetch(`${API}/inventory/purchase-suggestions`, { headers: { Authorization: 'Bearer ' + this.session.token } })
         if (r.ok) {
@@ -602,6 +614,7 @@ function app() {
           this.purchaseSuggestions.items = d.items || []
           this.purchaseSuggestions.count = d.count || 0
           this.purchaseSuggestions.totalEstimatedCost = d.totalEstimatedCost || 0
+          this.purchaseSuggestions.legacyLeadTimeSuppliers = d.legacyLeadTimeSuppliers || 0
         }
       } catch {}
       this.purchaseSuggestions.loading = false
