@@ -80,14 +80,47 @@ def _real_list_page():
     return REAL
 
 
-def _spy_fetch(monkeypatch):
-    """把 `fetch_raw` 換成計數器。⚠️ 觀測點是**呼叫次數**（SL1／SL2 明文）。"""
+def _page_batch(n):
+    """把真實樣本的**機關名**加一個批次尾碼，做出「這一批是新的」的頁面。
+
+    ## 🔴 為什麼需要這個（B 讀出來的，我驗過原始碼）
+
+        tender_source.py:565  INSERT OR IGNORE INTO tenders      UNIQUE (org, case_no)
+        tender_source.py:582  INSERT OR IGNORE INTO tender_hits  UNIQUE (watch_id, tender_id)
+
+    ⇒ **同一份頁面掃第二次，`new_hits` 就是 0。**
+    我第一版讓四個時段都餵同一頁，於是「抓 4 寄 4」要求的行為
+    **正是 SL16 要擋的那個行為**（沒有新命中也寄）。
+    ☠️ **三題不可能同時綠 —— 而那不是我佈置寫錯，是規格本身有矛盾**
+    （SL3「封數 == 設定的時段數」與 SL16「沒有新命中就不寄」只在
+    「每個時段都剛好有新命中」時相容）。正確的統一規則是
+    **封數 ==「有新命中的寄信時段」數**。
+
+    ⚠️ 手術對象選**機關名**而不是案號：UNIQUE 是 `(org, case_no)`，
+    改哪一個都行，而機關名改完仍然含中文、仍然不像日期
+    ⇒ 不會撞到 `parse_list` 的形狀驗證（第 4 輪條件 6c 三道）。
+    """
+    from tests.test_tender_match_2026_09_21 import (
+        REAL, _get_cell, _rebuild, _split_results, _set_cell, COL_ORG,
+    )
+    _m, _header, data = _split_results(REAL)
+    rows = [_set_cell(r, COL_ORG, _get_cell(r, COL_ORG) + f"第{n}批") for r in data]
+    page = _rebuild(REAL, rows)
+    assert page != REAL, "手術沒有改到任何東西 —— 樣本結構變了"
+    return page
+
+
+def _spy_fetch(monkeypatch, vary=False):
+    """把 `fetch_raw` 換成計數器。⚠️ 觀測點是**呼叫次數**（SL1／SL2 明文）。
+
+    `vary=True` ⇒ 每一次回**不同批**的頁面，讓每個時段真的出現新命中。
+    """
     calls = []
     page = _real_list_page()
 
     def _rec(*a, **kw):
         calls.append(a)
-        return (page, None)
+        return (_page_batch(len(calls)) if vary else page, None)
 
     monkeypatch.setattr(ts, "fetch_raw", _rec)
     return calls
@@ -112,9 +145,27 @@ def _spy_mail(monkeypatch):
     return calls
 
 
-def _at_slot(monkeypatch, hour):
-    """把「現在是哪個時段」換掉。**這是 SL9 的接縫。**"""
-    monkeypatch.setattr(ts, "current_slot", lambda: hour)
+def _at_time(monkeypatch, hour):
+    """把**時間來源**換掉 —— 不是把 `current_slot()` 換掉。
+
+    ## 🔴 為什麼不 patch `current_slot()`（我第一版就是那樣寫的）
+
+    `current_slot()` 內部要讀 `tender_radar_scan_hours` 設定。
+    ⇒ **我 patch 掉它，就把「有沒有查設定」這件事一起 patch 掉了。**
+    SL6（設定 `9,15`）與 SL16（設定 `""`）於是都沒有真的走到設定判斷那一段，
+    而它們**各自假設了那段判斷發生在不同的地方** —— 我自己寫得不一致。
+
+    🔑 這是今天那一族（**觀測手段與被測對象共用一段程式碼**）的第五個實例，
+    而這一次是我自己造的：T4 的 `_pid_alive`／我的診斷 `print`／
+    `geocode` 的快取／M4 的總開關位置／這一個。
+
+    ⇒ 換掉最底層那個會碰系統時鐘的東西（`now_dt()`），
+    讓 `current_slot()` 自己去讀設定、自己去推導。
+    """
+    from datetime import datetime
+
+    fixed = datetime.combine(ts.today(), datetime.min.time()).replace(hour=hour)
+    monkeypatch.setattr(ts, "now_dt", lambda: fixed)
 
 
 @pytest.fixture()
@@ -153,7 +204,7 @@ def test_sl1_same_slot_twice_fetches_once(radar_ready, monkeypatch):
     """SL1：**同一個時段內觸發兩次 → `fetch_raw` 只被呼叫 1 次。**"""
     calls = _spy_fetch(monkeypatch)
     _spy_mail(monkeypatch)
-    _at_slot(monkeypatch, 9)
+    _at_time(monkeypatch, 9)
     run = _need("run_scheduled_scan")
     run()
     run()
@@ -170,9 +221,9 @@ def test_sl2_different_slots_fetch_twice(radar_ready, monkeypatch):
     calls = _spy_fetch(monkeypatch)
     _spy_mail(monkeypatch)
     run = _need("run_scheduled_scan")
-    _at_slot(monkeypatch, 9)
+    _at_time(monkeypatch, 9)
     run()
-    _at_slot(monkeypatch, 12)
+    _at_time(monkeypatch, 12)
     run()
     assert len(calls) == 2, (
         f"跨時段只抓了 {len(calls)} 次 —— 節流還是「每天一次」的語意"
@@ -186,7 +237,7 @@ def test_sl6_two_configured_slots_mean_two_fetches(radar_ready, monkeypatch):
     _spy_mail(monkeypatch)
     run = _need("run_scheduled_scan")
     for hour in (9, 12, 15, 18):
-        _at_slot(monkeypatch, hour if hour in (9, 15) else None)
+        _at_time(monkeypatch, hour)
         run()
     assert len(calls) == 2, (
         f"設定只有兩個時段，卻抓了 {len(calls)} 次 —— 設定沒有被讀到"
@@ -226,11 +277,11 @@ def test_sl9b_patching_the_slot_changes_the_behaviour(radar_ready, monkeypatch):
     calls = _spy_fetch(monkeypatch)
     _spy_mail(monkeypatch)
     run = _need("run_scheduled_scan")
-    _at_slot(monkeypatch, 9)
+    _at_time(monkeypatch, 9)
     run()
     run()
     same_slot = len(calls)
-    _at_slot(monkeypatch, 15)
+    _at_time(monkeypatch, 15)
     run()
     assert same_slot == 1 and len(calls) == 2, (
         f"同一時段跑兩次得到 {same_slot} 次抓取、換時段之後累計 {len(calls)} 次；"
@@ -259,13 +310,21 @@ def test_sl3_mail_count_equals_configured_notify_slots(
 
     ⚠️ **範圍（D 修正 A）**：這一題擋得掉「一天四封信」，
     **擋不掉「只寄最後一次抓到的」** —— 那是 SL5 的事。**它是不完備，不是無效。**
+
+    🔴 **而它也擋不掉「每個寄信時段無條件寄一封」**（B 指出）：
+    這裡每個時段都有新命中，所以兩種實作都會給出同樣的封數。
+    ⇒ **鑑別那一個壞法的是 `SL3b` 與 `SL16`**，不是這一題。
+    **三題要一起看，單獨一題都不完備。**
     """
     _set_setting(NOTIFY_HOURS_KEY, notify_hours)
-    _spy_fetch(monkeypatch)
+    # ⚠️ `vary=True` 是必要的，不是講究：同一頁掃第二次 `new_hits` 是 0
+    # （`INSERT OR IGNORE` ＋ UNIQUE），那時「抓 4 寄 4」要求的行為
+    # **正是 SL16 要擋的那個**。見 `_page_batch` 的說明。
+    _spy_fetch(monkeypatch, vary=True)
     mails = _spy_mail(monkeypatch)
     run = _need("run_scheduled_scan")
     for hour in (9, 12, 15, 18):
-        _at_slot(monkeypatch, hour)
+        _at_time(monkeypatch, hour)
         run()
     assert len(mails) == expected, (
         f"寄信時段設定成 {notify_hours!r}（{expected} 個時段），"
@@ -276,6 +335,91 @@ def test_sl3_mail_count_equals_configured_notify_slots(
             "收件人清單是空的 —— `_send` 會寫一行 log 就 return，"
             "而那看起來跟「寄出去了」一模一樣"
         )
+
+
+def test_sl3b_only_slots_with_new_hits_send_a_mail(radar_ready, monkeypatch):
+    """🔴🔴 SL3b：寄信時段有四個，而**只有兩個時段有新命中 ⇒ 只寄 2 封**。
+
+    ## 🔑 這一題才是有鑑別力的那一題
+
+    SL3 的每個時段都有新命中，所以「**每個時段無條件寄**」與
+    「**有新命中才寄**」兩種實作**給出一樣的封數** ⇒ SL3 分不出它們。
+    ⚠️ 而那兩種實作的差別，使用者會在「今天沒有新標案」那一天看到：
+    一種安靜，另一種寄四封空信。
+
+    📌 **統一的規則是「封數 ==『有新命中的寄信時段』數」** ——
+    SL3 那句「封數 == 設定的時段數」是它的**特例**，
+    而 §3j 原文把特例寫成了規則，於是與 SL16 互相排斥。
+    （B 讀 `INSERT OR IGNORE` ＋ UNIQUE 推出來的，我驗過原始碼。）
+    """
+    _set_setting(NOTIFY_HOURS_KEY, "9,12,15,18")
+    calls = []
+    page_new = _page_batch(1)
+
+    def _rec(*a, **kw):
+        calls.append(a)
+        # 第 1、3 次給新的一批；第 2、4 次給**重複的**（⇒ 沒有新命中）
+        return (_page_batch(len(calls)) if len(calls) in (1, 3) else page_new, None)
+
+    monkeypatch.setattr(ts, "fetch_raw", _rec)
+    mails = _spy_mail(monkeypatch)
+    run = _need("run_scheduled_scan")
+    for hour in (9, 12, 15, 18):
+        _at_time(monkeypatch, hour)
+        run()
+
+    assert len(calls) == 4, f"四個時段應該抓四次，實際 {len(calls)}"
+    assert len(mails) == 2, (
+        f"只有兩個時段出現新命中，卻寄了 {len(mails)} 封。\n"
+        "⇒ 寄信寫成「每個寄信時段無條件寄一封」了。"
+        "那在沒有新標案的那一天會寄四封空信，而收件人會學會忽略它們。"
+    )
+
+
+def test_sl19_notify_slot_is_independent_of_scan_slot(radar_ready, monkeypatch):
+    """🔴 SL19：**抓取時段與寄信時段完全不重疊時，仍然要寄。**
+
+    ```
+    scan_hours   = "9"     ← 9 點抓
+    notify_hours = "18"    ← 18 點寄
+    現在是 18 點           ← 不抓，但**要寄**
+    ```
+
+    ## 🔑 這一題釘的是「判斷時段的入口必須獨立」（B 推出來的）
+
+    `current_slot()` 內部讀的是 **`scan_hours`** ⇒ 18 點時它回 `None`。
+    ⚠️ **寄信那一段若也問 `current_slot()`，就永遠拿不到小時** ——
+    而後果**不會在預設設定下出現**（預設抓 9,12,15,18、寄 18，兩者重疊），
+    ☠️ **要等到有人設「抓 9,15／寄 9,12,15,18」那天才爆。**
+
+    ⇒ **抓取問 `current_slot()`，寄信問 `now_dt().hour`。**
+    **兩個設定是獨立的，所以判斷時段的入口也必須是獨立的。**
+
+    📌 這一題在原本的 14 題裡**一個都驗不到** —— 因為那 14 題的
+    `scan_hours` 與 `notify_hours` 不是相同就是其中一個為空。
+    🔑 **兩個獨立的設定，要有一題讓它們真的不一樣。**
+    """
+    _set_setting(SCAN_HOURS_KEY, "9")
+    _set_setting(NOTIFY_HOURS_KEY, "18")
+    calls = _spy_fetch(monkeypatch, vary=True)
+    mails = _spy_mail(monkeypatch)
+    run = _need("run_scheduled_scan")
+
+    _at_time(monkeypatch, 9)        # 抓取時段：抓，但不是寄信時段
+    run()
+    assert len(calls) == 1, f"9 點是抓取時段，卻抓了 {len(calls)} 次"
+    assert len(mails) == 0, "9 點不是寄信時段"
+
+    _at_time(monkeypatch, 18)       # 寄信時段：不抓，但要寄
+    run()
+    assert len(calls) == 1, (
+        f"18 點不在 scan_hours 裡，卻又抓了一次（累計 {len(calls)}）"
+    )
+    assert len(mails) == 1, (
+        "18 點是寄信時段、而且 9 點抓到的命中還沒通知過，卻一封都沒寄。\n"
+        "⇒ 寄信那一段八成在問 `current_slot()`，而它讀的是 `scan_hours`，"
+        "18 點不在裡面 ⇒ 永遠拿不到小時。**兩個設定要有兩個入口。**"
+    )
 
 
 def test_sl16_no_new_hits_means_no_mail(radar_ready, monkeypatch):
@@ -294,7 +438,7 @@ def test_sl16_no_new_hits_means_no_mail(radar_ready, monkeypatch):
     mails = _spy_mail(monkeypatch)
     run = _need("run_scheduled_scan")
     for hour in (9, 12, 15, 18):
-        _at_slot(monkeypatch, hour)
+        _at_time(monkeypatch, hour)
         run()
     assert len(calls) == 0, f"抓取時段是空的，卻抓了 {len(calls)} 次"
     assert len(mails) == 0, (
@@ -316,7 +460,7 @@ def test_sl4_data_lands_even_outside_the_notify_slots(radar_ready, monkeypatch):
     _set_setting(NOTIFY_HOURS_KEY, "18")
     _spy_fetch(monkeypatch)
     mails = _spy_mail(monkeypatch)
-    _at_slot(monkeypatch, 9)                    # 抓取時段，但不是寄信時段
+    _at_time(monkeypatch, 9)                    # 抓取時段，但不是寄信時段
     _need("run_scheduled_scan")()
 
     import db
@@ -348,16 +492,16 @@ def test_sl5_each_mail_only_contains_hits_new_since_the_last_one(
     ⚠️ **兩條都要留，而理由要寫對** —— 否則下一個人會把它們合併成一條。
     """
     _set_setting(NOTIFY_HOURS_KEY, "9,18")
-    _spy_fetch(monkeypatch)
+    _spy_fetch(monkeypatch, vary=True)
     mails = _spy_mail(monkeypatch)
     run = _need("run_scheduled_scan")
 
-    _at_slot(monkeypatch, 9)
+    _at_time(monkeypatch, 9)
     run()
     assert len(mails) == 1, f"9 點應該寄一封，實際 {len(mails)}"
     first_html = mails[0][2]
 
-    _at_slot(monkeypatch, 18)
+    _at_time(monkeypatch, 18)
     run()
     assert len(mails) == 2, (
         f"18 點應該再寄一封，實際共 {len(mails)} 封 —— "
@@ -369,6 +513,13 @@ def test_sl5_each_mail_only_contains_hits_new_since_the_last_one(
     def _case_nos(html):
         return set(re.findall(r"[A-Z]{2,}[0-9]{4,}", html or ""))
 
+    # 🔴 **先證明第二封裡真的有東西**（B 抓到的空集合假綠燈）：
+    # 第二封是空的時候，交集必然是空集合 ⇒ 下面那個斷言**必然綠**。
+    # 🔑 「沒有重複」與「第二封根本沒有東西」不可以長得一樣。
+    assert _case_nos(second_html), (
+        f"第二封信裡一個案號都沒有 —— 下面「不重複」那個斷言會空過去。\n"
+        f"第二封內容前 300 字：{(second_html or '')[:300]!r}"
+    )
     repeated = _case_nos(first_html) & _case_nos(second_html)
     assert not repeated, (
         f"這幾筆在兩封信裡都出現了：{sorted(repeated)}\n"
@@ -400,7 +551,7 @@ def test_sl7_clearing_the_fetch_log_does_not_resend_the_mail(
     mails = _spy_mail(monkeypatch)
     run = _need("run_scheduled_scan")
 
-    _at_slot(monkeypatch, 18)
+    _at_time(monkeypatch, 18)
     run()
     assert len(mails) == 1, f"18 點應該寄一封，實際 {len(mails)}"
 
@@ -466,7 +617,7 @@ def test_sl10_the_detail_limit_is_shared_across_slots(radar_ready, monkeypatch):
 
     run = _need("run_scheduled_scan")
     for hour in (9, 12, 15, 18):
-        _at_slot(monkeypatch, hour)
+        _at_time(monkeypatch, hour)
         run()
 
     assert len(detail_calls) <= 2, (
