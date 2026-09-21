@@ -221,9 +221,30 @@ def test_g2_coordinates_without_accuracy_are_rejected(
     「誤差約 N 公尺」而那個 N **不是量出來的** ——
     🔑 〈一個數字不帶它的可信度就會被當成事實〉的更壞版本：
     **那個可信度本身是編的。**
+
+    ## 🔴 這一題第一版沒有驗到它自己宣稱的東西，⑤ 抓出來的
+
+    第一版只送兩段的標頭（`lat,lon`）。⚠️ 而那樣的 422 來自
+    **標頭的格式檢查**（「格式是 `<lat>,<lon>,<accuracy>`」），
+    **不是來自「不可以預設誤差」那一條**。
+    ⇒ 我把 `_user_position` 突變成「沒給 accuracy 就預設 50」之後，
+    **這一題照樣綠**（只有 `test_g5[""]` 紅了）。
+
+    🔑 跟 G10b 同一個形狀：**「回 422」太寬了，要問的是「為什麼 422」。**
+    ⇒ 兩種形狀都送：**少一段**（格式錯）與**三段但誤差是空的**（真正的那一條）。
     """
     hdr = _auth(client, make_user)
+
+    # ① 少一段：格式錯
     _ask(client, hdr, position=f"{USER_TAIPEI[0]},{USER_TAIPEI[1]}", expect=422)
+
+    # ② 三段而誤差是空的 —— **這一個才是「不可以預設一個誤差值」**
+    r = _ask(client, hdr, position=f"{USER_TAIPEI[0]},{USER_TAIPEI[1]},",
+             expect=422)
+    assert "accuracy" in r.text or "誤差" in r.text, (
+        f"誤差留空時回了 422，但訊息沒提到誤差：{r.text[:200]}\n"
+        "⇒ 那道 422 可能來自格式檢查，而「不可以預設一個誤差值」仍然沒有人守。"
+    )
 
 
 @pytest.mark.parametrize("lat,lon", [
@@ -581,9 +602,26 @@ def test_g10b_even_one_of_them_in_the_query_string_is_refused(
     ⚠️ 只擋「三個都齊」的話，`?lat=…&lon=…` 這種寫法照樣會被 uvicorn 記下來
     —— 而**兩個座標就足以定位一個人**，`accuracy` 本來就不是敏感的那一部分。
     🔑 判準要對齊**外洩的條件**，不是對齊**功能的條件**。
+
+    ## 🔴 這一題第一版是假綠的，⑤ 把它抓出來了
+
+    第一版只斷言 `expect=422`。⚠️ 而我把 `map_points.py` 裡那個
+    「query string 一律拒絕」的 `raise` 突變掉之後，**G10 紅了而這一題沒有** ——
+    因為 `?lat=25.03` 單獨給時，422 來自**另一道檢查**
+    （`_user_position` 的「lat 與 lon 要一起給」）。
+
+    ☠️ **也就是說：把整條禁令拿掉，這一題照樣全綠**，而那正是外洩的情境。
+    🔑 〈判準的寬窄都會騙人〉：**「回 422」太寬了，要問的是「為什麼 422」。**
+    ⇒ 改成連**理由**一起驗：訊息必須指向標頭。
     """
     hdr = _auth(client, make_user)
-    _ask(client, hdr, query=query, expect=422)
+    r = _ask(client, hdr, query=query, expect=422)
+    assert POSITION_HEADER in r.text, (
+        f"`?{query}` 確實回了 422，**但不是因為座標不可以走 query string** ——\n"
+        f"訊息是：{r.text[:200]}\n"
+        "⇒ 那道 422 來自別的參數檢查，而把 query string 的禁令整個拿掉之後，"
+        "這一題還是會綠。"
+    )
 
 
 def test_g11_the_same_values_in_the_header_work_fine(
