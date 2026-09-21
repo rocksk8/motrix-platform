@@ -901,7 +901,7 @@ def test_08e_effective_switch_opens_with_env(monkeypatch):
     assert _radar_on()() is True, "環境變數 MOTRIX_TENDER_RADAR=1 時實測開關要打開"
 
 
-@pytest.mark.parametrize("value", ["0", "", "false", "no"])
+@pytest.mark.parametrize("value", ["0", "", "false", "no", "true", "yes", "1 "])
 def test_08f_only_the_exact_value_opens_it(monkeypatch, value):
     """⚠️ **`MOTRIX_TENDER_RADAR=0` 不可以打開它。**
 
@@ -909,6 +909,12 @@ def test_08f_only_the_exact_value_opens_it(monkeypatch, value):
     於是「我明確把它設成 0」會把雷達**打開**。
     🔑 跟 `0` vs `NULL` 同一族：**字串 `"0"` 的真假值與它的意思相反。**
     而這個錯誤的方向是**往開的那一邊**，也就是會真的連出去的那一邊。
+
+    📌 `"true"`／`"yes"` 也釘成**不開**，是刻意的：判定就是 `== "1"`，
+    跟隔壁 `MOTRIX_DISABLE_SCHEDULERS` 同一家。**不要長出一張「哪些字算真」的
+    對照表** —— 那種表最會腐爛，而且兩邊會慢慢長得不一樣。
+    ⚠️ `"1 "`（後面一個空格）也不開：有人從設定檔複製貼上時很容易帶到，
+    而「我明明設了」跟「它沒生效」之間沒有任何訊號。
     """
     monkeypatch.setattr(_src(), "TENDER_RADAR_ENABLED", False)
     monkeypatch.setenv("MOTRIX_TENDER_RADAR", value)
