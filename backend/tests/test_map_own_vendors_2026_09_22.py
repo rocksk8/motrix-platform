@@ -74,6 +74,22 @@ from helpers import geo
 #: 📌 `completion_notes` **不在這裡**（P16：0 筆，不為一張空表寫實作）。
 OWN_SOURCES = ("contractors", "vendor_contractors", "shipping_notes")
 
+#: 每個來源**繼承它自己那個模組的權限**（A 2026-09-22 升成通則）。
+#:
+#: ⚠️ 這張表是**從路由讀出來的**，不是從規格抄的 —— A 明講「我會猜錯，
+#: 而猜錯的方向是放寬」。`grep` 的結果：
+#: ```
+#: routers/contractors.py          module='contractor_list'（＋require_superadmin）
+#: routers/vendor_contractors.py   ('procurement', 'case_manage', 'contractor_list')
+#: routers/shipping_notes.py       ('case_manage', 'quotation')
+#: ```
+#: 🔑 **通則的好處是將來加來源時不必再問一次**：去讀那支路由要什麼。
+SOURCE_MODULES = {
+    "contractors": ("contractor_list",),
+    "vendor_contractors": ("procurement", "case_manage", "contractor_list"),
+    "shipping_notes": ("case_manage", "quotation"),
+}
+
 
 def _auth(client, make_user, **kw):
     username, password = make_user(**kw)
@@ -275,6 +291,19 @@ def test_p12b_asking_for_two_sources_keeps_them_apart(
         "⇒ `dataset`（資料集）與 `source`（定位服務）是兩個意思，要兩個鍵。"
     )
 
+    # A 2026-09-22 要求：**兩個鍵都要存在且值不同。**
+    # ⚠️ 少了「值不同」那一半，一個把兩個鍵都填成資料集名字的實作會綠 ——
+    #    而那等於用兩個名字講同一件事，§3o 要的定位服務就不見了。
+    for p in body["points"]:
+        assert p.get("dataset") and p.get("source"), (
+            f"點缺了其中一個鍵：dataset={p.get('dataset')!r} "
+            f"source={p.get('source')!r}"
+        )
+        assert p["dataset"] != p["source"], (
+            f"`dataset` 與 `source` 是同一個值 `{p['source']}` —— "
+            "那兩個鍵在講兩件事（資料集／定位服務）。"
+        )
+
 
 # ══════════════════════════════════════════════════════════════════════
 # P12c · 🔴 `contractors` 是自然人名冊，權限不可以從地圖這扇門降級
@@ -308,6 +337,35 @@ def test_p12c_the_personal_roster_keeps_its_own_permission(
     assert not leaked, (
         f"沒有權限的使用者拿到了 {len(leaked)} 個外包人員的點"
         f"（住家地址）。第一筆：{leaked[0]}"
+    )
+
+
+@pytest.mark.parametrize("name", OWN_SOURCES)
+def test_p12d_a_user_who_does_have_the_module_gets_the_points(
+        client, make_user, own_data, name):
+    """🔴🔴 P12d 反向控制：**有權限的人拿得到點。**
+
+    ☠️ 沒有這一半，一個「**永遠回 `no_permission`**」的實作會讓 P12c 全綠 ——
+    而那在畫面上是「地圖一個廠商都沒有」，**正是使用者說等於沒有效果的那件事**。
+    🔑 A 的話：**兩半都要。**
+
+    📌 用的權限是**從路由讀出來**的（`SOURCE_MODULES`），不是從規格抄的：
+    A 明講「我會猜錯，而猜錯的方向是放寬」。
+    ⚠️ 而**不是用 superadmin** —— superadmin 繞過一切，
+    它證明不了「權限檢查放對了地方」，只證明得了「有人拿得到點」。
+    """
+    hdr = _auth(client, make_user, role="sales",
+                modules=[SOURCE_MODULES[name][0]])
+    body = _points(client, hdr, name)
+
+    info = _info(body, name)
+    assert info.get("skipped") != "no_permission", (
+        f"帶著 `{SOURCE_MODULES[name][0]}` 的使用者被擋下了：{info}\n"
+        f"⇒ 那個來源的權限應該是 `{SOURCE_MODULES[name]}` 其中之一。"
+    )
+    pts = [p for p in body["points"] if p.get("dataset") == name]
+    assert pts, (
+        f"有權限的使用者在 `{name}` 上一個點都沒拿到（測試資料塞了一筆查得到的地址）"
     )
 
 
