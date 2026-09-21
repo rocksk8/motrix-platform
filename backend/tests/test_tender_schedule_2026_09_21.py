@@ -538,8 +538,27 @@ def test_sl5_each_mail_only_contains_hits_new_since_the_last_one(
     second_html = mails[1][2]
 
     import re
-    def _case_nos(html):
-        return set(re.findall(r"[A-Z]{2,}[0-9]{4,}", html or ""))
+
+    def _batches(html):
+        """信裡出現了哪幾批。
+
+        ## 🔴 我第一版釘的是**案號**，而信裡根本沒有案號
+
+        `notify_tender_found()` 組的列是
+        `name` ／ `機關 {org}　地點 {location}` ／ `預算 … 截止 …`
+        —— **沒有 `case_no`**。
+        ⇒ 我的 regex 永遠回空集合 ⇒ `not repeated` **永遠成立**。
+
+        🔑 **斷言寫對、觀測點指向一個信裡不存在的東西** —— 今天第五次同一族。
+        ✅ 而這一次是**我自己加的前提斷言**（`assert _case_nos(first_html)`）抓到的，
+        不是別人指出來的。**那道前提就是為了這件事加的。**
+
+        ⇒ 改釘 `_page_batch(n)` 放進**機關名**的尾碼：那是我控制的、
+        而且它確實會被渲染進信裡。
+        """
+        return set(re.findall(r"第(\d+)批", html or ""))
+
+    _case_nos = _batches      # 下面沿用同一個名字
 
     # 🔴 **先證明第二封裡真的有東西**（B 抓到的空集合假綠燈）：
     # 第二封是空的時候，交集必然是空集合 ⇒ 下面那個斷言**必然綠**。
