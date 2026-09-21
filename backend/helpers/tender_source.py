@@ -59,7 +59,7 @@ import threading
 import time
 import urllib.parse
 import urllib.request
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from db import get_db
 from helpers import notification_prefs
@@ -121,8 +121,27 @@ QUIET_PERIOD_DAYS = 7
 FIRST_SCAN_SETTING = "tender_radar_first_scan_at"
 # ⚠️ 存 system_settings 不是 tender_fetch_log：後者不進每日 JSON 備份，
 # 還原之後是空的 ⇒ 7 天純記錄期會**靜默重新開始**。
-SCAN_HOUR = 8            # 預設時間。具名常數才驗得到「預設值是多少」（D14）
-SCAN_HOUR_SETTING = "tender_radar_scan_hour"
+# ── 時段設定 ─────────────────────────────────────────────────────────────────
+#
+# 🔑 **抓取與寄信是兩份獨立的設定**（使用者 2026-09-21：「我要可調整」「信的頻率可調」）。
+# 「一天一封」從一條寫死的規則，變成**那份設定的一個值**。
+SCAN_HOURS = (9, 12, 15, 18)          # 預設抓取時段
+NOTIFY_HOURS = (18,)                  # 預設寄信時段
+SCAN_HOURS_SETTING = "tender_radar_scan_hours"
+NOTIFY_HOURS_SETTING = "tender_radar_notify_hours"
+#: 「這個時段寄過沒」。**放 `system_settings` 不放 `tender_fetch_log`**：
+#: 後者**不進每日 JSON 備份** ⇒ 放那裡的話**每一次災難還原都會重寄當天的彙總信**。
+#: ⚠️ 反過來，抓取的標記**可以**留在 `tender_fetch_log`——
+#: **重抓一次是無害的，重寄一封不是。**（同一份證據的兩個方向。）
+NOTIFY_MARK_SETTING = "tender_radar_notify_last_slot"
+
+#: 超過幾個時段要先跟使用者確認。**不是硬上限**——按了確認就一定存得進去
+#: （使用者 2026-09-21 裁示）。門檻**只有這一份**，前端從後端取。
+#: ⚠️ 兩邊各寫一份的失敗樣子是：**前端不跳、後端擋 ⇒ 使用者存不了而且不知道為什麼。**
+HIGH_FREQUENCY_SLOT_THRESHOLD = 12
+
+SCAN_HOUR = 8            # 舊的單值預設。具名常數才驗得到「預設值是多少」（D14）
+SCAN_HOUR_SETTING = "tender_radar_scan_hour"   # 舊的單數鍵，**留著不刪**（見 scan_hours）
 
 # 第二層（詳細頁）抓取的安全閥。三條缺一不可，而 D1 是基礎：
 # **只對「命中 watch 的」抓** —— 把 N 從「當天所有公告」綁到「你真的在乎的那幾筆」。
@@ -156,6 +175,18 @@ _PAGECODE_RE = re.compile(r"pageCode2Img\(\s*[\"'](.*?)[\"']\s*\)", re.S)
 _ROC_DATE_RE = re.compile(r"^(\d{2,3})/(\d{1,2})/(\d{1,2})$")
 _CASE_NO_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._()\-/]*$")
 _CJK_RE = re.compile(r"[一-鿿]")
+
+
+def now_dt():
+    """現在（含時刻）。**這是這個模組裡唯一會碰系統時鐘的地方。**
+
+    🔴 時段判定需要「幾點」，而 `today()` 只給日期。
+    ⚠️ **不可以在別處直接 `datetime.now()`**：那樣測試 patch 不到，而後果不是紅燈，
+    是**偶爾紅的綠燈**——一天四個時段邊界（8:59/9:00…），全部落在上班時間，
+    失敗率低、無法重現、**看起來像真的有 bug**。
+    🔑 **偶爾紅的綠燈比紅燈貴**：紅燈會被修，偶爾紅的會被重跑一次然後忘掉。
+    """
+    return datetime.now()
 
 
 def today():
@@ -428,6 +459,55 @@ def fetch_detail(url):
         return None, f"{type(exc).__name__}: {exc}"
 
 
+DETAIL_COUNT_SETTING = "tender_radar_detail_fetched"
+
+
+def _details_fetched_today(conn):
+    """今天已經抓了幾筆詳細頁。存 `system_settings`，值是 `"YYYY-MM-DD:N"`。
+
+    ⚠️ **日期一起存**：只存數字的話跨日不會歸零，而那會讓上限愈收愈緊，
+    直到有一天完全不抓——**而症狀是「地圖上沒有點」，跟其他三個成因長得一樣。**
+
+    🔴 **走傳進來的 `conn`，不可以用 `helpers.settings._get_setting`。**
+    那兩支各自 `get_db()` 開**另一條連線**，而這裡是在 `_fetch_details` 裡面被叫的，
+    外層那條 `conn` 正握著一個還沒 commit 的寫入交易
+    ⇒ 新連線要寫就得等它 ⇒ **`sqlite3.OperationalError: database is locked`**。
+    ⚠️ 我就是這樣把 13 題弄紅的，而那個錯誤訊息**完全不指向成因**：
+    它說「資料庫被鎖住」，而真正的問題是「**我在自己的交易裡面又開了一條連線**」。
+    """
+    row = conn.execute(
+        "SELECT value_json FROM system_settings WHERE key=?",
+        (DETAIL_COUNT_SETTING,)).fetchone()
+    if not row:
+        return 0
+    try:
+        raw = json.loads(row["value_json"])
+    except (TypeError, ValueError):
+        return 0
+    day, _, count = str(raw).partition(":")
+    if day != today().isoformat():
+        return 0
+    try:
+        return max(int(count), 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _remember_details_fetched(conn, total):
+    """同上：走 `conn`，而且**值的格式要與 `_set_setting` 相同**（JSON）。
+
+    ⚠️ 格式不一致的話，這裡寫進去的東西**別人讀不出來**，
+    而 `_get_setting` 讀失敗時會安靜地回預設值 ⇒ 計數永遠是 0 ⇒ 上限形同不存在。
+    """
+    conn.execute(
+        "INSERT INTO system_settings (key, value_json, updated_at) VALUES (?,?,?) "
+        "ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json, "
+        "updated_at=excluded.updated_at",
+        (DETAIL_COUNT_SETTING,
+         json.dumps(f"{today().isoformat()}:{int(total)}", ensure_ascii=False),
+         _now_iso()))
+
+
 def _fetch_details(conn, tender_ids):
     """對**命中 watch 且還沒有地點**的標案抓詳細頁。回實際抓了幾筆。
 
@@ -450,10 +530,17 @@ def _fetch_details(conn, tender_ids):
         f"WHERE t.id IN ({marks}) AND (t.location IS NULL OR t.location='') "  # D6
         f"ORDER BY t.id", tuple(tender_ids)).fetchall()
 
+    # 🔴 **額度要跨呼叫累計，不可以是區域變數。**
+    # 原本 `fetched = 0` 寫在這裡 ⇒ 實際語意是「**每次呼叫**最多 20 筆」。
+    # 一天呼叫一次的時候兩者恰好相等——**那是巧合不是設計**，
+    # 而改成一天四個時段之後，上限會**靜默變成 80**：
+    # 功能照跑、畫面正常，只是對政府網站的負載變四倍，**而沒有任何測試會紅**。
+    used_today = _details_fetched_today(conn)
     fetched = 0
     for i, r in enumerate(rows):
-        if fetched >= DETAIL_DAILY_LIMIT:
-            logger.warning("詳細頁抓取達每日上限 %d，其餘留到明天", DETAIL_DAILY_LIMIT)
+        if used_today + fetched >= DETAIL_DAILY_LIMIT:
+            logger.warning("詳細頁抓取達每日上限 %d（今日已用 %d），其餘留到明天",
+                           DETAIL_DAILY_LIMIT, used_today + fetched)
             conn.execute(
                 "UPDATE tender_fetch_log SET error=? WHERE id=(SELECT MAX(id) FROM tender_fetch_log)",
                 (f"詳細頁達每日上限 {DETAIL_DAILY_LIMIT}，剩 {len(rows) - fetched} 筆未抓",))
@@ -469,6 +556,8 @@ def _fetch_details(conn, tender_ids):
         final_url = second if (second and second.startswith("http")) else r["url"]
         conn.execute("UPDATE tenders SET location=?, url=? WHERE id=?",
                      (location, final_url, r["id"]))
+    if fetched:
+        _remember_details_fetched(conn, used_today + fetched)
     return fetched
 
 
@@ -514,15 +603,36 @@ def fetch_raw(params=None):
 # ── 掃描（呼叫抓取的那一層）──────────────────────────────────────────────────
 
 def _now_iso():
-    from datetime import datetime
-    return datetime.now().isoformat(timespec="seconds")
+    """現在的時間字串。**走 `now_dt()`，不可以直接 `datetime.now()`。**
+
+    🔴 這裡原本是 `datetime.now()`，而節流查的是 `now_dt()` 的小時
+    ⇒ **寫入與查詢用了兩個不同的時間來源**：紀錄寫的是真實時鐘的小時，
+    查詢找的是被換掉的那個小時 ⇒ **永遠對不上 ⇒ 節流完全失效**。
+    🔑 而失效的方向是「**多抓**」——同一個時段內每觸發一次就真的抓一次。
+    ⚠️ 症狀只在時間被換掉時出現（也就是只在測試裡），
+    但成因是真的：**一個時間來源的模組，不可以有第二個入口。**
+    """
+    return now_dt().isoformat(timespec="seconds")
 
 
-def _already_fetched_today(conn):
-    """今天抓過了沒。**每日一次是對別人的伺服器的承諾，不是對我們自己的。**"""
+def _already_fetched_this_slot(conn):
+    """**這個時段**抓過了沒。
+
+    ⚠️ 名字從 `_already_fetched_today` 改過來，因為語意真的變了。
+    🔑 **留著舊名字＝那個名字會說謊**，而那正是 `DETAIL_DAILY_LIMIT` 的毛病
+    （它實際是「每次呼叫 20 筆」，只因為一天呼叫一次才剛好等於「每天 20」）。
+    ⚠️ 而「留著舊名字但不再呼叫它」更糟：既有測試的 monkeypatch 會**靜默失效**
+    ——patch 成功、沒有錯誤、而它什麼也沒做。**那是假綠燈不是相容性。**
+
+    📌 節流仍然是對政府網站的承諾，只是承諾的單位從「一天一次」
+    變成「**設定裡的每個時段各一次**」——使用者改得了幾點與幾次，
+    **改不了「同一個時段內重複觸發只算一次」**。
+    """
+    hour = now_dt().hour
     row = conn.execute(
-        "SELECT COUNT(*) AS c FROM tender_fetch_log WHERE substr(fetched_at,1,10)=?",
-        (today().isoformat(),),
+        "SELECT COUNT(*) AS c FROM tender_fetch_log "
+        "WHERE substr(fetched_at,1,10)=? AND CAST(substr(fetched_at,12,2) AS INTEGER)=?",
+        (today().isoformat(), hour),
     ).fetchone()
     return (row["c"] if row else 0) > 0
 
@@ -602,10 +712,11 @@ def run_scan():
 
     conn = get_db()
     try:
-        if _already_fetched_today(conn):
-            # ⚠️ 失敗那一次也算用掉了今天的額度：§T.5「連不上 → 記 log、下次再試」，
-            # 下次＝明天。重試會把「每日一次」變成「失敗就無限重試」。
-            return {"skipped": "daily_limit", "fetched": False}
+        if _already_fetched_this_slot(conn):
+            # ⚠️ 失敗那一次**也算用掉了這個時段的額度**：§T.5「連不上 → 記 log、
+            # 下次再試」，下次＝下一個時段。重試會把節流變成「失敗就無限重試」，
+            # 而**失敗的時候正是對方最不希望被重試的時候**。
+            return {"skipped": "slot_limit", "fetched": False}
 
         html, error = fetch_raw()
         if error is not None or html is None:
@@ -803,12 +914,16 @@ def _mark_hits_notified(hit_ids):
         conn.close()
 
 
-def _notify(result, previous):
-    """依這一輪的結果決定要不要寄信。**任何情況都不把例外往外丟。**
+def _notify_health(result, previous):
+    """抓取健康度的兩種告警。**綁在「有沒有抓」上，不是綁在寄信時段上。**
 
-    三種事件各自一個 key、各自邊緣觸發：
-      抓不到（`tender_fetch_failed`）／疑似改版（`tender_source_changed`）／
-      找到標案（`tender_found`，每日一封彙總）
+    🔴 為什麼與彙總信分家：**它們回答的是不同的問題。**
+    「站台抓不到了」是**這一次抓取**的結果，晚幾個小時才講就失去意義；
+    而彙總信是「今天有哪些新標案」，那是使用者自己排的節奏。
+    ⚠️ 綁在一起的話，把寄信時段設成空（＝不寄彙總信）會**順手關掉故障告警**——
+    **而使用者以為他只是不想每天收標案清單。**
+
+    三種事件各自一個 key、各自邊緣觸發。**任何情況都不把例外往外丟。**
     """
     from helpers import email_notify
 
@@ -830,6 +945,21 @@ def _notify(result, previous):
         except Exception:  # noqa: BLE001
             logger.exception("notify_tender_source_changed failed")
 
+    return
+
+
+def _notify_found(result=None):
+    """彙總信：**這個寄信時段要不要寄、寄什麼。** 回傳有沒有真的寄出去。
+
+    🔴 判準是「**有沒有未通知的命中**」，不是「這一輪有沒有新增標案」。
+    `INSERT OR IGNORE` 會讓重試時「新增 0 筆」，於是那批標案就此消失——
+    **「不要記錄失敗」與「要記得重試」是兩件事。**
+
+    📌 `result` 可以是 `None`：寄信時段不一定跟著一次抓取
+    （設定成「抓 9／寄 18」時，18 點根本沒有 `result`）。
+    """
+    from helpers import email_notify
+
     # ⚠️ 疑似改版時**仍然照常通知解析成功的那幾筆**：它們通過了形狀驗證，
     # 是真的標案。因為版面有疑慮就整批不通知的話，**會漏掉真的標案**，
     # 而「不會漏掉標案」正是這條線的承諾。
@@ -840,7 +970,7 @@ def _notify(result, previous):
     quiet = _in_quiet_period()
     _remember_first_scan(_now_iso())
     if quiet:
-        return
+        return False
     announce = _quiet_period_starts_after_this_mail()
     has_watches = _has_enabled_watch()
     tenders, hit_ids, watch_names = _load_unnotified_hits()
@@ -853,11 +983,11 @@ def _notify(result, previous):
         # ⚠️ 少了 N17b 的話，使用者啟用之後會收到**完全的沉默**，
         # 而沉默跟「壞掉了」長得一模一樣——那正是 N14 在防的事，只是換一個入口。
         if has_watches or not announce:
-            return
-        tenders = _load_tenders_by_ids(result.get("new_tender_ids") or [])
+            return False
+        tenders = _load_tenders_by_ids((result or {}).get("new_tender_ids") or [])
         hit_ids, watch_names = [], []
         if not tenders:
-            return
+            return False
     try:
         email_notify.notify_tender_found(
             tenders, watch_names,
@@ -865,61 +995,221 @@ def _notify(result, previous):
             no_watches=not has_watches)
     except Exception:  # noqa: BLE001
         logger.exception("notify_tender_found failed；已通知標記不會被設定")
-        return          # ⚠️ 不標記——見 _mark_hits_notified 的說明
+        return False    # ⚠️ 不標記——見 _mark_hits_notified 的說明
     _mark_hits_notified(hit_ids)
+    return True
 
 
 # ── 排程 ─────────────────────────────────────────────────────────────────────
+
+def _slot_key(hour):
+    """`"2026-09-21:18"`。**日期一起帶**，否則昨天 18 點會擋掉今天 18 點。"""
+    return f"{today().isoformat()}:{int(hour):02d}"
+
+
+def _already_notified_this_slot(hour):
+    """這個寄信時段寄過沒。單鍵 ＋ `>=` 比較。
+
+    📌 `>=` 而不是 `==`：同一個時段重複觸發要擋掉，而萬一時鐘往回跳
+    （或有人手動改設定造成順序錯亂），**寧可少寄一封也不要重寄一封**。
+    """
+    mark = _get_setting(NOTIFY_MARK_SETTING)
+    return bool(mark) and str(mark) >= _slot_key(hour)
+
 
 def run_scheduled_scan():
     """排程的執行體。**模組層級的具名函式，不是巢狀 closure。**
 
     既有四支排程的執行體都是 closure（`_loop`／`_run_all`／`_daily_run`），
     **測試從外面叫不到** ⇒ 只能等 Timer。這裡具名是為了讓它驗得動。
-    """
-    previous = {"failed": False, "suspected": False}
-    try:
-        conn = get_db()
-        try:
-            previous = _previous_alert_state(conn)
-        finally:
-            conn.close()
-    except Exception:  # noqa: BLE001
-        logger.exception("讀取上一次抓取狀態失敗，這一輪以「先前正常」處理")
 
-    result = run_scan()
-    if not result or result.get("skipped"):
-        return result
-    try:
-        _notify(result, previous)
-    except Exception:  # noqa: BLE001
-        logger.exception("標案雷達通知失敗")
+    ## 🔑 兩個判斷，兩個入口，刻意不共用
+    ```
+    抓取  current_slot()      ← 內部讀 scan_hours()
+    寄信  now_dt().hour       ← 直接比對 notify_hours()
+    ```
+    ⚠️ **寄信不可以問 `current_slot()`**：它在「抓 9／寄 18」那種設定下，
+    18 點時回 `None` ⇒ **永遠拿不到小時，而那時正是要寄信的時候**。
+    📌 這個錯在預設設定下看不出來（預設抓 9,12,15,18、寄 18，兩者重疊），
+    **要等到有人把兩份設定設成不重疊那天才爆。**
+    """
+    slot = current_slot()
+    result = None
+    if slot is not None:
+        previous = {"failed": False, "suspected": False}
+        try:
+            conn = get_db()
+            try:
+                previous = _previous_alert_state(conn)
+            finally:
+                conn.close()
+        except Exception:  # noqa: BLE001
+            logger.exception("讀取上一次抓取狀態失敗，這一輪以「先前正常」處理")
+
+        result = run_scan()
+        if result and not result.get("skipped"):
+            try:
+                _notify_health(result, previous)
+            except Exception:  # noqa: BLE001
+                logger.exception("標案雷達健康告警失敗")
+
+    hour = now_dt().hour
+    if hour in notify_hours() and not _already_notified_this_slot(hour):
+        try:
+            if _notify_found(result):
+                # ⚠️ **只有真的寄出去才標記。** 先標記再寄的話，一次失敗會吃掉
+                # 整個時段的重試，而那正是第 5 輪 N15 的教訓。
+                _set_setting(NOTIFY_MARK_SETTING, _slot_key(hour))
+        except Exception:  # noqa: BLE001
+            logger.exception("標案雷達彙總信失敗")
     return result
 
 
-def scan_hour():
-    """每天幾點掃。存 `system_settings`（有進每日 JSON 備份）。
+def _parse_hours(raw, fallback, what):
+    """`"9,12,15,18"` → `(9, 12, 15, 18)`。排序去重。
 
-    ⚠️ **只能改「幾點」不能改「幾次」**：每日一次的硬上限由
-    `_already_fetched_today()` 把關，**不因這個設定而改變**（D13）。
-    那個上限是對別人的伺服器的承諾，不是我們自己的偏好。
+    🔴 **空字串是合法值，不是「沒設定」**：抓取設成空＝完全不抓，
+    寄信設成空＝不寄。**「可調整」包含「調成不要」**，而那是最容易被實作漏掉的值，
+    因為它看起來像「還沒設」。
+
+    ⚠️ **不合法時退回 `fallback`，而 `fallback` 必須是一個真的存在的具名常數。**
+    這裡原本寫的是 `DEFAULT_SCAN_HOUR` —— **那個名字從來沒有被定義過**，
+    也就是說「值超出 0-23」這條防禦分支一被走到就是 `NameError`。
+    🔑 它活下來是因為寫入端擋了範圍（`tender_radar.py` 的 422），
+    **也就是那道防禦從來沒有真的防過任何東西，而它看起來一直在那裡。**
+    ⇒ 而那正是這類 bug 唯一能長期存活的地方：**只有異常時才走到的路徑**。
+
+    ⚠️ 部分不合法時**整份退回**，不是「跳過壞的那幾個」——
+    跳過會讓 `"9,25,15"` 變成「抓 9 與 15」，而使用者以為他設了三個時段。
+    **降級之後它還是會動，而沒有人會發現。**
     """
-    raw = _get_setting(SCAN_HOUR_SETTING)
-    try:
-        h = int(raw)
-    except (TypeError, ValueError):
-        return SCAN_HOUR
-    return h if 0 <= h <= 23 else DEFAULT_SCAN_HOUR
+    if raw is None:
+        return tuple(fallback)
+    text = str(raw).strip()
+    if not text:
+        return ()
+    hours = []
+    for part in text.replace("，", ",").split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            h = int(part)
+        except (TypeError, ValueError):
+            logger.warning("%s 設定值 %r 不是整數，整份退回預設 %r", what, raw, fallback)
+            return tuple(fallback)
+        if not 0 <= h <= 23:
+            logger.warning("%s 設定值 %r 含超出 0-23 的小時，整份退回預設 %r",
+                           what, raw, fallback)
+            return tuple(fallback)
+        hours.append(h)
+    return tuple(sorted(set(hours)))
+
+
+def parse_hours_strict(raw):
+    """寫入端用：解析時段字串，**不合法就丟 `ValueError`，不退回預設**。
+
+    🔴 與 `_parse_hours`（讀取端）是**兩條路，刻意不共用**：
+    - **讀取端**遇到壞掉的設定要**退回預設**——那時使用者不在現場，
+      而「排程整個不跑」比「用預設時段跑」糟。
+    - **寫入端**遇到壞掉的輸入要**當場拒絕**——使用者正在看著畫面，
+      **這是唯一能把錯誤講給他聽的時刻**。
+    ⚠️ 共用一支的話，只會剩下其中一種行為：
+    要嘛使用者打錯字而系統靜默改成預設（他以為存好了），
+    要嘛排程因為一筆舊的壞資料而完全不跑。
+    """
+    text = "" if raw is None else str(raw).strip()
+    if not text:
+        return ()
+    hours = []
+    for part in text.replace("，", ",").split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            h = int(part)
+        except (TypeError, ValueError):
+            raise ValueError(f"「{part}」不是整數")
+        if not 0 <= h <= 23:
+            raise ValueError(f"「{part}」不在 0-23 的範圍內")
+        hours.append(h)
+    # ⚠️ 去重：`"9,9,9"` 是 1 個時段不是 3 個。不去重的話節流仍然正確
+    # （同一個時段只抓一次），但**門檻判定會被灌水**，而那會讓確認視窗
+    # 在使用者只設了一個時段時跳出來。
+    return tuple(sorted(set(hours)))
+
+
+def _hours_setting(key, legacy_key, fallback, what):
+    """讀時段設定，必要時從舊的單數鍵遷移。
+
+    🔴 **判準是「鍵存在嗎」，不是「值是不是真的」。**
+    寫成 `new or old` 的話：使用者把寄信時段**設成空**（合法值＝不寄）
+    ⇒ 空字串是 falsy ⇒ **退回舊值 ⇒ 它又開始寄了**，而畫面上看起來完全正常。
+    📌 同一天在 `quotations.py:1379` 找到同型的一個（`body.status or ...`，
+    而左邊有 truthy 預設 ⇒ 右邊整段是死碼）。
+
+    ⚠️ 舊的單數鍵**留著不刪**：刪掉就沒有回頭路，而留著的成本是這幾行。
+    """
+    raw = _get_setting(key)
+    if raw is not None:
+        return _parse_hours(raw, fallback, what)
+    if legacy_key:
+        old = _get_setting(legacy_key)
+        if old is not None:
+            # 舊值是單一小時（0-23）⇒ 語意等於「一天一個時段」。
+            return _parse_hours(str(old), fallback, what)
+    return tuple(fallback)
+
+
+def scan_hours():
+    """每天哪幾個時段抓。空 tuple ＝ 完全不抓（合法設定）。"""
+    return _hours_setting(SCAN_HOURS_SETTING, SCAN_HOUR_SETTING,
+                          SCAN_HOURS, "抓取時段")
+
+
+def notify_hours():
+    """每天哪幾個時段寄彙總信。空 tuple ＝ 不寄（合法設定）。"""
+    return _hours_setting(NOTIFY_HOURS_SETTING, None,
+                          NOTIFY_HOURS, "寄信時段")
+
+
+def current_slot():
+    """現在屬於哪一個**抓取**時段；不在設定裡就回 `None`。
+
+    ⚠️ **這個函式只回答抓取那一側。** 寄信要問 `now_dt().hour`，不可以問這裡——
+    它內部讀的是 `scan_hours()`，所以「抓 9／寄 18」那種設定下，
+    **18 點時它回 `None`，而那時候正是要寄信的時候**。
+    🔑 **兩個設定是獨立的，所以判斷時段的入口也必須是獨立的。**
+    📌 而這個錯不會在預設設定下出現（預設兩者重疊），
+    要等到有人設「抓 9,15／寄 9,12,15,18」那天才爆。
+    """
+    hour = now_dt().hour
+    return hour if hour in scan_hours() else None
 
 
 def _seconds_until_next_run():
-    """下一次掃描時間。比照 `daily_tasks`／`dev_crm` 既有兩支的作法。"""
-    from datetime import datetime
-    now = datetime.now()
-    nxt = now.replace(hour=scan_hour(), minute=0, second=0, microsecond=0)
-    if nxt <= now:
-        nxt += timedelta(days=1)
-    return max((nxt - now).total_seconds(), 1.0)
+    """到下一個**時段**（抓取或寄信，取較近的那個）還有幾秒。
+
+    ⚠️ 走 `now_dt()`，**不可以直接 `datetime.now()`**——原本那一版就是直接叫的，
+    所以測試 patch 不到它，而那是那四個時段邊界上偶爾紅的來源之一。
+
+    📌 **抓取與寄信的時段都要排**：設定成「抓 9／寄 18」時，
+    只排抓取時段的話 **18 點沒有人會醒來，信就永遠不會寄**。
+    🔑 **排程的醒來時機，是所有時段的聯集。**
+    """
+    now = now_dt()
+    hours = sorted(set(scan_hours()) | set(notify_hours()))
+    if not hours:
+        # 兩份設定都是空的 ⇒ 沒有任何事要做。
+        # ⚠️ 仍然要醒來：設定隨時可能被改回來，而**睡死的排程叫不醒**。
+        return 3600.0
+    candidates = []
+    for h in hours:
+        nxt = now.replace(hour=h, minute=0, second=0, microsecond=0)
+        if nxt <= now:
+            nxt += timedelta(days=1)
+        candidates.append((nxt - now).total_seconds())
+    return max(min(candidates), 1.0)
 
 
 def schedule_tender_scan():

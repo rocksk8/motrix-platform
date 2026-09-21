@@ -311,36 +311,81 @@ def radar_status(authorization: str = Header(None)):
 
 @router.get("/api/tender-radar/schedule")
 def get_schedule(authorization: str = Header(None)):
-    """每天幾點掃。**只有「幾點」可設定，「幾次」不行。**"""
+    """抓取與寄信的時段設定。**兩份獨立的設定。**
+
+    ⚠️ 這裡**不再回「每日一次為硬上限，不可調整」**。
+    那句話是 2026-09-21 稍早寫的，而使用者在畫面上讀到它之後裁示「我要可調整」。
+    🔑 **寫在畫面上的字串沒有「待辦」狀態——它一上線就在對使用者說話**，
+    在它被改掉之前都還在說。
+    """
     _require_radar(authorization)
     return {
-        "scanHour": tender_source.scan_hour(),
-        "defaultScanHour": tender_source.SCAN_HOUR,
-        "dailyLimitNote": "每日一次為硬上限，不可調整",
+        "scanHours": ",".join(str(h) for h in tender_source.scan_hours()),
+        "notifyHours": ",".join(str(h) for h in tender_source.notify_hours()),
+        "defaultScanHours": ",".join(str(h) for h in tender_source.SCAN_HOURS),
+        "defaultNotifyHours": ",".join(str(h) for h in tender_source.NOTIFY_HOURS),
+        # 門檻只有這一份，前端從這裡取。兩邊各寫一份 ⇒ 前端不跳、後端擋，
+        # 而使用者存不了又看不出為什麼。
+        "highFrequencyThreshold": tender_source.HIGH_FREQUENCY_SLOT_THRESHOLD,
     }
+
+
+def _hours_field(body, key, setting_key, label, confirmed, changes):
+    """解析一份時段設定。不合法 → 422；超過門檻而未確認 → 409。
+
+    🔑 **422 與 409 是兩件不同的事**：
+    422 ＝「這個值不合法」（擋下來，使用者要改）
+    409 ＝「這個值合法但頻繁」（**要確認，不是要拒絕**）——
+    使用者明確裁示**不設硬上限**，所以按了確認就一定要存得進去。
+    """
+    if key not in body:
+        return
+    try:
+        hours = tender_source.parse_hours_strict(body[key])
+    except ValueError as exc:
+        raise HTTPException(422, f"{label}：{exc}")
+    threshold = tender_source.HIGH_FREQUENCY_SLOT_THRESHOLD
+    if len(hours) > threshold and not confirmed:
+        current = len(tender_source.scan_hours())
+        # ⚠️ 警告要講出**代價**，不是只講數字。
+        # 「你設了 18 個時段，確定嗎？」使用者只會學會一路按確定；
+        # 要講「對誰、多少次、跟現在比」。
+        raise HTTPException(409, (
+            f"{label}設了 {len(hours)} 個時段，這會在每個工作日對政府採購網"
+            f"發出 {len(hours)} 次請求（目前 {current} 次）。"
+            f"超過 {threshold} 個時段需要確認。"))
+    changes.append((setting_key, ",".join(str(h) for h in hours), label, hours))
 
 
 @router.put("/api/tender-radar/schedule")
 def set_schedule(body: dict = Body(...), authorization: str = Header(None)):
-    """設定每天幾點掃。
+    """設定抓取與寄信的時段。**兩份可以分別設，也可以設成空。**
 
-    ⚠️ **只收「幾點」，刻意不提供「一天幾次」。**
-    每日一次是對政府網站的節制（SPEC §T.5 #4），**不是我們自己的偏好**，
-    所以它不該出現在設定畫面上——**能調的東西遲早會被調**。
-    📌 改了之後下一次 Timer 才會用新時間（排程是自我重排的）。
+    🔴 **空字串是合法值**：抓取設空＝不抓，寄信設空＝不寄。
+    「可調整」包含「調成不要」，而那是最容易被實作漏掉的值——**它看起來像「還沒設」**。
+
+    ⚠️ **驗證與寫入分兩段**：兩份設定都通過之後才開始寫。
+    一邊驗一邊寫的話，第二份不合法時**第一份已經生效了**，
+    而使用者看到的是一個錯誤訊息 ⇒ 他會以為什麼都沒變。
     """
     _require_radar(authorization)
-    raw = body.get("scanHour")
-    try:
-        hour = int(raw)
-    except (TypeError, ValueError):
-        raise HTTPException(422, "掃描時間必須是 0-23 的整數")
-    if not 0 <= hour <= 23:
-        raise HTTPException(422, "掃描時間必須是 0-23 的整數")
-    _set_setting(tender_source.SCAN_HOUR_SETTING, hour)
+    confirmed = bool(body.get("confirmHighFrequency"))
+    changes = []
+    _hours_field(body, "scanHours", tender_source.SCAN_HOURS_SETTING,
+                 "抓取時段", confirmed, changes)
+    _hours_field(body, "notifyHours", tender_source.NOTIFY_HOURS_SETTING,
+                 "寄信時段", confirmed, changes)
+    if not changes:
+        raise HTTPException(422, "沒有要變更的設定（scanHours／notifyHours）")
+    for setting_key, text, _label, _hours in changes:
+        _set_setting(setting_key, text)
     _audit(_tok(authorization), "tender_radar.schedule", "tender_radar", "",
-           f"每日掃描時間改為 {hour}:00")
-    return {"scanHour": hour}
+           "；".join(f"{label}改為 {text or '（不執行）'}"
+                     for _k, text, label, _h in changes))
+    return {
+        "scanHours": ",".join(str(h) for h in tender_source.scan_hours()),
+        "notifyHours": ",".join(str(h) for h in tender_source.notify_hours()),
+    }
 
 
 @router.get("/api/tender-radar/map")
