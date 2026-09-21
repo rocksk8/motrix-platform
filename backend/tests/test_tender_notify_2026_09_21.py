@@ -260,39 +260,92 @@ def test_s5_main_actually_starts_the_tender_scheduler():
 
 
 # ══════════════════════════════════════════════════════════════════════
-# N1～N13 · 通知
+# N1～N14 · 通知
 # ══════════════════════════════════════════════════════════════════════
+#
+# 🔴 觀測點有三層。我停在第一層、A 指出第二層、我查出第三層：
+#
+#   ① `notify_tender_found` 被呼叫          ← 我原本驗這個。**假綠燈**
+#   ② `email_notify._async_send` 被呼叫     ← A 的裁決。**仍然不夠**
+#   ③ `_async_send` 被呼叫**而且收件人非空** ← 真正「有人收得到」
+#
+# ⚠️ 為什麼 ② 不夠（`email_notify.py:185`，我讀過那幾行）：
+#       def _async_send(to_addrs, subject, html):
+#           threading.Thread(target=_send, args=(to_addrs, subject, html)).start()
+#   **它不檢查 `to_addrs` 是不是空的。** 空清單的檢查在 `_send` 裡：
+#       if not to_addrs:
+#           logger.warning("email skipped — recipient list empty; ...")
+#           return
+#   ⇒ 收件人是空的時候 `_async_send` 照樣被呼叫、執行緒照樣開，
+#     那條執行緒寫一行 log 就結束。**觀測點停在 ② 仍然會綠。**
+#
+# 🔑 **每一次把觀測點往下游移一步，都要再問一次
+#    「這一步之後還有沒有東西會讓它安靜地不發生」。**
 
-def _fetch_log(conn, *, recognised, dropped, error, fetched_at):
-    conn.execute(
-        "INSERT INTO tender_fetch_log (fetched_at, recognised, dropped, error) "
-        "VALUES (?,?,?,?)", (fetched_at, recognised, dropped, error))
+
+@pytest.fixture()
+def admin_with_email(client):
+    """種一個**有 email 的 admin** —— 否則「有沒有寄信」根本不可觀測。
+
+    ⚠️ `conftest.make_user` 的 INSERT 沒有 email 那一欄（`conftest.py:323`），
+    而 `_admin_emails()` 的條件是
+    `role IN ('admin','superadmin') AND email IS NOT NULL AND email != ''`
+    ⇒ **預設情況下收件人清單永遠是空的**，一封信都寄不出去，
+    而我原本的 N1 仍然是綠的。
+    """
+    import db
+    conn = db.get_db()
+    try:
+        conn.execute(
+            "INSERT INTO users (username, password_hash, display_name, role, email, "
+            "modules, active, created_at, must_change_password, notification_muted) "
+            "VALUES (?,?,?,?,?,?,1,?,0,?)",
+            ("tender_boss", "x", "標案收件人", "superadmin",
+             "boss@example.invalid", "[]", "2026-01-01T00:00:00", "[]"),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return "boss@example.invalid"
+
+
+def _sent(monkeypatch):
+    """把 `email_notify._async_send` 換成記錄器。"""
+    _need(en, "_async_send")
+    calls = []
+    monkeypatch.setattr(
+        en, "_async_send",
+        lambda to_addrs, subject, html: calls.append((to_addrs, subject, html)))
+    return calls
+
+
+def _assert_mails(calls, n):
+    """斷言「真的寄了 n 封」—— 次數**而且**每一封收件人非空。"""
+    assert len(calls) == n, f"應該寄 {n} 封，實際 {len(calls)} 封"
+    for k, (to_addrs, subject, _html) in enumerate(calls):
+        assert to_addrs, (
+            f"第 {k + 1} 封的收件人是空的 —— `_async_send` 被呼叫了，但 `_send` "
+            f"只會寫一行 log 就 return，沒有人收得到。subject={subject!r}"
+        )
 
 
 def _seed_log(rows):
-    """把 `tender_fetch_log` 塞到已知狀態。
+    """把 `tender_fetch_log` 塞到已知狀態（§3 明文，C 審單第五項）。
 
-    ⚠️ §3 明文要求（C 審單第五項）：**N4／N5 不可以靠環境預設** ——
-    `tender_fetch_log` 在我上一輪的裁決裡是**不進 JSON 備份**的，
-    所以它在還原後／CI 空庫上是空的。靠「它剛好是空的」驗到的是別的東西。
+    ⚠️ 那張表**不進 JSON 備份**（我第 4 輪的裁決），還原後／CI 空庫上是空的。
+    靠「它剛好是空的」驗到的是別的東西。
     """
     import db
     conn = db.get_db()
     try:
         for r in rows:
-            _fetch_log(conn, **r)
+            conn.execute(
+                "INSERT INTO tender_fetch_log (fetched_at, recognised, dropped, error) "
+                "VALUES (?,?,?,?)",
+                (r["fetched_at"], r["recognised"], r["dropped"], r["error"]))
         conn.commit()
     finally:
         conn.close()
-
-
-def test_n1_one_email_per_day_not_per_tender(client, monkeypatch):
-    """§3 N1：命中 5 筆 → 寄信函式**被呼叫 1 次**（不是 5 次）。"""
-    sent = _spy(monkeypatch, en, NOTIFY_FOUND)
-    monkeypatch.setattr(ts, "TENDER_RADAR_ENABLED", True)
-    _spy(monkeypatch, ts, "fetch_raw", result=(_five_hit_page(), None))
-    _need(ts, "run_scheduled_scan")()
-    assert len(sent) == 1, f"五筆命中應該只寄一封彙總，實際 {len(sent)} 封"
 
 
 def _five_hit_page():
@@ -301,157 +354,147 @@ def _five_hit_page():
     return REAL
 
 
-def test_n2_no_hits_means_no_email(client, monkeypatch):
-    """§3 N2：命中 0 筆 → 寄信函式 **0 次**。
+def _set_first_scan_at(value):
+    """寫入 `tender_radar_first_scan_at`。
 
-    ⚠️ 「今天沒標案」不是異常，不該打擾任何人。
+    ⚠️ **用 `helpers/settings.py::_set_setting`，不要自己寫 SQL**（B 抓到、A 複驗、
+    我自己也查過 `db.py:323`）：`system_settings` 的欄位是
+    `(key, value_json, updated_at)` 不是 `value`；而且 `_get_setting` 會
+    `json.loads(row["value_json"])`，**裸字串會丟例外並靜默回 default**。
+    ⇒ **改對欄位名還不夠**，那支函式就是為這件事存在的接縫。
     """
+    from helpers.settings import _set_setting
+    _set_setting("tender_radar_first_scan_at", value)
+
+
+def _run(monkeypatch, page=None, error=None, enabled=True):
+    """跑一次排程掃描，`fetch_raw` 換成固定回應。"""
+    monkeypatch.setattr(ts, "TENDER_RADAR_ENABLED", enabled)
+    _spy(monkeypatch, ts, "fetch_raw", result=(page, error))
+    _need(ts, "run_scheduled_scan")()
+
+
+def test_n1_one_email_per_day_not_per_tender(client, admin_with_email, monkeypatch):
+    """§3 N1：命中 5 筆 → **真的寄出 1 封**（不是 5 封）。"""
+    mails = _sent(monkeypatch)
+    _run(monkeypatch, page=_five_hit_page())
+    _assert_mails(mails, 1)
+
+
+def test_n2_no_hits_means_no_email(client, admin_with_email, monkeypatch):
+    """§3 N2：命中 0 筆 → 0 封。「今天沒標案」不是異常，不該打擾任何人。"""
     from tests.test_tender_match_2026_09_21 import HTML_EMPTY_RESULTS
-    sent = _spy(monkeypatch, en, NOTIFY_FOUND)
-    monkeypatch.setattr(ts, "TENDER_RADAR_ENABLED", True)
-    _spy(monkeypatch, ts, "fetch_raw", result=(HTML_EMPTY_RESULTS, None))
-    _need(ts, "run_scheduled_scan")()
-    assert len(sent) == 0, f"零命中不該寄信，實際 {len(sent)} 封"
+    mails = _sent(monkeypatch)
+    _run(monkeypatch, page=HTML_EMPTY_RESULTS)
+    assert len(mails) == 0, f"零命中不該寄信，實際 {len(mails)} 封"
 
 
-def test_n3_fetch_failure_sends_one_email(client, monkeypatch):
-    """§3 N3：抓取失敗 → 寄信函式 1 次（§T.6：**雷達瞎了要有人知道**）。"""
+def test_n3_fetch_failure_sends_one_email(client, admin_with_email, monkeypatch):
+    """§3 N3：抓取失敗 → 1 封（§T.6：**雷達瞎了要有人知道**）。"""
     _seed_log([])
-    sent = _spy(monkeypatch, en, NOTIFY_FAILED)
-    monkeypatch.setattr(ts, "TENDER_RADAR_ENABLED", True)
-    _spy(monkeypatch, ts, "fetch_raw", result=(None, "timeout after 15s"))
-    _need(ts, "run_scheduled_scan")()
-    assert len(sent) == 1, f"抓不到要通知一次，實際 {len(sent)} 次"
+    mails = _sent(monkeypatch)
+    _run(monkeypatch, page=None, error="timeout after 15s")
+    _assert_mails(mails, 1)
 
 
-def test_n4_seven_days_of_failure_sends_only_one_email(client, monkeypatch):
-    """§3 N4：連續 7 天抓取失敗 → 寄信函式**總共 1 次**（邊緣觸發）。
+def test_n4_seven_days_of_failure_sends_only_one(client, admin_with_email, monkeypatch):
+    """§3 N4：連續 7 天失敗 → **總共 1 封**（邊緣觸發）。
 
     ⚠️ **站台掛一週不可以變成七封信** —— 狼來了的告警等於沒有告警。
-    ⚠️ 這題**自己 seed `tender_fetch_log`**，不靠環境預設（§3 明文）。
     """
-    _seed_log([{"fetched_at": f"2026-09-{d:02d}T09:00:00", "recognised": None,
+    _seed_log([{"fetched_at": "2026-09-%02dT09:00:00" % d, "recognised": None,
                 "dropped": 0, "error": "timeout"} for d in range(14, 21)])
-    sent = _spy(monkeypatch, en, NOTIFY_FAILED)
-    monkeypatch.setattr(ts, "TENDER_RADAR_ENABLED", True)
-    _spy(monkeypatch, ts, "fetch_raw", result=(None, "timeout after 15s"))
-    _need(ts, "run_scheduled_scan")()
-    assert len(sent) == 0, (
-        f"已經連續失敗好幾天了，今天這次不該再寄，實際 {len(sent)} 次 —— "
-        "那是準位觸發不是邊緣觸發"
+    mails = _sent(monkeypatch)
+    _run(monkeypatch, page=None, error="timeout after 15s")
+    assert len(mails) == 0, (
+        f"已經連續失敗好幾天，今天不該再寄，實際 {len(mails)} 封 —— 那是準位觸發"
     )
 
 
-def test_n5_fail_recover_fail_sends_two_emails(client, monkeypatch):
-    """§3 N5：失敗 → 恢復 → 又失敗 → 寄信函式**總共 2 次**。
+def test_n5_fail_recover_fail_sends_again(client, admin_with_email, monkeypatch):
+    """§3 N5：失敗 → 恢復 → 又失敗 → **要再寄一次**。
 
-    ⚠️⚠️ **沒有這題，「這輩子只發一次」的實作會完整通過** ——
-    而那個實作在第二次真的壞掉時是**啞的**。
-
+    ⚠️⚠️ **沒有這題，「這輩子只發一次」的實作會完整通過** —— 而它在第二次
+    真的壞掉時是**啞的**。
     🔑 跟去重要驗兩個方向是同一件事：**該發的有發、該停的有停。**
-    （第 4 輪 `test_05c`「同案號不同機關要留兩筆」是同一個手法。）
     """
-    # 前一次是「恢復了」——所以今天這次失敗是**重新進入異常**，要寄
     _seed_log([
         {"fetched_at": "2026-09-18T09:00:00", "recognised": None, "dropped": 0,
-         "error": "timeout"},                      # 第一次失敗（當時已寄過）
+         "error": "timeout"},
         {"fetched_at": "2026-09-19T09:00:00", "recognised": 1, "dropped": 0,
-         "error": ""},                             # 恢復
+         "error": ""},
     ])
-    sent = _spy(monkeypatch, en, NOTIFY_FAILED)
-    monkeypatch.setattr(ts, "TENDER_RADAR_ENABLED", True)
-    _spy(monkeypatch, ts, "fetch_raw", result=(None, "timeout again"))
-    _need(ts, "run_scheduled_scan")()
-    assert len(sent) == 1, (
-        f"恢復之後又失敗 ＝ 重新進入異常，要再寄一次，實際 {len(sent)} 次。"
-        "⚠️ 0 次代表實作是「這輩子只發一次」—— 第二次真的壞掉時它是啞的。"
-    )
+    mails = _sent(monkeypatch)
+    _run(monkeypatch, page=None, error="timeout again")
+    _assert_mails(mails, 1)
 
 
-def test_n6_suspected_redesign_uses_a_different_event_key(client, monkeypatch):
-    """§3 N6：`suspect_redesign` 為真 → 寄信 1 次，且**與 N3 是不同的事件 key**。
+def test_n6_suspected_redesign_is_a_different_event(
+    client, admin_with_email, monkeypatch
+):
+    """§3 N6：`suspect_redesign` 為真 → 1 封，且**與 N3 不同的事件 key**。
 
-    ⚠️ 兩者的處置相反：**改版要改解析器、掛掉只要等它好**。
+    ⚠️ 兩者處置相反：**改版要改解析器、掛掉只要等它好**。
     共用一個 key 的話，使用者關掉其中一個就同時關掉另一個。
     """
     from tests.test_tender_match_2026_09_21 import HTML_MOSTLY_DROPPED
     _seed_log([])
     changed = _spy(monkeypatch, en, NOTIFY_CHANGED)
     failed = _spy(monkeypatch, en, NOTIFY_FAILED)
-    monkeypatch.setattr(ts, "TENDER_RADAR_ENABLED", True)
-    _spy(monkeypatch, ts, "fetch_raw", result=(HTML_MOSTLY_DROPPED, None))
-    _need(ts, "run_scheduled_scan")()
+    _run(monkeypatch, page=HTML_MOSTLY_DROPPED)
     assert len(changed) == 1, f"疑似改版要通知一次，實際 {len(changed)} 次"
     assert len(failed) == 0, "疑似改版不可以走「抓不到」那個事件 key —— 處置不同"
 
 
 @pytest.mark.parametrize("key", [EVENT_FOUND, EVENT_FAILED, EVENT_CHANGED])
 def test_n6b_event_keys_are_registered(client, key):
-    """三個事件 key 都要登記進 `EVENT_KEYS`，否則使用者關不掉也開不了。"""
+    """三個事件 key 都要登記進 `EVENT_KEYS`。
+
+    📌 既有守門 `test_notification_prefs_coverage.py` 掃的是 `email_notify.py` 的
+    **呼叫端**，所以三支獨立函式漏登記會紅；**一支函式帶 key 參數則掃不出來**。
+    """
     assert key in np.EVENT_KEYS, (
-        f"事件 key `{key}` 沒有登記進 notification_prefs.EVENT_KEYS；"
-        f"實際有 {len(np.EVENT_KEYS)} 個"
+        "事件 key `%s` 沒有登記進 notification_prefs.EVENT_KEYS" % key
     )
 
 
-def test_n7_quiet_period_sends_nothing(client, monkeypatch):
-    """§3 N7：首次成功掃描起 **7 天內**，即使有命中 → 寄信函式 0 次。
+def test_n7_quiet_period_sends_nothing(client, admin_with_email, monkeypatch):
+    """§3 N7：首次成功掃描起 **7 天內**，即使有命中 → 0 封。
 
-    §T.5 #3 的「純記錄模式」。⚠️ 起算點是**第一次成功掃描**不是「開關被打開」——
-    常數翻開的時間無法查證，而**無法查證的起算點在正式機上完全不存在**。
-
-    📌 monkeypatch 的是 `helpers.tender_source.today`（接縫已存在，`:93`）。
+    ⚠️ 起算點是**第一次成功掃描**不是「開關被打開」—— 常數翻開的時間無法查證，
+    而**無法查證的起算點在正式機上完全不存在**。
     """
     import datetime as dt
-    sent = _spy(monkeypatch, en, NOTIFY_FOUND)
-    monkeypatch.setattr(ts, "TENDER_RADAR_ENABLED", True)
-    _spy(monkeypatch, ts, "fetch_raw", result=(_five_hit_page(), None))
-    _need(ts, "today")
-    monkeypatch.setattr(ts, "today", lambda: dt.date(2026, 9, 24))  # 首掃後第 3 天
     _set_first_scan_at("2026-09-21T09:00:00")
-    _need(ts, "run_scheduled_scan")()
-    assert len(sent) == 0, f"純記錄模式 7 天內不該寄信，實際 {len(sent)} 封"
+    _need(ts, "today")
+    monkeypatch.setattr(ts, "today", lambda: dt.date(2026, 9, 24))
+    mails = _sent(monkeypatch)
+    _run(monkeypatch, page=_five_hit_page())
+    assert len(mails) == 0, f"純記錄模式 7 天內不該寄，實際 {len(mails)} 封"
 
 
-def test_n8_day_eight_sends(client, monkeypatch):
-    """§3 N8：第 8 天有命中 → 寄信函式 1 次。
+def test_n8_day_eight_sends(client, admin_with_email, monkeypatch):
+    """§3 N8：第 8 天有命中 → 1 封。
 
     ⚠️ N7 的對照組：沒有這題，一個「永遠不寄」的實作會讓 N7 全綠。
     """
     import datetime as dt
-    sent = _spy(monkeypatch, en, NOTIFY_FOUND)
-    monkeypatch.setattr(ts, "TENDER_RADAR_ENABLED", True)
-    _spy(monkeypatch, ts, "fetch_raw", result=(_five_hit_page(), None))
-    monkeypatch.setattr(ts, "today", lambda: dt.date(2026, 9, 29))  # 首掃後第 8 天
     _set_first_scan_at("2026-09-21T09:00:00")
-    _need(ts, "run_scheduled_scan")()
-    assert len(sent) == 1, f"純記錄模式過了就該寄，實際 {len(sent)} 封"
+    monkeypatch.setattr(ts, "today", lambda: dt.date(2026, 9, 29))
+    mails = _sent(monkeypatch)
+    _run(monkeypatch, page=_five_hit_page())
+    _assert_mails(mails, 1)
 
 
-def _set_first_scan_at(value):
-    """寫入 `tender_radar_first_scan_at`（§3 的新欄位）。"""
+def test_n9_already_notified_tender_not_in_later_emails(
+    client, admin_with_email, monkeypatch
+):
+    """§3 N9：同一標案已通知過 → **不出現在後續的信裡**。"""
     import db
-    conn = db.get_db()
-    try:
-        conn.execute(
-            "INSERT OR REPLACE INTO system_settings (key, value) VALUES (?,?)",
-            ("tender_radar_first_scan_at", value))
-        conn.commit()
-    finally:
-        conn.close()
-
-
-def test_n9_already_notified_tender_not_in_later_emails(client, monkeypatch):
-    """§3 N9：同一標案已通知過 → **不出現在後續的信裡**（`tender_hits` 的已通知標記）。"""
-    import db
-    monkeypatch.setattr(ts, "TENDER_RADAR_ENABLED", True)
-    _spy(monkeypatch, ts, "fetch_raw", result=(_five_hit_page(), None))
-    sent = _spy(monkeypatch, en, NOTIFY_FOUND)
-    run = _need(ts, "run_scheduled_scan")
-
-    run()
-    assert len(sent) == 1, "第一次應該寄一封（觀測點壞了的話後面都沒意義）"
-    first_payload = repr(sent[0])
+    mails = _sent(monkeypatch)
+    _run(monkeypatch, page=_five_hit_page())
+    _assert_mails(mails, 1)
+    first_html = mails[0][2]
 
     conn = db.get_db()
     try:
@@ -461,65 +504,63 @@ def test_n9_already_notified_tender_not_in_later_emails(client, monkeypatch):
         conn.close()
     monkeypatch.setattr(ts, "_already_fetched_today", lambda conn: False)
 
-    run()
-    if len(sent) > 1:
-        assert repr(sent[1]) != first_payload, (
-            "第二封信跟第一封一模一樣 —— 已通知的標案又被寄了一次"
+    _run(monkeypatch, page=_five_hit_page())
+    if len(mails) > 1:
+        assert mails[1][2] != first_html, (
+            "第二封信的內容跟第一封一模一樣 —— 已通知過的標案又被寄了一次"
         )
 
 
-def test_n10_no_enabled_recipient_means_no_send(client, monkeypatch):
-    """§3 N10：monkeypatch `is_enabled()` 讓**一個收件人都不啟用** → 寄信 0 次。
+def test_n10_no_enabled_recipient_means_no_send(client, admin_with_email, monkeypatch):
+    """§3 N10：一個收件人都沒啟用 → `_async_send` 0 次。
+
+    ⚠️ **要 patch 的是 `email_notify._pref_enabled`，不是
+    `notification_prefs.is_enabled`**（A 裁決，我複驗過）：`email_notify.py:14` 是
+    `from .notification_prefs import is_enabled as _pref_enabled` —— **一份副本**。
+    **這是「patch 目標要走模組」的第六個實例，而且這次在既有碼裡。**
 
     ⚠️ 原本 §3 寫「驗沒有寫死的信箱字串」是**結構測試**（A 自己在 8b 禁止的），
-    而且擋不住 `"admin" + "@" + "x.com"` 這種拼接。**這一題驗行為**：
-    收件人真的走設定的話，全部關掉就應該一封都不寄；
-    **有寫死信箱的話，它還是會寄 → 紅。**
+    而且擋不住 `"admin" + "@" + "x.com"`。這一題驗行為。
     """
-    sent = _spy(monkeypatch, en, NOTIFY_FOUND)
-    monkeypatch.setattr(np, "is_enabled", lambda muted_json, event_key: False)
-    monkeypatch.setattr(ts, "TENDER_RADAR_ENABLED", True)
-    _spy(monkeypatch, ts, "fetch_raw", result=(_five_hit_page(), None))
-    _need(ts, "run_scheduled_scan")()
-    assert len(sent) == 0, (
-        f"一個收件人都沒啟用，卻寄了 {len(sent)} 封 —— 收件人沒有走 is_enabled()"
+    _need(en, "_pref_enabled")
+    mails = _sent(monkeypatch)
+    monkeypatch.setattr(en, "_pref_enabled", lambda muted_json, event_key: False)
+    _run(monkeypatch, page=_five_hit_page())
+    assert len(mails) == 0, (
+        f"一個收件人都沒啟用，卻呼叫了 {len(mails)} 次 _async_send"
     )
 
 
-def test_n11_email_payload_carries_attribution(client, monkeypatch):
+def test_n11_email_payload_carries_attribution(client, admin_with_email, monkeypatch):
     """§3 N11：信件內容含**資料出處標示**（§T.5 #6，授權條款要求）。
 
-    ⚠️ 觀測點是**傳給寄信函式的參數**，不是投遞結果 —— §3「開工前先讀 #1」
-    禁止的是後者（信箱裡有幾封），前者在呼叫邊界上看得到，是合法觀測點。
+    ⚠️ 觀測點是**傳給 `_async_send` 的參數**，不是投遞結果。
     """
-    sent = _spy(monkeypatch, en, NOTIFY_FOUND)
-    monkeypatch.setattr(ts, "TENDER_RADAR_ENABLED", True)
-    _spy(monkeypatch, ts, "fetch_raw", result=(_five_hit_page(), None))
-    _need(ts, "run_scheduled_scan")()
-    assert len(sent) == 1
-    payload = repr(sent[0])
-    assert "政府電子採購網" in payload or "web.pcc.gov.tw" in payload, (
-        "信件內容沒有資料出處標示（授權條款要求）。"
-        f"實際傳入的參數：{payload[:300]}"
+    mails = _sent(monkeypatch)
+    _run(monkeypatch, page=_five_hit_page())
+    _assert_mails(mails, 1)
+    body = mails[0][1] + mails[0][2]
+    assert "政府電子採購網" in body or "web.pcc.gov.tw" in body, (
+        "信件沒有資料出處標示（授權條款要求）。實際主旨=%r" % (mails[0][1],)
     )
 
 
-def test_n12_send_failure_must_not_mark_as_notified(client, monkeypatch):
+def test_n12_send_failure_must_not_mark_as_notified(
+    client, admin_with_email, monkeypatch
+):
     """§3 N12：**寄信丟例外時，已通知標記不可以被設定**。
 
-    ⚠️ 在寄信**之前**設定的話，那批標案**永遠不會再出現在任何一封信裡** ——
-    而且不會有任何錯誤訊息。**這是「安靜地少做一件事」的又一個實例。**
+    ⚠️ 在寄信**之前**設定的話，那批標案**永遠不會再出現在任何一封信裡**，
+    而且不會有任何錯誤訊息。**又一個「安靜地少做一件事」。**
     """
     import db
-    monkeypatch.setattr(ts, "TENDER_RADAR_ENABLED", True)
-    _spy(monkeypatch, ts, "fetch_raw", result=(_five_hit_page(), None))
+    _need(en, "_async_send")
 
     def _boom(*a, **kw):
         raise RuntimeError("SMTP 掛了")
 
-    _need(en, NOTIFY_FOUND)
-    monkeypatch.setattr(en, NOTIFY_FOUND, _boom)
-    _need(ts, "run_scheduled_scan")()      # 不可以把例外往外丟
+    monkeypatch.setattr(en, "_async_send", _boom)
+    _run(monkeypatch, page=_five_hit_page())      # 不可以把例外往外丟
 
     conn = db.get_db()
     try:
@@ -529,30 +570,48 @@ def test_n12_send_failure_must_not_mark_as_notified(client, monkeypatch):
     finally:
         conn.close()
     assert row["c"] == 0, (
-        f"寄信失敗了，卻有 {row['c']} 筆被標記成已通知 —— "
-        "那批標案永遠不會再出現在任何一封信裡，而且不會有錯誤訊息"
+        "寄信失敗了，卻有 %d 筆被標記成已通知 —— 那批標案永遠不會再出現在"
+        "任何一封信裡，而且不會有錯誤訊息" % row["c"]
     )
 
 
-def test_n13_restart_during_outage_does_not_resend(client, monkeypatch):
+def test_n13_restart_during_outage_does_not_resend(
+    client, admin_with_email, monkeypatch
+):
     """§3 N13：**異常期間重啟服務，不可以重發**。
 
     🔑 **與 N5 是一對**：該發的有發（N5）、**不該重發的沒重發**（N13）。
-
-    ⚠️ 「重啟」在測試裡的意義是「行程內狀態沒了」，所以這題把可能的記憶體狀態
-    清掉，只留資料庫裡的事實 —— **邊緣觸發的狀態必須是持久的**，
-    存在行程記憶體裡的話，每次重啟都會重新寄一次。
+    ⚠️ 「重啟」在測試裡的意義是「行程內狀態沒了」，所以這題只留資料庫裡的事實。
+    **邊緣觸發的狀態必須是持久的**，存在行程記憶體裡的話每次重啟都會重寄。
     """
     _seed_log([{"fetched_at": "2026-09-20T09:00:00", "recognised": None,
                 "dropped": 0, "error": "timeout"}])
-    importlib.reload(ts) if False else None      # 不真的 reload，避免打掉 monkeypatch
-    sent = _spy(monkeypatch, en, NOTIFY_FAILED)
-    monkeypatch.setattr(ts, "TENDER_RADAR_ENABLED", True)
-    _spy(monkeypatch, ts, "fetch_raw", result=(None, "still down"))
-    _need(ts, "run_scheduled_scan")()
-    assert len(sent) == 0, (
-        f"異常期間重啟不該重發，實際 {len(sent)} 次 —— "
+    mails = _sent(monkeypatch)
+    _run(monkeypatch, page=None, error="still down")
+    assert len(mails) == 0, (
+        f"異常期間重啟不該重發，實際 {len(mails)} 封 —— "
         "邊緣觸發的狀態必須存在資料庫裡，不是行程記憶體裡"
+    )
+
+
+def test_n14_first_email_announces_the_quiet_period(
+    client, admin_with_email, monkeypatch
+):
+    """§3 N14：**第 1 天那封信必須寫明接下來 7 天是純記錄模式**（A 新增）。
+
+    ⚠️ 寄一封然後安靜一週，**從收件人的角度跟「壞掉了」完全一樣** ——
+    而這條線的全部價值就是「不會漏掉標案」，讓收件人懷疑它壞了等於毀掉它。
+    """
+    import datetime as dt
+    _set_first_scan_at("2026-09-21T09:00:00")
+    monkeypatch.setattr(ts, "today", lambda: dt.date(2026, 9, 21))
+    mails = _sent(monkeypatch)
+    _run(monkeypatch, page=_five_hit_page())
+    _assert_mails(mails, 1)
+    body = mails[0][1] + mails[0][2]
+    assert "7" in body and ("純記錄" in body or "不會再寄" in body), (
+        "第 1 天那封信沒有說明接下來 7 天不會再寄信 —— 收件人會以為它壞了。"
+        "實際主旨=%r" % (mails[0][1],)
     )
 
 

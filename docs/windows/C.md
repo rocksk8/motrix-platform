@@ -1020,6 +1020,74 @@ A「把工具正規化後的輸出當成原始碼」—— 而我做的更徹底
 - 🔑 **更一般的**：任何「我要回報的事實」都不可以來自一個**會截斷的指令**。
   截斷不會報錯，它只是安靜地少給你一行 —— 而那一行正好是你要的。
 
+### 27 · 🔴🔴 我的六題通知測試是假綠燈 —— **而 A 的修正也還差一層**
+
+視窗 B 實作時撞出來、A 複驗：**我的通知測試觀測點在「成功之前」，而且測試環境
+裡根本沒有收件人。**
+
+#### 觀測點有三層，我停在第一層、A 指到第二層、第三層是我查出來的
+
+| 層 | 觀測點 | 夠不夠 |
+|---|---|---|
+| ① | `notify_tender_found` **被呼叫** | ❌ **我原本驗這個** |
+| ② | `email_notify._async_send` 被呼叫 | ❌ **A 的裁決，仍然不夠** |
+| ③ | `_async_send` 被呼叫**而且收件人非空** | ✅ |
+
+**為什麼 ① 是假綠**：`conftest.make_user` 的 INSERT 沒有 `email` 那一欄
+（`conftest.py:323`），而 `_admin_emails()` 的條件是
+`role IN ('admin','superadmin') AND email IS NOT NULL AND email != ''`
+⇒ **收件人清單永遠是空的，一封信都寄不出去，而我的 N1 仍然是綠的。**
+
+**為什麼 ② 還不夠**（我讀了 `email_notify.py:185` 才發現）：
+
+```python
+def _async_send(to_addrs, subject, html):
+    threading.Thread(target=_send, args=(to_addrs, subject, html)).start()
+```
+
+**它不檢查 `to_addrs` 是不是空的。** 空清單的檢查在 `_send` 裡面：
+
+```python
+if not to_addrs:
+    logger.warning("email skipped — recipient list empty; ...")
+    return
+```
+
+⇒ 收件人是空的時候 `_async_send` **照樣被呼叫**、執行緒照樣開，
+那條執行緒寫一行 log 就結束。**觀測點停在 ② 仍然會綠。**
+
+#### 我用對照組證明第三層真的有牙齒
+
+把 `_admin_emails` 換成回空清單 → **N1／N3／N11 全部變紅**（「應該寄 1 封，實際 0 封」）。
+修正前它們是綠的。
+
+> 🔑 **每一次把觀測點往下游移一步，都要再問一次
+> 「這一步之後還有沒有東西會讓它安靜地不發生」。**
+>
+> 往下移一步很容易讓人覺得「這次總算驗到真的了」—— 而那個滿足感正是停下來的原因。
+
+#### 另外兩個一起修掉的
+
+- **`_pref_enabled` 是副本**：`email_notify.py:14` 是
+  `from .notification_prefs import is_enabled as _pref_enabled`，
+  patch `notification_prefs.is_enabled` **打不到**。
+  ⚠️ **「patch 目標要走模組」的第六個實例，而且這次在既有碼裡**
+  （前五個：`fetch_raw`／`procurement.today`／`_PUBKEY_DEV`／`LICENSE_PATH`／`Timer`）。
+- **`system_settings` 沒有 `value` 欄位**：實際是 `(key, value_json, updated_at)`，
+  而 `_get_setting` 會 `json.loads(row["value_json"])` —— **裸字串會丟例外並靜默回
+  default**。⇒ **改對欄位名還不夠**，要用 `helpers/settings.py::_set_setting`。
+
+### 28 · 🟡 我第三次被 bash heredoc 咬，這次改的是流程不是那一次
+
+今天第三次：heredoc 吃掉跳脫字元（`\\n` 變真換行）、吃掉 `\\r\\n`、這次是引號配對
+直接讓 bash 語法錯誤。
+
+⚠️ 前兩次我都只修那一次的內容。**這次改流程**：含跳脫字元或大量引號的腳本
+一律用 `Write` 工具寫成檔案再 `python <file>` 執行，不經過 heredoc。
+
+🔑 **修好一個實例不等於認得那個模式** —— 這句是我自己在第 5 輪開頭寫的，
+然後我又用同一個壞工具做了兩次。**規則要能改掉流程才算數，只寫在文件裡不算。**
+
 ## 收工檢查表
 
 **第 5 輪（2026-09-21）** —— ②完成，等 B 寫碼
