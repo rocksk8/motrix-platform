@@ -2,7 +2,11 @@
 
 ## ☠️ 事實（A 實測，不是推的）
 
-OSM 正在封鎖這個 IP：
+OSM 正在封鎖這個連線 ——
+⚠️ **而「封鎖的依據是什麼」我一開始寫錯了**：這裡原本寫「封鎖這個 IP」，
+**實際是按 `User-Agent` 封鎖的**（B 後來實測出來，見本檔末 T8）。
+📌 留著這行更正是因為：**那個錯的歸因，正是讓第一版探測變成假陰性的原因** ——
+探測用 MOTRIX 的 UA 去問，而它不在被封鎖的那一組裡。
 
 ```
 GET https://tile.openstreetmap.org/5/26/13.png
@@ -290,3 +294,131 @@ def test_t6_the_probe_never_really_talks_to_osm(client, make_user, monkeypatch):
     for _ in range(3):
         assert client.get(MAP_PATH, headers=hdr).status_code == 200
     # NETGUARD 在收尾時斷言「沒有任何真實連線嘗試」——這一題靠它背書
+
+
+# ══════════════════════════════════════════════════════════════════════
+# T8／T9 · 🔴 **誰去問，決定了問到的是什麼**
+# ══════════════════════════════════════════════════════════════════════
+#
+# B 實測（**它量的，不是我量的** —— 我沒有再去打 OSM 一次）：
+#
+#     MOTRIX 的 UA（探測用的）  → 200, 33919 bytes, 無 x-blocked   ← 真圖磚
+#     瀏覽器的 UA（使用者那側）  → 200,  6987 bytes, x-blocked      ← 封鎖圖
+#
+# 🔑 **OSM 是按 User-Agent 封鎖的，不是按 IP。**
+# 而 `geo.USER_AGENT` 是描述性的、符合 OSM 政策 ⇒ **探測不被擋**
+# ⇒ **它永遠回 `False`，而使用者永遠看到封鎖圖。**
+#
+# ☠️ **它量的不是它宣稱的那件事**：
+# 量的是「**後端**拿不拿得到圖磚」，宣稱的是「**使用者的瀏覽器**拿不拿得到」。
+#
+# 📌 而這比一般的〈證據適用範圍〉更難發現：
+# **探測完全正確地執行了，`x-blocked` 的判讀也對。錯的是「誰去問」。**
+# ⇒ 一個回 `False` 的假陰性，而且它**明確宣稱「可以用」** —— 比沒有這個訊號更糟。
+#
+# ## ⚠️ 已知天花板（B 提，我認為應該留在檔案裡而不是只在訊息裡）
+#
+# 探測是**後端**發的 ⇒ 它量的永遠是**伺服器的**網路路徑與身分。
+# UA 修好之後，**IP 那一維仍然是代打的**：使用者從別的網路（VPN／外網）
+# 連進來時，判定仍可能錯。
+# **真正量得準的是讓瀏覽器自己 `fetch()` 一張圖磚並讀 `x-blocked`**
+# （OSM 圖磚有送 `Access-Control-Allow-Origin`），⚠️ 但那需要 CSP 的
+# `connect-src` 開一個來源 —— **那是另一個決定，本輪不做。**
+# 🔑 寫在這裡是因為：**這個訊號的天花板，下一個人看不出來。**
+
+#: 我釘的名字：探測專用的 UA，**與 `geo.USER_AGENT` 是兩個東西**。
+TILE_PROBE_UA_ATTR = "TILE_PROBE_USER_AGENT"
+
+
+def _captured_request(monkeypatch, call, headers=None):
+    """跑 `call()`，把它送出去的那個 `Request` 攔下來回傳。
+
+    ⚠️ 觀測點是**送出去的那個請求物件**，不是模組裡的常數 ——
+    常數改對了而組請求時沒用它，讀常數的測試會全綠（載入 ≠ 跑到）。
+    """
+    seen = []
+
+    def _fake(req, *a, **kw):
+        seen.append(req)
+        return _Resp(headers or {})
+
+    monkeypatch.setattr(_geo().urllib.request, "urlopen", _fake)
+    call()
+    assert seen, "一個請求都沒送出去 —— 這一題的前提不成立"
+    return seen[0]
+
+
+def test_t8_the_tile_probe_pretends_to_be_a_browser():
+    """🔴🔴 T8：探測送出的 `User-Agent` **必須是瀏覽器形狀的**。
+
+    ## 為什麼這個「看起來很怪」的東西是對的
+
+    OSM 按 **User-Agent** 封鎖。`geo.USER_AGENT`（MOTRIX 那個）是描述性的、
+    符合 OSM 政策 ⇒ **不被擋** ⇒ 探測永遠回 `False`，
+    **而使用者的瀏覽器照樣拿到封鎖圖。**
+
+    🔑 **探測要代表的是使用者，不是我們自己。**
+    ⇒ 它必須用**使用者的瀏覽器會送的那種 UA**，否則它量的是另一件事。
+
+    ⚠️⚠️ **這一題的訊息刻意講原因，不只講形狀**：
+    下一個人看到「一個瀏覽器 UA 混在 MOTRIX 的模組裡」會覺得那是錯的、
+    **把它改回 `USER_AGENT`** —— 而改回去之後
+    **這個訊號會靜默地永遠說「可以用」。**
+    📌 一個看起來像錯誤的東西，如果沒有寫下它為什麼是對的，**它會被修好**。
+    """
+    probe_ua = _geo(TILE_PROBE_UA_ATTR)
+    assert probe_ua != _geo("USER_AGENT"), (
+        "探測用的 UA 跟 `geo.USER_AGENT` 是同一個。\n"
+        "⇒ OSM 按 UA 封鎖，而 MOTRIX 那個 UA 符合政策、**不被擋** "
+        "⇒ 探測永遠回 False，而使用者永遠看到封鎖圖。\n"
+        "🔑 探測要代表的是使用者，不是我們自己。"
+    )
+    assert probe_ua.startswith("Mozilla/"), (
+        f"探測 UA 不是瀏覽器形狀：{probe_ua!r}\n"
+        "⇒ 隨便換一個字串不夠 —— 它要跟使用者的瀏覽器**被同樣對待**，"
+        "才量得到使用者會遇到的事。"
+    )
+
+
+def test_t8b_the_probe_really_sends_that_user_agent(monkeypatch):
+    """T8 的另一半：**那個常數要真的被送出去。**
+
+    ⚠️ 上一題只驗常數長什麼樣。一個「常數改對了而組請求時仍然用 `USER_AGENT`」
+    的實作會讓它全綠 —— **載入 ≠ 跑到**（今晚第三次用到這句）。
+    """
+    _reset_cache(monkeypatch)
+    req = _captured_request(monkeypatch, _geo("tiles_blocked"))
+    sent = req.get_header("User-agent") or req.headers.get("User-agent")
+    assert sent == _geo(TILE_PROBE_UA_ATTR), (
+        f"探測實際送出的 UA 是 {sent!r}，而 `{TILE_PROBE_UA_ATTR}` 是 "
+        f"{_geo(TILE_PROBE_UA_ATTR)!r} —— 常數對了，組請求時沒用它。"
+    )
+
+
+def test_t9_geocoding_still_identifies_itself_as_motrix(monkeypatch):
+    """🔴 T9：`geocode()` 打 Nominatim 時**仍然要用 MOTRIX 的 `USER_AGENT`**。
+
+    ## 這兩個對外連線要用**相反**的身分
+
+    | | 身分 | 為什麼 |
+    |---|---|---|
+    | 圖磚探測 | **瀏覽器的 UA** | 它要代表使用者，才量得到使用者會遇到的事 |
+    | Nominatim | **MOTRIX 的 UA** | 那是**我們自己**在用，而它的政策**要求**可識別的 UA |
+
+    ⚠️ **而它們現在共用一個常數** ——
+    🔑 **共用常數本身就是下一次踩到的成因**：有人為了修其中一邊而改那個常數，
+    **另一邊會靜默地跟著變**，而兩邊的失敗方式完全不同
+    （一邊是假陰性，另一邊是違反對方的使用政策、可能被封鎖）。
+    """
+    _geo("geocode")
+    req = _captured_request(
+        monkeypatch, lambda: _geo("geocode")("台中市西屯區文心路二段201號"))
+    sent = req.get_header("User-agent") or req.headers.get("User-agent")
+    assert sent == _geo("USER_AGENT"), (
+        f"Nominatim 收到的 UA 是 {sent!r}，應為 MOTRIX 的 `USER_AGENT`。\n"
+        "⇒ Nominatim 的政策**要求**可識別的 UA；用瀏覽器 UA 冒充使用者"
+        "在這一邊是錯的，而且可能讓我們被那個服務封鎖。"
+    )
+    assert "MOTRIX" in (sent or "").upper(), (
+        f"Nominatim 收到的 UA 認不出是誰：{sent!r}"
+    )
