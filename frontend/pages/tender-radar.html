@@ -93,23 +93,88 @@
       </div>
     </div>
 
-    <!-- ── 排程 ── -->
+    <!-- ── 雷達儀表板：三個訊號 ──────────────────────────────────────────
+         ☠️ 這三件在畫面上**都長成「一張乾淨、看起來完全正常的地圖」**，
+         而處置完全相反：
+           沒有地點資訊 → 標案在，只是定位不到（要等詳細頁抓到）
+           沒填辦公室地址 → 去設定頁填一行字
+           沒有 Google 金鑰 → 「附近廠商」那塊不存在（不是壞了）
+         🔑 所以**每一個都必須有自己的訊號**，不能靠使用者看圖分辨。
+         少幾個點跟「那些標案不存在」長得一模一樣，**而且沒有人會報修。** -->
+    <div class="panel" style="margin-top:12px" x-show="mapInfo">
+      <div class="tr-panel-body" style="display:flex;gap:18px;flex-wrap:wrap;align-items:center">
+        <div>
+          <div style="font-size:11px;color:var(--text-secondary)">可定位的標案</div>
+          <div style="font-size:18px;font-weight:600"
+               x-text="mapInfo ? mapInfo.points.length : '—'"></div>
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--text-secondary)">沒有地點資訊</div>
+          <div style="font-size:18px;font-weight:600"
+               :style="mapInfo && mapInfo.withoutLocation ? 'color:var(--warning)' : ''"
+               x-text="mapInfo ? mapInfo.withoutLocation : '—'"></div>
+        </div>
+        <div style="flex:1 1 320px;font-size:12px;line-height:1.7">
+          <div x-show="mapInfo && mapInfo.withoutLocation > 0" style="color:var(--warning)">
+            ⚠️ 有 <span x-text="mapInfo ? mapInfo.withoutLocation : 0"></span>
+            筆標案還沒有地點資訊，<strong>它們在下面的清單裡，只是不會出現在地圖上</strong>。
+            （詳細頁每天有抓取上限，其餘會在後續時段補上。）
+          </div>
+          <div x-show="mapInfo && mapInfo.officeMissing" style="color:var(--warning)">
+            ⚠️ 尚未設定<strong>辦公室地址</strong>，所以算不出距離。
+            <a href="company-profile-settings.html">去公司資料設定填寫</a>
+          </div>
+          <div x-show="mapInfo && !mapInfo.officeMissing && mapInfo.office"
+               style="color:var(--text-secondary)">
+            辦公室：<span x-text="mapInfo.office.address"></span>
+          </div>
+          <div x-show="mapInfo && !mapInfo.officeMissing && !mapInfo.office"
+               style="color:var(--warning)">
+            ⚠️ 已填辦公室地址，但<strong>定位不到</strong>——
+            地址可能需要調整，或地理查詢未啟用（<code>MOTRIX_GEO=1</code>）。
+          </div>
+          <!-- 「附近廠商」：沒有金鑰時**那一塊不存在**，不是一個按了會壞的按鈕。
+               ⚠️ 最容易做錯的兩種：載入 Google 腳本但金鑰是空字串（灰色浮水印＝壞掉的樣子），
+                  或回空結果（一張乾淨、看起來完全正常、一個點都沒有的地圖）。
+                  後者跟「標案沒有地點」在畫面上一模一樣，而處置相反。 -->
+          <div x-show="mapInfo && mapInfo.googleMapsConfigured" style="color:var(--text-secondary)">
+            附近廠商：<strong>已啟用</strong>（Google Maps 金鑰已設定）
+          </div>
+          <div x-show="mapInfo && !mapInfo.googleMapsConfigured"
+               style="color:var(--text-secondary)">
+            附近廠商：<strong>未啟用</strong>——這是選用功能，
+            需要在公司資料設定填入 Google Maps 金鑰。
+            <strong>底圖與距離不需要金鑰，照常運作。</strong>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 排程：抓取與寄信兩份獨立設定 ── -->
     <div class="panel" style="margin-top:12px" x-show="schedule">
-      <div class="tr-panel-body" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-        <span style="font-size:13px">每天</span>
-        <select class="fi" style="width:92px" x-model="scheduleHour">
-          <template x-for="h in 24" :key="h">
-            <option :value="h - 1" x-text="String(h - 1).padStart(2, '0') + ':00'"></option>
-          </template>
-        </select>
-        <span style="font-size:13px">自動掃描一次</span>
-        <button class="btn btn-ghost btn-sm" @click="saveSchedule()"
-                :disabled="schedule && Number(scheduleHour) === schedule.scanHour">儲存</button>
-        <!-- ⚠️ 「一天幾次」刻意不做成設定。每日一次是對政府網站的節制，
-             不是我們的偏好 —— 放上畫面它遲早會被人調大。 -->
-        <span style="font-size:12px;color:var(--text-dim)"
-              x-text="schedule ? schedule.dailyLimitNote : ''"></span>
-        <span style="font-size:12px" x-show="scheduleMsg" x-text="scheduleMsg"></span>
+      <div class="tr-panel-body">
+        <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end">
+          <div>
+            <label class="fi-label">抓取時段（逗號分隔，0-23）</label>
+            <input class="fi" style="width:180px" type="text" x-model="scanHoursText"
+                   placeholder="9,12,15,18">
+          </div>
+          <div>
+            <label class="fi-label">寄信時段（留空＝不寄）</label>
+            <input class="fi" style="width:180px" type="text" x-model="notifyHoursText"
+                   placeholder="18">
+          </div>
+          <button class="btn btn-ghost btn-sm" @click="saveSchedule()">儲存</button>
+          <span style="font-size:12px" x-show="scheduleMsg" x-text="scheduleMsg"></span>
+        </div>
+        <!-- 📌 「留空＝不寄」要寫出來：它是一個合法設定，而它看起來像「還沒設」。
+             不寫的話使用者不會知道自己可以關掉它。 -->
+        <div style="font-size:11px;color:var(--text-secondary);margin-top:8px;line-height:1.7">
+          抓取與寄信是<strong>兩份獨立的設定</strong>：可以一天抓四次、只在傍晚寄一封，
+          也可以完全不寄（寄信時段留空）。同一個時段內重複觸發只會抓一次。<br>
+          超過 <span x-text="schedule ? schedule.highFrequencyThreshold : 12"></span>
+          個時段會先跟你確認一次——那不是上限，確認之後就會存進去。
+        </div>
       </div>
     </div>
 
@@ -255,7 +320,8 @@ function tenderRadarPage() {
   return {
     session: {}, token: '', loading: false, scanning: false,
     status: null, watches: [], tenders: [], formError: '',
-    schedule: null, scheduleHour: '', scheduleMsg: '', listError: '',
+    schedule: null, scheduleMsg: '', listError: '',
+    scanHoursText: '', notifyHoursText: '', mapInfo: null,
     form: { id: null, name: '', keywords: '', excludes: '', org: '',
             budgetMin: '', budgetMax: '', enabled: true },
 
@@ -303,9 +369,11 @@ function tenderRadarPage() {
           fetch('/api/tender-radar/tenders', { headers: this._h() }),
         ])
         this.loadSchedule()
+        this.loadMap()
         if (s.ok) this.status  = await s.json()
         if (w.ok) this.watches = (await w.json()).items || []
         if (t.ok) this.tenders = (await t.json()).items || []
+        this.loadMap()
       } catch (_e) {}
       this.loading = false
     },
@@ -382,20 +450,45 @@ function tenderRadarPage() {
         const r = await fetch('/api/tender-radar/schedule', { headers: this._h() })
         if (!r.ok) return
         this.schedule = await r.json()
-        this.scheduleHour = this.schedule.scanHour
+        this.scanHoursText = this.schedule.scanHours
+        this.notifyHoursText = this.schedule.notifyHours
       } catch (_e) {}
     },
 
-    async saveSchedule() {
+    async loadMap() {
+      // ⚠️ 失敗時 mapInfo 留 null ⇒ 整塊不顯示。
+      // **不要顯示一個全是 0 的儀表板**——那會讓「沒載到」看起來像「一切正常且沒東西」。
+      try {
+        const r = await fetch('/api/tender-radar/map', { headers: this._h() })
+        if (r.ok) this.mapInfo = await r.json()
+      } catch (_e) {}
+    },
+
+    async saveSchedule(confirmed) {
       this.scheduleMsg = ''
+      const body = { scanHours: this.scanHoursText, notifyHours: this.notifyHoursText }
+      if (confirmed) body.confirmHighFrequency = true
       try {
         const r = await fetch('/api/tender-radar/schedule',
-                              { method: 'PUT', headers: this._h(),
-                                body: JSON.stringify({ scanHour: Number(this.scheduleHour) }) })
+                              { method: 'PUT', headers: this._h(), body: JSON.stringify(body) })
         const d = await r.json().catch(() => ({}))
+        // 409 ＝「合法但頻繁，要確認」，不是「被拒絕」。
+        // ⚠️ 訊息用後端給的那一句——它講的是**代價**（對誰、幾次、跟現在比），
+        //    而不是只有數字。一個沒有講出後果的警告，使用者只會學會一路按確定。
+        if (r.status === 409) {
+          if (confirm([d.detail || '這個設定會提高請求頻率', '',
+                       '確定要這樣設定嗎？'].join(String.fromCharCode(10)))) {
+            return this.saveSchedule(true)
+          }
+          this.scheduleMsg = '已取消，設定沒有變更'
+          return
+        }
         if (!r.ok) { this.scheduleMsg = d.detail || '儲存失敗'; return }
-        this.schedule.scanHour = d.scanHour
-        this.scheduleMsg = `已改為每天 ${d.scanHour}:00（下一次排程起生效）`
+        this.schedule.scanHours = d.scanHours
+        this.schedule.notifyHours = d.notifyHours
+        this.scanHoursText = d.scanHours
+        this.notifyHoursText = d.notifyHours
+        this.scheduleMsg = `已儲存：抓取 ${d.scanHours || '（不抓）'}／寄信 ${d.notifyHours || '（不寄）'}`
       } catch (_e) { this.scheduleMsg = '連線失敗' }
     },
 
