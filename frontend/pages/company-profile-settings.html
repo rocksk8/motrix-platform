@@ -131,6 +131,21 @@
                 <input type="text" x-model="cfg.contact_info" placeholder="Tel: 04-3610-6566｜info@miactw.com">
               </div>
             </div>
+            <div class="ns-row">
+              <div class="ns-field" style="flex:1 1 100%">
+                <label>辦公室地址</label>
+                <input type="text" x-model="cfg.address"
+                       placeholder="例：台中市西屯區文心路二段201號">
+                <!-- ⚠️ 這個欄位的用途跟抬頭／統編不一樣：它是**算標案離我們多遠**的起點。
+                     沒填的後果不是 PDF 少一行，是整個距離功能不會動，
+                     所以地圖那一側會明白顯示「尚未設定辦公室地址」，而不是安靜地不顯示距離。
+                     🔑 使用者看到「距離都空著」會以為功能壞了，而不是他還沒填——
+                     兩者的下一步完全不同：一個是報修，一個是回來填這一行字。 -->
+                <div style="font-size:11px;color:var(--text-secondary);margin-top:4px">
+                  用來計算標案與辦公室的直線距離。沒有填的話，地圖上不會顯示距離。
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -413,7 +428,7 @@
       return {
         session: {},
         cfg: {
-          name: '', tax_id: '', contact_info: '',
+          name: '', tax_id: '', contact_info: '', address: '',
           bank_name: '', bank_branch: '', bank_account_name: '', bank_account_number: '',
         },
         saving: false,
