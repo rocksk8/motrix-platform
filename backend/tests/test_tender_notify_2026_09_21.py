@@ -802,6 +802,115 @@ def test_n15b_failed_alert_does_not_consume_the_edge(
     )
 
 
+def _remove_all_watches():
+    """把搜尋條件清空 —— N17／N17b 要的是「使用者還沒設定任何條件」那個狀態。
+
+    ⚠️ `admin_with_email` 預設會種一筆（否則 `tender_hits` 永遠是空的，
+    見〈給彙整〉29）。這兩題要的正好是相反的前提，所以明確清掉。
+    """
+    import db
+    conn = db.get_db()
+    try:
+        conn.execute("DELETE FROM tender_watches")
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _watch_count():
+    import db
+    conn = db.get_db()
+    try:
+        return conn.execute("SELECT COUNT(*) c FROM tender_watches").fetchone()["c"]
+    finally:
+        conn.close()
+
+
+def test_n17_no_watches_means_no_found_email(client, admin_with_email, monkeypatch):
+    """§3 N17：**一列 `tender_watches` 都沒有時，不可以寄「找到標案」的信**。
+
+    ⚠️ 這是我實測到的：沒有任何搜尋條件時，系統仍然寄出「5 筆新標案」——
+    **使用者還沒設定關鍵字之前，就會收到全部標案的通知。**
+
+    理由在 SPEC 自己身上（§T.4）：「**沒有排除詞，這功能會在第三天就被使用者關掉**」
+    —— 而「**一條件都沒有**」比「沒有排除詞」更吵。
+
+    📌 這一題刻意挑**純記錄期之後**的日子，讓「第 1 天的公告信」不會混進來 ——
+    否則 0 封與 1 封的差別會說不清是哪一種信。
+    """
+    import datetime as dt
+    _remove_all_watches()
+    assert _watch_count() == 0, "前提沒成立：搜尋條件沒有被清掉"
+    _set_first_scan_at("2026-09-21T09:00:00")
+    monkeypatch.setattr(ts, "today", lambda: dt.date(2026, 9, 29))   # 第 8 天
+    mails = _sent(monkeypatch)
+    _run(monkeypatch, page=_five_hit_page())
+    assert len(mails) == 0, (
+        "一列搜尋條件都沒有，卻寄了 %d 封「找到標案」的信 —— "
+        "使用者還沒設定關鍵字就收到全部標案，那會讓他第三天就把功能關掉。"
+        "實際主旨=%r" % (len(mails), mails[0][1] if mails else None)
+    )
+
+
+def test_n17b_first_email_tells_user_to_configure_watches(
+    client, admin_with_email, monkeypatch
+):
+    """§3 N17b：一條件都沒有時，**第 1 天那封要寫明「你還沒設定任何搜尋條件」**。
+
+    ⚠️ **只做 N17 會變成「安靜的無事發生」** —— 雷達裝好了、開著、而永遠不寄信，
+    從使用者的角度跟「壞掉了」完全一樣。
+    🔑 **把「不做事」變成「說一句話」，成本是一行，省掉的是一次
+    「這功能是不是壞了」的懷疑。**
+
+    ⚠️ 這題也是否定式斷言的反面：N17 驗「不寄」，**而不寄本身可能只是壞掉**。
+    這一題就是 N17 的對照組 —— **證明系統在該說話的時候有說話。**
+    """
+    import datetime as dt
+    _remove_all_watches()
+    assert _watch_count() == 0, "前提沒成立：搜尋條件沒有被清掉"
+    _set_first_scan_at("2026-09-21T09:00:00")
+    monkeypatch.setattr(ts, "today", lambda: dt.date(2026, 9, 21))   # 第 1 天
+    mails = _sent(monkeypatch)
+    _run(monkeypatch, page=_five_hit_page())
+
+    _assert_mails(mails, 1)          # 先證明這是一封寄得出去的真信
+    body = mails[0][1] + mails[0][2]
+    # ⚠️ 不可以只驗「關鍵字」或「搜尋條件」這兩個詞：**N14 的純記錄期公告裡本來就有
+    # 「請到畫面上確認關鍵字是否準確」** —— 我第一版就是這樣寫的，於是它
+    # **在 B 還沒實作 N17b 的情況下就綠了**（實測：那封普通的「5 筆新標案」
+    # 同時含「搜尋條件／關鍵字／純記錄／不會再寄」四個詞）。
+    # 🔑 **兩封信共用的詞分不出兩封信。** 要挑只有這一封會說的話。
+    assert "還沒設定" in body or "尚未設定" in body, (
+        "第 1 天那封信沒有說「你還沒設定任何搜尋條件」—— "
+        "他會看到一個裝好了卻永遠不寄信的雷達。實際主旨=%r" % (mails[0][1],)
+    )
+
+
+def test_n17c_configured_user_is_not_told_to_configure(
+    client, admin_with_email, monkeypatch
+):
+    """N17b 的反向對照：**已經設定過條件的人，不可以被叫去設定條件**。
+
+    ⚠️ 沒有這一題，一個「每封信都寫『你還沒設定任何搜尋條件』」的實作會讓
+    N17b 全綠 —— 而那對已經設好條件的使用者是錯的訊息，
+    **他會以為自己的設定不見了**。
+
+    🔑 跟 N14／N14b 是同一組形狀：**一句話只能出現在它為真的那一封。**
+    """
+    import datetime as dt
+    assert _watch_count() >= 1, "前提沒成立：這題要的是「已經有搜尋條件」"
+    _set_first_scan_at("2026-09-21T09:00:00")
+    monkeypatch.setattr(ts, "today", lambda: dt.date(2026, 9, 21))
+    mails = _sent(monkeypatch)
+    _run(monkeypatch, page=_five_hit_page())
+    _assert_mails(mails, 1)
+    body = mails[0][1] + mails[0][2]
+    assert "還沒設定" not in body and "尚未設定" not in body, (
+        "使用者已經設定過搜尋條件，信裡卻說他「還沒設定」—— "
+        "他會以為自己的設定不見了。實際主旨=%r" % (mails[0][1],)
+    )
+
+
 # ══════════════════════════════════════════════════════════════════════
 # R3 · 結轉項：User-Agent 與逾時
 # ══════════════════════════════════════════════════════════════════════
