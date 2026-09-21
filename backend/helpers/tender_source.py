@@ -546,32 +546,73 @@ def _previous_alert_state(conn):
             "suspected": bool(row["suspected"])}
 
 
-def _load_new_tenders(tender_ids):
-    """把這一輪新增的標案讀出來給信件用，並回傳要標記的命中 id。"""
-    if not tender_ids:
-        return [], [], []
-    marks = ",".join("?" * len(tender_ids))
+def _has_enabled_watch():
+    """有沒有任何啟用中的搜尋條件。
+
+    ⚠️ 一條都沒有時，「找到標案」的信會是一份**未經篩選的全部清單**。
+    SPEC §T.4 自己寫著「沒有排除詞，這功能會在第三天就被使用者關掉」，
+    而「一條件都沒有」比「沒有排除詞」更吵。
+    ⚠️ 跟純記錄期疊起來更糟：**前 7 天正是還沒設定關鍵字的時候，
+    第 8 天的第一封信會是一份沒篩選過的清單。**
+    """
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT COUNT(*) AS c FROM tender_watches WHERE enabled=1").fetchone()
+    finally:
+        conn.close()
+    return (row["c"] if row else 0) > 0
+
+
+# `url` 一定要撈：信裡每一筆都要連得回來源，而**授權條款要求註明出處**
+# （SPEC §T.5 #6）。N11 的觀測點是「傳給寄信函式的參數」，所以出處必須在資料裡，
+# 不能只在 HTML 樣板裡——樣板在那個觀測點看不到。
+_TENDER_COLS = ("id, case_no, org, name, published_at, deadline, budget, url")
+
+
+def _load_unnotified_hits():
+    """**還沒通知過的命中**（不是「這一輪新增的標案」）。
+
+    ⚠️ 這個鍵選錯會讓重試永遠失效，而且我真的寫錯過：
+    原本是「這一輪 `INSERT` 進去的標案」，於是投遞失敗之後再跑一次——
+    `INSERT OR IGNORE` 判定那些標案**已經存在** ⇒ 新增 0 筆 ⇒ **一封都不會寄**，
+    那批標案就此消失。**N12／N15「不標記」那一半是對的，而「下次要再寄」那一半
+    需要另一個鍵才成立。**
+    🔑 「不要記錄失敗」與「要記得重試」是兩件事，前者做對不代表後者會發生。
+    """
     conn = get_db()
     try:
         rows = conn.execute(
-            # `url` 一定要撈：信裡每一筆都要連得回來源，而**授權條款要求註明出處**
-            # （SPEC §T.5 #6）。驗收條件 N11 的觀測點是「傳給寄信函式的參數」，
-            # 所以出處必須在資料裡，不能只在 HTML 樣板裡——樣板在那個觀測點看不到。
-            f"SELECT id, case_no, org, name, published_at, deadline, budget, url "
-            f"FROM tenders WHERE id IN ({marks}) ORDER BY (deadline IS NULL), deadline",
-            tuple(tender_ids),
+            f"SELECT DISTINCT t.{_TENDER_COLS.replace(', ', ', t.')} "
+            "FROM tender_hits h JOIN tenders t ON t.id = h.tender_id "
+            "WHERE h.notified_at IS NULL OR h.notified_at='' "
+            "ORDER BY (t.deadline IS NULL), t.deadline"
         ).fetchall()
         hits = conn.execute(
-            f"SELECT h.id AS hit_id, w.name AS watch_name FROM tender_hits h "
-            f"JOIN tender_watches w ON w.id = h.watch_id "
-            f"WHERE h.tender_id IN ({marks}) AND (h.notified_at IS NULL OR h.notified_at='')",
-            tuple(tender_ids),
+            "SELECT h.id AS hit_id, w.name AS watch_name FROM tender_hits h "
+            "JOIN tender_watches w ON w.id = h.watch_id "
+            "WHERE h.notified_at IS NULL OR h.notified_at=''"
         ).fetchall()
     finally:
         conn.close()
     return ([dict(r) for r in rows],
             [r["hit_id"] for r in hits],
             [r["watch_name"] for r in hits])
+
+
+def _load_tenders_by_ids(tender_ids):
+    """依 id 撈標案。**只給 N17b 那一封用**（沒有搜尋條件 ⇒ 沒有命中可撈）。"""
+    if not tender_ids:
+        return []
+    marks = ",".join("?" * len(tender_ids))
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            f"SELECT {_TENDER_COLS} FROM tenders WHERE id IN ({marks}) "
+            f"ORDER BY (deadline IS NULL), deadline", tuple(tender_ids)).fetchall()
+    finally:
+        conn.close()
+    return [dict(r) for r in rows]
 
 
 def _mark_hits_notified(hit_ids):
@@ -630,14 +671,28 @@ def _notify(result, previous):
     _remember_first_scan(_now_iso())
     if quiet:
         return
-    tenders, hit_ids, watch_names = _load_new_tenders(
-        result.get("new_tender_ids") or [])
+    announce = _quiet_period_starts_after_this_mail()
+    has_watches = _has_enabled_watch()
+    tenders, hit_ids, watch_names = _load_unnotified_hits()
+
     if not tenders:
-        return          # 今天沒有新標案不是異常，不該打擾任何人
+        # 沒有未通知的命中，兩種情況要分開：
+        #   有條件但今天沒中 → 不寄（今天沒標案不是異常，不該打擾任何人）
+        #   一條條件都沒有   → N17：不寄「找到標案」的信（那是未篩選的全部），
+        #                      **但 N17b：純記錄期開始那一封仍然要寄**
+        # ⚠️ 少了 N17b 的話，使用者啟用之後會收到**完全的沉默**，
+        # 而沉默跟「壞掉了」長得一模一樣——那正是 N14 在防的事，只是換一個入口。
+        if has_watches or not announce:
+            return
+        tenders = _load_tenders_by_ids(result.get("new_tender_ids") or [])
+        hit_ids, watch_names = [], []
+        if not tenders:
+            return
     try:
         email_notify.notify_tender_found(
             tenders, watch_names,
-            announce_quiet_period=_quiet_period_starts_after_this_mail())
+            announce_quiet_period=announce,
+            no_watches=not has_watches)
     except Exception:  # noqa: BLE001
         logger.exception("notify_tender_found failed；已通知標記不會被設定")
         return          # ⚠️ 不標記——見 _mark_hits_notified 的說明

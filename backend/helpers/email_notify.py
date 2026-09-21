@@ -1608,6 +1608,16 @@ def notify_disk_space_low(problems: list, temp_bloat: list = None,
 # ⚠️ 三個 key 也刻意分開：「抓不到」與「疑似改版」的**處置相反**
 # （掛掉等它好、改版要改解析器）。共用一個 key 的話，使用者關掉吵的那個，
 # 就同時關掉了他其實想留的那個。
+#
+# ⚠️⚠️ **三支都走 `_send_raising` 而不是 `_async_send`。**
+# `_async_send` 是**射後不理**（只開一條執行緒），而 `_send` 裡有**五個安靜的 return**
+# （功能未啟用／非正式機被擋／收件人空／SMTP 未設定／SMTP 例外），**一個都傳不回來**。
+# 後果分兩種，而第二種更嚴重：
+#   `notify_tender_found`        → 標案被標記「已通知」而信沒出去 ⇒ **永遠不會再寄**
+#   `notify_tender_fetch_failed` → 邊緣被消耗掉而信沒出去 ⇒ **雷達從此瞎著且沒人會知道**
+# 🔑 前者是漏掉幾筆標案，**後者是漏掉「雷達壞了」這件事本身**。
+# ⚠️ 最可能的觸發是「SMTP 還沒設定」——**使用者第一次啟用的那一天**。
+# 📌 它們跑在排程的 Timer 執行緒裡，同步阻塞 15 秒無害。
 
 _TENDER_SOURCE_NOTE = (
     "資料來源：政府電子採購網（依其著作權聲明重製，已註明出處）。"
@@ -1616,7 +1626,8 @@ _TENDER_SOURCE_NOTE = (
 
 
 def notify_tender_found(tenders: list, watch_names: list = None,
-                        announce_quiet_period: bool = False) -> None:
+                        announce_quiet_period: bool = False,
+                        no_watches: bool = False) -> None:
     """標案雷達命中新標案 → 所有 admin/superadmin。
 
     ⚠️ **每日一封彙總，不是每筆一封**：命中 40 筆就是信裡 40 列。
@@ -1639,7 +1650,18 @@ def notify_tender_found(tenders: list, watch_names: list = None,
         rows.append((f"{t.get('org', '')}｜{t.get('case_no', '')}",
                      f"{t.get('name', '')}<br>截止 {deadline}｜預算 {budget_s}"))
     more = len(tenders or []) - len(rows)
-    intro = f"標案雷達今天找到 <b>{len(tenders or [])}</b> 筆符合條件的新標案。"
+    if no_watches:
+        # N17b：一條搜尋條件都沒有時，這封信的意義不是「幫你篩到了什麼」，
+        # 而是「雷達開始跑了，但它還不知道你要找什麼」。
+        # ⚠️ 講成「找到 N 筆符合條件」是**騙人的**——那是未經篩選的全部。
+        intro = (
+            f"標案雷達開始運作了，今天抓到 <b>{len(tenders or [])}</b> 筆標案。"
+            "<b>⚠️ 你還沒設定任何搜尋條件，所以這是未經篩選的清單。</b>"
+            "請到標案雷達頁面新增關鍵字與<b>排除詞</b>——"
+            "沒有排除詞的話，這個功能會在第三天就吵到被你關掉。"
+        )
+    else:
+        intro = f"標案雷達今天找到 <b>{len(tenders or [])}</b> 筆符合條件的新標案。"
     if more > 0:
         intro += f"（信中只列前 {len(rows)} 筆，其餘 {more} 筆請進系統查看）"
     if watch_names:
@@ -1657,7 +1679,7 @@ def notify_tender_found(tenders: list, watch_names: list = None,
         rows, "", _base_url(), note=note, intro=intro,
         button_text="前往標案雷達",
     )
-    _async_send(to, f"【MOTRIX】標案雷達：{len(tenders or [])} 筆新標案", html)
+    _send_raising(to, f"【MOTRIX】標案雷達：{len(tenders or [])} 筆新標案", html)
 
 
 def notify_tender_fetch_failed(error: str, since: str = "") -> None:
@@ -1688,7 +1710,7 @@ def notify_tender_fetch_failed(error: str, since: str = "") -> None:
     html = _build_html("標案雷達：抓不到來源網站", "連線失敗", "#B91C1C",
                        rows, "", _base_url(), note=note, intro=intro,
                        button_text="前往標案雷達")
-    _async_send(to, "【MOTRIX】⚠️ 標案雷達抓不到政府電子採購網", html)
+    _send_raising(to, "【MOTRIX】⚠️ 標案雷達抓不到政府電子採購網", html)
 
 
 def notify_tender_source_changed(parsed: int, dropped: int) -> None:
@@ -1713,4 +1735,4 @@ def notify_tender_source_changed(parsed: int, dropped: int) -> None:
     html = _build_html("標案雷達：疑似對方改版", f"丟棄 {dropped} 筆", "#92400E",
                        rows, "", _base_url(), note=_TENDER_SOURCE_NOTE, intro=intro,
                        button_text="前往標案雷達")
-    _async_send(to, "【MOTRIX】⚠️ 標案雷達疑似對方網站改版", html)
+    _send_raising(to, "【MOTRIX】⚠️ 標案雷達疑似對方網站改版", html)
