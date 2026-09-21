@@ -227,13 +227,13 @@
                    ⚠️ 而「區級」不可以只是括號裡多兩個字——**使用者會略過括號**。
                    ⇒ 粗的那一種換顏色、加波浪號、並且把精度寫成獨立一行。 -->
               <td style="font-size:12px;text-align:right;white-space:nowrap">
-                <template x-if="p.distanceKm === null || p.distanceKm === undefined">
+                <template x-if="p.distanceFromOfficeKm === null || p.distanceFromOfficeKm === undefined">
                   <span>—</span>
                 </template>
-                <template x-if="p.distanceKm !== null && p.distanceKm !== undefined">
+                <template x-if="p.distanceFromOfficeKm !== null && p.distanceFromOfficeKm !== undefined">
                   <span :style="precisionIsCoarse(p.precision) ? 'color:var(--warning)' : ''">
                     <span x-text="(precisionIsCoarse(p.precision) ? '～' : '')
-                                  + p.distanceKm + ' km'"></span><br>
+                                  + p.distanceFromOfficeKm + ' km'"></span><br>
                     <span style="font-size:10px;opacity:.85"
                           x-text="precisionLabel(p.precision)"></span>
                   </span>
@@ -394,8 +394,8 @@ function mapPage() {
         })
         window.L.marker([p.lat, p.lon], { icon }).addTo(this._map)
           .bindPopup([d.label + '｜' + (p.name || ''), p.org, p.address || p.location,
-                      (p.distanceKm === null || p.distanceKm === undefined)
-                        ? '' : ('約 ' + p.distanceKm + ' km（'
+                      (p.distanceFromOfficeKm === null || p.distanceFromOfficeKm === undefined)
+                        ? '' : ('約 ' + p.distanceFromOfficeKm + ' km（'
                                 + this.precisionLabel(p.precision) + '）')]
                      .filter(Boolean).join('<br>'))
       })

@@ -427,8 +427,24 @@ def locate(address, manual_coord=None):
             return GeoResult(coord=coord, precision=precision, source=source,
                              address=address)
 
-    # 退階：整個地址查不到 => 只查「縣市＋區」
-    # 現行缺陷正是少了這一段：查得到「梧棲區」卻整個回報「定位不到」。
+    return _locate_district(address)
+
+
+def _locate_district(address):
+    """整個地址查不到時，退到「縣市＋區」再查一次。
+
+    🔴 **抽出來是為了消掉一次重複查詢**（A16）：
+    原本 `locate_cached()` 自己跑完整個梯子、全 miss 之後呼叫 `locate()`，
+    而 `locate()` **又從第一階把梯子重跑一遍**才退到行政區
+    ⇒ 同一個地址被問了**三次**，其中一次是純粹浪費的。
+    ☠️ 而那是**常態路徑**：沒有 Google 金鑰的機器上，每一個門牌地址都查不到。
+    而重複查詢正是 Nominatim 封 IP 的理由——被封之後的樣子是
+    「**地圖上沒有點，而 `geoEnabled` 仍然是 true**」，看起來像使用者地址填錯。
+
+    ⚠️ **兩個入口都要能退階**（A16d）：`locate()` 與 `locate_cached()` 各自呼叫它。
+    抽出來之後很容易變成「只剩快取那條路會退階」，
+    而那是〈兩個都對而路不存在〉的新斷點。
+    """
     district = district_of(address)
     if not district or district == address:
         # 切不出行政區、或切出來跟原地址一樣 => **不要再查一次**（A4c）。
@@ -539,7 +555,9 @@ def locate_cached(address, manual_coord=None):
     hit = _cached_stage(address, SOURCE_NOMINATIM_DISTRICT)
     if hit:
         return hit
-    result = locate(address)
+    # ⚠️ 直接呼叫退階，**不要再走一次 `locate()`** ——
+    # 上面那個迴圈已經把三階都問過了，`locate()` 會從第一階重跑（A16）。
+    result = _locate_district(address)
     if result.coord:
         _remember(address, result)
     return result

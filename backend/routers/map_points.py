@@ -21,7 +21,7 @@
 ☠️ 「你沒有權限看標案」與「今天沒有標案」在畫面上都是一張沒有點的地圖，
 而那是今天第五個長成那個樣子的成因。
 """
-from fastapi import APIRouter, Header
+from fastapi import APIRouter, Header, HTTPException
 
 from db import db_conn
 from helpers import _require_user
@@ -90,7 +90,7 @@ def _may_see_dataset(user, name) -> bool:
     return any(m in mods for m in spec["modules"])
 
 
-def _own_points(name, office):
+def _own_points(name, office, user_coord=None):
     """把一份自有資料的地址畫成點。回 `(points, 沒有地址或定位不到的筆數)`。"""
     spec = _DATASETS[name]
     col = spec["address"]
@@ -117,9 +117,7 @@ def _own_points(name, office):
             "name": r["name"], "address": r["addr"],
             "lat": found.coord[0], "lon": found.coord[1],
             "precision": found.precision, "source": found.source,
-            "distanceKm": (round(geo.haversine_km((office["lat"], office["lon"]),
-                                                  found.coord), 1)
-                           if office else None),
+            **_distances(found.coord, office, user_coord),
         })
     return points, missing
 
@@ -137,8 +135,41 @@ def _may_see_tenders(user) -> bool:
     return "tender_radar" in mods
 
 
+def _user_position(lat, lon, accuracy):
+    """把 query 上的三個參數變成 `((lat, lon), accuracy_m)`，或 `(None, None)`。
+
+    ## 🔴 沒給誤差就 422，**不可以預設一個**
+    一個編出來的誤差值會被畫成一個圈，而那個圈**看起來跟真的一樣**。
+    🔑 「我不知道有多準」與「誤差是 50 公尺」是兩件事，
+    而後者是一個**宣稱**——我們沒有資格替瀏覽器做那個宣稱。
+
+    ## 📌 `accuracy=0` 刻意不特判
+    它的語意沒有人裁過（「完美精準」還是「沒量到」？），
+    **而替使用者決定一個沒有人問過的語意，比留著它更糟。**
+    """
+    given = [v for v in (lat, lon, accuracy) if v is not None and v != ""]
+    if not given:
+        return None, None
+    if lat is None or lon is None:
+        raise HTTPException(422, "lat 與 lon 要一起給")
+    if accuracy is None or accuracy == "":
+        raise HTTPException(
+            422, "給了座標就要給 accuracy（公尺）——我們不替瀏覽器猜一個誤差值")
+    try:
+        lat_f, lon_f, acc_f = float(lat), float(lon), float(accuracy)
+    except (TypeError, ValueError):
+        raise HTTPException(422, "lat／lon／accuracy 必須是數字")
+    if not -90.0 <= lat_f <= 90.0 or not -180.0 <= lon_f <= 180.0:
+        raise HTTPException(422, f"座標超出範圍：({lat_f}, {lon_f})")
+    if acc_f < 0:
+        raise HTTPException(422, f"accuracy 不可以是負數：{acc_f}")
+    return (lat_f, lon_f), acc_f
+
+
 @router.get("/api/map/points")
-def map_points(sources: str = "tenders", authorization: str = Header(None)):
+def map_points(sources: str = "tenders",
+               lat: str = None, lon: str = None, accuracy: str = None,
+               authorization: str = Header(None)):
     """地圖上的點，以及**所有「為什麼這裡是空的」的理由**。
 
     ## ☠️ 這個畫面有五個成因會長成同一個樣子（一張乾淨、沒有點的地圖）
@@ -160,6 +191,16 @@ def map_points(sources: str = "tenders", authorization: str = Header(None)):
     """
     user = _require_user(authorization)
     wanted = [s.strip() for s in (sources or "").split(",") if s.strip()]
+    # 🔴 **並列，不是二選一**：辦公室是穩定的錨點，瀏覽器定位是會變的。
+    # 兩者**互相獨立**——公司地址沒填時，定位距離照樣要算得出來
+    # （那是新使用者第一天就會遇到的狀態）。
+    #
+    # 🔴 **這三個參數不可以被寫下來**（隱私）：
+    # 不進 `system_settings`、不進 `audit_log`、不進 `user_request_log`。
+    # ⚠️ 後者存的是 `path`，而 **query string 就在 path 裡**
+    # ⇒ 「順手記下完整網址」就足以把一個人的位置留在磁碟上，
+    # 而那張表**會進每日備份**。
+    user_coord, user_accuracy = _user_position(lat, lon, accuracy)
 
     profile = _company_profile()
     office_address = (profile.get("address") or "").strip()
@@ -190,7 +231,7 @@ def map_points(sources: str = "tenders", authorization: str = Header(None)):
                                 "count": 0,
                                 "note": "沒有標案雷達模組權限，地圖上不會顯示標案"})
         else:
-            pts, missing = _tender_points(office)
+            pts, missing = _tender_points(office, user_coord)
             points += pts
             without_location += missing
             source_info.append({
@@ -222,7 +263,7 @@ def map_points(sources: str = "tenders", authorization: str = Header(None)):
                 "note": f"沒有「{spec['label']}」的權限，地圖上不會顯示這一類",
             })
             continue
-        pts, missing = _own_points(name, office)
+        pts, missing = _own_points(name, office, user_coord)
         points += pts
         without_location += missing
         source_info.append({
@@ -241,6 +282,8 @@ def map_points(sources: str = "tenders", authorization: str = Header(None)):
         # ⚠️ 地理查詢關著時，**已填的地址也定位不到** ⇒ 距離全是 null。
         # 不講的話使用者會以為地址填錯了。
         "geoEnabled": geo.geo_on(),
+        # ⚠️ 沒有定位時是 `None` 不是 `0`——0 公尺是「完美精準」。
+        "userAccuracyM": user_accuracy,
         # 🔴 第七個訊號，而它跟前六個不同級：前六個是「沒有東西」，
         # 這個是「**有東西而且是錯的**」——OSM 封鎖的回應是 HTTP 200 ＋
         # 一張寫著 Access blocked 的圖 ⇒ 瀏覽器不觸發 error、JS 讀不到標頭
@@ -266,12 +309,29 @@ def _manual_coord(profile):
         return None
 
 
+def _distances(coord, office, user_coord):
+    """一個點到「辦公室」與到「使用者」的距離。**兩個各自獨立。**
+
+    ⚠️ 算不出來時是 `None` **不是 `0`**：
+    0 公里的意思是「就在這裡」，那跟「不知道」是兩件事，
+    **而它們在畫面上都是一個數字。**
+    """
+    return {
+        "distanceFromOfficeKm": (
+            round(geo.haversine_km((office["lat"], office["lon"]), coord), 1)
+            if office else None),
+        "distanceFromUserKm": (
+            round(geo.haversine_km(user_coord, coord), 1)
+            if user_coord else None),
+    }
+
+
 def _company_profile():
     from helpers.settings import _get_setting
     return {**(_get_setting("company_profile", {}) or {})}
 
 
-def _tender_points(office):
+def _tender_points(office, user_coord=None):
     """標案來源。回 `(points, 沒有地點的筆數)`。
 
     ⚠️ **雷達關著時這裡照常跑**：它讀的是資料庫裡已經抓回來的標案，
@@ -309,9 +369,7 @@ def _tender_points(office):
             "address": place,
             "precision": found.precision, "source": found.source,
             "budget": r["budget"], "deadline": r["deadline"], "url": r["url"],
-            "distanceKm": (round(geo.haversine_km((office["lat"], office["lon"]),
-                                                  coord), 1)
-                           if office else None),
+            **_distances(coord, office, user_coord),
         })
     return points, missing
 
