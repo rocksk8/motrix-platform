@@ -804,3 +804,6 @@ from datetime import datetime
   「`notify_backup_stale` 本體跑得起來」那一題的紅燈（目前無紅燈，依協定不能寫）
 - **⚠️ 會撞到 C**：`_already_fetched_today` → `_already_fetched_this_slot`，
   三處既有 patch 會變 AttributeError，已告知
+
+## 佔用宣告：`backend/routers/daily_tasks.py`（§3j 第 3 項，2026-09-21 22:5x）
+只改 `_check_backup_freshness` 的告警那一段（旗標順序＋例外要留痕跡）。
