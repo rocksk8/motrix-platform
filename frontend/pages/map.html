@@ -33,6 +33,12 @@
                margin-bottom:8px; }
     .mp-note.warn { background:var(--warning-light); color:var(--warning); }
     .mp-note.info { background:#F5F4F0; color:var(--text-secondary); }
+    /* 圖釘：**字在圖釘上**，不是在 popup 裡。
+       popup 要點才看得到，而使用者要的是「看一眼就知道哪幾個是自己的廠商」。 */
+    .mp-pin { display:inline-flex; align-items:center; justify-content:center;
+              width:20px; height:20px; border-radius:50%; color:#fff;
+              font-size:11px; font-weight:700; line-height:1;
+              box-shadow:0 0 0 2px #fff, 0 1px 3px rgba(0,0,0,.35); }
     #mp-canvas { height:460px; border-radius:var(--radius);
                  border:1px solid var(--border-light); }
   </style>
@@ -121,6 +127,23 @@
       </div>
     </div>
 
+    <!-- ── 要看哪幾種 ────────────────────────────────────────────────
+         使用者原話：「看不到其他商家就等於沒有效果」。
+         ⚠️ 預設只勾兩個（標案＋協力廠商）：外包名冊是**住家地址**，
+         不該在打開頁面的那一秒就全部攤在畫面上。 -->
+    <div class="panel" style="margin-bottom:12px">
+      <div class="mp-panel-body" style="display:flex;gap:16px;flex-wrap:wrap;align-items:center">
+        <span style="font-size:12px;color:var(--text-secondary)">顯示</span>
+        <template x-for="d in datasets" :key="d.key">
+          <label style="display:inline-flex;align-items:center;gap:5px;font-size:12px;cursor:pointer">
+            <input type="checkbox" :value="d.key" x-model="picked" @change="refresh()">
+            <span class="mp-pin" :style="'background:' + d.color" x-text="d.mark"></span>
+            <span x-text="d.label"></span>
+          </label>
+        </template>
+      </div>
+    </div>
+
     <div class="panel">
       <div class="mp-panel-body"
            style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
@@ -185,7 +208,13 @@
         <tbody>
           <template x-for="p in (info ? info.points : [])" :key="p.source + p.caseNo">
             <tr>
-              <td style="font-size:11px" x-text="p.source"></td>
+              <!-- ⚠️ 這一欄原本顯示 `p.source`，而那是**定位服務**（nominatim）
+                   不是資料集 —— 對使用者沒有意義。 -->
+              <td style="font-size:11px;white-space:nowrap">
+                <span class="mp-pin" :style="'background:' + datasetOf(p).color"
+                      x-text="datasetOf(p).mark"></span>
+                <span x-text="datasetOf(p).label"></span>
+              </td>
               <td style="font-size:12px" x-text="p.org || '—'"></td>
               <td style="font-size:12px">
                 <a :href="p.url" target="_blank" rel="noopener" x-text="p.name || '—'"></a>
@@ -236,12 +265,28 @@
 function mapPage() {
   return {
     session: {}, token: '', loading: false, info: null, loadError: '',
+    // 四個資料集。`mark` 是畫在標記上的字 —— **那才是分辨的載體**。
+    // 🔑 顏色只是輔助：色覺差異的人要看得出來，而**點開才知道等於沒有回答**。
+    datasets: [
+      { key: 'tenders',            label: '標案',     mark: '標', color: '#2563EB' },
+      { key: 'vendor_contractors', label: '協力廠商', mark: '廠', color: '#059669' },
+      { key: 'contractors',        label: '外包名冊', mark: '包', color: '#D97706' },
+      { key: 'shipping_notes',     label: '出貨地址', mark: '貨', color: '#7C3AED' },
+    ],
+    picked: ['tenders', 'vendor_contractors'],
     mapOpen: false, mapLoading: false, tileError: false, _map: null,
 
     _h() { return { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.token } },
 
     // 精度的中文。⚠️ 沒有精度時講「未知」，**不要留白**——
     // 留白會讓人以為那是最精確的那一種（因為沒有任何警告）。
+    //: 這個點屬於哪一個資料集。**找不到時回一個具名的「未知」**，
+    //  不要回 undefined —— 那會讓畫面整塊消失，而原因看不出來。
+    datasetOf(p) {
+      return this.datasets.find(d => d.key === (p && p.dataset))
+             || { key: '?', label: '未知來源', mark: '?', color: '#6B7280' }
+    },
+
     precisionLabel(p) {
       return ({ exact: '人工指定', rooftop: '門牌', street: '路段',
                 district: '區級（誤差數公里）' })[p] || '精度未知'
@@ -265,7 +310,10 @@ function mapPage() {
       this.loading = true
       this.loadError = ''
       try {
-        const r = await fetch('/api/map/points?sources=tenders', { headers: this._h() })
+        // ⚠️ 一個都沒勾時送 `none`，**不要送空字串** ——
+        // 空字串會被後端當成「沒有指定」，而那跟「我不要任何來源」是兩件事。
+        const want = this.picked.length ? this.picked.join(',') : 'none'
+        const r = await fetch('/api/map/points?sources=' + want, { headers: this._h() })
         if (!r.ok) {
           // ⚠️ 失敗時 info 留 null ⇒ 統計與清單都不渲染。
           // **不要顯示一個全是 0 的畫面**——那會讓「沒載到」看起來像「一切正常且沒東西」。
@@ -334,8 +382,18 @@ function mapPage() {
           .bindPopup('辦公室<br>' + office.address)
       }
       pts.forEach(p => {
-        window.L.marker([p.lat, p.lon]).addTo(this._map)
-          .bindPopup([p.name, p.org, p.location,
+        const d = this.datasetOf(p)
+        // 🔴 **標記本身就要分得出來。** 用 divIcon 放一個字＋顏色。
+        // popup 要點才看得到 ⇒ 如果要點開才知道這個點屬於哪一類，
+        // **地圖就沒有回答「哪幾個是我的廠商」那個問題。**
+        const icon = window.L.divIcon({
+          className: '',
+          html: '<span class="mp-pin" style="background:' + d.color + '">'
+                + d.mark + '</span>',
+          iconSize: [20, 20], iconAnchor: [10, 10],
+        })
+        window.L.marker([p.lat, p.lon], { icon }).addTo(this._map)
+          .bindPopup([d.label + '｜' + (p.name || ''), p.org, p.address || p.location,
                       (p.distanceKm === null || p.distanceKm === undefined)
                         ? '' : ('約 ' + p.distanceKm + ' km（'
                                 + this.precisionLabel(p.precision) + '）')]
