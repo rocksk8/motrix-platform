@@ -1958,3 +1958,57 @@ A 原本要我「把 8 條寫完才能打包」——**實際欠帳是 40 條不
 | 從 `AMBIGUOUS_ACK` 偷刪 `T1` | 撞名偵測 |
 | `C_OWNED` 塞一個不存在的編號 | 幽靈列 |
 | 把表格解析器改成永不匹配 | 解析器量尺 |
+
+---
+
+### 39 · §3p 第三節（P12–P16）：16 題、14 紅 1 綠
+
+**檔案**：`backend/tests/test_map_own_vendors_2026_09_22.py`
+
+#### 一、🔴 抓到產品碼一個安靜的 bug，而它正好會在 P12 上爆開
+
+`routers/map_points.py` 的點字典裡 **`"source"` 出現兩次**（172 與 176）：
+
+```python
+"source": "tenders",                                   # 172：資料集
+"precision": found.precision, "source": found.source,  # 176：定位服務
+```
+Python 後面的鍵覆蓋前面 ⇒ `point["source"]` 實際上是 `"nominatim"`。
+
+⚠️ 現在看不出來，因為地圖上只有一種資料集。
+**而 P12 一加進廠商，每一個點都會說自己是 `nominatim`** ⇒ 前端無法分開上色。
+🔑 **兩個不同的意思搶同一個名字**（資料集／定位服務），而兩個值都合法 ⇒ 不會報錯。
+⇒ 釘 `dataset`（資料集）與 `source`（定位服務）兩個分開的鍵。
+
+#### 二、🔴 規格沒寫而我加了一題：`contractors` 是**自然人**名冊
+
+`routers/contractors.py` 每一支都是 `require_superadmin=True` ＋ `module='contractor_list'`，
+欄位有 `id_number`／`bank_account_number` ⇒ **那個 `address` 是住家地址。**
+畫在「已登入就看得到」的地圖上＝**從一扇新的門把保護降級**，而地圖會正常運作。
+🔑 〈降級之後它還是會動〉。P12c 釘死它沿用 `contractor_list` 權限。
+
+#### 三、P14 我**不釘 precision 的值**
+
+§3o 實測過 Nominatim 認不得台灣門牌，沒金鑰時廠商一樣退到 `district`，而開發機沒金鑰
+⇒ 斷言 `precision == "rooftop"` 會讓**正確的實作在開發機上變紅**。
+今晚第三次同一個機會（CSP 萬用子網域、連線洩漏的 `with`）。
+⇒ 釘不變量：**存在、在階梯上、不知道時是 `None` 不是省略**。
+
+#### 四、⚠️ 假貨的形狀決定了題目驗得到什麼（兩件）
+
+1. **`geo.tiles_blocked` 要關掉**：`/api/map/points` 每次都真的去打
+   `tile.openstreetmap.org`。抓到的是 NETGUARD，**而它只報在第一題**
+   （探測結果有快取）⇒ **後面的題看起來乾淨，只是第一題替它們打過了。**
+   回 `None` 不回 `False`：回 `False` 會讓「三態被壓成兩態」的 bug 在這個檔裡看不見。
+2. **`geo.locate_cached` 的假貨每個地址回不同精度**。
+   一律回同一個精度的話，P14b 就只驗得到「有一個精度值」，
+   而一個**全部寫死 district** 的實作會全綠 —— 那正是要防的東西。
+   ⇒ 斷言變成「這一筆的精度等於這一筆地址該有的」，驗的是**逐點傳遞**。
+
+#### 五、兩個自己抓到的空綠
+
+- P12b 的 `None not in datasets`：**點為空時空集合裡當然沒有 `None`** ⇒ 補前提。
+- P14b 原本寫「查不到對應就 `continue`」：**點沒有 `address` 鍵時整段迴圈什麼都不驗** ⇒ 改成斷言。
+- `own_data` 也塞了一筆標案：不塞的話 P12b 在 B 做完之後**仍然紅**，
+  而紅的理由會變成「沒有標案」—— 一個跟 P12b 無關的理由。
+  🔑 **紅燈也要紅在對的地方**，否則下一輪有人會去修一個不存在的問題。
