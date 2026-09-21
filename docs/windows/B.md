@@ -27,17 +27,22 @@
 |------|--------------|--------|--------|
 | 2026-09-21 | `backend/main.py` | 掛 `licensing.router` | ✅ **准**（STATE §5 回覆 B 第 1 項）。已動，只有兩行：第 25 行 import 末端加 `, licensing`、第 484 行 `app.include_router(licensing.router)`。**middleware 一個字沒碰。** |
 | 2026-09-21 | `backend/helpers/__init__.py` | 條件性 re-export | ✅ **准但預設不動**（STATE §5 第 2 項）。**最後沒有動** —— C 的測試用 `from helpers import licensing as lic`，`helpers/__init__.py` 不需要改。 |
+| 2026-09-21<br>第 2 輪 | `backend/main.py` | 掛授權守門 middleware。位置在 `auth_middleware` **之後**（先確認是誰，再確認這台機器有沒有買）。⚠️ **總開關 `LICENSE_GATE_ENABLED` 做完並驗過之後才會動這個檔** —— 順序反過來的話，中途被打斷會在工作樹留下「會擋住全部 API 而且沒有開關可以關」的狀態 | ⬜ 等回覆 |
 
 ---
 
 ## 本輪狀態
 
-- **輪次**：第 1 輪
-- **狀態**：🟢 **寫完，C 的 27 題全綠**（`pytest tests/test_licensing_core_2026_09_21.py` → `27 passed`）
-- **依據**：`docs/windows/STATE.md` §5〈本輪最終契約〉（不是 §3 的舊段落）
-- **全量**：`--collect-only` ＝ **1,111**（基準 1,084 ＋ 新增 27，對得上）
-- **A 端驗收**：✅ 通過（範圍、私鑰、契約逐項）。程式碼已進 `2dadfb6`（四個檔）
-- **下一步**：第 2 輪，開發單在 `docs/windows/STATE.md` §3
+- **輪次**：**第 2 輪**（細線 1 第 3 步：擋住）
+- **第 1 輪**：✅ A 端驗收通過，程式碼 `2dadfb6`、視窗紀錄 `649f07f`
+- **第 1 輪全量回歸**（我跑的，非 C 的⑥）：**1,055 過／55 skip／1 紅**，合計 1,111，數字對得上
+  - 紅的是 `test_pdf_concurrency_2026_09_07.py::test_semaphore_caps_concurrent_holders`
+  - **單獨重跑是綠的**；該測試只碰 `EDGE_PDF_SEMAPHORE` 與執行緒，與授權零交集
+  - 當下**機器上有三個 pytest 同時在跑**（另兩個不是我的），該測試的第二個斷言
+    `peak == max_concurrency`（「應該至少有一批真的頂到上限」）在 CPU 被搶時會頂不到
+  - ⚠️ **我無法百分之百證明是哪一行紅的**：我把輸出接了 `tail -25`，traceback 被截掉了。
+    這是我的失誤，下次全量回歸不接 `tail`。C 的⑥要在機器安靜時重跑一次才算數
+- **狀態**：🟡 第 2 輪進行中
 
 > ⚠️ **不要在 C 的測試紅之前開始寫碼。** 協定 §4 的②先於④是刻意的：
 > 先有測試才寫碼，測試就不可能是照著你的實作長出來的。
