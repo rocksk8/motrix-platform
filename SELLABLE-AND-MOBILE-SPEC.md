@@ -46,7 +46,7 @@ middleware **完全不介入**（連 `verify_license()` 都不呼叫）。
 ①b 🔴 **解凍第一件事不是打開開關，是補寫 `backend/tests/test_licensing_gate_2026_09_21.py`**。
 第 2 輪（middleware／`kind`／快取）的 13 條驗收條件，**除了「開關關著時完全不介入」那一條以外，一條都沒被測試過**
 （A 當時用第 1 輪的證據結了第 2 輪的案，見 STATE §5 第十次裁決）。
-⚠️ 另：`a63cc49` 的 middleware **到 2026-09-21 11:00 為止從未被任何一次全量回歸跑到**（C 用 sha256 前後對比算出來的）。
+⚠️ 另：`a63cc49` 的 middleware **關著時無害已驗**（1,111 綠），但**開著時的行為零覆蓋**——`backend/tests/` 對 `LICENSE_GATE_ENABLED` 零命中，而 middleware 第一行就是 `if not ...: return`，所以 **`main.py:282` 以下從未被任何測試執行過一次**。（C 先拓到回歸沒涵蓋，B 再拓到「載入了≠跑到了」；A 兩次都把證據讀得比事實寬。）
 
 ② 八個套餐的展開表已經定案在 `docs/windows/STATE.md` §4
 ③ `_PUBKEY_PROD` 還是空的，正式私鑰保管方式未決
