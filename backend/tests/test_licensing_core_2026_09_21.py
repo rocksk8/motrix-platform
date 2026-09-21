@@ -53,11 +53,11 @@
 import base64
 import datetime as _dt
 import json
-import subprocess
-import sys
 from pathlib import Path
 
 import pytest
+
+from tests._subproc import run_python
 
 
 # ── 產品碼還不存在時，給每一題一個讀得懂的紅 ────────────────────────────────
@@ -494,15 +494,13 @@ def test_07b_machine_fingerprint_is_stable_across_processes():
     in_process = machine_fingerprint()
 
     backend_dir = Path(m.__file__).resolve().parent.parent
-    proc = subprocess.run(
-        [sys.executable, "-c",
+    # ⚠️ 走 `tests/_subproc.py` 這個唯一入口：`encoding=` 只管**父行程怎麼解碼**，
+    # 子行程要印什麼編碼是**它自己的環境**決定的。兩者的名字讓人以為是同一件事，
+    # 而只設前者正是 2026-09-21 那次「同一棵樹、兩個人量到相反結果」的成因。
+    proc = run_python(
+        ["-c",
          "from helpers.licensing import machine_fingerprint; print(machine_fingerprint())"],
-        cwd=str(backend_dir),
-        capture_output=True,
-        text=True,
-        encoding="utf-8",      # 不給 encoding 的話中文輸出會在讀取執行緒解碼失敗，
-        errors="replace",      # 例外不回主流程、returncode 仍是 0、stdout 變 None
-        timeout=120,
+        cwd=backend_dir, timeout=120,
     )
     assert proc.returncode == 0, (
         f"子行程算指紋失敗（returncode={proc.returncode}）：\n{proc.stderr}"

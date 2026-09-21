@@ -39,6 +39,8 @@ import sys
 import time
 from pathlib import Path
 
+from tests._subproc import run_python, utf8_env
+
 BACKEND = Path(__file__).resolve().parent.parent
 TARGET = "tests/test_ports_helper_2026_09_21.py"   # 小、快、不碰 DB
 
@@ -47,14 +49,9 @@ def _run_pytest(*args, lock=None, timeout=180):
     """在子行程跑 pytest。**必須是子行程** —— `pytest_configure` 只在啟動時跑一次，
     在同一個行程裡是重現不出來的。
     """
-    env = dict(os.environ, PYTHONIOENCODING="utf-8")
-    if lock is not None:
-        env["MOTRIX_PYTEST_LOCK"] = str(lock)
-    return subprocess.run(
-        [sys.executable, "-m", "pytest", TARGET, "--collect-only", "-q", *args],
-        cwd=str(BACKEND), env=env, capture_output=True, text=True,
-        encoding="utf-8", errors="replace", timeout=timeout,
-    )
+    env = utf8_env(MOTRIX_PYTEST_LOCK=str(lock) if lock is not None else None)
+    return run_python(["-m", "pytest", TARGET, "--collect-only", "-q", *args],
+                      cwd=BACKEND, env=env, timeout=timeout)
 
 
 def _really_gone(pid):

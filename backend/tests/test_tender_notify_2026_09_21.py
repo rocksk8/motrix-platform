@@ -241,11 +241,7 @@ def test_s5_main_actually_starts_the_tender_scheduler():
     區塊的任何一行，它都會紅。
     """
     backend = Path(__file__).resolve().parent.parent
-    proc = subprocess.run(
-        [sys.executable, "-c", _S5_SCRIPT],
-        cwd=str(backend), capture_output=True, text=True,
-        encoding="utf-8", errors="replace", timeout=180,
-    )
+    proc = run_python(["-c", _S5_SCRIPT], cwd=backend, timeout=180)
     assert proc.returncode == 0, (
         f"子行程失敗（returncode={proc.returncode}）：\n{proc.stderr[-2500:]}"
     )

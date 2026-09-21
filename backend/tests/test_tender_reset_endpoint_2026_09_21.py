@@ -58,9 +58,9 @@ E3（`radar_on()` 的語意：沒設→False、`"1"`→True、`"0"`／`"true"`�
 **已經由 `test_tender_match_2026_09_21.py` 的 08d／08e／08f 涵蓋**，
 那三題用 `monkeypatch.delenv/setenv`，同樣與機器設定無關。這裡不重複寫。
 """
-import subprocess
-import sys
 from pathlib import Path
+
+from tests._subproc import run_python
 
 BACKEND = Path(__file__).resolve().parent.parent
 RESET_PATH = "/api/tender-radar/reset-today"
@@ -134,11 +134,7 @@ print("BODY=%s" % resp.text[:200].replace("\\n", " "))
 
 
 def _run(mode, timeout=240):
-    proc = subprocess.run(
-        [sys.executable, "-c", _SCRIPT, mode],
-        cwd=str(BACKEND), capture_output=True, text=True,
-        encoding="utf-8", errors="replace", timeout=timeout,
-    )
+    proc = run_python(["-c", _SCRIPT, mode], cwd=BACKEND, timeout=timeout)
     assert proc.returncode == 0, (
         f"子行程（{mode}）失敗 returncode={proc.returncode}\n{proc.stderr[-2500:]}"
     )

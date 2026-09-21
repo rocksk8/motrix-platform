@@ -29,9 +29,9 @@ B 的理由，照抄：
 會長得一模一樣，而後者會讓 B 去補一行**其實已經在那裡**的訊息。
 🔑 **先證明量尺有刻度，再拿它去量。**
 """
-import subprocess
-import sys
 from pathlib import Path
+
+from tests._subproc import run_python
 
 BACKEND = Path(__file__).resolve().parent.parent
 ANCHOR = "MOTRIX_TENDER_RADAR"
@@ -83,19 +83,20 @@ _dt.schedule_overdue_check = lambda *a, **kw: None
 import main   # noqa: F401
 
 hits = [m for lvl, m in _seen if "MOTRIX_TENDER_RADAR" in m]
+# ⚠️ **跨行程的輸出一律 ASCII**（`ensure_ascii` 用預設值 True）。
+# 這幾行原本是 `ensure_ascii=False`，而它就是 2026-09-21 那次「三題全紅」的
+# 真正引爆點 —— **一個只為了讓失敗訊息好讀的診斷輸出，自己把成功變成了失敗**，
+# 而錯誤訊息（UnicodeEncodeError）看起來像被測對象的問題。
+# 🔑 傳輸用 ASCII，顯示是讀的人的事。
 print("TOTAL=%d" % len(_seen))
 print("HITS=%d" % len(hits))
-print("SAMPLE=%s" % json.dumps([m for _l, m in _seen[:40]], ensure_ascii=False))
-print("HITTEXT=%s" % json.dumps(hits, ensure_ascii=False))
+print("SAMPLE=%s" % json.dumps([m for _l, m in _seen[:40]]))
+print("HITTEXT=%s" % json.dumps(hits))
 '''
 
 
 def _run(mode, timeout=240):
-    proc = subprocess.run(
-        [sys.executable, "-c", _SCRIPT, mode],
-        cwd=str(BACKEND), capture_output=True, text=True,
-        encoding="utf-8", errors="replace", timeout=timeout,
-    )
+    proc = run_python(["-c", _SCRIPT, mode], cwd=BACKEND, timeout=timeout)
     assert proc.returncode == 0, (
         f"子行程（{mode}）失敗 returncode={proc.returncode}\n{proc.stderr[-2500:]}"
     )
