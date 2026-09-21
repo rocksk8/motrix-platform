@@ -18,6 +18,7 @@ from datetime import datetime
 from fastapi import APIRouter, Body, Header, HTTPException
 
 from db import get_db
+from helpers.settings import _set_setting
 from helpers import _audit, _require_user, _tok, require_any_module
 # ⚠️ 走模組不是 `from ... import run_scan`：那會複製走副本，
 # 測試換不掉，而「換不掉」的症狀是計數器永遠 0、那一題永遠綠。
@@ -142,6 +143,16 @@ def update_watch(watch_id: int, body: dict = Body(...),
         name = (body.get("name") or "").strip()
         if not name:
             raise HTTPException(422, "請填寫條件名稱")
+        # 🔴 D22：**收不到 `enabled` 就維持原值，不要預設 `True`。**
+        # 原本 `body.get("enabled", True)` 是**靜默的資料改寫**：
+        # 使用者去改一個關鍵字，順手把一個停用的條件打開了，而**沒有任何訊息**。
+        # 🔑 這是〈降級之後它還是會動〉的寫入版本：
+        # **操作成功了，而它做的不只是你要的那件事。**
+        row = conn.execute("SELECT enabled FROM tender_watches WHERE id=?",
+                           (watch_id,)).fetchone()
+        enabled = row["enabled"] if row else 1
+        if "enabled" in body:
+            enabled = 1 if body.get("enabled") else 0
         conn.execute(
             "UPDATE tender_watches SET name=?, keywords=?, excludes=?, org=?, "
             "budget_min=?, budget_max=?, enabled=?, updated_at=? WHERE id=?",
@@ -150,7 +161,7 @@ def update_watch(watch_id: int, body: dict = Body(...),
              (body.get("org") or "").strip() or None,
              _opt_int(body.get("budgetMin"), "budgetMin"),
              _opt_int(body.get("budgetMax"), "budgetMax"),
-             1 if body.get("enabled", True) else 0, now, watch_id),
+             enabled, now, watch_id),
         )
         conn.commit()
     finally:
@@ -249,6 +260,40 @@ def radar_status(authorization: str = Header(None)):
         "tenderCount": counts["c"],
         "source": "資料來源：政府電子採購網",
     }
+
+
+@router.get("/api/tender-radar/schedule")
+def get_schedule(authorization: str = Header(None)):
+    """每天幾點掃。**只有「幾點」可設定，「幾次」不行。**"""
+    _require_radar(authorization)
+    return {
+        "scanHour": tender_source.scan_hour(),
+        "defaultScanHour": tender_source.SCAN_HOUR,
+        "dailyLimitNote": "每日一次為硬上限，不可調整",
+    }
+
+
+@router.put("/api/tender-radar/schedule")
+def set_schedule(body: dict = Body(...), authorization: str = Header(None)):
+    """設定每天幾點掃。
+
+    ⚠️ **只收「幾點」，刻意不提供「一天幾次」。**
+    每日一次是對政府網站的節制（SPEC §T.5 #4），**不是我們自己的偏好**，
+    所以它不該出現在設定畫面上——**能調的東西遲早會被調**。
+    📌 改了之後下一次 Timer 才會用新時間（排程是自我重排的）。
+    """
+    _require_radar(authorization)
+    raw = body.get("scanHour")
+    try:
+        hour = int(raw)
+    except (TypeError, ValueError):
+        raise HTTPException(422, "掃描時間必須是 0-23 的整數")
+    if not 0 <= hour <= 23:
+        raise HTTPException(422, "掃描時間必須是 0-23 的整數")
+    _set_setting(tender_source.SCAN_HOUR_SETTING, hour)
+    _audit(_tok(authorization), "tender_radar.schedule", "tender_radar", "",
+           f"每日掃描時間改為 {hour}:00")
+    return {"scanHour": hour}
 
 
 @router.post("/api/tender-radar/scan")

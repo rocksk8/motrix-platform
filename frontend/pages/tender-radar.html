@@ -27,14 +27,26 @@
     .tr-health.warn     { background:var(--warning-light); color:var(--warning); }
     .tr-health.err      { background:var(--danger-light); color:var(--danger); }
     .tr-health.idle     { background:#F5F4F0; color:var(--text-secondary); }
-    .tr-card { border:1px solid var(--border-light); border-radius:var(--radius);
-               padding:12px 14px; margin-bottom:10px; background:#fff; }
-    .tr-chip { display:inline-block; padding:1px 7px; border-radius:10px; font-size:11px;
-               background:#F5F4F0; color:var(--text-secondary); margin-right:4px; }
-    .tr-chip.ex { background:var(--danger-light); color:var(--danger); }
+    /* ⚠️ 卡片與標籤改用系統既有的 .panel／.chip／.badge（D15）。
+       原本這裡有一組自訂的 tr-card／tr-chip —— 使用者回報「欄位跟字體字型都跟我
+       既使用的不同」，而查下來字型其實相同（--font-zh 就是 LINE Seed TW_OTF），
+       差異全部來自這幾個自訂樣式。🔑 自己發明一套長得像的，比沿用醜的更糟：
+       它會在每一次改版時跟系統慢慢分岔，而且沒有人記得它為什麼存在。 */
+    .tr-panel-body { padding:12px 14px; }
     .tr-form-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr));
                     gap:10px; margin-bottom:10px; }
     .tr-src { font-size:11px; color:var(--text-dim); margin-top:18px; }
+
+    /* 表單欄位：與 case-management.html 的 .fi 家族逐字相同的值。
+       ⚠️ 這個專案沒有全域的表單樣式——case-management 用頁內的 .fi、
+       dev-crm 用頁內的 .dc-input，每頁各自帶一份。所以「沿用系統慣例」在這裡
+       是指**沿用同一組名字與同一組值**，不是指引用一個並不存在的全域樣式。
+       📌 我原本寫的 .form-input／.form-select／.form-label 三個名字**從未被定義過**，
+       於是那些欄位是完全沒有樣式的裸 input——使用者回報「欄位跟字體字型都跟
+       其他頁面不一樣」就是這個。教訓：沒有樣式不會報錯，它只是看起來很醜。 */
+    .fi { width:100%; padding:6px 10px; font-size:12px; border:1px solid var(--border-light); border-radius:6px; font-family:var(--font-zh); background:#fff; outline:none; transition:border-color .12s; box-sizing:border-box; }
+    .fi:focus { border-color:#9CA3AF; }
+    .fi-label { font-size:10px; color:var(--text-dim); font-family:LINE Seed TW_OTF, sans-serif; margin-bottom:3px; display:block; }
     @media (max-width:640px) { .tr-wrap { padding:14px 16px; } }
   </style>
 </head>
@@ -50,7 +62,9 @@
 
     <h1 class="page-title">標案雷達</h1>
     <p style="font-size:12px;color:var(--text-secondary);margin-top:4px">
-      依搜尋條件自動比對政府電子採購網的招標公告。本階段只做抓取與比對，**不發送通知**。
+      依搜尋條件自動比對政府電子採購網的招標公告，每日一次，命中的會寄一封彙總信。
+      <!-- ⚠️ 原本這裡寫「**不發送通知**」：一是 HTML 裡的 Markdown 粗體會顯示成
+           字面的星號，二是第 5 輪之後它已經不正確了。過時的說明比沒有說明更糟。 -->
     </p>
 
     <!-- ⚠️ 健康狀態有四種而不是兩種，而且「抓不到」與「認不得」不可以合併顯示：
@@ -79,6 +93,26 @@
       </div>
     </div>
 
+    <!-- ── 排程 ── -->
+    <div class="panel" style="margin-top:12px" x-show="schedule">
+      <div class="tr-panel-body" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <span style="font-size:13px">每天</span>
+        <select class="fi" style="width:92px" x-model="scheduleHour">
+          <template x-for="h in 24" :key="h">
+            <option :value="h - 1" x-text="String(h - 1).padStart(2, '0') + ':00'"></option>
+          </template>
+        </select>
+        <span style="font-size:13px">自動掃描一次</span>
+        <button class="btn btn-ghost btn-sm" @click="saveSchedule()"
+                :disabled="schedule && Number(scheduleHour) === schedule.scanHour">儲存</button>
+        <!-- ⚠️ 「一天幾次」刻意不做成設定。每日一次是對政府網站的節制，
+             不是我們的偏好 —— 放上畫面它遲早會被人調大。 -->
+        <span style="font-size:12px;color:var(--text-dim)"
+              x-text="schedule ? schedule.dailyLimitNote : ''"></span>
+        <span style="font-size:12px" x-show="scheduleMsg" x-text="scheduleMsg"></span>
+      </div>
+    </div>
+
     <!-- ── 搜尋條件 ── -->
     <div style="display:flex;align-items:center;justify-content:space-between;margin:18px 0 8px">
       <h2 style="font-size:14px;font-weight:600">搜尋條件</h2>
@@ -91,31 +125,40 @@
       </div>
     </div>
 
-    <div class="tr-card">
+    <div class="panel tr-panel-body">
       <div class="tr-form-grid">
         <div>
-          <label class="form-label">條件名稱</label>
-          <input class="form-input" type="text" x-model="form.name" placeholder="例：監視系統標案">
+          <label class="fi-label">條件名稱</label>
+          <input class="fi" type="text" x-model="form.name" placeholder="例：監視系統標案">
         </div>
         <div>
-          <label class="form-label">關鍵字（逗號分隔，任一中即命中）</label>
-          <input class="form-input" type="text" x-model="form.keywords" placeholder="監視,門禁,監控">
+          <label class="fi-label">關鍵字（逗號分隔，任一中即命中）</label>
+          <input class="fi" type="text" x-model="form.keywords" placeholder="監視,門禁,監控">
         </div>
         <div>
-          <label class="form-label">排除詞（逗號分隔，一中就整筆排除）</label>
-          <input class="form-input" type="text" x-model="form.excludes" placeholder="維護,保養">
+          <label class="fi-label">排除詞（逗號分隔，一中就整筆排除）</label>
+          <input class="fi" type="text" x-model="form.excludes" placeholder="維護,保養">
         </div>
         <div>
-          <label class="form-label">機關（留空＝不篩）</label>
-          <input class="form-input" type="text" x-model="form.org" placeholder="留空 = 所有機關">
+          <label class="fi-label">機關（留空＝不篩）</label>
+          <input class="fi" type="text" x-model="form.org" placeholder="留空 = 所有機關">
         </div>
         <div>
-          <label class="form-label">預算下限（留空＝不篩）</label>
-          <input class="form-input" type="number" min="0" x-model="form.budgetMin" placeholder="留空 = 不設下限">
+          <label class="fi-label">預算下限（留空＝不篩）</label>
+          <input class="fi" type="number" min="0" x-model="form.budgetMin" placeholder="留空 = 不設下限">
         </div>
         <div>
-          <label class="form-label">預算上限（留空＝不篩）</label>
-          <input class="form-input" type="number" min="0" x-model="form.budgetMax" placeholder="留空 = 不設上限">
+          <label class="fi-label">預算上限（留空＝不篩）</label>
+          <input class="fi" type="number" min="0" x-model="form.budgetMax" placeholder="留空 = 不設上限">
+        </div>
+        <!-- D21：`enabled` 有資料欄位、有後端、有「已停用」標籤，卻沒有任何地方能改它。
+             ⇒ 表單看起來就是不完整，而使用者說的「需要有儲存」很可能就是這個。 -->
+        <div>
+          <label class="fi-label">狀態</label>
+          <select class="fi" x-model="form.enabled">
+            <option :value="true">啟用（會納入每日比對）</option>
+            <option :value="false">停用（保留條件但不比對）</option>
+          </select>
         </div>
       </div>
       <!-- ⚠️ 「留空 = 不篩」不是廢話：留空被當成 0 的話，「沒設上限」會變成
@@ -128,15 +171,15 @@
     </div>
 
     <template x-for="w in watches" :key="w.id">
-      <div class="tr-card" style="display:flex;justify-content:space-between;gap:12px">
+      <div class="panel tr-panel-body" style="display:flex;justify-content:space-between;gap:12px">
         <div>
           <div style="font-weight:600;font-size:13px">
             <span x-text="w.name"></span>
-            <span x-show="!w.enabled" class="tr-chip">已停用</span>
+            <span x-show="!w.enabled" class="badge badge--draft">已停用</span>
           </div>
           <div style="margin-top:5px">
-            <template x-for="k in w.keywords" :key="k"><span class="tr-chip" x-text="k"></span></template>
-            <template x-for="x in w.excludes" :key="x"><span class="tr-chip ex" x-text="'排除 ' + x"></span></template>
+            <template x-for="k in w.keywords" :key="k"><span class="chip" x-text="k"></span></template>
+            <template x-for="x in w.excludes" :key="x"><span class="badge badge--danger" x-text="'排除 ' + x"></span></template>
           </div>
           <div style="font-size:11px;color:var(--text-dim);margin-top:5px">
             機關：<span x-text="w.org || '不篩'"></span>
@@ -144,6 +187,8 @@
           </div>
         </div>
         <div style="display:flex;gap:6px;align-items:flex-start">
+          <button class="btn btn-ghost btn-sm" @click="toggleEnabled(w)"
+                  x-text="w.enabled ? '停用' : '啟用'"></button>
           <button class="btn btn-ghost btn-sm" @click="edit(w)">編輯</button>
           <button class="btn btn-ghost btn-sm" @click="remove(w)">刪除</button>
         </div>
@@ -160,7 +205,8 @@
     <div class="table-scroll">
       <table class="data-table" x-show="tenders.length > 0">
         <thead><tr>
-          <th>機關</th><th>案號</th><th>標案名稱</th>
+          <th>機關</th><th>案號</th><th>標案名稱</th><th>地點</th>
+          <th>採購性質</th><th>招標方式</th>
           <th style="text-align:right">預算</th><th>公告日</th><th>截止投標</th><th>命中條件</th>
         </tr></thead>
         <tbody>
@@ -169,6 +215,11 @@
               <td style="font-size:12px" x-text="t.org"></td>
               <td style="font-size:12px;font-family:LINE Seed TW_OTF, sans-serif" x-text="t.caseNo"></td>
               <td style="font-size:12px" x-text="t.name"></td>
+              <!-- ⚠️ 三欄一律 `|| '—'`：NULL 顯示「—」不是空白。
+                   空白讓人分不出「沒有這個欄位」與「這一頁沒載好」。 -->
+              <td style="font-size:12px" x-text="t.location || '—'"></td>
+              <td style="font-size:12px" x-text="t.procurementType || '—'"></td>
+              <td style="font-size:12px" x-text="t.tenderMethod || '—'"></td>
               <!-- ⚠️ 預算用 === null 判斷：0 元是合法金額，
                    用真假值會把「預算 0 元」顯示成「未公告」。 -->
               <td style="text-align:right;font-size:12px;font-family:LINE Seed TW_OTF, sans-serif"
@@ -199,8 +250,9 @@ function tenderRadarPage() {
   return {
     session: {}, token: '', loading: false, scanning: false,
     status: null, watches: [], tenders: [], formError: '',
+    schedule: null, scheduleHour: '', scheduleMsg: '',
     form: { id: null, name: '', keywords: '', excludes: '', org: '',
-            budgetMin: '', budgetMax: '' },
+            budgetMin: '', budgetMax: '', enabled: true },
 
     _h() { return { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.token } },
 
@@ -245,6 +297,7 @@ function tenderRadarPage() {
           fetch('/api/tender-radar/watches', { headers: this._h() }),
           fetch('/api/tender-radar/tenders', { headers: this._h() }),
         ])
+        this.loadSchedule()
         if (s.ok) this.status  = await s.json()
         if (w.ok) this.watches = (await w.json()).items || []
         if (t.ok) this.tenders = (await t.json()).items || []
@@ -254,7 +307,7 @@ function tenderRadarPage() {
 
     resetForm() {
       this.form = { id: null, name: '', keywords: '', excludes: '', org: '',
-                    budgetMin: '', budgetMax: '' }
+                    budgetMin: '', budgetMax: '', enabled: true }
       this.formError = ''
     },
 
@@ -267,6 +320,9 @@ function tenderRadarPage() {
         // ⚠️ null → 空字串，不是 0：送回去時空字串才會變回 null（不篩）。
         budgetMin: w.budgetMin === null ? '' : w.budgetMin,
         budgetMax: w.budgetMax === null ? '' : w.budgetMax,
+        // ⚠️ `!== false`，不是 `|| true`：舊資料沒有這個欄位時要當成啟用，
+        //    但明確的 false 必須原樣帶出來，否則一按編輯就被悄悄改回啟用。
+        enabled: w.enabled !== false,
       }
       this.formError = ''
     },
@@ -279,6 +335,7 @@ function tenderRadarPage() {
         // 空字串要原樣送出，讓後端判成 null（不篩）。
         budgetMin: this.form.budgetMin === '' ? null : Number(this.form.budgetMin),
         budgetMax: this.form.budgetMax === '' ? null : Number(this.form.budgetMax),
+        enabled: this.form.enabled,
       }
       const url = this.form.id ? `/api/tender-radar/watches/${this.form.id}`
                                : '/api/tender-radar/watches'
@@ -293,6 +350,39 @@ function tenderRadarPage() {
         this.resetForm()
         await this.refresh()
       } catch (_e) { this.formError = '連線失敗' }
+    },
+
+    async toggleEnabled(w) {
+      // 只送 `enabled` 一個欄位。後端保留其餘現值，所以這裡不必把整張表單湊齊——
+      // 湊齊反而危險：畫面上的值可能比資料庫舊，會把別人的修改蓋掉。
+      try {
+        const r = await fetch(`/api/tender-radar/watches/${w.id}`,
+                              { method: 'PUT', headers: this._h(),
+                                body: JSON.stringify({ enabled: !w.enabled }) })
+        if (r.ok) await this.refresh()
+      } catch (_e) {}
+    },
+
+    async loadSchedule() {
+      try {
+        const r = await fetch('/api/tender-radar/schedule', { headers: this._h() })
+        if (!r.ok) return
+        this.schedule = await r.json()
+        this.scheduleHour = this.schedule.scanHour
+      } catch (_e) {}
+    },
+
+    async saveSchedule() {
+      this.scheduleMsg = ''
+      try {
+        const r = await fetch('/api/tender-radar/schedule',
+                              { method: 'PUT', headers: this._h(),
+                                body: JSON.stringify({ scanHour: Number(this.scheduleHour) }) })
+        const d = await r.json().catch(() => ({}))
+        if (!r.ok) { this.scheduleMsg = d.detail || '儲存失敗'; return }
+        this.schedule.scanHour = d.scanHour
+        this.scheduleMsg = `已改為每天 ${d.scanHour}:00（下一次排程起生效）`
+      } catch (_e) { this.scheduleMsg = '連線失敗' }
     },
 
     async remove(w) {
