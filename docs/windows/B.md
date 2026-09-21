@@ -807,3 +807,6 @@ from datetime import datetime
 
 ## 佔用宣告：`backend/routers/daily_tasks.py`（§3j 第 3 項，2026-09-21 22:5x）
 只改 `_check_backup_freshness` 的告警那一段（旗標順序＋例外要留痕跡）。
+
+## 佔用宣告：`main.py`＋`sidebar.js`＋新檔 `routers/map_points.py`（5c 端點搬遷，23:3x）
+地圖脫離雷達成獨立模組：新增 `/api/map/points`、掛 router、側欄加 `map` key。
