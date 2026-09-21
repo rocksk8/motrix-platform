@@ -359,28 +359,43 @@ def test_q6_the_organisation_name_is_tried_before_the_location(
     )
 
 
-def test_q7_an_organisation_hit_has_its_own_precision_tier():
-    """🔴 Q7：機關名稱命中的精度**要與縣市級分得開**。
+def test_q7_a_name_hit_has_its_own_precision_tier():
+    """🔴 Q7：以名稱查到的東西，精度**要與縣市級分得開**。
 
     ☠️ 跟縣市級共用一個 `precision` 的話，**§3o 整個設計會失效**：
     那個設計的全部價值就是「一個座標要帶得出它有多準」，
     而建物級與縣市級的誤差差了三個數量級（~10m vs ~20km）。
 
-    📌 建議的那一級叫 `org`，介於 `street` 與 `district` 之間。
-    ⇒ 兩個測試檔（§3p 第三節與這裡）**都從 `geo.PRECISION_ORDER` 讀**，
-    不各自寫死 —— 否則改階梯時會有一邊安靜地過期（A 已採用）。
+    ## 🔴 規格自己有兩條在打架，我只釘兩邊都同意的那一半
+
+    | | 要的位置 | 依據 |
+    |---|---|---|
+    | **§3q Q7**（行 358） | `org`，**介於 street 與 district** ⇒ 比 street **粗** | 「建議」，沒有量測 |
+    | **§3r R9**（行 286） | `poi`，**介於 rooftop 與 street** ⇒ 比 street **細** | D 實測：`交通部航港局` 回真實建物座標 |
+
+    ⇒ **方向相反**。而 R9 有實測、Q7 寫的是「建議」
+    ⇒ 照 R9 做的話，一個**正確的實作會在這一題上變紅**。
+    🔑 今晚第五次同一個機會，而這一次來源不是我的猜測，
+    **是規格裡兩條活著的條文互相牴觸。**
+
+    ⇒ 這一題只釘**兩條都同意的那個不變量**：
+    **「以名稱查到的」有自己的一階，而且它比 `district` 細。**
+    精確位置由 R9／R10 釘（那裡有量測）。已回報 A 擇一。
     """
-    assert hasattr(geo, "PRECISION_ORG"), (
-        "`helpers/geo.py` 缺少 `PRECISION_ORG`（機關名稱命中的那一級）"
-    )
     order = list(getattr(geo, "PRECISION_ORDER", []))
-    assert geo.PRECISION_ORG in order, (
-        f"`PRECISION_ORG` 不在階梯裡：{order}"
+    assert order, "`helpers/geo.py` 缺少 `PRECISION_ORDER`"
+
+    tier = next((getattr(geo, n) for n in ("PRECISION_POI", "PRECISION_ORG")
+                 if hasattr(geo, n)), None)
+    assert tier is not None, (
+        "`helpers/geo.py` 缺少「以名稱查到的」那一階"
+        "（`PRECISION_POI`／`PRECISION_ORG` 都沒有）。\n"
+        "⚠️ §3q Q7 與 §3r R9 對它的**位置**有衝突，但兩條都要求它存在。"
     )
-    assert (order.index(geo.PRECISION_STREET)
-            < order.index(geo.PRECISION_ORG)
-            < order.index(geo.PRECISION_DISTRICT)), (
-        f"`org` 要落在 `street` 與 `district` 之間，而階梯是 {order}"
+    assert tier in order, f"那一階不在 `PRECISION_ORDER` 裡：{order}"
+    assert order.index(tier) < order.index(geo.PRECISION_DISTRICT), (
+        f"`{tier}` 必須比 `district` 細，而階梯是 {order}\n"
+        "⇒ 不然畫面上會把一個建物座標與一個縣市中心點講成同一種準度。"
     )
 
 
@@ -404,8 +419,12 @@ def test_q9_an_unfindable_organisation_falls_back_to_the_location(
     assert (p["lat"], p["lon"]) == LOCATION_COORD, (
         f"退階之後的座標應該是 {LOCATION_COORD}，實際 {(p['lat'], p['lon'])}"
     )
-    assert p.get("precision") != geo.PRECISION_ORG, (
-        f"退回縣市之後 `precision` 還標成 `{geo.PRECISION_ORG}` —— "
+    # ⚠️ 用 getattr 取那一階的名字：§3q Q7 叫它 `org`、§3r R9 叫它 `poi`，
+    #    而規格裡兩條都活著（見 Q7 的說明）。寫死任一個名字都會在另一邊變紅。
+    name_tier = next((getattr(geo, n) for n in ("PRECISION_POI", "PRECISION_ORG")
+                      if hasattr(geo, n)), None)
+    assert p.get("precision") != name_tier or name_tier is None, (
+        f"退回縣市之後 `precision` 還標成 `{name_tier}` —— "
         "那會讓畫面上說一個縣市中心點是建物級精度。"
     )
 
