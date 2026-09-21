@@ -1615,11 +1615,18 @@ _TENDER_SOURCE_NOTE = (
 )
 
 
-def notify_tender_found(tenders: list, watch_names: list = None) -> None:
+def notify_tender_found(tenders: list, watch_names: list = None,
+                        announce_quiet_period: bool = False) -> None:
     """標案雷達命中新標案 → 所有 admin/superadmin。
 
     ⚠️ **每日一封彙總，不是每筆一封**：命中 40 筆就是信裡 40 列。
     40 封信會讓收件人把整個事件 key 關掉，**而他關掉之後就再也收不到真正重要的那一筆**。
+
+    `announce_quiet_period`：這一封寄完之後就要進入 7 天純記錄期時才給 True。
+    ⚠️ **寄一封然後安靜一週，從收件人的角度跟「壞掉了」完全一樣**，
+    而這條線的全部價值就是「不會漏掉標案」——讓收件人懷疑它壞了等於毀掉它。
+    ⚠️ 但這句話**只能出現在那一封**：每封都寫的話，第 8 天恢復後的信也會這樣說，
+    收件人會第二次以為它壞了。判斷在呼叫端（`_quiet_period_starts_after_this_mail`）。
     """
     to = _admin_emails("tender_found")
     if not to:
@@ -1637,9 +1644,17 @@ def notify_tender_found(tenders: list, watch_names: list = None) -> None:
         intro += f"（信中只列前 {len(rows)} 筆，其餘 {more} 筆請進系統查看）"
     if watch_names:
         intro += "　命中條件：" + "、".join(sorted(set(watch_names)))
+    note = _TENDER_SOURCE_NOTE
+    if announce_quiet_period:
+        note = (
+            "📌 這是標案雷達的第一封信。<b>接下來 7 天是純記錄模式，不會再寄信</b>——"
+            "系統照常每天抓取並記錄，只是不打擾你。"
+            "請在這段期間到畫面上確認關鍵字抓得準不準、需不需要加排除詞，"
+            "第 8 天起才會恢復每日彙總。<br>" + note
+        )
     html = _build_html(
         "標案雷達：新標案", f"{len(tenders or [])} 筆", "#1D4ED8",
-        rows, "", _base_url(), note=_TENDER_SOURCE_NOTE, intro=intro,
+        rows, "", _base_url(), note=note, intro=intro,
         button_text="前往標案雷達",
     )
     _async_send(to, f"【MOTRIX】標案雷達：{len(tenders or [])} 筆新標案", html)

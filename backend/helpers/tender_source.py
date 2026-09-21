@@ -495,15 +495,38 @@ def _in_quiet_period():
     準不準」，而「雷達瞎了」跟關鍵字準不準無關——把它一起擋掉的話，
     第一週就壞掉的雷達會安靜地壞滿七天。
     """
+    days = _days_since_first_scan()
+    # ⚠️ **第 0 天（首次成功掃描當天）不算靜默期。**
+    # 那一封正是使用者用來判斷關鍵字準不準的樣本，而純記錄期存在的理由就是
+    # 「讓他先看準不準」——把它一起擋掉的話，這個機制就只剩下沉默。
+    # 靜默的是第 1～7 天，第 8 天恢復。
+    return days is not None and 0 < days <= QUIET_PERIOD_DAYS
+
+
+def _days_since_first_scan():
+    """距首次成功掃描幾天。沒有紀錄回 `None`（不是 0——那是兩件事）。"""
     raw = _first_scan_at()
     if not raw:
-        return False
+        return None
     try:
         first = date.fromisoformat(raw[:10])
     except ValueError:
         logger.warning("%s 的值不是日期：%r", FIRST_SCAN_SETTING, raw)
-        return False
-    return (today() - first).days < QUIET_PERIOD_DAYS
+        return None
+    return (today() - first).days
+
+
+def _quiet_period_starts_after_this_mail():
+    """這一封寄出去之後，是不是就要進入靜默期。
+
+    ⚠️ **判斷條件是「寄完之後會不會靜默」，不是「現在在不在靜默期」**——
+    在靜默期裡根本不會走到寄信這一步，後者永遠不會觸發。
+
+    ⚠️ 而且這句話**只能出現在這一封**。每封都寫的話，第 8 天恢復之後的信
+    也會說「接下來 7 天不會再寄信」——**那是錯的，收件人會第二次以為它壞了**。
+    🔑 一個防止誤會的訊息，**貼錯位置會製造它原本要防的那個誤會**。
+    """
+    return _days_since_first_scan() == 0
 
 
 # ── 邊緣觸發（SPEC §T.5 #5 vs §T.6 的裁決）──────────────────────────────────
@@ -612,7 +635,9 @@ def _notify(result, previous):
     if not tenders:
         return          # 今天沒有新標案不是異常，不該打擾任何人
     try:
-        email_notify.notify_tender_found(tenders, watch_names)
+        email_notify.notify_tender_found(
+            tenders, watch_names,
+            announce_quiet_period=_quiet_period_starts_after_this_mail())
     except Exception:  # noqa: BLE001
         logger.exception("notify_tender_found failed；已通知標記不會被設定")
         return          # ⚠️ 不標記——見 _mark_hits_notified 的說明
