@@ -539,11 +539,27 @@ def test_r10b_the_frontend_treats_poi_and_street_differently():
     assert page.exists(), f"找不到 {page}"
     text = page.read_text(encoding="utf-8")
 
-    start = text.find("precisionIsCoarse")
-    assert start >= 0, "`map.html` 裡找不到 `precisionIsCoarse`"
-    window = text[start:start + 600]
+    # 🔴 **錨點要挑到「定義」，不是「呼叫端」。**
+    #
+    # 第一版用 `text.find("precisionIsCoarse")` ⇒ 抓到的是 **map.html:78**
+    # 那個 `x-show` 的**呼叫**，而定義在 **:342**。
+    # ⇒ B 把定義改對了（`poi` 現在與 `street` 同側算細），**而這道比對看不到**。
+    #
+    # 🔑 B 沒有為了讓它綠而在呼叫端塞一句提到 `'poi'` 的註解 ——
+    # **那就變成「寫給比對器看的字」**，而那正是我在這支 docstring 裡
+    # 自己寫下的限制（「它答的是有沒有被提到，不是有沒有被執行」）。
+    # 📌 所以這一次錯的是**錨點**，不是那個限制：
+    # **判準要挑得到「被執行的那一份」。**
+    import re
+
+    m = re.search(r"precisionIsCoarse\s*\([^)]*\)\s*\{", text)
+    assert m, (
+        "`map.html` 裡找不到 `precisionIsCoarse()` 的**定義**"
+        "（只有呼叫端也算沒有）"
+    )
+    window = text[m.end():m.end() + 400]
     assert f"'{poi}'" in window or f'"{poi}"' in window, (
-        f"`precisionIsCoarse()` 附近沒有提到 `{poi}` ——\n"
+        f"`precisionIsCoarse()` 的定義裡沒有處理 `{poi}`：\n{window[:200]}\n"
         "⇒ 後端加了一階而前端沒跟上，那一階在畫面上等於不存在"
         "（加了等於沒加）。"
     )

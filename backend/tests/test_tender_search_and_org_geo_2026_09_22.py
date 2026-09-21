@@ -217,8 +217,14 @@ def test_q2_a_manual_search_filters_the_list(client, make_user, seeded):
     import db
     conn = db.get_db()
     try:
+        # ⚠️ 欄位是 `keywords`（JSON 陣列）不是 `keyword` ——
+        #    **同一個檔案裡、同一個欄位名，我寫錯了第二次**
+        #    （第一次在 `_add_watch`，而我還在那裡寫了一段註解記錄它）。
+        # 🔑 〈主持人的記憶是負債〉的更窄一層：**我把教訓寫在 A 處，
+        #    然後在 B 處犯同一個錯** —— 寫下來不等於下次會讀到。
+        #    ⇒ 這一次是 B 幫我抓到的，不是那段註解擋住的。
         watches = conn.execute(
-            "SELECT keyword FROM tender_watches").fetchall()
+            "SELECT name, keywords FROM tender_watches").fetchall()
     finally:
         conn.close()
     assert not watches, (
@@ -538,4 +544,80 @@ def test_q10_two_lookups_for_one_tender_do_not_overwrite_each_other(client):
         f"兩個來源寫進快取之後，只剩下 {sorted(addresses)}\n"
         "⇒ 其中一筆蓋掉了另一筆。同一筆標案的機關名稱與 location "
         "是兩個不同的查詢，必須各自有自己的快取項。"
+    )
+
+
+def test_q8c_a_truncated_name_is_not_used_even_when_it_would_resolve(
+        client, make_user):
+    """🔴🔴 Q8c：**被截斷的名稱查得到別的地點時，仍然不可以用它。**
+
+    ## ☠️ 這一題是 ⑤ 抓出來的，而缺口很貴
+
+    Q8／Q8b 驗的是 `geo.looks_truncated()` **這個函式本身**。
+    ⚠️ 我把 `routers/map_points.py` 的呼叫端突變成
+    `if org:`（**拿掉那道防線**）之後 —— **40 題全綠。**
+
+    ⇒ 也就是說：**那個判斷存在，而沒有任何東西在驗「有人真的用它」。**
+    🔑 〈證據的適用範圍〉：**載入≠跑到。** Q8 的綠燈證明的是
+    「那個函式判得對」，不是「那個函式被呼叫了」。
+
+    ## 📌 假貨的形狀決定了這一題有沒有鑑別力
+
+    查表裡**刻意讓被截斷的名稱查得到一個錯的座標** ——
+    若讓它查不到，這一題會**因為退階而綠**，而那與「防線在不在」無關。
+    ☠️ 而那正是 Q8 真正要防的情境：
+    **「交通部民用航空局飛航」剛好命中某個不相關的地點**
+    ⇒ 我們得到一個**看起來合理而完全錯誤**的座標，
+    而地圖上那個圖釘**看起來跟正確的一模一樣**。
+    """
+    truncated = "交通部民用航空局飛航…"
+    wrong = (23.9739, 120.9820)          # 南投，離台北兩百公里
+
+    import db
+    conn = db.get_db()
+    try:
+        conn.execute(
+            "INSERT INTO tenders (case_no, name, org, location, fetched_at) "
+            "VALUES (?,?,?,?,?)",
+            ("Q-008", "被截斷機關的案子", truncated, LOCATION,
+             "2026-09-22T00:00:00"))
+        conn.commit()
+    finally:
+        conn.close()
+
+    # ⚠️ 這張表在本檔是 `_isolate_geo` 的**區域變數**，不是模組常數
+    #    —— 我第一版寫 `dict(_ADDRESSES)`，那是**另一個檔**的名字，
+    #    而它給的是 `NameError`（好的失敗：吵、而且指名）。
+    table = {
+        ORG_FINDABLE: (ORG_COORD, geo.PRECISION_STREET),
+        LOCATION: (LOCATION_COORD, geo.PRECISION_DISTRICT),
+        truncated: (wrong, geo.PRECISION_POI),   # ← 刻意讓它查得到
+    }
+
+    def _fake(address, manual_coord=None):
+        key = (address or "").strip()
+        hit = table.get(key)
+        if not hit:
+            return geo.GeoResult(error="查表裡沒有：%r" % key, address=key)
+        return geo.GeoResult(coord=hit[0], precision=hit[1],
+                             source=geo.SOURCE_NOMINATIM, address=key)
+
+    saved = geo.locate_cached
+    try:
+        geo.locate_cached = _fake
+        hdr = _auth(client, make_user)
+        p = _tender_point(client, hdr, "Q-008")
+    finally:
+        geo.locate_cached = saved
+
+    assert p.get("address") != truncated, (
+        f"被截斷的機關名稱被拿去查了，而它查到了 {wrong}（南投）——\n"
+        "⇒ 地圖上會出現一個看起來合理而完全錯誤的圖釘。\n"
+        "🔑 查不到會退階（安全），查到錯的不會。"
+    )
+    assert p.get("address") == LOCATION, (
+        f"應該退回 `location`（{LOCATION}），實際查的是 {p.get('address')!r}"
+    )
+    assert (p["lat"], p["lon"]) == LOCATION_COORD, (
+        f"座標應該是 `location` 查出來的，實際 {(p['lat'], p['lon'])}"
     )
