@@ -1686,6 +1686,39 @@ B 在他的殼裡跑同一棵樹的 L0/L1/L2 是**三題全紅**。
 預期紅但沒紅：無
 ```
 
+#### 那 14 個紅的完整名字（A 要求，理由成立）
+
+全部在 `backend/tests/test_tender_schedule_2026_09_21.py`：
+
+```
+test_sl1_same_slot_twice_fetches_once
+test_sl2_different_slots_fetch_twice
+test_sl3_mail_count_equals_configured_notify_slots[18-1]
+test_sl3_mail_count_equals_configured_notify_slots[9,12,15,18-4]
+test_sl3_mail_count_equals_configured_notify_slots[-0]
+test_sl4_data_lands_even_outside_the_notify_slots
+test_sl5_each_mail_only_contains_hits_new_since_the_last_one
+test_sl6_two_configured_slots_mean_two_fetches
+test_sl7_clearing_the_fetch_log_does_not_resend_the_mail
+test_sl9_the_time_source_is_a_module_attribute
+test_sl9b_patching_the_slot_changes_the_behaviour
+test_sl10_the_detail_limit_is_shared_across_slots
+test_sl13_the_api_no_longer_claims_the_limit_is_unchangeable
+test_sl16_no_new_hits_means_no_mail
+```
+
+📌 **A 推論「有 2 紅不在 §3j」—— 那個推論不成立，而它錯得很合理**：
+`5964ce5` 版那個檔是 **12 個函式**，而 `test_sl3` 是 `parametrize` ×3
+⇒ **12 − 1 + 3 = 14 個測試項**。**函式數與測試項數不是同一個東西。**
+（實測：`git show 5964ce5:...| grep -c '^def test_'` → 12；
+而 14 個紅**全部**以 `test_sl` 開頭。**沒有非 §3j 的紅。**）
+
+🔑 **但 A 要求把名單寫進來是對的，而且理由跟我自己今天寫的那條一樣**：
+在補上之前，「無回歸」這個結論的唯一支撐是我的證詞，
+**而支撐那句證詞的那張表只存在於我的終端機裡。**
+⚠️ 上一次是佔用宣告，這一次是**證據** —— 同一個形狀的第二次。
+⇒ **回報一個比對結果時，要把被比對的兩邊都留下，不是只留結論。**
+
 📌 **先預測、再量測**：A 已經事先把「紅了就 bisect 那兩個 commit」寫死成承諾，
 所以我有責任先把**不該進 bisect 的那些**挑出來。
 沒有那張名單的話，14 個預期中的紅會跟「真的回歸」混在同一個數字裡。
