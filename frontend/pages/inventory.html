@@ -324,7 +324,7 @@
   <div class="modal-box" style="width:920px" @click.stop>
     <div class="modal-title">採購建議</div>
     <div style="font-size:11px;color:var(--text-dim);margin-bottom:12px">
-      依安全庫存缺口自動計算，建議量補到「黃燈門檻」（安全庫存 × 1.5）；供應商/單價取自該料號最近一筆進貨紀錄，查無紀錄則單價退回料件標準成本。系統目前沒有追蹤供應商前置時間，僅供估算參考，正式下單前請自行確認交期。
+      依安全庫存缺口自動計算，建議量補到「黃燈門檻」（安全庫存 × 1.5）；供應商/單價取自該料號最近一筆進貨紀錄，查無紀錄則單價退回料件標準成本。前置時間優先取料號設定，未設定則取上次供應商的設定；<strong>兩邊都沒設定時預計到貨日會顯示「未知」——那不是今天，是系統沒有資料</strong>，請自行向供應商確認交期。
     </div>
     <div class="loading-text" x-show="purchaseSuggestions.loading">載入中…</div>
     <template x-if="!purchaseSuggestions.loading">
@@ -339,6 +339,7 @@
               <th style="text-align:center">水位</th><th>料號</th><th>品名</th><th style="text-align:right">在庫</th>
               <th style="text-align:right">安全庫存</th><th style="text-align:right">建議採購量</th>
               <th>上次供應商</th><th style="text-align:right">單價</th><th style="text-align:right">預估金額</th>
+              <th style="text-align:right">前置時間</th><th>預計到貨</th><th>採購狀態</th>
             </tr></thead>
             <tbody>
               <template x-for="s in purchaseSuggestions.items" :key="s.part_no">
@@ -352,6 +353,25 @@
                   <td style="font-size:12px" x-text="s.lastSupplierName || '（無進貨紀錄）'"></td>
                   <td style="text-align:right;font-size:12px;font-family:LINE Seed TW_OTF, sans-serif" x-text="'NT$ ' + Math.round(s.unitCost).toLocaleString()"></td>
                   <td style="text-align:right;font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-secondary)" x-text="'NT$ ' + Math.round(s.estimatedCost).toLocaleString()"></td>
+                  <!-- ⚠️ 前置時間與預計到貨一律用 === null 判斷，不可以用真假值：
+                       0 天（現貨、當天可出）是假值，寫成 `s.leadTimeDays ? ... : '未知'`
+                       會把「當天到貨」顯示成「未知」。 -->
+                  <td style="text-align:right;font-size:12px;font-family:LINE Seed TW_OTF, sans-serif"
+                      x-text="s.leadTimeDays === null ? '—' : s.leadTimeDays + ' 天'"></td>
+                  <td style="font-size:12px"
+                      :style="s.eta === null ? 'color:var(--text-dim)' : ''"
+                      x-text="s.eta === null ? '未知（未設定前置時間）' : s.eta"></td>
+                  <td style="font-size:12px;white-space:nowrap">
+                    <span x-show="s.status === 'suggested'" style="color:var(--text-dim)">待下單</span>
+                    <span x-show="s.status === 'ordered'" style="color:var(--accent)"
+                          x-text="'已下單 ' + (s.orderedAt || '').slice(0, 10)"></span>
+                    <button class="btn btn-ghost" style="font-size:11px;padding:2px 8px;margin-left:6px"
+                            x-show="s.status === 'suggested'"
+                            @click="setSuggestionStatus(s, 'ordered')">標記已下單</button>
+                    <button class="btn btn-ghost" style="font-size:11px;padding:2px 8px;margin-left:6px"
+                            x-show="s.status === 'ordered'"
+                            @click="setSuggestionStatus(s, 'received')">標記已到貨</button>
+                  </td>
                 </tr>
               </template>
             </tbody>
@@ -585,6 +605,26 @@ function app() {
         }
       } catch {}
       this.purchaseSuggestions.loading = false
+    },
+
+    async setSuggestionStatus(s, target) {
+      // 狀態只能往前走一步，跳階由後端擋（回 409 並說明要先經過哪一步）。
+      // 前端不自己判斷順序——兩邊各判一次就會各自對、合起來錯。
+      try {
+        const r = await fetch(
+          `${API}/inventory/purchase-suggestions/${encodeURIComponent(s.part_no)}/status`,
+          { method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+            body: JSON.stringify({ status: target }) })
+        if (!r.ok) {
+          const d = await r.json().catch(() => ({}))
+          alert(d.detail || '狀態更新失敗')
+          return
+        }
+        // 重新整理整份清單：到貨之後庫存可能已回到水位之上，那一列本來就該消失，
+        // 而那是庫存算出來的結果，不是前端自己把它藏起來。
+        await this.openPurchaseSuggestionsModal()
+      } catch { alert('狀態更新失敗') }
     },
 
     async toggleBatchPaid(b, action) {

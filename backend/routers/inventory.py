@@ -13,10 +13,30 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Header, Body
 
+from datetime import date
+
 from db import get_db, next_entity_code
 from helpers import _require_user, _tok, _audit, notify_module_activity, require_any_module
+from helpers.procurement import (
+    STATUS_ORDERED,
+    STATUS_RECEIVED,
+    STATUS_SUGGESTED,
+    compute_eta,
+    effective_cycle,
+    effective_status,
+    resolve_lead_time,
+    validate_transition,
+)
 
 router = APIRouter()
+
+# 黃燈門檻倍數。**提為模組常數是為了讓下面兩個地方不可能各走各的**：
+#   purchase_suggestions()      決定「誰出現在清單上」
+#   _below_yellow_threshold()   決定「狀態轉移時它算不算還缺貨」
+# 兩邊如果用各自的字面值，某天有人只改了一邊，清單上看得到的東西會在轉移時
+# 被判定成「不缺貨」——兩邊各自都對、合起來錯。
+# （`parts_summary()::_stock_level()` 裡那份是既有的，這一輪不動它，見 B.md。）
+_YELLOW_MULTIPLIER = 1.5
 
 
 def _require_admin(user: dict):
@@ -132,7 +152,7 @@ def purchase_suggestions(authorization: str = Header(None)):
     require_any_module(user, ('inventory', 'procurement', 'case_manage', 'netplan_edit'), "庫存管理")
     conn = get_db()
     parts_rows = conn.execute(
-        "SELECT part_no, name, brand, unit, category, cost, safety_stock "
+        "SELECT part_no, name, brand, unit, category, cost, safety_stock, lead_time_days "
         "FROM parts WHERE active=1 AND safety_stock > 0"
     ).fetchall()
     in_stock_by_part = {
@@ -150,9 +170,24 @@ def purchase_suggestions(authorization: str = Header(None)):
             "FROM stock_batches WHERE part_no != '' GROUP BY part_no"
         ).fetchall()
     }
+    # 供應商層級的前置時間。只撈有填的——`WHERE ... IS NOT NULL` 之後，
+    # 「不在這個 dict 裡」就精準地等於「未知」，不必再跟 0 區分一次。
+    supplier_lead_by_id = {
+        r["id"]: r["lead_time_days"] for r in conn.execute(
+            "SELECT id, lead_time_days FROM suppliers WHERE lead_time_days IS NOT NULL"
+        ).fetchall()
+    }
+    # 採購循環狀態。⚠️ **這張表不參與下面的過濾**：清單永遠由庫存算出來，
+    # 狀態只是附註（協定 §5b：旗標不可以蓋過真實狀態）。
+    status_by_part = {
+        r["part_no"]: dict(r) for r in conn.execute(
+            "SELECT * FROM purchase_suggestion_status"
+        ).fetchall()
+    }
     conn.close()
 
-    yellow_multiplier = 1.5  # 跟 parts_summary()::_stock_level() 的黃燈門檻定義一致
+    today = date.today()
+    yellow_multiplier = _YELLOW_MULTIPLIER  # 跟 parts_summary()::_stock_level() 的黃燈門檻定義一致
     result = []
     for p in parts_rows:
         d = dict(p)
@@ -164,6 +199,14 @@ def purchase_suggestions(authorization: str = Header(None)):
             continue
         level = "red" if in_stock < safety_stock else "yellow"
         last_batch = last_batch_by_part.get(d["part_no"], {})
+        lead_time_days = resolve_lead_time(
+            d.get("lead_time_days"),
+            supplier_lead_by_id.get(last_batch.get("supplierId")),
+        )
+        # 能走到這裡就代表 suggested_qty > 0，也就是**現在仍低於黃燈門檻**。
+        # ⚠️ 走 effective_cycle 不是只走 effective_status：新的一輪要連同
+        # 上一輪的時間戳一起清掉，否則會出現「還沒下單，但下單時間是 3 天前」。
+        cycle = effective_cycle(status_by_part.get(d["part_no"]), below_threshold=True)
         unit_cost = d.get("cost") or 0
         result.append({
             "part_no": d["part_no"], "name": d["name"], "brand": d["brand"],
@@ -174,10 +217,110 @@ def purchase_suggestions(authorization: str = Header(None)):
             "lastSupplierId": last_batch.get("supplierId"),
             "lastSupplierName": last_batch.get("supplierName") or "",
             "lastPurchaseAt": last_batch.get("lastPurchaseAt") or "",
+            # 料號層級覆寫供應商層級；兩邊都沒填 → None（未知），
+            # 而未知時 eta 也是 None，**不是今天、不是 0**。
+            "leadTimeDays": lead_time_days,
+            "eta": compute_eta(lead_time_days, today),
+            "status": cycle["status"],
+            "orderedAt": cycle["ordered_at"],
+            "receivedAt": cycle["received_at"],
         })
     result.sort(key=lambda r: (r["stockLevel"] != "red", -r["estimatedCost"]))
     total_estimated_cost = round(sum(r["estimatedCost"] for r in result), 2)
     return {"items": result, "count": len(result), "totalEstimatedCost": total_estimated_cost}
+
+
+def _below_yellow_threshold(conn, part_no: str) -> bool:
+    """這個料號現在還缺不缺貨（＝會不會出現在採購建議清單上）。
+
+    **跟 `purchase_suggestions()` 用同一個門檻常數**，否則會出現「清單上看得到、
+    轉移時卻說它不缺貨」這種兩邊各自都對、合起來錯的狀況。
+    """
+    row = conn.execute(
+        "SELECT safety_stock FROM parts WHERE part_no=? AND active=1", (part_no,)
+    ).fetchone()
+    if not row or not (row["safety_stock"] or 0) > 0:
+        return False
+    in_stock = conn.execute(
+        "SELECT COUNT(*) AS cnt FROM stock_items WHERE part_no=? AND status='in_stock'",
+        (part_no,)
+    ).fetchone()["cnt"]
+    target = math.ceil((row["safety_stock"] or 0) * _YELLOW_MULTIPLIER)
+    return max(0, target - in_stock) > 0
+
+
+@router.post("/api/inventory/purchase-suggestions/{part_no}/status")
+def set_purchase_suggestion_status(
+    part_no: str,
+    body: dict = Body(...),
+    authorization: str = Header(None),
+):
+    """推進一筆採購建議的循環：`suggested → ordered → received`。
+
+    **跳階會被拒絕**（`suggested → received` 回 409）。理由不是潔癖：跳過 `ordered`
+    代表「沒有人按過下單」，而下單日是之後追料、對帳、回頭驗證前置時間準不準的
+    唯一依據。靜默接受的話那一格會永遠是空的，而且沒有人知道它為什麼是空的。
+
+    ⚠️ **判斷用的是 `effective_status()` 算出來的「現在實際上在哪一步」，
+    不是資料表裡存的那個字串。** 上一輪收完貨、庫存卻還是低於水位（叫少了）時，
+    它就是新的一輪 —— 這時要能重新下單，而不是回「已經到貨了」把人擋在外面。
+    存的旗標會過期，算出來的才是真的（協定 §5b）。
+    """
+    user = _require_user(authorization)
+    require_any_module(user, ('inventory', 'procurement', 'case_manage', 'netplan_edit'), "庫存管理")
+    target = (body.get("status") or "").strip()
+    note   = (body.get("note") or "").strip()
+
+    conn = get_db()
+    try:
+        if not conn.execute(
+            "SELECT 1 FROM parts WHERE part_no=? AND active=1", (part_no,)
+        ).fetchone():
+            raise HTTPException(404, f"料號不存在或已停用：{part_no}")
+
+        row    = conn.execute(
+            "SELECT * FROM purchase_suggestion_status WHERE part_no=?", (part_no,)
+        ).fetchone()
+        below   = _below_yellow_threshold(conn, part_no)
+        cycle   = effective_cycle(row, below_threshold=below)
+        current = cycle["status"]
+        validate_transition(current, target)
+
+        now  = datetime.now().isoformat(timespec="seconds")
+        who  = user.get("display_name") or user["username"]
+        # 上一輪的時間戳該不該留，由 effective_cycle 決定——**跟清單同一支函式**。
+        new_cycle   = cycle["new_cycle"]
+        ordered_at  = cycle["ordered_at"]
+        ordered_by  = cycle["ordered_by"]
+        received_at = cycle["received_at"]
+        received_by = cycle["received_by"]
+
+        if target == STATUS_ORDERED:
+            ordered_at, ordered_by = now, who
+        elif target == STATUS_RECEIVED:
+            received_at, received_by = now, who
+
+        conn.execute("""
+            INSERT INTO purchase_suggestion_status
+                (part_no, status, ordered_at, ordered_by, received_at, received_by, note, updated_at)
+            VALUES (?,?,?,?,?,?,?,?)
+            ON CONFLICT(part_no) DO UPDATE SET
+                status=excluded.status, ordered_at=excluded.ordered_at,
+                ordered_by=excluded.ordered_by, received_at=excluded.received_at,
+                received_by=excluded.received_by, note=excluded.note,
+                updated_at=excluded.updated_at
+        """, (part_no, target, ordered_at, ordered_by, received_at, received_by, note, now))
+        conn.commit()
+    finally:
+        conn.close()
+
+    _audit(_tok(authorization), 'purchase_suggestion.status', 'part', part_no,
+           f"{part_no}：{current} → {target}", detail={"from": current, "to": target})
+    return {
+        "partNo": part_no, "status": target,
+        "orderedAt": ordered_at, "receivedAt": received_at,
+        "newCycle": new_cycle,
+    }
 
 
 # ── 序號清單 ─────────────────────────────────────────────────────────────────

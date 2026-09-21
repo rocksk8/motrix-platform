@@ -632,8 +632,18 @@
               </select>
             </div>
             <div class="form-group">
-              <label class="form-label">標準交期</label>
+              <label class="form-label">標準交期（說明）</label>
               <input class="form-input" type="text" x-model="form.leadTime" placeholder="例：30 天、4~6 週">
+              <div style="font-size:10px;color:var(--text-dim);margin-top:3px">純文字備註，系統不拿它算日期</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">前置時間（天）</label>
+              <input class="form-input" type="number" min="0" step="1" x-model="form.leadTimeDays"
+                     placeholder="留空 = 未知">
+              <div style="font-size:10px;color:var(--text-dim);margin-top:3px">
+                採購建議用這個欄位算預計到貨日。<strong>留空代表「未知」，到貨日會顯示未知；
+                填 0 代表「現貨、當天可出」</strong>——兩者不一樣，不確定就留空。
+              </div>
             </div>
           </div>
         </div>
@@ -987,7 +997,7 @@
       blankForm() {
         return {
           name:'', nameEn:'', tags:[], taxId:'', category:'', active: true,
-          currency:'NTD', paymentTerms:'', leadTime:'',
+          currency:'NTD', paymentTerms:'', leadTime:'', leadTimeDays:null,
           phone:'', fax:'', email:'', website:'', address:'',
           contacts:[], notes:''
         }
@@ -1042,8 +1052,13 @@
       async saveSupplier() {
         if (!this.form.name.trim()) { this.formError = '請填寫公司名稱'; return }
         this.formError = ''
-        const { name, taxId, phone, id, createdAt, updatedAt, ...dataFields } = this.form
-        const body = { name: (name||'').trim(), tax_id: taxId||'', phone: phone||'', data: dataFields }
+        const { name, taxId, phone, leadTimeDays, id, createdAt, updatedAt, ...dataFields } = this.form
+        // ⚠️ 空字串一定要變成 null，不可以讓它掉進 Number()——`Number('')` 是 0，
+        // 而 0 的意思是「現貨、當天可出」。沒填卻送 0，採購建議會說「今天到貨」。
+        const ltd = (leadTimeDays === '' || leadTimeDays === null || leadTimeDays === undefined)
+          ? null : Number(leadTimeDays)
+        const body = { name: (name||'').trim(), tax_id: taxId||'', phone: phone||'',
+                       lead_time_days: ltd, data: dataFields }
         try {
           const url = this.editingId ? `${API}/suppliers/${this.editingId}` : `${API}/suppliers`
           const method = this.editingId ? 'PUT' : 'POST'

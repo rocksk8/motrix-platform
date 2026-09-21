@@ -100,7 +100,7 @@ DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR = os.path.join(
 # 的附件，2026-09-14）——兩張表都是 TEXT NOT NULL DEFAULT '[]'，存
 # save_document_files() 回傳的清單。刪附件限 admin+，見 routers/quotations.py
 # 與 routers/dev_crm.py 的 DELETE .../files/{file_id}。
-CURRENT_VERSION = 84
+CURRENT_VERSION = 85
 
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
 # execution model) whenever the current request is authenticated as the 'demo'
@@ -3516,6 +3516,50 @@ def _m084_backfill_role_bypass_modules(conn):
     logger.info("v84 模組回填完成：%d/%d 個帳號有異動", changed, len(rows))
 
 
+def _m085_procurement_lead_time(conn):
+    """供應商／料號前置時間，與採購建議的下單狀態（2026-09-21）。
+
+    補的是兩個既有模組**自己在文件裡承認**的缺口：
+      - `SELLABLE-AND-MOBILE-SPEC.md` §5.1 第 4 項：`lead_time` 全系統實測 0 處
+      - 架構地圖 §6.6：採購建議「v1 刻意不含 ETA」，理由正是「從未追蹤前置時間」
+
+    ⚠️ **`lead_time_days` 預設 NULL，而 NULL 是「未知」不是「0」。**
+    這兩者在畫面上都會顯示成「今天到貨」——**那是一個看起來很正常的錯誤答案**，
+    採購人員會照著它去排程。補了欄位不等於補了資料：沒填的那些**仍然是未知**，
+    ETA 必須跟著回 `null`，不可以因為欄位存在就假裝算得出來。
+    （同 `_m070_stock_batches` 對 `is_paid=0` 的處理：誠實反映「系統從未知道過」。）
+
+    解析順序：`parts.lead_time_days` → 該料號最近一筆進貨的供應商 → NULL。
+    **料號層級可以覆寫供應商層級**，因為同一家供應商的現貨品項與訂製品項差很多。
+
+    `purchase_suggestion_status` 一個料號一列，記的是**目前那一輪**採購循環。
+    採購建議本身是即時從庫存算出來的（`routers/inventory.py::purchase_suggestions`，
+    以 `part_no` 為鍵、沒有自己的主鍵），所以狀態只能另存。
+
+    ⚠️ **這張表不參與清單的過濾。** 清單永遠由庫存算出來，狀態只是附註——
+    旗標是人設的、會過期，真實狀態是算出來的、會自己更新，**旗標不可以蓋過真實狀態**
+    （協定 §5b）。收到貨庫存自然回到水位之上、建議自然消失；若收了貨庫存還是低
+    （叫少了），本來就該再建議一次。
+    """
+    if not _col_exists(conn, "suppliers", "lead_time_days"):
+        conn.execute("ALTER TABLE suppliers ADD COLUMN lead_time_days INTEGER")
+    if not _col_exists(conn, "parts", "lead_time_days"):
+        conn.execute("ALTER TABLE parts ADD COLUMN lead_time_days INTEGER")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS purchase_suggestion_status (
+            part_no     TEXT PRIMARY KEY,
+            status      TEXT NOT NULL DEFAULT 'suggested',
+            ordered_at  TEXT DEFAULT '',
+            ordered_by  TEXT DEFAULT '',
+            received_at TEXT DEFAULT '',
+            received_by TEXT DEFAULT '',
+            note        TEXT DEFAULT '',
+            updated_at  TEXT DEFAULT ''
+        )
+    """)
+    conn.commit()
+
+
 _MIGRATIONS = [
     _m001_export_columns,        # v1
     _m002_sessions_expires,      # v2
@@ -3601,6 +3645,7 @@ _MIGRATIONS = [
     _m082_feed_attachments,                         # v82
     _m083_backup_retention_policy,                  # v83
     _m084_backfill_role_bypass_modules,             # v84
+    _m085_procurement_lead_time,                    # v85
 ]
 
 

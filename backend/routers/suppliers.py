@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 from db import get_db, next_entity_code, spawn_bg_thread
 from helpers import _require_user, _tok, _audit, notify_module_activity, require_any_module
+from helpers.procurement import clean_lead_time
 from archive import _backup_suppliers
 
 router = APIRouter()
@@ -19,6 +20,12 @@ class SupplierIn(BaseModel):
     tax_id: Optional[str] = ''
     phone:  Optional[str] = ''
     data:   Optional[dict] = {}
+    # 前置時間（天）。**None ＝ 未知，不是 0。** 0 是「現貨、當天可出」，
+    # 未知是「我們從來沒追蹤過這家」——兩者在採購排程上是完全不同的事。
+    # ⚠️ PUT 時「沒有送這個欄位」與「送了 null」必須分得開，否則舊的前端
+    # （不知道有這欄位）每更新一次供應商就會把它清成 NULL，而且沒有任何訊息。
+    # 判斷靠 `model_fields_set`，見 update_supplier()。
+    lead_time_days: Optional[int] = None
 
 
 @router.get("/api/suppliers")
@@ -29,7 +36,8 @@ def list_suppliers(authorization: str = Header(None)):
         return []
     conn = get_db()
     rows = conn.execute(
-        "SELECT id, code, name, tax_id, phone, data_json, created_at, updated_at FROM suppliers ORDER BY name"
+        "SELECT id, code, name, tax_id, phone, lead_time_days, data_json, created_at, updated_at "
+        "FROM suppliers ORDER BY name"
     ).fetchall()
     conn.close()
     result = []
@@ -40,7 +48,9 @@ def list_suppliers(authorization: str = Header(None)):
             "name": row["name"],
             "taxId": row["tax_id"], "phone": row["phone"],
             "createdAt": row["created_at"], "updatedAt": row["updated_at"],
-            **d
+            **d,
+            # 放在 **d 之後是刻意的：真欄位要贏過 data_json 裡可能同名的殘留值。
+            "leadTimeDays": row["lead_time_days"],
         })
     return result
 
@@ -50,11 +60,17 @@ def create_supplier(body: SupplierIn, authorization: str = Header(None)):
     user = _require_user(authorization)
     require_any_module(user, ('customer', 'procurement', 'inventory'), "供應商管理")
     now = datetime.now().isoformat()
+    # ⚠️ 驗證要在下面那個 `except Exception` **之外**做。
+    # 那段是用來把 INSERT 的 IntegrityError 轉成乾淨 409 的，但它會一併吞掉
+    # clean_lead_time() 丟的 422——負數前置時間會回「建立失敗」而不是說明原因。
+    lead_time_days = clean_lead_time(body.lead_time_days)
     conn = get_db()
     try:
         conn.execute(
-            "INSERT INTO suppliers (name, tax_id, phone, data_json, created_at, updated_at) VALUES (?,?,?,?,?,?)",
+            "INSERT INTO suppliers (name, tax_id, phone, lead_time_days, data_json, "
+            "created_at, updated_at) VALUES (?,?,?,?,?,?,?)",
             (body.name.strip(), body.tax_id or '', body.phone or '',
+             lead_time_days,
              json.dumps(body.data or {}, ensure_ascii=False), now, now)
         )
         conn.commit()
@@ -82,11 +98,16 @@ def update_supplier(sid: int, body: SupplierIn, authorization: str = Header(None
     if not conn.execute("SELECT id FROM suppliers WHERE id=?", (sid,)).fetchone():
         conn.close()
         raise HTTPException(404, "供應商不存在")
-    conn.execute(
-        "UPDATE suppliers SET name=?, tax_id=?, phone=?, data_json=?, updated_at=? WHERE id=?",
-        (body.name.strip(), body.tax_id or '', body.phone or '',
-         json.dumps(body.data or {}, ensure_ascii=False), now, sid)
-    )
+    # 只有「這次真的送了 lead_time_days」才動它。沒送就保持原值——
+    # 不知道有這個欄位的舊前端，不應該因為存了一次供應商就把它清掉。
+    sets   = ["name=?", "tax_id=?", "phone=?", "data_json=?", "updated_at=?"]
+    params = [body.name.strip(), body.tax_id or '', body.phone or '',
+              json.dumps(body.data or {}, ensure_ascii=False), now]
+    if "lead_time_days" in body.model_fields_set:
+        sets.append("lead_time_days=?")
+        params.append(clean_lead_time(body.lead_time_days))
+    params.append(sid)
+    conn.execute(f"UPDATE suppliers SET {', '.join(sets)} WHERE id=?", params)
     conn.commit()
     conn.close()
     spawn_bg_thread(_backup_suppliers)

@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException, Header, Body
 
 from db import get_db
 from helpers import _require_user, _tok, _audit, notify_module_activity, require_any_module
+from helpers.procurement import clean_lead_time
 
 router = APIRouter()
 
@@ -92,8 +93,8 @@ def create_part(body: dict = Body(...), authorization: str = Header(None)):
         # 拋成不友善的 500，而不是乾淨的 409。
         try:
             conn.execute("""
-                INSERT INTO parts (part_no, name, brand, unit, cost, list_price, category, note, safety_stock, active, created_at, updated_at)
-                VALUES (?,?,?,?,?,?,?,?,?,1,?,?)
+                INSERT INTO parts (part_no, name, brand, unit, cost, list_price, category, note, safety_stock, lead_time_days, active, created_at, updated_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,1,?,?)
             """, (
                 part_no, name,
                 body.get("brand",""),
@@ -103,6 +104,7 @@ def create_part(body: dict = Body(...), authorization: str = Header(None)):
                 category,
                 body.get("note",""),
                 body.get("safetyStock") or body.get("safety_stock") or 0,
+                clean_lead_time(body.get("leadTimeDays", body.get("lead_time_days"))),
                 now, now,
             ))
             conn.commit()
@@ -123,7 +125,9 @@ def update_part(part_id: int, body: dict = Body(...), authorization: str = Heade
     require_any_module(user, ('procurement', 'case_manage', 'inventory'), "供應商／料號／採購")
     conn = get_db()
     try:
-        row = conn.execute("SELECT part_no, name, safety_stock FROM parts WHERE id=?", (part_id,)).fetchone()
+        row = conn.execute(
+            "SELECT part_no, name, safety_stock, lead_time_days FROM parts WHERE id=?",
+            (part_id,)).fetchone()
         if not row:
             raise HTTPException(404, "料號不存在")
         now = datetime.now().isoformat()
@@ -135,8 +139,18 @@ def update_part(part_id: int, body: dict = Body(...), authorization: str = Heade
             safety_stock = body.get("safetyStock", body.get("safety_stock")) or 0
         else:
             safety_stock = row["safety_stock"]
+        # 前置時間照 safety_stock 同一個慣用法：沒帶這個鍵就沿用現值。
+        # 不知道有這個欄位的既有呼叫路徑（批次改名／Excel 匯入／舊前端）
+        # 不應該因為存了一次料號，就把前置時間悄悄清成 NULL。
+        # ⚠️ 這裡分的是「有沒有送這個鍵」，不是「送的值是不是空的」——
+        # 明確送 null 是「改成未知」，那是使用者的意思，要照做。
+        if "leadTimeDays" in body or "lead_time_days" in body:
+            lead_time_days = clean_lead_time(
+                body.get("leadTimeDays", body.get("lead_time_days")))
+        else:
+            lead_time_days = row["lead_time_days"]
         conn.execute("""
-            UPDATE parts SET name=?, brand=?, unit=?, cost=?, list_price=?, category=?, note=?, safety_stock=?, updated_at=?
+            UPDATE parts SET name=?, brand=?, unit=?, cost=?, list_price=?, category=?, note=?, safety_stock=?, lead_time_days=?, updated_at=?
             WHERE id=?
         """, (
             new_name,
@@ -147,6 +161,7 @@ def update_part(part_id: int, body: dict = Body(...), authorization: str = Heade
             body.get("category",""),
             body.get("note",""),
             safety_stock,
+            lead_time_days,
             now, part_id,
         ))
         conn.commit()
