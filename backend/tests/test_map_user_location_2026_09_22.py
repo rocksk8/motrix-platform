@@ -225,13 +225,32 @@ def test_g5_a_bad_accuracy_is_rejected(
         client, make_user, geo_enabled, office, tenders, accuracy):
     """🔴 G5：`accuracy` 是負數或非數字 ⇒ **422**。
 
-    📌 `0` **不在這張表裡**，那是刻意的：`accuracy=0` 的語意不明
-    （「完美精準」還是「沒量到」？），而這一輪沒有人裁過它。
+    📌 `0` 一開始**刻意不在這張表裡**：它的語意不明（「完美精準」還是
+    「沒量到」？），而當時沒有人裁過它。
     ⚠️ 我不把一個沒有人決定過的值寫成斷言 —— 那會變成**我替使用者做了決定**。
+    ⇒ A 2026-09-22 裁了，見下面的 G5b。
     """
     hdr = _auth(client, make_user)
     _ask(client, hdr, lat=USER_TAIPEI[0], lon=USER_TAIPEI[1],
          accuracy=accuracy, expect=422)
+
+
+def test_g5b_an_accuracy_of_zero_is_rejected_too(
+        client, make_user, geo_enabled, office, tenders):
+    """🔴 G5b：`accuracy=0` ⇒ **422**，跟負數同一條路（A 2026-09-22 裁定）。
+
+    ☠️ **理由不是「0 不合理」，是「0 會讓我們說一句謊」。**
+    瀏覽器定位**沒有任何情境能宣稱誤差為零**（GPS 最佳也是數公尺）
+    ⇒ 收下 `0` 的話，畫面會顯示「誤差約 0 公尺」。
+    🔑 **那比不顯示誤差更糟 —— 它是一個具體而錯誤的保證。**
+
+    📌 而它直接繞過 §3n 的核心設計：**距離與誤差綁在一起**，
+    而綁上去的誤差如果可以是 0，**整個設計就白做了**。
+    （A 的話，我照收；我原本只是不替使用者決定，沒想到這一層。）
+    """
+    hdr = _auth(client, make_user)
+    _ask(client, hdr, lat=USER_TAIPEI[0], lon=USER_TAIPEI[1],
+         accuracy=0, expect=422)
 
 
 # ══════════════════════════════════════════════════════════════════════
