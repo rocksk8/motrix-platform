@@ -103,8 +103,17 @@ python -m pytest tests/ --collect-only -q --basetemp=<固定路徑> | tail -1   
 1. **不准用會動的名字。** `HEAD~1`、`$(git rev-parse HEAD)`、`ls -t | head -1`、
    `sorted(glob(...))[-1]` 一律禁止 —— 在共用工作目錄裡，它們會指到另一個視窗的東西，
    而失敗的樣子是「成功了，只是動到別人的」。要講哪一個 commit 就寫完整 SHA。
-2. **commit 前先 `git status`，只 `git add` 到檔案層級。**
+2. **commit 前先 `git status`，只 `git add` 到檔案層級，而且 `git commit` 一律帶 pathspec：`git commit -m ... -- <路徑>`。**
    `git add <目錄>` 等同那個目錄下的 `-A`，會把另一個視窗正在改的東西一起帶走。
+   🔴 **而且「只 add 自己的檔」防不了真正的坐池：`git index` 是共用狀態，`git commit` 送出的是**整個 index**，不是「我剛 `add` 的那些」。**
+   ⇒ 別人暫存好的檔會進你的 commit，而你完全不會發現。
+   **A 已實測確認**（沙箱 repo，2026-09-21）：
+   ```
+   兩人各自 add 一個檔 → git commit -m "..."        ⇒ commit 含兩個檔 ❌
+   兩人各自 add 一個檔 → git commit -m "..." -- b.txt ⇒ 只含 b.txt，
+                                                    a.txt 仍留在 index ✅
+   ```
+   （這個坑是 MSP 安控平台視窗3 告知的，它們真的踩到了：某個 session 明確單檔 `add`，照樣把別人已暫存的 12 個檔送進自己的 commit。）
 3. **跑 pytest 一律帶 `--basetemp`，而且要「固定但分用途」**：
    ```
    全量回歸    --basetemp=...\motrix-pytest-<視窗>-full
