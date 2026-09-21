@@ -257,7 +257,7 @@ def _record_request_trail(user_id: int, now_dt, method: str, path: str,
 
 # ⚠️ 這支**寫在 auth_middleware 前面**是刻意的，不是排版隨意。
 #
-# Starlette 的 middleware：**後宣告的在外層、先跑**（本檔第 350 行附近那句
+# Starlette 的 middleware：**後宣告的在外層、先跑**（本檔 `security_headers` 上方那句
 # 「Registered last = outermost」講的就是這件事，已用最小 app 實測確認）。
 # 所以要讓「先確認是誰，再確認這台機器有沒有買」成立，這支必須宣告在
 # `auth_middleware` **之前**，它才會在 auth 之後才跑。
@@ -292,6 +292,15 @@ async def license_gate_middleware(request: Request, call_next):
     if path in license_core.LICENSE_EXEMPT_PATHS or path in _PUBLIC_API_PATHS:
         return await call_next(request)
 
+    # ⚠️⚠️ 這一行**刻意沒有包 try/except**。不是漏寫的，不要順手補上去。
+    #
+    # `verify_license()` 契約上任何情況都不丟例外（C 有測試釘住 missing／malformed／
+    # 截斷／亂碼各種路徑）。萬一它還是丟了，三條路只能選一條：
+    #   包起來放行 → 授權形同虛設，而且**不會有人發現**
+    #   包起來擋住 → 付費客戶整套系統癱瘓
+    #   不包       → 那一支 API 回 500
+    # 選最後一條：500 會被報修，「出錯就放行」是降級，而**降級不會有人報修**。
+    # 授權模組壞掉本來就該是全站停下來的等級。（A 於 2026-09-21 覆核通過）
     status = license_core.verify_license()
     if license_core.license_blocks_request(status):
         # 402 Payment Required，不是 403。
