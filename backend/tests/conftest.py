@@ -501,22 +501,41 @@ def pytest_configure(config):
     path = _lock_path()
     held = _read_lock(path)
     if held:
-        age = time.time() - float(held.get("started_at", 0))
-        alive = _pid_alive(int(held.get("pid", -1)))
-        if alive and age <= LOCK_MAX_AGE_SECONDS:
-            raise pytest.UsageError(
-                "另一個全量回歸正在跑（協定 §5-5：一次只能有一個人跑）。\n"
-                "  持有者 pid=%s 視窗=%s 已跑 %d 分鐘\n"
-                "  鎖檔 %s\n"
-                "⚠️ CPU 是共用資源：兩份全量回歸一起跑會把靠時序的斷言搞紅，"
-                "而**失敗的樣子跟真的有 bug 一模一樣**。\n"
-                "⇒ 等它跑完；若確定它已經死了，刪掉上面那個鎖檔。"
-                % (held.get("pid"), held.get("basetemp"), age // 60, path)
-            )
-        # 🔑 過期就接手。**一個解不掉的鎖比沒有鎖更糟** ——
-        # 它會把每個人訓練成「遇到鎖就先刪檔」，而那個習慣會讓鎖永遠失效。
-        print("\n[全量回歸鎖] 接手一個%s的鎖：pid=%s、%d 分鐘前" %
-              ("已死" if not alive else "過期", held.get("pid"), age // 60))
+        # ⚠️ **取值也要包在 try 裡**，不是只有 `json.loads`。
+        # JSON 合法而 `started_at` 是 `"x"` 的話，`float()` 會丟 `ValueError`，
+        # 而它發生在 `pytest_configure` 裡 ⇒ **整個 pytest 起不來** ⇒
+        # 每一個人的每一支測試都被擋住 —— 與「壞掉的鎖應該放行」完全相反。
+        # 🔑 **一個不可信的鎖要當成「沒有鎖」，不是當成「拒絕所有人」。**
+        # ⚠️ 而觸發條件（有人手動改過鎖檔）正是下面那段訊息會引發的行為：
+        #    兩個各自都不嚴重的缺陷互相餵對方。
+        try:
+            age = time.time() - float(held.get("started_at", 0))
+            pid = int(held.get("pid", -1))
+        except (TypeError, ValueError):
+            print("\n[全量回歸鎖] 鎖檔內容不可信（%s）—— 當成沒有鎖" % path)
+            held = None
+        else:
+            alive = _pid_alive(pid)
+            if alive and age <= LOCK_MAX_AGE_SECONDS:
+                raise pytest.UsageError(
+                    "另一個全量回歸正在跑（協定 §5-5：一次只能有一個人跑）。\n"
+                    "  持有者 pid=%s 視窗=%s 已跑 %d 分鐘\n"
+                    "  鎖檔 %s\n"
+                    "⚠️ CPU 是共用資源：兩份全量回歸一起跑會把靠時序的斷言搞紅，"
+                    "而**失敗的樣子跟真的有 bug 一模一樣**。\n"
+                    "⇒ **等它跑完。**\n"
+                    "⚠️ 不要因為「它大概已經死了」就刪掉鎖檔 —— **持有者真的死掉、"
+                    "或鎖超過 %d 分鐘，這裡都會自己放行**，所以你會被擋，"
+                    "就代表那個行程很可能**真的還在跑**。\n"
+                    "   唯一該手動刪的情形是 **pid 被重用**（一個無關的新行程剛好拿到"
+                    "同一個號碼），而你不想等到年紀上限 —— 先去確認 pid=%s 是不是 pytest。"
+                    % (held.get("pid"), held.get("basetemp"), age // 60, path,
+                       LOCK_MAX_AGE_SECONDS // 60, held.get("pid"))
+                )
+            # 🔑 過期就接手。**一個解不掉的鎖比沒有鎖更糟** ——
+            # 它會把每個人訓練成「遇到鎖就先刪檔」，而那個習慣會讓鎖永遠失效。
+            print("\n[全量回歸鎖] 接手一個%s的鎖：pid=%s、%d 分鐘前" %
+                  ("已死" if not alive else "過期", held.get("pid"), age // 60))
 
     try:
         path.parent.mkdir(parents=True, exist_ok=True)

@@ -57,7 +57,27 @@ def _run_pytest(*args, lock=None, timeout=180):
     )
 
 
-def _dead_pid():
+def _really_gone(pid):
+    """這個 pid 真的不在了嗎 —— **用與受測對象無關的來源判斷**。
+
+    🔴 **刻意不呼叫 `conftest._pid_alive()`**：那是 T4 唯一要驗的東西，
+    拿它來挑測試資料等於用受測對象證明受測對象。
+    （而且 `pid_always_alive` 那個突變一下去，這支會永遠找不到死的 pid，
+    T4 就會變成「**錯誤**」而不是「**紅**」—— 而錯誤的訊息會指向重試邏輯，
+    指不到 `_pid_alive`。）
+    """
+    if os.name != "nt":
+        try:
+            os.kill(pid, 0)
+        except OSError:
+            return True
+        return False
+    out = subprocess.run(["tasklist", "/FI", "PID eq %d" % pid],
+                         capture_output=True, text=True, timeout=60)
+    return str(pid) not in out.stdout
+
+
+def _dead_pid(tries=8):
     """拿一個**確定已死、而且沒有人握著 handle** 的 pid。
 
     ⚠️ 不可以用 `subprocess.Popen` 再 `wait()`：`Popen` 物件**還握著 handle**，
@@ -65,10 +85,24 @@ def _dead_pid():
     而症狀是「T4 判成還活著」，看起來完全像守門邏輯寫錯。
     🔑 **「查得到」與「還活著」是兩件事。**
     `subprocess.run` 回來之後物件就沒了，handle 跟著關掉。
+
+    ## ⚠️ 為什麼要重試：**Windows 會重用剛釋放的 pid**
+
+    剛結束的行程留下的號碼很快就會被別人拿走。被重用的話這一題會紅，
+    ☠️ **而它紅起來的訊息是「持有者已經死了還擋著 —— 這個鎖解不掉」，
+    看起來完全像實作壞了。** 一個偶發、而且指向錯方向的紅燈。
+    ⇒ 拿到號碼之後**獨立確認它真的不在了**，被重用就換一個。
     """
-    out = subprocess.run([sys.executable, "-c", "import os;print(os.getpid())"],
-                         capture_output=True, text=True, timeout=60)
-    return int(out.stdout.strip())
+    for _ in range(tries):
+        out = subprocess.run([sys.executable, "-c", "import os;print(os.getpid())"],
+                             capture_output=True, text=True, timeout=60)
+        pid = int(out.stdout.strip())
+        if _really_gone(pid):
+            return pid
+    raise AssertionError(
+        "試了 %d 次都拿不到一個確定已死的 pid —— 這台機器的 pid 重用特別快，"
+        "T4 需要換一種取得方式（不是守門壞了）" % tries
+    )
 
 
 def _write_lock(path, pid, age_seconds=0):
@@ -219,3 +253,83 @@ def test_t5c_lock_is_released_when_the_run_finishes(tmp_path):
     proc = _run_pytest(f"--basetemp={tmp_path / 'x-full'}", lock=lock)
     assert proc.returncode == 0, proc.stdout[-500:]
     assert not lock.exists(), "跑完了鎖還在 —— 下一個人會被一個沒有人持有的鎖擋住"
+
+
+# ── G1／G2：A 的四項裁定裡屬於測試的兩項 ─────────────────────────────────
+
+def test_g1_refusal_message_does_not_offer_deleting_the_lock_as_the_cure(tmp_path):
+    """🟡 G1：拒絕訊息**不可以**把「刪掉鎖檔」寫成「持有者已經死了」的解法。
+
+    🔴 **因為在 T4 有效的前提下，那個情況根本不會讓你被擋到。**
+    持有者死了 → T4 放行；鎖過期 → T4b 放行。
+    ⇒ 你會被擋，代表那個行程**很可能真的還在跑** ——
+    這時候刪掉鎖檔，就是去踩掉一個正在跑的 24 分鐘回歸。
+
+    唯一該手動刪的情形是 **pid 被重用**（一個無關的新行程剛好拿到同一個號碼），
+    而你不想等到年紀上限。
+
+    ## ⚠️ 這一題的斷言是脆的，我照實說
+
+    改個說法就繞過去了。但判準不是「它擋不擋得住所有寫法」，是
+    **「什麼改動會讓它紅」＝有人把那個錯的適用情境寫回來**。
+    ⇒ 所以寫成**條件式**而不是字串比對：
+    **訊息可以提刪檔，但提了就必須同時說出「重用」這個前提。**
+    講出正確前提的寫法都過得去，漏掉前提的寫法才紅。
+
+    📌 這條的來歷值得留著：B 承諾「被擋到不自己刪、會回報」，
+    而它讀到的訊息叫它「若確定已經死了就刪」。
+    **B 的承諾比訊息正確。**
+    ⚠️ 一句錯的建議，被一個讀不到它的人用更嚴的原則擋掉了 —— **那不是設計，是運氣。**
+    """
+    lock = tmp_path / "lock"
+    _write_lock(lock, os.getpid())
+    proc = _run_pytest(f"--basetemp={tmp_path / 'x-full'}", lock=lock)
+    assert proc.returncode == 4, "前提不成立：這一輪應該被擋下來"
+    msg = proc.stdout + proc.stderr
+    if "刪" in msg:
+        assert "重用" in msg, (
+            "拒絕訊息叫人刪鎖檔，卻沒有說出唯一適用的前提（pid 被重用）。\n"
+            "⚠️ 在 T4 有效的前提下，『持有者已經死了』不會讓人被擋到 —— "
+            "會被擋就代表它很可能還在跑，這時候刪檔是去踩掉一個正在跑的回歸。\n"
+            f"實際訊息：{msg[-600:]}"
+        )
+
+
+def test_g2_a_corrupt_lock_file_lets_everyone_through(tmp_path):
+    """🔴 G2：鎖檔內容壞掉（JSON 合法、欄位不是數字）→ **放行**，不可以崩掉。
+
+    `float(held["started_at"])` / `int(held["pid"])` 對 `"x"` 會丟 `ValueError`，
+    而它發生在 `pytest_configure` 裡 ⇒ **整個 pytest 起不來** ⇒
+    **每一個人的每一支測試都被擋住**，方向與「壞掉的鎖應該放行」完全相反。
+
+    ⚠️ 觸發條件是「有人手動改過鎖檔」，聽起來很罕見 ——
+    🔑 **但 G1 那句錯的訊息正在叫人去手動動那個檔，而手動動過的鎖檔
+    正是唯一能讓守門崩掉的東西。** 兩個各自都不嚴重的缺陷互相加成。
+
+    ⇒ 一個**不可信的鎖**要當成**沒有鎖**，不是當成「拒絕所有人」。
+    """
+    lock = tmp_path / "lock"
+    lock.write_text(json.dumps({"pid": "不是數字", "started_at": "也不是",
+                                "basetemp": "壞掉的"}), encoding="utf-8")
+    proc = _run_pytest(f"--basetemp={tmp_path / 'x-full'}", lock=lock)
+    assert proc.returncode == 0, (
+        f"壞掉的鎖檔把所有人擋在外面了（{proc.returncode}）—— "
+        "不可信的鎖要當成沒有鎖\n" + (proc.stdout + proc.stderr)[-900:]
+    )
+
+
+def test_g2b_a_lock_file_that_is_not_json_lets_everyone_through(tmp_path):
+    """G2 的第二條路：鎖檔**根本不是 JSON**（寫到一半、被編輯器塞了 BOM…）。
+
+    ⚠️ 跟 G2 分開寫是因為它們走的是**不同的例外**：
+    這一條在 `json.loads` 就炸（已經被 `_read_lock` 接住），
+    G2 那一條活過了解析、炸在**取值**上 —— 而那一層原本沒有人接。
+    🔑 **「格式壞掉」與「格式對而值壞掉」是兩個不同的失敗。**
+    """
+    lock = tmp_path / "lock"
+    lock.write_text("這不是 JSON {{{", encoding="utf-8")
+    proc = _run_pytest(f"--basetemp={tmp_path / 'x-full'}", lock=lock)
+    assert proc.returncode == 0, (
+        f"不是 JSON 的鎖檔把所有人擋在外面了（{proc.returncode}）\n"
+        + (proc.stdout + proc.stderr)[-900:]
+    )
