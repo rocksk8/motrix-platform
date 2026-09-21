@@ -22,6 +22,7 @@ from helpers import (
 from archive import _ensure_archive_dirs, _schedule_weekly, _schedule_daily
 import trail
 
+from helpers import licensing as license_core
 from routers import auth, quotations, customers, suppliers, parts, dashboard, system, reports, contractors, payslips, daily_tasks, module_versions, vendor_contractors, dev_crm, env_guide, netarch_guide, switch_guide, shipping_notes, inventory, search, monitor_guide, access_guide, gateway_guide, automation_guide, contractor_vouchers, invoice_vouchers, org_structure, payment_requests, list_prefs, case_action_items, uploads, network_plans, network_plans_quick, approval_delegates, cashier, accounting_export, material_orders, case_extra_expenses, completion_notes, licensing
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -252,6 +253,58 @@ def _record_request_trail(user_id: int, now_dt, method: str, path: str,
         tc.close()
     except Exception:
         pass
+
+
+# ⚠️ 這支**寫在 auth_middleware 前面**是刻意的，不是排版隨意。
+#
+# Starlette 的 middleware：**後宣告的在外層、先跑**（本檔第 350 行附近那句
+# 「Registered last = outermost」講的就是這件事，已用最小 app 實測確認）。
+# 所以要讓「先確認是誰，再確認這台機器有沒有買」成立，這支必須宣告在
+# `auth_middleware` **之前**，它才會在 auth 之後才跑。
+#
+# 寫反了不會有任何錯誤訊息，只會變成：未登入的請求收到 402 而不是 401，
+# 而且會對還沒通過身分驗證的人洩漏「這台機器沒有授權」。
+@app.middleware("http")
+async def license_gate_middleware(request: Request, call_next):
+    """授權守門（細線 1 第 3 步）。**預設完全不介入。**
+
+    `LICENSE_GATE_ENABLED` 是 False 時**連 `verify_license()` 都不呼叫** ——
+    不要留「算了但不擋」的中間狀態，那會付出效能成本卻換不到任何好處。
+
+    ⚠️ 透過 `license_core.` 讀那兩個名字（而不是 `from ... import` 進來），
+    是為了讓它們在**呼叫時**才被讀到：測試要 monkeypatch 它們，import 進來的
+    副本 monkeypatch 不掉。
+
+    ⚠️ 這裡刻意**不包 try/except**。`verify_license()` 契約上任何情況都不丟例外，
+    而且 C 有測試釘住這件事。萬一它真的丟了，讓它變成 500 是對的：
+    500 會被報修，而「出錯就放行」是降級——降級不會有人報修。
+    """
+    if not license_core.LICENSE_GATE_ENABLED:
+        return await call_next(request)
+    if request.method == "OPTIONS":
+        return await call_next(request)
+
+    path = request.url.path
+    # 非 /api/ 一律放行：前端靜態檔要載得出來，否則客戶連「為什麼被擋」都看不到。
+    if not path.startswith("/api/"):
+        return await call_next(request)
+    # 豁免清單 ∪ 既有公開端點——未授權時這些仍要通，否則客戶連自救都做不到。
+    if path in license_core.LICENSE_EXEMPT_PATHS or path in _PUBLIC_API_PATHS:
+        return await call_next(request)
+
+    status = license_core.verify_license()
+    if license_core.license_blocks_request(status):
+        # 402 Payment Required，不是 403。
+        # 403＝「你這個人沒權限」，402＝「這台機器沒買」。客服現場要分得開。
+        return JSONResponse(
+            status_code=402,
+            content={
+                "detail": license_core.license_block_message(status),
+                "reason": status["reason"],
+                "code":   "license_required",
+            },
+        )
+    return await call_next(request)
 
 
 @app.middleware("http")
