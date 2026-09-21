@@ -370,3 +370,180 @@ def seed_extra_expense():
             conn.close()
 
     return _seed
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# 守門：`--basetemp` 與「全量回歸互斥」（協定 §5-3／§5-5）
+#
+# 🔑 **這兩條規則早就寫在 `MULTIWIN-PROTOCOL.md:226-243` 與 §5-5 裡，而今天
+#    兩個視窗各踩了一次。** ⇒ 結論不是「再寫一次規則」，是**規則沒有到達**。
+#    文件擋不住「順手跑一下」，因為那不是一個會被當成決策的時刻。
+#
+# ⚠️ 兩條規則防的是**不同**的失敗，理由不可以互相代用：
+#   `--basetemp`   防**檔案**互刪 —— 跟機器忙不忙**完全無關**，
+#                  閒著的時候一樣會刪（我當初就是這樣推錯邊界的）。
+#   全量回歸互斥   防**CPU** 競爭 —— 這一條才是「機器閒著就還好」。
+#   🔑 **規則決定做什麼，理由決定什麼時候適用。理由寫錯＝邊界錯，
+#      而規則本身看起來完全沒問題。**
+# ══════════════════════════════════════════════════════════════════════════
+
+import ctypes
+import json
+import os
+import tempfile
+import time
+from pathlib import Path
+
+#: basetemp 的名字以這個結尾 ⇒ 視為「全量回歸」，要搶鎖。
+FULL_REGRESSION_SUFFIX = "-full"
+
+#: 鎖多久之後一律視為過期。全量回歸實測 23~24 分鐘，這裡給 2.5 倍餘裕。
+LOCK_MAX_AGE_SECONDS = 60 * 60
+
+_STILL_ACTIVE = 259          # Windows GetExitCodeProcess 的「還在跑」
+_ERROR_ACCESS_DENIED = 5
+
+_lock_taken_by_me = False
+
+
+def _lock_path() -> Path:
+    """鎖檔位置。**環境變數只是測試用的接縫**，不是給人繞過用的。
+
+    ⚠️ 這道守門防的是「順手跑一下」，不是防惡意 —— 有人下定決心要繞過它，
+    他也可以直接刪掉鎖檔。**把它做成防不住的樣子是對的**，做成防得住的樣子
+    會讓下一個人以為它保證了互斥。
+    """
+    override = os.environ.get("MOTRIX_PYTEST_LOCK")
+    if override:
+        return Path(override)
+    return Path(tempfile.gettempdir()) / "motrix-pytest-full-regression.lock"
+
+
+def _pid_alive(pid: int) -> bool:
+    """這個 pid 現在還在跑嗎。
+
+    ## ⚠️ 為什麼不用 `os.kill(pid, 0)`（Windows）
+
+    我**實測過兩次**（2026-09-21，Python 3.11 / Windows 11）：
+    `os.kill(pid, 0)` **沒有**殺掉目標，等 5 秒、再用 `tasklist` 獨立確認都還在。
+    也就是說「它會殺掉行程」那個常見說法在這裡是**錯的**。
+
+    **但我仍然不用它**，理由不是它危險，是**猜錯的代價不對稱**：
+    CPython 在 Windows 走的是 `OpenProcess(PROCESS_ALL_ACCESS)` ＋ `TerminateProcess`，
+    而我只在**一個** Python 版本上試過。猜錯的後果是**殺掉別人跑到一半的
+    24 分鐘全量回歸**，那個代價不值得拿「我試過一次沒事」去換。
+    ⇒ 改用**唯讀**的 `PROCESS_QUERY_LIMITED_INFORMATION`：它沒有任何一個版本會殺人。
+
+    ## ⚠️ 光看 `OpenProcess` 成不成功是不夠的
+
+    我第一次測的時候被自己誤導：`subprocess.Popen` 物件**還握著 handle**，
+    行程已經結束了，`OpenProcess` 照樣成功 ⇒ 判成「還活著」。
+    🔑 **「查得到」與「還活著」是兩件事** ⇒ 所以要再問一次結束碼。
+
+    ## 殘留風險（誠實標註，兩個都靠 `LOCK_MAX_AGE_SECONDS` 兜底）
+
+    1. **pid 會被重用** —— 一個無關的新行程剛好拿到同一個號碼 ⇒ 誤判成還活著。
+    2. 行程若真的以 **259** 這個結束碼退出，會被誤判成 `STILL_ACTIVE`。
+    """
+    if pid <= 0:
+        return False
+    if os.name == "nt":
+        kernel32 = ctypes.windll.kernel32
+        handle = kernel32.OpenProcess(0x1000, False, pid)   # QUERY_LIMITED_INFORMATION
+        if not handle:
+            # 存在但我們沒權限查 ⇒ 仍然算活著（寧可誤擋，不要誤放）
+            return kernel32.GetLastError() == _ERROR_ACCESS_DENIED
+        try:
+            code = ctypes.c_ulong()
+            if kernel32.GetExitCodeProcess(handle, ctypes.byref(code)):
+                return code.value == _STILL_ACTIVE
+            return True
+        finally:
+            kernel32.CloseHandle(handle)
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return False
+    return True
+
+
+def _read_lock(path):
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+def pytest_configure(config):
+    """在**任何一支測試跑起來之前**擋下來。
+
+    ⚠️ 擋在這裡而不是擋在 fixture 裡，是因為 fixture 只在有測試用到它時才跑，
+    而傷害（刪掉別人的 basetemp）發生在**第一支用到 `tmp_path` 的測試**——
+    那時候已經來不及了。
+    """
+    global _lock_taken_by_me
+
+    basetemp = config.option.basetemp
+    if basetemp is None:
+        raise pytest.UsageError(
+            "這個 repo 的 pytest 一律要帶 --basetemp（協定 §5-3）。\n"
+            "  全量回歸    --basetemp=%s\\motrix-pytest-<視窗>-full\n"
+            "  臨時單檔跑  --basetemp=%s\\motrix-pytest-<視窗>-adhoc\n"
+            "⚠️ 不帶的話會共用 %s\\pytest-of-<user>\\pytest-current，"
+            "而 pytest 會把它整個刪掉重建 —— **另一個視窗跑到一半的資料庫會在腳下消失**，"
+            "錯誤訊息則指向一支完全無關的測試（2026-09-21 兩個視窗各踩一次）。"
+            % (tempfile.gettempdir(), tempfile.gettempdir(), tempfile.gettempdir())
+        )
+
+    if not str(basetemp).rstrip("\\/").endswith(FULL_REGRESSION_SUFFIX):
+        return                       # 不是全量回歸，不搶鎖
+
+    path = _lock_path()
+    held = _read_lock(path)
+    if held:
+        age = time.time() - float(held.get("started_at", 0))
+        alive = _pid_alive(int(held.get("pid", -1)))
+        if alive and age <= LOCK_MAX_AGE_SECONDS:
+            raise pytest.UsageError(
+                "另一個全量回歸正在跑（協定 §5-5：一次只能有一個人跑）。\n"
+                "  持有者 pid=%s 視窗=%s 已跑 %d 分鐘\n"
+                "  鎖檔 %s\n"
+                "⚠️ CPU 是共用資源：兩份全量回歸一起跑會把靠時序的斷言搞紅，"
+                "而**失敗的樣子跟真的有 bug 一模一樣**。\n"
+                "⇒ 等它跑完；若確定它已經死了，刪掉上面那個鎖檔。"
+                % (held.get("pid"), held.get("basetemp"), age // 60, path)
+            )
+        # 🔑 過期就接手。**一個解不掉的鎖比沒有鎖更糟** ——
+        # 它會把每個人訓練成「遇到鎖就先刪檔」，而那個習慣會讓鎖永遠失效。
+        print("\n[全量回歸鎖] 接手一個%s的鎖：pid=%s、%d 分鐘前" %
+              ("已死" if not alive else "過期", held.get("pid"), age // 60))
+
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({
+            "pid": os.getpid(),
+            "started_at": time.time(),
+            "basetemp": str(basetemp),
+        }), encoding="utf-8")
+        _lock_taken_by_me = True
+    except OSError as exc:            # 寫不進去不該擋住測試
+        print("\n[全量回歸鎖] 寫不進 %s（%s）—— 這一輪沒有鎖" % (path, exc))
+
+
+def pytest_unconfigure(config):
+    """只釋放**自己**拿到的鎖。
+
+    ⚠️ 無條件刪檔的話，一個沒搶到鎖、被擋下來的行程會在結束時
+    **把持有者的鎖刪掉** —— 那道守門就只對第一個人有效。
+    """
+    global _lock_taken_by_me
+    if not _lock_taken_by_me:
+        return
+    _lock_taken_by_me = False
+    path = _lock_path()
+    held = _read_lock(path)
+    if held and int(held.get("pid", -1)) == os.getpid():
+        try:
+            path.unlink()
+        except OSError:
+            pass
