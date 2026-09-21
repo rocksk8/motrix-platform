@@ -47,7 +47,19 @@ except Exception as exc:  # noqa: BLE001
     geo = None
     _GEO_ERR = repr(exc)
 
-MAP_PATH = "/api/tender-radar/map"
+#: 🔴 2026-09-21 裁示：**地圖脫離雷達成為獨立模組。**
+#: 使用者原話：「**我即便沒有在雷達內，也要能用地圖**」
+#:
+#:     端點  /api/tender-radar/map  →  /api/map/points
+#:     守衛  _require_radar()       →  地圖自己的模組 key
+#:     開關  radar_on()             →  geo_on()
+#:
+#: ⚠️ 這**不是改個名字**：搬完之後「雷達關著時地圖還能不能用」是一個
+#: 新的、可觀測的行為 —— 見 `test_map_works_with_the_radar_off`。
+MAP_PATH = "/api/map/points"
+#: 地圖自己的模組 key（我釘的；要改先講）。**刻意不沿用 `tender_radar`** ——
+#: 沿用的話「不在雷達內也能用地圖」這件事就沒有地方成立。
+MAP_MODULE_KEY = "map"
 KEY_SETTING = "google_maps_api_key"
 
 #: 地圖端點回應必須有的鍵。**名字是我釘的**，形狀的理由見各題。
@@ -397,6 +409,61 @@ def _map(client, hdr):
     missing = [k for k in MAP_KEYS if k not in body]
     assert not missing, f"地圖端點少了這些鍵：{missing}（實際 {sorted(body)}）"
     return body
+
+
+def test_map_works_with_the_radar_off(client, make_user, monkeypatch):
+    """🔴🔴 **雷達關著時，地圖仍然要能用。**
+
+    使用者原話：**「我即便沒有在雷達內，也要能用地圖」**。
+
+    ⚠️ **沒有這一題，搬家就只是改了個名字。** 路徑換掉、守衛換掉、開關換掉，
+    三件事都可以做完而**行為完全沒變** —— 而那個沒變的地方正是使用者要的那件事。
+
+    📌 這一題裡標案來源是空的（雷達關著 ⇒ 沒有標案）
+    ⇒ **要走 `withoutLocation` 那套訊號**，不可以無聲地少一層：
+    🔑 「雷達關著所以沒有標案點」與「地圖壞了」在畫面上**都是一張沒有點的地圖**，
+    而那是今天第四個會長成那個樣子的成因（M6／M13／M8 被封鎖／這一個）。
+    """
+    _seed_legacy_profile()
+    monkeypatch.setattr(_geo(), "GEO_ENABLED", True)
+    import helpers.tender_source as ts
+    monkeypatch.setattr(ts, "TENDER_RADAR_ENABLED", False)
+    monkeypatch.delenv("MOTRIX_TENDER_RADAR", raising=False)
+    assert ts.radar_on() is False, "前提不成立：雷達應該是關的"
+
+    hdr = _auth(client, make_user)
+    r = client.get(MAP_PATH, headers=hdr)
+    assert r.status_code == 200, (
+        f"雷達關著時 {MAP_PATH} 回 {r.status_code}：{r.text[:300]}。"
+        "⇒ 地圖還綁在雷達的守衛或開關上。使用者明確說「我即便沒有在雷達內，"
+        "也要能用地圖」。"
+    )
+    body = r.json()
+    assert "withoutLocation" in body, (
+        f"地圖回應少了 `withoutLocation`。實際：{sorted(body)}。"
+        "⇒ 雷達關著時標案來源是空的，而那必須是一個**說出來的**狀態，"
+        "不是少一層點。一張沒有點的地圖，跟「地圖壞了」長得一模一樣。"
+    )
+
+
+def test_map_does_not_require_the_tender_radar_module(client, make_user):
+    """🔴 **沒有雷達模組權限的使用者，叫得到地圖。**
+
+    這是「守衛換 key」那半的證明。⚠️ 沿用 `_require_radar()` 的話上一題
+    仍然可能綠（開關與權限是兩件事）—— **兩題各釘一半，缺一半就不完整。**
+    """
+    username, password = make_user(role="admin", modules=["dashboard"])
+    r = client.post("/api/auth/login",
+                    json={"username": username, "password": password})
+    assert r.status_code == 200, r.text
+    hdr = {"Authorization": "Bearer " + r.json()["token"]}
+
+    r = client.get(MAP_PATH, headers=hdr)
+    assert r.status_code != 403, (
+        f"沒有雷達模組的使用者被擋在地圖外（403）—— 守衛還是 `_require_radar()`。"
+        f"（我釘的新 key 是 `{MAP_MODULE_KEY}`，要改先講）"
+    )
+    assert r.status_code == 200, f"{MAP_PATH} 回 {r.status_code}：{r.text[:300]}"
 
 
 def test_m3_empty_office_address_is_reported_not_silently_skipped(client, make_user):
