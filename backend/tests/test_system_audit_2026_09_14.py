@@ -57,7 +57,7 @@ def _json_backup_tables() -> set:
 # 刻意不進「每日 JSON 匯出」的表，以及理由。
 #
 # **2026-09-14 傍晚更新**：這份清單原本有 68 筆（JSON 只涵蓋 8/76 張表），
-# 現在剩 35 筆——所有業務資料表都已補進 archive.py 的每日匯出，
+# 現在剩 36 筆——所有業務資料表都已補進 archive.py 的每日匯出，
 # §8.3 的最後手段（JSON 重建）現在真的重建得出一套可用的系統。
 # 留在這裡的兩類都是「重建它沒有意義」，不是「忘了做決定」。
 _NOT_IN_JSON_BACKUP = {
@@ -77,9 +77,16 @@ _NOT_IN_JSON_BACKUP = {
     # user_request_log/user_activity_daily：操作軌跡與時數，筆數最大、
     #   對「把系統救回來」沒有幫助；整庫複製那層仍然有
     # user_list_prefs：每個人的排序偏好，重設一次就好
+    # tender_fetch_log：標案雷達的抓取軌跡（時間／認不認得／dropped 數）。
+    #   它回答的是「雷達瞎了沒」，而還原之後要看的是「現在會不會動」，
+    #   下一次抓取就會重新長出來。每日一筆、量會一直累積，
+    #   對「把系統救回來」沒有幫助。整庫複製那層仍然有。
+    #   ⚠️ 同一批的另外三張表（tender_watches／tenders／tender_hits）**都要備份**，
+    #   不要看到 tender_ 開頭就跟著排除——tender_watches 是使用者自己建的搜尋條件，
+    #   失去它的症狀是「功能還在，只是不再找到東西」，而且沒有人會發現它不見了。
     "sessions", "login_rate_limit", "edit_presence", "schema_version",
     "quote_seq", "payslip_seq", "user_request_log", "user_activity_daily",
-    "user_list_prefs",
+    "user_list_prefs", "tender_fetch_log",
 }
 
 
