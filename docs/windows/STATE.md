@@ -226,6 +226,56 @@ dashboard.py:516   conn.close()        ← 只關了第二個
 
 **修法**：刪掉第 469 行那個重複的 `get_db()`（第一個已經夠用），或改成 `try/finally`。
 
+#### 🔴 第二處（D 獨立掃到、人工驗過，A 複驗屬實）
+
+```
+dashboard.py:344-421  dashboard_monthly()
+  get_db() = 1   .close() = 0   無 with   無 finally
+```
+⇒ **取一次、完全不關。** 它也是首頁會打的端點（`/api/dashboard/monthly`）。
+
+#### 🔑 為什麼 A 掃到 1 處、D 掃到 2 處 —— **判準差異，兩個數字都對**
+
+| | 判準 | 涵蓋 |
+|---|---|---|
+| A | `get_db() >= 2` 且 `close < get_db` | **只找「取兩次只關一次」** |
+| D | `get_db() > 任何 .close()` | **也找「取一次都不關」** |
+
+⇒ `dashboard_monthly()`（取一次、不關）**本來就不在 A 要找的類別裡**。
+🔑 **D 的處置值得學：它沒說「你漏了」，它說「我的判準涵蓋範圍更寬，而寬出來的那一個是真的」。**
+**判準決定數量，所以兩個數字可以都對。**
+
+#### ⚠️ 用 D 的判準掃全樹得到 **9 個候選** —— **它們不是缺陷，是候選**
+
+```
+archive.py::_pdf_archive_dirs            db.py::spawn_bg_thread
+db.py::get_db                            main.py::auth_middleware (5/4)
+helpers/quotations.py::guard_case_access routers/dashboard.py::dashboard_monthly ✅已驗
+routers/dev_crm.py::schedule_dev_case_stale_check
+routers/quotations.py::_apply_case_change_request
+routers/dashboard.py::dashboard_expenses_monthly ✅已驗
+```
+
+🔴 **A 刻意不把它們寫成缺陷** —— **三十分鐘前 A 才因為「5 處」裡有 4 個假陽性被打臉。**
+📌 **至少 `db.py::get_db` 必然是假陽性**：那是工廠函式，**回傳連線給呼叫端關**。
+⇒ **9 個候選交給 D 人工逐一驗**（它的判準已知三個限制：`.close()` 不分物件可能低估、
+沒處理 `with get_db() as conn`、沒追「conn 傳給 helper 由對方關」）。
+**只有它驗過的才進這張單。**
+
+#### 📌 D 自己講的那一段，A 要記下來
+
+> 「AST 給我『2 處』之後，**我原本要直接報給你**。停下來人工看第 2 處，
+> 是因為你那則訊息的最後一句還在我眼前。
+> **如果我沒看就報，而那是假陽性，B 就會去改一個不存在的問題
+> —— 跟你的 4 個假陽性一模一樣的後果，只是換我造成。**」
+
+🔑 **而它接著補的那句更準**：
+> 「我這次之所以沒踩，**不是因為我比較小心，是因為你的訊息讓我在動手前就知道要用 AST**
+> —— 我是站在你付的學費上做的。」
+
+⇒ **這是「知識要變成守門」那條的正面實例**：A 的錯誤**在同一個小時內**
+變成了 D 的前置條件。**而那之所以有效，是因為它是一則指名的訊息，不是一段註解。**
+
 #### 🔑 A 在查這件事時犯了 D 剛警告過的同一個錯
 
 A 用 regex 猜函式邊界掃全 `routers/`，得出「**5 處同類**」。
