@@ -459,7 +459,7 @@ function tenderRadarPage() {
       // ⚠️ 失敗時 mapInfo 留 null ⇒ 整塊不顯示。
       // **不要顯示一個全是 0 的儀表板**——那會讓「沒載到」看起來像「一切正常且沒東西」。
       try {
-        const r = await fetch('/api/tender-radar/map', { headers: this._h() })
+        const r = await fetch('/api/map/points', { headers: this._h() })
         if (r.ok) this.mapInfo = await r.json()
       } catch (_e) {}
     },
