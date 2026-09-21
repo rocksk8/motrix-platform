@@ -28,6 +28,7 @@
 | 2026-09-21 | `backend/main.py` | 掛 `licensing.router` | ✅ **准**（STATE §5 回覆 B 第 1 項）。已動，只有兩行：第 25 行 import 末端加 `, licensing`、第 484 行 `app.include_router(licensing.router)`。**middleware 一個字沒碰。** |
 | 2026-09-21 | `backend/helpers/__init__.py` | 條件性 re-export | ✅ **准但預設不動**（STATE §5 第 2 項）。**最後沒有動** —— C 的測試用 `from helpers import licensing as lic`，`helpers/__init__.py` 不需要改。 |
 | 2026-09-21<br>第 2 輪 | `backend/main.py` | 掛授權守門 middleware。位置在 `auth_middleware` **之後**（先確認是誰，再確認這台機器有沒有買）。⚠️ **總開關做完並驗過之後才動這個檔** | ✅ **准**（STATE §5 第三次回覆）。已動，**只新增 53 行、無刪除** |
+| 2026-09-21<br>第 3 輪 | **`backend/db.py`** | 加前置時間欄位與採購建議狀態。**migration 編號 `_m085_procurement_lead_time`**（目前 `CURRENT_VERSION = 84`，最後一支是 `_m084_backfill_role_bypass_modules`）。一支 migration 做三件事：①`suppliers` 加 `lead_time_days INTEGER`（預設 NULL）②`parts` 加同名欄位 ③新建 `purchase_suggestion_status` 表。⚠️ 協定 §3 明寫兩人同時加 migration 會產生兩個 `_m085_`、merge 不衝突、只在執行時撞版本號——**我在這裡把編號講死，A 若已派給別人請立刻回我** | ⬜ 等回覆 |
 
 ---
 
@@ -93,7 +94,28 @@ backend/main.py                【新增 53 行、無刪除】license_gate_middl
 > 發現的問題、要動別人的檔、規格對不上、需要裁決的事，寫在這裡。
 > **不要自己擴充規格範圍**；覺得該多做什麼，寫在這裡讓 A 決定。
 
-> 第 1 輪的五項 A 都已回覆結案，不再重複。以下是**第 2 輪**寫碼當下才看出來的事。
+> 第 1、2 輪的提報 A 都已收進 STATE §5 並結案。以下是**第 3 輪**開工前的事。
+
+- 🔴 **驗收條件 7（`received` 不再出現）會讓一個料號「只能被採購一次」，請裁決。**
+  採購建議是**即時算出來的**（`routers/inventory.py:113`，以 `part_no` 為鍵，沒有自己的
+  主鍵），所以狀態只能另存一張表。條件 7 要求 `received` 的不再出現在清單裡——
+  照字面做的話，某料號走完 `suggested → ordered → received` 之後，**它的狀態列就永遠
+  留在 `received`**；半年後庫存再度跌破安全水位時，它**不會再被建議**，而且不會有
+  任何訊息說明為什麼。採購人員看到的是「這個料號從此消失了」。
+  **我這一輪照字面做**（條件 7 要綠），但資料模型先留好退路：
+  狀態表記 `received_at`，未來要「新的一輪採購」只需要比對它與最近一筆進貨的時間。
+  **請 A 裁決哪一種**：
+  ① 維持照字面（`received` 永久排除，之後另開一輪處理「重新開啟」）
+  ② 改成「一次採購循環」：`received` 之後若再度跌破水位就開新循環
+  （⚠️ 選②的話**條件 7 要改寫**，否則它會跟②直接衝突）
+- 🟠 **三個我自己決定的實作細節**（都是例行判斷，不需要 A 回覆，寫出來是為了可稽核）：
+  - 狀態表 `purchase_suggestion_status`，以 `part_no` 為主鍵，一個料號一列（＝目前那一輪）
+  - 狀態轉移端點 `POST /api/inventory/purchase-suggestions/{part_no}/status`
+    （條件 6 要求「跳過中間狀態要被拒絕」，所以轉移必須有一支端點來拒絕它）
+  - `ordered` 仍然留在清單裡（條件 7 只講 `received`）——東西還在路上，採購要看得到
+- ⚪ 解析順序照單子寫：`parts.lead_time_days` → 該料號最近一筆進貨的供應商 → NULL。
+  第二層我會沿用既有的 `last_batch_by_part`（`inventory.py:148`，已經算好 `supplierId`），
+  **不另外寫一套查詢** —— 單子明寫「不要順手重構既有邏輯」。
 
 - 🔴🔴 **「用 mtime 判定重讀」不夠，快取鍵還必須包含「今天的日期」。**
   這是本輪最重要的一項，而且它會**完全符合全部 12 條驗收條件**之後才在客戶那裡發作。
