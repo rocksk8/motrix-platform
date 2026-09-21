@@ -1131,6 +1131,23 @@ def _daily_backup_tables() -> dict:
         # 「這個料號是哪天下單的、哪天到貨的」在系統裡沒有第二個來源，
         # 採購建議本身是即時從庫存算出來的，重算得出清單但重算不出這段歷史。
         "採購建議狀態":     "SELECT * FROM purchase_suggestion_status ORDER BY part_no",  # 無 id 欄
+        # ── 標案雷達（2026-09-21）──
+        # ⚠️ 三條都用 `SELECT *` 而不是列舉欄位：這三張沒有敏感欄位
+        # （不像 users.password_hash／webauthn_credentials 是刻意略過的），
+        # 而**列舉欄位的表，日後加欄位不會有人發現它沒被備份**。
+        #
+        # 🔴 `tender_watches` 是**必須**不是建議：其餘兩張最壞是失去歷史，
+        # 它失去的是**設定**。還原之後系統跑得起來、每個畫面都正常，
+        # 而雷達從此什麼都找不到——使用者只會覺得「最近都沒標案」，
+        # 不會覺得「備份漏了東西」。**壞掉會被報修，設定不見不會。**
+        #
+        # ⚠️ `tenders` 看起來像「選型資料庫」那一類（可重跑所以不必備份），**但它不是**：
+        # 選型資料庫的內容由 sync_*.py 產生、**git 裡有來源**；
+        # `tenders` 的來源是一個**會把已截止標案刪掉的外部網站**，
+        # 重跑只拿得回「今天還掛著的」。別被表面的相似騙了。
+        "標案搜尋條件":     "SELECT * FROM tender_watches ORDER BY id",
+        "標案":             "SELECT * FROM tenders ORDER BY id",
+        "標案命中":         "SELECT * FROM tender_hits ORDER BY id",
         # ── 紀錄類 ──
         "稽核紀錄":         "SELECT * FROM audit_log ORDER BY id",
         "通知":             "SELECT * FROM notifications ORDER BY id",
