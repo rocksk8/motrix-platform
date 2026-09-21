@@ -155,11 +155,22 @@ def _suggestions(client, hdr):
     return {i["part_no"]: i for i in r.json()["items"]}
 
 
-# §3 明文寫的欄位名是 `lead_time_days`；B 實作回的是 `leadTimeDays`。
-# **這個紅是刻意留著的**——A 的指示是「紅代表你和 B 對開發單理解不一致 ⇒
-# 那是規格有歧義，回報給我，不要改測試去遷就實作」。
-_LEAD_FIELD = "lead_time_days"
-_LEAD_FIELD_ALT = "leadTimeDays"
+# API 回應的前置時間欄位名。
+#
+# 沿革（2026-09-21，`8b903eb`）：§3 原本寫 `lead_time_days`，而 B 的實作回
+# `leadTimeDays`。這 4 題因此紅過一輪。**當時沒有把它改成 camelCase 讓它變綠**——
+# 那會是「改測試遷就實作」，而且 A 就永遠不會知道規格寫錯，
+# 錯的規格會留在檔案裡給下一棒照著做下一件事。
+#
+# 回報之後 A 裁決：**改 §3，不改實作**（那支端點既有欄位全是 camelCase：
+# `safetyStock`／`inStockCount`／`stockLevel`／`orderedAt`／`receivedAt`；
+# 原本的錯是把**資料庫欄位名**抄進了 **API 回應規格**，那是兩個命名空間）。
+#
+# ⚠️ 所以下面這一行現在是 camelCase，**理由是 §3 改了，不是因為實作長這樣**。
+# ⚠️ **資料庫欄位仍然是 `suppliers.lead_time_days` / `parts.lead_time_days`**
+#    （snake_case），條件 1 驗的就是那個，不要一起改。
+_LEAD_FIELD = "leadTimeDays"
+_LEAD_FIELD_ALT = "lead_time_days"
 
 
 def _lead(item):
