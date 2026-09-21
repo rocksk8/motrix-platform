@@ -623,6 +623,27 @@ def _cached_stage(address, source):
     return None
 
 
+def cached_only(address):
+    """**只問快取，絕不對外連線。** 找不到回 `None`。
+
+    ## 🔴 為什麼需要一個「不會連出去」的入口
+    `locate_cached()` 的名字讀起來像「用快取」，**而它在 miss 的時候會連出去**。
+    ⇒ 呼叫端想問「這個地址我已經知道了嗎」時，沒有辦法只問而不查。
+
+    📌 `/api/map/points` 用它來實作**每次請求的查詢預算**：
+    已經知道的一律免費，不知道的才算進預算。
+    """
+    address = (address or "").strip()
+    if not address:
+        return None
+    for _name, source in _STAGES:
+        hit = _cached_stage(address, source)
+        if hit:
+            return hit
+    # 退階那一階也有自己的快取鍵（見 `locate_cached`）。
+    return _cached_stage(address, SOURCE_NOMINATIM_DISTRICT)
+
+
 def locate_cached(address, manual_coord=None):
     """`locate` 加兩層快取：記憶體 -> 資料庫。
 

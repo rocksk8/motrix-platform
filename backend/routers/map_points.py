@@ -23,6 +23,7 @@
 """
 import json
 import logging
+import time
 
 from fastapi import APIRouter, Header, HTTPException
 
@@ -118,11 +119,11 @@ def _may_see_dataset(user, name) -> bool:
     return any(m in mods for m in spec["modules"])
 
 
-def _own_points(name, office, user_coord=None):
+def _own_points(name, office, user_coord=None, budget=None):
     """把一份自有資料的地址畫成點。回 `(points, 沒有地址或定位不到的筆數)`。"""
     spec = _DATASETS[name]
     if spec.get("json"):
-        return _json_points(name, office, user_coord)
+        return _json_points(name, office, user_coord, budget)
     col = spec["address"]
     # ⚠️ **`with get_db()` 是錯的**：sqlite 連線的 `with` 管的是**交易**，
     # 不是關閉 ⇒ 那個連線永遠不會關。要走 `db_conn()`。
@@ -136,9 +137,14 @@ def _own_points(name, office, user_coord=None):
             f"WHERE {col} IS NOT NULL AND TRIM({col}) <> ''"
         ).fetchall()
 
+    budget = budget or _GeocodeBudget()
     points, missing = [], 0
     for r in rows:
-        found = geo.locate_cached(r["addr"])
+        found = budget.locate(r["addr"])
+        if found is None:
+            # ⚠️ **不算進 `missing`**：「這次來不及查」與「查不到」是兩件事，
+            # 而它們的處置相反（前者再按一次就好，後者要去改地址）。
+            continue
         if not found.coord:
             missing += 1
             continue
@@ -152,7 +158,7 @@ def _own_points(name, office, user_coord=None):
     return points, missing
 
 
-def _json_points(name, office, user_coord=None):
+def _json_points(name, office, user_coord=None, budget=None):
     """地址在 `data_json` 裡的來源（客戶／供應商）。
 
     ## 🔴 一筆壞資料只能拖垮**它自己**
@@ -173,6 +179,7 @@ def _json_points(name, office, user_coord=None):
         rows = conn.execute(
             f"SELECT id, name, data_json FROM {spec['table']}").fetchall()
 
+    budget = budget or _GeocodeBudget()
     points, missing = [], 0
     for r in rows:
         try:
@@ -184,7 +191,7 @@ def _json_points(name, office, user_coord=None):
         if not isinstance(data, dict):
             data = {}
 
-        seen, made = set(), 0
+        seen, made, deferred = set(), 0, False
         for dataset, key, label in spec["json"]:
             addr = str(data.get(key) or "").strip()
             if not addr:
@@ -196,7 +203,11 @@ def _json_points(name, office, user_coord=None):
                 # ⇒ 這個缺陷不會被報修，它只會讓「我有幾個據點」長期答錯。
                 continue
             seen.add(addr)
-            found = geo.locate_cached(addr)
+            found = budget.locate(addr)
+            if found is None:
+                # 這一筆這次來不及查 ⇒ **不可以算成「定位不到」**。
+                deferred = True
+                continue
             if not found.coord:
                 continue
             made += 1
@@ -207,7 +218,7 @@ def _json_points(name, office, user_coord=None):
                 "precision": found.precision, "source": found.source,
                 **_distances(found.coord, office, user_coord),
             })
-        if not made:
+        if not made and not deferred:
             missing += 1
     return points, missing
 
@@ -376,6 +387,9 @@ def map_points(sources: str = "tenders",
                       "precision": found.precision, "source": found.source}
 
     points, without_location, source_info = [], 0, []
+    # 🔴 **整個請求共用一份預算**，不是每個來源各給一份。
+    # 每個來源各給的話，六個來源 × 6 秒 = 36 秒，而使用者等的是**一次請求**。
+    budget = _GeocodeBudget()
     # ⚠️ **只回報「被要求的」來源**：使用者沒問的東西出現在回報裡，
     # 會讓他以為那個來源是開著的。
     if "tenders" in wanted:
@@ -385,7 +399,7 @@ def map_points(sources: str = "tenders",
                                 "count": 0,
                                 "note": "沒有標案雷達模組權限，地圖上不會顯示標案"})
         else:
-            pts, missing = _tender_points(office, user_coord)
+            pts, missing = _tender_points(office, user_coord, budget)
             points += pts
             without_location += missing
             source_info.append({
@@ -417,7 +431,7 @@ def map_points(sources: str = "tenders",
                 "note": f"沒有「{spec['label']}」的權限，地圖上不會顯示這一類",
             })
             continue
-        pts, missing = _own_points(name, office, user_coord)
+        pts, missing = _own_points(name, office, user_coord, budget)
         points += pts
         without_location += missing
         source_info.append({
@@ -444,6 +458,13 @@ def map_points(sources: str = "tenders",
         # ⇒ **前端沒有任何辦法自己發現。** 只有後端讀得到那個標頭。
         # ⚠️ 三態：True 被擋／False 探過可以用／**None 不知道**。
         "tilesBlocked": geo.tiles_blocked(),
+        # 🔴 第八個訊號：**「這次來不及查」的筆數。**
+        # ⚠️ 它與 `withoutLocation` 是兩件事，而處置相反：
+        #   `withoutLocation` ＝ 查過了、查不到 ⇒ **去改地址**
+        #   `pendingGeocode`  ＝ 還沒查 ⇒ **再按一次就好**
+        # ☠️ 合併的話，使用者會去翻資料找一個不存在的錯。
+        # 📌 快取是永久的 ⇒ 這個數字**只會往下掉**，按幾次就歸零。
+        "pendingGeocode": budget.pending,
         "sources": source_info,
     }
 
@@ -461,6 +482,57 @@ def _manual_coord(profile):
         return (float(lat), float(lon))
     except (TypeError, ValueError):
         return None
+
+
+#: 一次 `/api/map/points` 最多花多少**秒**在「還沒查過的地址」上。
+#:
+#: ## 🔴 為什麼需要預算
+#: ⚠️ 實測（正式機 `motrix_erp.db`，2026-09-22）：
+#:
+#: ```
+#: 相異查詢字串 199（tenders.org 158 ＋ suppliers 23 ＋ customers 10 ＋ 其餘 10）
+#: geocode_cache 現有 5 筆、google_maps_api_key 空 ⇒ 全部走 Nominatim
+#: 而 `_throttle()` 是每秒最多一次 ⇒ 冷快取要 199 秒 = 3.3 分鐘
+#: ```
+#:
+#: ☠️ 而那是**一個同步的 HTTP 請求** ⇒ 瀏覽器先逾時，
+#: 使用者看到的不是「慢」，是「**地圖資料載入失敗：連線不到伺服器**」。
+#: 🔑 這是 R1 改出來的：改之前 `location` 全 NULL ⇒ 標案那一段
+#: **一次查詢都不發**。我把「0 個點」修好了，同時把 0 次查詢變成 158 次，
+#: **而那一面我原本沒有量。**
+#:
+#: ## 📌 用時間不是用次數
+#: 測試把 `geo.locate_cached` 換成查表（瞬間回）⇒ **時間預算在測試裡
+#: 永遠不會觸發**，不會改到任何一題的行為。
+#: 次數預算會，而那會讓一堆題目在「剛好超過 N 筆」時開始紅。
+GEOCODE_TIME_BUDGET_SECONDS = 6.0
+
+
+class _GeocodeBudget:
+    """這次請求還能花多少時間去查沒查過的地址。
+
+    ⚠️ **超過預算不是「安靜地少幾個點」** —— 那又是一個「空地圖」的成因，
+    而今天已經有五個成因長成同一個樣子了。
+    ⇒ 查不完的筆數回到 `pendingGeocode`，畫面上要說出來。
+
+    📌 快取是**永久的**（`geocode_cache` 表，migration v89）
+    ⇒ 每一次請求都讓進度往前，按幾次「繼續定位」之後就不用再按了。
+    """
+
+    def __init__(self, seconds=None):
+        self.deadline = time.monotonic() + (
+            GEOCODE_TIME_BUDGET_SECONDS if seconds is None else seconds)
+        self.pending = 0
+
+    def locate(self, address):
+        """回 `GeoResult` 或 `None`（`None` ＝**這次來不及查**，不是查不到）。"""
+        hit = geo.cached_only(address)
+        if hit is not None:
+            return hit          # 已經知道的一律免費
+        if time.monotonic() >= self.deadline:
+            self.pending += 1
+            return None
+        return geo.locate_cached(address)
 
 
 def _distances(coord, office, user_coord):
@@ -485,7 +557,7 @@ def _company_profile():
     return {**(_get_setting("company_profile", {}) or {})}
 
 
-def _locate_tender(org, place):
+def _locate_tender(org, place, budget):
     """一筆標案的定位：**機關名稱 → `location` → 失敗**。回 `(GeoResult, 查的字串)`。
 
     ## 🔴 為什麼順序是這樣
@@ -511,18 +583,26 @@ def _locate_tender(org, place):
     """
     org = (org or "").strip()
     place = (place or "").strip()
+    deferred = False
     if org and not geo.looks_truncated(org):
-        found = geo.locate_cached(org)
-        if found.coord:
-            return found, org
+        found = budget.locate(org)
+        if found is None:
+            deferred = True
+        elif found.coord:
+            return found, org, False
     if place:
-        found = geo.locate_cached(place)
-        if found.coord:
-            return found, place
-    return None, None
+        found = budget.locate(place)
+        if found is None:
+            deferred = True
+        elif found.coord:
+            return found, place, False
+    # 🔴 第三個回傳值分辨「**查不到**」與「**這次來不及查**」。
+    # ⚠️ 合併的話，「還沒查」會被算進 `withoutLocation`，
+    # 而那個數字的意思是「這筆標案沒有地點資訊」——**使用者會去找資料的錯**。
+    return None, None, deferred
 
 
-def _tender_points(office, user_coord=None):
+def _tender_points(office, user_coord=None, budget=None):
     """標案來源。回 `(points, 沒有地點的筆數)`。
 
     ⚠️ **雷達關著時這裡照常跑**：它讀的是資料庫裡已經抓回來的標案，
@@ -533,10 +613,13 @@ def _tender_points(office, user_coord=None):
             "SELECT case_no, name, org, location, budget, deadline, url "
             "FROM tenders ORDER BY id DESC").fetchall()
 
+    budget = budget or _GeocodeBudget()
     points, missing = [], 0
     for r in rows:
         place = (r["location"] or "").strip()
-        found, used = _locate_tender(r["org"], place)
+        found, used, deferred = _locate_tender(r["org"], place, budget)
+        if found is None and deferred:
+            continue
         if found is None:
             # ⚠️ 一筆定位失敗不可以拖垮其他筆，而它要歸到「沒有地點」那一欄
             # ——使用者至少看得到它存在，而不是它不存在。

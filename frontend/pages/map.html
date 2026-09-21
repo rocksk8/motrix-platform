@@ -92,6 +92,26 @@
         <div>有 <strong x-text="info.withoutLocation"></strong> 筆<strong>沒有地點資訊</strong>，
           不會出現在地圖上。它們仍然存在，只是我們還不知道它們在哪裡。</div>
       </div>
+      <!-- 🔴 「還沒查」與「查不到」是兩件事，**而處置相反**：
+           上面那條要去改地址，這一條只要再按一次。
+           ☠️ 合併的話使用者會去翻資料找一個不存在的錯。
+
+           ⚠️ 為什麼會有「還沒查」：地址轉座標是跟 OpenStreetMap 要的，
+           而對方**每秒只接受一次查詢** ⇒ 一次請求查不完幾百個地址
+           （實測相異地址 199 個 ⇒ 一次查完要 3.3 分鐘，而瀏覽器會先逾時）。
+           📌 查到的結果**永久存在資料庫裡** ⇒ 這個數字只會往下掉。 -->
+      <div class="mp-note info" x-show="info && info.pendingGeocode > 0">
+        <span>⏳</span>
+        <div>還有 <strong x-text="info.pendingGeocode"></strong> 個地址
+          <strong>這次來不及定位</strong>（不是查不到）。
+          地址轉座標是跟 OpenStreetMap 要的，對方每秒只接受一次查詢，
+          所以一次只查一部分。
+          <strong>查過的會永久記住</strong>，按幾次就會全部出現。
+          <button class="btn btn-ghost btn-sm" style="margin-left:6px"
+                  @click="refresh()" :disabled="loading"
+                  x-text="loading ? '定位中…' : '繼續定位'"></button>
+        </div>
+      </div>
       <template x-for="s in (info ? info.sources : [])" :key="s.source">
         <div class="mp-note info" x-show="s.skipped">
           <span>ℹ️</span>
