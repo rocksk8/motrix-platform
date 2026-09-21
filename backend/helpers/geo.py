@@ -259,6 +259,15 @@ PRECISION_ROOFTOP = "rooftop"      # 門牌
 PRECISION_STREET = "street"        # 路段
 PRECISION_DISTRICT = "district"    # 縣市＋區（退階的結果）
 
+#: 精度由**精確到粗略**的有序序列。**這是單一來源。**
+#:
+#: 🔴 兩個地方各抄一份的話，改階梯時**會有一邊安靜地過期** ——
+#: 那一邊的測試不會紅，**它只是在驗一個舊的階梯**。
+#: 📌 之後要在 street 與 district 之間插入「機關所在地」那一級時，
+#: 只改這一行。
+PRECISION_ORDER = (PRECISION_EXACT, PRECISION_ROOFTOP,
+                   PRECISION_STREET, PRECISION_DISTRICT)
+
 SOURCE_MANUAL = "manual"
 SOURCE_GOOGLE = "google"
 SOURCE_TGOS = "tgos"

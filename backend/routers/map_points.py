@@ -23,7 +23,7 @@
 """
 from fastapi import APIRouter, Header
 
-from db import get_db
+from db import db_conn
 from helpers import _require_user
 from helpers import geo
 from helpers import tender_source
@@ -34,6 +34,94 @@ router = APIRouter()
 #: 沿用的話「不在雷達內也能用地圖」這件事就沒有地方成立。
 #: 📌 它管的是**側邊欄入口**，不是這個端點的守衛（見檔頭〈權限〉）。
 MAP_MODULE_KEY = "map"
+
+
+#: 每一個資料集：它的表、地址欄、顯示名、以及**它自己的權限**。
+#:
+#: 🔴 權限一律**沿用那份資料原本的入口**，不是另外發明一套：
+#: `contractors` 是**外包名冊（自然人）**——那張表有 `id_number`（身分證號）與
+#: `bank_account_number`，所以那個 `address` 是**住家地址**。
+#: ☠️ 把它畫在一張「已登入就看得到」的地圖上，**等於從一扇新的門把保護降級**，
+#: 而地圖會**正常運作**，只是保護變低了。
+#: 🔑〈降級之後它還是會動〉：**壞掉會被報修，降級不會。**
+#:
+#: 📌 `completion_notes` **刻意不在這裡**：實測 0 筆。
+#: 不為一張空表寫實作——那份程式碼沒有任何東西會驗它，
+#: 而它會一直看起來像「已經支援了」。
+_DATASETS = {
+    "contractors": {
+        "table": "contractors", "address": "address", "label": "外包名冊",
+        # ⚠️ `routers/contractors.py` 是 superadmin ＋ `contractor_list` 兩者都要，
+        # 而這裡只要求模組。**那是一個放寬**，由 C 的 P12d 釘死。
+        # 📌 理由（我的理解）：名冊端點會回身分證號與銀行帳號，
+        # 而地圖只回**名稱與地址** ⇒ 暴露面不同。
+        # 🔴 但那個地址仍然是**住家地址**，所以模組這一道不可以再拿掉。
+        "modules": ("contractor_list",),
+    },
+    "vendor_contractors": {
+        "table": "vendor_contractors", "address": "address", "label": "協力廠商",
+        "modules": ("procurement", "case_manage", "contractor_list"),
+    },
+    "shipping_notes": {
+        "table": "shipping_notes", "address": "delivery_address", "label": "出貨單",
+        "modules": ("case_manage", "quotation"),
+    },
+}
+
+
+#: 有地址欄位、但**刻意不查**的資料集。回報它們、但不碰那些表。
+_NOT_QUERIED = {
+    "completion_notes": "完工單目前沒有可用的地址資料（實測 0 筆），這個來源尚未支援",
+}
+
+
+def _may_see_dataset(user, name) -> bool:
+    """這個使用者看不看得到這一份資料。**判準與那份資料原本的入口相同。**"""
+    spec = _DATASETS[name]
+    if (user or {}).get("role") == "superadmin":
+        return True
+    mods = (user or {}).get("modules") or []
+    if isinstance(mods, str):
+        import json
+        try:
+            mods = json.loads(mods)
+        except (TypeError, ValueError):
+            mods = []
+    return any(m in mods for m in spec["modules"])
+
+
+def _own_points(name, office):
+    """把一份自有資料的地址畫成點。回 `(points, 沒有地址或定位不到的筆數)`。"""
+    spec = _DATASETS[name]
+    col = spec["address"]
+    # ⚠️ **`with get_db()` 是錯的**：sqlite 連線的 `with` 管的是**交易**，
+    # 不是關閉 ⇒ 那個連線永遠不會關。要走 `db_conn()`。
+    # 📌 而它同時解掉另一件：`db_conn()` 在呼叫當下才從 `db` 取 `get_db`，
+    # 所以測試把間諜裝在 `db.get_db` 上看得到；
+    # `from db import get_db` 拿的是副本，**間諜裝了也打不到**。
+    name_col = "customer_name" if spec["table"] == "shipping_notes" else "name"
+    with db_conn() as conn:
+        rows = conn.execute(
+            f"SELECT id, {name_col} AS name, {col} AS addr FROM {spec['table']} "
+            f"WHERE {col} IS NOT NULL AND TRIM({col}) <> ''"
+        ).fetchall()
+
+    points, missing = [], 0
+    for r in rows:
+        found = geo.locate_cached(r["addr"])
+        if not found.coord:
+            missing += 1
+            continue
+        points.append({
+            "dataset": name,
+            "name": r["name"], "address": r["addr"],
+            "lat": found.coord[0], "lon": found.coord[1],
+            "precision": found.precision, "source": found.source,
+            "distanceKm": (round(geo.haversine_km((office["lat"], office["lon"]),
+                                                  found.coord), 1)
+                           if office else None),
+        })
+    return points, missing
 
 
 def _may_see_tenders(user) -> bool:
@@ -65,9 +153,10 @@ def map_points(sources: str = "tenders", authorization: str = Header(None)):
     處置完全不同，而少幾個點跟「那些東西不存在」長得一模一樣，
     **而且沒有人會報修。**
 
-    📌 `sources` 目前只實作 `tenders`。其餘（`contractors`／`vendor_contractors`／
-    `shipping_notes`／`completion_notes` 都有 `address` 欄位）**留介面不實作**——
-    使用者叫停過範圍，不要一次做完。
+    📌 `sources` 支援 `tenders`／`contractors`／`vendor_contractors`／`shipping_notes`。
+    ⚠️ **`completion_notes` 刻意不支援**：實測 0 筆。
+    不為一張空表寫實作——那份程式碼沒有任何東西會驗它，
+    **而它會一直看起來像「已經支援了」**。
     """
     user = _require_user(authorization)
     wanted = [s.strip() for s in (sources or "").split(",") if s.strip()]
@@ -92,17 +181,56 @@ def map_points(sources: str = "tenders", authorization: str = Header(None)):
                       "precision": found.precision, "source": found.source}
 
     points, without_location, source_info = [], 0, []
+    # ⚠️ **只回報「被要求的」來源**：使用者沒問的東西出現在回報裡，
+    # 會讓他以為那個來源是開著的。
     if "tenders" in wanted:
         if not _may_see_tenders(user):
             # 🔴 **說出來，不要只是少一層點。**
             source_info.append({"source": "tenders", "skipped": "no_permission",
+                                "count": 0,
                                 "note": "沒有標案雷達模組權限，地圖上不會顯示標案"})
         else:
             pts, missing = _tender_points(office)
             points += pts
             without_location += missing
-            source_info.append({"source": "tenders", "skipped": None,
-                                "count": len(pts), "withoutLocation": missing})
+            source_info.append({
+                "source": "tenders", "skipped": None,
+                "count": len(pts), "withoutLocation": missing,
+                "note": (f"{len(pts)} 筆標案畫在地圖上"
+                         + (f"，另有 {missing} 筆沒有地點資訊" if missing else "")),
+            })
+
+    # 🔴 **被要求了就要回報，即使我們刻意不支援它。**
+    # 沉默的話畫面上就是一張沒有點的地圖，而「沒有權限」「沒有資料」
+    # 「我們沒做」三件事長得一模一樣。
+    # ⚠️ 而它**連查都不查**：實測 0 筆，不為一張空表寫實作——
+    # 那份程式碼沒有任何東西會驗它，**而它會一直看起來像「已經支援了」**。
+    for name in _NOT_QUERIED:
+        if name in wanted:
+            source_info.append({
+                "source": name, "skipped": "not_supported", "count": 0,
+                "note": _NOT_QUERIED[name],
+            })
+
+    for name in _DATASETS:
+        if name not in wanted:
+            continue
+        spec = _DATASETS[name]
+        if not _may_see_dataset(user, name):
+            source_info.append({
+                "source": name, "skipped": "no_permission", "count": 0,
+                "note": f"沒有「{spec['label']}」的權限，地圖上不會顯示這一類",
+            })
+            continue
+        pts, missing = _own_points(name, office)
+        points += pts
+        without_location += missing
+        source_info.append({
+            "source": name, "skipped": None,
+            "count": len(pts), "withoutLocation": missing,
+            "note": (f"{spec['label']} {len(pts)} 筆畫在地圖上"
+                     + (f"，另有 {missing} 筆定位不到" if missing else "")),
+        })
 
     return {
         "office": office,
@@ -149,13 +277,10 @@ def _tender_points(office):
     ⚠️ **雷達關著時這裡照常跑**：它讀的是資料庫裡已經抓回來的標案，
     **不對外連線**。開關管的是「要不要去抓」，不是「能不能看已經抓到的」。
     """
-    conn = get_db()
-    try:
+    with db_conn() as conn:
         rows = conn.execute(
             "SELECT case_no, name, org, location, budget, deadline, url "
             "FROM tenders ORDER BY id DESC").fetchall()
-    finally:
-        conn.close()
 
     points, missing = [], 0
     for r in rows:
@@ -171,9 +296,17 @@ def _tender_points(office):
             missing += 1
             continue
         points.append({
-            "source": "tenders",
+            # 🔴 `dataset`（這個點屬於哪一份資料）與 `source`（誰把地址變成座標）
+            # 是**兩件事**，而它們一度搶同一個鍵名：
+            #   {"source": "tenders", ..., "source": found.source}
+            # Python 的字典字面值**後面的鍵覆蓋前面的** ⇒ 每個點都說自己是
+            # `nominatim`，而**那時看不出來**，因為地圖上只有一種資料集。
+            # ☠️ 一加上廠商就會爆：前端沒有任何辦法把兩者分開上色。
+            # 🔑 兩個不同的意思搶同一個名字，而**兩個值都合法** ⇒ 不會有人報錯。
+            "dataset": "tenders",
             "caseNo": r["case_no"], "name": r["name"], "org": r["org"],
             "location": place, "lat": coord[0], "lon": coord[1],
+            "address": place,
             "precision": found.precision, "source": found.source,
             "budget": r["budget"], "deadline": r["deadline"], "url": r["url"],
             "distanceKm": (round(geo.haversine_km((office["lat"], office["lon"]),
