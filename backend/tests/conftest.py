@@ -566,3 +566,88 @@ def pytest_unconfigure(config):
             path.unlink()
         except OSError:
             pass
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# NETGUARD · 測試套件不可以真的對外連線
+#
+# ☠️ 2026-09-21：B 量到**測試套件每跑一次就對政府採購網發出數十次真實請求**，
+#    而它從第 6 輪就存在了。單獨跑一題 `test_sl1` ⇒ 5 次對外嘗試。
+#
+#    成因：`_spy_fetch()` patch 的是 `fetch_raw`（清單頁）—— 而
+#    `parse_list(REAL)` 解出來的 `url` 是**真的**
+#    ⇒ `run_scan` → `_fetch_details` → `fetch_detail` → `urlopen` → 真的連出去。
+#    **只有 SL10 記得 patch `fetch_detail`，其餘每一題都是真的。**
+#
+# 🔑 而它的諷刺值得寫在這裡：我們整晚在做的是
+#    「**這台機器不會在沒有人知道的情況下對外連線**」——
+#    `radar_on()`、出貨預設關、啟動 log、404 而不是 403。
+#    **而測試套件每跑一次就對那個網站發出數十次請求，沒有任何人知道。**
+#    ⇒ **我們守住了產品，沒有守住測試。**
+#
+# ⚠️ 逐題去 patch `fetch_detail` **不是**修法 —— 那正是「只有 SL10 記得加」
+#    的成因。這一道攔的是**所有**同類的疏漏，包含還沒被寫出來的那些。
+# ══════════════════════════════════════════════════════════════════════════
+
+#: 允許對外連線的標記：`@pytest.mark.allow_outbound`
+#: ⚠️ 目前**一個都不該有**。要加的話請在該題的 docstring 寫出為什麼。
+_ALLOW_OUTBOUND = "allow_outbound"
+
+
+def pytest_collection_modifyitems(config, items):
+    """把 `allow_outbound` 註冊成已知標記，免得它變成一個安靜的錯字。
+
+    ⚠️ 未註冊的 mark 只會噴 warning ⇒ `@pytest.mark.allow_outbund`（打錯字）
+    會**靜默地不生效**，而那一題會在 NETGUARD 下紅得莫名其妙。
+    """
+    config.addinivalue_line(
+        "markers", "%s: 這一題確實需要對外連線（目前一個都沒有）" % _ALLOW_OUTBOUND)
+
+
+@pytest.fixture(autouse=True)
+def _netguard(request, monkeypatch):
+    """任何測試真的對外連線 ⇒ **那一題紅**。
+
+    ## ⚠️ 三個限制，寫在這裡免得被當成比它實際更強
+
+    1. **它攔的是 `urllib.request.urlopen`。**
+       走 `requests`／`http.client`／裸 `socket`／`smtplib` 的**不在射程內**。
+       （這個 codebase 的對外連線目前都走 `urllib.request`，而那是今天的事實，
+       不是保證。）
+    2. **它只管這個行程。** 子行程（`tests/_subproc.py` 起的那些）**攔不到**。
+    3. **它擋的是「測試對外連線」，不是「產品對外連線」。**
+       產品那一側由 `radar_on()`／`geo_on()`／出貨預設關那幾道守著，
+       **不要因為這裡綠了就以為產品被守住了。**
+
+    ## 🔴 為什麼不能只靠丟例外
+
+    第一版我只在攔截點 `raise`。**那是不夠的** ——
+    `fetch_detail()` 有 `except Exception: return None, ...`
+    ⇒ **它會把我的例外吞掉**，那一題照樣綠，而連線嘗試已經發生了。
+
+    🔑 **守門的例外會被受測對象接住** ⇒ 所以要**記錄下來、在收尾時斷言**。
+    ⚠️ 那正是今天反覆出現的那一族：**觀測手段與被測對象共用一條路徑**
+    （這次共用的是例外傳播）。
+    """
+    if request.node.get_closest_marker(_ALLOW_OUTBOUND):
+        yield
+        return
+
+    import urllib.request
+
+    attempts = []
+
+    def _blocked(req, *args, **kwargs):
+        url = req if isinstance(req, str) else getattr(req, "full_url", repr(req))
+        attempts.append(url)
+        raise OSError("NETGUARD：測試不可以真的對外連線（%s）" % url)
+
+    monkeypatch.setattr(urllib.request, "urlopen", _blocked)
+    yield
+    assert not attempts, (
+        "這一題對外發出了 %d 次真實連線嘗試：\n  %s\n"
+        "⇒ 八成是 `fetch_raw` 被換掉了而 `fetch_detail` 沒有 —— "
+        "樣本解出來的 `url` 是**真的網址**。\n"
+        "⚠️ 若這一題確實需要連外，加 `@pytest.mark.%s` 並在 docstring 寫出理由。"
+        % (len(attempts), "\n  ".join(attempts[:5]), _ALLOW_OUTBOUND)
+    )

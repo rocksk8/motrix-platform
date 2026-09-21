@@ -61,6 +61,8 @@ from helpers.settings import _get_setting, _set_setting
 SCAN_HOURS_KEY = "tender_radar_scan_hours"
 NOTIFY_HOURS_KEY = "tender_radar_notify_hours"
 NOTIFY_MARK_KEY = "tender_radar_notify_last_slot"
+#: 第 6 輪的**單數**舊鍵 —— 同一個設定的舊語意，正式機可能有值（SL17／SL18）
+OLD_SCAN_HOUR_KEY = "tender_radar_scan_hour"
 
 DEFAULT_SCAN_HOURS = "9,12,15,18"
 DEFAULT_NOTIFY_HOURS = "18"
@@ -73,6 +75,14 @@ def _need(name):
             "見本檔開頭〈我釘的名字〉。"
         )
     return getattr(ts, name)
+
+
+def _auth(client, make_user):
+    username, password = make_user(role="superadmin")
+    r = client.post("/api/auth/login",
+                    json={"username": username, "password": password})
+    assert r.status_code == 200, r.text
+    return {"Authorization": "Bearer " + r.json()["token"]}
 
 
 def _real_list_page():
@@ -132,6 +142,17 @@ def _spy_mail(monkeypatch):
     ⚠️ **不可以觀測 `notify_tender_found` 被呼叫**（第 5 輪的假綠燈），
     也**不可以只觀測 `_async_send`**（它不檢查收件人是不是空的，
     空清單時執行緒照樣開、寫一行 log 就結束）。
+
+    ## ⚠️ 而這個 patch 本身有一個無法避免的缺口，寫在這裡免得被當成有蓋到
+
+    換掉 `_send_raising` ⇒ **它的本體在本檔一次都沒有被執行過。**
+    ⇒ **本檔不涵蓋 `_send_raising` 內部，以及它下游的任何東西。**
+    📌 這不是疏忽（測試不能真的寄信），但它的後果是具體的：
+    今天那個 `email_notify.py:1494` 的 `NameError` 若發生在那一層，
+    **這一整批題目會全綠。**
+    🔑 **下一個人看到這裡有十幾題，會以為「寄信這條路被蓋住了」** ——
+    蓋住的是「有沒有走到寄信」，不是「寄信本身會不會炸」。
+    （那一層由 `test_backup_stale_alert_2026_09_21.py` 另外處理。）
     """
     import helpers.email_notify as en
     _ = _need  # 讓讀的人知道下面那個 hasattr 是刻意的
@@ -190,6 +211,13 @@ def radar_ready(client, monkeypatch):
         conn.commit()
     finally:
         conn.close()
+    # 🔴 **`fetch_detail` 一定要一起換掉，而且是在 fixture 裡換不是逐題換。**
+    # `_spy_fetch` 只換了 `fetch_raw`（清單頁），而 `parse_list(REAL)` 解出來的
+    # `url` 是**真的網址** ⇒ `run_scan` → `_fetch_details` → `fetch_detail`
+    # → `urlopen` → **真的對政府採購網連出去**（B 量到單一題 5 次）。
+    # ⚠️ 逐題加正是「只有 SL10 記得加」的成因 —— 這裡換一次，全檔都蓋到。
+    monkeypatch.setattr(
+        ts, "fetch_detail", lambda url, *a, **kw: (None, "測試不抓詳細頁"))
     monkeypatch.setattr(ts, "TENDER_RADAR_ENABLED", True)
     _set_setting(SCAN_HOURS_KEY, DEFAULT_SCAN_HOURS)
     _set_setting(NOTIFY_HOURS_KEY, DEFAULT_NOTIFY_HOURS)
@@ -516,6 +544,10 @@ def test_sl5_each_mail_only_contains_hits_new_since_the_last_one(
     # 🔴 **先證明第二封裡真的有東西**（B 抓到的空集合假綠燈）：
     # 第二封是空的時候，交集必然是空集合 ⇒ 下面那個斷言**必然綠**。
     # 🔑 「沒有重複」與「第二封根本沒有東西」不可以長得一樣。
+    assert _case_nos(first_html), (
+        "**第一封**信裡一個案號都沒有 —— 兩邊都空的時候交集也是空的，"
+        "下面那個斷言一樣會空過去。"
+    )
     assert _case_nos(second_html), (
         f"第二封信裡一個案號都沒有 —— 下面「不重複」那個斷言會空過去。\n"
         f"第二封內容前 300 字：{(second_html or '')[:300]!r}"
@@ -620,6 +652,17 @@ def test_sl10_the_detail_limit_is_shared_across_slots(radar_ready, monkeypatch):
         _at_time(monkeypatch, hour)
         run()
 
+    # 🔴 **下界與上界都要**（A／D 稽核指出）：只有 `<= 2` 的話，
+    # 一個「**根本不呼叫 `_fetch_details`**」的實作會讓 `0 <= 2` 成立 ⇒ 綠。
+    # 🔑 **那一題就分不出「上限正確共用」與「根本沒抓」。**
+    # 📌 我在別的檔做對過（`test_d3` 是 `assert len(calls) >= 2, "前提不成立"`），
+    #    這裡沒做 —— 而 D 的普查也漏掉它，**因為那份普查用 `assert X == N` 的 regex，
+    #    而這一行是 `<=`**。兩個人、兩種工具、同一種盲點：
+    #    **判準的形狀決定了你看得見什麼。**
+    assert len(detail_calls) >= 1, (
+        "四個時段一次詳細頁都沒抓 —— 這一題的前提不成立（上限根本驗不到）。\n"
+        "⇒ 先確認命中的標案真的有 `location IS NULL`，以及 `fetch_detail` 有被走到。"
+    )
     assert len(detail_calls) <= 2, (
         f"每日上限設成 2，而四個時段一共抓了 {len(detail_calls)} 次詳細頁。\n"
         "⇒ `fetched` 是區域變數，每次呼叫重置 ⇒ 上限實際變成「每時段 2」。"
@@ -682,4 +725,352 @@ def test_sl13_the_api_no_longer_claims_the_limit_is_unchangeable(client, make_us
         f"這些端點還在回那句話：{found}\n"
         "⇒ 使用者會在畫面上讀到它，然後以為這個設定改不了 —— "
         "而他今天就是這樣讀到的，然後裁示「我要可調整」。"
+    )
+
+
+# ══════════════════════════════════════════════════════════════════════
+# SL20～SL23 · 🔴 **升級當下那一刻** —— 14 題全部沒有覆蓋到的那條路
+# ══════════════════════════════════════════════════════════════════════
+#
+# D 稽核發現 `radar_ready`（上面那個 fixture）**每次都先 `_set_setting`**
+# ⇒ **原本 14 題全部在「已設定、已有狀態」的前提下跑。**
+#
+# 🔴 而 A 複驗出更硬的事實：
+#
+#     db.py 的 `_seed_setting` 是 `ON CONFLICT(key) DO NOTHING`
+#     grep tender_radar_scan_hours backend/db.py  →  0 命中（根本沒被 seed）
+#
+# ⇒ **正式機升到 v88 之後那兩個 key 不存在**，
+# 「沒設過 → 走預設」是它**第一次跑排程時唯一會走的那一條路** —— 而它一題都沒有。
+#
+# ⚠️ **不可以用 `_set_setting(key, "")` 代替「沒設過」**：
+# 空字串是「**不要寄**」（SL16 已經在測），**跟「沒設過」是兩件不同的事**。
+# 🔑 那正是 `null` 不等於 `0`：判斷要用「**key 在不在**」，不可以用真假值。
+
+
+@pytest.fixture()
+def radar_bare(client, monkeypatch):
+    """跟 `radar_ready` 一樣，但**把那兩個設定鍵整個刪掉** —— 升級當下的樣子。
+
+    ⚠️ 這個 fixture 存在的理由就是 `radar_ready` 做不到的那件事。
+    把它們合併成「`radar_ready(preset=False)`」會讓**預設值那一側繼續是隱形的**。
+    """
+    import db
+    conn = db.get_db()
+    try:
+        conn.execute(
+            "INSERT INTO users (username, password_hash, display_name, role, email, "
+            "modules, active, created_at, must_change_password, notification_muted) "
+            "VALUES (?,?,?,?,?,?,1,?,0,?)",
+            ("sl_bare", "x", "收件人", "superadmin", "bare@example.invalid",
+             "[]", "2026-01-01T00:00:00", "[]"))
+        conn.execute(
+            "INSERT INTO tender_watches (name, keywords, enabled) VALUES (?,?,1)",
+            ("監視系統", '["監視"]'))
+        for key in (SCAN_HOURS_KEY, NOTIFY_HOURS_KEY, OLD_SCAN_HOUR_KEY,
+                    NOTIFY_MARK_KEY):
+            conn.execute("DELETE FROM system_settings WHERE key=?", (key,))
+        conn.commit()
+    finally:
+        conn.close()
+    # 🔴 **`fetch_detail` 一定要一起換掉，而且是在 fixture 裡換不是逐題換。**
+    # `_spy_fetch` 只換了 `fetch_raw`（清單頁），而 `parse_list(REAL)` 解出來的
+    # `url` 是**真的網址** ⇒ `run_scan` → `_fetch_details` → `fetch_detail`
+    # → `urlopen` → **真的對政府採購網連出去**（B 量到單一題 5 次）。
+    # ⚠️ 逐題加正是「只有 SL10 記得加」的成因 —— 這裡換一次，全檔都蓋到。
+    monkeypatch.setattr(
+        ts, "fetch_detail", lambda url, *a, **kw: (None, "測試不抓詳細頁"))
+    monkeypatch.setattr(ts, "TENDER_RADAR_ENABLED", True)
+    return "bare@example.invalid"
+
+
+def _settings_has(key):
+    import db
+    conn = db.get_db()
+    try:
+        row = conn.execute(
+            "SELECT 1 FROM system_settings WHERE key=?", (key,)).fetchone()
+    finally:
+        conn.close()
+    return row is not None
+
+
+def test_sl20_defaults_apply_when_nothing_has_ever_been_configured(
+        radar_bare, monkeypatch):
+    """🔴🔴 SL20：**那兩個 key 完全不存在時，抓取與寄信都要走預設。**
+
+    這是正式機升級之後**第一次跑排程**唯一會走的那一條路，
+    而原本 14 題**一題都沒有覆蓋到它**。
+
+    ⚠️ 前提先驗：如果 key 其實存在，這一題就只是 SL1 的重複。
+    """
+    assert not _settings_has(SCAN_HOURS_KEY), "前提不成立：那個 key 存在"
+    assert not _settings_has(NOTIFY_HOURS_KEY), "前提不成立：那個 key 存在"
+
+    calls = _spy_fetch(monkeypatch, vary=True)
+    mails = _spy_mail(monkeypatch)
+    run = _need("run_scheduled_scan")
+
+    _at_time(monkeypatch, 9)        # 9 在預設的 9,12,15,18 裡
+    run()
+    assert len(calls) == 1, (
+        f"什麼都沒設定時 9 點沒有抓（{len(calls)} 次）—— "
+        "預設值沒有生效。⇒ 正式機升級之後雷達完全不會動，而畫面上看不出來。"
+    )
+
+    _at_time(monkeypatch, 10)       # 10 不在預設裡
+    run()
+    assert len(calls) == 1, (
+        f"10 點不在預設時段裡，卻抓了（累計 {len(calls)} 次）—— "
+        "預設值被當成「不限時段」了"
+    )
+
+    _at_time(monkeypatch, 18)       # 18 是預設的寄信時段
+    run()
+    assert len(mails) == 1, (
+        f"什麼都沒設定時 18 點沒有寄（{len(mails)} 封）—— 寄信的預設值沒有生效"
+    )
+
+
+def test_sl18_falls_back_to_the_old_singular_key(radar_bare, monkeypatch):
+    """SL18：新鍵不存在、**舊的單數鍵有值** → 當成單元素清單。
+
+    📌 **我第一版把這一題編成 `SL21`，而規格裡它叫 `SL18`。**
+    ⚠️ 內容一字不差，**只有編號對不上** ⇒ 規格覆蓋率守門會說「SL18 沒有人寫」，
+    而它其實寫了。🔑 **「寫了」與「找得到」是兩件事**，
+    而追蹤覆蓋率的東西只看得到後者。
+
+    第 6 輪的 `tender_radar_scan_hour`（單數、`0-23`）是**同一個設定的舊語意**，
+    而正式機可能有值。A 裁定 (乙)：**讀新鍵，沒有就把舊值當成 `[舊值]`。**
+    """
+    _set_setting(OLD_SCAN_HOUR_KEY, 8)
+    calls = _spy_fetch(monkeypatch, vary=True)
+    _spy_mail(monkeypatch)
+    run = _need("run_scheduled_scan")
+
+    _at_time(monkeypatch, 8)
+    run()
+    assert len(calls) == 1, (
+        f"舊鍵是 8 而 8 點沒有抓（{len(calls)} 次）—— 那條 fallback 沒有生效。\n"
+        "⇒ 升級之後使用者原本設的時間被忽略了，而他不會收到任何訊息。"
+    )
+
+    _at_time(monkeypatch, 9)        # 預設裡有 9，但舊鍵說只有 8
+    run()
+    assert len(calls) == 1, (
+        f"舊鍵只說 8 點，9 點卻也抓了（累計 {len(calls)}）—— "
+        "fallback 變成「舊值 ＋ 預設」了"
+    )
+
+
+def test_sl17_an_empty_new_key_must_not_fall_back_to_the_old_one(
+        radar_bare, monkeypatch):
+    """🔴🔴 SL17：**新鍵存在而值是空清單 ⇒ 用新鍵，不可以退回舊值。**
+
+    📌 同上：我第一版編成 `SL22`，規格裡它是 `SL17`。
+
+    ## ☠️ 這個坑在這個 codebase 裡有前科
+
+        quotations.py:1379   new_status = body.status or q.get(...)
+                             # status 預設是 truthy 的 "草稿" ⇒ 右邊是死碼
+
+    ⇒ fallback 若寫成 `新值 or 舊值`，而使用者把寄信時段設成**空**
+    （＝不要寄，SL16 已經在測的那個合法設定）⇒ **空清單是 falsy ⇒ 退回舊值
+    ⇒ 它又開始寄了。**
+
+    🔑 **判準是「鍵存在嗎」，不是「值是不是真的」。**
+    ⚠️ 而使用者會怎麼發現？**他不會。** 他以為關掉了，而信照常寄。
+    """
+    _set_setting(OLD_SCAN_HOUR_KEY, 8)
+    _set_setting(SCAN_HOURS_KEY, "")          # 明確設成空 —— 不是沒設過
+    calls = _spy_fetch(monkeypatch, vary=True)
+    _spy_mail(monkeypatch)
+    run = _need("run_scheduled_scan")
+
+    for hour in (8, 9, 12, 15, 18):
+        _at_time(monkeypatch, hour)
+        run()
+    assert len(calls) == 0, (
+        f"抓取時段被明確設成空，卻抓了 {len(calls)} 次 —— "
+        "`新值 or 舊值` 讓空清單退回了舊鍵的 8。\n"
+        "⇒ 使用者以為關掉了，而它照跑。判準要用「鍵在不在」不是真假值。"
+    )
+
+
+def test_sl23_the_first_run_after_an_upgrade_does_not_double_fetch(
+        radar_bare, monkeypatch):
+    """🔴 SL23：**升級當下「新標記還不存在」，不可以被誤判成「沒抓過」而多抓一輪。**
+
+    ## 兩個方向都要防（A 與 D 各推出一個）
+
+    **方向 A —— 升級當天完全不抓**：新碼若只比對「最後一筆的小時 == 當前時段」
+    而**不比日期** ⇒ **昨天 9 點那筆會讓今天 9 點被跳過**。
+    **方向 B —— 升級當天多抓一輪**：新碼若改查一個**新的標記**
+    （而不是 `tender_fetch_log`）⇒ 那個標記升級當下不存在 ⇒ 誤判成沒抓過。
+
+    📌 方向 B 有具體對象：B 的詳細頁上限實作把 `"YYYY-MM-DD:N"` 存進
+    `system_settings` —— **那正是一個升級當下不存在的新標記。**
+
+    ⚠️ 這一題與 SL20 是**同一個洞的兩面**：SL20 是設定側（沒設過 → 走預設），
+    這一題是狀態側（新標記不存在 → 誤判沒抓過）。
+    **兩者都只在「升級當下那一刻」發生。**
+    """
+    import db
+    from datetime import timedelta
+
+    # 昨天這個時段抓過一次 —— 那是升級前留下的列
+    conn = db.get_db()
+    try:
+        yesterday = (ts.today() - timedelta(days=1)).isoformat()
+        conn.execute(
+            "INSERT INTO tender_fetch_log (fetched_at, recognised) VALUES (?,1)",
+            (f"{yesterday}T09:00:00",))
+        conn.commit()
+    finally:
+        conn.close()
+
+    calls = _spy_fetch(monkeypatch, vary=True)
+    _spy_mail(monkeypatch)
+    run = _need("run_scheduled_scan")
+
+    _at_time(monkeypatch, 9)
+    run()
+    assert len(calls) == 1, (
+        f"昨天 9 點那筆讓今天 9 點被跳過了（抓了 {len(calls)} 次）—— "
+        "時段比對沒有比日期。**升級當天雷達完全不會動。**"
+    )
+    run()
+    assert len(calls) == 1, (
+        f"同一個時段內第二次又抓了（累計 {len(calls)}）—— "
+        "節流改查了一個升級當下還不存在的新標記，於是誤判成沒抓過"
+    )
+
+
+# ══════════════════════════════════════════════════════════════════════
+# SL24～SL27 · 使用者裁示：**不設硬上限，但 > 12 個時段要確認**
+# ══════════════════════════════════════════════════════════════════════
+#
+# 🔑 **這條裁示會存在，是因為我沒有替使用者假設一個上限並把它釘死。**
+# 我問的是「要不要有上限」，而他的答案**兩個選項都不是**。
+# ⚠️ 如果我當時自己假設一個（例如「最多 24」）並寫成測試，
+# **那一題會是綠的，而這個答案永遠不會出現。**
+#
+# 🔴 門檻與判定放**後端**（A 裁定）：**我只寫後端測試** ——
+# 警告若只活在前端，這條裁示**沒有任何一題驗得到**。
+#
+# ⚠️ 這條跟「值不合法」是**兩條路**，不可以合併：
+#   `"9,25,15"` 不合法      → **422**，擋
+#   13 個時段（合法但頻繁） → **409**，確認
+# 🔑 後端**不拒絕** ⇒ 仍然不是硬上限，使用者按了確認就一定存得進去。
+
+CONFIRM_FLAG = "confirmHighFrequency"
+
+
+def _schedule_put(client, hdr, **body):
+    return client.put("/api/tender-radar/schedule", headers=hdr, json=body)
+
+
+def test_sl24_twelve_slots_save_without_a_warning(client, make_user):
+    """SL24：**12 個時段（門檻本身）直接存得進去，不要確認。**
+
+    ⚠️ 邊界的**安全側**要有題：只測 13 的話，一個「>= 12 就擋」的實作會全綠，
+    而那會讓門檻悄悄變成 11。
+    """
+    hdr = _auth(client, make_user)
+    threshold = _need("HIGH_FREQUENCY_SLOT_THRESHOLD")
+    hours = ",".join(str(h) for h in range(threshold))
+    r = _schedule_put(client, hdr, scanHours=hours)
+    assert r.status_code == 200, (
+        f"{threshold} 個時段（門檻本身）應該直接存得進去，實際 {r.status_code}："
+        f"{r.text[:300]}"
+    )
+    assert _get_setting(SCAN_HOURS_KEY), "回了 200 而設定沒被改"
+
+
+def test_sl25_more_than_twelve_slots_needs_confirmation(client, make_user):
+    """🔴 SL25：**超過門檻而沒帶確認旗標 → 409，而且設定真的沒被改。**
+
+    🔴 **一定要斷言「設定沒被改」，不可以只斷言狀態碼** ——
+    **「回了 409 但其實已經存進去了」是這一類最常見的壞法**，
+    而只看狀態碼**看不到**它。
+    ⚠️ 那也正是〈降級之後它還是會動〉：使用者看到「需要確認」，按了取消，
+    **而它已經生效了。**
+    """
+    hdr = _auth(client, make_user)
+    threshold = _need("HIGH_FREQUENCY_SLOT_THRESHOLD")
+    _set_setting(SCAN_HOURS_KEY, DEFAULT_SCAN_HOURS)
+    hours = ",".join(str(h) for h in range(threshold + 1))
+
+    r = _schedule_put(client, hdr, scanHours=hours)
+    assert r.status_code == 409, (
+        f"{threshold + 1} 個時段沒帶確認旗標，應該回 409（需要確認），"
+        f"實際 {r.status_code}：{r.text[:300]}"
+    )
+    assert _get_setting(SCAN_HOURS_KEY) == DEFAULT_SCAN_HOURS, (
+        f"回了 409，而設定已經被改成 {_get_setting(SCAN_HOURS_KEY)!r} —— "
+        "使用者按取消，它卻已經生效了"
+    )
+
+
+def test_sl26_confirmed_high_frequency_is_accepted(client, make_user):
+    """SL26：**帶了確認旗標就一定存得進去** —— 這是「不設硬上限」的那一半。
+
+    ⚠️ 沒有這一題，一個「超過門檻一律擋」的實作會讓 SL25 全綠 ——
+    **而那就變成硬上限了，正好跟使用者的裁示相反。**
+    """
+    hdr = _auth(client, make_user)
+    threshold = _need("HIGH_FREQUENCY_SLOT_THRESHOLD")
+    hours = ",".join(str(h) for h in range(threshold + 1))
+    r = _schedule_put(client, hdr, scanHours=hours,
+                      **{CONFIRM_FLAG: True})
+    assert r.status_code == 200, (
+        f"帶了確認旗標還是被擋（{r.status_code}）：{r.text[:300]}\n"
+        "⇒ 那變成硬上限了，而使用者明確裁示不要硬上限"
+    )
+    stored = _get_setting(SCAN_HOURS_KEY)
+    assert stored and len(str(stored).split(",")) == threshold + 1, (
+        f"回了 200 而存進去的是 {stored!r}"
+    )
+
+
+def test_sl27_an_invalid_hour_is_rejected_not_merely_confirmed(client, make_user):
+    """🔴 SL27：**`"9,25,15"` 是不合法，不是「頻繁」** —— 要 422 不是 409。
+
+    🔑 兩條路的差別是**能不能靠按確認通過**：
+    不合法的值按幾次確認都不該存得進去。
+    ⚠️ 合併成一條的話，使用者會看到「時段太多，要確認嗎？」——
+    **而真正的問題是 25 不是一個小時。** 那句話會把他導向完全錯誤的方向。
+    """
+    hdr = _auth(client, make_user)
+    _set_setting(SCAN_HOURS_KEY, DEFAULT_SCAN_HOURS)
+    r = _schedule_put(client, hdr, scanHours="9,25,15")
+    assert r.status_code == 422, (
+        f"`9,25,15` 含不合法的小時，應該 422，實際 {r.status_code}：{r.text[:300]}"
+    )
+    assert _get_setting(SCAN_HOURS_KEY) == DEFAULT_SCAN_HOURS, "422 而設定被改了"
+
+    r = _schedule_put(client, hdr, scanHours="9,25,15", **{CONFIRM_FLAG: True})
+    assert r.status_code == 422, (
+        f"帶了確認旗標就讓不合法的值過了（{r.status_code}）—— "
+        "確認是給「合法但頻繁」用的，不是給「值錯了」用的"
+    )
+
+
+def test_sl28_duplicate_slots_do_not_multiply_the_fetches(radar_ready, monkeypatch):
+    """SL28：`9,9,9,9` **不可以在 9 點抓四次**。
+
+    ⚠️ 使用者可以自己打字，而重複值是打字最容易產生的東西。
+    🔑 而它的後果落在對外的那一側：**對政府網站的請求變四倍**，
+    而畫面上只會顯示「已設定 4 個時段」—— 看起來完全正常。
+    """
+    _set_setting(SCAN_HOURS_KEY, "9,9,9,9")
+    calls = _spy_fetch(monkeypatch, vary=True)
+    _spy_mail(monkeypatch)
+    run = _need("run_scheduled_scan")
+    _at_time(monkeypatch, 9)
+    for _ in range(4):
+        run()
+    assert len(calls) == 1, (
+        f"時段設成 `9,9,9,9`，而 9 點抓了 {len(calls)} 次 —— "
+        "重複值沒有去重，對政府網站的請求變四倍而畫面上看不出來"
     )
