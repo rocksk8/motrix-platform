@@ -46,20 +46,18 @@
     `peak == max_concurrency`（「應該至少有一批真的頂到上限」）在 CPU 被搶時會頂不到
   - ⚠️ **我無法百分之百證明是哪一行紅的**：我把輸出接了 `tail -25`，traceback 被截掉了。
     這是我的失誤，下次全量回歸不接 `tail`。C 的⑥要在機器安靜時重跑一次才算數
-- **輪次**：**第 4 輪**（細線 6 標案雷達第 1～3 步）
-- **狀態**：🛑 **第 4 輪停手（第二次宣告）。SHA = `8a3612d`**（最後一個動 `backend/`／`frontend/` 的 commit）
-  在 C 回報⑤⑥之前，我不再動 `backend/` 或 `frontend/` 任何一個字。
-  ⚠️ 這不是形式：⑥要跑 20 分鐘，受測對象在那 20 分鐘裡被改的話，**⑥的結果就沒有意義**
-  （C 提的方案①，A 採用）。之後只會動 `docs/windows/B.md`——它不在 C 的 `fp()` 範圍、
-  pytest 也不讀它。
-- **C 的 46 題**：**46 passed / 0 failed**（先前 43 紅 3 綠）。
-  ⚠️ **這個數字我上一輪就跑出來了，卻只講在對話裡、沒有寫進這裡，也沒有回報給 A。**
-  A 是對的：**沒有回報不能當成綠燈**——那正是 §5c 那條。這一項記在這裡當教訓。
-- **模組 key 三方一致性**：`test_module_keys_consistency` ＋ `test_module_permission_fixes`
-  ＋ `test_dark_mode_chrome_structure` ＋ C 的 46 題 ＝ **94 題全綠**
-- **全量回歸**：⚠️ **我沒有跑完。** 起跑後 A 派下模組 key 的工作，我**主動砍掉**那一支——
-  它量的是 `7309864`（改模組 key 之前），留著會變成一個**看起來像數字、其實過期**的結果，
-  而且會跟 C 的⑥搶 CPU。⑥是 C 的職責且是權威結果，由它跑。
+- **輪次**：**第 5 輪**（細線 6 第 2 步排程 ＋ 第 5 步通知）
+- **狀態**：🟢 產品碼寫完（`bbbbc28`）。**82 綠 3 紅，三紅全部在 C 的檔**
+- **測試結果**（`test_tender_match` ＋ `test_tender_notify` ＋ prefs coverage ＋ module 一致性）：
+  ```
+  82 passed, 3 failed
+  FAILED test_n7_quiet_period_sends_nothing        ← C 的 helper SQL 錯欄位
+  FAILED test_n8_day_eight_sends                   ← 同上
+  FAILED test_n10_no_enabled_recipient_means_no_send ← 與 N1/N3/N5/N6/N9/N11 互斥
+  ```
+- **R1 已完成**：解析 dict 鍵 `published` → `published_at`，`test_06e` 轉綠
+- **動的鎖定檔**：`db.py`（`_m087_tender_notify`，86→87）、`main.py`（排程閘門加一行）
+
 - **A 已驗過停手握手**（不是相信我，是跑 `git log a18adf9..HEAD -- backend frontend` 查空）。
   ⚠️ **握手判準看 `MULTIWIN-PROTOCOL.md` §4 的那張表，不要看這裡。**
   這一行原本抄了判準的**內容**（「`<宣告SHA>..HEAD` 對 `backend`／`frontend` 是空的」），
@@ -87,6 +85,45 @@
   ⇒ 這件事的用處在未來：**下一個人看到那三行會想「這不是重複嗎」而合併掉其中兩道**，
   而合併之後反向驗證第 5 題仍然會紅（還剩一道），**看起來完全正常**。
   三道各自擋的是不同的欄序錯位組合，不是同一件事講三遍。
+
+### 🔴 第 5 輪：三紅的診斷（都在 C 的檔，我不動）
+
+**① N7／N8 —— C 的 helper 用了不存在的欄位**
+
+```
+tests/test_tender_notify_2026_09_21.py:436
+    INSERT OR REPLACE INTO system_settings (key, value) VALUES (?,?)
+sqlite3.OperationalError: table system_settings has no column named value
+```
+實際欄位是 `key` / **`value_json`** / `updated_at`（`db.py`）。
+
+⚠️ **而且改對欄位名還不夠**，我實測了第二層：`helpers/settings.py::_get_setting`
+對值做 `json.loads`，所以寫進去的必須是 **JSON**。裸字串 `2026-09-21T09:00:00`
+會讓 `json.loads` 丟例外 → `_get_setting` 記一筆 warning 並回 default。
+⇒ 正確寫法是 `json.dumps("2026-09-21T09:00:00")`，或直接用 `_set_setting`。
+
+**② N10 與 N1／N3／N5／N6／N9／N11 互斥——只能滿足一邊**
+
+N10 把 `notify_tender_found` **整支換成計數器**，所以函式內部的收件人早退救不了它：
+要讓它 0 次，**呼叫端必須先檢查有沒有收件人**。
+但 `conftest` 的每測試資料庫只跑 `init_demo_account()`、**沒有任何有 email 的 admin**
+（`init_default_admin` 不在 `client` fixture 裡）⇒ 加了閘門之後那六題全部變成 0 封。
+
+我實測過兩種都做一次：
+```
+加閘門   → N10 綠，N1/N3/N5/N6/N9/N11 紅（6 紅）
+不加閘門 → 那六題綠，N10 紅（1 紅）
+```
+**我選不加**，理由是既有 44 支 `notify_*` 一致的做法就是「自己解析收件人」
+（`to = _admin_emails(key); if not to: return`），而守門
+`test_notification_prefs_coverage.py` 掃的正是那個呼叫點。⇒ 行為是對的，
+只是**在 C 選的觀測點上看不到**。
+
+⚠️ **N10 的 patch 目標對既有結構也不成立**：它換掉 `notification_prefs.is_enabled`，
+但 `email_notify.py:14` 是 `from .notification_prefs import is_enabled as _pref_enabled`
+——**一份副本**，patch 打不到。
+⇒ 建議 N10 改成：spy `email_notify._async_send`（真正投遞那一步）＋
+patch `email_notify._pref_enabled`。那樣不必加閘門、其餘六題也不受影響。
 
 ### ⚠️ 第 5 輪審單：我有一項判斷是錯的，而且錯在方法
 
