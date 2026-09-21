@@ -52,6 +52,10 @@ import re
 # 後者會把 Timer 複製進本模組的命名空間，monkeypatch 打不到 ⇒ S3 永遠綠。
 # 跟 `fetch_raw`／`procurement.today` 是同一條（第 4 輪 8b 的教訓）。
 import threading
+# ⚠️ `import time` 走模組：`time.sleep` 要 patch 得到（D3）。
+# **「patch 目標要走模組」的第七個實例**——前六個：fetch_raw／procurement.today／
+# _PUBKEY_DEV／LICENSE_PATH／threading.Timer／_pref_enabled。
+import time
 import urllib.parse
 import urllib.request
 from datetime import date, timedelta
@@ -70,6 +74,7 @@ logger = logging.getLogger(__name__)
 # 而「沒產生資料 ≠ 沒被呼叫」正是 licensing middleware 那次的教訓。
 TENDER_RADAR_ENABLED = False
 
+SITE_ROOT = "https://web.pcc.gov.tw"
 TENDER_SOURCE_URL = (
     "https://web.pcc.gov.tw/prkms/tender/common/basic/readTenderBasic")
 TENDER_INDEX_URL = (
@@ -82,6 +87,8 @@ _HEADER_MARKERS = ("機關名稱", "標案案號", "截止投標", "預算金額
 
 # 欄位位置。⚠️ 固定索引正是「欄序被對調」偵測不到的原因，所以一定要配形狀驗證。
 _COL_ORG, _COL_CASE_NAME = 1, 2
+# 表頭：項次｜機關名稱｜標案案號標案名稱｜傳輸次數｜招標方式｜採購性質｜…
+_COL_METHOD, _COL_PROC_TYPE = 4, 5
 _COL_PUBLISHED, _COL_DEADLINE, _COL_BUDGET = 6, 7, 8
 _MIN_COLUMNS = 9
 
@@ -94,7 +101,30 @@ QUIET_PERIOD_DAYS = 7
 FIRST_SCAN_SETTING = "tender_radar_first_scan_at"
 # ⚠️ 存 system_settings 不是 tender_fetch_log：後者不進每日 JSON 備份，
 # 還原之後是空的 ⇒ 7 天純記錄期會**靜默重新開始**。
-SCAN_HOUR = 8
+SCAN_HOUR = 8            # 預設時間。具名常數才驗得到「預設值是多少」（D14）
+SCAN_HOUR_SETTING = "tender_radar_scan_hour"
+
+# 第二層（詳細頁）抓取的安全閥。三條缺一不可，而 D1 是基礎：
+# **只對「命中 watch 的」抓** —— 把 N 從「當天所有公告」綁到「你真的在乎的那幾筆」。
+# 沒有 D1 的話，上限與間隔都只是在拖慢一件不該做的事。
+DETAIL_DAILY_LIMIT = 20
+DETAIL_INTERVAL_SECONDS = 2
+
+# 履約地點那一格的 id。⚠️ **只認這個 id，不要用「地址」字樣去找。**
+# 詳細頁上「地址」出現 10 次，9 次是每一頁都一樣的樣板（六個監督機關＋頁尾）。
+# 用字樣找 ⇒ 每一筆標案都得到同一個臺北市信義區的地址，**而它看起來完全像一個合法地點**。
+# ⚠️ 更陰的是監督機關裡有一個也在桃園市，抽驗時「桃園市」會讓人以為抓對了。
+_LOCATION_FIELD_ID = "fkPmsExecuteLocation"
+
+# 臺灣 22 個縣市。⚠️ **用白名單不用樣式比對**：
+# 「多個縣市」用 `^..[市縣]$` 是會通過的（多個縣＋市），而它不是地名。
+# 白名單是封閉集合、幾乎不變，而樣式比對的漏網之魚會**看起來像個地名**。
+_TW_PLACES = frozenset((
+    "臺北市", "台北市", "新北市", "桃園市", "臺中市", "台中市", "臺南市", "台南市",
+    "高雄市", "基隆市", "新竹市", "嘉義市", "新竹縣", "苗栗縣", "彰化縣", "南投縣",
+    "雲林縣", "嘉義縣", "屏東縣", "宜蘭縣", "花蓮縣", "臺東縣", "台東縣",
+    "澎湖縣", "金門縣", "連江縣",
+))
 _ROC_OFFSET = 1911
 
 _TABLE_RE = re.compile(r"<table\b.*?</table>", re.S | re.I)
@@ -220,6 +250,8 @@ def _parse_row(cells):
 
     case_no, name = _split_case_and_name(cells[_COL_CASE_NAME])
     org = _text(cells[_COL_ORG])
+    m = re.search(r'href="([^"]+)"', cells[_COL_CASE_NAME])
+    detail_href = m.group(1) if m else ""
 
     # 必要欄位：案號／名稱／機關。**截止日不在其中**——
     # 「公告沒寫截止日」是解析成功而不是失敗，算成失敗會污染 dropped 那個訊號。
@@ -255,10 +287,17 @@ def _parse_row(cells):
     if not _within_sanity_window(published) or not _within_sanity_window(deadline):
         return None
 
+    # ⚠️ 解析不到存 `None` 不是 `""`：「沒有這一欄」與「這一欄是空的」是兩件事。
+    # （`0` vs `NULL` 那一族，今天第五次。）
+    method = _text(cells[_COL_METHOD]) or None
+    proc_type = _text(cells[_COL_PROC_TYPE]) or None
+
     return {
         "case_no":   case_no,
         "name":      name,
         "org":       org,
+        "tender_method":    method,
+        "procurement_type": proc_type,
         # R1（第 5 輪）：這個鍵原本叫 `published`，而 DB 欄位叫 `published_at`。
         # ⚠️ 兩者在相鄰兩行被讀寫，中間沒有轉換層 —— 同一輪裡兩種寫法，
         # 下一個人會以為那是有意義的區別。API 那一層的 `publishedAt` 才是
@@ -266,7 +305,12 @@ def _parse_row(cells):
         "published_at": published.isoformat() if published else None,
         "deadline":  deadline.isoformat() if deadline else None,
         "budget":    budget,
-        "url":       TENDER_SOURCE_URL,
+        # ⚠️ 這是**轉址前**的連結（`/prkms/urlSelector/...` 會 302 到
+        # `/tps/QueryTender/...`）。點下去照樣到得了頁面（瀏覽器會跟隨轉址）。
+        # **刻意不自己合成轉址後的網址**：我只觀察過一次轉址，
+        # 據一個樣本推斷規則，錯的時候會是**每一筆的網址都錯而且看起來很合法**。
+        # 真正抓過詳細頁的那些，會用**實際觀察到的最終網址**覆寫（見 _fetch_details）。
+        "url":       _absolute(detail_href) or TENDER_SOURCE_URL,
     }
 
 
@@ -304,6 +348,108 @@ def suspect_redesign(parsed_count, dropped):
     if total <= 0:
         return False
     return dropped > total / 2
+
+
+def _absolute(href):
+    """把列表頁的相對連結補成絕對網址。空的回空字串。"""
+    href = (href or "").strip()
+    if not href:
+        return ""
+    if href.startswith("http"):
+        return href
+    return SITE_ROOT + (href if href.startswith("/") else "/" + href)
+
+
+def parse_detail(html):
+    """詳細頁 HTML → `{"location": str|None}`。**純函式，不碰網路。**
+
+    ⚠️ **只認 `id="fkPmsExecuteLocation"`。** 不要用「地址」字樣去找——
+    那一頁「地址」出現 10 次，9 次是每一頁都一樣的樣板（六個監督機關＋頁尾工程會）。
+    用字樣找的話**每一筆標案都會得到同一個臺北市信義區的地址**，
+    而它看起來完全像一個合法地點，畫面上不會有任何異常。
+    ⚠️ 而監督機關裡有一個**也在桃園市**，抽驗時「桃園市」三個字會讓人以為抓對了。
+    """
+    if not html:
+        return {"location": None}
+    # 兩種引號都收：fixture 用雙引號，但不保證對方永遠不改。
+    m = None
+    for q in (chr(34), chr(39)):
+        m = re.search("id=" + q + _LOCATION_FIELD_ID + q + "[^>]*>(.*?)</",
+                      html, re.S)
+        if m:
+            break
+    if not m:
+        return {"location": None}
+    raw = _text(m.group(1))
+    # 括號後綴（「桃園市(非原住民地區)」）拆掉，只留縣市。
+    place = re.split(r"[（(]", raw, maxsplit=1)[0].strip()
+    # ⚠️ 非地名值（「全國」「依契約規定」「多個縣市」）**留 None 不要硬存**——
+    # 硬存的話，下游「依地點篩選」會篩出一個叫「依契約規定」的縣市。
+    # 🔑 跟 `0` vs `NULL` 同一族：**「不知道」不是一個值。**
+    return {"location": place if place in _TW_PLACES else None}
+
+
+def fetch_detail(url):
+    """拿回一筆標案的詳細頁。回 `(html, error)`，**其中一個必為 None**。
+
+    ⚠️ 簽名比照 `fetch_raw`：字串沒有辦法表達「我沒拿到」，
+    而「抓不到」與「解析不出」的處置不一樣。
+    """
+    if not url:
+        return None, "no url"
+    try:
+        req = urllib.request.Request(url, headers={
+            "User-Agent": USER_AGENT,
+            "Referer": TENDER_INDEX_URL,
+        })
+        with urllib.request.urlopen(req, timeout=FETCH_TIMEOUT_SECONDS) as resp:
+            return resp.read().decode("utf-8", "replace"), resp.geturl()
+    except Exception as exc:  # noqa: BLE001
+        return None, f"{type(exc).__name__}: {exc}"
+
+
+def _fetch_details(conn, tender_ids):
+    """對**命中 watch 且還沒有地點**的標案抓詳細頁。回實際抓了幾筆。
+
+    三道安全閥，而 **D1 是基礎**：
+      D1 只對命中的抓 —— 把 N 從「當天所有公告」綁到「你真的在乎的那幾筆」。
+                        沒有它，上限與間隔都只是在拖慢一件不該做的事。
+      D2 每日硬上限（`DETAIL_DAILY_LIMIT`），超過就停並記進 log
+      D3 每次之間間隔（`DETAIL_INTERVAL_SECONDS`）——對別人的伺服器的禮貌
+      D6 已經有 `location` 的不再抓（冪等）
+
+    ⚠️ **抓失敗／解析不出地點 → 那一筆標案照樣留著，`location` 是 NULL。**
+    不可以因為拿不到地點就整筆丟掉——這條線的承諾是「不會漏掉標案」。
+    """
+    if not tender_ids:
+        return 0
+    marks = ",".join("?" * len(tender_ids))
+    rows = conn.execute(
+        f"SELECT DISTINCT t.id, t.url FROM tenders t "
+        f"JOIN tender_hits h ON h.tender_id = t.id "        # D1：只有命中的
+        f"WHERE t.id IN ({marks}) AND (t.location IS NULL OR t.location='') "  # D6
+        f"ORDER BY t.id", tuple(tender_ids)).fetchall()
+
+    fetched = 0
+    for i, r in enumerate(rows):
+        if fetched >= DETAIL_DAILY_LIMIT:
+            logger.warning("詳細頁抓取達每日上限 %d，其餘留到明天", DETAIL_DAILY_LIMIT)
+            conn.execute(
+                "UPDATE tender_fetch_log SET error=? WHERE id=(SELECT MAX(id) FROM tender_fetch_log)",
+                (f"詳細頁達每日上限 {DETAIL_DAILY_LIMIT}，剩 {len(rows) - fetched} 筆未抓",))
+            break
+        if i:
+            time.sleep(DETAIL_INTERVAL_SECONDS)   # D3：走模組屬性，patch 得到
+        html, second = fetch_detail(r["url"])
+        fetched += 1
+        if html is None:
+            continue                 # D4：抓不到就算了，標案照樣留著
+        location = parse_detail(html).get("location")
+        # D20：用**實際觀察到的**最終網址覆寫（`second` 是 `resp.geturl()`）。
+        final_url = second if (second and second.startswith("http")) else r["url"]
+        conn.execute("UPDATE tenders SET location=?, url=? WHERE id=?",
+                     (location, final_url, r["id"]))
+    return fetched
 
 
 # ── 抓取 ─────────────────────────────────────────────────────────────────────
@@ -453,6 +599,8 @@ def run_scan():
         new_ids, new_hits = ([], 0)
         if recognised:
             new_ids, new_hits = _store(conn, items)
+            # 第二層：只對命中的標案抓詳細頁拿地點（D1～D6）。
+            _fetch_details(conn, new_ids)
         conn.commit()
         return {
             "fetched": True, "error": None, "recognised": recognised,
@@ -727,11 +875,26 @@ def run_scheduled_scan():
     return result
 
 
+def scan_hour():
+    """每天幾點掃。存 `system_settings`（有進每日 JSON 備份）。
+
+    ⚠️ **只能改「幾點」不能改「幾次」**：每日一次的硬上限由
+    `_already_fetched_today()` 把關，**不因這個設定而改變**（D13）。
+    那個上限是對別人的伺服器的承諾，不是我們自己的偏好。
+    """
+    raw = _get_setting(SCAN_HOUR_SETTING)
+    try:
+        h = int(raw)
+    except (TypeError, ValueError):
+        return SCAN_HOUR
+    return h if 0 <= h <= 23 else DEFAULT_SCAN_HOUR
+
+
 def _seconds_until_next_run():
-    """下一次 08:00。比照 `daily_tasks`／`dev_crm` 既有兩支的作法。"""
+    """下一次掃描時間。比照 `daily_tasks`／`dev_crm` 既有兩支的作法。"""
     from datetime import datetime
     now = datetime.now()
-    nxt = now.replace(hour=SCAN_HOUR, minute=0, second=0, microsecond=0)
+    nxt = now.replace(hour=scan_hour(), minute=0, second=0, microsecond=0)
     if nxt <= now:
         nxt += timedelta(days=1)
     return max((nxt - now).total_seconds(), 1.0)

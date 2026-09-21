@@ -1642,26 +1642,58 @@ def notify_tender_found(tenders: list, watch_names: list = None,
     to = _admin_emails("tender_found")
     if not to:
         return
+    def _dash(v):
+        """⚠️ `NULL` 一律顯示「—」，**不可以是空白或 `None`**。
+        空白讓收件人分不出「沒有這個欄位」與「這一頁沒載好」；
+        `None` 則是直接把 Python 的內部值漏到信裡。
+        🔑 「沒有」要看得見，才知道那是**沒有**不是**漏掉**。"""
+        if v is None or str(v).strip() == "":
+            return "—"
+        return str(v)
+
+    from datetime import date as _date
+    today = _date.today()
+    due_soon = 0
     rows = []
     for t in (tenders or [])[:50]:
-        deadline = t.get("deadline") or "未公告"
         budget = t.get("budget")
-        budget_s = "未公告" if budget is None else f"{budget:,}"
-        rows.append((f"{t.get('org', '')}｜{t.get('case_no', '')}",
-                     f"{t.get('name', '')}<br>截止 {deadline}｜預算 {budget_s}"))
+        budget_s = "—" if budget is None else f"{budget:,}"
+        deadline = t.get("deadline")
+        if deadline:
+            try:
+                if 0 <= (_date.fromisoformat(deadline) - today).days <= 7:
+                    due_soon += 1
+            except ValueError:
+                pass
+        # 七個欄位（D9）：標案名稱／機關／地點／採購性質／招標方式／預算／截止日
+        rows.append((
+            _dash(t.get("name")),
+            f"機關 {_dash(t.get('org'))}　地點 {_dash(t.get('location'))}<br>"
+            f"採購性質 {_dash(t.get('procurement_type'))}　"
+            f"招標方式 {_dash(t.get('tender_method'))}<br>"
+            f"預算 {budget_s}　截止 {_dash(deadline)}",
+        ))
     more = len(tenders or []) - len(rows)
     if no_watches:
         # N17b：一條搜尋條件都沒有時，這封信的意義不是「幫你篩到了什麼」，
         # 而是「雷達開始跑了，但它還不知道你要找什麼」。
         # ⚠️ 講成「找到 N 筆符合條件」是**騙人的**——那是未經篩選的全部。
         intro = (
-            f"標案雷達開始運作了，今天抓到 <b>{len(tenders or [])}</b> 筆標案。"
+            f"<b>共 {len(tenders or [])} 筆</b>標案（<b>其中 {due_soon} 筆七日內截止</b>）。"
+            "標案雷達開始運作了。"
             "<b>⚠️ 你還沒設定任何搜尋條件，所以這是未經篩選的清單。</b>"
             "請到標案雷達頁面新增關鍵字與<b>排除詞</b>——"
             "沒有排除詞的話，這個功能會在第三天就吵到被你關掉。"
         )
     else:
-        intro = f"標案雷達今天找到 <b>{len(tenders or [])}</b> 筆符合條件的新標案。"
+        # D11：開頭先給大綱，不是直接進清單。
+        # ⚠️ 收件人每天打開這封信，第一眼要能判斷「今天需不需要花時間」——
+        # 直接是一張表的話，他每天都得讀完才知道。
+        # ⚠️ 粗體要包**整句**不要包數字：`共 <b>5</b> 筆` 會被標籤切開，
+        # 而下游（信件、測試、任何掃內容的東西）看到的是「共 」與「 筆」中間夾標籤。
+        # 🔑 這正是列表頁 `截止<br>投標` 那個坑，只是這次是我自己製造的。
+        intro = (f"<b>共 {len(tenders or [])} 筆</b>符合條件的新標案，"
+                 f"<b>其中 {due_soon} 筆七日內截止</b>。")
     if more > 0:
         intro += f"（信中只列前 {len(rows)} 筆，其餘 {more} 筆請進系統查看）"
     if watch_names:

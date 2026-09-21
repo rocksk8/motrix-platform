@@ -100,7 +100,7 @@ DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR = os.path.join(
 # 的附件，2026-09-14）——兩張表都是 TEXT NOT NULL DEFAULT '[]'，存
 # save_document_files() 回傳的清單。刪附件限 admin+，見 routers/quotations.py
 # 與 routers/dev_crm.py 的 DELETE .../files/{file_id}。
-CURRENT_VERSION = 87
+CURRENT_VERSION = 88
 
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
 # execution model) whenever the current request is authenticated as the 'demo'
@@ -3658,6 +3658,34 @@ def _m087_tender_notify(conn):
     conn.commit()
 
 
+def _m088_tender_detail_fields(conn):
+    """標案的地點與兩個列表頁就有的欄位（2026-09-21，第 6 輪）。
+
+    使用者實測回饋：「彙整好標案資訊的信件內容要有大綱，例如標案名稱、地點、
+    金額、項目等重要資訊協助判別」。
+    🔑 **一鍵轉案再有價值，也建立在他願意每天打開那封信之上。**
+
+    - `location`：履約地點。**只從詳細頁 `id="fkPmsExecuteLocation"` 取**。
+      ⚠️ 詳細頁上「地址」出現 10 次，其中 9 次是**每一頁都一樣的樣板**
+      （六個監督機關 ＋ 頁尾工程會）。用字樣去找的話，**每一筆標案都會得到
+      同一個臺北市信義區的地址，而它看起來完全像一個合法地點**。
+      ⚠️ 更陰的是：監督機關裡有一個**也在桃園市**，抽驗時「桃園市」三個字
+      會讓人以為抓對了。
+    - `procurement_type`／`tender_method`：採購性質與招標方式，
+      **從列表頁解析，不增加任何對外請求**。
+
+    ⚠️ 三欄都可以是 NULL，而 **NULL 不是空字串**：
+    「沒有這一欄」與「這一欄是空的」是兩件事。`location` 尤其——
+    非地名值（「全國」「依契約規定」「多個縣市」）一律存 NULL 不要硬存，
+    否則下游「依地點篩選」會篩出一個叫「依契約規定」的縣市。
+    （`0` vs `NULL` 那一族的第六個實例。）
+    """
+    for col in ("location", "procurement_type", "tender_method"):
+        if not _col_exists(conn, "tenders", col):
+            conn.execute(f"ALTER TABLE tenders ADD COLUMN {col} TEXT")
+    conn.commit()
+
+
 _MIGRATIONS = [
     _m001_export_columns,        # v1
     _m002_sessions_expires,      # v2
@@ -3746,6 +3774,7 @@ _MIGRATIONS = [
     _m085_procurement_lead_time,                    # v85
     _m086_tender_radar,                             # v86
     _m087_tender_notify,                            # v87
+    _m088_tender_detail_fields,                     # v88
 ]
 
 
