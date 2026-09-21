@@ -39,6 +39,8 @@ if _BACKEND_DIR not in sys.path:
     sys.path.insert(0, _BACKEND_DIR)
 
 from helpers.licensing import (  # noqa: E402 — sys.path 要先補好才 import 得到
+    LICENSE_KIND_PERPETUAL,
+    LICENSE_KIND_SUBSCRIPTION,
     machine_fingerprint,
     sign_license,
     verify_license,
@@ -139,6 +141,9 @@ def cmd_issue(args):
         "modules":  modules,
         "issued":   issued,
         "expires":  expires.isoformat(),
+        # kind 會自動落在簽章範圍內（sign_license 簽的是除 sig 外的全部欄位），
+        # 所以客戶把 subscription 改成 perpetual 會被 bad_signature 擋下來。
+        "kind":     args.kind,
     }
     blob = sign_license(payload, priv_pem)
 
@@ -164,6 +169,10 @@ def cmd_issue(args):
     print(f"  機器     {machine}", file=sys.stderr)
     print(f"  模組     {', '.join(modules)}", file=sys.stderr)
     print(f"  有效期   {issued} ~ {payload['expires']}", file=sys.stderr)
+    if args.kind == LICENSE_KIND_PERPETUAL:
+        print("  種類     永久授權（到期後仍可使用，只是不再提供更新）", file=sys.stderr)
+    else:
+        print("  種類     年費授權（到期後會擋住業務 API）", file=sys.stderr)
     print(f"  簽發環境 {status['env']}", file=sys.stderr)
     if status["env"] != "prod":
         print("  ⚠️ 這是**開發用**金鑰（env=dev），不要交給真的客戶。", file=sys.stderr)
@@ -203,6 +212,11 @@ def main(argv=None):
                        help="有效天數（預設 365；--expires 優先）")
     p_iss.add_argument("--expires", default=None, help="到期日 YYYY-MM-DD")
     p_iss.add_argument("--issued", default=None, help="簽發日 YYYY-MM-DD（預設今天）")
+    p_iss.add_argument("--kind", default=LICENSE_KIND_SUBSCRIPTION,
+                       choices=[LICENSE_KIND_SUBSCRIPTION, LICENSE_KIND_PERPETUAL],
+                       help="授權種類：subscription＝年費（到期擋住）、"
+                            "perpetual＝永久（到期只提示）。預設 subscription —— "
+                            "預設值要往「會擋住」那一邊倒，簽錯成永久是救不回來的")
     p_iss.add_argument("--key", default=DEFAULT_KEY, help="私鑰路徑")
     p_iss.add_argument("--out", default=None,
                        help="金鑰輸出檔（預設印到 stdout）")
