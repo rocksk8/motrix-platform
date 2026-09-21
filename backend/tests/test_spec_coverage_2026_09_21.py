@@ -119,7 +119,11 @@ PENDING = {
     # ── A 2026-09-22 確認的真欠帳（我逐條查過沒有現成測試，不是用猜的）──
     "E3":   "radar_on() 環境變數解析；查過 tests/ 沒有任何 radar_on 的題",
     "N7B":  "靜默期擋通知不擋開跑公告（規格寫作 N7b）",
-    "T8":   "⚠️ 見下方 AMBIGUOUS_ACK：T 系列整組都沒做，它只是剛好沒撞名",
+    # ── §3g 標案→案件轉換：A 2026-09-22 裁定「那是一個功能，不是一條驗收條件」──
+    "T6":   "§3g 第 7 輪，尚未開工，非本期範圍",
+    "T7":   "§3g 第 7 輪，尚未開工，非本期範圍",
+    "T8":   "§3g 第 7 輪，尚未開工，非本期範圍"
+            "（⚠️ 它原本單獨出現在欠帳清單上，只因剛好沒有別的檔用到 t8）",
     "U5C":  "_MIGRATIONS 不可有 DROP COLUMN／RENAME／DROP TABLE（規格寫作 U5c）",
     "U8":   "schema_version 表不存在 → 回 0。"
             "⚠️ A 懷疑已有測試，我查過：沒有，test_upgrade_path 裡沒有這一題",
@@ -173,6 +177,22 @@ AMBIGUOUS_ACK = {
     #    **「編號這個形狀本來就不是規格的專利」** ——
     #    `s3`／`t100` 這種名字比規格早存在，而判準是後來才套上去的。
     "S3",
+}
+
+#: 🔴 **被不相干的測試「認領」的編號 —— 撞名偵測抓不到這一類。**
+#:
+#: `T6`／`T7` 規格只宣告一次（§3g 標案→案件轉換）、測試也只有一個檔
+#: ⇒ 兩道撞名判準（規格重複宣告／測試多檔實作）**兩道都不觸發**，
+#: 而那個檔是 `test_tiles_blocked_2026_09_22.py`（圖磚探測），**完全不相干**。
+#:
+#: ⚠️ **我是靠人工比對節次找到的，不是靠這支守門**：
+#: 把每個編號的規格節次與實作檔列成對照表，94 個裡只有這 2 個對不上。
+#: 🔑 **所以這一類目前沒有自動偵測** —— 寫在這裡是為了讓「它沒有被守住」
+#: 這件事是**寫著的**，而不是我以為守住了。
+#: 📌 真正的修法是每個測試檔宣告自己涵蓋哪一節（A 已裁定新編號帶節前綴）。
+MISCREDITED = {
+    "T6": "§3g 標案→案件轉換，被 test_tiles_blocked 的 T6（圖磚）認領",
+    "T7": "§3g 標案→案件轉換，被 test_tiles_blocked 的 T7（圖磚）認領",
 }
 
 #: 已知存在過的編號（反向控制用）。**只增不減。**
@@ -241,7 +261,7 @@ def _implemented():
     where = _implemented_where()
     ambiguous = {n for n, files in where.items() if len(files) > 1}
     ambiguous |= {n for n, lines in _declared_where().items() if len(lines) > 1}
-    return set(where) - ambiguous
+    return set(where) - ambiguous - set(MISCREDITED)
 
 
 def test_every_declared_condition_has_a_test():
@@ -355,6 +375,15 @@ def test_nothing_in_these_tables_points_at_nothing():
     ghost_known = sorted(KNOWN - _declared() - implemented)
     assert not ghost_known, (
         f"`KNOWN` 裡的這些編號，規格與測試兩邊都找不到：{ghost_known}"
+    )
+    # `MISCREDITED` 的定義就是「規格有、測試也有，但那個測試是別的東西」
+    # ⇒ 兩邊有任何一邊沒有，這一列就失去意義。
+    ghost_mis = sorted(n for n in MISCREDITED
+                       if n not in _declared() or n not in implemented)
+    assert not ghost_mis, (
+        "`MISCREDITED` 裡的這些編號，規格或測試其中一邊已經沒有了：\n  "
+        + "\n  ".join(ghost_mis)
+        + "\n⇒ 認領它的那支測試改名了？還是條文被刪了？兩種都該把這一列刪掉。"
     )
 
 
