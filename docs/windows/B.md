@@ -882,3 +882,5 @@ autostart.bat 是無限迴圈 ⇒ 用量由「重啟幾次」決定，不是由�
    🔑 〈答案沒錯，是題目問錯了〉：**我完整回答了一個問題，而要問的是另一個。**
 
 ## 恢復施工（§3o，2026-09-22）：動 `db.py`（v89，已佔號）＋ `helpers/geo.py` ＋ `routers/map_points.py` ＋ `frontend/pages/map.html`
+
+## 佔用宣告：`db.py`（§3i 連線 context manager `db_conn()`）＋ `routers/dashboard.py` 九支，2026-09-22
