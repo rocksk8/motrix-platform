@@ -171,7 +171,19 @@ HTML_MISSING_CASE_NAME = _rebuild(
 HTML_NO_DEADLINE = _rebuild(REAL, [_set_cell(ROW0, COL_DEADLINE, "")] + _DATA[1:])
 # 條件 6g：預算空白 → None（不是 0）
 HTML_NO_BUDGET = _rebuild(REAL, [_set_cell(ROW0, COL_BUDGET, "")] + _DATA[1:])
-# 條件 6c：把「機關」與「截止投標」兩格對調 → 形狀不符
+# 條件 6c：形狀驗證**是三道獨立檢查**（我在第 4 輪⑤除錯突變時黑箱探測出來的），
+# 所以 R2（第 5 輪結轉）把它拆成三個樣本、三題，各破壞一道。
+#
+# ⚠️ 原本一題涵蓋三道，**那是⑤自己的假綠燈**：下一個人合併掉兩道時，
+# 第 5 個突變仍然會紅（還剩一道），看起來完全正常。
+# 一道也是紅、三道也是紅，**中間少掉兩道沒有任何訊號**。
+HTML_ORG_NOT_CJK = _rebuild(           # ① 機關那格要含中文
+    REAL, [_set_cell(ROW0, COL_ORG, "ABC Agency")] + _DATA[1:])
+HTML_ORG_LOOKS_LIKE_DATE = _rebuild(   # ② 機關那格不可以長得像日期
+    REAL, [_set_cell(ROW0, COL_ORG, "115/09/30")] + _DATA[1:])
+HTML_DEADLINE_NOT_A_DATE = _rebuild(   # ③ 截止日非空時要解得出日期
+    REAL, [_set_cell(ROW0, COL_DEADLINE, "衛生福利部桃園醫院")] + _DATA[1:])
+# 真實情境（兩欄對調）會同時撞到 ②③——留著當整合樣本，但斷言由上面三題各自負責
 HTML_TRANSPOSED = _rebuild(
     REAL, [_swap_cells(ROW0, COL_ORG, COL_DEADLINE)] + _DATA[1:])
 # 條件 6e：截止日早於公告日（公告 115/09/21，截止設成 105/01/01）
@@ -480,8 +492,15 @@ def test_06e_roc_date_is_converted_to_western():
     assert first["deadline"] == "2026-09-30", (
         f"115/09/30 應轉成 2026-09-30，實際 {first['deadline']!r}"
     )
-    assert first["published"] == "2026-09-21", (
-        f"115/09/21 應轉成 2026-09-21，實際 {first.get('published')!r}"
+    assert first["published_at"] == "2026-09-21", (
+        f"115/09/21 應轉成 2026-09-21，實際 {first.get('published_at')!r}"
+    )
+    # ⚠️ R1（第 5 輪結轉）：鍵名從 `published` 改成 `published_at`。
+    # 三種拼法橫跨三層——解析 dict／DB 欄／API 與前端。DB 是 `published_at`，
+    # 而解析 dict 跟 DB insert 在相鄰兩行、中間沒有轉換層，所以兩邊要一致；
+    # API 那層的 `publishedAt` 保留（跨邊界用 camelCase，leadTimeDays 那次已定案）。
+    assert "published" not in first, (
+        "舊鍵 `published` 還在——兩個鍵並存的話，下游讀到哪一個是看運氣"
     )
 
 
@@ -553,18 +572,44 @@ def test_06i_name_is_the_javascript_argument_not_the_script_text():
     )
 
 
-def test_06j_transposed_columns_are_dropped():
-    """§3 條件 6c：**欄序被對調 → 該筆丟掉**，不可以安靜地收下。
+# ⚠️ 只用短 label 當參數，**不要把 HTML 當參數** —— pytest 會把整頁塞進測試 ID，
+# 輸出會變成幾百 KB。這個檔今天已經踩過一次（`test_06f`），這裡是第二次。
+_SHAPE_CASES = {
+    "org_not_cjk":       ("① 機關要含中文",            lambda: HTML_ORG_NOT_CJK),
+    "org_looks_like_date": ("② 機關不可以長得像日期",  lambda: HTML_ORG_LOOKS_LIKE_DATE),
+    "deadline_not_a_date": ("③ 截止日非空要解得出日期", lambda: HTML_DEADLINE_NOT_A_DATE),
+}
+
+
+@pytest.mark.parametrize("label", list(_SHAPE_CASES))
+def test_06j_each_shape_check_drops_its_own_row(label):
+    """§3 條件 6c（R2 拆成三題）：形狀驗證的**每一道**都要各自擋得住。
+
+    ⚠️⚠️ **原本這是一題涵蓋三道，那是⑤自己的假綠燈**（視窗 B 指出）：
+    下一個人若覺得三行重複而合併掉兩道，**⑤的第 5 個突變仍然會紅（還剩一道），
+    看起來完全正常**。一道也是紅、三道也是紅，**中間少掉兩道沒有任何訊號**。
+
+    🔑 三道檢查正是我在第 4 輪⑤除錯突變時黑箱探測出來的 ——
+    我把發現寫成了知識，卻沒有當場把它變成守門。這三題就是那個補救。
+    """
+    which, page_of = _SHAPE_CASES[label]
+    items, dropped, recognised = _src("parse_list")(page_of())
+    assert recognised is True, f"[{label}] 容器還在，不是『認不得』那種壞法"
+    assert dropped == 1, (
+        f"[{label}] 形狀檢查「{which}」該擋下這一列，實際 dropped={dropped}"
+    )
+    assert len(items) == N_DATA_ROWS - 1
+
+
+def test_06j_transposed_row_is_dropped():
+    """真實情境：兩欄對調。它**同時**撞到 ②③，所以只驗「有被丟掉」。
 
     ⚠️ 必要欄位**全都在**、容器也找得到 —— **每個訊號都綠而資料全錯**。
-    這是反向驗證第 5 題的目標。
+    逐道的斷言由上面那三題負責；這一題只確認真實情境不會漏網。
     """
     items, dropped, recognised = _src("parse_list")(HTML_TRANSPOSED)
-    assert recognised is True, "容器還在，不是『認不得』那種壞法"
-    assert dropped == 1, (
-        f"機關格放的是日期、截止日格放的是機關名 → 形狀不符，該筆要丟掉，"
-        f"實際 dropped={dropped}"
-    )
+    assert recognised is True
+    assert dropped == 1, f"欄序對調的那一列要被丟掉，實際 dropped={dropped}"
     assert len(items) == N_DATA_ROWS - 1
 
 
