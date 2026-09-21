@@ -81,6 +81,30 @@
           <div><span x-text="s.note"></span></div>
         </div>
       </template>
+      <!-- ☠️ 第七個訊號，而它跟上面六個不同級。
+           上面六個是「**沒有東西**」；這一個是「**有東西，而且是錯的**」：
+           OSM 封鎖時回的是 HTTP 200 ＋ 一張畫著 Access blocked 的圖
+           ⇒ 瀏覽器不觸發 error、JS 讀不到標頭 ⇒ **前端自己發現不了**。
+           所以是後端探出來告訴我們的。
+           🔑 而它必須出現在**按下去之前** —— 等他按了才看到滿版的封鎖圖，
+           那個訊號就沒有用了，他已經以為地圖壞了。 -->
+      <div class="mp-note warn" x-show="info && info.tilesBlocked === true">
+        <span>⛔</span>
+        <div><strong>OpenStreetMap 目前封鎖了這台機器的底圖請求。</strong>
+          按下去會看到一張滿版寫著「Access blocked」的圖——
+          <strong>那不是地圖壞了，是對方擋住我們</strong>。
+          <br>下面的清單與距離<strong>不受影響</strong>，照常可用。
+          <br>處理方式見
+          <a href="https://operations.osmfoundation.org/policies/tiles/"
+             target="_blank" rel="noopener">OSM 圖磚使用政策</a>。
+        </div>
+      </div>
+      <!-- ⚠️ `null` ＝ **不知道**（探測逾時或連不上），不是「可以用」。
+           這一行刻意很輕：它不阻止使用者，只是不讓我們宣稱一件沒查證的事。 -->
+      <div class="mp-note info" x-show="info && info.tilesBlocked === null">
+        <span>ℹ️</span>
+        <div>無法確認底圖是否可用（探測逾時或連不上）。可以按按看。</div>
+      </div>
       <div class="mp-note info" x-show="loadError">
         <span>✕</span><div x-text="loadError"></div>
       </div>
@@ -104,7 +128,9 @@
              按下去才會載入 Leaflet 與 OpenStreetMap 的圖磚。 -->
         <button class="btn btn-primary btn-sm" @click="openMap()"
                 x-show="!mapOpen" :disabled="mapLoading"
-                x-text="mapLoading ? '載入中…' : '開啟地圖（需要網路）'"></button>
+                x-text="mapLoading ? '載入中…'
+                        : (info && info.tilesBlocked === true
+                           ? '仍要開啟地圖' : '開啟地圖（需要網路）')"></button>
         <button class="btn btn-ghost btn-sm" @click="refresh()" :disabled="loading">重新整理</button>
       </div>
     </div>

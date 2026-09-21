@@ -104,6 +104,12 @@ def map_points(sources: str = "tenders", authorization: str = Header(None)):
         # ⚠️ 地理查詢關著時，**已填的地址也定位不到** ⇒ 距離全是 null。
         # 不講的話使用者會以為地址填錯了。
         "geoEnabled": geo.geo_on(),
+        # 🔴 第七個訊號，而它跟前六個不同級：前六個是「沒有東西」，
+        # 這個是「**有東西而且是錯的**」——OSM 封鎖的回應是 HTTP 200 ＋
+        # 一張寫著 Access blocked 的圖 ⇒ 瀏覽器不觸發 error、JS 讀不到標頭
+        # ⇒ **前端沒有任何辦法自己發現。** 只有後端讀得到那個標頭。
+        # ⚠️ 三態：True 被擋／False 探過可以用／**None 不知道**。
+        "tilesBlocked": geo.tiles_blocked(),
         "sources": source_info,
     }
 

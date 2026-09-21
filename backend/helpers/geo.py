@@ -139,6 +139,66 @@ def geocode_cached(address: str):
     return coord, err
 
 
+# ── 圖磚是否被封鎖 ───────────────────────────────────────────────────────────
+#
+# ☠️ **失敗偽裝成了成功。** OSM 封鎖一個 IP 的方式是：
+#     HTTP 200 OK ＋ `x-blocked` 標頭 ＋ 一張畫著「Access blocked」的 PNG
+# ⇒ 瀏覽器**不會**觸發 error 事件（狀態碼是 200），
+#   而圖磚是 `<img>` 載的 ⇒ **JavaScript 讀不到回應標頭**
+# ⇒ **前端沒有任何辦法自己發現這件事。**
+#
+# 🔑 這比「地圖上沒有點」那一族嚴重一級：那些是「**沒有東西**」，
+#    這個是「**有東西，而且是錯的**」——使用者看到的是一張看起來正常運作的地圖。
+# ⇒ 所以要由**後端**去探一次（後端讀得到標頭），把結果當成第七個訊號送給畫面。
+TILE_PROBE_URL = "https://tile.openstreetmap.org/5/26/13.png"
+#: ⚠️ 探測是在**使用者等著看畫面**的請求裡做的 ⇒ 不可以讓他等。
+TILE_PROBE_TIMEOUT_SECONDS = 3
+#: 探測結果快取多久。⚠️ 每開一次畫面探一次的話，**我們自己就是在濫用對方的服務**
+#: ——而那正是會被封鎖的原因。
+TILE_PROBE_CACHE_SECONDS = 3600
+
+#: `(判定, 時間戳)`；`None` ＝ 還沒探過。
+_TILE_PROBE_CACHE = None
+
+
+def tiles_blocked():
+    """圖磚是不是被擋住了。**三態：`True` / `False` / `None`。**
+
+    🔴 **`None` 是「不知道」，不可以退化成 `False`。**
+    `False` 的意思是「**我探過了，可以用**」——那是一個**宣稱**。
+    探測本身失敗（逾時、連不上、DNS 壞掉）時回 `False` 的話，
+    **我們會對使用者宣稱一件我們沒有查證過的事**，
+    而他會在看到滿版的封鎖圖時，**完全沒有線索**。
+    🔑 〈訊號數要 ≥ 你敢斷定的成因數〉：探測失敗只給了我一個訊號
+    （「探不到」），它推不出「可以用」也推不出「被擋了」。
+
+    📌 快取是必要的（見 `TILE_PROBE_CACHE_SECONDS`），而它有一個副作用：
+    **它會讓測試之間互相汙染** —— 一個為了正確性而存在的機制，
+    變成了測試之間的隱形耦合。所以 C 的每一題都先把它清掉。
+    """
+    global _TILE_PROBE_CACHE
+    now = time.time()
+    if _TILE_PROBE_CACHE is not None:
+        verdict, at = _TILE_PROBE_CACHE
+        if now - at < TILE_PROBE_CACHE_SECONDS:
+            return verdict
+
+    req = urllib.request.Request(TILE_PROBE_URL, headers={"User-Agent": USER_AGENT})
+    try:
+        with urllib.request.urlopen(req, timeout=TILE_PROBE_TIMEOUT_SECONDS) as resp:
+            # ⚠️ 標頭名稱大小寫不敏感，但不是每一種回應物件都保證如此 ⇒ 兩邊都看。
+            headers = getattr(resp, "headers", None)
+            blocked = bool(headers and (headers.get("x-blocked")
+                                        or headers.get("X-Blocked")))
+    except Exception:  # noqa: BLE001
+        # 探不到 ⇒ 不知道。**不快取「不知道」**：下一次請求要重新試一次，
+        # 否則一次網路抖動會讓這個訊號整整一小時說「不知道」。
+        return None
+
+    _TILE_PROBE_CACHE = (blocked, now)
+    return blocked
+
+
 def haversine_km(a, b) -> float:
     """兩個 `(lat, lon)` 之間的**直線**距離，單位公里。
 
