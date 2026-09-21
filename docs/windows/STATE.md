@@ -256,11 +256,89 @@ routers/quotations.py::_apply_case_change_request
 routers/dashboard.py::dashboard_expenses_monthly ✅已驗
 ```
 
-🔴 **A 刻意不把它們寫成缺陷** —— **三十分鐘前 A 才因為「5 處」裡有 4 個假陽性被打臉。**
-📌 **至少 `db.py::get_db` 必然是假陽性**：那是工廠函式，**回傳連線給呼叫端關**。
-⇒ **9 個候選交給 D 人工逐一驗**（它的判準已知三個限制：`.close()` 不分物件可能低估、
-沒處理 `with get_db() as conn`、沒追「conn 傳給 helper 由對方關」）。
-**只有它驗過的才進這張單。**
+🔴 **A 當時刻意不把它們寫成缺陷，而那個保留是對的 —— D 逐一驗完，6 個全是假陽性。**
+
+#### 🔴 成因不是 A 猜的那個（D 診斷，A 複驗）
+
+A 猜「至少 `db.py::get_db` 是假陽性，因為它是工廠函式」。
+**結論對、理由也對 —— 但那個理由只救得了它一個。**
+
+**真正的成因**：A 的掃描是 **`seg.count('get_db()')` 文字比對**，
+**不是 `ast.Call` 判定** ⇒ **註解與 docstring 裡提到 `get_db()` 的函式全部上榜**。
+
+```
+get_db            → def get_db(): ...                      ← 定義本身
+spawn_bg_thread   → docstring：「…會碰 get_db()/is_demo_mode()…」
+_pdf_archive_dirs → docstring：「跟 get_db() 的既有推理一致」
+guard_case_access → docstring：「呼叫端清一色是 conn = get_db() → 操作 → close()」
+stale_check       → docstring：「threading.Thread／get_db()，不使用 spawn_bg_thread()」
+_apply_case_...   → 註解：「_audit(...)  # get_db() 另開一條連線寫入」
+auth_middleware   → 第 5 個在 main.py:340 的一行**註解**
+```
+
+✅ **A 改用真正的 `ast.Call` 判定重掃全樹：剛好 2 處**（與 D 原本的數字一致）。
+🔑 **這個 repo 的註解寫得特別詳細，所以文字比對的命中率特別高** ——
+**寫得好的文件讓粗糙的工具更容易騙人。**
+
+---
+
+#### 🔴🔴 而 `auth_middleware` 有**三處真的例外路徑洩漏**（D 親眼讀，A 複驗）
+
+計數判準對它**是盲的**：4 個 `get_db` / 4 個 `close`，**數量相等**。
+
+```python
+# 第 1 段 L344 —— 安全
+conn = get_db()
+try:    row = conn.execute(...).fetchone()
+finally: conn.close()          ← finally，保證關
+
+# 第 2、3、4 段 L368／L378／L390 —— 三處同一形狀，都不安全
+try:
+    ec = get_db()
+    ec.execute(...); ec.commit(); ec.close()   ← close 在 try 內，不是 finally
+except Exception:
+    pass                                        ← 例外被吞掉
+```
+
+☠️ **三件事疊起來才是它的嚴重度**：
+1. 它在**每一個請求**上跑
+2. 只在例外路徑觸發 ⇒ **正常運作時完全看不到**
+3. `except Exception: pass` ⇒ **不會有人報修**
+
+🔑 **而第 1 段用的是正確的 `try/finally`** ——
+**這不是「不知道該用 finally」，是後面三段沒跟上。**
+📌 **與 `expenses-monthly` 那件事同一形狀**：正確的做法就在同一個檔裡，**只救了它所在的那一段**。
+
+⚠️ **嚴重度不加碼**（D 的判斷，A 同意）：`commit()` 在 SQLite 上失敗的機率不高
+（鎖等待 30 秒上限）⇒ **潛在洩漏不是持續洩漏**。
+**修法**：`close()` 移進 `finally`，並在 `except` 裡補一行 `logger.warning`
+（**保留不中斷請求的既有行為，但不要連一行 log 都沒有**）。
+
+---
+
+#### 🔑 D 的第四個限制，**比前三個都要緊**
+
+> **計數判準抓得到「無條件洩漏」，抓不到「例外路徑洩漏」** ——
+> 因為 `close()` **確實寫在那裡，只是站在錯的位置**。
+
+⇒ 要抓這一族，判準得換成**結構**：`get_db()` 之後的 `close()` **是否在 `finally` 內**。
+📌 **D 自己的結論**：「『2 處』和『9 個』都不是答案。
+**正確的答案是『我的判準只回答了計數那一半』。**」
+
+⚠️ **全樹還沒有人用結構判準掃過** ⇒ **排進下一輪**（D 自己說的：
+那會產出新的候選名單，而候選名單需要逐一人工驗，**那是下一輪的成本，不是這一輪的**）。
+
+---
+
+### ✅ P1 最終清單（**只有 D 親眼驗過的**）
+
+| 位置 | 類型 |
+|---|---|
+| `dashboard.py::dashboard_monthly` | 無條件（取一次、零 close） |
+| `dashboard.py::dashboard_expenses_monthly` | 無條件（取兩次、關一個） |
+| `main.py::auth_middleware` L368／L378／L390 | **例外路徑**（close 在 try 內，例外被吞） |
+
+❌ 其餘 6 個：**假陽性，成因是註解／docstring**
 
 #### 📌 D 自己講的那一段，A 要記下來
 
