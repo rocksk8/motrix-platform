@@ -256,12 +256,13 @@ tenders.org        200 筆，filled = 200   ← 機關名稱全都有
 
 **A 實測的資料現況**：
 ```
-customers   13 筆   data_json.invoiceAddress   13 筆有值
-                    data_json.deliveryAddress  11 筆有值     ← 兩種地址
-suppliers   24 筆   data_json.address          23 筆有值
+customers   13 筆   data_json.invoiceAddress    9 筆有值   ← C 實測更正（A 原寫 13，那是總列數不是有值數）
+                    data_json.deliveryAddress   7 筆有值   ← C 實測更正（A 原寫 11）
+suppliers   24 筆   data_json.address          23 筆有值   ✅ 這個數字是對的
 ```
 ⇒ 加上既有的 `contractors` 5／`vendor_contractors` 3／`shipping_notes` 3，
-**地圖上會有約 48 個自有據點** —— 比現在多一個數量級。
+**地圖上會有 9＋7＋23＋5＋3＋3 = 50 個自有據點**（R8 去重之後更少）—— 比現在多一個數量級。
+📌 **A 原本寫「約 48」而那是把 `customers` 的總列數當成有值數算的** —— C 實測更正。
 
 - **R4.** `sources` 加入 `customers` 與 `suppliers`，**各自獨立可開關**
 - **R5.** 🔴 **客戶的兩種地址都要畫，而且分得出來**（使用者裁「丙」）
@@ -282,6 +283,10 @@ suppliers   24 筆   data_json.address          23 筆有值
 **D 實測**：`交通部航港局` 回 `precision='street'`，而 `台中市西屯區台灣大道三段`（路段中心）**也是** `street`
 ⇒ 因為 `_locate_nominatim` 不管命中什麼都回 `PRECISION_STREET`，
 而前端的 `precisionIsCoarse()` 把 `street` 算成「細」⇒ **不會警告**。
+
+> ☠️ **A 2026-09-22 認**：A 在 §3q 的 Q7 把同一個概念放在 `street` 的**另一側**（`org`，比 street 粗），而 R9 放在 `street` 的細側。**兩條都活在規格裡，B 一動 `PRECISION_ORDER` 就會撞上。**
+> 🔑 **C 的診斷**：「今晚第五次『把一個會變的東西寫成不變量』，而這一次來源不是我的猜測，**是規格裡兩條活著的條文**。」
+> ⇒ **Q7 已作廢，以 R9／R10 為準** —— 判準是 **R9 有 D 的實測，Q7 是「建議」**。
 
 - **R9.** 🔴 **新增一階 `poi`**（介於 `rooftop` 與 `street` 之間），
   用於「**以名稱查到的地物**」（機關、公司、機構）
@@ -355,7 +360,7 @@ FAIL                      交通部民用航空局飛航…       ← 名稱在�
 | | 條件 |
 |---|---|
 | **Q6** | 🔴 **退階順序**：機關名稱 → `location`（縣市） → 失敗。**每一階要標出 `source`** |
-| **Q7** | 🔴 **機關名稱命中時 `precision` 要與縣市級分得開**（建議 `org` 這一級，介於 street 與 district 之間） |
+| ~~**Q7**~~ | 🔴 **已作廢，改由 §3r 的 R9／R10 取代**（A 2026-09-22 裁）。⚠️ **原文說「建議 `org`，介於 street 與 district 之間」＝比 street 粗，而 R9 依 D 的實測放在 rooftop 與 street 之間＝比 street 細。同一個概念被寫在 `street` 的兩側，而 Q7 那個位置是「建議」、R9 有量測** |
 | **Q8** | 🔴 **截斷偵測**：機關名稱以 `…`／`...` 結尾、或長度剛好等於某個上限時，**不可以拿去查** —— 直接退回 `location` |
 | **Q9** | **反向控制**：同一筆標案，把機關名稱換成查不到的字串 ⇒ 必須退回 `location` 且 `source` 改變 |
 | **Q10** | 快取的鍵要含「查的是機關名稱還是 location」—— ⚠️ 同一筆標案兩個來源查出兩個座標，**不可以互相覆蓋** |
