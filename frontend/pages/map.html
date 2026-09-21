@@ -156,6 +156,10 @@
         <div style="font-size:11px;color:var(--text-secondary);margin-top:6px">
           底圖 © <a href="https://www.openstreetmap.org/copyright"
                     target="_blank" rel="noopener">OpenStreetMap</a> 貢獻者
+          ・<a href="https://www.openstreetmap.org/fixthemap"
+               target="_blank" rel="noopener">回報地圖錯誤</a>
+          <!-- OSM 條款 recommended：讓使用者有地方回報底圖本身的錯誤。
+               📌 那跟「我們的資料點畫錯了」是兩件事——這個連結是給前者的。 -->
         </div>
       </div>
     </div>
@@ -275,8 +279,11 @@ function mapPage() {
                             : (pts.length ? [pts[0].lat, pts[0].lon] : [23.9, 121.0])
       this._map = window.L.map('mp-canvas').setView(centre, pts.length ? 8 : 7)
 
+      // 📌 **單一主機名，不用 `{s}` 輪替子網域。**
+      // OSM 條款：「Use exactly https://tile.openstreetmap.org/{z}/{x}/{y}.png」，
+      // 其他子網域是**舊形式**，可能更慢或**隨時撤除**。
       const tiles = window.L.tileLayer(
-        'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+        'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
         { maxZoom: 18,
           attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> 貢獻者' })
       // ⚠️ **圖磚載不出來要講出來。** 不講的話畫面是一片灰，

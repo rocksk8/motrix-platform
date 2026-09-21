@@ -422,7 +422,11 @@ _CSP = (
     # 📌 這一行原本沒有它 ⇒ 地圖按下去是一片灰，
     # **而我寫的錯誤提示會說「這台機器可能沒有對外連線」——那個診斷是錯的。**
     # 🔑 一個會講錯原因的錯誤訊息比沒有訊息更難查：它會讓人去查網路，而網路是對的。
-    "img-src 'self' data: blob: https://*.tile.openstreetmap.org; "
+    # 📌 收窄成**單一主機名**。原本是 `https://*.tile.openstreetmap.org`，
+    # 因為 Leaflet 的 `{s}` 會輪替 a/b/c —— 而 OSM 條款說那是**舊形式**、
+    # 其他子網域「可能更慢或隨時撤除」。改用 `tile.openstreetmap.org` 之後，
+    # **這一條也跟著變緊，不是變鬆。**
+    "img-src 'self' data: blob: https://tile.openstreetmap.org; "
     "font-src 'self' data:; "
     "connect-src 'self'; "
     "frame-src 'self' blob:; "
@@ -431,12 +435,42 @@ _CSP = (
 )
 
 
+#: 🔴 **只有這一頁放寬 `Referrer-Policy`。**
+#:
+#: OSM 的圖磚條款逐字要求兩件事，而我們**兩件都踩到了**：
+#:   *You must not: Set a restrictive Referrer-Policy that prevents the
+#:    HTTP Referer header being sent.*
+#:   *From web pages, ensure a valid HTTP Referer header is sent.*
+#: 而 `same-origin` 的意思正是「跨網域一律不送 Referer」
+#: ⇒ 瀏覽器去要圖磚時湊成「瀏覽器 UA ＋ 沒有 Referer」⇒ **被回一張封鎖圖**。
+#:
+#: ⚠️ **實測矩陣**（同 IP、同時間）證明變因是 Referer 不是 UA：
+#:     瀏覽器UA ＋ Referer   → 33,914 bytes ✅
+#:     瀏覽器UA 無 Referer   →  6,987 bytes ❌ 封鎖圖
+#:     MOTRIX UA 無 Referer  → 33,923 bytes ✅
+#:
+#: 🔴 **不可以整站放寬。** `same-origin` 是全站的隱私設定——
+#: 使用者點一個外部連結時，不該把「他剛剛在看哪一頁」送給對方。
+#: 🔴 **也不可以用 `unsafe-url`**：那會連**完整路徑**一起送出去
+#: （`/pages/quotation-form.html?id=MQ-2026-001` 這種）。
+#: ⇒ `strict-origin-when-cross-origin`：跨網域**只送來源**（`http://host:666/`），
+#:   OSM 拿得到它要的 Referer，而我們不洩漏使用者正在看哪一頁。
+_REFERER_RELAXED_PATHS = frozenset({"/pages/map.html"})
+_REFERRER_POLICY_DEFAULT = "same-origin"
+_REFERRER_POLICY_MAP = "strict-origin-when-cross-origin"
+
+
 @app.middleware("http")
 async def security_headers(request: Request, call_next):
     response = await call_next(request)
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
-    response.headers.setdefault("Referrer-Policy", "same-origin")
+    # ⚠️ 比對的是**路徑**，不是「有沒有 map 這個字」——
+    # 子字串比對會讓 `/pages/sitemap.html` 之類的東西意外跟著放寬。
+    referrer = (_REFERRER_POLICY_MAP
+                if request.url.path in _REFERER_RELAXED_PATHS
+                else _REFERRER_POLICY_DEFAULT)
+    response.headers.setdefault("Referrer-Policy", referrer)
     response.headers.setdefault("X-XSS-Protection", "1; mode=block")
     response.headers.setdefault("Content-Security-Policy", _CSP)
     return response
