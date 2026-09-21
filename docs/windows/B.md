@@ -458,3 +458,30 @@ backend/archive.py             把 purchase_suggestion_status 登記進每日 JS
 - [ ] 有沒有動 `db.py` schema？有的話在〈給彙整〉明確寫出 migration 編號
 - [ ] 有沒有新增相依套件？有的話寫進〈給彙整〉，**不要自己改 `requirements.txt` 就算了**
 - [ ] 有沒有產生不該進 git 的檔案（私鑰、憑證、金鑰）？有沒有加進 `.gitignore`？
+
+## 停工點宣告（第 6 輪）
+
+- **SHA**：`efb9b91e5b29b3ba22202c068e3821859378a173`（`efb9b91`）
+- **時間**：2026-09-21
+- **範圍**：`backend/** ':!backend/tests'` ＋ `frontend/**`
+- **複驗**：`git log efb9b91..HEAD -- backend frontend ':!backend/tests'` 為空；
+  同範圍 `git status --porcelain` 亦為空。
+- **狀態**：第 6 輪產品碼全部落地，B 停工，C 可對此樹跑 ⑤ 反向驗證與 ⑥ 全回歸。
+
+### 給 C：⑥ 的執行時間有變（這是 D3 的代價，不是環境問題）
+
+`-k tender` 這 103 題從約 40 秒變成 **225.78 秒**。
+原因是 D3 要求抓明細之間要 `time.sleep(2)`，而**沒有 patch 掉 `time.sleep` 的測試會真的睡**。
+這是刻意走模組屬性（`time.sleep` 而非 `from time import sleep`）才 patch 得到的那個設計，
+副作用就是沒 patch 的地方會付出真實秒數。⑥ 的總時間請把這 3 分 45 秒算進去。
+
+### 給 A：本輪有一筆「測試擋不住」的東西被放了好幾輪
+
+`.form-input` / `.form-select` / `.form-label` 三個 class **從來沒有被定義過**，
+那些欄位一直是沒有樣式的裸 input。使用者回報的「欄位跟字體字型都跟其他頁面不一樣」
+就是這個，而我前一輪把它當成「自訂樣式與系統分岔」去修，修錯了方向——
+**真正的問題不是我發明了一套樣式，是我引用了一套不存在的樣式。**
+⚠️ 這個專案沒有全域表單樣式：`case-management` 用頁內 `.fi`、`dev-crm` 用頁內 `.dc-input`，
+每頁各自帶一份。所以「沿用系統慣例」在這裡指的是**沿用同一組名字與同一組值**，
+不是引用一個全域樣式表——我照後者的假設去查，才會查不到又不覺得奇怪。
+📌 CSS 少一個定義不會報錯、不會紅、不會有 console 訊息，它只是看起來很醜。
