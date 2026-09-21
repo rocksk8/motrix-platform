@@ -615,6 +615,37 @@ def test_n14_first_email_announces_the_quiet_period(
     )
 
 
+def test_n14b_quiet_period_notice_only_in_the_first_email(
+    client, admin_with_email, monkeypatch
+):
+    """§3 N14b：那句話**只能出現在「純記錄期開始」的那一封**（B 提，A 採用）。
+
+    ⚠️ 每封都寫的話，**第 8 天恢復之後的信也會說「接下來 7 天不會再寄信」——
+    而那是錯的**，收件人會**第二次**以為它壞掉了。
+
+    🔑 B 那個判斷條件值得單獨記：
+    觸發條件是「**這一封寄出去之後就要進入靜默**」，**不是「現在在靜默期」** ——
+    因為**靜默期裡根本不寄信，所以後者永遠不會觸發**。
+    ⇒ **一個永遠為假的條件寫起來完全合理，而且不會有任何紅燈。**
+
+    ⚠️ 這題是「斷言某個字串不存在」，本身很弱（信是空的也會過），
+    所以先用 `_assert_mails` 釘住「**這確實是一封寄得出去的真信**」再驗它沒那句話。
+    """
+    import datetime as dt
+    _set_first_scan_at("2026-09-21T09:00:00")
+    monkeypatch.setattr(ts, "today", lambda: dt.date(2026, 9, 29))   # 第 8 天
+    mails = _sent(monkeypatch)
+    _run(monkeypatch, page=_five_hit_page())
+
+    _assert_mails(mails, 1)          # 先證明這是一封真的信，不是空的
+    body = mails[0][1] + mails[0][2]
+    assert "純記錄" not in body and "不會再寄" not in body, (
+        "第 8 天（靜默期已結束）那封信仍然寫著「接下來不會再寄信」—— "
+        "那是錯的，收件人會第二次以為它壞了。"
+        "實際主旨=%r" % (mails[0][1],)
+    )
+
+
 # ══════════════════════════════════════════════════════════════════════
 # R3 · 結轉項：User-Agent 與逾時
 # ══════════════════════════════════════════════════════════════════════
