@@ -47,6 +47,12 @@ ALLOWLIST = {
     "docs": "FastAPI 自動產生",
     "redoc": "FastAPI 自動產生",
     "deployed-version": "部署工具在用（deploy_dashboard.py:258、check_prod_drift.ps1），不是給人點的",
+    # 2026-09-22：測試模式專用，**刻意沒有前端入口**。
+    # 它只在 `MOTRIX_TENDER_RADAR=1` 時才註冊（`tender_radar.py` 的 `if os.getenv(...)`），
+    # 所以在正式出貨的機器上**它不存在**，不是「存在但沒人點」。
+    # 🔑 而它沒有前端按鈕是有意的：那是一個能重設「每日一次」節流的動作，
+    # **把它放在畫面上，等於把「重設這個承諾」放在被它約束的人手邊一公分處。**
+    "reset-today": "測試模式專用（MOTRIX_TENDER_RADAR=1 才註冊），刻意不做前端按鈕",
 }
 
 # 「第一次掃描時就已經沒有前端入口、但還沒查證是刻意還是忘了做」的端點放這裡。
