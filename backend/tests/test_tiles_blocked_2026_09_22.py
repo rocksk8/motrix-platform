@@ -326,8 +326,44 @@ def test_t6_the_probe_never_really_talks_to_osm(client, make_user, monkeypatch):
 # `connect-src` 開一個來源 —— **那是另一個決定，本輪不做。**
 # 🔑 寫在這裡是因為：**這個訊號的天花板，下一個人看不出來。**
 
-#: 我釘的名字：探測專用的 UA，**與 `geo.USER_AGENT` 是兩個東西**。
-TILE_PROBE_UA_ATTR = "TILE_PROBE_USER_AGENT"
+# ══════════════════════════════════════════════════════════════════════
+# 🔴 **T8／T8b 已撤回（2026-09-22）—— 它們會把我們推去違反 OSM 的條款**
+# ══════════════════════════════════════════════════════════════════════
+#
+# 撤掉的那兩題要求「探測送出的 User-Agent 必須是瀏覽器形狀（`Mozilla/` 開頭）」。
+# **OSM 的條款逐字禁止那件事：**
+#
+#     You must not: **never impersonate another app or a browser**
+#
+# ☠️ 而那兩題**會綠** —— 實作照著做就通過了。
+# 🔑 **一個綠燈把我們帶去違規，比紅燈危險。**
+#
+# ## 真正的根因（A／B 實測的完整矩陣，同一 IP 同一時間）
+#
+#     瀏覽器UA ＋ Referer   →  33,914 bytes  ✅ 真圖磚
+#     瀏覽器UA 無 Referer   →   6,987 bytes  ❌ 封鎖圖
+#     MOTRIX UA 無 Referer  →  33,923 bytes  ✅ 真圖磚
+#
+# ⇒ 觸發封鎖的是「**瀏覽器 UA ＋ 沒有 Referer**」這個**組合**，
+#   而 **Referer 是我們自己拿掉的**（`main.py:439` `Referrer-Policy: same-origin`）。
+#   條款同樣逐字禁止：*Set a restrictive Referrer-Policy that prevents the
+#   HTTP Referer header being sent.*
+# ⇒ **守門改釘 `Referrer-Policy`**，見 `test_csp_map_tiles_2026_09_22.py`。
+#
+# ## 🔑 而這件事要留在這裡，因為它推翻了我自己寫的一句話
+#
+# 我在 T8 的 docstring 裡寫：
+# > **一個看起來像錯誤的東西，如果沒有寫下它為什麼是對的，它會被修好。**
+#
+# ⚠️ **而它這次保護的是一個錯的東西。**
+# ⇒ 補上另一半：**把「為什麼這是對的」寫下來，不會讓它變成對的。**
+# 那段理由讀起來很有說服力，**是因為它解釋得通，不是因為它被查證過。**
+#
+# 📌 B 的自述值得逐字留著：
+# > 「我當時給了你一組**真的**數字，而那組數字**不足以支持我當時的結論** ——
+# > 你照它設計題目，所以錯誤原樣傳了下去。」
+# ⇒ **訊號數要 ≥ 你敢斷定的成因數。** 兩次診斷都少測了一個變數
+#   （第一次少測 UA 說是 IP，第二次少測 Referer 說是 UA）。
 
 
 def _captured_request(monkeypatch, call, headers=None):
@@ -335,6 +371,12 @@ def _captured_request(monkeypatch, call, headers=None):
 
     ⚠️ 觀測點是**送出去的那個請求物件**，不是模組裡的常數 ——
     常數改對了而組請求時沒用它，讀常數的測試會全綠（載入 ≠ 跑到）。
+
+    📌 **這支 helper 差點跟著 T8／T8b 一起被刪掉。**
+    它原本寫在那兩題旁邊，而 T9 也在用它 ——
+    🔑 我才剛在 T9 的 docstring 裡寫「要分辨『它靠那題才成立』還是
+    『它剛好被寫在那題旁邊』」，**然後就把它依賴的東西刪掉了。**
+    ⚠️ 撤回一批東西時，**位置上的相鄰**會被誤當成**邏輯上的相依**。
     """
     seen = []
 
@@ -348,68 +390,28 @@ def _captured_request(monkeypatch, call, headers=None):
     return seen[0]
 
 
-def test_t8_the_tile_probe_pretends_to_be_a_browser():
-    """🔴🔴 T8：探測送出的 `User-Agent` **必須是瀏覽器形狀的**。
-
-    ## 為什麼這個「看起來很怪」的東西是對的
-
-    OSM 按 **User-Agent** 封鎖。`geo.USER_AGENT`（MOTRIX 那個）是描述性的、
-    符合 OSM 政策 ⇒ **不被擋** ⇒ 探測永遠回 `False`，
-    **而使用者的瀏覽器照樣拿到封鎖圖。**
-
-    🔑 **探測要代表的是使用者，不是我們自己。**
-    ⇒ 它必須用**使用者的瀏覽器會送的那種 UA**，否則它量的是另一件事。
-
-    ⚠️⚠️ **這一題的訊息刻意講原因，不只講形狀**：
-    下一個人看到「一個瀏覽器 UA 混在 MOTRIX 的模組裡」會覺得那是錯的、
-    **把它改回 `USER_AGENT`** —— 而改回去之後
-    **這個訊號會靜默地永遠說「可以用」。**
-    📌 一個看起來像錯誤的東西，如果沒有寫下它為什麼是對的，**它會被修好**。
-    """
-    probe_ua = _geo(TILE_PROBE_UA_ATTR)
-    assert probe_ua != _geo("USER_AGENT"), (
-        "探測用的 UA 跟 `geo.USER_AGENT` 是同一個。\n"
-        "⇒ OSM 按 UA 封鎖，而 MOTRIX 那個 UA 符合政策、**不被擋** "
-        "⇒ 探測永遠回 False，而使用者永遠看到封鎖圖。\n"
-        "🔑 探測要代表的是使用者，不是我們自己。"
-    )
-    assert probe_ua.startswith("Mozilla/"), (
-        f"探測 UA 不是瀏覽器形狀：{probe_ua!r}\n"
-        "⇒ 隨便換一個字串不夠 —— 它要跟使用者的瀏覽器**被同樣對待**，"
-        "才量得到使用者會遇到的事。"
-    )
-
-
-def test_t8b_the_probe_really_sends_that_user_agent(monkeypatch):
-    """T8 的另一半：**那個常數要真的被送出去。**
-
-    ⚠️ 上一題只驗常數長什麼樣。一個「常數改對了而組請求時仍然用 `USER_AGENT`」
-    的實作會讓它全綠 —— **載入 ≠ 跑到**（今晚第三次用到這句）。
-    """
-    _reset_cache(monkeypatch)
-    req = _captured_request(monkeypatch, _geo("tiles_blocked"))
-    sent = req.get_header("User-agent") or req.headers.get("User-agent")
-    assert sent == _geo(TILE_PROBE_UA_ATTR), (
-        f"探測實際送出的 UA 是 {sent!r}，而 `{TILE_PROBE_UA_ATTR}` 是 "
-        f"{_geo(TILE_PROBE_UA_ATTR)!r} —— 常數對了，組請求時沒用它。"
-    )
-
-
 def test_t9_geocoding_still_identifies_itself_as_motrix(monkeypatch):
-    """🔴 T9：`geocode()` 打 Nominatim 時**仍然要用 MOTRIX 的 `USER_AGENT`**。
+    """🔴 T9：`geocode()` 打 Nominatim 時**必須用 MOTRIX 的 `USER_AGENT`**。
 
-    ## 這兩個對外連線要用**相反**的身分
+    Nominatim 的使用政策**要求可識別的 User-Agent**，
+    而 OSM 的條款同時**禁止冒充瀏覽器** —— 這兩件事指向同一個答案。
 
-    | | 身分 | 為什麼 |
-    |---|---|---|
-    | 圖磚探測 | **瀏覽器的 UA** | 它要代表使用者，才量得到使用者會遇到的事 |
-    | Nominatim | **MOTRIX 的 UA** | 那是**我們自己**在用，而它的政策**要求**可識別的 UA |
+    ## 📌 這一題在 T8／T8b 撤回之後**仍然成立，而且理由更乾淨了**
 
-    ⚠️ **而它們現在共用一個常數** ——
-    🔑 **共用常數本身就是下一次踩到的成因**：有人為了修其中一邊而改那個常數，
-    **另一邊會靜默地跟著變**，而兩邊的失敗方式完全不同
-    （一邊是假陰性，另一邊是違反對方的使用政策、可能被封鎖）。
+    它原本是「兩個對外連線要用**相反**的身分」那組的一半。
+    T8 被撤回之後**沒有相反的那一半了** —— 兩邊都該是 MOTRIX 的 UA。
+    ⚠️ 而這一題**不是因此變成多餘**：它釘的是「**我們對外時自報身分**」，
+    那是條款的要求，**與探測那邊怎麼做無關**。
+
+    🔑 **一組題目裡的某一題被撤回時，要分辨「它靠那題才成立」
+    還是「它剛好被寫在那題旁邊」** —— 後者不該被一起刪掉。
     """
+    # 🔴 `geocode` 有 `geo_on()` 守衛（M9）⇒ 關著時**根本不發請求**
+    # ⇒ 不開的話這一題會在「一個請求都沒送出去」的前提斷言上紅，
+    #   而那個紅**看起來像 UA 寫錯了**。
+    # 📌 抓到它的是我自己加的那道前提斷言 —— 沒有它，
+    #   `_captured_request` 會回一個空清單而斷言會**空過去**（又一個空集合假綠燈）。
+    monkeypatch.setattr(_geo(), "GEO_ENABLED", True)
     _geo("geocode")
     req = _captured_request(
         monkeypatch, lambda: _geo("geocode")("台中市西屯區文心路二段201號"))
