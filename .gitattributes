@@ -32,6 +32,16 @@
 *.ps1           text eol=crlf
 *.vbs           text eol=crlf
 
+# 🔴 測試 fixture：**原始位元組，一個都不准動**（2026-09-21，視窗 B 抓到）
+#
+# fixture 的用途是「保存對方網站當時真正送來的樣子」，日後改版時拿新舊兩份比對。
+# 若讓上面的 `*.html text eol=lf` 把它正規化，存進去的就不是現實而是現實的正規化版
+# ——而那正好打掉了它存在的理由。
+# 實測：磁碟 90,207 bytes／CRLF 1,585 處，正規化後物件庫只剩 88,622 bytes／CRLF 0。
+# ⚠️ 加這行之後還要 `git add --renormalize <該檔>` 重新存一次，
+#    規則本身不會把已經正規化的 blob 還原。
+backend/tests/fixtures/**    -text
+
 # 二進位：不要碰
 *.png           binary
 *.jpg           binary
