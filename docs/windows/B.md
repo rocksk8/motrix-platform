@@ -547,3 +547,44 @@ basetemp 我是隔離的（查證過，檔案沒互刪），但 **CPU 一直在�
 
 📌 這條宣告本身是 2026-09-21 新增的慣例：**停工點宣告之後要再動產品碼，得先宣告恢復施工，
 不是動完再補講。** 上一次我沒做，讓 C 的⑤跑在會動的目標上，三個突變結果作廢重跑。
+
+## 🔒 佔用宣告：migration **v89**（§3l `company_profile.address`）
+
+- **宣告時間**：2026-09-21
+- **佔的是**：`db.py` 的 `CURRENT_VERSION 88 → 89`、新函式 `_m089_company_address`、
+  `_MIGRATIONS` 清單末尾一筆
+- **狀態**：⏸️ **只佔號，尚未動手**。等 C 的七步紅燈才寫。
+- **查證**（不是照抄 A 的轉述）：
+  - `db.py:103` `CURRENT_VERSION = 88`
+  - `_MIGRATIONS` 最後一筆 `_m088_tender_detail_fields  # v88`
+  - `grep -rn "v89\|_m089" docs/windows/` → 空，**沒有別人佔過**
+- ⚠️ **兩人同時加 migration，git 不會衝突，只會在執行時撞版本號。** 所以要用宣告不是靠 diff。
+- 📌 做完要把這一節改成「已釋放」。
+
+### 寫的時候必須記得的兩件（已自行查證，非轉述）
+
+**① `_seed_setting` 改不動既有資料庫**
+```
+db.py:3808  INSERT INTO system_settings ... ON CONFLICT(key) DO NOTHING
+```
+`company_profile` 目前 seed 七個鍵（name／tax_id／contact_info／bank_name／
+bank_branch／bank_account_name／bank_account_number），**沒有 address**。
+⇒ **把 `address` 加進那個 dict，對已經存在的資料庫一個字都不會變**（`DO NOTHING`）。
+⇒ migration 必須是**讀出現有 JSON → 缺 address 才補上 → 寫回**，
+**不可以整個 dict 重寫**——那會把使用者已經填好的七個欄位蓋掉。
+🔑 這個坑的症狀是「新裝的機器正常、既有的機器沒有那個欄位」，
+而開發時通常兩種機器都有，**卻只會注意到會動的那一台**。
+
+**② 距離的精度天花板不是地址決定的，是資料來源決定的**
+```
+tender_source.py:409  return {"location": place if place in _TW_PLACES else None}
+_TW_PLACES = 22 個縣市，沒有區、沒有鄉鎮
+```
+⇒ `tenders.location` 只可能是 22 個縣市字串之一或 NULL ⇒ **距離只能到縣市中心點。**
+⚠️ **本輪不動解析器**去提高精度：詳細頁上的完整地址是**另一個欄位**（文件遞送地點），
+而 C 查過那一頁「地址」出現 10 次、9 次是樣板。**看起來可以精確不代表那個值是對的。**
+
+**③ M6 是最容易做出「安靜的錯」的一題**
+`location` 是 NULL 的標案：要在清單裡、不在地圖上、**而且畫面要寫出「有 N 筆沒有地點資訊」**。
+☠️ **地圖上少幾個點，跟「那些標案不存在」長得一模一樣，而且沒有人會報修。**
+（同族：[[feedback-null-vs-zero]]、本檔前面那條「NULL 顯示『—』不留空白」。）
