@@ -1,0 +1,157 @@
+"""地理查詢：地址 → 座標（OSM／Nominatim），以及兩點間的直線距離。
+
+§3l 第 1 步。**免金鑰**——底圖與定位都走 OpenStreetMap，
+Google Maps 是**可選的加值**（「附近公司」），沒有金鑰時那一塊不存在。
+
+## ⚠️ 這個模組會對外連線，所以有四道護欄
+
+`USER_AGENT`／`FETCH_TIMEOUT_SECONDS`／`GEOCODE_INTERVAL_SECONDS`／總開關。
+Nominatim 的使用政策明文要求**可識別的 User-Agent** 與**每秒最多一次**。
+🔑 而這不只是禮貌：**被對方封鎖時的症狀是「地圖上沒有點」**，
+而那跟「標案沒有地點」「沒有 Google 金鑰」在畫面上是同一個樣子
+——三個成因、一個畫面、三種相反的處置，所以每一個都必須有自己的訊號。
+"""
+import json
+import math
+import os
+import time
+import urllib.parse
+import urllib.request
+
+# ── 總開關 ───────────────────────────────────────────────────────────────────
+#
+# 🔴 **出貨預設關**（它會對外連線）。
+# ⚠️ 形狀比照 `tender_source.radar_on()`：**字面值留著、環境變數放在讀的那一端**。
+# 反過來寫（把 `os.getenv(...)` 放進 `GEO_ENABLED` 的初始值）會讓釘住出貨預設的
+# 那道守門從「永遠綠，除非有人改原始碼」變成「**取決於周圍環境**」——
+# 有人 `export MOTRIX_GEO=1` 之後跑全回歸就會紅，**而那不是缺陷**。
+#
+# 📌 **沒有環境變數 ＝ 關，那就是出貨預設，不是「預設值忘了設」。**
+GEO_ENABLED = False
+
+
+def geo_on() -> bool:
+    """地理查詢現在開著沒。只有 `MOTRIX_GEO=1` 才開。
+
+    ⚠️ 判準是 `== "1"` **不是真假值**：`"0"` 是非空字串，
+    用真假值判的話「我明確設成 0」會把它**打開**，
+    **而錯的方向是往「會真的連出去」的那一邊。**
+    """
+    return GEO_ENABLED or os.getenv("MOTRIX_GEO") == "1"
+
+
+# ── 對外連線的護欄 ───────────────────────────────────────────────────────────
+USER_AGENT = "MOTRIX-ERP/1.0 (tender map; contact your MOTRIX administrator)"
+FETCH_TIMEOUT_SECONDS = 10
+#: Nominatim 政策：每秒最多一次。取 1.1 留一點餘裕給時鐘誤差。
+GEOCODE_INTERVAL_SECONDS = 1.1
+
+NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
+
+_last_call_at = 0.0
+
+
+def _throttle():
+    """距離上一次查詢不足 `GEOCODE_INTERVAL_SECONDS` 就等到夠。
+
+    ⚠️ 走 `time.sleep` 這個模組屬性（不是 `from time import sleep`），
+    測試才 patch 得掉——這個專案今天已經踩過八次同一件事。
+    """
+    global _last_call_at
+    wait = GEOCODE_INTERVAL_SECONDS - (time.time() - _last_call_at)
+    if wait > 0:
+        time.sleep(wait)
+    _last_call_at = time.time()
+
+
+def geocode(address: str):
+    """地址 → `((lat, lon), None)`；失敗回 `(None, "原因")`。
+
+    🔴 **總開關檢查在這個函式裡面，不在呼叫端。**
+    理由與 `tender_source.run_scan()` 相同：開關管的是「**這台機器會不會對外連線**」，
+    而那個承諾不該取決於是哪一個呼叫端。放在呼叫端的話，
+    **下一個呼叫端很可能忘記檢查，而它會安靜地連出去。**
+
+    📌 兩個回傳值**必有一個是 `None`**，而判別依據是**第一個**：
+    `coord is None` 就是失敗。（`tender_source.fetch_detail` 曾經讓第二個值
+    一值兩用，結果 docstring 與行為對不上——這裡不重複那件事。）
+    """
+    address = (address or "").strip()
+    if not address:
+        return None, "沒有地址"
+    if not geo_on():
+        # ⚠️ 這不是錯誤，是**刻意不做**。訊息要講得出「怎麼打開」，
+        # 否則實測的人只會看到「查不到」，然後去懷疑地址寫錯了。
+        return None, "地理查詢未啟用（需要 MOTRIX_GEO=1）"
+
+    params = urllib.parse.urlencode({
+        "q": address, "format": "json", "limit": 1, "countrycodes": "tw",
+    })
+    req = urllib.request.Request(
+        f"{NOMINATIM_URL}?{params}", headers={"User-Agent": USER_AGENT})
+    try:
+        _throttle()
+        with urllib.request.urlopen(req, timeout=FETCH_TIMEOUT_SECONDS) as resp:
+            rows = json.loads(resp.read().decode("utf-8"))
+    except Exception as exc:                      # noqa: BLE001
+        # 把例外的型別帶出來。只回「查詢失敗」的話，
+        # 「被封鎖」「逾時」「對方改版」會長成同一句話，而處置完全不同。
+        return None, f"{type(exc).__name__}: {exc}"
+
+    if not rows:
+        return None, "查無此地址"
+    try:
+        return (float(rows[0]["lat"]), float(rows[0]["lon"])), None
+    except (KeyError, TypeError, ValueError) as exc:
+        return None, f"回應格式不認得：{type(exc).__name__}"
+
+
+#: 已查過的地址 → 結果。**只快取成功的**。
+#:
+#: ⚠️ 失敗不可以快取：`503`／逾時是暫時的，快取起來會讓一次抖動變成永久的空白，
+#: 而症狀是「地圖上少了那幾個點」——又是那個沒有人會報修的樣子。
+#:
+#: 📌 這是**行程內**的快取，重開機就沒了。可以接受，因為鍵的數量很小：
+#: `tenders.location` 只可能是 22 個縣市之一（`tender_source._TW_PLACES`），
+#: 加上辦公室地址一筆 ⇒ 重啟後最多重查 23 次。
+#: ⇒ **不值得為它開一張表**（而開表就要 migration，那是另一個層級的成本）。
+_CACHE: dict = {}
+
+
+def geocode_cached(address: str):
+    """`geocode` 加一層快取。**同一個地址第二次不再發出請求。**
+
+    🔴 **快取必須在 `geocode` 外面**（也就是這裡），不可以寫進 `geocode` 裡面。
+    測試是 monkeypatch `geo.geocode` 來數呼叫次數的——快取若在被換掉的那個
+    函式裡，**patch 之後快取就一起被換掉了，而那一題會安靜地失效。**
+
+    📌 這裡呼叫的是**模組層的 `geocode`**（全域查找，呼叫當下才解析），
+    所以 monkeypatch 打得到。
+    """
+    address = (address or "").strip()
+    if not address:
+        return None, "沒有地址"
+    if address in _CACHE:
+        return _CACHE[address]
+    coord, err = geocode(address)
+    if coord is not None:
+        _CACHE[address] = (coord, None)
+    return coord, err
+
+
+def haversine_km(a, b) -> float:
+    """兩個 `(lat, lon)` 之間的**直線**距離，單位公里。
+
+    ⚠️ **直線不是行車距離**，畫面上要寫出來（M11）——
+    使用者看到「32 公里」會以為是車程，而山路可能是它的兩倍。
+    純函式：不碰網路、不碰資料庫、不看時間。
+    """
+    lat1, lon1 = float(a[0]), float(a[1])
+    lat2, lon2 = float(b[0]), float(b[1])
+    r = 6371.0088                      # 地球平均半徑（IUGG 平均半徑，km）
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dp = math.radians(lat2 - lat1)
+    dl = math.radians(lon2 - lon1)
+    h = (math.sin(dp / 2) ** 2
+         + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2)
+    return 2 * r * math.asin(math.sqrt(h))

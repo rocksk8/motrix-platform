@@ -607,11 +607,27 @@ class CompanyProfile(BaseModel):
     bank_branch:         str = ''
     bank_account_name:   str = ''
     bank_account_number: str = ''
+    # 辦公室地址（2026-09-21 §3l）。用途是**算標案離我們多遠**，
+    # 所以它跟抬頭／統編不同：沒填的後果不是 PDF 少一行，是整個距離功能不會動。
+    # ⇒ 沒填時地圖端點會明白回報 `officeMissing`，不是安靜地不顯示距離。
+    address: str = ''
+    # Google Maps 金鑰（可選）。**免金鑰的底圖與距離不需要它**，
+    # 它只開啟「附近公司」那一塊；空字串 ⇒ 那一塊**不存在**（不是壞掉的按鈕）。
+    # ⚠️ 它會被送到前端——那是 Maps JS API 的正常用法，不是洩漏。
+    #    但**不可以寫進任何 log**：log 會被打包、被寄出、被放進備份，
+    #    而那些地方沒有人在管金鑰。兩者的保存期限完全不同。
+    google_maps_api_key: str = ''
 
 
+# 🔴 **既有安裝讀得到新欄位，靠的是這裡，不是 `db.py` 的 seed。**
+# `_seed_setting` 是 `ON CONFLICT(key) DO NOTHING` ⇒ 對已經存在的那一列
+# **一個字都不會改**。新增欄位時只改 seed 的話，新機正常、舊機沒有那個欄位，
+# 而開發時手邊兩種都有、注意力只會落在會動的那一台。
+# 📌 銀行那四欄 2026-08-24 就走過這條路。
 _COMPANY_PROFILE_DEFAULT = {
     "name": "", "tax_id": "", "contact_info": "",
     "bank_name": "", "bank_branch": "", "bank_account_name": "", "bank_account_number": "",
+    "address": "", "google_maps_api_key": "",
 }
 
 
@@ -625,11 +641,39 @@ def get_company_profile(authorization: str = Header(None)):
 
 @router.put("/api/settings/company-profile")
 def set_company_profile(body: CompanyProfile, authorization: str = Header(None)):
+    """部分更新：**這次沒送的欄位保留現值。**
+
+    🔴 原本是 `body.model_dump()` 整筆覆蓋，而 `CompanyProfile` 每個欄位都有
+    `= ''` 預設 ⇒ **任何沒送齊欄位的呼叫端，會把沒送的欄位清成空字串**，
+    而且**不會報錯**。畫面上是「欄位都在、只是空的」——
+    跟「新裝的機器還沒填」長得一模一樣。
+    ⚠️ 具體情境不是假想：一個在部署**之前**就開著的分頁（跑的是舊 JS，
+    不知道有 `address`），存一次檔就把 address 清掉了。
+
+    ## ⚠️ 這裡不能用 `key in body`
+
+    收的是 **Pydantic 模型不是 dict** ⇒ Pydantic 會先把沒送的欄位填成 `''`，
+    進到這裡時「沒送」與「送了空字串」**已經被壓成同一個值**。
+    （`routers/tender_radar.py` 那邊收的是 `dict = Body(...)`，所以那邊
+    `key in body` 成立——**兩邊不一樣，抄過來會失效而且安靜。**）
+
+    ⇒ 用 `model_fields_set`（這次請求真的送了哪幾個），形狀照 `suppliers.py:106`。
+    📌 那裡的註解 2026 年就寫著同一件事：「不知道有這個欄位的舊前端，
+    不應該因為存了一次供應商就把它清掉。」**全庫只有那一處在用它。**
+
+    🔑 而「明確送空字串」必須真的清掉（不可以寫成「空字串一律忽略」），
+    否則使用者**永遠刪不掉**填錯的銀行帳號。
+    **「沒送」與「送了空字串」是兩件事。**
+    """
     _require_user(authorization, require_superadmin=True, module='settings')
-    value = body.model_dump()
+    cur = {**_COMPANY_PROFILE_DEFAULT,
+           **(_get_setting("company_profile", {}) or {})}
+    sent = body.model_dump(include=body.model_fields_set)
+    value = {**cur, **sent}
     _set_setting("company_profile", value)
+    # ⚠️ 稽核留的是**公司名**，不是整包 value —— 那包裡有金鑰。
     _audit(_tok(authorization), "settings.company_profile.update", "settings",
-           "company_profile", body.name)
+           "company_profile", value.get("name", ""))
     return {"ok": True}
 
 
