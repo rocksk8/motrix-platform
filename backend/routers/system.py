@@ -617,6 +617,13 @@ class CompanyProfile(BaseModel):
     #    但**不可以寫進任何 log**：log 會被打包、被寄出、被放進備份，
     #    而那些地方沒有人在管金鑰。兩者的保存期限完全不同。
     google_maps_api_key: str = ''
+    # 手動座標（2026-09-22 §3o A2／A10）。填了就**跳過所有查詢**，
+    # 精度是 exact、來源是 manual。
+    # 🔑 它存在的理由：圖資認不得台灣的門牌，而使用者知道自己在哪裡。
+    # ⚠️ 兩個欄位是 Optional 而不是預設 0.0——
+    #    **0.0 是幾內亞灣上的一個點，不是「沒有填」。**
+    office_lat: Optional[float] = None
+    office_lon: Optional[float] = None
 
 
 # 🔴 **既有安裝讀得到新欄位，靠的是這裡，不是 `db.py` 的 seed。**
@@ -628,6 +635,7 @@ _COMPANY_PROFILE_DEFAULT = {
     "name": "", "tax_id": "", "contact_info": "",
     "bank_name": "", "bank_branch": "", "bank_account_name": "", "bank_account_number": "",
     "address": "", "google_maps_api_key": "",
+    "office_lat": None, "office_lon": None,
 }
 
 
@@ -637,6 +645,29 @@ def get_company_profile(authorization: str = Header(None)):
     # 既有安裝的 DB 值可能是新增銀行欄位前存的舊 shape，缺的鍵補上空字串，
     # 前端才不用每個欄位都自己防 undefined。
     return {**_COMPANY_PROFILE_DEFAULT, **(_get_setting("company_profile", {}) or {})}
+
+
+def _check_office_coord(body: "CompanyProfile") -> None:
+    """手動座標的範圍檢查。超出範圍 ⇒ 422。
+
+    ⚠️ **緯度 ±90、經度 ±180 是地球的範圍，不是台灣的。**
+    刻意不收窄到台灣：使用者哪天要標一個國外的案子，
+    而**一個「為了你好」而擋住合法輸入的驗證，會被繞過去**。
+    """
+    pairs = (("office_lat", 90.0), ("office_lon", 180.0))
+    for field, limit in pairs:
+        if field not in body.model_fields_set:
+            continue
+        value = getattr(body, field)
+        if value is None:
+            continue
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            raise HTTPException(422, f"{field} 必須是數字")
+        if not -limit <= number <= limit:
+            raise HTTPException(
+                422, f"{field} 超出範圍（{-limit:g} ~ {limit:g}）：{number}")
 
 
 @router.put("/api/settings/company-profile")
@@ -666,6 +697,9 @@ def set_company_profile(body: CompanyProfile, authorization: str = Header(None))
     **「沒送」與「送了空字串」是兩件事。**
     """
     _require_user(authorization, require_superadmin=True, module='settings')
+    # 🔴 **先驗證，再寫入。** 「回了錯誤碼」與「沒有存進去」是兩件事——
+    # 一邊驗一邊寫的話，使用者會看到 422 而值已經生效了。
+    _check_office_coord(body)
     cur = {**_COMPANY_PROFILE_DEFAULT,
            **(_get_setting("company_profile", {}) or {})}
     sent = body.model_dump(include=body.model_fields_set)

@@ -100,7 +100,7 @@ DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR = os.path.join(
 # 的附件，2026-09-14）——兩張表都是 TEXT NOT NULL DEFAULT '[]'，存
 # save_document_files() 回傳的清單。刪附件限 admin+，見 routers/quotations.py
 # 與 routers/dev_crm.py 的 DELETE .../files/{file_id}。
-CURRENT_VERSION = 88
+CURRENT_VERSION = 89
 
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
 # execution model) whenever the current request is authenticated as the 'demo'
@@ -3728,6 +3728,51 @@ def _m088_tender_detail_fields(conn):
     conn.commit()
 
 
+
+def _m089_geocode_cache(conn):
+    """地址 → 座標的快取表（2026-09-22，§3o）。
+
+    ## 為什麼要落地，而不是留在記憶體
+    原本是 `helpers/geo.py` 的一個 dict ⇒ **重啟就空**。
+    而正式機的 `autostart.bat` 是一個無限迴圈（崩潰就重拉）
+    ⇒ **查詢次數由「重啟幾次」決定，不是由使用者決定**，
+    而 Google 那一階是要收費的。
+    不重複的地址最多 27 個（22 個縣市＋其他＋辦公室）
+    ⇒ **存進來 ＝ 一輩子 27 次；不存 ＝ 每次重啟 27 次。**
+
+    ## 🔴 四個欄位，每一個都有它擋著的錯
+    - `address` ＋ `source`：**複合唯一鍵**。同一個地址用 OSM 與用 TGOS 查，
+      結果不一樣 ⇒ 只用 `address` 當鍵的話，**兩個來源會互相覆蓋**，
+      而覆蓋是安靜的。
+    - `precision`：☠️ **這個最容易被省略。** 「門牌精度」與「行政區精度」
+      **在畫面上都是一個圖釘**，而距離可能差好幾公里。
+      不存的話，日後從「縣市中心」升級到「門牌」時，
+      **舊的粗結果會被當成新的細結果用**，而畫面上看不出來。
+      🔑 **一個數字不帶它的可信度，就會被當成事實。**
+    - `created_at`：**給 TTL 用的，不是裝飾。**
+      ⚠️ 地址與座標的對應**會變**（門牌改編、行政區調整、圖資被修正）。
+      存進資料庫 ＝ 一輩子不再查 ⇒ **那個錯誤會永遠留著**，
+      而症狀是「地圖上那個點一直在錯的位置」——**沒有人會報修。**
+      🔑 記憶體版沒有這個問題，是因為**它會自己忘記**；
+      進資料庫之後那個保護就消失了，所以要自己把它加回來。
+
+    📌 **失敗不存進這張表**（`_m089` 不建欄位給它）：
+    `503`／逾時是暫時的，寫進來會讓一次抖動變成永久的空白。
+    """
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS geocode_cache (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            address    TEXT    NOT NULL,
+            source     TEXT    NOT NULL,   -- google / tgos / nominatim / nominatim_district
+            lat        REAL    NOT NULL,
+            lon        REAL    NOT NULL,
+            precision  TEXT    NOT NULL,   -- exact / rooftop / street / district
+            created_at TEXT    NOT NULL DEFAULT '',
+            UNIQUE (address, source)
+        )
+    """)
+    conn.commit()
+
 _MIGRATIONS = [
     _m001_export_columns,        # v1
     _m002_sessions_expires,      # v2
@@ -3817,6 +3862,7 @@ _MIGRATIONS = [
     _m086_tender_radar,                             # v86
     _m087_tender_notify,                            # v87
     _m088_tender_detail_fields,                     # v88
+    _m089_geocode_cache,                            # v89
 ]
 
 

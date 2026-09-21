@@ -12,6 +12,8 @@ Nominatim 的使用政策明文要求**可識別的 User-Agent** 與**每秒最�
 ——三個成因、一個畫面、三種相反的處置，所以每一個都必須有自己的訊號。
 """
 import json
+import re
+from datetime import date
 import math
 import os
 import time
@@ -224,6 +226,293 @@ def tiles_blocked():
 
     _TILE_PROBE_CACHE = (blocked, now)
     return blocked
+
+
+# 地址 -> 座標：**三個來源都保留，有序退階**（3o）
+#
+# 起因是實測：**不是地址寫錯，是圖資認不得台灣的路名與門牌。**
+#     台中市梧棲區八德路一段66號12樓之11   查不到
+#     台中市梧棲區八德路一段66號           查不到
+#     台中市梧棲區                        OK
+# 而現行缺陷是「查不到就整個回報定位不到」，**連退一階都沒做**。
+#
+# **座標一定要帶著它的精度與來源一起回來。**
+# 門牌精度與行政區精度**在畫面上都是一個圖釘**，而距離可能差好幾公里。
+# 一個數字不帶它的可信度，就會被當成事實。
+
+PRECISION_EXACT = "exact"          # 人工填的座標
+PRECISION_ROOFTOP = "rooftop"      # 門牌
+PRECISION_STREET = "street"        # 路段
+PRECISION_DISTRICT = "district"    # 縣市＋區（退階的結果）
+
+SOURCE_MANUAL = "manual"
+SOURCE_GOOGLE = "google"
+SOURCE_TGOS = "tgos"
+SOURCE_NOMINATIM = "nominatim"
+SOURCE_NOMINATIM_DISTRICT = "nominatim_district"
+
+GOOGLE_KEY_SETTING = "google_maps_api_key"
+TGOS_APPID_SETTING = "tgos_app_id"
+
+#: 快取多久之後要重新查一次。
+#: **TTL 不是為了省用量，是為了讓錯誤有機會自己修好。**
+#: 地址與座標的對應會變（門牌改編、行政區調整、圖資被修正），
+#: 而存進資料庫 = 一輩子不再查 => 那個錯誤會**永遠留著**，
+#: 症狀是「地圖上那個點一直在錯的位置」——**沒有人會報修。**
+#: 記憶體版沒有這個問題，是因為**它會自己忘記**；
+#: 進資料庫之後那個保護就消失了，所以要自己把它加回來。
+#: 具名常數，不可以埋進 SQL 字面值——埋進去就沒有人驗得到它變了。
+GEOCODE_CACHE_TTL_DAYS = 180
+
+_DISTRICT_RE = re.compile(r"^(.{2,3}[縣市])(.{1,4}?[區鄉鎮市])")
+
+
+class GeoResult:
+    """定位的結果。**具名結構，不是 tuple。**
+
+    tuple 可以被 `coord, *_ = locate(...)` 拆掉，
+    **而具名結構逼呼叫端講出它要的是哪一個。**
+    （同一個理由用過一次：`tender_source.fetch_detail` 的第二個回傳值一值兩用。）
+    """
+
+    __slots__ = ("coord", "precision", "source", "error", "address")
+
+    def __init__(self, coord=None, precision=None, source=None, error=None,
+                 address=None):
+        self.coord = coord
+        self.precision = precision
+        self.source = source
+        self.error = error
+        self.address = address
+
+    def __repr__(self):
+        return (f"GeoResult(coord={self.coord!r}, precision={self.precision!r}, "
+                f"source={self.source!r}, error={self.error!r})")
+
+
+def district_of(address):
+    """從完整地址切出「縣市＋區」。切不出來回 `None`。
+
+    切不出來時**必須回 `None`**，不可以回原地址——
+    回原地址的話退階會拿同一串字再查一次，
+    **而那是一個不會結束的迴圈的第一步**（A4c）。
+    """
+    m = _DISTRICT_RE.match((address or "").strip())
+    return m.group(0) if m else None
+
+
+def _locate_google(address, **_kw):
+    """Google Geocoding。**沒有金鑰就不發請求**（A6）。
+
+    「沒有金鑰時不要送出去」不只是省錢：
+    **一個帶空金鑰的請求會被記在對方那裡**，而我們拿不到任何有用的東西。
+    """
+    from helpers.settings import _get_setting
+    profile = _get_setting("company_profile", {}) or {}
+    key = (profile.get(GOOGLE_KEY_SETTING) or "").strip()
+    if not key:
+        return None
+    params = urllib.parse.urlencode({"address": address, "key": key,
+                                     "region": "tw", "language": "zh-TW"})
+    req = urllib.request.Request(
+        "https://maps.googleapis.com/maps/api/geocode/json?" + params,
+        headers={"User-Agent": USER_AGENT})
+    try:
+        with urllib.request.urlopen(req, timeout=FETCH_TIMEOUT_SECONDS) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except Exception:  # noqa: BLE001
+        return None
+    results = data.get("results") or []
+    if not results:
+        return None
+    geometry = results[0].get("geometry") or {}
+    loc = geometry.get("location") or {}
+    if "lat" not in loc or "lng" not in loc:
+        return None
+    # Google 自己會講精度（location_type）。ROOFTOP 才算門牌。
+    precision = (PRECISION_ROOFTOP if geometry.get("location_type") == "ROOFTOP"
+                 else PRECISION_STREET)
+    return (float(loc["lat"]), float(loc["lng"])), precision
+
+
+def _locate_tgos(address, **_kw):
+    """TGOS（政府圖資）。**沒有 AppID 就不發請求**（A7）。
+
+    **條款尚未查證的部分**：TGOS 的**底圖**已逐字查證為免註冊、免費、可商用
+    （政府資料開放授權條款第 1 版，但顯名標示是硬性的）；
+    **而「地址定位」在不在免申請的 Lite 版裡，目前仍然未知。**
+    => 所以這一階預設沒有 AppID => 不做任何事，等條款讀完再接。
+    「我記得它是免費的」跟「我查過它是免費的」在單子上長得一樣。
+    """
+    from helpers.settings import _get_setting
+    app_id = _get_setting(TGOS_APPID_SETTING) or ""
+    if not str(app_id).strip():
+        return None
+    # 尚未接上：有 AppID 也先不查，等條款與端點確認。
+    return None
+
+
+def _locate_nominatim(address, **_kw):
+    """OSM／Nominatim。回 `((lat, lon), precision)` 或 `None`。"""
+    coord, _err = geocode(address)
+    if coord is None:
+        return None
+    return coord, PRECISION_STREET
+
+
+#: 有序退階。**每一階都是模組層屬性**，否則測試沒辦法讓前 N 階失敗，
+#: 而那一題會退化成「只驗最後有沒有座標」。
+_STAGES = (("_locate_google", SOURCE_GOOGLE),
+           ("_locate_tgos", SOURCE_TGOS),
+           ("_locate_nominatim", SOURCE_NOMINATIM))
+
+
+def _run_stage(name, address):
+    """呼叫某一階。**從模組全域取，不要抓住函式參考。**
+
+    抓住參考的話，測試 patch 模組屬性就打不到那個舊參考,
+    而那一題會安靜地失效——今晚已經踩過這一族很多次。
+    """
+    return globals()[name](address)
+
+
+def locate(address, manual_coord=None):
+    """地址 -> `GeoResult`。手動 -> Google -> TGOS -> Nominatim -> 退到行政區。"""
+    if manual_coord is not None:
+        # **人工填的座標跳過每一階，而且不對外連線**（A2）。
+        # 使用者親手指定的位置，沒有任何理由再去問別人一次。
+        return GeoResult(coord=tuple(manual_coord), precision=PRECISION_EXACT,
+                         source=SOURCE_MANUAL, address=address)
+
+    address = (address or "").strip()
+    if not address:
+        return GeoResult(error="沒有地址")
+    if not geo_on():
+        return GeoResult(error="地理查詢未啟用（需要 MOTRIX_GEO=1）")
+
+    for name, source in _STAGES:
+        found = _run_stage(name, address)
+        if found:
+            coord, precision = found
+            return GeoResult(coord=coord, precision=precision, source=source,
+                             address=address)
+
+    # 退階：整個地址查不到 => 只查「縣市＋區」
+    # 現行缺陷正是少了這一段：查得到「梧棲區」卻整個回報「定位不到」。
+    district = district_of(address)
+    if not district or district == address:
+        # 切不出行政區、或切出來跟原地址一樣 => **不要再查一次**（A4c）。
+        return GeoResult(error="查無此地址", address=address)
+    found = _run_stage("_locate_nominatim", district)
+    if not found:
+        return GeoResult(error="查無此地址", address=address)
+    coord, _precision = found
+    # **精度由「我們實際問了什麼」決定，不是由回應說什麼決定。**
+    # 我們問的是行政區 => 拿到的就是行政區中心點，不管對方怎麼標。
+    return GeoResult(coord=coord, precision=PRECISION_DISTRICT,
+                     source=SOURCE_NOMINATIM_DISTRICT, address=address)
+
+
+def _cache_get(address, source):
+    """讀資料庫快取。**過期的當成沒有。**"""
+    from db import get_db
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT lat, lon, precision, created_at FROM geocode_cache "
+            "WHERE address=? AND source=?", (address, source)).fetchone()
+    finally:
+        conn.close()
+    if not row:
+        return None
+    created = (row["created_at"] or "")[:10]
+    if created:
+        try:
+            age = (date.today() - date.fromisoformat(created)).days
+        except ValueError:
+            age = 0
+        if age >= GEOCODE_CACHE_TTL_DAYS:
+            return None
+    return GeoResult(coord=(row["lat"], row["lon"]), precision=row["precision"],
+                     source=source, address=address)
+
+
+def _cache_put(result):
+    """寫資料庫快取。**只寫成功的**——失敗不進永久快取（A14）。
+
+    `503`／逾時是暫時的，寫進資料庫會讓一次抖動變成**永久的空白**。
+    記憶體會自己忘記，資料庫不會。
+    """
+    if not result or not result.coord or result.source == SOURCE_MANUAL:
+        return
+    from db import get_db
+    conn = get_db()
+    try:
+        conn.execute(
+            "INSERT INTO geocode_cache "
+            "(address, source, lat, lon, precision, created_at) "
+            "VALUES (?,?,?,?,?,?) "
+            "ON CONFLICT(address, source) DO UPDATE SET "
+            "lat=excluded.lat, lon=excluded.lon, "
+            "precision=excluded.precision, created_at=excluded.created_at",
+            (result.address, result.source, result.coord[0], result.coord[1],
+             result.precision, date.today().isoformat()))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _remember(address, result):
+    result.address = address
+    _CACHE[(address, result.source)] = result
+    _cache_put(result)
+
+
+def _cached_stage(address, source):
+    """記憶體 -> 資料庫，兩層都找。"""
+    key = (address, source)
+    if key in _CACHE:
+        return _CACHE[key]
+    hit = _cache_get(address, source)
+    if hit:
+        _CACHE[key] = hit
+        return hit
+    return None
+
+
+def locate_cached(address, manual_coord=None):
+    """`locate` 加兩層快取：記憶體 -> 資料庫。
+
+    **快取以「地址＋來源」為鍵，逐階檢查。**
+    只用地址當鍵的話：Nominatim 先查到行政區中心點並寫進快取
+    => 使用者後來填了 Google 金鑰 => **快取命中，永遠拿不到門牌精度**（A9）。
+    而症狀是**沒有症狀**：地圖上有點、距離有數字，只是一直差幾公里。
+    """
+    if manual_coord is not None:
+        return locate(address, manual_coord)
+    address = (address or "").strip()
+    if not address:
+        return GeoResult(error="沒有地址")
+
+    for name, source in _STAGES:
+        hit = _cached_stage(address, source)
+        if hit:
+            return hit
+        found = _run_stage(name, address)
+        if found:
+            coord, precision = found
+            result = GeoResult(coord=coord, precision=precision, source=source)
+            _remember(address, result)
+            return result
+
+    # 退階那一階也要有自己的快取鍵。
+    hit = _cached_stage(address, SOURCE_NOMINATIM_DISTRICT)
+    if hit:
+        return hit
+    result = locate(address)
+    if result.coord:
+        _remember(address, result)
+    return result
 
 
 def haversine_km(a, b) -> float:

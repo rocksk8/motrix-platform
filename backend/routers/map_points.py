@@ -76,11 +76,20 @@ def map_points(sources: str = "tenders", authorization: str = Header(None)):
     office_address = (profile.get("address") or "").strip()
     api_key = (profile.get("google_maps_api_key") or "").strip()
 
+    # 🔴 走 `locate_cached()` 不是舊的 `geocode_cached()`。
+    # 舊的只有 Nominatim 一階，查不到就整個回報定位不到——
+    # ☠️ **§3o 的 25 題全綠而這裡沒換的話，使用者看到的仍然是舊行為**，
+    # 而每一題都是對的。斷點在兩個後端函式之間，**沒有人會去點那裡。**
     office = None
-    if office_address:
-        coord, _err = geo.geocode_cached(office_address)
-        if coord:
-            office = {"address": office_address, "lat": coord[0], "lon": coord[1]}
+    manual = _manual_coord(profile)
+    if office_address or manual:
+        found = geo.locate_cached(office_address, manual_coord=manual)
+        if found.coord:
+            office = {"address": office_address,
+                      "lat": found.coord[0], "lon": found.coord[1],
+                      # 精度要帶到畫面上：門牌與行政區在地圖上都是一個圖釘，
+                      # 而距離可能差好幾公里。
+                      "precision": found.precision, "source": found.source}
 
     points, without_location, source_info = [], 0, []
     if "tenders" in wanted:
@@ -114,6 +123,21 @@ def map_points(sources: str = "tenders", authorization: str = Header(None)):
     }
 
 
+def _manual_coord(profile):
+    """人工填的辦公室座標。兩個都要有才算數。
+
+    ⚠️ **只填一個 ⇒ 當成沒填。** 一個只有緯度的座標不是「一半的位置」，
+    它是一個在赤道或本初子午線上的錯誤位置——而那會畫在地圖上，看起來很正常。
+    """
+    lat, lon = profile.get("office_lat"), profile.get("office_lon")
+    if lat is None or lon is None:
+        return None
+    try:
+        return (float(lat), float(lon))
+    except (TypeError, ValueError):
+        return None
+
+
 def _company_profile():
     from helpers.settings import _get_setting
     return {**(_get_setting("company_profile", {}) or {})}
@@ -139,7 +163,8 @@ def _tender_points(office):
         if not place:
             missing += 1
             continue
-        coord, _err = geo.geocode_cached(place)
+        found = geo.locate_cached(place)
+        coord = found.coord
         if not coord:
             # ⚠️ 一筆定位失敗不可以拖垮其他筆，而它要歸到「沒有地點」那一欄
             # ——使用者至少看得到它存在，而不是它不存在。
@@ -149,6 +174,7 @@ def _tender_points(office):
             "source": "tenders",
             "caseNo": r["case_no"], "name": r["name"], "org": r["org"],
             "location": place, "lat": coord[0], "lon": coord[1],
+            "precision": found.precision, "source": found.source,
             "budget": r["budget"], "deadline": r["deadline"], "url": r["url"],
             "distanceKm": (round(geo.haversine_km((office["lat"], office["lon"]),
                                                   coord), 1)
