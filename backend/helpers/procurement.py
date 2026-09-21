@@ -18,7 +18,7 @@
 ⚠️ 這代表**任何地方都不可以用真假值判斷前置時間**（`if lead_time:`），
 因為 `0` 是假值——一律用 `is None`。
 """
-from datetime import timedelta
+from datetime import date, timedelta
 
 from fastapi import HTTPException
 
@@ -28,6 +28,23 @@ STATUS_ORDERED   = "ordered"     # 已下單，東西在路上
 STATUS_RECEIVED  = "received"    # 已到貨，這一輪結束
 
 STATUS_SEQUENCE = (STATUS_SUGGESTED, STATUS_ORDERED, STATUS_RECEIVED)
+
+
+def today():
+    """今天（本地日期）。**這支存在的唯一理由，是讓測試換得掉它。**
+
+    ⚠️ 它**不是**在修任何 bug。`date.today()` 取的本來就是本地日期，
+    台灣的日界線沒有算錯過——A 於 2026-09-21 查證並更正了這個說法。
+    純粹是因為：`compute_eta(lead, today)` 的 `today` 已經是參數，但**呼叫端**
+    仍然直接叫 `date.today()`，於是端點回傳的 `eta` 沒辦法用固定日期驗，
+    驗收條件 4 只驗得到純函式那一半。
+
+    ⚠️ **要換掉它必須 monkeypatch `helpers.procurement.today`，
+    而呼叫端必須寫成 `procurement.today()` 而不是 `from ... import today`** ——
+    後者會在 import 當下把函式物件複製進呼叫端的命名空間，換不掉。
+    這跟 `_PUBKEY_DEV`／`LICENSE_PATH` 是同一件事（見 `helpers/licensing.py` 開頭）。
+    """
+    return date.today()
 
 
 def clean_lead_time(value):

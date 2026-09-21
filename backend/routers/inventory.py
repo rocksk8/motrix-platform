@@ -13,10 +13,13 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Header, Body
 
-from datetime import date
-
 from db import get_db, next_entity_code
 from helpers import _require_user, _tok, _audit, notify_module_activity, require_any_module
+# ⚠️ 兩種匯入方式是刻意的，不是沒整理：
+#   `from helpers.procurement import ...` —— 純函式，測試不需要換掉它們，直接匯入沒問題
+#   `from helpers import procurement`     —— **接縫**，`procurement.today()` 必須在呼叫當下
+#                                           才解析，直接匯入 `today` 會複製函式物件、換不掉
+from helpers import procurement
 from helpers.procurement import (
     STATUS_ORDERED,
     STATUS_RECEIVED,
@@ -189,7 +192,7 @@ def purchase_suggestions(authorization: str = Header(None)):
     }
     conn.close()
 
-    today = date.today()
+    today = procurement.today()   # 接縫：測試換掉 helpers.procurement.today 就能驗 eta
     yellow_multiplier = _YELLOW_MULTIPLIER  # 跟 parts_summary()::_stock_level() 的黃燈門檻定義一致
     result = []
     for p in parts_rows:
