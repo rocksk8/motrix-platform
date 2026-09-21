@@ -8137,7 +8137,140 @@ A 寫給 C 的話       「20:20 我看的時候鎖還在」
 📌 **而 A 要記一件**：**A 今天自己才因為排錯這個順序而讓 E1～E4 的紅燈沒能先於程式碼**
 （第六十二次）。**同一個順序，兩個人在同一天各弄反一次。**
 
+---
+
+### 2026-09-21（第七十八次）· 全庫 PUT 普查：**16 支確認會靜默清資料，而 15 支是同一份碼複製五次**
+
+> 🔑 **這一輪的起點是使用者的一句話**：「D 在待機，有些問題可以交給 D 去處理，例如驗證、測試、找出漏洞。」
+> ⚠️ **而 A 當時正在用鐵則 (f)「沒有可裁決的事就不要製造工作」讓 D 閒置** ——
+> **那條規則是防 A 亂派工的，不是拿來讓一個閒置的查證視窗繼續閒置。**
+
+## ✅ ① D 的工具自檢（A 給的三個已知案例，三個全中）
+
+```
+suppliers/{sid}                   -> SAFE_fields_set     ✅ 早就修好的那個
+tender-radar/watches/{watch_id}   -> SAFE_in_check       ✅ B 今天修的
+settings/company-profile          -> SUSPECT_pydantic    ✅ 剛裁定要修
+```
+
+## 📊 ② 掃描結果：100 檔、**103 支 PUT/PATCH**
+
+```
+other 50 ｜ SUSPECT_dict 32 ｜ SUSPECT_pydantic 14 ｜ SAFE_in_check 6 ｜ SAFE_fields_set 1
+```
+
+🔑 **而 D 把界線劃得很清楚，A 照抄**：
+> **「『46 個 SUSPECT』不是『46 個甲類』。我驗了 21 個，其中 16 甲、5 乙。」**
+
+## 🔴🔴 ③ 甲類 16 支，**而 15 支是同一份碼複製五次**
+
+`access`／`automation`／`gateway`／`monitor`／`switch` 五個 guide，各有
+`scenarios`／`categories`／`products` 三支 PUT。**D 逐字比對過五個檔的 `SET` 子句，完全相同。**
+
+```python
+body.get("name", ""), body.get("keySpecs", ""), body.get("tags", ""),
+body.get("priceRange", ""), body.get("dependencyNote", ""), body.get("watchNote", ""),
+```
+⇒ **每一欄都是 `body.get(key, "")`，沒有任何必填檢查** ⇒ 🔴 **「安靜清成 `''`」那一種。**
+**跟 `company_profile` 同型，不是 `tender-radar` 那種會 422 的。**
+
+### ⚠️ 而它今天不會壞，是因為前端「整包帶著走」
+
+```javascript
+access-guide.html:815
+body = { code, name, keySpecs, tags, priceRange, dependencyNote, watchNote }   // 七欄全帶
+```
+🔑 **又一次靠前端巧合，不是後端防住。**
+
+## 🔴 ④ A 的裁決：**不現在修那 15 支，但絆線要寫在會踩到的人面前**
+
+**照第六十六次那張三維度表**：
+
+| | |
+|---|---|
+| 今天的後果 | **0**（前端整包帶著走） |
+| 修的成本 | **15 支 / 5 個檔** —— ⚠️ **而真正的修法不是修 15 支** |
+| 🔴 將來的後果 | **手機版 `frontend/m/` 是已定案要做的，而 D 明白列它是第一個會踩爆的情境** |
+
+### 🔑 為什麼「修 15 支」是錯的修法
+
+**真正的缺陷不是 15 個端點，是「一份碼被複製了五次而沒有共用」。**
+⇒ **逐支修會把同一個問題再複製五份。**
+📌 **正確的修法是讓那五份共用一個 helper** —— **而那是一個重構，不是本輪的事。**
+
+### 🔴 絆線寫在哪：**寫進 `SELLABLE-AND-MOBILE-SPEC.md` 的手機版那一節**
+
+**不是寫進待辦清單，不是靠人記得。**
+🔑 **理由是 B 今天給 A 的那條**：**把但書寫在會用到它的那一行旁邊，不是寫在人身上。**
+⇒ **手機版 `frontend/m/` 要另寫一套送出邏輯 ⇒ 寫那套邏輯的人一定會讀那一節。**
+
+**要寫的一句**：
+> ⚠️ **另寫送出邏輯之前，那 15 支 guide 的 PUT 必須先改成部分更新**
+> （或共用一個 helper），**否則手機版存檔會把沒送的欄位清成空字串，而畫面上看起來正常。**
+
+### ✅ 而 `company_profile` 那一支**照原計畫修**（§3l 的 M2）
+
+**理由不同：使用者正要用它輸入辦公室地址。** 那不是將來式。
+
+## ✅ ⑤ 乙類 5 支，其中三支是 D 自己判準的假陽性
+
+| | |
+|---|---|
+| `suppliers/{sid}` | 用 `model_fields_set` |
+| `tender-radar/watches/{watch_id}` | 有 `"x" in body` |
+| **三支 `visits`**（customers／suppliers／vendor-contractors） | **先讀出 `data_json` 再只覆寫 `visits` 一個 key，其餘保留**<br>📌 `customers` 那支還有**樂觀鎖**（`expectedUpdatedAt` → 409） |
+
+⚠️ **D 自報**：「三支 `visits` 是我的判準的假陽性（`gets=5 > cols=2` 讓它們上榜）——
+**判準看 `.get()` 次數，看不出『只寫回一個 key』。**」
+
+🔑 **而那三支的作法值得當成範本**：**讀出來 → 只改自己那一個 key → 寫回去。**
+**那比 `model_fields_set` 更通用，因為它不依賴 Pydantic。**
+
+## 🔴 ⑥ 丙類 66 支沒驗，**而這一段比上面兩段重要**
+
+| | 數 | 為什麼沒驗 |
+|---|---|---|
+| `system.py` 其他 settings | 11 | `set_cols=0`（寫 JSON blob 不是 UPDATE 多欄）⇒ **D 的「整筆 vs 幾欄」判準對它們無效** |
+| `env_guide`／`netarch_guide` | 6 | 形狀像那五個 guide，**但表結構不同，沒逐字比對** |
+| 🔴 **`dev_crm /dev-logs/{log_id}`（cols=7）**<br>🔴 **`payment_requests/{request_no}`（cols=7, gets=10）** | 2 | **最可能是真甲類，而 D 沒讀** |
+| `network_plans` ×2 等 | 8 | 沒讀 |
+| 🔴🔴 **`other` bucket** | **50** | **兩種形狀都沒匹配到 ⇒ D 完全沒看** |
+
+☠️ **`payment_requests` 是請款單 —— 那是財務資料。A 把它排成下一個要看的第一支。**
+
+## ✅ ⑦ D 順帶報的一個安全面觀察（A 有交代「看到就直接報」）
+
+那五個 guide 的 PUT 都有 `_require_user(..., require_superadmin=True, module=_EDIT_MODULE)`
+⇒ **只有 superadmin 能改。**
+✅ **實際暴露面比端點數小** —— 要破壞資料得先是 superadmin。
+⚠️ **但 D 的但書是對的**：**「那降低了嚴重度，但不改變『後端沒防住』這個事實。」**
+🔑 **而在手機版的情境下，動手的正是合法的 superadmin 自己。**
+
 ## §6 · 紀律提醒（給所有視窗）
+
+### 🔴 同一份碼被複製 N 次時，修法不是修 N 份（2026-09-21，全庫 PUT 普查）
+
+**真正的缺陷是「它被複製了 N 次而沒有共用」** —— **逐份修會把同一個問題再複製一遍。**
+📌 實例：五個 guide 的 15 支 PUT，`SET` 子句逐字相同。
+⇒ **正確的修法是讓那五份共用一個 helper，而那是一個重構，要單獨排。**
+
+### 🔑 絆線要寫在會踩到它的那一行旁邊（2026-09-21，源自視窗 B）
+
+**不是寫進待辦清單，不是靠人記得。**
+📌 實例：15 支 guide PUT 今天無害（前端整包帶著走），
+**而手機版 `frontend/m/` 另寫送出邏輯就會踩爆** ⇒
+**絆線寫進 `SELLABLE-AND-MOBILE-SPEC.md` 的手機版那一節，因為寫那套邏輯的人一定會讀它。**
+
+### ✅ 「讀出來 → 只改自己那一個 key → 寫回去」比 `model_fields_set` 更通用（2026-09-21，視窗 D）
+
+三支 `visits` 端點的作法：
+```python
+d = json.loads(row["data_json"] or "{}")
+d["visits"] = body.get("visits", [])      # 只動這一個 key，其餘原封不動
+```
+🔑 **它不依賴 Pydantic，對「寫 JSON blob」那一類端點也適用。**
+📌 `customers` 那支還加了**樂觀鎖**（`expectedUpdatedAt` → 409）—— **那是更上面一層的防線。**
+
 
 ### ☠️ 內容是真的，標籤是錯的 —— 這種錯最難被發現（2026-09-21，C 與 A 在同一分鐘內各一次）
 
