@@ -47,6 +47,7 @@
 """
 import json
 import logging
+import os
 import re
 # ⚠️ **`import threading` 走模組，不要 `from threading import Timer`。**
 # 後者會把 Timer 複製進本模組的命名空間，monkeypatch 打不到 ⇒ S3 永遠綠。
@@ -73,6 +74,25 @@ logger = logging.getLogger(__name__)
 # 那個差別驗得出來（條件 8 的觀測點是呼叫次數，不是有沒有產生資料），
 # 而「沒產生資料 ≠ 沒被呼叫」正是 licensing middleware 那次的教訓。
 TENDER_RADAR_ENABLED = False
+
+
+def radar_on():
+    """雷達現在開著沒。**出貨預設關；只有 `MOTRIX_TENDER_RADAR=1` 才開。**
+
+    🔴 **為什麼環境變數放在這裡，而不是寫進 `TENDER_RADAR_ENABLED` 的初始值：**
+    上面那個字面值被 `test_08c_switch_ships_off_by_default` 釘著。若寫成
+    `TENDER_RADAR_ENABLED = os.getenv(...) == "1"`，那道守門就會從
+    「永遠綠，除非有人改原始碼」變成「結果取決於周圍環境」——
+    有人 `export MOTRIX_TENDER_RADAR=1` 之後跑全回歸，它會紅，
+    **而那不是缺陷**。一個不是缺陷的紅燈，代價是一次抓錯方向的除錯。
+    ⇒ **字面值留著（守門無條件綠），環境變數放在讀的那一端。**
+
+    ⚠️ 判準是 `== "1"` **不是真假值**：`"0"` 是非空字串，用真假值判會變成開著。
+
+    📌 這個函式讀的是**模組全域**，所以既有 18 處
+    `monkeypatch.setattr(ts, "TENDER_RADAR_ENABLED", True)` 照樣有效。
+    """
+    return TENDER_RADAR_ENABLED or os.getenv("MOTRIX_TENDER_RADAR") == "1"
 
 SITE_ROOT = "https://web.pcc.gov.tw"
 TENDER_SOURCE_URL = (
@@ -571,11 +591,13 @@ def _store(conn, items):
 def run_scan():
     """跑一次掃描。**這是唯一呼叫 `fetch_raw` 的地方。**
 
-    ⚠️ `TENDER_RADAR_ENABLED` 與 `fetch_raw` 都在**呼叫當下**才從模組取，
-    所以測試 monkeypatch 得掉。呼叫端若寫成 `from tender_source import fetch_raw`
-    會複製走副本，計數器永遠是 0 而條件 8 永遠綠——**那題就什麼都沒證明**。
+    ⚠️ 開關走 `radar_on()`、`fetch_raw` 走模組屬性，兩個都在**呼叫當下**才取，
+    所以測試 monkeypatch 得掉（`radar_on()` 讀的是模組全域 `TENDER_RADAR_ENABLED`，
+    既有的 `monkeypatch.setattr(ts, "TENDER_RADAR_ENABLED", True)` 照樣有效）。
+    呼叫端若寫成 `from tender_source import fetch_raw` 會複製走副本，
+    計數器永遠是 0 而條件 8 永遠綠——**那題就什麼都沒證明**。
     """
-    if not TENDER_RADAR_ENABLED:
+    if not radar_on():
         return {"skipped": "disabled", "fetched": False}
 
     conn = get_db()

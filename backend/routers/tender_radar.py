@@ -13,6 +13,7 @@
 **一個會發假警報的雷達，比沒有雷達更快被關掉。**
 """
 import json
+import os
 from datetime import datetime
 
 from fastapi import APIRouter, Body, Header, HTTPException
@@ -289,7 +290,10 @@ def radar_status(authorization: str = Header(None)):
         health = "ok"
 
     return {
-        "enabled": tender_source.TENDER_RADAR_ENABLED,
+        # 🔴 讀 `radar_on()` 不是讀 `TENDER_RADAR_ENABLED`。
+        # 讀字面值的話：測試機上雷達實際是開的、畫面顯示「關」——
+        # **使用者看到的狀態與實際相反，比完全不顯示還難發現。**
+        "enabled": tender_source.radar_on(),
         "health": health,
         "lastFetchedAt": last["fetched_at"] if last else None,
         "lastRecognised": last["recognised"] if last else None,
@@ -350,3 +354,39 @@ def manual_scan(authorization: str = Header(None)):
     _audit(_tok(authorization), "tender_radar.scan", "tender_radar", "",
            json.dumps(result, ensure_ascii=False)[:200])
     return result
+
+
+# ── 測試模式專用：清掉今天的抓取紀錄 ────────────────────────────────────
+#
+# 🔴 **這個端點在正式出貨的機器上不是「被關掉」，是「沒有」。**
+# 註冊發生在 import 時，所以沒有環境變數時 FastAPI 根本沒有這條路由 ⇒ **404**，
+# 不是 403。403 會告訴外面的人「這裡有東西，只是你不能用」，而 404 什麼都不說。
+#
+# ⚠️ **閘門刻意綁環境變數，不是綁 `radar_on()`。**
+# `radar_on()` 在「出貨開關被打開」時也是 True——那是一台正常營運的客戶機器，
+# **它不該得到一個能重設每日上限的端點**。
+# 「雷達開著」與「這台機器是測試機」是兩件事，壓成一件就會靜默出貨。
+#
+# ⚠️ 這裡清掉的是**抓取紀錄**，`_already_fetched_today` 本身一個字都沒動。
+# 每日一次是對政府網站的承諾，它不會因為有人想多試一次而放寬——
+# 放寬的是「這台測試機今天算不算抓過」，不是那條規則。
+if os.getenv("MOTRIX_TENDER_RADAR") == "1":
+
+    @router.post("/api/tender-radar/reset-today")
+    def reset_today(authorization: str = Header(None)):
+        """【測試模式】刪掉今天的 `tender_fetch_log`，讓 `_already_fetched_today` 回 False。"""
+        _require_radar(authorization)
+        conn = get_db()
+        try:
+            cur = conn.execute(
+                "DELETE FROM tender_fetch_log WHERE substr(fetched_at,1,10)=?",
+                (tender_source.today().isoformat(),),
+            )
+            removed = cur.rowcount
+            conn.commit()
+        finally:
+            conn.close()
+        # 稽核一定要留：這是一個**放寬了節流**的動作，即使只在測試機上也要看得見。
+        _audit(_tok(authorization), "tender_radar.reset_today", "tender_radar",
+               "", f"清掉今天的抓取紀錄 {removed} 筆（測試模式）")
+        return {"removed": removed}
