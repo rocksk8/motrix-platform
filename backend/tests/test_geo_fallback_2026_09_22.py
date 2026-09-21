@@ -435,3 +435,231 @@ def test_a9_the_cache_is_keyed_by_source_too(monkeypatch):
         "**而畫面上完全看不出來。**"
     )
     assert second.precision == _geo("PRECISION_ROOFTOP")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# A11～A14 · 🔴 **快取要存進資料庫** —— 用量不是由使用者決定的
+# ══════════════════════════════════════════════════════════════════════
+#
+# ## A 量給使用者看的數字
+#
+#     geo.py:118   _CACHE: dict = {}        ← 純記憶體，重啟就空
+#     _TW_PLACES   26 個地點 ＋ 1 個辦公室   ⇒ 不重複的地址最多 27 個
+#     autostart.bat 是無限迴圈，uvicorn 一退出就重拉
+#
+# 🔑 **⇒ 用量不是由使用者決定的，是由「重啟幾次」決定的。**
+# 存進 DB ⇒ **一輩子 27 次**；不存 ⇒ **每次重啟 27 次**。
+# 而 Google 那一階**是要收費的**。
+#
+# ## 📌 存哪裡：**新表 `geocode_cache`**（A 判斷，我同意）
+#
+# ⚠️ 塞進 `system_settings` 一筆 JSON 的話：
+# **A12 的「兩筆都在」會變成字典裡的兩個鍵，而單筆失效就得讀寫整包。**
+# ⇒ 新表才能依（地址, 來源）各自成列、單筆失效、將來能清。
+# 🔴 **而那是一個 migration（v89）—— B 要動 `db.py`，請先宣告。**
+
+GEOCODE_CACHE_TABLE = "geocode_cache"
+
+
+def _cache_rows(address=None):
+    import db
+    conn = db.get_db()
+    try:
+        if address is None:
+            sql = f"SELECT * FROM {GEOCODE_CACHE_TABLE}"
+            return [dict(r) for r in conn.execute(sql).fetchall()]
+        sql = f"SELECT * FROM {GEOCODE_CACHE_TABLE} WHERE address=?"
+        return [dict(r) for r in conn.execute(sql, (address,)).fetchall()]
+    finally:
+        conn.close()
+
+
+def _forget_memory(monkeypatch):
+    """把**記憶體**那一層快取清掉，模擬「重啟之後的第一次查詢」。
+
+    ⚠️ 這**不等於**真的重開一個行程 —— 我照實說。
+    真的重開行程的話，測試用的暫存資料庫路徑要一起帶過去，
+    那會讓這一題變成一個 harness 題而不是快取題。
+    ⇒ 所以 A11 用**兩個觀測點**補足：
+    **① 那一列真的在資料庫裡**（存得下去）
+    **② 記憶體清空之後不再發請求**（讀得回來）
+    🔑 兩個都成立，才排除得掉「其實只是記憶體還在」。
+    """
+    for attr in ("_CACHE", "_GEOCODE_CACHE", "_cache"):
+        if hasattr(_geo(), attr) and isinstance(getattr(_geo(), attr), dict):
+            monkeypatch.setattr(_geo(), attr, {})
+            return attr
+    raise AssertionError(
+        "找不到記憶體那一層快取（試過 _CACHE／_GEOCODE_CACHE／_cache）—— "
+        "名字改了的話這一題要跟著改"
+    )
+
+
+def test_a11_the_cache_survives_a_restart(client, monkeypatch):
+    """🔴🔴 A11：**寫進快取之後，記憶體清空仍然命中，而且不再發請求。**
+
+    ☠️ 現在的快取是純記憶體，而 `autostart.bat` 是無限迴圈 ——
+    **uvicorn 一退出就重拉** ⇒ 快取每次都空 ⇒ **27 個地址重查一輪**。
+    🔑 **用量不是由使用者決定的，是由「重啟幾次」決定的。**
+    而 Google 那一階是要收費的。
+    """
+    _enable(monkeypatch)
+    calls = []
+
+    def _nominatim(address, **kw):
+        calls.append(address)
+        return (DISTRICT_COORD, _geo("PRECISION_DISTRICT"))
+
+    monkeypatch.setattr(_geo(), "_locate_nominatim", _nominatim)
+    monkeypatch.setattr(_geo(), "_locate_google", lambda addr, **kw: None)
+    monkeypatch.setattr(_geo(), "_locate_tgos", lambda addr, **kw: None)
+
+    first = _geo("locate_cached")(DISTRICT)
+    assert first.coord == DISTRICT_COORD, f"第一次就沒查到：{first}"
+    assert len(calls) == 1, f"第一次應該查一次，實際 {len(calls)}（前提不成立）"
+
+    # ① 那一列真的在資料庫裡
+    rows = _cache_rows(DISTRICT)
+    assert rows, (
+        f"`{GEOCODE_CACHE_TABLE}` 裡沒有 {DISTRICT!r} 這一列 —— 快取沒有落地。\n"
+        "⇒ 重啟之後又要重查一輪，而 Google 那一階是要收費的。"
+    )
+
+    # ② 記憶體清空之後仍然命中，而且**不再發請求**
+    _forget_memory(monkeypatch)
+    second = _geo("locate_cached")(DISTRICT)
+    assert second.coord == DISTRICT_COORD, f"從資料庫讀不回來：{second}"
+    assert len(calls) == 1, (
+        f"記憶體清空之後又查了一次（累計 {len(calls)} 次）—— "
+        "資料庫那一層沒有被讀"
+    )
+
+
+def test_a12_two_sources_for_one_address_do_not_overwrite_each_other(
+        client, monkeypatch):
+    """🔴 A12：同一個地址用兩個來源各查一次 ⇒ **資料庫裡兩筆都在**。
+
+    ⚠️ 這是 A9 的**落地版**：A9 驗的是「記憶體裡分得開」，
+    這一題驗的是「**存進去之後還分得開**」。
+    📌 而它同時說明了為什麼不用 `system_settings` 一筆 JSON：
+    **那會變成字典裡的兩個鍵，而單筆失效就得讀寫整包。**
+    """
+    _enable(monkeypatch)
+    monkeypatch.setattr(_geo(), "_locate_tgos", lambda addr, **kw: None)
+
+    monkeypatch.setattr(_geo(), "_locate_google", lambda addr, **kw: None)
+    monkeypatch.setattr(
+        _geo(), "_locate_nominatim",
+        lambda addr, **kw: (DISTRICT_COORD, _geo("PRECISION_DISTRICT")))
+    _geo("locate_cached")(DISTRICT)
+
+    _set_setting(GOOGLE_KEY_SETTING, "AIza-fake")
+    _forget_memory(monkeypatch)
+    monkeypatch.setattr(
+        _geo(), "_locate_google",
+        lambda addr, **kw: (ROOFTOP_COORD, _geo("PRECISION_ROOFTOP")))
+    _geo("locate_cached")(DISTRICT)
+
+    rows = _cache_rows(DISTRICT)
+    sources = {r.get("source") for r in rows}
+    assert len(rows) >= 2, (
+        f"同一地址查了兩個來源，而資料庫裡只有 {len(rows)} 列：{rows}\n"
+        "⇒ 鍵裡沒有來源，後查的把先查的蓋掉了。"
+    )
+    assert {_geo("SOURCE_NOMINATIM"), _geo("SOURCE_GOOGLE")} <= sources, (
+        f"兩個來源沒有各自成列，實際 source 有：{sources}"
+    )
+
+
+def test_a13_precision_and_source_survive_the_round_trip(client, monkeypatch):
+    """🔴🔴 A13：從快取讀回來的 `precision` 與 `source` **必須跟寫進去時一樣**。
+
+    ☠️ **這是這一組的核心。** 只存座標的話，
+    **下次讀回來就不知道它是門牌還是行政區** —— 那等於把整個設計繞過去了：
+    我們花了一整批題目讓座標帶著可信度一起回來，
+    **而快取這一層把可信度丟掉了。**
+
+    🔑 而症狀是**沒有症狀**：地圖上有點、距離有數字，
+    只是那個「僅供參考」的標示不見了。
+    """
+    _enable(monkeypatch)
+    monkeypatch.setattr(_geo(), "_locate_google", lambda addr, **kw: None)
+    monkeypatch.setattr(_geo(), "_locate_tgos", lambda addr, **kw: None)
+    monkeypatch.setattr(
+        _geo(), "_locate_nominatim",
+        lambda addr, **kw: (DISTRICT_COORD, _geo("PRECISION_DISTRICT")))
+
+    written = _geo("locate_cached")(DISTRICT)
+    assert written.precision == _geo("PRECISION_DISTRICT"), "前提不成立"
+
+    _forget_memory(monkeypatch)
+    read_back = _geo("locate_cached")(DISTRICT)
+    assert read_back.precision == written.precision, (
+        f"寫進去時是 {written.precision!r}，讀回來變成 {read_back.precision!r}。\n"
+        "⇒ 快取只存了座標。那個點會被當成門牌精度，"
+        "而它其實是行政區中心點，可能差好幾公里。"
+    )
+    assert read_back.source == written.source, (
+        f"來源沒有存：寫入 {written.source!r}，讀回 {read_back.source!r}"
+    )
+
+
+def test_a14_failures_are_not_cached_forever(client, monkeypatch):
+    """🔴 A14：**查不到不可以被永久快取。**
+
+    ⚠️ 把「查不到」存成永久的話，**一個地址查失敗一次就永遠查不到** ——
+    而使用者**改了地址也救不回來**（鍵是舊地址，新地址是另一筆，
+    但如果他改回去、或那個服務後來修好了，那一筆仍然是失敗）。
+
+    🔑 這一題的判準刻意寬：**要嘛不存，要嘛分開存並有自己的短 TTL。**
+    ⇒ 只驗「**再查一次時它會真的再去問**」，不驗它怎麼實作。
+    """
+    _enable(monkeypatch)
+    calls = []
+
+    def _fail(address, **kw):
+        calls.append(address)
+        return None
+
+    monkeypatch.setattr(_geo(), "_locate_google", lambda addr, **kw: None)
+    monkeypatch.setattr(_geo(), "_locate_tgos", lambda addr, **kw: None)
+    monkeypatch.setattr(_geo(), "_locate_nominatim", _fail)
+
+    first = _geo("locate_cached")("查不到的地址")
+    assert first.coord is None, f"前提不成立：{first}"
+    assert calls, "第一次就沒有去查（前提不成立）"
+
+    _forget_memory(monkeypatch)
+    monkeypatch.setattr(
+        _geo(), "_locate_nominatim",
+        lambda addr, **kw: (DISTRICT_COORD, _geo("PRECISION_DISTRICT")))
+    second = _geo("locate_cached")("查不到的地址")
+    assert second.coord == DISTRICT_COORD, (
+        "上一次查不到被永久快取了 —— 那個服務後來修好了也沒有用。\n"
+        "⇒ 失敗要嘛不存，要嘛分開存並有自己的短 TTL。"
+    )
+
+
+def test_a14b_a_successful_lookup_is_still_cached(client, monkeypatch):
+    """A14 的對照組：**成功的那些仍然要被快取。**
+
+    ⚠️ 沒有這一題，一個「乾脆都不存」的實作會讓 A14 全綠 ——
+    而那會讓 A11 想解決的問題原封不動地回來。
+    🔑 「失敗不留」與「成功要留」是兩件事。
+    """
+    _enable(monkeypatch)
+    calls = []
+    monkeypatch.setattr(_geo(), "_locate_google", lambda addr, **kw: None)
+    monkeypatch.setattr(_geo(), "_locate_tgos", lambda addr, **kw: None)
+    monkeypatch.setattr(
+        _geo(), "_locate_nominatim",
+        lambda addr, **kw: (calls.append(addr),
+                            (DISTRICT_COORD, _geo("PRECISION_DISTRICT")))[1])
+
+    _geo("locate_cached")(DISTRICT)
+    _forget_memory(monkeypatch)
+    _geo("locate_cached")(DISTRICT)
+    assert len(calls) == 1, (
+        f"成功的結果沒有被快取（查了 {len(calls)} 次）—— "
+        "那 A11 要解決的問題原封不動"
+    )
