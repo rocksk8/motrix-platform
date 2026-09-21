@@ -112,6 +112,13 @@
         <div class="pg__eyebrow">採購庫存</div>
         <h1 class="pg__t">供應商管理</h1>
 <p style="font-size:12px;color:var(--text-secondary);margin-top:4px" x-text="`共 ${filtered.length} 筆供應商資料`"></p>
+<!-- 退休舊「標準交期」文字欄位的時機要由資料決定，不是由感覺決定：
+     這個數字歸零那天才安全。這一輪只顯示數字，不做退休。 -->
+<p x-show="legacyLeadTimeCount > 0"
+   style="font-size:12px;color:var(--warning);margin-top:4px">
+  還有 <strong x-text="legacyLeadTimeCount"></strong> 家供應商只填了舊的「標準交期」文字，
+  沒有可計算的前置時間天數 —— 這些供應商的料號算不出預計到貨日。
+</p>
       </div>
       <button class="btn btn-primary" @click="openCreate()">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v16m8-8H4"/></svg>
@@ -644,6 +651,16 @@
                 採購建議用這個欄位算預計到貨日。<strong>留空代表「未知」，到貨日會顯示未知；
                 填 0 代表「現貨、當天可出」</strong>——兩者不一樣，不確定就留空。
               </div>
+              <!-- 遷移提示（A 裁決③：人工協助，不自動猜）。
+                   舊欄位寫「4~6 週」時，該填 28 還是 42 是使用者的判斷，不是程式的。
+                   自動猜一個進去，失敗的樣子是「採購照著一個沒人決定過的日期在排程」。 -->
+              <div x-show="(form.leadTimeDays === null || form.leadTimeDays === '' || form.leadTimeDays === undefined)
+                           && String(form.leadTime || '').trim() !== ''"
+                   style="font-size:11px;color:var(--warning);margin-top:4px;
+                          background:var(--warning-light);padding:5px 7px;border-radius:4px">
+                舊的「標準交期」寫的是「<strong x-text="form.leadTime"></strong>」，
+                請換算成天數填進上面的欄位。<span style="color:var(--text-dim)">（系統不會自動換算）</span>
+              </div>
             </div>
           </div>
         </div>
@@ -970,6 +987,16 @@
       },
       removePreset(pi) {
         this.tagPresets.splice(pi, 1); this.saveTagPresets()
+      },
+
+      // 只有舊文字、沒有新數值的供應商家數。
+      // ⚠️ 用 `== null` 判 leadTimeDays（同時涵蓋 null 與 undefined），
+      // **不可以用真假值**：0 是合法的「現貨當天可出」，用 `!s.leadTimeDays`
+      // 會把已經填好 0 的供應商也算進「還沒填」。
+      get legacyLeadTimeCount() {
+        return this.suppliers.filter(s =>
+          s.leadTimeDays == null && String(s.leadTime || '').trim() !== ''
+        ).length
       },
 
       get filtered() {

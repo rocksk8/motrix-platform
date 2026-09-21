@@ -68,16 +68,19 @@ def parts_summary(q: Optional[str] = None, category: Optional[str] = None, autho
         s = st.get(status, {})
         return s.get("cnt", 0), s.get("cost_sum", 0)
 
-    _STOCK_LEVEL_YELLOW_MULTIPLIER = 1.5  # 在庫 < 安全庫存 * 此倍數時顯示黃燈（接近安全庫存）
-
     def _stock_level(in_cnt: int, safety_stock: int) -> str:
         """庫存水位燈號（2026-08-28）：safety_stock<=0 代表未設定門檻，一律綠燈，
-        不強迫每個料號都要設定；有設定時 <門檻=紅、<門檻*_STOCK_LEVEL_YELLOW_MULTIPLIER=黃、其餘綠。"""
+        不強迫每個料號都要設定；有設定時 <門檻=紅、<門檻*_YELLOW_MULTIPLIER=黃、其餘綠。
+
+        2026-09-21：原本這裡有自己的 `_STOCK_LEVEL_YELLOW_MULTIPLIER = 1.5`，
+        是全檔第三份同樣的字面值。改用模組常數。
+        **收掉兩份卻留著第三份，比三份都留著更危險**——那會製造「已經整理好了」
+        的錯覺，而那正是下一個人不會再去檢查它的原因。"""
         if safety_stock <= 0:
             return "green"
         if in_cnt < safety_stock:
             return "red"
-        if in_cnt < safety_stock * _STOCK_LEVEL_YELLOW_MULTIPLIER:
+        if in_cnt < safety_stock * _YELLOW_MULTIPLIER:
             return "yellow"
         return "green"
 
@@ -140,7 +143,7 @@ def purchase_suggestions(authorization: str = Header(None)):
     是跟哪個供應商用多少單價買的」，不猜前置時間；缺料急迫程度用既有的
     `stockLevel`（紅/黃燈，`parts_summary()` 同一套邏輯）表示，不是用天數。
 
-    建議採購量 = 補到「黃燈門檻」（安全庫存 * 1.5，跟既有水位燈號定義一致，
+    建議採購量 = 補到「黃燈門檻」（安全庫存 * `_YELLOW_MULTIPLIER`，跟既有水位燈號定義一致，
     見 `_stock_level()`）所需的數量，不是只補到剛好等於安全庫存——否則採購
     完成後燈號會立刻從紅燈變黃燈，還是會被同一張建議清單再抓出來一次。
 
