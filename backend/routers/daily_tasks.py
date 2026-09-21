@@ -1481,11 +1481,30 @@ def _check_backup_freshness() -> None:
         today = _date.today().isoformat()
         if _get_setting(guard_key) == today:
             return                               # 今天已經寄過
-        _set_setting(guard_key, today)
+
+        # 🔴 **旗標在寄信成功之後才寫，不可以先寫。**
+        # 原本是先 `_set_setting(guard_key, today)` 再開執行緒 ⇒
+        # 通知只要丟例外，今天就**不會再試**；而那個例外是必然的
+        # （`notify_backup_stale` 缺 `datetime` import）⇒ **永遠不會寄到**。
+        # 🔑 「不要記錄失敗」與「要記得重試」是兩件事，前者做對不代表後者會發生。
+        #
+        # ⚠️ **例外要在執行緒裡面接，不能靠下面那個 `except`。**
+        # 那個 `except` 只包得到「啟動執行緒」這個動作，包不到執行緒裡面發生的事
+        # ⇒ 例外被 Python 印掉或吞掉，而 `_logger` 上一個字都沒有。
+        # ☠️ **那就是那個 NameError 活到今天的原因：它每天都在發生，而沒有留下過痕跡。**
+        # 🔑〈防護的副作用落在盲側〉：背景執行緒讓告警不會拖慢排程，
+        # 代價是「**告警自己壞了**」變成不可觀測的——而那正是最需要被觀測的那一種失敗。
+        def _send_alert():
+            try:
+                notify_backup_stale(stale, _BACKUP_STALE_HOURS)
+            except Exception:  # noqa: BLE001
+                _logger.exception("notify_backup_stale failed —— 旗標不寫，今天仍會重試")
+                return
+            _set_setting(guard_key, today)
 
         threading.Thread(
-            target=notify_backup_stale,
-            args=(stale, _BACKUP_STALE_HOURS),
+            target=_send_alert,
+            args=(),
             daemon=True,
         ).start()
         _logger.error("備份新鮮度告警：%s",

@@ -1,6 +1,7 @@
 """External email notifications via SMTP (Gmail App Password)."""
 import html as _html
 import logging
+from datetime import datetime   # notify_backup_stale 用；缺它是執行期 NameError
 import os
 import smtplib
 import threading
