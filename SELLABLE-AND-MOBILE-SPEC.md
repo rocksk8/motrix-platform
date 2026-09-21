@@ -14,7 +14,7 @@
 | 資料表 | **78 張全在同一個 `backend/db.py`**（3,639 行、84 個 migration、單一 SQLite 檔） |
 | 前端頁面 | 56 頁、49,456 行；`frontend/js/` 只有 2 支有效外置 JS，其餘 Alpine 全 inline |
 | 前端 RWD | 殼層**已完成**（`style.css` 1,668 行，平板 icon-rail ＋ 手機抽屜側欄）；**但 56 頁只有 18 頁有自己的 `@media`** |
-| 測試 | 136 檔、**1,034 題** |
+| 測試 | 136 檔、**1,084 題**（`pytest --collect-only`；⚠️ 本表原記 1,034，那是 `grep -c "def test_"` 算的，漏掉 7 個檔的 parametrize 展開共 50 題，2026-09-21 由視窗 C 抓到並更正） |
 | 授權／多租戶機制 | **不存在。全 codebase 零 license／序號／到期／tenant 概念** |
 | 公司抬頭寫死 | **124 處**，分布 9 支後端檔（`pdf_gen.py` 佔 14 處）＋ 4 支前端檔 |
 | 既有設定 | `system_settings.company_profile` 已存在，但**只有銀行欄位被 PDF 讀取**（`pdf_gen.py:2006`），名稱／統編／電話仍是寫死 |
