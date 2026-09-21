@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="../static/favicon.png">
+  <title>地圖 - MOTRIX 專案管理系統</title>
+  <script src="../static/auth-guard.js"></script>
+  <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
+  <!-- ⚠️ Leaflet 的 CSS／JS **不在這裡載**。
+       它們只在使用者按下「開啟地圖」之後才被插入 —— 見 `openMap()`。
+       🔑 理由不是省流量，是**圖磚是一條沒有任何開關管得到的對外連線**：
+       `MOTRIX_TENDER_RADAR` 管抓標案、`MOTRIX_GEO` 管地址定位，
+       而圖磚是瀏覽器直接發的，兩個都不經過。
+       ⇒ 預設不載 ⇒ **這一頁在封閉網路的客戶機器上不會壞掉**，只是沒有底圖。
+       而那個按鈕本身就是那條連線的開關：把選擇權放在會承受後果的人手上。 -->
+  <style>
+    .btn { display:inline-flex; align-items:center; gap:6px; padding:7px 16px;
+           border-radius:var(--radius); font-size:12px; font-family:var(--font-zh);
+           font-weight:500; cursor:pointer; border:1px solid transparent;
+           white-space:nowrap; text-decoration:none; line-height:1.4; }
+    .btn:disabled { opacity:.45; cursor:not-allowed; }
+    .btn-primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+    .btn-ghost { background:#fff; color:var(--text-secondary); border-color:var(--border-light); }
+    .btn-sm { padding:5px 12px; font-size:11px; }
+
+    .mp-wrap { padding:18px 22px; max-width:1280px; }
+    .mp-panel-body { padding:12px 14px; }
+    .mp-note { display:flex; gap:8px; align-items:flex-start; padding:9px 12px;
+               border-radius:var(--radius); font-size:12px; line-height:1.7;
+               margin-bottom:8px; }
+    .mp-note.warn { background:var(--warning-light); color:var(--warning); }
+    .mp-note.info { background:#F5F4F0; color:var(--text-secondary); }
+    #mp-canvas { height:460px; border-radius:var(--radius);
+                 border:1px solid var(--border-light); }
+  </style>
+</head>
+<body>
+<div id="sidebar-root"></div>
+<div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+<div class="app-shell">
+  <main class="main">
+  <div x-data="mapPage()" x-init="init()" class="mp-wrap">
+
+    <h1 class="page-title">地圖</h1>
+    <p style="font-size:12px;color:var(--text-secondary);margin-top:4px">
+      把有地址的資料畫在同一張圖上，並算出與辦公室的<strong>直線</strong>距離。
+      <!-- ⚠️ 「直線」要寫出來：使用者看到「32 公里」會以為是車程，而山路可能是它的兩倍。 -->
+    </p>
+
+    <!-- ── 為什麼這裡可能是空的：五個成因，五個訊號 ──────────────────────
+         ☠️ 它們在畫面上**都長成一張乾淨、沒有點的地圖**，而處置完全不同。
+         🔑 少幾個點跟「那些東西不存在」長得一模一樣，**而且沒有人會報修。** -->
+    <div style="margin:14px 0">
+      <div class="mp-note warn" x-show="info && info.officeMissing">
+        <span>⚠️</span>
+        <div>尚未設定<strong>辦公室地址</strong>，所以算不出距離。
+          <a href="company-profile-settings.html">去公司資料設定填寫</a></div>
+      </div>
+      <div class="mp-note warn"
+           x-show="info && !info.officeMissing && !info.office">
+        <span>⚠️</span>
+        <div>已填辦公室地址，但<strong>定位不到</strong>——地址可能需要調整。</div>
+      </div>
+      <div class="mp-note warn" x-show="info && !info.geoEnabled">
+        <span>⚠️</span>
+        <div><strong>地理查詢未啟用</strong>，所以沒有任何東西定位得到、距離全部是空的。
+          需由管理者在伺服器設定 <code>MOTRIX_GEO=1</code> 並重啟。</div>
+      </div>
+      <div class="mp-note warn" x-show="info && info.withoutLocation > 0">
+        <span>⚠️</span>
+        <div>有 <strong x-text="info.withoutLocation"></strong> 筆<strong>沒有地點資訊</strong>，
+          不會出現在地圖上。它們仍然存在，只是我們還不知道它們在哪裡。</div>
+      </div>
+      <template x-for="s in (info ? info.sources : [])" :key="s.source">
+        <div class="mp-note info" x-show="s.skipped">
+          <span>ℹ️</span>
+          <div><span x-text="s.note"></span></div>
+        </div>
+      </template>
+      <div class="mp-note info" x-show="loadError">
+        <span>✕</span><div x-text="loadError"></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="mp-panel-body"
+           style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+        <div>
+          <div style="font-size:11px;color:var(--text-secondary)">可定位</div>
+          <div style="font-size:18px;font-weight:600"
+               x-text="info ? info.points.length : '—'"></div>
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--text-secondary)">沒有地點資訊</div>
+          <div style="font-size:18px;font-weight:600"
+               x-text="info ? info.withoutLocation : '—'"></div>
+        </div>
+        <div style="flex:1"></div>
+        <!-- 🔴 這顆按鈕就是「要不要對外連線」的開關。
+             按下去才會載入 Leaflet 與 OpenStreetMap 的圖磚。 -->
+        <button class="btn btn-primary btn-sm" @click="openMap()"
+                x-show="!mapOpen" :disabled="mapLoading"
+                x-text="mapLoading ? '載入中…' : '開啟地圖（需要網路）'"></button>
+        <button class="btn btn-ghost btn-sm" @click="refresh()" :disabled="loading">重新整理</button>
+      </div>
+    </div>
+
+    <!-- 底圖：只有按了按鈕才存在 -->
+    <div class="panel" style="margin-top:12px" x-show="mapOpen">
+      <div class="mp-panel-body">
+        <div class="mp-note warn" x-show="tileError">
+          <span>⚠️</span>
+          <div><strong>底圖載不出來</strong>——圖磚需要連到
+            <code>tile.openstreetmap.org</code>。這台機器可能沒有對外連線。
+            <br>下面的清單與距離<strong>不需要網路</strong>，照常可用。</div>
+        </div>
+        <div id="mp-canvas"></div>
+        <!-- OSM 使用條款要求標示出處。Leaflet 的 attribution 控制項會顯示，
+             這一行是它載不出來時的後備。 -->
+        <div style="font-size:11px;color:var(--text-secondary);margin-top:6px">
+          底圖 © <a href="https://www.openstreetmap.org/copyright"
+                    target="_blank" rel="noopener">OpenStreetMap</a> 貢獻者
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 清單：**預設就是這個**，零對外連線 ── -->
+    <div class="panel" style="margin-top:12px">
+      <table class="table">
+        <thead><tr>
+          <th>來源</th><th>機關</th><th>名稱</th><th>地點</th>
+          <th style="text-align:right">距離</th><th>截止</th>
+        </tr></thead>
+        <tbody>
+          <template x-for="p in (info ? info.points : [])" :key="p.source + p.caseNo">
+            <tr>
+              <td style="font-size:11px" x-text="p.source"></td>
+              <td style="font-size:12px" x-text="p.org || '—'"></td>
+              <td style="font-size:12px">
+                <a :href="p.url" target="_blank" rel="noopener" x-text="p.name || '—'"></a>
+              </td>
+              <td style="font-size:12px" x-text="p.location || '—'"></td>
+              <!-- ⚠️ 距離是 null 時顯示「—」不是 0。
+                   0 公里的意思是「就在辦公室」，那跟「算不出來」是兩件事。 -->
+              <td style="font-size:12px;text-align:right"
+                  x-text="p.distanceKm === null || p.distanceKm === undefined
+                          ? '—' : p.distanceKm + ' km'"></td>
+              <td style="font-size:12px" x-text="p.deadline || '—'"></td>
+            </tr>
+          </template>
+          <tr x-show="info && info.points.length === 0">
+            <td colspan="6" style="text-align:center;color:var(--text-secondary);padding:18px">
+              目前沒有可定位的資料。<strong>上面的提示說明了為什麼</strong>。
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p style="font-size:11px;color:var(--text-dim);margin-top:18px">
+      距離是<strong>直線</strong>距離，不是行車距離。
+      地點目前只到縣市層級（資料來源只提供到那裡）。
+    </p>
+  </div>
+  </main>
+</div>
+
+<script src="../static/notif.js"></script>
+<script src="../static/sidebar.js"></script>
+<script>
+function mapPage() {
+  return {
+    session: {}, token: '', loading: false, info: null, loadError: '',
+    mapOpen: false, mapLoading: false, tileError: false, _map: null,
+
+    _h() { return { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.token } },
+
+    async init() {
+      const raw = localStorage.getItem('motrix_session')
+      if (!raw) { location.href = 'login.html'; return }
+      this.session = JSON.parse(raw)
+      this.token = this.session.token || ''
+      await this.refresh()
+    },
+
+    async refresh() {
+      this.loading = true
+      this.loadError = ''
+      try {
+        const r = await fetch('/api/map/points?sources=tenders', { headers: this._h() })
+        if (!r.ok) {
+          // ⚠️ 失敗時 info 留 null ⇒ 統計與清單都不渲染。
+          // **不要顯示一個全是 0 的畫面**——那會讓「沒載到」看起來像「一切正常且沒東西」。
+          this.loadError = '地圖資料載入失敗（HTTP ' + r.status + '）'
+          return
+        }
+        this.info = await r.json()
+      } catch (_e) {
+        this.loadError = '地圖資料載入失敗：連線不到伺服器'
+      } finally {
+        this.loading = false
+      }
+    },
+
+    // ── 只有這裡會對外連線 ──────────────────────────────────────────
+    openMap() {
+      if (this.mapOpen || this.mapLoading) return
+      this.mapLoading = true
+      this._loadLeaflet()
+        .then(() => { this.mapOpen = true; this.$nextTick(() => this._draw()) })
+        .catch(() => { this.loadError = 'Leaflet 載入失敗（檔案不存在或被擋下）' })
+        .finally(() => { this.mapLoading = false })
+    },
+
+    _loadLeaflet() {
+      if (window.L) return Promise.resolve()
+      return new Promise((resolve, reject) => {
+        const css = document.createElement('link')
+        css.rel = 'stylesheet'
+        css.href = '../static/vendor/leaflet/leaflet.css'
+        document.head.appendChild(css)
+        const js = document.createElement('script')
+        js.src = '../static/vendor/leaflet/leaflet.js'
+        js.onload = resolve
+        js.onerror = reject
+        document.head.appendChild(js)
+      })
+    },
+
+    _draw() {
+      if (!window.L || this._map) return
+      // 🔴 **明著設 imagePath，不依賴 Leaflet 從 CSS 位置推導。**
+      // 推導現在剛好是對的，而「剛好是對的」會在有人搬動檔案那天失效，
+      // 失效的樣子是 marker 圖去 CDN 抓 —— 一條沒有人注意到的對外連線。
+      window.L.Icon.Default.imagePath = '../static/vendor/leaflet/images/'
+      const pts = (this.info && this.info.points) || []
+      const office = this.info && this.info.office
+      const centre = office ? [office.lat, office.lon]
+                            : (pts.length ? [pts[0].lat, pts[0].lon] : [23.9, 121.0])
+      this._map = window.L.map('mp-canvas').setView(centre, pts.length ? 8 : 7)
+
+      const tiles = window.L.tileLayer(
+        'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+        { maxZoom: 18,
+          attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> 貢獻者' })
+      // ⚠️ **圖磚載不出來要講出來。** 不講的話畫面是一片灰，
+      // 而「一片灰」跟「這個地區沒有資料」長得一模一樣。
+      tiles.on('tileerror', () => { this.tileError = true })
+      tiles.addTo(this._map)
+
+      if (office) {
+        window.L.marker([office.lat, office.lon]).addTo(this._map)
+          .bindPopup('辦公室<br>' + office.address)
+      }
+      pts.forEach(p => {
+        window.L.marker([p.lat, p.lon]).addTo(this._map)
+          .bindPopup([p.name, p.org, p.location,
+                      (p.distanceKm === null || p.distanceKm === undefined)
+                        ? '' : ('約 ' + p.distanceKm + ' km')]
+                     .filter(Boolean).join('<br>'))
+      })
+    },
+  }
+}
+</script>
+</body>
+</html>

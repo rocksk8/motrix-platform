@@ -414,6 +414,7 @@
     cDT  = has('daily_task')
     cDev = has('dev_crm')
     cTdr = has('tender_radar')
+    cMap = has('map')            // 地圖是共用能力，刻意不綁 tender_radar
     cCon = has('contractor_list')
     cPay = has('payslip')
     cEnvG = has('env_guide')
@@ -483,6 +484,7 @@
   var _FILE_MODULE = {
     'dev-crm.html':            'dev_crm',
     'tender-radar.html':       'tender_radar',
+    'map.html':                'map',
     'quotations.html':         'quotation',
     'quotation-form.html':     'quotation',
     'approval-queue.html':     'quotation',
@@ -617,6 +619,7 @@
       sec('業務', cDev || cQ || cTdr),
       ni(pg('dev-crm.html'),         'bdev',  '業務開發', ['dev-crm.html'],                          cDev, 'sb-mod-dev-crm'),
       ni(pg('tender-radar.html'),    'radar', '標案雷達', ['tender-radar.html'],                     cTdr, 'sb-mod-tender-radar'),
+      ni(pg('map.html'),             'radar', '地圖',     ['map.html'],                              cMap),
       ni(pg('quotations.html'),      'quote', '報價單',   ['quotations.html', 'quotation-form.html'], cQ,   'sb-mod-quotation'),
       // 2026-09-14：改走 ni()，否則不會被記錄進上方選單的分組資料
       ni(pg('approval-queue.html'), 'appr', '\u7c3d\u6838\u4f47\u5217', ['approval-queue.html'], cQ, '',

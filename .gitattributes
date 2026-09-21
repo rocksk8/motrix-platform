@@ -59,3 +59,12 @@ backend/tests/fixtures/**    -text
 *.woff          binary
 *.woff2         binary
 *.ttf           binary
+
+# ── 第三方 vendored 發布檔：**不要做任何換行轉換** ────────────────────────
+#
+# 這些檔案附有 `PROVENANCE.md`，裡面記著下載當下的 SHA-256。
+# 🔴 若讓 git 正規化換行，**checkout 出來的位元組就不是廠商發布的那一份**，
+#    而那份雜湊會驗不起來 ⇒ **憑證本身變成誤導**（它看起來還在，只是對不上）。
+# 🔑 憑證的用途正是「將來有人問這個檔有沒有被動過」，
+#    所以保存的必須是**原始位元組**，不是「我們這邊看起來比較整齊的版本」。
+frontend/static/vendor/leaflet/** -text
