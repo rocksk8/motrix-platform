@@ -1502,6 +1502,12 @@ def _check_backup_freshness() -> None:
                 return
             _set_setting(guard_key, today)
 
+        # 📌 **刻意不用 `spawn_bg_thread`**：C 的題 patch 的是 `dt.threading.Thread`，
+        # 換過去 patch 會打不到（`spawn_bg_thread` 在 `db` 模組裡叫 `threading.Thread`）
+        # ⇒ 那兩題會失去同步執行而變成靠時序，而 flaky 比不一致貴。
+        # 例外可見性已由上面的 wrapper 解決，那才是那三件要的東西。
+        # ⚠️ 這裡是**實作的形狀被測試的 patch 點決定的**——正解是「patch 打在對的層級」，
+        # 不是「實作遷就 patch」。凍結解除後要回來看這一段。
         threading.Thread(
             target=_send_alert,
             args=(),
