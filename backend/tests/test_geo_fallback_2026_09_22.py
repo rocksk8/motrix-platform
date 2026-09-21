@@ -90,6 +90,40 @@ def _enable(monkeypatch):
     monkeypatch.setattr(_geo(), "GEO_ENABLED", True)
 
 
+@pytest.fixture(autouse=True)
+def _fresh_geo_cache(monkeypatch):
+    """🔴 **每一題都從「快取是空的」開始。**
+
+    ## 這一段的由來：同一天、同一個形狀、第二次
+
+    B 回報 A12／A15／A15b **單獨跑全過、一起跑全紅**，訊息是
+    「第一次應該查一次，實際 0（前提不成立）」——
+    ⇒ **A11 先跑過，把結果留在模組層的 `_CACHE` 裡。**
+
+    🔑 而那正是我自己在 `_reset_cache`（`test_tiles_blocked`）的 docstring
+    裡寫過的那一條：**一個為了正確性而存在的機制，會變成測試之間的隱形耦合。**
+    ⚠️ 那次是 `_TILE_PROBE_CACHE`，這次是 `_CACHE`。
+
+    ## ⚠️ 而我刻意**不**照 B 建議的「三題各加一行」
+
+    那是**修結果** —— 下一題忘了加的時候，症狀會一模一樣地回來，
+    而且它只在「一起跑」的時候出現（單跑全過 ⇒ 最難歸因的那一種）。
+    ⇒ **autouse ⇒ 下一個人不必知道有這件事。**
+
+    ## 📌 這裡的「找不到就不做」是有理由的，不是優雅降級
+
+    B 還沒實作時那個屬性不存在 —— **那時候本來就沒有東西要清**，
+    而各題會為了**它們真正要驗的事**而紅。
+    ⚠️ 差別在於：`_forget_memory()` 用在**測試主體裡**時是觀測的一部分，
+    **找不到就必須大聲紅**（那一題會驗不到東西）；
+    用在**前置清理**時，找不到只代表「還沒有東西」。
+    🔑 **同一個動作，在不同位置有不同的失敗語意。**
+    """
+    for attr in ("_CACHE", "_GEOCODE_CACHE", "_cache"):
+        if geo is not None and isinstance(getattr(geo, attr, None), dict):
+            monkeypatch.setattr(geo, attr, {})
+
+
 def _no_outbound(monkeypatch):
     """記錄有沒有真的發出請求。**A6／A7 的觀測點是這個，不是回傳值。**"""
     attempts = []
