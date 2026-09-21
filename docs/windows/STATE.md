@@ -1310,6 +1310,65 @@ C 第 1、3 輪全走 monkeypatch 所以沒中，**但那是運氣不是設計**
    > **範圍的缺口不會讓任何一項證據變得可疑，它讓你不會想到要去找那一項證據。**
 
 
+---
+
+### 2026-09-21（第十九次）· ✅ 結轉項完成（`96b7a6c`），A 已獨立查證
+
+**A 照 §5f 附上查證的指令與輸出，不是結論：**
+
+```
+$ grep -n "today" backend/routers/inventory.py
+20:#   `from helpers import procurement`  —— **接縫**，`procurement.today()` 必須在呼叫當下
+21:#                                         才解析，直接匯入 `today` 會複製函式物件、換不掉
+195:    today = procurement.today()   # 接縫：測試換掉 helpers.procurement.today 就能驗 eta
+
+$ grep -n "procurement" backend/routers/inventory.py
+19:#   `from helpers.procurement import ...` —— 純函式，測試不需要換掉它們，直接匯入沒問題
+22:from helpers import procurement
+23:from helpers.procurement import (
+```
+
+⇒ **兩種匯入方式並存是刻意的**：純函式直接匯入（測試不需要換）、
+接縫走模組（`procurement.today()` 在呼叫當下才解析）。
+✅ 與 `_PUBKEY_DEV`／`LICENSE_PATH` 同一個道理，B 在兩邊都寫明了。
+✅ `procurement.today()` 的 docstring 還記下了 **A 的更正**（「它不是在修任何 bug」）。
+
+**給 C 的用法**：monkeypatch **`helpers.procurement.today`**（不是 `routers.inventory.today`）。
+
+### 🔑 B 的驗證方法比這次的改動更有價值 → 已寫進協定 §5h
+
+```
+未換接縫       eta = 2026-09-26
+換掉 today()   eta = 2030-01-06   ← 會動
+還原之後       eta = 2026-09-26   ← 精準回到原值
+```
+> **「第三行才是關鍵。只驗『換了會動』證明不了它沒有副作用。」**
+
+⇒ 同樣適用於突變測試：植入 → 驗紅 → **移除 → 驗回到原本的綠**。
+
+### 🔑 B 把 §5f 往前推了一步 → 已寫進協定 §5i
+
+C 說「A 要附查證的指令與輸出」（習慣）。
+**B 說那還不夠，因為問題是結構不是疏忽**：
+
+> 「當時我停工、C 不能讀實作，**不是我們不想查，是我們被規則擋住了**。
+> ⇒ 需要的不是『我更小心』，是把**『誰有權查證這一類主張』寫成協定的一部分**。」
+
+⇒ 新規則：**A 對實作現狀的主張若會變成驗收條件或工作項，B 有權也有責任複驗；
+B 停工期間仍可被要求做唯讀查證，那不算開工**（停工是為了讓樹不動，讀檔不會讓樹動）。
+
+### 📌 「待命不等於零責任」（B 自己講的，已寫進 §5i）
+
+> 「我把『等派工』執行得很乾淨，**乾淨到你漏派的那一件就這樣躺了一整輪**。」
+
+⇒ **最不可能發現 A 漏派的時刻，正是被漏派的人已經停工的時候。**
+
+### ✅ B 另外做對的一件小事
+
+它發現自己抄進 `B.md` 的那句「`.gitattributes` 要挑沒人跑回歸時做」
+**正是 A 那個沒查證的假設**，決定回頭更正——**不留著一個已知錯誤的警語**。
+
+
 ## §6 · 紀律提醒（給所有視窗）
 
 - 不准用 `HEAD~1`／`$(git rev-parse HEAD)`／`ls -t | head -1` —— 共用目錄，會指到別人的東西
