@@ -124,6 +124,25 @@ A 為了找出 C 是哪一個 session，對候選名單群發了幾輪。
 | `backend/helpers/tender_match.py`（比對邏輯，**純函式**） | **B** |
 | `backend/routers/tender_radar.py` | **B** |
 | `frontend/pages/tender-radar.html` | **B** |
+| `frontend/static/sidebar.js`（**鎖定檔**） | **B** |
+| `frontend/pages/users.html`（模組目錄） | **B** |
+| `backend/routers/tender_radar.py` 的模組檢查 | **B** |
+
+### 🔴 新模組 key `tender_radar`（A 於第二十七次裁決补進交付物）
+
+B 宣告：`tender-radar.html` **沒有側欄入口就只能手打網址**，而我沒把 `sidebar.js` 列進交付物。✅ **它停手是對的，而我漏了。**
+
+**裁決：新建模組 key `tender_radar`，不沿用 `dev_crm`。**
+
+理由：細線 1 第 4 步已定案把標案雷達列為**第 9 個套餐 `tender`**（§4）。
+沿用 `dev_crm` 的話，**套餐名與模組 key 就對不上，而那正是我在 §4 警告過的「兩套 key 會產生對照表，而對照表最會腐爛」**。
+
+⚠️ **三處要一起補，少一處既有守門就會紅**（`test_module_keys_consistency_2026_09_13.py`）：
+1. `users.html` 的 `allModules` 目錄（group 放「業務」）
+2. `sidebar.js`：旗標、`_FILE_MODULE` 的 `tender-radar.html` 對應、選單項
+3. `routers/tender_radar.py` 的 `require_any_module(('tender_radar',), ...)`
+
+📌 **不用新增測試** —— 既有的三方一致性守門自動涵蓋這件事。
 | `backend/tests/test_tender_match_2026_09_21.py` | **C** |
 
 ⚠️ **抓取與解析要分開兩支**：解析是純函式（吃 HTML 字串、吐結構），
