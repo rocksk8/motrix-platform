@@ -68,6 +68,44 @@
 這一輪整條線都是這個形狀。**每一題驗狀態碼的測試，都要同時釘住「那條 route 真的存在」
 或「那個 handler 真的被呼叫過」**，否則驗到的是 middleware 不是新功能。
 
+### 🔴🔴 最優先：總開關 `LICENSE_GATE_ENABLED`，預設 `False`
+
+**A 於 2026-09-21 查出的部署風險，這一輪的第一件事就是做這個。**
+
+事實（已查證，非推論）：
+- `build_deploy_package.ps1:394` 用 **`git archive`** 打包，**只含 git 已追蹤且已 commit 的內容**。
+- `backend/license.key` 在 `.gitignore:11`，`_license_private_key*.pem` 在 `.gitignore:13`。
+- ⇒ **金鑰永遠不會進部署包**（這是對的，金鑰本來就是 per-installation）。
+- `apply_update.ps1:351` Step 3 是「只加不刪，絕不 `/MIR`」，所以正式機原有檔案不會被刪，
+  但**正式機上本來就沒有 `license.key`**。
+
+所以：**第 3 步的 middleware 一上正式機，每一支業務 API 都會回 402 ⇒ 整個系統癱瘓。**
+客戶端看到的是「全部功能都壞了」，而不是「授權過期」——因為連登入後的第一個畫面
+都載不出來。
+
+**做法**（照本專案既有的 `PASSKEY_ENABLED` 慣例，`helpers/auth.py` 有前例）：
+
+```python
+# backend/helpers/licensing.py
+LICENSE_GATE_ENABLED = False   # 總開關，預設關。要開必須是刻意的動作。
+```
+
+- `False` 時 middleware **完全不介入**（連 `verify_license()` 都不要呼叫，
+  不要有「算了但不擋」的中間狀態——那會有效能成本卻沒有好處）。
+- 程式碼、測試、端點全部照做照上線，**只是不生效**。
+- 打開的順序必須是：**① 把 `license.key` 放進那台機器 → ② 確認
+  `GET /api/license/status` 回 `valid:true` → ③ 才把開關打開並重啟**。
+- **C 要寫兩題**：
+  - `LICENSE_GATE_ENABLED=False` 時，**沒有金鑰也照樣 200**（＝正式機現況是安全的）
+  - `LICENSE_GATE_ENABLED=True` 時才走第 2～9 題的擋住行為
+  - ⚠️ 上面第 12 題「既有 1,084 題全綠」要在 **`False`（預設值）** 下驗——
+    那才是正式機真正會跑到的狀態。
+
+**⚠️ 守門掛法照 `PASSKEY_ENABLED` 的教訓**：那次學到的是「守門要掛成 route dependency，
+不能寫在函式第一行，否則 FastAPI 先驗 body 會回 422 並把欄位名列出來」。
+這裡是 middleware 不是 route，形狀不同，但**同一個原則**：
+開關要在最外層就判掉，不要讓它走進去之後才發現不該走。
+
 ### 設計決定（A 已裁決）
 
 **① 金鑰新增 `kind` 欄位：`"subscription"`（年費）或 `"perpetual"`（永久）。**
@@ -113,6 +151,9 @@
 | `backend/main.py`（掛 middleware，**鎖定檔，先在 `B.md` 宣告**） | **B** |
 | `backend/tools/issue_license.py`（`--kind` 參數） | **B** |
 | `backend/tests/test_licensing_gate_2026_09_21.py` | **C** |
+
+**⚠️ B 的第一件事是總開關，不是 middleware。** 開關沒做好之前不要掛 middleware——
+中途被打斷的話，工作樹裡會留下一個「會擋住全部 API 而且沒有開關可以關」的狀態。
 
 ### 驗收條件（C 先寫成紅的）
 
