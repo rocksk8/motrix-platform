@@ -57,6 +57,7 @@ import uvicorn
 # 那一檔**不會**被這個開關 skip——否則整組 Passkey 測試全 skip 時，端點是真的
 # 回 404 還是路由根本壞了，沒有任何一題分得出來。
 from helpers.auth import PASSKEY_ENABLED
+from tests._ports import free_safe_port
 
 pytestmark = pytest.mark.skipif(
     not PASSKEY_ENABLED,
@@ -64,30 +65,13 @@ pytestmark = pytest.mark.skipif(
 
 
 
-def _pick_browser_safe_port() -> int:
-    """挑一個空閒、而且 Chrome 不會拒連的埠。
-
-    2026-09-11：原本讓 uvicorn 用 port 0 自己抽，某次抽到 1723（PPTP）之後
-    `page.goto` 直接回 `net::ERR_UNSAFE_PORT`——Chromium 內建一份「不安全埠」
-    黑名單（net/base/port_util.cc），對名單上的埠一律拒絕連線，跟伺服器有沒有
-    起來完全無關。名單裡最大的是 10080，所以固定在 20000 以上抽就不會撞到。
-
-    這種失敗是**間歇性**的：絕大多數時候抽到正常埠就過了，偶爾整支炸掉，而
-    錯誤訊息完全看不出跟埠號有關——正是最浪費時間的那種 flaky。
-
-    注意：不能「讓 OS 用 port 0 抽、抽到黑名單就重抽」——這台機器的暫時埠範圍
-    整段都在 20000 以下（`netsh int ipv4 show dynamicport tcp`），那樣會永遠抽不到
-    合格的埠。改成自己在安全區間裡挑，用 bind 測試是否可用。
-    """
-    for _ in range(200):
-        port = random.randint(20000, 60000)
-        with socket.socket() as sock:
-            try:
-                sock.bind(("127.0.0.1", port))
-            except OSError:
-                continue    # 已被占用，換一個
-        return port
-    pytest.fail("20000-60000 之間試了 200 次都綁不到埠")
+# 🔴 2026-09-21：這裡原本有一支自己的挑埠函式（寫於 2026-09-11，起因是抽到
+# 1723/PPTP）。它是對的，但**只住在這一個檔裡** —— 十天後同一個 bug 在
+# `test_e2e_material_orders` 又咬了一次（2049/NFS），而第 5 輪的⑥才抓到。
+#
+# 🔑 **修好一個實例，不等於認得那個模式。**
+# 已抽成 `tests/_ports.py::free_safe_port()`（21 個 e2e 檔共用），
+# 完整診斷與守門見那一支與 `test_ports_helper_2026_09_21.py`。
 
 
 @pytest.fixture()
@@ -96,7 +80,7 @@ def live_server(client):
     純 http，所以 RP ID 用 localhost、瀏覽器也從 localhost 進——這條路徑
     `_validate_webauthn_pair()` 本來就明文放行（見該函式最後一段）。"""
     import main
-    config = uvicorn.Config(main.app, host="127.0.0.1", port=_pick_browser_safe_port(),
+    config = uvicorn.Config(main.app, host="127.0.0.1", port=free_safe_port(),
                             log_level="warning")
     server = uvicorn.Server(config)
     thread = threading.Thread(target=server.run, daemon=True)

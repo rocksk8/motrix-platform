@@ -21,6 +21,7 @@ pytest.importorskip("playwright.sync_api")
 from playwright.sync_api import sync_playwright
 
 import uvicorn
+from tests._ports import free_safe_port
 
 FAKE_GCIS = [
     {"Company_Name": "允碩整合集創股份有限公司", "Business_Accounting_NO": "60575481",
@@ -42,7 +43,7 @@ def live_server(client, monkeypatch):
 
     monkeypatch.setattr(dashboard, "_gcis_get", _fake_gcis_get)
 
-    config = uvicorn.Config(main.app, host="127.0.0.1", port=0, log_level="warning")
+    config = uvicorn.Config(main.app, host="127.0.0.1", port=free_safe_port(), log_level="warning")
     server = uvicorn.Server(config)
     thread = threading.Thread(target=server.run, daemon=True)
     thread.start()

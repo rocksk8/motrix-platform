@@ -25,6 +25,7 @@ pytest.importorskip("playwright.sync_api")
 from playwright.sync_api import sync_playwright
 
 import uvicorn
+from tests._ports import free_safe_port
 
 
 @pytest.fixture()
@@ -35,7 +36,7 @@ def live_server(client):
     再開一個真正的 loopback TCP 監聽，因為 Playwright 是真的瀏覽器程序、
     不能像 TestClient 一樣直接呼叫 ASGI app，需要一個真實網址可以打。"""
     import main
-    config = uvicorn.Config(main.app, host="127.0.0.1", port=0, log_level="warning")
+    config = uvicorn.Config(main.app, host="127.0.0.1", port=free_safe_port(), log_level="warning")
     server = uvicorn.Server(config)
     thread = threading.Thread(target=server.run, daemon=True)
     thread.start()

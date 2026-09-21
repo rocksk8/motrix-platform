@@ -16,12 +16,13 @@ pytest.importorskip("playwright.sync_api")
 from playwright.sync_api import sync_playwright
 
 import uvicorn
+from tests._ports import free_safe_port
 
 
 @pytest.fixture()
 def live_server(client):
     import main
-    config = uvicorn.Config(main.app, host="127.0.0.1", port=0, log_level="warning")
+    config = uvicorn.Config(main.app, host="127.0.0.1", port=free_safe_port(), log_level="warning")
     server = uvicorn.Server(config)
     thread = threading.Thread(target=server.run, daemon=True)
     thread.start()

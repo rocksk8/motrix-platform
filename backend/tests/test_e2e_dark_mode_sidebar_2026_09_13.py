@@ -45,6 +45,7 @@ from PIL import Image
 from playwright.sync_api import sync_playwright
 
 import uvicorn
+from tests._ports import free_safe_port
 
 # 當初的 15 個受害頁（側欄被包在 .app-shell 裡）全部量一次，外加一頁本來就
 # 正確的當對照組。側欄退役後這份清單量的是各頁的頂欄與主導覽列——頁面本身
@@ -81,7 +82,7 @@ BRIGHT_MIN = 190
 def live_server(client):
     """比照 test_e2e_playwright_2026_09_07.py 的同名 fixture。"""
     import main
-    config = uvicorn.Config(main.app, host="127.0.0.1", port=0, log_level="warning")
+    config = uvicorn.Config(main.app, host="127.0.0.1", port=free_safe_port(), log_level="warning")
     server = uvicorn.Server(config)
     thread = threading.Thread(target=server.run, daemon=True)
     thread.start()

@@ -25,6 +25,7 @@ pytest.importorskip("playwright.sync_api")
 from playwright.sync_api import sync_playwright
 
 import uvicorn
+from tests._ports import free_safe_port
 
 # 六類品牌目錄，順序即頁面上的顯示順序
 EXPECTED_SECTIONS = [
@@ -41,7 +42,7 @@ EXPECTED_SECTIONS = [
 def live_server(client):
     """比照 test_e2e_playwright_2026_09_07.py 的同名 fixture。"""
     import main
-    config = uvicorn.Config(main.app, host="127.0.0.1", port=0, log_level="warning")
+    config = uvicorn.Config(main.app, host="127.0.0.1", port=free_safe_port(), log_level="warning")
     server = uvicorn.Server(config)
     thread = threading.Thread(target=server.run, daemon=True)
     thread.start()
