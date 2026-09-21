@@ -126,11 +126,41 @@
                :style="mapInfo && mapInfo.withoutLocation ? 'color:var(--warning)' : ''"
                x-text="mapInfo ? mapInfo.withoutLocation : '—'"></div>
         </div>
+        <div>
+          <div style="font-size:11px;color:var(--text-secondary)">尚未定位</div>
+          <div style="font-size:18px;font-weight:600"
+               :style="mapInfo && mapInfo.pendingGeocode ? 'color:var(--text-secondary)' : ''"
+               x-text="mapInfo ? mapInfo.pendingGeocode : '—'"></div>
+        </div>
         <div style="flex:1 1 320px;font-size:12px;line-height:1.7">
+          <!-- 🔴 「尚未定位」與「沒有地點資訊」是兩件事，**而處置相反**：
+               前者只要再開一次地圖，後者要去看資料。
+               ☠️ 只顯示「可定位 12 筆」的話，冷啟動時這一塊看起來像
+               「雷達只抓到 12 筆」——**而那是另一件事**。 -->
+          <div x-show="mapInfo && mapInfo.pendingGeocode > 0"
+               style="color:var(--text-secondary)">
+            ⏳ 有 <span x-text="mapInfo ? mapInfo.pendingGeocode : 0"></span>
+            個地址<strong>還沒定位過</strong>（不是查不到）。
+            地址轉座標每秒只能問一次，所以一次只查一部分；
+            <strong>查過的會永久記住</strong>。
+            <a href="map.html">到地圖頁按「繼續定位」</a>就會愈來愈完整。
+          </div>
+          <!-- ⚠️ 這句話的成因在 §3r 之後變了，原本寫的是
+               「詳細頁每天有抓取上限，其餘會在後續時段補上」——
+               那在「只用 `location` 定位」的時代是對的。
+               🔴 現在定位依據是**機關名稱**，而實測 195 個相異字串裡
+               **53 個在 OpenStreetMap 上查不到**（成功 142，約 73%）
+               ⇒ 主要成因已經不是抓取上限了。
+               ⚠️ 我中途看到的是「50 筆裡 28 筆」（56%）就寫成「約一半」，
+               而跑完是 73% —— **前 50 筆不是隨機樣本**（DISTINCT 的順序
+               不是隨機的）。〈量測比變化慢〉：拿部分結果當全貌。
+               🔑〈答案沒錯，是題目問錯了〉的親戚：**一句正確的解釋
+               在成因換掉之後會變成誤導**，而它讀起來仍然完全合理。 -->
           <div x-show="mapInfo && mapInfo.withoutLocation > 0" style="color:var(--warning)">
             ⚠️ 有 <span x-text="mapInfo ? mapInfo.withoutLocation : 0"></span>
-            筆標案還沒有地點資訊，<strong>它們在下面的清單裡，只是不會出現在地圖上</strong>。
-            （詳細頁每天有抓取上限，其餘會在後續時段補上。）
+            筆標案<strong>定位不到</strong>，它們在下面的清單裡，只是不會出現在地圖上。
+            成因有兩種：<strong>機關名稱在地圖資料裡查不到</strong>（約四分之一的機關是這樣），
+            或詳細頁的地點資訊還沒抓到（詳細頁每天有抓取上限，會在後續時段補上）。
           </div>
           <div x-show="mapInfo && mapInfo.officeMissing" style="color:var(--warning)">
             ⚠️ 尚未設定<strong>辦公室地址</strong>，所以算不出距離。
