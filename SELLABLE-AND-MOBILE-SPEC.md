@@ -16,7 +16,8 @@
 | 前端 RWD | 殼層**已完成**（`style.css` 1,668 行，平板 icon-rail ＋ 手機抽屜側欄）；**但 56 頁只有 18 頁有自己的 `@media`** |
 | 測試 | 136 檔、**1,084 題**（`pytest --collect-only`；⚠️ 本表原記 1,034，那是 `grep -c "def test_"` 算的，漏掉 7 個檔的 parametrize 展開共 50 題，2026-09-21 由視窗 C 抓到並更正） |
 | 授權／多租戶機制 | **不存在。全 codebase 零 license／序號／到期／tenant 概念** |
-| 公司抬頭寫死 | **124 處**，分布 9 支後端檔（`pdf_gen.py` 佔 14 處）＋ 4 支前端檔 |
+| 公司抬頭寫死 | **56 行 / 14 檔**（2026-09-21 複查更正，見下） |
+| 模組權限 | 權限目錄 **40 個** key，**35 個後端真的會擋**，只有 **5 個**是純側欄開關 |
 | 既有設定 | `system_settings.company_profile` 已存在，但**只有銀行欄位被 PDF 讀取**（`pdf_gen.py:2006`），名稱／統編／電話仍是寫死 |
 | 相依 | `cryptography>=42.0.0` **已在 `requirements.txt`** → 離線簽章零新增套件 |
 
@@ -39,9 +40,49 @@
 | 2 | **裝進一台機器** | 把 `.key` 放到 `backend/license.key`，重啟服務，`GET /api/license/status` 回 `{valid:true, customer:"某某公司", expires:"..."}` |
 | 3 | **無效就要擋住** | 金鑰不存在／簽章錯／機器指紋不符／已過期 → 服務**照樣起得來**，但所有業務 API 回 **402** 並附人看得懂的原因；只有登入頁與授權頁還能開 |
 | 4 | **金鑰決定開哪些模組** | 金鑰裡沒有 `monitor_guide` → 該 router 的端點回 402、側欄不出現該項目。**與使用者模組旗標是兩回事**：金鑰管「這台機器買了什麼」，旗標管「這個人能看什麼」 |
-| 5 | **抬頭不再寫死** | 124 處寫死全部改讀 `company_profile`；報價單／出貨單／請款單／完工單 PDF 上印的是設定值。**`grep -r "60575481" backend frontend --include=*.py --include=*.html` 除測試檔外為 0** |
+| 5 | **抬頭不再寫死** | 56 行全部改讀 `company_profile`；報價單／出貨單／請款單／完工單 PDF 上印的是設定值。收斂條件見下方〈第 5 步的真實範圍〉 |
 | 6 | **到期前會提醒** | 剩餘 30／14／7／1 天時，登入後畫面顯示橫幅 ＋ 寄信給 superadmin（掛在既有 `daily_tasks.py` 排程，比照 `_check_cert_expiry()`） |
 | 7 | **換機裝得上去** | 在 B 機器用 A 機器的金鑰 → 第 3 步的擋住行為；重發一把綁 B 機器的 → 第 2 步的通過行為 |
+
+## 第 5 步的真實範圍（2026-09-21 A 實測，**更正先前的 124 處**）
+
+先前寫的「124 處」是錯的——那次 grep 沒有排除 `backend/rollback_snapshots/`
+（gitignore 過的還原快照，裡面是整份 backend 的舊副本）與 `backend/tests/`。
+**以 `git ls-files` 為準、排除測試檔，四個識別字串（統編／允碩／miactw／3610-6566）
+去重後的實際命中是 56 行、14 個檔：**
+
+| 檔案 | 行數 |
+|------|------|
+| `backend/pdf_gen.py` | **24** ← 接近一半集中在這一支 |
+| `backend/db.py` | 4 |
+| `backend/helpers/startup.py` | 4 |
+| `backend/network_plan_export.py` | 4 |
+| `frontend/pages/company-profile-settings.html` | 4 |
+| `frontend/pages/users.html` | 3 |
+| `backend/routers/reports.py` | 2 |
+| `backend/tools/sync_pending_data_20260817.py` | 2 |
+| `frontend/index.html` | 2 |
+| `frontend/pages/login.html` | 2 |
+| `frontend/pages/quotation-form.html` | 2 |
+| `backend/helpers/auth.py` | 1 |
+| `backend/main.py` | 1 |
+| `backend/routers/system.py` | 1 |
+
+**收斂條件用指令的結束碼，不要用「每個檔都改過了」**（用檔案清單劃範圍，
+範圍的邊緣就是盲點）：
+
+```bash
+git ls-files backend frontend | grep -E '\.(py|html|js|css)$' | grep -v '^backend/tests/' \
+  | xargs grep -Il -e 60575481 -e 允碩 -e miactw -e 3610-6566
+# 收斂條件：這條指令沒有輸出
+```
+
+⚠️ **`company-profile-settings.html` 那 4 行是 placeholder**（給使用者看「該填什麼樣子」），
+**那是對的、不要改掉**——改掉的話設定頁反而沒有範例。B 到第 5 步時要分辨
+「印在單據上的值」與「輸入框的提示文字」，後者留著。
+
+⚠️ `backend/tools/sync_pending_data_20260817.py` 是一次性資料搬移腳本，
+`main.py` 不 import 它。**確認之後整支刪掉比改它划算**，但那是 A 的決定，到時再說。
 
 ## 設計決定（A 已裁決，不需再議）
 
@@ -121,8 +162,14 @@
 以下在 `MOTRIX-ERP-QUICK.md` §11 是開著的，但**不在這兩條線上，本期一律不動**：
 
 - 🟠 每案資料的 IDOR 面還沒收完
-- 🟡 16 個模組後端完全不讀（只是側欄開關）—— **注意：細線 1 第 4 步會讓這件事變得更重要**，
-  因為金鑰層的檢查是新的一層，不要跟它混為一談。若施作中發現衝突，寫進視窗檔問 A。
+- 🟢 ~~16 個模組後端完全不讀~~ —— **2026-09-21 複查：這筆已經過時，現在只剩 5 個。**
+  `MODULE-AUDIT-2026-09-13.md` 寫的 16 個是 2026-09-13 的狀態，**2026-09-14 那一輪
+  （DB v84「取消 admin 直通、模組權限對管理員也生效」）把大部分補上了**，文件沒同步更新。
+  實測：權限目錄 40 個 key，**35 個後端真的會擋**，只剩 5 個是純側欄開關——
+  `dashboard`／`netplan`／`project_approve_biz`／`project_approve_eng`／`selection_overview`。
+  死 key 0 個（後端在擋、目錄裡沒有的 key 一個也沒有）。
+  **這對第 4 步是好消息**：金鑰關掉一個模組，35/40 的情況下 API 真的會擋得住。
+  剩下那 5 個的處置見 `docs/windows/STATE.md` §4 第 2 項。
 - 🟠 pytest 暫存不自動清（用 `--basetemp` 繞過即可，不要順手去修）
 - ⚪ Let's Encrypt 憑證／RP ID 決策、Passkey 恢復
 - 🟢 DR 演練
