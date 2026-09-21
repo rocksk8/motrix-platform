@@ -569,11 +569,50 @@ db.py:3808  INSERT INTO system_settings ... ON CONFLICT(key) DO NOTHING
 ```
 `company_profile` 目前 seed 七個鍵（name／tax_id／contact_info／bank_name／
 bank_branch／bank_account_name／bank_account_number），**沒有 address**。
-⇒ **把 `address` 加進那個 dict，對已經存在的資料庫一個字都不會變**（`DO NOTHING`）。
-⇒ migration 必須是**讀出現有 JSON → 缺 address 才補上 → 寫回**，
-**不可以整個 dict 重寫**——那會把使用者已經填好的七個欄位蓋掉。
-🔑 這個坑的症狀是「新裝的機器正常、既有的機器沒有那個欄位」，
-而開發時通常兩種機器都有，**卻只會注意到會動的那一台**。
+⇒ **把 `address` 加進那個 dict，對已經存在的資料庫一個字都不會變**（`DO NOTHING`）。✅ 這句仍然對。
+
+~~⇒ migration 必須是讀出現有 JSON → 缺 address 才補上 → 寫回，不可以整個 dict 重寫。~~
+
+🔴 **上面那個結論是錯的，由視窗 C 更正、我自己查證屬實 ⇒ 很可能根本不需要 migration。**
+```python
+routers/system.py:623
+return {**_COMPANY_PROFILE_DEFAULT, **(_get_setting("company_profile", {}) or {})}
+```
+`_COMPANY_PROFILE_DEFAULT`（`system.py:612`）在**讀的時候**把預設蓋在存的值下面，
+所以既有安裝缺的鍵**在讀取端就補好了**——銀行那四欄 2026-08-24 已經走過這條路，
+而且那行的註解就是為了同一件事寫的。
+
+🔑 **我的錯不在查證，在推論的範圍。** 我查了 `_seed_setting` 屬實，
+然後直接推出「所以要靠 migration 補」——**而我沒有去查「有沒有別的地方已經解決了它」。**
+⇒ 這是今天第三次同一個骨架：**查了一環，推了整條鏈。**
+（前兩次：排程那 13 個檢查查了呼叫端沒查被呼叫的函式；exit 127 把兩個行程的證據合成一份。）
+⚠️ 而三次的共同點是**查到的那一環都是真的**，所以推出來的結論聽起來有憑有據。
+
+### 所以 §3l 真正要改的是三處，`db.py` 影響最小
+| 檔 | 影響 |
+|---|---|
+| `_COMPANY_PROFILE_DEFAULT`（`system.py:612`） | 既有安裝讀得到 `address` 的**真正原因** |
+| `CompanyProfile`（Pydantic，`system.py:602`） | 沒有它，**PUT 會把 address 丟掉** |
+| `db.py` 的 `_seed_setting` | 只影響**全新安裝** |
+
+### 🔴 而我另外查到一件 C 與 A 都還沒點到的
+```python
+system.py:627  def set_company_profile(body: CompanyProfile, ...)
+system.py:629      value = body.model_dump()      ← 全欄位
+system.py:630      _set_setting("company_profile", value)   ← 整筆覆蓋
+```
+**這是整筆覆蓋，而每個欄位都有 `= ''` 預設** ⇒ **任何沒送齊欄位的呼叫端，會把沒送的欄位清成空字串。**
+🔑 **那正是我今天修的 D22／D21b 完全相同的形狀**，只是換一個檔。
+
+前端目前**是靠巧合活下來的**：
+```js
+company-profile-settings.html:468   this.cfg = { ...this.cfg, ...data }
+company-profile-settings.html:637   body: JSON.stringify(this.cfg)
+```
+它是**把 GET 回來的整包併進 cfg 再原樣送回**，不是逐欄挑 ⇒ 新欄位會自動被帶著走。
+⚠️ **但那是「剛好沒事」不是「防住了」**：
+一個在部署**之前**就開著的分頁，它的 `cfg` 沒有 `address`，**存檔時會把 address 清掉**，
+而畫面上是「欄位都在、只是空的」——跟「還沒填」一模一樣。
 
 **② 距離的精度天花板不是地址決定的，是資料來源決定的**
 ```
