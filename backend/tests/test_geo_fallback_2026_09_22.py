@@ -663,3 +663,139 @@ def test_a14b_a_successful_lookup_is_still_cached(client, monkeypatch):
         f"成功的結果沒有被快取（查了 {len(calls)} 次）—— "
         "那 A11 要解決的問題原封不動"
     )
+
+
+# ══════════════════════════════════════════════════════════════════════
+# A15 · 🔴 **快取要會過期** —— 進 DB 順手拆掉了一個沒人打算要的保護
+# ══════════════════════════════════════════════════════════════════════
+#
+# B 的理由（照抄，它講得比我清楚）：
+#
+# > 地址與座標的對應**會變**（門牌改編、行政區調整、OSM 資料被修正）。
+# > 存進 DB ＝ 一輩子不再查 ⇒ **那個錯誤會永遠留著**，
+# > 而症狀是「地圖上那個點一直在錯的位置」——
+# > **沒有人會報修，因為它看起來很正常。**
+# > 📌 **記憶體版沒有這個問題，是因為它會自己忘記。
+# >    進 DB 之後那個保護就消失了。**
+#
+# 🔑 **那是〈防護的副作用落在盲側〉的一個乾淨實例**：
+# 我們為了省 API 用量而加的東西，**順手拆掉了一個沒有人打算要的保護**。
+#
+# 📌 **TTL 不是為了省用量，是為了讓錯誤有機會自己修好。**
+#    （27 個地址 ÷ 180 天 ⇒ 一年約 54 次，仍然是常數級 —— 不衝突。）
+
+
+def _backdate(address, days):
+    """把那一列的 `created_at` 往回調 `days` 天。"""
+    from datetime import datetime, timedelta
+
+    import db
+    when = (datetime.now() - timedelta(days=days)).isoformat(timespec="seconds")
+    conn = db.get_db()
+    try:
+        cur = conn.execute(
+            f"UPDATE {GEOCODE_CACHE_TABLE} SET created_at=? WHERE address=?",
+            (when, address))
+        conn.commit()
+        return cur.rowcount
+    finally:
+        conn.close()
+
+
+def test_a15_an_expired_cache_row_is_re_queried(client, monkeypatch):
+    """🔴🔴 A15：**超過有效期的快取列不可以被採用，要重新查一次。**
+
+    ☠️ 存進 DB ＝ 一輩子不再查 ⇒ 一個錯的座標會**永遠**留著，
+    而症狀是「地圖上那個點一直在錯的位置」——
+    **沒有人會報修，因為它看起來很正常。**
+
+    🔑 **記憶體版沒有這個問題，是因為它會自己忘記。**
+    進 DB 之後那個保護消失了 —— 我們為了省 API 用量而加的東西，
+    **順手拆掉了一個沒有人打算要的保護。**
+
+    📌 **TTL 不是為了省用量，是為了讓錯誤有機會自己修好。**
+    """
+    _enable(monkeypatch)
+    ttl_days = _geo("GEOCODE_CACHE_TTL_DAYS")
+    assert ttl_days >= 1, f"TTL 是 {ttl_days} 天 —— 那等於沒有快取"
+
+    calls = []
+
+    def _nominatim(address, **kw):
+        calls.append(address)
+        return (DISTRICT_COORD, _geo("PRECISION_DISTRICT"))
+
+    monkeypatch.setattr(_geo(), "_locate_google", lambda addr, **kw: None)
+    monkeypatch.setattr(_geo(), "_locate_tgos", lambda addr, **kw: None)
+    monkeypatch.setattr(_geo(), "_locate_nominatim", _nominatim)
+
+    _geo("locate_cached")(DISTRICT)
+    assert len(calls) == 1, f"第一次應該查一次，實際 {len(calls)}（前提不成立）"
+
+    updated = _backdate(DISTRICT, ttl_days + 1)
+    assert updated == 1, (
+        f"`{GEOCODE_CACHE_TABLE}` 裡改不到 {DISTRICT!r} 的 `created_at`"
+        f"（影響 {updated} 列）—— 那一欄不存在，或那一列沒有落地"
+    )
+    _forget_memory(monkeypatch)
+
+    _geo("locate_cached")(DISTRICT)
+    assert len(calls) == 2, (
+        f"快取已經超過 {ttl_days} 天，而它沒有重查（累計 {len(calls)} 次）。\n"
+        "⇒ `created_at` 存了但沒有人看它。門牌改編、行政區調整、"
+        "OSM 資料被修正 —— 那些都不會再被反映出來。"
+    )
+
+
+def test_a15b_a_fresh_cache_row_is_still_used(client, monkeypatch):
+    """🔴 A15 的反向控制：**還沒過期的那一列仍然要被採用。**
+
+    ⚠️ 沒有這一題，一個**永遠重查**的實作會讓 A15 全綠 ——
+    而那等於整個快取沒有作用，A11 想解決的問題原封不動。
+
+    🔑 **A15 與這一題合起來才證明「`created_at` 真的被讀了」** ——
+    單獨看任何一題，都可以被一個不看那個欄位的實作滿足
+    （一個永遠重查、一個永遠不重查）。
+    📌 **一個欄位存了而沒有人看它，它看起來像被處理過了** ——
+    那是今晚「載入 ≠ 跑到」的資料版本。
+    """
+    _enable(monkeypatch)
+    ttl_days = _geo("GEOCODE_CACHE_TTL_DAYS")
+    calls = []
+
+    def _nominatim(address, **kw):
+        calls.append(address)
+        return (DISTRICT_COORD, _geo("PRECISION_DISTRICT"))
+
+    monkeypatch.setattr(_geo(), "_locate_google", lambda addr, **kw: None)
+    monkeypatch.setattr(_geo(), "_locate_tgos", lambda addr, **kw: None)
+    monkeypatch.setattr(_geo(), "_locate_nominatim", _nominatim)
+
+    _geo("locate_cached")(DISTRICT)
+    assert len(calls) == 1, "前提不成立"
+
+    # 往回調到「還在有效期內」—— 而不是完全不調，
+    # 否則「只看列在不在、根本不比日期」的實作也會過。
+    updated = _backdate(DISTRICT, max(ttl_days - 1, 0))
+    assert updated == 1, f"改不到 `created_at`（影響 {updated} 列）"
+    _forget_memory(monkeypatch)
+
+    _geo("locate_cached")(DISTRICT)
+    assert len(calls) == 1, (
+        f"快取還在有效期內（{ttl_days} 天），而它又查了一次"
+        f"（累計 {len(calls)} 次）—— 那等於快取沒有作用"
+    )
+
+
+def test_a15c_the_ttl_is_a_module_level_constant():
+    """A15 的可維護性：TTL 必須是**模組層常數**，不是埋在 SQL 裡的字面值。
+
+    ⚠️ 埋在查詢字串裡的話，上面兩題就得自己複製一份天數 ——
+    🔑 **而測試與實作各持一份同樣的常數，是「兩邊一起改錯」最常見的入口。**
+    """
+    ttl = _geo("GEOCODE_CACHE_TTL_DAYS")
+    assert isinstance(ttl, (int, float)), f"TTL 不是數字：{ttl!r}"
+    assert 30 <= ttl <= 3650, (
+        f"TTL 是 {ttl} 天 —— 太短會讓用量失控，太長讓錯誤永遠留著。"
+        "建議 180（27 個地址 ÷ 180 天 ⇒ 一年約 54 次，仍是常數級）。"
+    )
