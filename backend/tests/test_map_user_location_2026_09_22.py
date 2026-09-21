@@ -140,19 +140,42 @@ def _auth(client, make_user):
     return {"Authorization": "Bearer " + r.json()["token"]}
 
 
-def _ask(client, hdr, *, lat=None, lon=None, accuracy=None, expect=200):
-    q = "sources=tenders"
-    if lat is not None:
-        q += f"&lat={lat}"
-    if lon is not None:
-        q += f"&lon={lon}"
-    if accuracy is not None:
-        q += f"&accuracy={accuracy}"
-    r = client.get("/api/map/points?" + q, headers=hdr)
+#: 🔴 使用者的座標走**標頭**，不走 query string。格式 `<lat>,<lon>,<accuracy>`。
+#:
+#: ## ☠️ 為什麼改形狀：B 實測出一個我們三個都沒想到的出口
+#:
+#: ```
+#: INFO: 127.0.0.1:34378 - "GET /api/map/points?sources=tenders
+#:       &lat=24.1657&lon=120.6402&accuracy=35 HTTP/1.1" 200 OK
+#: ```
+#: 正式機的 `autostart.bat` 是 `uvicorn … --log-level info >> logs\server.log`
+#: ⇒ **每按一次「使用我的位置」，那個人當下的座標就被追加進一個永久檔案。**
+#:
+#: ⚠️ **而我的 G9 三張表全是乾淨的**：`system_settings` 沒寫、`audit_log` 沒寫、
+#: `user_request_log` 存的是 `request.url.path`（**不含** query string）。
+#: 🔑 **三個想得到的出口都堵了，漏的是沒有人列進清單的那一個** ——
+#: **它不在我們的程式碼裡，在 web server 裡。**
+#: 📌 **我們列的是「我們會寫入的地方」，而資料外洩不需要我們寫入，
+#: 只需要有人記錄。**
+POSITION_HEADER = "X-Map-Position"
+
+
+def _ask(client, hdr, *, position=None, query=None, expect=200):
+    """打一次地圖端點。`position` 走標頭，`query` 是刻意走舊路（G10 用）。"""
+    q = "sources=tenders" + (("&" + query) if query else "")
+    headers = dict(hdr)
+    if position is not None:
+        headers[POSITION_HEADER] = position
+    r = client.get("/api/map/points?" + q, headers=headers)
     assert r.status_code == expect, (
-        f"?{q}\n預期 {expect}，實際 {r.status_code}：{r.text[:250]}"
+        f"?{q}  {POSITION_HEADER}={position!r}\n"
+        f"預期 {expect}，實際 {r.status_code}：{r.text[:250]}"
     )
     return r.json() if r.status_code == 200 else r
+
+
+def _pos(coords, accuracy=42):
+    return f"{coords[0]},{coords[1]},{accuracy}"
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -170,8 +193,7 @@ def test_g1_both_distances_are_reported_side_by_side(
     **今晚第四次同一件事：一個數字不帶它的誤差，就會被當成事實。**
     """
     hdr = _auth(client, make_user)
-    body = _ask(client, hdr, lat=USER_TAIPEI[0], lon=USER_TAIPEI[1],
-                accuracy=42)
+    body = _ask(client, hdr, position=_pos(USER_TAIPEI))
 
     assert body["points"], "一個點都沒有 —— 這一題的前提不成立"
     assert body.get("userAccuracyM") == 42, (
@@ -201,7 +223,7 @@ def test_g2_coordinates_without_accuracy_are_rejected(
     **那個可信度本身是編的。**
     """
     hdr = _auth(client, make_user)
-    _ask(client, hdr, lat=USER_TAIPEI[0], lon=USER_TAIPEI[1], expect=422)
+    _ask(client, hdr, position=f"{USER_TAIPEI[0]},{USER_TAIPEI[1]}", expect=422)
 
 
 @pytest.mark.parametrize("lat,lon", [
@@ -217,7 +239,7 @@ def test_g4_out_of_range_coordinates_are_rejected(
     （地球是圓的，什麼數字都算得出來）—— 而沒有人會發現。
     """
     hdr = _auth(client, make_user)
-    _ask(client, hdr, lat=lat, lon=lon, accuracy=42, expect=422)
+    _ask(client, hdr, position=f"{lat},{lon},42", expect=422)
 
 
 @pytest.mark.parametrize("accuracy", [-1, -0.5, "abc", ""])
@@ -231,8 +253,7 @@ def test_g5_a_bad_accuracy_is_rejected(
     ⇒ A 2026-09-22 裁了，見下面的 G5b。
     """
     hdr = _auth(client, make_user)
-    _ask(client, hdr, lat=USER_TAIPEI[0], lon=USER_TAIPEI[1],
-         accuracy=accuracy, expect=422)
+    _ask(client, hdr, position=_pos(USER_TAIPEI, accuracy), expect=422)
 
 
 def test_g5b_an_accuracy_of_zero_is_rejected_too(
@@ -249,8 +270,7 @@ def test_g5b_an_accuracy_of_zero_is_rejected_too(
     （A 的話，我照收；我原本只是不替使用者決定，沒想到這一層。）
     """
     hdr = _auth(client, make_user)
-    _ask(client, hdr, lat=USER_TAIPEI[0], lon=USER_TAIPEI[1],
-         accuracy=0, expect=422)
+    _ask(client, hdr, position=_pos(USER_TAIPEI, 0), expect=422)
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -301,8 +321,7 @@ def test_g6_a_missing_office_does_not_break_the_user_distance(
     而那是一個**新使用者第一天就會遇到**的狀態。
     """
     hdr = _auth(client, make_user)
-    body = _ask(client, hdr, lat=USER_TAIPEI[0], lon=USER_TAIPEI[1],
-                accuracy=42)
+    body = _ask(client, hdr, position=_pos(USER_TAIPEI))
 
     assert body.get("officeMissing") is True, (
         f"地址沒填，而 `officeMissing` 是 {body.get('officeMissing')!r}"
@@ -341,8 +360,7 @@ def test_g7_turning_geo_off_is_visibly_different_from_zero_kilometres(
 
     monkeypatch.setattr(geo, "GEO_ENABLED", False)
     monkeypatch.delenv("MOTRIX_GEO", raising=False)
-    off = _ask(client, hdr, lat=USER_TAIPEI[0], lon=USER_TAIPEI[1],
-               accuracy=42)
+    off = _ask(client, hdr, position=_pos(USER_TAIPEI))
 
     assert off.get("geoEnabled") is False, (
         f"地理查詢關著，而 `geoEnabled` 是 {off.get('geoEnabled')!r}\n"
@@ -358,8 +376,7 @@ def test_g7_turning_geo_off_is_visibly_different_from_zero_kilometres(
 
     # ── 對照組：打開之後，同一個請求要拿得到點與距離 ──
     monkeypatch.setattr(geo, "GEO_ENABLED", True)
-    on = _ask(client, hdr, lat=USER_TAIPEI[0], lon=USER_TAIPEI[1],
-              accuracy=42)
+    on = _ask(client, hdr, position=_pos(USER_TAIPEI))
     assert on.get("geoEnabled") is True
     assert on["points"], (
         "打開地理查詢之後仍然一個點都沒有 —— "
@@ -388,7 +405,7 @@ def test_g8_the_user_distance_actually_follows_the_coordinates(
     hdr = _auth(client, make_user)
 
     def _by_case(coords):
-        body = _ask(client, hdr, lat=coords[0], lon=coords[1], accuracy=42)
+        body = _ask(client, hdr, position=_pos(coords))
         assert body["points"], "一個點都沒有 —— 前提不成立"
         return {p["caseNo"]: p["distanceFromUserKm"] for p in body["points"]}
 
@@ -410,7 +427,7 @@ def test_g8_the_user_distance_actually_follows_the_coordinates(
 # ══════════════════════════════════════════════════════════════════════
 
 def test_g9_the_users_position_is_never_written_down(
-        client, make_user, geo_enabled, office, tenders):
+        client, make_user, geo_enabled, office, tenders, caplog):
     """🔴🔴 G9：傳進來的 `lat`/`lon`/`accuracy` **不可以被寫進資料庫或 log**。
 
     ☠️ **那是使用者的位置。** 而 `audit_log` 有 2,254 列、
@@ -421,10 +438,29 @@ def test_g9_the_users_position_is_never_written_down(
     🔑 A 說得對：**這一條現在不寫，之後不會有人想到。**
     📌 而它的失敗方式是最安靜的一種：**功能完全正常，只是多留了一筆。**
     """
+    import logging
+
     hdr = _auth(client, make_user)
     lat, lon = USER_TAIPEI
-    body = _ask(client, hdr, lat=lat, lon=lon, accuracy=42)
+    with caplog.at_level(logging.DEBUG):
+        body = _ask(client, hdr, position=_pos((lat, lon)))
     assert body["points"], "一個點都沒有 —— 前提不成立（請求沒有真的被處理？）"
+
+    # 🔴 **第四層：log。** 前三層是「**我們會寫入的地方**」，而這一層不是。
+    # B 實測發現 uvicorn 的 access log 會把整個 URL（含 query string）
+    # 追加進 `logs/server.log`，**而我們三個都沒有把它列進清單**。
+    # 🔑 **資料外洩不需要我們寫入，只需要有人記錄。**
+    #
+    # ⚠️ **我明講這一層擋得到什麼**：`caplog` 抓的是 Python `logging`
+    #    ⇒ 它擋得住「我們自己順手把座標印出來」，
+    #    **抓不到 uvicorn 自己的 access log**（那是伺服器設定，不是我們的程式碼）。
+    # ⇒ 那個真正的出口由**形狀**擋住：座標不走 query string（G10／G11）。
+    #    🔑 **一道守門要說得出它守不到什麼，否則它的綠燈會被當成更大的保證。**
+    logged = [rec.getMessage() for rec in caplog.records
+              if str(lat) in rec.getMessage() or str(lon) in rec.getMessage()]
+    assert not logged, (
+        "使用者的座標出現在 log 裡：\n  " + "\n  ".join(logged[:4])
+    )
 
     # 🔴 **前提：那組座標真的被端點收下了。**
     # ⚠️ 少了這一道，這一題在「端點根本不認得 lat/lon/accuracy」時會**空綠** ——
@@ -496,4 +532,80 @@ def test_g9b_the_privacy_scan_can_actually_find_something(
     assert rows, (
         "把座標種進 `audit_log.detail` 之後，G9 用的那個 LIKE 查詢卻找不到它"
         " ⇒ **G9 的綠燈不代表任何事。**"
+    )
+
+
+# ══════════════════════════════════════════════════════════════════════
+# G10 / G11 · 🔴 座標不可以走 query string
+# ══════════════════════════════════════════════════════════════════════
+
+def test_g10_coordinates_in_the_query_string_are_refused(
+        client, make_user, geo_enabled, office, tenders):
+    """🔴🔴 G10：`?lat=&lon=&accuracy=` ⇒ **422**，而訊息要**指路到標頭**。
+
+    ## ☠️ 這一條不是參數潔癖，它堵的是一個真實的外洩
+
+    B 起了一個真的 uvicorn 打一次請求：
+    ```
+    INFO: 127.0.0.1:34378 - "GET /api/map/points?sources=tenders
+          &lat=24.1657&lon=120.6402&accuracy=35 HTTP/1.1" 200 OK
+    ```
+    正式機的 `autostart.bat` 是 `uvicorn … --log-level info >> logs\server.log`
+    ⇒ **每按一次「使用我的位置」，那個人當下的座標就被追加進一個永久檔案。**
+
+    🔑 **而我的 G9 三張表全是乾淨的** —— 三個想得到的出口都堵了，
+    **漏的是沒有人列進清單的那一個，而它不在我們的程式碼裡，在 web server 裡。**
+    📌 **我們列的是「我們會寫入的地方」，而資料外洩不需要我們寫入，
+    只需要有人記錄。**
+
+    ⚠️ **訊息要指路**：只回「參數不合法」的話，下一個人（或下一個我）
+    會以為是格式寫錯，然後**把座標換個寫法再塞進 query string 一次**。
+    🔑 **一個不說明理由的拒絕，擋得住這一次，擋不住下一次。**
+    """
+    hdr = _auth(client, make_user)
+    lat, lon = USER_TAIPEI
+    r = _ask(client, hdr, query=f"lat={lat}&lon={lon}&accuracy=42",
+             expect=422)
+    body = r.text
+    assert POSITION_HEADER in body, (
+        f"422 的訊息裡沒有提到 `{POSITION_HEADER}`：{body[:300]}\n"
+        "⇒ 要指路，否則下一個人會以為只是格式寫錯，再塞一次。"
+    )
+
+
+@pytest.mark.parametrize("query", ["lat=25.03", "lon=121.56", "accuracy=42"])
+def test_g10b_even_one_of_them_in_the_query_string_is_refused(
+        client, make_user, geo_enabled, office, tenders, query):
+    """🔴 G10b：**三個裡任何一個**出現在 query string 都要 422。
+
+    ⚠️ 只擋「三個都齊」的話，`?lat=…&lon=…` 這種寫法照樣會被 uvicorn 記下來
+    —— 而**兩個座標就足以定位一個人**，`accuracy` 本來就不是敏感的那一部分。
+    🔑 判準要對齊**外洩的條件**，不是對齊**功能的條件**。
+    """
+    hdr = _auth(client, make_user)
+    _ask(client, hdr, query=query, expect=422)
+
+
+def test_g11_the_same_values_in_the_header_work_fine(
+        client, make_user, geo_enabled, office, tenders):
+    """🔴🔴 G11 反向控制：**同一組值放在標頭裡要正常運作。**
+
+    ☠️ 少了這一半，一個「**兩條路都擋**」的實作會讓 G10 全綠 ——
+    而那在畫面上是「按了『使用我的位置』什麼都沒發生」，
+    **使用者會以為是瀏覽器不給權限**（而那正是 V1～V3 在分辨的三個成因，
+    這下又多一個假的）。
+
+    📌 這一題與 G1 的差別：G1 驗的是**欄位齊不齊**，
+    這一題驗的是**「走標頭這條路真的通」** —— 兩題會在不同的修法下變紅。
+    """
+    hdr = _auth(client, make_user)
+    lat, lon = USER_TAIPEI
+    body = _ask(client, hdr, position=_pos((lat, lon)))
+    assert body.get("userAccuracyM") == 42, (
+        f"標頭 `{POSITION_HEADER}` 帶了合法的值，而端點沒有收下："
+        f"userAccuracyM={body.get('userAccuracyM')!r}"
+    )
+    assert any(p.get("distanceFromUserKm") is not None
+               for p in body["points"]), (
+        "標頭收下了，但沒有任何點算出定位距離"
     )
