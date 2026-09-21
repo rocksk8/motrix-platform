@@ -7,6 +7,7 @@ import shutil
 import time
 import logging
 import threading
+import contextlib
 import contextvars
 from datetime import datetime, date
 
@@ -151,6 +152,37 @@ def _connect(path: str):
 
 def get_db():
     return _connect(DEMO_DB_PATH if _demo_mode.get() else DB_PATH)
+
+
+@contextlib.contextmanager
+def db_conn():
+    """`with db_conn() as conn:` —— **一個地方保證關，呼叫端不必各自記得。**
+
+    ## 為什麼是它而不是九個 `try/finally`
+
+    實測 `routers/dashboard.py` 九支端點：
+    ```
+    正常路徑就洩漏   2 支（dashboard_monthly／dashboard_expenses_monthly）
+    例外路徑會洩漏   9 支（全部——沒有任何一支有 finally）
+    ```
+    🔑 加九個 `try/finally` 對「這會不會讓**第十支**不可能出事」的答案是
+    「會少一點」⇒ **那還是在修結果。**
+    ⇒ 而那七支「看起來成對」的最危險：**它們在正常路徑下是對的**，
+    所以任何「數 open 與 close」的檢查都會說它們沒問題。
+
+    ## ⚠️ 範圍刻意只到 `dashboard.py`
+    全庫有 426/562 處是同一個寫法，那個裁定過是**房子風格**，不在這一輪動。
+    `dashboard.py` 是例外的理由很具體：**它是首頁端點，七天 1,044 次，全站最高。**
+
+    📌 這不是「唯一正確的寫法」——`try/finally` 與 `contextlib.closing` 在行為上等價。
+    **守門釘的是「連線有沒有被關」，不是「你用哪一種寫法」**，
+    所以日後有人用別的方式重寫其中一支，那些題目應該照樣綠。
+    """
+    conn = get_db()
+    try:
+        yield conn
+    finally:
+        conn.close()
 
 
 def get_demo_db():

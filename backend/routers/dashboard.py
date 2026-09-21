@@ -8,7 +8,7 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Header, Query
 
-from db import get_db
+from db import db_conn, get_db
 from helpers import (_require_user, _warranty_expiry, payment_item_amounts, norm_at,
                      case_extra_expenses, user_has_module, can_see_financial,
                      require_any_module)
@@ -102,22 +102,21 @@ def dashboard_stats(department_id: Optional[int] = Query(None), authorization: s
     mods = json.loads(u.get("modules") or "[]") if isinstance(u.get("modules"), str) else (u.get("modules") or [])
     can_finance   = role in ("superadmin", "admin") or "finance" in mods
     can_quotation = role in ("superadmin", "admin", "sales") or "quotation" in mods
-    conn = get_db()
-    rows = conn.execute("""
-        SELECT quote_no, status, customer_name, project_name, total, pretax, quote_date, sales_person,
-               sales_person_id,
-               net_margin_pct, direct_margin_pct,
-               COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') as deal_tag,
-               json_extract(data_json,'$.caseRecord')           as case_record_json,
-               json_extract(data_json,'$.approval')             as approval_json,
-               json_extract(data_json,'$.settlement.summary')   as settlement_summary_json
-        FROM quotations ORDER BY id DESC
-    """).fetchall()
-    cust_count = conn.execute("SELECT COUNT(*) FROM customers").fetchone()[0]
-    if department_id:
-        dept_by_user = {r["id"]: r["department_id"] for r in conn.execute("SELECT id, department_id FROM users").fetchall()}
-        rows = [r for r in rows if r["sales_person_id"] and dept_by_user.get(r["sales_person_id"]) == department_id]
-    conn.close()
+    with db_conn() as conn:
+        rows = conn.execute("""
+            SELECT quote_no, status, customer_name, project_name, total, pretax, quote_date, sales_person,
+                   sales_person_id,
+                   net_margin_pct, direct_margin_pct,
+                   COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') as deal_tag,
+                   json_extract(data_json,'$.caseRecord')           as case_record_json,
+                   json_extract(data_json,'$.approval')             as approval_json,
+                   json_extract(data_json,'$.settlement.summary')   as settlement_summary_json
+            FROM quotations ORDER BY id DESC
+        """).fetchall()
+        cust_count = conn.execute("SELECT COUNT(*) FROM customers").fetchone()[0]
+        if department_id:
+            dept_by_user = {r["id"]: r["department_id"] for r in conn.execute("SELECT id, department_id FROM users").fetchall()}
+            rows = [r for r in rows if r["sales_person_id"] and dept_by_user.get(r["sales_person_id"]) == department_id]
 
     today = date.today()
     total_count   = len(rows)
@@ -296,14 +295,13 @@ def dashboard_stats(department_id: Optional[int] = Query(None), authorization: s
             pass
 
     # ── Project summary（案件/專案管理延伸，2026-08-22）：依狀態分組計數，可依部門篩選 ──
-    proj_conn = get_db()
-    proj_sql  = "SELECT status FROM projects"
-    proj_args = ()
-    if department_id:
-        proj_sql  += " WHERE department_id=?"
-        proj_args  = (department_id,)
-    proj_rows = proj_conn.execute(proj_sql, proj_args).fetchall()
-    proj_conn.close()
+    with db_conn() as proj_conn:
+        proj_sql  = "SELECT status FROM projects"
+        proj_args = ()
+        if department_id:
+            proj_sql  += " WHERE department_id=?"
+            proj_args  = (department_id,)
+        proj_rows = proj_conn.execute(proj_sql, proj_args).fetchall()
     project_summary = {}
     for pr in proj_rows:
         project_summary[pr["status"]] = project_summary.get(pr["status"], 0) + 1
@@ -347,78 +345,78 @@ def dashboard_monthly(department_id: Optional[int] = Query(None), authorization:
     mods = json.loads(u.get("modules") or "[]") if isinstance(u.get("modules"), str) else (u.get("modules") or [])
     if role not in ("superadmin", "admin") and "finance" not in mods:
         return {"items": []}
-    conn = get_db()
-    # 部門篩選邏輯（2026-09-09 新增）
-    dept_by_user = {}
-    if department_id:
-        dept_by_user = {r["id"]: r["department_id"] for r in conn.execute("SELECT id, department_id FROM users").fetchall()}
-    # 依實際收款進度與時間分組（2026-08-24，第二輪修正）：使用者指出「銷售收入
-    # 趨勢」該反映真正收到錢的月份，不是案件成交（dealTag 轉為已成案，第一輪
-    # 用 dealWonAt 修正的邏輯）的月份——業務簽單跟財務實際收款常常不同月份，
-    # 同一張報價單也常分好幾期款項陸續收款，理當各自算進實際收到的那個月。
-    # 改用 caseRecord.payment.items[]（案件管理頁「款項明細」，每期有
-    # received/receivedAt/actualAmount）逐筆展開，只計入 received=true 的款項，
-    # 依 receivedAt 分組；金額優先用使用者填的 actualAmount（實收金額，含稅／
-    # 可能因手續費打折等因素跟應收金額不同），未填則退回 payment_item_amounts()
-    # 換算出的應收金額。跟「應收款狀態」圓環（本檔案上方 recv_received 那段）
-    # 共用同一套換算邏輯，避免兩處分開實作、算出不一致的數字。
-    rows = conn.execute(
-        "SELECT total, pretax, sales_person_id, data_json FROM quotations WHERE "
-        "COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') IN ('已成案','已結案')"
-    ).fetchall()
+    with db_conn() as conn:
+        # 部門篩選邏輯（2026-09-09 新增）
+        dept_by_user = {}
+        if department_id:
+            dept_by_user = {r["id"]: r["department_id"] for r in conn.execute("SELECT id, department_id FROM users").fetchall()}
+        # 依實際收款進度與時間分組（2026-08-24，第二輪修正）：使用者指出「銷售收入
+        # 趨勢」該反映真正收到錢的月份，不是案件成交（dealTag 轉為已成案，第一輪
+        # 用 dealWonAt 修正的邏輯）的月份——業務簽單跟財務實際收款常常不同月份，
+        # 同一張報價單也常分好幾期款項陸續收款，理當各自算進實際收到的那個月。
+        # 改用 caseRecord.payment.items[]（案件管理頁「款項明細」，每期有
+        # received/receivedAt/actualAmount）逐筆展開，只計入 received=true 的款項，
+        # 依 receivedAt 分組；金額優先用使用者填的 actualAmount（實收金額，含稅／
+        # 可能因手續費打折等因素跟應收金額不同），未填則退回 payment_item_amounts()
+        # 換算出的應收金額。跟「應收款狀態」圓環（本檔案上方 recv_received 那段）
+        # 共用同一套換算邏輯，避免兩處分開實作、算出不一致的數字。
+        rows = conn.execute(
+            "SELECT total, pretax, sales_person_id, data_json FROM quotations WHERE "
+            "COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') IN ('已成案','已結案')"
+        ).fetchall()
 
-    monthly_amount, monthly_count, monthly_fee = {}, {}, {}
-    for r in rows:
-        # 部門篩選
-        if department_id and dept_by_user.get(r["sales_person_id"]) != department_id:
-            continue
-        try:
-            data = json.loads(r["data_json"] or "{}")
-        except Exception:
-            continue
-        pay_items = ((data.get("caseRecord") or {}).get("payment") or {}).get("items") or []
-        if not pay_items:
-            continue
-        amounts = payment_item_amounts(r["total"] or 0, pay_items, r["pretax"])
-        for i, p in enumerate(pay_items):
-            if not p.get("received"):
+        monthly_amount, monthly_count, monthly_fee = {}, {}, {}
+        for r in rows:
+            # 部門篩選
+            if department_id and dept_by_user.get(r["sales_person_id"]) != department_id:
                 continue
-            mo = (p.get("receivedAt") or "")[:7]
-            if not mo:
+            try:
+                data = json.loads(r["data_json"] or "{}")
+            except Exception:
                 continue
-            act_amt = p.get("actualAmount")
-            amt = act_amt if act_amt is not None else amounts[i]
-            monthly_amount[mo] = monthly_amount.get(mo, 0) + amt
-            monthly_count[mo]  = monthly_count.get(mo, 0) + 1
-            monthly_fee[mo]    = monthly_fee.get(mo, 0) + (p.get("feeAmount") or 0)
+            pay_items = ((data.get("caseRecord") or {}).get("payment") or {}).get("items") or []
+            if not pay_items:
+                continue
+            amounts = payment_item_amounts(r["total"] or 0, pay_items, r["pretax"])
+            for i, p in enumerate(pay_items):
+                if not p.get("received"):
+                    continue
+                mo = (p.get("receivedAt") or "")[:7]
+                if not mo:
+                    continue
+                act_amt = p.get("actualAmount")
+                amt = act_amt if act_amt is not None else amounts[i]
+                monthly_amount[mo] = monthly_amount.get(mo, 0) + amt
+                monthly_count[mo]  = monthly_count.get(mo, 0) + 1
+                monthly_fee[mo]    = monthly_fee.get(mo, 0) + (p.get("feeAmount") or 0)
 
-    today = date.today()
-    month_list = []
-    for i in range(11, -1, -1):
-        m = today.month - i
-        y = today.year
-        while m <= 0:
-            m += 12
-            y -= 1
-        month_list.append(f"{y:04d}-{m:02d}")
+        today = date.today()
+        month_list = []
+        for i in range(11, -1, -1):
+            m = today.month - i
+            y = today.year
+            while m <= 0:
+                m += 12
+                y -= 1
+            month_list.append(f"{y:04d}-{m:02d}")
 
-    items = []
-    for mo in month_list:
-        label = f"{int(mo[5:7])}月"
-        gross = monthly_amount.get(mo, 0)
-        fee   = monthly_fee.get(mo, 0)
-        items.append({
-            "month": mo, "label": label,
-            "amount": gross,
-            "count":  monthly_count.get(mo, 0),
-            # 手續費/扣款＋淨收（首頁「當月實收」圓餅圖用，2026-08-25）：跟
-            # amount 共用同一組 receivedAt 篩選過的款項明細，保證兩者加總對得
-            # 起來，不是兩套各自平行的計算。
-            "fee": fee,
-            "net": gross - fee,
-        })
+        items = []
+        for mo in month_list:
+            label = f"{int(mo[5:7])}月"
+            gross = monthly_amount.get(mo, 0)
+            fee   = monthly_fee.get(mo, 0)
+            items.append({
+                "month": mo, "label": label,
+                "amount": gross,
+                "count":  monthly_count.get(mo, 0),
+                # 手續費/扣款＋淨收（首頁「當月實收」圓餅圖用，2026-08-25）：跟
+                # amount 共用同一組 receivedAt 篩選過的款項明細，保證兩者加總對得
+                # 起來，不是兩套各自平行的計算。
+                "fee": fee,
+                "net": gross - fee,
+            })
 
-    return {"items": items}
+        return {"items": items}
 
 
 # 設備類 parts.category（進貨成本歸「設備」；線材配件／其他／無法對應 part_no 一律歸「料件」）
@@ -437,83 +435,82 @@ def dashboard_expenses_monthly(department_id: Optional[int] = Query(None), autho
     if role not in ("superadmin", "admin") and "finance" not in mods:
         return {"items": [], "otherBreakdown": {}}
 
-    conn = get_db()
-    # 部門篩選邏輯（2026-09-09 新增）
-    dept_by_quote = {}
-    if department_id:
-        dept_by_user = {r["id"]: r["department_id"] for r in conn.execute("SELECT id, department_id FROM users").fetchall()}
-        dept_by_quote = {
-            r["quote_no"]: dept_by_user.get(r["sales_person_id"])
-            for r in conn.execute("SELECT quote_no, sales_person_id FROM quotations").fetchall()
-        }
+    with db_conn() as conn:
+        # 部門篩選邏輯（2026-09-09 新增）
+        dept_by_quote = {}
+        if department_id:
+            dept_by_user = {r["id"]: r["department_id"] for r in conn.execute("SELECT id, department_id FROM users").fetchall()}
+            dept_by_quote = {
+                r["quote_no"]: dept_by_user.get(r["sales_person_id"])
+                for r in conn.execute("SELECT quote_no, sales_person_id FROM quotations").fetchall()
+            }
 
-    def _quote_in_department(quote_no: str) -> bool:
-        if not department_id:
-            return True
-        return bool(quote_no) and dept_by_quote.get(quote_no) == department_id
+        def _quote_in_department(quote_no: str) -> bool:
+            if not department_id:
+                return True
+            return bool(quote_no) and dept_by_quote.get(quote_no) == department_id
 
-    today = date.today()
-    month_list = []
-    for i in range(11, -1, -1):
-        m = today.month - i
-        y = today.year
-        while m <= 0:
-            m += 12
-            y -= 1
-        month_list.append(f"{y:04d}-{m:02d}")
-    month_set = set(month_list)
+        today = date.today()
+        month_list = []
+        for i in range(11, -1, -1):
+            m = today.month - i
+            y = today.year
+            while m <= 0:
+                m += 12
+                y -= 1
+            month_list.append(f"{y:04d}-{m:02d}")
+        month_set = set(month_list)
 
-    expenses = {mo: {"contractor": 0.0, "equipment": 0.0, "material": 0.0, "other": 0.0} for mo in month_list}
-    other_breakdown = {mo: {} for mo in month_list}
+        expenses = {mo: {"contractor": 0.0, "equipment": 0.0, "material": 0.0, "other": 0.0} for mo in month_list}
+        other_breakdown = {mo: {} for mo in month_list}
 
-    conn = get_db()
+    with db_conn() as conn:
 
-    # ── 承攬商派發 ───────────────────────────────────────────────────────────
-    disp_rows = conn.execute(
-        "SELECT * FROM contractor_dispatches WHERE status != 'cancelled'"
-    ).fetchall()
-    for r in disp_rows:
-        mo = (r["dispatch_date"] or "")[:7]
-        if mo not in expenses or not _quote_in_department(r["quote_no"]):
-            continue
-        expenses[mo]["contractor"] += _dispatch_row(r)["grandTotal"]
-
-    # ── 料件 / 設備進貨成本 ──────────────────────────────────────────────────
-    stock_rows = conn.execute("""
-        SELECT s.created_at AS created_at, s.cost AS cost, s.quote_no, p.category AS category
-        FROM stock_items s LEFT JOIN parts p ON p.part_no = s.part_no
-        WHERE s.status != 'void'
-    """).fetchall()
-    for r in stock_rows:
-        mo = (r["created_at"] or "")[:7]
-        if mo not in expenses or not _quote_in_department(r["quote_no"]):
-            continue
-        bucket = "equipment" if r["category"] in _EQUIPMENT_PART_CATEGORIES else "material"
-        expenses[mo][bucket] += float(r["cost"] or 0)
-
-    # ── 其他支出（精算「額外支出」逐筆）─────────────────────────────────────
-    # 2026-09-09 修：這裡原本有兩個問題，(a) 只撈 settlement.status='finalized'
-    # 的案件，草稿階段填的額外支出完全不算；(b) 一律用精算完結時間歸月，連
-    # reports.py 2026-09-02 已經改用 expenseDate（憑證日期）的修正都沒同步過來，
-    # 所以首頁「本月支出」跟營運報表的同一個數字本來就對不起來。兩處統一改用
-    # helpers.case_extra_expenses()。
-    # 2026-09-11：額外支出搬到 case_extra_expenses 表（migration v75），改成直接
-    # 從那張表取有資料的案件，不再掃 data_json 的 json_extract。conn 也因此必須
-    # 撐到迴圈結束才關——新的 helper 要讀表。
-    quote_rows = conn.execute(
-        "SELECT DISTINCT quote_no FROM case_extra_expenses"
-    ).fetchall()
-    for r in quote_rows:
-        if not _quote_in_department(r["quote_no"]):
-            continue
-        for ex in case_extra_expenses(conn, r["quote_no"]):
-            if ex["month"] not in expenses:
+        # ── 承攬商派發 ───────────────────────────────────────────────────────────
+        disp_rows = conn.execute(
+            "SELECT * FROM contractor_dispatches WHERE status != 'cancelled'"
+        ).fetchall()
+        for r in disp_rows:
+            mo = (r["dispatch_date"] or "")[:7]
+            if mo not in expenses or not _quote_in_department(r["quote_no"]):
                 continue
-            expenses[ex["month"]]["other"] += ex["cost"]
-            other_breakdown[ex["month"]][ex["category"]] = (
-                other_breakdown[ex["month"]].get(ex["category"], 0) + ex["cost"]
-            )
-    conn.close()
+            expenses[mo]["contractor"] += _dispatch_row(r)["grandTotal"]
+
+        # ── 料件 / 設備進貨成本 ──────────────────────────────────────────────────
+        stock_rows = conn.execute("""
+            SELECT s.created_at AS created_at, s.cost AS cost, s.quote_no, p.category AS category
+            FROM stock_items s LEFT JOIN parts p ON p.part_no = s.part_no
+            WHERE s.status != 'void'
+        """).fetchall()
+        for r in stock_rows:
+            mo = (r["created_at"] or "")[:7]
+            if mo not in expenses or not _quote_in_department(r["quote_no"]):
+                continue
+            bucket = "equipment" if r["category"] in _EQUIPMENT_PART_CATEGORIES else "material"
+            expenses[mo][bucket] += float(r["cost"] or 0)
+
+        # ── 其他支出（精算「額外支出」逐筆）─────────────────────────────────────
+        # 2026-09-09 修：這裡原本有兩個問題，(a) 只撈 settlement.status='finalized'
+        # 的案件，草稿階段填的額外支出完全不算；(b) 一律用精算完結時間歸月，連
+        # reports.py 2026-09-02 已經改用 expenseDate（憑證日期）的修正都沒同步過來，
+        # 所以首頁「本月支出」跟營運報表的同一個數字本來就對不起來。兩處統一改用
+        # helpers.case_extra_expenses()。
+        # 2026-09-11：額外支出搬到 case_extra_expenses 表（migration v75），改成直接
+        # 從那張表取有資料的案件，不再掃 data_json 的 json_extract。conn 也因此必須
+        # 撐到迴圈結束才關——新的 helper 要讀表。
+        quote_rows = conn.execute(
+            "SELECT DISTINCT quote_no FROM case_extra_expenses"
+        ).fetchall()
+        for r in quote_rows:
+            if not _quote_in_department(r["quote_no"]):
+                continue
+            for ex in case_extra_expenses(conn, r["quote_no"]):
+                if ex["month"] not in expenses:
+                    continue
+                expenses[ex["month"]]["other"] += ex["cost"]
+                other_breakdown[ex["month"]][ex["category"]] = (
+                    other_breakdown[ex["month"]].get(ex["category"], 0) + ex["cost"]
+                )
 
     items = []
     for mo in month_list:
@@ -546,20 +543,19 @@ def list_devices(
 ):
     user = _require_user(authorization)
     require_any_module(user, ('equipment', 'case_manage'), "設備登載／保固")
-    conn = get_db()
-    sql = """
-        SELECT quote_no, customer_name, project_name,
-               COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '')    as deal_tag,
-               json_extract(data_json,'$.caseRecord') as case_record_json
-        FROM quotations
-        WHERE json_extract(data_json,'$.caseRecord') IS NOT NULL
-    """
-    params = []
-    if deal_tag:
-        sql += " AND COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '')=?"
-        params.append(deal_tag)
-    rows = conn.execute(sql, params).fetchall()
-    conn.close()
+    with db_conn() as conn:
+        sql = """
+            SELECT quote_no, customer_name, project_name,
+                   COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '')    as deal_tag,
+                   json_extract(data_json,'$.caseRecord') as case_record_json
+            FROM quotations
+            WHERE json_extract(data_json,'$.caseRecord') IS NOT NULL
+        """
+        params = []
+        if deal_tag:
+            sql += " AND COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '')=?"
+            params.append(deal_tag)
+        rows = conn.execute(sql, params).fetchall()
 
     today   = date.today()
     devices = []
@@ -624,23 +620,22 @@ def list_sales_orders(authorization: str = Header(None)):
         raise HTTPException(403, "僅管理員或具『應收帳款／銷售訂單』模組的使用者可查閱")
     if not can_see_financial(user):
         raise HTTPException(403, "此帳號沒有檢視財務金額的權限（需要「財務金額可視」模組）")
-    conn = get_db()
-    rows = conn.execute("""
-        SELECT quote_no, customer_name, project_name, total, pretax, quote_date, sales_person,
-               net_margin_pct,
-               COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '')         AS deal_tag,
-               json_extract(data_json,'$.caseRecord')      AS case_record_json,
-               json_extract(data_json,'$.deliveryTerms')   AS delivery_terms,
-               json_extract(data_json,'$.deliveryAddress') AS delivery_address,
-               (SELECT COUNT(*) FROM case_stages cs WHERE cs.quote_no = quotations.quote_no)
-                   AS stages_count,
-               (SELECT COUNT(*) FROM case_stages cs WHERE cs.quote_no = quotations.quote_no AND cs.done=1)
-                   AS stages_done
-        FROM quotations
-        WHERE COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') IN ('已成案','已結案')
-        ORDER BY quote_date DESC
-    """).fetchall()
-    conn.close()
+    with db_conn() as conn:
+        rows = conn.execute("""
+            SELECT quote_no, customer_name, project_name, total, pretax, quote_date, sales_person,
+                   net_margin_pct,
+                   COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '')         AS deal_tag,
+                   json_extract(data_json,'$.caseRecord')      AS case_record_json,
+                   json_extract(data_json,'$.deliveryTerms')   AS delivery_terms,
+                   json_extract(data_json,'$.deliveryAddress') AS delivery_address,
+                   (SELECT COUNT(*) FROM case_stages cs WHERE cs.quote_no = quotations.quote_no)
+                       AS stages_count,
+                   (SELECT COUNT(*) FROM case_stages cs WHERE cs.quote_no = quotations.quote_no AND cs.done=1)
+                       AS stages_done
+            FROM quotations
+            WHERE COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') IN ('已成案','已結案')
+            ORDER BY quote_date DESC
+        """).fetchall()
 
     items = []
     for r in rows:
@@ -693,16 +688,15 @@ def dashboard_funnel(authorization: str = Header(None)):
     if not can_quotation:
         return {"funnel": {}, "followUpQuotes": [], "expiringQuotes": []}
 
-    conn = get_db()
-    rows = conn.execute("""
-        SELECT quote_no, status, customer_name, total, quote_date, sales_person,
-               COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') AS deal_tag,
-               json_extract(data_json,'$.validDays') AS valid_days
-        FROM quotations
-        WHERE status NOT IN ('草稿')
-        ORDER BY quote_date DESC
-    """).fetchall()
-    conn.close()
+    with db_conn() as conn:
+        rows = conn.execute("""
+            SELECT quote_no, status, customer_name, total, quote_date, sales_person,
+                   COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') AS deal_tag,
+                   json_extract(data_json,'$.validDays') AS valid_days
+            FROM quotations
+            WHERE status NOT IN ('草稿')
+            ORDER BY quote_date DESC
+        """).fetchall()
 
     today = date.today()
     total_submitted = 0
@@ -793,12 +787,11 @@ def dashboard_ops_alerts(authorization: str = Header(None)):
     # 顯示的件數跟通知系統對「停滯」的認定兜不起來。
     dev_stale = []
     if can_dev_crm:
-        conn = get_db()
-        rows = conn.execute("""
-            SELECT id, case_name, customer_name, sales_persons, planners, created_by, updated_at
-            FROM dev_cases WHERE is_deleted=0 AND status='洽談中'
-        """).fetchall()
-        conn.close()
+        with db_conn() as conn:
+            rows = conn.execute("""
+                SELECT id, case_name, customer_name, sales_persons, planners, created_by, updated_at
+                FROM dev_cases WHERE is_deleted=0 AND status='洽談中'
+            """).fetchall()
         for r in rows:
             if not _can_access_case(u, r):
                 continue
@@ -817,13 +810,12 @@ def dashboard_ops_alerts(authorization: str = Header(None)):
                 })
         dev_stale.sort(key=lambda x: x["daysSince"], reverse=True)
 
-    conn = get_db()
-    rows = conn.execute("""
-        SELECT note_no, quote_no, status, customer_name, project_name, updated_at, data_json
-        FROM shipping_notes
-        WHERE status IN ('待審核','簽核中')
-    """).fetchall()
-    conn.close()
+    with db_conn() as conn:
+        rows = conn.execute("""
+            SELECT note_no, quote_no, status, customer_name, project_name, updated_at, data_json
+            FROM shipping_notes
+            WHERE status IN ('待審核','簽核中')
+        """).fetchall()
 
     my_username = u["username"]
     shipping_waiting_for_me = 0
@@ -873,16 +865,15 @@ def list_materials_summary(
 ):
     user = _require_user(authorization)
     require_any_module(user, ('procurement', 'case_manage'), "供應商／料號／採購")
-    conn = get_db()
-    rows = conn.execute("""
-        SELECT quote_no, customer_name,
-               COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '')    AS deal_tag,
-               json_extract(data_json,'$.caseRecord') AS case_record_json
-        FROM quotations
-        WHERE json_extract(data_json,'$.caseRecord') IS NOT NULL
-        ORDER BY quote_date DESC
-    """).fetchall()
-    conn.close()
+    with db_conn() as conn:
+        rows = conn.execute("""
+            SELECT quote_no, customer_name,
+                   COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '')    AS deal_tag,
+                   json_extract(data_json,'$.caseRecord') AS case_record_json
+            FROM quotations
+            WHERE json_extract(data_json,'$.caseRecord') IS NOT NULL
+            ORDER BY quote_date DESC
+        """).fetchall()
 
     items = []
     for r in rows:
@@ -970,188 +961,187 @@ def dashboard_activity_feed(limit: int = Query(30, ge=1, le=100),
     can_quotation = role in ("superadmin", "admin", "sales") or "quotation" in mods
     can_dev_crm   = is_admin or "dev_crm" in mods
 
-    conn = get_db()
-    items = []
+    with db_conn() as conn:
+        items = []
 
-    def _visible_to_sales(row) -> bool:
-        """比照 §3.4 報價列表過濾規則：sales_person_id=自己id OR
-        （尚未回填 sales_person_id 的舊資料）sales_person(顯示名稱文字)=自己"""
-        if is_admin:
-            return True
-        return row["sales_person_id"] == u["id"] or (
-            row["sales_person_id"] is None and row["sales_person"] == u["display_name"]
-        )
+        def _visible_to_sales(row) -> bool:
+            """比照 §3.4 報價列表過濾規則：sales_person_id=自己id OR
+            （尚未回填 sales_person_id 的舊資料）sales_person(顯示名稱文字)=自己"""
+            if is_admin:
+                return True
+            return row["sales_person_id"] == u["id"] or (
+                row["sales_person_id"] is None and row["sales_person"] == u["display_name"]
+            )
 
-    dept_by_user = {}
-    if department_id:
-        dept_by_user = {r["id"]: r["department_id"] for r in conn.execute("SELECT id, department_id FROM users").fetchall()}
+        dept_by_user = {}
+        if department_id:
+            dept_by_user = {r["id"]: r["department_id"] for r in conn.execute("SELECT id, department_id FROM users").fetchall()}
 
-    def _in_department(row) -> bool:
-        if not department_id:
-            return True
-        return bool(row["sales_person_id"]) and dept_by_user.get(row["sales_person_id"]) == department_id
+        def _in_department(row) -> bool:
+            if not department_id:
+                return True
+            return bool(row["sales_person_id"]) and dept_by_user.get(row["sales_person_id"]) == department_id
 
-    # 1. 案件留言板 comments（quote_no 範圍比照報價單可視權限）
-    if can_quotation:
-        rows = conn.execute("""
-            SELECT cu.id, cu.quote_no, cu.author, cu.content, cu.created_at,
-                   q.customer_name, q.sales_person_id, q.sales_person, du.display_name
-            FROM case_updates cu
-            LEFT JOIN quotations q ON q.quote_no = cu.quote_no
-            LEFT JOIN users du ON du.username = cu.author
-            ORDER BY cu.created_at DESC LIMIT 40
+        # 1. 案件留言板 comments（quote_no 範圍比照報價單可視權限）
+        if can_quotation:
+            rows = conn.execute("""
+                SELECT cu.id, cu.quote_no, cu.author, cu.content, cu.created_at,
+                       q.customer_name, q.sales_person_id, q.sales_person, du.display_name
+                FROM case_updates cu
+                LEFT JOIN quotations q ON q.quote_no = cu.quote_no
+                LEFT JOIN users du ON du.username = cu.author
+                ORDER BY cu.created_at DESC LIMIT 40
+            """).fetchall()
+            for r in rows:
+                if not _visible_to_sales(r) or not _in_department(r):
+                    continue
+                items.append({
+                    "id": f"cu_{r['id']}", "source": "comment", "moduleLabel": "案件留言板",
+                    "actor": r["display_name"] or r["author"], "actionLabel": "新增留言",
+                    "itemLabel": r["customer_name"] or r["quote_no"] or "", "detail": _trunc(r["content"]),
+                    "link": f"case-management.html?q={r['quote_no']}", "at": norm_at(r["created_at"]),
+                })
+
+        # 2. 工作日誌（非 admin 只看自己的，比照 §3.4 編輯/刪除權限的既有精神）
+        wl_rows = conn.execute("""
+            SELECT w.id, w.log_date, w.content, w.created_at, u.id AS uid, u.display_name, u.username
+            FROM work_logs w LEFT JOIN users u ON u.id = w.user_id
+            ORDER BY w.created_at DESC LIMIT 40
         """).fetchall()
-        for r in rows:
-            if not _visible_to_sales(r) or not _in_department(r):
+        for r in wl_rows:
+            if not is_admin and r["uid"] != u["id"]:
                 continue
             items.append({
-                "id": f"cu_{r['id']}", "source": "comment", "moduleLabel": "案件留言板",
-                "actor": r["display_name"] or r["author"], "actionLabel": "新增留言",
-                "itemLabel": r["customer_name"] or r["quote_no"] or "", "detail": _trunc(r["content"]),
-                "link": f"case-management.html?q={r['quote_no']}", "at": norm_at(r["created_at"]),
+                "id": f"wl_{r['id']}", "source": "work_log", "moduleLabel": "工作日誌",
+                "actor": r["display_name"] or r["username"] or "", "actionLabel": "新增工作日誌",
+                "itemLabel": r["log_date"] or "", "detail": _trunc(r["content"]),
+                "link": "work-log.html", "at": norm_at(r["created_at"]),
             })
 
-    # 2. 工作日誌（非 admin 只看自己的，比照 §3.4 編輯/刪除權限的既有精神）
-    wl_rows = conn.execute("""
-        SELECT w.id, w.log_date, w.content, w.created_at, u.id AS uid, u.display_name, u.username
-        FROM work_logs w LEFT JOIN users u ON u.id = w.user_id
-        ORDER BY w.created_at DESC LIMIT 40
-    """).fetchall()
-    for r in wl_rows:
-        if not is_admin and r["uid"] != u["id"]:
-            continue
-        items.append({
-            "id": f"wl_{r['id']}", "source": "work_log", "moduleLabel": "工作日誌",
-            "actor": r["display_name"] or r["username"] or "", "actionLabel": "新增工作日誌",
-            "itemLabel": r["log_date"] or "", "detail": _trunc(r["content"]),
-            "link": "work-log.html", "at": norm_at(r["created_at"]),
-        })
+        # 3. 業務開發：開發記錄 + 案件建立／狀態異動／轉換（沿用 dev_crm._can_access_case 逐筆過濾）
+        if can_dev_crm:
+            dc_map = {r["id"]: r for r in conn.execute(
+                "SELECT id, case_name, customer_name, sales_persons, planners, created_by "
+                "FROM dev_cases WHERE is_deleted=0"
+            ).fetchall()}
 
-    # 3. 業務開發：開發記錄 + 案件建立／狀態異動／轉換（沿用 dev_crm._can_access_case 逐筆過濾）
-    if can_dev_crm:
-        dc_map = {r["id"]: r for r in conn.execute(
-            "SELECT id, case_name, customer_name, sales_persons, planners, created_by "
-            "FROM dev_cases WHERE is_deleted=0"
-        ).fetchall()}
+            dl_rows = conn.execute("""
+                SELECT dl.id, dl.case_id, dl.log_date, dl.channel, dl.content, dl.created_at,
+                       lu.display_name AS log_display, lu.username AS log_username
+                FROM dev_logs dl LEFT JOIN users lu ON lu.id = dl.log_by
+                WHERE dl.needs_approval=0
+                ORDER BY dl.created_at DESC LIMIT 40
+            """).fetchall()
+            for r in dl_rows:
+                dc = dc_map.get(r["case_id"])
+                if not dc or not _can_access_case(u, dc):
+                    continue
+                items.append({
+                    "id": f"dl_{r['id']}", "source": "dev_log", "moduleLabel": "業務開發",
+                    "actor": r["log_display"] or r["log_username"] or "",
+                    "actionLabel": f"新增開發記錄（{r['channel']}）" if r["channel"] else "新增開發記錄",
+                    "itemLabel": dc["case_name"] or dc["customer_name"] or "",
+                    "detail": _trunc(r["content"]), "link": "dev-crm.html", "at": norm_at(r["created_at"]),
+                })
 
-        dl_rows = conn.execute("""
-            SELECT dl.id, dl.case_id, dl.log_date, dl.channel, dl.content, dl.created_at,
-                   lu.display_name AS log_display, lu.username AS log_username
-            FROM dev_logs dl LEFT JOIN users lu ON lu.id = dl.log_by
-            WHERE dl.needs_approval=0
-            ORDER BY dl.created_at DESC LIMIT 40
+            ph = ",".join("?" * len(_DEV_CASE_ACTION_LABELS))
+            al_rows = conn.execute(f"""
+                SELECT id, at, username, display_name, action, target_id, target_label
+                FROM audit_log WHERE target_type='dev_case' AND action IN ({ph})
+                ORDER BY at DESC LIMIT 40
+            """, list(_DEV_CASE_ACTION_LABELS.keys())).fetchall()
+            for r in al_rows:
+                try:
+                    case_id = int(r["target_id"])
+                except (TypeError, ValueError):
+                    continue
+                dc = dc_map.get(case_id)
+                if not dc or not _can_access_case(u, dc):
+                    continue
+                items.append({
+                    "id": f"al_{r['id']}", "source": "dev_case", "moduleLabel": "業務開發",
+                    "actor": r["display_name"] or r["username"] or "",
+                    "actionLabel": _DEV_CASE_ACTION_LABELS.get(r["action"], r["action"]),
+                    "itemLabel": r["target_label"] or dc["case_name"] or "",
+                    "detail": "", "link": "dev-crm.html", "at": norm_at(r["at"]),
+                })
+
+        # 4. 報價單狀態／內容異動（非 admin 只看自己名下的報價單，比照 §3.4 報價列表過濾規則）
+        if can_quotation:
+            ph = ",".join("?" * len(_QUOTE_ACTION_LABELS))
+            rows = conn.execute(f"""
+                SELECT a.id, a.at, a.username, a.display_name, a.action, a.target_id AS quote_no,
+                       a.target_label, q.sales_person_id, q.sales_person
+                FROM audit_log a LEFT JOIN quotations q ON q.quote_no = a.target_id
+                WHERE a.target_type='quotation' AND a.action IN ({ph})
+                ORDER BY a.at DESC LIMIT 40
+            """, list(_QUOTE_ACTION_LABELS.keys())).fetchall()
+            for r in rows:
+                if not _visible_to_sales(r):
+                    continue
+                items.append({
+                    "id": f"qa_{r['id']}", "source": "quotation", "moduleLabel": "報價單",
+                    "actor": r["display_name"] or r["username"] or "",
+                    "actionLabel": _QUOTE_ACTION_LABELS.get(r["action"], r["action"]),
+                    "itemLabel": r["target_label"] or r["quote_no"] or "",
+                    "detail": "", "link": f"quotation-form.html?id={r['quote_no']}", "at": norm_at(r["at"]),
+                })
+
+        # 5. 出貨單（案件管理子頁面，quote_no 歸屬比照報價單可視權限）
+        if can_quotation:
+            ph = ",".join("?" * len(_SHIPPING_ACTION_LABELS))
+            rows = conn.execute(f"""
+                SELECT a.id, a.at, a.username, a.display_name, a.action, a.target_id AS note_no,
+                       a.target_label, sn.quote_no, q.sales_person_id, q.sales_person
+                FROM audit_log a
+                LEFT JOIN shipping_notes sn ON sn.note_no = a.target_id
+                LEFT JOIN quotations q ON q.quote_no = sn.quote_no
+                WHERE a.target_type='shipping_note' AND a.action IN ({ph})
+                ORDER BY a.at DESC LIMIT 40
+            """, list(_SHIPPING_ACTION_LABELS.keys())).fetchall()
+            for r in rows:
+                if not _visible_to_sales(r):
+                    continue
+                link = f"case-management.html?q={r['quote_no']}" if r["quote_no"] else "case-management.html"
+                items.append({
+                    "id": f"sa_{r['id']}", "source": "shipping", "moduleLabel": "出貨單",
+                    "actor": r["display_name"] or r["username"] or "",
+                    "actionLabel": _SHIPPING_ACTION_LABELS.get(r["action"], r["action"]),
+                    "itemLabel": r["target_label"] or r["note_no"] or "",
+                    "detail": "", "link": link, "at": norm_at(r["at"]),
+                })
+
+        # 6. 進出物料（序號級庫存異動）
+        #
+        # 2026-09-15 使用者要求「沒有權限的使用者，最近的變動只能看到自己的」。
+        # 這一段原本對**所有登入者全開**（原註解：「比照 /api/devices・
+        # /api/materials-summary 開放給所有已登入使用者」）——但那兩支回的是「有哪些
+        # 料號、還剩幾個」，這裡回的是「**誰**把哪一個序號用到哪一個案子」，那是人的
+        # 行為軌跡，不是庫存數字。上面五個來源每一個都有逐筆過濾，只有這一段沒有，
+        # 結果是一個只有 dashboard 模組的檢視者，在首頁就能看到全公司的料件流向。
+        #
+        # 有庫存／設備模組的人看全部（那本來就是他們的工作範圍），其他人只看自己動過
+        # 的；自己沒動過就一筆都不會出現。
+        # consumed_by/created_by 存的就是操作者顯示名稱字串（見 inventory.py），非 user id，不需再 join users
+        can_inventory = is_admin or "inventory" in mods or "equipment" in mods
+        st_rows = conn.execute("""
+            SELECT id, part_no, serial_no, status, quote_no, updated_at, consumed_by, created_by
+            FROM stock_items ORDER BY updated_at DESC LIMIT 40
         """).fetchall()
-        for r in dl_rows:
-            dc = dc_map.get(r["case_id"])
-            if not dc or not _can_access_case(u, dc):
-                continue
+        for r in st_rows:
+            if not can_inventory:
+                # 比對顯示名稱是這張表唯一可用的歸屬依據（沒有 user id 欄位）。
+                # 名稱為空的紀錄一律不給——無法證明是自己的，就不是自己的。
+                actor = r["consumed_by"] or r["created_by"] or ""
+                if not actor or actor != u["display_name"]:
+                    continue
             items.append({
-                "id": f"dl_{r['id']}", "source": "dev_log", "moduleLabel": "業務開發",
-                "actor": r["log_display"] or r["log_username"] or "",
-                "actionLabel": f"新增開發記錄（{r['channel']}）" if r["channel"] else "新增開發記錄",
-                "itemLabel": dc["case_name"] or dc["customer_name"] or "",
-                "detail": _trunc(r["content"]), "link": "dev-crm.html", "at": norm_at(r["created_at"]),
+                "id": f"st_{r['id']}", "source": "stock", "moduleLabel": "進出物料",
+                "actor": r["consumed_by"] or r["created_by"] or "",
+                "actionLabel": _STOCK_STATUS_LABELS.get(r["status"], r["status"] or ""),
+                "itemLabel": f"{r['part_no']} / {r['serial_no']}",
+                "detail": "", "link": "inventory.html", "at": norm_at(r["updated_at"]),
             })
 
-        ph = ",".join("?" * len(_DEV_CASE_ACTION_LABELS))
-        al_rows = conn.execute(f"""
-            SELECT id, at, username, display_name, action, target_id, target_label
-            FROM audit_log WHERE target_type='dev_case' AND action IN ({ph})
-            ORDER BY at DESC LIMIT 40
-        """, list(_DEV_CASE_ACTION_LABELS.keys())).fetchall()
-        for r in al_rows:
-            try:
-                case_id = int(r["target_id"])
-            except (TypeError, ValueError):
-                continue
-            dc = dc_map.get(case_id)
-            if not dc or not _can_access_case(u, dc):
-                continue
-            items.append({
-                "id": f"al_{r['id']}", "source": "dev_case", "moduleLabel": "業務開發",
-                "actor": r["display_name"] or r["username"] or "",
-                "actionLabel": _DEV_CASE_ACTION_LABELS.get(r["action"], r["action"]),
-                "itemLabel": r["target_label"] or dc["case_name"] or "",
-                "detail": "", "link": "dev-crm.html", "at": norm_at(r["at"]),
-            })
-
-    # 4. 報價單狀態／內容異動（非 admin 只看自己名下的報價單，比照 §3.4 報價列表過濾規則）
-    if can_quotation:
-        ph = ",".join("?" * len(_QUOTE_ACTION_LABELS))
-        rows = conn.execute(f"""
-            SELECT a.id, a.at, a.username, a.display_name, a.action, a.target_id AS quote_no,
-                   a.target_label, q.sales_person_id, q.sales_person
-            FROM audit_log a LEFT JOIN quotations q ON q.quote_no = a.target_id
-            WHERE a.target_type='quotation' AND a.action IN ({ph})
-            ORDER BY a.at DESC LIMIT 40
-        """, list(_QUOTE_ACTION_LABELS.keys())).fetchall()
-        for r in rows:
-            if not _visible_to_sales(r):
-                continue
-            items.append({
-                "id": f"qa_{r['id']}", "source": "quotation", "moduleLabel": "報價單",
-                "actor": r["display_name"] or r["username"] or "",
-                "actionLabel": _QUOTE_ACTION_LABELS.get(r["action"], r["action"]),
-                "itemLabel": r["target_label"] or r["quote_no"] or "",
-                "detail": "", "link": f"quotation-form.html?id={r['quote_no']}", "at": norm_at(r["at"]),
-            })
-
-    # 5. 出貨單（案件管理子頁面，quote_no 歸屬比照報價單可視權限）
-    if can_quotation:
-        ph = ",".join("?" * len(_SHIPPING_ACTION_LABELS))
-        rows = conn.execute(f"""
-            SELECT a.id, a.at, a.username, a.display_name, a.action, a.target_id AS note_no,
-                   a.target_label, sn.quote_no, q.sales_person_id, q.sales_person
-            FROM audit_log a
-            LEFT JOIN shipping_notes sn ON sn.note_no = a.target_id
-            LEFT JOIN quotations q ON q.quote_no = sn.quote_no
-            WHERE a.target_type='shipping_note' AND a.action IN ({ph})
-            ORDER BY a.at DESC LIMIT 40
-        """, list(_SHIPPING_ACTION_LABELS.keys())).fetchall()
-        for r in rows:
-            if not _visible_to_sales(r):
-                continue
-            link = f"case-management.html?q={r['quote_no']}" if r["quote_no"] else "case-management.html"
-            items.append({
-                "id": f"sa_{r['id']}", "source": "shipping", "moduleLabel": "出貨單",
-                "actor": r["display_name"] or r["username"] or "",
-                "actionLabel": _SHIPPING_ACTION_LABELS.get(r["action"], r["action"]),
-                "itemLabel": r["target_label"] or r["note_no"] or "",
-                "detail": "", "link": link, "at": norm_at(r["at"]),
-            })
-
-    # 6. 進出物料（序號級庫存異動）
-    #
-    # 2026-09-15 使用者要求「沒有權限的使用者，最近的變動只能看到自己的」。
-    # 這一段原本對**所有登入者全開**（原註解：「比照 /api/devices・
-    # /api/materials-summary 開放給所有已登入使用者」）——但那兩支回的是「有哪些
-    # 料號、還剩幾個」，這裡回的是「**誰**把哪一個序號用到哪一個案子」，那是人的
-    # 行為軌跡，不是庫存數字。上面五個來源每一個都有逐筆過濾，只有這一段沒有，
-    # 結果是一個只有 dashboard 模組的檢視者，在首頁就能看到全公司的料件流向。
-    #
-    # 有庫存／設備模組的人看全部（那本來就是他們的工作範圍），其他人只看自己動過
-    # 的；自己沒動過就一筆都不會出現。
-    # consumed_by/created_by 存的就是操作者顯示名稱字串（見 inventory.py），非 user id，不需再 join users
-    can_inventory = is_admin or "inventory" in mods or "equipment" in mods
-    st_rows = conn.execute("""
-        SELECT id, part_no, serial_no, status, quote_no, updated_at, consumed_by, created_by
-        FROM stock_items ORDER BY updated_at DESC LIMIT 40
-    """).fetchall()
-    for r in st_rows:
-        if not can_inventory:
-            # 比對顯示名稱是這張表唯一可用的歸屬依據（沒有 user id 欄位）。
-            # 名稱為空的紀錄一律不給——無法證明是自己的，就不是自己的。
-            actor = r["consumed_by"] or r["created_by"] or ""
-            if not actor or actor != u["display_name"]:
-                continue
-        items.append({
-            "id": f"st_{r['id']}", "source": "stock", "moduleLabel": "進出物料",
-            "actor": r["consumed_by"] or r["created_by"] or "",
-            "actionLabel": _STOCK_STATUS_LABELS.get(r["status"], r["status"] or ""),
-            "itemLabel": f"{r['part_no']} / {r['serial_no']}",
-            "detail": "", "link": "inventory.html", "at": norm_at(r["updated_at"]),
-        })
-
-    conn.close()
     items.sort(key=lambda x: x["at"], reverse=True)
     return {"items": items[:limit], "total": len(items)}

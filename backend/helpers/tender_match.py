@@ -18,6 +18,35 @@
 """
 
 
+#: 異體字對照。**目前只有「臺/台」一組。**
+#:
+#: 使用者原話：「台中跟臺中這兩個仍要修」。
+#: 政府採購網寫的是「臺中市政府」，而使用者會打「台中」=> 純字串包含 0 筆命中,
+#: 而畫面上看起來像「今天沒有台中的標案」。
+#:
+#: **這張表刻意只有一組，而它不涵蓋的東西要講出來**（P11）：
+#: - **不處理**簡繁轉換（「监视」不會對到「監視」）
+#: - **不處理**全形半形、大小寫、空白
+#: - **不處理**其他常見異體（「裡/裏」「著/着」「臺灣/台灣」以外的）
+#: 一張說自己只做一件事的表，比一張讓人以為它什麼都做的表安全。
+VARIANT_MAP = {
+    "臺": "台",
+}
+
+
+def normalize(text):
+    """比對用的正規化。**只在比對當下用，不寫回資料庫。**
+
+    存進去的是政府採購網原本的字（「臺中市政府」），
+    **顯示給使用者看的也要是那個字** —— 我們沒有立場替對方改寫機關名稱。
+    正規化只存在於「這兩串字算不算同一件事」那一瞬間。
+    """
+    out = str(text or "")
+    for src, dst in VARIANT_MAP.items():
+        out = out.replace(src, dst)
+    return out
+
+
 def _as_list(value):
     """關鍵字／排除詞：允許 list、單一字串、或 None。"""
     if value is None:
@@ -36,14 +65,18 @@ def matches(tender, watch):
     if not watch.get("enabled", 1):
         return False
 
-    name = str(tender.get("name") or "")
-
+    # 標案名稱與機關名都要比：使用者打「台中」時，那通常是機關名而不是標案名。
+    # (原本只比 name => watch「台中」對 200 筆是 0 命中)
+    haystack = normalize(str(tender.get("name") or "")
+                         + " " + str(tender.get("org") or ""))
     keywords = _as_list(watch.get("keywords"))
-    if keywords and not any(k in name for k in keywords):
+    if keywords and not any(normalize(k) in haystack for k in keywords):
         return False
-
     # 排除詞一中就整筆排除，不管關鍵字中了幾個。
-    if any(x in name for x in _as_list(watch.get("excludes"))):
+    # **排除詞也要正規化**（P9）：只正規化關鍵字的話，
+    # 使用者打「台北」想排除，而資料寫「臺北」=> 排不掉,
+    # 而那個失敗的方向是**多收**，不是少收。
+    if any(normalize(x) in haystack for x in _as_list(watch.get("excludes"))):
         return False
 
     # ⚠️ 用 `is not None`：沒填 = 不篩。寫成 `if watch.get("org"):` 的話，

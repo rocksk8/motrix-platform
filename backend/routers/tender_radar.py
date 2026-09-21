@@ -23,6 +23,7 @@ from helpers.settings import _get_setting, _set_setting
 from helpers import _audit, _require_user, _tok, require_any_module
 # ⚠️ 走模組不是 `from ... import run_scan`：那會複製走副本，
 # 測試換不掉，而「換不掉」的症狀是計數器永遠 0、那一題永遠綠。
+from helpers import tender_match
 from helpers import tender_source
 # ⚠️ 同理走模組：`geo.geocode` 要 patch 得到（M8b）。
 from helpers import geo
@@ -237,28 +238,83 @@ def delete_watch(watch_id: int, authorization: str = Header(None)):
 # ── 標案與命中 ───────────────────────────────────────────────────────────────
 
 @router.get("/api/tender-radar/tenders")
-def list_tenders(authorization: str = Header(None)):
-    """命中的標案，最近截止的排前面。**沒有截止日的排最後而不是最前面**——
-    `NULL` 在 SQLite 的排序裡最小，不處理的話「沒寫截止日」會插到最急的位置。
+def list_tenders(watch: int = None, authorization: str = Header(None)):
+    """**所有**標案，命中的帶上標籤。最近截止的排前面。
+
+    ## 使用者原話
+    > 「200 筆改成都顯示，我可以打入關鍵字讓他分類，但分類剩的我一樣看得到」
+
+    🔴 **關鍵字從「門檻」變成「標籤」。**
+    原本這裡是 `JOIN tender_hits` => **沒有命中任何條件的標案根本不在清單裡**,
+    而實測是：資料庫 200 筆、命中 0 筆 => **畫面上什麼都沒有**。
+    ☠️ 而那跟「今天沒有新標案」長得一模一樣。
+
+    ⚠️ **通知那一側不跟著改**（P4）：信裡仍然只有命中的。
+    🔑 「顯示」與「通知」共用一個「命中」概念，**那正是它們會一起被改掉的原因**——
+    而改錯的話使用者每天收到 200 筆，**那封信會讓他關掉整個功能**。
+
+    沒有截止日的排最後而不是最前面——`NULL` 在 SQLite 的排序裡最小，
+    不處理的話「沒寫截止日」會插到最急的位置。
     """
     _require_radar(authorization)
     conn = get_db()
     try:
         rows = conn.execute("""
-            SELECT t.*, w.id AS watch_id, w.name AS watch_name
-            FROM tender_hits h
-            JOIN tenders t        ON t.id = h.tender_id
-            JOIN tender_watches w ON w.id = h.watch_id
-            ORDER BY (t.deadline IS NULL), t.deadline ASC, t.id DESC
+            SELECT * FROM tenders
+            ORDER BY (deadline IS NULL), deadline ASC, id DESC
         """).fetchall()
+        watches = []
+        for r in conn.execute(
+                "SELECT * FROM tender_watches WHERE enabled=1").fetchall():
+            w = dict(r)
+            # ⚠️ `keywords`／`excludes` 在資料庫裡是 **JSON 字串**，不是 list。
+            # 不解析的話 `_as_list` 會把整串 `'["監視"]'` 當成**一個關鍵字**
+            # ⇒ 永遠比不到，**而畫面上看起來像「這個條件沒有命中任何標案」**。
+            # 📌 形狀照 `tender_source._store()`（同一份資料的同一種解析）。
+            for key in ("keywords", "excludes"):
+                try:
+                    w[key] = json.loads(w[key] or "[]")
+                except (ValueError, TypeError):
+                    w[key] = []
+            watches.append(w)
     finally:
         conn.close()
-    return {"items": [{
+
+    # 🔴 **標籤是即時算出來的，不是從 `tender_hits` 讀的。**
+    #
+    # 兩個理由，而第二個才是重點：
+    # ① 新增一個條件就立刻看得到它的標籤（P5），不必等下一次抓取。
+    # ② ☠️ **`tender_hits` 是「通知的帳本」**——每一列代表「這一筆要寄給使用者」。
+    #    把顯示也掛在它上面的話，**「讓畫面看得到」就會變成「寄一封信」**：
+    #    使用者新增一個條件 ⇒ 回溯比對寫進 200 列未通知的命中
+    #    ⇒ 下一個寄信時段**一次寄出 200 筆**，而那封信會讓他關掉整個功能。
+    # 🔑 P4 擔心的是「顯示與通知共用一個命中概念」——
+    #    **而真正的解不是小心一點，是讓它們不再共用。**
+    labels = {}
+    for t in rows:
+        tender = {"name": t["name"], "org": t["org"], "budget": t["budget"]}
+        hit = [{"id": w["id"], "name": w["name"]}
+               for w in watches if tender_match.matches(tender, w)]
+        if hit:
+            labels[t["id"]] = hit
+
+    items = [{
         "id": r["id"], "caseNo": r["case_no"], "org": r["org"], "name": r["name"],
         "publishedAt": r["published_at"], "deadline": r["deadline"],
         "budget": r["budget"], "url": r["url"],
-        "watchId": r["watch_id"], "watchName": r["watch_name"],
-    } for r in rows], "source": "資料來源：政府電子採購網"}
+        "location": r["location"], "procurementType": r["procurement_type"],
+        "tenderMethod": r["tender_method"],
+        # ⚠️ 沒命中是**空陣列**不是缺這個鍵（P2）——
+        # 缺鍵的話前端每個用到它的地方都要防 undefined，
+        # 而漏防的那一處會是「畫面整塊消失」。
+        "matchedWatches": labels.get(r["id"], []),
+    } for r in rows]
+
+    if watch is not None:
+        # 📌 篩選是**可選的**：不帶參數就是全部（P3）。
+        items = [it for it in items
+                 if any(w["id"] == watch for w in it["matchedWatches"])]
+    return {"items": items, "source": "資料來源：政府電子採購網"}
 
 
 # ── 雷達健康狀態 ─────────────────────────────────────────────────────────────
