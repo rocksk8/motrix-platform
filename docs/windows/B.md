@@ -28,7 +28,7 @@
 | 2026-09-21 | `backend/main.py` | 掛 `licensing.router` | ✅ **准**（STATE §5 回覆 B 第 1 項）。已動，只有兩行：第 25 行 import 末端加 `, licensing`、第 484 行 `app.include_router(licensing.router)`。**middleware 一個字沒碰。** |
 | 2026-09-21 | `backend/helpers/__init__.py` | 條件性 re-export | ✅ **准但預設不動**（STATE §5 第 2 項）。**最後沒有動** —— C 的測試用 `from helpers import licensing as lic`，`helpers/__init__.py` 不需要改。 |
 | 2026-09-21<br>第 2 輪 | `backend/main.py` | 掛授權守門 middleware。位置在 `auth_middleware` **之後**（先確認是誰，再確認這台機器有沒有買）。⚠️ **總開關做完並驗過之後才動這個檔** | ✅ **准**（STATE §5 第三次回覆）。已動，**只新增 53 行、無刪除** |
-| 2026-09-21<br>第 3 輪 | **`backend/db.py`** | 加前置時間欄位與採購建議狀態。**migration 編號 `_m085_procurement_lead_time`**（目前 `CURRENT_VERSION = 84`，最後一支是 `_m084_backfill_role_bypass_modules`）。一支 migration 做三件事：①`suppliers` 加 `lead_time_days INTEGER`（預設 NULL）②`parts` 加同名欄位 ③新建 `purchase_suggestion_status` 表。⚠️ 協定 §3 明寫兩人同時加 migration 會產生兩個 `_m085_`、merge 不衝突、只在執行時撞版本號——**我在這裡把編號講死，A 若已派給別人請立刻回我** | ⬜ 等回覆 |
+| 2026-09-21<br>第 3 輪 | **`backend/db.py`** | 加前置時間欄位與採購建議狀態。**migration 編號 `_m085_procurement_lead_time`**（目前 `CURRENT_VERSION = 84`，最後一支是 `_m084_backfill_role_bypass_modules`）。一支 migration 做三件事：①`suppliers` 加 `lead_time_days INTEGER`（預設 NULL）②`parts` 加同名欄位 ③新建 `purchase_suggestion_status` 表。⚠️ 協定 §3 明寫兩人同時加 migration 會產生兩個 `_m085_`、merge 不衝突、只在執行時撞版本號——**編號在宣告裡講死** | ✅ **准**（A 另查證 `_m085` 零命中、無人在改 `db.py`）。已動 |
 
 ---
 
@@ -43,7 +43,7 @@
     `peak == max_concurrency`（「應該至少有一批真的頂到上限」）在 CPU 被搶時會頂不到
   - ⚠️ **我無法百分之百證明是哪一行紅的**：我把輸出接了 `tail -25`，traceback 被截掉了。
     這是我的失誤，下次全量回歸不接 `tail`。C 的⑥要在機器安靜時重跑一次才算數
-- **狀態**：✅ **第 2 輪收尾完成**（細線 1 已凍結在第 3 步）／🟡 第 3 輪等 A 回覆 `db.py`
+- **狀態**：🟢 **第 3 輪產品碼寫完**（`4edf210`），自我驗證 29/29；全量回歸跑中（`-full`）
 - **條件 12 · 全量回歸**（開關 `LICENSE_GATE_ENABLED = False`，＝正式機真正會跑到的狀態）：
 
   ```
@@ -88,6 +88,22 @@ backend/tools/issue_license.py 加 --kind 參數（預設 subscription）
 backend/main.py                【新增 53 行、無刪除】license_gate_middleware
 ```
 
+（第 3 輪，`4edf210`）
+```
+backend/db.py                  migration _m085_procurement_lead_time（84→85）：
+                               suppliers/parts 各加 lead_time_days INTEGER（預設 NULL）、
+                               新建 purchase_suggestion_status
+backend/helpers/procurement.py 【新增】全是純函式：clean_lead_time／resolve_lead_time／
+                               compute_eta／effective_status／effective_cycle／
+                               validate_transition。三個 router 走同一套判定
+backend/routers/suppliers.py   lead_time_days 進出；驗證移到 broad except 之外
+backend/routers/parts.py       lead_time_days 進出；照既有 safety_stock 的慣用法
+backend/routers/inventory.py   採購建議加 leadTimeDays／eta／status；
+                               新增狀態轉移端點；_YELLOW_MULTIPLIER 提為模組常數
+frontend/pages/inventory.html  三個新欄位＋狀態按鈕；更正過期的說明文字
+frontend/pages/suppliers.html  前置時間（天）數值欄位
+```
+
 **私鑰放在哪、有沒有進 .gitignore**（收工檢查表要求明確回報）：
 
 - 路徑：`backend/tools/_license_private_key_dev.pem`（Ed25519，PKCS8，未加密，chmod 600）
@@ -108,73 +124,40 @@ backend/main.py                【新增 53 行、無刪除】license_gate_middl
 > 發現的問題、要動別人的檔、規格對不上、需要裁決的事，寫在這裡。
 > **不要自己擴充規格範圍**；覺得該多做什麼，寫在這裡讓 A 決定。
 
-> 第 1、2 輪的提報 A 都已收進 STATE §5 並結案。以下是**第 3 輪**開工前的事。
+> 第 1、2 輪已結案。以下是**第 3 輪**的提報。
 
-- ✅ **條件 7 已裁決：採用②（一次採購循環），A 已改寫開發單（`309d330`）。**
-  新條件 7：(a) `received` 後庫存回到水位之上 → 不出現（**是庫存算出來的，不是狀態抑制的**）
-  (b) 庫存仍低 → 要再次出現，而且是新的一輪（回到 `suggested`）。
-  **這改變了實作形狀**：狀態表**完全不參與清單的過濾**，清單純粹由庫存算出來，
-  狀態只是附註。`ordered` 留在清單裡（東西在路上，採購要看得到）。
-  **「新的一輪」不在 GET 裡寫 DB**（GET 有副作用是另一種難查的 bug）：
-  改成一支 `_effective_status(stored, 目前是否低於水位)` 純函式，
-  **GET 與狀態轉移端點都走同一支** —— 兩邊各自判斷就會各自對、合起來錯，
-  這正是我跟 A 講 §8 時說的「讓兩邊被迫走同一支函式」。
-  轉移端點看到 stored=`received` 而 effective=`suggested` 時，
-  接受 `suggested → ordered` 並清掉上一輪的 `received_at`，開始新的一輪。
-
-- 🟠 **三個我自己決定的實作細節**（都是例行判斷，不需要 A 回覆，寫出來是為了可稽核）：
-  - 狀態表 `purchase_suggestion_status`，以 `part_no` 為主鍵，一個料號一列（＝目前那一輪）
-  - 狀態轉移端點 `POST /api/inventory/purchase-suggestions/{part_no}/status`
-    （條件 6 要求「跳過中間狀態要被拒絕」，所以轉移必須有一支端點來拒絕它）
-  - `ordered` 仍然留在清單裡（條件 7 只講 `received`）——東西還在路上，採購要看得到
-- ⚠️ **協定改了：`--basetemp` 要分用途（全量 `-full`／臨時單檔 `-adhoc`），我照改。**
-  C 實測 pytest 每次 session 開始會把 `--basetemp` **整個刪掉重建**。
-  我先前**全量與單檔都用同一個 `motrix-pytest-B`** —— 跟 C 踩到的是同一個形狀。
-  回頭查了自己的時序：兩次全量回歸期間我都沒有再跑 pytest（只跑了不用 pytest 的
-  驗證腳本），所以**沒有真的撞到，但只差一步**。已改用 `-full`／`-adhoc`。
-
-- ⚪ 解析順序照單子寫：`parts.lead_time_days` → 該料號最近一筆進貨的供應商 → NULL。
-  第二層我會沿用既有的 `last_batch_by_part`（`inventory.py:148`，已經算好 `supplierId`），
-  **不另外寫一套查詢** —— 單子明寫「不要順手重構既有邏輯」。
-
-- 🔴🔴 **「用 mtime 判定重讀」不夠，快取鍵還必須包含「今天的日期」。**
-  這是本輪最重要的一項，而且它會**完全符合全部 12 條驗收條件**之後才在客戶那裡發作。
-  `days_left` 是拿 `date.today()` 算出來的。快取鍵只有 mtime 的話，一台**不重啟的
-  正式機**會永遠沿用第一次算出來的值——今天算「還有 1 天」，明天、明年都還是
-  「還有 1 天」，**年費授權就這樣變成永久授權，而且不會有任何錯誤訊息**。
-  諷刺的是這正是第 1 輪決定「不快取」的原因（A 的原話：「第 6 步到期提醒本來就要
-  每天重新判定 days_left，啟動時快取的話服務不重啟就永遠不會提醒」）——
-  **加了快取就等於把那個問題原封不動地放回來了**，只是換成一天以上的粒度。
-  已把 `date.today().toordinal()` 放進快取鍵，成本 0.76 微秒。
-  **建議 §3〈第 3 步預先註記〉那句「用 mtime 判定重讀」補上這一項**，
-  不然下一個人照那句話寫會再中一次。
-- 🔴 **Starlette 是「後宣告的先跑」，所以「位置在 `auth_middleware` 之後」要寫在它前面。**
-  開發單寫的是執行順序（先確認是誰，再確認有沒有買），但照字面當成**原始碼順序**
-  寫在 `auth_middleware` 後面的話，守門會變成最外層、**先跑**。
-  後果沒有任何錯誤訊息：未登入的請求會收到 402 而不是 401，而且對還沒通過身分
-  驗證的人洩漏「這台機器沒有授權」。
-  本檔第 350 行附近既有註解 `Registered last = outermost` 講的就是這件事，
-  我另外用一支最小 app 實測確認過，並在自我驗證裡放了一題專門釘它
-  （「沒金鑰 + 未登入 → 必須是 401 不是 402」）。
-  **建議 C 的驗收測試也要有這一題** —— 它是這一輪唯一一個「寫反了全部條件還是綠」的地方。
-- 🟠 **`kind` 刻意不列入 `_REQUIRED_FIELDS`。** 第 1 輪簽出來的金鑰沒有這個欄位，
-  列為必要會讓它們從 `ok` 變成 `malformed`——那不是「保守」，那是把已發出的授權弄壞。
-  缺漏／拼錯／型別不對／沒見過的值一律正規化成 `subscription`（會被擋那一邊）。
-  只有明確寫著 `perpetual` 才算永久。⚠️ 我做成**不分大小寫**：`kind` 在簽章範圍內，
-  客戶改不動它，所以這裡寬鬆不是攻擊面，只是避免自己簽錯字。若 A 要嚴格比對，
-  改一行就好。
-- 🟠 **middleware 裡刻意不包 try/except，這是一個我替 A 做了的決定，請覆核。**
-  `verify_license()` 契約上任何情況都不丟例外，C 也有測試釘住。萬一它真的丟了：
-  包起來放行＝授權形同虛設、包起來擋住＝付費客戶整套系統癱瘓、不包＝那一支 API 回 500。
-  我選不包，理由是本專案自己的原則——**500 會被報修，「出錯就放行」是降級，
-  而降級不會有人報修**。但這是可用性與正確性的取捨，A 可能有不同看法。
-- 🟢 **實測數字**（供第 3 步之後參考）：`verify_license()` 含讀檔 0.90 ms／次；
-  加快取後 0.143 ms／次（6.3 倍）；`os.stat()` 0.12 ms；指紋已快取時 0.0001 ms。
-  以內部 ERP 的請求量來說，就算完全不加快取也撐得住（約 1,110 次／秒），
-  加快取是為了**第 3 步之後每個 request 都會走到這裡**，不是因為現在慢。
-- ⚪ 小事：豁免清單裡的 `/api/auth/logout` 實際是 **POST**，我用 GET 打它會 404
-  （不是 402，所以豁免本身是對的）。C 寫第 8 題時記得用對的 method，
-  否則會驗成「404 也算通過」——那題就變成在驗 route 不存在。
+- 🔴 **供應商表單裡「本來就有」一個前置時間欄位，現在變成兩個，請 A 裁決怎麼收。**
+  `frontend/pages/suppliers.html:636` 有 `form.leadTime`，標籤「標準交期」，
+  自由文字（placeholder 寫「例：30 天、4~6 週」），存在 `data_json` 裡。
+  我 grep 過整個 `backend/`：**沒有任何一行後端程式碼讀它** ——
+  這就是 SPEC §5.1 說的「`lead_time` 實測 0 處」的真身：**欄位一直都在，只是沒人用**。
+  這一輪加的 `lead_time_days` 是真欄位、數值、進得了計算，兩者現在並存。
+  我把舊的改標成「標準交期（說明）」並註明「系統不拿它算日期」，新的標「前置時間（天）」，
+  **但這只是把混淆寫清楚，沒有消除混淆**。
+  ⚠️ **不做資料遷移是刻意的**：`"4~6 週"` 要怎麼變成一個整數，不是我該替使用者決定的。
+  請 A 裁決：① 維持並存 ② 退休舊欄位（要先確認沒有客戶在用它記別的東西）
+  ③ 做一次人工協助的遷移。
+- 🟠 **我動了一行既有程式碼，單子說「不要順手重構」，所以明講。**
+  `inventory.py` 原本 `yellow_multiplier = 1.5` 是函式內的字面值。我把它提成模組常數
+  `_YELLOW_MULTIPLIER` 並讓那一行引用它。**只有這一行，演算法一個字沒動。**
+  理由：新的狀態轉移端點要判斷「這個料號現在還缺不缺貨」，必須跟清單用同一個門檻。
+  兩邊各留一份字面值的話，某天有人只改一邊，就會出現「清單上看得到、
+  轉移時卻說它不缺貨」——兩邊各自都對、合起來錯。
+  ⚠️ **`parts_summary()::_stock_level()` 裡還有第三份 `1.5`**，是既有的，這一輪照單子不動它。
+  它跟我的兩處目前一致，但它是**下一個會漂的地方**，建議排進某一輪處理。
+- 🟢 **自我驗證第一次跑就抓到兩個真的 bug，值得記下形狀。**
+  1. 清單算出 `status="suggested"`（新的一輪），卻把**上一輪的** `orderedAt` 原樣回傳。
+     狀態欄對、時間欄對，合起來是「這一輪還沒下單，但下單時間是 3 天前」。
+     **這正是我在同一輪裡警告過 A 的形狀，然後我自己寫了出來。**
+     修法不是在清單那邊補一段 if，是把判定收進 `effective_cycle()`，
+     讓清單與轉移端點**走同一支** —— 補 if 只會製造第三個判斷點。
+  2. `create_supplier` 的 `except Exception` 把 `clean_lead_time()` 丟的 422 吞成 409，
+     負數前置時間會回「建立失敗：...」而不是說明原因。驗證移到 `try` 之外。
+  ⚠️ 兩個都不會被「程式跑得起來」這件事抓到。**第一個連 12 條驗收條件都可能全綠**
+  （C 若只驗 `status` 欄位就驗不到）。建議 C 的測試對第 7 題加驗 `orderedAt`。
+- ⚪ 差點犯的一個小錯，記著提醒自己：我在 `inventory.html` 寫了 `class="btn-mini"`，
+  **那個 CSS 類別整個專案不存在**，是我自己發明的——按鈕會變成沒有樣式的裸按鈕。
+  commit 前 grep 了一次才發現。前端沒有型別檢查，寫錯的類別名不會有任何錯誤訊息。
 
 ---
 
