@@ -693,3 +693,53 @@ _TW_PLACES = 22 個縣市，沒有區、沒有鄉鎮
 金鑰空 ⇒ Google 區塊**不存在**；設了才出現。
 ⚠️ 我先前給 A 的提醒要自己記得：**「渲染一張沒有點的地圖」也是錯的**——
 它跟 M6（有標案但沒有地點）在畫面上是同一個樣子，而兩者的處置完全相反。
+
+## §3j 實作設計（凍結期間規劃，解凍後照這個寫）
+
+### 三個層次，**只有最底下那一層碰系統時鐘**
+```python
+def now_dt():            # 唯一呼叫 datetime.now() 的地方
+def scan_hours():        # 設定 tender_radar_scan_hours   → list[int]
+def notify_hours():      # 設定 tender_radar_notify_hours → list[int]（允許空）
+def current_slot():      # now_dt().hour if 它在 scan_hours() 裡 else None
+```
+🔴 **`current_slot()` 內部要讀設定**（C 的要求，理由是對的）：
+他原本 patch `current_slot()`，**那會把「有沒有查設定」這件事一起 patch 掉**——
+觀測手段與被測對象共用一段程式碼的第五個實例。
+
+⚠️ **而有一個推論 C 沒講，不注意會做錯**：
+**寄信時段的判斷不可以用 `current_slot()`。**
+SL16 的設定是 `scan_hours=""` ＋ `notify_hours="9,12,15,18"` ⇒
+`current_slot()` 在那一題**永遠回 `None`**，寄信那一段就永遠拿不到小時。
+⇒ 寄信要直接問 `now_dt().hour`，抓取才問 `current_slot()`。
+🔑 **兩個設定是獨立的，所以判斷時段的入口也必須是獨立的。**
+
+### 兩個「做過了沒」的標記要放在**不同的地方**（SL7）
+| | 放哪 | 為什麼 |
+|---|---|---|
+| 抓取側 | `tender_fetch_log`（今天 ＋ 小時 == slot）| 既有機制，`_already_fetched_today` 改成 `_already_fetched_this_slot` |
+| 通知側 | `system_settings` 的 `tender_radar_notify_last_slot`（單鍵 ＋ `>=`）| **`tender_fetch_log` 不進每日備份** ⇒ 放那裡的話**每次災難還原都會重寄** |
+📌 SL7 的本意就是「兩個標記不可以共用一個載體」，所以這個分法不是權宜，是它要的答案。
+
+### 既有設定的遷移（A 裁 (乙)，SL17／SL18）
+```python
+raw = _get_setting("tender_radar_scan_hours")        # ← 先問「鍵在不在」
+if raw is None:                                       # 不是 `or`！
+    old = _get_setting("tender_radar_scan_hour")      # 第 6 輪的單數鍵
+    raw = str(old) if old is not None else DEFAULT
+```
+🔴 **判準是「鍵存在嗎」不是「值是不是真的」。**
+寫成 `new or old` 的話，**使用者把寄信時段設成空（＝不寄，SL3 明訂的合法值）
+會是 falsy ⇒ 退回舊值 ⇒ 它又開始寄了。**
+📌 同一形狀 D 今天在 `quotations.py:1379` 找到一個（`body.status or q.get(...)`，
+而左邊有 truthy 預設 ⇒ 右邊是死碼）。**同一天、同一個形狀、兩個檔。**
+⚠️ 舊的單數鍵**留著不刪**——刪掉就沒有回頭路，留著的成本是一行 fallback。
+
+### 其他
+- **SL10**：`_fetch_details` 的 `fetched` 是區域變數 ⇒ 上限實際是「每次呼叫 20」。
+  一天四個時段就是 80。要改成**跨呼叫累計**（依 `tender_fetch_log` 或當日計數）。
+  ⚠️ 現在「每天 20」與「每次 20」恰好相等，**那是巧合不是設計**。
+- **SL13**：拿掉 `/schedule` 的 `dailyLimitNote`。
+  📌 這是我寫的字串，而使用者讀到它之後裁示「我要可調整」——
+  **寫在畫面上的字串沒有「待辦」狀態，它一上線就在對使用者說話。**
+- **SL9**：`_seconds_until_next_run()`（915）目前直接 `datetime.now()`，**patch 不到**，要改走 `now_dt()`。
