@@ -41,6 +41,7 @@ from pathlib import Path
 import pytest
 
 from tests._subproc import run_python
+from tests._timefreeze import freeze_slot
 
 
 # ── 契約 ─────────────────────────────────────────────────────────────────────
@@ -168,11 +169,27 @@ def test_s3b_timer_is_scheduled_on_the_happy_path_too(client, monkeypatch):
     assert timers, "正常情況下也必須排下一次 Timer"
 
 
-def test_s4_second_trigger_same_day_makes_no_external_request(client, monkeypatch):
+def test_s4_second_trigger_same_slot_makes_no_external_request(client, monkeypatch):
     """§3 S4：同一天排程觸發兩次 → `fetch_raw` 計數器 == 1。
 
-    沿用第 4 輪 9c 的形狀；`_already_fetched_today` 已經存在，排程不必自己判。
+    沿用第 4 輪 9c 的形狀；節流由 `tender_source` 自己判，排程不必重複判。
+    ## 🔴 2026-09-21 §3j：這一條原本宣稱的是「**每日**一次」，而那個上限被拆掉了
+
+    使用者裁示「我要可調整」⇒ 抓取改成一天多個時段（預設 9,12,15,18）。
+    ⚠️ **斷言的數字沒有變**（連續呼叫兩次仍然只該抓一次），
+    **而它宣稱的東西變了** —— 從「今天抓過就不再抓」變成「**這個時段**抓過就不再抓」。
+
+    ☠️ 而如果只改描述不加時間控制，它會變成**偶爾紅的綠燈**：
+    測試若剛好在 8:59 跑第一次、9:00 跑第二次（或 11:59/12:00、14:59/15:00、
+    17:59/18:00）⇒ 跨時段 ⇒ 抓兩次 ⇒ 紅。
+    🔴 **一天四個這種邊界，而且全部落在上班時間。**
+    🔑 **那比紅燈貴**：紅燈會被修，偶爾紅的綠燈會被重跑一次然後忘掉。
+
+    ⇒ 所以把時間釘住。`now_dt()` 由 §3j 的 B 提供（形狀比照 `today()`），
+    **在它出現之前這一題是紅的，那是刻意的。**
+
     """
+    freeze_slot(monkeypatch, ts)      # 兩次呼叫必須落在同一個時段裡
     fetches = _spy(monkeypatch, ts, "fetch_raw", result=("<html></html>", None))
     monkeypatch.setattr(ts, "TENDER_RADAR_ENABLED", True)
     run = _need(ts, "run_scheduled_scan")

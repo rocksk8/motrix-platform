@@ -63,6 +63,7 @@ import pytest
 
 import helpers.email_notify as en       # noqa: E402
 import helpers.tender_source as ts      # noqa: E402
+from tests._timefreeze import freeze_slot  # noqa: E402
 
 DETAIL_FIXTURE = Path(__file__).parent / "fixtures" / "tender_detail_20260921.html"
 LOCATION_FIELD_ID = "fkPmsExecuteLocation"
@@ -452,11 +453,27 @@ def test_d12_scan_hour_is_stored_in_system_settings(client):
 
 
 def test_d13_configured_time_does_not_change_the_daily_cap(client, monkeypatch):
-    """§3 D13：**每日一次的硬上限不因設定而改變** —— 只能改「幾點」不能改「幾次」。
+    """§3 D13：**每個時段一次的上限不因設定而改變** —— 設定改的是「哪幾點」。
+    ## 🔴 2026-09-21 §3j：這一條原本宣稱的是「**每日**一次」，而那個上限被拆掉了
+
+    使用者裁示「我要可調整」⇒ 抓取改成一天多個時段（預設 9,12,15,18）。
+    ⚠️ **斷言的數字沒有變**（連續呼叫兩次仍然只該抓一次），
+    **而它宣稱的東西變了** —— 從「今天抓過就不再抓」變成「**這個時段**抓過就不再抓」。
+
+    ☠️ 而如果只改描述不加時間控制，它會變成**偶爾紅的綠燈**：
+    測試若剛好在 8:59 跑第一次、9:00 跑第二次（或 11:59/12:00、14:59/15:00、
+    17:59/18:00）⇒ 跨時段 ⇒ 抓兩次 ⇒ 紅。
+    🔴 **一天四個這種邊界，而且全部落在上班時間。**
+    🔑 **那比紅燈貴**：紅燈會被修，偶爾紅的綠燈會被重跑一次然後忘掉。
+
+    ⇒ 所以把時間釘住。`now_dt()` 由 §3j 的 B 提供（形狀比照 `today()`），
+    **在它出現之前這一題是紅的，那是刻意的。**
+
 
     ⚠️ 這題驗：設定過時間之後，**手動觸發兩次仍然只抓一次**。
     🔑 「可設定」最容易滑成「可繞過」—— 而繞過的是我們對別人伺服器的承諾。
     """
+    freeze_slot(monkeypatch, ts)      # 兩次呼叫必須落在同一個時段裡
     from helpers.settings import _set_setting
     from tests.test_tender_match_2026_09_21 import REAL
     from tests.test_tender_notify_2026_09_21 import _sent

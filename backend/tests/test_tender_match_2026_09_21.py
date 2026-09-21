@@ -45,6 +45,8 @@ from pathlib import Path
 
 import pytest
 
+from tests._timefreeze import freeze_slot
+
 
 # ── 契約 ─────────────────────────────────────────────────────────────────────
 
@@ -814,13 +816,29 @@ def test_09b_fetch_log_records_time_recognised_and_dropped(client, monkeypatch):
     assert row["dropped"] == 1, f"這一頁丟了一筆，實際 {row['dropped']!r}"
 
 
-def test_09c_second_run_same_day_makes_no_external_request(client, monkeypatch):
-    """§3 條件 9c：**同一天第二次呼叫不發出任何外部請求**。
+def test_09c_second_run_same_slot_makes_no_external_request(client, monkeypatch):
+    """§3 條件 9c：**同一個時段內第二次呼叫不發出任何外部請求**。
 
     ⚠️ **沒人驗它就沒人守它，而這一條是對別人的伺服器的承諾，不是對我們自己的。**
-    每日一次是硬上限；寫了而沒有測試的上限，等於沒有上限。
+    寫了而沒有測試的上限，等於沒有上限。
+
+    ## 🔴 2026-09-21 §3j：這一條原本宣稱的是「**每日**一次」，而那個上限被拆掉了
+
+    使用者裁示「我要可調整」⇒ 抓取改成一天多個時段（預設 9,12,15,18）。
+    ⚠️ **斷言的數字沒有變**（連續呼叫兩次仍然只該抓一次），
+    **而它宣稱的東西變了** —— 從「今天抓過就不再抓」變成「**這個時段**抓過就不再抓」。
+
+    ☠️ 而如果只改描述不加時間控制，它會變成**偶爾紅的綠燈**：
+    測試若剛好在 8:59 跑第一次、9:00 跑第二次（或 11:59/12:00、14:59/15:00、
+    17:59/18:00）⇒ 跨時段 ⇒ 抓兩次 ⇒ 紅。
+    🔴 **一天四個這種邊界，而且全部落在上班時間。**
+    🔑 **那比紅燈貴**：紅燈會被修，偶爾紅的綠燈會被重跑一次然後忘掉。
+
+    ⇒ 所以把時間釘住。`now_dt()` 由 §3j 的 B 提供（形狀比照 `today()`），
+    **在它出現之前這一題是紅的，那是刻意的。**
     """
     mod = _src()
+    freeze_slot(monkeypatch, mod)      # 兩次呼叫必須落在同一個時段裡
     monkeypatch.setattr(mod, "TENDER_RADAR_ENABLED", True)
     calls = _fetch_counter(monkeypatch)
     _src("run_scan")()
@@ -828,7 +846,7 @@ def test_09c_second_run_same_day_makes_no_external_request(client, monkeypatch):
     assert first >= 1, "第一次就該真的抓一次，否則這題的觀測點是壞的"
     _src("run_scan")()
     assert len(calls) == first, (
-        f"同一天第二次不該再發外部請求，實際從 {first} 變成 {len(calls)} 次"
+        f"同一個時段內第二次不該再發外部請求，實際從 {first} 變成 {len(calls)} 次"
     )
 
 
