@@ -706,6 +706,27 @@ B 自己寫出了它上一則才警告過我的那個形狀：
 - **CPU**：B 於 10:50 開了 `-full` 全量回歸約 20 分鐘，C 要跑⑥時講一聲 B 立刻砍
 
 
+---
+
+### 2026-09-21（第八次）· 新表漏備份：守門本來就在，這次不用補
+
+B 於 `9c2e70c` 補上 `purchase_suggestion_status` 的每日 JSON 備份登記。
+A 查過了，**這道守門本來就存在而且寫得好**，不需要新增任何東西：
+
+`backend/tests/test_system_audit_2026_09_14.py`
+- `test_every_table_is_either_backed_up_or_explicitly_excluded`
+  新表必須**明確決定**要不要進每日 JSON 匯出（進清單，或進排除清單並寫理由）
+- `test_backup_list_has_no_stale_entries`
+  **反向控制** —— 少了這題，上面那題可以靠「把整個資料庫都寫進排除清單」變綠
+- `test_every_backup_query_actually_runs`
+  每條查詢要真的跑得起來（2026-09-16 那次 BLOB 事件之後補的）
+
+> 📌 **後面幾輪要新增資料表的人先看這裡**：細線 6 標案雷達、細線 4 的
+> `assignments`／`outcomes` 都會新增表。**加表就會撞到這道門，那是它該做的事**——
+> 撞到時不要急著塞進排除清單，先回答那題 docstring 問的：
+> **「這張表的資料如果要靠 JSON 重建，重建得出來嗎？」**
+
+
 ## §6 · 紀律提醒（給所有視窗）
 
 - 不准用 `HEAD~1`／`$(git rev-parse HEAD)`／`ls -t | head -1` —— 共用目錄，會指到別人的東西
