@@ -659,3 +659,37 @@ _TW_PLACES = 22 個縣市，沒有區、沒有鄉鎮
 ⚠️ A 同一則訊息裡同時說了「你可以動」與「C 還在跑、不要跑 pytest」，**兩者有衝突**，
 我取後者：⑥ 的目的正是「在什麼條件下量的」，讓它跑在會動的樹上會毀掉那個目的。
 已回報 A。
+
+## §3l 的 API 契約（從 C 的 `test_geo_2026_09_21.py` 抽出，19 支測試 / 24 題）
+
+⚠️ 這份是**抽出來的**不是**約定的**——解鎖後動手前要再對一次測試本文。
+記在這裡是因為：測試檔的中文在這台的主控台會糊掉，**抽 ASCII 識別字是唯一可靠的讀法**。
+
+### `backend/helpers/geo.py`（新檔）
+| 名字 | 形狀 |
+|---|---|
+| `GEO_ENABLED` | 字面值 `False`（出貨預設，M9 釘它） |
+| `geo_on()` | `GEO_ENABLED or os.getenv("MOTRIX_GEO") == "1"` |
+| `haversine_km(a, b)` | 純函式，對稱、自己對自己為 0（M7／M7b） |
+| `geocode(...)` | **走模組屬性**才 patch 得到（M8b） |
+| `USER_AGENT` / `FETCH_TIMEOUT_SECONDS` / `GEOCODE_INTERVAL_SECONDS` | 對外連線四道護欄（M8） |
+
+🔑 **`geo_on()` 是 `radar_on()` 的第二個實例**，而 M9c 明確測了 `"true"`／`"yes"`／`"false"`
+都**不可以**打開它 ⇒ `== "1"` 不是真假值。**這是今天第二次抄這個形狀，要整個抄不是抄一半。**
+
+### `GET /api/tender-radar/map`
+回傳鍵固定五個：`office`／`officeMissing`／`points`／`withoutLocation`／`googleMapsConfigured`
+- `points` 的元素含 `caseNo`
+- ☠️ **`withoutLocation` 是 M6**：`location` 為 NULL 的標案要**被數出來**，不是被丟掉。
+  地圖上少幾個點跟「那些標案不存在」長得一模一樣，而沒有人會報修。
+- `officeMissing` 是 M3：辦公室地址沒填要**講出來**，不是安靜跳過。
+
+### 設定
+`google_maps_api_key`（M12 要在既有資料庫上讀得到），對外名 `googleMapsApiKey`。
+🔴 **M14：金鑰不可以進 log。** 這一題與 L1 那條「要記錄開著那一側」是相反方向的同族——
+**一個要留痕跡，一個不可以留痕跡，判準都是「洩漏出去的代價」。**
+
+### M13／M13b（前端）
+金鑰空 ⇒ Google 區塊**不存在**；設了才出現。
+⚠️ 我先前給 A 的提醒要自己記得：**「渲染一張沒有點的地圖」也是錯的**——
+它跟 M6（有標案但沒有地點）在畫面上是同一個樣子，而兩者的處置完全相反。
