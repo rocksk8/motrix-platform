@@ -424,3 +424,113 @@ def test_t9_geocoding_still_identifies_itself_as_motrix(monkeypatch):
     assert "MOTRIX" in (sent or "").upper(), (
         f"Nominatim 收到的 UA 認不出是誰：{sent!r}"
     )
+
+
+# ══════════════════════════════════════════════════════════════════════
+# T10 · 🔴 **`None` 也要快取，但要很短** —— 現在「壞掉的時候最慢」
+# ══════════════════════════════════════════════════════════════════════
+#
+# B 的自述（照抄，因為它把兩端都講出來了）：
+#
+# > 我當初不快取 `None` 的理由是：**一次網路抖動不該讓這個訊號整整一小時
+# > 說「不知道」**。而那個理由**只看了一端**：
+# > **如果 OSM 持續不可達，每一次開地圖都會重探、每一次都等 3 秒。**
+#
+# ☠️ 「為了一個附加訊號讓主要功能變慢」**最糟的組合就是這個 —— 壞掉的時候最慢。**
+#
+# ⇒ `None` 也快取，但很短。🔑 **短快取同時滿足原本那兩個理由**：
+# **60 秒就重試**（抖動不會被記一小時），**而持續不可達時也不會每次都罰 3 秒。**
+
+def _patch_clock(monkeypatch, offset_seconds):
+    """把 `geo` 看到的時間往前撥。
+
+    ⚠️ 換的是 `geo.time.time`（模組屬性）—— 不是換快取本身。
+    換快取的話就驗不到「它有沒有比對時間」了。
+    """
+    import time as _time
+    base = _time.time()
+    monkeypatch.setattr(_geo().time, "time", lambda: base + offset_seconds)
+
+
+def test_t10_the_unknown_verdict_has_its_own_short_cache():
+    """🔴 T10：`None`（不知道）的快取秒數是**獨立的具名常數**。
+
+    ⚠️ 跟成功的那個共用一個常數的話，兩個相反的需求會被綁在一起：
+    成功要久（省請求）、不知道要短（抖動要能自己恢復）。
+    """
+    unknown = _geo("TILE_PROBE_UNKNOWN_CACHE_SECONDS")
+    assert isinstance(unknown, (int, float)) and unknown > 0, (
+        f"`TILE_PROBE_UNKNOWN_CACHE_SECONDS` 不是正數：{unknown!r}"
+    )
+
+
+def test_t10b_the_unknown_cache_is_shorter_than_the_success_cache():
+    """🔴🔴 T10b：**「不知道」的快取必須短於「成功」的那個。**
+
+    🔑 **這一題是整組的鑑別力所在。** 沒有它，一個「兩個都設 3600」的實作
+    會讓 T10 全綠 —— **而那正好是我們要修的東西的反面**：
+    一次網路抖動會讓這個訊號整整一小時說「不知道」。
+    """
+    unknown = _geo("TILE_PROBE_UNKNOWN_CACHE_SECONDS")
+    success = _geo("TILE_PROBE_CACHE_SECONDS")
+    assert unknown < success, (
+        f"「不知道」快取 {unknown} 秒、「成功」快取 {success} 秒 —— "
+        "前者必須更短。\n"
+        "⇒ 兩個一樣長的話，一次網路抖動會讓這個訊號整整一小時說「不知道」。"
+    )
+
+
+def test_t10c_a_failed_probe_is_not_retried_immediately(monkeypatch):
+    """🔴 T10c：探測失敗之後，**短快取期間內不再發請求**。
+
+    ☠️ 現況是失敗完全不快取 ⇒ OSM 持續不可達時，
+    **每一次開地圖都重探、每一次都等 3 秒** —— 而那 3 秒花在一個
+    **清單本身完全不需要**的訊號上。
+    """
+    calls = []
+
+    def _fake(req, *a, **kw):
+        calls.append(req)
+        raise OSError("連不上")
+
+    _reset_cache(monkeypatch)
+    monkeypatch.setattr(_geo().urllib.request, "urlopen", _fake)
+
+    assert _geo("tiles_blocked")() is None, "前提不成立：失敗應該回 None"
+    first = len(calls)
+    assert first == 1, f"第一次應該探測一次，實際 {first}"
+
+    for _ in range(4):
+        assert _geo("tiles_blocked")() is None
+    assert len(calls) == first, (
+        f"短快取期間內又探測了 {len(calls) - first} 次 —— 失敗完全沒有被快取。\n"
+        "⇒ OSM 持續不可達時，每一次開地圖都要等 3 秒。"
+    )
+
+
+def test_t10d_the_failure_is_retried_after_the_short_window(monkeypatch):
+    """🔴 T10d 反向控制：**過了那個秒數就要重新探測。**
+
+    ⚠️ 沒有這一題，一個「失敗也快取 3600 秒」甚至「失敗永遠快取」的實作
+    會讓 T10c 全綠 —— **而那就是「一次抖動記一輩子」。**
+    🔑 T10c 與這一題**合起來**才證明那個秒數真的被比對了；
+    單獨看任何一題，都可以被一個不看時間的實作滿足。
+    """
+    unknown = _geo("TILE_PROBE_UNKNOWN_CACHE_SECONDS")
+    calls = []
+
+    def _fake(req, *a, **kw):
+        calls.append(req)
+        raise OSError("連不上")
+
+    _reset_cache(monkeypatch)
+    monkeypatch.setattr(_geo().urllib.request, "urlopen", _fake)
+    _geo("tiles_blocked")()
+    assert len(calls) == 1, "前提不成立"
+
+    _patch_clock(monkeypatch, unknown + 1)
+    _geo("tiles_blocked")()
+    assert len(calls) == 2, (
+        f"過了 {unknown} 秒還是沒有重新探測（累計 {len(calls)} 次）—— "
+        "那一次網路抖動會被永遠記著。"
+    )
