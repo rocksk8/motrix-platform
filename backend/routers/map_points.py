@@ -558,7 +558,11 @@ def _tender_points(office, user_coord=None):
             # 所以退階走到哪一階從回傳上讀得出來，不必去猜內部呼叫了什麼。
             "address": used,
             "precision": found.precision, "source": found.source,
-            "budget": r["budget"], "deadline": r["deadline"], "url": r["url"],
+            "budget": r["budget"], "deadline": r["deadline"],
+            # 空網址回 `None` **不是 `""`**——理由與 `tender_radar._clean_url`
+            # 相同（`href=""` 是一個看起來可以點、點了沒反應的東西）。
+            # 📌 刻意**不跨 router 匯入**那個函式：L2 功能模組彼此不可依賴。
+            "url": (str(r["url"] or "").strip() or None),
             **_distances(coord, office, user_coord),
         })
     return points, missing

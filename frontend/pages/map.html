@@ -134,12 +134,25 @@
     <div class="panel" style="margin-bottom:12px">
       <div class="mp-panel-body" style="display:flex;gap:16px;flex-wrap:wrap;align-items:center">
         <span style="font-size:12px;color:var(--text-secondary)">顯示</span>
-        <template x-for="d in datasets" :key="d.key">
+        <template x-for="src in sources" :key="src.key">
           <label style="display:inline-flex;align-items:center;gap:5px;font-size:12px;cursor:pointer">
-            <input type="checkbox" :value="d.key" x-model="picked" @change="refresh()">
+            <input type="checkbox" :value="src.key" x-model="picked" @change="refresh()">
+            <span x-text="src.label"></span>
+          </label>
+        </template>
+      </div>
+      <!-- 圖例：**圖釘上的字才是分辨的載體**。
+           🔑 顏色只是輔助 —— 色覺差異的人要看得出來，
+           而**點開才知道等於沒有回答**。 -->
+      <div class="mp-panel-body" style="display:flex;gap:12px;flex-wrap:wrap;
+           align-items:center;padding-top:0">
+        <span style="font-size:11px;color:var(--text-dim)">圖例</span>
+        <template x-for="d in datasets" :key="d.key">
+          <span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;
+                       color:var(--text-secondary)">
             <span class="mp-pin" :style="'background:' + d.color" x-text="d.mark"></span>
             <span x-text="d.label"></span>
-          </label>
+          </span>
         </template>
       </div>
     </div>
@@ -246,7 +259,16 @@
               </td>
               <td style="font-size:12px" x-text="p.org || '—'"></td>
               <td style="font-size:12px">
-                <a :href="p.url" target="_blank" rel="noopener" x-text="p.name || '—'"></a>
+                <!-- ⚠️ 只有標案有 `url`，客戶／廠商那些點沒有
+                     ⇒ 不包條件的話它們會渲染出 `href="undefined"` 的死連結。
+                     🔑 一個看起來可以點、點了沒反應的東西，比一開始就不可點更糟。
+                     📌 `rel` 補上 `noreferrer`：少了 `noopener` 的話，
+                     被開啟的那一頁可以透過 `window.opener` 改寫我們這一頁的網址。 -->
+                <template x-if="p.url">
+                  <a :href="p.url" target="_blank" rel="noopener noreferrer"
+                     x-text="p.name || '—'"></a>
+                </template>
+                <template x-if="!p.url"><span x-text="p.name || '—'"></span></template>
               </td>
               <td style="font-size:12px" x-text="p.location || '—'"></td>
               <!-- ⚠️ 距離是 null 時顯示「—」不是 0。
@@ -312,13 +334,32 @@ function mapPage() {
     userPos: null, geoBusy: false, geoError: '',
     // 四個資料集。`mark` 是畫在標記上的字 —— **那才是分辨的載體**。
     // 🔑 顏色只是輔助：色覺差異的人要看得出來，而**點開才知道等於沒有回答**。
+    // 🔴 **`sources`（要不要抓）與 `datasets`（畫成什麼樣子）是兩件事。**
+    // 一個來源可以產出多個資料集：`customers` 會回
+    // `customers_delivery` 與 `customers_invoice` 兩種點。
+    // ⚠️ 這兩件事一度共用同一個陣列 —— 那時只有「一個來源＝一個資料集」，
+    // **所以看不出來**；加上客戶之後，勾選框會送出一個後端不認得的來源名。
+    sources: [
+      { key: 'tenders',            label: '標案' },
+      { key: 'customers',          label: '客戶' },
+      { key: 'suppliers',          label: '供應商' },
+      { key: 'vendor_contractors', label: '協力廠商' },
+      { key: 'contractors',        label: '外包名冊' },
+      { key: 'shipping_notes',     label: '出貨地址' },
+    ],
     datasets: [
       { key: 'tenders',            label: '標案',     mark: '標', color: '#2563EB' },
+      { key: 'customers_delivery', label: '客戶送貨', mark: '送', color: '#DC2626' },
+      { key: 'customers_invoice',  label: '客戶發票', mark: '票', color: '#EA580C' },
+      { key: 'suppliers',          label: '供應商',   mark: '供', color: '#0891B2' },
       { key: 'vendor_contractors', label: '協力廠商', mark: '廠', color: '#059669' },
       { key: 'contractors',        label: '外包名冊', mark: '包', color: '#D97706' },
       { key: 'shipping_notes',     label: '出貨地址', mark: '貨', color: '#7C3AED' },
     ],
-    picked: ['tenders', 'vendor_contractors'],
+    // ⚠️ 預設**不含 `contractors`**：外包名冊是**住家地址**，
+    // 不該在打開頁面的那一秒就全部攤在畫面上。
+    // 📌 客戶與供應商預設開著 —— 使用者原話：「看不到其他商家就等於沒有效果」。
+    picked: ['tenders', 'customers', 'suppliers', 'vendor_contractors'],
     mapOpen: false, mapLoading: false, tileError: false, _map: null,
 
     _h() { return { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.token } },

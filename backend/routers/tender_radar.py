@@ -237,6 +237,26 @@ def delete_watch(watch_id: int, authorization: str = Header(None)):
 
 # ── 標案與命中 ───────────────────────────────────────────────────────────────
 
+# ⚠️ **這個函式要放在 `@router.get` 之上。**
+# 🔴 今天第二次踩：把新函式插在一支**被裝飾的**函式正上方，
+# 那個 `@router.get` 就會落到新函式頭上 ⇒ **路由指向錯的人**。
+# ☠️ 而症狀完全不像成因：這次是 `GET /tenders` 回 422 說
+# 「query 參數 `raw` 是必填」——上一次（`_check_office_coord`）是
+# PUT 回 200 而什麼都沒存。
+# 🔑 `sub()` 的 assert 守的是「字串有沒有對上」，**守不到「插在哪裡」**。
+def _clean_url(raw):
+    """空網址回 `None`，**不是 `""`**。
+
+    ☠️ 回 `""` 的話，前端最自然的寫法 `if (t.url !== undefined)`
+    會把空字串當成「有網址」⇒ 渲染出一個 `href=""` 的死連結。
+    🔑 **一個看起來可以點的東西點了沒反應，比一開始就不可點更糟** ——
+    前者讓使用者以為是網路壞了，然後再點五次。
+    📌 前後空白也要去掉：`" "` 不是空字串，而它一樣是死連結。
+    """
+    text = str(raw or "").strip()
+    return text or None
+
+
 @router.get("/api/tender-radar/tenders")
 def list_tenders(watch: int = None, q: str = None,
                  authorization: str = Header(None)):
@@ -324,7 +344,7 @@ def list_tenders(watch: int = None, q: str = None,
     items = [{
         "id": r["id"], "caseNo": r["case_no"], "org": r["org"], "name": r["name"],
         "publishedAt": r["published_at"], "deadline": r["deadline"],
-        "budget": r["budget"], "url": r["url"],
+        "budget": r["budget"], "url": _clean_url(r["url"]),
         "location": r["location"], "procurementType": r["procurement_type"],
         "tenderMethod": r["tender_method"],
         # ⚠️ 沒命中是**空陣列**不是缺這個鍵（P2）——
@@ -332,6 +352,14 @@ def list_tenders(watch: int = None, q: str = None,
         # 而漏防的那一處會是「畫面整塊消失」。
         "matchedWatches": labels.get(r["id"], []),
     } for r in rows]
+
+    # 🔴 **命中的整段排在前面**，兩段各自再依截止日排。
+    # ⚠️ **不是「整份排完再分段」**：資料庫已經照截止日排好了，
+    # 而 Python 的 sort 是**穩定**的 ⇒ 只用「有沒有命中」當鍵，
+    # 段內的截止日順序自然保留。
+    # 📌 只看截止日的話，一筆沒命中但截止日很近的會被推到最前面，
+    # 而使用者第一眼看到的就會是他不做的那一類。
+    items.sort(key=lambda it: not it["matchedWatches"])
 
     # ⚠️ **在 `q` 篩選之前算**：這個訊號問的是「搜尋條件有沒有命中東西」，
     # 不是「這次的搜尋結果有幾筆」。兩者混在一起的話，

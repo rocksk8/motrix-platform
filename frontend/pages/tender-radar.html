@@ -37,6 +37,18 @@
                     gap:10px; margin-bottom:10px; }
     .tr-src { font-size:11px; color:var(--text-dim); margin-top:18px; }
 
+    /* ⚠️ `.empty-state` **本來就沒有定義**：這一頁用了它，而它只存在於
+       contractors.html／customers.html／inventory.html 各自的 <style> 裡，
+       不在 css/style.css。⇒ 這一頁的空清單一直是沒有樣式的一行字。
+       🔑 今天第三次同一件事（`.form-input`／`.btn-secondary`／這個）：
+       **我假設有共用樣式，而它的症狀只是「看起來有點怪」。**
+       📌 值逐字抄 contractors.html，不自己發明一套長得像的。 */
+    .empty-state { text-align:center; padding:60px 20px; color:var(--text-dim); }
+
+    /* 訊息條：跟 .tr-health 同一種形狀，但它講的是「清單的狀態」不是「雷達的狀態」。 */
+    .tr-note { padding:9px 12px; border-radius:var(--radius); font-size:12px;
+               line-height:1.7; background:#F5F4F0; color:var(--text-secondary); }
+
     /* 表單欄位：與 case-management.html 的 .fi 家族逐字相同的值。
        ⚠️ 這個專案沒有全域的表單樣式——case-management 用頁內的 .fi、
        dev-crm 用頁內的 .dc-input，每頁各自帶一份。所以「沿用系統慣例」在這裡
@@ -277,7 +289,15 @@
       標案（<span x-text="visibleTenders.length"></span><span
         x-show="watchFilter" x-text="' / 共 ' + tenders.length"></span>）
     </h2>
+    <!-- 🔴 手動搜尋走**後端**（`?q=`），不是前端 `Array.filter`。
+         異體字表在 Python 裡（`tender_match.VARIANT_MAP`）⇒ 前端做不到
+         「同一套正規化」，而症狀是使用者手打「台中」查不到「臺中市政府」，
+         **而他剛剛才看到搜尋條件「台中」命中了那一筆**。 -->
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+      <input class="fi" style="width:220px" type="search" x-model="search"
+             @input="onSearch()" placeholder="搜尋標案名稱／機關／案號">
+      <button class="btn btn-ghost btn-sm" x-show="search"
+              @click="search = ''; loadTenders()">清除</button>
       <span style="font-size:12px;color:var(--text-secondary)">只看</span>
       <select class="fi" style="width:190px" x-model="watchFilter">
         <option value="">全部（不篩選）</option>
@@ -294,6 +314,22 @@
         信件只寄新掃到的命中，<strong>新增條件不會補寄舊標案</strong>。
       </span>
     </div>
+
+    <!-- 🔴 「一個標籤都沒有」有兩種成因，**而處置相反**：
+         沒有條件 ⇒ 去**新增**；有條件沒命中 ⇒ 去**改**。
+         ☠️ 兩者在畫面上都是一整欄的「—」，所以必須寫出來是哪一種。
+         📌 這個訊號跟清單同一個回應回來（`matchedEmptyReason`）——
+         前端自己去打 `watches` API 判斷的話是兩次往返加一個競態。 -->
+    <div class="tr-note" x-show="matchedEmptyReason === 'no_watches'"
+         style="margin-bottom:8px">
+      目前<strong>一個搜尋條件都沒有</strong>，所以沒有標案會被標上標籤，
+      也不會有通知信。上面的「搜尋條件」可以新增。
+    </div>
+    <div class="tr-note" x-show="matchedEmptyReason === 'no_hits'"
+         style="margin-bottom:8px">
+      有搜尋條件，但<strong>目前的標案一筆都沒命中</strong>——
+      要調整的是條件本身，不是再等一次抓取。
+    </div>
     <div class="table-scroll">
       <table class="data-table" x-show="visibleTenders.length > 0">
         <thead><tr>
@@ -304,9 +340,36 @@
         <tbody>
           <template x-for="t in visibleTenders" :key="t.id">
             <tr>
-              <td style="font-size:12px" x-text="t.org"></td>
+              <!-- 🔴 **機關名稱與標案名稱都要可點。**
+                   使用者在清單上掃的是**機關名稱**（他認得哪些機關常發
+                   他做得來的標案），而標案名稱太長、常被截斷
+                   ⇒ 只做一個的話**他會去點另一個然後以為壞了**。
+
+                   ⚠️ `x-if` 不是 `x-show`：沒有網址時 **DOM 裡不該有 `<a>`**。
+                   ☠️ `href=""` 是一個看起來可以點、點了沒反應的東西，
+                   而那比一開始就不可點更糟——使用者會以為是網路壞了，
+                   然後再點五次。
+                   📌 後端保證空網址回 `null` 而不是 `""`（SO8），
+                   所以這裡的 `t.url` 判斷**有可能寫對**。
+
+                   ⚠️ `rel="noopener"` **不是可選的**：少了它，被開啟的那一頁
+                   可以透過 `window.opener` 改寫我們這一頁的網址，
+                   而使用者不會發現分頁被換掉了。 -->
+              <td style="font-size:12px">
+                <template x-if="t.url">
+                  <a :href="t.url" target="_blank" rel="noopener noreferrer"
+                     x-text="t.org"></a>
+                </template>
+                <template x-if="!t.url"><span x-text="t.org"></span></template>
+              </td>
               <td style="font-size:12px;font-family:LINE Seed TW_OTF, sans-serif" x-text="t.caseNo"></td>
-              <td style="font-size:12px" x-text="t.name"></td>
+              <td style="font-size:12px">
+                <template x-if="t.url">
+                  <a :href="t.url" target="_blank" rel="noopener noreferrer"
+                     x-text="t.name"></a>
+                </template>
+                <template x-if="!t.url"><span x-text="t.name"></span></template>
+              </td>
               <!-- ⚠️ 三欄一律 `|| '—'`：NULL 顯示「—」不是空白。
                    空白讓人分不出「沒有這個欄位」與「這一頁沒載好」。 -->
               <td style="font-size:12px" x-text="t.location || '—'"></td>
@@ -322,10 +385,15 @@
                    沒有命中時顯示「—」**不留白**：留白會讓人分不出
                    「沒有命中」與「這一欄壞了」。 -->
               <td style="font-size:12px">
-                <template x-if="!t.matchedWatches || t.matchedWatches.length === 0">
+                <!-- ⚠️ 這裡**刻意不寫 `!t.matchedWatches ||`**：
+                     後端保證「沒命中是空陣列，不是缺鍵」（P2），
+                     而多一道防呆會把「後端哪天真的漏掉那個鍵」
+                     **變成看不見**——畫面照常顯示「—」，沒有人會發現。
+                     🔑 防呆擋掉的不只是壞資料，還有**壞資料的症狀**。 -->
+                <template x-if="t.matchedWatches.length === 0">
                   <span style="color:var(--text-dim)">—</span>
                 </template>
-                <template x-for="w in (t.matchedWatches || [])" :key="w.id">
+                <template x-for="w in t.matchedWatches" :key="w.id">
                   <span class="chip" style="margin:0 3px 3px 0" x-text="w.name"></span>
                 </template>
               </td>
@@ -333,8 +401,21 @@
           </template>
         </tbody>
       </table>
-      <div class="empty-state" x-show="tenders.length === 0">
-        目前沒有命中的標案。
+      <!-- ⚠️ 空清單有三種成因，**而它們在畫面上長得一樣**。
+           原本這裡寫「目前沒有命中的標案」——而清單早就改成「全部都列」了，
+           🔑 那句話會讓使用者以為「沒命中」是空白的原因，
+           **然後跑去改搜尋條件**，而真正的原因可能是雷達沒抓過。 -->
+      <div class="empty-state" x-show="tenders.length === 0 && search">
+        搜尋「<span x-text="search"></span>」沒有結果。
+        <button class="btn btn-ghost btn-sm" @click="search = ''; loadTenders()">清除搜尋</button>
+      </div>
+      <div class="empty-state" x-show="tenders.length === 0 && !search">
+        資料庫裡還沒有任何標案——雷達還沒抓過，或抓取失敗。
+        上面的「狀態」會說是哪一種。
+      </div>
+      <div class="empty-state"
+           x-show="tenders.length > 0 && visibleTenders.length === 0">
+        目前的篩選條件沒有符合的標案（共 <span x-text="tenders.length"></span> 筆）。
       </div>
     </div>
 
@@ -353,6 +434,10 @@ function tenderRadarPage() {
     session: {}, token: '', loading: false, scanning: false,
     status: null, watches: [], tenders: [], formError: '',
     schedule: null, scheduleMsg: '', listError: '', watchFilter: '',
+    // 🔴 `search` 是**這一次的篩選**，不是一筆搜尋條件：
+    // 存成 watch 的話使用者隨手打三個字就會在設定裡長出三個條件，
+    // **然後他每天會收到那三個條件的通知信。**
+    search: '', matchedEmptyReason: null, _searchTimer: null,
     scanHoursText: '', notifyHoursText: '', mapInfo: null,
     form: { id: null, name: '', keywords: '', excludes: '', org: '',
             budgetMin: '', budgetMax: '', enabled: true },
@@ -361,6 +446,34 @@ function tenderRadarPage() {
 
     //: 依篩選器過濾。**篩選是畫面上的事，不改資料**——
     //  後端回的永遠是全部，所以切換篩選不必重新請求。
+    //: 打字時不要每一鍵都打一次 API。
+    //  ⚠️ 250ms 是**體感**不是量測——它只影響請求次數，不影響正確性。
+    onSearch() {
+      clearTimeout(this._searchTimer)
+      this._searchTimer = setTimeout(() => this.loadTenders(), 250)
+    },
+
+    async loadTenders() {
+      const q = (this.search || '').trim()
+      const url = '/api/tender-radar/tenders'
+                + (q ? ('?q=' + encodeURIComponent(q)) : '')
+      try {
+        const r = await fetch(url, { headers: this._h() })
+        if (!r.ok) {
+          // ⚠️ 失敗時**不要把清單清空**——清空看起來像「沒有標案」，
+          // 而那是另一件事。留著上一次的內容並說載入失敗。
+          this.listError = '標案清單載入失敗（HTTP ' + r.status + '）'
+          return
+        }
+        const body = await r.json()
+        this.tenders = body.items || []
+        this.matchedEmptyReason = body.matchedEmptyReason || null
+        this.listError = ''
+      } catch (_e) {
+        this.listError = '標案清單載入失敗：連線不到伺服器'
+      }
+    },
+
     get visibleTenders() {
       const f = this.watchFilter
       if (!f) return this.tenders
@@ -408,16 +521,17 @@ function tenderRadarPage() {
     async refresh() {
       this.loading = true
       try {
-        const [s, w, t] = await Promise.all([
+        // 📌 標案清單走 `loadTenders()` 而不是在這裡再寫一次 fetch ——
+        // 兩條路的話，搜尋與重新整理會各自解析回傳，
+        // 而 `matchedEmptyReason` 會在其中一條上安靜地消失。
+        const [s, w] = await Promise.all([
           fetch('/api/tender-radar/status',  { headers: this._h() }),
           fetch('/api/tender-radar/watches', { headers: this._h() }),
-          fetch('/api/tender-radar/tenders', { headers: this._h() }),
+          this.loadTenders(),
         ])
         this.loadSchedule()
-        this.loadMap()
         if (s.ok) this.status  = await s.json()
         if (w.ok) this.watches = (await w.json()).items || []
-        if (t.ok) this.tenders = (await t.json()).items || []
         this.loadMap()
       } catch (_e) {}
       this.loading = false
