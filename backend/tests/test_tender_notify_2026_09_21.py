@@ -306,17 +306,78 @@ def admin_with_email(client):
         conn.commit()
     finally:
         conn.close()
+    # 🔴 同時種一筆搜尋條件 —— **不種的話 `tender_hits` 永遠是空的**。
+    #
+    # 我實測（用完即刪的探針）：
+    #     沒有 watch → tenders=5, tender_hits=0, notified=0，**但照樣寄出「5 筆新標案」**
+    #     有 watch   → tenders=5, tender_hits=5, notified=5
+    # ⇒ N9／N12／N15 斷言的是 `tender_hits.notified_at`，
+    #   而沒有 watch 時那張表是空的 ⇒ `assert notified == 0` 是
+    #   **空集合上的真，什麼都沒驗到**。
+    # 🔑 這是〈假綠燈〉裡「清單為空的斷言」那一條，我自己踩了。
+    conn = db.get_db()
+    try:
+        conn.execute(
+            "INSERT INTO tender_watches (name, keywords, enabled) VALUES (?,?,1)",
+            ("監視系統", "監視"))
+        conn.commit()
+    finally:
+        conn.close()
     return "boss@example.invalid"
 
 
+DELIVERY = "_send_raising"
+
+
 def _sent(monkeypatch):
-    """把 `email_notify._async_send` 換成記錄器。"""
-    _need(en, "_async_send")
+    """把 `email_notify._send_raising` 換成記錄器 —— **唯一的觀測點**。
+
+    §3 裁決：三支 `notify_tender_*` 全部改走 `_send_raising`（同步、五種失敗
+    情況全部 `raise`），取代射後不理的 `_async_send`。
+
+    ⚠️ 我一度想「兩條都攔」以免 B 改到一半打不到。**B 說得對：不要。**
+    兩個觀測點的話，「**哪一支走哪一條**」本身就會變成下一個坑 ——
+    一支忘了改就會安靜地走舊路，而測試照樣綠。**單一觀測點會讓那件事紅。**
+    """
+    _need(en, DELIVERY)
     calls = []
     monkeypatch.setattr(
-        en, "_async_send",
+        en, DELIVERY,
         lambda to_addrs, subject, html: calls.append((to_addrs, subject, html)))
     return calls
+
+
+def _sending_fails(monkeypatch, message="SMTP 掛了"):
+    """讓**真正的投遞**失敗。"""
+    _need(en, DELIVERY)
+
+    def _boom(*a, **kw):
+        raise RuntimeError(message)
+
+    monkeypatch.setattr(en, DELIVERY, _boom)
+
+
+def _notified_count():
+    import db
+    conn = db.get_db()
+    try:
+        return conn.execute(
+            "SELECT COUNT(*) c FROM tender_hits "
+            "WHERE notified_at IS NOT NULL AND notified_at != ''").fetchone()["c"]
+    finally:
+        conn.close()
+
+
+def _allow_rerun_today(monkeypatch):
+    """讓同一天可以再掃一次（繞開每日一次的上限，只在測試裡）。"""
+    import db
+    conn = db.get_db()
+    try:
+        conn.execute("DELETE FROM tender_fetch_log")
+        conn.commit()
+    finally:
+        conn.close()
+    monkeypatch.setattr(ts, "_already_fetched_today", lambda conn: False)
 
 
 def _assert_mails(calls, n):
@@ -552,26 +613,15 @@ def test_n12_send_failure_must_not_mark_as_notified(
 
     ⚠️ 在寄信**之前**設定的話，那批標案**永遠不會再出現在任何一封信裡**，
     而且不會有任何錯誤訊息。**又一個「安靜地少做一件事」。**
+
+    📌 N15 是它的下一層：這題只管「呼叫端丟例外時不標記」，
+    而 N15 管「**投遞真的沒成功**時不標記」—— 後者才是 A 追鏈時抓到的那個洞。
     """
-    import db
-    _need(en, "_async_send")
-
-    def _boom(*a, **kw):
-        raise RuntimeError("SMTP 掛了")
-
-    monkeypatch.setattr(en, "_async_send", _boom)
+    _sending_fails(monkeypatch)
     _run(monkeypatch, page=_five_hit_page())      # 不可以把例外往外丟
-
-    conn = db.get_db()
-    try:
-        row = conn.execute(
-            "SELECT COUNT(*) c FROM tender_hits WHERE notified_at IS NOT NULL "
-            "AND notified_at != ''").fetchone()
-    finally:
-        conn.close()
-    assert row["c"] == 0, (
+    assert _notified_count() == 0, (
         "寄信失敗了，卻有 %d 筆被標記成已通知 —— 那批標案永遠不會再出現在"
-        "任何一封信裡，而且不會有錯誤訊息" % row["c"]
+        "任何一封信裡，而且不會有錯誤訊息" % _notified_count()
     )
 
 
@@ -643,6 +693,112 @@ def test_n14b_quiet_period_notice_only_in_the_first_email(
         "第 8 天（靜默期已結束）那封信仍然寫著「接下來不會再寄信」—— "
         "那是錯的，收件人會第二次以為它壞了。"
         "實際主旨=%r" % (mails[0][1],)
+    )
+
+
+def test_n15_real_send_failure_does_not_mark_and_retries_next_time(
+    client, admin_with_email, monkeypatch
+):
+    """§3 N15：**寄信真的失敗時不標記，而且那批標案要出現在下一次的信裡**。
+
+    ⚠️⚠️ 這是 A 追端到端鏈時抓到的缺陷，而它正是
+    「**每一次把觀測點往下游移一步，都要再問一次『這一步之後還有沒有東西會讓它
+    安靜地不發生』**」的直接應用：
+
+    `_async_send`（`email_notify.py:185`）是**射後不理** —— 只開一條執行緒，
+    而 `_send` 裡有**五個安靜的 return**（功能未啟用／非正式機被擋／收件人空／
+    SMTP 未設定／SMTP 例外），**一個都傳不回呼叫端**。
+    ⇒ `_mark_hits_notified()` 在這五種情況下**照樣執行**，
+    **標案被標記成「已通知」而信根本沒出去，且永遠不會再出現在任何一封信裡。**
+
+    🔴 **這直接打破這條線的承諾「不會漏掉標案」，而最可能的觸發是
+    「SMTP 還沒設定」—— 也就是使用者第一次啟用的那一天。**
+
+    ⚠️ N12 攔不住它：N12 驗的是「`notify_tender_found` 有沒有丟例外」，
+    而失敗發生在**那之後**的背景執行緒裡。**名字承諾兩層，觀測點只蓋住一層。**
+    """
+    # 第一次：投遞真的失敗
+    _sending_fails(monkeypatch)
+    _run(monkeypatch, page=_five_hit_page())      # 不可以把例外往外丟
+    assert _notified_count() == 0, (
+        "投遞失敗了，卻有 %d 筆被標記成已通知 —— "
+        "那批標案永遠不會再出現在任何一封信裡" % _notified_count()
+    )
+
+    # 第二次：投遞正常 → 那批標案要真的出現在這一封裡
+    _allow_rerun_today(monkeypatch)
+    mails = _sent(monkeypatch)
+    _run(monkeypatch, page=_five_hit_page())
+    _assert_mails(mails, 1)
+    assert _notified_count() > 0, (
+        "第二次投遞成功了，卻一筆都沒被標記 —— 下一次還會再寄一遍同樣的標案"
+    )
+    body = mails[0][1] + mails[0][2]
+    assert "TYGH115152" in body or "監視" in body, (
+        "第一次沒寄成功的標案沒有出現在第二封信裡 —— 它們被漏掉了。"
+        "實際主旨=%r" % (mails[0][1],)
+    )
+
+
+def test_n16_smtp_not_configured_does_not_mark(client, admin_with_email, monkeypatch):
+    """§3 N16：**SMTP 未設定時同 N15**（不標記、下次再寄）。
+
+    ⚠️ 這不是錯誤是「還沒設定」，但**結果一樣不可以標記** ——
+    而且它是**使用者第一次啟用那一天最可能發生的情況**。
+
+    🔑 這題刻意**走真正的程式路徑**（讓 `_cfg()` 回一份沒有帳密的設定），
+    不是把投遞函式整支換掉 —— 換掉的話驗到的是我自己造的例外，
+    **而不是「SMTP 沒設定時系統真的會拒絕寄出」**。
+    """
+    _need(en, "_cfg")
+    monkeypatch.setattr(en, "_cfg", lambda: {"enabled": True, "smtp_host": "x",
+                                             "smtp_port": 587, "smtp_user": "",
+                                             "smtp_password": ""})
+    if hasattr(en, "_smtp_send_blocked"):
+        monkeypatch.setattr(en, "_smtp_send_blocked", lambda subject: False)
+
+    _run(monkeypatch, page=_five_hit_page())      # 不可以把例外往外丟
+    assert _notified_count() == 0, (
+        "SMTP 沒設定、信根本沒出去，卻有 %d 筆被標記成已通知 —— "
+        "使用者第一次啟用那天就會靜默漏掉一批標案" % _notified_count()
+    )
+
+
+def test_n15b_failed_alert_does_not_consume_the_edge(
+    client, admin_with_email, monkeypatch
+):
+    """§3 N15b：**抓取失敗的告警寄不出去時，「已告警」的邊緣狀態不可以被消耗掉**。
+
+    ⚠️⚠️ **這個比 N15 嚴重一級**（視窗 B 抓到）：
+
+        第 1 天  抓取失敗 → 寫 tender_fetch_log（recognised=NULL）
+                 previous["failed"] 還是 False ⇒ 寄「抓不到」的告警
+                 投遞失敗（五種安靜 return 之一）⇒ **信沒出去**
+        第 2 天  previous["failed"] 現在是 True ⇒ **不再寄**
+
+    ⇒ **邊緣被消耗掉了，而信根本沒出去。雷達從此瞎著，而沒有任何人會知道** ——
+      因為邊緣觸發**保證了它不會再試**。
+
+    > **N15 是「漏掉幾筆標案」；這一題是漏掉「雷達壞了」這件事本身。**
+
+    🔑 邊緣觸發的狀態**必須在投遞成功之後才推進**，不是在決定要寄的時候。
+    """
+    _seed_log([])
+
+    # 第 1 天：抓取失敗，而且告警也寄不出去
+    _sending_fails(monkeypatch)
+    _run(monkeypatch, page=None, error="timeout day1")
+
+    # 第 2 天：仍然抓取失敗，但這次投遞正常 —— **必須再寄一次**
+    _allow_rerun_today(monkeypatch)
+    mails = _sent(monkeypatch)
+    _run(monkeypatch, page=None, error="timeout day2")
+
+    _assert_mails(mails, 1)
+    # 這一封必須是「抓不到」那一類，不是「找到標案」
+    subject = mails[0][1]
+    assert "標案雷達" in subject or "抓" in subject or "失敗" in subject, (
+        "第 2 天寄出的不是抓取失敗的告警？實際主旨=%r" % (subject,)
     )
 
 
