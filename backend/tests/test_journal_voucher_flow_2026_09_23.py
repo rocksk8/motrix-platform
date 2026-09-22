@@ -1,0 +1,324 @@
+# -*- coding: utf-8 -*-
+"""`JV2` · 傳票**送審 → 簽核 → 過帳／退回／作廢**（A `§160` 路徑定案）。
+
+```
+POST /api/vouchers/{id}/submit      送審
+POST /api/vouchers/{id}/approve     簽核通過
+POST /api/vouchers/{id}/send-back   退回（**會升版成 -Rn**）
+POST /api/vouchers/{id}/post        過帳
+POST /api/vouchers/{id}/void        作廢
+```
+📌 退回叫 `/send-back` 不叫 `/reject`：**傳票退回會升版**，
+   與既有那幾張單的「駁回」語意不同 —— 同名會讓人以為行為一樣。
+
+---
+
+# 🔴 一律走 `client`，**不准直接叫 helper**
+
+A-2 實查：**8 支傳票測試有 7 支打 0 個 API** —— 直接叫 `helpers/voucher.py`
+繞過 router ⇒ **規則全綠而沒有一條路走得到**。
+🔑 〈兩個都對而路不存在〉：本檔每一題都從 HTTP 進去。
+
+# 🔴 而簽核三格的時間戳，**欄位不存在**（B 讀使用者原話後指出）
+
+使用者原話逐字有「**你還問過我審核日期等**」。而我實測 `vouchers_all` 19 個欄位：
+```
+時間戳只有  posted_at ／ voided_at ／ created_at ／ updated_at
+沒有        送審、覆核、主管 各自的時間
+簽核紀錄表  也沒有（只有 audit_log 與 approval_delegates，都不是）
+```
+📌 `SPEC-VOUCHER §106c` 明著寫三格簽名位**從簽核紀錄取，不可以從 `status` 欄推**
+⇒ 本檔釘的是**不變量**：三格**各自**要有自己的人與時間，而且**從 API 讀得到**。
+⚠️ 用欄位還是用一張簽核紀錄表**由 B 決定** —— 我不釘機制。
+☠️ 而缺了它的症狀很具體：**單子印出來，三個簽名格有名字而沒有日期** ——
+   而那正是使用者當初問的那件事。
+"""
+import re
+from datetime import date
+
+import pytest
+
+#: `SPEC-VOUCHER §一` 的狀態機。
+STATUSES = ("草稿", "待審核", "簽核中", "已核准", "已過帳")
+
+#: `§160` 定案的五條路徑。⚠️ 改了 **退回給我**。
+ACTIONS = ("submit", "approve", "send-back", "post", "void")
+
+#: 三格簽名位（`§106c`）⇒ 每一格要有**人**與**時間**。
+SIGN_SLOTS = ("製票", "覆核", "主管")
+
+_LINES = [{"account_code": "1113", "debit": 1000, "credit": 0},
+          {"account_code": "4111", "debit": 0, "credit": 1000}]
+
+
+def _hdr(client, make_user, username, role="superadmin", modules=("cashier",)):
+    u, p = make_user(username=username, role=role, modules=list(modules))
+    r = client.post("/api/auth/login", json={"username": u, "password": p})
+    assert r.status_code == 200, r.text
+    return u, {"Authorization": "Bearer " + r.json()["token"]}
+
+
+def _create(client, hdr, **kw):
+    """建一張草稿。**走 API**，不直接寫資料庫。"""
+    body = {"summary": "JV2", "lines": _LINES}
+    body.update(kw)
+    r = client.post("/api/vouchers", json=body, headers=hdr)
+    if r.status_code in (404, 405):
+        pytest.fail(
+            "`POST /api/vouchers` 還不存在（回 %s）—— 這是 `JV1` 的紅，"
+            "**本檔每一題都靠它**。" % r.status_code)
+    assert r.status_code in (200, 201), (
+        "建立草稿失敗：%s %s" % (r.status_code, r.text[:160]))
+    j = r.json()
+    return j.get("id") or j.get("voucher_id"), j
+
+
+def _act(client, hdr, vid, action, body=None):
+    """走 `§160` 定案的那五條路之一。**不再試探別的路徑**。"""
+    r = client.post("/api/vouchers/%s/%s" % (vid, action),
+                    json=body or {}, headers=hdr)
+    if r.status_code in (404, 405):
+        pytest.fail(
+            "`POST /api/vouchers/{id}/%s` 還不存在（回 %s）。\n"
+            % (action, r.status_code)
+            + "⚠️ 路徑是 `§160` 定案的，改了 **退回給我**。")
+    return r
+
+
+def _get(client, hdr, vid):
+    r = client.get("/api/vouchers/%s" % vid, headers=hdr)
+    assert r.status_code == 200, "讀不回來：%s %s" % (r.status_code, r.text[:160])
+    return r.json()
+
+
+# ══════════════════════════════════════════════════════════════════════
+# ① 送審 → 簽核 → 過帳：狀態要真的往前走
+# ══════════════════════════════════════════════════════════════════════
+
+def test_jv2_submit_moves_a_draft_out_of_draft(client, make_user):
+    """🔴 **送審之後它不再是草稿。**
+
+    ⚠️ 觀測點是**再 GET 一次讀回來的 `status`**，不是送審那一支的回應：
+    ```
+    回應說「已送審」  => 那是一句話
+    GET 讀回「待審核」 => **它真的落地了**
+    ```
+    ☠️ 只驗回應的話，一支「回 200 而什麼都沒改」的端點也會綠 ——
+       而症狀是**使用者按了送審，單子還在草稿匣裡**。
+    """
+    _u, hdr = _hdr(client, make_user, "jv2_submit")
+    vid, _ = _create(client, hdr)
+    assert _get(client, hdr, vid)["status"] == "草稿", "新建的不是草稿。"
+
+    r = _act(client, hdr, vid, "submit")
+    assert r.status_code == 200, "送審失敗：%s %s" % (r.status_code, r.text[:160])
+
+    after = _get(client, hdr, vid)["status"]
+    assert after != "草稿", (
+        "送審回 200，而 GET 讀回來仍然是「草稿」——\n"
+        + "☠️ 使用者按了送審，**單子還在草稿匣裡**。")
+    assert after in STATUSES, (
+        "送審之後的狀態是 %r，而它不在 `§一` 的五個值裡：%s\n"
+        % (after, list(STATUSES))
+        + "🔑 多一個狀態 ⇒ 有人加了一個值而沒有人決定它的轉移規則。")
+
+
+def test_jv2_a_draft_cannot_be_posted_directly(client, make_user):
+    """🔴 **草稿不可以直接過帳** —— 必須先走完簽核（`§六②`）。
+
+    ☠️ 少了這道擋：**一個人可以自己開單、自己過帳，中間沒有第二個人看過** ——
+       而那正是簽核流程存在的理由。
+    🔑 而它不會報錯：帳是平的、單號也對，**只是沒有人覆核過**。
+    ⚙️ 而拒絕的理由要說得出是**狀態**不是別的（例如不平衡）——
+       否則使用者會去改分錄，而問題不在那裡。
+    """
+    _u, hdr = _hdr(client, make_user, "jv2_direct")
+    vid, _ = _create(client, hdr)
+
+    r = _act(client, hdr, vid, "post")
+    assert r.status_code >= 400, (
+        "**草稿直接過帳成功了**（回 %s）——\n" % r.status_code
+        + "☠️ 一個人可以自己開單、自己過帳，**中間沒有第二個人看過**。")
+    assert re.search(r"草稿|已核准|狀態|簽核", r.text), (
+        "擋下來了，而訊息沒說是**狀態**的問題：%s\n" % r.text[:200]
+        + "☠️ 使用者會去改分錄 —— **而問題不在那裡**。")
+    assert _get(client, hdr, vid)["status"] == "草稿", (
+        "被擋下來了，而狀態已經被改掉了 ——\n"
+        + "🔑 拒絕的路徑上不可以留下副作用。")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# ② 退回：狀態回草稿 ＋ **單號升版**
+# ══════════════════════════════════════════════════════════════════════
+
+def test_jv2_send_back_returns_to_draft_and_bumps_the_revision(client,
+                                                               make_user):
+    """🔴🔴 **退回 ⇒ 回草稿 ＋ 單號升版 `-Rn` ＋ 清除簽核**（`§106c`）。
+
+    📌 它叫 `/send-back` 不叫 `/reject`，**因為它會升版** ——
+       與既有那幾張單的「駁回」語意不同，同名會讓人以為行為一樣。
+
+    ⚙️ 三格都要，而**升版那一格最容易漏**：
+    ```
+    狀態回草稿    漏了 => 退回之後改不動
+    單號升版      漏了 => **兩個版本共用一個單號** ⇒ 對不出改了什麼
+    清除簽核      漏了 => 改完之後**還帶著上一版的簽名** ⇒ 簽的人沒看過新的內容
+    ```
+    ☠️ 第三格最安靜：單子上有簽名，而那個人沒有看過這一版。
+    """
+    _u, hdr = _hdr(client, make_user, "jv2_back")
+    vid, created = _create(client, hdr)
+    no0 = created.get("voucher_no") or created.get("voucherNo")
+
+    assert _act(client, hdr, vid, "submit").status_code == 200
+    r = _act(client, hdr, vid, "send-back", {"reason": "科目挑錯了"})
+    assert r.status_code == 200, "退回失敗：%s %s" % (r.status_code, r.text[:160])
+
+    after = _get(client, hdr, vid)
+    assert after["status"] == "草稿", (
+        "退回之後狀態是 %r，而 `§106c` 是**回草稿**。\n" % after["status"]
+        + "☠️ 不回草稿的話，被退回的人**改不動它**。")
+
+    no1 = after.get("voucher_no")
+    assert no1 != no0, (
+        "退回前後單號都是 %r —— **沒有升版**。\n" % no0
+        + "☠️ 兩個版本共用一個單號 ⇒ **對不出這一次改了什麼**，\n"
+          "   而 `UNIQUE INDEX` 擋不住（它不報錯）。")
+    assert re.search(r"-R\d+$", no1 or ""), (
+        "升版之後的單號是 %r，而 `§一` 的形狀是 `…-Rn`。\n" % no1
+        + "🔑 格式不對 ⇒ 下一次退回會變 `-R1-R1`（`quotations` 那一支的症狀）。")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# ③ 作廢：已過帳不可退回，只能作廢重開
+# ══════════════════════════════════════════════════════════════════════
+
+def test_jv2_a_posted_voucher_can_only_be_voided_not_sent_back(client,
+                                                               make_user):
+    """🔴 **已過帳不可退回 —— 只能作廢重開**（使用者裁示）。
+
+    ```
+    已過帳 ──退回──▶ ✗   ☠️ 帳上那一筆還在，而單據回到可編輯狀態
+    已過帳 ──作廢──▶ ✅   原單留著，另開一張 —— **帳上看得到那一次作廢**
+    ```
+    ⚙️ 而這一題要走完整條路（草稿→送審→簽核→過帳），**全部走 API** ——
+       直接改資料庫把狀態設成「已過帳」的話，驗到的不是這條路。
+    """
+    _u, hdr = _hdr(client, make_user, "jv2_void")
+    vid, _ = _create(client, hdr)
+
+    assert _act(client, hdr, vid, "submit").status_code == 200
+    ap = _act(client, hdr, vid, "approve")
+    assert ap.status_code == 200, "簽核失敗：%s %s" % (ap.status_code, ap.text[:160])
+    st = _get(client, hdr, vid)["status"]
+    if st != "已核准":
+        # 分層簽核可能要簽不只一次 —— 再簽到底。
+        for _ in range(4):
+            if _get(client, hdr, vid)["status"] == "已核准":
+                break
+            _act(client, hdr, vid, "approve")
+    assert _get(client, hdr, vid)["status"] == "已核准", (
+        "簽核走不到「已核准」（現在是 %r）—— 後面兩格量不到。"
+        % _get(client, hdr, vid)["status"])
+
+    assert _act(client, hdr, vid, "post").status_code == 200, "過帳失敗。"
+    assert _get(client, hdr, vid)["status"] == "已過帳"
+
+    back = _act(client, hdr, vid, "send-back", {"reason": "想改"})
+    assert back.status_code >= 400, (
+        "**已過帳的傳票退回成功了**（回 %s）——\n" % back.status_code
+        + "☠️ 帳上那一筆還在，而單據回到可編輯狀態。")
+
+    v = _act(client, hdr, vid, "void", {"reason": "開錯了"})
+    assert v.status_code == 200, (
+        "已過帳的傳票**作廢不了**：%s %s\n" % (v.status_code, v.text[:160])
+        + "⚙️ 這是正對照：少了它，「已過帳什麼都不准做」也會讓上面那格綠，\n"
+          "   **而開錯的那一張從此沒有出路**。")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# 🔴 ④ 簽核三格各自要有時間戳（B 指出的欄位缺口）
+# ══════════════════════════════════════════════════════════════════════
+
+def test_jv2_each_signature_slot_has_its_own_person_and_timestamp(client,
+                                                                  make_user):
+    """🔴🔴 **製票／覆核／主管三格，各自要有「誰」與「什麼時候」。**
+
+    使用者原話逐字：「**你還問過我審核日期等**」。
+    而我實測 `vouchers_all` 的 19 個欄位，時間戳只有：
+    ```
+    posted_at ／ voided_at ／ created_at ／ updated_at
+    ⇒ **送審、覆核、主管各自的時間都沒有**
+    ⇒ 簽核紀錄表也沒有（只有 audit_log 與 approval_delegates，都不是）
+    ```
+    ☠️ 缺了它的症狀很具體：**單子印出來，三個簽名格有名字而沒有日期。**
+    📌 `§106c` 明著寫三格**從簽核紀錄取，不可以從 `status` 欄推** ——
+       ⇒ 本題釘**不變量**（三格各有人與時間、而且 API 讀得到），
+         **用欄位還是用一張紀錄表由 B 決定**，我不釘機制。
+
+    ⚙️ 而「時間」要是**各自的** —— 三格共用 `updated_at` 不算：
+    ```
+    共用一個時間 => 覆核與主管看起來同一秒簽的
+                 => **而那正是「有人代簽」的樣子**
+    ```
+    """
+    _u, hdr = _hdr(client, make_user, "jv2_sign")
+    vid, _ = _create(client, hdr)
+    assert _act(client, hdr, vid, "submit").status_code == 200
+    for _ in range(4):
+        if _get(client, hdr, vid)["status"] == "已核准":
+            break
+        _act(client, hdr, vid, "approve")
+
+    v = _get(client, hdr, vid)
+    sigs = (v.get("signatures") or v.get("signoffs")
+            or v.get("approvals") or v.get("sign_slots"))
+    assert sigs, (
+        "讀回來的傳票裡沒有簽核三格（找過 `signatures` / `signoffs` / "
+        "`approvals` / `sign_slots`）。現有鍵：%s\n" % sorted(v)
+        + "☠️ 版面上那三格印不出來 —— 而使用者問過「**審核日期**」。\n"
+        + "⚠️ 鍵名可以換（**退回給我**），而三格要有**各自的人與時間**。")
+
+    times = []
+    for slot in SIGN_SLOTS:
+        one = sigs.get(slot) if isinstance(sigs, dict) else next(
+            (s for s in sigs if s.get("slot") == slot), None)
+        assert one, (
+            "簽核三格裡沒有「%s」。現有：%r\n" % (slot, sigs)
+            + "📌 `§106c`：製票＝`created_by`／覆核＝第一層簽核人／"
+              "主管＝最後一層簽核人。")
+        who = one.get("by") or one.get("username") or one.get("user")
+        at = one.get("at") or one.get("signed_at") or one.get("time")
+        assert who, "「%s」那一格沒有人：%r" % (slot, one)
+        assert at, (
+            "「%s」那一格沒有**時間**：%r\n" % (slot, one)
+            + "☠️ 單子印出來，那一格有名字而**沒有日期** ——\n"
+              "   而使用者原話逐字問過「你還問過我審核日期等」。")
+        times.append(at)
+
+    assert len(set(times)) > 1, (
+        "三格的時間完全相同（%r）——\n" % times[0]
+        + "☠️ 覆核與主管看起來**同一秒簽的**，而那正是「有人代簽」的樣子。\n"
+        + "🔑 時間要來自**各自簽的那一刻**，不是共用 `updated_at`。")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# ⚙️ 每一條路都要走過 HTTP（A-2：8 支有 7 支打 0 API）
+# ══════════════════════════════════════════════════════════════════════
+
+def test_jv2_this_file_never_calls_the_helper_directly():
+    """⚙️ **本檔自己不可以繞過 router。**
+
+    A-2 實查：**8 支傳票測試有 7 支打 0 個 API** ——
+    直接叫 `helpers/voucher.py` ⇒ 規則全綠而**沒有一條路走得到**。
+    🔑 ⇒ 這一題釘的是**我自己**：本檔不可以 `from helpers.voucher import …`。
+    ⚠️ 而它擋不住「別的檔那樣做」—— 那是另一題，不在 `JV2` 範圍。
+    """
+    from pathlib import Path
+    src = Path(__file__).read_text(encoding="utf-8")
+    code = "\n".join(l for l in src.splitlines()
+                     if not l.lstrip().startswith("#"))
+    bad = re.findall(r"^\s*(?:from|import)\s+helpers\.voucher\b", code, re.M)
+    assert not bad, (
+        "本檔直接 import 了 `helpers.voucher`：%s\n" % bad
+        + "☠️ 那條路繞過 router ⇒ **規則全綠而沒有一條路走得到**。")
