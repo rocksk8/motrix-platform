@@ -35,6 +35,39 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+# ── 計時與統計（2026-09-22，使用者問「打包的時間為什麼會越來越久」）──────
+#
+# 🔴 問到這一題的時候，我們發現**答不出來**：`deploy_manifest.json` 只記
+# commit／branch／built_at，**沒有記耗時也沒有記題數** ⇒ 「越來越久」無法從
+# 產物查證，只能靠某個人當時的紀錄，而那份紀錄的原始輸出已經不存在。
+# 🔑 ⇒ 下面這些欄位的價值**不在這一次**，是「下一次有人問同一個問題時，
+#    答案在產物裡而不在誰的記憶裡」。
+$BuildT = [ordered]@{}
+$BuildStats = [ordered]@{}
+$BuildStart = Get-Date
+
+function Mark-Elapsed($name, $from) {
+    $BuildT[$name] = [math]::Round(((Get-Date) - $from).TotalSeconds, 2)
+}
+
+function Parse-PytestSummary($lines) {
+    # 最後那一行 `N passed, M skipped in X.XXs` 拆成數字。拆不出來留 $null。
+    #
+    # 這裡原本被我寫成 Python 的三引號 docstring —— PowerShell 會把它當成
+    # 一個**字串運算式**，而運算式的值會被送進輸出串流
+    # => 這支函式會回「字串 ＋ 雜湊表」兩個東西，而不是一個雜湊表。
+    # 語法檢查不會紅（它是合法的 PowerShell），而呼叫端拿到的東西是錯的。
+    # 「換一種語言寫註解」在這裡不是風格問題，是行為問題。
+    $out = [ordered]@{ passed = $null; failed = $null; skipped = $null }
+    foreach ($ln in ($lines | Select-Object -Last 12)) {
+        $t = [string]$ln
+        if ($t -match "(\d+) passed") { $out.passed = [int]$Matches[1] }
+        if ($t -match "(\d+) failed") { $out.failed = [int]$Matches[1] }
+        if ($t -match "(\d+) skipped") { $out.skipped = [int]$Matches[1] }
+    }
+    return $out
+}
+
 function Fail($msg) {
     Write-Host "`n[FAIL] $msg" -ForegroundColor Red
     exit 1
@@ -472,8 +505,19 @@ try {
 $pytestTemp = Join-Path $env:TEMP "motrix-pytest-$(Get-Date -Format 'yyyyMMdd_HHmmss')"
 Write-Host "`n[測試] 執行 pytest（非 e2e，backend/tests/，含 API 整合測試，pytest-xdist 平行化，$workers 個 worker）..."
 Push-Location (Join-Path $projectRoot "backend")
-& $pyExe -m pytest -q -m "not e2e" -n $workers --basetemp="$pytestTemp"
+# ⚠️ `--durations=20` 是**零額外時間**：那一輪本來就要跑，它只是把 pytest
+# 已經量到的分布印出來。而它量到的正是「**打包環境下**」的分布 ——
+# 🔑 那是我們先前唯一拿不到的那一格（單獨跑一支探針量不到 `-n 6` 的競爭）。
+$_tNonE2e = Get-Date
+& $pyExe -m pytest -q -m "not e2e" -n $workers --durations=20 --basetemp="$pytestTemp" 2>&1 |
+    Tee-Object -Variable nonE2eOut |
+    ForEach-Object { Write-Host $_ }
+# ⚠️ `$LASTEXITCODE` 由原生執行檔設定，**管線接到 cmdlet 不會覆蓋它** ——
+# 用 `$?` 的話拿到的是 `ForEach-Object` 的結果，那永遠是 True。
 $testExit = $LASTEXITCODE
+Mark-Elapsed "pytest_not_e2e" $_tNonE2e
+$BuildStats["not_e2e"] = Parse-PytestSummary $nonE2eOut
+$BuildStats["workers"] = $workers
 if ($testExit -ne 0) {
     Pop-Location
     Fail "測試未全數通過（exit code $testExit），中止打包。請先修好測試再重新執行本腳本。"
@@ -509,14 +553,44 @@ if ($leaked.Count -gt 0) {
     Write-Host "[OK] 跑完測試之後工作樹沒有多出任何東西。" -ForegroundColor Green
 }
 
-Write-Host "`n[測試] 執行 pytest（e2e，真實瀏覽器，失敗僅警告不中止打包）..."
-& $pyExe -m pytest -q -m "e2e" --basetemp="${pytestTemp}_e2e"
+Write-Host "`n[測試] 執行 pytest（e2e，真實瀏覽器）..."
+$_tE2e = Get-Date
+# `-rf` 讓失敗的那幾題印出 `FAILED <題> - <例外類別>: <訊息>` —— 那一行是
+# 下面分類的依據。
+& $pyExe -m pytest -q -rf -m "e2e" --durations=20 --basetemp="${pytestTemp}_e2e" 2>&1 |
+    Tee-Object -Variable e2eOut |
+    ForEach-Object { Write-Host $_ }
 $e2eExit = $LASTEXITCODE
+Mark-Elapsed "pytest_e2e" $_tE2e
+$BuildStats["e2e"] = Parse-PytestSummary $e2eOut
 Pop-Location
-if ($e2eExit -ne 0) {
-    Write-Host "[WARN] e2e 測試未全數通過（exit code $e2eExit）——已知這類測試偶爾因系統負載造成瀏覽器渲染逾時，非必然代表程式碼壞掉。繼續打包，但建議事後單獨重跑這個檔案確認（python -m pytest -m e2e -v）。" -ForegroundColor Yellow
-} else {
+
+# 🔴 **逾時與斷言失敗要分開判**（2026-09-22）。
+#
+# 這一段原本一律只印一句「已知這類測試偶爾因系統負載造成瀏覽器渲染逾時」
+# 然後繼續打包。
+# ☠️ 而 2026-09-22 那一次它是**內容斷言**（`assert '業務' in [...]`），
+#    不是逾時 —— 一個真的錯誤被一句「已知偶爾」放過去了。
+# 🔑 改文字是修結果；**修作法是讓判定看得見那個區別**，而 pytest 給得出來：
+#    `-rf` 的摘要行帶著例外類別。
+#
+# ⚠️ **fail closed**：只有**認得出來的逾時**才降級成警告。
+# ☠️ 分類不出來（收集錯誤、行程被殺、輸出被截斷）⇒ **中止**。
+#    認不得就放行的話，這道判定會在它最該擋的時候消失。
+$e2eFailLines = @($e2eOut | Where-Object { $_ -match "^FAILED " })
+$e2eTimeoutOnly = $false
+if ($e2eExit -ne 0 -and $e2eFailLines.Count -gt 0) {
+    # 逐行看例外類別；**全部**都是逾時才算逾時。
+    $nonTimeout = @($e2eFailLines | Where-Object { $_ -notmatch "Timeout" })
+    $e2eTimeoutOnly = ($nonTimeout.Count -eq 0)
+}
+if ($e2eExit -eq 0) {
     Write-Host "[OK] e2e 測試也全數通過。" -ForegroundColor Green
+} elseif ($e2eTimeoutOnly) {
+    Write-Host "[WARN] e2e 有 $($e2eFailLines.Count) 題**逾時**（exit $e2eExit）——真實瀏覽器在系統負載高時會渲染逾時，不必然代表程式碼壞掉。繼續打包，建議事後單獨重跑：python -m pytest -m e2e -v" -ForegroundColor Yellow
+} else {
+    $e2eFailLines | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
+    Fail "e2e 測試失敗，而失敗的原因**不是逾時**（見上方 FAILED 行）。逾時可以續跑，斷言失敗不行——那代表畫面上真的有東西不對。要確認請單獨跑：python -m pytest -m e2e -v"
 }
 
 # 2026-09-15：測試暫存跑完就自己刪。
@@ -582,6 +656,7 @@ if (Test-Path $versionManifestPath) {
 }
 
 # --- Step 5: 用 git archive 匯出乾淨快照 ---
+$_tArchive = Get-Date
 $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
 if (-not $OutDir) {
     $OutDir = Join-Path $projectRoot "deploy_packages"
@@ -653,12 +728,26 @@ if (-not (Test-Path (Join-Path $pkgDir "backend")) -or -not (Test-Path (Join-Pat
 # git archive 本來就只會匯出 git 追蹤的內容，這裡不需要額外過濾。
 
 # --- Step 6: 寫 deploy_manifest.json ---
+Mark-Elapsed "archive" $_tArchive
+$BuildT["total_so_far"] = [math]::Round(((Get-Date) - $BuildStart).TotalSeconds, 2)
+
 $manifest = [ordered]@{
     commit               = $commit
     commit_short         = $commitShort
     branch               = $branch
     built_at             = (Get-Date -Format "yyyy-MM-dd HH:mm:ss")
     version_manifest_latest = $versionLatest
+    # 🔴 2026-09-22 新增：使用者問「打包的時間為什麼會越來越久」，
+    # 而我們**答不出來** —— 這裡先前只有 commit／branch／built_at。
+    # 🔑 這幾欄的價值不在這一次，是**下一次有人問同一個問題時，
+    #    答案在產物裡而不在誰的記憶裡**。
+    durations_sec        = $BuildT
+    tests                = $BuildStats
+    env                  = [ordered]@{
+        phys_cores = $physCores
+        workers    = $workers
+        priority   = "BelowNormal"
+    }
 }
 $manifestPath = Join-Path $pkgDir "deploy_manifest.json"
 $manifest | ConvertTo-Json -Depth 6 | Set-Content -Path $manifestPath -Encoding UTF8
@@ -678,6 +767,7 @@ Write-Host "[2/2] 寫入 deploy_manifest.json"
 # 手動放進來的東西（改名留存的包、筆記、複製到一半的資料夾）不能被掃掉。
 # 排序用資料夾名稱而不是 LastWriteTime——名字開頭就是時間戳，字串排序即時間排序，
 # 而 LastWriteTime 會被「複製到隨身碟」之類的動作改掉。
+$_tPrune = Get-Date
 if ($KeepPackages -gt 0) {
     $pkgPattern = '^\d{8}_\d{6}_[0-9a-fA-F]{7,40}$'
     $allPkgs = Get-ChildItem $OutDir -Directory -ErrorAction SilentlyContinue |
@@ -700,6 +790,50 @@ if ($KeepPackages -gt 0) {
         }
         Write-Host "  （要保留更多份：-KeepPackages N；完全不清理：-KeepPackages 0）" -ForegroundColor DarkGray
     }
+}
+
+Mark-Elapsed "prune" $_tPrune
+$BuildT["total"] = [math]::Round(((Get-Date) - $BuildStart).TotalSeconds, 2)
+
+# 🔴 **同一份數字要再寫一次到不會被刪的地方。**
+#
+# `KeepPackages=2` 會把舊包整個刪掉 ⇒ 只寫進包裡的 `deploy_manifest.json`
+# 的話，**每一筆都記了，而只剩最後兩筆** ⇒ 下一次問「打包為什麼越來越久」
+# 還是查不到。2026-09-22 就是這樣：四個視窗查了半小時，結論是「查不到」。
+#
+# 📌 落點選 `backend/tools/deploy_logs/`（已在 `.gitignore:62`）：
+#    ① 不被 `KeepPackages` 掃到 —— 它只看 `deploy_packages/`
+#    ② **不會弄髒 `git status`** —— Step 1 要求乾淨，寫一個**被追蹤**的檔
+#       會讓下一次打包被自己擋住
+# ⚠️ 代價寫明：它**不進 git 歷史**，換一台機器就沒有。
+#    要跨機器保存是一個獨立的決定，不在這一次。
+#
+# ⚠️ 而它與包裡那份**刻意不一致**：manifest 在 Step 6 寫，那時 prune 還沒跑
+#    ⇒ manifest 記到 `archive` 為止，**這裡才有 `prune` 與 `total`**。
+#    不寫這一段的話，下一個人比對兩邊會以為有一個壞了。
+try {
+    $histDir = Join-Path $projectRoot "backend\tools\deploy_logs"
+    if (-not (Test-Path $histDir)) { New-Item -ItemType Directory -Path $histDir | Out-Null }
+    $histPath = Join-Path $histDir "build_history.jsonl"
+    $histLine = ([ordered]@{
+        built_at      = (Get-Date -Format "yyyy-MM-dd HH:mm:ss")
+        commit        = $commitShort
+        package       = (Split-Path $pkgDir -Leaf)
+        durations_sec = $BuildT
+        tests         = $BuildStats
+        env           = [ordered]@{
+            phys_cores = $physCores
+            workers    = $workers
+            priority   = "BelowNormal"
+        }
+    } | ConvertTo-Json -Depth 6 -Compress)
+    Add-Content -Path $histPath -Value $histLine -Encoding UTF8
+    Write-Host "`n[紀錄] 耗時已附加到 backend\tools\deploy_logs\build_history.jsonl" -ForegroundColor DarkGray
+    Write-Host "  total=$($BuildT.total)s  非e2e=$($BuildT.pytest_not_e2e)s  e2e=$($BuildT.pytest_e2e)s  archive=$($BuildT.archive)s  prune=$($BuildT.prune)s" -ForegroundColor DarkGray
+} catch {
+    # ⚠️ 寫不進歷史檔**不該讓打包失敗** —— 包已經做好了，這是紀錄不是產物。
+    # 而它要**說出來**：一個安靜失敗的紀錄機制，跟沒有紀錄機制一樣。
+    Write-Host "  [WARN] 耗時紀錄寫入失敗（$($_.Exception.Message)）——包本身不受影響" -ForegroundColor Yellow
 }
 
 Write-Host "`n======================================"
