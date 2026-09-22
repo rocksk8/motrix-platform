@@ -432,6 +432,24 @@ def test_the_freeze_scanner_can_see_a_join():
     assert _joins_for_name(real_code, strip=False), (
         "連沒剝的版本都看不到真的 JOIN —— 儀器壞了。")
 
+    # 🔴 **真檔案的誘餌**（A-2 2026-09-23 建議，而我改成這個形式）：
+    #    上面三格都是**合成字串**，它們證明不了「剝註解在一個真的 .py 上也成立」。
+    # ⇒ 拿**本檔自己**當輸入：它含有下面這行故意留著的誘餌 ——
+    #
+    #    ⚙️ 誘餌（**不可刪**）：這一行刻意寫著 JOIN account_items 與 ai.name，
+    #       它存在的唯一理由是讓「剝註解」這件事在一個真檔案上被證明。
+    #
+    #    ⇒ 不剝 => 一定命中（誘餌在）／剝了 => 一定不命中（它在註解裡）
+    # 🔑 〈正對照要釘在故意留著的誘餌上〉：B 已經改寫了他那段真實的文字，
+    #    **真實案例沒有了** —— 所以誘餌要由我自己留著，而且標明不可刪。
+    me = Path(__file__).read_text(encoding="utf-8")
+    assert _joins_for_name(me, strip=False), (
+        "本檔的誘餌不見了 —— **有人刪了那一行註解** ⇒ 下面那個斷言從此沒有意義。")
+    assert not _joins_for_name(me), (
+        "剝完註解之後，本檔仍然命中：%s\n" % _joins_for_name(me)
+        + "☠️ 剝註解在**真檔案**上沒有生效 —— "
+          "而上面三格合成輸入都是綠的，它們證明不了這一件事。")
+
 
 def test_no_voucher_print_path_joins_account_items_for_the_name():
     """🔴 **傳票的讀取／列印路徑不可以 JOIN `account_items` 取 `name`。**
@@ -442,6 +460,27 @@ def test_no_voucher_print_path_joins_account_items_for_the_name():
     絆線    證明「它根本沒有那條讀取路徑」  <= 現在就跑得動
     ```
     ⚠️ 而絆線單獨不夠：**沒有 JOIN 也可能是它根本沒印名字。**
+
+    # 🔴 而 B 2026-09-23 指出它**目前是零資訊的綠燈**
+
+    ```
+    B 的實作整支檔都沒有連接查詢（過帳與草稿兩條路都分開查）
+    => 這道絆線分不出「過帳路徑乾淨」與「這支檔本來就沒有那個寫法」
+    ```
+    ✅ 我同意，而我沒有拿掉它：**它的價值在未來的變更上，不在現在的量測上**
+       —— 它擋得住「日後有人加一條 JOIN 進去」。
+
+    ## ⚠️ 而那個正當性有一個**依賴**，A-2 要求讓它看得見
+
+    ```
+    絆線的正當性  ← 依賴 →  test_a_posted_voucher_prints_the_frozen_name_not_the_current_one
+                            test_a_draft_shows_the_current_name_not_a_frozen_one
+    ```
+    ☠️ 那兩題若被刪或改寫 ⇒ **絆線的正當性沒了，而沒有人會發現** ——
+       它會留在檔案裡、永遠綠、而不再有任何理由。
+    📌 兩者**刻意放同一個檔**（A-2 提的最便宜做法）：刪的人會同時看到。
+    ⚠️ 指名的是**函式名不是行號**：改名時 `grep` 會找不到，
+       而那比「指到別的東西」好（〈不要用會動的名字〉）。
     """
     cands = [p for p in (_BACKEND / "routers").glob("*.py")
              if p.stem in ("vouchers", "voucher")]
