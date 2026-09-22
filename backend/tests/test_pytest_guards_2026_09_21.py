@@ -384,3 +384,30 @@ def test_g2b_a_lock_file_that_is_not_json_lets_everyone_through(tmp_path):
         f"不是 JSON 的鎖檔把所有人擋在外面了（{proc.returncode}）\n"
         + (proc.stdout + proc.stderr)[-900:]
     )
+def test_the_politeness_delay_is_zero_in_tests():
+    """⚙️ `_no_politeness_delay` 的**生效那一側**。
+
+    ☠️ 少了這一題，那支 fixture 哪天失效（常數改名、模組搬家）
+    會讓整個 suite **安靜地慢回去** —— 而慢不會讓任何一題紅。
+    🔑 而「設回去真的會 sleep」那一側由
+    `test_tender_detail_2026_09_21.py::test_d3_…` 守 —— **兩題成對。**
+
+    ## ☠️ 而這一題原本寫在 `conftest.py` 裡，**pytest 根本不收集它**
+
+    ```
+    $ pytest tests/ --collect-only -k politeness
+      no tests collected (1939 deselected)
+    ```
+    🔑 **一個不會被收集的「對照組」，與沒有對照組完全相同** ——
+    而它在 `conftest.py` 裡看起來像一題（有 `def test_`、有斷言、有 docstring）。
+    📌 是我跑 `--collect-only -k` 去查才發現的，**不是它報錯**。
+    ⇒ 寫完一個新的對照組，**第一件事是確認它真的被收集到**。
+    """
+    from helpers import tender_source
+    assert tender_source.DETAIL_INTERVAL_SECONDS == 0, (
+        f"測試裡的 `DETAIL_INTERVAL_SECONDS` 是 "
+        f"{tender_source.DETAIL_INTERVAL_SECONDS}，預期 0 ——\n"
+        "☠️ `_no_politeness_delay` 沒有生效（常數改名？模組搬家？），\n"
+        "🔑 而它失效的症狀只有「整個 suite 慢回去」，**沒有任何一題會紅**。")
+
+

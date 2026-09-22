@@ -293,6 +293,15 @@ def test_d3_interval_between_detail_fetches(client, monkeypatch):
     from tests.test_tender_notify_2026_09_21 import _sent
 
     _need(ts, "time")
+    # 🔴 `conftest._no_politeness_delay` 把這個常數設成 0（全域，為了速度）——
+    #    **這一題要驗的正是那個延遲，所以它要自己設回正數。**
+    # ☠️ 不設回去的話，`slept` 會收到一串 `0`，而下面
+    #    `all(s > 0 for s in slept)` 會紅 ——
+    # 🔑 **而那個紅是對的**：它會告訴你「全域關掉了節流而沒有人設回來」。
+    # 📌 ⇒ 這一題是那支 fixture 的**反對照**：它證明「設回去時真的會 sleep」。
+    #    只有「生效那一側」的話，fixture 以後壞掉不會有人發現。
+    monkeypatch.setattr(ts, "DETAIL_INTERVAL_SECONDS", 2)
+
     slept = []
     monkeypatch.setattr(ts.time, "sleep", lambda s: slept.append(s))
 
