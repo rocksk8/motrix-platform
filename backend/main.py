@@ -326,11 +326,15 @@ async def auth_middleware(request: Request, call_next):
     if not path.startswith("/api/") or path in _PUBLIC_API_PATHS:
         return await call_next(request)
     # uploads auth is handled by the route handler:
-    #   ?pt=  → HMAC signed token (P2)
-    #   ?token= → session token forwarded as Bearer by route handler (img src pattern)
-    if path.startswith("/api/uploads/") and (
-        request.query_params.get("pt") or request.query_params.get("token")
-    ):
+    #   ?pt=  → HMAC signed token (P2) —— 綁定單一路徑、1 小時
+    #
+    # 🔴 2026-09-22：`?token=` 那一條**拿掉了**（§8 FX21）。
+    # 它把完整的 session token 放在 query string ⇒ 進 access log、
+    # 進瀏覽器歷史、進 Referer，☠️ **而它不是短效的**。
+    # ⚠️ 原本那行註解寫著它是「img src pattern」——
+    # **那描述的是被 `?pt=` 取代掉的舊做法**，而留著它的話，
+    # 🔑 下一個人會照著那句話把這條路加回來。
+    if path.startswith("/api/uploads/") and request.query_params.get("pt"):
         return await call_next(request)
     auth_header = request.headers.get("Authorization", "")
     if not auth_header.startswith("Bearer "):

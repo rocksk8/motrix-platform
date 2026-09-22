@@ -78,9 +78,23 @@ def get_photo_token(path: str = Query(...), authorization: str = Header(None)):
 def serve_upload(
     file_path: str,
     authorization: str = Header(None),
-    token: str = Query(None),
     pt: str = Query(None),
 ):
+    """檔案服務。**兩條路：`Authorization` 標頭，或 `?pt=` 簽章。**
+
+    ## 🔴 2026-09-22 拿掉了第三條：`?token=`（§8 FX21）
+    它把**完整的 session token** 放在 query string 裡
+    ⇒ ☠️ 寫進 uvicorn 的 access log（`logs/server.log`，永久追加），
+    也會進瀏覽器歷史、`Referer`、任何中間的代理。
+    ⚠️ **而它不是短效的** —— 那是使用者當下的 session，撿到就等於登入。
+
+    🔑 `?pt=` 正是為了**同一個問題**（`<img src>` 設不了 header）而做的，
+    **而且做對了**：HMAC 簽章、1 小時、**綁定單一路徑**。
+    ⇒ 撿到一個 `pt` 只能看那一張圖一小時；撿到一個 `token` 是整個帳號。
+
+    📌 實查過再拿掉的：前端用 `?token=` 打 uploads **0 處**、用 `?pt=` **8 處**，
+    `backend/tests/` 也沒有任何一支在用。**一條沒有人走、而仍然打開著的路。**
+    """
     safe = os.path.normpath(file_path).lstrip('/\\')
     full = _resolve_upload_path(safe)
     if full is None:
@@ -89,8 +103,6 @@ def serve_upload(
         if not _verify_photo_token(safe, pt):
             raise HTTPException(403, "照片連結已過期或無效，請重新載入")
     else:
-        if not authorization and token:
-            authorization = f"Bearer {token}"
         _require_user(authorization)
     if not os.path.isfile(full):
         raise HTTPException(404, "檔案不存在")

@@ -1005,3 +1005,13 @@ A 說「可以動了」。**我自己不會解除。**
   ⚠️ 而 `MOTRIX_GEO` 現在**完全沒有啟動痕跡** ——
   ☠️ 一台「以為開了而其實沒開」的機器，症狀是「地圖上沒有點」，
   🔑 而那與「地址查不到」「還沒暖快取」長得一模一樣。
+
+## 🔒 佔用宣告：`main.py`（§8 FX21c 拿掉 `?token=` 的 middleware 旁路），2026-09-22
+
+- **佔的是**：`main.py:329-333` 那個 `if path.startswith("/api/uploads/") and (...)`
+  裡的 `token` 條件，以及上面那三行註解
+- **不動**：`_PUBLIC_API_PATHS`、其餘 middleware 邏輯、`?pt=` 那一條
+- **為什麼**：那條路讓**完整的 session token 走 query string** ⇒ 進 access log，
+  ☠️ 而它**不是短效的**（`?pt=` 是 HMAC 簽章、1 小時、綁單一路徑）。
+- **實查**：前端用 `?token=` 打 uploads **0 處**、用 `?pt=` **8 處**；
+  `backend/tests/` 也沒有任何一支在用 ⇒ **一條沒有人走、而仍然打開著的路**
