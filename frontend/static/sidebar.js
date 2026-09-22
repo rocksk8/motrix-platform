@@ -745,6 +745,12 @@ if (typeof module !== 'undefined' && module.exports) {
       //    拆成獨立頁之後那個限制連同 `§46b` 一起消失了 —— **同一個根因
       //    （兩個功能共用一頁）的三個出口一起關掉。**
       ni(pg('cashier.html'),         'cash',  '出納',     ['cashier.html'],                          cCash),
+      // 🔑 `VC4a`（2026-09-23）：傳票。放在「出納」後面 —— 使用者原話
+      //    「要由**出納獨立作業**還有送審流程跟編號」⇒ 它是出納的作業，
+      //    不是另一個部門的東西。權限沿用 `cCash`（與後端的
+      //    `routers/vouchers.py::_VOUCHER_MODULES` 對得上：cashier／finance）。
+      // ⚠️ 而**看得到入口 ≠ 改得動** —— 後端另有 `can_edit(status)`：只有草稿可改。
+      ni(pg('voucher.html'),         'vouch', '傳票',     ['voucher.html'],                          cCash),
       // 🔑 `FN1`（2026-09-23）：會計科目樹。放在出納後面，因為它是**出納與
       //    傳票挑科目時的那份清單**，不是一個獨立的業務流程。
       // ⚠️ 權限沿用 `cCash`：它目前是唯讀的參考資料，而會看它的正是出納。

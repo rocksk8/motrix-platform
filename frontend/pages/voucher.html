@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="../static/favicon.png">
+  <title>傳票 - MOTRIX 專案管理系統</title>
+  <script src="../js/voucher.js"></script>
+  <script src="../static/auth-guard.js"></script>
+  <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
+  <style>
+    [x-cloak]{display:none!important}
+    .page-main{margin-left:var(--sidebar-w);margin-top:var(--topbar-h);padding:28px 32px;min-height:calc(100vh - var(--topbar-h));background:var(--white)}
+
+    /* 版面照使用者提供的實例 `docs/reference/傳票-實例-20260330-006.pdf`
+       （A 逐欄讀圖，見 STATE.md §103b）—— 不是照我想像的傳票長相。 */
+    .vc-sheet{max-width:960px;border:1px solid var(--border-light);border-radius:var(--radius);padding:22px 26px;font-family:var(--font-zh)}
+    .vc-org{text-align:center;font-size:13px;color:var(--text-secondary);margin-bottom:2px}
+    .vc-doc{text-align:center;font-size:22px;font-weight:700;letter-spacing:8px;color:var(--text-primary);margin-bottom:18px}
+
+    .vc-head{display:flex;gap:26px;flex-wrap:wrap;align-items:center;margin-bottom:16px;font-size:13px}
+    .vc-head label{color:var(--text-secondary);margin-right:6px}
+    .vc-no{font-family:var(--font-mono,monospace);font-weight:700;color:var(--text-primary)}
+    .vc-status{font-size:12px;padding:2px 10px;border-radius:9px;background:#F0EEE9;color:var(--text-secondary)}
+    .vc-input{padding:5px 9px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:var(--font-zh)}
+
+    table.vc-lines{width:100%;border-collapse:collapse;font-size:13px}
+    table.vc-lines th,table.vc-lines td{border:1px solid var(--border-light);padding:6px 8px;text-align:left}
+    table.vc-lines th{background:#FAF9F6;font-weight:600;color:var(--text-secondary);font-size:12px}
+    table.vc-lines td.num,table.vc-lines th.num{text-align:right;font-family:var(--font-mono,monospace)}
+    table.vc-lines input{width:100%;border:none;background:transparent;font-size:13px;font-family:inherit;padding:0}
+    table.vc-lines input.num{text-align:right;font-family:var(--font-mono,monospace)}
+    table.vc-lines input:focus{outline:1px solid var(--accent,#888)}
+    .vc-total td{font-weight:700;background:#FAF9F6}
+    .vc-total .label{text-align:center;letter-spacing:6px}
+    .vc-diff{color:#B91C1C;font-weight:700}
+
+    .vc-note{margin-top:16px;font-size:13px}
+    .vc-note textarea{width:100%;min-height:52px;padding:7px 9px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:var(--font-zh);box-sizing:border-box}
+
+    .vc-sign{display:flex;gap:0;margin-top:22px;border:1px solid var(--border-light)}
+    .vc-sign div{flex:1;padding:10px 12px;font-size:13px;border-right:1px solid var(--border-light);min-height:46px}
+    .vc-sign div:last-child{border-right:none}
+    .vc-sign span{color:var(--text-secondary);margin-right:8px}
+    .vc-hint{margin-top:14px;font-size:12px;color:var(--text-secondary);line-height:1.8}
+    .vc-err{margin:10px 0;padding:9px 11px;border:1px solid #FCA5A5;background:#FEF2F2;border-radius:var(--radius);font-size:12px;color:#7F1D1D;line-height:1.7}
+  </style>
+</head>
+<!-- ⚠️ 這個 body **刻意只有 `x-data`，沒有那個明著呼叫初始化的屬性**。
+     Alpine 3 看到 data 物件上有初始化方法就會**自己叫一次**；
+     再用屬性叫一次 ⇒ 它會**跑兩次**。
+     ☠️ 實測（2026-09-23）：只有 `x-data` ⇒ 1 次；兩者並存 ⇒ **2 次**。
+        本頁的症狀看得見：初始化會加 3 行空白分錄 ⇒ 畫面變成 **6 行**。
+     🔑 而多數頁面的症狀是**看不見的**：載入兩次拿到同一份資料，
+        只是多打一次 API ⇒ 沒有人會發現。
+     📌 本 repo 另有 5 頁是同一個形狀（已量、已回報；未派工，不動）。
+     ⚠️ 本段刻意**不寫出那個屬性的字面值** —— 寫了就會被盤點工具算成一處使用。 -->
+<body x-data="voucherPage()" x-cloak>
+
+  <header id="app-topbar" class="topbar"></header>
+  <div id="sidebar-root"></div>
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+  <div>
+    <main class="page-main">
+
+      <template x-if="loadError">
+        <div class="vc-err" x-text="loadError"></div>
+      </template>
+
+      <div class="vc-sheet">
+        <!-- ⚠️ 抬頭從設定讀，**不要寫死** —— 公司抬頭在這個 repo 裡已經
+             寫死在 14 個檔、56 行，再加一處就是第 57 處。 -->
+        <div class="vc-org" x-text="company || '（尚未設定公司抬頭）'"></div>
+        <div class="vc-doc">傳　票</div>
+
+        <div class="vc-head">
+          <!-- 🔴 單號由後端產生，**前端不發號**：格式規則在 helpers/voucher.py
+               （`YYYYMMDD-NNN[-Rn]`，退回時從現有最大值 +1）。
+               ☠️ 前端自己拼的話就是第二份實作，而兩份一定會分岔。 -->
+          <div><label>傳票號碼</label><span class="vc-no"
+               x-text="voucherNo || '（儲存後產生）'"></span></div>
+          <!-- 🔁 日期**可選，預設今天**（使用者 2026-09-23 改裁，
+               SPEC-VOUCHER.md:67）—— 舊裁示「建檔當天不可編輯」已被推翻，
+               理由是月結補登是會計的日常。 -->
+          <div><label>傳票日期</label>
+            <input type="date" class="vc-input" x-model="voucherDate"
+                   :disabled="!canEdit"></div>
+          <div><label>狀態</label><span class="vc-status" x-text="status"></span></div>
+        </div>
+
+        <table class="vc-lines">
+          <thead>
+            <tr>
+              <th style="width:92px">會計科目</th>
+              <th style="width:150px">科目名稱</th>
+              <th>摘要</th>
+              <th class="num" style="width:120px">借方金額</th>
+              <th class="num" style="width:120px">貸方金額</th>
+            </tr>
+          </thead>
+          <tbody>
+            <!-- 🔴 每一行有自己的「摘要」（§103c③）——
+                 那是從使用者的實例讀出來的，不是單據層備註的複本。 -->
+            <template x-for="(l, i) in lines" :key="i">
+              <tr>
+                <td><input x-model="l.account_code" :disabled="!canEdit"
+                           placeholder="1268" @change="fillName(i)"></td>
+                <td><input x-model="l.account_name" :disabled="!canEdit"
+                           placeholder="（輸入代號後自動帶入）"></td>
+                <td><input x-model="l.summary" :disabled="!canEdit"
+                           placeholder="3/30 向量圓專 XV15543058"></td>
+                <td class="num"><input class="num" x-model="l.debit"
+                           :disabled="!canEdit" inputmode="numeric"></td>
+                <td class="num"><input class="num" x-model="l.credit"
+                           :disabled="!canEdit" inputmode="numeric"></td>
+              </tr>
+            </template>
+            <!-- 合計列：使用者的實例上**印出來的**，借貸兩邊各一個數字。 -->
+            <tr class="vc-total">
+              <td></td><td></td>
+              <td class="label">合　計</td>
+              <td class="num" x-text="fmt(totalDebit)"></td>
+              <td class="num" x-text="fmt(totalCredit)"></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div style="margin-top:8px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+          <button class="ai-btn" style="padding:5px 13px;border-radius:var(--radius);border:1px solid var(--border-light);background:#fff;font-size:12px;font-family:var(--font-zh);cursor:pointer"
+                  @click="addLine()" x-show="canEdit">＋ 新增一行</button>
+          <!-- ⚠️ 只顯示**差額**，不說「可不可以過帳」——
+               🔴 過帳的擋關由後端決定（helpers/voucher.py::check_balance）。
+               ☠️ 前端自己判的話就是第二份判準，而它會在某一天與後端不一致，
+                  那時使用者看到的是「畫面說可以，按下去被拒絕」。 -->
+          <span class="vc-diff" x-show="totalDebit !== totalCredit"
+                x-text="'借貸差額 ' + fmt(Math.abs(totalDebit - totalCredit))"></span>
+        </div>
+
+        <div class="vc-note">
+          <label style="color:var(--text-secondary);font-size:12px">備註</label>
+          <textarea x-model="note" :disabled="!canEdit"
+                    placeholder="京城凱悅報價單MQ-202608-009工資"></textarea>
+        </div>
+
+        <!-- 🔴 三格是**版面上的簽名位**，與狀態機（待審核／簽核中／已核准）
+             **不是同一組東西**（§103c⑤）⇒ 這裡只呈現，不由前端推導流程。 -->
+        <div class="vc-sign">
+          <div><span>製票</span><b x-text="signs.maker || ''"></b></div>
+          <div><span>覆核</span><b x-text="signs.checker || ''"></b></div>
+          <div><span>主管</span><b x-text="signs.manager || ''"></b></div>
+        </div>
+      </div>
+
+      <div class="vc-hint">
+        ⚠️ 這是傳票的版面骨架：欄位與合計已經可以操作，<b>而儲存、送審與過帳的功能尚未提供</b>。<br>
+        單號在儲存時由系統產生；借貸是否平衡由系統在過帳時檢查，此處僅顯示目前差額。
+      </div>
+
+    </main>
+  </div>
+
+  <!-- ⚠️ `notif.js` 必須與 `sidebar.js` 成對出現：`sidebar.js` 無條件輸出
+       `globalSearchStore()` 與 `notifStore()`，而那兩支定義在 `notif.js` 裡。
+       少載它的症狀不是錯誤畫面，是搜尋框與鈴鐺變成死的。 -->
+  <script src="../static/notif.js"></script>
+  <script src="../static/sidebar.js"></script>
+</body>
+</html>
