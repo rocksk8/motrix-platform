@@ -582,3 +582,91 @@ def test_a_page_name_is_never_claimed_by_items_with_different_conditions(nav):
         "同一個檔名被條件不同的項目宣告：\n  " + "\n  ".join(problems)
         + "\n🔑 隱藏的那一個會把它丟進 `_deniedPages`（`:614`），"
           "而顯示的那一個的使用者因此被擋在門外（`:778`）。")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# 🔴 UI10 · `§46b` 現在可以修了 —— **因為當初不修的那個理由消失了**
+# ══════════════════════════════════════════════════════════════════════
+
+def test_ui10_the_reports_item_is_not_shown_to_cashier_only_users(nav):
+    """🔴🔴 `UI10`：**只有出納權限的人，側欄上不可以有「營運報表」。**
+
+    ## 這一題的重點是「**為什麼現在可以了**」
+
+    ```
+    §65 當時裁「不修 §46b」，理由是：
+        兩項**同檔名**（都指向 reports.html）⇒ 把 cCash 拿掉會讓
+        只有出納權限的人被 _deniedPages 鎖在他唯一被授權的那一頁外面
+    UI9 之後：出納的 href 是 cashier.html ⇒ **不再共用檔名**
+        ⇒ **那個理由整個消失** ⇒ 裁示要重新看一次
+    ```
+    🔑 **而它不會自己發出聲音** —— 是 B 回報「拆完只消失兩個症狀不是三個」才被看見。
+    📌 進 `§6`：**一個裁示的理由消失時，那個裁示要重新看一次。**
+
+    ## ☠️ 而現況不只是「看到不該看的名字」，**是一個死連結**
+
+    ```
+    只有 cashier 權限：營運報表 show = cRpt || cCash || cFi = **True**（靠 cCash）
+    ⇒ 他看得到「營運報表」，點進去 ⇒ reports.html
+    ⇒ 而那一頁的內容是 admin+ 才載入的 ⇒ **點進去是空的**（B 實測）
+    ```
+
+    ## ⚙️ 而我自己推演過它安全（不是照收）
+    ```
+    改成 cRpt || cFi 之後，只有 cashier 的人：
+      營運報表 隱藏 ⇒ _deniedPages += ['reports.html']
+      出納     顯示 ⇒ href cashier.html、activeNames ['cashier.html']
+      他點出納 ⇒ file = 'cashier.html' ⇒ **不在 _deniedPages** ⇒ 正常
+    ```
+    ✅ 而本檔那兩道鎖門守門會繼續驗這件事 —— **它們不是靠這一段推演，是靠斷言。**
+    """
+    _l, _c, items = _groups(nav)["財務"]
+    rpt = [it for it in items if it[0] == "營運報表"]
+    assert rpt, "財務組底下沒有「營運報表」—— **儀器失效**。"
+
+    flags = _flags(rpt[0][3])
+    assert "cCash" not in flags, (
+        "「營運報表」的顯示條件是 `%s`（旗標 %s），裡面還有 `cCash` ——\n"
+        % (rpt[0][3], sorted(flags))
+        + "☠️ 只有出納權限的人會看到「營運報表」，而**點進去是空的**"
+          "（那一頁的內容 admin+ 才載入）——那不是「看到不該看的名字」，"
+          "**是一個死連結**。\n"
+        "🔑 `§65` 當初不修的理由（兩項同檔名會鎖門）在 `UI9` 之後**已經消失**。")
+
+    assert "cRpt" in flags, (
+        "「營運報表」的條件裡沒有 `cRpt`（%s）——\n" % sorted(flags)
+        + "⚙️ 這是**正對照**：少了它，一個「把條件整個清空」的實作"
+          "會讓上面那個斷言綠，而**有報表權限的人也看不到報表了**。")
+
+
+def test_ui10_the_cashier_item_still_reaches_its_own_page(nav):
+    """⚙️ `UI10` 的另一半：**收窄之後，只有出納權限的人仍然到得了出納頁。**
+
+    ☠️ 這一題是 `§65` 當初擋下來的那個災難的守門：
+    ```
+    若出納的 href 還指向 reports.html（UI9 之前）
+    ⇒ 營運報表收窄成 cRpt||cFi ⇒ 它隱藏 ⇒ reports.html 進 _deniedPages
+    ⇒ 而出納顯示、指向同一個檔名 ⇒ **點下去「沒有權限」**
+    ```
+    🔑 現在它安全，**而安全的原因是「出納有自己的檔名」，不是「有人記得」。**
+    ⇒ 這一題把那個原因**釘住**：出納的 href 必須**不是** `reports.html`。
+    📌 本檔 `..._never_points_at_a_page_someone_else_denied` 是通用版，
+       而這一題是它在**這一組權限**上的具體案例 —— 兩個都留著。
+    """
+    _l, _c, items = _groups(nav)["財務"]
+    cash = [it for it in items if it[0] == "出納"]
+    assert cash, "財務組底下沒有「出納」—— **儀器失效**。"
+
+    label, href, names, cond = cash[0]
+    tgt = _target_file(href)
+    assert tgt and tgt != "reports.html", (
+        "「出納」的 href 解析到 `%s` ——\n" % tgt
+        + "☠️ 與「營運報表」同檔名 ⇒ 後者收窄成 `cRpt||cFi` 之後，"
+          "只有出納權限的人會被 `_deniedPages` 擋在門外。")
+    assert "cCash" in _flags(cond), (
+        "「出納」的條件是 `%s`，沒有 `cCash` —— 有出納權限的人看不到它。" % cond)
+    assert tgt in _active_names(names), (
+        "「出納」的 `activeNames` 是 %s，裡面沒有 `%s` ——\n"
+        % (_active_names(names), tgt)
+        + "🔑 它現在有自己的檔名了，**應該宣告它** ——"
+          "`UI6` 當時寫成 `[]` 是因為那時宣告會造成鎖門，而那個理由已經消失。")
