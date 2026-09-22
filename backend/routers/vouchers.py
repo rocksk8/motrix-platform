@@ -18,9 +18,10 @@ routers/vouchers.py  **不存在** => 沒有任何人在「改」的時候叫它
 而它們的端點**沒有派工** ⇒ 不在這裡順手加。
 """
 import datetime as _dt
+import os
 from datetime import datetime
 
-from fastapi import APIRouter, Body, Header, HTTPException
+from fastapi import APIRouter, Body, Header, HTTPException, Request
 
 from db import get_db
 # 🔑 科目代號的規則**只有一份** —— 借用既有那一支，不在這裡再寫。
@@ -28,6 +29,11 @@ from db import get_db
 from routers.accounting_export import validate_account_code
 from helpers import _require_user, _tok, _audit, require_any_module
 from helpers.edit_log import append_edit_log, MissingOldValue
+from helpers.uploads import save_document_files
+from helpers.voucher_attachments import (
+    resolve_picks, copy_into, abs_path, case_attachments,
+    COPY_SOURCE_TYPE,
+)
 from helpers.voucher import (
     EDITABLE_STATUSES, can_edit, describe_balance, get_voucher,
     next_voucher_no, post_voucher, can_send_back, next_revision_no,
@@ -278,7 +284,8 @@ def case_summary(customer_name, quote_no):
 # 🔑 **422 讀起來像「我參數傳錯了」，而實際是「這條路還沒做」** ——
 #    查的人會去翻自己的呼叫端，而問題在這個檔案的行號順序上。
 @router.get("/summary-sources")
-def summary_sources(q: str = "", authorization: str = Header(None)):
+def summary_sources(q: str = "", quote_no: str = "",
+                    authorization: str = Header(None)):
     """摘要可以從哪些地方帶入（`JV7`）。
 
     ## ⚠️ 帶入是**起點不是終點**
@@ -314,6 +321,20 @@ def summary_sources(q: str = "", authorization: str = Header(None)):
     finally:
         conn.close()
 
+    # ── 頁籤②：這個案件底下可帶入的憑證（`JV3` 與 `JV7` 共用同一支端點）──
+    files = []
+    note2 = "請先選一個案件，才看得到它底下可以帶入的憑證。"
+    picked = (quote_no or "").strip()
+    if picked:
+        conn2 = get_db()
+        try:
+            files = case_attachments(conn2, picked)
+        finally:
+            conn2.close()
+        if not files:
+            note2 = "案件「%s」底下目前沒有可帶入的憑證。" % picked
+        else:
+            note2 = ""
     cases = []
     for r in rows:
         cases.append({
@@ -327,10 +348,12 @@ def summary_sources(q: str = "", authorization: str = Header(None)):
         "tabs": {
             SUMMARY_TABS[0]: cases,
             # 🔑 空清單**不是**「這個頁籤不存在」——見上面的 docstring。
-            SUMMARY_TABS[1]: [],
+            #    ⚠️ 要列東西得先知道**是哪一個案件**（`quote_no`）：
+            #       憑證是掛在案件底下的，沒有案件就沒有範圍。
+            SUMMARY_TABS[1]: files,
         },
         "notes": {
-            SUMMARY_TABS[1]: "附件功能尚未提供，這個頁籤目前沒有可帶入的來源。",
+            SUMMARY_TABS[1]: note2,
         },
     }
 
@@ -358,10 +381,14 @@ def read_voucher(voucher_id: int, authorization: str = Header(None)):
     conn = get_db()
     try:
         data = get_voucher(conn, voucher_id)
+        # 📌 附件掛在這裡而不是獨立端點：畫面開一張單就要看到它的憑證，
+        #    多一次往返只會讓「單子出來了而附件還沒」變成一段可見的空窗。
+        atts = _attachments_of(conn, voucher_id) if data is not None else []
     finally:
         conn.close()
     if data is None:
         raise HTTPException(404, "找不到這張傳票。")
+    data["attachments"] = atts
     return data
 
 
@@ -510,20 +537,55 @@ def void_voucher(voucher_id: int, body: dict = Body(default={}),
     if not reason:
         # 🔑 沒有理由的作廢等於沒有留痕：事後沒有人回得出為什麼。
         raise HTTPException(400, "請填寫作廢原因。")
+    # 🔴 `reopen` 用**鍵在不在**判斷不到，它是真假值 ⇒ 明著轉 bool。
+    #    ⚠️ 而**預設是不重開** —— 重開會多出一張單，那不該是順手發生的。
+    reopen = bool((body or {}).get("reopen"))
     now = _dt.datetime.now().isoformat()
+    who = _user_name(user)
+    new_id = new_no = None
+    copied = 0
     conn = get_db()
     try:
-        _load(conn, voucher_id)          # 已作廢的會在這裡被擋掉
+        cur = _load(conn, voucher_id)    # 已作廢的會在這裡被擋掉
         conn.execute(
             "UPDATE vouchers_all SET voided_at=?, voided_by=?, void_reason=?,"
             " updated_at=? WHERE id=?",
-            (now, _user_name(user), reason, now, voucher_id))
+            (now, who, reason, now, voucher_id))
+        if reopen:
+            # 🔴 **另開一張**（新的 `voucher_id`）—— 與「退回升版」不同：
+            #    退回是同一張單換個號碼，作廢重開是兩張單。
+            #    ⇒ 所以附件要**複製**，不複製的話新單是空的。
+            src = dict(cur)
+            new_no = next_voucher_no(conn, src.get("voucher_date") or "")
+            c2 = conn.execute(
+                "INSERT INTO vouchers_all (voucher_no, voucher_date, category,"
+                " summary, status, created_by, created_at, updated_at)"
+                " VALUES (?,?,?,?, '草稿', ?,?,?)",
+                (new_no, src.get("voucher_date"), src.get("category") or "轉",
+                 src.get("summary") or "", who, now, now))
+            new_id = c2.lastrowid
+            for ln in conn.execute(
+                    "SELECT * FROM voucher_lines WHERE voucher_id = ?"
+                    " ORDER BY line_no", (voucher_id,)).fetchall():
+                ln = dict(ln)
+                conn.execute(
+                    "INSERT INTO voucher_lines (voucher_id, line_no,"
+                    " account_code, summary, debit, credit)"
+                    " VALUES (?,?,?,?,?,?)",
+                    (new_id, ln["line_no"], ln["account_code"],
+                     ln["summary"], ln["debit"], ln["credit"]))
+            copied = _copy_attachments_to(conn, voucher_id, new_id, who, now)
         conn.commit()
     finally:
         conn.close()
     _audit(_tok(authorization), "voucher.void", "vouchers", str(voucher_id),
            "傳票作廢：%s" % reason)
-    return {"ok": True, "voided_at": now}
+    out = {"ok": True, "voided_at": now}
+    if reopen:
+        out["new_id"] = new_id
+        out["new_voucher_no"] = new_no
+        out["copied_attachments"] = copied
+    return out
 
 
 @router.post("/{voucher_id}/post")
@@ -689,3 +751,228 @@ def update_voucher(voucher_id: int, body: dict = Body(...),
            "修改傳票：%s"
            % "／".join(c["field"] for c in (changes + line_changes)))
     return {"ok": True, "changed": len(changes) + len(line_changes)}
+
+
+def _attachments_of(conn, voucher_id, include_deleted=False):
+    """這張傳票看得到的附件。**預設不列已刪的**。
+
+    ⚠️ 而已刪的那幾列**留在表裡也留在備份裡** —— 一個被刪掉的憑證與一個
+       從來不存在的憑證，在紀錄上必須分得開。
+    """
+    sql = ("SELECT * FROM voucher_attachments WHERE voucher_id = ?"
+           + ("" if include_deleted else " AND deleted_at = ''")
+           + " ORDER BY id")
+    return [dict(r) for r in conn.execute(sql, (voucher_id,))]
+
+
+def _insert_attachment(conn, voucher_id, file_id, filename, path, size, mime,
+                       source_type, source_doc_no, source_file_id,
+                       uploaded_by, uploaded_at):
+    conn.execute(
+        "INSERT INTO voucher_attachments (voucher_id, file_id, filename, path,"
+        " size, mime, source_type, source_doc_no, source_file_id,"
+        " uploaded_by, uploaded_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+        (voucher_id, file_id, filename, path, int(size or 0), mime or "",
+         source_type or "", source_doc_no or "", source_file_id or "",
+         uploaded_by, uploaded_at))
+
+
+@router.post("/{voucher_id}/attachments")
+async def add_voucher_attachments(voucher_id: int, request: Request,
+                                  authorization: str = Header(None)):
+    """上傳（multipart）或帶入（`{"picks": [...]}`）附件。**同一支端點兩種形態。**
+
+    ## 🔴 帶入**不可以讓前端傳路徑進來**
+
+    只收 `(type, docNo, fileId)`，路徑由後端依來源表自己組 ——
+    ☠️ 收路徑等於開一個**任意檔案讀取**。
+
+    ## 🔴 先把全部來源檔檢查完，再開始複製
+
+    ☠️ 邊複製邊檢查的話，第三筆失敗時**前兩筆已經落地了**，
+       而回應說失敗 ⇒ 使用者重試 ⇒ 前兩筆變成兩份。
+    🔑 拒絕的路徑上不可以留下副作用。
+
+    ## ⚠️ 缺欄位與缺檔案，**處置相反**
+
+    ```
+    metadata 缺 size／mime／uploadedBy／uploadedAt  => 照樣複製，缺的留空，
+                                                     **而在回應裡回報**
+    實體檔不存在                                    => **整批拒絕 400**
+    ```
+    ☠️ 前者靜默補預設值的話，傳票上會顯示一個看起來正常的上傳者與時間，
+       **而那是我們編的**。
+    ☠️ 後者跳過的話，使用者以為附件帶進來了，
+       **過帳之後才發現那張憑證從來沒存在過**。
+    """
+    user = _require_user(authorization)
+    _require_voucher_access(user)
+    now = _dt.datetime.now().isoformat()
+    who = _user_name(user)
+
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT * FROM vouchers_all WHERE id = ?",
+                           (voucher_id,)).fetchone()
+        if row is None:
+            raise HTTPException(404, "找不到這張傳票。")
+        if dict(row).get("voided_at"):
+            raise HTTPException(400, "這張傳票已經作廢，不能再加附件。")
+
+        ctype = (request.headers.get("content-type") or "").lower()
+        incomplete = []
+        added = 0
+        if ctype.startswith("multipart/"):
+            form = await request.form()
+            files = [f for f in form.getlist("files") if getattr(f, "filename", None)]
+            if not files:
+                raise HTTPException(400, "請至少選擇一個檔案。")
+            # 🔑 實體檔的白名單／大小上限**沿用既有那一份**（三處共用同一份常數）。
+            #    ⚠️ 路徑的 doc_no 用 `str(voucher_id)` ⇒ **不含單號**（單號會升版）。
+            saved = await save_document_files(
+                "voucher_attachments", str(voucher_id), files, who)
+            for meta in saved:
+                _insert_attachment(
+                    conn, voucher_id, meta["id"], meta["filename"], meta["path"],
+                    meta.get("size"), meta.get("mime"), "", "", "", who, now)
+                added += 1
+        else:
+            try:
+                body = await request.json()
+            except Exception:                                   # noqa: BLE001
+                raise HTTPException(400, "請求格式不正確。")
+            picks = (body or {}).get("picks")
+            if not picks:
+                raise HTTPException(400, "請至少選擇一個檔案或一筆來源。")
+            # 🔴 **全部檢查完才開始複製**（見 docstring）。
+            resolved = resolve_picks(conn, picks)
+            for item in resolved:
+                meta = item["meta"]
+                name = meta.get("filename") or meta.get("name") or "附件"
+                file_id, rel, size = copy_into(voucher_id, item["src"], name)
+                _insert_attachment(
+                    conn, voucher_id, file_id, name, rel,
+                    meta.get("size") or size, meta.get("mime"),
+                    item["source_type"], item["source_doc_no"],
+                    item["source_file_id"], who, now)
+                added += 1
+                if item["missing"]:
+                    incomplete.append({"filename": name,
+                                       "missing": item["missing"]})
+        conn.commit()
+        attachments = _attachments_of(conn, voucher_id)
+    finally:
+        conn.close()
+
+    _audit(_tok(authorization), "voucher.attachment.add", "vouchers",
+           str(voucher_id), "傳票附件 +%d" % added)
+    out = {"ok": True, "added": added, "attachments": attachments}
+    if incomplete:
+        # ⚠️ 明著回報而不是靜默補值：使用者要知道哪幾筆的上傳者／時間是空的。
+        out["incomplete"] = incomplete
+        out["warning"] = ("有 %d 筆來源附件的資訊不完整（上傳者或時間缺漏），"
+                          "檔案已經帶入，缺的欄位留空。" % len(incomplete))
+    return out
+
+
+@router.delete("/{voucher_id}/attachments/{file_id}")
+def delete_voucher_attachment(voucher_id: int, file_id: str,
+                              authorization: str = Header(None)):
+    """刪一個附件。**只有草稿可刪，而且是軟刪 —— 實體檔留著。**
+
+    ## ☠️ `helpers/uploads.py::delete_document_file()` **不可以拿來用**
+
+    ```
+    它會  os.remove(full)            <= **真的刪掉實體檔**
+    也會  回傳「移除該筆之後的陣列」   <= 而我們用資料表，不是 JSON 陣列
+    ```
+    🔑 它的名字正好、簽章也接近 —— **下一個人會很自然地拿它來用**，
+       而後果是 bytes 沒了：一個無聲的違裁（使用者裁定 `§163` ②）。
+    ⚠️ 這段註解刻意寫在這裡而不是只寫在規格裡：
+       **下一個人是在寫這支函式的時候動念頭的**，不是在讀規格的時候。
+
+    ## 🔴 為什麼保留 bytes
+
+    `archive.py::_mirror_uploads()` 逐字：「鏡像只增不減 —— 即使來源檔案被刪除，
+    鏡像裡的舊副本仍保留」⇒ 已進雲端的檔刪了也還在，
+    ☠️ **而當天上傳、當天刪掉的檔從來沒被鏡像過** ⇒ 硬刪等於不可復原。
+
+    ## 🔴 離開草稿就完全不可刪（不是「刪除要簽核」）
+
+    送審後可刪 ＝ 簽核人看過的東西可以在他不知情時消失。
+    要移除 ⇒ 作廢整張傳票重開。
+    ⚠️ 而**拒絕的路徑上不可以留下副作用** —— 先擋再寫，不是先寫再擋。
+    """
+    user = _require_user(authorization)
+    _require_voucher_access(user)
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT * FROM vouchers_all WHERE id = ?",
+                           (voucher_id,)).fetchone()
+        if row is None:
+            raise HTTPException(404, "找不到這張傳票。")
+        cur = dict(row)
+        att = conn.execute(
+            "SELECT * FROM voucher_attachments WHERE voucher_id = ? AND file_id = ?",
+            (voucher_id, file_id)).fetchone()
+        if att is None:
+            raise HTTPException(404, "找不到這個附件。")
+        att = dict(att)
+        if not can_edit(cur.get("status")) or cur.get("voided_at"):
+            raise HTTPException(
+                400, "只有「%s」的傳票可以移除附件，這一張現在是「%s」。"
+                     "若要移除，請作廢整張傳票再重開。"
+                     % ("／".join(EDITABLE_STATUSES),
+                        "已作廢" if cur.get("voided_at") else cur.get("status")))
+        if att.get("deleted_at"):
+            return {"ok": True, "already": True}
+        now = _dt.datetime.now().isoformat()
+        # 🔴 **只 UPDATE**，一個 `os.remove` 都沒有。
+        conn.execute(
+            "UPDATE voucher_attachments SET deleted_at = ?, deleted_by = ?"
+            " WHERE id = ?", (now, _user_name(user), att["id"]))
+        # 📌 附件的增刪也是「這張傳票被改過什麼」的一部分。
+        append_edit_log(conn, voucher_id, _user_name(user),
+                        [{"field": "attachment", "from": att.get("filename") or "",
+                          "to": ""}],
+                        table="voucher_edit_log", changed_at=now)
+        conn.commit()
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "voucher.attachment.delete", "vouchers",
+           str(voucher_id), "移除傳票附件：%s" % (att.get("filename") or file_id))
+    return {"ok": True}
+
+
+def _copy_attachments_to(conn, old_id, new_id, who, now):
+    """作廢重開：把**未刪**的附件複製到新單。回複製的筆數。
+
+    ## 🔴 兩格不可以省
+
+    ```
+    ① 已刪的那一筆（deleted_at 非空）**不複製**
+       => 使用者刪掉它是有意的，重開不該把它撿回來
+    ② file_id **不可共用**，每一筆重新產生；**實體檔也真的複製一份**
+       => 共用的話：在新單刪掉一個，**原單的憑證跟著不見**
+    ```
+    🔑 ② 的理由比 ① 硬，而硬在它**不由使用者的行為決定**：
+    ```
+    ① 尊重使用者的意圖          —— 意圖可以改變，規則就跟著可議
+    ② 已作廢的歷史不可被後來的動作改寫 —— **稽核的不可變性**
+    ```
+    ⚠️ `idx_vatt_file` 是 UNIQUE，它擋得住「同一個 file_id 兩列」，
+       **擋不住「兩列指向同一個實體檔」** ⇒ 所以要真的複製 bytes。
+    """
+    n = 0
+    for att in _attachments_of(conn, old_id):
+        src = abs_path(att["path"])
+        if not os.path.isfile(src):
+            # ⚠️ 原檔不見了就**不要造一筆指向空氣的新列** ——
+            #    那會讓新單看起來有憑證而點不開。
+            continue
+        file_id, rel, size = copy_into(new_id, src, att["filename"])
+        _insert_attachment(conn, new_id, file_id, att["filename"], rel,
+                           size, att["mime"], COPY_SOURCE_TYPE,
+                           str(old_id), att["file_id"], who, now)
+        n += 1
+    return n

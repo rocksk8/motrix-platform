@@ -83,6 +83,18 @@
     .vc-src__txt{font-weight:600}
     .vc-src__meta{color:var(--text-secondary);font-size:11px;margin-left:auto}
     .vc-src__empty{padding:16px 8px;color:var(--text-secondary);font-size:12px;line-height:1.8}
+
+    .vc-att{margin-top:18px;border:1px solid var(--border-light);border-radius:var(--radius);padding:12px 14px;font-family:var(--font-zh)}
+    .vc-att__hd{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:8px;font-size:13px;font-weight:600;color:var(--text-primary)}
+    .vc-att__hint{font-size:11px;color:var(--text-secondary);font-weight:400}
+    .vc-att__row{display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--border-light);font-size:12px}
+    .vc-att__row:last-of-type{border-bottom:none}
+    .vc-att__tag{font-size:11px;padding:1px 7px;border-radius:9px;background:#F0EEE9;color:var(--text-secondary)}
+    .vc-att__name{font-weight:600;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .vc-att__meta{color:var(--text-secondary);font-size:11px;margin-left:auto}
+    .vc-att__del{border:none;background:transparent;color:#B91C1C;cursor:pointer;font-size:12px;font-family:var(--font-zh);padding:0 4px}
+    .vc-att__empty{padding:12px 4px;color:var(--text-secondary);font-size:12px}
+    .vc-att__acts{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px}
   </style>
 </head>
 <!-- ⚠️ 這個 body **刻意只有 `x-data`，沒有那個明著呼叫初始化的屬性**。
@@ -253,11 +265,22 @@
               </template>
             </div>
             <div class="vc-src__list">
+              <!-- 🔑 兩個頁籤點下去做的事**不一樣**，而按鈕長得一樣：
+                   案件      -> 帶入摘要文字（JV7）
+                   已上傳檔案 -> 帶入一個憑證檔（JV3，後端複製一份）
+                   ⚠️ 所以分支寫在這裡而不是寫在一支「什麼都做」的函式裡 ——
+                      那支函式的每一個呼叫端都要先猜它這次會做哪一件。 -->
               <template x-for="(it, si) in tabItems()" :key="si">
                 <button class="vc-src__item" data-testid="summary-source-item"
-                        :disabled="!canEdit" @click="applySource(it)">
-                  <span class="vc-src__txt" x-text="it.summary || it.text"></span>
-                  <span class="vc-src__meta" x-text="it.project_name || it.status || ''"></span>
+                        :disabled="!canEdit || (it.exists === false)"
+                        @click="sourceTab === '已上傳檔案' ? bringIn(it) : applySource(it)">
+                  <span class="vc-src__txt"
+                        x-text="it.summary || it.text || it.filename"></span>
+                  <!-- ⚠️ 實體檔不見的那幾筆**照樣列出來並標記** ——
+                       濾掉的話使用者會覺得「那張發票我明明傳過」而畫面上什麼都沒有。 -->
+                  <span class="vc-src__meta"
+                        x-text="it.exists === false ? '檔案已遺失'
+                                : (it.project_name || it.status || it.type || '')"></span>
                 </button>
               </template>
               <!-- 🔑 空清單要說出**為什麼**空的（後端給的那句話，不在這裡重寫）：
@@ -269,6 +292,65 @@
             </div>
             <template x-if="sourceErr">
               <div class="vc-err" x-text="sourceErr"></div>
+            </template>
+          </div>
+
+          <!-- ══ 附件（JV3）════════════════════════════════════════════
+               使用者逐字（§159b (7)）：「必須有上傳功能可以合併輸出」。
+
+               🔴 帶入 ＝ **後端複製一份檔案**，不是引用：
+                  引用的話別人刪掉來源附件 ⇒ **一張已過帳傳票的憑證消失**，
+                  而那要到幾個月後對帳才會被發現。
+               🔴 刪除是**軟刪**：DB 標記已刪，而 bytes 留著（使用者裁定 §163②）。
+                  ☠️ 當天上傳、當天刪掉的檔**從來沒被雲端鏡像過**
+                     ⇒ 硬刪等於不可復原。
+               🔴 離開草稿就**完全不可刪** —— 送審後可刪 ＝ 簽核人看過的東西
+                  可以在他不知情時消失。要移除 ⇒ 作廢整張傳票重開。 -->
+          <div class="vc-att" x-show="isSaved">
+            <div class="vc-att__hd">
+              <span>附件</span>
+              <span class="vc-att__hint">發票、請款單等憑證。帶入的檔案會複製一份留在這張傳票裡。</span>
+            </div>
+
+            <template x-for="a in attachments" :key="a.file_id">
+              <div class="vc-att__row">
+                <span class="vc-att__tag" x-text="attFrom(a)"></span>
+                <span class="vc-att__name" x-text="a.filename"></span>
+                <span class="vc-att__meta" x-text="fileSize(a.size)"></span>
+                <!-- 🔴 **`x-if` 不是 `x-show`／`disabled`**：非草稿時這顆鈕要
+                     **不存在**，不是存在而按不下去。
+                     ☠️ 看得到而按不下去的按鈕，使用者會一直按，
+                        **而畫面不會說為什麼**。 -->
+                <template x-if="canEdit">
+                  <button class="vc-att__del" data-testid="voucher-att-delete"
+                          @click="deleteAttachment(a)" title="移除這個附件">移除</button>
+                </template>
+              </div>
+            </template>
+
+            <div class="vc-att__empty" x-show="!attachments.length">
+              這張傳票還沒有附件。
+            </div>
+
+            <div class="vc-att__acts" x-show="canEdit">
+              <label class="vc-btn" style="cursor:pointer">
+                ＋ 上傳檔案
+                <input type="file" multiple accept=".jpg,.jpeg,.png,.pdf"
+                       data-testid="voucher-att-upload" style="display:none"
+                       @change="uploadAttachments($event)">
+              </label>
+              <span class="vc-att__hint" x-show="uploading">處理中…</span>
+              <span class="vc-att__hint">
+                可帶入的憑證在下方「摘要來源」的「已上傳檔案」頁籤 ——
+                先點一個案件，再點要帶入的檔案。
+              </span>
+            </div>
+
+            <template x-if="attErr">
+              <div class="vc-err" x-text="attErr"></div>
+            </template>
+            <template x-if="attMsg">
+              <div class="vc-ok" x-text="attMsg"></div>
             </template>
           </div>
 

@@ -47,6 +47,19 @@ function voucherPage() {
     sourceNotes: {},
     sourcesLoaded: false,
     sourceErr: '',
+    //: 頁籤②「已上傳檔案」要先知道**是哪一個案件** —— 憑證掛在案件底下。
+    sourceQuote: '',
+
+    // ── 附件（`JV3`）──
+    //
+    // 🔴 帶入 ＝ **後端複製一份檔案**，不是引用。
+    //    引用的話，別人刪掉來源附件 ⇒ **一張已過帳傳票的憑證消失**。
+    // ⚠️ 而前端**只送 `(type, docNo, fileId)`，不送路徑** ——
+    //    送路徑等於開一個任意檔案讀取。
+    attachments: [],
+    attErr: '',
+    attMsg: '',
+    uploading: false,
     //: 帶入要寫到**哪一行**。預設第一行；使用者點過哪一格的摘要就換到那一行。
     summaryTarget: 0,
 
@@ -96,7 +109,10 @@ function voucherPage() {
     async loadSources() {
       // ⚙️ **只在載入時拿一次** —— 切頁籤不重新打，也不重新帶入。
       try {
-        const r = await fetch('/api/vouchers/summary-sources', { headers: this._auth() })
+        const q = this.sourceQuote
+          ? '?quote_no=' + encodeURIComponent(this.sourceQuote) : ''
+        const r = await fetch('/api/vouchers/summary-sources' + q,
+                              { headers: this._auth() })
         if (!r.ok) throw new Error('HTTP ' + r.status)
         const d = await r.json()
         this.sources = d.tabs || {}
@@ -127,9 +143,109 @@ function voucherPage() {
       if (!this.lines[i]) { this.addLine(); i = this.lines.length - 1 }
       // ⚠️ 覆蓋那一行的摘要 —— 而**只有使用者點了來源才會走到這裡**。
       this.lines[i].summary = s
+      // 🔑 順手記下是哪一個案件，頁籤②（可帶入的憑證）才有範圍。
+      //    ⚠️ 重新拿來源**不會**再寫一次摘要：`loadSources()` 只換資料，
+      //       寫進 `l.summary` 的**只有這一支**。
+      if (it && it.quote_no && it.quote_no !== this.sourceQuote) {
+        this.sourceQuote = it.quote_no
+        this.loadSources()
+      }
     },
 
     focusLine(i) { this.summaryTarget = i },
+
+    // ── 附件（`JV3`）──────────────────────────────────────────────
+
+    async uploadAttachments(ev) {
+      this.attErr = ''
+      this.attMsg = ''
+      const input = ev && ev.target
+      const files = (input && input.files) || []
+      if (!files.length || !this.id) return
+      if (this.uploading) return
+      this.uploading = true
+      try {
+        const fd = new FormData()
+        for (const f of files) fd.append('files', f)
+        // ⚠️ **不要自己設 Content-Type** —— multipart 的 boundary 由瀏覽器產生，
+        //    手動設的話 boundary 會缺，而後端解析出 0 個檔案。
+        const r = await fetch('/api/vouchers/' + this.id + '/attachments', {
+          method: 'POST', headers: this._auth(), body: fd,
+        })
+        const d = await r.json().catch(function () { return {} })
+        if (!r.ok) throw new Error(d.detail || ('HTTP ' + r.status))
+        this.attachments = d.attachments || []
+        this.attMsg = '已上傳 ' + (d.added || 0) + ' 個附件。'
+      } catch (e) {
+        this.attErr = e.message
+      } finally {
+        this.uploading = false
+        // 🔑 清掉 input 的值，否則**同一個檔案選第二次不會觸發 change**。
+        if (input) input.value = ''
+      }
+    },
+
+    //: 從來源帶入一筆憑證。**只送 (type, docNo, fileId)**。
+    //: ☠️ 送路徑等於開一個任意檔案讀取 —— 路徑由後端自己組。
+    async bringIn(it) {
+      this.attErr = ''
+      this.attMsg = ''
+      if (!this.id || !it) return
+      if (this.uploading) return
+      this.uploading = true
+      try {
+        const r = await fetch('/api/vouchers/' + this.id + '/attachments', {
+          method: 'POST',
+          headers: this._jsonAuth(),
+          body: JSON.stringify({ picks: [
+            { type: it.type, docNo: it.docNo, fileId: it.fileId },
+          ] }),
+        })
+        const d = await r.json().catch(function () { return {} })
+        if (!r.ok) throw new Error(d.detail || ('HTTP ' + r.status))
+        this.attachments = d.attachments || []
+        // ⚠️ 後端回的 `warning` **直接顯示**，不要在這裡重寫文案：
+        //    那一句說的是「哪幾筆的上傳者／時間是空的」，規則只有一份。
+        this.attMsg = d.warning || '已帶入 1 個附件。'
+      } catch (e) {
+        this.attErr = e.message
+      } finally {
+        this.uploading = false
+      }
+    },
+
+    // 🔴 刪除是**軟刪**：DB 標記已刪，而**實體檔留著**（使用者裁定 `§163` ②）。
+    //    而「離開草稿就不可刪」由後端擋 —— 這裡只負責不顯示那顆鈕。
+    async deleteAttachment(a) {
+      this.attErr = ''
+      this.attMsg = ''
+      if (!this.id || !a) return
+      try {
+        const r = await fetch('/api/vouchers/' + this.id
+                              + '/attachments/' + encodeURIComponent(a.file_id), {
+          method: 'DELETE', headers: this._auth(),
+        })
+        const d = await r.json().catch(function () { return {} })
+        if (!r.ok) throw new Error(d.detail || ('HTTP ' + r.status))
+        this.attachments = (this.attachments || []).filter(function (x) {
+          return x.file_id !== a.file_id
+        })
+        this.attMsg = '已移除「' + (a.filename || '') + '」。檔案本身仍保留在系統裡。'
+      } catch (e) {
+        this.attErr = e.message
+      }
+    },
+
+    //: 這一筆附件是**帶入的**還是**當場上傳的**。畫面上要分得出來。
+    attFrom(a) { return (a && a.source_type) ? '帶入' : '上傳' },
+
+    fileSize(n) {
+      const v = Number(n) || 0
+      if (!v) return ''
+      if (v < 1024) return v + ' B'
+      if (v < 1024 * 1024) return (v / 1024).toFixed(1) + ' KB'
+      return (v / 1024 / 1024).toFixed(1) + ' MB'
+    },
 
     async loadCompany() {
       // ⚠️ 抬頭從設定讀。**不要寫死** —— 這個 repo 已經寫死在 14 個檔、56 行。
@@ -216,6 +332,7 @@ function voucherPage() {
         checker: (s['覆核'] || {}).by || '',
         manager: (s['主管'] || {}).by || '',
       }
+      this.attachments = d.attachments || []
       this.summaryTarget = 0
       // 🔑 網址帶上 `?id=`，**重新整理會回到同一張單**。
       //    ☠️ 少了它：使用者改完摘要、存檔、按 F5 ⇒ 回到一張空白新單
