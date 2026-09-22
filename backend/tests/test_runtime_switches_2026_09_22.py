@@ -295,6 +295,21 @@ def test_fx1b_the_deploy_script_asks_the_endpoint():
 
     📌 ⇒ 這一題的價值只有一個：**那一段不可以被順手刪掉**。
     真正會擋的是 `FX1c`（把兩個 `set` 搬到 `:loop` 之前），而那要 A 裁。
+
+    ## 🔴 2026-09-22 FX30：**失敗訊息改成它實際在驗的那件事**
+
+    D 找到的：這個斷言是 `"runtime-switches" in text` 的**子字串比對**，
+    ☠️ 而腳本裡任何一行 `Write-Host` 的提醒文字就足以讓它綠。
+    🔑 **而它的失敗訊息宣稱的是「有沒有去問」** ——
+    兩者差得很遠：一個是「有沒有發出那個請求」，一個是「檔案裡有沒有這個字」。
+
+    ⚠️ A 原本把它排進 `NEXT`（照「誰要的」分類），而我請求現在就改，
+    理由是：**一個正在誤導的綠燈，不是下一包的技術債，是現在就在說謊的東西。**
+    📌 A 准了，並補了一句我認為更準的：**分類是給還沒做的事用的。**
+
+    ⇒ **只改訊息、不改行為、不增紅燈。**
+    真正驗行為（那個請求有沒有被發出去）要在 `.ps1` 上跑一次，
+    那是 `FX28`／`FX29` 那一批，留在 `NEXT`。
     """
     ps1 = (Path(__file__).resolve().parent.parent
            / "tools" / "build_deploy_package.ps1")
@@ -302,6 +317,9 @@ def test_fx1b_the_deploy_script_asks_the_endpoint():
     text = ps1.read_text(encoding="utf-8", errors="replace")
 
     assert "runtime-switches" in text, (
-        "`build_deploy_package.ps1` 沒有去問 `/api/system/runtime-switches` ——\n"
-        "⇒ 部署完成之後沒有人確認「跑著的行程真的是這一包」。"
+        "`build_deploy_package.ps1` 裡找不到 `runtime-switches` 這個字。\n"
+        "⚠️ **這一題驗的是「那個字還在檔案裡」，不是「那個請求真的被發出去」** ——\n"
+        "   子字串比對連一行 `Write-Host` 的提醒文字都會收下。\n"
+        "🔑 它唯一的作用是：**那一段不可以被順手刪掉。**\n"
+        "📌 要驗行為得在 `.ps1` 上真的跑一次（`FX28`／`FX29`，在 `NEXT`）。"
     )
