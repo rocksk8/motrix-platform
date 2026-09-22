@@ -234,8 +234,62 @@ def _send(to_addrs: list, subject: str, html: str) -> str:
         return SEND_TRANSIENT_FAIL
 
 
-def _async_send(to_addrs: list, subject: str, html: str) -> None:
-    threading.Thread(target=_send, args=(to_addrs, subject, html), daemon=True).start()
+#: 「還沒有結果」。⚠️ **它不是第五種失敗**，它是「我還沒問到」。
+#:
+#: 🔴 呼叫端**不可以把它當成成功**：那正是 YA 整節在修的形狀
+#: （一個沒有確認的結果被當成「寄過了」，而那張單子從此不再提醒）。
+SEND_UNKNOWN = "unknown"
+
+
+class SendHandle:
+    """`_async_send()` 的把手：**要結果的人可以等，不要的人可以不理。**
+
+    ## 🔴 為什麼需要它
+    `_async_send` 的本體是 `threading.Thread(target=_send).start()`
+    ⇒ **`_send()` 的回傳值整個掉在執行緒裡**，呼叫端拿不到。
+    ☠️ 那就是 14 處「先寫已通知標記、再射後不理」的共同的根：
+    **不是它們忘了檢查，是它們沒有東西可以檢查。**
+
+    ## ⚠️ `wait()` 逾時回 `SEND_UNKNOWN`，不是回 `transient_fail`
+    「我等不到答案」與「對方拒絕了」是兩件事，而**只有後者可以用來做決定**。
+    🔑 把逾時當成失敗 ⇒ 每次 SMTP 慢一點就重寄一封；
+    把逾時當成成功 ⇒ 信掉了而標記留著。**兩個方向都錯，所以它要有自己的名字。**
+    """
+
+    __slots__ = ("_thread", "outcome")
+
+    def __init__(self):
+        self._thread = None
+        self.outcome = None
+
+    def wait(self, timeout=None) -> str:
+        """等到有結果為止（或逾時）。回 `SEND_*`，拿不到就回 `SEND_UNKNOWN`。"""
+        if self._thread is not None:
+            self._thread.join(timeout)
+        return self.outcome if self.outcome is not None else SEND_UNKNOWN
+
+
+def _async_send(to_addrs: list, subject: str, html: str) -> SendHandle:
+    """背景寄信。**回一個把手，不要再把結果丟掉。**
+
+    📌 既有呼叫端可以繼續忽略回傳值（行為完全不變）——
+    ⚠️ 而那正是它危險的地方：**「可以忽略」與「應該忽略」是兩件事**，
+    所以會寫下「已通知」標記的那些呼叫端**必須** `wait()`。
+    """
+    handle = SendHandle()
+
+    def _run():
+        # ⚠️ 例外也要留下結果，否則 `wait()` 會回 `SEND_UNKNOWN`，
+        # 而呼叫端分不出「執行緒炸了」與「還沒跑完」。
+        try:
+            handle.outcome = _send(to_addrs, subject, html)
+        except Exception as exc:                      # noqa: BLE001
+            logger.exception("非同步寄信的執行緒自己炸了：%s", exc)
+            handle.outcome = SEND_TRANSIENT_FAIL
+
+    handle._thread = threading.Thread(target=_run, daemon=True)
+    handle._thread.start()
+    return handle
 
 
 def _send_raising(to_addrs: list, subject: str, html: str) -> None:
