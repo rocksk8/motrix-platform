@@ -1540,6 +1540,34 @@
     "content": "修復 apply_update.ps1 首次在正式機真實套用時觸發的誤判自動回滾：套用 commit 484c1b4 後健康檢查判定失敗（healthy=True, log 錯誤筆數=5）觸發回滾，事後比對 server.log 確認回滾成功、正式機穩定運作、沒有資料風險，但診斷發現是腳本本身誤判，不是新程式碼問題——根因是 Step 2 停服後沒等 port 666 真正釋放就讓既有 autostart crash-restart 迴圈搶著重新綁定，撞到 [Errno 10048] 位址已被使用重試 2 次才成功（迴圈本身設計上會自癒），但 Step 4 健康檢查掃 log tail 80 行沒有分辨這些錯誤是否已被後續成功啟動蓋過去，誤判成更新失敗；修法：① Step 2 停服後新增主動輪詢確認 port 666 真正釋放（最長 15 秒）② Step 4 log 掃描邏輯改為只檢查 tail 範圍內「最後一次成功啟動（Uvicorn running on）」之後的內容，忽略重試階段已自癒的暫時性錯誤；已用 PowerShell AST 語法檢查通過，並用當次事故實際 log 內容重建測試樣本模擬驗證：舊邏輯判定 2 筆錯誤（會誤判失敗）、新邏輯判定 0 筆（正確判定健康），另外驗證真正在成功啟動之後發生的錯誤（如 Traceback）新邏輯仍會正確攔截"
   },
   {
+    "module": "部署/更新流程",
+    "version": "2026-08-01g",
+    "date": "2026-08-01",
+    "time": "10:00",
+    "content": "新增半自動「更新模式」，把 §14.3 原本列為之後才做的自動化推送方向落地成兩支腳本：backend/tools/build_deploy_package.ps1（開發機執行，git status 必須乾淨才允許打包，用 git archive 只匯出已 commit 內容，解決來源不可靠問題）與 backend/tools/apply_update.ps1（正式機執行，身分守門＋版本比對防重複套用＋套用前自動備份 db 與程式碼＋停服讓既有 autostart crash-restart 迴圈接手＋robocopy 只加不刪絕不 /MIR＋套用後輪詢 /api/ping 與檢查 server.log，失敗自動回滾）；MOTRIX-ERP-QUICK.md 新增 §15 說明完整流程，§14.3 更新狀態；兩支腳本因含中文註解，已確認需存成 UTF-8 with BOM 才能被 PowerShell 5.1 正確解析（純 UTF-8 no-BOM 會在中文字附近誤判字串終止符），已修正並通過語法檢查；尚未在正式機做過真實套用測試（會實際停服重啟，需使用者另外確認執行時機），開發機端的 build_deploy_package.ps1 也尚未實地跑過（需先於開發機 commit 現有未進版控的變更）"
+  },
+  {
+    "module": "營運報表",
+    "version": "2026-08-01c",
+    "date": "2026-08-01",
+    "time": "00:37",
+    "content": "修復月報 PDF 產製失敗（KeyError: totalReceivable）：_build_report_html() 內精算明細迴圈變數 s 覆蓋了外層月報總覽變數 s（Python 無區塊作用域），僅在當月有已完結精算案件時才會觸發；迴圈內變數改名為 ss 避免覆蓋；已用 2026-07 實際資料重現驗證並補寄修正後含 PDF 附件的月報"
+  },
+  {
+    "module": "系統安全",
+    "version": "2026-08-01b",
+    "date": "2026-08-01",
+    "time": "00:27",
+    "content": "新增獨立心跳監控機制：backend/heartbeat_job.py 由 Task Scheduler 每 5 分鐘執行，先檢查本機 /api/ping，正常才對 healthchecks.io 打卡，本機無回應直接打 /fail 立即告警；本機或整台主機斷線時打卡中斷，由 healthchecks.io 逾時（20 分鐘）寄信通知 superadmin；設定檔 heartbeat_config.json 存放打卡網址，setup_heartbeat_task.ps1 負責註冊排程"
+  },
+  {
+    "module": "系統安全",
+    "version": "2026-08-01a",
+    "date": "2026-08-01",
+    "time": "00:15",
+    "content": "正式環境穩定性強化：setup_autostart_task.ps1 登入觸發器加 90 秒延遲避免與 GoogleDriveFS 搶跑造成誤報 BACKUP_ALERT；autostart.bat 改為 crash-restart 迴圈（uvicorn 意外中止 5 秒後自動重啟）並加 chcp 65001 + PYTHONUTF8=1 修正 log 中文亂碼；restart.bat 同步補殺 autostart 迴圈避免搶 port 666；archive.py 殘留的舊碟符 G: 文字（註解/告警訊息）改為現行 H:；清除根目錄與 backend/ 下各一個 0-byte 殘留 db 檔"
+  },
+  {
     "module": "系統/資料庫",
     "version": "2026-08-01q",
     "date": "2026-08-01",
@@ -2246,7 +2274,7 @@
   },
   {
     "module": "每日工作事項",
-    "version": "2026-07-22r",
+    "version": "2026-07-22q",
     "date": "2026-07-22",
     "time": "10:00",
     "content": "刪除按鈕不再需要解鎖（dtUnlocked 條件移除）；直接點選確認即可刪除並留下 audit log；僅限 superadmin"

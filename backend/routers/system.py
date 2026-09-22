@@ -1370,14 +1370,13 @@ def set_webauthn_config(body: dict = Body(...), authorization: str = Header(None
 # 比照 edge-path／pdf-base-path 這類低頻技術設定的既有慣例，透過 API 直接調整）。
 
 class BackupRetentionBody(BaseModel):
-    local_db_keep_days:    int
-    cloud_daily_keep_days: int
-    cloud_weekly_keep_days: int
-    audit_log_keep_days:   int
-    # 2026-09-14 新增的兩個都給預設值，舊 client 只送原本 4 個欄位仍然能用
-    # （這支端點沒有前端頁面，但打包過的舊腳本／curl 範例可能還在流傳）。
-    cloud_monthly_keep_days: int = 0    # 0 = 永久保留（使用者裁示的預設政策）
-    local_pre_update_keep:   int = 5    # 份數，不是天數
+    local_db_keep_days:    Optional[int] = None
+    cloud_daily_keep_days: Optional[int] = None
+    cloud_weekly_keep_days: Optional[int] = None
+    audit_log_keep_days:   Optional[int] = None
+    # 2026-09-14 新增的兩個。
+    cloud_monthly_keep_days: Optional[int] = None    # 0 = 永久保留（使用者裁示的預設政策）
+    local_pre_update_keep:   Optional[int] = None    # 份數，不是天數
 
 
 @router.get("/api/settings/backup-retention")
@@ -1390,12 +1389,34 @@ def get_backup_retention_setting(authorization: str = Header(None)):
 @router.patch("/api/settings/backup-retention")
 def set_backup_retention_setting(body: BackupRetentionBody, authorization: str = Header(None)):
     actor = _require_user(authorization, require_superadmin=True)
-    value = body.model_dump()
+    from archive import _backup_retention
+
+    # 🔴🔴 BK3（2026-09-22）：這裡原本是 `body.model_dump()` —— **整包覆蓋**。
+    #
+    # 那兩個 2026-09-14 才加的欄位有 Pydantic 預設值，而設定頁只送原本四個
+    # ⇒ 使用者用 curl 把 `cloud_monthly_keep_days` 設成 1825，
+    #   下一個人在設定頁按一次「儲存」，它就**静静變回 0**。
+    # 🔑 今天無害，因為 0 剛好就是預設值 —— 而那正是它沒有被發現的原因。
+    # ☠️ 〈降級之後它還是會動〉：存檔成功、沒有錯誤，而一個設定被重設了。
+    #
+    # ⇒ 改成**合併**：只有這次真的送出來的鍵才會蓋掉舊值。
+    # 📌 用 `model_fields_set` 不是「值不是 None 就算送了」——
+    #    ☠️ 後者的話，一個明確送 `null` 的 client 會被當成沒送，
+    #    而那兩件事在語意上不同（〈null 不等於 0〉的同一族）。
+    sent = {k: v for k, v in body.model_dump().items()
+            if k in body.model_fields_set}
+    if not sent:
+        raise HTTPException(400, "沒有送出任何要變更的欄位")
+    value = {**_backup_retention(), **sent}
     # 三種欄位語意不同，不能再像原本那樣一律套「1～3650 天」：
     #   *_keep_days      天數，至少 1 天
     #   cloud_monthly_*  天數，但 0 有特殊意義＝永久保留（預設政策）
     #   local_pre_update_keep 是「份數」不是天數，上限用 100 份就夠荒謬了
+    # ⚠️ 驗證跑在**合併後的完整字典**上，不是只跑在送來的那幾個鍵上：
+    # 一個舊的、當時合法而現在超出範圍的值，不應該因為這次沒被送出就溜過去。
     for label, days in value.items():
+        if days is None:
+            raise HTTPException(400, f"{label} 不可以是空值")
         if label == "local_pre_update_keep":
             if days < 0 or days > 100:
                 raise HTTPException(400, f"{label} 需介於 0～100 份之間（0 = 不清理）")

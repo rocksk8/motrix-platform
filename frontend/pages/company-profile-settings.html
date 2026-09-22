@@ -347,7 +347,17 @@
           <div class="ns-card-body">
             <div class="ns-desc">
               超過保留天數的備份會在每日排程時自動清除。<strong>調小等於刪掉更多歷史備份，調整前先確認磁碟空間與可回溯範圍的取捨。</strong>
-              各欄位可填 1～3650 天。
+            </div>
+            <!-- 🔑 BK8（使用者 2026-09-22：「長期哪些會刪哪些不會刪」）。
+                 📌 判準：**使用者不應該需要問這個問題。**
+                 ☠️ 這一段排在天數欄位**之前**，是因為「哪些不會被刪」比「幾天」重要：
+                    一個把每日調成 1 天的人，真正需要知道的是「月備份還在」。 -->
+            <div class="ns-desc" style="background:#F8FAFC;border-left:3px solid #94A3B8;
+                                        padding:10px 12px;border-radius:4px;line-height:1.9">
+              <div><strong>永久保留（不會被任何設定清掉）：</strong>
+                月備份（含整份資料庫）・上傳檔案・PDF 存檔・即時備份</div>
+              <div style="margin-top:4px"><strong>會自動清除：</strong>
+                本機 DB 快照・雲端每日備份・雲端週備份・稽核紀錄，各依下方天數</div>
             </div>
             <div class="ns-row">
               <div class="ns-field">
@@ -367,6 +377,27 @@
               <div class="ns-field">
                 <label>稽核紀錄（天）</label>
                 <input type="number" min="1" max="3650" x-model.number="retention.audit_log_keep_days">
+              </div>
+            </div>
+            <!-- 🔴 BK2：下面這兩個欄位在 2026-09-14 就存在於後端，而畫面上一直沒有。
+                 ☠️ 使用者說「只有顯示天」是完全正確的觀察 —— 而且少的這兩個
+                    恰好就是他問的那兩件事：「月的部分會保留多久」與「幾份」。
+                 ⚠️ 它們先前不只是看不到，還**設不動**（BK3）：這一頁只送四個欄位，
+                    而後端整包覆蓋 ⇒ 用 curl 設好的值會被下一次儲存静静打回預設。 -->
+            <div class="ns-row">
+              <div class="ns-field">
+                <label>雲端月備份（天，0 = 永久保留）</label>
+                <input type="number" min="0" max="3650" x-model.number="retention.cloud_monthly_keep_days">
+                <div style="font-size:11px;color:#64748B;margin-top:4px">
+                  預設 0。這是長期保存的那一層，<strong>填 0 就永遠不會被清掉</strong>。
+                </div>
+              </div>
+              <div class="ns-field">
+                <label>更新前快照（份數，不是天數）</label>
+                <input type="number" min="0" max="100" x-model.number="retention.local_pre_update_keep">
+                <div style="font-size:11px;color:#64748B;margin-top:4px">
+                  每次套用更新前會先做一份本機快照，這裡是保留幾份。0 = 不清理。
+                </div>
               </div>
             </div>
             <div class="ns-actions">
@@ -552,7 +583,12 @@
         // 否則使用者填的值會被稍後抵達的回應蓋回預設。實測踩過——填 45 存進去
         // 卻是 30，而且畫面沒有任何異狀。同一類競態稍早在叫料清單也發生過。
         sysLoading: true,
-        retention: { local_db_keep_days: 30, cloud_daily_keep_days: 365, cloud_weekly_keep_days: 730, audit_log_keep_days: 365 },
+        // ⚠️ 這幾個預設值只在「後端還沒回應」的那一瞬間出現，載入後會被
+        //    `/api/settings/backup-retention` 覆蓋。仍然對齊後端的真實預設
+        //    （archive._BACKUP_RETENTION_DEFAULT）—— 一個對不上的暫時值，
+        //    在後端讀取失敗時就會變成畫面上唯一的說法。
+        retention: { local_db_keep_days: 30, cloud_daily_keep_days: 60, cloud_weekly_keep_days: 90,
+                     audit_log_keep_days: 730, cloud_monthly_keep_days: 0, local_pre_update_keep: 5 },
         retSaving: false, retSaved: false, retMsg: '', retIsError: false,
         pdfBase: { configured: '', resolved: '', default: '' },
         pdfSaving: false, pdfSaved: false, pdfMsg: '', pdfIsError: false,
@@ -679,6 +715,22 @@
               return
             }
           }
+          // ⚠️ 這兩個的下限是 **0 不是 1**，而 0 各自有不同的意思：
+          //    月備份 0 = 永久保留（不是「不保留」）；更新前快照 0 = 不清理。
+          // ☠️ 套用上面那個 1～3650 的迴圈會把合法的 0 擋掉，所以分開驗。
+          const zeroOk = {
+            cloud_monthly_keep_days: ['雲端月備份', 3650],
+            local_pre_update_keep:   ['更新前快照份數', 100],
+          }
+          for (const [k, spec] of Object.entries(zeroOk)) {
+            const n = Number(v[k])
+            if (!Number.isInteger(n) || n < 0 || n > spec[1]) {
+              this.retMsg = `${spec[0]} 需為 0～${spec[1]} 之間的整數`
+              this.retIsError = true
+              setTimeout(() => this.retMsg = '', 5000)
+              return
+            }
+          }
           await this._saveSetting({
             url: '/api/settings/backup-retention', method: 'PATCH', prefix: 'ret',
             body: {
@@ -686,6 +738,8 @@
               cloud_daily_keep_days: Number(v.cloud_daily_keep_days),
               cloud_weekly_keep_days: Number(v.cloud_weekly_keep_days),
               audit_log_keep_days: Number(v.audit_log_keep_days),
+              cloud_monthly_keep_days: Number(v.cloud_monthly_keep_days),
+              local_pre_update_keep: Number(v.local_pre_update_keep),
             },
           })
         },

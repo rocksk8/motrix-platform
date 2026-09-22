@@ -286,6 +286,34 @@ $($report -join "`n")
 Write-Host "[環境] 測試將使用：$pyExe" -ForegroundColor Green
 Write-Host "[OK] 依賴齊全。" -ForegroundColor Green
 
+# --- Step 2.52: 版本紀錄的反方向（2026-09-22 新增，§13 VR7）---
+# Step 1.6 守的是「manifest 舊於這一包的 commit」。A-2 指出它只守一半：
+#   manifest 有、DB 沒有   正常 —— 服務還沒重啟，下次開機會同步進去
+#   DB 有、manifest 沒有   🔴 重建資料庫就永久消失，而 Step 1.6 看不到
+# 實際發生過：四筆 2026-08-01 的紀錄只活在資料庫裡，已經 52 天。
+#
+# 【為什麼不併進 Step 1.6】那一關只用 git 與 PS 內建 JSON，這一關要讀 SQLite，
+# 而 PowerShell 5.1 沒有 SQLite ⇒ 需要 Python，也就是要等 Step 2.5 挑完直譯器。
+#
+# ⚠️ **讀不到資料庫是失敗，不是跳過。** 一道從來不會觸發的守門，
+# 跟一道運作良好的守門在輸出上完全一樣。
+Write-Host "`n[版本紀錄] 反方向檢查：資料庫裡有而 manifest 沒有的..."
+$vsyncScript = Join-Path $projectRoot "backend\tools\check_version_sync.py"
+if (-not (Test-Path $vsyncScript)) {
+    Fail "找不到 $vsyncScript —— VR7 的守門無法執行。這道檢查不會因為腳本不見就放行。"
+}
+$prevIoEnc3 = $env:PYTHONIOENCODING
+$env:PYTHONIOENCODING = "utf-8"
+try {
+    & $pyExe $vsyncScript | ForEach-Object { Write-Host "  $_" }
+    $vsyncExit = $LASTEXITCODE
+} finally {
+    $env:PYTHONIOENCODING = $prevIoEnc3
+}
+if ($vsyncExit -ne 0) {
+    Fail "版本紀錄反方向守門沒過（見上方訊息）。資料庫裡有而 manifest 沒有的紀錄，在重建資料庫或災難還原之後會永久消失，而畫面上不會有任何跡象。"
+}
+
 # --- Step 2.55: 規格覆蓋率守門（2026-09-22 新增，YC）---
 # 【為什麼排在這裡】這道檢查自己只跑 0.73 秒，而它抓的東西（規格宣告了條件
 # 而沒有人寫測試／測試宣稱一個規格沒有的編號）跟「測試會不會通過」完全無關

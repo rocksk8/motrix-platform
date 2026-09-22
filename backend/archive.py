@@ -572,6 +572,185 @@ def _ensure_archive_dirs():
     _clear_backup_alert_if_healthy()
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# 快照內容檢查（§12 BK10／BK12／BK13／BK22／BK24／BK25／BK26）
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# 🔴 為什麼需要這一段：2026-08-30／08-31／09-03 三天的雲端每日備份是一份
+#    **結構正確而資料是空的**資料庫 —— `PRAGMA quick_check = ok`、表數也對
+#    （68／70 張）、檔案大小看起來合理，只是裡面沒有資料。
+#    成因已結案（`BK11`：本機 pytest 的雲端隔離死碼，`a55fe26` 已修），
+#    ☠️ **而「修好」不等於「看得見」**：同一個形狀的下一次仍然會靜靜通過。
+#
+# 🔑 判準分兩部分，**缺一不可**（A-2 用 `BK21` 推翻了只有第一部分的版本）：
+#
+#    ① 身分對照   快照的 稽核紀錄／報價單／客戶 ≥ 同一天 `彙總.json`
+#                 抓「拿到的是另一個資料庫」
+#    ② 每列位元組 bytes(.db) ÷ 彙總的稽核筆數，要落在校準出來的區間內
+#                 抓「某一張表失控膨脹」——08-02／08-03 整庫 311 MB 的那一種，
+#                 ☠️ 而那兩天**三張表全部正常**，①完全抓不到。
+#
+# ⚠️ ② 預設關閉（`BK26`）：`[800, 8000]` 只在**一個安裝、61 天**上驗過。
+#    🔑 換一個客戶（稽核少而附件多）分布就不同，而寫死的界線不會報錯，
+#    只會在別人的機器上一直誤判。⇒ 要嘛隨安裝自我校準，要嘛只在自己的機器開。
+
+#: 身分對照要比的三張表（鍵＝`彙總.json` 裡的檔名）。
+#: 🔑 D 逐日實測 61 天的單調性選出來的：只增不減。
+#: ❌ 通知（09-01 148 → 09-02 124 會減少）與模組版本（劇烈震盪）不在內。
+SNAPSHOT_IDENTITY_TABLES = ("稽核紀錄", "報價單", "客戶")
+
+#: 身分對照那三張表在資料庫裡的真名。
+_SNAPSHOT_IDENTITY_SQL = {
+    "稽核紀錄": "audit_log",
+    "報價單":   "quotations",
+    "客戶":     "customers",
+}
+
+#: 沒有 `彙總.json` 可以對照時，能驗的只剩「這是不是我們的資料庫」。
+#: ⚠️ **這一層擋不到那三天**（它們 68 張表都在）—— 它擋的是「拿到的根本
+#: 不是這個系統的庫」。真正抓那三天的是 `snapshot_content_ok()` 的身分對照，
+#: 而那道檢查跑在 `_daily_backup()` 匯出 JSON 之後。
+#: 📌 寫在這裡是因為〈防護的副作用落在盲側〉：一個列在清單上的檢查，
+#:    會讓人以為那一側有人在守。**這一層守的範圍比看起來小。**
+SNAPSHOT_REQUIRED_TABLES = (
+    "schema_version", "users", "system_settings",
+    "audit_log", "quotations", "customers",
+)
+
+#: `BK25`：合法的 VACUUM 會讓每列位元組掉到接近下界（08-04 是 1,334）。
+#: ☠️ **不可以為了容納它而放寬下界** —— 放到 300 以下就同時放掉了
+#: 08-30／08-31／09-03（330／328／319）。
+#: 🔑 〈判準的寬窄都會騙人〉：**為了容納例外而放寬的判準，放掉的是它本來要抓的。**
+#: ⚙️ 反向控制在測試裡：那三天不可以出現在這個清單上。
+SNAPSHOT_RATIO_EXCEPTIONS = frozenset({
+    # 2026-08-04：08-02／08-03 膨脹之後跑過 VACUUM 而緊縮（`BK23`，成因未複驗）。
+    "2026-08-04",
+    "2026-08-05",
+})
+
+#: ② 的預設界線。⚠️ **只在開發機這一個安裝、61 天上驗過**（`BK26`）。
+_SNAPSHOT_RATIO_FALLBACK = (800.0, 8000.0)
+
+#: 自我校準時，界線離中位數的倍數。
+#: 🔑 用**倍數**不用絕對值：這個指標分子分母同步成長，
+#: ⇒ 資料長大時界線自己跟著長，不需要每個月回來調數字。
+_SNAPSHOT_RATIO_SPREAD = 3.0
+
+
+def snapshot_ratio_bounds(samples=None) -> tuple:
+    """每列位元組的合格區間 `(下界, 上界)`。
+
+    `samples` 是這個安裝的歷史比值。給了就**隨安裝自我校準**（`BK26`）；
+    沒給就退回 `_SNAPSHOT_RATIO_FALLBACK`。
+
+    ⚠️ 用中位數不用平均：08-02／08-03 那種 65 倍的離群值會把平均整個拖走，
+    🔑 而校準資料本身就可能含有我們要抓的那種異常 ——
+    ☠️ **一個被異常值校準過的界線，會把那種異常認成正常。**
+    """
+    values = sorted(float(v) for v in (samples or []) if v)
+    if not values:
+        return _SNAPSHOT_RATIO_FALLBACK
+    mid = len(values) // 2
+    median = values[mid] if len(values) % 2 else (values[mid - 1] + values[mid]) / 2
+    return (median / _SNAPSHOT_RATIO_SPREAD, median * _SNAPSHOT_RATIO_SPREAD)
+
+
+def bytes_per_audit_row(db_bytes, audit_rows):
+    """每列位元組。
+
+    ⚠️ 分母 0 ⇒ 回 `None`，**不是 0**（`BK24`）。
+    🔑 全新安裝的第一天稽核紀錄就是 0 ——〈null 不等於 0〉：
+    ☠️ 回 0 的話它會落在下界之外，**每一個全新安裝的第一天都收到一則假警報**，
+    而第一天收到的假警報會決定使用者往後怎麼看待這個系統的告警。
+    """
+    if not audit_rows:
+        return None
+    return db_bytes / audit_rows
+
+
+def snapshot_content_ok(counts: dict, summary: dict, db_bytes: int = 0,
+                        day: str = None, ratio_samples=None,
+                        ratio_enabled: bool = False) -> bool:
+    """這份快照的內容合不合格。
+
+    `counts`  快照檔裡實際數到的筆數（鍵同 `SNAPSHOT_IDENTITY_TABLES`）
+    `summary` 同一天 `彙總.json` 的筆數 —— **另一條程式路徑寫的**，
+              🔑 而那正是它有效的原因：`BK11` 那三天 JSON 全部正確。
+
+    ⚠️ `ratio_enabled` 預設 `False`（`BK26`）。
+    """
+    for label in SNAPSHOT_IDENTITY_TABLES:
+        want = summary.get(label)
+        if want is None:
+            continue
+        got = counts.get(label)
+        if got is None or got < want:
+            return False
+
+    if not ratio_enabled:
+        return True
+    if day and day in SNAPSHOT_RATIO_EXCEPTIONS:
+        return True
+    ratio = bytes_per_audit_row(db_bytes, summary.get("稽核紀錄") or 0)
+    if ratio is None:
+        # 分母 0 ⇒ 跳過第二部分，不是紅（`BK24`）。
+        return True
+    lo, hi = snapshot_ratio_bounds(ratio_samples)
+    return lo <= ratio <= hi
+
+
+def _snapshot_row_counts(path: str) -> tuple:
+    """直接開**快照檔本身**數筆數。回 `(表名集合, {標籤: 筆數})`。
+
+    ☠️ 觀測點必須是快照檔，不是來源庫 —— 來源庫從來沒有壞過，
+    🔑 壞的是那一刻被複製出來的東西。
+    ⚠️ 讀不開就回 `(None, {})`：呼叫端要把它當**失敗**，不是當通過
+    （〈fail closed〉——「我不知道它裡面是什麼」不可以被當成「它是好的」）。
+    """
+    try:
+        conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+    except sqlite3.Error:
+        return None, {}
+    try:
+        names = {r[0] for r in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+        counts = {}
+        for label, table in _SNAPSHOT_IDENTITY_SQL.items():
+            if table in names:
+                counts[label] = conn.execute(
+                    "SELECT COUNT(*) FROM %s" % table).fetchone()[0]
+        return names, counts
+    except sqlite3.Error:
+        return None, {}
+    finally:
+        conn.close()
+
+
+def _snapshot_health(path: str, summary: dict = None, day: str = None) -> tuple:
+    """`(合格嗎, 原因清單, 筆數)`。`summary` 給了才跑得了身分對照。"""
+    if not os.path.isfile(path):
+        return False, ["快照檔不存在：%s" % path], {}
+    names, counts = _snapshot_row_counts(path)
+    if names is None:
+        return False, ["快照檔讀不開，看不出裡面有什麼資料：%s" % path], {}
+
+    missing = [t for t in SNAPSHOT_REQUIRED_TABLES if t not in names]
+    if missing:
+        return False, [
+            "快照裡缺少核心資料表（%s）——這份檔案不是這個系統的資料庫，"
+            "或者結構不完整" % "、".join(missing)], counts
+
+    if summary is not None and not snapshot_content_ok(
+            counts, summary, db_bytes=os.path.getsize(path), day=day):
+        return False, [
+            "快照的資料筆數少於同一天的彙總紀錄（快照 %s ／彙總 %s）——"
+            "這份快照很可能不是正式資料庫" % (
+                {k: counts.get(k) for k in SNAPSHOT_IDENTITY_TABLES},
+                {k: summary.get(k) for k in SNAPSHOT_IDENTITY_TABLES})], counts
+
+    return True, [], counts
+
+
 def _snapshot_sqlite(also_to_cloud: bool = True):
     """
     Consistent SQLite snapshot under backend/db_backups/YYYY-MM-DD/motrix_erp.db.
@@ -594,13 +773,39 @@ def _snapshot_sqlite(also_to_cloud: bool = True):
                     dst.close()
             finally:
                 src.close()
+            # 🔴🔴 BK10：寫 `.done` 之前先看那份檔裡面有什麼。
+            #
+            # ☠️ 在這之前，`_snapshot_sqlite()` 是**寫完就算成功** ——
+            #    沒有任何人看過快照裡面有沒有東西。
+            #    2026-08-30／08-31／09-03 三份雲端備份就是這樣過關的：
+            #    `PRAGMA quick_check = ok`、表數也對，只是裡面沒有資料。
+            #
+            # ⚠️ 這裡**沒有 `彙總.json` 可以對照** —— `_daily_backup()` 的順序是
+            #    先快照、後匯出 JSON。所以這一關只驗得了「這是不是我們的庫」。
+            # 🔑 真正抓那三天的是身分對照，它跑在 `_daily_backup()` 匯出之後。
+            #    ⇒ **這一關守的範圍比它看起來小，不要把它當成那三天已經有人守。**
+            healthy, reasons, counts = _snapshot_health(dest)
+            if not healthy:
+                # 📌 不寫 `.done` ⇒ 下一次排程會重做，而不是把殘缺的那份留著。
+                _write_backup_alert(
+                    "SQLite 快照的內容不合格，**未標記完成**（%s）：%s"
+                    % (today, "；".join(reasons)), level="ERROR")
+                _system_audit("backup.snapshot_rejected", today,
+                              {"path": dest, "reasons": reasons, "counts": counts})
+                # ⚠️ 刻意**不往下跑清理**：這一刻我們手上唯一確定的事，是今天這份
+                #    快照不能信。在那種狀態下去刪舊的快照，等於用一份壞的換掉一份好的。
+                # 📌 代價（明著寫下來）：若快照持續不合格，本機 `db_backups/` 會一直長。
+                #    ☠️ 而那是**看得見**的；反過來那一種不是。
+                return None
             with open(marker, "w", encoding="utf-8") as f:
                 f.write(datetime.now().isoformat())
             logger.info("SQLite snapshot saved: %s", dest)
             _system_audit(
                 "backup.sqlite_snapshot",
                 today,
-                {"path": dest, "bytes": os.path.getsize(dest) if os.path.exists(dest) else 0},
+                {"path": dest,
+                 "bytes": os.path.getsize(dest) if os.path.exists(dest) else 0,
+                 "counts": counts},
             )
         if also_to_cloud and _archive_ok():
             try:
@@ -1222,7 +1427,19 @@ def _monthly_backup():
     # 殘缺的資料。來源用本機當日快照（_snapshot_sqlite() 在 _daily_backup()
     # 一開頭就已經跑過，這時一定存在）。
     today_snapshot = os.path.join(_LOCAL_DB_BACKUP, date.today().isoformat(), "motrix_erp.db")
-    if os.path.isfile(today_snapshot):
+    # 🔴🔴 BK12：月備份的來源就是那份每日快照 ⇒ **快照是空的，永久備份就永久是空的。**
+    # ☠️ 月備份一個月只跑一次，而 `.done` 照寫 ⇒ 那個月不會再試。
+    # ✅ 2026-09 這一份是正常的 —— 📌 **那是運氣，不是設計**：
+    #    月備份剛好沒有落在 08-30／08-31／09-03 那三天。
+    # 🔑 這裡**有 `summary` 可以對照**（JSON 已經匯出完），所以身分對照跑得起來。
+    snap_ok, snap_reasons, _snap_counts = _snapshot_health(
+        today_snapshot, summary=summary, day=month_label)
+    if os.path.isfile(today_snapshot) and not snap_ok:
+        summary["db_snapshot"] = False
+        _write_backup_alert(
+            "月備份（%s）的當日快照內容不合格，**未複製、未標記完成**：%s"
+            % (month_label, "；".join(snap_reasons)), level="ERROR")
+    elif os.path.isfile(today_snapshot):
         try:
             _cloud_copy_file(today_snapshot,
                              os.path.join(month_dir, "motrix_erp.db"),
@@ -1239,7 +1456,17 @@ def _monthly_backup():
 
     _cloud_write_json(os.path.join(month_dir, '彙總.json'), f"{s3_dir}/彙總.json", summary)
 
+    # 🔴🔴 BK5：`summary["db_snapshot"] = False` 先前**不在 `failed` 裡**。
+    # ☠️ 成因是一個型別比對：`False == "error"` 是假的
+    #    ⇒ 整庫 `.db` 複製失敗時照樣寫 `.done`
+    #    ⇒ 那個月的永久備份**永遠殘缺**，而沒有人會再試一次。
+    # 🔑 代價是實的：資料庫 82 張表而 JSON 只涵蓋 45 張 ⇒ **37 張只靠那份整庫檔**，
+    #    其中包含選型資料庫七類的 28 張表。
+    # 📌 〈假綠燈〉：告警**已經有了**（`level="ERROR"`），而 `.done` 也寫了 ——
+    #    「有沒有人被通知」與「這件事會不會再試一次」是兩個問題。
     failed = [k for k, v in summary.items() if v == "error"]
+    if summary.get("db_snapshot") is False:
+        failed.append("整庫檔案")
     if failed:
         # 月備份是永久保留的那一份，內容不完整比每日層嚴重得多——**不寫 .done**，
         # 讓明天的每日備份再試一次，直到這個月真的拿到一份完整的為止。
@@ -1298,6 +1525,40 @@ def _daily_backup():
 
         conn.close()
         _cloud_write_json(os.path.join(day_dir, '彙總.json'), f"每日備份/{today_label}/彙總.json", summary)
+
+        # 🔴🔴 BK10 身分對照 —— **這一關才是抓 08-30／08-31／09-03 的那一關。**
+        #
+        # 🔑 為什麼排在這裡而不是排在 `_snapshot_sqlite()` 裡：
+        #    對照組是**同一天的 `彙總.json`**，而它到上面那一行才存在。
+        #    兩邊是兩條不同的程式路徑（JSON 走 `get_db()`、快照走 `DB_PATH`）
+        #    ⇒ 那三天 JSON 全部正確，只有快照是空的 ⇒ **比得出來。**
+        #
+        # ⚠️ 這時候雲端那份 `.db` 已經複製過去了（`_snapshot_sqlite()` 做的）。
+        #    ☠️ **我不刪它** —— 刪掉使用者的備份檔是破壞性動作，而且刪錯就沒了。
+        #    ⇒ 能做的是：**不寫 `.done`** ＋ 告警。不寫 marker 的效果是
+        #    明天的排程會把這一天整個重做一次，而那正是我們要的。
+        #
+        # ⚠️ **只在快照檔存在時比。**
+        # 🔑 快照根本沒產生出來是另一件事，而 `_snapshot_sqlite()` 已經對它
+        #    發過告警了 —— 在這裡再判一次，等於把「整庫沒做成」與「整庫內容
+        #    不對」混成同一則訊息，而那兩件事的處置不同。
+        # ☠️ 明著寫下這是一道 fail-open 的接縫：**檔案不見就不比**。
+        #    擋它的是上游那一關，不是這一關。
+        _snap_today = os.path.join(_LOCAL_DB_BACKUP, today_label, "motrix_erp.db")
+        _snap_ok, _snap_reasons, _snap_counts = (True, [], {})
+        if os.path.isfile(_snap_today):
+            _snap_ok, _snap_reasons, _snap_counts = _snapshot_health(
+                _snap_today, summary=summary, day=today_label)
+        if not _snap_ok:
+            _system_audit("backup.daily_snapshot_mismatch", today_label,
+                          {"reasons": _snap_reasons, "counts": _snap_counts})
+            _write_backup_alert(
+                "每日備份（%s）的整庫快照與當日彙總對不上，**未標記完成**：%s。"
+                "☠️ 檔案在、大小合理、結構也對，而裡面的資料不是正式庫的 ——"
+                "2026-08-30／08-31／09-03 三天就是這個樣子。"
+                % (today_label, "；".join(_snap_reasons)), level="ERROR")
+            return
+
         _cloud_write_marker(marker, f"每日備份/{today_label}/.done")
         logger.info("Daily backup completed: %s", day_dir)
 

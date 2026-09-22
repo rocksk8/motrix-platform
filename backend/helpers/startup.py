@@ -315,6 +315,94 @@ def _version_to_updated_at(date_str: str, version: str, time_str: str = "") -> s
     return date_str + "T00:00:00"
 
 
+_MANIFEST_PATH = os.path.join(os.path.dirname(__file__), "..", "version_manifest.json")
+
+
+def _manifest_entries() -> list:
+    """`version_manifest.json` 的內容。讀不到就回空清單。
+
+    ⚠️ `utf-8-sig`：容忍 BOM。這個檔目前沒有 BOM，但只要有人用 PowerShell 重寫它
+    （PS 5.1 的 `Set-Content -Encoding UTF8` 會加），純 `utf-8` 會在第一個字元
+    就 `JSONDecodeError`，而整個模組版本同步會**靜默停擺**（`1c8f2e8` 踩過一次）。
+    """
+    if not os.path.exists(_MANIFEST_PATH):
+        return []
+    try:
+        with open(_MANIFEST_PATH, encoding="utf-8-sig") as f:
+            entries = json.load(f)
+    except Exception:
+        logger.exception("_manifest_entries: failed to load version_manifest.json")
+        return []
+    return entries if isinstance(entries, list) else []
+
+
+def drift_between(entries, db_keys) -> dict:
+    """純函式版的雙向比對：`entries` 是 manifest 的內容，`db_keys` 是
+    `{(module, version)}`。
+
+    🔑 抽出來是為了**讓兩個呼叫端共用同一個判準**：
+    伺服器內（`manifest_drift()`）與打包流程（`tools/check_version_sync.py`，
+    它可以用 `--db` 指到另一份資料庫）。
+    ☠️ 兩份各自實作的話，「守門說同步了」與「實際同步了」會在某一天不是同一件事，
+    而那一天不會有人發現。
+    """
+    manifest_keys, duplicates = set(), []
+    for e in entries or []:
+        key = ((e.get("module") or "").strip(), (e.get("version") or "").strip())
+        if not key[0] or not key[1]:
+            continue
+        if key in manifest_keys:
+            duplicates.append("%s / %s" % key)
+        manifest_keys.add(key)
+
+    normalized = {(str(m).strip(), str(v).strip()) for m, v in (db_keys or set())}
+    db_only = sorted("%s / %s" % k for k in (normalized - manifest_keys))
+    manifest_only = sorted("%s / %s" % k for k in (manifest_keys - normalized))
+    return {
+        # 🔑 `ok` 只看 `db_only` 與 `duplicates`：`manifest_only` 是等待重啟的
+        #    正常狀態，不是缺陷（`VR9`）。
+        "ok": not db_only and not duplicates,
+        "db_only": db_only,
+        "manifest_only": manifest_only,
+        "duplicates": duplicates,
+    }
+
+
+def manifest_drift() -> dict:
+    """`version_manifest.json` 與 `module_versions` 資料表的**兩個方向**。
+
+    ```
+    manifest_only   manifest 有、DB 沒有   ✅ 正常 —— 服務還沒重啟，下次開機會同步
+    db_only         DB 有、manifest 沒有   🔴 重建資料庫就永久消失
+    duplicates      manifest 裡重複的鍵     🔴 資料表有 UNIQUE ⇒ 永遠進不去
+    ```
+
+    🔑 **兩個方向要分開回報，不可以合成一個「差 N 列」的數字**（`VR9`）：
+    ☠️ 兩邊都是「對不上」，**而處置相反** —— 一個混起來的指標會讓人去修錯的那一邊，
+    📌 而「修錯的那一邊」在這裡具體是什麼：把 `manifest_only` 當缺陷，
+    會導出一個「啟動時強制同步」的修法，**而那正是 `_m035` 修掉的東西**
+    （加 `UNIQUE(module, version)` 之前，每次啟動整份重插，兩天內長出 62 萬列）。
+
+    `ok` 只看 `db_only` 與 `duplicates`。
+    """
+    db_keys = set()
+    conn = get_db()
+    try:
+        for row in conn.execute(
+                "SELECT module, version FROM module_versions"):
+            db_keys.add(((row["module"] or "").strip(),
+                         (row["version"] or "").strip()))
+    except Exception:
+        logger.exception("manifest_drift: failed to read module_versions")
+        # ☠️ 讀不到資料表**不是通過**：那會讓這道守門在最需要它的時候消失。
+        return {"ok": False, "db_only": [], "manifest_only": [],
+                "duplicates": [], "error": "module_versions 讀不到"}
+    finally:
+        conn.close()
+
+    return drift_between(_manifest_entries(), db_keys)
+
+
 def _sync_module_versions() -> None:
     """Upsert version_manifest.json entries into module_versions table.
 
@@ -326,18 +414,10 @@ def _sync_module_versions() -> None:
       edits (e.g. adding a "time" field) take effect on next restart.
     - User-created entries (updated_by != 'system') are never modified.
     """
-    manifest_path = os.path.join(os.path.dirname(__file__), "..", "version_manifest.json")
-    if not os.path.exists(manifest_path):
-        return
-    try:
-        # utf-8-sig（2026-09-10）：容忍 BOM。這個檔案目前沒有 BOM，但只要有人用
-        # PowerShell 重寫它（PS 5.1 的 Set-Content -Encoding UTF8 會加 BOM），純
-        # utf-8 會在第一個字元就 JSONDecodeError，整個模組版本同步靜默停擺。
-        # 同一個陷阱已經在 deployed-version 端點上發生過一次（commit 1c8f2e8）。
-        with open(manifest_path, encoding="utf-8-sig") as f:
-            entries = json.load(f)
-    except Exception:
-        logger.exception("_sync_module_versions: failed to load version_manifest.json")
+    # 🔑 跟 `manifest_drift()` 共用同一個讀取函式：兩份讀法會分岔，
+    #    而分岔之後「守門說同步了」與「實際同步了」就不是同一件事。
+    entries = _manifest_entries()
+    if not entries:
         return
 
     conn = get_db()
