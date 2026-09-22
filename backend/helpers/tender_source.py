@@ -154,6 +154,15 @@ DETAIL_INTERVAL_SECONDS = 2
 # ⚠️ 更陰的是監督機關裡有一個也在桃園市，抽驗時「桃園市」會讓人以為抓對了。
 _LOCATION_FIELD_ID = "fkPmsExecuteLocation"
 
+#: 招標方式在詳細頁上的 id（實測 `tests/fixtures/tender_detail_20260921.html`）。
+#:
+#: 🔑 它與 `location` 走同一條路 ⇒ 補地點的時候順便把它補起來，**零額外請求**。
+#: ⚠️ 而**採購性質不在詳細頁上** —— 「工程類／財物類／勞務類」那三個字
+#: 在那一頁只出現在 JavaScript 的註解與字串裡，**不是一個被渲染出來的欄位值**。
+#: ☠️ 不要寫一個「順便也抓採購性質」的解析：它會**永遠回 None**，
+#:    而那與「這一筆本來就沒有」長得一模一樣。
+_METHOD_FIELD_ID = "fkPmsTenderWay"
+
 # 臺灣 22 個縣市。⚠️ **用白名單不用樣式比對**：
 # 「多個縣市」用 `^..[市縣]$` 是會通過的（多個縣＋市），而它不是地名。
 # 白名單是封閉集合、幾乎不變，而樣式比對的漏網之魚會**看起來像個地名**。
@@ -410,8 +419,21 @@ def _absolute(href):
     return SITE_ROOT + (href if href.startswith("/") else "/" + href)
 
 
+def _detail_field(html, field_id):
+    """詳細頁上 `id="<field_id>"` 那一格的文字。找不到回 `None`。
+
+    兩種引號都收：fixture 用雙引號，但不保證對方永遠不改。
+    """
+    for q in (chr(34), chr(39)):
+        m = re.search("id=" + q + field_id + q + "[^>]*>(.*?)</", html, re.S)
+        if m:
+            return _text(m.group(1)) or None
+    return None
+
+
 def parse_detail(html):
-    """詳細頁 HTML → `{"location": str|None}`。**純函式，不碰網路。**
+    """詳細頁 HTML → `{"location": str|None, "tender_method": str|None}`。
+    **純函式，不碰網路。**
 
     ⚠️ **只認 `id="fkPmsExecuteLocation"`。** 不要用「地址」字樣去找——
     那一頁「地址」出現 10 次，9 次是每一頁都一樣的樣板（六個監督機關＋頁尾工程會）。
@@ -420,23 +442,19 @@ def parse_detail(html):
     ⚠️ 而監督機關裡有一個**也在桃園市**，抽驗時「桃園市」三個字會讓人以為抓對了。
     """
     if not html:
-        return {"location": None}
-    # 兩種引號都收：fixture 用雙引號，但不保證對方永遠不改。
-    m = None
-    for q in (chr(34), chr(39)):
-        m = re.search("id=" + q + _LOCATION_FIELD_ID + q + "[^>]*>(.*?)</",
-                      html, re.S)
-        if m:
-            break
-    if not m:
-        return {"location": None}
-    raw = _text(m.group(1))
+        return {"location": None, "tender_method": None}
+    # TD3：招標方式與地點在同一頁上 ⇒ 一次請求補兩格。
+    method = _detail_field(html, _METHOD_FIELD_ID)
+    raw = _detail_field(html, _LOCATION_FIELD_ID)
+    if not raw:
+        return {"location": None, "tender_method": method}
     # 括號後綴（「桃園市(非原住民地區)」）拆掉，只留縣市。
     place = re.split(r"[（(]", raw, maxsplit=1)[0].strip()
     # ⚠️ 非地名值（「全國」「依契約規定」「多個縣市」）**留 None 不要硬存**——
     # 硬存的話，下游「依地點篩選」會篩出一個叫「依契約規定」的縣市。
     # 🔑 跟 `0` vs `NULL` 同一族：**「不知道」不是一個值。**
-    return {"location": place if place in _TW_PLACES else None}
+    return {"location": place if place in _TW_PLACES else None,
+            "tender_method": method}
 
 
 def fetch_detail(url):
@@ -516,6 +534,27 @@ def _remember_details_fetched(conn, total):
          _now_iso()))
 
 
+def _backlog_detail_ids(conn, limit=None):
+    """**既有**那些命中 watch 而還沒有地點的標案 id。
+
+    🔴 TD3：`_fetch_details()` 一直只收 `run_scan()` 這一輪**新插入的** id
+    ⇒ 既有那 200 筆**從來沒有進過那支函式** ⇒ `location` 全部是 NULL。
+    ☠️ 而畫面上「來源沒寫」與「我們沒去抓」長得一模一樣。
+
+    ⚠️ 安全閥一條都沒有放寬：這裡只是把 id 撈出來交給 `_fetch_details()`，
+    D1（只抓命中的）／D2（每日上限）／D3（間隔）／D6（有地點的不抓）
+    **全部由那支函式維持** —— 在這裡自己再判一次的話，兩份會分岔。
+    """
+    rows = conn.execute(
+        "SELECT DISTINCT t.id FROM tenders t "
+        "JOIN tender_hits h ON h.tender_id = t.id "
+        "WHERE (t.location IS NULL OR t.location='') "
+        "  AND t.url IS NOT NULL AND TRIM(t.url) <> '' "
+        "ORDER BY t.id DESC" + (" LIMIT %d" % int(limit) if limit else "")
+    ).fetchall()
+    return [r["id"] for r in rows]
+
+
 def _fetch_details(conn, tender_ids):
     """對**命中 watch 且還沒有地點**的標案抓詳細頁。回實際抓了幾筆。
 
@@ -559,11 +598,18 @@ def _fetch_details(conn, tender_ids):
         fetched += 1
         if html is None:
             continue                 # D4：抓不到就算了，標案照樣留著
-        location = parse_detail(html).get("location")
+        detail = parse_detail(html)
+        location = detail.get("location")
+        method = detail.get("tender_method")
         # D20：用**實際觀察到的**最終網址覆寫（`second` 是 `resp.geturl()`）。
         final_url = second if (second and second.startswith("http")) else r["url"]
-        conn.execute("UPDATE tenders SET location=?, url=? WHERE id=?",
-                     (location, final_url, r["id"]))
+        # ⚠️ `COALESCE(?, tender_method)`：**解析不到就不要蓋掉已經有的**。
+        # ☠️ 直接寫 `NULL` 的話，一次對方改版會把列表頁抓到的那一欄清光，
+        #    而畫面上會從「有值」變成「—」，**沒有任何錯誤訊息**。
+        conn.execute(
+            "UPDATE tenders SET location=?, url=?, "
+            "tender_method=COALESCE(?, tender_method) WHERE id=?",
+            (location, final_url, method, r["id"]))
     if fetched:
         _remember_details_fetched(conn, used_today + fetched)
     return fetched
@@ -680,12 +726,24 @@ def _store(conn, items):
 
     now, new_ids, new_hits = _now_iso(), [], 0
     for item in items:
+        # 🔴 TD1：`tender_method` 與 `procurement_type` **解析出來了而沒有寫進去**。
+        #
+        # 四個地方裡三個是對的：`parse_list_row()` 解析了它們（:342-350）、
+        # `tender_radar.py:347-348` 在讀、`email_notify.py:1826` 也在讀 ——
+        # ☠️ 而這一行少了那兩個名字 ⇒ 畫面上 200 筆全部顯示「—」，
+        # 🔑 **而那跟「來源本來就沒寫」長得一模一樣**，所以沒有人查得出來。
+        # 📌 〈兩個都對而路不存在〉：今天第三次（前兩次是 `quotations.location_id`
+        #    與 `_clean_locations()` 的五個抬頭欄位）。
+        #
+        # ⚠️ `INSERT OR IGNORE` ⇒ **既有那 200 筆不會被這一行補上**（`TD2`／`TD3`）。
         cur = conn.execute(
             "INSERT OR IGNORE INTO tenders "
-            "(case_no, org, name, published_at, deadline, budget, url, fetched_at) "
-            "VALUES (?,?,?,?,?,?,?,?)",
+            "(case_no, org, name, published_at, deadline, budget, url, "
+            " tender_method, procurement_type, fetched_at) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?)",
             (item["case_no"], item["org"], item["name"], item["published_at"],
-             item["deadline"], item["budget"], item.get("url", ""), now),
+             item["deadline"], item["budget"], item.get("url", ""),
+             item.get("tender_method"), item.get("procurement_type"), now),
         )
         inserted = (cur.rowcount or 0) > 0
         row = conn.execute(
@@ -741,7 +799,15 @@ def run_scan():
         if recognised:
             new_ids, new_hits = _store(conn, items)
             # 第二層：只對命中的標案抓詳細頁拿地點（D1～D6）。
+            # TD3：新的先抓，**剩下的額度給既有的補**。
+            # 🔑 順序是刻意的：新的那幾筆是使用者現在在看的東西。
+            # ⚠️ 額度由 `_fetch_details()` 自己管（跨呼叫累計），所以第二次
+            #    呼叫拿到的是**剩下的**，不是再一份完整的額度。
             _fetch_details(conn, new_ids)
+            backlog = [i for i in _backlog_detail_ids(conn)
+                       if i not in set(new_ids or [])]
+            if backlog:
+                _fetch_details(conn, backlog)
         conn.commit()
         return {
             "fetched": True, "error": None, "recognised": recognised,
