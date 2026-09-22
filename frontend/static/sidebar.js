@@ -745,6 +745,11 @@ if (typeof module !== 'undefined' && module.exports) {
       //    拆成獨立頁之後那個限制連同 `§46b` 一起消失了 —— **同一個根因
       //    （兩個功能共用一頁）的三個出口一起關掉。**
       ni(pg('cashier.html'),         'cash',  '出納',     ['cashier.html'],                          cCash),
+      // 🔑 `FN1`（2026-09-23）：會計科目樹。放在出納後面，因為它是**出納與
+      //    傳票挑科目時的那份清單**，不是一個獨立的業務流程。
+      // ⚠️ 權限沿用 `cCash`：它目前是唯讀的參考資料，而會看它的正是出納。
+      //    ⇒ 日後要開放給更多人時，這裡與 `_deniedPages` 要一起改。
+      ni(pg('account-items.html'),   'acct',  '會計科目', ['account-items.html'],                     cCash),
       sec('勞務管理', cCon || cPay),
       ni(pg('contractors.html'),     'contl', '外包名冊', ['contractors.html'],                      cCon),
       ni(pg('payslips.html'),        'paysl', '勞報單',   ['payslips.html', 'payslip-form.html'],    cPay),

@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="../static/favicon.png">
+  <title>會計科目 - MOTRIX 專案管理系統</title>
+  <script src="../js/account-items.js"></script>
+  <script src="../static/auth-guard.js"></script>
+  <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
+  <style>
+    [x-cloak]{display:none!important}
+    .page-main{margin-left:var(--sidebar-w);margin-top:var(--topbar-h);padding:28px 32px;min-height:calc(100vh - var(--topbar-h));background:var(--white)}
+
+    .ai-head{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:6px}
+    .ai-title{font-size:20px;font-weight:700;font-family:var(--font-zh);color:var(--text-primary)}
+    .ai-counts{font-size:13px;color:var(--text-secondary);font-family:var(--font-zh)}
+    .ai-counts b{color:var(--text-primary)}
+    .ai-src-note{font-size:12px;color:var(--text-secondary);font-family:var(--font-zh);margin-bottom:18px;line-height:1.7}
+
+    .ai-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+    .ai-btn{padding:5px 13px;border-radius:var(--radius);border:1px solid var(--border-light);background:#fff;color:var(--text-secondary);font-size:12px;font-family:var(--font-zh);cursor:pointer}
+    .ai-btn:hover{background:#F0EEE9}
+    .ai-search{padding:6px 11px;border-radius:var(--radius);border:1px solid var(--border-light);font-size:13px;font-family:var(--font-zh);min-width:230px}
+    .ai-hint{font-size:12px;color:var(--text-secondary);font-family:var(--font-zh);margin-left:auto}
+
+    .ai-tree{border:1px solid var(--border-light);border-radius:var(--radius);overflow:hidden}
+    .ai-row{display:flex;align-items:center;gap:9px;padding:7px 12px;border-bottom:1px solid var(--border-light);font-family:var(--font-zh);font-size:13px}
+    .ai-row:last-child{border-bottom:none}
+    .ai-row:hover{background:#FAF9F6}
+    .ai-toggle{width:17px;height:17px;flex:none;display:flex;align-items:center;justify-content:center;border:1px solid var(--border-light);border-radius:3px;background:#fff;cursor:pointer;font-size:10px;color:var(--text-secondary);line-height:1}
+    .ai-toggle.leaf{border-color:transparent;background:transparent;cursor:default;color:transparent}
+    .ai-code{font-family:var(--font-mono,monospace);font-size:12px;color:var(--text-secondary);min-width:74px;flex:none}
+    .ai-name{color:var(--text-primary)}
+    .ai-name-en{color:var(--text-dim,#6B6B6B);font-size:11px}
+    .ai-kids{font-size:11px;color:var(--text-secondary);background:#F0EEE9;border-radius:9px;padding:1px 7px;flex:none}
+    .ai-lv1 .ai-name{font-weight:700}
+    .ai-lv2 .ai-name{font-weight:600}
+
+    .ai-tag{font-size:11px;padding:1px 7px;border-radius:9px;flex:none;font-family:var(--font-zh)}
+    .ai-tag.statutory{background:#EFF6FF;color:#1D4ED8;border:1px solid #BFDBFE}
+    .ai-tag.system_default{background:#FFFBEB;color:#B45309;border:1px solid #FDE68A}
+    .ai-tag.custom{background:#F0FDF4;color:#15803D;border:1px solid #BBF7D0}
+    .ai-lock{font-size:11px;color:var(--text-secondary);flex:none}
+    .ai-empty{padding:40px;text-align:center;color:var(--text-secondary);font-family:var(--font-zh);font-size:13px}
+  </style>
+</head>
+<body x-data="accountItemsPage()" x-init="init()" x-cloak>
+
+  <header id="app-topbar" class="topbar"></header>
+  <div id="sidebar-root"></div>
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+  <div>
+    <main class="page-main">
+
+      <div class="ai-head">
+        <div class="ai-title">會計科目</div>
+        <!-- 🔑 總數放在標題旁邊，而不是只放在樹裡面。
+             ☠️ 預設收合到第二層 ⇒ 畫面上只有 28 列 ⇒ 少了這個數字，
+                使用者會以為整個系統就這麼多科目。 -->
+        <div class="ai-counts" x-show="loaded">
+          共 <b x-text="total"></b> 筆
+          <template x-for="s in sourceOrder" :key="s">
+            <span x-show="bySource[s]">
+              <span x-text="sourceLabel[s]"></span>
+              <b x-text="bySource[s] || 0"></b> 筆
+            </span>
+          </template>
+        </div>
+      </div>
+
+      <!-- ⚠️ 這段是**寫給使用者看的**，不是註解：
+           `561 勞務成本` 掛在 `51 銷貨成本` 底下看起來像分類錯了，
+           而那是公告版本自己的編排。不先說的話他會當成缺陷回報。 -->
+      <div class="ai-src-note">
+        依經濟部公告《商業會計項目表》112 年度及以後適用版本建立，法定項目不可修改或刪除。<br>
+        部分項目的層級編排沿用公告原文（例如「勞務成本」列在「銷貨成本」之下），本系統未做調整。
+      </div>
+
+      <div class="ai-bar">
+        <button class="ai-btn" @click="expandTo(1)">只看一級</button>
+        <button class="ai-btn" @click="expandTo(2)">展開到二級</button>
+        <button class="ai-btn" @click="expandAll()">全部展開</button>
+        <input class="ai-search" type="search" x-model="q"
+               placeholder="搜尋代號或名稱…">
+        <div class="ai-hint" x-show="q.trim()" x-text="matchHint"></div>
+      </div>
+
+      <div class="ai-tree" x-show="loaded">
+        <template x-for="row in visibleRows" :key="row.code">
+          <div class="ai-row" :class="'ai-lv' + row.level"
+               :style="'padding-left:' + (12 + (row.level - 1) * 22) + 'px'">
+            <span class="ai-toggle" :class="{leaf: !row.kids}"
+                  @click="row.kids && toggle(row.code)"
+                  x-text="!row.kids ? '' : (open[row.code] ? '−' : '+')"></span>
+            <span class="ai-code" x-text="row.code"></span>
+            <span class="ai-name" x-text="row.name"></span>
+            <span class="ai-name-en" x-show="row.name_en" x-text="row.name_en"></span>
+            <!-- 🔑 收合時這個數字是「底下還有東西」的唯一訊號 -->
+            <span class="ai-kids" x-show="row.kids && !open[row.code]"
+                  x-text="row.kids + ' 項'"></span>
+            <span style="flex:1"></span>
+            <span class="ai-tag" :class="row.source"
+                  x-text="sourceLabel[row.source] || row.source"></span>
+            <!-- 🔴 「不可編輯」必須在**按下去之前**就說出來。
+                 ☠️ 少了它，使用者按下編輯才被資料層擋，
+                    而他看到的是 RAISE(ABORT) 那句話。 -->
+            <span class="ai-lock" x-show="row.source === 'statutory'" title="法定項目：不可修改、不可刪除">🔒 唯讀</span>
+          </div>
+        </template>
+        <div class="ai-empty" x-show="!visibleRows.length"
+             x-text="q.trim() ? '沒有符合的科目。' : '目前沒有會計科目。'"></div>
+      </div>
+
+      <div class="ai-empty" x-show="!loaded" x-text="loadError || '載入中…'"></div>
+    </main>
+  </div>
+
+  <script src="../static/sidebar.js"></script>
+</body>
+</html>

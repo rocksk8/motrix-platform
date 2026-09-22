@@ -107,7 +107,8 @@ DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR = os.path.join(
 # v94: 載入 547 筆法定會計項目（靜態檔，**不呼叫解析器**）
 # v95: 傳票五張表（vouchers／voucher_lines／voucher_edit_log／
 #      voucher_templates／voucher_template_versions）＋ 索引 ＋ 兩支 TRIGGER
-CURRENT_VERSION = 95
+# v96: account_items.is_active —— **停用而不是刪除**（FN1⑤）
+CURRENT_VERSION = 96
 
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
 # execution model) whenever the current request is authenticated as the 'demo'
@@ -4273,6 +4274,55 @@ def _m094_load_account_items(conn):
              it.get("name_en", ""), it["parent_code"]))
 
 
+def _m096_account_item_active(conn):
+    """v96（2026-09-23 `FN1⑤`）：`account_items.is_active` —— 停用，不是刪除。
+
+    ## 🔴 意圖早就寫在 `v93` 的註解裡，而**承載它的欄位不存在**
+
+    `_m093_account_items` 逐字寫著 `system_default`「**可停用**、可改指向」。
+    ⇒ 那句話從落地的第一天起就沒有東西實現它。
+
+    ## ☠️ 少了它，使用者面對一個用不到的科目只有兩條路
+
+    ```
+    留著  => 下拉選單愈來愈長，而他每次都要略過它
+    刪掉  => 已被傳票引用的刪不掉（v95 的 TRIGGER）
+            **而沒被引用的，刪掉就沒了**
+    ```
+    🔑 而「刪掉就沒了」在會計上不可接受：**歷史單據的科目要留著。**
+    📌 停用與刪除的差別正是這個：停用之後**過去的傳票還印得出科目名稱**。
+
+    ## 🔴 為什麼是**欄位**不是塞進 JSON
+
+    C 釘了這一句，而理由是查得動：
+    ```
+    欄位  SELECT ... WHERE is_active = 1        <= 「只列出還在用的」寫得出來
+    JSON  每一列都要拉回 Python 再過濾          <= 而下拉選單每次都要全表掃描
+    ```
+
+    ## ⚠️ 預設 1（啟用），而**法定那 547 筆也一樣**
+
+    停用是**使用者的決定**，不是資料的性質 ——
+    ☠️ 把法定項目預設停用的話，使用者第一次打開科目樹會看到一片空的，
+       而他不會知道那是預設值造成的。
+    📌 而法定列被 `v93` 的 TRIGGER 擋著不可 UPDATE ⇒ **法定項目目前停不掉**。
+       🔑 那是 TRIGGER 的範圍問題，不是這一支的：`BEFORE UPDATE ON account_items`
+          擋的是整列。要讓法定項目可停用而其餘欄位仍唯讀，
+          得把它改成 `BEFORE UPDATE OF code, name, level, parent_code`。
+       ⚠️ **本輪不改** —— 沒有派工，而它會動到一個已經有測試釘著的 TRIGGER。
+          已回報 A。
+    """
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(account_items)")}
+    if "is_active" not in cols:
+        conn.execute(
+            "ALTER TABLE account_items ADD COLUMN"
+            " is_active INTEGER NOT NULL DEFAULT 1")
+    # 🔑 下拉選單與科目樹每次都要用它過濾 ⇒ 給它索引。
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_account_items_active"
+        " ON account_items(is_active)")
+
+
 def _m095_vouchers(conn):
     """v95（2026-09-23）：傳票五張表 ＋ 索引 ＋ 兩支 TRIGGER。
 
@@ -4582,6 +4632,7 @@ _MIGRATIONS = [
     _m093_account_items,                            # v93
     _m094_load_account_items,                       # v94
     _m095_vouchers,                                 # v95
+    _m096_account_item_active,                      # v96
 ]
 
 
