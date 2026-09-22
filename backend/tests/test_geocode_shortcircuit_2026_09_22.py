@@ -313,9 +313,32 @@ def test_gc6_the_asymmetry_is_visible_in_the_response(client, make_user,
     🔑 判準：**回應裡要帶得出每一個點的精度**，讓畫面說得出「這個點只到行政區」。
     📌 〈缺欄位≠缺訊號〉的反面：**這裡真的缺那個欄位。**
     """
+    import db
+
     geo = _geo()
     monkeypatch.setattr(geo, "GEO_ENABLED", True)
     monkeypatch.setattr(geo, "tiles_blocked", lambda: None, raising=False)
+
+    # 📌 **這一題自己種前提**：一筆有地址的標案 ＋ 一個已知的定位結果。
+    # ⚠️ 定位走替身（不連外網），而**精度是替身給的** ——
+    #    🔑 這一題問的是「那個精度有沒有被帶到回應裡」，不是「定位準不準」。
+    conn = db.get_db()
+    try:
+        conn.execute("DELETE FROM tenders WHERE case_no=?", ("GC6-001",))
+        conn.execute(
+            "INSERT INTO tenders (case_no, name, org, location, fetched_at)"
+            " VALUES (?,?,?,?,?)",
+            ("GC6-001", "GC6 測試標案", "GC6 測試機關",
+             "台中市西屯區", "2026-09-22T00:00:00"))
+        conn.commit()
+    finally:
+        conn.close()
+
+    monkeypatch.setattr(
+        geo, "locate_cached",
+        lambda addr, manual_coord=None: geo.GeoResult(
+            coord=(24.1477, 120.6736), precision="district",
+            source="nominatim_district", address=addr))
 
     username, password = make_user(username="gc6_admin", role="superadmin")
     r = client.post("/api/auth/login",
@@ -327,8 +350,17 @@ def test_gc6_the_asymmetry_is_visible_in_the_response(client, make_user,
     assert r.status_code == 200, r.text
     body = r.json()
     points = body.get("points") or body.get("items") or []
-    if not points:
-        pytest.skip("這個環境沒有任何點位 —— 這一題的前提不成立")
+
+    # 🔴 2026-09-23：**這一題原本是永久 skip。**
+    #
+    # 它寫的是「這個環境沒有任何點位 ⇒ 略過」，而測試資料庫**從來就沒有**
+    # 點位 ⇒ ☠️ **它從出生那天起一次都沒有跑過**，
+    # 🔑 而全量報告上它長得像「1 skipped」——**而 skip 不是驗過**。
+    # 📌 ⇒ 前提改成自己備：這一題要什麼，這一題自己放進去。
+    assert points, (
+        "地圖一個點都沒有 —— 而這一題自己種了一筆標案。\n"
+        "⇒ 這是前提不成立，**不可以略過**：要嘛種子沒進去，"
+        "要嘛那一筆被定位那一段丟掉了，兩個都要有人看。")
     assert any("precision" in p for p in points), (
         f"點位沒有帶精度欄位：{points[0]}\n"
         "⇒ 畫面說不出「這個點只到行政區」，而距離看起來精確到小數點。")
