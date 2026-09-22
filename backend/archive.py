@@ -849,6 +849,35 @@ def _recent_snapshot_sizes(exclude_day: str = None) -> list:
     return sizes
 
 
+def _summary_is_comparable() -> bool:
+    """身分對照的**前提**：JSON 與快照要來自同一個資料庫。
+
+    ```
+    JSON 走 `get_db()`         ⇒ 讀的是 `db.DB_PATH` **當下**的值
+    快照走 `DB_PATH`           ⇒ 那是 `from db import DB_PATH` **匯入當下**的值
+    ```
+    🔑 正式機上兩者永遠是同一個檔 —— 而那正是這道對照有效的原因：
+    **兩條不同的程式路徑讀同一份資料**，所以它們對不上就代表有東西壞了。
+
+    ☠️ 兩者指到不同檔案時，比出來的差異是真的，**而它證明不了任何事**：
+    它只是在說「這兩個資料庫的內容不一樣」—— 那本來就不一樣。
+    📌 〈證據的適用範圍〉：**一個為真的比較，比的不一定是你以為的那兩個東西。**
+
+    ⚠️ 這個情況只在測試環境出現（fixture 換掉 `db.DB_PATH`，
+    而 `archive.DB_PATH` 是 import 當下抓的值）。
+    ⚠️ 回 `False` 的時候**一定要留一行 log** ——
+    ☠️ 一道安靜關掉自己的守門，跟一道通過的守門長得一模一樣。
+    """
+    import db as _db_mod
+    live = getattr(_db_mod, "DB_PATH", DB_PATH)
+    if os.path.abspath(DB_PATH) == os.path.abspath(live):
+        return True
+    logger.warning(
+        "身分對照略過：快照來源 %s 與 JSON 來源 %s 不是同一個資料庫，"
+        "兩者的筆數差異證明不了任何事。", DB_PATH, live)
+    return False
+
+
 def _snapshot_health(path: str, summary: dict = None, day: str = None) -> tuple:
     """`(合格嗎, 原因清單, 筆數)`。`summary` 給了才跑得了身分對照。"""
     if not os.path.isfile(path):
@@ -1574,8 +1603,13 @@ def _monthly_backup():
     # ✅ 2026-09 這一份是正常的 —— 📌 **那是運氣，不是設計**：
     #    月備份剛好沒有落在 08-30／08-31／09-03 那三天。
     # 🔑 這裡**有 `summary` 可以對照**（JSON 已經匯出完），所以身分對照跑得起來。
+    # ⚠️ 前提不成立時**仍然驗結構**，只是不做身分對照 ——
+    # 🔑 「這份檔是不是我們的資料庫」不需要對照組，而那一半照樣守得住。
+    # ☠️ 整個跳過的話，`BK12`（月備份複製了一份空庫）就沒有人守了。
     snap_ok, snap_reasons, _snap_counts = _snapshot_health(
-        today_snapshot, summary=summary, day=month_label)
+        today_snapshot,
+        summary=summary if _summary_is_comparable() else None,
+        day=month_label)
     if os.path.isfile(today_snapshot) and not snap_ok:
         summary["db_snapshot"] = False
         _write_backup_alert(
@@ -1688,7 +1722,8 @@ def _daily_backup():
         #    擋它的是上游那一關，不是這一關。
         _snap_today = os.path.join(_LOCAL_DB_BACKUP, today_label, "motrix_erp.db")
         _snap_ok, _snap_reasons, _snap_counts = (True, [], {})
-        if os.path.isfile(_snap_today):
+        # 🔴 前提見 `_summary_is_comparable()`：兩邊要來自同一個資料庫。
+        if _summary_is_comparable() and os.path.isfile(_snap_today):
             _snap_ok, _snap_reasons, _snap_counts = _snapshot_health(
                 _snap_today, summary=summary, day=today_label)
         if not _snap_ok:
