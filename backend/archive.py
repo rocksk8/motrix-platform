@@ -1,6 +1,7 @@
 """Google Drive archive helpers: real-time, daily, and weekly backups + local SQLite snapshots."""
 import json
 import os
+import re
 import shutil
 import sqlite3
 import string
@@ -1639,6 +1640,56 @@ def _daily_backup_tables() -> dict:
         #    少了它，一張獎金單看起來完全正常，而沒有人回得出它被改過什麼。
         "獎金異動":         "SELECT * FROM bonus_award_edit_log ORDER BY id",
     }
+
+
+#: 從一句 `SELECT … FROM <表>` 裡取出表名。
+#:
+#: 🔑 這個式子原本**只存在於測試裡**（`test_system_audit_2026_09_14.py`），
+#:    而每一個新的呼叫端都要自己記得「表名在值裡，要這樣抽」。
+#: ☠️ 2026-09-23 同一天**三個人**面對同一個 dict：一個記得、兩個取了**鍵**。
+#:    而第二個踩的人是在**讀了第一個人的回報幾分鐘之後**踩的
+#:    ⇒ 「提醒」這一層不夠，要的是一個**讓人不必知道內部形狀**的介面。
+_BACKUP_TABLE_RE = re.compile(r"FROM\s+(\w+)", re.I)
+
+
+def backed_up_table_names() -> set:
+    """每日 JSON 備份**涵蓋到的資料表名**。
+
+    ## 🔴 為什麼要這一支，而不是叫大家「記得取值不要取鍵」
+
+    ```
+    _daily_backup_tables()  回 {中文檔名: SQL}
+    set(那個 dict)          => {'報價單', '客戶', …}   <= **鍵**
+    ```
+    ☠️ 那個形狀**本身在誘導人取錯一層**：鍵是人看得懂的中文，
+       所以 `"voucher_attachments" in set(listed)` 讀起來很自然 ——
+       **而它永遠是 `False`**。
+
+    ## ⚠️ 而「長度」這個防呆對這個錯誤是**盲的**
+
+    ```
+    len(dict)          = 59
+    len(表名集合)       = 59      <= **一模一樣**
+    ```
+    🔑 ⇒ 驗的是「有沒有東西」，而錯的是「那些東西是什麼」。
+    ☠️ 它失效時看起來是「我有防呆」—— **比沒有防呆更容易被信任**。
+    ⇒ 前置條件要作用在**已經解讀過的值**上，不是原始容器上。
+
+    ## ⚠️ 它只抓 `FROM` 後面那一張，**`JOIN` 進來的抓不到**
+
+    這是**刻意與既有稽核題一致**（`test_system_audit_2026_09_14.py:52-54`
+    用的就是同一個式子）—— 兩邊不一致的話，這一支會給出一個
+    **看起來很權威的不同答案**，而它存在的目的正是「讓人不必自己抽」。
+    ⚙️ 實測：目前 59 句備份 SQL **一句 JOIN 都沒有** ⇒ 這個限制今天不影響結果。
+    📌 而哪天有人寫了 JOIN，症狀是「那張表看起來沒有被備份」
+       ⇒ 有人會去加第二份備份設定。**那時要改的是這個式子，不是加設定。**
+
+    ⚠️ 我原本在這裡寫「用 `findall` 所以抓得到 JOIN 的多張表」——
+       **那是錯的**，是寫這一支時的正對照抓出來的（`FROM x JOIN y` 只回 `x`）。
+       🔑 留著這一列：一個講得通的解釋不等於一個量過的事實。
+    """
+    return {m for sql in _daily_backup_tables().values()
+            for m in _BACKUP_TABLE_RE.findall(sql)}
 
 
 def _export_table_json_set(conn, dest_dir_abs: str, s3_prefix: str, now: str) -> dict:
