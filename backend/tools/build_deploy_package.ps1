@@ -561,4 +561,26 @@ Write-Host "下一步（手動）："
 Write-Host "  1. 把整個資料夾 '$pkgDir' 複製到正式機（隨身碟／網路芳鄰／雲端硬碟皆可）"
 Write-Host "  2. 在正式機執行："
 Write-Host "     powershell -ExecutionPolicy Bypass -File backend\tools\apply_update.ps1 -PackagePath <複製過去的路徑>"
+# --- 第 3 步：那個從來沒有人做過的步驟（2026-09-22 §8 FX1b）---
+#
+# 88 份部署紀錄裡「重跑排程工作」出現次數是 0。
+# 那不是有人偷懶 —— 是「下一步」這張清單上從來沒有它。
+#
+# 為什麼非做不可：autostart.bat 的 set MOTRIX_* 在 :loop 標籤【之前】
+# ⇒ 不重跑排程工作的話，接手的是已經在跑的那個 crash-restart 迴圈，
+#   而它拿的是【舊的】環境變數。
+# 它的失敗長什麼樣（DEPLOY.md 自己寫的）：
+#   「推送成功、服務正常、畫面正常，就是雷達不掃、地圖上沒有點。」
+#
+# ⚠️ 這支腳本【問不到】那台機器：它對外打 HTTP 的次數是 0，
+#    而且打包的當下正式機還沒被更新。
+#    ⇒ 自動比對做在 apply_update.ps1 裡（它在正式機上跑、restart 之後，
+#      比對 autostart.bat 說要開的 vs 這次啟動 log 裡看得到的）。
+#    ⇒ 這裡只負責把【人工確認的方法】寫出來。
+Write-Host "  3. 【重要】如果這一版改過 autostart.bat 或兩個開關，"
+Write-Host "     要到工作排程器把 MOTRIX ERP 那個工作【結束後重新執行】——"
+Write-Host "     只等 crash-restart 迴圈接手的話，跑的還是舊的環境變數。"
+Write-Host "     確認方式（superadmin 登入後）：GET /api/system/runtime-switches"
+Write-Host "     它回的是【這個行程實際拿到什麼】，不是設定檔裡寫了什麼。"
+Write-Host "     apply_update.ps1 也會自動比對一次，不一致會用黃字喊。"
 Write-Host ""
