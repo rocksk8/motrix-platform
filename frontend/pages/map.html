@@ -158,6 +158,13 @@
       </div>
       <!-- ⚠️ `null` ＝ **不知道**（探測逾時或連不上），不是「可以用」。
            這一行刻意很輕：它不阻止使用者，只是不讓我們宣稱一件沒查證的事。 -->
+      <div class="mp-note info" x-show="autoOpenSkipped && !mapOpen">
+        <span>ℹ️</span>
+        <div><strong>這次沒有自動開啟地圖</strong> ——
+          上一次底圖載不出來（這台機器可能沒有對外連線）。
+          <br>按「開啟地圖」可以再試一次；<strong>載得到之後就會恢復自動開啟</strong>。
+          下面的清單與距離不需要網路，照常可用。</div>
+      </div>
       <div class="mp-note info" x-show="info && info.tilesBlocked === null">
         <span>ℹ️</span>
         <div>無法確認底圖是否可用（探測逾時或連不上）。可以按按看。</div>
@@ -213,6 +220,7 @@
         <div style="flex:1"></div>
         <!-- 🔴 這顆按鈕就是「要不要對外連線」的開關。
              按下去才會載入 Leaflet 與 OpenStreetMap 的圖磚。 -->
+        <!-- 斷路器跳掉時要講出**為什麼**與**怎麼恢復**。 -->
         <button class="btn btn-primary btn-sm" @click="openMap()"
                 x-show="!mapOpen" :disabled="mapLoading"
                 x-text="mapLoading ? '載入中…'
@@ -407,6 +415,10 @@ function mapPage() {
     // 📌 客戶與供應商預設開著 —— 使用者原話：「看不到其他商家就等於沒有效果」。
     picked: ['tenders', 'customers', 'suppliers', 'vendor_contractors'],
     mapOpen: false, mapLoading: false, tileError: false, _map: null,
+    // 斷路器：上一次載不到圖磚 ⇒ 這一次不自動開，而**要說出來**。
+    // ☠️ 不說的話，「這一頁以前會自動出現地圖」變成「今天沒有」，
+    // 而使用者會以為功能壞了。
+    autoOpenSkipped: false, _tileFlag: null,
 
     _h() { return { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.token } },
 
@@ -452,7 +464,15 @@ function mapPage() {
       // 📌 `tilesBlocked` 的提示與 `tileerror` 偵測**照舊**：
       // 自動開之後載不出來**更需要講**，因為使用者沒有按過任何東西
       // ⇒ 他不會把「一片灰」跟「我剛剛開了地圖」連起來。
-      this.openMap()
+      //
+      // 🔴 **上一次載不到就不要再自動開**（見 `tiles.on('tileerror')`）。
+      // 這不是「記住使用者的偏好」，是**一道自己會跳的斷路器**：
+      // 封閉網路上每一次自動開都是一個注定失敗的對外連線。
+      if (this._tileFailedBefore()) {
+        this.autoOpenSkipped = true
+      } else {
+        this.openMap()
+      }
     },
 
     //: 這一次的回傳裡到底有沒有用到定位。**以後端說的為準**，
@@ -664,7 +684,18 @@ function mapPage() {
           attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> 貢獻者' })
       // ⚠️ **圖磚載不出來要講出來。** 不講的話畫面是一片灰，
       // 而「一片灰」跟「這個地區沒有資料」長得一模一樣。
-      tiles.on('tileerror', () => { this.tileError = true })
+      // 🔴 **自動開圖必須自己會停。**
+      //
+      // ☠️ 封閉網路不是「偶爾失敗」，是**每次都失敗** ——
+      // 而自動開圖把「一次失敗」變成「**每次進這一頁都失敗**」，
+      // 代價是一個敲不到的對外連線，每一次。
+      // 🔑〈告警必須有速率上限〉的同一條：**自動的東西必須自己會停，
+      // 而且設計時就要想「失控時怎麼關掉」。**
+      //
+      // ⇒ 載不到 ⇒ 記旗標 ⇒ 下次不自動開，退回按鈕並說明為什麼。
+      // ✅ 成功載到一張就把旗標清掉 —— 網路修好之後不需要有人來按重設。
+      tiles.on('tileerror', () => { this.tileError = true; this._rememberTileFailure(true) })
+      tiles.on('tileload', () => { this._rememberTileFailure(false) })
       tiles.addTo(this._map)
       this._redraw()
     },
@@ -780,6 +811,27 @@ function mapPage() {
       this._drawUser()
       this._fitAll()
     },
+    //: 上一次載圖磚失敗了嗎。**讀不到就當成沒失敗**（自動開）。
+    //  ⚠️ `localStorage` 在無痕視窗／被封鎖時會丟例外 ——
+    //  而「讀不到偏好」不是「不要開地圖」。
+    _tileFailedBefore() {
+      try {
+        return localStorage.getItem('motrix_map_tile_failed') === '1'
+      } catch (_e) { return false }
+    },
+
+    //: 記下「圖磚載得到嗎」。
+    //  📌 **只在狀態改變時寫**：每一張圖磚都寫一次的話，
+    //  一次正常瀏覽會打幾十次 `localStorage`。
+    _rememberTileFailure(failed) {
+      if (this._tileFlag === failed) return
+      this._tileFlag = failed
+      try {
+        if (failed) localStorage.setItem('motrix_map_tile_failed', '1')
+        else localStorage.removeItem('motrix_map_tile_failed')
+      } catch (_e) { /* 無痕視窗：記不住就算了，行為退回「每次都自動開」 */ }
+    },
+
     //: 讓 Leaflet 重新量一次容器。回 `true` 表示**它本來是壞的**。
     //
     //  🔴 XA3 反向控制：**退化尺寸要被看見，不要靜默。**
