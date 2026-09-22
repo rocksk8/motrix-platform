@@ -1160,10 +1160,18 @@ def schedule_dev_case_stale_check() -> None:
         _check_dev_case_hold_expiry()
 
     def _loop():
-        _run_all()
-        t = threading.Timer(_next_08(), _loop)
-        t.daemon = True
-        t.start()
+        try:
+            _run_all()
+        except Exception:                     # noqa: BLE001
+            _logger.exception("dev_crm scheduled checks failed")
+        finally:
+        # 🔴 重排放在 `finally` —— 形狀照 `helpers/geo.py::schedule_geocode_warm()`。
+        # ☠️ 放在工作之後而沒包 `try` 的話，**一次未捕捉的例外就讓這支排程
+        #    從此不再跑，直到重開機** —— 而「排程死了」與「今天沒事做」
+        #    長得一模一樣，沒有任何訊號。
+            t = threading.Timer(_next_08(), _loop)
+            t.daemon = True
+            t.start()
 
     threading.Thread(target=_run_all, daemon=True).start()  # startup catch-up
     t = threading.Timer(_next_08(), _loop)

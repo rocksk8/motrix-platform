@@ -2066,10 +2066,18 @@ def schedule_overdue_check() -> None:
         return (t08 - now).total_seconds()
 
     def _loop():
-        _daily_run()
-        t = threading.Timer(_next_08(), _loop)
-        t.daemon = True
-        t.start()
+        try:
+            _daily_run()
+        except Exception:                     # noqa: BLE001
+            _logger.exception("_daily_run failed")
+        finally:
+        # 🔴 重排放在 `finally` —— 形狀照 `helpers/geo.py::schedule_geocode_warm()`。
+        # ☠️ 放在工作之後而沒包 `try` 的話，**一次未捕捉的例外就讓這支排程
+        #    從此不再跑，直到重開機** —— 而「排程死了」與「今天沒事做」
+        #    長得一模一樣，沒有任何訊號。
+            t = threading.Timer(_next_08(), _loop)
+            t.daemon = True
+            t.start()
 
     t = threading.Timer(_next_08(), _loop)
     t.daemon = True
