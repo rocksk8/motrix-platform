@@ -375,6 +375,58 @@ def test_bn1_the_base_comes_from_the_same_place_as_the_base_endpoint(
           "   **兩邊本來就不同名**，這一題比的是值不是名字。")
 
 
+def test_bn1_the_plan_really_calls_base_amount_for(client, make_user,
+                                                   monkeypatch):
+    """🔴 **`plan` 要**呼叫** `base_amount_for()`，不是自己算出一個一樣的數字。**
+
+    ## ☠️ 上一題（兩邊相等）**抓不到這件事**，突變證明過
+
+    ```
+    突變 P6  把 plan 的 base 改成在端點裡直接讀 settlement.summary.netProfit
+    結果    **活下來** —— 因為今天兩邊算出來一樣
+    ```
+    ⚠️ 而 B 指出一個更糟的版本：突變若改在 `_settlement_of()` 那一層，
+       `plan` 與 `/base` **會一起變** ⇒ 連「兩邊相等」都還是綠的。
+    🔑 ⇒ 要釘的是**同源**這件事本身，而同源是「**那個函式真的被呼叫到**」，
+      不是「兩個數字現在一樣」。
+
+    ## ⚙️ 觀測點：換掉那支函式，看回應會不會跟著變
+
+    給 `base_amount_for` 一個回傳**不可能自然出現**的值（`77`），
+    而 `netProfit` 是 `123456` ⇒
+    ```
+    回 77      => 它真的呼叫了那支函式           ✅
+    回 123456  => 它**自己算**，只是今天算出一樣  ☠️
+    ```
+    📌 這個哨兵值同時是**呼叫次數**的證據：沒被呼叫就取不到 `77`。
+    """
+    import routers.bonus as rb
+
+    net, sentinel = 123456, 77
+    _seed_case("MQ-BN1-SRC", net_profit=net, sales_person="alice")
+    _u, hdr = _hdr(client, make_user, "bn1_src")
+
+    calls = []
+
+    def _fake(settlement):
+        calls.append(settlement)
+        return True, sentinel, None
+
+    monkeypatch.setattr(rb, "base_amount_for", _fake)
+    payload = _plan(client, hdr, "MQ-BN1-SRC").json()
+
+    assert calls, (
+        "`plan` 一次都沒有呼叫 `base_amount_for()` ——\n"
+        + "☠️ 那表示基數是它**自己算**的 ⇒ 有人改算式的那天，\n"
+          "   畫面顯示的基數與實際入帳的基數會分岔，**而兩個都看起來合理**。")
+    got = (payload.get("base") or {}).get("amount")
+    assert got == sentinel, (
+        "我把 `base_amount_for()` 換成回 %r，而 `plan` 仍然回 %r（= netProfit）——\n"
+        % (sentinel, got)
+        + "☠️ 它呼叫了那支函式，**而沒有用它的回傳值**。\n"
+        + "⚠️ 這比完全不呼叫更難發現：呼叫次數的斷言會綠。")
+
+
 def test_bn1_it_says_whether_a_live_award_already_exists(client, make_user):
     """🔴 **`has_active_award` 要回** —— 這個模組已經確立「先問再做」。
 
