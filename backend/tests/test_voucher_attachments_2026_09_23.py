@@ -445,6 +445,47 @@ def test_jv3_voiding_and_reopening_copies_the_attachments(client, make_user):
         + "📌 `§1` 裁定 ①：作廢重開**要複製附件**。")
 
 
+def test_jv3_attachments_are_behind_the_voucher_modules(client, make_user):
+    """🔴 **`§6`：附件端點要用 `require_any_module(("cashier","finance"))`。**
+
+    ☠️ `§6` 逐字：只用 `_require_user()` ＝ **任何登入者讀得到全公司會計憑證**，
+       而畫面上看不出來。
+
+    ## ⚠️ 角色要用 `user`，不可以用 `superadmin`
+
+    ```
+    helpers/auth.py:174   if user["role"] == "superadmin": return
+    ```
+    那是 2026-09-14 的使用者裁示（「超級管理者預設全開」）。
+    🔑 拿 `superadmin` ＋ 空模組去驗這道閘，**它永遠不會紅** ——
+      「沒有模組」與「不需要模組」在測試裡長得一樣，
+      而那個帳號**根本不經過那道閘**。（`JV7` 我已經踩過一次，B 退回。）
+
+    ⚙️ 配正對照：同一個角色**帶著模組**要進得去，
+       否則一個「一律 403」的實作也會讓上半綠。
+    """
+    _u0, owner = _hdr(client, make_user, "jv3_owner")
+    vid = _create(client, owner)
+
+    _u1, nomod = _hdr(client, make_user, "jv3_nomod", role="user", modules=())
+    r = client.post(ATT % vid, headers=nomod,
+                    files={"files": ("x.pdf", io.BytesIO(b"%PDF-1.4"),
+                                     "application/pdf")})
+    if r.status_code in (404, 405, 422):
+        pytest.fail("端點還不存在（回 %s）—— 這一格量不到權限。" % r.status_code)
+    assert r.status_code in (401, 403), (
+        "沒有任何模組的一般員工傳得上附件（回 %s）：%s\n"
+        % (r.status_code, r.text[:200])
+        + "☠️ 附件是**會計憑證**。")
+
+    _u2, hasmod = _hdr(client, make_user, "jv3_hasmod", role="user",
+                       modules=("cashier",))
+    r2 = client.get("/api/vouchers/%s" % vid, headers=hasmod)
+    assert r2.status_code == 200, (
+        "帶著 `cashier` 模組的一般員工讀不到傳票（回 %s）——\n" % r2.status_code
+        + "☠️ 那道閘擋過頭了，上面那一句就不算數。")
+
+
 def test_jv3_the_source_type_list_is_exactly_the_nine_plus_the_copy_one():
     """⚙️ **可數完備：九類 ＋ 一個複製用的，少一個多一個都要紅。**
 

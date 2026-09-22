@@ -216,8 +216,25 @@ def test_jv7_it_is_behind_the_voucher_modules(client, make_user):
        那是業務資料，不是傳票資料。沒有出納／財務模組的人看到它，
        等於**從一個記帳畫面繞過去看客戶清單**。
     ⚠️ 判準是「有沒有被擋」，不是「回哪一個碼」：403 與 401 都算擋。
+
+    ## 🔴 我第一版用 `superadmin` ＋ 空模組 —— **它永遠不會紅**（B 退回）
+
+    ```
+    helpers/auth.py:174   if user["role"] == "superadmin": return
+    ```
+    那一行是 **2026-09-14 使用者裁示**（「超級管理者預設全開」），不是疏漏。
+    B 實測四種：
+    ```
+    superadmin  modules=[]          => **放行**
+    admin       modules=[]          => 403
+    user        modules=[]          => 403
+    user        modules=['cashier'] => 放行
+    ```
+    🔑 值得記的是它的形狀：**「沒有模組」與「不需要模組」在測試裡長得一樣** ——
+      我釘的是「有沒有被擋」，而那個帳號**根本不經過那道閘**。
+    ⇒ 改用 `role="user"`：它一定會走到模組檢查。
     """
-    _u, hdr = _hdr(client, make_user, "jv7_nomod", modules=())
+    _u, hdr = _hdr(client, make_user, "jv7_nomod", role="user", modules=())
     r = client.get(ENDPOINT, headers=hdr)
     if r.status_code in (404, 405):
         pytest.fail("端點還不存在（回 %s）—— 這一格量不到權限。" % r.status_code)
@@ -225,6 +242,17 @@ def test_jv7_it_is_behind_the_voucher_modules(client, make_user):
         "沒有任何模組的帳號讀到了摘要來源（回 %s）：%s\n"
         % (r.status_code, r.text[:200])
         + "☠️ 那份清單裡有**客戶名與報價單號**。")
+
+    # ⚙️ 正對照：同一個角色**帶著模組**要進得去。
+    #    ☠️ 少了它，一個「一律 403」的實作會讓上面那句綠 ——
+    #       而那會讓有權限的人也讀不到。
+    _u2, hdr2 = _hdr(client, make_user, "jv7_hasmod", role="user",
+                     modules=("cashier",))
+    r2 = client.get(ENDPOINT, headers=hdr2)
+    assert r2.status_code == 200, (
+        "帶著 `cashier` 模組的一般員工被擋掉了（回 %s）：%s\n"
+        % (r2.status_code, r2.text[:200])
+        + "☠️ 那道閘擋過頭了 —— 它應該擋的是**沒有模組的人**。")
 
 
 # ══════════════════════════════════════════════════════════════════════

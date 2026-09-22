@@ -224,6 +224,20 @@ def test_jv7_an_edited_summary_survives_a_reload(live_server, make_user):
         box.fill(box.input_value() + TYPED)
         edited = box.input_value()
 
+        # 🔴 存檔前一定要有**會計科目** —— B 退回的那一格。
+        #    db.py:4735 `account_code TEXT NOT NULL REFERENCES account_items(code)`
+        #    ⇒ 空字串或不存在的代號會撞 FOREIGN KEY；B 已把它翻成 400
+        #      「第 1 行還沒有選會計科目」。
+        # ☠️ 我第一版點完來源就按儲存，**一個科目都沒填** ⇒ 這一題紅在
+        #    「存不下去」而不是「摘要被蓋回去」—— 紅的理由不是我要驗的那一件。
+        code = page.locator('input[x-model="l.account_code"]')
+        if code.count() == 0:
+            browser.close()
+            pytest.fail(
+                "找不到會計科目的輸入框（`input[x-model=\"l.account_code\"]`）"
+                "—— **退回給我**改這個觀測點。")
+        code.first.fill("1113")
+
         save = page.locator('button:has-text("儲存")')
         if save.count() == 0:
             browser.close()
