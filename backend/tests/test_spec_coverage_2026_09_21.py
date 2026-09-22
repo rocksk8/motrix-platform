@@ -101,22 +101,34 @@ def _scope_sections():
     ⚠️ 用 `## ` 標題切段，而**不是**靠段落順序 ——
     ☠️ 靠順序的話，A 在中間插一段說明就會讓整份解析錯位，
     🔑 而錯位的樣子是「某一區忽然空了」，那與「清完了」長得一樣。
+
+    ## ⚠️ 只讀**程式碼圍欄裡**的編號，而我第一版連散文也讀
+
+    ☠️ 結果我解析出 **68 個**而 A 說是 **64 個** —— 多出來的四個來自
+    `THIS` 區塊裡的說明文字（它提到了 `G1`、`T1` 這些別節的編號）。
+    🔑 而那四個假陽性讓「跳號偵測」報出 17 個不存在的洞
+    （`BK9`／`G2`–`G11`／`T2`–`T7`）——
+    📌 **一份清單混了「項目」與「談論項目的話」，解析器分不出來。**
+    ⇒ 圍欄是那條界線，而它本來就在那裡，我只是沒有用它。
     """
     text = SCOPE.read_text(encoding="utf-8")
     sections = {"THIS": set(), "NEXT": set(), "EXEMPT": set()}
     current = None
+    in_block = False
     for line in text.splitlines():
         stripped = line.strip()
         if stripped.startswith("## "):
             current = None
+            in_block = False
             for key in sections:
                 if key in stripped:
                     current = key
                     break
             continue
-        if current and (stripped.startswith("```") or not stripped):
+        if stripped.startswith("```"):
+            in_block = not in_block
             continue
-        if current:
+        if current and in_block and stripped:
             for num in _SCOPE_NUM.findall(line):
                 sections[current].add(num.upper())
     return sections
@@ -355,7 +367,8 @@ EXEMPT = {
 #: ☠️ 而 P 系列另有 P5–P16 ⇒ 留著它會撞號。A 已把標題改成「🔴 最高優先 ·」。
 #: 🔑 **一個解析器的假陽性，長得跟一條沒有人做的欠帳一模一樣。**
 UNTRIAGED_HEADINGS = {
-    "FX3":  "A 已明著排「下一包」：其餘 14 處射後不理",
+    # ✅ `FX3` 已從暫存欄移出：規格不再宣告它，而它進了 `SCOPE.md` 的 `NEXT`
+    #    （「查不到使用者交辦的原話」）。⇒ 有人做過決定了。
     "FX4":  "A 已明著排「下一包」：29 支 notify_* 回報不了失敗"
             "（⚠️ FX20 說那份 29 支清單的判準本身要換）",
     "HC6":  "31 處未使用的 import —— B 的活，A 排在 HC4 之後",
@@ -607,14 +620,11 @@ AMBIGUOUS_ACK = {
     "P1", "P2", "P3", "P4", "R1", "R2", "SL19",
     "T1", "T2", "T3", "T4", "T5", "U8", "U9",
     "V1", "V2", "V3",
-    # 🔴 2026-09-22 新撞名：`§18 放行判準` 用了 `G1`～`G10`，
-    #    而 `§3` 的 `G` 系列（地圖／地理編碼）早就佔著同樣的號。
-    # ☠️ 兩者完全不同類：§18 是**放行條件**（A 與 A-2 執行的人工關卡），
-    #    §3 是**驗收條件**（我寫成測試的）。
-    # 🔑 守門分不出 `test_g3_` 指的是哪一個 ⇒ 兩邊都不給「已實作」的信用。
-    # 📌 而這一次的代價比 T1–T8 那次小，**只因為它不在這一包的範圍裡** ——
-    #    ⚠️ 不是因為我們做對了什麼。請 A 把 §18 那組改成別的字首。
-    "G3", "G4", "G5", "G6", "G7", "G8", "G9", "G10",
+    # 📌 `§18 放行判準`曾經用 `G1`–`G10`，與 `§3` 的 G 系列撞號。
+    # ✅ A-2 認領並改成 `RG1`–`RG10`（Release Gate）⇒ 撞名解除，這幾列已移除。
+    # 🔑 A-2 的話值得留著：**「那是運氣，不是機制」** ——
+    #    代價比 T1–T8 小只因為它不在這一包範圍裡。
+    #    ⇒ 真正的修法是**新編號一律先 grep 一次前綴**。
     # 🔴 另一種撞名，來自完全不同的方向：**`s3` 同時是 Amazon S3。**
     # `test_cloud_storage_2026_09_07.py` 有六支 `test_s3_*`（物件儲存），
     # `test_e2e_system_settings_ui_2026_09_11.py` 還有一支。
@@ -1056,4 +1066,126 @@ def test_the_parser_reads_both_bullet_and_table_declarations():
     assert got == {"SL3", "N1", "D9", "P12", "A1"}, (
         f"解析器讀出來的是 {sorted(got)}，而不是預期的五個。\n"
         "⇒ 少了表格那兩個 ⇒ §3o／§3p／§3q 整節會變成「規格從未宣告」。"
+    )
+
+
+# ══════════════════════════════════════════════════════════════════════
+# 🔴 範圍檔自己的守門（A-2 2026-09-22 指出，我實測確認並擴大）
+# ══════════════════════════════════════════════════════════════════════
+#
+# ☠️ `SCOPE.md` 用了刪節號：
+# ```
+# GC1 … GC10      對人是「這中間全部」，對解析器只有兩個編號
+# GB1 … GB16
+# QL5 … QL15
+# ```
+# ⇒ 我上一則回報的「缺題 18 → 7」**最多少算 31 個編號** ——
+# 🔑 而少算的那些**不會出現在任何清單上**。
+#
+# ## ⚠️ 而我自己配的那道防濫用擋不住它
+#
+# 我寫的是「`THIS` 解析不到 10 個編號就紅」—— **它驗的是總量**。
+# `GC1 … GC10` 仍然貢獻 2 個，總數 35 照樣過門。
+# ☠️ **一道驗總量的守門，抓不到「某一段被省略了」。**
+# 📌 〈判準的寬窄都會騙人〉再一次：我防的是「整個讀不到」，
+#    而發生的是「**讀到了一部分**」——**而部分讀到比完全讀不到更難發現**。
+
+#: 省略形式。⚠️ 半形三點與全形刪節號都要擋。
+_ELLIPSIS_FORMS = ("…", "...", "‥", "~", "〜", "等等", "以下略", "其餘")
+
+
+def test_the_scope_list_does_not_use_any_elision():
+    """🔴🔴 `SCOPE.md` 的編號清單**不可以用省略形式**。
+
+    ☠️ 對人，`GC1 … GC10` 是「這中間全部」；
+    **對解析器，那一行只有兩個編號。**
+    🔑 而這道閘門的整個價值是「它量得出還差多少」——
+    **一個讀到一半的範圍，量出來的數字是錯的，而它看起來很具體。**
+
+    📌 A-2 的話：**閘門本身的輸入是散文，而散文對工具是隱形的。**
+
+    ## ⚠️ 只掃 `THIS` 區塊，而我第一版掃了整份檔案
+
+    ☠️ 結果它命中的是 A **解釋這個問題本身**的那幾行
+    （`SCOPE.md:123  原本寫  GC1 … GC10`）——
+    🔑 **一個講「不要用刪節號」的句子，本身必須寫得出刪節號。**
+    📌 〈判準的寬窄都會騙人〉：判準的**適用範圍**也會太寬，
+    而症狀是「它紅在一段正確的文字上」。
+    """
+    text = SCOPE.read_text(encoding="utf-8")
+    offenders = []
+    in_block = False
+    current = None
+    for lineno, line in enumerate(text.splitlines(), 1):
+        stripped = line.strip()
+        if stripped.startswith("## "):
+            current = "THIS" if "THIS" in stripped else None
+            in_block = False
+            continue
+        if stripped.startswith("```"):
+            in_block = not in_block
+            continue
+        if not (in_block and current == "THIS"):
+            continue
+        for form in _ELLIPSIS_FORMS:
+            if form in line:
+                offenders.append(f"SCOPE.md:{lineno}  {stripped[:60]}")
+                break
+    assert not offenders, (
+        "`SCOPE.md` 的編號清單裡有省略形式：\n  " + "\n  ".join(offenders)
+        + "\n☠️ 對人那是「這中間全部」，對解析器只有兩端那兩個。\n"
+          "⇒ 逐一列出。這道閘門的整個價值是「量得出還差多少」。"
+    )
+
+
+def test_no_prefix_in_scope_has_a_hole_that_the_spec_declares():
+    """🔴🔴 `THIS` 裡某個字首**跳號**，而跳掉的那些規格有宣告 ⇒ 幾乎一定是省略。
+
+    ## 🔑 這一道比「禁止刪節號」強，因為它不依賴格式
+
+    A-2 建議的第二道是「每一組寫出它有幾個」——
+    ⚠️ 而那一道自己有盲點（**數字與清單同時寫錯時一致**），
+    ☠️ 而且它要 A 改格式、要人**記得**寫對數字。
+
+    📌 這一道改成**對照 `STATE.md`**：
+    ```
+    THIS 有 GC1 與 GC10，沒有 GC2..GC9
+    而 STATE.md 宣告了 GC2..GC9
+    ⇒ 那八個要嘛真的不在這一包（那就明著寫在 NEXT），
+      要嘛是被刪節號吃掉的
+    ```
+    🔑 **兩種情況都要有人做一個決定**，而現在沒有人做過。
+    """
+    scope = _scope_sections()
+    declared = _declared()
+    implemented = _implemented()
+    holes = []
+    for prefix in sorted({re.match(r"^([A-Z]{1,2})", n).group(1)
+                          for n in scope["THIS"]}):
+        nums = sorted(int(re.sub(r"[^0-9]", "", n) or 0)
+                      for n in scope["THIS"]
+                      if re.match(r"^%s\d" % prefix, n))
+        if len(nums) < 2:
+            continue
+        for value in range(nums[0], nums[-1] + 1):
+            candidate = f"{prefix}{value}"
+            if candidate in scope["THIS"]:
+                continue
+            if candidate not in declared:
+                continue                      # 規格根本沒這一號 ⇒ 正常跳號
+            if candidate in scope["NEXT"] or candidate in scope["EXEMPT"]:
+                continue                      # 有人明著放到別處 ⇒ 是個決定
+            if candidate in implemented:
+                # ⚠️ 已經有題了 ⇒ **沒有東西是缺的**，不算洞。
+                # ☠️ 不排除的話，`BK9`（已寫、而不在任何清單上）會被報成
+                #    「被刪節號吃掉」—— 🔑 而那是**兩個不同的問題**：
+                #    「沒有人管」與「被省略了」，處置不一樣。
+                continue
+            holes.append(candidate)
+    assert not holes, (
+        "這些編號規格宣告了、夾在 `THIS` 的範圍中間，而三個區塊都沒有列到：\n  "
+        + "、".join(sorted(holes))
+        + "\n☠️ 幾乎一定是被省略形式（`…`）吃掉的。\n"
+          "⇒ 要嘛列進 `THIS`，要嘛明著放進 `NEXT`／`EXEMPT` —— "
+          "**兩種都是一個決定，而現在沒有人做過。**"
     )

@@ -82,6 +82,40 @@ def arch(isolated_archive):
     return archive
 
 
+def _seed_today_snapshot(arch):
+    """在當日快照的位置種一份**真的最小 SQLite 庫**。
+
+    ## 🔴 2026-09-22 改：原本寫的是 `b"fake-sqlite"`
+
+    ☠️ 那不是一個 SQLite 檔 —— 而 B 實作結構下限檢查時發現，
+    我這幾題等於要求「**讀不開的快照要放行**」，
+    而 `BK12` 那題要求「讀得開但缺表的要擋」⇒ **兩題互相牴觸**。
+
+    🔑 **B 選 fail closed（讀不開＝擋），而且它讓我那題紅著、沒有去動守門。**
+    📌 A 裁：**為了讓一題變綠去放寬一道備份完整性守門，代價落在客戶的資料上。**
+
+    ## ⚠️ 而錯的是我的 fixture，不是那道守門
+
+    我用一個「隨便寫幾個位元組」的假檔當快照，
+    ☠️ **等於在測試裡編碼了一個比產品該有的更弱的要求** ——
+    而它看起來只是個偷懶的 fixture。
+
+    📌 六張表就是 `archive.SNAPSHOT_REQUIRED_TABLES`，從模組取不手寫：
+    **手寫的那一份會在有人加第七張表的時候悄悄落後。**
+    """
+    import sqlite3
+
+    snap_dir = os.path.join(arch._LOCAL_DB_BACKUP, date.today().isoformat())
+    os.makedirs(snap_dir, exist_ok=True)
+    conn = sqlite3.connect(os.path.join(snap_dir, "motrix_erp.db"))
+    try:
+        for table in getattr(arch, "SNAPSHOT_REQUIRED_TABLES", ()):
+            conn.execute("CREATE TABLE %s (id INTEGER PRIMARY KEY)" % table)
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def _superadmin(client, make_user, name, ip):
     username, password = make_user(username=name, role="superadmin")
     r = client.post("/api/auth/login",
@@ -244,10 +278,7 @@ def test_bk5_a_failed_db_copy_must_not_mark_the_month_done(arch, monkeypatch):
         lambda conn, d, s3, now: {"quotations": 3, "customers": 5})
 
     # 當日本機快照存在（`_daily_backup()` 一開頭就會做），但複製會失敗。
-    snap_dir = os.path.join(arch._LOCAL_DB_BACKUP, date.today().isoformat())
-    os.makedirs(snap_dir, exist_ok=True)
-    with open(os.path.join(snap_dir, "motrix_erp.db"), "wb") as f:
-        f.write(b"fake-sqlite")
+    _seed_today_snapshot(arch)
 
     def _boom(*a, **kw):
         raise OSError("雲端磁碟在複製整庫檔案時斷線")
@@ -277,10 +308,7 @@ def test_bk5_a_complete_month_is_still_marked_done(arch, monkeypatch):
     monkeypatch.setattr(
         arch, "_export_table_json_set",
         lambda conn, d, s3, now: {"quotations": 3, "customers": 5})
-    snap_dir = os.path.join(arch._LOCAL_DB_BACKUP, date.today().isoformat())
-    os.makedirs(snap_dir, exist_ok=True)
-    with open(os.path.join(snap_dir, "motrix_erp.db"), "wb") as f:
-        f.write(b"fake-sqlite")
+    _seed_today_snapshot(arch)
 
     arch._monthly_backup()
 
@@ -299,10 +327,7 @@ def test_bk5_the_summary_records_that_the_db_is_missing(arch, monkeypatch):
     monkeypatch.setattr(
         arch, "_export_table_json_set",
         lambda conn, d, s3, now: {"quotations": 3})
-    snap_dir = os.path.join(arch._LOCAL_DB_BACKUP, date.today().isoformat())
-    os.makedirs(snap_dir, exist_ok=True)
-    with open(os.path.join(snap_dir, "motrix_erp.db"), "wb") as f:
-        f.write(b"fake-sqlite")
+    _seed_today_snapshot(arch)
     monkeypatch.setattr(arch, "_cloud_copy_file",
                         lambda *a, **kw: (_ for _ in ()).throw(OSError("斷線")))
 
