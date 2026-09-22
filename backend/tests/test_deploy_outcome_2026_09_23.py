@@ -88,13 +88,33 @@ def _dash():
     return importlib.import_module("deploy_dashboard")
 
 
+#: 每個接縫**各自**的成因說明。
+#: ⚠️ 原本 `_need()` 對所有接縫印同一句「它內嵌在 job runner（`:179-189`）」——
+#:    那句話對 `decide_outcome` 為真，對 `describe_rolled_back` **是假的**
+#:    （它的實情是 `:321` 解析出來就丟掉）。
+#: 🔑 〈訊息的指向是我當初的假設，不是這次的證據〉：
+#:    一句共用的訊息會把**第一個**接縫的成因，講成**每一個**接縫的成因。
+_SEAM_WHY = {
+    "decide_outcome":
+        "判定要抽成一支可以單獨呼叫的函式；"
+        "現在它內嵌在 job runner（`:179-189`），沒有地方測得到。",
+    "used_legacy_protocol":
+        "畫面要標「本次以舊版協定判定」，就需要一個**可以問**的地方。",
+    "describe_rolled_back":
+        "`:321` 把 `rolled_back` 解析出來就丟掉（`_rolled_back`）⇒ "
+        "這個欄位一路走到畫面之前**沒有任何地方把它變成人話**，"
+        "而 §41a 要的正是「同一個機器值、依 `action` 算出不同的人話」。",
+}
+
+
 def _need(name):
     mod = _dash()
     fn = getattr(mod, name, None)
     assert fn is not None, (
         f"`tools/deploy_dashboard.py` 缺少 `{name}` —— 見本檔〈我釘的接縫〉。\n"
-        "🔑 判定要抽成一支可以單獨呼叫的函式；"
-        "現在它內嵌在 job runner（`:179-189`），沒有地方測得到。")
+        "🔑 " + _SEAM_WHY.get(name, "見規格。")
+        + "\n⚠️ 名字可以換（**退回給我**，不要自己改題），"
+          "而那個接縫必須存在。")
     return fn
 
 
@@ -863,10 +883,14 @@ def test_p0_00_a_result_line_whose_service_is_unusable_is_fail_closed():
 
 #: `(status, rolled_back, service, exit, 期望判定)`
 _ROLLBACK_EXITS = [
-    ("rollback_not_prod_machine",    "unknown",            "unknown", 1, "failed"),
-    ("rollback_snapshot_missing",    "unknown",            "unknown", 1, "failed"),
-    ("rollback_db_snapshot_missing", "unknown",            "unknown", 1, "failed"),
-    ("rollback_user_cancelled",      "unknown",            "unknown", 1, "failed"),
+    # ⚠️ 這四條的 `rolled_back` **本表寫 `not_applied`（§41b 裁示），
+    #    而 `rollback_update.ps1:85` 現在還是 `unknown`** ——
+    #    表寫的是規格的真相，不是現況的程式碼。守那件事的是
+    #    `..._starts_from_a_true_statement`（現在是紅的，等 B 改）。
+    ("rollback_not_prod_machine",    "not_applied",        "unknown", 1, "failed"),
+    ("rollback_snapshot_missing",    "not_applied",        "unknown", 1, "failed"),
+    ("rollback_db_snapshot_missing", "not_applied",        "unknown", 1, "failed"),
+    ("rollback_user_cancelled",      "not_applied",        "unknown", 1, "failed"),
     ("rollback_ok",                  "restored",           "up",      0, "succeeded"),
     ("rollback_failed",              "restored_unhealthy", "down",    1, "failed"),
 ]
@@ -1091,3 +1115,160 @@ def test_p0_00_no_exit_before_the_copy_can_claim_the_service_is_down():
         + "\n  ".join(":%d %s" % b for b in bad)
         + "\n☠️ 那時候伺服器還好端端跑著 —— 畫面叫使用者去開一台沒停的機器。\n"
           "🔑 `= down` 只能設在**我們自己把它停掉之後**。")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# §41a／§41b · `rolled_back`：一份值域，**而文案由 `action` 決定**
+# ══════════════════════════════════════════════════════════════════════
+#
+# A 的裁示逐字（`§41a`）：
+#   「值域統一成 `not_applied`（一份值域，避免分岔），
+#     而畫面的文案由 `action` 決定：
+#       action=deploy    not_applied ⇒ 「正式機沒有被碰過」
+#       action=rollback  not_applied ⇒ 「還原沒有開始，正式機維持在你按回滾之前的樣子」
+#     ⚙️ 守門：兩個 action 的文案相同 ⇒ 紅（那表示有人把它「統一」掉了）」
+#
+# 🔴 **為什麼這一層存在**（A 指出，B 與我都沒看到）：兩支腳本的**參考點不同**。
+# ```
+#   apply 的 not_applied     ＝ 正式機**完全沒被碰過**
+#   rollback 的同一種情境    ＝ 還原沒開始，正式機維持在**你按回滾之前**的樣子
+#                               ⚠️ 而那個樣子通常是「一次失敗的部署剛動過它」
+# ```
+# ☠️ 直接共用而不處理這一層 ⇒ 畫面會說「正式機沒有被碰過」，
+#    而它剛剛才被一次失敗的部署動過。
+#
+# ⚠️ **我釘的接縫**：`describe_rolled_back(value, action) -> str`
+#    現況 `deploy_dashboard.py:321` 把它解析出來就丟掉（`_rolled_back`）
+#    ⇒ 這個欄位一路走到畫面之前**沒有任何地方把它變成人話**。
+#    名字要改**退回給我**，不要自己改題。
+
+#: `§41b` 定版 6 個。
+_ROLLED_BACK_DOMAIN = (
+    "not_applied", "applied", "applied_no_restore",
+    "restored", "restored_unhealthy", "unknown",
+)
+
+
+def test_p0_00_the_rolled_back_wording_depends_on_the_action():
+    """🔴🔴 §41a 守門：**同一個機器值，兩個 action 要講出不同的人話。**
+
+    ☠️ 文案相同 ⇒ 有人把它「統一」掉了 ⇒ 回滾前的畫面會說
+    **「正式機沒有被碰過」**，而它剛剛才被一次失敗的部署動過。
+    🔑 而使用者正是在**剛出事、正在回滾**的時候看它。
+
+    ⚙️ **反向控制（擋一種會讓上面那條全綠的作弊）**：
+    ```
+    ❌ return 基本文案 + "（回滾）"      ⇒ 兩個 action 不同了，而意思沒變
+    ```
+    ⇒ 所以還要求**兩句話互不為對方的子字串** ——
+    A 給的那兩句（「正式機沒有被碰過」／「還原沒有開始，正式機維持在你按回滾之前的樣子」）
+    本來就滿足它。
+    📌 這不是在釘 A 那兩句的**字面**（B 要怎麼寫由 B 決定），
+       是在釘「它們得是兩句真的不同的話」。
+
+    ⚠️ 同時要求：6 個值**每一個**在兩個 action 下都給得出非空的人話，
+    而且不可以把機器值原樣吐回去（`not_applied` 不是人話）。
+    """
+    describe = _need("describe_rolled_back")
+
+    for value in _ROLLED_BACK_DOMAIN:
+        for action in ("deploy", "rollback"):
+            text = describe(value, action)
+            assert isinstance(text, str) and text.strip(), (
+                "`describe_rolled_back(%r, %r)` 回傳 %r ——\n"
+                "☠️ 畫面上會是一片空白，而使用者看不出它是「沒有資料」"
+                "還是「狀態正常」。" % (value, action, text))
+            assert text.strip() != value, (
+                "`describe_rolled_back(%r, %r)` 把機器值原樣吐回去了 ——\n"
+                "🔑 `%s` 不是人話，而這支函式存在的唯一理由就是把它變成人話。"
+                % (value, action, value))
+
+    d = describe("not_applied", "deploy")
+    r = describe("not_applied", "rollback")
+    assert d != r, (
+        "`not_applied` 在 `deploy` 與 `rollback` 下的文案**一樣**：%r\n"
+        "☠️ 那表示有人把它「統一」掉了 ⇒ 回滾前的畫面會說「正式機沒有被碰過」，\n"
+        "   而它剛剛才被一次失敗的部署動過（§41a 逐字）。\n"
+        "🔑 參考點不同：deploy 的 `not_applied` 是「完全沒被碰過」，\n"
+        "   rollback 的是「還原沒開始，維持在你按回滾之前的樣子」。" % d)
+    assert d not in r and r not in d, (
+        "兩個 action 的文案是**包含關係**：\n"
+        "  deploy   %r\n  rollback %r\n"
+        "☠️ 那是在同一句話後面加個標籤，意思沒有變 ——\n"
+        "🔑 而 §41a 要的是兩句**參考點不同**的話，不是一句話加後綴。" % (d, r))
+
+
+def test_p0_00_the_rollback_script_starts_from_a_true_statement():
+    """🔴 §41b：**`rollback_update.ps1` 的 `ProdState` 初始值要是 `not_applied`。**
+
+    A 的裁示逐字：
+    > 「初始值必須是**對當下狀態為真的陳述**，
+    >   `rollback_update.ps1:85` 要從 `unknown` 改成 `not_applied`。」
+
+    ```
+    unknown 在畫面上的意思   「去現場看一眼」
+    那四條早退出口的實情      我知道，而且答案是「還原沒有開始」
+    ```
+    ☠️ 用 `unknown` 表達一個**已知**的事實 ＝ 叫人去查一件已經有答案的事。
+    🔑 而這個方向**安全**（不宣稱超過它知道的）⇒ 不會壞、不會被報修 ——
+       〈降級之後它還是會動〉：**代價全部落在使用者的時間上，而那一格沒有人在量。**
+
+    ⚠️ **這一題會讓 `rolled_back=unknown` 變成沒有任何路徑產生得出來**
+    （兩支腳本掃過：`unknown` 只出現在這一個初始值）。
+    A 裁定值域仍保留它，當「真的不知道」時的誠實答案。
+    📌 **而我刻意不替它寫題** ——〈防著不存在問題的測試永遠是綠的〉。
+    ⇒ 哪天有人讓它產生得出來，要發編號，不是順手補一題。
+    """
+    assert ROLLBACK_PS1.exists(), "找不到 %s" % ROLLBACK_PS1
+    lines = ROLLBACK_PS1.read_text(encoding="utf-8", errors="replace").splitlines()
+    assign = _re.compile(r'^\s*\$script:ProdState\s*=')
+    firsts = [(i, ln) for i, ln in enumerate(lines, 1) if assign.match(ln)]
+    assert firsts, (
+        "`rollback_update.ps1` 裡一個 `$script:ProdState =` 都沒抓到 ——\n"
+        "🔑 **儀器失效**，不是「初始值正確」。")
+
+    ln_no, first = firsts[0]
+    vals = _re.findall(r'"([a-z_]+)"', first)
+    assert vals, "第一個 `ProdState` 指派（:%d）抓不到值：%s" % (ln_no, first.strip())
+    assert vals[0] == "not_applied", (
+        "`rollback_update.ps1:%d` 的 `ProdState` 初始值是 `%s`，"
+        "§41b 裁定要是 `not_applied`。\n"
+        "☠️ 四條「什麼都還沒碰」的早退出口會報 `unknown`，"
+        "而畫面上 `unknown` 的意思是「去現場看一眼」——\n"
+        "🔑 那四條恰恰是**不必去看**的那幾條。使用者白跑一趟。"
+        % (ln_no, vals[0]))
+
+
+@pytest.mark.parametrize("ps1", [APPLY_PS1, ROLLBACK_PS1],
+                         ids=["apply_update", "rollback_update"])
+def test_p0_00_the_rolled_back_value_domain_is_the_six(ps1):
+    """🔴 §41b：**`rolled_back` 值域定版 6 個，兩支腳本都不可以多出第七個。**
+
+    ⚠️ 這一題的錨點要抓得到**三元運算式**那一種寫法：
+    ```
+    $script:ProdState = if ($rolledBackHealthy) { "restored" } else { "restored_unhealthy" }
+    ```
+    🔑 只比對 `= "值"` 的正則**看不到這一行** ——
+       〈查詢的形狀決定了答案的可能集合〉。
+    ⇒ 改成：先認出「這是一行 `ProdState` 指派」，再把那一行**所有**引號值都收進來。
+    """
+    assert ps1.exists(), "找不到 %s" % ps1
+    lines = ps1.read_text(encoding="utf-8", errors="replace").splitlines()
+    assign = _re.compile(r'^\s*\$script:ProdState\s*=')
+    seen = {}
+    for i, ln in enumerate(lines, 1):
+        if assign.match(ln):
+            for v in _re.findall(r'"([a-z_]+)"', ln):
+                seen.setdefault(v, i)
+    assert seen, (
+        "`%s` 裡一個 `$script:ProdState =` 都沒抓到 —— **儀器失效**，不是乾淨。"
+        % ps1.name)
+
+    bad = {v: i for v, i in seen.items() if v not in _ROLLED_BACK_DOMAIN}
+    assert not bad, (
+        "`%s` 的 `rolled_back` 出現值域外的值：%s\n"
+        "§41b 定版 6 個：%s\n"
+        "☠️ dashboard 的值域檢查會把它判成失敗 ⇒ 一次成功的動作被記成失敗。"
+        % (ps1.name,
+           ", ".join(":%d=%s" % (i, v) for v, i in sorted(bad.items())),
+           ", ".join(_ROLLED_BACK_DOMAIN)))
