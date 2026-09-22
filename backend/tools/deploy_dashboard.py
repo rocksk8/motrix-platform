@@ -66,6 +66,70 @@ PROD_BASE_URL = f"https://{PROD_HOST}:666"
 
 app = FastAPI(title="MOTRIX 部署儀表板")
 
+# ══════════════════════════════════════════════════════════════════════════
+# 🔴🔴 只接受本機的請求（2026-09-22 §8 HC1）
+# ══════════════════════════════════════════════════════════════════════════
+#
+# ## ☠️ 原本的「防線」在一個不一定會執行的分支裡
+# ```python
+# if __name__ == "__main__":
+#     uvicorn.run(app, host="127.0.0.1", port=8765)   # ← 綁本機
+# ```
+# **`uvicorn deploy_dashboard:app --host 0.0.0.0` 根本不會執行那一行。**
+# 🔑 而**這個專案的 ERP 本體就是那樣起的**：
+# ```
+# autostart.bat:31   uvicorn main:app --host 0.0.0.0
+# restart.bat:40     同上
+# start.bat:27       同上
+# ```
+# ⇒ 📌 **同一台機器上的人，用同一個習慣去起這支工具，
+#       `/api/deploy` 與 `/api/rollback` 就是無驗證的。**
+#
+# 這 13 支路由裡沒有任何一支做請求層檢查（實查：`request.client`／
+# middleware／`Depends`／`_require_*` 全部 0 處），而它們做的事是
+# **部署與回滾正式機**。
+#
+# ## 🔑 判準：防線要在**請求**這一層，不在**啟動**那一層
+# 啟動參數是「這一次怎麼起它」，而請求檢查是「不管怎麼起，誰打得到」。
+# ⇒ 前者是一個習慣，後者是一個性質。
+
+#: 什麼算「本機」。**只有這兩個**。
+#: ⚠️ 刻意不含 `"testclient"`（`TestClient` 的預設來源）——
+#: ☠️ 放行它的話，反向控制那一題會**永遠綠**，而那道門形同虛設。
+#: 📌 測試要驗正向路徑時，用 `TestClient(app, client=("127.0.0.1", 1))`。
+LOCAL_CLIENT_HOSTS = frozenset({"127.0.0.1", "::1"})
+
+
+def _is_local(client) -> bool:
+    """這個請求是不是從本機來的。**拿不到來源就當成不是**（fail closed）。
+
+    🔑 「我不知道它從哪來」不可以被當成「它從本機來」——
+    那正是今天在 `SEND_UNKNOWN` 上裁過的同一件事：
+    **一個沒有確認的結果不可以被當成通過。**
+    """
+    host = getattr(client, "host", None) if client else None
+    return bool(host) and host in LOCAL_CLIENT_HOSTS
+
+
+_NOT_LOCAL_DETAIL = (
+    "部署儀表板只接受本機（127.0.0.1）的請求。"
+    "它可以部署與回滾正式機，所以不對外開放。"
+    "要遠端使用請改用 SSH／RDP 連到這台機器之後從本機開啟。"
+)
+
+
+@app.middleware("http")
+async def _local_only(request, call_next):
+    """所有 HTTP 請求都要來自本機。
+
+    ⚠️ **這一層蓋不到 WebSocket** —— `@app.middleware("http")` 只吃 http scope。
+    ⇒ `/ws/prod-status` 自己也要檢查一次（見那支函式）。
+    🔑 「一道只有一層、而第二層明著不覆蓋的防線」是今天記過兩次的形狀。
+    """
+    if not _is_local(request.client):
+        return JSONResponse(status_code=403, content={"detail": _NOT_LOCAL_DETAIL})
+    return await call_next(request)
+
 # ── 背景 job 追蹤（記憶體內，重啟這個小工具就重置——完整輸出另外落地在
 #    DEPLOY_LOGS_DIR，重啟後記憶體內的即時串流會不見，但檔案還在）──────
 _jobs_lock = threading.Lock()
@@ -294,6 +358,12 @@ def prod_status():
 # （連線自然斷線）就自動停止背景檢查，不會留下孤兒輪詢迴圈。
 @app.websocket("/ws/prod-status")
 async def ws_prod_status(websocket: WebSocket):
+    # 🔴 **WebSocket 不經過 `@app.middleware("http")`** —— 要自己檢查一次。
+    # ⚠️ 少了這一行，HTTP 那一面關起來了而這一面還開著，
+    # 🔑 而「關起來了」這件事在畫面上完全看不出差別。
+    if not _is_local(websocket.client):
+        await websocket.close(code=1008)      # 1008 = policy violation
+        return
     await websocket.accept()
     try:
         while True:
@@ -568,5 +638,8 @@ def check_only(body: CheckOnlyIn):
 
 
 if __name__ == "__main__":
+    # 📌 綁 127.0.0.1 **留著**，而它不再是唯一的防線 ——
+    # 現在就算有人用 `--host 0.0.0.0` 起它，請求層那道也會擋下來。
+    # 🔑 兩層都要有：這一層擋「監聽在哪」，那一層擋「誰打得到」。
     print("MOTRIX 部署儀表板：http://127.0.0.1:8765")
     uvicorn.run(app, host="127.0.0.1", port=8765, log_level="warning")
