@@ -16,8 +16,16 @@ from helpers import _require_user, _tok, _audit, _get_setting, notify_module_act
 router = APIRouter()
 
 # 匯出存檔目錄（backend/export_archive/）
+#
+# 2026-09-22（§12 BK19）：這裡原本在**模組層**就 `os.makedirs()`。
+# 🔑 那表示「有人 import 這支檔案」就會在磁碟上長出一個目錄 ——
+# ☠️ 而 import 會發生在測試、健檢工具、任何一支腳本裡，
+#    全都繞過測試的暫存隔離（隔離是在 fixture 裡建立的，比 import 晚）。
+# ⇒ 目錄改成**用到的時候才建**：`_archive_path()` 本來就已經在寫入前
+#    `os.makedirs(archive_dir, exist_ok=True)`，所以這一行純粹是多的。
+# 📌 判準是〈降級之後它還是會動〉的反面：這一行拿掉之後**行為完全不變**，
+#    少掉的只有「匯入即寫磁碟」這個副作用。
 _ARCHIVE_DIR = os.path.join(os.path.dirname(__file__), "..", "export_archive")
-os.makedirs(_ARCHIVE_DIR, exist_ok=True)
 
 # 唯一合法格式，防止 slip_no 被用來做路徑穿越（2026-08-24 安全審查修正）：
 # _archive_path() 直接用 slip_no 拼檔案路徑，slip_no 若可被前端任意指定

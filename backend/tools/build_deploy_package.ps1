@@ -121,6 +121,91 @@ if (-not $syntaxOk) {
 }
 Write-Host "[OK] 語法檢查通過（共 $($psFiles.Count) 支 .ps1）。" -ForegroundColor Green
 
+# --- Step 1.6: 版本紀錄不可以舊於要打包的那個 commit（2026-09-22 新增，§13 VR1）---
+# 使用者在 2026-09-22 指出「系統內的版本紀錄還停在 9/15」。那七天有幾百個
+# commit，而「版本紀錄」頁面上一筆新的都沒有。
+#
+# ⚠️ 把 9/16~9/22 補上是**修結果**：補完之後，第八天一樣會停。
+# 🔑 會讓下一次不可能發生的是**這道關卡** —— 沒有寫紀錄就打不出包。
+#
+# 【為什麼排在這裡】它只用到 git 跟 PowerShell 內建的 JSON 解析，不需要
+# Python（要用哪一支 Python 是 Step 2.5 才決定的），成本大約 0.1 秒。
+# ⇒ 同 Step 2.55 的判準：**便宜又會擋的檢查排最前面。**
+#
+# 📌 刻意只比**日期**，不比時分：「先 commit、再補寫紀錄」是正常的順序，
+# 比到時分的話那個正常順序會被判紅。要擋的是**整批遺忘**，不是順序。
+#
+# 📌 用 Step 2 釘住的 $commit，不是現在的 HEAD ——
+# 要驗的是「**這一包**裡的東西有沒有被記錄」，不是「repo 現在長怎樣」。
+Write-Host "`n[版本紀錄] 檢查 version_manifest.json 跟不跟得上 commit..."
+$vmPath = Join-Path $projectRoot "backend\version_manifest.json"
+if (-not (Test-Path $vmPath)) {
+    # ☠️ 找不到檔案**不是跳過，是紅的**：一道「檔案不見就自動消失」的守門，
+    # 在輸出上跟一道「通過了」的守門長得一模一樣。
+    Fail "找不到 $vmPath，版本紀錄守門無法判定。這道檢查不會因為讀不到檔案就放行。"
+}
+try {
+    # -Encoding UTF8：同 Step 4 —— PS 5.1 在繁中 Windows 上會用 cp950 猜編碼。
+    $vmParsed = Get-Content $vmPath -Raw -Encoding UTF8 | ConvertFrom-Json
+} catch {
+    $vmParsed = $null
+}
+# ⚠️ **先接成變數，再 `@()`。**
+# PS 5.1 的 `ConvertFrom-Json` 讀到一個 JSON 陣列時，往 pipeline 送的是
+# **一個東西**（那個陣列本身），不是 361 個。
+# ☠️ 直接寫 `@(... | ConvertFrom-Json)` 的話，會得到一個「裡面裝著陣列」的
+#    單元素陣列 —— `.Count` 是 1、`[0]` 是整個陣列，而 `[0].date` 會
+#    member-enumerate 成 361 個日期串在一起。實測過，訊息長達 361 個日期。
+# 🔑 `@($變數)` 才會正常展開（管線化一個變數會逐一送出）。
+$vmEntries = @($vmParsed)
+if (-not $vmEntries -or $vmEntries.Count -eq 0) {
+    Fail "version_manifest.json 讀不出任何紀錄（檔案壞掉或是空陣列）。在版本紀錄讀不出來的狀態下打包，等於把這道守門關掉。"
+}
+
+$vmDates = @($vmEntries | ForEach-Object { $_.date } | Where-Object { $_ -match "^\d{4}-\d{2}-\d{2}$" })
+if ($vmDates.Count -eq 0) {
+    Fail "version_manifest.json 裡一筆有日期的紀錄都沒有（或日期格式不是 YYYY-MM-DD）。"
+}
+# ⚠️ 不要用 `Measure-Object -Maximum`：PS 5.1 的它只吃數字，一串字串會回空，
+# 🔑 而回空之後下面拿 $null 去比較 —— **那會通過**。
+$vmNewest = ($vmDates | Sort-Object | Select-Object -Last 1)
+
+$commitDate = git show -s --format=%cs $commit
+$gitDateExit = $LASTEXITCODE
+$commitDate = "$commitDate".Trim()
+if ($gitDateExit -ne 0 -or $commitDate -notmatch "^\d{4}-\d{2}-\d{2}$") {
+    # ☠️ 量尺本身壞掉的時候**不可以**當成通過：`"" -lt ""` 是假的，
+    # 🔑 也就是說一個「什麼都沒量到」的比較，會給你它能給的最好結果。
+    Fail "取不到 commit $commitShort 的日期（git exit=$gitDateExit，值='$commitDate'）。守門在量不到的時候一律擋下，不放行。"
+}
+
+if ($vmNewest -lt $commitDate) {
+    Write-Host "  版本紀錄最新一筆：$vmNewest" -ForegroundColor Yellow
+    Write-Host "  這一包的 commit ：$commitDate（$commitShort）" -ForegroundColor Yellow
+    # 警告：不要在這裡教人用 git log --since。
+    # D 在 2026-09-22 實測過：--since/--until 得 73 筆，完整 git log
+    # 再自己過濾得 74 筆 —— 漏掉的正是 b6e29ea（2026-09-16，Passkey 備份
+    # BLOB，也就是這整串缺陷最早的那個受害者）。
+    # 走訪剪枝在這段「兩天爆量」的歷史上不可靠，而它漏掉的那一筆，
+    # 看起來跟「那天本來就沒有東西可以寫」一模一樣。
+    # 這裡是**唯一一個會被人照著打**的地方，指錯工具等於把缺陷寫進修法。
+    @'
+  補這一段的來源（不是記憶）：
+    git log --pretty='%ad|%h|%s' --date=short | awk -F'|' '$1>="<起日>" && $1<="<迄日>"'
+  再對照 docs/windows/STATE.md 這幾天新增的節。
+'@ | ForEach-Object { Write-Host $_ -ForegroundColor Yellow }
+    Fail "版本紀錄停在 $vmNewest，而這一包的 commit 是 $commitDate —— 中間這段時間出貨的東西，使用者在『版本紀錄』頁面上一筆都看不到。請先補上 backend\version_manifest.json（來源見上方指令），再重新打包。"
+}
+
+# 📌 順帶驗 Step 4 依賴的那個假設：它直接取 $entries[0] 當版本標籤。
+# ☠️ 有人把新紀錄接在**結尾**的話，上面那一題照樣綠（最大值確實是新的），
+#    而 deploy_manifest.json 的版本標籤會標到一筆舊的 —— 安靜地錯。
+$vmFirstDate = "$($vmEntries[0].date)".Trim()
+if ($vmFirstDate -ne $vmNewest) {
+    Fail "version_manifest.json 的第一筆日期是 '$vmFirstDate'，但最新的是 '$vmNewest'。新紀錄必須插在陣列**最前面**：Step 4 直接取第一筆當這個部署包的版本標籤，順序不對的話包上會標到一筆舊的版本，而且不會有任何錯誤訊息。"
+}
+Write-Host "[OK] 版本紀錄共 $($vmEntries.Count) 筆，最新一筆 $vmNewest，不舊於這一包的 commit（$commitDate）。" -ForegroundColor Green
+
 # --- Step 2.5: 釘住 Python 直譯器並驗證依賴齊全（2026-09-10 新增）---
 # 為什麼需要這一段：這台機器 PATH 上同時有 4 個 Python（hermes venv、Programs\
 # Python313、WindowsApps shim、AppData\Local\Python\bin 的 PyManager shim），裸

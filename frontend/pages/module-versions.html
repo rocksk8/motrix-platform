@@ -433,6 +433,20 @@
               style="font-size:12px;padding:6px 14px">+ 新增</button>
     </div>
 
+    <!-- 🔴 版本紀錄停掉的時候，畫面上跟正常運作長得一模一樣（VR5）。
+         ☠️ 這一次是**使用者用眼睛比對才發現的**，而那不是一個可以依賴的偵測方式
+         —— 它停了七天。
+         🔑 一個「沒有新紀錄」的畫面與一個「這段時間真的沒出貨」的畫面，
+         必須分得開。 -->
+    <div x-show="!loading && isStale"
+         style="margin:0 0 12px;padding:9px 12px;border-radius:6px;
+                background:var(--warning-light);color:var(--warning);
+                font-size:12px;line-height:1.7">
+      ⚠️ <strong>版本紀錄已經 <span x-text="staleDays"></span> 天沒有更新</strong>
+      （最後一筆：<span x-text="fmtDate(latestAt)"></span>）。
+      這段時間如果有出貨，表示有人忘了寫 —— 而不是沒有東西可以寫。
+    </div>
+
     <!-- Loading -->
     <div class="mv-loading" x-show="loading">載入中…</div>
 
@@ -640,6 +654,32 @@
       form:           { module: '', version: '', content: '' },
       isAdmin:        false,
       isSuperadmin:   false,
+      // 🔑 超過這麼久沒有新紀錄，就在畫面上說出來。
+      // ⚠️ 門檻本身是個判斷，不是排版 —— 它要有名字，
+      // 📌 否則下一個人只會看到一個裸露的 14，而不知道它代表什麼。
+      // 用毫秒而不是「天數」比較：`staleDays` 是**取整**過的，
+      // 拿它跟門檻比會在邊界上差一天，而那一天沒有人說得清是哪一邊。
+      STALE_AFTER_MS: 14 * 24 * 60 * 60 * 1000,
+      latestAt:       null,
+      staleDays:      null,
+      isStale:        false,
+
+      //: 全部模組裡最新的那一筆是什麼時候，以及距今幾天。
+      //  ⚠️ 取不到就留 `null`（不是 0）——
+      //  ☠️ 0 的意思是「今天才更新過」，那跟「我不知道」相反。
+      computeStaleness() {
+        const stamps = (this.modules || [])
+          .map(m => m.latest_updated_at)
+          .filter(Boolean)
+          .sort()
+        if (!stamps.length) { this.latestAt = null; this.staleDays = null; return }
+        this.latestAt = stamps[stamps.length - 1]
+        const then = new Date(this.latestAt)
+        if (isNaN(then.getTime())) { this.staleDays = null; return }
+        const elapsed = Date.now() - then.getTime()
+        this.isStale   = elapsed > this.STALE_AFTER_MS
+        this.staleDays = Math.floor(elapsed / 86400000)   // ← 只用來顯示
+      },
 
       init() {
         const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
@@ -658,6 +698,7 @@
           .then(r => r.ok ? r.json() : Promise.reject(r.status))
           .then(data => {
             this.modules = data
+            this.computeStaleness()
             // Restore selection after refresh
             if (this.selected) {
               const refreshed = data.find(m => m.module === this.selected.module)
