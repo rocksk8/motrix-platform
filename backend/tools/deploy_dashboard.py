@@ -256,18 +256,21 @@ _ROLLED_BACK_TEXT = {
         "not_applied": "正式機沒有被碰過。",
         "applied": "新版已經完整寫進正式機。",
         "applied_no_restore": "新版只寫了一半就中斷，而且沒有還原。",
+        # 🔴 `restoring` 在 **deploy 表裡也要有**，而且不可以借用
+        # `applied_no_restore` 那一句 —— 那一句含「**而且沒有還原**」，
+        # ☠️ 方向相反：自動回滾（`apply_update.ps1:632`）正在還原，
+        #    而那一次操作使用者按的是**部署** ⇒ 畫面查的是 deploy 這張表。
+        "restoring": "正在把套用前的版本寫回正式機，還沒有做完。",
         "restored": "已還原到套用前的版本。",
         "restored_unhealthy": "已還原到套用前的版本，但它仍然沒有回應。",
-        # 金絲雀：不從任何顯式出口產生（§42）
-        "unknown": "這一次執行沒有回報它改動了什麼——出口可能漏設了狀態。",
     },
     "rollback": {
         "not_applied": "還原沒有開始，正式機維持在你按回滾之前的樣子。",
         "applied": "正式機上是還原之前的那一版，這次回滾沒有改動它。",
         "applied_no_restore": "還原做到一半就中斷了，正式機現在不是完整的任何一版。",
+        "restoring": "正在把快照寫回正式機，還沒有做完。",
         "restored": "已經還原到你選的那個快照。",
         "restored_unhealthy": "已經還原到你選的那個快照，但它仍然沒有回應。",
-        "unknown": "這一次執行沒有回報它改動了什麼——出口可能漏設了狀態。",
     },
 }
 
@@ -306,8 +309,46 @@ def describe_rolled_back(value: str, action: str) -> str:
     ⚠️ 認不得的值也要給得出話 —— 這支函式在畫面路徑上，
     ☠️ 回空字串的話使用者看到一片空白，而他分不出那是「沒有資料」還是「狀態正常」。
     """
-    table = _ROLLED_BACK_TEXT.get(action) or _ROLLED_BACK_TEXT["deploy"]
-    return table.get(value) or ("狀態回報看不懂（%s）——這不是預期的值。" % value)
+    # 🔴 **認不得的 `action` 要明著說認不得，不可以靜默退回 deploy 的文案。**
+    #
+    # ☠️ 先前這裡是 `.get(action) or _ROLLED_BACK_TEXT["deploy"]` ——
+    #    `action="rollback "`（多一個空白）、`"Rollback"`、甚至 `None`
+    #    都會拿到 deploy 的那一句「**正式機沒有被碰過**」，
+    #    而它可能剛剛才被一次失敗的部署動過。**逐字就是 §41a 要防的那句話。**
+    # 🔑 而我加那個 `or` 的動機是「不要回空字串」——
+    #    **它順便吞掉了「認不得」**（〈防護的副作用落在盲側〉）。
+    #
+    # 🔴 **分界是「誰錯了」**（§56），不是「哪一側」：
+    # ```
+    # action 不認得 ⇒ **我們自己的 bug**
+    #                 它由我們的碼從一個封閉集合寫入，沒見過的值代表程式錯了
+    #                 ⇒ **拋錯**，讓它當場爆
+    # value  不認得 ⇒ **對面送上來的資料有問題**
+    #                 正式機上的 ps1 可能是舊的、或印錯了
+    #                 ⇒ **顯示「看不懂」並讓它被看見**，不可以爆
+    # ```
+    # ☠️ 反過來的話：value 拋錯 ⇒ 一份壞掉的輸出讓**整個畫面空白**，
+    #    而使用者連「回滾成功了沒」都看不到 —— 那是最不能出事的時刻。
+    # ☠️ 而 action 不拋錯 ⇒ 靜默退回 deploy 的文案 ⇒ 畫面說
+    #    「正式機沒有被碰過」，而它剛剛才被一次失敗的部署動過。
+    # ⚠️ 兩處都用 `in` 判斷，**不要用 `or`**（§54d）：
+    # ☠️ `or` 會把「沒有這個鍵」與「鍵在而值是空字串」合併成同一種處置
+    #    ⇒ 哪天有人把某個值的文案暫時留空，畫面會說「狀態回報看不懂（applied）」
+    #    —— 🔑 **一個看起來像正確處理的錯誤訊息**，而實情是有人把文案刪了。
+    # 📌 〈null 不等於 0〉：合併之後錯誤看起來完全正常，所以沒有人報修。
+    if action not in _ROLLED_BACK_TEXT:
+        raise ValueError(
+            "describe_rolled_back() 不認得 action=%r（認得的有 %s）——"
+            "這個值由我們自己的碼寫入，沒見過的值代表程式錯了，"
+            "不是正式機送上來的資料有問題。"
+            % (action, "、".join(sorted(_ROLLED_BACK_TEXT))))
+    table = _ROLLED_BACK_TEXT[action]
+    if value not in table:
+        return "狀態回報看不懂（%s）——這不是預期的值。" % value
+    text = table[value]
+    if not text.strip():
+        return "這個狀態（%s）的說明是空的——文案表漏填了，不是狀態有問題。" % value
+    return text
 
 
 def used_legacy_protocol(output: str, action: str) -> bool:
@@ -497,9 +538,14 @@ def _run_job(job_id: str, action: str, cmd: list, input_text: str = None):
             _jobs[job_id]["status"] = outcome
             _jobs[job_id]["legacyProtocol"] = legacy
             _jobs[job_id]["result"] = parsed
+            # ⚠️ 只有**講協定的動作**才問文案 —— `describe_rolled_back`
+            # 對沒見過的 `action` 會拋錯（§56，那是刻意的），
+            # 而 `build` 不在那張表裡。
+            # 📌 `parsed` 對 `build` 本來就是 `None`（它不印結果行），
+            #    這裡多一道是因為**「本來就是」是一個會變的事實**。
             _jobs[job_id]["rolledBackText"] = (
                 describe_rolled_back(parsed["rolledBack"], action)
-                if parsed else "")
+                if (parsed and action in _ROLLED_BACK_TEXT) else "")
 
         if action in ("deploy", "rollback"):
             _append_history(action, job_id, success, str(log_path))

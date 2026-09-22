@@ -87,7 +87,7 @@ class Report(object):
         if self.voided:
             print("🔴 正對照不成立 ⇒ **整份報告作廢**，包側的數字不論多少都不可解讀。")
         if not self.fails:
-            print("✅ 全部通過（%d 項 FAIL）" % 0)
+            print("✅ 全部通過（0 項 FAIL）")
             return 0
         print("🔴 共 %d 項 FAIL：" % len(self.fails))
         for gate, detail in self.fails:
@@ -245,7 +245,29 @@ def _db_version_facts(path):
 
 
 def check_db_version(pkg, expect):
-    """③④ 判準**只看包裡那一份**；工作樹那一份只用來比對。"""
+    """③④ 判準**只看包裡那一份**；工作樹那一份只用來比對。
+
+    ## 🔴 `VP1`：沒給 `--expect-db-version` ⇒ **FAIL**，不是印個警告就算
+
+    ☠️ 先前這裡只 `print` 一行警告然後繼續 ⇒ 摘要印「✅ 全部通過」、結束碼 0
+    ⇒ **呼叫端忘了帶參數，那道版本擋關就安靜關掉，而管線全綠。**
+    🔑 〈散文對工具是隱形的〉在這裡是字面上的：**那行 `print` 對呼叫端不存在**
+       —— 自動化讀的是結束碼。
+    ⚠️ 而它與 `P0-00` 是同一個形狀：**「新增一條路徑而忘記回報」是預設會發生的事。**
+
+    ## ⚠️ **刻意沒有**「明著略過」的逃生口
+
+    D 的原始規格有一條「明著略過版本比對」的旗標（降級為只驗三源一致）。
+    ☠️ 而它是 `VP2`，不是 `VP1` —— A 裁 `VP2`–`VP4` 留在 `NEXT`，
+    而 `test_vp2_vp3_the_unwritten_items_are_named_not_forgotten` 是一條**絆線**：
+    它 grep 那個旗標的名字，**斷言它還不在這個檔裡**。
+    ⚠️ 所以這段註解**刻意不寫出那個字**——我第一次寫的時候寫了，
+       而絆線照樣紅：**它比對的是字面，分不出「實作」與「解釋它不存在的註解」**。
+       📌 §6 那一條的同一個形狀：一個寫得好的註解，讓一個粗糙的比對產生假陽性。
+    🔑 ⇒ 接縫出現的那一天它會紅，**逼人回來把那一項寫成真的題目**。
+    ⚠️ **代價寫明**：在 `VP2` 落地之前，手動臨時查驗**也必須**帶
+       `--expect-db-version`，沒有略過的辦法。那是刻意的。
+    """
     pkg_db = os.path.join(pkg, "backend", "db.py")
     wt_db = os.path.join(WT, "backend", "db.py")
 
@@ -266,11 +288,12 @@ def check_db_version(pkg, expect):
 
     # ④ 與外部期望值比較
     if expect is None:
-        print("  ⚠️ 未給 --expect-db-version ⇒ **只驗了「三源自己一致」**，"
-              "沒有驗「它是不是應該的那個版本」。")
-        print("     📌 `deploy_manifest.json` 不帶 db 版本（實查：只有 "
-              "commit／branch／built_at／version_manifest_latest／"
-              "durations_sec／tests／env）⇒ 期望值只能由呼叫端給。")
+        # 📌 `deploy_manifest.json` **不帶 db 版本**（實查：只有 commit／branch／
+        #    built_at／version_manifest_latest／durations_sec／tests／env）
+        #    ⇒ 期望值只能由呼叫端給，這裡推不出來。
+        R.fail("db 版本期望值未指定",
+               "沒有給 --expect-db-version ⇒ 無從判斷包裡的 db.py 是不是"
+               "應該的那個版本。（明著略過的選項是 VP2，尚未實作。）")
     elif f["current"] != expect:
         R.fail("db 版本 == 期望值",
                "包內是 %s，而期望是 %s" % (f["current"], expect))
@@ -301,7 +324,7 @@ def main():
     ap.add_argument("package", nargs="?", default=None,
                     help="包目錄；省略則取最新一包")
     ap.add_argument("--expect-db-version", type=int, default=None,
-                    help="包內 db.py 的 CURRENT_VERSION 應該是多少（不給則只驗三源一致）")
+                    help="包內 db.py 的 CURRENT_VERSION 應該是多少（不給就 FAIL）")
     args = ap.parse_args()
 
     pkg = args.package

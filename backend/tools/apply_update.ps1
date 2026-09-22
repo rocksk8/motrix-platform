@@ -335,8 +335,20 @@ $rollbackRoot = Join-Path $BackendDir "rollback_snapshots"
 $rollbackDir = Join-Path $rollbackRoot $timestamp
 New-Item -ItemType Directory -Force -Path $rollbackDir | Out-Null
 Info "  建立程式碼回滾快照：$rollbackDir"
+# 🔴 **做快照失敗要當場擋下**（`RP1`）。
+# ☠️ 先前這兩行是 `| Out-Null` 而沒有檢查結束碼 ⇒ **靜默失敗 ⇒ 快照殘缺**，
+#    而它**沒有任何症狀** —— 直到有一天真的要用它回滾。
+# 🔑 **那一天正是最不能出事的一天，而那一刻沒有第二次機會。**
+# 📌 對照就在同一支檔案：`Step 3` 套用新版那兩行本來就有 `-ge 8 ⇒ Fail`
+#    ⇒ 這不是新紀律，是**把已有的紀律補到漏掉的那一半**。
+# ⚠️ `| Out-Null` 不影響 `$LASTEXITCODE` —— 它由原生執行檔設定，
+#    管線接到 cmdlet 不會覆蓋它。
+# ⚠️ 這兩條出口的 `rolled_back` 是 `not_applied`（此刻正式機還沒被碰）
+#    ⇒ 與「還原到一半」**不可以共用一個 status**：前者重跑就好，後者要叫人。
 robocopy $BackendDir (Join-Path $rollbackDir "backend") /E /XD db_backups rollback_snapshots logs /XF motrix_erp.db motrix_erp.db-wal motrix_erp.db-shm motrix_erp_demo.db motrix_erp_demo.db-wal motrix_erp_demo.db-shm heartbeat_config.json .deployed_commit.json server.log | Out-Null
+if ($LASTEXITCODE -ge 8) { Fail "建立程式碼回滾快照失敗（backend，exit code $LASTEXITCODE）——快照不完整就繼續套用的話，出事時沒有東西可以回滾。" "snapshot_failed_backend" }
 robocopy $FrontendDir (Join-Path $rollbackDir "frontend") /E | Out-Null
+if ($LASTEXITCODE -ge 8) { Fail "建立程式碼回滾快照失敗（frontend，exit code $LASTEXITCODE）——快照不完整就繼續套用的話，出事時沒有東西可以回滾。" "snapshot_failed_frontend" }
 # 根目錄文件（CHANGELOG.md / MOTRIX-ERP-QUICK.md 等）也要存一份回滾快照——
 # Step 3 會在健康檢查「之前」就先覆蓋這些文件，如果沒有這份快照，健康檢查
 # 失敗回滾程式碼＋db 時，根目錄文件會維持新版內容，變成「文件說已經是新版，
@@ -629,8 +641,19 @@ if ($healthy -and -not $logErrors) {
     if ($conn2) { Stop-Process -Id $conn2.OwningProcess -Force -ErrorAction SilentlyContinue }
     Start-Sleep -Seconds 2
 
+    # 🔴 **危險值在動作之前設**（與 `:420` 同一條紀律）。
+    # ☠️ 設在之後的話，下面兩條新出口會報 `applied`
+    #    ——語意是「新版**完整**寫進正式機」，**而它正在還原**。
+    $script:ProdState = "restoring"
+
+    # 🔴 還原寫回也要檢查（`RP2`）。
+    # ☠️ 先前失敗**不中止**，直接流進下面的健康檢查 —— 而半還原的 backend
+    #    也可能回得出 `/api/ping` ⇒ 報 `restored`＝「已還原且健康」，
+    #    **而磁碟上是還原到一半的殘骸。**
     robocopy (Join-Path $rollbackDir "backend") $BackendDir /E | Out-Null
+    if ($LASTEXITCODE -ge 8) { Fail "自動回滾寫回正式機失敗（backend，exit code $LASTEXITCODE）——正式機現在是還原到一半的狀態，需要人工處理。" "restore_copy_failed_backend" }
     robocopy (Join-Path $rollbackDir "frontend") $FrontendDir /E | Out-Null
+    if ($LASTEXITCODE -ge 8) { Fail "自動回滾寫回正式機失敗（frontend，exit code $LASTEXITCODE）——正式機現在是還原到一半的狀態，需要人工處理。" "restore_copy_failed_frontend" }
 
     # 根目錄文件（MOTRIX-ERP-QUICK.md / CHANGELOG.md 等）也一併回滾，否則文件
     # 會停留在「已經是新版」的內容，跟被回滾回舊版的實際程式碼對不上（見上方

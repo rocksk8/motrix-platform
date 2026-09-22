@@ -169,15 +169,23 @@ Info "`n[2/2] 開始回滾..."
 # 從停服那一刻起，`service=down`、磁碟即將被覆寫。
 # ☠️ 之後才設的話，還原到一半失敗會報出一個**比實際安全**的狀態。
 $script:ServiceState = "down"
-$script:ProdState = "applied_no_restore"
+# 🔴 **危險值在動作之前設**。
+# ⚠️ 這裡是 `restoring` 不是 `applied_no_restore`：後者的語意含
+#    「**沒有還原**」，而這支腳本正在還原 —— 方向相反。
+$script:ProdState = "restoring"
 
 # 先停服務再動檔案（含 db）——避免正在跑的伺服器跟覆寫的檔案打架。
 $conn = Get-NetTCPConnection -LocalPort 666 -State Listen -ErrorAction SilentlyContinue
 if ($conn) { Stop-Process -Id $conn.OwningProcess -Force -ErrorAction SilentlyContinue }
 Start-Sleep -Seconds 2
 
+# 🔴 還原寫回要檢查結束碼（`RP3`）—— 與 `apply_update.ps1` 的自動回滾同一件事。
+# ☠️ 失敗不中止 ⇒ 流進下面的健康檢查 ⇒ 碰巧過了就報「已還原」，
+#    **而磁碟上是還原到一半的殘骸。**
 robocopy (Join-Path $rollbackDir "backend") $BackendDir /E | Out-Null
+if ($LASTEXITCODE -ge 8) { Fail "回滾寫回正式機失敗（backend，exit code $LASTEXITCODE）——正式機現在是還原到一半的狀態，需要人工處理。" "rollback_copy_failed_backend" }
 robocopy (Join-Path $rollbackDir "frontend") $FrontendDir /E | Out-Null
+if ($LASTEXITCODE -ge 8) { Fail "回滾寫回正式機失敗（frontend，exit code $LASTEXITCODE）——正式機現在是還原到一半的狀態，需要人工處理。" "rollback_copy_failed_frontend" }
 
 $rootDocDir = Join-Path $rollbackDir "root_docs"
 if (Test-Path $rootDocDir) {
