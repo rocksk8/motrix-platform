@@ -12870,6 +12870,98 @@ bank_name bank_branch bank_account_name bank_account_number   BR22 已留
 
 ---
 
+# §10 · **公司身分與金錢欄位：只有最高管理員可以改**（使用者 2026-09-22 裁示）
+
+> **使用者原話**：「像匯款帳號\公司名稱\帳戶\很多都要能改，**只有超級管理員可以修改**」
+
+**編號 `SA`** —— 選字母前已 grep。
+
+---
+
+## 一、🔴 實查：現在**不是**只有超級管理員
+
+```python
+backend/routers/system.py:1001
+_require_user(authorization, require_superadmin=True, module='settings')
+```
+而 `_require_user` 的規則（`helpers/auth.py:202` 的 docstring 逐字）：
+> `module`: if provided alongside `require_superadmin=True`,
+> **superadmin OR users with that module key in their modules list** are permitted.
+
+⇒ **是「superadmin **或** 有 `settings` 模組的人」，不是「只有 superadmin」。**
+
+### ☠️ 而正式資料庫裡真的有這種人
+```
+automation     role=viewer     modules 含 settings   ← 🔴 一個 viewer 改得動匯款帳號
+```
+
+### ☠️ 而稽核抓不到它
+```python
+system.py:1039
+_audit(..., "settings.company_profile.update", "settings",
+       "company_profile", value.get("name", ""))      # ← 只記公司名
+```
+🔑 **一個 viewer 把匯款帳號換成自己的，紀錄裡只會有一行「有人更新了公司資料」** ——
+**沒有哪些欄位變了、沒有前後值。**
+📌 **那正是〈降級之後它還是會動〉**：**成功了，而且降低了安全強度。**
+
+---
+
+## 二、要做的
+
+- **SA1.** 🔴 **`PUT /api/settings/company-profile` 改成只有 superadmin**
+  ⇒ 拿掉 `module='settings'`。
+  ⚠️ **反向控制**：`role=viewer` ＋ `modules` 含 `settings` ⇒ **必須 403**。
+  ☠️ 沒有這一題的話，一個「照樣放行」的實作會全綠 —— **而目前就是那個狀態。**
+- **SA2.** 🔴 **稽核要記「哪些欄位變了」**
+  ```
+  變更的欄位名清單            一律記
+  金錢／身分欄位的前後值       記，而帳號中間遮蔽（只留末四碼）
+    bank_account_number  bank_name  bank_branch  bank_account_name
+    company_name  tax_id  locations[*] 的同名欄位
+  google_maps_api_key         🔴 只記「有沒有變」，不記值（它是付費憑證）
+  ```
+  🔑 **判準：事後要能回答「是誰、在什麼時候、把帳號從什麼改成什麼」** ——
+  ☠️ **記公司名回答不了那個問題，而它看起來像有稽核。**
+- **SA3.** 🔴 **`locations` 的銀行與抬頭欄位同樣只有 superadmin**
+  ⚠️ **同一個端點，所以 SA1 一改就涵蓋了** —— 📌 **而題要分開寫**：
+  **下一個人把 `locations` 拆成獨立端點時，那道保護不會自動跟過去。**
+- **SA4.** **讀取維持「登入即可」**（A 裁）
+  🔑 **理由**：匯款帳號本來就印在寄給客戶的請款單上，**它不是秘密**。
+  ⚠️ **而 Google 金鑰照舊遮蔽**（已實作）—— **那個才是秘密。**
+
+---
+
+## 三、⚠️ 一個要先確認的風險（B 動手前）
+
+**`automation` 這個 viewer 帳號現在有 `settings` 模組** ——
+❓ **它是不是有某個自動化流程在寫 `company_profile`？**
+☠️ **是的話，SA1 會讓那個流程開始安靜地失敗**（403 而沒有人在看）。
+- **SA5.** **動手前先查 `audit_log` 裡 `settings.company_profile.update` 的歷史**：
+  有沒有 `automation` 做的？有的話**先問使用者**，不要直接擋。
+  📌 〈降級之後它還是會動〉的反面：**把門關緊也可能讓某個東西安靜地停掉。**
+
+---
+
+## 四、📌 更大的一件（登記，這一輪不做）
+
+```
+require_superadmin=True, module='…'  這個寬鬆寫法全 repo 出現 100 次／12 支 router
+其中 access_guide / switch_guide 等「指南」類佔 90 次   ← 那些是參考內容，不是錢
+system.py 只有 2 次，而其中一次就是這一條
+```
+- **SA6.** ⚠️ **那 100 處要盤一次「這個模組的持有者，該不該做這件事」** ——
+  🔑 **而判準不是「它安不安全」，是「當初給這個模組的人，是為了讓他做這件事嗎」。**
+  📌 **指南類大概是對的**（有那個模組就是要編指南）；
+  **而「設定」這個模組名太大** —— 它同時蓋住了「調整介面偏好」與「改匯款帳號」。
+
+## ⛔ 這一輪不做
+- 那 100 處的全面盤點（SA6）
+- 把 `settings` 模組拆成細粒度權限
+- 金錢欄位的雙人覆核
+
+---
+
 ### 2026-09-21 22:19 · 📌 **A 重啟了測試機 666**（使用者要看新功能）
 
 ```
