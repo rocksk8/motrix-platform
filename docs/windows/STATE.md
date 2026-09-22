@@ -29558,3 +29558,35 @@ RP3   declared=False  implemented=None   而 RP3 in THIS = True
 
 **`UI8` 實際有題**：`test_sidebar_finance:334 every_section_condition_is_the_union_of_its_items`
 ＋`:386` 正對照 —— **題名沒帶編號**，所以閘門認不得。
+
+---
+
+## §140 更正：`RP2`／`RP3` 有題；而閘門只認題名裡的**第一個**編號
+
+> 2026-09-23 02:45 ／ C 推翻，A 認
+
+**更正**（`§139` 與我給 C 的派工均錯）
+```
+test_deploy_outcome:1795  test_rp2_rp3_the_restore_copies_say_when_they_failed
+                    :1834 status = "%s_%s" % (prefix, suffix)   <= **四個字串是組出來的**
+                    :1841  restoring 設在第一次寫入之前
+pytest -k "rp1 or rp2 or rp3"  =>  7 passed
+```
+⇒ **不缺題，C 沒有新增任何一支。**
+
+**我錯在哪**：我拿 `snapshot_failed_backend` 命中 3 支當對照組。
+```
+RP1 的字串  **逐字寫死**
+RP2/RP3     **組出來的**
+=> 對照組與受測對象**寫法不同** => 它排除不掉這種假陰性
+```
+⇒ `§137`（對照組要逐字相同）的另一面：
+**不只指令要相同，受測對象的「被寫出來的方式」也要相同。**
+
+**閘門第二個洞（並入 `GT1`）**
+```
+_IMPLEMENTED = ^def test_([a-z]{1,2}\d{1,2}[a-z]?)_
+實跑  test_rp2_rp3_…  ->  ['rp2']      <= **RP3 拿不到信用**
+```
+⇒ 一支題涵蓋兩個編號時，第二個永遠看起來像「沒有題」。
+⇒ `GT1` 範圍加：**題名裡的每一個編號都要算數**。
