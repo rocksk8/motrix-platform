@@ -972,6 +972,68 @@ def _check_office_coord(body: "CompanyProfile") -> None:
                 422, f"{field} 超出範圍（{-limit:g} ~ {limit:g}）：{number}")
 
 
+#: 稽核要記**前後值**的欄位（金錢／身分類），而值要遮成末四碼。
+#:
+#: 🔑 兩件事同時成立才有用：**只記「變了」回答不了「從什麼改成什麼」，
+#: 而記全碼會讓 `audit_log` 變成一張帳號清單**（它會被匯出、被截圖）。
+_AUDIT_MASKED_VALUE_FIELDS = ("bank_account_number", "tax_id")
+
+#: 稽核**連末四碼都不記**的欄位。
+#:
+#: ☠️ 它跟銀行帳號**不是同一類**：
+#: 匯款帳號本來就印在寄給客戶的請款單上 ⇒ 不是秘密；
+#: **Google 金鑰是一個付費憑證 ⇒ 撿到就能刷我們的帳。**
+#: 🔑 而一個「一律遮成末四碼」的實作會讓帳號那一題全綠，**同時洩漏這一把**。
+#: 📌〈判準的寬窄都會騙人〉：一個統一的規則對其中一類來說太寬。
+_AUDIT_NEVER_VALUE_FIELDS = ("google_maps_api_key",)
+
+
+def _audit_tail(value) -> str:
+    """遮成 `…1234`。太短就整個遮掉。"""
+    text = str(value or "")
+    if not text:
+        return ""
+    return ("…" + text[-4:]) if len(text) > 4 else "…"
+
+
+def _profile_audit_detail(before, after, sent_keys):
+    """這一次改了哪些欄位，以及該留下什麼值。
+
+    ## 🔑 判準：事後要能回答「**是誰、在什麼時候、把帳號從什麼改成什麼**」
+    ☠️ 原本記的是**公司名**（`value.get("name","")`，而且進的是 `target_label`
+    不是 `detail`）—— **它回答不了那個問題，而它看起來像有稽核。**
+    📌 `_audit()` 有一個 `detail: dict` 參數，**而呼叫端從來沒有傳過它**
+    ⇒ `audit_log` 歷來的 `detail` 全是 `{}`。
+    ⚠️〈缺欄位≠缺訊號〉的反面：**欄位在，只是從來沒有人往裡面放東西。**
+
+    ⚠️ 只列**真的變了**的：一份把沒改的也列進去的清單，等於沒有清單。
+    """
+    changed, values = [], {}
+    for key in sent_keys:
+        old, new = before.get(key), after.get(key)
+        if old == new:
+            continue
+        changed.append(key)
+        if key in _AUDIT_NEVER_VALUE_FIELDS:
+            # 🔴 不記值 —— **但一定要記它變過**，
+            # 否則換金鑰這件事完全無跡可循。
+            continue
+        if key in _AUDIT_MASKED_VALUE_FIELDS:
+            values[key] = {"from": _audit_tail(old), "to": _audit_tail(new)}
+        elif key == "locations":
+            # 📌 據點是一整個陣列 ⇒ 只記「幾筆、名字是什麼」，
+            # 不把整包（含銀行欄位）倒進稽核。
+            values[key] = {
+                "from": [str(l.get("name") or "") for l in (old or [])
+                         if isinstance(l, dict)],
+                "to": [str(l.get("name") or "") for l in (new or [])
+                       if isinstance(l, dict)],
+            }
+        elif isinstance(new, (str, int, float, bool)) or new is None:
+            values[key] = {"from": old, "to": new}
+    return {"changed": changed, "values": values}
+
+
 @router.put("/api/settings/company-profile")
 def set_company_profile(body: CompanyProfile, authorization: str = Header(None)):
     """部分更新：**這次沒送的欄位保留現值。**
@@ -998,7 +1060,16 @@ def set_company_profile(body: CompanyProfile, authorization: str = Header(None))
     否則使用者**永遠刪不掉**填錯的銀行帳號。
     **「沒送」與「送了空字串」是兩件事。**
     """
-    _require_user(authorization, require_superadmin=True, module='settings')
+    # 🔴 SA1：**只有 superadmin**，不接受「持有 settings 模組」。
+    #
+    # ⚠️ `require_superadmin=True` 這個參數名**說的不是它做的事** ——
+    # 它真正的意思是「superadmin **或** 持有那個模組的人」。
+    # ☠️ 而它之所以到今天才被看見，**就是因為那個名字讀起來已經像是關緊了。**
+    #
+    # 實際後果：`automation` 是 `role=viewer` 而 `modules` 含 `settings`
+    # ⇒ **它改得動匯款帳號** —— 而那個號碼就印在寄給客戶的請款單上。
+    # 📌 不傳 `module` ⇒ 只剩 superadmin 那一條路。
+    _require_user(authorization, require_superadmin=True)
     # 🔴 **先驗證，再寫入。** 「回了錯誤碼」與「沒有存進去」是兩件事——
     # 一邊驗一邊寫的話，使用者會看到 422 而值已經生效了。
     _check_office_coord(body)
@@ -1035,9 +1106,12 @@ def set_company_profile(body: CompanyProfile, authorization: str = Header(None))
         sent["office_lon"] = primary.get("lon") if primary else None
     value = {**cur, **sent}
     _set_setting("company_profile", value)
-    # ⚠️ 稽核留的是**公司名**，不是整包 value —— 那包裡有金鑰。
+    # 🔴 SA2：稽核要記**哪些欄位變了**，金錢／身分欄位連前後值（遮成末四碼）。
+    # ⚠️ `target_label` 仍然放公司名（那是「這筆紀錄講的是哪個對象」），
+    # 而**真正回答「改了什麼」的是 `detail`** —— 那個參數在這裡從來沒被傳過。
     _audit(_tok(authorization), "settings.company_profile.update", "settings",
-           "company_profile", value.get("name", ""))
+           "company_profile", value.get("name", ""),
+           detail=_profile_audit_detail(cur, value, sent.keys()))
     return {"ok": True}
 
 
