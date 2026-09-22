@@ -587,6 +587,122 @@ def test_ya10_a_machine_level_problem_does_not_mark_anything(
         )
 
 
+def test_fx24a_an_unknown_outcome_keeps_the_mark_and_is_recorded(
+        client, pending_quote, smtp, monkeypatch):
+    """🔴🔴 FX24a：**`SEND_UNKNOWN` ⇒ 標記保留、落點多一筆、
+    類別與 `permanent` 分開。**（下一次不重寄在 FX24c。）
+
+    ## 🔑 判準不是「自動修好」，是「**不可以安靜**」
+
+    「拿不到結果」是第五種狀態，而它與前四種都不同：
+    ```
+    sent            知道成功了
+    transient_fail  知道失敗了，而且會再試
+    permanent_fail  知道失敗了，而且不會再試
+    skipped         知道沒有送出去（機器層級）
+    unknown         **不知道**              ← 這一個
+    ```
+    ☠️ 把 `unknown` 當成 `transient_fail`（重寄）⇒ **可能寄出兩封**；
+    ☠️ 當成 `sent`（安靜標記）⇒ **可能一封都沒出去而沒有人知道**。
+    🔑 ⇒ 兩害相權：**保留標記（不重寄）＋ 記一筆讓人看得見。**
+    📌 〈告警必須有速率上限〉的鄰居：**不確定時選「會被看見」的那一側，
+    而不是選「會自動處理」的那一側。**
+
+    ## ⚠️ 而它必須與 `permanent` **分開記**
+
+    兩者都「不重寄」⇒ 看起來可以合併。
+    ☠️ **而處置完全不同**：`permanent` 是「那個人沒填 email，去幫他填」，
+    `unknown` 是「**我不知道這封有沒有出去，去問收件人**」。
+    🔑 合併的話，**第二種會被當成第一種處理，而那封信的狀態永遠不會被查清。**
+    """
+    if not hasattr(email_notify, "SEND_UNKNOWN"):
+        pytest.skip("`SEND_UNKNOWN` 還不存在")
+
+    monkeypatch.setattr(
+        dt, "notify_approval_reminder",
+        lambda *a, **kw: email_notify.SEND_UNKNOWN)
+
+    _run(monkeypatch, 3)
+
+    assert _markers(), (
+        "結果是 `unknown`（不知道有沒有寄出去），而標記沒有被寫入 ——\n"
+        "☠️ 那會讓下一次排程再寄一封，而收件人可能已經收到第一封了。"
+    )
+
+    query = getattr(dt, "reminder_send_failures", None)
+    assert callable(query), "`reminder_send_failures()` 不存在（見 YA5）"
+    records = list(query())
+    blob = json.dumps(records, ensure_ascii=False, default=str)
+    assert DOC_NO in blob, (
+        f"`unknown` 沒有在落點留下紀錄：{blob[:240]}\n"
+        "🔑 判準不是「自動修好」，是**不可以安靜**。"
+    )
+    assert "unknown" in blob, (
+        f"落點裡沒有把它標成 `unknown`：{blob[:240]}\n"
+        "☠️ 與 `permanent` 合併的話，「我不知道這封有沒有出去」"
+        "會被當成「那個人沒填 email」處理，而那封信的狀態永遠不會被查清。"
+    )
+
+
+def test_fx24c_an_unknown_outcome_is_not_retried(
+        client, pending_quote, smtp, monkeypatch):
+    """🔴🔴 FX24c 反向控制：**`unknown` 之後下一次排程不可以重寄。**
+
+    ☠️ 少了這一題，一個「記了一筆但照樣重試」的實作會讓 FX24a 綠 ——
+    而收件人可能會**收到兩封**（第一封其實成功了，只是我們沒拿到結果）。
+
+    🔑 而這一題與 YA6（`transient` 要重試）**判準相反** ——
+    ⚠️ 兩題都在這個檔裡，所以一個「不看類別一律重試」或
+    「不看類別一律不重試」的實作**跑不掉**。
+    📌 那是今天反覆用的手法：**把兩個方向的題放在同一個檔。**
+    """
+    if not hasattr(email_notify, "SEND_UNKNOWN"):
+        pytest.skip("`SEND_UNKNOWN` 還不存在")
+
+    monkeypatch.setattr(
+        dt, "notify_approval_reminder",
+        lambda *a, **kw: email_notify.SEND_UNKNOWN)
+    _run(monkeypatch, 3)
+
+    calls = []
+    monkeypatch.setattr(
+        dt, "notify_approval_reminder",
+        lambda *a, **kw: (calls.append(a), email_notify.SEND_SENT)[1])
+    _run(monkeypatch, 3, on=(2026, 9, 23))
+
+    assert not calls, (
+        f"`unknown` 之後下一次排程又寄了 {len(calls)} 封 ——。"
+        "☠️ 第一封可能其實成功了，只是我們沒拿到結果 ⇒ 收件人收到兩封。"
+    )
+
+
+def test_fx24b_the_wait_timeout_is_longer_than_the_smtp_timeout():
+    """🔴 FX24b：`wait()` 的逾時要**明顯長於 SMTP 自己的逾時**。
+
+    ☠️ 反過來的話，**每一封正常但比較慢的信都會被記成 `unknown`** ——
+    🔑 而 `unknown` 的處置是「**去問收件人**」⇒ 那會產生一堆假的待辦，
+    📌 而真正的 `unknown`（那些該被查的）**會被埋在裡面**。
+
+    ⚠️ 判準是**比例**不是絕對值：SMTP 逾時 15 秒，
+    `wait()` 至少要明顯超過它，否則那個分類本身沒有意義。
+    """
+    wait_timeout = None
+    for name in ("SEND_WAIT_TIMEOUT_SECONDS", "SEND_WAIT_TIMEOUT",
+                 "_SEND_WAIT_TIMEOUT"):
+        if hasattr(email_notify, name):
+            wait_timeout = getattr(email_notify, name)
+            break
+    assert wait_timeout is not None, (
+        "`helpers/email_notify.py` 裡找不到 `wait()` 的逾時常數 ——\n"
+        "⇒ 一個寫死在呼叫處的數字，沒有人能拿它跟 SMTP 的逾時比較。"
+    )
+    assert wait_timeout > 15, (
+        f"`wait()` 的逾時是 {wait_timeout} 秒，而 SMTP 自己是 15 秒 ——\n"
+        "☠️ 每一封正常但比較慢的信都會被記成 `unknown`，"
+        "而真正該查的那些會被埋在裡面。"
+    )
+
+
 def test_ya10b_the_next_run_retries_after_a_skip(
         client, pending_quote, smtp, monkeypatch):
     """🔴 YA10b 反向控制：**`skipped` 之後，下一次排程要再試。**
