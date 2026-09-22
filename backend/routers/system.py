@@ -726,6 +726,16 @@ _COMPANY_PROFILE_DEFAULT = {
 _LOCATION_BANK_FIELDS = ("bank_name", "bank_branch",
                          "bank_account_name", "bank_account_number")
 
+#: 據點自己的抬頭。**每一欄留空 = 沿用主要據點的同一欄**（§9 QL5），
+#: 所以「沒填」與「填空字串」在這裡是同一件事，不必分。
+#:
+#: 🔴 這幾個欄位先前**收了但沒有存** —— `_clean_locations()` 只留 id/name/
+#: address/座標 ＋ 四個銀行欄位，而 `pdf_gen.location_identity()` 讀的正是這幾個。
+#: ☠️ 症狀是「設定頁存檔成功，而分公司的單據還是印總公司抬頭」：
+#: 🔑 沒有任何錯誤訊息，因為沒有人做錯事 —— 前端送了、後端收了、後端沒存。
+_LOCATION_IDENTITY_FIELDS = ("company_name", "company_name_en",
+                             "tax_id", "phone", "email")
+
 #: 下一個要配發的據點流水號存在哪。**存在自己的設定鍵裡，不在 `company_profile` 裡。**
 #:
 #: 🔴 **它不可以從「現有據點的最大 id」推算** ——
@@ -921,7 +931,7 @@ def _clean_locations(raw, previous):
             raise HTTPException(422, f"據點「{name}」的座標必須是數字")
         if clean["lat"] is None or clean["lon"] is None:
             clean["lat"] = clean["lon"] = None
-        for field in _LOCATION_BANK_FIELDS:
+        for field in _LOCATION_BANK_FIELDS + _LOCATION_IDENTITY_FIELDS:
             value = str(item.get(field) or "").strip()
             if value:
                 clean[field] = value      # ← 沒填就**整個鍵不存在**

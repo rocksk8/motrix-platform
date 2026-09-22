@@ -104,7 +104,7 @@ def _build_quote_html(q: dict, tot: dict, internal: bool = False,
     #    「**現在**該匯到哪」——舊單據印出舊帳號，對方會照著匯到一個
     #    已經關掉的帳戶。代價（改一次設定，歷史 PDF 重印都會變）
     #    由列印時的稽核紀錄承擔，見 routers 那一側。
-    _ident = location_identity((q or {}).get('locationId'))
+    _ident = location_identity(_location_of(q))
     def esc(s):
         return (s or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>')
     ps = q.get('pdfShow') or {}
@@ -457,12 +457,17 @@ def generate_pdf_bytes(quote_no: str, internal: bool = False) -> bytes:
     edge = _get_edge_path()
     conn = get_db()
     row  = conn.execute(
-        "SELECT data_json, status, deal_tag FROM quotations WHERE quote_no=?", (quote_no,)
+        # QL7：`location_id` 是**欄位**，不在 `data_json` 裡 —— 不撈的話
+        # 8 支 builder 拿到的永遠是空的，而每一份真實單據都印總公司抬頭。
+        "SELECT data_json, status, deal_tag, location_id FROM quotations "
+        "WHERE quote_no=?", (quote_no,)
     ).fetchone()
     conn.close()
     if not row:
         raise ValueError("報價單不存在")
     q            = json.loads(row["data_json"] or "{}")
+    # 用欄位覆蓋 payload：`data_json` 裡若有舊的 `locationId`，**欄位才是權威**。
+    q["locationId"] = row["location_id"] or ""
     deal_tag     = row["deal_tag"] or q.get("dealTag") or ""
     status       = row["status"] or ""
     show_wm      = (deal_tag == "未成案") or (status != "已送出")
@@ -582,6 +587,41 @@ def location_identity(location_id=None) -> dict:
             *[profile.get(alias) for alias in _PROFILE_ALIASES.get(field, ())],
             default)
     return out
+
+
+def _location_of(payload) -> str:
+    """這份單據屬於哪一個據點。回 `""` ⇒ 主要據點。
+
+    ```
+    ① payload 自己的 `locationId`     報價單表單直接送、測試也直接塞
+    ② 用 `quoteNo` 去查 quotations    出貨單／三種憑單／完工單／結案報告
+    ```
+    🔴 **②不可以省。** `generate_pdf_bytes()` 這一族只 `SELECT data_json,…`，
+    而 `location_id` 是**欄位不是 `data_json` 的鍵** ⇒ 少了②的話，
+    ☠️ 8 支 builder 拿到的永遠是空字串，**每一份真實單據都印總公司抬頭**，
+    🔑 而題目會全綠（測試自己塞 `locationId`）—— 接縫有，呼叫者沒有。
+
+    ⚠️ 查不到就回 `""`，**不要丟例外**：一張單據印不出來比印錯抬頭更糟，
+    而這裡最壞的情況是退回既有行為（主要據點）。
+    """
+    payload = payload or {}
+    direct = str(payload.get("locationId") or "").strip()
+    if direct:
+        return direct
+    quote_no = str(payload.get("quoteNo") or payload.get("quote_no") or "").strip()
+    if not quote_no:
+        return ""
+    try:
+        conn = get_db()
+        try:
+            row = conn.execute(
+                "SELECT location_id FROM quotations WHERE quote_no=?",
+                (quote_no,)).fetchone()
+        finally:
+            conn.close()
+    except Exception:       # noqa: BLE001 —— 查不到就退回主要據點
+        return ""
+    return str((row["location_id"] if row else "") or "").strip()
 
 
 def _identity_head(ident: dict) -> str:
@@ -1019,12 +1059,16 @@ def _generate_quotation_pdf(quote_no: str, actor: str = '', action_type: str = '
     try:
         conn = get_db()
         row = conn.execute(
-            "SELECT data_json, status, deal_tag FROM quotations WHERE quote_no=?", (quote_no,)
+            # QL7：`location_id` 是**欄位**，不在 `data_json` 裡 —— 不撈的話
+        # 8 支 builder 拿到的永遠是空的，而每一份真實單據都印總公司抬頭。
+        "SELECT data_json, status, deal_tag, location_id FROM quotations "
+        "WHERE quote_no=?", (quote_no,)
         ).fetchone()
         conn.close()
         if not row:
             return
         q        = json.loads(row["data_json"] or "{}")
+        q["locationId"] = row["location_id"] or ""      # QL7：欄位才是權威
         deal_tag = row["deal_tag"] or q.get("dealTag") or ""
         status   = row["status"] or ""
         show_wm      = (deal_tag == "未成案") or (status != "已送出")
@@ -1099,7 +1143,7 @@ def _build_shipping_html(n: dict) -> str:
     #    「**現在**該匯到哪」——舊單據印出舊帳號，對方會照著匯到一個
     #    已經關掉的帳戶。代價（改一次設定，歷史 PDF 重印都會變）
     #    由列印時的稽核紀錄承擔，見 routers 那一側。
-    _ident = location_identity((n or {}).get('locationId'))
+    _ident = location_identity(_location_of(n))
     def esc(s):
         return (s or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>')
 
@@ -1459,7 +1503,7 @@ def _build_contractor_voucher_html(v: dict) -> str:
     #    「**現在**該匯到哪」——舊單據印出舊帳號，對方會照著匯到一個
     #    已經關掉的帳戶。代價（改一次設定，歷史 PDF 重印都會變）
     #    由列印時的稽核紀錄承擔，見 routers 那一側。
-    _ident = location_identity((v or {}).get('locationId'))
+    _ident = location_identity(_location_of(v))
     def esc(s):
         return (s or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>')
     def money(n):
@@ -1817,7 +1861,7 @@ def _build_invoice_voucher_html(v: dict) -> str:
     #    「**現在**該匯到哪」——舊單據印出舊帳號，對方會照著匯到一個
     #    已經關掉的帳戶。代價（改一次設定，歷史 PDF 重印都會變）
     #    由列印時的稽核紀錄承擔，見 routers 那一側。
-    _ident = location_identity((v or {}).get('locationId'))
+    _ident = location_identity(_location_of(v))
     def esc(s):
         return (s or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>')
     def money(n):
@@ -2125,7 +2169,7 @@ def _build_payment_request_html(v: dict) -> str:
     #    「**現在**該匯到哪」——舊單據印出舊帳號，對方會照著匯到一個
     #    已經關掉的帳戶。代價（改一次設定，歷史 PDF 重印都會變）
     #    由列印時的稽核紀錄承擔，見 routers 那一側。
-    _ident = location_identity((v or {}).get('locationId'))
+    _ident = location_identity(_location_of(v))
     def esc(s):
         return (s or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>')
     def money(n):
@@ -2625,7 +2669,7 @@ def _build_case_closing_html(data: dict) -> str:
     #    「**現在**該匯到哪」——舊單據印出舊帳號，對方會照著匯到一個
     #    已經關掉的帳戶。代價（改一次設定，歷史 PDF 重印都會變）
     #    由列印時的稽核紀錄承擔，見 routers 那一側。
-    _ident = location_identity((data or {}).get('locationId'))
+    _ident = location_identity(_location_of(data))
     def esc(s):
         return (str(s) if s is not None else '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>')
 
@@ -3137,7 +3181,7 @@ def _build_project_execution_report_html(data: dict) -> str:
     #    「**現在**該匯到哪」——舊單據印出舊帳號，對方會照著匯到一個
     #    已經關掉的帳戶。代價（改一次設定，歷史 PDF 重印都會變）
     #    由列印時的稽核紀錄承擔，見 routers 那一側。
-    _ident = location_identity((data or {}).get('locationId'))
+    _ident = location_identity(_location_of(data))
     def esc(s):
         return (str(s) if s is not None else '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>')
 
@@ -3330,7 +3374,7 @@ def _build_completion_html(n: dict) -> str:
     #    「**現在**該匯到哪」——舊單據印出舊帳號，對方會照著匯到一個
     #    已經關掉的帳戶。代價（改一次設定，歷史 PDF 重印都會變）
     #    由列印時的稽核紀錄承擔，見 routers 那一側。
-    _ident = location_identity((n or {}).get('locationId'))
+    _ident = location_identity(_location_of(n))
     def esc(s):
         return (str(s) if s is not None else '').replace('&', '&amp;').replace('<', '&lt;') \
             .replace('>', '&gt;').replace('\n', '<br>')

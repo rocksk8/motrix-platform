@@ -577,7 +577,10 @@
     </section>
 
     <!-- ─── ONBOARDING 引導條（系統無資料時顯示） ─── -->
-    <div x-show="!loading && !onboardingDismissed && stats.totalQuotes === 0 && stats.activeCases === 0"
+    <!-- FX33：`statsLoaded` 一起判。
+         ☠️ 少了它，一次網路失敗就會讓一個有幾百筆資料的老使用者
+            看到全新安裝的新手引導 —— 而他不會報修，那看起來就是空狀態。 -->
+    <div x-show="!loading && statsLoaded && !onboardingDismissed && stats.totalQuotes === 0 && stats.activeCases === 0"
          style="background:linear-gradient(135deg,var(--accent-light),#F0FDF4);border:1px solid #BFDBFE;border-radius:var(--radius-lg);padding:16px 20px;margin-bottom:16px;display:flex;gap:16px;align-items:flex-start">
       <div style="flex-shrink:0;width:36px;height:36px;background:var(--accent);border-radius:8px;display:flex;align-items:center;justify-content:center">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
@@ -914,6 +917,12 @@ feedCount(key) {
         if (overdue > 0) {
           return '有 ' + overdue + ' 台設備已過保，先確認要不要續約或更換。'
         }
+        // FX33：**先問「讀到了嗎」，再問「是不是空的」。**
+        // 兩者在 `stats` 上長得一模一樣（都是 0），而它們要講的話相反。
+        if (!this.statsLoaded) {
+          return '目前讀不到儀表板資料（可能是連線或伺服器正在重啟），'
+               + '畫面上的數字暫時不準。重新整理可以再試一次。'
+        }
         if (this.stats.totalQuotes === 0) {
           return '系統目前還沒有資料，從建立第一筆客戶與報價單開始。'
         }
@@ -1026,6 +1035,11 @@ feedCount(key) {
         this.onboardingDismissed = true
       },
 
+      //: 這一次有沒有真的讀到 `dashboard/stats`。
+      //  ⚠️ 初始 `false` 不是 `true`：**還沒讀到之前不可以先說「你沒有資料」**。
+      //  一個樂觀的初始值會在最慢的那一台機器上變成一句謊話。
+      statsLoaded: false,
+
       async loadStats() {
         try {
           const qs = this.departmentId ? `?department_id=${this.departmentId}` : ''
@@ -1042,8 +1056,19 @@ feedCount(key) {
           // 📌 補那兩個欄位是修結果；合併進既有預設值**同時處理所有欄位**，
           //    而且日後新增欄位時不會再漏一次。這是同一個形狀的第二次
           //    （第一次是 `4e3ebdb` 的側邊欄權限被不完整的 200 洗空）。
-          if (r.ok) this.stats = { ...this.stats, ...(await r.json()) }
-        } catch {}
+          if (r.ok) {
+            this.stats = { ...this.stats, ...(await r.json()) }
+            this.statsLoaded = true
+          } else {
+            // FX33：讀不到就是讀不到。**不可以讓它看起來像「沒有資料」** ——
+            // `stats` 保持初始 0，而 0 在畫面上會被講成「系統目前還沒有資料」。
+            this.statsLoaded = false
+          }
+        } catch {
+          // 逾時／離線／後端重啟中都走這裡。後端重啟中正是這一包的部署視窗：
+          // DEPLOY.md 的那個 🔴🔴 步驟沒做時，前端是新的、後端還在重啟。
+          this.statsLoaded = false
+        }
       },
 
       async loadMonthly() {
