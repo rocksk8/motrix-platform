@@ -12665,6 +12665,109 @@ B 的 v1   同一個成因 ⇒ _catchup_monthly_reports 被判成「不是寄信
 
 ---
 
+## §8 補三 · **系統程式碼健檢的發現**（使用者 2026-09-22：「整體的系統代碼做一次健檢這件事還沒跑」）
+
+> 完整報告：`docs/windows/HEALTH-2026-09-22.md`。工具：`backend/tools/code_health.py`。
+> 範圍 102 支產品碼＋181 支測試碼＋1,719 題，純 `ast`（**這個 repo 沒有任何 linter**）。
+> **編號 `HC`** —— 選字母前已 grep。
+
+---
+
+### 🔴🔴 HC1 · `deploy_dashboard.py` 的防護要搬到請求層
+
+```python
+backend/tools/deploy_dashboard.py
+570:  if __name__ == "__main__":
+572:      uvicorn.run(app, host="127.0.0.1", port=8765, log_level="warning")
+```
+**13 支路由、0 個請求層檢查**（`request.client`／middleware／`Depends`／`_require_*` 全 0）：
+```
+POST /api/build  /api/deploy  /api/rollback  /api/snapshots  /api/log-tail  /api/check-only
+GET  / /api/dev-status /api/prod-status /api/packages /api/history /api/jobs/{id} /api/pre-deploy-check
+```
+☠️ **`uvicorn deploy_dashboard:app --host 0.0.0.0` 根本不會執行第 572 行。**
+🔑 **而這個專案的 ERP 本體就是這樣起的** ——
+`autostart.bat:31`／`restart.bat:40`／`start.bat:27` **全是 `uvicorn main:app --host 0.0.0.0`**。
+📌 **同一台機器上的人，用同一個習慣去起 dashboard，`/api/deploy` 與 `/api/rollback` 就是無驗證的。**
+
+- **HC1a.** 🔴 **防護放在每個請求都會經過的地方**（middleware 檢查 `request.client.host`
+  在不在本機白名單），**不是在啟動分支裡**。
+  📌 〈防線要在被保護者身上〉——**那個檔案裡的路由不知道自己被誰掛著。**
+- **HC1b.** 🔴 **反向控制**：用 `TestClient` 模擬**非本機**來源 ⇒ **每一支都要被拒**。
+  ⚠️ **不可以真的用 `--host 0.0.0.0` 在這台機器上開來測** ——
+  ☠️ 那會在測試期間真的開一個無驗證的部署控制端點。
+- **HC1c.** ✅ **結構上掛不上去這一半已經驗過，不用再做**（D 實查）：
+  它是 `FastAPI()` 不是 `APIRouter` ⇒ `include_router` 吃不下；全 repo 零 `.py` 引用它。
+
+---
+
+### 🔴 HC2 · 讓 `pip_audit` 跑得起來 —— **相依漏洞目前是完全的盲區**
+
+```
+UnicodeDecodeError: 'cp932' codec can't decode byte 0xef in position 211
+```
+`backend/requirements.txt` 有**中文註解**，而 `pip_audit` 的解析器用**系統語系編碼**讀檔。
+- **HC2a.** 註解改英文（或確認 `PYTHONUTF8=1` 能讓它過），**然後真的跑一次並記下結果**。
+🔑 **判準是「跑出一份結果」，不是「改完編碼」** —— 改完而沒跑，盲區還在。
+
+---
+
+### 🟡 HC3 · **工具要先讓「已知的那一個」亮起來，才有資格報「沒有其他的」**（視窗 D 提，A 採用）
+
+```
+死碼掃描 v1  報 462 支   ← 沒排除 FastAPI 裝飾器持有的路由
+        v2  報   4 支   ← 排除之後
+        v3  報   3 支   ← is_enabled 是 `from X import is_enabled as _pref_enabled`
+                          改名之後原名不再出現 ⇒ 假陽性
+```
+- **HC3a.** **任何盤點／掃描工具，輸出前要先印正對照與負對照的結果。**
+  ✅ `backend/tools/code_health.py` 已經這樣做了。
+📌 **D 那一輪的憑證掃描改了三次，三次都是正對照救的**（v1 濾掉雙軌、v2 子字串命中 37 條、
+v3 精確名單抓不到 `_verify_photo_token`）。
+
+---
+
+### 🟡 HC4 · 裝一個 linter，**只擋新增**
+
+```
+pyflakes ruff pylint flake8 mypy bandit vulture coverage    全部沒有安裝
+```
+📌 **今天三次「語法對、位置對、而它不做事」都是 linter 抓得到的**
+（`Fail "a" + "b"`／Python 字串裡的 `	`／漏 `--basetemp`）。
+- **HC4a.** ⚠️ **只擋新增，存量進明示清單**（比照 `YF` 與 MSP 的 `oversized-accepted.json`）。
+  ☠️ 不這樣做會複製那個死結：守門每次 FAIL ⇒ 只在零 FAIL 才推進 ⇒ 永遠推不動。
+
+---
+
+### 🟢 HC5 · 刪掉 3 支死碼
+```
+daily_tasks.py:1743  reminder_stage    ← 已在 FX11 裁定
+geo.py:162           geocode_cached    ← 唯一提及是「走 locate_cached() 不是舊的 geocode_cached()」
+map_points.py:612    _manual_coord     ← 唯一提及是註解與測試的 docstring
+```
+☠️ **危險不在佔空間，在於下一個人會讀它們來預測行為，而它們會給錯的答案。**
+
+### 🟢 HC6 · 31 處未使用的 import
+📌 **價值不是整潔**：`helpers/quotations.py` 與 `routers/dashboard.py` 匯入了 `get_db` 卻不用
+⇒ **那是「這個檔曾經直接開連線」的指紋**，而我們今天正好在修連線洩漏。
+
+### ⏸️ HC7 · 22 支 ≥150 行的函式：**這一輪不動**
+多數是「一大段 HTML／Excel 版型」，**拆開的風險大於收益，而且沒有測試在保護那些輸出的細節**。
+📌 **但 `_build_*_html` 那幾支就是白標化（§7 WL）版型要換的地方** ⇒ 兩件事要一起想。
+
+---
+
+### ⚠️ 健檢自己的盲區（登記，不假裝）
+```
+❌ 相依套件漏洞     見 HC2
+❌ 真實測試覆蓋率   沒有 coverage 套件；「39 支未測路由」是 needle 比對 ⇒ 那是下限
+❌ 前端            只掃 backend/**；frontend/ 的 JS 沒有等價檢查
+❌ 執行期          全部靜態分析，沒有跑起來量過任何東西
+❌ 複雜度          用行數當代理，不是 cyclomatic complexity
+```
+
+---
+
 ### 2026-09-21 22:19 · 📌 **A 重啟了測試機 666**（使用者要看新功能）
 
 ```
