@@ -25732,3 +25732,55 @@ cashier    ⊂ cashierHistoryStart
 - **「交出訊號」不需要知道對方的優先序，「替他決定」需要。**
   ⇒ 執行者發現同一個對象的第三個症狀時，說「**這是第三個**」就夠了。
 
+
+## §80 · 開發機 666 的重啟程序（2026-09-22 22:4x，A 實測後記下）
+
+🔴 **使用者裁示：出納拆完後重啟 666 給他看。**
+
+### ☠️ A 上次重啟踩的坑（22:07，伺服器停了約 90 秒）
+
+```
+A 從行程清單挑 python ⇒ 挑到**子行程**那支
+  C:\Users\hichan\AppData\Roaming\uv\python\cpython-3.11-...\python.exe
+⇒ **No module named uvicorn** ⇒ 起不來
+真正裝著套件的是**父行程**那支 venv
+  C:\Users\hichan\AppData\Local\hermes\hermes-agent\venv\Scripts\python.exe
+```
+🔑 **⇒ 從行程清單挑直譯器時，父子行程可能是兩支不同的 python，
+而裝著套件的不一定是正在監聽的那一支。**
+
+### ✅ 正確程序（實測可用）
+
+```powershell
+$py = "C:\Users\hichan\AppData\Local\hermes\hermes-agent\venv\Scripts\python.exe"
+& $py -c "import uvicorn,fastapi;print('deps OK')"     # ← **先驗，再殺**
+# 停掉 666 上所有 listen 的 PID（父與子都要）
+$env:MOTRIX_GEO = "1"; $env:MOTRIX_TENDER_RADAR = "1"; $env:PYTHONUTF8 = "1"
+Start-Process $py -ArgumentList "-m","uvicorn","main:app","--port","666","--host","0.0.0.0","--log-level","info" `
+  -WorkingDirectory "<repo>\backend" -WindowStyle Hidden `
+  -RedirectStandardOutput "<repo>\backend\logs\uvicorn_out.log" `
+  -RedirectStandardError  "<repo>\backend\logs\uvicorn_err.log"
+```
+⚠️ **`autostart.bat` 不可以跑**——它的路徑寫死 `C:\Users\Motrix\Desktop\V9.0`，**那是正式機**。
+⚠️ **排程工作 `MOTRIX-ERP-Server` 是「停用」** ⇒ 這台**沒有自動重啟保護**，
+砍掉不會有人拉起來 ⇒ **一定要自己啟**。
+📌 兩個總開關（`MOTRIX_GEO`／`MOTRIX_TENDER_RADAR`）**預設是關**
+⇒ 不帶的話「服務正常、畫面正常，而雷達不掃、地圖沒有點」。
+
+### 🔴 `DV1`（新編號，`NEXT`）：`restart.bat` 是**空檔**
+
+```
+restart.bat  0 bytes      start.bat  0 bytes
+start_server.ps1          port **5000**，而且是**互動式**（Read-Host）⇒ 自動化用不了
+```
+☠️ **⇒ 那正是 A 上次要用猜的原因。**
+⇒ `DV1`：把上面那段寫進 `restart.bat`（含先驗直譯器、兩個開關、不碰 6667）。
+🔑 〈主持人的記憶是負債〉：**這段程序現在寫在 `STATE.md` 裡，而它應該是一個可執行的檔。**
+
+### §6 新增
+
+- 🔴 **從行程清單挑直譯器時，父子行程可能是兩支不同的 python。**
+  ⚠️ **裝著套件的不一定是正在監聽的那一支。**
+  ⇒ 作法：**先用 `-c "import <套件>"` 驗過那支直譯器，再去停服務。**
+  ☠️ A 上次的順序是「先殺再啟」，而啟失敗 ⇒ **服務空窗 90 秒。**
+
