@@ -53,7 +53,16 @@ routers/reports.py:338 註解逐字：
    毛利 > 淨利（差 adminCost ＋ charityDonation）⇒ **獎金會發多**
    而它**不報錯，畫面上每個數字都正常**
 ```
-✅ **⇒ 沒有 `netProfit` ⇒ 拒絕產生獎金單，並說出「這個案件的精算沒有淨利欄位」。**
+✅ **⇒ 沒有 `netProfit` ⇒ 拒絕產生獎金單。**
+### 🔴 而拒絕訊息**必須講出路**，不可以只說「沒有淨利」
+```
+副作用  **舊案就永遠發不了獎金**，而使用者看不出路在哪裡
+出路    settlement.html:944-948 是**儲存時算**的
+        ⇒ ⇒ **重新儲存那一案的精算，就會補上 netProfit**
+```
+📌 訊息要寫成：「這個案件的精算是舊格式（沒有淨利欄位）。
+   **請重新開啟並儲存一次該案的精算，系統會自動補算。**」
+🔑 與 `RAISE(ABORT)` 那一條同源：**那句話是使用者唯一看得到的東西。**
 ### ⚠️ 而這一條在開發機上永遠不會被觸發
 ```
 $ 開發機 26 張報價單／12 張有 settlement.summary／**12 張都有 netProfit／0 張是舊資料**
@@ -109,13 +118,30 @@ CREATE TABLE bonus_awards (
     status                TEXT    NOT NULL DEFAULT '草稿',
     voucher_no_accrual    TEXT    NOT NULL DEFAULT '',  -- 核定那筆傳票
     voucher_no_payment    TEXT    NOT NULL DEFAULT '',  -- 發放那筆傳票
+    -- 作廢／重開鏈（與傳票 §35 同一條原則：作廢留痕、重開一張）
+    voided_at             TEXT    NOT NULL DEFAULT '',
+    voided_by             TEXT    NOT NULL DEFAULT '',
+    void_reason           TEXT    NOT NULL DEFAULT '',
+    supersedes_id         INTEGER NOT NULL DEFAULT 0,   -- 本筆取代了哪一筆
     created_by            TEXT    NOT NULL,
     created_at            TEXT    NOT NULL,
     updated_at            TEXT    NOT NULL
 );
-CREATE UNIQUE INDEX idx_bonus_awards_case ON bonus_awards(quote_no);
+-- 🔴 **部分**唯一索引：一個案件同時只能有一筆**有效**獎金，而作廢後可以重開
+CREATE UNIQUE INDEX idx_bonus_awards_case_active
+    ON bonus_awards(quote_no) **WHERE voided_at = ''**;
 ```
-🔴 `UNIQUE(quote_no)` 直接落實使用者的「**依案件獨立發放**」⇒ **不做跨案件結算。**
+## 🔴 而這個索引落實的**不是**「依案件獨立發放」，兩者要分開講
+```
+「不做跨案件結算」＝ **一筆獎金不可橫跨多案**
+                    ⇒ 靠的是 `quote_no` 是**單一欄位**（不是清單），**不是唯一性**
+這個部分索引強制的 ＝ **一個案件同時只能有一筆有效獎金**
+```
+☠️ 若寫成完全唯一（無 WHERE）⇒ **發錯了改不了** ——
+   而傳票那邊有完整的作廢重開鏈（使用者親口裁的）
+   ⇒ **兩個模組對「錯了怎麼辦」會不一致，而獎金還會開傳票。**
+✅ 實跑驗證（A）：第二筆未作廢 ⇒ IntegrityError／作廢後重開 ⇒ OK／再一筆 ⇒ IntegrityError
+   ⇒ **有效 1 列、歷史留著。**
 
 ## 3.4 `bonus_award_lines`（每人一列）
 ```sql
@@ -199,10 +225,14 @@ engineer                         工程師
 不做  **不碰精算既有邏輯**（只讀結果，不改它怎麼算）
 不做  不做薪資單、不接薪轉、不碰勞健保
 不做  **不做跨案件結算**（使用者明說「依案件獨立發放」）
+      ⇒ 落實方式：`bonus_awards.quote_no` 是**單一欄位**，不是清單
 ```
 
 ---
-# 九、⚙️ 代價歸屬掃描（定稿前跑，A-2 已跑）
+# 九、⚙️ 代價歸屬掃描（定稿前跑，**兩問**）
+> 第一問：**誰決定的**（答不出名字 ⇒ 移出施工圖）
+> 第二問：**這個決定的副作用列過了嗎**（「我比較過三個選項」不算 —— 那是選擇的理由）
+
 | 代價／限制 | 誰決定的 | 判定 |
 |---|---|---|
 | 不做跨案件結算 | **使用者**（「依案件獨立發放」） | ✅ 真代價 |
@@ -215,8 +245,6 @@ engineer                         工程師
 ---
 # 十、⚠️ 未查
 ```
-✗ 「結案的最終金額」是否就是 netProfit —— 使用者兩句話（「結案的最終金額」／
-  「實際獲利」）我讀成同一件事，**而那是我的解讀**
 ✗ bonus 的 migration 版本號（等 A 指派，傳票用掉 v95）
 ✗ 「最高管理者」是否沿用 superadmin（A 已 🟡 預設沿用，未經使用者確認）
 ✗ 營運報表現行可見範圍的實際實作（只知道不可沿用，未讀它怎麼寫的）
