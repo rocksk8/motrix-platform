@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Body, Form, HTTPException, Header, UploadFile, File
 from fastapi.responses import Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from db import get_db, spawn_bg_thread
 from helpers import (
@@ -605,6 +605,14 @@ class QuotationIn(BaseModel):
     status:     Optional[str] = "草稿"
     data:       dict
     created_by: Optional[str] = None
+    # 這張單屬於哪一個據點（2026-09-22 §9 QL4）。
+    # ⚠️ 沒送 ⇒ 落在**主要據點**；送了 ⇒ 用送的那個。
+    # ☠️ 只做前半的話（寫死主要據點、不看送進來的值），
+    # **分公司就永遠開不出自己的單** —— 而那正是使用者要這個功能的原因。
+    # 📌 兩種鍵名都收：前端送 `locationId`，而 DB 欄位叫 `location_id`。
+    location_id: Optional[str] = Field(None, alias="locationId")
+
+    model_config = {"populate_by_name": True}
 
 
 class QuotationStatusUpdate(BaseModel):
@@ -1240,8 +1248,9 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
               (quote_no, status, customer_name, project_name,
                total, pretax, direct_margin_pct, net_margin_pct,
                sales_person, sales_person_id, quote_date, valid_days, data_json,
-               created_at, updated_at, created_by, deal_tag, settle_status)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+               created_at, updated_at, created_by, deal_tag, settle_status,
+               location_id)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """, (
             no, body.status,
             q.get("customerName"), q.get("projectName"),
@@ -1250,6 +1259,10 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
             q.get("salesPerson"), sp_id, q.get("quoteDate"), q.get("validDays", 30),
             json.dumps(q, ensure_ascii=False),
             now, now, user["username"], deal_tag, settle_status,
+            # 沒送 ⇒ 留空，由 DB 的 trigger 補成當下的主要據點。
+            # 🔑 **不在這裡查一次主要據點**：那會變成「兩個地方各自決定
+            # 什麼是預設」，而 trigger 那一份管得到所有寫入路徑。
+            (body.location_id or "").strip() or None,
         ))
 
     try:

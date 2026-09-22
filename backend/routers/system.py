@@ -808,14 +808,28 @@ def _clean_locations(raw, previous):
                      "兩個同名的據點會讓「離○○多遠」那句話沒有意義")
         seen_names.add(name)
 
+        # 📌 **送進來的 id 就沿用**（不限於既有的那幾個）：
+        # 報價單等下游資料會存「我屬於據點 X」⇒ 🔑 **id 是一個對外的識別碼**，
+        # 而呼叫端（匯入、還原、測試治具）需要能指定它。
+        # ⚠️ 而「**不重用已刪除的 id**」那條仍然成立：自動配號走的是
+        # 只增不減的計數器，而下面那一行讓外來的 `loc_N` 也把它頂上去。
         ident = str(item.get("id") or "").strip()
-        if not ident or ident not in prev_by_id:
+        if not ident:
             keep = prev_by_name.get(name)
             ident = str(keep.get("id")) if keep and keep.get("id") else ""
+        if ident.startswith("loc_") and ident[4:].isdigit():
+            # ☠️ 外來的 `loc_7` 不把計數器頂上去的話，
+            # 之後自動配號可能配出同一個 `loc_7` —— **而它指向另一家分公司。**
+            seq = max(seq, int(ident[4:]))
+            _save_location_seq(seq)
         if not ident:
             seq += 1
             ident = f"loc_{seq}"
             _save_location_seq(seq)
+        if any(l["id"] == ident for l in out):
+            raise HTTPException(
+                422, f"據點 id 重複：「{ident}」。"
+                     "下游資料靠 id 指認據點，重複的話會指錯對象")
 
         clean = {"id": ident, "name": name, "address": address}
         lat, lon = item.get("lat"), item.get("lon")

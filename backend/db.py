@@ -101,7 +101,7 @@ DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR = os.path.join(
 # 的附件，2026-09-14）——兩張表都是 TEXT NOT NULL DEFAULT '[]'，存
 # save_document_files() 回傳的清單。刪附件限 admin+，見 routers/quotations.py
 # 與 routers/dev_crm.py 的 DELETE .../files/{file_id}。
-CURRENT_VERSION = 89
+CURRENT_VERSION = 90
 
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
 # execution model) whenever the current request is authenticated as the 'demo'
@@ -3851,6 +3851,90 @@ def _m089_geocode_cache(conn):
     """)
     conn.commit()
 
+def _m090_quotation_location(conn):
+    """v90（2026-09-22 §9 QL2）：報價單記下**它屬於哪一個據點**。
+
+    ## 🔴 真欄位，不塞 `data_json`
+    `data_json` 裡的東西查不出來也 JOIN 不了，而「這張單屬於哪個據點」
+    是要拿來**決定 PDF 印誰的抬頭與帳號**的。
+
+    ## ⚠️ 順序是硬的：**先確保主要據點存在，再把報價單指過去**
+    既有安裝的 `company_profile` 有 `address` 而**沒有 `locations`**
+    ⇒ 那個時候「主要據點」還不存在。
+    ☠️ 順序反過來的話，既有的報價單會指向**一個不存在的 id**，
+    🔑 而那比 NULL 更糟：NULL 看得出來沒設定，**一個壞掉的 id 看起來像設定好了**。
+
+    ## 📌 導出的邏輯**寫在這裡**，不呼叫 `routers.system._migrated_locations()`
+    〈凍住的歷史不要呼叫活的程式碼〉：那支 helper 會演進，
+    而 migration 是歷史 —— 它跑的必須是**當時**的規則。
+
+    ## 🔴 那個 trigger 才是「不可以留 NULL」的實際保證
+    ⚠️ 應用層補預設只管得住**走 API 的那條路**。
+    ☠️ 而報價單也會被匯入腳本、修復腳本、以及未來的其他端點寫進來 ——
+    🔑 **一個只在某一條路上成立的不變量，不是不變量。**
+    📌 trigger 讀的是**當下的**主要據點（`json_extract`），不是 migration 當時的值
+    ⇒ 使用者改了主要據點之後，新的預設會跟著走。
+    """
+    if not _col_exists(conn, "quotations", "location_id"):
+        conn.execute("ALTER TABLE quotations ADD COLUMN location_id TEXT")
+
+    # ── ① 主要據點：沒有 `locations` 就從 `address` 導一筆（BR3 當時的規則）──
+    row = conn.execute(
+        "SELECT value_json FROM system_settings WHERE key='company_profile'"
+    ).fetchone()
+    try:
+        profile = json.loads(row["value_json"]) if row and row["value_json"] else {}
+    except (TypeError, ValueError):
+        profile = {}
+    if not isinstance(profile, dict):
+        profile = {}
+    locations = profile.get("locations")
+    if not isinstance(locations, list) or not locations:
+        address = str(profile.get("address") or "").strip()
+        if address:
+            # ⚠️ 地址是空的就**不要造一筆空的據點**（BR3b）——
+            # 一筆「有名字沒地址」的據點在地圖上是「定位不到」，
+            # 而那與「使用者真的填錯了」長得一模一樣。
+            profile["locations"] = [{
+                "id": "loc_1", "name": "總公司", "address": address,
+                "lat": profile.get("office_lat"), "lon": profile.get("office_lon"),
+            }]
+            conn.execute(
+                "INSERT INTO system_settings (key, value_json, updated_at) "
+                "VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET "
+                "value_json=excluded.value_json, updated_at=excluded.updated_at",
+                ("company_profile",
+                 json.dumps(profile, ensure_ascii=False),
+                 datetime.now().isoformat()))
+            locations = profile["locations"]
+
+    primary_id = ""
+    if isinstance(locations, list) and locations and isinstance(locations[0], dict):
+        primary_id = str(locations[0].get("id") or "")
+
+    # ── ② 既有的報價單補上主要據點 ──────────────────────────────────
+    if primary_id:
+        conn.execute(
+            "UPDATE quotations SET location_id=? "
+            "WHERE location_id IS NULL OR TRIM(location_id)=''", (primary_id,))
+
+    # ── ③ 之後不帶 `location_id` 的 INSERT 一律補成當下的主要據點 ──
+    conn.execute("DROP TRIGGER IF EXISTS quotations_default_location")
+    conn.execute("""
+        CREATE TRIGGER quotations_default_location
+        AFTER INSERT ON quotations
+        WHEN NEW.location_id IS NULL OR TRIM(NEW.location_id) = ''
+        BEGIN
+            UPDATE quotations
+               SET location_id = (
+                     SELECT json_extract(value_json, '$.locations[0].id')
+                       FROM system_settings WHERE key = 'company_profile')
+             WHERE id = NEW.id;
+        END
+    """)
+    conn.commit()
+
+
 _MIGRATIONS = [
     _m001_export_columns,        # v1
     _m002_sessions_expires,      # v2
@@ -3941,6 +4025,7 @@ _MIGRATIONS = [
     _m087_tender_notify,                            # v87
     _m088_tender_detail_fields,                     # v88
     _m089_geocode_cache,                            # v89
+    _m090_quotation_location,                       # v90
 ]
 
 

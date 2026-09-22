@@ -1054,3 +1054,16 @@ cff77e2  §5    多據點（分公司）
   ⚠️ **53 個頁面載入 sidebar.js** ⇒ 新開一個檔要改 53 個 `<script>` 標籤，
   而漏掉一個的後果是那一頁**完全不更新權限**（fail-open，最糟的方向）。
   📌 C 明講「`sidebar.js` 我也收，匯出方式是 B 的決定」。
+
+## 🔒 佔用宣告：`db.py`（§9 QL2 migration **v90**），2026-09-22
+
+- **查證**：`db.py:104 CURRENT_VERSION = 89`、`_MIGRATIONS` 末筆 `_m089  # v89`；
+  `docs/windows/` 裡 v90 沒有別人佔著
+- **佔的是**：`CURRENT_VERSION 89 → 90`、新函式 `_m090_quotation_location`、
+  `_MIGRATIONS` 末尾一筆
+- **不動**：`_get_version`／`_run_migrations` 的流程、任何既有的 `_mNNN`
+- ⚠️ **C 釘的是 `> 89` 不是 `== 90`** ——
+  📌 釘等號的話，兩個視窗同時各加一個 migration 會讓那一題**紅在一個假的理由上**
+  （〈兩人同時加 migration，git 不會衝突、只會在執行時撞版本號〉）
+- ⚠️ **BR19**：migration 裡的據點導出邏輯要**inline**，
+  不可以呼叫 `_migrated_locations()` 那種會演進的 helper
