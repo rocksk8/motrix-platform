@@ -52,6 +52,70 @@ def _login(page, base_url, username, password):
     page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=10000)
 
 
+#: 一個只有 `dashboard`＋`quotation` 的帳號，**導覽列裡一個都不該出現**的字。
+#:
+#: 🔑 **分組名與項目名都列**，理由見 `test_admin_without_module_…` 裡那一段：
+#: 漏權限時，一個只剩一項的分組會渲染成**那一項的名字**，
+#: ☠️ 只釘分組名的話，那次漏權限**結構上抓不到**。
+#:
+#: 📌 來源：`frontend/static/sidebar.js` 的 `sec()`／`ni()`（2026-09-22 讀取）。
+#: ⚠️ 而一份**字串打錯的**禁列永遠是綠的 ——
+#: ⇒ 所以 `test_superadmin_still_sees_everything` 反過來斷言**這裡每一個字
+#:    superadmin 都看得到**。那是這份清單的正對照，兩題必須成對。
+_FORBIDDEN_WITHOUT_MODULES = (
+    # 廠商與採購
+    "廠商與採購", "客戶管理", "供應商管理", "承攬商管理",
+    "料號主檔", "庫存管理", "採購管理",
+    # 設備
+    "設備", "設備登載", "保固追蹤", "網路架構規劃書",
+    # 勞務管理
+    "勞務管理", "外包名冊", "勞報單",
+    # 選型資料庫
+    "選型資料庫", "場域選型導覽", "網路架構選型導覽", "交換器選型導覽",
+    "監控系統選型導覽", "門禁系統選型導覽", "閘道器與控制器選型導覽",
+    "自動化系統選型導覽",
+    # 財務（單項分組 ⇒ 平常渲染成項目名）
+    "營運報表",
+)
+
+
+def _nav_vocabulary(page):
+    """導覽列上**所有**看得到的字：分組名（`.mnav__top`）＋ 項目名（`.mnav__item`）。
+
+    ## ☠️ 為什麼不能只看 `.mnav__top`（A-2 2026-09-22 抓到的假綠燈）
+
+    `sidebar.js:620-623`：**單項分組直接渲染成 `.mnav__top`（那一項的名字），
+    多項分組才渲染成分組名 ＋ 面板裡的 `.mnav__item`。**
+    ```
+    舊寫法   names 只取 .mnav__top
+    ⇒ 「廠商與採購」哪天真的漏權限顯示，而它當時**只剩一項**
+      ⇒ 渲染成項目名、不在 .mnav__top 裡 ⇒ **assert not in 通過** ⇒ 🔴 假綠燈
+    ```
+    ⚠️ 而**這一包正好製造了一個單項分組**（財務／營運報表）⇒ 那顆地雷是活的。
+
+    ## 🔴 而修法有一個反直覺的坑，我實測過（2026-09-22 18:55）
+
+    `.mnav__panel` 的隱藏方式是 **`visibility: hidden`**（`style.css:480`），
+    不是 `display: none`。而這兩者對 `innerText` 的行為**相反**：
+    ```
+    實測（Playwright + set_content，最小樣本）
+      visibility:hidden  → all_inner_texts()   = ['', '']        ← **抓不到**
+                           all_text_contents() = ['報價單','客戶'] ← 抓得到
+      display:none       → all_inner_texts()   = ['被 display-none 的']  ← **抓得到**
+                           （不被渲染 ⇒ innerText 退回 textContent）
+    ```
+    🔑 ⇒ **面板裡的 `.mnav__item` 必須用 `all_text_contents()`**；
+    用 `all_inner_texts()` 的話會拿到一串空字串，
+    ☠️ 而那會讓 `not in` **永遠成立** —— 換一個更嚴的寫法，得到一個更弱的守門。
+
+    📌 ⇒ 兩層都用 `text_content`：它與 hover 狀態無關，
+    問的是「**這個帳號的導覽列裡有沒有這個字**」，而那正是這幾題要問的。
+    """
+    tops = page.locator(".mnav .mnav__top").all_text_contents()
+    items = page.locator(".mnav .mnav__item").all_text_contents()
+    return [t.strip() for t in (tops + items) if t and t.strip()]
+
+
 @pytest.mark.e2e
 def test_page_without_module_shows_no_permission(live_server, make_user):
     """沒有「供應商／料號／採購」模組的工程師手打 parts.html → 顯示沒有權限。
@@ -119,18 +183,39 @@ def test_admin_without_module_loses_both_item_and_group_name(live_server, make_u
         try:
             _login(page, live_server, u, p)
             page.wait_for_selector(".mnav .mnav__top", timeout=10000)
-            tops = page.locator(".mnav .mnav__top").all_inner_texts()
-            names = [t.strip() for t in tops]
-            assert "業務" in names, f"該看得到的分組不見了：{names}"
-            # ⚠️ 只有**多項**的分組才會渲染成分組名稱；單項分組（例如「財務」
-            # 底下目前只有營運報表）會直接渲染成那一項的名稱。驗「分組名稱有沒有
-            # 消失」要挑多項分組，否則是在斷言一個本來就不存在的字串＝假綠燈。
-            # 初稿就是這樣寫的，靠 superadmin 那題印出實際清單才發現。
-            for gone in ("廠商與採購", "選型資料庫", "設備", "勞務管理"):
-                assert gone not in names, (
-                    f"沒有該模組卻仍看得到「{gone}」分組名稱：{names}")
-            # 單項分組則驗那一項本身
-            assert "營運報表" not in names, f"沒有 reports 模組卻看得到營運報表：{names}"
+            names = _nav_vocabulary(page)
+            # ⚙️ **正對照：這個帳號自己的兩個模組必須看得到。**
+            #
+            # 🔴 舊版斷言的是 `"業務" in names`，而 2026-09-22 實測那個帳號的
+            #    導覽詞彙是：
+            #    `['儀表板', '報價單', '我的工作', '簽核佇列', '簽核代理人', '簽核歷史']`
+            #    ⇒ **「業務」不在裡面** —— 因為它底下只剩「報價單」一項，
+            #      而單項分組渲染成**那一項的名字**（`sidebar.js:620-623`）。
+            # ☠️ ⇒ 舊版釘的是**分組名**，而分組名會隨「底下剩幾項」變動 ——
+            #    那個數字由**這個帳號有哪些模組**決定，**正是這一題在改的變數**。
+            # 🔑 ⇒ 改釘**項目名**：`dashboard` ⇒ 儀表板、`quotation` ⇒ 報價單。
+            #    它們與分組怎麼渲染無關。
+            # ⚠️ **而這一條不可以省**（A-2 明著不背書「只刪掉它」）：
+            #    整題只剩 `not in` 的話，**導覽列整個空掉也會綠**。
+            for must in ("儀表板", "報價單"):
+                assert must in names, (
+                    f"這個帳號有那個模組，而導覽列裡找不到「{must}」：{names}\n"
+                    "☠️ 少了這一條，導覽列整個空掉也會讓下面的 `not in` 全過。")
+            # 🔴 **只釘分組名是抓不到漏權限的**（2026-09-22，A-2 指出 ＋ C 實測）
+            #
+            # ```
+            # 「廠商與採購」哪天真的漏出來，而它當時只剩一項
+            #   ⇒ 渲染成**那一項的名字**（客戶管理／供應商管理／…）
+            #   ⇒ 分組名根本不會出現 ⇒ `assert "廠商與採購" not in names` **通過**
+            # ```
+            # ☠️ 而那正是這一題要抓的那件事 —— **它是一個結構上抓不到目標的判準。**
+            # 🔑 ⇒ 連**項目名**一起釘：漏出來的東西無論渲染成哪一層，都會被抓到。
+            leaked = sorted(n for n in _FORBIDDEN_WITHOUT_MODULES if n in names)
+            assert not leaked, (
+                f"沒有那些模組，而導覽列裡出現了：{leaked}\n"
+                f"  完整詞彙：{names}\n"
+                "☠️ 漏權限顯示 ⇒ 使用者點進去才發現沒有權限，"
+                "而他會以為是系統壞了。")
         finally:
             browser.close()
 
@@ -146,8 +231,10 @@ def test_admin_with_module_still_sees_the_group(live_server, make_user):
         try:
             _login(page, live_server, u, p)
             page.wait_for_selector(".mnav .mnav__top", timeout=10000)
-            names = [t.strip() for t in page.locator(".mnav .mnav__top").all_inner_texts()]
-            # 「財務」分組目前只有營運報表一項，所以渲染出來是項目名稱不是分組名
+            names = _nav_vocabulary(page)
+            # 🔑 用兩層詞彙之後，這一條**不再依賴「財務底下只有一項」**：
+            #    哪天有人往財務加第二項 ⇒ 營運報表改渲染成 `.mnav__item`，
+            #    而 `_nav_vocabulary()` 照樣找得到它 ⇒ **這一題不會紅在一個假的理由上**。
             assert "營運報表" in names, f"有 reports 模組卻看不到營運報表：{names}"
         finally:
             browser.close()
@@ -163,8 +250,25 @@ def test_superadmin_still_sees_everything(live_server, make_user):
         try:
             _login(page, live_server, u, p)
             page.wait_for_selector(".mnav .mnav__top", timeout=10000)
-            names = [t.strip() for t in page.locator(".mnav .mnav__top").all_inner_texts()]
+            names = _nav_vocabulary(page)
             for expect in ("業務", "案件", "營運報表", "廠商與採購", "選型資料庫", "系統"):
                 assert expect in names, f"superadmin 看不到「{expect}」：{names}"
+
+            # 📏 **這是 `_FORBIDDEN_WITHOUT_MODULES` 的正對照，兩題必須成對。**
+            #
+            # ☠️ 那份清單全部是 `not in` 斷言 ——
+            # **一個打錯字的字串，`not in` 永遠成立** ⇒ 那一格會安靜地永遠綠。
+            # 🔑 而 superadmin 看得到全部 ⇒ **每一個字都必須在這裡出現得到**。
+            # 📌 ⇒ 哪天有人改了選單文案（例如「料號主檔」改名），
+            #    紅的是**這一題**，訊息直接說出是哪一個字對不上，
+            #    而不是讓禁列裡那一條安靜失效。
+            missing = sorted(n for n in _FORBIDDEN_WITHOUT_MODULES
+                             if n not in names)
+            assert not missing, (
+                f"`_FORBIDDEN_WITHOUT_MODULES` 裡這些字 superadmin 也看不到："
+                f"{missing}\n"
+                f"  superadmin 的完整詞彙：{names}\n"
+                "☠️ 那代表那幾個字**根本不存在於導覽列**（改名了？打錯了？）——\n"
+                "🔑 而它們在另一題裡是 `not in` 斷言 ⇒ **永遠成立 ⇒ 永遠綠**。")
         finally:
             browser.close()
