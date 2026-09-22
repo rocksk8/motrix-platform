@@ -537,3 +537,100 @@ def test_the_payable_account_code_is_not_hardcoded():
         "`%s` 直接 `return \"2191\"`：\n  " % path.name
         + "\n  ".join("%d: %s" % h for h in bad)
         + "\n☠️ 那不是 fallback，那是寫死。")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# 🔴 可見性：**打 router，不打函式**（A-2 複核提出）
+# ══════════════════════════════════════════════════════════════════════
+
+def _auth(client, make_user, role="superadmin", username=None):
+    u, p = make_user(role=role, **({"username": username} if username else {}))
+    r = client.post("/api/auth/login", json={"username": u, "password": p})
+    assert r.status_code == 200, r.text
+    return u, {"Authorization": "Bearer " + r.json()["token"]}
+
+
+def _seed_award_with_two_lines(conn, alice, bob):
+    # ⚠️ `bonus_award_lines.bonus_item_id REFERENCES bonus_items(id)` ——
+    #    我第一版塞 `0` ⇒ `FOREIGN KEY constraint failed`，而訊息指向資料庫。
+    #    🔑 又是探針壞掉：種資料要種**完整的那一串**，不是最少的那幾欄。
+    conn.execute(
+        "INSERT INTO bonus_items (name, person_source, created_by, created_at,"
+        " updated_at) VALUES ('業務獎金','sales_person','C',"
+        "'2026-09-23T00:00:00','2026-09-23T00:00:00')")
+    item_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+    conn.execute(
+        "INSERT INTO bonus_awards (quote_no, base_amount, created_by,"
+        " created_at, updated_at) VALUES ('Q-VIS',1000000,'C',"
+        "'2026-09-23T00:00:00','2026-09-23T00:00:00')")
+    aid = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+    for who, amount in ((alice, 100), (bob, 200)):
+        conn.execute(
+            "INSERT INTO bonus_award_lines (award_id, bonus_item_id,"
+            " item_name_snapshot, username, person_source_snapshot,"
+            " total_pct, person_pct, amount) VALUES (?,?,?,?,?,?,?,?)",
+            (aid, item_id, "業務獎金", who, "sales_person", 1000, 5000, amount))
+    conn.commit()
+    return aid
+
+
+def test_the_awards_endpoint_actually_filters_by_viewer(client, make_user):
+    """🔴🔴 **`GET /api/bonus/awards` 要真的過濾** —— 驗函式不等於驗呼叫端。
+
+    ☠️ A-2 複核指出我原本那題的射程：
+    ```
+    我的 :473  取到 `visible_lines` 之後**直接呼叫它** ⇒ 函式守得完整 ✅
+    而**沒有人驗「router 有沒有叫它」**
+    ⇒ 漏叫一次 ⇒ **全公司每個人領多少在 API 回應裡**，而畫面完全正常
+    ```
+    🔑 〈兩個都對而路不存在〉：函式對、畫面對，**而中間那一段沒有人走過**。
+
+    ⚙️ 三格都要（少一格就被「全部可見」或「一律回空」騙過）：
+    ```
+    alice   只看得到自己那一列，**而且看不到 base_amount**
+    carol   與她無關的單**完全不出現**
+    root    看得到全部
+    ```
+    """
+    import db as _db
+    _u_root, hdr_root = _auth(client, make_user, "superadmin", "vis_root")
+    alice, hdr_alice = _auth(client, make_user, "user", "vis_alice")
+    bob, _hdr_bob = _auth(client, make_user, "user", "vis_bob")
+    _carol, hdr_carol = _auth(client, make_user, "user", "vis_carol")
+
+    conn = _db.get_db()
+    try:
+        _seed_award_with_two_lines(conn, alice, bob)
+    finally:
+        conn.close()
+
+    r = client.get("/api/bonus/awards", headers=hdr_alice)
+    assert r.status_code == 200, r.text
+    awards = r.json()["awards"]
+    assert len(awards) == 1, (
+        "alice 看到 %d 張單（預期 1）。\n" % len(awards)
+        + "⚙️ 她在那張單上有一列 ⇒ 該看得到那張單"
+          "（否則她收到一筆錢而查不到來源）。")
+    names = [l["username"] for l in awards[0]["lines"]]
+    assert names == [alice], (
+        "alice 看到的分錄是 %s ——\n" % names
+        + "☠️ **全公司每個人領多少在 API 回應裡**，而畫面完全正常。\n"
+        + "🔑 最可能的成因是 router 沒有叫 `visible_lines` ——"
+          "而那一支函式**自己是對的**（我另外驗過）。")
+    assert "base_amount" not in awards[0], (
+        "alice 看得到 `base_amount`（整案淨利 %r）——\n"
+        % awards[0].get("base_amount")
+        + "☠️ 那等於看得到整張單的規模 ⇒ 反推得出別人領多少。")
+
+    r2 = client.get("/api/bonus/awards", headers=hdr_carol)
+    assert r2.json()["awards"] == [], (
+        "carol 在那張單上沒有任何一列，而她看得到它：%r\n"
+        % r2.json()["awards"]
+        + "⚙️ 這是第三格：少了它，「全部可見」也會讓上面兩格綠。")
+
+    r3 = client.get("/api/bonus/awards", headers=hdr_root)
+    assert r3.json()["awards"], "管理者看不到任何單 —— 「一律回空」也會讓上面綠。"
+    assert len(r3.json()["awards"][0]["lines"]) == 2, (
+        "管理者只看到 %d 列（預期 2）——\n"
+        % len(r3.json()["awards"][0]["lines"])
+        + "⚙️ 正對照：少了它，一個「永遠只回自己那列」的實作也會讓上面綠。")

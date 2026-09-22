@@ -339,3 +339,147 @@ def test_vp2_vp3_the_unwritten_items_are_named_not_forgotten(missing):
         "                      `VP4` 自測要驗到**結束碼路徑**\n"
         "🔑 這一題是那三項欠帳的**落點** —— 它紅了表示欠帳可以還了。"
         % missing)
+
+
+# ══════════════════════════════════════════════════════════════════════
+# VP6 —— autostart.bat 的內容（A `§143`／`§150`，D 實測）
+# ══════════════════════════════════════════════════════════════════════
+
+#: 正式機必須明著打開的兩個總開關（出貨預設是**關**）。
+AUTOSTART_SWITCHES = ("MOTRIX_TENDER_RADAR", "MOTRIX_GEO")
+
+#: 一份**真的**正式機 `autostart.bat` 的骨架（照 `deploy_packages/…` 那一份）。
+_REAL_AUTOSTART = r"""@echo off
+chcp 65001 >nul
+set PYTHONUTF8=1
+set MOTRIX_TENDER_RADAR=1
+set MOTRIX_GEO=1
+cd /d "C:\Users\Motrix\Desktop\V9.0\backend"
+set SSL_ARGS=
+"C:\...\uvicorn.exe" main:app --port 666
+"""
+
+
+def _autostart_gates(mod, pkg):
+    """用乾淨的 `Report` 跑「必須存在」那一節，回傳 gate 名稱。
+
+    ⚠️ 同 `_gates`：`R` 是模組層單例，不換掉的話前一案的 FAIL 會留下來。
+    """
+    fn = getattr(mod, "check_autostart", None)
+    old = mod.R
+    mod.R = mod.Report()
+    try:
+        if callable(fn):
+            fn(pkg)
+        else:
+            pytest.fail(
+                "`verify_package.py` 沒有 `check_autostart(pkg)` ——\n"
+                "⚠️ 名字可以換（**退回給我**），而它必須是一支**叫得到的函式**：\n"
+                "   現在那段內嵌在 `main()` 的 `for name in MUST_EXIST` 迴圈裡"
+                "（`:415`），\n"
+                "   ⇒ **只有整支跑起來才驗得到**，而那正是 `VP1` 那次的形狀。")
+        return [g for g, _ in mod.R.fails]
+    finally:
+        mod.R = old
+
+
+def _write_autostart(root, text):
+    backend = os.path.join(str(root), "backend")
+    os.makedirs(backend, exist_ok=True)
+    with io.open(os.path.join(backend, "autostart.bat"), "w",
+                 encoding="utf-8") as fh:
+        fh.write(text)
+    return str(root)
+
+
+def test_vp6_an_autostart_without_the_two_switches_is_a_failure(tmp_path):
+    """🔴🔴 `VP6`：**`autostart.bat` 只驗存在是不夠的。**
+
+    ```
+    D 實測  把它清成 **0 bytes** => 驗包仍然 **EXIT=0**
+    現況    verify_package.py:415-420 只把 `set ` 開頭的行**印出來**
+            —— `print` 不是 `R.fail`，**它一個斷言都沒有**
+    ```
+    ☠️ 那兩個開關是**這台機器的設定**，出貨預設是**關**：
+    ```
+    少了 MOTRIX_TENDER_RADAR => 標案雷達整個不跑，而系統一切正常
+    少了 MOTRIX_GEO          => 地址永遠換不到座標，地圖上什麼都沒有
+    ```
+    🔑 兩者的症狀都是「**功能安靜地不存在**」—— 沒有錯誤、沒有紅字。
+    ⚙️ 而斷言要落在 **gate 名稱**上，不是逐字訊息（`§50d`）。
+    """
+    mod = _vp()
+    bad = _write_autostart(tmp_path / "bad", u"@echo off\r\n")
+    gates = _autostart_gates(mod, bad)
+    assert gates, (
+        "一份**沒有任何開關**的 `autostart.bat` 沒有產生任何 FAIL ——\n"
+        + "☠️ D 實測把它清成 0 bytes 驗包仍然 EXIT=0，"
+          "而那台機器起來之後**標案雷達與地理查詢都不會跑**。")
+
+
+def test_vp6_each_switch_is_named_individually(tmp_path):
+    """🔴 **兩個開關要各自被指名** —— 少一個也要紅。
+
+    ⚙️ 「兩個都少」與「少一個」是不同的失敗：
+    ```
+    兩個都少  => 多半是檔案壞了／被清空       => 一看就知道
+    **少一個** => 是**有人手動註解掉了其中一行** => 而它看起來完全正常
+    ```
+    🔑 ⇒ 只驗「至少有一個」的話，**後者永遠不會被抓到**。
+    """
+    mod = _vp()
+    for missing in AUTOSTART_SWITCHES:
+        text = "\n".join(ln for ln in _REAL_AUTOSTART.splitlines()
+                         if missing not in ln) + "\n"
+        pkg = _write_autostart(tmp_path / ("no_" + missing), text)
+        gates = _autostart_gates(mod, pkg)
+        assert gates, (
+            "`autostart.bat` 少了 `%s` 而驗包沒有任何 FAIL ——\n" % missing
+            + "☠️ 那一行是**被人註解掉**時的樣子，而它看起來完全正常。")
+
+
+def test_vp6_the_production_path_is_checked_too(tmp_path):
+    r"""🔴🔴 **正式機路徑也要驗** —— 而它**不在 `set ` 那幾行裡**。
+
+    ```
+    真實的 autostart.bat：
+      set MOTRIX_TENDER_RADAR=1        <= verify_package 看得到
+      **cd /d "C:\Users\Motrix\Desktop\V9.0\backend"**   <= **它看不到**
+    現況 :417  只收 `ln.strip().lower().startswith("set ")`
+    ```
+    🔑 ⇒ 那是〈只留「可執行行」的過濾器〉的極端版：
+       **它只留一種可執行行**，而路徑住在另一種。
+    ☠️ D 實測：兩個開關還在、`set` 行數還是 4，**只改正式機路徑** ⇒ 驗包 EXIT=0
+       ⇒ 那台機器會 `cd` 到一個不存在的目錄 ⇒ uvicorn 起不來 ⇒
+       **而排程每 5 秒重試一次，log 一直長**。
+
+    ⚙️ 而判準**不可以是「等於某個路徑字面值」** —— 那會把測試綁在一台機器上。
+       釘的是：**有一條 `cd` 指令、它的路徑非空、而且看得出是一條絕對路徑**。
+    """
+    mod = _vp()
+    text = _REAL_AUTOSTART.replace(
+        r'cd /d "C:\Users\Motrix\Desktop\V9.0\backend"', 'cd /d ""')
+    pkg = _write_autostart(tmp_path / "nopath", text)
+    gates = _autostart_gates(mod, pkg)
+    assert gates, (
+        "`autostart.bat` 的 `cd` 路徑是空的而驗包沒有任何 FAIL ——\n"
+        + "☠️ 那台機器會 cd 到錯的地方 ⇒ uvicorn 起不來 ⇒\n"
+          "   **而排程每 5 秒重試一次，log 一直長**。\n"
+        + "🔑 現況 `:417` 只收 `set ` 開頭的行 ⇒ 路徑住在 `cd` 那一行，"
+          "**它結構上看不到**。")
+
+
+def test_vp6_a_real_autostart_still_passes(tmp_path):
+    """⚙️ **正對照：一份真的 `autostart.bat` 必須通過。**
+
+    ☠️ 少了它，一個「一律 FAIL」的實作也會讓上面三題綠 ——
+       而那樣**每一次打包都紅**，而它會在兩天內被關掉。
+    📌 骨架照 `deploy_packages/20260922_200604_7bc1fb8/backend/autostart.bat`
+       抄的（我讀過那一份），而**路徑保留原樣** —— 判準不可以綁在別的機器上。
+    """
+    mod = _vp()
+    pkg = _write_autostart(tmp_path / "good", _REAL_AUTOSTART)
+    gates = _autostart_gates(mod, pkg)
+    assert not gates, (
+        "一份**真的** `autostart.bat` 被判 FAIL：%s\n" % gates
+        + "☠️ 那樣每一次打包都紅 ⇒ 這道守門會在兩天內被關掉。")
