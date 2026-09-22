@@ -48,6 +48,34 @@ def _is_manager(user):
     """
     return user.get("role") in ("superadmin", "admin")
 
+def _user_name(user):
+    """寫進 `*_by` 欄位的值：**`username`，不是 token，也不是 id**。
+
+    ## ☠️ 原本寫的是 `_tok(authorization)` —— 那是**原始 bearer token**
+
+    ```
+    寫入  created_by / submitted_by / checked_by / manager_by / voided_by / posted_by
+    讀出  SELECT * -> dict(row)  => 任何有 cashier／finance 的人都拿得到
+    ```
+    而 token 有效期 **30 天**，且 `auth.py:216` 的條件讓 **NULL 等於永不過期**。
+    🔑 ⇒ 那不是「欄位存錯東西」，是**把別人的憑證發給其他使用者**。
+
+    ## ⚠️ 用 `username` 而不是 `id`
+
+    `auth.py:1502` 的可更新白名單是 display_name／email／phone／modules／
+    notification_muted／department_id／password ⇒ **`username` 不可改**
+    ⇒ 它當歷史紀錄是穩定的。
+    📌 而 `visible_lines(lines, username, …)` 與獎金的可見性判斷**已經用 username**
+       ⇒ 零轉換層。
+
+    ## 🔴 而版面上那一格會印出它
+
+    `signatures_of()` 把這些欄位當成「簽名的人」回傳
+    ⇒ 舊寫法會讓傳票的「製票」格印出一串 64 字元的 token。
+    """
+    return (user or {}).get("username") or ""
+
+
 
 # ── 獎金項目（最高管理者維護）──────────────────────────────────────
 @router.get("/items")
@@ -88,7 +116,7 @@ def create_bonus_item(body: dict = Body(...), authorization: str = Header(None))
             "INSERT INTO bonus_items (name, person_source, sort_order, is_active,"
             " created_by, created_at, updated_at) VALUES (?,?,?,1,?,?,?)",
             (name, source, int(body.get("sort_order") or 0),
-             _tok(authorization), now, now))
+             _user_name(user), now, now))
         conn.commit()
         new_id = cur.lastrowid
     finally:
@@ -238,7 +266,7 @@ def create_award(body: dict = Body(...), authorization: str = Header(None)):
                 " VALUES (?,?,?,?,'草稿',?,?,?)",
                 (quote_no, base, int(body.get("template_id") or 0),
                  int(body.get("template_version") or 0),
-                 _tok(authorization), now, now))
+                 _user_name(user), now, now))
         except Exception as exc:                            # noqa: BLE001
             if "UNIQUE" in str(exc).upper():
                 raise HTTPException(
@@ -291,7 +319,7 @@ def void_award(award_id: int, body: dict = Body(default={}),
         conn.execute(
             "UPDATE bonus_awards SET voided_at = ?, voided_by = ?,"
             " void_reason = ?, updated_at = ? WHERE id = ?",
-            (now, _tok(authorization), reason, now, award_id))
+            (now, _user_name(user), reason, now, award_id))
         conn.commit()
     finally:
         conn.close()

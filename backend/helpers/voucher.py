@@ -317,7 +317,42 @@ def get_voucher(conn, voucher_id):
             ln["account_name"] = names.get(ln["account_code"], "")
 
     voucher["lines"] = lines
+    voucher["signatures"] = signatures_of(voucher)
     return voucher
+
+
+#: 版面上的三個簽名格（使用者的實例逐字：製票／覆核／主管）。
+#:
+#: 🔴 **製票不是一個簽核動作** —— 它就是建立者。
+#:    ⇒ 它讀 `created_by`／`created_at`，沒有自己的欄位。
+#: ⚠️ 而三格**各有自己的時間戳**，不共用 `updated_at`：
+#: ☠️ 共用的話，任何一次編輯都會把「覆核是什麼時候簽的」推掉 ——
+#:    而那一列**看起來完全正常**：有人、有時間，只是時間是錯的。
+#: ⚠️ 鍵用**中文格名**，與版面上印的三個字一致（使用者的實例逐字）。
+#:    英文鍵會讓畫面與 API 各有一套名字，而那一層翻譯沒有人維護。
+_SIGNATURE_SLOTS = (
+    ("製票", "created_by", "created_at"),
+    ("覆核", "checked_by", "checked_at"),
+    ("主管", "manager_by", "manager_at"),
+)
+
+
+def signatures_of(voucher):
+    """三格簽核：`{格名: {by, at}}`，格名是「製票／覆核／主管」。
+
+    ⚠️ 還沒簽的那一格 `by`／`at` 是**空字串**（欄位的 DEFAULT），
+       而呼叫端要分得出「還沒簽」與「簽了而沒有時間」——
+       🔑 前者是流程還沒走到，後者是缺陷。
+    📌 `§106c`：三格**從簽核紀錄取，不可以從 `status` 欄推** ——
+       ☠️ 從 status 推的話，一張退回重送的單會顯示「覆核已簽」而其實被清掉了。
+    """
+    out = {}
+    for label, by_col, at_col in _SIGNATURE_SLOTS:
+        out[label] = {
+            "by": voucher.get(by_col) or "",
+            "at": voucher.get(at_col) or "",
+        }
+    return out
 
 
 def post_voucher(conn, voucher_id, user):

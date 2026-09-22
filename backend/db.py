@@ -122,7 +122,8 @@ DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR = os.path.join(
 # v97: 獎金分潤五張表（bonus_items／bonus_templates／bonus_template_versions／
 #      bonus_awards＋**部分**唯一索引／bonus_award_lines）
 # v98: FN4 編寫紀錄 —— bonus_award_edit_log ＋ 兩張共同的 retention 欄
-CURRENT_VERSION = 98
+# v99: JV2 簽核三格各自的「誰」與「什麼時候」（送審／覆核／主管）
+CURRENT_VERSION = 99
 
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
 # execution model) whenever the current request is authenticated as the 'demo'
@@ -4297,6 +4298,65 @@ def _m094_load_account_items(conn):
              it.get("name_en", ""), it["parent_code"]))
 
 
+def _m099_voucher_signatures(conn):
+    """v99（2026-09-23 `JV2`）：簽核三格各自的人與時間。
+
+    ## 🔴 為什麼要加欄位：**單子印出來，簽名格有名字而沒有日期**
+
+    使用者原話逐字：「**你還問過我審核日期等**」。
+    而 `vouchers_all` 的時間戳實查只有：
+    ```
+    posted_at ／ voided_at ／ created_at ／ updated_at
+    ⇒ **送審、覆核、主管各自的時間都沒有**
+    ```
+    簽核紀錄表也沒有（`audit_log` 與 `approval_delegates` 都不是那個東西）。
+
+    ## ⚠️ 三格**各有自己的欄位**，不可以共用 `updated_at`
+
+    ☠️ 共用的話，任何一次編輯都會把「覆核是什麼時候簽的」推掉 ——
+       而那一列**看起來完全正常**：有人、有時間，只是時間是錯的。
+    ⚙️ 驗法（C 釘的）：**簽完主管之後，覆核的時間戳沒有被改掉**。
+       🔑 而**不是**「三格時間不可以相同」—— 小公司常常同一個人連按兩次，
+          **真的會同一秒** ⇒ 那個斷言會紅在一個正確的實作上。
+
+    ## 📌 用欄位不用另一張表（`§106c` 允許兩者，由 B 決定）
+
+    ```
+    欄位    三格是**固定的**（製票／覆核／主管），版面上就是三格
+            => 一列一張單，讀寫都不必 JOIN
+    紀錄表  適合**層數不固定**的流程
+    ```
+    而 A `§161` 已裁「簽核兩層寫死、**不接既有 `approval_settings`**」
+    ⇒ 層數不會變 ⇒ 欄位是對的形狀。
+    ⚠️ 而**製票**不需要新欄位：它就是 `created_by`／`created_at`
+       —— 建立者即製票人，那是版面上的第一格，不是一個獨立的簽核動作。
+
+    ## ⚠️ 退回時這幾格要**清掉**
+
+    `§一`：退回 ⇒ 清除簽核 ＋ 單號升版。
+    ☠️ 不清的話，一張退回重送的單會帶著**上一輪的簽名**走完流程 ——
+       而簽過的人不知道他簽的已經被改過了。
+    """
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(vouchers_all)")}
+    # ⚠️ 冪等：ALTER 前先看欄位在不在（migration 引擎失敗重跑時不會炸）。
+    for name in ("submitted_by", "submitted_at",
+                 "checked_by", "checked_at",
+                 "manager_by", "manager_at"):
+        if name not in cols:
+            conn.execute(
+                "ALTER TABLE vouchers_all ADD COLUMN %s TEXT NOT NULL DEFAULT ''"
+                % name)
+
+    # ⚙️ **VIEW 不必重建** —— 實測（sqlite 3.53.1）：
+    #    `CREATE VIEW v AS SELECT * FROM t` 的 `*` 是**查詢時展開**的，
+    #    `ALTER TABLE t ADD COLUMN` 之後 `PRAGMA table_info(v)` 立刻多一欄。
+    #
+    # 🔑 這一段留著，因為我原本**推論相反**：我以為 `SELECT *` 是建立當下的
+    #    快照、新欄位不會出現，差一點就寫一句 `DROP VIEW` ＋ 一句假的註解進來。
+    # ☠️ 那句註解的危害比多餘的 SQL 大：下一個人會照它去「修」一個不存在的問題，
+    #    而它讀起來像查證過的。
+
+
 def _m098_edit_log_retention(conn):
     """v98（2026-09-23 `FN4`）：獎金的編寫紀錄 ＋ 兩張共同的 `retention`。
 
@@ -4848,6 +4908,7 @@ _MIGRATIONS = [
     _m096_account_item_active,                      # v96
     _m097_bonus,                                    # v97
     _m098_edit_log_retention,                       # v98
+    _m099_voucher_signatures,                       # v99
 ]
 
 
