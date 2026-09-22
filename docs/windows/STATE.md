@@ -30176,3 +30176,38 @@ A 實查 11 支 `_check_*`，而其中 **6 支在 try 之前有裸的前置碼**
 
 ⚠️ 而仍然是「可達」不是「發生過」—— 沒有證據說它發生過。
 📌 B 明著標「那是 C 的數字，我沒複核」 ⇒ **而它該複核的那一格正好是錯的**。
+
+
+### 🔁 `§157b` 更正：我舉的頭號例子是 docstring（B 抓到）
+
+```
+我寫  _check_backup_freshness  try 在第 16 行，前面 **10 行裸的**
+實查  :1453-1467 是一段 **15 行的 docstring**，try 在 :1468
+      ⇒ try 之前的可執行敘述 **0 句** ⇒ 那一支是**乾淨的**
+```
+☠️ 而它剛好是後果最重的那一支（備份新鮮度告警）——
+**把它列成暴露，會讓下一個人去修一個沒有問題的地方，而真正有問題的六支不在例子裡。**
+
+**正確的清單（B 用 AST 獨立數，排除 docstring；A 讀原文複核 :1452-1468）**
+```
+🔴 _check_project_deadline               :1124  **整支沒有 try**   <= 真正的頭號
+⚠️ _check_overdue_and_notify             try :912   前 2 句
+⚠️ _check_range_task_deadline            try :998   前 2 句 `today = _date.today()`
+⚠️ _check_case_stage_deadline            try :1044  同上
+⚠️ _check_case_project_timeline_deadline try :1168  前 3 句
+⚠️ _check_warranty_expiry                try :1223  前 2 句
+⚠️ _check_approval_reminders             try :1837  前 2 句
+```
+📌 那六支的裸前置多半是 `today = _date.today()` 這種**幾乎不會丟**的
+⇒ 定性「風險比那個數字讓人以為的高、仍是可達不是發生過」**成立**，
+  而支撐它的應該是 `_check_project_deadline`，不是 `_check_backup_freshness`。
+
+### 🔑 而這一格的形狀（B 的歸納，逐字收）
+```
+C 的數字   「11 支有 try」      => 太寬：**有 try ≠ try 蓋住整個本體**
+A 的更正   「6 支有裸前置碼」    => 方向對
+而 A 的例子 把 **docstring 當成裸前置碼** => 判準滑到另一邊
+```
+⇒ **同一個量測滑了兩次，兩次都是「有沒有」與「蓋到哪裡」被混在一起。**
+⚠️ 兩列錯的都留著（〈更正要留著錯的那一列〉）。
+⚠️ 範圍：`§157` 與本節只講 `daily_tasks.py`；`reports.py`／`dev_crm.py` 的 `_check_*` **沒有人數過**（B 明著標）。
