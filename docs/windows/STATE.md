@@ -28014,3 +28014,73 @@ B 把範圍撐開到 repo 根，找到第四個庫  ./motrix_erp.db
 ```
 🔑 那比我要的 `account_items=0` 強：**我問的是結果，他量的是原因。**
 ⇒ 與我那條時間線證據（最新包 `7bc1fb8` 比 `47f98b5` 早四小時）**兩個獨立來源同一結論**。
+
+---
+
+## §109 `R8` 裁定 —— **A-2 抓到的是真的，而它描述的後果是反的**
+
+> 2026-09-23 01:0x ／ A 實跑 `r8_repro.py`（忠實重現 `db.py:224-236` 的寫法）
+
+### ✅ 機制部分 A-2 全對
+
+```
+db.py:227-233  tables 從 sqlite_master **動態取得** => 一定包含 account_items
+               PRAGMA foreign_keys=OFF  =>  **對 TRIGGER 無效**
+v93 的 TRIGGER  BEFORE DELETE ON account_items WHEN OLD.source='statutory'
+=> 實跑：raised = IntegrityError: statutory item not deletable   **確認**
+```
+
+### 🔴 而「留下一個半清空的 demo 資料庫」**實跑為假**
+
+```
+BEFORE reset          users:1  quotations:1  account_items:2  cases:1
+AFTER reset attempt   users:1  quotations:1  account_items:2  cases:1   <== **一列都沒少**
+```
+🔑 成因：那一串 `DELETE` **全在同一個隱式交易裡**，而 `conn.commit()` 在迴圈之後
+⇒ 中途拋例外 ⇒ **commit 從來沒發生** ⇒ `finally: conn.close()` 整筆回捲。
+
+### ⇒ 真正的後果（`auth.py:376-377`，**沒有 try/except**）
+
+```
+reset_demo_db() 拋例外 => 往上拋到 FastAPI => **demo 登入直接 500**
+```
+```
+A-2 說的   安靜的資料毀損   => 要很久才會被發現
+實際上的   **每次都 500**   => 下一個碰 demo 的人立刻知道
+```
+📌 ⇒ **它不必插隊到 C 的紅燈前面**，但**必須在下一個升級包之前修掉**。
+⚠️ 〈把自己的動作當成對象的性質〉的鏡像：**別人會照回報的嚴重度重排順序**，
+   而這次是**高報**，它會擠掉更該先做的事。
+
+### ☠️ 而真正陰險的是它的時序 —— **第一次登入會成功**
+
+（以下**是讀碼推得的，不是跑出來的**，因為跑它要動到真的 `init_db`）
+```
+demo 庫現在是 v92（B 實測）=> 還沒有 account_items
+第 1 次 demo 登入  清空成功（表還不存在）=> 接著 init_db() 升到 v94 => **載入 547 筆**
+第 2 次 demo 登入  account_items 有 statutory 列 => **ABORT => 500**
+```
+🔑 ⇒ **「我登入 demo 試過了，可以」會漏掉它。** 驗收必須**連登兩次**。
+
+### ✅ 裁定：採 A-2 的丁案，**而守門要雙向**
+
+```
+✅ 丁  account_items 排除在 demo 清除清單外
+       理由不是「繞過 TRIGGER」，是 **547 筆是系統資料不是使用者資料**
+```
+⚙️ **而 A-2 提的守門只有一個方向**（新增系統資料表沒登記 => 紅）：
+```
+☠️ 那道守門可以靠「**把每一張表都放進排除清單**」變綠 => demo 從此不再清空
+```
+⇒ 改成**笛卡兒積**（`§54c` 同一形狀）：
+```
+sqlite_master 的每一張表，**必須**落在「使用者資料」或「系統資料」其中一邊
+兩份清單 **互斥且窮盡** => 少一張紅、多一張也紅、兩邊都有也紅
+```
+🔑 〈守門要驗有沒有人做過決定〉＋它那條配套：**要配反向控制。**
+
+### 📌 順序（`db.py` 是鎖定檔）
+
+```
+C 先寫紅（連登兩次的那個形狀）=> B 宣告鎖定 db.py => B 改 => 綠
+```

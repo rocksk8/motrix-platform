@@ -88,6 +88,7 @@ TC(4):  TC1 TC2 TC3 TC4
 FE(1):  FE1
 UI(1):  UI10
 DB(1):  DB1
+DM(1):  DM1
 ```
 
 > 📌 `VP`（verify package）＝ `backend/tools/verify_package.py` 四項，
@@ -186,4 +187,12 @@ NEXT
        ⚠️ 本輪**只做量**（對 _connect() 斷言 PRAGMA foreign_keys == 1）
           改不改那個 except 是另一個決定 => 〈量它不等於修它〉
        ⚠️ 量測要走 _connect()，自己 sqlite3.connect() 量到的是 SQLite 預設值 0
+```
+
+```
+NEXT (追加 01:0x)
+  DM1  demo 重置撞 v93 的 TRIGGER => demo 登入 500          §109
+       => account_items 排除在清除清單外（系統資料，不是使用者資料）
+       ⚠️ 驗收要**連登兩次**：第 1 次會成功（表還沒建），第 2 次才炸
+       ⚙️ 守門要笛卡兒積：每張表必須落在使用者/系統其中一邊，互斥且窮盡
 ```
