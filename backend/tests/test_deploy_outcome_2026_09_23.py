@@ -1142,11 +1142,51 @@ def test_p0_00_no_exit_before_the_copy_can_claim_the_service_is_down():
 #    ⇒ 這個欄位一路走到畫面之前**沒有任何地方把它變成人話**。
 #    名字要改**退回給我**，不要自己改題。
 
-#: `§41b` 定版 6 個。
+#: 🔴 `§53` 定版**六個名字**（不是「維持 6 個」—— 先前也是 6，而組成不同）。
+#: ```
+#:   unknown    刪除   它在 :98 改成 not_applied 之後沒有任何產生路徑
+#:   restoring  新增   一次 deploy 執行有**兩個寫入階段**（套用／自動回滾），
+#:                     一個值表達不了兩個
+#: ```
+#: ⚠️ **這個常數就是裁示的落點。** A 記進 §6：
+#:    allowlist 型的守門，**值域縮小時不會自己紅**（超集永遠比較好過）
+#:    ⇒ 裁示要寫出那個數字落在哪一個識別字上，不能只寫「去掉某個值」。
+#: 📌 所以下面那一題直接釘這六個名字 —— 讓「安靜地放寬」在 diff 上藏不住。
 _ROLLED_BACK_DOMAIN = (
     "not_applied", "applied", "applied_no_restore",
-    "restored", "restored_unhealthy", "unknown",
+    "restoring", "restored", "restored_unhealthy",
 )
+
+
+def test_53_the_value_domain_constant_is_exactly_the_six_names():
+    """⚙️ **值域常數本身的變更偵測** —— 它是 `§53` 裁示的落點。
+
+    ☠️ allowlist 型的守門**值域縮小時不會自己紅**：
+    清單留 6 而規格定 5 ⇒ 超集檢查照樣全綠，**而你不會回來看它**。
+    🔑 ⇒ 這一題不驗產品，它驗**我自己的清單有沒有被安靜地改動**。
+    ⚠️ 它擋不到「連這一題一起改」—— 那是刻意的：那一改在 diff 上藏不住，
+       而「安靜地多放行一個值」不會。
+    """
+    assert _ROLLED_BACK_DOMAIN == (
+        "not_applied", "applied", "applied_no_restore",
+        "restoring", "restored", "restored_unhealthy",
+    ), "`_ROLLED_BACK_DOMAIN` 與 `§53` 定版的六個名字不一致：%s" % (
+        list(_ROLLED_BACK_DOMAIN),)
+
+
+def _is_fallback(describe, value, action):
+    """`describe_rolled_back` 對這個值回的是**退路**（而不是一句真的文案）嗎。
+
+    🔑 為什麼需要它：退路是一句**非空、而且不等於任何真文案**的字串
+    ⇒ 「非空」「與別的值不同」這兩種斷言**都會被它騙過去**。
+    ⚠️ 今天真的騙過去一次：`restoring` 還沒有文案，
+       而 `..._does_not_borrow_a_sentence_that_means_the_opposite` 照樣綠。
+
+    做法：拿一個**確定不存在**的值去量退路的形狀，再把值代換回來比對。
+    """
+    bogus = "__c_probe_not_a_real_value__"
+    shape = describe(bogus, action)
+    return describe(value, action) == shape.replace(bogus, value)
 
 
 def test_p0_00_the_rolled_back_wording_depends_on_the_action():
@@ -1178,6 +1218,12 @@ def test_p0_00_the_rolled_back_wording_depends_on_the_action():
                 "`describe_rolled_back(%r, %r)` 回傳 %r ——\n"
                 "☠️ 畫面上會是一片空白，而使用者看不出它是「沒有資料」"
                 "還是「狀態正常」。" % (value, action, text))
+            assert not _is_fallback(describe, value, action), (
+                "`describe_rolled_back(%r, %r)` 回的是**退路**不是文案 ——" % (value, action)
+                + chr(10) +
+                "☠️ 退路是一句非空、而且不等於任何真文案的字串 ⇒ "
+                "「非空」與「與別的值不同」這兩種斷言**都騙得過去**。" + chr(10) +
+                "🔑 笛卡兒積那一題會指出缺的是哪一格（§54c）。")
             assert text.strip() != value, (
                 "`describe_rolled_back(%r, %r)` 把機器值原樣吐回去了 ——\n"
                 "🔑 `%s` 不是人話，而這支函式存在的唯一理由就是把它變成人話。"
@@ -1242,7 +1288,10 @@ def test_p0_00_the_rollback_script_starts_from_a_true_statement():
 @pytest.mark.parametrize("ps1", [APPLY_PS1, ROLLBACK_PS1],
                          ids=["apply_update", "rollback_update"])
 def test_p0_00_the_rolled_back_value_domain_is_the_six(ps1):
-    """🔴 §41b：**`rolled_back` 值域定版 6 個，兩支腳本都不可以多出第七個。**
+    """🔴 §41b→§53：**`rolled_back` 值域定版六個名字，不可以多出第七個。**
+
+    ⚠️ `§53` 換過組成（`unknown` 刪、`restoring` 新增）而**數量仍是 6** ——
+    🔑 「6 個」這個數字本身**不帶資訊**，要看的是上面那六個名字。
 
     ⚠️ 這一題的錨點要抓得到**三元運算式**那一種寫法：
     ```
@@ -1426,3 +1475,403 @@ def test_p0_00_the_exempt_branch_never_reaches_decide_outcome():
         "非豁免分支裡**沒有**呼叫 `decide_outcome` ——\n"
         "☠️ 一支接縫寫好了而沒有人呼叫，跟沒有寫是一樣的。\n"
         "🔑 這是正對照：少了它，「兩邊都不呼叫」會讓這一題全綠。")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# §54c · 🔴 根治的是守門不是補文案：**值域 × action 的笛卡兒積要完整**
+# ══════════════════════════════════════════════════════════════════════
+#
+# A 的裁示逐字：
+#   「自動回滾這個缺口的成因，就是**deploy 那張表少了一個表達還原階段的值**
+#     —— 完整性守門會當場抓到它。而它比逐條補文案強：
+#     **下一個新增的值，忘記補另一張表時會立刻紅。**」
+#
+# 🔑 〈修作法不要修結果〉：判準是「這個修法會不會讓下一次不可能發生」。
+#    逐條補文案答「會少一點」；笛卡兒積守門答「會」。
+#
+# ⚠️ **我釘的接縫**：`_ROLLED_BACK_TEXT`（B 已存在的模組層常數）。
+#    名字要改**退回給我**。與本檔釘 `_PROTOCOL_EXEMPT` 同一個形狀。
+
+
+def test_54c_every_value_has_wording_in_every_action_table():
+    """🔴🔴 §54c：**值域 × action 的笛卡兒積完整 —— 缺一格就紅。**
+
+    ```
+    值域 6 個 × action 2 個 = 12 格，**每一格都要有非空的人話**
+    ```
+    ☠️ 缺一格的後果不是「畫面空白」，是**靜默退回一句意思相反的話**：
+       自動回滾走的 `action` 是 `deploy`，而 deploy 表原本沒有
+       「正在還原」這個值 ⇒ 最接近的是 `applied_no_restore`＝
+       「新版只寫了一半就中斷，**而且沒有還原**」——**方向相反**。
+
+    ⚙️ 多出來的格子也要紅（不只驗「缺」）：
+       一個**有文案而不在值域裡**的值，表示有人只改了一邊。
+       📌 現況會抓到 `unknown`（`§53` 已把它從值域刪掉，而文案還留著）。
+    """
+    mod = _dash()
+    table = getattr(mod, "_ROLLED_BACK_TEXT", None)
+    assert table is not None, (
+        "`deploy_dashboard.py` 缺少 `_ROLLED_BACK_TEXT` ——" + chr(10) +
+        "🔑 笛卡兒積完整性要有一個**可以數**的地方；"
+        "散在 `if/elif` 裡的話數不出「缺哪一格」。" + chr(10) +
+        "⚠️ 名字可以換（**退回給我**，不要自己改題）。")
+
+    want = set(_ROLLED_BACK_DOMAIN)
+    problems = []
+    for action, sub in sorted(table.items()):
+        have = set(sub)
+        for v in sorted(want - have):
+            problems.append("缺　%-10s × %-18s" % (action, v))
+        for v in sorted(have - want):
+            problems.append("多　%-10s × %-18s（不在值域裡）" % (action, v))
+        for v in sorted(want & have):
+            if not (isinstance(sub[v], str) and sub[v].strip()):
+                problems.append("空　%-10s × %-18s = %r" % (action, v, sub[v]))
+    assert not problems, (
+        "值域 × action 的笛卡兒積不完整（值域 %d 個 × action %d 個 = %d 格）："
+        % (len(want), len(table), len(want) * len(table)) + chr(10) + "  "
+        + (chr(10) + "  ").join(problems) + chr(10) +
+        "☠️ 缺一格不是畫面空白 —— 是**靜默退回一句意思相反的話**。" + chr(10) +
+        "🔑 §54c：根治的是這道守門，不是逐條補文案。")
+
+
+def test_54c_the_two_actions_never_share_a_sentence():
+    """🔴 §54c 的另一半：**同一個值，兩個 action 的文案不可以相同。**
+
+    🔑 值域共用一份、而**語意隨 `action` 變**，A 裁定那是**刻意的**：
+    > 「機器值記的是『這一次執行**寫到哪一步**』，
+    >   而那一步的意義取決於**它當時在寫什麼**。」
+
+    ☠️ 兩句相同 ⇒ 那個「刻意」被還原成一句通用的話 ⇒
+       回滾前的畫面會說「正式機沒有被碰過」，而它剛剛才被一次失敗的部署動過。
+
+    ⚙️ 而它同時擋住 `§41a` 那個作弊（`基本文案 + "（回滾）"`）：
+       本題只要求**不相同**，`§41a` 那題再加一層「互不為對方的子字串」。
+    """
+    mod = _dash()
+    table = getattr(mod, "_ROLLED_BACK_TEXT", None)
+    assert table is not None, "缺少 `_ROLLED_BACK_TEXT` —— 見上一題。"
+    actions = sorted(table)
+    assert len(actions) >= 2, (
+        "文案表只有 %d 個 action —— **儀器失效**，這一題比不出東西。" % len(actions))
+
+    same = []
+    for v in sorted(set(_ROLLED_BACK_DOMAIN)):
+        seen = {}
+        for a in actions:
+            t = table[a].get(v)
+            if t is None:
+                continue
+            if t in seen:
+                same.append("%-18s %s 與 %s 同一句：%r" % (v, seen[t], a, t))
+            seen[t] = a
+    assert not same, (
+        "有值在兩個 action 下是同一句話：" + chr(10) + "  "
+        + (chr(10) + "  ").join(same) + chr(10) +
+        "☠️ 參考點不同這件事被抹平了 ——" + chr(10) +
+        "   deploy 的 `not_applied`＝正式機完全沒被碰過；" + chr(10) +
+        "   rollback 的＝還原沒開始，而它通常剛被一次失敗的部署動過。")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# §53 · `RP1`–`RP3`：復原路徑上的每一個複製都要說得出自己失敗了
+# ══════════════════════════════════════════════════════════════════════
+#
+# 盤點（兩支檔案**所有**的 robocopy，不是只看 A-2 指的那一段）：
+# ```
+#   apply_update.ps1    :338 :339   製作快照（正式機 → 快照）    🔴 無檢查  RP1
+#   apply_update.ps1    :422 :427   套用新版（包   → 正式機）    ✅ 有檢查
+#   apply_update.ps1    :632 :633   自動回滾（快照 → 正式機）    🔴 無檢查  RP2
+#   rollback_update.ps1 :179 :180   手動回滾（快照 → 正式機）    🔴 無檢查  RP3
+# ```
+# 🔑 **唯一有檢查的那一對，是「套用新版」那一對。**
+#    A 升成 §6：檢查做在**前進路徑**而沒做在**復原路徑**是一種常見的不對稱 ——
+#    因為前進路徑天天在跑、錯了馬上看得到；
+#    **復原路徑很少跑，而它跑的時候你已經在處理另一個問題了。**
+#
+# ☠️ 而 `RP1` 是三個裡最嚴重的：那兩行做的是**快照本身**。
+#    靜默失敗 ⇒ 快照殘缺 ⇒ **沒有人知道，直到有一天要用它回滾。**
+#    📌 A 的判準：「這東西是**平常用的**，還是**出事才用的**」——
+#       後者一定要在製作當下就擋，因為那一刻沒有第二次機會。
+#
+# ⚠️ **錨點錨在「來源→目的地」的方向上，不錨在 `robocopy` 這個字**：
+#    同一支檔案裡它扮演兩種角色（做快照／還原快照），而方向相反。
+#    📌 B 自陳第一次用 `robocopy\b` 掃抓到 11 行，其中 3 行是**註解**
+#       —— 它把命中逐行印出來才看到。
+
+#: 正式機 → 快照（`RP1`：做快照）
+_ROBO_TO_SNAPSHOT = _re.compile(
+    r'^\s*robocopy\s+\$(?:Backend|Frontend)Dir\s+\(Join-Path\s+\$rollbackDir\b')
+#: 快照 → 正式機（`RP2`／`RP3`：還原）
+_ROBO_TO_PROD = _re.compile(
+    r'^\s*robocopy\s+\(Join-Path\s+\$rollbackDir\s+"(?:backend|frontend)"\)'
+    r'\s+\$(?:Backend|Frontend)Dir\b')
+
+
+def _guarded(lines, idx, window=3):
+    """第 `idx` 行（0-based）之後 `window` 行內，有沒有一個檢查結束碼並 `Fail` 的守門。
+
+    ⚠️ 同時要求 `$LASTEXITCODE` **與** `Fail` —— 只檢查不中止等於沒檢查。
+    """
+    for ln in lines[idx: idx + 1 + window]:
+        if "$LASTEXITCODE" in ln and _re.search(r'\bFail\b', ln):
+            return ln.strip()
+    return None
+
+
+def _robo_rows(ps1, pattern):
+    lines = ps1.read_text(encoding="utf-8", errors="replace").splitlines()
+    return lines, [i for i, ln in enumerate(lines)
+                   if pattern.match(ln) and not ln.strip().startswith("#")]
+
+
+def test_rp1_the_snapshot_copies_say_when_they_failed():
+    """🔴🔴 `RP1`：**做快照的那兩個 robocopy 要檢查結束碼。**
+
+    ```
+    :338 robocopy $BackendDir  → 快照/backend    | Out-Null    ← 失敗沒有人知道
+    :339 robocopy $FrontendDir → 快照/frontend   | Out-Null
+    ```
+    ☠️ **靜默失敗 ⇒ 快照殘缺 ⇒ 而它沒有任何症狀**，直到有一天真的要用它回滾。
+    🔑 **那一天正是最不能出事的一天**，而那一刻沒有第二次機會。
+
+    📌 對照組就在同一支檔案裡（`:422`／`:427` 套用新版**有**檢查）——
+       ⇒ 這一題不是「加一個沒人做過的東西」，是**把已有的紀律補到漏掉的那一半**。
+
+    ⚙️ 斷言要求 `$LASTEXITCODE` **與** `Fail` 同時出現：
+       只檢查而不中止等於沒檢查（照樣走下去，快照照樣殘缺）。
+    """
+    lines, rows = _robo_rows(APPLY_PS1, _ROBO_TO_SNAPSHOT)
+    assert len(rows) == 2, (
+        "「正式機 → 快照」的 robocopy 抓到 %d 行，預期 2 行（backend／frontend）——\n"
+        "🔑 0 行 ⇒ **儀器失效**，這一題會因為量不到而綠。" % len(rows)
+        + "".join("\n  :%d %s" % (i + 1, lines[i].strip()[:80]) for i in rows))
+
+    bad = [i for i in rows if _guarded(lines, i) is None]
+    assert not bad, (
+        "做快照的 robocopy 沒有檢查結束碼：\n  "
+        + "\n  ".join(":%d %s" % (i + 1, lines[i].strip()[:80]) for i in bad)
+        + "\n☠️ 失敗了不會有人知道 ⇒ 快照殘缺 ⇒ **而它沒有任何症狀**，\n"
+          "   直到有一天真的要用它回滾 —— 那一天沒有第二次機會。\n"
+          "📌 同一支檔案的 `:422`／`:427` 就是對照：`-ge 8 ⇒ Fail`。")
+
+
+def test_rp1_each_snapshot_failure_has_its_own_status():
+    """🔴 `RP1` 的值：`snapshot_failed_backend` ／ `snapshot_failed_frontend`，**各一次**。
+
+    ⚙️ `== 1` 不是 `in`：`in` 只擋得住「漏掉」，
+       `== 1` 還擋得住**兩條出口共用一個值**（而值與出口 1:1 是這裡的不變量）。
+
+    🔑 **而 B 補的第三條就是這件事**：
+    ```
+    做快照失敗   ⇒ 正式機**還沒被碰**    ⇒ 重跑就好
+    還原到一半   ⇒ 正式機**半還原**      ⇒ 要人去看
+    ☠️ 共用一個 status 的話，這兩件事長得一樣。
+    ```
+    """
+    src = APPLY_PS1.read_text(encoding="utf-8", errors="replace")
+    for status in ("snapshot_failed_backend", "snapshot_failed_frontend"):
+        n = len(_re.findall(
+            r'(?:Fail\s+.*?|Emit-Result\s+)"' + _re.escape(status) + r'"', src))
+        assert n == 1, (
+            "`%s` 以引數出現 %d 次，預期恰好 1 次。\n"
+            "☠️ 0 次 ⇒ 那條出口印不出自己是誰；2 次以上 ⇒ 兩條出口共用一個值。\n"
+            "🔑 「做快照失敗」與「還原到一半」共用一個值的話，"
+            "前者該重跑、後者該叫人，而畫面分不出來。" % (status, n))
+
+
+def test_rp1_a_failed_snapshot_says_prod_was_not_touched():
+    """🔴 `RP1` 的 `rolled_back`：做快照失敗時，正式機**一個檔都沒被動**。
+
+    A 裁定那兩條出口的 `rolled_back` 是 `not_applied`。
+    靜態上它成立的條件是：**從初始值到快照那兩行之間，沒有別的 `ProdState` 指派。**
+    ⚠️ 而那個條件要**驗**，不是假設 —— 日後有人在 Step 1/2 加一個指派，
+       這兩條出口會開始報一個比實際嚴重的狀態，而**沒有東西會紅**。
+
+    ☠️ 報得比實際嚴重的代價：使用者以為正式機被動過，去做一次不必要的回滾
+    —— **在一台其實沒事的機器上**。
+    """
+    lines, rows = _robo_rows(APPLY_PS1, _ROBO_TO_SNAPSHOT)
+    assert rows, "「正式機 → 快照」的錨點一行都沒命中 —— **儀器失效**。"
+    first = rows[0]
+
+    assign = _re.compile(r'^\s*\$script:ProdState\s*=')
+    before = [(i + 1, lines[i].strip()[:70]) for i in range(first)
+              if assign.match(lines[i])]
+    assert len(before) == 1, (
+        "做快照之前的 `ProdState` 指派有 %d 個，預期 1 個（初始值）：\n  "
+        % len(before) + "\n  ".join(":%d %s" % b for b in before)
+        + "\n🔑 多一個 ⇒ 快照出口報的不再是 `not_applied`，而沒有東西會紅。")
+    assert '"not_applied"' in lines[before[0][0] - 1], (
+        "做快照之前唯一的 `ProdState` 指派不是 `not_applied`：:%d %s\n"
+        "☠️ 那兩條出口會報一個**比實際嚴重**的狀態 ⇒ "
+        "使用者在一台其實沒事的機器上做一次不必要的回滾。" % before[0])
+
+
+#: `(檔, status 前綴, 編號)` —— `rollback_update.ps1` 沿用它自己的 `rollback_` 前綴。
+_RESTORE_SITES = [
+    (None, "restore_copy_failed", "RP2"),      # apply_update.ps1（自動回滾）
+    (None, "rollback_copy_failed", "RP3"),     # rollback_update.ps1（手動回滾）
+]
+
+
+@pytest.mark.parametrize("ps1,prefix,rp", [
+    (APPLY_PS1, "restore_copy_failed", "RP2"),
+    (ROLLBACK_PS1, "rollback_copy_failed", "RP3"),
+], ids=["RP2_auto_rollback", "RP3_manual_rollback"])
+def test_rp2_rp3_the_restore_copies_say_when_they_failed(ps1, prefix, rp):
+    """🔴🔴 `RP2`／`RP3`：**把快照寫回正式機的 robocopy 也要檢查結束碼。**
+
+    ☠️ `:632`／`:633` 失敗**不中止**，直接流進 `:701` 的健康檢查 ——
+    健康檢查若碰巧過了（半還原的 backend 也可能回得出 `/health`）
+    ⇒ 報 **`restored`＝「已還原到套用前的版本」**，
+    🔑 **而磁碟上是還原到一半的殘骸。**
+
+    ⚙️ 值域 1:1 照舊：`%s_backend`／`%s_frontend` 各一次。
+    """
+    lines, rows = _robo_rows(ps1, _ROBO_TO_PROD)
+    assert len(rows) == 2, (
+        "`%s`：「快照 → 正式機」的 robocopy 抓到 %d 行，預期 2 行 ——\n"
+        "🔑 0 行 ⇒ **儀器失效**。" % (ps1.name, len(rows))
+        + "".join("\n  :%d %s" % (i + 1, lines[i].strip()[:80]) for i in rows))
+
+    bad = [i for i in rows if _guarded(lines, i) is None]
+    assert not bad, (
+        "`%s`（%s）：還原用的 robocopy 沒有檢查結束碼：\n  " % (ps1.name, rp)
+        + "\n  ".join(":%d %s" % (i + 1, lines[i].strip()[:80]) for i in bad)
+        + "\n☠️ 失敗不中止 ⇒ 流進健康檢查 ⇒ 碰巧過了就報「已還原」，\n"
+          "   **而磁碟上是還原到一半的殘骸。**")
+
+    src = ps1.read_text(encoding="utf-8", errors="replace")
+    for suffix in ("backend", "frontend"):
+        status = "%s_%s" % (prefix, suffix)
+        n = len(_re.findall(
+            r'(?:Fail\s+.*?|Emit-Result\s+)"' + _re.escape(status) + r'"', src))
+        assert n == 1, (
+            "`%s` 在 `%s` 裡以引數出現 %d 次，預期 1 次。" % (status, ps1.name, n))
+
+
+@pytest.mark.parametrize("ps1", [APPLY_PS1, ROLLBACK_PS1],
+                         ids=["apply_update", "rollback_update"])
+def test_rp2_rp3_restoring_is_set_before_the_first_restore_write(ps1):
+    """🔴🔴 `restoring` 要設在**第一次把快照寫回正式機之前**。
+
+    與 `:420`（`applied_no_restore` 設在 robocopy 之前）**同一條紀律**：
+    🔑 **危險值在動作之前設。**
+
+    ☠️ 設在之後的話，`RP2`／`RP3` 那兩條新出口印出來的 `rolled_back` 會是：
+    ```
+    apply_update     applied             語意「新版**完整**寫進正式機」—— 而它正在還原
+    rollback_update  applied_no_restore  語意含「**沒有還原**」—— 而它正在還原
+    ```
+    ⇒ **兩個都比實際樂觀，而且方向都是錯的。**
+    📌 `§53` 明文要求 `RP2`／`RP3` 成對落地：
+       **少了結束碼檢查，`restoring` 印不出來（永遠綠的題）；
+         少了 `restoring`，結束碼檢查印出來的狀態是錯的。**
+    """
+    lines, rows = _robo_rows(ps1, _ROBO_TO_PROD)
+    assert rows, "`%s`：「快照 → 正式機」的錨點一行都沒命中 —— **儀器失效**。" % ps1.name
+    first = rows[0]
+
+    assign = _re.compile(r'^(\s*)\$script:ProdState\s*=\s*"([^"]*)"')
+    hits = []
+    for i, ln in enumerate(lines):
+        m = assign.match(ln)
+        if m and m.group(2) == "restoring":
+            hits.append((i + 1, len(m.group(1))))
+    assert hits, (
+        "`%s` 裡沒有 `$script:ProdState = \"restoring\"` ——\n"
+        "☠️ 那兩條新出口會報 `applied`／`applied_no_restore`，"
+        "而它們的語意**都與「正在還原」相反**。\n"
+        "🔑 §53：`restoring` 與結束碼檢查**成對**落地。" % ps1.name)
+
+    ln_no, col = hits[0]
+    assert ln_no <= first, (
+        "`%s`：`restoring` 設在 :%d，而第一次把快照寫回正式機在 :%d —— **順序反了**。\n"
+        "🔑 危險值在動作之前設（與 `:420` 同一條紀律）。" % (ps1.name, ln_no, first + 1))
+    between = [(i + 1, assign.match(lines[i]).group(2))
+               for i in range(ln_no, first) if assign.match(lines[i])]
+    assert not between, (
+        "`%s`：`restoring`（:%d）與第一次寫回（:%d）之間又有指派：%s\n"
+        "☠️ 那兩條出口報的會是後面那個值，不是 `restoring`。"
+        % (ps1.name, ln_no, first + 1,
+           ", ".join(":%d=%s" % b for b in between)))
+
+
+# ══════════════════════════════════════════════════════════════════════
+# §53e · `describe_rolled_back` 的兩個 fail-open
+# ══════════════════════════════════════════════════════════════════════
+
+def test_53e_an_unrecognised_action_is_named_not_guessed():
+    """🔴 §53e：**沒見過的 `action` 要明著說「認不得」，不可以靜默退回 `deploy` 的文案。**
+
+    B 實跑的並排（它自己回報的）：
+    ```
+    action='rollback'   → 還原沒有開始，正式機維持在你按回滾之前的樣子。   ✅
+    action='rollback '  → **正式機沒有被碰過。**                            🔴
+    action='Rollback'   → **正式機沒有被碰過。**                            🔴
+    action=None         → **正式機沒有被碰過。**                            🔴
+    ```
+    ☠️ 逐字就是 `§41a` 要防的那句話：**畫面說「正式機沒有被碰過」，
+       而它剛剛才被一次失敗的部署動過。**
+
+    ⚠️ **這裡不拋錯**（`§51b` 的分工，A 裁）：
+    ```
+    判定側  decide_outcome        fail-closed（拋錯／判失敗）
+    呈現側  describe_rolled_back  fail-safe（明著標，不可以爆、不可以猜）
+    ```
+    🔑 而這個分工的**理由要寫在碼裡** —— 否則後人看到的是
+       「同一支檔案，一個拋錯一個不拋」，然後把它「統一」掉。
+    """
+    describe = _need("describe_rolled_back")
+    good = describe("not_applied", "deploy")
+
+    for action in ("rollback ", "Rollback", "restore", "", None):
+        got = describe("not_applied", action)
+        assert got != good, (
+            "`action=%r` 靜默退回了 `deploy` 的文案：%r\n"
+            "☠️ 畫面會說「正式機沒有被碰過」，"
+            "而它可能剛剛才被一次失敗的部署動過（§41a 逐字）。\n"
+            "🔑 認不得就說認不得 —— 不可以猜一個看起來很正常的答案。"
+            % (action, got))
+        assert str(action) in got, (
+            "`action=%r` 的文案沒有把那個值說出來：%r\n"
+            "🔑 排錯的人拿到的第一份線索就是這句話"
+            "（與 B 對沒見過的 `value` 的處理同一個形狀）。" % (action, got))
+
+
+def test_53e_restoring_does_not_borrow_a_sentence_that_means_the_opposite():
+    """🔴 A-2 找到的那一層：**自動回滾走的 `action` 是 `deploy`，不是 `rollback`。**
+
+    ```
+    自動回滾發生在 apply_update.ps1:632 ⇒ 那一次操作是使用者按的**部署**
+    ⇒ dashboard 查的是 deploy 的文案表
+    ⇒ 而 deploy 表裡最接近的那一句是
+       "applied_no_restore": "新版只寫了一半就中斷，**而且沒有還原**。"
+                                                      ↑ 方向相反：它正在還原
+    ```
+    ⇒ `restoring` 在**兩個** action 的文案表裡都要有，
+    🔑 **而 deploy 那一句不可以跟 `applied_no_restore` 是同一句** ——
+       否則「正在還原」與「沒有還原」在畫面上長得一樣。
+
+    ⚠️ 而它與 `rollback` 表的 `applied_no_restore`（「還原做到一半就中斷了」）
+       **語意重疊**。A-2 指出真正的那一層問題：
+       **`rolled_back` 的值域共用一份，而語意隨 `action` 變。**
+       📌 那是刻意的還是欠帳，要 A 說 —— 本題只釘「兩句不可以相同」。
+    """
+    describe = _need("describe_rolled_back")
+    for action in ("deploy", "rollback"):
+        text = describe("restoring", action)
+        assert isinstance(text, str) and text.strip(), (
+            "`describe_rolled_back('restoring', %r)` 給不出人話。" % action)
+        assert not _is_fallback(describe, "restoring", action), (
+            "`restoring` 在 `%s` 下回的是**退路**不是文案：%r" % (action, text)
+            + chr(10) +
+            "⚠️ 這一題的 v1 因此**綠得不對**：退路本來就不等於 "
+            "`applied_no_restore` 的文案 ⇒ 下面那個比較永遠成立。" + chr(10) +
+            "🔑 〈假綠燈〉：斷言要挑「**只有做對了才會出現**」的觀測點。")
+        other = describe("applied_no_restore", action)
+        assert text != other, (
+            "`restoring` 與 `applied_no_restore` 在 `%s` 下是**同一句話**：%r\n"
+            "☠️ 「正在還原」與「沒有還原」在畫面上長得一樣 ——\n"
+            "🔑 而使用者要用它決定「現在能不能再按一次回滾」。" % (action, text))
