@@ -90,19 +90,27 @@ def _tool():
     return mod
 
 
+#: `(a-2)` 的兩個名字。
+#:
+#: 🔴 **更正留著**：A `§176` 先裁 `SHARED_GLOB`，而 B 已經實作成 **`STATIC_GLOB`**
+#: （`= frontend/static/*.js`，不是只有 `sidebar.js`）。我照**實作**走 ——
+#: 照裁定寫的話，這一題會紅在一支已經做對的碼上。
+#: ⚠️ 而 `STATIC_GLOB` **只是正對照的可替換範圍，不是排除清單本身**：
+#:    排除清單是 `shared_js()` **算出來的**（被 >1 頁 script-link），不可寫死。
+SHARED_SCAN = "scan_shared"
+SHARED_HOOK = "STATIC_GLOB"
+
+
 def _shared_scan(mod):
-    """`(a-2)` 的共用母體。⚠️ 名字還沒定，四種都試 —— 定了**退回給我**。"""
-    for name in ("scan_shared", "scan_injected", "shared_scan", "scan_static"):
-        fn = getattr(mod, name, None)
-        if callable(fn):
-            return fn()
+    """`(a-2)` 的共用母體。"""
+    fn = getattr(mod, SHARED_SCAN, None)
+    if callable(fn):
+        return fn()
     pytest.fail(
-        "`check_double_init.py` 還沒有共用母體的掃描（`(a-2)` 未做）。\n"
+        "`check_double_init.py` 還沒有 `%s()`（`(a-2)` 未做）。\n" % SHARED_SCAN
         + "📌 `§174`：**兩個集合，不要合成一個**\n"
           "    排除清單 := 被 >1 頁 script-link 的 js（實算 7 檔，**要算不要手列**）\n"
           "    共用母體 := `sidebar.js` 裡的 2 個 `x-data` ＋ `x-init` **宣告**\n"
-        + "⚠️ 函式叫什麼由你決定（我試 `scan_shared`／`scan_injected`／\n"
-          "   `shared_scan`／`scan_static`）—— 用別的名字**退回給我**。\n"
         + "☠️ 不要寫成「掃 `notif.js` 的兩個 store」——那裡的宣告數是 **0**，\n"
           "   `53 + 2 = 55` 會永遠湊不出來，而人會開始懷疑 regex 壞了。")
 
@@ -282,6 +290,104 @@ def test_al1_the_a2_rewrite_is_behaviour_preserving():
         + "✅ 若是 `(c)` 真的在逐頁加守衛，**退回給我**把這一格改成只增不減。")
 
 
+def _fake_static(tmp_path, edits=None):
+    """複製 `frontend/static/*.js` 到暫存目錄，可以順手改其中幾個檔。
+
+    ⚠️ **整個目錄都要複製**：`scan_shared()` 數宣告、`_def_body()` 找定義，
+       兩者都掃同一個 `STATIC_GLOB` ⇒ 只放宣告檔的話定義會找不到，
+       而那時 `guarded` 會全部變 `False` —— **看起來像缺陷，其實是我的裝置不全**。
+    """
+    src_dir = ROOT / "frontend" / "static"
+    out = tmp_path / "static"
+    out.mkdir(parents=True)
+    for p in sorted(src_dir.glob("*.js")):
+        text = p.read_text(encoding="utf-8", errors="replace")
+        if edits and p.name in edits:
+            text = edits[p.name](text)
+        (out / p.name).write_text(text, encoding="utf-8")
+    return out
+
+
+def test_al1_the_shared_population_is_computed_not_hardcoded(
+        tmp_path, monkeypatch):
+    """⚙️ **正對照：共用母體是「算出來的」，不是寫死 `sidebar.js` 的。**（B 補的缺口）
+
+    ☠️ 我原本只驗「拿掉一個宣告 ⇒ 2 變 1」——
+       **一個寫死「掃 `sidebar.js`」的實作也會過那一題**。
+    ```
+    把宣告加進 auth-guard.js（**不是** sidebar.js）  =>  共用母體 2 -> 3
+    ```
+    🔑 加進**別的檔**才分得出「掃全部共用檔」與「掃 sidebar.js」。
+    """
+    mod = _tool()
+    if not hasattr(mod, SHARED_HOOK):
+        pytest.fail("`%s` 不存在 —— `(a-2)` 未做。" % SHARED_HOOK)
+
+    def add_decl(text):
+        return (text + '\n// 合成宣告（測試用）\n'
+                '// <div x-data="globalSearchStore()" x-init="init()"></div>\n')
+
+    fake = _fake_static(tmp_path, {"auth-guard.js": add_decl})
+    monkeypatch.setattr(mod, SHARED_HOOK, str(fake / "*.js"))
+    rows = mod.scan_shared()
+
+    assert len(rows) == SHARED_POPULATION + 1, (
+        "把一個宣告加進 `auth-guard.js` 之後共用母體是 %d，應該是 %d。\n"
+        % (len(rows), SHARED_POPULATION + 1)
+        + "☠️ 數字沒動 ⇒ 掃描範圍**寫死在 `sidebar.js`** 了，\n"
+          "   而條文要的是「凡共用檔都算」—— 下一個把宣告寫進別的共用檔的人\n"
+          "   會得到一個看起來正常的 0。")
+    assert any(r.get("where") == "auth-guard.js" for r in rows), (
+        "新增的那一列沒有指出它在 `auth-guard.js`：%r\n" % (rows,)
+        + "⚠️ `where` 是宣告點，`(c)` 的人要靠它才知道去哪裡看。")
+
+
+def test_al1_writing_the_guard_into_the_wrong_file_does_not_turn_it_green(
+        tmp_path, monkeypatch):
+    """🔴 **把 `_initDone` 寫進宣告檔（`sidebar.js`）不可以翻綠。**（`§174c` 的引信）
+
+    ```
+    舊寫法 guarded = "_initDone" in blob（含 sidebar.js 全文）
+    ⇒ **改錯檔也會翻綠** —— 而兩個數字都對，事情沒做完
+    ```
+    ⚙️ 而這一格單獨看**分不出「擋住了」與「我的尺壞掉」**
+       ⇒ 配一個反向：寫進**定義檔** `notif.js` 的 `notifStore()`
+         ⇒ **只有它**要翻綠。
+    🔑 這個配對是 B 跑出來的，收成常駐題的理由是「改錯檔」會一直發生。
+    """
+    mod = _tool()
+    if not hasattr(mod, SHARED_HOOK):
+        pytest.fail("`%s` 不存在 —— `(a-2)` 未做。" % SHARED_HOOK)
+
+    # ① 寫進**宣告檔** —— 不可以翻綠
+    wrong = _fake_static(tmp_path / "a", {
+        "sidebar.js": lambda t: t + "\nconst _initDone = false  // 寫錯檔\n"})
+    monkeypatch.setattr(mod, SHARED_HOOK, str(wrong / "*.js"))
+    rows = mod.scan_shared()
+    flipped = [r for r in rows if r.get("guarded")]
+    assert not flipped, (
+        "`_initDone` 寫進**宣告檔** `sidebar.js` 就翻綠了：%r\n" % flipped
+        + "☠️ 那是 `§174c` 的引信：`guarded` 在讀宣告檔全文 ⇒ **改錯檔也算修好**。\n"
+        + "🔑 `guarded` 要讀**定義點**（`defined_in` 那個檔的函式本體）。")
+
+    # ② 反向：寫進**定義檔** —— 只有那一個要翻綠
+    right = _fake_static(tmp_path / "b", {
+        "notif.js": lambda t: t.replace(
+            "function notifStore() {",
+            "function notifStore() {\n  const _initDone = false", 1)})
+    monkeypatch.setattr(mod, SHARED_HOOK, str(right / "*.js"))
+    rows2 = mod.scan_shared()
+    green = {r.get("store") for r in rows2 if r.get("guarded")}
+    assert green, (
+        "`_initDone` 寫進**定義檔** `notif.js` 的 `notifStore()` 也沒有翻綠 ——\n"
+        + "☠️ 那表示上面那一格的「沒翻綠」**證明不了任何事**："
+          "可能是尺整個壞掉。\n"
+        + "⚠️ 先修尺，再去看上面那一題的顏色。")
+    assert green == {"notifStore()"}, (
+        "翻綠的是 %s，而我只改了 `notifStore()` 的本體。\n" % sorted(green)
+        + "☠️ 多翻的那些表示 `_def_body()` 切太長，把隔壁函式算進來了。")
+
+
 def test_al1_removing_one_declaration_moves_only_the_shared_bucket(
         tmp_path, monkeypatch):
     """⚙️ **正對照：兩個桶各自會動，而且不互相牽動。**（`§174` ②）
@@ -299,29 +405,26 @@ def test_al1_removing_one_declaration_moves_only_the_shared_bucket(
     assert real.is_file(), "`%s` 不見了 —— **退回給我**。" % DECL_FILE
 
     src = real.read_text(encoding="utf-8", errors="replace")
-    mutated, n = re.subn(r'\s+x-init="init\(\)"', "", src, count=1)
+    _mutated, n = re.subn(r'\s+x-init="init\(\)"', "", src, count=1)
     assert n == 1, (
         "在 `%s` 裡找不到可以拿掉的 `x-init=\"init()\"` ——\n" % DECL_FILE
         + "⚠️ 宣告被改寫了，這個正對照要重做，**退回給我**。")
 
-    fake_static = tmp_path / "static"
-    fake_static.mkdir()
-    (fake_static / "sidebar.js").write_text(mutated, encoding="utf-8")
+    fake_static = _fake_static(tmp_path, {
+        "sidebar.js": lambda t: re.subn(
+            r'\s+x-init="init\(\)"', "", t, count=1)[0]})
 
-    hook = None
-    for name in ("STATIC_GLOB", "SHARED_GLOB", "DECL_GLOB"):
-        if hasattr(mod, name):
-            hook = name
-            break
-    if hook is None:
+    if not hasattr(mod, SHARED_HOOK):
         pytest.fail(
-            "共用母體的掃描範圍沒有可替換的鉤子。\n"
-            + "📌 我需要一個模組層常數（`STATIC_GLOB`／`SHARED_GLOB`／`DECL_GLOB`\n"
-              "   其中一個）才能餵一份改過的 `sidebar.js` 進去。\n"
+            "共用母體的掃描範圍沒有 `%s` 這個可替換的常數。\n" % SHARED_HOOK
+            + "📌 有它我才能餵一份改過的 `sidebar.js` 進去做正對照。\n"
             + "⚠️ 沒有它，這個正對照只能對真檔做 —— 而那要改產品碼，我不做。\n"
-            + "🔑 沒有正對照的話，共用母體那一題**回 2 與回 2 而其實壞掉**分不出來。")
+            + "🔑 沒有正對照的話，共用母體那一題**回 2 與回 2 而其實壞掉**分不出來。\n"
+            + "⚠️ 而 `%s` **只是正對照的可替換範圍，不是排除清單本身** ——\n"
+              "   排除清單仍然要**算出來**（被 >1 頁 script-link 的 js），\n"
+              "   不要因為有了這個常數就改成寫死。" % SHARED_HOOK)
 
-    monkeypatch.setattr(mod, hook, str(fake_static / "*.js"))
+    monkeypatch.setattr(mod, SHARED_HOOK, str(fake_static / "*.js"))
     shrunk = _shared_scan(mod)
     pages_after = mod.scan()
 

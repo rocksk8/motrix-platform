@@ -109,7 +109,12 @@ def _plan(client, hdr, quote_no):
     r = client.get(PLAN % quote_no, headers=hdr)
     if r.status_code in (404, 405, 422):
         pytest.fail(
-            "`GET %s` 還不存在（回 %s）。\n" % (PLAN % "{quote_no}", r.status_code)
+            "`GET %s` 還不存在（回 %s，案件 `%s`）。\n"
+            % (PLAN % "{quote_no}", r.status_code, quote_no)
+            + "⚠️ **除非你查的是一個不存在的案件** —— `/base` 對找不到的案件\n"
+              "   回 404，而 `plan` 會照同一條做 ⇒ 那時 404 是**正確答案**，\n"
+              "   要另外寫一支不經過 `_plan()` 的輔助函式。\n"
+              "   （本檔每一題都先 `_seed_case()`，所以目前撞不到。）\n"
             + "📌 這個 repo 裡「端點不存在」有**三種臉**：\n"
               "    404  StaticFiles 接走 GET\n"
               "    405  StaticFiles 接走非 GET（它只處理 GET/HEAD）\n"
@@ -317,9 +322,33 @@ def test_bn1_the_base_comes_from_the_same_place_as_the_base_endpoint(
 
     ⚠️ 兩支各算一次而算法漂移的話，**畫面顯示的基數與實際入帳的基數會不同**
        —— 而兩個數字都「看起來合理」。
+
+    ## 🔴 我第一版釘錯欄位了（B 退回，留著這一列）
+
+    ```
+    我寫    r2.json().get("amount")
+    實際    /base 回 {"quote_no", "ok", "base_amount", "error"}（bonus.py:160）
+    ⇒ get("amount") **恆為 None** ⇒ 這一題只有在 plan 的 amount 也是 None 時才綠
+    ⇒ 而那正是規格禁止的東西
+    ```
+    🔑 值得記的不是「拼錯一個鍵」：`SPEC-BN1-PLAN §1` 的範例裡 `plan` 用 `amount`、
+      `/base` 用 `base_amount`，**兩邊本來就不同名** ——
+      而我把「名字對不起來」寫成了一個叫「來源對不起來」的斷言。
+
+    ⚙️ 改法用**第三點**（B 給的三條路裡的第二條）：兩邊都比對 `base_amount_for()`
+      的實算值 ⇒ **兩邊一起漂移時也抓得到**（只比對彼此的話，一起錯就一起綠）。
     """
-    _seed_case("MQ-BN1-BASE", net_profit=123456, sales_person="alice")
+    from helpers.bonus import base_amount_for
+
+    net = 123456
+    _seed_case("MQ-BN1-BASE", net_profit=net, sales_person="alice")
     _u, hdr = _hdr(client, make_user, "bn1_mgr5")
+
+    ok, expected, _err = base_amount_for(
+        {"summary": {"netProfit": net}})
+    assert ok and expected == net, (
+        "`base_amount_for()` 對 netProfit=%d 回 %r ——\n" % (net, (ok, expected))
+        + "**量測裝置的第三點自己壞了**，先修這個。")
 
     plan = _plan(client, hdr, "MQ-BN1-BASE").json()
     r2 = client.get("/api/bonus/base/MQ-BN1-BASE", headers=hdr)
@@ -327,10 +356,16 @@ def test_bn1_the_base_comes_from_the_same_place_as_the_base_endpoint(
 
     base = plan.get("base") or {}
     assert isinstance(base, dict), "`base` 應該是一包 {ok, amount, error}：%r" % base
-    assert base.get("amount") == r2.json().get("amount"), (
-        "`plan` 的基數 %r ≠ `/base` 的 %r\n"
-        % (base.get("amount"), r2.json().get("amount"))
-        + "☠️ 畫面顯示的基數與實際入帳的基數不同，**而兩個都看起來合理**。")
+    assert r2.json().get("base_amount") == expected, (
+        "`/base` 回的基數 %r ≠ `base_amount_for()` 實算的 %r —— "
+        "**既有端點就不對了**，先看它。"
+        % (r2.json().get("base_amount"), expected))
+    assert base.get("amount") == expected, (
+        "`plan` 的基數 %r ≠ `base_amount_for()` 實算的 %r\n"
+        % (base.get("amount"), expected)
+        + "☠️ 畫面顯示的基數與實際入帳的基數不同，**而兩個都看起來合理**。\n"
+        + "📌 `plan` 的鍵是 `base.amount`、`/base` 的鍵是 `base_amount` ——\n"
+          "   **兩邊本來就不同名**，這一題比的是值不是名字。")
 
 
 def test_bn1_it_says_whether_a_live_award_already_exists(client, make_user):
@@ -463,20 +498,43 @@ def test_bn1_the_remainder_cannot_see_a_total_that_is_too_big():
     Σperson_pct 超額  ->  remainder_of() < 0  可以
     total_pct   超額  ->  **必須拿 base 當基準**（或直接斷言端點回 400）
     ```
-    ⚠️ 這一題**現在是綠的，而它釘的是一個盲點**：日後若 `remainder_of()`
-       在這個情況下開始回負數，它會紅 —— 那時要來讀這段，不是直接改數字。
+    ## 🔴 而盲點有**兩半**，不是一半（A-2 補的）
+
+    ```
+    total_pct 超額(20000)   改變 pool -> remainder **0**       看不見
+    total_pct 為負(-5000)   改變 pool -> remainder **0**       看不見
+    Σperson_pct 超額        **不改 pool** -> remainder -61728  唯一看得見的
+    ```
+    > **`remainder_of()` 只看得見 `person_pct` 那一側的錯，**
+    > **因為那是唯一不改變 `pool` 的那一側。**
+
+    ☠️ 只釘超額那一半的話，**負值那一半更容易被誤以為已經覆蓋了**。
+
+    ## ⚙️ 這一題的**死亡條件**
+
+    ```
+    它紅的那天 = 盲點消失了（remainder_of 開始抓得到）
+    => **刪掉這一題**，不是改期望值
+    ```
+    🔑 一個釘住缺陷的 characterization test **必須自帶死亡條件**，
+      否則它會反過來**擋住修好它的那個改動** —— 而那時它看起來像一道正當的守門。
+      而改期望值是最省力的動作，所以要明著禁止它。
     """
     from helpers.bonus import pool_for, remainder_of, split_award
 
     base = 123456
-    lines = split_award(base, BP * 2, [("a", BP)])
-    assert remainder_of(base, BP * 2, lines) == 0, (
-        "`remainder_of()` 在 `total_pct=20000` 時回了非 0 ——\n"
-        + "✅ 若它現在抓得到超額了，那是好事，**而請來改這段 docstring**："
-          "上面那句「拿它當觀測點抓不到」已經過期。")
+    for total in (BP * 2, -5000):
+        lines = split_award(base, total, [("a", BP)])
+        assert remainder_of(base, total, lines) == 0, (
+            "`remainder_of()` 在 `total_pct=%d` 時回了非 0 ——\n" % total
+            + "✅ 它現在抓得到了，那是好事 ⇒ **刪掉這一整題**。\n"
+            + "❌ **不要改期望值** —— 這一題釘的是一個盲點，\n"
+              "   盲點消失了它就沒有存在理由了。")
     assert pool_for(base, BP * 2) > base, (
         "`pool_for(base, 20000)` 沒有超過 `base` —— **前提變了**，\n"
         + "上面整段推理要重做。")
+    assert pool_for(base, -5000) < 0, (
+        "`pool_for(base, -5000)` 不是負的了 —— **前提變了**。")
 
 
 def test_bn1_paying_less_than_the_whole_pool_is_still_allowed(client,
