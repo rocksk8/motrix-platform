@@ -279,3 +279,198 @@ def test_fn4_execution_history_does_not_get_its_own_table(fresh_db):
         + "☠️ 那是**另一份副本** ⇒ 兩份會分岔，而分岔之後哪一份是真的沒有定義。\n"
         + "✅ 施工圖 `§3.3`：沿用 `cashier.py:150 _execution_history()` 的做法"
           "（對業務表做日期範圍查詢）。")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# 🔴 `append_edit_log` 的**第一個呼叫端**（A 判甲，必須進這一包）
+# ══════════════════════════════════════════════════════════════════════
+
+def test_fn4_something_actually_calls_append_edit_log():
+    """🔴🔴 **`append_edit_log()` 目前沒有任何產品碼在叫它。**
+
+    ```
+    $ grep -rn append_edit_log --include=*.py .（排除定義與 tests）
+      => **零命中**
+    helpers/edit_log.py:88  定義在 ✅
+    routers/vouchers.py     **不存在**
+    ```
+    🔑 〈兩個都對而路不存在〉：規則對、函式對、我的題也對 ——
+       **而它不會生效**。`FN4` 的 ② 那一層目前**什麼都不記**。
+    ☠️ 而這種缺陷讀規格看不出來：規格說「改過要留痕」，
+       函式也真的會留痕，**而沒有人在改的時候叫它**。
+
+    📌 這一題釘的是**呼叫端存在**，下面兩題釘它**叫對了**。
+    ⚠️ 我上一題（`visible_lines`）就是驗函式沒驗呼叫，A-2 複核才補上 ——
+       同一個形狀，這次先釘。
+    """
+    import subprocess
+    out = subprocess.run(
+        ["git", "grep", "-l", "append_edit_log", "--", "backend/*.py",
+         "backend/routers/*.py", "backend/helpers/*.py"],
+        cwd=str(_BACKEND.parent), capture_output=True, text=True).stdout
+    callers = [f for f in out.split()
+               if not f.endswith("helpers/edit_log.py")
+               and "/tests/" not in f]
+    assert callers, (
+        "沒有任何產品碼呼叫 `append_edit_log()`（只有它自己的定義）——\n"
+        + "☠️ 那條規則**不會生效**：使用者改了傳票，而沒有任何一列紀錄。\n"
+        + "🔑 〈兩個都對而路不存在〉：規則對、函式對，**而路不存在**。\n"
+        + "⚠️ 而它讀規格看不出來 —— 規格說「改過要留痕」，函式也真的會留痕。")
+
+
+def _voucher_update_path(client):
+    """找傳票更新端點。找不到 ⇒ 說出我找過什麼。"""
+    paths = [r.path for r in client.app.routes if hasattr(r, "path")]
+    cands = [p for p in paths
+             if re.search(r"/api/vouchers?/\{[^}]+\}$", p)]
+    if not cands:
+        pytest.fail(
+            "找不到傳票的更新端點（找過 `/api/vouchers/{id}`）。\n"
+            "現有 `/api/voucher…` 的路由：%s\n"
+            % sorted(p for p in paths if "voucher" in p)
+            + "⚠️ 路徑可以換（**退回給我**），而那條路必須存在 ——\n"
+              "   `helpers/edit_log.py:88` 的 `append_edit_log()` "
+              "**現在沒有任何呼叫端**。")
+    return cands[0]
+
+
+def _seed_draft(conn):
+    conn.execute(
+        "INSERT INTO vouchers_all (voucher_no, voucher_date, created_by,"
+        " created_at, updated_at, status) VALUES "
+        "('20260923-900','2026-09-23','C','2026-09-23T00:00:00',"
+        "'2026-09-23T00:00:00','草稿')")
+    vid = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+    conn.commit()
+    return vid
+
+
+def test_fn4_editing_a_draft_voucher_writes_exactly_one_edit_log_row(
+        client, make_user):
+    """🔴🔴 **在草稿狀態改欄位 ⇒ `voucher_edit_log` 必須多一列。**
+
+    ```
+    施工圖 §2.1  voucher_date「可編輯，僅限草稿」＋「改過要進 voucher_edit_log」
+    ```
+    ☠️ 少了這一列，**沒有人回得出「這張單原本是哪一天」** ——
+       而傳票日期決定它落在哪一期，那是會計最在意的一格。
+    🔑 這一題打的是**端點**不是函式：〈兩個都對而路不存在〉。
+
+    ⚙️ 而斷言是「**剛好多一列**」不是「至少一列」：
+    ```
+    0 列  => 沒人叫它
+    2 列  => 有人叫了兩次（改一次留兩筆痕，而稽核讀起來像改了兩次）
+    ```
+    """
+    import db as _db
+    _u, hdr = _auth_hdr(client, make_user)
+    path = _voucher_update_path(client)
+
+    conn = _db.get_db()
+    try:
+        vid = _seed_draft(conn)
+        before = conn.execute(
+            "SELECT COUNT(*) FROM voucher_edit_log WHERE voucher_id=?",
+            (vid,)).fetchone()[0]
+    finally:
+        conn.close()
+
+    url = path.replace("{voucher_id}", str(vid)).replace("{id}", str(vid))
+    r = client.put(url, json={"voucher_date": "2026-08-31"}, headers=hdr)
+    assert r.status_code == 200, (
+        "改草稿的日期回 %s：%s" % (r.status_code, r.text[:200]))
+
+    conn = _db.get_db()
+    try:
+        rows = [dict(x) for x in conn.execute(
+            "SELECT * FROM voucher_edit_log WHERE voucher_id=? ORDER BY id",
+            (vid,))]
+    finally:
+        conn.close()
+
+    assert len(rows) - before == 1, (
+        "改一個欄位之後 `voucher_edit_log` 多了 %d 列（預期 1）。\n"
+        % (len(rows) - before)
+        + "☠️ 0 列 ⇒ 沒有人叫 `append_edit_log()`，"
+          "**而使用者看不出任何異常**。\n"
+          "   2 列以上 ⇒ 改一次留兩筆痕，稽核讀起來像改了兩次。")
+
+    changes = json.loads(rows[-1]["changes_json"])
+    assert changes, "`changes_json` 是空的 —— 那一列什麼都沒記。"
+    entry = next((c for c in changes if c.get("field") == "voucher_date"), None)
+    assert entry is not None, (
+        "`changes_json` 裡沒有 `voucher_date`：%r" % (changes,))
+    assert "from" in entry and entry["from"] == "2026-09-23", (
+        "改前值是 %r，而它原本是 '2026-09-23'。\n" % entry.get("from")
+        + "☠️ 少了改前值，那一列**回答不出「原本是什麼」** ——\n"
+          "   而那正是逐筆紀錄唯一要回答的問題。")
+
+
+def test_fn4_an_old_value_of_empty_string_still_counts_as_present():
+    """🔴 **改前值是空字串或 `None` 也算「有值」。**
+
+    ☠️ 用真假值判斷的話：
+    ```
+    if not ch.get("from"):  raise 缺改前值
+    => 原本是**空的**那些欄位（summary / departmentCode …）**永遠寫不進去**
+    => 而它們正是「從沒填變成有填」那種最該留痕的改動
+    ```
+    🔑 〈null 不等於 0〉：「沒有這個鍵」與「值是空的」是兩件事。
+    📌 而這一題釘的是**不變量不是實作** —— B 用 `"from" in ch`，
+       換一種寫法只要行為一樣就過。
+    """
+    import importlib
+    mod = importlib.import_module("helpers.edit_log")
+    fn = getattr(mod, "append_edit_log")
+
+    for old in ("", None):
+        rows = fn(None, 1, "C",
+                  [{"field": "summary", "from": old, "to": "新的摘要"}])
+        assert rows and "from" in rows[0], (
+            "改前值是 %r 時被當成「缺改前值」——\n" % old
+            + "☠️ 原本是空的那些欄位**永遠寫不進去**，"
+              "而它們正是最該留痕的那一種（從沒填變成有填）。")
+
+    with pytest.raises(Exception):
+        fn(None, 1, "C", [{"field": "summary", "to": "新的摘要"}])
+
+
+def test_fn4_no_change_writes_no_row(client, make_user):
+    """⚙️ **反向控制：沒有改動時不可以寫入空紀錄。**
+
+    ☠️ 少了它，一個「每次 PUT 都寫一列」的實作也會讓上面那題綠 ——
+       而症狀是**紀錄被灌水**：稽核打開看到十列，而使用者只改過一次。
+    🔑 而灌水比漏記更難發現：**它看起來像「記得很完整」。**
+    """
+    import db as _db
+    _u, hdr = _auth_hdr(client, make_user)
+    path = _voucher_update_path(client)
+
+    conn = _db.get_db()
+    try:
+        vid = _seed_draft(conn)
+    finally:
+        conn.close()
+
+    url = path.replace("{voucher_id}", str(vid)).replace("{id}", str(vid))
+    r = client.put(url, json={"voucher_date": "2026-09-23"}, headers=hdr)
+    assert r.status_code == 200, r.text
+
+    conn = _db.get_db()
+    try:
+        n = conn.execute(
+            "SELECT COUNT(*) FROM voucher_edit_log WHERE voucher_id=?",
+            (vid,)).fetchone()[0]
+    finally:
+        conn.close()
+    assert n == 0, (
+        "送了一組**與現值相同**的資料，而 `voucher_edit_log` 多了 %d 列。\n" % n
+        + "☠️ 紀錄被灌水 ⇒ 稽核打開看到十列，而使用者只改過一次。\n"
+        + "🔑 灌水比漏記難發現：**它看起來像「記得很完整」。**")
+
+
+def _auth_hdr(client, make_user, role="superadmin"):
+    u, p = make_user(role=role)
+    r = client.post("/api/auth/login", json={"username": u, "password": p})
+    assert r.status_code == 200, r.text
+    return u, {"Authorization": "Bearer " + r.json()["token"]}
