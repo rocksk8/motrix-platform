@@ -32677,3 +32677,56 @@ C 試  UPLOAD_DIR／UPLOADS_DIR   兩個都不存在
   `tmp_path/uploads`（註解逐字寫著**在那之前測試的 PNG 真的落在 repo 的
   `uploads/quotations/` 裡**）⇒ **自己另外算一個路徑會寫到真的 `uploads/`**。
 🔑 ⇒ 用產品的常數不只是「比較對」，**它是隔離機制的一部分**。
+
+---
+
+## §194 ✅ `JV3` 交付（`e908526`）＋ **`from X import CONST` 抓的是值**
+
+```
+test_voucher_attachments  **13/13**
+相關切片 309 passed ／ 4 skipped ／ 2 failed（2 紅都是 AL1 (c)，未派工）
+端點 POST /{id}/attachments（multipart 上傳 ／ {"picks":[…]} 帶入，同一支看 content-type）
+     DELETE /{id}/attachments/{file_id}（軟刪，僅草稿）
+     GET /{id} 多回 attachments ／ POST /{id}/void {"reopen":true} 回 new_id 並複製
+     GET /summary-sources?quote_no= 列**該案件**可帶入的憑證（JV3＋JV7 **共用同一支**）
+```
+📌 最後那一項是規格 `§6` 說的「共用同一支」**真的落地** ——
+  頁籤②原本回空清單，現在有來源了。
+
+### 🔴 **`from X import CONST` 抓的是值，不是那個名字**
+```
+from helpers.uploads import UPLOADS_ROOT   <= 抓的是一份**拷貝**
+conftest 之後 monkeypatch 那個常數          <= 改的是**模組屬性**，手上那份不會變
+=> save_document_files() 存到被導向的暫存目錄，而去**真正的 uploads/** 找
+=> 三支測試紅在「來源檔不見了」「作廢重開複製 0 筆」
+```
+☠ **那三句訊息都在說資料的問題，而壞的是 import 的方式。**
+✅ 改成 `_uploads.UPLOADS_ROOT`，**在用到那一刻才取**。
+⚠ 而它**不只是測試環境的事**：任何**在執行期重新指定**那個常數的做法都會失效。
+🔑 ⇒ **凡是「會被替換的東西」都要整個模組 import。**
+
+☠ **而那是同一個常數的兩種錯法**：
+```
+C  找錯名字  UPLOAD_DIR／UPLOADS_DIR（真名 UPLOADS_ROOT）=> 「找不到上傳根目錄常數」
+B  抓錯時機  from … import UPLOADS_ROOT                  => 「來源檔不見了」
+```
+⇒ 兩種的症狀**都指向產品**，而壞的都是量測那一側。
+
+### 🔑 兩層職責不同
+> **清單那一層說實話，寫入那一層擋住錯誤的結果。**
+
+⇒ 實體檔不見的來源**照樣列出來並標「檔案已遺失」**，而按下去會被擋（整批 400）。
+📌 三個裁定的實作要點也都落地：
+```
+① 帶入＝複製  「禁止刪除來源」不成立，理由是**實作路徑不同不是偏好不同**：
+              科目刪除走 SQL（TRIGGER 攔得到）／附件刪除走 os.remove()（**攔不到**）
+② 軟刪 bytes 留  那句警告寫在**他自己那支刪除函式的正上方**
+③ 作廢重開複製   已刪的不複製；file_id 不共用；**實體檔真的兩份**
+                 —— A-2 補的第三格（UNIQUE 擋不住「兩列指向同一個實體檔」）已落地
+```
+
+⚠ **一件標著待開編號**：`invoice_voucher` 與 `contractor_*` 三類
+  **不在「選一個案件就看得到」那份清單裡**（它們的 `doc_no` 是自己的單號／派工 id，
+  不是案件編號）⇒ 要另一條選取路徑。
+☠ 症狀是「**這個案件的承攬商發票帶不進來**」，
+  **而畫面上看起來只是「沒有那一類」** ⇒ 不可靜默略過。
