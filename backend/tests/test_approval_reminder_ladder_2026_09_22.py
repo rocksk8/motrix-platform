@@ -389,10 +389,15 @@ def test_wb2_the_also_superadmin_parameter_is_still_there():
     )
 
 
-def test_wb3a_superadmin_stays_in_the_email_recipients(captured_mail):
-    """🔴 WB3a：`also_superadmin=True` 時 superadmin 仍在 **email 收件人**裡。
+def test_wb3_superadmin_stays_in_the_email_recipients(captured_mail):
+    """🔴 WB3：`also_superadmin=True` 時 superadmin 仍在 **email 收件人**裡。
 
     ⚠️ **這是 A 原本沒看到的那一項。**
+    📌 函式名刻意是 `wb3` 不是 `wb3a` —— 規格宣告的是 `WB3`，
+    而覆蓋率守門認的是**函式名裡的那個編號**：
+    ⚠️ 命名成 `wb3a` 的話，`WB3` 會被判定成「規格宣告了而沒有人寫」。
+    🔑 今天第二次踩到它（SO5／SO6 那次是參數化）——
+    **同一道守門，同一個成因，而我兩次都是用最自然的命名習慣。**
     """
     email_notify.notify_approval_reminder(
         "匯款申請", "WB-0002", "測試", 10, ["approver"], True)
