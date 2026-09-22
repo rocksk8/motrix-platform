@@ -56,6 +56,13 @@
   </style>
 </head>
 <body>
+
+    <!-- 🔴 頂欄的掛載點。**這一行漏了整整一天**（`6e4dcc9` 建這一頁時沒加），
+         而使用者看到的是「logo／搜尋列／通知整個欄位都沒有」。
+         ☠️ `sidebar.js:buildTopbar()` 找不到它就安靜 `return` ⇒ 沒有錯誤、
+            沒有空白框，**畫面看起來像這一頁本來就長那樣**。
+         📌 位置與寫法逐字照 `quotations.html:75`（`<body>` 之後的第一個元素）。 -->
+    <header id="app-topbar" class="topbar"></header>
 <div id="sidebar-root"></div>
 <div class="sidebar-overlay" id="sidebar-overlay"></div>
 

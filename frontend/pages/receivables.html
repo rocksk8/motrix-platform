@@ -10,7 +10,12 @@
        自動導向出納模組。 -->
   <script>location.href = 'cashier.html'</script>
 </head>
-<body>
+<!-- `data-no-topbar`：這是一頁**轉址頁**（下面那行 `location.href` 會
+     立刻把瀏覽器帶走），沒有 app shell 也不該有頂欄。
+     🔑 宣告它是為了讓「刻意沒有」與「忘了加」分得開 ——
+        `sidebar.js` 找不到掛載點又沒有這個宣告時會 `console.error`。
+     ☠️ 沒有這個分辨的話，`map.html` 那個漏掉的掛載點可以安靜一整天。 -->
+<body data-no-topbar>
   <p>此頁已併入 <a href="cashier.html">出納模組</a>，正在為您導向…</p>
 </body>
 </html>

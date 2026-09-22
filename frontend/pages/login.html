@@ -185,7 +185,10 @@
      ——自動那次一次、x-init 一次——連帶把版本查詢與既有 session 檢查都做兩遍。
      原本這裡是 `@load="init()"`：那是無效的（load 事件只在 window 上觸發、
      不會冒泡到 body），但因為有自動呼叫所以看不出來，屬於誤導性的死碼。 -->
-<body x-data="loginPage()">
+<!-- `data-no-topbar`：**未登入頁**，本來就不該有頂欄（它要顯示使用者身分
+     與通知）。🔑 宣告它是為了讓「刻意沒有」與「忘了加」分得開；
+     ⚠️ 也是為了讓下一個人**不要順手補齊** —— 補上去會在登入前就去要權限。 -->
+<body x-data="loginPage()" data-no-topbar>
 
   <div class="login-wrap">
     <div class="logo-area">

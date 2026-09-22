@@ -344,7 +344,29 @@ if (typeof module !== 'undefined' && module.exports) {
 
   function buildTopbar() {
     var el = document.getElementById('app-topbar')
-    if (!el) return
+    if (!el) {
+      // 🔴 這一行原本只是 `if (!el) return` —— **安靜地什麼都不做**。
+      //
+      // ☠️ 2026-09-22：`map.html` 從來沒有 `#app-topbar`（`6e4dcc9` 建那一頁
+      //    時漏的），而使用者看到的是「logo／搜尋列／通知整個欄位都沒有」。
+      //    沒有錯誤、沒有空白框 ⇒ **畫面看起來像那一頁本來就長那樣**
+      //    ⇒ 它安靜了整整一天，而那一天裡我們出了一個包。
+      //
+      // 🔑 而**不能一律報錯**：login／轉址頁是**合法的沒有**。
+      //    ⇒ 用一個明著的宣告把兩者分開：`<body data-no-topbar>`。
+      //    📌 「刻意沒有」與「忘了加」先前是同一件事，這一行把它們拆開。
+      //
+      // ⚠️ **不丟例外**：頂欄缺了不該讓整頁的側邊欄也跟著不渲染 ——
+      //    那會把一個「少一條列」的問題變成「整頁壞掉」。
+      if (!document.body || !document.body.hasAttribute('data-no-topbar')) {
+        try {
+          console.error('[sidebar] 找不到 #app-topbar 掛載點，頂欄不會顯示：'
+            + location.pathname
+            + '　⇒ 這一頁若刻意不要頂欄，請在 <body> 加 data-no-topbar')
+        } catch (_e) { /* console 不可用時不要再炸一次 */ }
+      }
+      return
+    }
 
     var cpHref = inPg ? 'change-password.html' : 'pages/change-password.html'
 

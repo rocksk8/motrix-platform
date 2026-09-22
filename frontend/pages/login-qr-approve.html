@@ -140,7 +140,10 @@
     .status-box.bad { color: #F87171; }
   </style>
 </head>
-<body x-data="qrApprovePage()">
+<!-- `data-no-topbar`：**未登入頁**，本來就不該有頂欄（它要顯示使用者身分
+     與通知）。🔑 宣告它是為了讓「刻意沒有」與「忘了加」分得開；
+     ⚠️ 也是為了讓下一個人**不要順手補齊** —— 補上去會在登入前就去要權限。 -->
+<body x-data="qrApprovePage()" data-no-topbar>
 
   <div class="login-wrap">
     <div class="logo-area">
