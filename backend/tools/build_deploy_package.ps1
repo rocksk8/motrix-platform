@@ -201,6 +201,57 @@ $($report -join "`n")
 Write-Host "[環境] 測試將使用：$pyExe" -ForegroundColor Green
 Write-Host "[OK] 依賴齊全。" -ForegroundColor Green
 
+# --- Step 2.55: 規格覆蓋率守門（2026-09-22 新增，YC）---
+# 【為什麼排在這裡】這道檢查自己只跑 0.73 秒，而它抓的東西（規格宣告了條件
+# 而沒有人寫測試／測試宣稱一個規格沒有的編號）跟「測試會不會通過」完全無關
+# ——它在 Step 3 之前就能判定。
+#
+# 過去它排在 Step 3（全量測試）之後，所以每一次「忘了登記」都要先等
+# 431 秒的完整測試跑完才會知道。2026-09-22 一天因此損失兩次 7 分 11 秒。
+# 判準：**便宜又會擋的檢查排最前面。**
+#
+# ⚠️ 為什麼不是排在 Step 1.5（YC1 的字面位置）之後：這道檢查要用 Python，
+# 而**挑哪一支 Python 是 Step 2.5 才決定的**（這台機器 PATH 上有 4 支，
+# 其中幾支缺依賴 —— 那正是 Step 2.5 存在的理由）。
+# 🔑 排在 Step 2.5 之前就得裸呼叫 `python`，而那是 Step 2.5 要防的那個 bug。
+# ⇒ 挪到 Step 2.5 之後，省下的時間一樣（Step 2.5 只有幾秒）。
+#
+# ⚠️ **Step 3 照舊會再跑它一次，不要因為這裡跑過就排除掉。**
+# 🔑 前面這次是「快速攔截」，後面那次是「最終關卡」——目的不同：
+# 中間任何一步都可能改到檔案（例如有人在打包途中 commit），
+# 而**只在前面擋一次的話，最終產出就沒有被那道守門看過。**
+Write-Host "`n[覆蓋率] 規格條件與測試的對應（快速攔截，Step 3 會再跑一次）..."
+$coverageTest = "backend\tests\test_spec_coverage_2026_09_21.py"
+if (Test-Path (Join-Path $projectRoot $coverageTest)) {
+    $prevIoEnc2 = $env:PYTHONIOENCODING
+    $env:PYTHONIOENCODING = "utf-8"
+    Push-Location $projectRoot
+    try {
+        # ⚠️ `--basetemp` 是**必要的**，不是省事：這個 repo 的 conftest
+        # 明確拒絕沒有指定 basetemp 的執行：`%TEMP%\pytest-of-<user>\pytest-current` 是共用的，另一個視窗同時在跑就會互相刪對方
+        # 的暫存目錄）。⇒ 漏掉它的話這道守門**每次都以 ERROR 收場**，
+        # 而那會被讀成「覆蓋率沒過」。
+        $covTemp = Join-Path $env:TEMP "motrix-pytest-cov-$(Get-Date -Format 'yyyyMMdd_HHmmss')"
+        & $pyExe -m pytest $coverageTest -q --no-header --basetemp="$covTemp" 2>&1 |
+            ForEach-Object { Write-Host "  $_" }
+        $covExit = $LASTEXITCODE
+    } finally {
+        Pop-Location
+        $env:PYTHONIOENCODING = $prevIoEnc2
+    }
+    if ($covExit -ne 0) {
+        # ⚠️ **一個字串，不要用 `+` 串** —— PowerShell 的參數位置不是運算式，
+        # `Fail "a" + "b"` 會把三個東西當成三個參數傳進去（而 `Fail` 只收一個
+        # ⇒ 後面兩段安靜消失）。語法檢查抓不到這一種。
+        Fail "規格覆蓋率守門沒過（見上方訊息）。這道檢查只花不到一秒，所以它排在全量測試之前——先把登記補完再打包，不要等 7 分鐘。"
+    }
+    Write-Host "[OK] 覆蓋率守門通過。" -ForegroundColor Green
+} else {
+    # ⚠️ 找不到就**明說**，不要靜靜跳過：一道「檔案不見了就自動消失」的守門，
+    # 跟一道「通過了」的守門在輸出上長得一樣。
+    Write-Host "  [警告] 找不到 $coverageTest —— 這道守門這次沒有跑。" -ForegroundColor Yellow
+}
+
 # --- Step 2.6: 後端端點入口檢查（只警告，不擋，2026-09-11 新增）---
 # 本專案已經連續兩次出現「後端上線、前端沒入口」：WebAuthn 的設定頁沒被
 # 部署，端點回 503 卻沒有任何地方能填 RP ID；叫料（material_orders.py）修好
