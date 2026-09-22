@@ -515,11 +515,34 @@ def test_fx23c_the_allow_list_points_at_something_real():
 # FX21 · uploads 的 ?token=
 # ══════════════════════════════════════════════════════════════════════
 
+#: 🔴 本檔專屬的假來源 IP —— **登入一律帶它。**
+#:
+#: ## ☠️ `routers/auth.py:42` 的 `_rl_state` 是**行程級全域，以 IP 為鍵**
+#:
+#: 而 `conftest.py` 把資料庫隔離得很乾淨，**卻沒有重設這個 dict** ——
+#: 🔑 `TestClient` 的預設來源是 `"testclient"`，**全套測試共用同一個鍵**
+#: ⇒ 任何一支測試在這個 worker 裡累積 5 次登入失敗，
+#:   **之後所有人的登入都被鎖 900 秒。**
+#:
+#: ## 📌 失敗的樣子：`KeyError: 'token'`
+#:
+#: 登入回 429 而程式碼直接 `.json()["token"]` ——
+#: ☠️ **單獨跑永遠是綠的，全量跑才紅，而紅的理由跟這一題要驗的事完全無關。**
+#: ⚠️ 2026-09-22 實測證實：把 `_rl_fail("testclient", …)` 呼叫六次，
+#: 這個檔立刻出現同樣的 `KeyError` —— **不是推論，是重現過的。**
+#:
+#: 🔑 這個 repo 早就有這個慣例（`test_totp_qr_push_2026_09_08.py` 用
+#: `203.0.113.201`／`.202`／`.203`），而我寫這個檔時沒有跟上。
+#: 📌 `203.0.113.0/24` 是 RFC 5737 保留給文件用的網段，不會撞到真實位址。
+RL_IP = {"X-Forwarded-For": "203.0.113.221"}
+
+
 def _login(client, make_user, **kw):
     kw.setdefault("role", "superadmin")
     username, password = make_user(**kw)
     r = client.post("/api/auth/login",
-                    json={"username": username, "password": password})
+                    json={"username": username, "password": password},
+                    headers=RL_IP)
     assert r.status_code == 200, r.text
     return r.json()["token"]
 
@@ -671,7 +694,18 @@ def test_the_qr_decoder_would_actually_see_a_leaked_challenge():
 
 def test_the_qr_image_does_not_carry_the_challenge_in_the_query_string(
         client, make_user):
-    """🔴 **QR 圖裡的網址不可以用 `?challenge=`。**（⏳ 這裡需要一個編號，等 A 給）
+    """🔴 **QR 圖裡的網址不可以用 `?challenge=`。**
+
+    ## ⏳ 編號：A 指定了 `FX22d`，**而規格裡沒有那一行**
+
+    我實查 `docs/windows/STATE.md`：`FX22d` 一次都沒出現 ——
+    它只存在於一則訊息裡。
+    🔑 而 A 同一天才剛裁定：**規格是編號的權威**，
+    並自己認了「寫在規格散文裡→守門看不見」那一條。
+    ⇒ 📌 **我不自己登記**（自己發一個編號會讓守門變綠，
+    而綠燈的意思會變成「我承認了我自己」）。
+    ⚠️ 所以題名先維持**守門看不見**的描述式；
+    A 把 `FX22d` 寫進規格之後，改名成 `test_fx22d_...` 即可。
 
     ## ☠️ B 發現的第三個洩漏點，而它是**另一個形狀**
 
@@ -697,10 +731,16 @@ def test_the_qr_image_does_not_carry_the_challenge_in_the_query_string(
     ⚠️ 它仍然留在**那支手機的瀏覽器歷史**裡 —— 可接受（一次性、數分鐘、
     而那支手機就是要核准的本人）。
     """
+    # ⚠️ 兩次登入都要帶 `RL_IP` —— 見那個常數的說明（行程級的 per-IP 鎖定）。
     username, password = make_user(role="superadmin")
-    token = client.post(
-        "/api/auth/login", json={"username": username, "password": password}
-    ).json()["token"]
+    r = client.post("/api/auth/login",
+                    json={"username": username, "password": password},
+                    headers=RL_IP)
+    assert r.status_code == 200, (
+        f"第一次登入就失敗了（{r.status_code}）：{r.text[:200]}\n"
+        "⇒ 429 的話是 per-IP 鎖定被別的測試累積到了，見 `RL_IP`。"
+    )
+    token = r.json()["token"]
     r = client.post("/api/auth/totp/setup", headers={"Authorization": f"Bearer {token}"})
     assert r.status_code == 200, r.text
     secret = r.json()["secret"]
@@ -711,7 +751,8 @@ def test_the_qr_image_does_not_carry_the_challenge_in_the_query_string(
     assert r.status_code == 200, r.text
 
     r = client.post("/api/auth/login",
-                    json={"username": username, "password": password})
+                    json={"username": username, "password": password},
+                    headers=RL_IP)
     assert r.status_code == 200, r.text
     body = r.json()
     assert body.get("qrCodePng"), f"這次登入沒有給 QR ⇒ 這一題的前提不成立：{body}"

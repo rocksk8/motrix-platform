@@ -195,6 +195,24 @@ def client(_app, tmp_path, monkeypatch):
     import routers.reports as reports_module
     monkeypatch.setattr(reports_module, "_export_times", {})
 
+    # routers/auth.py::_rl_state 是**同一個形狀的第二個** process-global dict，
+    # 以「用戶端 IP」為鍵。而 TestClient 的預設來源是 `"testclient"` ——
+    # 全套測試共用同一個鍵 ⇒ 任何一支測試在這個 worker 裡累積 5 次登入失敗，
+    # 之後**所有人的登入都被鎖 900 秒**。
+    #
+    # 失敗的樣子是 `KeyError: 'token'`（登入回 429 而呼叫端直接
+    # `.json()["token"]`），而它**單獨跑永遠是綠的、只在全量跑才紅**，
+    # 紅的理由跟那一題要驗的事完全無關。2026-09-22 實測重現：對
+    # `_rl_fail("testclient", …)` 呼叫六次，就能讓一個乾淨的檔案紅兩題。
+    #
+    # 在這一行之前，repo 的做法是「每支會失敗登入的測試自己挑一個
+    # X-Forwarded-For 假 IP」（test_api_integration.py:127、
+    # test_totp_2026_09_07.py:111、test_totp_qr_push_2026_09_08.py 都有）——
+    # 那是**要求每個人記得**，而漏掉的那一支不會報錯，只會讓別人紅。
+    # 那些假 IP 的宣告一個都不用拿掉：它們現在是第二道防線，而不是唯一那道。
+    import routers.auth as auth_module
+    monkeypatch.setattr(auth_module, "_rl_state", {})
+
     # pdf_gen.py 的 6 類 PDF 存檔目錄（報價單／出貨單／承攬商匯款申請／開票申請
     # 憑據／請款單／結案報表）各自算自己的路徑，跟上面 uploads/photos 一樣**不受
     # 任何既有 patch 影響**——這是 2026-09-07 那批隔離修正唯一漏掉的一個。

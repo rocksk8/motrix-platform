@@ -861,7 +861,32 @@ def test_company_profile_put_rejects_non_superadmin_without_settings_module(clie
     assert r.status_code == 403, r.text
 
 
-def test_company_profile_put_allows_non_superadmin_with_settings_module(client, make_user):
+def test_company_profile_put_refuses_non_superadmin_with_settings_module(client, make_user):
+    """🔴 §10 SA1：`role=viewer` ＋ `modules` 含 `settings` ⇒ **403**。
+
+    ## ☠️ 這一題原本斷言 200，而題名逐字寫著 `allows_...`
+
+    ```
+    舊：test_company_profile_put_allows_non_superadmin_with_settings_module
+        assert r.status_code == 200
+    ```
+    🔑 **它不是沒發現問題 —— 它把問題寫成了規格。**
+    正式資料庫裡真的有這種帳號（`automation`，`role=viewer` 而持有 `settings`）
+    ⇒ **一個 viewer 改得動匯款帳號**，而這一題每天替那個行為背書。
+
+    ## ⚠️ 而它今天之所以被看見，只是因為**有人改了行為**
+
+    使用者說「只有超級管理員可以修改」⇒ SA1 拿掉 `module='settings'`
+    ⇒ 這一題紅了。**沒有那一句話的話，它會永遠綠著。**
+    📌 一個鎖住漏洞的測試**不會自己求救**：不紅、不警告、不出現在任何清單上，
+    **而它的名字讀起來像一個決定。**
+
+    ## 🔑 為什麼改斷言而不是刪掉它
+
+    刪掉之後，下一個人把 `module='settings'` 加回去時**沒有東西會紅**。
+    ⇒ 留著它、把方向轉過來 —— 〈更正要留著錯的那一列〉：
+    **改成對的當沒發生過，下一個人只會看到結論。**
+    """
     username, password = make_user(role="viewer", modules=["settings"])
     token = _login(client, username, password)
     r = client.put(
@@ -869,10 +894,19 @@ def test_company_profile_put_allows_non_superadmin_with_settings_module(client, 
         json={"name": "允碩整合集創股份有限公司", "tax_id": "60575481",
               "contact_info": "Tel: 04-3610-6566｜info@miactw.com"},
     )
-    assert r.status_code == 200, r.text
+    assert r.status_code == 403, (
+        f"持有 `settings` 模組的 viewer 改得動公司資料（{r.status_code}）——\n"
+        "☠️ 那個模組同時蓋住「調整介面偏好」與「改匯款帳號」，而它們不是同一件事。\n"
+        f"{r.text[:200]}"
+    )
 
+    # 📌 讀取**仍然**要通（SA4：匯款帳號印在寄給客戶的請款單上，它不是秘密）。
+    # ⚠️ 少了這一行，一個「把整個端點關掉」的實作會讓上面那個斷言綠，
+    #    而一般使用者的請款單頁面會整個壞掉。
     r = client.get("/api/settings/company-profile", headers=_auth(token))
-    assert r.json()["contact_info"] == "Tel: 04-3610-6566｜info@miactw.com"
+    assert r.status_code == 200, (
+        f"把寫入關緊的同時把讀取也關掉了（{r.status_code}）：{r.text[:200]}"
+    )
 
 
 def test_company_profile_put_still_allows_superadmin(client, make_user):
