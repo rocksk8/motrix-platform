@@ -240,14 +240,21 @@ def _seed_posted(conn, post, code, name, status="已核准"):
 def _line_name(row):
     """從一行分錄的回傳裡取出「畫面上會印的科目名稱」。
 
-    ⚠️ 欄位名沒定版 => 依序找。找不到 => 說出我找過什麼。
+    ⚠️ 欄位名沒定版 => 依序找。
+
+    🔴 **欄位在而值是空的**，與**欄位根本不存在**，是兩件事：
+    ```
+    第一版  `if row.get(k):` => 空字串被當成「沒有這個欄位」=> 訊息印 `欄位 None`
+    而突變跑出來的樣子  「印出來是 None（欄位 `None`）」<= **它說不出是哪一種**
+    ```
+    🔑 〈null 不等於 0〉＋〈探針的訊息只能描述我看到什麼〉：
+       ⇒ 先看鍵在不在，**在就回那個值**（即使是空字串）。
     """
+    keys = set(row.keys()) if hasattr(row, "keys") else set()
     for k in ("account_name", "accountName", "name", "account_name_snapshot"):
-        if isinstance(row, dict) and row.get(k):
+        if k in keys:
             return k, row[k]
-        if hasattr(row, "keys") and k in row.keys() and row[k]:
-            return k, row[k]
-    return None, None
+    return None, "（找不到任何一個名稱欄位，這一行有：%s）" % sorted(keys)[:8]
 
 
 def test_a_posted_voucher_prints_the_frozen_name_not_the_current_one(fresh_db):
@@ -329,13 +336,47 @@ _NAME_PICK_RE = re.compile(
     r"\baccount_items\s*\.\s*name\b|\bai\s*\.\s*name\b", re.IGNORECASE)
 
 
-def _joins_for_name(src):
-    """回傳「同時 JOIN account_items 又取它的 name」的行號。
+def _strip_comments(src):
+    """把註解與字串以外的部分留下，**行號與長度都不變**（空白填回去）。
 
-    ⚠️ 兩個條件都要 —— 只看 JOIN 會誤報（查科目樹本來就要 JOIN）。
+    🔴 **B 2026-09-23 抓到的**：第一版直接掃 `src.splitlines()` ⇒
+       **任何討論它的註解都會讓它亮**。B 在 `_current_account_names()` 的
+       docstring 裡逐字寫出「為什麼不用 JOIN 取 name」，絆線就亮在那段解釋上。
+    ☠️ 方向與我設計的相反：**把一段寫對的碼報成缺陷** ——
+       而那個方向會讓人去改一段沒壞的東西。
+    ⚠️ 而 B 同時指出我的誘餌自檢有盲點：誘餌是**合成字串**，
+       它證明得了「掃描器看得見」，**證明不了「掃描器只看程式碼」**。
+       ⇒ 下面的自檢補了那一半。
+    📌 用 `tokenize` 不用 AST：AST 看得到「已經存在的語法結構」，
+       而我要的是「把註解與字串**變不見**」。
     """
+    import io
+    import tokenize
+    lines = src.splitlines(keepends=True)
+    try:
+        toks = list(tokenize.generate_tokens(io.StringIO(src).readline))
+    except (tokenize.TokenError, IndentationError, SyntaxError):
+        return src                      # 解析不了就原樣回去，寧可誤報也不漏報
+    for tok in toks:
+        if tok.type not in (tokenize.COMMENT, tokenize.STRING):
+            continue
+        (r1, c1), (r2, c2) = tok.start, tok.end
+        for r in range(r1, r2 + 1):
+            line = lines[r - 1]
+            a = c1 if r == r1 else 0
+            b = c2 if r == r2 else len(line.rstrip("\n"))
+            lines[r - 1] = line[:a] + " " * (b - a) + line[b:]
+    return "".join(lines)
+
+
+def _joins_for_name(src, strip=True):
+    """回傳「JOIN account_items」或「取它的 name」的行號。
+
+    ⚠️ `strip=False` 只給儀器自檢用（合成片段不是合法的 Python）。
+    """
+    text = _strip_comments(src) if strip else src
     hits = []
-    for i, line in enumerate(src.splitlines(), 1):
+    for i, line in enumerate(text.splitlines(), 1):
         if _JOIN_RE.search(line) or _NAME_PICK_RE.search(line):
             hits.append((i, line.strip()))
     return hits
@@ -355,15 +396,41 @@ def test_the_freeze_scanner_can_see_a_join():
         "  FROM voucher_lines l",
         "  JOIN account_items ai ON ai.code = l.account_code",
     ])
-    hits = _joins_for_name(bait)
+    hits = _joins_for_name(bait, strip=False)
     assert len(hits) >= 2, (
         "掃描器在合成誘餌上只看到 %d 行：%s\n" % (len(hits), hits)
         + "☠️ **儀器壞了** => 下一題回報的「沒有 JOIN」不可信。")
 
     clean = "SELECT l.debit, l.account_name_snapshot FROM voucher_lines l"
-    assert not _joins_for_name(clean), (
+    assert not _joins_for_name(clean, strip=False), (
         "掃描器在乾淨的輸入上也命中 —— **它會把對的東西報成缺陷**，"
         "而那個方向會讓人去改一段沒壞的碼。")
+
+    # 🔴 B 2026-09-23 抓到的那一半：**它必須只看程式碼**。
+    # ☠️ 少了這一格，任何人寫註解解釋「為什麼不用 JOIN 取 name」都會中 ——
+    #    而那正是 B 實際踩到的（他在 docstring 裡逐字寫出那兩個詞）。
+    # 🔑 而合成誘餌**證明不了這一格**：它只證明「掃描器看得見」，
+    #    不證明「掃描器**只**看程式碼」。兩者是不同的失效。
+    in_comment = (
+        "def f(conn):\n"
+        "    # 這裡刻意不 JOIN account_items 取 ai.name —— 見 §六(3)\n"
+        '    """已過帳時不可以 JOIN account_items 拿 ai.name。"""\n'
+        "    return conn.execute('SELECT account_name_snapshot FROM voucher_lines')\n"
+    )
+    assert not _joins_for_name(in_comment), (
+        "掃描器亮在**註解／docstring** 上：%s\n" % _joins_for_name(in_comment)
+        + "☠️ **寫註解解釋為什麼避開某寫法的人會被報成缺陷** ——\n"
+          "   而那個方向會讓人去改一段寫對的碼，甚至刪掉那段解釋。")
+
+    # ⚙️ 而剝不可以把真的那一行也剝掉（剝過頭 => 下一題永遠綠）
+    real_code = (
+        "def f(conn):\n"
+        "    return conn.execute(\n"
+        "        'SELECT ai.name FROM voucher_lines l'\n"
+        "        ' JOIN account_items ai ON ai.code = l.account_code')\n"
+    )
+    assert _joins_for_name(real_code, strip=False), (
+        "連沒剝的版本都看不到真的 JOIN —— 儀器壞了。")
 
 
 def test_no_voucher_print_path_joins_account_items_for_the_name():

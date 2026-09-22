@@ -439,7 +439,7 @@ def _miss_key(geo, address):
     return geo._miss_key(address)
 
 
-def test_gc9_a_miss_is_forgotten_once_the_ttl_has_passed(clean_miss_cache):
+def test_gc9b_a_miss_is_forgotten_once_the_ttl_has_passed(clean_miss_cache):
     """🔴 **過了 TTL ⇒ 不再算「最近查過」，而且那一筆要真的被移除。**
 
     🔑 兩件事要一起驗：
@@ -469,7 +469,7 @@ def test_gc9_a_miss_is_forgotten_once_the_ttl_has_passed(clean_miss_cache):
         "☠️ 標案雷達每天帶進新的機關名稱，而它永遠不會被清。")
 
 
-def test_gc9_a_fresh_miss_is_still_remembered(clean_miss_cache):
+def test_gc9b_a_fresh_miss_is_still_remembered(clean_miss_cache):
     """⚙️ 反向控制①：**還沒到 TTL ⇒ 仍然要記得。**
 
     ☠️ 少了這一題，一個「**永遠回 False**」的實作會讓上一題全綠 ——
@@ -488,7 +488,7 @@ def test_gc9_a_fresh_miss_is_still_remembered(clean_miss_cache):
         "☠️ 那等於把 GC8 關掉：那些地址每一次都重新排隊。")
 
 
-def test_gc9_the_two_ttl_implementations_agree(clean_miss_cache):
+def test_gc9b_the_two_ttl_implementations_agree(clean_miss_cache):
     """🔴🔴 **TTL 有兩份實作，而沒有任何東西要求它們一致。**
 
     ```
@@ -535,7 +535,7 @@ def test_gc9_the_two_ttl_implementations_agree(clean_miss_cache):
         "而沒有任何東西要求它們一致。")
 
 
-def test_gc9_the_yardstick_shrinking_the_ttl_changes_the_answer(
+def test_gc9b_the_yardstick_shrinking_the_ttl_changes_the_answer(
         clean_miss_cache, monkeypatch):
     """📏 量尺：**把 TTL 改小 ⇒ 同一筆從「記得」變成「忘了」。**
 
@@ -561,7 +561,7 @@ def test_gc9_the_yardstick_shrinking_the_ttl_changes_the_answer(
         "🔑 而上面三題的綠證明不了任何事。")
 
 
-def test_gc9_the_exact_ttl_boundary_gets_the_same_answer_from_both(
+def test_gc9b_the_exact_ttl_boundary_gets_the_same_answer_from_both(
         clean_miss_cache, monkeypatch):
     """🔴🔴 §48：**`now - at == TTL` 那一個點上，兩份實作要給同一個答案。**
 
