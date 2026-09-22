@@ -518,15 +518,36 @@ def _forget_memory(monkeypatch):
     **① 那一列真的在資料庫裡**（存得下去）
     **② 記憶體清空之後不再發請求**（讀得回來）
     🔑 兩個都成立，才排除得掉「其實只是記憶體還在」。
+
+    ## 🔴 2026-09-22 17:4x 修了兩個洞（第一個是 A 抓到的）
+
+    ```
+    ① 它沒有清 _MISS_CACHE  ⇒ 負快取跨題殘留 ⇒ 別的題被汙染
+    ② `return attr` 在迴圈**裡面** ⇒ **只清第一個命中的**，其餘留著
+    ```
+    ⚠️ ② 是我自己的：我要的是「把記憶體那一層清掉」，
+    ☠️ **而我寫的是「把記憶體那一層的其中一個清掉」** ——
+    🔑 今天實測 `geo` 上同時有 `_CACHE` 與 `_MISS_CACHE` 兩個 dict，
+    而舊版只會清到 `_CACHE` 就 `return`。
+    📌 〈判準的寬窄都會騙人〉：一個「找到就停」的迴圈，
+    **在只有一個候選時是對的，在有兩個時靜靜地少做一半。**
+
+    ⚠️ 而這**不是 `a14` 的解法** —— `a14` 要的是「查詢失敗不可以寫負快取」，
+    那是產品行為，A 已裁定由 B 改產品碼（甲）。**兩件分開，不要合併。**
     """
-    for attr in ("_CACHE", "_GEOCODE_CACHE", "_cache"):
-        if hasattr(_geo(), attr) and isinstance(getattr(_geo(), attr), dict):
+    cleared = []
+    for attr in ("_CACHE", "_GEOCODE_CACHE", "_cache", "_MISS_CACHE"):
+        if isinstance(getattr(_geo(), attr, None), dict):
             monkeypatch.setattr(_geo(), attr, {})
-            return attr
-    raise AssertionError(
-        "找不到記憶體那一層快取（試過 _CACHE／_GEOCODE_CACHE／_cache）—— "
-        "名字改了的話這一題要跟著改"
-    )
+            cleared.append(attr)
+
+    # 📏 正對照：**至少要真的清到兩個** —— 正快取與負快取各一。
+    # ☠️ 少了這一行，日後哪一個改名，這支 helper 會**安靜地少清一層**，
+    # 🔑 而症狀是「別的題偶爾紅」，那種紅沒有人查得出成因。
+    assert "_CACHE" in cleared and "_MISS_CACHE" in cleared, (
+        f"只清到 {cleared} —— 正快取(`_CACHE`)與負快取(`_MISS_CACHE`) 都要清。\n"
+        "☠️ 少清一層 ⇒ 跨題汙染 ⇒ 症狀是別的題偶爾紅，而成因查不出來。")
+    return cleared
 
 
 def test_a11_the_cache_survives_a_restart(client, monkeypatch):
@@ -672,6 +693,159 @@ def test_a14_failures_are_not_cached_forever(client, monkeypatch):
         "上一次查不到被永久快取了 —— 那個服務後來修好了也沒有用。\n"
         "⇒ 失敗要嘛不存，要嘛分開存並有自己的短 TTL。"
     )
+
+
+def test_a14c_a_lookup_that_errored_is_never_written_to_the_negative_cache(
+        client, monkeypatch):
+    """🔴🔴 A14c（§15 補三）：**查詢「失敗」不可以寫進負快取。**
+
+    ```
+    查無此地址（三階都乾淨地 miss）→ 負快取，TTL 7 天       ✅ 應該記
+    查詢失敗（丟例外／逾時／回 err）→ 🔴 **絕對不可以寫負快取**
+    ```
+    ☠️ **把「這次問不到」記成「這個地址查不到」** ——
+    🔑 `Nominatim` 出一次 20 分鐘故障 ⇒ **那段時間查過的每一個地址被記成
+    「查不到」七天** ⇒ 使用者的地圖少一批點、少一個禮拜，
+    📌 **而畫面會叫他「去改地址」—— 在叫他修一個沒有壞的東西。**
+    ☠️ 〈降級之後它還是會動〉：**壞掉會被報修，降級不會。**
+
+    ## ⚠️ 這一題釘的是**條文**，不是 B 的寫法
+
+    A 2026-09-22 裁定走甲（B 改產品碼），並明著否決了乙
+    （「承認它是行程內的、重啟會清掉，測試加一行 reset」）：
+    🔑 **乙做完之後這一條仍然沒有實作，而斷言會變綠** —— 那是〈假綠燈〉的定義。
+    ⇒ 所以觀測點是 `_MISS_CACHE` **裡有沒有那個地址**，
+    不是「重啟之後會不會再查」（後者對乙也成立）。
+
+    ## ☠️ 而我第一版是**假綠燈**，留著錯的那一版
+
+    我原本把 `_locate_nominatim` 換成一個**丟例外**的替身：
+    ```
+    例外一路往上逃出 locate_cached()
+    ⇒ remember_geocode_miss() **根本沒跑到** ⇒ _MISS_CACHE 是空的 ⇒ 綠
+    ```
+    🔑 **它綠是因為那一行沒被執行，不是因為產品做對了。**
+    ☠️ 而真實的失敗長得完全不同：`_locate_google` **自己 `except` 然後回
+    `None`**（`geo.py:787-795`）—— **與「乾淨地查無此地址」回的是同一個值**，
+    📌 所以 `remember_geocode_miss()` 照樣會跑到。**那才是 §15 補三 在講的路徑。**
+
+    ⇒ 這一版改成**驅動 B 真正的錯誤分支**：讓 `urlopen` 丟例外，
+    走進 `_locate_google` 自己的 `except`（它會往 `errors` 塞一筆），
+    🔑 **然後問：上游有沒有消費那個訊號。**
+    """
+    _enable(monkeypatch)
+    geo = _geo()
+    _forget_memory(monkeypatch)
+
+    # 前提：有金鑰、額度沒爆 ⇒ google 階會真的走到 urlopen。
+    from helpers import settings as _settings
+    monkeypatch.setattr(
+        _settings, "_get_setting",
+        lambda key, default=None: ({geo.GOOGLE_KEY_SETTING: "A14C-KEY"}
+                                   if key == "company_profile" else default),
+        raising=False)
+    monkeypatch.setattr(geo, "quota_exceeded", lambda *a, **k: False,
+                        raising=False)
+    monkeypatch.setattr(geo, "_throttle", lambda: None, raising=False)
+
+    import urllib.request
+    tried = []
+
+    def _boom(*a, **k):
+        tried.append(1)
+        raise TimeoutError("連不上 Google（模擬服務故障／逾時）")
+
+    monkeypatch.setattr(urllib.request, "urlopen", _boom)
+    # 其餘兩階**乾淨地**查不到 —— 只有 google 那一階是「失敗」。
+    monkeypatch.setattr(geo, "_locate_tgos", lambda addr, **kw: None)
+    monkeypatch.setattr(geo, "_locate_nominatim", lambda addr, **kw: None)
+
+    address = "A14c 故障期間查的地址"
+    geo.locate_cached(address)
+
+    assert tried, (
+        "`_locate_google` 沒有走到 `urlopen`（前提不成立）——\n"
+        "⚠️ 可能是金鑰／額度那兩道擋住了，那這一題什麼都沒驗。")
+
+    assert not geo.geocode_missed_recently(address), (
+        f"有一階**查詢失敗**（連不上），而 `{address}` 仍然被記成「查不到」。\n"
+        "☠️ 一次 20 分鐘的服務故障 ⇒ 那段時間查過的每個地址七天不再查，\n"
+        "🔑 而畫面會叫使用者「去改地址」——**在叫他修一個沒有壞的東西**。\n"
+        "📌 §15 補三：**查詢失敗與查無此地址，處置相反。**\n"
+        "⚠️ 訊號已經有了（`_locate_google(address, errors=…)` 會往 `errors`\n"
+        "   塞一筆，`geo.py:791-794`）—— **缺的是上游消費它。**")
+
+
+def test_a14c_yardstick_the_probe_notices_when_the_error_signal_is_dropped(
+        client, monkeypatch):
+    """📏 量尺：**讓錯誤訊號收不到 ⇒ `a14c` 要紅。**
+
+    ⚠️ `a14c` 是**綠著出生**的（B 已實作，`geo.py:1300-1306` 的 `elif errors:`）——
+    ☠️ 而今天這個形狀已經付過兩次學費：`QL7` 八題全綠而功能零效果、
+    以及 `a14c` **自己的第一版**（例外逃出去 ⇒ 那一行沒跑到 ⇒ 綠）。
+    🔑 ⇒ 一個綠著出生的題目，要先證明它**分辨得出「做了」與「沒做」**。
+
+    做法：把 `_accepts_errors()` 壓成永遠 `False` ⇒ `_run_stage()` 就不會
+    把 `errors` 傳進去 ⇒ 那一階的失敗**不會被記錄下來** ⇒ 上游看到的是
+    「三階都乾淨地 miss」⇒ 它會寫負快取。**那正是修正前的行為。**
+
+    ⚠️ **不改 B 的檔。**
+    """
+    _enable(monkeypatch)
+    geo = _geo()
+    _forget_memory(monkeypatch)
+
+    from helpers import settings as _settings
+    monkeypatch.setattr(
+        _settings, "_get_setting",
+        lambda key, default=None: ({geo.GOOGLE_KEY_SETTING: "A14C-KEY"}
+                                   if key == "company_profile" else default),
+        raising=False)
+    monkeypatch.setattr(geo, "quota_exceeded", lambda *a, **k: False,
+                        raising=False)
+    monkeypatch.setattr(geo, "_throttle", lambda: None, raising=False)
+    # 🔴 突變：錯誤訊號收不到了。
+    monkeypatch.setattr(geo, "_accepts_errors", lambda fn: False)
+
+    import urllib.request
+    monkeypatch.setattr(
+        urllib.request, "urlopen",
+        lambda *a, **k: (_ for _ in ()).throw(TimeoutError("連不上")))
+    monkeypatch.setattr(geo, "_locate_tgos", lambda addr, **kw: None)
+    monkeypatch.setattr(geo, "_locate_nominatim", lambda addr, **kw: None)
+
+    address = "A14c 量尺用的地址"
+    geo.locate_cached(address)
+
+    assert geo.geocode_missed_recently(address), (
+        "把錯誤訊號的收集關掉之後，那個地址**仍然沒有**被記進負快取 ——\n"
+        "☠️ 那代表 `a14c` 量到的不是 `errors` 那一段，\n"
+        "🔑 而它的綠證明不了任何事（`a14c` 的第一版就是這樣綠的）。")
+
+
+def test_a14d_a_clean_miss_is_still_remembered(client, monkeypatch):
+    """⚙️ A14c 的反向控制：**三階乾淨地 miss ⇒ 必須記進負快取。**
+
+    ☠️ 少了這一題，**把負快取整個拿掉**也會讓上一題全綠 ——
+    🔑 而那會讓 `GC8` 想解決的問題原封不動地回來：
+    使用者每次開地圖都看到同一批地址重新排隊，數字永遠不會變少。
+    📌 〈判準的寬窄都會騙人〉：「永遠不記」是「失敗時不記」的超集。
+    """
+    _enable(monkeypatch)
+    geo = _geo()
+    _forget_memory(monkeypatch)
+
+    monkeypatch.setattr(geo, "_locate_google", lambda addr, **kw: None)
+    monkeypatch.setattr(geo, "_locate_tgos", lambda addr, **kw: None)
+    monkeypatch.setattr(geo, "_locate_nominatim", lambda addr, **kw: None)
+
+    address = "A14d 三階都乾淨地查不到的地址"
+    geo.locate_cached(address)
+
+    assert geo.geocode_missed_recently(address), (
+        "三階都乾淨地 miss，而它沒有被記進負快取 ——\n"
+        "☠️ 那 53 個抽不出行政區的機關名稱會每一次都重新排隊，\n"
+        "🔑 而使用者看到的是那個數字永遠不會變少（60 → 103）。")
 
 
 def test_a14b_a_successful_lookup_is_still_cached(client, monkeypatch):
