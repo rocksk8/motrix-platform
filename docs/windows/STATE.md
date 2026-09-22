@@ -29062,7 +29062,7 @@ B 報的   3  test_spec_coverage  「GC9 是地理編碼的條件，非我的」
 | **BI1** | 🔴 **出貨阻擋**：`POST /api/bonus/items` 的 `user` 未綁定 ⇒ NameError 500，而**空狀態的唯一出路就是它**；驗收四條見 `§180`，③ 要走成功路徑（403 已經是綠的） |
 | **AC2** | **動作要有可見的回饋** —— 觀測點是**渲染之後畫面上的文字**，不是變數被設定過；範圍＝每一個會寫入的動作；⚙️ 反向控制＝故意讓訊息被後續動作清掉必須紅 |
 | **AR1** | `archive.py` 加 **`backed_up_table_names()`**，讓沒有人需要知道 `_daily_backup_tables()` 內部是 `{中文標籤: SQL}`；☠️ 那個 dict 的形狀**本身就在誘導人取錯一層**（C 與 A-2 各踩一次） |
-| **SP1** | 三類憑證的 `doc_no` **不是案件編號** ⇒ 「選一個案件」看不到它們；後端九類都支援帶入，**缺的只有選取路徑** ⇒ 前端介面問題；☠️ 症狀是「沒有那一類」不是「壞了」 |
+| **SP1** | **4 類**（D 複核：B 漏了 `extra_expense`）的 `doc_no` 不是案件編號 ⇒ 「選一個案件」看不到它們；✅ **那四類的表都有 `quote_no` 欄** ⇒ `case_attachments()` 多一個 SELECT 即可，**不需要新的選取介面**；⚠️ 畫面要讓 `contractor_dispatch`／`contractor_invoice` 出現**兩列**（`docNo` 相同） |
 | **AI1** | `account_items.is_active` 有欄位（v96）而 `routers/account_items.py` **只有一支 GET** ⇒ **沒有端點也沒有 UI，停不掉任何科目**；與 v93「註解說得出而沒有欄位」是同一種，往前走了一格 |
 | **CA1** | **自訂科目樹**（使用者點名，`STATE:16674`）：新增／編輯自訂科目，`AI1`（停用）**併入本項**；✅ 實查無 `BEFORE INSERT` TRIGGER ⇒ 新增不被擋；🔴 而 547 筆全 `statutory` ⇒ `PATCH is_active` **對現有每一筆都會被 TRIGGER 擋**；⚠️ 層級深度與編碼規則**要問使用者** |
 | **GT1** | 閘門要驗 **`THIS` ⊆ 已宣告** —— 現状：在 `THIS` 而從未宣告的編號，宣告與實作兩邊都空 => **互相抵銷 => 綠** |
@@ -32959,3 +32959,91 @@ account_items 現況 547 筆，source **全部是 statutory**，custom **0 筆**
 而 §29 舊條文寫「規格不可以寫死層數」
 ⚠️ **「不寫死」與「不驗證」是兩件事，沒有人裁過。**
 ```
+
+---
+
+## §198 `SP1` 更正為 **4 類**；三件突變／探針的方法論
+
+### 🔁 `SP1`：**是 4 類不是 3 類，而且不需要新的選取介面**
+
+D 用 `§189` 讀結構（`source_files()` 的 if 鏈＋`db.py` 的 CREATE/ALTER）：
+```
+_CASE_SCOPED（doc_no ＝案件編號或 {quote_no}_{idx}）  **5**
+  quotation_signed／case_update／payment_item／material／material_invoice
+不在（doc_no ＝自己的 id／單號）                      **4**
+  **extra_expense**  <= B 漏掉的那一個
+  invoice_voucher／contractor_dispatch／contractor_invoice
+收斂 5 + 4 = SOURCE_TYPES **9** ✅
+```
+☠️ **`extra_expense` 最會騙人**：表名叫 `case_extra_expenses`、**字面上就有 case**，
+而 `source_files` 用的是 `id` 不是 `quote_no` ⇒ 「選一個案件」一樣看不到它。
+
+✅ **而範圍比 B 估的便宜**：那四類的表**全部有 `quote_no` 欄**
+（`case_extra_expenses` 22 欄／`invoice_vouchers` 13 欄／`contractor_dispatches` 13 欄，
+D 逐一列過）⇒ `case_attachments()` 只要多一個
+`SELECT id/voucher_no FROM <表> WHERE quote_no=?` 就涵蓋全部 9 類
+⇒ **不需要新的選取介面。**
+
+📌 D 也**差一步報錯**：`invoice_vouchers` 的 `issued_files_json`、
+`contractor_dispatches` 的 `files_json`／`invoice_files_json`
+**不在 CREATE TABLE 裡** —— 他去確認才發現是 `ALTER TABLE` 補的（`db.py:2516/:1873/:2462`）。
+⚠️ 若真的不存在，`source_files` 會是 **OperationalError 不是空清單**。
+
+### 🔴 `§193` 的同形狀**第二組**，而這一組更難發現
+```
+material          -> quotations.data_json -> materials[idx].files        ┐同一個陣列元素
+material_invoice  -> quotations.data_json -> materials[idx].invoiceFiles ┘
+contractor_dispatch -> contractor_dispatches.id -> files_json          ┐**同一張表、同一個 doc_no**
+contractor_invoice  -> contractor_dispatches.id -> invoice_files_json   ┘只有欄位不同
+```
+🔑 後兩者的 **`docNo` 完全相同**（都是 dispatch id）⇒
+**任何只用 `docNo` 當鍵的清單／去重／畫面會把兩組併成一組，而少的那一組不會報錯。**
+✅ `resolve_picks()`（:201）用 `(type, docNo, fileId)` 三元組 ⇒ **後端不會撞**。
+⚠️ **風險在畫面**：一張派工單要出現**兩列**（承攬商文件／廠商發票），不是一列。
+
+### 🔴 突變要挑一個**語法上不可能壞**的形狀
+```
+C 第一版：只換掉 return 的**第一行**，而那個 return 是**跨多行的集合生成式**
+=> 剩下的續行變成孤兒 => **語法壞掉** => collection error 不是測試紅
+而他的輸出過濾只認 FAILED／passed／failed => **什麼都沒印** => 看起來像腳本壞了
+```
+🔑 〈突變測試的假陽性〉第一格（**編譯紅不是測試紅**）的**新載體：多行運算式的「第一行替換」**。
+✅ 第二版改用**檔尾覆寫**（重新定義同名函式）—— **語法上一定成立**，
+  並在跑之前 `py_compile` 一次確認。
+⇒ **挑形狀不要挑「看起來最小的改動」。**
+
+### 🔴 測試不可以相依於**受測物的相依**
+```
+C 的 _page_count 刻意**不用 pypdf** —— 它是 JV5 的相依
+=> 沒裝會 error，而那與「合併壞了」長得不一樣，**但兩者都會讓人去看錯的地方**
+```
+
+### 📌 探針撞到資料層的守門（今天第二次，兩次方向相反）
+```
+這次  用法定科目 1113 去改名 => 撞 account_items_statutory_no_update
+      => 紅在**他的前置**，訊息指向資料層，**而受測物根本還沒被碰到**
+先前  反過來：拿 TRIGGER 探針自己種的 9901 當法定科目用
+```
+✅ 改成自己種一個 `source='custom'` 的 `9911`。
+
+### 🔴 `§196` 同族掃描：欄位層只有 1 個，**而盲區被量出來了**
+```
+母體 測試 242 支（134 支有直寫 SQL）／產品碼 423 支
+只有測試寫過的 (表,欄) = **5 組**   收斂 384 = 379 交集 + 5
+⚙️ 正對照：(account_items, is_active) **亮了** ✅
+五個逐一打開：**4 個假陽性**（臨時表／滿足外鍵的 id／故意寫錯欄位名的那張表）
+⚠️ 邊界 invoice_vouchers.payment_idx —— db.py:1501 明寫「對新資料不再使用但保留不刪」
+        產品**既不寫也不讀** => 不是 §196 的形狀
+        **而那筆 fixture 讓一個已廢欄位看起來還活著**
+```
+🔴 **而「只有 1 個」只對欄位層成立**：
+```
+① 無欄位清單的 INSERT ... VALUES   4 處（全在同一支測試、全是臨時表）
+② **直接用 json.dumps 捏 JSON 狀態  80 支測試檔／173 處** => 這把尺完全看不到
+```
+🔑 而這個系統**大量狀態住在 `quotations.data_json` 的 `caseRecord` 裡**
+（`SP1` 那五類就有三類是）⇒ **「產品到不了的狀態」最可能住在 JSON 層**，
+而那一層要另一把尺：判準從「**欄位**有沒有產品寫入路徑」改成
+「**這個 JSON 鍵**有沒有產品寫入路徑」，且**要讀 router 不能靠 grep**。
+📌 D 自報第四次靜默 0：`grep schema_version | grep -i insert` 回 0，
+  他**沒有當答案**，改成不加過濾列出全部命中才看到 `db.py:809`（產品用 `version` 不是 `ver`）。
