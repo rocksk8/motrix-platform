@@ -1875,3 +1875,51 @@ def test_53e_restoring_does_not_borrow_a_sentence_that_means_the_opposite():
             "`restoring` 與 `applied_no_restore` 在 `%s` 下是**同一句話**：%r\n"
             "☠️ 「正在還原」與「沒有還原」在畫面上長得一樣 ——\n"
             "🔑 而使用者要用它決定「現在能不能再按一次回滾」。" % (action, text))
+
+
+# ══════════════════════════════════════════════════════════════════════
+# §54d · 兩處 `or` 要改成 `in`：**「沒有這個值」與「這個值的文案是空的」是兩件事**
+# ══════════════════════════════════════════════════════════════════════
+
+def test_54d_a_blank_wording_is_not_mistaken_for_an_unknown_value(monkeypatch):
+    """🔴 §54d：**空字串的文案不可以被當成「不認得這個值」。**
+
+    A-2 找到的第二條 fail-open（第一條是 `action`，我找的）：
+    ```python
+    return table.get(value) or ("狀態回報看不懂（%s）…" % value)
+                          ↑ `or` 對「文案是空字串」也會退回
+    ```
+    ⚠️ 它**現在打不到**（表裡沒有空字串，而 `§54c` 也禁止），**而它是一顆種子**：
+    ☠️ 哪天有人把某個值的文案暫時留空 ⇒ 靜默變成「狀態回報看不懂（applied）」
+       —— 🔑 **一個看起來像正確處理的錯誤訊息**，而實情是「有人把文案刪了」。
+
+    ⇒ 兩處都要用 `in` 判斷，不要用 `or`。
+    📌 本題**不規定空字串該回什麼**（那是 B 的）——
+       只釘「它與『不認得這個值』要分得出來」。
+    ⚠️ 而〈null 不等於 0〉是同一條：
+       「沒有這個鍵」與「鍵在而值是空的」合併之後，
+       **錯誤看起來完全正常，所以沒有人報修。**
+    """
+    mod = _dash()
+    table = getattr(mod, "_ROLLED_BACK_TEXT", None)
+    assert table is not None, "缺少 `_ROLLED_BACK_TEXT` —— 見 `§54c` 那一題。"
+    assert "deploy" in table and "applied" in table["deploy"], (
+        "`deploy` × `applied` 這一格不在表裡 —— **儀器失效**，"
+        "這一題要拿它當被注入的對象。")
+
+    patched = dict((a, dict(sub)) for a, sub in table.items())
+    patched["deploy"]["applied"] = ""
+    monkeypatch.setattr(mod, "_ROLLED_BACK_TEXT", patched)
+
+    blank = mod.describe_rolled_back("applied", "deploy")
+    bogus = "__c_probe_not_a_real_value__"
+    shape = mod.describe_rolled_back(bogus, "deploy")
+    assert blank != shape.replace(bogus, "applied"), (
+        "把 `deploy × applied` 的文案改成空字串之後，"
+        "`describe_rolled_back` 回的是**「不認得這個值」那一句**：%r" % blank
+        + chr(10) +
+        "☠️ 而實情是**有人把文案刪了** —— 那是一個看起來像正確處理的錯誤訊息。"
+        + chr(10) +
+        "🔑 `or` 把「沒有這個鍵」與「鍵在而值是空的」合併了，改用 `in` 判斷。"
+        + chr(10) +
+        "📌 空字串要回什麼由你定，本題只釘「兩者分得出來」。")
