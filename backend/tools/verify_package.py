@@ -412,14 +412,13 @@ def main():
             R.fail("必須存在", "%s 不在包裡" % name)
             continue
         print("  %-20s OK     %s" % (name, found[0]))
-        if name == "autostart.bat":
-            p = os.path.join(pkg, found[0])
-            with io.open(p, "r", encoding="utf-8", errors="replace") as fh:
-                sets = [ln.strip() for ln in fh
-                        if ln.strip().lower().startswith("set ")]
-            print("       set 行 %d 條：" % len(sets))
-            for s in sets:
-                print("         %s" % s)
+    print()
+
+    # 🔴 `VP6`：autostart.bat 的**內容**要被驗，不是只驗存在。
+    #    ⚠️ 抽成函式而不是留在上面那個迴圈裡 —— 內嵌的話
+    #       **只有整支跑起來才驗得到**，而那正是 `VP1` 那次的形狀。
+    print("### (4b) autostart.bat 內容（🔴 擋關）")
+    check_autostart(pkg)
     print()
 
     print("### (5) Leaflet SHA vs PROVENANCE.md（兩側都自己算）")
@@ -431,6 +430,127 @@ def main():
     check_db_version(pkg, args.expect_db_version)
 
     sys.exit(R.finish())
+
+
+#: `autostart.bat` 必須帶的兩個開關。
+#:
+#: ☠️ 兩者少了的症狀都是「**功能安靜地不存在**」——
+#:    少 `MOTRIX_TENDER_RADAR` ⇒ 標案雷達整個不跑，而系統一切正常
+#:    少 `MOTRIX_GEO`          ⇒ 地址永遠換不到座標，地圖上什麼都沒有
+#: 🔑 沒有錯誤、沒有紅字 ⇒ **不會有人報修。**
+AUTOSTART_SWITCHES = ("MOTRIX_TENDER_RADAR", "MOTRIX_GEO")
+
+#: 反斜線。**刻意用 `chr(92)` 而不是字面值。**
+#:
+#: ☠️ 我在這一支上踩過：用修檔腳本把 `[\\/]` 寫進來，而轉義被吃掉一層
+#:    ⇒ 檔案裡變成 `[\/]` ⇒ 在字元類別裡那只是「斜線」，**不含反斜線**
+#:    ⇒ 一條 `C:\…` 的正常路徑被判成「不是絕對路徑」。
+#: 🔑 而它紅在**正對照**上（一份真的 autostart 被拒），所以當場就看得見；
+#:    若我只寫了三個「該擋的」而沒有正對照，這個錯會安靜地讓**每一包都紅**。
+_BS = chr(92)
+
+
+def _looks_absolute(path):
+    """看不看得出是一條絕對路徑。**不比對任何路徑字面值。**
+
+    ⚠️ 不用 `os.path.isabs()`：它跟**跑驗包的那台機器**的作業系統走，
+       而我們要判斷的是**目標機器**上的路徑 ——
+    ☠️ 在 Linux 上 `os.path.isabs("C:\\…")` 是 `False` ⇒ 同一個包
+       在不同機器上驗會得到不同結論，而那比不驗更糟。
+    """
+    if not path:
+        return False
+    if path[0] in (_BS, "/"):          # UNC (\\server) 或 POSIX 絕對路徑
+        return True
+    return len(path) >= 3 and path[1] == ":" and path[2] in (_BS, "/")
+
+
+#: 一條 `cd` 指令，抓它的目標路徑（可帶 `/d`、可帶引號）。
+_CD_RE = re.compile(r'^\s*cd\s+(?:/d\s+)?"?([^"\r\n]*)"?\s*$', re.IGNORECASE)
+
+
+def check_autostart(pkg):
+    r"""`VP6`：`autostart.bat` **不是只驗存在**。
+
+    ## ☠️ 現況：只把 `set ` 開頭的行**印出來**
+
+    `print` 不是 `R.fail` —— 它一個斷言都沒有。
+    D 實測：把 `autostart.bat` 清成 **0 bytes**，驗包仍然 **EXIT=0**。
+
+    ## 🔴 而正式機路徑**結構上看不到**
+
+    ```
+    set MOTRIX_TENDER_RADAR=1                      <= 舊過濾器看得到
+    cd /d "C:\Users\Motrix\Desktop\V9.0\backend"   <= **它看不到**
+    ```
+    🔑 那是〈只留「可執行行」的過濾器〉的極端版：**它只留一種可執行行**，
+       而路徑住在另一種。
+    ☠️ D 實測：兩個開關還在、`set` 行數還是 4，**只改路徑** ⇒ 驗包 EXIT=0
+       ⇒ 那台機器會 `cd` 到不存在的目錄 ⇒ uvicorn 起不來 ⇒
+       **而排程每 5 秒重試一次，log 一直長。**
+
+    ## ⚠️ 判準**不綁路徑字面值**
+
+    綁了就是把驗包綁死在一台機器上 —— 換一台部署就永遠紅。
+    ⇒ 釘的是：**有一條 `cd`、它的路徑非空、而且看得出是絕對路徑。**
+
+    ## ⚙️ 兩個開關要**各自指名**
+
+    ```
+    兩個都少   多半是檔案壞了／被清空        => 一看就知道
+    **少一個** 是有人**手動註解掉**其中一行  => 而它看起來完全正常
+    ```
+    🔑 只驗「至少有一個」的話，後者永遠不會被抓到。
+    """
+    path = None
+    for root, _dirs, files in os.walk(pkg):
+        for f in files:
+            if f.lower() == "autostart.bat":
+                path = os.path.join(root, f)
+                break
+        if path:
+            break
+    if path is None:
+        R.fail("autostart 內容", "autostart.bat 不在包裡 ⇒ 這一項無法檢驗（**不是 PASS**）")
+        return
+
+    with io.open(path, "r", encoding="utf-8", errors="replace") as fh:
+        text = fh.read()
+    lines = text.splitlines()
+
+    for sw in AUTOSTART_SWITCHES:
+        # ⚠️ 只看**沒有被註解掉**的行：`rem` 或 `::` 開頭的不算數 ——
+        #    「被註解掉」正是這一題要抓的那一種。
+        live = [ln for ln in lines
+                if not re.match(r"^\s*(rem\b|::)", ln, re.IGNORECASE)]
+        hit = [ln for ln in live if re.search(r"^\s*set\s+%s\s*=" % sw, ln,
+                                               re.IGNORECASE)]
+        if not hit:
+            R.fail("autostart 開關",
+                   "autostart.bat 沒有設定 %s ⇒ 那個功能在那台機器上"
+                   "**安靜地不會跑**" % sw)
+
+    cds = [m.group(1).strip() for m in
+           (_CD_RE.match(ln) for ln in lines) if m]
+    if not cds:
+        R.fail("autostart 路徑",
+               "autostart.bat 裡沒有任何 cd 指令 ⇒ uvicorn 會在錯的目錄啟動")
+    else:
+        target = cds[-1]
+        if not target:
+            R.fail("autostart 路徑",
+                   "autostart.bat 的 cd 目標是**空的** ⇒ 那台機器會 cd 到錯的地方，"
+                   "uvicorn 起不來而排程一直重試")
+        elif not _looks_absolute(target):
+            # 🔑 不比對字面值，只問「看不看得出是絕對路徑」。
+            R.fail("autostart 路徑",
+                   "autostart.bat 的 cd 目標不是絕對路徑（%r）⇒ "
+                   "啟動目錄會跟著排程的工作目錄跑" % target)
+    print("  autostart.bat  %s" % path)
+    print("       開關 %d／%d　cd 目標 %r"
+          % (sum(1 for sw in AUTOSTART_SWITCHES
+                 if re.search(r"^\s*set\s+%s\s*=" % sw, text, re.I | re.M)),
+             len(AUTOSTART_SWITCHES), cds[-1] if cds else None))
 
 
 def check_provenance(pkg, lower):
