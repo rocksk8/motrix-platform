@@ -16,9 +16,214 @@ db.DB_PATH alone does not update their already-bound copies — both modules'
 own attributes need patching too.
 """
 import importlib
+import os as _bk19_os
 import sys
+import tempfile as _bk19_tempfile
+from pathlib import Path as _Bk19Path
 
 import pytest
+
+# ══════════════════════════════════════════════════════════════════════
+# BK19 · 測試期間不可以碰到真的雲端硬碟
+# ══════════════════════════════════════════════════════════════════════
+#
+# BK11 結案（1593d8a）：2026-08-30／08-31／09-03 三天的雲端每日備份是**空庫**。
+# 成因是這個檔的雲端隔離**死碼** —— patch 釘在五個大寫常數上，
+# 而 archive.py 早就改成 `_archive_base()` 這種動態掃描磁碟機的函式
+# ⇒ patch 什麼都沒隔離到 ⇒ 跑 pytest 時 DB 指向 tmp 空庫、
+#   而 `_archive_base()` 真的掃到 G: ⇒ 空庫被覆寫進雲端當天的資料夾。
+#
+# 🔑 〈守門守的對象被搬走〉：隔離寫了、對象被搬走了、測試全綠 ——
+# ☠️ **而這一次的代價落在 repo 之外，所以沒有任何一題會因此變紅。**
+#
+# ⇒ 這道守門在**每一題開始前**問一次「`_archive_base()` 現在指到哪」。
+# ⚠️ 判準是「回傳值在不在 tmp 底下」，**不是「有沒有寫成功」**：
+#    後者要真的寫一次才知道，而那正是這裡要避免的事。
+
+#: `_app` 建立的隔離根目錄。⚠️ 用集合而不是單一值：xdist 每個 worker 一份。
+_ISOLATION_ROOTS: set = set()
+
+
+def archive_path_is_isolated(path) -> bool:
+    """這個存檔路徑是不是在測試的 tmp 底下。
+
+    ⚠️ **fail closed**：空字串／`None`／算不出來 ⇒ 一律回 `False`。
+    🔑 「我不知道它指到哪」不可以被當成「它是安全的」——
+    而 `_archive_base()` 掃不到任何磁碟機時回的正是 `""`。
+    """
+    if not path:
+        return False
+    try:
+        resolved = _Bk19Path(str(path)).resolve()
+    except (OSError, ValueError):
+        return False
+    roots = set(_ISOLATION_ROOTS)
+    roots.add(_Bk19Path(_bk19_tempfile.gettempdir()).resolve())
+    for root in roots:
+        try:
+            resolved.relative_to(root)
+            return True
+        except ValueError:
+            continue
+    return False
+
+
+#: BK19 診斷模式：設 `MOTRIX_BK19_REPORT=1` ⇒ 不 fail，只把寫入路徑收集起來。
+#: 📌 它的用途是**先量再訂判準** —— 直接訂「tmp 之外一律 fail」會在 1,600 題上
+#: 一次爆開，而那時分不出「真的越界」與「我沒想到的合法寫入」。
+_BK19_WRITES: set = set()
+
+
+def _bk19_write_allowed(path) -> bool:
+    """這個**寫入**路徑允不允許。fail closed。"""
+    if not path:
+        return False
+    try:
+        resolved = _Bk19Path(str(path)).resolve()
+    except (OSError, ValueError, TypeError):
+        return False
+    roots = set(_ISOLATION_ROOTS)
+    roots.add(_Bk19Path(_bk19_tempfile.gettempdir()).resolve())
+    for root in roots:
+        try:
+            resolved.relative_to(root)
+            return True
+        except ValueError:
+            continue
+    return False
+
+
+#: repo 根目錄。repo 內的越界寫入是**隔離缺口**，repo 外的是**事故**。
+_BK19_REPO_ROOT = _Bk19Path(__file__).resolve().parent.parent.parent
+
+
+def _bk19_inside_repo(path) -> bool:
+    try:
+        _Bk19Path(str(path)).resolve().relative_to(_BK19_REPO_ROOT)
+        return True
+    except (OSError, ValueError, TypeError):
+        return False
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _bk19_no_write_outside_tmp():
+    """🔴 BK19：測試期間**任何寫入**都不可以落在 tmp 之外。
+
+    ## ☠️ 為什麼不是釘 `_archive_base()` 的回傳值
+
+    D 查證：那只守得住一條，另有三條繞得過去。
+    ```
+    甲  cloud_storage.s3_put_bytes()  完全不經過 _archive_base()
+        ⇒ 開發者 shell 漏進來的 AWS 憑證會讓測試真的上傳
+    乙  main.py:517 _ensure_archive_dirs() 在**模組層**執行
+        ⇒ patch 生效前 import main 就已經在真實磁碟建好目錄（另立 BK20）
+    丙  逐一 patch 的模組層常數 —— 新增一個而 conftest 沒跟上就重演 09-07
+    ```
+    🔑 ⇒ **斷言對象不是某一個函式的回傳值，是「實際寫到哪裡」。**
+
+    ⚠️ 乙那一條**這道守門抓不到**：它在 import 當下就發生了，
+    而這個 fixture 是在 import 之後才裝上去的。📌 那是 `BK20`。
+    """
+    import builtins
+    import os as _os
+    import shutil as _shutil
+
+    report_only = _bk19_os.environ.get("MOTRIX_BK19_REPORT") == "1"
+    real_open = builtins.open
+    real_makedirs = _os.makedirs
+    real_copy = _shutil.copy
+    real_copy2 = _shutil.copy2
+    real_copyfile = _shutil.copyfile
+
+    def _check(path, what):
+        if _bk19_write_allowed(path):
+            return
+        _BK19_WRITES.add(f"{what}: {path}")
+        # 🔴 分兩級，而分級的依據是**量出來的**不是猜的
+        #    （2026-09-22 用 `MOTRIX_BK19_REPORT=1` 實跑 60 題）：
+        #    tmp 外的寫入共 11 種，**全部落在 repo 內**，沒有任何一條碰到
+        #    G: 或別的磁碟機。
+        #
+        #    repo 外  ⇒ 立刻炸。那是 2026-08-30 三份空備份的那一類，
+        #               而它的代價落在使用者的雲端硬碟上、repo 裡看不到。
+        #    repo 內  ⇒ 只記錄。它們是真的隔離缺口（見
+        #               `test_bk19_nothing_was_written_outside_tmp`），
+        #               ⚠️ 而在這裡炸的話，60 題會同時紅在一個看不懂的地方 ——
+        #               **一個講不清楚自己在說什麼的紅燈，會被當成雜訊關掉。**
+        if not report_only and not _bk19_inside_repo(path):
+            raise AssertionError(
+                f"BK19：測試想寫到 repo 與 tmp 之外 —— {what} {path!r}. "
+                "2026-08-30／08-31／09-03 三份空備份就是這樣寫進雲端硬碟的。")
+
+    def _open(file, mode="r", *a, **kw):
+        if isinstance(file, (str, bytes, _os.PathLike)) and any(
+                c in str(mode) for c in ("w", "a", "x", "+")):
+            _check(file, "open")
+        return real_open(file, mode, *a, **kw)
+
+    def _makedirs(name, *a, **kw):
+        _check(name, "makedirs")
+        return real_makedirs(name, *a, **kw)
+
+    def _wrap_copy(fn, label):
+        def _inner(src, dst, *a, **kw):
+            _check(dst, label)
+            return fn(src, dst, *a, **kw)
+        return _inner
+
+    builtins.open = _open
+    _os.makedirs = _makedirs
+    _shutil.copy = _wrap_copy(real_copy, "shutil.copy")
+    _shutil.copy2 = _wrap_copy(real_copy2, "shutil.copy2")
+    _shutil.copyfile = _wrap_copy(real_copyfile, "shutil.copyfile")
+    try:
+        yield
+    finally:
+        builtins.open = real_open
+        _os.makedirs = real_makedirs
+        _shutil.copy = real_copy
+        _shutil.copy2 = real_copy2
+        _shutil.copyfile = real_copyfile
+        if report_only and _BK19_WRITES:
+            print("[BK19] tmp 之外的寫入 %d 種：" % len(_BK19_WRITES))
+            for line in sorted(_BK19_WRITES):
+                print("   ", line)
+
+
+@pytest.fixture(autouse=True)
+def _guard_archive_isolation(tmp_path_factory):
+    """🔴 BK19：每一題開始前，確保存檔根目錄不是真的雲端硬碟。
+
+    ## 🔴 這道守門一裝上去就抓到一個真的洞
+
+    第一版只**斷言**，結果它在自己的測試檔上立刻紅：
+    `_archive_base()` 回 `G:\\我的雲端硬碟\\系統存檔`。
+    ☠️ 成因：隔離寫在 **session 級的 `_app` fixture 裡**
+    ⇒ **只有用到 `client`／`_app` 的測試才受保護**。
+    任何一支「只 `import archive`」的測試，看到的是真的磁碟機掃描結果。
+
+    🔑 而那正是 2026-08-30／08-31／09-03 的形狀：
+    **不是隔離寫錯了，是隔離的覆蓋範圍比大家以為的小。**
+
+    ## ⇒ 所以它不只檢查，它還**負責把隔離建立起來**
+
+    📌 〈修作法不要修結果〉：只斷言的話，下一個寫新測試檔的人
+    會看到一個紅燈、然後去加 `client` fixture —— **而那是修結果。**
+    ⚠️ 已經隔離好的（`_app` 跑過了）**不動它**，避免踩到別人的設定。
+    """
+    import archive
+    base = archive._archive_base()
+    if not archive_path_is_isolated(base):
+        fallback = tmp_path_factory.mktemp("archive_fallback")
+        _ISOLATION_ROOTS.add(str(_Bk19Path(fallback).resolve()))
+        archive._archive_base = lambda: str(fallback)
+        base = archive._archive_base()
+    assert archive_path_is_isolated(base), (
+        f"存檔根目錄是 {base!r}，不在測試的 tmp 底下。 "
+        "☠️ 測試會把資料寫進去，而那裡可能是使用者真的雲端硬碟 —— "
+        "2026-08-30／08-31／09-03 三份空備份就是這樣來的。"
+    )
+    yield
 
 
 @pytest.fixture(scope="session")
@@ -104,6 +309,8 @@ def _app(tmp_path_factory):
     archive_base = base / "archive_base"
     archive_base.mkdir()
     archive._archive_base = lambda: str(archive_base)
+    # 🔴 BK19：把「這一刻的 tmp 根目錄」記下來，給下面那道 autouse 守門用。
+    _ISOLATION_ROOTS.add(str(_Bk19Path(base).resolve()))
     archive._LOCAL_DB_BACKUP = str(base / "db_backups")
     archive._ALERT_DIR = str(base / "backup_alerts")
     archive._UPLOADS_DIR = str(base / "uploads")  # empty — don't let tests read the real uploads/
