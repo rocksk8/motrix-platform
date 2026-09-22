@@ -39,6 +39,11 @@
               width:20px; height:20px; border-radius:50%; color:#fff;
               font-size:11px; font-weight:700; line-height:1;
               box-shadow:0 0 0 2px #fff, 0 1px 3px rgba(0,0,0,.35); }
+    /* 據點（分公司）：**方形牌子＋名稱**，跟圓形的資料點一眼分得開。
+       🔑 名稱直接寫在圖上 —— 多據點時「離公司 12 km」那句話要指得出是哪一個。 */
+    .mp-site { display:inline-block; padding:2px 7px; border-radius:4px;
+               background:#1F2937; color:#fff; font-size:11px; font-weight:600;
+               white-space:nowrap; box-shadow:0 0 0 2px #fff, 0 1px 3px rgba(0,0,0,.4); }
     /* 「你在這裡」：**刻意跟資料點長得不一樣。**
        ☠️ 一張圖上有標案／客戶／供應商／辦公室，全部同一個圖釘的話，
        **多畫一個等於沒有畫** —— 使用者找不到自己。
@@ -120,6 +125,22 @@
                   x-text="loading ? '定位中…' : '繼續定位'"></button>
         </div>
       </div>
+      <!-- 🔴🔴 定位不到的據點**不可以安靜地被排除**。
+           ☠️ 台北分公司定位失敗 ⇒ 台北的案子**全部算成「離梧棲 150 km」**
+           ⇒ 🔑 **每個數字都是對的，而整張表在回答一個沒有人問的問題。**
+           ⚠️ 而「有 2 個定位不到」這種數字不夠 —— **要指得出是哪幾筆**，
+           否則使用者無從知道該去修哪一個地址。 -->
+      <div class="mp-note warn"
+           x-show="info && info.locationsUnlocated && info.locationsUnlocated.length">
+        <span>⚠️</span>
+        <div><strong>有據點定位不到</strong>：
+          <span x-text="(info.locationsUnlocated || []).map(l => l.name + '（' + (l.address || '沒有地址') + '）').join('、')"></span>。
+          <br>這些據點<strong>不會被算進「最近的據點」</strong> ——
+          附近的案子會被算到別的據點上，而那個距離看起來完全正常。
+          <a href="company-profile-settings.html">去公司資料設定修正地址</a>（或直接填經緯度）。
+        </div>
+      </div>
+
       <!-- 🔴 背景停掉有三種，**而處置完全不同**：
            `geo_off`（去打開地理查詢）／`daily_limit`（明天會繼續）／
            `failures`（**對方可能拒絕我們了，要看伺服器記錄**）。
@@ -280,7 +301,7 @@
       <table class="table">
         <thead><tr>
           <th>來源</th><th>機關</th><th>名稱</th><th>地點</th>
-          <th style="text-align:right">離公司</th>
+          <th style="text-align:right">離最近據點</th>
           <!-- 🔴 **並列，不是取代**：辦公室是穩定的錨點，瀏覽器定位是會變的。
                沒有定位時整欄不出現 —— 不顯示「—」也不顯示 0。 -->
           <th style="text-align:right" x-show="hasUserPos">
@@ -333,8 +354,11 @@
                   <span :style="precisionIsCoarse(p.precision) ? 'color:var(--warning)' : ''">
                     <span x-text="(precisionIsCoarse(p.precision) ? '～' : '')
                                   + p.distanceFromOfficeKm + ' km'"></span><br>
+                    <!-- 🔑 **要說出是哪一個據點** —— 多據點時「12 km」
+                         這個數字本身回答不了「該由誰去」。 -->
                     <span style="font-size:10px;opacity:.85"
-                          x-text="precisionLabel(p.precision)"></span>
+                          x-text="(p.nearestLocationName ? p.nearestLocationName + '｜' : '')
+                                  + precisionLabel(p.precision)"></span>
                   </span>
                 </template>
               </td>
@@ -752,7 +776,9 @@ function mapPage() {
       const pts = (this.info && this.info.points) || []
       const office = this.info && this.info.office
       const box = pts.map(p => [p.lat, p.lon])
-      if (office) box.push([office.lat, office.lon])
+      // ⚠️ **所有據點**都要進來，不是只有第一個 ——
+      // 台北分公司落在畫面外的話，使用者會以為它沒被畫出來。
+      this.locationsOf().forEach(loc => box.push([loc.lat, loc.lon]))
       if (this.userPos) box.push([this.userPos.lat, this.userPos.lon])
       // 🔴 **點沒有變就不要動視野。**
       // ⚠️ `refresh()` 現在會重畫（勾選資料集、按「繼續定位」都會打），
@@ -773,6 +799,24 @@ function mapPage() {
         this._map.setView(box[0], 14)
       }
     },
+    //: 定位得到的據點。**沒有 `locations` 時退回舊的 `office`** ——
+    //  ⚠️ 後端還沒更新（或回舊格式）時，畫面不可以整個少掉辦公室標記。
+    locationsOf() {
+      const info = this.info || {}
+      if (Array.isArray(info.locations) && info.locations.length) return info.locations
+      return info.office ? [{ name: '辦公室', address: info.office.address,
+                              lat: info.office.lat, lon: info.office.lon }] : []
+    },
+
+    //: 給 divIcon 的 HTML 用。**名稱是使用者填的，要跳脫。**
+    //  ☠️ 不跳脫的話，一個叫 `<img onerror=...>` 的據點名稱會在每個開圖的人
+    //  瀏覽器裡執行 —— 而那個名稱是從設定頁存進去的，看起來完全無害。
+    _esc(text) {
+      return String(text == null ? '' : text)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+    },
+
     //: 把資料點、辦公室、以及「你」重新畫一次。
     //  📌 舊的圖層整組丟掉再畫，不是一個一個比對差異 ——
     //  比對差異會讓「少畫一個」與「多留一個」兩種錯誤同時可能發生。
@@ -782,11 +826,21 @@ function mapPage() {
       this._layer = window.L.layerGroup().addTo(this._map)
 
       const pts = (this.info && this.info.points) || []
-      const office = this.info && this.info.office
-      if (office) {
-        window.L.marker([office.lat, office.lon]).addTo(this._layer)
-          .bindPopup('辦公室<br>' + office.address)
-      }
+      // 🔴 **每一個據點都畫出來，而名稱要在標記上看得到**（不必點開）。
+      // ☠️ 只畫「辦公室」一個點的話，多據點的使用者看到的是
+      // 「離公司 12 km」而圖上只有一個公司 —— 🔑 那句話指的是哪一個？
+      // ⚠️ 據點用**方形深色牌子**、資料點用圓形圖釘 ⇒ 一眼分得出來。
+      this.locationsOf().forEach(loc => {
+        const icon = window.L.divIcon({
+          className: '',
+          html: '<span class="mp-site">' + this._esc(loc.name || '據點') + '</span>',
+          iconSize: [null, 20], iconAnchor: [0, 10],
+        })
+        window.L.marker([loc.lat, loc.lon], { icon, zIndexOffset: 500 })
+          .addTo(this._layer)
+          .bindPopup('<strong>' + this._esc(loc.name || '據點') + '</strong><br>'
+                     + this._esc(loc.address || ''))
+      })
       pts.forEach(p => {
         const d = this.datasetOf(p)
         // 🔴 **標記本身就要分得出來。** 用 divIcon 放一個字＋顏色。
@@ -804,7 +858,8 @@ function mapPage() {
                         ? '' : ('離你約 ' + p.distanceFromUserKm + ' km'
                                 + (this.accuracyLabel() ? '（' + this.accuracyLabel() + '）' : '')),
                       (p.distanceFromOfficeKm === null || p.distanceFromOfficeKm === undefined)
-                        ? '' : ('約 ' + p.distanceFromOfficeKm + ' km（'
+                        ? '' : ('離' + (p.nearestLocationName || '據點') + '約 '
+                                + p.distanceFromOfficeKm + ' km（'
                                 + this.precisionLabel(p.precision) + '）')]
                      .filter(Boolean).join('<br>'))
       })

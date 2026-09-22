@@ -131,56 +131,82 @@
                 <input type="text" x-model="cfg.contact_info" placeholder="Tel: 04-3610-6566｜info@miactw.com">
               </div>
             </div>
+            <!-- ── 據點（分公司）──────────────────────────────────────
+                 使用者原話：「在地址的部分可增加複數選項，由使用者新增名稱跟位置，
+                 我們有分公司」。
+                 🔴 **`locations` 是唯一真相**；舊欄位由後端導出（理由見 `save()`）。 -->
             <div class="ns-row">
               <div class="ns-field" style="flex:1 1 100%">
-                <label>辦公室地址</label>
-                <input type="text" x-model="cfg.address"
-                       placeholder="例：台中市西屯區文心路二段201號">
-                <!-- ⚠️ 這個欄位的用途跟抬頭／統編不一樣：它是**算標案離我們多遠**的起點。
-                     沒填的後果不是 PDF 少一行，是整個距離功能不會動，
-                     所以地圖那一側會明白顯示「尚未設定辦公室地址」，而不是安靜地不顯示距離。
-                     🔑 使用者看到「距離都空著」會以為功能壞了，而不是他還沒填——
-                     兩者的下一步完全不同：一個是報修，一個是回來填這一行字。 -->
-                <div style="font-size:11px;color:var(--text-secondary);margin-top:4px">
-                  用來計算標案與辦公室的直線距離。沒有填的話，地圖上不會顯示距離。
-                </div>
-              </div>
-            </div>
+                <label>據點（分公司）</label>
 
-            <!-- 🔴 手動座標：**填了就跳過所有地址查詢。**
-                 它存在的理由是實測出來的：OpenStreetMap 的圖資**認不得台灣的門牌**
-                 ⇒ 地址只查得到「區級」，而區級中心點與實際地點可能差好幾公里。
-                 🔑 而使用者知道自己在哪裡 —— 這一欄把「猜」換成「他說了算」。
-                 📌 不需要 Google 金鑰、不需要任何外部查詢。 -->
-            <div class="ns-row">
-              <div class="ns-field" style="flex:1 1 100%">
-                <label for="office_lat">辦公室座標（選填，填了會比地址精確）</label>
-                <div style="display:flex;gap:8px;flex-wrap:wrap">
-                  <!-- 📌 `id`／`name` 用**後端欄位的名字**：那兩個欄位在
-                       `company_profile` 裡叫 `office_lat`／`office_lon`，
-                       而畫面上的狀態叫 `latText`／`lonText`（字串版）。
-                       ⇒ 之後有人要從畫面找到端點時，兩邊對得起來。 -->
-                  <input type="text" id="office_lat" name="office_lat"
-                         style="flex:1 1 180px" x-model="latText"
-                         @input="splitPastedCoord()" @paste="$nextTick(() => splitPastedCoord())"
-                         placeholder="緯度，例 24.2549239">
-                  <input type="text" id="office_lon" name="office_lon"
-                         style="flex:1 1 180px" x-model="lonText"
-                         placeholder="經度，例 120.5316259">
-                  <button type="button" class="btn btn-ghost btn-sm"
-                          x-show="latText || lonText"
-                          @click="latText = ''; lonText = ''">清除</button>
+                <!-- 🔴 BR17：第一筆是「主要據點」，而那件事要講出來。
+                     ⚠️ 不講的話，使用者調整順序時不會知道自己改動了別的東西
+                     （報價單的抬頭與地圖的辦公室標記都跟著它走）。 -->
+                <div style="font-size:11px;color:var(--text-secondary);margin-bottom:8px">
+                  <strong>第一筆是「主要據點」</strong>：單據與地圖上的「辦公室」都跟著它走。
+                  地圖上每一筆案子會顯示<strong>離最近的據點</strong>多遠，並寫出是哪一個。
                 </div>
-                <!-- ⚠️ 「貼一串」要能自動拆兩欄。
+
+                <template x-for="(loc, i) in locations" :key="loc._key">
+                  <div style="border:1px solid var(--border-light);border-radius:var(--radius);
+                              padding:10px 12px;margin-bottom:8px">
+                    <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
+                      <span x-show="i === 0" class="chip" style="background:var(--accent);color:#fff">主要據點</span>
+                      <span x-show="i !== 0" style="font-size:11px;color:var(--text-dim)"
+                            x-text="'據點 ' + (i + 1)"></span>
+                      <div style="flex:1"></div>
+                      <button type="button" class="btn btn-ghost btn-sm"
+                              x-show="i > 0" @click="moveLocationUp(i)">往上</button>
+                      <button type="button" class="btn btn-ghost btn-sm"
+                              @click="removeLocation(i)">刪除</button>
+                    </div>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap">
+                      <input type="text" style="flex:1 1 150px" x-model="loc.name"
+                             placeholder="名稱，例：總公司／台北分公司">
+                      <input type="text" style="flex:2 1 260px" x-model="loc.address"
+                             placeholder="地址，例：台中市梧棲區八德路一段66號">
+                    </div>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
+                      <!-- 📌 第一筆的兩個輸入框沿用 `office_lat`／`office_lon` 這兩個
+                           id：那正是它們在後端的名字（主要據點的座標），
+                           而畫面與端點對得起來，下一個人才找得到。 -->
+                      <input type="text" style="flex:1 1 160px"
+                             :id="i === 0 ? 'office_lat' : ('loc_lat_' + i)"
+                             :name="i === 0 ? 'office_lat' : ('loc_lat_' + i)"
+                             x-model="loc.latText" @input="splitPastedCoord(loc)"
+                             @paste="$nextTick(() => splitPastedCoord(loc))"
+                             placeholder="緯度（選填），例 24.2549239">
+                      <input type="text" style="flex:1 1 160px"
+                             :id="i === 0 ? 'office_lon' : ('loc_lon_' + i)"
+                             :name="i === 0 ? 'office_lon' : ('loc_lon_' + i)"
+                             x-model="loc.lonText"
+                             placeholder="經度（選填），例 120.5316259">
+                      <button type="button" class="btn btn-ghost btn-sm"
+                              x-show="loc.latText || loc.lonText"
+                              @click="loc.latText = ''; loc.lonText = ''">清除座標</button>
+                    </div>
+                  </div>
+                </template>
+
+                <!-- ⚠️ BR16：刪到一個都不剩是**合法的**（那是「還沒設定」），
+                     🔑 擋下來會讓「還沒設定」與「不能設定」混在一起。
+                     ⇒ 不擋，但要**講清楚後果**。 -->
+                <div x-show="locations.length === 0"
+                     style="font-size:12px;color:var(--warning);margin-bottom:8px">
+                  目前一個據點都沒有 —— <strong>地圖上的距離欄位會全部是空白</strong>。
+                </div>
+
+                <button type="button" class="btn btn-ghost btn-sm" @click="addLocation()">＋ 新增據點</button>
+
+                <!-- ⚠️ 「貼一串」要能自動拆兩欄（沿用 UA5b）：
                      使用者從 Google 地圖複製出來的是 `24.2549239, 120.5316259` **一串**，
                      逼他手動拆的話，最可能的錯誤是**兩個數字貼反**，
-                     ☠️ 而 `(120.53, 24.25)` 是一個**合法**的座標（在阿拉伯海上）——
-                     範圍檢查擋不住它，地圖也會乖乖畫出來。
-                     🔑 **一個會通過所有驗證的錯誤，比一個被擋下來的錯誤貴得多。** -->
-                <div style="font-size:11px;color:var(--text-secondary);margin-top:4px">
-                  在 Google 地圖上對著辦公室按右鍵，第一列就是座標，
-                  <strong>整串貼進左邊那一格會自動拆成兩欄</strong>。
-                  兩格都清空就回到用地址查詢。
+                     ☠️ 而 `(120.53, 24.25)` 是一個**合法**座標（阿拉伯海上）——
+                     🔑 一個會通過所有驗證的錯誤，比一個被擋下來的錯誤貴得多。 -->
+                <div style="font-size:11px;color:var(--text-secondary);margin-top:6px">
+                  座標<strong>選填</strong>：填了就跳過地址查詢（圖資認不得台灣的門牌，
+                  查地址只到得了「區」級）。在 Google 地圖上對著據點按右鍵，第一列就是座標，
+                  <strong>整串貼進緯度那一格會自動拆成兩欄</strong>。
                 </div>
                 <div x-show="coordWarn" style="font-size:11px;color:var(--warning);margin-top:4px"
                      x-text="coordWarn"></div>
@@ -497,10 +523,12 @@
           name: '', tax_id: '', contact_info: '', address: '',
           bank_name: '', bank_branch: '', bank_account_name: '', bank_account_number: '',
         },
-        // 🔴 座標在畫面上是**字串**，送出時才變數字。
-        // ⚠️ 用 `x-model.number` 綁的話，清空會變成 `''` 或 `NaN`，
-        // 而後端要的是 `null` —— **`0.0` 是幾內亞灣上的一個點，不是「沒有填」。**
-        latText: '', lonText: '', coordWarn: '',
+        // 🔴 據點清單。**畫面上的座標是字串**，送出時才變數字 ——
+        // 用 `x-model.number` 綁的話，清空會變成 `''` 或 `NaN`，
+        // 而後端要的是 `null`（**`0.0` 是幾內亞灣上的一個點，不是「沒有填」**）。
+        // 📌 `_key` 是給 `x-for` 用的穩定鍵：**不要用索引**，
+        // 否則刪掉中間一筆之後，Alpine 會把輸入框的值接錯行。
+        locations: [], coordWarn: '', _locSeq: 0,
         // 金鑰**不放進 `cfg`**：GET 回的是遮蔽字，混進去就會在存檔時被送回去。
         // 📌 後端已經有安全網（收到遮蔽字視為沒送），而**兩邊都做**是刻意的：
         // 前端不送＝正確的行為，後端擋＝前端回歸時的防線。
@@ -556,8 +584,7 @@
             const data = await r.json()
             this.cfg = { ...this.cfg, ...data }
             // ⚠️ 座標可能是 `null` ⇒ 顯示空字串，**不要顯示 `null` 或 `0`**。
-            this.latText = data.office_lat == null ? '' : String(data.office_lat)
-            this.lonText = data.office_lon == null ? '' : String(data.office_lon)
+            this.locations = (data.locations || []).map(l => this._toRow(l))
             // 金鑰回的是遮蔽字（或空字串）。**不放進輸入框**，只當狀態。
             this.keyMasked = data.google_maps_api_key || ''
             this.keySet = !!this.keyMasked
@@ -620,6 +647,20 @@
             setTimeout(() => this[prefix + 'Msg'] = '', 5000)
           }
           return false
+        },
+
+        //: 只重讀據點那一段（存檔之後要拿回後端配發的 id）。
+        //  ⚠️ **不要整包重讀** —— 那會把使用者其他還沒存的欄位蓋掉
+        //  （這一頁有四張卡片各自獨立存檔）。
+        async _reloadLocations() {
+          try {
+            const r = await fetch('/api/settings/company-profile', {
+              headers: { Authorization: 'Bearer ' + this.session.token }
+            })
+            if (!r.ok) return
+            const data = await r.json()
+            this.locations = (data.locations || []).map(l => this._toRow(l))
+          } catch (_e) { /* 讀不回來就算了：下一次存檔仍然是對的，只是會多配一次 id */ }
         },
 
         async saveRetention() {
@@ -726,14 +767,47 @@
           setTimeout(() => this.webauthnMsg = '', 4000)
         },
 
+        //: 後端的一筆 → 畫面上的一列。
+        _toRow(l) {
+          return {
+            _key: 'k' + (++this._locSeq),
+            id: l.id || '',
+            name: l.name || '',
+            address: l.address || '',
+            latText: l.lat == null ? '' : String(l.lat),
+            lonText: l.lon == null ? '' : String(l.lon),
+            // ⚠️ 銀行欄位原樣帶著走：**這一輪畫面上沒有入口**（§7 WL1 才接 PDF），
+            // 而不帶著走的話，存一次檔就會把後端已經存好的那幾欄清掉。
+            // 🔑 一個「畫面上看不到、而存檔時被清掉」的欄位，沒有人會發現。
+            _extra: Object.keys(l).reduce((acc, k) => {
+              if (!['id', 'name', 'address', 'lat', 'lon'].includes(k)) acc[k] = l[k]
+              return acc
+            }, {}),
+          }
+        },
+
+        addLocation() {
+          this.locations.push(this._toRow({ name: '', address: '' }))
+        },
+
+        removeLocation(i) { this.locations.splice(i, 1) },
+
+        //: 往上移一格。**第一筆是主要據點**，所以順序是有意義的。
+        moveLocationUp(i) {
+          if (i <= 0) return
+          const row = this.locations[i]
+          this.locations.splice(i, 1)
+          this.locations.splice(i - 1, 0, row)
+        },
+
         // 貼上 `24.2549239, 120.5316259` 這種一串時自動拆成兩欄。
-        // ⚠️ 只在「左邊那格裡有兩個數字」時才動經度欄 ——
+        // ⚠️ 只在「那一格裡有兩個數字」時才動經度欄 ——
         // 使用者正在手打緯度時不可以去改另一格。
-        splitPastedCoord() {
-          const found = String(this.latText || '').match(/-?\d+(?:\.\d+)?/g)
+        splitPastedCoord(loc) {
+          const found = String(loc.latText || '').match(/-?\d+(?:\.\d+)?/g)
           if (!found || found.length < 2) return
-          this.latText = found[0]
-          this.lonText = found[1]
+          loc.latText = found[0]
+          loc.lonText = found[1]
         },
 
         // 空字串 ⇒ `null`（沒有填）。數字 ⇒ 數字。其他 ⇒ `undefined`（＝有問題）。
@@ -748,23 +822,36 @@
 
         async save() {
           this.coordWarn = ''
-          const lat = this._coordValue(this.latText)
-          const lon = this._coordValue(this.lonText)
-          if (lat === undefined || lon === undefined) {
-            this.coordWarn = '座標必須是數字（或兩格都留空）。這次沒有儲存。'
-            return
-          }
-          // ⚠️ 只填一格 ⇒ 擋下來。一個只有緯度的點畫不出來，
-          // 而後端會把另一格存成 null ⇒ 畫面上看起來像「沒填」。
-          if ((lat === null) !== (lon === null)) {
-            this.coordWarn = '緯度與經度要一起填，或一起留空。這次沒有儲存。'
-            return
+          const locations = []
+          for (let i = 0; i < this.locations.length; i++) {
+            const row = this.locations[i]
+            const lat = this._coordValue(row.latText)
+            const lon = this._coordValue(row.lonText)
+            if (lat === undefined || lon === undefined) {
+              this.coordWarn = '第 ' + (i + 1) + ' 個據點的座標必須是數字（或兩格都留空）。這次沒有儲存。'
+              return
+            }
+            // ⚠️ 只填一格 ⇒ 擋下來。一個只有緯度的點畫不出來，
+            // 而後端會把另一格存成 null ⇒ 畫面上看起來像「沒填」。
+            if ((lat === null) !== (lon === null)) {
+              this.coordWarn = '第 ' + (i + 1) + ' 個據點：緯度與經度要一起填，或一起留空。這次沒有儲存。'
+              return
+            }
+            locations.push({ ...row._extra, id: row.id || undefined,
+                             name: row.name, address: row.address,
+                             lat: lat, lon: lon })
           }
           this.saving = true; this.msg = ''
           // 🔴 **明確組出要送的東西**，不要把 `cfg` 整包丟出去：
           // `cfg.google_maps_api_key` 裡是 GET 回來的**遮蔽字**。
-          const payload = { ...this.cfg, office_lat: lat, office_lon: lon }
+          //
+          // ⚠️ **不送 `address`／`office_lat`／`office_lon`** ——
+          // 它們由後端從 `locations[0]` 導出。送的話就是「兩個地方都能編輯同一件事」。
+          const payload = { ...this.cfg, locations: locations }
           delete payload.google_maps_api_key
+          delete payload.address
+          delete payload.office_lat
+          delete payload.office_lon
           if (this.keyCleared) {
             payload.google_maps_api_key = ''      // 明確清除
           } else if (this.keyText.trim()) {
@@ -781,6 +868,9 @@
             this.saved = true; setTimeout(() => this.saved = false, 3000)
             // 存完把金鑰欄位歸位：輸入框清空、狀態改成「已設定」。
             // ⚠️ 不重新 GET —— 那會把使用者其他還沒存的欄位蓋掉。
+            // 後端會配發 id、並把導出的舊欄位寫好 ⇒ 重新讀一次那一段，
+            // 否則下一次存檔會把新據點當成「又一筆新的」再配一個 id。
+            r.clone().json().catch(() => null).then(() => this._reloadLocations())
             if (this.keyCleared) { this.keySet = false; this.keyMasked = '' }
             else if (this.keyText.trim()) {
               this.keySet = true

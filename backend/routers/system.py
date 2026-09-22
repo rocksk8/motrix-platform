@@ -695,6 +695,14 @@ class CompanyProfile(BaseModel):
     #    **0.0 是幾內亞灣上的一個點，不是「沒有填」。**
     office_lat: Optional[float] = None
     office_lon: Optional[float] = None
+    # 多據點（2026-09-22 §5 BR）。**這是唯一真相**，
+    # 而上面那三個欄位（address／office_lat／office_lon）改成由 `locations[0]` 導出。
+    # 🔑 留著它們是為了**相容**（`map_points.py` 還在讀），不是為了再編輯一次 ——
+    # ☠️ 兩個地方都能編輯同一件事，是這一整天在修的那一族缺陷。
+    #
+    # 每一筆：`id`（後端配發）／`name`（必填、不可重複）／`address`（必填）／
+    # `lat`／`lon`（選填）／銀行四欄（選填，**留空＝沿用主要據點**）。
+    locations: Optional[list] = None
 
 
 # 🔴 **既有安裝讀得到新欄位，靠的是這裡，不是 `db.py` 的 seed。**
@@ -707,7 +715,149 @@ _COMPANY_PROFILE_DEFAULT = {
     "bank_name": "", "bank_branch": "", "bank_account_name": "", "bank_account_number": "",
     "address": "", "google_maps_api_key": "",
     "office_lat": None, "office_lon": None,
+    "locations": [],
 }
+
+#: 據點可以自己帶的銀行欄位。**留空＝沿用主要據點。**
+#:
+#: ⚠️ **這一輪只留位置，不接到 PDF**（那是 §7 白標化 WL1）——
+#: 接上去之前要先回答「一張報價單屬於哪個據點」，而那個欄位還不存在。
+#: 🔑 **而結構現在就要留**：§5 定稿之後再改就有正式機資料了，
+#: 那一改是 migration 不是編輯。
+_LOCATION_BANK_FIELDS = ("bank_name", "bank_branch",
+                         "bank_account_name", "bank_account_number")
+
+#: 下一個要配發的據點流水號存在哪。**存在自己的設定鍵裡，不在 `company_profile` 裡。**
+#:
+#: 🔴 **它不可以從「現有據點的最大 id」推算** ——
+#: 那正是 BR5 在擋的：刪掉 `loc_2` 之後最大值變回 1，
+#: ⇒ ☠️ 下一個新據點又拿到 `loc_2`，**而它指向的是另一家分公司**。
+#: 🔑 一個「從現況推算」的計數器，在現況縮小時會倒退 ——
+#: 📌〈計數器要有落點〉：落點要是一個**只增不減**的地方，不是資料本身。
+#:
+#: 🔴 **不可以重用已刪除的 id**：某個地方存著「這個案子歸據點 3」，
+#: 而據點 3 被刪掉、新的台北分公司拿到同一個 3
+#: ⇒ ☠️ **那筆歸屬悄悄換了對象，而畫面上完全正常。**
+#: 🔑〈降級之後它還是會動〉：資料看起來完整，只是指錯了人。
+_LOCATION_SEQ_KEY = "_location_seq"
+
+
+def _location_seq_floor():
+    from helpers.settings import _get_setting
+    try:
+        return int(_get_setting(_LOCATION_SEQ_KEY, 0) or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _save_location_seq(value):
+    from helpers.settings import _set_setting
+    _set_setting(_LOCATION_SEQ_KEY, int(value))
+
+
+def _clean_locations(raw, previous):
+    """把送進來的 `locations` 驗過、配發 id、補座標。回新的清單。
+
+    ## 🔴 名稱必填且不可重複
+    理由不是整潔：距離欄位要寫「離**台北分公司** 3.2 km」——
+    ☠️ 兩個同名的據點會讓那句話沒有意義，而空名稱會寫出「離 3.2 km」。
+
+    ## 📌 id 的配發規則
+    ① 送進來有 `id` 而且是既有的 ⇒ 沿用
+    ② 沒有 id 但**名字**對得上既有的一筆 ⇒ 沿用那一筆的 id
+       （名稱不可重複 ⇒ 名字是一個合法的鍵；前端不送 id 時才用得到）
+    ③ 其餘 ⇒ **配一個新的流水號**，而流水號**只增不減**。
+
+    ## ⚠️ 留空與空字串是兩件事
+    銀行欄位沒送 ⇒ **整個鍵不存在**（語意是「沿用主要據點」）；
+    ☠️ 塞一個空字串進去的話，讀起來變成「這個據點沒有帳號」。
+    """
+    if raw is None:
+        return None
+    if not isinstance(raw, list):
+        raise HTTPException(422, "locations 必須是一個陣列")
+
+    prev_by_id = {str(l.get("id")): l for l in (previous or [])
+                  if isinstance(l, dict) and l.get("id")}
+    prev_by_name = {str(l.get("name") or "").strip(): l for l in (previous or [])
+                    if isinstance(l, dict)}
+    # 🔴 **只增不減**：從設定裡讀，而不是從現有據點推算。
+    # ⚠️ 從現況推算的話，刪掉最後一筆之後計數器會倒退，
+    # ⇒ 下一個新據點拿到剛被刪掉的那個 id。
+    # 📌 同時也吃現有據點的最大值 —— 那是為了**既有安裝**：
+    # 它們的 `locations` 是讀取時補出來的（`loc_1`），而計數器還沒存在過。
+    seq = _location_seq_floor()
+    for loc in (previous or []):
+        if isinstance(loc, dict):
+            ident = str(loc.get("id") or "")
+            if ident.startswith("loc_") and ident[4:].isdigit():
+                seq = max(seq, int(ident[4:]))
+
+    out, seen_names = [], set()
+    for idx, item in enumerate(raw):
+        if not isinstance(item, dict):
+            raise HTTPException(422, f"locations[{idx}] 不是一個物件")
+        name = str(item.get("name") or "").strip()
+        address = str(item.get("address") or "").strip()
+        if not name:
+            raise HTTPException(422, f"第 {idx + 1} 個據點沒有名稱 —— "
+                                     "距離欄位要寫「離○○ 3.2 km」，沒有名稱那句話就沒有主詞")
+        if not address:
+            raise HTTPException(422, f"據點「{name}」沒有地址")
+        if name in seen_names:
+            raise HTTPException(
+                422, f"據點名稱重複：「{name}」。"
+                     "兩個同名的據點會讓「離○○多遠」那句話沒有意義")
+        seen_names.add(name)
+
+        ident = str(item.get("id") or "").strip()
+        if not ident or ident not in prev_by_id:
+            keep = prev_by_name.get(name)
+            ident = str(keep.get("id")) if keep and keep.get("id") else ""
+        if not ident:
+            seq += 1
+            ident = f"loc_{seq}"
+            _save_location_seq(seq)
+
+        clean = {"id": ident, "name": name, "address": address}
+        lat, lon = item.get("lat"), item.get("lon")
+        # ⚠️ **只填一個 ⇒ 當成沒填**（同 `_manual_coord` 的理由）：
+        # 一個只有緯度的座標不是「一半的位置」，它是赤道上的一個錯誤位置。
+        try:
+            clean["lat"] = float(lat) if lat is not None and lat != "" else None
+            clean["lon"] = float(lon) if lon is not None and lon != "" else None
+        except (TypeError, ValueError):
+            raise HTTPException(422, f"據點「{name}」的座標必須是數字")
+        if clean["lat"] is None or clean["lon"] is None:
+            clean["lat"] = clean["lon"] = None
+        for field in _LOCATION_BANK_FIELDS:
+            value = str(item.get(field) or "").strip()
+            if value:
+                clean[field] = value      # ← 沒填就**整個鍵不存在**
+        out.append(clean)
+    return out
+
+
+def _fill_location_coords(locations):
+    """把沒有座標的據點查一次，**把結果存進 `company_profile`**。
+
+    ## 🔴 為什麼要存起來，而不是每次讀的時候查
+    `geocode_cache` 因為隱私**已經被排除出每日備份**（§3t）
+    ⇒ ☠️ **還原之後那張表是空的**。
+    🔑 若據點座標只活在快取裡，災難還原之後每個據點都要重新定位 ——
+    **而那需要對外連線，而還原的當下不一定有網路。**
+    ⇒ 座標要跟著 `company_profile` 一起被備份。
+
+    ⚠️ 查不到就留 `None`（不是 `0`），由地圖那一側回報 `locationsUnlocated`。
+    """
+    from helpers import geo
+    for loc in locations or []:
+        if loc.get("lat") is not None and loc.get("lon") is not None:
+            continue
+        found = geo.locate_cached(loc.get("address") or "")
+        if found and found.coord:
+            loc["lat"], loc["lon"] = found.coord[0], found.coord[1]
+    return locations
 
 
 #: 遮蔽用的符號，以及末端露幾碼。
@@ -761,6 +911,30 @@ def _looks_masked(value) -> bool:
 _MASKED_FIELDS = ("google_maps_api_key",)
 
 
+def _migrated_locations(profile):
+    """既有安裝：`locations` 不存在而 `address` 非空 ⇒ 造一筆「總公司」。
+
+    ## ⚠️ 空地址**不要**造一筆空的據點（BR3b）
+    ☠️ 一筆「有名字沒地址」的據點會在地圖上變成「**定位不到的據點**」，
+    🔑 **而那與「使用者真的填錯了地址」長得一模一樣**
+    ⇒ 📌 新裝的機器會在第一天就看到一個「總公司定位不到」的警告，
+    **而他什麼都還沒填。**
+
+    ⚠️ **這是讀取時的補值，不是 migration** —— 它不改資料庫。
+    🔑 真正寫進去的時機是下一次存檔（那時 `locations` 會被當成唯一真相）。
+    📌 這樣做的理由與 `_COMPANY_PROFILE_DEFAULT` 同一條：
+    `_seed_setting` 是 `DO NOTHING`，**對既有的那一列一個字都不會改**。
+    """
+    existing = profile.get("locations")
+    if isinstance(existing, list) and existing:
+        return existing
+    address = str(profile.get("address") or "").strip()
+    if not address:
+        return []
+    return [{"id": "loc_1", "name": "總公司", "address": address,
+             "lat": profile.get("office_lat"), "lon": profile.get("office_lon")}]
+
+
 @router.get("/api/settings/company-profile")
 def get_company_profile(authorization: str = Header(None)):
     _require_user(authorization)
@@ -773,6 +947,7 @@ def get_company_profile(authorization: str = Header(None)):
     # 📌 末四碼留著 —— 使用者要分得出「我填的是哪一把」。
     for field in _MASKED_FIELDS:
         profile[field] = _mask_secret(profile.get(field))
+    profile["locations"] = _migrated_locations(profile)
     return profile
 
 
@@ -847,6 +1022,19 @@ def set_company_profile(body: CompanyProfile, authorization: str = Header(None))
     for field in _MASKED_FIELDS:
         if field in sent and _looks_masked(sent[field]):
             sent.pop(field)
+    if "locations" in sent:
+        # 🔴 **驗證與配發 id 在寫入之前**（同 `_check_office_coord` 的理由：
+        # 「回了錯誤碼」與「沒有存進去」是兩件事）。
+        locations = _clean_locations(sent["locations"], cur.get("locations"))
+        _fill_location_coords(locations)
+        sent["locations"] = locations
+        # 🔴 **舊欄位由 `locations[0]` 導出，在這裡寫入。**
+        # ⚠️ 不讓前端兩邊各寫一次 —— 那就是「兩個地方都能編輯同一件事」。
+        # 📌 空清單 ⇒ 三個欄位清空（那是合法狀態：還沒設定）。
+        primary = locations[0] if locations else None
+        sent["address"] = primary["address"] if primary else ""
+        sent["office_lat"] = primary.get("lat") if primary else None
+        sent["office_lon"] = primary.get("lon") if primary else None
     value = {**cur, **sent}
     _set_setting("company_profile", value)
     # ⚠️ 稽核留的是**公司名**，不是整包 value —— 那包裡有金鑰。

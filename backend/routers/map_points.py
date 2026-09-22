@@ -119,6 +119,15 @@ def _map_geocode_backlog():
     而查到的座標進 `geocode_cache`，讀出來時仍然要過 `_may_see_dataset`。
     """
     out = []
+    # 🔴 **據點的地址也要進佇列**（BR13）。
+    # ⚠️ 不納入的話，新增一個分公司之後**要等到有人打開地圖才會被定位** ——
+    # 🔑 而那正是 §3v 整節要解決的事（使用者不必按任何按鈕）。
+    # 📌 而它與 `_WARM_EXCLUDED` 不衝突：**據點是公司的營業地址，
+    # 不是自然人的住家** —— 那個排除只針對 `contractors`。
+    for loc in _profile_locations(_company_profile()):
+        address = str(loc.get("address") or "").strip()
+        if address:
+            out.append(address)
     with db_conn() as conn:
         for r in conn.execute("SELECT org, location FROM tenders").fetchall():
             org = (r["org"] or "").strip()
@@ -178,11 +187,11 @@ def _may_see_dataset(user, name) -> bool:
     return any(m in mods for m in spec["modules"])
 
 
-def _own_points(name, office, user_coord=None, budget=None):
+def _own_points(name, located, user_coord=None, budget=None):
     """把一份自有資料的地址畫成點。回 `(points, 沒有地址或定位不到的筆數)`。"""
     spec = _DATASETS[name]
     if spec.get("json"):
-        return _json_points(name, office, user_coord, budget)
+        return _json_points(name, located, user_coord, budget)
     col = spec["address"]
     # ⚠️ **`with get_db()` 是錯的**：sqlite 連線的 `with` 管的是**交易**，
     # 不是關閉 ⇒ 那個連線永遠不會關。要走 `db_conn()`。
@@ -212,12 +221,12 @@ def _own_points(name, office, user_coord=None, budget=None):
             "name": r["name"], "address": r["addr"],
             "lat": found.coord[0], "lon": found.coord[1],
             "precision": found.precision, "source": found.source,
-            **_distances(found.coord, office, user_coord),
+            **_distances(found.coord, located, user_coord),
         })
     return points, missing
 
 
-def _json_points(name, office, user_coord=None, budget=None):
+def _json_points(name, located, user_coord=None, budget=None):
     """地址在 `data_json` 裡的來源（客戶／供應商）。
 
     ## 🔴 一筆壞資料只能拖垮**它自己**
@@ -275,7 +284,7 @@ def _json_points(name, office, user_coord=None, budget=None):
                 "name": r["name"], "address": addr,
                 "lat": found.coord[0], "lon": found.coord[1],
                 "precision": found.precision, "source": found.source,
-                **_distances(found.coord, office, user_coord),
+                **_distances(found.coord, located, user_coord),
             })
         if not made and not deferred:
             missing += 1
@@ -434,16 +443,11 @@ def map_points(sources: str = "tenders",
     # 舊的只有 Nominatim 一階，查不到就整個回報定位不到——
     # ☠️ **§3o 的 25 題全綠而這裡沒換的話，使用者看到的仍然是舊行為**，
     # 而每一題都是對的。斷點在兩個後端函式之間，**沒有人會去點那裡。**
-    office = None
-    manual = _manual_coord(profile)
-    if office_address or manual:
-        found = geo.locate_cached(office_address, manual_coord=manual)
-        if found.coord:
-            office = {"address": office_address,
-                      "lat": found.coord[0], "lon": found.coord[1],
-                      # 精度要帶到畫面上：門牌與行政區在地圖上都是一個圖釘，
-                      # 而距離可能差好幾公里。
-                      "precision": found.precision, "source": found.source}
+    located, unlocated = _locate_locations(profile)
+    # `office` 保留給既有的讀取者（前端的辦公室標記與 `officeMissing`）——
+    # **它是「主要據點」（`locations[0]`）**，不是「最近的那一個」。
+    # 🔑 兩者是不同的問題：主要據點決定舊欄位與抬頭，最近據點決定距離。
+    office = dict(located[0]) if located else None
 
     points, without_location, source_info = [], 0, []
     # 🔴 **整個請求共用一份預算**，不是每個來源各給一份。
@@ -458,7 +462,7 @@ def map_points(sources: str = "tenders",
                                 "count": 0,
                                 "note": "沒有標案雷達模組權限，地圖上不會顯示標案"})
         else:
-            pts, missing = _tender_points(office, user_coord, budget)
+            pts, missing = _tender_points(located, user_coord, budget)
             points += pts
             without_location += missing
             source_info.append({
@@ -490,7 +494,7 @@ def map_points(sources: str = "tenders",
                 "note": f"沒有「{spec['label']}」的權限，地圖上不會顯示這一類",
             })
             continue
-        pts, missing = _own_points(name, office, user_coord, budget)
+        pts, missing = _own_points(name, located, user_coord, budget)
         points += pts
         without_location += missing
         source_info.append({
@@ -503,6 +507,11 @@ def map_points(sources: str = "tenders",
     return {
         "office": office,
         "officeMissing": not office_address,
+        # 🔴 每個據點都要畫得出來（BR10），而**定位不到的要被看見**（BR7）。
+        "locations": located,
+        # ⚠️ 不是只給數量 —— **要指得出是哪幾筆**：
+        # 一個「2 個據點定位不到」的數字，使用者無從知道該去修哪一個地址。
+        "locationsUnlocated": unlocated,
         "points": points,
         "withoutLocation": without_location,
         "googleMapsConfigured": bool(api_key),
@@ -532,6 +541,72 @@ def map_points(sources: str = "tenders",
         "geocodeWarm": geo.warm_status(),
         "sources": source_info,
     }
+
+
+def _profile_locations(profile):
+    """據點清單。**讀取時做與設定頁同一套遷移**（既有安裝只有 `address`）。
+
+    ⚠️ 兩邊各寫一份遷移邏輯的話，設定頁看得到一筆據點而地圖看不到 ——
+    🔑 而那種不一致**沒有任何錯誤訊息**。
+    📌 所以這裡直接呼叫 `routers.system` 那一支。
+    """
+    from routers.system import _migrated_locations
+    return _migrated_locations(profile) or []
+
+
+def _locate_locations(profile):
+    """把每個據點定位。回 `(定位得到的, 定位不到的)`。
+
+    ## 🔴🔴 定位不到的**要被看見**，不可以安靜地排除（BR7）
+    ☠️ 台北分公司定位失敗 ⇒ 台北的案子**全部算成「離梧棲 150 km」**
+    ⇒ 🔑 **每個數字都是對的，而整張表在回答一個沒有人問的問題。**
+    📌〈答案沒錯，是題目問錯了〉。
+
+    ⚠️ 而「數量」不夠，**要指得出是哪幾筆** ——
+    一個「2 個據點定位不到」的數字，使用者無從知道該去修哪一個地址。
+    """
+    located, unlocated = [], []
+    for loc in _profile_locations(profile):
+        address = str(loc.get("address") or "").strip()
+        manual = None
+        lat, lon = loc.get("lat"), loc.get("lon")
+        if lat is not None and lon is not None:
+            try:
+                manual = (float(lat), float(lon))
+            except (TypeError, ValueError):
+                manual = None
+        found = geo.locate_cached(address, manual_coord=manual) if (address or manual) else None
+        if found and found.coord:
+            located.append({
+                "id": loc.get("id"), "name": loc.get("name") or "",
+                "address": address,
+                "lat": found.coord[0], "lon": found.coord[1],
+                "precision": found.precision, "source": found.source,
+            })
+        else:
+            unlocated.append({"id": loc.get("id"),
+                              "name": loc.get("name") or "",
+                              "address": address})
+    return located, unlocated
+
+
+def _nearest_location(coord, located):
+    """離 `coord` 最近的據點。回 `(公里數, 名稱)`，沒有可用據點就 `(None, None)`。
+
+    ## 🔴 只從「定位得到的」裡挑，而挑不到時是 `None` 不是 `0`
+    ☠️ 回 `0` 的話畫面顯示「離公司 0 km」，**看起來像「就在公司」** ——
+    而使用者會照著那個數字排行程。📌〈null 不等於 0〉。
+
+    ## ⚠️ 是「最近」不是「第一個」
+    ☠️ 回 `locations[0]` 的實作在**只有一個據點**時看不出差別 ——
+    🔑 而那正是既有使用者的狀態，所以它會一路綠到有人開了分公司。
+    """
+    best = None
+    for loc in located or []:
+        km = round(geo.haversine_km((loc["lat"], loc["lon"]), coord), 1)
+        if best is None or km < best[0]:
+            best = (km, loc.get("name") or "")
+    return best if best else (None, None)
 
 
 def _manual_coord(profile):
@@ -600,17 +675,23 @@ class _GeocodeBudget:
         return geo.locate_cached(address)
 
 
-def _distances(coord, office, user_coord):
-    """一個點到「辦公室」與到「使用者」的距離。**兩個各自獨立。**
+def _distances(coord, located, user_coord):
+    """一個點到「**最近據點**」與到「使用者」的距離。**兩個各自獨立。**
+
+    ## 🔑 A 的裁決：「離公司多遠」背後真正要回答的是
+    **「這個案子該由哪個據點去」** ⇒ 所以要多回一欄說是**哪一個**據點。
+    📌 只有一個據點時**行為與改版前完全相同**（最近的就是它）⇒ 向下相容。
 
     ⚠️ 算不出來時是 `None` **不是 `0`**：
     0 公里的意思是「就在這裡」，那跟「不知道」是兩件事，
     **而它們在畫面上都是一個數字。**
     """
+    km, name = _nearest_location(coord, located)
     return {
-        "distanceFromOfficeKm": (
-            round(geo.haversine_km((office["lat"], office["lon"]), coord), 1)
-            if office else None),
+        "distanceFromOfficeKm": km,
+        # ⚠️ 沒有可用據點時**名稱也要是 `None`** ——
+        # 一個「離 12 km」而說不出離什麼的數字，比沒有數字更糟。
+        "nearestLocationName": name,
         "distanceFromUserKm": (
             round(geo.haversine_km(user_coord, coord), 1)
             if user_coord else None),
@@ -667,7 +748,7 @@ def _locate_tender(org, place, budget):
     return None, None, deferred
 
 
-def _tender_points(office, user_coord=None, budget=None):
+def _tender_points(located, user_coord=None, budget=None):
     """標案來源。回 `(points, 沒有地點的筆數)`。
 
     ⚠️ **雷達關著時這裡照常跑**：它讀的是資料庫裡已經抓回來的標案，
@@ -711,7 +792,7 @@ def _tender_points(office, user_coord=None, budget=None):
             # 相同（`href=""` 是一個看起來可以點、點了沒反應的東西）。
             # 📌 刻意**不跨 router 匯入**那個函式：L2 功能模組彼此不可依賴。
             "url": (str(r["url"] or "").strip() or None),
-            **_distances(coord, office, user_coord),
+            **_distances(coord, located, user_coord),
         })
     return points, missing
 
