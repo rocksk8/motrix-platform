@@ -1297,3 +1297,120 @@ dashboard 收不到 ⇒ 表示「跑的不是我送過去那一份」⇒ **畫�
 
 📌 `P2-2`（失敗判定不靠文字）已被 `P0-00` 吃掉，A 會在 `SCOPE.md` 標明，不要做第二次。
 
+---
+
+# 🔴 八、出口盤點**更正**：不是 14 條，是 15 條 —— 而漏掉的那兩條最危險
+
+```
+❌ 我先前報   Fail 呼叫點 8 個 ⇒ 全部落在「正式機被動到之前」
+✅ 實際       Fail 呼叫點 **10 個**，漏掉的兩個是 `:358` 與 `:361`
+              而它們在 **robocopy 已經開始覆蓋正式機之後**
+```
+成因：我的正則 `^\s*Fail\s+["']` **錨在行首**，而那兩個寫在 `if { }` 裡同一行：
+```powershell
+if ($LASTEXITCODE -ge 8) { Fail "robocopy backend/ 失敗（exit code $LASTEXITCODE）。" }
+```
+☠️ 〈判準的寬窄都會騙人〉——**太窄那一側**，而它在我自己的盤點工具上發生。
+📌 這是同一支工具**第二次**出錯（v1 是假陽性、這次是假陰性），而兩次的共同點是
+**我沒有把命中的東西逐個印出來看**，只數了數量。
+🔑 ⇒ 規則升級：**任何 pattern 比對，先印出命中的內容看一眼再去數它。**
+
+## 🔴 而 `:358`／`:361` 的狀態是全部 15 條裡最壞的
+
+```
+Step 2 (:316)  已經停掉正式機的伺服器
+Step 3 (:355)  robocopy 開始覆蓋 backend/
+:358           robocopy 失敗 ⇒ Fail ⇒ **exit 1**
+```
+而 `Fail()` 的本體（`:114-117`）**只有兩行**：印一行紅字、`exit 1`。
+☠️ **它不做回滾** —— 回滾邏輯在 Step 5 健康檢查的 `else` 分支裡（`:590+`），
+根本還沒走到。
+⇒ 正式機這時是：**已停服 ＋ 半複製 ＋ 沒有人還原**。
+✅ 守門抓得到（`[FAIL]` 命中）⇒ 會被記成失敗，**這一點沒問題**；
+🔴 **而畫面說不出「正式機現在是半套用而且停著」** —— 那正是 `P0-0` 要回答的東西。
+
+---
+
+# 九、`::RESULT::` 欄位格式 **定版 v2**（C 釘題依據）
+
+## 格式
+
+```
+::RESULT:: v=2 status=<status> rolled_back=<state> exit=<n>
+```
+- 一行、無前後空白、**大小寫固定**、欄位順序固定。
+- `v=2` 是協定版本；dashboard 只認得 `v=2`，**認不得的版本一律當失敗**。
+- 🔴 **每一條出口都要印，共 15 條**（含 `-CheckOnly` 那兩條與正常成功那條）。
+
+## `status` 值域（**封閉**，15 條出口 1:1）
+
+| # | 行 | `status` | `rolled_back` | exit |
+|---|---|---|---|---|
+| 1 | 131 | `not_prod_machine` | `not_applied` | 1 |
+| 2 | 148 | `bad_args` | `not_applied` | 1 |
+| 3 | 151 | `package_missing` | `not_applied` | 1 |
+| 4 | 155 | `package_invalid` | `not_applied` | 1 |
+| 5 | 172 | `duplicate_version` | `not_applied` | 1 |
+| 6 | 228 | `backup_failed` | `not_applied` | 1 |
+| 7 | 276 | `migration_dryrun_failed` | `not_applied` | 1 |
+| 8 | 311 | `user_cancelled` | `not_applied` | 1 |
+| 9 | **358** | `copy_failed_backend` | 🔴 `applied_no_restore` | 1 |
+| 10 | **361** | `copy_failed_frontend` | 🔴 `applied_no_restore` | 1 |
+| 11 | 140 | `checkonly_ok` | `not_applied` | 0 |
+| 12 | 143 | `checkonly_failed` | `not_applied` | 1 |
+| 13 | **545** | `unhealthy_not_rolled_back` | `applied` | **0** 🔴 P0-00 |
+| 14 | 621 | `unhealthy_rolled_back` | `restored` / `restored_unhealthy` | 1 |
+| 15 | 646 | `success` | `applied` | 0 |
+
+🔑 **1:1 是刻意的**：一個 status 對一條出口 ⇒ 新增出口時**沒有現成的值可以借用**，
+⇒ 作者必須加一個新值，**而加新值會被守門的值域檢查看到**。
+☠️ 值域開放的話，dashboard 端只能再回去猜字串 —— **等於換個地方做關鍵字比對。**
+
+## `rolled_back` 值域（**五態，不是布林**）
+
+```
+not_applied         正式機**完全沒被碰過**
+applied             新程式碼在正式機上（健康，或未通過驗證但被保留）
+applied_no_restore  🔴 **半套用且沒有人還原**，而且服務已經停了
+restored            已還原，且還原後健康檢查通過
+restored_unhealthy  🔴 已還原，**而正式機仍然異常**（腳本自己印「需要人工介入！」）
+```
+⚠️ **A 指定三態（未套用／已套用／已還原），我加了兩個**，理由逐條：
+```
+applied_no_restore   `:358`/`:361` 用「已套用」會漏掉「沒有人還原而且停著」——
+                     而那一格決定使用者要不要現在衝去開機
+restored_unhealthy   `:621` 的 $rolledBackHealthy 為 false 時正式機**現在是壞的**
+                     用「已還原」蓋過去 ⇒ **降一層複製了 P0-0 自己要修的缺陷**
+```
+⇒ **要刪的話刪這兩個就好**，其餘不動；C 釘題時把它們當定版。
+
+## 🔑 實作機制：`rolled_back` 用**腳本層變數**，不由各出口自己填
+
+```powershell
+$script:ProdState = "not_applied"        # 起始
+# Step 3 robocopy **之前**  → "applied_no_restore"
+# Step 5 健康檢查通過        → "applied"
+# 回滾完成                   → "restored" / "restored_unhealthy"
+```
+🔴 **危險值要在動作之前就設**，不是之後。
+☠️ 之後才設的話，動作中途失敗會報出一個**比實際安全**的狀態 ——
+而〈降級之後它還是會動〉講的正是這個方向。
+🔑 而 `Fail($msg, $status)` 印的是**當下的** `$ProdState`
+⇒ **日後有人在 Step 3 之後新增一個 `Fail`，它會自動報對**，不必記得改。
+📌 `$status` 預設 `unknown` ⇒ 忘記給就印 `status=unknown`
+⇒ dashboard 把 `unknown` 當失敗（fail-closed）。
+
+## dashboard 端（`deploy_dashboard.py`）
+
+```
+1 從輸出裡撈 ::RESULT:: 那一行（取**最後一行**，避免子行程的輸出干擾）
+2 🔴 **撈不到 ⇒ 判定失敗**（fail-closed）
+  現在是「沒比對到＝成功」＝ fail-open，而「新增出口時忘記印」是**預設會發生**的事
+3 v 不是 2 ⇒ 判定失敗（跑的不是我送過去那一份）
+4 status 不在值域內 ⇒ 判定失敗
+5 status 在值域內 ⇒ 照表判定；**`exit=0` 不等於成功**（`unhealthy_not_rolled_back` 就是 0）
+6 舊的關鍵字比對**留著**當第二道，兩者矛盾時一律當失敗
+```
+🔴 **第 5 點是 P0-00 的核心**：判定不可以再由 `returncode` 單獨決定。
+
+
