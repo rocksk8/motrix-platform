@@ -54,6 +54,60 @@ def _run_pytest(*args, lock=None, timeout=180):
                       cwd=BACKEND, env=env, timeout=timeout)
 
 
+def test_fx6a_netguard_blocks_a_real_smtp_connection(tmp_path):
+    """🔴 FX6a：**NETGUARD 要涵蓋 `smtplib.SMTP`** —— 附實跑證據，不是只有綠燈。
+
+    ## 📌 這一題是 §4 FX8a 要求的那個證據
+
+    FX8a：「**新增的守門必須附『紅燈那一條路的實跑證據』**，不是只有綠燈。」
+    ⇒ 我 2026-09-22 把 `smtplib` 加進 NETGUARD，而
+    🔑 **「我加了一道守門」與「那道守門擋得住」是兩件事** ——
+    今天已經在 `db.py:597` 的「守門見 test_u5c」上看過一次
+    （那句話指向一支不存在的測試）。
+
+    ## ⚠️ 必須在子行程裡跑，理由與 T1–T5 相同
+
+    NETGUARD 的斷言在 **teardown**，所以在同一個行程裡「證明它會紅」
+    就等於「讓這一題自己紅」。
+    ⇒ 寫一個一次性的測試檔、在子行程跑它、**看它紅的理由對不對**。
+
+    📌 而理由要對：`returncode != 0` 還不夠 ——
+    ☠️ **一個 import 失敗也會給非零結束碼**，而那證明不了守門有作用
+    （〈突變測試的假陽性〉：結束碼非 0 也可能是突變本身寫壞了）。
+    ⇒ 要在輸出裡看到 **NETGUARD 自己的那句話**。
+    """
+    probe = BACKEND / "tests" / "test_ng1_probe_tmp.py"
+    probe.write_text(
+        "import smtplib\n"
+        "def test_probe():\n"
+        "    try:\n"
+        "        smtplib.SMTP('smtp.example.invalid', 587, timeout=1)\n"
+        "    except Exception:\n"
+        "        pass          # 模擬產品碼把例外吞掉\n",
+        encoding="utf-8")
+    try:
+        proc = run_python(
+            ["-m", "pytest", str(probe), "-q", "-p", "no:randomly",
+             "--basetemp", str(tmp_path / "bt")],
+            cwd=BACKEND, env=utf8_env(MOTRIX_PYTEST_LOCK=str(tmp_path / "lk")),
+            timeout=180)
+    finally:
+        probe.unlink(missing_ok=True)
+
+    out = proc.stdout + proc.stderr
+    assert proc.returncode != 0, (
+        "那一題連了 SMTP 而測試通過了 —— NETGUARD 沒有攔到。\n"
+        f"{out[-700:]}"
+    )
+    assert "NETGUARD" in out, (
+        "它紅了，**而不是因為 NETGUARD** —— 那證明不了守門有作用。\n"
+        f"{out[-700:]}"
+    )
+    assert "smtp" in out.lower(), (
+        f"NETGUARD 的訊息裡沒有提到 smtp：\n{out[-700:]}"
+    )
+
+
 def _really_gone(pid):
     """這個 pid 真的不在了嗎 —— **用與受測對象無關的來源判斷**。
 

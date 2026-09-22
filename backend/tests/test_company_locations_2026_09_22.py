@@ -174,6 +174,38 @@ def test_br1_locations_is_the_single_source_of_truth(client, make_user):
     )
 
 
+def test_br2_the_legacy_fields_are_derived_not_edited(client, make_user):
+    """🔴 BR2：`address`／`office_lat`／`office_lon` **由 `locations[0]` 導出**，
+    而且是**後端在存檔時寫入**，不是前端兩邊各寫一次。
+
+    ⚠️ 這一題原本折在 `test_br1_` 裡 —— 而 **BR1 與 BR2 是兩條**
+    （前者是「`locations` 是唯一真相」，後者是「舊欄位怎麼來」）。
+    🔑 「寫了但編號對不上」——**今天第五次**（SO6／WB3／YA3／YB2／這一條），
+    而五次都是我把兩條規格折進一支測試。
+    📌 〈判準的寬窄都會騙人〉的一個新面向：**一支測試涵蓋兩條條件時，
+    守門只看得到其中一條** —— 而它報的是「另一條沒有人寫」。
+
+    ⇒ 判準：**只送 `locations`**（完全不送那三個舊欄位）⇒ 它們要被後端填好。
+    ☠️ 前端也送的話就是「兩個地方都能編輯同一件事」，
+    而那是今天整天在修的那一族缺陷。
+    """
+    hdr = _auth(client, make_user)
+    _put(client, hdr, {"locations": [
+        {**TAIPEI, "lat": 25.0375, "lon": 121.5637},
+        dict(WUQI),
+    ]})
+
+    prof = _profile()
+    assert prof.get("address") == TAIPEI["address"], (
+        f"`address` 不是從 `locations[0]` 導出的：{prof.get('address')!r}"
+    )
+    assert (prof.get("office_lat"), prof.get("office_lon")) == (25.0375, 121.5637), (
+        f"`office_lat`／`office_lon` 沒有跟著 `locations[0]` 走："
+        f"{prof.get('office_lat')!r}, {prof.get('office_lon')!r}\n"
+        "⇒ 舊的讀取者（`map_points.py` 的 `_manual_coord`）會拿到過期的座標。"
+    )
+
+
 def test_br18_a_reload_agrees_with_locations_zero(client, make_user):
     """🔴 BR18 反向控制：**存檔後重新讀取 ⇒ `address` 等於 `locations[0].address`。**
 
@@ -550,4 +582,60 @@ def test_br21_the_locations_survive_a_restore_without_geocode_cache(
     assert locs[0].get("lat") is not None and locs[0].get("lon") is not None, (
         f"清空 `geocode_cache` 之後，據點沒有自己的座標：{locs[0]}\n"
         "☠️ 災難還原之後每個據點都要重新定位，而那時不一定有網路。"
+    )
+
+
+# ══════════════════════════════════════════════════════════════════════
+# BR22 · 🔴 每一筆據點可以帶自己的銀行欄位（**結構先留位置**）
+# ══════════════════════════════════════════════════════════════════════
+
+def test_br22_a_location_can_carry_its_own_bank_fields(client, make_user):
+    """🔴 BR22：`locations` 的每一筆**可以帶自己的銀行欄位**（留空＝沿用主要據點）。
+
+    ## ☠️ 這是 §5 的隱藏需求，而它差一點被我們兩個一起漏掉
+
+    A 早上告訴我：「`pdf_gen.py` **只讀銀行欄位** ⇒ 改地址結構不會弄壞 PDF」
+    —— **那句話本身沒錯**（我用 AST 覆驗過，見 BR2b）。
+    🔑 **而它讓我們兩個都沒問下一個問題：那銀行欄位要不要跟著據點走？**
+
+    ☠️ **分公司的報價單不能印總公司的帳號。**
+    📌 〈答案沒錯，是題目問錯了〉的一個新變體：
+    **一個正確的答案，把問題的邊界畫在錯的地方。**
+
+    ## ⚠️ 這一題刻意只釘「結構存得下」，不釘「PDF 真的讀它」
+
+    讓 PDF 讀它是 **WL1**（§7 白標化），不是這一輪。
+    🔑 **而結構現在就要留位置** —— 否則 §5 定稿之後要再改一次資料結構，
+    **而那時已經有正式機資料了**（那一改就變成 migration，不是編輯）。
+
+    📌 所以判準是：存進去、拿出來、**值沒有被吞掉**。
+    ⚠️ 留空（或整個沒有那幾個鍵）**必須也合法** —— 那是「沿用主要據點」，
+    ☠️ 而把它做成必填會讓既有的單一據點使用者**存不了檔**。
+    """
+    hdr = _auth(client, make_user)
+    bank = {"bank_name": "測試銀行", "bank_branch": "梧棲分行",
+            "bank_account_name": "分公司帳戶", "bank_account_number": "12345678"}
+
+    _put(client, hdr, {"locations": [
+        dict(WUQI),                      # ← 完全沒有銀行欄位：合法（沿用）
+        {**TAIPEI, **bank},              # ← 帶自己的
+    ]})
+
+    locs = _profile().get("locations") or []
+    assert len(locs) == 2, f"兩筆據點沒有都存下來：{locs!r}"
+
+    taipei = next((l for l in locs if l.get("name") == TAIPEI["name"]), None)
+    assert taipei, f"找不到台北那一筆：{locs!r}"
+    missing = {k: v for k, v in bank.items() if taipei.get(k) != v}
+    assert not missing, (
+        f"台北分公司的銀行欄位被吞掉了：{missing}\n"
+        "☠️ 分公司的報價單不能印總公司的帳號（WL1 會讀這裡）。"
+    )
+
+    wuqi = next((l for l in locs if l.get("name") == WUQI["name"]), None)
+    assert wuqi, f"找不到梧棲那一筆：{locs!r}"
+    assert not any(str(wuqi.get(k) or "").strip() for k in bank), (
+        f"沒有填銀行欄位的那一筆被塞了預設值：{wuqi}\n"
+        "⇒ 「留空」與「填了空字串」要分得開：留空的語意是**沿用主要據點**，"
+        "而一個被塞了空字串的欄位讀起來像「這個據點沒有帳號」。"
     )

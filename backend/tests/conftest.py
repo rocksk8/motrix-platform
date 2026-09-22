@@ -610,10 +610,20 @@ def _netguard(request, monkeypatch):
 
     ## ⚠️ 三個限制，寫在這裡免得被當成比它實際更強
 
-    1. **它攔的是 `urllib.request.urlopen`。**
-       走 `requests`／`http.client`／裸 `socket`／`smtplib` 的**不在射程內**。
-       （這個 codebase 的對外連線目前都走 `urllib.request`，而那是今天的事實，
-       不是保證。）
+    1. **它攔的是 `urllib.request.urlopen` 與 `smtplib.SMTP`。**
+       走 `requests`／`http.client`／裸 `socket` 的**不在射程內**。
+       （這個 codebase 的對外連線目前都走這兩條，而那是今天的事實，不是保證。）
+
+       ## 🔴 `smtplib` 是 2026-09-22 補的，而理由不是完整性
+
+       §4 YA 那一輪要走到 SMTP，所以那個檔繞過了 `_smtp_send_blocked()` ——
+       而那道擋存在的理由是**開發機真的對同仁寄出過兩次真實催辦信**。
+       ☠️ 當時我自己寫下：「**NETGUARD 攔不到這一條 ⇒ 沒有第二道防線**」，
+       🔑 而「**我知道那裡沒有防線**」與「**那裡有防線**」是兩件事。
+       📌 現在補上了：即使某一題的 `monkeypatch` 失效，
+       **也不會有真的信寄出去。**
+       ⚠️ 而 `_smtp_send_blocked()` 仍然是產品那一側的第一道 ——
+       **這一道只保護測試，不保護正式機。**
     2. **它只管這個行程。** 子行程（`tests/_subproc.py` 起的那些）**攔不到**。
     3. **它擋的是「測試對外連線」，不是「產品對外連線」。**
        產品那一側由 `radar_on()`／`geo_on()`／出貨預設關那幾道守著，
@@ -633,6 +643,7 @@ def _netguard(request, monkeypatch):
         yield
         return
 
+    import smtplib
     import urllib.request
 
     attempts = []
@@ -642,7 +653,22 @@ def _netguard(request, monkeypatch):
         attempts.append(url)
         raise OSError("NETGUARD：測試不可以真的對外連線（%s）" % url)
 
+    class _BlockedSMTP:
+        """任何試圖建立 SMTP 連線的動作都記帳並丟例外。
+
+        ⚠️ 記帳的理由與 `urlopen` 那一條相同：`_send()` 有
+        `except Exception: ...` ⇒ **它會把這個例外吞掉**，
+        而那一題照樣綠 —— 🔑 所以要在收尾時斷言。
+        """
+
+        def __init__(self, host="", port=0, *a, **kw):
+            attempts.append("smtp://%s:%s" % (host, port))
+            raise OSError("NETGUARD：測試不可以真的連 SMTP（%s:%s）"
+                          % (host, port))
+
     monkeypatch.setattr(urllib.request, "urlopen", _blocked)
+    monkeypatch.setattr(smtplib, "SMTP", _BlockedSMTP)
+    monkeypatch.setattr(smtplib, "SMTP_SSL", _BlockedSMTP, raising=False)
     yield
     assert not attempts, (
         "這一題對外發出了 %d 次真實連線嘗試：\n  %s\n"

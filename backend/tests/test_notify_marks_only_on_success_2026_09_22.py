@@ -222,13 +222,162 @@ def test_ya0_the_fake_transport_is_really_in_place(smtp):
     )
 
 
+def test_ya1_send_reports_what_happened(smtp):
+    """🔴 YA1：`_send()` **要回傳結果**，不要只回 `None`。
+
+    📌 這一題釘的是**那四態真的分得開**，不是「有回傳值」——
+    ⚠️ 一個「一律回 `sent`」的實作有回傳值，而它的回傳值裡沒有資訊。
+    🔑 而「有回傳值而永遠相同」與「沒有回傳值」在呼叫端是同一件事。
+    """
+    for name in ("SEND_SENT", "SEND_TRANSIENT_FAIL",
+                 "SEND_PERMANENT_FAIL", "SEND_SKIPPED"):
+        assert hasattr(email_notify, name), (
+            f"`helpers/email_notify.py` 缺少 `{name}`"
+        )
+
+    ok = email_notify._send(["x@test.invalid"], "YA1 成功", "<p>x</p>")
+    assert ok == email_notify.SEND_SENT, f"成功時回了 {ok!r}"
+
+    smtp.mode = "transient"
+    bad = email_notify._send(["x@test.invalid"], "YA1 失敗", "<p>x</p>")
+    assert bad == email_notify.SEND_TRANSIENT_FAIL, (
+        f"SMTP 連線失敗時回了 {bad!r}（預期 `transient_fail`）"
+    )
+
+    smtp.mode = "ok"
+    empty = email_notify._send([], "YA1 沒有收件人", "<p>x</p>")
+    assert empty == email_notify.SEND_PERMANENT_FAIL, (
+        f"收件人為空時回了 {empty!r}（預期 `permanent_fail`）——\n"
+        "⇒ 那是「這一封壞了」，不是「整台機器壞了」（見 YA4／YA10）。"
+    )
+    assert len({ok, bad, empty}) == 3, (
+        f"三種情況回了重複的值：{ok!r}／{bad!r}／{empty!r}\n"
+        "⇒ 有回傳值而分不開，跟沒有回傳值在呼叫端是同一件事。"
+    )
+
+
+def test_ya2_the_scheduler_knows_the_outcome_before_it_returns(
+        client, pending_quote, smtp, monkeypatch):
+    """🔴 YA2：那 15 處改成**同步呼叫**。
+
+    📌 「同步」這件事**不是風格**，它是 YA3 的前提：
+    ☠️ `threading.Thread(...)` 射後不理 ⇒ **排程返回時結果還沒發生**
+    ⇒ 🔑 **那個設計在結構上不可能知道成敗。**
+
+    ⇒ 判準是**可觀測的後果**：排程返回的那一刻，
+    「已通知」的狀態必須已經是最終的 —— **不需要等、不需要 sleep**。
+    ⚠️ 而我刻意**不**用「有沒有 `threading.Thread`」當判準：
+    那是釘實作，而一個「開了執行緒但 `join()`」的寫法也是對的。
+    """
+    smtp.mode = "transient"
+    _run(monkeypatch, 3)
+    # 沒有 sleep、沒有 join —— 排程返回之後立刻看
+    assert not _markers(), (
+        "排程返回時標記還在／或還沒決定 —— 寄送不是同步的。\n"
+        "🔑 射後不理的設計在結構上不可能知道成敗。"
+    )
+    assert smtp.connections >= 1, "一次都沒嘗試連線 —— 前提不成立"
+
+
+def test_ya4_the_three_outcomes_are_distinguishable(smtp):
+    """🔴🔴 YA4：**失敗要分三種，不是兩種。**
+
+    ```
+    transient   SMTP 連不上、逾時、4xx/5xx      ⇒ 不標記，明天再試
+    permanent   收件人沒有 email                ⇒ 標記 ＋ 記錄原因
+    skipped     SMTP 未設定／未啟用／開發機硬擋   ⇒ 不標記，設定修好要補寄
+    ```
+
+    🔑 **B 的判準比原本的規格好**（A 已更正條文）：
+    A 分的是「**會不會自己好**」，
+    **而真正決定的是「修好之後這一封該不該補寄」。**
+
+    📌 這一題只釘「三種分得開」；「每一種的處置」在 YA6／YA8／YA10。
+    ⚠️ 分不開的話，那三種處置**沒有辦法被寫出來** ——
+    而那正是為什麼這一條要獨立成題。
+    """
+    smtp.mode = "ok"
+    sent = email_notify._send(["x@test.invalid"], "YA4", "<p>x</p>")
+    perm = email_notify._send([], "YA4", "<p>x</p>")
+    smtp.mode = "transient"
+    trans = email_notify._send(["x@test.invalid"], "YA4", "<p>x</p>")
+
+    values = {"sent": sent, "permanent": perm, "transient": trans}
+    assert len(set(values.values())) == 3, (
+        f"三種結果沒有分開：{values}\n"
+        "☠️ 分不開的話那三種處置沒有辦法被寫出來。"
+    )
+    assert perm != trans, (
+        "永久性與暫時性失敗回同一個值 ——\n"
+        "🔑 前者要標記（補寄沒意義），後者不可以標記（明天要再試）。"
+    )
+
+
+def test_ya5_the_failure_landing_spot_is_queryable(client):
+    """🔴 YA5：失敗**要有落點**，而且**查得到**。
+
+    📌 〈計數器要有落點〉：「要記錄失敗原因」必須指出**記在哪** ——
+    沒有落點的要求**永遠不會被違反，也永遠不會被滿足**。
+
+    ⚠️ 而「只寫進 log」不算（A 的原話：「只寫進 log 等於換個位置」）——
+    ☠️ log 會被輪替、會被打包、**而沒有人在讀它**。
+    🔑 ⇒ 判準是「**有一個可以被程式問到的地方**」，
+    而它同時讓畫面有機會把那件事說出來。
+    """
+    query = getattr(dt, "reminder_send_failures", None)
+    assert callable(query), (
+        "`routers/daily_tasks.py` 缺少 `reminder_send_failures()`"
+    )
+    records = query()
+    assert isinstance(records, (list, tuple)), (
+        f"`reminder_send_failures()` 回的不是清單：{type(records).__name__}"
+    )
+
+
+def test_ya9_the_observation_point_is_not_the_return_value(client):
+    """🔴 YA9 量尺：**這個檔的觀測點真的是 `system_settings`，不是回傳值。**
+
+    A 的 YA9：「觀測點不可以是被測對象自己的回傳值。」
+    ⇒ 這一題把那件事變成**可檢查的**：`_markers()` 必須真的去讀資料庫。
+
+    ⚠️ 沒有這一題，那個要求只是 docstring 裡的一句話 ——
+    🔑 而**一句「我有照規矩做」的話，本身不是守門**
+    （今天已經在 `db.py:597` 的「守門見 test_u5c」上看過一次）。
+    """
+    import db
+
+    conn = db.get_db()
+    try:
+        conn.execute(
+            "INSERT OR REPLACE INTO system_settings (key, value_json, updated_at)"
+            " VALUES (?,?,?)",
+            (f"approval_notif.quotations.{DOC_NO}.probe.stage.d1",
+             json.dumps("2026-09-22"), "2026-09-22T00:00:00"))
+        conn.commit()
+    finally:
+        conn.close()
+
+    assert _markers(), (
+        "手動把一個標記寫進 `system_settings` 之後，`_markers()` 讀不到它 ——\n"
+        "⇒ 那表示這個檔的觀測點沒有真的在讀資料庫，"
+        "而上面每一題的綠燈都不代表任何事。"
+    )
+
+
 # ══════════════════════════════════════════════════════════════════════
 # YA1 / YA6 · 寄失敗 ⇒ 不可以標記已通知
 # ══════════════════════════════════════════════════════════════════════
 
-def test_ya1_a_failed_send_does_not_mark_it_as_notified(
+def test_ya3_a_failed_send_does_not_mark_it_as_notified(
         client, pending_quote, smtp, monkeypatch):
-    """🔴🔴 YA1：**SMTP 失敗時，「已通知」不可以被寫入。**
+    """🔴🔴 YA3：**只有 `sent` 才寫「已通知」標記。**
+
+    ⚠️ 這一題原本叫 `test_ya1_` —— 而 **YA1 是別的條件**
+    （`_send()` 要回傳結果）。§4 的 YA1–YA5 是**實作要求**、
+    YA6–YA9 是**測試要求**，而我把 YA1 的位置用在 YA3 的內容上。
+    🔑 那是「**寫了但編號對不上**」——**我今天早上才叫 A 去查同一類**，
+    而規格覆蓋率守門立刻在我自己身上抓到它。
+    📌 〈主持人的記憶是負債〉：**我記得有這個陷阱，而我沒有去對編號。**
 
     ☠️ 現況：`_fire()` 先 `_set_setting(g, today_str)` **才**開執行緒寄信
     ⇒ 信掉了而標記留著 ⇒ **那張單子永遠不會再被提醒**。
