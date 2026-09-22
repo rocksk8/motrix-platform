@@ -1,0 +1,3840 @@
+{
+  "source": {
+    "title": "商業會計項目表(112年度及以後適用版本)",
+    "url": "https://gcis.nat.gov.tw/F/t70492_p",
+    "sha256": "872f827ce18157b9b8e26a979c7bb47b7952ddee68fd850a363e869d419e2d34",
+    "bytes": 1578890
+  },
+  "count": 547,
+  "items": [
+    {
+      "code": "1",
+      "level": 1,
+      "name": "資產",
+      "name_en": "Assets",
+      "parent_code": null
+    },
+    {
+      "code": "11-12",
+      "level": 2,
+      "name": "流動資產",
+      "name_en": "Current assets",
+      "parent_code": "1"
+    },
+    {
+      "code": "111",
+      "level": 3,
+      "name": "現金及約當現金",
+      "name_en": "Cash and cash equivalents",
+      "parent_code": "11-12"
+    },
+    {
+      "code": "1111",
+      "level": 4,
+      "name": "庫存現金",
+      "name_en": "Cash on hand",
+      "parent_code": "111"
+    },
+    {
+      "code": "1112",
+      "level": 4,
+      "name": "零用金／週轉金",
+      "name_en": "Petty cash / revolving funds",
+      "parent_code": "111"
+    },
+    {
+      "code": "1113",
+      "level": 4,
+      "name": "銀行存款",
+      "name_en": "Cash in banks",
+      "parent_code": "111"
+    },
+    {
+      "code": "1114",
+      "level": 4,
+      "name": "在途現金",
+      "name_en": "Cash in transit",
+      "parent_code": "111"
+    },
+    {
+      "code": "1115",
+      "level": 4,
+      "name": "約當現金",
+      "name_en": "Cash equivalents",
+      "parent_code": "111"
+    },
+    {
+      "code": "112",
+      "level": 3,
+      "name": "透過損益按公允價值衡量之金融資產—流動",
+      "name_en": "Current financial assetsmeasured at fair valuethrough profit or loss",
+      "parent_code": "11-12"
+    },
+    {
+      "code": "1121",
+      "level": 4,
+      "name": "指定為透過損益按公允價值衡量之金融資產—流動",
+      "name_en": "Current financial assetsdesignation as measured atfair value through profit orloss",
+      "parent_code": "112"
+    },
+    {
+      "code": "1122",
+      "level": 4,
+      "name": "指定為透過損益按公允價值衡量之金融資產評價調整—流動",
+      "name_en": "Adjustments for change invalue of current financialassets designation asmeasured at fair valuethrough profit or loss",
+      "parent_code": "112"
+    },
+    {
+      "code": "1123",
+      "level": 4,
+      "name": "強制透過損益按公允價值衡量之金融資產—流動",
+      "name_en": "Current financial assetsmandatorily measured at fairvalue through profit or loss",
+      "parent_code": "112"
+    },
+    {
+      "code": "1124",
+      "level": 4,
+      "name": "強制透過損益按公允價值衡量之金融資產評價調整—流動",
+      "name_en": "Adjustments for change invalue of current financialassets mandatorily measuredat fair value through profit orloss",
+      "parent_code": "112"
+    },
+    {
+      "code": "113",
+      "level": 3,
+      "name": "透過其他綜合損益按公允價值衡量之金融資產—流動",
+      "name_en": "Current financial assetsmeasured at fair valuethrough other comprehensiveincome",
+      "parent_code": "11-12"
+    },
+    {
+      "code": "1131",
+      "level": 4,
+      "name": "透過其他綜合損益按公允價值衡量之權益工具投資—流動",
+      "name_en": "Current equity investments measured at fair valuethrough other comprehensiveincome",
+      "parent_code": "113"
+    },
+    {
+      "code": "1132",
+      "level": 4,
+      "name": "透過其他綜合損益按公允價值衡量之權益工具投資評價調整—流動",
+      "name_en": "Adjustments for change invalue of current equityinvestments measured at fairvalue through othercomprehensive income",
+      "parent_code": "113"
+    },
+    {
+      "code": "1133",
+      "level": 4,
+      "name": "透過其他綜合損益按公允價值衡量之債務工具投資—流動",
+      "name_en": "Current debt instrumentinvestments measured at fairvalue through othercomprehensive income",
+      "parent_code": "113"
+    },
+    {
+      "code": "1134",
+      "level": 4,
+      "name": "透過其他綜合損益按公允價值衡量之債務工具投資評價調整—流動",
+      "name_en": "Adjustments for change invalue of current debtinstrument investmentsmeasured at fair valuethrough other comprehensiveincome",
+      "parent_code": "113"
+    },
+    {
+      "code": "114",
+      "level": 3,
+      "name": "以成本衡量之金融資產—流動",
+      "name_en": "Current financial assetsmeasured at cost",
+      "parent_code": "11-12"
+    },
+    {
+      "code": "1141",
+      "level": 4,
+      "name": "以成本衡量之金融資產—流動",
+      "name_en": "Current financial assetsmeasured at cost",
+      "parent_code": "114"
+    },
+    {
+      "code": "1142",
+      "level": 4,
+      "name": "累計減損—以成本衡量之金融資產—流動",
+      "name_en": "Accumulated impairment,current financial assetsmeasured at cost",
+      "parent_code": "114"
+    },
+    {
+      "code": "115",
+      "level": 3,
+      "name": "按攤銷後成本衡量之金融資產—流動",
+      "name_en": "Current financial assetsmeasured at amortized cost",
+      "parent_code": "11-12"
+    },
+    {
+      "code": "1151",
+      "level": 4,
+      "name": "按攤銷後成本衡量之金融資產—流動",
+      "name_en": "Current financial assetsmeasured at amortized cost",
+      "parent_code": "115"
+    },
+    {
+      "code": "1152",
+      "level": 4,
+      "name": "備抵損失—按攤銷後成本衡量之金融資產—流動",
+      "name_en": "Loss allowances, currentfinancial assets measured atamortized cost",
+      "parent_code": "115"
+    },
+    {
+      "code": "117",
+      "level": 3,
+      "name": "避險之金融資產—流動",
+      "name_en": "Current financial assets forhedging",
+      "parent_code": "11-12"
+    },
+    {
+      "code": "1171",
+      "level": 4,
+      "name": "避險之金融資產—流動",
+      "name_en": "Current financial assets forhedging",
+      "parent_code": "117"
+    },
+    {
+      "code": "1172",
+      "level": 4,
+      "name": "避險之金融資產評價調整—流動",
+      "name_en": "Adjustments for change invalue of current financialassets for hedging",
+      "parent_code": "117"
+    },
+    {
+      "code": "118",
+      "level": 3,
+      "name": "應收票據淨額",
+      "name_en": "Notes receivable, net",
+      "parent_code": "11-12"
+    },
+    {
+      "code": "1181",
+      "level": 4,
+      "name": "應收票據",
+      "name_en": "Notes receivable",
+      "parent_code": "118"
+    },
+    {
+      "code": "1182",
+      "level": 4,
+      "name": "應收票據貼現",
+      "name_en": "Discounted notes receivable",
+      "parent_code": "118"
+    },
+    {
+      "code": "1183",
+      "level": 4,
+      "name": "應收票據—關係人",
+      "name_en": "Notes receivable due fromrelated parties",
+      "parent_code": "118"
+    },
+    {
+      "code": "1184",
+      "level": 4,
+      "name": "其他應收票據",
+      "name_en": "Other notes receivable",
+      "parent_code": "118"
+    },
+    {
+      "code": "1185",
+      "level": 4,
+      "name": "備抵損失—應收票據",
+      "name_en": "Loss allowance, notesreceivable",
+      "parent_code": "118"
+    },
+    {
+      "code": "1186",
+      "level": 4,
+      "name": "應收票據貼現—關係人",
+      "name_en": "Discounted notes receivabledue from related parties",
+      "parent_code": "118"
+    },
+    {
+      "code": "1187",
+      "level": 4,
+      "name": "其他應收票據—關係人",
+      "name_en": "Other notes receivable due from related parties",
+      "parent_code": "118"
+    },
+    {
+      "code": "1188",
+      "level": 4,
+      "name": "備抵損失—應收關係人票據",
+      "name_en": "Loss allowance, notesreceivable due from relatedparties",
+      "parent_code": "118"
+    },
+    {
+      "code": "119",
+      "level": 3,
+      "name": "應收帳款淨額",
+      "name_en": "Accounts receivable, net",
+      "parent_code": "11-12"
+    },
+    {
+      "code": "1191",
+      "level": 4,
+      "name": "應收帳款",
+      "name_en": "Accounts receivable",
+      "parent_code": "119"
+    },
+    {
+      "code": "1192",
+      "level": 4,
+      "name": "備抵銷售退回及折讓",
+      "name_en": "Allowance for sales returnsand discounts",
+      "parent_code": "119"
+    },
+    {
+      "code": "1193",
+      "level": 4,
+      "name": "應收分期帳款",
+      "name_en": "Installment accountsreceivable",
+      "parent_code": "119"
+    },
+    {
+      "code": "1194",
+      "level": 4,
+      "name": "未實現利息收入",
+      "name_en": "Unrealized interest income",
+      "parent_code": "119"
+    },
+    {
+      "code": "1195",
+      "level": 4,
+      "name": "應收租賃款",
+      "name_en": "Lease payments receivable",
+      "parent_code": "119"
+    },
+    {
+      "code": "1196",
+      "level": 4,
+      "name": "未賺得融資收益",
+      "name_en": "Unearned finance income",
+      "parent_code": "119"
+    },
+    {
+      "code": "1197",
+      "level": 4,
+      "name": "應收帳款—關係人",
+      "name_en": "Accounts receivable duefrom related parties",
+      "parent_code": "119"
+    },
+    {
+      "code": "1198",
+      "level": 4,
+      "name": "備抵損失—應收租賃款",
+      "name_en": "Loss allowance, leasepayments receivable",
+      "parent_code": "119"
+    },
+    {
+      "code": "1199",
+      "level": 4,
+      "name": "備抵損失—應收帳款及分期帳款應收分期帳款—關係人未實現利息收入—關係人應收租賃款—關係人未賺得融資收益—關係人備抵損失—應收關係人款項及分期帳款備抵損失—應收關係人租賃款",
+      "name_en": "Loss allowance, accountsreceivable and installmentaccounts receivables Installment accountsreceivable due from relatedparties Unrealized interest incomedue from related parties Lease payments receivabledue from related parties Unearned finance income due from related parties Loss allowance, accountsreceivable and installmentaccounts receivable due fromrelated parties Loss allowance,leasepayments receivable duefrom related parties",
+      "parent_code": "119"
+    },
+    {
+      "code": "120",
+      "level": 3,
+      "name": "應收建造合約款",
+      "name_en": "Construction contractsreceivable",
+      "parent_code": "11-12"
+    },
+    {
+      "code": "1201",
+      "level": 4,
+      "name": "應收建造合約款",
+      "name_en": "Construction contractsreceivable",
+      "parent_code": "120"
+    },
+    {
+      "code": "1202",
+      "level": 4,
+      "name": "應收建造合約款—關係人",
+      "name_en": "Construction contractsreceivable due from relatedparties",
+      "parent_code": "120"
+    },
+    {
+      "code": "121",
+      "level": 3,
+      "name": "其他應收款",
+      "name_en": "Other receivables",
+      "parent_code": "11-12"
+    },
+    {
+      "code": "1211",
+      "level": 4,
+      "name": "應收收益",
+      "name_en": "Non-operating revenuesreceivable",
+      "parent_code": "121"
+    },
+    {
+      "code": "1212",
+      "level": 4,
+      "name": "其他應收款—關係人",
+      "name_en": "Other receivables due fromrelated parties",
+      "parent_code": "121"
+    },
+    {
+      "code": "1213",
+      "level": 4,
+      "name": "其他應收款—其他",
+      "name_en": "Other non-operatingreceivables, others",
+      "parent_code": "121"
+    },
+    {
+      "code": "1214",
+      "level": 4,
+      "name": "備抵損失—其他應收款",
+      "name_en": "Loss allowance, other non-operating receivables",
+      "parent_code": "121"
+    },
+    {
+      "code": "1215",
+      "level": 4,
+      "name": "備抵損失—其他應收關係人款",
+      "name_en": "Loss allowance, otherreceivables due from relatedparties",
+      "parent_code": "121"
+    },
+    {
+      "code": "122",
+      "level": 3,
+      "name": "本期所得稅資產",
+      "name_en": "Current tax assets",
+      "parent_code": "11-12"
+    },
+    {
+      "code": "1221",
+      "level": 4,
+      "name": "應收所得稅退稅款",
+      "name_en": "Income tax refund receivable",
+      "parent_code": "122"
+    },
+    {
+      "code": "1222",
+      "level": 4,
+      "name": "預付所得稅",
+      "name_en": "Prepaid income tax",
+      "parent_code": "122"
+    },
+    {
+      "code": "123-124",
+      "level": 3,
+      "name": "存貨",
+      "name_en": "Inventories",
+      "parent_code": "11-12"
+    },
+    {
+      "code": "1231",
+      "level": 4,
+      "name": "商品存貨",
+      "name_en": "Merchandise inventory",
+      "parent_code": "123-124"
+    },
+    {
+      "code": "1232",
+      "level": 4,
+      "name": "寄銷品",
+      "name_en": "Goods on consignment",
+      "parent_code": "123-124"
+    },
+    {
+      "code": "1233",
+      "level": 4,
+      "name": "在途商品",
+      "name_en": "Goods in transit",
+      "parent_code": "123-124"
+    },
+    {
+      "code": "1234",
+      "level": 4,
+      "name": "備抵存貨跌價(買賣業)",
+      "name_en": "Allowance for inventoryvaluation (for merchandisingbusiness)",
+      "parent_code": "123-124"
+    },
+    {
+      "code": "1235",
+      "level": 4,
+      "name": "製成品",
+      "name_en": "Finished goods",
+      "parent_code": "123-124"
+    },
+    {
+      "code": "1236",
+      "level": 4,
+      "name": "副產品",
+      "name_en": "By-products",
+      "parent_code": "123-124"
+    },
+    {
+      "code": "1237",
+      "level": 4,
+      "name": "在製品",
+      "name_en": "Work in progress",
+      "parent_code": "123-124"
+    },
+    {
+      "code": "1238",
+      "level": 4,
+      "name": "委外加工",
+      "name_en": "Outsourced processing",
+      "parent_code": "123-124"
+    },
+    {
+      "code": "1239",
+      "level": 4,
+      "name": "原料",
+      "name_en": "Raw materials",
+      "parent_code": "123-124"
+    },
+    {
+      "code": "1240",
+      "level": 4,
+      "name": "物料",
+      "name_en": "Supplies",
+      "parent_code": "123-124"
+    },
+    {
+      "code": "1241",
+      "level": 4,
+      "name": "在途原物料",
+      "name_en": "Materials and supplies intransit",
+      "parent_code": "123-124"
+    },
+    {
+      "code": "1242",
+      "level": 4,
+      "name": "備抵存貨跌價(製造業)",
+      "name_en": "Allowance for inventoryvaluation ( formanufacturing business)",
+      "parent_code": "123-124"
+    },
+    {
+      "code": "1243",
+      "level": 4,
+      "name": "農業產品",
+      "name_en": "Agricultural produce",
+      "parent_code": "123-124"
+    },
+    {
+      "code": "1244",
+      "level": 4,
+      "name": "在建工程",
+      "name_en": "Construction in progress",
+      "parent_code": "123-124"
+    },
+    {
+      "code": "125",
+      "level": 3,
+      "name": "生物資產—流動",
+      "name_en": "Current biological assets",
+      "parent_code": "11-12"
+    },
+    {
+      "code": "1251",
+      "level": 4,
+      "name": "生產性生物資產—流動",
+      "name_en": "Current bearer biologicalassets",
+      "parent_code": "125"
+    },
+    {
+      "code": "1252",
+      "level": 4,
+      "name": "累計折舊—生產性生物資產—流動",
+      "name_en": "Accumulated depreciation, current bearer biologicalassets",
+      "parent_code": "125"
+    },
+    {
+      "code": "1253",
+      "level": 4,
+      "name": "累計減損—生產性生物資產—流動",
+      "name_en": "Accumulated impairment,current bearer biologicalassets",
+      "parent_code": "125"
+    },
+    {
+      "code": "1254",
+      "level": 4,
+      "name": "生產性生物資產公允價值減出售成本累計變動數—流動",
+      "name_en": "Cumulative change in fairvalue less costs to sell ofcurrent bearer biologicalassets",
+      "parent_code": "125"
+    },
+    {
+      "code": "1255",
+      "level": 4,
+      "name": "消耗性生物資產—流動",
+      "name_en": "Current consumablebiological assets",
+      "parent_code": "125"
+    },
+    {
+      "code": "1256",
+      "level": 4,
+      "name": "累計折舊—消耗性生物資產—流動",
+      "name_en": "Accumulated depreciation,current consumablebiological assets",
+      "parent_code": "125"
+    },
+    {
+      "code": "1257",
+      "level": 4,
+      "name": "累計減損—消耗性生物資產—流動",
+      "name_en": "Accumulated impairment,current consumablebiological assets",
+      "parent_code": "125"
+    },
+    {
+      "code": "1258",
+      "level": 4,
+      "name": "消耗性生物資產公允價值減出售成本累計變動數—流動",
+      "name_en": "Cumulative change in fairvalue less costs to sell ofcurrent consumablebiological assets",
+      "parent_code": "125"
+    },
+    {
+      "code": "126-127",
+      "level": 3,
+      "name": "預付款項",
+      "name_en": "Prepayments",
+      "parent_code": "11-12"
+    },
+    {
+      "code": "1261",
+      "level": 4,
+      "name": "預付薪資",
+      "name_en": "Advance wages and salaries",
+      "parent_code": "126-127"
+    },
+    {
+      "code": "1262",
+      "level": 4,
+      "name": "預付租金",
+      "name_en": "Prepaid rents",
+      "parent_code": "126-127"
+    },
+    {
+      "code": "1263",
+      "level": 4,
+      "name": "預付保險費",
+      "name_en": "Prepaid insurance premiums",
+      "parent_code": "126-127"
+    },
+    {
+      "code": "1264",
+      "level": 4,
+      "name": "用品盤存",
+      "name_en": "Office supplies",
+      "parent_code": "126-127"
+    },
+    {
+      "code": "1265",
+      "level": 4,
+      "name": "其他預付費用",
+      "name_en": "Other prepaid expenses",
+      "parent_code": "126-127"
+    },
+    {
+      "code": "1266",
+      "level": 4,
+      "name": "預付貨款",
+      "name_en": "Prepayments to suppliers",
+      "parent_code": "126-127"
+    },
+    {
+      "code": "1267",
+      "level": 4,
+      "name": "預付投資款",
+      "name_en": "Current prepayments forinvestments",
+      "parent_code": "126-127"
+    },
+    {
+      "code": "1268",
+      "level": 4,
+      "name": "進項稅額",
+      "name_en": "Business tax paid (or InputVAT)",
+      "parent_code": "126-127"
+    },
+    {
+      "code": "1269",
+      "level": 4,
+      "name": "留抵稅額",
+      "name_en": "Excess business tax paid (orNet Input VAT)",
+      "parent_code": "126-127"
+    },
+    {
+      "code": "1270",
+      "level": 4,
+      "name": "其他預付款項",
+      "name_en": "Other prepayments",
+      "parent_code": "126-127"
+    },
+    {
+      "code": "128",
+      "level": 3,
+      "name": "其他流動資產",
+      "name_en": "Other current assets",
+      "parent_code": "11-12"
+    },
+    {
+      "code": "1281",
+      "level": 4,
+      "name": "暫付款",
+      "name_en": "Temporary debits",
+      "parent_code": "128"
+    },
+    {
+      "code": "1282",
+      "level": 4,
+      "name": "代付款",
+      "name_en": "Payment on behalf of others",
+      "parent_code": "128"
+    },
+    {
+      "code": "1283",
+      "level": 4,
+      "name": "員工借支",
+      "name_en": "Advances to employees",
+      "parent_code": "128"
+    },
+    {
+      "code": "1284",
+      "level": 4,
+      "name": "存出保證金",
+      "name_en": "Guarantee deposits paid",
+      "parent_code": "128"
+    },
+    {
+      "code": "13-15",
+      "level": 2,
+      "name": "非流動資產",
+      "name_en": "Non-current assets",
+      "parent_code": "1"
+    },
+    {
+      "code": "131",
+      "level": 3,
+      "name": "透過損益按公允價值衡量之金融資產—非流動",
+      "name_en": "Non-current financial assetsmeasured at fair valuethrough profit or loss",
+      "parent_code": "13-15"
+    },
+    {
+      "code": "1311",
+      "level": 4,
+      "name": "指定為透過損益按公允價值衡量之金融資產—非流動",
+      "name_en": "Non-current financial assetsdesignation as measured atfair value through profit orloss",
+      "parent_code": "131"
+    },
+    {
+      "code": "1312",
+      "level": 4,
+      "name": "指定為透過損益按公允價值衡量之金融資產評價調整—非流動",
+      "name_en": "Adjustments for change invalue of non-currentfinancial assets designationas measured at fair valuethrough profit or loss",
+      "parent_code": "131"
+    },
+    {
+      "code": "1313",
+      "level": 4,
+      "name": "強制透過損益按公允價值衡量之金融資產—非流動",
+      "name_en": "Non-current financial assets mandatorily measured at fairvalue through profit or loss",
+      "parent_code": "131"
+    },
+    {
+      "code": "1314",
+      "level": 4,
+      "name": "強制透過損益按公允價值衡量之金融資產評價調整—非流動",
+      "name_en": "Adjustments for change invalue of non-currentfinancial assets mandatorilymeasured at fair valuethrough profit or loss",
+      "parent_code": "131"
+    },
+    {
+      "code": "132",
+      "level": 3,
+      "name": "透過其他綜合損益按公允價值衡量之金融資產—非流動",
+      "name_en": "Non-current financial assetsmeasured at fair valuethrough other comprehensiveincome",
+      "parent_code": "13-15"
+    },
+    {
+      "code": "1321",
+      "level": 4,
+      "name": "透過其他綜合損益按公允價值衡量之權益工具投資—非流動",
+      "name_en": "Non-current equityinvestments measured at fairvalue through othercomprehensive income",
+      "parent_code": "132"
+    },
+    {
+      "code": "1322",
+      "level": 4,
+      "name": "透過其他綜合損益按公允價值衡量之權益工具投資評價調整—非流動",
+      "name_en": "Adjustments for change invalue of non-current equityinvestments measured at fairvalue through othercomprehensive income",
+      "parent_code": "132"
+    },
+    {
+      "code": "1323",
+      "level": 4,
+      "name": "透過其他綜合損益按公允價值衡量之債務工具投資—非流動",
+      "name_en": "Non-current debt instrumentinvestments measured at fairvalue through othercomprehensive income",
+      "parent_code": "132"
+    },
+    {
+      "code": "1324",
+      "level": 4,
+      "name": "透過其他綜合損益按公允價值衡量之債務工具投資評價調整—非流動",
+      "name_en": "Adjustments for change invalue of non-current debtinstrument investmentsmeasured at fair valuethrough other comprehensive income",
+      "parent_code": "132"
+    },
+    {
+      "code": "133",
+      "level": 3,
+      "name": "以成本衡量之金融資產—非流動",
+      "name_en": "Non-current financial assetsmeasured at cost",
+      "parent_code": "13-15"
+    },
+    {
+      "code": "1331",
+      "level": 4,
+      "name": "以成本衡量之金融資產—非流動",
+      "name_en": "Non-current financial assetsmeasured at cost",
+      "parent_code": "133"
+    },
+    {
+      "code": "1332",
+      "level": 4,
+      "name": "累計減損—以成本衡量之金融資產—非流動",
+      "name_en": "Accumulated impairment,non-current financial assetsmeasured at cost",
+      "parent_code": "133"
+    },
+    {
+      "code": "134",
+      "level": 3,
+      "name": "按攤銷後成本衡量之金融資產—非流動",
+      "name_en": "Non-current financial assetsmeasured at amortized cost",
+      "parent_code": "13-15"
+    },
+    {
+      "code": "1341",
+      "level": 4,
+      "name": "按攤銷後成本衡量之金融資產—非流動",
+      "name_en": "Non-current financial assetsmeasured at amortized cost",
+      "parent_code": "134"
+    },
+    {
+      "code": "1342",
+      "level": 4,
+      "name": "備抵損失—按攤銷後成本衡量之金融資產—非流動",
+      "name_en": "Loss allowances, non-currentfinancial assets measured atamortized cost",
+      "parent_code": "134"
+    },
+    {
+      "code": "136",
+      "level": 3,
+      "name": "避險之金融資產—非流動",
+      "name_en": "Non-current financial assetsfor hedging",
+      "parent_code": "13-15"
+    },
+    {
+      "code": "1361",
+      "level": 4,
+      "name": "避險之金融資產—非流動",
+      "name_en": "Non-current financial assetsfor hedging",
+      "parent_code": "136"
+    },
+    {
+      "code": "1362",
+      "level": 4,
+      "name": "避險之金融資產評價調整—非流動",
+      "name_en": "Adjustments for change invalue of non-currentfinancial assets for hedging",
+      "parent_code": "136"
+    },
+    {
+      "code": "137",
+      "level": 3,
+      "name": "採用權益法之投資",
+      "name_en": "Investments accounted forusing equity method",
+      "parent_code": "13-15"
+    },
+    {
+      "code": "1371",
+      "level": 4,
+      "name": "採用權益法之投資",
+      "name_en": "Investments accounted for using equity method",
+      "parent_code": "137"
+    },
+    {
+      "code": "1372",
+      "level": 4,
+      "name": "累計減損—採用權益法之投資",
+      "name_en": "Accumulated impairment,investments accounted forusing equity method",
+      "parent_code": "137"
+    },
+    {
+      "code": "138",
+      "level": 3,
+      "name": "投資性不動產",
+      "name_en": "Investment property",
+      "parent_code": "13-15"
+    },
+    {
+      "code": "1381",
+      "level": 4,
+      "name": "投 資 性 不 動 產—土地—成本",
+      "name_en": "Investment property, land,cost",
+      "parent_code": "138"
+    },
+    {
+      "code": "1382",
+      "level": 4,
+      "name": "投 資 性 不 動 產—土地—累計公允價值變動數",
+      "name_en": "Accumulated changes in fairvalue, investment property,land",
+      "parent_code": "138"
+    },
+    {
+      "code": "1383",
+      "level": 4,
+      "name": "累計減損—投資性不動產—土地",
+      "name_en": "Accumulated impairment,investment property, land",
+      "parent_code": "138"
+    },
+    {
+      "code": "1384",
+      "level": 4,
+      "name": "投資性不動產—建築物—成本",
+      "name_en": "Investment property,buildings, cost",
+      "parent_code": "138"
+    },
+    {
+      "code": "1385",
+      "level": 4,
+      "name": "投資性不動產—建築物—重估增值",
+      "name_en": "Investment property,buildings, revaluationincrement",
+      "parent_code": "138"
+    },
+    {
+      "code": "1386",
+      "level": 4,
+      "name": "投資性不動產—建築物—累計公允價值變動數",
+      "name_en": "Accumulated changes in fairvalue, investment property,buildings",
+      "parent_code": "138"
+    },
+    {
+      "code": "1387",
+      "level": 4,
+      "name": "累計折舊—投資性不動產—建築物",
+      "name_en": "Accumulated depreciation,investment property,buildings",
+      "parent_code": "138"
+    },
+    {
+      "code": "1388",
+      "level": 4,
+      "name": "累計減損—投資性不動產—建築物",
+      "name_en": "Accumulated impairment,investment property,buildings",
+      "parent_code": "138"
+    },
+    {
+      "code": "139",
+      "level": 3,
+      "name": "不動產、廠房及設備",
+      "name_en": "Property, plant andequipment",
+      "parent_code": "13-15"
+    },
+    {
+      "code": "1391",
+      "level": 4,
+      "name": "土地—成本",
+      "name_en": "Land, cost",
+      "parent_code": "139"
+    },
+    {
+      "code": "1392",
+      "level": 4,
+      "name": "土地—重估增值",
+      "name_en": "Land, revaluation increment",
+      "parent_code": "139"
+    },
+    {
+      "code": "1393",
+      "level": 4,
+      "name": "累計減損—土地",
+      "name_en": "Accumulated impairment,land",
+      "parent_code": "139"
+    },
+    {
+      "code": "1401",
+      "level": 4,
+      "name": "土地改良物—成本",
+      "name_en": "Land improvements, cost",
+      "parent_code": "139"
+    },
+    {
+      "code": "1402",
+      "level": 4,
+      "name": "土地改良物—重估增值",
+      "name_en": "Land improvements,revaluation increment",
+      "parent_code": "139"
+    },
+    {
+      "code": "1403",
+      "level": 4,
+      "name": "累計折舊—土地改良物",
+      "name_en": "Accumulated depreciation,land improvements",
+      "parent_code": "139"
+    },
+    {
+      "code": "1404",
+      "level": 4,
+      "name": "累計減損—土地改良物",
+      "name_en": "Accumulated impairment,land improvements",
+      "parent_code": "139"
+    },
+    {
+      "code": "1411",
+      "level": 4,
+      "name": "房屋及建築—成本",
+      "name_en": "Buildings and structures,cost",
+      "parent_code": "139"
+    },
+    {
+      "code": "1412",
+      "level": 4,
+      "name": "房屋及建築—重估增值",
+      "name_en": "Buildings and structures,revaluation increment",
+      "parent_code": "139"
+    },
+    {
+      "code": "1413",
+      "level": 4,
+      "name": "累計折舊—房屋及建築",
+      "name_en": "Accumulated depreciation,buildings and structures",
+      "parent_code": "139"
+    },
+    {
+      "code": "1414",
+      "level": 4,
+      "name": "累計減損—房屋及建築",
+      "name_en": "Accumulated impairment,buildings and structures",
+      "parent_code": "139"
+    },
+    {
+      "code": "1421",
+      "level": 4,
+      "name": "機器設備—成本",
+      "name_en": "Machinery and equipment,cost",
+      "parent_code": "139"
+    },
+    {
+      "code": "1422",
+      "level": 4,
+      "name": "累計折舊—機器設備",
+      "name_en": "Accumulated depreciation,machinery and equipment",
+      "parent_code": "139"
+    },
+    {
+      "code": "1423",
+      "level": 4,
+      "name": "累計減損—機器設備",
+      "name_en": "Accumulated impairment,machinery and equipment",
+      "parent_code": "139"
+    },
+    {
+      "code": "1431",
+      "level": 4,
+      "name": "辦公設備—成本",
+      "name_en": "Office equipment, cost",
+      "parent_code": "139"
+    },
+    {
+      "code": "1432",
+      "level": 4,
+      "name": "累計折舊—辦公設備",
+      "name_en": "Accumulated depreciation,office equipment",
+      "parent_code": "139"
+    },
+    {
+      "code": "1433",
+      "level": 4,
+      "name": "累計減損—辦公設備",
+      "name_en": "Accumulated impairment,office equipment",
+      "parent_code": "139"
+    },
+    {
+      "code": "1441",
+      "level": 4,
+      "name": "租賃資產—成本",
+      "name_en": "Leased assets, cost",
+      "parent_code": "139"
+    },
+    {
+      "code": "1442",
+      "level": 4,
+      "name": "累計折舊—租賃資產",
+      "name_en": "Accumulated depreciation,leased assets",
+      "parent_code": "139"
+    },
+    {
+      "code": "1443",
+      "level": 4,
+      "name": "累計減損—租賃資產",
+      "name_en": "Accumulated impairment,leased assets",
+      "parent_code": "139"
+    },
+    {
+      "code": "1451",
+      "level": 4,
+      "name": "出租設備—成本",
+      "name_en": "Rental assets, cost",
+      "parent_code": "139"
+    },
+    {
+      "code": "1452",
+      "level": 4,
+      "name": "累計折舊—出租設備",
+      "name_en": "Accumulated depreciation,rental assets",
+      "parent_code": "139"
+    },
+    {
+      "code": "1453",
+      "level": 4,
+      "name": "累計減損—出租設備",
+      "name_en": "Accumulated impairment,rental assets",
+      "parent_code": "139"
+    },
+    {
+      "code": "1461",
+      "level": 4,
+      "name": "租賃權益改良—成本",
+      "name_en": "Leasehold improvements,cost",
+      "parent_code": "139"
+    },
+    {
+      "code": "1462",
+      "level": 4,
+      "name": "累計折舊—租賃權益改良",
+      "name_en": "Accumulated depreciation,leasehold improvements",
+      "parent_code": "139"
+    },
+    {
+      "code": "1463",
+      "level": 4,
+      "name": "累計減損—租賃權益改良",
+      "name_en": "Accumulated impairment,leasehold improvements",
+      "parent_code": "139"
+    },
+    {
+      "code": "1464",
+      "level": 4,
+      "name": "未完工程及待驗設備",
+      "name_en": "Unfinished construction andequipments pendingacceptance",
+      "parent_code": "139"
+    },
+    {
+      "code": "1466",
+      "level": 4,
+      "name": "生產性植物—成本",
+      "name_en": "Bearer plants, cost",
+      "parent_code": "139"
+    },
+    {
+      "code": "1467",
+      "level": 4,
+      "name": "累計折舊—生產性植物",
+      "name_en": "Accumulated depreciation,bearer plants",
+      "parent_code": "139"
+    },
+    {
+      "code": "1468",
+      "level": 4,
+      "name": "累計減損—生產性植物",
+      "name_en": "Accumulated impairment,bearer plants",
+      "parent_code": "139"
+    },
+    {
+      "code": "147",
+      "level": 3,
+      "name": "礦產資源淨額",
+      "name_en": "Mineral resources, net",
+      "parent_code": "13-15"
+    },
+    {
+      "code": "1471",
+      "level": 4,
+      "name": "礦產資源—成本",
+      "name_en": "Mineral resources, cost",
+      "parent_code": "147"
+    },
+    {
+      "code": "1472",
+      "level": 4,
+      "name": "礦產資源—重估增值",
+      "name_en": "Mineral resources,revaluation increment",
+      "parent_code": "147"
+    },
+    {
+      "code": "1473",
+      "level": 4,
+      "name": "累計折耗—礦產資源",
+      "name_en": "Accumulated depletion,mineral resources",
+      "parent_code": "147"
+    },
+    {
+      "code": "1474",
+      "level": 4,
+      "name": "累計減損—礦產資源",
+      "name_en": "Accumulated impairment,mineral resources",
+      "parent_code": "147"
+    },
+    {
+      "code": "148",
+      "level": 3,
+      "name": "生物資產—非流動",
+      "name_en": "Non-current biological assets",
+      "parent_code": "13-15"
+    },
+    {
+      "code": "1481",
+      "level": 4,
+      "name": "生產性生物資產—非流動",
+      "name_en": "Non-current bearerbiological assets",
+      "parent_code": "148"
+    },
+    {
+      "code": "1482",
+      "level": 4,
+      "name": "累計折舊—生產性生物資產—非流動",
+      "name_en": "Accumulated depreciation,non-current bearer biologicalassets",
+      "parent_code": "148"
+    },
+    {
+      "code": "1483",
+      "level": 4,
+      "name": "累計減損—生產性生物資產—非流動",
+      "name_en": "Accumulated impairment,non-current bearer biologicalassets",
+      "parent_code": "148"
+    },
+    {
+      "code": "1484",
+      "level": 4,
+      "name": "生產性生物資產公允價值減出售成本累計變動數—非流動",
+      "name_en": "Accumulated change in fairvalue less costs to sell of non-current bearer biologicalassets",
+      "parent_code": "148"
+    },
+    {
+      "code": "1485",
+      "level": 4,
+      "name": "消耗性生物資產—非流動",
+      "name_en": "Non-current consumablebiological assets",
+      "parent_code": "148"
+    },
+    {
+      "code": "1486",
+      "level": 4,
+      "name": "累計折舊—消耗性生物資產—非流動",
+      "name_en": "Accumulated depreciation,non-current consumablebiological assets",
+      "parent_code": "148"
+    },
+    {
+      "code": "1487",
+      "level": 4,
+      "name": "累計減損—消耗性生物資產—非流動",
+      "name_en": "Accumulated impairment,non-current consumablebiological assets",
+      "parent_code": "148"
+    },
+    {
+      "code": "1488",
+      "level": 4,
+      "name": "消耗性生物資產公允價值減出售成本累計變動數—非流動",
+      "name_en": "Accumulated change in fairvalue less cost to sell of non-current consumablebiological assets",
+      "parent_code": "148"
+    },
+    {
+      "code": "149-155",
+      "level": 3,
+      "name": "無形資產",
+      "name_en": "Intangible assets",
+      "parent_code": "13-15"
+    },
+    {
+      "code": "1491",
+      "level": 4,
+      "name": "商標權—成本",
+      "name_en": "Trademarks, cost",
+      "parent_code": "149-155"
+    },
+    {
+      "code": "1492",
+      "level": 4,
+      "name": "商標權—重估增值",
+      "name_en": "Trademarks, revaluationincrement",
+      "parent_code": "149-155"
+    },
+    {
+      "code": "1493",
+      "level": 4,
+      "name": "累計攤銷—商標權",
+      "name_en": "Accumulated amortization,trademarks",
+      "parent_code": "149-155"
+    },
+    {
+      "code": "1494",
+      "level": 4,
+      "name": "累計減損—商標權",
+      "name_en": "Accumulated impairment,trademarks",
+      "parent_code": "149-155"
+    },
+    {
+      "code": "1501",
+      "level": 4,
+      "name": "專利權—成本",
+      "name_en": "Patents, cost",
+      "parent_code": "149-155"
+    },
+    {
+      "code": "1502",
+      "level": 4,
+      "name": "專利權—重估增值",
+      "name_en": "Patents, revaluationincrement",
+      "parent_code": "149-155"
+    },
+    {
+      "code": "1503",
+      "level": 4,
+      "name": "累計攤銷—專利權",
+      "name_en": "Accumulated amortization,patents",
+      "parent_code": "149-155"
+    },
+    {
+      "code": "1504",
+      "level": 4,
+      "name": "累計減損—專利權",
+      "name_en": "Accumulated impairment,patents",
+      "parent_code": "149-155"
+    },
+    {
+      "code": "1511",
+      "level": 4,
+      "name": "特許權—成本",
+      "name_en": "Franchise, cost",
+      "parent_code": "149-155"
+    },
+    {
+      "code": "1512",
+      "level": 4,
+      "name": "特許權—重估增值",
+      "name_en": "Franchise, revaluationincrement",
+      "parent_code": "149-155"
+    },
+    {
+      "code": "1513",
+      "level": 4,
+      "name": "累計攤銷—特許權",
+      "name_en": "Accumulated amortization,franchise",
+      "parent_code": "149-155"
+    },
+    {
+      "code": "1514",
+      "level": 4,
+      "name": "累計減損—特許權",
+      "name_en": "Accumulated impairment,franchise",
+      "parent_code": "149-155"
+    },
+    {
+      "code": "1521",
+      "level": 4,
+      "name": "著作權—成本",
+      "name_en": "Copyright, cost",
+      "parent_code": "149-155"
+    },
+    {
+      "code": "1522",
+      "level": 4,
+      "name": "著作權—重估增值",
+      "name_en": "Copyright, revaluationincrement",
+      "parent_code": "149-155"
+    },
+    {
+      "code": "1523",
+      "level": 4,
+      "name": "累計攤銷—著作權",
+      "name_en": "Accumulated amortization,copyright",
+      "parent_code": "149-155"
+    },
+    {
+      "code": "1524",
+      "level": 4,
+      "name": "累計減損—著作權",
+      "name_en": "Accumulated impairment,copyright",
+      "parent_code": "149-155"
+    },
+    {
+      "code": "1531",
+      "level": 4,
+      "name": "電腦軟體—成本",
+      "name_en": "Computer software, cost",
+      "parent_code": "149-155"
+    },
+    {
+      "code": "1532",
+      "level": 4,
+      "name": "電腦軟體—重估增值",
+      "name_en": "Computer software,revaluation increment",
+      "parent_code": "149-155"
+    },
+    {
+      "code": "1533",
+      "level": 4,
+      "name": "累計攤銷—電腦軟體",
+      "name_en": "Accumulated amortization,computer software",
+      "parent_code": "149-155"
+    },
+    {
+      "code": "1534",
+      "level": 4,
+      "name": "累計減損—電腦軟體",
+      "name_en": "Accumulated impairment,computer software",
+      "parent_code": "149-155"
+    },
+    {
+      "code": "1541",
+      "level": 4,
+      "name": "商譽—成本",
+      "name_en": "Goodwill, cost",
+      "parent_code": "149-155"
+    },
+    {
+      "code": "1542",
+      "level": 4,
+      "name": "累計攤銷—商譽",
+      "name_en": "Accumulated amortization,goodwill",
+      "parent_code": "149-155"
+    },
+    {
+      "code": "1543",
+      "level": 4,
+      "name": "累計減損—商譽",
+      "name_en": "Accumulated impairment,goodwill",
+      "parent_code": "149-155"
+    },
+    {
+      "code": "1551",
+      "level": 4,
+      "name": "其他無形資產",
+      "name_en": "Other intangible assets, net",
+      "parent_code": "149-155"
+    },
+    {
+      "code": "1552",
+      "level": 4,
+      "name": "累計攤銷—其他無形資產",
+      "name_en": "Accumulated amortization,other intangible assets",
+      "parent_code": "149-155"
+    },
+    {
+      "code": "1553",
+      "level": 4,
+      "name": "累計減損—其他無形資產",
+      "name_en": "Accumulated impairment,other intangible assets",
+      "parent_code": "149-155"
+    },
+    {
+      "code": "156",
+      "level": 3,
+      "name": "遞延所得稅資產",
+      "name_en": "Deferred tax assets",
+      "parent_code": "13-15"
+    },
+    {
+      "code": "1561",
+      "level": 4,
+      "name": "遞延所得稅資產",
+      "name_en": "Deferred tax assets",
+      "parent_code": "156"
+    },
+    {
+      "code": "157-158",
+      "level": 3,
+      "name": "其他非流動資產",
+      "name_en": "Other non-current assets",
+      "parent_code": "13-15"
+    },
+    {
+      "code": "1571",
+      "level": 4,
+      "name": "長期應收票據",
+      "name_en": "Long-term notes receivable",
+      "parent_code": "157-158"
+    },
+    {
+      "code": "1572",
+      "level": 4,
+      "name": "長期應收款",
+      "name_en": "Long-term accountsreceivables",
+      "parent_code": "157-158"
+    },
+    {
+      "code": "1573",
+      "level": 4,
+      "name": "催收款項",
+      "name_en": "Overdue receivables",
+      "parent_code": "157-158"
+    },
+    {
+      "code": "1574",
+      "level": 4,
+      "name": "備抵損失—長期應收票據及款項",
+      "name_en": "Loss Allowance, long-termnotes and accountsreceivable",
+      "parent_code": "157-158"
+    },
+    {
+      "code": "1575",
+      "level": 4,
+      "name": "備抵損失—催收款項",
+      "name_en": "Loss Allowance, overduereceivables",
+      "parent_code": "157-158"
+    },
+    {
+      "code": "1576",
+      "level": 4,
+      "name": "長期應收票據及款項—關係人",
+      "name_en": "Long-term notes andaccounts receivable due fromrelated parties",
+      "parent_code": "157-158"
+    },
+    {
+      "code": "1577",
+      "level": 4,
+      "name": "催收款項—關係人",
+      "name_en": "Overdue receivables fromrelated parties",
+      "parent_code": "157-158"
+    },
+    {
+      "code": "1578",
+      "level": 4,
+      "name": "長期預付租金",
+      "name_en": "Long-term prepaid rents",
+      "parent_code": "157-158"
+    },
+    {
+      "code": "1579",
+      "level": 4,
+      "name": "長期預付保險費",
+      "name_en": "Long-term prepaid insurancepremiums",
+      "parent_code": "157-158"
+    },
+    {
+      "code": "1580",
+      "level": 4,
+      "name": "預付投資款",
+      "name_en": "Non-current prepayments forinvestments",
+      "parent_code": "157-158"
+    },
+    {
+      "code": "1581",
+      "level": 4,
+      "name": "預付退休金",
+      "name_en": "Prepaid pension cost",
+      "parent_code": "157-158"
+    },
+    {
+      "code": "1582",
+      "level": 4,
+      "name": "預付設備款",
+      "name_en": "Prepayments for businessfacilities",
+      "parent_code": "157-158"
+    },
+    {
+      "code": "1583",
+      "level": 4,
+      "name": "存出保證金",
+      "name_en": "Guarantee deposits paid",
+      "parent_code": "157-158"
+    },
+    {
+      "code": "1584",
+      "level": 4,
+      "name": "業主(股東)往來",
+      "name_en": "Owner (shareholder)accounts, debit",
+      "parent_code": "157-158"
+    },
+    {
+      "code": "1585",
+      "level": 4,
+      "name": "同業往來",
+      "name_en": "Accounts with the trade,debit",
+      "parent_code": "157-158"
+    },
+    {
+      "code": "1586",
+      "level": 4,
+      "name": "其他非流動資產—其他",
+      "name_en": "Other non-current assets,others",
+      "parent_code": "157-158"
+    },
+    {
+      "code": "1587",
+      "level": 4,
+      "name": "人壽保險現金解約價值",
+      "name_en": "Cash surrender value of lifeinsurance",
+      "parent_code": "157-158"
+    },
+    {
+      "code": "1588",
+      "level": 4,
+      "name": "備抵損失—長期應收關係人票據及款項",
+      "name_en": "Loss Allowance, long-termnotes and accountsreceivable due from relatedparties",
+      "parent_code": "157-158"
+    },
+    {
+      "code": "1589",
+      "level": 4,
+      "name": "備抵損失—催收關係人款項",
+      "name_en": "Loss Allowance, overduereceivables from relatedparties",
+      "parent_code": "157-158"
+    },
+    {
+      "code": "2",
+      "level": 1,
+      "name": "負債",
+      "name_en": "Liabilities",
+      "parent_code": null
+    },
+    {
+      "code": "21-22",
+      "level": 2,
+      "name": "流動負債",
+      "name_en": "Current liabilities",
+      "parent_code": "2"
+    },
+    {
+      "code": "211",
+      "level": 3,
+      "name": "短期借款",
+      "name_en": "Short-term borrowings",
+      "parent_code": "21-22"
+    },
+    {
+      "code": "2111",
+      "level": 4,
+      "name": "銀行透支",
+      "name_en": "Bank overdrafts",
+      "parent_code": "211"
+    },
+    {
+      "code": "2112",
+      "level": 4,
+      "name": "銀行借款",
+      "name_en": "Bank loan",
+      "parent_code": "211"
+    },
+    {
+      "code": "2113",
+      "level": 4,
+      "name": "短期借款—業主",
+      "name_en": "Short-term borrowings fromowners",
+      "parent_code": "211"
+    },
+    {
+      "code": "2114",
+      "level": 4,
+      "name": "短期借款—員工",
+      "name_en": "Short-term borrowings fromemployees",
+      "parent_code": "211"
+    },
+    {
+      "code": "2115",
+      "level": 4,
+      "name": "短期借款—關係人",
+      "name_en": "Short-term borrowings fromrelated parties",
+      "parent_code": "211"
+    },
+    {
+      "code": "2116",
+      "level": 4,
+      "name": "短期借款—其他",
+      "name_en": "Short-term borrowings, others",
+      "parent_code": "211"
+    },
+    {
+      "code": "212",
+      "level": 3,
+      "name": "應付短期票券",
+      "name_en": "Short-term notes and billspayable",
+      "parent_code": "21-22"
+    },
+    {
+      "code": "2121",
+      "level": 4,
+      "name": "應付商業本票",
+      "name_en": "Commercial papers payable",
+      "parent_code": "212"
+    },
+    {
+      "code": "2122",
+      "level": 4,
+      "name": "銀行承兌匯票",
+      "name_en": "Bank acceptances",
+      "parent_code": "212"
+    },
+    {
+      "code": "2123",
+      "level": 4,
+      "name": "其他應付短期票券",
+      "name_en": "Other short-term notes andbills payable",
+      "parent_code": "212"
+    },
+    {
+      "code": "2124",
+      "level": 4,
+      "name": "應付短期票券折價",
+      "name_en": "Discount on short-term notesand bills payable",
+      "parent_code": "212"
+    },
+    {
+      "code": "213",
+      "level": 3,
+      "name": "透過損益按公允價值衡量之金融負債—流動",
+      "name_en": "Current financial liabilitiesmeasured at fair valuethrough profit or loss",
+      "parent_code": "21-22"
+    },
+    {
+      "code": "2131",
+      "level": 4,
+      "name": "指定為透過損益按公允價值衡量之金融負債—流動",
+      "name_en": "Current financial liabilitiesdesignation as measured atfair value through profit orloss",
+      "parent_code": "213"
+    },
+    {
+      "code": "2132",
+      "level": 4,
+      "name": "指定為透過損益按公允價值衡量之金融負債評價調整—流動",
+      "name_en": "Adjustments for change invalue of current financialliabilities designation asmeasured at fair valuethrough profit or loss",
+      "parent_code": "213"
+    },
+    {
+      "code": "2133",
+      "level": 4,
+      "name": "持有供交易之金融負債—流動",
+      "name_en": "Current financial liabilitiesheld for trading",
+      "parent_code": "213"
+    },
+    {
+      "code": "2134",
+      "level": 4,
+      "name": "持有供交易之金融負債評價調整—流動",
+      "name_en": "Adjustments for change invalue of current financialliabilities held for trading",
+      "parent_code": "213"
+    },
+    {
+      "code": "214",
+      "level": 3,
+      "name": "避險之金融負債—流動",
+      "name_en": "Current financial liabilitiesfor hedging",
+      "parent_code": "21-22"
+    },
+    {
+      "code": "2141",
+      "level": 4,
+      "name": "避險之金融負債—流動",
+      "name_en": "Current financial liabilitiesfor hedging",
+      "parent_code": "214"
+    },
+    {
+      "code": "2142",
+      "level": 4,
+      "name": "避險之金融負債評價調整—流動",
+      "name_en": "Adjustments for change invalue of current financialliabilities for hedging",
+      "parent_code": "214"
+    },
+    {
+      "code": "215",
+      "level": 3,
+      "name": "以成本衡量之金融負債—流動",
+      "name_en": "Current financial liabilitiesmeasured at cost",
+      "parent_code": "21-22"
+    },
+    {
+      "code": "2151",
+      "level": 4,
+      "name": "以成本衡量之金融負債—流動",
+      "name_en": "Current financial liabilitiesmeasured at cost",
+      "parent_code": "215"
+    },
+    {
+      "code": "216",
+      "level": 3,
+      "name": "應付票據",
+      "name_en": "Notes payable",
+      "parent_code": "21-22"
+    },
+    {
+      "code": "2161",
+      "level": 4,
+      "name": "應付票據",
+      "name_en": "Notes payable",
+      "parent_code": "216"
+    },
+    {
+      "code": "2162",
+      "level": 4,
+      "name": "應付票據—關係人",
+      "name_en": "Notes payable to relatedparties",
+      "parent_code": "216"
+    },
+    {
+      "code": "2163",
+      "level": 4,
+      "name": "其他應付票據",
+      "name_en": "Other notes payable",
+      "parent_code": "216"
+    },
+    {
+      "code": "217",
+      "level": 3,
+      "name": "應付帳款",
+      "name_en": "Accounts payable",
+      "parent_code": "21-22"
+    },
+    {
+      "code": "2171",
+      "level": 4,
+      "name": "應付帳款",
+      "name_en": "Accounts payable",
+      "parent_code": "217"
+    },
+    {
+      "code": "2172",
+      "level": 4,
+      "name": "應付租賃款—流動",
+      "name_en": "Current lease obligationspayable",
+      "parent_code": "217"
+    },
+    {
+      "code": "2173",
+      "level": 4,
+      "name": "應付帳款—關係人",
+      "name_en": "Accounts payable to relatedparties",
+      "parent_code": "217"
+    },
+    {
+      "code": "218",
+      "level": 3,
+      "name": "應付建造合約款",
+      "name_en": "Construction contractspayable",
+      "parent_code": "21-22"
+    },
+    {
+      "code": "219-220",
+      "level": 3,
+      "name": "其他應付款",
+      "name_en": "Other payables",
+      "parent_code": "21-22"
+    },
+    {
+      "code": "2191",
+      "level": 4,
+      "name": "應付薪資",
+      "name_en": "Wages and salaries payable",
+      "parent_code": "219-220"
+    },
+    {
+      "code": "2192",
+      "level": 4,
+      "name": "應付租金",
+      "name_en": "Rents payable",
+      "parent_code": "219-220"
+    },
+    {
+      "code": "2193",
+      "level": 4,
+      "name": "應付利息",
+      "name_en": "Interest payable",
+      "parent_code": "219-220"
+    },
+    {
+      "code": "2194",
+      "level": 4,
+      "name": "應付營業稅",
+      "name_en": "Business tax payable",
+      "parent_code": "219-220"
+    },
+    {
+      "code": "2195",
+      "level": 4,
+      "name": "應付稅捐—其他",
+      "name_en": "Other tax payable",
+      "parent_code": "219-220"
+    },
+    {
+      "code": "2196",
+      "level": 4,
+      "name": "應付退休金費用",
+      "name_en": "Pension expense payable",
+      "parent_code": "219-220"
+    },
+    {
+      "code": "2197",
+      "level": 4,
+      "name": "其他應付費用",
+      "name_en": "Other accrued expenses",
+      "parent_code": "219-220"
+    },
+    {
+      "code": "2198",
+      "level": 4,
+      "name": "應付土地房屋款",
+      "name_en": "Payable on land and buildingpurchased",
+      "parent_code": "219-220"
+    },
+    {
+      "code": "2199",
+      "level": 4,
+      "name": "應付設備款",
+      "name_en": "Payable on machinery andequipment",
+      "parent_code": "219-220"
+    },
+    {
+      "code": "2200",
+      "level": 4,
+      "name": "其他應付款—關係人",
+      "name_en": "Other payables to relatedparties",
+      "parent_code": "219-220"
+    },
+    {
+      "code": "2201",
+      "level": 4,
+      "name": "應付股利",
+      "name_en": "Dividends payable",
+      "parent_code": "219-220"
+    },
+    {
+      "code": "2202",
+      "level": 4,
+      "name": "應付員工酬勞",
+      "name_en": "Employee compensationpayable",
+      "parent_code": "219-220"
+    },
+    {
+      "code": "2203",
+      "level": 4,
+      "name": "應付董監事酬勞",
+      "name_en": "Compensation due todirectors and supervisors",
+      "parent_code": "219-220"
+    },
+    {
+      "code": "2204",
+      "level": 4,
+      "name": "銷項稅額",
+      "name_en": "Business tax received (orOutput VAT)",
+      "parent_code": "219-220"
+    },
+    {
+      "code": "2205",
+      "level": 4,
+      "name": "其他應付款—股份基礎給付",
+      "name_en": "Other payables, share-basedpayments",
+      "parent_code": "219-220"
+    },
+    {
+      "code": "2206",
+      "level": 4,
+      "name": "其他應付款—其他",
+      "name_en": "Other payables, others",
+      "parent_code": "219-220"
+    },
+    {
+      "code": "221",
+      "level": 3,
+      "name": "本期所得稅負債",
+      "name_en": "Current tax liabilities",
+      "parent_code": "21-22"
+    },
+    {
+      "code": "2211",
+      "level": 4,
+      "name": "本期所得稅負債",
+      "name_en": "Current tax liabilities",
+      "parent_code": "221"
+    },
+    {
+      "code": "222",
+      "level": 3,
+      "name": "預收款項",
+      "name_en": "Advance receipts",
+      "parent_code": "21-22"
+    },
+    {
+      "code": "2221",
+      "level": 4,
+      "name": "預收貨款",
+      "name_en": "Advance sales receipts",
+      "parent_code": "222"
+    },
+    {
+      "code": "2222",
+      "level": 4,
+      "name": "預收收入",
+      "name_en": "Unearned revenue",
+      "parent_code": "222"
+    },
+    {
+      "code": "2223",
+      "level": 4,
+      "name": "其他預收款",
+      "name_en": "Other advance receipts",
+      "parent_code": "222"
+    },
+    {
+      "code": "223",
+      "level": 3,
+      "name": "一年內到期長期負債",
+      "name_en": "Long-term liabilities, currentportion",
+      "parent_code": "21-22"
+    },
+    {
+      "code": "2231",
+      "level": 4,
+      "name": "一年內到期應付公司債",
+      "name_en": "Bonds payable, currentportion",
+      "parent_code": "223"
+    },
+    {
+      "code": "2232",
+      "level": 4,
+      "name": "一年內到期長期借款",
+      "name_en": "Long-term borrowings,current portion",
+      "parent_code": "223"
+    },
+    {
+      "code": "2233",
+      "level": 4,
+      "name": "一年內到期長期應付票據及款項",
+      "name_en": "Long-term notes andaccounts payable, currentportion",
+      "parent_code": "223"
+    },
+    {
+      "code": "2234",
+      "level": 4,
+      "name": "一年內到期長期應付票據及款項—關係人",
+      "name_en": "Long-term notes andaccounts payable to relatedparties, current portion",
+      "parent_code": "223"
+    },
+    {
+      "code": "2235",
+      "level": 4,
+      "name": "一年內到期其他長期負債",
+      "name_en": "Other long-term liabilities,current portion",
+      "parent_code": "223"
+    },
+    {
+      "code": "224",
+      "level": 3,
+      "name": "負債準備—流動",
+      "name_en": "Current provisions",
+      "parent_code": "21-22"
+    },
+    {
+      "code": "2241",
+      "level": 4,
+      "name": "保固之短期負債準備",
+      "name_en": "Short-term warrantyprovision",
+      "parent_code": "224"
+    },
+    {
+      "code": "2242",
+      "level": 4,
+      "name": "虧損性合約之短期負債準備",
+      "name_en": "Short-term onerous contractsprovision",
+      "parent_code": "224"
+    },
+    {
+      "code": "2243",
+      "level": 4,
+      "name": "除役、復原及修復成本之短期負債準備",
+      "name_en": "Short-term provision fordecommissioning,restoration and rehabilitationcosts",
+      "parent_code": "224"
+    },
+    {
+      "code": "2244",
+      "level": 4,
+      "name": "保證合約之短期負債準備",
+      "name_en": "Short-term guaranteecontracts provision",
+      "parent_code": "224"
+    },
+    {
+      "code": "2245",
+      "level": 4,
+      "name": "銷貨退回及折讓之短期負債準備",
+      "name_en": "Short-term provision for sales returns and discounts",
+      "parent_code": "224"
+    },
+    {
+      "code": "2246",
+      "level": 4,
+      "name": "其他短期負債準備",
+      "name_en": "Other short-term provisions",
+      "parent_code": "224"
+    },
+    {
+      "code": "225",
+      "level": 3,
+      "name": "其他流動負債",
+      "name_en": "Other current liabilities",
+      "parent_code": "21-22"
+    },
+    {
+      "code": "2251",
+      "level": 4,
+      "name": "暫收款",
+      "name_en": "Temporary credits",
+      "parent_code": "225"
+    },
+    {
+      "code": "2252",
+      "level": 4,
+      "name": "代收款",
+      "name_en": "Receipts under custody",
+      "parent_code": "225"
+    },
+    {
+      "code": "23",
+      "level": 2,
+      "name": "非流動負債",
+      "name_en": "Non-current liabilities",
+      "parent_code": "2"
+    },
+    {
+      "code": "231",
+      "level": 3,
+      "name": "透過損益按公允價值衡量之金融負債—非流動",
+      "name_en": "Non-current financialliabilities measured at fairvalue through profit or loss",
+      "parent_code": "23"
+    },
+    {
+      "code": "2311",
+      "level": 4,
+      "name": "指定為透過損益按公允價值衡量之金融負債—非流動",
+      "name_en": "Non-current financialliabilities designation asmeasured at fair valuethrough profit or loss",
+      "parent_code": "231"
+    },
+    {
+      "code": "2312",
+      "level": 4,
+      "name": "指定為透過損益按公允價值衡量之金融負債評價調整—非流動",
+      "name_en": "Adjustments for change invalue of non-currentfinancial liabilitiesdesignation as measured atfair value through profit orloss",
+      "parent_code": "231"
+    },
+    {
+      "code": "2313",
+      "level": 4,
+      "name": "持有供交易之金融負債—非流動",
+      "name_en": "Non-current financialliabilities held for trading",
+      "parent_code": "231"
+    },
+    {
+      "code": "2314",
+      "level": 4,
+      "name": "持有供交易之金融負債評價調整—非流動",
+      "name_en": "Adjustments for change invalue of non-currentfinancial liabilities held fortrading",
+      "parent_code": "231"
+    },
+    {
+      "code": "232",
+      "level": 3,
+      "name": "避險之金融負債—非流動",
+      "name_en": "Non-current financialliabilities for hedging",
+      "parent_code": "23"
+    },
+    {
+      "code": "2321",
+      "level": 4,
+      "name": "避險之金融負債—非流動",
+      "name_en": "Non-current financialliabilities for hedging",
+      "parent_code": "232"
+    },
+    {
+      "code": "2322",
+      "level": 4,
+      "name": "避險之金融負債評價調整—非流動",
+      "name_en": "Adjustments for change invalue of non-currentfinancial liabilities forhedging",
+      "parent_code": "232"
+    },
+    {
+      "code": "233",
+      "level": 3,
+      "name": "以成本衡量之金融負債—非流動",
+      "name_en": "Non-current financialliabilities measured at cost",
+      "parent_code": "23"
+    },
+    {
+      "code": "2331",
+      "level": 4,
+      "name": "以成本衡量之金融負債—非流動",
+      "name_en": "Non-current financialliabilities measured at cost",
+      "parent_code": "233"
+    },
+    {
+      "code": "234",
+      "level": 3,
+      "name": "應付公司債",
+      "name_en": "Bonds payable",
+      "parent_code": "23"
+    },
+    {
+      "code": "2341",
+      "level": 4,
+      "name": "應付公司債",
+      "name_en": "Bonds payable",
+      "parent_code": "234"
+    },
+    {
+      "code": "2342",
+      "level": 4,
+      "name": "應付公司債溢(折)價",
+      "name_en": "Premium (discount) onbonds payable",
+      "parent_code": "234"
+    },
+    {
+      "code": "235",
+      "level": 3,
+      "name": "長期借款",
+      "name_en": "Long-term borrowings",
+      "parent_code": "23"
+    },
+    {
+      "code": "2351",
+      "level": 4,
+      "name": "長期銀行借款",
+      "name_en": "Long-term bank loans",
+      "parent_code": "235"
+    },
+    {
+      "code": "2352",
+      "level": 4,
+      "name": "長期借款—業主",
+      "name_en": "Long-term borrowings fromowners",
+      "parent_code": "235"
+    },
+    {
+      "code": "2353",
+      "level": 4,
+      "name": "長期借款—員工",
+      "name_en": "Long-term borrowings fromemployees",
+      "parent_code": "235"
+    },
+    {
+      "code": "2354",
+      "level": 4,
+      "name": "長期借款—關係人",
+      "name_en": "Long-term borrowings fromrelated parties",
+      "parent_code": "235"
+    },
+    {
+      "code": "2355",
+      "level": 4,
+      "name": "長期借款—其他",
+      "name_en": "Long-term borrowings,others",
+      "parent_code": "235"
+    },
+    {
+      "code": "236",
+      "level": 3,
+      "name": "長期應付票據及款項",
+      "name_en": "Long-term notes andaccounts payable",
+      "parent_code": "23"
+    },
+    {
+      "code": "2361",
+      "level": 4,
+      "name": "長期應付票據",
+      "name_en": "Long-term notes payable",
+      "parent_code": "236"
+    },
+    {
+      "code": "2362",
+      "level": 4,
+      "name": "長期應付帳款",
+      "name_en": "Long-term accounts payable",
+      "parent_code": "236"
+    },
+    {
+      "code": "2363",
+      "level": 4,
+      "name": "應付租賃款—非流動",
+      "name_en": "Non-current leaseobligations payable",
+      "parent_code": "236"
+    },
+    {
+      "code": "2364",
+      "level": 4,
+      "name": "長期應付票據及款項—關係人",
+      "name_en": "Long-term notes andaccounts payable to relatedparties",
+      "parent_code": "236"
+    },
+    {
+      "code": "2365",
+      "level": 4,
+      "name": "其他長期應付款項",
+      "name_en": "Others long-term accountspayable",
+      "parent_code": "236"
+    },
+    {
+      "code": "237",
+      "level": 3,
+      "name": "負債準備—非流動",
+      "name_en": "Non-current provisions",
+      "parent_code": "23"
+    },
+    {
+      "code": "2371",
+      "level": 4,
+      "name": "虧損性合約之長期負債準備",
+      "name_en": "Long-term onerous contractsprovision",
+      "parent_code": "237"
+    },
+    {
+      "code": "2372",
+      "level": 4,
+      "name": "除役、復原及修復成本之長期負債準備",
+      "name_en": "Long-term provision fordecommissioning,restoration and rehabilitationcosts",
+      "parent_code": "237"
+    },
+    {
+      "code": "2373",
+      "level": 4,
+      "name": "保證合約之長期負債準備",
+      "name_en": "Long-term guaranteecontracts provision",
+      "parent_code": "237"
+    },
+    {
+      "code": "2374",
+      "level": 4,
+      "name": "保固之長期負債準備",
+      "name_en": "Long-term warrantyprovision",
+      "parent_code": "237"
+    },
+    {
+      "code": "238",
+      "level": 3,
+      "name": "遞延所得稅負債",
+      "name_en": "Deferred tax liabilities",
+      "parent_code": "23"
+    },
+    {
+      "code": "2381",
+      "level": 4,
+      "name": "遞延所得稅負債—土地增值稅",
+      "name_en": "Deferred tax liabilities, landvalue increment tax",
+      "parent_code": "238"
+    },
+    {
+      "code": "2382",
+      "level": 4,
+      "name": "遞延所得稅負債—所得稅",
+      "name_en": "Deferred tax liabilities,income tax",
+      "parent_code": "238"
+    },
+    {
+      "code": "239",
+      "level": 3,
+      "name": "其他非流動負債",
+      "name_en": "Other non-current liabilities",
+      "parent_code": "23"
+    },
+    {
+      "code": "2391",
+      "level": 4,
+      "name": "遞延收入",
+      "name_en": "Unearned revenue",
+      "parent_code": "239"
+    },
+    {
+      "code": "2392",
+      "level": 4,
+      "name": "存入保證金",
+      "name_en": "Guarantee deposits received",
+      "parent_code": "239"
+    },
+    {
+      "code": "2393",
+      "level": 4,
+      "name": "業主(股東)往來",
+      "name_en": "Owner (shareholder)accounts, credit",
+      "parent_code": "239"
+    },
+    {
+      "code": "2394",
+      "level": 4,
+      "name": "同業往來",
+      "name_en": "Accounts with the trade,credit",
+      "parent_code": "239"
+    },
+    {
+      "code": "2395",
+      "level": 4,
+      "name": "其他非流動負債—股份基礎給付",
+      "name_en": "Other non-current liabilities,share-based payment",
+      "parent_code": "239"
+    },
+    {
+      "code": "3",
+      "level": 1,
+      "name": "權益",
+      "name_en": "Equity",
+      "parent_code": null
+    },
+    {
+      "code": "31",
+      "level": 2,
+      "name": "資本(或股本)",
+      "name_en": "Capital (Share capital)",
+      "parent_code": "3"
+    },
+    {
+      "code": "311",
+      "level": 3,
+      "name": "資本(或股本)",
+      "name_en": "Capital (Share capital)",
+      "parent_code": "31"
+    },
+    {
+      "code": "3111",
+      "level": 4,
+      "name": "普通股股本",
+      "name_en": "Ordinary share",
+      "parent_code": "311"
+    },
+    {
+      "code": "3112",
+      "level": 4,
+      "name": "特別股股本",
+      "name_en": "Preference share",
+      "parent_code": "311"
+    },
+    {
+      "code": "3113",
+      "level": 4,
+      "name": "預收股本",
+      "name_en": "Advance receipts forordinary share",
+      "parent_code": "311"
+    },
+    {
+      "code": "3114",
+      "level": 4,
+      "name": "待分配股票股利",
+      "name_en": "Stock dividend to bedistributed",
+      "parent_code": "311"
+    },
+    {
+      "code": "32",
+      "level": 2,
+      "name": "資本公積",
+      "name_en": "Capital surplus",
+      "parent_code": "3"
+    },
+    {
+      "code": "321",
+      "level": 3,
+      "name": "資本公積",
+      "name_en": "Capital surplus",
+      "parent_code": "32"
+    },
+    {
+      "code": "3211",
+      "level": 4,
+      "name": "資本公積—普通股股票溢價",
+      "name_en": "Capital surplus, additionalpaid-in capital arising fromordinary share",
+      "parent_code": "321"
+    },
+    {
+      "code": "3212",
+      "level": 4,
+      "name": "資本公積—特別股股票溢價",
+      "name_en": "Capital surplus, additionalpaid-in capital arising frompreference share",
+      "parent_code": "321"
+    },
+    {
+      "code": "3213",
+      "level": 4,
+      "name": "資本公積—庫藏股票交易",
+      "name_en": "Capital surplus, treasuryshare transactions",
+      "parent_code": "321"
+    },
+    {
+      "code": "3214",
+      "level": 4,
+      "name": "資本公積—股份基礎給付",
+      "name_en": "Capital surplus, share-based payments",
+      "parent_code": "321"
+    },
+    {
+      "code": "3215",
+      "level": 4,
+      "name": "資本公積—受贈資產",
+      "name_en": "Capital surplus, donatedassets received",
+      "parent_code": "321"
+    },
+    {
+      "code": "3216",
+      "level": 4,
+      "name": "資本公積—採用權益法認列關聯企業及合資股權淨值變動數",
+      "name_en": "Capital surplus, changes inequity of investment inassociates and joint venturesaccounted for using equitymethod",
+      "parent_code": "321"
+    },
+    {
+      "code": "3217",
+      "level": 4,
+      "name": "資本公積—實際取得或處分子公司股權價格與帳面價值差額",
+      "name_en": "Capital surplus, differencebetween consideration andcarrying amount ofsubsidiaries acquired ordisposed",
+      "parent_code": "321"
+    },
+    {
+      "code": "3218",
+      "level": 4,
+      "name": "資本公積—認列對子公司所有權權益變動數",
+      "name_en": "Capital surplus, changes inownership interests insubsidiaries",
+      "parent_code": "321"
+    },
+    {
+      "code": "3219",
+      "level": 4,
+      "name": "資本公積—認股權",
+      "name_en": "Capital surplus, share option",
+      "parent_code": "321"
+    },
+    {
+      "code": "3220",
+      "level": 4,
+      "name": "資本公積—其他",
+      "name_en": "Capital surplus, others",
+      "parent_code": "321"
+    },
+    {
+      "code": "33",
+      "level": 2,
+      "name": "保留盈餘(或累積虧損)",
+      "name_en": "Retained earnings(accumulated deficit)",
+      "parent_code": "3"
+    },
+    {
+      "code": "331",
+      "level": 3,
+      "name": "法定盈餘公積",
+      "name_en": "Legal reserve",
+      "parent_code": "33"
+    },
+    {
+      "code": "3311",
+      "level": 4,
+      "name": "法定盈餘公積",
+      "name_en": "Legal reserve",
+      "parent_code": "331"
+    },
+    {
+      "code": "332",
+      "level": 3,
+      "name": "特別盈餘公積",
+      "name_en": "Special reserve",
+      "parent_code": "33"
+    },
+    {
+      "code": "3321",
+      "level": 4,
+      "name": "特別盈餘公積",
+      "name_en": "Special reserve",
+      "parent_code": "332"
+    },
+    {
+      "code": "335",
+      "level": 3,
+      "name": "未分配盈餘(或待彌補虧損)",
+      "name_en": "Unappropriated retainedearnings (accumulateddeficit)",
+      "parent_code": "33"
+    },
+    {
+      "code": "3351",
+      "level": 4,
+      "name": "累積盈虧",
+      "name_en": "Accumulated profit and loss",
+      "parent_code": "335"
+    },
+    {
+      "code": "3352",
+      "level": 4,
+      "name": "追溯適用及追溯重編之影響數",
+      "name_en": "Effect of retrospectiveapplication and retrospectiverestatement",
+      "parent_code": "335"
+    },
+    {
+      "code": "3353",
+      "level": 4,
+      "name": "本期損益",
+      "name_en": "Current profit and loss",
+      "parent_code": "335"
+    },
+    {
+      "code": "34",
+      "level": 2,
+      "name": "其他權益",
+      "name_en": "Other equity interest",
+      "parent_code": "3"
+    },
+    {
+      "code": "341",
+      "level": 3,
+      "name": "其他權益",
+      "name_en": "Other equity interest",
+      "parent_code": "34"
+    },
+    {
+      "code": "3411",
+      "level": 4,
+      "name": "透過其他綜合損益按公允價值衡量之金融資產未實現損益",
+      "name_en": "Unrealized gains (losses)from financial assetsmeasured at fair valuethrough other comprehensiveincome",
+      "parent_code": "341"
+    },
+    {
+      "code": "3412",
+      "level": 4,
+      "name": "避險工具之損益",
+      "name_en": "Gains (losses) on hedginginstruments",
+      "parent_code": "341"
+    },
+    {
+      "code": "3413",
+      "level": 4,
+      "name": "國外營運機構財務報表換算之兌換差額",
+      "name_en": "Exchange differences ontranslation of foreignfinancial statements",
+      "parent_code": "341"
+    },
+    {
+      "code": "3414",
+      "level": 4,
+      "name": "未實現重估增值",
+      "name_en": "Unrealized revaluationsurplus",
+      "parent_code": "341"
+    },
+    {
+      "code": "3415",
+      "level": 4,
+      "name": "其他權益—其他",
+      "name_en": "Other equity interest, others",
+      "parent_code": "341"
+    },
+    {
+      "code": "35",
+      "level": 2,
+      "name": "庫藏股票",
+      "name_en": "Treasury shares",
+      "parent_code": "3"
+    },
+    {
+      "code": "351",
+      "level": 3,
+      "name": "庫藏股票",
+      "name_en": "Treasury shares",
+      "parent_code": "35"
+    },
+    {
+      "code": "3511",
+      "level": 4,
+      "name": "庫藏股票",
+      "name_en": "Treasury shares",
+      "parent_code": "351"
+    },
+    {
+      "code": "4",
+      "level": 1,
+      "name": "營業收入",
+      "name_en": "Operating revenue",
+      "parent_code": null
+    },
+    {
+      "code": "41",
+      "level": 2,
+      "name": "營業收入",
+      "name_en": "Operating revenue",
+      "parent_code": "4"
+    },
+    {
+      "code": "411",
+      "level": 3,
+      "name": "銷貨收入",
+      "name_en": "Sales revenue",
+      "parent_code": "41"
+    },
+    {
+      "code": "4111",
+      "level": 4,
+      "name": "銷貨收入",
+      "name_en": "Sales revenue",
+      "parent_code": "411"
+    },
+    {
+      "code": "4112",
+      "level": 4,
+      "name": "分期付款銷貨收入",
+      "name_en": "Installment sales",
+      "parent_code": "411"
+    },
+    {
+      "code": "4113",
+      "level": 4,
+      "name": "銷貨退回",
+      "name_en": "Sales returns",
+      "parent_code": "411"
+    },
+    {
+      "code": "4114",
+      "level": 4,
+      "name": "銷貨折讓",
+      "name_en": "Sales discounts andallowances",
+      "parent_code": "411"
+    },
+    {
+      "code": "412",
+      "level": 3,
+      "name": "勞務收入",
+      "name_en": "Service revenue",
+      "parent_code": "41"
+    },
+    {
+      "code": "4121",
+      "level": 4,
+      "name": "勞務收入",
+      "name_en": "Service revenue",
+      "parent_code": "412"
+    },
+    {
+      "code": "413-423",
+      "level": 3,
+      "name": "工程收入",
+      "name_en": "Engineering service revenue",
+      "parent_code": "41"
+    },
+    {
+      "code": "4131",
+      "level": 4,
+      "name": "工程收入",
+      "name_en": "Engineering revenue",
+      "parent_code": "413-423"
+    },
+    {
+      "code": "4232",
+      "level": 4,
+      "name": "工程收入退回及折讓",
+      "name_en": "Return and allowance forengineering revenue",
+      "parent_code": "413-423"
+    },
+    {
+      "code": "414",
+      "level": 3,
+      "name": "其他營業收入",
+      "name_en": "Other operating revenue",
+      "parent_code": "41"
+    },
+    {
+      "code": "4141",
+      "level": 4,
+      "name": "其他營業收入",
+      "name_en": "Other operating revenue",
+      "parent_code": "414"
+    },
+    {
+      "code": "5",
+      "level": 1,
+      "name": "營業成本",
+      "name_en": "Operating costs",
+      "parent_code": null
+    },
+    {
+      "code": "51",
+      "level": 2,
+      "name": "銷貨成本",
+      "name_en": "Cost of sales",
+      "parent_code": "5"
+    },
+    {
+      "code": "511",
+      "level": 3,
+      "name": "銷貨成本",
+      "name_en": "Cost of sales",
+      "parent_code": "51"
+    },
+    {
+      "code": "5111",
+      "level": 4,
+      "name": "銷貨成本",
+      "name_en": "Cost of sales",
+      "parent_code": "511"
+    },
+    {
+      "code": "5112",
+      "level": 4,
+      "name": "分期付款銷貨成本",
+      "name_en": "Cost of installment sales",
+      "parent_code": "511"
+    },
+    {
+      "code": "512",
+      "level": 3,
+      "name": "進貨",
+      "name_en": "Cost of goods purchased",
+      "parent_code": "51"
+    },
+    {
+      "code": "5121",
+      "level": 4,
+      "name": "進貨",
+      "name_en": "Purchase of goods",
+      "parent_code": "512"
+    },
+    {
+      "code": "5122",
+      "level": 4,
+      "name": "進貨費用",
+      "name_en": "Purchasing expense",
+      "parent_code": "512"
+    },
+    {
+      "code": "5123",
+      "level": 4,
+      "name": "進貨退出",
+      "name_en": "Purchases returns",
+      "parent_code": "512"
+    },
+    {
+      "code": "5124",
+      "level": 4,
+      "name": "進貨折讓",
+      "name_en": "Purchases discounts andallowances",
+      "parent_code": "512"
+    },
+    {
+      "code": "513",
+      "level": 3,
+      "name": "進料",
+      "name_en": "Cost of raw materialspurchased",
+      "parent_code": "51"
+    },
+    {
+      "code": "5131",
+      "level": 4,
+      "name": "進料",
+      "name_en": "Purchase of raw materials",
+      "parent_code": "513"
+    },
+    {
+      "code": "5132",
+      "level": 4,
+      "name": "進料費用",
+      "name_en": "Raw materials purchasingexpense",
+      "parent_code": "513"
+    },
+    {
+      "code": "5133",
+      "level": 4,
+      "name": "進料退出",
+      "name_en": "Raw materials purchasereturns",
+      "parent_code": "513"
+    },
+    {
+      "code": "5134",
+      "level": 4,
+      "name": "進料折讓",
+      "name_en": "Raw materials purchasediscounts and allowances",
+      "parent_code": "513"
+    },
+    {
+      "code": "514",
+      "level": 3,
+      "name": "直接人工",
+      "name_en": "Direct labor",
+      "parent_code": "51"
+    },
+    {
+      "code": "5141",
+      "level": 4,
+      "name": "直接人工",
+      "name_en": "Direct labor",
+      "parent_code": "514"
+    },
+    {
+      "code": "515-516",
+      "level": 3,
+      "name": "製造費用",
+      "name_en": "Overhead",
+      "parent_code": "51"
+    },
+    {
+      "code": "5151",
+      "level": 4,
+      "name": "間接人工",
+      "name_en": "Indirect labor",
+      "parent_code": "515-516"
+    },
+    {
+      "code": "5152",
+      "level": 4,
+      "name": "租金支出",
+      "name_en": "Rent expense",
+      "parent_code": "515-516"
+    },
+    {
+      "code": "5153",
+      "level": 4,
+      "name": "文具用品",
+      "name_en": "Stationery supplies",
+      "parent_code": "515-516"
+    },
+    {
+      "code": "5154",
+      "level": 4,
+      "name": "旅費",
+      "name_en": "Traveling Expense",
+      "parent_code": "515-516"
+    },
+    {
+      "code": "5155",
+      "level": 4,
+      "name": "運費",
+      "name_en": "Freight",
+      "parent_code": "515-516"
+    },
+    {
+      "code": "5156",
+      "level": 4,
+      "name": "郵電費",
+      "name_en": "Postage expenses",
+      "parent_code": "515-516"
+    },
+    {
+      "code": "5157",
+      "level": 4,
+      "name": "修繕費",
+      "name_en": "Repairs and maintenanceexpense",
+      "parent_code": "515-516"
+    },
+    {
+      "code": "5158",
+      "level": 4,
+      "name": "包裝費",
+      "name_en": "Packing expenses",
+      "parent_code": "515-516"
+    },
+    {
+      "code": "5159",
+      "level": 4,
+      "name": "水電瓦斯費",
+      "name_en": "Utilities expense",
+      "parent_code": "515-516"
+    },
+    {
+      "code": "5160",
+      "level": 4,
+      "name": "保險費",
+      "name_en": "Insurance expense",
+      "parent_code": "515-516"
+    },
+    {
+      "code": "5161",
+      "level": 4,
+      "name": "加工費",
+      "name_en": "Processing expense",
+      "parent_code": "515-516"
+    },
+    {
+      "code": "5162",
+      "level": 4,
+      "name": "稅捐",
+      "name_en": "Taxes",
+      "parent_code": "515-516"
+    },
+    {
+      "code": "5163",
+      "level": 4,
+      "name": "折舊",
+      "name_en": "Depreciations",
+      "parent_code": "515-516"
+    },
+    {
+      "code": "5164",
+      "level": 4,
+      "name": "各項耗竭及攤提",
+      "name_en": "Depletions and amortizations",
+      "parent_code": "515-516"
+    },
+    {
+      "code": "5165",
+      "level": 4,
+      "name": "伙食費",
+      "name_en": "Meal expense",
+      "parent_code": "515-516"
+    },
+    {
+      "code": "5166",
+      "level": 4,
+      "name": "職工福利",
+      "name_en": "Employee benefits/welfare",
+      "parent_code": "515-516"
+    },
+    {
+      "code": "5167",
+      "level": 4,
+      "name": "訓練費",
+      "name_en": "Training expense",
+      "parent_code": "515-516"
+    },
+    {
+      "code": "5168",
+      "level": 4,
+      "name": "間接材料",
+      "name_en": "Indirect materials",
+      "parent_code": "515-516"
+    },
+    {
+      "code": "5169",
+      "level": 4,
+      "name": "其他製造費用",
+      "name_en": "Other overheads",
+      "parent_code": "515-516"
+    },
+    {
+      "code": "561",
+      "level": 3,
+      "name": "勞務成本",
+      "name_en": "Cost of services",
+      "parent_code": "51"
+    },
+    {
+      "code": "5611",
+      "level": 4,
+      "name": "勞務成本",
+      "name_en": "Cost of services",
+      "parent_code": "561"
+    },
+    {
+      "code": "581",
+      "level": 3,
+      "name": "工程成本",
+      "name_en": "Cost of engineering servicesales",
+      "parent_code": "51"
+    },
+    {
+      "code": "5811",
+      "level": 4,
+      "name": "工程成本",
+      "name_en": "Cost of engineering servicesales",
+      "parent_code": "581"
+    },
+    {
+      "code": "591",
+      "level": 3,
+      "name": "其他營業成本",
+      "name_en": "Other operating costs",
+      "parent_code": "51"
+    },
+    {
+      "code": "5911",
+      "level": 4,
+      "name": "其他營業成本",
+      "name_en": "Other operating costs",
+      "parent_code": "591"
+    },
+    {
+      "code": "6",
+      "level": 1,
+      "name": "營業費用",
+      "name_en": "Operating expenses",
+      "parent_code": null
+    },
+    {
+      "code": "61",
+      "level": 2,
+      "name": "營業費用",
+      "name_en": "Operating expenses",
+      "parent_code": "6"
+    },
+    {
+      "code": "611-613",
+      "level": 3,
+      "name": "營業費用",
+      "name_en": "Operating expenses",
+      "parent_code": "61"
+    },
+    {
+      "code": "6111",
+      "level": 4,
+      "name": "薪資支出",
+      "name_en": "Wages and salaries",
+      "parent_code": "611-613"
+    },
+    {
+      "code": "6112",
+      "level": 4,
+      "name": "租金支出",
+      "name_en": "Rent expense",
+      "parent_code": "611-613"
+    },
+    {
+      "code": "6113",
+      "level": 4,
+      "name": "文具用品",
+      "name_en": "Stationery supplies",
+      "parent_code": "611-613"
+    },
+    {
+      "code": "6114",
+      "level": 4,
+      "name": "旅費",
+      "name_en": "Traveling Expense",
+      "parent_code": "611-613"
+    },
+    {
+      "code": "6115",
+      "level": 4,
+      "name": "運費",
+      "name_en": "Freight",
+      "parent_code": "611-613"
+    },
+    {
+      "code": "6116",
+      "level": 4,
+      "name": "郵電費",
+      "name_en": "Postage expenses",
+      "parent_code": "611-613"
+    },
+    {
+      "code": "6117",
+      "level": 4,
+      "name": "修繕費",
+      "name_en": "Repairs and maintenanceexpense",
+      "parent_code": "611-613"
+    },
+    {
+      "code": "6118",
+      "level": 4,
+      "name": "廣告費",
+      "name_en": "Advertisement expense",
+      "parent_code": "611-613"
+    },
+    {
+      "code": "6119",
+      "level": 4,
+      "name": "水電瓦斯費",
+      "name_en": "Utilities expense",
+      "parent_code": "611-613"
+    },
+    {
+      "code": "6120",
+      "level": 4,
+      "name": "保險費",
+      "name_en": "Insurance expense",
+      "parent_code": "611-613"
+    },
+    {
+      "code": "6121",
+      "level": 4,
+      "name": "交際費",
+      "name_en": "Entertainment expense",
+      "parent_code": "611-613"
+    },
+    {
+      "code": "6122",
+      "level": 4,
+      "name": "捐贈",
+      "name_en": "Donation expense",
+      "parent_code": "611-613"
+    },
+    {
+      "code": "6123",
+      "level": 4,
+      "name": "稅捐",
+      "name_en": "Taxes",
+      "parent_code": "611-613"
+    },
+    {
+      "code": "6124",
+      "level": 4,
+      "name": "呆帳損失",
+      "name_en": "Losses on doubtful debts",
+      "parent_code": "611-613"
+    },
+    {
+      "code": "6125",
+      "level": 4,
+      "name": "折舊",
+      "name_en": "Depreciations",
+      "parent_code": "611-613"
+    },
+    {
+      "code": "6126",
+      "level": 4,
+      "name": "各項耗竭及攤提",
+      "name_en": "Depletions and amortizations",
+      "parent_code": "611-613"
+    },
+    {
+      "code": "6127",
+      "level": 4,
+      "name": "外銷損失",
+      "name_en": "Losses on export sales",
+      "parent_code": "611-613"
+    },
+    {
+      "code": "6128",
+      "level": 4,
+      "name": "伙食費",
+      "name_en": "Meal expense",
+      "parent_code": "611-613"
+    },
+    {
+      "code": "6129",
+      "level": 4,
+      "name": "職工福利",
+      "name_en": "Employee benefits/welfare",
+      "parent_code": "611-613"
+    },
+    {
+      "code": "6130",
+      "level": 4,
+      "name": "研究發展費用",
+      "name_en": "Research and developmentexpense",
+      "parent_code": "611-613"
+    },
+    {
+      "code": "6131",
+      "level": 4,
+      "name": "佣金支出",
+      "name_en": "Commissions expense",
+      "parent_code": "611-613"
+    },
+    {
+      "code": "6132",
+      "level": 4,
+      "name": "訓練費",
+      "name_en": "Training expense",
+      "parent_code": "611-613"
+    },
+    {
+      "code": "6133",
+      "level": 4,
+      "name": "勞務費",
+      "name_en": "Services expense",
+      "parent_code": "611-613"
+    },
+    {
+      "code": "6134",
+      "level": 4,
+      "name": "其他營業費用",
+      "name_en": "Other operating expenses",
+      "parent_code": "611-613"
+    },
+    {
+      "code": "7",
+      "level": 1,
+      "name": "營業外收益及費損",
+      "name_en": "Non-operating income andexpenses",
+      "parent_code": null
+    },
+    {
+      "code": "71-72",
+      "level": 2,
+      "name": "營業外收益及費損",
+      "name_en": "Non-operating income andexpenses",
+      "parent_code": "7"
+    },
+    {
+      "code": "711",
+      "level": 3,
+      "name": "利息收入",
+      "name_en": "Interest revenue",
+      "parent_code": "71-72"
+    },
+    {
+      "code": "7111",
+      "level": 4,
+      "name": "利息收入",
+      "name_en": "Interest revenue",
+      "parent_code": "711"
+    },
+    {
+      "code": "712",
+      "level": 3,
+      "name": "租金收入",
+      "name_en": "Rent income",
+      "parent_code": "71-72"
+    },
+    {
+      "code": "7121",
+      "level": 4,
+      "name": "租金收入",
+      "name_en": "Rent income",
+      "parent_code": "712"
+    },
+    {
+      "code": "713",
+      "level": 3,
+      "name": "權利金收入",
+      "name_en": "Royalty income",
+      "parent_code": "71-72"
+    },
+    {
+      "code": "7131",
+      "level": 4,
+      "name": "權利金收入",
+      "name_en": "Royalty income",
+      "parent_code": "713"
+    },
+    {
+      "code": "714",
+      "level": 3,
+      "name": "股利收入",
+      "name_en": "Dividend revenue",
+      "parent_code": "71-72"
+    },
+    {
+      "code": "7141",
+      "level": 4,
+      "name": "股利收入",
+      "name_en": "Dividend revenue",
+      "parent_code": "714"
+    },
+    {
+      "code": "715",
+      "level": 3,
+      "name": "利息費用",
+      "name_en": "Interest expense",
+      "parent_code": "71-72"
+    },
+    {
+      "code": "7151",
+      "level": 4,
+      "name": "利息費用",
+      "name_en": "Interest expense",
+      "parent_code": "715"
+    },
+    {
+      "code": "716",
+      "level": 3,
+      "name": "透過損益按公允價值衡量之金融資產(負債)淨損益",
+      "name_en": "Net Gain or loss on financialassets (liabilities) measuredat fair value through profit orloss",
+      "parent_code": "71-72"
+    },
+    {
+      "code": "7161",
+      "level": 4,
+      "name": "透過損益按公允價值衡量之金融資產(負債)利益",
+      "name_en": "Gains on financial assets(liabilities) measured at fairvalue through profit or loss",
+      "parent_code": "716"
+    },
+    {
+      "code": "7162",
+      "level": 4,
+      "name": "透過損益按公允價值衡量之金融資產(負債)損失",
+      "name_en": "Losses on financial assets(liabilities) measured at fairvalue through profit or loss",
+      "parent_code": "716"
+    },
+    {
+      "code": "717",
+      "level": 3,
+      "name": "採權益法認列之投資損益",
+      "name_en": "Net investment income orloss accounted for usingequity method",
+      "parent_code": "71-72"
+    },
+    {
+      "code": "7171",
+      "level": 4,
+      "name": "採權益法認列之投資利益",
+      "name_en": "Investment incomeaccounted for using equitymethod",
+      "parent_code": "717"
+    },
+    {
+      "code": "7172",
+      "level": 4,
+      "name": "採權益法認列之投資損失",
+      "name_en": "Investment loss accountedfor using equity method",
+      "parent_code": "717"
+    },
+    {
+      "code": "718",
+      "level": 3,
+      "name": "兌換損益",
+      "name_en": "Foreign exchange net gain orloss",
+      "parent_code": "71-72"
+    },
+    {
+      "code": "7181",
+      "level": 4,
+      "name": "兌換利益",
+      "name_en": "Foreign exchange gains",
+      "parent_code": "718"
+    },
+    {
+      "code": "7182",
+      "level": 4,
+      "name": "兌換損失",
+      "name_en": "Foreign exchange losses",
+      "parent_code": "718"
+    },
+    {
+      "code": "719",
+      "level": 3,
+      "name": "處分投資損益",
+      "name_en": "Net gain or loss on disposalsof investment",
+      "parent_code": "71-72"
+    },
+    {
+      "code": "7191",
+      "level": 4,
+      "name": "處分投資性不動產利益",
+      "name_en": "Gains on disposals ofinvestment property",
+      "parent_code": "719"
+    },
+    {
+      "code": "7192",
+      "level": 4,
+      "name": "處分投資性不動產損失",
+      "name_en": "Losses on disposals ofinvestment property",
+      "parent_code": "719"
+    },
+    {
+      "code": "7193",
+      "level": 4,
+      "name": "處分投資利益",
+      "name_en": "Gains on disposals ofinvestments",
+      "parent_code": "719"
+    },
+    {
+      "code": "7194",
+      "level": 4,
+      "name": "處分投資損失",
+      "name_en": "Losses on disposals ofinvestments",
+      "parent_code": "719"
+    },
+    {
+      "code": "720",
+      "level": 3,
+      "name": "處分不動產、廠房及設備損益",
+      "name_en": "Net gain or loss on disposalsof property, plant andequipment",
+      "parent_code": "71-72"
+    },
+    {
+      "code": "7201",
+      "level": 4,
+      "name": "處分不動產、廠房及設備利益",
+      "name_en": "Gains on disposals ofproperty, plant andequipment",
+      "parent_code": "720"
+    },
+    {
+      "code": "7202",
+      "level": 4,
+      "name": "處分不動產、廠房及設備損失",
+      "name_en": "Losses on disposals ofproperty, plant andequipment",
+      "parent_code": "720"
+    },
+    {
+      "code": "721",
+      "level": 3,
+      "name": "減損損失",
+      "name_en": "Impairment loss",
+      "parent_code": "71-72"
+    },
+    {
+      "code": "7211",
+      "level": 4,
+      "name": "金融資產減損損失",
+      "name_en": "Impairment loss on financialassets",
+      "parent_code": "721"
+    },
+    {
+      "code": "7212",
+      "level": 4,
+      "name": "投資性不動產減損損失",
+      "name_en": "Impairment loss recognizedin profit or loss, investment property",
+      "parent_code": "721"
+    },
+    {
+      "code": "7213",
+      "level": 4,
+      "name": "不動產、廠房及設備減損損失",
+      "name_en": "Impairment loss recognizedin profit or loss, property,plant and equipment",
+      "parent_code": "721"
+    },
+    {
+      "code": "7214",
+      "level": 4,
+      "name": "無形資產減損損失",
+      "name_en": "Impairment loss recognisedin profit or loss, intangibleassets other than goodwill",
+      "parent_code": "721"
+    },
+    {
+      "code": "7215",
+      "level": 4,
+      "name": "生物資產減損損失",
+      "name_en": "Impairment loss recognizedin profit or loss, biologicalassets",
+      "parent_code": "721"
+    },
+    {
+      "code": "722",
+      "level": 3,
+      "name": "減損迴轉利益",
+      "name_en": "Reversal of impairment lossrecognised in profit or loss",
+      "parent_code": "71-72"
+    },
+    {
+      "code": "7221",
+      "level": 4,
+      "name": "金融資產減損迴轉利益",
+      "name_en": "Reversal of impairment lossrecognized in profit or loss,financial assets",
+      "parent_code": "722"
+    },
+    {
+      "code": "7222",
+      "level": 4,
+      "name": "投資性不動產減損迴轉利益",
+      "name_en": "Reversal of impairment lossrecognized in profit or loss,investment property",
+      "parent_code": "722"
+    },
+    {
+      "code": "7223",
+      "level": 4,
+      "name": "不動產、廠房及設備減損迴轉利益",
+      "name_en": "Reversal of impairment lossrecognized in profit or loss,property, plant andequipment",
+      "parent_code": "722"
+    },
+    {
+      "code": "7224",
+      "level": 4,
+      "name": "無形資產減損迴轉利益",
+      "name_en": "Reversal of impairment lossrecognized in profit or loss,intangible assets",
+      "parent_code": "722"
+    },
+    {
+      "code": "7225",
+      "level": 4,
+      "name": "生物資產減損迴轉利益",
+      "name_en": "Reversal of impairment lossrecognised in profit or loss,biological assets",
+      "parent_code": "722"
+    },
+    {
+      "code": "723-724",
+      "level": 3,
+      "name": "其他營業外收益及費損",
+      "name_en": "Other non-operating income and expenses",
+      "parent_code": "71-72"
+    },
+    {
+      "code": "7231",
+      "level": 4,
+      "name": "捐贈收入",
+      "name_en": "Donation revenue",
+      "parent_code": "723-724"
+    },
+    {
+      "code": "7232",
+      "level": 4,
+      "name": "佣金收入",
+      "name_en": "Commissions revenue",
+      "parent_code": "723-724"
+    },
+    {
+      "code": "7233",
+      "level": 4,
+      "name": "處分無形資產利益",
+      "name_en": "Gains on disposals ofintangible assets",
+      "parent_code": "723-724"
+    },
+    {
+      "code": "7234",
+      "level": 4,
+      "name": "出售下腳及廢料收入",
+      "name_en": "Income from sale of scraps",
+      "parent_code": "723-724"
+    },
+    {
+      "code": "7235",
+      "level": 4,
+      "name": "呆帳轉回利益",
+      "name_en": "Gains on doubtful debtrecoveries",
+      "parent_code": "723-724"
+    },
+    {
+      "code": "7236",
+      "level": 4,
+      "name": "手續費收入",
+      "name_en": "Fee income",
+      "parent_code": "723-724"
+    },
+    {
+      "code": "7237",
+      "level": 4,
+      "name": "廉價購買利益",
+      "name_en": "Gain recognized in bargainpurchase transaction",
+      "parent_code": "723-724"
+    },
+    {
+      "code": "7238",
+      "level": 4,
+      "name": "當期原始認列生物資產之利益",
+      "name_en": "Gains on initial recognitionof biological assets forcurrent period",
+      "parent_code": "723-724"
+    },
+    {
+      "code": "7239",
+      "level": 4,
+      "name": "生物資產當期公允價值減出售成本之變動之利益",
+      "name_en": "Gains on changes in fairvalue less costs to sell ofbiological assets for currentperiod",
+      "parent_code": "723-724"
+    },
+    {
+      "code": "7240",
+      "level": 4,
+      "name": "處分無形資產損失",
+      "name_en": "Losses on disposals ofintangible assets other thangoodwill",
+      "parent_code": "723-724"
+    },
+    {
+      "code": "7241",
+      "level": 4,
+      "name": "停工損失",
+      "name_en": "Losses on work stoppages",
+      "parent_code": "723-724"
+    },
+    {
+      "code": "7242",
+      "level": 4,
+      "name": "災害損失",
+      "name_en": "Losses on disaster",
+      "parent_code": "723-724"
+    },
+    {
+      "code": "7243",
+      "level": 4,
+      "name": "手續費支出",
+      "name_en": "Fee expense",
+      "parent_code": "723-724"
+    },
+    {
+      "code": "7244",
+      "level": 4,
+      "name": "虧損性合約損失",
+      "name_en": "Onerous contracts losses",
+      "parent_code": "723-724"
+    },
+    {
+      "code": "7245",
+      "level": 4,
+      "name": "當期原始認列生物資產之損失",
+      "name_en": "Losses on initial recognitionof biological assets forcurrent period",
+      "parent_code": "723-724"
+    },
+    {
+      "code": "7246",
+      "level": 4,
+      "name": "生物資產當期公允價值減出售成本之變動之損失",
+      "name_en": "Losses on changes in fairvalue less costs to sell ofbiological assets for currentperiod",
+      "parent_code": "723-724"
+    },
+    {
+      "code": "8",
+      "level": 1,
+      "name": "綜合損益總額",
+      "name_en": "Total comprehensive income",
+      "parent_code": null
+    },
+    {
+      "code": "81",
+      "level": 2,
+      "name": "繼續營業單位稅前淨利（或淨損）",
+      "name_en": "Profit (loss) from continuingoperations before tax",
+      "parent_code": "8"
+    },
+    {
+      "code": "811",
+      "level": 3,
+      "name": "繼續營業單位稅前淨益（或淨損）",
+      "name_en": "Profit (loss) from continuingoperations before tax",
+      "parent_code": "81"
+    },
+    {
+      "code": "82",
+      "level": 2,
+      "name": "所得稅費用(或利益)",
+      "name_en": "Tax expense (income)",
+      "parent_code": "8"
+    },
+    {
+      "code": "821",
+      "level": 3,
+      "name": "所得稅費用(或利益)",
+      "name_en": "Tax expense (income)",
+      "parent_code": "82"
+    },
+    {
+      "code": "8211",
+      "level": 4,
+      "name": "所得稅費用(或利益)",
+      "name_en": "Tax expense (income)",
+      "parent_code": "821"
+    },
+    {
+      "code": "83",
+      "level": 2,
+      "name": "繼續營業單位稅後淨利(或淨損）",
+      "name_en": "Profit (loss) from continuingoperations",
+      "parent_code": "8"
+    },
+    {
+      "code": "831",
+      "level": 3,
+      "name": "繼續營業單位稅後淨利(或淨損）",
+      "name_en": "Profit (loss) from continuingoperations",
+      "parent_code": "83"
+    },
+    {
+      "code": "84",
+      "level": 2,
+      "name": "停業單位損益(稅後)",
+      "name_en": "Profit (loss) fromdiscontinued operations, netof tax",
+      "parent_code": "8"
+    },
+    {
+      "code": "841",
+      "level": 3,
+      "name": "停業單位損益(稅後)",
+      "name_en": "Profit (loss) fromdiscontinued operations, netof tax",
+      "parent_code": "84"
+    },
+    {
+      "code": "8411",
+      "level": 4,
+      "name": "停業單位資產或處分群組處分損益（稅後）",
+      "name_en": "Gain (loss) on disposal ofassets or disposal groupsconstituting discontinuedoperation, net of tax",
+      "parent_code": "841"
+    },
+    {
+      "code": "8412",
+      "level": 4,
+      "name": "停業單位資產或處分群組按公允價值減出售成本衡量損益（稅後）",
+      "name_en": "Gain (loss) recognized on measurement to fair valueless costs to sell of assets ordisposal groups constitutingdiscontinued operation, netof tax",
+      "parent_code": "841"
+    },
+    {
+      "code": "86",
+      "level": 2,
+      "name": "本期稅後淨利(淨損)",
+      "name_en": "Profit (loss)",
+      "parent_code": "8"
+    },
+    {
+      "code": "87",
+      "level": 2,
+      "name": "本期其他綜合損益",
+      "name_en": "Other comprehensiveincome",
+      "parent_code": "8"
+    },
+    {
+      "code": "871",
+      "level": 3,
+      "name": "透過其他綜合損益按公允價值衡量之金融資產未實現損益",
+      "name_en": "Unrealized gains (losses)from financial assetsmeasured at fair valuethrough other comprehensiveincome",
+      "parent_code": "87"
+    },
+    {
+      "code": "8711",
+      "level": 4,
+      "name": "透過其他綜合損益按公允價值衡量之權益工具投資未實現損益",
+      "name_en": "Unrealized gains (losses)from investment in equityinstrument measured at fairvalue through othercomprehensive income",
+      "parent_code": "871"
+    },
+    {
+      "code": "8712",
+      "level": 4,
+      "name": "透過其他綜合損益按公允價值衡量之債務工具投資未實現損益",
+      "name_en": "Unrealized gains (losses)from investment in debtinstrument measured at fairvalue through othercomprehensive income",
+      "parent_code": "871"
+    },
+    {
+      "code": "872",
+      "level": 3,
+      "name": "避險工具之損益",
+      "name_en": "Gains (losses) on hedginginstruments",
+      "parent_code": "87"
+    },
+    {
+      "code": "8721",
+      "level": 4,
+      "name": "避險工具之損益",
+      "name_en": "Gains (losses) on hedginginstruments",
+      "parent_code": "872"
+    },
+    {
+      "code": "873",
+      "level": 3,
+      "name": "國外營運機構財務報表換算之兌換差額",
+      "name_en": "Exchange differences ontranslation of foreignfinancial statements",
+      "parent_code": "87"
+    },
+    {
+      "code": "8731",
+      "level": 4,
+      "name": "國外營運機構財務報表換算之兌換差額",
+      "name_en": "Exchange differences ontranslation of foreignfinancial statements",
+      "parent_code": "873"
+    },
+    {
+      "code": "874",
+      "level": 3,
+      "name": "未實現重估增值",
+      "name_en": "Unrealized gains (losses) onrevaluation",
+      "parent_code": "87"
+    },
+    {
+      "code": "8741",
+      "level": 4,
+      "name": "未實現重估增值",
+      "name_en": "Unrealized gains (losses) onrevaluation",
+      "parent_code": "874"
+    },
+    {
+      "code": "875",
+      "level": 3,
+      "name": "採用權益法認列之其他綜合損益份額",
+      "name_en": "Share of othercomprehensive income,accounted for using equitymethod",
+      "parent_code": "87"
+    },
+    {
+      "code": "8751",
+      "level": 4,
+      "name": "採用權益法認列之透過其他綜合損益按公允價值衡量之金融資產未實現損益",
+      "name_en": "Unrealized gains (losses)from investment in equityinstrument measured at fairvalue through othercomprehensive income,accounted for using equitymethod",
+      "parent_code": "875"
+    },
+    {
+      "code": "8752",
+      "level": 4,
+      "name": "採用權益法認列之避險工具之損益",
+      "name_en": "Gains (losses) on hedginginstruments, accounted forusing equity method",
+      "parent_code": "875"
+    },
+    {
+      "code": "8753",
+      "level": 4,
+      "name": "採用權益法認列之國外營運機構財務報表換算之兌換差額",
+      "name_en": "Exchange differences ontranslation of foreignfinancial statements,accounted for using equitymethod",
+      "parent_code": "875"
+    },
+    {
+      "code": "8754",
+      "level": 4,
+      "name": "採用權益法認列之未實現重估增值",
+      "name_en": "Unrealized gains (losses) onrevaluation, accounted forusing equity method",
+      "parent_code": "875"
+    },
+    {
+      "code": "876",
+      "level": 3,
+      "name": "與本期其他綜合損益相關之所得稅",
+      "name_en": "Income tax related tocomponents of othercomprehensive income",
+      "parent_code": "87"
+    },
+    {
+      "code": "8761",
+      "level": 4,
+      "name": "與本期其他綜合損益相關之所得稅",
+      "name_en": "Income tax related tocomponents of othercomprehensive income",
+      "parent_code": "876"
+    },
+    {
+      "code": "88",
+      "level": 2,
+      "name": "本期綜合損益總額",
+      "name_en": "Total comprehensive income",
+      "parent_code": "8"
+    }
+  ]
+}
