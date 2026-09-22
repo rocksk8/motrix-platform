@@ -559,3 +559,66 @@ def test_gc9_the_yardstick_shrinking_the_ttl_changes_the_answer(
         "把 TTL 改成 60 秒之後，一小時前那一筆**仍然**被當成「最近查過」——\n"
         "☠️ 那代表過期判斷讀的不是 `GEOCODE_MISS_TTL_SECONDS`，\n"
         "🔑 而上面三題的綠證明不了任何事。")
+
+
+def test_gc9_the_exact_ttl_boundary_gets_the_same_answer_from_both(
+        clean_miss_cache, monkeypatch):
+    """🔴🔴 §48：**`now - at == TTL` 那一個點上，兩份實作要給同一個答案。**
+
+    上面那題（`..._the_two_ttl_implementations_agree`）用的是 `TTL + 3600`
+    與 `TTL - 1` —— **它從來沒有踩在邊界上**。
+    ```
+    geo.py:1157  geocode_missed_recently()   now - at >= TTL  ⇒ 過期
+    geo.py:1184  geocode_miss_count()        now - at <  TTL  ⇒ 計入
+    ```
+    🔑 `>=` 與 `<` 現在**互補**，所以邊界上一致 —— 而**沒有一題在守那個互補性**。
+    ☠️ 把 `:1157` 改成 `>`（一個字元）之後，**只有邊界那一點**會分岔：
+    ```
+    now - at == TTL   recently → True（還沒過期）  而 count → 0（沒計入）
+    ⇒ 畫面說「0 個查不到」，而那一筆的查詢**仍然被短路**
+    ⇒ 使用者看到「都查完了」，而某個地址**永遠不會再被查**
+    ```
+    📌 差一個字元、只差一個時間點，而**兩支的所有其他測試都還是綠的**。
+
+    ⚠️ **這一題必須凍住時間**，否則量不到那個點：
+    `at = time.time() - TTL` 之後，函式裡再呼叫一次 `time.time()` 已經晚了幾微秒
+    ⇒ 差距變成 `> TTL` ⇒ `>=` 與 `>` 給出**相同**的答案 ⇒ 這一題會永遠綠。
+    🔑 〈探針與被測對象糾纏〉：**時間本身就是那個糾纏。**
+    """
+    geo = _geo()
+    frozen = 1_700_000_000.0
+    monkeypatch.setattr(geo.time, "time", lambda: frozen)
+
+    address = "TTL 邊界測試地址"
+    geo.remember_geocode_miss(address)
+    key = _miss_key(geo, address)
+
+    # 差距**恰好**等於 TTL。
+    geo._MISS_CACHE[key] = frozen - geo.GEOCODE_MISS_TTL_SECONDS
+    assert geo._MISS_CACHE[key] is not None
+
+    # ⚠️ 先量 count（唯讀），再量 recently —— 後者判過期會 **pop** 掉那一筆，
+    #    順序反過來的話 count 一定是 0，而那個 0 是我自己造成的（假綠燈）。
+    counted = geo.geocode_miss_count()
+    remembered = geo.geocode_missed_recently(address)
+
+    assert remembered is (counted > 0), (
+        f"邊界 `now - at == TTL` 上兩支不一致："
+        f"`geocode_missed_recently` 回 {remembered}、"
+        f"`geocode_miss_count` 回 {counted}。\n"
+        "☠️ 一邊說「還記得」而另一邊沒算它 ⇒ 畫面說「0 個查不到」，\n"
+        "   而那一筆的查詢仍然被短路 ⇒ **那個地址永遠不會再被查**。\n"
+        "🔑 `:1157` 的 `>=` 與 `:1184` 的 `<` 必須**互補**；"
+        "把任一邊改成 `>` 或 `<=`，分岔就只出現在這一個點上。")
+
+    # ⚙️ 正對照：邊界**之前**一刻兩支都要說「還記得」——
+    #    少了它，一個「永遠都說過期」的實作會讓上面那個 `is` 照樣成立。
+    geo.remember_geocode_miss(address)
+    geo._MISS_CACHE[_miss_key(geo, address)] = (
+        frozen - geo.GEOCODE_MISS_TTL_SECONDS + 1)
+    counted_before = geo.geocode_miss_count()
+    remembered_before = geo.geocode_missed_recently(address)
+    assert remembered_before is True and counted_before == 1, (
+        f"距離 TTL 還差一秒，而兩支說 recently={remembered_before}、"
+        f"count={counted_before} ——\n"
+        "🔑 這是正對照：少了它，「兩支都永遠說過期」會讓上面那個一致性斷言全綠。")
