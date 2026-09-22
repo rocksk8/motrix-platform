@@ -794,20 +794,18 @@ def test_the_decoder_refuses_to_report_failure_as_an_empty_string():
         _decode_qr_png(uri)
 
 
-def test_the_qr_image_does_not_carry_the_challenge_in_the_query_string(
+def test_fx22d_the_qr_image_does_not_carry_the_challenge_in_the_query_string(
         client, make_user):
-    """🔴 **QR 圖裡的網址不可以用 `?challenge=`。**
+    """🔴 FX22d：**QR 圖裡的網址不可以用 `?challenge=`。**
 
-    ## ⏳ 編號：A 指定了 `FX22d`，**而規格裡沒有那一行**
+    ## 📌 編號的來歷（留著，因為它是一條規則的實例）
 
-    我實查 `docs/windows/STATE.md`：`FX22d` 一次都沒出現 ——
-    它只存在於一則訊息裡。
-    🔑 而 A 同一天才剛裁定：**規格是編號的權威**，
-    並自己認了「寫在規格散文裡→守門看不見」那一條。
-    ⇒ 📌 **我不自己登記**（自己發一個編號會讓守門變綠，
-    而綠燈的意思會變成「我承認了我自己」）。
-    ⚠️ 所以題名先維持**守門看不見**的描述式；
-    A 把 `FX22d` 寫進規格之後，改名成 `test_fx22d_...` 即可。
+    A 先在**訊息裡**指定 `FX22d`，而我實查 `STATE.md` 時它一次都沒出現 ——
+    ⇒ 我改成 `test_fx22d_…` 之後**守門立刻紅**（那個編號沒有被宣告過）
+    ⇒ 於是先改回守門看不見的描述式名字，**沒有自己登記**。
+    🔑 自己發一個編號會讓守門變綠，**而那個綠燈的意思會變成「我承認了我自己」。**
+    ✅ A 之後把它寫進規格（`e002da3`，`STATE.md:12593` 的條列），才有這個名字。
+    📌 〈散文對工具是隱形的〉：**寫在訊息裡不算宣告。**
 
     ## ☠️ B 發現的第三個洩漏點，而它是**另一個形狀**
 
