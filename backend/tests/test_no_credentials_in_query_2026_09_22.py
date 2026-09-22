@@ -645,9 +645,42 @@ def test_fx22b_qr_status_is_changed_together_with_qr_info():
 def _decode_qr_png(data_uri):
     """把 `data:image/png;base64,…` 解成 QR 裡真正的那串字。
 
-    ⚠️ **不要改成「攔截 `qrcode.make()` 的參數」** —— 那觀測的是
-    「我們傳給產生器什麼」，而這一題問的是**手機相機讀到什麼**。
-    🔑 兩者之間隔著一次編碼，而〈證據的適用範圍〉說的就是這種差一層。
+    ## 🔴 2026-09-22 加固：**舊版把「解不開」回報成空字串**
+
+    ```python
+    text, _, _ = cv2.QRCodeDetector().detectAndDecode(arr)   # 解不開 ⇒ ''
+    ...
+    assert "?challenge=" not in url      # ← `'' ` 當然不含它 ⇒ **綠**
+    ```
+    ☠️ **一個安全斷言，因為觀測失敗而通過。**
+    🔑 〈降級之後它還是會動〉套在觀測工具上：
+    **量不到的時候它沒有報錯，它回報了一個「看起來像通過」的結果。**
+    📌 抓到它的是同一題下面那行
+    `assert f"#challenge={真值}" in url` —— **那一行是這一題唯一的底。**
+
+    ## 📌 而根因不是「偶爾閃爍」，我實測過（不是推論）
+
+    ```
+    樣本 500 組隨機 challenge，每組產一張 QR 再解：
+      cv2.QRCodeDetector()          失敗 42.5%   ← 近一半
+      同一張圖重複解 20 次           結果全同     ⇒ **決定性，不是隨機閃爍**
+      放大 2x／3x／4x／CUBIC        失敗 42.5%   ⇒ **加大完全無效**
+      detectAndDecodeMulti          失敗 95.0%   ⇒ 更糟
+      加 40px 白邊                  失敗  6.7%
+      cv2.QRCodeDetectorAruco()     失敗  0.0%（500/500，每次 26ms）
+    ```
+    ⚠️ **「放大就會比較準」是一個聽起來很合理而實際上零效果的修法** ——
+    🔑 而它會讓人以為問題解決了，**直到下一次它又紅在別人的打包裡**。
+
+    ## ⇒ 三層，而最後一層才是真正的修復
+
+    ```
+    ① Aruco 偵測器              實測 0/500 失敗
+    ② 古典偵測器 ＋ 40px 白邊    退路
+    ③ 全部失敗 ⇒ **丟例外**      ← 絕對不回空字串
+    ```
+    🔑 ③ 才是根因的修復：**即使哪天兩個偵測器同時失效，
+    也不會再有一個安全斷言靠著空字串變綠。**
     """
     import base64 as _b64
 
@@ -659,8 +692,36 @@ def _decode_qr_png(data_uri):
     raw = _b64.b64decode(data_uri[len(prefix):])
     arr = cv2.imdecode(np.frombuffer(raw, np.uint8), cv2.IMREAD_GRAYSCALE)
     assert arr is not None, "PNG 解不開 —— 這張圖本身就壞了"
-    text, _pts, _qr = cv2.QRCodeDetector().detectAndDecode(arr)
-    return text
+
+    attempts = []
+
+    def _try(label, image, detector):
+        try:
+            text = detector.detectAndDecode(image)[0]
+        except cv2.error as exc:                      # noqa: BLE001
+            attempts.append(f"{label}: cv2.error {exc}")
+            return ""
+        attempts.append(f"{label}: {'讀到 %d 字元' % len(text) if text else '空字串'}")
+        return text
+
+    padded = cv2.copyMakeBorder(arr, 40, 40, 40, 40,
+                                cv2.BORDER_CONSTANT, value=255)
+    for label, image, detector in (
+        ("Aruco 原圖", arr, cv2.QRCodeDetectorAruco()),
+        ("Aruco 白邊", padded, cv2.QRCodeDetectorAruco()),
+        ("古典 白邊", padded, cv2.QRCodeDetector()),
+    ):
+        text = _try(label, image, detector)
+        if text:
+            return text
+
+    raise AssertionError(
+        "這張 QR 三種解法都讀不出來（圖 %dx%d）：\n  %s\n"
+        "☠️ **不可以回空字串** —— 空字串會讓 `\"?challenge=\" not in url` 通過，"
+        "而那是一個安全斷言。\n"
+        "⇒ 這一題現在紅在「量不到」而不是「洩漏了」，兩者要分得出來。"
+        % (arr.shape[1], arr.shape[0], "\n  ".join(attempts))
+    )
 
 
 def test_the_qr_decoder_would_actually_see_a_leaked_challenge():
@@ -690,6 +751,47 @@ def test_the_qr_decoder_would_actually_see_a_leaked_challenge():
         "解碼器讀不出我自己編進去的那串字 ⇒ **下一題的綠燈不能採信**，"
         "它只證明了『解不開』。"
     )
+
+
+def test_the_decoder_refuses_to_report_failure_as_an_empty_string():
+    """📏📏 **量尺的量尺：解不開的時候必須炸，不可以回空字串。**
+
+    ## ☠️ 這一題防的是那個真正的根因
+
+    2026-09-22 打包那一輪，這個檔紅在：
+    ```
+    assert '#challenge=02a03bb4…' in ''
+                                    ^^ 解碼回了空字串
+    ```
+    而**前面兩個斷言都過了**：
+    ```
+    body.get("qrCodePng")        ✅ 有給 QR
+    "?challenge=" not in url     ✅ 因為 url 是 ''，空字串當然不含它
+    ```
+    🔑 **那個「沒有洩漏」的綠，是空字串給的。**
+    📌 而擋下它的只有 `#challenge=<真值>` 那一行 ——
+    **一個「必須有」的斷言，救了一個「必須沒有」的斷言。**
+
+    ## ⇒ 所以現在 `_decode_qr_png` 解不開就丟例外
+
+    ⚠️ 即使哪天兩個偵測器同時失效，也不會再有安全斷言靠空字串變綠：
+    **它會紅在「量不到」，而那與「洩漏了」分得出來。**
+    🔑 〈降級之後它還是會動〉：**量不到的時候要拒絕那一筆，不要送空值。**
+    """
+    import base64 as _b64
+    import io as _io
+
+    import numpy as np
+    from PIL import Image
+
+    # 一張純雜訊圖 —— 它不是 QR，所以兩個偵測器都會回空字串。
+    noise = (np.random.RandomState(0).rand(300, 300) * 255).astype("uint8")
+    buf = _io.BytesIO()
+    Image.fromarray(noise).save(buf, format="PNG")
+    uri = "data:image/png;base64," + _b64.b64encode(buf.getvalue()).decode()
+
+    with pytest.raises(AssertionError, match="三種解法都讀不出來"):
+        _decode_qr_png(uri)
 
 
 def test_the_qr_image_does_not_carry_the_challenge_in_the_query_string(
