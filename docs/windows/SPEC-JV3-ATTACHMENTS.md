@@ -171,13 +171,13 @@ JV3：要回答「這個檔案被哪幾張傳票引用過」 => JSON 欄位**查
 
 | # | `source_type` | subfolder（實體路徑） | `source_doc_no` | metadata 位置 | 呼叫端 |
 |---|---|---|---|---|---|
-| 1 | `quotation` | `quotations` | `quote_no` | `quotations.files_json` | `quotations.py:1173` |
-| 2 | `case_update` | `case_updates` | `quote_no` | `case_updates` | `quotations.py:4621` |
+| 1 | `quotation_signed` | `quotations` | `quote_no` | `quotations.**signed_files_json**` | `quotations.py:1173` |
+| 2 | `case_update` | `case_updates` | `quote_no` | `case_updates.files_json` | `quotations.py:4621` |
 | 3 | `payment_item` | `quotation_payment_items` | `{quote_no}_{idx}` | 陣列內 `invoiceFiles` | `quotations.py:3129` |
 | 4 | `material` | `quotation_materials` | `{quote_no}_{idx}` | 陣列內 `files` | `quotations.py:3205` |
 | 5 | `material_invoice` | `quotation_materials_invoices` | `{quote_no}_{idx}` | 陣列內 `invoiceFiles` | `quotations.py:3268` |
 | 6 | `extra_expense` | `case_extra_expense` | `{quote_no}_{exp_id}` | `case_extra_expenses.files_json` | `case_extra_expenses.py:569` |
-| 7 | `invoice_voucher` | `invoice_vouchers` | `voucher_no` | `invoice_vouchers` | `invoice_vouchers.py:738` |
+| 7 | `invoice_voucher` | `invoice_vouchers` | `voucher_no` | `invoice_vouchers.**issued_files_json**` | `invoice_vouchers.py:738` |
 | 8 | `contractor_dispatch` | `contractor_dispatches` | `str(did)` | `files_json` | `vendor_contractors.py:602` |
 | 9 | `contractor_invoice` | `contractor_dispatch_invoices` | `str(did)` | `invoice_files_json` | `vendor_contractors.py:670` |
 
@@ -191,6 +191,24 @@ JV3：要回答「這個檔案被哪幾張傳票引用過」 => JSON 欄位**查
 購料       => 4 ＋ 5
 案件既有   => 1 ＋ 2 ＋ 3 ＋ 6（4/5 也掛在案件下）
 ```
+
+### ✅ 九類的欄位名已逐一對過 `PRAGMA table_info`（A-2 2026-09-23）
+
+初版這張表的欄位名是**從呼叫端上下文讀的**，A-2 當時標了「沒逐一開 DDL 對」。
+現在對過了，**九類裡有一類是錯的、一類不完整**：
+
+```
+#1 quotation   規格原寫 quotations.**files_json**
+               實際     quotations.**signed_files_json**（該表根本沒有 files_json）
+               ⇒ 而它的語意也更窄：那是**報價單回簽檔**，不是「報價單的附件」
+               ⇒ source_type 一併改名 quotation -> **quotation_signed**
+#7 invoice_voucher  原寫只到表名，未指欄 ⇒ 補 **issued_files_json**
+其餘七類            ✅ 對得上
+```
+
+☠️ **錯一個的症狀是「那一類的清單永遠是空的，而它不會報錯」**（B 的說法，準）
+⇒ 實作時**再對一次**：`PRAGMA table_info` 是權威，`db.py` 的原始碼不是
+（A-2 第一次用 regex 掃 `db.py` 就跨到隔壁表，撈出三個不屬於 `quotations` 的欄位）。
 
 ### 🔴 「購料」**不在** `material_orders` —— 這一格最容易踩
 
