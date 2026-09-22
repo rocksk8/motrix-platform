@@ -148,16 +148,60 @@ def _lookup_emails(usernames: list, event_key: str = None) -> list:
         return []
 
 
-def _send(to_addrs: list, subject: str, html: str) -> None:
+#: `_send()` 的四種結果。**呼叫端要看得懂「為什麼沒寄成功」。**
+#:
+#: ## ☠️ 為什麼非分不可
+#: 原本 `_send()` **不論成敗都回 `None`**（五個安靜 `return` ＋
+#: `except Exception: logger.warning`）⇒ **它的回傳值裡沒有任何資訊**，
+#: 而 `_async_send` 還把它丟進 `Thread` ⇒ **呼叫端連那個 `None` 都拿不到**。
+#: 🔑 那個設計**在結構上不可能知道成敗** —— 所以呼叫端只好「先記已通知再寄」，
+#: 而信掉了就**永遠不補**。
+#:
+#: | | 意思 | 呼叫端該做的 |
+#: |---|---|---|
+#: | `sent` | 真的寄出去了 | 記「已通知」 |
+#: | `transient_fail` | SMTP 連不上／逾時／5xx | **不記**，明天再試 |
+#: | `permanent_fail` | **這一封**永遠寄不出去（收件人沒有 email） | 記「已通知」＋記一筆失敗 |
+#: | `skipped` | **這台機器刻意不寄**（未啟用／開發機硬擋／未設定 SMTP） | **不記**，設定好之後補寄 |
+SEND_SENT = "sent"
+SEND_TRANSIENT_FAIL = "transient_fail"
+SEND_PERMANENT_FAIL = "permanent_fail"
+SEND_SKIPPED = "skipped"
+
+
+def _send(to_addrs: list, subject: str, html: str) -> str:
+    """寄一封信，**回傳四種結果之一**（見 `SEND_*`）。
+
+    ## 🔴 `permanent` 與 `skipped` 的分界，是我（B）當場做的決定
+    A 的 YA4 把「SMTP 未設定」列在 `permanent`。⚠️ **我把它改成 `skipped`**，
+    判準是「**壞的是這一封，還是這台機器**」：
+
+    | | 範圍 | 修好之後 |
+    |---|---|---|
+    | 收件人沒有 email | **這一封** | 那個人當時就該被通知，補寄沒有意義 |
+    | SMTP 未設定／未啟用／開發機硬擋 | **整台機器** | **每一封都該補寄** |
+
+    ☠️ 把機器層級的問題記成 `permanent` ⇒ **一個設定沒填，造成 N 筆單子
+    被永久標記成「已通知」** —— 🔑 而管理員把 SMTP 設好之後，
+    **那些信永遠不會出去，且沒有人知道**。
+    📌 而「每天重試」在這一側幾乎沒有成本：`_send()` 在碰到網路之前就返回了。
+    """
     cfg = _cfg()
     if not cfg.get("enabled"):
-        return
+        # ⚠️ 這裡原本**完全沒有 log** —— 一個安靜的 return 讓
+        # 「沒設定」與「寄出去了」在紀錄上長得一樣。
+        logger.info("email skipped — notifications disabled; subject: %r", subject)
+        return SEND_SKIPPED
     subject = _apply_dev_subject_prefix(cfg, subject)
+    # 🔴 **這道擋必須留在 SMTP 呼叫之前，不可以重排到它後面。**
+    # 它是 2026-08-27 加的硬性防呆，理由是**開發機真的對同仁寄出過兩次
+    # 真實催辦信**（軟性提醒不夠）。`_smtp_send_blocked` 自己會 log。
     if _smtp_send_blocked(subject):
-        return
+        return SEND_SKIPPED
     if not to_addrs:
         logger.warning("email skipped — recipient list empty; subject: %r", subject)
-        return
+        # 🔴 **這一封**永遠寄不出去（那個人沒有 email）⇒ permanent。
+        return SEND_PERMANENT_FAIL
     host = cfg.get("smtp_host", "smtp.gmail.com")
     port = int(cfg.get("smtp_port", 587))
     user = cfg.get("smtp_user", "")
@@ -165,7 +209,9 @@ def _send(to_addrs: list, subject: str, html: str) -> None:
     from_name = cfg.get("from_name", "MOTRIX專案管理系統")
     if not user or not pw:
         logger.warning("email skipped — SMTP credentials not configured; subject: %r", subject)
-        return
+        # ⚠️ **機器層級**（見 docstring）⇒ `skipped` 不是 `permanent`：
+        # 設定好之後那些信還要補寄。
+        return SEND_SKIPPED
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
     msg["From"]    = f"{from_name} <{user}>"
@@ -179,8 +225,13 @@ def _send(to_addrs: list, subject: str, html: str) -> None:
             s.login(user, pw)
             s.sendmail(user, to_addrs, msg.as_string())
         logger.info("email sent to %s — %r", to_addrs, subject)
+        return SEND_SENT
     except Exception as exc:
+        # 連不上／逾時／5xx 一律當**暫時性** ——
+        # ⚠️ 往「會重試」那一側倒：猜錯的代價是多試一次，
+        # 而反過來猜錯的代價是**那封信永遠不出去**。
         logger.warning("email send failed: %s", exc)
+        return SEND_TRANSIENT_FAIL
 
 
 def _async_send(to_addrs: list, subject: str, html: str) -> None:
@@ -592,7 +643,7 @@ def notify_payment_request_returned(request_no: str, customer: str, note: str,
 
 
 def notify_approval_reminder(doc_type_label: str, doc_no: str, desc: str, days_elapsed: int,
-                             approver_usernames: list, also_superadmin: bool = False) -> None:
+                             approver_usernames: list, also_superadmin: bool = False) -> str:
     """簽核逾期催辦（2026-08-21，2026-08-24 補上出貨單，2026-08-25 收斂收件人）：
     報價單／承攬商匯款申請／開票申請憑據／出貨單共用同一支——卡在簽核柱列的
     第 1／3／5 個工作日、之後每 5 個工作日（10、15、20…）由
@@ -607,7 +658,11 @@ def notify_approval_reminder(doc_type_label: str, doc_no: str, desc: str, days_e
     if not to:
         logger.warning("notify_approval_reminder: %s %r 的簽核人 %s 及管理員皆無設定 email（also_superadmin=%s）",
                        doc_type_label, doc_no, approver_usernames, also_superadmin)
-        return
+        # 🔴 **這一封**永遠寄不出去（沒有人有 email）⇒ permanent。
+        # 呼叫端要據此標記已通知**並留下一筆失敗紀錄** ——
+        # ☠️ 不標記的話排程每天重試到天荒地老，
+        # 🔑 而「每天重試」與「已經修好了」在 log 上長得一模一樣。
+        return SEND_PERMANENT_FAIL
     if days_elapsed >= 5:
         badge, color = f"已逾期 {days_elapsed} 個工作日，急件", "#DC2626"
     elif days_elapsed >= 3:
@@ -628,7 +683,15 @@ def notify_approval_reminder(doc_type_label: str, doc_no: str, desc: str, days_e
         intro=f"您好，以下{doc_type_label}已送出審核，但等待您簽核已超過 {days_elapsed} 個工作日，敬請儘速於系統中完成審核作業。",
         button_text="前往簽核佇列",
     )
-    _async_send(to, f"【MOTRIX】{doc_type_label}簽核逾期提醒（{days_elapsed} 個工作日）— {doc_no}", html)
+    # 🔴 **同步寄，並把結果回給呼叫端。**
+    # ⚠️ 原本走 `_async_send` ⇒ 丟進 `Thread` ⇒ **呼叫端拿不到任何結果**，
+    # 所以它只能「先記已通知再寄」，而信掉了就永遠不補。
+    # 📌 這一支的唯一呼叫端是 `_check_approval_reminders`，
+    # 而**它本來就跑在背景排程裡** —— 沒有理由再開一層執行緒。
+    return _send(
+        to,
+        f"【MOTRIX】{doc_type_label}簽核逾期提醒（{days_elapsed} 個工作日）— {doc_no}",
+        html)
 
 
 def notify_resubmit_requester(new_quote_no: str, original_quote_no: str,
@@ -1236,19 +1299,25 @@ def _department_manager_emails(department_id: int, event_key: str = None) -> lis
         return []
 
 
-def _send_with_attachments(to_addrs: list, subject: str, html: str, attachments: list) -> None:
+def _send_with_attachments(to_addrs: list, subject: str, html: str, attachments: list) -> str:
     """Send HTML email with binary file attachments.
     attachments: list of (filename_str, bytes, mime_type_str) e.g. ("report.xlsx", b"...", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+    回傳值與 `_send()` **同一個契約**（`SEND_*`）。
+    📌 兩支各自有五個出口，而**只改一支的話，下一個人會以為
+    「email_notify 的函式都回結果」** —— 一句對一半的通則比沒有通則更危險。
     """
     cfg = _cfg()
     if not cfg.get("enabled"):
-        return
+        logger.info("email+attachments skipped — notifications disabled; subject: %r", subject)
+        return SEND_SKIPPED
     subject = _apply_dev_subject_prefix(cfg, subject)
+    # 🔴 這道擋必須留在 SMTP 呼叫之前（理由見 `_send`）。
     if _smtp_send_blocked(subject):
-        return
+        return SEND_SKIPPED
     if not to_addrs:
         logger.warning("email skipped — recipient list empty; subject: %r", subject)
-        return
+        return SEND_PERMANENT_FAIL
     host = cfg.get("smtp_host", "smtp.gmail.com")
     port = int(cfg.get("smtp_port", 587))
     user = cfg.get("smtp_user", "")
@@ -1256,7 +1325,7 @@ def _send_with_attachments(to_addrs: list, subject: str, html: str, attachments:
     from_name = cfg.get("from_name", "MOTRIX專案管理系統")
     if not user or not pw:
         logger.warning("email skipped — SMTP credentials not configured; subject: %r", subject)
-        return
+        return SEND_SKIPPED
 
     outer = MIMEMultipart("mixed")
     outer["Subject"] = subject
@@ -1287,8 +1356,10 @@ def _send_with_attachments(to_addrs: list, subject: str, html: str, attachments:
             s.login(user, pw)
             s.sendmail(user, to_addrs, outer.as_string())
         logger.info("email+attachments sent to %s — %r", to_addrs, subject)
+        return SEND_SENT
     except Exception as exc:
         logger.warning("email+attachments send failed: %s", exc)
+        return SEND_TRANSIENT_FAIL
 
 
 def notify_monthly_report(period_label: str, period_str: str,

@@ -27,6 +27,15 @@ from helpers import (
     notify_module_activity,
     _get_setting, _set_setting, notify_approval_reminder, _workdays_elapsed, require_any_module,
 )
+# 寄送結果的常數。**這兩個是不可變的字串字面值**，所以 `from ... import`
+# 拿到副本沒有關係 —— ⚠️ 而**會被 monkeypatch 的東西不可以這樣拿**
+# （`notify_approval_reminder` 上面那一行就是；測試 patch 的是
+# `dt.notify_approval_reminder` 這個名字，所以它必須是模組屬性）。
+# 📌 兩者的差別是「值會不會被換掉」，不是「寫法好不好看」。
+from helpers.email_notify import (            # noqa: E402
+    SEND_SENT as _SEND_SENT,
+    SEND_PERMANENT_FAIL as _SEND_PERMANENT_FAIL,
+)
 
 router = APIRouter()
 
@@ -557,6 +566,25 @@ def delete_daily_task(task_id: int, authorization: str = Header(None)):
     notify_module_activity("工作事項", "刪除", user.get("display_name") or user["username"],
                             f"{row['task_date']} {row['title']}", "daily-tasks.html")
     return {"ok": True}
+
+
+@router.get("/api/settings/reminder-send-failures")
+def get_reminder_send_failures(authorization: str = Header(None)):
+    """簽核提醒**永久寄不出去**的那幾筆。
+
+    ## 🔴 這個端點存在的理由，比「多一個 API」深一層
+    YA5 要求失敗要有落點，而 A 的原話是：
+    > ⚠️ **落點要看得到** —— ☠️ 只寫進 log 的話就是把這一條原封不動換了個位置。
+
+    📌 那正是這一整節在修的形狀：**一個沒有人看得到的事實等於沒有發生過。**
+    ⇒ 一筆紀錄回答的是「**哪一張單子、哪一階、為什麼、試了幾次**」，
+    而那四個合起來才足以讓人去處置它（通常是去幫那個人填 email）。
+
+    ⚠️ 限 superadmin：它列得出單號與簽核流程的狀態。
+    """
+    _require_user(authorization, require_superadmin=True, module='settings')
+    # 最新的排前面 —— 使用者要看的是「現在還卡著什麼」。
+    return {"items": list(reversed(reminder_send_failures()))}
 
 
 @router.get("/api/daily-tasks/{task_id}/history")
@@ -1772,6 +1800,53 @@ def reminder_stages_at_or_below(days):
     return out
 
 
+#: 永久性寄送失敗的落點。
+#:
+#: 📌〈計數器要有落點〉：「要記錄失敗原因」**先指出記在哪張表**，
+#: 否則那句要求**永遠不會被違反，也永遠不會被滿足**。
+#: ⚠️ 用 `system_settings` 一列而不是新開一張表：這是**運維紀錄**不是業務資料，
+#: 而新增一張表要 migration、要進備份決策、要有人決定保留期
+#: ——今天已經為 `geocode_cache` 走過一次那個流程。
+REMINDER_FAILURE_SETTING = "approval_reminder_failures"
+
+#: 最多留幾筆。⚠️ 不設上限的話，一個永遠不會被修的收件人
+#: 會讓那一列無限成長，而 `system_settings` 會進每日備份。
+REMINDER_FAILURE_KEEP = 200
+
+
+def reminder_send_failures():
+    """永久性寄送失敗的紀錄。**最新的在後面。**
+
+    每一筆：文件別／單號／階段／失敗類別／時間／嘗試次數。
+    ☠️ **只寫進 log 的話，就是把這條缺陷原封不動換了個位置** ——
+    所以它同時有一個端點（`GET /api/settings/reminder-send-failures`）。
+    """
+    rows = _get_setting(REMINDER_FAILURE_SETTING, []) or []
+    return rows if isinstance(rows, list) else []
+
+
+def _record_reminder_failure(doc_type, doc_no, stage, reason):
+    """記一筆永久性失敗。**同一張單子的同一階只留一筆，累加嘗試次數。**
+
+    ⚠️ 每次都追加一筆的話，一張永遠寄不出去的單子會把這張清單灌滿，
+    而**真正需要被看到的那幾筆會被擠掉**（`REMINDER_FAILURE_KEEP`）。
+    """
+    key = f"{doc_type}|{doc_no}|{stage}"
+    rows = [dict(r) for r in reminder_send_failures() if isinstance(r, dict)]
+    now = datetime.now().isoformat(timespec="seconds")
+    for row in rows:
+        if row.get("key") == key:
+            row["attempts"] = int(row.get("attempts", 0) or 0) + 1
+            row["at"] = now
+            row["reason"] = reason
+            break
+    else:
+        rows.append({"key": key, "docType": doc_type, "docNo": doc_no,
+                     "stage": stage, "reason": reason, "attempts": 1,
+                     "at": now})
+    _set_setting(REMINDER_FAILURE_SETTING, rows[-REMINDER_FAILURE_KEEP:])
+
+
 def reminder_dedup_key(stage):
     """某一階的去重鍵。**只吃階段，不吃日期。**
 
@@ -1864,19 +1939,40 @@ def _check_approval_reminders() -> None:
                     highest = owed[-1]
                     # 3 天門檻起才同步通知 superadmin（維持原本的分界）。
                     also_superadmin = int(highest[1:]) >= 3
-                    # ⚠️ **先把每一階都標記掉再寄**：欠的低階段不標的話，
-                    # 下一次排程會把它們補寄一遍。
+
+                    # 🔴🔴 **先寄，成功才記「已通知」。**
+                    #
+                    # ☠️ 原本是「先 `_mark()` 再開 daemon 執行緒寄」
+                    # ⇒ 信掉了而標記留著 ⇒ **那張單子永遠不會再被提醒**，
+                    # 🔑 而它的症狀是**沒有症狀**：畫面正常、log 裡一行
+                    # warning，而沒有人在看那一行。
+                    #
+                    # ⚠️ **同步呼叫不是效率的退讓**：`_check_approval_reminders`
+                    # 本來就跑在背景排程裡，**沒有理由再開一層執行緒**——
+                    # 而那一層正是「呼叫端拿不到結果」的成因。
+                    # 📌 信裡的天數是**實際等了幾天**（12），不是門檻值（10）。
+                    outcome = notify_approval_reminder(
+                        doc_type, doc_no, desc, days_elapsed, recipients,
+                        also_superadmin)
+
+                    if outcome == _SEND_PERMANENT_FAIL:
+                        # **這一封**永遠寄不出去（收件人沒有 email）
+                        # ⇒ 標記＋留一筆看得見的失敗紀錄。
+                        # ☠️ 不標記的話排程每天重試到天荒地老，
+                        # 🔑 而「每天重試」與「已經修好了」在 log 上長得一樣。
+                        _record_reminder_failure(doc_type, doc_no, highest,
+                                                 outcome)
+                    elif outcome != _SEND_SENT:
+                        # `transient_fail`（SMTP 抖了）或 `skipped`
+                        # （這台機器刻意不寄）⇒ **什麼都不記，明天再試**。
+                        # ⚠️ 站內通知也一起延後：它跟標記綁在一起，
+                        # 否則重試的每一天都會再產生一則站內通知。
+                        continue
+
+                    # ⚠️ **欠的低階段一併標記**（WA6）：不標的話下一次排程
+                    # 會把它們補寄一遍，使用者同一天收到四封。
                     for st in owed:
                         _mark(st)
-                    threading.Thread(
-                        target=notify_approval_reminder,
-                        # 📌 信裡的天數是**實際等了幾天**（12），
-                        # 不是那一階的門檻值（10）——後者會讓使用者
-                        # 以為單子只卡了 10 天。
-                        args=(doc_type, doc_no, desc, days_elapsed, recipients,
-                              also_superadmin),
-                        daemon=True,
-                    ).start()
                     notify_targets = (list(set(recipients + superadmins))
                                       if also_superadmin else recipients)
                     for u in notify_targets:
