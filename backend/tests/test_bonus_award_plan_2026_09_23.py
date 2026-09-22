@@ -1,0 +1,540 @@
+# -*- coding: utf-8 -*-
+"""`BN1` · `GET /api/bonus/awards/plan/{quote_no}`（A-2 `SPEC-BN1-PLAN.md`）。
+
+```
+POST /api/bonus/awards 要 allocations[].person_pct = { username: pct }
+而那些 username 由 people_for_item() 決定，**六支端點沒有一支吐出它**
+⇒ 畫面組不出 request body
+```
+🔑 這是**契約缺口，不是接線缺口**。
+
+# 🔴 為什麼是新端點而不是前端自己算
+
+資料前端拿得到（案件 API 有 `assignedTo`），**而那是把同一條規則抄到第二個地方**。
+```
+helpers/bonus.py:141 已標「已知的未來來源 quotations.assigned_user_ids」
+⇒ 加它的那天：後端改、JS 不會跟
+⇒ 症狀是**少發一個人，而總額對得起來**
+```
+☠️ **對不起來還有人會查，對得起來沒有人會查。**
+📌 A 裁成一句：**規則只有一份。**
+
+# ⚠️ 單位是**基點**（1/10000），而欄位名字叫 `pct`
+
+```
+BASIS_POINTS = 10000     pool = base × total_pct // 10000
+```
+🔑 **50% 要送 `5000`，不是 `50`。**
+☠️ 送 `50` 的後果：獎金變成應得的 1/100，**而畫面上它是一個格式正確的金額**
+⇒ 沒有人會把它看成錯誤，只會覺得「怎麼這麼少」。
+
+## ☠️ 而驗這個單位**不可以寫成「差 100 倍」**
+
+```
+pool 是整數無條件捨去
+base=123456    pool(50)=617     pool(5000)=61728    差 28，**不是 100 倍**
+base=999999    pool(50)=4999    pool(5000)=499999   差 1
+只有 base 是 10000 的倍數時才剛好成立（我 import 產品碼實跑 7 個有 4 個紅）
+```
+🔑 那種寫法**紅在正確的碼上**，而訊息指向 `split_award()`
+⇒ 下一個人最省力的反應是去「修」那個先乘後除，**而那會真的弄壞精度**。
+"""
+import json
+
+import pytest
+
+#: `§160` 風格的路徑（A-2 `SPEC-BN1-PLAN §1`）。⚠️ 改了 **退回給我**。
+PLAN = "/api/bonus/awards/plan/%s"
+
+#: `§166`：走到端點才會出現的狀態碼。**404／405／422 都不在裡面**
+#: —— 這個 repo 裡「端點不存在」有三種臉。
+OK_CODES = (200, 400, 403)
+
+#: `helpers/bonus.py:152`。
+NO_ELIGIBLE_PEOPLE = "無可發放對象"
+
+#: 基點。
+BP = 10000
+
+
+def _hdr(client, make_user, username, role="superadmin", modules=None):
+    u, p = make_user(username=username, role=role, modules=modules)
+    r = client.post("/api/auth/login", json={"username": u, "password": p})
+    assert r.status_code == 200, r.text
+    return u, {"Authorization": "Bearer " + r.json()["token"]}
+
+
+def _seed_case(quote_no, net_profit=1000000, sales_person="alice",
+               stage_people=None):
+    """種一個有精算淨利的案件。`stage_people=None` ⇒ **一個階段負責人都沒有**。"""
+    import db
+    conn = db.get_db()
+    try:
+        conn.execute(
+            "INSERT INTO quotations (quote_no, status, customer_name, "
+            "project_name, total, pretax, sales_person, data_json, "
+            "created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (quote_no, "已結案", "測試客戶", "測試案", 0, 0, sales_person,
+             json.dumps({"settlement": {"summary": {"netProfit": net_profit}}}),
+             "2026-09-01T00:00:00", "2026-09-01T00:00:00"))
+        if stage_people is not None:
+            cols = {r["name"] for r in conn.execute(
+                "PRAGMA table_info(case_stages)")}
+            assert "assigned_to" in cols, "`case_stages.assigned_to` 不見了。"
+            conn.execute(
+                "INSERT INTO case_stages (quote_no, assigned_to) VALUES (?,?)",
+                (quote_no, json.dumps(stage_people)))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _seed_item(name, person_source, is_active=1):
+    import db
+    conn = db.get_db()
+    try:
+        cur = conn.execute(
+            "INSERT INTO bonus_items (name, person_source, sort_order, "
+            "is_active, created_by, created_at, updated_at) "
+            "VALUES (?,?,0,?,'seed','2026-09-01','2026-09-01')",
+            (name, person_source, is_active))
+        conn.commit()
+        return cur.lastrowid
+    finally:
+        conn.close()
+
+
+def _plan(client, hdr, quote_no):
+    """打 `plan`，**先釘狀態碼形狀再看內容**（`§166`）。"""
+    r = client.get(PLAN % quote_no, headers=hdr)
+    if r.status_code in (404, 405, 422):
+        pytest.fail(
+            "`GET %s` 還不存在（回 %s）。\n" % (PLAN % "{quote_no}", r.status_code)
+            + "📌 這個 repo 裡「端點不存在」有**三種臉**：\n"
+              "    404  StaticFiles 接走 GET\n"
+              "    405  StaticFiles 接走非 GET（它只處理 GET/HEAD）\n"
+              "    422  被同 prefix 的 `/{id}` path param 當成整數解析\n"
+            + "⚠️ ⇒ `assert status_code != 404` **擋不到後兩種**。\n"
+            + "🔴 而 422 這一種對 `plan` 是真實風險：日後有人加\n"
+              "   `GET /awards/{award_id}` 並宣告在 `plan` 之前 ⇒\n"
+              "   `/awards/plan/MQ-1` 會把 `plan` 當成 `award_id`。\n"
+              "   ⇒ **`plan` 必須宣告在任何 `/awards/{award_id}` 之前**，\n"
+              "     而那一行要寫成程式碼註解 —— 下一個加端點的人不會讀規格。")
+    assert r.status_code in OK_CODES, (
+        "`plan` 回 %s，不在 %s 裡：%s"
+        % (r.status_code, list(OK_CODES), r.text[:200]))
+    return r
+
+
+def _item_of(payload, item_id):
+    for it in payload.get("items") or ():
+        if int(it.get("bonus_item_id") or 0) == int(item_id):
+            return it
+    return None
+
+
+# ══════════════════════════════════════════════════════════════════════
+# ① 權限：與 POST /awards 同一道閘
+# ══════════════════════════════════════════════════════════════════════
+
+def test_bn1_a_non_manager_is_refused_not_given_an_empty_list(client,
+                                                              make_user):
+    """🔴 **非管理者要回 403，不是 200 加一個空清單。**
+
+    ☠️ 回空清單的後果不是「看不到東西」，是**繞過可見性規則的入口被打開了**：
+    ```
+    visible_lines()  本人只看得到自己那一列
+    而 plan 回的是**全案每個人的發放對象名單**
+    ```
+    ⇒ 閘門要與 `POST /awards` **同一道**（`_is_manager`），不可以更鬆。
+    ⚠️ 判準是「有沒有被擋」：401 與 403 都算。
+    """
+    _seed_case("MQ-BN1-403")
+    _u, hdr = _hdr(client, make_user, "bn1_staff", role="user",
+                   modules=["bonus"])
+    r = client.get(PLAN % "MQ-BN1-403", headers=hdr)
+    if r.status_code in (404, 405, 422):
+        pytest.fail("端點還不存在（回 %s）—— 這一格量不到權限。" % r.status_code)
+    assert r.status_code in (401, 403), (
+        "一般員工讀到了發放對象名單（回 %s）：%s\n" % (r.status_code, r.text[:200])
+        + "☠️ 那份清單是**全案每個人**，而 `visible_lines()` 那條\n"
+          "   「本人只看得到自己那一列」就被這支端點繞過去了。")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# ② 契約：ok=false 的項目要留著
+# ══════════════════════════════════════════════════════════════════════
+
+def test_bn1_an_item_with_nobody_is_still_listed_and_says_why(client,
+                                                              make_user):
+    """🔴 **反向控制：發不出去的項目要留在清單裡，並說出為什麼。**
+
+    ```
+    person_source = case_stages.assigned_to，而案件**一個階段負責人都沒有**
+    （assigned_to 的 DEFAULT 就是 '[]' ⇒ 空是常態不是例外）
+    ⇒ people_for_item() 回 (False, [], NO_ELIGIBLE_PEOPLE)
+    ```
+    ☠️ 濾掉它的後果，`people_for_item()` 的 docstring 逐字在防：
+       「那個項目從來沒出現在任何一張獎金單上 ——
+        **而沒有人會發現一個從來不出現的東西**」
+
+    ⚠️ **不要用「把 `person_source` 改成一個不合法的值」做這個反向控制**：
+    ```
+    POST /items 有 source not in PERSON_SOURCES -> 400（bonus.py:83）
+    ⇒ 那條路走不通，只能直接 INSERT 繞過 router
+    ⇒ 而那就變成「測試自己準備的輸入繞過生產路徑上的一段」
+    ```
+    🔑 上面那個做法**全程走產品路徑**，這是它比較好的唯一理由。
+    """
+    _seed_case("MQ-BN1-EMPTY", stage_people=None)   # 刻意沒有任何階段
+    item_id = _seed_item("工程獎金", "case_stages.assigned_to")
+    _u, hdr = _hdr(client, make_user, "bn1_mgr1")
+
+    payload = _plan(client, hdr, "MQ-BN1-EMPTY").json()
+    it = _item_of(payload, item_id)
+    assert it is not None, (
+        "「工程獎金」整個不見了。收到的 items：%r\n"
+        % (payload.get("items"),)
+        + "☠️ 它被濾掉了 ⇒ **沒有人會發現一個從來不出現的東西**。")
+    assert it.get("ok") is False, "它應該是 ok=false：%r" % it
+    assert it.get("people") == [], "ok=false 而還有人：%r" % it
+    assert NO_ELIGIBLE_PEOPLE in (it.get("note") or ""), (
+        "它沒有說出為什麼不能發（note=%r）——\n" % it.get("note")
+        + "📌 `note` 要**直接用後端回的字串**，前端不重寫文案 ⇒ 規則只有一份。")
+
+
+def test_bn1_ok_and_people_never_disagree(client, make_user):
+    """🔴 **`ok` 與 `people` 必須一致，兩個方向都要。**
+
+    ```
+    ok=true  而 people == []   => 畫面出現「可以發放，但沒有人」
+    ok=false 而 people != []   => 畫面列出人，而按下產生會被後端擋掉
+    ```
+    ☠️ 第二種更糟：使用者**看得到名字**，填完比例才被拒絕。
+    """
+    _seed_case("MQ-BN1-PAIR", sales_person="alice", stage_people=None)
+    good = _seed_item("業務獎金", "sales_person")
+    bad = _seed_item("工程獎金", "case_stages.assigned_to")
+    _u, hdr = _hdr(client, make_user, "bn1_mgr2")
+
+    payload = _plan(client, hdr, "MQ-BN1-PAIR").json()
+    seen = 0
+    for it in payload.get("items") or ():
+        seen += 1
+        ok, people = it.get("ok"), it.get("people")
+        assert isinstance(people, list), "`people` 不是陣列：%r" % it
+        assert bool(ok) == bool(people), (
+            "`ok` 與 `people` 對不起來：%r\n" % it
+            + "☠️ `ok=true` 而沒有人 ⇒ 畫面說「可以發放，但沒有人」；\n"
+              "   `ok=false` 而有人 ⇒ 使用者看得到名字，填完比例才被拒絕。")
+    assert seen >= 2, (
+        "只看到 %d 個項目，而我種了兩個（%s／%s）。\n" % (seen, good, bad)
+        + "⚠️ 少的那個多半是 `ok=false` 被濾掉了。")
+
+
+def test_bn1_a_deactivated_item_is_not_offered(client, make_user):
+    """🔴 **`is_active = 0` 的項目不可以出現。**（與 `create_award` 同一條過濾）
+
+    ```
+    create_award 逐字：SELECT * FROM bonus_items WHERE is_active = 1
+    ```
+    ☠️ 不加的後果是**「先問再做」失效的具體形狀**：
+    ```
+    畫面列出已停用的項目 -> 使用者填完比例 -> 按下產生
+      -> 400「獎金項目不存在或已停用」
+    ```
+    🔑 **問過了，而答案是錯的** —— 那比不問更糟，因為他相信了它。
+    """
+    _seed_case("MQ-BN1-OFF", sales_person="alice")
+    dead = _seed_item("停用的獎金", "sales_person", is_active=0)
+    live = _seed_item("還在用的獎金", "sales_person")
+    _u, hdr = _hdr(client, make_user, "bn1_mgr3")
+
+    payload = _plan(client, hdr, "MQ-BN1-OFF").json()
+    assert _item_of(payload, live) is not None, (
+        "啟用中的項目沒有出現 —— **量測裝置可能撈錯案件**，先看這個。")
+    assert _item_of(payload, dead) is None, (
+        "已停用的項目出現在清單裡：%r\n" % _item_of(payload, dead)
+        + "📌 `create_award` 用的是 `WHERE is_active = 1`，兩邊要同一條。")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# ③ 不變量：plan 說的人，就是實際發到的人
+# ══════════════════════════════════════════════════════════════════════
+
+def test_bn1_the_people_it_promises_are_the_people_who_actually_get_paid(
+        client, make_user):
+    """🔴🔴 **`plan` 回的 `people`，與 `POST /awards` 實際寫進去的**
+    **`bonus_award_lines.username` 逐字相同。**
+
+    🔑 這一題釘的是**不變量（兩邊同源）**，不是實作細節 ——
+      `plan` 存在的唯一理由就是「規則只有一份」。
+    ☠️ 分岔的症狀：**少發一個人，而總額對得起來** ——
+      而〈對不起來還有人會查，對得起來沒有人會查〉。
+
+    ⚙️ 觀測點挑的是 `bonus_award_lines.username`（**成功後才會被寫入**的下游），
+      不是 `POST` 的回應 —— 回應是它自己說的話。
+    """
+    _seed_case("MQ-BN1-SAME", sales_person="alice",
+               stage_people=["bob", "carol"])
+    item_id = _seed_item("工程獎金", "case_stages.assigned_to")
+    _u, hdr = _hdr(client, make_user, "bn1_mgr4")
+
+    payload = _plan(client, hdr, "MQ-BN1-SAME").json()
+    it = _item_of(payload, item_id)
+    assert it is not None, "找不到剛種的項目：%r" % (payload.get("items"),)
+    promised = list(it.get("people") or ())
+    assert promised, "`plan` 說一個人都沒有，而我種了兩個階段負責人：%r" % it
+
+    share = BP // len(promised)
+    r = client.post("/api/bonus/awards", headers=hdr, json={
+        "quote_no": "MQ-BN1-SAME",
+        "allocations": [{"bonus_item_id": item_id, "total_pct": 1000,
+                         "person_pct": {p: share for p in promised}}]})
+    assert r.status_code == 200, (
+        "照 `plan` 給的人送出去，卻被拒絕了：%s %s\n" % (r.status_code, r.text[:200])
+        + "☠️ 那表示 `plan` 說的與 `create_award` 認的**不是同一份規則**。")
+
+    import db
+    conn = db.get_db()
+    try:
+        paid = {row["username"] for row in conn.execute(
+            "SELECT DISTINCT username FROM bonus_award_lines"
+            " WHERE bonus_item_id = ?", (item_id,))}
+    finally:
+        conn.close()
+
+    assert paid == set(promised), (
+        "`plan` 說會發給 %s，而實際寫進 `bonus_award_lines` 的是 %s\n"
+        % (sorted(promised), sorted(paid))
+        + "☠️ 兩邊分岔的症狀是**少發一個人，而總額對得起來** ——\n"
+          "   對不起來還有人會查，**對得起來沒有人會查**。")
+
+
+def test_bn1_the_base_comes_from_the_same_place_as_the_base_endpoint(
+        client, make_user):
+    """🔴 **`plan` 的 `base` 與 `GET /base/{quote_no}` 必須同一個來源。**
+
+    ⚠️ 兩支各算一次而算法漂移的話，**畫面顯示的基數與實際入帳的基數會不同**
+       —— 而兩個數字都「看起來合理」。
+    """
+    _seed_case("MQ-BN1-BASE", net_profit=123456, sales_person="alice")
+    _u, hdr = _hdr(client, make_user, "bn1_mgr5")
+
+    plan = _plan(client, hdr, "MQ-BN1-BASE").json()
+    r2 = client.get("/api/bonus/base/MQ-BN1-BASE", headers=hdr)
+    assert r2.status_code == 200, "既有的 `/base` 端點壞了：%s" % r2.text[:200]
+
+    base = plan.get("base") or {}
+    assert isinstance(base, dict), "`base` 應該是一包 {ok, amount, error}：%r" % base
+    assert base.get("amount") == r2.json().get("amount"), (
+        "`plan` 的基數 %r ≠ `/base` 的 %r\n"
+        % (base.get("amount"), r2.json().get("amount"))
+        + "☠️ 畫面顯示的基數與實際入帳的基數不同，**而兩個都看起來合理**。")
+
+
+def test_bn1_it_says_whether_a_live_award_already_exists(client, make_user):
+    """🔴 **`has_active_award` 要回** —— 這個模組已經確立「先問再做」。
+
+    ```
+    POST /awards 撞到部分唯一索引（WHERE voided_at = ''）會回 **409**
+    GET /base 的 docstring 逐字：
+      「畫面在按下產生之前就該知道答案，而不是按下去才收到一句拒絕」
+    ```
+    ⚙️ 兩個方向都釘：沒有單 ⇒ `False`；建了一張 ⇒ `True`。
+    ☠️ 只釘一個方向的話，一個「永遠回 False」的實作也會綠。
+    """
+    _seed_case("MQ-BN1-DUP", sales_person="alice")
+    item_id = _seed_item("業務獎金", "sales_person")
+    _u, hdr = _hdr(client, make_user, "bn1_mgr6")
+
+    before = _plan(client, hdr, "MQ-BN1-DUP").json()
+    assert before.get("has_active_award") is False, (
+        "還沒有任何獎金單，而它說有：%r" % before.get("has_active_award"))
+
+    r = client.post("/api/bonus/awards", headers=hdr, json={
+        "quote_no": "MQ-BN1-DUP",
+        "allocations": [{"bonus_item_id": item_id, "total_pct": 1000,
+                         "person_pct": {"alice": BP}}]})
+    assert r.status_code == 200, "建單失敗：%s %s" % (r.status_code, r.text[:200])
+
+    after = _plan(client, hdr, "MQ-BN1-DUP").json()
+    assert after.get("has_active_award") is True, (
+        "已經有一張有效獎金單了，而 `plan` 說沒有：%r\n" % after
+        + "☠️ 使用者會再按一次產生，然後收到 **409** ——\n"
+          "   而這個模組已經確立「按下去之前就該知道答案」。")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# ④ 上界：現在沒有人擋
+# ══════════════════════════════════════════════════════════════════════
+
+def test_bn1_a_total_over_one_hundred_percent_is_refused(client, make_user):
+    """🔴 **`total_pct > 10000` 要在後端擋並回 400。**
+
+    ```
+    routers/bonus.py:256   if sum(...) <= 0: raise 400     <= **只有下界**
+    ```
+    ☠️ 沒擋的後果：`pool > base` ⇒ **獎金超過整個案子的淨利**。
+    📌 而這個不變量**已經寫在 `split_award()` 的 docstring 裡**：
+       「Σamount <= pool，且 pool - Σamount < 人數。
+        **大於人數表示那不是捨入誤差，是算式錯了。**」
+       ⇒ 寫下來了，**而沒有任何一行程式在檢查它**。
+    ⚠️ **不可以只在前端擋** —— `bonus.js` 自己的註解逐字：
+       「前端過濾是假的：值仍然在 API 回應裡」，同一個道理套在輸入上。
+    """
+    _seed_case("MQ-BN1-OVER", sales_person="alice")
+    item_id = _seed_item("業務獎金", "sales_person")
+    _u, hdr = _hdr(client, make_user, "bn1_mgr7")
+
+    r = client.post("/api/bonus/awards", headers=hdr, json={
+        "quote_no": "MQ-BN1-OVER",
+        "allocations": [{"bonus_item_id": item_id, "total_pct": BP + 1,
+                         "person_pct": {"alice": BP}}]})
+    assert r.status_code == 400, (
+        "`total_pct = %d`（>100%%）被接受了（回 %s）。\n" % (BP + 1, r.status_code)
+        + "☠️ 獎金池比整個案子的淨利還大。")
+
+
+def test_bn1_person_shares_over_one_hundred_percent_are_refused(client,
+                                                                make_user):
+    """🔴 **`Σperson_pct > 10000` 也要擋。**
+
+    ☠️ 它比上一題安靜：`Σamount > pool` ⇒ `remainder_of()` **變成負數**
+       ⇒ 「公司留存」那一欄是一個負數，而**帳面上每一列都對**。
+    """
+    _seed_case("MQ-BN1-OVER2", stage_people=["bob", "carol"])
+    item_id = _seed_item("工程獎金", "case_stages.assigned_to")
+    _u, hdr = _hdr(client, make_user, "bn1_mgr8")
+
+    r = client.post("/api/bonus/awards", headers=hdr, json={
+        "quote_no": "MQ-BN1-OVER2",
+        "allocations": [{"bonus_item_id": item_id, "total_pct": 1000,
+                         "person_pct": {"bob": BP, "carol": BP}}]})
+    assert r.status_code == 400, (
+        "兩個人各拿 100%%（Σ=%d）被接受了（回 %s）。\n" % (BP * 2, r.status_code)
+        + "☠️ `remainder_of()` 會變成負數，而**帳面上每一列都對**。")
+
+
+def test_bn1_a_negative_total_is_refused(client, make_user):
+    """🔴 **負的 `total_pct` 也沒有人擋。**（A-2 實跑，我複跑確認）
+
+    ```
+    pool_for(123456, -5000) = **-61728**
+    ```
+    ☠️ 負的獎金池在傳票上是一筆反向分錄，**帳是平的** ——
+       而某個人的獎金單上是一個負數。
+    📌 `base` 那一側**已經擋了**（`base_amount_for` 對淨利 -5000 與 0
+       都回 `(False, 0, 訊息)`，使用者裁示「負數當 0 不發」已落實）
+       ⇒ 缺的只有 `pct` 這一側。
+    """
+    _seed_case("MQ-BN1-NEG", sales_person="alice")
+    item_id = _seed_item("業務獎金", "sales_person")
+    _u, hdr = _hdr(client, make_user, "bn1_mgr10")
+
+    r = client.post("/api/bonus/awards", headers=hdr, json={
+        "quote_no": "MQ-BN1-NEG",
+        "allocations": [{"bonus_item_id": item_id, "total_pct": -5000,
+                         "person_pct": {"alice": BP}}]})
+    assert r.status_code == 400, (
+        "`total_pct = -5000` 被接受了（回 %s）。\n" % r.status_code
+        + "☠️ 獎金池是負的，而傳票上那筆反向分錄**帳是平的**。")
+
+
+def test_bn1_the_remainder_cannot_see_a_total_that_is_too_big():
+    """⚙️ **反向控制：`remainder_of()` 抓不到 `total_pct` 超額，別拿它當觀測點。**
+
+    A-2 實跑、我複跑（`base = 123456`）：
+    ```
+    Σperson_pct 超額（兩人各 100%）
+      pool=61728   Σamount=123456   remainder_of = **-61728**   看得見 ✅
+    total_pct 超額（20000 ＝ 200%）
+      pool=246912（= base×2）  Σamount=246912  remainder_of = **0**  看不見 ❌
+    ```
+    🔑 而 `split_award()` docstring 的兩條不變量在後者**也都成立**：
+    ```
+    Σamount <= pool         246912 <= 246912  ✅
+    pool - Σamount < 人數    0 < 1             ✅
+    ```
+    ☠️ **因為 `pool` 本身被撐大了，而不變量拿 `pool` 當基準** ——
+       *一個以受污染的值為基準的檢查，永遠不會發現污染。*
+    ⇒ 兩種超額要兩個觀測點：
+    ```
+    Σperson_pct 超額  ->  remainder_of() < 0  可以
+    total_pct   超額  ->  **必須拿 base 當基準**（或直接斷言端點回 400）
+    ```
+    ⚠️ 這一題**現在是綠的，而它釘的是一個盲點**：日後若 `remainder_of()`
+       在這個情況下開始回負數，它會紅 —— 那時要來讀這段，不是直接改數字。
+    """
+    from helpers.bonus import pool_for, remainder_of, split_award
+
+    base = 123456
+    lines = split_award(base, BP * 2, [("a", BP)])
+    assert remainder_of(base, BP * 2, lines) == 0, (
+        "`remainder_of()` 在 `total_pct=20000` 時回了非 0 ——\n"
+        + "✅ 若它現在抓得到超額了，那是好事，**而請來改這段 docstring**："
+          "上面那句「拿它當觀測點抓不到」已經過期。")
+    assert pool_for(base, BP * 2) > base, (
+        "`pool_for(base, 20000)` 沒有超過 `base` —— **前提變了**，\n"
+        + "上面整段推理要重做。")
+
+
+def test_bn1_paying_less_than_the_whole_pool_is_still_allowed(client,
+                                                              make_user):
+    """⚙️ **反向控制：少發是合法的，不可以一起擋掉。**
+
+    ```
+    只發 80%  => 合法的公司政策，**不是錯誤**
+    剛好 100% => 也要允許（邊界是 <=，不是 <）
+    ```
+    ☠️ 少了這一題，上面兩題可以靠「一律擋 `>= 10000`」變綠 ——
+       而那會讓使用者**連整數的 100% 都送不出去**。
+    """
+    _seed_case("MQ-BN1-UNDER", sales_person="alice")
+    item_id = _seed_item("業務獎金", "sales_person")
+    _u, hdr = _hdr(client, make_user, "bn1_mgr9")
+
+    r = client.post("/api/bonus/awards", headers=hdr, json={
+        "quote_no": "MQ-BN1-UNDER",
+        "allocations": [{"bonus_item_id": item_id, "total_pct": 8000,
+                         "person_pct": {"alice": BP}}]})
+    assert r.status_code == 200, (
+        "只發 80%%（`total_pct=8000`、`person_pct=10000`）被擋掉了："
+        "%s %s\n" % (r.status_code, r.text[:200])
+        + "☠️ 上界寫成 `>=` 了 —— 少發是**合法政策**，而 100%% 是邊界不是超額。")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# ⑤ 單位：基點不是百分比
+# ══════════════════════════════════════════════════════════════════════
+
+@pytest.mark.parametrize("base", [1, 7, 100, 101, 123456, 999999, 87654321])
+def test_bn1_the_unit_is_basis_points_in_both_directions(base):
+    """🔴 **`10000` 基點 = 全額，`100` 基點 = 1%。**
+
+    🔑 兩條抓的是**相反的兩個方向**：
+    ```
+    ① 單位被實作成 // 100   => pool_for(base, 10000) 變成 base×100  => ① 紅
+    ③ 單位被呼叫端當成百分比 => 100 被當 100% 而實際是 1%           => ③ 紅
+    ```
+    ⇒ 兩條都**不依賴 `base` 整除**（前提只有 `base >= 1`；
+      我掃 `b = 0~2000`，只有 `b = 0` 讓 ③ 不成立）。
+
+    ☠️ **不要寫成 `pool(5000) == pool(50) * 100`** ——
+      `pool` 是整數無條件捨去，7 個 base 有 4 個會紅，
+      **而紅燈指向 `split_award()`，那支是對的**。
+    """
+    from helpers.bonus import pool_for
+
+    assert pool_for(base, BP) == base, (
+        "`pool_for(%d, 10000)` = %r，應該等於 `base` 本身。\n"
+        % (base, pool_for(base, BP))
+        + "☠️ 值變成 100 倍 ⇒ 單位被實作成百分比（`// 100`）。")
+    assert pool_for(base, 100) == base // 100, (
+        "`pool_for(%d, 100)` = %r，應該是 `base // 100`（1%%）。"
+        % (base, pool_for(base, 100)))
+    assert pool_for(base, 100) != base, (
+        "`pool_for(%d, 100)` 等於 `base` ——\n" % base
+        + "☠️ `100` 被當成「100%%」了，而它是 **1%**。\n"
+        + "🔑 送 `50` 想表達 50%% 的人會拿到應得的 1/100，\n"
+          "   **而畫面上那是一個格式正確的金額**。")
