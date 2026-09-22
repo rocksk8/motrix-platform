@@ -100,7 +100,14 @@ def create_bonus_item(body: dict = Body(...), authorization: str = Header(None))
        **從來沒有出現在任何一張獎金單上** —— 沒有人會發現一個從來不出現的東西。
     ⚠️ 資料層的 `NOT NULL` 擋不住空字串，所以這一關是必要的另一半。
     """
-    _require_user(authorization, require_superadmin=True)
+    # 🔴 `BI1`：**回傳值要接住**。這一支原本只把 `_require_user` 當檢查用，
+    #    而 `dd50d2e` 把 `created_by` 從 `_tok(...)` 改成 `_user_name(user)`
+    #    之後，下面就讀得到一個從來沒有被綁定的 `user` ⇒ **NameError -> 500**。
+    # ☠️ 而全量是綠的：`grep "api/bonus/items" tests/` 當時是 **0 筆** ——
+    #    這支端點從來沒有人量過。⇒ 綠燈證明的是「有人量過的那些」。
+    # ⚠️ 不可以改成 `_user_name(None)` 或寫死空字串：那會讓 500 消失，
+    #    **而稽核欄位變成空的** —— 壞掉會被報修，降級不會。
+    user = _require_user(authorization, require_superadmin=True)
     name = (body.get("name") or "").strip()
     source = (body.get("person_source") or "").strip()
     if not name:
