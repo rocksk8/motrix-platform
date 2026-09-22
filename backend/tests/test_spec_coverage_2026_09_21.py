@@ -1183,9 +1183,15 @@ def test_every_prefix_in_the_spec_appears_somewhere_in_the_scope_file():
 
     spec_prefixes = {_prefix(n) for n in _declared()}
     scope_prefixes = {_prefix(n) for n in listed}
-    # 📌 已經有題的字首不算漏：它們有人管，只是 A 沒有列進範圍檔。
-    implemented_prefixes = {_prefix(n) for n in _implemented()}
-    missing = sorted(spec_prefixes - scope_prefixes - implemented_prefixes)
+    # 📌 **「有人管」不只有 `SCOPE.md` 一種形式。**
+    # ☠️ 我第一版只扣掉「已經有題的」⇒ 它把 `V`（V1–V3 在 `AMBIGUOUS_ACK`、
+    #    V4／V5 在 `EXEMPT`）報成沒人管 —— **而那五條各自都有人做過決定。**
+    # 🔑 〈判準的寬窄都會騙人〉：**判準漏掉一種合法狀態時，
+    #    它報出來的不是缺口，是雜訊** —— 而雜訊會讓真的那幾個被忽略。
+    managed = (_implemented() | set(EXEMPT) | set(PENDING)
+               | AMBIGUOUS_ACK | set(UNTRIAGED_HEADINGS))
+    managed_prefixes = {_prefix(n) for n in managed}
+    missing = sorted(spec_prefixes - scope_prefixes - managed_prefixes)
     assert not missing, (
         "這些字首在 `STATE.md` 裡有編號，而 `SCOPE.md` 三個區塊一個都沒提到：\n  "
         + "、".join(missing)
