@@ -692,3 +692,150 @@ def test_ui9_the_tail_list_does_not_rot():
     assert not stale, (
         "`_REPORTS_CASHIER_TAIL` 裡這些已經不在 `reports.js` 了：%s\n" % stale
         + "⇒ 把它們從那個常數移除。**這不是迴歸 —— 它表示清乾淨了。**")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# 🔴🔴 升級 · **呼叫／定義全面比對**（不只 modal）
+# ══════════════════════════════════════════════════════════════════════
+#
+# ☠️ 使用者實際踩到：出納頁「標記已收款」→ 按確定 →
+#    `網路錯誤：this._displayName is not a function`
+#
+# 🔑 A 的更正逐字：
+# > 「我讓你釘的『每一個 `open*Modal` 都要有對應的 modal 本體』**太窄**，
+# >   真正該釘的是『**`cashier.js` 裡每一個 `this.X()` 呼叫，
+# >   都要在這一頁的 JS 裡定義得到**』——後者涵蓋前者。」
+#
+# ⚠️ **而那個錯誤訊息一開始就在 A 手上**，它被讀成選單工具的 UI 故障
+#    —— **它是畫面上的真實輸出。**
+# 📌 第二個缺陷在措辭：一個 `TypeError` 被 `catch` 報成「**網路錯誤**」
+#    ⇒ **會讓人去查網路。**（那一條我另外提給 A，不在這一題裡。）
+
+
+def _blank_js_comments_local(src):
+    """把 JS 註解換成等長空白（引號內的 `//` 不算）。
+
+    ☠️ 不剝的話會假陽性：`reports.js:1940` 有一行**註解**寫著
+       `// this.$nextTick(() => this._initSubListSortable(...))`
+       ⇒ 掃描器把它讀成一個呼叫，而那支函式在 `case-management.js` 裡。
+    🔑 今天第三次被註解騙（B 的絆線／我的 sidebar 解析器／這次）。
+    """
+    out, i, n = [], 0, len(src)
+    while i < n:
+        c = src[i]
+        if c in "'\"`":
+            q = c
+            out.append(c)
+            i += 1
+            while i < n and src[i] != q:
+                if src[i] == "\\" and i + 1 < n:
+                    out.append(src[i]); out.append(src[i + 1]); i += 2; continue
+                out.append(src[i]); i += 1
+            if i < n:
+                out.append(src[i]); i += 1
+            continue
+        if c == "/" and i + 1 < n and src[i + 1] == "/":
+            while i < n and src[i] != "\n":
+                out.append(" "); i += 1
+            continue
+        if c == "/" and i + 1 < n and src[i + 1] == "*":
+            while i < n and not (src[i] == "*" and i + 1 < n and src[i + 1] == "/"):
+                out.append("\n" if src[i] == "\n" else " "); i += 1
+            out.append("  "); i += 2
+            continue
+        out.append(c); i += 1
+    blanked = "".join(out)
+    assert len(blanked) == len(src), "剝註解改變了長度 —— 行號會錯位。"
+    return blanked
+
+
+def _calls_and_defs(js_raw):
+    """`(被呼叫的, 有定義的)`。
+
+    ⚠️ **定義那一邊刻意寬**：方法／`async` 方法／getter／一般屬性都算。
+    🔑 理由是方向 —— 定義漏抓 ⇒ **報出一個不存在的缺口** ⇒ 有人去「補」一支
+       已經存在的函式，或更糟，**去刪一個還在用的**。
+    📌 今天已經發生過一次（只認 `this.X(` ⇒ 把 `initCharts()` 報成死碼，
+       而它是 `self.initCharts()`）。**判準太窄的方向不是對稱的。**
+
+    ⚠️ `$` 開頭的是 Alpine 內建（`$nextTick`／`$watch`／`$refs`…），不是這一頁定義的。
+    """
+    js = _blank_js_comments_local(js_raw)
+    defs = set(re.findall(
+        r"^\s{2,6}(?:async\s+)?([A-Za-z_$][\w$]*)\s*\([^)]*\)\s*\{", js, re.M))
+    defs |= set(re.findall(r"^\s{2,6}get\s+([A-Za-z_$][\w$]*)\s*\(", js, re.M))
+    defs |= set(re.findall(r"^\s{2,6}([A-Za-z_$][\w$]*)\s*:", js, re.M))
+    defs -= {"if", "for", "while", "switch", "catch", "function", "return", "else"}
+    calls = set(re.findall(
+        r"(?:this|self|that|vm)\.([A-Za-z_$][\w$]*)\s*\(", js))
+    calls = {c for c in calls if not c.startswith("$")}
+    return calls, defs
+
+
+@pytest.mark.parametrize("which", ["cashier", "reports"])
+def test_every_method_called_on_the_page_is_defined_on_the_page(which):
+    """🔴🔴 **`this.X()` 呼叫得到的每一支，都要在這一頁的 JS 裡定義得到。**
+
+    ☠️ 使用者實際踩到的那一次：
+    ```
+    confirmReceive() 呼叫 this._displayName() 填 receivedBy
+    而 cashier.js **沒有** _displayName（reports.js 有）
+    ⇒ TypeError ⇒ 被 catch 抓走 ⇒ 印成「**網路錯誤**」
+    ⇒ 使用者按確定，什麼都沒存，而畫面說是網路問題
+    ```
+    🔑 **這一題涵蓋那道 modal 題**：`open*Modal` 缺本體只是它的一個特例，
+       而這一次缺的是一支**工具函式**，modal 那一題完全看不到它。
+    📌 A 的更正：「我讓你釘的太窄了」—— 而更窄的那一版**已經全綠**，
+       ⇒ 〈判準的寬窄都會騙人〉：**一道綠燈守門不代表那一類問題不存在。**
+
+    ⚙️ 兩側都驗（`cashier` 與 `reports`）—— 今天第三次修同一種不對稱，
+       **而前兩次我只修了實例。**
+    """
+    if which == "cashier":
+        where, raw = _cashier_js()
+    else:
+        where, raw = REPORTS_JS.name, _read(REPORTS_JS)
+
+    calls, defs = _calls_and_defs(raw)
+    assert calls and defs, (
+        "`%s`：呼叫 %d 個、定義 %d 個 —— **儀器失效**，"
+        "這一題會因為量不到而綠。" % (where, len(calls), len(defs)))
+
+    missing = sorted(calls - defs)
+    assert not missing, (
+        "`%s` 呼叫了這些，而它們**沒有定義在這一頁的 JS 裡**：%s\n" % (where, missing)
+        + "☠️ 按下去會丟 `TypeError`，而它被 `catch` 抓走之後"
+          "**印成「網路錯誤」** ⇒ 使用者以為是網路問題。\n"
+        "🔑 那比「按了沒反應」更糟：**它給了一個錯誤的方向。**")
+
+
+def test_the_call_scanner_is_not_fooled_by_comments_or_alpine():
+    """⚙️ **正對照** —— 這個掃描器的兩個已知陷阱各驗一次。
+
+    ```
+    ① 註解裡的呼叫      reports.js:1940 有一行註解寫著
+                        `// this.$nextTick(() => this._initSubListSortable(...))`
+                        ⇒ 不剝註解 ⇒ 報出一個假缺口
+    ② Alpine 內建       $nextTick／$watch 不是這一頁定義的 ⇒ 不該被當成缺口
+    ```
+    🔑 兩個都會讓這一題**報出不存在的問題**，而那個方向的代價是
+       **有人去「補」一支不需要的函式**。
+    ⚠️ 而它與受測物**走同一條量測路徑**（`_calls_and_defs`）——
+       它分辨的是「量法壞了」；上面那個 `assert calls and defs`
+       分辨的是「檔案空了」。**兩個不是同一件事。**
+    """
+    sample = "\n".join([
+        "    async loadX() {",
+        "      // this.$nextTick(() => this._neverDefined())",
+        "      this.$watch('a', () => {})",
+        "      this._realOne()",
+        "    },",
+        "    _realOne() { return 1 },",
+    ])
+    calls, defs = _calls_and_defs(sample)
+    assert "_neverDefined" not in calls, (
+        "掃描器把**註解裡**的呼叫算進去了 —— 它會報出一個假缺口。")
+    assert "$watch" not in calls, (
+        "掃描器把 Alpine 內建 `$watch` 算成這一頁該定義的東西。")
+    assert "_realOne" in calls and "_realOne" in defs, (
+        "掃描器連一個正常的呼叫／定義都認不出來 —— **量法壞了**。")
