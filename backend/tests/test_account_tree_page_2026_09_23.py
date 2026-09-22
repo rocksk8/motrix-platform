@@ -61,6 +61,10 @@ STATIC_JSON = _BACKEND / "data" / "account_items_112.json"
 TABLE = "account_items"
 SOURCES = ("statutory", "system_default", "custom")
 
+#: 官方表裡**本來就沒有子節點**的二級（合計列）。實跑量到的，不是推的。
+#: ⚠️ A 建議「每個二級都必須有子節點」—— 而那條規則會**紅在正確的實作上**。
+EMPTY_L2 = ["86", "88"]
+
 #: 我釘的接縫。名字要換 **退回給我**，不要自己改題。
 _ROUTER_MODULES = ("routers.account_items", "routers.accounts",
                    "routers.account_tree")
@@ -136,6 +140,68 @@ def test_the_prefix_shortcut_really_is_wrong_on_the_real_data():
           "而這一格就是在守那句話。（共 %d 個）" % len(ranges))
 
 
+def test_the_level_invariant_holds_on_the_real_data_and_catches_every_prefix_error():
+    """⚙️🔑 **`parent.level == level - 1` —— 一條完美判別的不變量。**
+
+    A 實跑、我複驗（547 筆）：
+    ```
+    套在真實資料（parent_code）    => 違反 **0** 筆
+    套在前綴法建出來的樹           => 抓到 **232** 筆  <= **全部**
+    ```
+    🔑 ⇒ **它一次擋掉全部，而且在正確實作上是乾淨的零。**
+    📌 比「`1268` 的父必須是 `126-127`」強：那一題只釘**一個例子**，
+       而這一條釘的是**結構**。⚠️ 而兩個都留著 ——
+       **不變量擋全部，具名例子讓紅燈訊息看得懂。**
+
+    ⚙️ 而這一題同時是那條不變量的**儀器自檢**：
+       它在真實資料上零違反（否則它擋不了任何實作），
+       在前綴法上抓到全部（否則它沒有鑑別力）。
+    """
+    items = _items()
+    by = {i["code"]: i for i in items}
+
+    bad = [(i["code"], i["parent_code"]) for i in items
+           if i.get("parent_code")
+           and by.get(i["parent_code"], {}).get("level") != i["level"] - 1]
+    assert not bad, (
+        "真實資料上就有 %d 筆違反 `parent.level == level - 1`：%s\n"
+        % (len(bad), bad[:6])
+        + "🔑 那樣這條不變量**擋不了任何實作** —— 它會在正確的樹上也紅。")
+
+    roots = [i for i in items if not i.get("parent_code")]
+    assert roots and all(i["level"] == 1 for i in roots), (
+        "沒有 parent 的那些不全是 level 1：%s\n"
+        % sorted({i["level"] for i in roots})
+        + "⚠️ 那樣「level 1 沒有 parent」這一半就不成立。")
+
+    # ⚙️ 鑑別力：套在**前綴法**建出來的樹上，它必須抓到全部 232 筆。
+    codes = set(by)
+
+    def prefix_parent(code):
+        for n in range(len(code) - 1, 0, -1):
+            if code[:n] in codes:
+                return code[:n]
+        return None
+
+    caught = notfound = 0
+    for i in items:
+        if not i.get("parent_code"):
+            continue
+        g = prefix_parent(i["code"])
+        if g is None:
+            notfound += 1
+        elif by[g]["level"] != i["level"] - 1:
+            caught += 1
+    assert caught > 200, (
+        "這條不變量在前綴法的樹上只抓到 %d 筆（預期 232）——\n" % caught
+        + "🔑 它的鑑別力不夠 ⇒ 一個用前綴法的實作可能照樣綠。")
+    assert notfound == 0, (
+        "前綴法有 %d 筆**找不到父**（我與 A-2 都量到 0）——\n" % notfound
+        + "🔑 那個 0 正是「它結構上不可能報錯」的證據：\n"
+          "   前綴法**永遠退得到一個存在的較短前綴**（最短退到一級 1–9）。\n"
+        + "☠️ 靜態檔換過了 ⇒ 那個「全部靜默」的結論要重算。")
+
+
 def test_every_parent_code_points_at_an_existing_row():
     """⚙️ **也該現在就綠**：每一個 `parent_code` 都指向存在的科目。
 
@@ -184,9 +250,25 @@ def test_fn1_the_tree_is_built_from_parent_code_not_from_the_code_prefix():
     ```
     1268  parent = 126-127     ← 前綴法：**掛不上任何父節點**
     ```
-    ☠️ 而前綴法的失敗方式最安靜：**掛不上的那些會變成第一層**，
-       畫面上看起來只是「樹有點亂」，不是一個錯誤。
-    🔑 我量到 **232 筆**會這樣（547 筆中）—— 那不是幾個例外。
+    ☠️ 而前綴法的失敗方式**比我第一版寫的糟得多**：
+
+    ```
+    我第一版寫的  「掛不上的那些會變成第一層，畫面上只是樹有點亂」  ← **錯的**
+    實際量到      掛到**存在但錯誤**的父  232
+                  **找不到父**            **0**
+    ```
+    🔑 **沒有一筆會報錯。樹建得出來、每一筆都有父、而 42% 掛在錯的地方。**
+    📌 成因：前綴法**永遠退得到一個存在的較短前綴**（最短退到一級 `1`–`9`）
+       ⇒ 它**結構上不可能報「找不到父」**。
+    ```
+    111 現金及約當現金   真實父 = 11-12（流動資產）
+                         前綴法 => 掛到 **1（資產）**   ← **少了一整層**
+    ⇒ 「流動資產」那一層會是空的
+    ⇒ ☠️ **報表小計錯，而畫面上每一個數字都正常**
+    ```
+    ⚠️ 我把錯的那一版留著（〈更正要留著錯的那一列〉）——
+       兩個版本都說「很安靜」，**而它們的處置不同**：
+       「變成第一層」看得出來（樹的形狀怪），**「掛到錯的父」看不出來**。
 
     ⚙️ 正對照要用**實際資料**不是合成的：`1268` 的父必須是 `126-127`
        —— 合成的資料我可以挑一個剛好前綴對的，那樣兩種實作都會綠。
@@ -225,6 +307,38 @@ def test_fn1_the_tree_is_built_from_parent_code_not_from_the_code_prefix():
         "樹裡有 %d 個節點，資料有 %d 筆 —— **有節點掉了**。\n"
         % (len(parent_of), len(items))
         + "☠️ 掉的那些不會報錯，它們只是**不在畫面上**。")
+
+    # 🔑🔑 結構不變量：**一次擋掉全部 232 筆**，而具名例子只擋一筆。
+    by = {i["code"]: i for i in items}
+    wrong_level = [(c, p) for c, p in parent_of.items()
+                   if p is not None and by[p]["level"] != by[c]["level"] - 1]
+    assert not wrong_level, (
+        "有 %d 個節點掛在**層級不對**的父底下，前 6 個：%s\n"
+        % (len(wrong_level), wrong_level[:6])
+        + "🔑 不變量是 `parent.level == level - 1` —— "
+          "它在真實資料上是**乾淨的零**，在前綴法的樹上抓到 **232** 筆。\n"
+        + "☠️ 而它的長相是**吃掉一整層**：`111 現金及約當現金` 的真實父是\n"
+          "   `11-12 流動資產`，前綴法把它掛到 `1 資產`\n"
+          "   ⇒ **「流動資產」那一層是空的，而小計會錯、畫面上每個數字都正常。**")
+
+    # ⚙️ A 建議「每個二級節點都必須有子節點」（空層＝被跳過的證據）。
+    # 🔴 **而那條規則是錯的，我實跑查出來的**：
+    # ```
+    # L2 沒有子節點的：**2 個**  86 本期稅後淨利(淨損) ／ 88 本期綜合損益總額
+    # （L3 也有 3 個：218 / 811 / 831）
+    # ```
+    # ⇒ 它們是官方表裡的**合計列**，本來就沒有子項
+    #   ⇒ 照 A 的原話寫，會**紅在一個正確的實作上**。
+    # 📌 ⇒ 改成釘**已知集合**：多出來才紅（一整層被吃掉會多出很多個）。
+    has_child = {p for p in parent_of.values() if p is not None}
+    empty_l2 = sorted(c for c in parent_of
+                      if by[c]["level"] == 2 and c not in has_child)
+    assert empty_l2 == EMPTY_L2, (
+        "沒有子節點的二級節點是 %s，已知的是 %s。\n" % (empty_l2, EMPTY_L2)
+        + "☠️ **多出來的那些就是「有一層被吃掉」的證據** —— "
+          "它們的子節點被掛到更上面去了。\n"
+        + "⚠️ 少了的話請先看是不是靜態檔換了：`86`/`88` 是官方表的**合計列**，"
+          "本來就沒有子項。")
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -275,17 +389,35 @@ def test_fn1_all_three_sources_are_distinguishable_on_the_page():
     📌 `§54c` 的形狀：三個都要在，而不是「有 statutory 就好」。
     """
     page = _page()
-    html = page.read_text(encoding="utf-8")
-    js = ""
     cand = _FRONTEND / "js" / (page.stem + ".js")
-    if cand.exists():
-        js = cand.read_text(encoding="utf-8")
-    src = html + "\n" + js
-    missing = [s for s in SOURCES if s not in src]
+    assert cand.exists(), (
+        "找不到 `%s` —— 三態的判斷要在**行為那一層**。\n" % cand.name
+        + "⚠️ 檔名要換 **退回給我**。")
+    js = cand.read_text(encoding="utf-8")
+
+    # 🔴 **只看 JS，不看 HTML** —— 我第一版看 `html + js`，而那是假綠燈：
+    # ```
+    # 突變：把 JS 裡的 system_default 改掉 => 我的題**照樣綠**
+    # 成因：HTML 裡還有 `.ai-tag.system_default{...}` —— 那只是一個 **CSS class**
+    #       ⇒ JS 不再產生那個值的話，那條樣式是**死的**
+    # ```
+    # 🔑 〈判準的寬窄都會騙人〉：**超集永遠比較好過** ——
+    #    「這個字出現在這兩個檔的任何地方」是一個太寬的判準。
+    missing = [s for s in SOURCES if s not in js]
     assert not missing, (
-        "`%s` 認不出 %s。\n" % (page.name, missing)
+        "`%s` 認不出 %s。\n" % (cand.name, missing)
         + "☠️ 少了 `system_default` 的後果最安靜：**一個使用者從來沒建過的項目"
           "出現在「我的自訂」裡，而他不敢刪。**")
+
+    # ⚙️ 而三個要**被列在一起**（一份數得出來的清單），不是散在三個地方。
+    flat = re.sub(r"\s+", " ", js)
+    together = any(
+        all(s in flat[m:m + 160] for s in SOURCES)
+        for m in range(0, len(flat), 40))
+    assert together, (
+        "`%s` 三個 source 都在，而**沒有出現在同一份清單裡**。\n" % cand.name
+        + "📌 `§54c` 的形狀：清單要能被數 —— 散在三個 `if` 裡的話，"
+          "**加第四種狀態時不會有任何訊號**。")
 
 
 def test_fn1_custom_rows_must_still_be_editable_on_the_page():
@@ -304,16 +436,32 @@ def test_fn1_custom_rows_must_still_be_editable_on_the_page():
         js = cand.read_text(encoding="utf-8")
     src = html + "\n" + js
 
-    # 「唯讀」的判斷必須**綁在 source 上**，不是整頁一律唯讀。
-    guarded = re.search(
-        r"statutory[^\n]{0,120}(disabled|readonly|唯讀|不可)", src) or re.search(
-        r"(disabled|readonly|唯讀|不可)[^\n]{0,120}statutory", src)
-    assert guarded, (
-        "`%s` 裡「不可編輯」沒有與 `statutory` 綁在同一個判斷上 ——\n" % page.name
-        + "☠️ 那通常表示**整頁一律唯讀** ⇒ 使用者連自己加的科目都改不動，\n"
-          "   而 ② 那一題照樣綠（它分不出擋過頭）。\n"
-        + "⚠️ 我只看「兩者是否出現在同一段判斷附近」——"
-          "判斷方式是你的自由，**撞到就退回給我**。")
+    # 🔴 **我改過兩次，兩次都是 B 指出來的，而第二次的理由比第一次深**
+    # ```
+    # v1  statutory[^\n]{0,120}(唯讀|不可…)    => **跨不了行** => 假陽性
+    #     （B 的綁定寫在 x-show，唯讀兩個字在下一行）
+    # v2  壓掉換行再看鄰近度                    => 排版無關了，**而**
+    #     🔑 B：「我沒有改行為，只改了排版」
+    #     ⇒ 它驗的是「這兩個詞排在附近」，**不是「有沒有綁在一起」**
+    #     ☠️ 一個把 `statutory` 寫進同一行**註解**的實作照樣會過
+    # ```
+    # ⇒ v3 釘**結構**：要有一個**屬性綁定運算式**同時提到 `source` 與 `statutory`。
+    #   ⚙️ 而先把 HTML 註解剝掉 —— B 的元素上面就有一段寫著同樣字眼的註解。
+    no_comment = re.sub(r"<!--.*?-->", " ", src, flags=re.S)
+    exprs = [m.group(3) for m in re.finditer(
+        r"""(x-show|x-if|x-bind|:class|:disabled|v-if|v-show|:readonly)"""
+        r"""\s*=\s*(["'])((?:(?!\2).)*)\2""", no_comment)]
+    exprs = [e for e in exprs if "source" in e and "statutory" in e]
+    assert exprs, (
+        "`%s` 裡沒有任何**綁定運算式**同時提到 `source` 與 `statutory`。\n"
+        % page.name
+        + "☠️ 那通常表示**整頁一律唯讀**（條件被寫死）⇒ 使用者連自己加的\n"
+          "   科目都改不動，而 ② 那一題照樣綠（它分不出擋過頭）。\n"
+        + "⚠️ 我釘的是**結構不是排版**：要有一個 `x-show` / `:class` / `v-if` …\n"
+          "   的值裡同時出現 `source` 與 `statutory`。\n"
+          "   ⚙️ HTML 註解已剝掉 —— 寫在註解裡不算。\n"
+        + "📌 用別的機制（例如在 JS 算好一個 `row.locked`）**退回給我**，"
+          "我把那個形狀加進來。")
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -381,6 +529,48 @@ def test_fn1_creating_a_custom_item_requires_an_existing_parent():
           "   **而那樣使用者一個自訂科目都建不了**。\n"
         + "⚠️ 而我刻意挑一個**範圍代號**當正對照："
           "若實作用前綴驗 parent，它會在這裡紅。")
+
+
+def _auth(client, make_user, role="superadmin"):
+    username, password = make_user(role=role)
+    r = client.post("/api/auth/login",
+                    json={"username": username, "password": password})
+    assert r.status_code == 200, r.text
+    return {"Authorization": "Bearer " + r.json()["token"]}
+
+
+def test_fn1_the_endpoint_answers_over_http(client, make_user):
+    """🔴 **`GET /api/account-items` 要在 HTTP 那一層真的回得出來。**
+
+    ☠️ B 2026-09-23 **明著說**他沒走過這一層：
+    > 「`build_tree` / `validate_parent` / 序列化 ✅ 實跑；
+    >   `GET /api/account-items` 的 **HTTP 層**（登入 → 帶 token → 200）❌ 沒跑過。
+    >   我用對照組確認 auth 樣式與 `map_points.py` 逐字相同，
+    >   **而那是推論不是量測**。」
+
+    🔑 〈證據的適用範圍〉：函式跑得動 ≠ 端點回得出來。中間還有
+       **路由註冊／auth 依賴／序列化**三層，而它們各自都壞過。
+    ⚙️ 而它同時是**登入這件事本身**的對照：`401` 與 `200` 要分得出來 ——
+       少了那一格，一個「誰都可以拿」的端點也會讓這一題綠。
+    """
+    hdr = _auth(client, make_user)
+    r = client.get("/api/account-items", headers=hdr)
+    assert r.status_code == 200, (
+        "`GET /api/account-items` 回 %s。\n%s\n" % (r.status_code, r.text[:300])
+        + "☠️ 函式層全綠而端點回不出來 —— 中間還有路由註冊／auth 依賴／序列化。")
+
+    body = r.json()
+    rows = body.get("items") or body.get("rows") or body.get("tree") or body
+    assert rows, (
+        "端點回 200 而內容是空的：%r\n" % (str(body)[:200],)
+        + "☠️ **空的 200 與正確的 200 在狀態碼上長得一樣。**")
+
+    # ⚙️ 反向控制：不帶 token 一定要被擋。
+    anon = client.get("/api/account-items")
+    assert anon.status_code in (401, 403), (
+        "不帶 token 也回 %s ——\n" % anon.status_code
+        + "⚙️ 這是正對照：少了它，一個**誰都可以拿**的端點會讓上面那一題綠，\n"
+          "   而會計科目表是內部資料。")
 
 
 def test_fn1_disabling_is_possible_without_deleting():
