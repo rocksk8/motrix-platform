@@ -174,6 +174,15 @@ def test_a_half_filled_item_is_refused_with_a_reason(client, make_user,
        「從來沒有出現在任何一張獎金單上」——
        而〈沒有人會發現一個從來不出現的東西〉。
     ⚠️ 資料層的 `NOT NULL` 擋不住**空字串**，所以這一關是必要的另一半。
+
+    ## 🔴 ⚠️ **這三題在端點壞掉的時候也是綠的**
+
+    ```
+    三種半填驗證都在 `_user_name(user)` 那一行**之前** return
+    ⇒ NameError 根本跑不到 ⇒ 它們證明不了「這支端點可用」
+    ```
+    🔑 加上 403 那一題，**一支 100% 不可用的端點可以有 6 綠**。
+    ⇒ 會從紅轉綠的只有「superadmin 建得成」與「`created_by` 是誰」那兩題。
     """
     # ⚠️ 固定名字是安全的：`client` 是 function-scoped，每一個參數化案例
     #    拿到的是**自己的一份資料庫**。
