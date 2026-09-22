@@ -285,3 +285,48 @@ def test_bk19_nothing_new_was_written_outside_tmp():
         "測試寫到了 tmp 之外、而且不在已登記的存量清單裡：\n  "
         + "\n  ".join(unexpected)
         + "\n⇒ 要嘛把那個路徑導進 tmp，要嘛登記進 `KNOWN_REPO_WRITES` 並寫出理由。")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# BK20 · 模組層副作用在 patch 之前就發生了
+# ══════════════════════════════════════════════════════════════════════
+
+def test_bk20_main_does_not_create_directories_at_import_time():
+    """🔴🔴 BK20：`main.py` 不可以在**模組層**建目錄。
+
+    ```
+    main.py:517   _ensure_archive_dirs()      ← 模組層，不在函式內
+    ```
+    ☠️ 任何在 conftest patch 生效前 `import main` 的路徑，
+    **會在真實磁碟上建目錄**。
+
+    ## 🔑 這是 `BK19` 抓不到的那一條，而理由是**時序**
+
+    `BK19` 的守門裝在 fixture 裡 ⇒ 它跑的時候，**損害已經造成**。
+    📌 〈防護的副作用落在盲側〉：
+    **一道裝在事後的守門，對「事前」那一段完全沒有意見。**
+
+    ## ⚠️ 判準：釘在 **import 邊界**，用 AST 讀而不是真的 import
+
+    ☠️ 真的 `import main` 來驗的話，**這一題自己就會建那些目錄** ——
+    🔑 一個為了證明「不該發生」而讓它發生一次的測試。
+    ⇒ 用 AST 看「模組層有沒有呼叫它」。
+    """
+    import ast
+
+    source = (Path(__file__).resolve().parent.parent / "main.py").read_text(
+        encoding="utf-8")
+    tree = ast.parse(source)
+
+    offenders = []
+    for node in tree.body:                      # ⚠️ 只看**模組層**，不 walk
+        if isinstance(node, ast.Expr) and isinstance(node.value, ast.Call):
+            fn = node.value.func
+            name = getattr(fn, "id", None) or getattr(fn, "attr", None)
+            if name and ("ensure" in name and "dir" in name.lower()
+                         or name == "_ensure_archive_dirs"):
+                offenders.append(f"main.py:{node.lineno} {name}()")
+    assert not offenders, (
+        "這些建目錄的呼叫在 `main.py` 的模組層執行：\n  " + "\n  ".join(offenders)
+        + "\n☠️ conftest 的 patch 還沒生效，它們就已經在真實磁碟上建好目錄了。\n"
+          "⇒ 改成延遲執行（第一次真的要用的時候），或搬進啟動事件處理器。")

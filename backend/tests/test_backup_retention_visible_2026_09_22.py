@@ -534,3 +534,153 @@ def test_bk12_the_monthly_backup_does_not_copy_an_empty_snapshot(arch, monkeypat
         "☠️ 月備份一個月只跑一次 ⇒ 那個月的永久備份永遠是空的，而沒有人會再試。\n"
         "🔑 判準：**複製之前先看那份檔裡面有沒有東西**（BK10 的同一道檢查）。"
     )
+
+
+# ══════════════════════════════════════════════════════════════════════
+# BK10 定案版 · 兩部分缺一不可（A-2 推翻了第一版）
+# ══════════════════════════════════════════════════════════════════════
+#
+# 第一部分  身分對照    快照的 稽核紀錄／報價單／客戶 ≥ 同一天 彙總.json 的值
+# 第二部分  每列位元組   bytes(.db) ÷ 彙總.json 的「稽核紀錄」筆數 ∈ [800, 8000]
+#
+# ☠️ 為什麼第一部分不夠（A-2 用 BK21 當反例）：
+#    08-02／08-03 整庫 311 MB、模組版本 618,363 列，
+#    **而稽核／報價單／客戶三張表全部正常** ⇒ 第一部分對 100 倍膨脹免疫。
+#
+# 📌 D 實測 61 天：
+#    正常 59 天        1,334（08-04）  ~  3,427（08-14）
+#    08-02／08-03      222,839／220,306      ← 上界的 65 倍
+#    08-30/31/09-03    330／328／319         ← 下界的 1/4
+#    五個已知異常日全部在區間外，59 個正常日全部在內。
+#
+# 🔑 這個指標**自己會長大**（分子分母同步）⇒ 不需要維護數字。
+
+#: 身分對照要比的三張表。
+IDENTITY_TABLES = ("稽核紀錄", "報價單", "客戶")
+
+
+def _bytes_per_audit_row(db_bytes, audit_rows):
+    """每列位元組。⚠️ 分母 0 時回 `None`（不是 0）—— 見 BK24。"""
+    if not audit_rows:
+        return None
+    return db_bytes / audit_rows
+
+
+def test_bk10_the_snapshot_is_compared_against_the_same_day_summary(arch, monkeypatch):
+    """🔴 BK10 第一部分：**快照的三張表筆數不可以少於同一天的 `彙總.json`。**
+
+    🔑 判準是「**對照同一天的另一份紀錄**」，不是「大於 0」——
+    ☠️ 大於 0 太寬：全新安裝的第一天三張表也都是 0，
+    而那三天的空庫**確實也是 0** ⇒ 兩者分不出來。
+    """
+    check = getattr(arch, "snapshot_content_ok", None)
+    assert check is not None, (
+        "`archive.py` 缺少 `snapshot_content_ok()` —— BK10 的下限檢查要抽成"
+        "可呼叫的函式，不然只能靠「快照寫完了」當成功。")
+
+    summary = {"稽核紀錄": 2965, "報價單": 35, "客戶": 18}
+    good = {"稽核紀錄": 2965, "報價單": 35, "客戶": 18}
+    bad = {"稽核紀錄": 0, "報價單": 0, "客戶": 0}
+
+    assert check(good, summary, db_bytes=8_331_264) is True, (
+        "內容與彙總一致的快照被判定成失敗 —— 判準太嚴，每天都會紅。")
+    assert check(bad, summary, db_bytes=765_952) is False, (
+        "三張表全空而彙總說有 2965／35／18，卻被判定成成功。\n"
+        "☠️ 那正是 2026-08-30／08-31／09-03。")
+
+
+def test_bk22_a_hundredfold_bloat_is_caught_by_bytes_per_row(arch):
+    """🔴🔴 BK22（＝BK10 第二部分）：**每列位元組要落在 [800, 8000]。**
+
+    ## ☠️ A-2 的反例：第一部分對 100 倍膨脹免疫
+
+    08-02／08-03 整庫 **311 MB**、模組版本 618,363 列，
+    **而稽核／報價單／客戶三張表全部正常** ⇒ 身分對照全部通過。
+    🔑 ⇒ **兩部分缺一不可**，它們抓的不是同一種壞法。
+
+    📌 而這個指標**自己會長大**：資料多了，分子分母同步成長
+    ⇒ **不需要每個月回來調數字**（〈量測比變化慢〉的反面）。
+    """
+    lo, hi = 800, 8000
+    normal = (1_334, 3_427)                 # D 實測 59 個正常日的兩端
+    bloated = (222_839, 220_306)            # 08-02／08-03
+    emptied = (330, 328, 319)               # 08-30／08-31／09-03
+
+    for value in normal:
+        assert lo <= value <= hi, f"正常日 {value} 落在區間外 —— 區間訂太窄"
+    for value in bloated + emptied:
+        assert not (lo <= value <= hi), (
+            f"已知異常日 {value} 落在區間內 —— 區間訂太寬，抓不到它")
+
+
+def test_bk24_a_brand_new_install_is_skipped_not_failed(arch):
+    """🔴 BK24：`稽核紀錄 == 0` 且 `彙總.json` 也是 0 ⇒ **跳過第二部分，不是紅。**
+
+    ☠️ 全新安裝的第一天分母是 0。
+    少了這一條，**每一個全新安裝的第一天都會收到一則假警報** ——
+    🔑 而第一天收到的假警報，會決定使用者往後怎麼看待這個系統的告警。
+    """
+    assert _bytes_per_audit_row(765_952, 0) is None, (
+        "分母是 0 時要回 None（跳過），不可以回 0 或丟例外。")
+    check = getattr(arch, "snapshot_content_ok", None)
+    assert check is not None, "見 BK10 第一部分"
+    assert check({"稽核紀錄": 0, "報價單": 0, "客戶": 0},
+                 {"稽核紀錄": 0, "報價單": 0, "客戶": 0},
+                 db_bytes=765_952) is True, (
+        "全新安裝（兩邊都是 0）被判定成失敗 —— 第一天就假警報。")
+
+
+def test_bk25_vacuum_days_go_on_an_explicit_list_not_a_wider_bound(arch):
+    """🔴🔴 BK25：合法的 VACUUM 會觸發下界 ⇒ **明著登記的例外清單，不是放寬下界。**
+
+    ## ☠️ 放寬下界等於把 `BK11` 那三天一起放掉
+
+    ```
+    08-04（VACUUM）  1,334   ← 合法，而它最接近下界
+    08-30/31/09-03    330 / 328 / 319
+    ```
+    🔑 把下界降到 300 以下就同時放掉了那三天 ——
+    📌 **一個為了容納例外而放寬的判準，放掉的是它本來要抓的東西。**
+
+    ## ⚙️ 反向控制：清單為空時，`BK11` 那三天要紅
+
+    ☠️ 少了這一半，一個「把所有日期都寫進例外清單」的做法會全綠。
+    """
+    accepted = getattr(arch, "SNAPSHOT_RATIO_EXCEPTIONS", None)
+    assert accepted is not None, (
+        "`archive.py` 缺少 `SNAPSHOT_RATIO_EXCEPTIONS` —— "
+        "VACUUM 那幾天要明著登記，不可以靠放寬下界。")
+    assert isinstance(accepted, (set, frozenset, tuple, list))
+
+    for day in ("2026-08-30", "2026-08-31", "2026-09-03"):
+        assert day not in accepted, (
+            f"{day} 出現在例外清單裡 —— 那是 BK11 的空庫，不是合法的 VACUUM。\n"
+            "☠️ 靠把東西寫進排除清單來變綠，是這個專案記過的死結。")
+
+
+def test_bk26_the_bounds_are_not_hardcoded_for_every_customer(arch):
+    """🔴🔴 BK26：`[800, 8000]` **不可以寫死進出貨版本**。
+
+    ## ☠️ D 自陳：只在這 61 天、這一個安裝上驗過
+
+    換一個客戶（稽核少而附件多）分布就不同 ——
+    🔑 而寫死的界線**不會報錯，只會在別人的機器上一直誤判**。
+    📌 同一族：〈版本適配：不可變成孤兒〉與「不要在程式裡寫死單價」（GB5）。
+
+    ## 🔑 這一題的觀測點：**換一組分布，判準跟著動**
+
+    ⚠️ 不是「有沒有一個設定檔」（那可以存在而沒有人讀），
+    是**餵兩組不同的歷史分布，得到兩組不同的界線**。
+    """
+    bounds = getattr(arch, "snapshot_ratio_bounds", None)
+    assert bounds is not None, (
+        "`archive.py` 缺少 `snapshot_ratio_bounds()` —— "
+        "界線要能隨安裝自我校準，不可以是兩個字面值。")
+
+    small = bounds([1_200, 1_400, 1_600, 1_800, 2_000])
+    large = bounds([40_000, 45_000, 50_000, 55_000, 60_000])
+    assert small != large, (
+        f"餵兩組完全不同的歷史分布，界線沒有跟著動：{small} vs {large}\n"
+        "☠️ 那代表它實際上還是寫死的 —— 換個客戶就會一直誤判。")
+    assert small[0] < small[1] and large[0] < large[1], (
+        f"界線的下界沒有小於上界：{small} / {large}")

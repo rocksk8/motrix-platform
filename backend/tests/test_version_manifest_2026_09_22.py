@@ -198,17 +198,30 @@ def test_vr4_entries_created_from_the_ui_are_distinguishable(client, make_user):
 
     ## ☠️ 那幾列**不會回寫進 manifest**
 
-    資料表 361 列、manifest 358 筆 —— 差的三列是從畫面 API 新增的。
+    ⚠️ **數字更正（A-2 2026-09-22 對鍵比過，我原本寫的是錯的）**：
+    ```
+    我寫的      361 vs 358，差「三列」
+    實際        manifest 358 筆其中**有 1 組重複鍵**
+                （`('每日工作事項','2026-07-22r')` ×2）⇒ 去重 357
+                只在 DB、不在 manifest：**4 筆**（不是 3）
+                只在 manifest、不在 DB：0 筆（當時）
+                ⇒ 357 共有 + 4 = 361；357 + 1 重複 = 358。兩個數字都解釋掉了。
+    ```
+    🔑 我那個「差三列」是**兩個總數相減**得來的 ——
+    ☠️ 而相減算不出「哪幾筆」，它只算得出「差幾個」，
+    **而那兩件事在有重複鍵的時候不相等。**
+
+    那四筆是從畫面 API 新增的。
     `_sync_module_versions()` 用的是 `INSERT OR IGNORE`：**只會多不會少**，
     而新資料庫是從 manifest 長出來的
-    ⇒ **重裝或災難還原之後，那三列會消失。**
+    ⇒ **重裝或災難還原之後，那四列會消失。**
 
     ## 🔑 這一題不假裝那件事不存在，它把那幾列變成**數得出來的**
 
     ⚠️ 它**不修**那個缺陷（回寫 manifest 是另一件事，要 A 裁）——
     📌 它保證的是「**要搬家之前，有辦法知道哪幾列只存在於資料庫**」。
-    ☠️ 而沒有這個標記的話，那三列會在還原之後安靜消失，
-    **而「少了三列版本紀錄」沒有任何人會發現。**
+    ☠️ 而沒有這個標記的話，那四列會在還原之後安靜消失，
+    **而「少了四列版本紀錄」沒有任何人會發現。**
     """
     import db
 
@@ -324,3 +337,113 @@ def test_vr6_is_written_down_not_acted_on():
     rows = len(_entries())
     assert rows > 0, "manifest 是空的 —— 那不是「不動它」，那是壞了"
     assert date.today().year >= 2026      # 佔位：這一題不驗行為，見 docstring
+
+
+# ══════════════════════════════════════════════════════════════════════
+# VR7 / VR8 / VR9 · 守門要雙向，而兩個方向的意義完全不同
+# ══════════════════════════════════════════════════════════════════════
+#
+# A-2 查出 `VR1` 只守一個方向。兩個方向：
+# ```
+# DB 有而 manifest 沒有     ☠️ 缺陷  —— 重建資料庫就永久消失（4 筆，已存在 52 天）
+# manifest 有而 DB 沒有     ✅ 正確  —— 那是剛寫進 manifest、還沒重啟同步（9 筆）
+# ```
+# 🔑 **而把第二個方向寫成缺陷，會導出一個「啟動時強制同步」的修法** ——
+# ☠️ **那正是 `_m035` 修掉的東西**（`db.py:2698-2707`）。
+# 📌 〈答案沒錯，是題目問錯了〉：兩邊都是「對不上」，而處置相反。
+
+
+def _drift():
+    from helpers import startup
+    fn = getattr(startup, "manifest_drift", None)
+    assert fn is not None, (
+        "`helpers/startup.py` 缺少 `manifest_drift()` —— "
+        "VR7 要能分別回報兩個方向，而不是回一個「差幾列」的數字。")
+    return fn
+
+
+def test_vr7_a_row_only_in_the_database_is_reported(client):
+    """🔴🔴 VR7：**DB 有而 manifest 沒有的列要被報出來。**
+
+    ☠️ 那四筆已經存在 **52 天**，而 `_sync_module_versions()` 是
+    `INSERT OR IGNORE`：**只會多不會少**，新資料庫是從 manifest 長出來的
+    ⇒ **重建或災難還原之後它們永久消失，而沒有人會發現少了四列。**
+
+    🔑 `VR1` 看不到這一個方向：它只比「最新日期」。
+    📌 一個只守一個方向的守門，**它守不到的那一側不會給你紅燈**。
+    """
+    import db
+    conn = db.get_db()
+    try:
+        conn.execute(
+            "INSERT INTO module_versions (module, version, updated_at, content, "
+            "updated_by) VALUES (?,?,?,?,?)",
+            ("VR7 只在資料庫裡的模組", "2026-09-22z", "2026-09-22T00:00:00",
+             "用來驗雙向守門的那一側。", "system"))
+        conn.commit()
+    finally:
+        conn.close()
+
+    drift = _drift()()
+    db_only = drift.get("db_only") or []
+    assert any("VR7" in str(item) for item in db_only), (
+        f"DB 裡有一列不在 manifest 裡，而守門沒有報出來：{drift}\n"
+        "⇒ 重建資料庫之後它會永久消失。")
+
+
+def test_vr7_the_guard_goes_green_once_it_is_written_back(client, monkeypatch):
+    """🔴 VR7 反向控制：**補進 manifest 之後要綠。**
+
+    ☠️ 少了這一題，一個「永遠報有漂移」的實作會讓上一題全綠 ——
+    而那道守門從此沒有人看。
+    """
+    import db
+    from helpers import startup
+
+    extra = {"module": "VR7 補回來的模組", "version": "2026-09-22y",
+             "date": "2026-09-22", "time": "00:00",
+             "content": "補進 manifest 之後，雙向守門要恢復綠燈。"}
+    monkeypatch.setattr(startup, "_manifest_entries",
+                        lambda: _entries() + [extra], raising=False)
+
+    conn = db.get_db()
+    try:
+        conn.execute(
+            "INSERT INTO module_versions (module, version, updated_at, content, "
+            "updated_by) VALUES (?,?,?,?,?)",
+            (extra["module"], extra["version"], "2026-09-22T00:00:00",
+             extra["content"], "system"))
+        conn.commit()
+    finally:
+        conn.close()
+
+    drift = _drift()()
+    db_only = [str(x) for x in (drift.get("db_only") or [])]
+    assert not any("補回來" in x for x in db_only), (
+        f"已經補進 manifest 了，守門還是把它報成漂移：{drift}")
+
+
+def test_vr9_a_row_only_in_the_manifest_is_not_a_defect(client, monkeypatch):
+    """🔴🔴 VR9：**`manifest 有而 DB 沒有` 是正確狀態，不可以寫成缺陷。**
+
+    那 9 筆是 B 剛寫的 `VR3`，**開發機沒重啟所以還沒同步** ——
+    ☠️ 把它寫成缺陷會導出一個「**啟動時強制同步**」的修法，
+    🔑 **而那正是 `_m035`（`db.py:2698-2707`）修掉的東西。**
+
+    📌 〈答案沒錯，是題目問錯了〉：
+    兩個方向都是「對不上」，**而處置相反** ——
+    ⚠️ 一個把兩者混成「差 N 列」的指標，會讓人去修錯的那一邊。
+    """
+    drift = _drift()()
+    assert "manifest_only" in drift, (
+        f"`manifest_drift()` 沒有把兩個方向分開回報：{sorted(drift)}\n"
+        "⇒ 一個「差 N 列」的數字會讓人去修錯的那一邊。")
+    assert isinstance(drift.get("manifest_only"), list)
+    # 🔑 關鍵：它是**資料**不是**錯誤**。守門不可以因為它而判失敗。
+    verdict = drift.get("ok")
+    assert verdict is not None, (
+        f"`manifest_drift()` 沒有給一個明確的成敗判定：{sorted(drift)}")
+    if drift["manifest_only"] and not (drift.get("db_only") or []):
+        assert verdict is True, (
+            "只有「manifest 有而 DB 沒有」時被判定成失敗 —— "
+            "那是等待重啟同步的正常狀態，不是缺陷。")
