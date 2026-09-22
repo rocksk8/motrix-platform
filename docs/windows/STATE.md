@@ -12962,6 +12962,98 @@ system.py 只有 2 次，而其中一次就是這一條
 
 ---
 
+> 🔷 **排程：這一節排在**下一包之後**（A 2026-09-22 明訂）。
+> ⇒ `SA7`–`SA11` 直接進 `PENDING`，而三欄是：
+> **誰驗**：C（題）＋B（碼）　**什麼時候驗**：下一包出貨之後的第一輪　**驗完寫哪**：`docs/windows/STATE.md §10 補`
+>
+> 🔑 **而這一行本身是一個新規則**：視窗 C 指出「守門同時是打包的閘門，而它的輸入是一份正在長大的規格」
+> ⇒ **A 每新增一節，擋打包的那道門就立刻紅一次**。
+> ⚠️ ☠️ **而把新的一律丟進 PENDING 是一條通往〈基準推進死結〉的路** ——
+> 所以 **A 新增一節時要順手指定順序**，C 才填得出「什麼時候驗」那一欄。
+
+## §10 補 · **把「設定」模組拆細**（使用者 2026-09-22：「把設定模組拆細這件也列入修正，未來可以更方便修改」）
+
+---
+
+### 🔴 先更正我自己講過兩次的數字
+
+| 我說過 | 實際（AST，526 支路由） |
+|---|---|
+| ~~「寬鬆寫法全 repo 100 次／12 支 router」~~ | **11 個模組、共 88 支路由**用 `module=` 逃生門 |
+| ~~「指南類佔 90 次」~~ | **7 個 `*_guide_edit` 模組共 78 支** —— 而它們是**對的** |
+| ~~「`settings` 這個模組名太大」~~ | 🔴 **`settings` 只蓋 3 支** |
+
+☠️ **兩次都錯在同一個地方**：
+第一次我用 `grep -c` 數**行數**（含註解、含多重匯入行）當成路由數；
+第二次我用 AST 但**只比對 `ast.Constant`** ⇒ `module=_EDIT_MODULE`（**變數**）
+被歸進「superadmin 專屬」，**而 7 支指南 router 全用變數。**
+🔑 **修法**：工具加對照組（`access_guide.py` **必須**出現在某個模組底下）＋
+解析模組層級常數 ⇒ 兩條都亮了才信。**那是 `HC3` 的第二次應用。**
+
+---
+
+### 📊 實際分佈
+
+```
+53  superadmin 專屬（沒有模組逃生門）    users / org / 承攬商身分證 / 簽核流程設定 …
+12  access_guide_edit        12  automation_guide_edit   12  gateway_guide_edit
+12  monitor_guide_edit       12  switch_guide_edit        9  env_guide_edit
+ 9  netarch_guide_edit       10  payslip                  5  contractor_list
+ 4  netplan_edit              3  settings
+```
+
+### 🔑 而真正的問題不是「太大」，是**讀與寫綁在同一把鑰匙上**
+```
+GET  /api/settings/reminder-send-failures    唯讀（診斷）
+GET  /api/system/runtime-switches            唯讀（診斷）
+PUT  /api/settings/company-profile           🔴 改匯款帳號
+```
+☠️ **給一個人「看得到系統診斷」，就同時給了他「改錢匯到哪裡」。**
+📌 **而 7 個 `*_guide_edit` 已經把這件事做對了** —— 名字裡的 `_edit` 就是答案。
+
+---
+
+### ⇒ 要做的
+
+- **SA7.** 🔴 **模組名要分讀寫。** 現有的三個沒分的改名／拆開：
+```
+settings          →  settings_view   （唯讀診斷：reminder-send-failures / runtime-switches）
+                     ⚠️ 而 company-profile 的寫入**不進任何模組** —— 它走 SA1 的 superadmin only
+payslip           →  payslip_view / payslip_edit
+contractor_list   →  contractor_view / contractor_edit
+                     📌 `/api/contractors/{cid}/id-card` 讀身分證掃描檔 —— 那一支要單獨想
+```
+- **SA8.** 🔴 **判準不是「幾支路由」，是「這把鑰匙同時開了哪幾種門」**
+  ```
+  唯讀 vs 寫入          ← 最重要的一刀
+  一般資料 vs 金錢／身分  ← 第二刀（匯款帳號、統編、抬頭、身分證掃描檔）
+  ```
+  ☠️ **用「路由數」當判準會得到錯的答案** —— `settings` 只有 3 支，而它是最危險的一個。
+  🔑 **我自己就是用路由數判斷，然後說錯了兩次。**
+- **SA9.** ⚠️ **改名要有遷移**：現有使用者的 `modules` 欄位裡存著舊名。
+  ```
+  settings         →  settings_view
+  payslip          →  payslip_view + payslip_edit   （保守：兩個都給，不要靜默降權）
+  contractor_list  →  contractor_view + contractor_edit
+  ```
+  ☠️ **不遷移的話，一批人在升級的那一刻安靜地失去權限**，
+  **而症狀是「某個頁面突然打不開」，跟「他本來就沒權限」長得一模一樣。**
+- **SA10.** 🔴 **反向控制**：
+  ```
+  只有 *_view 的人  ⇒ 讀得到、寫入 403
+  只有 *_edit 的人  ⇒ 寫得進去
+  升級前有 payslip 的人 ⇒ 升級後兩支都還在（SA9 的遷移真的跑了）
+  ```
+- **SA11.** **權限設定畫面要看得出來哪一個是「可以改東西」的。**
+  📌 一個叫 `settings` 的勾選框，**勾的人不知道自己給了什麼。**
+
+### ⛔ 這一輪不做
+- 53 支 superadmin 專屬的重新分類（那一組現在是最嚴的，往下放才需要理由）
+- 細到「單一欄位」的權限
+- 權限的稽核報表
+
+---
+
 ### 2026-09-21 22:19 · 📌 **A 重啟了測試機 666**（使用者要看新功能）
 
 ```
