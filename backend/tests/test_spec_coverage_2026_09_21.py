@@ -58,7 +58,68 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent.parent
 SPEC = REPO / "docs" / "windows" / "STATE.md"
+SCOPE = REPO / "docs" / "windows" / "SCOPE.md"
 TESTS = Path(__file__).resolve().parent
+
+# ══════════════════════════════════════════════════════════════════════
+# 🔴 2026-09-22 第三次大改：閘門只看 `SCOPE.md` 的 `THIS`
+# ══════════════════════════════════════════════════════════════════════
+#
+# 我提的結構問題（A 裁示採納，`c39f1e6`）：
+# **「守門是打包的閘門，而它的輸入正在以快過我收斂的速度成長。」**
+# ```
+# 我開始時    BK1-15 / GC1-7 / MN1-5
+# 交 BK19 後  ＋BK16-18
+# 交 BK10 後  ＋BK20-23 ＋BK27 ＋GC8 ＋VR7-10 ＋NB1-11
+# 再跑一次    ＋BK28-30 ＋GC9-10
+# ```
+# ☠️ 那道閘門因此**量不出「還差多少」**：它永遠紅，而紅的原因每次都不同。
+# 📌 〈迴圈的目標函數〉：**每一輪都成功，而整體愈來愈難完成 ——
+#    問題不在任何一輪裡。**
+#
+# ## ⚠️ A 不採「凍結編號」而採「拆範圍檔」，理由值得留著
+#
+# **凍結編號是修結果** —— 下一次發現得快一點，同一件事就再來一次。
+# **拆範圍檔是修作法**：閘門從此只看範圍內的，
+# 而「發現新東西」不再等於「閘門更紅」。
+#
+# ## 🔑 而這個改動本身有一個明顯的濫用路徑，要講在前面
+#
+# ☠️ **把東西從 `THIS` 搬到 `NEXT` 就能讓閘門變綠。**
+# ⇒ 所以 `SCOPE.md` 的規則是「**搬進 `THIS` 要寫理由**」，
+#   而理由只有兩種形狀：**使用者的原話**，或**它是 `THIS` 裡某一條的前置**。
+# ⚙️ 反向控制：`NEXT` 為空時要有人懷疑 ——
+#   **不是清完了，是沒有人在往裡面放。**
+
+#: `SCOPE.md` 裡列編號的樣子：區塊底下的程式碼圍欄，一行可能有多個編號。
+_SCOPE_NUM = re.compile(r"\b([A-Z]{1,2}\d{1,2}[a-z]?)\b")
+
+
+def _scope_sections():
+    """`SCOPE.md` 的三個區塊 → 各自的編號集合。
+
+    ⚠️ 用 `## ` 標題切段，而**不是**靠段落順序 ——
+    ☠️ 靠順序的話，A 在中間插一段說明就會讓整份解析錯位，
+    🔑 而錯位的樣子是「某一區忽然空了」，那與「清完了」長得一樣。
+    """
+    text = SCOPE.read_text(encoding="utf-8")
+    sections = {"THIS": set(), "NEXT": set(), "EXEMPT": set()}
+    current = None
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("## "):
+            current = None
+            for key in sections:
+                if key in stripped:
+                    current = key
+                    break
+            continue
+        if current and (stripped.startswith("```") or not stripped):
+            continue
+        if current:
+            for num in _SCOPE_NUM.findall(line):
+                sections[current].add(num.upper())
+    return sections
 
 #: 規格裡宣告一條驗收條件的樣子：`- **SL3.**` / `- N1. 🔴 ...`
 # ⚠️ 粗體是**可有可無**的：規格裡兩種寫法都有。
@@ -222,6 +283,16 @@ EXEMPT = {
     "BK27": "已結案（D 本機實驗）：`src.backup(dst)` 連空頁一起複製 ⇒ "
             "BK23 的縮小不可能來自快照路徑 ⇒ 只剩「來源被 VACUUM 或重建」。"
             "它是一個排除法的結論，不是一個可以持續驗證的不變量",
+    # ── §12 BK25 · A 2026-09-22 取消，而 `SCOPE.md` 的 `THIS` 還列著它 ──
+    # 倍率法（bytes ÷ median(前 7 份)）讓例外清單不再需要：
+    # 08-04 那次合法的 VACUUM 是 0.568，離下界 0.3 還很遠。
+    # ⚠️ 我已經把那一題拆掉了（留著一題驗「取消掉的需求」比沒有更糟）。
+    # 📌 這一列會一直在，直到 A 把 `BK25` 從 `SCOPE.md` 的 `THIS` 移走 ——
+    # 🔑 我不自己去改 `SCOPE.md`：那是 A 的檔，而**能自己改範圍的人，
+    #    等於能自己決定這一包要做什麼**。
+    "BK25": "🔵 A 2026-09-22 已取消（倍率法不需要例外清單）。"
+            "⏳ 等 A 從 SCOPE.md 的 THIS 移除。誰驗＝A／何時＝下一次動 SCOPE 時／"
+            "寫在哪＝docs/windows/SCOPE.md",
     # ── §12 BK23 · 成因未知的縮小 ───────────────────────────────
     # 2026-08-04／08-05 的快照比 08-01 小 46%。
     # ✅ BK27 已排除快照路徑（`src.backup(dst)` 連空頁一起複製）
@@ -536,6 +607,14 @@ AMBIGUOUS_ACK = {
     "P1", "P2", "P3", "P4", "R1", "R2", "SL19",
     "T1", "T2", "T3", "T4", "T5", "U8", "U9",
     "V1", "V2", "V3",
+    # 🔴 2026-09-22 新撞名：`§18 放行判準` 用了 `G1`～`G10`，
+    #    而 `§3` 的 `G` 系列（地圖／地理編碼）早就佔著同樣的號。
+    # ☠️ 兩者完全不同類：§18 是**放行條件**（A 與 A-2 執行的人工關卡），
+    #    §3 是**驗收條件**（我寫成測試的）。
+    # 🔑 守門分不出 `test_g3_` 指的是哪一個 ⇒ 兩邊都不給「已實作」的信用。
+    # 📌 而這一次的代價比 T1–T8 那次小，**只因為它不在這一包的範圍裡** ——
+    #    ⚠️ 不是因為我們做對了什麼。請 A 把 §18 那組改成別的字首。
+    "G3", "G4", "G5", "G6", "G7", "G8", "G9", "G10",
     # 🔴 另一種撞名，來自完全不同的方向：**`s3` 同時是 Amazon S3。**
     # `test_cloud_storage_2026_09_07.py` 有六支 `test_s3_*`（物件儲存），
     # `test_e2e_system_settings_ui_2026_09_11.py` 還有一支。
@@ -674,7 +753,28 @@ def _headings_to_ignore():
 
 
 def _declared_where():
-    """每個編號 → 它在規格裡被宣告的行號清單。"""
+    """每個編號 → 它在 `STATE.md` 裡被宣告的行號清單（**全部，不限範圍**）。
+
+    🔑 兩份檔案各答一個問題：
+    ```
+    SCOPE.md   這一包**收哪些**          ← 閘門的範圍
+    STATE.md   那一條**條文長什麼樣**    ← 行號、撞名判斷
+    ```
+    ⚠️ 一個只讀 `SCOPE.md` 的版本會失去撞名偵測（`AMBIGUOUS`），
+    ☠️ 而撞名正是這支守門歷史上最貴的一個缺陷（T1–T8 那次）。
+
+    ## ⚠️ 範圍**不在這裡**套用，而我第一版把它套在這裡了
+
+    ☠️ 把 `_declared()` 整個縮到 `THIS` 之後，其他五道反向控制全部誤判：
+    ```
+    「PENDING 裡有規格沒宣告的」     ← 範圍外的全部變成幽靈
+    「測試宣稱了規格沒有的編號」      ← 已實作而在 NEXT 的全部變成越權
+    「AMBIGUOUS_ACK 的編號還在嗎」    ← 同上
+    ```
+    🔑 **範圍限制的是「這一包要全綠」，不是「這個編號存不存在」** ——
+    📌 兩件事被我混成一件，而混在一起之後**七道檢查同時紅**。
+    ⇒ 範圍只套在 `test_every_declared_condition_has_a_test` 的缺題計算上。
+    """
     text = SPEC.read_text(encoding="utf-8")
     where = defaultdict(list)
     ignore = _headings_to_ignore()
@@ -766,9 +866,22 @@ def test_every_declared_condition_has_a_test():
         f"只從規格裡解析出 {len(declared)} 條驗收條件 —— 那個 regex 八成失效了。\n"
         "⚠️ **解析器壞掉時這支守門會安靜地全綠**，所以先驗它有沒有讀到東西。"
     )
+    # 🔴 2026-09-22：閘門只看 `SCOPE.md` 的 `THIS`。
+    #
+    # 📌 `NEXT` 與 `EXEMPT` 裡的編號**算已登記**，不算缺口 ——
+    # 它們有人管（A 明著放進去的），只是不在這一包。
+    # ☠️ 而「範圍外的也算缺口」正是這道閘門先前量不出「還差多少」的成因。
+    scope = _scope_sections()
+    assert len(scope["THIS"]) > 10, (
+        f"`SCOPE.md` 的 `THIS` 只解析出 {len(scope['THIS'])} 個編號 —— "
+        "那個解析八成壞了。\n"
+        "⚠️ 讀不到範圍時這道閘門會**安靜地全綠**，"
+        "而全綠的意思會變成「這一包什麼都不用做」。"
+    )
     accounted = (_implemented() | set(EXEMPT) | set(PENDING)
-                 | AMBIGUOUS_ACK | set(UNTRIAGED_HEADINGS))
-    missing = sorted(declared - accounted)
+                 | AMBIGUOUS_ACK | set(UNTRIAGED_HEADINGS)
+                 | scope["NEXT"] | scope["EXEMPT"])
+    missing = sorted((declared & scope["THIS"]) - accounted)
     assert not missing, (
         "這些條件在規格裡宣告了，而**沒有人管**：\n  "
         + "\n  ".join(missing)

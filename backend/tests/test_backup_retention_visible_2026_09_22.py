@@ -630,34 +630,6 @@ def test_bk24_a_brand_new_install_is_skipped_not_failed(arch):
         "全新安裝（兩邊都是 0）被判定成失敗 —— 第一天就假警報。")
 
 
-def test_bk25_vacuum_days_go_on_an_explicit_list_not_a_wider_bound(arch):
-    """🔴🔴 BK25：合法的 VACUUM 會觸發下界 ⇒ **明著登記的例外清單，不是放寬下界。**
-
-    ## ☠️ 放寬下界等於把 `BK11` 那三天一起放掉
-
-    ```
-    08-04（VACUUM）  1,334   ← 合法，而它最接近下界
-    08-30/31/09-03    330 / 328 / 319
-    ```
-    🔑 把下界降到 300 以下就同時放掉了那三天 ——
-    📌 **一個為了容納例外而放寬的判準，放掉的是它本來要抓的東西。**
-
-    ## ⚙️ 反向控制：清單為空時，`BK11` 那三天要紅
-
-    ☠️ 少了這一半，一個「把所有日期都寫進例外清單」的做法會全綠。
-    """
-    accepted = getattr(arch, "SNAPSHOT_RATIO_EXCEPTIONS", None)
-    assert accepted is not None, (
-        "`archive.py` 缺少 `SNAPSHOT_RATIO_EXCEPTIONS` —— "
-        "VACUUM 那幾天要明著登記，不可以靠放寬下界。")
-    assert isinstance(accepted, (set, frozenset, tuple, list))
-
-    for day in ("2026-08-30", "2026-08-31", "2026-09-03"):
-        assert day not in accepted, (
-            f"{day} 出現在例外清單裡 —— 那是 BK11 的空庫，不是合法的 VACUUM。\n"
-            "☠️ 靠把東西寫進排除清單來變綠，是這個專案記過的死結。")
-
-
 def test_bk26_the_bounds_are_not_hardcoded_for_every_customer(arch):
     """🔴🔴 BK26：`[800, 8000]` **不可以寫死進出貨版本**。
 
@@ -684,3 +656,71 @@ def test_bk26_the_bounds_are_not_hardcoded_for_every_customer(arch):
         "☠️ 那代表它實際上還是寫死的 —— 換個客戶就會一直誤判。")
     assert small[0] < small[1] and large[0] < large[1], (
         f"界線的下界沒有小於上界：{small} / {large}")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# BK22 定案版 · 倍率法（A-2 推翻了 [800, 8000]）
+# ══════════════════════════════════════════════════════════════════════
+#
+# ☠️ A-2 推翻的理由：**同一安裝 61 天的自然變動是 2.57 倍**，
+#    而 `[800,8000]` 的餘裕只有 1.67x／2.33x —— **兩個都小於自然變動**。
+# 🔑 而 `BK10`／`BK22` 是要跑在**客戶機**上的產品碼 ⇒ 會一直誤判。
+#
+# 定案：
+# ```
+# bytes(今天的快照) ÷ median(前 7 份快照的 bytes)
+# 上界 3.0   對正常最大 1.758 餘裕 1.71x ｜ 對異常 103   距離 34x
+# 下界 0.3   對正常最小 0.568 餘裕 1.89x ｜ 對異常 0.12  距離 2.5x
+# ```
+# 📌 倍率**無單位、不綁安裝** ⇒ 從「不可寫死、預設關閉」改成「**開著出貨**」。
+# 📌 而 `BK25` 的例外清單因此取消：08-04 的合法 VACUUM 是 0.568，離下界還很遠。
+
+RATIO_LO, RATIO_HI = 0.3, 3.0
+
+
+def test_bk22_the_ratio_separates_normal_days_from_the_known_anomalies():
+    """🔴 BK22 定案版：**倍率要落在 [0.3, 3.0]。**
+
+    這一題驗的是**判準本身分不分得開**（用 A-2 算出來的實際倍率），
+    ⚠️ **不是「產品有在用這個判準」** —— 那一半在 `BK10`／`BK26` 紅著。
+    🔑 兩者的距離就是〈證據的適用範圍〉：**一個綠燈要講清楚它證明了什麼。**
+    """
+    normal = (0.568, 1.758)          # 59 個正常日的兩端（含 08-04 的 VACUUM）
+    anomalies = (103.0, 0.12)        # 膨脹那兩天 / 空庫那三天
+
+    for value in normal:
+        assert RATIO_LO <= value <= RATIO_HI, (
+            f"正常日的倍率 {value} 落在區間外 —— 客戶機上會一直誤判")
+    for value in anomalies:
+        assert not (RATIO_LO <= value <= RATIO_HI), (
+            f"已知異常的倍率 {value} 落在區間內 —— 抓不到它")
+
+    # 📏 餘裕要大於同一安裝的自然變動（A-2 實測 2.57 倍），否則會誤判。
+    assert RATIO_HI / 1.758 > 1.5, "上界對正常最大值的餘裕太小"
+    assert 0.568 / RATIO_LO > 1.5, "下界對正常最小值的餘裕太小"
+
+
+def test_bk29_the_first_seven_days_have_no_baseline_and_are_skipped(arch):
+    """🔴🔴 BK29：**前 7 天沒有基準 ⇒ 跳過，不是紅。**
+
+    ☠️ 倍率的分母是「前 7 份快照的中位數」——
+    **全新安裝的第一天一份都沒有。**
+    🔑 少了這一條，**每一個全新安裝的第一天都會假警報** ——
+    📌 而第一天收到的假警報，會決定使用者往後怎麼看待這個系統的告警。
+
+    ⚠️ 它必須與 `BK22` **同一包**（A 明著寫的）：
+    ☠️ 先出 `BK22` 再補 `BK29`，中間每一個新裝的客戶都會收到那則假警報。
+    """
+    ratio = getattr(arch, "snapshot_size_ratio", None)
+    assert ratio is not None, (
+        "`archive.py` 缺少 `snapshot_size_ratio()` —— 倍率法要抽成可呼叫的函式。")
+
+    assert ratio(8_000_000, []) is None, (
+        "一份歷史都沒有時要回 None（跳過），不可以回 0 或丟例外。")
+    assert ratio(8_000_000, [8_000_000] * 3) is None, (
+        "只有 3 份歷史（< 7）時要回 None —— 中位數還不穩，會誤判。")
+
+    seven = [8_000_000] * 7
+    got = ratio(8_000_000, seven)
+    assert got is not None and abs(got - 1.0) < 0.01, (
+        f"七份一樣大的歷史，今天也一樣大，倍率應該是 1.0，實際 {got}")
