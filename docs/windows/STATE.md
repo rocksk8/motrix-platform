@@ -22837,3 +22837,111 @@ in 型   不精確**不影響結論**（43 或 121 都證明「它存在」）
   於是為了解釋「簽核後要能修正」，發明了「改了重新送審」。
   ⚠️ **既有系統早就有那條路，它叫退回。**
 
+
+## §47 · 刪除要簽核＋永不真刪（2026-09-22 21:3x 使用者裁示）
+
+### 使用者原話（逐字）
+
+> 好，繼續處理，然後像是有上傳檔案、文件、照片，只要是刪除一樣需要簽核，
+> 管理員以下的人員即便有送簽核刪除，一樣保留檔案，只有超級管理員看的到
+> 並且會有備註已送簽核刪除，超級管理員刪除也需要備註該檔案已刪除，並有快照保留
+
+---
+
+### 🔴 §47a　**這個設計已經存在，而且欄位逐字對得上**（第 4 次）
+
+`backend/db.py:1237` `_m028_dev_cases_soft_delete`，docstring 逐字
+「Add soft-delete + pending-delete columns to dev_cases」：
+
+```
+is_deleted            INTEGER NOT NULL DEFAULT 0    ← 已刪除
+deleted_at            TEXT                          ← 何時
+deleted_by            TEXT                          ← 誰刪的
+deleted_snapshot      TEXT                          ← ★ **快照保留**
+pending_delete        INTEGER NOT NULL DEFAULT 0    ← ★ **已送簽核刪除**
+delete_requested_by   TEXT                          ← 誰送的
+delete_requested_at   TEXT                          ← 何時送的
+delete_reason         TEXT                          ← ★ **備註**
+:1252  INDEX idx_dev_cases_is_deleted ON dev_cases(is_deleted)
+```
+
+🔑 **使用者的每一句都對得上一個既有欄位。**
+⇒ **這是把一個已上線的樣板延伸到檔案層級，不是新設計。**
+
+⚠️ **而它不是全系統慣例**（與 `EDITABLE_STATUSES` 的 8 個 router 不同）：
+`is_deleted` 只在 **3 張表**（`db.py:526` / `:931` / `dev_cases`）。
+⇒ 判準（`§46` 那條）：**它是一個模組的選擇，不是這個系統的作法**
+⇒ 延伸它是**擴大採用**，要明著寫成決定，不能當成「照舊」。
+
+### 🔴 §47b　而檔案那一側**現在是硬刪**
+
+```
+os.remove / os.unlink 實際出現在 6 處：
+  helpers/uploads.py:112   ★ delete_document_file() —— **共用入口**
+  routers/quotations.py:2222 / :4683
+  routers/dev_crm.py:954
+  routers/reports.py:2302
+  routers/system.py:586
+```
+⇒ **要改的主要是 `helpers/uploads.py:112` 那一支**，其餘五處要逐一確認
+是不是都經過它（**還沒查，不要假設**）。
+
+☠️ **而那支函式現在有一個靜默失敗**：
+```python
+try:
+    full = os.path.join(UPLOADS_ROOT, target["path"])
+    if os.path.isfile(full):
+        os.remove(full)
+except Exception:
+    pass                      # 🔴 刪不掉也不報
+return [f for f in existing_files if f.get("id") != file_id]   # 🔴 照樣從清單移除
+```
+⇒ **刪除失敗 ⇒ 檔案還在磁碟上、而紀錄說它不見了 ⇒ 孤兒檔，沒有人知道。**
+📌 〈降級之後它還是會動〉。新設計要把它改成**拒絕那一筆**，不是吞掉。
+
+### §47c　可見性規則（定版）
+
+```
+pending_delete = 1   一般使用者      ❌ 看不到
+                     **超級管理員**  ✅ 看得到，標「**已送簽核刪除**」
+                                        ＋ 誰送的／何時／備註
+is_deleted = 1       一般使用者      ❌ 看不到
+                     **超級管理員**  ✅ 看得到，標「**該檔案已刪除**」
+                                        ＋ 誰刪的／何時／備註 ＋ 快照
+```
+⚠️ **「管理員以下」** ⇒ 依 `auth.py:147`，這個系統只有 `superadmin` 直通。
+⇒ **`admin` 也在「以下」**：admin 送出的刪除同樣只是 `pending_delete`，
+**只有 `superadmin` 能讓 `is_deleted` 成立**。
+🔑 這一句要寫死——「管理員以下」有兩種讀法（含不含 admin 自己），
+而使用者接著說「只有超級管理員看的到」，**那句話解釋了前一句**。
+
+### 🔴 §47d　「快照保留」對**檔案**是什麼意思——這一題要答
+
+`dev_cases` 的 `deleted_snapshot` 是 **TEXT**（紀錄的 JSON 快照）。
+而檔案不是紀錄：
+```
+甲  連**實體檔案**一起留（移到 uploads/_deleted/，不真的 os.remove）
+    ⇒ 「刪除」從來不釋放空間；⚠️ 而附件要進每日備份 ⇒ **備份也會一起長**
+乙  只留 **metadata 快照**（檔名／大小／hash／上傳者／時間）
+    ⇒ 空間可回收，而**照片本身沒了** ⇒ 「快照」救不回內容
+```
+⇒ **🟡 A 的預設：甲（連實體檔案一起留）。**
+理由是使用者整段話的意思是「**永不真的刪**」，而乙會讓
+「超級管理員刪除…並有快照保留」這句話**只剩一半為真**。
+⚠️ **代價要讓使用者知道**：磁碟與每日備份都只會增長，不會因為刪除而縮小。
+📌 若他要乙，那要同時定「幾天後才真的清掉」——而那又撞
+`§36c` 的保留年限（**未結會計事項不受年限限制**）。
+
+### §6 新增
+
+- 🔴 **一個設計「已經存在」有兩種強度，要分開講。**
+  ```
+  全系統慣例    EDITABLE_STATUSES ⇒ 8 個 router ⇒ **不一致本身就是缺陷**
+  單一模組選擇  is_deleted        ⇒ 3 張表     ⇒ **延伸它是一個要明著做的決定**
+  ```
+  ⚠️ 把後者講成「照舊」，等於**藉著既有性避開一個決定**。
+
+- **「刪除失敗就吞掉」比「刪除失敗就報錯」更糟的地方，在於紀錄已經改了。**
+  `uploads.py:112` 的 `except Exception: pass` 之後**照樣把檔案從清單移除**
+  ⇒ 磁碟上有、紀錄裡沒有 ⇒ **孤兒檔，而且沒有人會發現。**
+
