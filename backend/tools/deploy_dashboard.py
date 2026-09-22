@@ -228,12 +228,86 @@ _LEGACY_FAIL_RE = re.compile(r"更新失敗|已自動回滾|\[FAIL\]")
 #:    ⇒ 對 deploy 而言「收不到握手」本身就是一個要擋下來的訊號。
 _PROTOCOL_LEGACY_FALLBACK = {"rollback"}
 
+#: `decide_outcome` 認得的動作。**不在這裡面的一律拋錯**（§42b）。
+#: ⚠️ `build` 刻意**不在**：它走 `_PROTOCOL_EXEMPT`，根本不該走到判定這一支。
+_KNOWN_ACTIONS = {"deploy", "rollback"}
+
 _PROTOCOL_EXEMPT = {
     # `build` 跑的是本機打包（`build_deploy_package.ps1`），**完全不碰正式機**
     # ⇒ `rolled_back` 對它沒有意義，硬要它印一個 `not_applied` 只是噪音。
     # ⚠️ 而它的失敗本來就擋得住：打包腳本任何一步失敗都 `exit 1`。
     "build",
 }
+
+
+#: 🔴 **同一個機器值，兩個動作講不同的話**（§41a）。
+#:
+#: ☠️ 統一成一句的話，回滾前的畫面會說「**正式機沒有被碰過**」，
+#:    而它剛剛才被一次失敗的部署動過 —— 🔑 而使用者正是在**剛出事、
+#:    正在回滾**的時候看它。
+#:
+#: 🔑 **參考點不同**，不是措辭不同：
+#:      deploy 的 not_applied   ＝ 正式機完全沒被碰過
+#:      rollback 的 not_applied ＝ 還原沒開始，維持在按回滾之前的樣子
+#: ⇒ 所以**不可以**寫成「基本文案 ＋（回滾）」那種後綴 ——
+#:   那樣兩個動作不同了，而意思沒變。
+_ROLLED_BACK_TEXT = {
+    "deploy": {
+        "not_applied": "正式機沒有被碰過。",
+        "applied": "新版已經完整寫進正式機。",
+        "applied_no_restore": "新版只寫了一半就中斷，而且沒有還原。",
+        "restored": "已還原到套用前的版本。",
+        "restored_unhealthy": "已還原到套用前的版本，但它仍然沒有回應。",
+        # 金絲雀：不從任何顯式出口產生（§42）
+        "unknown": "這一次執行沒有回報它改動了什麼——出口可能漏設了狀態。",
+    },
+    "rollback": {
+        "not_applied": "還原沒有開始，正式機維持在你按回滾之前的樣子。",
+        "applied": "正式機上是還原之前的那一版，這次回滾沒有改動它。",
+        "applied_no_restore": "還原做到一半就中斷了，正式機現在不是完整的任何一版。",
+        "restored": "已經還原到你選的那個快照。",
+        "restored_unhealthy": "已經還原到你選的那個快照，但它仍然沒有回應。",
+        "unknown": "這一次執行沒有回報它改動了什麼——出口可能漏設了狀態。",
+    },
+}
+
+
+def parse_result_line(output: str):
+    """把**最後一行** `::RESULT::` 拆成 dict，沒有就回 `None`。
+
+    ⚠️ 與 `decide_outcome` 共用同一個 `_RESULT_RE` —— **不要在這裡另寫一份**。
+    ☠️ 兩份正則會分岔，而分岔之後「判定說失敗、畫面說成功」，
+       兩邊各自都看起來很合理。
+    """
+    found = _RESULT_RE.findall(output or "")
+    if not found:
+        return None
+    version, status, rolled_back, service, exit_field = found[-1]
+    return {"v": version, "status": status, "rolledBack": rolled_back,
+            "service": service, "exit": exit_field}
+
+
+def describe_rolled_back(value: str, action: str) -> str:
+    """把 `rolled_back` 的機器值變成人話。**同一個值，兩個動作講不同的話。**
+
+    🔴 這支函式存在的唯一理由是 §44 那個根因：
+    `rolled_back` 在兩支腳本裡曾經回答**兩個不同的問題** ——
+    ```
+    甲「磁碟上現在是什麼」   乙「這一次執行改動了什麼」
+    ```
+    §44 採**讀法乙**，機器值因此統一成一份；
+    ☠️ **而參考點仍然不同** —— 同樣是「這一次沒有改動磁碟」：
+    ```
+    deploy    正式機**完全沒被碰過**
+    rollback  還原**沒開始**，而正式機通常剛被一次失敗的部署動過
+    ```
+    ⇒ 機器值一份、人話兩份。**這裡就是那個「兩份」。**
+
+    ⚠️ 認不得的值也要給得出話 —— 這支函式在畫面路徑上，
+    ☠️ 回空字串的話使用者看到一片空白，而他分不出那是「沒有資料」還是「狀態正常」。
+    """
+    table = _ROLLED_BACK_TEXT.get(action) or _ROLLED_BACK_TEXT["deploy"]
+    return table.get(value) or ("狀態回報看不懂（%s）——這不是預期的值。" % value)
 
 
 def used_legacy_protocol(output: str, action: str) -> bool:
@@ -306,6 +380,21 @@ def decide_outcome(returncode: int, output: str,
     ⇒ fail-open 時那條新出口會安靜地全部記成成功；
       fail-closed 時它在第一次被走到就紅。
     """
+    # 🔴 **沒見過的動作要當場爆，不可以回傳一個判定**（§42b）。
+    #
+    # ☠️ 回傳的話，那個判定是**猜的** —— 而它會被寫進部署歷史。
+    # 🔑 〈計數器要有落點〉的變體：「`build` 哪天真的接進 dashboard，
+    #    **誰會記得回來加**？」靠「以後記得」＝沒有落點。
+    # ⇒ 拋錯讓那一天當場爆，**不需要任何人記得**。
+    # 📌 而它同時讓「不加 `build ⇒ False` 那個案例」這個決定變成**安全的**：
+    #    遺漏變成不可能，不是靠一題去守。〈修作法不要修結果〉。
+    #
+    # ⚠️ 訊息裡要有那個 action 的名字 —— 排錯的人拿到的第一份線索就是這句話。
+    if action not in _KNOWN_ACTIONS:
+        raise ValueError(
+            "decide_outcome() 不認得 action=%r（認得的有 %s）——"
+            "一個沒見過的動作拿不到判定，因為那個判定會是猜的。"
+            % (action, "、".join(sorted(_KNOWN_ACTIONS))))
     text = output or ""
     # 🔴 **只有明著開了 fallback 的動作**（目前只有 `rollback`）才走這條，
     # 而條件是**連握手都收不到** —— 收得到握手卻沒有結果行，仍然是 fail-closed。
@@ -400,9 +489,17 @@ def _run_job(job_id: str, action: str, cmd: list, input_text: str = None):
                     "（`::PROTOCOL:: v=2`）——**本次以舊版協定判定**："
                     "只看結束碼與關鍵字，判不出「健康檢查沒過但沒回滾」那一種。"
                     "下一次成功部署之後就會恢復。")
+        # 🔴 **把結果行留給畫面** —— 判定是二元的，而使用者要的是
+        # 「正式機現在怎樣」。少了這一段，`describe_rolled_back()` 會是一支
+        # **沒有人呼叫的接縫**（`reminder_stage()` 那次的形狀）。
+        parsed = parse_result_line(joined)
         with _jobs_lock:
             _jobs[job_id]["status"] = outcome
             _jobs[job_id]["legacyProtocol"] = legacy
+            _jobs[job_id]["result"] = parsed
+            _jobs[job_id]["rolledBackText"] = (
+                describe_rolled_back(parsed["rolledBack"], action)
+                if parsed else "")
 
         if action in ("deploy", "rollback"):
             _append_history(action, job_id, success, str(log_path))
@@ -651,6 +748,9 @@ def job_status(job_id: str, since: int = 0):
             # 🔑 〈計數器要有落點〉：設了旗標而畫面上沒有它，
             # 它從來不會被看見 —— 而那與「沒有退化」長得一模一樣。
             "legacyProtocol": job.get("legacyProtocol", False),
+            # 🔑 〈計數器要有落點〉：算了而畫面拿不到，等於沒算。
+            "result": job.get("result"),
+            "rolledBackText": job.get("rolledBackText", ""),
             "lines": job["lines"][since:],
             "totalLines": len(job["lines"]),
         }

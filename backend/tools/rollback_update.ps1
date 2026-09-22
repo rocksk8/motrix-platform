@@ -77,12 +77,25 @@ function Test-Ping {
 #   **「回滾到底成功了沒」**。
 #
 # ⚠️ `rolled_back` 在這支腳本裡的語意：
-#    unknown    這支腳本**沒有動過磁碟**（早期中止）⇒ 它不知道上面是什麼
+#    not_applied  **這一次執行沒有改動磁碟**（早期中止）
+#    applied_no_restore  還原做到一半
 #    restored   還原完成，且還原後 ping 成功
 #    restored_unhealthy  還原完成，而 ping 一直沒成功
-#    ☠️ 早期中止**不可以報 `applied`** —— 那是在斷言「磁碟上是新版」，
-#       而這支腳本從來沒有檢查過那件事。
-$script:ProdState = "unknown"
+#
+# 🔴 **讀法乙**（§44 定版）：這個欄位回答的是「**這一次執行改動了什麼**」，
+#    不是「磁碟上現在是什麼」。兩支腳本同一個讀法 ⇒ 同一個情境同一個值。
+# ⚠️ 而**參考點不同**，那由畫面負責講：
+#      deploy 的 not_applied   ＝ 正式機完全沒被碰過
+#      rollback 的 not_applied ＝ 還原沒開始，維持在按回滾之前的樣子
+#      （而那個樣子通常是「一次失敗的部署剛動過它」）
+#    ⇒ 機器值一份、人話兩份，見 `deploy_dashboard.describe_rolled_back()`。
+#
+# 🔴 初始值**不可以是 `unknown`**（§42）：
+# ☠️ 那會讓每一條早退出口都報「我不知道」，**而其實它知道** ——
+#    它知道自己什麼都還沒做。那是〈危險值在動作之前就設〉的相反病。
+# 📌 `unknown` 留在值域裡當**金絲雀**：它不從任何顯式出口產生，
+#    所以它一旦出現，就表示有人加了出口而漏設值。
+$script:ProdState = "not_applied"
 
 # `service`：只講**觀察到的事實**（定義與 apply_update.ps1 一致）
 #   up / down / unknown
