@@ -238,13 +238,17 @@ def reset_demo_db() -> None:
             #    它們，也不該因為重置而失去它們。
             # ☠️ 理由寫錯的代價很具體：下一個人會被帶去改那道 TRIGGER，
             #    **而那道 TRIGGER 是對的**。
-            missing = [t for t in DEMO_CLEARED_TABLES
-                       if t not in {r["name"] for r in conn.execute(
-                           "SELECT name FROM sqlite_master WHERE type='table'")}]
+            present = {r["name"] for r in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'")}
             conn.execute("PRAGMA foreign_keys=OFF")
+            # ⚠️ 跳過不存在的表：這段 DELETE 跑在 `init_db()` **之前**，
+            #    而一個舊的 `demo.db` 可能還沒有比較新的那幾張表。
             for t in DEMO_CLEARED_TABLES:
-                if t not in missing:
+                if t in present:
                     conn.execute(f"DELETE FROM {t}")
+            for t, where in DEMO_FILTERED_CLEARS.items():
+                if t in present:
+                    conn.execute(f"DELETE FROM {t} WHERE {where}")
             conn.commit()
             conn.execute("VACUUM")
         finally:
@@ -263,8 +267,8 @@ def reset_demo_db() -> None:
 #
 # 🔑 名字描述的是**會發生什麼**，不是一個語意宣稱：
 # ```
-# DEMO_PRESERVED_TABLES  重置時**不清**
-# DEMO_CLEARED_TABLES    重置時清空
+# DEMO_CLEARED_TABLES    重置時**整張**清空
+# DEMO_FILTERED_CLEARS   重置時**依條件清掉一部分列**（目前只有 account_items）
 # ```
 # ⚠️ 刻意**不叫**「系統資料／使用者資料」—— 那兩個詞擔不起這份清單：
 #    選型資料庫那 28 張目錄表**是系統資料**，而它們在這裡屬於「會被清」的一邊，
@@ -281,10 +285,26 @@ def reset_demo_db() -> None:
 # ```
 # ☠️ 而單向的排除清單可以靠「**把每一張表都放進去**」變綠 ——
 #    那樣 demo 從此不再清空任何東西，**而它全綠**。
-DEMO_PRESERVED_TABLES = frozenset((
-    # 🔴 547 筆法定會計項目：**系統資料**，而且在資料層是唯讀的（`v93` TRIGGER）。
-    "account_items",
-))
+# 🔴 **粒度是「列」不是「表」。**
+#
+# ☠️ 整張保留 `account_items` 會換來一個**更安靜**的問題：
+# ```
+# statutory 的 547 筆留著                       ✅ 本來就要
+# 而 demo 使用者自己建的 custom 科目**也留著**   ❌
+# ⇒ **下一個客戶看得到上一個客戶建的科目**
+# ```
+# 🔑 demo 重置的目的是「**每個客戶的展示都從乾淨開始**」——
+# ⚠️ 而這個問題不會報錯，要到有人在客戶面前打開科目樹才發現。
+#
+# ⚠️ 而這個 `WHERE` **不會撞到 `v93` 的 TRIGGER**：那道 TRIGGER 的條件是
+#    `OLD.source = 'statutory'`，而這裡刪的正好是 `source != 'statutory'`。
+DEMO_FILTERED_CLEARS = {
+    "account_items": "source != 'statutory'",
+}
+
+#: 給守門用的別名：**被過濾清除**的那幾張表。
+#: ⚠️ 它不是「完全不清」—— 那正是上面那段註解在講的事。
+DEMO_PARTIALLY_CLEARED_TABLES = frozenset(DEMO_FILTERED_CLEARS)
 
 DEMO_CLEARED_TABLES = frozenset((
     "access_categories", "access_fit", "access_products",
