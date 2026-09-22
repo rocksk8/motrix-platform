@@ -429,7 +429,16 @@ def _modal_sets(html_path, js_src):
     return set(_MODAL_OPEN.findall(js_src)), set(_MODAL_SHOW.findall(html))
 
 
-def test_ui9_every_modal_the_page_can_open_is_actually_on_the_page():
+def _modal_side(which):
+    """`(樣板, JS, 標籤)` —— modal 不變量**兩側都要驗**。"""
+    if which == "cashier":
+        _w, js = _cashier_js()
+        return CASHIER_HTML, js, "cashier.html／cashier.js"
+    return REPORTS_HTML, _read(REPORTS_JS), "reports.html／reports.js"
+
+
+@pytest.mark.parametrize("which", ["cashier", "reports"])
+def test_ui9_every_modal_the_page_can_open_is_actually_on_the_page(which):
     """🔴🔴 **出納頁打得開的每一個 modal，都要在出納頁上。**
 
     ```
@@ -446,16 +455,30 @@ def test_ui9_every_modal_the_page_can_open_is_actually_on_the_page():
     ⇒ 紅。
     📌 它同時是一個**遷移守門**：把功能搬到新頁時，
        「面板搬了而 modal 沒搬」是這一類搬遷最典型的漏法。
+
+    ## ⚠️ v1 只驗出納那一側，而那是**我 20 分鐘前才修過的同一種不對稱**
+
+    ```
+    v1  只掃 cashier.html ⇒ 看不到「樣板搬走了而 opener 留在原地」
+    實測 reports 那一側現在有 4 個打得開而沒標記
+        （bankPay／invoice／payVoucher／receive）
+    ```
+    🔑 我在**死碼題**上剛修完「只掃一側」這件事，**而這一題有一模一樣的毛病** ——
+       **我修了一個實例，沒有修那個類別。**
+    📌 〈修作法不要修結果〉：判準是「這個修法會不會讓下一次不可能發生」，
+       而我當時答的是「**這一支**不會了」。
+    ⚠️ 而 A 以為這一題已經守得到那一側 —— **一個「通用的」標籤會讓人以為它掃了全部。**
     """
-    where, js = _cashier_js()
-    openable, rendered = _modal_sets(CASHIER_HTML, js)
+    html_path, js, where = _modal_side(which)
+    openable, rendered = _modal_sets(html_path, js)
     assert openable, (
         "`%s` 裡一個 `this.*Modal = true` 都沒抓到 ——\n" % where
         + "🔑 **儀器失效**：這一題會因為量不到而綠。")
 
     missing = sorted(openable - rendered)
     assert not missing, (
-        "出納頁打得開這些 modal，而畫面上**沒有它們的標記**：%s\n" % missing
+        "`%s` 打得開這些 modal，而畫面上**沒有它們的標記**：%s\n"
+        % (where, missing)
         + "☠️ 按鈕按下去**什麼都不會發生**，而且不報錯 ——\n"
           "   Alpine 設一個沒有人繫結的狀態是合法的。\n"
         "🔑 那比「壞掉」難發現：壞掉會有紅字，什麼都沒發生只會讓人再按一次。\n"
