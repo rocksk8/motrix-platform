@@ -126,14 +126,20 @@ GOLDEN = {
 }
 
 
+#: ⚠️ `address` 是必填（§5 的驗證：沒有地址的據點會在地圖上變成
+#: 「定位不到的據點」，而那與「使用者真的填錯了」長得一樣）。
+#: ☠️ 我第一版沒給地址 ⇒ QL3／QL4 紅在 `422 沒有地址` ——
+#: **紅在一個與題目無關的理由上，而那種紅會被讀成「功能還沒做」。**
 PRIMARY = {
     "id": "L1", "name": "台中總公司",
+    "address": "台中市西屯區台灣大道三段301號",
     "company_name": "", "company_name_en": "", "tax_id": "",
     "phone": "", "email": "",
 }
 
 BRANCH = {
     "id": "L2", "name": "台北分公司",
+    "address": "台北市信義區市府路1號",
     "company_name": "允碩台北分公司",
     "company_name_en": "MOTRIX Taipei Branch",
     "tax_id": "12345678",
@@ -205,3 +211,191 @@ def test_ql6_the_baseline_is_not_empty():
     assert sum(len(v) for v in GOLDEN.values()) >= 30, (
         f"基準只有 {sum(len(v) for v in GOLDEN.values())} 行 —— 抓取八成失效了"
     )
+
+
+# ══════════════════════════════════════════════════════════════════════
+# 我釘的接縫，以及它為什麼要連「有沒有呼叫者」一起釘
+# ══════════════════════════════════════════════════════════════════════
+#
+# 我釘一支 `pdf_gen.location_identity(location_id) -> dict`：
+#     company_name / company_name_en / tax_id / phone / email
+#     bank_name / bank_branch / bank_account_name / bank_account_number
+#
+# 每一欄留空 ⇒ 沿用主要據點的同一欄（QL5）；
+# 主要據點也留空 ⇒ 沿用現在寫死的那組值（QL6）。
+#
+# 🔴 **而這一次我要連「它真的被呼叫」一起釘，理由是今天付過學費：**
+# `reminder_stage()` 也是我釘的接縫，寫得好好的、題目全綠，
+# ☠️ **而產品碼零呼叫者** —— 那四題在測一支沒有人跑的函式。
+# 🔑 ⇒ 所以 QL7 的做法是**換掉這支函式的回傳值，看 8 支 builder 的輸出有沒有變**。
+# 📌 那一題同時回答兩件事：「值有沒有被用」與「誰在用它」，
+#    而單獨釘函式本身只回答得了前者。
+
+
+@pytest.fixture
+def identity(monkeypatch):
+    """把 `location_identity` 換成可控的替身，回傳一個 `{id: 值}` 的登記簿。"""
+    import pdf_gen
+    fn = getattr(pdf_gen, "location_identity", None)
+    if fn is None:
+        pytest.fail(
+            "`pdf_gen.py` 缺少 `location_identity(location_id)` —— "
+            "見本檔〈我釘的接縫〉。8 支單據的抬頭要從這裡取值。")
+    table = {}
+
+    def _fake(location_id=None, **kw):
+        return table.get(location_id, table.get(None, {}))
+
+    monkeypatch.setattr(pdf_gen, "location_identity", _fake)
+    return table
+
+
+# ══════════════════════════════════════════════════════════════════════
+# QL1 / QL2 · 資料模型
+# ══════════════════════════════════════════════════════════════════════
+
+def _columns(table):
+    import db
+    conn = db.get_db()
+    try:
+        return {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
+    finally:
+        conn.close()
+
+
+def test_ql2_the_location_is_a_real_column_not_a_json_key(client):
+    """QL2：用真的欄位 `location_id TEXT`，不要塞進 `data_json`。
+
+    理由不是效能，是日後營運報表會想「按據點分組」，而 `data_json` 查不動。
+    """
+    cols = _columns("quotations")
+    assert "location_id" in cols, (
+        f"`quotations` 沒有 `location_id` 欄位，現有欄位：{sorted(cols)}")
+
+
+def test_ql2_the_migration_version_moved(client):
+    """QL2：新增欄位要一次 migration，`CURRENT_VERSION` 要往前走。
+
+    釘的是「比 89 大」不是「等於 90」—— 等於 90 的話，
+    B 與別的視窗同時各加一個 migration 時這一題會紅在一個假的理由上。
+    兩人同時加 migration，git 不會衝突、只會在執行時撞版本號。
+    """
+    import db
+    assert db.CURRENT_VERSION > 89, (
+        f"`CURRENT_VERSION` 還是 {db.CURRENT_VERSION} —— 沒有加 migration")
+
+
+def test_ql1_downstream_documents_do_not_each_store_their_own_location(client):
+    """QL1：據點只綁在 `quotations`，下游全部經由 `quote_no` 繼承。
+
+    一個案子只屬於一個據點，而所有單據都是那個案子的產物。
+    每張單各存一次的話，會製造「同一個案子的兩張單印不同抬頭」——
+    而那種不一致沒有任何地方會報錯，它只會印在寄給客戶的紙上。
+
+    判準是「哪些表有 `quote_no`」而不是一份手寫的表名清單：
+    手寫清單漏掉的永遠是「後來才加的那一張」。
+    """
+    import db
+    conn = db.get_db()
+    try:
+        tables = [r["name"] for r in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'")]
+    finally:
+        conn.close()
+
+    offenders = []
+    for name in tables:
+        cols = _columns(name)
+        if name == "quotations" or "quote_no" not in cols:
+            continue
+        if "location_id" in cols:
+            offenders.append(name)
+    assert not offenders, (
+        "這些下游單據表各自存了一份據點：" + "、".join(offenders)
+        + "。據點要綁在 quotations，其餘經由 quote_no 繼承。")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# QL3 / QL4 · 既有資料與新建
+# ══════════════════════════════════════════════════════════════════════
+
+def _set_locations(client, token, locations):
+    r = client.put("/api/settings/company-profile",
+                   headers={"Authorization": f"Bearer {token}"},
+                   json={"locations": locations})
+    assert r.status_code == 200, r.text
+
+
+def _superadmin(client, make_user, name):
+    username, password = make_user(username=name, role="superadmin")
+    r = client.post("/api/auth/login",
+                    json={"username": username, "password": password},
+                    headers={"X-Forwarded-For": "203.0.113.231"})
+    assert r.status_code == 200, r.text
+    return r.json()["token"]
+
+
+def test_ql3_no_quotation_is_left_without_a_location(client, make_user):
+    """QL3：既有報價單全部指向主要據點，**不可以留 NULL**。
+
+    一張沒有據點的報價單，PDF 要嘛壞掉、要嘛安靜地退回某個預設，
+    而後者就是這一節正在修的那一族。
+
+    這一題查的是**整張表**而不是「我剛建的那一筆」——
+    migration 要照顧的正是「我沒有建的那些」。
+    """
+    import db
+    token = _superadmin(client, make_user, "ql3_admin")
+    _set_locations(client, token, [dict(PRIMARY)])
+
+    assert "location_id" in _columns("quotations"), (
+        "`quotations` 還沒有 `location_id` 欄位（見 QL2）—— "
+        "這一題要等那一步，而它現在紅得對：**既有資料還沒有家可以放。**")
+
+    conn = db.get_db()
+    try:
+        conn.execute(
+            "INSERT INTO quotations (quote_no, status, data_json) VALUES (?,?,?)",
+            ("MQ-202601-900", "草稿", "{}"))
+        conn.commit()
+        bad = conn.execute(
+            "SELECT quote_no FROM quotations "
+            "WHERE location_id IS NULL OR TRIM(location_id) = ''").fetchall()
+    finally:
+        conn.close()
+    assert not bad, (
+        "這些報價單沒有據點："
+        + "、".join(r["quote_no"] for r in bad)
+        + "。欄位要 NOT NULL 並有預設，或 migration 要把它們補成主要據點。")
+
+
+def test_ql4_a_new_quotation_defaults_to_the_primary_location(client, make_user):
+    """QL4：新建報價單時據點預設為主要據點，**且可改**。
+
+    兩半都要驗：只驗「有預設」的話，一個寫死主要據點、
+    完全不看送進來的值的實作會綠 —— 而分公司就永遠開不出自己的單。
+    """
+    token = _superadmin(client, make_user, "ql4_admin")
+    auth = {"Authorization": f"Bearer {token}"}
+    _set_locations(client, token, [dict(PRIMARY), dict(BRANCH)])
+
+    r = client.post("/api/quotations", headers=auth,
+                    json={"status": "草稿", "data": {"customerName": "甲"}})
+    assert r.status_code == 201, r.text
+    no_default = r.json().get("quoteNo") or r.json().get("quote_no")
+
+    r = client.get(f"/api/quotations/{no_default}", headers=auth)
+    assert r.status_code == 200, r.text
+    got = r.json().get("locationId") or r.json().get("location_id")
+    assert got == PRIMARY["id"], (
+        f"沒送據點時應該落在主要據點 {PRIMARY['id']}，實際 {got!r}")
+
+    r = client.post("/api/quotations", headers=auth,
+                    json={"status": "草稿", "locationId": BRANCH["id"],
+                          "data": {"customerName": "乙"}})
+    assert r.status_code == 201, r.text
+    no_branch = r.json().get("quoteNo") or r.json().get("quote_no")
+    r = client.get(f"/api/quotations/{no_branch}", headers=auth)
+    got = r.json().get("locationId") or r.json().get("location_id")
+    assert got == BRANCH["id"], (
+        f"送了 {BRANCH['id']} 而存成 {got!r} —— 據點改不動，分公司開不出自己的單")

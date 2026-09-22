@@ -182,6 +182,30 @@ def _draw_section(text):
     return "\n".join(bodies)
 
 
+def test_fx9a_the_anchor_is_a_property_not_a_character_window():
+    """FX9a：錨點是一個**性質**（會動到 `this._map` 的最內層方法），
+    不是一個字元窗。
+
+    這一題釘的是那個性質本身，而不是它今天切出哪幾個方法名——
+    釘方法名的話，B 改一次名字題目就紅，而名字不決定行為。
+    （`invalidateSize` → `_syncMapSize` 那次就是被名字咬到的。）
+
+    兩個方向：
+      碰 `this._map` 的方法要被選中；不碰的不可以被選中。
+    """
+    section = _draw_section(_fake(user_line="this._map.addLayer(m)",
+                                  other_line="const z = 3"))
+    assert "this._map.addLayer(m)" in section, (
+        "碰 `this._map` 的方法沒有被選中 —— 錨點抓不到它要守的東西")
+    assert "const z = 3" not in section, (
+        "不碰 `this._map` 的方法被選進來了 —— 判準退回成整份檔案")
+    # ⚠️ 這一行原本寫成 `"…" in section is False or "…" not in section`。
+    # ☠️ 那是**鏈式比較**：`(x in section) and (section is False)` ——
+    #    前半段恆假，整句只靠 `or` 後面那一半成立。
+    # 🔑 斷言的結果是對的，**而它讀起來像驗了兩件事，實際只驗了一件** ——
+    #    一個恆假的子句不會失敗，所以它不會被任何測試抓到。
+
+
 # ══════════════════════════════════════════════════════════════════════
 # UB1 / UB3 · 畫一個「你在這裡」，而且和別的點不一樣
 # ══════════════════════════════════════════════════════════════════════
@@ -377,7 +401,7 @@ def _fake(comment="", user_line="const x = 1", other_line="const y = 2"):
                          "other_line": other_line}
 
 
-def test_a_long_comment_inside_the_method_does_not_move_the_boundary():
+def test_fx9b_a_long_comment_inside_the_method_does_not_move_the_boundary():
     """📏 **方向一：在方法裡面塞 5,000 字的註解 ⇒ 判準不受影響。**
 
     ☠️ 舊的 3000 字元窗在這裡會直接失效 —— 註解把程式碼擠出窗外。
@@ -396,7 +420,7 @@ def test_a_long_comment_inside_the_method_does_not_move_the_boundary():
     )
 
 
-def test_code_moved_out_of_a_map_touching_method_falls_outside():
+def test_fx9c_code_moved_out_of_a_map_touching_method_falls_outside():
     """📏 **方向二：搬到一個不碰地圖的方法裡 ⇒ 判準看不見它（該紅）。**
 
     🔑 這一半才是這道守門的價值：
@@ -415,7 +439,7 @@ def test_code_moved_out_of_a_map_touching_method_falls_outside():
     )
 
 
-def test_the_boundary_finder_ignores_control_structures():
+def test_fx9c_the_boundary_finder_ignores_control_structures():
     """📏 `if (...) {` 長得像「函式名(引數) {」—— 不可以被當成一個方法。
 
     ⚠️ 我的原型第一版就把 `fitBounds` 的外層算成一個叫 `if` 的「方法」，
