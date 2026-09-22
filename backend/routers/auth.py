@@ -429,9 +429,20 @@ def auth_login(body: LoginIn, request: Request):
         # （見 login-qr-approve.html／qr-info／qr-approve／qr-status 四個新端點）。
         # QR 內容是指向確認頁面的完整網址，動態組出（不寫死 IP，比照既有「CORS
         # 白名單寫死 IP」的已知限制更穩健）。
+        # 🔴 **用 `#` 不是 `?`**（2026-09-22，§8 FX22 的第三個洩漏點）。
+        #
+        # ☠️ FX22 只說了兩支 API，而 challenge **還有第三個地方會進 access log**：
+        # 這個頁面網址本身。手機一掃就是
+        # `GET /pages/login-qr-approve.html?challenge=xxx` ⇒ 照樣被記一筆。
+        # 🔑 **只改 API 的話，我們會宣稱洩漏堵住了，而它沒有。**
+        #
+        # ⇒ 改成 URL fragment：**`#` 後面的東西瀏覽器不會送給伺服器**，
+        # 所以它不可能出現在任何伺服器端的紀錄裡，而 JS 讀得到（`location.hash`）。
+        # 📌 沒有留舊格式的相容路徑：QR 的有效期只有幾分鐘，
+        # 不存在「已經印出去的舊 QR」，而**留一條相容路徑就是留著那個洩漏**。
         approve_url = (
             f"{request.url.scheme}://{request.headers.get('host', '')}"
-            f"/pages/login-qr-approve.html?challenge={challenge_token}"
+            f"/pages/login-qr-approve.html#challenge={challenge_token}"
         )
         qr_img = qrcode.make(approve_url)
         qr_buf = io.BytesIO()
@@ -546,12 +557,56 @@ def auth_login_totp(body: TotpLoginVerifyIn, request: Request):
     return result
 
 
+#: 掃碼登入的 challenge 走哪個 header。
+#:
+#: ## 🔴 為什麼不走 query string（§8 FX22）
+#: 它是「**拿到就能換到 session**」的秘密（`login_qr_status` 在 `approved`
+#: 時直接發 session），而 `qr-status` 是**每 2 秒輪詢一次**的
+#: ⇒ ☠️ 它在 uvicorn 的 access log 裡留下的不是一筆，**是一整串**。
+#:
+#: ⚠️ 嚴重度是**中不是高**，理由要寫出來不要只給一個形容詞：
+#: 有效期很短（掃碼到核准之間）＋ 單次使用；讀得到 log 的人已經有伺服器權限；
+#: `logs/` 不進每日備份（今天早上為了座標那件已經驗過）。
+#: 🔑 **它是縱深防禦的問題，不是「現在就會被打」的問題。**
+#: ☠️ 而它與座標那件是同一族：三張表都堵了，**漏的那一層在 web server 裡**。
+LOGIN_CHALLENGE_HEADER = "X-Login-Challenge"
+
+
+def _login_challenge(request: Request, header_value: str) -> str:
+    """從 header 取 challenge。**放在 query string 就 422。**
+
+    ## ⚠️ 拿掉參數宣告 ≠ 那條路被擋住
+    FastAPI **會忽略沒有宣告的 query 參數** ⇒ 帶了它不會報錯
+    ⇒ ☠️ 舊的前端會**靜靜地送、而伺服器靜靜地忽略**，
+    而那個 challenge **仍然進了 access log**。
+    🔑 〈守門守的對象被搬走〉：宣告拿掉了，而那條路還通。
+    ⇒ 所以這裡**主動去看 query string**，看到就拒絕。
+
+    📌 錯誤訊息要**指路**（該走 header 還是 body）——
+    不指路的話下一個人會以為只是格式寫錯，然後再送一次。
+    """
+    if request.query_params.get("challenge") is not None:
+        raise HTTPException(
+            422,
+            "challenge 不可以放在網址上：query string 會被寫進伺服器的 "
+            f"access log。請改用 {LOGIN_CHALLENGE_HEADER} header。")
+    value = (header_value or "").strip()
+    if not value:
+        raise HTTPException(
+            422, f"缺少 {LOGIN_CHALLENGE_HEADER} header（challenge 走 header，不走網址）。")
+    return value
+
+
 @router.get("/api/auth/login/qr-info")
-def login_qr_info(challenge: str):
+def login_qr_info(request: Request, x_login_challenge: str = Header(None)):
     """Public — the phone's camera opens login-qr-approve.html straight from
     the QR code, with no session token yet. Lets that page show a masked
     account name so the legitimate phone owner can recognise their own
-    in-progress login before typing a password."""
+    in-progress login before typing a password.
+
+    2026-09-22（§8 FX22）：challenge 改走 `X-Login-Challenge` header。
+    """
+    challenge = _login_challenge(request, x_login_challenge)
     _totp_sweep_expired()
     with _totp_lock:
         pending = _totp_pending.get(challenge)
@@ -633,10 +688,16 @@ def login_qr_approve(body: QrApproveIn, request: Request):
 
 
 @router.get("/api/auth/login/qr-status")
-def login_qr_status(challenge: str):
+def login_qr_status(request: Request, x_login_challenge: str = Header(None)):
     """Public — polled by the desktop login page every ~2s while showing the
     QR code. Only issues the real session once (single-use, mirrors the
-    manual-code path), the first time it observes approved=True."""
+    manual-code path), the first time it observes approved=True.
+
+    ⚠️ **兩支要一起改**（§8 FX22b）：它們用的是**同一個** challenge
+    ⇒ 只改一支的話，另一支照樣把它洩進 access log ——
+    🔑 而這一支是**每 2 秒一次**的那一支。
+    """
+    challenge = _login_challenge(request, x_login_challenge)
     _totp_sweep_expired()
     with _totp_lock:
         pending = _totp_pending.get(challenge)

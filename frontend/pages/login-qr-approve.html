@@ -217,10 +217,16 @@
       autoTrying: false,
 
       async init() {
-        this.challengeToken = new URLSearchParams(window.location.search).get('challenge') || ''
+        // 🔴 從 **fragment**（`#`）讀，不是從 query string（`?`）。
+        // `#` 後面的東西瀏覽器**不會送給伺服器** ⇒ 它不會出現在 access log 裡。
+        // ⚠️ 而 challenge 是「拿到就能換到 session」的秘密。
+        this.challengeToken = new URLSearchParams(
+          (window.location.hash || '').replace(/^#/, '')).get('challenge') || ''
         if (!this.challengeToken) { this.invalid = true; return }
         try {
-          const res = await fetch('/api/auth/login/qr-info?challenge=' + encodeURIComponent(this.challengeToken))
+          // challenge 走 header（§8 FX22）—— 走網址的話會進 access log。
+          const res = await fetch('/api/auth/login/qr-info',
+            { headers: { 'X-Login-Challenge': this.challengeToken } })
           if (!res.ok) { this.invalid = true; return }
           const data = await res.json()
           this.maskedUsername = data.maskedUsername || ''

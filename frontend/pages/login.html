@@ -394,7 +394,10 @@
         if (this.qrPollTimer) clearInterval(this.qrPollTimer)
         this.qrPollTimer = setInterval(async () => {
           try {
-            const res = await fetch('/api/auth/login/qr-status?challenge=' + encodeURIComponent(this.challengeToken))
+            // challenge 走 header（§8 FX22）。⚠️ 這一支是**每 2 秒一次**的，
+            // 走網址的話它在 access log 裡留下的不是一筆，是一整串。
+            const res = await fetch('/api/auth/login/qr-status',
+              { headers: { 'X-Login-Challenge': this.challengeToken } })
             if (!res.ok) {
               // challenge 逾時/作廢（含錯誤密碼次數過多）——回到重新登入畫面
               this.backToLogin()
