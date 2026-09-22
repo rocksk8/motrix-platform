@@ -20,23 +20,27 @@ docs/windows/SCOPE.md :241     (a) 圓欄裡編號被標記拆開（`UI**10**`�
 📌 ⇒ 所以它需要一份**有理由、且會爛掉時自己紅**的白名單，不是一個更寬的 pattern
    （更寬的 pattern 會連 `**UI10**` 一起擋掉，而那是合法寫法）。
 
-# ⚠️ 而掃描範圍我**刻意縮小**，代價寫在這裡
+# 🔴 而掃描範圍我第一版訂錯了 —— **我整份排除 `STATE.md`**
 
 ```
-掃  SCOPE.md            <= **守門真的在解析它**（test_spec_coverage:114/1115）
-掃  SPEC-VOUCHER.md     <= 施工圖，B 照它實作
-掃  MULTIWIN-PROTOCOL.md
-不掃 STATE.md / C.md    <= 敘事紀錄：它們**本來就會描述失效模式**
+我的理由  它是敘事紀錄，本來就會描述失效模式 => 每次 A 記錄一次就紅一次
+我標的代價 STATE.md 裡一個真的被拆開的編號，抓不到
 ```
-☠️ **代價**：`STATE.md` 裡一個真的被拆開的編號，這道守門抓不到（它有 2,292 個切點）。
-🔑 我選這個代價，因為反過來的那一側更糟：**每次 A 記錄一個失效模式就紅一次**，
-   而那會讓這道守門在兩天內被關掉（〈擋太早會讓功能不能用，而它看起來像很嚴謹〉）。
-⚠️ 這是**我的判斷不是量出來的事實** —— 要改範圍請 A 裁。
+☠️ **而 A 指出那個代價比我標的大得多**：
+```
+_declared_where() 讀的就是 STATE.md（SPEC = STATE.md）
+=> 排除它 = **在「編號宣告的唯一所在地」把這道守門關掉**
+```
+🔑 我的顧慮是真的，我的處置是錯的 —— **兩者不衝突，我只是沒有找第三條路。**
+⇒ A 裁：**掃 `STATE.md`，只掃宣告形狀的行**（`- ` ／ `| ` ／ `## `），
+   散文／圍欄／引用區塊不掃 ⇒ 記錄失效模式的地方不會紅。
+✅ 實測：`STATE.md` 4,046 行宣告形狀的行，**命中 0** ⇒ 零誤報。
+📌 判準寫死：**守門看的範圍 == 解析器看的範圍**，不多不少。
 
-# 📌 順帶：`SCOPE.md:241` 逐字是「**圓**欄」不是「**圍**欄」
+# 📌 順帶：`SCOPE.md:241` 原本逐字是「**圓**欄」不是「**圍**欄」
 
 `grep "圍欄"` 找不到那一行 —— 🔑 **同一族的第四個載體：看起來對的字。**
-（`U+5713 圓` vs `U+570D 圍`。我沒有改它，那是 A 的檔。）
+（`U+5713 圓` vs `U+570D 圍`。A 已修，`c9c29b3`，兩處；他掃過 `docs/` 沒有第三處。）
 """
 import hashlib
 import re
@@ -46,13 +50,35 @@ import pytest
 
 _ROOT = Path(__file__).resolve().parent.parent.parent
 
-#: 掃描範圍。⚠️ 刻意不含 `STATE.md`／`C.md` —— 理由見檔頭。
+#: 掃描範圍，**每一份各自對齊讀它的那支解析器**（A 2026-09-23 裁）。
+#:
+#: 🔑 判準：**守門看的範圍 == 解析器看的範圍**，不多不少。
+#: ```
+#: "fence"  程式碼圍欄裡     <= test_spec_coverage._scope_sections() 讀 SCOPE.md 的圍欄
+#: "decl"   宣告形狀的行     <= _declared_where() 讀 STATE.md 的 `- ` / `| ` / `## `
+#: ```
+#: ⚠️ 我第一版**整份排除 `STATE.md`**，理由是「它是敘事紀錄，本來就會描述失效模式」。
+#: ☠️ 而 A 指出那個排除的代價比我標的大得多：
+#: ```
+#: 我標的   STATE.md 裡一個真的被拆開的編號，抓不到
+#: 而實際   **_declared_where() 讀的就是 STATE.md**（SPEC = STATE.md）
+#:          => 排除它 = 在「編號宣告的唯一所在地」把這道守門關掉
+#: ```
+#: 📌 ⇒ 第三條路：**掃 `STATE.md`，只掃宣告形狀的行**。
+#:    散文／圍欄／引用區塊不掃 ⇒ 記錄失效模式的地方不會紅。
+#: ✅ 我實測過：`STATE.md` 4,046 行宣告形狀的行，**命中 0** ⇒ 零誤報。
 SCANNED = (
-    "docs/windows/SCOPE.md",
-    "docs/windows/SPEC-VOUCHER.md",
-    "docs/windows/SPEC-VOUCHER-HISTORY.md",
-    "MULTIWIN-PROTOCOL.md",
+    ("docs/windows/SCOPE.md", "fence"),
+    ("docs/windows/STATE.md", "decl"),
+    # ⚠️ 下面三份**沒有解析器在讀** —— 掃它們是為了**人**（B 照施工圖實作、會 grep 它）。
+    #    所以判準不是「對齊解析器」，是「對齊讀者會用的動作」。
+    ("docs/windows/SPEC-VOUCHER.md", "fence"),
+    ("docs/windows/SPEC-VOUCHER-HISTORY.md", "fence"),
+    ("MULTIWIN-PROTOCOL.md", "fence"),
 )
+
+#: 宣告形狀：`_DECLARED_BULLET`／`_DECLARED_TABLE`／`_DECLARED_HEADING` 看的那些起頭。
+_DECL_START = re.compile(r"^(?:- |\| |#{2,4} )")
 
 #: 行內標記。`~~` 要排在 `*` 前面，否則 `**` 會先被 `*` 吃掉半個。
 _MARKS = ("**", "~~", "*", "`", "_")
@@ -78,6 +104,28 @@ def _fenced_lines(text):
     return out
 
 
+def _decl_lines(text):
+    """只回**宣告形狀的行**（`- ` ／ `| ` ／ `## `），圍欄與引用區塊不算。
+
+    📌 那是 `_declared_where()` 唯一會看的那些行。
+    ⚠️ 引用區塊（`> `）排除：它是**在轉述別人的話**，而轉述裡的編號不是宣告。
+    """
+    out, inside = [], False
+    for i, line in enumerate(text.splitlines(), 1):
+        s = line.strip()
+        if s.startswith("```"):
+            inside = not inside
+            continue
+        if inside or s.startswith(">"):
+            continue
+        if _DECL_START.match(s):
+            out.append((i, line))
+    return out
+
+
+_MODES = {"fence": _fenced_lines, "decl": _decl_lines}
+
+
 def _key(rel, line):
     """白名單的鍵：**檔名 ＋ 該行內容的雜湊**，不是行號。
 
@@ -93,19 +141,21 @@ def _key(rel, line):
 #: ⚠️ 每一筆都要有理由；而**條目對不上任何一行時這道守門會紅**（見反向控制）。
 ALLOW = {
     _key("docs/windows/SCOPE.md",
-         "(a) 圓欄裡編號被標記拆開（`UI**10**`）=> 紅"):
-        "A 在 SCOPE.md 定義 MD1(a) 時舉的反例本身。",
+         "(a) 圍欄裡編號被標記拆開（`UI**10**`）=> 紅"):
+        "A 在 SCOPE.md 定義 MD1(a) 時舉的反例本身。"
+        "（⚠️ 2026-09-23 換過一次鍵：A 把「圓欄」修成「圍欄」"
+        "=> 舊鍵對不上 => **反向控制正確地紅了**，這就是它存在的理由。）",
 }
 
 
 def _scan():
     hits, missing_files = [], []
-    for rel in SCANNED:
+    for rel, mode in SCANNED:
         p = _ROOT / rel
         if not p.exists():
             missing_files.append(rel)
             continue
-        for ln, line in _fenced_lines(p.read_text(encoding="utf-8")):
+        for ln, line in _MODES[mode](p.read_text(encoding="utf-8")):
             for m in _SPLIT.finditer(line):
                 hits.append((rel, ln, m.group(0), line.strip(), _key(rel, line)))
     return hits, missing_files
@@ -115,7 +165,7 @@ def _scan():
 # (a) 圍欄裡不可以有被拆開的編號
 # ══════════════════════════════════════════════════════════════════════
 
-def test_md1a_no_identifier_inside_a_fence_is_split_by_inline_markup():
+def test_md1_a_no_identifier_inside_a_fence_is_split_by_inline_markup():
     """🔴 `MD1(a)` **圍欄裡的編號不可以被行內標記拆開。**
 
     ```
@@ -144,7 +194,7 @@ def test_md1a_no_identifier_inside_a_fence_is_split_by_inline_markup():
         + "\n".join("    %r: \"…\"," % h[4] for h in bad[:3]))
 
 
-def test_md1a_the_allowlist_does_not_rot():
+def test_md1_a_the_allowlist_does_not_rot():
     """⚙️ **反向控制：`ALLOW` 裡對不上任何一行的條目 => 紅。**
 
     ☠️ 少了它，這道守門可以靠**把每一個命中都加進白名單**變綠 ——
@@ -163,7 +213,7 @@ def test_md1a_the_allowlist_does_not_rot():
           "**而沒有人分得出哪些還算數**。")
 
 
-def test_md1a_the_scanner_catches_a_split_and_spares_a_wrapped_one():
+def test_md1_a_the_scanner_catches_a_split_and_spares_a_wrapped_one():
     """⚙️ **儀器自檢：現在就該綠。**
 
     ☠️ 目前**0 個真實例** ⇒ 上面那題是綠的，而它綠可能有兩個理由：
@@ -231,7 +281,7 @@ def _parse_with(monkeypatch, tmp_path, body):
     return mod._scope_sections()["THIS"]
 
 
-def test_md1b_the_scope_parser_still_sees_a_split_identifier(monkeypatch,
+def test_md1_b_the_scope_parser_still_sees_a_split_identifier(monkeypatch,
                                                              tmp_path):
     """🔴🔴 `MD1(b)` **解析 `SCOPE.md` 的那支守門，要先剝掉行內標記再比對。**
 
@@ -254,7 +304,7 @@ def test_md1b_the_scope_parser_still_sees_a_split_identifier(monkeypatch,
           "⚠️ 名字可以換（**退回給我**），而它必須在**讀進來之後、比對之前**。")
 
 
-def test_md1b_the_probe_itself_parses_a_legal_line(monkeypatch, tmp_path):
+def test_md1_b_the_probe_itself_parses_a_legal_line(monkeypatch, tmp_path):
     """⚙️ **正對照：合法寫法本來就解析得出來。**
 
     ☠️ 少了它，上一題可能紅在**我的假 `SCOPE.md` 根本沒被解析** ——
@@ -267,7 +317,7 @@ def test_md1b_the_probe_itself_parses_a_legal_line(monkeypatch, tmp_path):
         + "**我的假 SCOPE.md 沒有被當成 `THIS` 區塊解析** ⇒ 上一題的紅不可信。")
 
 
-def test_md1b_normalising_must_not_invent_identifiers(monkeypatch, tmp_path):
+def test_md1_b_normalising_must_not_invent_identifiers(monkeypatch, tmp_path):
     """⚙️ **反向控制：剝掉標記之後不可以多出編號來。**
 
     ☠️ 一支剝得太用力的正規化會把不相干的東西黏成編號：
