@@ -65,6 +65,7 @@ L646  exit 0  正常成功         ⇒ 本來就是成功
    ⇒ 改成驗「**走到任何一條出口，都恰好印一行**」（逐條餵，不是數總數）
 ```
 """
+import re as _re
 import sys
 from pathlib import Path
 
@@ -97,14 +98,29 @@ def _need(name):
     return fn
 
 
-def _result_line(status, rolled_back="not_applied", exit_code=0, v=2):
+def _result_line(status, rolled_back="not_applied", *,
+                 service="unknown", exit_code=0, v=2):
     """`::RESULT::` 那一行 —— **整個檔只有這裡知道它長什麼樣**。
 
-    B `af1d56f` 定版：`::RESULT:: v=2 status=<s> rolled_back=<r> exit=<n>`
+    B `af1d56f` 定版、`§34c` 加 `service`：
+    `::RESULT:: v=2 status=<s> rolled_back=<r> service=<up|down|unknown> exit=<n>`
     一行、無前後空白、大小寫固定、欄位順序固定。
     ⇒ 格式再改**只改這一支**，下面每一個案例一行都不用動。
+
+    ✅ **這一支存在的理由，今天被 `§34c` 實測了一次**：
+    加一個欄位 ⇒ 37 題裡 4 題紅 ⇒ **改這 8 行，33 題一行都沒動。**
+
+    ⚠️ **而它差一點沒守住**：`service` 插在 `exit_code` 前面，
+    而十個呼叫點**全部**用位置引數傳 `exit_code`
+    ⇒ 那個 `0` 會餵進 `service`，變成 `service=0`。
+    ☠️ 失敗的樣子是「值域題紅了」，而壞的是**題目檔**不是產品。
+    🔑 B 只點出其中一處（`:613`）—— 一處是對的，而**十處才是實情**：
+       〈判準的寬窄都會騙人〉的同一個形狀，**照收一個更正也要自己數一次。**
+    ⇒ 所以 `service` 之後**全部具名**（`*`）：
+       日後再插欄位，位置引數會當場 `TypeError`，不會靜默餵錯格。
     """
-    return f"::RESULT:: v={v} status={status} rolled_back={rolled_back} exit={exit_code}"
+    return (f"::RESULT:: v={v} status={status} rolled_back={rolled_back}"
+            f" service={service} exit={exit_code}")
 
 
 #: B 定版的 15 條出口，`status` 與出口 **1:1**。
@@ -145,7 +161,7 @@ def test_p0_00_every_exit_is_judged_as_what_it_actually_was(
     📌 而 **`exit=0` 不等於成功**：`unhealthy_not_rolled_back` 就是 0。
     """
     decide = _need("decide_outcome")
-    out = f"（{line} 那條出口的輸出）\n" + _result_line(status, rolled, rc)
+    out = f"（{line} 那條出口的輸出）\n" + _result_line(status, rolled, exit_code=rc)
     got = decide(rc, out)
     assert got == expected, (
         f"出口 `:{line}`（status={status}, exit={rc}）判成 {got!r}，"
@@ -167,7 +183,7 @@ def test_p0_00_the_real_defect_health_check_failed_without_rollback():
     """
     decide = _need("decide_outcome")
     out = ("健康檢查沒有通過，因為指定了 -SkipAutoRollback 所以不自動回滾\n"
-           + _result_line("unhealthy_not_rolled_back", "applied", 0))
+           + _result_line("unhealthy_not_rolled_back", "applied", exit_code=0))
     assert decide(0, out) == "failed", (
         "健康檢查沒過而 `exit 0`，判定仍然是成功 ——\n"
         "☠️ 正式機跑著沒過健康檢查的版本，而儀表板歷史記著「成功」。")
@@ -186,7 +202,7 @@ def test_p0_00_the_two_exits_that_leave_prod_half_applied_are_failures():
     decide = _need("decide_outcome")
     for status in ("copy_failed_backend", "copy_failed_frontend"):
         out = ("robocopy 失敗\n"
-               + _result_line(status, "applied_no_restore", 1))
+               + _result_line(status, "applied_no_restore", exit_code=1))
         assert decide(1, out) == "failed", f"{status} 沒有被判成失敗"
 
 
@@ -229,7 +245,7 @@ def test_p0_00_a_wrong_protocol_version_is_a_failure():
     🔑 而舊的那一份**不會印新的狀態值** ⇒ 拿它的輸出去判，等於在猜。
     """
     decide = _need("decide_outcome")
-    out = "更新完成\n" + _result_line("success", "applied", 0, v=1)
+    out = "更新完成\n" + _result_line("success", "applied", exit_code=0, v=1)
     assert decide(0, out) == "failed", (
         "`v=1` 的結果行被當成有效 ——\n"
         "☠️ 那代表正式機跑的是舊版 ps1，而它印不出新的狀態值。")
@@ -245,7 +261,7 @@ def test_p0_00_an_unknown_status_is_a_failure():
     """
     decide = _need("decide_outcome")
     for bad in ("unknown", "ok", "done", "succeeded", ""):
-        out = "看起來很正常\n" + _result_line(bad, "applied", 0)
+        out = "看起來很正常\n" + _result_line(bad, "applied", exit_code=0)
         assert decide(0, out) == "failed", (
             f"`status={bad!r}` 不在值域，而判定是成功 ——\n"
             "☠️ 值域一旦開放，dashboard 就只能再回去猜字串。")
@@ -260,10 +276,10 @@ def test_p0_00_the_last_result_line_wins():
     decide = _need("decide_outcome")
     out = "\n".join([
         "子行程開始",
-        _result_line("success", "applied", 0),          # ← 子行程印的
+        _result_line("success", "applied", exit_code=0),          # ← 子行程印的
         "回到主流程",
         "健康檢查沒有通過",
-        _result_line("unhealthy_not_rolled_back", "applied", 0),   # ← 真正的
+        _result_line("unhealthy_not_rolled_back", "applied", exit_code=0),   # ← 真正的
     ])
     assert decide(0, out) == "failed", (
         "撈到的是**第一行**（子行程那一條）而不是最後一行 ——\n"
@@ -277,7 +293,7 @@ def test_p0_00_a_contradiction_resolves_to_failure():
     ☠️ 反過來的話，一個「印錯結果行」的出口會蓋掉一個真實的非 0 結束碼。
     """
     decide = _need("decide_outcome")
-    out = "看起來很正常\n" + _result_line("success", "applied", 0)
+    out = "看起來很正常\n" + _result_line("success", "applied", exit_code=0)
     assert decide(1, out) == "failed", (
         "結束碼是 1 而結果行說成功，判定卻是成功 ——\n"
         "🔑 兩個訊號矛盾時要往失敗倒。")
@@ -291,7 +307,7 @@ def test_p0_00_a_success_is_still_a_success():
     📌 〈判準的寬窄都會騙人〉：「永遠失敗」是「fail-closed」的超集。
     """
     decide = _need("decide_outcome")
-    out = "更新完成\n" + _result_line("success", "applied", 0)
+    out = "更新完成\n" + _result_line("success", "applied", exit_code=0)
     assert decide(0, out) == "succeeded", (
         "一條正常成功的出口被判定成失敗 ——\n"
         "☠️ 每一次部署都記成失敗，而沒有人會相信那個歷史。")
@@ -335,7 +351,6 @@ def test_p0_00_every_exit_prints_exactly_one_result_line():
     📌 實測（我自己跑的，不是引用 B 的）：15 個值**全部恰好一次**，
     10 個掛在 `Fail`、5 個掛在 `Emit-Result`。
     """
-    import re as _re
 
     assert PS1.exists(), f"找不到 {PS1}"
     src = PS1.read_text(encoding="utf-8", errors="replace")
@@ -450,7 +465,6 @@ def test_p0_00_the_dangerous_state_is_set_before_the_action():
     ⚠️ 我同意那個界定。**而「服務停著」這件事五態裡沒有任何一個說得出來** ——
     已回報 A，那是條文層級的事，不是這一題的。
     """
-    import re as _re
 
     assert PS1.exists(), f"找不到 {PS1}"
     src = PS1.read_text(encoding="utf-8", errors="replace")
@@ -610,7 +624,7 @@ def test_p0_00_rollback_with_the_handshake_and_a_result_line_is_judged_by_it():
     """
     decide = _need("decide_outcome")
     out = (_PROTOCOL_LINE + "\n回滾完成\n"
-           + _result_line("success", "restored", 0))
+           + _result_line("success", "restored", exit_code=0))
     assert decide(0, out, action="rollback") == "succeeded", (
         "有握手、也有結果行說成功，而判定是失敗 ——\n"
         "☠️ 每一次正常的回滾都會被記成失敗。")
@@ -687,3 +701,236 @@ def test_p0_00_the_rollback_script_emits_one_result_per_exit():
         + "\n  ".join(e.strip()[:90] for e in emitters)
         + "\n☠️ 格式散在多處 ⇒ 改格式要改多個地方，而漏掉一個會被 fail-closed\n"
           "   接住 ⇒ **看起來像「那次回滾失敗了」。**")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# §34c · `service` —— 它生出來是為了 `:358`，而原本沒有一題在守那件事
+# ══════════════════════════════════════════════════════════════════════
+
+APPLY_PS1 = (Path(__file__).resolve().parent.parent / "tools"
+             / "apply_update.ps1")
+
+#: 「寫進正式機」那一行的語意錨。
+#: ⚠️ **不可以錨在 `robocopy` 這個字**：兩支腳本裡它都扮演兩種角色
+#:    （把正式機複製到快照／把快照複製回正式機），而只有後者是破壞性的。
+#:    〈錨點要錨在語意上〉的可操作判準：
+#:    **「這個字串在檔裡扮演幾種角色？」答案大於一就不能用它當錨。**
+#: ⇒ 所以錨在**目的地**上：`... $BackendDir` 才是寫進正式機。
+_WRITES_INTO_PROD = _re.compile(
+    r'^\s*(?:\$\w+\s*=\s*)?robocopy\s+\(Join-Path\s+\$\w+\s+"backend"\)\s+\$BackendDir\b')
+
+
+@pytest.mark.parametrize("ps1", [APPLY_PS1, ROLLBACK_PS1],
+                         ids=["apply_update", "rollback_update"])
+def test_p0_00_service_goes_down_before_the_first_write_into_prod(ps1):
+    """🔴🔴 §34c 的**本尊案例**：`service=down` 要在第一次寫進正式機**之前**設。
+
+    §34c 逐字：
+    > ☠️ 而「服務停著」正是 `:358` 那條出口（已停服＋半複製＋`Fail()` 不做回滾）
+    > 最需要說出口的那一件 —— **它決定使用者要不要現在衝去開機。**
+
+    ⚠️ **而原本沒有一題在守它。** `_EXITS` 那 15 題連 `service` 都沒傳，
+    §34c 的整個理由**一題都沒落地** ——
+    🔑 〈缺欄位≠缺訊號〉的反面：**欄位加了，而沒有人檢查它說得對不對。**
+
+    ```
+    設在動作之前  ⇒ robocopy 中途失敗 ⇒ service=down    ✅ 使用者知道要去開機
+    設在動作之後  ⇒ 同一次失敗         ⇒ service=unknown ☠️ 「可能還活著吧」
+    ```
+    📌 與 B 在 `§30a` 記下的 `$script:ProdState` **同一條紀律**：
+    **危險值在動作之前就設** —— 而那條紀律當時只寫進 `STATE.md`，
+    〈散文對工具是隱形的〉⇒ 這一題是它的可執行形式。
+
+    ⚠️ **這一題的錨點自檢在第一次實跑就抓到我自己**，那一列留著：
+    ```
+    ❌ v1  assert len(writes) == 1   ⇒ apply_update 紅：命中 2 行
+           :422  robocopy $PackagePath/backend  → $BackendDir   套用新版
+           :632  robocopy $rollbackDir/backend  → $BackendDir   自動回滾的還原
+    ✅ v2  assert writes            ⇒ 兩行都真的是寫進正式機，
+                                      而不變量是「在**第一次**寫之前」
+    ```
+    🔑 〈判準的寬窄都會騙人〉兩側今天都出現了：`== 1` 太**窄**（假陰性），
+       而放寬到 `assert writes` **仍然擋得住唯一會給假綠燈的那一種** —— 命中 0 行。
+    ⇒ 可操作的順序：**放寬之前先把命中的內容印出來看，不要只數數量。**
+    """
+    assert ps1.exists(), "找不到 %s" % ps1
+    lines = ps1.read_text(encoding="utf-8", errors="replace").splitlines()
+
+    downs = [i for i, ln in enumerate(lines)
+             if ln.strip().startswith("$script:ServiceState")
+             and '"down"' in ln]
+    writes = [i for i, ln in enumerate(lines) if _WRITES_INTO_PROD.match(ln)]
+
+    # ⚙️ 錨點自檢 —— 〈盤點工具的正對照〉：
+    #    先證明「已知的那一個亮得起來」，才有資格拿它去比大小。
+    assert writes, (
+        "`%s`：「寫進正式機」的錨點**一行都沒命中** ——\n"
+        "☠️ 那會讓這一題**因為量不到而綠**，而那與「順序是對的」長得一模一樣。\n"
+        "🔑 錨在目的地 `$BackendDir`，不是錨在 `robocopy`（它扮演兩種角色）。"
+        % ps1.name)
+
+    assert len(downs) == 1, (
+        "`%s`：`$script:ServiceState = down` 有 %d 處，預期 1 處。\n"
+        "🔑 兩處以上 ⇒ 順序這件事變成「每一處都要對」，"
+        "而這一題只驗得到最早那一處。" % (ps1.name, len(downs)))
+
+    assert downs[0] < writes[0], (
+        "`%s`：`service=down` 設在 :%d，而第一次寫進正式機在 :%d —— **順序反了**。\n"
+        "☠️ 複製到一半失敗時會報 `service=unknown`，"
+        "而實際上是**我們自己把它停掉的**。\n"
+        "🔑 那個差別決定使用者要不要現在衝去開機（§34c 逐字）。"
+        % (ps1.name, downs[0] + 1, writes[0] + 1))
+
+
+def test_p0_00_the_service_value_domain_is_exactly_what_the_spec_says():
+    """🔴 §34c 逐字 `service=up|down|unknown` —— **兩支腳本都不可以多出第四個值**。
+
+    ☠️ 多一個值（`restarting`／`degraded`／`partial`…）而 dashboard 不認得
+    ⇒ 值域檢查把它判成失敗 ⇒ **一次成功的部署被記成失敗**。
+    🔑 fail-closed 的方向是對的，而**代價是使用者不再相信那個畫面**。
+
+    ⚙️ 反向控制：初始值必須是 `unknown`（最安全的那一個）——
+    少了這一條，「把初始值改成 `up`」會讓值域題照樣全綠，
+    而那會讓**還沒檢查過**的服務被畫面說成「活著」。
+    """
+    allowed = {"up", "down", "unknown"}
+    assign = _re.compile(r'^\s*\$script:ServiceState\s*=\s*"([^"]*)"')
+    for ps1 in (APPLY_PS1, ROLLBACK_PS1):
+        assert ps1.exists(), "找不到 %s" % ps1
+        lines = ps1.read_text(encoding="utf-8", errors="replace").splitlines()
+        hits = []
+        for ln in lines:
+            m = assign.match(ln)
+            if m:
+                hits.append(m.group(1))
+        assert hits, (
+            "`%s` 裡一個 `$script:ServiceState =` 指派都沒抓到 ——\n"
+            "☠️ 那不是「值域乾淨」，是**儀器失效**"
+            "（〈沒抓到要被解釋成儀器失效，不可以被解釋成乾淨〉）。" % ps1.name)
+        bad = set(hits) - allowed
+        assert not bad, (
+            "`%s` 的 `service` 出現規格以外的值：%s\n"
+            "§34c 逐字只有 %s。\n"
+            "☠️ dashboard 的值域檢查會把它判成失敗 ⇒ 一次成功的部署被記成失敗。"
+            % (ps1.name, sorted(bad), sorted(allowed)))
+        assert hits[0] == "unknown", (
+            "`%s` 的 `service` 初始值是 %r，應該是 `unknown`。\n"
+            "☠️ 初始值是 `up` 的話，**還沒檢查過**的服務會被畫面說成活著。\n"
+            "🔑 `up` 只能從一次觀察到的事實來（ping 成功），不可以是預設。"
+            % (ps1.name, hits[0]))
+
+
+def test_p0_00_a_result_line_whose_service_is_unusable_is_fail_closed():
+    """⚙️ **`service` 缺席／亂值 ⇒ fail-closed。**
+
+    ⚠️ **這一題不是紅題，是我在 B 交付之後補的守門。**
+    B 說「缺 `service` ⇒ fail-closed」，我自己把四種輸入都實跑過才寫 ——
+    🔑 〈標出來源不等於查證了來源〉：**照收一個前提與照收一個派工是同一種毛病。**
+    ⇒ 它守的是**日後**有人「順手放寬」時會紅，不是今天抓到了什麼。
+
+    ☠️ 特別是 `service=0`：那是**位置引數踩進 `service` 那一格**的樣子
+    （今天十個呼叫點全部踩得到）—— 它必須是失敗，
+    否則一個**格式壞掉的**結果行會被當成一次成功的部署。
+    """
+    decide = _need("decide_outcome")
+    base = "::RESULT:: v=2 status=success rolled_back=applied"
+    for tail, why in (
+            (" exit=0",                  "整個 service 欄位缺席"),
+            (" service=banana exit=0",   "service 是值域外的字串"),
+            (" service=0 exit=0",        "service=0（位置引數餵錯格的樣子）"),
+            (" service= exit=0",         "service 是空字串"),
+    ):
+        out = "更新完成\n" + base + tail
+        assert decide(0, out) == "failed", (
+            "%s ⇒ 判定是成功。\n"
+            "☠️ 一個**格式壞掉**的結果行被當成一次確認過的部署。\n"
+            "🔑 fail-closed 的方向：讀不出來要拒絕那一筆，不要送一個空值過去。" % why)
+
+
+# ══════════════════════════════════════════════════════════════════════
+# §34a · rollback 的 6 條出口 —— 值域表到了，把當初明著欠的那一半補上
+# ══════════════════════════════════════════════════════════════════════
+#
+# 📌 上面 `..._emits_one_result_per_exit` 的 docstring 寫著：
+#    「逐一釘值的那一半，等 B 的值域表到了再補 —— **而我明著說它還沒釘。**」
+#    ⇒ 表到了，這一節就是那一半。
+#    🔑 〈已知的代價 vs 要修的東西〉：當初寫成註解，**現在要把它結掉**，
+#       否則那行註解會變成「它看起來被處理過了」。
+
+#: `(status, rolled_back, service, exit, 期望判定)`
+_ROLLBACK_EXITS = [
+    ("rollback_not_prod_machine",    "unknown",            "unknown", 1, "failed"),
+    ("rollback_snapshot_missing",    "unknown",            "unknown", 1, "failed"),
+    ("rollback_db_snapshot_missing", "unknown",            "unknown", 1, "failed"),
+    ("rollback_user_cancelled",      "unknown",            "unknown", 1, "failed"),
+    ("rollback_ok",                  "restored",           "up",      0, "succeeded"),
+    ("rollback_failed",              "restored_unhealthy", "down",    1, "failed"),
+]
+
+
+@pytest.mark.parametrize("status,rolled,service,rc,expected", _ROLLBACK_EXITS,
+                         ids=[e[0] for e in _ROLLBACK_EXITS])
+def test_p0_00_every_rollback_exit_is_judged_as_what_it_actually_was(
+        status, rolled, service, rc, expected):
+    """🔴 §34a：**rollback 的 6 條出口也要被判定成它實際的結果。**
+
+    ⚠️ 有握手才走這條 —— 沒握手的那一側是
+    `..._rollback_without_the_handshake_falls_back_to_the_old_judgement`，
+    兩題**方向相反而缺一不可**。
+
+    ☠️ `rollback_failed` 最值得單獨看一眼：
+    ```
+    rolled_back=restored_unhealthy   還原**動作做完了**（快照已經套回去）
+    service=down                     而它**現在沒在服務**
+    ```
+    🔑 合成一句「回滾失敗」會讓人以為快照沒被套用，**而去做第二次回滾** ——
+       那是在一台已經不健康的機器上再蓋一次。
+    """
+    decide = _need("decide_outcome")
+    out = (_PROTOCOL_LINE + "\n（%s 那條出口的輸出）\n" % status
+           + _result_line(status, rolled, service=service, exit_code=rc))
+    got = decide(rc, out, action="rollback")
+    assert got == expected, (
+        "rollback 出口 `%s`（rolled_back=%s, service=%s, exit=%d）"
+        "判成 %r，應該是 %r。" % (status, rolled, service, rc, got, expected))
+
+
+def test_p0_00_the_rollback_status_values_are_one_to_one_with_its_exits():
+    """🔴 §34a：**6 個狀態值，每一個恰好出現一次，且必為 `Fail`／`Emit-Result` 的引數。**
+
+    📌 判準與 `apply_update.ps1` 那一題**同一個形狀**，而形狀本身是 B 退回我換來的：
+    ```
+    ❌ 我的 v1   f"status={s}" in src   ⇒ 逼 ps1 把格式複製 6 份
+    ✅ B 的      數「引數」出現幾次      ⇒ 格式仍然只有一個地方知道
+    ```
+    🔑 `== 1` 而不是 `in`：`in` 只擋得住「漏掉」，
+       `== 1` 還擋得住**兩條出口共用同一個值**（而 1:1 正是這裡的不變量）。
+
+    ⚙️ 反向控制：`unknown` **不可以**是任何一條出口的狀態值。
+    它是 `Fail($msg, $status = "unknown")` 的預設，
+    存在的理由是「日後新增 `Fail` 忘了給狀態 ⇒ 被記成失敗」——
+    ☠️ 而它一旦被當成某條出口的**正式**值，那道保險就失效了
+       （忘記給值與刻意給值再也分不出來）。
+    """
+    assert ROLLBACK_PS1.exists(), "找不到 %s" % ROLLBACK_PS1
+    src = ROLLBACK_PS1.read_text(encoding="utf-8", errors="replace")
+
+    def as_argument(v):
+        #: 只認「被當成引數傳進去」的那一種出現方式 —— 註解與訊息文字不算。
+        return len(_re.findall(
+            r'(?:Fail\s+.*?|Emit-Result\s+)"' + _re.escape(v) + r'"', src))
+
+    for row in _ROLLBACK_EXITS:
+        status = row[0]
+        n = as_argument(status)
+        assert n == 1, (
+            "`%s` 在 `rollback_update.ps1` 裡以引數出現 %d 次，預期恰好 1 次。\n"
+            "☠️ 0 次 ⇒ 那條出口印不出自己是誰；"
+            "2 次以上 ⇒ 兩條出口共用一個值，而畫面分不出它們。\n"
+            "🔑 值與出口 1:1 是刻意的：新增出口時沒有現成的值可借"
+            "⇒ 作者必須加新值 ⇒ **而加新值會被這一題看到。**" % (status, n))
+
+    assert as_argument("unknown") == 0, (
+        "`unknown` 被當成某一條出口的正式狀態值了 ——\n"
+        "☠️ 它是 `Fail` 的**預設**，用來接住「日後新增出口而忘了給狀態」。\n"
+        "🔑 一旦某條出口刻意用它，忘記給值與刻意給值就再也分不出來了。")
