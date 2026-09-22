@@ -269,7 +269,9 @@ def test_ua3c_sending_the_mask_back_must_not_destroy_the_key(
     _put(client, hdr, {"google_maps_api_key": KEY})
     masked = _get(client, hdr).get("google_maps_api_key")
     assert masked and masked != KEY, (
-        f"前提不成立：UA2 還沒做（GET 回的是 {masked!r}）"
+        f"前提不成立：GET 回的是 {masked!r}，不是遮罩過的值。\n"
+        "⚠️ `UA2` **應該**已經做了 ⇒ 那樣這一題本來就跑不了；\n"
+        "   `UA2` 已完成 ⇒ **那是遮罩那一段被改掉了**。"
     )
 
     _put(client, hdr, {"google_maps_api_key": masked})

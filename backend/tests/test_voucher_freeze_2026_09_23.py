@@ -111,7 +111,9 @@ def test_voucher_lines_has_all_five_snapshot_columns(fresh_db):
     have = {r[0] for r in fresh_db.execute(
         "SELECT name FROM sqlite_master WHERE type IN ('table','view')")}
     assert CHILD in have, (
-        "`%s` 不存在 —— `v95` 還沒有。\n" % CHILD
+        "我在 `sqlite_master` 裡沒有找到 `%s`。\n" % CHILD
+        + "⚠️ 它**應該**存在 ⇒ 看 `v95`；`v95` 已完成 ⇒ "
+          "**那它是被刪掉或改名了**。\n"
         + "⚠️ 這是**弱紅**，本檔多題會一起紅在這裡。")
 
     cols = {r[1] for r in fresh_db.execute("PRAGMA table_info(%s)" % CHILD)}
@@ -210,7 +212,11 @@ def _seed_posted(conn, post, code, name, status="已核准"):
         "SELECT name FROM sqlite_master WHERE type IN ('table','view')")}
     missing = {"vouchers", CHILD} - have
     if missing:
-        pytest.fail("`v95` 還沒有：缺 %s。⚠️ 這是**弱紅**。" % sorted(missing))
+        pytest.fail(
+            "我在 `sqlite_master` 裡沒有找到 %s。\n"
+            % sorted(missing)
+            + "⚠️ 它們**應該**存在 ⇒ 看 `v95`；`v95` 已完成 ⇒ "
+              "**那是被刪掉或改名了**。")
 
     conn.execute(
         "INSERT INTO account_items (code, name, parent_code, level,"

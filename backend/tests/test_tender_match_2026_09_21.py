@@ -365,7 +365,10 @@ def _cols(table):
                                    "tender_fetch_log"])
 def test_05_tables_exist(client, table):
     """§3：四張新表要存在。"""
-    assert _cols(table), f"資料表 {table} 不存在（B 的 migration 還沒做）"
+    assert _cols(table), (
+            f"我在 sqlite_master 裡沒有找到資料表 {table}。\n"
+            "⚠️ 它**應該**存在 ⇒ 看對應的 migration；migration 已完成 ⇒ "
+            "**那它是被刪掉或改名了**。")
 
 
 def test_05b_same_org_and_case_no_cannot_be_inserted_twice(client):

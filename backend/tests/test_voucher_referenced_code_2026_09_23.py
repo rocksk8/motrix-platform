@@ -174,7 +174,9 @@ def _need_v95(conn):
     missing = {"vouchers", CHILD} - have
     if missing:
         pytest.fail(
-            "`v95` 還沒有：缺 %s。\n" % sorted(missing)
+            "我在 `sqlite_master` 裡沒有找到 %s。\n" % sorted(missing)
+            + "⚠️ 它們**應該**存在 ⇒ 看 `v95`；`v95` 已完成 ⇒ "
+              "**那是被刪掉或改名了**。\n"
             + "⚠️ 這是**弱紅** —— 本檔多題會一起紅在這裡，"
               "而它們證明的不是同一件事。\n"
               "=> `v95` 落地後我會跑突變逐題確認它紅在自己的斷言上。")

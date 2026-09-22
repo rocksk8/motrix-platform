@@ -70,7 +70,10 @@ def seeded(tmp_path):
         "SELECT name FROM sqlite_master WHERE type IN ('table','view')")}
     if "vouchers" not in have:
         conn.close()
-        pytest.fail("`vouchers` 不存在 —— `v95` 還沒有。")
+        pytest.fail(
+            "我在 `sqlite_master` 裡沒有找到 `vouchers`。\n"
+            "⚠️ 它**應該**存在 ⇒ 看 `v95`；`v95` 已完成 ⇒ "
+            "**那它是被刪掉或改名了**。")
 
     target = "vouchers_all" if "vouchers_all" in have else "vouchers"
     for no, voided in (("20260923-001", ""), ("20260923-002", "2026-09-23T01:00:00")):

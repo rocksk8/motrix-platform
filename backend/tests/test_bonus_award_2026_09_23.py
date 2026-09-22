@@ -349,7 +349,9 @@ def test_one_case_has_at_most_one_live_award_but_can_be_reopened(fresh_db):
     have = {r[0] for r in fresh_db.execute(
         "SELECT name FROM sqlite_master WHERE type IN ('table','view')")}
     assert "bonus_awards" in have, (
-        "`bonus_awards` 不存在 —— migration 還沒有。\n"
+        "我在 `sqlite_master` 裡沒有找到 `bonus_awards`。\n"
+        + "⚠️ 它**應該**存在 ⇒ 看 `v97`；`v97` 已完成 ⇒ "
+          "**那它是被刪掉或改名了**。\n"
         + "⚠️ 這是**弱紅**。")
 
     _award(fresh_db)
@@ -412,7 +414,10 @@ def test_a_bonus_item_without_a_person_source_cannot_be_saved(fresh_db):
     """
     have = {r[0] for r in fresh_db.execute(
         "SELECT name FROM sqlite_master WHERE type='table'")}
-    assert "bonus_items" in have, "`bonus_items` 不存在 —— migration 還沒有。"
+    assert "bonus_items" in have, (
+        "我在 `sqlite_master` 裡沒有找到 `bonus_items`。\n"
+        "⚠️ 它**應該**存在 ⇒ 看 `v97`；`v97` 已完成 ⇒ "
+        "**那它是被刪掉或改名了**。")
     # 🔴 **我第一版多包了一層**（B 抓到）：內層產生器吐 `(欄位名, Row)`，
     #    外層的 `r[1]` 就變成 `Row` ⇒ **鍵是 Row 不是字串**
     #    ⇒ `"person_source" in cols` 恆為 False ⇒ 斷言觸發

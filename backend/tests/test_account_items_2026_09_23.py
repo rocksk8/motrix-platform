@@ -163,7 +163,9 @@ def test_v93_the_table_exists_with_its_columns(fresh_db):
         "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
         (TABLE,)).fetchone()
     assert row, (
-        "`%s` 表不存在 —— `v93` 還沒做。\n" % TABLE
+        "我在 `sqlite_master` 裡沒有找到 `%s`。\n" % TABLE
+        + "⚠️ 它**應該**存在 ⇒ 看 `v93`；`v93` 已完成 ⇒ "
+          "**那它是被刪掉或改名了**。\n"
         + "⚠️ 本檔其餘的紅在這一題綠之前**都不可信**：它們全部紅在同一個原因。")
 
     cols = {r["name"] for r in fresh_db.execute("PRAGMA table_info(%s)" % TABLE)}
@@ -325,7 +327,9 @@ def test_v94_the_migration_does_not_call_the_parser():
     start = next((i for i, l in enumerate(lines)
                   if re.match(r"\s*def _m094_", l)), None)
     assert start is not None, (
-        "`db.py` 裡找不到 `_m094_…` —— `v94` 還沒做。")
+        "`db.py` 裡找不到 `_m094_…`。\n"
+        "⚠️ 它**應該**存在 ⇒ 看 `v94`；`v94` 已完成 ⇒ "
+        "**那支 migration 被改名或刪掉了**。")
 
     depth, body = 0, []
     for i in range(start, len(lines)):

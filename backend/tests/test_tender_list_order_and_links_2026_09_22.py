@@ -359,7 +359,9 @@ def test_so10_the_template_guards_the_link_with_a_condition():
     assert PAGE.exists(), f"找不到 {PAGE}"
     text = PAGE.read_text(encoding="utf-8")
     assert "t.url" in text or "tender.url" in text, (
-        "`tender-radar.html` 裡完全沒有用到標案的 `url` —— SO7 還沒做"
+        "`tender-radar.html` 裡完全沒有用到標案的 `url`。\n"
+        "⚠️ 它**應該**用得到 ⇒ 看 `SO7`；`SO7` 已完成 ⇒ "
+        "**那是那一段被改掉或刪掉了**。"
     )
     guarded = ("x-if=" in text and "url" in text) or ("x-show=" in text
                                                       and "url" in text)
@@ -383,7 +385,10 @@ def test_so7_both_the_tender_name_and_the_organisation_are_clickable():
     text = PAGE.read_text(encoding="utf-8")
 
     links = text.split("<a ")[1:]
-    assert links, "`tender-radar.html` 裡一個 `<a>` 都沒有 —— SO7 還沒做"
+    assert links, (
+        "`tender-radar.html` 裡一個 `<a>` 都沒有。\n"
+        "⚠️ 它**應該**有 ⇒ 看 `SO7`；`SO7` 已完成 ⇒ "
+        "**那是連結那一段被改掉或刪掉了**。")
 
     def _linked(field):
         return any(field in chunk[:400] for chunk in links)
