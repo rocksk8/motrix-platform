@@ -311,17 +311,100 @@ def test_p0_00_every_exit_prints_exactly_one_result_line():
 
     ⚠️ 這一題是**靜態的**（讀 ps1 的文字），它擋得住「忘記印」，
     ☠️ 擋不住「印了但印錯值」 —— 那一半由上面那 15 個案例與人工驗收負責。
+
+    ## 🔴 我第一版的判準會逼 B 把格式複製 15 份（B 退回，留著錯的那一版）
+
+    ```
+    ❌ 我寫的   f"status={status}" not in src
+       它找的是字面 `status=not_prod_machine`
+    而 B 把格式集中在**一支** `Emit-Result`，狀態用**參數**傳
+       ⇒ ps1 裡 `status=` 只出現 **2 次**（實測：`:133` 那一行 ＋ `:137` 的註解）
+       ⇒ 我那個判準 **0/15 命中**
+    ☠️ 要它綠，B 得在 15 條出口各自內嵌 `status=xxx` ＝ **把格式複製 15 份**
+    🔑 而那正是我在 `_result_line()` 刻意避開的同一件事 ——
+       **我要求 B 做一件我自己拒絕做的事。**
+    ```
+
+    ## ✅ B 建議的判準，而它比我原本的**強一級**
+
+    ```
+    in src   只擋得住「漏掉」
+    == 1     還擋得住「**同一個值被兩條出口共用**」
+             —— 而值域與出口 1:1 正是這整件事的不變量，共用會讓它**安靜失效**
+    ```
+    📌 實測（我自己跑的，不是引用 B 的）：15 個值**全部恰好一次**，
+    10 個掛在 `Fail`、5 個掛在 `Emit-Result`。
+    """
+    import re as _re
+
+    assert PS1.exists(), f"找不到 {PS1}"
+    src = PS1.read_text(encoding="utf-8", errors="replace")
+
+    wrong = []
+    for _l, status, _r, _e, _x in _EXITS:
+        hits = _re.findall(
+            r'(?:Fail|Emit-Result)[^\n]*"%s"' % _re.escape(status), src)
+        if len(hits) != 1:
+            wrong.append(f"{status}: {len(hits)} 次")
+    assert not wrong, (
+        "這些 `status` 值不是**恰好一次**出現在 `Fail`／`Emit-Result` 的引數上：\n  "
+        + "\n  ".join(wrong)
+        + "\n🔑 值域與出口是 **1:1**：\n"
+          "   0 次 ⇒ 那一條出口**沒有印結果行** ⇒ 它會落進 fail-closed\n"
+          "         （被記成失敗 —— 比記成成功好，**而它說不出真正發生了什麼**）\n"
+          "   ≥2 次 ⇒ **兩條出口共用同一個值** ⇒ 1:1 安靜失效，\n"
+          "         而 dashboard 從此分不出那兩條")
+
+
+def test_p0_00_the_result_format_lives_in_exactly_one_place():
+    """🔴 **結果行的格式只准有一個地方知道。**
+
+    ☠️ 複製成 15 份的話，**改格式要改 15 個地方**，而漏掉一個的症狀是
+    「那一條出口的結果行版本號不對 ⇒ 被判成失敗」——
+    🔑 **一個會被 fail-closed 接住的錯誤，而它看起來像「那次部署失敗了」。**
+    📌 這一題與上一題是**一對**：上一題管「每個值都有人印」，
+    這一題管「**印的方式只有一種**」。
+
+    ⚠️ 而這正是 B 退回我第一版的理由 —— 我當時的判準會逼它把格式複製 15 份。
+    ⇒ 現在把那件事**釘成不變量**，免得日後有人為了「讓某一題好寫」再拆開一次。
     """
     assert PS1.exists(), f"找不到 {PS1}"
     src = PS1.read_text(encoding="utf-8", errors="replace")
-    missing = [status for _l, status, _r, _e, _x in _EXITS
-               if f"status={status}" not in src]
-    assert not missing, (
-        "這些出口的 `status` 在 `apply_update.ps1` 裡找不到印出它的地方：\n  "
-        + "、".join(missing)
-        + "\n🔑 值域與出口是 **1:1**：少一個代表**那一條出口沒有印結果行**，\n"
-          "☠️ 而它會落進 fail-closed ⇒ 被記成失敗 —— "
-          "**那比記成成功好，但它說不出真正發生了什麼。**")
+    emitters = [ln for ln in src.splitlines()
+                if "::RESULT::" in ln and not ln.strip().startswith("#")]
+    assert len(emitters) == 1, (
+        f"`::RESULT::` 的**輸出點**有 {len(emitters)} 處，預期 1 處：\n  "
+        + "\n  ".join(e.strip()[:90] for e in emitters)
+        + "\n☠️ 格式散在多處 ⇒ 改格式要改多個地方，而漏掉一個的症狀是\n"
+          "   「那一條出口的版本號不對 ⇒ 被判成失敗」——\n"
+          "🔑 **一個會被 fail-closed 接住的錯誤，而它看起來像「那次部署失敗了」。**")
+
+
+def test_p0_00_the_fail_closed_exemption_list_cannot_grow_silently():
+    """🔴 **豁免清單只准有 `build` 一個名字。**
+
+    B 實作了 `_PROTOCOL_EXEMPT`：列在裡面的動作**不走結果行**，走舊的
+    結束碼＋關鍵字。`build` 在裡面（它不碰正式機，`rolled_back` 對它沒有意義）。
+
+    ☠️ **而那是一條非常便宜的變綠路徑**：哪天 `rollback` 或 `deploy` 沒印結果行
+    而被 fail-closed 記成失敗，**最省力的動作是把它加進這個集合** ——
+    🔑 而加進去之後，`P0-00` 對那個動作**整個失效**，且沒有任何一題會紅。
+    📌 〈守門要驗有沒有人做過決定〉：豁免是一個決定，**它要留下名字**。
+
+    ⚠️ 而 B 明著**沒有**把 `rollback` 列進去（它會碰正式機，本來就該講協定）——
+    那個判斷是對的，而這一題是它的守門。
+    """
+    mod = _dash()
+    exempt = getattr(mod, "_PROTOCOL_EXEMPT", None)
+    assert exempt is not None, (
+        "`deploy_dashboard.py` 缺少 `_PROTOCOL_EXEMPT` ——\n"
+        "⇒ 前提不成立（那個機制改名或拿掉了）。")
+    assert set(exempt) == {"build"}, (
+        f"豁免清單現在是 {sorted(exempt)}，預期只有 `build`。\n"
+        "☠️ 多一個名字 ＝ 那個動作從此不走結果行 ⇒ `P0-00` 對它整個失效，\n"
+        "🔑 而它是「被 fail-closed 記成失敗」時**最省力的那個動作**。\n"
+        "📌 要加名字的話，理由要寫在那個集合旁邊，並且改這一題 —— "
+        "**那一改在 diff 上藏不住。**")
 
 
 def test_p0_00_the_dangerous_state_is_set_before_the_action():
