@@ -240,6 +240,19 @@ def _send(to_addrs: list, subject: str, html: str) -> str:
 #: （一個沒有確認的結果被當成「寄過了」，而那張單子從此不再提醒）。
 SEND_UNKNOWN = "unknown"
 
+#: `SendHandle.wait()` 預設等多久。
+#:
+#: 🔴 **要明顯長於 SMTP 自己的逾時**（`smtplib.SMTP(..., timeout=15)`）。
+#: ☠️ 反過來的話，**每一封正常但比較慢的信都會被記成 `unknown`** ——
+#: 🔑 而 `unknown` 的處置是「**去問收件人**」⇒ 那會產生一堆假的待辦，
+#: 📌 **而真正該查的那些會被埋在裡面。**
+#:
+#: ⚠️ 判準是**比例**不是絕對值：15 秒的連線逾時 ＋ 握手與投遞的時間
+#: ⇒ 45 秒讓「真的卡住」與「只是比較慢」分得開。
+#: 🔑 目的是讓 `SEND_UNKNOWN` 在結構上**罕見** ——
+#: 那個計數器開始往上跑，**本身就是訊號**。
+SEND_WAIT_TIMEOUT_SECONDS = 45
+
 
 class SendHandle:
     """`_async_send()` 的把手：**要結果的人可以等，不要的人可以不理。**
@@ -263,9 +276,17 @@ class SendHandle:
         self.outcome = None
 
     def wait(self, timeout=None) -> str:
-        """等到有結果為止（或逾時）。回 `SEND_*`，拿不到就回 `SEND_UNKNOWN`。"""
+        """等到有結果為止（或逾時）。回 `SEND_*`，拿不到就回 `SEND_UNKNOWN`。
+
+        ⚠️ **預設值是 `SEND_WAIT_TIMEOUT_SECONDS`，不是「無限等」** ——
+        ☠️ 無限等的話，一個卡死的 SMTP 連線會把整個排程停在那裡，
+        🔑 而那個症狀是「今天的提醒信一封都沒出去」，
+        **與「沒有人該被提醒」長得一模一樣**。
+        📌 要無限等的呼叫端請明著傳 `timeout=None`。
+        """
+        wait_for = SEND_WAIT_TIMEOUT_SECONDS if timeout is None else timeout
         if self._thread is not None:
-            self._thread.join(timeout)
+            self._thread.join(wait_for)
         return self.outcome if self.outcome is not None else SEND_UNKNOWN
 
 

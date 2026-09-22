@@ -35,6 +35,7 @@ from helpers import (
 from helpers.email_notify import (            # noqa: E402
     SEND_SENT as _SEND_SENT,
     SEND_PERMANENT_FAIL as _SEND_PERMANENT_FAIL,
+    SEND_UNKNOWN as _SEND_UNKNOWN,
 )
 
 router = APIRouter()
@@ -1920,11 +1921,25 @@ def _check_approval_reminders() -> None:
                         doc_type, doc_no, desc, days_elapsed, recipients,
                         also_superadmin)
 
-                    if outcome == _SEND_PERMANENT_FAIL:
-                        # **這一封**永遠寄不出去（收件人沒有 email）
-                        # ⇒ 標記＋留一筆看得見的失敗紀錄。
-                        # ☠️ 不標記的話排程每天重試到天荒地老，
-                        # 🔑 而「每天重試」與「已經修好了」在 log 上長得一樣。
+                    if outcome in (_SEND_PERMANENT_FAIL, _SEND_UNKNOWN):
+                        # ## 兩種都「不重寄」，而**理由不同、處置也不同**
+                        #
+                        # `permanent_fail`：**知道**寄不出去（收件人沒有 email）
+                        #   ⇒ 處置是「去幫那個人填 email」。
+                        #   ☠️ 不標記的話排程每天重試到天荒地老，
+                        #   🔑 而「每天重試」與「已經修好了」在 log 上長得一樣。
+                        #
+                        # `unknown`：**不知道**有沒有寄出去（等不到結果）
+                        #   ⇒ 處置是「**去問收件人**」。
+                        #   ☠️ 當成失敗而重寄 ⇒ 可能寄出兩封（第一封其實成功了）；
+                        #   ☠️ 當成成功而安靜標記 ⇒ 可能一封都沒出去而沒有人知道。
+                        #   🔑 兩害相權：**保留標記（不重寄）＋ 記一筆讓人看得見。**
+                        #   📌 不確定時選「**會被看見**」的那一側，
+                        #      不是選「會自動處理」的那一側。
+                        #
+                        # ⚠️ **落點裡的類別要分開**（`outcome` 原樣寫進去）——
+                        # ☠️ 合併的話，「我不知道這封有沒有出去」會被當成
+                        # 「那個人沒填 email」處理，**而那封信的狀態永遠不會被查清**。
                         _record_reminder_failure(doc_type, doc_no, highest,
                                                  outcome)
                     elif outcome != _SEND_SENT:
