@@ -2,20 +2,557 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>出納 — 已併入營運報表模組</title>
-  <!-- 2026-08-31：出納整合進營運報表模組，成為 reports.html 的一個頁籤（見
-       reports.html/reports.js 的 cashier 頁籤與 showCashierTab()）。保留這個
-       檔案本身（不刪除、不 404）只是為了讓舊書籤/連結還能用，實際內容改成
-       自動導向營運報表模組的出納頁籤。 -->
-  <script>location.href = 'reports.html?tab=cashier'</script>
+  <link rel="icon" type="image/png" href="../static/favicon.png">
+  <title>出納 - MOTRIX 專案管理系統</title>
+  <script src="../js/cashier.js"></script>
+  <script src="../static/auth-guard.js"></script>
+  <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
+  <!-- ⚠️ 下面這整塊樣式是從 `reports.html` **整段複製**過來的。
+       🔑 面板用到的 35 個 class（`ctab`／`stat-pill`／`kpi-card`／`rb-*`…）
+          **只定義在 reports.html 的內嵌 style 裡**，不在 `style.css`
+          ⇒ 不抄過來這一頁會跑版，而跑版不會有任何錯誤訊息。
+       ⚠️ 代價寫明：這是**第二份**，兩邊會各自演進。
+          挑「整段抄」而不是「只抄用得到的 35 條」，理由是後者要人工判斷
+          哪一條被哪個 class 用到，而**漏一條的症狀是視覺跑版、沒有人會報修**。
+          抽成共用 CSS 與 `FE1` 是同一類欠帳，一起排。 -->
+  <style>
+    [x-cloak]{display:none!important}
+    .page-main{margin-left:var(--sidebar-w);margin-top:var(--topbar-h);padding:28px 32px;min-height:calc(100vh - var(--topbar-h));background:var(--white)}
+
+    .period-bar{display:flex;align-items:center;gap:10px;margin-bottom:20px;flex-wrap:wrap}
+    .period-type-btn{padding:5px 14px;border-radius:var(--radius);border:1px solid var(--border-light);font-size:12px;font-family:var(--font-zh);cursor:pointer;background:#fff;color:var(--text-secondary);transition:all .1s}
+    .period-type-btn.on{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+    .period-nav{display:flex;align-items:center;gap:6px}
+    .period-nav button{width:28px;height:28px;border:1px solid var(--border-light);border-radius:var(--radius);background:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--text-secondary)}
+    .period-nav button:hover{background:#F0EEE9}
+    .period-label{font-size:14px;font-weight:600;font-family:var(--font-zh);color:var(--text-primary);min-width:90px;text-align:center}
+    .export-wrap{margin-left:auto;display:flex;gap:8px}
+    .btn-export{display:inline-flex;align-items:center;gap:5px;padding:6px 14px;border-radius:var(--radius);border:1px solid;font-size:12px;font-family:var(--font-zh);font-weight:500;cursor:pointer;transition:all .12s}
+    .btn-export.excel{background:#F0FDF4;border-color:#86EFAC;color:#15803D}
+    .btn-export.excel:hover{background:#DCFCE7}
+    .btn-export.pdf{background:#FEF2F2;border-color:#FCA5A5;color:#DC2626}
+    .btn-export.pdf:hover{background:#FEE2E2}
+    .btn-export:disabled{opacity:.5;cursor:not-allowed}
+    .btn-load{padding:6px 16px;border-radius:var(--radius);border:1px solid var(--accent);background:var(--accent);color:#fff;font-size:12px;font-family:var(--font-zh);font-weight:600;cursor:pointer}
+    .btn-load:hover{opacity:.88}
+
+    .kpi-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(155px,1fr));gap:12px;margin-bottom:22px}
+    .kpi-card{background:#fff;border:1px solid var(--border-light);border-radius:var(--radius-lg);padding:14px 18px}
+    .kpi-card__lbl{font-size:10px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.06em;text-transform:uppercase;margin-bottom:5px}
+    .kpi-card__val{font-size:20px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;line-height:1;color:var(--text-primary)}
+    .kpi-card__sub{font-size:10px;color:var(--text-dim);margin-top:4px;font-family:LINE Seed TW_OTF, sans-serif}
+    .kpi-card.green .kpi-card__val{color:var(--success)}
+    .kpi-card.red   .kpi-card__val{color:var(--danger)}
+    .kpi-card.blue  .kpi-card__val{color:var(--accent)}
+    .kpi-card.orange .kpi-card__val{color:#D97706}
+    .kpi-card.purple .kpi-card__val{color:#7C3AED}
+
+    .tab__cnt{font-family:LINE Seed TW_OTF, sans-serif;font-size:10px;font-weight:600;margin-left:4px;padding:1px 5px;border-radius:8px;background:#F0EEE9}
+    .tab.on .tab__cnt{background:var(--accent-light);color:var(--accent)}
+
+    .panel{background:#fff;border:1px solid var(--border-light);border-radius:var(--radius-lg);overflow:hidden}
+    .data-table{width:100%;border-collapse:collapse;font-size:13px}
+    .data-table th{padding:10px 14px;text-align:left;font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);font-weight:500;background:#FAFAF8;border-bottom:1px solid var(--border-light);white-space:nowrap}
+    .data-table th.r{text-align:right}.data-table th.c{text-align:center}
+    .data-table td{padding:10px 14px;border-bottom:1px solid #F0EEE9;vertical-align:middle}
+    .data-table tr:last-child td{border-bottom:none}
+    .data-table tr:hover td{background:#FDFCFA}
+    .data-table .sum-row td{background:#111827!important;color:#fff;font-weight:600;border-bottom:none}
+    .data-table tr.in-period td{background:var(--accent-light)}
+    .mono{font-family:LINE Seed TW_OTF, sans-serif;font-size:11px}
+    .r{text-align:right}.c{text-align:center}
+    .green-txt{color:var(--success);font-weight:600}
+    .red-txt{color:var(--danger);font-weight:600}
+    .orange-txt{color:#D97706;font-weight:600}
+    .rb{display:inline-flex;align-items:center;padding:2px 9px;border-radius:4px;font-size:11px;font-weight:600}
+    .rb-active{background:#DCFCE7;color:#15803D}
+    .rb-closed{background:#F3F4F6;color:#374151}
+    .rb-fin{background:#EDE9FE;color:#7C3AED}
+    .rb-received{background:var(--success-light);color:var(--success)}
+    .rb-pending{background:#FEF3C7;color:#92400E}
+    .rb-invoiced{background:#ECFDF5;color:#065F46}
+
+    .link-btn{background:none;border:none;color:var(--accent);font-size:11px;cursor:pointer;text-decoration:underline;padding:0;font-family:var(--font-zh)}
+    .link-btn:hover{opacity:.75}
+
+    /* ── 出納頁籤（2026-08-31 併入本頁）────────────────────────────────────── */
+    .stat-strip{display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap}
+    .stat-pill{display:flex;flex-direction:column;padding:14px 18px;border:1px solid var(--border-light);border-radius:var(--radius-lg);background:#fff;min-width:130px;flex:1;max-width:200px}
+    .stat-pill__val{font-size:22px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;line-height:1;color:var(--text-primary)}
+    .stat-pill__lbl{font-size:10px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.06em;margin-top:4px;text-transform:uppercase}
+    .stat-pill.accent .stat-pill__val{color:var(--accent)}
+    .stat-pill.danger  .stat-pill__val{color:var(--danger)}
+    .stat-pill.success .stat-pill__val{color:var(--success)}
+    .stat-pill.warn    .stat-pill__val{color:#D97706}
+    /* 出納頁籤內部子頁籤，刻意不叫 .tab/.tab-bar（那是本頁頂層頁籤列，
+       style.css 全站共用的 class，同名會互相污染樣式） */
+    .ctabs{display:flex;gap:8px;margin-bottom:18px;border-bottom:1px solid var(--border-light)}
+    .ctab{padding:9px 4px;margin-right:14px;font-size:13px;font-family:var(--font-zh);font-weight:600;color:var(--text-dim);background:none;border:none;border-bottom:2px solid transparent;cursor:pointer}
+    .ctab.on{color:var(--accent);border-bottom-color:var(--accent)}
+    .search-wrap{position:relative;flex:0 0 260px}
+    .search-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text-dim);pointer-events:none}
+    .search-input{width:100%;padding:8px 11px 8px 34px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:var(--font-zh);background:#fff;outline:none;box-sizing:border-box}
+    .alert-bar{display:flex;align-items:center;gap:10px;padding:10px 16px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:var(--radius-lg);margin-bottom:14px;font-size:12px;font-family:var(--font-zh);color:#92400E}
+    .alert-bar svg{flex-shrink:0;color:#D97706}
+    .data-table tr.uninvoiced-row td{background:#FFFBEB}
+    .action-btn{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:var(--radius);font-size:11px;font-family:var(--font-zh);font-weight:500;cursor:pointer;border:1px solid;transition:all .12s}
+    .action-btn.pay{background:#F0FDF4;border-color:#86EFAC;color:#15803D}
+    .action-btn.pay:hover{background:#DCFCE7}
+    .action-btn.unreceive{background:#F9FAFB;border-color:#D1D5DB;color:#6B7280}
+    .action-btn.invoice{background:#FFF7ED;border-color:#FED7AA;color:#C2410C}
+    .summary-bar{display:flex;gap:24px;padding:10px 14px;background:#FAFAF8;border-top:1px solid var(--border-light);font-size:12px;font-family:var(--font-zh);color:var(--text-secondary)}
+    .summary-bar strong{color:var(--text-primary);font-family:LINE Seed TW_OTF, sans-serif}
+    .field-label{font-size:11px;font-family:var(--font-zh);color:var(--text-secondary);margin-bottom:4px;font-weight:500;display:block}
+    .field-input{width:100%;padding:7px 10px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:var(--font-zh);outline:none;box-sizing:border-box;margin-bottom:12px}
+
+    /* Achievement (目標達成率) */
+    .acv-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px;margin-bottom:22px}
+    .acv-card{background:#fff;border:1px solid var(--border-light);border-radius:var(--radius-lg);padding:16px 18px}
+    .acv-card__lbl{font-size:10px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px}
+    .acv-value-row{display:flex;align-items:baseline;gap:5px;margin-bottom:8px}
+    .acv-actual{font-size:17px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-primary)}
+    .acv-sep{font-size:11px;color:var(--text-dim)}
+    .acv-target{font-size:11px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif}
+    .acv-bar-track{height:6px;background:#F0EEE9;border-radius:3px;overflow:hidden;margin-bottom:8px}
+    .acv-bar-fill{height:100%;border-radius:3px;transition:width .4s ease}
+    .acv-footer{display:flex;align-items:center;justify-content:space-between}
+    .acv-rate{font-size:12px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif}
+    .acv-rate.green{color:var(--success)}.acv-rate.orange{color:#D97706}.acv-rate.red{color:var(--danger)}.acv-rate.none{color:var(--text-dim)}
+    .acv-prorata{font-size:10px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif}
+    .acv-hd{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px;gap:12px}
+    .acv-hd__title{font-size:15px;font-weight:700;color:var(--text-primary);font-family:var(--font-zh)}
+    .acv-hd__sub{font-size:11px;color:var(--text-dim);margin-top:3px}
+    .btn-set-target{padding:7px 15px;border-radius:var(--radius);border:1px solid #7C3AED;background:#EDE9FE;color:#7C3AED;font-size:12px;font-family:var(--font-zh);font-weight:600;cursor:pointer;white-space:nowrap}
+    .btn-set-target:hover{background:#DDD6FE}
+
+    /* Target form */
+    .tgt-2col{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:18px}
+    .tgt-field label{font-size:11px;color:var(--text-dim);display:block;margin-bottom:4px;font-family:var(--font-zh)}
+    .tgt-field input{width:100%;padding:7px 10px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-primary);background:#fff}
+    .tgt-field input:focus{outline:none;border-color:var(--accent)}
+    .tgt-sp-row{display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:8px;align-items:end;margin-bottom:8px}
+    .tgt-sp-row label{font-size:10px;color:var(--text-dim);display:block;margin-bottom:3px}
+    .tgt-sp-row input{width:100%;padding:6px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;font-family:LINE Seed TW_OTF, sans-serif}
+
+    /* Charts (圖表分析) */
+    .chart-2col{display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:16px}
+    .chart-full{margin-bottom:16px}
+    .chart-card{background:#fff;border:1px solid var(--border-light);border-radius:var(--radius-lg);padding:18px}
+    /* ── 本期財務快照（2026-09-14）── */
+    .fsnap { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px; }
+    @media (max-width: 860px) { .fsnap { grid-template-columns: 1fr; } }
+    .fsnap__col {
+      background: #fff; border: 1px solid var(--border-light);
+      border-radius: var(--radius-lg); padding: 12px 16px 14px;
+    }
+    .fsnap__h { display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+    .fsnap__title { font-size: 12.5px; font-weight: 700; color: var(--text-primary); }
+    .fsnap__net {
+      margin-left: auto; font-size: 12.5px; font-weight: 700;
+      font-family: LINE Seed TW_OTF, sans-serif; font-variant-numeric: tabular-nums;
+    }
+    .fsnap__net.pos { color: var(--success); }
+    .fsnap__net.neg { color: var(--danger); }
+    .fsnap__row { display: flex; align-items: center; gap: 10px; margin-bottom: 7px; }
+    .fsnap__lbl { font-size: 11.5px; color: var(--text-secondary); width: 30px; flex: 0 0 auto; }
+    .fsnap__track {
+      flex: 1; min-width: 0; height: 10px; border-radius: 5px;
+      background: var(--icon-btn-bg); overflow: hidden; display: block;
+    }
+    .fsnap__track > i { display: block; height: 100%; border-radius: 5px; }
+    .fsnap__v {
+      flex: 0 0 auto; min-width: 108px; text-align: right;
+      font-size: 12.5px; font-weight: 600; color: var(--text-primary);
+      font-family: LINE Seed TW_OTF, sans-serif; font-variant-numeric: tabular-nums;
+    }
+    .fsnap__v--na { font-weight: 400; color: var(--text-dim); font-size: 11.5px; }
+    .fsnap__note { font-size: 10.5px; color: var(--text-dim); margin-top: 8px; }
+
+    /* ── 圖表數值明細（2026-09-14）──────────────────────────────────
+       圖只讀得出量級，讀不出數字。這張表就是圖的「表格檢視」：同一組數字，
+       另一種讀法。文字一律用文字色，識別交給欄頭那顆小色塊——數值本身
+       染成系列色會讓整張表變得很吵，而且色盲讀者拿不到任何資訊。 */
+    .cdata { margin-top: 10px; border-top: 1px solid var(--border-light); padding-top: 8px; overflow-x: auto; }
+    .cdata__t { width: 100%; border-collapse: collapse; font-size: 11px; }
+    .cdata__t th, .cdata__t td { padding: 4px 8px; white-space: nowrap; }
+    .cdata__t thead th {
+      font-weight: 700; color: var(--text-dim); text-align: right;
+      border-bottom: 1px solid var(--border-light);
+    }
+    .cdata__t thead th:first-child { text-align: left; }
+    .cdata__t tbody th {
+      font-weight: 500; color: var(--text-secondary); text-align: left;
+      border-bottom: 1px solid var(--border-light);
+    }
+    .cdata__t tbody td {
+      text-align: right; color: var(--text-primary);
+      font-family: LINE Seed TW_OTF, sans-serif; font-variant-numeric: tabular-nums;
+      border-bottom: 1px solid var(--border-light);
+    }
+    .cdata__t tbody tr:last-child th, .cdata__t tbody tr:last-child td { border-bottom: none; }
+    .cdata__t tbody tr:hover td, .cdata__t tbody tr:hover th { background: var(--icon-btn-bg); }
+    .cdata__sw { display: inline-block; width: 7px; height: 7px; border-radius: 2px; margin-right: 5px; vertical-align: 1px; }
+    .cdata-toggle { display: flex; justify-content: flex-end; margin-bottom: 8px; }
+    .cdata-toggle button {
+      font-family: var(--font-zh); font-size: 11.5px; padding: 3px 10px;
+      border-radius: var(--radius); border: 1px solid var(--border-light);
+      background: #fff; color: var(--text-secondary); cursor: pointer;
+    }
+    .cdata-toggle button:hover { border-color: var(--ghost-hover-border); color: var(--text-primary); }
+
+    .chart-card__title{font-size:10px;font-weight:600;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.06em;text-transform:uppercase;color:var(--text-dim);margin-bottom:14px}
+    @media(max-width:800px){.chart-2col{grid-template-columns:1fr}}
+    @media(max-width:767px){
+      .panel{overflow-x:auto!important;-webkit-overflow-scrolling:touch}
+      .data-table{min-width:520px}
+    }
+
+    /* Customer history */
+    .cust-layout{display:flex;gap:0;border:1px solid var(--border-light);border-radius:var(--radius-lg);overflow:hidden;min-height:420px}
+    .cust-list-col{width:280px;min-width:240px;overflow-y:auto;border-right:1px solid var(--border-light);background:#FAFAF9;flex-shrink:0}
+    .cust-list-controls{padding:10px 12px;border-bottom:1px solid var(--border-light);background:#fff;display:flex;gap:6px;flex-wrap:wrap}
+    .cust-search{flex:1;min-width:0;padding:5px 9px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;font-family:var(--font-zh);background:#fff;outline:none}
+    .cust-sort{padding:5px 6px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:11px;font-family:var(--font-zh);background:#fff;cursor:pointer}
+    .cust-card{padding:11px 14px;border-bottom:1px solid var(--border-light);cursor:pointer;transition:.1s;background:#fff}
+    .cust-card:hover{background:#F0EEE9}
+    .cust-card.active{background:var(--accent-light);border-left:3px solid var(--accent)}
+    .cust-card__name{font-size:13px;font-weight:600;font-family:var(--font-zh);color:var(--text-primary);margin-bottom:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .cust-card__meta{font-size:11px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;margin-bottom:5px}
+    .cust-card__chips{display:flex;gap:4px;flex-wrap:wrap}
+    .cust-chip{font-size:10px;padding:1px 6px;border-radius:4px;font-family:LINE Seed TW_OTF, sans-serif;font-weight:500}
+    .cust-chip-won{background:#DCFCE7;color:#15803D}
+    .cust-chip-lost{background:#FEF2F2;color:#DC2626}
+    .cust-chip-pend{background:#F3F4F6;color:#6B7280}
+    .cust-detail-col{flex:1;overflow-y:auto;background:#fff;padding:18px}
+    .cust-placeholder{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:var(--text-dim);font-family:var(--font-zh);font-size:13px;gap:10px;padding:40px}
+    .cust-header{display:flex;align-items:baseline;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+    .cust-header__name{font-size:17px;font-weight:700;font-family:var(--font-zh);color:var(--text-primary)}
+    .cust-kpi-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px}
+    .cust-kpi{padding:10px 14px;border:1px solid var(--border-light);border-radius:var(--radius);background:#FAFAF9;min-width:100px}
+    .cust-kpi__lbl{font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;margin-bottom:3px}
+    .cust-kpi__val{font-size:15px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-primary)}
+
+    .empty-state{text-align:center;padding:48px;color:var(--text-dim);font-family:var(--font-zh);font-size:13px}
+    .loading-text{text-align:center;padding:40px;color:var(--text-dim);font-size:13px}
+    .error-bar{background:#FEF2F2;border:1px solid #FCA5A5;border-radius:var(--radius-lg);padding:12px 16px;color:#DC2626;font-family:var(--font-zh);font-size:13px;margin-bottom:16px}
+
+    .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:300;display:flex;align-items:center;justify-content:center;padding:24px}
+    .modal-box{background:#fff;border-radius:12px;width:100%;max-width:620px;max-height:90vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.2)}
+    .modal-hd{display:flex;align-items:center;justify-content:space-between;padding:18px 24px;border-bottom:1px solid var(--border-light)}
+    .modal-title{font-size:15px;font-weight:700;font-family:var(--font-zh);color:var(--text-primary)}
+    .modal-body{padding:20px 24px}
+    .stl-meta{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+    .stl-kpi{border:1px solid var(--border-light);border-radius:var(--radius);padding:10px 14px;background:#FAFAF8}
+    .stl-kpi__lbl{font-size:10px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.06em;text-transform:uppercase;margin-bottom:3px}
+    .stl-kpi__val{font-size:16px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-primary)}
+    .stl-section{font-size:11px;font-weight:600;color:var(--text-secondary);font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.08em;text-transform:uppercase;margin:14px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--border-light)}
+    .stl-table{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:10px}
+    .stl-table th{padding:7px 10px;text-align:left;font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.06em;text-transform:uppercase;color:var(--text-dim);background:#FAFAF8;border-bottom:1px solid var(--border-light)}
+    .stl-table td{padding:7px 10px;border-bottom:1px solid #F0EEE9;vertical-align:middle;font-family:var(--font-zh)}
+    .stl-table tr:last-child td{border-bottom:none}
+  </style>
 </head>
-<!-- `data-no-topbar`：這是一頁**轉址頁**（下面那行 `location.href` 會
-     立刻把瀏覽器帶走），沒有 app shell 也不該有頂欄。
-     🔑 宣告它是為了讓「刻意沒有」與「忘了加」分得開 ——
-        `sidebar.js` 找不到掛載點又沒有這個宣告時會 `console.error`。
-     ☠️ 沒有這個分辨的話，`map.html` 那個漏掉的掛載點可以安靜一整天。 -->
-<body data-no-topbar>
-  <p>出納已併入 <a href="reports.html?tab=cashier">營運報表模組</a>，正在為您導向…</p>
+<body x-data="cashierApp()" x-init="init()" x-cloak>
+
+  <!-- 🔴 頂欄的掛載點。
+       ⚠️ 覆蓋前的那個轉址存根，`<body>` 上宣告了「這一頁刻意沒有頂欄」那個屬性。
+          **那個宣告絕對不可以跟著留下來** —— 它的作用是讓 `sidebar.js` 找不到
+          掛載點時**不要** `console.error`（「刻意沒有」與「忘了加」分得開）。
+       ☠️ 留著的結果是：沒有頂欄，**而且沒有任何警告** —— 最該叫的那一次不叫。
+       📌 而這段註解**刻意不寫出那個屬性的名字**：守門是字面比對，
+          它分不出「宣告」與「解釋不可以宣告的註解」。
+          🔑 我今天已經踩過兩次同樣的形狀（驗包的絆線、以及它的第二次）。 -->
+  <header id="app-topbar" class="topbar"></header>
+
+  <!-- 側欄必須是 <body> 的直接子元素：深色模式的反轉濾鏡排除清單只認直接
+       子元素（style.css「DARK MODE」區塊的 body > *:not(.sidebar)）。 -->
+  <div id="sidebar-root"></div>
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+  <div class="app-shell">
+    <main class="page-main">
+
+      <h1 class="page-title">出納</h1>
+
+      <div x-show="error" class="alert-bar" x-text="error"></div>
+
+      <div x-show="!error" class="panel" style="padding:20px">
+            <div class="stat-strip">
+              <div class="stat-pill danger">
+                <div class="stat-pill__val" x-text="fmt(kpiPayableTotal)">—</div>
+                <div class="stat-pill__lbl">待付款總額</div>
+              </div>
+              <div class="stat-pill accent">
+                <div class="stat-pill__val" x-text="fmt(kpiReceivableTotal)">—</div>
+                <div class="stat-pill__lbl">待收款總額</div>
+              </div>
+              <div class="stat-pill success">
+                <div class="stat-pill__val" x-text="fmt(cashierHistoryOutgoingTotal)">—</div>
+                <div class="stat-pill__lbl">本期已匯款</div>
+              </div>
+              <div class="stat-pill success">
+                <div class="stat-pill__val" x-text="fmt(cashierHistoryIncomingTotal)">—</div>
+                <div class="stat-pill__lbl">本期已收款</div>
+              </div>
+              <div class="stat-pill warn">
+                <div class="stat-pill__val" x-text="kpiPayableOverdue + kpiReceivableOverdue">—</div>
+                <div class="stat-pill__lbl">逾期待處理筆數</div>
+              </div>
+            </div>
+
+            <div class="ctabs">
+              <button class="ctab" :class="{on: cashierSub==='payable'}" @click="cashierSub='payable'">
+                待付款<span class="tab__cnt" x-text="payable.length"></span>
+              </button>
+              <button class="ctab" :class="{on: cashierSub==='receivable'}" @click="cashierSub='receivable'">
+                待收款<span class="tab__cnt" x-text="receivable.filter(i=>!i.received).length"></span>
+              </button>
+              <button class="ctab" :class="{on: cashierSub==='history'}" @click="cashierSub='history'">執行歷史</button>
+              <button class="ctab" :class="{on: cashierSub==='bank'}" @click="cashierSub='bank'">銀行對帳單比對</button>
+            </div>
+
+            <!-- 待付款 -->
+            <div x-show="cashierSub==='payable'">
+              <template x-if="payable.length===0">
+                <div class="empty-state">目前沒有待匯款的申請</div>
+              </template>
+              <template x-if="payable.length>0">
+                <div class="panel">
+                  <table class="data-table">
+                    <thead><tr>
+                      <th>申請單號</th><th>關聯案件</th><th>廠商</th>
+                      <th class="r">應付金額</th><th class="c">應付款日期</th><th class="c">動作</th>
+                    </tr></thead>
+                    <tbody>
+                      <template x-for="v in payable" :key="v.voucherNo">
+                        <tr>
+                          <td class="mono" x-text="v.voucherNo"></td>
+                          <td class="mono" x-text="v.quoteNo"></td>
+                          <td x-text="v.vendorName || '（外包人員點工）'"></td>
+                          <td class="r mono" x-text="fmt(v.grandTotal)"></td>
+                          <td class="c mono" :class="isOverdue(v.payableDate) ? 'red-txt' : (isDueSoon(v.payableDate) ? 'orange-txt' : '')"
+                              x-text="v.payableDate || '未指定'"></td>
+                          <td class="c">
+                            <button x-show="canExecuteCashier()" class="action-btn pay" @click="openPayVoucherModal(v)">標記已匯款</button>
+                            <span x-show="!canExecuteCashier()" style="font-size:11px;color:var(--text-dim)">僅檢視</span>
+                          </td>
+                        </tr>
+                      </template>
+                    </tbody>
+                  </table>
+                </div>
+              </template>
+            </div>
+
+            <!-- 待收款（併入 receivables.html 全部功能，2026-08-31） -->
+            <div x-show="cashierSub==='receivable'">
+              <div class="alert-bar" x-show="receivableUninvoicedCount > 0">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+                <span>共 <strong x-text="receivableUninvoicedCount"></strong> 筆款項尚未登錄發票號碼。</span>
+              </div>
+
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+                <div class="search-wrap">
+                  <span class="search-icon">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                  </span>
+                  <input class="search-input" type="search" placeholder="搜尋案件號 / 客戶 / 款項…" x-model="receivableSearch">
+                </div>
+                <button class="period-type-btn" :class="{on:receivableFilterTab==='all'}" @click="receivableFilterTab='all'">全部</button>
+                <button class="period-type-btn" :class="{on:receivableFilterTab==='unreceived'}" @click="receivableFilterTab='unreceived'">未收款</button>
+                <button class="period-type-btn" :class="{on:receivableFilterTab==='received'}" @click="receivableFilterTab='received'">已收款</button>
+                <button class="period-type-btn" :class="{on:receivableFilterTab==='uninvoiced'}" @click="receivableFilterTab='uninvoiced'">未開發票</button>
+                <div style="margin-left:auto;font-size:12px;color:var(--text-dim)" x-text="'共 ' + filteredReceivable.length + ' 筆'"></div>
+              </div>
+
+              <template x-if="filteredReceivable.length===0">
+                <div class="empty-state">沒有符合條件的款項</div>
+              </template>
+              <template x-if="filteredReceivable.length>0">
+                <div class="panel">
+                  <table class="data-table">
+                    <thead><tr>
+                      <th>案件號</th><th>客戶</th><th>業務員</th><th>款項類型</th>
+                      <th class="r">應收金額</th><th class="c">預計收款日</th><th class="c">收款狀態</th>
+                      <th>發票號碼</th><th class="c">動作</th>
+                    </tr></thead>
+                    <tbody>
+                      <template x-for="it in filteredReceivable" :key="it.quoteNo + '-' + it.idx">
+                        <tr :class="!it.invoiceNo && 'uninvoiced-row'">
+                          <td class="mono" x-text="it.quoteNo"></td>
+                          <td x-text="it.customer"></td>
+                          <td x-text="it.salesPerson"></td>
+                          <td x-text="it.type"></td>
+                          <td class="r mono" x-text="fmt(it.amount)"></td>
+                          <td class="c mono" :class="it.overdue ? 'red-txt' : (isDueSoon(it.expectedReceiptDate) ? 'orange-txt' : '')"
+                              x-text="it.expectedReceiptDate || '未指定'"></td>
+                          <td class="c"><span class="rb" :class="it.received ? 'rb-received' : 'rb-pending'" x-text="it.received ? '已收款' : '待收款'"></span></td>
+                          <td>
+                            <template x-if="it.invoiceNo">
+                              <span class="rb rb-invoiced" :style="canExecuteCashier() ? 'cursor:pointer' : ''" @click="canExecuteCashier() && openInvoiceModal(it)" x-text="it.invoiceNo"></span>
+                            </template>
+                            <template x-if="!it.invoiceNo && canExecuteCashier()">
+                              <button class="action-btn invoice" @click="openInvoiceModal(it)">登錄發票</button>
+                            </template>
+                            <span x-show="!it.invoiceNo && !canExecuteCashier()" style="color:var(--text-dim);font-size:11px">未登錄</span>
+                          </td>
+                          <td class="c">
+                            <template x-if="canExecuteCashier() && !it.received">
+                              <button class="action-btn pay" @click="openReceiveModal(it)">標記已收款</button>
+                            </template>
+                            <template x-if="canExecuteCashier() && it.received">
+                              <button class="action-btn unreceive" @click="toggleReceived(it, false)">取消收款</button>
+                            </template>
+                            <span x-show="!canExecuteCashier()" style="font-size:11px;color:var(--text-dim)">僅檢視</span>
+                          </td>
+                        </tr>
+                      </template>
+                    </tbody>
+                  </table>
+                  <div class="summary-bar">
+                    <span>篩選結果合計：<strong x-text="fmt(filteredReceivable.reduce((s,i)=>s+i.amount,0))"></strong></span>
+                    <span>已收：<strong style="color:var(--success)" x-text="fmt(filteredReceivable.filter(i=>i.received).reduce((s,i)=>s+i.amount,0))"></strong></span>
+                    <span>未收：<strong style="color:var(--danger)" x-text="fmt(filteredReceivable.filter(i=>!i.received).reduce((s,i)=>s+i.amount,0))"></strong></span>
+                    <span>未開票：<strong style="color:#D97706" x-text="filteredReceivable.filter(i=>!i.invoiceNo).length + ' 筆'"></strong></span>
+                  </div>
+                </div>
+              </template>
+            </div>
+
+            <!-- 執行歷史（2026-08-31） -->
+            <div x-show="cashierSub==='history'">
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+                <label class="field-label" style="margin:0">起</label>
+                <input type="date" class="field-input" style="width:auto;margin:0" x-model="cashierHistoryStart">
+                <label class="field-label" style="margin:0">迄</label>
+                <input type="date" class="field-input" style="width:auto;margin:0" x-model="cashierHistoryEnd">
+                <button class="period-type-btn" @click="loadCashierHistory()">查詢</button>
+                <button class="btn-export excel" style="margin-left:auto" :disabled="cashierExporting" @click="exportCashierHistory()">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                  <span x-text="cashierExporting ? '匯出中…' : '匯出 Excel'"></span>
+                </button>
+              </div>
+
+              <template x-if="cashierHistoryLoading">
+                <div class="empty-state">載入中…</div>
+              </template>
+              <template x-if="!cashierHistoryLoading">
+                <div>
+                  <div class="stl-section">已匯款明細（共 <span x-text="cashierHistoryOutgoing.length"></span> 筆，合計 <span x-text="fmt(cashierHistoryOutgoingTotal)"></span>）</div>
+                  <template x-if="cashierHistoryOutgoing.length===0">
+                    <div class="empty-state">此區間沒有已匯款紀錄</div>
+                  </template>
+                  <template x-if="cashierHistoryOutgoing.length>0">
+                    <div class="panel" style="margin-bottom:20px">
+                      <table class="data-table">
+                        <thead><tr><th>申請單號</th><th>關聯案件</th><th>廠商</th><th class="r">金額</th><th class="c">匯款日期</th></tr></thead>
+                        <tbody>
+                          <template x-for="v in cashierHistoryOutgoing" :key="v.voucherNo">
+                            <tr>
+                              <td class="mono" x-text="v.voucherNo"></td>
+                              <td class="mono" x-text="v.quoteNo"></td>
+                              <td x-text="v.vendorName || '（外包人員點工）'"></td>
+                              <td class="r mono" x-text="fmt(v.grandTotal)"></td>
+                              <td class="c mono" x-text="v.paidAt ? v.paidAt.slice(0,10) : ''"></td>
+                            </tr>
+                          </template>
+                        </tbody>
+                      </table>
+                    </div>
+                  </template>
+
+                  <div class="stl-section">已收款明細（共 <span x-text="cashierHistoryIncoming.length"></span> 筆，合計 <span x-text="fmt(cashierHistoryIncomingTotal)"></span>）</div>
+                  <template x-if="cashierHistoryIncoming.length===0">
+                    <div class="empty-state">此區間沒有已收款紀錄</div>
+                  </template>
+                  <template x-if="cashierHistoryIncoming.length>0">
+                    <div class="panel">
+                      <table class="data-table">
+                        <thead><tr><th>案件號</th><th>客戶</th><th>業務員</th><th>款項類型</th><th class="r">實收金額</th><th class="c">收款日</th></tr></thead>
+                        <tbody>
+                          <template x-for="it in cashierHistoryIncoming" :key="it.quoteNo + it.type + it.receivedAt">
+                            <tr>
+                              <td class="mono" x-text="it.quoteNo"></td>
+                              <td x-text="it.customer"></td>
+                              <td x-text="it.salesPerson"></td>
+                              <td x-text="it.type"></td>
+                              <td class="r mono" x-text="fmt(it.actualAmount !== null ? it.actualAmount : it.amount)"></td>
+                              <td class="c mono" x-text="it.receivedAt"></td>
+                            </tr>
+                          </template>
+                        </tbody>
+                      </table>
+                    </div>
+                  </template>
+                </div>
+              </template>
+            </div>
+
+            <!-- 銀行對帳單比對（搬自營運報表資金水位頁籤，2026-08-31） -->
+            <div x-show="cashierSub==='bank'">
+              <div style="font-size:11px;color:var(--text-dim);margin-bottom:10px">
+                上傳銀行匯出的 CSV（需含日期與金額欄位），依金額比對目前「已核准未匯款」清單，僅供人工複核，不會自動標記已匯款。
+              </div>
+              <label x-show="canExecuteCashier()" class="action-btn pay" style="cursor:pointer;display:inline-flex">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+                <span x-text="bankReconciling ? '比對中…' : '上傳 CSV 比對'"></span>
+                <input type="file" accept=".csv" style="display:none" :disabled="bankReconciling" @change="uploadBankCsv($event)">
+              </label>
+              <span x-show="!canExecuteCashier()" style="font-size:12px;color:var(--text-dim)">僅出納/管理員可上傳比對</span>
+
+              <template x-if="bankResult">
+                <div style="margin-top:14px">
+                  <div class="kpi-grid">
+                    <div class="kpi-card green">
+                      <div class="kpi-card__lbl">配對成功</div>
+                      <div class="kpi-card__val" x-text="bankResult.matchedCount"></div>
+                    </div>
+                    <div class="kpi-card orange">
+                      <div class="kpi-card__lbl">銀行紀錄未配對</div>
+                      <div class="kpi-card__val" x-text="bankResult.unmatchedBankCount"></div>
+                    </div>
+                    <div class="kpi-card red">
+                      <div class="kpi-card__lbl">仍待匯款（未配對）</div>
+                      <div class="kpi-card__val" x-text="bankResult.unmatchedVouchers.length"></div>
+                    </div>
+                  </div>
+
+                  <div class="panel">
+                    <table class="data-table">
+                      <thead><tr>
+                        <th class="c">銀行日期</th><th class="r">銀行金額</th><th>銀行摘要</th>
+                        <th>配對申請單號</th><th>承攬商</th><th class="c">動作</th>
+                      </tr></thead>
+                      <tbody>
+                        <template x-for="(r, i) in bankResult.bankRows" :key="i">
+                          <tr>
+                            <td class="c" x-text="r.date"></td>
+                            <td class="r mono" x-text="fmt(r.amount)"></td>
+                            <td x-text="r.desc"></td>
+                            <td x-show="r.match" class="mono" x-text="r.match ? (r.match.quoteNo + ' / ' + r.match.voucherNo) : ''"></td>
+                            <td x-show="!r.match" colspan="2" style="color:var(--text-dim)">未找到金額相符的待匯款申請</td>
+                            <td x-show="r.match" x-text="r.match ? r.match.vendorName : ''"></td>
+                            <td class="c">
+                              <button x-show="r.match && !r.match._paid && canExecuteCashier()" class="action-btn pay" @click="openBankPayModal(r)">標記已匯款</button>
+                              <span x-show="r.match && r.match._paid" style="color:#15803D;font-size:11px">✓ 已標記</span>
+                            </td>
+                          </tr>
+                        </template>
+                      </tbody>
+                    </table>
+                  </div>
+                  <div style="font-size:11px;color:var(--text-dim);margin-top:8px" x-text="bankResult.note"></div>
+                </div>
+              </template>
+            </div>
+      </div>
+
+    </main>
+  </div>
+
+  <script src="../static/sidebar.js"></script>
 </body>
 </html>

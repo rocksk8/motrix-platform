@@ -717,28 +717,24 @@ if (typeof module !== 'undefined' && module.exports) {
       // ——後端 `_MODULE_ACTION_PREFIXES['finance']` 照樣在算 payment./sales_order./
       // settlement. 三種異動的數量，前端卻永遠找不到元素可以顯示，等於這個模組的
       // 通知數字靜靜消失了。那些內容現在都在營運報表頁，紅點就掛回這裡。
-      ni(pg('reports.html'),         'rpt',   '營運報表', ['reports.html', 'cashier.html'],          cRpt || cCash || cFi, 'sb-mod-finance'),
-      // 🔴 UI6（使用者 2026-09-23）：出納在側欄上**沒有任何入口** ——
+      // ⚠️ `UI9`（2026-09-23）：`'cashier.html'` 從這裡**拿掉**了。
+      //    它在 `UI6` 時代要留著，因為那時 cashier.html 是一頁轉址存根、
+      //    出納的內容在本頁的一個頁籤裡。出納拆回獨立頁之後**它換了主人**。
+      //    🔑 兩項條件不同（`cCash` vs `cRpt||cCash||cFi`）而同時宣告同一個
+      //       檔名的話，`_deniedPages` 會讓其中一邊把另一邊的人鎖在門外。
+      ni(pg('reports.html'),         'rpt',   '營運報表', ['reports.html'],                          cRpt || cCash || cFi, 'sb-mod-finance'),
+      // 🔴 UI6（使用者 2026-09-23）：出納在側欄上原本**沒有任何入口** ——
       // 只有 `cashier` 權限的人看得到一個叫「營運報表」的項目，
       // 而他被授權的那一頁點不到。
       //
-      // ⚠️ `reports.html?tab=cashier` 不是筆誤：出納在 2026-08-31 併進營運報表
-      //    成為一個頁籤，`cashier.html` 現在是 1,198 bytes 的轉址存根。
-      //
-      // 🔴 `activeNames` **刻意是空的**，兩個理由而它們是同一件事的兩面：
-      //    ① `act()` 只比對 `location.pathname` 的檔名（`:79`），query 不在裡面
-      //       ⇒ 使用者停在 `reports.html?tab=cashier` 時 `file` 是 `reports.html`
-      //       ⇒ **這一項本來就亮不起來**（已知限制，`UI7` 才解）
-      //    ② 若它宣告 `'cashier.html'`：只有報表權限的人（這一項隱藏）會讓
-      //       `cashier.html` 被丟進 `_deniedPages`（`:614`）⇒ 他開舊書籤會看到
-      //       「沒有權限」——**而他明明看得到營運報表，那個檔也會轉到他有權限的頁**
-      //    ⇒ 宣告它只有壞處沒有好處。
-      //
-      // ⚠️ 而「營運報表」的 `show` 維持 `cRpt || cCash || cFi` **不要順手收窄**：
-      //    拿掉 `cCash` 會讓只有出納權限的人被 `_deniedPages` 擋在 `reports.html`
-      //    外面 —— 原本是「他看得到一個不屬於他的項目」，改完變成「他點不進自己的頁」。
-      //    🔴 §46b 那個權限缺陷**沒有被修掉，只是被稀釋了**（A §65 裁甲）。
-      ni(pg('reports.html?tab=cashier'), 'cash', '出納', [], cCash),
+      // 🔑 `UI9`（同日）把出納**拆回獨立頁面** ⇒ 這裡從
+      //    `reports.html?tab=cashier` 改成 `cashier.html`，而 `activeNames`
+      //    從空的變成 `['cashier.html']` —— 它現在是這個檔案的主人。
+      // ⚠️ `UI6` 當時 `activeNames` 刻意留空，理由是 `act()` 只比對檔名、
+      //    query 不在 `location.pathname` 裡 ⇒ 那一項**永遠不會亮**。
+      //    拆成獨立頁之後那個限制連同 `§46b` 一起消失了 —— **同一個根因
+      //    （兩個功能共用一頁）的三個出口一起關掉。**
+      ni(pg('cashier.html'),         'cash',  '出納',     ['cashier.html'],                          cCash),
       sec('勞務管理', cCon || cPay),
       ni(pg('contractors.html'),     'contl', '外包名冊', ['contractors.html'],                      cCon),
       ni(pg('payslips.html'),        'paysl', '勞報單',   ['payslips.html', 'payslip-form.html'],    cPay),

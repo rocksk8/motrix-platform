@@ -264,7 +264,6 @@
       <!-- Period bar（財務報表期間選擇/匯出，僅 admin+；2026-08-31 出納併入
            本頁後，純 cashier/finance 模組使用者不該看到跟他們無關的期間/
            匯出控制列，出納自己的執行歷史匯出在出納頁籤裡另有一份） -->
-      <template x-if="isAdminPlus()">
       <div class="period-bar">
         <button class="period-type-btn" :class="{on: periodType==='month'}" @click="switchType('month')">月報</button>
         <button class="period-type-btn" :class="{on: periodType==='quarter'}" @click="switchType('quarter')">季報</button>
@@ -322,7 +321,6 @@
           </button>
         </div>
       </div>
-      </template>
 
       <!-- Error -->
       <div x-show="error" class="error-bar" x-text="error"></div>
@@ -333,7 +331,7 @@
       <!-- 2026-08-31：出納併入本頁後，data 只有 admin+ 會載入（cashier/finance
            模組的非管理職使用者永遠是 null），所以外層 gate 放寬成兩者其一，
            真正需要 data 的財務 KPI 摘要另外包一層 isAdminPlus() -->
-      <template x-if="!loading && (data || hasCashierAccess())">
+      <template x-if="!loading && data">
         <div>
           <!-- KPI 摘要（CEO 視角：成長 → 現金流 → 盈利質量 → 風控），僅 admin+ -->
           <template x-if="isAdminPlus()">
@@ -471,8 +469,6 @@
                以下 12 個既有頁籤整批只給 admin+ 看，非管理職的 cashier/finance
                模組使用者只看得到最後面的「出納」頁籤，見 reports.js::init() ） -->
           <div class="tab-bar">
-          <template x-if="isAdminPlus()">
-          <span style="display:contents">
             <button class="tab" :class="{on:activeTab==='targets'}" @click="activeTab='targets'">
               🎯 目標達成率
               <span class="tab__cnt"
@@ -524,11 +520,6 @@
             <button class="tab" :class="{on:activeTab==='t100'}" @click="showT100Tab()">
               T100匯出<span class="tab__cnt" x-show="t100Preview && t100Preview.count" x-text="t100Preview ? t100Preview.count : ''"></span>
             </button>
-          </span>
-          </template>
-          <button class="tab" x-show="hasCashierAccess()" :class="{on:activeTab==='cashier'}" @click="showCashierTab()">
-            出納<span class="tab__cnt" x-show="payable.length" x-text="payable.length"></span>
-          </button>
           </div>
 
           <!-- recv/out 分頁共用的「當月/本季/今年度」切換鈕（2026-09-10 加入本季）。
@@ -1802,9 +1793,17 @@
 
                 <div style="font-size:11px;color:var(--text-dim);margin-top:4px" x-text="'資料截至 ' + cashPos.asOf + '　' + cashPos.note"></div>
 
-                <!-- 銀行對帳單比對已併入出納頁籤（2026-08-31，財務/出納權限分工＋出納併入本頁）-->
+                <!-- 銀行對帳單比對在出納。
+                     2026-08-31 出納併入本頁時它指向本頁的出納頁籤；
+                     `UI9`（2026-09-23）出納拆回獨立頁 ⇒ 改成**真的連結**。
+                     🔴 先前是 `href="#"` ＋ 一個 `@click.prevent` 呼叫頁籤切換函式 ——
+                        那個處理器隨著頁籤一起被拿掉了，**留著會變成一個
+                        點了沒反應的連結**，而那比不可點更糟（與 map.html 那次
+                        同一條：`href=""` 看起來可以點、點了沒反應）。
+                     📌 這段註解**刻意不寫出那個函式的名字**：守門是字面比對，
+                        它分不出「呼叫」與「解釋已經不再呼叫的註解」。 -->
                 <div style="margin-top:20px;padding-top:14px;border-top:1px solid var(--border-light);font-size:12px;color:var(--text-dim)">
-                  銀行對帳單比對已併入 <a href="#" @click.prevent="showCashierTab()" style="color:var(--accent)">出納頁籤</a>。
+                  銀行對帳單比對在 <a href="cashier.html" style="color:var(--accent)">出納</a>。
                 </div>
 
                 <!-- 稅務匯出 -->
@@ -2037,277 +2036,6 @@
             </div>
           </div>
 
-          <!-- 出納（2026-08-31 併入本頁，原獨立 cashier.html／cashier.js） -->
-          <div x-show="activeTab==='cashier'" class="panel" style="padding:20px">
-            <div class="stat-strip">
-              <div class="stat-pill danger">
-                <div class="stat-pill__val" x-text="fmt(kpiPayableTotal)">—</div>
-                <div class="stat-pill__lbl">待付款總額</div>
-              </div>
-              <div class="stat-pill accent">
-                <div class="stat-pill__val" x-text="fmt(kpiReceivableTotal)">—</div>
-                <div class="stat-pill__lbl">待收款總額</div>
-              </div>
-              <div class="stat-pill success">
-                <div class="stat-pill__val" x-text="fmt(cashierHistoryOutgoingTotal)">—</div>
-                <div class="stat-pill__lbl">本期已匯款</div>
-              </div>
-              <div class="stat-pill success">
-                <div class="stat-pill__val" x-text="fmt(cashierHistoryIncomingTotal)">—</div>
-                <div class="stat-pill__lbl">本期已收款</div>
-              </div>
-              <div class="stat-pill warn">
-                <div class="stat-pill__val" x-text="kpiPayableOverdue + kpiReceivableOverdue">—</div>
-                <div class="stat-pill__lbl">逾期待處理筆數</div>
-              </div>
-            </div>
-
-            <div class="ctabs">
-              <button class="ctab" :class="{on: cashierSub==='payable'}" @click="cashierSub='payable'">
-                待付款<span class="tab__cnt" x-text="payable.length"></span>
-              </button>
-              <button class="ctab" :class="{on: cashierSub==='receivable'}" @click="cashierSub='receivable'">
-                待收款<span class="tab__cnt" x-text="receivable.filter(i=>!i.received).length"></span>
-              </button>
-              <button class="ctab" :class="{on: cashierSub==='history'}" @click="cashierSub='history'">執行歷史</button>
-              <button class="ctab" :class="{on: cashierSub==='bank'}" @click="cashierSub='bank'">銀行對帳單比對</button>
-            </div>
-
-            <!-- 待付款 -->
-            <div x-show="cashierSub==='payable'">
-              <template x-if="payable.length===0">
-                <div class="empty-state">目前沒有待匯款的申請</div>
-              </template>
-              <template x-if="payable.length>0">
-                <div class="panel">
-                  <table class="data-table">
-                    <thead><tr>
-                      <th>申請單號</th><th>關聯案件</th><th>廠商</th>
-                      <th class="r">應付金額</th><th class="c">應付款日期</th><th class="c">動作</th>
-                    </tr></thead>
-                    <tbody>
-                      <template x-for="v in payable" :key="v.voucherNo">
-                        <tr>
-                          <td class="mono" x-text="v.voucherNo"></td>
-                          <td class="mono" x-text="v.quoteNo"></td>
-                          <td x-text="v.vendorName || '（外包人員點工）'"></td>
-                          <td class="r mono" x-text="fmt(v.grandTotal)"></td>
-                          <td class="c mono" :class="isOverdue(v.payableDate) ? 'red-txt' : (isDueSoon(v.payableDate) ? 'orange-txt' : '')"
-                              x-text="v.payableDate || '未指定'"></td>
-                          <td class="c">
-                            <button x-show="canExecuteCashier()" class="action-btn pay" @click="openPayVoucherModal(v)">標記已匯款</button>
-                            <span x-show="!canExecuteCashier()" style="font-size:11px;color:var(--text-dim)">僅檢視</span>
-                          </td>
-                        </tr>
-                      </template>
-                    </tbody>
-                  </table>
-                </div>
-              </template>
-            </div>
-
-            <!-- 待收款（併入 receivables.html 全部功能，2026-08-31） -->
-            <div x-show="cashierSub==='receivable'">
-              <div class="alert-bar" x-show="receivableUninvoicedCount > 0">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
-                <span>共 <strong x-text="receivableUninvoicedCount"></strong> 筆款項尚未登錄發票號碼。</span>
-              </div>
-
-              <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
-                <div class="search-wrap">
-                  <span class="search-icon">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-                  </span>
-                  <input class="search-input" type="search" placeholder="搜尋案件號 / 客戶 / 款項…" x-model="receivableSearch">
-                </div>
-                <button class="period-type-btn" :class="{on:receivableFilterTab==='all'}" @click="receivableFilterTab='all'">全部</button>
-                <button class="period-type-btn" :class="{on:receivableFilterTab==='unreceived'}" @click="receivableFilterTab='unreceived'">未收款</button>
-                <button class="period-type-btn" :class="{on:receivableFilterTab==='received'}" @click="receivableFilterTab='received'">已收款</button>
-                <button class="period-type-btn" :class="{on:receivableFilterTab==='uninvoiced'}" @click="receivableFilterTab='uninvoiced'">未開發票</button>
-                <div style="margin-left:auto;font-size:12px;color:var(--text-dim)" x-text="'共 ' + filteredReceivable.length + ' 筆'"></div>
-              </div>
-
-              <template x-if="filteredReceivable.length===0">
-                <div class="empty-state">沒有符合條件的款項</div>
-              </template>
-              <template x-if="filteredReceivable.length>0">
-                <div class="panel">
-                  <table class="data-table">
-                    <thead><tr>
-                      <th>案件號</th><th>客戶</th><th>業務員</th><th>款項類型</th>
-                      <th class="r">應收金額</th><th class="c">預計收款日</th><th class="c">收款狀態</th>
-                      <th>發票號碼</th><th class="c">動作</th>
-                    </tr></thead>
-                    <tbody>
-                      <template x-for="it in filteredReceivable" :key="it.quoteNo + '-' + it.idx">
-                        <tr :class="!it.invoiceNo && 'uninvoiced-row'">
-                          <td class="mono" x-text="it.quoteNo"></td>
-                          <td x-text="it.customer"></td>
-                          <td x-text="it.salesPerson"></td>
-                          <td x-text="it.type"></td>
-                          <td class="r mono" x-text="fmt(it.amount)"></td>
-                          <td class="c mono" :class="it.overdue ? 'red-txt' : (isDueSoon(it.expectedReceiptDate) ? 'orange-txt' : '')"
-                              x-text="it.expectedReceiptDate || '未指定'"></td>
-                          <td class="c"><span class="rb" :class="it.received ? 'rb-received' : 'rb-pending'" x-text="it.received ? '已收款' : '待收款'"></span></td>
-                          <td>
-                            <template x-if="it.invoiceNo">
-                              <span class="rb rb-invoiced" :style="canExecuteCashier() ? 'cursor:pointer' : ''" @click="canExecuteCashier() && openInvoiceModal(it)" x-text="it.invoiceNo"></span>
-                            </template>
-                            <template x-if="!it.invoiceNo && canExecuteCashier()">
-                              <button class="action-btn invoice" @click="openInvoiceModal(it)">登錄發票</button>
-                            </template>
-                            <span x-show="!it.invoiceNo && !canExecuteCashier()" style="color:var(--text-dim);font-size:11px">未登錄</span>
-                          </td>
-                          <td class="c">
-                            <template x-if="canExecuteCashier() && !it.received">
-                              <button class="action-btn pay" @click="openReceiveModal(it)">標記已收款</button>
-                            </template>
-                            <template x-if="canExecuteCashier() && it.received">
-                              <button class="action-btn unreceive" @click="toggleReceived(it, false)">取消收款</button>
-                            </template>
-                            <span x-show="!canExecuteCashier()" style="font-size:11px;color:var(--text-dim)">僅檢視</span>
-                          </td>
-                        </tr>
-                      </template>
-                    </tbody>
-                  </table>
-                  <div class="summary-bar">
-                    <span>篩選結果合計：<strong x-text="fmt(filteredReceivable.reduce((s,i)=>s+i.amount,0))"></strong></span>
-                    <span>已收：<strong style="color:var(--success)" x-text="fmt(filteredReceivable.filter(i=>i.received).reduce((s,i)=>s+i.amount,0))"></strong></span>
-                    <span>未收：<strong style="color:var(--danger)" x-text="fmt(filteredReceivable.filter(i=>!i.received).reduce((s,i)=>s+i.amount,0))"></strong></span>
-                    <span>未開票：<strong style="color:#D97706" x-text="filteredReceivable.filter(i=>!i.invoiceNo).length + ' 筆'"></strong></span>
-                  </div>
-                </div>
-              </template>
-            </div>
-
-            <!-- 執行歷史（2026-08-31） -->
-            <div x-show="cashierSub==='history'">
-              <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
-                <label class="field-label" style="margin:0">起</label>
-                <input type="date" class="field-input" style="width:auto;margin:0" x-model="cashierHistoryStart">
-                <label class="field-label" style="margin:0">迄</label>
-                <input type="date" class="field-input" style="width:auto;margin:0" x-model="cashierHistoryEnd">
-                <button class="period-type-btn" @click="loadCashierHistory()">查詢</button>
-                <button class="btn-export excel" style="margin-left:auto" :disabled="cashierExporting" @click="exportCashierHistory()">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                  <span x-text="cashierExporting ? '匯出中…' : '匯出 Excel'"></span>
-                </button>
-              </div>
-
-              <template x-if="cashierHistoryLoading">
-                <div class="empty-state">載入中…</div>
-              </template>
-              <template x-if="!cashierHistoryLoading">
-                <div>
-                  <div class="stl-section">已匯款明細（共 <span x-text="cashierHistoryOutgoing.length"></span> 筆，合計 <span x-text="fmt(cashierHistoryOutgoingTotal)"></span>）</div>
-                  <template x-if="cashierHistoryOutgoing.length===0">
-                    <div class="empty-state">此區間沒有已匯款紀錄</div>
-                  </template>
-                  <template x-if="cashierHistoryOutgoing.length>0">
-                    <div class="panel" style="margin-bottom:20px">
-                      <table class="data-table">
-                        <thead><tr><th>申請單號</th><th>關聯案件</th><th>廠商</th><th class="r">金額</th><th class="c">匯款日期</th></tr></thead>
-                        <tbody>
-                          <template x-for="v in cashierHistoryOutgoing" :key="v.voucherNo">
-                            <tr>
-                              <td class="mono" x-text="v.voucherNo"></td>
-                              <td class="mono" x-text="v.quoteNo"></td>
-                              <td x-text="v.vendorName || '（外包人員點工）'"></td>
-                              <td class="r mono" x-text="fmt(v.grandTotal)"></td>
-                              <td class="c mono" x-text="v.paidAt ? v.paidAt.slice(0,10) : ''"></td>
-                            </tr>
-                          </template>
-                        </tbody>
-                      </table>
-                    </div>
-                  </template>
-
-                  <div class="stl-section">已收款明細（共 <span x-text="cashierHistoryIncoming.length"></span> 筆，合計 <span x-text="fmt(cashierHistoryIncomingTotal)"></span>）</div>
-                  <template x-if="cashierHistoryIncoming.length===0">
-                    <div class="empty-state">此區間沒有已收款紀錄</div>
-                  </template>
-                  <template x-if="cashierHistoryIncoming.length>0">
-                    <div class="panel">
-                      <table class="data-table">
-                        <thead><tr><th>案件號</th><th>客戶</th><th>業務員</th><th>款項類型</th><th class="r">實收金額</th><th class="c">收款日</th></tr></thead>
-                        <tbody>
-                          <template x-for="it in cashierHistoryIncoming" :key="it.quoteNo + it.type + it.receivedAt">
-                            <tr>
-                              <td class="mono" x-text="it.quoteNo"></td>
-                              <td x-text="it.customer"></td>
-                              <td x-text="it.salesPerson"></td>
-                              <td x-text="it.type"></td>
-                              <td class="r mono" x-text="fmt(it.actualAmount !== null ? it.actualAmount : it.amount)"></td>
-                              <td class="c mono" x-text="it.receivedAt"></td>
-                            </tr>
-                          </template>
-                        </tbody>
-                      </table>
-                    </div>
-                  </template>
-                </div>
-              </template>
-            </div>
-
-            <!-- 銀行對帳單比對（搬自營運報表資金水位頁籤，2026-08-31） -->
-            <div x-show="cashierSub==='bank'">
-              <div style="font-size:11px;color:var(--text-dim);margin-bottom:10px">
-                上傳銀行匯出的 CSV（需含日期與金額欄位），依金額比對目前「已核准未匯款」清單，僅供人工複核，不會自動標記已匯款。
-              </div>
-              <label x-show="canExecuteCashier()" class="action-btn pay" style="cursor:pointer;display:inline-flex">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
-                <span x-text="bankReconciling ? '比對中…' : '上傳 CSV 比對'"></span>
-                <input type="file" accept=".csv" style="display:none" :disabled="bankReconciling" @change="uploadBankCsv($event)">
-              </label>
-              <span x-show="!canExecuteCashier()" style="font-size:12px;color:var(--text-dim)">僅出納/管理員可上傳比對</span>
-
-              <template x-if="bankResult">
-                <div style="margin-top:14px">
-                  <div class="kpi-grid">
-                    <div class="kpi-card green">
-                      <div class="kpi-card__lbl">配對成功</div>
-                      <div class="kpi-card__val" x-text="bankResult.matchedCount"></div>
-                    </div>
-                    <div class="kpi-card orange">
-                      <div class="kpi-card__lbl">銀行紀錄未配對</div>
-                      <div class="kpi-card__val" x-text="bankResult.unmatchedBankCount"></div>
-                    </div>
-                    <div class="kpi-card red">
-                      <div class="kpi-card__lbl">仍待匯款（未配對）</div>
-                      <div class="kpi-card__val" x-text="bankResult.unmatchedVouchers.length"></div>
-                    </div>
-                  </div>
-
-                  <div class="panel">
-                    <table class="data-table">
-                      <thead><tr>
-                        <th class="c">銀行日期</th><th class="r">銀行金額</th><th>銀行摘要</th>
-                        <th>配對申請單號</th><th>承攬商</th><th class="c">動作</th>
-                      </tr></thead>
-                      <tbody>
-                        <template x-for="(r, i) in bankResult.bankRows" :key="i">
-                          <tr>
-                            <td class="c" x-text="r.date"></td>
-                            <td class="r mono" x-text="fmt(r.amount)"></td>
-                            <td x-text="r.desc"></td>
-                            <td x-show="r.match" class="mono" x-text="r.match ? (r.match.quoteNo + ' / ' + r.match.voucherNo) : ''"></td>
-                            <td x-show="!r.match" colspan="2" style="color:var(--text-dim)">未找到金額相符的待匯款申請</td>
-                            <td x-show="r.match" x-text="r.match ? r.match.vendorName : ''"></td>
-                            <td class="c">
-                              <button x-show="r.match && !r.match._paid && canExecuteCashier()" class="action-btn pay" @click="openBankPayModal(r)">標記已匯款</button>
-                              <span x-show="r.match && r.match._paid" style="color:#15803D;font-size:11px">✓ 已標記</span>
-                            </td>
-                          </tr>
-                        </template>
-                      </tbody>
-                    </table>
-                  </div>
-                  <div style="font-size:11px;color:var(--text-dim);margin-top:8px" x-text="bankResult.note"></div>
-                </div>
-              </template>
-            </div>
-          </div>
 
         </div>
       </template>
