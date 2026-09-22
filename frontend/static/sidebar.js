@@ -3,6 +3,52 @@
  * Builds topbar + sidebar from session. Handles mobile slide-in toggle.
  * Load at end of <body> (after notif.js).
  */
+/* ── 這一次的 /api/auth/me 回應，可不可以拿來覆寫既有的 session？ ──────────
+ *
+ * 🔴 缺陷（2026-09-22 §4 YB）：這裡原本只擋 `null`
+ *      if (!d) return
+ *      stored.modules = d.modules        // ← undefined 時把既有值蓋掉
+ *    ⇒ 一次「200 但缺欄位」的回應就把權限洗空，畫面變「你沒有這個頁面的權限」。
+ *
+ * ☠️ 而真正難查的是那個**不對稱**：
+ *      :909  mods = Array.isArray(d.modules) ? d.modules : []   ← 有防護
+ *      :903  stored.modules = d.modules                          ← 沒有
+ *    ⇒ 當下那一頁自己恢復了，**而存下來的值已經被洗掉** ⇒ 下一次載入才爆。
+ *    🔑 「重新載入不會自己好，要載入兩次」就是這個不對稱的指紋。
+ *    ⇒ 修法不是在兩個地方各補一次判斷，是**讓它們共用同一個決定**。
+ *
+ * 🔑 而這個決定最容易寫錯的地方是 `[]`：
+ *      modules: []          真的沒有模組（權限被拿掉了）⇒ **要**覆寫
+ *      modules: undefined   這次回應沒帶                ⇒ **不可以**覆寫
+ *    ☠️ `if (d.modules)` 會把合法的 `[]` 當成「沒帶」
+ *    ⇒ **真正的權限撤銷永遠生效不了** —— 管理員把某人的模組全拿掉，
+ *      而那個人的瀏覽器永遠停在舊權限上。
+ *
+ * 📌 它是**純函式**（沒有 DOM、沒有 fetch、沒有 localStorage）——
+ *    那是為了讓它在 node 裡被直接問答案。行為不對的話，
+ *    在瀏覽器裡量到的與在 node 裡量到的會不一樣，而那會讓那些綠燈失去意義。
+ */
+function acceptsSessionUpdate(d) {
+  if (!d || typeof d !== 'object') return false
+  // ⚠️ 用 `Array.isArray` 不用真假值 —— `[]` 是合法的。
+  if (!Array.isArray(d.modules)) return false
+  if (typeof d.role !== 'string' || !d.role) return false
+  return true
+}
+
+/* 匯出：瀏覽器走 globalThis，node 走 module.exports。
+ * ⚠️ 兩個都要，而且要在下面那個 IIFE **之前** ——
+ *    IIFE 第一行就碰 `localStorage`，在 node 裡會丟，
+ *    而丟出去之後 `module.exports` 就拿不到了；`globalThis` 的賦值留得住。
+ * 🔑 「它載入失敗」與「它不存在」是兩件事，而這個順序讓前者仍然問得到答案。 */
+if (typeof globalThis !== 'undefined') {
+  globalThis.MotrixSession = globalThis.MotrixSession || {}
+  globalThis.MotrixSession.acceptsSessionUpdate = acceptsSessionUpdate
+}
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports.acceptsSessionUpdate = acceptsSessionUpdate
+}
+
 ;(function () {
   // ── Session & path ──────────────────────────────────────────────────────────
   var raw  = localStorage.getItem('motrix_session')
@@ -890,7 +936,9 @@
     fetch('/api/auth/me', { headers: { Authorization: 'Bearer ' + s.token } })
       .then(function (r) { return r.ok ? r.json() : null })
       .then(function (d) {
-        if (!d) return
+        // 🔴 **一個決定，管住下面兩件事**（寫回 localStorage ＋ 重算 mods）。
+        // ⚠️ 不接受就整筆不覆寫 —— 保留既有權限，等下一次刷新。
+        if (!acceptsSessionUpdate(d)) return
         var stored = JSON.parse(localStorage.getItem('motrix_session') || '{}')
         var modsChanged = JSON.stringify(stored.modules) !== JSON.stringify(d.modules)
         var roleChanged = stored.role !== d.role
@@ -904,7 +952,9 @@
         // 一樣的旗標計算，而且已經漏掉 cCon／cPay／cNetPlan——改成共用
         // computeFlags()，之後新增模組只會有一個地方要改。
         role = d.role
-        mods = Array.isArray(d.modules) ? d.modules : []
+        // 📌 `acceptsSessionUpdate()` 已經保證它是陣列 ——
+        // 這裡再判一次的話就又變成「兩個地方各自判斷同一件事」。
+        mods = d.modules
         computeFlags()
         // 重建前要清掉上一輪累積的分組與被擋頁面清單，否則重建會把新舊選單接在一起
         _navGroups = []
