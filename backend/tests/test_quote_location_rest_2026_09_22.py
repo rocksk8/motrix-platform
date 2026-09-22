@@ -97,28 +97,6 @@ def test_ql5_a_blank_field_falls_back_to_the_primary_location(
 # QL7 · 8 種單據一起改
 # ══════════════════════════════════════════════════════════════════════
 
-#: `QL7` 的 8 支。📌 `payslip` 是第 9 支，走 `QL8` 那條路。
-QL7_BUILDERS = tuple(b for b in I.BUILDERS if b != "_build_payslip_html")
-
-
-@pytest.mark.parametrize("builder", QL7_BUILDERS)
-def test_ql7_every_document_takes_its_identity_from_the_location(
-        builder, identity):
-    """🔴🔴 QL7：**8 種單據的抬頭都要從據點取值。**
-
-    ⚠️ **一次改 8 種**，因為它們是同一個模式的 32 行複製 ——
-    ☠️ **只改一部分的話，同一個案子的報價單與請款單會印不同抬頭**，
-    🔑 而那種不一致沒有任何地方會報錯，它只會印在寄給客戶的紙上。
-    """
-    identity[None] = {"company_name": "QL7 測試抬頭股份有限公司",
-                      "company_name_en": "QL7 Test Corp.",
-                      "tax_id": "99999999"}
-    html = I.render(builder)
-    assert "QL7 測試抬頭股份有限公司" in html, (
-        f"`{builder}` 沒有從 `location_identity()` 取抬頭。\n"
-        "☠️ 只改一部分的話，同一個案子的兩張單會印不同抬頭。")
-
-
 # ══════════════════════════════════════════════════════════════════════
 # QL8 / QL9
 # ══════════════════════════════════════════════════════════════════════

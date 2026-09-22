@@ -346,3 +346,46 @@ def test_gc8_the_response_carries_both_numbers_separately(client, make_user,
         "畫面會把它當成 0，而那代表「全部查完了」。")
     assert info["unresolvableGeocode"] is not None, (
         "`unresolvableGeocode` 是 `None` —— 同上。")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# GC8（前半）· 同一個查不到的地址不可以問第二次
+# ══════════════════════════════════════════════════════════════════════
+#
+# 🔴 這一題原本住在 `test_geocode_shortcircuit_2026_09_22.py`。
+#    搬過來的理由是**守門抓到的**：一個編號跨兩個檔時，
+#    覆蓋率守門分辨不出「哪一支在守哪一條」。
+# 📌 而 `GC8` 真的有兩半（A 2026-09-23：「有一半是使用者看得到的」）：
+#    **省下請求**（這一題）與**講對話**（上面那幾題）。
+# 🔑 兩半放在同一個檔裡，「GC8 綠了」這句話才不會被單獨引用其中一半。
+
+def test_gc8_a_repeated_miss_does_not_ask_google_again(monkeypatch):
+    """🔴🔴 GC8：**一個打不到的地址，不可以每次開地圖就問一次。**
+
+    ☠️ 疊上 `GC5`（google 階無節流）＝ **無上限**。
+    🔑 **判準與 `GB` 不同**：`GB` 擋的是總量，
+    而這裡是**同一個地址被重複問** —— 光加每日上限擋不住它，
+    📌 它會把額度吃光，**而每一次都是同一個地址**。
+
+    ## ⚠️ 這一題驗的是**請求數**，不是省錢
+
+    A 2026-09-22 收回了「Google 對這類請求仍然計費」那句（未查證）——
+    ⇒ 規格已改成「**負快取省的是請求數，是否省錢未確認**」。
+    🔑 **所以這裡的斷言不可以寫成「省了多少錢」** ——
+    ☠️ 那是一件我們不知道的事，而寫進斷言之後它會變成一個
+    **沒有人查過、卻被當成前提的句子**。
+    """
+    geo = _geo()
+    calls = []
+    monkeypatch.setattr(geo, "_locate_google",
+                        lambda addr, **kw: calls.append(addr) or None)
+    monkeypatch.setattr(geo, "_locate_tgos", lambda *a, **kw: None)
+    monkeypatch.setattr(geo, "_locate_nominatim", lambda *a, **kw: None)
+    monkeypatch.setattr(geo, "GEO_ENABLED", True)
+    monkeypatch.setattr(geo, "_throttle", lambda: None)
+
+    address = "完全查不到的地址 XYZ"
+    for _ in range(5):
+        geo.locate_cached(address)
+    assert len(calls) <= 1, (
+        f"同一個查不到的地址問了 Google {len(calls)} 次 —— 沒有負快取。")
