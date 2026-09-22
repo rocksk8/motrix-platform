@@ -35,6 +35,7 @@ JV(7): JV1 JV2 JV3 JV4 JV5 JV6 JV7
 BN(1): BN1
 AC(1): AC1
 AL(1): AL1
+BI(1): BI1
 ```
 
 > 📌 `RP`（restore path）是 2026-09-22 21:4x 由 A 明著搬進 `THIS` 的。
@@ -345,3 +346,13 @@ THIS
 ```
 ☠️ **它在多數頁面上看不見**（多打一次 API 而已）⇒ 沒有人會報修。
 ⚠️ 三處更正在 `STATE.md` §159c：`why_cannot_post` 那支函式**不存在**（真名 `describe_balance`，我把 docstring 語意當函式名）、審核日期沒有欄位已併 `JV2`、全量閘門那一題**不可信**（跑到一半我改了 SCOPE）。
+
+---
+
+## 🔴 2026-09-23 追加：`BI1`（出貨阻擋，`STATE.md` §180）
+
+`POST /api/bonus/items` 的 `user` 未綁定 ⇒ NameError 500。
+☠ 而 `bonus_items` 兩個庫都 0 列、空狀態的唯一出路就是它
+⇒ **每一個新客戶的第一天，按下新增就是 500**。
+🔑 1440 綠沒抓到：`grep api/bonus/items tests/` = **0**，
+  連 `BN1` 也繞過 router（`_seed_item()` 直接 INSERT）。
