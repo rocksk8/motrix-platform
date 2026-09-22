@@ -38,6 +38,15 @@ from tests._ports import free_safe_port
 
 #: ⚠️ 我單方面宣告的測試掛鉤。頁面還不存在，選擇器只能由我先定。
 #: **要換名字請退回給我改這張表，不要動我的檔。**
+#: 🔴 bonus.html 由 **reports** 模組把關 —— sidebar.js:765 那一列的旗標是
+#:    cRpt，而 cRpt = has("reports")（sidebar.js:480）。
+#: ☠️ 我第一版寫 "bonus" —— 那是**選單項目的 id**，不是模組名 ⇒ 三個帳號
+#:    全被 _showNoPermission() 擋在頁面外：admin／superadmin 兩題會紅，
+#:    而「一般員工看不到新增入口」那題**變成真空的綠**（它根本沒走到頁面，
+#:    畫面整個壞掉也會過）—— 而它是 superadmin 那題的反向控制
+#:    ⇒ **兩題一起失效**。B 退回，我複查 sidebar.js 成立。
+BONUS_MODULE = "reports"
+
 HOOKS = {
     "empty": '[data-testid="bonus-items-empty"]',
     "create": '[data-testid="bonus-item-create"]',
@@ -125,7 +134,7 @@ def test_ac1_an_admin_is_told_who_can_fix_it_and_gets_no_button(
        而這個模組已經確立「**按下去之前就該知道答案**」。
     """
     u, p = make_user(username="e2e_bn_admin", role="admin",
-                     modules=["bonus"])
+                     modules=[BONUS_MODULE])
     text, create, empty, errors = _open_bonus(live_server, u, p)
 
     assert not errors, "頁面丟了例外：%s —— 先修這個。" % errors[:3]
@@ -148,7 +157,7 @@ def test_ac1_a_superadmin_gets_the_way_out(live_server, make_user):
        而那樣**沒有人建得了獎金項目**，整個模組永遠是空的。
     """
     u, p = make_user(username="e2e_bn_super", role="superadmin",
-                     modules=["bonus"])
+                     modules=[BONUS_MODULE])
     text, create, empty, errors = _open_bonus(live_server, u, p)
 
     assert not errors, "頁面丟了例外：%s" % errors[:3]
@@ -173,7 +182,7 @@ def test_ac1_a_plain_employee_does_not_see_the_management_area(
     ⚠️ 判準只看**新增入口**：空狀態那三句話他看不看得到由畫面決定，
        我不釘（他本來就沒有項目可看）。
     """
-    u, p = make_user(username="e2e_bn_staff", role="user", modules=["bonus"])
+    u, p = make_user(username="e2e_bn_staff", role="user", modules=[BONUS_MODULE])
     _text, create, _empty, errors = _open_bonus(live_server, u, p)
 
     assert not errors, "頁面丟了例外：%s" % errors[:3]
