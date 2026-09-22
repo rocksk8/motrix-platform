@@ -99,12 +99,26 @@ def test_vp1_a_missing_expected_version_is_a_failure(tmp_path):
     """🔴🔴 `VP1`：**沒有指定「該是哪個版本」時，驗包不可以回 0。**
 
     ```
-    打包腳本呼叫 verify_package.py 時忘了帶 --expect-db-version
+    有人驗一個包而忘了帶 --expect-db-version
     ⇒ 報告印「⚠️ 未給 --expect-db-version」
     ⇒ 摘要印「✅ 全部通過」
-    ⇒ **EXIT 0** ⇒ 打包全綠出貨
+    ⇒ **EXIT 0**
     ```
     ☠️ **而包裡的 `db.py` 可能是任何版本，沒有人知道。**
+
+    ⚠️ **v1 這裡寫的是「打包腳本呼叫」，那是錯的**（A-2 抓到，那一列留著）：
+    ```
+    實查   grep verify_package backend/tools/build_deploy_package.ps1   ⇒ 0 處
+           A-2 再擴大到全 repo（排除 rollback_snapshots／deploy_packages）
+           ⇒ 命中全落在測試檔／它自己的 docstring／docs
+           ⇒ **沒有任何流程呼叫它，它是人工執行的**
+    ```
+    🔑 而缺陷的嚴重度**沒有因此降低，可能更高**：
+       自動呼叫寫一次就固定了，**人工每次都要記得帶那個參數**。
+    🔴 **但要分清楚**：修好這個 fail-open 讓這道守門**判得對**，
+       它不會讓任何東西變安全 —— 因為擋關生效還需要第二個條件：
+       **有人跑它**。而「要不要接進打包流程」不在 `VP1`–`VP4` 裡，
+       已請 A 發編號。⇒ **看到 `VP1` 已修，不要以為驗包這件事有人在守。**
     🔑 警告是**文字**，而自動化讀的是**結束碼** ——
        〈散文對工具是隱形的〉在這裡是字面上的：那行 `print` 對呼叫端不存在。
 
@@ -268,8 +282,54 @@ def test_vp2_vp3_the_unwritten_items_are_named_not_forgotten(missing):
 
     ⚠️ 它守不到的：接縫**用別的名字**出現（那一天它不會紅）。
        ⇒ 這是提醒，不是保證。A 發編號之後這一題要換成真的題目。
+
+    ## ⚠️ v2：**比對之前先剝掉註解與字串**
+
+    B 實際踩到了 v1 的假陽性，而且踩了兩次：
+    ```
+    第一次  它順手把 VP2 的旗標也做了      ⇒ 紅（**正確**，它做過頭了）
+    第二次  撤掉之後**還是紅** —— 因為它寫了一段註解解釋
+            「那個旗標刻意不做」，而**註解裡寫了那個旗標的名字**
+    ```
+    ☠️ 字面比對**分不出「實作」與「解釋它不存在的註解」** ——
+    🔑 而那正是〈一個寫得好的註解讓一個粗糙的比對產生假陽性〉，
+       這次假陽性的受害者是**寫註解的人自己**。
+
+    ⇒ v2 用 `tokenize` 剝掉 `COMMENT` 與 `STRING`，只留下**程式碼識別字**。
+    📌 真的做出來時它仍然抓得到：`argparse` 的 `--allow-unverified-version`
+       會被讀成 `args.allow_unverified_version`（識別字，不是字串）。
+    ⚠️ **不用「除外清單」** —— 那會變成
+       〈守門要配反向控制，否則可以靠把東西寫進排除清單變綠〉。
+    ⚙️ 而剝完要有**正對照**：一個確定存在的識別字必須還在，
+       否則「剝過頭 ⇒ 什麼都找不到 ⇒ 這一題永遠綠」。
+
+    ### 📏 v2 的三種輸入**實跑過**（不是推的）
+    ```
+    ① 註解裡提到那個名字（B 踩到的假陽性）  ⇒ 不命中  ✅ 這就是 v2 要修的
+    ② 真的實作（讀 args.allow_unverified_…）⇒ 命中    ✅ 沒有漏掉真的
+    ③ 只加了 argparse 旗標而**沒有人讀它**  ⇒ 不命中  ⚠️ **已知限制**
+    ```
+    ⚠️ ③ 是刻意寫出來的：一個加了而沒有人讀的旗標，對使用者**沒有任何效果**
+       —— 我判斷它不算「接縫做出來了」，而**那是我的判斷不是量出來的事實**。
+       ⇒ 若 A 認為③也該紅，退回給我。
     """
-    src = _VP_PATH.read_text(encoding="utf-8")
+    import io as _io
+    import tokenize as _tok
+
+    raw = _VP_PATH.read_text(encoding="utf-8")
+    kept = []
+    with _io.open(str(_VP_PATH), "rb") as fh:
+        for t in _tok.tokenize(fh.readline):
+            if t.type in (_tok.COMMENT, _tok.STRING):
+                continue
+            kept.append(t.string)
+    src = " ".join(kept)
+
+    # ⚙️ 正對照：剝完之後，確定存在的識別字必須還在。
+    assert "check_db_version" in src, (
+        "剝掉註解與字串之後連 `check_db_version` 都找不到了 ——\n"
+        "🔑 **剝過頭**，這一題會因為什麼都找不到而永遠綠（儀器失效）。")
+
     assert missing not in src, (
         "`verify_package.py` 裡出現了 `%s` —— 接縫可能已經做出來了。\n"
         "⇒ 回頭看本檔檔頭那張表，把對應的那一項寫成真的題目"
