@@ -517,3 +517,173 @@ def test_p0_00_the_old_keyword_check_is_kept_as_a_second_layer():
         assert keyword in src, (
             f"舊的關鍵字比對裡少了 {keyword!r} ——\n"
             "☠️ 改用結果行之後把舊的那道刪掉了 ⇒ 兩層變一層，而它沒有症狀。")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# §34a · `rollback` 的 fail-closed **必須經過握手**（A 2026-09-22 裁定）
+# ══════════════════════════════════════════════════════════════════════
+#
+# 🔴 兩個動作的判定條件**不一樣，而那是有理由的不對稱**：
+#
+# ```
+# deploy    _dashboard_remote.ps1:98-104 先把套件裡的 tools 複製過去
+#           ⇒ **跑的保證是新的那一份** ⇒ 無條件 fail-closed
+# rollback  :150-170 直接跑 $Root\backend\tools\rollback_update.ps1
+#           ⇒ **沒有預先複製** ⇒ 新腳本只能靠一次成功的部署才上得去
+# ```
+# ☠️ 而危險的順序正是最可能發生的那一條：
+# ```
+# 部署失敗 ⇒ 自動回滾用套用前快照蓋回去 ⇒ **正式機的 tools 退回舊版**
+# ⇒ 使用者手動回滾 ⇒ 舊腳本不印 ::RESULT::
+# ⇒ 🔴 無條件 fail-closed ⇒ 記成「回滾失敗」
+# ⇒ 而那一刻使用者最需要知道的正是「回滾到底成功了沒」
+# ```
+# 🔑 ⇒ 握手：收到 `::PROTOCOL:: v=2` 才啟用 fail-closed；
+#    沒收到 ⇒ 退回結束碼＋關鍵字，**並在畫面標「本次以舊版協定判定」**。
+#
+# ⚠️ **我釘的接縫**：`decide_outcome(returncode, output, action="deploy")`
+#    📌 `action` 預設 `"deploy"`（**嚴格的那一邊**）——
+#    🔑 與 `_PROTOCOL_EXEMPT` 同一個方向：**豁免要舉手，不是預設。**
+#    ⇒ 上面那 15＋8 題不傳 `action`，它們釘的仍然是嚴格判定。
+
+_PROTOCOL_LINE = "::PROTOCOL:: v=2"
+
+
+def test_p0_00_rollback_without_the_handshake_falls_back_to_the_old_judgement():
+    """🔴🔴 §34a：**`rollback` 沒收到握手 ⇒ 退回舊判定，不可以無條件判失敗。**
+
+    ☠️ 無條件 fail-closed 的話，「**部署失敗→自動回滾→tools 退回舊版→
+    使用者手動回滾**」這條最可能發生的路徑上，
+    每一次回滾都會被記成失敗 —— 🔑 **而那一刻使用者最需要的正是
+    「回滾到底成功了沒」。**
+
+    ⚙️ **這一題同時是 A 要的那支反向題**：
+    把 `rollback` 也改成無條件 fail-closed ⇒ **這一題會紅**。
+    📌 有人日後「統一」掉那個不對稱時，紅的是這裡，而訊息說得出為什麼。
+    """
+    decide = _need("decide_outcome")
+    out = "回滾完成\n正式機已還原到上一版"
+    assert decide(0, out, action="rollback") == "succeeded", (
+        "`rollback` 沒有收到 `::PROTOCOL:: v=2`，而判定是失敗 ——\n"
+        "☠️ 那是無條件 fail-closed，而 rollback 的腳本**沒有被預先複製** ⇒\n"
+        "   正式機上那一份可能是舊的（部署失敗自動回滾之後就是）⇒\n"
+        "   **每一次手動回滾都會被記成失敗**。\n"
+        "🔑 §34a：收到握手才啟用 fail-closed，沒收到就退回結束碼＋關鍵字。")
+
+
+def test_p0_00_deploy_without_a_result_line_still_fails():
+    """⚙️ **不對稱的另一側：同樣沒有結果行，`deploy` 仍然判失敗。**
+
+    ☠️ 少了這一題，一個「**乾脆兩邊都退回舊判定**」的實作會讓上一題全綠 ——
+    🔑 而那會把 `P0-00` 整個解除掉：`unhealthy_not_rolled_back` 的 `exit=0`
+    會再一次被記成成功。
+    📌 **兩題成對**：一題守「不要對 rollback 太嚴」，一題守「不要對 deploy 太鬆」。
+    """
+    decide = _need("decide_outcome")
+    out = "更新完成\n一切正常"
+    assert decide(0, out, action="deploy") == "failed", (
+        "`deploy` 沒有結果行而判成成功 —— 那是 fail-open。\n"
+        "☠️ `deploy` 的 tools **有**預先複製，跑的保證是新的那一份 ⇒\n"
+        "   它沒有理由退回舊判定。")
+
+
+def test_p0_00_rollback_with_the_handshake_is_fail_closed():
+    """🔴 §34a：**`rollback` 收到握手 ⇒ fail-closed 啟用。**
+
+    🔑 握手的意思是「**那一份腳本會印結果行**」⇒ 它沒印就是出事了。
+    ☠️ 少了這一題，握手會變成一個**沒有後果的宣告**：
+    收到也好沒收到也好，都退回舊判定 ⇒ 那條協定等於不存在。
+    """
+    decide = _need("decide_outcome")
+    out = _PROTOCOL_LINE + "\n回滾完成"      # 宣告了會印，而沒有印
+    assert decide(0, out, action="rollback") == "failed", (
+        "`rollback` 收到了 `::PROTOCOL:: v=2`（＝那份腳本宣告它會印結果行），\n"
+        "而輸出裡沒有結果行，判定卻是成功 ——\n"
+        "☠️ 那讓握手變成一個沒有後果的宣告：收到與沒收到的行為一樣。")
+
+
+def test_p0_00_rollback_with_the_handshake_and_a_result_line_is_judged_by_it():
+    """⚙️ 握手那一側的正對照：**有握手也有結果行 ⇒ 照結果行判。**
+
+    ☠️ 少了這一題，一個「收到握手就一律判失敗」的實作會讓上一題全綠 ——
+    🔑 而那會讓**每一次正常的回滾**都被記成失敗。
+    """
+    decide = _need("decide_outcome")
+    out = (_PROTOCOL_LINE + "\n回滾完成\n"
+           + _result_line("success", "restored", 0))
+    assert decide(0, out, action="rollback") == "succeeded", (
+        "有握手、也有結果行說成功，而判定是失敗 ——\n"
+        "☠️ 每一次正常的回滾都會被記成失敗。")
+
+
+def test_p0_00_a_legacy_rollback_is_marked_as_such():
+    """🔴 §34a：**退回舊判定時，畫面要說得出「本次以舊版協定判定」。**
+
+    ☠️ 不標的話，使用者看到的「成功」與一個**經過 fail-closed 驗證**的成功
+    長得一模一樣 —— 🔑 而它們的可信度差很多：
+    ```
+    有握手的成功   結果行說 success，而那一份腳本保證會印
+    舊判定的成功   結束碼是 0，而**我們不知道它有沒有真的做完**
+    ```
+    📌 而使用者正是在「剛出事、正在回滾」的時候看它 ——
+    **那是最不該讓他誤以為事情已經確認好的時刻。**
+
+    ⚠️ **我釘的是「那個事實被記下來了」，不是欄位叫什麼名字** ——
+    這裡用 `legacy_protocol`，B 要改名**退回給我**，不要自己改題。
+    """
+    mod = _dash()
+    fn = getattr(mod, "used_legacy_protocol", None)
+    assert fn is not None, (
+        "`deploy_dashboard.py` 缺少 `used_legacy_protocol(output, action)` ——\n"
+        "🔑 畫面要標「本次以舊版協定判定」，就需要一個**可以問**的地方。\n"
+        "⚠️ 名字可以換（退回給我），而那個事實必須記得下來。")
+    assert fn("回滾完成", "rollback") is True, (
+        "`rollback` 沒收到握手而 `used_legacy_protocol` 回 False ——\n"
+        "☠️ 那一次是用舊判定做的，而畫面會把它顯示成一個確認過的成功。")
+    assert fn(_PROTOCOL_LINE + "\n回滾完成", "rollback") is False, (
+        "收到握手了而仍然標成舊判定 —— 那個標記會變成雜訊，\n"
+        "🔑 而一個每次都出現的警告，與沒有警告是同一件事。")
+    assert fn("更新完成", "deploy") is False, (
+        "`deploy` 被標成舊判定 —— 它有預先複製，不走那條退路。")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# §34a · rollback_update.ps1 的 6 條出口
+# ══════════════════════════════════════════════════════════════════════
+
+ROLLBACK_PS1 = (Path(__file__).resolve().parent.parent / "tools"
+                / "rollback_update.ps1")
+
+
+def test_p0_00_the_rollback_script_announces_the_protocol():
+    """🔴 §34a：**`rollback_update.ps1` 要印握手行。**
+
+    🔑 沒有它，dashboard 永遠走舊判定 ⇒ 那 6 條出口印不印結果行都沒有差別。
+    """
+    assert ROLLBACK_PS1.exists(), f"找不到 {ROLLBACK_PS1}"
+    src = ROLLBACK_PS1.read_text(encoding="utf-8", errors="replace")
+    assert "::PROTOCOL:: v=2" in src, (
+        "`rollback_update.ps1` 沒有印 `::PROTOCOL:: v=2` ——\n"
+        "☠️ dashboard 會永遠走舊判定，而那 6 條出口的結果行等於白印。")
+
+
+def test_p0_00_the_rollback_script_emits_one_result_per_exit():
+    """🔴 §34a：**6 條出口每一條都要印結果行，而格式只有一個地方知道。**
+
+    📌 判準與 `apply_update.ps1` 那兩題**同一個形狀**：
+    ```
+    輸出點恰好 1 處        ← 格式不複製
+    每條出口一個狀態值     ← 而不是數 `::RESULT::` 出現幾次
+    ```
+    ⚠️ 狀態值域由 B 定（6 個），**我這裡只釘「不是 0 也不是共用」**：
+    🔑 逐一釘值的那一半，等 B 的值域表到了再補 —— **而我明著說它還沒釘。**
+    """
+    assert ROLLBACK_PS1.exists(), f"找不到 {ROLLBACK_PS1}"
+    src = ROLLBACK_PS1.read_text(encoding="utf-8", errors="replace")
+    emitters = [ln for ln in src.splitlines()
+                if "::RESULT::" in ln and not ln.strip().startswith("#")]
+    assert len(emitters) == 1, (
+        f"`::RESULT::` 的**輸出點**有 {len(emitters)} 處，預期 1 處：\n  "
+        + "\n  ".join(e.strip()[:90] for e in emitters)
+        + "\n☠️ 格式散在多處 ⇒ 改格式要改多個地方，而漏掉一個會被 fail-closed\n"
+          "   接住 ⇒ **看起來像「那次回滾失敗了」。**")
