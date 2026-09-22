@@ -1623,6 +1623,9 @@ def _daily_backup_tables() -> dict:
                              " ORDER BY template_id, version"),  # 無 id 欄
         "獎金單":           "SELECT * FROM bonus_awards ORDER BY id",
         "獎金明細":         "SELECT * FROM bonus_award_lines ORDER BY id",
+        # 🔑 編寫紀錄是**憑證的一部分**，不是軌跡（同 voucher_edit_log 的理由）：
+        #    少了它，一張獎金單看起來完全正常，而沒有人回得出它被改過什麼。
+        "獎金異動":         "SELECT * FROM bonus_award_edit_log ORDER BY id",
     }
 
 

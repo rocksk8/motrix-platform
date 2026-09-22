@@ -126,14 +126,25 @@ def remainder_of(base, total_pct, lines):
     return pool_for(base, total_pct) - sum(l["amount"] for l in lines or ())
 
 
-#: 每個獎金項目各自綁一個人員來源（使用者裁）。
+#: 每個獎金項目各自綁一個人員來源。
 #:
-#: 📌 `owner`／`engineer` **目前沒有對應的獎金項目** —— 那是
-#:    「**還沒有人定義**」，不是「決定不做」。放在這裡是因為欄位本身存在。
+#: 🔴 **只有兩個**，而那是使用者原話逐字定的：
+#:    「業務獎金→`sales_person`／專案執行獎金→`case_stages.assigned_to`」。
+#:
+#: ## ☠️ 這裡原本有 `owner` 與 `engineer`，已拿掉（A 裁，2026-09-23）
+#:
+#: 那兩個是**規格自己加的**，而 `quotations` 上**沒有那兩個欄位**
+#: （實查 `PRAGMA table_info`）⇒ 用它們建的獎金項目**永遠發不出去**。
+#: ⚠️ 留著並標「尚未支援」也被否決：那會讓畫面上永遠有兩個點不下去的選項，
+#:    而**沒有人答得出它們什麼時候會支援**。
+#:
+#: ## 📌 已知的未來來源：`quotations.assigned_user_ids`
+#:
+#: 那個欄位**真的存在**（A 實查；我原本與 A-2 都沒列到它）。
+#: ⚠️ 而它**這一輪刻意不接** —— 沒有紅燈、沒有裁示。
+#:    寫在這裡是為了讓下一個人**不必重新去找**，不是為了暗示它該被加進來。
 PERSON_SOURCES = (
     "sales_person",             # 業務
-    "owner",                    # 案件擁有者
-    "engineer",                 # 工程師
     "case_stages.assigned_to",  # 各執行階段負責人（JSON 陣列）
 )
 

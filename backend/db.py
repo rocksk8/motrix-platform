@@ -121,7 +121,8 @@ DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR = os.path.join(
 # v96: account_items.is_active —— **停用而不是刪除**（FN1⑤）
 # v97: 獎金分潤五張表（bonus_items／bonus_templates／bonus_template_versions／
 #      bonus_awards＋**部分**唯一索引／bonus_award_lines）
-CURRENT_VERSION = 97
+# v98: FN4 編寫紀錄 —— bonus_award_edit_log ＋ 兩張共同的 retention 欄
+CURRENT_VERSION = 98
 
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
 # execution model) whenever the current request is authenticated as the 'demo'
@@ -376,7 +377,7 @@ DEMO_CLEARED_TABLES = frozenset((
     # ⚠️ `bonus_items`／`bonus_templates` 看起來像「系統預設」那一類，
     #    **而它們不是**：施工圖 `§一` 逐字「項目可由**最高管理者**定義」
     #    ⇒ 那是**使用者建的**，不是我們預載的。
-    "bonus_award_lines", "bonus_awards", "bonus_items",
+    "bonus_award_edit_log", "bonus_award_lines", "bonus_awards", "bonus_items",
     "bonus_template_versions", "bonus_templates",
     "voucher_edit_log", "voucher_lines", "voucher_template_versions",
     "voucher_templates", "vouchers_all",
@@ -4296,6 +4297,70 @@ def _m094_load_account_items(conn):
              it.get("name_en", ""), it["parent_code"]))
 
 
+def _m098_edit_log_retention(conn):
+    """v98（2026-09-23 `FN4`）：獎金的編寫紀錄 ＋ 兩張共同的 `retention`。
+
+    ## 🔴 **兩張表，不是一張共用表**
+
+    施工圖 `§三3.1`：傳票與獎金各一張。理由是**外鍵**——
+    一張共用表無法同時對 `vouchers_all(id)` 與 `bonus_awards(id)` 宣告
+    `REFERENCES`，而拿掉外鍵就等於拿掉「指到一張不存在的單」那道防線。
+    ⚠️ 而**不抽成共用函式**也是刻意的：共用函式壞掉 ⇒ **兩個模組同時失效**。
+    ⇒ 選的是「同形狀 ＋ 同命名」，不是「同一份實作」。
+
+    ## ⚠️ 兩張的欄位形狀必須一致（扣掉各自的外鍵欄）
+
+    ```
+    id ／ changed_by ／ changed_at ／ changes_json ／ retention
+    ```
+    ☠️ 不一致不會報錯 —— 它讓「查任一模組的編寫歷史」那種工具
+       **只在其中一張上壞掉**，而那支工具還沒有人寫，所以現在看不出來。
+
+    ## 🔴 `retention` 的值域只有兩個，而**這裡不訂天數**
+
+    ```
+    permanent  「誰**匯出**過」—— 資料離開系統的證據
+    term       「誰**預覽**過」—— 保留期可設
+    ```
+    ⚠️ **刻意不放天數**：法條的起算點是「年度決算辦理終了後」，
+       **而系統沒有記錄那個時點** ⇒ 任何寫進去的天數都是猜的。
+    🔑 會計師答了之後**改設定值，不改結構**（`FN6`）。
+    ☠️ 而值域外的值不會報錯，它只是讓清理排程**跳過那一列** ——
+       那一列會永遠留著，**而沒有人知道為什麼**。
+    ⇒ 用 `CHECK` 擋在資料層（實測：`ALTER TABLE … ADD COLUMN … CHECK`
+       在 SQLite 可行，且非法值會被 `IntegrityError` 擋下）。
+
+    ## 📌 `①` 執行歷史**不建表**
+
+    它答的是「這個月實際發生了什麼」⇒ 資料來源是**業務表自己**。
+    ☠️ 另建一份副本 ⇒ 兩份會分岔，而**分岔之後哪一份是真的沒有定義**。
+    🔑 而「取消的那一筆要消失」正是靠業務表自己的欄位做到的
+       （`contractor_vouchers.is_paid=0`）—— 副本做不到，它只會多一列「已取消」。
+    """
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS bonus_award_edit_log ("
+        "  id           INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "  award_id     INTEGER NOT NULL REFERENCES bonus_awards(id),"
+        "  changed_by   TEXT    NOT NULL,"
+        "  changed_at   TEXT    NOT NULL,"
+        "  changes_json TEXT    NOT NULL DEFAULT '[]',"   # 改前 → 改後
+        "  retention    TEXT    NOT NULL DEFAULT 'term'"
+        "    CHECK (retention IN ('permanent', 'term'))"
+        ")")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_bael_award"
+        " ON bonus_award_edit_log(award_id, changed_at)")
+
+    # `voucher_edit_log` 在 `v95` 就建好了，這裡補上同一欄。
+    # ⚠️ 冪等：ALTER 前先看欄位在不在（migration 引擎失敗重跑時不會炸）。
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(voucher_edit_log)")}
+    if "retention" not in cols:
+        conn.execute(
+            "ALTER TABLE voucher_edit_log ADD COLUMN"
+            " retention TEXT NOT NULL DEFAULT 'term'"
+            " CHECK (retention IN ('permanent', 'term'))")
+
+
 def _m097_bonus(conn):
     """v97（2026-09-23 `FN2`）：獎金分潤五張表。
 
@@ -4782,6 +4847,7 @@ _MIGRATIONS = [
     _m095_vouchers,                                 # v95
     _m096_account_item_active,                      # v96
     _m097_bonus,                                    # v97
+    _m098_edit_log_retention,                       # v98
 ]
 
 
