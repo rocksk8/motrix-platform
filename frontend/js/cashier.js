@@ -283,7 +283,7 @@ function cashierApp() {
         this.payVoucherModal = false
         this.payVoucherTarget = null
         await Promise.all([this.loadPayable(), this.loadCashierHistory()])
-      } catch (e) { alert('網路錯誤：' + e.message) }
+      } catch (e) { alert('標記已匯款失敗：' + e.message) }
       this.payVoucherSaving = false
     },
 
@@ -318,7 +318,7 @@ function cashierApp() {
         this.receiveModal = false
         this.receiveTarget = null
         await Promise.all([this.loadReceivable(), this.loadCashierHistory()])
-      } catch (e) { alert('網路錯誤：' + e.message) }
+      } catch (e) { alert('標記已收款失敗：' + e.message) }
       this.receiveSaving = false
     },
 
@@ -332,7 +332,7 @@ function cashierApp() {
         })
         if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '操作失敗'); return }
         await this.loadReceivable()
-      } catch (e) { alert('網路錯誤：' + e.message) }
+      } catch (e) { alert('更新收款狀態失敗：' + e.message) }
     },
 
     openInvoiceModal(item) {
@@ -352,7 +352,7 @@ function cashierApp() {
         item.invoiceNo = this.invoiceModal.no.trim()
         item.invoiceDate = this.invoiceModal.date || ''
         this.invoiceModal.show = false
-      } catch (e) { alert('網路錯誤：' + e.message) }
+      } catch (e) { alert('登錄發票號碼失敗：' + e.message) }
     },
 
     async uploadBankCsv(evt) {
