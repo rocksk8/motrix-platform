@@ -128,10 +128,15 @@ def _rows(vid=None):
 def _abs(path):
     """把 `uploads/` 相對路徑換成這一輪測試的實際檔案位置。"""
     import helpers.uploads as up
-    base = getattr(up, "UPLOAD_DIR", None) or getattr(up, "UPLOADS_DIR", None)
+    base = getattr(up, "UPLOADS_ROOT", None)
+    # 🔴 **更正留著**：我第一版試 `UPLOAD_DIR`／`UPLOADS_DIR`，兩個都不存在
+    #    ⇒ 三題紅在「找不到上傳根目錄常數」。真名是 **`UPLOADS_ROOT`**
+    #    （`helpers/uploads.py:20`），而 `conftest.py:423` 每一題都把它
+    #    monkeypatch 到 `tmp_path/uploads` ⇒ 用它是安全且隔離的。
+    # ☠️ 今天第五次同一個形狀：**探針找不到東西時報「找不到」，
+    #    而那與「產品缺了它」長得一樣**。
     assert base, (
-        "`helpers/uploads.py` 找不到上傳根目錄常數（試過 `UPLOAD_DIR`／"
-        "`UPLOADS_DIR`）—— **退回給我**。")
+        "`helpers/uploads.py` 沒有 `UPLOADS_ROOT` —— **退回給我**改觀測點。")
     p = pathlib.Path(str(path))
     if p.is_absolute():
         return p
@@ -319,8 +324,8 @@ def _seed_quotation_with_file(quote_no="MQ-JV3-001", name="來源憑證.pdf"):
     import db
     import helpers.uploads as up
 
-    base = getattr(up, "UPLOAD_DIR", None) or getattr(up, "UPLOADS_DIR", None)
-    assert base, "`helpers/uploads.py` 找不到上傳根目錄常數 —— **退回給我**。"
+    base = getattr(up, "UPLOADS_ROOT", None)
+    assert base, "`helpers/uploads.py` 沒有 `UPLOADS_ROOT` —— **退回給我**。"
     folder = pathlib.Path(str(base)) / "quotations"
     folder.mkdir(parents=True, exist_ok=True)
     file_id = "jv3src001"
@@ -452,6 +457,117 @@ def test_jv3_voiding_and_reopening_copies_the_attachments(client, make_user):
     assert a.resolve() != b.resolve(), (
         "新舊單指向**同一個實體檔**：%s\n" % a
         + "📌 `§1` 裁定 ①：作廢重開**要複製附件**。")
+
+
+#: `§3` 的 #3／#4／#5 —— 它們**不是欄位**，是 `quotations.data_json` 裡面的
+#: 陣列鍵 ⇒ **`PRAGMA` 看不到它們，原始碼是唯一的權威**（A-2 更正）。
+#:
+#: ☠️ 而 #4 與 #5 住在**同一個陣列元素**的兩個鍵：
+#: ```
+#: mats[idx]["files"]         到貨憑證／包裝清單
+#: mats[idx]["invoiceFiles"]  發票     （quotations.py:3247 逐字：「兩個各自獨立的清單」）
+#: ```
+#: 🔑 拿錯一個 ⇒ **帶進來的是另一種單據的附件，而筆數與格式都正常** ——
+#:   那比「清單永遠是空的」難發現得多：**它有東西，只是錯的東西**。
+#: ⇒ 觀測點釘 `source_file_id`，**不要只驗筆數**。
+_JSON_SOURCES = {
+    "payment_item": (("caseRecord", "payment", "items"), "invoiceFiles",
+                     "quotation_payment_items"),
+    "material": (("caseRecord", "materials"), "files",
+                 "quotation_materials"),
+    "material_invoice": (("caseRecord", "materials"), "invoiceFiles",
+                         "quotation_materials_invoices"),
+}
+
+
+def _seed_json_source(source_type, quote_no):
+    """在 `quotations.data_json` 裡種一筆**指定鍵**的附件。
+
+    回 `(docNo, file_id, 實體檔)`。⚠️ 同一個陣列元素上**兩個鍵各種一筆**，
+    而且檔名不同 —— 拿錯鍵的話 `source_file_id` 就對不上。
+    """
+    import db
+    import helpers.uploads as up
+
+    path, key, subfolder = _JSON_SOURCES[source_type]
+    base = getattr(up, "UPLOADS_ROOT", None)
+    assert base, "`helpers/uploads.py` 沒有 `UPLOADS_ROOT` —— **退回給我**。"
+
+    made = {}
+    for k in ("files", "invoiceFiles"):
+        folder = pathlib.Path(str(base)) / subfolder
+        folder.mkdir(parents=True, exist_ok=True)
+        fid = "jv3_%s_%s" % (source_type, k)
+        real = folder / ("%s.pdf" % fid)
+        real.write_bytes(b"%PDF-1.4 " + k.encode())
+        made[k] = (fid, real)
+
+    node = {"id": "row0"}
+    for k in ("files", "invoiceFiles"):
+        fid, real = made[k]
+        node[k] = [{"id": fid, "name": "%s.pdf" % fid,
+                    "path": "%s/%s" % (subfolder, real.name)}]
+
+    data = {}
+    cur = data
+    for seg in path[:-1]:
+        cur = cur.setdefault(seg, {})
+    cur[path[-1]] = [node]
+
+    conn = db.get_db()
+    try:
+        conn.execute(
+            "INSERT INTO quotations (quote_no, status, customer_name, "
+            "project_name, total, pretax, data_json, created_at, updated_at) "
+            "VALUES (?,?,?,?,?,?,?,?,?)",
+            (quote_no, "已結案", "測試客戶", "測試案", 0, 0,
+             json.dumps(data), "2026-09-01T00:00:00", "2026-09-01T00:00:00"))
+        conn.commit()
+    finally:
+        conn.close()
+
+    fid, real = made[key]
+    other = made["invoiceFiles" if key == "files" else "files"][0]
+    return "%s_0" % quote_no, fid, real, other
+
+
+@pytest.mark.parametrize("source_type", sorted(_JSON_SOURCES))
+def test_jv3_a_json_array_source_brings_in_the_right_key(client, make_user,
+                                                         source_type):
+    """🔴 **`§3` 的 #3／#4／#5：帶進來的要是**那個鍵**的那一筆。**（%s）
+
+    ```
+    mats[idx]["files"]         到貨憑證／包裝清單
+    mats[idx]["invoiceFiles"]  發票
+    ⇒ **同一個陣列元素上的兩個獨立清單**（quotations.py:3247 逐字）
+    ```
+    ☠️ 拿錯鍵的症狀：**筆數對、格式對、而內容是另一種單據的附件** ——
+       比「清單永遠是空的」難發現得多，因為**它有東西**。
+    ⚙️ ⇒ 觀測點是 `source_file_id`，**不是筆數**。
+       我在同一個元素的兩個鍵**各種一筆**，兩筆檔名不同 ⇒ 拿錯就對不上。
+    ⚠️ 這三類 `PRAGMA` **看不到**（它們在 `data_json` 裡面）
+       ⇒ 「`PRAGMA` 是權威」那條在這裡用不上，**原始碼是唯一的權威**。
+    """ % source_type
+    _u, hdr = _hdr(client, make_user, "jv3_json_%s" % source_type)
+    vid = _create(client, hdr)
+    doc_no, want_id, want_file, other = _seed_json_source(
+        source_type, "MQ-JV3-%s" % source_type.upper()[:6])
+
+    r = client.post(ATT % vid, headers=hdr, json={"picks": [
+        {"type": source_type, "docNo": doc_no, "fileId": want_id}]})
+    _reached(r, "POST /api/vouchers/{id}/attachments (picks)")
+    assert r.status_code == 200, (
+        "帶入 `%s` 失敗：%s %s" % (source_type, r.status_code, r.text[:200]))
+
+    rows = _rows(vid)
+    assert len(rows) == 1, "帶入之後表裡有 %d 列：%r" % (len(rows), rows)
+    got = rows[0].get("source_file_id")
+    assert got == want_id, (
+        "`source_file_id` 是 %r，而我指名的是 %r（另一個鍵那一筆是 %r）。\n"
+        % (got, want_id, other)
+        + "☠️ 拿錯鍵的話**筆數對、格式對，而內容是另一種單據的附件** ——\n"
+          "   而 `files` 與 `invoiceFiles` 就住在**同一個陣列元素**上。")
+    assert _abs(rows[0].get("path")).is_file(), "複製出來的檔不存在。"
 
 
 def test_jv3_a_missing_source_file_aborts_the_whole_batch(client, make_user):
