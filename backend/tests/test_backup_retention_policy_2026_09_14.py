@@ -66,9 +66,14 @@ def test_daily_pruned_at_60_days_weekly_at_90(arch):
 
 # ── 月備份永久保留 ──────────────────────────────────────────────────────────
 
-def test_monthly_never_pruned_by_default(arch):
-    """預設 cloud_monthly_keep_days=0 → 連 10 年前的月備份都不能被刪掉。
-    這是「長久只留月備份」這條政策的核心，壞掉等於長期備份無聲消失。"""
+def test_bk9_monthly_never_pruned_by_default(arch):
+    """§12 BK9（上半）：預設 cloud_monthly_keep_days=0 → 連 10 年前的月備份都不能被刪掉。
+    這是「長久只留月備份」這條政策的核心，壞掉等於長期備份無聲消失。
+
+    2026-09-22 掛上 BK9 這個編號。它與下面那題是**同一條規格的兩半**，
+    規格明著要求兩半都要有：少了下半，「永遠不刪」跟「這段程式根本沒跑到」
+    一模一樣。⇒ 兩題的名字都帶 bk9，是為了讓它們一起被看見。
+    """
     base = arch._archive_base()
     ancient = (date.today() - timedelta(days=3650)).strftime("%Y-%m")
     _mkdir_with_file(base, "月備份", ancient)
@@ -83,9 +88,13 @@ def test_monthly_never_pruned_by_default(arch):
         "月備份是永久保留層，預設設定下不得被清除"
 
 
-def test_monthly_pruned_only_when_explicitly_configured(arch):
-    """把 cloud_monthly_keep_days 設成正數時才會清——確認那條分支真的接得上，
-    不是寫了一段永遠不會執行的死碼。"""
+def test_bk9_monthly_pruned_only_when_explicitly_configured(arch):
+    """§12 BK9（下半）：把 cloud_monthly_keep_days 設成正數時才會清——確認那條
+    分支真的接得上，不是寫了一段永遠不會執行的死碼。
+
+    🔑 這一半才是 BK9 的重點：**沒有它，上面那題無法分辨
+    「政策生效了」與「那段清理程式根本沒被呼叫」。**
+    """
     base = arch._archive_base()
     old = (date.today() - timedelta(days=400)).strftime("%Y-%m")
     recent = date.today().strftime("%Y-%m")
