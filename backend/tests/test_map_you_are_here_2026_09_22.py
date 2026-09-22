@@ -205,3 +205,26 @@ def test_ub0_the_page_and_the_anchor_are_both_findable(page):
     assert "L.marker" in section or "marker(" in section, (
         "畫圖那一段裡沒有任何 `marker` —— 那就不是畫圖的那一段"
     )
+
+
+def test_ub3_the_user_marker_is_not_only_in_the_list_column(page):
+    """🔴 UB3：**地圖展開之後要看得到「你」** —— 不可以只存在於清單那一欄。
+
+    ☠️ 現況正是這個：`userAccuracyM` 只餵「離你多遠」那一欄（`map.html:431`），
+    而地圖上沒有任何東西代表使用者。
+    🔑 **「有這個資料」與「看得到它」是兩件事**，
+    而使用者按下按鈕之後看的是**地圖**不是表格那一欄。
+
+    📌 這一題與 UB1 的差別：UB1 驗「有沒有畫」，這一題驗
+    **「畫的那一段跟清單那一段不是同一段」** —— 也就是它真的進了地圖圖層。
+    """
+    section = _draw_section(page)
+    assert "userPos" in section, (
+        "畫圖那一段裡沒有 `userPos` —— 它只存在於清單／標頭那一側。\n"
+        "⇒ 使用者按下按鈕之後看的是地圖，不是表格那一欄。"
+    )
+    assert "addTo" in section[section.find("userPos"):
+                              section.find("userPos") + 500], (
+        "`userPos` 出現在畫圖那一段，但沒有 `addTo(...)` ——\n"
+        "⇒ 算出來了而沒有加進地圖圖層。"
+    )

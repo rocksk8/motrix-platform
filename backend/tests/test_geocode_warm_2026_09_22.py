@@ -485,3 +485,60 @@ def test_vc2_the_page_can_say_which_kind_of_stopped_it_is():
         "⇒ 三種停止原因在畫面上會變成同一件事（數字不動），"
         "而處置完全不同。"
     )
+
+
+# ══════════════════════════════════════════════════════════════════════
+# VA1 / VA2 · 要做的那兩件
+# ══════════════════════════════════════════════════════════════════════
+
+def test_va1_the_backlog_shrinks_without_anyone_pressing_anything(
+        client, backlog, counting_lookup, monkeypatch):
+    """🔴 VA1：背景工作**輪流把還沒定位的地址查完並存進 `geocode_cache`**。
+
+    ⚠️⚠️ **這一題證明不了「它真的會自己跑完」** —— 見檔頭：
+    `MOTRIX_DISABLE_SCHEDULERS=1` 讓開發機上的排程整批不跑。
+    ⇒ 它釘的是「**那支函式單獨呼叫時，待辦真的會變少**」，
+    **而那與「它真的在跑」是兩件事**（後者由 VB8 的註冊 ＋ 正式機目視）。
+
+    📌 觀測點是 `geocode_cache` 的列數 —— **不是回傳值**：
+    🔑 一個「查了、然後把結果丟掉」的實作會讓回傳值好看，
+    而使用者下次開地圖仍然要重查（**那正是這一節要解決的事**）。
+    """
+    import db
+
+    def _cached():
+        conn = db.get_db()
+        try:
+            return conn.execute(
+                "SELECT COUNT(*) FROM geocode_cache").fetchone()[0]
+        finally:
+            conn.close()
+
+    monkeypatch.setattr(geo, "_throttle", lambda: None)
+    monkeypatch.setattr(geo, "GEOCODE_WARM_DAILY_LIMIT", 100)
+
+    before = _cached()
+    _need("warm_geocode_cache")()
+    after = _cached()
+
+    assert counting_lookup, "一個查詢都沒發 —— 前提不成立"
+    assert after > before, (
+        f"跑完之後 `geocode_cache` 還是 {after} 列（跑之前 {before}）——\n"
+        "⇒ 查了而沒有存起來，使用者下次開地圖仍然要重查。"
+    )
+
+
+def test_va2_the_manual_button_is_still_there(client):
+    """🟡 VA2：「繼續定位」按鈕**留著**，給不想等的人用。
+
+    ⚠️ 背景做完之後最自然的動作是把按鈕拿掉 —— **不要**。
+    📌 使用者裁的是「不要**逼**他按」，不是「不准他按」：
+    🔑 一個剛填完 50 筆客戶地址的人，**不想等到明天**。
+
+    ⚠️ 文字比對，弱的（見檔頭）。而它擋的是「順手刪掉」那種改動。
+    """
+    text = _ui_text()
+    assert "定位" in text and ("@click" in text or "onclick" in text), (
+        "找不到任何手動定位的按鈕 —— 它被拿掉了？\n"
+        "⇒ 使用者裁的是「不要逼他按」，不是「不准他按」。"
+    )
