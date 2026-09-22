@@ -394,3 +394,97 @@ def test_ui9_the_cashier_page_loads_all_five_of_its_own_endpoints():
         "出納那一側（`%s`）沒有載這些端點：\n  " % where + "\n  ".join(missing)
         + "\n☠️ 缺哪一個，畫面上對應的那一塊就是空的 —— "
           "而空的看起來像「這期沒有資料」，不像「沒載到」。")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# 🔴 UI9 補 · **按鈕按下去要有東西可以開**
+# ══════════════════════════════════════════════════════════════════════
+#
+# ☠️ `UI9` 交綠、使用者實看說「ok」之後才發現：**四個 modal 一個都沒搬過去。**
+#    五個按鈕（`openPayVoucherModal`／`openInvoiceModal`×2／`openReceiveModal`／
+#    `openBankPayModal`）按下去**不會有任何反應**。
+#
+# 🔑 **而我的題擋不到它，成因值得留著**：
+# ```
+# 我釘了  轉址消失／內容出現／五個端點／shell 能 boot／側欄指向
+# 我沒釘  **按鈕按下去有沒有東西可以開**
+# ```
+# 我用 div 深度配對量「出納面板」量得很準（270 行，byte 級比對過），
+# **而那個準確的邊界正好把 modal 排除在外** —— 它們在 `reports.html` 的另一個區段。
+# ⇒ ⇒ **邊界量得越準，越容易漏掉邊界外的東西。** 而 B 照著那個邊界搬，自然就漏了。
+#
+# 📌 使用者說「出納我看到了，ok」—— **那句話只涵蓋他看到的**，他沒有點那四個按鈕。
+
+#: 「這個 modal 打得開」的兩種寫法。
+#: ⚠️ v1 只認 `= true`，而 `invoiceModal` 是**物件**（`{show, item, no}`）
+#:    ⇒ v1 只抓到 3 個，實際是 **4 個**。今天第四次判準太窄。
+_MODAL_OPEN = re.compile(
+    r"this\.(\w*[Mm]odal)\s*=\s*(?:true|\{[^}]*?\bshow\s*:\s*true)")
+#: 「這個 modal 有標記」—— 兩種繫結形式都算。
+_MODAL_SHOW = re.compile(r'x-show="\s*(\w*[Mm]odal)(?:\.show)?\s*"')
+
+
+def _modal_sets(html_path, js_src):
+    html = _read(html_path)
+    return set(_MODAL_OPEN.findall(js_src)), set(_MODAL_SHOW.findall(html))
+
+
+def test_ui9_every_modal_the_page_can_open_is_actually_on_the_page():
+    """🔴🔴 **出納頁打得開的每一個 modal，都要在出納頁上。**
+
+    ```
+    cashier.js  會設 payVoucherModal／receiveModal／bankPayModal／invoiceModal
+    cashier.html 裡的 modal 標記  ⇒ **0 個**
+    ⇒ 標記已匯款／標記已收款／開立發票／銀行對帳比對 —— **四個動作全是死的**
+    ```
+    ☠️ 而它**不會報錯**：Alpine 設一個沒有人繫結的狀態是合法的，
+    使用者按下去只是**什麼都沒發生**。
+    🔑 那比「壞掉」難發現 —— **壞掉會有紅字，什麼都沒發生只會讓人再按一次。**
+
+    ⚙️ 這一題是**通用的**（不只出納）：任何頁面，
+    `this.xxxModal = true`（或 `= {show:true}`）而畫面上沒有 `x-show="xxxModal"`
+    ⇒ 紅。
+    📌 它同時是一個**遷移守門**：把功能搬到新頁時，
+       「面板搬了而 modal 沒搬」是這一類搬遷最典型的漏法。
+    """
+    where, js = _cashier_js()
+    openable, rendered = _modal_sets(CASHIER_HTML, js)
+    assert openable, (
+        "`%s` 裡一個 `this.*Modal = true` 都沒抓到 ——\n" % where
+        + "🔑 **儀器失效**：這一題會因為量不到而綠。")
+
+    missing = sorted(openable - rendered)
+    assert not missing, (
+        "出納頁打得開這些 modal，而畫面上**沒有它們的標記**：%s\n" % missing
+        + "☠️ 按鈕按下去**什麼都不會發生**，而且不報錯 ——\n"
+          "   Alpine 設一個沒有人繫結的狀態是合法的。\n"
+        "🔑 那比「壞掉」難發現：壞掉會有紅字，什麼都沒發生只會讓人再按一次。\n"
+        "📌 它們現在還在 `reports.html`（註解自己寫著"
+        "「出納 Modal 群組⋯**原獨立 cashier.html**」）。")
+
+
+def test_ui9_reports_has_no_cashier_buttons_left_behind():
+    """🔴 另一側：**`reports.html` 不可以還留著出納的按鈕。**
+
+    ⚠️ **而我要更正我自己一句**：我先回報時說那四個 modal 在 `reports.html`
+    「是孤兒」。**更精確的實情是**：
+    ```
+    reports.html 的 modal 標記      ✅ 還在
+    reports.js  的 opener 函式      ✅ 還在（四支各 1 處）
+    reports.html 的**按鈕**         ❌ 已經沒有（0 處）
+    ```
+    ⇒ 它們**不是打不開**（JS 路徑完整），只是**沒有東西去叫它**。
+    🔑 差別有實質後果：**清掉它們是整理，不是修 bug** ——
+       而我原本那句話會讓人以為 `reports` 那邊也壞了。
+    📌 〈發現自己上一則有問題不要等下一次被問〉：別人照上一則在排優先序。
+
+    ⚙️ 這一題釘的是**按鈕**那一層（使用者點得到的東西）：
+       出納的按鈕不可以出現在報表頁上。
+    """
+    html = _read(REPORTS_HTML)
+    openers = ("openPayVoucherModal", "openReceiveModal",
+               "openInvoiceModal", "openBankPayModal")
+    left = [o for o in openers if o in html]
+    assert not left, (
+        "`reports.html` 還有出納的按鈕：%s\n" % left
+        + "☠️ 使用者會在報表頁上按到出納的動作 —— 而出納已經是獨立頁面了。")
