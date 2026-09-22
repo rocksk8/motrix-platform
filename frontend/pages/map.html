@@ -82,13 +82,13 @@
     <div style="margin:14px 0">
       <div class="mp-note warn" x-show="info && info.officeMissing">
         <span>⚠️</span>
-        <div>尚未設定<strong>辦公室地址</strong>，所以算不出距離。
-          <a href="company-profile-settings.html">去公司資料設定填寫</a></div>
+        <div>尚未設定<strong>辦公室地址</strong>，因此無法計算距離。
+          請至<a href="company-profile-settings.html">公司資料設定</a>填寫。</div>
       </div>
       <div class="mp-note warn"
            x-show="info && !info.officeMissing && !info.office">
         <span>⚠️</span>
-        <div>已填辦公室地址，但<strong>定位不到</strong>——地址可能需要調整。</div>
+        <div>已設定辦公室地址，但<strong>無法定位</strong>——地址可能需要調整。</div>
       </div>
       <!-- 🔴 起算點的精度會傳染給**每一個**距離。
            辦公室只定到行政區的話，下面每一筆都差同樣的幾公里，
@@ -96,10 +96,10 @@
       <div class="mp-note warn"
            x-show="info && info.office && precisionIsCoarse(info.office.precision)">
         <span>⚠️</span>
-        <div><strong>辦公室只定位到「<span x-text="info.office ? precisionLabel(info.office.precision) : ''"></span>」</strong>
-          ——查不到完整門牌，所以起算點是行政區中心，
-          <strong>下面所有的距離都會差幾公里</strong>。
-          <br>可以在公司資料設定直接填經緯度，那會跳過所有查詢。</div>
+        <div><strong>辦公室地址只定位到「<span x-text="info.office ? precisionLabel(info.office.precision) : ''"></span>」</strong>
+          ——查不到完整門牌，距離的起算點是行政區中心，
+          <strong>因此以下所有的距離都會差幾公里</strong>。
+          <br>如需精確距離，可於公司資料設定直接填入經緯度，系統將不再查詢。</div>
       </div>
       <!-- 🔴 GB9：**降級必須看得見。**
            📌 〈降級之後它還是會動〉：壞掉會被報修，降級不會。
@@ -109,26 +109,25 @@
            ⚠️ 排在「地理查詢未啟用」之前：那一則講的是「什麼都定位不到」，
               這一則講的是「定位得到，只是比較粗」——兩件事不要疊在一起講。 -->
       <div class="mp-note warn" x-show="info && info.quota && info.quota.degraded">
-        <span>💸</span>
-        <div><strong>目前是省錢模式</strong>：本週期的 Google 地圖額度已用畢
+        <div><strong>目前為節費模式</strong>：本週期的 Google 地圖額度已用畢
           （<span x-text="(info.quota && info.quota.used) || 0"></span>／<span
              x-text="(info.quota && info.quota.quota) || 0"></span>），
-          定位已自動退回免費來源，<strong>精度較低</strong>（可能只到路段或行政區）。
-          <br>功能沒有關閉，清單與距離照常可用；<strong>下一個計費週期開始會自動恢復</strong>，
-          不需要有人去按。
+          定位來源已自動切換為免費服務，<strong>精度較低</strong>（可能只到路段或行政區）。
+          <br>功能並未關閉，清單與距離均可正常使用；<strong>下一個計費週期開始後會自動恢復</strong>，
+          無須人工操作。
           <br><span style="opacity:.8">週期起日
             <span x-text="(info.quota && info.quota.periodStart) || '—'"></span>；
-            額度與起算日可在「公司資料設定」由最高管理員調整。</span></div>
+            額度與起算日可由最高管理員於「公司資料設定」調整。</span></div>
       </div>
       <div class="mp-note warn" x-show="info && !info.geoEnabled">
         <span>⚠️</span>
-        <div><strong>地理查詢未啟用</strong>，所以沒有任何東西定位得到、距離全部是空的。
-          需由管理者在伺服器設定 <code>MOTRIX_GEO=1</code> 並重啟。</div>
+        <div><strong>地理查詢功能未啟用</strong>，因此所有項目都無法定位，距離欄位全部是空的。
+          請由系統管理者於伺服器設定 <code>MOTRIX_GEO=1</code> 後重新啟動。</div>
       </div>
       <div class="mp-note warn" x-show="info && info.withoutLocation > 0">
         <span>⚠️</span>
-        <div>有 <strong x-text="info.withoutLocation"></strong> 筆<strong>沒有地點資訊</strong>，
-          不會出現在地圖上。它們仍然存在，只是我們還不知道它們在哪裡。</div>
+        <div>有 <strong x-text="info.withoutLocation"></strong> 筆<strong>沒有填寫地點資訊</strong>，
+          不會顯示在地圖上。這些資料仍然存在，只是缺少地點欄位。</div>
       </div>
       <!-- 🔴 「還沒查」與「查不到」是兩件事，**而處置相反**：
            上面那條要去改地址，這一條只要再按一次。
@@ -147,20 +146,19 @@
         <span>📍</span>
         <div>有 <strong x-text="info.unresolvableGeocode"></strong> 筆
           <strong>查不到這個地址</strong>（不是來不及）。
-          已經查過了，七天內不會再重複查 ——
+          系統已經查過了，七天內不會再重複查詢 ——
           <strong>再按「繼續定位」也不會變少。</strong>
-          <br>多半是只有機關名稱、沒有門牌，或是地址打錯。
-          把地址補完整或改對之後會自動重查（不需要清快取）。
+          <br>常見原因是只有機關名稱、沒有門牌，或是地址有誤。
+          請將地址補齊或更正，系統會自動重新查詢（不需要清除快取）。
         </div>
       </div>
       <div class="mp-note info" x-show="info && info.pendingGeocode > 0">
-        <span>⏳</span>
         <div>還有 <strong x-text="info.pendingGeocode"></strong> 個地址
           <strong>這次來不及定位</strong>（不是查不到）。
-          地址轉座標是跟 OpenStreetMap 要的，對方每秒只接受一次查詢，
-          所以一次只查一部分。
-          <strong>查過的會永久記住，而且背景會自己慢慢查完</strong> ——
-          不用一直按。想馬上看到的話再按這顆。
+          地址轉換座標需要向 OpenStreetMap 查詢，該服務每秒只接受一次查詢，
+          所以一次只能處理一部分。
+          <strong>查過的結果會永久保存，背景也會持續補完</strong> ——
+          不需要反覆點選。如需立即更新，請按下方按鈕。
           <button class="btn btn-ghost btn-sm" style="margin-left:6px"
                   @click="refresh()" :disabled="loading"
                   x-text="loading ? '定位中…' : '繼續定位'"></button>
@@ -174,11 +172,11 @@
       <div class="mp-note warn"
            x-show="info && info.locationsUnlocated && info.locationsUnlocated.length">
         <span>⚠️</span>
-        <div><strong>有據點定位不到</strong>：
-          <span x-text="(info.locationsUnlocated || []).map(l => l.name + '（' + (l.address || '沒有地址') + '）').join('、')"></span>。
+        <div><strong>有據點無法定位</strong>：
+          <span x-text="(info.locationsUnlocated || []).map(l => l.name + '（' + (l.address || '未填地址') + '）').join('、')"></span>。
           <br>這些據點<strong>不會被算進「最近的據點」</strong> ——
-          附近的案子會被算到別的據點上，而那個距離看起來完全正常。
-          <a href="company-profile-settings.html">去公司資料設定修正地址</a>（或直接填經緯度）。
+          鄰近的案件會改算到其他據點上，而那個距離在畫面上看不出異常。
+          請至<a href="company-profile-settings.html">公司資料設定</a>修正地址，或直接填入經緯度。
         </div>
       </div>
 
@@ -209,11 +207,11 @@
            那個訊號就沒有用了，他已經以為地圖壞了。 -->
       <div class="mp-note warn" x-show="info && info.tilesBlocked === true">
         <span>⛔</span>
-        <div><strong>OpenStreetMap 目前封鎖了這台機器的底圖請求。</strong>
-          按下去會看到一張滿版寫著「Access blocked」的圖——
-          <strong>那不是地圖壞了，是對方擋住我們</strong>。
-          <br>下面的清單與距離<strong>不受影響</strong>，照常可用。
-          <br>處理方式見
+        <div><strong>OpenStreetMap 目前封鎖了本機的底圖請求。</strong>
+          開啟地圖後會看到一張滿版寫著「Access blocked」的圖——
+          <strong>這不是地圖故障，而是對方的服務端擋下了請求</strong>。
+          <br>以下的清單與距離<strong>不受影響</strong>，均可正常使用。
+          <br>處理方式請參閱
           <a href="https://operations.osmfoundation.org/policies/tiles/"
              target="_blank" rel="noopener">OSM 圖磚使用政策</a>。
         </div>
@@ -312,16 +310,15 @@
     <div class="panel" style="margin-top:12px" x-show="mapOpen">
       <div class="mp-panel-body">
         <div class="mp-note warn" x-show="tileError">
-          <span>⚠️</span>
           <!-- ⚠️ **不要替使用者斷定原因。** 這裡只有一個訊號（圖磚載不出來），
                而它至少對應兩個成因：沒有對外連線、或瀏覽器的安全政策擋下。
                🔑 原本這句寫死成「這台機器可能沒有對外連線」——而那會讓人去查網路，
                **而網路是對的**，於是他會更困惑然後開始懷疑別的東西。
                ⇒ **訊號數要 ≥ 你敢斷定的成因數。** -->
-          <div><strong>底圖載不出來。</strong>
-            可能是這台機器沒有對外連線，或瀏覽器的安全政策擋下了
+          <div><strong>底圖無法載入。</strong>
+            可能是本機沒有對外連線，或瀏覽器的安全政策擋下了
             <code>tile.openstreetmap.org</code>。
-            <br>下面的清單與距離<strong>不需要網路</strong>，照常可用。</div>
+            <br>以下的清單與距離<strong>不需要網路</strong>，均可正常使用。</div>
         </div>
         <div id="mp-canvas"></div>
         <!-- OSM 使用條款要求標示出處。Leaflet 的 attribution 控制項會顯示，
@@ -556,17 +553,17 @@ function mapPage() {
       const w = (this.info && this.info.geocodeWarm) || {}
       const why = w.stoppedBecause
       if (why === 'geo_off') {
-        return '背景定位沒有在跑：這台機器的地理查詢是關的'
-             + '（需要管理者設定 MOTRIX_GEO=1 並重啟）。'
+        return '背景定位未執行：本機的地理查詢功能未啟用'
+             + '（請由系統管理者設定 MOTRIX_GEO=1 後重新啟動）。'
       }
       if (why === 'daily_limit') {
-        return '背景定位今天的額度用完了（' + (w.usedToday || 0) + '／'
-             + (w.dailyLimit || 0) + '），明天會自動繼續。'
-             + '想現在就補完的話按「繼續定位」。'
+        return '背景定位今日的額度已用畢（' + (w.usedToday || 0) + '／'
+             + (w.dailyLimit || 0) + '），明日會自動繼續。'
+             + '如需立即補完，請按「繼續定位」。'
       }
       if (why === 'failures') {
-        return '背景定位連續失敗而停下來了 —— 地圖服務可能暫時拒絕了我們。'
-             + '請看伺服器記錄；它下一個時段會再試一次。'
+        return '背景定位因連續失敗而暫停 —— 地圖服務可能暫時拒絕了本機的查詢。'
+             + '請查閱伺服器記錄；系統會在下一個時段再試一次。'
       }
       return ''
     },
@@ -584,11 +581,11 @@ function mapPage() {
         // ⚠️ 這是開發機最常撞到的一種：HTTP 上瀏覽器直接拒絕，
         // 而錯誤訊息長得像「使用者拒絕授權」。**兩者要分開講。**
         this.geoError = '這個網址不是安全環境（HTTPS 或 localhost），'
-                      + '瀏覽器不會提供定位。正式機是 HTTPS，在那裡可以用。'
+                      + '瀏覽器不會提供定位。正式機為 HTTPS，可正常使用。'
         return
       }
       if (!navigator.geolocation) {
-        this.geoError = '這個瀏覽器沒有定位功能。'
+        this.geoError = '這個瀏覽器不支援定位功能。'
         return
       }
       this.geoBusy = true
@@ -599,7 +596,7 @@ function mapPage() {
           // 在這裡就說清楚，使用者才知道為什麼那一欄沒出現。
           if (!(c.accuracy > 0)) {
             this.geoBusy = false
-            this.geoError = '瀏覽器沒有給出定位誤差，無法標示可信度。'
+            this.geoError = '瀏覽器未提供定位誤差，無法標示可信度。'
             return
           }
           this.userPos = { lat: c.latitude, lon: c.longitude, accuracy: c.accuracy }
@@ -608,8 +605,8 @@ function mapPage() {
         },
         err => {
           this.geoBusy = false
-          const why = { 1: '你拒絕了定位權限（可以在網址列左邊的圖示重新開啟）',
-                        2: '量不到位置（沒有 GPS／Wi-Fi 定位來源）',
+          const why = { 1: '已拒絕定位權限（可在網址列左側的圖示重新開啟）',
+                        2: '無法取得位置（沒有 GPS／Wi-Fi 定位來源）',
                         3: '定位逾時' }
           this.geoError = '定位失敗：' + (why[err && err.code] || '不明原因')
         },
