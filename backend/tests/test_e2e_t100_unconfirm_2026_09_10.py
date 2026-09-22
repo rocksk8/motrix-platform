@@ -88,9 +88,16 @@ def test_t100_confirm_then_unconfirm_from_ui(live_server, make_user):
         page.on("dialog", lambda d: d.accept())      # confirm() 一律按確定
         try:
             _login(page, live_server, username, password)
-            page.goto(f"{live_server}/pages/reports.html")
-            page.wait_for_selector(".period-bar", timeout=20000)
-            page.click('.tab:has-text("T100匯出")')
+            # 🔴 2026-09-23 `FN3`：T100 匯出 UI 從**營運報表的頁籤**
+            #    搬成**出納頁的子頁籤**（`cashierSub==='t100'`）。
+            # ⚠️ 改的是**去哪裡、點什麼**，斷言一個字都沒動 ——
+            #    這一題驗的是「反確認那個入口存不存在、按了有沒有效」，
+            #    而那件事沒有跟著搬家改變。
+            # 🔑 〈搬家要驗兩邊〉：舊位置沒有了由 `test_cashier_split_*`
+            #    那一組守，這裡只負責**新位置仍然能走完整條路**。
+            page.goto(f"{live_server}/pages/cashier.html")
+            page.wait_for_selector(".ctab", timeout=20000)
+            page.click('.ctab:has-text("T100匯出")')
 
             # 日期區間涵蓋這筆收款
             page.fill('input[x-model="t100Start"]', "2026-06-01")

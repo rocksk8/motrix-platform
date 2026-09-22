@@ -592,10 +592,35 @@ def test_ui9_nothing_was_over_copied_into_the_cashier_page():
     ```
     📌 那與〈已知的代價 vs 要修的東西〉是同一族：**留著它比刪掉它貴。**
     """
+    # ⚙️ 儀器自檢 —— **v2**。
+    #
+    # ☠️ v1 寫的是 `assert dangling`（「至少允許清單那幾個要被抓到」），
+    #    而 `FN3` 把那四支的呼叫端補上了 ⇒ **一個懸空函式都沒有了**
+    #    ⇒ 這一題紅，訊息說「儀器失效」。
+    # 🔑 **那是一個好結果被報成失敗** —— 而它的成因是：
+    #    **我把儀器自檢釘在一個「會被修掉的狀態」上。**
+    #    欠帳還完的那一天，那個自檢就開始說謊。
+    # 📌 ⇒ 自檢要釘在**掃描器自己的能力**上，不是釘在「現在有幾個缺陷」。
+    #    〈正對照要釘在故意留著的誘餌上，釘在真缺陷上會在缺陷修好那天失效〉
+    #    —— 而這一次連誘餌都不必：用一份合成的輸入就夠了。
+    sample_html = "<button @click=\"usedOne()\">x</button>"
+    sample_js = "\n".join([
+        "    usedOne() { this.helper() },",
+        "    helper() { return 1 },",
+        "    neverCalled() { return 2 },",
+    ])
+    probe_html = CASHIER_HTML.parent / "_probe_dangling.html"
+    probe_html.write_text(sample_html, encoding="utf-8")
+    try:
+        probe = _dangling_functions(probe_html, sample_js)
+    finally:
+        probe_html.unlink(missing_ok=True)
+    assert probe == {"neverCalled"}, (
+        "掃描器對一份合成輸入的判斷是 %s，預期只有 `neverCalled`。\n" % sorted(probe)
+        + "🔑 **量法壞了** —— 這一題對真實檔案的結論不可信。\n"
+          "（`usedOne` 被樣板呼叫、`helper` 被同檔 JS 呼叫，兩者都不算懸空。）")
+
     dangling = _dangling_functions()
-    assert dangling, (
-        "`cashier.js` 裡一個懸空函式都沒抓到 —— **儀器失效**"
-        "（連允許清單裡那幾個都該被抓到）。")
 
     bad = sorted(dangling - set(_ALLOWED_DANGLING))
     assert not bad, (
