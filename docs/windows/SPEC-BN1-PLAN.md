@@ -82,6 +82,11 @@ _is_manager(user)   ← 與 POST /awards **同一道閘**，不要更鬆
 ⑤ **has_active_award 要回** —— POST /awards 撞到部分唯一索引會回 409，
    而這個模組已經確立「先問再做」（GET /base docstring 逐字：
    「畫面在按下產生之前就該知道答案，而不是按下去才收到一句拒絕」）
+⑥ **items 要用與 POST /awards 相同的過濾：`WHERE is_active = 1`**
+   （routers/bonus.py create_award 逐字用這一條）
+   ☠️ 不加的話，畫面列出一個已停用的項目、使用者填了比例、按下產生
+      -> 400「獎金項目不存在或已停用」
+   ⇒ 那是「先問再做」失效的具體形狀：問過了，而答案是錯的
 ```
 
 ### ⚠️ 路由順序：這條路徑現在安全，而它**會在未來被吃掉**
@@ -184,9 +189,17 @@ base=87654321  pool(50)=438271  pool(5000)=43827160   **差 60**
 ② ok 與 people 必須一致：ok=true 且 people==[] 要紅，ok=false 且 people!=[] 也要紅
    ☠️ 否則畫面會出現「可以發放，但沒有人」
 ③ 非管理者呼叫 -> 403（不是 200 空清單）
-④ **反向控制**：把 person_source 改成一個解析不出人的值，
-   那個項目要變成 ok=false 且仍然**出現在 items 裡**
-⑤ ⚠️ 先斷言 status_code in (200, 400, 403) 再看內容
+④ **反向控制**：做一個 ok=false 的項目出來，它要**仍然出現在 items 裡**
+   🔴 做法：person_source = "case_stages.assigned_to"，而案件**沒有任何
+      階段負責人**（assigned_to 預設就是 '[]'）⇒ people_for_item 回
+      (False, [], NO_ELIGIBLE_PEOPLE)
+   ⚠️ **不要用「把 person_source 改成一個不合法的值」**——
+      POST /items 有 `source not in PERSON_SOURCES -> 400`（bonus.py:83）
+      ⇒ 那條路走不通，只能直接 INSERT 繞過 router，而那就變成
+      「測試自己準備的輸入繞過了生產路徑上的一段」
+   🔑 上面那個做法**全程走產品路徑**，這是它比較好的唯一理由
+⑤ **is_active = 0 的項目不可以出現在 items 裡**（配 §1 ⑥）
+⑥ ⚠️ 先斷言 status_code in (200, 400, 403) 再看內容
    —— 端點不存在時這個 repo 有三種臉：404／405／**422**（見 §166）
 ```
 
