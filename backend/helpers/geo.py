@@ -700,14 +700,17 @@ def notify_quota_warning(used=None, quota=None) -> bool:
 
     回傳「這一次有沒有真的寄出去」。
     """
-    from helpers import email_notify
-    from helpers.settings import _get_setting, _set_setting
-
     settings = quota_settings()
     if quota is None:
         quota = quota_for()
     if quota is None:
+        # ⚠️ 這個早退**排在 import 之前**是刻意的（D 2026-09-22 指出的測試成本）：
+        # 🔑 想測「額度留空時什麼都不做」，就不應該先備好一個寄信模組才跑得到分支。
+        # 📌 一個需要先架好周邊才驗得到的短路，很容易被寫成「反正它會回 False」。
         return False            # 不管制 => 沒有警戒線可言
+    from helpers import email_notify
+    from helpers.settings import _get_setting, _set_setting
+
     if used is None:
         used = usage_this_period()
     warn_pct = settings.get("warn_pct") or 80

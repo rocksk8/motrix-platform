@@ -358,6 +358,19 @@
                   style="font-size:12px;color:#16A34A;font-weight:600">已儲存</span>
           </div>
           <div class="ns-card-body">
+            <!-- 🔴 GB21②：這一行講的是**已經存檔的狀態**，不是輸入框裡的值。
+                 ☠️ 畫面上有兩個填了數字的百分比欄位 —— 那是一個**為真的視覺斷言**，
+                    而在沒有額度的時候它是假的。一行灰色小字救不了它，
+                    所以這一行放在最上面，用的是後端回來的 `quota`（存檔值）。
+                 📌 後端早就回了 `managed` 這個訊號（`geo.quota_status()`），
+                    而畫面上一直沒有人接 ——〈缺欄位≠缺訊號〉的反面。 -->
+            <div x-show="gqCalc && gqCalc.quota === null"
+                 style="margin:0 0 10px;padding:9px 12px;border-radius:6px;
+                        background:#FEF3C7;color:#92400E;font-size:12px;
+                        font-weight:600;line-height:1.7">
+              ⚠️ 目前<strong>沒有設定費用上限</strong> —— 用多少算多少。
+              下方的警戒線與硬上限<strong>不會生效</strong>，要先填免費額度。
+            </div>
             <div class="ns-desc">
               到達上限時系統會<strong>自動退回免費的定位來源</strong>（精度較低），
               <strong>功能不會關閉</strong>；下一個計費週期開始自動恢復，不需要有人去按。
@@ -390,15 +403,30 @@
                 <input type="number" min="0" step="0.01" x-model.number="gq.price_per_1000">
               </div>
             </div>
-            <div class="ns-row">
+            <!-- 🔴 GB18：額度留空時，這兩個欄位**完全不會被讀到**，
+                 ☠️ 而它們畫面上有值（80／100）—— **看起來像有在管，而保護不在**。
+                 📌 〈降級之後它還是會動〉的畫面版：一行文字提示會被那兩個
+                    「已設定」的數字蓋過去，所以要讓欄位自己說出來。 -->
+            <div class="ns-row" :style="quotaUnmanaged() ? 'opacity:.45' : ''">
               <div class="ns-field">
-                <label>警戒線（%，達到就寄信）</label>
-                <input type="number" min="1" max="100" x-model.number="gq.warn_pct">
+                <label>警戒線（%，達到就寄信）
+                  <span x-show="quotaUnmanaged()"
+                        style="color:#B45309;font-weight:700">・未生效</span></label>
+                <input type="number" min="1" max="100" x-model.number="gq.warn_pct"
+                       :disabled="quotaUnmanaged()">
               </div>
               <div class="ns-field">
-                <label>硬上限（%，達到就降回免費）</label>
-                <input type="number" min="1" max="100" x-model.number="gq.hard_pct">
+                <label>硬上限（%，達到就降回免費）
+                  <span x-show="quotaUnmanaged()"
+                        style="color:#B45309;font-weight:700">・未生效</span></label>
+                <input type="number" min="1" max="100" x-model.number="gq.hard_pct"
+                       :disabled="quotaUnmanaged()">
               </div>
+            </div>
+            <div x-show="quotaUnmanaged()"
+                 style="font-size:11px;color:#B45309;margin-top:-4px;margin-bottom:8px">
+              ⚠️ 上面兩個百分比<strong>目前不會生效</strong>：沒有額度就沒有「幾成」可言。
+              填了上方的免費額度之後它們才會開始作用。
             </div>
             <div class="ns-row">
               <div class="ns-field">
@@ -871,6 +899,15 @@
               local_pre_update_keep: Number(v.local_pre_update_keep),
             },
           })
+        },
+
+        //: 額度有沒有設。**`null` 與 `0` 是兩件事**：
+        //  `null`＝沒設（不管制）；`0`＝明著設成一次都不准查，那是**有在管**。
+        //  ⚠️ 用 `== null` 同時吃 `null` 與 `undefined`，不要用真假值——
+        //  ☠️ `0` 在真假值下是 false，那會把「一次都不准查」顯示成「未生效」。
+        quotaUnmanaged() {
+          const q = this.gq && this.gq.monthly_free_quota
+          return q === null || q === undefined || q === ''
         },
 
         async saveGoogleQuota() {
