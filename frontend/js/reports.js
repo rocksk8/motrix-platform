@@ -111,36 +111,17 @@ function reportsApp() {
     // ── 出納（2026-08-31 併入營運報表，原獨立的 cashier.html/cashier.js 頁面
     // 退役成頁內「出納」頁籤，內容/邏輯完全比照原本，只有跟本檔案既有狀態
     // 衝突的名稱做了改名，見下方各區塊註解）────────────────────────────────────
-    cashierSub:    'payable',   // payable/receivable/history/bank，出納頁籤內部子頁籤
     cashierLoaded: false,       // 出納頁籤第一次打開時 payable+receivable+history 一次性彙整載入 guard
 
     payable:    [],
     receivable: [],   // status=all，含已收+未收全部歷史（併入 receivables.html 用途）
 
-    receivableSearch:    '',
-    receivableFilterTab: 'unreceived',   // all / unreceived / received / uninvoiced
 
-    payVoucherModal:   false,
-    payVoucherTarget:  null,
-    payVoucherDate:    '',
-    payVoucherNote:    '',
-    payVoucherBankAcctCode: '',
-    payVoucherSaving:  false,
 
-    receiveModal:         false,
-    receiveTarget:        null,
-    receiveDate:          '',
-    receiveActualAmount:  null,
-    receiveFeeAmount:     0,
-    receiveNote:          '',
-    receiveBankAcctCode:  '',
-    receiveSaving:        false,
     // T100 傳票匯出設定裡的銀行帳戶清單（2026-09-01 新增），標記已收款/已匯款
     // 時挑選要用哪個帳戶；每次開啟標記 Modal 都重抓最新清單，見
     // loadT100BankAccounts()
-    t100DefaultBankAcctCode: '',   // 2026-09-02 新增：系統預設銀行帳戶，見 _resolveDefaultBankAccount()
 
-    invoiceModal: { show: false, item: null, no: '' },
 
     // 原 cashier.js 的 historyStart/historyEnd/... 改加 cashier 前綴，避免在
     // 這支已經很大的共用檔案裡跟「執行歷史」以外的概念混淆
@@ -153,14 +134,7 @@ function reportsApp() {
     cashierHistoryIncomingTotal: 0,
     // 原 cashier.js 叫 exporting，這裡本來就有同名的「exporting」給財務報表
     // 匯出用（見 exportFile()），改名避免互踩
-    cashierExporting: false,
 
-    bankReconciling: false,
-    bankResult:      null,
-    bankPayModal:    false,
-    bankPayRow:      null,
-    bankPayDate:     '',
-    bankPaySaving:   false,
 
     // ── Helpers ───────────────────────────────────────────────────────────────
     get periodParam() {
@@ -281,10 +255,8 @@ function reportsApp() {
     get undatedOutstandingItems() { return (this.receivablesData || {}).undatedOutstandingItems || [] },
     get undatedOutstandingTotal() { return (this.receivablesData || {}).undatedOutstandingTotal || 0 },
 
-    get monthReceivableItems()  { return (this.receivablesData || {}).monthReceivableItems || [] },
     get monthCollectedItems()   { return (this.receivablesData || {}).monthCollectedItems || [] },
     get monthOutstandingItems() { return (this.receivablesData || {}).monthOutstandingItems || [] },
-    get yearReceivableItems()   { return (this.receivablesData || {}).yearReceivableItems || [] },
     get yearCollectedItems()    { return (this.receivablesData || {}).yearCollectedItems || [] },
     get yearOutstandingItems()  { return (this.receivablesData || {}).yearOutstandingItems || [] },
     get quarterCollectedItems()   { return (this.receivablesData || {}).quarterCollectedItems || [] },
@@ -308,7 +280,6 @@ function reportsApp() {
     expensesCatLabel(cat) {
       return { contractor: '承攬商派發', equipment: '設備進貨', material: '料件進貨', other: '其他支出' }[cat] || cat
     },
-    get casesPeriod()  { return (this.data || {}).casesPeriod || [] },
     get salesPerf()    { return (this.data || {}).salesPerf   || [] },
     get marginCases()  { return (this.data || {}).marginCases || [] },
     get warranty()      { return (this.data || {}).warranty      || [] },
@@ -403,10 +374,6 @@ function reportsApp() {
     _modules() {
       var s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
       return s.modules || []
-    },
-    _displayName() {
-      var s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
-      return s.displayName || s.username || ''
     },
     isAdminPlus() {
       var r = this._role()
@@ -1354,36 +1321,10 @@ function reportsApp() {
     get kpiPayableTotal() {
       return this.payable.reduce((s, v) => s + (v.grandTotal || 0), 0)
     },
-    get kpiPayableOverdue() {
-      return this.payable.filter(v => this.isOverdue(v.payableDate)).length
-    },
     get kpiReceivableTotal() {
       return this.receivable.filter(i => !i.received).reduce((s, i) => s + (i.amount || 0), 0)
     },
-    get kpiReceivableOverdue() {
-      return this.receivable.filter(i => i.overdue).length
-    },
-    get filteredReceivable() {
-      let list = this.receivable
-      if (this.receivableFilterTab === 'unreceived') list = list.filter(i => !i.received)
-      if (this.receivableFilterTab === 'received')   list = list.filter(i => i.received)
-      if (this.receivableFilterTab === 'uninvoiced') list = list.filter(i => !i.invoiceNo)
-      const q = this.receivableSearch.trim().toLowerCase()
-      if (q) list = list.filter(i =>
-        (i.quoteNo || '').toLowerCase().includes(q) ||
-        (i.customer || '').toLowerCase().includes(q) ||
-        (i.type || '').toLowerCase().includes(q) ||
-        (i.invoiceNo || '').toLowerCase().includes(q)
-      )
-      return list
-    },
-    get receivableUninvoicedCount() {
-      return this.receivable.filter(i => !i.invoiceNo).length
-    },
 
-    isOverdue(dateStr) {
-      return !!dateStr && dateStr < this._localDateStr()
-    },
 
     async showCashierTab() {
       this.activeTab = 'cashier'
@@ -1432,18 +1373,6 @@ function reportsApp() {
 
     // 銀行帳戶預設值（2026-09-02 新增）：①這個對象上次標記用的帳戶 ②系統
     // 預設帳戶 ③兩者都沒有就空白。lastUsedUrl 由呼叫端組好（各自對象不同）。
-    async _resolveDefaultBankAccount(lastUsedUrl) {
-      if (lastUsedUrl) {
-        try {
-          const r = await fetch(lastUsedUrl, { headers: { Authorization: 'Bearer ' + this._token() } })
-          if (r.ok) {
-            const d = await r.json()
-            if (d.acctCode) return d.acctCode
-          }
-        } catch {}
-      }
-      return this.t100DefaultBankAcctCode || ''
-    },
 
 
 
@@ -1453,25 +1382,7 @@ function reportsApp() {
 
 
 
-    _guessDateFromBankText(raw) {
-      const s = (raw || '').trim()
-      if (!s) return ''
-      let m = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/)
-      if (m) return this._normalizeYmd(+m[1], +m[2], +m[3])
-      m = s.match(/^(\d{4})(\d{2})(\d{2})(\d{0,6})?$/)
-      if (m) return this._normalizeYmd(+m[1], +m[2], +m[3])
-      // 民國年（台灣銀行常見，例如 115/08/20 = 2026/08/20）
-      m = s.match(/^(\d{2,3})[-/.](\d{1,2})[-/.](\d{1,2})$/)
-      if (m && +m[1] >= 1 && +m[1] <= 200) return this._normalizeYmd(+m[1] + 1911, +m[2], +m[3])
-      return ''
-    },
 
-    _normalizeYmd(y, mo, d) {
-      if (mo < 1 || mo > 12 || d < 1 || d > 31) return ''
-      const dt = new Date(y, mo - 1, d)
-      if (dt.getFullYear() !== y || dt.getMonth() !== mo - 1 || dt.getDate() !== d) return ''
-      return y + '-' + String(mo).padStart(2, '0') + '-' + String(d).padStart(2, '0')
-    },
 
 
 
