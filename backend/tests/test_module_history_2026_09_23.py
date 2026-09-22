@@ -282,8 +282,9 @@ def test_fn4_execution_history_does_not_get_its_own_table(fresh_db):
 
 
 # ══════════════════════════════════════════════════════════════════════
-# 🔴 `append_edit_log` 的**第一個呼叫端**（A 判甲，必須進這一包）
+# 🔴 `append_edit_log` 的**第一個呼叫端**（A `§151`：判甲 ⇒ **改判丙**）
 # ══════════════════════════════════════════════════════════════════════
+
 
 def test_fn4_something_actually_calls_append_edit_log():
     """🔴🔴 **`append_edit_log()` 目前沒有任何產品碼在叫它。**
@@ -303,19 +304,45 @@ def test_fn4_something_actually_calls_append_edit_log():
     ⚠️ 我上一題（`visible_lines`）就是驗函式沒驗呼叫，A-2 複核才補上 ——
        同一個形狀，這次先釘。
     """
+    # 🔴 **掃工作樹不用 `git grep`**（B 2026-09-23 指出）：
+    # ```
+    # git grep 只看得到**被追蹤的檔** ⇒ B 的 routers/vouchers.py 當時未 add
+    # ⇒ 檔案在、碼是對的、呼叫也真的存在，**而守門照樣紅**
+    # ```
+    # ⚠️ 而它的方向與〈工作樹≠repo〉記的**相反**：
+    # ```
+    # 平常  未追蹤檔讓守門**閉嘴**（它看不到違規）
+    # 這次  未追蹤檔讓守門**誤報**（它看不到修正）
+    # ```
+    # ⇒ 掃工作樹（行為的真相），而「有沒有被 add」由下一個斷言分開講。
     import subprocess
-    out = subprocess.run(
-        ["git", "grep", "-l", "append_edit_log", "--", "backend/*.py",
-         "backend/routers/*.py", "backend/helpers/*.py"],
-        cwd=str(_BACKEND.parent), capture_output=True, text=True).stdout
-    callers = [f for f in out.split()
-               if not f.endswith("helpers/edit_log.py")
-               and "/tests/" not in f]
+    callers = []
+    for path in sorted((_BACKEND).rglob("*.py")):
+        rel = path.relative_to(_BACKEND).as_posix()
+        if rel.startswith("tests/") or rel.endswith("helpers/edit_log.py"):
+            continue
+        if "rollback_snapshots/" in rel or "deploy_packages/" in rel:
+            continue
+        if "append_edit_log" in path.read_text(encoding="utf-8", errors="replace"):
+            callers.append(rel)
     assert callers, (
         "沒有任何產品碼呼叫 `append_edit_log()`（只有它自己的定義）——\n"
         + "☠️ 那條規則**不會生效**：使用者改了傳票，而沒有任何一列紀錄。\n"
         + "🔑 〈兩個都對而路不存在〉：規則對、函式對，**而路不存在**。\n"
         + "⚠️ 而它讀規格看不出來 —— 規格說「改過要留痕」，函式也真的會留痕。")
+
+    # ⚙️ 而**出貨的是被追蹤的那一份** ⇒ 未追蹤的呼叫端要分開講。
+    tracked = subprocess.run(
+        ["git", "ls-files", "--", "backend"],
+        cwd=str(_BACKEND.parent), capture_output=True, text=True).stdout.split()
+    tracked = {f[len("backend/"):] for f in tracked if f.startswith("backend/")}
+    untracked = [c for c in callers if c not in tracked]
+    assert not untracked, (
+        "呼叫端在工作樹上而**沒有被 git 追蹤**：%s\n" % untracked
+        + "☠️ 它在這台機器上會動，**而打包出去的那一份沒有它** ——\n"
+          "   ⇒ 正式機上使用者改了傳票，一列紀錄都沒有。\n"
+        + "🔑 這一格與上一格分開，是因為兩者的處置不同："
+          "上面那個要**去寫呼叫**，這個要**`git add`**。")
 
 
 def _voucher_update_path(client):
@@ -474,3 +501,120 @@ def _auth_hdr(client, make_user, role="superadmin"):
     r = client.post("/api/auth/login", json={"username": u, "password": p})
     assert r.status_code == 200, r.text
     return u, {"Authorization": "Bearer " + r.json()["token"]}
+
+
+# ══════════════════════════════════════════════════════════════════════
+# 🔴 傳票兩支端點的**權限**（A 的交付條件②）
+# ══════════════════════════════════════════════════════════════════════
+
+#: `routers/vouchers.py:34` 逐字的模組清單。⚠️ 改了 **退回給我**。
+VOUCHER_MODULES = ("cashier", "finance")
+
+
+def _user_with(make_user, client, role, modules, username):
+    """建一個**指定模組**的帳號並登入。
+
+    🔴 `users.modules` 存的是 **JSON 字串**（B 實測踩過）——
+       餵純字串的話 `json.loads` 失敗 ⇒ `user_has_module` 回 `False`
+       ⇒ 一個「明明有權限」的帳號拿到 403，**而那是量具壞了不是產品**。
+    ⚠️ 而 `modules=None` 會套角色樣板 ⇒ 要驗「沒有模組」必須明著傳 `[]`。
+    """
+    u, p = make_user(username=username, role=role, modules=modules)
+    r = client.post("/api/auth/login", json={"username": u, "password": p})
+    assert r.status_code == 200, r.text
+    return {"Authorization": "Bearer " + r.json()["token"]}
+
+
+#: `(角色, 模組, 該不該過)` —— **兩個方向各自都要有**（`§54c`：清單要能被數）。
+VOUCHER_ACCESS = (
+    ("superadmin", [],           True,  "superadmin 不受模組限制"),
+    ("admin",      [],           False, "🔴 admin **無模組要 403** —— 不可直通"),
+    ("admin",      ["cashier"],  True,  "admin 有其中一個模組"),
+    ("admin",      ["finance"],  True,  "admin 有另一個模組"),
+    ("user",       ["cashier"],  True,  "一般使用者有模組就可以"),
+    ("user",       ["reports"],  False, "🔴 有**別的**模組要 403 —— 不是「有任何模組就行」"),
+    ("user",       [],           False, "一般使用者無模組"),
+)
+
+
+@pytest.mark.parametrize("role,modules,allowed,why", VOUCHER_ACCESS,
+                         ids=[f"{r}_{'-'.join(m) or 'none'}"
+                              for r, m, _a, _w in VOUCHER_ACCESS])
+def test_fn4_who_may_read_a_voucher(client, make_user, role, modules,
+                                    allowed, why):
+    """🔴 **`GET /api/vouchers/{id}` 的權限：七格全列。**
+
+    ```
+    routers/vouchers.py:34  _VOUCHER_MODULES = ("cashier", "finance")
+                      :43  require_any_module(user, _VOUCHER_MODULES, "傳票")
+    ```
+    📌 用 `require_any_module` 而**不是** `role in ("superadmin","admin")` ——
+       使用者 2026-09-14 裁示逐字：「**管理者一樣依據有開權限的內容去顯示**」。
+
+    ☠️ 兩個最容易做反的方向，各自都有一格：
+    ```
+    admin 無模組  => **403**（直通回來的話，`MODULE-AUDIT §5` 那件事就復發）
+    user 有 reports => **403**（不是「有任何模組就行」）
+    ```
+    🔑 而它們**不會報錯** —— 擋錯人的症狀是「他說他看不到」，
+       放錯人的症狀是**沒有症狀**。
+    """
+    import db as _db
+    hdr = _user_with(make_user, client, role, modules,
+                     "vperm_%s_%s" % (role, "".join(modules) or "none"))
+    conn = _db.get_db()
+    try:
+        vid = _seed_draft(conn)
+    finally:
+        conn.close()
+
+    r = client.get("/api/vouchers/%d" % vid, headers=hdr)
+    if allowed:
+        assert r.status_code == 200, (
+            "%s（%s／%s）被擋下來了：%s %s\n"
+            % (why, role, modules or "無模組", r.status_code, r.text[:120])
+            + "⚙️ 這是正對照：少了它，「一律 403」也會讓下面那幾格綠，\n"
+              "   **而那樣沒有任何人打得開傳票**。")
+    else:
+        assert r.status_code == 403, (
+            "%s（%s／%s）**通過了**（回 %s）\n"
+            % (why, role, modules or "無模組", r.status_code)
+            + "☠️ 放錯人**沒有症狀** —— 沒有人會來報修「我看得到我不該看的東西」。")
+
+
+@pytest.mark.parametrize("role,modules,allowed,why", VOUCHER_ACCESS,
+                         ids=[f"{r}_{'-'.join(m) or 'none'}"
+                              for r, m, _a, _w in VOUCHER_ACCESS])
+def test_fn4_who_may_edit_a_draft_voucher(client, make_user, role, modules,
+                                          allowed, why):
+    """🔴 **`PUT /api/vouchers/{id}` 走同一道閘。**
+
+    ⚠️ B 自己標了「**沒評估多一支 PUT 對權限稽核的影響**」——
+       那一格不能留白：**新增一條路徑就是新增一個入口**。
+    ☠️ 而讀與寫用不同判準是最常見的形狀：
+    ```
+    GET 擋住了、PUT 忘了擋 => 他看不到那張單，**而他改得動它**
+    ```
+    🔑 而那不會有任何症狀 —— 直到有人問「這張單為什麼變了」。
+    """
+    import db as _db
+    hdr = _user_with(make_user, client, role, modules,
+                     "vput_%s_%s" % (role, "".join(modules) or "none"))
+    conn = _db.get_db()
+    try:
+        vid = _seed_draft(conn)
+    finally:
+        conn.close()
+
+    r = client.put("/api/vouchers/%d" % vid,
+                   json={"voucher_date": "2026-08-31"}, headers=hdr)
+    if allowed:
+        assert r.status_code == 200, (
+            "%s（%s／%s）改不了草稿：%s %s"
+            % (why, role, modules or "無模組", r.status_code, r.text[:120]))
+    else:
+        assert r.status_code == 403, (
+            "%s（%s／%s）**改得動**（回 %s）\n"
+            % (why, role, modules or "無模組", r.status_code)
+            + "☠️ 讀擋住了而寫沒擋：**他看不到那張單，而他改得動它** ——\n"
+              "   直到有人問「這張單為什麼變了」。")

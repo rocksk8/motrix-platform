@@ -94,6 +94,21 @@ TESTS = Path(__file__).resolve().parent
 #: `SCOPE.md` 裡列編號的樣子：區塊底下的程式碼圍欄，一行可能有多個編號。
 _SCOPE_NUM = re.compile(r"\b([A-Z]{1,2}\d{1,2}[a-z]?)\b")
 
+#: 🔴 `MD1(b)`：**比對前把行內標記剝掉**（A `§118`／`§119`）。
+#: ```
+#: 'UI**10** DB1'   舊 => ['DB1']      ⇒ **UI10 消失，而不會有任何錯誤**
+#:                  新 => ['UI10','DB1']
+#: ```
+#: ⚠️ 只剝**夾在編號中間**的那幾個字元（`**` `*` `` ` `` `~~` `_`），
+#:    **不動空白** —— 吃掉空白會讓「看 UI 的 10 分鐘」生出一個幽靈編號 `UI10`，
+#:    而那個方向比漏掉更貴：守門每天紅而理由是假的 ⇒ **它會被關掉**。
+_INLINE_MARKS = re.compile(r"(?<=[A-Za-z0-9])(?:\*\*|~~|\*|`|_)+(?=[A-Za-z0-9])")
+
+
+def strip_inline_marks(text):
+    """把**夾在英數字之間**的行內標記拿掉；其餘一字不動。"""
+    return _INLINE_MARKS.sub("", text)
+
 
 def _scope_sections():
     """`SCOPE.md` 的三個區塊 → 各自的編號集合。
@@ -129,7 +144,7 @@ def _scope_sections():
             in_block = not in_block
             continue
         if current and in_block and stripped:
-            for num in _SCOPE_NUM.findall(line):
+            for num in _SCOPE_NUM.findall(strip_inline_marks(line)):
                 sections[current].add(num.upper())
     return sections
 
@@ -790,6 +805,7 @@ def _headings_to_ignore():
     """
     text = SPEC.read_text(encoding="utf-8")
     leaf = set()
+    text = strip_inline_marks(text)
     for rx in (_DECLARED_BULLET, _DECLARED_TABLE):
         leaf |= {m.group(1).upper() for m in rx.finditer(text)}
     ignore = set()
@@ -829,6 +845,7 @@ def _declared_where():
     text = SPEC.read_text(encoding="utf-8")
     where = defaultdict(list)
     ignore = _headings_to_ignore()
+    text = strip_inline_marks(text)
     for rx in (_DECLARED_BULLET, _DECLARED_TABLE, _DECLARED_HEADING):
         for m in rx.finditer(text):
             num = m.group(1).upper()
