@@ -514,7 +514,6 @@ init_demo_account()
 flag_weak_passwords()
 init_unlock_passwords()
 _cleanup_sessions()
-_ensure_archive_dirs()
 
 # ── 背景排程（2026-09-14 起可停用）────────────────────────────────────────────
 #
@@ -536,6 +535,15 @@ _ensure_archive_dirs()
 # 直接呼叫這些函式的測試不受影響（它們 import 之後自己叫），停的只有
 # 「啟動時自動跑一次」。
 if os.getenv("MOTRIX_DISABLE_SCHEDULERS") != "1":
+    # 🔴 BK20（2026-09-22）：這一行原本在**模組層**（上面那批 init 的最後一行）。
+    # ☠️ 那表示任何在 conftest 的 patch 生效之前 `import main` 的路徑，
+    #    會在**真實的雲端硬碟**上建目錄 —— 而 `BK19` 的守門裝在 fixture 裡，
+    #    它跑的時候損害已經造成。
+    # 📌 〈防護的副作用落在盲側〉：**一道裝在事後的守門，對「事前」那一段沒有意見。**
+    # 🔑 搬進這個區塊而不是新增 `@app.on_event`：正式機與開發機都不設
+    #    `MOTRIX_DISABLE_SCHEDULERS` ⇒ **行為逐字相同**；
+    #    而會設它的只有測試，那正是不該在真實磁碟上建目錄的情境。
+    _ensure_archive_dirs()
     _schedule_daily()
     _schedule_weekly()
     daily_tasks.schedule_overdue_check()

@@ -406,6 +406,18 @@ def manifest_drift() -> dict:
 def _sync_module_versions() -> None:
     """Upsert version_manifest.json entries into module_versions table.
 
+    ⚠️ **有人在用這個函式的副作用當重啟計數器**（`VR10`，2026-09-22）。
+    下面那個 `INSERT OR IGNORE` 每次啟動都對整份 manifest 跑一遍，而
+    `module_versions` 是 `AUTOINCREMENT` ⇒ 撞 `UNIQUE` 時 `sqlite_sequence`
+    仍然會推進一整批。比較兩份每日備份的 `sqlite_sequence(module_versions)`
+    就看得出中間重啟過幾次 —— 那是 `DEPLOY.md` 那個 🔴🔴 步驟
+    （部署後要把排程工作結束再執行）目前**唯一**的純命令列驗證方式。
+    🔑 前提是它**每次啟動無條件執行**。
+    ☠️ 若哪天改成有條件（加快取、加早退、只在版本變了才跑），
+    那個計數器會失效**而不會有人發現** —— `sqlite_sequence` 照樣在動，
+    只是它量的已經不是那件事（〈守門守的對象被搬走〉）。
+    ⇒ 要改成有條件執行的話，請同時去 `DEPLOY.md` 把那個驗證方式撤掉。
+
     Key rules:
     - (module, version) is the natural unique key.
     - First run: inserts all historical records.
