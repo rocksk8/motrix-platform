@@ -21,6 +21,11 @@
     .bn-scope.all{background:#EFF6FF;color:#1D4ED8;border:1px solid #BFDBFE}
     .bn-scope.mine{background:#F0FDF4;color:#15803D;border:1px solid #BBF7D0}
 
+    .bn-sec{margin-bottom:26px}
+    .bn-sec__hd{display:flex;align-items:baseline;gap:10px;margin-bottom:10px;font-family:var(--font-zh);flex-wrap:wrap}
+    .bn-sec__t{font-size:15px;font-weight:700;color:var(--text-primary)}
+    .bn-sec__s{font-size:12px;color:var(--text-secondary)}
+
     .bn-card{border:1px solid var(--border-light);border-radius:var(--radius);margin-bottom:14px;overflow:hidden}
     .bn-card__hd{display:flex;align-items:center;gap:12px;padding:10px 14px;background:#FAF9F6;border-bottom:1px solid var(--border-light);font-family:var(--font-zh);font-size:13px;flex-wrap:wrap}
     .bn-case{font-weight:700;color:var(--text-primary)}
@@ -36,6 +41,26 @@
     .bn-amt{margin-left:auto;font-family:var(--font-mono,monospace);font-weight:700;color:var(--text-primary)}
     .bn-empty{padding:40px;text-align:center;color:var(--text-secondary);font-family:var(--font-zh);font-size:13px;line-height:1.8}
     .bn-err{margin:10px 0;padding:9px 11px;border:1px solid #FCA5A5;background:#FEF2F2;border-radius:var(--radius);font-size:12px;color:#7F1D1D;font-family:var(--font-zh);line-height:1.7}
+    .bn-ok{margin:10px 0;padding:9px 11px;border:1px solid #BBF7D0;background:#F0FDF4;border-radius:var(--radius);font-size:12px;color:#14532D;font-family:var(--font-zh);line-height:1.7}
+
+    .bn-blank{padding:22px 18px;border:1px dashed var(--border-light);border-radius:var(--radius);background:#FCFBF8;font-family:var(--font-zh);font-size:13px;line-height:1.9;color:var(--text-secondary)}
+    .bn-blank strong{color:var(--text-primary)}
+
+    .bn-form{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;padding:14px;border:1px solid var(--border-light);border-radius:var(--radius);background:#FCFBF8;font-family:var(--font-zh)}
+    .bn-fld{display:flex;flex-direction:column;gap:4px}
+    .bn-fld label{font-size:11px;color:var(--text-secondary)}
+    .bn-fld input,.bn-fld select{padding:6px 9px;border:1px solid var(--border-light);border-radius:6px;font-size:13px;font-family:var(--font-zh);background:var(--white);color:var(--text-primary)}
+    .bn-btn{padding:7px 16px;border:none;border-radius:6px;background:var(--text-primary);color:var(--white);font-size:13px;font-family:var(--font-zh);cursor:pointer}
+    .bn-btn:disabled{opacity:.5;cursor:not-allowed}
+    .bn-btn--ghost{background:transparent;color:var(--text-primary);border:1px solid var(--border-light)}
+
+    .bn-unit{font-size:11px;color:var(--text-dim,#6B6B6B);margin-left:4px}
+    .bn-alloc{border:1px solid var(--border-light);border-radius:var(--radius);padding:12px 14px;margin-bottom:10px;font-family:var(--font-zh);font-size:13px}
+    .bn-alloc__hd{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+    .bn-alloc__no{color:#B91C1C;font-size:12px}
+    .bn-person{display:flex;align-items:center;gap:8px;padding:4px 0 4px 22px;font-size:12px}
+    .bn-person input{width:88px;padding:4px 7px;border:1px solid var(--border-light);border-radius:6px;font-size:12px;text-align:right}
+    .bn-sum{padding-left:22px;font-size:11px;color:var(--text-dim,#6B6B6B)}
   </style>
 </head>
 <body x-data="bonusPage()" x-init="init()" x-cloak>
@@ -66,7 +91,181 @@
         <div class="bn-err" x-text="loadError"></div>
       </template>
 
-      <div x-show="loaded">
+      <!-- ══ 獎金項目（SPEC-BN1-PLAN §2）════════════════════════════
+           🔴 這一區只有**管理者**看得到：它列的是公司的發放政策。
+
+           ☠️ 而這裡的空狀態是**每一個新客戶的第一天看到的畫面**，
+              不是邊緣情境：兩個庫的 bonus_items 都是 0 列，
+              而產品碼裡 INSERT INTO bonus_items 只有一處（POST /items）。
+
+           🔴 兩級權限，而要決定的是 admin 那一格 —— **他走不完**：
+              POST /items   require_superadmin   只有 superadmin
+              POST /awards  _is_manager          superadmin ＋ admin
+              ⇒ 公司裡只有 admin 在用的那天，他看到空清單**而他修不好它**
+              ⇒ 空狀態必須說出三件：為什麼空／誰能解決／去哪裡解決
+           ⚠️ 只給他一個空盒子的副作用落在盲側：
+              **他會以為功能壞了，而那與功能真的壞了長得一模一樣**
+              ⇒ 他會去報修一個沒有壞的東西。 -->
+      <section class="bn-sec" x-show="isManager && itemsLoaded">
+        <div class="bn-sec__hd">
+          <span class="bn-sec__t">獎金項目</span>
+          <span class="bn-sec__s">每個項目綁一個人員來源，決定這筆獎金發給誰。</span>
+        </div>
+
+        <template x-if="itemErr">
+          <div class="bn-err" x-text="itemErr"></div>
+        </template>
+        <template x-if="itemMsg">
+          <div class="bn-ok" x-text="itemMsg"></div>
+        </template>
+
+        <div class="bn-card" x-show="items.length">
+          <template x-for="it in items" :key="it.id">
+            <div class="bn-line">
+              <span class="bn-who" x-text="it.name"></span>
+              <span class="bn-item" x-text="srcLabel(it.person_source)"></span>
+              <span class="bn-status" x-show="!it.is_active">已停用</span>
+            </div>
+          </template>
+        </div>
+
+        <!-- 🔴 空狀態要說出三件，而第三件（目前的我行不行）是靠**有沒有下面那張表單**
+             表達的 —— superadmin 直接看到輸入框，admin 只看到這段話。 -->
+        <div class="bn-blank" data-testid="bonus-items-empty" x-show="!items.length">
+          <strong>尚未建立任何獎金項目。</strong><br>
+          沒有項目就產不出獎金單，所以這一頁目前什麼都發不了。<br>
+          <span x-show="!canManageItems">
+            新增獎金項目只有<strong>最高管理員（superadmin）</strong>做得到。
+            請他到本頁的「獎金項目」區塊新增，您就可以開始產生獎金單。
+          </span>
+          <span x-show="canManageItems">
+            您是<strong>最高管理員（superadmin）</strong>，可以直接在下方新增第一個獎金項目。
+          </span>
+        </div>
+
+        <!-- ⚠️ 入口看 canManageItems（後端的 can_edit）**不看 isManager** ——
+             用 isManager 擋的話，admin 看得到按鈕、按下去收到 403，
+             而這個模組已經確立「按下去之前就該知道答案」。
+
+             🔴 用 `x-if` 不用 `x-show`：**`x-show` 只是 display:none，
+                元素仍然在 DOM 裡** ⇒ 「admin 看不到新增入口」這件事
+                用 `locator(...).count()` 量會得到 1。
+             ☠️ 而畫面上看起來是對的 ⇒ 人會以為守門誤報，然後去改守門。 -->
+        <template x-if="canManageItems">
+          <div class="bn-form" data-testid="bonus-item-create" style="margin-top:10px">
+            <div class="bn-fld">
+              <label for="bn-new-name">項目名稱</label>
+              <input id="bn-new-name" type="text" x-model="newItem.name" placeholder="例如：業務獎金">
+            </div>
+            <div class="bn-fld">
+              <label for="bn-new-src">人員來源</label>
+              <!-- 🔴 來源清單由**後端**給（PERSON_SOURCES），不在這裡寫死：
+                   寫死的話，後端加一個來源而這裡不會跟。 -->
+              <select id="bn-new-src" x-model="newItem.person_source">
+                <option value="">請選擇…</option>
+                <template x-for="s in personSources" :key="s">
+                  <option :value="s" x-text="srcLabel(s)"></option>
+                </template>
+              </select>
+            </div>
+            <button class="bn-btn" @click="createItem()"
+                    :disabled="savingItem || !newItem.name || !newItem.person_source"
+                    x-text="savingItem ? '新增中…' : '新增獎金項目'"></button>
+          </div>
+        </template>
+      </section>
+
+      <!-- ══ 產生獎金單 ═════════════════════════════════════════════
+           🔑 先問再做：畫面在按下產生之前就該知道答案，
+              而不是按下去才收到一句拒絕。
+           🔴 發放對象**一律由 plan 端點決定**，這一頁不自己算 —— 規則只有一份。 -->
+      <section class="bn-sec" x-show="isManager">
+        <div class="bn-sec__hd">
+          <span class="bn-sec__t">產生獎金單</span>
+          <span class="bn-sec__s">輸入已完成精算的案件編號，系統會先算出可發放的項目與對象。</span>
+        </div>
+
+        <div class="bn-form">
+          <div class="bn-fld">
+            <label for="bn-quote">案件編號</label>
+            <input id="bn-quote" type="text" x-model="planQuote" placeholder="例如：MQ-202608-009"
+                   @keydown.enter="loadPlan()">
+          </div>
+          <button class="bn-btn bn-btn--ghost" @click="loadPlan()" :disabled="planning"
+                  x-text="planning ? '查詢中…' : '查詢可發放項目'"></button>
+        </div>
+
+        <template x-if="planErr">
+          <div class="bn-err" x-text="planErr"></div>
+        </template>
+        <template x-if="createErr">
+          <div class="bn-err" x-text="createErr"></div>
+        </template>
+        <template x-if="createMsg">
+          <div class="bn-ok" x-text="createMsg"></div>
+        </template>
+
+        <div x-show="plan" style="margin-top:12px">
+          <div class="bn-card__hd" style="border:1px solid var(--border-light);border-radius:var(--radius)">
+            <span class="bn-case" x-text="plan && plan.quote_no"></span>
+            <!-- ⚠️ base 算不出來時顯示**後端給的那句話**，不要自己寫一句
+                 —— 它講得出出路，而重寫一份就是文案有兩份。 -->
+            <span class="bn-base"
+                  x-text="plan && plan.base && plan.base.ok
+                    ? '案件淨利 ' + fmt(plan.base.amount)
+                    : (plan && plan.base && plan.base.error) || ''"></span>
+            <span class="bn-status bn-voided" x-show="plan && plan.has_active_award">已有有效獎金單</span>
+          </div>
+
+          <template x-for="it in (plan && plan.items) || []" :key="it.bonus_item_id">
+            <div class="bn-alloc">
+              <div class="bn-alloc__hd">
+                <!-- 🔴 ok=false 的項目**留在清單裡並說出為什麼**，不可以濾掉：
+                     濾掉的話它從來不出現，而**沒有人會發現一個從來不出現的東西**。 -->
+                <input type="checkbox" :id="'bn-use-' + it.bonus_item_id"
+                       x-model="alloc[it.bonus_item_id].use" :disabled="!it.ok">
+                <label :for="'bn-use-' + it.bonus_item_id" x-text="it.name" style="font-weight:600"></label>
+                <span class="bn-item" x-text="srcLabel(it.person_source)"></span>
+                <span class="bn-alloc__no" x-show="!it.ok" x-text="it.note"></span>
+                <template x-if="it.ok">
+                  <span style="margin-left:auto">
+                    發放比例
+                    <input type="number" min="0" max="100" step="0.01" style="width:88px;text-align:right"
+                           x-model="alloc[it.bonus_item_id].total">
+                    <!-- ☠️ 單位是基點（1/10000）而欄位名字叫 pct：50% 要送 5000。
+                         送 50 的後果是獎金變成應得的 1/100，**而它是一個格式正確的金額**
+                         ⇒ 沒有人會看成錯誤。⇒ 輸入框給百分比，換算只在 toBp() 一處。 -->
+                    <span class="bn-unit">% 的案件淨利</span>
+                  </span>
+                </template>
+              </div>
+
+              <template x-for="p in it.people" :key="p">
+                <div class="bn-person">
+                  <span style="min-width:110px" x-text="p"></span>
+                  <input type="number" min="0" max="100" step="0.01" x-model="alloc[it.bonus_item_id].people[p]">
+                  <span class="bn-unit">% 的本項獎金池</span>
+                </div>
+              </template>
+              <div class="bn-sum" x-show="it.ok"
+                   x-text="'人員比例合計 ' + personSum(it.bonus_item_id) + '%（未滿 100% 的部分歸公司留存）'"></div>
+            </div>
+          </template>
+
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+            <button class="bn-btn" @click="createAward()"
+                    :disabled="creating || !!planIssue()"
+                    x-text="creating ? '產生中…' : '產生獎金單'"></button>
+            <span class="bn-sec__s" x-text="planIssue()"></span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ══ 已產生的獎金單 ═════════════════════════════════════════ -->
+      <section class="bn-sec" x-show="loaded">
+        <div class="bn-sec__hd">
+          <span class="bn-sec__t">獎金單</span>
+        </div>
         <template x-for="a in awards" :key="a.id">
           <div class="bn-card">
             <div class="bn-card__hd">
@@ -95,12 +294,15 @@
 
         <!-- 🔑 空清單對兩種人意義不同，所以要分開講：
              管理者看到空的 ＝ 還沒有人產生過獎金單；
-             一般同仁看到空的 ＝ **目前沒有發給您的獎金**，而不是系統壞了。 -->
+             一般同仁看到空的 ＝ **目前沒有發給您的獎金**，而不是系統壞了。
+             ⚠️ 而它與上面「尚未建立任何獎金項目」是**兩件不同的事**：
+                沒有獎金單  = 還沒有人產生過（可以自己去產生）
+                沒有獎金項目 = **產不出來**（而且只有 superadmin 修得了） -->
         <div class="bn-empty" x-show="!awards.length"
              x-text="isManager
                ? '目前還沒有任何獎金單。獎金單依案件產生，案件需要先完成精算。'
                : '目前沒有發放給您的獎金。'"></div>
-      </div>
+      </section>
 
       <div class="bn-empty" x-show="!loaded && !loadError">載入中…</div>
     </main>
