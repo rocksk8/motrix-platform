@@ -4068,7 +4068,16 @@ def _m093_account_items(conn):
         "  name        TEXT NOT NULL,"
         "  name_en     TEXT NOT NULL DEFAULT '',"
         "  parent_code TEXT,"                  # 🔴 明確欄位，不靠前綴
-        "  source      TEXT NOT NULL DEFAULT 'custom'"   # statutory / custom
+        # 🔴 **三態，不是兩態**（§107）：
+        #   statutory       官方《商業會計項目表》—— **唯讀**（下面兩個 TRIGGER）
+        #   system_default  我們預設帶的常用項目 —— 可停用、可改指向
+        #   custom          使用者自己加的
+        # ☠️ 把 `system_default` 併進 `custom` 的話，使用者日後**找不到是誰建的**
+        #    —— 一個他從來沒建過的項目出現在「我的自訂」裡，而他不敢刪。
+        # ⚠️ 而 TRIGGER 的條件**只認 `statutory`**：`system_default` 要能改，
+        #    否則我們預設帶的東西會變成第二種不可變的東西，而它沒有法源。
+        "  source      TEXT NOT NULL DEFAULT 'custom'"
+        "    CHECK (source IN ('statutory', 'system_default', 'custom'))"
         ")")
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_account_items_parent"
