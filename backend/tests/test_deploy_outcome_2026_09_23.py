@@ -1272,3 +1272,157 @@ def test_p0_00_the_rolled_back_value_domain_is_the_six(ps1):
         % (ps1.name,
            ", ".join(":%d=%s" % (i, v) for v, i in sorted(bad.items())),
            ", ".join(_ROLLED_BACK_DOMAIN)))
+
+
+# ══════════════════════════════════════════════════════════════════════
+# §42 · `unknown` 當金絲雀 ／ §42b · 讓遺漏不可能
+# ══════════════════════════════════════════════════════════════════════
+
+@pytest.mark.parametrize("ps1", [APPLY_PS1, ROLLBACK_PS1],
+                         ids=["apply_update", "rollback_update"])
+def test_p0_00_no_explicit_exit_can_emit_rolled_back_unknown(ps1):
+    """🔴 §42 守門：**任何顯式出口都不可以印出 `rolled_back=unknown`。**
+
+    A 的定版逐字：
+    > 「`unknown` 留在值域，但它的角色是**金絲雀不是狀態**」
+
+    ⚠️ **而我要把這一題守得到與守不到的分開寫**，否則下一個人會高估它：
+    ```
+    ✅ 它守得到   有人把 `$script:ProdState = "unknown"` 加回來
+                  （`:85` 現在就是，這一題因此是**紅的**，與 §41b 同一個修）
+    ❌ 它守不到   「新增一條出口而漏設值」
+    ```
+    🔑 **守不到的理由在 §42 自己的段落裡**：
+    > 「而『忘記設值』本來就安全：B 的設計把危險值設在動作之前
+    >   ⇒ 任何 robocopy 之後的出口都繼承 `applied_no_restore`」
+
+    ⇒ 漏設值的出口**繼承前一個值**，不會變成 `unknown`。
+    📌 §42 另一句「具體來源：B 的 `Fail($msg, $status="unknown")` 那個預設」
+       **講的是另一個欄位**：那個預設餵進 `$status` ⇒ 印在 `status=` 那一格，
+       而 `rolled_back=` 印的是 `$script:ProdState`。
+       ⇒ `status=unknown` 的金絲雀是**活的**（`_STATUS_ALL` 不含它 ⇒ fail-closed，
+         且本檔 `..._one_to_one_with_its_exits` 已經在守）；
+         `rolled_back=unknown` 在 `:85` 改掉之後**沒有任何產生路徑**。
+    ⚠️ 所以這一題是**對一個刻意的缺席做變更偵測**，不是「金絲雀在響」。
+       寫清楚是為了不讓人以為漏設值有東西在接。
+    """
+    assert ps1.exists(), "找不到 %s" % ps1
+    lines = ps1.read_text(encoding="utf-8", errors="replace").splitlines()
+    assign = _re.compile(r'^\s*\$script:ProdState\s*=')
+    hits = [(i, ln.strip()[:80]) for i, ln in enumerate(lines, 1)
+            if assign.match(ln) and "unknown" in ln]
+    assert not hits, (
+        "`%s` 有 `rolled_back` 被設成 `unknown` 的地方：\n  " % ps1.name
+        + "\n  ".join(":%d %s" % h for h in hits)
+        + "\n☠️ `unknown` 在畫面上的意思是「去現場看一眼」，"
+          "而這些出口**知道**答案。\n"
+          "🔑 §42：它的角色是**金絲雀不是狀態** —— 不可以有人拿它當一個正常值用。")
+
+
+def test_p0_00_an_unknown_action_blows_up_instead_of_guessing():
+    """🔴 §42b：**`decide_outcome` 對非 `deploy`／`rollback` 的 `action` 要拋錯。**
+
+    A-2 提、A 採用，理由是〈計數器要有落點〉的變體：
+    > 「`build` 哪天真的接進 dashboard，**誰會記得回來加**？
+    >   靠『以後記得』＝沒有落點。」
+
+    ⇒ 拋錯讓那一天**當場爆**，不需要任何人記得 ——
+    🔑 而它同時讓「不加 `build ⇒ False` 那個案例」這個決定變成**安全的**：
+       遺漏變成不可能，不是靠一題去守。〈修作法不要修結果〉。
+
+    ⚠️ **不釘例外的型別與訊息字面**（B 決定），只釘三件事：
+    ```
+    ① 沒見過的 action ⇒ 一定要拋，不可以**回傳**一個判定
+    ② 例外訊息裡要有那個 action 的名字 —— 否則排錯的人得去讀碼
+    ③ ⚙️ 正對照：deploy／rollback **照常運作**
+       少了它，`raise` 寫在函式第一行也會讓上面兩條全綠
+    ```
+    """
+    decide = _need("decide_outcome")
+    good = "更新完成\n" + _result_line("success", "applied", service="up")
+
+    for action in ("build", "", "Deploy", "deploy ", "restore", None):
+        try:
+            got = decide(0, good, action=action)
+        except Exception as exc:                      # noqa: BLE001 —— 型別由 B 定
+            assert str(action) in str(exc), (
+                "action=%r 有拋錯，而訊息裡沒有那個名字：%s\n"
+                "🔑 排錯的人拿到的第一份線索就是這句話。" % (action, exc))
+        else:
+            pytest.fail(
+                "`decide_outcome(action=%r)` **回傳了** %r 而不是拋錯。\n"
+                "☠️ 一個沒見過的動作拿到了一個判定 —— 那個判定是猜的。\n"
+                "🔑 §42b：拋錯讓「以後記得回來加」變成不需要記得。" % (action, got))
+
+    # ⚙️ 正對照 —— 少了它，`raise` 寫在第一行也會讓上面全綠。
+    assert decide(0, good, action="deploy") == "succeeded"
+    assert decide(0, _PROTOCOL_LINE + "\n回滾完成\n"
+                  + _result_line("rollback_ok", "restored", service="up"),
+                  action="rollback") == "succeeded"
+
+
+def test_p0_00_the_exempt_branch_never_reaches_decide_outcome():
+    """🔴 §42b 的**前提**要有題守：`build` 不可以走進 `decide_outcome`。
+
+    A 寫：「⚠️ 前提是 `build` 走 `_PROTOCOL_EXEMPT` 確實不會進到 `decide_outcome`
+    —— C 已經有一題釘住豁免集合只有 `build` 一個名字，**那一題同時保住了這個前提**。」
+
+    ⚠️ **那一題只釘住集合的內容，沒有釘住順序。** 兩件事：
+    ```
+    已經有題守  _PROTOCOL_EXEMPT == {"build"}        ← 誰在豁免名單裡
+    沒有題守    豁免分支裡不會呼叫 decide_outcome     ← 豁免到底有沒有生效
+    ```
+    ☠️ 少了這一題，`§42b` 的拋錯落地那天，**每一次打包都會拋例外** ——
+    而症狀是「打包壞了」，沒有人會想到是一個為了防呆而加的 `raise`。
+    🔑 〈防護的副作用落在盲側〉：加防護時要問
+       「**它擋不到的那一側**會不會更難看見」。
+
+    📌 用 AST 不用字串比對：`decide_outcome` 這個名字在檔裡扮演多種角色
+       （定義／呼叫／docstring／註解）⇒ 〈這個字串在檔裡扮演幾種角色？
+       答案大於一就不能用 `find`〉。
+    """
+    import ast as _ast
+
+    path = Path(_dash().__file__)
+    tree = _ast.parse(path.read_text(encoding="utf-8"))
+    fn = next((n for n in _ast.walk(tree)
+               if isinstance(n, _ast.FunctionDef) and n.name == "_run_job"), None)
+    assert fn is not None, (
+        "`deploy_dashboard.py` 裡找不到 `_run_job` —— **前提不成立**，"
+        "不是「順序正確」。")
+
+    def mentions_exempt(node):
+        return any(isinstance(n, _ast.Name) and n.id == "_PROTOCOL_EXEMPT"
+                   for n in _ast.walk(node))
+
+    branches = [n for n in _ast.walk(fn)
+                if isinstance(n, _ast.If) and mentions_exempt(n.test)]
+    assert len(branches) == 1, (
+        "`_run_job` 裡以 `_PROTOCOL_EXEMPT` 為條件的分支有 %d 個，預期 1 個 ——\n"
+        "🔑 0 個 ⇒ **儀器失效**（豁免機制改寫了，這一題量不到）。" % len(branches))
+
+    def calls_decide(nodes):
+        out = []
+        for node in nodes:
+            for n in _ast.walk(node):
+                if (isinstance(n, _ast.Call) and isinstance(n.func, _ast.Name)
+                        and n.func.id == "decide_outcome"):
+                    out.append(n.lineno)
+        return out
+
+    bad = calls_decide(branches[0].body)
+    assert not bad, (
+        "豁免分支（`if action in _PROTOCOL_EXEMPT`）裡呼叫了 `decide_outcome`，"
+        "在 :%s ——\n"
+        "☠️ `§42b` 的拋錯一落地，**每一次打包都會拋例外**，\n"
+        "   而症狀是「打包壞了」，沒有人會想到是一個防呆用的 `raise`。\n"
+        "🔑 豁免要在**呼叫之前**生效，不是在裡面被特判。"
+        % ", ".join(str(b) for b in bad))
+
+    # ⚙️ 正對照：另一側**必須**呼叫它 —— 否則「兩邊都不呼叫」也會讓上面全綠，
+    #    而那表示 `decide_outcome` 根本沒有被接上（`reminder_stage()` 那個形狀）。
+    other = calls_decide(branches[0].orelse)
+    assert other, (
+        "非豁免分支裡**沒有**呼叫 `decide_outcome` ——\n"
+        "☠️ 一支接縫寫好了而沒有人呼叫，跟沒有寫是一樣的。\n"
+        "🔑 這是正對照：少了它，「兩邊都不呼叫」會讓這一題全綠。")
