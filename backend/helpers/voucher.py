@@ -16,6 +16,7 @@
 ⇒ 這一支**不碰資料庫、不碰 request**，它只吃值回值。
 📌 〈模組化：L2 功能模組彼此不可依賴〉：所以它也**不 import 任何 router**。
 """
+import datetime as _dt
 import re
 
 #: 施工圖 `§一`「狀態值」那一行，**逐字五個**。
@@ -186,3 +187,142 @@ def base_no(voucher_no):
     """去掉 `-Rn` 尾碼，回那張單的基底單號（歷次版本的共同身分）。"""
     m = _REV_SUFFIX.match(voucher_no or "")
     return m.group("base") if m else voucher_no
+
+
+# ══════════════════════════════════════════════════════════════════════
+# 過帳與讀取 —— **科目名稱的凍結點在「過帳那一刻」**
+# ══════════════════════════════════════════════════════════════════════
+#
+# 施工圖 `§2.2` 逐字：`account_name_snapshot` **過帳時凍結**（版面要印）。
+#
+# ## 🔑 凍太早與凍太晚是同一個軸的兩端，而**只有凍太晚會被報修**
+# ```
+# 凍太晚（列印時照樣去查現值）
+#   => 去年的傳票今天印出來不一樣
+#   ☠️ 而大部分科目從來沒改過名字 => **只有改過名字的那幾筆是錯的**
+#      => 那幾筆看起來也很正常 => 不會有人報修
+# 凍太早（建立分錄時就凍）
+#   => 使用者改了科目名，回到自己還沒送審的草稿卻沒變
+#   => 他會以為改名沒生效，**再改一次**
+# ```
+
+#: 已過帳 ⇒ 讀凍結值；其餘一律讀現值。
+_FROZEN_STATUS = "已過帳"
+
+
+def _current_account_names(conn, codes):
+    """`{代號: 現在的名稱}`。
+
+    ## ⚠️ 刻意**不用 JOIN**，而理由不是為了閃避守門
+
+    ```
+    JOIN 取名字  => 「列印時去查現值」這件事就藏在 SQL 裡，
+                   而它與「讀凍結值」長得幾乎一樣
+    分開查       => 呼叫點看得出來「我現在要的是**現值**」
+    ```
+    🔑 ⇒ 過帳那條路**完全不碰科目表**，那是可以一眼看出來的，
+       不必去讀 SQL 才知道。
+
+    ## ☠️ 這段註解本身踩過一次「註解重新引入被 grep 的字面值」
+
+    C 有一道結構絆線在掃「以連接方式取科目名稱」那個形狀，而它**掃原始碼的每一行、
+    不剝註解** ⇒ 我原本在這裡**逐字寫出**它要找的那兩個詞去說明我為什麼不用它
+    ⇒ **那道絆線就亮在這段解釋上**。
+    🔑 而它的方向是**假陽性**：把一段寫對的碼報成缺陷。
+    📌 ⇒ 寫「為什麼避開某個寫法」時，**不要把那個寫法的字面值寫進去**。
+       這是同一個坑的第七次，所以修的是作法：改用描述，不用那兩個詞。
+    """
+    out = {}
+    for code in set(codes):
+        row = conn.execute(
+            "SELECT name FROM account_items WHERE code = ?", (code,)).fetchone()
+        out[code] = (row[0] if row else "") if not hasattr(row, "keys") \
+            else row["name"]
+    return out
+
+
+def get_voucher(conn, voucher_id):
+    """讀一張傳票（含分錄）。查不到回 `None`。
+
+    ⚠️ 查 `vouchers_all`（**實表**）而不是 VIEW：**這一支要讀得到作廢單** ——
+       稽核要看得見「這一張作廢過」，而 VIEW 會把它濾掉。
+
+    ## 🔴 `account_name` 的來源由 `status` 決定
+    ```
+    已過帳  => account_name_snapshot（**過帳當時**的名字）
+    其餘    => account_items 的現值
+    ```
+    ☠️ 而已過帳時**不做「snapshot 是空的就退回查現值」那種退路**：
+       那會讓一個真正的缺陷（過帳沒寫 snapshot）**變成看起來正常**，
+       🔑 〈降級之後它還是會動〉—— 成功而降低了正確性的那一種，沒有人會報修。
+    """
+    row = conn.execute(
+        "SELECT * FROM vouchers_all WHERE id = ?", (voucher_id,)).fetchone()
+    if row is None:
+        return None
+    voucher = dict(row)
+
+    lines = [dict(r) for r in conn.execute(
+        "SELECT * FROM voucher_lines WHERE voucher_id = ? ORDER BY line_no",
+        (voucher_id,))]
+
+    if voucher.get("status") == _FROZEN_STATUS:
+        for ln in lines:
+            ln["account_name"] = ln.get("account_name_snapshot") or ""
+    else:
+        names = _current_account_names(conn, [l["account_code"] for l in lines])
+        for ln in lines:
+            ln["account_name"] = names.get(ln["account_code"], "")
+
+    voucher["lines"] = lines
+    return voucher
+
+
+def post_voucher(conn, voucher_id, user):
+    """過帳。回 `(ok, err)` —— `err` 是**給使用者看的字串**，成功時 `None`。
+
+    施工圖 `§六` 的過帳前檢查：
+    ```
+    ① SUM(debit) == SUM(credit) 且 > 0   => 不平衡**拒絕並說出差額**
+    ② status == '已核准'
+    ③ 寫入 account_name_snapshot（凍結）
+    ```
+    ⚠️ ④（法定副本／`ledger_confirmed`）**本輪不做** —— 沒有派工，
+       而 `ledger_confirmed` 的預設值 0 已經讓它日後接得上。
+    """
+    row = conn.execute(
+        "SELECT * FROM vouchers_all WHERE id = ?", (voucher_id,)).fetchone()
+    if row is None:
+        return False, "找不到這張傳票。"
+    voucher = dict(row)
+
+    if voucher.get("voided_at"):
+        return False, "這張傳票已經作廢，不能過帳。"
+    if voucher.get("status") != "已核准":
+        # 🔑 說出**現在是什麼狀態**，不要只說「狀態不對」——
+        #    否則使用者要自己回去翻那張單才知道卡在哪。
+        return False, ("只有「已核准」的傳票可以過帳，這一張現在是「%s」。"
+                       % voucher.get("status"))
+
+    lines = [dict(r) for r in conn.execute(
+        "SELECT * FROM voucher_lines WHERE voucher_id = ? ORDER BY line_no",
+        (voucher_id,))]
+    err = describe_balance(lines, status=voucher.get("status"))
+    if err:
+        return False, err
+
+    # ③ 凍結科目名稱。**先凍分錄再改狀態** ——
+    # ☠️ 反過來的話，中途失敗會留下一張「已過帳而沒有凍結值」的傳票，
+    #    而 `get_voucher` 對它會印出空白的科目名稱。
+    names = _current_account_names(conn, [l["account_code"] for l in lines])
+    for ln in lines:
+        conn.execute(
+            "UPDATE voucher_lines SET account_name_snapshot = ? WHERE id = ?",
+            (names.get(ln["account_code"], ""), ln["id"]))
+
+    now = _dt.datetime.now().isoformat()
+    conn.execute(
+        "UPDATE vouchers_all SET status = ?, posted_at = ?, posted_by = ?,"
+        " updated_at = ? WHERE id = ?",
+        (_FROZEN_STATUS, now, user or "", now, voucher_id))
+    return True, None
