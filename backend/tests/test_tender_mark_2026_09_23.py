@@ -328,22 +328,64 @@ def test_td8_marked_ones_keep_the_existing_order_among_themselves(
     ☠️ 「重新排過」會讓使用者以為**排序規則改了** ——
     🔑 而那與功能壞掉不一樣，更難察覺：他只會覺得「順序怪怪的」。
 
-    ⚠️ 這一題刻意**先標晚的、再標早的**：
-    若實作是「照標註時間排」，順序會是 `M-05, M-03`；
-    而條文要的是照既有排序 ⇒ `M-03, M-05`。
+    ## 🔴 第一版分辨不出「照 `marked_at` 排」—— 錯的那一版留著
+
+    我原本標**兩筆**（先 `M-05` 後 `M-03`），並寫下「這樣就分辨得出兩種實作」。
+    ☠️ **那句話只對了一半，而我沒有驗過它**（A 問起時才去驗）：
+    ```
+    ① 時間戳打平   routers/tender_radar.py:665  isoformat(timespec="seconds")
+                   ⇒ 連續標兩筆幾乎必然**同一秒** ⇒ marked_at 相同
+                   ⇒ 任何「照 marked_at 的 stable sort」與「不排」結果完全一樣
+    ② 只涵蓋一側   就算時間戳不打平，**兩筆也只抓得到一個方向**：
+                   marked_at(M-05) < marked_at(M-03) ⇒ ASC 抓得到、**DESC 抓不到**
+                   反過來設 ⇒ DESC 抓得到、**ASC 抓不到**
+    ```
+    🔑 **兩筆在結構上不可能同時抓到兩側** —— 因為兩個元素只有兩種排列。
+
+    ## ⇒ 這一版：**三筆，而 `marked_at` 刻意非單調**
+
+    ```
+    既有排序（deadline）   M-01 → M-03 → M-05          ← 期望的答案
+    我設的 marked_at       M-05 最早 ／ M-01 中間 ／ M-03 最晚
+    ⇒ 照 marked_at ASC    [M-05, M-01, M-03]   ≠ 期望 ⇒ 🔴 紅
+    ⇒ 照 marked_at DESC   [M-03, M-01, M-05]   ≠ 期望 ⇒ 🔴 紅
+    ```
+    📌 〈判準的寬窄都會騙人〉的「只重疊一半」那一種 ——
+    ☠️ 而換一個**看起來更嚴謹**卻仍然分不出來的判準，**比原本更糟**。
     """
+    import db
+
     hdr = _auth(client, make_user, "mark_order")
-    client.post(_mark_path("M-05"), headers=hdr)   # 先標截止日較晚的
-    client.post(_mark_path("M-03"), headers=hdr)   # 後標較早的
+    for case_no in ("M-01", "M-03", "M-05"):
+        r = client.post(_mark_path(case_no), headers=hdr)
+        assert r.status_code in (200, 201, 204), f"{case_no}: {r.status_code}"
+
+    # 🔑 **直接設 `marked_at`，不靠標註的先後** —— 產品用的是秒解析度，
+    #    而測試需要的差距是「看得出來」，不是「剛好不同」。
+    stamps = {"M-05": "2026-09-20T09:00:00",   # 最早
+              "M-01": "2026-09-21T09:00:00",   # 中間
+              "M-03": "2026-09-22T09:00:00"}   # 最晚
+    conn = db.get_db()
+    try:
+        for case_no, at in stamps.items():
+            conn.execute("UPDATE tenders SET marked_at=? WHERE case_no=?",
+                         (at, case_no))
+        conn.commit()
+    finally:
+        conn.close()
 
     after = _list(client, hdr)
-    assert after[:2] == ["M-03", "M-05"], (
-        f"標註那兩筆的內部順序是 {after[:2]}，而既有排序要求 ['M-03', 'M-05']。\n"
-        "☠️ 看起來是照**標註時間**排的 —— 而條文要的是「整批提前，內部不動」。\n"
-        "🔑 重新排過會讓使用者以為排序規則改了。")
-    assert after[2:5] == ["M-01", "M-02", "M-04"], (
-        f"未標註的那幾筆順序也變了：{after[2:5]}\n"
-        "⇒ 預期它們照既有排序（M-01, M-02, M-04）。")
+    assert after[:3] == ["M-01", "M-03", "M-05"], (
+        f"標註那三筆的內部順序是 {after[:3]}，而既有排序要求 "
+        "['M-01', 'M-03', 'M-05']。\n"
+        f"  我設的 marked_at：M-05 最早／M-01 中間／M-03 最晚\n"
+        f"  ⇒ 拿到 ['M-05', 'M-01', 'M-03'] 代表**照 marked_at ASC 排**\n"
+        f"  ⇒ 拿到 ['M-03', 'M-01', 'M-05'] 代表**照 marked_at DESC 排**\n"
+        "☠️ 條文要的是「整批提前，內部不動」——\n"
+        "🔑 重新排過會讓使用者以為排序規則改了，而那比功能壞掉更難察覺。")
+    assert after[3:5] == ["M-02", "M-04"], (
+        f"未標註的那幾筆順序也變了：{after[3:5]}\n"
+        "⇒ 預期它們照既有排序（M-02, M-04）。")
 
 
 def test_td7_unmarking_returns_it_to_its_original_position(
