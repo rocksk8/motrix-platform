@@ -31215,3 +31215,58 @@ D 問  要不要把 16 縮成確認值（把第 ③ 段限定在 init 可遞移�
 ```
 ⇒ **下界 ≥ 1**（`case-management`，已發生過）；**上界 = 16**。
 ⚠️ 而「37 頁只是多打一次 API」**也是推論** —— D 只對最早那 5 頁做過四項後果分析。
+
+---
+
+## §172 🔴 `AL1` 的作用範圍要**白名單** ——359 個命中落在 `git status` 看不見的地方
+
+### ✅ 先結：母體確認 **62**，53 的分母是對的
+```
+全 repo .html（排除 deploy_packages／backend/rollback_snapshots／node_modules／.git）= 67
+  frontend/pages/*.html  61 ＋ frontend/index.html 1  = **62** ✅
+  其餘 5 個（deploy_dashboard／兩個 docs mockup／兩個 tests fixture）
+    x-data=0 x-init=0 ⇒ **全都不用 Alpine** ⇒ 正確地在射程外
+67 − 62 = 5 ✅ 加總對得上
+```
+📌 `static/` 底下**沒有 html**（只有 js／css／vendor）⇒ 那一格答案是「沒有」。
+
+### ☠️ 而 `sed` 的第二個危險，比註解那 3 個嚴重
+```
+backend/rollback_snapshots/   x-init="init()" 命中 **215** 個／210 個檔
+deploy_packages/              x-init="init()" 命中 **144** 個／124 個檔
+                                                    合計 **359**
+而 git ls-files 對這兩個目錄都回 **0**（兩者都在 .gitignore 裡）
+```
+**後果三重，每一重都看不見**
+```
+① sed -i 跑在 repo 樹上 ⇒ 會改掉那 359 個
+② 那兩個目錄**未被追蹤** ⇒ **git status 一行都不會顯示** ⇒ 沒有人會發現
+③ 改到的是什麼：
+   backend/rollback_snapshots/ = **回滾還原點**（`RP1`：整套部署安全機制的地基）
+   deploy_packages/            = 已產出的部署包，其中一個是驗包基準
+   ⇒ 改過的包再驗，**Leaflet SHA 會過**（沒動到），
+     而**頁面內容與它 build 時的不同** ⇒ 驗包給的是綠燈
+```
+🔑 那是〈工作樹≠repo〉的**反面**：
+  那一條講「未追蹤檔案能讓守門閉嘴」，這裡是
+  **未追蹤區讓破壞本身看不見** —— `git status` 乾淨，而還原點已經被改了。
+
+### 🔴 機械規則再加兩條（定案）
+```
+✅ 作用範圍**白名單**：只有 frontend/pages/*.html 與 frontend/index.html
+❌ **不要用「repo 根遞迴 ＋ 排除清單」** —— 排除清單漏一個就是靜默改到還原點
+   📌 D 自己剛剛就漏過：排除寫成 `./rollback_snapshots/*` 而實際是
+      `./backend/rollback_snapshots/*` ⇒ 215 個凍結快照沒被排掉（他先數出 282）
+```
+**⚙️ 驗收從三個數字變 **五個**
+```
+標籤內 x-init="init()"               = 0
+原始字串 x-init="init()"             = 3     （註解，**不可為 0**）
+x-init="$nextTick(...)"              = 3     （未動）
+backend/rollback_snapshots/ 的命中數  = **改動前的值**（未動）
+deploy_packages/ 的命中數            = **改動前的值**（未動）
+```
+⚠️ 後兩個**不可以寫死成 215／144** —— D 標的：`deploy_packages/` 會被
+  `KeepPackages` 修剪 ⇒ 打包後數字會變 ⇒ **要在同一輪內取「改動前」與「改動後」**。
+🔑 而它與註解那 3 個是同一族：
+  **「把它清成 0」這種驗收條件會把作用範圍往外推，而外面就是還原點。**
