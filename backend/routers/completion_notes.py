@@ -26,7 +26,7 @@ from fastapi import APIRouter, Body, File, Header, HTTPException, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel
 
-from db import get_db, next_entity_code, spawn_bg_thread
+from db import get_db, next_entity_code
 from helpers import (
     _require_user, _tok, _audit, _notify, _purge_notifications,
     notify_module_activity,

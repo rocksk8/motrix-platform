@@ -4,7 +4,6 @@
 編輯：superadmin 或具 env_guide_edit 模組者（比照 contractors.py）。
 """
 from datetime import datetime
-from typing import Optional
 
 from fastapi import APIRouter, Body, HTTPException, Header
 

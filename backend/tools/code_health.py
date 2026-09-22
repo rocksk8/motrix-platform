@@ -4,7 +4,7 @@
 v1 報 462 個死碼 —— 絕大多數是 FastAPI 路由（裝飾器持有）。
 v2 的每一節都先跑「對照組」：已知該亮的要亮、已知不該亮的不可以亮。
 """
-import os, io, ast, collections, builtins
+import os, io, ast, collections
 
 ROOT = r'C:\Users\hichan\Desktop\MOTRIX-ERP'
 SKIP = {'rollback_snapshots', 'deploy_packages', '__pycache__', 'node_modules',

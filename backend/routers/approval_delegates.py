@@ -8,9 +8,7 @@ _m067_approval_delegates() 的完整設計說明。
 預設就是自己，不能指定別人）；superadmin 額外可以代替任何人設定/停用（例如
 本人突然請假忘記自己先設定），比照這個專案「附件上傳任何人皆可、關鍵狀態變更才
 限管理員」的既有權限慣例。"""
-import json
-from datetime import date, datetime
-from typing import Optional
+from datetime import  datetime
 
 from fastapi import APIRouter, Body, HTTPException, Header
 

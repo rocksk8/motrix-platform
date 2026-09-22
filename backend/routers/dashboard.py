@@ -8,7 +8,7 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Header, Query
 
-from db import db_conn, get_db
+from db import db_conn
 from helpers import (_require_user, _warranty_expiry, payment_item_amounts, norm_at,
                      case_extra_expenses, user_has_module, can_see_financial,
                      require_any_module, _get_setting, _set_setting)

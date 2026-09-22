@@ -62,7 +62,6 @@ import urllib.request
 from datetime import date, datetime, timedelta
 
 from db import get_db
-from helpers import notification_prefs
 from helpers.settings import _get_setting, _set_setting
 
 logger = logging.getLogger(__name__)

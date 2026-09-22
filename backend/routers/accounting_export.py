@@ -62,7 +62,7 @@ Excel、財務人員在 T100 用既有匯入功能手動核對匯入，風險小
 """
 import io
 from datetime import date, datetime
-from typing import Dict, List, Optional
+from typing import Dict, List
 from urllib.parse import quote as _url_quote
 
 import openpyxl

@@ -2,7 +2,6 @@
 橫跨多個模組、不屬於任何單一業務 router，故獨立成檔（沿用 dashboard.py 收納跨模組端點的慣例）。
 每個分類的可見性一律復用該模組既有 router 已驗證過的角色規則，不重新發明權限邏輯。"""
 import json
-from typing import Optional
 
 from fastapi import APIRouter, Header, Query
 

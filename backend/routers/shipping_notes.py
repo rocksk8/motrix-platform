@@ -6,7 +6,6 @@
 簡化：無改版號的退回機制。
 """
 import json
-import threading
 from datetime import datetime
 from typing import List, Optional
 from urllib.parse import quote as urlquote

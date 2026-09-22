@@ -1,7 +1,6 @@
 """外包人員名冊 CRUD — superadmin only."""
 import base64
 import io
-import json
 import os
 from datetime import datetime
 from typing import Optional

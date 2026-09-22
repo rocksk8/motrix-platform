@@ -1,5 +1,4 @@
 """Module version records — per-module changelog stored in DB, synced via daily backup."""
-import json
 import sqlite3
 from datetime import datetime
 

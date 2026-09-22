@@ -25,10 +25,8 @@ from webauthn import (
 
 from db import get_db, get_demo_db, reset_demo_db, demo_reset_lock
 from helpers import (
-    _hash_pw, _verify_pw, _require_user, _tok, _audit,
-    _SUPERADMIN_MODULES, is_weak_password, MIN_PASSWORD_LEN, DEMO_TOKEN_PREFIX,
-    notify_module_activity,
-)
+    _hash_pw, _verify_pw, _require_user, _tok, _audit, is_weak_password, MIN_PASSWORD_LEN, DEMO_TOKEN_PREFIX,
+    notify_module_activity)
 
 logger = logging.getLogger(__name__)
 

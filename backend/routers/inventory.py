@@ -23,13 +23,10 @@ from helpers import procurement
 from helpers.procurement import (
     STATUS_ORDERED,
     STATUS_RECEIVED,
-    STATUS_SUGGESTED,
     compute_eta,
     effective_cycle,
-    effective_status,
     resolve_lead_time,
-    validate_transition,
-)
+    validate_transition)
 
 router = APIRouter()
 

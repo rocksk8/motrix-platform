@@ -17,7 +17,7 @@ v2（2026-08-31 同日）：receivables.html（應收帳款）獨有的發票登
   這輪一開始定案的財務/出納分工原則。
 """
 import json
-from datetime import date, datetime
+from datetime import date
 
 from fastapi import APIRouter, Header, HTTPException, Query
 from fastapi.responses import StreamingResponse

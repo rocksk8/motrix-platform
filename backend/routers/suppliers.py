@@ -1,6 +1,5 @@
 """Supplier CRUD and visit log endpoints."""
 import json
-import threading
 from datetime import datetime
 from typing import Optional
 

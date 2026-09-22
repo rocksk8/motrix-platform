@@ -4,7 +4,6 @@ import hmac
 import os
 import json
 import logging
-import secrets
 from datetime import datetime
 
 from fastapi import HTTPException

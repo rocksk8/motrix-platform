@@ -5,7 +5,6 @@ import re
 import os
 import shutil
 import sqlite3
-import threading
 import uuid
 from collections import defaultdict
 from datetime import datetime

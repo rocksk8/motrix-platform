@@ -5,7 +5,6 @@ from datetime import date, datetime
 
 from fastapi import HTTPException
 
-from db import get_db
 
 # Prefer real columns; fall back to data_json for rows not yet re-saved (pre-v6 backward compat).
 # IMPORTANT: never use bare `SELECT deal_tag` — always use SQL_DEAL_TAG to correctly read pre-v6 rows.

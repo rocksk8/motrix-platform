@@ -8,7 +8,7 @@ list_key)），純粹是個人化 UI 偏好，不受角色權限限制，任何�
 """
 import json
 from datetime import datetime
-from typing import List, Optional
+from typing import List
 
 from fastapi import APIRouter, Header
 from pydantic import BaseModel

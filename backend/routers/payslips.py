@@ -3,7 +3,6 @@ import json
 import math
 import os
 import re
-import threading
 from datetime import datetime
 from typing import Optional
 

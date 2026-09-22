@@ -8,7 +8,7 @@ import tempfile
 import threading
 import time
 from calendar import monthrange
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from typing import Optional
 from urllib.parse import quote as _url_quote
 

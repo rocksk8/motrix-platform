@@ -13,10 +13,8 @@ from pydantic import BaseModel, model_validator
 from db import get_db, CURRENT_VERSION, _MIGRATIONS
 from helpers import (
     _require_user, _tok, _audit, _get_setting, _set_setting, _get_edge_path,
-    _filter_live_notifications, notify_module_activity,
-    approval_flow_setting_key, APPROVAL_DOC_TYPES, DEFAULT_UNIFIED_DOC_TYPES,
-    APPROVAL_DOC_TYPE_LABELS, require_any_module,
-)
+    _filter_live_notifications, notify_module_activity, APPROVAL_DOC_TYPES, DEFAULT_UNIFIED_DOC_TYPES,
+    APPROVAL_DOC_TYPE_LABELS, require_any_module)
 from helpers.quotations import _steps_to_tiers
 from photos import _process_project_photo, _photo_root
 import trail

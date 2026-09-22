@@ -30,7 +30,6 @@ from fastapi import APIRouter, Header, HTTPException
 from db import db_conn
 from helpers import _require_user
 from helpers import geo
-from helpers import tender_source
 
 logger = logging.getLogger(__name__)
 
