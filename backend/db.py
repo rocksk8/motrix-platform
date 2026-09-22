@@ -103,7 +103,9 @@ DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR = os.path.join(
 # 與 routers/dev_crm.py 的 DELETE .../files/{file_id}。
 # v92: tenders.marked_at / tenders.marked_by（標註功能，2026-09-22 §21 補）
 #      —— 一個可為 NULL 的時間戳兼任旗標，判定一律 `marked_at IS NOT NULL`。
-CURRENT_VERSION = 92
+# v93: account_items 表 ＋ 兩個 TRIGGER（法定項目在**資料層**唯讀，FN1 §69）
+# v94: 載入 547 筆法定會計項目（靜態檔，**不呼叫解析器**）
+CURRENT_VERSION = 94
 
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
 # execution model) whenever the current request is authenticated as the 'demo'
@@ -4020,6 +4022,129 @@ def _m092_tender_mark(conn):
         conn.execute("ALTER TABLE tenders ADD COLUMN marked_by INTEGER")
 
 
+def _m093_account_items(conn):
+    """v93（2026-09-23 `FN1` §69）：會計項目表 ＋ **資料層**的唯讀保護。
+
+    ## 🔑 單表 ＋ `source` 欄位，**不要兩張表**
+
+    法定（官方《商業會計項目表》）與自訂並存。
+    ☠️ 拆成兩張表的話，每一個引用點都要 `UNION` ——
+       **而漏掉 `UNION` 的那一處會安靜地少一半資料**，不會報錯。
+
+    ## 🔴 `parent_code` 是明確欄位，**不可以靠前綴推**
+
+    官方表的二級是**範圍代號**：
+    ```
+    一級 1        資產
+    二級 11-12    流動資產      ← 是一個範圍，不是單一代號
+    三級 111      現金及約當現金
+    ☠️ "111".startswith("11-12") 為 False
+    ```
+    實測活證據三筆：`111→11-12`／`211→21-22`／`723-724→71-72`
+    —— **用字串前綴一筆都串不起來。**
+
+    ## 🔴 唯讀擋在**資料層**，不是應用層
+
+    〈應用層的守門只在「有人走那條路徑」時生效〉：
+    migration、修復腳本、直接連資料庫**都繞得過**。
+    ⇒ 真的不可變的東西要用 TRIGGER ＋ `RAISE(ABORT)`。
+    ⚠️ 本專案用過 TRIGGER，**而 `RAISE(ABORT)` 沒有前例** ⇒ A 已實測：
+    ```
+    UPDATE statutory -> BLOCKED    DELETE statutory -> BLOCKED
+    UPDATE custom    -> ALLOWED    DELETE custom    -> ALLOWED   ← 正對照
+    ```
+    🔑 **正對照那兩格是關鍵**：少了它們，「全部都擋住」也會讓前兩格通過，
+       而那會讓使用者**連自己加的科目都改不動** —— 而法條正是允許
+       「商業得視實際需要增減其會計項目」。
+
+    ## ⚠️ `RAISE(ABORT, …)` 那句話是使用者唯一看得到的東西
+
+    所以它要說得出**為什麼不准**，不是只說「失敗」。
+    """
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS account_items ("
+        "  code        TEXT PRIMARY KEY,"      # 1 / 11-12 / 111 / 1111 / 自訂
+        "  level       INTEGER NOT NULL,"      # 1~4；自訂可自行決定
+        "  name        TEXT NOT NULL,"
+        "  name_en     TEXT NOT NULL DEFAULT '',"
+        "  parent_code TEXT,"                  # 🔴 明確欄位，不靠前綴
+        "  source      TEXT NOT NULL DEFAULT 'custom'"   # statutory / custom
+        ")")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_account_items_parent"
+        " ON account_items(parent_code)")
+
+    # ⚠️ `BEFORE` 不是 `AFTER`：`AFTER` 的話那一列已經被改掉了，
+    #    `RAISE(ABORT)` 雖然會回滾，而語意上「先擋住」比「做了再退回」清楚。
+    conn.execute(
+        "CREATE TRIGGER IF NOT EXISTS account_items_statutory_no_update"
+        " BEFORE UPDATE ON account_items"
+        " FOR EACH ROW WHEN OLD.source = 'statutory'"
+        " BEGIN"
+        "   SELECT RAISE(ABORT,"
+        "     '法定會計項目不可修改：這是經濟部公告的《商業會計項目表》，"
+        "要調整請新增自訂項目');"
+        " END")
+    conn.execute(
+        "CREATE TRIGGER IF NOT EXISTS account_items_statutory_no_delete"
+        " BEFORE DELETE ON account_items"
+        " FOR EACH ROW WHEN OLD.source = 'statutory'"
+        " BEGIN"
+        "   SELECT RAISE(ABORT,"
+        "     '法定會計項目不可刪除：這是經濟部公告的《商業會計項目表》，"
+        "不需要的項目請在自己的帳上停用，不要刪除');"
+        " END")
+
+
+def _m094_load_account_items(conn):
+    """v94（2026-09-23 `FN1` §69(c)）：載入 547 筆法定會計項目。
+
+    ## 🔴 讀**靜態檔**，不呼叫 `parse_account_items`
+
+    〈凍住的歷史不要呼叫活的程式碼〉：migration 是凍結的歷史，
+    而那支解析器會演進（官方改版、`pdfplumber` 升級都會改變它的輸出）。
+    ☠️ 呼叫它的話，日後解析器一改，**這支 migration 產生的東西就跟當初不一樣**
+       —— 而症狀只出現在「**全新安裝**」與「**災難還原**」那條路上，
+       也就是最不能出事的兩條。
+    ⇒ 這裡讀 `data/account_items_112.json`，那份檔是**產物不是程式**。
+
+    ## ⚠️ 用 `INSERT OR IGNORE`
+
+    migration 引擎失敗重跑時不會炸；而它也不會覆蓋任何既有列 ——
+    🔑 **覆蓋是危險的方向**：使用者的自訂項目若不小心用了同一個代號，
+       `OR REPLACE` 會把它換掉，而他不會收到任何通知。
+
+    ## 📌 數字（實查靜態檔，不是估的）
+
+    ```
+    總筆數 547   層級 L1=8 ／ L2=20 ／ L3=94 ／ L4=425   孤兒 0
+    ```
+    ⚠️ 一級是 **8 個不是 9** —— `§69` 原本寫 9，那是從「1–9」的編號**推的**；
+       實查整份表結束在「88 本期綜合損益總額」，**沒有 9**。
+    """
+    import json
+    import os
+
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                        "data", "account_items_112.json")
+    if not os.path.exists(path):
+        # ⚠️ 缺檔**不要**靜默跳過：那會讓一個沒有科目表的資料庫看起來一切正常，
+        # 而傳票的分錄指不到任何東西 —— 那時才發現已經晚了。
+        raise RuntimeError(
+            "找不到會計項目靜態檔：%s —— v94 無法載入法定項目。" % path)
+
+    with open(path, "r", encoding="utf-8") as fh:
+        payload = json.load(fh)
+
+    for it in payload["items"]:
+        conn.execute(
+            "INSERT OR IGNORE INTO account_items"
+            " (code, level, name, name_en, parent_code, source)"
+            " VALUES (?,?,?,?,?, 'statutory')",
+            (it["code"], it["level"], it["name"],
+             it.get("name_en", ""), it["parent_code"]))
+
+
 _MIGRATIONS = [
     _m001_export_columns,        # v1
     _m002_sessions_expires,      # v2
@@ -4113,6 +4238,8 @@ _MIGRATIONS = [
     _m090_quotation_location,                       # v90
     _m091_geocode_usage,                            # v91
     _m092_tender_mark,                              # v92
+    _m093_account_items,                            # v93
+    _m094_load_account_items,                       # v94
 ]
 
 
