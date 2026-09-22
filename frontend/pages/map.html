@@ -40,6 +40,13 @@
        ☠️ 單獨看每一塊都沒問題 —— 這個缺陷只在並排時存在。
        📌 24px = 圖示 span 寬 ＋ `gap:8px`，在瀏覽器裡量到的，不是估的。 */
     .mp-note > div:first-child { margin-left:24px; }
+    /* 圖示欄固定寬，否則**窄的那個字元會把自己那一列的文字往左拉**。
+       ⚠️ 這一筆與上面那一筆**成因不同，刻意分開兩個 commit**：
+          上面是我們拿掉圖示造成的；這一個是既有的 ——
+          `✕` 是文字字元 9.8px，其餘四個 emoji 都是 16.5px ⇒ 差 6px。
+       📌 16px ＋ `gap:8px` = 24px，剛好等於上面那一行的 `margin-left`，
+          兩者要一起改才不會差 1px。量到的值不是估的。 */
+    .mp-note > span:first-child { flex:none; width:16px; text-align:center; }
     .mp-note.info { background:#F5F4F0; color:var(--text-secondary); }
     /* 圖釘：**字在圖釘上**，不是在 popup 裡。
        popup 要點才看得到，而使用者要的是「看一眼就知道哪幾個是自己的廠商」。 */
