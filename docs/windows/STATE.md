@@ -28138,3 +28138,69 @@ A 實查     db.py:17,25-36 十個常數**全部是 os.path.join(...)** => 都�
 
 🔑 收進 `§6`：**照收一個更正、與把一個更正軟化成「時間差」，是同一種毛病的兩面。**
 📌 與〈更正要留著錯的那一列〉互補：那條管**寫的人**，這條管**轉述的人**。
+
+---
+
+## §111 傳票規格 v6 **內容過了、形式沒過** —— 而這一格是我自己的規則被用歪
+
+> 2026-09-23 01:3x ／ A 審定稿（579 行）
+
+### 🔴 實查：**整份文件只有三個 DDL 區塊，而三個都是修訂前的版本**
+
+```
+$ grep -n "CREATE TABLE|CREATE TRIGGER" SPEC-VOUCHER.md
+60:  CREATE TABLE vouchers (           <= v1 版
+96:  CREATE TABLE voucher_lines (      <= v1 版
+124: CREATE TABLE voucher_edit_log (   <= v1 版
+**CREATE TRIGGER 0 個**
+```
+```
+line 100  account_item_id INTEGER NOT NULL,  -- -> account_items.id（v93）  <= **那個欄位不存在**
+line 111  CREATE INDEX ... ON voucher_lines(account_item_id)                 <= 同一個錯
+line  63  voucher_date TEXT NOT NULL,  -- 傳票日期（!= 建立日）              <= **與使用者裁示相反**
+```
+而更正**都在**：`R1` 在 line 356、`R4` 在 line 412。
+
+### ⇒ 每一條更正都只活在散文層，**一條都沒有回到施工圖**
+
+```
+account_name_snapshot    全檔 2 次   posted_with_warning      全檔 1 次
+posted_warning_snapshot  全檔 1 次   voucher_templates        全檔 1 次
+REFERENCES               全檔 1 次   CREATE TRIGGER           **0 次**
+```
+☠️ ⇒ **照這份規格實作，寫出來的就是我已經退回兩次的那個 schema。**
+
+### 🔑 而這是〈更正要留著錯的那一列〉**被我自己用歪**
+
+```
+那條規則說的  留著錯的那一列，**讓下一個人看得到曾經錯過**   <= 管的是**歷史**
+被用成的      錯的那一列**留在「現在要照做」的位置**          <= 變成了**現況**
+```
+☠️ **當文件裡只有一個 DDL 區塊、而它是錯的那一個 ⇒ 「留著錯的那一列」已經變成「錯的那一列就是規格」。**
+📌 我整晚都在對三個視窗講「留著錯的那一列」，**而沒有講它的邊界。**
+
+### ⇒ 一般形式（收進 `§6`）
+
+> **一份文件同時當「決議紀錄」與「施工圖」時，
+> 修訂層會贏得歷史、輸掉現況** ——
+> 因為讀的人要自己把六層修訂套回去，**而重建就是出錯的地方**。
+
+⇒ **權威檔只有一份**（〈要求寫在訊息裡等於沒下達〉的同一條）：
+```
+文件要分兩段  ① **定稿段**：現在就照著做的完整 DDL 與規則（單一版本，無修訂層）
+              ② **修訂紀錄**：六層全部留著，一列都不刪
+```
+⚠️ 而判準是可量的：**「施工圖那一段，有沒有出現過任何一個被後面推翻的字」**。
+
+### ⇒ 派回 A-2 的確切清單（不是「去修一下」）
+
+```
+① account_item_id INTEGER  ->  account_code TEXT NOT NULL REFERENCES account_items(code)
+② voucher_lines 加 account_name_snapshot TEXT NOT NULL      （過帳時凍結）
+③ idx_vlines_account 改建在 account_code 上
+④ voucher_date 的註解改成「建立當日，不可編輯」＋已知代價（補登上月帳做不到）
+⑤ vouchers 加 posted_with_warning / posted_warning_snapshot
+⑥ 補 CREATE TRIGGER 兩支（UPDATE OF code ／ DELETE，WHEN 被 voucher_lines 引用）
+⑦ 補 voucher_templates 的 DDL（id, version, body, created_by, created_at, is_current）
+⑧ 附件路徑慣例寫進定稿段：uploads/{subfolder}/{**voucher_id**}/ ——不是 voucher_no
+```
