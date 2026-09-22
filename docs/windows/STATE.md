@@ -31173,3 +31173,45 @@ completion-note-form 與 login 本來就在「已經是好的」那 7 個裡
 只掃 pages/*.html ＋ index.html，**沒掃 static/ 或其他目錄下的 html**
 ```
 📌 集合差核對：歸屬到的 53 頁 vs 標籤內 53 個／53 檔 ⇒ **差 0** ✅
+
+---
+
+## §171 那條分界：**16 頁看得見／37 頁看不見**（16 是上界）
+
+```
+53 頁會跑兩次
+  ├─ **16** 頁 有可編輯清單且那個陣列會被覆寫
+  │            ⇒ 🔴 **可能抹掉使用者剛輸入的東西（看得見）**
+  └─ 37 頁 沒有 ⇒ 只是多打一次 API（看不見）
+```
+**16 頁**：`case-management`／`quotation-form`／`network-plan-form`／`topology-quick`／
+`inventory`／`company-profile-settings`／`customers`／`suppliers`／`cashier`／`reports`／
+`contractor-voucher-approval-settings`／五支選型指南（`access`／`automation`／
+`gateway`／`monitor`／`switch`）。
+📌 其中 6 頁是**輸入密集的表單頁**。
+⚙️ 正對照 `case-management` 在清單裡 ✅ —— 而它命中的 `materialOrders(m)`
+  **正是 B 註解說的那個「叫料清單」** ⇒ 尺指到了實際發生過的那一格。
+⚙️ 負對照 `this.zzzNotARealArray8821 =` ⇒ 0 命中 ✅
+
+### 🔴 裁定：**不縮成確認值**，直接做修法
+```
+D 問  要不要把 16 縮成確認值（把第 ③ 段限定在 init 可遞移可達的方法內）
+裁    **不縮**
+```
+📌 理由：**修法對 16 和 53 都一樣有效** ⇒ 縮不縮**不改變要做的事**。
+  D 自己也說「修法不受這件影響，可以先做」。
+🔑 而 16 這份清單另有一個用途，上界正好夠用：
+  **如果使用者回報過「打的東西不見了」，先看這 16 頁。**
+  那個用途下寧可多列，不可少列。
+
+### ⚠️ D 標的三條「為什麼是上界」
+```
+① 第 ③ 段搜的是該頁 JS 語料裡**任何** this.<arr> = ⇒ 含儲存後重載、按鈕 handler
+   ⇒ 真正會被第二次 init 抹掉的是「init 可達的那些覆寫」⇒ 一定 ≤ 16
+② 有幾個根其實是**物件**（this.modal／this.form／this.plan／this.intake／this.t100Config）
+   —— 取 x-for 運算式的第一個識別字當根 ⇒ **頁面清單不受影響，欄位標示不精確**
+③ x-model 與 x-for 的配對是**頁面層近似**（用迴圈變數名比對）不是 DOM 包含關係
+   ⇒ 兩個不同 x-for 都叫 row 的話可能配錯
+```
+⇒ **下界 ≥ 1**（`case-management`，已發生過）；**上界 = 16**。
+⚠️ 而「37 頁只是多打一次 API」**也是推論** —— D 只對最早那 5 頁做過四項後果分析。
