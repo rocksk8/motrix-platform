@@ -21,7 +21,7 @@ VR(10): VR1 VR2 VR3 VR4 VR5 VR6 VR7 VR8 VR9 VR10
 BK(13): BK1 BK2 BK3 BK5 BK8 BK9 BK10 BK19 BK20 BK22 BK24 BK26 BK29
 MN(7):  MN1 MN2 MN3 MN4 MN5 MN6 MN7
 GB(21): GB1 GB2 GB3 GB4 GB5 GB6 GB7 GB8 GB9 GB10 GB11 GB12 GB13 GB14 GB15 GB16 GB17 GB18 GB19 GB21 GB22
-GC(10): GC1 GC2 GC3 GC4 GC5 GC6 GC7 GC8 GC9 GC10
+GC(11): GC1 GC2 GC3 GC4 GC5 GC6 GC7 GC8 GC9 GC9b GC10
 FX(2):  FX31 FX33
 TD(5):  TD1 TD5 TD6 TD7 TD8
 QL(19): QL5 QL6 QL7 QL8 QL9 QL10 QL11 QL12 QL13 QL14 QL15 QL16 QL17 QL18 QL19 QL20 QL21 QL22 QL23
@@ -251,4 +251,13 @@ NEXT (追加 01:0x)
        stale = backed - tables ⇒ **完全沒碰 _NOT_IN_JSON_BACKUP**
        ⇒ 把所有表寫進排除清單，兩題都綠
        ⚠️ 進 NEXT 不擋本輪，而 B 這一次要明著選「進備份」
+```
+
+```
+2026-09-23 01:35
+  GC9b => **THIS**（從 GC9 拆出來的，§126）
+       原條文裡有兩個可分開驗證的要求，而兩支測試各驗一個
+       => 守門認成撞名，兩邊都拿不到「已實作」的信用
+       GC9  不落 DB／與地理快取表分開   <= test_gc9_*  （shortcircuit）
+       GC9b 分鐘級的短退避 TTL              <= **要改名成 test_gc9b_***（miss_message）
 ```
