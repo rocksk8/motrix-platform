@@ -23475,3 +23475,119 @@ rolled_back        **描述性**   ⇒ 值域外 ⇒ 照常判定 ＋ 標示 ＋
 2 誰預覽過算不算帳簿  🔴 **唯一未結**——要問會計師，不是使用者
 ```
 
+
+## §53 · 🔴 復原路徑上的 robocopy 全部沒有檢查結束碼（C 複驗查到）2026-09-22 21:4x
+
+### ✅ 先結一件：`bfc255b` 是**產品側**的綠
+
+```
+git diff --stat 72e8af4 bfc255b -- <C 的題目檔>   ⇒ **空**
+bfc255b 動的檔：deploy_dashboard.py ／ rollback_update.ps1
+本機實跑：58 passed
+```
+⇒ 「題目在修之前凍住」這一輪**成立** ⇒ 58/58 的綠**只可能來自產品側**。
+
+### §53a　複驗 `:600-701`：A-2 對，而洞更深
+
+C 逐行掃過，**中間沒有另一個 `ProdState` 設定點**：
+```
+:620  EXIT   unhealthy_not_rolled_back
+:632  WRITE  robocopy 快照/backend  → $BackendDir      ← 開始寫回正式機
+:633  WRITE  robocopy 快照/frontend → $FrontendDir
+:641  WRITE  Copy-Item 根目錄文件   → $ProdRoot
+:652  WRITE  Copy-Item db 快照      → $dbPath
+:656  WRITE  Remove-Item -wal/-shm
+:701  PROD   ProdState = if ($rolledBackHealthy) {restored} else {restored_unhealthy}
+```
+⇒ **五個破壞性寫入，中間零個設定點。**
+
+### 🔴 §53b　真正的洞：**唯一有檢查結束碼的，是「套用新版」那一對**
+
+```
+apply_update.ps1    :338 :339   製作快照（正式機 → 快照）  🔴 **沒檢查**
+apply_update.ps1    :422 :427   套用新版（包 → 正式機）    ✅ 有檢查（-ge 8 ⇒ Fail）
+apply_update.ps1    :632 :633   自動回滾（快照 → 正式機）  🔴 **沒檢查**
+rollback_update.ps1 :179 :180   手動回滾（快照 → 正式機）  🔴 **沒檢查**
+```
+🔑 **復原路徑上每一個複製都是靜默的。**
+
+☠️ **`:338`／`:339` 可能是六個裡最壞的**——它做的是**快照本身**：
+```
+靜默失敗 ⇒ 快照不完整 ⇒ **沒有人知道**
+⇒ 直到有一天要用它回滾 ⇒ 那一刻你回滾到一份殘缺的快照
+```
+📌 那正是〈降級之後它還是會動〉的最貴版本：
+**整套部署安全機制的地基，是「有一份可以回去的快照」。**
+
+☠️ `:632`／`:633` 失敗 ⇒ 不中止 ⇒ 直接流進 `:701` 的健康檢查。
+若健康檢查**碰巧過了**（半還原的 backend 也可能回得出 `/health`）
+⇒ 報 **`restored` ＝「已還原且健康」**。
+
+### §53c　⇒ 裁示 ①：**做**。編號 `RP1`–`RP3`（新前綴＝restore path）
+
+```
+RP1  :338 / :339   快照製作      ⇒ -ge 8 ⇒ Fail
+     status  snapshot_failed_backend / snapshot_failed_frontend
+     rolled_back  **not_applied**（快照階段，正式機一個檔都還沒被動）
+RP2  :632 / :633   自動回滾      ⇒ -ge 8 ⇒ Fail
+     status  restore_copy_failed_backend / restore_copy_failed_frontend
+     rolled_back  **restoring**
+RP3  :179 / :180   手動回滾      ⇒ -ge 8 ⇒ Fail
+     status  rollback_copy_failed_backend / rollback_copy_failed_frontend
+     rolled_back  **restoring**
+```
+📌 命名沿用既有形狀（`copy_failed_backend` 已存在），
+且 `rollback_update.ps1` 的既有慣例是 `rollback_` 前綴。
+⚙️ **1:1 不變量照舊**：每一個新出口配一個新 `status` 值，不可共用。
+
+### 🔴 §53d　裁示 ②：`restoring` 與 `RP2`／`RP3` **必須成對落地**
+
+C 把話講完整了，A 照收：
+```
+少了 RP2/RP3  ⇒ restoring **印不出來**（沒有任何出口在「還原中」印東西）
+少了 restoring ⇒ RP2/RP3 印出來的 rolled_back 是 applied（「完整在磁碟上」，**錯**）
+```
+⇒ **兩件一起做，一起釘。** `restoring` 設在 `:632` / `:179` **之前**
+（與 `:420` 同一條紀律：危險值在動作之前設）。
+
+📌 C 的方法論值得記：它推翻了「`restoring` 現在有用」，
+**而它沒有把那個推翻當成「所以別加 `restoring`」**
+——〈推翻的證據不會自動支持替代方案〉的**正用**。
+⚠️ 而 C **在 ① 定案之前不釘 `restoring`**，理由是「否則那是一個永遠綠的題」。正確。
+
+### 🔴 §53e　裁示 ③：`describe_rolled_back` 的 fail-open ⇒ **回「動作無法辨識」，不拋錯**
+
+```python
+table = _ROLLED_BACK_TEXT.get(action) or _ROLLED_BACK_TEXT["deploy"]
+```
+☠️ 沒見過的 `action` **靜默退回 deploy 的文案** ⇒ 畫面說
+「**正式機沒有被碰過**」，而它剛剛才被一次失敗的部署動過
+——**逐字就是 `§41a` 要防的那一句**。
+
+⇒ **回「動作無法辨識（%s）」**，不拋錯。
+🔑 而它與 `§42b`（`decide_outcome` 對沒見過的 action **拋錯**）方向相反，
+**那不是不一致，是 `§51b` 已經定下的分工**：
+```
+判定側  decide_outcome        ⇒ **fail-closed**（拋錯／判失敗）
+呈現側  describe_rolled_back  ⇒ **fail-safe**（明著標，不可以爆、不可以猜）
+⚠️ 這個分工的**理由要寫在碼裡**，否則後人看到的是「同一支檔案裡一個拋錯一個不拋」
+```
+✅ B 對沒見過的 **`value`** 處理得對（回「狀態回報看不懂（%s）」）
+——**那已經是丙案的一半**，`action` 那一半照同樣的形狀補上。
+
+### §6 新增
+
+- 🔴 **一個安全機制的「製作」步驟失敗時，症狀出現在「使用」那一天。**
+  `:338`／`:339` 做的是回滾快照本身，靜默失敗 ⇒ 快照殘缺 ⇒
+  **要到真的需要回滾那一刻才發現**，而那一刻沒有第二次機會。
+  🔑 判準：**這個東西是「平常用的」還是「出事才用的」？**
+  後者的錯誤**一定要在製作當下就擋**，不能留給使用時發現。
+
+- 🔴 **檢查做在「前進」路徑上而沒做在「復原」路徑上，是一種常見的不對稱。**
+  ⚠️ 因為前進路徑天天在跑、錯了馬上看得到；
+  **復原路徑很少跑，而它跑的時候你已經在處理另一個問題了。**
+
+- **「這個值現在印不出來」不等於「不該加這個值」。**
+  正確的結論是**找出它為什麼印不出來**——而答案往往是另一個缺陷。
+  （C：`restoring` 印不出來，是因為復原路徑的 robocopy 沒人檢查。）
+
