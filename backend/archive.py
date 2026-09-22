@@ -1560,6 +1560,20 @@ def _daily_backup_tables() -> dict:
         "傳票範本":         "SELECT * FROM voucher_templates ORDER BY id",
         "傳票範本版本":     ("SELECT * FROM voucher_template_versions"
                              " ORDER BY template_id, version"),  # 無 id 欄
+        # ── 獎金分潤（v97，2026-09-23）────────────────────────────
+        #
+        # 🔴 `bonus_awards` 會開出兩筆傳票（核定／發放）⇒ 它是**憑證的上游**，
+        #    掉了就對不出「那筆獎金費用是怎麼算出來的」。
+        # ⚠️ `bonus_award_lines` 尤其不能掉：**每個人領多少只存在那裡**，
+        #    而 `bonus_awards` 上只有基數與比例 ⇒ 光有它重建不出個人金額。
+        # 🔑 `bonus_template_versions` 同傳票範本：`template_version` 凍結指向
+        #    的那一版，**版本不見了就追不回「當時是照哪個規則發的」**。
+        "獎金項目":         "SELECT * FROM bonus_items ORDER BY id",
+        "獎金模板":         "SELECT * FROM bonus_templates ORDER BY id",
+        "獎金模板版本":     ("SELECT * FROM bonus_template_versions"
+                             " ORDER BY template_id, version"),  # 無 id 欄
+        "獎金單":           "SELECT * FROM bonus_awards ORDER BY id",
+        "獎金明細":         "SELECT * FROM bonus_award_lines ORDER BY id",
     }
 
 

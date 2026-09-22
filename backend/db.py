@@ -41,6 +41,17 @@ DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR = os.path.join(
 #   ① 寫 _mNNN_xxx(conn)（冪等：ALTER 前先檢查、建表用 IF NOT EXISTS）
 #   ② 加進下面的 _MIGRATIONS 清單（位置＝版號，只能往後接、不可插隊或刪除）
 #   ③ 把這行下面的 CURRENT_VERSION 加一
+#
+# 🔴 而**新增資料表**還有兩個動作，它們不在這支檔裡，所以最容易漏：
+#   ④ `DEMO_CLEARED_TABLES` 或 `DEMO_FILTERED_CLEARS`（本檔下面）
+#      守門 test_demo_reset::test_dm1_every_table_is_classified_as_user_or_system_data
+#   ⑤ `archive.py::_daily_backup_tables()`（每日 JSON 備份）
+#      守門 test_system_audit::test_every_table_is_either_backed_up_or_explicitly_excluded
+# ☠️ 這兩個**在 v93／v95／v97 連續漏了三次** —— 而每一次的症狀都一樣：
+#    migration 本身全綠、伺服器照常起來，**而那兩道守門在全量回歸時才紅**。
+# 🔑 它們漏掉的真正代價不是紅燈：
+#    ④ 漏 ⇒ demo 重置清不掉新表 ⇒ **下一個客戶看得到上一個客戶的資料**
+#    ⑤ 漏 ⇒ 新表**不進每日備份** ⇒ 而那要到還原的那一天才會發現
 # 漏掉③的症狀是**完全沒有症狀**：_run_migrations() 第一行 current >=
 # CURRENT_VERSION 就直接 return，migration 從頭到尾沒被呼叫、log 不會有任何
 # 一行、伺服器照常起來，只有實際去 INSERT 新欄位時才炸。2026-09-14 v82 就是
@@ -108,7 +119,9 @@ DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR = os.path.join(
 # v95: 傳票五張表（vouchers／voucher_lines／voucher_edit_log／
 #      voucher_templates／voucher_template_versions）＋ 索引 ＋ 兩支 TRIGGER
 # v96: account_items.is_active —— **停用而不是刪除**（FN1⑤）
-CURRENT_VERSION = 96
+# v97: 獎金分潤五張表（bonus_items／bonus_templates／bonus_template_versions／
+#      bonus_awards＋**部分**唯一索引／bonus_award_lines）
+CURRENT_VERSION = 97
 
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
 # execution model) whenever the current request is authenticated as the 'demo'
@@ -356,6 +369,15 @@ DEMO_CLEARED_TABLES = frozenset((
     #    守門對 `sqlite_master WHERE type='table'` 做笛卡兒積，**VIEW 不在裡面**，
     #    ☠️ 而把 VIEW 寫進來會變成「清單裡有一張不存在的表」⇒ 反向控制會紅。
     # 🔑 而清除也必須打實表：`DELETE FROM vouchers` 對 VIEW 會直接 OperationalError。
+    # ── v97 獎金五張（`FN2`）──────────────────────────────────────
+    #
+    # 🔑 五張**都是使用者資料**，整張清：獎金單是依案件發放的，
+    #    而 demo 重置的目的是讓每個客戶的展示都從乾淨開始。
+    # ⚠️ `bonus_items`／`bonus_templates` 看起來像「系統預設」那一類，
+    #    **而它們不是**：施工圖 `§一` 逐字「項目可由**最高管理者**定義」
+    #    ⇒ 那是**使用者建的**，不是我們預載的。
+    "bonus_award_lines", "bonus_awards", "bonus_items",
+    "bonus_template_versions", "bonus_templates",
     "voucher_edit_log", "voucher_lines", "voucher_template_versions",
     "voucher_templates", "vouchers_all",
     "webauthn_credentials", "work_logs",
@@ -4274,6 +4296,132 @@ def _m094_load_account_items(conn):
              it.get("name_en", ""), it["parent_code"]))
 
 
+def _m097_bonus(conn):
+    """v97（2026-09-23 `FN2`）：獎金分潤五張表。
+
+    施工圖：`docs/windows/SPEC-BONUS.md`（251 行改版）。
+    第一行逐字：`# 獎金分潤 `FN2` —— **施工圖**`
+
+    ## 🔴 `bonus_awards.quote_no` 是**單一欄位**，不是清單
+
+    使用者原話：「**依案件獨立發放**」。
+    ⇒ 落實它的是**欄位的形狀**（一個 TEXT，不是 JSON 陣列），**不是唯一性**：
+    ```
+    單一欄位   => 一筆獎金**結構上不可能**橫跨多案
+    JSON 清單  => 可以塞兩個案號進去，而唯一索引照樣過
+    ```
+
+    ## 🔴 而那個唯一索引是**部分**唯一：`WHERE voided_at = ''`
+
+    它強制的是**另一件事**：「一個案件同時只能有一筆**有效**獎金」。
+    ☠️ 寫成完全唯一（無 WHERE）的後果是 **發錯了改不了** ——
+    而傳票那邊有完整的作廢重開鏈（使用者親口裁的）
+    ⇒ 兩個模組對「錯了怎麼辦」會不一致，**而獎金還會開傳票**。
+    ⚙️ 三步驗收：第二筆未作廢 ⇒ 擋／作廢後重開 ⇒ 過／再一筆 ⇒ 擋，
+       而那個案號**留 2 列**（有效 1 列、歷史留著）。
+
+    ## 🔴 `bonus_items.person_source` 必填
+
+    ☠️ 可以是空的話，那個獎金項目**每次都算出 0 個人** ——
+       而畫面上它只是**從來沒有出現在任何一張獎金單上**，
+    🔑 **沒有人會發現一個從來不出現的東西。**
+    ⚠️ `NOT NULL` 擋不住空字串 ⇒ **應用層還要擋一次**，這裡只是最便宜的一半。
+
+    ## 📌 範本拆兩張，理由與傳票範本同一個
+
+    `AUTOINCREMENT` 只能用在單一 `INTEGER PRIMARY KEY`，
+    複合主鍵 `(template_id, version)` 下 id 無法自動產生。
+    """
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS bonus_items ("
+        "  id            INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "  name          TEXT    NOT NULL,"
+        # 🔴 必填：這個項目的人從哪裡來（業務→sales_person／
+        #    專案執行→case_stages.assigned_to）。空的 ⇒ 永遠 0 人。
+        "  person_source TEXT    NOT NULL,"
+        "  sort_order    INTEGER NOT NULL DEFAULT 0,"
+        "  is_active     INTEGER NOT NULL DEFAULT 1,"
+        "  created_by    TEXT    NOT NULL,"
+        "  created_at    TEXT    NOT NULL,"
+        "  updated_at    TEXT    NOT NULL"
+        ")")
+
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS bonus_templates ("
+        "  id         INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "  name       TEXT    NOT NULL,"
+        "  created_by TEXT    NOT NULL,"
+        "  created_at TEXT    NOT NULL"
+        ")")
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS bonus_template_versions ("
+        "  template_id INTEGER NOT NULL REFERENCES bonus_templates(id),"
+        "  version     INTEGER NOT NULL,"
+        "  body_json   TEXT    NOT NULL,"
+        "  edited_by   TEXT    NOT NULL,"
+        "  edited_at   TEXT    NOT NULL,"
+        "  is_current  INTEGER NOT NULL DEFAULT 1,"
+        "  PRIMARY KEY (template_id, version)"
+        ")")
+
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS bonus_awards ("
+        "  id                 INTEGER PRIMARY KEY AUTOINCREMENT,"
+        # 🔴 **單一欄位**：一筆獎金結構上不可能橫跨多案（見 docstring）。
+        "  quote_no           TEXT    NOT NULL,"
+        # **凍結**的基數。取自精算的已存值，不在這裡重算。
+        "  base_amount        INTEGER NOT NULL,"
+        "  base_source        TEXT    NOT NULL"
+        "    DEFAULT 'settlement.summary.netProfit',"
+        "  template_id        INTEGER NOT NULL DEFAULT 0,"
+        # 🔴 凍結版本：**改模板不影響已發放的那幾張**。
+        "  template_version   INTEGER NOT NULL DEFAULT 0,"
+        "  status             TEXT    NOT NULL DEFAULT '草稿',"
+        "  voucher_no_accrual TEXT    NOT NULL DEFAULT '',"   # 核定那筆傳票
+        "  voucher_no_payment TEXT    NOT NULL DEFAULT '',"   # 發放那筆傳票
+        # 作廢／重開鏈 —— 與傳票同一條原則：**原單留著**。
+        "  voided_at          TEXT    NOT NULL DEFAULT '',"
+        "  voided_by          TEXT    NOT NULL DEFAULT '',"
+        "  void_reason        TEXT    NOT NULL DEFAULT '',"
+        "  supersedes_id      INTEGER NOT NULL DEFAULT 0,"
+        "  created_by         TEXT    NOT NULL,"
+        "  created_at         TEXT    NOT NULL,"
+        "  updated_at         TEXT    NOT NULL"
+        ")")
+    # 🔴 **部分**唯一索引。`WHERE voided_at = ''` 那一段是整個設計的重點：
+    #    少了它 ⇒ 發錯了改不了；而有了它 ⇒ 有效的只有一筆，歷史全部留著。
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_bonus_awards_case_active"
+        " ON bonus_awards(quote_no) WHERE voided_at = ''")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_bonus_awards_quote"
+        " ON bonus_awards(quote_no)")
+
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS bonus_award_lines ("
+        "  id                     INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "  award_id               INTEGER NOT NULL REFERENCES bonus_awards(id),"
+        "  bonus_item_id          INTEGER NOT NULL REFERENCES bonus_items(id),"
+        # 凍結：項目可能改名，而已發放的那一張要印出當時的名字。
+        "  item_name_snapshot     TEXT    NOT NULL,"
+        "  username               TEXT    NOT NULL,"
+        # 凍結：這個人是從哪個來源來的（同一人身兼兩職會有兩列）。
+        "  person_source_snapshot TEXT    NOT NULL,"
+        # 🔑 比例一律用**基點**（1/10000）的整數，不用浮點：
+        #    浮點相加不等於 1 是一個**沒有錯誤訊息**的缺陷。
+        "  total_pct              INTEGER NOT NULL,"
+        "  person_pct             INTEGER NOT NULL,"
+        "  amount                 INTEGER NOT NULL"
+        ")")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_bonus_lines_award"
+        " ON bonus_award_lines(award_id)")
+    # 🔑 可見性是「本人只看自己那一列」⇒ 用 username 查是熱路徑。
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_bonus_lines_user"
+        " ON bonus_award_lines(username)")
+
+
 def _m096_account_item_active(conn):
     """v96（2026-09-23 `FN1⑤`）：`account_items.is_active` —— 停用，不是刪除。
 
@@ -4633,6 +4781,7 @@ _MIGRATIONS = [
     _m094_load_account_items,                       # v94
     _m095_vouchers,                                 # v95
     _m096_account_item_active,                      # v96
+    _m097_bonus,                                    # v97
 ]
 
 

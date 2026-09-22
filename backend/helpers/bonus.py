@@ -1,0 +1,240 @@
+# -*- coding: utf-8 -*-
+"""獎金分潤的**純邏輯**（`FN2`）：基數、拆分、人員、可見性。
+
+施工圖：`docs/windows/SPEC-BONUS.md`。
+第一行逐字：``# 獎金分潤 `FN2` —— **施工圖**``
+
+使用者原話：「獎金分潤子模組是依據案件的**實際獲利**去拆比例給參與者」。
+
+# 🔴 這一支**不重算任何係數**
+
+淨利的算式只寫在一個地方（`frontend/pages/settlement.html`，儲存時算），
+後端兩個讀它的地方（`pdf_gen.py`／`routers/reports.py`）都是**讀已存值**。
+```
+獎金若自己再乘一次 => **第三份實作，而三份一定會分岔**
+=> 分岔之後「獎金算出來跟精算頁對不上」會被當成**精算頁的錯**
+```
+⇒ 這裡一律取 `settlement.summary.netProfit` 的**已存值**。
+
+# 🔴 而更危險的是**退回用毛利**
+
+`routers/reports.py` 有一段 fallback，註解逐字寫著
+「Fallback to gross fields for legacy settlements saved before netProfit was
+recorded.」——**對報表是合理的折衷**（寧可有個數字）。
+```
+☠️ 而獎金照抄它：毛利 > 淨利 => **獎金發多**
+   而它**不報錯，畫面上每一個數字都正常**
+```
+⇒ 沒有淨利 ⇒ **拒絕**，而拒絕訊息要講得出**出路**。
+
+📌 〈模組化：L2 功能模組彼此不可依賴〉：本支不碰資料庫、不 import 任何 router。
+"""
+
+#: 比例的單位：**基點**（1/10000）。
+#:
+#: ⚙️ 用整數基點而不是浮點百分比 —— 浮點相加不等於 1 是一個
+#:    **沒有錯誤訊息**的缺陷：三個 0.3333 加起來不是 1，而沒有人會看到。
+BASIS_POINTS = 10000
+
+#: 基數的唯一來源。寫成常數是為了讓「它從哪來」可以被查，
+#: 而 `bonus_awards.base_source` 會把它一起凍進每一筆。
+BASE_FIELD = "netProfit"
+
+#: 舊精算的拒絕訊息。**必須講出路** ——
+#:
+#: ☠️ 只說「沒有淨利」的副作用是**舊案永遠發不了獎金**，而使用者看不出路在哪。
+#: 🔑 出路存在：淨利是**儲存精算時**算出來寫進去的
+#:    ⇒ 重新儲存一次就會補上。
+#: 📌 與 `RAISE(ABORT)` 那一條同源：**那句話是使用者唯一看得到的東西。**
+LEGACY_SETTLEMENT_MESSAGE = (
+    "這個案件的精算是舊格式（沒有淨利欄位），無法產生獎金單。\n"
+    "請重新開啟並儲存一次該案的精算，系統會自動補算淨利後即可發放。")
+
+
+def base_amount_for(settlement):
+    """回 `(ok, base, err)` —— 獎金基數。
+
+    ```
+    沒有 netProfit 這個欄位  => (False, 0, 舊格式訊息)   **不可退回用毛利**
+    netProfit <= 0           => (False, 0, 說明)          使用者裁：負數當 0 不發
+    netProfit > 0            => (True, 值, None)
+    ```
+
+    ## ⚠️ 「沒有這個欄位」與「值是 0」是兩件事
+
+    ☠️ 寫成 `summary.get("netProfit") or ...` 的話，**淨利剛好是 0 的案子**
+       會被當成舊格式 ⇒ 使用者收到「請重新儲存精算」，而他照做之後
+       **還是 0，訊息還是一樣** ⇒ 他會以為系統壞了。
+    ⇒ 用 `is None` 分辨（〈null 不等於 0〉）。
+    """
+    summary = (settlement or {}).get("summary") or {}
+    raw = summary.get(BASE_FIELD)
+    if raw is None:
+        # 🔴 這裡**不看 grossProfit** —— 見模組 docstring。
+        return False, 0, LEGACY_SETTLEMENT_MESSAGE
+
+    value = int(raw)
+    if value <= 0:
+        # 使用者裁：負數當 0 不發。
+        # ☠️ 硬發的話，負的獎金在傳票上是一筆反向分錄，**帳是平的**，
+        #    沒有人會報修 —— 而某個人的獎金單上是一個負數。
+        return False, 0, (
+            "這個案件的淨利是 %s，沒有可分配的獎金基數。" % f"{value:,}")
+    return True, value, None
+
+
+def pool_for(base, total_pct):
+    """總獎金池 ＝ `base × total_pct / 10000`（整數，無條件捨去）。"""
+    return int(base) * int(total_pct) // BASIS_POINTS
+
+
+def split_award(base, total_pct, people):
+    """把獎金池拆給每個人。回 `[{username, person_pct, amount}, …]`。
+
+    ```
+    pool   = base × total_pct / 10000
+    amount = pool × person_pct / 10000
+    尾差   = pool - Σamount  =>  **歸公司**（A 裁），不落在任何一個人身上
+    ```
+
+    ## ⚙️ 為什麼尾差不補給最後一個人
+
+    補給誰都是一個**沒有依據的決定**，而它每次都落在同一個人身上
+    （清單順序通常是穩定的）⇒ 那個人會固定多拿幾塊錢。
+    🔑 歸公司是唯一不需要理由的選擇。
+
+    ⚠️ 不變量：`Σamount <= pool`，且 `pool - Σamount < 人數`。
+       **大於人數表示那不是捨入誤差，是算式錯了。**
+    """
+    pool = pool_for(base, total_pct)
+    out = []
+    for entry in people or ():
+        username, person_pct = entry[0], entry[1]
+        out.append({
+            "username": username,
+            "person_pct": int(person_pct),
+            "total_pct": int(total_pct),
+            # 🔑 先乘後除：`pool * pct // BP`。
+            #    反過來（先除後乘）會讓每一項先各自損失一次精度。
+            "amount": pool * int(person_pct) // BASIS_POINTS,
+        })
+    return out
+
+
+def remainder_of(base, total_pct, lines):
+    """尾差（歸公司的那一塊）。呼叫端要把它記下來，不要讓它消失。"""
+    return pool_for(base, total_pct) - sum(l["amount"] for l in lines or ())
+
+
+#: 每個獎金項目各自綁一個人員來源（使用者裁）。
+#:
+#: 📌 `owner`／`engineer` **目前沒有對應的獎金項目** —— 那是
+#:    「**還沒有人定義**」，不是「決定不做」。放在這裡是因為欄位本身存在。
+PERSON_SOURCES = (
+    "sales_person",             # 業務
+    "owner",                    # 案件擁有者
+    "engineer",                 # 工程師
+    "case_stages.assigned_to",  # 各執行階段負責人（JSON 陣列）
+)
+
+#: 來源解析不出任何人時的標記。**不可以靜默算成 0 筆。**
+NO_ELIGIBLE_PEOPLE = "無可發放對象"
+
+
+def people_for_item(item, case):
+    """這個獎金項目在這個案件上該發給誰。回 `(ok, people, note)`。
+
+    ## 🔴 解析出 0 人 ⇒ **拒絕該項目**，不是靜默算 0
+
+    `case_stages.assigned_to` 的預設值是 `'[]'`（空陣列）
+    ⇒ **空是常態不是例外**。
+    ☠️ 靜默算 0 的兩個後果，第二個更糟：
+    ```
+    ① 那個項目從來沒出現在任何一張獎金單上 —— 而**沒有人會發現一個
+       從來不出現的東西**
+    ② **把金額併給別的項目** => 別人領多了，**而總額對得起來**
+    ```
+
+    ## ⚠️ 階段負責人要**逐筆解析 JSON**，不能用一句 SQL 彙整
+
+    `db.py` 對 `case_stages.assigned_to` 的註解逐字寫著「刻意維持 JSON text
+    欄位，不再往下正規化成 join table」⇒ 這一層只能在應用層做。
+    """
+    import json
+
+    source = ((item or {}).get("person_source") or "").strip()
+    if not source:
+        # 🔑 資料層的 NOT NULL 擋不住空字串 ⇒ 這裡是另一半。
+        return False, [], "這個獎金項目沒有設定人員來源，無法決定發給誰。"
+
+    case = case or {}
+    people = []
+
+    if source == "case_stages.assigned_to":
+        for stage in case.get("stages") or ():
+            raw = stage.get("assigned_to")
+            if isinstance(raw, str):
+                try:
+                    raw = json.loads(raw or "[]")
+                except ValueError:
+                    # ⚠️ 壞掉的 JSON **不要吞** —— 吞掉就變成「這一階段沒有人」，
+                    #    而那與「真的沒有人」在結果上一模一樣。
+                    return False, [], (
+                        "案件階段的負責人資料格式不正確，無法解析發放對象。")
+            for name in raw or ():
+                if name and name not in people:
+                    people.append(name)
+    else:
+        name = case.get(source)
+        if name and name not in people:
+            people.append(name)
+
+    if not people:
+        return False, [], NO_ELIGIBLE_PEOPLE
+    return True, people, None
+
+
+def visible_lines(lines, username, is_admin=False):
+    """這個人看得到哪幾列。
+
+    ```
+    管理者  全部
+    本人    **只看得到自己那一列**
+    其他人  看不到
+    ```
+    🔴 施工圖 `§七` 逐字：**現行營運報表的可見範圍不可沿用** ——
+       沿用＝**全公司看得到每個人領多少**。
+    📌 「本人」是一條**規則**不是一個角色 ⇒ 明著比對 `username`，
+       不從角色推論。
+    """
+    if is_admin:
+        return list(lines or ())
+    return [l for l in (lines or ()) if l.get("username") == username]
+
+
+#: 「應付獎金」要記在哪個科目 —— **設定值的鍵**，不是代號本身。
+#:
+#: 🔴 那個科目**未決**（會計師三題之一）⇒ 代號不可以寫死進 DDL 或程式碼。
+#: 🔑 而預設值的判準不是「哪個比較好」，是「**猜錯時哪個比較好收拾**」：
+#: ```
+#: 用法定科目  => 日後要拆出來 ＝ 新增一個科目 ＋ 改設定
+#: 用自訂科目而會計師說不行 => **已開出的傳票都指向一個不該存在的科目**
+#: ```
+#: ⇒ 預設用法定的「應付薪資」（代號見 `DEFAULT_PAYABLE_ACCOUNT`）。
+PAYABLE_ACCOUNT_SETTING_KEY = "bonus_payable_account_code"
+
+#: 預設代號。**放在設定的預設值裡，不是散在程式邏輯裡** ——
+#: 改它只要改設定，不必改碼，而已開出的傳票凍的是當時的值。
+DEFAULT_PAYABLE_ACCOUNT = "2191"
+
+
+def payable_account_code(get_setting):
+    """讀「應付獎金」的科目代號。`get_setting` 是取設定的那支函式。
+
+    ⚠️ 傳進來而不是直接 import `helpers.settings`：這一支要能在**沒有資料庫**
+       的情況下被測到，而相依注入比 monkeypatch 誠實。
+    ⚙️ 而設定值指向一個**不存在或已停用**的科目時，擋它的是設定頁不是這裡 ——
+       這一支只負責回報「設定說是哪一個」。
+    """
+    value = (get_setting(PAYABLE_ACCOUNT_SETTING_KEY) or "").strip()
+    return value or DEFAULT_PAYABLE_ACCOUNT
