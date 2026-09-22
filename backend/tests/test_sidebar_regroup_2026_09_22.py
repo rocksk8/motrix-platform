@@ -235,3 +235,86 @@ def test_mn2_the_group_is_renamed_to_the_name_the_user_picked(sidebar):
     assert "工作內容" not in names, (
         f"舊名字「工作內容」還在：{sorted(names)}\n"
         "☠️ 兩個同時存在 ⇒ 改名做了一半，使用者會看到兩個很像的分組。")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# MN6 / MN7 · 搬到了，比搬走了重要
+# ══════════════════════════════════════════════════════════════════════
+#
+# A-2 查了 `sec()`／`ni()` 的實作，後果比原本描述的嚴重：
+# ```js
+# sec(label, show) { if (show === false) { _curGroup = {…, hidden:true}; return '' } }
+#                                          ↑ 不 push 進 _navGroups
+# ni(...)          { _curGroup.items.push({…}) }
+#                    ↑ push 進一個「不在 _navGroups 裡」的 group
+# ```
+# ☠️ **整組不會被渲染** —— 不是「掛在看不見的標題底下」，
+# **是那三個項目完全消失。**
+#
+# 🔑 而症狀的形狀是最難被報修的那一種：
+# `cQ` 為 true ⇒ 那三頁**不會**進 `_deniedPages` ⇒ **直接打網址仍然打得開**
+# ⇒ 使用者遇到的是「**功能還在，但我找不到它**」——
+# ☠️ **不會有人報修一個他以為被移除的功能。**
+
+
+def _section_condition(text, label):
+    """`sec('<label>', …)` 的第二個引數（原始字串）。找不到回 `None`。"""
+    m = re.search(r"sec\(\s*'" + re.escape(label) + r"'\s*,\s*([^)]*)\)",
+                  _decode_escapes(text))
+    return m.group(1).strip() if m else None
+
+
+def test_mn6_the_group_condition_is_the_union_of_its_items(sidebar):
+    """🔴🔴 MN6：**分組條件必須是底下每一項條件的聯集。**
+
+    搬進去之後那一組有四項：工作日誌（`cWL`）、每日工作事項（`cDT`）、
+    以及搬過來的三項（`cQ`）。
+    ⇒ 分組條件要是 **`cWL || cDT || cQ`**。
+
+    ☠️ **不加 `cQ` ＝ 回歸缺陷**：
+    一個**有報價單權限、沒有工作日誌／每日工作事項權限**的人
+    （**業務人員很可能就是**），搬家後在選單裡**找不到那三項**。
+    """
+    condition = _section_condition(sidebar, "我的工作")
+    assert condition is not None, (
+        "找不到 `sec('我的工作', …)` —— 見 `MN2`（改名）。\n"
+        "📌 搜尋範圍：`frontend/static/sidebar.js` 全文的 `sec('…', …)`。")
+    missing = [name for name in ("cWL", "cDT", "cQ")
+               if not re.search(r"\b%s\b" % name, condition)]
+    assert not missing, (
+        f"「我的工作」的分組條件是 `{condition}`，少了：{'、'.join(missing)}\n"
+        "☠️ 少了 `cQ` ⇒ 有報價單權限而沒有工作日誌權限的人（業務很可能就是），"
+        "整組看不到 —— 而那三項是他每天要用的。")
+
+
+def test_mn7_a_quote_only_role_can_still_see_the_three_items(sidebar):
+    """🔴🔴 MN7 反向控制：**只有 `cQ` 的角色，那三項要在選單裡看得到。**
+
+    ## 🔑 這一題比 `MN4` 重要：`MN4` 驗的是**搬走**，`MN7` 驗的是**搬到了**
+
+    ☠️ 而「沒搬到」的症狀最難被報修：
+    ```
+    cQ 為 true ⇒ 那三頁不會進 _deniedPages ⇒ **直接打網址仍然打得開**
+    ⇒ 使用者遇到的是「功能還在，但我找不到它」
+    ```
+    📌 **不會有人報修一個他以為被移除的功能。**
+
+    ## ⚠️ 我驗得到什麼
+
+    這是**結構檢查**：我釘的是「那一組的條件涵蓋 `cQ`，而那三項也在那一組裡」。
+    ☠️ 我**驗不到瀏覽器真的渲染出來** —— `sec()`／`ni()` 是 JS，
+    🔑 而那兩件合起來仍然不等於「使用者看得到」。
+    📌 真正的驗收是目視，而這句話寫在這裡，不寫在豁免表裡。
+    """
+    condition = _section_condition(sidebar, "我的工作")
+    assert condition is not None, "找不到 `sec('我的工作', …)`（見 MN2）"
+    assert re.search(r"\bcQ\b", condition), (
+        f"「我的工作」的分組條件 `{condition}` 不含 `cQ` ——\n"
+        "☠️ 只有報價單權限的人整組看不到，而那三項是他每天要用的。")
+
+    decoded = _decode_escapes(sidebar)
+    group = _groups(decoded).get("我的工作", "")
+    for label in MOVED:
+        assert label in group, (
+            f"「{label}」不在「我的工作」那一組裡。\n"
+            "🔑 `MN4` 驗的是搬走，這一題驗的是**搬到了** —— 兩半都要。")
