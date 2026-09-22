@@ -396,14 +396,44 @@ def _allow_rerun_today(monkeypatch):
     # 🔑 前提是抓取側標記仍存放在 `tender_fetch_log`；搬走的話這幾題會紅，而那是對的。
 
 
-def _assert_mails(calls, n):
-    """斷言「真的寄了 n 封」—— 次數**而且**每一封收件人非空。"""
+def _assert_mails(calls, n, mentions=()):
+    """斷言「真的寄了 n 封」—— 次數、收件人、**而且信裡真的有東西**。
+
+    ## ☠️ 2026-09-22 補：這支原本把第三個元素解成 `_html` 然後從來不看它
+
+    A 今天的 §6 新條（他第二次把 `STATE.md` 清空的一般化）：
+    > **任何兩段式提交的乾跑，要中和的是第二段不是第一段。**
+    > 拿掉第一段會製造一個「空的、成功的」結果，然後第二段把它當真的提交出去。
+
+    🔑 **而這個檔就有那個形狀，在 `_run()` 裡**：
+    ```
+    fetch_detail → 被換成 (None, "測試不抓詳細頁")   ← 中和了「產生」
+    run_scheduled_scan() → 照常跑完、照常寄            ← 「送出」還活著
+    _assert_mails(mails, 1)                            ← 只數封數與收件人
+    ```
+    ⇒ **一封內文全空的信會讓 N1／N3 全綠。**
+    ⚠️ 今天內文其實不空（它來自 `parse_list` 的真實命中，不是詳細頁），
+    **但這幾題證明不了那件事** —— 〈證據的適用範圍〉。
+
+    📌 `mentions`：呼叫端可以指定「信裡一定要出現的字」，
+    把「有內容」收緊成「有**正確的**內容」。
+    """
     assert len(calls) == n, f"應該寄 {n} 封，實際 {len(calls)} 封"
-    for k, (to_addrs, subject, _html) in enumerate(calls):
+    for k, (to_addrs, subject, html) in enumerate(calls):
         assert to_addrs, (
             f"第 {k + 1} 封的收件人是空的 —— `_async_send` 被呼叫了，但 `_send` "
             f"只會寫一行 log 就 return，沒有人收得到。subject={subject!r}"
         )
+        assert html and html.strip(), (
+            f"第 {k + 1} 封的內文是空的（subject={subject!r}）—— "
+            "信寄出去了、收件人也對，而打開來裡面什麼都沒有。\n"
+            "☠️ 只數封數的斷言看不見這件事。"
+        )
+        for word in mentions:
+            assert word in html, (
+                f"第 {k + 1} 封的內文裡找不到 {word!r}（subject={subject!r}）。\n"
+                f"內文開頭：{html[:200]}"
+            )
 
 
 def _seed_log(rows):
