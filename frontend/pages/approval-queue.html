@@ -643,6 +643,14 @@
         <div class="aq-section">
           <div class="aq-section-title">基本資訊</div>
           <div class="aq-info-grid">
+            <!-- QL15：這張單是哪個據點開的。**只有一個據點時不顯示。**
+                 簽核人一次看好幾張不同分公司的單，而抬頭、統編與**匯款帳號**
+                 都跟著據點走 —— 他需要看得到自己在核什麼。 -->
+            <div class="aq-info-row" x-show="locationName(selected?.locationId)">
+              <span class="aq-info-label">據點</span>
+              <span class="aq-info-value"
+                    x-text="locationName(selected?.locationId)"></span>
+            </div>
             <div class="aq-info-row">
               <span class="aq-info-label">客戶</span>
               <span class="aq-info-value" x-text="selected?.customer || '—'"></span>
@@ -1216,7 +1224,28 @@
           return !!item && item.type !== 'quotation'
         },
 
-        amountLabel(item) {
+        //: 據點 id -> 名字。**只有一個據點（或讀不到）時回空字串**，
+      //  那一列就不顯示 —— 一個永遠一樣的標籤不是資訊，它只是佔位置。
+      locations: [],
+      locationName(id) {
+        if (!id || !this.locations || this.locations.length < 2) return ''
+        const hit = this.locations.find(l => l && l.id === id)
+        return hit ? (hit.name || '') : ''
+      },
+
+      //: 讀公司資料裡的據點清單。讀不到就留空 => 那一列不顯示，其餘照常。
+      //  ⚠️ 這一頁不是設定頁，**不應該因為讀不到一個選填清單而壞掉**。
+      async loadLocations() {
+        try {
+          const r = await fetch(`${API}/settings/company-profile`, {
+            headers: { Authorization: 'Bearer ' + this.session.token } })
+          if (!r.ok) return
+          const d = await r.json()
+          this.locations = (d.locations || []).filter(l => l && l.id)
+        } catch (_e) { /* 讀不到就不顯示據點 */ }
+      },
+
+      amountLabel(item) {
           if (item?.type === 'contractor_voucher') return '申請金額'
           if (item?.type === 'invoice_voucher') return '申請金額（含稅）'
           if (item?.type === 'shipping_note') return '出貨品項'
@@ -1287,7 +1316,9 @@
           const s = JSON.parse(localStorage.getItem('motrix_session') || 'null')
           if (!s?.token) { location.href = 'login.html'; return }
           this.session = s
-          await this.loadQueue()
+          // QL15：據點清單與佇列一起載。用 allSettled 而不是先後 await ——
+          // 據點讀不到不應該拖慢或擋住佇列，那才是這一頁的主體。
+          await Promise.allSettled([this.loadQueue(), this.loadLocations()])
         },
 
         async loadQueue() {

@@ -97,6 +97,14 @@ def _build_quote_html(q: dict, tot: dict, internal: bool = False,
                       show_watermark: bool = False, watermark_text: str = '未成案 · 報價單僅供瀏覽',
                       watermark_font_size: int = 30,
                       show_notice: bool = False, notice_text: str = '') -> str:
+    # 🔑 QL7：抬頭從**這一筆單據所屬的據點**取值，一支函式取一次。
+    # ⚠️ 取不到 `locationId` ⇒ `location_identity(None)` 落在主要據點，
+    #    那是既有安裝（只有一個據點、或根本沒設過）的正確行為。
+    # 📌 **讀即時值不做快照**（QL10，A 裁定）：匯款帳號要回答的是
+    #    「**現在**該匯到哪」——舊單據印出舊帳號，對方會照著匯到一個
+    #    已經關掉的帳戶。代價（改一次設定，歷史 PDF 重印都會變）
+    #    由列印時的稽核紀錄承擔，見 routers 那一側。
+    _ident = location_identity((q or {}).get('locationId'))
     def esc(s):
         return (s or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>')
     ps = q.get('pdfShow') or {}
@@ -269,9 +277,7 @@ def _build_quote_html(q: dict, tot: dict, internal: bool = False,
         if show_notice else '')
         + '<div class="header">\n'
         '  <div>\n'
-        '    <div class="co-name">允碩整合集創股份有限公司</div>\n'
-        '    <div class="co-sub">MOTRIX Synergy Integration Corp.</div>\n'
-        '    <div class="co-sub" style="margin-top:4px">統一編號：60575481　｜　電話：04-3610-6566　｜　info@miactw.com</div>\n'
+        + _identity_head(_ident) +
         '  </div>\n'
         '  <div>\n'
         '    <div class="doc-title">報　價　單</div>\n'
@@ -341,7 +347,7 @@ def _build_quote_html(q: dict, tot: dict, internal: bool = False,
         '  </div>\n'
         '</div>\n'
         '<div class="footer">\n'
-        '  MOTRIX Synergy Integration Corp. 允碩整合集創 ｜ info@miactw.com ｜ Tel: 04-3610-6566 ｜ 統一編號: 60575481\n'
+        + _identity_foot(_ident) +
         '</div>\n'
         '</div>\n'
         '<script>\n'
@@ -495,14 +501,173 @@ def generate_pdf_bytes(quote_no: str, internal: bool = False) -> bytes:
 
 # ── 勞報單 PDF ────────────────────────────────────────────────────────────────
 
+# ══════════════════════════════════════════════════════════════════════════════
+# §9 QL · 單據抬頭從「據點」取值
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# 使用者 2026-09-22：「在地址的部分可增加複數選項，由使用者新增名稱跟位置，
+# 我們有分公司」⇒ 分公司開的單，抬頭與匯款帳號要是分公司自己的。
+#
+# 🔴 為什麼一次改 8 種，不是先改報價單：
+#    這 8 種的抬頭是**同一個模式的 32 行複製**。只改一部分的話，
+#    ☠️ **同一個案子的報價單與請款單會印不同抬頭** ——
+#    🔑 而那種不一致沒有任何地方會報錯，它只會印在寄給客戶的紙上。
+#
+# 🔑 **落空的順序是逐欄，不是整筆**（QL5）：
+#    這一筆據點的欄 → 主要據點的同一欄 → `company_profile` 的同一欄 → 內建預設
+#    ☠️ 「整筆有值就整筆用」會讓一個只想改銀行帳號的分公司，抬頭變成空白。
+#
+# ⚠️ **全部留空時要與改版前逐字相同**（QL6）——`DEFAULT_IDENTITY` 就是那組值，
+#    它不是「範例資料」，它是**既有安裝的行為**。動它等於改所有人的單據。
+
+#: 什麼都沒填時印的那一組 —— **改版前寫死在 32 行裡的值**。
+DEFAULT_IDENTITY = {
+    "company_name": "允碩整合集創股份有限公司",
+    "company_name_en": "MOTRIX Synergy Integration Corp.",
+    "tax_id": "60575481",
+    "phone": "04-3610-6566",
+    "email": "info@miactw.com",
+    "bank_name": "",
+    "bank_branch": "",
+    "bank_account_name": "",
+    "bank_account_number": "",
+}
+
+#: `company_profile` 頂層那幾個欄位的對照（既有安裝已經在用的鍵）。
+_PROFILE_ALIASES = {
+    "company_name": ("companyName", "company_name"),
+    "company_name_en": ("companyNameEn", "company_name_en"),
+    "tax_id": ("taxId", "tax_id"),
+    "phone": ("phone",),
+    "email": ("email",),
+    "bank_name": ("bankName", "bank_name"),
+    "bank_branch": ("bankBranch", "bank_branch"),
+    "bank_account_name": ("bankAccountName", "bank_account_name"),
+    "bank_account_number": ("bankAccountNumber", "bank_account_number"),
+}
+
+
+def _first_filled(*values):
+    """第一個非空字串。**逐欄落空用的，不是「整筆有值就整筆用」**（QL5）。"""
+    for value in values:
+        text = str(value).strip() if value is not None else ""
+        if text:
+            return text
+    return ""
+
+
+def location_identity(location_id=None) -> dict:
+    """一筆單據要印的公司身分。
+
+    `location_id` 給 `None` ⇒ **主要據點**（`locations[0]`，QL8 明著要的行為）。
+    找不到那個 id ⇒ 一樣落到主要據點 ——
+    ⚠️ 不要丟例外：一張綁著已刪據點的舊單據**仍然要印得出來**，
+    ☠️ 而印不出來的那一刻，使用者手上就只剩一張紙。
+    """
+    profile = _get_setting("company_profile", {}) or {}
+    locations = profile.get("locations") or []
+    primary = locations[0] if locations else {}
+    here = primary
+    if location_id:
+        for item in locations:
+            if str(item.get("id") or "") == str(location_id):
+                here = item
+                break
+
+    out = {}
+    for field, default in DEFAULT_IDENTITY.items():
+        out[field] = _first_filled(
+            here.get(field),
+            primary.get(field),
+            *[profile.get(alias) for alias in _PROFILE_ALIASES.get(field, ())],
+            default)
+    return out
+
+
+def _identity_head(ident: dict) -> str:
+    """單據抬頭那三行。**縮排與字元逐字保留改版前的樣子**（QL6）。
+
+    ⚠️ 第三行的分隔符是**全形空白 ＋ ｜**，不是半形 ——
+    ☠️ 換成半形的話所有既有單據的那一行都會變，而沒有人會說得出是哪一次改的。
+    """
+    third = "統一編號：%s　｜　電話：%s　｜　%s" % (
+        ident.get("tax_id", ""), ident.get("phone", ""), ident.get("email", ""))
+    return (
+        '    <div class="co-name">%s</div>\n'
+        '    <div class="co-sub">%s</div>\n'
+        '    <div class="co-sub" style="margin-top:4px">%s</div>\n'
+        % (ident.get("company_name", ""), ident.get("company_name_en", ""),
+           third))
+
+
+def _identity_foot(ident: dict) -> str:
+    """頁尾那一行（完整版：英文名 ＋ 中文名 ｜ email ｜ Tel ｜ 統編）。"""
+    return "  %s %s ｜ %s ｜ Tel: %s ｜ 統一編號: %s\n" % (
+        ident.get("company_name_en", ""),
+        # ⚠️ 頁尾用的是**不含「股份有限公司」的短名**。改版前寫死的是「允碩整合集創」，
+        # 🔑 而那是 `company_name` 去掉尾綴 —— 這裡只去掉既有那幾種尾綴，
+        #    使用者自己填的名字原樣印出去，不要替他猜。
+        _short_name(ident.get("company_name", "")),
+        ident.get("email", ""), ident.get("phone", ""), ident.get("tax_id", ""))
+
+
+def _identity_foot_short(ident: dict) -> str:
+    """頁尾那一行（短版：只有英文名與中文短名）。"""
+    return "%s %s\n</div>\n" % (
+        ident.get("company_name_en", ""),
+        _short_name(ident.get("company_name", "")))
+
+
+#: 頁尾短名要去掉的尾綴。**只有這幾種，不做更聰明的猜測。**
+_NAME_SUFFIXES = ("股份有限公司", "有限公司", "企業社", "工作室")
+
+
+def _short_name(name: str) -> str:
+    for suffix in _NAME_SUFFIXES:
+        if name.endswith(suffix):
+            return name[: -len(suffix)]
+    return name
+
+
 def _build_payslip_html(d: dict) -> str:
     def esc(s): return (s or '').replace('&','&amp;').replace('<','&lt;').replace('>','&gt;').replace('\n','<br>')
     def amt(n): return f"NT$ {int(n):,}" if n else "NT$ 0"
     def pct(r): return (f"{r*100:.2f}".rstrip('0').rstrip('.') + '%') if r else '0%'
 
+    # QL16：薪資單的抬頭**繼續讀開單時的快照**（`payslips.data_json`）。
+    #
+    # 判準是**這份單據有沒有已經交到外面的人手上**（A 2026-09-22 裁定）：
+    # 薪資單已經交給員工，員工可能拿去報稅或貸款
+    # => 重印**必須重現當初發出去的那一份**，公司改名搬家之後也一樣。
+    # QL10（讀即時值）套的是還在流程裡的案件文件 ——
+    # 匯款帳號要回答「**現在**該匯到哪」，而薪資單的抬頭回答的是
+    # 「**當初是誰付的**」。**那不是同一個問題。**
     company  = d.get('companyName', '')
     tax_id   = d.get('companyTaxId', '')
     contact  = d.get('companyContactInfo', '')
+
+    # QL17：舊薪資單的 `data_json` 根本**沒有**這三個欄位時怎麼辦。
+    #
+    # 三條路，A 明著排除了其中兩條：
+    #   X 安靜地用即時值補   => 一份看起來像正本、而抬頭是今天的文件。
+    #                          **它不會報錯，而它在說謊。**
+    #   X 直接拒絕重印       => 擋掉所有舊薪資單的合法重印，代價太大。
+    #   O 用即時值，**而且在文件上標明**
+    # 〈降級之後它還是會動〉：降級可以，**而降級必須看得見** ——
+    # 真正要擋的是「**安靜**」那兩個字，不是「即時值」。
+    _reprint_note = ''
+    if not (company or tax_id or contact):
+        _live = location_identity(None)      # QL8：人事文件沒有所屬據點 => 主要據點
+        company = _live.get('company_name', '')
+        tax_id = _live.get('tax_id', '')
+        contact = '｜'.join(
+            x for x in (_live.get('phone', ''), _live.get('email', '')) if x)
+        _reprint_note = (
+            '<div style="margin:6px 0 10px;padding:6px 10px;border:1px solid #999;'
+            'background:#F5F5F5;font-size:8.5pt;color:#333;line-height:1.6">'
+            '※ 本件甲方抬頭為<strong>現行</strong>公司資料，'
+            '非開單當時的紀錄（這份單據建立時未留存抬頭）。'
+            '</div>\n')
     cname    = d.get('contractorName', '')
     cid_no   = d.get('contractorIdNumber', '')
     cphone   = d.get('contractorPhone', '')
@@ -706,7 +871,7 @@ th{{background:#f0f0f0;font-weight:600;width:100px;white-space:nowrap}}
 </div>
 
 <div class="section-title">一、甲方（給付單位）</div>
-<table>
+{_reprint_note}<table>
   <tr><th>公司名稱</th><td colspan="3">{esc(company)}</td></tr>
   <tr><th>統一編號</th><td>{esc(tax_id)}</td>
       <th>聯絡資訊</th><td>{esc(contact)}</td></tr>
@@ -927,6 +1092,14 @@ def _generate_quotation_pdf(quote_no: str, actor: str = '', action_type: str = '
 # ── 出貨單 PDF ────────────────────────────────────────────────────────────────
 
 def _build_shipping_html(n: dict) -> str:
+    # 🔑 QL7：抬頭從**這一筆單據所屬的據點**取值，一支函式取一次。
+    # ⚠️ 取不到 `locationId` ⇒ `location_identity(None)` 落在主要據點，
+    #    那是既有安裝（只有一個據點、或根本沒設過）的正確行為。
+    # 📌 **讀即時值不做快照**（QL10，A 裁定）：匯款帳號要回答的是
+    #    「**現在**該匯到哪」——舊單據印出舊帳號，對方會照著匯到一個
+    #    已經關掉的帳戶。代價（改一次設定，歷史 PDF 重印都會變）
+    #    由列印時的稽核紀錄承擔，見 routers 那一側。
+    _ident = location_identity((n or {}).get('locationId'))
     def esc(s):
         return (s or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>')
 
@@ -1039,9 +1212,7 @@ def _build_shipping_html(n: dict) -> str:
         '<div class="accent-bar"></div>\n'
         '<div class="header">\n'
         '  <div>\n'
-        '    <div class="co-name">允碩整合集創股份有限公司</div>\n'
-        '    <div class="co-sub">MOTRIX Synergy Integration Corp.</div>\n'
-        '    <div class="co-sub" style="margin-top:4px">統一編號：60575481　｜　電話：04-3610-6566　｜　info@miactw.com</div>\n'
+        + _identity_head(_ident) +
         '  </div>\n'
         '  <div>\n'
         '    <div class="doc-title">出　貨　單</div>\n'
@@ -1094,7 +1265,7 @@ def _build_shipping_html(n: dict) -> str:
         '  </div>\n'
         '</div>\n'
         '<div class="footer">\n'
-        '  MOTRIX Synergy Integration Corp. 允碩整合集創 ｜ info@miactw.com ｜ Tel: 04-3610-6566 ｜ 統一編號: 60575481\n'
+        + _identity_foot(_ident) +
         '</div>\n'
         '</div>\n'
         '<script>\n'
@@ -1281,6 +1452,14 @@ def _voucher_sign_html(appr: dict) -> str:
 
 
 def _build_contractor_voucher_html(v: dict) -> str:
+    # 🔑 QL7：抬頭從**這一筆單據所屬的據點**取值，一支函式取一次。
+    # ⚠️ 取不到 `locationId` ⇒ `location_identity(None)` 落在主要據點，
+    #    那是既有安裝（只有一個據點、或根本沒設過）的正確行為。
+    # 📌 **讀即時值不做快照**（QL10，A 裁定）：匯款帳號要回答的是
+    #    「**現在**該匯到哪」——舊單據印出舊帳號，對方會照著匯到一個
+    #    已經關掉的帳戶。代價（改一次設定，歷史 PDF 重印都會變）
+    #    由列印時的稽核紀錄承擔，見 routers 那一側。
+    _ident = location_identity((v or {}).get('locationId'))
     def esc(s):
         return (s or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>')
     def money(n):
@@ -1411,9 +1590,8 @@ def _build_contractor_voucher_html(v: dict) -> str:
         '</style>\n</head>\n<body>\n<div id="root">\n'
         f'{watermark_html}\n'
         '<div class="accent-bar"></div>\n'
-        '<div class="header">\n  <div>\n    <div class="co-name">允碩整合集創股份有限公司</div>\n'
-        '    <div class="co-sub">MOTRIX Synergy Integration Corp.</div>\n'
-        '    <div class="co-sub" style="margin-top:4px">統一編號：60575481　｜　電話：04-3610-6566　｜　info@miactw.com</div>\n'
+        '<div class="header">\n  <div>\n'
+        + _identity_head(_ident) +
         '  </div>\n  <div>\n    <div class="doc-title">承攬商匯款申請</div>\n  </div>\n</div>\n'
         '<div class="meta">\n'
         f'  <div><span>申請單號：</span><strong style="font-family:Arial,sans-serif">{esc(v.get("voucherNo",""))}</strong></div>\n'
@@ -1459,7 +1637,9 @@ def _build_contractor_voucher_html(v: dict) -> str:
         f'    <div style="font-size:13px;font-weight:600;color:#0A0A0A;margin:2px 0 8px">{esc(applicant_name)}</div>\n'
         f'    <div class="sign-line"></div>\n    <div class="sign-date">申請日期：{esc(applicant_date) or "＿＿＿＿＿＿＿＿＿＿"}</div>\n  </div>\n'
         '</div>\n'
-        '<div class="footer">\n  MOTRIX Synergy Integration Corp. 允碩整合集創 ｜ info@miactw.com ｜ Tel: 04-3610-6566 ｜ 統一編號: 60575481\n</div>\n'
+        '<div class="footer">\n'
+        + _identity_foot(_ident) +
+        '</div>\n'
         '</div>\n'
         '<script>window.addEventListener("load",function(){var r=document.getElementById("root");if(!r)return;'
         'var A4H=Math.round(267/25.4*96);var h=r.scrollHeight;'
@@ -1630,6 +1810,14 @@ def _generate_contractor_voucher_pdf(voucher_no: str, actor: str = '', action_ty
 # ── 開票申請憑據 ──────────────────────────────────────────────────────────────
 
 def _build_invoice_voucher_html(v: dict) -> str:
+    # 🔑 QL7：抬頭從**這一筆單據所屬的據點**取值，一支函式取一次。
+    # ⚠️ 取不到 `locationId` ⇒ `location_identity(None)` 落在主要據點，
+    #    那是既有安裝（只有一個據點、或根本沒設過）的正確行為。
+    # 📌 **讀即時值不做快照**（QL10，A 裁定）：匯款帳號要回答的是
+    #    「**現在**該匯到哪」——舊單據印出舊帳號，對方會照著匯到一個
+    #    已經關掉的帳戶。代價（改一次設定，歷史 PDF 重印都會變）
+    #    由列印時的稽核紀錄承擔，見 routers 那一側。
+    _ident = location_identity((v or {}).get('locationId'))
     def esc(s):
         return (s or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>')
     def money(n):
@@ -1757,9 +1945,8 @@ def _build_invoice_voucher_html(v: dict) -> str:
         '</style>\n</head>\n<body>\n<div id="root">\n'
         f'{watermark_html}\n'
         '<div class="accent-bar"></div>\n'
-        '<div class="header">\n  <div>\n    <div class="co-name">允碩整合集創股份有限公司</div>\n'
-        '    <div class="co-sub">MOTRIX Synergy Integration Corp.</div>\n'
-        '    <div class="co-sub" style="margin-top:4px">統一編號：60575481　｜　電話：04-3610-6566　｜　info@miactw.com</div>\n'
+        '<div class="header">\n  <div>\n'
+        + _identity_head(_ident) +
         '  </div>\n  <div>\n    <div class="doc-title">開票申請憑據</div>\n  </div>\n</div>\n'
         '<div class="meta">\n'
         f'  <div><span>憑據單號：</span><strong style="font-family:Arial,sans-serif">{esc(v.get("voucherNo",""))}</strong></div>\n'
@@ -1791,7 +1978,9 @@ def _build_invoice_voucher_html(v: dict) -> str:
         f'    <div style="font-size:13px;font-weight:600;color:#0A0A0A;margin:2px 0 8px">{esc(applicant_name)}</div>\n'
         f'    <div class="sign-line"></div>\n    <div class="sign-date">申請日期：{esc(applicant_date) or "＿＿＿＿＿＿＿＿＿＿"}</div>\n  </div>\n'
         '</div>\n'
-        '<div class="footer">\n  MOTRIX Synergy Integration Corp. 允碩整合集創 ｜ info@miactw.com ｜ Tel: 04-3610-6566 ｜ 統一編號: 60575481\n</div>\n'
+        '<div class="footer">\n'
+        + _identity_foot(_ident) +
+        '</div>\n'
         '</div>\n'
         '<script>window.addEventListener("load",function(){var r=document.getElementById("root");if(!r)return;'
         'var A4H=Math.round(267/25.4*96);var h=r.scrollHeight;'
@@ -1929,6 +2118,14 @@ _PAYMENT_STAGE_LABELS = {
 
 
 def _build_payment_request_html(v: dict) -> str:
+    # 🔑 QL7：抬頭從**這一筆單據所屬的據點**取值，一支函式取一次。
+    # ⚠️ 取不到 `locationId` ⇒ `location_identity(None)` 落在主要據點，
+    #    那是既有安裝（只有一個據點、或根本沒設過）的正確行為。
+    # 📌 **讀即時值不做快照**（QL10，A 裁定）：匯款帳號要回答的是
+    #    「**現在**該匯到哪」——舊單據印出舊帳號，對方會照著匯到一個
+    #    已經關掉的帳戶。代價（改一次設定，歷史 PDF 重印都會變）
+    #    由列印時的稽核紀錄承擔，見 routers 那一側。
+    _ident = location_identity((v or {}).get('locationId'))
     def esc(s):
         return (s or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>')
     def money(n):
@@ -2003,12 +2200,16 @@ def _build_payment_request_html(v: dict) -> str:
     # 就是要匯款，比照大型企業/上市櫃公司請款單慣例把匯款帳戶放在明顯位置，
     # 不要埋在條款/簽核區塊後面才看到。company_profile 未填任何一個銀行欄位時
     # 整段不顯示（新裝機/尚未設定時不留一個空殼區塊）。
-    profile = _get_setting("company_profile", {}) or {}
+    # 🔴🔴 QL9：銀行欄位改讀**這一筆單據所屬的據點**，不是全公司唯一那一組。
+    # ☠️ 這是使用者要這個功能的原因：**分公司開的請款單不能印總公司的帳號** ——
+    #    而客戶會照著上面那串數字匯款。
+    # 📌 `location_identity()` 逐欄落空：分公司沒填銀行欄位就沿用主要據點的，
+    #    所以既有安裝（只有一個據點）行為完全不變。
     bank_rows = [
-        ('銀行名稱', profile.get('bank_name', '')),
-        ('分行名稱', profile.get('bank_branch', '')),
-        ('戶　　名', profile.get('bank_account_name', '')),
-        ('帳　　號', profile.get('bank_account_number', '')),
+        ('銀行名稱', _ident.get('bank_name', '')),
+        ('分行名稱', _ident.get('bank_branch', '')),
+        ('戶　　名', _ident.get('bank_account_name', '')),
+        ('帳　　號', _ident.get('bank_account_number', '')),
     ]
     bank_rows = [(label, val) for label, val in bank_rows if (val or '').strip()]
     bank_info_section = ''
@@ -2093,9 +2294,8 @@ def _build_payment_request_html(v: dict) -> str:
         '</style>\n</head>\n<body>\n<div id="root">\n'
         f'{watermark_html}\n'
         '<div class="accent-bar"></div>\n'
-        '<div class="header">\n  <div>\n    <div class="co-name">允碩整合集創股份有限公司</div>\n'
-        '    <div class="co-sub">MOTRIX Synergy Integration Corp.</div>\n'
-        '    <div class="co-sub" style="margin-top:4px">統一編號：60575481　｜　電話：04-3610-6566　｜　info@miactw.com</div>\n'
+        '<div class="header">\n  <div>\n'
+        + _identity_head(_ident) +
         '  </div>\n  <div>\n    <div class="doc-title">請款單</div>\n  </div>\n</div>\n'
         '<div class="meta">\n'
         f'  <div><span>請款單號：</span><strong style="font-family:Arial,sans-serif">{esc(v.get("requestNo",""))}</strong></div>\n'
@@ -2121,7 +2321,9 @@ def _build_payment_request_html(v: dict) -> str:
         f'{quote_items_html}'
         f'{bank_info_section}'
         f'{terms_section}\n'
-        '<div class="footer">\n  MOTRIX Synergy Integration Corp. 允碩整合集創 ｜ info@miactw.com ｜ Tel: 04-3610-6566 ｜ 統一編號: 60575481\n</div>\n'
+        '<div class="footer">\n'
+        + _identity_foot(_ident) +
+        '</div>\n'
         '</div>\n'
         '<script>window.addEventListener("load",function(){var r=document.getElementById("root");if(!r)return;'
         'var A4H=Math.round(267/25.4*96);var h=r.scrollHeight;'
@@ -2416,6 +2618,14 @@ def _case_closing_report_data(quote_no: str) -> dict:
 
 
 def _build_case_closing_html(data: dict) -> str:
+    # 🔑 QL7：抬頭從**這一筆單據所屬的據點**取值，一支函式取一次。
+    # ⚠️ 取不到 `locationId` ⇒ `location_identity(None)` 落在主要據點，
+    #    那是既有安裝（只有一個據點、或根本沒設過）的正確行為。
+    # 📌 **讀即時值不做快照**（QL10，A 裁定）：匯款帳號要回答的是
+    #    「**現在**該匯到哪」——舊單據印出舊帳號，對方會照著匯到一個
+    #    已經關掉的帳戶。代價（改一次設定，歷史 PDF 重印都會變）
+    #    由列印時的稽核紀錄承擔，見 routers 那一側。
+    _ident = location_identity((data or {}).get('locationId'))
     def esc(s):
         return (str(s) if s is not None else '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>')
 
@@ -2654,9 +2864,8 @@ def _build_case_closing_html(data: dict) -> str:
         'font-family:Arial,sans-serif;letter-spacing:.04em}\n'
         '</style>\n</head>\n<body>\n<div id="root">\n'
         '<div class="accent-bar"></div>\n'
-        '<div class="header">\n  <div>\n    <div class="co-name">允碩整合集創股份有限公司</div>\n'
-        '    <div class="co-sub">MOTRIX Synergy Integration Corp.</div>\n'
-        '    <div class="co-sub" style="margin-top:4px">統一編號：60575481　｜　電話：04-3610-6566　｜　info@miactw.com</div>\n'
+        '<div class="header">\n  <div>\n'
+        + _identity_head(_ident) +
         '  </div>\n  <div>\n    <div class="doc-title">案件結案報表</div>\n'
         f'    <div class="co-sub" style="text-align:right;margin-top:4px">產出時間：{gen_at}</div>\n  </div>\n</div>\n'
         '<div class="meta">\n'
@@ -2689,7 +2898,7 @@ def _build_case_closing_html(data: dict) -> str:
         '    <div class="sign-line"></div>\n    <div class="sign-date">覆核日期：＿＿＿＿＿＿＿＿＿＿</div>\n  </div>\n'
         '</div>\n'
         '<div class="footer">\n  本文件含案件內部財務與成本資訊，僅供內部留存查核使用，不對外提供 ｜ '
-        'MOTRIX Synergy Integration Corp. 允碩整合集創\n</div>\n'
+        + _identity_foot_short(_ident) +
         '</div>\n</body>\n</html>'
     )
 
@@ -2921,6 +3130,14 @@ def _project_execution_report_data(quote_no: str) -> dict:
 
 
 def _build_project_execution_report_html(data: dict) -> str:
+    # 🔑 QL7：抬頭從**這一筆單據所屬的據點**取值，一支函式取一次。
+    # ⚠️ 取不到 `locationId` ⇒ `location_identity(None)` 落在主要據點，
+    #    那是既有安裝（只有一個據點、或根本沒設過）的正確行為。
+    # 📌 **讀即時值不做快照**（QL10，A 裁定）：匯款帳號要回答的是
+    #    「**現在**該匯到哪」——舊單據印出舊帳號，對方會照著匯到一個
+    #    已經關掉的帳戶。代價（改一次設定，歷史 PDF 重印都會變）
+    #    由列印時的稽核紀錄承擔，見 routers 那一側。
+    _ident = location_identity((data or {}).get('locationId'))
     def esc(s):
         return (str(s) if s is not None else '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>')
 
@@ -3040,9 +3257,8 @@ def _build_project_execution_report_html(data: dict) -> str:
         'font-family:Arial,sans-serif;letter-spacing:.04em}\n'
         '</style>\n</head>\n<body>\n<div id="root">\n'
         '<div class="accent-bar"></div>\n'
-        '<div class="header">\n  <div>\n    <div class="co-name">允碩整合集創股份有限公司</div>\n'
-        '    <div class="co-sub">MOTRIX Synergy Integration Corp.</div>\n'
-        '    <div class="co-sub" style="margin-top:4px">統一編號：60575481　｜　電話：04-3610-6566　｜　info@miactw.com</div>\n'
+        '<div class="header">\n  <div>\n'
+        + _identity_head(_ident) +
         '  </div>\n  <div>\n    <div class="doc-title">專案執行報告</div>\n'
         f'    <div class="co-sub" style="text-align:right;margin-top:4px">產出時間：{gen_at}</div>\n  </div>\n</div>\n'
         '<div class="meta">\n'
@@ -3059,7 +3275,7 @@ def _build_project_execution_report_html(data: dict) -> str:
         f'{work_logs_section}\n'
         f'{feed_section}\n'
         '<div class="footer">\n  本文件彙整案件執行過程資訊，僅供內部留存查核使用 ｜ '
-        'MOTRIX Synergy Integration Corp. 允碩整合集創\n</div>\n'
+        + _identity_foot_short(_ident) +
         '</div>\n</body>\n</html>'
     )
 
@@ -3107,6 +3323,14 @@ def generate_project_execution_report_pdf_bytes(quote_no: str) -> bytes:
 # 忽略正是日後驗收爭議的來源。
 
 def _build_completion_html(n: dict) -> str:
+    # 🔑 QL7：抬頭從**這一筆單據所屬的據點**取值，一支函式取一次。
+    # ⚠️ 取不到 `locationId` ⇒ `location_identity(None)` 落在主要據點，
+    #    那是既有安裝（只有一個據點、或根本沒設過）的正確行為。
+    # 📌 **讀即時值不做快照**（QL10，A 裁定）：匯款帳號要回答的是
+    #    「**現在**該匯到哪」——舊單據印出舊帳號，對方會照著匯到一個
+    #    已經關掉的帳戶。代價（改一次設定，歷史 PDF 重印都會變）
+    #    由列印時的稽核紀錄承擔，見 routers 那一側。
+    _ident = location_identity((n or {}).get('locationId'))
     def esc(s):
         return (str(s) if s is not None else '').replace('&', '&amp;').replace('<', '&lt;') \
             .replace('>', '&gt;').replace('\n', '<br>')
@@ -3261,9 +3485,7 @@ def _build_completion_html(n: dict) -> str:
         '<div class="accent-bar"></div>\n'
         '<div class="header">\n'
         '  <div>\n'
-        '    <div class="co-name">允碩整合集創股份有限公司</div>\n'
-        '    <div class="co-sub">MOTRIX Synergy Integration Corp.</div>\n'
-        '    <div class="co-sub" style="margin-top:4px">統一編號：60575481　｜　電話：04-3610-6566　｜　info@miactw.com</div>\n'
+        + _identity_head(_ident) +
         '  </div>\n'
         '  <div>\n'
         '    <div class="doc-title">完　工　單</div>\n'
@@ -3325,7 +3547,7 @@ def _build_completion_html(n: dict) -> str:
         '  </div>\n'
         '</div>\n'
         '<div class="footer">\n'
-        '  MOTRIX Synergy Integration Corp. 允碩整合集創 ｜ info@miactw.com ｜ Tel: 04-3610-6566 ｜ 統一編號: 60575481\n'
+        + _identity_foot(_ident) +
         '</div>\n'
         '</div>\n'
         '<script>\n'

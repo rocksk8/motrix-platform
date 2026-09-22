@@ -765,6 +765,62 @@ def _save_location_seq(value):
     _set_setting(_LOCATION_SEQ_KEY, int(value))
 
 
+def _location_reference_counts(ids):
+    """這些據點各被幾張單據綁著。回 `{id: 張數}`，只回**大於 0** 的。
+
+    🔑 現在只有 `quotations.location_id` 一個引用點。
+    ⚠️ 日後多一張表綁據點時**要一起加進來** ——
+    ☠️ 漏掉的那一張表，它的單據會在使用者刪據點時安靜地換掉發票抬頭，
+       而 `QL11` 的守門會說「沒有人在用它」。
+    """
+    ids = [i for i in ids if i]
+    if not ids:
+        return {}
+    conn = get_db()
+    try:
+        placeholders = ",".join("?" for _ in ids)
+        rows = conn.execute(
+            "SELECT location_id, COUNT(*) AS c FROM quotations "
+            "WHERE location_id IN (%s) GROUP BY location_id" % placeholders,
+            ids).fetchall()
+    finally:
+        conn.close()
+    return {r["location_id"]: int(r["c"]) for r in rows if r["c"]}
+
+
+def _guard_removed_locations(new_list, previous):
+    """🔴🔴 QL11：**被引用的據點不可以刪掉。**
+
+    ⚠️ **不可以「刪了就自動退回主要據點」** ——
+    ☠️ 那會讓一批單據在**沒有人知道的情況下**換了發票抬頭，
+    🔑 而那種事不會報錯，它只會印在寄給客戶的紙上。
+
+    📌 判準是 **`id` 還在不在**，不是「這一筆有沒有變」（`QL12`）：
+    `id` 還在、`name` 變了 ⇒ 那是**改名，不是刪除**。
+    ☠️ 否則使用者改一個分公司的名字會被擋下來，而錯誤訊息會說
+       「有 N 張單據在用它」—— **那句話是對的，而它回答的不是使用者正在做的那件事。**
+    """
+    before = {str(x.get("id") or "") for x in (previous or []) if x.get("id")}
+    after = {str(x.get("id") or "") for x in (new_list or []) if x.get("id")}
+    removed = sorted(before - after)
+    if not removed:
+        return
+    counts = _location_reference_counts(removed)
+    if not counts:
+        return          # QL12 反向控制：沒有人引用 ⇒ 刪得掉
+    names = {str(x.get("id")): (x.get("name") or x.get("id"))
+             for x in (previous or [])}
+    detail = "、".join(
+        "「%s」有 %d 張報價單" % (names.get(k, k), n)
+        for k, n in sorted(counts.items()))
+    raise HTTPException(
+        422,
+        "這些據點還被單據引用，不能刪除：%s。"
+        "請先把那些單據改綁到別的據點，或保留這個據點。"
+        "（刪掉的話，那批單據會在沒有人發現的情況下換掉發票抬頭與匯款帳號。）"
+        % detail)
+
+
 def _clean_locations(raw, previous):
     """把送進來的 `locations` 驗過、配發 id、補座標。回新的清單。
 
@@ -1132,6 +1188,11 @@ def set_company_profile(body: CompanyProfile, authorization: str = Header(None))
         # 🔴 **驗證與配發 id 在寫入之前**（同 `_check_office_coord` 的理由：
         # 「回了錯誤碼」與「沒有存進去」是兩件事）。
         locations = _clean_locations(sent["locations"], cur.get("locations"))
+        # 🔴 QL11：**擋在寫入之前**（同 `_clean_locations` 的理由：
+        # 「回了錯誤碼」與「沒有存進去」是兩件事）。
+        # ⚠️ 也排在 `_fill_location_coords()` 之前 —— 那一支會對外查地址，
+        #    而一個注定要被擋下來的請求不該先去打 Nominatim。
+        _guard_removed_locations(locations, cur.get("locations"))
         _fill_location_coords(locations)
         sent["locations"] = locations
         # 🔴 **舊欄位由 `locations[0]` 導出，在這裡寫入。**

@@ -1032,7 +1032,17 @@ feedCount(key) {
           const r = await fetch(`${API}/dashboard/stats${qs}`, {
             headers: { Authorization: 'Bearer ' + this.session.token }
           })
-          if (r.ok) this.stats = await r.json()
+          // 🔴 **合併，不要整個覆蓋**（D 2026-09-22）。
+          // ☠️ 直接指派的話，回應少了哪個鍵，畫面就印
+          //    「我的待簽核 undefined 件」給使用者看 —— `:486`／`:487`
+          //    是直接字串相加，沒有任何防線。
+          // 🔑 而「回應少了某個鍵」最會發生的時刻是**部署後忘了重啟排程**：
+          //    前端是新的、後端還是舊的。DEPLOY.md 自己寫著那一步沒做的樣子是
+          //    「推送成功、服務正常、畫面正常」。
+          // 📌 補那兩個欄位是修結果；合併進既有預設值**同時處理所有欄位**，
+          //    而且日後新增欄位時不會再漏一次。這是同一個形狀的第二次
+          //    （第一次是 `4e3ebdb` 的側邊欄權限被不完整的 200 洗空）。
+          if (r.ok) this.stats = { ...this.stats, ...(await r.json()) }
         } catch {}
       },
 

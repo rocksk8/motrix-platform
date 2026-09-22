@@ -67,6 +67,10 @@ Write-Host "Project path:  $relPath （本次 git status／打包範圍只限這
 
 # --- Step 1: git 狀態必須乾淨（只看專案子目錄範圍） ---
 $dirty = git status --porcelain -- $relPath
+# RG19：記下「跑測試之前」的樣子，Step 3.1 會拿它來比對。
+# ⚠️ 用 `@()` 包起來：只有一列時 PowerShell 會給一個字串而不是陣列，
+# ☠️ 而 `-notin` 對字串是逐字元比對 —— 那會讓比對變成一個永遠成立的東西。
+$dirtyBefore = @($dirty)
 if ($dirty) {
     Write-Host "專案目錄（$relPath）內目前有未 commit 的變更：" -ForegroundColor Yellow
     Write-Host $dirty
@@ -302,6 +306,10 @@ $vsyncScript = Join-Path $projectRoot "backend\tools\check_version_sync.py"
 if (-not (Test-Path $vsyncScript)) {
     Fail "找不到 $vsyncScript —— VR7 的守門無法執行。這道檢查不會因為腳本不見就放行。"
 }
+# ⚠️ 第二道（第一道在 `check_version_sync.py` 裡自己 reconfigure stdout）。
+# ☠️ 這台機器的主控台預設是 cp932 ⇒ 中文輸出會丟 UnicodeEncodeError
+#    ⇒ 行程 exit 1 ⇒ **這裡會判成「守門沒過」，而它其實過了。**
+# 🔑 兩道都留：腳本會被人直接跑，而這裡也會有下一支中文輸出的腳本。
 $prevIoEnc3 = $env:PYTHONIOENCODING
 $env:PYTHONIOENCODING = "utf-8"
 try {
@@ -471,6 +479,35 @@ if ($testExit -ne 0) {
     Fail "測試未全數通過（exit code $testExit），中止打包。請先修好測試再重新執行本腳本。"
 }
 Write-Host "[OK] 非 e2e 測試全數通過。" -ForegroundColor Green
+
+# --- Step 3.1: 測試有沒有在工作樹留下東西（2026-09-22 新增，RG19）---
+# 【這道檢查在回答什麼】「除了我們已知的那幾個，還有沒有第八個？」
+#
+# 🔑 **這是行為證據，不是從常數推的。** 從 `db.py` 的常數清單推路徑答不了
+# 三件事：執行期才算出來的路徑、函式內的區域路徑變數、
+# 以及「跑全量到底會不會寫到別的地方」——而最後那一件正是這裡回答的。
+#
+# 📌 **成本是零**：打包流程本來就跑全量，這裡只多一次 `git status` 比對。
+#
+# ⚠️ 只**警告不擋**：測試留下的檔案不會進部署包（`git archive` 只匯出已追蹤
+# 內容），所以它不是這一包的品質問題。
+# ☠️ 而它是**下一次打包**的品質問題：Step 1 要求 git 狀態乾淨，
+#    所以今天多出來的未追蹤檔案，會讓下一個人的打包直接被擋，
+#    而他完全不知道那是上一次跑測試留下的。
+$dirtyAfter = @(git status --porcelain -- $relPath)
+$leaked = @($dirtyAfter | Where-Object { $_ -notin $dirtyBefore })
+if ($leaked.Count -gt 0) {
+    Write-Host "  [警告] 跑完測試之後，工作樹多出這些東西：" -ForegroundColor Yellow
+    $leaked | ForEach-Object { Write-Host "    $_" -ForegroundColor Yellow }
+    @'
+  ⇒ 它們不會進這一包（git archive 只匯出已追蹤內容），而它們會讓**下一次**
+    打包在 Step 1 被擋下，而那個人不會知道是上一次跑測試留下的。
+    處置：把路徑加進 .gitignore（同 backend/_demo_* 那一段的理由），
+    或讓那支測試自己清乾淨。
+'@ | ForEach-Object { Write-Host $_ -ForegroundColor Yellow }
+} else {
+    Write-Host "[OK] 跑完測試之後工作樹沒有多出任何東西。" -ForegroundColor Green
+}
 
 Write-Host "`n[測試] 執行 pytest（e2e，真實瀏覽器，失敗僅警告不中止打包）..."
 & $pyExe -m pytest -q -m "e2e" --basetemp="${pytestTemp}_e2e"

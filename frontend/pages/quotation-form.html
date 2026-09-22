@@ -1123,6 +1123,23 @@
             <label class="form-label">報價單號</label>
             <input class="form-input readonly" :value="q.quoteNo" readonly>
           </div>
+          <!-- QL13/QL14：據點選擇器。
+               這張單開出去之後，抬頭、統編、聯絡方式與**匯款帳號**都跟著它走
+               —— 分公司開的請款單不能印總公司的帳號。
+               QL14：`locations.length > 1` 才顯示。
+               一個只有一個選項的下拉選單，**是在問一個沒有選擇的問題**，
+               而既有安裝（只有一個據點、或根本沒設過）什麼都不會看到。 -->
+          <div class="form-group" x-show="locations.length > 1">
+            <label class="form-label">開立據點</label>
+            <select class="form-input" x-model="q.locationId" @change="setDirty">
+              <template x-for="loc in locations" :key="loc.id">
+                <option :value="loc.id" x-text="loc.name"></option>
+              </template>
+            </select>
+            <div style="font-size:11px;color:#888;margin-top:3px">
+              決定這張單印出來的抬頭、統編與匯款帳號。
+            </div>
+          </div>
           <div class="form-group">
             <label class="form-label">報價日期</label>
             <input class="form-input" type="date" x-model="q.quoteDate" @change="setDirty">
@@ -2263,8 +2280,15 @@
       _prevDealTag: '',
       _defaultPaymentTerms: DEFAULT_TERMS.paymentTerms,  // 送審前比對用；new-record 模式下會被 init() 換成後端目前設定的預設值
 
+      //: 公司資料裡的據點清單。空的時候選擇器不顯示（QL14）。
+      //  載不回來時留空陣列**不是留 null** —— `locations.length` 會在
+      //  null 上丟例外，而那會讓整張表單白掉。
+      locations: [],
+
       q: {
         quoteNo: '',
+        // QL13：這張單屬於哪一個據點。空字串 = 主要據點（既有安裝的行為）。
+        locationId: '',
         quoteDate: new Date().toISOString().slice(0,10),
         validDays: 30,
         version: 1,
@@ -2512,6 +2536,23 @@
         return html
       },
 
+      //: 讀公司資料裡的據點清單，給 QL13 的選擇器用。
+      //  讀不到就留空陣列 => 選擇器不顯示，表單其餘部分照常運作。
+      //  這一頁不是設定頁，它**不應該因為讀不到一個選填清單而壞掉**。
+      async loadLocations() {
+        try {
+          const r = await fetch(`${this.API}/settings/company-profile`, {
+            headers: { Authorization: 'Bearer ' + this.session.token } })
+          if (!r.ok) return
+          const d = await r.json()
+          this.locations = (d.locations || []).filter(l => l && l.id)
+          // 新單預設主要據點（locations[0]）；既有單不要覆蓋它自己的值。
+          if (!this.q.locationId && this.locations.length) {
+            this.q.locationId = this.locations[0].id
+          }
+        } catch (_e) { /* 讀不到就不顯示選擇器 */ }
+      },
+
       async apiSave(isNew) {
         // 一旦開始存檔，單號的權威就交給後端回應了：載入時那支非同步取號若在這之後
         // 才回來，一律不得再寫進 q.quoteNo（見 _peekQuoteNo()）。
@@ -2521,7 +2562,12 @@
         this._quoteNoFrozen = true
         const data = { ...this.q, tot: this.tot }
         if (!isNew) data._expectedUpdatedAt = this._lastUpdatedAt
-        const payload = { quote_no: this.q.quoteNo, status: this.q.status, data, created_by: this.session?.username }
+        // QL13：`locationId` 是**真的欄位**（`quotations.location_id`），
+        // 不是 `data_json` 裡的一個鍵 —— 日後營運報表要按據點分組，
+        // 而 `data_json` 查不動。所以它跟 `status` 一樣放在 payload 頂層。
+        const payload = { quote_no: this.q.quoteNo, status: this.q.status, data,
+                          locationId: this.q.locationId || '',
+                          created_by: this.session?.username }
         try {
           const method = isNew ? 'POST' : 'PUT'
           const url    = isNew ? `${this.API}/quotations` : `${this.API}/quotations/${this.q.quoteNo}`
@@ -3609,6 +3655,11 @@ window.addEventListener('load',function(){
         try {
           this.session = JSON.parse(s)
         } catch(e) { window.location.href = 'login.html'; return }
+
+        // QL13：據點清單。放在這裡而不是更後面，是因為新單要用 locations[0]
+        // 當預設值，而那要在既有單的資料載入**之前**決定 —— 否則會覆蓋掉
+        // 既有單自己的 locationId。
+        await this.loadLocations()
 
         // ── 帶入業務員資料（從後端 API 取最新顯示名稱），同時以回應結果判斷後端是否在線 ──
         try {

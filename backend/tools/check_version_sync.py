@@ -40,6 +40,24 @@ import sys
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _BACKEND = os.path.dirname(_HERE)
 
+# 🔴🔴 主控台編碼會把「過了」變成「沒過」（2026-09-22，A 在打包前手動跑才撞到）。
+#
+# 這支腳本的輸出是中文，而 Windows 主控台的預設編碼在這台機器上是 cp932
+# ⇒ `print()` 丟 `UnicodeEncodeError` ⇒ **行程以 exit 1 收場**。
+# ☠️ 而打包腳本 Step 2.52 只看 `$LASTEXITCODE`
+#    ⇒ 它會停在一句「版本紀錄反方向守門沒過」，**而實際上它過了**，
+#    🔑 然後下一個人會去查版本紀錄，那裡什麼問題都沒有。
+#
+# ⚠️ 修法**不可以是「改成印 ASCII」**：這道守門的價值有一半在它的失敗訊息。
+# ⚠️ 也不可以只在打包腳本那一側設 `PYTHONIOENCODING` —— 這支腳本會被人
+#    直接跑（A 與 D 今天都跑過），直接跑一樣會炸。
+# ⇒ **兩道都做**，而這一道在這裡：不管誰呼叫都不會因為主控台編碼而失敗。
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:       # noqa: BLE001 —— 舊版 Python 或被接管過的 stream
+        pass
+
 
 # 🔑 判準**只有一份**：`helpers/startup.py:drift_between()`。
 # ☠️ 這支腳本自己再寫一次比對的話，「守門說同步了」與「伺服器實際同步了」

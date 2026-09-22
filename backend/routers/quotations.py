@@ -1069,6 +1069,9 @@ def get_quotation(quote_no: str, authorization: str = Header(None)):
     result["signed_log"] = json.loads(result.get("signed_log") or "[]")
     result["signed_files"] = json.loads(result.pop("signed_files_json", None) or "[]")
     result["assigned_user_ids"] = json.loads(result.get("assigned_user_ids") or "[]")
+    # QL13：前端用 `locationId`，DB 欄位叫 `location_id`。
+    # 兩個都回：舊的呼叫端不會因此壞掉，而新的表單讀得到它。
+    result["locationId"] = result.get("location_id") or ""
     return result
 
 
@@ -1510,7 +1513,8 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
           status=?, customer_name=?, project_name=?,
           total=?, pretax=?, direct_margin_pct=?, net_margin_pct=?,
           sales_person=?, sales_person_id=?, quote_date=?, valid_days=?,
-          data_json=?, updated_at=?, deal_tag=?, settle_status=?
+          data_json=?, updated_at=?, deal_tag=?, settle_status=?,
+          location_id=COALESCE(?, location_id)
         WHERE quote_no=?
     """, (
         new_status,
@@ -1519,6 +1523,10 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
         tot.get("directMarginPct", 0), tot.get("netMarginPct", 0),
         q.get("salesPerson"), sp_id, q.get("quoteDate"), q.get("validDays", 30),
         json.dumps(q, ensure_ascii=False), now, deal_tag, settle_status,
+        # QL13：沒送 `locationId` 時傳 `None` => `COALESCE` 保持原值。
+        # 一個只改了金額的 PUT 不應該把這張單的據點清掉 —— 那會讓它的抬頭
+        # 與匯款帳號安靜地退回主要據點，而沒有任何地方會報錯。
+        (body.location_id or "").strip() or None,
         quote_no,
     ))
     # caseRecord.stages 正規化 Phase 3a（2026-08-23）：quotation-form.html::apiSave()
@@ -4720,7 +4728,10 @@ def download_quotation_pdf(quote_no: str, internal: bool = False, authorization:
     user = _require_user(authorization)
     conn = get_db()
     _guard_case(conn, quote_no, user, allow_approver=True)
-    row  = conn.execute("SELECT quote_no FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+    # 🔑 QL10：把 `location_id` 一起取出來 —— 列印的稽核要記得下這一次用了哪個據點。
+    row  = conn.execute(
+        "SELECT quote_no, location_id FROM quotations WHERE quote_no=?",
+        (quote_no,)).fetchone()
     conn.close()
     if not row:
         raise HTTPException(404, "報價單不存在")
@@ -4731,8 +4742,29 @@ def download_quotation_pdf(quote_no: str, internal: bool = False, authorization:
     except Exception as e:
         raise HTTPException(500, f"PDF 產生失敗：{e}")
     mode_label = "內部版" if internal else "對外版"
+    # 🔴🔴 QL10：**讀即時值不做快照**（A 裁定）—— 匯款帳號要回答的是
+    #    「**現在**該匯到哪」，舊單據印出舊帳號的話，對方會照著匯到一個
+    #    已經關掉的帳戶。
+    # ☠️ **而那個選擇有代價：改一次據點設定，所有歷史 PDF 重印時都會變。**
+    # 🔑 代價不假裝不存在，它變成**可追查**：這一行記下這次列印用的是哪一個
+    #    據點、以及當下那組值的抬頭與帳號。
+    # 📌 少了它，客戶拿著兩張同號不同帳號的單子來問，
+    #    **我們答不出哪一張是哪一天印的。**
+    _loc_id = (row["location_id"] or "") if "location_id" in row.keys() else ""
+    try:
+        from pdf_gen import location_identity
+        _ident = location_identity(_loc_id or None)
+    except Exception:       # noqa: BLE001 —— 稽核不可以讓下載失敗
+        _ident = {}
     _audit(_tok(authorization), "quotation.export_pdf", "quotation", quote_no,
-           f"{quote_no} {mode_label} PDF 下載", {"mode": "internal" if internal else "external", "via": "server"})
+           f"{quote_no} {mode_label} PDF 下載"
+           + (f"（據點 {_loc_id}）" if _loc_id else "（據點：主要據點）"),
+           {"mode": "internal" if internal else "external", "via": "server",
+            "locationId": _loc_id or None,
+            # ⚠️ 只記抬頭與帳號**末四碼** —— 完整帳號不進稽核紀錄。
+            #    要答的是「這張印的是哪一組」，不是「帳號是多少」。
+            "companyName": _ident.get("company_name") or None,
+            "bankAccountLast4": (_ident.get("bank_account_number") or "")[-4:] or None})
     fname = f"{quote_no}_內部.pdf" if internal else f"{quote_no}.pdf"
     encoded = urlquote(fname)
     return Response(

@@ -152,6 +152,28 @@ function app() {
     },
 
     // 點一列回到既有的五頁籤詳情頁——矩陣是它的上層索引，不是取代它
+    //: 據點 id -> 名字。**只有一個據點（或讀不到）時回空字串**，
+    //  那一行就不顯示 —— 一個永遠一樣的標籤不是資訊，它只是佔位置。
+    //  QL15：多據點之後兩個分公司的案子混在同一張表裡，而「這是誰的案子」
+    //  是使用者每天都要問的第一個問題。
+    locations: [],
+    locationName(id) {
+      if (!id || !this.locations || this.locations.length < 2) return ''
+      const hit = this.locations.find(l => l && l.id === id)
+      return hit ? (hit.name || '') : ''
+    },
+
+    //: 讀公司資料裡的據點清單。讀不到就留空 => 那一行不顯示，其餘照常。
+    async loadLocations() {
+      try {
+        const r = await fetch(`${this.API}/settings/company-profile`, {
+          headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (!r.ok) return
+        const d = await r.json()
+        this.locations = (d.locations || []).filter(l => l && l.id)
+      } catch (_e) { /* 讀不到就不顯示據點 */ }
+    },
+
     async openFromMatrix(quoteNo) {
       this.caseViewMode = 'list'
       await this.selectCase(quoteNo)
@@ -1052,6 +1074,9 @@ function app() {
 
     async init() {
       this._initTabFromUrl()
+      // QL15：據點清單。不 await —— 它只決定一行小字要不要顯示，
+      // 而這一頁的主體（案件矩陣）不應該等它。
+      this.loadLocations()
       // Alpine 3 會自動呼叫資料物件上的 init()，而 case-management.html 的
       // <body> 又寫了一次 x-init="init()"，所以整個 init() 每次開頁都跑兩遍：
       // 所有 API 都發兩次，並且第二次 selectCase() 會把第一次已經載好的狀態

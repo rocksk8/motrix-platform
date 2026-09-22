@@ -704,6 +704,10 @@
                   <div class="cm-mtx__no" x-text="row.quoteNo"></div>
                   <div class="cm-mtx__cust"
                        x-text="(row.customerName || '(未填客戶)') + (row.projectName ? '　|　' + row.projectName : '')"></div>
+                  <!-- QL15：這個案子是哪個據點的。只有一個據點時不顯示。 -->
+                  <div x-show="locationName(row.locationId)"
+                       style="font-size:10.5px;color:var(--text-dim);margin-top:2px"
+                       x-text="'據點：' + locationName(row.locationId)"></div>
                 </td>
                 <td class="cm-mtx__amt" x-text="canSeeFinancial() ? (row.total||0).toLocaleString() : '—'"></td>
                 <td>
