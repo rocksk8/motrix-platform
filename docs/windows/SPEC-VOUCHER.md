@@ -152,7 +152,10 @@ BEGIN SELECT RAISE(ABORT, '此科目已被傳票引用，不可刪除'); END;
 > `account_code` 已宣告 `REFERENCES`，而 SQLite 的外鍵強制**隨時可能是關的**：
 > `db.py:151` 的 `PRAGMA foreign_keys=ON` **包在 `try/except: pass` 裡**，
 > 而 `db.py:230` 的 demo 重置路徑**明著關掉它**。
-> ⇒ **這兩支 TRIGGER 防的是「FK 被關掉的那一條路」，不是「SQLite 不強制」。**
+> 🔴 **而上面兩行是不準的—— C 實測：裸的 `sqlite3.connect()` 預設就是 `FK=0`。**
+> ⇒ 那不是「兩個例外」，是**任何一條沒走 `db._connect()` 的路，FK 本來就是關的**。
+> ⇒ ⇒ **這兩支 TRIGGER 防的是預設值，不是兩個特例—— 所以它們永遠不會「不再需要」。**
+> ⚠️ 兩行舊描述留著（〈更正要留著錯的那一列〉）：把**預設值**寫成**特例**，會讓下一個人以為「那兩條路修好就不用 TRIGGER 了」。
 ⚙️ 正對照：對 `source='custom'` 且**未被引用**的科目改 code ⇒ **必須成功**。
 
 ---
