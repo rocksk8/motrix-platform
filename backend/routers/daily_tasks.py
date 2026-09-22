@@ -1740,41 +1740,6 @@ REMINDER_FIRST_STAGES = (1, 3, 5)
 REMINDER_STEP_AFTER = 5
 
 
-def reminder_stage(days):
-    """第 N 個工作日要寄哪一階，或 `None`（不寄）。
-
-    `1 → "d1"`、`3 → "d3"`、`5 → "d5"`、`10 → "d10"`、`15 → "d15"`…
-    **其餘一律 `None`。**
-
-    ## ☠️ 這裡取代的是什麼
-    ```python
-    if   days_elapsed >= 5:  _fire(True,  f"5d.{today_str}")   ← 鍵含日期
-    elif days_elapsed >= 3:  _fire(True,  "3d")
-    else:                    _fire(False, "1d")
-    ```
-    第 5 天之後 dedup 鍵每天都是新的 ⇒ **每天一封**。
-    一筆卡 20 個工作日的單子會寄 **1 + 1 + 16 = 18 封**。
-
-    ## 📌 為什麼是具名純函式
-    原本這段邏輯是迴圈裡的三個 `if`，**沒有任何辦法單獨問它**
-    「第 7 天會不會寄」。〈決定邏輯抽純函式才測得到「換一種設定」〉。
-
-    ⚠️ 第 0 天與負數的判斷**留在這裡**，不是只留在呼叫端 ——
-    搬到呼叫端的話，那道防線就搬到了一個沒有人看的地方。
-    """
-    try:
-        days = int(days)
-    except (TypeError, ValueError):
-        return None
-    if days < 1:
-        return None
-    if days in REMINDER_FIRST_STAGES:
-        return f"d{days}"
-    if days > REMINDER_FIRST_STAGES[-1] and days % REMINDER_STEP_AFTER == 0:
-        return f"d{days}"
-    return None
-
-
 def reminder_stages_at_or_below(days):
     """所有**不超過** `days` 的階段，由小到大。
 

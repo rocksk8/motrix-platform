@@ -609,21 +609,6 @@ def _nearest_location(coord, located):
     return best if best else (None, None)
 
 
-def _manual_coord(profile):
-    """人工填的辦公室座標。兩個都要有才算數。
-
-    ⚠️ **只填一個 ⇒ 當成沒填。** 一個只有緯度的座標不是「一半的位置」，
-    它是一個在赤道或本初子午線上的錯誤位置——而那會畫在地圖上，看起來很正常。
-    """
-    lat, lon = profile.get("office_lat"), profile.get("office_lon")
-    if lat is None or lon is None:
-        return None
-    try:
-        return (float(lat), float(lon))
-    except (TypeError, ValueError):
-        return None
-
-
 #: 一次 `/api/map/points` 最多花多少**秒**在「還沒查過的地址」上。
 #:
 #: ## 🔴 為什麼需要預算

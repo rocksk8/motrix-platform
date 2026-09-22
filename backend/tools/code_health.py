@@ -73,9 +73,59 @@ for name, where in sorted(defined.items()):
         dead.append('%s:%d  %s' % (rel, ln, name))
 
 # --- 對照組 ---
-ctrl_pos = [d for d in dead if 'reminder_stage' in d]      # D 實證的死碼，應該亮
-ctrl_neg = [d for d in dead if 'locate_cached' in d or 'warm_geocode_cache' in d
-            or 'is_enabled' in d]   # is_enabled 是改名匯入的，v2 曾誤報  # 活的，不可以亮
+#
+# 正向對照組原本指向 reminder_stage —— 一個【真的】死碼。
+# 2026-09-22 那支被刪掉之後，這個對照組就永遠不會再亮
+# ⇒ 工具每次都印「tool broken」，而工具其實是好的。
+#
+# 一個「以真實缺陷為對照組」的工具，在缺陷被修好的那一刻自己壞掉
+# —— 修好問題把偵測器關掉了。
+#
+# ⇒ 改成【合成的】來源：它活在這支工具自己肚子裡，
+#   不會被誰修掉，也不需要在 repo 裡留一支沒有人用的函式當樣本。
+_CTRL_SRC = '''
+def _ctrl_dead_one():
+    return 1
+
+
+def _ctrl_live_one():
+    return 2
+
+
+def _ctrl_caller():
+    return _ctrl_live_one()
+
+
+# 模組層的呼叫 —— 讓 _ctrl_caller 自己也被引用到。
+# 少了這一行，_ctrl_caller 在這段合成來源裡【本身就是死的】，
+# 而負向對照組會亮 —— 那不是工具壞了，是我的樣本寫錯了。
+# 對照組的樣本也要有人驗，而驗它的就是對照組自己。
+_ctrl_result = _ctrl_caller()
+'''
+
+
+def _dead_in(source):
+    """對一段來源跑同一套判準，回「零引用的模組層函式」。"""
+    t = ast.parse(source)
+    names = [n.name for n in t.body
+             if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+             and not n.decorator_list]
+    used = collections.Counter()
+    for n in ast.walk(t):
+        if isinstance(n, ast.Name):
+            used[n.id] += 1
+        elif isinstance(n, ast.Attribute):
+            used[n.attr] += 1
+    return [x for x in names if used[x] == 0]
+
+
+_ctrl_synth = _dead_in(_CTRL_SRC)
+# 正向：合成的死碼要被抓到；負向：合成的活碼不可以被抓到
+ctrl_pos = ['_ctrl_dead_one'] if '_ctrl_dead_one' in _ctrl_synth else []
+ctrl_neg = [x for x in ('_ctrl_live_one', '_ctrl_caller') if x in _ctrl_synth]
+# 真實碼那一側的負向對照：活著的東西不可以被列進 dead
+ctrl_neg += [d for d in dead if 'locate_cached' in d or 'warm_geocode_cache' in d
+             or 'is_enabled' in d]   # is_enabled 是改名匯入的，v2 曾誤報
 
 # ═══ 2. 未使用的 import（排除 __init__.py 的再匯出）═══
 unused = []
@@ -138,8 +188,8 @@ print('=' * 72)
 
 print()
 print('-- CONTROLS (a tool must light the known one before reporting "no others")')
-print('   positive  reminder_stage (D proved dead) : %s' % ('LIT' if ctrl_pos else 'NOT LIT  <-- tool broken'))
-print('   negative  locate_cached/warm_geocode     : %s' % ('CLEAN' if not ctrl_neg else 'FALSE POSITIVE'))
+print('   positive  synthetic dead function        : %s' % ('LIT' if ctrl_pos else 'NOT LIT  <-- tool broken'))
+print('   negative  synthetic live + real live      : %s' % ('CLEAN' if not ctrl_neg else 'FALSE POSITIVE: %s' % ctrl_neg))
 
 print()
 print('-- dead module-level functions (undecorated, 0 refs repo-wide): %d' % len(dead))

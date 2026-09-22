@@ -159,59 +159,6 @@ def geocode(address: str):
 _CACHE: dict = {}
 
 
-def geocode_cached(address: str):
-    """`geocode` 加一層快取。**同一個地址第二次不再發出請求。**
-
-    🔴 **快取必須在 `geocode` 外面**（也就是這裡），不可以寫進 `geocode` 裡面。
-    測試是 monkeypatch `geo.geocode` 來數呼叫次數的——快取若在被換掉的那個
-    函式裡，**patch 之後快取就一起被換掉了，而那一題會安靜地失效。**
-
-    📌 這裡呼叫的是**模組層的 `geocode`**（全域查找，呼叫當下才解析），
-    所以 monkeypatch 打得到。
-    """
-    address = (address or "").strip()
-    if not address:
-        return None, "沒有地址"
-    if address in _CACHE:
-        return _CACHE[address]
-    coord, err, _info = _unpack_geocode(geocode(address))
-    if coord is not None:
-        _CACHE[address] = (coord, None)
-    return coord, err
-
-
-# ── 圖磚是否被封鎖 ───────────────────────────────────────────────────────────
-#
-# ☠️ **失敗偽裝成了成功。** OSM 封鎖一個 IP 的方式是：
-#     HTTP 200 OK ＋ `x-blocked` 標頭 ＋ 一張畫著「Access blocked」的 PNG
-# ⇒ 瀏覽器**不會**觸發 error 事件（狀態碼是 200），
-#   而圖磚是 `<img>` 載的 ⇒ **JavaScript 讀不到回應標頭**
-# ⇒ **前端沒有任何辦法自己發現這件事。**
-#
-# 🔑 這比「地圖上沒有點」那一族嚴重一級：那些是「**沒有東西**」，
-#    這個是「**有東西，而且是錯的**」——使用者看到的是一張看起來正常運作的地圖。
-# ⇒ 所以要由**後端**去探一次（後端讀得到標頭），把結果當成第七個訊號送給畫面。
-TILE_PROBE_URL = "https://tile.openstreetmap.org/5/26/13.png"
-#: ⚠️ 探測是在**使用者等著看畫面**的請求裡做的 ⇒ 不可以讓他等。
-TILE_PROBE_TIMEOUT_SECONDS = 3
-#: 探測結果快取多久。⚠️ 每開一次畫面探一次的話，**我們自己就是在濫用對方的服務**
-#: ——而那正是會被封鎖的原因。
-TILE_PROBE_CACHE_SECONDS = 3600
-#: **「不知道」也要快取，但很短。**
-#:
-#: 🔴 原本探測失敗時完全不快取，理由是
-#: 「一次網路抖動不該讓這個訊號整整一小時說『不知道』」——**而那只看了一端**：
-#: ☠️ 如果對方持續不可達，**每一次開地圖都會重探、每一次都等 3 秒**。
-#: 🔑 「為了一個附加訊號讓主要功能變慢」最糟的組合就是這個：**壞掉的時候最慢。**
-#: ⇒ 60 秒同時滿足兩端：抖動 60 秒後就重試，而持續壞掉也不會每次都罰 3 秒。
-#: ⚠️ **必須短於 `TILE_PROBE_CACHE_SECONDS`** ——
-#: 兩個都設 3600 的話就退回「抖動被記一小時」，也就是這個修正的反面。
-TILE_PROBE_UNKNOWN_CACHE_SECONDS = 60
-
-#: `(判定, 時間戳)`；`None` ＝ 還沒探過。
-_TILE_PROBE_CACHE = None
-
-
 def tiles_blocked():
     """**這台伺服器**拿不拿得到圖磚。三態：`True` / `False` / `None`。
 
