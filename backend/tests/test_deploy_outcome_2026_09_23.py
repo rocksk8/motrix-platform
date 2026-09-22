@@ -1802,42 +1802,58 @@ def test_rp2_rp3_restoring_is_set_before_the_first_restore_write(ps1):
 # §53e · `describe_rolled_back` 的兩個 fail-open
 # ══════════════════════════════════════════════════════════════════════
 
-def test_53e_an_unrecognised_action_is_named_not_guessed():
-    """🔴 §53e：**沒見過的 `action` 要明著說「認不得」，不可以靜默退回 `deploy` 的文案。**
+def test_56_an_unrecognised_action_blows_up_because_that_one_is_our_bug():
+    """🔴 §56：**沒見過的 `action` ⇒ 拋錯。**（`§53e` 的第二版，A 第三次更正同一支函式）
 
-    B 實跑的並排（它自己回報的）：
+    分界是**誰錯了**：
     ```
-    action='rollback'   → 還原沒有開始，正式機維持在你按回滾之前的樣子。   ✅
-    action='rollback '  → **正式機沒有被碰過。**                            🔴
-    action='Rollback'   → **正式機沒有被碰過。**                            🔴
-    action=None         → **正式機沒有被碰過。**                            🔴
+    action 不認得  **程式錯誤** —— 它由我們自己的碼從一個封閉集合寫入   ⇒ 拋錯
+    value  不認得  **資料錯誤** —— 正式機送上來的                      ⇒ 顯示 ＋ 記告警
     ```
-    ☠️ 逐字就是 `§41a` 要防的那句話：**畫面說「正式機沒有被碰過」，
-       而它剛剛才被一次失敗的部署動過。**
+    🔑 `§51b` 的 fail-safe 保護的是「**對面送來的東西**不可以弄垮我們的畫面」，
+       它**不保護**「我們自己傳錯參數」—— 那種要**盡早大聲地壞掉**。
 
-    ⚠️ **這裡不拋錯**（`§51b` 的分工，A 裁）：
+    ⚠️ **這一題的 v1 釘的是相反的方向，那一列留著**：
     ```
-    判定側  decide_outcome        fail-closed（拋錯／判失敗）
-    呈現側  describe_rolled_back  fail-safe（明著標，不可以爆、不可以猜）
+    v1（§53e）  不可以拋錯，要回「動作無法辨識（%s）」
+                依據：A 在 §54 明著寫「A-2 建議的 raise 那一半我不採」
+    v2（§56）   要拋錯
+                依據：A 自己更正 —— 分界不是「哪一側」，是「誰錯了」
     ```
-    🔑 而這個分工的**理由要寫在碼裡** —— 否則後人看到的是
-       「同一支檔案，一個拋錯一個不拋」，然後把它「統一」掉。
+    ☠️ 而 v1 我是**刻意**寫成 `try/except … pytest.fail` 的，理由是
+       「少了它，B 若改成 raise，這一題會以 ERROR 收場而訊息指向例外不是裁示」。
+    🔑 **那個理由現在反過來替 v2 服務** —— 形狀沒變，期望的方向變了。
+    📌 可記的一條：**一題「不可以做 X」的守門，在裁示翻面時不會自己翻面，
+       而它會用一個看起來很有道理的訊息擋住正確的實作。**
+
+    ⚙️ 正對照：`deploy`／`rollback` **不可以**拋 —— 少了它，
+       「函式第一行就 raise」會讓上面全綠，而畫面永遠是壞的。
     """
     describe = _need("describe_rolled_back")
-    good = describe("not_applied", "deploy")
 
     for action in ("rollback ", "Rollback", "restore", "", None):
-        got = describe("not_applied", action)
-        assert got != good, (
-            "`action=%r` 靜默退回了 `deploy` 的文案：%r\n"
-            "☠️ 畫面會說「正式機沒有被碰過」，"
-            "而它可能剛剛才被一次失敗的部署動過（§41a 逐字）。\n"
-            "🔑 認不得就說認不得 —— 不可以猜一個看起來很正常的答案。"
-            % (action, got))
-        assert str(action) in got, (
-            "`action=%r` 的文案沒有把那個值說出來：%r\n"
-            "🔑 排錯的人拿到的第一份線索就是這句話"
-            "（與 B 對沒見過的 `value` 的處理同一個形狀）。" % (action, got))
+        try:
+            got = describe("not_applied", action)
+        except Exception as exc:                      # noqa: BLE001 —— 型別由 B 定
+            assert str(action) in str(exc), (
+                "`action=%r` 有拋錯，而訊息裡沒有那個值：%s" % (action, exc)
+                + chr(10) + "🔑 排錯的人拿到的第一份線索就是這句話。")
+        else:
+            pytest.fail(
+                "`describe_rolled_back(action=%r)` **回傳了** %r 而沒有拋錯。" % (
+                    action, got)
+                + chr(10) +
+                "☠️ 原本的缺陷是**靜默退回 `deploy` 的文案**（畫面說「正式機沒有被碰過」，"
+                "而它可能剛剛才被一次失敗的部署動過）——那一半已經修掉了。" + chr(10) +
+                "⚠️ 而回一句**具名的**話仍然不夠：`§56` 要的是拋錯。" + chr(10) +
+                "🔑 §56：`action` 由**我們自己的碼**從封閉集合寫入 ⇒ "
+                "傳錯是**程式錯誤** ⇒ 要盡早大聲地壞掉，不是顯示一句話。")
+
+    # ⚙️ 正對照 —— 少了它，「第一行就 raise」會讓上面全綠。
+    for action in ("deploy", "rollback"):
+        text = describe("not_applied", action)
+        assert isinstance(text, str) and text.strip(), (
+            "`action=%r` 是合法的，而它拿不到文案。" % action)
 
 
 def test_53e_restoring_does_not_borrow_a_sentence_that_means_the_opposite():
