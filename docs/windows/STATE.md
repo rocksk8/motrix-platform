@@ -30490,3 +30490,72 @@ SPEC-VOUCHER DDL  只有 posted_at／voided_at ⇒ **沒有審核日期欄**
 ⚠️ 而它**不可信**——我在那一跑進行中改了 `SCOPE.md`
   （〈凍結是一段期間不是一個瞬間〉）⇒ 打包前要重跑。
 ✅ 可用的部分：**除了閘門那一題，2150 全綠**，那是接線工作的基準。
+
+---
+
+## §160 傳票端點路徑**定案** ＋ A-2 的缺口清單
+
+> A 裁定。C 的紅燈在等這個——路徑沒定案，紅燈對不上實作。
+
+### 🔴 端點路徑（**這是定案，不要再發明**）
+```
+POST   /api/vouchers                          建立草稿          JV1
+GET    /api/vouchers                          清單              JV1
+GET    /api/vouchers/{voucher_id}             單筆              ✅ 已存在
+PUT    /api/vouchers/{voucher_id}             改草稿            ✅ 已存在
+POST   /api/vouchers/{voucher_id}/submit      送審              JV2
+POST   /api/vouchers/{voucher_id}/approve     簽核通過          JV2
+POST   /api/vouchers/{voucher_id}/send-back   退回（**升版**）  JV2
+POST   /api/vouchers/{voucher_id}/post        過帳              JV2
+POST   /api/vouchers/{voucher_id}/void        作廢              JV2
+GET    /api/vouchers/{voucher_id}/pdf-download  PDF（含附件合併）JV5
+POST   /api/vouchers/{voucher_id}/attachments   附件上傳        JV3
+DELETE /api/vouchers/{voucher_id}/attachments/{file_id}          JV3
+GET    /api/vouchers/summary-sources          摘要可帶入的來源  JV7
+```
+📌 **命名依據**：與既有 `contractor-vouchers` 同風格（`/submit`／`/approve`）。
+⚠️ 退回用 **`/send-back`** 不用 `/reject`——傳票的退回會**升版**成 `-Rn`，
+  與既有那幾張單的「駁回」語意不同，同名會讓人以為行為一樣。
+⚠️ 過帳用 **`/post`**（C 的紅燈已試探這個名字，對得上）。
+
+### 🔴 A-2 的缺口清單（全部實查）—— 最上面那一條比六項都大
+```
+grep "INSERT INTO vouchers_all"  產品碼  =>  **0**
+```
+🔑 ⇒ **整個模組生不出第一張傳票。**
+  現有的 `GET`／`PUT` 操作的那些列**在正式機不可能存在**。
+
+**為什麼沒有任何測試抓到**
+```
+8 支傳票測試檔，client.post/get/put 呼叫數
+  test_journal_voucher_create   有 API ✅（C 今天的紅燈）
+  其餘 7 支                      **全部 0**（約 89k/112k 位元組）
+  test_module_history            用 raw SQL 自己 INSERT 進 vouchers_all
+```
+🔑 **這就是 8/10 規則沒有呼叫端的成因：測試直接叫 helper，繞過 router。**
+☠️ ⇒ 規則全綠，而**沒有一條路走得到它們**。
+
+**逐項**
+```
+JV1 🟡 紅燈已就位（C，22.8k），端點 0 支      ⇒ B 直接可動
+JV2 🔴 端點 0、**紅燈 0**（狀態機那支打 0 API）⇒ 路徑已由本節定案
+JV3 🔴 **連資料表都沒有**（v95 五張表無附件表；uploads.py voucher 命中 0）
+       ⚠️ 且既有附件規格要求「刪除要簽核＋快照保留」「附件進每日備份」
+       ⇒ 這不是加個欄位，是一條完整的鏈 ⇒ **要新 migration**
+JV4 🟡 頁面與側欄入口在，而 voucher.js **不打 /api/vouchers**（自承骨架）
+JV5 🔴 0。⚠️ **同名陷阱**：pdf_gen.py 有 63 個 "voucher"，逐個查證
+       全部是 contractor_payment_vouchers／invoice_vouchers ⇒ **與會計傳票無關**
+JV6 🟡 欄位齊備（source_type／source_id／source_amount_snapshot＋索引）
+       寫入端 0 ⇒ 缺的是**產生器**不是 schema
+```
+⚠️ A-2 明著標的射程：`INSERT` 那一掃只掃 `backend/**.py` 排除 `tests/`，
+  抓不到 ORM 或字串組裝的寫入（**而本 repo 全走 raw SQL**，可接受）。
+✗ PDF 逐欄位比對 A-2 仍未做——**A 已自己做完**（`§158b`），兩邊不要重複。
+
+### ⇒ 施工順序（相依決定的，不是偏好）
+```
+1) JV1  B 動工 —— 紅燈唯一已就位的一項
+2) JV2  C 先補紅燈（路徑照本節），再給 B
+3) JV3  要新 migration ⇒ **動 db.py 前照規矩宣告**
+4) JV6 / JV7 / JV5  相依 JV1-JV3
+```
