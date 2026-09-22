@@ -105,7 +105,9 @@ DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR = os.path.join(
 #      —— 一個可為 NULL 的時間戳兼任旗標，判定一律 `marked_at IS NOT NULL`。
 # v93: account_items 表 ＋ 兩個 TRIGGER（法定項目在**資料層**唯讀，FN1 §69）
 # v94: 載入 547 筆法定會計項目（靜態檔，**不呼叫解析器**）
-CURRENT_VERSION = 94
+# v95: 傳票五張表（vouchers／voucher_lines／voucher_edit_log／
+#      voucher_templates／voucher_template_versions）＋ 索引 ＋ 兩支 TRIGGER
+CURRENT_VERSION = 95
 
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
 # execution model) whenever the current request is authenticated as the 'demo'
@@ -332,6 +334,29 @@ DEMO_CLEARED_TABLES = frozenset((
     "t100_export_confirmations", "tender_fetch_log", "tender_hits",
     "tender_watches", "tenders", "user_activity_daily", "user_list_prefs",
     "user_request_log", "users", "vendor_contractors",
+    # ── v95 傳票五張（`SPEC-VOUCHER §八`）──────────────────────────
+    #
+    # 🔑 五張**都是使用者資料**，整張清 —— 傳票是 demo 使用者自己開的單。
+    # ⚠️ 對照 `account_items`：那一張走 `DEMO_FILTERED_CLEARS`（只清 custom），
+    #    因為法定 547 筆是**系統資料**。傳票這邊沒有對應的「法定列」。
+    #
+    # ⚙️ **與 v95 那兩支 TRIGGER 的互動（寫在這裡，否則下一個人會重推一次）**：
+    # ```
+    # TRIGGER 擋的是「account_items 的某個 code 還被 voucher_lines 引用時，
+    #                 不准改那個 code／不准刪那一列」
+    # 而重置時 voucher_lines **整張清空** => 引用全部消失
+    # => 接著清 account_items 的 custom 列時，TRIGGER 的 WHEN EXISTS 為假
+    # => **不會擋**
+    # ```
+    # 🔑 所以順序上沒有問題，**而它是靠「voucher_lines 在這份清單裡」成立的** ——
+    # ☠️ 哪天有人把 voucher_lines 移去 `DEMO_FILTERED_CLEARS`（只清一部分），
+    #    殘留的引用會讓 demo 重置**清不掉某些 custom 科目，而且會丟例外**。
+    # ⚠️ 這裡列的是 `vouchers_all`（**實表**）不是 `vouchers`（VIEW）——
+    #    守門對 `sqlite_master WHERE type='table'` 做笛卡兒積，**VIEW 不在裡面**，
+    #    ☠️ 而把 VIEW 寫進來會變成「清單裡有一張不存在的表」⇒ 反向控制會紅。
+    # 🔑 而清除也必須打實表：`DELETE FROM vouchers` 對 VIEW 會直接 OperationalError。
+    "voucher_edit_log", "voucher_lines", "voucher_template_versions",
+    "voucher_templates", "vouchers_all",
     "webauthn_credentials", "work_logs",
 ))
 
@@ -4248,6 +4273,219 @@ def _m094_load_account_items(conn):
              it.get("name_en", ""), it["parent_code"]))
 
 
+def _m095_vouchers(conn):
+    """v95（2026-09-23）：傳票五張表 ＋ 索引 ＋ 兩支 TRIGGER。
+
+    規格：`docs/windows/SPEC-VOUCHER.md`（施工圖）`§二`／`§七`。
+    第一行逐字：`🔴 **這一份是施工圖：單一版本、無修訂層。照這一份做。**`
+    ⚠️ **不要照 `SPEC-VOUCHER-HISTORY.md`** —— 它的 DDL 是被推翻的那一版。
+
+    ## ⚙️ 前置實查（施工圖 `§七` 要求，2026-09-23 實跑）
+
+    ```
+    backend/motrix_erp.db        schema_version=92   傳票五張表：都不存在
+    backend/motrix_erp_demo.db   schema_version=92   傳票五張表：都不存在
+    ```
+    ⇒ 沒有任何一個持久化 .db 已經有這些表 ⇒ **可以是新的一支，不必改既有的**。
+
+    ## 🔴 範本拆兩張表，不是一張
+
+    `AUTOINCREMENT` 只能用在**單一** `INTEGER PRIMARY KEY`，
+    而 `(id, version)` 複合主鍵下 id 無法自動產生
+    ⇒ `voucher_templates` 管 id（穩定）／`voucher_template_versions` 管歷史
+       （每次編輯**新增一列，不覆蓋**）。
+
+    ## 🔴 兩支 TRIGGER 防的是「FK 被關掉的那一條路」
+
+    `voucher_lines.account_code` 已經宣告 `REFERENCES account_items(code)`，
+    **而 SQLite 的外鍵強制隨時可能是關的**：
+    ```
+    db.py `PRAGMA foreign_keys=ON`  包在 try/except 裡  => 失敗會靜默
+    demo 重置路徑                    **明著關掉它**
+    ```
+    ⇒ 光靠 `REFERENCES` 擋不住「改掉一個已被引用的科目代號」。
+    ☠️ 而那個後果很安靜：`voucher_lines.account_code` 指向一個**不存在的代號**
+       ⇒ 傳票印出來那一行是空白的科目名稱，**而它不報錯**。
+    ⚠️ **它們不是「以防萬一」** —— 上面那兩條是實際存在的路徑，
+       所以這段註解要留著，否則日後會有人**正當地**把它們當成多餘的東西刪掉。
+    """
+    # ══════════════════════════════════════════════════════════
+    # 🔴 實表叫 `vouchers_all`，而 `vouchers` 是**只露出未作廢的 VIEW**
+    # ══════════════════════════════════════════════════════════════
+    #
+    # ## 成因：`status` 被兩個問題共用
+    # ```
+    # 「走到流程哪裡」  => status（草稿／待審核／…／已過帳）
+    # 「現在算不算數」  => **voided_at**
+    # ```
+    # 一張已過帳的傳票被作廢之後，`status` **仍然是「已過帳」**
+    # （會計上正確：作廢不是把過帳收回去，帳上看得到那一次作廢）
+    # ☠️ ⇒ 「本月已過帳的傳票」這個查詢**包含已作廢的那些** ⇒ **金額重複計算**。
+    # 🔑 而失敗的樣子是**一個偏大的數字，不是一個錯誤** ⇒ 沒有人會報修它。
+    # ⚠️ 而作廢＋重開是使用者裁定的**正常流程**，不是邊緣情境 ⇒ 它一定會發生。
+    #
+    # ## ⇒ 讓「預設查到的就是有效的」
+    # ```
+    # SELECT ... FROM vouchers      => 自動排除作廢單（絕大多數查詢要的）
+    # SELECT ... FROM vouchers_all  => **明著寫才查得到全部**（稽核／寫入）
+    # ```
+    #
+    # ## ✅ VIEW 不可寫入，而那是**優點**
+    # ```
+    # INSERT INTO vouchers / UPDATE vouchers  ->  OperationalError（當場炸）
+    # ```
+    # ⇒ 寫錯會**當場報錯**，不會安靜地做錯事。
+    # 🔴 **不要為它加 `INSTEAD OF` trigger 去繞過** —— 那會把這個優點拆掉。
+    #
+    # ## ☠️ 而缺陷沒有消失，它**換了形狀**
+    # ```
+    # 舊：忘記加 WHERE voided_at = ''   => 多算
+    # 新：**打錯表名**寫成 vouchers_all  => 🔴 不報錯，而它包含作廢單 => 一樣多算
+    # ```
+    # ⇒ 所以**每一處 `vouchers_all` 都要有一行註解說明「為什麼要查全部」**
+    #    （C 的守門會檢查，而它配了反向控制）。
+    #
+    # ## ☠️☠️ `CREATE TABLE IF NOT EXISTS vouchers` 撞到同名 VIEW ⇒ **靜默**
+    # 實跑（sqlite 3.53.1）：
+    # ```
+    # CREATE TABLE IF NOT EXISTS vouchers(...)  -> **OK，不報錯，而表沒有被建**
+    #   之後 sqlite_master.type 仍是 'view'     <= **零訊息**
+    # CREATE TABLE vouchers(...)（無 IF NOT EXISTS） -> OperationalError ✅
+    # DROP TABLE vouchers ／ INSERT ／ UPDATE        -> OperationalError ✅
+    # ```
+    # 🔑 **五種寫法裡只有一種是靜默的，而它正好是 `init_db()` 全檔在用的那一種。**
+    # ⚠️ ⇒ 日後有人很自然地寫 `CREATE TABLE IF NOT EXISTS vouchers`
+    #    （邏輯實體本來就叫 vouchers）⇒ 表沒被建 ⇒ 寫入失敗、讀出來是過濾過的，
+    #    **而症狀離成因很遠**。守門：型別檢查（`vouchers` 必須是 view）。
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS vouchers_all ("
+        "  id                      INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "  voucher_no              TEXT    NOT NULL,"          # YYYYMMDD-NNN[-Rn]
+        # 🔴 可編輯，**僅草稿**，預設建檔當天（使用者 2026-09-23 改裁）。
+        # ☠️ 做成「隨時可改」的後果：一張已過帳的傳票被改掉日期 ⇒
+        #    **它換了一個會計期間，而帳上那一筆沒有跟著動。**
+        "  voucher_date            TEXT    NOT NULL,"
+        "  category                TEXT    NOT NULL DEFAULT '轉',"   # 沿用 T100
+        "  summary                 TEXT    NOT NULL DEFAULT '',"
+        "  status                  TEXT    NOT NULL DEFAULT '草稿',"
+        "  created_by              TEXT    NOT NULL,"          # 製票（版面三格之一）
+        "  posted_at               TEXT    NOT NULL DEFAULT '',"
+        "  posted_by               TEXT    NOT NULL DEFAULT '',"
+        "  posted_with_warning     INTEGER NOT NULL DEFAULT 0,"
+        # 🔑 存**當時警示的內容**，不只是一個旗標：
+        #    旗標只說「有警示」，而事後沒有人回得出「那時警示的是什麼」。
+        "  posted_warning_snapshot TEXT    NOT NULL DEFAULT '',"
+        "  voided_at               TEXT    NOT NULL DEFAULT '',"
+        "  voided_by               TEXT    NOT NULL DEFAULT '',"
+        "  void_reason             TEXT    NOT NULL DEFAULT '',"
+        "  supersedes_no           TEXT    NOT NULL DEFAULT '',"  # 本張取代了哪一張
+        "  ledger_confirmed        INTEGER NOT NULL DEFAULT 0,"   # 0 ⇒ 進首頁未確認計數
+        "  custom_fields           TEXT    NOT NULL DEFAULT '{}',"  # 只在草稿可新增
+        "  created_at              TEXT    NOT NULL,"
+        "  updated_at              TEXT    NOT NULL"
+        ")")
+    # ⚠️ 索引一律建在**實表**上 —— VIEW 沒有自己的索引。
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_vouchers_no"
+                 " ON vouchers_all(voucher_no)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_vouchers_status"
+                 " ON vouchers_all(status)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_vouchers_date"
+                 " ON vouchers_all(voucher_date)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_vouchers_ledger"
+                 " ON vouchers_all(ledger_confirmed)")
+    # 🔑 `voided_at` 也要索引：VIEW 的 `WHERE voided_at = ''` 每一次查詢都會用到它。
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_vouchers_voided"
+                 " ON vouchers_all(voided_at)")
+
+    # 🔴 VIEW 本身。`IF NOT EXISTS` 在這裡是安全的（同名實表存在時會報錯，
+    #    不是靜默）—— 靜默的那一種是 `CREATE TABLE IF NOT EXISTS` 撞 VIEW。
+    conn.execute(
+        "CREATE VIEW IF NOT EXISTS vouchers AS"
+        " SELECT * FROM vouchers_all WHERE voided_at = ''")
+
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS voucher_lines ("
+        "  id                       INTEGER PRIMARY KEY AUTOINCREMENT,"
+        # 🔴 指向**實表** `vouchers_all`，不是 VIEW —— 外鍵指到 VIEW 建不起來。
+        # 📌 而語意上也該如此：作廢單的分錄**必須留著**（稽核要看得到）。
+        "  voucher_id               INTEGER NOT NULL REFERENCES vouchers_all(id),"
+        "  line_no                  INTEGER NOT NULL,"
+        "  account_code             TEXT    NOT NULL REFERENCES account_items(code),"
+        # 🔑 **過帳時凍結**：版面要印科目名稱，而科目名稱日後可能被改。
+        "  account_name_snapshot    TEXT    NOT NULL DEFAULT '',"
+        "  summary                  TEXT    NOT NULL DEFAULT '',"   # 產生當下凍結
+        "  summary_template_id      INTEGER NOT NULL DEFAULT 0,"    # 追溯：哪個範本
+        "  summary_template_version INTEGER NOT NULL DEFAULT 0,"    # 追溯：哪一版
+        "  debit                    INTEGER NOT NULL DEFAULT 0,"    # 兩欄式，沿用 T100
+        "  credit                   INTEGER NOT NULL DEFAULT 0,"    # 其中一欄為 0
+        "  dept_code                TEXT    NOT NULL DEFAULT '',"
+        "  source_type              TEXT    NOT NULL DEFAULT '',"   # 決定性連結：型別
+        "  source_id                INTEGER NOT NULL DEFAULT 0,"    # 決定性連結：主鍵
+        # 帶入當時的來源金額 ⇒ 日後比對「來源單據被改了沒」的基準。
+        "  source_amount_snapshot   INTEGER NOT NULL DEFAULT 0,"
+        "  counterparty             TEXT    NOT NULL DEFAULT ''"
+        ")")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_vlines_voucher"
+                 " ON voucher_lines(voucher_id, line_no)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_vlines_account"
+                 " ON voucher_lines(account_code)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_vlines_source"
+                 " ON voucher_lines(source_type, source_id)")
+
+    # ⚠️ `DEFAULT '[]'` **擋不住空紀錄** —— 一筆 `changes_json='[]'` 的留痕
+    #    看起來像「有記錄」，而它什麼都沒說。
+    # ⇒ 「缺改前值就寫入失敗」必須在**應用層**擋（施工圖 `§2.3`）。
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS voucher_edit_log ("
+        "  id           INTEGER PRIMARY KEY AUTOINCREMENT,"
+        # 🔴 同上：指實表。作廢單的異動紀錄是稽核的一部分。
+        "  voucher_id   INTEGER NOT NULL REFERENCES vouchers_all(id),"
+        "  changed_by   TEXT    NOT NULL,"
+        "  changed_at   TEXT    NOT NULL,"
+        "  changes_json TEXT    NOT NULL DEFAULT '[]'"          # 改前 → 改後
+        ")")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_vel_voucher"
+                 " ON voucher_edit_log(voucher_id, changed_at)")
+
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS voucher_templates ("
+        "  id          INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "  name        TEXT    NOT NULL,"
+        "  created_by  TEXT    NOT NULL,"
+        "  created_at  TEXT    NOT NULL"
+        ")")
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS voucher_template_versions ("
+        "  template_id INTEGER NOT NULL REFERENCES voucher_templates(id),"
+        "  version     INTEGER NOT NULL,"
+        "  body        TEXT    NOT NULL,"
+        "  edited_by   TEXT    NOT NULL,"
+        "  edited_at   TEXT    NOT NULL,"
+        "  is_current  INTEGER NOT NULL DEFAULT 1,"
+        "  PRIMARY KEY (template_id, version)"
+        ")")
+
+    # ── 兩支 TRIGGER（建在 `account_items` 上）────────────────────
+    #
+    # ⚙️ 正對照（施工圖 `§2.5`）：對 `source='custom'` 且**未被引用**的科目
+    #    改 code ⇒ **必須成功**。少了這個方向，「全部都擋住」也會讓上半綠，
+    #    ☠️ 而那會讓使用者連自己加的、沒有人用的科目都改不動。
+    conn.execute(
+        "CREATE TRIGGER IF NOT EXISTS account_items_referenced_code_no_update"
+        " BEFORE UPDATE OF code ON account_items"
+        " WHEN EXISTS (SELECT 1 FROM voucher_lines WHERE account_code = OLD.code)"
+        " BEGIN"
+        "   SELECT RAISE(ABORT, '此科目已被傳票引用，代號不可修改');"
+        " END")
+    conn.execute(
+        "CREATE TRIGGER IF NOT EXISTS account_items_referenced_no_delete"
+        " BEFORE DELETE ON account_items"
+        " WHEN EXISTS (SELECT 1 FROM voucher_lines WHERE account_code = OLD.code)"
+        " BEGIN"
+        "   SELECT RAISE(ABORT, '此科目已被傳票引用，不可刪除');"
+        " END")
+
+
 _MIGRATIONS = [
     _m001_export_columns,        # v1
     _m002_sessions_expires,      # v2
@@ -4343,6 +4581,7 @@ _MIGRATIONS = [
     _m092_tender_mark,                              # v92
     _m093_account_items,                            # v93
     _m094_load_account_items,                       # v94
+    _m095_vouchers,                                 # v95
 ]
 
 

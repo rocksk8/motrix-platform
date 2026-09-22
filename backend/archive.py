@@ -1528,6 +1528,38 @@ def _daily_backup_tables() -> dict:
         "地理查詢用量":     "SELECT * FROM geocode_usage ORDER BY id",
         "通知":             "SELECT * FROM notifications ORDER BY id",
         "模組版本":         "SELECT * FROM module_versions ORDER BY id",
+        # ── 會計項目（v93，2026-09-23 補）────────────────────────────
+        #
+        # 🔑 **整張備份，不要只備 `source != 'statutory'` 的那幾列。**
+        # 表面上法定那 547 筆長得像「選型資料庫」那一類（由 migration 產生、
+        # 來源 `data/account_items_112.json` 在 git 裡 ⇒ 可重建 ⇒ 不必備份），
+        # ☠️ **而那個類比在還原的那一刻會害人**：
+        # ```
+        # 只備自訂  => 災難還原時有人打開「會計項目.json」，看到 3 筆
+        #             => 他會以為科目表壞了／備份漏了
+        # ```
+        # 📌 而代價只是每天多抄 547 列靜態資料 —— **位元組很便宜，
+        #    在還原現場誤判「資料沒了」很貴。**
+        # ⚙️ 兩者分得出來：`source` 欄位是 `statutory` / `custom`。
+        "會計項目":         "SELECT * FROM account_items ORDER BY code",  # 無 id 欄
+        # ── 傳票（v95，2026-09-23）──────────────────────────────────
+        #
+        # 🔴 這五張是**會計憑證本身**，不是軌跡：掉了就是帳掉了。
+        # ⚠️ `voucher_edit_log` 看起來像「紀錄類」（audit_log 那一群），**而它不是**：
+        #    施工圖 `§2.3` 要求「改過傳票日期要留改前→改後」，那是**憑證的一部分**，
+        #    ☠️ 少了它，一張傳票**看起來完全正常**，而沒有人回得出它被改過什麼。
+        # 📌 `voucher_template_versions` 同理：摘要凍結時存了
+        #    `summary_template_id` ＋ `version`，**指向的那一版不見了就追不回來**。
+        # 🔴 **`vouchers_all` 不是筆誤**：`vouchers` 是只露出未作廢的 VIEW，
+        #    備份它等於**把已作廢的傳票排除在備份之外**。
+        # ☠️ 而作廢單正是最需要留存的那一種（稽核要看得到「這一張作廢過」），
+        #    ⇒ 用 VIEW 備份的話，還原之後**那些單會整個消失，而帳面看起來很正常**。
+        "傳票":             "SELECT * FROM vouchers_all ORDER BY id",
+        "傳票分錄":         "SELECT * FROM voucher_lines ORDER BY voucher_id, line_no",
+        "傳票異動":         "SELECT * FROM voucher_edit_log ORDER BY id",
+        "傳票範本":         "SELECT * FROM voucher_templates ORDER BY id",
+        "傳票範本版本":     ("SELECT * FROM voucher_template_versions"
+                             " ORDER BY template_id, version"),  # 無 id 欄
     }
 
 
