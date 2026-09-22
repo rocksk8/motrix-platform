@@ -220,6 +220,29 @@ def test_a_legacy_settlement_without_net_profit_is_refused_and_says_the_way_out(
           "**而那樣一張獎金單都開不出來**。")
 
 
+def test_a_net_profit_of_exactly_zero_is_not_reported_as_legacy_data():
+    """🔴 **`netProfit` 是 `0` 與「沒有 `netProfit` 這個鍵」是兩件事。**
+
+    ☠️ 用 `or` 合併的話：
+    ```
+    淨利真的是 0 的案子  => 收到「請重新開啟並儲存一次該案的精算」
+    他照做 => **還是 0、訊息還是一樣** => 他會以為系統壞了
+    ```
+    🔑 〈null 不等於 0〉：「沒有值」與「值是零」在這裡的**處置完全相反** ——
+       一個要他去補資料，另一個要告訴他「這一案沒有可分潤的淨利」。
+    📌 **這一格是 B 主動加的**（我原本沒釘）—— 而我把它釘起來，
+       是因為下一個改這段的人不會知道那個 `or` 為什麼不能寫。
+    """
+    where, mod = _module()
+    fn = _seam(mod, where, "base_amount_for", "resolve_base", "_base_amount")
+    _ok, _base, err = _tri(fn({"summary": {"grossProfit": 1000, "netProfit": 0}}))
+    assert "重新" not in str(err), (
+        "淨利是 `0` 的案子收到舊格式訊息：%r\n" % (err,)
+        + "☠️ 他照著「重新儲存精算」做完 ⇒ **還是 0、訊息還是一樣**"
+          " ⇒ 他會以為系統壞了。\n"
+        + "🔑 「沒有這個鍵」與「值是 0」要分開判（`is None`，不是 `or`）。")
+
+
 def _tri(out):
     """回傳形狀沒定版 ⇒ `(ok, base, err)` / `(base, err)` / 例外，都收。"""
     if isinstance(out, tuple) and len(out) == 3:
@@ -390,8 +413,13 @@ def test_a_bonus_item_without_a_person_source_cannot_be_saved(fresh_db):
     have = {r[0] for r in fresh_db.execute(
         "SELECT name FROM sqlite_master WHERE type='table'")}
     assert "bonus_items" in have, "`bonus_items` 不存在 —— migration 還沒有。"
-    cols = {r[1]: r for r in
-            ((c[1], c) for c in fresh_db.execute("PRAGMA table_info(bonus_items)"))}
+    # 🔴 **我第一版多包了一層**（B 抓到）：內層產生器吐 `(欄位名, Row)`，
+    #    外層的 `r[1]` 就變成 `Row` ⇒ **鍵是 Row 不是字串**
+    #    ⇒ `"person_source" in cols` 恆為 False ⇒ 斷言觸發
+    #    ⇒ 而訊息那一行要 `sorted(cols)` ⇒ `TypeError: Row 不能比大小`
+    # ☠️ ⇒ 它紅在**訊息那一行**，而訊息說「`bonus_items` 沒有 `person_source`」——
+    #    **一句錯的話，而它聽起來像量出來的**（與我 ⑤ 那次「v95 還沒有」同形）。
+    cols = {c[1]: c for c in fresh_db.execute("PRAGMA table_info(bonus_items)")}
     assert "person_source" in cols, (
         "`bonus_items` 沒有 `person_source`。現有：%s" % sorted(cols))
     notnull = cols["person_source"][3]
@@ -466,15 +494,41 @@ def test_the_payable_account_code_is_not_hardcoded():
     用法定科目   => 日後要拆出來＝新增一個科目 ＋ 改設定
     用自訂科目而會計師說不行 => **已開出的傳票都指向一個不該存在的科目**
     ```
-    ⚙️ 而這道絆線剝掉註解與字串才比對 —— 註解裡寫「預設 2191」不算寫死。
+    # 🔴 **B 2026-09-23 指出我第一版守錯了對象**
+    # ```
+    # 我第一版  絆線找字面值 `"2191"`，而它**剝掉字串**才比對
+    #           => 一個 `PAYABLE = "2191"` 然後到處用 `PAYABLE` 的實作，**一個字都看不到**
+    #           => 而那正是「寫死」最常見的長相
+    # ⚠️ 而 B 差一點為了躲這道守門，把 `"2191"` 寫成 `"2" "191"` 字串拼接
+    #    —— 一段清楚的碼被寫成不清楚的，**而那道守門本來就看不到它**
+    # ```
+    # 🔑 ⇒ 改成守**機制**：科目代號必須**走設定**（`get_setting` 那條路），
+    #    常數只能當 fallback。那樣兩種長相都分得出來。
     """
     where, mod = _module()
-    src = _strip_py_comments(Path(mod.__file__).read_text(encoding="utf-8"))
-    hits = [(i, l.strip()[:70]) for i, l in enumerate(src.splitlines(), 1)
-            if re.search(r"""["']2191["']""", l)]
-    assert not hits, (
-        "`%s` 裡把科目代號寫死了：\n  " % Path(mod.__file__).name
-        + "\n  ".join("%d: %s" % h for h in hits)
-        + "\n☠️ 那個科目**還沒有決定**（會計師三題之一）——\n"
-          "   寫死的話，改的時候要改的是程式碼而不是一個設定值。\n"
-        + "✅ 存進設定，預設值放在設定的預設裡。")
+    path = Path(mod.__file__)
+    src = path.read_text(encoding="utf-8")
+    code = _strip_py_comments(src)
+
+    fn = getattr(mod, "payable_account_code", None)
+    assert callable(fn), (
+        "`%s` 沒有 `payable_account_code()` ——\n" % where
+        + "⚠️ 名字可以換（**退回給我**），而科目代號要**從一支函式取得**：\n"
+          "   散在各處的話，改設定要改的是程式碼。")
+
+    assert re.search(r"get_setting|_setting\(|settings\.", code), (
+        "`%s` 沒有任何一處走設定（找過 `get_setting` …）——\n" % path.name
+        + "☠️ 那表示科目代號是寫死的，而那個科目**還沒有決定**"
+          "（會計師三題之一）。\n"
+        + "✅ 存進設定，**常數只能當 fallback**。\n"
+        + "📌 而這一題釘的是**機制不是字面值**：守字面值的話，"
+          "`PAYABLE = \"2191\"` 再到處用 `PAYABLE` 會一個字都看不到 ——"
+          "而那正是「寫死」最常見的長相。（B 2026-09-23 指出）")
+
+    # ⚙️ 而字面值出現在**回傳路徑上**（不是 fallback）仍然要紅。
+    bad = [(i, l.strip()[:70]) for i, l in enumerate(code.splitlines(), 1)
+           if re.search(r"""return\s+["']2191["']""", l)]
+    assert not bad, (
+        "`%s` 直接 `return \"2191\"`：\n  " % path.name
+        + "\n  ".join("%d: %s" % h for h in bad)
+        + "\n☠️ 那不是 fallback，那是寫死。")
