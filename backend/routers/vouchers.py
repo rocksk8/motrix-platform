@@ -28,6 +28,7 @@ from helpers.edit_log import append_edit_log, MissingOldValue
 from helpers.voucher import (
     EDITABLE_STATUSES, can_edit, describe_balance, get_voucher,
     next_voucher_no, post_voucher, can_send_back, next_revision_no,
+    diff_lines,
 )
 
 router = APIRouter(prefix="/api/vouchers", tags=["vouchers"])
@@ -450,17 +451,57 @@ def update_voucher(voucher_id: int, body: dict = Body(...),
             changes.append({"field": field, "from": old, "to": new})
             updates[field] = new
 
-        if not changes:
-            # ⚙️ 反向控制的那一格：沒有改動就什麼都不做，**包括不寫紀錄**。
+        # 🔴 **分錄：`lines` 有帶才動它，沒帶就一個字都不碰。**
+        #
+        # ☠️ 最自然的實作是「刪掉舊的 -> 重寫新的」，而**沒帶 `lines` 的 PUT
+        #    若照樣走刪除那一步，分錄會全沒** —— 那比「存不進去」更糟：
+        #    單子還在、狀態還是草稿，**只是內容空了**，而且不報錯。
+        # 🔑 ⇒ 判斷用 `"lines" in body`（鍵在不在），**不用值的真假**：
+        #    送 `lines: []` 是「把分錄清空」，與「沒提到分錄」是兩件事。
+        line_changes = []
+        new_lines = None
+        if "lines" in body:
+            new_lines = body.get("lines") or []
+            old_lines = [dict(r) for r in conn.execute(
+                "SELECT * FROM voucher_lines WHERE voucher_id = ?"
+                " ORDER BY line_no", (voucher_id,))]
+            # 📌 逐行 diff（`§103e`）—— 整包記一筆的話，同一張被退兩次
+            #    **看不出來第二次改了什麼**，而那在財務上不可接受。
+            line_changes = diff_lines(old_lines, new_lines)
+
+        # ⚙️ 反向控制的那一格：沒有改動就什麼都不做，**包括不寫紀錄**。
+        #    ⚠️ 而「沒有改動」現在要把分錄一起算進來 ——
+        #    ☠️ 只看 `changes` 的話，一次「只改了分錄」的儲存會在這裡
+        #       提早 return，而分錄**根本沒被寫進去**。
+        if not changes and not line_changes:
             return {"ok": True, "changed": 0}
 
         now = datetime.now().isoformat()
-        sets = ", ".join("%s = ?" % f for f in updates)
-        conn.execute(
-            "UPDATE vouchers_all SET %s, updated_at = ? WHERE id = ?" % sets,
-            list(updates.values()) + [now, voucher_id])
+        if updates:
+            sets = ", ".join("%s = ?" % f for f in updates)
+            conn.execute(
+                "UPDATE vouchers_all SET %s, updated_at = ? WHERE id = ?" % sets,
+                list(updates.values()) + [now, voucher_id])
+        else:
+            conn.execute("UPDATE vouchers_all SET updated_at = ? WHERE id = ?",
+                         (now, voucher_id))
+        if new_lines is not None:
+            # ⚠️ 重寫整組（刪舊寫新）—— 而它只在 `lines` 有帶的時候才發生。
+            #    🔑 行號在這裡**重新編**：它是位置不是身分，
+            #       而 `diff_lines()` 刻意不比對它（整行搬動不算改動）。
+            conn.execute("DELETE FROM voucher_lines WHERE voucher_id = ?",
+                         (voucher_id,))
+            for n, ln in enumerate(new_lines, start=1):
+                conn.execute(
+                    "INSERT INTO voucher_lines (voucher_id, line_no,"
+                    " account_code, summary, debit, credit)"
+                    " VALUES (?,?,?,?,?,?)",
+                    (voucher_id, n, (ln.get("account_code") or ""),
+                     (ln.get("summary") or ""),
+                     int(ln.get("debit") or 0), int(ln.get("credit") or 0)))
         try:
-            append_edit_log(conn, voucher_id, _user_name(user), changes,
+            append_edit_log(conn, voucher_id, _user_name(user),
+                            changes + line_changes,
                             table="voucher_edit_log", changed_at=now)
         except MissingOldValue as exc:
             # 🔑 規則擋下來 ⇒ **整筆退回**，不要留下「改了而沒有紀錄」的狀態。
@@ -472,5 +513,6 @@ def update_voucher(voucher_id: int, body: dict = Body(...),
 
     _audit(_tok(authorization), "voucher.update", "vouchers",
            str(voucher_id),
-           "修改傳票：%s" % "／".join(c["field"] for c in changes))
-    return {"ok": True, "changed": len(changes)}
+           "修改傳票：%s"
+           % "／".join(c["field"] for c in (changes + line_changes)))
+    return {"ok": True, "changed": len(changes) + len(line_changes)}

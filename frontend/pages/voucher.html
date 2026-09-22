@@ -24,6 +24,8 @@
     .vc-head label{color:var(--text-secondary);margin-right:6px}
     .vc-no{font-family:var(--font-mono,monospace);font-weight:700;color:var(--text-primary)}
     .vc-status{font-size:12px;padding:2px 10px;border-radius:9px;background:#F0EEE9;color:var(--text-secondary)}
+    .vc-status.posted{background:#EFF6FF;color:#1D4ED8}
+    .vc-status.voided{background:#FEF2F2;color:#B91C1C}
     .vc-input{padding:5px 9px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:var(--font-zh)}
 
     table.vc-lines{width:100%;border-collapse:collapse;font-size:13px}
@@ -36,6 +38,7 @@
     .vc-total td{font-weight:700;background:#FAF9F6}
     .vc-total .label{text-align:center;letter-spacing:6px}
     .vc-diff{color:#B91C1C;font-weight:700}
+    .vc-del{border:none;background:transparent;color:#B91C1C;cursor:pointer;font-size:13px;padding:0 4px}
 
     .vc-note{margin-top:16px;font-size:13px}
     .vc-note textarea{width:100%;min-height:52px;padding:7px 9px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:var(--font-zh);box-sizing:border-box}
@@ -46,6 +49,26 @@
     .vc-sign span{color:var(--text-secondary);margin-right:8px}
     .vc-hint{margin-top:14px;font-size:12px;color:var(--text-secondary);line-height:1.8}
     .vc-err{margin:10px 0;padding:9px 11px;border:1px solid #FCA5A5;background:#FEF2F2;border-radius:var(--radius);font-size:12px;color:#7F1D1D;line-height:1.7}
+    .vc-ok{margin:10px 0;padding:9px 11px;border:1px solid #BBF7D0;background:#F0FDF4;border-radius:var(--radius);font-size:12px;color:#14532D;line-height:1.7}
+
+    .vc-wrap{display:flex;gap:26px;align-items:flex-start;flex-wrap:wrap}
+    .vc-side{width:290px;flex-shrink:0;font-family:var(--font-zh)}
+    .vc-side__hd{display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:13px;font-weight:700;color:var(--text-primary)}
+    .vc-side__chk{font-size:11px;color:var(--text-secondary);font-weight:400;display:flex;align-items:center;gap:4px;cursor:pointer}
+    .vc-row{display:flex;align-items:center;gap:8px;padding:7px 9px;border:1px solid var(--border-light);border-radius:var(--radius);margin-bottom:6px;font-size:12px;cursor:pointer;background:var(--white)}
+    .vc-row:hover{background:#FAF9F6}
+    .vc-row.on{border-color:var(--text-primary)}
+    .vc-row__no{font-family:var(--font-mono,monospace);font-weight:700;color:var(--text-primary)}
+    .vc-row__sum{color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .vc-side__empty{padding:22px 10px;text-align:center;color:var(--text-secondary);font-size:12px;line-height:1.8;border:1px dashed var(--border-light);border-radius:var(--radius)}
+
+    .vc-acts{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:16px}
+    .vc-btn{padding:6px 14px;border:1px solid var(--border-light);border-radius:var(--radius);background:var(--white);font-size:13px;font-family:var(--font-zh);cursor:pointer;color:var(--text-primary)}
+    .vc-btn--go{background:var(--text-primary);color:var(--white);border-color:var(--text-primary)}
+    .vc-btn--warn{color:#B91C1C;border-color:#FCA5A5}
+    .vc-btn:disabled{opacity:.5;cursor:not-allowed}
+    .vc-reason{margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px;font-family:var(--font-zh)}
+    .vc-reason input{flex:1;min-width:220px;padding:6px 9px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:var(--font-zh)}
   </style>
 </head>
 <!-- ⚠️ 這個 body **刻意只有 `x-data`，沒有那個明著呼叫初始化的屬性**。
@@ -53,6 +76,7 @@
      再用屬性叫一次 ⇒ 它會**跑兩次**。
      ☠️ 實測（2026-09-23）：只有 `x-data` ⇒ 1 次；兩者並存 ⇒ **2 次**。
         本頁的症狀看得見：初始化會加 3 行空白分錄 ⇒ 畫面變成 **6 行**。
+        接線之後症狀更貴：清單與單據會各載兩次。
      🔑 而多數頁面的症狀是**看不見的**：載入兩次拿到同一份資料，
         只是多打一次 API ⇒ 沒有人會發現。
      📌 本 repo 另有 5 頁是同一個形狀（已量、已回報；未派工，不動）。
@@ -70,93 +94,194 @@
         <div class="vc-err" x-text="loadError"></div>
       </template>
 
-      <div class="vc-sheet">
-        <!-- ⚠️ 抬頭從設定讀，**不要寫死** —— 公司抬頭在這個 repo 裡已經
-             寫死在 14 個檔、56 行，再加一處就是第 57 處。 -->
-        <div class="vc-org" x-text="company || '（尚未設定公司抬頭）'"></div>
-        <div class="vc-doc">傳　票</div>
+      <div class="vc-wrap">
 
-        <div class="vc-head">
-          <!-- 🔴 單號由後端產生，**前端不發號**：格式規則在 helpers/voucher.py
-               （`YYYYMMDD-NNN[-Rn]`，退回時從現有最大值 +1）。
-               ☠️ 前端自己拼的話就是第二份實作，而兩份一定會分岔。 -->
-          <div><label>傳票號碼</label><span class="vc-no"
-               x-text="voucherNo || '（儲存後產生）'"></span></div>
-          <!-- 🔁 日期**可選，預設今天**（使用者 2026-09-23 改裁，
-               SPEC-VOUCHER.md:67）—— 舊裁示「建檔當天不可編輯」已被推翻，
-               理由是月結補登是會計的日常。 -->
-          <div><label>傳票日期</label>
-            <input type="date" class="vc-input" x-model="voucherDate"
-                   :disabled="!canEdit"></div>
-          <div><label>狀態</label><span class="vc-status" x-text="status"></span></div>
-        </div>
+        <!-- ══ 清單 ═══════════════════════════════════════════════════
+             ⚠️ 清單**不帶分錄**（後端明著不撈）⇒ 這裡只顯示單頭，
+                點進去才讀那一張。 -->
+        <aside class="vc-side">
+          <div class="vc-side__hd">
+            <span>傳票</span>
+            <!-- 🔑 作廢單**仍然查得到**（稽核），而要明著要 —— 與後端
+                 `include_voided` 同一條規則，不在前端自己過濾。 -->
+            <label class="vc-side__chk" style="margin-left:auto">
+              <input type="checkbox" data-testid="voucher-include-voided"
+                     :checked="includeVoided" @change="toggleVoided()">含已作廢
+            </label>
+          </div>
 
-        <table class="vc-lines">
-          <thead>
-            <tr>
-              <th style="width:92px">會計科目</th>
-              <th style="width:150px">科目名稱</th>
-              <th>摘要</th>
-              <th class="num" style="width:120px">借方金額</th>
-              <th class="num" style="width:120px">貸方金額</th>
-            </tr>
-          </thead>
-          <tbody>
-            <!-- 🔴 每一行有自己的「摘要」（§103c③）——
-                 那是從使用者的實例讀出來的，不是單據層備註的複本。 -->
-            <template x-for="(l, i) in lines" :key="i">
+          <button class="vc-btn vc-btn--go" style="width:100%;margin-bottom:10px"
+                  data-testid="voucher-new" @click="newVoucher()">＋ 新增傳票</button>
+
+          <template x-for="v in list" :key="v.id">
+            <div class="vc-row" :class="{ on: v.id === id }" @click="open(v.id)">
+              <span class="vc-row__no" x-text="v.voucher_no"></span>
+              <span class="vc-status"
+                    :class="v.voided_at ? 'voided' : (v.status === '已過帳' ? 'posted' : '')"
+                    x-text="v.voided_at ? '已作廢' : v.status"></span>
+              <span class="vc-row__sum" x-text="v.summary || shortDate(v.voucher_date)"></span>
+            </div>
+          </template>
+
+          <div class="vc-side__empty" x-show="listLoaded && !list.length">
+            還沒有任何傳票。<br>按上面的「新增傳票」開第一張。
+          </div>
+        </aside>
+
+        <!-- ══ 單據 ═══════════════════════════════════════════════════ -->
+        <div class="vc-sheet">
+          <!-- ⚠️ 抬頭從設定讀，**不要寫死** —— 公司抬頭在這個 repo 裡已經
+               寫死在 14 個檔、56 行，再加一處就是第 57 處。 -->
+          <div class="vc-org" x-text="company || '（尚未設定公司抬頭）'"></div>
+          <div class="vc-doc">傳　票</div>
+
+          <div class="vc-head">
+            <!-- 🔴 單號由後端產生，**前端不發號**：格式規則在 helpers/voucher.py
+                 （`YYYYMMDD-NNN[-Rn]`，退回時從現有最大值 +1）。
+                 ☠️ 前端自己拼的話就是第二份實作，而兩份一定會分岔。 -->
+            <div><label>傳票號碼</label><span class="vc-no" data-testid="voucher-no"
+                 x-text="voucherNo || '（儲存後產生）'"></span></div>
+            <!-- 🔁 日期**可選，預設今天**（使用者 2026-09-23 改裁，
+                 SPEC-VOUCHER.md:67）—— 舊裁示「建檔當天不可編輯」已被推翻，
+                 理由是月結補登是會計的日常。 -->
+            <div><label>傳票日期</label>
+              <input type="date" class="vc-input" x-model="voucherDate"
+                     :disabled="!canEdit"></div>
+            <div><label>類別</label>
+              <select class="vc-input" x-model="category" :disabled="!canEdit">
+                <option value="轉">轉帳</option>
+                <option value="收">收入</option>
+                <option value="付">支出</option>
+              </select></div>
+            <div><label>狀態</label><span class="vc-status" data-testid="voucher-status"
+                 :class="voidedAt ? 'voided' : (status === '已過帳' ? 'posted' : '')"
+                 x-text="voidedAt ? '已作廢' : status"></span></div>
+          </div>
+
+          <table class="vc-lines">
+            <thead>
               <tr>
-                <td><input x-model="l.account_code" :disabled="!canEdit"
-                           placeholder="1268" @change="fillName(i)"></td>
-                <td><input x-model="l.account_name" :disabled="!canEdit"
-                           placeholder="（輸入代號後自動帶入）"></td>
-                <td><input x-model="l.summary" :disabled="!canEdit"
-                           placeholder="3/30 向量圓專 XV15543058"></td>
-                <td class="num"><input class="num" x-model="l.debit"
-                           :disabled="!canEdit" inputmode="numeric"></td>
-                <td class="num"><input class="num" x-model="l.credit"
-                           :disabled="!canEdit" inputmode="numeric"></td>
+                <th style="width:92px">會計科目</th>
+                <th style="width:150px">科目名稱</th>
+                <th>摘要</th>
+                <th class="num" style="width:120px">借方金額</th>
+                <th class="num" style="width:120px">貸方金額</th>
+                <th style="width:34px"></th>
               </tr>
-            </template>
-            <!-- 合計列：使用者的實例上**印出來的**，借貸兩邊各一個數字。 -->
-            <tr class="vc-total">
-              <td></td><td></td>
-              <td class="label">合　計</td>
-              <td class="num" x-text="fmt(totalDebit)"></td>
-              <td class="num" x-text="fmt(totalCredit)"></td>
-            </tr>
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              <!-- 🔴 每一行有自己的「摘要」（§103c③）——
+                   那是從使用者的實例讀出來的，不是單據層備註的複本。 -->
+              <template x-for="(l, i) in lines" :key="i">
+                <tr>
+                  <td><input x-model="l.account_code" :disabled="!canEdit"
+                             placeholder="1268" @change="fillName(i)"></td>
+                  <td><input x-model="l.account_name" :disabled="!canEdit"
+                             placeholder="（輸入代號後自動帶入）"></td>
+                  <td><input x-model="l.summary" :disabled="!canEdit"
+                             placeholder="3/30 向量圓專 XV15543058"></td>
+                  <td class="num"><input class="num" x-model="l.debit"
+                             :disabled="!canEdit" inputmode="numeric"></td>
+                  <td class="num"><input class="num" x-model="l.credit"
+                             :disabled="!canEdit" inputmode="numeric"></td>
+                  <td><button class="vc-del" x-show="canEdit" @click="removeLine(i)"
+                              title="刪除這一行">✕</button></td>
+                </tr>
+              </template>
+              <!-- 合計列：使用者的實例上**印出來的**，借貸兩邊各一個數字。 -->
+              <tr class="vc-total">
+                <td></td><td></td>
+                <td class="label">合　計</td>
+                <td class="num" data-testid="voucher-total-debit" x-text="fmt(totalDebit)"></td>
+                <td class="num" data-testid="voucher-total-credit" x-text="fmt(totalCredit)"></td>
+                <td></td>
+              </tr>
+            </tbody>
+          </table>
 
-        <div style="margin-top:8px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
-          <button class="ai-btn" style="padding:5px 13px;border-radius:var(--radius);border:1px solid var(--border-light);background:#fff;font-size:12px;font-family:var(--font-zh);cursor:pointer"
-                  @click="addLine()" x-show="canEdit">＋ 新增一行</button>
-          <!-- ⚠️ 只顯示**差額**，不說「可不可以過帳」——
-               🔴 過帳的擋關由後端決定（helpers/voucher.py::check_balance）。
-               ☠️ 前端自己判的話就是第二份判準，而它會在某一天與後端不一致，
-                  那時使用者看到的是「畫面說可以，按下去被拒絕」。 -->
-          <span class="vc-diff" x-show="totalDebit !== totalCredit"
-                x-text="'借貸差額 ' + fmt(Math.abs(totalDebit - totalCredit))"></span>
-        </div>
+          <div style="margin-top:8px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+            <button class="ai-btn" style="padding:5px 13px;border-radius:var(--radius);border:1px solid var(--border-light);background:#fff;font-size:12px;font-family:var(--font-zh);cursor:pointer"
+                    @click="addLine()" x-show="canEdit">＋ 新增一行</button>
+            <!-- ⚠️ 只顯示**差額**，不說「可不可以過帳」——
+                 🔴 過帳的擋關由後端決定（helpers/voucher.py::check_balance）。
+                 ☠️ 前端自己判的話就是第二份判準，而它會在某一天與後端不一致，
+                    那時使用者看到的是「畫面說可以，按下去被拒絕」。 -->
+            <span class="vc-diff" x-show="totalDebit !== totalCredit"
+                  x-text="'借貸差額 ' + fmt(Math.abs(totalDebit - totalCredit))"></span>
+          </div>
 
-        <div class="vc-note">
-          <label style="color:var(--text-secondary);font-size:12px">備註</label>
-          <textarea x-model="note" :disabled="!canEdit"
-                    placeholder="京城凱悅報價單MQ-202608-009工資"></textarea>
-        </div>
+          <div class="vc-note">
+            <label style="color:var(--text-secondary);font-size:12px">備註</label>
+            <textarea x-model="note" :disabled="!canEdit"
+                      placeholder="京城凱悅報價單MQ-202608-009工資"></textarea>
+          </div>
 
-        <!-- 🔴 三格是**版面上的簽名位**，與狀態機（待審核／簽核中／已核准）
-             **不是同一組東西**（§103c⑤）⇒ 這裡只呈現，不由前端推導流程。 -->
-        <div class="vc-sign">
-          <div><span>製票</span><b x-text="signs.maker || ''"></b></div>
-          <div><span>覆核</span><b x-text="signs.checker || ''"></b></div>
-          <div><span>主管</span><b x-text="signs.manager || ''"></b></div>
+          <!-- 🔴 三格是**版面上的簽名位**，與狀態機（待審核／簽核中／已核准）
+               **不是同一組東西**（§103c⑤）⇒ 這裡只呈現，不由前端推導流程。
+               ⚠️ 印的是**人名**：後端曾經把原始 bearer token 存進這些欄位，
+                  而這一格會把那串 64 字元印在「製票」上（2026-09-23 已修）。 -->
+          <div class="vc-sign" data-testid="voucher-signs">
+            <div><span>製票</span><b x-text="signs.maker || ''"></b></div>
+            <div><span>覆核</span><b x-text="signs.checker || ''"></b></div>
+            <div><span>主管</span><b x-text="signs.manager || ''"></b></div>
+          </div>
+
+          <template x-if="actionErr">
+            <div class="vc-err" x-text="actionErr"></div>
+          </template>
+          <template x-if="actionMsg">
+            <div class="vc-ok" x-text="actionMsg"></div>
+          </template>
+
+          <!-- ══ 動作 ═════════════════════════════════════════════════
+               🔑 按鈕顯不顯示只看後端回的 `status`，而**能不能成立由後端說**。
+               ☠️ 前端自己判就是第二份判準，它會在某天與後端不一致 ⇒
+                  使用者看到「畫面說可以，按下去被拒絕」。
+               ⚠️ 作廢與退回都要一段**理由**（後端沒有理由直接回 400）⇒
+                  用行內輸入框，**不用 `confirm()`／`prompt()`**：
+                  原生對話框會擋住整個頁面的事件。 -->
+          <div class="vc-acts" x-show="!voidedAt">
+            <button class="vc-btn vc-btn--go" data-testid="voucher-save"
+                    x-show="canEdit" :disabled="busy" @click="save()"
+                    x-text="isSaved ? '儲存' : '儲存草稿'"></button>
+            <button class="vc-btn" data-testid="voucher-submit"
+                    x-show="isSaved && status === '草稿'" :disabled="busy"
+                    @click="submit()">送出審核</button>
+            <button class="vc-btn" data-testid="voucher-approve"
+                    x-show="isSaved && (status === '待審核' || status === '簽核中')"
+                    :disabled="busy" @click="approve()">簽核</button>
+            <button class="vc-btn" data-testid="voucher-post"
+                    x-show="isSaved && status === '已核准'" :disabled="busy"
+                    @click="post()">過帳</button>
+            <button class="vc-btn vc-btn--warn" data-testid="voucher-sendback"
+                    x-show="isSaved && (status === '待審核' || status === '簽核中' || status === '已核准')"
+                    :disabled="busy" @click="openReason('sendback')">退回修改</button>
+            <button class="vc-btn vc-btn--warn" data-testid="voucher-void"
+                    x-show="isSaved" :disabled="busy"
+                    @click="openReason('void')">作廢</button>
+          </div>
+
+          <template x-if="askReason">
+            <div class="vc-reason">
+              <span x-text="askReason === 'void' ? '作廢原因' : '退回原因'"></span>
+              <input type="text" x-model="reason" data-testid="voucher-reason"
+                     placeholder="請寫清楚原因，事後只有這一句回答得了『為什麼』">
+              <button class="vc-btn vc-btn--warn" :disabled="busy || !reason.trim()"
+                      data-testid="voucher-reason-ok"
+                      @click="askReason === 'void' ? voidIt() : sendBack()"
+                      x-text="askReason === 'void' ? '確認作廢' : '確認退回'"></button>
+              <button class="vc-btn" @click="cancelReason()">取消</button>
+            </div>
+          </template>
         </div>
       </div>
 
       <div class="vc-hint">
-        ⚠️ 這是傳票的版面骨架：欄位與合計已經可以操作，<b>而儲存、送審與過帳的功能尚未提供</b>。<br>
-        單號在儲存時由系統產生；借貸是否平衡由系統在過帳時檢查，此處僅顯示目前差額。
+        單號在儲存時由系統產生；借貸是否平衡由系統在過帳時檢查，此處僅顯示目前差額。<br>
+        退回修改會把狀態退回草稿、<b>清除已有的簽核</b>，並把單號升版（例如 <code>-R1</code>）——
+        同一張被退過幾次因此看得出來。作廢後原單仍留在系統裡，勾選「含已作廢」可以查到。<br>
+        草稿可以反覆修改並儲存（含分錄），<b>每一次儲存都會逐行記下改了哪一行的哪一個欄位、由什麼變成什麼</b>；
+        送出審核之後就不能再改，要改請先退回修改。
       </div>
 
     </main>

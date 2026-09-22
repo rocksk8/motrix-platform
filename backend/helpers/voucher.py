@@ -416,3 +416,70 @@ def post_voucher(conn, voucher_id, user):
         " updated_at = ? WHERE id = ?",
         (_FROZEN_STATUS, now, user or "", now, voucher_id))
     return True, None
+
+
+#: 分錄上會被比對的欄位。**不含 `line_no`** —— 行號是位置不是內容，
+#: 整行搬動時比對行號會產生一堆假的「改動」。
+_LINE_FIELDS = ("account_code", "summary", "debit", "credit")
+
+
+def _norm_line(ln):
+    """把一行分錄正規化成比對用的形狀。
+
+    ⚠️ 兩邊來源不同：**舊的**來自資料庫（`debit` 是 int、`summary` 不會是 None），
+       **新的**來自 request body（可能是字串、可能缺鍵）。
+    ☠️ 不正規化的話，`1000` 與 `"1000"` 會被判成一次改動 ⇒
+       使用者什麼都沒改而編寫紀錄多一筆 —— 而那一筆讀起來完全合理。
+    """
+    ln = ln or {}
+    return {
+        "account_code": (ln.get("account_code") or "").strip(),
+        "summary": (ln.get("summary") or "").strip(),
+        "debit": int(ln.get("debit") or 0),
+        "credit": int(ln.get("credit") or 0),
+    }
+
+
+def diff_lines(old, new):
+    """逐行比對分錄，回 `append_edit_log()` 吃得下的 changes 清單。
+
+    ## 🔴 為什麼是**逐行**而不是整包記一筆（`§103e`）
+
+    ```
+    整包  {"field": "lines", "from": "2 行", "to": "2 行"}
+          => 同一張被退兩次，**看不出來第二次改了什麼**
+    ```
+    而 `§103e` 對退回升版的要求逐字是「同一張被退兩次看不出來是財務不可接受」
+    ⇒ 同一條精神套在分錄上。
+
+    ## 📌 每一筆長什麼樣
+
+    ```
+    改欄位  {"field": "lines[0].debit",  "from": 1000, "to": 7777}
+    新增行  {"field": "lines[2]",        "from": None, "to": {…}}
+    刪掉行  {"field": "lines[2]",        "from": {…},  "to": None}
+    ```
+    ⚠️ `from`／`to` 這兩個**鍵一定要在**（即使值是 `None`）——
+       `append_edit_log()` 用 `"from" not in ch` 判斷，不是用值的真假。
+       ☠️ 用真假值的話，一筆「原本是空白」的改動會被當成沒記錄改前值。
+
+    ## ⚙️ 沒有改動就回空清單
+
+    呼叫端要據此決定「**不寫**編寫紀錄」——
+    ☠️ 一列 `changes_json='[]'` 看起來像有記錄，而它什麼都沒說。
+    """
+    a = [_norm_line(x) for x in (old or ())]
+    b = [_norm_line(x) for x in (new or ())]
+    out = []
+    for i in range(max(len(a), len(b))):
+        if i >= len(b):
+            out.append({"field": "lines[%d]" % i, "from": a[i], "to": None})
+            continue
+        if i >= len(a):
+            out.append({"field": "lines[%d]" % i, "from": None, "to": b[i]})
+            continue
+        for f in _LINE_FIELDS:
+            if a[i][f] != b[i][f]:
+                out.append({"field": "lines[%d].%s" % (i, f),
+                            "from": a[i][f], "to": b[i][f]})
+    return out
