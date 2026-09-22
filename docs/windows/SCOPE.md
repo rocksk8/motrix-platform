@@ -29,6 +29,7 @@ P0(4):  P0-00 P0-0 P0-1 P0-2
 RP(3):  RP1 RP2 RP3
 VP(1):  VP1
 UI(4):  UI6 UI8 UI9 UI10
+DM(1):  DM1
 MG(1):  MG1
 ```
 
@@ -87,7 +88,8 @@ MG(1):  MG2
 TC(4):  TC1 TC2 TC3 TC4
 FE(1):  FE1
 DB(1):  DB1
-DM(1):  DM1
+CL(1):  CL1
+
 ```
 
 > 📌 `VP`（verify package）＝ `backend/tools/verify_package.py` 四項，
@@ -218,3 +220,12 @@ NEXT (追加 01:0x)
    我今晚才剛用「最新的包比 commit 早四小時」糾正過 A-2 的範圍，
    ☠️ **而同一則訊息裡我自己派了一個已完成的任務。**
 ⇒ 可操作：**派任何一個「既有欠帳」之前，先 `git log -- <那個檔>` 看最近三筆。**
+
+```
+2026-09-23 00:40
+  DM1  => **THIS**（bf36922 綠 4/4，列粒度：account_items 只清 source != 'statutory'）
+  CL1  UI9/FN3 搬遷留下的殘骸                              §112
+       reports.js 孤兒函式 14 ／ 孤兒狀態 23（四個 modal 的狀態，markup 搬走而狀態留著）
+       ⚠️ 範圍含**把那道 modal 不變量補成雙向** —— 它只問「打得開的有沒有標記」，
+          掃不到「留著而沒有人打得開」；少了這一半，下一次搬遷再留一批
+```
