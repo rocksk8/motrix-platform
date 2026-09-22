@@ -236,6 +236,23 @@ EXEMPT = {
     #    ⇒ **鎖成 superadmin 不會弄壞任何自動化流程。**
     # ⚠️ 而那個查證本身有射程：它看的是**正式機的稽核表**，
     #    ☠️ 而稽核表只記「有人成功改過」—— 它答不出「有沒有流程試過而失敗」。
+    # ── §15 GC2 · 一條**更正紀錄**，不是驗收條件 ────────────────
+    # A 先前對使用者說「填入金鑰那一刻會一次性重查約 200 個地址」——**那是錯的**。
+    # 🔑 錯的來源：讀了 `locate_cached` 的逐階快取鍵設計，
+    #    **而沒讀到 `cached_only()` 跨階短路那一段**。
+    # ⚠️ 它測不成一題：要驗的是「**那句話有沒有被更正**」，
+    #    ☠️ 而那是文件的內容，不是系統的行為。
+    # 📌 真正防止它再發生的是 `GC1`／`GC3`（把跨階短路修掉）——
+    #    **更正一句話不會讓第五次不可能發生，改掉那個行為才會。**
+    "GC2":  "A 對使用者說錯的那句話的更正紀錄。要驗的是文件內容不是系統行為；"
+            "防復發的是 GC1／GC3（把跨階短路修掉）",
+    # ── §14 MN3 · `sidebar.js` 是鎖定檔，動前要在 `B.md` 宣告 ────
+    # ⚠️ 那是**協定上的動作**，我驗不到「有沒有人宣告過」——
+    # ☠️ 一個檢查「B.md 裡有沒有那行字」的測試，驗的是別人的檔案有沒有被編輯，
+    #    而不是「兩個人有沒有真的避開對方」。
+    # 🔑 真正在守它的是那條協定本身，以及動到同一個檔時 git 會出現的衝突。
+    "MN3":  "`sidebar.js` 是鎖定檔，動前要在 B.md 宣告 —— 那是協定上的動作，"
+            "沒有任何 pytest 觀測得到「有沒有人宣告過」",
     "SA5":  "動手前查 audit_log 歷史 —— 那是一個動作不是系統行為。"
             "A 已做完：4 筆全是 jeff(superadmin)，automation 從未用過",
     # ── §12 BK7 ────────────────────────────────────────────────
@@ -1135,6 +1152,45 @@ def test_the_scope_list_does_not_use_any_elision():
         "`SCOPE.md` 的編號清單裡有省略形式：\n  " + "\n  ".join(offenders)
         + "\n☠️ 對人那是「這中間全部」，對解析器只有兩端那兩個。\n"
           "⇒ 逐一列出。這道閘門的整個價值是「量得出還差多少」。"
+    )
+
+
+def test_every_prefix_in_the_spec_appears_somewhere_in_the_scope_file():
+    """🔴🔴 `STATE.md` 用到的**每一個字首**，都要在 `SCOPE.md` 的三個區塊之一出現過。
+
+    ## 🔑 它補的是我自己找到、而跳號偵測看不見的那個盲點
+
+    ```
+    跳號偵測   看得到「夾在範圍中間」的洞
+    ☠️ 看不到「一整個字首從頭到尾都沒被列進來」——
+       因為那個字首在 THIS 裡連一個端點都沒有
+    ```
+    📌 A-2 給的補法（A 採用）：**比字首集合**，不比個別編號。
+    🔑 它不依賴任何人記得寫數量，也不受「圍欄內／外」影響。
+
+    ## ⚠️ 而它自己的盲點，要寫在這裡
+
+    ☠️ **字首在清單裡、而那個字首下只列了一半** —— 這一道看不見。
+    ⇒ 那一種靠 `test_no_prefix_in_scope_has_a_hole_that_the_spec_declares`。
+    🔑 **兩道各抓一種，不可以把其中一道當成另一道的備援**（同 `BK30` 的形狀）。
+    """
+    scope = _scope_sections()
+    listed = scope["THIS"] | scope["NEXT"] | scope["EXEMPT"]
+    assert listed, "`SCOPE.md` 三個區塊都是空的 —— 那個解析壞了"
+
+    def _prefix(num):
+        return re.match(r"^([A-Z]{1,2})", num).group(1)
+
+    spec_prefixes = {_prefix(n) for n in _declared()}
+    scope_prefixes = {_prefix(n) for n in listed}
+    # 📌 已經有題的字首不算漏：它們有人管，只是 A 沒有列進範圍檔。
+    implemented_prefixes = {_prefix(n) for n in _implemented()}
+    missing = sorted(spec_prefixes - scope_prefixes - implemented_prefixes)
+    assert not missing, (
+        "這些字首在 `STATE.md` 裡有編號，而 `SCOPE.md` 三個區塊一個都沒提到：\n  "
+        + "、".join(missing)
+        + "\n☠️ 整組沒有人管，而跳號偵測看不見它們 ——\n"
+          "   那個字首在 `THIS` 裡連一個端點都沒有。"
     )
 
 
