@@ -1015,3 +1015,29 @@ A 說「可以動了」。**我自己不會解除。**
   ☠️ 而它**不是短效的**（`?pt=` 是 HMAC 簽章、1 小時、綁單一路徑）。
 - **實查**：前端用 `?token=` 打 uploads **0 處**、用 `?pt=` **8 處**；
   `backend/tests/` 也沒有任何一支在用 ⇒ **一條沒有人走、而仍然打開著的路**
+
+---
+
+# 🛑 停手宣告（第三次，2026-09-22 12:07）
+
+```
+最後一個 commit   bf715d21130187bef0369279b9c24c50e8be1f3d
+工作樹            乾淨（git status --porcelain 無輸出）
+覆蓋率守門        8 passed（打包第一步會跑的那一支）
+```
+
+**我不再寫入 `backend/` 與 `frontend/`，直到 A 說可以。自己不會解除。**
+
+## 這一輪（第三次停手之前）做完的
+```
+813827c  FX21  拿掉 /api/uploads 的 ?token=
+3ffa7f6  FX1b  打包的「下一步」補上重跑排程工作
+08748e1  FX22  掃碼登入的 challenge 改走 header，QR 網址改 fragment
+cff77e2  §5    多據點（分公司）
+9fad854  HC1   部署儀表板的防線搬到請求層
+80eaac5  HC5   刪三支死碼＋健檢工具改用合成對照組
+62bf3e5  FX24  SEND_UNKNOWN 保留標記＋記一筆
+503bd15  HC6   32 個沒用到的 import → 0
+292924b  HC2   requirements.txt 純 ASCII ＋ 第一次跑出相依漏洞掃描
+3894358  §10   公司資料只有 superadmin 改得動，稽核記下改了什麼
+```
