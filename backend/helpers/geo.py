@@ -1002,15 +1002,25 @@ def _cache_get_many(address, sources):
         return {}
     from db import get_db
     marks = ",".join("?" * len(sources))
+    # ⚠️ **只有 `finally`，沒有 `except`** —— 與 `_cache_get()` 逐字相同。
+    #
+    # 🔴 我第一版包了 `except Exception: return {}`（「讀不到快取不該讓查詢
+    #    整個失敗」）。那是一個**沒有人要求的行為改變，夾在一個效能修復裡**：
+    #    舊的 `_cache_get()` 從來不吞例外。
+    # ☠️ 後果：DB 出事 ⇒ 回 `{}` ⇒ 每個地址都被當成「沒查過」⇒ **每一個都
+    #    重新對外查**（Google 計費、Nominatim 速率限制），
+    #    **而地圖仍然會畫出來、看起來完全正常** ⇒ 沒有人會報修。
+    # 📌 〈降級之後它還是會動〉：壞掉會被報修，降級不會。
+    #    而 `logger.exception` 擋不住它 —— 錯誤輸出在「起不來」時有人看，
+    #    在「起來了但做錯事」時沒有人看。
+    # ⇒ 要讓地圖在 DB 出事時還能畫，那是一個**獨立的決定**，
+    #    要配一題「DB 讀取失敗時的行為」＋反向控制，不是夾帶。
     conn = get_db()
     try:
         rows = conn.execute(
             "SELECT source, lat, lon, precision, created_at FROM geocode_cache "
             "WHERE address=? AND source IN (%s)" % marks,
             (address, *sources)).fetchall()
-    except Exception:       # noqa: BLE001 —— 讀不到快取不該讓查詢整個失敗
-        logger.exception("_cache_get_many failed: %s", address)
-        return {}
     finally:
         conn.close()
     out = {}
