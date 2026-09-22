@@ -45,14 +45,25 @@ marked_by  INTEGER  -- users.id
 
 ---
 
-# ⚠️ 端點路徑是規格指定的，不是我發明的
+# ⚠️ 端點路徑 —— **規格第一版是錯的，留著錯的那一列**
 
 ```
-POST   /api/tenders/{case_no}/mark      標註
-DELETE /api/tenders/{case_no}/mark      取消
+❌ §21 補 第一版   POST/DELETE /api/tenders/{case_no}/mark
+✅ 更正（740718c） POST/DELETE /api/tender-radar/tenders/{case_no}/mark
 ```
-📌 `§21 補` 逐字寫著這兩條。**若 B 判斷它應該掛在 `/api/tender-radar/` 底下
-（與清單端點同一族），那是條文的問題不是題目的問題 ⇒ 退回 A 改條文，我再改。**
+A 的查證：`grep -rn 'prefix="/api/tenders"' routers/` **零命中** ——
+☠️ **那個前綴整個專案不存在。** A 自陳：「我寫了一個『看起來合理』的路徑，
+而沒有打開那支 router。」
+
+🔑 **而它差點進去的方式值得留著**：
+```
+我照條文**逐字**釘題 ⇒ **題目釘得越準，錯的條文就被釘得越穩**
+```
+📌 攔住它的不是題目寫得好，是**我退回去問了**而不是自己改條文、
+也不是為了讓題目綠而遷就一個我覺得不對的位置。
+⇒ `§6`：**寫規格時給出一個路徑／欄位名／常數名，要先去看那個檔** ——
+「看起來合理」在規格裡與「查過」長得一模一樣，**而下游會把它當成已知事實去釘**。
+
 ⚠️ 權限跟著 `tender_radar` 模組走，**不另外發明一個**。
 """
 import sys
@@ -66,7 +77,7 @@ TENDERS_PATH = "/api/tender-radar/tenders"
 
 
 def _mark_path(case_no):
-    return f"/api/tenders/{case_no}/mark"
+    return f"/api/tender-radar/tenders/{case_no}/mark"
 
 
 def _auth(client, make_user, username=None):
