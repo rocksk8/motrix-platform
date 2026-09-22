@@ -101,7 +101,7 @@ DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR = os.path.join(
 # 的附件，2026-09-14）——兩張表都是 TEXT NOT NULL DEFAULT '[]'，存
 # save_document_files() 回傳的清單。刪附件限 admin+，見 routers/quotations.py
 # 與 routers/dev_crm.py 的 DELETE .../files/{file_id}。
-CURRENT_VERSION = 90
+CURRENT_VERSION = 91
 
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
 # execution model) whenever the current request is authenticated as the 'demo'
@@ -3935,6 +3935,40 @@ def _m090_quotation_location(conn):
     conn.commit()
 
 
+def _m091_geocode_usage(conn):
+    """§16 GB1：Google 額度計數器的落點。
+
+    📌 〈計數器要有落點〉：「累積到 N 就停」要先指出 **N 寫在哪張表**。
+    ☠️ 記憶體計數器一重啟就歸零，而**「永遠沒觸發」跟「運作良好」長得一模一樣**。
+
+    ## 🔑 為什麼鍵是 `period_start` 而不是「年月」
+
+    帳單週期起算日**可以設定**（`GB4`），而使用者把它從 1 號改成 15 號的那一刻，
+    `"2026-09"` 這個標籤已經累計了 N 次 —— 那 N 次算在哪一期？
+    ⇒ 存**實際的週期起日**就沒有這個問題：改設定會開出一個新的週期，
+    舊的那一段原封不動留在它自己的起日底下，看得到也對得上。
+    `month` 只是顯示用，**不是鍵**。
+
+    ## 🔑 `source` 是 SKU 粒度，不是 provider 粒度
+
+    Google 2025-03-01 起廢掉了每月 $200 的共用 credit，
+    改成**每個 SKU 各自一組免費月額度而且不共用**
+    ⇒ 「google 用了幾次」這個問題沒有意義。
+    ☠️ 用 `'google'` 一個值的話，等 Places 進來時兩個 SKU 的用量會被加在一起
+    去對同一個門檻 —— **兩邊都算錯。**
+    """
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS geocode_usage ("
+        "  id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "  period_start TEXT NOT NULL,"      # 週期起日 YYYY-MM-DD（鍵）
+        "  month TEXT NOT NULL DEFAULT '',"  # 顯示用標籤，不是鍵
+        "  source TEXT NOT NULL,"            # SKU：google:geocoding / nominatim ...
+        "  count INTEGER NOT NULL DEFAULT 0,"
+        "  updated_at TEXT NOT NULL DEFAULT '',"
+        "  UNIQUE(period_start, source)"
+        ")")
+
+
 _MIGRATIONS = [
     _m001_export_columns,        # v1
     _m002_sessions_expires,      # v2
@@ -4026,6 +4060,7 @@ _MIGRATIONS = [
     _m088_tender_detail_fields,                     # v88
     _m089_geocode_cache,                            # v89
     _m090_quotation_location,                       # v90
+    _m091_geocode_usage,                            # v91
 ]
 
 

@@ -405,6 +405,337 @@ def district_of(address):
     return m.group(0) if m else None
 
 
+# ==========================================================================
+# 16 GB - Google 額度治理（真實計算器 + 自動降回免費）
+# ==========================================================================
+#
+# 使用者 2026-09-22：「你做一個真實計算器，並讓超級管理員可以依據現在 google 的
+# 免費額度去調整，當準備到達上限額度自動寄信並將附近客戶跟查找功能先回歸免費，
+# 待月週期結束開放」
+#
+# 這一整節的預設是「關著」（GB13）：沒有金鑰、或沒填額度 => 行為跟現在完全一樣。
+# 「關著」要能被證明，不是靠沒有人去踩到它。
+
+#: 額度設定存在 `system_settings` 的這個鍵底下。
+QUOTA_SETTING = "google_quota"
+
+#: 計數的「來源」。
+#:
+#: 這個值是 **SKU 粒度**，不是 provider 粒度（A-2 2026-09-22）：
+#: Google 2025-03-01 起廢掉了每月 $200 共用 credit，改成**每個 SKU 各自**
+#: 一組免費月額度而且**不共用**。所以「google 用了幾次」這個問題沒有意義，
+#: 有意義的是「Geocoding 這個 SKU 用了幾次」。
+#: 17 NB 若之後接 Places，它是**另一個 SKU、另一組額度** =>
+#: 要用另一個值（例如 `google:places-text-search`），不可以跟這個加在一起。
+#: 值是 `"google:geocoding"`，**不是** `"google"`。
+#: Places Text Search / Place Details 各自是另一個 SKU、另一組額度，
+#: 要用另一個值，**不可以跟這個加在一起去對同一個門檻**——那會兩邊都算錯。
+USAGE_SKU_GEOCODING = "google:geocoding"
+USAGE_SKU_PLACES_TEXT = "google:places-text-search"
+USAGE_SKU_PLACE_DETAILS = "google:place-details"
+
+#: 預設值。`monthly_free_quota` **留空（None）= 不管制**，不是 0（GB7）。
+#:
+#: 免費額度**不寫死在程式裡**（GB5/GB6）：它是超級管理員填的欄位。
+#: Google 改過不止一次，而寫死的數字不會報錯，只會算錯。
+QUOTA_DEFAULTS = {
+    # 一個 SKU 一格：{"google:geocoding": 10000, ...}。**留空的 SKU = 不管制。**
+    # 預設**不填任何數字**：A-2 2026-09-22 明說「台灣適用哪一組數字我沒查」，
+    # 而寫死一個沒查證的額度，錯的方向若偏晚就是真的花錢。
+    "sku_quotas": {},
+    # Geocoding 那一格的舊名。今天只有這一個 SKU 在用，保留它讓既有的
+    # curl / 腳本還能用；`quota_for()` 會把兩者解析成同一件事。
+    "monthly_free_quota": None,
+    "price_per_1000": None,       # 只影響畫面上的金額換算，不影響管制
+    "warn_pct": 80,
+    "hard_pct": 100,
+    "cycle_start_day": 1,
+}
+
+
+def quota_settings() -> dict:
+    """超級管理員填的額度設定。"""
+    from helpers.settings import _get_setting
+    stored = _get_setting(QUOTA_SETTING, {}) or {}
+    return {**QUOTA_DEFAULTS, **stored}
+
+
+def quota_for(sku: str = None):
+    """某個 SKU 的免費額度。**沒填回 `None`（= 不管制），不是 0**（GB7）。
+
+    額度是 **per-SKU 而且不 pool**（Google 2025-03-01 起廢掉共用的
+    $200 credit）=> 「Google 還剩多少」這個問題沒有意義，
+    有意義的是「**這個 SKU** 還剩多少」。
+    """
+    sku = sku or USAGE_SKU_GEOCODING
+    settings = quota_settings()
+    quotas = settings.get("sku_quotas") or {}
+    if sku in quotas:
+        return quotas[sku]
+    if sku == USAGE_SKU_GEOCODING:
+        return settings.get("monthly_free_quota")
+    return None
+
+
+def current_billing_period(start_day: int = 1, today=None) -> str:
+    """當下所在帳單週期的**起日**（`YYYY-MM-DD`）。
+
+    回起日而不是 `"2026-09"` 這種標籤，理由是 A-2 問的那個問題：
+    使用者把起算日從 1 號改成 15 號的那一刻，舊標籤已經累計了 N 次，
+    而 09-01~09-14 的那 N 次該算在哪一期？
+    => 存**實際的週期起日**就沒有這個問題：改設定會開出一個新的週期，
+    舊的那一段原封不動留在原本的起日底下，看得到也對得上。
+
+    Google 的帳單週期**不一定是自然月**（GB4）——
+    寫死 1 號的話，跨週期那幾天的管制會完全錯位：
+    我們以為歸零了，而帳單還在累積。
+
+    週期是**算出來的**，不是存下來的（GB11）：
+    一個「下次恢復日」欄位在排程漏跑一次之後就永遠不會觸發，
+    而症狀是「額度早就重置了，而系統還在省錢模式」。
+    """
+    today = today or date.today()
+    try:
+        start_day = int(start_day)
+    except (TypeError, ValueError):
+        start_day = 1
+    # 28：每個月都有的最後一天。29~31 在二月會不存在，
+    # 而那種設定會讓某些月份**整個月沒有起算日**。
+    start_day = min(max(start_day, 1), 28)
+    year, month = today.year, today.month
+    if today.day < start_day:
+        month -= 1
+        if month == 0:
+            year, month = year - 1, 12
+    return "%04d-%02d-%02d" % (year, month, start_day)
+
+
+def record_geocode_call(source: str) -> None:
+    """記一次**真的發出去而且收到回應**的請求。
+
+    計數點在 `_locate_google()` 內部、發出之後解析之前（GB2/GB3）：
+
+        快取命中、預算用完、提前返回、沒有金鑰   不計
+        收到回應（含 ZERO_RESULTS、配額用完）    計
+        連線失敗（timeout / DNS）                不計
+
+    判準是「**有沒有收到回應**」，不是「有沒有拿到座標」（A 2026-09-22 裁定）。
+    只看有沒有拿到座標的話，這兩種會被歸成同一類。
+
+    把計數加在「決定要查」的地方，算出來的數字會**大於**帳單
+    => 我們會提前降級，**使用者拿到的精度比他付的錢低**。
+    只計成功的話，一個查不到的地址可以無限重試而不進計數器。
+
+    未查證：ZERO_RESULTS 與錯誤回應**在帳單上算不算一次**，
+    A-2 2026-09-22 讀過官方頁面，**沒有找到明文**。
+    所以這個計數器數的是「我們發出去幾次」，那與帳單的關係目前是未確認的。
+    不要把「查不到也計費」當成已知的事寫進任何地方。
+
+    寫進 `geocode_usage` 表，不是行程內變數：
+    記憶體計數器一重啟就歸零，而「永遠沒觸發」跟「運作良好」長得一模一樣。
+    """
+    from db import get_db
+    settings = quota_settings()
+    period = current_billing_period(settings.get("cycle_start_day", 1))
+    conn = get_db()
+    try:
+        # **原子 upsert，不要讀出來 +1 再寫回去**（A-2）：
+        # 兩個請求同時進來會少算一次，而**少算的方向是危險的那一側** ——
+        # 計數器偏低 => 自動降回免費太晚觸發 => 真的花到錢。
+        # 偏高只會讓功能提早變差，看得見、會被報修；偏低不會。
+        #
+        # 也不要用 `INSERT OR IGNORE` 當 upsert：AUTOINCREMENT 下它撞 UNIQUE
+        # 時照樣把 `sqlite_sequence` 往前推，`max(id)` 會漲到幾十萬，
+        # 而下一個人看 `max(id)` 會以為這裡有大量資料
+        # （`module_versions` 就是這樣騙了我們大半天）。
+        # `ON CONFLICT ... DO UPDATE` 走 UPDATE 路徑，不分配 rowid。
+        conn.execute(
+            "INSERT INTO geocode_usage "
+            "(period_start, month, source, count, updated_at) "
+            "VALUES (?,?,?,1,?) "
+            "ON CONFLICT(period_start, source) DO UPDATE SET "
+            "count = count + 1, updated_at = excluded.updated_at",
+            (period, period[:7], source, datetime.now().isoformat()))
+        conn.commit()
+    except Exception:   # noqa: BLE001
+        # 計數失敗**不可以打斷查詢** —— 使用者要的是地圖，不是計數器。
+        # 而它也不可以安靜：留一行 log，否則「沒有用量」與「計數壞了」一樣。
+        logger.exception("record_geocode_call failed (source=%s)", source)
+    finally:
+        conn.close()
+
+
+def usage_this_period(source: str = None) -> int:
+    """這個帳單週期已經發出去幾次。"""
+    from db import get_db
+    source = source or USAGE_SKU_GEOCODING
+    period = current_billing_period(quota_settings().get("cycle_start_day", 1))
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT count FROM geocode_usage WHERE period_start=? AND source=?",
+            (period, source)).fetchone()
+    except Exception:   # noqa: BLE001
+        logger.exception("usage_this_period failed")
+        return 0
+    finally:
+        conn.close()
+    return int(row["count"]) if row else 0
+
+
+def quota_exceeded(used=None, quota=None, pct=None) -> bool:
+    """到硬上限了嗎。
+
+    **`quota is None` = 不管制**（GB7），不是 = 0。
+    用 `is None`，不要用真假值。寫成真假值的話：
+    沒填額度 = 額度 0 = **第一次請求就鎖死**，
+    而那看起來很像「金鑰有問題」—— 使用者會去查金鑰，查不出東西。
+
+    `quota` 明著填 0 => 「一次都不准查」。**那與留空是兩件事。**
+    """
+    settings = quota_settings()
+    if quota is None and used is None:
+        quota = quota_for()
+        used = usage_this_period()
+    if quota is None:
+        return False
+    if pct is None:
+        pct = settings.get("hard_pct") or 100
+    try:
+        limit = float(quota) * float(pct) / 100.0
+    except (TypeError, ValueError):
+        return False
+    return float(used or 0) >= limit
+
+
+def quota_status() -> dict:
+    """現在是不是省錢模式，以及這個週期到哪天。給畫面用（GB9）。"""
+    settings = quota_settings()
+    used = usage_this_period()
+    quota = quota_for()
+    period = current_billing_period(settings.get("cycle_start_day", 1))
+    return {
+        "sku": USAGE_SKU_GEOCODING,
+        "managed": quota is not None,
+        "used": used,
+        "quota": quota,
+        "periodStart": period,
+        "degraded": quota_exceeded(used=used, quota=quota),
+        "warnPct": settings.get("warn_pct"),
+        "hardPct": settings.get("hard_pct"),
+        "cycleStartDay": settings.get("cycle_start_day"),
+    }
+
+
+def quota_calculator() -> dict:
+    """**真實**計算器 —— 每一個數字都從實際資料算，一個都不是估的（GB5）。
+
+    單價與免費額度**不寫死在程式裡**，它們是超級管理員填的欄位（GB6）。
+    Google 改過不止一次，而寫死的價格不會報錯，只會算錯。
+
+    `cost_this_period` 的前提是「一次請求 = 一個計費單位」，
+    而那一點**尚未查證**（A-2 讀過官方頁面沒有找到明文）=>
+    沒填單價就回 `None`，不要用 0 冒充：0 元會被讀成「不用錢」。
+    """
+    from db import get_db
+    settings = quota_settings()
+    cached = uncached = 0
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT COUNT(DISTINCT address) AS c FROM geocode_cache").fetchone()
+        cached = int(row["c"] or 0) if row else 0
+    except Exception:   # noqa: BLE001
+        logger.exception("quota_calculator: geocode_cache 讀不到")
+    finally:
+        conn.close()
+
+    # 還沒快取的相異地址：問「誰會被畫在地圖上」的那些來源。
+    # 用 `cached_only()` 判斷，不自己再寫一次「算不算已知」——
+    # 兩份判準會分岔，而分岔之後計算器說的跟實際查的就不是同一件事。
+    try:
+        addresses = set()
+        for fn in list(_WARM_SOURCES):
+            try:
+                addresses.update(a for a in (fn() or []) if a)
+            except Exception:   # noqa: BLE001
+                logger.exception("quota_calculator: 一個待暖來源壞了")
+        uncached = sum(1 for a in addresses if cached_only(a) is None)
+    except Exception:   # noqa: BLE001
+        logger.exception("quota_calculator: 待暖清單算不出來")
+
+    used = usage_this_period()
+    quota = quota_for()
+    price = settings.get("price_per_1000")
+    out = {
+        "cached_addresses": cached,
+        "uncached_addresses": uncached,
+        "used_this_period": used,
+        "quota": quota,
+        "remaining": None if quota is None else max(int(quota) - used, 0),
+        "period_start": current_billing_period(
+            settings.get("cycle_start_day", 1)),
+        # TTL 到期攤提：相異地址 / TTL 天數 * 30 = **每月經常性**用量。
+        "monthly_recurring_estimate": (
+            round(cached / float(GEOCODE_CACHE_TTL_DAYS) * 30, 1)
+            if cached else 0.0),
+        "price_per_1000": price,
+        "ttl_days": GEOCODE_CACHE_TTL_DAYS,
+    }
+    out["cost_this_period"] = (None if price is None
+                               else round(used * float(price) / 1000.0, 2))
+    return out
+
+
+#: 一個週期只寄一次警戒信，記在這個設定鍵底下。
+QUOTA_WARNED_SETTING = "google_quota_warned_period"
+
+
+def notify_quota_warning(used=None, quota=None) -> bool:
+    """達警戒線 => 寄信給超級管理員。**一個週期只寄一次。**
+
+    告警必須有速率上限：設計時就要想「失控時怎麼關掉」。
+    走 `_send_raising` **不要走 `_async_send`** ——
+    射後不理會讓「已通知」被標起來而信沒出去（同 3s 的標案雷達）。
+
+    回傳「這一次有沒有真的寄出去」。
+    """
+    from helpers import email_notify
+    from helpers.settings import _get_setting, _set_setting
+
+    settings = quota_settings()
+    if quota is None:
+        quota = quota_for()
+    if quota is None:
+        return False            # 不管制 => 沒有警戒線可言
+    if used is None:
+        used = usage_this_period()
+    warn_pct = settings.get("warn_pct") or 80
+    try:
+        if float(used) < float(quota) * float(warn_pct) / 100.0:
+            return False
+    except (TypeError, ValueError):
+        return False
+
+    period = current_billing_period(settings.get("cycle_start_day", 1))
+    if (_get_setting(QUOTA_WARNED_SETTING, "") or "") == period:
+        return False
+
+    subject = "Google 地圖額度已達警戒線（週期 %s 起）" % period
+    body = (
+        "本週期（%s 起）Google 地理編碼已送出 %s 次請求，設定的免費額度 %s 次，"
+        "已達警戒線 %s%%。\n\n"
+        "達到硬上限之後，系統會自動退回免費的定位來源（精度較低），"
+        "功能不會關閉；下一個週期開始會自動恢復，不需要有人去按。"
+        % (period, used, quota, warn_pct))
+    # 先寄再記：先記的話寄失敗就永遠不會再寄。
+    result = email_notify._send_raising(subject, body)
+    if result == email_notify.SEND_SENT:
+        _set_setting(QUOTA_WARNED_SETTING, period)
+        return True
+    return False
+
+
 def _locate_google(address, **_kw):
     """Google Geocoding。**沒有金鑰就不發請求**（A6）。
 
@@ -416,6 +747,12 @@ def _locate_google(address, **_kw):
     key = (profile.get(GOOGLE_KEY_SETTING) or "").strip()
     if not key:
         return None
+    # 🔴 GB8 第二道：到硬上限就**不要發出去**。
+    # ⚠️ 第一道在退階迴圈裡（`_stage_allowed()`）—— 這一道是給直接呼叫者的。
+    # 🔑 兩道都要：少了迴圈那道，我們會付錢；少了這一道，
+    #    任何一個繞過迴圈的新呼叫端都會默默把額度用完。
+    if quota_exceeded():
+        return None
     params = urllib.parse.urlencode({"address": address, "key": key,
                                      "region": "tw", "language": "zh-TW"})
     req = urllib.request.Request(
@@ -423,7 +760,19 @@ def _locate_google(address, **_kw):
         headers={"User-Agent": USER_AGENT})
     try:
         with urllib.request.urlopen(req, timeout=FETCH_TIMEOUT_SECONDS) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
+            raw = resp.read()
+    except Exception:  # noqa: BLE001
+        # 🔑 **連線失敗不計數**（GB3）：請求沒有到達對方，或沒有收到回應。
+        # ⚠️ 判準是「有沒有收到回應」，不是「有沒有拿到座標」——
+        # ☠️ 只看有沒有座標的話，「查不到」與「連不上」會被歸成同一類。
+        return None
+    # 🔴 **計數點在這裡**：收到回應之後、解析之前（GB2／GB3）。
+    # ☠️ 放在解析之後的話，`ZERO_RESULTS` 這種「送出去了、對方回了、
+    #    而我們沒拿到座標」的請求就不會被計到 ——
+    #    而那種地址可以被無限重試。
+    record_geocode_call(USAGE_SKU_GEOCODING)
+    try:
+        data = json.loads(raw.decode("utf-8"))
     except Exception:  # noqa: BLE001
         return None
     results = data.get("results") or []
@@ -477,6 +826,24 @@ _STAGES = (("_locate_google", SOURCE_GOOGLE),
            ("_locate_nominatim", SOURCE_NOMINATIM))
 
 
+def _stage_allowed(source) -> bool:
+    """這一階現在可不可以走。
+
+    🔴 GB8：達硬上限 ⇒ **google 那一階直接跳過**，退到 TGOS／Nominatim／行政區。
+    ⭐ 使用者要的是「附近客戶跟查找功能**先回歸免費**」——
+       **功能照用，只是精度降級**，不是把功能關掉。
+
+    ⚠️ 只擋 Google。免費那幾階沒有額度可言，擋它們等於把地圖關掉，
+    ☠️ 而「鎖死了所以地圖是空的」會讓「沒有超支」這個斷言變綠（GB15）——
+       那是把一個成本問題換成一個功能故障。
+    """
+    if source != SOURCE_GOOGLE:
+        return True
+    # 🔑 具名呼叫模組層函式，不要抓住參考：抓住的話測試 patch 打不到，
+    #    而那一題會安靜地失效。
+    return not quota_exceeded()
+
+
 def _run_stage(name, address):
     """呼叫某一階。**從模組全域取，不要抓住函式參考。**
 
@@ -501,6 +868,8 @@ def locate(address, manual_coord=None):
         return GeoResult(error="地理查詢未啟用（需要 MOTRIX_GEO=1）")
 
     for name, source in _STAGES:
+        if not _stage_allowed(source):
+            continue
         found = _run_stage(name, address)
         if found:
             coord, precision = found
@@ -645,6 +1014,15 @@ def locate_cached(address, manual_coord=None):
         hit = _cached_stage(address, source)
         if hit:
             return hit
+        if not _stage_allowed(source):
+            # 🔴 GB10／GB16：**跳過，而不是用免費階的結果去填 google 的快取鍵。**
+            # ☠️ 填進去的話，額度恢復之後 `cached_only()` 會在 google 階命中
+            #    ⇒ **永遠不會再問 Google** —— 就是 A9／GC1 那個坑。
+            # 🔑 而「永遠不再問」與「問了而答案一樣」在畫面上完全相同：
+            #    症狀是**沒有症狀**，金鑰、額度、設定全都正常。
+            # 📌 下面每一階各自用自己的 `source` 當快取鍵，所以降級期間拿到的
+            #    行政區中心點會被記在 `nominatim` 底下，不會污染 google 那一格。
+            continue
         found = _run_stage(name, address)
         if found:
             coord, precision = found
@@ -782,6 +1160,22 @@ def _warm_backlog():
     return out
 
 
+def _check_quota_warning():
+    """順手看一下要不要寄警戒信（`GB12`）。
+
+    🔑 **掛在背景這一輪，不掛在 `record_geocode_call()` 裡**：
+    ☠️ `_send_raising()` 是同步的 —— 掛在計數那一行等於把一次 SMTP
+       塞進使用者開地圖的請求路徑上，而 SMTP 慢起來是以秒計的。
+    📌 警戒線講的是「快到了」，不是「已經超了」⇒ 六小時的解析度夠用；
+       而真正的硬上限是**每一次呼叫都會檢查**的（`_stage_allowed()`）。
+    ⚠️ 寄信失敗不可以打斷背景暖快取 —— 它的工作是補快取，不是寄信。
+    """
+    try:
+        notify_quota_warning()
+    except Exception:   # noqa: BLE001
+        logger.exception("_check_quota_warning failed")
+
+
 def warm_geocode_cache() -> dict:
     """跑一趟背景暖快取。回 `warm_status()`。
 
@@ -857,6 +1251,9 @@ def warm_geocode_cache() -> dict:
                     "（對方可能拒絕了我們——請看上面的錯誤訊息）", streak)
                 reason = "failures"
                 break
+    # 📌 每一輪結束時看一次警戒線（`GB12`）——
+    #    這裡是**唯一**會定期醒來而且不在請求路徑上的地方。
+    _check_quota_warning()
     return _finish(reason, processed, succeeded)
 
 

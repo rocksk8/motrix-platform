@@ -338,6 +338,102 @@
           </div>
         </div>
 
+        <!-- Google 額度治理（§16 GB5／GB6）
+             使用者 2026-09-22：「你做一個真實計算器，並讓超級管理員可以依據
+             現在 google 的免費額度去調整…」
+             🔑 每一個數字都從實際資料算，一個都不是估的。
+             ⚠️ 免費額度與單價**不寫死在程式裡** —— Google 2025-03-01 廢掉了
+                每月 $200 的共用 credit，改成每個 SKU 各自一組額度而且不共用，
+                而台灣適用哪一組數字我們沒有查證過。
+                ☠️ 寫死一個沒查證的數字，錯的方向若偏晚就是真的花錢。 -->
+        <div class="ns-card" x-show="!sysLoading">
+          <div class="ns-card-head">
+            <div class="ns-card-head-title">Google 地圖額度</div>
+            <span x-show="gqSaved" x-transition
+                  style="font-size:12px;color:#16A34A;font-weight:600">已儲存</span>
+          </div>
+          <div class="ns-card-body">
+            <div class="ns-desc">
+              到達上限時系統會<strong>自動退回免費的定位來源</strong>（精度較低），
+              <strong>功能不會關閉</strong>；下一個計費週期開始自動恢復，不需要有人去按。
+              <br>⚠️ <strong>額度留空 ＝ 不管制</strong>（不是 0）。
+              請填入你自己在 Google Cloud 主控台上看到的數字 ——
+              每個服務（SKU）各自一組免費額度，<strong>不共用</strong>。
+            </div>
+            <div class="ns-row">
+              <div class="ns-field">
+                <label>地址定位每月免費額度（次，留空＝不管制）</label>
+                <input type="number" min="0" x-model.number="gq.monthly_free_quota">
+              </div>
+              <div class="ns-field">
+                <label>每 1000 次單價（選填，只影響金額換算）</label>
+                <input type="number" min="0" step="0.01" x-model.number="gq.price_per_1000">
+              </div>
+            </div>
+            <div class="ns-row">
+              <div class="ns-field">
+                <label>警戒線（%，達到就寄信）</label>
+                <input type="number" min="1" max="100" x-model.number="gq.warn_pct">
+              </div>
+              <div class="ns-field">
+                <label>硬上限（%，達到就降回免費）</label>
+                <input type="number" min="1" max="100" x-model.number="gq.hard_pct">
+              </div>
+            </div>
+            <div class="ns-row">
+              <div class="ns-field">
+                <label>帳單週期起算日（1～28）</label>
+                <input type="number" min="1" max="28" x-model.number="gq.cycle_start_day">
+                <div style="font-size:11px;color:#64748B;margin-top:4px">
+                  Google 的帳單週期不一定是自然月。29 以後的日子二月沒有，所以上限是 28。
+                </div>
+              </div>
+            </div>
+
+            <!-- 真實計算器：每一格都標明它是怎麼來的 -->
+            <div class="ns-desc" x-show="gqCalc"
+                 style="background:#F8FAFC;border-left:3px solid #94A3B8;
+                        padding:10px 12px;border-radius:4px;line-height:1.9">
+              <div><strong>目前已快取的相異地址</strong>
+                <span x-text="gqCalc && gqCalc.cached_addresses"></span> 個
+                —— 這些開地圖是 <strong>0 次</strong>請求。</div>
+              <div><strong>尚未快取的相異地址</strong>
+                <span x-text="gqCalc && gqCalc.uncached_addresses"></span> 個
+                —— 一次性成本。</div>
+              <div><strong>本週期已送出</strong>
+                <span x-text="gqCalc && gqCalc.used_this_period"></span> 次
+                <template x-if="gqCalc && gqCalc.quota !== null">
+                  <span>／額度 <span x-text="gqCalc.quota"></span>，
+                    還剩 <span x-text="gqCalc.remaining"></span></span>
+                </template>
+                <template x-if="gqCalc && gqCalc.quota === null">
+                  <span>（未設額度 ⇒ 不管制）</span>
+                </template>
+              </div>
+              <div><strong>每月經常性用量</strong>
+                約 <span x-text="gqCalc && gqCalc.monthly_recurring_estimate"></span> 次
+                —— 快取有效期 <span x-text="gqCalc && gqCalc.ttl_days"></span> 天，
+                到期後會重查。</div>
+              <div x-show="gqCalc && gqCalc.cost_this_period !== null">
+                <strong>本週期金額換算</strong>
+                <span x-text="gqCalc && gqCalc.cost_this_period"></span>
+                <span style="opacity:.75">（依你填的單價；
+                  ⚠️ 「一次請求＝一個計費單位」我們沒有向 Google 查證過，
+                  這個數字只能當估算）</span></div>
+            </div>
+
+            <div class="ns-actions">
+              <button class="btn btn-primary" @click="saveGoogleQuota()" :disabled="gqSaving">
+                <span x-show="!gqSaving">儲存設定</span>
+                <span x-show="gqSaving">儲存中…</span>
+              </button>
+            </div>
+            <div x-show="gqMsg" x-text="gqMsg" x-transition
+                 :style="gqIsError ? 'color:#DC2626' : 'color:#16A34A'"
+                 style="font-size:13px;margin-top:12px;font-weight:600"></div>
+          </div>
+        </div>
+
         <!-- 備份保留天數 -->
         <div class="ns-card" x-show="!sysLoading">
           <div class="ns-card-head">
@@ -583,6 +679,11 @@
         // 否則使用者填的值會被稍後抵達的回應蓋回預設。實測踩過——填 45 存進去
         // 卻是 30，而且畫面沒有任何異狀。同一類競態稍早在叫料清單也發生過。
         sysLoading: true,
+        // 🔑 額度：全部 `null` 起手。**`null` 是「不管制」，`0` 是「一次都不准查」** ——
+        //    用 0 當預設的話，畫面一載入就在說一件不是真的事。
+        gq: { monthly_free_quota: null, price_per_1000: null,
+              warn_pct: 80, hard_pct: 100, cycle_start_day: 1 },
+        gqCalc: null, gqSaving: false, gqSaved: false, gqMsg: '', gqIsError: false,
         // ⚠️ 這幾個預設值只在「後端還沒回應」的那一瞬間出現，載入後會被
         //    `/api/settings/backup-retention` 覆蓋。仍然對齊後端的真實預設
         //    （archive._BACKUP_RETENTION_DEFAULT）—— 一個對不上的暫時值，
@@ -644,13 +745,21 @@
         async _loadSysSettings() {
           const h = { Authorization: 'Bearer ' + this.session.token }
           const get = (p) => fetch(p, { headers: h }).then(r => r.ok ? r.json() : null)
-          const [ret, pdf, edge, cloud] = await Promise.allSettled([
+          // ⚠️ 解構的順序**就是陣列的順序**。多塞一個查詢進中間而忘了改這一行，
+          //    後面每一個都會拿到隔壁那支端點的回應 —— 而它們都是
+          //    `{...}` 合併，所以不會丟例外，只會讓畫面上出現別人的值。
+          const [ret, gq, pdf, edge, cloud] = await Promise.allSettled([
             get('/api/settings/backup-retention'),
+            get('/api/settings/google-quota'),
             get('/api/settings/pdf-base-path'),
             get('/api/settings/edge-path'),
             get('/api/settings/cloud-backup-target'),
           ])
           if (ret.status === 'fulfilled' && ret.value) this.retention = { ...this.retention, ...ret.value }
+          if (gq.status === 'fulfilled' && gq.value) {
+            this.gq = { ...this.gq, ...(gq.value.settings || {}) }
+            this.gqCalc = gq.value.calculator || null
+          }
           if (pdf.status === 'fulfilled' && pdf.value) this.pdfBase = { ...this.pdfBase, ...pdf.value }
           if (edge.status === 'fulfilled' && edge.value) this.edgePath = { ...this.edgePath, ...edge.value }
           if (cloud.status === 'fulfilled' && cloud.value) {
@@ -742,6 +851,41 @@
               local_pre_update_keep: Number(v.local_pre_update_keep),
             },
           })
+        },
+
+        async saveGoogleQuota() {
+          const v = this.gq
+          // ⚠️ 空字串要變回 `null`（不管制），**不可以變成 0**。
+          // ☠️ Alpine 的 `x-model.number` 在欄位清空時給的是空字串，
+          //    而 `Number('')` 是 0 —— 那會把「不管制」悄悄變成「一次都不准查」，
+          //    而使用者看到的症狀會是「金鑰好像壞了」。
+          const orNull = (x) => (x === '' || x === null || x === undefined)
+                                ? null : Number(x)
+          for (const [k, label, lo, hi] of [
+              ['warn_pct', '警戒線', 1, 100],
+              ['hard_pct', '硬上限', 1, 100],
+              ['cycle_start_day', '帳單週期起算日', 1, 28]]) {
+            const n = Number(v[k])
+            if (!Number.isInteger(n) || n < lo || n > hi) {
+              this.gqMsg = `${label} 需為 ${lo}～${hi} 之間的整數`
+              this.gqIsError = true
+              setTimeout(() => this.gqMsg = '', 5000)
+              return
+            }
+          }
+          const ok = await this._saveSetting({
+            url: '/api/settings/google-quota', method: 'PUT', prefix: 'gq',
+            body: {
+              monthly_free_quota: orNull(v.monthly_free_quota),
+              price_per_1000: orNull(v.price_per_1000),
+              warn_pct: Number(v.warn_pct),
+              hard_pct: Number(v.hard_pct),
+              cycle_start_day: Number(v.cycle_start_day),
+            },
+          })
+          // 存完重讀一次：計算器的數字會跟著設定變，而畫面上停在舊值
+          // 跟「沒有生效」長得一樣。
+          if (ok) await this._loadSysSettings()
         },
 
         async savePdfBase() {

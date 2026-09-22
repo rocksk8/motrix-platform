@@ -1363,6 +1363,94 @@ def set_webauthn_config(body: dict = Body(...), authorization: str = Header(None
     return {"ok": True, "invalidatedCredentials": invalidated, "affectedUsers": affected_users}
 
 
+# ── Google 額度治理（§16 GB）────────────────────────────────────────────────
+#
+# 使用者 2026-09-22：「你做一個真實計算器，並讓超級管理員可以依據現在 google 的
+# 免費額度去調整，當準備到達上限額度自動寄信並將附近客戶跟查找功能先回歸免費，
+# 待月週期結束開放」
+#
+# 🔑 只有超級管理員改得動（`GB6`，比照 `SA1`）：這幾個欄位決定的是**錢**。
+# ⚠️ 反向控制那一題用的是 `role=viewer` ＋ `modules` 含 `settings` ——
+#    那正是 §10 查出來的那個真實帳號形狀，所以這裡**不可以**用 `module=` 放行。
+
+
+class GoogleQuotaBody(BaseModel):
+    # 🔴 每一格都可以不送（`Optional` ＋ `None`）：這支端點是**合併**不是覆蓋。
+    # ☠️ 整包覆蓋的教訓見 `BK3`：一個沒有人送出的值會被静静打回預設，
+    #    而存檔成功、沒有錯誤。
+    sku_quotas:         Optional[dict] = None
+    monthly_free_quota: Optional[int] = None
+    price_per_1000:     Optional[float] = None
+    warn_pct:           Optional[int] = None
+    hard_pct:           Optional[int] = None
+    cycle_start_day:    Optional[int] = None
+
+
+@router.get("/api/settings/google-quota")
+def get_google_quota_setting(authorization: str = Header(None)):
+    """設定值 ＋ 真實計算器的數字（`GB5`）。"""
+    _require_user(authorization, require_superadmin=True)
+    from helpers import geo
+    return {
+        "settings": geo.quota_settings(),
+        "status": geo.quota_status(),
+        "calculator": geo.quota_calculator(),
+        # 📌 SKU 清單給畫面用。**額度是 per-SKU 而且不 pool** ——
+        #    一個「Google 還剩多少」的欄位在 2025-03-01 之後沒有意義。
+        "skus": [
+            {"key": geo.USAGE_SKU_GEOCODING, "label": "地址定位（Geocoding）"},
+            {"key": geo.USAGE_SKU_PLACES_TEXT,
+             "label": "附近商家搜尋（Places Text Search，尚未啟用）"},
+            {"key": geo.USAGE_SKU_PLACE_DETAILS,
+             "label": "商家詳細資料（Place Details，尚未啟用）"},
+        ],
+    }
+
+
+@router.put("/api/settings/google-quota")
+def set_google_quota_setting(body: GoogleQuotaBody,
+                             authorization: str = Header(None)):
+    actor = _require_user(authorization, require_superadmin=True)
+    from helpers import geo
+
+    sent = {k: v for k, v in body.model_dump().items()
+            if k in body.model_fields_set}
+    if not sent:
+        raise HTTPException(400, "沒有送出任何要變更的欄位")
+
+    # ⚠️ 留空（`None`）與填 0 是**兩件事**（`GB7`）：
+    #    留空 ＝ 不管制；填 0 ＝ 一次都不准查。
+    # ☠️ 所以額度欄位**不做「沒填就當 0」的正規化** —— `None` 要原樣存下去。
+    for key in ("warn_pct", "hard_pct"):
+        if key in sent and sent[key] is not None:
+            if not 1 <= int(sent[key]) <= 100:
+                raise HTTPException(400, f"{key} 需介於 1～100 之間")
+    if "cycle_start_day" in sent and sent["cycle_start_day"] is not None:
+        # 上限 28：29~31 在二月不存在，而那種設定會讓某些月份整個月沒有起算日。
+        if not 1 <= int(sent["cycle_start_day"]) <= 28:
+            raise HTTPException(400, "cycle_start_day 需介於 1～28 之間"
+                                     "（29 以後的日子二月沒有）")
+    for key in ("monthly_free_quota",):
+        if key in sent and sent[key] is not None and int(sent[key]) < 0:
+            raise HTTPException(400, f"{key} 不可以是負數")
+    if "sku_quotas" in sent and sent["sku_quotas"] is not None:
+        for sku, value in (sent["sku_quotas"] or {}).items():
+            if value is None:
+                continue            # 該 SKU 不管制
+            if not isinstance(value, int) or value < 0:
+                raise HTTPException(400, f"SKU `{sku}` 的額度要是非負整數或留空")
+
+    value = {**geo.quota_settings(), **sent}
+    _set_setting(geo.QUOTA_SETTING, value)
+
+    # 📌 稽核只記「改了哪幾項」與新值。這裡沒有祕密（額度與百分比不是憑證），
+    #    所以值可以留；金鑰本身在另一支端點，那裡連末四碼都不記。
+    _audit(_tok(authorization), "settings.google_quota.update", "settings",
+           "google_quota",
+           "；".join("%s=%s" % (k, sent[k]) for k in sorted(sent)))
+    return {"ok": True, "status": geo.quota_status()}
+
+
 # ── Backup retention settings ─────────────────────────────────────────────────
 # 2026-09-01：本機/雲端備份保留天數原本寫死在 archive.py（見該檔 _BACKUP_RETENTION_
 # DEFAULT 註解），使用者要求可調整避免雲端空間被逐年累積的每日/週備份塞爆，改成

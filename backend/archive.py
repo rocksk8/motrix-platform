@@ -526,6 +526,29 @@ def _clear_backup_alert_if_healthy() -> None:
 
 
 def _ensure_archive_dirs():
+    """雲端存檔的目錄預建與可用性告警。
+
+    🔴 **這一行不可以在模組層被呼叫**（`BK20`，2026-09-22）。
+
+    ☠️ 它原本在 `main.py` 的模組層 ⇒ 任何在 conftest 的 patch 生效之前
+    `import main` 的路徑，會在**真實的雲端硬碟**上建目錄。
+    而 `BK19` 的守門裝在 fixture 裡 —— 它跑的時候，損害已經造成。
+    📌 〈防護的副作用落在盲側〉：**裝在事後的守門，對「事前」那一段沒有意見。**
+    ⇒ 現在它在 `main.py` 的 `MOTRIX_DISABLE_SCHEDULERS` 區塊裡。
+
+    🔑 **為什麼搬得動**：`archive.py` 的寫入端本來就自己建目錄
+    （`exist_ok=True`，326／334／359／420／764／1145 六處）——
+    就算這一行沒跑，真正要寫的那一刻仍然會建。
+    ⇒ 它的作用是「**提早發現雲端碟不見了**」的告警，不是「讓寫入成功」。
+
+    ☠️ **不要用「正式機與開發機都不設 `MOTRIX_DISABLE_SCHEDULERS`」當理由**
+    （我原本是這樣寫的，A-2 2026-09-22 給了現成反例）：
+    666 的啟動指令就設了它。那台機器沒事只是因為 `cloud_archive_enabled()`
+    是 false，這個函式第一行就 `return` ——
+    🔑 **結論一樣，而支撐它的理由不是那一個。**
+    ⚠️ 理由會被下一個人引用，而他可能在一台 `cloud_archive_enabled()`
+    為 true 的機器上用 `DISABLE_SCHEDULERS=1` 啟動。
+    """
     # 2026-09-15：這台機器不上傳雲端（開發機）→ 什麼都不做，也**不要寫任何警示**。
     # 這不是故障，是設定；在這裡寄信或留警示檔只會訓練大家忽略這封信。
     if not cloud_archive_enabled():
@@ -628,13 +651,88 @@ SNAPSHOT_RATIO_EXCEPTIONS = frozenset({
     "2026-08-05",
 })
 
-#: ② 的預設界線。⚠️ **只在開發機這一個安裝、61 天上驗過**（`BK26`）。
-_SNAPSHOT_RATIO_FALLBACK = (800.0, 8000.0)
+#: 自我校準需要的最少樣本數。少於這個數就**不判斷**。
+#:
+#: 🔴 A-2 2026-09-22 推翻了「樣本不足就退回一組常數」的寫法：
+#: ☠️ 樣本為空的時候，正好是**全新安裝的前幾天** ——
+#:    那正是「別台機器的數字最不適用」的時刻，
+#:    而它同時與 `BK29`（前 7 天沒有基準要跳過）直接矛盾。
+#: 🔑 **沒有基準時，正確的行為是「不判斷」，不是「用別人的基準判斷」。**
+_SNAPSHOT_RATIO_MIN_SAMPLES = 5
 
-#: 自我校準時，界線離中位數的倍數。
+#: 自我校準時，上界離中位數的倍數。
 #: 🔑 用**倍數**不用絕對值：這個指標分子分母同步成長，
 #: ⇒ 資料長大時界線自己跟著長，不需要每個月回來調數字。
 _SNAPSHOT_RATIO_SPREAD = 3.0
+
+#: 下界的倍數。⚠️ 比上界寬，理由見 `snapshot_ratio_bounds()`。
+_SNAPSHOT_RATIO_LOW_SPREAD = 4.0
+
+
+def _median(samples):
+    """中位數。樣本不足回 `None`。
+
+    ⚠️ 用中位數不用平均：校準資料本身**就可能含有我們要抓的那種異常**
+    （08-02／08-03 是 65 倍的離群值），
+    ☠️ 而一個被異常值校準過的界線，會把那種異常認成正常。
+    """
+    values = sorted(float(v) for v in (samples or []) if v)
+    if len(values) < _SNAPSHOT_RATIO_MIN_SAMPLES:
+        return None
+    mid = len(values) // 2
+    return values[mid] if len(values) % 2 else (values[mid - 1] + values[mid]) / 2
+
+
+#: `BK22` 定案版的倍率區間。**無單位、不綁安裝** ⇒ 可以開著出貨。
+#:
+#: A-2 用 61 天實算：正常日 0.568~1.758（含 08-04 那天合法的 VACUUM），
+#: 膨脹那兩天 103，空庫那三天 0.12。
+#: 下界對正常最小值餘裕 1.89x、對異常仍有 2.5x 距離；上界餘裕 1.71x、距離 34x。
+#: 🔑 兩側各有獨立用途，**下界不是冗餘的**：
+#:    上界抓「別的表膨脹」（分子暴增，08-02 的 module_versions）；
+#:    下界抓「分母那張表自己被灌爆」——而身分對照是「只增不減」，那一種它看不到。
+SNAPSHOT_SIZE_RATIO_LO = 0.3
+SNAPSHOT_SIZE_RATIO_HI = 3.0
+
+#: 倍率法要幾份歷史才算得出來。
+#:
+#: 🔴 `BK29`：**前 7 天沒有基準 ⇒ 跳過，不是紅。**
+#: ☠️ 少了這一條，每一個全新安裝的第一天都會收到假警報，
+#: 📌 而第一天收到的假警報，會決定使用者往後怎麼看待這個系統的告警。
+#: ⚠️ 它必須與 `BK22` **同一包**：先出 BK22 再補 BK29 的話，
+#:    中間每一個新裝的客戶都會踩到。
+SNAPSHOT_SIZE_HISTORY_MIN = 7
+
+
+def snapshot_size_ratio(today_bytes, history_bytes):
+    """今天的快照是前幾份的幾倍。歷史不足 `SNAPSHOT_SIZE_HISTORY_MIN` 份 ⇒ `None`。
+
+    ⚠️ 回 `None` 不是回 0，也不是丟例外（`BK29`）——
+    🔑 「還沒有基準」與「比值是 0」是兩件事（〈null 不等於 0〉）。
+    """
+    values = sorted(float(v) for v in (history_bytes or []) if v)
+    if len(values) < SNAPSHOT_SIZE_HISTORY_MIN:
+        return None
+    mid = len(values) // 2
+    median = values[mid] if len(values) % 2 else (values[mid - 1] + values[mid]) / 2
+    if not median:
+        return None
+    return float(today_bytes) / median
+
+
+def snapshot_size_ok(today_bytes, history_bytes) -> bool:
+    """倍率落在 `[0.3, 3.0]` 之內嗎。**算不出基準時回 `True`（跳過）。**
+
+    ☠️ 這裡 fail-open 是刻意的，而且是唯一正確的：
+    「還沒有基準」不是「這份快照有問題」，
+    🔑 而把它判成紅的代價是**每一個新客戶的第一天都收到假警報**。
+    📌 明著寫下來，不要讓它看起來像「這一側有人在守」——
+       前 7 天這一側**沒有人在守**，守的只有身分對照那一半。
+    """
+    ratio = snapshot_size_ratio(today_bytes, history_bytes)
+    if ratio is None:
+        return True
+    return SNAPSHOT_SIZE_RATIO_LO <= ratio <= SNAPSHOT_SIZE_RATIO_HI
 
 
 def snapshot_ratio_bounds(samples=None) -> tuple:
@@ -647,12 +745,17 @@ def snapshot_ratio_bounds(samples=None) -> tuple:
     🔑 而校準資料本身就可能含有我們要抓的那種異常 ——
     ☠️ **一個被異常值校準過的界線，會把那種異常認成正常。**
     """
-    values = sorted(float(v) for v in (samples or []) if v)
-    if not values:
-        return _SNAPSHOT_RATIO_FALLBACK
-    mid = len(values) // 2
-    median = values[mid] if len(values) % 2 else (values[mid - 1] + values[mid]) / 2
-    return (median / _SNAPSHOT_RATIO_SPREAD, median * _SNAPSHOT_RATIO_SPREAD)
+    median = _median(samples)
+    if median is None:
+        return None
+    # ⚠️ **上下不對稱**（A-2 2026-09-22 實算 61 天）：
+    #    下界是唯一薄的一側，而踩到它的是**合法的 VACUUM**（08-04）。
+    #    對稱的 ÷3 對 1,334 只有 1.42x 餘裕；÷4 拉到 1.89x，
+    #    而對已知異常（330）仍保有 2.14x 的距離。
+    # 📌 這比開一份例外清單好：〈守門要驗「有沒有人做過決定」〉配的反向控制
+    #    就是「不可以靠把東西寫進排除清單變綠」。
+    return (median / _SNAPSHOT_RATIO_LOW_SPREAD,
+            median * _SNAPSHOT_RATIO_SPREAD)
 
 
 def bytes_per_audit_row(db_bytes, audit_rows):
@@ -726,6 +829,26 @@ def _snapshot_row_counts(path: str) -> tuple:
         conn.close()
 
 
+def _recent_snapshot_sizes(exclude_day: str = None) -> list:
+    """本機既有快照的檔案大小，當作倍率法的基準（`BK22`／`BK29`）。
+
+    🔑 用**本機**那一層而不是雲端：雲端要走網路，而這道檢查跑在每一次快照之後。
+    ⚠️ 排除今天自己那一份 —— 拿自己當基準的話倍率永遠是 1.0，
+    ☠️ 而那是〈假綠燈：斷言驗到自己設的值〉的標準形狀。
+    """
+    sizes = []
+    try:
+        for name in sorted(os.listdir(_LOCAL_DB_BACKUP)):
+            if exclude_day and name == exclude_day:
+                continue
+            candidate = os.path.join(_LOCAL_DB_BACKUP, name, "motrix_erp.db")
+            if os.path.isfile(candidate):
+                sizes.append(os.path.getsize(candidate))
+    except OSError:
+        return []
+    return sizes
+
+
 def _snapshot_health(path: str, summary: dict = None, day: str = None) -> tuple:
     """`(合格嗎, 原因清單, 筆數)`。`summary` 給了才跑得了身分對照。"""
     if not os.path.isfile(path):
@@ -739,6 +862,20 @@ def _snapshot_health(path: str, summary: dict = None, day: str = None) -> tuple:
         return False, [
             "快照裡缺少核心資料表（%s）——這份檔案不是這個系統的資料庫，"
             "或者結構不完整" % "、".join(missing)], counts
+
+    # 🔴 `BK22` 定案版：倍率法。**無單位、不綁安裝** ⇒ 開著出貨。
+    #    上界抓「別的表膨脹」（08-02／08-03 整庫 311 MB，而三張表全部正常
+    #    ⇒ 身分對照對它完全免疫）；
+    #    下界抓「分母那張表自己被灌爆」（身分對照是只增不減，看不到那一種）。
+    # ⚠️ 歷史不足 7 份 ⇒ `snapshot_size_ok()` 回 True（`BK29` 明訂跳過）。
+    history = _recent_snapshot_sizes(exclude_day=day)
+    if not snapshot_size_ok(os.path.getsize(path), history):
+        ratio = snapshot_size_ratio(os.path.getsize(path), history)
+        return False, [
+            "快照大小是前 %d 份的 %.2f 倍（合格區間 %s~%s）——"
+            "不是「這一份特別大／特別小」，是**有東西失控了**"
+            % (len(history), ratio, SNAPSHOT_SIZE_RATIO_LO,
+               SNAPSHOT_SIZE_RATIO_HI)], counts
 
     if summary is not None and not snapshot_content_ok(
             counts, summary, db_bytes=os.path.getsize(path), day=day):
@@ -1355,6 +1492,11 @@ def _daily_backup_tables() -> dict:
         "標案命中":         "SELECT * FROM tender_hits ORDER BY id",
         # ── 紀錄類 ──
         "稽核紀錄":         "SELECT * FROM audit_log ORDER BY id",
+        # 🔑 Google 額度計數器（§16 GB1）。**它算不回來。**
+        # ☠️ 掉了就從 0 重算 ⇒ 我們會以為還有額度，而自動降回免費**太晚觸發**
+        #    ⇒ 真的花到錢。〈計數器要有落點〉的落點本身也要有備份。
+        # 📌 它很小（一個週期一個 SKU 一列），進 JSON 幾乎沒有成本。
+        "地理查詢用量":     "SELECT * FROM geocode_usage ORDER BY id",
         "通知":             "SELECT * FROM notifications ORDER BY id",
         "模組版本":         "SELECT * FROM module_versions ORDER BY id",
     }

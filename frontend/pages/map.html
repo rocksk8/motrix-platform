@@ -94,6 +94,25 @@
           <strong>下面所有的距離都會差幾公里</strong>。
           <br>可以在公司資料設定直接填經緯度，那會跳過所有查詢。</div>
       </div>
+      <!-- 🔴 GB9：**降級必須看得見。**
+           📌 〈降級之後它還是會動〉：壞掉會被報修，降級不會。
+           ☠️ 少了這一行，使用者會把「地圖突然變不準了」當成 bug 報上來，
+              而查的人會發現金鑰正常、設定正常、程式沒有例外 ——
+              **沒有人查得出來。**
+           ⚠️ 排在「地理查詢未啟用」之前：那一則講的是「什麼都定位不到」，
+              這一則講的是「定位得到，只是比較粗」——兩件事不要疊在一起講。 -->
+      <div class="mp-note warn" x-show="info && info.quota && info.quota.degraded">
+        <span>💸</span>
+        <div><strong>目前是省錢模式</strong>：本週期的 Google 地圖額度已用畢
+          （<span x-text="(info.quota && info.quota.used) || 0"></span>／<span
+             x-text="(info.quota && info.quota.quota) || 0"></span>），
+          定位已自動退回免費來源，<strong>精度較低</strong>（可能只到路段或行政區）。
+          <br>功能沒有關閉，清單與距離照常可用；<strong>下一個計費週期開始會自動恢復</strong>，
+          不需要有人去按。
+          <br><span style="opacity:.8">週期起日
+            <span x-text="(info.quota && info.quota.periodStart) || '—'"></span>；
+            額度與起算日可在「公司資料設定」由最高管理員調整。</span></div>
+      </div>
       <div class="mp-note warn" x-show="info && !info.geoEnabled">
         <span>⚠️</span>
         <div><strong>地理查詢未啟用</strong>，所以沒有任何東西定位得到、距離全部是空的。
