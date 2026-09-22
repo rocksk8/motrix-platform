@@ -290,22 +290,36 @@ def test_al1_the_a2_rewrite_is_behaviour_preserving():
         + "✅ 若是 `(c)` 真的在逐頁加守衛，**退回給我**把這一格改成只增不減。")
 
 
-def _fake_static(tmp_path, edits=None):
-    """複製 `frontend/static/*.js` 到暫存目錄，可以順手改其中幾個檔。
+#: `STATIC_GLOB` 現在是 `frontend/**/*.js`（遞迴、排除 `vendor`）⇒ 我的替身
+#: 也要**兩個目錄都放**，否則替身比受測物窄，而窄的替身會讓題目變弱。
+_FAKE_DIRS = ("static", "js")
 
-    ⚠️ **整個目錄都要複製**：`scan_shared()` 數宣告、`_def_body()` 找定義，
-       兩者都掃同一個 `STATIC_GLOB` ⇒ 只放宣告檔的話定義會找不到，
+
+def _fake_frontend(tmp_path, edits=None):
+    """複製 `frontend/static/*.js` ＋ `frontend/js/*.js`，可順手改其中幾個檔。
+
+    回傳可以直接餵給 `STATIC_GLOB` 的 pattern（`<tmp>/**/*.js`）。
+
+    ⚠️ **整個範圍都要複製**：`scan_shared()` 數宣告、`_def_body()` 找定義，
+       兩者掃同一個 `STATIC_GLOB` ⇒ 只放宣告檔的話定義會找不到，
        而那時 `guarded` 會全部變 `False` —— **看起來像缺陷，其實是我的裝置不全**。
+    🔴 **更正留著**：我第一版只複製 `frontend/static`（當時 `STATIC_GLOB`
+       就是那個目錄）。B 之後把範圍改成 `frontend/**`，理由是排除集合
+       （`shared_js()` 從實際 `<script src>` 算）涵蓋兩個目錄，而共用母體只吃一個
+       ⇒ **從 `frontend/js` 注入的宣告排除得到、而數不到**。
+       ⇒ 我的替身跟著改，否則這幾題只驗得到其中一個目錄。
     """
-    src_dir = ROOT / "frontend" / "static"
-    out = tmp_path / "static"
-    out.mkdir(parents=True)
-    for p in sorted(src_dir.glob("*.js")):
-        text = p.read_text(encoding="utf-8", errors="replace")
-        if edits and p.name in edits:
-            text = edits[p.name](text)
-        (out / p.name).write_text(text, encoding="utf-8")
-    return out
+    root = tmp_path / "fe"
+    for d in _FAKE_DIRS:
+        src_dir = ROOT / "frontend" / d
+        out = root / d
+        out.mkdir(parents=True)
+        for p in sorted(src_dir.glob("*.js")):
+            text = p.read_text(encoding="utf-8", errors="replace")
+            if edits and p.name in edits:
+                text = edits[p.name](text)
+            (out / p.name).write_text(text, encoding="utf-8")
+    return root
 
 
 def test_al1_the_shared_population_is_computed_not_hardcoded(
@@ -327,8 +341,8 @@ def test_al1_the_shared_population_is_computed_not_hardcoded(
         return (text + '\n// 合成宣告（測試用）\n'
                 '// <div x-data="globalSearchStore()" x-init="init()"></div>\n')
 
-    fake = _fake_static(tmp_path, {"auth-guard.js": add_decl})
-    monkeypatch.setattr(mod, SHARED_HOOK, str(fake / "*.js"))
+    fake = _fake_frontend(tmp_path, {"auth-guard.js": add_decl})
+    monkeypatch.setattr(mod, SHARED_HOOK, str(fake / "**" / "*.js"))
     rows = mod.scan_shared()
 
     assert len(rows) == SHARED_POPULATION + 1, (
@@ -340,6 +354,46 @@ def test_al1_the_shared_population_is_computed_not_hardcoded(
     assert any(r.get("where") == "auth-guard.js" for r in rows), (
         "新增的那一列沒有指出它在 `auth-guard.js`：%r\n" % (rows,)
         + "⚠️ `where` 是宣告點，`(c)` 的人要靠它才知道去哪裡看。")
+
+
+def test_al1_a_declaration_in_the_other_js_folder_is_counted_too(
+        tmp_path, monkeypatch):
+    """⚙️ **正對照：共用母體要涵蓋 `frontend/js`，不是只有 `frontend/static`。**
+
+    ```
+    排除集合 shared_js()   從**實際 <script src>** 算 ⇒ 兩個目錄都涵蓋
+    共用母體 舊 scan_shared() 只吃 frontend/static/*.js
+    ⇒ 從 frontend/js 注入的宣告：**排除得到，而數不到**
+    ```
+    ☠️ 那是 `AL1` 原本那個缺陷**換一個目錄重演** ——
+       兩邊都是**靠一份寫死的範圍在決定誰被看見**。
+    ✅ 今天 `frontend/js` 的注入型宣告實算 **0**，所以現況不受影響
+       ⇒ 這一題釘的是**範圍**，不是今天的數字。
+    🔑 而「今天是 0」正是它需要合成輸入的理由：沒有真實案例可以當誘餌。
+    """
+    mod = _tool()
+    if not hasattr(mod, SHARED_HOOK):
+        pytest.fail("`%s` 不存在 —— `(a-2)` 未做。" % SHARED_HOOK)
+
+    target = "voucher.js"
+    assert (ROOT / "frontend" / "js" / target).is_file(), (
+        "`frontend/js/%s` 不見了 —— 換一個檔當載體，**退回給我**。" % target)
+
+    def add_decl(text):
+        return (text + '\n// 合成宣告（測試用，放在 frontend/js 而不是 static）\n'
+                '// <div x-data="globalSearchStore()" x-init="init()"></div>\n')
+
+    fake = _fake_frontend(tmp_path, {target: add_decl})
+    monkeypatch.setattr(mod, SHARED_HOOK, str(fake / "**" / "*.js"))
+    rows = mod.scan_shared()
+
+    assert len(rows) == SHARED_POPULATION + 1, (
+        "宣告放在 `frontend/js/%s` 之後共用母體是 %d，應該是 %d。\n"
+        % (target, len(rows), SHARED_POPULATION + 1)
+        + "☠️ 掃描範圍只吃 `frontend/static` ⇒ 從 `frontend/js` 注入的宣告\n"
+          "   **排除得到、而數不到** —— 那是 `AL1` 換一個目錄重演。")
+    assert any(r.get("where") == target for r in rows), (
+        "新增的那一列沒有指出它在 `%s`：%r" % (target, rows))
 
 
 def test_al1_writing_the_guard_into_the_wrong_file_does_not_turn_it_green(
@@ -360,9 +414,9 @@ def test_al1_writing_the_guard_into_the_wrong_file_does_not_turn_it_green(
         pytest.fail("`%s` 不存在 —— `(a-2)` 未做。" % SHARED_HOOK)
 
     # ① 寫進**宣告檔** —— 不可以翻綠
-    wrong = _fake_static(tmp_path / "a", {
+    wrong = _fake_frontend(tmp_path / "a", {
         "sidebar.js": lambda t: t + "\nconst _initDone = false  // 寫錯檔\n"})
-    monkeypatch.setattr(mod, SHARED_HOOK, str(wrong / "*.js"))
+    monkeypatch.setattr(mod, SHARED_HOOK, str(wrong / "**" / "*.js"))
     rows = mod.scan_shared()
     flipped = [r for r in rows if r.get("guarded")]
     assert not flipped, (
@@ -371,11 +425,11 @@ def test_al1_writing_the_guard_into_the_wrong_file_does_not_turn_it_green(
         + "🔑 `guarded` 要讀**定義點**（`defined_in` 那個檔的函式本體）。")
 
     # ② 反向：寫進**定義檔** —— 只有那一個要翻綠
-    right = _fake_static(tmp_path / "b", {
+    right = _fake_frontend(tmp_path / "b", {
         "notif.js": lambda t: t.replace(
             "function notifStore() {",
             "function notifStore() {\n  const _initDone = false", 1)})
-    monkeypatch.setattr(mod, SHARED_HOOK, str(right / "*.js"))
+    monkeypatch.setattr(mod, SHARED_HOOK, str(right / "**" / "*.js"))
     rows2 = mod.scan_shared()
     green = {r.get("store") for r in rows2 if r.get("guarded")}
     assert green, (
@@ -410,7 +464,7 @@ def test_al1_removing_one_declaration_moves_only_the_shared_bucket(
         "在 `%s` 裡找不到可以拿掉的 `x-init=\"init()\"` ——\n" % DECL_FILE
         + "⚠️ 宣告被改寫了，這個正對照要重做，**退回給我**。")
 
-    fake_static = _fake_static(tmp_path, {
+    fake_static = _fake_frontend(tmp_path, {
         "sidebar.js": lambda t: re.subn(
             r'\s+x-init="init\(\)"', "", t, count=1)[0]})
 
@@ -424,7 +478,7 @@ def test_al1_removing_one_declaration_moves_only_the_shared_bucket(
               "   排除清單仍然要**算出來**（被 >1 頁 script-link 的 js），\n"
               "   不要因為有了這個常數就改成寫死。" % SHARED_HOOK)
 
-    monkeypatch.setattr(mod, SHARED_HOOK, str(fake_static / "*.js"))
+    monkeypatch.setattr(mod, SHARED_HOOK, str(fake_static / "**" / "*.js"))
     shrunk = _shared_scan(mod)
     pages_after = mod.scan()
 
