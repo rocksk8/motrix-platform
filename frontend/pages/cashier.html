@@ -675,6 +675,22 @@
             </div>
 
             <div x-show="t100ConfigOpen && _role()==='superadmin'" x-cloak style="margin-top:4px">
+            <!-- 🔴 已存的設定指向一個**不存在或已停用**的科目時，要明著說。
+                 ☠️ 靜默的話，匯出那一欄會用一個停用的科目，而症狀是
+                    **會計師匯入時退件** —— 離成因很遠。
+                 ⚠️ 這裡只**報告**，不自動清空：自動清空的話使用者下次打開
+                    會看到一個空欄位，而他不知道那裡本來有值、是誰清掉的。 -->
+            <template x-if="t100Config && t100Config.codeIssues && t100Config.codeIssues.length">
+              <div style="margin:6px 0 12px;padding:9px 11px;border:1px solid #FCA5A5;background:#FEF2F2;border-radius:var(--radius)">
+                <div style="font-size:12px;font-weight:700;color:#B91C1C;margin-bottom:5px"
+                     x-text="'⚠ 有 ' + t100Config.codeIssues.length + ' 個已設定的科目代號目前不可用，請重新選擇'"></div>
+                <template x-for="(iss, ii) in t100Config.codeIssues" :key="ii">
+                  <div style="font-size:11px;color:#7F1D1D;line-height:1.7">
+                    ・<b x-text="iss.where"></b>：<span x-text="iss.reason"></span>
+                  </div>
+                </template>
+              </div>
+            </template>
             <template x-if="!t100Config">
             <div style="font-size:12px;color:var(--text-dim)">載入中…</div>
             </template>
@@ -878,6 +894,13 @@
     </div>
   </div>
 
+  <!-- ⚠️ `notif.js` 必須與 `sidebar.js` 成對出現：`sidebar.js` 無條件輸出
+       `x-data="globalSearchStore()"`（:196）與 `x-data="notifStore()"`（:377），
+       而那兩支定義在 `notif.js` 裡。
+       ☠️ 少載它的症狀**不是錯誤畫面**：全域搜尋框與通知鈴鐺變成死的，
+          而版面其餘部分完全正常 ⇒ 使用者不會報修，
+          **他會以為那個框本來就長那樣**。 -->
+  <script src="../static/notif.js"></script>
   <script src="../static/sidebar.js"></script>
 </body>
 </html>

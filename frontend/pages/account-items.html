@@ -130,6 +130,13 @@
     </main>
   </div>
 
+  <!-- ⚠️ `notif.js` 必須與 `sidebar.js` 成對出現：`sidebar.js` 無條件輸出
+       `x-data="globalSearchStore()"`（:196）與 `x-data="notifStore()"`（:377），
+       而那兩支定義在 `notif.js` 裡。
+       ☠️ 少載它的症狀**不是錯誤畫面**：全域搜尋框與通知鈴鐺變成死的，
+          而版面其餘部分完全正常 ⇒ 使用者不會報修，
+          **他會以為那個框本來就長那樣**。 -->
+  <script src="../static/notif.js"></script>
   <script src="../static/sidebar.js"></script>
 </body>
 </html>
