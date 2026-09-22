@@ -219,15 +219,13 @@
       <!-- ⚠️ `null` ＝ **不知道**（探測逾時或連不上），不是「可以用」。
            這一行刻意很輕：它不阻止使用者，只是不讓我們宣稱一件沒查證的事。 -->
       <div class="mp-note info" x-show="autoOpenSkipped && !mapOpen">
-        <span>ℹ️</span>
         <div><strong>這次沒有自動開啟地圖</strong> ——
-          上一次底圖載不出來（這台機器可能沒有對外連線）。
-          <br>按「開啟地圖」可以再試一次；<strong>載得到之後就會恢復自動開啟</strong>。
-          下面的清單與距離不需要網路，照常可用。</div>
+          上一次底圖無法載入（本機可能沒有對外連線）。
+          <br>按「開啟地圖」可以再試一次；<strong>載入成功後就會恢復自動開啟</strong>。
+          以下的清單與距離不需要網路，均可正常使用。</div>
       </div>
       <div class="mp-note info" x-show="info && info.tilesBlocked === null">
-        <span>ℹ️</span>
-        <div>無法確認底圖是否可用（探測逾時或連不上）。可以按按看。</div>
+        <div>無法確認底圖是否可用（探測逾時或無法連線），可直接按「開啟地圖」嘗試。</div>
       </div>
       <div class="mp-note info" x-show="loadError">
         <span>✕</span><div x-text="loadError"></div>
@@ -652,7 +650,7 @@ function mapPage() {
         // 而**兩邊不一致時使用者會相信看得見的那一邊**。
         this._redraw()
       } catch (_e) {
-        this.loadError = '地圖資料載入失敗：連線不到伺服器'
+        this.loadError = '地圖資料載入失敗：無法連線至伺服器'
       } finally {
         this.loading = false
       }
