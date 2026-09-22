@@ -122,6 +122,45 @@ def _t100_config() -> dict:
     return cfg
 
 
+def validate_account_code(conn, code):
+    """T100 設定裡的科目代號必須指得到 `account_items` 的一列。回 `(ok, err)`。
+
+    ## ☠️ 打錯的代號**不會報錯**
+
+    T100 匯出照樣產生，到**會計師匯入那一刻**才發現 ——
+    而那時傳票已經開出去了。
+    ⇒ 擋在**儲存設定**那一刻，不是匯出那一刻。
+
+    ## ⚠️ 不擋「非 statutory」，而要擋「已停用」
+
+    ```
+    法定      可選
+    自訂      **也可選**   <= 使用者自訂的科目也可能是正確的對應
+    已停用    **不可選**   <= 停用的科目不該被新設定引用
+    ```
+    🔑 兩種拒絕的**訊息要分得出來**：「找不到」與「已停用」的下一步不同 ——
+       前者是打錯字，後者是那個科目還在、只是不該再用。
+
+    ## 📌 而已經設定好的**不因停用而失效**
+
+    這一支只擋**新的設定值**。已存的值若指向一個被停用的科目，
+    正確處置是**明著顯示「這個科目已停用」並要求重選** ——
+    ☠️ 靜默失效的症狀是「匯出的科目代號突然變空」，**而沒有人會知道為什麼**。
+    """
+    value = (code or "").strip()
+    if not value:
+        # 空字串交給「完整性」那一關處理，不是這一支的事。
+        return True, ""
+    row = conn.execute(
+        "SELECT code, is_active FROM account_items WHERE code = ?",
+        (value,)).fetchone()
+    if row is None:
+        return False, ("科目代號「%s」不存在於會計科目表，請確認後重新輸入。" % value)
+    if not row["is_active"]:
+        return False, ("科目代號「%s」已停用，請改選一個仍在使用中的科目。" % value)
+    return True, ""
+
+
 @router.get("/api/settings/t100-export-config")
 def get_t100_export_config(authorization: str = Header(None)):
     u = _require_user(authorization)

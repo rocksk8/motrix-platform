@@ -612,12 +612,32 @@ function cashierApp() {
     t100ConfirmedOpen:    false,
     t100Unconfirming:     '',   // 正在反確認的 sourceType:sourceKey
 
+    // 🔴 `FN5`：這個綠勾原本**會說謊**。
+    //    舊判準只看三個核心科目＋銀行清單 ⇒ 六個料件分類一個都沒設，
+    //    畫面照樣顯示「✓ 科目代號已設定」，而 `accounting_export.py` 的
+    //    `.get(category, "")` 讓匯出那幾列的科目代號是**空的**。
+    // ☠️ 一個**主動說謊的綠勾比沒有綠勾更糟**：使用者看到 ✓ 之後
+    //    就不會再去看那一段，而錯誤要到會計師匯入 T100 那一刻才出現。
     get t100ConfigComplete() {
       const c = this.t100Config
       if (!c) return false
       const coreFilled = c.salesRevenueAccount && c.outputTaxAccount && c.contractorExpenseAccount
       const hasBank = c.bankAccounts && c.bankAccounts.length > 0 && c.bankAccounts.every(b => b.name && b.acctCode)
-      return !!(coreFilled && hasBank)
+      // 料件分類：鍵由後端依 `parts.py::PART_CATEGORIES` 補齊（`_t100_config()`）。
+      // 🔑 判準是**涵蓋全部的鍵**，不是「有填東西」——
+      //    設了一個就算完整的話，另外五個分類的匯出仍然是空的。
+      // ⚠️ 而它**不綁數字**：分類日後增加時，後端會多送一個空鍵，
+      //    這裡自動跟著變「不完整」。綁 6 的話它會**安靜地繼續說完整**。
+      // 📌 也刻意**不在前端再寫一份分類名稱** —— 兩份一定會分岔。
+      const inv = c.inventoryExpenseAccounts || {}
+      const categories = Object.keys(inv)
+      const invFilled = categories.length > 0 && categories.every(k => String(inv[k] || '').trim())
+      // 預設帳戶：**有值還不夠，要指得到清單裡的一筆**。
+      // ☠️ 只驗「有填」的話，一個指向已刪帳戶的預設值照樣算完整，
+      //    而症狀是標記付款時挑不到任何帳戶，**沒有錯誤訊息**。
+      const defaultOk = !!c.defaultBankAccountCode &&
+        (c.bankAccounts || []).some(b => b.acctCode === c.defaultBankAccountCode)
+      return !!(coreFilled && hasBank && invFilled && defaultOk)
     },
 
     async unconfirmT100(row) {

@@ -567,7 +567,7 @@
             <!-- 科目代號設定完成度一眼可見，不用展開設定面板才知道 -->
             <span style="white-space:nowrap;display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border-radius:999px;font-size:11px;font-weight:600"
             :style="t100Config ? (t100ConfigComplete ? 'background:#DCFCE7;color:var(--success)' : 'background:#FEF3C7;color:var(--warning)') : 'background:#F0EEE9;color:var(--text-dim)'"
-            x-text="!t100Config ? '科目代號讀取中…' : (t100ConfigComplete ? '✓ 科目代號已設定' : '⚠ 科目代號尚未設定完整')"></span>
+            x-text="!t100Config ? '科目代號讀取中…' : (t100ConfigComplete ? '✓ 科目代號已設定' : (_role()==='superadmin' ? '⚠ 科目代號尚未設定完整 → 請點右方「展開科目代號設定」填寫' : '⚠ 科目代號尚未設定完整 → 請聯絡系統管理員設定'))"></span>
             </div>
 
             <!-- KPI 一覽：待確認事件/金額/已設定銀行帳戶數，切換進頁籤就自動載入 -->
@@ -597,7 +597,9 @@
             <span x-text="t100Exporting ? '產製中…' : '匯出傳票 Excel'"></span>
             </button>
             <button class="btn-ghost btn-sm" @click="loadT100Preview()" :disabled="t100Previewing" x-text="t100Previewing ? '載入中…' : '重新整理預覽'"></button>
-            <button class="btn-ghost btn-sm" @click="toggleT100Config()" x-text="t100ConfigOpen ? '收合科目代號設定' : '展開科目代號設定'" style="margin-left:auto"></button>
+            <!-- ⚠️ 這顆按鈕要與面板**同一個條件** —— 面板藏起來而按鈕留著，
+                 按下去什麼都不會發生，而那與「功能壞了」在使用者眼中一樣。 -->
+            <button class="btn-ghost btn-sm" x-show="_role()==='superadmin'" @click="toggleT100Config()" x-text="t100ConfigOpen ? '收合科目代號設定' : '展開科目代號設定'" style="margin-left:auto"></button>
             </div>
 
             <!-- 預覽表格＋確認已匯入 -->
@@ -672,7 +674,7 @@
             </div>
             </div>
 
-            <div x-show="t100ConfigOpen" x-cloak style="margin-top:4px">
+            <div x-show="t100ConfigOpen && _role()==='superadmin'" x-cloak style="margin-top:4px">
             <template x-if="!t100Config">
             <div style="font-size:12px;color:var(--text-dim)">載入中…</div>
             </template>

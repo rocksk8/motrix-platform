@@ -1396,6 +1396,44 @@ def _strip_inline_images(value):
     return value
 
 
+def _daily_backup_summary_header(day_label: str = "",
+                                 exported_at: str = "") -> dict:
+    """彙總檔的固定欄位（`BK31`）。
+
+    ## 🔴 `expected_tables` 回答的是一個彙總檔**自己回答不了**的問題
+
+    ```
+    彙總檔有 N 筆
+    => 是「今天有幾張沒備到」，還是「那一天的程式就只有 N 張」？
+    ```
+    ☠️ 產物裡沒有那個答案 ⇒ 判斷「少了幾張」要靠 `git log -S` 考古，
+       **而還原現場沒有 git**。
+    🔑 〈計數器要有落點〉：判斷「少了幾張」需要一個**對照值**，
+       而那個值必須**在產物裡**，不是在文件裡。
+    📌 代價已經發生過一次：`09-10~09-14` 那幾天差一點被報成事故，
+       **救它的不是守門，是一個人想到去翻 git**。
+
+    ## ⚠️ 它與「實際匯出幾筆」是**兩個不同的數字**
+
+    ```
+    expected_tables  當天的**程式**期望幾張   <= 這裡
+    len(summary) - 固定欄位數  實際寫出幾筆   <= 匯出迴圈算的
+    ```
+    ⇒ 兩者相減才是「少備了幾張」。**同源會讓這個減法恆為 0，失去意義。**
+    ⚙️ 而 `expected_tables` 必須與 `_daily_backup_tables()` **同源**
+       （直接 `len()` 它）—— 另外寫一個常數的話，它會變成**第三個會腐爛的數字**。
+    
+    ⚠️ 兩個參數都有預設值，**是為了讓它可以被無參數呼叫來問「欄位有哪些」** ——
+       守門要的是欄位清單，而它不該為了問這個而去湊一個日期。
+    """
+    return {
+        "date": day_label,
+        "exported_at": exported_at,
+        # 🔑 直接 len()，不寫死 —— 見 `_daily_backup_tables()` 的 docstring。
+        "expected_tables": len(_daily_backup_tables()),
+    }
+
+
 def _daily_backup_tables() -> dict:
     """每日 JSON 匯出的 {檔名: SQL}。
 
@@ -1408,8 +1446,19 @@ def _daily_backup_tables() -> dict:
     新增資料表時請一起決定要不要進來（鍵＝檔名、值＝完整 SELECT）。
     漏掉會被 test_every_table_is_either_backed_up_or_explicitly_excluded 擋下。
     ⚠️ 這一層是 §8.3「還原優先序」的**最後手段**（本機整庫 → 雲端整庫 →
-    JSON 重建）。前兩層是整個 .db 檔，涵蓋全部 76 張表；這裡的 41 張是
-    「人看得懂、可以單獨挑出來重建」的那一份。
+    JSON 重建）。前兩層是整個 `.db` 檔，涵蓋**所有**資料表；這一層是
+    「人看得懂、可以單獨挑出來重建」的那一份**子集**。
+
+    ## ⚠️ 這段原本寫著兩個具體的張數，**已拿掉，而且不要加回來**
+
+    🔑 那不是某一次忘了更新 —— 寫死的張數**只會往一個方向偏**：
+       每新增一張表就更錯一點，**而沒有任何一步會紅**。
+    ☠️ 它比沒有數字更糟：一個具體的數字讀起來像查證過的，
+       **而下一個人會拿它去推論備份的涵蓋率**。
+    ⇒ 要知道現在幾張，**去數它**：`len(_daily_backup_tables())`。
+    📌 改對一次也會過 —— **而它明天又會錯**，所以這裡不放數字。
+    ⚠️ 連「原本是多少」也不要寫：那個敘述同樣是一個會過期的數字，
+       而守門分不出「現況」與「歷史」。（`BK32`）
     """
     return {
         # ── 主檔 ──
@@ -1741,7 +1790,7 @@ def _daily_backup():
         conn = get_db()
         now  = datetime.now().isoformat()
 
-        summary: dict = {"date": today_label, "exported_at": now}
+        summary: dict = _daily_backup_summary_header(today_label, now)
         summary.update(_export_table_json_set(
             conn, day_dir, f"每日備份/{today_label}", now))
 
