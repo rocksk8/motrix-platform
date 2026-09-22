@@ -332,6 +332,27 @@ def list_tenders(watch: int = None, q: str = None,
     #    ⇒ 下一個寄信時段**一次寄出 200 筆**，而那封信會讓他關掉整個功能。
     # 🔑 P4 擔心的是「顯示與通知共用一個命中概念」——
     #    **而真正的解不是小心一點，是讓它們不再共用。**
+    # ── 標註人的名字：一次查完，不要每一列各打一次 ──────────────
+    # 🔴 `SELECT *` 已經把 `marked_at`／`marked_by` 帶回來了（v92 加的兩欄），
+    # 缺的只有「那個 id 是誰」。
+    # ⚠️ 不用 JOIN：`SELECT *` 加 JOIN 之後欄位名會相撞（`tenders.id` 與
+    # `users.id`），而 sqlite3 的 Row 取名字時**後面的會蓋掉前面的** ——
+    # ☠️ 那會讓 `r["id"]` 安靜地變成使用者的 id，而清單看起來完全正常。
+    marker_ids = sorted({r["marked_by"] for r in rows
+                         if r["marked_by"] is not None})
+    marker_names = {}
+    if marker_ids:
+        conn2 = get_db()
+        try:
+            qs = ",".join("?" * len(marker_ids))
+            for u in conn2.execute(
+                    f"SELECT id, display_name, username FROM users"
+                    f" WHERE id IN ({qs})", marker_ids).fetchall():
+                marker_names[u["id"]] = (u["display_name"] or "").strip() \
+                    or u["username"]
+        finally:
+            conn2.close()
+
     labels = {}
     for t in rows:
         tender = {"name": t["name"], "org": t["org"], "budget": t["budget"]}
@@ -350,6 +371,16 @@ def list_tenders(watch: int = None, q: str = None,
         # 缺鍵的話前端每個用到它的地方都要防 undefined，
         # 而漏防的那一處會是「畫面整塊消失」。
         "matchedWatches": labels.get(r["id"], []),
+        # 🔑 判定一律 `is not None`，**不可以用真假值** ——
+        # `marked_at` 是字串，空字串是假的而它代表「有標註」。
+        # 📌 〈null 不等於 0〉：「沒有值」與「值是空的」是兩件事。
+        "marked": r["marked_at"] is not None,
+        "markedAt": r["marked_at"],
+        "markedBy": r["marked_by"],
+        # ⚠️ 讀不到對應的人時給「未知」，**不是把那一列藏起來**，
+        # 也不是回 `null` 讓前端自己想辦法 ——
+        # ☠️ 使用者被刪掉之後標註仍然要在，而畫面要說得出「不知道是誰」。
+        "markedByName": marker_names.get(r["marked_by"], ""),
     } for r in rows]
 
     # 🔴 **命中的整段排在前面**，兩段各自再依截止日排。
@@ -359,6 +390,24 @@ def list_tenders(watch: int = None, q: str = None,
     # 📌 只看截止日的話，一筆沒命中但截止日很近的會被推到最前面，
     # 而使用者第一眼看到的就會是他不做的那一類。
     items.sort(key=lambda it: not it["matchedWatches"])
+
+    # 🔴 **標註的整批提到最前面**（TD5／TD8）。
+    #
+    # > 使用者原話：「當這個標案被標誌，**則顯示於標案的最上方**」
+    #
+    # ⚠️ 這是**第二次** `sort`，不是把兩個鍵併成一個 tuple ——
+    # 🔑 Python 的 sort 是**穩定**的 ⇒ 後排的鍵是主鍵，而前一次排好的順序
+    #    在每一組內部原封不動保留下來。
+    # ⇒ TD8 要的「整批提前，**內部照既有排序**（不另外排）」就是這個意思：
+    #    標註那一批內部仍然是「命中的在前、再依截止日」，**沒有被重排過**。
+    # ☠️ 若照**標註時間**排，先標晚的再標早的會得到相反的順序 ——
+    #    而那兩種實作在「只標一筆」的測試下完全無法分辨。
+    #
+    # 🔴 而它擺在這裡（**篩選之前**）是刻意的：
+    #    下面的 `watch` 與 `q` 是在這個順序上做**過濾**，過濾不會改變順序。
+    # ☠️ 反過來把標註的「UNION 上去」的話，一筆**不符合搜尋條件**的標案
+    #    會因為被標註而冒出來 —— 而使用者會以為搜尋壞了。
+    items.sort(key=lambda it: not it["marked"])
 
     # ⚠️ **在 `q` 篩選之前算**：這個訊號問的是「搜尋條件有沒有命中東西」，
     # 不是「這次的搜尋結果有幾筆」。兩者混在一起的話，
@@ -566,3 +615,91 @@ if os.getenv("MOTRIX_TENDER_RADAR") == "1":
         _audit(_tok(authorization), "tender_radar.reset_today", "tender_radar",
                "", f"清掉今天的抓取紀錄 {removed} 筆（測試模式）")
         return {"removed": removed}
+
+
+# ── 標註 ─────────────────────────────────────────────────────────────────────
+#
+# > 使用者 2026-09-22 凌晨：「增加一個標註的功能，
+# > **當這個標案被標誌，則顯示於標案的最上方**」
+# > 使用者裁示：**共用的** —— 一個人標，全部的人看得到。
+#
+# ⚠️ 權限走 `_require_radar`（與本檔其他九條同一個），**不另外發明一個** ——
+# 🔑 另設一個權限的話，第一個想標的人會被擋住，**而他不知道要找誰開**。
+
+def _mark_target(conn, case_no):
+    """找出那一筆，找不到就 404。**用 `case_no` 不用 `id`。**
+
+    🔑 `case_no` 是政府電子採購網那一側的識別碼 ⇒ 它在重新抓取之後仍然一樣，
+    而 `id` 是我們這邊的流水號。
+    ⚠️ 端點用 `case_no` 是規格定的，而它同時也是比較穩的那一個。
+    """
+    row = conn.execute(
+        "SELECT id, case_no, name, marked_at, marked_by FROM tenders"
+        " WHERE case_no=?", (case_no,)).fetchone()
+    if not row:
+        raise HTTPException(404, "找不到這個標案")
+    return row
+
+
+@router.post("/api/tender-radar/tenders/{case_no}/mark")
+def mark_tender(case_no: str, authorization: str = Header(None)):
+    """標註一筆標案。記**誰標的**與**什麼時候標的**。
+
+    ## 🔑 已經標註過的，**原封不動**
+
+    ⚠️ 不是「最後一個按的人獲勝」：畫面上標註是一顆切換鈕，
+    要重新標一次得先取消 ⇒ 會走到 `DELETE` 那一條。
+    ☠️ 而覆寫的話，一次誤按（或一次連點）會把**原本是誰標的**換掉，
+    🔑 而那個資訊沒有別的地方留著 —— 取消是清掉，不留歷史。
+    ⇒ 重複 POST 是 no-op，回 200 而不是 409：呼叫端要的狀態已經達成了。
+    """
+    user = _require_radar(authorization)
+    conn = get_db()
+    try:
+        row = _mark_target(conn, case_no)
+        # 📌 判定用 `is None`，不是 `not row["marked_at"]` ——
+        # 空字串是假的，而它代表「有標註但時間戳是空的」，不是「沒標註」。
+        if row["marked_at"] is None:
+            conn.execute(
+                "UPDATE tenders SET marked_at=?, marked_by=? WHERE id=?",
+                (datetime.now().isoformat(timespec="seconds"),
+                 user["id"], row["id"]))
+            conn.commit()
+            row = _mark_target(conn, case_no)
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "tender.mark", "tender", case_no, row["name"])
+    return {"caseNo": case_no, "marked": True,
+            "markedAt": row["marked_at"], "markedBy": row["marked_by"]}
+
+
+@router.delete("/api/tender-radar/tenders/{case_no}/mark", status_code=204)
+def unmark_tender(case_no: str, authorization: str = Header(None)):
+    """取消標註。**兩欄都回 `NULL`。**
+
+    ## ⚠️ 兩欄一起清，不可以只清一半
+
+    ☠️ 「只清 `marked_at`、留著 `marked_by`」是最容易發生的半套 ——
+    🔑 那會讓「誰標的」指向一個**已經不存在的標註**，
+    而 `marked_at IS NOT NULL` 那個判定仍然會說它沒標註
+    ⇒ **兩欄講的話不一樣了，而沒有任何東西會紅。**
+
+    ## 🔑 **任何有這個模組的人都可以取消別人的標註**
+
+    使用者裁示「共用的」⇒ 它是這一筆標案的屬性，不是誰的私有物。
+    ☠️ 「只有標的人可以取消」是一個看起來很合理的錯誤實作 ——
+    **那個人請假的那一天，那一筆就沒有人能動它。**
+    📌 而畫面要看得到是誰標的，那是靠 `markedByName`，不是靠限制權限。
+    """
+    _require_radar(authorization)
+    conn = get_db()
+    try:
+        row = _mark_target(conn, case_no)
+        conn.execute(
+            "UPDATE tenders SET marked_at=NULL, marked_by=NULL WHERE id=?",
+            (row["id"],))
+        conn.commit()
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "tender.unmark", "tender", case_no,
+           row["name"])

@@ -37,6 +37,25 @@
                     gap:10px; margin-bottom:10px; }
     .tr-src { font-size:11px; color:var(--text-dim); margin-top:18px; }
 
+    /* 🔴 被標註的那幾筆**要看得出來是被標的**，不能只是排在前面。
+       ☠️ 只排在前面的話，使用者看到的是「順序怎麼變了」——
+          他會以為**排序規則改了**，而那比功能壞掉更難察覺。
+       📌 用左側色條 ＋ 淡底：兩個訊號而不是一個，因為單靠底色在
+          深色模式與投影機上都可能幾乎看不出來。 */
+    .tr-marked > td { background:var(--warning-light); }
+    .tr-marked > td:first-child { box-shadow:inset 3px 0 0 var(--warning); }
+    /* 切換鈕：未標註時很輕（不要在每一列上放一個搶眼的東西），
+       已標註時實心。⚠️ 兩個狀態的差別**不可以只有顏色**——
+       旗子的空心／實心才是主要訊號。 */
+    .tr-mark-btn { background:none; border:none; cursor:pointer; padding:2px 4px;
+                   font-size:14px; line-height:1; border-radius:4px;
+                   color:var(--text-dim); }
+    .tr-mark-btn:hover { background:var(--warning-light); }
+    .tr-mark-btn:disabled { opacity:.4; cursor:progress; }
+    .tr-mark-btn.on { color:var(--warning); }
+    .tr-mark-who { font-size:10px; color:var(--text-dim); display:block;
+                   margin-top:2px; white-space:nowrap; }
+
     /* ⚠️ `.empty-state` **本來就沒有定義**：這一頁用了它，而它只存在於
        contractors.html／customers.html／inventory.html 各自的 <style> 裡，
        不在 css/style.css。⇒ 這一頁的空清單一直是沒有樣式的一行字。
@@ -360,16 +379,42 @@
       有搜尋條件，但<strong>目前的標案一筆都沒命中</strong>——
       要調整的是條件本身，不是再等一次抓取。
     </div>
+    <div class="tr-note" style="background:var(--danger-light);color:var(--danger);margin-bottom:8px"
+         x-show="markError" x-text="markError"></div>
     <div class="table-scroll">
       <table class="data-table" x-show="visibleTenders.length > 0">
         <thead><tr>
+          <th style="width:52px">標註</th>
           <th>機關</th><th>案號</th><th>標案名稱</th><th>地點</th>
           <th>採購性質</th><th>招標方式</th>
           <th style="text-align:right">預算</th><th>公告日</th><th>截止投標</th><th>標籤</th>
         </tr></thead>
         <tbody>
           <template x-for="t in visibleTenders" :key="t.id">
-            <tr>
+            <tr :class="t.marked ? 'tr-marked' : ''">
+              <!-- 🔴 **切換鈕**（未標註／已標註）。
+                   ⚠️ `title` 帶「誰標的、什麼時候」—— 規格允許 tooltip 或小字，
+                   而這裡**兩個都給**：tooltip 在手機上點不出來，
+                   小字在欄位窄的時候會擠掉標案名稱。
+                   ☠️ 只給 tooltip 的話，手機使用者永遠看不到是誰標的。
+                   📌 `markedByName` 後端保證是字串（讀不到人時是空字串，
+                      不是 null）⇒ 這裡的 `|| '未知'` 接得住兩種。 -->
+              <td style="text-align:center">
+                <button class="tr-mark-btn" :class="t.marked ? 'on' : ''"
+                        :disabled="markBusy === t.caseNo"
+                        @click="toggleMark(t)"
+                        :aria-pressed="t.marked ? 'true' : 'false'"
+                        :title="t.marked
+                          ? ((t.markedByName || '未知') + ' 於 '
+                             + (t.markedAt || '不明時間') + ' 標註．再按一次取消')
+                          : '標註這一筆，它會排到清單最上方'"
+                        x-text="t.marked ? '\u2691' : '\u2690'"></button>
+                <template x-if="t.marked">
+                  <span class="tr-mark-who"
+                        x-text="(t.markedByName || '未知')
+                                + (t.markedAt ? ('．' + t.markedAt.slice(5, 10)) : '')"></span>
+                </template>
+              </td>
               <!-- 🔴 **機關名稱與標案名稱都要可點。**
                    使用者在清單上掃的是**機關名稱**（他認得哪些機關常發
                    他做得來的標案），而標案名稱太長、常被截斷
@@ -464,6 +509,9 @@ function tenderRadarPage() {
     session: {}, token: '', loading: false, scanning: false,
     status: null, watches: [], tenders: [], formError: '',
     schedule: null, scheduleMsg: '', listError: '', watchFilter: '',
+    // ⚠️ 存的是**哪一筆正在送**（`caseNo`），不是一個布林值 ——
+    // 布林值會把整張表的按鈕一起鎖住，而使用者只按了一顆。
+    markBusy: '', markError: '',
     // 🔴 `search` 是**這一次的篩選**，不是一筆搜尋條件：
     // 存成 watch 的話使用者隨手打三個字就會在設定裡長出三個條件，
     // **然後他每天會收到那三個條件的通知信。**
@@ -501,6 +549,41 @@ function tenderRadarPage() {
         this.listError = ''
       } catch (_e) {
         this.listError = '標案清單載入失敗：連線不到伺服器'
+      }
+    },
+
+    //: 標註／取消標註。**切換，不是兩顆按鈕。**
+    //
+    //  🔑 成功之後**重新載入清單**，不在前端自己搬動那一列：
+    //     排序規則（標註的整批提前、內部照既有排序、篩選不被吃掉）
+    //     在後端，前端再實作一次就是**兩份會分岔的規則**，
+    //     ☠️ 而分岔之後畫面看起來永遠是合理的。
+    //  ⚠️ 代價寫明：每次切換多一次往返。這一頁的清單是幾百筆的等級，
+    //     而正確的順序比少一次請求重要。
+    async toggleMark(t) {
+      if (this.markBusy) return          // 同時只送一筆，避免兩次切換互相覆蓋
+      this.markBusy = t.caseNo
+      this.markError = ''
+      const path = '/api/tender-radar/tenders/'
+                 + encodeURIComponent(t.caseNo) + '/mark'
+      try {
+        const r = await fetch(path, {
+          method: t.marked ? 'DELETE' : 'POST', headers: this._h() })
+        if (!r.ok) {
+          // ⚠️ 逐個碼分開講：403 是權限、404 是那一筆不在了，
+          // 而兩者的下一步完全不同。合併成「操作失敗」會讓人去按第二次。
+          this.markError = r.status === 403
+            ? '沒有標案雷達的權限，不能標註。'
+            : (r.status === 404
+               ? '這一筆標案已經不在清單裡了，請重新整理。'
+               : ('標註失敗（HTTP ' + r.status + '）'))
+          return
+        }
+        await this.loadTenders()
+      } catch (_e) {
+        this.markError = '標註失敗：連線不到伺服器'
+      } finally {
+        this.markBusy = ''
       }
     },
 

@@ -101,7 +101,9 @@ DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR = os.path.join(
 # 的附件，2026-09-14）——兩張表都是 TEXT NOT NULL DEFAULT '[]'，存
 # save_document_files() 回傳的清單。刪附件限 admin+，見 routers/quotations.py
 # 與 routers/dev_crm.py 的 DELETE .../files/{file_id}。
-CURRENT_VERSION = 91
+# v92: tenders.marked_at / tenders.marked_by（標註功能，2026-09-22 §21 補）
+#      —— 一個可為 NULL 的時間戳兼任旗標，判定一律 `marked_at IS NOT NULL`。
+CURRENT_VERSION = 92
 
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
 # execution model) whenever the current request is authenticated as the 'demo'
@@ -3969,6 +3971,55 @@ def _m091_geocode_usage(conn):
         ")")
 
 
+def _m092_tender_mark(conn):
+    """v92（2026-09-22 §21 補 TD5–TD8）：標案可以被**標註**，標註的排在最上方。
+
+    > 使用者原話：「增加一個標註的功能，**當這個標案被標誌，則顯示於標案的最上方**」
+    > 使用者裁示：**共用的** —— 一個人標，全部的人看得到。
+
+    ## 🔑 一個可為 NULL 的時間戳**兼任旗標**，不另外開一個 boolean
+
+    ☠️ 兩個欄位（`is_marked` ＋ `marked_at`）**會分岔** —— 有人只更新其中一個，
+    而**分岔之後沒有任何東西會紅**：兩欄各自都是合法的值，
+    只是它們講的話不一樣了。
+    ⇒ 判定一律 `marked_at IS NOT NULL`，**不可以用真假值**（〈null 不等於 0〉）。
+
+    ## 🔑 為什麼標註是 `tenders` 上的欄位，不是 `(user_id, tender_id)` 一張表
+
+    使用者裁示「共用的」⇒ 它是**這一筆標案的屬性**，不是誰的清單。
+    ☠️ 做成關聯表的話，「這一筆我們要投」會變成每個人各自的便利貼 ——
+    🔑 而那個實作在**單人測試**下與正確的完全無法分辨。
+
+    ## ⚠️ `marked_by` 刻意**不加 FOREIGN KEY**
+
+    照本檔既有體例（`quotations.location_id`、`dev_logs.owner_id` 都沒加）。
+    而理由在這裡特別要寫出來：使用者被刪掉時，**標註不應該跟著消失** ——
+    ☠️ 一個「有標註但不知道誰標的」比「標註整個不見」好，
+    因為後者使用者看到的是「我標的那幾筆不見了」而沒有任何東西會說話。
+    ⇒ 讀不到 `marked_by` 對應的人時，畫面顯示「未知」，不是把那一列藏起來。
+
+    ## 📌 可逆性：這一支**降版走得掉**
+
+    `apply_update.ps1` 的回滾會把資料一起還原。而就算不還原資料，
+    這兩個欄位對 v91 的程式碼是**看不見的**（既有查詢全是具名欄位或
+    `SELECT *` 後取用具名鍵），多兩個欄位不會讓任何舊路徑壞掉。
+    ⚠️ 本機 SQLite 是 3.53.1（`DROP COLUMN` 需 ≥ 3.35.0，支援），
+    而**這裡不寫 down**：本專案的 migration 引擎只往前走，
+    降版靠的是還原整個檔案。寫一個沒有人會呼叫的 down 只會讓人以為有退路。
+    🔴 ⇒ **回滾之後標註也會不見**，那一句要寫進交付說明。
+
+    ## ⚠️ 這一支不呼叫任何會演進的 helper
+
+    〈凍住的歷史不要呼叫活的程式碼〉：只有 `_col_exists` 與兩句 DDL，
+    兩者都不會因為日後的業務規則而改變意思。
+    """
+    # 🔑 `_col_exists` 讓它可以重複跑 —— migration 引擎失敗重跑時不會炸。
+    if not _col_exists(conn, "tenders", "marked_at"):
+        conn.execute("ALTER TABLE tenders ADD COLUMN marked_at TEXT")
+    if not _col_exists(conn, "tenders", "marked_by"):
+        conn.execute("ALTER TABLE tenders ADD COLUMN marked_by INTEGER")
+
+
 _MIGRATIONS = [
     _m001_export_columns,        # v1
     _m002_sessions_expires,      # v2
@@ -4061,6 +4112,7 @@ _MIGRATIONS = [
     _m089_geocode_cache,                            # v89
     _m090_quotation_location,                       # v90
     _m091_geocode_usage,                            # v91
+    _m092_tender_mark,                              # v92
 ]
 
 
