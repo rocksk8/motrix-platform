@@ -113,7 +113,10 @@ def test_the_prefix_shortcut_really_is_wrong_on_the_real_data():
     # 🔴 而「範圍代號」這個成因**不完整**（B 量出來、我複核相符）：
     #    232 = 父是範圍 201 ＋ **另一種成因 31**
     # ☠️ 少了下面這一格，有人把範圍代號處理掉之後會以為前綴法可以用了。
-    non_range = [i for i in broken if "-" not in i["parent_code"]]
+    # ⚠️ `broken` 是 `(code, parent_code)` 的 tuple 不是 dict ——
+    #    我第一版當成 dict 索引 ⇒ `TypeError` ⇒ **這個對照組整個不跑**，
+    #    而它的訊息會是 Python 的，不是我寫的（〈紅燈說不出話〉）。
+    non_range = [(c, p) for c, p in broken if "-" not in p]
     assert len(non_range) >= 30, (
         "與範圍代號無關的前綴例外只有 %d 筆（我與 B 都量到 31）——\n" % len(non_range)
         + "🔑 靜態檔換過了 ⇒ 「前綴法不可用」的理由要重算。")
