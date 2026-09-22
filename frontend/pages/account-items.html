@@ -30,7 +30,11 @@
     .ai-row{display:flex;align-items:center;gap:9px;padding:7px 12px;border-bottom:1px solid var(--border-light);font-family:var(--font-zh);font-size:13px}
     .ai-row:last-child{border-bottom:none}
     .ai-row:hover{background:#FAF9F6}
-    .ai-toggle{width:17px;height:17px;flex:none;display:flex;align-items:center;justify-content:center;border:1px solid var(--border-light);border-radius:3px;background:#fff;cursor:pointer;font-size:10px;color:var(--text-secondary);line-height:1}
+    /* 🔑 pointer-events:none —— 點擊讓給整列處理（見下方 ai-row 的註解）。 */
+    .ai-toggle{width:17px;height:17px;flex:none;display:flex;align-items:center;justify-content:center;border:1px solid var(--border-light);border-radius:3px;background:#fff;font-size:10px;color:var(--text-secondary);line-height:1;pointer-events:none}
+    /* 有子項的列整列可點，而且要看得出來可以點。 */
+    .ai-row.has-kids{cursor:pointer}
+    .ai-row.has-kids:hover .ai-toggle{border-color:var(--accent,#888);background:#F0EEE9}
     .ai-toggle.leaf{border-color:transparent;background:transparent;cursor:default;color:transparent}
     .ai-code{font-family:var(--font-mono,monospace);font-size:12px;color:var(--text-secondary);min-width:74px;flex:none}
     .ai-name{color:var(--text-primary)}
@@ -90,11 +94,18 @@
       </div>
 
       <div class="ai-tree" x-show="loaded">
+        <!-- 🔴 展開／收合掛在**整列**上，不是只掛在那個小三角上。
+             實測（2026-09-23）：展開鈕 17×17px，而一列是 1906×36px
+             ⇒ 可點面積只有 **0.42%**，其餘 99.58% 的列面積對點擊是死的。
+             ☠️ 而點不到的症狀不是錯誤訊息，是「**我點了它沒反應**」——
+                使用者會以為功能壞了，而不會以為自己差了幾個像素。
+             ⚠️ 那個 `<span>` 設 `pointer-events:none`：讓它把點擊讓給整列，
+                否則同一次點擊會觸發兩次 toggle（展開又立刻收合，**看起來完全沒反應**）。 -->
         <template x-for="row in visibleRows" :key="row.code">
-          <div class="ai-row" :class="'ai-lv' + row.level"
+          <div class="ai-row" :class="['ai-lv' + row.level, row.kids ? 'has-kids' : '']"
+               @click="row.kids && toggle(row.code)"
                :style="'padding-left:' + (12 + (row.level - 1) * 22) + 'px'">
             <span class="ai-toggle" :class="{leaf: !row.kids}"
-                  @click="row.kids && toggle(row.code)"
                   x-text="!row.kids ? '' : (open[row.code] ? '−' : '+')"></span>
             <span class="ai-code" x-text="row.code"></span>
             <span class="ai-name" x-text="row.name"></span>
