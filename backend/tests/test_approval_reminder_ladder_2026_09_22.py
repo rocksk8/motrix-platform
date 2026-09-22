@@ -178,8 +178,25 @@ def test_wa6_crossing_several_thresholds_marks_the_lower_ones_too():
     """
     at_or_below = _need("reminder_stages_at_or_below")
 
-    assert _need("reminder_stage")(12) == "d10", "第 12 天最高的那一階是 d10"
+    # 🔴 **這一行第一版寫成 `reminder_stage(12) == "d10"`，而它與 WA2 互斥。**
+    #
+    # WA2 的 SILENT 名單含 12 ⇒ `reminder_stage(12)` 必須是 `None`。
+    # 而我在檔頭已經裁過：`reminder_stage` 回答的是「**這一天要不要寄**」。
+    # ⇒ 「到第 12 天為止最高的那一階是什麼」**是另一個問題**，
+    #    而我自己已經替它準備了另一支函式。
+    #
+    # ☠️ 兩題不可能同時綠，而**兩題都是我寫的** ——
+    # 🔑 〈兩個都對而路不存在〉的鏡像：這次不是「路不存在」，
+    #    是**同一個輸入被兩個斷言要求兩種答案**，
+    #    而它們分別出現在 76 行與 181 行 ⇒ **讀任何一題都看不出矛盾。**
+    # 📌 B 抓到的，它照 WA1／WA2 實作而刻意沒有動 WA6 —— 那是對的。
+    assert _need("reminder_stage")(12) is None, (
+        "第 12 天不是階梯上的日子，`reminder_stage(12)` 必須是 None（同 WA2）"
+    )
     stages = list(at_or_below(12))
+    assert stages[-1] == "d10", (
+        f"到第 12 天為止最高的那一階應該是 d10，實際 {stages[-1] if stages else None!r}"
+    )
     assert stages == ["d1", "d3", "d5", "d10"], (
         f"第 12 天要標記的階段應該是 d1/d3/d5/d10，實際 {stages}\n"
         "⇒ 漏標的那幾階，下一次排程會補寄。"
