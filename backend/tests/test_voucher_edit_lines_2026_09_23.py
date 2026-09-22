@@ -135,6 +135,31 @@ def test_a_put_that_does_not_mention_lines_must_not_wipe_them(client,
           "   單子還在、狀態還是草稿，**只是內容空了**。")
 
 
+def test_sending_an_empty_line_list_really_clears_them(client, make_user):
+    """🔴 **`lines: []` 是「清空」，而「沒提到 lines」是不要動它。**
+
+    ⚙️ 這是上一題的**另一半**。兩題合起來才釘得住那個判斷：
+    ```
+    "lines" in body（鍵在不在）  => lines:[] 清空 ✅ ／ 沒帶 不動 ✅
+    body.get("lines") 的真假值   => lines:[] 被當成「沒帶」 ☠️ **清不掉**
+    ```
+    ☠️ 少了這一題，一個用真假值判斷的實作會讓上一題綠 ——
+       而使用者刪光分錄按儲存，**舊的分錄還在**。
+    📌 〈null 不等於 0〉在這裡的形狀：**空清單與「沒有這個鍵」是兩件事**。
+    """
+    _u, hdr = _hdr(client, make_user, "vl_clear")
+    vid = _create(client, hdr)
+    assert len(_lines_of(_get(client, hdr, vid))) == 2, "前置不對。"
+
+    _put(client, hdr, vid, lines=[])
+
+    after = _lines_of(_get(client, hdr, vid))
+    assert after == [], (
+        "送了 `lines: []` 而分錄還在：%r\n" % (_amounts(after),)
+        + "☠️ 判斷用了**值的真假**而不是**鍵在不在** ——\n"
+          "   使用者刪光分錄按儲存，舊的還在，而畫面沒說任何話。")
+
+
 def test_the_edit_log_says_which_line_and_which_field_changed(client,
                                                               make_user):
     """🔴 **編寫紀錄要逐行**：哪一行的哪一個欄位，由 A 變 B。（`§103e`）
