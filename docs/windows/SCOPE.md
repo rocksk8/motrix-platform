@@ -90,7 +90,8 @@ FE(1):  FE1
 DB(1):  DB1
 BG(1):  BG1
 HG(1):  HG1
-QA(1):  QA1
+QA(2):  QA1 QA2
+BK(2):  BK31 BK32
 CL(2):  CL1 CL2
 MD(1):  MD1
 
