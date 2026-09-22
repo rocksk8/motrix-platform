@@ -652,3 +652,162 @@ def test_gb7_a_small_quota_really_does_warn_and_degrade(client, monkeypatch):
         "⇒ 那兩條路可能根本沒接上，而上一題的綠因此證明不了任何事。")
     assert geo.quota_exceeded(used=100, quota=100) is True, (
         "已用 100／100 而沒有判定達上限 —— 硬上限那條路沒有接上。")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# GB17–GB22 · SKU 粒度，而其中兩條是「明著標不知道」
+# ══════════════════════════════════════════════════════════════════════
+
+def test_gb17_usage_is_recorded_at_sku_granularity(client):
+    """🔴 GB17：`geocode_usage.source` 要存 **SKU 粒度**，不是 provider 粒度。
+
+    ```
+    ❌ google                       一個值管不到兩個獨立額度
+    ✅ google:geocoding ／ google:places-text-search ／ google:place-details
+    ```
+    ☠️ Google **2025-03-01 廢掉每月 $200 共用 credit**，改成
+    **每個 SKU 各自一組免費額度而且不 pool**
+    ⇒ 🔑 **兩個 SKU 的用量加在一起去對同一個門檻，兩邊都會算錯。**
+    """
+    geo = _geo()
+    for name in ("USAGE_SKU_GEOCODING", "USAGE_SKU_PLACES_TEXT"):
+        value = getattr(geo, name, None)
+        assert isinstance(value, str) and ":" in value, (
+            f"`geo.{name}` 不是一個 SKU 粒度的字串（實際 {value!r}）——\n"
+            "⇒ provider 粒度管不到兩個獨立額度。")
+    assert geo.USAGE_SKU_GEOCODING != geo.USAGE_SKU_PLACES_TEXT, (
+        "兩個 SKU 用同一個字串 —— 它們的用量會被加在一起。")
+
+
+def test_gb18_the_per_sku_quota_has_no_hardcoded_default(client):
+    """🔴 GB18：額度設定要 **per-SKU**，而**預設值不可以寫死 10,000**。
+
+    A-2 明說「**台灣適用哪一組數字我沒查**」。
+    ☠️ 寫死一個沒查證的數字，**錯的方向若偏晚，使用者會先收到帳單再收到告警** ——
+    🔑 而那時「我們有額度管制」這句話已經被相信了很久。
+    📌 同 `GB5`「不要在程式裡寫死單價」與〈版本適配：不可變成孤兒〉。
+    """
+    geo = _geo()
+    quota_for = _need("quota_for")
+    got = quota_for(geo.USAGE_SKU_GEOCODING)
+    assert got is None, (
+        f"沒有人填過額度，而 `quota_for()` 回了 {got!r} ——\n"
+        "☠️ 那是一個寫死的預設值，而 A-2 明說台灣適用哪一組數字沒查過。\n"
+        "🔑 留空 ＝ 不管制（GB7），不是「用我們猜的那個數字」。")
+
+
+def test_gb19_the_two_unknowns_are_marked_unknown_not_assumed(client):
+    """🔴 GB19：**兩格明著標「查不到」，程式裡不可以寫成已知。**
+
+    ```
+    ZERO_RESULTS 算不算計費                    ❌ 官方頁沒有明文
+    INVALID_REQUEST／OVER_QUERY_LIMIT 是否計費  ❌ 同上
+    ```
+    🔑 而這一題驗的是**程式碼沒有假裝知道** ——
+    ☠️ 一個 `# ZERO_RESULTS 會計費，所以要計數` 的註解，
+    **會在下一個人讀到時變成一個前提**，而那個前提沒有人查過。
+
+    📌 判準：`geo.py` 裡不可以出現「宣稱計費」的句子。
+    ⚠️ 而它擋不住換一種說法寫同一件事 —— 這一題是**提醒**不是**證明**，
+    🔑 真正的處置是「**理由要跟斷言一樣驗得到**」，那寫在 `GB3` 裡。
+    """
+    from pathlib import Path as _Path
+    src = (_Path(__file__).resolve().parent.parent / "helpers" / "geo.py"
+           ).read_text(encoding="utf-8")
+    import re as _re
+    claims = [ln.strip() for ln in src.splitlines()
+              if _re.search(r"(ZERO_RESULTS|INVALID_REQUEST|OVER_QUERY_LIMIT)",
+                            ln) and "計費" in ln and "未" not in ln
+              and "沒有" not in ln and "不確定" not in ln]
+    assert not claims, (
+        "`geo.py` 裡把「這些狀態會不會計費」寫成已知：\n  "
+        + "\n  ".join(claims)
+        + "\n⇒ 官方頁沒有明文（A-2 查過）。標成未知，不要寫成前提。")
+
+
+def test_gb21_the_percent_fields_are_marked_inactive_when_quota_is_blank():
+    """🔴 GB21：額度留空時，**警戒線／硬上限要變灰或標「未生效」**。
+
+    ```
+    畫面   警戒線 = 80、硬上限 = 100      ← 兩個欄位有值
+    實際   quota is None 時，這兩個值完全不會被用到
+    ```
+    ☠️ **一個有值而不生效的欄位，比一個空的欄位更會騙人** ——
+    🔑 使用者看到 80／100 會以為「有在管」，
+    而實際上**沒有任何東西會擋住費用**（這個方向剛被更正過）。
+
+    ⚠️ 結構檢查：釘「畫面有沒有依額度是否留空去改那兩欄的狀態」，
+    不釘 `disabled` 還是 `opacity`（那是實作）。
+
+    ## ⚠️ 判準收緊過一次，而第一版是我自己抓到的
+
+    我原本寫「`quota` 後面 120 字內出現 `null`／`''`／`disabled`…」——
+    ☠️ **而 `quota: ''` 這種初始值就會讓它過**。
+    📌 它這次是**為了對的理由綠的**（B 真的做了 `quotaUnmanaged()`／
+    `未生效`／`:disabled`），🔑 **而那是運氣不是判準。**
+
+    ⇒ 改成兩件都要，而且要**在附近**：
+    ```
+    ① 一個「額度沒填」的判斷式（quota 與 null／undefined 比）
+    ② 一個「未生效」的表現（未生效／disabled／opacity）
+    ```
+    """
+    from pathlib import Path as _Path
+
+    page = (_Path(__file__).resolve().parent.parent.parent / "frontend"
+            / "pages" / "company-profile-settings.html")
+    assert page.exists(), f"找不到 {page}"
+    text = page.read_text(encoding="utf-8")
+    import re as _re
+
+    lines = text.splitlines()
+    predicate = [i for i, ln in enumerate(lines)
+                 if _re.search(r"quota", ln, _re.I)
+                 and _re.search(r"(===?\s*(null|undefined)|Unmanaged)", ln)]
+    assert predicate, (
+        "設定頁裡找不到任何「額度有沒有填」的判斷式。\n"
+        "📌 搜尋範圍：`company-profile-settings.html` 全文，"
+        "找的是 `quota` 與 `null`／`undefined` 比較、或名字含 `Unmanaged` 的呼叫。")
+
+    marked = False
+    for i in predicate:
+        window = "\n".join(lines[max(0, i - 10):i + 11])
+        if _re.search(r"(未生效|disabled|opacity)", window):
+            marked = True
+            break
+    assert marked, (
+        "有「額度沒填」的判斷式，而附近沒有任何「未生效」的表現 ——\n"
+        "☠️ 使用者看到 80／100 會以為有在管，而那兩個值完全不會被用到。\n"
+        "🔑 一個有值而不生效的欄位，比一個空的欄位更會騙人。")
+
+
+def test_gb22_the_blank_quota_shortcut_does_not_need_a_mail_module(
+        client, monkeypatch):
+    """⚠️ GB22：**這是測試成本，不是缺陷** —— 但它值得一題。
+
+    `notify_quota_warning()` 的第一行是 `from helpers import email_notify`，
+    **而那在 `if quota is None: return False` 之前**
+    ⇒ 想測「留空時短路」必須先備好那個模組。
+
+    ## 🔑 而它有一個真的後果，不只是麻煩
+
+    ☠️ **「不管制」那條路依賴一個它用不到的模組** ——
+    寄信那一塊哪天壞了（匯入失敗、設定缺漏），
+    **連「不管制」都會跟著炸**，而那條路本來什麼都不該做。
+    📌 〈防護的副作用落在盲側〉：**最不該有依賴的那條路上有一個依賴。**
+
+    ⇒ 這一題釘的是「**額度留空時，不碰寄信那一塊也能跑完**」。
+    """
+    geo = _geo()
+    monkeypatch.setattr(geo, "quota_for", lambda *a, **kw: None, raising=False)
+
+    import helpers.email_notify as _en
+
+    def _boom(*a, **kw):
+        raise AssertionError("額度留空時不該碰到寄信那一塊")
+
+    monkeypatch.setattr(_en, "_send_raising", _boom, raising=False)
+    monkeypatch.setattr(_en, "_async_send", _boom, raising=False)
+
+    assert geo.notify_quota_warning(used=999_999) is False, (
+        "額度留空而它沒有短路 —— 見 `GB7`。")

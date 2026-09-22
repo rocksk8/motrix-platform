@@ -107,13 +107,23 @@ def test_ql8_the_payslip_uses_the_primary_location_explicitly(identity):
 
     它掛 `contractor_id`，**是人事文件不是案件文件** —— 沒有所屬據點。
 
-    ## ☠️ 而我查到一件 A 的條文裡沒有的
+    ## 🔴 我原本在這裡寫的結論被 A 推翻了，而錯的那一版留著
 
-    `_build_payslip_html` 的抬頭來自 `payslips.data_json`（`pdf_gen.py:801`）
-    —— **那是開單時的快照**，而 `QL10` 裁的是「讀即時值」。
-    ⇒ 🔑 `QL8` 不是「把寫死的換成據點」，
-    是**把一個既有的快照改成即時讀取** ——
-    ⚠️ 而那會改變既有薪資單重印時的內容。**已回報 A。**
+    我寫的是：
+    > `QL8` 不是「把寫死的換成據點」，是**把既有快照改成即時讀取** ——
+    > 而那會改變既有薪資單重印時的內容。
+
+    ✅ **A 採納了那個發現，而裁的方向相反**（`QL16`）：
+    **`_build_payslip_html` 的抬頭繼續讀 `payslips.data_json` 的開單時快照。**
+    🔑 理由：`QL10`（讀即時值）是為了**匯款帳號要回答「現在該匯到哪」**，
+    ☠️ 而薪資單的抬頭回答的是「**當初是誰付的**」—— **那不是同一個問題。**
+
+    📌 所以我發現的是對的（它是快照），**而我從那個事實推出的方向是錯的** ——
+    ⚠️ 〈推翻的證據不會自動支持替代方案〉：
+    **我查出「它是快照」，然後順手主張「所以要改成即時」。**
+
+    ⇒ 這一題現在只驗「**不給據點時落在主要據點**」，
+    而「抬頭從哪裡來」歸 `QL16`。
     """
     resolve = _need("location_identity")
     identity[PRIMARY["id"]] = {"company_name": "主要據點抬頭"}
@@ -322,3 +332,71 @@ def test_ql15_the_case_and_approval_lists_show_the_location():
     assert not missing, (
         "這些列表看不出案子屬於哪個據點：" + "、".join(missing) + "\n"
         "⇒ 多據點之後兩邊的案子混在同一張表裡。")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# QL16 / QL17 / QL18 · 薪資單的快照要留著，而缺欄位不可以安靜補值
+# ══════════════════════════════════════════════════════════════════════
+
+def test_ql16_the_payslip_still_reads_its_snapshot(identity):
+    """🔴 QL16：`_build_payslip_html` 的抬頭**繼續讀開單時的快照**。
+
+    `QL8` **不可以**改變既有薪資單重印時的內容。
+    🔑 `QL10`（讀即時值）是為了**匯款帳號要回答「現在該匯到哪」**，
+    ☠️ 而薪資單的抬頭回答的是「**當初是誰付的**」—— **不是同一個問題。**
+
+    📌 觀測點：把 `location_identity()` 換成一個**完全不同**的抬頭，
+    而薪資單印出來的仍然是 `data_json` 裡那一個。
+    """
+    identity[None] = {"company_name": "不該出現在薪資單上的抬頭"}
+    html = I.render("_build_payslip_html")
+    assert "不該出現在薪資單上的抬頭" not in html, (
+        "薪資單的抬頭跟著即時值走了 ——\n"
+        "☠️ 既有薪資單重印時的內容會變，而它回答的是「當初是誰付的」。")
+
+
+def test_ql17_a_payslip_without_a_snapshot_is_not_silently_filled(identity):
+    """🔴🔴 QL17：舊薪資單的 `data_json` **沒有抬頭欄位**時，不可以安靜補值。
+
+    ```
+    ❌ 安靜地用即時值補 ⇒ 產出一份**看起來像正本、而抬頭是今天的**文件
+                        ☠️ 它不會報錯，而它是錯的
+    ```
+    🔑 〈降級之後它還是會動〉：**壞掉會被報修，而這一份會被寄出去。**
+    ⇒ 📌 正確的處置是**讓它看得出來**（留空、或明著標示），
+    **而不是拿一個今天的值去假裝它是當初那一個。**
+    """
+    identity[None] = {"company_name": "今天的抬頭股份有限公司"}
+    html = I.render("_build_payslip_html")      # `MINIMAL_INPUT` 沒有抬頭欄位
+    assert "今天的抬頭股份有限公司" not in html, (
+        "舊薪資單沒有抬頭快照，而系統用今天的值補了進去 ——\n"
+        "☠️ 那是一份看起來像正本、而抬頭是今天的文件。它不會報錯。")
+
+
+def test_ql18_a_new_location_id_is_validated_on_submit(client, make_user):
+    """🔴 QL18：`id` 格式驗證要驗「**這一次送進來的新據點**」，不是整包重驗。
+
+    ☠️ 整包重驗的話，**既有那些 id 格式不合的據點會讓使用者存不了檔** ——
+    🔑 而他改的可能是完全無關的一欄，**而錯誤訊息會指著一個他沒有動的東西**。
+    📌 同 `QL12` 的「改名不算刪除」：
+    **判準要分得出「使用者正在做什麼」與「資料本來長什麼樣」。**
+    """
+    token = _superadmin(client, make_user, "ql18_admin")
+    auth = {"Authorization": f"Bearer {token}"}
+    _set_locations(client, token, [dict(PRIMARY)])
+
+    bad = dict(BRANCH)
+    bad["id"] = "有空白 與中文/斜線"
+    r = client.put("/api/settings/company-profile", headers=auth,
+                   json={"locations": [dict(PRIMARY), bad]})
+    assert r.status_code == 422, (
+        f"送進來一個 id 格式不合的新據點，而它被收下了（{r.status_code}）。")
+
+    # 📏 正對照：只改既有據點的無關欄位，不可以被既有資料的格式擋住。
+    tweaked = dict(PRIMARY)
+    tweaked["phone"] = "04-0000-0000"
+    r = client.put("/api/settings/company-profile", headers=auth,
+                   json={"locations": [tweaked]})
+    assert r.status_code == 200, (
+        f"只改了一個無關的欄位卻被擋下來（{r.status_code}）：{r.text[:200]}\n"
+        "☠️ 錯誤訊息會指著一個使用者沒有動的東西。")
