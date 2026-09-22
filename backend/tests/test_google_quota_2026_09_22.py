@@ -560,3 +560,95 @@ def test_gb12_the_warning_mail_is_sent_once_per_cycle_and_raises(
     notify(used=850, quota=1000)
     assert len(sent) == 1, (
         f"同一個週期寄了 {len(sent)} 封警戒信 —— 一個週期只能寄一次。")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# GB7 行為版 · 現在的證據只有註解，而註解不會在行為改變時變紅
+# ══════════════════════════════════════════════════════════════════════
+#
+# A-2 明著標了它的限制：`GB7`／`GB13` 目前的證據是**讀 `geo.py` 的註解與
+# 預設值**（`geo.py:437`／`448`／`464`／`416`），**沒有跑過任何一條路徑**。
+#
+# 🔴 而這件事的後果方向**剛剛被更正過，而且反過來了**：
+# ```
+# 先前以為   留空 = 功能沒開   ⇒ 保守失敗（看得見、會被報修）
+# 實際上     留空 = 不設上限   ⇒ **沒有任何東西會擋住費用**
+# ```
+# 🔑 ⇒ 這一題不是補文件，是**把一個方向相反的假設變成可執行的斷言**。
+
+
+def test_gb7_a_blank_quota_neither_warns_nor_degrades_but_still_counts(
+        client, monkeypatch):
+    """🔴🔴 GB7 行為版：`monthly_free_quota is None` 時
+
+    ```
+    ① 警戒線那一條路   不寄信
+    ② 硬上限那一條路   不降級
+    ③ 而計數**仍然照記**   ← 不是「關掉整個模組」
+    ```
+    🔑 ③ 是這一題最容易被做錯的一半：
+    ☠️ 「不管制」很容易被實作成「連計數都不做」——
+    **而那會讓使用者哪天想開始管制時，手上一筆歷史用量都沒有。**
+    """
+    geo = _geo()
+    from helpers import email_notify, settings as _settings
+
+    monkeypatch.setattr(geo, "quota_for", lambda *a, **kw: None, raising=False)
+    sent = []
+    monkeypatch.setattr(email_notify, "_send_raising",
+                        lambda *a, **kw: sent.append(a) or email_notify.SEND_SENT,
+                        raising=False)
+
+    assert geo.notify_quota_warning(used=999_999) is False, (
+        "額度留空（不管制）而它寄了警戒信 —— 沒有門檻就沒有警戒線可言。")
+    assert sent == [], f"額度留空而信真的送出去了：{sent}"
+
+    assert geo.quota_exceeded(used=999_999, quota=None) is False, (
+        "額度留空而它判定「已達上限」⇒ 會降級。\n"
+        "☠️ 留空的意思是不管制，不是額度 0。")
+
+    # ③ 計數仍然要記 —— 不管制不等於不量。
+    import db
+    before = _usage_rows(db, geo)
+    geo.record_geocode_call(geo.USAGE_SKU_GEOCODING)
+    after = _usage_rows(db, geo)
+    assert after > before, (
+        "額度留空時連計數都停掉了 ——\n"
+        "⇒ 使用者哪天想開始管制，手上一筆歷史用量都沒有。")
+
+
+def _usage_rows(db, geo):
+    conn = db.get_db()
+    try:
+        row = conn.execute(
+            "SELECT COALESCE(SUM(count), 0) AS n FROM geocode_usage "
+            "WHERE source=?", (geo.USAGE_SKU_GEOCODING,)).fetchone()
+    finally:
+        conn.close()
+    return row["n"]
+
+
+def test_gb7_a_small_quota_really_does_warn_and_degrade(client, monkeypatch):
+    """🔴🔴 GB7 反向控制：**填一個小額度 ⇒ 那兩條路要真的會觸發。**
+
+    ☠️ 少了這一半，**「整段程式碼都沒跑到」也會讓上一題綠** ——
+    🔑 而「不管制」與「這個模組根本沒接上」在畫面上完全一樣：
+    **兩者都是沒有信、沒有降級。**
+    📌 〈假綠燈〉：一個什麼都沒發生的實作，滿足所有「不應該發生」的斷言。
+    """
+    geo = _geo()
+    from helpers import email_notify
+
+    monkeypatch.setattr(geo, "quota_for", lambda *a, **kw: 100, raising=False)
+    monkeypatch.setattr(geo, "usage_this_period", lambda *a, **kw: 95,
+                        raising=False)
+    sent = []
+    monkeypatch.setattr(email_notify, "_send_raising",
+                        lambda *a, **kw: sent.append(a) or email_notify.SEND_SENT,
+                        raising=False)
+
+    assert geo.notify_quota_warning(used=95, quota=100) is True, (
+        "已用 95／100（超過預設警戒線 80%）而沒有寄信 ——\n"
+        "⇒ 那兩條路可能根本沒接上，而上一題的綠因此證明不了任何事。")
+    assert geo.quota_exceeded(used=100, quota=100) is True, (
+        "已用 100／100 而沒有判定達上限 —— 硬上限那條路沒有接上。")

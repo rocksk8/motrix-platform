@@ -186,8 +186,16 @@ def test_mn5_no_page_still_calls_these_three_part_of_sales():
             if "業務" not in line:
                 continue
             # 📌 只看麵包屑／返回連結那一類，不看「業務員」「業務負責」這種欄位名。
-            if re.search(r"業務(?!員|負責|開發|人員)", line):
-                offenders.append(f"{page}:{lineno}  {line.strip()[:80]}")
+            if not re.search(r"業務(?!員|負責|開發|人員)", line):
+                continue
+            # 🔴 B 指出的誤報：`approval-queue.html:1339` 的
+            #    `const LABEL = { …, sales: '業務', … }` 是**角色顯示名**，
+            #    ☠️ 改它會讓畫面上「業務」這個角色變成別的字 ——
+            #    🔑 **而那跟選單搬家毫無關係。**
+            # 📌 判準加一條：那一行若在講角色對照表，就不是麵包屑。
+            if re.search(r"\b(sales|admin|superadmin|engineer|viewer)\s*:", line):
+                continue
+            offenders.append(f"{page}:{lineno}  {line.strip()[:80]}")
     assert not offenders, (
         "這幾頁還把自己寫成「業務」底下的：\n  " + "\n  ".join(offenders)
         + "\n⇒ 返回連結／麵包屑要跟著搬家一起改。")
@@ -197,24 +205,33 @@ def test_mn5_no_page_still_calls_these_three_part_of_sales():
 # MN2 · 改名要使用者點頭，這一題只釘「不要自己改」
 # ══════════════════════════════════════════════════════════════════════
 
-def test_mn2_the_group_name_is_not_changed_before_the_user_says_so(sidebar):
-    """🔴 MN2：**「工作內容」的新名字要使用者選，不是我們選。**
+def test_mn2_the_group_is_renamed_to_the_name_the_user_picked(sidebar):
+    """🔴 MN2：那一組改名為 **「我的工作」**。
 
-    使用者原話：「工作內容**再選用一個更好的名稱**」——
-    🔑 **選的人是他，不是我們。**
+    使用者原話：「工作內容**再選用一個更好的名稱**」——**選的人是他。**
 
-    ## 📌 所以這一題釘的是「還沒改」，不是「改成什麼」
+    ## ⭐ 這一題按照設計走完了一個循環
 
-    ⚠️ 這是一個**會過期的斷言**：使用者一裁示，它就要改成釘新名字。
-    ☠️ 而我刻意讓它**在那一刻紅** —— 它的失敗訊息就是那張待辦：
+    我第一版釘的是「**還沒改名**」，而它的失敗訊息寫著
     **「使用者裁示了嗎？裁示了就把名字釘在這裡。」**
+    ⇒ 📌 裁示下來了（`我的工作`），⇒ **現在把名字釘進來。**
+
     🔑 〈守門要驗「有沒有人做過決定」〉：
-    現在沒有人做過決定，而這一題確保那件事不會被順手代勞。
+    **它不是在驗名字對不對，是在驗「有沒有人代替使用者做這個決定」。**
+    ☠️ 而舊那一版留在這裡不刪（〈更正要留著錯的那一列〉）：
+    **下一個人只看到「釘著我的工作」的話，會以為這個名字一直都是這樣。**
+
+    ## 📌 理由（A 寫的，值得留著）
+
+    搬完之後這一組全部是**「等我處理」或「我做過的」** ——
+    **主語是使用者自己，不是模組類型。**
+    ☠️ 「工作內容」描述的是**資料**，而簽核佇列不是資料，**是一件要你去做的事。**
     """
     decoded = _decode_escapes(sidebar)
     names = set(_groups(decoded))
-    assert "工作內容" in names, (
-        f"「工作內容」這一組不見了，現有分組：{sorted(names)}\n"
-        "⚠️ 若是使用者已經裁示了新名字 —— **把新名字釘在這一題裡**，\n"
-        "   而不是把這一題刪掉：〈更正要留著錯的那一列〉。"
-    )
+    assert "我的工作" in names, (
+        f"那一組還不叫「我的工作」，現有分組：{sorted(names)}\n"
+        "⇒ 使用者裁示的名字是「我的工作」。")
+    assert "工作內容" not in names, (
+        f"舊名字「工作內容」還在：{sorted(names)}\n"
+        "☠️ 兩個同時存在 ⇒ 改名做了一半，使用者會看到兩個很像的分組。")
