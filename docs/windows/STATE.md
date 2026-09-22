@@ -16100,7 +16100,200 @@ GC13  讓地圖在 DB 出事時還能畫（即 B 那個 fail-open）—— **独
 
 ---
 
+
+## §25 · 放行紀錄 · `20260922_184908_c5b1e84`（2026-09-22）
+
+> 使用者裁示：「**打包完成後直接匯出，驗包結果一起回報**」、
+> 「**我來部署，剩下的欠帳你繼續處理**」
+> ⇒ A 與 A-2 共同裁定可以更新，**部署動作由使用者自己做**。
+
+### 產物
+
+```
+包      deploy_packages\20260922_184908_c5b1e84   40MB / **470 檔**
+來源    git archive c5b1e840a8e9040b97dcbf4351eb7e3bc30aaf90  ⇒ **只含已提交的內容**
+manifest commit_short c5b1e84 / branch master / built_at 2026-09-22 18:49:14
+```
+
+### `RG1` · 測試（指令與 SHA 寫在數字旁邊）
+
+```
+指令  backend\tools\build_deploy_package.ps1（預設參數，KeepPackages=2）
+      內部：pytest -q -m "not e2e" -n 6 --basetemp=%TEMP%\motrix-pytest-<ts>
+            pytest -q -m "e2e" --basetemp=<...>_e2e
+於    HEAD c5b1e84，START 18:34:53 → END 18:49:15，EXIT=0
+```
+```
+非 e2e   **1819 passed / 53 skipped / 0 failed**   578.94s (0:09:38)
+e2e       **52 passed / 1 failed / 2 skipped / 1872 deselected**   256.46s (0:04:16)
+下界    非 e2e 收集數 ≥ 1860（量於 31bb058，17:2x，
+        `pytest --collect-only -q -m "not e2e"`，同一輪 deselected 55）
+        ⇒ 本輪 1819 + 53 = **1872 非 e2e** ⇒ ✅ **沒有掉題**
+⚠️ 收集數與 passed 單位不同（本輪差 53）
+```
+
+### `RG2` · skip 逐筆驗
+
+```
+53 筆，分佈在 39 行（`SKIPPED [N]` 的 N 要**加總**，不是數行）
+  test_webauthn_rp_id_column 18 / config 15 / b64url 12 / basic 8 = 53
+reason 含可解析參照  39/39（全部指向 backend/helpers/auth.py::PASSKEY_ENABLED=False）
+reason 空／TODO        0
+⚙️ 反向控制二（參照要存在） helpers/auth.py:75  PASSKEY_ENABLED = False  ✅
+```
+⚠️ **黑洞（D 指出，不擋這一包）**：`RG2` 驗的是「符號存在」不是「方向正確」，
+且它**只看得見已經觸發的 skip**：該 skip 而沒 skip ⇒ 沒有任何一列 ⇒ 看不見。
+
+### `RG6` · 驗包（D 跑，`scratchpad/rg6.py`）—— **四項全過**
+
+```
+⚙️ 兩次執行的根目錄與排除清單（逐字，讓「同一支掛描」可查）
+① 工作樹  根 C:\Users\hichan\Desktop\MOTRIX-ERP
+          排除 .git, .venv, __pycache__, deploy_packages, node_modules, venv
+          檔案數 1470
+② 包      根 ...\deploy_packages\20260922_184908_c5b1e84
+          排除 （無）
+          檔案數 470
+🔑 **兩次的排除清單不同，而那是刻意的** ——
+   寫成「同一個比對器、同一組模式，**不同的掛描範圍**」，
+   **不可以寫成「完全相同的掛描」**。（D 的用字）
+```
+```
+① 掛描能力證明（工作樹）**PASS** —— 指名的五個全部命中：
+   motrix_erp.db（repo 根）／backend\motrix.db／backend\motrix_erp.db／
+   backend\motrix_erp_demo.db ＋ backend\tools\_license_private_key_dev.pem
+   ⚠️ db_backups/** 36 個不計鑑別力（/XD 整批排除）
+   ⚠️ -wal／-shm：出現與否**不具意義**，
+      **而它們出現在包裡等同於 `.db` 出現**（含未 checkpoint 的資料）
+② 包內禁止清單 **十類全 0**
+   db-sqlite／pem-key-crt／private_key／license.key／certs/／
+   _demo_／logs/／*.log／.env／__pycache__／.git
+③ Leaflet 五檔 **5/5 相符**（兩邊都 D 自己算，不引用任何人報過的值）
+④ 必須存在  autostart.bat 含 set MOTRIX_TENDER_RADAR=1 ✅ 與 set MOTRIX_GEO=1 ✅
+          （**指名，不數 set 行數** —— 實際有四條）／DEPLOY.md ✅
+```
+🔑 **三個獨立鑑別維度（`.db`／`.pem`／`logs`）在工作樹上各自亮過、在包上三類全暗。**
+⇒ **那才是「零命中可以解讀」的依據。**
+⚠️ `certs/` 逐字：「未出現在包內；**而工作樹本來就沒有它（`certs-dir` 在工作樹也是 0），
+此項未構成有效檢驗。**」
+✅ 而 `logs/` **恢復成有效正對照** —— D 實測工作樹 `logs/` 7 檔、`*.log` 118 個；
+先前「`logs/` 有 0 個檔所以不能當正對照」的前提**不成立**。
+
+### `RG19`／`RG20` · 凍結與工作樹
+
+```
+FREEZE_START 2026-09-22 18:34:41   HEAD c5b1e840a8e9...   git status --porcelain 0 項
+FREEZE_END   2026-09-22 18:53:15   HEAD c5b1e840a8e9...   git status --porcelain 0 項
+⚠️ 涵蓋範圍：`git status --porcelain` **不含 `.gitignore` 的路徑**
+   （實測：`deploy_packages/`、`backend/license.key`、
+    `backend/.initial_admin_credentials.txt` 都看不到）
+自陳（**標成自陳**）：五個視窗回報零寫入
+  A 18:32:25 / B 18:32:55 / C 18:33:16 / D 18:33:41 / A-2 18:34:02（全部實跑 `date`）
+可量測：起跑前機器上 pytest／playwright／打包行程 **0 個**
+  （正對照：python 行程總數 12 ⇒ 查詢本身有效）
+```
+
+### 🔴 `RG` 新增一問（D 提，這一包就需要它）
+
+> **「這一包有沒有任何一支測試是紅的？紅的那一支擋不擋出貨？」**
+
+⇒ **這一包的答案：有一支紅，而它不擋。**
+```
+FAILED tests/test_e2e_page_module_guard_2026_09_13.py::test_admin_without_module_loses_both_item_and_group_name
+E   AssertionError: 該看得到的分組不見了：['儀表板', '報價單', '我的工作']
+E   assert '業務' in ['儀表板', '報價單', '我的工作']
+```
+
+#### 裁定：**甲（題目過期），不擋這一包** —— A 提、A-2 背書
+
+證據三層，**兩個人各自查過**：
+```
+① sidebar.js:665   sec('業務', cDev || cQ || cTdr)          ⇒ 分組仍然存在
+② sidebar.js:620-622
+   if (g.items.length === 1) { return '<a class="mnav__top'…'>' + esc(it0.label) + '</a>' }
+   ⇒ **單項分組吐的也是 `.mnav__top`** ⇒ 測試抓的就是項目名
+   🔑 **那是實作，不是註解**（A-2 貼了原始碼）
+③ 測試帳號 modules=["dashboard","quotation"] ⇒ 逐項算得出來：
+   主選單 1 項⇒「儀表板」／業務 1 項（cMap=false）⇒「報價單」／
+   我的工作 3 項⇒「我的工作」  ⇒ **三項全中，沒有第四項**
+```
+✅ **而最硬的旁證是同檔的另一題是綠的**：
+```
+tests/…:156  test_superadmin_still_sees_everything   assert "業務" in names   ✅ 綠
+⇒ **分組渲染完全正常，壞的只是「那個帳號底下剩幾項」。**
+🔑 而它是一個**現成的對照組**，不必有人去造。
+```
+⇒ 成因：`MN` 把簽核三項搬進「我的工作」（條件含 `cQ`）
+⇒ 「業務」對這個帳號剩單項 ⇒ 渲染成項目名。**使用者親自交辦的改動的預期後果。**
+
+#### 🔴 而 A-2 查出一件比那支紅重要的（排下一輪第一件）
+
+```python
+tests/…:128  for gone in ("廠商與採購", "選型資料庫", "設備", "勞務管理"):
+                   assert gone not in names        # names 只來自 .mnav__top
+```
+☠️ 若哪天「廠商與採購」真的漏權限顯示，而它當時**只剩一項**
+⇒ 渲染成項目名 ⇒ 字串不在 `names` ⇒ **斷言通過 ⇒ 假綠燈**。
+🔑 **而這一包正好製造了一個單項分組** ⇒ 那顆地雷現在是活的。
+⚠️ 第二顆：`:151` 反向控制 `assert "營運報表" in names`（**單項分組**）
+⇒ 哪天有人往「財務」加第二項，**反向控制會紅，而那會被讀成產品壞了**。
+🔴 **A-2 明著不背書「只改那一行」**：刪掉 `in` 斷言 ⇒ 整題只剩 not-in
+⇒ **導覽列整個空掉也會綠。**
+
+### 打包耗時的組成（今天第一次量到）
+
+```
+總       862s（14m22s）  START 18:34:53 → END 18:49:15
+非 e2e   578.94s  **67.2%**   1872 題 ⇒ **309 ms/題**
+e2e       256.46s  **29.8%**     55 題 ⇒ **4.66 s/題**   ⇒ 相差 **15 倍**
+其餘     ≈ 27s   **3.1%**（所有非測試步驟：git archive／解壓／守門／清舊包）
+```
+🔑 ⇒ **排除「archive／prune 隨時間成長」那個候選：它的上界就是 27 秒。**
+🔑 ⇒ **成長的斜率取決於新增題是哪一套，而目前沒有任何地方分套記錄它。**
+
+---
+
 ## §6 · 紀律提醒（給所有視窗）
+
+### ☠️ 一個「僅警告」的關卡，它的警告文字決定了它實際上擋不擋得住東西（2026-09-22）
+
+```
+打包腳本逐字：「已知這類測試偶爾因系統負載造成瀏覽器渲染逾時，
+             非必然代表程式碼壞掉。繼續打包」
+而這一次紅的是 `assert '業務' in [...]` —— **內容斷言，不是逾時**
+```
+```
+不擋出貨        ⇒ 紅燈沒有後果
+＋ 文字說別理它  ⇒ 沒有人會去看它是不是真的 flaky
+⇒ **一個內容斷言的紅，會以「已知的負載問題」的形式永久存在**（D 的話）
+```
+🔑 **改文字是修結果。修作法：把「逾時」與「斷言失敗」分開判**（A-2）——
+pytest 給得出這個區別（`TimeoutError` vs `AssertionError`）
+⇒ 逾時 ⇒ 警告續跑；**斷言失敗 ⇒ 中止**。**那是機械判定的，不靠下一個人把警告讀對。**
+
+### 🔑 「同一支掛描」要寫清楚哪一部分相同（2026-09-22，D）
+
+驗包那兩次的**排除清單不同**（工作樹要排掉 `deploy_packages/` 等，包那次不排除任何東西），
+而那是**刻意的**。
+⇒ 寫成「**同一個比對器、同一組模式，不同的掛描範圍**」，
+❌ 不可以寫成「完全相同的掛描」。
+☠️ 否則下一個人會以為兩邊的數字可以直接相減。
+
+### 🔑 一個寫得好的註解，讓一個粗糙的計數器產生一個完全合理的假陽性（2026-09-22，A）
+
+A 查「B 的 `except` 拿掉了沒」，`grep -c "except Exception"` 回 **1** ⇒ 差點報「還在」。
+☠️ 實際那個命中是**打到 B 寫的註解裡的字** —— 它註解裡逐字寫著
+「我第一版包了 `except Exception: return {}`」。
+📌 與 D 今天那兩次（掛描器**丟掉**註解 ⇒ 差點把對的報成錯；
+**把註解讀成程式碼** ⇒ 真的把已修的報成缺陷）合起來是**同一個機制的三面**。
+⇒ 通則：**註解與實作在文字層面是同一種東西，而任何只看文字的工具都分不出來。**
+
+### 🔑 只活在 session 暫存裡的工具，等於沒有交付（2026-09-22）
+
+`rg6.py`（驗包器）寫在 D 的 scratchpad 裡 ⇒ **下一次驗包的人拿不到它**。
+📌 與〈散文對工具是隱形的〉同族：**寫在訊息裡→沒下達／寫在註解裡→工具看不見／
+寫在 session 暫存裡→下一個人拿不到**。
+
 
 ### ☠️ 為了讓紅燈變綠而換量具，而換上去的那一個已經被停用了（2026-09-22，A）
 
