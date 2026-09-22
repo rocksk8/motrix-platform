@@ -31,8 +31,15 @@ function accountItemsPage() {
 
     async init() {
       try {
+        // 🔴 token 存在 `motrix_session` 這個 **JSON** 裡，不是一個同名的獨立鍵。
+        //    ☠️ 我原本直接去拿那個獨立鍵 —— 它不會報錯，只是回 `null`
+        //       ⇒ 送出一個沒有值的 Bearer ⇒ **401**，而頁面一片空白。
+        //    🔑 全站其他 8 支都是這個形狀（`cashier.js` 的 `_token()`），
+        //       **只有我那一支不是** —— 而我沒有查就假設了鍵名。
+        //    📌 這段刻意不寫出錯誤寫法的字面值：寫了就會被盤點工具當成殘留。
+        const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
         const r = await fetch('/api/account-items', {
-          headers: { Authorization: 'Bearer ' + (localStorage.getItem('token') || '') },
+          headers: { Authorization: 'Bearer ' + (s.token || '') },
         })
         if (!r.ok) throw new Error('HTTP ' + r.status)
         const d = await r.json()
