@@ -160,14 +160,18 @@ def test_an_admin_cannot_create_bonus_items(client, make_user):
         "被擋下來了，**而資料已經寫進去了** —— 拒絕的路徑上不可以留副作用。")
 
 
-@pytest.mark.parametrize("body,why", [
-    ({"person_source": GOOD_SOURCE}, "沒有名稱"),
-    ({"name": "沒來源的項目"}, "沒有人員來源"),
+#: ⚠️ `says` 要**分得開**，不可以互為子字串 ——
+#:    我第一版給「人員來源」，而「不支援的人員來源「」」**也包含它**
+#:    ⇒ 突變 M4 照樣活下來。〈判準的寬窄都會騙人〉。
+@pytest.mark.parametrize("body,why,says", [
+    ({"person_source": GOOD_SOURCE}, "沒有名稱", "請填寫"),
+    ({"name": "沒來源的項目"}, "沒有人員來源", "請選擇"),
     ({"name": "亂來的", "person_source": "quotations.owner"},
-     "人員來源不在白名單（`owner` 欄位在 `quotations` 裡根本不存在）"),
+     "人員來源不在白名單（`owner` 欄位在 `quotations` 裡根本不存在）",
+     "不支援"),
 ])
 def test_a_half_filled_item_is_refused_with_a_reason(client, make_user,
-                                                     body, why):
+                                                     body, why, says):
     """🔴 **半填的項目要被擋，而且說得出是哪一格。**（%s）
 
     ☠️ 沒有人員來源的項目**永遠算不出發放對象** ⇒ 它會
@@ -183,6 +187,19 @@ def test_a_half_filled_item_is_refused_with_a_reason(client, make_user,
     ```
     🔑 加上 403 那一題，**一支 100% 不可用的端點可以有 6 綠**。
     ⇒ 會從紅轉綠的只有「superadmin 建得成」與「`created_by` 是誰」那兩題。
+
+    ## 🔴 而我第一版只斷言 400，突變當場抓到（留著這一列）
+
+    ```
+    突變 M4  把 `if not source:` 那道擋拿掉
+    結果    **活下來** —— 三題照樣綠
+    成因    少了它，`source=""` 會掉到下一道 `source not in PERSON_SOURCES`
+            ⇒ **仍然回 400**，只是訊息從「請選擇人員來源…」
+              變成「不支援的人員來源「」」
+    ```
+    ☠️ 而我的 docstring 寫著「**而且說得出是哪一格**」——
+       **斷言的名字說它在驗 A，而它實際只驗了狀態碼**。
+    ⇒ 補上 `says`：訊息要指得出是哪一格。
     """
     # ⚠️ 固定名字是安全的：`client` 是 function-scoped，每一個參數化案例
     #    拿到的是**自己的一份資料庫**。
@@ -193,6 +210,12 @@ def test_a_half_filled_item_is_refused_with_a_reason(client, make_user,
         pytest.fail("回 %s —— 這一格量不到驗證（先修 `NameError`）。" % r.status_code)
     assert r.status_code == 400, (
         "%s 的項目被接受了（回 %s）：%s" % (why, r.status_code, r.text[:200]))
+    assert says in r.text, (
+        "%s 被擋下來了，**而訊息沒有指出是哪一格**（找 %r）：%s\n"
+        % (why, says, r.text[:200])
+        + "☠️ 使用者只知道「不行」，不知道要改哪裡。\n"
+        + "📌 突變 M4 就是靠這一格才殺得掉：拿掉「缺來源」那道擋之後，\n"
+          "   下一道仍然回 400，**只有訊息會變**。")
     assert len(_items()) == before, "被擋下來了，而資料已經寫進去了。"
 
 
