@@ -663,8 +663,16 @@ class _GeocodeBudget:
     def locate(self, address):
         """回 `GeoResult` 或 `None`。
 
-        `None` 的意思是「**這次沒有拿到座標**」，而為什麼沒拿到有兩種，
-        分別記在 `pending`（來不及）與 `unresolvable`（查過查不到）。
+        🔴 **`None` 只有一個意思：這次來不及查（時間預算用完）。**
+        查過而查不到 ⇒ 回一個**沒有座標的 `GeoResult`**，不是 `None`。
+
+        ☠️ 我第一版讓兩種都回 `None`，而 `_locate_tender()` 把 `None`
+        一律當成「來不及」⇒ **`withoutLocation` 變成 0**
+        ⇒ **定位不到的標案從計數裡消失，而畫面說一切正常**
+        （`test_m6`／`test_r2` 當場紅，它們守的正是這件事）。
+        🔑 兩個計數器答得了「這一輪各有幾筆」，**答不了「這一筆是哪一種」**——
+        而呼叫端要的是後者。
+        📌 〈缺欄位≠缺訊號〉的反面：訊號在計數器裡，**而消費端拿不到**。
         """
         hit = geo.cached_only(address)
         if hit is not None:
@@ -672,7 +680,7 @@ class _GeocodeBudget:
         if geo.geocode_missed_recently(address):
             # 📌 不佔時間預算：它根本不會發出請求。
             self.unresolvable += 1
-            return None
+            return geo.GeoResult(error="查無此地址", address=address)
         if time.monotonic() >= self.deadline:
             self.pending += 1
             return None
@@ -680,7 +688,7 @@ class _GeocodeBudget:
         if found is None or not found.coord:
             # 剛剛查過而且查不到 ⇒ 這一筆歸「查不到」，不歸「來不及」。
             self.unresolvable += 1
-            return None
+            return found or geo.GeoResult(error="查無此地址", address=address)
         return found
 
 

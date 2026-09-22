@@ -1204,21 +1204,14 @@ def locate_cached(address, manual_coord=None):
     #   ⇒ **什麼都不寫** ⇒ 下一次又在待辦裡、又查一次、又失敗
     #   ⇒ **永遠不會變少**，而標案雷達每天帶進新的機關名稱。
     #
-    # ⚠️ 這個判斷排在**快取命中檢查之前**是錯的 —— 所以它在這裡，
-    #    而下面的迴圈仍然會先看正快取。
-    # 🔑 理由：地址可能先查不到、後來被別的路徑寫進快取（例如手動填座標）。
-    #    先看正快取才不會把一個**已經知道的**地址當成查不到。
-    for _name, source in _STAGES:
-        hit = _cached_stage(address, source)
-        if hit:
-            return hit
-    hit = _cached_stage(address, SOURCE_NOMINATIM_DISTRICT)
-    if hit:
-        return hit
-    if geocode_missed_recently(address):
-        # 📌 回「查無此地址」而不是 `None`：呼叫端要分得出
-        #    「還沒查」與「查過了，就是查不到」。
-        return GeoResult(error="查無此地址", address=address)
+    # 🔴 而它**必須在迴圈裡面、貼著「要發出去了」那一行**，不可以放在迴圈之前。
+    # ☠️ 我第一版把它連同一段「先掃完所有階的快取」放在迴圈之前
+    #    ⇒ 有 Google 金鑰時，**nominatim 的舊快取會在 google 階被問到之前
+    #       就回傳** ⇒ 那正是 `A9` 在守的東西，而我把它重新做了一次
+    #       （`test_a9`／`test_a12` 當場紅）。
+    # 🔑 **逐階交錯是這支函式的不變量**：每一階先看自己的快取、再查自己的。
+    #    任何「先全部看一遍」的優化都會破壞它，而症狀是**沒有症狀**。
+    missed = geocode_missed_recently(address)
 
     for name, source in _STAGES:
         hit = _cached_stage(address, source)
@@ -1233,6 +1226,11 @@ def locate_cached(address, manual_coord=None):
             # 📌 下面每一階各自用自己的 `source` 當快取鍵，所以降級期間拿到的
             #    行政區中心點會被記在 `nominatim` 底下，不會污染 google 那一格。
             continue
+        if missed:
+            # 📌 這一階的快取沒有命中、而這個地址最近查過查不到
+            # ⇒ **不要發出去**。（快取仍然先看過了，所以「後來被別的路徑
+            #    寫進快取」的地址不會被當成查不到。）
+            continue
         found = _run_stage(name, address)
         if found:
             coord, precision = found
@@ -1244,6 +1242,10 @@ def locate_cached(address, manual_coord=None):
     hit = _cached_stage(address, SOURCE_NOMINATIM_DISTRICT)
     if hit:
         return hit
+    if missed:
+        # 📌 回「查無此地址」而不是 `None`：呼叫端要分得出
+        #    「還沒查」與「查過了，就是查不到」。
+        return GeoResult(error="查無此地址", address=address)
     # ⚠️ 直接呼叫退階，**不要再走一次 `locate()`** ——
     # 上面那個迴圈已經把三階都問過了，`locate()` 會從第一階重跑（A16）。
     result = _locate_district(address)
