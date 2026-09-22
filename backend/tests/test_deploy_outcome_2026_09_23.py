@@ -763,6 +763,10 @@ def test_p0_00_service_goes_down_before_the_first_write_into_prod(ps1):
 
     # ⚙️ 錨點自檢 —— 〈盤點工具的正對照〉：
     #    先證明「已知的那一個亮得起來」，才有資格拿它去比大小。
+    # ⚠️ **刻意放寬**：這裡不守「寫入正式機的地方有幾處」，只守「量得到」。
+    #    原本的 `== 1` 抓得到「有人新增了第三處寫入」，放寬後抓不到 ——
+    #    那不是錯，是**交換**，寫在這裡讓下一個人看得出它是被拿掉的，
+    #    不是從來沒有過（A-2 提）。
     assert writes, (
         "`%s`：「寫進正式機」的錨點**一行都沒命中** ——\n"
         "☠️ 那會讓這一題**因為量不到而綠**，而那與「順序是對的」長得一模一樣。\n"
@@ -934,3 +938,156 @@ def test_p0_00_the_rollback_status_values_are_one_to_one_with_its_exits():
         "`unknown` 被當成某一條出口的正式狀態值了 ——\n"
         "☠️ 它是 `Fail` 的**預設**，用來接住「日後新增出口而忘了給狀態」。\n"
         "🔑 一旦某條出口刻意用它，忘記給值與刻意給值就再也分不出來了。")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# §41d · `service` 的**理由**要有題守（A 指派）
+# ══════════════════════════════════════════════════════════════════════
+#
+# A 的派工逐字：
+#   「`:358` / `:361` 那兩條出口**必須報 `service=down`**，
+#     且 `:355` robocopy 之前的出口不可以報 `down`。
+#     ⚙️ 反向控制：把 `:358` 改成報 `up` ⇒ 必須紅。」
+#
+# ⚠️ **A 給的行號是舊的**（檔案長大了）。現況實測：
+# ```
+#   141  ServiceState=unknown          405  ServiceState=down      ← 唯一一處，欄位 0
+#   179  not_prod_machine              421  robocopy → $BackendDir ← 第一次寫進正式機
+#   188  ServiceState=up  (ping 成功)  425  copy_failed_backend    ← A 說的 :358
+#   189  checkonly_ok                  428  copy_failed_frontend   ← A 說的 :361
+#   193  checkonly_failed              620  unhealthy_not_rolled_back
+#   199  bad_args                      707  unhealthy_rolled_back
+#   202  package_missing               712  ServiceState=up
+#   206  package_invalid               740  success
+#   223  duplicate_version
+#   279  backup_failed
+#   327  migration_dryrun_failed
+#   362  user_cancelled
+# ```
+# ⇒ **這裡一律用 status 值定位，不用行號**：行號會變，值不會
+#    （值與出口 1:1 已經有題在守）。
+#
+# 🔑 **為什麼行號順序在這裡是「可以推論」的**（而一般情況不行）：
+#    PowerShell 有分支，行號順序 ≠ 執行順序。
+#    而這兩件事讓推論在**這一題**成立：
+#      ① `= "down"` 全檔**只有一處**（已有題在守）
+#         ⇒ 行號小於它的出口，**執行時不可能**是 down
+#      ② 它在**欄位 0**（頂層，不在任何 if/try 裡）
+#         ⇒ 行號大於它而中間沒有別的指派的出口，**執行時必定**是 down
+#    ⚠️ 兩個前提**都寫成斷言**，不是寫成註解 —— 前提失效時要紅，不是要靜默。
+
+_SERVICE_ASSIGN = _re.compile(r'^(\s*)\$script:ServiceState\s*=\s*"([^"]*)"')
+_EXIT_SITE = _re.compile(r'(?:Fail\s+.*?|Emit-Result\s+)"([a-z_]+)"')
+
+
+def _service_layout(ps1):
+    """`(指派清單, 出口 → 行號)`，行號都是 1-based。"""
+    lines = ps1.read_text(encoding="utf-8", errors="replace").splitlines()
+    assigns, exits = [], {}
+    for i, ln in enumerate(lines, 1):
+        m = _SERVICE_ASSIGN.match(ln)
+        if m:
+            assigns.append((i, m.group(2), len(m.group(1))))
+        for s in _EXIT_SITE.findall(ln):
+            exits.setdefault(s, []).append(i)
+    return assigns, exits
+
+
+def test_p0_00_the_half_copied_exits_report_that_the_service_is_down():
+    """🔴🔴 §41d：**已停服＋半複製的那兩條出口，必須報 `service=down`。**
+
+    A 的派工理由逐字：
+    > 「`:358` 是『已停服＋半複製＋`Fail()` 不做回滾』，
+    >   而『服務停著』決定使用者要不要現在衝去開機。
+    >   **沒有這一題，`service` 只是一個格式正確的欄位。**」
+
+    ```
+    報 down     ✅ 使用者知道要現在去開機
+    報 unknown  ☠️ 「可能還活著吧」—— 而是我們自己把它停掉的
+    報 up       ☠️☠️ 畫面說它活著，而它躺在那裡，磁碟還是半套用的
+    ```
+    ⚙️ **反向控制（A 指定的那一個）**：在這兩條出口之前塞一個
+    `$script:ServiceState = "up"` ⇒ 這一題必須紅。
+    ⇒ 所以斷言不是「`down` 在前面」，是「`down` 在前面**而中間沒有別的指派**」。
+
+    ⚙️ **正對照**：`success` 那一條必須報 `up`。
+    少了它，「把 `:712` 刪掉」會讓這一題照樣全綠，
+    而**每一次成功的部署都會說服務停著** —— 那個方向一樣會讓人白跑一趟。
+    """
+    assigns, exits = _service_layout(APPLY_PS1)
+
+    downs = [(ln, col) for ln, val, col in assigns if val == "down"]
+    assert len(downs) == 1, (
+        "`apply_update.ps1` 的 `= down` 有 %d 處，預期 1 處 —— "
+        "**這一題的靜態推論以它為前提**。" % len(downs))
+    down_ln, down_col = downs[0]
+    assert down_col == 0, (
+        "`= down` 縮排 %d 格 ⇒ 它在某個 `if`／`try` 裡面 ——\n"
+        "☠️ 那表示它**可能不會被執行到**，而這一題卻據此斷言「必定是 down」。\n"
+        "🔑 前提要寫成斷言，不是寫成註解：前提失效時要紅，不是要靜默。"
+        % down_col)
+
+    for status in ("copy_failed_backend", "copy_failed_frontend"):
+        at = exits.get(status, [])
+        assert len(at) == 1, (
+            "`%s` 的出口有 %d 處，預期 1 處。" % (status, len(at)))
+        exit_ln = at[0]
+        assert down_ln < exit_ln, (
+            "`%s` 在 :%d，而 `service=down` 設在 :%d —— **它報不出服務停著**。\n"
+            "☠️ 已停服＋半複製＋`Fail()` 不做回滾，而畫面說 `unknown`。\n"
+            "🔑 那個差別決定使用者要不要現在衝去開機（§34c／§41d）。"
+            % (status, exit_ln, down_ln))
+        between = [(ln, v) for ln, v, _ in assigns if down_ln < ln < exit_ln]
+        assert not between, (
+            "`%s`（:%d）與 `service=down`（:%d）之間又有指派：%s\n"
+            "☠️ 那條出口報的會是後面那個值，而不是 `down`。\n"
+            "⚙️ 這正是 A 指定的反向控制：把它改成報 `up` ⇒ 這一題要紅。"
+            % (status, exit_ln, down_ln,
+               ", ".join(":%d=%s" % b for b in between)))
+
+    # ⚙️ 正對照 —— 成功那一條要報 `up`，否則刪掉 `:712` 也照樣全綠。
+    ok_at = exits.get("success", [])
+    assert len(ok_at) == 1, "`success` 出口有 %d 處，預期 1 處。" % len(ok_at)
+    before_ok = [(ln, v) for ln, v, _ in assigns if ln < ok_at[0]]
+    assert before_ok and before_ok[-1][1] == "up", (
+        "`success`（:%d）之前最後一個 `service` 指派是 %s ——\n"
+        "☠️ 一次**成功**的部署會說服務停著 ⇒ 使用者一樣白跑一趟去開機。\n"
+        "🔑 這是正對照：少了它，「把最後那個 `= up` 刪掉」不會被任何題看到。"
+        % (ok_at[0], (":%d=%s" % before_ok[-1]) if before_ok else "（一個都沒有）"))
+
+
+def test_p0_00_no_exit_before_the_copy_can_claim_the_service_is_down():
+    """🔴 §41d 的另一半：**robocopy 之前的出口不可以報 `down`。**
+
+    ☠️ 對稱的那個錯：`= "down"` 被搬到 Step 0／Step 1
+    ⇒ `not_prod_machine`／`package_missing`／`user_cancelled` 這些
+    **什麼都還沒碰**的出口會說「服務停著」——
+    🔑 而伺服器**好端端跑著**，使用者白跑一趟去開機。
+
+    📌 與 §41a 同一個病：**一個比實際嚴重的狀態，代價是使用者不再相信那個畫面。**
+    ⚠️ 而它與「報得比實際安全」不一樣 —— 後者會害人不去開機（§41d 上一題），
+    兩個方向**都要有題守**，因為修其中一個很容易把另一個推過頭。
+    """
+    assigns, exits = _service_layout(APPLY_PS1)
+    lines = APPLY_PS1.read_text(encoding="utf-8", errors="replace").splitlines()
+
+    writes = [i for i, ln in enumerate(lines, 1) if _WRITES_INTO_PROD.match(ln)]
+    assert writes, (
+        "「寫進正式機」的錨點一行都沒命中 —— **儀器失效**，"
+        "這一題會因為量不到而綠。")
+    first_write = writes[0]
+
+    down_lns = [ln for ln, val, _ in assigns if val == "down"]
+    early = sorted((ln, s) for s, lns in exits.items() for ln in lns
+                   if ln < first_write)
+    assert early, (
+        "第一次寫進正式機（:%d）之前一條出口都沒抓到 —— **儀器失效**。\n"
+        "🔑 〈沒抓到要被解釋成儀器失效，不可以被解釋成乾淨〉。" % first_write)
+
+    bad = [(ln, s) for ln, s in early if any(d < ln for d in down_lns)]
+    assert not bad, (
+        "這些出口在第一次寫進正式機（:%d）**之前**，卻會報 `service=down`：\n  "
+        % first_write
+        + "\n  ".join(":%d %s" % b for b in bad)
+        + "\n☠️ 那時候伺服器還好端端跑著 —— 畫面叫使用者去開一台沒停的機器。\n"
+          "🔑 `= down` 只能設在**我們自己把它停掉之後**。")
