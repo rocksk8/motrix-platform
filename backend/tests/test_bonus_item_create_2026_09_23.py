@@ -375,7 +375,12 @@ def test_this_file_is_the_only_path_that_exercises_the_endpoint():
     assert "INSERT" not in code.upper(), (
         "本檔的**程式碼**裡出現了 `INSERT` ——\n"
         + "☠️ 直接種資料會讓上面每一題都還是綠的，"
-          "**而那扇門又壞了沒有人知道**。")
+          "**而那扇門又壞了沒有人知道**。\n"
+        + "🔑 **該做什麼**：若你是為了別的目的需要先有資料，\n"
+          "   把那一題搬到別的檔（`_seed_item()` 直接 INSERT 在那裡是對的）——\n"
+          "   **不要在本檔 INSERT，也不要刪掉這一題**。\n"
+        + "📌 判準：測「這支端點對不對」⇒ 走 API（本檔）；\n"
+          "   測「別的東西，需要先有資料」⇒ 直接 INSERT（別的檔）。")
     # ⚙️ 正對照：抹掉字串之後，`client.post` 這個**識別字鏈**要還在
     #    —— 抹過頭的話上面那句會無條件通過。
     assert "client . post" in code, (

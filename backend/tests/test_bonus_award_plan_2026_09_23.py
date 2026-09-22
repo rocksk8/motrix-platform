@@ -81,9 +81,16 @@ def _seed_case(quote_no, net_profit=1000000, sales_person="alice",
             cols = {r["name"] for r in conn.execute(
                 "PRAGMA table_info(case_stages)")}
             assert "assigned_to" in cols, "`case_stages.assigned_to` 不見了。"
+            # 🔴 `case_stages` 的 NOT NULL 無預設欄位有**三個**（我實查 PRAGMA）：
+            #    `quote_no` / `created_at` / `updated_at`
+            # ☠️ 我第一版只給了 `quote_no` ⇒ `IntegrityError`，而 traceback
+            #    指向**我的 seed**，長得像資料層問題（〈探針與被測對象糾纏〉）。
+            # ⚠️ 補了 `created_at` 還會**再撞一次** `updated_at` ⇒ 兩個一起補。
             conn.execute(
-                "INSERT INTO case_stages (quote_no, assigned_to) VALUES (?,?)",
-                (quote_no, json.dumps(stage_people)))
+                "INSERT INTO case_stages (quote_no, assigned_to, "
+                "created_at, updated_at) VALUES (?,?,?,?)",
+                (quote_no, json.dumps(stage_people),
+                 "2026-09-01T00:00:00", "2026-09-01T00:00:00"))
         conn.commit()
     finally:
         conn.close()
