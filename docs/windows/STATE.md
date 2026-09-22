@@ -29172,3 +29172,34 @@ b0caacd  01:36  我新寫的 MD1 宣告列 => **同兩個字又出現**
               🔑 而它只有合成自檢當證據（真實案例被 B 改掉了）
               ⇒ 那正好是〈正對照要釘在故意留著的誘餃上〉
 ```
+
+---
+
+## §129 使用者裁：**科目樹做完要重啟 666 給他看**
+
+> 2026-09-23 **01:50** ／ A 實查（只查不動）
+
+### 🔴 666 的 listener 是**子行程**，而兩個直譯器不同
+
+```
+PID 41532 (父)  ...\hermes\hermes-agent\venv\Scripts\python.exe -m uvicorn main:app --port 666 --host 0.0.0.0
+PID 50008 (子)  ...\uv\python\cpython-3.11-windows-x86_64-none\python.exe -m uvicorn main:app --port 666 ...
+Get-NetTCPConnection -LocalPort 666  =>  OwningProcess = **50008**（子）
+```
+⚠️ 我記憶裡那句「子行程的 Python 沒有 uvicorn」**與今天量到的不符**
+—— 兩個行程的命令列**都有** `-m uvicorn`。
+🔑 ⇒ 重啟**不要靠記憶挑行程**：用 `Get-NetTCPConnection -LocalPort 666`
+找 `OwningProcess`，再用 `ParentProcessId` 往上找根。
+📌 上一次 90 秒停機就是靠記憶挑錯的。
+
+### ⇒ 重啟配方（**做完 `FN1` 才跑，現在不跑**）
+
+```
+① 先確認工作樹乾淨 —— 重啟時有人在寫檔 => **他看到的是半成品**
+② Get-NetTCPConnection -LocalPort 666 -State Listen => OwningProcess
+③ 從它的 ParentProcessId 找到根，整棵停掉
+④ 在 backend/ 用**父行程那一條命令列**重新起來
+⑤ 起來後**實打一次端點**確認，不只看行程在
+```
+⚠️ 前端是 `no-cache` => 純前端改動**不需要重啟**（`§81` 實測）。
+🔴 **而 `FN1` 會加新端點 => 這一次真的要重啟。**
