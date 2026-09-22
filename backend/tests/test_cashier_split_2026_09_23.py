@@ -519,20 +519,41 @@ _ALLOWED_DANGLING = {
 }
 
 
-def _dangling_functions():
-    """`cashier.js` 裡**沒有人叫**的公開方法。
+def _dangling_functions(html_path=None, js_src=None):
+    """一個頁面的 JS 裡**沒有人叫**的公開方法。
 
     ⚠️ 底線開頭的（`_token`／`_localDateStr`…）不算 —— 那是慣例上的內部工具，
        而它們被呼叫的方式不一定抓得到。
+    ⚠️ **呼叫端要認四種接收者**：`this.` / `self.` / `that.` / `vm.`。
+    ☠️ v1 只認 `this.` ⇒ 它把 `initCharts()` 報成死碼，**而那支是用
+       `self.initCharts()` 在 `requestAnimationFrame` 裡叫的**（`reports.js:1250`）。
+    🔑 今天第五次判準太窄，**而這一次的方向最壞：它會讓人去刪一個還在用的函式。**
     """
-    html = _read(CASHIER_HTML)
-    _where, js = _cashier_js()
+    if html_path is None:
+        html_path = CASHIER_HTML
+    if js_src is None:
+        _where, js_src = _cashier_js()
+    html = _read(html_path)
     defs = set(re.findall(
-        r"^\s{4}(?:async\s+)?([a-zA-Z_$][\w$]*)\s*\([^)]*\)\s*\{", js, re.M))
+        r"^\s{4}(?:async\s+)?([a-zA-Z_$][\w$]*)\s*\([^)]*\)\s*\{", js_src, re.M))
     defs -= {"if", "for", "while", "switch", "catch", "function", "return"}
     used = set(re.findall(r"\b([a-zA-Z_$][\w$]*)\s*\(", html))
-    used |= set(re.findall(r"this\.([a-zA-Z_$][\w$]*)\s*\(", js))
+    used |= set(re.findall(
+        r"(?:this|self|that|vm)\.([a-zA-Z_$][\w$]*)\s*\(", js_src))
     return set(d for d in defs if d not in used and not d.startswith("_"))
+
+
+#: `reports.js` 裡**出納留下的尾巴** —— `UI9` 把樣板搬走了，而 JS 留在原地。
+#: 🔑 它是 `cashier.js` 那個「多抄」的**鏡像**：
+#:    多抄＝該留的被帶走；這個＝**該走的被留下**。同一次搬遷的兩個方向。
+#: ⚠️ 而我原本那道死碼題**只掃 `cashier.js`** ⇒ 它看不到這一側。
+#:    ⇒ 現在改成對稱的：**兩支都掃。**
+_REPORTS_CASHIER_TAIL = frozenset((
+    "canExecuteCashier", "confirmBankPay", "confirmInvoice", "confirmPayVoucher",
+    "confirmReceive", "exportCashierHistory", "isDueSoon", "openBankPayModal",
+    "openInvoiceModal", "openPayVoucherModal", "openReceiveModal",
+    "toggleReceived", "uploadBankCsv",
+))
 
 
 def test_ui9_nothing_was_over_copied_into_the_cashier_page():
@@ -589,3 +610,62 @@ def test_ui9_the_dangling_allowlist_does_not_rot():
         "🔑 這不是迴歸 —— 它表示對應的那件事**做完了**"
         "（modal 搬過來了，或 `FN3` 做完了）。\n"
         "☠️ 不移除的話，這份清單會變成一份只進不出的排除清單。")
+
+
+def test_ui9_reports_js_has_no_cashier_tail_left_behind():
+    """🔴 **對稱的另一側：`reports.js` 不可以留著出納的函式。**
+
+    ```
+    cashier.js 那一題  多抄 ＝ **該留的被帶走**（exportTaxInvoices）
+    這一題             留尾 ＝ **該走的被留下**
+    ⇒ 同一次搬遷的兩個方向，而我原本只掃了其中一支
+    ```
+    ☠️ 實測 `reports.js` 有 **13 個**沒有人叫的公開方法，**全部是出納的**：
+    `openPayVoucherModal`／`confirmReceive`／`uploadBankCsv`／`canExecuteCashier`⋯
+    ⇒ 樣板在 `UI9`＋補件時搬走了，而 JS 留在原地。
+
+    🔑 **而它比死碼更糟一點**：那些函式**還會動**。
+    ```
+    openPayVoucherModal() 在 reports.js 裡仍然會設 this.payVoucherModal = true
+    ⇒ 而 reports.html 已經沒有那個 modal 的標記
+    ⇒ 哪天有人在報表頁上接一顆按鈕叫它 ⇒ **又是一次「按了沒反應」**
+    ```
+    📌 〈已知的代價 vs 要修的東西〉：留著它比刪掉它貴。
+
+    ⚠️ **而這一題現在是紅的，它不在 `FN3` 的範圍裡** ——
+       它是 `UI9` 那一次搬遷的尾巴。**要不要現在清由 A 排。**
+    """
+    dangling = _dangling_functions(REPORTS_HTML, _read(REPORTS_JS))
+    tail = sorted(dangling & _REPORTS_CASHIER_TAIL)
+    assert not tail, (
+        "`reports.js` 還留著 %d 個出納的函式（沒有人叫）：\n  " % len(tail)
+        + ", ".join(tail)
+        + "\n☠️ 它們不只是死碼 —— `open*Modal` 仍然會設那些狀態，"
+          "而 `reports.html` 已經沒有對應的標記 ⇒\n"
+          "   哪天有人在報表頁接一顆按鈕叫它，**又是一次「按了沒反應」**。\n"
+        "📌 這是 `UI9` 那一次搬遷的尾巴，不在 `FN3` 範圍裡。")
+
+
+def test_ui9_the_tail_list_does_not_rot():
+    """⚙️ 反向控制：`_REPORTS_CASHIER_TAIL` 裡**已經不存在**的名字要移除。
+
+    ☠️ 少了它，B 清掉那 13 支之後這份清單還留著 13 個名字 ——
+    而下一個人會以為 `reports.js` 裡還有那些東西。
+    🔑 與 `_ALLOWED_DANGLING` 那道控制同一個形狀：**清單要自己會縮短。**
+
+    ⚠️ 判準是「這個名字還在不在 `reports.js` 的定義裡」，
+       **不是**「它還懸不懸空」—— 那兩件事不一樣：
+    ```
+    它被刪掉了        ⇒ 這裡要移除 ✅
+    它被接上了呼叫端  ⇒ 它不再懸空，**而名字還在** ⇒ 這裡**不該**移除
+    ```
+    📌 那是刻意的：這份清單記的是「出納留在報表側的東西」，
+       而「有人在報表頁上接了它」是一個**更該紅**的狀態，由上一題管。
+    """
+    js = _read(REPORTS_JS)
+    defined = set(re.findall(
+        r"^\s{4}(?:async\s+)?([a-zA-Z_$][\w$]*)\s*\([^)]*\)\s*\{", js, re.M))
+    stale = sorted(_REPORTS_CASHIER_TAIL - defined)
+    assert not stale, (
+        "`_REPORTS_CASHIER_TAIL` 裡這些已經不在 `reports.js` 了：%s\n" % stale
+        + "⇒ 把它們從那個常數移除。**這不是迴歸 —— 它表示清乾淨了。**")
