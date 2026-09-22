@@ -594,8 +594,10 @@ def notify_payment_request_returned(request_no: str, customer: str, note: str,
 def notify_approval_reminder(doc_type_label: str, doc_no: str, desc: str, days_elapsed: int,
                              approver_usernames: list, also_superadmin: bool = False) -> None:
     """簽核逾期催辦（2026-08-21，2026-08-24 補上出貨單，2026-08-25 收斂收件人）：
-    報價單／承攬商匯款申請／開票申請憑據／出貨單共用同一支——卡在簽核柱列超過
-    工作日 1/3/5 天時由 routers/daily_tasks.py 的每日排程呼叫。days_elapsed 決定
+    報價單／承攬商匯款申請／開票申請憑據／出貨單共用同一支——卡在簽核柱列的
+    第 1／3／5 個工作日、之後每 5 個工作日（10、15、20…）由
+    routers/daily_tasks.py 的每日排程呼叫（階梯見 `reminder_stage`）。
+    days_elapsed 決定
     badge 文字/顏色的嚴重度分級；also_superadmin 為真時額外加上最高管理員收件人
     （3 天門檻起）——只通知 superadmin，不是全部 admin，避免一般 admin 被灌爆。
     統一連到簽核佇列頁（四種文件現在都在同一頁），不用像其他通知一樣依文件類型
@@ -617,8 +619,13 @@ def notify_approval_reminder(doc_type_label: str, doc_no: str, desc: str, days_e
         f"{doc_type_label}簽核逾期提醒", badge, color,
         [("單號", doc_no), ("內容", desc), ("已等待", f"{days_elapsed} 個工作日")],
         "", page,
-        intro=f"您好，以下{doc_type_label}已送出審核，但等待您簽核已超過 {days_elapsed} 個工作日，敬請儘速於系統中完成審核作業。"
-              + ("目前已同步通知系統管理員協助處理。" if also_superadmin else ""),
+        # 🔴 「目前已同步通知系統管理員協助處理。」**使用者明確要求刪掉**。
+        # ⚠️ **而 `also_superadmin` 這個參數不要一起刪**：它還決定
+        #   ① 這封 email 的收件人（上面的 `_superadmin_emails(...)`）
+        #   ② 站內通知的收件人（`daily_tasks.py` 的 `notify_targets`）
+        # ☠️ 順手把參數刪掉的話，**管理員會安靜地不再收到信**。
+        # 🔑 文案與收件人是兩件事，而它們現在共用同一個旗標。
+        intro=f"您好，以下{doc_type_label}已送出審核，但等待您簽核已超過 {days_elapsed} 個工作日，敬請儘速於系統中完成審核作業。",
         button_text="前往簽核佇列",
     )
     _async_send(to, f"【MOTRIX】{doc_type_label}簽核逾期提醒（{days_elapsed} 個工作日）— {doc_no}", html)

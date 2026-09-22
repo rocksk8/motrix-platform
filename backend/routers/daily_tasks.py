@@ -1706,9 +1706,86 @@ _APPROVAL_REMINDER_SOURCES = [
 ]
 
 
+#: 前三階，之後**以五為基準**。使用者原話：
+#: 「第三天、第五天、再來第十天以五為基準重新寄信」。
+REMINDER_FIRST_STAGES = (1, 3, 5)
+REMINDER_STEP_AFTER = 5
+
+
+def reminder_stage(days):
+    """第 N 個工作日要寄哪一階，或 `None`（不寄）。
+
+    `1 → "d1"`、`3 → "d3"`、`5 → "d5"`、`10 → "d10"`、`15 → "d15"`…
+    **其餘一律 `None`。**
+
+    ## ☠️ 這裡取代的是什麼
+    ```python
+    if   days_elapsed >= 5:  _fire(True,  f"5d.{today_str}")   ← 鍵含日期
+    elif days_elapsed >= 3:  _fire(True,  "3d")
+    else:                    _fire(False, "1d")
+    ```
+    第 5 天之後 dedup 鍵每天都是新的 ⇒ **每天一封**。
+    一筆卡 20 個工作日的單子會寄 **1 + 1 + 16 = 18 封**。
+
+    ## 📌 為什麼是具名純函式
+    原本這段邏輯是迴圈裡的三個 `if`，**沒有任何辦法單獨問它**
+    「第 7 天會不會寄」。〈決定邏輯抽純函式才測得到「換一種設定」〉。
+
+    ⚠️ 第 0 天與負數的判斷**留在這裡**，不是只留在呼叫端 ——
+    搬到呼叫端的話，那道防線就搬到了一個沒有人看的地方。
+    """
+    try:
+        days = int(days)
+    except (TypeError, ValueError):
+        return None
+    if days < 1:
+        return None
+    if days in REMINDER_FIRST_STAGES:
+        return f"d{days}"
+    if days > REMINDER_FIRST_STAGES[-1] and days % REMINDER_STEP_AFTER == 0:
+        return f"d{days}"
+    return None
+
+
+def reminder_stages_at_or_below(days):
+    """所有**不超過** `days` 的階段，由小到大。
+
+    🔴 它回答的是**另一個問題**：不是「這次寄哪一封」，
+    而是「**要把哪幾階記成已寄**」。
+
+    ☠️ 一筆單子從第 2 天停機到第 12 天 ⇒ 只該寄 `d10` **一封**，
+    而 `d1`／`d3`／`d5` 要**一併標記成已寄** —— 不標的話下一次排程會補一遍，
+    使用者會在同一天收到四封，**而那正是這一節要消滅的東西**。
+    🔑 **「補掉欠的」與「補寄欠的」只差一個字，而收件匣裡差四封。**
+
+    ⚠️ 用同一個答案回答兩個問題的話，其中一個一定會錯。
+    """
+    try:
+        days = int(days)
+    except (TypeError, ValueError):
+        return []
+    out = [f"d{n}" for n in REMINDER_FIRST_STAGES if n <= days]
+    n = REMINDER_FIRST_STAGES[-1] + REMINDER_STEP_AFTER
+    while n <= days:
+        out.append(f"d{n}")
+        n += REMINDER_STEP_AFTER
+    return out
+
+
+def reminder_dedup_key(stage):
+    """某一階的去重鍵。**只吃階段，不吃日期。**
+
+    🔑 **這支函式的簽名本身就是那道防線**：不收日期參數
+    ⇒ 「每天一個新鍵」在**結構上**不可能，
+    而不是靠下一個人記得不要把 `today_str` 串進去。
+    📌 〈修作法不要修結果〉。
+    """
+    return f"stage.{stage}"
+
+
 def _check_approval_reminders() -> None:
-    """簽核卡在柱列超過工作日 1/3/5 天分級催辦：1、3 天門檻各寄一次，3 天起同步
-    通知全部 superadmin，5 天以上每個工作日都重複寄，直到簽核完成或退回為止。
+    """簽核卡在柱列的催辦：**第 1／3／5 個工作日各一封，之後每 5 個工作日一封**
+    （10、15、20…），3 天起同步通知全部 superadmin，直到簽核完成或退回為止。
     一律從 approval.requestedAt（原始送審時間）起算工作日，不因換層歸零；
     guard key 帶入 requestedAt，文件退回重新送審後 requestedAt 換新值，催辦
     倒數會自然重新從 0 天起算，不會被舊一輪的 guard 卡住讓新一輪永遠不寄。
@@ -1768,27 +1845,44 @@ def _check_approval_reminders() -> None:
                 doc_type  = src["label"]
                 guard_base = f"approval_notif.{src['table']}.{doc_no}.{requested_at}"
 
-                def _fire(also_superadmin: bool, dedup_key: str) -> None:
-                    g = f"{guard_base}.{dedup_key}"
-                    if _get_setting(g):
-                        return
-                    _set_setting(g, today_str)
+                def _mark(stage: str) -> None:
+                    _set_setting(f"{guard_base}.{reminder_dedup_key(stage)}",
+                                 today_str)
+
+                def _sent(stage: str) -> bool:
+                    return bool(_get_setting(
+                        f"{guard_base}.{reminder_dedup_key(stage)}"))
+
+                # 🔴 **欠的階段一次結清，而只寄最高的那一封。**
+                #
+                # ⚠️ 判準是「**這個階段寄過沒有**」，不是「今天是不是第 5 天」——
+                # 週末與停機會讓門檻被整個跳過，而那時
+                # 「今天剛好是第幾天」問不出正確答案。
+                owed = [st for st in reminder_stages_at_or_below(days_elapsed)
+                        if not _sent(st)]
+                if owed:
+                    highest = owed[-1]
+                    # 3 天門檻起才同步通知 superadmin（維持原本的分界）。
+                    also_superadmin = int(highest[1:]) >= 3
+                    # ⚠️ **先把每一階都標記掉再寄**：欠的低階段不標的話，
+                    # 下一次排程會把它們補寄一遍。
+                    for st in owed:
+                        _mark(st)
                     threading.Thread(
                         target=notify_approval_reminder,
-                        args=(doc_type, doc_no, desc, days_elapsed, recipients, also_superadmin),
+                        # 📌 信裡的天數是**實際等了幾天**（12），
+                        # 不是那一階的門檻值（10）——後者會讓使用者
+                        # 以為單子只卡了 10 天。
+                        args=(doc_type, doc_no, desc, days_elapsed, recipients,
+                              also_superadmin),
                         daemon=True,
                     ).start()
-                    notify_targets = list(set(recipients + superadmins)) if also_superadmin else recipients
+                    notify_targets = (list(set(recipients + superadmins))
+                                      if also_superadmin else recipients)
                     for u in notify_targets:
                         _notify(u, "approval_reminder", doc_no, doc_no,
-                                f"{doc_type} {doc_no} 已等待簽核 {days_elapsed} 個工作日，敬請儘速處理")
-
-                if days_elapsed >= 5:
-                    _fire(True, f"5d.{today_str}")
-                elif days_elapsed >= 3:
-                    _fire(True, "3d")
-                else:
-                    _fire(False, "1d")
+                                f"{doc_type} {doc_no} 已等待簽核 "
+                                f"{days_elapsed} 個工作日，敬請儘速處理")
         conn.close()
         _logger.info("Approval reminder check complete for %s", today_str)
     except Exception as exc:
