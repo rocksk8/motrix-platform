@@ -883,6 +883,11 @@
             this.lookupOk    = true
           } else if (r.status === 404) {
             this.lookupMsg = '查無此統編登記資料，請手動輸入'; this.lookupOk = false
+          // 🔴 429 是**額度用完**，不是查無資料。
+          // ☠️ 落到下面那個 else 的話，使用者會照「請手動輸入」去做，
+          // 而他手上那張紙其實是對的 —— 🔑 兩者在畫面上都是「查不到」。
+          } else if (r.status === 429) {
+            this.lookupMsg = '今天的公司資料查詢次數已達上限，明天會自動恢復（或請管理者調高上限）'; this.lookupOk = false
           } else if (r.status === 503) {
             this.lookupMsg = '政府資料庫連線失敗，請確認伺服器對外網路或稍後再試'; this.lookupOk = false
           } else if (r.status === 401) {
