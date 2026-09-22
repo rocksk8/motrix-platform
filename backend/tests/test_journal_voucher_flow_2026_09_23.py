@@ -45,7 +45,23 @@ STATUSES = ("草稿", "待審核", "簽核中", "已核准", "已過帳")
 ACTIONS = ("submit", "approve", "send-back", "post", "void")
 
 #: 三格簽名位（`§106c`）⇒ 每一格要有**人**與**時間**。
-SIGN_SLOTS = ("製票", "覆核", "主管")
+#:
+#: 🔴 **格名對應**（B `_m099_voucher_signatures`，`vouchers_all` 的欄位）：
+#: ```
+#: 製票  created_by / created_at      <= 本來就有，**不另開第四組**
+#: 覆核  checked_by / checked_at      <= 簽核第 1 層
+#: 主管  manager_by / manager_at      <= 簽核第 2 層
+#: ```
+#: ⚠️ 另有 `submitted_by / submitted_at`＝**送審**（製票人自己按的），
+#:    它不是三格簽名位之一 —— 版面上那三格印的是上面那三組。
+#: 📌 我原本用中文格名去查（`sigs["覆核"]`），而 B 的鍵是英文 ⇒ 那一題紅在
+#:    一個正確的實作上。A `§167` 判給我改：**釘的是不變量，欄位名是實作細節**。
+SLOT_FIELDS = {
+    "製票": ("created_by", "created_at"),
+    "覆核": ("checked_by", "checked_at"),
+    "主管": ("manager_by", "manager_at"),
+}
+SIGN_SLOTS = tuple(SLOT_FIELDS)
 
 _LINES = [{"account_code": "1113", "debit": 1000, "credit": 0},
           {"account_code": "4111", "debit": 0, "credit": 1000}]
@@ -92,16 +108,38 @@ def _get(client, hdr, vid):
 
 
 def _slots(v):
-    """三格簽核。⚠️ 鍵名**還沒定**，四種都收（定了退回給我改這一行）。"""
-    return (v.get("signatures") or v.get("signoffs")
-            or v.get("approvals") or v.get("sign_slots"))
+    """把三格簽核整理成 `{中文格名: {"by":…, "at":…}}`。
+
+    兩種形狀都收：
+    ```
+    ① 攤平在傳票上   checked_by / checked_at …   <= B 走的這一種
+    ② 包成一包       signatures / signoffs / approvals / sign_slots
+    ```
+    ⚠️ 用別的欄位名**退回給我**改 `SLOT_FIELDS`，不要改題目。
+    """
+    nested = (v.get("signatures") or v.get("signoffs")
+              or v.get("approvals") or v.get("sign_slots"))
+    if nested:
+        if isinstance(nested, dict):
+            return nested
+        return {s.get("slot"): s for s in nested if isinstance(s, dict)}
+
+    out = {}
+    for slot, (by_k, at_k) in SLOT_FIELDS.items():
+        if by_k in v or at_k in v:
+            out[slot] = {"by": v.get(by_k), "at": v.get(at_k)}
+    return out or None
 
 
 def _slot_time(sigs, slot):
-    """某一格的時間戳；那一格還不存在就回 `None`（**不是空字串**）。
+    """某一格的時間戳；**還沒簽**就回 `None`。
 
-    🔑 〈null 不等於 0〉：「還沒簽」與「簽了而時間是空的」是兩件事，
-       合併之後 ③ 會拿 `None == None` 換到一個假綠燈。
+    🔴 六個欄位是 `TEXT NOT NULL DEFAULT ''` ⇒ **沒簽的那一格是空字串不是 NULL**。
+    ```
+    不正規化 => t1 = ''  ->  '' == ''  ->  ③ 無聲通過
+    ```
+    🔑 〈null 不等於 0〉在這裡的形狀是反的：這張表的「沒有值」就是 `''`，
+       所以要把 `''` 收斂成 `None`，而**不是**用 `is None` 去分辨它們。
     """
     if not sigs:
         return None
@@ -111,7 +149,8 @@ def _slot_time(sigs, slot):
         return None
     for k in ("at", "signed_at", "time"):
         if k in one:
-            return one[k]
+            v = one[k]
+            return None if v in ("", None) else v
     return None
 
 
@@ -309,9 +348,9 @@ def test_jv2_each_signature_slot_has_its_own_person_and_timestamp(client,
     assert _act(client, hdr, vid, "approve").status_code == 200
     t1 = _slot_time(_slots(_get(client, hdr, vid)), "覆核")
     assert t1 is not None, (
-        "簽完第一層之後，「覆核」那一格**讀不到時間**（拿到 `None`）。\n"
-        + "⚠️ 這一句擋的是**下面那一題的假綠燈** ——\n"
-          "   `None == None` 會讓 ③ 無聲通過，而它什麼都沒證明。")
+        "簽完第一層之後，`checked_at` 仍然是空的。\n"
+        + "⚠️ 這一句擋的是**下面那一題的假綠燈** —— 欄位是 `NOT NULL DEFAULT ''`，\n"
+          "   沒簽的那一格是**空字串**，`'' == ''` 會讓 ③ 無聲通過。")
 
     # ② 第二層（主管）
     assert _act(client, hdr, vid, "approve").status_code == 200
@@ -368,10 +407,12 @@ def test_jv2_the_slot_time_check_can_actually_tell_a_shared_field_apart():
       的假回應，要求它**看得出差別**。看不出來 ⇒ ③ 的綠燈不算數。
     """
     # 共用欄位的實作長這樣：兩格都指向同一個 `updated_at`
+    # ⚠️ 用**攤平**的形狀（B 走的那一種），不是包起來的那一種 ——
+    #    正對照走的路徑要與受測物同一條，否則量法壞掉時它照樣綠。
     def snapshot(updated_at):
-        return {"signatures": {"製票": {"by": "a", "at": updated_at},
-                               "覆核": {"by": "b", "at": updated_at},
-                               "主管": {"by": "c", "at": updated_at}}}
+        return {"created_by": "a", "created_at": updated_at,
+                "checked_by": "b", "checked_at": updated_at,
+                "manager_by": "c", "manager_at": updated_at}
 
     before = snapshot("2026-09-23 10:00:00")
     after = snapshot("2026-09-23 10:05:00")   # 主管簽了 => 共用欄位被改掉
