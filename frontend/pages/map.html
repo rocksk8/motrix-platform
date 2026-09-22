@@ -374,7 +374,10 @@ function mapPage() {
     userPos: null, geoBusy: false, geoError: '',
     // 圖層參考：資料點一組、「你」一組。**分開放**是因為清除的時機不同
     // （換資料集要重畫資料點，取消定位只拿掉「你」）。
-    _layer: null, _userLayer: null,
+    _layer: null, _userLayer: null, _sizeWatcher: null, _fitSig: '',
+    // 🔴 復發訊號：Leaflet 曾經量到 0×0。畫面上不顯示（使用者幫不上忙），
+    // 而它讓「這個 bug 又回來了」有一個看得見的形狀。
+    mapSizeWasZero: false,
     // 四個資料集。`mark` 是畫在標記上的字 —— **那才是分辨的載體**。
     // 🔑 顏色只是輔助：色覺差異的人要看得出來，而**點開才知道等於沒有回答**。
     // 🔴 **`sources`（要不要抓）與 `datasets`（畫成什麼樣子）是兩件事。**
@@ -439,6 +442,17 @@ function mapPage() {
       this.session = JSON.parse(raw)
       this.token = this.session.token || ''
       await this.refresh()
+      // 🔴 XA4：**自動開圖**（使用者裁示：「正式機都長期開著，
+      // 為什麼不能預載好地圖發給使用者，還要使用者點選開啟地圖」）。
+      //
+      // ⚠️ **一定要排在 `refresh()` 之後** —— 否則 `_fitAll()` 會在
+      // `points` 還是空的時候跑，視野會停在退化狀態
+      // （現在那個 zoom 15 就是這個形狀的近親）。
+      //
+      // 📌 `tilesBlocked` 的提示與 `tileerror` 偵測**照舊**：
+      // 自動開之後載不出來**更需要講**，因為使用者沒有按過任何東西
+      // ⇒ 他不會把「一片灰」跟「我剛剛開了地圖」連起來。
+      this.openMap()
     },
 
     //: 這一次的回傳裡到底有沒有用到定位。**以後端說的為準**，
@@ -563,6 +577,18 @@ function mapPage() {
     },
 
     // ── 只有這裡會對外連線 ──────────────────────────────────────────
+    //: 收掉地圖與它的觀察器。**目前沒有 UI 入口**，
+    //  而它存在的理由是 `_watchMapSize()` 建了一個會活著的觀察器 ——
+    //  ⚠️ 一個「只建不收」的資源，在加上關閉入口的那一天會變成洩漏，
+    //  而那時沒有人會記得它是在這裡建的。
+    closeMap() {
+      if (this._sizeWatcher) { this._sizeWatcher.disconnect(); this._sizeWatcher = null }
+      if (this._map) { this._map.remove(); this._map = null }
+      this._layer = null
+      this._userLayer = null
+      this.mapOpen = false
+    },
+
     openMap() {
       if (this.mapOpen || this.mapLoading) return
       this.mapLoading = true
@@ -602,7 +628,32 @@ function mapPage() {
       const office = this.info && this.info.office
       const centre = office ? [office.lat, office.lon]
                             : (pts.length ? [pts[0].lat, pts[0].lon] : [23.9, 121.0])
+      // 🔴🔴 **建圖之後一定要校正尺寸**（下面兩行）。
+      //
+      // ☠️ A 在瀏覽器實測到的：`m.getSize()` 是 **0 × 0**，而容器實際是
+      // 1206 × 460 ⇒ `fitBounds` 對一個退化的 bounds 直接撞 maxZoom（15），
+      // `getBounds()` 的左上等於右下。
+      //
+      // 🔑 **而它不會報錯、console 也沒有東西**：
+      // 標記的 DOM transform 與 `latLngToLayerPoint` **互相一致**
+      // （兩邊用同一套錯的數學），而**圖磚是照容器真實像素鋪的**
+      // ⇒ 兩邊各算各的，縮放時誤差被放大
+      // ⇒ 使用者看到「**底圖跑了，標記留在原地**」。
+      //
+      // ⚠️ 成因是 `x-show` 剛把容器切成可見，而 `$nextTick` 保證的是
+      // 「Alpine 更新完 DOM」，**不是「瀏覽器算完版面」** —— 差一個 frame。
+      // 📌 XA2（`_watchMapSize`）是這一條的一般化：容器變大變小**不一定
+      // 伴隨視窗縮放**（提示橫幅出現／消失、字級縮放、側邊欄收合、
+      // 分頁從背景切回前景），而只修「第一次」會讓症狀變成**偶發**。
+      //
+      // ⚠️ 註解放在這一行**之前**是刻意的：`test_map_you_are_here` 的
+      // `_draw_section()` 錨在 `setView` 往後數 3000 字元，
+      // 而一段長註解會把後面的程式碼擠出那個窗。
+      // 🔑 那道判準是脆的（我今天已經撞到三次），**而在它修好之前，
+      // 讓程式碼靠近錨點比讓註解靠近程式碼重要。**
       this._map = window.L.map('mp-canvas').setView(centre, pts.length ? 8 : 7)
+      this._syncMapSize()    // ← 尺寸校正，理由見上面那段
+      this._watchMapSize()   // ← 之後每一次尺寸變化也跟上（XA2）
 
       // 📌 **單一主機名，不用 `{s}` 輪替子網域。**
       // OSM 條款：「Use exactly https://tile.openstreetmap.org/{z}/{x}/{y}.png」，
@@ -661,11 +712,28 @@ function mapPage() {
     //  而成因完全不同。**
     _fitAll() {
       if (!this._map) return
+      // 🔴 **算視野之前先確認 Leaflet 量得對。**
+      // 尺寸是 0 時 `fitBounds` 會算出一個退化的 bounds，
+      // 而結果是**直接撞 maxZoom** —— 畫面上那是「地圖放到最大、只有一個點」，
+      // ☠️ 看起來像「資料只有一筆」，而不是「尺寸量錯了」。
+      const size = this._map.getSize()
+      if (!(size && size.x > 0 && size.y > 0)) this._syncMapSize()
       const pts = (this.info && this.info.points) || []
       const office = this.info && this.info.office
       const box = pts.map(p => [p.lat, p.lon])
       if (office) box.push([office.lat, office.lon])
       if (this.userPos) box.push([this.userPos.lat, this.userPos.lon])
+      // 🔴 **點沒有變就不要動視野。**
+      // ⚠️ `refresh()` 現在會重畫（勾選資料集、按「繼續定位」都會打），
+      // 而每一次都 `fitBounds` 的話，**使用者剛剛平移／縮放的結果會被吃掉**
+      // ——那是另一種「它自己動了」，而且他會以為自己按錯。
+      // 📌 判準是「這一組點跟上次一樣嗎」，不是「使用者有沒有動過」：
+      // 後者要攔 Leaflet 的事件，而 `fitBounds` 自己也會觸發那些事件
+      // ⇒ 那條路要再加一個「現在是我在動」的旗標，**而競態就是從那裡來的**。
+      const sig = box.length + '|' + JSON.stringify(box[0] || null)
+                              + '|' + JSON.stringify(box[box.length - 1] || null)
+      if (sig === this._fitSig) return
+      this._fitSig = sig
       if (box.length > 1) {
         // maxZoom 擋住「只有兩個很近的點」時放大到街道等級 ——
         // 那會讓使用者以為地圖壞了（整片都是同一條路）。
@@ -712,6 +780,44 @@ function mapPage() {
       this._drawUser()
       this._fitAll()
     },
+    //: 讓 Leaflet 重新量一次容器。回 `true` 表示**它本來是壞的**。
+    //
+    //  🔴 XA3 反向控制：**退化尺寸要被看見，不要靜默。**
+    //  📌〈防護的副作用落在盲側〉：加了 `invalidateSize()` 之後，
+    //  「它本來會是 0」這件事就**永遠看不見了** ——
+    //  而那正是我們唯一的復發訊號。⇒ 記一個旗標，並在 console 留一行。
+    _syncMapSize() {
+      if (!this._map) return false
+      const before = this._map.getSize()
+      const wasZero = !(before && before.x > 0 && before.y > 0)
+      this._map.invalidateSize(false)   // false = 不要動畫，不要觸發 moveend
+      if (wasZero) {
+        this.mapSizeWasZero = true
+        // ⚠️ 留痕跡而不擋路：畫面上不顯示（使用者幫不上忙），
+        // 但復發時看得到 —— 沒有這一行的話，這個 bug 修好之後就再也偵測不到。
+        console.warn('[map] Leaflet 量到的容器尺寸是 0×0，已重新校正。'
+                     + ' 實際尺寸：', this._map.getSize())
+      }
+      return wasZero
+    },
+
+    //: 盯著容器尺寸。**關圖時要 disconnect**（不然觀察器會留在記憶體裡）。
+    _watchMapSize() {
+      if (this._sizeWatcher || typeof ResizeObserver === 'undefined') return
+      const el = document.getElementById('mp-canvas')
+      if (!el) return
+      this._sizeWatcher = new ResizeObserver(() => {
+        if (!this._map) return
+        // 🔴 **尺寸本來是 0 的話，之前算的視野是垃圾** ⇒ 校正完要重算一次。
+        // ⚠️ 只在「本來是 0」時重算：每一次 resize 都重算的話，
+        // 會把使用者手動平移／縮放的結果吃掉 —— 那是另一種「它自己動了」。
+        // 📌 這一支同時是 XA1 的保險：`$nextTick` 早於瀏覽器的版面計算，
+        // 而 ResizeObserver 在**版面算完之後**才觸發。
+        if (this._syncMapSize()) { this._fitSig = ''; this._fitAll() }
+      })
+      this._sizeWatcher.observe(el)
+    },
+
 
   }
 }
