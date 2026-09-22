@@ -639,12 +639,70 @@ _COMPANY_PROFILE_DEFAULT = {
 }
 
 
+#: 遮蔽用的符號，以及末端露幾碼。
+#:
+#: 📌 具名常數的理由不是排版：`_looks_masked()` 要認得出自己遮的東西，
+#: 而兩邊各寫一個字面值時，改一邊就會讓 UA3c 的安全網**安靜地失效**。
+MASK_CHAR = "\u2022"
+MASK_TAIL = 4
+
+
+def _mask_secret(value) -> str:
+    """把一個憑證遮成 `••••••••ab12`。**空值回空值。**
+
+    ## 🔴 空的不可以遮成「看起來已經設定了」
+    ☠️ 一律回一串 `••••••••` 的話，「**已經設定**」與「**還沒設定**」
+    在畫面上會變成同一個樣子 ——
+    🔑 那正好把「使用者找不到欄位」的問題原封不動搬到另一個位置：
+    **他以為填過了，而「附近廠商」一直沒有出現。**
+
+    ## ⚠️ 太短的金鑰整串遮掉
+    `text[-4:]` 對一個 3 碼的值會回**整個值** ⇒ 遮蔽等於沒遮。
+    這裡不會發生（Google 金鑰 39 碼），**而「不會發生」不是不處理的理由**：
+    下一個用這個函式的欄位可能是四位數的 PIN。
+
+    ## 📌 遮蔽長度刻意**不等於**原長度
+    回傳 `MASK_CHAR * 8` 是固定的 ⇒ **看不出金鑰有多長**。
+    長度本身是資訊（39 碼是 Google、32 碼是別家）。
+    """
+    text = str(value or "")
+    if not text:
+        return ""
+    if len(text) <= MASK_TAIL:
+        return MASK_CHAR * 8
+    return MASK_CHAR * 8 + text[-MASK_TAIL:]
+
+
+def _looks_masked(value) -> bool:
+    """這個值是不是我們自己遮出來的那一串。
+
+    ⚠️ 判準是「含有 `MASK_CHAR`」。Google 的金鑰是
+    `[A-Za-z0-9_-]` ⇒ 真金鑰**不可能**含有 `•`。
+    📌 而萬一誤判，後果是**那次沒有更新金鑰**（保守），
+    不是「金鑰被清掉」——🔑 **誤判要往安全的方向倒。**
+    """
+    return MASK_CHAR in str(value or "")
+
+
+#: 哪些欄位在回傳時要遮起來。
+#: 🔑 具名清單而不是 if：下一個憑證欄位（TGOS AppID…）加進來時，
+#: **加在這裡就同時得到遮蔽與 UA3c 的安全網**，不會只做到一半。
+_MASKED_FIELDS = ("google_maps_api_key",)
+
+
 @router.get("/api/settings/company-profile")
 def get_company_profile(authorization: str = Header(None)):
     _require_user(authorization)
     # 既有安裝的 DB 值可能是新增銀行欄位前存的舊 shape，缺的鍵補上空字串，
     # 前端才不用每個欄位都自己防 undefined。
-    return {**_COMPANY_PROFILE_DEFAULT, **(_get_setting("company_profile", {}) or {})}
+    profile = {**_COMPANY_PROFILE_DEFAULT,
+               **(_get_setting("company_profile", {}) or {})}
+    # 🔴 **金鑰不明文回傳。** 那是一個**付費憑證**，而這個畫面會被截圖、
+    # 被投影、被肩後看見，而且 superadmin 不只一個人。
+    # 📌 末四碼留著 —— 使用者要分得出「我填的是哪一把」。
+    for field in _MASKED_FIELDS:
+        profile[field] = _mask_secret(profile.get(field))
+    return profile
 
 
 def _check_office_coord(body: "CompanyProfile") -> None:
@@ -703,6 +761,21 @@ def set_company_profile(body: CompanyProfile, authorization: str = Header(None))
     cur = {**_COMPANY_PROFILE_DEFAULT,
            **(_get_setting("company_profile", {}) or {})}
     sent = body.model_dump(include=body.model_fields_set)
+    # 🔴 **收到遮蔽字 ⇒ 視為沒送。**
+    #
+    # ☠️ 遮蔽帶出來的缺陷，而它**完全安靜**：設定頁最自然的寫法是
+    # 「載入時填進輸入框、存檔時整包送出」⇒ 那串 `••••••••ab12`
+    # 會被寫回設定，**把真金鑰蓋掉**。
+    # 而症狀是：使用者改了**銀行帳號**存檔 ⇒ 幾天後「附近廠商」變成未啟用
+    # ⇒ 🔑 **沒有人會把那兩件事連起來。**
+    #
+    # 📌 為什麼是後端擋而不是「前端不要送」：
+    # **前端會回歸**（換一個人寫、複製貼上另一頁的存檔函式），
+    # 而這個缺陷**不會有任何錯誤訊息**。
+    # ⚠️ 與「空字串＝明確清除」不衝突：**遮蔽字不是空字串**。
+    for field in _MASKED_FIELDS:
+        if field in sent and _looks_masked(sent[field]):
+            sent.pop(field)
     value = {**cur, **sent}
     _set_setting("company_profile", value)
     # ⚠️ 稽核留的是**公司名**，不是整包 value —— 那包裡有金鑰。

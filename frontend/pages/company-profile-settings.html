@@ -146,6 +146,72 @@
                 </div>
               </div>
             </div>
+
+            <!-- 🔴 手動座標：**填了就跳過所有地址查詢。**
+                 它存在的理由是實測出來的：OpenStreetMap 的圖資**認不得台灣的門牌**
+                 ⇒ 地址只查得到「區級」，而區級中心點與實際地點可能差好幾公里。
+                 🔑 而使用者知道自己在哪裡 —— 這一欄把「猜」換成「他說了算」。
+                 📌 不需要 Google 金鑰、不需要任何外部查詢。 -->
+            <div class="ns-row">
+              <div class="ns-field" style="flex:1 1 100%">
+                <label for="office_lat">辦公室座標（選填，填了會比地址精確）</label>
+                <div style="display:flex;gap:8px;flex-wrap:wrap">
+                  <!-- 📌 `id`／`name` 用**後端欄位的名字**：那兩個欄位在
+                       `company_profile` 裡叫 `office_lat`／`office_lon`，
+                       而畫面上的狀態叫 `latText`／`lonText`（字串版）。
+                       ⇒ 之後有人要從畫面找到端點時，兩邊對得起來。 -->
+                  <input type="text" id="office_lat" name="office_lat"
+                         style="flex:1 1 180px" x-model="latText"
+                         @input="splitPastedCoord()" @paste="$nextTick(() => splitPastedCoord())"
+                         placeholder="緯度，例 24.2549239">
+                  <input type="text" id="office_lon" name="office_lon"
+                         style="flex:1 1 180px" x-model="lonText"
+                         placeholder="經度，例 120.5316259">
+                  <button type="button" class="btn btn-ghost btn-sm"
+                          x-show="latText || lonText"
+                          @click="latText = ''; lonText = ''">清除</button>
+                </div>
+                <!-- ⚠️ 「貼一串」要能自動拆兩欄。
+                     使用者從 Google 地圖複製出來的是 `24.2549239, 120.5316259` **一串**，
+                     逼他手動拆的話，最可能的錯誤是**兩個數字貼反**，
+                     ☠️ 而 `(120.53, 24.25)` 是一個**合法**的座標（在阿拉伯海上）——
+                     範圍檢查擋不住它，地圖也會乖乖畫出來。
+                     🔑 **一個會通過所有驗證的錯誤，比一個被擋下來的錯誤貴得多。** -->
+                <div style="font-size:11px;color:var(--text-secondary);margin-top:4px">
+                  在 Google 地圖上對著辦公室按右鍵，第一列就是座標，
+                  <strong>整串貼進左邊那一格會自動拆成兩欄</strong>。
+                  兩格都清空就回到用地址查詢。
+                </div>
+                <div x-show="coordWarn" style="font-size:11px;color:var(--warning);margin-top:4px"
+                     x-text="coordWarn"></div>
+              </div>
+            </div>
+
+            <!-- Google 金鑰：**選用**。免金鑰的底圖與距離不需要它。 -->
+            <div class="ns-row">
+              <div class="ns-field" style="flex:1 1 100%">
+                <label>Google Maps 金鑰（選填）</label>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+                  <input type="password" style="flex:1 1 280px" x-model="keyText"
+                         :placeholder="keySet ? '已設定，留空表示不變更' : '未設定'"
+                         autocomplete="off">
+                  <span x-show="keySet && !keyCleared" style="font-size:11px;color:var(--text-secondary)"
+                        x-text="'目前：' + keyMasked"></span>
+                  <button type="button" class="btn btn-ghost btn-sm"
+                          x-show="keySet && !keyCleared" @click="keyCleared = true; keyText = ''">清除金鑰</button>
+                  <span x-show="keyCleared" style="font-size:11px;color:var(--warning)">
+                    儲存後會清除（按取消或重新整理可還原）
+                  </span>
+                </div>
+                <!-- 🔴 這一欄**只開啟「附近廠商」那一塊**，不影響底圖與距離。
+                     ⚠️ 讀取時只回末四碼：那是一個**付費憑證**，
+                     而這個畫面會被截圖、被投影、被肩後看見。 -->
+                <div style="font-size:11px;color:var(--text-secondary);margin-top:4px">
+                  只用來開啟「附近廠商」。地圖底圖與距離計算<strong>不需要它</strong>。
+                  為了安全，讀取時只會顯示末四碼。
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -431,6 +497,14 @@
           name: '', tax_id: '', contact_info: '', address: '',
           bank_name: '', bank_branch: '', bank_account_name: '', bank_account_number: '',
         },
+        // 🔴 座標在畫面上是**字串**，送出時才變數字。
+        // ⚠️ 用 `x-model.number` 綁的話，清空會變成 `''` 或 `NaN`，
+        // 而後端要的是 `null` —— **`0.0` 是幾內亞灣上的一個點，不是「沒有填」。**
+        latText: '', lonText: '', coordWarn: '',
+        // 金鑰**不放進 `cfg`**：GET 回的是遮蔽字，混進去就會在存檔時被送回去。
+        // 📌 後端已經有安全網（收到遮蔽字視為沒送），而**兩邊都做**是刻意的：
+        // 前端不送＝正確的行為，後端擋＝前端回歸時的防線。
+        keyText: '', keyMasked: '', keySet: false, keyCleared: false,
         saving: false,
         saved: false,
         msg: '',
@@ -481,6 +555,14 @@
           if (r.ok) {
             const data = await r.json()
             this.cfg = { ...this.cfg, ...data }
+            // ⚠️ 座標可能是 `null` ⇒ 顯示空字串，**不要顯示 `null` 或 `0`**。
+            this.latText = data.office_lat == null ? '' : String(data.office_lat)
+            this.lonText = data.office_lon == null ? '' : String(data.office_lon)
+            // 金鑰回的是遮蔽字（或空字串）。**不放進輸入框**，只當狀態。
+            this.keyMasked = data.google_maps_api_key || ''
+            this.keySet = !!this.keyMasked
+            this.keyText = ''
+            this.keyCleared = false
           }
           if (this.isSuperadmin) {
             await this.loadWebauthnConfig()
@@ -644,17 +726,67 @@
           setTimeout(() => this.webauthnMsg = '', 4000)
         },
 
+        // 貼上 `24.2549239, 120.5316259` 這種一串時自動拆成兩欄。
+        // ⚠️ 只在「左邊那格裡有兩個數字」時才動經度欄 ——
+        // 使用者正在手打緯度時不可以去改另一格。
+        splitPastedCoord() {
+          const found = String(this.latText || '').match(/-?\d+(?:\.\d+)?/g)
+          if (!found || found.length < 2) return
+          this.latText = found[0]
+          this.lonText = found[1]
+        },
+
+        // 空字串 ⇒ `null`（沒有填）。數字 ⇒ 數字。其他 ⇒ `undefined`（＝有問題）。
+        // 🔑 三態，不是兩態：把「打錯字」當成「沒有填」的話，
+        // **使用者會看到儲存成功而座標被清掉了。**
+        _coordValue(text) {
+          const raw = String(text || '').trim()
+          if (!raw) return null
+          const n = Number(raw)
+          return Number.isFinite(n) ? n : undefined
+        },
+
         async save() {
+          this.coordWarn = ''
+          const lat = this._coordValue(this.latText)
+          const lon = this._coordValue(this.lonText)
+          if (lat === undefined || lon === undefined) {
+            this.coordWarn = '座標必須是數字（或兩格都留空）。這次沒有儲存。'
+            return
+          }
+          // ⚠️ 只填一格 ⇒ 擋下來。一個只有緯度的點畫不出來，
+          // 而後端會把另一格存成 null ⇒ 畫面上看起來像「沒填」。
+          if ((lat === null) !== (lon === null)) {
+            this.coordWarn = '緯度與經度要一起填，或一起留空。這次沒有儲存。'
+            return
+          }
           this.saving = true; this.msg = ''
+          // 🔴 **明確組出要送的東西**，不要把 `cfg` 整包丟出去：
+          // `cfg.google_maps_api_key` 裡是 GET 回來的**遮蔽字**。
+          const payload = { ...this.cfg, office_lat: lat, office_lon: lon }
+          delete payload.google_maps_api_key
+          if (this.keyCleared) {
+            payload.google_maps_api_key = ''      // 明確清除
+          } else if (this.keyText.trim()) {
+            payload.google_maps_api_key = this.keyText.trim()
+          }                                        // 兩者皆非 ⇒ **不送**＝保留現值
           const r = await fetch('/api/settings/company-profile', {
             method: 'PUT',
             headers: { Authorization: 'Bearer ' + this.session.token, 'Content-Type': 'application/json' },
-            body: JSON.stringify(this.cfg),
+            body: JSON.stringify(payload),
           })
           this.saving = false
           if (r.ok) {
             this.msg = '設定已儲存'; this.isError = false
             this.saved = true; setTimeout(() => this.saved = false, 3000)
+            // 存完把金鑰欄位歸位：輸入框清空、狀態改成「已設定」。
+            // ⚠️ 不重新 GET —— 那會把使用者其他還沒存的欄位蓋掉。
+            if (this.keyCleared) { this.keySet = false; this.keyMasked = '' }
+            else if (this.keyText.trim()) {
+              this.keySet = true
+              this.keyMasked = '\u2022'.repeat(8) + this.keyText.trim().slice(-4)
+            }
+            this.keyText = ''; this.keyCleared = false
           } else {
             const d = await r.json().catch(() => ({}))
             this.msg = d.detail || '儲存失敗'; this.isError = true

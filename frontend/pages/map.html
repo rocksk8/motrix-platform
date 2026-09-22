@@ -39,6 +39,13 @@
               width:20px; height:20px; border-radius:50%; color:#fff;
               font-size:11px; font-weight:700; line-height:1;
               box-shadow:0 0 0 2px #fff, 0 1px 3px rgba(0,0,0,.35); }
+    /* 「你在這裡」：**刻意跟資料點長得不一樣。**
+       ☠️ 一張圖上有標案／客戶／供應商／辦公室，全部同一個圖釘的話，
+       **多畫一個等於沒有畫** —— 使用者找不到自己。
+       📌 用一個帶白邊與脈動外環的實心圓點，不是另一個有字的方塊。 */
+    .mp-me { display:block; width:14px; height:14px; border-radius:50%;
+             background:#DC2626; border:3px solid #fff;
+             box-shadow:0 0 0 1px #DC2626, 0 1px 4px rgba(0,0,0,.4); }
     #mp-canvas { height:460px; border-radius:var(--radius);
                  border:1px solid var(--border-light); }
   </style>
@@ -352,6 +359,9 @@ function mapPage() {
     // 🔴 座標只活在這個物件裡：**不存 localStorage**。
     // 存下來的話，下次開頁會用一個舊位置算距離，而畫面上看不出來它是舊的。
     userPos: null, geoBusy: false, geoError: '',
+    // 圖層參考：資料點一組、「你」一組。**分開放**是因為清除的時機不同
+    // （換資料集要重畫資料點，取消定位只拿掉「你」）。
+    _layer: null, _userLayer: null,
     // 四個資料集。`mark` 是畫在標記上的字 —— **那才是分辨的載體**。
     // 🔑 顏色只是輔助：色覺差異的人要看得出來，而**點開才知道等於沒有回答**。
     // 🔴 **`sources`（要不要抓）與 `datasets`（畫成什麼樣子）是兩件事。**
@@ -475,6 +485,10 @@ function mapPage() {
     clearPosition() {
       this.userPos = null
       this.geoError = ''
+      // 🔴 **先把圖上的「你」拿掉，不要等 refresh 回來。**
+      // refresh 是非同步的 ⇒ 中間那段時間圖上還有一個點，
+      // 而使用者剛剛才按了「不要用我的位置」。
+      this._removeUserLayer()
       this.refresh()
     },
 
@@ -503,6 +517,9 @@ function mapPage() {
           return
         }
         this.info = await r.json()
+        // ⚠️ 地圖開著的時候要跟著重畫 —— 不然清單更新了而地圖沒有，
+        // 而**兩邊不一致時使用者會相信看得見的那一邊**。
+        this._redraw()
       } catch (_e) {
         this.loadError = '地圖資料載入失敗：連線不到伺服器'
       } finally {
@@ -536,7 +553,12 @@ function mapPage() {
     },
 
     _draw() {
-      if (!window.L || this._map) return
+      // 🔴 **地圖建一次，圖層每次重畫。**
+      // ⚠️ 原本是 `if (this._map) return` ⇒ 地圖開著的時候
+      // **勾選資料集、按「繼續定位」、按「使用我的位置」都不會改變畫面**，
+      // 而清單那一側會更新 ⇒ 🔑 兩邊不一致，而使用者會相信看得見的那一邊。
+      if (!window.L) return
+      if (this._map) { this._redraw(); return }
       // 🔴 **明著設 imagePath，不依賴 Leaflet 從 CSS 位置推導。**
       // 推導現在剛好是對的，而「剛好是對的」會在有人搬動檔案那天失效，
       // 失效的樣子是 marker 圖去 CDN 抓 —— 一條沒有人注意到的對外連線。
@@ -558,9 +580,77 @@ function mapPage() {
       // 而「一片灰」跟「這個地區沒有資料」長得一模一樣。
       tiles.on('tileerror', () => { this.tileError = true })
       tiles.addTo(this._map)
+      this._redraw()
+    },
 
+    //: 「你在這裡」＋ 精度圓。
+    //
+    //  🔴 **精度圓的半徑要用真的那個數字。**
+    //  ☠️ 一個圖釘不帶它的誤差，就會被當成「我就在這裡」——
+    //  而桌機用 IP 定位時，那個誤差可能是**數十公里**。
+    //  🔑 這是 §3n「距離與誤差綁在一起」在地圖上的版本。
+    //  ⚠️ 寫死一個好看的圈**比沒有更糟**：它宣稱了一個不是量出來的精度。
+    _drawUser() {
+      this._removeUserLayer()
+      if (!this._map || !this.userPos) return
+      const me = this.userPos
+      const icon = window.L.divIcon({
+        className: '', html: '<span class="mp-me"></span>',
+        iconSize: [20, 20], iconAnchor: [10, 10],
+      })
+      const marker = window.L.marker([me.lat, me.lon], { icon, zIndexOffset: 1000 })
+        .addTo(this._map)
+        .bindPopup('你在這裡<br>' + (this.accuracyLabel() || '定位誤差不明'))
+      const circle = window.L.circle([me.lat, me.lon], {
+        radius: me.accuracy,          // ← 公尺，就是瀏覽器給的那個數字
+        color: '#DC2626', weight: 1,
+        fillColor: '#DC2626', fillOpacity: 0.10,
+      }).addTo(this._map)
+      this._userLayer = { marker: marker, circle: circle }
+    },
+
+    //: 把「你」從圖上拿掉。
+    //  ☠️ 不拿掉的話，圖上會留著**上一次的位置**，而使用者以為那是現在的自己 ——
+    //  🔑 它不會報錯，只是那個點是舊的（〈降級之後它還是會動〉）。
+    _removeUserLayer() {
+      if (!this._map || !this._userLayer) { this._userLayer = null; return }
+      this._map.removeLayer(this._userLayer.marker)
+      this._map.removeLayer(this._userLayer.circle)
+      this._userLayer = null
+    },
+
+    //: 讓視野框住所有東西，**包含「你」**。
+    //  ☠️ 原本是 `setView(centre, 8)` —— 一個固定的中心與縮放。
+    //  使用者在高雄而辦公室在台中的話，那個標記**在畫面外**，
+    //  而他會以為「按了沒反應」—— 🔑 **跟「根本沒畫」的症狀一模一樣，
+    //  而成因完全不同。**
+    _fitAll() {
+      if (!this._map) return
+      const pts = (this.info && this.info.points) || []
+      const office = this.info && this.info.office
+      const box = pts.map(p => [p.lat, p.lon])
+      if (office) box.push([office.lat, office.lon])
+      if (this.userPos) box.push([this.userPos.lat, this.userPos.lon])
+      if (box.length > 1) {
+        // maxZoom 擋住「只有兩個很近的點」時放大到街道等級 ——
+        // 那會讓使用者以為地圖壞了（整片都是同一條路）。
+        this._map.fitBounds(box, { padding: [30, 30], maxZoom: 15 })
+      } else if (box.length === 1) {
+        this._map.setView(box[0], 14)
+      }
+    },
+    //: 把資料點、辦公室、以及「你」重新畫一次。
+    //  📌 舊的圖層整組丟掉再畫，不是一個一個比對差異 ——
+    //  比對差異會讓「少畫一個」與「多留一個」兩種錯誤同時可能發生。
+    _redraw() {
+      if (!this._map) return
+      if (this._layer) { this._map.removeLayer(this._layer) }
+      this._layer = window.L.layerGroup().addTo(this._map)
+
+      const pts = (this.info && this.info.points) || []
+      const office = this.info && this.info.office
       if (office) {
-        window.L.marker([office.lat, office.lon]).addTo(this._map)
+        window.L.marker([office.lat, office.lon]).addTo(this._layer)
           .bindPopup('辦公室<br>' + office.address)
       }
       pts.forEach(p => {
@@ -574,7 +664,7 @@ function mapPage() {
                 + d.mark + '</span>',
           iconSize: [20, 20], iconAnchor: [10, 10],
         })
-        window.L.marker([p.lat, p.lon], { icon }).addTo(this._map)
+        window.L.marker([p.lat, p.lon], { icon }).addTo(this._layer)
           .bindPopup([d.label + '｜' + (p.name || ''), p.org, p.address || p.location,
                       (p.distanceFromUserKm === null || p.distanceFromUserKm === undefined)
                         ? '' : ('離你約 ' + p.distanceFromUserKm + ' km'
@@ -584,7 +674,10 @@ function mapPage() {
                                 + this.precisionLabel(p.precision) + '）')]
                      .filter(Boolean).join('<br>'))
       })
+      this._drawUser()
+      this._fitAll()
     },
+
   }
 }
 </script>
