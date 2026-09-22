@@ -163,10 +163,25 @@ CREATE INDEX idx_bonus_lines_user  ON bonus_award_lines(username);
 ---
 # 四、參與人員：**彙整，不是新建**（實查）
 ```
-sales_person / sales_person_id   業務
-owner                            案件擁有者
-engineer                         工程師
-**case_stages.assigned_to**      各執行階段負責人（JSON 陣列）
+sales_person / sales_person_id   業務           ← 使用者裁示的兩個來源之一
+**case_stages.assigned_to**      各執行階段負責人（JSON 陣列）← 另一個
+```
+### 🔴 `owner`／`engineer` **已移除**（2026-09-23，B 實查兩個欄位都不存在）
+```
+本規格 §一⑤ 的使用者裁示逐字只有兩個來源：
+  業務獎金 → sales_person ／ 專案執行獎金 → case_stages.assigned_to
+⇒ ⇒ `owner`／`engineer` 是**本規格 §四 自己加的**，使用者從未提過
+⇒ 而 B 實查 quotations：**兩個欄位都不存在**
+```
+📌 **留著這一列，不當沒發生過**：代價歸屬掃描當時就標了這一格
+   （「`owner`／`engineer` 無對應項目 ｜ **沒有人** ｜ 🔴 不是代價，是還沒有人定義」）
+   —— **那個標註現在成真了**，而它是掃描第一次抓到自己憑空加的東西。
+
+### ⚠️ 已知的未來來源，**本輪不接**
+```
+quotations 另有 **assigned_user_ids**（A 補查）
+⇒ 它可能是「這個案子有哪些人」的第三個來源
+⇒ 🔴 而**沒有人裁示過它要不要進獎金** ⇒ 本輪不接，不自己決定
 ```
 ### ⚠️ 兩個實作約束
 ```
@@ -176,8 +191,7 @@ engineer                         工程師
 ② db.py:1459 註解逐字：「assigned_to/depends_on **刻意維持 JSON text 欄位**，
    不再往下正規化成 join table」⇒ **彙整不能用一句 SQL JOIN，要在應用層逐筆解析**
 ```
-📌 `owner`／`engineer` 目前**沒有對應的獎金項目** —— 那是「還沒有人定義」，
-   **不是「決定不做」**。本施工圖不替使用者決定。
+📌 上面那一節已處理 `owner`／`engineer`。**本施工圖不替使用者決定任何來源。**
 
 ---
 # 五、計算（**金額全部用整數，比例用基點**）
