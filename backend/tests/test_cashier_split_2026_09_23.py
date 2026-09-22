@@ -571,12 +571,10 @@ def _dangling_functions(html_path=None, js_src=None):
 #:    多抄＝該留的被帶走；這個＝**該走的被留下**。同一次搬遷的兩個方向。
 #: ⚠️ 而我原本那道死碼題**只掃 `cashier.js`** ⇒ 它看不到這一側。
 #:    ⇒ 現在改成對稱的：**兩支都掃。**
-_REPORTS_CASHIER_TAIL = frozenset((
-    "canExecuteCashier", "confirmBankPay", "confirmInvoice", "confirmPayVoucher",
-    "confirmReceive", "exportCashierHistory", "isDueSoon", "openBankPayModal",
-    "openInvoiceModal", "openPayVoucherModal", "openReceiveModal",
-    "toggleReceived", "uploadBankCsv",
-))
+#: 🔑 **13 筆已全部從 `reports.js` 清掉**（B，`UI9` 第三次補件）。
+#: 這個集合刻意留成空的而不是刪掉整個常數 —— 下面那道反向控制要它存在，
+#: 而它空著本身就是一句話：**清乾淨了，不是「還沒開始」。**
+_REPORTS_CASHIER_TAIL = frozenset()
 
 
 def test_ui9_nothing_was_over_copied_into_the_cashier_page():

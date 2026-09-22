@@ -433,9 +433,6 @@ function reportsApp() {
     hasCashierAccess() {
       return this.isAdminPlus() || this._modules().includes('cashier') || this._modules().includes('finance')
     },
-    canExecuteCashier() {
-      return this.isAdminPlus() || this._modules().includes('cashier')
-    },
     // 本地日期字串（YYYY-MM-DD），不用 toISOString()（UTC，台灣 UTC+8 每天
     // 00:00-08:00 之間會誤判成前一天，比照 case-management.js/cashier.js 同款修法）。
     _localDateStr(d) {
@@ -1459,12 +1456,6 @@ function reportsApp() {
     isOverdue(dateStr) {
       return !!dateStr && dateStr < this._localDateStr()
     },
-    isDueSoon(dateStr) {
-      if (!dateStr || this.isOverdue(dateStr)) return false
-      const soon = new Date()
-      soon.setDate(soon.getDate() + 7)
-      return dateStr <= this._localDateStr(soon)
-    },
 
     async showCashierTab() {
       this.activeTab = 'cashier'
@@ -1508,23 +1499,6 @@ function reportsApp() {
       this.cashierHistoryLoading = false
     },
 
-    async exportCashierHistory() {
-      this.cashierExporting = true
-      try {
-        const qs = `?start=${this.cashierHistoryStart}&end=${this.cashierHistoryEnd}`
-        const r = await fetch('/api/cashier/export' + qs, { headers: { Authorization: 'Bearer ' + this._token() } })
-        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '匯出失敗'); this.cashierExporting = false; return }
-        const blob = await r.blob()
-        const a = document.createElement('a')
-        a.href = URL.createObjectURL(blob)
-        a.download = `MOTRIX_出納執行紀錄_${this.cashierHistoryStart}_${this.cashierHistoryEnd}.xlsx`
-        document.body.appendChild(a)
-        a.click()
-        document.body.removeChild(a)
-        URL.revokeObjectURL(a.href)
-      } catch (e) { alert('匯出失敗：' + e.message) }
-      this.cashierExporting = false
-    },
 
     async loadT100BankAccounts() {
       // 2026-09-02：改成每次開啟標記 Modal 都重抓（不再 cache-once），確保跟
@@ -1559,131 +1533,13 @@ function reportsApp() {
       return this.t100DefaultBankAcctCode || ''
     },
 
-    async openPayVoucherModal(v) {
-      this.payVoucherTarget = v
-      this.payVoucherBankAcctCode = ''
-      this.payVoucherDate = v.payableDate || this._localDateStr()
-      this.payVoucherNote = ''
-      this.payVoucherModal = true
-      await this.loadT100BankAccounts()
-      const url = v.vendorId ? `/api/contractor-vouchers/last-paid-bank-account?vendor_id=${v.vendorId}` : ''
-      this.payVoucherBankAcctCode = await this._resolveDefaultBankAccount(url)
-    },
 
-    async confirmPayVoucher() {
-      const v = this.payVoucherTarget
-      if (!v || !this.payVoucherDate) return
-      this.payVoucherSaving = true
-      try {
-        const r = await fetch(`/api/contractor-vouchers/${v.voucherNo}/paid-toggle`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this._token() },
-          body: JSON.stringify({
-            action: 'pay', paid_at: this.payVoucherDate, note: this.payVoucherNote,
-            bankAccountCode: this.payVoucherBankAcctCode, bankAccountName: this._t100BankName(this.payVoucherBankAcctCode),
-          })
-        })
-        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '操作失敗'); this.payVoucherSaving = false; return }
-        this.payVoucherModal = false
-        this.payVoucherTarget = null
-        await Promise.all([this.loadPayable(), this.loadCashierHistory()])
-      } catch (e) { alert('網路錯誤：' + e.message) }
-      this.payVoucherSaving = false
-    },
 
-    async openReceiveModal(it) {
-      this.receiveTarget = it
-      this.receiveDate = this._localDateStr()
-      this.receiveActualAmount = it.amount
-      this.receiveFeeAmount = 0
-      this.receiveNote = ''
-      this.receiveBankAcctCode = ''
-      this.receiveModal = true
-      await this.loadT100BankAccounts()
-      const url = it.customer ? `/api/quotations/last-received-bank-account?customerName=${encodeURIComponent(it.customer)}` : ''
-      this.receiveBankAcctCode = await this._resolveDefaultBankAccount(url)
-    },
 
-    async confirmReceive() {
-      const it = this.receiveTarget
-      if (!it || !this.receiveDate) return
-      this.receiveSaving = true
-      try {
-        const r = await fetch(`/api/quotations/${encodeURIComponent(it.quoteNo)}/payment/${it.idx}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this._token() },
-          body: JSON.stringify({
-            received: true, receivedAt: this.receiveDate, receivedBy: this._displayName(),
-            actualAmount: this.receiveActualAmount, feeAmount: this.receiveFeeAmount || 0, note: this.receiveNote,
-            bankAccountCode: this.receiveBankAcctCode, bankAccountName: this._t100BankName(this.receiveBankAcctCode),
-          })
-        })
-        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '操作失敗'); this.receiveSaving = false; return }
-        this.receiveModal = false
-        this.receiveTarget = null
-        await Promise.all([this.loadReceivable(), this.loadCashierHistory()])
-      } catch (e) { alert('網路錯誤：' + e.message) }
-      this.receiveSaving = false
-    },
 
-    async toggleReceived(item, received) {
-      if (!confirm(received ? '標記此款項為已收？' : '取消此款項的收款紀錄？')) return
-      try {
-        const r = await fetch(`/api/quotations/${encodeURIComponent(item.quoteNo)}/payment/${item.idx}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this._token() },
-          body: JSON.stringify({ received, receivedAt: '', receivedBy: '' })
-        })
-        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '操作失敗'); return }
-        await this.loadReceivable()
-      } catch (e) { alert('網路錯誤：' + e.message) }
-    },
 
-    openInvoiceModal(item) {
-      this.invoiceModal = { show: true, item, no: item.invoiceNo || '', date: item.invoiceDate || '' }
-    },
 
-    async confirmInvoice() {
-      const item = this.invoiceModal.item
-      if (!item) return
-      try {
-        const r = await fetch(`/api/quotations/${encodeURIComponent(item.quoteNo)}/payment/${item.idx}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this._token() },
-          body: JSON.stringify({ invoiceNo: this.invoiceModal.no.trim(), invoiceDate: this.invoiceModal.date || '' })
-        })
-        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '操作失敗'); return }
-        item.invoiceNo = this.invoiceModal.no.trim()
-        item.invoiceDate = this.invoiceModal.date || ''
-        this.invoiceModal.show = false
-      } catch (e) { alert('網路錯誤：' + e.message) }
-    },
 
-    async uploadBankCsv(evt) {
-      var file = evt.target.files[0]
-      if (!file) return
-      this.bankReconciling = true
-      this.bankResult = null
-      try {
-        var fd = new FormData()
-        fd.append('file', file)
-        var res = await fetch('/api/reports/bank-reconcile', {
-          method: 'POST',
-          headers: { Authorization: 'Bearer ' + this._token() },
-          body: fd,
-        })
-        if (!res.ok) {
-          var j = await res.json().catch(function () { return {} })
-          throw new Error(j.detail || '比對失敗')
-        }
-        this.bankResult = await res.json()
-      } catch (e) {
-        alert('銀行對帳比對失敗：' + (e.message || e))
-      } finally {
-        this.bankReconciling = false
-        evt.target.value = ''
-      }
-    },
 
     _guessDateFromBankText(raw) {
       const s = (raw || '').trim()
@@ -1705,37 +1561,7 @@ function reportsApp() {
       return y + '-' + String(mo).padStart(2, '0') + '-' + String(d).padStart(2, '0')
     },
 
-    openBankPayModal(row) {
-      if (!row || !row.match) return
-      this.bankPayRow = row
-      this.bankPayDate = this._guessDateFromBankText(row.date) || this._localDateStr()
-      this.bankPayModal = true
-    },
 
-    async confirmBankPay() {
-      const row = this.bankPayRow
-      if (!row || !row.match || !this.bankPayDate) return
-      const voucherNo = row.match.voucherNo
-      this.bankPaySaving = true
-      try {
-        var res = await fetch('/api/contractor-vouchers/' + voucherNo + '/paid-toggle', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this._token() },
-          body: JSON.stringify({ action: 'pay', paid_at: this.bankPayDate, note: '銀行對帳單比對後標記' }),
-        })
-        if (!res.ok) {
-          var j = await res.json().catch(function () { return {} })
-          throw new Error(j.detail || '標記失敗')
-        }
-        row.match._paid = true
-        this.bankPayModal = false
-        this.bankPayRow = null
-        await Promise.all([this.loadPayable(), this.loadCashierHistory()])
-      } catch (e) {
-        alert('標記失敗：' + (e.message || e))
-      }
-      this.bankPaySaving = false
-    },
 
     async exportTaxInvoices() {
       this.taxExporting = true

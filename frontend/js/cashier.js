@@ -556,6 +556,39 @@ function cashierApp() {
         this.t100Confirming = false
       }
     },
+    // 🔴 `UI9` 第三次補件：這兩支是 **JS 內部呼叫**的，而我前兩次的掃描
+    //    都掃不到它們 ——
+    // ```
+    // ① 樣板 → JS    @click 的 handler 在不在      （這兩支樣板沒用到）
+    // ② JS → 樣板    狀態有沒有對應的 UI            （這兩支不需要 UI）
+    // ③ **JS → JS**  this.x() 呼叫的在不在同一個檔  ← **漏掉的是這個方向**
+    // ```
+    // ☠️ 使用者實際踩到的是 `_displayName`：按「標記已收款」的確定會丟
+    //    `TypeError`，而 `confirmReceive` 的 catch 把它印成「**網路錯誤**」
+    //    ⇒ 前半句是假的、後半句是真的，**而人會先讀前半句**。
+    _displayName() {
+      var s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
+      return s.displayName || s.username || ''
+    },
+    async loadT100Confirmed() {
+      this.t100ConfirmedLoading = true
+      try {
+        var qs = '?start=' + this.t100Start + '&end=' + this.t100End
+        var res = await fetch('/api/reports/t100-export/confirmed' + qs, {
+          headers: { Authorization: 'Bearer ' + this._token() }
+        })
+        if (!res.ok) {
+          var j = await res.json().catch(function () { return {} })
+          throw new Error(j.detail || '載入失敗')
+        }
+        this.t100Confirmed = await res.json()
+      } catch (e) {
+        alert('已確認清單載入失敗：' + (e.message || e))
+      } finally {
+        this.t100ConfirmedLoading = false
+      }
+    },
+
     // ── 進入點 ─────────────────────────────────────────────
     // 🔑 原本是 `showCashierTab()`（切到頁籤時才載）。獨立頁之後**進來就載**，
     //    而那個函式的內容一行都沒改 —— 只是換了一個呼叫的時機。
