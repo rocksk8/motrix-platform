@@ -14,6 +14,7 @@ Nominatim 的使用政策明文要求**可識別的 User-Agent** 與**每秒最�
 import json
 import logging
 import re
+import inspect as _inspect
 import threading
 from datetime import date, datetime
 import math
@@ -752,7 +753,7 @@ def notify_quota_warning(used=None, quota=None) -> bool:
     return False
 
 
-def _locate_google(address, **_kw):
+def _locate_google(address, errors=None, **_kw):
     """Google Geocoding。**沒有金鑰就不發請求**（A6）。
 
     「沒有金鑰時不要送出去」不只是省錢：
@@ -783,10 +784,13 @@ def _locate_google(address, **_kw):
     try:
         with urllib.request.urlopen(req, timeout=FETCH_TIMEOUT_SECONDS) as resp:
             raw = resp.read()
-    except Exception:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
         # 🔑 **連線失敗不計數**（GB3）：請求沒有到達對方，或沒有收到回應。
         # ⚠️ 判準是「有沒有收到回應」，不是「有沒有拿到座標」——
         # ☠️ 只看有沒有座標的話，「查不到」與「連不上」會被歸成同一類。
+        # 🔴 而它同時是「不可以寫負快取」的那一種（§15 補三）。
+        if errors is not None:
+            errors.append(("google", str(exc) or exc.__class__.__name__))
         return None
     # 🔴 **計數點在這裡**：收到回應之後、解析之前（GB2／GB3）。
     # ☠️ 放在解析之後的話，`ZERO_RESULTS` 這種「送出去了、對方回了、
@@ -827,7 +831,7 @@ def _locate_tgos(address, **_kw):
     return None
 
 
-def _locate_nominatim(address, **_kw):
+def _locate_nominatim(address, errors=None, **_kw):
     """OSM／Nominatim。回 `((lat, lon), precision)` 或 `None`。
 
     🔴 精度由**回應的分類**決定（`classify_precision`），不是一律 `street`。
@@ -835,8 +839,13 @@ def _locate_nominatim(address, **_kw):
     ⇒ `交通部航港局`（建物）與 `台中市西屯區台灣大道三段`（路段中心）
     **在畫面上是同一種準度**，而誤差差了兩個數量級。
     """
-    coord, _err, info = _unpack_geocode(geocode(address))
+    coord, err, info = _unpack_geocode(geocode(address))
     if coord is None:
+        # 🔴 **把「我沒問到」與「對方說沒有」分開**（§15 補三）。
+        # ⚠️ 回傳型別沒有變（仍然是 `None`）—— 錯誤走呼叫端給的容器，
+        #    所以既有呼叫端與既有測試替身一個字都不用改。
+        if err and errors is not None:
+            errors.append(("nominatim", err))
         return None
     return coord, classify_precision(info)
 
@@ -866,13 +875,47 @@ def _stage_allowed(source) -> bool:
     return not quota_exceeded()
 
 
-def _run_stage(name, address):
+def _accepts_errors(fn) -> bool:
+    """這個可呼叫物收不收 `errors=`。
+
+    🔴 **用簽章判斷，不要用 `try/except TypeError`。**
+    ☠️ 那一種寫法在 stage **自己內部**丟 `TypeError` 時會把它整支再跑一次 ——
+    🔑 而第二次通常會丟同一個例外，於是我們吞掉了一個真的 bug，
+       還順便讓那一階被呼叫兩次（對外連線就是兩個請求）。
+    📌 判準：**分辨「它不收這個參數」與「它自己壞了」** —— 那是兩件事。
+    """
+    try:
+        sig = _inspect.signature(fn)
+    except (TypeError, ValueError):     # 內建／C 實作的東西問不到簽章
+        return False
+    for p in sig.parameters.values():
+        if p.name == "errors":
+            return True
+        if p.kind is _inspect.Parameter.VAR_KEYWORD:
+            return True                 # `**kw` 收得下
+    return False
+
+
+def _run_stage(name, address, errors=None):
     """呼叫某一階。**從模組全域取，不要抓住函式參考。**
 
     抓住參考的話，測試 patch 模組屬性就打不到那個舊參考,
     而那一題會安靜地失效——今晚已經踩過這一族很多次。
+
+    `errors` 是一個**選填**的容器：某一階「沒問到」（丟例外／逾時／對方回錯）
+    時把理由放進去，讓上層分得出「查不到」與「沒查成功」（§15 補三）。
+
+    ⚠️ **容忍不收 `errors` 的替身。** 既有測試把 stage patch 成
+    `lambda addr: None` 這種只收一個參數的東西 ——
+    ☠️ 硬傳的話那些題會紅在一個跟受測行為無關的 `TypeError` 上，
+    🔑 而**紅的樣子會像是我們的 bug**。同 `_unpack_geocode` 容忍兩種長度的理由。
+    📌 代價寫明：不收容器的替身**報不出錯誤** ⇒ 它的 `None` 一律被當成
+       「乾淨地查不到」。那對測試替身是對的（它們不模擬故障）。
     """
-    return globals()[name](address)
+    fn = globals()[name]
+    if errors is None or not _accepts_errors(fn):
+        return fn(address)
+    return fn(address, errors=errors)
 
 
 def locate(address, manual_coord=None):
@@ -901,7 +944,7 @@ def locate(address, manual_coord=None):
     return _locate_district(address)
 
 
-def _locate_district(address):
+def _locate_district(address, errors=None):
     """整個地址查不到時，退到「縣市＋區」再查一次。
 
     🔴 **抽出來是為了消掉一次重複查詢**（A16）：
@@ -920,7 +963,7 @@ def _locate_district(address):
     if not district or district == address:
         # 切不出行政區、或切出來跟原地址一樣 => **不要再查一次**（A4c）。
         return GeoResult(error="查無此地址", address=address)
-    found = _run_stage("_locate_nominatim", district)
+    found = _run_stage("_locate_nominatim", district, errors=errors)
     if not found:
         return GeoResult(error="查無此地址", address=address)
     coord, _precision = found
@@ -1212,6 +1255,9 @@ def locate_cached(address, manual_coord=None):
     # 🔑 **逐階交錯是這支函式的不變量**：每一階先看自己的快取、再查自己的。
     #    任何「先全部看一遍」的優化都會破壞它，而症狀是**沒有症狀**。
     missed = geocode_missed_recently(address)
+    # 🔴 §15 補三：**只有「三階都乾淨地 miss」才可以記負快取。**
+    # 任何一階回報 `err`（逾時／對方回錯／連不上）⇒ 這一輪什麼都不記。
+    errors = []
 
     for name, source in _STAGES:
         hit = _cached_stage(address, source)
@@ -1231,7 +1277,7 @@ def locate_cached(address, manual_coord=None):
             # ⇒ **不要發出去**。（快取仍然先看過了，所以「後來被別的路徑
             #    寫進快取」的地址不會被當成查不到。）
             continue
-        found = _run_stage(name, address)
+        found = _run_stage(name, address, errors=errors)
         if found:
             coord, precision = found
             result = GeoResult(coord=coord, precision=precision, source=source)
@@ -1248,9 +1294,16 @@ def locate_cached(address, manual_coord=None):
         return GeoResult(error="查無此地址", address=address)
     # ⚠️ 直接呼叫退階，**不要再走一次 `locate()`** ——
     # 上面那個迴圈已經把三階都問過了，`locate()` 會從第一階重跑（A16）。
-    result = _locate_district(address)
+    result = _locate_district(address, errors=errors)
     if result.coord:
         _remember(address, result)
+    elif errors:
+        # 🔴 **有任何一階沒問到 ⇒ 不記。**
+        # ☠️ 記下去的話：Nominatim 出一次 20 分鐘的故障，那段時間查過的每一個
+        #    地址都被記成「查不到」七天 ⇒ 使用者的地圖少一批點、少一個禮拜，
+        #    而畫面說「查不到這個地址，請去改資料」——
+        # 🔑 **那是在叫他去修一個沒有壞的東西。**
+        logger.info("不記負快取（有階失敗）：%s ← %s", address, errors)
     else:
         # 🔴 GC8：三階都 miss **而且**退階也抽不出東西 ⇒ 記下來。
         # ⚠️ 這裡是**唯一**可以記負快取的地方：走到這一行代表
