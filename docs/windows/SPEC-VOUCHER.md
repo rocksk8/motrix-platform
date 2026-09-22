@@ -37,7 +37,7 @@
 CREATE TABLE vouchers (
     id                      INTEGER PRIMARY KEY AUTOINCREMENT,
     voucher_no              TEXT    NOT NULL,              -- YYYYMMDD-NNN[-Rn]
-    voucher_date            TEXT    NOT NULL,              -- 可編輯，**預設建檔當天**（使用者 2026-09-23 改裁）
+    voucher_date            TEXT    NOT NULL,              -- 可編輯（**僅草稿**），預設建檔當天（使用者 2026-09-23 改裁）
     category                TEXT    NOT NULL DEFAULT '轉',  -- 傳票別，沿用 T100 voucherCategory
     summary                 TEXT    NOT NULL DEFAULT '',   -- 單據層摘要
     status                  TEXT    NOT NULL DEFAULT '草稿',
