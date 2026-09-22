@@ -86,6 +86,8 @@ FN(4):  FN1 FN2 FN3 FN4
 MG(1):  MG2
 TC(4):  TC1 TC2 TC3 TC4
 FE(1):  FE1
+UI(1):  UI10
+DB(1):  DB1
 ```
 
 > 📌 `VP`（verify package）＝ `backend/tools/verify_package.py` 四項，
@@ -169,4 +171,19 @@ EXEMPT
   UI7  act()/_deniedPages 認 query string
        🔴 **「已不需要」不是「延後」** —— 理由 §71c：
        出納拆成獨立頁面之後**不同檔名**，同檔名衝突整個消失。
+```
+
+---
+
+## 📌 2026-09-23 00:5x 追加（理由在 `STATE.md` §107／§108）
+
+```
+NEXT
+  UI10 營運報表那一項的 show 條件拿掉 cCash        §71c
+       => 只有出納權限的人不該看到「營運報表」（點進去是別人的頁）
+  DB1  db.py:151 的 PRAGMA foreign_keys=ON 包在 try/except: pass  §108
+       => 設定失敗 => 外鍵不強制 => **系統照常運作，沒有任何東西會說話**
+       ⚠️ 本輪**只做量**（對 _connect() 斷言 PRAGMA foreign_keys == 1）
+          改不改那個 except 是另一個決定 => 〈量它不等於修它〉
+       ⚠️ 量測要走 _connect()，自己 sqlite3.connect() 量到的是 SQLite 預設值 0
 ```
