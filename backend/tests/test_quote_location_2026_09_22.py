@@ -163,19 +163,66 @@ def _need(name):
 
 @pytest.fixture
 def blank_profile(monkeypatch):
-    """`company_profile` 為空 —— 既有安裝什麼都沒填的狀態。"""
+    """`company_profile` 為空 —— 既有安裝什麼都沒填的狀態。
+
+    ## 🔴 2026-09-23：這支 fixture 一度**不再清空任何東西**
+
+    它原本只打 `pdf_gen._get_setting`。B 為了 `BR2b` 把解析搬到
+    `helpers/company_identity.py` 之後，**真正被讀的是那一支**：
+    ```
+    斷言沒變、字面值沒變、fixture 也沒報錯
+    ⇒ 而決定行為的已經不是它了 ⇒ 真實 DB 的設定漏了進來
+    ```
+    ☠️ 症狀是 `QL6[_build_payment_request_html]` 紅在一個看起來像
+    「B 改壞了」的地方（多印一行「戶　　名」），
+    🔑 **而產品碼是對的，錯的是我的觀測裝置。**
+    📌 〈守門守的對象被搬走〉——我今天第二次付這個學費。
+
+    ⇒ 所以現在**兩個模組都打**，而且**打完當場驗它真的空了**。
+    """
     import pdf_gen
-    monkeypatch.setattr(
-        pdf_gen, "_get_setting",
-        lambda key, default=None: {} if key == "company_profile" else default,
-        raising=False)
+    import helpers.company_identity as ci
+
+    blank = lambda key, default=None: (       # noqa: E731
+        {} if key == "company_profile" else default)
+    for mod in (pdf_gen, ci):
+        monkeypatch.setattr(mod, "_get_setting", blank, raising=False)
+
+    # 📏 **正對照：先證明它真的清空了，才有資格拿它去比對逐字。**
+    # ☠️ 少了這三行，下一次解析再搬一次家，這支 fixture 會
+    #    **安靜地什麼都不做**，而 8 題會紅在一個與題目無關的理由上 ——
+    # 🔑 而那種紅會被讀成「產品壞了」，正是今天發生的事。
+    got = pdf_gen.location_identity(None)
+    assert got == ci.DEFAULT_IDENTITY, (
+        "`blank_profile` 沒有真的清空 —— `location_identity(None)` 回的是：\n"
+        f"  {got}\n"
+        f"  預期：{ci.DEFAULT_IDENTITY}\n"
+        "☠️ 那代表設定是從我沒打到的地方讀進來的（解析又搬家了），\n"
+        "🔑 而接下來每一題的紅綠都與題目無關。")
 
 
 # ══════════════════════════════════════════════════════════════════════
 # QL6 · 既有安裝不會壞的保證（逐字）
 # ══════════════════════════════════════════════════════════════════════
 
-@pytest.mark.parametrize("builder", I.BUILDERS)
+#: 🔴 2026-09-23 `QL6` 的比對範圍縮成 8 支 —— **`_build_payslip_html` 退出**。
+#:
+#: 理由**不是**它難測，是 **`QL6` 的判準對它已經是錯的**：
+#: ```
+#: QL6   空 payload ⇒ 輸出與改版前**逐字相同**（基準：一行身分都沒有）
+#: QL17  空 payload ＝ 沒有快照 ⇒ **用即時值並標明** ← A 的裁定
+#: ⇒ 同一格，一題要求它不變，另一題要求它變。**其中一題一定會錯。**
+#: ```
+#: ⚠️ 而「把基準重取」那條路我**明著不走**：`pdf_gen.py` 現在是 ` M`（B 已改），
+#: 此刻取到的基準會是**從被測物複製來的** —— 〈假綠燈〉最標準的形狀，
+#: ☠️ 而它永遠是綠的，因為它抄的就是答案。
+#: 📌 那一格的保護沒有消失，是**換手**：`QL16`（有快照 ⇒ 用快照）
+#:    ＋ `QL17`（沒快照 ⇒ 即時值＋標示）現在負責它，
+#:    而那兩題的期望值來自**我送進去的輸入**，不是來自輸出。
+QL6_BUILDERS = tuple(b for b in I.BUILDERS if b != "_build_payslip_html")
+
+
+@pytest.mark.parametrize("builder", QL6_BUILDERS)
 def test_ql6_a_blank_profile_prints_exactly_what_it_prints_today(
         builder, blank_profile):
     """QL6：所有據點的抬頭欄位留空 ⇒ **與改版前逐字相同**。
@@ -186,6 +233,9 @@ def test_ql6_a_blank_profile_prints_exactly_what_it_prints_today(
     基準是 2026-09-22 用還沒改過的 `pdf_gen.py` 跑出來的（見檔頭 ⓒ）。
     比對前把連續半形空白壓成一個 —— 排版改動不該讓這一題紅，
     而全形空白不壓（它是那行內容的一部分）。
+
+    ⚠️ **2026-09-23 改過一次**：比對範圍由 9 支縮成 8 支，
+    `_build_payslip_html` 退出（理由見上面 `QL6_BUILDERS` 那一段）。
     """
     got = I.normalise(I.identity_lines(I.render(builder)))
     want = list(GOLDEN[builder])
@@ -198,7 +248,7 @@ def test_ql6_a_blank_profile_prints_exactly_what_it_prints_today(
 
 
 def test_ql6_the_baseline_is_not_empty():
-    """量尺：基準本身要有東西，否則上面那 9 題是在比對兩個空清單。
+    """量尺：基準本身要有東西，否則上面那 8 題是在比對兩個空清單。
 
     `_build_payslip_html` 是唯一合法的空的一支 —— 它一行公司身分都沒有寫死
     （抬頭來自呼叫端傳進來的 dict，見檔頭 ⓐ）。
@@ -210,6 +260,27 @@ def test_ql6_the_baseline_is_not_empty():
     )
     assert sum(len(v) for v in GOLDEN.values()) >= 30, (
         f"基準只有 {sum(len(v) for v in GOLDEN.values())} 行 —— 抓取八成失效了"
+    )
+
+
+def test_ql6_the_exclusion_list_has_exactly_one_name_on_it():
+    """⚙️ 反向控制：**`QL6` 的排除清單只准有 `_build_payslip_html` 一個名字。**
+
+    ☠️ 少了這一題，`QL6` 有一條非常便宜的變綠路徑：
+    **哪一支 builder 紅了就把它加進排除清單。**
+    🔑 而那與「它本來就不該被這個判準管」在 diff 上長得一模一樣 ——
+    差別只在**有沒有人做過決定**，而那正是這一題要驗的東西。
+    📌 〈守門要驗有沒有人做過決定〉：排除是一個決定，它要留下名字。
+    """
+    excluded = sorted(set(I.BUILDERS) - set(QL6_BUILDERS))
+    assert excluded == ["_build_payslip_html"], (
+        f"`QL6` 現在排除了這些：{excluded}\n"
+        "🔑 只有 `_build_payslip_html` 有理由退出（`QL17` 明著要它變）。\n"
+        "☠️ 其他任何一支出現在這裡，都是「紅了就排除」。"
+    )
+    assert len(QL6_BUILDERS) == 8, (
+        f"`QL6` 現在只比對 {len(QL6_BUILDERS)} 支 —— 改版前是 8 支。\n"
+        "⚠️ 這個數字變小＝既有安裝的保護範圍變小了。"
     )
 
 

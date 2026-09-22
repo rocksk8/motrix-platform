@@ -52,24 +52,45 @@ def _frontend(*parts):
 # QL5 · 留空 ＝ 沿用主要據點的同一欄
 # ══════════════════════════════════════════════════════════════════════
 
-def test_ql5_a_blank_field_falls_back_to_the_primary_location(identity):
+def test_ql5_a_blank_field_falls_back_to_the_primary_location(
+        client, make_user):
     """QL5：據點的每一欄留空 ＝ **沿用主要據點的同一欄**（不是留空）。
 
     🔑 判準是**逐欄**不是**整筆** —— 一個分公司可能只想改銀行帳號，
     ☠️ 而「整筆有值就整筆用」會讓它的抬頭變成空白。
-    """
-    resolve = _need("location_identity")
-    identity[PRIMARY["id"]] = {"company_name": "允碩整合集創股份有限公司",
-                               "tax_id": "60575481", "phone": "04-3610-6566"}
-    identity[BRANCH["id"]] = {"company_name": "允碩台北分公司",
-                              "tax_id": "", "phone": ""}
 
-    got = resolve(BRANCH["id"])
-    assert got.get("company_name") == "允碩台北分公司", "有填的欄位要用自己的"
+    ## 🔴 我第一版驗到的是我自己的假貨（B 抓到）
+
+    那一版用了 `identity` fixture —— **而那個 fixture 正是把
+    `pdf_gen.location_identity` 換成 `_fake` 的那一個**，
+    ⇒ 題目裡再 `_need("location_identity")` 拿到的**就是 `_fake`**。
+
+    ☠️ 而 `_fake` 是 `table.get(id, table.get(None, {}))` ——
+    **它結構上不可能做逐欄落空** ⇒ **B 不管怎麼寫，這一題都紅。**
+    🔑 〈假綠燈〉的鏡像：**觀測手段與被測對象是同一個東西**，
+    而這一次它給的是**假紅燈** —— 更難察覺，因為紅燈看起來像在工作。
+
+    ⇒ 📌 這一題現在**不碰 fixture**：設好真的 `company_profile`，
+    呼叫真的 `location_identity()`。
+    """
+    import pdf_gen
+
+    token = _superadmin(client, make_user, "ql5_admin")
+    primary = dict(PRIMARY)
+    primary.update(company_name="允碩整合集創股份有限公司",
+                   tax_id="60575481", phone="04-3610-6566")
+    branch = dict(BRANCH)
+    branch.update(company_name="允碩台北分公司", tax_id="", phone="")
+    _set_locations(client, token, [primary, branch])
+
+    got = pdf_gen.location_identity(BRANCH["id"])
+    assert got.get("company_name") == "允碩台北分公司", (
+        f"有填的欄位沒有用自己的：{got}")
     assert got.get("tax_id") == "60575481", (
         f"`tax_id` 留空時沒有沿用主要據點：{got}\n"
         "☠️ 留空的意思是「跟總公司一樣」，不是「印一個空白」。")
-    assert got.get("phone") == "04-3610-6566", "`phone` 留空時沒有沿用"
+    assert got.get("phone") == "04-3610-6566", (
+        f"`phone` 留空時沒有沿用主要據點：{got}")
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -289,7 +310,7 @@ def test_ql13_the_quote_form_has_a_location_picker():
     ⚠️ 結構檢查：它答的是「有沒有被寫出來」，不是「畫面長怎樣」。
     📌 真正的驗收是目視，而這句話寫在這裡，不寫在豁免表裡。
     """
-    page = _frontend("index.html")
+    page = _frontend("pages", "quotation-form.html")
     assert page.exists(), f"找不到 {page}"
     text = page.read_text(encoding="utf-8")
     assert "locationId" in text or "location_id" in text, (
@@ -303,7 +324,8 @@ def test_ql14_the_picker_is_hidden_when_there_is_only_one_location():
     🔑 判準用「有沒有依據點數量做判斷」，不釘 `x-show` 還是 `disabled`
     —— **那是實作選擇，而釘實作的守門會在重構時紅在一個無關的理由上。**
     """
-    page = _frontend("index.html")
+    page = _frontend("pages", "quotation-form.html")
+    assert page.exists(), f"找不到 {page}"
     text = page.read_text(encoding="utf-8")
     hit = re.search(r"locations(\.length|\s*\|\|\s*\[\]).{0,80}?[><=]", text,
                     re.S)
@@ -347,9 +369,30 @@ def test_ql16_the_payslip_still_reads_its_snapshot(identity):
 
     📌 觀測點：把 `location_identity()` 換成一個**完全不同**的抬頭，
     而薪資單印出來的仍然是 `data_json` 裡那一個。
+
+    ## 🔴 而我第一版與 `QL17` **對同一個輸入斷言相反的事**（B 抓到）
+
+    兩題都跑 `I.render("_build_payslip_html")`，
+    而 `MINIMAL_INPUT` 沒有 payslip 那一項 ⇒ **兩題送的都是空 dict**：
+    ```
+    QL16  即時值**不可以**出現
+    QL17  即時值**必須**出現＋要標示
+    ⇒ 同一個輸入，兩個互斥的斷言 —— **其中一個一定會錯**
+    ```
+    ☠️ **今天第二次**（第一次是 `WA6` 與 `WA2`）——
+    🔑 而兩次的成因一樣：**我沒有先問「這兩題送進去的是不是同一個東西」。**
+    📌 ⇒ 這一題現在明著**傳一份有快照的 payload**，`QL17` 傳空的。
+    **輸入不同，兩題才各自在問自己的問題。**
     """
+    snapshot = {"companyName": "開單當時股份有限公司",
+                "companyTaxId": "11111111",
+                "companyContactInfo": "04-1111-1111"}
     identity[None] = {"company_name": "不該出現在薪資單上的抬頭"}
-    html = I.render("_build_payslip_html")
+
+    import pdf_gen
+    html = pdf_gen._build_payslip_html(dict(snapshot))
+    assert "開單當時股份有限公司" in html, (
+        "有快照而薪資單沒有印出它 —— 這一題的前提不成立")
     assert "不該出現在薪資單上的抬頭" not in html, (
         "薪資單的抬頭跟著即時值走了 ——\n"
         "☠️ 既有薪資單重印時的內容會變，而它回答的是「當初是誰付的」。")
