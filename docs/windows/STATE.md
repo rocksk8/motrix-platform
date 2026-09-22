@@ -12320,19 +12320,8 @@ autostart.bat     set MOTRIX_TENDER_RADAR=1 / set MOTRIX_GEO=1  在 :loop 標籤
   🔑 **判準：它回答的是「這個行程實際拿到什麼」，不是「檔案裡寫了什麼」。**
 - **FX1b.** 🔴 **部署腳本結束時要去問那個端點並印出來**，不一致就**明著喊**。
   📌 〈計數器要有落點〉：步驟寫在文件、而沒有任何東西在驗它發生過 ＝ 它不存在。
-- **FX1c.** ⚠️ **更根本的一條（要裁）**：兩個 `set` 放在 `:loop` 之前，
-  **代表每次部署之後都必須人工重跑排程**。
-  ⇒ **搬到迴圈內、或改成從設定檔讀**，就不需要那個步驟了。
-  ☠️ **而那會改變「開關預設關」的安全設計** —— 所以這是產品決定，不是重構。
-
-### FX2 · **32 個沒有人管的規格條件**（打包第一步就會擋住）
-
-B 把覆蓋率守門搬到全量測試之前（`3c35449`，0.99 秒）之後，它會在**第一步**擋下打包。
-```
-沒人管   29 條   BR2 / BR10-20 / YA2-9 / YB* / YC1 / YC2 / YE2 / YF* / YG*
-沒人承認  3 條   YA0 / YA10 / YA10B
-```
-⚠️ **YC1／YC2 是 B 的條文而 B 沒有題** —— 那不是 C 的疏漏，是**寫條文的人沒有配題**。
+- ~~**FX1c.**~~ 已在「§8 補」裁定（暫緩）—— 這裡只留指標，**不重複宣告**。
+  ⚠️ 同一個編號宣告兩次 ⇒ 守門分辨不出「重複」與「矛盾」，而它只能進 `AMBIGUOUS_ACK`（C 實測）。
 - **FX2a.** 下一次打包前，這 32 個決定要全部做完（進題／進 `EXEMPT`／進 `PENDING`／進 `C_OWNED`）。
 - **FX2b.** 🔴 **而真正要修的是「條文一旦寫下就自動欠一題」這件事沒有人在擋** ——
   📌 今天四次「口頭裁／當場改 → 規格落後」（A16／G10／UA5／YA4）是同一族。
@@ -12526,6 +12515,129 @@ FX5 FX6 FX7           ← 安全相關
 FX14  DEPLOY 版本從系統讀
 其餘照 P2/P3
 ```
+
+---
+
+## §8 補二 · **憑證走 query string（三處）＋ `SEND_UNKNOWN` 的裁決**（A 2026-09-22 實查）
+
+> 起因：視窗 D 在查 `_PUBLIC_API_PATHS` 的豁免時撞到 `qr-status`。
+> **A 用 AST 掃全部 router 之後找到三處，其中一處 D 沒看到，而它比較嚴重。**
+
+**as-of**：2026-09-22，HEAD `99c8e23`。
+**指令**：`ast` 掃 `backend/routers/*.py` 的 GET/DELETE 路由，
+找「參數名含 `challenge|token|secret|code|key|password|otp|nonce|sig`
+且不在路徑樣板裡、且 default 不是 `Header`／`Depends`／`Body`」。
+
+```
+auth.py     GET /api/auth/login/qr-info      challenge
+auth.py     GET /api/auth/login/qr-status    challenge          每 2 秒輪詢
+uploads.py  GET /api/uploads/{file_path}     token=Query(None)  🔴 完整 session token
+```
+
+---
+
+### 🔴 FX21 · `uploads.py` 的 `?token=` —— **拿掉**（最嚴重，而且沒有人在用）
+
+```python
+uploads.py:81   token: str = Query(None)
+uploads.py:92   if not authorization and token:
+uploads.py:93       authorization = f"Bearer {token}"
+uploads.py:94   _require_user(authorization)
+```
+☠️ **那是完整的 session token，而它不是短效的。**
+
+#### ✅ 而它沒有人在用（A 實查）
+```
+前端用 ?token= 打 uploads    0 處
+前端用 ?pt= 打 uploads       8 處    ← 正確的那條路
+```
+`?pt=` 是 **HMAC 簽章、1 小時、綁定單一路徑**（`_make_photo_token`）——
+🔑 **它正是為了解決同一個問題（`<img src>` 設不了 header）而做的，而且做對了。**
+📌 `main.py:330` 的註解還寫著 `?token=` 是「img src pattern」——**那個註解描述的是被取代掉的舊做法。**
+
+- **FX21a.** 🔴 **移除 `token: str = Query(None)` 與第 92-93 行的轉換。**
+- **FX21b.** **反向控制**：帶 `?token=<有效的 session token>` ⇒ **必須 401/403**，不可以放行。
+- **FX21c.** `main.py:330` 那行註解要一起改掉 ——
+  ⚠️ **留著的話，下一個人會照它把這條路加回來。**
+
+🔑 **這是今天最便宜的一條安全修正**：**一條沒有人走、而仍然打開著的路。**
+
+---
+
+### 🟡 FX22 · `qr-info` / `qr-status` 的 `challenge` 走 query string
+
+**它是「拿到就能換到 session」的秘密**（`login_qr_status` 在 `approved` 時直接發 session）。
+```
+產生   secrets.token_hex(24)，存在記憶體 _totp_pending
+輪詢   桌機端每 ~2 秒一次 ⇒ 核准前會被寫進 access log 幾十次
+單次   發出 session 之後 del _totp_pending[challenge] ⇒ 用過即失效
+```
+
+#### ⚠️ 嚴重度：**中，不是高** —— 理由要寫出來，不要只給一個形容詞
+```
+有效期      很短（掃碼到核准之間）＋ 單次使用
+讀得到 log   的人已經有伺服器權限
+logs/       不進每日備份（今天早上為了座標那件已經驗過）
+```
+🔑 **⇒ 它是縱深防禦的問題，不是「現在就會被打」的問題。**
+☠️ **而它與座標那件是同一族**：三張表都堵了，**漏的那一層在 web server 裡**。
+
+- **FX22a.** `challenge` 改走 header 或 POST body（比照座標改走 `X-Map-Position`）。
+- **FX22b.** ⚠️ **`qr-info` 與 `qr-status` 要一起改** —— 只改一支等於沒改。
+- **FX22c.** **反向控制**：challenge 走 query string ⇒ **422**（比照 §3n 的 G10）。
+
+---
+
+### 🔴 FX23 · **這一類要有守門，不然第四處會再出現**
+
+- **FX23a.** 🔴 **守門**：GET/DELETE 路由的參數名含憑證類字樣 ⇒ **不可以是 query 參數**。
+  ⚠️ **白名單要明示**（`pt` 是刻意的，因為 `<img src>` 設不了 header），**而白名單要寫理由。**
+- **FX23b.** 📌 **判準要涵蓋「預設值是 `Query(...)`」與「純 `str` 沒有預設值」兩種** ——
+  ☠️ `login_qr_status(challenge: str)` 就是後者，**而它看起來最無害。**
+
+---
+
+### 🔴 FX24 · **`SEND_UNKNOWN` 的處置**（B 提問，A 裁）
+
+B 在 `_async_send` 加了第四態：`SEND_UNKNOWN` ＝「我等不到答案」。
+> 「把逾時當失敗 ⇒ SMTP 慢一點就重寄；當成功 ⇒ 信掉了而標記留著。**兩個方向都錯。**」
+
+#### ⇒ A 裁：**保留標記（不重寄）＋ 記進落點 ＋ 獨立計數**
+
+```
+刪標記   ⇒ SMTP 每次慢就重寄一次 ⇒ 使用者收到重複的信，而且是在系統最忙的時候
+留標記   ⇒ 那一封可能掉了
+⇒ 留標記，但那一筆要「看得見」
+```
+🔑 **判準不是「自動修好」，是「不可以安靜」。**
+📌 一個人看得到「有 N 封狀態未知」就能處置；**而一個安靜的旗標沒有人處置得了。**
+
+- **FX24a.** `SEND_UNKNOWN` ⇒ **標記保留**，且**在落點記一筆，類別與 `permanent` 分開**。
+  ☠️ 混在一起的話，「**我們知道它失敗了**」與「**我們不知道**」會變成同一格。
+- **FX24b.** 🔴 **`wait()` 的逾時要明顯長於 SMTP 自己的逾時**
+  （`_send` 是 `smtplib.SMTP(..., timeout=15)`）⇒ **建議 30 秒以上。**
+  🔑 **這一條的目的是讓 `SEND_UNKNOWN` 在結構上罕見** ——
+  📌 **如果那個計數器開始往上跑，那本身就是訊號**（〈計數器要有落點〉的正面用法）。
+- **FX24c.** **反向控制**：替身故意不回應 ⇒ 標記**仍在** ＋ 落點多一筆 `unknown`
+  ＋ **下一次排程不重寄**。
+
+#### ✅ 而 B 的另一個決定我肯定：**執行緒自己炸掉記成 `transient_fail`**
+> 「那是**已知的失敗**，不是『還沒問到』。」
+🔑 **對。「失敗」與「不知道」的分界是「有沒有拿到答案」，不是「結果好不好」。**
+
+---
+
+### 📌 FX25 · B 與 D 的工具各自在「最該答對的地方」系統性答錯
+
+```
+D 的 v1   Thread(target=notify_xxx) 的 target 是 ast.Name 不是 ast.Call
+          ⇒ 16 支有標記的被歸進「沒有人呼叫」
+B 的 v1   同一個成因 ⇒ _catchup_monthly_reports 被判成「不是寄信」
+          而這一整節的主題就是「用執行緒寄信」
+```
+🔑 **兩個人、兩支工具、同一個盲點，而兩次都是「手動追的時候撞到」才發現的，不是工具自己說的。**
+📌 **⇒ 呼叫圖分析必須把「函式被當成值提到」算成邊**，而放寬之後要**把路徑印出來**
+（B 的做法）—— 〈判準的寬窄都會騙人〉：**太窄給假陰性，太寬要用路徑來補。**
 
 ---
 
