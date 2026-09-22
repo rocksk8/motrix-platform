@@ -433,14 +433,44 @@ def test_vb8_the_warmer_is_registered_with_the_other_schedulers():
     `tests/conftest.py:52` 設了那個變數、`main.py:533` 據此整批略過。
     ⇒ 🔑 **這是文字比對，而且它守的是「有沒有被寫進那個區塊」。**
     📌 真正的證據是正式機上 VB6 的 `lastRunAt` 會不會動 —— **那要 A 去看。**
+
+    ## 🔴 2026-09-22：錨點從「字元窗」換成 **AST 的那個 `if` 的 body**
+
+    原本是 `text[i:i + 1200]`。B 在那個區塊加了 `BK20` 的註解，
+    ☠️ **這一題就紅了 —— 而 `schedule_geocode_warm()` 一直都在，
+    只是被擠出 1200 個字元之外。**
+
+    🔑 與 A 在 `FX9` 裁過的 `_draw_section()` 3000 字錨點**完全同一種**：
+    📌 **一個會被註解長度左右的守門，量的是排版不是行為。**
+    ⚠️ 而 B 把長理由搬進 `archive._ensure_archive_dirs()` 的 docstring
+    **只是把下一次撞牆往後延** —— 判準本身還是會再咬人。
+
+    ⇒ 用 AST 找那個 `if` 的 body，**註解不在 AST 裡**。
     """
-    text = (Path(__file__).resolve().parent.parent / "main.py").read_text(
+    import ast
+
+    source = (Path(__file__).resolve().parent.parent / "main.py").read_text(
         encoding="utf-8")
-    i = text.find('if os.getenv("MOTRIX_DISABLE_SCHEDULERS") != "1":')
-    assert i >= 0, "`main.py` 的排程區塊找不到了 —— 這個檔的結構變了"
-    block = text[i:i + 1200]
-    assert "warm" in block and "geo" in block.lower(), (
-        "排程區塊裡沒有背景定位：\n" + block[:300] + "\n"
+    tree = ast.parse(source)
+
+    block = None
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.If):
+            continue
+        test_src = ast.dump(node.test)
+        if "MOTRIX_DISABLE_SCHEDULERS" in test_src:
+            block = node
+            break
+    assert block is not None, (
+        "`main.py` 裡找不到那個 `MOTRIX_DISABLE_SCHEDULERS` 的 `if` —— "
+        "這個檔的結構變了。\n"
+        "☠️ 找不到時**不可以放行**：一個切不出東西的切法會讓這一題安靜地綠。")
+
+    called = {getattr(n.func, "id", None) or getattr(n.func, "attr", None)
+              for n in ast.walk(block) if isinstance(n, ast.Call)}
+    assert any(name and "warm" in name.lower() for name in called), (
+        "排程區塊裡沒有呼叫任何 `*warm*`：\n"
+        f"  它呼叫的是：{sorted(n for n in called if n)}\n"
         "⇒ 那支函式寫好了而沒有人叫它 —— 〈兩個都對而路不存在〉。"
     )
 

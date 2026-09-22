@@ -36,10 +36,28 @@ GB15  達上限時 /api/map/points 仍要回得出點位
 ```
 GB2  計數加在「真的發出 HTTP 請求」那一行，不是「決定要查」的地方
      快取命中、預算用完、提前返回 => 都不計
-GB3  失敗的請求也要計（Google 對 ZERO_RESULTS 仍然計費）
+GB3  失敗的請求也要計 —— 判準是「**有沒有收到回應**」
      計數點在**發出之後、解析之前**；連線失敗（timeout／DNS）不計
 ```
-🔑 **只計成功的話，一個查不到的地址可以無限重試而不計費 —— 而帳單會記。**
+🔑 **只計成功的話，一個查不到的地址可以無限重試而不進計數。**
+
+⚠️ **這裡原本寫的是「Google 對 `ZERO_RESULTS` 仍然計費」** ——
+A 2026-09-22 自陳那半句未查證並收回。**行為不變，理由換掉。**
+📌 〈證據的適用範圍〉：**一個斷言的理由，要跟那個斷言一樣驗得到。**
+
+---
+
+# 🔴 `source` 是 **SKU 粒度**，不是 `"google"`
+
+Google **2025-03-01 廢掉每月 $200 共用 credit**，改成
+**每個 SKU 各自一組免費額度，而且不 pool**（A-2 讀過官方頁面逐字）。
+```
+google:geocoding            Geocoding
+google:places-text-search   §17 的 Places（還沒做）
+```
+☠️ **兩個 SKU 的用量不可以加在一起去對同一個門檻** ——
+🔑 所以這個檔一律釘 `geo.USAGE_SKU_*` **常數**，不釘字面值：
+📌 **釘字面值的話，Places 進來的那一天不會有人發現。**
 """
 import sqlite3
 
@@ -101,15 +119,17 @@ def test_gb14_the_counter_survives_a_restart(client):
     用同一個連線讀的話，驗到的可能是尚未提交的交易。
     """
     import db
+    geo = _geo()
     bump = _need("record_geocode_call")
-    bump("google")
-    bump("google")
+    bump(geo.USAGE_SKU_GEOCODING)
+    bump(geo.USAGE_SKU_GEOCODING)
 
     conn = db.get_db()
     try:
         row = conn.execute(
-            "SELECT count FROM geocode_usage WHERE source='google' "
-            "ORDER BY month DESC LIMIT 1").fetchone()
+            "SELECT count FROM geocode_usage WHERE source=? "
+            "ORDER BY month DESC LIMIT 1",
+            (geo.USAGE_SKU_GEOCODING,)).fetchone()
     finally:
         conn.close()
     assert row is not None, "呼叫兩次之後，`geocode_usage` 裡一列都沒有"
@@ -192,9 +212,18 @@ def test_gb3_a_zero_results_response_is_still_counted(client, monkeypatch):
 
     monkeypatch.setattr(geo.urllib.request, "urlopen", lambda *a, **kw: _Resp())
     geo._locate_google("查不到的地址")
-    assert calls == ["google"], (
-        f"Google 回 ZERO_RESULTS 而沒有計數：{calls}\n"
-        "⇒ 查不到的地址可以無限重試而不計費，但帳單會記。")
+    # 🔴 2026-09-22：釘**常數**不釘字面值（B 指出，A 已裁 SKU 粒度）。
+    #
+    # Google 2025-03-01 廢掉每月 $200 共用 credit ⇒ **每個 SKU 各自一組免費
+    # 額度，而且不 pool**（A-2 讀過官方頁面逐字）。
+    # ⇒ `source` 存的是 `google:geocoding`，不是 `google`。
+    #
+    # 🔑 而用常數的理由不只是「現在對」：等 §17 的 Places 進來時會有
+    # `google:places-text-search`，而**兩個 SKU 的用量不可以加在一起去對
+    # 同一個門檻** —— ☠️ **釘字面值的話，那一天不會有人發現。**
+    assert calls == [geo.USAGE_SKU_GEOCODING], (
+        f"Google 回 ZERO_RESULTS 而沒有計到 `{geo.USAGE_SKU_GEOCODING}`：{calls}\n"
+        "⇒ 查不到的地址可以無限重試而不進計數，而那個 SKU 的額度會被吃掉。")
 
     calls.clear()
 
