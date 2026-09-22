@@ -538,6 +538,10 @@ def map_points(sources: str = "tenders",
         # ☠️ 合併的話，使用者會去翻資料找一個不存在的錯。
         # 📌 快取是永久的 ⇒ 這個數字**只會往下掉**，按幾次就歸零。
         "pendingGeocode": budget.pending,
+        # 🔴 GC8：**查過查不到**的筆數，與「這次來不及」分開回。
+        # ☠️ 合在一起的話，畫面會永遠說「這次來不及」，而那句話會變成
+        #    一個**永久的謊** —— 再按幾次都不會變少。
+        "unresolvableGeocode": budget.unresolvable,
         # 🔴 背景暖快取的狀態。**「沒有在跑」與「跑了什麼都沒做」
         # 在畫面上一模一樣**，所以它要跟著這個回應出來。
         # 📌 `stoppedBecause` 的三種停法處置完全不同：
@@ -571,16 +575,13 @@ def _locate_locations(profile):
     一個「2 個據點定位不到」的數字，使用者無從知道該去修哪一個地址。
     """
     located, unlocated = [], []
+    # 🔴 GC7：預算保護在 `geo._locate_locations()` 裡 ——
+    # 🔑 **判準只有一份**：這裡再寫一次「算不算已知」的話，兩份會分岔，
+    #    而分岔之後「畫面說的」與「實際查的」就不是同一件事。
+    resolved = geo._locate_locations(_profile_locations(profile))
     for loc in _profile_locations(profile):
         address = str(loc.get("address") or "").strip()
-        manual = None
-        lat, lon = loc.get("lat"), loc.get("lon")
-        if lat is not None and lon is not None:
-            try:
-                manual = (float(lat), float(lon))
-            except (TypeError, ValueError):
-                manual = None
-        found = geo.locate_cached(address, manual_coord=manual) if (address or manual) else None
+        found = resolved.get(loc.get("id"))
         if found and found.coord:
             located.append({
                 "id": loc.get("id"), "name": loc.get("name") or "",
@@ -653,16 +654,34 @@ class _GeocodeBudget:
         self.deadline = time.monotonic() + (
             GEOCODE_TIME_BUDGET_SECONDS if seconds is None else seconds)
         self.pending = 0
+        # 🔴 GC8 的那一半：**查過、查不到**的筆數。
+        # ☠️ 它先前被算進 `pending`，於是畫面說「這次來不及」——
+        #    而使用者再按幾次也不會變少（實測：60 → 103，方向是反的）。
+        # 🔑 兩者的處置相反：一個是**等**，一個是**要去改地址**。
+        self.unresolvable = 0
 
     def locate(self, address):
-        """回 `GeoResult` 或 `None`（`None` ＝**這次來不及查**，不是查不到）。"""
+        """回 `GeoResult` 或 `None`。
+
+        `None` 的意思是「**這次沒有拿到座標**」，而為什麼沒拿到有兩種，
+        分別記在 `pending`（來不及）與 `unresolvable`（查過查不到）。
+        """
         hit = geo.cached_only(address)
         if hit is not None:
             return hit          # 已經知道的一律免費
+        if geo.geocode_missed_recently(address):
+            # 📌 不佔時間預算：它根本不會發出請求。
+            self.unresolvable += 1
+            return None
         if time.monotonic() >= self.deadline:
             self.pending += 1
             return None
-        return geo.locate_cached(address)
+        found = geo.locate_cached(address)
+        if found is None or not found.coord:
+            # 剛剛查過而且查不到 ⇒ 這一筆歸「查不到」，不歸「來不及」。
+            self.unresolvable += 1
+            return None
+        return found
 
 
 def _distances(coord, located, user_coord):

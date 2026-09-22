@@ -356,6 +356,19 @@ SOURCE_NOMINATIM = "nominatim"
 SOURCE_NOMINATIM_DISTRICT = "nominatim_district"
 
 GOOGLE_KEY_SETTING = "google_maps_api_key"
+
+
+def _google_key_configured() -> bool:
+    """這台機器有沒有 Google 金鑰。
+
+    🔑 抽出來是因為**兩個地方要問同一個問題**（`_locate_google()` 與
+    `cached_only(min_source=…)`），而兩份判斷會分岔 ——
+    ☠️ 分岔之後「算不算已經知道」與「要不要真的去查」就不是同一件事，
+    而那正是 `A9`／`GC1` 那個坑的形狀。
+    """
+    from helpers.settings import _get_setting
+    profile = _get_setting("company_profile", {}) or {}
+    return bool((profile.get(GOOGLE_KEY_SETTING) or "").strip())
 TGOS_APPID_SETTING = "tgos_app_id"
 
 #: 快取多久之後要重新查一次。
@@ -756,6 +769,12 @@ def _locate_google(address, **_kw):
     #    任何一個繞過迴圈的新呼叫端都會默默把額度用完。
     if quota_exceeded():
         return None
+    # 🔴 GC5：**google 階也要節流。**
+    # ☠️ 在這之前 `_throttle()` 只在 `_locate_nominatim` 與待暖迴圈裡
+    # ⇒ 一次請求的 6 秒預算內能發出幾個 Google 請求，**取決於網路有多快**，
+    # 🔑 而「取決於網路有多快」的意思是：**網路愈好，帳單愈高。**
+    # 📌 排在金鑰與額度檢查**之後**：不會發出去的請求不應該佔別人的節流窗口。
+    _throttle()
     params = urllib.parse.urlencode({"address": address, "key": key,
                                      "region": "tw", "language": "zh-TW"})
     req = urllib.request.Request(
@@ -978,7 +997,81 @@ def _cached_stage(address, source):
     return None
 
 
-def cached_only(address):
+#: 「查過，查不到」記多久。
+#:
+#: 🔑 TTL 不可以跟成功的一樣長（180 天）——
+#: ☠️ 使用者把地址打錯又改對時要救得回來，而 180 天等於救不回來。
+#: 📌 而它的鍵是**地址字串**（GC10）：改一個字＝換一個鍵＝**自動失效**，
+#:    所以不需要另外做一個「清快取」功能給使用者按。
+GEOCODE_MISS_TTL_SECONDS = 7 * 24 * 60 * 60
+
+#: 查過查不到的地址。`{address: 記下來的時間}`。
+#:
+#: 🔴 **不落 `geocode_cache`**（GC9）：那張表分不出
+#: ```
+#: 查過查不到   要記住（別再問了）
+#: 沒查成功     要重試（網路壞了不是地址壞了）
+#: ```
+#: ☠️ 混在一起的話，**一次網路中斷會讓那些地址永遠不再被查**。
+#:
+#: ⚠️ 它是**行程內**的 => 重啟就忘光。那是一個已知的缺口，不是設計：
+#: 重啟之後那 53 個會再被查一輪（每日上限 120，所以是一輪不是無限）。
+#: 📌 要讓它跨重啟存活得另開一張表（不是 `geocode_cache`），那需要 migration。
+_MISS_CACHE = {}
+
+
+def remember_geocode_miss(address) -> None:
+    """記下「這個地址查過，查不到」。
+
+    ⚠️ 只給**查無此地址**用（三階都 miss 而且退階也抽不出行政區）。
+    ☠️ **查詢失敗（配額用完／逾時／金鑰錯）絕對不可以走這裡** ——
+    🔑 那是「沒查成功」不是「查不到」，而把它記成查不到的話，
+       一次配額用完會讓那些地址**七天內都不再被查**。
+    """
+    address = (address or "").strip()
+    if not address:
+        return
+    _MISS_CACHE[address] = time.time()
+
+
+def geocode_missed_recently(address) -> bool:
+    """這個地址最近查過而且查不到嗎。"""
+    address = (address or "").strip()
+    if not address:
+        return False
+    at = _MISS_CACHE.get(address)
+    if at is None:
+        return False
+    if time.time() - at >= GEOCODE_MISS_TTL_SECONDS:
+        # 過期就忘掉 —— 讓它有機會再被查一次（地址可能沒變而對方的資料變了）。
+        _MISS_CACHE.pop(address, None)
+        return False
+    return True
+
+
+def reset_geocode_misses() -> int:
+    """忘掉所有「查過查不到」，回傳忘掉幾筆。
+
+    🔑 兩個用途：
+    ① 使用者改了一批地址之後想**馬上**重查，不想等七天。
+    ② 測試 —— `_MISS_CACHE` 是**行程內**的（`GC9` 要求不落 DB），
+       而行程內的東西會**跨測試存活**：同一個檔裡前一題記下的
+       「待定位機關0」，會讓後一題的背景迴圈一筆都不跑。
+    ☠️ 那種失效的樣子是「跑了 0 次」，而它跟「迴圈壞了」長得一模一樣。
+    """
+    n = len(_MISS_CACHE)
+    _MISS_CACHE.clear()
+    return n
+
+
+def geocode_miss_count() -> int:
+    """目前記著幾個「查不到」。畫面要用它把兩種情況分開講。"""
+    now = time.time()
+    return sum(1 for at in _MISS_CACHE.values()
+               if now - at < GEOCODE_MISS_TTL_SECONDS)
+
+
+def cached_only(address, min_source=None):
     """**只問快取，絕不對外連線。** 找不到回 `None`。
 
     ## 🔴 為什麼需要一個「不會連出去」的入口
@@ -987,16 +1080,85 @@ def cached_only(address):
 
     📌 `/api/map/points` 用它來實作**每次請求的查詢預算**：
     已經知道的一律免費，不知道的才算進預算。
+
+    ## 🔴 `min_source` —— 「畫得出來」與「還需不需要再查」是兩件事（GC3）
+
+    ```
+    min_source=None            舊階命中就算數     ← 「現在畫什麼」
+    min_source=SOURCE_GOOGLE   只有 google 階算數  ← 「還需不需要再查」
+    ```
+    ☠️ 現在它們是同一個判斷，而那讓 A9 從另一扇門回來了：
+    填了 Google 金鑰之後，那 147 筆（nominatim 92／district 55）
+    **一直停在行政區精度直到 180 天 TTL 到期**，而症狀是**沒有症狀**。
+
+    ⚠️ **沒有金鑰時 `min_source` 一律忽略**（GC4）：
+    ☠️ 不忽略的話，沒金鑰的人每次開地圖都會重查一次 Nominatim ——
+    🔑 而他們**永遠升級不了**（沒有 google 階可以升級），
+       所以那些請求是純粹的浪費，而 Nominatim 有速率限制。
     """
     address = (address or "").strip()
     if not address:
         return None
+    if min_source == SOURCE_GOOGLE and _google_key_configured():
+        return _cached_stage(address, SOURCE_GOOGLE)
     for _name, source in _STAGES:
         hit = _cached_stage(address, source)
         if hit:
             return hit
     # 退階那一階也有自己的快取鍵（見 `locate_cached`）。
     return _cached_stage(address, SOURCE_NOMINATIM_DISTRICT)
+
+
+#: 一次請求裡，據點最多真的去查幾個。
+#:
+#: 🔴 GC7：google 階沒快取時，**每一次 `/api/map/points` 都會去問 Google**
+#: （成功寫快取之後才停）。配合 `GC5`（節流）⇒ 金鑰一填，那幾個據點就變成
+#: **每次開地圖各發一次請求**。
+#: 📌 3 的理由：據點是**少數**（一個總公司幾個分公司），而它們是**起算點** ——
+#: 慢慢補完可以，每次全查不行。查不到的那幾個下一次會繼續（負快取只擋
+#: 「查過查不到」的，不擋「還沒輪到」的）。
+LOCATION_LOOKUP_BUDGET = 3
+
+
+def _locate_locations(locations, budget=None):
+    """把據點清單定位。回 `{id: GeoResult}`，**定位不到的不在裡面**。
+
+    🔑 **已經知道的一律免費**（快取命中不算進預算），
+    只有真的要對外查的才佔額度 —— 所以穩定狀態下這支不發任何請求。
+
+    ⚠️ 預算用完就停，**不是失敗** ——
+    ☠️ 回一個「失敗」會讓呼叫端把那些據點畫成定位不到，
+    🔑 而它們只是**還沒輪到**，那兩件事在畫面上要分得開（BR7）。
+    """
+    budget = LOCATION_LOOKUP_BUDGET if budget is None else budget
+    out = {}
+    for loc in (locations or []):
+        ident = loc.get("id")
+        address = str(loc.get("address") or "").strip()
+        manual = None
+        lat, lon = loc.get("lat"), loc.get("lon")
+        if lat is not None and lon is not None:
+            try:
+                manual = (float(lat), float(lon))
+            except (TypeError, ValueError):
+                manual = None
+        if manual is not None:
+            # 人工填的座標不對外連線，也不佔預算（A2）。
+            out[ident] = locate_cached(address, manual_coord=manual)
+            continue
+        if not address:
+            continue
+        known = cached_only(address)
+        if known is not None:
+            out[ident] = known
+            continue
+        if budget <= 0:
+            continue                # 還沒輪到 —— 不是定位不到
+        budget -= 1
+        found = locate_cached(address)
+        if found and found.coord:
+            out[ident] = found
+    return out
 
 
 def locate_cached(address, manual_coord=None):
@@ -1012,6 +1174,31 @@ def locate_cached(address, manual_coord=None):
     address = (address or "").strip()
     if not address:
         return GeoResult(error="沒有地址")
+
+    # 🔴🔴 GC8：**查過查不到的，七天內不要再問。**
+    #
+    # 使用者 2026-09-22 看到的就是少了這一段：
+    # 「每次進入地圖都要重新定位，每次都還有 1xx 個地址這次來不及定位，
+    #   上次剩 60 個這是回到 103」
+    # ⇒ 那些地址三階都 miss、退階也抽不出行政區（實測 0/53）
+    #   ⇒ **什麼都不寫** ⇒ 下一次又在待辦裡、又查一次、又失敗
+    #   ⇒ **永遠不會變少**，而標案雷達每天帶進新的機關名稱。
+    #
+    # ⚠️ 這個判斷排在**快取命中檢查之前**是錯的 —— 所以它在這裡，
+    #    而下面的迴圈仍然會先看正快取。
+    # 🔑 理由：地址可能先查不到、後來被別的路徑寫進快取（例如手動填座標）。
+    #    先看正快取才不會把一個**已經知道的**地址當成查不到。
+    for _name, source in _STAGES:
+        hit = _cached_stage(address, source)
+        if hit:
+            return hit
+    hit = _cached_stage(address, SOURCE_NOMINATIM_DISTRICT)
+    if hit:
+        return hit
+    if geocode_missed_recently(address):
+        # 📌 回「查無此地址」而不是 `None`：呼叫端要分得出
+        #    「還沒查」與「查過了，就是查不到」。
+        return GeoResult(error="查無此地址", address=address)
 
     for name, source in _STAGES:
         hit = _cached_stage(address, source)
@@ -1042,6 +1229,14 @@ def locate_cached(address, manual_coord=None):
     result = _locate_district(address)
     if result.coord:
         _remember(address, result)
+    else:
+        # 🔴 GC8：三階都 miss **而且**退階也抽不出東西 ⇒ 記下來。
+        # ⚠️ 這裡是**唯一**可以記負快取的地方：走到這一行代表
+        #    「問過了，對方說沒有」，不是「沒問成功」。
+        # ☠️ 把查詢失敗（配額用完／逾時／金鑰錯）記成查不到的話，
+        #    **一次配額用完會讓那些地址七天內都不再被查** ——
+        #    而那是一個沒有人看得見的降級。
+        remember_geocode_miss(address)
     return result
 
 
