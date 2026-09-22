@@ -684,7 +684,9 @@ if (typeof module !== 'undefined' && module.exports) {
       ni(up + 'index.html',          'dash',  '儀表板',   ['index.html', ''],                       canDash),
       // 2026-09-14：只留真正的業務項目（開發、報價、簽核）。
       // 案件管理拆到下方獨立分組，理由見那邊註解。
-      sec('業務', cDev || cQ || cTdr),
+      // ⚠️ UI8：少了 `cMap` ⇒ 只有地圖權限的人會看到「地圖」掛在一個
+      //    **不顯示的分組標題**底下。分組條件必須是底下每一項條件的聯集。
+      sec('業務', cDev || cQ || cTdr || cMap),
       ni(pg('dev-crm.html'),         'bdev',  '業務開發', ['dev-crm.html'],                          cDev, 'sb-mod-dev-crm'),
       ni(pg('tender-radar.html'),    'radar', '標案雷達', ['tender-radar.html'],                     cTdr, 'sb-mod-tender-radar'),
       ni(pg('map.html'),             'radar', '地圖',     ['map.html'],                              cMap),
@@ -696,7 +698,8 @@ if (typeof module !== 'undefined' && module.exports) {
       sec('案件', cCM),
       ni(pg('case-management.html'), 'case_', '案件管理', ['case-management.html'],                   cCM,  'sb-mod-case'),
       ni(pg('case-stage-board.html'),'case_', '案件執行看板', ['case-stage-board.html'],               cCM),
-      sec('廠商與採購', cCu || cPr),
+      // ⚠️ UI8：少了 `cInv`（庫存管理）—— 同上。
+      sec('廠商與採購', cCu || cPr || cInv),
       ni(pg('customers.html'),       'cust',  '客戶管理', ['customers.html', 'customer-log.html'],   cCu,  'sb-mod-customer'),
       ni(pg('suppliers.html'),          'supp',  '供應商管理', ['suppliers.html', 'supplier-log.html'],    cPr,  'sb-mod-suppliers'),
       ni(pg('vendor-contractors.html'), 'vend',  '承攬商管理', ['vendor-contractors.html'],               cPr,  'sb-mod-vendor'),
@@ -715,6 +718,27 @@ if (typeof module !== 'undefined' && module.exports) {
       // settlement. 三種異動的數量，前端卻永遠找不到元素可以顯示，等於這個模組的
       // 通知數字靜靜消失了。那些內容現在都在營運報表頁，紅點就掛回這裡。
       ni(pg('reports.html'),         'rpt',   '營運報表', ['reports.html', 'cashier.html'],          cRpt || cCash || cFi, 'sb-mod-finance'),
+      // 🔴 UI6（使用者 2026-09-23）：出納在側欄上**沒有任何入口** ——
+      // 只有 `cashier` 權限的人看得到一個叫「營運報表」的項目，
+      // 而他被授權的那一頁點不到。
+      //
+      // ⚠️ `reports.html?tab=cashier` 不是筆誤：出納在 2026-08-31 併進營運報表
+      //    成為一個頁籤，`cashier.html` 現在是 1,198 bytes 的轉址存根。
+      //
+      // 🔴 `activeNames` **刻意是空的**，兩個理由而它們是同一件事的兩面：
+      //    ① `act()` 只比對 `location.pathname` 的檔名（`:79`），query 不在裡面
+      //       ⇒ 使用者停在 `reports.html?tab=cashier` 時 `file` 是 `reports.html`
+      //       ⇒ **這一項本來就亮不起來**（已知限制，`UI7` 才解）
+      //    ② 若它宣告 `'cashier.html'`：只有報表權限的人（這一項隱藏）會讓
+      //       `cashier.html` 被丟進 `_deniedPages`（`:614`）⇒ 他開舊書籤會看到
+      //       「沒有權限」——**而他明明看得到營運報表，那個檔也會轉到他有權限的頁**
+      //    ⇒ 宣告它只有壞處沒有好處。
+      //
+      // ⚠️ 而「營運報表」的 `show` 維持 `cRpt || cCash || cFi` **不要順手收窄**：
+      //    拿掉 `cCash` 會讓只有出納權限的人被 `_deniedPages` 擋在 `reports.html`
+      //    外面 —— 原本是「他看得到一個不屬於他的項目」，改完變成「他點不進自己的頁」。
+      //    🔴 §46b 那個權限缺陷**沒有被修掉，只是被稀釋了**（A §65 裁甲）。
+      ni(pg('reports.html?tab=cashier'), 'cash', '出納', [], cCash),
       sec('勞務管理', cCon || cPay),
       ni(pg('contractors.html'),     'contl', '外包名冊', ['contractors.html'],                      cCon),
       ni(pg('payslips.html'),        'paysl', '勞報單',   ['payslips.html', 'payslip-form.html'],    cPay),
@@ -738,7 +762,8 @@ if (typeof module !== 'undefined' && module.exports) {
          '<span id="sb-approval-badge" style="display:none;background:#DC2626;color:#fff;font-size:9px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;padding:1px 6px;border-radius:9px;margin-left:auto"></span>'),
       ni(pg('approval-delegates.html'), 'appr', '簽核代理人', ['approval-delegates.html'], cQ),
       ni(pg('approval-history.html'), 'apprhist', '簽核歷史', ['approval-history.html'], cQ),
-      sec('選型資料庫', cEnvG || cNetG || cSwitchG || cMonitorG || cAccessG || cGatewayG || cAutomationG),
+      // ⚠️ UI8：少了 `cOvw`（涵蓋度總覽）—— 同上。
+      sec('選型資料庫', cEnvG || cNetG || cSwitchG || cMonitorG || cAccessG || cGatewayG || cAutomationG || cOvw),
       ni(pg('env-guide.html'),      'envg',    '場域選型導覽',     ['env-guide.html'],     cEnvG),
       ni(pg('netarch-guide.html'),  'netg',    '網路架構選型導覽', ['netarch-guide.html'], cNetG),
       ni(pg('switch-guide.html'),   'switchg', '交換器選型導覽',   ['switch-guide.html'],  cSwitchG),
@@ -747,7 +772,10 @@ if (typeof module !== 'undefined' && module.exports) {
       ni(pg('gateway-guide.html'),  'gwg',      '閘道器與控制器選型導覽', ['gateway-guide.html'], cGatewayG),
       ni(pg('automation-guide.html'), 'automationg', '自動化系統選型導覽', ['automation-guide.html'], cAutomationG),
       ni(pg('selection-db-overview.html'), 'ovg', '涵蓋度總覽', ['selection-db-overview.html'], cOvw),
-      sec('系統', sa || cAudit || cShipLog || cVer || cOvw || cSet),
+      // ⚠️ UI8：這一處是**多**不是少 —— `cOvw`／`cSet` 底下**沒有任何一個 `ni()`**
+      //    用它們 ⇒ 只有那個權限的人會看到一個**空的分組標題**。
+      //    🔑 方向與前三處相反，而成因相同：條件與項目各自演進，沒有東西在比對。
+      sec('系統', sa || cAudit || cShipLog || cVer),
       ni(pg('users.html'),             'users', '使用者管理', ['users.html'],             sa),
       ni(pg('org-structure.html'),     'org',   '組織架構設定', ['org-structure.html'],   sa),
       ni(pg('approval-settings.html'),      'sett',  '簽核設定',   ['approval-settings.html'],      sa),
