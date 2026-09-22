@@ -762,3 +762,33 @@ A 當時看 `ListAgents` 顯示 idle 就推論「C 還沒開工」，
 量測時間 ＋ 當下 HEAD（清單會過期，一印出來就過期）
 「我沒查什麼」（否定句要同句講出查的範圍）
 ```
+
+---
+
+# §2g 量測回報要附 dirty 檔的**內容雜湊**
+
+> D 實測指出 `§2f`「量測時間＋HEAD」不夠。
+
+**缺口**
+```
+HEAD                     只釘住**已提交**的部分
+git status --porcelain   只釘住**檔名**
+=> 兩次執行可以 HEAD 相同、dirty 檔名相同，而那些檔的**內容不同**
+```
+**實例**（`DM1` 02:29 批次紅、02:37 綠）：
+兩次之間 B 把未提交的 `db.py` 提交了 ⇒ **原始內容已不存在，成因不可回溯**。
+
+**做法**
+```
+git status --porcelain | while read st p; do
+  printf '%s %s ' "$st" "$p"; sha256sum "$p" 2>/dev/null | cut -c1-16
+done
+```
+⇒ 回報量測時一律附：**量測時間 ＋ HEAD ＋ 每個 dirty 檔的雜湊前 16 碼**。
+
+**而共用工作樹上「凍結重跑」只有一種做法**
+```
+❌ git stash              會帶走別人的（禁用）
+✅ git archive <sha> 解到自己的 scratchpad 再跑
+   ⇒ 不寫 repo，而要自己處理相依與 conftest 路徑
+```
