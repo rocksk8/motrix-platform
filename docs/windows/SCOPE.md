@@ -36,6 +36,7 @@ WL(4):  WL1 WL2 WL3 WL4
 FX(4):  FX3 FX28 FX29 FX30
 XA(2):  XA6 XA7
 YB(1):  YB1
+UI(1):  UI1
 ```
 
 ---
