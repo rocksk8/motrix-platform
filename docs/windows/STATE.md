@@ -16392,8 +16392,22 @@ TD7  ⚙️ **反向控制**：取消標註 ⇒ **回到原本的排序位置**�
 ### 端點
 
 ```
-POST   /api/tenders/{case_no}/mark      標註（記 marked_at = now、marked_by = 目前使用者）
-DELETE /api/tenders/{case_no}/mark      取消（兩欄都設回 NULL）
+POST   /api/tender-radar/tenders/{case_no}/mark   標註（記 marked_at = now、marked_by = 目前使用者）
+DELETE /api/tender-radar/tenders/{case_no}/mark   取消（兩欄都設回 NULL）
+```
+🔴 **更正（19:23）**：A 第一版寫的是 `/api/tenders/{case_no}/mark` —— **那個前綴不存在**。
+```
+$ grep -nE '^@router\.(get|post|delete|put)' routers/tender_radar.py
+  /api/tender-radar/watches ... /api/tender-radar/tenders ... /api/tender-radar/scan
+$ grep -rn 'prefix="/api/tenders"' routers/     ⇒ 無命中
+```
+☠️ **A 寫了一個「看起來合理」的路徑，而沒有打開那支 router。**
+🔑 而它差點進去的方式值得記：**C 照條文逐字釘題，而題目釘得越準，錯的條文就被釘得越穩。**
+✅ **是 C 退回來問的** —— 它沒有自己改條文，也沒有為了讓題目綠而遷就。
+📌 ⇒ `§6`：**寫規格時給出一個路徑／欄位名／常數名，要先去看那個檔** ——
+   「看起來合理」在規格裡與「查過」長得一模一樣，
+   而**下游會把它當成已知事實去釘**。
+
 ```
 ⚠️ **權限**：跟著標案雷達模組走（`tender_radar`），**不另外發明一個**。
 ⚠️ 共用的 ⇒ **任何有該模組的人都可以取消別人的標註**，而畫面要讓他看得到是誰標的。
