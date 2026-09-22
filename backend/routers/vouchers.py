@@ -23,6 +23,9 @@ from datetime import datetime
 from fastapi import APIRouter, Body, Header, HTTPException
 
 from db import get_db
+# 🔑 科目代號的規則**只有一份** —— 借用既有那一支，不在這裡再寫。
+#    （router 互相 import 在這個 repo 是既有做法，實查 7 處。）
+from routers.accounting_export import validate_account_code
 from helpers import _require_user, _tok, _audit, require_any_module
 from helpers.edit_log import append_edit_log, MissingOldValue
 from helpers.voucher import (
@@ -83,6 +86,52 @@ def _user_name(user):
 EDITABLE_FIELDS = ("voucher_date", "category", "summary")
 
 
+
+def _check_account_codes(conn, lines):
+    """分錄的科目代號**必須指得到一個仍在使用中的科目**，否則回一句看得懂的 400。
+
+    ## ☠️ 不擋的話它是 **500**
+
+    ```
+    voucher_lines.account_code  TEXT NOT NULL REFERENCES account_items(code)
+    空字串 / 不存在的代號  =>  sqlite3.IntegrityError: FOREIGN KEY constraint failed
+                          =>  未攔截 => **500**
+    ```
+    🔑 而 500 對使用者是「系統壞了」，對查的人是「去翻 log」——
+       實際上那是一句「這一行還沒選科目」。
+
+    ## 🔑 規則**借用既有那一份**，不在這裡再寫一次
+
+    `routers.accounting_export.validate_account_code()` 已經定義了同一條規則，
+    而且分得出「找不到」與「已停用」——兩者的下一步不同：
+    ```
+    找不到  打錯字
+    已停用  那個科目還在，只是不該再用
+    ```
+    ☠️ 在這裡另寫一份的話，某一天停用規則改了而傳票這邊不會跟
+       ⇒ **T100 匯出擋得住的代號，傳票存得進去**。
+    📌 router 互相 import 在這個 repo 是既有做法（實查 7 處）。
+
+    ## ⚠️ 它擋得住輸入，擋不住**時間**
+
+    科目代號在寫入之後仍可能被改（`v96` 的 TRIGGER 擋的是「改掉已被引用的代號」）
+    ⇒ 這一支只保證**寫入當下**那個代號是有效的。
+    """
+    problems = []
+    for i, ln in enumerate(lines or (), start=1):
+        code = (ln.get("account_code") or "").strip()
+        if not code:
+            # 🔑 空與「打錯」是兩件事，訊息也要分得出來：
+            #    空 ＝ 還沒選；打錯 ＝ 選了一個不存在的。
+            problems.append("第 %d 行還沒有選會計科目" % i)
+            continue
+        ok, err = validate_account_code(conn, code)
+        if not ok:
+            problems.append("第 %d 行：%s" % (i, err))
+    if problems:
+        raise HTTPException(400, "；".join(problems))
+
+
 @router.post("")
 def create_voucher(body: dict = Body(...), authorization: str = Header(None)):
     """建立一張**草稿**傳票（`JV1`）。
@@ -111,6 +160,10 @@ def create_voucher(body: dict = Body(...), authorization: str = Header(None)):
 
     conn = get_db()
     try:
+        # 🔑 **先驗再發號**：驗不過就丟例外，而 `next_voucher_no()` 取的是
+        #    當天最大值 +1 —— 先發號再失敗的話那個號碼不會被用掉，
+        #    但**下一張單會從它後面接**，帳上就少一個號碼而沒有人解釋得了。
+        _check_account_codes(conn, lines)
         no = next_voucher_no(conn, voucher_date)
         try:
             cur = conn.execute(
@@ -163,6 +216,123 @@ def list_vouchers(include_voided: bool = False,
     finally:
         conn.close()
     return {"vouchers": rows, "count": len(rows)}
+
+
+#: 摘要來源的兩個頁籤（`§159b` (7) 使用者原話：「摘要部分也要有分頁選單
+#: 帶入案件跟哪些已上傳檔案」）。**可數完備**：少一個使用者會報修，
+#: 而多一個**不會有人報修** —— 那表示有人加了來源而沒有人決定它的格式。
+SUMMARY_TABS = ("案件", "已上傳檔案")
+
+#: 清單長度上限。案件會一直長，而這是一個**選單**不是報表。
+_SOURCE_LIMIT = 50
+
+
+def case_summary(customer_name, quote_no):
+    """案件來源帶入的那個字串（`§164`）。
+
+    ```
+    京城凱悅報價單MQ-202608-009
+    ```
+
+    ## 🔴 取不到的那一段**省略**，不是留一個洞
+
+    `§164` 逐字：「取不到廠商或發票號的欄位就省略那一段，**不要填空字串佔位**」。
+    ☠️ 填佔位的樣子很具體，而它**不會報錯**：
+    ```
+    「3/30  XV15543058」      <= 兩個空白（廠商是空的）
+    「3/30 None XV15543058」  <= Python 的 %s
+    「3/30 undefined …」      <= JS 的樣板字串
+    ```
+    ⇒ 使用者只會覺得「怎麼多一個空格」，然後手動刪掉，**每一張單都刪一次**。
+
+    ## ⚠️ 省略的是**缺的那一段**，不是整個字串
+
+    客戶取不到 ⇒ 仍然要帶得出報價單號那一段。
+    ☠️ 整串變空的話，使用者點了來源而摘要欄沒反應 —— 那讀起來像「壞了」。
+
+    ## 🔑 字串在**後端**組，不在 JS
+
+    ```
+    格式寫在 JS   => JV5 的 PDF 匯出讀不到它 => 兩邊會長不一樣
+    格式寫在後端  => 兩邊同一個來源
+    ```
+    """
+    parts = []
+    name = (customer_name or "").strip()
+    no = (quote_no or "").strip()
+    if name:
+        parts.append(name)
+    if no:
+        parts.append("報價單" + no)
+    return "".join(parts)
+
+
+# ══════════════════════════════════════════════════════════════════════
+# 🔴 **這一支是靜態 GET 路徑，它必須宣告在下面那條 `/{voucher_id}` 之前。**
+# ══════════════════════════════════════════════════════════════════════
+# 📌 那不是假設：2026-09-23 這條路徑實測回 **422**，成因就是它當時宣告在
+#    下面那條「路徑只有一段、而那一段是整數參數」的 GET 後面
+#    ⇒ `summary-sources` 被當成那個整數參數去解析 ⇒ 參數驗證失敗。
+# ⚠️ 這一段**刻意不寫出那條路由的字面值** —— 寫了的話，
+#    「檢查宣告順序」的掃描器會把這行註解也算成一條路由（我剛踩過）。
+# 🔑 **422 讀起來像「我參數傳錯了」，而實際是「這條路還沒做」** ——
+#    查的人會去翻自己的呼叫端，而問題在這個檔案的行號順序上。
+@router.get("/summary-sources")
+def summary_sources(q: str = "", authorization: str = Header(None)):
+    """摘要可以從哪些地方帶入（`JV7`）。
+
+    ## ⚠️ 帶入是**起點不是終點**
+
+    `§164`：那張實例 PDF 的三行摘要**沒有一行是同一個格式**，而三行裡兩行都有的
+    「事由」**沒有來源可以帶** ⇒ 一定要手打。
+    ⇒ 帶入只是**省打字** ⇒ 帶完之後那一格仍然要打得動，
+      而最終值是**使用者打的那個**，不是來源 id 再組一次。
+    ☠️ 存來源 id、開啟時重組的實作，症狀是「使用者改完、存檔、關掉；
+       **下次打開才變回來**」—— 中間隔了幾天，他不會把兩件事連起來。
+
+    ## 🔴 閘門與傳票其餘端點**同一道**
+
+    這裡會列出**案件**（客戶名、報價單號）—— 那是業務資料不是傳票資料。
+    ☠️ 閘門放鬆的話，等於**從一個記帳畫面繞過去看客戶清單**。
+
+    ## 📌 頁籤②「已上傳檔案」現在是空的，而它**要出現**
+
+    附件表屬於 `JV3`，還沒建（實查：106 張表裡沒有 attachments／uploads／files）。
+    ⚠️ 不回這個頁籤的話，畫面上就少一個選項，而**沒有人會發現一個從來不出現的東西**；
+       ⇒ 回一個空清單 ＋ 一句「為什麼是空的」，讓它是**看得見的未完成**。
+    """
+    _require_voucher_access(_require_user(authorization))
+    like = "%" + (q or "").strip() + "%"
+    conn = get_db()
+    try:
+        # ⚠️ 只取要用的四欄，**不要 `SELECT *`** —— `quotations` 有 data_json
+        #    那種整包欄位，而下一個人加欄位時不會回來看這支端點回給誰。
+        rows = [dict(r) for r in conn.execute(
+            "SELECT quote_no, customer_name, project_name, status"
+            " FROM quotations WHERE quote_no LIKE ? OR customer_name LIKE ?"
+            " ORDER BY id DESC LIMIT ?", (like, like, _SOURCE_LIMIT))]
+    finally:
+        conn.close()
+
+    cases = []
+    for r in rows:
+        cases.append({
+            "quote_no": r["quote_no"],
+            "customer_name": r["customer_name"] or "",
+            "project_name": r["project_name"] or "",
+            "status": r["status"] or "",
+            "summary": case_summary(r["customer_name"], r["quote_no"]),
+        })
+    return {
+        "tabs": {
+            SUMMARY_TABS[0]: cases,
+            # 🔑 空清單**不是**「這個頁籤不存在」——見上面的 docstring。
+            SUMMARY_TABS[1]: [],
+        },
+        "notes": {
+            SUMMARY_TABS[1]: "附件功能尚未提供，這個頁籤目前沒有可帶入的來源。",
+        },
+    }
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -467,6 +637,9 @@ def update_voucher(voucher_id: int, body: dict = Body(...),
                 " ORDER BY line_no", (voucher_id,))]
             # 📌 逐行 diff（`§103e`）—— 整包記一筆的話，同一張被退兩次
             #    **看不出來第二次改了什麼**，而那在財務上不可接受。
+            # ⚠️ 與 `create_voucher` **同一道** —— 兩邊不一致的話，
+            #    新建擋得住而修改會炸成 500。
+            _check_account_codes(conn, new_lines)
             line_changes = diff_lines(old_lines, new_lines)
 
         # ⚙️ 反向控制的那一格：沒有改動就什麼都不做，**包括不寫紀錄**。

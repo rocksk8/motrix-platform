@@ -69,6 +69,20 @@
     .vc-btn:disabled{opacity:.5;cursor:not-allowed}
     .vc-reason{margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px;font-family:var(--font-zh)}
     .vc-reason input{flex:1;min-width:220px;padding:6px 9px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:var(--font-zh)}
+
+    .vc-src{margin-top:18px;border:1px solid var(--border-light);border-radius:var(--radius);padding:12px 14px;font-family:var(--font-zh)}
+    .vc-src__hd{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:8px;font-size:13px;font-weight:600;color:var(--text-primary)}
+    .vc-src__hint{font-size:11px;color:var(--text-secondary);font-weight:400}
+    .vc-src__tabs{display:flex;gap:4px;border-bottom:1px solid var(--border-light);margin-bottom:8px}
+    .vc-src__tab{padding:6px 14px;border:none;background:transparent;font-size:13px;font-family:var(--font-zh);cursor:pointer;color:var(--text-secondary);border-bottom:2px solid transparent;margin-bottom:-1px}
+    .vc-src__tab.on{color:var(--text-primary);font-weight:700;border-bottom-color:var(--text-primary)}
+    .vc-src__list{max-height:180px;overflow-y:auto}
+    .vc-src__item{display:flex;width:100%;gap:10px;align-items:baseline;padding:6px 8px;border:none;background:transparent;text-align:left;font-size:12px;font-family:var(--font-zh);cursor:pointer;border-radius:6px;color:var(--text-primary)}
+    .vc-src__item:hover:not(:disabled){background:#FAF9F6}
+    .vc-src__item:disabled{opacity:.5;cursor:not-allowed}
+    .vc-src__txt{font-weight:600}
+    .vc-src__meta{color:var(--text-secondary);font-size:11px;margin-left:auto}
+    .vc-src__empty{padding:16px 8px;color:var(--text-secondary);font-size:12px;line-height:1.8}
   </style>
 </head>
 <!-- ⚠️ 這個 body **刻意只有 `x-data`，沒有那個明著呼叫初始化的屬性**。
@@ -178,7 +192,13 @@
                              placeholder="1268" @change="fillName(i)"></td>
                   <td><input x-model="l.account_name" :disabled="!canEdit"
                              placeholder="（輸入代號後自動帶入）"></td>
+                  <!-- ⚠️ 停用條件**只有 `!canEdit` 這一個理由**（草稿以外不可改）。
+                       🔴 `§164`：「事由」那一段沒有來源可以帶 ⇒ **一定要手打**
+                          ⇒ 帶入之後**不可以把這一格鎖起來**。
+                       ☠️ 鎖起來的頁面看起來完全正常，使用者只會覺得
+                          「這格打不了字」，而不會知道那是設計。 -->
                   <td><input x-model="l.summary" :disabled="!canEdit"
+                             @focus="focusLine(i)"
                              placeholder="3/30 向量圓專 XV15543058"></td>
                   <td class="num"><input class="num" x-model="l.debit"
                              :disabled="!canEdit" inputmode="numeric"></td>
@@ -208,6 +228,48 @@
                     那時使用者看到的是「畫面說可以，按下去被拒絕」。 -->
             <span class="vc-diff" x-show="totalDebit !== totalCredit"
                   x-text="'借貸差額 ' + fmt(Math.abs(totalDebit - totalCredit))"></span>
+          </div>
+
+          <!-- ══ 摘要來源（JV7）═══════════════════════════════════════
+               使用者逐字（§159b (7)）：「摘要部分也要有分頁選單帶入案件跟
+               哪些已上傳檔案並帶入摘要，也可以手動填寫或修改摘要」。
+
+               🔴 **帶入是起點不是終點**：§164 —— 實例 PDF 的三行摘要沒有一行
+                  是同一個格式，而三行裡兩行都有的「事由」沒有來源可以帶
+                  ⇒ 帶入只是省打字，帶完之後那一格仍然要打得動。
+               ☠️ 切頁籤**不會**重新帶入：那種實作看起來像功能正常
+                  （點哪個頁籤就帶哪個，很合理），而使用者打完字去看一眼
+                  附件清單、切回來，**他打的字沒了**。 -->
+          <div class="vc-src" x-show="sourcesLoaded">
+            <div class="vc-src__hd">
+              <span>摘要來源</span>
+              <span class="vc-src__hint">點一筆帶入到目前這一行的摘要，帶入後仍然可以直接修改。</span>
+            </div>
+            <div class="vc-src__tabs" data-testid="summary-source-tabs">
+              <template x-for="t in tabNames()" :key="t">
+                <button class="vc-src__tab" data-testid="summary-source-tab"
+                        :class="{ on: t === sourceTab }" @click="pickTab(t)"
+                        x-text="t"></button>
+              </template>
+            </div>
+            <div class="vc-src__list">
+              <template x-for="(it, si) in tabItems()" :key="si">
+                <button class="vc-src__item" data-testid="summary-source-item"
+                        :disabled="!canEdit" @click="applySource(it)">
+                  <span class="vc-src__txt" x-text="it.summary || it.text"></span>
+                  <span class="vc-src__meta" x-text="it.project_name || it.status || ''"></span>
+                </button>
+              </template>
+              <!-- 🔑 空清單要說出**為什麼**空的（後端給的那句話，不在這裡重寫）：
+                   「已上傳檔案」的附件表屬於 JV3、還沒建。
+                   ☠️ 只畫一個空盒子的話，使用者會以為功能壞了 ——
+                      而那與功能真的壞了長得一模一樣。 -->
+              <div class="vc-src__empty" x-show="!tabItems().length"
+                   x-text="tabNote() || '這個頁籤目前沒有可帶入的來源。'"></div>
+            </div>
+            <template x-if="sourceErr">
+              <div class="vc-err" x-text="sourceErr"></div>
+            </template>
           </div>
 
           <div class="vc-note">

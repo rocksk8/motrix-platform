@@ -31,6 +31,25 @@ function voucherPage() {
     listLoaded: false,
     includeVoided: false,
 
+    // ── 摘要來源（`JV7`）──
+    //
+    // 🔴 **帶入是起點不是終點。**
+    //    `§164`：那張實例 PDF 的三行摘要沒有一行是同一個格式，而三行裡兩行都有的
+    //    「事由」**沒有來源可以帶** ⇒ 一定要手打。
+    //    ⇒ 帶入只是**省打字**，帶完之後那一格仍然要打得動。
+    // ☠️ 最容易寫錯的實作是「**切頁籤時重新帶入**」—— 它看起來像功能正常
+    //    （點哪個頁籤就帶哪個，很合理），而使用者打完字去看一眼附件清單、
+    //    切回來，**他打的字沒了**。
+    // ⇒ 所以 `pickTab()` **只換頁籤，一個字都不寫回分錄**；
+    //   唯一會寫進 `l.summary` 的是 `applySource()`，而它只在**點一筆來源**時跑。
+    sourceTab: '案件',
+    sources: {},
+    sourceNotes: {},
+    sourcesLoaded: false,
+    sourceErr: '',
+    //: 帶入要寫到**哪一行**。預設第一行；使用者點過哪一格的摘要就換到那一行。
+    summaryTarget: 0,
+
     // ── 狀態 ──
     loadError: '',
     actionErr: '',
@@ -66,10 +85,51 @@ function voucherPage() {
       for (let i = 0; i < 3; i++) this.addLine()
       await this.loadCompany()
       await this.loadList()
+      await this.loadSources()
       // 深連結：`voucher.html?id=12` 直接開那一張。
       const m = /[?&]id=(\d+)/.exec(window.location.search || '')
       if (m) await this.open(Number(m[1]))
     },
+
+    // ── 摘要來源 ────────────────────────────────────────────────────
+
+    async loadSources() {
+      // ⚙️ **只在載入時拿一次** —— 切頁籤不重新打，也不重新帶入。
+      try {
+        const r = await fetch('/api/vouchers/summary-sources', { headers: this._auth() })
+        if (!r.ok) throw new Error('HTTP ' + r.status)
+        const d = await r.json()
+        this.sources = d.tabs || {}
+        this.sourceNotes = d.notes || {}
+        this.sourcesLoaded = true
+      } catch (e) {
+        this.sourceErr = '摘要來源載入失敗（' + e.message + '）。摘要仍然可以手動填寫。'
+      }
+    },
+
+    tabNames() { return Object.keys(this.sources || {}) },
+
+    tabItems() { return (this.sources || {})[this.sourceTab] || [] },
+
+    tabNote() { return (this.sourceNotes || {})[this.sourceTab] || '' },
+
+    // 🔴 **只換頁籤，什麼都不寫回分錄。**
+    //    ☠️ 在這裡順手帶入的話，使用者切走再切回來，**他打的字會被蓋掉**，
+    //       而畫面上一切正常 —— 他只會覺得「我剛剛好像打過」。
+    pickTab(name) { this.sourceTab = name },
+
+    //: 帶入到 `summaryTarget` 那一行。**唯一會寫進 `l.summary` 的地方。**
+    applySource(it) {
+      if (!this.canEdit) return
+      const s = (it && (it.summary || it.text)) || ''
+      if (!s) return
+      let i = this.summaryTarget
+      if (!this.lines[i]) { this.addLine(); i = this.lines.length - 1 }
+      // ⚠️ 覆蓋那一行的摘要 —— 而**只有使用者點了來源才會走到這裡**。
+      this.lines[i].summary = s
+    },
+
+    focusLine(i) { this.summaryTarget = i },
 
     async loadCompany() {
       // ⚠️ 抬頭從設定讀。**不要寫死** —— 這個 repo 已經寫死在 14 個檔、56 行。
@@ -156,6 +216,17 @@ function voucherPage() {
         checker: (s['覆核'] || {}).by || '',
         manager: (s['主管'] || {}).by || '',
       }
+      this.summaryTarget = 0
+      // 🔑 網址帶上 `?id=`，**重新整理會回到同一張單**。
+      //    ☠️ 少了它：使用者改完摘要、存檔、按 F5 ⇒ 回到一張空白新單
+      //       ⇒ 他會以為「剛剛存的不見了」。
+      //    ⚠️ 用 `replaceState` 不是 `pushState`：這不是一次導覽，
+      //       上一頁不該退回到同一張單的前一個狀態。
+      try {
+        if (this.id && window.history && window.history.replaceState) {
+          window.history.replaceState({}, '', 'voucher.html?id=' + this.id)
+        }
+      } catch (e) { /* 網址更新失敗不影響任何功能 */ }
     },
 
     // ── 建立／儲存 ──────────────────────────────────────────────────
@@ -172,6 +243,14 @@ function voucherPage() {
       this.lines = []
       for (let i = 0; i < 3; i++) this.addLine()
       this.signs = { maker: '', checker: '', manager: '' }
+      this.summaryTarget = 0
+      // ⚠️ 網址上的 `?id=` 要一起拿掉，否則按 F5 會跳回剛才那一張，
+      //    而使用者以為自己在開新單。
+      try {
+        if (window.history && window.history.replaceState) {
+          window.history.replaceState({}, '', 'voucher.html')
+        }
+      } catch (e) { /* 忽略 */ }
     },
 
     //: 送給後端的分錄。**過濾掉整行空白的**，否則一張三行的單會存進三筆空分錄。
