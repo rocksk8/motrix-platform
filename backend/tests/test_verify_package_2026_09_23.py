@@ -1,35 +1,40 @@
 # -*- coding: utf-8 -*-
 """`backend/tools/verify_package.py`：打包守門自己的守門。
 
-## ⚠️ 編號：**這一檔的題目還沒有編號，而那是刻意的**
+## ⚠️ 編號：**`VP1`–`VP4`（`§50c`），而它們一開始是沒有編號的**
 
 D 一開始在訊息裡發了 `RC1~RC4` 這組編號，**他自己先認了那是缺陷**
 （`docs/windows/STATE.md:53` 寫著 D「不裁決、不派工」，而發編號離派工只差一步），
 改成只給**事實與接縫**，編號等 A 落進 `SCOPE.md`／`STATE.md`。
-⇒ 本檔用 **D 的暫代代號**，A 發編號之後再改。
+⇒ A 已於 `§50c` 發號 **`VP1`–`VP4`**（D 交的內容、A 編號），本檔已改標。
+📌 而 A 同時記下：**只有能寫進權威檔的人可以發編號，因為編號是規格的形狀**
+   —— 一則帶編號的訊息，**比不帶編號的更容易被誤當成已下達**。
 🔑 〈要求寫在訊息裡等於沒下達〉：`grep -rn "RC1\\|RC4" docs/ backend/tests/` 實查 **0 筆**
    ——那四條在 repo 裡一個字都沒有，只存在於一則訊息裡。
 
 ## 本檔只寫「接縫存在」的那一項
 
 ```
-暫代 A  期望版本必填          ✅ 接縫在（check_db_version :247／argparse :303）⇒ 本檔
-暫代 B  降級要被說出來        ⚠️ `--allow-unverified-version` **不存在**（grep ⇒ 0）
-暫代 C  髒目錄不髒了要作廢    ⚠️ 自我檢驗**整段不存在**
-暫代 D  自測要驗到結束碼路徑  ⚠️ 同上
+VP1  期望版本必填              ✅ 接縫在（check_db_version :247／argparse :303）⇒ 本檔
+VP2  降級要出現在**摘要**      ⚠️ `--allow-unverified-version` **不存在**（grep ⇒ 0）
+VP3  髒目錄不髒了 ⇒ 報告作廢   ⚠️ 自我檢驗**整段不存在**
+VP4  自測要驗到結束碼路徑      ⚠️ 同上
 ```
-⇒ B／C／D 要的產品面整段不存在 ⇒ 替它們寫題**等於我在替產品訂規格**。
+⇒ VP2／VP3／VP4 要的產品面整段不存在 ⇒ 替它們寫題**等於我在替產品訂規格**。
 📌 而〈已知的代價 vs 要修的東西〉要求我把這件事寫在檔案裡，不是寫在訊息裡
-   ——否則它看起來會像被處理過了。**本檔只有暫代 A，其餘三項是欠帳。**
+   ——否則它看起來會像被處理過了。**本檔只有 `VP1`（＋`VP4` 的可寫部分），其餘是欠帳。**
 
 ## ⚠️ 兩個會讓這一類題假綠的地雷（D 說今天都真的發生過）
 
 ```
 1. 測結束碼**不可以接管線** —— `… | tail -8; echo EXIT=$?` 印的是 tail 的結束碼
    ☠️ 方向最壞：它會讓人去修一個**已經好的**東西
-2. 斷言要落在**具名的 gate** 上
-   ——不要只落在 exit 1（同一支有 8 種以上的 FAIL 來源，任何一個存在它都綠），
-     也不要落在逐字訊息（訊息會被潤稿）
+2. 斷言要落在**具名的 gate** 上（`R.fail(gate, …)` 的第一個引數）
+   ——不要只落在 exit 1（現有 gate 名稱至少 10 種，任何一個存在它都綠），
+     也不要落在逐字訊息。**訊息會被潤稿，gate 名稱是結構**（§50d）。
+   📌 A 原本在 `§34d` 轉述成「釘逐字訊息」，D 自己更正了，A 已改（錯的那列留著）。
+   ⚠️ 而本檔 `VP1` 用的是**差分**不是指名 gate —— 因為那個 gate **還不存在**
+      （名字是 B 的）。差分不必先知道它叫什麼，而一樣落在 gate 這一層。
 ```
 """
 import importlib.util
@@ -90,8 +95,8 @@ def _gates(mod, pkg, expect):
         mod.R = old
 
 
-def test_verify_package_a_missing_expected_version_is_a_failure(tmp_path):
-    """🔴🔴 暫代 A：**沒有指定「該是哪個版本」時，驗包不可以回 0。**
+def test_vp1_a_missing_expected_version_is_a_failure(tmp_path):
+    """🔴🔴 `VP1`：**沒有指定「該是哪個版本」時，驗包不可以回 0。**
 
     ```
     打包腳本呼叫 verify_package.py 時忘了帶 --expect-db-version
@@ -143,7 +148,7 @@ def test_verify_package_a_missing_expected_version_is_a_failure(tmp_path):
         "（不給期望值：%s／給了之後：%s）" % (sorted(without), sorted(with_expect)))
 
 
-def test_verify_package_a_the_version_gate_still_passes_and_still_catches(tmp_path):
+def test_vp1_the_version_gate_still_passes_and_still_catches(tmp_path):
     """⚙️ 上一題的**兩個正對照** —— 少了它們，「一律 FAIL」會讓上一題全綠。
 
     ```
@@ -180,20 +185,20 @@ def test_verify_package_a_the_version_gate_still_passes_and_still_catches(tmp_pa
         "那上一題的紅就不能被解讀成「抓到缺陷」。")
 
 
-def test_verify_package_d_the_exit_code_path_is_alive():
-    """🔴 暫代 D 的**可寫部分**：`FAIL 收集 → 結束碼 1` 那條路要是活的。
+def test_vp4_the_exit_code_path_is_alive():
+    """🔴 `VP4` 的**可寫部分**（主體要等 `VP3` 的自測落地）：`FAIL 收集 → 結束碼 1` 那條路要是活的。
 
     ⚠️ **這一題是綠著出生的變更偵測，不是今天抓到了什麼。**
     D 給的理由值得留著：
     > 「這正是 `rg6.py` 原版的缺陷（整支沒有 `sys.exit`），
-    >   而它在**同一支腳本裡已經復活過一次**（暫代 A）。」
+    >   而它在**同一支腳本裡已經復活過一次**（`VP1`）。」
 
     ```
     掃描器看得見 ＋ FAIL 印在畫面上 ＋ **結束碼 0**  ⇒ 打包照樣過
     ```
     ☠️ 三件事有兩件是對的，而**唯一被自動化讀到的那一件**是錯的。
 
-    📌 自我檢驗那一段（暫代 C／D 的主體）**整段不存在** ⇒ 那部分是欠帳，
+    📌 自我檢驗那一段（`VP3`／`VP4` 的主體）**整段不存在** ⇒ 那部分是欠帳，
        本題只守「結束碼路徑」本身，**不宣稱守到偵測能力**。
     """
     mod = _vp()
@@ -209,8 +214,8 @@ def test_verify_package_d_the_exit_code_path_is_alive():
         "🔑 三件事有兩件對，而唯一被自動化讀到的那一件是錯的。")
 
 
-def test_verify_package_d_the_exit_code_is_actually_the_gate_result():
-    """🔴 暫代 D 的另一半：**`finish()` 的回傳值要真的走進 `sys.exit`。**
+def test_vp4_the_exit_code_is_actually_the_gate_result():
+    """🔴 `VP4` 的另一半：**`finish()` 的回傳值要真的走進 `sys.exit`。**
 
     ☠️ 上一題證明 `finish()` 算得對，**而算得對與被用到是兩件事**：
     ```
@@ -250,8 +255,8 @@ def test_verify_package_d_the_exit_code_is_actually_the_gate_result():
 
 
 @pytest.mark.parametrize("missing", ["allow_unverified", "self_test"])
-def test_verify_package_the_unwritten_items_are_named_not_forgotten(missing):
-    """📌 **暫代 B／C／D 的主體寫不出來，而我把「為什麼」留成一個會說話的形狀。**
+def test_vp2_vp3_the_unwritten_items_are_named_not_forgotten(missing):
+    """📌 **`VP2`／`VP3`／`VP4` 的主體寫不出來，而我把「為什麼」留成一個會說話的形狀。**
 
     ⚠️ 這一題**不驗產品**，它驗的是「那三項的接縫仍然不存在」。
     ```
@@ -269,8 +274,8 @@ def test_verify_package_the_unwritten_items_are_named_not_forgotten(missing):
         "`verify_package.py` 裡出現了 `%s` —— 接縫可能已經做出來了。\n"
         "⇒ 回頭看本檔檔頭那張表，把對應的那一項寫成真的題目"
         "（並請 A 發編號）：\n"
-        "   allow_unverified ⇒ 暫代 B 降級要出現在**摘要**，不只出現在中段\n"
-        "   self_test        ⇒ 暫代 C 髒目錄不髒了要**作廢**不是通過\n"
-        "                      暫代 D 自測要驗到**結束碼路徑**\n"
+        "   allow_unverified ⇒ `VP2` 降級要出現在**摘要**，不只出現在中段\n"
+        "   self_test        ⇒ `VP3` 髒目錄不髒了要**作廢**不是通過\n"
+        "                      `VP4` 自測要驗到**結束碼路徑**\n"
         "🔑 這一題是那三項欠帳的**落點** —— 它紅了表示欠帳可以還了。"
         % missing)
