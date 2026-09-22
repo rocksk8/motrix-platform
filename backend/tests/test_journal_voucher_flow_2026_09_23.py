@@ -91,6 +91,30 @@ def _get(client, hdr, vid):
     return r.json()
 
 
+def _slots(v):
+    """三格簽核。⚠️ 鍵名**還沒定**，四種都收（定了退回給我改這一行）。"""
+    return (v.get("signatures") or v.get("signoffs")
+            or v.get("approvals") or v.get("sign_slots"))
+
+
+def _slot_time(sigs, slot):
+    """某一格的時間戳；那一格還不存在就回 `None`（**不是空字串**）。
+
+    🔑 〈null 不等於 0〉：「還沒簽」與「簽了而時間是空的」是兩件事，
+       合併之後 ③ 會拿 `None == None` 換到一個假綠燈。
+    """
+    if not sigs:
+        return None
+    one = sigs.get(slot) if isinstance(sigs, dict) else next(
+        (s for s in sigs if s.get("slot") == slot), None)
+    if one is None:
+        return None
+    for k in ("at", "signed_at", "time"):
+        if k in one:
+            return one[k]
+    return None
+
+
 # ══════════════════════════════════════════════════════════════════════
 # ① 送審 → 簽核 → 過帳：狀態要真的往前走
 # ══════════════════════════════════════════════════════════════════════
@@ -256,23 +280,53 @@ def test_jv2_each_signature_slot_has_its_own_person_and_timestamp(client,
        ⇒ 本題釘**不變量**（三格各有人與時間、而且 API 讀得到），
          **用欄位還是用一張紀錄表由 B 決定**，我不釘機制。
 
-    ⚙️ 而「時間」要是**各自的** —— 三格共用 `updated_at` 不算：
+    ⚙️ 而「時間」要是**各自的** —— 三格共用 `updated_at` 不算。
+
+    ## 🔴 而我第一版的斷言（「三格時間不可以完全相同」）**會誤報**
+
     ```
-    共用一個時間 => 覆核與主管看起來同一秒簽的
-                 => **而那正是「有人代簽」的樣子**
+    我的理由  共用一個時間 => 覆核與主管看起來同一秒簽的
+    A 的反駁  小公司常常**同一個人連按兩次** => **真的會同一秒**
+    ⇒ 我那個斷言會**紅在一個正確的實作上**
     ```
+    🔑 **理由成立而斷言錯** —— 改成釘**欄位獨立**不是釘**值不相同**：
+    ```
+    ① 簽覆核 → GET → 記下覆核的時間戳 t1
+    ② 簽主管 → GET
+    ③ 覆核的時間戳**仍然是 t1**（沒被主管那一步改掉）
+    ```
+    ⇒ 它證明的正是我要的那件事（各有自己的欄位、不是共用 `updated_at`），
+      **而同一秒簽兩格照樣綠**。
+    📌 簽核是**兩層**（覆核第 1、主管第 2；製票是建立者不算層）——
+       `§161` 裁定**不接**既有 `approval_settings`（那是承攬商匯款單那一套，
+       接上去會讓層數變可設定，而使用者要的是固定三格）。
     """
     _u, hdr = _hdr(client, make_user, "jv2_sign")
     vid, _ = _create(client, hdr)
     assert _act(client, hdr, vid, "submit").status_code == 200
-    for _ in range(4):
-        if _get(client, hdr, vid)["status"] == "已核准":
-            break
-        _act(client, hdr, vid, "approve")
 
+    # ① 第一層（覆核）
+    assert _act(client, hdr, vid, "approve").status_code == 200
+    t1 = _slot_time(_slots(_get(client, hdr, vid)), "覆核")
+    assert t1 is not None, (
+        "簽完第一層之後，「覆核」那一格**讀不到時間**（拿到 `None`）。\n"
+        + "⚠️ 這一句擋的是**下面那一題的假綠燈** ——\n"
+          "   `None == None` 會讓 ③ 無聲通過，而它什麼都沒證明。")
+
+    # ② 第二層（主管）
+    assert _act(client, hdr, vid, "approve").status_code == 200
     v = _get(client, hdr, vid)
-    sigs = (v.get("signatures") or v.get("signoffs")
-            or v.get("approvals") or v.get("sign_slots"))
+
+    # ③ 🔴 覆核那一格的時間**不可以被第二步改掉**
+    t1_after = _slot_time(_slots(v), "覆核")
+    assert t1_after == t1, (
+        "簽了主管之後，**覆核那一格的時間也跟著變了**（%r → %r）。\n"
+        % (t1, t1_after)
+        + "☠️ 那表示兩格**共用同一個欄位**（多半是 `updated_at`）\n"
+          "   ⇒ 版面上兩個簽名格永遠印同一個日期。\n"
+        + "🔑 而它不會報錯 —— **兩格都有日期，只是那個日期不是各自簽的時間**。")
+
+    sigs = _slots(v)
     assert sigs, (
         "讀回來的傳票裡沒有簽核三格（找過 `signatures` / `signoffs` / "
         "`approvals` / `sign_slots`）。現有鍵：%s\n" % sorted(v)
@@ -296,10 +350,40 @@ def test_jv2_each_signature_slot_has_its_own_person_and_timestamp(client,
               "   而使用者原話逐字問過「你還問過我審核日期等」。")
         times.append(at)
 
-    assert len(set(times)) > 1, (
-        "三格的時間完全相同（%r）——\n" % times[0]
-        + "☠️ 覆核與主管看起來**同一秒簽的**，而那正是「有人代簽」的樣子。\n"
-        + "🔑 時間要來自**各自簽的那一刻**，不是共用 `updated_at`。")
+    # ⚠️ 這裡**故意不再斷言**「三格時間不可以完全相同」——
+    #    同一個人連按兩次真的會同一秒，那一版會紅在正確的實作上（`§161`）。
+    #    要的是欄位獨立，已經由上面的 ③ 釘住了。
+
+
+def test_jv2_the_slot_time_check_can_actually_tell_a_shared_field_apart():
+    """⚙️ **正對照：上面的 ③ 真的分辨得出「兩格共用一個欄位」嗎？**
+
+    ③ 的斷言是「簽完主管之後，覆核的時間**沒變**」。
+    它綠可能是兩件事：
+    ```
+    ✅ 覆核有自己的欄位     => 本來就不會變
+    ☠️ 我的 `_slot_time` 壞了 => 兩次都回 None，`None == None` 照樣綠
+    ```
+    ⇒ 這一題**走同一條量測路徑**（`_slot_time`），餵一份「共用 `updated_at`」
+      的假回應，要求它**看得出差別**。看不出來 ⇒ ③ 的綠燈不算數。
+    """
+    # 共用欄位的實作長這樣：兩格都指向同一個 `updated_at`
+    def snapshot(updated_at):
+        return {"signatures": {"製票": {"by": "a", "at": updated_at},
+                               "覆核": {"by": "b", "at": updated_at},
+                               "主管": {"by": "c", "at": updated_at}}}
+
+    before = snapshot("2026-09-23 10:00:00")
+    after = snapshot("2026-09-23 10:05:00")   # 主管簽了 => 共用欄位被改掉
+
+    t1 = _slot_time(_slots(before), "覆核")
+    t1_after = _slot_time(_slots(after), "覆核")
+
+    assert t1 == "2026-09-23 10:00:00", "量測裝置自己壞了：%r" % (t1,)
+    assert t1_after != t1, (
+        "餵了一份**明知道是共用欄位**的假回應，③ 的比較卻看不出差別 ——\n"
+        + "☠️ 那表示 ③ 就算綠了也**什麼都沒證明**（多半兩邊都回 `None`）。\n"
+        + "🔑 先修 `_slot_time`，再去看 ③ 的顏色。")
 
 
 # ══════════════════════════════════════════════════════════════════════

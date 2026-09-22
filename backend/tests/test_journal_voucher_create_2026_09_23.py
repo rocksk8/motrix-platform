@@ -222,13 +222,35 @@ _UNBALANCED = [{"account_code": "1113", "debit": 1000, "credit": 0},
 
 
 def _post_action(client, vid, hdr, body=None):
-    """找過帳那一支。⚠️ 路徑沒定版 ⇒ 依序試，全部 404 才報。"""
+    """過帳那一支。路徑是 `§160` 定案的 `/post`，**不再試探**。
+
+    ## 🔴 我第一版是假綠燈，而那個坑我在**同一個檔**裡寫過（B 抓到）
+
+    ```python
     for suffix in ("/post", "/posting", "/confirm"):
-        r = client.post("/api/vouchers/%s%s" % (vid, suffix),
-                        json=body or {}, headers=hdr)
-        if r.status_code != 404:
+        if r.status_code != 404:      # ← **只跳過 404**
             return suffix, r
-    return None, None
+    ```
+    ```
+    實測  /post ／ /posting ／ /confirm 全部回 **405** 不是 404
+    成因  main.py 有 catch-all 路由吃掉那個路徑 => 路徑匹配到、方法不匹配
+    ⇒ `!= 404` 為真 => **它以為找到過帳端點了**
+    ⇒ `test_..._a_balanced_voucher_is_not_refused_by_the_same_path` 斷言
+       `"不平衡" not in resp.text`，而 resp.text 是 {"detail":"Method Not Allowed"}
+    ⇒ ⇒ **當然不含「不平衡」** => 綠，而過帳端點根本不存在
+    ```
+    ☠️ 而我在 `_assert_denied` 的 docstring 裡**逐字寫過 405 這件事** ——
+       🔑 **我在一個 helper 裡修好了，而另一個沒有跟上。**
+       ⇒ 同一輪、同一個檔、同一個坑：修一處不等於修掉那個形狀。
+    """
+    r = client.post("/api/vouchers/%s/post" % vid, json=body or {}, headers=hdr)
+    if r.status_code in (404, 405):
+        pytest.fail(
+            "`POST /api/vouchers/{id}/post` 還不存在（回 %s）。\n" % r.status_code
+            + "⚠️ 路徑是 `§160` 定案的 —— 改了 **退回給我**。\n"
+            + "🔑 而**不要靜默回 None** ⇒ 那會讓下游的斷言"
+              "拿一句 `{\"detail\":\"Method Not Allowed\"}` 去比對，**然後變綠**。")
+    return "/post", r
 
 
 def test_jv1_posting_an_unbalanced_voucher_is_refused_with_the_difference(
