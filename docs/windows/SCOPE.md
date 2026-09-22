@@ -90,7 +90,7 @@ FE(1):  FE1
 DB(1):  DB1
 BG(1):  BG1
 HG(1):  HG1
-CL(1):  CL1
+CL(2):  CL1 CL2
 MD(1):  MD1
 
 ```
