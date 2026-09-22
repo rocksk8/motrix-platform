@@ -17,6 +17,7 @@ routers/vouchers.py  **不存在** => 沒有任何人在「改」的時候叫它
 過帳、送審、退回、作廢那幾條走 `helpers.voucher` 的純邏輯，
 而它們的端點**沒有派工** ⇒ 不在這裡順手加。
 """
+import datetime as _dt
 from datetime import datetime
 
 from fastapi import APIRouter, Body, Header, HTTPException
@@ -24,7 +25,10 @@ from fastapi import APIRouter, Body, Header, HTTPException
 from db import get_db
 from helpers import _require_user, _tok, _audit, require_any_module
 from helpers.edit_log import append_edit_log, MissingOldValue
-from helpers.voucher import EDITABLE_STATUSES, can_edit, get_voucher
+from helpers.voucher import (
+    EDITABLE_STATUSES, can_edit, describe_balance, get_voucher,
+    next_voucher_no, post_voucher,
+)
 
 router = APIRouter(prefix="/api/vouchers", tags=["vouchers"])
 
@@ -50,6 +54,88 @@ def _require_voucher_access(user):
 EDITABLE_FIELDS = ("voucher_date", "category", "summary")
 
 
+@router.post("")
+def create_voucher(body: dict = Body(...), authorization: str = Header(None)):
+    """建立一張**草稿**傳票（`JV1`）。
+
+    ## 🔴 草稿**允許不平衡**
+
+    使用者正在打，打到一半本來就不平。
+    ☠️ 反過來擋的症狀是「**他打不完第一行就被擋住**」——
+       而它看起來很嚴謹，所以不會有人覺得那是缺陷。
+    ⇒ 借貸平衡是**過帳**那一關的事（`describe_balance`），不是建立這一關。
+
+    ## ⚠️ 單號由後端發，而規則在 `helpers/voucher.py`
+
+    `next_voucher_no()` 取那一天的**最大值 +1**（不是數幾筆）——
+    理由見它的 docstring：作廢單留在表上，數筆數會撞號。
+    🔑 而併發撞號由 `UNIQUE INDEX` 擋，這裡把它翻成一句人看得懂的話。
+    """
+    user = _require_user(authorization)
+    _require_voucher_access(user)
+
+    # 🔁 日期**可選，預設今天**（使用者 2026-09-23 改裁）——
+    #    舊裁示「建檔當天且不可改」已被推翻，理由是月結補登是會計的日常。
+    voucher_date = (body.get("voucher_date") or "").strip() or _dt.date.today().isoformat()
+    lines = body.get("lines") or []
+    now = _dt.datetime.now().isoformat()
+
+    conn = get_db()
+    try:
+        no = next_voucher_no(conn, voucher_date)
+        try:
+            cur = conn.execute(
+                "INSERT INTO vouchers_all (voucher_no, voucher_date, category,"
+                " summary, status, created_by, created_at, updated_at)"
+                " VALUES (?,?,?,?, '草稿', ?,?,?)",
+                (no, voucher_date, (body.get("category") or "轉"),
+                 (body.get("summary") or ""), _tok(authorization), now, now))
+        except Exception as exc:                            # noqa: BLE001
+            if "UNIQUE" in str(exc).upper():
+                raise HTTPException(
+                    409, "傳票號碼「%s」剛剛被別人用掉了，請再存一次。" % no)
+            raise
+        vid = cur.lastrowid
+        for i, ln in enumerate(lines, start=1):
+            conn.execute(
+                "INSERT INTO voucher_lines (voucher_id, line_no, account_code,"
+                " summary, debit, credit) VALUES (?,?,?,?,?,?)",
+                (vid, i, (ln.get("account_code") or ""),
+                 (ln.get("summary") or ""),
+                 int(ln.get("debit") or 0), int(ln.get("credit") or 0)))
+        conn.commit()
+    finally:
+        conn.close()
+
+    _audit(_tok(authorization), "voucher.create", "vouchers", str(vid),
+           "建立傳票草稿：%s" % no)
+    return {"ok": True, "id": vid, "voucher_no": no, "status": "草稿"}
+
+
+@router.get("")
+def list_vouchers(include_voided: bool = False,
+                  authorization: str = Header(None)):
+    """傳票清單。
+
+    ⚠️ 預設**只列有效的**（走 VIEW `vouchers`）——
+       作廢單仍查得到（稽核），而要明著要（`include_voided`）。
+    📌 清單**不帶分錄**：一次把幾百張單的分錄都撈回來，
+       而畫面上那一層根本不顯示它們。
+    """
+    user = _require_user(authorization)
+    _require_voucher_access(user)
+    conn = get_db()
+    try:
+        # 🔑 有效的走 VIEW、要全部才打實表 —— 而不是自己再寫一次 WHERE：
+        #    那個條件只該有一個地方寫著（`v95` 的 VIEW 定義）。
+        src = "vouchers_all" if include_voided else "vouchers"
+        rows = [dict(r) for r in conn.execute(
+            "SELECT * FROM %s ORDER BY id DESC" % src)]
+    finally:
+        conn.close()
+    return {"vouchers": rows, "count": len(rows)}
+
+
 @router.get("/{voucher_id}")
 def read_voucher(voucher_id: int, authorization: str = Header(None)):
     """讀一張傳票（含分錄）。科目名稱依 `status` 決定取凍結值或現值。"""
@@ -62,6 +148,41 @@ def read_voucher(voucher_id: int, authorization: str = Header(None)):
     if data is None:
         raise HTTPException(404, "找不到這張傳票。")
     return data
+
+
+@router.post("/{voucher_id}/post")
+def post_voucher_endpoint(voucher_id: int, body: dict = Body(default={}),
+                          authorization: str = Header(None)):
+    """過帳（`JV1`，A `§162` 從 `JV2` 移進來）。
+
+    ## 🔴 這一支是 `helpers.voucher.post_voucher()` 的**薄包裝**
+
+    ☠️ 在這裡再寫一份平衡檢查的話，就是**第二份判準** ——
+       而兩份會分岔，分岔之後沒有人知道哪一份是真的，
+       🔑 **而它一開始是綠的**。
+    ⇒ 借貸差額那句話由 `describe_balance()` 算（它已經說得出「貸方少 100」），
+      狀態、凍結科目名稱、`posted_at`／`posted_by` 全在那支 helper 裡。
+
+    ## ⚠️ 本輪**只有過帳**
+
+    `submit`／`approve`／`send-back`／`void` 是 `JV2`，不在這裡順手加。
+    """
+    user = _require_user(authorization)
+    _require_voucher_access(user)
+    conn = get_db()
+    try:
+        ok, err = post_voucher(conn, voucher_id, _tok(authorization))
+        if not ok:
+            # 🔑 `err` 是**給使用者看的字串**（含差額）⇒ 原樣帶出去，
+            #    不要在這裡改寫成一句更短的話。
+            conn.rollback()
+            raise HTTPException(400, err)
+        conn.commit()
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "voucher.post", "vouchers", str(voucher_id),
+           "傳票過帳")
+    return {"ok": True, "status": "已過帳"}
 
 
 @router.put("/{voucher_id}")

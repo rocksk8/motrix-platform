@@ -173,6 +173,48 @@ def next_revision_no(voucher_no):
     return "%s-R%d" % (m.group("base"), int(m.group("n")) + 1)
 
 
+#: 單號的主體：`YYYYMMDD-NNN`（日期 ＋ 三位流水）。
+#:
+#: 📌 格式**不是推的** —— 使用者提供的實例逐字是 `20260330-006`
+#:    （`docs/reference/傳票-實例-20260330-006.pdf`，分析在 `STATE.md §103b`）。
+_DAILY_NO_RE = re.compile(r"^(\d{8})-(\d{3})(?:-R\d+)?$")
+
+
+def next_voucher_no(conn, voucher_date):
+    """那一天的下一個單號。`2026-03-30` → `20260330-007`。
+
+    ## 🔴 取**最大值 +1**，不是「數幾筆 +1」
+
+    ```
+    數幾筆  003 被作廢 => 剩 2 筆 => 下一個算成 003  => **撞號**
+    取最大  003 還在表上（作廢單留著）=> 下一個是 004  ✅
+    ```
+    ☠️ 而撞號的症狀是 `UNIQUE INDEX` 丟例外 —— 那還算好的；
+       真正糟的是**有人先把作廢單刪掉**，那時就會安靜地重用一個用過的號。
+
+    ## ⚠️ 掃 `vouchers_all`，不是 VIEW
+
+    VIEW 濾掉作廢單 ⇒ 用它取最大值就等於上面那個「數幾筆」的錯法。
+
+    ## ⚠️ 併發下仍可能撞號，而**那是 `UNIQUE INDEX` 的事**
+
+    兩個人同一秒建單，兩邊都讀到同一個最大值 ⇒ 第二個寫入會被唯一索引擋下。
+    🔑 ⇒ 呼叫端要**把那個例外翻成一句人看得懂的話並請他重試**，
+       而不是在這裡加鎖 —— 加鎖會讓一個每天幾十筆的操作付出整表鎖的代價。
+    """
+    day = (voucher_date or "").replace("-", "")[:8]
+    if len(day) != 8 or not day.isdigit():
+        raise ValueError("傳票日期格式不正確：%r" % (voucher_date,))
+    biggest = 0
+    for row in conn.execute(
+            "SELECT voucher_no FROM vouchers_all WHERE voucher_no LIKE ?",
+            (day + "-%",)):
+        m = _DAILY_NO_RE.match(row[0] if not hasattr(row, "keys") else row["voucher_no"])
+        if m and m.group(1) == day:
+            biggest = max(biggest, int(m.group(2)))
+    return "%s-%03d" % (day, biggest + 1)
+
+
 def revision_of(voucher_no):
     """這張單是第幾版（沒有 `-Rn` 尾碼回 `0`）。
 
@@ -298,18 +340,31 @@ def post_voucher(conn, voucher_id, user):
 
     if voucher.get("voided_at"):
         return False, "這張傳票已經作廢，不能過帳。"
+
+    lines = [dict(r) for r in conn.execute(
+        "SELECT * FROM voucher_lines WHERE voucher_id = ? ORDER BY line_no",
+        (voucher_id,))]
+
+    # 🔴 **先驗平衡，再驗狀態** —— 順序照施工圖 `§六` 的編號（① 平衡 ② 狀態）。
+    #
+    # ☠️ 反過來的話，一張**草稿而且不平衡**的傳票只會收到
+    #    「只有已核准可以過帳」—— 那句話是對的，
+    #    🔑 **而它把使用者真正要修的那件事藏起來了**：他送審之後才會發現不平衡，
+    #       那時已經有人簽過名了。
+    #
+    # ⚠️ 而這裡**不能用那張單目前的 status 去評平衡** ——
+    #    `check_balance()` 對「草稿」一律回 True（草稿允許不平衡，那是對的）。
+    #    ☠️ 傳 `voucher["status"]` 進去的話，草稿永遠算「平衡」⇒ 這一關形同不存在。
+    #    ⇒ 明著用**過帳的規則**去評：問的是「如果要過帳，這些分錄過得了嗎」。
+    err = describe_balance(lines, status=_FROZEN_STATUS)
+    if err:
+        return False, err
+
     if voucher.get("status") != "已核准":
         # 🔑 說出**現在是什麼狀態**，不要只說「狀態不對」——
         #    否則使用者要自己回去翻那張單才知道卡在哪。
         return False, ("只有「已核准」的傳票可以過帳，這一張現在是「%s」。"
                        % voucher.get("status"))
-
-    lines = [dict(r) for r in conn.execute(
-        "SELECT * FROM voucher_lines WHERE voucher_id = ? ORDER BY line_no",
-        (voucher_id,))]
-    err = describe_balance(lines, status=voucher.get("status"))
-    if err:
-        return False, err
 
     # ③ 凍結科目名稱。**先凍分錄再改狀態** ——
     # ☠️ 反過來的話，中途失敗會留下一張「已過帳而沒有凍結值」的傳票，
