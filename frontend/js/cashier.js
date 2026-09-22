@@ -433,32 +433,6 @@ function cashierApp() {
       this.bankPaySaving = false
     },
 
-    async exportTaxInvoices() {
-      this.taxExporting = true
-      try {
-        var qs = 'year=' + this.taxExportYear + (this.taxExportMonth ? '&month=' + this.taxExportMonth : '')
-        var res = await fetch('/api/reports/tax-export?' + qs, {
-          headers: { Authorization: 'Bearer ' + this._token() }
-        })
-        if (!res.ok) {
-          var j = await res.json().catch(function () { return {} })
-          throw new Error(j.detail || '匯出失敗')
-        }
-        var blob = await res.blob()
-        var label = this.taxExportYear + (this.taxExportMonth ? ('_' + String(this.taxExportMonth).padStart(2, '0')) : '')
-        var a = document.createElement('a')
-        a.href = URL.createObjectURL(blob)
-        a.download = 'MOTRIX_銷項發票清單_' + label + '.xlsx'
-        document.body.appendChild(a)
-        a.click()
-        document.body.removeChild(a)
-        URL.revokeObjectURL(a.href)
-      } catch (e) {
-        alert('稅務匯出失敗：' + (e.message || e))
-      } finally {
-        this.taxExporting = false
-      }
-    },
 
     // ── T100（鼎新）傳票批次匯出 ──────────────────────────────────────────────
     async loadT100Config() {

@@ -512,10 +512,6 @@ def test_ui9_reports_has_no_cashier_buttons_left_behind():
 #: ⚠️ 這不是「排除清單」——下面那道反向控制要求：**不再懸空的項目必須從這裡移除**，
 #:    否則它會爛掉，而一份爛掉的允許清單與「全部寫進去變綠」是同一件事。
 _ALLOWED_DANGLING = {
-    "confirmPayVoucher": "modal 還沒搬過來（本檔 ..._every_modal_... 那一題）",
-    "confirmReceive":    "同上",
-    "confirmInvoice":    "同上",
-    "confirmBankPay":    "同上",
     "confirmT100Imported": "T100 匯出 UI 還在 reports（FN3）",
     "exportT100Vouchers":  "同上（FN3）",
     "saveT100Config":      "同上（FN3）",

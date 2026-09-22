@@ -553,6 +553,120 @@
     </main>
   </div>
 
+
+  <!-- 🔴 `UI9` 補件（2026-09-23）：這四個 modal 原本留在 `reports.html`。
+       ☠️ 拆頁那一次我用**行號區間**當邊界（出納面板 :2041~:2310），
+          而 modal 在那個區間**之外** ⇒ 五顆按鈕的 handler 都搬過來了，
+          **而它們要開的東西沒有** ⇒ 按下去不會有任何反應、也不會報錯。
+       🔑 這一次改用**識別字反查**：`reports.html` 裡凡出現
+          `payVoucher*`／`receive*`／`invoice*`／`bankPay*` 的行全部找出來，
+          確認它們落在同一個連續區塊（:2337~:2438），再整段搬。
+       📌 而那個教訓是雙向的：同一次我也**多抄**了 `exportTaxInvoices()`
+          （它的 UI 在報表側的「稅務匯出」區）—— 區間外漏掉、區間內多抄，
+          是同一個根因的兩個方向。 -->
+  <!-- 出納 Modal 群組（2026-08-31 併入本頁，原獨立 cashier.html） -->
+  <div x-show="payVoucherModal" class="modal-overlay" @click.self="payVoucherModal=false">
+    <div class="modal-box" style="max-width:360px">
+      <div class="modal-hd">
+        <div class="modal-title" x-text="'標記已匯款' + (payVoucherTarget ? '　' + payVoucherTarget.voucherNo : '')"></div>
+        <button class="modal-close" @click="payVoucherModal=false">&#10005;</button>
+      </div>
+      <div class="modal-body">
+        <label class="field-label">匯款日期</label>
+        <input type="date" class="field-input" x-model="payVoucherDate">
+        <label class="field-label">匯款銀行帳戶（選填，供 T100 傳票匯出使用）</label>
+        <select class="field-input" x-model="payVoucherBankAcctCode">
+          <option value="">— 未指定 —</option>
+          <template x-for="b in t100BankAccounts" :key="b.acctCode"><option :value="b.acctCode" x-text="b.name"></option></template>
+        </select>
+        <label class="field-label">備註（選填，例如匯款帳號末五碼）</label>
+        <input type="text" class="field-input" x-model="payVoucherNote" placeholder="選填">
+        <div style="display:flex;justify-content:flex-end;gap:8px">
+          <button @click="payVoucherModal=false" :disabled="payVoucherSaving"
+                  style="padding:7px 16px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:var(--font-zh);background:#fff;cursor:pointer">取消</button>
+          <button @click="confirmPayVoucher()" :disabled="payVoucherSaving || !payVoucherDate"
+                  style="padding:7px 16px;border:none;border-radius:var(--radius);font-size:13px;font-weight:600;font-family:var(--font-zh);background:#059669;color:#fff;cursor:pointer"
+                  x-text="payVoucherSaving ? '處理中…' : '確認標記已匯款'"></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div x-show="receiveModal" class="modal-overlay" @click.self="receiveModal=false">
+    <div class="modal-box" style="max-width:360px">
+      <div class="modal-hd">
+        <div class="modal-title" x-text="'標記已收款' + (receiveTarget ? '　' + receiveTarget.quoteNo : '')"></div>
+        <button class="modal-close" @click="receiveModal=false">&#10005;</button>
+      </div>
+      <div class="modal-body">
+        <label class="field-label">收款日期</label>
+        <input type="date" class="field-input" x-model="receiveDate">
+        <label class="field-label">實收金額（含稅）</label>
+        <input type="number" min="0" class="field-input" x-model.number="receiveActualAmount">
+        <label class="field-label">手續費 / 扣款</label>
+        <input type="number" min="0" class="field-input" x-model.number="receiveFeeAmount">
+        <label class="field-label">收款銀行帳戶（選填，供 T100 傳票匯出使用）</label>
+        <select class="field-input" x-model="receiveBankAcctCode">
+          <option value="">— 未指定 —</option>
+          <template x-for="b in t100BankAccounts" :key="b.acctCode"><option :value="b.acctCode" x-text="b.name"></option></template>
+        </select>
+        <label class="field-label">備註（選填）</label>
+        <input type="text" class="field-input" x-model="receiveNote" placeholder="例：匯款轉入、票期兌現…">
+        <div style="display:flex;justify-content:flex-end;gap:8px">
+          <button @click="receiveModal=false" :disabled="receiveSaving"
+                  style="padding:7px 16px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:var(--font-zh);background:#fff;cursor:pointer">取消</button>
+          <button @click="confirmReceive()" :disabled="receiveSaving || !receiveDate"
+                  style="padding:7px 16px;border:none;border-radius:var(--radius);font-size:13px;font-weight:600;font-family:var(--font-zh);background:#059669;color:#fff;cursor:pointer"
+                  x-text="receiveSaving ? '處理中…' : '確認標記已收款'"></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div x-show="invoiceModal.show" class="modal-overlay" @click.self="invoiceModal.show=false">
+    <div class="modal-box" style="max-width:360px">
+      <div class="modal-hd">
+        <div class="modal-title" x-text="'登錄發票號碼' + (invoiceModal.item ? '　' + invoiceModal.item.quoteNo : '')"></div>
+        <button class="modal-close" @click="invoiceModal.show=false">&#10005;</button>
+      </div>
+      <div class="modal-body">
+        <label class="field-label">統一發票號碼</label>
+        <input type="text" class="field-input" x-model="invoiceModal.no" placeholder="AB12345678" @keydown.enter="confirmInvoice()">
+        <div style="font-size:11px;color:var(--text-dim);font-family:var(--font-zh);margin-top:-6px;margin-bottom:12px">留空並儲存可清除發票號碼</div>
+        <label class="field-label">發票開立日期</label>
+        <input type="date" class="field-input" x-model="invoiceModal.date">
+        <div style="font-size:11px;color:var(--text-dim);font-family:var(--font-zh);margin-top:-6px;margin-bottom:12px">供稅務匯出判斷申報期別，跟收款日期是兩回事；留空則沿用收款日期</div>
+        <div style="display:flex;justify-content:flex-end;gap:8px">
+          <button @click="invoiceModal.show=false" style="padding:7px 16px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:var(--font-zh);background:#fff;cursor:pointer">取消</button>
+          <button @click="confirmInvoice()" style="padding:7px 16px;border:none;border-radius:var(--radius);font-size:13px;font-weight:600;font-family:var(--font-zh);background:#059669;color:#fff;cursor:pointer">儲存</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div x-show="bankPayModal" class="modal-overlay" @click.self="bankPayModal=false">
+    <div class="modal-box" style="max-width:360px">
+      <div class="modal-hd">
+        <div class="modal-title" x-text="'標記已匯款' + (bankPayRow && bankPayRow.match ? '　' + bankPayRow.match.voucherNo : '')"></div>
+        <button class="modal-close" @click="bankPayModal=false">&#10005;</button>
+      </div>
+      <div class="modal-body">
+        <label class="field-label">匯款日期</label>
+        <input type="date" class="field-input" x-model="bankPayDate">
+        <div style="font-size:11px;color:var(--text-dim);font-family:var(--font-zh);margin-bottom:12px">
+          銀行對帳單上的日期原文：<span x-text="bankPayRow ? (bankPayRow.date || '（無）') : ''"></span>　請核對後再確認
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:8px">
+          <button @click="bankPayModal=false" :disabled="bankPaySaving"
+                  style="padding:7px 16px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:var(--font-zh);background:#fff;cursor:pointer">取消</button>
+          <button @click="confirmBankPay()" :disabled="bankPaySaving || !bankPayDate"
+                  style="padding:7px 16px;border:none;border-radius:var(--radius);font-size:13px;font-weight:600;font-family:var(--font-zh);background:#059669;color:#fff;cursor:pointer"
+                  x-text="bankPaySaving ? '處理中…' : '確認標記已匯款'"></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script src="../static/sidebar.js"></script>
 </body>
 </html>
