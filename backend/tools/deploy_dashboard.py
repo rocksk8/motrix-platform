@@ -143,6 +143,115 @@ _active_job_lock = threading.Lock()
 _active_job_id: str | None = None
 
 
+# ══════════════════════════════════════════════════════════════════
+# `::RESULT::` 協定（P0-00，B.md §九 定版）
+# ══════════════════════════════════════════════════════════════════
+#
+# 🔴 這一段取代「用結束碼判定 ＋ 掃關鍵字」那個組合，理由是它**低報失敗**：
+# `apply_update.ps1:545` 在健康檢查**失敗**的 `-SkipAutoRollback` 分支 `exit 0`，
+# 而那一段印的是「略過**自動回滾**」——舊防線找的是「**已**自動回滾」，差一個字
+# ⇒ 儀表板把它記成 **成功**，而正式機上跑的是一個沒過健康檢查的版本。
+#
+# 🔑 而舊防線**沒有壞**：它是照當時已知的兩種輸出寫的，
+#    `-SkipAutoRollback` 是同一天稍後才長出的第三個出口。
+#    ⇒ 關鍵字比對是**散文比對**：它要求每一條新出口的作者，記得把字寫成
+#      守門認得的形狀 —— 而那是同一個形狀的第三次（〈散文對工具是隱形的〉）。
+RESULT_PROTOCOL_VERSION = 2
+
+#: 一行、無前後空白、大小寫固定、欄位順序固定。
+_RESULT_RE = re.compile(
+    r"^::RESULT:: v=(\d+) status=(\S+) rolled_back=(\S+) exit=(-?\d+)\s*$",
+    re.M)
+
+#: 🔴 **值域封閉**，與 `apply_update.ps1` 的 15 條出口 **1:1**。
+#: 🔑 1:1 是刻意的：新增出口時**沒有現成的值可以借**
+#:    ⇒ 作者必須加一個新值 ⇒ **而加新值會被這裡的值域檢查看到**。
+#: ☠️ 值域一旦開放，這裡就只能再回去猜字串 ＝ **換個地方做關鍵字比對**。
+_STATUS_SUCCEEDED = frozenset({
+    "checkonly_ok",                 # :140  -CheckOnly 且 ping 成功
+    "success",                      # :646  正常成功
+    "rollback_ok",                  # rollback_update.ps1 正常完成
+})
+_STATUS_FAILED = frozenset({
+    "not_prod_machine",             # :131
+    "bad_args",                     # :148
+    "package_missing",              # :151
+    "package_invalid",              # :155
+    "duplicate_version",            # :172
+    "backup_failed",                # :228  正式庫尚未被觸碰
+    "migration_dryrun_failed",      # :276  正式庫尚未被觸碰
+    "user_cancelled",               # :311
+    "copy_failed_backend",          # :358  🔴 半套用、沒有人還原、服務已停
+    "copy_failed_frontend",         # :361  🔴 同上
+    "checkonly_failed",             # :143
+    "unhealthy_not_rolled_back",    # :545  🔴 P0-00 本尊：exit 0 而它是失敗
+    "unhealthy_rolled_back",        # :621
+    # rollback_update.ps1 那一側
+    "rollback_not_prod_machine", "rollback_snapshot_missing",
+    "rollback_db_snapshot_missing", "rollback_user_cancelled",
+    "rollback_failed",
+})
+_STATUS_ALL = _STATUS_SUCCEEDED | _STATUS_FAILED
+
+#: 舊的關鍵字比對 —— **留著當第二道，不要拿掉。**
+#: 🔑 理由不是它準，是**兩道獨立的防線不會同時因為同一個原因失效**。
+#: ☠️ 「改用新方法就把舊的刪掉」會讓一個本來有兩層的地方安靜地變成一層。
+_LEGACY_FAIL_RE = re.compile(r"更新失敗|已自動回滾|\[FAIL\]")
+
+#: 🔴 **哪些動作要講這個協定：預設「要」。**
+#: ☠️ 反過來寫成白名單的話，日後新增一個動作**忘了加進去**就會安靜地
+#:    退回舊行為 —— 而那正是這一整件事要修的東西。
+#: ⇒ 只有這裡列出來的可以不講，而每一個都要寫理由。
+_PROTOCOL_EXEMPT = {
+    # `build` 跑的是本機打包（`build_deploy_package.ps1`），**完全不碰正式機**
+    # ⇒ `rolled_back` 對它沒有意義，硬要它印一個 `not_applied` 只是噪音。
+    # ⚠️ 而它的失敗本來就擋得住：打包腳本任何一步失敗都 `exit 1`。
+    "build",
+}
+
+
+def decide_outcome(returncode: int, output: str) -> str:
+    """這一次部署到底是成功還是失敗。回 `"succeeded"` 或 `"failed"`。
+
+    ## 🔴 `exit=0` 不等於成功
+
+    `unhealthy_not_rolled_back`（`apply_update.ps1:545`）的結束碼**就是 0** ——
+    健康檢查沒過、而 `-SkipAutoRollback` 讓它不回滾 ⇒ 新程式碼留在正式機上。
+    ☠️ 用結束碼判的話，那一次會被記成成功，**而沒有人會來看**。
+
+    ## 🔴 fail-closed：撈不到結果行 ⇒ 失敗
+
+    現在的形狀是「沒比對到關鍵字 ＋ 結束碼 0 ⇒ 成功」＝ **fail-open**，
+    而「**新增一條出口時忘記印那一行**」是**預設會發生**的事，不是例外。
+    ⇒ fail-open 時那條新出口會安靜地全部記成成功；
+      fail-closed 時它在第一次被走到就紅。
+    """
+    text = output or ""
+    found = _RESULT_RE.findall(text)
+    if not found:
+        return "failed"                      # 🔴 fail-closed
+    # ⚠️ 取**最後一行**：`apply_update.ps1` 會呼叫別的腳本，而那些也可能印
+    #    `::RESULT::` —— 取第一行的話**子行程的結果會蓋掉真正的那一條出口**。
+    version, status, _rolled_back, _exit_field = found[-1]
+    if version != str(RESULT_PROTOCOL_VERSION):
+        # 跑的不是我們送過去那一份（正式機上那一支比較舊）
+        # ⇒ 舊的那一份印不出新的狀態值，拿它的輸出去判等於在猜。
+        return "failed"
+    if status not in _STATUS_ALL:
+        # 含 ps1 的預設值 `unknown`（忘記給狀態就印它）。
+        return "failed"
+    if status not in _STATUS_SUCCEEDED:
+        return "failed"
+    # ⚠️ 兩個訊號矛盾時一律往失敗倒：結果行說成功而結束碼非 0，
+    #    代表有一條路徑印錯了 —— 而「印錯」不可以蓋掉一個真實的非 0 結束碼。
+    if returncode != 0:
+        return "failed"
+    # 第二道：舊的關鍵字比對。同上，矛盾時當失敗。
+    if _LEGACY_FAIL_RE.search(text):
+        return "failed"
+    return "succeeded"
+
+
 def _run_job(job_id: str, action: str, cmd: list, input_text: str = None):
     global _active_job_id
     with _jobs_lock:
@@ -176,17 +285,23 @@ def _run_job(job_id: str, action: str, cmd: list, input_text: str = None):
                 log_file.flush()
             proc.wait()
 
-        success = proc.returncode == 0
-        if success:
-            # 2026-09-08（保險）：即使 _dashboard_remote.ps1 已修好結束碼傳遞，
-            # 這裡再加一道獨立防線——掃輸出文字本身有沒有出現「明明失敗」的
-            # 字樣，兩者矛盾時一律當失敗處理。不是為了取代結束碼判定，是避免
-            # 同一類「exit code 沒接住真實結果」的漏洞以後又用不同方式重演。
-            joined = "\n".join(_jobs[job_id]["lines"])
-            if re.search(r"更新失敗|已自動回滾|\[FAIL\]", joined):
+        joined = "\n".join(_jobs[job_id]["lines"])
+        if action in _PROTOCOL_EXEMPT:
+            # 不講協定的動作（見 `_PROTOCOL_EXEMPT` 的理由）走舊路：
+            # 結束碼 ＋ 關鍵字第二道。
+            # ⚠️ 這一條**不是**「以後再說」——`build` 不碰正式機，
+            #    `rolled_back` 對它沒有意義。
+            success = proc.returncode == 0
+            if success and _LEGACY_FAIL_RE.search(joined):
                 success = False
+            outcome = "succeeded" if success else "failed"
+        else:
+            # 🔴 判定**經過** `decide_outcome`，不是在這裡重寫一次。
+            # ☠️ 一支接縫寫好了而沒有人呼叫，跟沒有寫是一樣的
+            #    （`reminder_stage()` 那次：四題全綠而產品碼零呼叫者）。
+            outcome = decide_outcome(proc.returncode, joined)
         with _jobs_lock:
-            _jobs[job_id]["status"] = "succeeded" if success else "failed"
+            _jobs[job_id]["status"] = outcome
 
         if action in ("deploy", "rollback"):
             _append_history(action, job_id, success, str(log_path))

@@ -111,8 +111,34 @@ function Test-Ping {
     }
 }
 
-function Fail($msg) {
+# ══════════════════════════════════════════════════════════════════
+# `::RESULT::` 協定 v2（P0-00）—— 每一條出口都要印一行
+# ══════════════════════════════════════════════════════════════════
+#
+# 🔴 為什麼要這個：先前 deploy_dashboard.py 用「結束碼 ＋ 掃關鍵字」判定，
+# 而本檔 `-SkipAutoRollback` 那條分支在健康檢查**失敗**時 `exit 0`，
+# 印的又是「略過**自動回滾**」（守門找的是「**已**自動回滾」，差一個字）
+# ⇒ 儀表板把它記成**成功**，而正式機上跑的是一個沒過健康檢查的版本。
+#
+# 🔑 關鍵字比對是**散文比對**：它要求每一條新出口的作者，記得把字寫成
+#    守門認得的形狀。這裡改成**結構化輸出**，而且是機器產生的。
+#
+# ⚠️ `$script:ProdState` 回答的是「**正式機的磁碟上現在是什麼**」，
+#    不是「這次成功了沒」。停服**不算**改變它 —— 磁碟上還是舊程式碼，
+#    autostart 迴圈會把它拉回來，那個狀態自己會好。
+$script:ProdState = "not_applied"
+
+function Emit-Result($status, $code) {
+    # 一行、無前後空白、大小寫固定、欄位順序固定（B.md §九 定版）。
+    Write-Host "::RESULT:: v=2 status=$status rolled_back=$($script:ProdState) exit=$code"
+}
+
+# ⚠️ `$status` 預設 `unknown` 是刻意的：日後有人新增一條 `Fail` 而忘了給狀態，
+#    它會印 `status=unknown` ⇒ 而 dashboard 的值域檢查會把 `unknown` 判成失敗。
+# 🔑 **忘記的代價是「被記成失敗」，不是「被記成成功」** —— 方向要是這一邊。
+function Fail($msg, $status = "unknown") {
     Write-Host "`n[FAIL] $msg" -ForegroundColor Red
+    Emit-Result $status 1
     exit 1
 }
 function Info($msg)  { Write-Host $msg }
@@ -128,7 +154,7 @@ Write-Host "======================================"
 # ============================================================
 $scriptRoot = (Get-Item $PSScriptRoot).Parent.Parent.FullName
 if ($scriptRoot -ne $ProdRoot) {
-    Fail "偵測到執行路徑為 '$scriptRoot'，不是正式機路徑 '$ProdRoot'。本腳本只允許在正式機執行，中止。"
+    Fail "偵測到執行路徑為 '$scriptRoot'，不是正式機路徑 '$ProdRoot'。本腳本只允許在正式機執行，中止。" "not_prod_machine"
 }
 Info "身分確認：正式機（$ProdRoot）`n"
 
@@ -137,22 +163,24 @@ if ($CheckOnly) {
     Info "  健康檢查網址：$PingUrl（走 _healthcheck_ping.py，$(if ($UsesHttps) { 'HTTPS' } else { 'HTTP' })）"
     if (Test-Ping -Url $PingUrl -TimeoutSec 5) {
         Ok "  /api/ping 回應 200，健康檢查機制正常。"
+        Emit-Result "checkonly_ok" 0
         exit 0
     } else {
         Warn "  /api/ping 未回應 200 或逾時——可能是伺服器真的沒開，也可能是健康檢查機制本身還有問題（例如協定/憑證不對）。"
+        Emit-Result "checkonly_failed" 1
         exit 1
     }
 }
 
 if (-not $PackagePath) {
-    Fail "-PackagePath 為必填參數（除非搭配 -CheckOnly 使用）。"
+    Fail "-PackagePath 為必填參數（除非搭配 -CheckOnly 使用）。" "bad_args"
 }
 if (-not (Test-Path $PackagePath)) {
-    Fail "找不到部署包路徑：$PackagePath"
+    Fail "找不到部署包路徑：$PackagePath" "package_missing"
 }
 $manifestPath = Join-Path $PackagePath "deploy_manifest.json"
 if (-not (Test-Path $manifestPath)) {
-    Fail "部署包內找不到 deploy_manifest.json（$PackagePath），不是合法的部署包。"
+    Fail "部署包內找不到 deploy_manifest.json（$PackagePath），不是合法的部署包。" "package_invalid"
 }
 $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
 
@@ -169,7 +197,7 @@ if (Test-Path $deployedMarkerPath) {
 
 if ($prevDeployed -and $prevDeployed.commit -eq $manifest.commit) {
     if (-not $Force) {
-        Fail "這個部署包（commit $($manifest.commit_short)）跟正式機目前已套用的版本相同，看起來是重複套用。如果確定要強制重套，請加 -Force。"
+        Fail "這個部署包（commit $($manifest.commit_short)）跟正式機目前已套用的版本相同，看起來是重複套用。如果確定要強制重套，請加 -Force。" "duplicate_version"
     } else {
         Warn "版本相同，但因為 -Force 強制繼續套用。"
     }
@@ -225,7 +253,7 @@ print('BACKUP_OK')
     Remove-Item $backupPy -Force -ErrorAction SilentlyContinue
     if ($backupExit -ne 0 -or ($backupOutput -notmatch "BACKUP_OK")) {
         Write-Host ($backupOutput | Out-String)
-        Fail "升級前 db 備份失敗，中止套用（正式庫尚未被觸碰）。"
+        Fail "升級前 db 備份失敗，中止套用（正式庫尚未被觸碰）。" "backup_failed"
     }
     Ok "  db 快照（SQLite Online Backup API）：$dbBackupPath"
 } else {
@@ -273,7 +301,7 @@ print('DRYRUN_OK')
         Write-Host "  Migration 乾跑驗證失敗，中止套用（正式庫完全未被觸碰）" -ForegroundColor Red
         Write-Host "======================================" -ForegroundColor Red
         Write-Host ($dryRunOutput | Out-String)
-        Fail "新版本的 migration 在 db 快照副本上乾跑失敗，套用到正式庫時很可能也會出錯。請檢查上面的錯誤訊息、修好新版 db.py 的 migration 後重新打包，再重新套用。"
+        Fail "新版本的 migration 在 db 快照副本上乾跑失敗，套用到正式庫時很可能也會出錯。請檢查上面的錯誤訊息、修好新版 db.py 的 migration 後重新打包，再重新套用。" "migration_dryrun_failed"
     }
     Ok "  Migration 乾跑驗證通過（新版 db.py 對照正式庫目前的 schema 乾跑一輪，未發現錯誤）。"
 } else {
@@ -308,7 +336,7 @@ if (-not $Yes) {
     Write-Host ""
     $answer = Read-Host "確認要套用這個更新嗎？(y/N)"
     if ($answer -ne "y" -and $answer -ne "Y") {
-        Fail "使用者取消，未做任何套用動作（備份已保留，可直接刪除或留著沒差）。"
+        Fail "使用者取消，未做任何套用動作（備份已保留，可直接刪除或留著沒差）。" "user_cancelled"
     }
 }
 
@@ -352,13 +380,28 @@ Ok "  伺服器已停止，等待 autostart crash-restart 迴圈接手（見 §1
 # ============================================================
 Info "`n[3/6] 套用新程式碼..."
 
+# 🔴 **危險值要在動作之前設，不是之後。**
+# ☠️ 之後才設的話，複製到一半失敗會報出一個**比實際安全**的狀態：
+#    畫面說「沒開始」，而正式機已經停服＋半複製。
+# 🔑 而它有個附帶好處：日後有人在這一行之後新增一條 `Fail`，
+#    **它會自動報對**，不必記得改。
+# 📌 起點選在這裡而不是 Step 2 停服：停服不改變磁碟上的東西，
+#    autostart 迴圈會把舊程式碼拉回來 ⇒ 那個狀態自己會好。
+#    **真正不可逆的是下一行開始寫入 $BackendDir。**
+$script:ProdState = "applied_no_restore"
+
 $rc1 = robocopy (Join-Path $PackagePath "backend") $BackendDir /E `
     /XD db_backups rollback_snapshots uploads logs 報價單PDF `
     /XF motrix_erp.db motrix_erp.db-wal motrix_erp.db-shm motrix_erp_demo.db motrix_erp_demo.db-wal motrix_erp_demo.db-shm heartbeat_config.json .deployed_commit.json server.log
-if ($LASTEXITCODE -ge 8) { Fail "robocopy backend/ 失敗（exit code $LASTEXITCODE）。" }
+if ($LASTEXITCODE -ge 8) { Fail "robocopy backend/ 失敗（exit code $LASTEXITCODE）。" "copy_failed_backend" }
 
 $rc2 = robocopy (Join-Path $PackagePath "frontend") $FrontendDir /E
-if ($LASTEXITCODE -ge 8) { Fail "robocopy frontend/ 失敗（exit code $LASTEXITCODE）。" }
+if ($LASTEXITCODE -ge 8) { Fail "robocopy frontend/ 失敗（exit code $LASTEXITCODE）。" "copy_failed_frontend" }
+
+# 兩個 robocopy 都過了 ⇒ 新程式碼**完整**在正式機磁碟上。
+# ⚠️ 這**不代表它是好的** —— 健康檢查還沒跑。`applied` 講的是磁碟狀態，
+#    不是健康狀態；那兩件事由 `status` 那一欄分開講。
+$script:ProdState = "applied"
 
 # 根目錄文件（CHANGELOG.md / MOTRIX-ERP-QUICK.md / GITFLOW.md / .gitignore 等）
 Get-ChildItem -Path $PackagePath -File | Where-Object { $_.Name -ne "deploy_manifest.json" } | ForEach-Object {
@@ -542,6 +585,10 @@ if ($healthy -and -not $logErrors) {
     if ($logErrors) {
         Write-Host "  （log 錯誤內容已列印在上方，供人工判斷是否為已知良性雜訊之外的真實問題）" -ForegroundColor Yellow
     }
+    # 🔴🔴 **P0-00 本尊**：結束碼是 0，而這是一次**失敗**。
+    # 健康檢查沒過、`-SkipAutoRollback` 讓它不回滾 ⇒ 新程式碼留在正式機上。
+    # ☠️ 先前儀表板用結束碼判 ⇒ 把它記成成功 ⇒ **而沒有人會來看。**
+    Emit-Result "unhealthy_not_rolled_back" 0
     exit 0
 } else {
     Warn "  套用後健康檢查失敗：healthy=$healthy, log 錯誤筆數=$($logErrors.Count)"
@@ -618,6 +665,12 @@ if ($healthy -and -not $logErrors) {
             }
         }
     }
+    # ⚠️ 回滾**完成**不等於正式機**是好的**：`$rolledBackHealthy` 為 false 時
+    #    腳本自己印的是「仍異常，需要人工介入！」。
+    # ☠️ 兩者合成一個「已還原」⇒ **使用者最需要知道的那一格又被蓋掉了**，
+    #    只是降了一層 —— 而那正是這整件事要修的東西。
+    $script:ProdState = if ($rolledBackHealthy) { "restored" } else { "restored_unhealthy" }
+    Emit-Result "unhealthy_rolled_back" 1
     exit 1
 }
 
@@ -643,3 +696,8 @@ Write-Host "提醒："
 Write-Host "  - 套用前 db 快照：$dbBackupDir"
 Write-Host "  - 套用前程式碼快照：$rollbackDir"
 Write-Host "  - 若本次更新對應到已知落差紀錄（§0），記得回去更新該表格狀態"
+
+# ⚠️ 成功那一條**也要印**。少了它，成功與「忘記印」在 dashboard 眼裡
+# 完全相同（都是撈不到結果行）⇒ 而 fail-closed 會把每一次成功記成失敗。
+# 🔑 「每一條出口都印」裡的「每一條」包含成功那一條。
+Emit-Result "success" 0
