@@ -385,3 +385,104 @@ def test_xa4b_the_tile_error_signals_are_still_there(page):
             f"`map.html` 裡的 `{name}` 不見了 ——\n"
             "⇒ OSM 封鎖時前端唯一的線索就是那兩個訊號。"
         )
+
+
+# ══════════════════════════════════════════════════════════════════════
+# XA5 · 自動開圖要「自己會停」
+# ══════════════════════════════════════════════════════════════════════
+#
+# 🔑 A 的理由：**封閉網路不是「偶爾失敗」，是每次都失敗。**
+# ☠️ 自動開圖把「一次失敗」變成「**每次進頁都失敗**」，
+#    而每一次的代價是一個敲不到的對外連線。
+# 📌 〈告警必須有速率上限〉的同一條：**自動的東西必須自己會停，
+#    設計時就要想失控怎麼關掉。**
+#
+# ⚠️ B 的原始觀察要留著：「以前是使用者按了才連 openstreetmap.org，
+#    現在是每次開這一頁都連。」
+#    **使用者說「正式機都長期開著」—— 那是他那台機器的理由，不是通則。**
+
+
+def test_xa5_a_tile_failure_is_remembered(page):
+    """🔴 XA5：偵測到 `tileerror` ⇒ **記起來**（跨頁面存活）。
+
+    📌 判準是「`tileerror` 的處理裡會去寫那個記憶」，
+    ⚠️ 不釘 `localStorage` 的鍵名（那是實作細節）——
+    🔑 只釘「它有被記下來」，而**記在哪由 B 決定**。
+    """
+    i = page.find("'tileerror'")
+    if i < 0:
+        i = page.find('"tileerror"')
+    assert i >= 0, "`map.html` 裡找不到 `tileerror` 的處理"
+    window = page[i:i + 300]
+    assert "TileFailure" in window or "localStorage" in window, (
+        f"`tileerror` 的處理裡沒有把失敗記起來：\n{window[:200]}\n"
+        "⇒ 下一次進這一頁仍然會自動開，而封閉網路每次都失敗。"
+    )
+
+
+def test_xa5b_a_remembered_failure_stops_the_auto_open(page):
+    """🔴🔴 XA5b：**記得上次失敗 ⇒ 下一次不自動開。**
+
+    ☠️ 這一題是斷路器的本體。少了它，XA5 只證明「有寫入」，
+    🔑 而**「記下來了」與「記下來有用」是兩件事** ——
+    那正是今晚反覆出現的〈證據的適用範圍〉。
+
+    📌 判準：`init()` 裡自動開圖那一步**被那個記憶擋著**
+    （`_tileFailedBefore()` 或等價的檢查出現在 `openMap()` 呼叫之前）。
+    """
+    body = _body(page, "init")
+    ok, detail = _order_ok(body, "TileFailedBefore", "openMap(")
+    if not ok:
+        ok, detail = _order_ok(body, "localStorage", "openMap(")
+    assert ok, (
+        f"`init()` 裡自動開圖那一步沒有被「上次失敗」擋著：{detail}\n"
+        "☠️ 封閉網路每次都失敗 ⇒ 每次進頁都會再敲一次連不到的對外連線。"
+    )
+
+
+def test_xa5c_a_successful_tile_clears_the_flag(page):
+    """🔴🔴 XA5c 反向控制：**載得到圖磚 ⇒ 把旗標清掉。**
+
+    ☠️ 少了這一題，一個「**一旦失敗就永遠手動**」的實作會讓 XA5b 綠 ——
+    而網路修好之後它**永遠不會自己好**，
+    🔑 而使用者不會知道要去哪裡按重設 —— 他只會覺得「地圖以前會自己開」。
+
+    📌 〈降級之後它還是會動〉的鏡像：這次是**降級之後它不會自己回來**。
+    """
+    i = page.find("'tileload'")
+    if i < 0:
+        i = page.find('"tileload"')
+    assert i >= 0, (
+        "`map.html` 裡沒有 `tileload` 的處理 ——\n"
+        "⇒ 網路修好之後那個旗標永遠不會被清掉，地圖永遠不再自動開。"
+    )
+    window = page[i:i + 300]
+    assert "TileFailure" in window or "removeItem" in window, (
+        f"`tileload` 的處理裡沒有清掉那個旗標：\n{window[:200]}"
+    )
+
+
+def test_xa5d_an_unreadable_storage_does_not_disable_the_map(page):
+    """🔴 XA5d：`localStorage` **讀不到**（無痕視窗）⇒ 當成「沒失敗」。
+
+    🔑 **「讀不到偏好」不是「不要開地圖」。**
+    ☠️ 反過來的話，**每一個用無痕視窗的人都會看到一張不會自己開的地圖**，
+    而畫面上不會說原因 —— 他會以為功能壞了。
+    📌 〈null 不等於 0〉的同一族：**「取不到值」與「值是 true」是兩件事。**
+
+    ⚠️ 判準是「讀取被 `try` 包著，而 `catch` 回的是**不擋**」——
+    我只驗那個 `catch` 存在且回 `false`／`return` 之類的放行，
+    **驗不到它在真的無痕視窗裡的行為**（那要瀏覽器）。
+    """
+    m = re.search(r"_tileFailedBefore\s*\([^)]*\)\s*\{", page)
+    assert m, "`map.html` 裡找不到 `_tileFailedBefore()` 的定義"
+    body = page[m.end():m.end() + 400]
+    assert "catch" in body, (
+        f"讀 `localStorage` 沒有被 `try/catch` 包著：\n{body[:200]}\n"
+        "⇒ 無痕視窗會丟例外，而那會讓整支 `init()` 掛掉。"
+    )
+    tail = body[body.find("catch"):body.find("catch") + 120]
+    assert "false" in tail or "return" in tail, (
+        f"`catch` 裡沒有放行：\n{tail}\n"
+        "🔑 「讀不到偏好」不是「不要開地圖」。"
+    )
