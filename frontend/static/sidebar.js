@@ -667,11 +667,6 @@ if (typeof module !== 'undefined' && module.exports) {
       ni(pg('tender-radar.html'),    'radar', '標案雷達', ['tender-radar.html'],                     cTdr, 'sb-mod-tender-radar'),
       ni(pg('map.html'),             'radar', '地圖',     ['map.html'],                              cMap),
       ni(pg('quotations.html'),      'quote', '報價單',   ['quotations.html', 'quotation-form.html'], cQ,   'sb-mod-quotation'),
-      // 2026-09-14：改走 ni()，否則不會被記錄進上方選單的分組資料
-      ni(pg('approval-queue.html'), 'appr', '\u7c3d\u6838\u4f47\u5217', ['approval-queue.html'], cQ, '',
-         '<span id="sb-approval-badge" style="display:none;background:#DC2626;color:#fff;font-size:9px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;padding:1px 6px;border-radius:9px;margin-left:auto"></span>'),
-      ni(pg('approval-delegates.html'), 'appr', '簽核代理人', ['approval-delegates.html'], cQ),
-      ni(pg('approval-history.html'), 'apprhist', '簽核歷史', ['approval-history.html'], cQ),
       // ── 案件：成案之後的執行與財務（2026-09-14 從「業務」拆出來）──
       // 拆出來的原因：cCM 包含 eng（工程師），而 cQ / cDev 不包含。
       // 舊分法下，一個沒有任何模組的工程師會看到一個叫「業務」的分組，
@@ -701,10 +696,26 @@ if (typeof module !== 'undefined' && module.exports) {
       sec('勞務管理', cCon || cPay),
       ni(pg('contractors.html'),     'contl', '外包名冊', ['contractors.html'],                      cCon),
       ni(pg('payslips.html'),        'paysl', '勞報單',   ['payslips.html', 'payslip-form.html'],    cPay),
-      sec('工作內容', cWL || cDT),
+      // 🔑 2026-09-22 使用者裁示：「工作內容」改名為「我的工作」，
+      //    並把簽核相關的三項從「業務」搬進來（見下方 ⬇️ 那一段）。
+      // ⚠️ 這裡**刻意不逐一列出那三項的名稱**：一段複述項目名稱的註解，
+      //    在有人改名的那天就會變成兩個說法，而讀的人不知道哪個是真的。
+      //    理由（使用者的話轉述）：搬完之後這一組全部是**「等我處理」或
+      //    「我做過的」** —— 主語是使用者自己，不是模組類型。
+      //    「工作內容」描述的是資料，而一張等你簽的單不是資料，
+      //    是一件要你去做的事。
+      // ⚠️ 顯示條件加上 `cQ`：三項的條件是 `cQ`，而**分組的條件必須是
+      //    底下每一項條件的聯集** —— 漏掉的話，一個只有 `cQ` 沒有
+      //    `cWL`／`cDT` 的人會看到三個項目掛在一個不顯示的標題底下。
+      sec('我的工作', cWL || cDT || cQ),
       ni(pg('work-log.html'),        'wlog',  '工作日誌',   ['work-log.html'],                         cWL,  'sb-mod-worklog'),
       ni(pg('daily-tasks.html'), 'dtask', '\u6bcf\u65e5\u5de5\u4f5c\u4e8b\u9805', ['daily-tasks.html'], cDT, 'sb-mod-daily-task',
          '<span id="sb-dt-badge" style="display:none;background:#7C3AED;color:#fff;font-size:9px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;padding:1px 6px;border-radius:9px;margin-left:auto"></span>'),
+      // ⬇️ 2026-09-22 從「業務」搬過來的三項。**條件仍然是 `cQ`，一個字沒改。**
+      ni(pg('approval-queue.html'), 'appr', '\u7c3d\u6838\u4f47\u5217', ['approval-queue.html'], cQ, '',
+         '<span id="sb-approval-badge" style="display:none;background:#DC2626;color:#fff;font-size:9px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;padding:1px 6px;border-radius:9px;margin-left:auto"></span>'),
+      ni(pg('approval-delegates.html'), 'appr', '簽核代理人', ['approval-delegates.html'], cQ),
+      ni(pg('approval-history.html'), 'apprhist', '簽核歷史', ['approval-history.html'], cQ),
       sec('選型資料庫', cEnvG || cNetG || cSwitchG || cMonitorG || cAccessG || cGatewayG || cAutomationG),
       ni(pg('env-guide.html'),      'envg',    '場域選型導覽',     ['env-guide.html'],     cEnvG),
       ni(pg('netarch-guide.html'),  'netg',    '網路架構選型導覽', ['netarch-guide.html'], cNetG),

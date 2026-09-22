@@ -348,7 +348,12 @@
                 ☠️ 寫死一個沒查證的數字，錯的方向若偏晚就是真的花錢。 -->
         <div class="ns-card" x-show="!sysLoading">
           <div class="ns-card-head">
-            <div class="ns-card-head-title">Google 地圖額度</div>
+            <!-- 🔑 叫「地址定位」不叫「地圖」（A-2 2026-09-22）：
+                 它管的是 **Geocoding（把地址換成座標）**，
+                 ☠️ 而底圖是 OpenStreetMap，**看地圖本身不花錢**。
+                 叫「地圖額度」的話，使用者會以為關掉就不能看地圖 ——
+                 那會讓他為了省錢關掉一個根本不花錢的東西。 -->
+            <div class="ns-card-head-title">Google 地址定位額度</div>
             <span x-show="gqSaved" x-transition
                   style="font-size:12px;color:#16A34A;font-weight:600">已儲存</span>
           </div>
@@ -356,7 +361,8 @@
             <div class="ns-desc">
               到達上限時系統會<strong>自動退回免費的定位來源</strong>（精度較低），
               <strong>功能不會關閉</strong>；下一個計費週期開始自動恢復，不需要有人去按。
-              <br>⚠️ <strong>額度留空 ＝ 不管制</strong>（不是 0）。
+              <br>⚠️ <strong>額度留空 ＝ 不設上限</strong>（不是 0，也不是關掉功能）：
+              警戒線不會寄信、硬上限不會降回免費，<strong>用多少算多少</strong>。
               請填入你自己在 Google Cloud 主控台上看到的數字 ——
               每個服務（SKU）各自一組免費額度，<strong>不共用</strong>。
             </div>
@@ -364,6 +370,20 @@
               <div class="ns-field">
                 <label>地址定位每月免費額度（次，留空＝不管制）</label>
                 <input type="number" min="0" x-model.number="gq.monthly_free_quota">
+                <!-- 🔑 程式裡不寫死這個數字（GB26），**而畫面上要給一個起點**：
+                     ☠️ 不給的話，使用者不知道要填多少，於是留空 ——
+                        而留空＝**不設上限**（功能照常運作），
+                        也就是費用沒有任何人在看。
+                     ⚠️ 不是「留空等於功能沒開」：那是 2026-09-22 從一張縮放過的
+                        截圖把「不管制」讀成「不啟用」而長出來的結論，已撤銷。
+                     📌 「不寫死在程式裡」與「寫在畫面上當提示」不衝突：
+                        程式不依賴它，使用者拿得到一個出發點。 -->
+                <div style="font-size:11px;color:#64748B;margin-top:4px">
+                  留空＝<strong>不設上限，超用多少算多少</strong>。
+                  Google 目前給 Geocoding <strong>每月 10,000 次免費</strong>
+                  （2026-09 查證，印度區另有例外），
+                  <strong>實際額度以你的帳單為準</strong>。
+                </div>
               </div>
               <div class="ns-field">
                 <label>每 1000 次單價（選填，只影響金額換算）</label>
