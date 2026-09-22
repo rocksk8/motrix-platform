@@ -221,17 +221,36 @@ def test_v93_custom_rows_are_still_editable(fresh_db, op):
     fresh_db.commit()
     try:
         if op == "update":
-            fresh_db.execute(
-                "UPDATE %s SET name='改過了' WHERE code='C999'" % TABLE)
-            fresh_db.commit()
+            # ⚠️ 這裡刻意**接住** `IntegrityError`：TRIGGER 擋過頭時，
+            #    裸的例外會讓這一題以 ERROR 收場，而訊息是一句 SQLite 的話
+            #    ——**它指向「法定不可修改」，而壞的是「擋到了 custom」**。
+            # 🔑 〈訊息的指向是我當初的假設，不是這次的證據〉。
+            try:
+                fresh_db.execute(
+                    "UPDATE %s SET name='改過了' WHERE code='C999'" % TABLE)
+                fresh_db.commit()
+            except sqlite3.IntegrityError as exc:
+                pytest.fail(
+                    "`custom` 的 UPDATE 被擋下來了：%s\n" % exc
+                    + "☠️ **TRIGGER 擋過頭了** —— 它的 `WHEN OLD.source='statutory'` "
+                      "條件可能不見了或寫錯。\n"
+                    "🔑 那個錯誤訊息說「法定會計項目不可修改」，"
+                    "**而這一列是 custom** ⇒ 訊息指向錯的地方。\n"
+                    "📌 使用者的症狀會是：**連自己加的科目都改不動**，"
+                    "而畫面說那是法定項目。")
             got = fresh_db.execute(
                 "SELECT name FROM %s WHERE code='C999'" % TABLE).fetchone()
             assert got and got["name"] == "改過了", (
                 "`custom` 的 UPDATE 沒有生效 ——\n"
                 "☠️ TRIGGER 擋過頭了：使用者連自己加的科目都改不動。")
         else:
-            fresh_db.execute("DELETE FROM %s WHERE code='C999'" % TABLE)
-            fresh_db.commit()
+            try:
+                fresh_db.execute("DELETE FROM %s WHERE code='C999'" % TABLE)
+                fresh_db.commit()
+            except sqlite3.IntegrityError as exc:
+                pytest.fail(
+                    "`custom` 的 DELETE 被擋下來了：%s" % exc
+                    + chr(10) + "☠️ **TRIGGER 擋過頭了** —— 使用者刪不掉自己加的科目。")
             got = fresh_db.execute(
                 "SELECT code FROM %s WHERE code='C999'" % TABLE).fetchone()
             assert got is None, (
