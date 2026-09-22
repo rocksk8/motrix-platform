@@ -244,8 +244,25 @@ def mails(monkeypatch):
     📌 順帶避開它原本會開的那條 `threading.Thread`。
     """
     calls = []
-    monkeypatch.setattr(dt, "notify_approval_reminder",
-                        lambda *a, **kw: calls.append((a, kw)))
+
+    def _replacement(*a, **kw):
+        calls.append((a, kw))
+        # 🔴 **一定要回 `SEND_SENT`。**
+        #
+        # §4 YA 落地之後，`notify_approval_reminder` 回四態
+        # （`sent`／`transient_fail`／`permanent_fail`／`skipped`），
+        # 而呼叫端**只在 `sent` 或 `permanent_fail` 時才標記已通知**。
+        # ⚠️ 我第一版的替身回 `None` ⇒ 它既不是 `sent` 也不是 `permanent_fail`
+        #    ⇒ **不標記、明天再試** ⇒ WA4／WA7 紅。
+        #
+        # 🔑 **而那個紅是對的**：B 刻意讓「沒有確認的結果」往安全那一側倒 ——
+        # 一個回 `None` 的東西不可以被當成成功，**那正是 YA 整節在修的事**。
+        # 📌 這是我自己在 YA 檔頭寫的那句話的後果：
+        #    「攔截點下移之後，舊的攔截點就失效了 ——
+        #    **那不是回歸，那是同一個決定的後果。**」
+        return email_notify.SEND_SENT
+
+    monkeypatch.setattr(dt, "notify_approval_reminder", _replacement)
     return calls
 
 
@@ -356,11 +373,27 @@ def test_wa7_a_long_outage_still_sends_exactly_one(
 
 @pytest.fixture()
 def captured_mail(monkeypatch):
-    """攔 `email_notify._async_send`，拿到真正組出來的 HTML。"""
+    """攔 **`email_notify._send`**，拿到真正組出來的 HTML。
+
+    ## 🔴 第一版攔的是 `_async_send`，而 §4 YA 把那條路拿掉了
+
+    `notify_approval_reminder` 現在**同步**呼叫 `_send`（它要拿到結果才能
+    決定要不要標記已通知）⇒ **`_async_send` 不再被走到**
+    ⇒ 我那四題全部停在「一封都沒寄出 —— 前提不成立」。
+
+    🔑 **那不是回歸，那是同一個決定的後果** ——
+    而那個決定是我自己在 YA 檔頭要求的：
+    **「不可以停在 `notify_*` 那一層攔截。」**
+    📌 ⇒ 攔截點必須跟著下移，而**替身要回一個 `SEND_*`**
+    （回 `None` 的話呼叫端會當成「沒有確認」而不標記）。
+    """
     box = []
-    monkeypatch.setattr(email_notify, "_async_send",
-                        lambda to, subject, html: box.append(
-                            {"to": to, "subject": subject, "html": html}))
+
+    def _fake_send(to_addrs, subject, html):
+        box.append({"to": to_addrs, "subject": subject, "html": html})
+        return email_notify.SEND_SENT
+
+    monkeypatch.setattr(email_notify, "_send", _fake_send)
     monkeypatch.setattr(email_notify, "_lookup_emails",
                         lambda users, kind: ["approver@example.com"])
     monkeypatch.setattr(email_notify, "_superadmin_emails",

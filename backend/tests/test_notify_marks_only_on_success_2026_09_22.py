@@ -382,3 +382,85 @@ def test_ya8b_a_transient_failure_is_not_recorded_as_permanent(
         f"暫時性失敗被記進永久性失敗的落點裡：{blob[:240]}\n"
         "⇒ 那張單子會被當成「已經處理過的失敗」，而它其實只是網路抖了一下。"
     )
+
+
+# ══════════════════════════════════════════════════════════════════════
+# YA10 · 🔴 機器層級的問題不是 permanent，是 skipped（B 的裁決）
+# ══════════════════════════════════════════════════════════════════════
+
+def test_ya10_a_machine_level_problem_does_not_mark_anything(
+        client, pending_quote, smtp, monkeypatch):
+    """🔴🔴 YA10：**SMTP 未啟用（機器層級）⇒ 標記不可以被寫入，而且下次再試。**
+
+    ## 📌 這一條與 A 的 YA4 字面不同，而 B 的版本是對的
+
+    A 的 YA4 把「SMTP 未設定」列在 `permanent`。**B 當場改成 `skipped`**，
+    理由是**壞掉的東西不是同一個**：
+
+    | | 壞的是 | 修好之後 |
+    |---|---|---|
+    | 收件人沒有 email | **這一封** | 那個人當時就該被通知，補寄沒有意義 ⇒ `permanent` |
+    | SMTP 未設定／未啟用／開發機硬擋 | **整台機器** | **每一封都該補寄** ⇒ `skipped` |
+
+    ☠️ 把機器層級的問題記成 `permanent` 的後果：
+    **一個設定沒填，造成 N 筆單子被永久標記成「已通知」** ——
+    🔑 而管理員把 SMTP 設好之後，**那些信永遠不會出去，且沒有人知道**。
+    📌 而「每天重試」在這一側幾乎沒有成本：`_send()` 在碰到網路之前就返回了。
+
+    ## 🔑 這一題與 YA8 是一對，而它們的判準只差「壞的是哪一層」
+
+    YA8：收件人為空 ⇒ **要**標記。
+    這一題：SMTP 未啟用 ⇒ **不可以**標記。
+    ⚠️ 一個不分層級的實作會同時滿足其中一個、破壞另一個 ——
+    **而兩題都在這個檔裡，所以它跑不掉。**
+    """
+    monkeypatch.setattr(email_notify, "_cfg", lambda: {"enabled": False})
+    assert not _markers(), "前提不成立：一開始就有標記"
+
+    _run(monkeypatch, 3)
+
+    assert smtp.connections == 0, (
+        f"SMTP 未啟用，而它仍然嘗試連線 {smtp.connections} 次 —— "
+        "那表示 `enabled` 那道判斷沒有生效，這一題的前提不成立"
+    )
+    assert not _markers(), (
+        f"SMTP 未啟用（機器層級），而「已通知」被寫進去了：{sorted(_markers())}\n"
+        "☠️ 一個設定沒填，造成 N 筆單子被永久標記成已通知 ——\n"
+        "而管理員把 SMTP 設好之後，那些信永遠不會出去，且沒有人知道。"
+    )
+
+    query = getattr(dt, "reminder_send_failures", None)
+    if callable(query):
+        blob = json.dumps(list(query()), ensure_ascii=False, default=str)
+        assert DOC_NO not in blob, (
+            f"機器層級的問題被記進永久性失敗的落點裡：{blob[:240]}\n"
+            "⇒ 那會讓它看起來像「已經處置過的失敗」。"
+        )
+
+
+def test_ya10b_the_next_run_retries_after_a_skip(
+        client, pending_quote, smtp, monkeypatch):
+    """🔴 YA10b 反向控制：**`skipped` 之後，下一次排程要再試。**
+
+    ☠️ 少了這一題，一個「`skipped` 就不標記、而也不再嘗試」的實作會讓
+    YA10 綠 —— 而 SMTP 設好之後那些信**仍然不會出去**。
+    🔑 跟 YA6 同一句：**「沒有留下錯的紀錄」與「事情被做完」是兩件事。**
+    """
+    monkeypatch.setattr(email_notify, "_cfg", lambda: {"enabled": False})
+    _run(monkeypatch, 3)
+    assert not _markers(), "前提不成立（見 YA10）"
+
+    # 設定修好了 —— 下一次排程要把那封信寄出去
+    monkeypatch.setattr(email_notify, "_cfg", lambda: {
+        "enabled": True,
+        "smtp_host": "smtp.test.invalid", "smtp_port": 587,
+        "smtp_user": "test@test.invalid", "smtp_password": "x",
+        "from_name": "MOTRIX 測試", "dev_mode": False,
+    })
+    _run(monkeypatch, 3, on=(2026, 9, 23))
+
+    assert smtp.sent, (
+        "SMTP 設定修好之後，那封被 skip 掉的信沒有補寄 ——\n"
+        "⇒ 使用者把設定填好了，而系統再也不提那件事。"
+    )
+    assert _markers(), "補寄成功了而標記沒有寫入（見 YA7）"
