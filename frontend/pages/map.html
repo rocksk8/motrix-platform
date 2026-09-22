@@ -32,6 +32,14 @@
                border-radius:var(--radius); font-size:12px; line-height:1.7;
                margin-bottom:8px; }
     .mp-note.warn { background:var(--warning-light); color:var(--warning); }
+    /* 沒有圖示的那幾塊，文字要**跟有圖示的對齊**。
+       🔴 `b5698ba`／`85f2d51` 拿掉三個圖示 span 之後，`.mp-note` 是 flex
+       ⇒ 少一個子元素，文字就整個往左移 24px（實測 90px → 66px）
+       ⇒ 十四塊並排時左緣是鋸齒狀的，**而「有圖示的比較重要」那個訊息讀不出來**，
+          因為不重要的那幾塊反而更往左突出。
+       ☠️ 單獨看每一塊都沒問題 —— 這個缺陷只在並排時存在。
+       📌 24px = 圖示 span 寬 ＋ `gap:8px`，在瀏覽器裡量到的，不是估的。 */
+    .mp-note > div:first-child { margin-left:24px; }
     .mp-note.info { background:#F5F4F0; color:var(--text-secondary); }
     /* 圖釘：**字在圖釘上**，不是在 popup 裡。
        popup 要點才看得到，而使用者要的是「看一眼就知道哪幾個是自己的廠商」。 */
