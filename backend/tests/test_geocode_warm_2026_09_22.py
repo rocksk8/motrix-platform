@@ -38,6 +38,7 @@
 | `geo.warm_status()` | `{lastRunAt, processed, succeeded, stoppedBecause}` |
 | `stoppedBecause` | `no_backlog` / `daily_limit` / `geo_off` / `failures` **四種要分得開** |
 """
+import re
 import sys
 from pathlib import Path
 
@@ -59,6 +60,27 @@ _PAGES_DIR = Path(__file__).resolve().parent.parent.parent / "frontend" / "pages
 UI_PAGES = ("map.html", "tender-radar.html")
 
 
+#: 🔴 2026-09-23：**註解不是使用者讀得到的出口。**
+#:
+#: `test_vc1` 斷言「按幾次」不可以出現在頁面上，而 B 在 `map.html` 的
+#: **註解**裡引用了使用者原話「再按幾次都不會變少」⇒ 紅。
+#: ☠️ **B 因此去改了那行註解** —— 而那是「讓受測物迎合判準」，
+#: 🔑 **根因在我這一邊**：我掃的是整個檔，而我要問的是「使用者會不會讀到」。
+#: 📌 今天第二次（`FX33` 的 `text.count()` 也數到了 B 的註解，
+#:    那一次差點變成「B 的修正沒生效」這個具體、可信、而且錯的指控）。
+#: ⇒ 剝掉註解再比對。**B 以後不需要為了我的題繞開自己的註解。**
+_HTML_COMMENT = re.compile(r"<!--.*?-->", re.S)
+_JS_LINE_COMMENT = re.compile(r"^[ \t]*//[^\n]*$", re.M)
+
+
+def _visible(text):
+    """只留使用者讀得到的部分 —— 剝掉 HTML 註解與整行 JS 行註解。
+
+    ☠️ 貪心地剝 `//` 會把 `https://` 切掉 ⇒ 只剝整行的。
+    """
+    return _JS_LINE_COMMENT.sub("", _HTML_COMMENT.sub("", text))
+
+
 def _ui_text():
     """兩個頁面的內容合起來，並先證明它們讀得到。"""
     chunks = []
@@ -67,7 +89,7 @@ def _ui_text():
         assert p.exists(), f"找不到 {p}"
         body = p.read_text(encoding="utf-8")
         assert len(body) > 3000, f"{name} 只有 {len(body)} 字元 —— 讀錯檔了？"
-        chunks.append(body)
+        chunks.append(_visible(body))
     # ⚠️ 用 `chr(10)` 不寫跳脫字元：我剛才用 bash heredoc 改這個檔，
     #    而 `"\n"` 被吃成了**一個真的換行**，把這支函式整個弄壞。
     # 🔑 那是〈Bash heredoc 會吃掉跳脫字元〉第八次 ——
@@ -86,8 +108,36 @@ def _need(name):
 
 @pytest.fixture()
 def backlog(client):
-    """塞一批**還沒定位過**的地址進去，並清空快取與今日計數。"""
+    """塞一批**還沒定位過**的地址進去，並清空快取與今日計數。
+
+    ## 🔴 2026-09-23：**負快取是行程內的，它跨測試存活**（B 抓到）
+
+    `GC9` 要求負快取**不落 DB**（否則分不出「查過查不到」與「沒查成功」）
+    ⇒ 它是一個 module-level 的 dict ⇒ **上一題記住的，下一題還記得**。
+    ```
+    每一題都塞同一批「待定位機關0~5」
+    前一題把它們記成查過查不到
+    ⇒ 後一題的 warm 迴圈一筆都不跑 ⇒ len(tries) == 0
+    ```
+    ☠️ **而「跑了 0 次」跟「迴圈壞了」長得一模一樣** ——
+    🔑 那正是 `VB4b` 的訊息在講的事，只是這一次成因在**測試之間**，
+    不在實作裡。**兩題單獨跑都綠**，所以它只在整批跑時出現。
+    📌 〈假綠燈〉的姊妹：**測試間共用的狀態**，這次是假紅燈。
+
+    ⚠️ 而 B **沒有**讓 warm 迴圈繞過負快取來讓那兩題變綠 ——
+    warm 迴圈正是那 53 個地址被重複查的地方（每 6 小時一輪），
+    讓它繞過等於把 `GC8` 的一半拿掉。**那個判斷是對的。**
+    """
     import db
+    # 🔴 B 加的 `reset_geocode_misses()` —— 測試隔離，
+    #    以及日後「使用者改了一批地址想馬上重查」共用同一支。
+    reset = getattr(geo, "reset_geocode_misses", None)
+    assert reset is not None, (
+        "`helpers/geo.py` 缺少 `reset_geocode_misses()` ——\n"
+        "☠️ 少了它，負快取會跨題殘留，而症狀是「warm 迴圈跑了 0 次」，\n"
+        "🔑 那與「迴圈壞了」長得一模一樣。")
+    reset()
+
     conn = db.get_db()
     try:
         conn.execute("DELETE FROM geocode_cache")
@@ -489,6 +539,13 @@ def test_vc1_the_page_no_longer_tells_the_user_to_press_a_button():
     在改用機關名稱定位之後就不是主要成因了）。
 
     ⚠️ 文字比對，弱的。它擋得住「**忘了改**」，擋不住「改成另一句錯的」。
+
+    ## 🔴 2026-09-23：**這一題現在只看使用者讀得到的部分**
+
+    我原本掃整個檔 ⇒ 紅在 B 寫的一行**註解**（它引用了使用者原話）
+    ⇒ ☠️ **B 去改了那行註解來讓我的題綠** —— 那是受測物迎合判準，
+    🔑 **而根因在我**：我要問的是「使用者會不會讀到」，不是「檔案裡有沒有」。
+    📌 ⇒ 剝掉註解再比對。**B 不需要為了我的題繞開自己的註解。**
     """
     text = _ui_text()
     assert "按幾次" not in text, (
@@ -496,6 +553,29 @@ def test_vc1_the_page_no_longer_tells_the_user_to_press_a_button():
         "⇒ 背景自動定位之後那不再是使用者要做的事，"
         "而那句話會把他送去做一件沒有用的事。"
     )
+
+
+def test_vc1_the_comment_stripping_cannot_swallow_the_real_copy():
+    """📏 量尺：**剝註解不可以把使用者讀得到的字一起剝掉。**
+
+    ☠️ 少了這一題，`_visible()` 哪天寫壞（例如貪心地剝 `//` 之後的一切）
+    會把整個頁面剝成空字串 ⇒ **上一題與每一個文字比對都會永遠綠**，
+    🔑 而「剝過頭」與「畫面上真的沒有那句話」在斷言上完全相同。
+    📌 〈盤點工具的正對照〉：要先讓**已知的那一個**亮起來。
+    """
+    text = _ui_text()
+    assert len(text) > 6000, (
+        f"兩個頁面剝完註解只剩 {len(text)} 字元 ——\n"
+        "☠️ `_visible()` 剝過頭了，而每一個文字比對都會因此永遠綠。")
+
+    # 📏 誘餌：一個**確定在畫面上**的字串，剝完之後必須還在。
+    #    ⚠️ 釘在「故意留著的錨點」上，不釘在缺陷上 ——
+    #    釘在缺陷上的正對照會在缺陷修好那天失效。
+    for anchor in ("這次來不及定位", "查不到這個地址"):
+        assert anchor in text, (
+            f"剝完註解之後找不到「{anchor}」——\n"
+            "☠️ 那是 `map.html` 上使用者讀得到的字（GC8 的兩句），\n"
+            "🔑 它不見了代表 `_visible()` 把真的內容也剝掉了。")
 
 
 def test_vc2_the_page_can_say_which_kind_of_stopped_it_is():
