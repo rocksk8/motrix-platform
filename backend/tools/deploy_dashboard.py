@@ -159,9 +159,18 @@ _active_job_id: str | None = None
 RESULT_PROTOCOL_VERSION = 2
 
 #: 一行、無前後空白、大小寫固定、欄位順序固定。
+#: 🔴 `service` 是**必填**：少了它整行比不上 ⇒ 落進 fail-closed。
+#: 🔑 那是刻意的 —— 「印了一半的結果行」與「沒印」一樣不可信。
 _RESULT_RE = re.compile(
-    r"^::RESULT:: v=(\d+) status=(\S+) rolled_back=(\S+) exit=(-?\d+)\s*$",
+    r"^::RESULT:: v=(\d+) status=(\S+) rolled_back=(\S+) service=(\S+)"
+    r" exit=(-?\d+)\s*$",
     re.M)
+
+#: 握手行：**正在跑的那一份腳本**看得懂 v2 協定。
+_PROTOCOL_RE = re.compile(r"^::PROTOCOL:: v=(\d+)\s*$", re.M)
+
+#: `service` 的值域。只講**觀察到的事實**，不講推論。
+_SERVICE_VALUES = frozenset({"up", "down", "unknown"})
 
 #: 🔴 **值域封閉**，與 `apply_update.ps1` 的 15 條出口 **1:1**。
 #: 🔑 1:1 是刻意的：新增出口時**沒有現成的值可以借**
@@ -202,6 +211,23 @@ _LEGACY_FAIL_RE = re.compile(r"更新失敗|已自動回滾|\[FAIL\]")
 #: ☠️ 反過來寫成白名單的話，日後新增一個動作**忘了加進去**就會安靜地
 #:    退回舊行為 —— 而那正是這一整件事要修的東西。
 #: ⇒ 只有這裡列出來的可以不講，而每一個都要寫理由。
+#: 🔴 **收不到握手時可以退回舊判定的動作** —— 只有 `rollback`，而它有機制層的理由。
+#:
+#: ☠️ `_dashboard_remote.ps1` 的 `rollback` 分支（`:149-170`）**沒有**預先複製
+#:    套件裡的 `backend\tools\*`（那段只在 `deploy` 分支的 `:98-104`）
+#:    ⇒ 新的 `rollback_update.ps1` **只能靠一次成功的部署**才會上正式機。
+#: ⇒ 而危險的順序正是最可能發生的那一條：
+#:      部署失敗 ⇒ 自動回滾用套用前快照蓋回去 ⇒ 正式機的 tools **退回舊版**
+#:      ⇒ 使用者手動回滾 ⇒ 舊腳本不印那些行
+#:      ⇒ 無條件 fail-closed 會把它記成「回滾失敗」
+#:      ⇒ **而那一刻使用者最需要的正是「回滾到底成功了沒」**
+#:
+#: ⚠️ **`deploy` 不在這裡，而那是有理由的不對稱，不要「統一」掉**：
+#:    deploy 有預先複製 ⇒ 跑的一定是新版 ⇒ 收不到握手代表**真的有問題**
+#:    （例如包裡缺 `backend\tools\`，那段複製會安靜跳過）
+#:    ⇒ 對 deploy 而言「收不到握手」本身就是一個要擋下來的訊號。
+_PROTOCOL_LEGACY_FALLBACK = {"rollback"}
+
 _PROTOCOL_EXEMPT = {
     # `build` 跑的是本機打包（`build_deploy_package.ps1`），**完全不碰正式機**
     # ⇒ `rolled_back` 對它沒有意義，硬要它印一個 `not_applied` 只是噪音。
@@ -210,7 +236,56 @@ _PROTOCOL_EXEMPT = {
 }
 
 
-def decide_outcome(returncode: int, output: str) -> str:
+def used_legacy_protocol(output: str, action: str) -> bool:
+    """這一次的判定**是不是用舊協定做的**。
+
+    🔴 存在的理由是「退化必須看得見」：
+    ```
+    有握手的成功   結果行說 success，而那一份腳本**保證會印**
+    舊判定的成功   結束碼是 0，而**我們不知道它有沒有真的做完**
+    ```
+    ☠️ 兩者在畫面上長得一樣，而使用者正是在**剛出事、正在回滾**時看它 ——
+    🔑 那是最不該讓他誤以為事情已經確認好的時刻。
+
+    ⚠️ 三種情形不是兩種：
+    ```
+    rollback 無握手 ⇒ True
+    rollback 有握手 ⇒ False   ← 少了這一條，「每次都標」的實作會綠，
+                                而**每次都出現的警告與沒有警告是同一件事**
+    deploy          ⇒ False   它有預先複製，不走那條退路
+    ```
+    """
+    return (action in _PROTOCOL_LEGACY_FALLBACK
+            and not protocol_handshake_seen(output))
+
+
+def protocol_handshake_seen(output: str) -> bool:
+    """輸出裡有沒有 `::PROTOCOL:: v=2`。
+
+    🔑 它回答的是「**正在跑的那一份腳本**看不看得懂 v2」，
+    不是「這次成功了沒」。兩者混在一起的話，一支舊腳本的成功會被當成
+    協定成立，而它根本沒有印結果行。
+    """
+    m = _PROTOCOL_RE.search(output or "")
+    return bool(m) and m.group(1) == str(RESULT_PROTOCOL_VERSION)
+
+
+def _legacy_outcome(returncode: int, output: str) -> str:
+    """舊判定：結束碼 ＋ 關鍵字第二道。
+
+    ⚠️ 這**不是**「比較寬鬆的版本」，它是**2026-09-22 之前的全部** ——
+    而 P0-00 正是因為它低報失敗才存在（`:545` 那條 `exit 0`）。
+    ⇒ 只在「對方腳本太舊、根本不會印結果行」時用它，**而畫面要明著標出來**。
+    """
+    if returncode != 0:
+        return "failed"
+    if _LEGACY_FAIL_RE.search(output or ""):
+        return "failed"
+    return "succeeded"
+
+
+def decide_outcome(returncode: int, output: str,
+                   action: str = "deploy") -> str:
     """這一次部署到底是成功還是失敗。回 `"succeeded"` 或 `"failed"`。
 
     ## 🔴 `exit=0` 不等於成功
@@ -218,6 +293,11 @@ def decide_outcome(returncode: int, output: str) -> str:
     `unhealthy_not_rolled_back`（`apply_update.ps1:545`）的結束碼**就是 0** ——
     健康檢查沒過、而 `-SkipAutoRollback` 讓它不回滾 ⇒ 新程式碼留在正式機上。
     ☠️ 用結束碼判的話，那一次會被記成成功，**而沒有人會來看**。
+
+    ## ⚠️ `action` 預設 `"deploy"`（**嚴格的那一邊**）
+
+    🔑 與 `_PROTOCOL_EXEMPT` 寫成例外清單同一個方向：**豁免要舉手，不是預設。**
+    ⇒ 呼叫端忘了傳 `action`，拿到的是嚴格判定，**而不是退路**。
 
     ## 🔴 fail-closed：撈不到結果行 ⇒ 失敗
 
@@ -227,18 +307,27 @@ def decide_outcome(returncode: int, output: str) -> str:
       fail-closed 時它在第一次被走到就紅。
     """
     text = output or ""
+    # 🔴 **只有明著開了 fallback 的動作**（目前只有 `rollback`）才走這條，
+    # 而條件是**連握手都收不到** —— 收得到握手卻沒有結果行，仍然是 fail-closed。
+    # 🔑 那個區別重要：握手在＝腳本是新的＝它有能力印結果行
+    #    ⇒ 沒印就是真的出事了，不是版本舊。
+    if used_legacy_protocol(text, action):
+        return _legacy_outcome(returncode, text)
     found = _RESULT_RE.findall(text)
     if not found:
         return "failed"                      # 🔴 fail-closed
     # ⚠️ 取**最後一行**：`apply_update.ps1` 會呼叫別的腳本，而那些也可能印
     #    `::RESULT::` —— 取第一行的話**子行程的結果會蓋掉真正的那一條出口**。
-    version, status, _rolled_back, _exit_field = found[-1]
+    version, status, _rolled_back, service, _exit_field = found[-1]
     if version != str(RESULT_PROTOCOL_VERSION):
         # 跑的不是我們送過去那一份（正式機上那一支比較舊）
         # ⇒ 舊的那一份印不出新的狀態值，拿它的輸出去判等於在猜。
         return "failed"
     if status not in _STATUS_ALL:
         # 含 ps1 的預設值 `unknown`（忘記給狀態就印它）。
+        return "failed"
+    if service not in _SERVICE_VALUES:
+        # 值域外的 `service` 代表這一行不是我們認得的那個協定產生的。
         return "failed"
     if status not in _STATUS_SUCCEEDED:
         return "failed"
@@ -291,17 +380,29 @@ def _run_job(job_id: str, action: str, cmd: list, input_text: str = None):
             # 結束碼 ＋ 關鍵字第二道。
             # ⚠️ 這一條**不是**「以後再說」——`build` 不碰正式機，
             #    `rolled_back` 對它沒有意義。
-            success = proc.returncode == 0
-            if success and _LEGACY_FAIL_RE.search(joined):
-                success = False
-            outcome = "succeeded" if success else "failed"
+            outcome = _legacy_outcome(proc.returncode, joined)
+            # ⚠️ `build` 是**豁免**不是**退化** —— 它從來就不講這個協定。
+            # ☠️ 標成 legacy 的話那句警告會在**每一次打包**出現，
+            #    而一個每次都出現的警告與沒有警告是同一件事。
+            legacy = False
         else:
             # 🔴 判定**經過** `decide_outcome`，不是在這裡重寫一次。
             # ☠️ 一支接縫寫好了而沒有人呼叫，跟沒有寫是一樣的
             #    （`reminder_stage()` 那次：四題全綠而產品碼零呼叫者）。
-            outcome = decide_outcome(proc.returncode, joined)
+            legacy = used_legacy_protocol(joined, action)
+            outcome = decide_outcome(proc.returncode, joined, action=action)
+            if legacy:
+                # 🔴 **退化必須看得見。** 少了這一行，一次「用舊協定判的」
+                # 與一次「用新協定判的」在畫面上完全相同 ——
+                # ☠️ 而靜默的退化正是這一整件事要修的東西。
+                _jobs[job_id]["lines"].append(
+                    "[注意] 正式機上的腳本沒有回報 v2 協定"
+                    "（`::PROTOCOL:: v=2`）——**本次以舊版協定判定**："
+                    "只看結束碼與關鍵字，判不出「健康檢查沒過但沒回滾」那一種。"
+                    "下一次成功部署之後就會恢復。")
         with _jobs_lock:
             _jobs[job_id]["status"] = outcome
+            _jobs[job_id]["legacyProtocol"] = legacy
 
         if action in ("deploy", "rollback"):
             _append_history(action, job_id, success, str(log_path))
@@ -547,6 +648,9 @@ def job_status(job_id: str, since: int = 0):
         return {
             "status": job["status"],
             "action": job["action"],
+            # 🔑 〈計數器要有落點〉：設了旗標而畫面上沒有它，
+            # 它從來不會被看見 —— 而那與「沒有退化」長得一模一樣。
+            "legacyProtocol": job.get("legacyProtocol", False),
             "lines": job["lines"][since:],
             "totalLines": len(job["lines"]),
         }

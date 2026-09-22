@@ -128,9 +128,22 @@ function Test-Ping {
 #    autostart 迴圈會把它拉回來，那個狀態自己會好。
 $script:ProdState = "not_applied"
 
+# 🔴 **`service` 是獨立的一維，不可以塞進 `rolled_back`**（§34c）。
+# `rolled_back` 問的是**磁碟上是什麼**，`service` 問的是**它現在跑不跑**。
+# ☠️ 混在一起會長出 `applied_no_restore_and_down` 這種組合爆炸。
+#
+# 三個值各自對應一個**觀察到的事實**，不是推論：
+#   up      我們在最後一個動作之後 ping 成功過
+#   down    我們**停掉了它**，而之後沒有任何一次 ping 成功
+#   unknown 我們沒有停過它，也沒有成功 ping 過（＝沒量過）
+# 📌 `:358` 那條出口（robocopy 中途失敗）就是 `down` ——
+#    **而那一件決定使用者要不要現在衝去開機。**
+$script:ServiceState = "unknown"
+
 function Emit-Result($status, $code) {
     # 一行、無前後空白、大小寫固定、欄位順序固定（B.md §九 定版）。
-    Write-Host "::RESULT:: v=2 status=$status rolled_back=$($script:ProdState) exit=$code"
+    Write-Host ("::RESULT:: v=2 status=$status rolled_back=$($script:ProdState)" +
+                " service=$($script:ServiceState) exit=$code")
 }
 
 # ⚠️ `$status` 預設 `unknown` 是刻意的：日後有人新增一條 `Fail` 而忘了給狀態，
@@ -145,6 +158,15 @@ function Info($msg)  { Write-Host $msg }
 function Warn($msg)  { Write-Host "[WARN] $msg" -ForegroundColor Yellow }
 function Ok($msg)    { Write-Host "[OK] $msg" -ForegroundColor Green }
 
+# 🔑 **握手行**：它說的是「**正在跑的這一份腳本**看得懂 v2 協定」。
+# ⚠️ 對 `apply_update.ps1` 而言它是**多餘的保險**——`_dashboard_remote.ps1:98-104`
+#    會在呼叫之前先把套件裡的 `backend\tools\*` 覆蓋過去，所以跑的一定是新版。
+# ☠️ 但那段複製包在 `if (Test-Path $srcTools) { ... }` 裡而**沒有 else** ⇒
+#    包裡缺 `backend\tools\` 時它**安靜跳過**，正式機就用舊的跑
+#    —— 這一行讓那個安靜跳過**變成看得見的**。
+# 🔴 而對 `rollback_update.ps1` 它不是保險，是**必要條件**：
+#    rollback 分支**沒有**那段預先複製（§34a），所以舊腳本真的會被跑到。
+Write-Host "::PROTOCOL:: v=2"
 Write-Host "======================================"
 Write-Host "  MOTRIX ERP - Apply Update"
 Write-Host "======================================"
@@ -163,6 +185,7 @@ if ($CheckOnly) {
     Info "  健康檢查網址：$PingUrl（走 _healthcheck_ping.py，$(if ($UsesHttps) { 'HTTPS' } else { 'HTTP' })）"
     if (Test-Ping -Url $PingUrl -TimeoutSec 5) {
         Ok "  /api/ping 回應 200，健康檢查機制正常。"
+        $script:ServiceState = "up"        # ping 成功＝觀察到的事實
         Emit-Result "checkonly_ok" 0
         exit 0
     } else {
@@ -374,6 +397,12 @@ if ($portFreed) {
     Warn "  Port 666 等待 15 秒後仍顯示被佔用，繼續往下走（crash-restart 迴圈本身會自動重試）。"
 }
 Ok "  伺服器已停止，等待 autostart crash-restart 迴圈接手（見 §1.1，最長約 5 秒偵測到中止後重啟）。"
+
+# 🔴 **我們自己停掉了它** ⇒ 從這裡開始 `service=down`，
+# 直到某一次 ping 成功才會變回 `up`。
+# ☠️ 少了這一行，`:358`（robocopy 中途失敗）會報 `service=unknown`，
+#    而實際上**是我們把它停掉的** —— 那個差別決定使用者要不要現在去開機。
+$script:ServiceState = "down"
 
 # ============================================================
 # Step 3: 複製新程式碼（只加不刪，絕不 /MIR）
@@ -670,9 +699,17 @@ if ($healthy -and -not $logErrors) {
     # ☠️ 兩者合成一個「已還原」⇒ **使用者最需要知道的那一格又被蓋掉了**，
     #    只是降了一層 —— 而那正是這整件事要修的東西。
     $script:ProdState = if ($rolledBackHealthy) { "restored" } else { "restored_unhealthy" }
+    # ⚠️ `$rolledBackHealthy` 為 false 時**維持 `down`**，不改成 `unknown`：
+    # 我們確實停掉了它，而之後 20 次 ping 沒有一次成功 ⇒ 照上面的定義就是 `down`。
+    # 📌 「它可能其實活著、只是健康檢查偽陰性」那個可能性**由上方印出的
+    #    port 666 監聽狀態負責**，不由這個欄位負責 —— 一個欄位只講一件事。
+    if ($rolledBackHealthy) { $script:ServiceState = "up" }
     Emit-Result "unhealthy_rolled_back" 1
     exit 1
 }
+
+# 走到這裡代表健康檢查通過過（ping 成功）⇒ 觀察到的事實。
+$script:ServiceState = "up"
 
 # ============================================================
 # Step 6: 更新版本追蹤檔

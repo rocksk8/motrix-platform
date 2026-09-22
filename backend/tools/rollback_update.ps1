@@ -61,14 +61,54 @@ function Test-Ping {
     }
 }
 
-function Fail($msg) {
+# ══════════════════════════════════════════════════════════════════
+# `::RESULT::` 協定 v2（§34a）
+# ══════════════════════════════════════════════════════════════════
+#
+# 🔴 **這支比 `apply_update.ps1` 更需要它，而理由是機制層的。**
+# `_dashboard_remote.ps1` 的 `rollback` 分支（`:149-170`）**沒有**預先複製
+# 套件裡的 `backend\tools\*`（那段只在 `deploy` 分支的 `:98-104`）
+# ⇒ 這一份新腳本**只能靠一次成功的部署**才會上正式機。
+# ☠️ 而危險的順序正是最可能發生的那一條：
+#    部署失敗 ⇒ 自動回滾用套用前快照蓋回去 ⇒ 正式機的 tools **退回舊版**
+#    ⇒ 使用者手動回滾 ⇒ 舊腳本不印這些行
+# ⇒ 所以 dashboard 那一側對 `rollback` **必須先握手再啟用 fail-closed**，
+#   否則那一刻會把回滾記成失敗 —— 而那一刻使用者最需要的正是
+#   **「回滾到底成功了沒」**。
+#
+# ⚠️ `rolled_back` 在這支腳本裡的語意：
+#    unknown    這支腳本**沒有動過磁碟**（早期中止）⇒ 它不知道上面是什麼
+#    restored   還原完成，且還原後 ping 成功
+#    restored_unhealthy  還原完成，而 ping 一直沒成功
+#    ☠️ 早期中止**不可以報 `applied`** —— 那是在斷言「磁碟上是新版」，
+#       而這支腳本從來沒有檢查過那件事。
+$script:ProdState = "unknown"
+
+# `service`：只講**觀察到的事實**（定義與 apply_update.ps1 一致）
+#   up / down / unknown
+$script:ServiceState = "unknown"
+
+function Emit-Result($status, $code) {
+    Write-Host ("::RESULT:: v=2 status=$status rolled_back=$($script:ProdState)" +
+                " service=$($script:ServiceState) exit=$code")
+}
+
+# ⚠️ `$status` 預設 `unknown` ⇒ 日後新增一條 `Fail` 而忘了給狀態，
+#    它會印 `status=unknown`，而 dashboard 的值域檢查把它判成失敗。
+#    🔑 **忘記的代價落在「被記成失敗」，不是「被記成成功」。**
+function Fail($msg, $status = "unknown") {
     Write-Host "`n[FAIL] $msg" -ForegroundColor Red
+    Emit-Result $status 1
     exit 1
 }
 function Info($msg)  { Write-Host $msg }
 function Warn($msg)  { Write-Host "[WARN] $msg" -ForegroundColor Yellow }
 function Ok($msg)    { Write-Host "[OK] $msg" -ForegroundColor Green }
 
+# 🔴 **握手行 —— 對這支腳本它是必要條件不是加分**（理由見上方）。
+# dashboard 收到它才啟用 fail-closed；收不到就退回結束碼判定，
+# 並在畫面上明著標「本次以舊版協定判定」。
+Write-Host "::PROTOCOL:: v=2"
 Write-Host "======================================"
 Write-Host "  MOTRIX ERP - Rollback"
 Write-Host "======================================"
@@ -78,7 +118,7 @@ Write-Host "======================================"
 # ============================================================
 $scriptRoot = (Get-Item $PSScriptRoot).Parent.Parent.FullName
 if ($scriptRoot -ne $ProdRoot) {
-    Fail "偵測到執行路徑為 '$scriptRoot'，不是正式機路徑 '$ProdRoot'。本腳本只允許在正式機執行，中止。"
+    Fail "偵測到執行路徑為 '$scriptRoot'，不是正式機路徑 '$ProdRoot'。本腳本只允許在正式機執行，中止。" "rollback_not_prod_machine"
 }
 Info "身分確認：正式機（$ProdRoot）`n"
 
@@ -90,10 +130,10 @@ $dbBackupPath = Join-Path $BackendDir "db_backups\pre_update_$SnapshotTimestamp\
 $dbPath       = Join-Path $BackendDir "motrix_erp.db"
 
 if (-not (Test-Path $rollbackDir)) {
-    Fail "找不到程式碼快照：$rollbackDir"
+    Fail "找不到程式碼快照：$rollbackDir" "rollback_snapshot_missing"
 }
 if (-not (Test-Path $dbBackupPath)) {
-    Fail "找不到 db 快照：$dbBackupPath"
+    Fail "找不到 db 快照：$dbBackupPath" "rollback_db_snapshot_missing"
 }
 Info "[1/2] 快照驗證通過："
 Info "  程式碼快照：$rollbackDir"
@@ -103,7 +143,7 @@ if (-not $Yes) {
     Write-Host ""
     $answer = Read-Host "確認要把正式機回滾到 $SnapshotTimestamp 這個快照嗎？(y/N)"
     if ($answer -ne "y" -and $answer -ne "Y") {
-        Fail "使用者取消，未做任何回滾動作。"
+        Fail "使用者取消，未做任何回滾動作。" "rollback_user_cancelled"
     }
 }
 
@@ -111,6 +151,12 @@ if (-not $Yes) {
 # Step 2: 還原（照抄 apply_update.ps1 第392-426行的自動回滾邏輯）
 # ============================================================
 Info "`n[2/2] 開始回滾..."
+
+# 🔴 **危險值在動作之前設**（與 apply_update.ps1 同一個紀律）：
+# 從停服那一刻起，`service=down`、磁碟即將被覆寫。
+# ☠️ 之後才設的話，還原到一半失敗會報出一個**比實際安全**的狀態。
+$script:ServiceState = "down"
+$script:ProdState = "applied_no_restore"
 
 # 先停服務再動檔案（含 db）——避免正在跑的伺服器跟覆寫的檔案打架。
 $conn = Get-NetTCPConnection -LocalPort 666 -State Listen -ErrorAction SilentlyContinue
@@ -149,6 +195,9 @@ if ($healthy) {
     Write-Host "======================================" -ForegroundColor Green
     Write-Host "  回滾完成，健康狀態正常：$SnapshotTimestamp" -ForegroundColor Green
     Write-Host "======================================" -ForegroundColor Green
+    $script:ProdState = "restored"
+    $script:ServiceState = "up"
+    Emit-Result "rollback_ok" 0
 } else {
     Write-Host "======================================" -ForegroundColor Red
     Write-Host "  回滾動作已執行，但健康檢查仍異常，需要人工介入！" -ForegroundColor Red
@@ -166,5 +215,11 @@ if ($healthy) {
             Write-Host "    State=$($c.State)  PID=$($c.OwningProcess)  Process=$procName" -ForegroundColor Yellow
         }
     }
+    # ⚠️ 還原**動作**完成了，而正式機**沒有**回到健康 ——
+    # 兩件事要分開講：`rolled_back=restored_unhealthy` 說「還原做完了」，
+    # `service=down` 說「它現在沒在服務」。
+    # ☠️ 合成一句「回滾失敗」會讓人以為快照沒被套用，而去做第二次回滾。
+    $script:ProdState = "restored_unhealthy"
+    Emit-Result "rollback_failed" 1
     exit 1
 }
