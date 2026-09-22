@@ -406,3 +406,156 @@ def test_gc8_a_repeated_miss_does_not_ask_google_again(monkeypatch):
         geo.locate_cached(address)
     assert len(calls) <= 1, (
         f"同一個查不到的地址問了 Google {len(calls)} 次 —— 沒有負快取。")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# 🔴 負快取的 TTL —— **它零題在守**（C 2026-09-22 18:14 實查）
+# ══════════════════════════════════════════════════════════════════════
+#
+# ```
+# GEOCODE_MISS_TTL_SECONDS 只出現在 helpers/geo.py 三處：
+#   :1049  = 7 * 24 * 60 * 60     定義
+#   :1107  過期就 pop 掉           geocode_missed_recently()
+#   :1134  now - at < TTL          geocode_miss_count()
+# ⇒ tests/ **零處**
+# ```
+# ☠️ 而 `a14c`／`a14d`／`GC8` 那七題驗的都是「**記不記**」——
+# **沒有一題驗「多久之後會忘」。**
+#
+# 🔑 它為什麼特別容易錯而沒人發現：
+# ```
+# TTL = 7 天 ⇒ 要驗必須**操控時間** ⇒ 「寫起來麻煩」的那一類 ⇒ 最容易被跳過
+# 失敗樣子：`>=` 寫成 `<=`／單位寫成分鐘／忘記 pop
+#          ⇒ **全部都不會有症狀** —— 地圖上少幾個點，或多重查幾次，沒有人報修
+# ```
+# 📌 〈降級之後它還是會動〉。
+#
+# 🔴 而 A-2 用「上限已經有了（TTL 7 天）」駁回了 `a14` 的乙案 ——
+# **那句話當時是「讀過程式碼」不是「驗過行為」。** 這一節補上它。
+
+
+def _miss_key(geo, address):
+    """`_MISS_CACHE` 的鍵 —— 它含 `db_path`，不是裸地址。"""
+    return geo._miss_key(address)
+
+
+def test_gc9_a_miss_is_forgotten_once_the_ttl_has_passed(clean_miss_cache):
+    """🔴 **過了 TTL ⇒ 不再算「最近查過」，而且那一筆要真的被移除。**
+
+    🔑 兩件事要一起驗：
+    ```
+    回 False        ← 行為
+    那一筆消失      ← 狀態
+    ```
+    ☠️ 只回 False 而留著的話，`_MISS_CACHE` 會**單調成長** ——
+    而標案雷達每天帶進新的機關名稱，那是一個永遠不會被清的字典。
+    """
+    geo = _geo()
+    address = "TTL 測試地址 A"
+    geo.remember_geocode_miss(address)
+    key = _miss_key(geo, address)
+    assert key in geo._MISS_CACHE, "前提不成立：沒記進去"
+
+    # 🔑 直接把時間戳往前推，**不等七天**。
+    geo._MISS_CACHE[key] = time.time() - geo.GEOCODE_MISS_TTL_SECONDS - 1
+
+    assert geo.geocode_missed_recently(address) is False, (
+        "過了 TTL 而 `geocode_missed_recently()` 仍然回 True ——\n"
+        "☠️ 那個地址永遠不會再被查，**而使用者改地址也救不回來**"
+        "（鍵是地址字串，改對了才換鍵；而他沒改、只是等服務修好）。")
+    assert key not in geo._MISS_CACHE, (
+        "過期之後那一筆仍然留在 `_MISS_CACHE` 裡 ——\n"
+        "🔑 回 False 是對的，**而狀態沒有跟著清** ⇒ 那個字典單調成長，\n"
+        "☠️ 標案雷達每天帶進新的機關名稱，而它永遠不會被清。")
+
+
+def test_gc9_a_fresh_miss_is_still_remembered(clean_miss_cache):
+    """⚙️ 反向控制①：**還沒到 TTL ⇒ 仍然要記得。**
+
+    ☠️ 少了這一題，一個「**永遠回 False**」的實作會讓上一題全綠 ——
+    🔑 而那等於把 `GC8` 整個關掉：53 個查不到的地址會每一次重新排隊，
+    **回到使用者回報的那個 `60 → 103`。**
+    📌 〈判準的寬窄都會騙人〉：「永遠忘記」是「過期就忘記」的超集。
+    """
+    geo = _geo()
+    address = "TTL 測試地址 B"
+    geo.remember_geocode_miss(address)
+    key = _miss_key(geo, address)
+    geo._MISS_CACHE[key] = time.time() - geo.GEOCODE_MISS_TTL_SECONDS + 3600
+
+    assert geo.geocode_missed_recently(address) is True, (
+        "還差一小時才到 TTL，而它已經忘了 ——\n"
+        "☠️ 那等於把 GC8 關掉：那些地址每一次都重新排隊。")
+
+
+def test_gc9_the_two_ttl_implementations_agree(clean_miss_cache):
+    """🔴🔴 **TTL 有兩份實作，而沒有任何東西要求它們一致。**
+
+    ```
+    geo.py:1107  geocode_missed_recently()   if now - at >= TTL: pop
+    geo.py:1134  geocode_miss_count()        if now - at <  TTL: 計入
+    ```
+    ☠️ **同一條規則、兩個獨立的比較式。** 分岔時的樣子：
+    ```
+    一邊過期了、另一邊還沒 ⇒ 查詢**會重查**，而畫面仍說「還有 N 個查不到」
+    或反過來              ⇒ 畫面說「0 個查不到」，而查詢**仍然被短路**
+    ⇒ 兩種都是「數字與行為對不上」，而**兩種都不會報錯**
+    ```
+    📌 而 `geo.py` 自己在別處就警告過這個形狀（`:365` 「⋯而兩份判斷會分岔」）——
+    🔑 **它在那裡被防住了，在這裡沒有。**
+
+    ⚠️ 而這一題是**過渡期的防線**：真正的修法是把那個比較抽成**單一來源**
+    （〈修作法不要修結果〉：守兩份一致 ⇒ 有人加第三個消費者時這題看不見它）。
+    ⇒ 已登記 `NEXT`，**而在那之前這一題至少現在就抓得到分岔**。
+    """
+    geo = _geo()
+    address = "TTL 測試地址 C"
+    geo.remember_geocode_miss(address)
+    key = _miss_key(geo, address)
+
+    # 還沒過期 ⇒ 兩支都要算它
+    geo._MISS_CACHE[key] = time.time() - geo.GEOCODE_MISS_TTL_SECONDS + 3600
+    assert geo.geocode_missed_recently(address) is True
+    assert geo.geocode_miss_count() >= 1, (
+        "還沒過期，而 `geocode_miss_count()` 沒有把它算進去 ——\n"
+        "☠️ 畫面會說「0 個查不到」，而查詢仍然被短路。")
+
+    # 過期 ⇒ 兩支都不可以再算它
+    geo.remember_geocode_miss(address)
+    geo._MISS_CACHE[_miss_key(geo, address)] = (
+        time.time() - geo.GEOCODE_MISS_TTL_SECONDS - 1)
+    before_count = geo.geocode_miss_count()
+    said_recent = geo.geocode_missed_recently(address)
+    assert said_recent is False and before_count == 0, (
+        f"兩支對同一筆的判斷不一致："
+        f"`geocode_missed_recently` 回 {said_recent}、"
+        f"`geocode_miss_count` 回 {before_count} ——\n"
+        "☠️ 「數字」與「行為」對不上，**而兩種方向都不會報錯**。\n"
+        "🔑 同一條規則寫了兩次（`geo.py:1107` 與 `:1134`），"
+        "而沒有任何東西要求它們一致。")
+
+
+def test_gc9_the_yardstick_shrinking_the_ttl_changes_the_answer(
+        clean_miss_cache, monkeypatch):
+    """📏 量尺：**把 TTL 改小 ⇒ 同一筆從「記得」變成「忘了」。**
+
+    ☠️ 少了這一題，上面三題在一個把 `604800` **寫死在比較式裡**的實作下
+    照樣全綠 —— 🔑 而這一題證明它**真的讀那個常數**。
+    📌 今天付過學費的形狀：`GC10` 那一族（對目標行為不敏感的斷言）。
+    """
+    geo = _geo()
+    address = "TTL 測試地址 D"
+    geo.remember_geocode_miss(address)
+    geo._MISS_CACHE[_miss_key(geo, address)] = time.time() - 3600   # 一小時前
+
+    assert geo.geocode_missed_recently(address) is True, (
+        "一小時前記的，在 TTL=7 天下應該還記得（前提不成立）")
+
+    monkeypatch.setattr(geo, "GEOCODE_MISS_TTL_SECONDS", 60)
+    geo.remember_geocode_miss(address)
+    geo._MISS_CACHE[_miss_key(geo, address)] = time.time() - 3600
+
+    assert geo.geocode_missed_recently(address) is False, (
+        "把 TTL 改成 60 秒之後，一小時前那一筆**仍然**被當成「最近查過」——\n"
+        "☠️ 那代表過期判斷讀的不是 `GEOCODE_MISS_TTL_SECONDS`，\n"
+        "🔑 而上面三題的綠證明不了任何事。")
