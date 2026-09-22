@@ -309,3 +309,88 @@ def test_ui9_the_measurement_tools_here_can_actually_fail():
         "`_enclosing_function` 回 %r，應該是 `loadX` —— 量法壞了，"
         "而它壞掉的樣子是**每一題都綠**（沒有函式 ⇒ body 為空 ⇒ 不會被列進 bad）。"
         % fn)
+
+
+# ══════════════════════════════════════════════════════════════════════
+# 🔴 使用者重啟後**第一個動作**就是點「出納」——這一節守那條路徑
+# ══════════════════════════════════════════════════════════════════════
+
+#: 一個正常內頁必須載入的東西（照 `reports.html` 的 shell）。
+_PAGE_SHELL = {
+    "auth-guard.js":  "沒有它 ⇒ 未登入也打得開，而資料會被 API 擋成一片 403",
+    "alpine-":        "沒有它 ⇒ 所有 x-data／x-show 都不會運作，整頁是死的",
+    "sidebar.js":     "沒有它 ⇒ **沒有導覽列**，使用者進去之後出不來",
+    "style.css":      "沒有它 ⇒ 版面整個散掉",
+}
+
+
+def test_ui9_the_cashier_page_can_actually_boot():
+    """🔴🔴 **使用者重啟後第一個動作就是點「出納」——這一題守那一下。**
+
+    ☠️ 一個「內容抄過去了、而 shell 沒抄」的頁面**通過上面每一題**：
+    轉址拿掉了 ✅、出納內容在 ✅、端點在 ✅ ——
+    🔑 **而使用者打開它看到的是一片沒有導覽列的死畫面。**
+
+    ⚠️ 最容易漏的是 `data-no-topbar`：現在那個存根的 `<body>` **宣告了它**，
+    而它的理由寫在檔案裡：
+    > 「這是一頁**轉址頁**⋯沒有 app shell 也不該有頂欄。
+    >   🔑 宣告它是為了讓『**刻意沒有**』與『**忘了加**』分得開 ——
+    >   `sidebar.js` 找不到掛載點又沒有這個宣告時會 `console.error`。」
+    ⇒ **覆蓋那個檔案時若把 `<body data-no-topbar>` 一起留著**，
+      `sidebar.js` 會**安靜地**不掛頂欄 —— 那個宣告的作用就是讓它安靜。
+    ☠️ **於是最該叫的那一次，它不會叫。**
+    📌 〈防護的副作用落在盲側〉：一個為了「分辨刻意與遺忘」而設的宣告，
+       在**被複製到不該有它的地方**時，正好關掉了唯一的警報。
+    """
+    html = _read(CASHIER_HTML)
+
+    missing = [(k, why) for k, why in _PAGE_SHELL.items() if k not in html]
+    assert not missing, (
+        "`cashier.html` 缺少內頁 shell：\n  "
+        + "\n  ".join("`%s` —— %s" % m for m in missing)
+        + "\n☠️ 上面每一題都會綠（轉址拿掉了、內容在、端點在），"
+          "**而使用者打開它看到的是一片死畫面**。")
+
+    assert "data-no-topbar" not in html, (
+        "`cashier.html` 的 `<body>` 還留著 `data-no-topbar` ——\n"
+        "☠️ 那是**轉址存根**的宣告，它的作用是讓 `sidebar.js` 找不到掛載點時"
+        "**不要 `console.error`**。\n"
+        "🔑 留著它 ⇒ 沒有頂欄，而且**沒有任何警告** —— "
+        "最該叫的那一次它不會叫。")
+
+    assert "已併入營運報表模組" not in html, (
+        "`cashier.html` 的標題還是存根那一個（「已併入營運報表模組」）——\n"
+        "☠️ 分頁標題與瀏覽紀錄會說這一頁不存在，而它就在使用者眼前。")
+
+
+def test_ui9_the_cashier_page_loads_all_five_of_its_own_endpoints():
+    """🔴 出納頁要**自己**載得到它需要的全部資料。
+
+    ```
+    /api/cashier/payable-queue          應付佇列
+    /api/cashier/receivable-queue       應收佇列
+    /api/cashier/execution-history      執行歷史
+    /api/cashier/export                 匯出
+    /api/settings/t100-export-config    銀行帳戶清單（標記付款／收款的下拉）
+    ```
+    ✅ 我量過：出納面板讀元件狀態 `data`（那包**只有 admin+ 會載入**的）**0 處**
+    ⇒ 它不依賴 `reports` 的任何資料，五個端點就是它的全部來源。
+
+    ⚠️ 而 `t100-export-config` 這一份在拆完之後會是**第四份**
+    （`reports`／`case-management`／庫存管理／出納）——
+    📌 **A 裁定刻意複製，同時發了 `FE1` 排 `NEXT`**：
+       不在 `UI9` 裡抽，是因為那會讓這一次的 diff 同時涵蓋「拆頁」與
+       「跨四檔重構」，**出事時分不出是哪一件**。
+    🔑 而它不是寫成註解放過 —— **一個編號不是註解，是一筆有號碼的欠帳。**
+    """
+    where, src = _cashier_js()
+    need = list(QUEUE_ENDPOINTS) + [
+        "/api/cashier/execution-history",
+        "/api/cashier/export",
+        "/api/settings/t100-export-config",
+    ]
+    missing = [e for e in need if e not in src]
+    assert not missing, (
+        "出納那一側（`%s`）沒有載這些端點：\n  " % where + "\n  ".join(missing)
+        + "\n☠️ 缺哪一個，畫面上對應的那一塊就是空的 —— "
+          "而空的看起來像「這期沒有資料」，不像「沒載到」。")
