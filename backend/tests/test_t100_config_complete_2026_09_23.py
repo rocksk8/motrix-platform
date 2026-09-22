@@ -336,9 +336,13 @@ def test_fn5_the_config_panel_is_not_shown_to_everyone():
        那是下一格，而它比畫面重要。
     """
     html = CASHIER_HTML.read_text(encoding="utf-8")
-    m = re.search(r'<div x-show="t100ConfigOpen"[^>]*>', html)
+    # 🔴 **我第一版寫 `t100ConfigOpen"` —— 要求屬性值剛好是它**（B 抓到）：
+    #    B 加上角色條件之後是 `x-show="t100ConfigOpen && _role()==='superadmin'"`
+    #    ⇒ `assert m` 先倒 ⇒ 訊息說「那個面板被改寫了」，**而它在，只是條件變長了**。
+    # ☠️ 又是「錯的話聽起來像量出來的」：我的判準太窄，而它去否定一個正確的修正。
+    m = re.search(r'<div x-show="t100ConfigOpen[^"]*"[^>]*>', html)
     assert m, (
-        "找不到 `x-show=\"t100ConfigOpen\"` 那個面板 ——\n"
+        "找不到 `x-show=\"t100ConfigOpen…\"` 那個面板 ——\n"
         + "⚠️ 它**應該**存在 ⇒ 看 `FN5`；已完成 ⇒ **那個面板被改寫了**。")
     assert "_role()" in m.group(0) or "superadmin" in m.group(0), (
         "設定面板的顯示條件只有 `t100ConfigOpen`，**與角色無關**：\n"
