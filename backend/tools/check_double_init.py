@@ -36,6 +36,13 @@ import os
 import re
 import sys
 
+# 🔴 `(a-1)`：這支腳本會 `print` emoji，而這台機器的主控台是 **cp932**
+#    ⇒ 不做這一行它會 `UnicodeEncodeError` **整支崩潰**，一個字都印不出來。
+# ⚠️ 而**不要為此把 emoji 拿掉** —— 拿掉報表就沒有可讀性，
+#    而下一個人會再加回來 ⇒ **那是修結果**。
+# 📌 這台機器上**任何 print emoji 的腳本都會**踩到，不只這一支。
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 PAGES_GLOB = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                           "..", "..", "frontend", "pages", "*.html")
 
@@ -58,13 +65,70 @@ def _linked_js(page_src, page_path):
     return out
 
 
+#: 同時宣告 `x-data` 與明著呼叫初始化的那個屬性 —— 那就是會跑兩遍的形狀。
+_DECL_RE = re.compile(r'x-data="([^"]+)"[^>]*x-init="([^"]*init\(\)[^"]*)"')
+
+
+def shared_js():
+    """被**超過一頁** script-link 的 js。**算出來，不手列。**
+
+    ## 🔴 `(a-2)`：這份清單是判準的一半，而它原本不存在
+
+    舊判準是「頁面 ＋ **所有** linked js 裡有沒有 `_initDone`」。
+    ☠️ 而 `auth-guard.js`／`notif.js`／`sidebar.js` **各被 57 頁引用**
+       ⇒ `_initDone` 寫進其中任何一個，**53 頁會一起翻成「已修」**
+       ⇒ 而那 53 頁**一頁都沒有真的修過**。
+    🔑 最毒的是：要修的那兩個 store 就在 `notif.js`
+       ⇒ **修法本身就是引信。**
+
+    ⚠️ 手列清單會腐爛（有人新增共用檔就漏掉）⇒ 這裡即時算。
+    ⚙️ 今天實算是 7 支；那個數字**不寫死**，只拿來對照。
+    """
+    count = {}
+    for p in sorted(glob.glob(PAGES_GLOB)):
+        for j in _linked_js(_read(p), p):
+            count[j] = count.get(j, 0) + 1
+    return {j for j, n in count.items() if n > 1}
+
+
+def injected_rows():
+    """**注入型**母體：宣告點不在任何頁面，而在共用 js 注入的 HTML 上。
+
+    ## ⚠️ 宣告點與定義點是**兩個檔**
+
+    ```
+    sidebar.js  x-data="globalSearchStore()" ／ x-data="notifStore()"  <= **宣告點**
+    notif.js    那兩支函式的定義                                        <= 定義點
+    ```
+    ☠️ 掃 `notif.js` 找**宣告**會得到 **0 個** —— 而「0」讀起來像「沒有問題」。
+    🔑 ⇒ 要掃的是 `sidebar.js`。
+    📌 而這一群**不可以併進頁面母體**：它們是同一份注入 HTML，
+       修一次就全部修好，與「53 頁各自要修」不是同一件事。
+    """
+    out = []
+    base = os.path.dirname(os.path.abspath(__file__))
+    for name in ("sidebar.js",):
+        p = os.path.normpath(os.path.join(base, "..", "..",
+                                          "frontend", "static", name))
+        if not os.path.exists(p):
+            continue
+        src = _read(p)
+        for m in _DECL_RE.finditer(src):
+            out.append({"where": name, "component": m.group(1),
+                        "guarded": "_initDone" in src})
+    return out
+
+
 def scan():
     rows = []
+    shared = shared_js()
     for p in sorted(glob.glob(PAGES_GLOB)):
         s = _read(p)
-        if not re.search(r'x-data="([^"]+)"[^>]*x-init="([^"]*init\(\)[^"]*)"', s):
+        if not _DECL_RE.search(s):
             continue
-        blob = "\n".join([s] + [_read(j) for j in _linked_js(s, p)])
+        # 🔴 `(a-2)`：只看**這一頁自己的** js —— 共用檔排除（見 `shared_js()`）。
+        own = [j for j in _linked_js(s, p) if j not in shared]
+        blob = "\n".join([s] + [_read(j) for j in own])
         guarded = "_initDone" in blob
         editable = len(re.findall(r'x-model="', s))
         if guarded:
@@ -99,6 +163,25 @@ def main():
         print("  %-8s %-44s %d" % (lab, r["page"], r["editable"]))
     todo = [r for r in rows if not r["guarded"]]
     print("\n待修 %d 頁／已修 %d 頁" % (len(todo), len(rows) - len(todo)))
+
+    # ── 注入型：**另一個母體，不併進上面的數字** ──────────────────
+    inj = injected_rows()
+    inj_todo = [r for r in inj if not r["guarded"]]
+    print("\n注入型（宣告點在共用 js，不屬於任何一頁）：待修 %d／共 %d"
+          % (len(inj_todo), len(inj)))
+    for r in inj:
+        print("  %-8s %-44s %s"
+              % (LABEL[0] if r["guarded"] else LABEL[2], r["component"], r["where"]))
+
+    # ── 自檢：共用檔裡不該有 `_initDone` ──────────────────────────
+    # ☠️ 有的話，上面那 53 頁的數字就不可信了 —— 一個共用檔就能讓全部翻綠。
+    # 🔑 而它不會報錯：報表會變好看，**而那正是它危險的地方**。
+    dirty = sorted(os.path.basename(j) for j in shared_js()
+                   if "_initDone" in _read(j))
+    print("\n⚙️ 自檢：%d 支共用 js 裡帶 `_initDone` 的 => %s"
+          % (len(shared_js()), dirty or "（無）✅"))
+    if dirty:
+        print("   🔴 上面的「已修」數字**不可信** —— 一個共用檔會讓引用它的頁全部翻綠。")
     print("修法見本檔 docstring。驗證：用瀏覽器開該頁、數它的載入 API 被打幾次，"
           "必須是 1（比照 test_e2e_system_settings_ui_2026_09_11.py::"
           "test_init_runs_exactly_once，那是確定性斷言，不必等競態重現）。")
