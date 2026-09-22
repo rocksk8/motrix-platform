@@ -488,3 +488,108 @@ def test_ui9_reports_has_no_cashier_buttons_left_behind():
     assert not left, (
         "`reports.html` 還有出納的按鈕：%s\n" % left
         + "☠️ 使用者會在報表頁上按到出納的動作 —— 而出納已經是獨立頁面了。")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# 🔴 反向 · **`cashier.js` 定義的東西要有人用**（B 提，而它抓到相反的錯）
+# ══════════════════════════════════════════════════════════════════════
+#
+# B 的掃法是**雙向**的，而只有反向那一邊抓得到這次的缺件：
+# ```
+# ① 前向  樣板指向的東西 → 在不在 JS      ⇒ **9 個 handler 全過**
+# ② 反向  JS 定義的東西 → 樣板有沒有引用  ⇒ 抓到 33 個 orphan
+# ```
+# 🔑 B 的原話：「我上一次就是只做了這個方向（①），
+#    **而它永遠抓不到「handler 在、而它要開的 UI 不在」**。」
+#
+# 📌 而 B 找到一個**方向相反**的問題：它抽 `reports.js` 的函式區時用
+#    **行號區間**當邊界 ⇒ **區間外的漏掉（modal）、區間內不屬於出納的多抄**
+#    ⇒ `exportTaxInvoices()` 被抄進 `cashier.js`，而它的按鈕在
+#      `reports.html:1823` 的「稅務匯出」區段 —— **它是報表側的。**
+# 🔑 與我那次「邊界量得越準越容易漏掉邊界外的東西」是**同一個根因的兩個方向**。
+
+#: 目前允許懸空的函式，**每一筆都要指向一個原因**。
+#: ⚠️ 這不是「排除清單」——下面那道反向控制要求：**不再懸空的項目必須從這裡移除**，
+#:    否則它會爛掉，而一份爛掉的允許清單與「全部寫進去變綠」是同一件事。
+_ALLOWED_DANGLING = {
+    "confirmPayVoucher": "modal 還沒搬過來（本檔 ..._every_modal_... 那一題）",
+    "confirmReceive":    "同上",
+    "confirmInvoice":    "同上",
+    "confirmBankPay":    "同上",
+    "confirmT100Imported": "T100 匯出 UI 還在 reports（FN3）",
+    "exportT100Vouchers":  "同上（FN3）",
+    "saveT100Config":      "同上（FN3）",
+    "toggleT100Config":    "同上（FN3）",
+}
+
+
+def _dangling_functions():
+    """`cashier.js` 裡**沒有人叫**的公開方法。
+
+    ⚠️ 底線開頭的（`_token`／`_localDateStr`…）不算 —— 那是慣例上的內部工具，
+       而它們被呼叫的方式不一定抓得到。
+    """
+    html = _read(CASHIER_HTML)
+    _where, js = _cashier_js()
+    defs = set(re.findall(
+        r"^\s{4}(?:async\s+)?([a-zA-Z_$][\w$]*)\s*\([^)]*\)\s*\{", js, re.M))
+    defs -= {"if", "for", "while", "switch", "catch", "function", "return"}
+    used = set(re.findall(r"\b([a-zA-Z_$][\w$]*)\s*\(", html))
+    used |= set(re.findall(r"this\.([a-zA-Z_$][\w$]*)\s*\(", js))
+    return set(d for d in defs if d not in used and not d.startswith("_"))
+
+
+def test_ui9_nothing_was_over_copied_into_the_cashier_page():
+    """🔴 **`cashier.js` 不可以有「沒有人叫」的函式**（允許清單以外）。
+
+    ☠️ 現況抓到 `exportTaxInvoices()` —— 它的按鈕在
+    `reports.html:1823` 的「**稅務匯出**」區段，**它不是出納的東西**。
+    🔑 B 用行號區間抽函式 ⇒ **區間外的漏掉、區間內不屬於出納的多抄**，
+       而這一題守的是後者。
+
+    ⚙️ **而死碼的代價不是「多幾行」**：
+    ```
+    下一個人讀 cashier.js 看到 exportTaxInvoices()
+    ⇒ 他會以為出納頁有稅務匯出功能
+    ⇒ 而他可能為它加一顆按鈕 —— 一個在錯的頁面上的正確功能
+    ```
+    📌 那與〈已知的代價 vs 要修的東西〉是同一族：**留著它比刪掉它貴。**
+    """
+    dangling = _dangling_functions()
+    assert dangling, (
+        "`cashier.js` 裡一個懸空函式都沒抓到 —— **儀器失效**"
+        "（連允許清單裡那幾個都該被抓到）。")
+
+    bad = sorted(dangling - set(_ALLOWED_DANGLING))
+    assert not bad, (
+        "`cashier.js` 有沒有人叫的函式：%s\n" % bad
+        + "☠️ 下一個人讀到它會以為出納頁有那個功能，"
+          "而他可能為它加一顆按鈕 —— **一個在錯的頁面上的正確功能**。\n"
+        "🔑 目前已知的合理懸空只有這些：\n  "
+        + "\n  ".join("%-22s %s" % kv for kv in sorted(_ALLOWED_DANGLING.items())))
+
+
+def test_ui9_the_dangling_allowlist_does_not_rot():
+    """⚙️ **反向控制：允許清單裡不再懸空的項目，必須被移除。**
+
+    ☠️ 少了這一題，`_ALLOWED_DANGLING` 會變成一份**只進不出**的清單 ——
+    🔑 而那與〈守門要配反向控制，否則可以靠把東西全寫進排除清單變綠〉
+       是同一件事，只是慢一點：**清單不會一次爛掉，它會一筆一筆爛掉。**
+
+    📌 具體會發生的時間點：
+    ```
+    modal 搬過來 ⇒ 四個 confirm* 不再懸空 ⇒ **這一題紅** ⇒ 有人把它們刪掉
+    FN3 做完     ⇒ 四個 T100 不再懸空     ⇒ **這一題紅** ⇒ 同上
+    ```
+    ⇒ 那正是我們要的：**清單自己會縮短，而不是有人記得去縮它。**
+    ⚠️ 而它有一個代價要知道：**B 補完 modal 的那一刻，這一題會紅** ——
+       那不是迴歸，是這一題在做它的事。訊息裡講清楚了。
+    """
+    dangling = _dangling_functions()
+    stale = sorted(set(_ALLOWED_DANGLING) - dangling)
+    assert not stale, (
+        "允許清單裡這些已經**不再懸空**了：%s\n" % stale
+        + "⇒ 把它們從 `_ALLOWED_DANGLING` 移除。\n"
+        "🔑 這不是迴歸 —— 它表示對應的那件事**做完了**"
+        "（modal 搬過來了，或 `FN3` 做完了）。\n"
+        "☠️ 不移除的話，這份清單會變成一份只進不出的排除清單。")
