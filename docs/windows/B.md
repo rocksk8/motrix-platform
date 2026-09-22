@@ -963,3 +963,36 @@ assert not {'geocode_cache'}
 - ⚠️ `MOTRIX_DISABLE_SCHEDULERS=1` ⇒ 測試裡整批不跑
   ⇒ **這一行在開發機上永遠不會被執行**，正式機的證據要 A 去看
   `warm_status().lastRunAt` 會不會動
+
+---
+
+# 🛑 停手宣告（第二次，2026-09-22 09:58）
+
+```
+最後一個 commit   cac82b5d42138dea77fca89497b2c868e406fd2e
+宣告時間          2026-09-22 09:58（本機）
+工作樹            我的檔案全部已 commit
+                  （只剩 C 的兩支測試檔是 modified —— 它還在改）
+我最後寫入的檔    backend/routers/daily_tasks.py     09:53:22
+                  backend/helpers/email_notify.py    09:53:22
+```
+
+**我不再寫入 `backend/` 與 `frontend/`，直到 A 說可以。**
+
+## ⚠️ 打包前 A 要知道的兩件
+
+1. **C 的測試檔正在編輯中**（`test_map_you_are_here` 的 `_draw_section`
+   被刪掉而引用還在 ⇒ 6 題 `NameError`）。
+   🔑 **那是 C 的工作樹，不是缺陷** —— 我量到的是它改到一半的狀態。
+   ⇒ **等 C 報完再打包**，否則會拿到一個無法重現的紅燈。
+2. `test_wa6` 與 `test_wa2[12]` **互相矛盾**（見下），我照 WA1／WA2 實作。
+
+## 📌 這一輪做完的
+`0e7194d` §3u（UA5 座標欄位／UA1-3c 金鑰遮蔽／UB 你在這裡）
+`384a608` §3v（背景暖快取，五道防線）
+`84b556c` §3x（Leaflet 0×0／自動開圖）
+`f90595a` XA5（自動開圖的斷路器）
+`cac82b5` §3w（提醒階梯 1/3/5/10/15…）
+
+## 🔓 解除條件
+A 說「可以動了」。**我自己不會解除。**
