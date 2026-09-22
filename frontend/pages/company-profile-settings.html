@@ -185,6 +185,55 @@
                               x-show="loc.latText || loc.lonText"
                               @click="loc.latText = ''; loc.lonText = ''">清除座標</button>
                     </div>
+
+                    <!-- QL20~QL22：這個據點自己的單據抬頭。**每一格都是選填。**
+                         使用者原話：「如果使用者有 key 他就帶入，如果使用者有
+                         三個地點，但只有 key 一個，那就是帶入那一個」
+                         ⇒ 不可以要求填滿才能用，也不可以在沒填時擋存檔。
+                         🔑 QL22：退階是**逐欄**不是整組 —— 填了名稱沒填統編，
+                            名稱用這個據點的、統編用主要據點的。
+                         ☠️ 整組退階的話，使用者填了名稱卻看到總公司的名稱，
+                            **而他不知道為什麼。** -->
+                    <div style="margin-top:8px">
+                      <button type="button" class="btn btn-ghost btn-sm"
+                              @click="loc._open = !loc._open"
+                              x-text="(loc._open ? '▾ ' : '▸ ') + '這個據點的單據抬頭與匯款帳號（選填）'
+                                      + (locFilledCount(loc) ? '　已填 ' + locFilledCount(loc) + ' 項' : '')"></button>
+                      <div x-show="loc._open" x-cloak style="margin-top:6px;padding:8px 10px;
+                           background:#F8FAFC;border-radius:6px">
+                        <div style="font-size:11px;color:#64748B;margin-bottom:6px">
+                          <strong>每一格都可以留空</strong>，<span x-show="i > 0">留空的那一格會沿用<strong>主要據點</strong>的同一格</span><span x-show="i === 0">留空的那一格會沿用上方「公司基本資料」的同一格</span>。
+                          <br>只填一格也可以 —— 例如只填公司名稱，統編就會沿用。
+                        </div>
+                        <div style="display:flex;gap:8px;flex-wrap:wrap">
+                          <input type="text" style="flex:1 1 200px" x-model="loc.company_name"
+                                 placeholder="公司名稱（選填）">
+                          <input type="text" style="flex:1 1 200px" x-model="loc.company_name_en"
+                                 placeholder="英文名稱（選填）">
+                          <input type="text" style="flex:1 1 130px" x-model="loc.tax_id"
+                                 placeholder="統一編號（選填）">
+                        </div>
+                        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
+                          <input type="text" style="flex:1 1 160px" x-model="loc.phone"
+                                 placeholder="電話（選填）">
+                          <input type="text" style="flex:1 1 200px" x-model="loc.email"
+                                 placeholder="Email（選填）">
+                        </div>
+                        <div style="font-size:11px;color:#64748B;margin:8px 0 4px">
+                          匯款帳號 —— <strong>請款單上印的就是這一組</strong>。
+                        </div>
+                        <div style="display:flex;gap:8px;flex-wrap:wrap">
+                          <input type="text" style="flex:1 1 170px" x-model="loc.bank_name"
+                                 placeholder="銀行名稱（選填）">
+                          <input type="text" style="flex:1 1 150px" x-model="loc.bank_branch"
+                                 placeholder="分行（選填）">
+                          <input type="text" style="flex:1 1 180px" x-model="loc.bank_account_name"
+                                 placeholder="戶名（選填）">
+                          <input type="text" style="flex:1 1 180px" x-model="loc.bank_account_number"
+                                 placeholder="帳號（選填）">
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </template>
 
@@ -1023,22 +1072,43 @@
         },
 
         //: 後端的一筆 → 畫面上的一列。
+        //: 這個據點的抬頭與帳號欄位。**順序＝畫面上的順序。**
+        //  🔑 列成常數而不是散在三個地方：`_toRow`／存檔／「已填幾項」
+        //  都要走同一份清單 —— 三份會分岔，而分岔的症狀是**某一格存不進去**，
+        //  ☠️ 零錯誤訊息（QL19 那次就是這樣，而使用者最後會怪自己）。
+        LOC_IDENTITY_FIELDS: [
+          'company_name', 'company_name_en', 'tax_id', 'phone', 'email',
+          'bank_name', 'bank_branch', 'bank_account_name', 'bank_account_number',
+        ],
+
+        //: 這一筆據點填了幾格。給摺疊標題用 —— **沒展開也看得出有沒有填。**
+        locFilledCount(loc) {
+          return this.LOC_IDENTITY_FIELDS
+            .filter(k => String(loc[k] || '').trim()).length
+        },
+
         _toRow(l) {
-          return {
+          const row = {
             _key: 'k' + (++this._locSeq),
+            _open: false,
             id: l.id || '',
             name: l.name || '',
             address: l.address || '',
             latText: l.lat == null ? '' : String(l.lat),
             lonText: l.lon == null ? '' : String(l.lon),
-            // ⚠️ 銀行欄位原樣帶著走：**這一輪畫面上沒有入口**（§7 WL1 才接 PDF），
-            // 而不帶著走的話，存一次檔就會把後端已經存好的那幾欄清掉。
+            // ⚠️ 其餘未知欄位原樣帶著走：不帶的話，存一次檔就會把後端已經
+            // 存好、而畫面上還沒有入口的欄位清掉。
             // 🔑 一個「畫面上看不到、而存檔時被清掉」的欄位，沒有人會發現。
             _extra: Object.keys(l).reduce((acc, k) => {
-              if (!['id', 'name', 'address', 'lat', 'lon'].includes(k)) acc[k] = l[k]
+              if (!['id', 'name', 'address', 'lat', 'lon'].includes(k)
+                  && !this.LOC_IDENTITY_FIELDS.includes(k)) acc[k] = l[k]
               return acc
             }, {}),
           }
+          for (const k of this.LOC_IDENTITY_FIELDS) row[k] = l[k] || ''
+          // 已經填過的那幾筆預設展開 —— 不然使用者看不到自己填過什麼。
+          row._open = this.LOC_IDENTITY_FIELDS.some(k => row[k])
+          return row
         },
 
         addLocation() {
@@ -1092,7 +1162,16 @@
               this.coordWarn = '第 ' + (i + 1) + ' 個據點：緯度與經度要一起填，或一起留空。這次沒有儲存。'
               return
             }
-            locations.push({ ...row._extra, id: row.id || undefined,
+            // QL20：九個抬頭欄位一起送。**空字串照送，不要過濾掉** ——
+            // 後端 `_clean_locations()` 的規則是「沒填就整個鍵不存在」，
+            // 而清空一格的意思是「這一格改成沿用主要據點」⇒ 送空字串
+            // 正好表達那件事。
+            // ☠️ 在前端先濾掉空字串的話，使用者**清不掉**一個填錯的值：
+            //    畫面上清成空白、存檔成功、重新整理之後它又回來了。
+            const identity = {}
+            for (const k of this.LOC_IDENTITY_FIELDS) identity[k] = row[k] || ''
+            locations.push({ ...row._extra, ...identity,
+                             id: row.id || undefined,
                              name: row.name, address: row.address,
                              lat: lat, lon: lon })
           }

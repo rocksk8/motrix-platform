@@ -1020,6 +1020,24 @@ GEOCODE_MISS_TTL_SECONDS = 7 * 24 * 60 * 60
 _MISS_CACHE = {}
 
 
+def _miss_key(address):
+    """負快取的鍵：`(資料庫, 地址)`。
+
+    🔑 **含資料庫**是語意上本來就該有的：demo 模式用的是另一個庫，
+    而一個在正式庫上查不到的地址，跟 demo 庫沒有關係。
+    📌 副作用（而它是我們要的）：測試每一題自己一個 DB
+    ⇒ 行程內的 dict 不會再跨測試污染，**不必靠每個人記得加一行 reset**。
+    ⚠️ 讀不到 `db.DB_PATH` 時退回 `""` —— 那只會讓所有東西共用一個命名空間，
+    也就是改動前的行為，**不會壞掉**。
+    """
+    try:
+        import db as _db
+        where = str(getattr(_db, "DB_PATH", "") or "")
+    except Exception:       # noqa: BLE001
+        where = ""
+    return (where, (address or "").strip())
+
+
 def remember_geocode_miss(address) -> None:
     """記下「這個地址查過，查不到」。
 
@@ -1031,7 +1049,7 @@ def remember_geocode_miss(address) -> None:
     address = (address or "").strip()
     if not address:
         return
-    _MISS_CACHE[address] = time.time()
+    _MISS_CACHE[_miss_key(address)] = time.time()
 
 
 def geocode_missed_recently(address) -> bool:
@@ -1039,12 +1057,13 @@ def geocode_missed_recently(address) -> bool:
     address = (address or "").strip()
     if not address:
         return False
-    at = _MISS_CACHE.get(address)
+    key = _miss_key(address)
+    at = _MISS_CACHE.get(key)
     if at is None:
         return False
     if time.time() - at >= GEOCODE_MISS_TTL_SECONDS:
         # 過期就忘掉 —— 讓它有機會再被查一次（地址可能沒變而對方的資料變了）。
-        _MISS_CACHE.pop(address, None)
+        _MISS_CACHE.pop(key, None)
         return False
     return True
 
@@ -1065,10 +1084,11 @@ def reset_geocode_misses() -> int:
 
 
 def geocode_miss_count() -> int:
-    """目前記著幾個「查不到」。畫面要用它把兩種情況分開講。"""
+    """**這個資料庫**目前記著幾個「查不到」。畫面要用它把兩種情況分開講。"""
     now = time.time()
-    return sum(1 for at in _MISS_CACHE.values()
-               if now - at < GEOCODE_MISS_TTL_SECONDS)
+    where = _miss_key("")[0]
+    return sum(1 for (db_path, _addr), at in _MISS_CACHE.items()
+               if db_path == where and now - at < GEOCODE_MISS_TTL_SECONDS)
 
 
 def cached_only(address, min_source=None):
