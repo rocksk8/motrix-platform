@@ -27938,3 +27938,79 @@ B 改 `v93` 之前必須交：`ls backend/*.db` 全部列出 ＋ 每一個查 `a
 
 `§零` 甲乙之辨（9–11 支 vs 1 支）／`§三` 兩欄式借貸／`§十一` 儲存範本時驗佔位符／
 `§十二` 金額二次比對只提示不阻擋／`§十六` `posted_warning_snapshot` 記**內容**不只記「他看過」。
+
+---
+
+## §108 科目代號的孤兒問題 —— **A-2 提的防護要做，而它給的理由是錯的**
+
+> 2026-09-23 00:4x ／ A 實跑 ／ `pk_probe2.py`
+
+### ☠️ 先認：**我第一支探針壞了，而它印出來的是一個假的 `ALLOWED`**
+
+```
+v1 第 3 格   DELETE ... WHERE code='2902'   -> ALLOWED
+```
+而第 2 格（把 code 改成 `2902`）**被擋下來了** ⇒ 那一列的 code 還是 `2901`
+⇒ ⇒ **第 3 格的 WHERE 命中 0 列，它什麼都沒刪** —— 而輸出寫的是「ALLOWED」。
+🔑 **我沒印 `rowcount`** ⇒ 〈判準的寬窄都會騙人〉：**「沒報錯」被我當成了「做了事」。**
+📌 而它是**前一格的結果決定後一格的 WHERE 命中不命中** ⇒ 探針的格與格之間有耦合。
+⇒ v2 改成：**每一格開一個全新的庫** ＋ **一律印 rowcount ＋ 事後實查父列還在不在**。
+（錯的那一列留著 —— 〈更正要留著錯的那一列〉）
+
+### 🔴 修好之後的結果：**A-2 的前提不成立**
+
+A-2 寫：「SQLite **無外鍵強制** ⇒ 會變成孤兒」。
+實查 `db.py:151`：**每一條連線都 `PRAGMA foreign_keys=ON`。**
+
+```
+                                    UPDATE code   DELETE row
+A) 無 REFERENCES ＋ FK OFF            ORPHAN        ORPHAN
+B) 有 REFERENCES ＋ FK ON  (db.py:151) BLOCKED       BLOCKED
+C) 有 REFERENCES ＋ FK OFF  (db.py:230) ORPHAN        ORPHAN
+D) FK OFF ＋ A-2 的 TRIGGER            BLOCKED       BLOCKED   (改名仍 ALLOWED)
+```
+
+### ✅ 裁定：**兩道都要**，而理由與 A-2 給的不同
+
+```
+① voucher_lines.account_code 要宣告 REFERENCES account_items(code)
+② 再加 TRIGGER（UPDATE OF code ／ **DELETE**）擋「已被傳票引用」
+```
+🔑 **② 不是因為 SQLite 不強制外鍵（它有強制）** ——
+   **② 是因為那個強制隨時可能是關的：**
+```
+db.py:151  PRAGMA foreign_keys=ON  **包在 try/except Exception: pass 裡**
+db.py:230  demo 重置路徑**明著關掉它**（然後 DELETE 每一張表）
+```
+☠️ 〈降級之後它還是會動〉：**pragma 沒設成功，系統照常運作，沒有任何東西會說話。**
+
+### 🔴 而最危險的不是漏了防護，是**理由寫錯**
+
+```
+A-2 的理由  「SQLite 無外鍵強制」 => 可查證為假
+後果        日後有人查到 FK 是 ON => **認定 ② 是多餘的 => 刪掉它**
+```
+🔑 ⇒ **規格要寫「② 防的是 FK 被關掉的那一條路」，不是「防 SQLite 不強制」。**
+📌 與 〈守門被拿掉≠規則被解除〉同一族：**一個正確的防護配一個錯的理由，會被正當地移除。**
+
+### ⚠️ A-2 漏了 **DELETE** 那一半
+
+A-2 只提 `BEFORE UPDATE OF code`。實測 A)／C) 兩格**DELETE 造成一模一樣的孤兒**。
+
+### ⇒ 新編號 `DB1`（登記進 NEXT，不是現在做）
+
+```
+db.py:151 的 PRAGMA 包在 try/except: pass => 失敗時靜默降級
+⚙️ 而「量它」很便宜：對一條新開的 _connect() 斷言 PRAGMA foreign_keys == 1
+```
+📌 〈量它不等於修它〉：**要不要改那個 except 是另一個決定；先讓它說得出話。**
+
+### ✅ B 的前置證據收下（`b032652`）
+
+```
+B 把範圍撐開到 repo 根，找到第四個庫  ./motrix_erp.db
+而他換了一個**更強的判準**：schema_version = **92**
+=> 不只是「表沒建起來」，是 **v93/v94 根本沒跑過**
+```
+🔑 那比我要的 `account_items=0` 強：**我問的是結果，他量的是原因。**
+⇒ 與我那條時間線證據（最新包 `7bc1fb8` 比 `47f98b5` 早四小時）**兩個獨立來源同一結論**。
