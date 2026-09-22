@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="../static/favicon.png">
+  <title>獎金分潤 - MOTRIX 專案管理系統</title>
+  <script src="../js/bonus.js"></script>
+  <script src="../static/auth-guard.js"></script>
+  <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
+  <style>
+    [x-cloak]{display:none!important}
+    .page-main{margin-left:var(--sidebar-w);margin-top:var(--topbar-h);padding:28px 32px;min-height:calc(100vh - var(--topbar-h));background:var(--white)}
+
+    .bn-head{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:6px}
+    .bn-title{font-size:20px;font-weight:700;font-family:var(--font-zh);color:var(--text-primary)}
+    .bn-note{font-size:12px;color:var(--text-secondary);font-family:var(--font-zh);margin-bottom:18px;line-height:1.7}
+    .bn-scope{display:inline-block;font-size:11px;padding:2px 9px;border-radius:9px;font-family:var(--font-zh)}
+    .bn-scope.all{background:#EFF6FF;color:#1D4ED8;border:1px solid #BFDBFE}
+    .bn-scope.mine{background:#F0FDF4;color:#15803D;border:1px solid #BBF7D0}
+
+    .bn-card{border:1px solid var(--border-light);border-radius:var(--radius);margin-bottom:14px;overflow:hidden}
+    .bn-card__hd{display:flex;align-items:center;gap:12px;padding:10px 14px;background:#FAF9F6;border-bottom:1px solid var(--border-light);font-family:var(--font-zh);font-size:13px;flex-wrap:wrap}
+    .bn-case{font-weight:700;color:var(--text-primary)}
+    .bn-base{font-size:12px;color:var(--text-secondary)}
+    .bn-status{font-size:11px;padding:1px 8px;border-radius:9px;background:#F0EEE9;color:var(--text-secondary)}
+    .bn-voided{background:#FEF2F2;color:#B91C1C;border:1px solid #FCA5A5}
+
+    .bn-line{display:flex;align-items:center;gap:10px;padding:7px 14px;border-bottom:1px solid var(--border-light);font-family:var(--font-zh);font-size:13px}
+    .bn-line:last-child{border-bottom:none}
+    .bn-who{min-width:110px;font-weight:600;color:var(--text-primary)}
+    .bn-item{color:var(--text-secondary);font-size:12px}
+    .bn-pct{font-size:11px;color:var(--text-dim,#6B6B6B)}
+    .bn-amt{margin-left:auto;font-family:var(--font-mono,monospace);font-weight:700;color:var(--text-primary)}
+    .bn-empty{padding:40px;text-align:center;color:var(--text-secondary);font-family:var(--font-zh);font-size:13px;line-height:1.8}
+    .bn-err{margin:10px 0;padding:9px 11px;border:1px solid #FCA5A5;background:#FEF2F2;border-radius:var(--radius);font-size:12px;color:#7F1D1D;font-family:var(--font-zh);line-height:1.7}
+  </style>
+</head>
+<body x-data="bonusPage()" x-init="init()" x-cloak>
+
+  <header id="app-topbar" class="topbar"></header>
+  <div id="sidebar-root"></div>
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+  <div>
+    <main class="page-main">
+
+      <div class="bn-head">
+        <div class="bn-title">獎金分潤</div>
+        <!-- 🔴 使用者必須知道**他看到的是哪一種範圍** ——
+             ☠️ 少了這個標示，一般同仁看到一張只有自己的清單，
+                會以為「公司只發了我一個人」；而管理者看到全部時，
+                也該知道自己正在看的是全公司的金額。 -->
+        <span class="bn-scope" :class="isManager ? 'all' : 'mine'" x-show="loaded"
+              x-text="isManager ? '檢視範圍：全部人員' : '檢視範圍：只有您自己的部分'"></span>
+      </div>
+
+      <div class="bn-note">
+        獎金依各案件<strong>精算後的淨利</strong>按比例分配，每個案件獨立發放。<br>
+        金額在產生獎金單的當下就固定下來，之後修改比例或範本都不會影響已經發出的單。
+      </div>
+
+      <template x-if="loadError">
+        <div class="bn-err" x-text="loadError"></div>
+      </template>
+
+      <div x-show="loaded">
+        <template x-for="a in awards" :key="a.id">
+          <div class="bn-card">
+            <div class="bn-card__hd">
+              <span class="bn-case" x-text="a.quote_no"></span>
+              <span class="bn-status" :class="a.voided_at ? 'bn-voided' : ''"
+                    x-text="a.voided_at ? '已作廢' : a.status"></span>
+              <!-- ⚠️ 基數只有管理者看得到：它等於全案淨利。
+                   後端沒回這個欄位時**不要顯示 0** —— 那會讓人以為淨利是零。 -->
+              <span class="bn-base" x-show="a.base_amount !== undefined"
+                    x-text="'案件淨利 ' + fmt(a.base_amount)"></span>
+              <span class="bn-amt" x-text="(isManager ? '合計 ' : '您的獎金 ') + fmt(a.visible_total)"></span>
+            </div>
+            <template x-for="(l, li) in a.lines" :key="li">
+              <div class="bn-line">
+                <span class="bn-who" x-text="l.username"></span>
+                <span class="bn-item" x-text="l.item_name_snapshot"></span>
+                <span class="bn-pct" x-text="pct(l.total_pct) + ' × ' + pct(l.person_pct)"></span>
+                <span class="bn-amt" x-text="fmt(l.amount)"></span>
+              </div>
+            </template>
+            <template x-if="!a.lines.length">
+              <div class="bn-line" style="color:var(--text-secondary)">這張單沒有您可以檢視的明細。</div>
+            </template>
+          </div>
+        </template>
+
+        <!-- 🔑 空清單對兩種人意義不同，所以要分開講：
+             管理者看到空的 ＝ 還沒有人產生過獎金單；
+             一般同仁看到空的 ＝ **目前沒有發給您的獎金**，而不是系統壞了。 -->
+        <div class="bn-empty" x-show="!awards.length"
+             x-text="isManager
+               ? '目前還沒有任何獎金單。獎金單依案件產生，案件需要先完成精算。'
+               : '目前沒有發放給您的獎金。'"></div>
+      </div>
+
+      <div class="bn-empty" x-show="!loaded && !loadError">載入中…</div>
+    </main>
+  </div>
+
+  <!-- ⚠️ `notif.js` 必須與 `sidebar.js` 成對出現：`sidebar.js` 無條件輸出
+       `globalSearchStore()`（:196）與 `notifStore()`（:377），而那兩支定義在
+       `notif.js` 裡。少載它的症狀不是錯誤畫面，是搜尋框與鈴鐺變成死的。 -->
+  <script src="../static/notif.js"></script>
+  <script src="../static/sidebar.js"></script>
+</body>
+</html>

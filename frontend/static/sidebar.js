@@ -750,6 +750,13 @@ if (typeof module !== 'undefined' && module.exports) {
       // ⚠️ 權限沿用 `cCash`：它目前是唯讀的參考資料，而會看它的正是出納。
       //    ⇒ 日後要開放給更多人時，這裡與 `_deniedPages` 要一起改。
       ni(pg('account-items.html'),   'acct',  '會計科目', ['account-items.html'],                     cCash),
+      // 🔑 `FN2`：獎金分潤。使用者原話「一樣加在營運報表那個模組獨立」
+      //    ⇒ 它與出納、營運報表並列在「財務」這一組，**不是獨立分組**。
+      // ⚠️ 權限沿用 `cRpt`（營運報表）：獎金是依案件獲利發放的，
+      //    而看得到獲利的人才有脈絡看獎金。
+      //    🔴 而**看得到入口 ≠ 看得到金額** —— 後端依 `§七` 過濾分錄列：
+      //       管理者看全部、本人只看自己那一列、其餘看不到。
+      ni(pg('bonus.html'),           'bonus', '獎金分潤', ['bonus.html'],                              cRpt),
       sec('勞務管理', cCon || cPay),
       ni(pg('contractors.html'),     'contl', '外包名冊', ['contractors.html'],                      cCon),
       ni(pg('payslips.html'),        'paysl', '勞報單',   ['payslips.html', 'payslip-form.html'],    cPay),

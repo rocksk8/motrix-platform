@@ -161,12 +161,59 @@ def validate_account_code(conn, code):
     return True, ""
 
 
+def config_code_issues(conn, cfg):
+    """已存設定裡**指不到東西**的科目代號。回 `[{where, code, reason}]`。
+
+    ## 🔴 `validate_account_code()` 只擋**新值**，而舊值會安靜地失效
+
+    ```
+    設定存好了 => 那個科目後來被停用（或被改掉代號）
+    => 匯出時 T100 那一欄用的是一個**已停用的科目**
+    => ☠️ 沒有錯誤訊息；症狀是會計師匯入時才退件
+    ```
+    🔑 〈降級之後它還是會動〉：**壞掉會被報修，而「還能跑但不對」不會。**
+    ⇒ 所以要在設定畫面上**明著顯示並要求重選**，不是靜默。
+
+    ## ⚠️ 只回報，不修改
+
+    這一支**不清空**任何值 ——
+    ☠️ 自動清空的話，使用者下次打開會看到一個空欄位，
+       而他不知道那裡**本來有值、是誰清掉的**。
+    """
+    issues = []
+
+    def _check(where, code):
+        ok, err = validate_account_code(conn, code)
+        if not ok:
+            issues.append({"where": where, "code": (code or "").strip(), "reason": err})
+
+    _check("銷貨收入", cfg.get("salesRevenueAccount"))
+    _check("銷項稅額", cfg.get("outputTaxAccount"))
+    _check("承攬商費用", cfg.get("contractorExpenseAccount"))
+    for name, code in (cfg.get("inventoryExpenseAccounts") or {}).items():
+        _check("料件分類：%s" % name, code)
+    for b in (cfg.get("bankAccounts") or []):
+        acct = b.get("acctCode") if isinstance(b, dict) else getattr(b, "acctCode", "")
+        _check("銀行帳戶：%s" % ((b.get("name") if isinstance(b, dict) else "") or "未命名"),
+               acct)
+    return issues
+
+
 @router.get("/api/settings/t100-export-config")
 def get_t100_export_config(authorization: str = Header(None)):
     u = _require_user(authorization)
     if u["role"] not in ("superadmin", "admin"):
         raise HTTPException(403, "僅管理員以上可查閱")
-    return _t100_config()
+    cfg = _t100_config()
+    # 🔑 把「已存的值現在還指不指得到東西」一起回去，讓畫面說得出來。
+    #    ⚠️ 這個鍵**不進 `T100ExportConfigBody`** ⇒ 前端整包 PUT 回來時
+    #       pydantic 會把它丟掉，不會被存進設定。
+    conn = get_db()
+    try:
+        cfg["codeIssues"] = config_code_issues(conn, cfg)
+    finally:
+        conn.close()
+    return cfg
 
 
 @router.put("/api/settings/t100-export-config")

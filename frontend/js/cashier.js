@@ -637,7 +637,11 @@ function cashierApp() {
       //    而症狀是標記付款時挑不到任何帳戶，**沒有錯誤訊息**。
       const defaultOk = !!c.defaultBankAccountCode &&
         (c.bankAccounts || []).some(b => b.acctCode === c.defaultBankAccountCode)
-      return !!(coreFilled && hasBank && invFilled && defaultOk)
+      // 🔴 已存的值現在還指不指得到東西（後端 `config_code_issues`）。
+      // ☠️ 少了這一條：某個科目被停用之後，設定**仍然顯示完整**，
+      //    而匯出那一欄用的是一個已停用的科目 —— 到會計師退件才發現。
+      const noIssues = !(c.codeIssues && c.codeIssues.length)
+      return !!(coreFilled && hasBank && invFilled && defaultOk && noIssues)
     },
 
     async unconfirmT100(row) {
