@@ -123,7 +123,7 @@ DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR = os.path.join(
 #      bonus_awards＋**部分**唯一索引／bonus_award_lines）
 # v98: FN4 編寫紀錄 —— bonus_award_edit_log ＋ 兩張共同的 retention 欄
 # v99: JV2 簽核三格各自的「誰」與「什麼時候」（送審／覆核／主管）
-CURRENT_VERSION = 99
+CURRENT_VERSION = 100
 
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
 # execution model) whenever the current request is authenticated as the 'demo'
@@ -380,6 +380,10 @@ DEMO_CLEARED_TABLES = frozenset((
     #    ⇒ 那是**使用者建的**，不是我們預載的。
     "bonus_award_edit_log", "bonus_award_lines", "bonus_awards", "bonus_items",
     "bonus_template_versions", "bonus_templates",
+    # 🔑 `voucher_attachments` 整張清：附件是**使用者上傳的憑證**，
+    #    demo 重置要讓每個客戶從乾淨開始。
+    # ⚠️ 而**實體檔不在這裡處理** —— 這份清單只管資料表。
+    "voucher_attachments",
     "voucher_edit_log", "voucher_lines", "voucher_template_versions",
     "voucher_templates", "vouchers_all",
     "webauthn_credentials", "work_logs",
@@ -4298,6 +4302,75 @@ def _m094_load_account_items(conn):
              it.get("name_en", ""), it["parent_code"]))
 
 
+def _m100_voucher_attachments(conn):
+    """v100（2026-09-23 `JV3`）：傳票附件。**這個 repo 第一張附件資料表。**
+
+    ## 🔴 為什麼是資料表，而既有附件都是 JSON 欄位
+
+    ```
+    既有：附件只被它的擁有者讀               => JSON 陣列夠用（實查 94 張表，0 張附件表）
+    JV3：要回答「這個檔案被哪幾張傳票引用過」 => JSON 欄位**查不動**
+    ```
+    📌 而那個查詢不是想像的：`JV7` 的來源清單要標示「已被引用」，否則同一張發票
+       會被帶進兩張傳票而**沒有人看得出來** ⇒ 重複入帳。
+
+    ## 🔴 綁 `voucher_id`，**不綁 `voucher_no`**
+
+    ```
+    voucher_no  退回升版 X -> X-R1 -> X-R2   **會變**
+    voucher_id  AUTOINCREMENT 主鍵            **不變**
+    ```
+    依據是 `helpers/voucher.py::can_send_back` 的 docstring 逐字：退回是**同一張單**
+    （清簽核、單號升版），作廢重開才是另開一張。⇒ 升版不換列 ⇒ id 跨版穩定。
+    ☠️ 綁單號的失敗方式不是錯誤：升版後清單是空的，
+       **看起來像這張單本來就沒有附件**。
+    📌 `voucher_lines` 與 `voucher_edit_log`（v95）已經都綁 `voucher_id` ⇒ 沿用，
+       不是新慣例。
+
+    ## 🔴 軟刪除：`deleted_at` 非空 ＝ 已刪，**而實體檔留著**
+
+    使用者裁定（`§163` ②）。理由在 `archive.py::_mirror_uploads()` 那一段：
+    鏡像「只增不減」⇒ 已進雲端的檔刪了也還在，
+    ☠️ **而當天上傳、當天刪掉的檔從來沒被鏡像過** ⇒ 硬刪等於不可復原。
+    ⚠️ ⇒ `helpers/uploads.py::delete_document_file()` **不可以重用**（它會 `os.remove`）。
+
+    ## ⚠️ `idx_vatt_file` 是 UNIQUE：同一個 `file_id` 只能有一列
+
+    它擋得住「兩列同一個 id」，**擋不住「兩列指向同一個實體檔」**
+    ⇒ 作廢重開複製時，實體檔也要真的複製一份（規格 `§1` 裁定 ①）。
+    ☠️ 共用實體檔的失敗方式很安靜：在新單刪掉一個附件**成功了**，
+       而少掉的是一張已作廢傳票的憑證 —— 沒有人會在當下發現。
+    """
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS voucher_attachments ("
+        "  id             INTEGER PRIMARY KEY AUTOINCREMENT,"
+        # 🔴 指向**實表** `vouchers_all`，不是 VIEW —— 外鍵指到 VIEW 建不起來，
+        #    而語意上也該如此：作廢單的附件必須留著（稽核要看得到）。
+        "  voucher_id     INTEGER NOT NULL REFERENCES vouchers_all(id),"
+        "  file_id        TEXT    NOT NULL,"
+        "  filename       TEXT    NOT NULL,"
+        "  path           TEXT    NOT NULL,"
+        "  size           INTEGER NOT NULL DEFAULT 0,"
+        "  mime           TEXT    NOT NULL DEFAULT '',"
+        # 🔑 來源三欄是**決定性連結**，不是一段描述文字：
+        #    `source_doc_no` 對傳票來源存的是 **id 不是單號**（單號會升版）。
+        "  source_type    TEXT    NOT NULL DEFAULT '',"
+        "  source_doc_no  TEXT    NOT NULL DEFAULT '',"
+        "  source_file_id TEXT    NOT NULL DEFAULT '',"
+        "  uploaded_by    TEXT    NOT NULL,"
+        "  uploaded_at    TEXT    NOT NULL,"
+        # 🔴 軟刪除。非空 ＝ 已刪，**而實體檔留著**（見 docstring）。
+        "  deleted_at     TEXT    NOT NULL DEFAULT '',"
+        "  deleted_by     TEXT    NOT NULL DEFAULT ''"
+        ")")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_vatt_voucher"
+                 " ON voucher_attachments(voucher_id, deleted_at)")
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_vatt_file"
+                 " ON voucher_attachments(file_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_vatt_source"
+                 " ON voucher_attachments(source_type, source_doc_no)")
+
+
 def _m099_voucher_signatures(conn):
     """v99（2026-09-23 `JV2`）：簽核三格各自的人與時間。
 
@@ -4909,6 +4982,7 @@ _MIGRATIONS = [
     _m097_bonus,                                    # v97
     _m098_edit_log_retention,                       # v98
     _m099_voucher_signatures,                       # v99
+    _m100_voucher_attachments,                      # v100
 ]
 
 

@@ -1609,6 +1609,18 @@ def _daily_backup_tables() -> dict:
         "傳票範本":         "SELECT * FROM voucher_templates ORDER BY id",
         "傳票範本版本":     ("SELECT * FROM voucher_template_versions"
                              " ORDER BY template_id, version"),  # 無 id 欄
+        # ── 傳票附件（v100，2026-09-23 `JV3`）─────────────────────
+        #
+        # ☠️ 不加的話 `test_system_audit_2026_09_14.py` 的 `undecided`
+        #    會多一張表 ⇒ 紅。而那一題是刻意的：新表必須**有人做過決定**，
+        #    不是「必須被備份」。
+        # 🔑 這裡備份的是 **metadata**；實體檔走 `_mirror_uploads()`（只增不減）
+        #    ⇒ 兩條路都要有，少一條還原回來就少一半：
+        #    有 metadata 沒 bytes ＝ 清單列得出檔名而點不開；
+        #    有 bytes 沒 metadata ＝ 一堆沒有人認得的檔案。
+        # ⚠️ 軟刪的那幾列（`deleted_at` 非空）**也要備份** —— 一個被刪掉的
+        #    憑證與一個從來不存在的憑證，在紀錄上必須分得開。
+        "傳票附件":         "SELECT * FROM voucher_attachments ORDER BY id",
         # ── 獎金分潤（v97，2026-09-23）────────────────────────────
         #
         # 🔴 `bonus_awards` 會開出兩筆傳票（核定／發放）⇒ 它是**憑證的上游**，
