@@ -79,8 +79,24 @@ uploads/voucher_attachments/{voucher_id}/{uuid}{ext}
 
 ## §2 資料表 `voucher_attachments`（新 migration，**動 `db.py` 前先宣告**）
 
-⚠️ 本文件寫成時 `CURRENT_VERSION = 98`。**開工當下重讀一次** —— 另一個視窗可能也在加。
+### 🔴 本節**刻意不寫版本號**
+
+```
+✗ 不要寫「v99」「v100」—— 一個寫進文件的號碼是**一份會過期的拷貝**
+✅ 動手當下自己取：
+   $ grep -n '^CURRENT_VERSION' backend/db.py
+   $ grep -c '# v[0-9]' backend/db.py     # 或直接看 _MIGRATIONS 清單尾巴
+```
+
 ☠️ 兩人同時加 migration，**git 不會衝突，只會在執行時撞版本號**。
+📌 2026-09-23 實例：本文件初版寫「`CURRENT_VERSION = 98`（寫成時）」，
+而 B 在同一小時內加了 `_m099_voucher_signatures` ⇒ 那個數字**當天就過期**。
+🔑 **釘一個新號碼（例如改寫成 v100）會用同一種方式再過期一次** ——
+所以這裡改成「不寫號碼，寫取號的指令」。
+
+⚠️ `db.py` 是鎖定檔：**動它之前要宣告**（`MULTIWIN-PROTOCOL.md`）。
+✅ 而號碼本身有守門：`test_migration_numbering_2026_09_23.py` 的 `MG1②`
+（`_mNNN` 前綴不可重號）＋ `MG1③`（連續、無跳號）會擋下來，**且有正對照**。
 
 ```sql
 CREATE TABLE IF NOT EXISTS voucher_attachments (
