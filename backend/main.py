@@ -24,6 +24,7 @@ import trail
 
 from helpers import licensing as license_core
 from helpers import tender_source as tender_radar_source
+from helpers import geo as geo_core
 from routers import auth, quotations, customers, suppliers, parts, dashboard, system, reports, contractors, payslips, daily_tasks, module_versions, vendor_contractors, dev_crm, env_guide, netarch_guide, switch_guide, shipping_notes, inventory, search, monitor_guide, access_guide, gateway_guide, automation_guide, contractor_vouchers, invoice_vouchers, org_structure, payment_requests, list_prefs, case_action_items, uploads, network_plans, network_plans_quick, approval_delegates, cashier, accounting_export, material_orders, case_extra_expenses, completion_notes, licensing, tender_radar, map_points
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -539,6 +540,19 @@ if os.getenv("MOTRIX_DISABLE_SCHEDULERS") != "1":
     # 標案雷達（2026-09-21）。總開關 TENDER_RADAR_ENABLED 預設關，
     # 關著時 run_scan() 立刻返回、不對外連線——排程照排，但不做事。
     tender_radar_source.schedule_tender_scan()
+    # 背景把地址查成座標（2026-09-22 §3v）。使用者裁示「不要他按按鈕」。
+    # ⚠️ 受 GEO_ENABLED 管：關著時一次都不發（不是「發了失敗」）。
+    # 🔴 它有每日上限與連續失敗停止 —— 一個會自己跑的迴圈，
+    # 失控的樣子就是**被對方封 IP**，而那時的畫面是「地圖上沒有點，
+    # 而 geoEnabled 仍然是 true」，看起來像使用者地址填錯。
+    # 📌 待辦清單由 `routers/map_points.py` 註冊（`geo` 不認識業務表），
+    # 所以這一行必須在那個模組**匯入之後**才有東西可做。
+    # ✅ 實測過（不是從行號推的）：`from routers import …, map_points` 在第 28 行、
+    #    這一行在第 553 行，而 `import main` 之後
+    #    `geo._WARM_SOURCES == ['_map_geocode_backlog']`。
+    # ⚠️ 註冊發生在**匯入**時，不是 `include_router` 時 ——
+    #    我原本寫「第一趟會空跑」，那是**從位置推的，而且是錯的**。
+    geo_core.schedule_geocode_warm()
 else:
     logger.info("MOTRIX_DISABLE_SCHEDULERS=1 —— 已略過所有背景排程（測試模式）")
 

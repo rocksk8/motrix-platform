@@ -952,3 +952,14 @@ assert not {'geocode_cache'}
 🔑 **A 排除的是「住家的經緯度」，而「住家地址本身」早就在那裡了。**
 📌 與我今天那個 access log 是同一族：
 **我們盤點的是「我們這次會寫什麼」，而既有的出口沒有人重新問過。**
+
+## 🔒 佔用宣告：`main.py`（§3v 背景暖快取掛進排程區塊），2026-09-22
+
+- **佔的是**：`if os.getenv("MOTRIX_DISABLE_SCHEDULERS") != "1":` 那個區塊裡
+  **加一行** `geo.schedule_geocode_warm()` ＋ 兩行 import／註解
+- **不動**：其他五支排程、雷達那段 log、任何 router 掛載、middleware
+- **為什麼要動它**：VB8 釘「那支函式要被掛進排程」——
+  🔑 不掛的話就是〈兩個都對而路不存在〉：函式寫好了而**沒有人叫它**
+- ⚠️ `MOTRIX_DISABLE_SCHEDULERS=1` ⇒ 測試裡整批不跑
+  ⇒ **這一行在開發機上永遠不會被執行**，正式機的證據要 A 去看
+  `warm_status().lastRunAt` 會不會動

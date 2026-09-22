@@ -12,13 +12,17 @@ Nominatim 的使用政策明文要求**可識別的 User-Agent** 與**每秒最�
 ——三個成因、一個畫面、三種相反的處置，所以每一個都必須有自己的訊號。
 """
 import json
+import logging
 import re
-from datetime import date
+import threading
+from datetime import date, datetime
 import math
 import os
 import time
 import urllib.parse
 import urllib.request
+
+logger = logging.getLogger(__name__)
 
 # ── 總開關 ───────────────────────────────────────────────────────────────────
 #
@@ -679,6 +683,224 @@ def locate_cached(address, manual_coord=None):
     if result.coord:
         _remember(address, result)
     return result
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# 背景自動暖快取（§3v）
+# ══════════════════════════════════════════════════════════════════════════
+#
+# ☠️ **一個會自己跑的背景迴圈，失控的樣子就是被 Nominatim 封 IP。**
+# 🔑 而 2026-09-22 圖磚那件已經演過一次：
+# **對方回 HTTP 200 而內容是拒絕，我們的錯誤處理完全沒觸發。**
+#
+# ⇒ 五道防線，每一道都不是可選的：
+#   ① 沿用現有的 `_throttle()`，**不另開不受限的路**
+#   ② 每日上限**跨呼叫累計並存 DB**（行程內變數 ＝「每次呼叫最多 N」）
+#   ③ 受 `geo_on()` 管，關著時**一次都不發**
+#   ④ **連續**失敗就停，而「失敗」**不可以只認例外**
+#   ⑤ 查完就停，而「沒有待辦」與「上限用完」**要分得開**
+# 而第六道是「怎麼知道它在跑」：
+#   ⑥ `warm_status()` —— **「沒有在跑」與「跑了什麼都沒做」在畫面上一模一樣**
+
+#: 一天最多查幾個新地址。
+#:
+#: 📌 199 個相異字串 ÷ 120 ≈ 兩天補完，而每天只佔 Nominatim 約兩分鐘。
+#: ⚠️ 這個數字**不是拍腦袋**：它要小於「一天內不會被當成 bulk geocoding」
+#: 的量，又要大到兩三天能收斂。改它之前先想「失控時誰會發現」。
+GEOCODE_WARM_DAILY_LIMIT = 120
+
+#: 連續失敗幾次就停。**連續，不是累計。**
+#:
+#: ☠️ 累計判準會在**正常運作**時停住：待辦裡本來就有查不到的地址
+#: （實測：門牌一律查不到）⇒ 跑三筆就永久停，
+#: 🔑 而症狀是「背景好像沒在跑」，**跟「它根本沒被排程」一模一樣**。
+WARM_MAX_CONSECUTIVE_FAILURES = 3
+
+#: 兩次背景暖快取之間隔多久。
+GEOCODE_WARM_INTERVAL_SECONDS = 6 * 60 * 60
+
+#: 狀態與每日計數存在哪。**存 DB 不存記憶體。**
+#: ⚠️ 存記憶體的話，uvicorn 一重啟（`autostart.bat` 是無限迴圈）
+#: 每日上限就歸零 ⇒ **上限實際上變成「每次重啟最多 N」**。
+WARM_STATE_SETTING = "geocode_warm_state"
+
+#: 待辦的來源。**由呼叫端註冊，`geo` 不認識任何一張業務表。**
+#:
+#: 🔑 〈模組化〉：`geo` 是共用能力，它不可以知道 `tenders`／`customers`
+#: 這些表的存在——那會讓「地理編碼」這個模組**賣不動**（它綁死了 ERP 的 schema）。
+#: ⇒ `routers/map_points.py` 在匯入時把自己的待辦清單註冊進來。
+_WARM_SOURCES = []
+
+
+def register_warm_source(fn):
+    """註冊一個「待辦地址清單」的來源。`fn()` 回一串字串。
+
+    ⚠️ **重複註冊要擋掉**：模組被重新匯入時（測試、reload）會再跑一次，
+    而一個被註冊兩次的來源會讓待辦**看起來多一倍**。
+    """
+    if fn not in _WARM_SOURCES:
+        _WARM_SOURCES.append(fn)
+    return fn
+
+
+def _warm_state():
+    from helpers.settings import _get_setting
+    state = _get_setting(WARM_STATE_SETTING, {}) or {}
+    return dict(state) if isinstance(state, dict) else {}
+
+
+def _save_warm_state(state):
+    from helpers.settings import _set_setting
+    _set_setting(WARM_STATE_SETTING, state)
+
+
+def warm_status() -> dict:
+    """背景暖快取的狀態。**四個欄位各自回答一個問題。**
+
+    | 欄位 | 回答的問題 |
+    |---|---|
+    | `lastRunAt` | **有沒有跑** |
+    | `processed` | **做了多少** |
+    | `succeeded` | **有沒有用** |
+    | `stoppedBecause` | **為什麼停** |
+
+    ☠️ 少任何一個，都有一種沉默分不出來。
+    📌 最容易漏的是 `succeeded`：跑了 100 筆而成功 0 筆，
+    `processed` 那個數字**看起來非常健康**。
+    """
+    state = _warm_state()
+    return {
+        "lastRunAt": state.get("last_run_at"),
+        "processed": state.get("processed", 0),
+        "succeeded": state.get("succeeded", 0),
+        "stoppedBecause": state.get("stopped_because"),
+        "usedToday": state.get("used", 0),
+        "dailyLimit": GEOCODE_WARM_DAILY_LIMIT,
+    }
+
+
+def _warm_backlog():
+    """所有註冊來源的待辦地址，**去重、且排除已經查過的**。
+
+    ⚠️ 一個來源壞掉不可以拖垮其他來源：那會讓「背景沒在跑」變成
+    一個**跟資料無關**的原因，而 log 裡只有一行堆疊。
+    """
+    seen, out = set(), []
+    for source in _WARM_SOURCES:
+        try:
+            items = source() or []
+        except Exception:                     # noqa: BLE001
+            logger.exception("暖快取的待辦來源失敗：%r", source)
+            continue
+        for raw in items:
+            address = str(raw or "").strip()
+            if not address or address in seen:
+                continue
+            seen.add(address)
+            if cached_only(address) is not None:
+                continue                      # 已經知道了，不算待辦
+            out.append(address)
+    return out
+
+
+def warm_geocode_cache() -> dict:
+    """跑一趟背景暖快取。回 `warm_status()`。
+
+    **可以單獨呼叫** —— 排程與測試共用同一支，
+    🔑 那讓「排程呼叫的東西」與「測試驗過的東西」**不可能是兩份**。
+    """
+    state = _warm_state()
+    today = date.today().isoformat()
+    if state.get("date") != today:
+        # 跨日 ⇒ 計數歸零。⚠️ **只歸零計數，不清掉上一次的狀態**：
+        # 那些數字是「上一次跑的結果」，昨天跑的仍然是有效的答案。
+        state["date"] = today
+        state["used"] = 0
+
+    def _finish(reason, processed=0, succeeded=0):
+        # 🔴 **每一趟都寫，包含什麼都沒做的那些。**
+        # ☠️ 只在有做事時才更新的話，畫面會永遠寫著「上次處理 3 筆」，
+        # 而那個迴圈可能已經停了三天 —— **一個看起來很健康的畫面。**
+        state["last_run_at"] = datetime.now().isoformat(timespec="seconds")
+        state["processed"] = processed
+        state["succeeded"] = succeeded
+        state["stopped_because"] = reason
+        _save_warm_state(state)
+        return warm_status()
+
+    # ── 防線③：總開關 ────────────────────────────────────────────────
+    # ⚠️ 「發了失敗」與「沒發」在畫面上一樣（都沒有新座標），
+    # 而代價差一個逾時 × 每一筆待辦。**壞掉的時候最慢。**
+    if not geo_on():
+        return _finish("geo_off")
+
+    # ── 防線⑤：沒有待辦就不要空轉 ────────────────────────────────────
+    # 🔑 「沒有待辦」是**好消息**，「上限用完」是欠帳 —— 合成一個
+    # 「已停止」的話，那兩件在畫面上會長得一樣。
+    backlog = _warm_backlog()
+    if not backlog:
+        return _finish("no_backlog")
+
+    # ── 防線②：每日上限，跨呼叫累計 ──────────────────────────────────
+    remaining = GEOCODE_WARM_DAILY_LIMIT - int(state.get("used", 0) or 0)
+    if remaining <= 0:
+        return _finish("daily_limit")
+
+    processed = succeeded = streak = 0
+    reason = "no_backlog"                 # 全部查完 ⇒ 待辦空了
+    for address in backlog:
+        if processed >= remaining:
+            reason = "daily_limit"
+            break
+        # ── 防線①：沿用現有節流 ──────────────────────────────────────
+        # ☠️ 另開一條不受節流的路 ＝ 用最快的速度連打對方，
+        # 而那正是被封 IP 的標準做法。
+        _throttle()
+        try:
+            result = locate_cached(address)
+        except Exception:                 # noqa: BLE001
+            logger.exception("暖快取查詢失敗：%s", address)
+            result = None
+        processed += 1
+        state["used"] = int(state.get("used", 0) or 0) + 1
+        # ── 防線④：連續失敗就停，**而失敗不只認例外** ────────────────
+        # ☠️ 對方回 HTTP 200 而內容是拒絕時，`except` 完全不會觸發
+        # ⇒ 只在 `except` 裡累計的實作會**若無其事地繼續打**。
+        # ⇒ 判準是「**這一筆有沒有拿到座標**」，不是「有沒有丟例外」。
+        if result is not None and getattr(result, "coord", None):
+            succeeded += 1
+            streak = 0
+        else:
+            streak += 1
+            if streak >= WARM_MAX_CONSECUTIVE_FAILURES:
+                logger.warning(
+                    "暖快取連續失敗 %d 次，停下來。"
+                    "（對方可能拒絕了我們——請看上面的錯誤訊息）", streak)
+                reason = "failures"
+                break
+    return _finish(reason, processed, succeeded)
+
+
+def schedule_geocode_warm():
+    """啟動時呼叫一次：跑一輪，然後排下一次。
+
+    ⚠️ 工作包在 `try` 裡、**重排放在 `finally`** —— 形狀照
+    `tender_source.schedule_tender_scan()`。
+    把重排放在工作之後而沒包 try 的話，丟一次例外就**永遠不會再排**，
+    而「排程死了」跟「今天沒事做」長得一模一樣。
+
+    ⚠️ `threading.Timer` 走模組屬性，`from threading import Timer`
+    會讓 monkeypatch 打不到。
+    """
+    try:
+        warm_geocode_cache()
+    except Exception:                     # noqa: BLE001
+        logger.exception("warm_geocode_cache failed")
+    finally:
+        t = threading.Timer(GEOCODE_WARM_INTERVAL_SECONDS,
+                            schedule_geocode_warm)
+        t.daemon = True
+        t.start()
 
 
 def haversine_km(a, b) -> float:

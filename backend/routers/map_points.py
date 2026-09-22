@@ -98,6 +98,65 @@ _DATASETS = {
 }
 
 
+#: 🔴 **背景暖快取刻意不碰的來源。**
+#:
+#: `contractors` 是**外包名冊（自然人）**，那個 `address` 是**住家地址**。
+#: ☠️ 地圖在有權限的人打開時查它，是**有人要求**；
+#: 背景迴圈查它，是**沒有人要求而我們把它送出去**。
+#: 🔑 兩者在技術上一樣、在性質上不一樣，而**只有後者是我們自己決定的**。
+#: 📌 代價很小：實測只有 5 個相異地址，需要時走前景那條路照樣查得到。
+#: ⚠️ 這是我（B）做的決定，不是規格裡的 —— 已回報 A。
+_WARM_EXCLUDED = ("contractors",)
+
+
+@geo.register_warm_source
+def _map_geocode_backlog():
+    """地圖會用到的所有地址。**給背景暖快取當待辦。**
+
+    📌 `geo` 不認識任何一張業務表（〈模組化〉：共用能力不可以綁死 ERP 的
+    schema），所以待辦是由**這一層**註冊進去的。
+    ⚠️ 這裡**不檢查權限**：它不回給任何人，只決定「先去查哪些地址」。
+    而查到的座標進 `geocode_cache`，讀出來時仍然要過 `_may_see_dataset`。
+    """
+    out = []
+    with db_conn() as conn:
+        for r in conn.execute("SELECT org, location FROM tenders").fetchall():
+            org = (r["org"] or "").strip()
+            # ⚠️ 被截斷的名稱不查 —— 與前景那條路同一個判準
+            # （`_locate_tender`）。兩邊不一致的話，背景會把一個
+            # **錯的**座標寫進快取，而前景永遠讀得到它。
+            if org and not geo.looks_truncated(org):
+                out.append(org)
+            place = (r["location"] or "").strip()
+            if place:
+                out.append(place)
+
+        for name, spec in _DATASETS.items():
+            if name in _WARM_EXCLUDED:
+                continue
+            if spec.get("json"):
+                rows = conn.execute(
+                    f"SELECT data_json FROM {spec['table']}").fetchall()
+                for row in rows:
+                    try:
+                        data = json.loads(row["data_json"] or "{}")
+                    except (TypeError, ValueError):
+                        continue          # 壞掉的那一筆跳過，不拖垮其他筆
+                    if not isinstance(data, dict):
+                        continue
+                    for _dataset, key, _label in spec["json"]:
+                        value = str(data.get(key) or "").strip()
+                        if value:
+                            out.append(value)
+            else:
+                col = spec["address"]
+                rows = conn.execute(
+                    f"SELECT {col} AS addr FROM {spec['table']} "
+                    f"WHERE {col} IS NOT NULL AND TRIM({col}) <> ''").fetchall()
+                out += [str(r["addr"] or "").strip() for r in rows]
+    return out
+
+
 #: 有地址欄位、但**刻意不查**的資料集。回報它們、但不碰那些表。
 _NOT_QUERIED = {
     "completion_notes": "完工單目前沒有可用的地址資料（實測 0 筆），這個來源尚未支援",
@@ -465,6 +524,12 @@ def map_points(sources: str = "tenders",
         # ☠️ 合併的話，使用者會去翻資料找一個不存在的錯。
         # 📌 快取是永久的 ⇒ 這個數字**只會往下掉**，按幾次就歸零。
         "pendingGeocode": budget.pending,
+        # 🔴 背景暖快取的狀態。**「沒有在跑」與「跑了什麼都沒做」
+        # 在畫面上一模一樣**，所以它要跟著這個回應出來。
+        # 📌 `stoppedBecause` 的三種停法處置完全不同：
+        #   `geo_off`（去打開）／`daily_limit`（明天會繼續）／
+        #   `failures`（**對方可能拒絕我們了，要看 log**）
+        "geocodeWarm": geo.warm_status(),
         "sources": source_info,
     }
 

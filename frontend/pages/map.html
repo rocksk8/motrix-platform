@@ -113,12 +113,25 @@
           <strong>這次來不及定位</strong>（不是查不到）。
           地址轉座標是跟 OpenStreetMap 要的，對方每秒只接受一次查詢，
           所以一次只查一部分。
-          <strong>查過的會永久記住</strong>，按幾次就會全部出現。
+          <strong>查過的會永久記住，而且背景會自己慢慢查完</strong> ——
+          不用一直按。想馬上看到的話再按這顆。
           <button class="btn btn-ghost btn-sm" style="margin-left:6px"
                   @click="refresh()" :disabled="loading"
                   x-text="loading ? '定位中…' : '繼續定位'"></button>
         </div>
       </div>
+      <!-- 🔴 背景停掉有三種，**而處置完全不同**：
+           `geo_off`（去打開地理查詢）／`daily_limit`（明天會繼續）／
+           `failures`（**對方可能拒絕我們了，要看伺服器記錄**）。
+           ☠️ 三種在畫面上都是「數字不動」——不說的話它們是同一件事。
+           📌 `no_backlog` 刻意**不顯示**：那是好消息，而一個永遠出現的
+           訊號不是訊號。 -->
+      <div class="mp-note warn"
+           x-show="info && info.geocodeWarm && warmNote()">
+        <span>⚠️</span>
+        <div x-text="warmNote()"></div>
+      </div>
+
       <template x-for="s in (info ? info.sources : [])" :key="s.source">
         <div class="mp-note info" x-show="s.skipped">
           <span>ℹ️</span>
@@ -437,6 +450,28 @@ function mapPage() {
 
     //: 誤差寫成人話。**距離與誤差要一起出現** —— 一個數字不帶它的可信度，
     //  就會被當成事實（§3n 的核心設計）。
+    //: 背景定位停掉的原因，寫成人話。**好消息回空字串**（不顯示）。
+    //  ⚠️ 讀不到狀態時也回空字串 —— 一個「狀態拿不到」的警告
+    //  會在每一台還沒跑過的新機器上出現，而它不是問題。
+    warmNote() {
+      const w = (this.info && this.info.geocodeWarm) || {}
+      const why = w.stoppedBecause
+      if (why === 'geo_off') {
+        return '背景定位沒有在跑：這台機器的地理查詢是關的'
+             + '（需要管理者設定 MOTRIX_GEO=1 並重啟）。'
+      }
+      if (why === 'daily_limit') {
+        return '背景定位今天的額度用完了（' + (w.usedToday || 0) + '／'
+             + (w.dailyLimit || 0) + '），明天會自動繼續。'
+             + '想現在就補完的話按「繼續定位」。'
+      }
+      if (why === 'failures') {
+        return '背景定位連續失敗而停下來了 —— 地圖服務可能暫時拒絕了我們。'
+             + '請看伺服器記錄；它下一個時段會再試一次。'
+      }
+      return ''
+    },
+
     accuracyLabel() {
       const m = this.info && this.info.userAccuracyM
       if (m === null || m === undefined) return ''
