@@ -233,3 +233,37 @@ def test_posting_an_unbalanced_voucher_is_refused_and_says_the_difference():
         "平衡的傳票（借 1000／貸 1000）過帳被擋 ——\n"
         "⚙️ 這是正對照：少了它，「永遠拒絕」會讓上面那個斷言綠，"
         "**而沒有任何一張傳票過得了帳**。")
+
+
+def test_an_all_zero_voucher_cannot_be_posted_although_it_balances():
+    """🔴 **全 0 的傳票「平衡」而不可過帳** —— 施工圖 `§六①` 逐字是
+    `SUM(debit) == SUM(credit)` **且 `> 0`**。
+
+    ```
+    借 0 ／ 貸 0   =>  相等 ✅  而金額是 0  =>  **不可過帳**
+    ```
+    ☠️ 放行的後果是一筆**金額為 0 的分錄**進帳：
+    **不報錯、帳是平的、對帳也對得起來** —— 它只是不該存在。
+    🔑 而這一格 B 主動指出來了，理由是 `(ok, diff)` 這個回傳**表達不出它**：
+    ```
+    借 0 ／ 貸 0  =>  (False, 0)
+    而 diff 也是 0  =>  `if diff: 擋` 會放行它
+    ```
+    📌 ⇒ 判準不可以綁在 `diff` 上。這一題釘的是 **`ok`**，不是 `diff`
+       —— 〈守門守的對象被搬走〉：兩個值都對，而決定行為的是另一個。
+    ⚠️ 我沒有改 B 的簽章，也沒有自己發明「> 0」這個門檻：它在 `§六①` 裡。
+    """
+    where, mod = _voucher_module()
+    _n, fn = _attr(mod, "check_balance", "_check_balance", "validate_balance")
+    if fn is None:
+        pytest.fail("沒有借貸平衡檢查 —— 見上一題。")
+
+    ok, diff = fn(_lines((0, 0)), status="已核准")
+    assert ok is False, (
+        "借 0／貸 0 的傳票過得了帳（回傳 ok=%r, diff=%r）——\n" % (ok, diff)
+        + "☠️ 一筆金額為 0 的分錄進帳：**不報錯、帳是平的、對帳也對得起來**。\n"
+        + "🔑 `§六①` 逐字是「`SUM(debit) == SUM(credit)` **且 > 0**」。")
+    assert diff == 0, (
+        "全 0 的差額報 %r —— 它**應該**是 0（兩邊相等）。\n" % diff
+        + "⚙️ 這一格刻意釘住，是為了說明**為什麼不可以拿 `diff` 當判準**："
+          "合法的 0 與非法的 0 在這個欄位上長得一模一樣。")
