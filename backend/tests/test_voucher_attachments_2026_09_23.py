@@ -37,6 +37,7 @@ assert r.status_code != 404   ⇒ **擋不到**（405 != 404）
 import io
 import json
 import pathlib
+import re
 
 import pytest
 
@@ -47,7 +48,7 @@ ATT_ONE = "/api/vouchers/%s/attachments/%s"
 OK_CODES = (200, 400, 403)
 
 #: `§3` 的九類來源 ＋ 第 10 個（作廢重開複製產生）。⚠️ 少一個、多一個都要紅。
-SOURCE_TYPES = ("quotation", "case_update", "payment_item", "material",
+SOURCE_TYPES = ("quotation_signed", "case_update", "payment_item", "material",
                 "material_invoice", "extra_expense", "invoice_voucher",
                 "contractor_dispatch", "contractor_invoice")
 COPY_SOURCE_TYPE = "voucher"
@@ -334,12 +335,20 @@ def _seed_quotation_with_file(quote_no="MQ-JV3-001", name="來源憑證.pdf"):
             "VALUES (?,?,?,?,?,?,?,?,?)",
             (quote_no, "已結案", "測試客戶", "測試案", 0, 0, "{}",
              "2026-09-01T00:00:00", "2026-09-01T00:00:00"))
+        # 🔴 **更正留著**：我照規格初版寫 `files_json`，而 `PRAGMA table_info`
+        #    說 `quotations` 唯一含 file 的欄是 **`signed_files_json`**
+        #    （`invoice_vouchers` 同理是 `issued_files_json`）。
+        # 🔑 A-2 查到並改了規格（`d620cbf`），而他的方法值得記：
+        #    **`PRAGMA table_info` 是權威，`db.py` 的原始碼不是** ——
+        #    他第一版用 regex 開 2600 字元視窗掃 `db.py`，**視窗跨到隔壁的
+        #    `CREATE TABLE`** ⇒ 拿到一份混了別張表的欄位清單，**而它看起來很完整**。
         cols = {r["name"] for r in conn.execute("PRAGMA table_info(quotations)")}
-        assert "files_json" in cols, (
-            "`quotations` 沒有 `files_json` 欄 —— `§3` 第 1 類的 metadata 位置\n"
-            "與我讀的不一樣，**退回給我**。")
+        assert "signed_files_json" in cols, (
+            "`quotations` 沒有 `signed_files_json` 欄（現有含 file 的欄：%s）"
+            "—— **退回給我**。"
+            % sorted(c for c in cols if "file" in c.lower()))
         conn.execute(
-            "UPDATE quotations SET files_json = ? WHERE quote_no = ?",
+            "UPDATE quotations SET signed_files_json = ? WHERE quote_no = ?",
             (json.dumps([{"id": file_id, "name": name,
                           "path": "quotations/%s" % real.name}]), quote_no))
         conn.commit()
@@ -365,14 +374,14 @@ def test_jv3_bringing_in_copies_the_file_so_the_source_can_be_deleted(
     quote_no, src_id, src_file = _seed_quotation_with_file()
 
     r = client.post(ATT % vid, headers=hdr, json={"picks": [
-        {"type": "quotation", "docNo": quote_no, "fileId": src_id}]})
+        {"type": "quotation_signed", "docNo": quote_no, "fileId": src_id}]})
     _reached(r, "POST /api/vouchers/{id}/attachments (picks)")
     assert r.status_code == 200, "帶入失敗：%s %s" % (r.status_code, r.text[:200])
 
     rows = _rows(vid)
     assert len(rows) == 1, "帶入之後表裡有 %d 列：%r" % (len(rows), rows)
     row = rows[0]
-    assert row.get("source_type") == "quotation", (
+    assert row.get("source_type") == "quotation_signed", (
         "來源型別沒記下來：%r —— `§2` 的三個來源欄是**決定性連結**，"
         "不是一段描述文字。" % row)
     assert row.get("file_id") != src_id, (
@@ -443,6 +452,45 @@ def test_jv3_voiding_and_reopening_copies_the_attachments(client, make_user):
     assert a.resolve() != b.resolve(), (
         "新舊單指向**同一個實體檔**：%s\n" % a
         + "📌 `§1` 裁定 ①：作廢重開**要複製附件**。")
+
+
+def test_jv3_a_missing_source_file_aborts_the_whole_batch(client, make_user):
+    """🔴 **來源的實體檔不見了 ⇒ 整批 400，`voucher_attachments` 零新增。**
+
+    （A-2 `27d7c52` 新增的驗收；他實查開發機：六個來源欄位的檔案 metadata
+    總筆數 = **1**，而 `uploads/` 實際檔案數 = **0** ⇒ 那一筆的 `path`
+    指向一個不存在的檔。⇒ **這不是假想情境，它是目前唯一的真實資料**。）
+
+    ⚠️ **不是「跳過它而其餘成功」**：
+    ```
+    跳過  => 使用者勾了三個，成功訊息說「已帶入」，而傳票上只有兩個
+           ⇒ 他要自己去數 —— 而**沒有人會去數**
+    整批拒絕 => 他當場知道哪一筆有問題
+    ```
+    ⚙️ 而「零新增」要**查表**不是看回應：一個「先寫再回滾」的實作
+       會在回應上看起來一樣，而並行時看得到那個空隙。
+    """
+    _u, hdr = _hdr(client, make_user, "jv3_gone")
+    vid = _create(client, hdr)
+    quote_no, src_id, src_file = _seed_quotation_with_file(
+        quote_no="MQ-JV3-GONE")
+
+    src_file.unlink()                     # ☠️ metadata 還在，而檔案不見了
+    assert not src_file.exists()
+
+    before = len(_rows(vid))
+    r = client.post(ATT % vid, headers=hdr, json={"picks": [
+        {"type": "quotation_signed", "docNo": quote_no, "fileId": src_id}]})
+    _reached(r, "POST /api/vouchers/{id}/attachments (picks)")
+    assert r.status_code == 400, (
+        "來源的實體檔不存在，而帶入回 %s：%s\n" % (r.status_code, r.text[:200])
+        + "☠️ 「成功」之後傳票上掛著一筆**指向空氣**的憑證。")
+    assert src_id in r.text or quote_no in r.text, (
+        "拒絕了，而訊息沒說是**哪一筆**：%s\n" % r.text[:200]
+        + "⚠️ 使用者一次勾好幾個，說不出是哪一筆等於要他自己一個一個試。")
+    assert len(_rows(vid)) == before, (
+        "拒絕了，**而表裡多了列**（%d -> %d）——\n" % (before, len(_rows(vid)))
+        + "🔑 拒絕的路徑上不可以留下副作用。")
 
 
 def test_jv3_attachments_are_behind_the_voucher_modules(client, make_user):
@@ -550,11 +598,23 @@ def test_jv3_the_new_table_is_in_the_daily_backup(client, make_user):
           "   探針找不到東西時報的是「找不到」，而那與「產品缺了它」長得一樣。")
 
     listed = fn()
-    assert len(listed) > 30, (
-        "每日備份只列了 %d 張表 —— **尺量不到東西**，下面的斷言不算數。"
-        % len(listed))
-    assert "voucher_attachments" in set(listed), (
-        "`voucher_attachments` 不在每日備份的 %d 張表裡。\n" % len(listed)
+    assert isinstance(listed, dict), (
+        "`_daily_backup_tables()` 回的不是 dict 而是 %s —— **退回給我**。"
+        % type(listed).__name__)
+
+    # 🔴 **更正留著**：我第一版寫 `set(listed)` ⇒ 拿到的是**鍵**（中文檔名
+    #    `報價單`／`客戶`／…），而表名在**值**（SQL）裡 ⇒ `voucher_attachments`
+    #    永遠不在裡面 ⇒ 那一題**不可能綠**，而它的訊息會指控產品。
+    # ☠️ 而我的前置 `len(listed) > 30` **對 dict 也成立** ——
+    #    它擋得住「空清單」，**擋不住「量錯一層」**。
+    # 📌 既有的稽核題（`test_system_audit_2026_09_14.py:52-54`）就是從值抽的。
+    tables = {t for sql in listed.values()
+              for t in re.findall(r"FROM\s+(\w+)", sql)}
+    assert len(tables) > 30, (
+        "從 %d 個備份項目只抽到 %d 張表 —— **尺量不到東西**，下面的斷言不算數。"
+        % (len(listed), len(tables)))
+    assert "voucher_attachments" in tables, (
+        "`voucher_attachments` 不在每日備份的 %d 張表裡。\n" % len(tables)
         + "☠️ 備份每天都有檔，**而還原回來少了一整張表** ——\n"
           "   那要到真的還原那天才會發現。")
 
