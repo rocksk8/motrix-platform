@@ -34,10 +34,14 @@
 
 ---
 
-# ⚠️ 弱紅聲明
+# ⚠️ 弱紅聲明（2026-09-23 01:3x 更新）
 
-`v95` 與傳票模組都還不存在 => 本檔多題會紅在同一個地方。
-=> B 落地後我會跑突變逐題確認它紅在自己的斷言上。
+```
+出題時   v95 與傳票模組都不存在 => 多題紅在同一個地方
+現在     v95 已落地、helpers/voucher.py 已存在
+         => 剩**讀取端兩題**紅，等 post_voucher / get_voucher
+```
+=> B 交接縫後我會跑突變逐題確認它紅在自己的斷言上。
 ⚙️ 而 `test_the_freeze_scanner_can_see_a_join` 是**儀器自檢**，用合成輸入，
    **現在就該綠** —— 它紅表示我的掃描器壞了，不是產品壞了。
 """
@@ -105,7 +109,7 @@ def test_voucher_lines_has_all_five_snapshot_columns(fresh_db):
     📌 `§54c` 的形狀：清單要能被數。
     """
     have = {r[0] for r in fresh_db.execute(
-        "SELECT name FROM sqlite_master WHERE type='table'")}
+        "SELECT name FROM sqlite_master WHERE type IN ('table','view')")}
     assert CHILD in have, (
         "`%s` 不存在 —— `v95` 還沒有。\n" % CHILD
         + "⚠️ 這是**弱紅**，本檔多題會一起紅在這裡。")
@@ -136,33 +140,31 @@ def _seam(mod, where, *names):
 
 
 def _call(fn, conn, vid, where, label):
-    """用幾種常見形狀叫它。**全部失敗才報**，而報的時候要附上它真正的簽名。
+    """照 **B 2026-09-23 明著給的簽名**叫它，失敗時附上它真正的簽名。
 
-    ⚠️ 我不自己發明簽名 —— 這裡只是不要為了「參數順序不同」而紅，
-       因為那種紅會**指向產品**而壞的是我的呼叫方式（〈探針與被測對象糾纏〉）。
+    ```
+    get_voucher(conn, voucher_id)          -> dict | None   （含 lines）
+    post_voucher(conn, voucher_id, user)   -> (ok, err)
+    ```
+    ⚠️ 我原本用五種形狀輪流試 —— 而 B 給了名字之後那就是**寬判準**：
+       🔑 寬的判準永遠比較好過，它給你綠燈所以你不會回來看它。
+    📌 保留 `TypeError` 那一格只是為了**說得出話**：那種紅會指向產品，
+       而壞的是我的呼叫方式（〈探針與被測對象糾纏〉）。
     """
     import inspect
-    shapes = (
-        lambda: fn(conn, vid),
-        lambda: fn(vid, conn=conn),
-        lambda: fn(vid),
-        lambda: fn(conn=conn, voucher_id=vid),
-        lambda: fn(conn, vid, "C"),
-    )
-    errs = []
-    for shape in shapes:
-        try:
-            return shape()
-        except TypeError as e:
-            errs.append(str(e))
     try:
-        sig = str(inspect.signature(fn))
-    except Exception:                                      # noqa: BLE001
-        sig = "(讀不到)"
-    pytest.fail(
-        "`%s` 的 `%s%s` 我叫不動（試過 %d 種形狀）。\n" % (where, label, sig, len(shapes))
-        + "⚠️ **壞的可能是我的呼叫方式，不是產品** —— 請 B 把簽名退回給我。\n"
-        + "   " + "\n   ".join(errs[:3]))
+        return fn(conn, vid, "C") if label == "post_voucher" else fn(conn, vid)
+    except TypeError as e:
+        try:
+            sig = str(inspect.signature(fn))
+        except Exception:                                  # noqa: BLE001
+            sig = "(讀不到)"
+        pytest.fail(
+            "`%s` 的 `%s%s` 我叫不動：%s\n" % (where, label, sig, e)
+            + "⚠️ **壞的可能是我的呼叫方式，不是產品。**\n"
+            + "   我照 B 2026-09-23 給的簽名叫：`get_voucher(conn, voucher_id)`／"
+              "`post_voucher(conn, voucher_id, user)`。\n"
+            + "   簽名改了 **退回給我**。")
 
 
 def _lines_of(payload):
@@ -179,6 +181,21 @@ def _lines_of(payload):
     return []
 
 
+def _voucher_table(conn):
+    """傳票**實表**的名字。
+
+    🔴 `vouchers` 自 2026-09-23 起是**只露出未作廢的 VIEW**，實表叫 `vouchers_all`。
+    ☠️ 而我的探針原本 INSERT 進 `vouchers` => VIEW 插不進去
+       ⇒ 三題一起紅，**而我的訊息說「v95 還沒有」** —— 它在，只是換了型別。
+    🔑 〈探針與被測對象糾纏〉最貴的一種：**紅燈不但指錯對象，還給了一個自信的錯解釋。**
+    """
+    have = {r[0] for r in conn.execute(
+        "SELECT name FROM sqlite_master WHERE type IN ('table','view')")}
+    if "vouchers_all" in have:
+        return "vouchers_all"
+    return "vouchers" if "vouchers" in have else None
+
+
 def _seed_posted(conn, post, code, name, status="已核准"):
     """種一張傳票（一借一貸、平衡），`post` 不是 `None` 就把它過帳。
 
@@ -190,7 +207,7 @@ def _seed_posted(conn, post, code, name, status="已核准"):
        〈探針與被測對象糾纏〉：壞的是我的裝置，而訊息的指向是我當初的假設。
     """
     have = {r[0] for r in conn.execute(
-        "SELECT name FROM sqlite_master WHERE type='table'")}
+        "SELECT name FROM sqlite_master WHERE type IN ('table','view')")}
     missing = {"vouchers", CHILD} - have
     if missing:
         pytest.fail("`v95` 還沒有：缺 %s。⚠️ 這是**弱紅**。" % sorted(missing))
@@ -202,8 +219,9 @@ def _seed_posted(conn, post, code, name, status="已核准"):
         "INSERT INTO account_items (code, name, parent_code, level,"
         " source) VALUES (?,?,?,?, 'custom')", ("9902", "銷貨收入", "", 4))
     conn.execute(
-        "INSERT INTO vouchers (voucher_no, voucher_date, created_by,"
-        " created_at, updated_at, status) VALUES (?,?,?,?,?,?)",
+        "INSERT INTO %s (voucher_no, voucher_date, created_by,"
+        " created_at, updated_at, status) VALUES (?,?,?,?,?,?)"
+        % _voucher_table(conn),
         ("20260923-001", "2026-09-23", "C", "2026-09-23T00:00:00",
          "2026-09-23T00:00:00", status))
     vid = conn.execute("SELECT last_insert_rowid()").fetchone()[0]

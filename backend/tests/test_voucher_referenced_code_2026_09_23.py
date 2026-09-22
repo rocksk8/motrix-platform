@@ -33,10 +33,17 @@ SQLite 3.53.1
 
 ---
 
-# ⚠️ 第一個紅是**弱的**（`v95` 還不存在 => 多題都紅在 `no such table: voucher_lines`）
+# 🔴 而**弱紅的代價已經兌現了**：`v95` 在我出題前就落地 => 本檔一寫完就全綠
 
-☠️ 而弱紅的代價是：**`v95` 一落地，這幾題會一起變綠，而它們證明的不是同一件事。**
-=> 本檔用兩層擋它：
+```
+出題時預期  紅在 no such table: voucher_lines，B 做完才變綠
+實際        **從來沒有紅過** => 我手上沒有證據說這幾題分辨得出對錯
+```
+⇒ 補跑突變 **14/14**（`scratchpad/mutate_v95_triggers.py`）：拿掉任一支 TRIGGER／
+  少 `OF code`／拿掉 `WHEN`／`WHEN` 查錯欄位，**都紅在自己的斷言上**。
+☠️ 而突變抓到的是**我自己的**缺陷：兩個正對照擋過頭時丟的是原始 `IntegrityError`，
+   我寫的「擋過頭」訊息**永遠不會印** => 排查的人會讀成「測試寫錯了」。已修。
+=> 本檔用兩層擋弱紅：
 ```
 (a) 前兩題**完全不碰產品資料庫**（合成 schema）=> 它們現在就該是綠的
     => 它們紅 = **我的前提錯了**，不是 B 沒做
@@ -163,7 +170,7 @@ def fk_off_db(tmp_path):
 
 def _need_v95(conn):
     have = {r[0] for r in conn.execute(
-        "SELECT name FROM sqlite_master WHERE type='table'")}
+        "SELECT name FROM sqlite_master WHERE type IN ('table','view')")}
     missing = {"vouchers", CHILD} - have
     if missing:
         pytest.fail(
@@ -173,6 +180,21 @@ def _need_v95(conn):
               "=> `v95` 落地後我會跑突變逐題確認它紅在自己的斷言上。")
 
 
+def _voucher_table(conn):
+    """傳票**實表**的名字。
+
+    🔴 `vouchers` 自 2026-09-23 起是**只露出未作廢的 VIEW**，實表叫 `vouchers_all`。
+    ☠️ 而我的探針原本 INSERT 進 `vouchers` => VIEW 插不進去
+       ⇒ 三題一起紅，**而我的訊息說「v95 還沒有」** —— 它在，只是換了型別。
+    🔑 〈探針與被測對象糾纏〉最貴的一種：**紅燈不但指錯對象，還給了一個自信的錯解釋。**
+    """
+    have = {r[0] for r in conn.execute(
+        "SELECT name FROM sqlite_master WHERE type IN ('table','view')")}
+    if "vouchers_all" in have:
+        return "vouchers_all"
+    return "vouchers" if "vouchers" in have else None
+
+
 def _seed(conn, code="1113", referenced=True):
     """種一張傳票（＋一行分錄），讓 `code` 變成**被引用的**。
 
@@ -180,8 +202,8 @@ def _seed(conn, code="1113", referenced=True):
        那樣 DDL 加欄位時這裡**不必跟著改**。
     """
     conn.execute(
-        "INSERT INTO vouchers (voucher_no, voucher_date, created_by,"
-        " created_at, updated_at) VALUES (?,?,?,?,?)",
+        "INSERT INTO %s (voucher_no, voucher_date, created_by,"
+        " created_at, updated_at) VALUES (?,?,?,?,?)" % _voucher_table(conn),
         ("20260923-001", "2026-09-23", "C", "2026-09-23T00:00:00",
          "2026-09-23T00:00:00"))
     vid = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
