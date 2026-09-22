@@ -337,21 +337,66 @@ def test_p0_00_the_dangerous_state_is_set_before_the_action():
     **它會自動報對，不必記得改。**
 
     ⚙️ 反向控制（B 建議的落點）：把那個設定點往後移一行 ⇒ 這一題必須紅。
+
+    ## 🔴 兩個錨點我第一版都挑錯了（B 退回，留著錯的那一版）
+
+    ```
+    ❌ copy_at = src.find("robocopy")
+       實測命中 :287 —— 那是**回滾快照**：
+       `robocopy $BackendDir (Join-Path $rollbackDir "backend")`
+       **來源是正式機、目的地是快照目錄 ⇒ 那一刻正式機一個檔都沒被動。**
+       ☠️ 照它做，B 得把危險值設在 :287 之前 ⇒ 而 :311（user_cancelled）
+          在 :287 之後 ⇒ **使用者按取消時會報 `applied_no_restore`**，
+          而那時正式機完全沒被碰過。
+    ❌ set_at = src.find("applied_no_restore")
+       ☠️ 那個字串會出現在**兩種角色**上：`$ProdState` 的**指派**、
+          以及 `::RESULT::` 的**輸出**。`find` 取第一個 ⇒ 可能比到輸出那一行。
+    ```
+    🔑 **兩個都是同一個病**：錨點是一個**字串**，而我要的是一個**語意位置**。
+    📌 而它與今天 B 自己那個 `^\\s*Fail` 漏掉兩條出口是同一族 ——
+    **查詢的形狀決定了答案的可能集合。**
+
+    ⇒ 這一版：
+    ```
+    copy_at  robocopy (Join-Path $PackagePath "backend") $BackendDir
+             ✅ **目的地是 $BackendDir** ＝ 真的在覆蓋正式機；實測唯一命中（:355）
+    set_at   對 $ProdState 的**指派**，不是任何一處提到那個字串的地方
+    ```
+    📌 而 B 明著界定了「不可逆的起點」：**不是 `:316` 停服，是 `:355` 開始寫入**
+    （停服之後、覆蓋之前，磁碟上還是舊程式碼，autostart 會把它拉回來 ⇒ 自己會好）。
+    ⚠️ 我同意那個界定。**而「服務停著」這件事五態裡沒有任何一個說得出來** ——
+    已回報 A，那是條文層級的事，不是這一題的。
     """
+    import re as _re
+
     assert PS1.exists(), f"找不到 {PS1}"
     src = PS1.read_text(encoding="utf-8", errors="replace")
-    set_at = src.find("applied_no_restore")
-    assert set_at > 0, (
-        "`apply_update.ps1` 裡找不到 `applied_no_restore` ——\n"
+
+    # 🔑 錨點①：**對 ProdState 的指派**，不是任何一處提到那個字串的地方。
+    m = _re.search(r"\$(?:script:)?ProdState\s*=\s*['\"]applied_no_restore['\"]",
+                   src)
+    assert m, (
+        "`apply_update.ps1` 裡找不到**對 `$ProdState` 指派 "
+        "`applied_no_restore`** 的地方 ——\n"
+        "⚠️ 注意這一題找的是**指派**不是字串出現：\n"
+        "   `::RESULT::` 的輸出裡也會有那個字，而那不是設定點。\n"
         "⇒ 那個狀態還沒實作（見 `B.md` 的五態表）。")
-    copy_at = src.find("robocopy")
-    assert copy_at > 0, "找不到 robocopy 那一段（前提不成立）"
+    set_at = m.start()
+
+    # 🔑 錨點②：**目的地是 $BackendDir** 的那一次 robocopy ＝ 真的在覆蓋正式機。
+    marker = 'robocopy (Join-Path $PackagePath "backend") $BackendDir'
+    assert src.count(marker) == 1, (
+        f"錨點 {marker!r} 在檔裡出現 {src.count(marker)} 次，預期 1 次 ——\n"
+        "⇒ 這一題的錨點不再唯一（那一行被改寫了？）⇒ **前提不成立**。")
+    copy_at = src.find(marker)
+
     assert set_at < copy_at, (
-        f"`applied_no_restore` 設在 robocopy **之後**"
-        f"（設定 @{set_at}，robocopy @{copy_at}）——\n"
+        f"`$ProdState = 'applied_no_restore'` 設在覆蓋正式機**之後**"
+        f"（設定 @{set_at}，覆蓋 @{copy_at}）——\n"
         "☠️ 動作中途失敗時會報出一個**比實際安全**的狀態：\n"
-        "   畫面說「沒開始」，而正式機已經停服＋半複製。\n"
-        "🔑 危險值要在動作**之前**設。")
+        "   畫面說「還沒開始」，而正式機已經半複製而且沒有人還原。\n"
+        "🔑 危險值要在動作**之前**設 —— 那樣日後有人在 Step 3 之後新增一個\n"
+        "   `Fail`，**它會自動報對，不必記得改。**")
 
 
 # ══════════════════════════════════════════════════════════════════════
