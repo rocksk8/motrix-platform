@@ -38,6 +38,24 @@ grep children|submenu|collapse|accordion  在 sidebar.js ⇒ **0 處**
 🔑 底層不變量：**兩個 `ni()` 的 href 解析到同一個檔名時，它們的 `show` 條件必須相同。**
 ⇒ 而那與 `§46b`（每一項的 show 要與它的 href 對得上）**直接牴觸** ——
    已送 A，甲／乙／丙三條路由 A 裁，**我不自己選**。
+
+---
+
+# ✅ `UI9` 之後：上面那一整段的**問題本身消失了**（上面照原樣留著）
+
+使用者裁示「出納是**獨立功能**」⇒ 出納拆回 `cashier.html`
+⇒ **兩個項目不再指向同一個檔名** ⇒ 鎖門、「出納永遠不會亮」、`§46b`
+   **三個症狀一起消失**（`UI7` 因此是「已不需要」，不是「延後」）。
+
+🔑 而這一段要留著，因為它是這個檔幾道守門**為什麼存在**的理由 ——
+   ⚠️ 問題消失了**不等於守門可以拿掉**：下一次有人再讓兩個項目指向同一個檔名時，
+   那幾道守門仍然是唯一會紅的東西。
+📌 〈守門被拿掉≠規則被解除〉的鄰居：**規則的理由暫時沒有觸發，不表示規則失效了。**
+
+⚠️ 連帶：`UI9` 之後 `cashier.html` 由「出納」那一項擁有
+⇒ **「營運報表」的 `activeNames` 要把它拿掉**（`UI6` 當時是要留著的）。
+   本檔 `..._never_claimed_by_items_with_different_conditions` 會自動逼出這件事：
+   兩項條件不同（`cCash` vs `cRpt||cCash||cFi`）而同時宣告同一個檔名 ⇒ 紅。
 """
 import re
 from pathlib import Path
@@ -47,9 +65,18 @@ import pytest
 SIDEBAR = (Path(__file__).resolve().parent.parent.parent
            / "frontend" / "static" / "sidebar.js")
 
-#: 出納頁的真正位置 —— 它是 `reports.html` 的一個頁籤，不是一個頁面。
-#: `frontend/pages/cashier.html` 是 1,198 bytes 的**轉址存根**（2026-08-31 整併）。
-CASHIER_TAB = "reports.html?tab=cashier"
+#: 🔴 `UI9` 之後出納是**一個獨立頁面**，沿用舊檔名。
+#: ```
+#: UI6 當時  reports.html?tab=cashier   ← 出納是 reports 的一個頁籤
+#: UI9 之後  cashier.html               ← 使用者裁示「出納是獨立功能」
+#: ```
+#: ⚠️ v1 那一列留著，因為它解釋了本檔幾道守門**為什麼存在**：
+#: 兩個項目指向同一個檔名時，`act()` 與 `_deniedPages` 只認檔名 ⇒ 會鎖門。
+#: ✅ 而 `UI9` 讓出納有自己的檔名 ⇒ **那一族問題自然消失**
+#:    （`UI7` 因此標成「已不需要」，不是「延後」）。
+#: 🔑 那是〈診斷的層級決定覆蓋率〉的實例：**我報準了三個症狀，
+#:    而它們是同一個根因（兩個功能共用一頁）的三個出口。**
+CASHIER_TARGET = "cashier.html"
 
 
 def _decode_escapes(text):
@@ -273,8 +300,9 @@ def test_ui6_finance_has_a_cashier_entry(nav):
         "📌 做完會是 **2 項不是 5 項**（會計科目／傳票／獎金分潤都還不存在）。")
 
     cashier = next(it for it in items if it[0] == "出納")
-    assert CASHIER_TAB in cashier[1], (
-        "「出納」的 href 是 %r，應該指向 `%s`。\n" % (cashier[1], CASHIER_TAB)
+    href = cashier[1]
+    assert CASHIER_TARGET in href and "?tab=" not in href, (
+        "「出納」的 href 是 %r，應該指向 `%s`。\n" % (cashier[1], CASHIER_TARGET)
         + "☠️ 指向 `cashier.html` 的話那是一頁**轉址存根**（1,198 bytes），\n"
           "   使用者會先落在它上面再被 JS 轉走。")
 
