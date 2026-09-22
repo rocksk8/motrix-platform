@@ -534,12 +534,11 @@ def test_ui9_reports_has_no_cashier_buttons_left_behind():
 #: 目前允許懸空的函式，**每一筆都要指向一個原因**。
 #: ⚠️ 這不是「排除清單」——下面那道反向控制要求：**不再懸空的項目必須從這裡移除**，
 #:    否則它會爛掉，而一份爛掉的允許清單與「全部寫進去變綠」是同一件事。
-_ALLOWED_DANGLING = {
-    "confirmT100Imported": "T100 匯出 UI 還在 reports（FN3）",
-    "exportT100Vouchers":  "同上（FN3）",
-    "saveT100Config":      "同上（FN3）",
-    "toggleT100Config":    "同上（FN3）",
-}
+#: 🔑 **四筆已全部清掉**（B，`FN3` 2026-09-23）：T100 匯出 UI 搬進出納之後，
+#: 那四支在 `cashier.html` 有了真的呼叫端 ⇒ **它們不再懸空**。
+#: 📌 清單留成空的而不是刪掉這個常數 —— 下面那道反向控制要它存在，
+#:    而它空著本身就是一句話：**欠帳還完了，不是「還沒開始記」。**
+_ALLOWED_DANGLING = {}
 
 
 def _dangling_functions(html_path=None, js_src=None):

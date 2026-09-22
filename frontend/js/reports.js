@@ -54,24 +54,10 @@ function reportsApp() {
     taxExporting:   false,
 
     // ── T100（鼎新）傳票批次匯出（2026-09-01 新增，見 accounting_export.py）
-    t100Start:        new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10),
-    t100End:          new Date().toISOString().slice(0, 10),
-    t100Exporting:    false,
-    t100ConfigOpen:   false,
-    t100Config:       null,
-    t100ConfigLoaded: false,
-    t100ConfigSaving: false,
-    t100Preview:      null,   // {count, totalAmount, events:[...]}，未確認事件預覽
-    t100Previewing:   false,
-    t100Confirming:   false,
     // 已確認清單＋反確認（2026-09-10 稽核補上）：後端 /t100-export/confirmed 與
     // /unconfirm 早就存在，unconfirm 的 docstring 自己寫著是「標記錯誤時的救援
     // 手段」，但畫面上一直沒有入口——使用者按下「確認已匯入」是批次操作，按錯
     // 之後只能改資料庫。這幾個狀態就是把那道門補上。
-    t100Confirmed:        [],
-    t100ConfirmedLoading: false,
-    t100ConfirmedOpen:    false,
-    t100Unconfirming:     '',   // 正在反確認的 sourceType:sourceKey
 
     // 銀行對帳單比對（連同標記已匯款 Modal）2026-08-31 搬到出納模組
     // frontend/js/cashier.js（財務/出納權限分工，見那邊同一輪改動），
@@ -152,7 +138,6 @@ function reportsApp() {
     // T100 傳票匯出設定裡的銀行帳戶清單（2026-09-01 新增），標記已收款/已匯款
     // 時挑選要用哪個帳戶；每次開啟標記 Modal 都重抓最新清單，見
     // loadT100BankAccounts()
-    t100BankAccounts:     [],
     t100DefaultBankAcctCode: '',   // 2026-09-02 新增：系統預設銀行帳戶，見 _resolveDefaultBankAccount()
 
     invoiceModal: { show: false, item: null, no: '' },
@@ -1336,71 +1321,14 @@ function reportsApp() {
       }
     },
 
-    async showT100Tab() {
-      // 2026-09-02：T100 匯出從資金水位頁籤拆成獨立頁籤，切換進來時就先預覽
-      // 本期待確認事件＋讀科目代號設定（不用展開設定面板才看得到 KPI 統計），
-      // 不用再多按一次「預覽待確認事件」
-      this.activeTab = 't100'
-      if (!this.t100Preview) this.loadT100Preview()
-      if (!this.t100Config) this.loadT100Config()
-      if (!this.t100Confirmed.length) this.loadT100Confirmed()
-    },
 
     // 已確認清單：預設帶目前日期區間，區間留空時後端回最近 500 筆
-    async loadT100Confirmed() {
-      this.t100ConfirmedLoading = true
-      try {
-        var qs = '?start=' + this.t100Start + '&end=' + this.t100End
-        var res = await fetch('/api/reports/t100-export/confirmed' + qs, {
-          headers: { Authorization: 'Bearer ' + this._token() }
-        })
-        if (!res.ok) {
-          var j = await res.json().catch(function () { return {} })
-          throw new Error(j.detail || '載入失敗')
-        }
-        this.t100Confirmed = await res.json()
-      } catch (e) {
-        alert('已確認清單載入失敗：' + (e.message || e))
-      } finally {
-        this.t100ConfirmedLoading = false
-      }
-    },
 
     // 反確認：撤銷單筆「已匯入」標記，該事件會在下次涵蓋其日期的匯出/預覽重新出現
-    async unconfirmT100(row) {
-      if (!confirm('撤銷這筆的「已匯入 T100」標記？\n\n' + row.date + '　' + row.summary +
-                   '\n\n撤銷後它會在下次涵蓋這個日期的匯出／預覽重新出現，' +
-                   '如果 T100 那邊其實已經匯入過，會造成重複匯入。')) return
-      this.t100Unconfirming = row.sourceType + ':' + row.sourceKey
-      try {
-        var res = await fetch('/api/reports/t100-export/unconfirm', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this._token() },
-          body: JSON.stringify({ sourceType: row.sourceType, sourceKey: row.sourceKey }),
-        })
-        if (!res.ok) {
-          var j = await res.json().catch(function () { return {} })
-          throw new Error(j.detail || '撤銷失敗')
-        }
-        await this.loadT100Confirmed()
-        this.loadT100Preview()
-      } catch (e) {
-        alert('撤銷已匯入標記失敗：' + (e.message || e))
-      } finally {
-        this.t100Unconfirming = ''
-      }
-    },
 
     // 科目代號設定完成度（視覺化提示用，非阻擋匯出的硬性檢查）：核心科目
     // （銷貨收入/銷項稅額/承攬商費用）與至少一個銀行帳戶都設定了，才算「已設定」。
     // 料件分類科目代號允許部分留白（可能有些分類真的沒進貨過），不列入判斷。
-    get t100ConfigComplete() {
-      const c = this.t100Config
-      if (!c) return false
-      const coreFilled = c.salesRevenueAccount && c.outputTaxAccount && c.contractorExpenseAccount
-      const hasBank = c.bankAccounts && c.bankAccounts.length > 0 && c.bankAccounts.every(b => b.name && b.acctCode)
-      return !!(coreFilled && hasBank)
-    },
 
     async showCashPosTab() {
       this.activeTab = 'cashpos'
@@ -1500,23 +1428,7 @@ function reportsApp() {
     },
 
 
-    async loadT100BankAccounts() {
-      // 2026-09-02：改成每次開啟標記 Modal 都重抓（不再 cache-once），確保跟
-      // 案件管理／庫存管理三處標記畫面共用同一份最新清單，見
-      // case-management.js::loadT100BankAccounts() 同款註解。
-      try {
-        const r = await fetch('/api/settings/t100-export-config', { headers: { Authorization: 'Bearer ' + this._token() } })
-        if (r.ok) {
-          const d = await r.json()
-          this.t100BankAccounts = d.bankAccounts || []
-          this.t100DefaultBankAcctCode = d.defaultBankAccountCode || ''
-        }
-      } catch {}
-    },
 
-    _t100BankName(code) {
-      return (this.t100BankAccounts.find(b => b.acctCode === code) || {}).name || ''
-    },
 
     // 銀行帳戶預設值（2026-09-02 新增）：①這個對象上次標記用的帳戶 ②系統
     // 預設帳戶 ③兩者都沒有就空白。lastUsedUrl 由呼叫端組好（各自對象不同）。
@@ -1591,127 +1503,13 @@ function reportsApp() {
     },
 
     // ── T100（鼎新）傳票批次匯出 ──────────────────────────────────────────────
-    async loadT100Config() {
-      if (this.t100ConfigLoaded) return
-      try {
-        var res = await fetch('/api/settings/t100-export-config', {
-          headers: { Authorization: 'Bearer ' + this._token() }
-        })
-        if (res.ok) {
-          this.t100Config = await res.json()
-          this.t100ConfigLoaded = true
-        }
-      } catch (e) { /* 靜默失敗，畫面仍可用預設空白值操作 */ }
-    },
 
-    toggleT100Config() {
-      this.t100ConfigOpen = !this.t100ConfigOpen
-      if (this.t100ConfigOpen) this.loadT100Config()
-    },
 
-    async saveT100Config() {
-      if (this._role() !== 'superadmin') return
-      this.t100ConfigSaving = true
-      try {
-        var res = await fetch('/api/settings/t100-export-config', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this._token() },
-          body: JSON.stringify(this.t100Config),
-        })
-        if (!res.ok) {
-          var j = await res.json().catch(function () { return {} })
-          throw new Error(j.detail || '儲存失敗')
-        }
-        alert('已儲存 T100 科目代號設定')
-      } catch (e) {
-        alert('儲存失敗：' + (e.message || e))
-      } finally {
-        this.t100ConfigSaving = false
-      }
-    },
 
-    async exportT100Vouchers() {
-      if (!this.t100Start || !this.t100End || this.t100Start > this.t100End) {
-        alert('請確認起訖日期區間正確')
-        return
-      }
-      this.t100Exporting = true
-      try {
-        var qs = 'start=' + this.t100Start + '&end=' + this.t100End
-        var res = await fetch('/api/reports/t100-export/vouchers?' + qs, {
-          headers: { Authorization: 'Bearer ' + this._token() }
-        })
-        if (!res.ok) {
-          var j = await res.json().catch(function () { return {} })
-          throw new Error(j.detail || '匯出失敗')
-        }
-        var blob = await res.blob()
-        var a = document.createElement('a')
-        a.href = URL.createObjectURL(blob)
-        a.download = 'MOTRIX_T100傳票匯出_' + this.t100Start + '_' + this.t100End + '.xlsx'
-        document.body.appendChild(a)
-        a.click()
-        document.body.removeChild(a)
-        URL.revokeObjectURL(a.href)
-      } catch (e) {
-        alert('T100 傳票匯出失敗：' + (e.message || e))
-      } finally {
-        this.t100Exporting = false
-      }
-    },
 
-    async loadT100Preview() {
-      if (!this.t100Start || !this.t100End || this.t100Start > this.t100End) {
-        alert('請確認起訖日期區間正確')
-        return
-      }
-      this.t100Previewing = true
-      try {
-        var qs = 'start=' + this.t100Start + '&end=' + this.t100End
-        var res = await fetch('/api/reports/t100-export/preview?' + qs, {
-          headers: { Authorization: 'Bearer ' + this._token() }
-        })
-        if (!res.ok) {
-          var j = await res.json().catch(function () { return {} })
-          throw new Error(j.detail || '預覽失敗')
-        }
-        this.t100Preview = await res.json()
-      } catch (e) {
-        alert('T100 預覽失敗：' + (e.message || e))
-      } finally {
-        this.t100Previewing = false
-      }
-    },
 
     // 財務人員實際到 T100 匯入後，回來按這顆按鈕標記整批已匯入——標記後這些
     // 事件會從之後所有匯出/預覽自動排除，避免重複匯入
-    async confirmT100Imported() {
-      if (!this.t100Preview || !this.t100Preview.count) {
-        alert('目前沒有可確認的事件，請先預覽')
-        return
-      }
-      if (!confirm('確認這 ' + this.t100Preview.count + ' 筆事件已經實際匯入 T100？確認後將自動從之後的匯出/預覽排除，避免重複匯入。')) return
-      this.t100Confirming = true
-      try {
-        var res = await fetch('/api/reports/t100-export/confirm', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this._token() },
-          body: JSON.stringify({ start: this.t100Start, end: this.t100End }),
-        })
-        if (!res.ok) {
-          var j = await res.json().catch(function () { return {} })
-          throw new Error(j.detail || '確認失敗')
-        }
-        var result = await res.json()
-        alert('已標記 ' + result.confirmedCount + ' 筆事件為已匯入')
-        this.loadT100Preview()
-        this.loadT100Confirmed()
-      } catch (e) {
-        alert('確認已匯入失敗：' + (e.message || e))
-      } finally {
-        this.t100Confirming = false
-      }
-    },
 
     async _loadTrendData() {
       this.trendLoading = true

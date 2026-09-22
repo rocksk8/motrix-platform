@@ -589,6 +589,71 @@ function cashierApp() {
       }
     },
 
+    // ── T100（鼎新）傳票批次匯出（`FN3`，2026-09-23 從營運報表搬過來）──
+    //
+    // 🔑 **這不是搬家，是團圓**：T100 的流程本來就跨在兩邊 ——
+    //    出納那一半（標記已收／已付）隨著 `UI9` 已經搬過來了，
+    //    而匯出這一半還留在報表頁。
+    // 📌 而它在概念上屬於這裡：`accounting_export.py:8` 逐字寫著
+    //    「設計採**現金基礎**：只匯出『錢真的有進出』的事件」
+    //    ⇒ **現金基礎就是出納的領域。**
+    t100Start:        new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10),
+    t100End:          new Date().toISOString().slice(0, 10),
+    t100Exporting:    false,
+    t100ConfigOpen:   false,
+    t100Config:       null,
+    t100ConfigLoaded: false,
+    t100ConfigSaving: false,
+    t100Preview:      null,   // {count, totalAmount, events:[...]}，未確認事件預覽
+    t100Previewing:   false,
+    t100Confirming:   false,
+    t100Confirmed:        [],
+    t100ConfirmedLoading: false,
+    t100ConfirmedOpen:    false,
+    t100Unconfirming:     '',   // 正在反確認的 sourceType:sourceKey
+
+    get t100ConfigComplete() {
+      const c = this.t100Config
+      if (!c) return false
+      const coreFilled = c.salesRevenueAccount && c.outputTaxAccount && c.contractorExpenseAccount
+      const hasBank = c.bankAccounts && c.bankAccounts.length > 0 && c.bankAccounts.every(b => b.name && b.acctCode)
+      return !!(coreFilled && hasBank)
+    },
+
+    async unconfirmT100(row) {
+      if (!confirm('撤銷這筆的「已匯入 T100」標記？\n\n' + row.date + '　' + row.summary +
+                   '\n\n撤銷後它會在下次涵蓋這個日期的匯出／預覽重新出現，' +
+                   '如果 T100 那邊其實已經匯入過，會造成重複匯入。')) return
+      this.t100Unconfirming = row.sourceType + ':' + row.sourceKey
+      try {
+        var res = await fetch('/api/reports/t100-export/unconfirm', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this._token() },
+          body: JSON.stringify({ sourceType: row.sourceType, sourceKey: row.sourceKey }),
+        })
+        if (!res.ok) {
+          var j = await res.json().catch(function () { return {} })
+          throw new Error(j.detail || '撤銷失敗')
+        }
+        await this.loadT100Confirmed()
+        this.loadT100Preview()
+      } catch (e) {
+        alert('撤銷已匯入標記失敗：' + (e.message || e))
+      } finally {
+        this.t100Unconfirming = ''
+      }
+    },
+
+    // 🔑 原本是 `showT100Tab()`（報表頁的頁籤）。這裡改成出納的**子頁籤**，
+    //    而**載入邏輯一行沒改** —— 只是換了觸發它的那個狀態。
+    // ⚠️ 三個 `if` 是懶載：切進來才抓，而切回去再切回來不會重抓。
+    async showT100Sub() {
+      this.cashierSub = 't100'
+      if (!this.t100Preview) this.loadT100Preview()
+      if (!this.t100Config) this.loadT100Config()
+      if (!this.t100Confirmed.length) this.loadT100Confirmed()
+    },
+
     // ── 進入點 ─────────────────────────────────────────────
     // 🔑 原本是 `showCashierTab()`（切到頁籤時才載）。獨立頁之後**進來就載**，
     //    而那個函式的內容一行都沒改 —— 只是換了一個呼叫的時機。
