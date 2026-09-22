@@ -14172,6 +14172,128 @@ mapSizeWasZero 三種寬度都是 False
 
 ---
 
+
+## §18 補 · **`G8` 實測：回滾核心 5/5 過，而 `/E` 留孤兒檔已確認**（A 2026-09-22）
+
+### 做法
+
+**不跑 `apply_update.ps1` 本身**（`$ProdRoot` 寫死 `C:\Users\Motrix\Desktop\V9.0`、有身分守門、會停服）。
+⭐ **把四行 `robocopy` 從真正的檔案裡抽出來**（不另抄一份，比照 B 驗 `VR1` 的做法），
+對 scratchpad 的沙箱跑。⇒ **有人改旗標，這個測試就跟著改。**
+
+### 結果
+
+```
+main.py 回到舊版          PASS
+app.js 回到舊版           PASS
+db 回到升級前             PASS
+過期的 -wal 被刪掉         PASS
+logs/ 沒有被蓋掉           PASS
+```
+⭐ **回滾的核心是對的。這是 52 天來第一次有證據。**
+
+### 🔴 而孤兒檔確認了
+
+```
+ORPHANS SURVIVED ROLLBACK:
+  backend\brand_new_router.py   backend\newpkg\thing.py   frontend\brand_new_page.html
+```
+`robocopy … /E` **只複製不刪除** ⇒ **回滾後是「舊程式碼 ＋ 新版的孤兒檔」。**
+
+- **G11.** 🔴🔴 **而顯而易見的修法比這個缺陷更糟：不要加 `/PURGE`。**
+  ```
+  快照那一側   /XD db_backups rollback_snapshots logs
+               /XF motrix_erp.db …-wal …-shm …_demo.db heartbeat_config.json …
+  還原那一側   **沒有任何排除**
+  ```
+  ☠️ ⇒ 在還原那一行加 `/PURGE`，會**刪掉 `db_backups/`、`logs/`、`uploads/` 與資料庫本身**
+  —— 因為它們不在快照裡。**那會把一個無害的髒污變成資料損毀。**
+  📌 〈降級之後它還是會動〉的反面：**這一次是「把不整齊修整齊」會造成損毀。**
+- **G12.** ✅ **孤兒檔的實際風險：低。** 逐一查過會自動探索檔案的地方：
+  ```
+  archive.py os.listdir/os.walk   掃的是 db_backups／uploads 鏡像 —— 資料目錄，不是程式碼
+  licensing.py:550 os.listdir     掃的是 /sys/class/net —— Linux 系統路徑，不是 repo
+  db.py 的 migration              是**函式**不是檔案探索
+  ```
+  ⇒ 留下來的 `.py` 不會被 import、不會被執行。
+  ⚠️ **殘餘風險**：留下來的前端頁面**用網址打得到**（沒有連結但可達）。
+  ⇒ **處置：回滾時把孤兒檔列出來寫進 log，不要刪。**
+- **G13.** ⚠️ **`G8` 只驗了回滾這一段。** 仍未驗的：
+  ```
+  停服／crash-restart 接手    pip install -r requirements.txt    健康檢查輪詢
+  ```
+  📌 **交付說明要寫「回滾的檔案還原邏輯已驗、整支腳本在正式機仍未跑過」**，
+  不可以簡化成「回滾已驗證」。
+
+---
+
+## §17 補二 · **A-2 拿到逐字條文：`NB12` 選項表重列，A 的傾向收回**
+
+### ☠️ 先修條號（兩處都錯，而錯的條號會讓下一個人查不到）
+
+```
+A 與 D 寫的   「Service Specific Terms §3.2.4」
+實際          Google Maps Platform Terms of Service §3.2.3 Restrictions Against Misusing the Services
+              其中 (e) No Use With Non-Google Maps ← 引的那句在這裡
+              Service Specific Terms 裡沒有 3.2.4；對應的是 §14.2
+```
+📌 A-2 的方法：`curl` 直接抓兩份條款 HTML（2.4 MB／2.3 MB），剝標籤成純文字後**自己讀**。
+🔑 **D 兩次撞到的截斷是摘要那一層造成的，不是頁面。**
+
+### 🔴🔴 兩個人都漏了 `§3.2.3(a) No Scraping`，而它才是擋住 §17 的那一條
+
+> (a) **No Scraping**. Customer will not export, extract, or otherwise scrape Google Maps Content
+> for use outside the Services… **(iii) copy and save business names, addresses, or user reviews**
+
+☠️ **使用者要的「慢慢將附近結構完善」＝ copy and save business names and addresses。
+這一條明文禁止它，而且與底圖無關。**
+
+- **NB15.** ☠️ **A 的「乙＋丙」傾向收回。**
+  A 寫的是「使用者確認後才寫進我們的表」——**寫進去的內容就是 business name ＋ address**，
+  **`(a)(iii)` 不因為中間多一次人工確認而放行。**
+  🔑 **甲乙丙三條路解的是 `(e)`，沒有一條解 `(a)`。**
+- **NB16.** 🔑 **缺的不是天數，是許可本身。**
+  ```
+  ToS §3.2.3(b) No Caching     除 SST 明文允許外，一律不得快取
+  SST §14.3 Caching            只給 latitude and longitude values，30 天
+  SST §3 Google ID Caching     place_id 可快取
+  店名／地址／電話／營業時間     **SST 沒有給任何許可** ⇒ 落回預設禁止
+  ```
+  ⇒ **結論要寫「不准存」，不是「不知道存多久」。** D 找不到那個數字是對的。
+- **NB17.** ✅ **一條明文出路：`SST §15 Places UI Kit`**
+  > Customer may use Places UI Kit … **with or without any map, including a non-Google Map.
+  > This clause will prevail over the No Use with Non-Google Maps clause of the Agreement.**
+
+  ⇒ **OSM 底圖 ＋ Places UI Kit 是被允許的。**
+  ⚠️ 而它**不解 §17 的核心需求**，三個代價：
+  ```
+  ① UI Kit 是 Google 的 UI 元件 ⇒ 與白標化（§7 WL）直接衝突
+  ② §15.2 仍然只給 lat/lng 30 天 ⇒ **存不存得下來完全沒有改善**
+  ③ §15.3 把合規責任明著寫給客戶 ⇒ 我們賣出去的產品，違約風險落在買的人身上
+  ```
+- **NB18.** 🔴 **實際的形狀是兩道各自獨立的牆：**
+  ```
+  牆一（底圖）  §3.2.3(e) / 14.2    可解：14.1 不畫地圖 ／ 15.1 用 UI Kit
+  牆二（保存）  §3.2.3(a)(iii)      🔴 **無解**。只有 place_id 與 lat/lng(30天) 能留
+  ```
+  ⇒ **不論走哪條路，「把附近結構存成我們自己的資料庫」用 Places 當來源都做不到。**
+- **NB19.** ⭐ **要問使用者的不是「甲乙丙選哪個」，是回到他的原話。**
+  ```
+  「附近有哪些公司」      Places 能做，但只能即時查、不能存 ⇒ 每次開都要花錢
+  「附近有哪些潛在客戶」  🔑 用我們自己已經有的資料就做得到：
+                        客戶／供應商／標案機關（§6 已經在圖上了）
+                        **零條款風險、零費用**
+  ```
+  📌 A-2 指出這與 `§5k`（「這比競爭對手強在哪」vs「這能不能省業務的時間」）同型：
+  **我們在答「怎麼合法地存 Google 的資料」，而他可能問的是
+  「我去客戶那邊，附近還有誰可以順路拜訪」。後者用我們自己的表就答得出八成。**
+- **NB20.** 🔴 **`NB3` 還有一個產品形態的障礙**：商工登記要填使用告知書、
+  **且「務必填寫外部 IP」**。
+  ⇒ **每一個客戶都要自己去申請、自己登記外部 IP，而客戶的 IP 會變。**
+  ☠️ **這不是我們寫程式能解決的。**
+
+---
+
 ## §6 · 紀律提醒（給所有視窗）
 
 ### ☠️ 對照實驗的 schema 與現場不一致 ＝ 一個乾淨、可重現、而且錯的答案（2026-09-22，D 自陳）
