@@ -28989,6 +28989,9 @@ B 報的   3  test_spec_coverage  「GC9 是地理編碼的條件，非我的」
 | **BK32** | `_daily_backup_tables()` 的 docstring 說 41 張，實際 46（包）／52（工作樹）⇒ 要改成算出來的數字 |
 | **QA2** | 提交前掃一次：註解裡不可重新引入**被守門 grep 的字面值**（今晚第八次） |
 | **QA3** | 測試的失敗訊息不可宣告**產品缺什麼**（「v93 還沒做」），只能描述**我看到什麼** —— 前者在產品做完那一刻過期 |
+| **UI8** | `sidebar.js` 的 `sec()` 條件必須是底下**每一項條件的聯集**（四處既有漂移） |
+| **RP3** | 手動回滻寫回正式機失敗 => 中止並報錯（`rollback_update.ps1`，`rollback_copy_failed_*`） |
+| **GT1** | 閘門要驗 **`THIS` ⊆ 已宣告** —— 現状：在 `THIS` 而從未宣告的編號，宣告與實作兩邊都空 => **互相抵銷 => 綠** |
 
 ⚠️ `V93`／`V94`／`V95` **不在上表** —— 它們是 migration 版本號，不是驗收條件
 ⇒ 它們屬於測試那一側的 `C_OWNED`，**已派 C** 加上去並寫理由。
@@ -29531,3 +29534,27 @@ test_bonus_award  :329  「bonus_awards 不存在 —— migration 還沒有」
 「等產品」的題    訊息寫「**v93 還沒做**」              ⚠️ 會過期
 ```
 ⇒ 將 `test_voucher_referenced_code:96` 那句定為「現在就該綠」型題目的**必要欄位**。
+
+---
+
+## §139 `GT1`：閘門的盲點 —— 未宣告的 `THIS` 項目互相抵銷
+
+> 2026-09-23 02:35 ／ A 實跑（A-2 找 `UI8` 找不到引出）
+
+**實測**
+```
+UI8   declared=False  implemented=None   而 UI8 in THIS = True
+RP3   declared=False  implemented=None   而 RP3 in THIS = True
+```
+**成因**：`test_every_declared_condition_has_a_test` 只算 **已宣告 ∩ THIS**。
+一個在 `THIS` 而從未宣告的編號，**兩邊都空 ⇒ 不在任何一個差集裡 ⇒ 綠**。
+
+**改善**：加一題 `THIS ⊆ 已宣告`。
+⇒ 那是〈守門要驗有沒有人做過決定〉的**反向那一半** ——
+現有驗「宣告了的有沒有題」，而沒驗「要出貨的有沒有宣告」。
+
+**順帶更正**：A-2 報 `RP2` 「0 支題」—— `RP2` 實際 `implemented=test_deploy_outcome`。
+它查的是**狀態字串**沒人釘（成立），不是「沒有題」。兩個問題不同。
+
+**`UI8` 實際有題**：`test_sidebar_finance:334 every_section_condition_is_the_union_of_its_items`
+＋`:386` 正對照 —— **題名沒帶編號**，所以閘門認不得。
