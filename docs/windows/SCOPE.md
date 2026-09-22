@@ -27,6 +27,7 @@ TD(5):  TD1 TD5 TD6 TD7 TD8
 QL(19): QL5 QL6 QL7 QL8 QL9 QL10 QL11 QL12 QL13 QL14 QL15 QL16 QL17 QL18 QL19 QL20 QL21 QL22 QL23
 P0(4):  P0-00 P0-0 P0-1 P0-2
 RP(3):  RP1 RP2 RP3
+VP(1):  VP1
 ```
 
 > 📌 `RP`（restore path）是 2026-09-22 21:4x 由 A 明著搬進 `THIS` 的。
@@ -37,6 +38,14 @@ RP(3):  RP1 RP2 RP3
 > ⚠️ **`RP2`／`RP3` 與 `restoring` 必須成對落地**（`§53d`）：
 > 少了 `RP2`/`RP3`，`restoring` 印不出來；少了 `restoring`，它們印出來的是
 > `applied`（語意「完整在磁碟上」）—— 兩邊都錯，而且各自看起來都合理。
+>
+> 📌 `VP1` 是 2026-09-22 21:5x 由 A 從 `NEXT` 搬進來的（`STATE.md §55c`）。
+> 理由不是它大，是**它什麼時候會被用到**：`verify_package.py:268` 的
+> `if expect is None:` 只 print 不 fail ⇒ 呼叫端忘記帶參數，**那道版本擋關就
+> 安靜關掉，而管線全綠** —— 而**這一包打包時就會用到那道擋關**。
+> ☠️ 一道可以安靜關掉的守門，比沒有守門更糟，**因為有人會信它**。
+> ⚠️ `VP2`–`VP4` 留在 `NEXT`：它們的接縫（參數／自測函式）**還不存在**，
+> 是**新功能不是修缺陷**，不要跟著一起進來把範圍撐大。
 
 > 📌 `P0` 是 2026-09-22 20:29 由 A 明著搬進 `THIS` 的（規則 1 要求寫理由）。
 > `P0-00` 是新的，排在 `P0-0` **前面**：兩者是同一個判定邏輯的兩側，
@@ -61,7 +70,7 @@ TD(5):  TD2 TD3 TD4 TD9 TD10
 VC(2):  VC2 VC3
 P1(1):  P1-1
 P2(5):  P2-1 P2-3 P2-4 P2-5 P2-6
-VP(4):  VP1 VP2 VP3 VP4
+VP(3):  VP2 VP3 VP4
 ```
 
 > 📌 `VP`（verify package）＝ `backend/tools/verify_package.py` 四項，
