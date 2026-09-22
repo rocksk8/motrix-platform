@@ -48,10 +48,23 @@ import pytest
 
 import db
 
-#: B 要引進的兩份清單。名字要改**退回給我**。
-_SYSTEM_SEAMS = ("DEMO_SYSTEM_TABLES", "_DEMO_SYSTEM_TABLES",
-                 "DEMO_PRESERVED_TABLES")
-_USER_SEAMS = ("DEMO_USER_TABLES", "_DEMO_USER_TABLES", "DEMO_CLEARED_TABLES")
+#: 兩份清單的接縫。
+#:
+#: ⚠️ **我 v1 猜的名字全部落空**（`DEMO_SYSTEM_TABLES`／`_DEMO_SYSTEM_TABLES`／
+#:    `DEMO_PRESERVED_TABLES`），而那不是命名品味問題 —— **是我把粒度想錯了**：
+#: ```
+#: 我以為  整張保留 ／ 整張清空        ⇒「系統資料表」是一個合理的名字
+#: 實際上  A 裁成**列粒度**            ⇒ account_items **不是**整張保留：
+#:         statutory 那 547 筆留著，而 **custom／system_default 要清掉**
+#: ```
+#: ☠️ 整張保留的話，**下一個客戶看得到上一個客戶建的科目** —— 而它不會報錯。
+#:
+#: 🔑 而 B **刻意不把它叫回 `DEMO_PRESERVED_TABLES`**，理由值得留著：
+#:    那會讓這兩題立刻變綠，**而那個名字現在是假的**（它不是「完全不清」，
+#:    是「清掉一部分列」）⇒ 下一個人看到 `PRESERVED` 會以為整張都留著，
+#:    **於是不會去想「那 custom 那幾筆呢」——而那正好是這次被抓到的那個洞。**
+_SYSTEM_SEAMS = ("DEMO_PARTIALLY_CLEARED_TABLES",)
+_USER_SEAMS = ("DEMO_CLEARED_TABLES",)
 
 #: 一定是**使用者資料**的幾張表 —— 反向控制用。
 _MUST_BE_USER = ("quotations", "customers", "users")
@@ -133,17 +146,31 @@ def test_dm1_resetting_the_demo_database_twice_still_works(demo_sandbox):
                 "📌 理由寫錯的話，下一個人會去改 TRIGGER。")
 
 
-def test_dm1_the_statutory_rows_survive_a_reset(demo_sandbox):
-    """⚙️ **正對照：重置之後那 547 筆必須還在。**
+def test_dm1_a_reset_keeps_the_statutory_rows_and_drops_the_rest(demo_sandbox):
+    """🔴🔴 **重置之後：法定那 547 筆還在，而 `custom`／`system_default` 不見了。**
 
-    ☠️ 少了它，有一種「過得去而錯」的修法會讓上一題全綠：
+    ## ⚠️ 這一題的 v1 只驗了前半，而那讓兩種修法長得一樣
+
     ```
-    把 TRIGGER 拿掉／改成不擋 demo 庫
-    ⇒ reset 不再爆 ⇒ 上一題綠
-    ⇒ **而 demo 庫每次重置都會把 547 筆法定項目刪光**
+    v1  只斷言「547 筆還在」
+        ⇒ **「整張保留 account_items」也會過**
+        ☠️ 而那一版被 A 推翻了，理由是：
+           demo 使用者自己建的 `custom` 科目**也會留著**
+           ⇒ **下一個客戶看得到上一個客戶建的科目**
+           —— 而它不會報錯，要到有人在客戶面前打開科目樹才發現
+    v2  兩半一起驗
     ```
-    🔑 而症狀是：**demo 環境的科目樹是空的**，而沒有任何東西報錯。
-    📌 〈守門要配反向控制〉：**「不爆」與「做對了」是兩件事。**
+    🔑 B 的原話：「沒有後者的話，我這一次的修法與被 A 推翻的那一版
+       **在你的題裡長得一樣**。」
+    📌 〈守門要配反向控制〉的一個新角度：**這裡的反向控制不是「擋太多」，
+       是「留太多」** —— 而留太多與做對了，在只驗前半的題裡完全相同。
+
+    ## ✅ 而修法是**列粒度**，不是整張排除
+    ```sql
+    DELETE FROM account_items WHERE source != 'statutory'
+    ```
+    🔑 它與 TRIGGER 的條件（`OLD.source = 'statutory'`）**剛好互補**
+       ⇒ 那個 `WHERE` 永遠不會撞到 TRIGGER。
     """
     db.reset_demo_db()
     conn = db._connect(db.DEMO_DB_PATH)
@@ -151,6 +178,14 @@ def test_dm1_the_statutory_rows_survive_a_reset(demo_sandbox):
         before = conn.execute(
             "SELECT COUNT(*) FROM account_items WHERE source='statutory'"
         ).fetchone()[0]
+        # demo 使用者「自己建的」兩筆 —— 重置之後它們**必須不見**。
+        conn.execute(
+            "INSERT INTO account_items (code, level, name, source) "
+            "VALUES ('DEMOC1', 1, '上一個客戶建的科目', 'custom')")
+        conn.execute(
+            "INSERT INTO account_items (code, level, name, source) "
+            "VALUES ('DEMOS1', 1, '預設帶的科目', 'system_default')")
+        conn.commit()
     finally:
         conn.close()
 
@@ -161,15 +196,24 @@ def test_dm1_the_statutory_rows_survive_a_reset(demo_sandbox):
 
     conn = db._connect(db.DEMO_DB_PATH)
     try:
-        after = conn.execute(
-            "SELECT COUNT(*) FROM account_items WHERE source='statutory'"
-        ).fetchone()[0]
+        rows = {r[0]: r[1] for r in conn.execute(
+            "SELECT source, COUNT(*) FROM account_items GROUP BY source")}
     finally:
         conn.close()
-    assert after == before > 0, (
-        "重置前 %d 筆、重置後 %d 筆 ——\n" % (before, after)
+
+    assert rows.get("statutory") == before > 0, (
+        "重置前 %d 筆法定、重置後 %s 筆 ——\n" % (before, rows.get("statutory"))
         + "☠️ 法定項目被 demo 重置刪掉了。**那不是「不爆」，那是刪光了。**\n"
           "🔑 demo 環境的科目樹會是空的，而沒有任何東西報錯。")
+
+    leftover = {k: v for k, v in rows.items() if k != "statutory" and v}
+    assert not leftover, (
+        "重置之後還留著非法定的列：%s\n" % leftover
+        + "☠️ **下一個客戶看得到上一個客戶建的科目** ——\n"
+          "   而它不會報錯，要到有人**在客戶面前**打開科目樹才發現。\n"
+        "🔑 那是「整張保留 `account_items`」那一版的症狀 ——\n"
+          "   正確的是**列粒度**：`DELETE … WHERE source != 'statutory'`，\n"
+          "   而那個條件與 TRIGGER 的 `OLD.source='statutory'` **剛好互補**。")
 
 
 # ══════════════════════════════════════════════════════════════════════
