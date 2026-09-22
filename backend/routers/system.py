@@ -2,6 +2,7 @@
 import inspect
 import json
 import os
+import re
 import secrets
 import uuid
 from datetime import datetime, timedelta
@@ -739,6 +740,17 @@ _LOCATION_BANK_FIELDS = ("bank_name", "bank_branch",
 #: 🔑〈降級之後它還是會動〉：資料看起來完整，只是指錯了人。
 _LOCATION_SEQ_KEY = "_location_seq"
 
+#: 據點 id 允許的形狀。
+#:
+#: 🔑 理由是**可讀性**，不是安全：那個字串會被寫進 `quotations.location_id`、
+#: 會出現在稽核紀錄、**會被人用眼睛比對**。
+#: ☠️ 一個含空白或標點的 id，出問題的那天會很難講清楚是哪一筆。
+#:
+#: ⚠️ **只驗新寫入，不追溯既有值**（見 `_clean_locations`）——
+#: 一個回溯驗證會讓「手動改過設定表」的人連存檔都存不了，
+#: 而那是一個**他無法從錯誤訊息推回去**的狀態。
+LOCATION_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,32}$")
+
 
 def _location_seq_floor():
     from helpers.settings import _get_setting
@@ -814,6 +826,17 @@ def _clean_locations(raw, previous):
         # ⚠️ 而「**不重用已刪除的 id**」那條仍然成立：自動配號走的是
         # 只增不減的計數器，而下面那一行讓外來的 `loc_N` 也把它頂上去。
         ident = str(item.get("id") or "").strip()
+        # 🔴 **只驗這一次新出現的 id。**
+        # 既有的 id（`prev_by_id` 裡那些）原樣放行 ——
+        # ☠️ 回溯驗證會讓一個手動改過設定表的人連存檔都存不了。
+        if ident and ident not in prev_by_id and not LOCATION_ID_RE.match(ident):
+            # 📌 訊息要講出**允許的型式**：只說「不合法」的話，
+            # 下一個人知道它錯了而不知道要改成什麼。
+            raise HTTPException(
+                422,
+                f"據點 id「{ident}」的格式不合：只允許英數字、底線與連字號，"
+                "長度 1~32（例如 `loc_1`、`taipei-branch`）。"
+                "這個值會被寫進單據與稽核紀錄，要能用眼睛比對。")
         if not ident:
             keep = prev_by_name.get(name)
             ident = str(keep.get("id")) if keep and keep.get("id") else ""
