@@ -48,7 +48,8 @@ def test_qr_info_returns_masked_username(client, make_user):
         "/api/auth/login", json={"username": username, "password": password}
     ).json()["challengeToken"]
 
-    r = client.get(f"/api/auth/login/qr-info?challenge={challenge}")
+    r = client.get("/api/auth/login/qr-info",
+                      headers={"X-Login-Challenge": challenge})
     assert r.status_code == 200, r.text
     masked = r.json()["maskedUsername"]
     assert masked != username
@@ -56,7 +57,16 @@ def test_qr_info_returns_masked_username(client, make_user):
 
 
 def test_qr_info_invalid_challenge_400(client):
-    r = client.get("/api/auth/login/qr-info?challenge=not-a-real-token")
+    """無效的 challenge ⇒ 400。
+
+    ⚠️ 2026-09-22 §8 FX22：challenge 改走 `X-Login-Challenge` header。
+    📌 這一題原本把它放在 query string ——
+    ☠️ 而**那條路現在回 422（格式拒絕）而不是 400（內容無效）**
+    ⇒ 若照舊不改，它會紅在一個**與這一題無關**的理由上。
+    🔑 而那個紅是對的：〈FX22c〉就是要讓舊的呼叫方式被明著拒絕。
+    """
+    r = client.get("/api/auth/login/qr-info",
+                   headers={"X-Login-Challenge": "not-a-real-token"})
     assert r.status_code == 400, r.text
 
 
@@ -68,7 +78,8 @@ def test_qr_status_pending_before_approval(client, make_user):
         "/api/auth/login", json={"username": username, "password": password}
     ).json()["challengeToken"]
 
-    r = client.get(f"/api/auth/login/qr-status?challenge={challenge}")
+    r = client.get("/api/auth/login/qr-status",
+                      headers={"X-Login-Challenge": challenge})
     assert r.status_code == 200, r.text
     assert r.json() == {"pending": True}
 
@@ -143,7 +154,8 @@ def test_qr_approve_and_manual_code_share_fail_counter(client, make_user):
     )
     assert last.status_code == 401, last.text
 
-    again = client.get(f"/api/auth/login/qr-status?challenge={challenge}")
+    again = client.get("/api/auth/login/qr-status",
+                      headers={"X-Login-Challenge": challenge})
     assert again.status_code == 400, again.text
 
 
@@ -165,7 +177,8 @@ def test_qr_approve_via_session_token_same_account_succeeds(client, make_user):
     assert approve.status_code == 200, approve.text
     assert approve.json() == {"ok": True}
 
-    status = client.get(f"/api/auth/login/qr-status?challenge={challenge}")
+    status = client.get("/api/auth/login/qr-status",
+                      headers={"X-Login-Challenge": challenge})
     assert status.status_code == 200, status.text
     assert status.json()["username"] == username
 
@@ -188,7 +201,8 @@ def test_qr_approve_via_session_token_different_account_rejected(client, make_us
     assert r.status_code == 401, r.text
 
     # 沒有真的核准掉——challenge 仍然 pending，不因為錯的 session 就被消耗掉
-    status = client.get(f"/api/auth/login/qr-status?challenge={challenge}")
+    status = client.get("/api/auth/login/qr-status",
+                      headers={"X-Login-Challenge": challenge})
     assert status.status_code == 200, status.text
     assert status.json() == {"pending": True}
 
@@ -263,12 +277,14 @@ def test_qr_approve_correct_password_then_status_issues_session_once(client, mak
     assert approve.status_code == 200, approve.text
     assert approve.json() == {"ok": True}
 
-    status = client.get(f"/api/auth/login/qr-status?challenge={challenge}")
+    status = client.get("/api/auth/login/qr-status",
+                      headers={"X-Login-Challenge": challenge})
     assert status.status_code == 200, status.text
     session = status.json()
     assert session["token"]
     assert session["username"] == username
 
     # 單次有效：同一個 challenge 再打一次要回 400，不能再拿到 session
-    again = client.get(f"/api/auth/login/qr-status?challenge={challenge}")
+    again = client.get("/api/auth/login/qr-status",
+                      headers={"X-Login-Challenge": challenge})
     assert again.status_code == 400, again.text

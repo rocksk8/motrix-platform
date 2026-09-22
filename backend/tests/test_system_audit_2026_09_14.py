@@ -618,9 +618,17 @@ _PUBLIC_ROUTES = {
     ("system.py", "GET", "/api/system/webauthn-config-status"),
     # 伺服器時間：前端對時用，不含任何公司資料
     ("dashboard.py", "GET", "/api/now"),
-    # 政府開放資料代理（統編查公司名），不觸及本系統資料
-    ("dashboard.py", "GET", "/api/company/tax/{tax_id}"),
-    ("dashboard.py", "GET", "/api/company/search"),
+    # ⚠️ 2026-09-22 §4 YD：兩支 GCIS 代理（`/api/company/tax/{tax_id}` 與
+    #    `/api/company/search`）**已經自己有守門了**，不再是公開路由
+    #    ⇒ 它們從這張表移除。
+    #
+    # 🔑 而抓到這件事的是這張表自己的**反向控制**
+    #    （`test_public_route_allowlist_has_no_stale_entries`）——
+    #    它報「清單上有東西已經不公開了」。
+    # 📌 那正是一張豁免清單該有的第二個方向：
+    #    **不只驗「清單外的都有守門」，還要驗「清單上的還需要在清單上」。**
+    #    ☠️ 少了它，一張豁免清單只會愈來愈長，
+    #    而**每一列都看起來像一個曾經被審查過的決定**。
 }
 
 

@@ -468,7 +468,15 @@ def test_login_qr_approve_smoke(live_server, make_user):
             # ── 手機：另開一個完全獨立的 context（模擬另一台裝置），開確認頁面 ──
             ctx_phone = browser.new_context()
             page_phone = ctx_phone.new_page()
-            page_phone.goto(f"{live_server}/pages/login-qr-approve.html?challenge={challenge}")
+            # ⚠️ 2026-09-22 §8 FX22：challenge 改走 **URL fragment**。
+            # ☠️ 原本是 `?challenge=` ⇒ 手機一掃就是
+            #    `GET /pages/login-qr-approve.html?challenge=xxx`
+            #    ⇒ **照樣被 access log 記一筆**。
+            # 🔑 而那是 B 發現的第三個洩漏點：**只改兩支 API 的話，
+            #    我們會宣稱洩漏堵住了，而它沒有。**
+            # 📌 `#` 後面的東西**瀏覽器不會送給伺服器**。
+            page_phone.goto(
+                f"{live_server}/pages/login-qr-approve.html#challenge={challenge}")
             page_phone.wait_for_selector('input[type="password"]', timeout=10000)
             page_phone.fill('input[type="password"]', password)
             page_phone.click('button:has-text("核准登入")')

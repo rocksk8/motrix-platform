@@ -31,8 +31,8 @@ else:                    _fire(False, "1d")
 
 | | |
 |---|---|
-| `reminder_stage(days)` | → `"d1"`／`"d3"`／`"d5"`／`"d10"`… 或 **`None`（不寄）** |
-| `reminder_stages_at_or_below(days)` | 跨越多階時，**要一併標記成已寄**的那幾階（WA6） |
+| ~~`reminder_stage(days)`~~ | 🔴 **死碼，0 個呼叫點，2026-09-22 由 A 裁定刪除**（FX11） |
+| `reminder_stages_at_or_below(days)` | 🔑 **真正在跑的那一支**；跨越多階時要一併標記成已寄的那幾階 |
 | `reminder_dedup_key(stage)` | ⚠️ **只吃 stage，不吃日期** —— 見 WA3 |
 
 🔑 **`reminder_dedup_key` 的簽名本身就是那道防線**：
@@ -68,6 +68,51 @@ def _need(name):
     return got
 
 
+def _new_stage_on(days):
+    """第 `days` 天**新出現**的那一階，沒有新的就 `None`。
+
+    ## 🔴 2026-09-22 改寫：原本這幾題打的是 `reminder_stage()`，而那是死碼
+
+    D 用 AST 實測（把「被當成參考傳遞」也算）：
+    ```
+    reminder_stage                0 個呼叫點   ← 產品碼 0、測試碼也 0（除了我）
+    reminder_stages_at_or_below   1 個呼叫點   ← daily_tasks.py:1936
+    ```
+    ☠️ **我的 WA1／WA2／WA1b／WA6 全綠，而它們證明的是一支沒有人呼叫的函式。**
+    🔑 〈證據的適用範圍〉最貴的一種：**綠燈是真的，而被測的東西不在路徑上。**
+
+    ## 📌 而更糟的是：那兩支的規則**不一樣**
+
+    ```
+    reminder_stage               days % 5 == 0          ← 5 的絕對倍數
+    reminder_stages_at_or_below  n = FIRST[-1] + STEP…  ← 從最後一階相對遞增
+    ⇒ 只因為 FIRST[-1] == STEP == 5 才碰巧一致
+    ```
+    D 實測把 `FIRST` 換成 `(1,3,4)` ⇒ **6 筆分歧**。
+    ⚠️ 所以這不只是「測了沒用的東西」，是**我釘的階梯與真正在跑的階梯是兩條**。
+
+    ## 🔑 翻譯的方法：問真正在跑的那支函式「今天有沒有多一階」
+
+    呼叫端做的是
+    `owed = [st for st in below(days) if not sent(st)]` → 寄 `owed[-1]`。
+    ⇒ 「今天會不會寄新的一封」＝**`below(days)` 比 `below(days-1)` 多不多一階**。
+    📌 這樣 WA1／WA2 問的還是同一件事，而**答案來自真的會被執行的程式碼**。
+    """
+    below = _need("reminder_stages_at_or_below")
+    prev = list(below(days - 1))
+    now = list(below(days))
+    assert now[:len(prev)] == prev, (
+        f"階梯在第 {days} 天**改寫了**前面幾階：{prev} → {now}\n"
+        "⇒ 已經寄出去的那幾封對不上新的名單，dedup 會整個失效。"
+    )
+    extra = now[len(prev):]
+    assert len(extra) <= 1, (
+        f"第 {days} 天一次多出 {len(extra)} 階：{extra}\n"
+        "⇒ 呼叫端只寄 `owed[-1]` 一封，其餘會被靜靜標記成已寄。"
+    )
+    return extra[0] if extra else None
+
+
 # ══════════════════════════════════════════════════════════════════════
 # WA1 / WA2 · 階梯本身
 # ══════════════════════════════════════════════════════════════════════
@@ -75,9 +120,9 @@ def _need(name):
 @pytest.mark.parametrize("days", LADDER)
 def test_wa1_the_ladder_fires_on_the_chosen_days(days):
     """🔴 WA1：只在 {1, 3, 5, 10, 15, 20, …} 寄。"""
-    stage = _need("reminder_stage")(days)
+    stage = _new_stage_on(days)
     assert stage == f"d{days}", (
-        f"第 {days} 個工作日應該回 `d{days}`，實際 {stage!r}"
+        f"第 {days} 個工作日應該新出現 `d{days}` 這一階，實際 {stage!r}"
     )
 
 
@@ -92,9 +137,9 @@ def test_wa2_no_mail_on_any_other_day(days):
     📌 名單裡刻意包含 **2 與 4**（第一階與第二階之間），以及 **11–14、16–19**
     —— 只驗 6–9 的話，一個「第 10 天之後恢復每天寄」的實作會綠。
     """
-    stage = _need("reminder_stage")(days)
+    stage = _new_stage_on(days)
     assert stage is None, (
-        f"第 {days} 個工作日不該寄信，而它回了 {stage!r}\n"
+        f"第 {days} 個工作日不該有新的一階，而它多出了 {stage!r}\n"
         "⇒ 一筆卡 20 個工作日的單子現在會寄 18 封。"
     )
 
@@ -107,9 +152,13 @@ def test_wa1b_day_zero_and_negative_are_silent():
     **如果純函式自己不管這一段，那道防線就搬到了一個沒有人看的地方** ——
     〈守門守的對象被搬走〉。
     """
-    stage_fn = _need("reminder_stage")
+    below = _need("reminder_stages_at_or_below")
     for days in (0, -1, -100):
-        assert stage_fn(days) is None, f"{days} 應該不寄，實際 {stage_fn(days)!r}"
+        got = list(below(days))
+        assert got == [], (
+            f"第 {days} 天的欠款清單應該是空的，實際 {got}\n"
+            "⇒ 呼叫端會把它們全部當成『欠著沒寄』而寄出去。"
+        )
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -172,7 +221,7 @@ def test_wa6_crossing_several_thresholds_marks_the_lower_ones_too():
     🔑 而那正是這一節要消滅的東西（一次寄太多封）。
 
     📌 所以這裡有兩個問題，要兩個答案：
-    **「這次寄哪一封」**（`reminder_stage`）與
+    **「這次寄哪一封」**（第 12 天：沒有新的一階 ⇒ 不寄）與
     **「要把哪幾階記成已寄」**（`reminder_stages_at_or_below`）。
     ⚠️ 用同一個答案回答兩個問題的話，其中一個一定會錯。
     """
@@ -180,18 +229,19 @@ def test_wa6_crossing_several_thresholds_marks_the_lower_ones_too():
 
     # 🔴 **這一行第一版寫成 `reminder_stage(12) == "d10"`，而它與 WA2 互斥。**
     #
-    # WA2 的 SILENT 名單含 12 ⇒ `reminder_stage(12)` 必須是 `None`。
-    # 而我在檔頭已經裁過：`reminder_stage` 回答的是「**這一天要不要寄**」。
-    # ⇒ 「到第 12 天為止最高的那一階是什麼」**是另一個問題**，
-    #    而我自己已經替它準備了另一支函式。
+    # WA2 的 SILENT 名單含 12 ⇒ 第 12 天必須沒有新的一階。
+    # ⇒ 「到第 12 天為止最高的那一階是什麼」**是另一個問題**。
     #
     # ☠️ 兩題不可能同時綠，而**兩題都是我寫的** ——
     # 🔑 〈兩個都對而路不存在〉的鏡像：這次不是「路不存在」，
     #    是**同一個輸入被兩個斷言要求兩種答案**，
-    #    而它們分別出現在 76 行與 181 行 ⇒ **讀任何一題都看不出矛盾。**
+    #    而它們分別出現在兩個相距一百行的地方 ⇒ **讀任何一題都看不出矛盾。**
     # 📌 B 抓到的，它照 WA1／WA2 實作而刻意沒有動 WA6 —— 那是對的。
-    assert _need("reminder_stage")(12) is None, (
-        "第 12 天不是階梯上的日子，`reminder_stage(12)` 必須是 None（同 WA2）"
+    #
+    # 🔴 2026-09-22 二次改寫：原本這一行問的是 `reminder_stage(12)`，
+    #    而那支是死碼（見 `_new_stage_on` 的說明）。改問真的會跑的那一支。
+    assert _new_stage_on(12) is None, (
+        "第 12 天不該有新的一階（同 WA2）—— 停機補寄時它會多出一封"
     )
     stages = list(at_or_below(12))
     assert stages[-1] == "d10", (

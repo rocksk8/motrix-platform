@@ -46,6 +46,7 @@ serve_upload(..., token: str = Query(None))   # ← 有 Query(...)
 **沒有人會把它跟這一次的安全修正連起來。**
 """
 import ast
+import re
 import sys
 from pathlib import Path
 
@@ -145,6 +146,265 @@ def _query_credentials():
                     kind = "有預設值"
             hits.append((filename, route, name, kind))
     return hits
+
+
+# ══════════════════════════════════════════════════════════════════════
+# FX23d · 倒過來問：**哪些參數的值，拿到就能做到一件原本需要授權的事？**
+# ══════════════════════════════════════════════════════════════════════
+#
+# ☠️ A 的條文：**關鍵字清單不是一個完整的類別。**
+# `challenge|token|secret|code|key|password|otp|nonce|sig` 是**我們想到的字**，
+# 而 `pt` 就是那個「判準抓得到、字樣清單抓不到」的例子。
+#
+# 🔑 **這一版的判準不看名字，看流向**：
+# 一個 query 參數，如果它的值**被交給一個在做「准不准」判斷的函式**，
+# 那它就是憑證 —— 不管它叫什麼。
+#
+# 📌 D 今天的方法論直接套在這裡：
+# **一個掃描工具要先能讓「已知的那一個」亮起來，才有資格報「沒有其他的」。**
+# ⇒ `test_fx23d_c_` 用合成路由證明它**亮得起來也不會亂亮**。
+#
+# ⚠️⚠️ **而它仍然看不見的（寫下來，不要留在這次對話裡）**：
+# ```
+# 1  間接一層     param → helper(param) → helper 內部才 verify
+# 2  跨檔         param 被存進物件／dict，別處才拿出來驗
+# 3  否定形       「沒有這個參數就拒絕」（授權靠的是它的存在而不是它的值）
+# ```
+# 🔑 ⇒ 這道守門**縮小了盲區，沒有消滅它**。三者之中 1 最可能真的發生。
+
+AUTHORITY_CALLS = re.compile(
+    r"(^|_)(verify|validate|authenticate|authorize|require|check)"
+    r"|compare_digest|decode_token",
+    re.I,
+)
+
+#: 「你是誰」與「你准不准」。**400 不算** —— 那是「你給的格式不對」。
+AUTHORITY_STATUS = (401, 403)
+
+
+def _query_params():
+    """每條 GET／DELETE 路由的 query 參數：`(檔, 路徑, 函式, 參數名)`。
+
+    📌 與 `_query_credentials()` 共用同一套「什麼算 query 參數」的判斷，
+    ⚠️ 但**刻意不套字樣清單** —— 那正是 FX23d 要繞開的那一層。
+    """
+    for filename, route, fn in _routes():
+        template = {seg[1:-1].split(":")[0]
+                    for seg in route.split("/")
+                    if seg.startswith("{") and seg.endswith("}")}
+        args = fn.args
+        positional = list(args.posonlyargs) + list(args.args)
+        defaults = ([None] * (len(positional) - len(args.defaults))
+                    + list(args.defaults))
+        pairs = list(zip(positional, defaults)) + list(
+            zip(args.kwonlyargs, args.kw_defaults))
+        for arg, default in pairs:
+            if arg.arg in ("self", "request", "response") or arg.arg in template:
+                continue
+            if (isinstance(default, ast.Call)
+                    and isinstance(default.func, ast.Name)
+                    and default.func.id in SAFE_DEFAULTS):
+                continue
+            yield filename, route, fn, arg.arg
+
+
+def _call_name(node):
+    f = node.func
+    if isinstance(f, ast.Name):
+        return f.id
+    if isinstance(f, ast.Attribute):
+        return f.attr
+    return ""
+
+
+def _mentions(node, name):
+    """`name` 這個變數有沒有出現在這個運算式裡（含 f-string）。"""
+    return any(isinstance(n, ast.Name) and n.id == name
+               for n in ast.walk(node))
+
+
+def _raised_statuses(node):
+    """這段程式碼裡 `raise HTTPException(...)` 丟出的狀態碼。"""
+    out = set()
+    for n in ast.walk(node):
+        if not (isinstance(n, ast.Raise) and isinstance(n.exc, ast.Call)):
+            continue
+        if _call_name(n.exc) != "HTTPException":
+            continue
+        cand = list(n.exc.args) + [kw.value for kw in n.exc.keywords
+                                   if kw.arg == "status_code"]
+        for c in cand:
+            if isinstance(c, ast.Constant) and isinstance(c.value, int):
+                out.add(c.value)
+    return out
+
+
+def _locals_raising_auth(path):
+    """同一個檔裡，哪些函式**自己會丟 401／403**。
+
+    ⚠️ 只看同一個檔（一層）。跨檔的 helper 看不到 —— 見本節的盲區清單。
+    """
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    out = set()
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            if _raised_statuses(node) & set(AUTHORITY_STATUS):
+                out.add(node.name)
+    return out
+
+
+def _authority_flows():
+    """回傳 `(檔, 路徑, 參數名, 被交給誰, 形狀)` —— 值決定授權的 query 參數。
+
+    ## 🔑 判準：**這個值不對的時候，回的是 401／403。**
+
+    ```
+    _verify_photo_token(safe, pt)   回 bool，403 在呼叫點      ⇒ 形狀 A
+    _validate_range(start, end)     400 在函式內部（格式錯）   ⇒ 不算
+    _require_user(authorization)    401 在函式內部             ⇒ 形狀 B
+    ```
+    ☠️ **我第一版只比對函式名，而 `_validate_range` 也含 `validate`** ——
+    一次掃出 4 筆日期參數。🔑 那正是 D 今天踩的 v2（子字串比對命中 37 條），
+    📌 **而我在看過它的紀錄之後，當場又踩了一次。**
+    ⇒ 修的不是清單，是**判準**：從「名字像不像」改成「錯了會回什麼」。
+    """
+    hits = []
+    local_auth = {}
+    for filename, route, fn, name in _query_params():
+        if filename not in local_auth:
+            local_auth[filename] = _locals_raising_auth(ROUTERS / filename)
+        for node in ast.walk(fn):
+            if not isinstance(node, ast.Call):
+                continue
+            called = _call_name(node)
+            if not AUTHORITY_CALLS.search(called):
+                continue
+            passed = list(node.args) + [kw.value for kw in node.keywords]
+            if not any(_mentions(a, name) for a in passed):
+                continue
+
+            shape = None
+            if called in local_auth[filename]:
+                shape = "B：被呼叫的函式自己丟 401／403"
+            else:
+                for guard in ast.walk(fn):
+                    if (isinstance(guard, ast.If)
+                            and _mentions(guard.test, name)
+                            and any(_call_name(c) == called
+                                    for c in ast.walk(guard.test)
+                                    if isinstance(c, ast.Call))
+                            and _raised_statuses(guard) & set(AUTHORITY_STATUS)):
+                        shape = "A：呼叫點的 if 擋下來丟 401／403"
+                        break
+            if shape:
+                hits.append((filename, route, name, called, shape))
+                break
+    return hits
+
+
+def test_fx23d_b_the_known_one_lights_up():
+    """📏📏 **正對照：`pt` 必須亮。不亮的話，下面那題的綠燈不算數。**
+
+    ☠️ 沒有這一題，`_authority_flows()` 只要壞掉（regex 打錯、AST 走法改了、
+    `ROUTERS` 指錯），它就回空集合 ⇒ **主題目立刻全綠**。
+    🔑 D 今天的方法論，A 要寫進 §6：
+    **一個掃描工具要先能讓「已知的那一個」亮起來，才有資格報「沒有其他的」。**
+
+    📌 而 `pt` 正是那個「字樣清單抓不到、這個判準抓得到」的例子：
+    它不含 `challenge|token|secret|code|key|password|otp|nonce|sig` 任何一個字。
+    """
+    hits = _authority_flows()
+    assert any(name == "pt" for _f, _r, name, _c, _s in hits), (
+        f"已知的 `?pt=` 沒有被這道判準看見：{hits}\n"
+        "⇒ 這個掃描器現在**沒有資格**說「沒有其他的」。"
+    )
+
+
+def test_fx23d_c_the_criterion_is_flow_not_spelling(tmp_path):
+    """🔴🔴 FX23d 反向控制：**看的是流向，不是名字。**
+
+    ```
+    /api/probe/nameless   ?widget=…  → _verify_widget() → 403   ← 名字完全無害，必須亮
+    /api/probe/daterange  ?start=…   → _validate_range() → 400  ← 不可以亮（格式錯不是沒授權）
+    /api/probe/unused     ?spare=…   （沒有人動它）             ← 不可以亮
+    ```
+    ⚠️ 第二條是我自己踩出來的：第一版判準只比對函式名，
+    而 `_validate_range` 含 `validate` ⇒ **一次誤報 4 筆日期參數**。
+    🔑 「這個值錯了會回 400」跟「會回 403」是兩件事，
+    **而一個把它們混在一起的判準，會逼人把對的寫法改掉。**
+    """
+    probe = tmp_path / "probe_flow.py"
+    probe.write_text(
+        "from fastapi import APIRouter, Query, HTTPException\n"
+        "router = APIRouter()\n"
+        "def _verify_widget(v):\n"
+        "    return False\n"
+        "def _validate_range(a, b):\n"
+        "    raise HTTPException(400, 'bad')\n"
+        "@router.get('/api/probe/nameless')\n"
+        "def nameless(widget: str = Query(None)):\n"
+        "    if not _verify_widget(widget):\n"
+        "        raise HTTPException(403, 'nope')\n"
+        "    return {}\n"
+        "@router.get('/api/probe/daterange')\n"
+        "def daterange(start: str = Query(...), end: str = Query(...)):\n"
+        "    _validate_range(start, end)\n"
+        "    return {}\n"
+        "@router.get('/api/probe/unused')\n"
+        "def unused(spare: str = Query(None)):\n"
+        "    return {}\n",
+        encoding="utf-8")
+
+    global ROUTERS
+    original = ROUTERS
+    try:
+        ROUTERS = tmp_path
+        found = {(r, n) for _f, r, n, _c, _s in _authority_flows()}
+    finally:
+        ROUTERS = original
+
+    assert ("/api/probe/nameless", "widget") in found, (
+        f"名字無害但**值決定授權**的參數沒有被抓到：{sorted(found)}\n"
+        "☠️ 那就是 `pt` 的形狀 —— 字樣清單看不見它。"
+    )
+    assert ("/api/probe/daterange", "start") not in found, (
+        f"日期區間參數被誤報了：{sorted(found)}\n"
+        "⇒ `_validate_range` 丟的是 400（格式錯），不是 403（沒授權）。"
+    )
+    assert ("/api/probe/unused", "spare") not in found, (
+        f"沒有任何人使用的參數被誤報了：{sorted(found)}"
+    )
+
+
+def test_fx23d_every_authority_deciding_query_parameter_has_been_reviewed():
+    """🔴 FX23d：**值決定授權的 query 參數，一個都不可以沒被審過。**
+
+    ## ☠️ A 的條文：關鍵字清單不是一個完整的類別
+
+    > `challenge|token|secret|code|key|password|otp|nonce|sig`
+    > **是我們想到的字。** 倒過來問比較接近真正的判準：
+    > **「哪些參數的值，拿到就能做到一件原本需要授權的事？」**
+
+    ## 📌 這一題現在是**綠的，而且是該綠的**
+
+    掃出來只有 `pt` 一筆，而它已經在 `ALLOWED` 裡（HMAC、1 小時、綁單一路徑）。
+    ⚠️ **綠燈在這裡的意思是「沒有新的」**，不是「這個判準完整」——
+    🔑 它的價值是**下一個被加進來的**會在這裡撞到。
+
+    ## ⚠️ 而它看不見的，見本節開頭的盲區清單（間接一層／跨檔／否定形）
+
+    📌 那三項**不是被忽略，是被寫下來了** ——
+    A 的話：把「我們用的是一個會漏的判準」寫成一個**有人負責的狀態**，
+    而不是留在某一次對話裡。
+    """
+    unreviewed = [(f, r, n, c, s) for f, r, n, c, s in _authority_flows()
+                  if (r, n) not in ALLOWED]
+    assert not unreviewed, (
+        "這些 query 參數的**值決定了授權**，而沒有人審過：\n"
+        + "\n".join(f"  {f}  {r}  ?{n}=  → {c}（{s}）" for f, r, n, c, s
+                    in unreviewed)
+        + "\n\n⇒ 要嘛改走 header／POST body，要嘛進 `ALLOWED` 並寫下理由。"
+    )
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -357,6 +617,114 @@ def test_fx22b_qr_status_is_changed_together_with_qr_info():
     📌 而兩支用的是**同一個** challenge ⇒ 改一支，另一支照樣把它洩出去。
     """
     _assert_no_query_credential("/api/auth/login/qr-status")
+
+
+def _decode_qr_png(data_uri):
+    """把 `data:image/png;base64,…` 解成 QR 裡真正的那串字。
+
+    ⚠️ **不要改成「攔截 `qrcode.make()` 的參數」** —— 那觀測的是
+    「我們傳給產生器什麼」，而這一題問的是**手機相機讀到什麼**。
+    🔑 兩者之間隔著一次編碼，而〈證據的適用範圍〉說的就是這種差一層。
+    """
+    import base64 as _b64
+
+    import cv2
+    import numpy as np
+
+    prefix = "data:image/png;base64,"
+    assert data_uri.startswith(prefix), f"不是 PNG data URI：{data_uri[:60]}"
+    raw = _b64.b64decode(data_uri[len(prefix):])
+    arr = cv2.imdecode(np.frombuffer(raw, np.uint8), cv2.IMREAD_GRAYSCALE)
+    assert arr is not None, "PNG 解不開 —— 這張圖本身就壞了"
+    text, _pts, _qr = cv2.QRCodeDetector().detectAndDecode(arr)
+    return text
+
+
+def test_the_qr_decoder_would_actually_see_a_leaked_challenge():
+    """📏 **量尺：先證明這把解碼器看得見洩漏，下一題的綠燈才算數。**
+
+    ☠️ 我第一版這題寫成 `"?challenge=" not in json.dumps(回應)` ——
+    **而那句話永遠是真的**：`approve_url` 是編進 **PNG 圖**裡的，
+    JSON 回應只有 `challengeToken` 與 base64 圖，
+    ⇒ **就算產品真的退回 `?challenge=`，那個斷言也照樣綠。**
+    🔑 〈假綠燈：斷言驗到自己設的值〉的另一種：
+    **斷言找的東西，從一開始就不可能出現在我看的那個位置。**
+
+    ⇒ 這一題用**產品之外**的一張合成 QR（明著含 `?challenge=`）
+    證明：解碼這條路徑**真的會把那五個字帶出來**。
+    """
+    import io as _io
+
+    import qrcode
+
+    leaked = "http://example.test/pages/x.html?challenge=deadbeef"
+    buf = _io.BytesIO()
+    qrcode.make(leaked).save(buf, format="PNG")
+    import base64 as _b64
+    uri = "data:image/png;base64," + _b64.b64encode(buf.getvalue()).decode()
+
+    assert _decode_qr_png(uri) == leaked, (
+        "解碼器讀不出我自己編進去的那串字 ⇒ **下一題的綠燈不能採信**，"
+        "它只證明了『解不開』。"
+    )
+
+
+def test_the_qr_image_does_not_carry_the_challenge_in_the_query_string(
+        client, make_user):
+    """🔴 **QR 圖裡的網址不可以用 `?challenge=`。**（⏳ 這裡需要一個編號，等 A 給）
+
+    ## ☠️ B 發現的第三個洩漏點，而它是**另一個形狀**
+
+    QR 原本編的是 `/pages/login-qr-approve.html?challenge=xxx`
+    ⇒ 手機一掃就是 `GET /pages/…?challenge=xxx` ⇒ **照樣被 access log 記一筆**。
+    🔑 **只改兩支 API 的話，我們會宣稱洩漏堵住了，而它沒有。**
+
+    ## ⚠️ 而我的 `FX23a` **掃不到這一個**
+
+    那道守門掃的是**路由參數**（函式簽名）。
+    ☠️ 而這裡的憑證**從來不是任何函式的參數** ——
+    它是被 `f"...{challenge_token}"` **組進一個字串**的。
+    🔑 〈判準的寬窄都會騙人〉的新一面：
+    **我的判準對「憑證會出現在哪裡」有一個隱含假設，而那個假設沒被寫下來。**
+
+    ## 📌 兩邊都要驗，少一邊就是一個可以靠「拿掉」通過的守門
+
+    ```
+    不可以有  ?challenge=        ← 洩漏的那個形狀
+    必須有    #challenge=<真值>  ← 否則「整個不帶 challenge」也會綠，而 QR 就廢了
+    ```
+    `#` 後面的東西瀏覽器**不會送給伺服器** ⇒ 不可能進任何伺服器端紀錄。
+    ⚠️ 它仍然留在**那支手機的瀏覽器歷史**裡 —— 可接受（一次性、數分鐘、
+    而那支手機就是要核准的本人）。
+    """
+    username, password = make_user(role="superadmin")
+    token = client.post(
+        "/api/auth/login", json={"username": username, "password": password}
+    ).json()["token"]
+    r = client.post("/api/auth/totp/setup", headers={"Authorization": f"Bearer {token}"})
+    assert r.status_code == 200, r.text
+    secret = r.json()["secret"]
+    import pyotp
+    r = client.post("/api/auth/totp/enable",
+                    headers={"Authorization": f"Bearer {token}"},
+                    json={"code": pyotp.TOTP(secret).now()})
+    assert r.status_code == 200, r.text
+
+    r = client.post("/api/auth/login",
+                    json={"username": username, "password": password})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body.get("qrCodePng"), f"這次登入沒有給 QR ⇒ 這一題的前提不成立：{body}"
+
+    url = _decode_qr_png(body["qrCodePng"])
+    assert "?challenge=" not in url, (
+        f"QR 裡的網址還帶著 `?challenge=`：{url}。"
+        "☠️ 手機一掃就是一筆帶著憑證的 GET，而它進 access log。"
+    )
+    assert f"#challenge={body['challengeToken']}" in url, (
+        f"QR 裡沒有帶上這次的 challenge（fragment 形式）：{url}。"
+        "⇒ 若是被整個拿掉，上面那個斷言會綠，而 QR 核准登入直接廢掉。"
+    )
 
 
 def test_fx22c_a_challenge_in_the_query_string_is_refused(client):
