@@ -349,3 +349,191 @@ def test_v94_the_migration_does_not_call_the_parser():
     assert "account_items_112.json" in code_only, (
         "`_m094` 的本體裡沒有讀那個靜態檔 ——\n"
         "⚙️ 這是正對照：少了它，「什麼都不做」的 `_m094` 也會讓上面全綠。")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# 🔴 §107 · `source` 是**三態**，而 TRIGGER 只認 `statutory`
+# ══════════════════════════════════════════════════════════════════════
+
+def test_v93_source_has_exactly_three_states(fresh_db):
+    """🔴 `§107`：**`source` 三態，不是兩態。**
+
+    ```
+    statutory       官方《商業會計項目表》—— **唯讀**
+    system_default  我們預設帶的常用項目 —— **可停用、可改指向**
+    custom          使用者自己加的
+    ```
+    ☠️ 把 `system_default` 併進 `custom`：使用者日後**找不到它是哪裡來的**
+       —— 一個他從來沒建過的項目出現在「我的自訂」裡。
+    ☠️ 併進 `statutory`：**我們預設帶的東西會變成第二種不可變的東西**，
+       而它沒有法源。
+
+    ⚙️ 判準是 `CHECK` 約束**真的擋得住**第四個值，不是「DDL 裡有那三個字」。
+    🔑 讀 DDL 只證明「有人寫了它」，**插一筆才證明「它擋得住」**。
+    """
+    with pytest.raises(sqlite3.IntegrityError):
+        fresh_db.execute(
+            "INSERT INTO %s (code, level, name, source) "
+            "VALUES ('CHK1', 1, '第四態', 'something_else')" % TABLE)
+        fresh_db.commit()
+    fresh_db.rollback()
+
+    # ⚠️ 用明確的代號清單，不用 `LIKE … ESCAPE` —— 那個 escape 字元
+    #    經過幾層引號之後很容易變成兩個字元，而症狀是 `OperationalError`，
+    #    **不是一個看得懂的失敗**（我剛踩過）。
+    # ⚠️ **不 commit**：插進去、在同一個交易裡讀回來、再 rollback。
+    #    ☠️ 我第一版有 commit ＋ 事後 DELETE 清理，而那一筆 `statutory` 的
+    #       probe **刪不掉** —— 被這張表自己的 TRIGGER 擋住了。
+    #    🔑 測試的清理動作與它要驗的保護**打架**，而失敗訊息是
+    #       「法定會計項目不可刪除」⇒ **它指向產品，而壞的是我的清理。**
+    probes = {"CHKstatutory": "statutory",
+              "CHKsystemdefault": "system_default",
+              "CHKcustom": "custom"}
+    try:
+        for code, src in probes.items():
+            fresh_db.execute(
+                "INSERT INTO %s (code, level, name, source) VALUES (?, 1, ?, ?)"
+                % TABLE, (code, "三態測試", src))
+        marks = ",".join("?" * len(probes))
+        got = {r["source"] for r in fresh_db.execute(
+            "SELECT source FROM %s WHERE code IN (%s)" % (TABLE, marks),
+            tuple(probes))}
+    finally:
+        fresh_db.rollback()
+    assert got == {"statutory", "system_default", "custom"}, (
+        "三態裡有插不進去的：%s\n" % sorted(got)
+        + "⚙️ 這是正對照 —— 少了它，一個「只允許 custom」的 CHECK "
+          "也會讓上面那個 `pytest.raises` 綠。")
+
+
+@pytest.mark.parametrize("op", ["update", "delete"])
+def test_v93_system_default_rows_are_editable_too(fresh_db, op):
+    """🔴 `§107`：**`system_default` 也要改得動 —— TRIGGER 只認 `statutory`。**
+
+    `db.py` 那段 DDL 的註解逐字：
+    > 「⚠️ 而 TRIGGER 的條件**只認 `statutory`**：`system_default` 要能改得動，
+    >   否則我們預設帶的東西會變成第二種不可變的東西。」
+
+    ⚠️ **而我原本那道正對照只驗了 `custom`** —— 三態是後來定的（`§107`），
+       而我沒有回頭看那一題還夠不夠。
+    🔑 〈量測比變化慢＝輸出一印出來就過期〉：**規格動了，而守門的射程沒有跟著動。**
+    📌 少了這一題，一個寫成 `WHEN OLD.source != 'custom'` 的 TRIGGER 會全綠，
+       而它會把 `system_default` 一起鎖住。
+    """
+    fresh_db.execute(
+        "INSERT INTO %s (code, level, name, parent_code, source) "
+        "VALUES ('SD999', 1, '預設帶的科目', NULL, 'system_default')" % TABLE)
+    fresh_db.commit()
+    try:
+        sql = ("UPDATE %s SET name='改過了' WHERE code='SD999'" % TABLE
+               if op == "update"
+               else "DELETE FROM %s WHERE code='SD999'" % TABLE)
+        try:
+            fresh_db.execute(sql)
+            fresh_db.commit()
+        except sqlite3.IntegrityError as exc:
+            pytest.fail(
+                "`system_default` 的 %s 被擋下來了：%s\n" % (op.upper(), exc)
+                + "☠️ TRIGGER 的條件不是**只認 `statutory`** ——\n"
+                  "   我們預設帶的東西變成了第二種不可變的東西，**而它沒有法源**。\n"
+                "🔑 `db.py` 的 DDL 註解自己寫著：「`system_default` 要能改得動」。")
+    finally:
+        fresh_db.execute("DELETE FROM %s WHERE code='SD999'" % TABLE)
+        fresh_db.commit()
+
+
+def test_any_foreign_key_to_account_items_uses_code(fresh_db):
+    """🔴 **指向 `account_items` 的外鍵一律用 `code`** —— 那張表**沒有 `id`**。
+
+    ```
+    db.py   code TEXT PRIMARY KEY      ← 主鍵就是代號
+    ```
+    ☠️ A-2 的規格草稿引用了 `account_items.id`，A 已退回。
+    🔑 而它會在 B 寫 `voucher_lines` 時第一次真的發生 —— **那正是它該亮的時機。**
+
+    ⚙️ 兩件一起驗：
+    ```
+    ① account_items **不可以**長出 `id` 欄位（長出來的話這條規則就鬆了）
+    ② 任何 FK 指向它的，`to` 欄必須是 `code`
+    ```
+    ⚠️ 現在還沒有任何 FK 指向它 ⇒ ② 目前是**空集合上的全稱句**（恆真）。
+    🔑 我明著標它：**這一題今天證明不了 ②**，它守的是「B 寫 `voucher_lines` 那一天」。
+    📌 〈防著不存在問題的測試永遠是綠的〉的界線 ——
+       差別在於**那個引用點是排定要出現的**，不是我想像出來的。
+    """
+    cols = {r["name"] for r in fresh_db.execute("PRAGMA table_info(%s)" % TABLE)}
+    assert "id" not in cols, (
+        "`%s` 長出了 `id` 欄位（現有：%s）——\n" % (TABLE, sorted(cols))
+        + "☠️ 那會讓「外鍵用 code」這條規則變成可選的，"
+          "而兩種引用方式會同時存在。\n"
+        "🔑 主鍵是 `code`：它**有意義**（代號本身就是會計上的識別），"
+        "而 `id` 沒有。")
+
+    bad = []
+    for t in [r["name"] for r in fresh_db.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'")]:
+        for fk in fresh_db.execute("PRAGMA foreign_key_list(%s)" % t):
+            if fk["table"] == TABLE and fk["to"] not in (None, "code"):
+                bad.append("%s.%s → %s.%s" % (t, fk["from"], TABLE, fk["to"]))
+    assert not bad, (
+        "有外鍵指向 `%s` 而不是用 `code`：%s\n" % (TABLE, bad)
+        + "☠️ 那張表**沒有 `id`** ⇒ 那個引用接不上任何東西。")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# 🔴 DB1 · 外鍵強制可能是**靜默關著**的
+# ══════════════════════════════════════════════════════════════════════
+
+def test_db1_foreign_key_enforcement_is_actually_on(tmp_path):
+    """🔴 `DB1`：**`_connect()` 開出來的連線，外鍵強制必須是開的。**
+
+    ```python
+    db.py:145  def _connect(path):
+                   try:
+                       conn.execute("PRAGMA foreign_keys=ON")
+                   except Exception:
+                       pass          # ☠️ 設定失敗 ⇒ 外鍵不強制
+    ```
+    ☠️ **而系統照常運作，沒有任何東西會說話** —— 那是
+    〈降級之後它還是會動〉：壞掉會被報修，**降級不會**。
+
+    ⚠️ **必須對 `_connect()` 量，不可以自己 `sqlite3.connect()` 再量**：
+    ```
+    自己連     量到的是 SQLite 的預設值（**0**）⇒ 量不到產品那一行有沒有生效
+    _connect() 量到的是**產品的那條路徑**
+    ```
+    🔑 〈正對照要走受測物那條量測路徑〉—— 而這一次那條規則決定的是
+       **這一題有沒有辨識力**，不是文風。
+
+    ⚙️ 而下面第二個斷言是那條規則的**可執行形式**：
+       先證明「裸連線確實是 0」，才證明 `_connect()` 的 1 是它做的。
+    📌 少了它，一個「SQLite 版本預設就開」的環境會讓這一題**為錯的理由綠**。
+
+    ## ⚠️ 這一題只**量**，不改那個 `except`
+    `DB1` 已登記 `NEXT`，改不改是另一個決定。〈量它不等於修它〉。
+    """
+    path = tmp_path / "fk.db"
+    db.init_db(str(path))
+
+    conn = db._connect(str(path))
+    try:
+        on = conn.execute("PRAGMA foreign_keys").fetchone()[0]
+    finally:
+        conn.close()
+    assert on == 1, (
+        "`_connect()` 開出來的連線 `PRAGMA foreign_keys` 是 %r，預期 1 ——\n" % on
+        + "☠️ 外鍵不強制，而**系統照常運作，沒有任何東西會說話**。\n"
+          "🔑 `db.py:151` 那行 `PRAGMA foreign_keys=ON` 包在 "
+          "`try/except Exception: pass` 裡 ⇒ 它失敗時是**靜默**的。\n"
+        "📌 症狀會是：孤兒列慢慢累積，而畫面上只是**少了幾筆關聯**。")
+
+    plain = sqlite3.connect(str(path))
+    try:
+        default = plain.execute("PRAGMA foreign_keys").fetchone()[0]
+    finally:
+        plain.close()
+    assert default == 0, (
+        "裸的 `sqlite3.connect()` 的 `PRAGMA foreign_keys` 已經是 %r ——\n" % default
+        + "⚙️ 那表示上面那個 `1` **證明不了 `_connect()` 做了什麼**"
+          "（這個環境的預設就是開的）。\n"
+        "🔑 這一題因此失去辨識力，要改用別的方式驗那一行。")
