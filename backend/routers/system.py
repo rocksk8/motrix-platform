@@ -597,6 +597,77 @@ def delete_work_log_photo(wid: int, photo_id: str, authorization: str = Header(N
     return {"ok": True}
 
 
+# ── 執行時的開關（2026-09-22 §8 FX1a）─────────────────────────────────────────
+
+#: 這台機器上「會不會對外連線」的兩個總開關。
+#:
+#: 🔴 **只列白名單裡的名字，不要把整個環境變數倒出來** ——
+#: `os.environ` 裡有 SMTP 密碼、雲端金鑰、資料庫路徑。
+#: ☠️ 一個「把環境變數印出來除錯」的端點，是外洩的標準形狀。
+#:
+#: 每一筆：`name`（環境變數名）／`on`（**這個行程實際判定的結果**）／
+#: `present`（那個變數在不在）／`raw`（**只在白名單裡才回**，它們是 "0"/"1"）。
+_RUNTIME_SWITCHES = (
+    ("MOTRIX_TENDER_RADAR", "標案雷達（連政府電子採購網）"),
+    ("MOTRIX_GEO", "地址定位（連 OpenStreetMap）"),
+    ("MOTRIX_DISABLE_SCHEDULERS", "停用所有背景排程（測試用）"),
+)
+
+
+#: 這個行程是什麼時候起來的。**模組匯入的那一刻 ≒ 行程啟動。**
+#: ⚠️ 它的用途是分辨「開關沒生效」與「**行程根本沒重啟**」——
+#: ☠️ 部署之後那兩件在畫面上一模一樣，而處置完全不同
+#: （一個要改 `autostart.bat`，一個要去重跑排程工作）。
+_PROCESS_STARTED_AT = datetime.now().isoformat(timespec="seconds")
+
+
+@router.get("/api/system/runtime-switches")
+def get_runtime_switches(authorization: str = Header(None)):
+    """**這個行程實際拿到哪些開關。**
+
+    ## 🔴 判準：它回答的是「行程拿到什麼」，不是「檔案裡寫了什麼」
+    ☠️ `autostart.bat` 的兩個 `set` 在 `:loop` **標籤之前**
+    ⇒ **部署之後不重跑排程工作的話，跑的還是舊環境變數的那個行程**，
+    而「重跑排程」那一步在 88 份部署紀錄裡出現次數是 **0**。
+    🔑 DEPLOY.md 自己寫著它的失敗長什麼樣：
+    「推送成功、服務正常、畫面正常，**就是雷達不掃、地圖上沒有點**。」
+    📌 〈計數器要有落點〉：一個只寫在文件裡而沒有任何東西在驗它發生過的步驟
+    **等於不存在**。
+
+    ⇒ 所以這裡讀的是 `os.environ`（透過各模組自己的 `*_on()`），
+    **不是讀 `autostart.bat`**。讀檔案只會告訴你「應該要是什麼」。
+
+    ## ⚠️ 限 superadmin
+    它說得出這台機器會不會對外連線。**不是機密，而它也不是需要公開的東西** ——
+    📌 公開白名單今天才因為「再多一條不會有人注意」被釘過（YD1b），
+    所以這一支**不進那張清單**。
+    """
+    _require_user(authorization, require_superadmin=True, module='settings')
+    from helpers import geo as _geo
+    from helpers import tender_source as _tender
+
+    # ⚠️ **`on` 走各模組自己的 `*_on()`，不要在這裡重寫一次判斷式。**
+    # 重寫的話，這個端點會回報「我以為的規則」而不是「它們實際用的規則」——
+    # 🔑 而那正是這個端點存在的理由（〈守門守的對象被搬走〉）。
+    resolved = {
+        "MOTRIX_TENDER_RADAR": _tender.radar_on(),
+        "MOTRIX_GEO": _geo.geo_on(),
+        "MOTRIX_DISABLE_SCHEDULERS": os.getenv("MOTRIX_DISABLE_SCHEDULERS") == "1",
+    }
+    return {
+        # 🔑 **行程資訊**：沒有它的話，「開關沒生效」與「行程根本沒重啟」分不開。
+        "pid": os.getpid(),
+        "startedAt": _PROCESS_STARTED_AT,
+        "switches": [
+            {"name": name, "label": label,
+             "present": os.getenv(name) is not None,
+             "raw": os.getenv(name),
+             "on": resolved.get(name, False)}
+            for name, label in _RUNTIME_SWITCHES
+        ],
+    }
+
+
 # ── Company profile（甲方設定，勞報單使用）────────────────────────────────────
 
 class CompanyProfile(BaseModel):

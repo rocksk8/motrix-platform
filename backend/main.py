@@ -573,6 +573,19 @@ else:
 if tender_radar_source.radar_on():
     logger.info("MOTRIX_TENDER_RADAR=1 —— 標案雷達已開，"
                 "這台機器會對外連線（政府電子採購網）")
+# ⚠️ **地理查詢也要有啟動痕跡**（2026-09-22 §8 FX1a）。
+# 它先前完全沒有 ⇒ 一台「以為開了而其實沒開」的機器，
+# 症狀是「地圖上沒有點」—— ☠️ 而那與「地址查不到」「還沒暖快取」
+# 「權限不足」長得一模一樣，**今晚已經有五個成因長成那個樣子**。
+#
+# 🔑 而這一行回答的是「**這個行程實際拿到什麼**」，不是「檔案裡寫了什麼」：
+# `geo_core.geo_on()` 讀的是 `os.environ`。
+# 📌 為什麼重要：兩個 `set` 在 `autostart.bat` 的 `:loop` **之前**
+# ⇒ **部署之後不重跑排程工作的話，跑的還是舊環境變數的那個行程**，
+# 而部署紀錄裡「重跑排程」這一步出現次數是 **0**。
+if geo_core.geo_on():
+    logger.info("MOTRIX_GEO=1 —— 地址定位已開，"
+                "這台機器會對外連線（OpenStreetMap／Nominatim）")
 
 auth.init_rate_limiting()
 _sync_module_versions()

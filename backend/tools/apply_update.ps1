@@ -476,6 +476,59 @@ if (Test-Path $logPath) {
 
 if ($healthy -and -not $logErrors) {
     Ok "  /api/ping 回應正常，log 未見新錯誤。"
+
+    # --- 開關生效檢查（2026-09-22 §8 FX1b）---
+    #
+    # 為什麼需要這一段：autostart.bat 的 set MOTRIX_* 在 :loop 標籤【之前】
+    # ⇒ 部署之後如果沒有重跑【排程工作】，接手的是已經在跑的那個
+    # crash-restart 迴圈，而它拿的是【舊的】環境變數。
+    # 88 份部署紀錄裡「重跑排程工作」出現次數是 0 —— 一個只寫在文件裡、
+    # 而沒有任何東西在驗它發生過的步驟，等於不存在。
+    #
+    # 它的失敗長什麼樣（DEPLOY.md 自己寫的）：
+    #   「推送成功、服務正常、畫面正常，就是雷達不掃、地圖上沒有點。」
+    # 那三句話沒有一句會讓人想到環境變數。
+    #
+    # 判準：autostart.bat 裡【寫著要開】的，就必須在這次啟動的 log 裡看得到
+    # 對應那一行。後端啟動時會印（main.py），而那一行讀的是 os.environ ——
+    # 它回答的是「這個行程實際拿到什麼」，不是「檔案裡寫了什麼」。
+    #
+    # 只檢查「該開而沒開」這一個方向：沒有要求開的就不會有那一行，
+    # 而那是正常狀態。漏報的代價是「有人偷偷開了而我們沒喊」，
+    # 漏喊的代價是「以為開了而其實沒開」——後者才是這一條在防的。
+    $switchNames = @("MOTRIX_TENDER_RADAR", "MOTRIX_GEO")
+    $autostartPath = Join-Path $BackendDir "autostart.bat"
+    $switchMismatch = @()
+    if ((Test-Path $autostartPath) -and $scanRange) {
+        $autostartText = Get-Content $autostartPath -Raw -ErrorAction SilentlyContinue
+        foreach ($sw in $switchNames) {
+            $wantOn = $false
+            foreach ($ln in ($autostartText -split "\r?\n")) {
+                $t = $ln.Trim()
+                if ($t.StartsWith("::")) { continue }   # 被註解掉的不算
+                if ($t -match ("^set\s+" + [regex]::Escape($sw) + "\s*=\s*1$")) { $wantOn = $true }
+            }
+            $sawLine = @($scanRange | Where-Object { $_ -match ([regex]::Escape($sw) + "=1") }).Count -gt 0
+            if ($wantOn -and -not $sawLine) {
+                $switchMismatch += $sw
+            } elseif ($wantOn) {
+                Ok "  開關 $sw：autostart.bat 要求開啟，這次啟動的 log 裡看得到它 —— 生效。"
+            }
+        }
+    } else {
+        Info "  開關生效檢查略過（找不到 autostart.bat，或這次沒有取到啟動後的 log）。"
+    }
+    if ($switchMismatch.Count -gt 0) {
+        Write-Host ""
+        Write-Host "======================================" -ForegroundColor Yellow
+        Write-Host "  開關沒有生效：$($switchMismatch -join '、')" -ForegroundColor Yellow
+        Write-Host "  autostart.bat 裡寫著要開，而這次啟動的 log 裡【沒有】對應那一行。" -ForegroundColor Yellow
+        Write-Host "  最可能的原因：這次沒有重跑【排程工作】，接手的是舊的那個" -ForegroundColor Yellow
+        Write-Host "  crash-restart 迴圈，而它拿的是舊的環境變數。" -ForegroundColor Yellow
+        Write-Host "  處置：到工作排程器把 MOTRIX ERP 那個工作【結束後重新執行】。" -ForegroundColor Yellow
+        Write-Host "  不處理的後果：服務正常、畫面正常，而雷達不掃、地圖上沒有點。" -ForegroundColor Yellow
+        Write-Host "======================================" -ForegroundColor Yellow
+    }
 } elseif ($SkipAutoRollback) {
     Write-Host ""
     Write-Host "======================================" -ForegroundColor Yellow
