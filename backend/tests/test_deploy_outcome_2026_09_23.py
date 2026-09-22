@@ -1647,6 +1647,49 @@ def _guarded(lines, idx, window=4):
     return None
 
 
+#: 「把新版寫進正式機」那一對（`$PackagePath` → `$BackendDir`）。
+#: 🔑 它的守門**在本輪之前就存在** ⇒ 拿它當 `_guarded()` 的參照，
+#:    而不是拿本輪才要求的那幾對（釘在會被修好的東西上，修好那天就失效）。
+_ROBO_APPLY_NEW = _re.compile(
+    r'^\s*(?:\$\w+\s*=\s*)?robocopy\s+\(Join-Path\s+\$PackagePath\s+'
+    r'"(?:backend|frontend)"\)')
+
+
+def _assert_the_guard_detector_still_works(lines, where):
+    """⚙️ **共用路徑的正對照**：證明 `_guarded()` 這個量法**本身**還在運作。
+
+    ## 🔴 為什麼需要「第二種」正對照
+
+    本檔的另一個正對照（`len(rows) == 2` 的錨點自檢）走的是 `_ROBO_TO_*`，
+    **與 `_guarded()` 不是同一條量測路徑** ⇒ 它分辨不出「`_guarded()` 壞了」。
+    ```
+    2026-09-22 實際發生：`_guarded()` 裡的 regex 被 heredoc 塞進一個
+    看不見的 0x08 ⇒ 它永遠回 None ⇒ 三題紅，訊息說「產品沒有守門」
+    ⇒ 而錨點自檢**維持綠** ⇒ 我因此去讀產品碼，而產品是對的
+    ```
+    🔑 **量法壞了與產品壞了，要分得出來。** 這一支就是那個分辨器：
+    它壞了 ⇒ 這一支與主題**一起紅** ⇒ 那是「量法壞了」的訊號。
+
+    ## ⚠️ 兩個正對照**看起來很像，而它們分辨的是不同的東西**
+    ```
+    _assert_the_guard_detector_still_works  ← 走 `_guarded()`：分辨「量法壞了」
+    assert len(rows) == N（錨點自檢）        ← 走 `_ROBO_TO_*`：分辨「錨點命中 0 行」
+    ```
+    ☠️ **刪掉任何一個，都會失去一種辨識力**（A-2 提：它們像到會被當成重複）。
+    """
+    refs = [i for i, ln in enumerate(lines) if _ROBO_APPLY_NEW.match(ln)]
+    assert refs, (
+        "`%s`：找不到「把新版寫進正式機」那一對 robocopy ——\n"
+        "🔑 這一支正對照的**參照點**不見了，它已經不能證明任何事。" % where)
+    assert any(_guarded(lines, i) for i in refs), (
+        "`%s`：`_guarded()` 對**本來就有守門**的那一對也回 None ——\n"
+        "☠️ **壞掉的是量法，不是產品。**（`:437`／`:441` 的 `-ge 8 ⇒ Fail` "
+        "在本輪之前就存在。）\n"
+        "🔑 2026-09-22 真的發生過：regex 裡被塞進一個看不見的 `0x08`，\n"
+        "   而那一次三題紅、訊息指向產品、錨點自檢維持綠。\n"
+        "📌 查法：`grep` 看不見控制字元，用 `cat -A`。" % where)
+
+
 def _robo_rows(ps1, pattern):
     lines = ps1.read_text(encoding="utf-8", errors="replace").splitlines()
     return lines, [i for i, ln in enumerate(lines)
@@ -1670,6 +1713,12 @@ def test_rp1_the_snapshot_copies_say_when_they_failed():
        只檢查而不中止等於沒檢查（照樣走下去，快照照樣殘缺）。
     """
     lines, rows = _robo_rows(APPLY_PS1, _ROBO_TO_SNAPSHOT)
+
+    # ⚙️ 正對照①（**共用路徑**）：分辨「`_guarded()` 這個量法壞了」。
+    _assert_the_guard_detector_still_works(lines, APPLY_PS1.name)
+
+    # ⚙️ 正對照②（**獨立路徑**）：分辨「錨點命中 0 行」——與①**不是**同一件事，
+    #    ①走 `_guarded()`、②走 `_ROBO_TO_SNAPSHOT`。**刪掉任一個都會少一種辨識力。**
     assert len(rows) == 2, (
         "「正式機 → 快照」的 robocopy 抓到 %d 行，預期 2 行（backend／frontend）——\n"
         "🔑 0 行 ⇒ **儀器失效**，這一題會因為量不到而綠。" % len(rows)
@@ -1758,6 +1807,15 @@ def test_rp2_rp3_the_restore_copies_say_when_they_failed(ps1, prefix, rp):
     ⚙️ 值域 1:1 照舊：`%s_backend`／`%s_frontend` 各一次。
     """
     lines, rows = _robo_rows(ps1, _ROBO_TO_PROD)
+
+    # ⚙️ 正對照①（共用路徑，分辨「量法壞了」）——參照點只在 `apply_update.ps1`
+    #    （`rollback_update.ps1` 沒有「把新版寫進正式機」那一對）。
+    #    ⚠️ 兩支共用同一個 `_guarded()` ⇒ 在這裡驗一次就夠，而**不可以不驗**。
+    _assert_the_guard_detector_still_works(
+        APPLY_PS1.read_text(encoding="utf-8", errors="replace").splitlines(),
+        APPLY_PS1.name)
+
+    # ⚙️ 正對照②（獨立路徑，分辨「錨點命中 0 行」）
     assert len(rows) == 2, (
         "`%s`：「快照 → 正式機」的 robocopy 抓到 %d 行，預期 2 行 ——\n"
         "🔑 0 行 ⇒ **儀器失效**。" % (ps1.name, len(rows))
