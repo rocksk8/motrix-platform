@@ -28,6 +28,8 @@ QL(19): QL5 QL6 QL7 QL8 QL9 QL10 QL11 QL12 QL13 QL14 QL15 QL16 QL17 QL18 QL19 QL
 P0(4):  P0-00 P0-0 P0-1 P0-2
 RP(3):  RP1 RP2 RP3
 VP(1):  VP1
+UI(3):  UI6 UI8 UI9
+MG(1):  MG1
 ```
 
 > 📌 `RP`（restore path）是 2026-09-22 21:4x 由 A 明著搬進 `THIS` 的。
@@ -80,6 +82,10 @@ VC(2):  VC2 VC3
 P1(1):  P1-1
 P2(5):  P2-1 P2-3 P2-4 P2-5 P2-6
 VP(4):  VP2 VP3 VP4 VP5
+FN(4):  FN1 FN2 FN3 FN4
+MG(1):  MG2
+TC(4):  TC1 TC2 TC3 TC4
+FE(1):  FE1
 ```
 
 > 📌 `VP`（verify package）＝ `backend/tools/verify_package.py` 四項，
@@ -118,6 +124,7 @@ GB(1):  GB20
 RG(18): RG1 RG2 RG3 RG4 RG5 RG6 RG7 RG8 RG9 RG10 RG11 RG12 RG13 RG14 RG15 RG16 RG17 RG18
 G(10):  G2 G3 G4 G5 G6 G7 G8 G9 G10 G11
 T(6):   T2 T3 T4 T5 T6 T7
+UI(1):  UI7
 P1(1):  P1-2
 ```
 
@@ -128,3 +135,38 @@ P1(1):  P1-2
 
 🔑 **`RG` 的理由欄不是「這一包不做」，是「落點在交付說明的 `§RG`，不在測試」。**
 **那一節填不出實際輸出 ⇒ 不打包。** 拒收的人是打包的那個人，不是 CI。
+
+---
+
+## 📌 2026-09-22 22:4x 補登記（理由全在 `STATE.md`）
+
+☠️ **這 14 個編號今晚全部發出過，而 `SCOPE.md` 裡一個都沒有。**
+成因：A 稍早那支修檔腳本 `AssertionError`（錨點不唯一），
+**而同一個指令裡 `STATE.md` 的 commit 成功、`push rc=0`** ⇒ A 看到 `rc=0` 就往下走。
+🔑 **assert 做了它的事，是 A 沒讀。**
+⇒ `§6`：**一個指令裡有多個步驟時，`rc=0` 只代表最後一步。**
+
+```
+THIS
+  UI6  財務分組加「出納」入口            §61／§65（裁甲，§46b 稀釋不是修掉）
+  UI8  sidebar 四處分組條件漂移          §68（三處是真的擋人）
+  UI9  出納**拆回獨立頁面**              §71／§77（驗收條件：兩頁讀同一組端點）
+  MG1  migration 版本號一致性守門        §66／§73（已綠 e15edb3）
+
+NEXT
+  FN1  財務（會計支出／科目樹）獨立頁面   §72b
+  FN2  獎金計算獨立頁面                  §72b
+  FN3  匯出傳票獨立頁面（T100 搬出 reports） §72b
+  FN4  五個模組各自的執行／操作歷史       §72a（一次定形狀，不要五種）
+  MG2  init_db() 執行期版本檢查          §75b（射程窄化 ⇒ 拒絕啟動）
+  TC1  backend/tools 每一支都要被分類     §62
+  TC2  分類成守門的要接在會被執行的流程上 §62（本身必須是 pytest 題）
+  TC3  欠帳清單每筆要指向存在的編號       §62
+  TC4  **盤點**解析型守門缺「輸入非空」斷言 §74c／§76a（只做盤點，不做可執行化）
+  FE1  t100BankAccounts 載入抽共用（四處） §77d（刻意製造的第四份）
+
+EXEMPT
+  UI7  act()/_deniedPages 認 query string
+       🔴 **「已不需要」不是「延後」** —— 理由 §71c：
+       出納拆成獨立頁面之後**不同檔名**，同檔名衝突整個消失。
+```

@@ -25592,3 +25592,49 @@ FE1  t100BankAccounts 的載入抽成共用（四處：reports／案件管理／
 - **執行者自責時，派工者不要順著收下。**
   「該問的問題沒問」若屬於派工者，**它不會因為執行者先道歉就變成執行者的**。
 
+
+## §78 · 🔴 A 對帳：今晚發了 15 個編號，`SCOPE.md` 裡**一個都沒有**（22:4x）
+
+```
+STATE 發過   UI6 UI7 UI8 UI9 FN1 FN2 FN3 FN4 MG1 MG2 TC1 TC2 TC3 TC4 FE1
+SCOPE 登記   （空）
+```
+
+### ☠️ 成因：assert 做了它的事，而 A 沒讀
+
+```
+A 稍早跑 scope_tc.py ⇒ **AssertionError: VP1 note anchor not unique**
+而**同一個 bash 指令裡** STATE.md 的 commit 成功、push 回 0
+⇒ A 看到 `push rc=0` 就往下走了
+```
+🔑 **⇒ `§6`：一個指令裡有多個步驟時，`rc=0` 只代表最後一步。**
+📌 而 A 今晚才剛寫過〈修檔腳本要有 assert〉的同一族規則
+——**assert 的價值在於有人讀它，而 A 把它跟後面那個 `rc=0` 混在一起看。**
+
+⚠️ **而它的後果正是 A 整晚在防的那一件**：
+`SCOPE.md` 是**打包關門讀的那一份** ⇒ 沒登記的編號**守門一個都看不見**。
+⇒ 若今晚就打包，那 15 個編號**不會被任何東西檢查**。
+
+### ✅ 已補登（`SCOPE.md`）
+
+```
+THIS   UI(3): UI6 UI8 UI9      MG(1): MG1
+NEXT   FN(4): FN1 FN2 FN3 FN4  MG(1): MG2  TC(4): TC1 TC2 TC3 TC4  FE(1): FE1
+EXEMPT UI(1): UI7   ← **「已不需要」不是「延後」**（§71c）
+```
+
+### ✅ §78a　而 A 這次的處置改了：**腳本結束碼與 commit 分開**
+
+```bash
+python scope_reconcile.py; rc=$?
+test $rc -eq 0 || { echo "ABORT: script failed, not committing"; exit 1; }
+```
+⇒ **腳本失敗就不 commit**，而不是讓後面的 `push rc=0` 蓋掉前面的失敗。
+
+### §6 新增
+
+- 🔴 **一個指令裡有多個步驟時，`rc=0` 只代表最後一步。**
+  ⚠️ 而中間那一步的 `AssertionError` **會印在畫面上**——
+  **它不是沒有被印出來，是被後面那個 `rc=0` 蓋過了注意力。**
+  ⇒ 作法：**會失敗的那一步跑完就檢查結束碼，失敗就中止整串。**
+
