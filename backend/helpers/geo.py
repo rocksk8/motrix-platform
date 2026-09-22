@@ -983,6 +983,46 @@ def _cache_get(address, source):
             "WHERE address=? AND source=?", (address, source)).fetchone()
     finally:
         conn.close()
+    return _row_to_result(row, address, source)
+
+
+def _cache_get_many(address, sources):
+    """**一次連線**讀多個來源的快取。回 `{source: GeoResult}`，過期的不收。
+
+    🔑 與 `_cache_get()` 的差別只有「開幾次連線」——
+    過期判斷、欄位、回傳形狀完全一樣，**刻意共用同一段邏輯**
+    （`_row_to_result`），否則兩份會分岔而症狀是「某一階的 TTL 不生效」。
+
+    ⚠️ **回的是 dict 不是 list**：呼叫端要自己決定順序。
+    ☠️ 讓 SQL 決定順序的話，`min_source`（GC3）與「google 階優先」那一段
+    會**靜默**改變行為 —— 而那是 A9 那個坑的形狀。
+    """
+    sources = [x for x in (sources or []) if x]
+    if not address or not sources:
+        return {}
+    from db import get_db
+    marks = ",".join("?" * len(sources))
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            "SELECT source, lat, lon, precision, created_at FROM geocode_cache "
+            "WHERE address=? AND source IN (%s)" % marks,
+            (address, *sources)).fetchall()
+    except Exception:       # noqa: BLE001 —— 讀不到快取不該讓查詢整個失敗
+        logger.exception("_cache_get_many failed: %s", address)
+        return {}
+    finally:
+        conn.close()
+    out = {}
+    for row in rows:
+        hit = _row_to_result(row, address, row["source"])
+        if hit:
+            out[row["source"]] = hit
+    return out
+
+
+def _row_to_result(row, address, source):
+    """一列 `geocode_cache` → `GeoResult`。**過期的回 `None`。**"""
     if not row:
         return None
     created = (row["created_at"] or "")[:10]
@@ -1164,12 +1204,28 @@ def cached_only(address, min_source=None):
         return None
     if min_source == SOURCE_GOOGLE and _google_key_configured():
         return _cached_stage(address, SOURCE_GOOGLE)
-    for _name, source in _STAGES:
-        hit = _cached_stage(address, source)
+
+    # 🔴 **一次連線問完四階**，不是四次。
+    # ☠️ 已知查不到的地址永遠不在記憶體裡 ⇒ 四階全部落到資料庫
+    #    ⇒ 20 個地址 = 80 次 `get_db()`＋`SELECT`＋`close()`。
+    #    正常優先權下貼著 1 秒門檻過，BelowNormal 下 2.20 秒 ⇒ 紅。
+    # 🔑 而正式機上的樣子更要緊：53 個已知 miss × 4 階 ≈ 2.6~5.8 秒，
+    #    **而每次請求的預算是 5 秒** ⇒ 它們把牆上時鐘吃光，
+    #    真正該查的那幾個走到 deadline ⇒ 畫面說「這次來不及」。
+    #    ⇒ 使用者的症狀只解掉一半，**而那一半正是他抱怨的那一半**。
+    order = [source for _name, source in _STAGES] + [SOURCE_NOMINATIM_DISTRICT]
+    # 記憶體先看（免費），只有沒命中的才進那一次查詢。
+    missing = [src for src in order if (address, src) not in _CACHE]
+    fetched = _cache_get_many(address, missing) if missing else {}
+    for src, hit in fetched.items():
+        _CACHE[(address, src)] = hit
+
+    # ⚠️ **順序在這裡決定，不在 SQL 裡** —— 照 `_STAGES`，退階墊底。
+    for src in order:
+        hit = _CACHE.get((address, src))
         if hit:
             return hit
-    # 退階那一階也有自己的快取鍵（見 `locate_cached`）。
-    return _cached_stage(address, SOURCE_NOMINATIM_DISTRICT)
+    return None
 
 
 #: 一次請求裡，據點最多真的去查幾個。
