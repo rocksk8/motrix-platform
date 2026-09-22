@@ -177,7 +177,24 @@ _DECLARED_HEADING = re.compile(
     r"^#{2,4}\s+[^\n]*?\b([A-Z]{1,2}\d{1,2}[a-z]?)\s*[·:]", re.M)
 
 #: 測試函式名裡的編號：`def test_sl3_...` / `def test_d20b_...`
-_IMPLEMENTED = re.compile(r"^def test_([a-z]{1,2}\d{1,2}[a-z]?)_", re.M)
+#: 🔴 `GT1①`（A 2026-09-23）：認題名裡**每一個**編號，不是只認第一個。
+#: ```
+#: test_rp2_rp3_the_restore_copies_say_when_they_failed
+#:   舊  ^def test_([a-z]{1,2}\d{1,2}[a-z]?)_   => ['rp2']   ⇒ **RP3 拿不到信用**
+#:   新                                          => ['rp2','rp3']
+#: ```
+#: ⚠️ 只吃**開頭連續**的那幾段（`test_rp2_rp3_…`），不掃整個函式名 ——
+#:    掃整個名字會把 `…_v2` `…_step3` 那種尾綴當成編號，**而那是假陽性**。
+_IMPLEMENTED_HEAD = re.compile(r"^def test_((?:[a-z]{1,2}\d{1,2}[a-z]?_)+)", re.M)
+_IMPLEMENTED_ONE = re.compile(r"([a-z]{1,2}\d{1,2}[a-z]?)_")
+
+#: `GT1②`：**題名帶不了編號**的那幾支 —— `編號 -> 測試函式名`。
+#: 🔴 A 明著裁：**不可以為了讓閘門認得而改測試函式名** ⇒ 改閘門，不改題。
+#: ⚠️ 這是**最後手段**，只放真的帶不了編號的。
+#: ⚙️ 反向控制：下面那一題要求這裡的函式名**真的存在**（否則這張表會爛掉）。
+NAMED_ELSEWHERE = {
+    "UI8": "test_every_section_condition_is_the_union_of_its_items",
+}
 
 #: 🔴 **明文豁免：這一條的驗證方式不是 pytest。**
 #: ⚠️ 理由欄要寫**它是怎麼驗的**（⑤突變／⑥回歸／目視），
@@ -829,8 +846,14 @@ def _implemented_where():
     """每個編號 → 寫著它的測試檔清單。"""
     where = defaultdict(set)
     for path in sorted(TESTS.glob("test_*.py")):
-        for m in _IMPLEMENTED.finditer(path.read_text(encoding="utf-8")):
-            where[m.group(1).upper()].add(path.name)
+        src = path.read_text(encoding="utf-8")
+        for m in _IMPLEMENTED_HEAD.finditer(src):
+            for num in _IMPLEMENTED_ONE.findall(m.group(1)):
+                where[num.upper()].add(path.name)
+        # `GT1②`：題名帶不了編號的那幾支，用明著的對照表。
+        for num, fname in NAMED_ELSEWHERE.items():
+            if re.search(r"^def %s\b" % re.escape(fname), src, re.M):
+                where[num.upper()].add(path.name)
     return where
 
 
@@ -1258,3 +1281,84 @@ def test_no_prefix_in_scope_has_a_hole_that_the_spec_declares():
           "⇒ 要嘛列進 `THIS`，要嘛明著放進 `NEXT`／`EXEMPT` —— "
           "**兩種都是一個決定，而現在沒有人做過。**"
     )
+
+
+# ══════════════════════════════════════════════════════════════════════
+# GT1 —— 閘門自己的盲點（A 2026-09-23 `§139`）
+# ══════════════════════════════════════════════════════════════════════
+
+def test_gt1_every_number_in_a_test_name_gets_credit():
+    """⚙️ `GT1①` **題名裡的每一個編號都要算數。**
+
+    ```
+    test_rp2_rp3_the_restore_copies_say_when_they_failed
+      舊解析 => ['rp2']        ⇒ **RP3 拿不到信用** ⇒ 閘門說它缺題
+      新解析 => ['rp2','rp3']
+    ```
+    ☠️ 而它造成的傷害是**往外的**：A 依據「RP3 沒有題」派了一次工，
+       而那四個字串的斷言一直都在（只是組出來的、grep 看不到）。
+    🔑 ⇒ 一道**認不得自己看得到的東西**的閘門，會讓人去做已經做完的事。
+
+    ⚙️ 而尾綴不可以被當成編號（`…_v2` / `…_step3`）—— 那是假陽性的方向。
+    """
+    got = _IMPLEMENTED_HEAD.search(
+        "def test_rp2_rp3_the_restore_copies_say_when_they_failed(a):")
+    assert got, "解析器看不到 `test_rp2_rp3_…` —— **儀器壞了**。"
+    nums = [n.upper() for n in _IMPLEMENTED_ONE.findall(got.group(1))]
+    assert nums == ["RP2", "RP3"], (
+        "`test_rp2_rp3_…` 解析出 %s，預期 ['RP2','RP3']。" % nums)
+
+    tail = _IMPLEMENTED_HEAD.search("def test_the_split_v2_is_fine(a):")
+    assert tail is None, (
+        "`test_the_split_v2_…` 被解析成一個編號 ——\n"
+        + "☠️ 那個方向是**假陽性**：尾綴會變成一個沒有人宣告過的幽靈編號。")
+
+    one = _IMPLEMENTED_HEAD.search("def test_ui9_something(a):")
+    assert one and [n.upper() for n in _IMPLEMENTED_ONE.findall(one.group(1))] \
+        == ["UI9"], "單一編號的題解析壞了 —— **既有的全部會失去信用**。"
+
+
+def test_gt1_the_named_elsewhere_table_points_at_real_functions():
+    """⚙️ `GT1②` 的**反向控制：對照表裡的函式名必須真的存在。**
+
+    ☠️ 少了它，這張表會變成一份**讓閘門閉嘴的清單** ——
+       打錯一個字、或那支測試被改名／刪掉，閘門照樣給信用，
+       而它看起來跟「那一題還在」一模一樣。
+    🔑 〈守門要驗有沒有人做過決定〉配的反向控制：
+       **能被加進去的東西，必須也能被要求拿出來。**
+    """
+    missing = []
+    for num, fname in NAMED_ELSEWHERE.items():
+        hit = any(re.search(r"^def %s\b" % re.escape(fname),
+                            p.read_text(encoding="utf-8"), re.M)
+                  for p in sorted(TESTS.glob("test_*.py")))
+        if not hit:
+            missing.append("%s -> %s" % (num, fname))
+    assert not missing, (
+        "`NAMED_ELSEWHERE` 有 %d 筆指不到任何函式：\n  " % len(missing)
+        + "\n  ".join(missing)
+        + "\n☠️ 那一列**讓閘門閉嘴**，而它看起來跟「那一題還在」一模一樣。\n"
+        + "⇒ 改名了就跟著改；刪掉了就把這一列拿掉。")
+
+
+def test_gt1_every_this_number_is_declared_in_the_spec():
+    """🔴 `GT1③` **`SCOPE` 的 `THIS` 裡每一個編號，規格都要宣告過。**
+
+    ☠️ 沒宣告的那些**兩邊都空**，所以它們在既有的兩道題裡**互相抵銷**：
+    ```
+    「每個宣告的條件都要有題」  => 它不在宣告裡 ⇒ 不會被點名
+    「沒有題宣稱規格沒宣告的號」=> 它沒有題     ⇒ 不會被點名
+    ⇒ ⇒ **一個在 THIS 裡、沒有宣告、也沒有題的編號，兩邊都綠。**
+    ```
+    🔑 而 `THIS` 是**打包關門讀的那一份** ⇒ 它會說「這一包該全綠的都綠了」，
+       **而那個編號從來沒有被守過。**
+    """
+    this = _scope_sections()["THIS"]
+    declared = _declared()
+    missing = sorted(this - declared - set(EXEMPT) - set(PENDING)
+                     - AMBIGUOUS_ACK - C_OWNED.keys())
+    assert not missing, (
+        "`THIS` 有 %d 個編號規格沒有宣告過：%s\n" % (len(missing), missing)
+        + "☠️ 它們在既有兩道題裡**互相抵銷** —— 兩邊都空 ⇒ 兩邊都綠，\n"
+          "   而打包關門讀的正是 `THIS`。\n"
+        + "⇒ 要嘛把它宣告進規格（用守門認得的樣式），要嘛把它移出 `THIS`。")
