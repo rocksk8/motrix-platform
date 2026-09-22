@@ -54,6 +54,15 @@ def _json_backup_tables() -> set:
             for t in re.findall(r"FROM\s+(\w+)", sql)}
 
 
+#: `BG1丙`（A 2026-09-23）：**`set` 改 `dict`，理由變成資料。**
+#:
+#: ☠️ 原本理由寫在**群組註解**裡 ⇒ 「每一張排除的表都要有理由」這件事
+#:    **沒有任何東西在守** —— 而下面那道題的 docstring 宣稱它守得住。
+#: 🔑 〈散文對工具是隱形的〉：註解裡的理由，守門讀不到。
+#: ⚠️ 語意**照抄原註解**，不重寫（A 明著交代）。
+SELECT = "選型資料庫七類：內容由 sync_*.py 腳本產生，git 裡有來源"
+ENVG = "環境指引：內容由腳本產生，git 裡有來源"
+
 # 刻意不進「每日 JSON 匯出」的表，以及理由。
 #
 # **2026-09-14 傍晚更新**：這份清單原本有 68 筆（JSON 只涵蓋 8/76 張表），
@@ -62,52 +71,46 @@ def _json_backup_tables() -> set:
 # 留在這裡的兩類都是「重建它沒有意義」，不是「忘了做決定」。
 _NOT_IN_JSON_BACKUP = {
     # ── 選型資料庫（七類導覽）：內容由 sync_*.py 腳本產生，git 裡有來源 ──
-    "switch_categories", "switch_products", "switch_scenarios", "switch_fit",
-    "monitor_categories", "monitor_products", "monitor_scenarios", "monitor_fit",
-    "access_categories", "access_products", "access_scenarios", "access_fit",
-    "gateway_categories", "gateway_products", "gateway_scenarios", "gateway_fit",
-    "automation_categories", "automation_products", "automation_scenarios", "automation_fit",
-    "netarch_families", "netarch_generations", "netarch_products",
-    "env_guide_environments", "env_guide_links", "env_guide_recommendations",
+    "switch_categories": SELECT, "switch_products": SELECT,
+    "switch_scenarios": SELECT, "switch_fit": SELECT,
+    "monitor_categories": SELECT, "monitor_products": SELECT,
+    "monitor_scenarios": SELECT, "monitor_fit": SELECT,
+    "access_categories": SELECT, "access_products": SELECT,
+    "access_scenarios": SELECT, "access_fit": SELECT,
+    "gateway_categories": SELECT, "gateway_products": SELECT,
+    "gateway_scenarios": SELECT, "gateway_fit": SELECT,
+    "automation_categories": SELECT, "automation_products": SELECT,
+    "automation_scenarios": SELECT, "automation_fit": SELECT,
+    "netarch_families": SELECT, "netarch_generations": SELECT,
+    "netarch_products": SELECT,
+    "env_guide_environments": ENVG, "env_guide_links": ENVG,
+    "env_guide_recommendations": ENVG,
     # ── 執行期狀態／流水號／軌跡：重建即可，或量太大而價值太低 ──
-    # sessions/login_rate_limit/edit_presence：登入態與鎖，還原後本來就該是空的
-    # schema_version：由 migration 自己寫，抄舊值反而會讓 migration 不跑
-    # quote_seq/payslip_seq：流水號，整庫還原時跟著單據一起回來；
-    #   走到 JSON 重建那一層時要人工對一次最後號碼（單據 JSON 裡看得到）
-    # user_request_log/user_activity_daily：操作軌跡與時數，筆數最大、
-    #   對「把系統救回來」沒有幫助；整庫複製那層仍然有
-    # user_list_prefs：每個人的排序偏好，重設一次就好
-    # tender_fetch_log：標案雷達的抓取軌跡（時間／認不認得／dropped 數）。
-    #   它回答的是「雷達瞎了沒」，而還原之後要看的是「現在會不會動」，
-    #   下一次抓取就會重新長出來。每日一筆、量會一直累積，
-    #   對「把系統救回來」沒有幫助。整庫複製那層仍然有。
-    #   ⚠️ 同一批的另外三張表（tender_watches／tenders／tender_hits）**都要備份**，
-    #   不要看到 tender_ 開頭就跟著排除——tender_watches 是使用者自己建的搜尋條件，
-    #   失去它的症狀是「功能還在，只是不再找到東西」，而且沒有人會發現它不見了。
+    "sessions": "登入態與鎖，還原後本來就該是空的",
+    "login_rate_limit": "登入態與鎖，還原後本來就該是空的",
+    "edit_presence": "登入態與鎖，還原後本來就該是空的",
+    "schema_version": "由 migration 自己寫，抄舊值反而會讓 migration 不跑",
+    "quote_seq": "流水號，整庫還原時跟著單據一起回來；"
+                 "走到 JSON 重建那一層時要人工對一次最後號碼（單據 JSON 裡看得到）",
+    "payslip_seq": "流水號，同 quote_seq",
+    "user_request_log": "操作軌跡，筆數最大、對「把系統救回來」沒有幫助；"
+                        "整庫複製那層仍然有",
+    "user_activity_daily": "時數統計，同 user_request_log",
+    "user_list_prefs": "每個人的排序偏好，重設一次就好",
+    "tender_fetch_log":
+        "標案雷達的抓取軌跡。它回答的是「雷達瞎了沒」，而還原之後要看的是"
+        "「現在會不會動」，下一次抓取就會重新長出來。⚠️ 同一批的 tender_watches／"
+        "tenders／tender_hits **都要備份** —— 不要看到 tender_ 開頭就跟著排除："
+        "tender_watches 是使用者自己建的搜尋條件，失去它的症狀是"
+        "「功能還在，只是不再找到東西」，而且沒有人會發現它不見了",
     # ── 2026-09-22 · geocode_cache：**排除的理由是隱私，不是「它只是快取」** ──
-    #
-    # ☠️ 這張表裡有 `contractors`（**外包名冊，自然人**）的**住家地址**
-    #    解析出來的經緯度。那張表今天才加上 `contractor_list` 權限
-    #    （`routers/contractors.py` 每一支都要 superadmin 或那個模組），
-    #    **而每日 JSON 備份會上傳到雲端硬碟。**
-    # 🔑 **備份它＝把「某人住家的經緯度」複製到雲端，而那份資料的權限保護
-    #    在備份裡不存在。**
-    #
-    # ⚠️ **「它只是快取」這個理由不成立**，要寫下來免得下一個人用它翻案：
-    #    重建**有**成本 —— 實測 2026-09-22：**147 列**，
-    #    而 `geo.GEOCODE_INTERVAL_SECONDS = 1.1` 的節流 ⇒ **約 2.7 分鐘**，
-    #    且**需要對外連線**（正式機不一定有，而那時地圖會整片空白）。
-    # 📌 真正的取捨是：**重建成本以分鐘計，而洩漏是不可逆的。**
-    #
-    # 📌 **第二道清單（`_BACKUP_OMITTED_ON_PURPOSE`）不要加它**：
-    #    那一道是**欄位**清單，只對「有進備份的表」生效
-    #    ⇒ 一張整個不備份的表放進去是一列指不到東西的資料，
-    #    **而那種列讀起來像一個決定。**
-    "geocode_cache",
-    "sessions", "login_rate_limit", "edit_presence", "schema_version",
-    "quote_seq", "payslip_seq", "user_request_log", "user_activity_daily",
-    "user_list_prefs", "tender_fetch_log",
+    "geocode_cache":
+        "🔴 **隱私**，不是「它只是快取」：這張表裡有 contractors（外包名冊，"
+        "自然人）住家地址解析出來的經緯度。那張表有 contractor_list 權限保護，"
+        "**而每日 JSON 備份會上傳到雲端硬碟** ⇒ 備份它＝把「某人住家的經緯度」"
+        "複製到雲端，而那份資料的權限保護在備份裡不存在",
 }
+
 
 
 def _all_tables(client) -> set:
@@ -129,7 +132,7 @@ def test_every_table_is_either_backed_up_or_explicitly_excluded(client):
     """
     tables = _all_tables(client)
     backed = _json_backup_tables()
-    undecided = tables - backed - _NOT_IN_JSON_BACKUP
+    undecided = tables - backed - set(_NOT_IN_JSON_BACKUP)
     assert not undecided, (
         "這些資料表既不在每日 JSON 備份裡，也不在本測試的排除清單裡：\n  "
         + "\n  ".join(sorted(undecided))
@@ -811,3 +814,95 @@ def test_department_and_division_references_are_valid(client, make_user):
     assert not orphans, (
         "組織階層有指向不存在對象的參照：\n  " + "\n  ".join(orphans)
         + "\n——部門篩選會讓這些人默默消失、主管簽核會找不到人，而不是報錯。")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# BG1 —— 排除清單自己沒有人守（A 2026-09-23，A-2 實跑找到）
+# ══════════════════════════════════════════════════════════════════════
+
+def test_bg1_every_excluded_table_still_exists(client):
+    """🔴 `BG1甲` **排除清單裡的每一張表，都必須真的存在。**
+
+    ☠️ 指不到東西的那幾列**讓清單看起來很完整**，而它們什麼都沒排除 ——
+       ⇒ 下一個人讀到的是「這 37 張都被決定過了」，
+         而其中幾張**早就不存在**，那個決定是對一個不存在的東西做的。
+    📌 現在就綠 ⇒ **它的價值在未來**：防這張清單爛掉。
+    🔑 〈不要用會動的名字〉的表格版：**一列指不到東西的資料，
+       讀起來卻像一個決定。**
+    """
+    tables = _all_tables(client)
+    ghost = sorted(set(_NOT_IN_JSON_BACKUP) - tables)
+    assert not ghost, (
+        "排除清單裡有 %d 張表不存在於資料庫：\n  " % len(ghost)
+        + "\n  ".join("%s —— 登記理由：%s"
+                      % (t, str(_NOT_IN_JSON_BACKUP[t])[:48]) for t in ghost)
+        + "\n☠️ 那幾列**讓清單看起來很完整**，而它們什麼都沒排除。\n"
+        + "⇒ 表被改名或刪掉了 ⇒ 把這幾列拿掉。")
+
+
+def test_bg1_every_excluded_table_has_a_reason(client):
+    """🔴 `BG1丙` **每一張排除的表都要有理由，而理由要是資料不是註解。**
+
+    ☠️ 原本那 37 張的理由寫在**群組註解**裡：
+    ```
+    test_every_table_is_either_backed_up_or_explicitly_excluded 的訊息逐字說
+      「或在本檔 _NOT_IN_JSON_BACKUP 註明不需要的理由」
+    而 `_NOT_IN_JSON_BACKUP` 是一個 **set** ⇒ **沒有任何東西在守那句話**
+    ```
+    🔑 〈散文對工具是隱形的〉：註解裡的理由，守門讀不到 ——
+       而那道 docstring 宣稱它守得住。
+    ⚙️ 而「理由」要有下限：一兩個字的理由等於沒有理由。
+    """
+    assert isinstance(_NOT_IN_JSON_BACKUP, dict), (
+        "`_NOT_IN_JSON_BACKUP` 是 %s，不是 dict ——\n"
+        % type(_NOT_IN_JSON_BACKUP).__name__
+        + "☠️ set 裝不下理由 ⇒ 「每一張都要有理由」這件事沒有東西在守。")
+    thin = sorted(t for t, why in _NOT_IN_JSON_BACKUP.items()
+                  if not isinstance(why, str) or len(why.strip()) < 8)
+    assert not thin, (
+        "這幾張排除的表沒有寫得出來的理由：%s\n" % thin
+        + "🔑 判準不是「有沒有填」，是**下一個人讀得出「為什麼重建它沒有意義」**。")
+
+
+def test_bg1_the_exclusion_list_cannot_swallow_the_whole_database(client):
+    """⚙️ `BG1` 的**真正反向控制**：排除清單不可以涵蓋全部的表。
+
+    ☠️ A-2 實跑（記憶體合成，未動檔）：
+    ```
+    把全部 94 張表塞進排除清單 => undecided=0 ／ stale=0 => **兩題都綠**
+    成因：`test_backup_list_has_no_stale_entries` 算的是 `backed - tables`，
+          **與排除清單無關** —— 而它的 docstring 說它守得住這件事
+    ```
+    🔑 **一個不對的防護，配一個聽起來對的描述** ⇒
+       沒有人會去補真正的那一道，**因為說明說它有了**。
+
+    ⚠️ 而判準**不可以是一個比例上限**（A 否決乙案）：
+    ```
+    「排除清單 ≤ 表數的 50%」 => 與 test_spec_coverage 上一版的
+       「差集不可以大於 25」同一個形狀 —— **魔術數字會隨規模失效，
+       某天變成一道永遠綠的門**
+    ```
+    ⇒ 改釘一個**不隨規模變動**的不變量：
+       **每日備份實際查到的表，必須與排除清單互斥、而且合起來不可以少於全部。**
+    """
+    tables = _all_tables(client)
+    excluded = set(_NOT_IN_JSON_BACKUP)
+    backed = _json_backup_tables()
+
+    overlap = sorted(excluded & backed)
+    assert not overlap, (
+        "這幾張表**同時**在備份清單與排除清單裡：%s\n" % overlap
+        + "☠️ 兩邊都有 ⇒ 沒有人知道它到底算不算被決定過，\n"
+          "   而「互斥且窮盡」那道分類從此分不出漏掉的那一張。")
+
+    assert excluded != tables, (
+        "排除清單涵蓋了**全部** %d 張表 ——\n" % len(tables)
+        + "☠️ 那樣 `undecided` 恆為 0 ⇒ 上面那道「每一張表都要做決定」**永遠綠**，\n"
+          "   而每日 JSON 備份**一張表都不會有**。\n"
+        + "🔑 這一格就是 A-2 實跑出來的那個洞。")
+
+    undecided = tables - backed - excluded
+    assert not undecided, (
+        "這幾張表兩邊都不在：%s\n" % sorted(undecided)
+        + "⚠️ 與上面那道題同一件事 —— 這裡重述是為了讓「互斥」與「窮盡」"
+          "在同一題裡讀得出來。")
