@@ -470,7 +470,7 @@
             <span class="h-kicker">MOTRIX 專案管理系統</span>
             <!-- 這三個節點刻意擠在同一行：標籤之間的換行會被當成一個空格，
                  中文句子中間會裂一條縫。 -->
-            <h1 class="h-hero__t"><span x-text="greeting"></span><template x-if="stats.waitingForMe > 0"><span>今天有 <em x-text="stats.waitingForMe"></em> 件事等您處理。</span></template><template x-if="!loading && stats.waitingForMe === 0"><span>目前沒有待您簽核的項目。</span></template></h1>
+            <h1 class="h-hero__t"><span x-text="greeting"></span><template x-if="stats.waitingForMe > 0"><span>今天有 <em x-text="stats.waitingForMe"></em> 件事等您處理。</span></template><template x-if="!loading && statsLoaded && stats.waitingForMe === 0"><span>目前沒有待您簽核的項目。</span></template><template x-if="!loading && !statsLoaded"><span>目前讀不到待辦數量，畫面上的數字暫時不準。</span></template></h1>
             <p class="h-hero__sub" x-text="heroSummary"></p>
             <div class="h-hero__acts">
               <a href="pages/approval-queue.html" class="btn btn-primary" style="text-decoration:none" x-show="canQuotation">
@@ -499,7 +499,7 @@
             <div class="h-band__k">等我簽核</div>
             <div class="h-band__n" x-text="stats.waitingForMe"></div>
             <div class="h-band__t">簽核佇列</div>
-            <p class="h-band__p" x-text="stats.waitingForMe > 0 ? '停在您這一關，處理完會自動往下一層送。' : '目前沒有待您簽核的單據。'"></p>
+            <p class="h-band__p" x-text="stats.waitingForMe > 0 ? '停在您這一關，處理完會自動往下一層送。' : (statsLoaded ? '目前沒有待您簽核的單據。' : '讀不到待簽核清單（可能是連線或伺服器正在重啟），這裡的數字暫時不準。')"></p>
           </a>
           <a href="pages/quotations.html" class="h-band__c">
             <div class="h-band__k">有效期將屆</div>
