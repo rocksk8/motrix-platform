@@ -224,12 +224,27 @@ def reset_demo_db() -> None:
     if os.path.exists(DEMO_DB_PATH):
         conn = _connect(DEMO_DB_PATH)
         try:
-            tables = [r["name"] for r in conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
-            ).fetchall()]
+            # 🔴 **清單是明著寫的，不再從 `sqlite_master` 動態取得**（`DM1`）。
+            #
+            # ☠️ 動態取得 ⇒ 清單**一定包含 `account_items`** ⇒ 而 `v93` 的
+            #    TRIGGER 會 `RAISE(ABORT)` ⇒ `reset_demo_db()` 拋例外 ⇒
+            #    **demo 第二次登入 500**（第一次會成功，所以「我登入試了，可以」
+            #    漏得掉它）。
+            # ⚠️ `PRAGMA foreign_keys=OFF` **對 TRIGGER 無效** —— 那個開關管的是
+            #    外鍵約束，不是觸發器。
+            #
+            # 🔑 而保留 `account_items` 的理由**不是「繞過 TRIGGER」**，是
+            #    **那 547 筆是系統資料不是使用者資料** —— demo 使用者沒有建立
+            #    它們，也不該因為重置而失去它們。
+            # ☠️ 理由寫錯的代價很具體：下一個人會被帶去改那道 TRIGGER，
+            #    **而那道 TRIGGER 是對的**。
+            missing = [t for t in DEMO_CLEARED_TABLES
+                       if t not in {r["name"] for r in conn.execute(
+                           "SELECT name FROM sqlite_master WHERE type='table'")}]
             conn.execute("PRAGMA foreign_keys=OFF")
-            for t in tables:
-                conn.execute(f"DELETE FROM {t}")
+            for t in DEMO_CLEARED_TABLES:
+                if t not in missing:
+                    conn.execute(f"DELETE FROM {t}")
             conn.commit()
             conn.execute("VACUUM")
         finally:
@@ -240,6 +255,65 @@ def reset_demo_db() -> None:
               DEMO_INVOICE_VOUCHER_PDF_ARCHIVE_DIR, DEMO_PAYMENT_REQUEST_PDF_ARCHIVE_DIR,
               DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR):
         _wipe_dir(d)
+
+
+# ══════════════════════════════════════════════════════════════════════
+# demo 重置的兩份清單（`DM1`，2026-09-23）
+# ══════════════════════════════════════════════════════════════════════
+#
+# 🔑 名字描述的是**會發生什麼**，不是一個語意宣稱：
+# ```
+# DEMO_PRESERVED_TABLES  重置時**不清**
+# DEMO_CLEARED_TABLES    重置時清空
+# ```
+# ⚠️ 刻意**不叫**「系統資料／使用者資料」—— 那兩個詞擔不起這份清單：
+#    選型資料庫那 28 張目錄表**是系統資料**，而它們在這裡屬於「會被清」的一邊，
+#    因為清除迴圈連 `schema_version` 一起清掉 ⇒ `init_db()` 看到版本 0 ⇒
+#    **整批 migration 重跑** ⇒ 種子資料全部重灌。
+#    🔑 ⇒ **「這張表是不是系統資料」與「它會不會被清」是兩個問題**，
+#       而把它們用同一個名字綁在一起，下一個人會照名字做出錯的決定。
+#
+# 🔴 兩份清單必須**互斥且窮盡**（對 `sqlite_master`）：
+# ```
+# 少一張   ⇒ 新表沒有人分類 ⇒ 守門紅
+# 多一張   ⇒ 清單裡有不存在的表 ⇒ 它爛掉了 ⇒ 守門紅
+# 兩邊都有 ⇒ 沒有人真的決定過 ⇒ 守門紅
+# ```
+# ☠️ 而單向的排除清單可以靠「**把每一張表都放進去**」變綠 ——
+#    那樣 demo 從此不再清空任何東西，**而它全綠**。
+DEMO_PRESERVED_TABLES = frozenset((
+    # 🔴 547 筆法定會計項目：**系統資料**，而且在資料層是唯讀的（`v93` TRIGGER）。
+    "account_items",
+))
+
+DEMO_CLEARED_TABLES = frozenset((
+    "access_categories", "access_fit", "access_products",
+    "access_scenarios", "approval_delegates", "audit_log",
+    "automation_categories", "automation_fit", "automation_products",
+    "automation_scenarios", "case_action_items", "case_change_requests",
+    "case_extra_expenses", "case_stage_visits", "case_stages",
+    "case_updates", "completion_notes", "contractor_dispatches",
+    "contractor_payment_vouchers", "contractors", "customers",
+    "daily_task_completions", "daily_task_edit_log", "daily_tasks",
+    "departments", "dev_cases", "dev_logs", "divisions", "edit_presence",
+    "env_guide_environments", "env_guide_links",
+    "env_guide_recommendations", "gateway_categories", "gateway_fit",
+    "gateway_products", "gateway_scenarios", "geocode_cache",
+    "geocode_usage", "invoice_vouchers", "login_rate_limit",
+    "module_versions", "monitor_categories", "monitor_fit",
+    "monitor_products", "monitor_scenarios", "netarch_families",
+    "netarch_generations", "netarch_products", "network_plans",
+    "notifications", "parts", "payment_requests", "payslip_seq",
+    "payslips", "project_logs", "project_stages", "projects",
+    "purchase_suggestion_status", "quotations", "quote_seq",
+    "schema_version", "sessions", "shipping_notes", "stock_batches",
+    "stock_items", "suppliers", "switch_categories", "switch_fit",
+    "switch_products", "switch_scenarios", "system_settings",
+    "t100_export_confirmations", "tender_fetch_log", "tender_hits",
+    "tender_watches", "tenders", "user_activity_daily", "user_list_prefs",
+    "user_request_log", "users", "vendor_contractors",
+    "webauthn_credentials", "work_logs",
+))
 
 
 # ── Schema init ───────────────────────────────────────────────────────────────
