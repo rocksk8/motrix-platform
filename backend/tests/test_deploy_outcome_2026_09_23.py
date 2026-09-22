@@ -1608,14 +1608,42 @@ _ROBO_TO_PROD = _re.compile(
     r'\s+\$(?:Backend|Frontend)Dir\b')
 
 
-def _guarded(lines, idx, window=3):
-    """第 `idx` 行（0-based）之後 `window` 行內，有沒有一個檢查結束碼並 `Fail` 的守門。
+#: 任何一行 robocopy（不分方向）—— `_guarded()` 用它當「掃描到此為止」的界線。
+_ANY_ROBO = _re.compile(r'^\s*(?:\$\w+\s*=\s*)?robocopy\b')
+
+
+def _guarded(lines, idx, window=4):
+    """第 `idx` 行的 robocopy **自己**有沒有一個檢查結束碼並 `Fail` 的守門。
 
     ⚠️ 同時要求 `$LASTEXITCODE` **與** `Fail` —— 只檢查不中止等於沒檢查。
+
+    🔴 **掃描在「下一個 robocopy」就停**，這不是題目的潔癖：
+    ```
+    $LASTEXITCODE 是**全域**的 —— 它只記得「最後一個外部指令」
+    ⇒ 守門寫在下一個 robocopy **之後** ⇒ 它檢查的是**那一個**，不是這一個
+    ```
+    ☠️ 而 `apply_update.ps1` 的四對 robocopy 是**兩兩相鄰交錯**的
+       （`robocopy backend / 檢查 / robocopy frontend / 檢查`）
+       ⇒ 固定視窗會讓**鄰居的守門冒充自己的**。
+
+    ⚠️ **這一段是 v2。v1 用固定三行視窗，而 ⑤ 反向驗證當場抓到它**：
+    ```
+    突變  把 backend 那一行守門刪掉
+    v1    ✅ 綠 —— 因為視窗吃到了 frontend 的守門
+    v2    🔴 紅
+    ```
+    🔑 〈探針與被測對象糾纏〉：**測試綠了，而壞的是我的量法。**
+       而它只在「兩個同類動作相鄰」時才會發生 —— 一般情況看不出來。
     """
-    for ln in lines[idx: idx + 1 + window]:
+    for off, ln in enumerate(lines[idx + 1: idx + 1 + window]):
+        if _ANY_ROBO.match(ln):
+            break
         if "$LASTEXITCODE" in ln and _re.search(r'\bFail\b', ln):
             return ln.strip()
+    # 同一行寫完的形式（`robocopy ...; if (...) { Fail ... }`）也算
+    if ("$LASTEXITCODE" in lines[idx]
+            and _re.search(r'\bFail\b', lines[idx])):
+        return lines[idx].strip()
     return None
 
 
