@@ -137,57 +137,6 @@ db.py  bonus_award_edit_log(id, award_id, changed_by, changed_at,
 
 ---
 
-## §4 處置
-
-### ① 擋空原因（一行）
-
-```python
-reason = (body.get("reason") or "").strip()
-if not reason:
-    raise HTTPException(400, "請填寫退回原因。")
-```
-⚠️ 而**措辭要與另外兩支一致**（「請填寫…原因。」）—— 不要另外發明一句。
-
-### ② 退回時寫 `bonus_award_edit_log`，`retention='permanent'`
-
-```python
-append_edit_log(conn, award_id, _user_name(user), [
-    {"field": "status",        "from": status,        "to": "草稿"},
-    {"field": "approval_json", "from": row["approval_json"], "to": "{}"},
-    {"field": "退回原因",       "from": "",            "to": reason},
-], table="bonus_award_edit_log", retention="permanent", changed_at=now)
-```
-
-```
-🔴 第二列是 §2③ 的留底 —— **在 UPDATE 之前讀 `row["approval_json"]`**
-   ☠️ UPDATE 之後才讀就是 `'{}'`，而那一列會寫成 `{} -> {}`
-      => **一列看起來很正常的紀錄，而它什麼都沒記住**
-      📌 〈假綠燈：斷言驗到自己設的值〉的寫入端版本
-⚠️ 第三列的 `from` 是空字串 —— 那**不是**缺改前值：
-   退回原因是**新產生的**，本來就沒有舊值
-   🔑 而 `append_edit_log` 要能接受它（B 要確認 `MissingOldValue` 的判準
-      是「鍵不存在」還是「值為空」——**我沒讀那一段**，見 §6②）
-```
-
-### ③ 讀取端：**只有一半成得立** —— 見 §3b
-
-```
-🔑 `JV22` 解的是「**上次退回** 與 **這次編修**要成對」
-🔴 而獎金單**沒有「這次編修」** —— 它改不了（§3b）
-⇒ 本規格的顯示是：「上一輪由 X 覆核、Y 主管簽過，在 <時間> 被 Z 退回，原因：…」
-⚠️ 而**不要留一個空的「這次編修」區塊** ——
-   ☠️ 它會顯示「（無）」，而使用者會以為是壞了
-```
-
-### 🔴 ④ 這一區**不可以有任何編輯或刪除控制項**（沿用 `JV22 §6`）
-
-```
-使用者原話（JV22）：「長期記憶，**這個不能刪除**」
-⇒ 同一句話對獎金單成立，而 A 已在 JV22 裁成守門 —— 直接沿用
-```
-
----
-
 ## §3b 🔴🔴 補查：**退回之後，使用者改不了任何東西**
 
 ### ⚙️ `bonus.py` 裡**沒有任何 `PUT` 或 `PATCH`**
@@ -247,6 +196,57 @@ append_edit_log(conn, award_id, _user_name(user), [
 ```
 
 ⚠️ 而**不論裁甲或乙**，§4①②③ 都要做（擋空原因／寫 edit_log／approval_json 留底）。
+
+---
+
+## §4 處置
+
+### ① 擋空原因（一行）
+
+```python
+reason = (body.get("reason") or "").strip()
+if not reason:
+    raise HTTPException(400, "請填寫退回原因。")
+```
+⚠️ 而**措辭要與另外兩支一致**（「請填寫…原因。」）—— 不要另外發明一句。
+
+### ② 退回時寫 `bonus_award_edit_log`，`retention='permanent'`
+
+```python
+append_edit_log(conn, award_id, _user_name(user), [
+    {"field": "status",        "from": status,        "to": "草稿"},
+    {"field": "approval_json", "from": row["approval_json"], "to": "{}"},
+    {"field": "退回原因",       "from": "",            "to": reason},
+], table="bonus_award_edit_log", retention="permanent", changed_at=now)
+```
+
+```
+🔴 第二列是 §2③ 的留底 —— **在 UPDATE 之前讀 `row["approval_json"]`**
+   ☠️ UPDATE 之後才讀就是 `'{}'`，而那一列會寫成 `{} -> {}`
+      => **一列看起來很正常的紀錄，而它什麼都沒記住**
+      📌 〈假綠燈：斷言驗到自己設的值〉的寫入端版本
+⚠️ 第三列的 `from` 是空字串 —— 那**不是**缺改前值：
+   退回原因是**新產生的**，本來就沒有舊值
+   ✅ 而 `validate_changes()` 用 `"from" not in ch` 判**鍵在不在**
+      （docstring 逐字：「`from` 是 `None` 或空字串**算有值**」）=> **合法**，已查
+```
+
+### ③ 讀取端：**只有一半成得立** —— 見 §3b
+
+```
+🔑 `JV22` 解的是「**上次退回** 與 **這次編修**要成對」
+🔴 而獎金單**沒有「這次編修」** —— 它改不了（§3b）
+⇒ 本規格的顯示是：「上一輪由 X 覆核、Y 主管簽過，在 <時間> 被 Z 退回，原因：…」
+⚠️ 而**不要留一個空的「這次編修」區塊** ——
+   ☠️ 它會顯示「（無）」，而使用者會以為是壞了
+```
+
+### 🔴 ④ 這一區**不可以有任何編輯或刪除控制項**（沿用 `JV22 §6`）
+
+```
+使用者原話（JV22）：「長期記憶，**這個不能刪除**」
+⇒ 同一句話對獎金單成立，而 A 已在 JV22 裁成守門 —— 直接沿用
+```
 
 ---
 
