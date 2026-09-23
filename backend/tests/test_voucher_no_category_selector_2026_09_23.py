@@ -70,6 +70,7 @@ grep -c "vouchers_all" routers/accounting_export.py  =>  **0**
 ```
 """
 import pathlib
+import re
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 
@@ -99,21 +100,48 @@ def _row(vid):
 # ① 畫面上不可以再有類別選項
 # ══════════════════════════════════════════════════════════════════════
 
+def _strip_html_comments(html):
+    return re.sub(r"<!--.*?-->", "", html, flags=re.S)
+
+
 def test_jv20_the_category_selector_is_removed_from_the_page():
     """🔴🔴 **核心：`voucher.html` 不可以再有類別的 `<select>`。**
 
     ⚠️ 也不可以換成唯讀文字框——使用者說的是「不需要有類別的選項」，
     不是「不能讓使用者改」，換成唯讀等於把使用者沒要求的東西留在畫面上。
+
+    🔴 **第一版對整份原始碼（含 HTML 註解）做字面比對**，B 回報：他寫的
+    說明註解裡含「類別」兩字被抓成假紅，只好改寫註解才過關——這是
+    〈守門會改變人的寫法，而那個改變不留痕跡〉今天第二次同一個機制。
+    ⇒ 改成**先剝掉 `<!--…-->` 註解再比對**：使用者要的是「畫面上沒有
+    這個選項」，不是「原始碼裡不准出現這兩個字」，說明性的註解不該被
+    這道守門管到。下面的誘餌題鎖住這個修法本身。
     """
-    html = (ROOT / "frontend" / "pages" / "voucher.html").read_text(
-        encoding="utf-8", errors="replace")
+    html = _strip_html_comments(
+        (ROOT / "frontend" / "pages" / "voucher.html").read_text(
+            encoding="utf-8", errors="replace"))
     assert 'x-model="category"' not in html, (
         "`voucher.html` 裡還找得到 `x-model=\"category\"` —— "
         "類別欄位還在畫面上。")
     assert "類別" not in html, (
-        "`voucher.html` 裡還找得到「類別」這兩個字——\n"
+        "`voucher.html` 裡（剝掉註解之後）還找得到「類別」這兩個字——\n"
         "☠️ 若只拿掉 `<select>` 而把標籤文字換成別的形式（例如唯讀文字），\n"
           "   那不是使用者要的：他說的是不需要這個選項，不是不能改。")
+
+
+def test_jv20_an_explanatory_comment_mentioning_the_word_is_not_a_false_positive():
+    """⚙️ **誘餌：說明性的 HTML 註解裡出現「類別」兩字，不可以被判成缺陷。**
+
+    ☠️ 少了這一題，「先剝掉註解再比對」這個修法本身若哪天被誤刪，
+    B 又會被逼著改寫一次自己的說明文字——而那個修改在 `git log` 上
+    看起來只是「順手整理文件」，沒有人會發現守門本身壞掉了。
+    """
+    synthetic = (
+        "<!-- 這裡刻意不加類別欄位，使用者說不需要有類別的選項 -->\n"
+        "<div>其他內容</div>")
+    stripped = _strip_html_comments(synthetic)
+    assert "類別" not in stripped, (
+        "剝除註解之後仍然找得到「類別」——退回改 `_strip_html_comments()`。")
 
 
 # ══════════════════════════════════════════════════════════════════════
