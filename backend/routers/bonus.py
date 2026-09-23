@@ -489,6 +489,52 @@ def list_awards(include_voided: bool = False, authorization: str = Header(None))
     }
 
 
+@router.get("/awards/{award_id}")
+def get_award(award_id: int, authorization: str = Header(None)):
+    """一張獎金分潤單的完整內容（`BN10`）。
+
+    使用者原話：「獎金單要跟報價單的頁面一樣……點選後可載入完整資料跟
+    明細」——這支端點就是那個「點選後載入」打的那一支，回應要包含畫面
+    上需要顯示的**全部**東西：案件精算明細（與 `GET /plan` 同一支
+    `_settlement_fields()`，不重算）＋分錄明細＋簽核狀態，一次拿齊，
+    不必再讀第二支端點。
+
+    可見性與 `GET /awards`（清單）**同一條規則**：非管理者只看得到自己
+    那一列，且看不到 `base_amount`——這裡不能因為是「點進去看詳情」就
+    放寬，那樣等於用另一個入口繞過清單端點已經擋住的東西。
+    """
+    user = _require_user(authorization)
+    me = user.get("username") or ""
+    manager = _sees_all_lines(user)
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT * FROM bonus_awards WHERE id = ?",
+                           (award_id,)).fetchone()
+        if row is None:
+            raise HTTPException(404, "找不到這張獎金分潤單。")
+        award = dict(row)
+        lines = [dict(r) for r in conn.execute(
+            "SELECT * FROM bonus_award_lines WHERE award_id = ? ORDER BY id",
+            (award_id,))]
+        settle = _settlement_of(conn, award["quote_no"])
+    finally:
+        conn.close()
+
+    visible = visible_lines(lines, me, is_admin=manager)
+    if not manager and not visible:
+        # 🔴 與清單同一條：跟這個人無關的單，連整張單的存在都不透露——
+        #    404 不是 403，不要洩漏「這張單存在，只是你看不到」。
+        raise HTTPException(404, "找不到這張獎金分潤單。")
+
+    award["lines"] = visible
+    award["visible_total"] = sum(l["amount"] for l in visible)
+    if not manager:
+        award.pop("base_amount", None)
+    award["signatures"] = bonus_signatures_of(award)
+    award["settlement"] = _settlement_fields(settle)
+    return award
+
+
 def _plan_allocations(conn, quote_no, allocations):
     """`allocations` -> `(settle, base, planned)`，`planned` 是
     `[(item, total_pct, lines)]`。擋不過就直接 `raise HTTPException`。
