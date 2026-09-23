@@ -99,3 +99,10 @@
 - 規則①保留：設定了簽核流程時，核准／退回者必須是**當層**簽核人或其有效代理人（不限排第一位）。製票人在當層名單內即可自簽。
 - 未設定簽核流程（內建兩層）：維持模組權限，不另加限制。
 - 依據商業會計法 §35 的「簽章」由電子權限控制替代，控制點在①；②屬內控強化，使用者因人力不足裁示不做。
+
+### JV35 傳票加入轉簽（2026-09-24，使用者：「我有轉簽的功能能加入」）
+- 既有轉簽：`POST /api/approval-queue/reassign`（`quotations.py:5727`），`_REASSIGN_TABLES`（:5717）只有 quotation／contractor_voucher／invoice_voucher／payment_request／shipping_note／completion_note，**沒有傳票**。
+- 要做：`_REASSIGN_TABLES` 加入傳票；傳票的簽核存在 `vouchers_all.approval_json`（不是 `data_json`）⇒ 讀寫要走傳票自己的解析（`parse_approval_json`／`_appr_of`），不可硬套 data_json 分支；簽核佇列（`approval-queue.html` 傳票那一列）出現轉簽鈕；簽核歷史照常記 `approval.reassign`。
+- 與 JV30 的關係：轉簽換掉當層待簽人 ⇒ JV30 的「當層簽核人」檢查自動認得新的人。**題要驗這一條**：轉簽前新的人按核准 ⇒ 403；轉簽後 ⇒ 200；原簽核人轉簽後 ⇒ 403。
+- 規則沿用既有轉簽：限 superadmin、原因必填、只換當層第一個尚未簽核的人、被轉到的人收到通知。
+- 排序：JV32 之後。
