@@ -834,7 +834,10 @@ def import_dispatch_to_quote(did: int, authorization: str = Header(None)):
         })
 
     now = datetime.now().isoformat()
-    save_quotation_json(conn, qrow["quote_no"], qdata, user["username"])
+    # T9（2026-09-23）：①漏 commit ⇒ 回 200 而 UPDATE 被回滾；②第 4 個位置參數是 status，
+    # 先前傳 username ⇒ 只修①會把報價單狀態改成使用者名稱。與 material_orders.py 09-10 同型。
+    save_quotation_json(conn, qrow["quote_no"], qdata, updated_at=now)
+    conn.commit()
     conn.close()
     _audit(_tok(authorization), 'vendor.dispatch.import', 'contractor_dispatch', str(did),
            f"匯入 {len(dispatch_items)} 品項至 {qrow['quote_no']}")
