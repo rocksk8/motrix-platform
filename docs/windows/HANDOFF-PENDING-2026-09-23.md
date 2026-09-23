@@ -183,3 +183,19 @@ deployed-version  46dc6ae（branch 欄顯示 HEAD＝detached 建包，內容即 
 | 報價案件 | 預覽與 PDF 統一 | 9 處可見差異（預覽寫死公司抬頭、項次編號不同…）⇒ 預覽改用伺服器版面 |
 
 未勾選（記錄在此，不做）：全單據禁止自己核准、獎金分潤單走共用檢查、稅額沖銷自核、T100 匯出三項（其中「每月 1 號承攬商付款漏匯」**已讀碼確認**：`accounting_export.py:233-237` 以 `>= 'YYYY-MM-DDT00:00:00'` 比對純日期 `paid_at`）。
+
+## 🟡 字級「特」時選單／簽核視窗／側邊清單超出畫面（2026-09-24，使用者：「傳票全部做完再做」）
+
+使用者：「部分使用者在字型用特大情況下，左右列表會無法閱讀，簽核跟選單在頁面外無法拖動」。
+
+**成因（已實測）**：`sidebar.js:61-70,114-117` 字級按鈕以 `document.documentElement.style.zoom`（小 0.85／標 1／大 1.15／特 1.3）放大；
+根元素 zoom 會把 `vh`／`dvh` 一起乘上倍率 ⇒ 以視窗高度限高的 fixed 元素超出畫面，fixed 不隨頁捲動 ⇒ 拖不到。
+```
+Chromium 151, viewport 1366×768（scratchpad zoomtest.html）
+              zoom 1   zoom 1.3
+max-height:90vh 彈窗底邊   730      948  ← 超出 180px
+calc(100vh-20px) 側欄     748      972
+100dvh                   768      998
+改成 calc(Nvh / var(--fz,1)) 後：0.85/1/1.15/1.3 ⇒ 724/730/735/741、742～751、768 —— 全在畫面內
+```
+**修法**：①`motrixSetZoom` 與初始化同時設 `--fz`；②前端 52 檔 132 處 `Nvh`／`Ndvh` ⇒ `calc(Nvh / var(--fz,1))`（白名單逐檔、驗收「該改的 0／不該改的沒動」，vendor 除外）；③`.mnav__panel`（`style.css` 約 :475）加 `max-height:calc(100dvh / var(--fz,1) - var(--topbar-h))`＋`overflow-y:auto`；④e2e：四段字級 × 1366×768，量選單面板、簽核彈窗、側邊清單底邊 ≤ innerHeight，HEAD 在「特」先紅。
