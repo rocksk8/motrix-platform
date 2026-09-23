@@ -487,9 +487,27 @@ routers/quotations.py:4465（reject_quotation 的**唯一一次寫入**）
    => MQ-202609-001  ->  MQ-202609-001-R1（_next_revision_no:164）
    🔴 **原地改名，舊單號從此不存在於 quotations 表**
 
-db.py 裡有 `quote_no` 欄位的表 = **18 張**
 全 backend 的 `SET quote_no=` = **1 句**（就是上面那一句）
 => **沒有任何連動。**
+```
+
+### 🔴 母體的數字我報錯過一次 —— 這一列留著
+
+```
+❌ 我報「18 張」：grep `db.py` 的 `quote_no TEXT` 行數，**沒有印出命中的內容**
+❌ A 獨立數得「14 張」：regex 掃 CREATE TABLE 區塊，非貪婪跨過區塊邊界
+   ⇒ 命中裡混進 `schema_version`（它只有 id／version／applied_at 三欄）
+🔑 **兩個數字都很整齊，而兩個都是錯的。**
+   〈計數是十全十美的 —— 它連自己撈錯東西都會算得很整齊〉
+
+✅ 可靠做法：對**實際 DB** 跑 `PRAGMA table_info`，逐張表看有沒有 `quote_no`
+   `backend/motrix_erp.db`（97 張表）=> **15 張**：
+   bonus_awards ／ case_action_items ／ case_change_requests ／
+   case_extra_expenses ／ case_stages ／ case_updates ／ completion_notes ／
+   contractor_dispatches ／ contractor_payment_vouchers ／ invoice_vouchers ／
+   network_plans ／ payment_requests ／ quotations ／ shipping_notes ／ stock_items
+⚠️ 而這是**開發機的 schema** —— 正式機若有 migration 沒跑到，數字會不同
+   ⇒ 守門要**掃 schema 求加總**，不要釘 15
 ```
 
 ### ⇒ 對 `QL25` 的直接後果
