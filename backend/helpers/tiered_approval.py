@@ -33,8 +33,27 @@ from .settings import _get_setting
 # 並可獨立設定」——這兩件事在現有機制裡剛好就是：列進 APPROVAL_DOC_TYPES 讓簽核
 # 設定頁看得到它、同時放進 DEFAULT_UNIFIED_DOC_TYPES 讓它預設走統一流程，之後在
 # 設定頁把它從套用範圍取消勾選就會切成自己的 extra_expense_approval_flow。
+# 2026-09-23 新增 "voucher"（會計傳票，`AS2`）。使用者原話：「**傳票的簽核需要
+# 在簽核設定中出現**」。
+#
+# 🔴 這一項推翻了 `§161` 的「傳票不接 approval_settings」——
+#    那個裁定是從「跟坊間正式傳票一樣」推出「簽核流程也要寫死」，
+#    **而使用者那句是在講版面**（那張實例 PDF 上的三格）。
+#    ⇒ 「兩層」是**預設值不是常數**，要改的是**它從哪裡來**。
+#
+# ☠️ **命名衝突**：這裡已經有 `invoice_voucher`（發票開立簽核單）與
+#    `contractor_voucher`（承攬商匯款申請）⇒ 三個都叫 voucher，
+#    而它們是**三種不同的單據**。標籤上必須看得出來：
+#    改錯一個不會報錯 —— 它只是讓另一種單據換了簽核鏈。
+#
+# ⚠️ **刻意不放進 `DEFAULT_UNIFIED_DOC_TYPES`**（規格 §4 標為待使用者裁）：
+#    放進去的話，傳票會與報價單／出貨單共用同一條簽核鏈，而改那一條的人
+#    不會知道自己也改了會計傳票。⇒ 預設各走各的，要共用再到設定頁勾選。
+#    📌 這是**可逆的預設值**：勾一下就合併，而反過來（預設合併之後拆開）
+#    要先有人發現它們被合在一起了。
 APPROVAL_DOC_TYPES = ["quotation", "shipping", "invoice_voucher", "payment_request",
-                      "contractor_voucher", "extra_expense", "completion"]
+                      "contractor_voucher", "extra_expense", "completion",
+                      "voucher"]
 DEFAULT_UNIFIED_DOC_TYPES = {"quotation", "shipping", "invoice_voucher", "payment_request",
                              "extra_expense", "completion"}
 APPROVAL_DOC_TYPE_LABELS = {
@@ -45,6 +64,9 @@ APPROVAL_DOC_TYPE_LABELS = {
     "contractor_voucher": "承攬商匯款申請",
     "extra_expense":     "案件額外支出",
     "completion":        "完工單",
+    # 🔑 不是「傳票」—— 三個 doc type 都叫 voucher，而設定頁上看得出來
+    #    才不會改錯。只有這一個是**會計傳票**。
+    "voucher":           "傳票（會計）",
 }
 
 
