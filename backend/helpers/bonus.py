@@ -226,6 +226,7 @@ PERSON_SOURCES = (
     "sales_person",             # 業務
     "case_stages.assigned_to",  # 各執行階段負責人（JSON 陣列）
     "group",                    # 獎金模組自建群組（例：後勤單位）
+    "manual",                   # `BN3`：最高管理者直接指定帳號（bonus_item_people）
 )
 
 #: 來源解析不出任何人時的標記。**不可以靜默算成 0 筆。**
@@ -285,6 +286,14 @@ def people_for_item(item, case):
         if err:
             return False, [], err
         for name in (item or {}).get("_group_members") or ():
+            if name and name not in people:
+                people.append(name)
+    elif source == "manual":
+        # `BN3`：同 `group` 的分工——名單由呼叫端（`_attach_manual_people()`）
+        # 先查好塞進 `_manual_people`（只含**在職**帳號），這裡不碰資料庫。
+        # ⚠️ 全部停用 ⇒ 名單是空的 ⇒ 落到下面「無可發放對象」的共用拒絕，
+        #    不是靜默算 0（`SPEC-BN2-BN5 §2` ③：新單不可以再發給停用的人）。
+        for name in (item or {}).get("_manual_people") or ():
             if name and name not in people:
                 people.append(name)
     else:

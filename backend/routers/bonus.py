@@ -182,17 +182,44 @@ def create_bonus_item(body: dict = Body(...), authorization: str = Header(None))
     # 分支會讀它，不會誤用到別的來源上。
     raw_ref = body.get("person_source_ref")
     ref = int(raw_ref) if raw_ref not in (None, "") else None
+    # `BN3`：`manual` 綁**帳號**（users.username），不存顯示名稱或自由文字——
+    # 打錯一個字那個人就領不到，而畫面上一切正常（`SPEC-BN2-BN5 §2`）。
+    manual_people = []
+    if source == "manual":
+        raw = body.get("people") or []
+        if not isinstance(raw, list):
+            raise HTTPException(400, "人員清單格式不正確。")
+        for u in raw:
+            u = str(u or "").strip()
+            if u and u not in manual_people:
+                manual_people.append(u)
+        if not manual_people:
+            raise HTTPException(400, "「手動指定」需要至少指定一位人員，"
+                                     "否則這個項目永遠不會出現在任何一張獎金分潤單上。")
     now = datetime.now().isoformat()
     conn = get_db()
     try:
+        if manual_people:
+            ph = ",".join("?" for _ in manual_people)
+            ok_names = {r["username"] for r in conn.execute(
+                "SELECT username FROM users WHERE active = 1 AND username IN (%s)" % ph,
+                tuple(manual_people))}
+            bad = [u for u in manual_people if u not in ok_names]
+            if bad:
+                # ⚠️ 說出是哪一個：一次指定好幾個人，說不出是哪一個等於要他自己試。
+                raise HTTPException(400, "找不到這些帳號，或帳號已停用：%s" % "、".join(bad))
         cur = conn.execute(
             "INSERT INTO bonus_items (name, person_source, person_source_ref,"
             " sort_order, is_active, created_by, created_at, updated_at)"
             " VALUES (?,?,?,?,1,?,?,?)",
             (name, source, ref, int(body.get("sort_order") or 0),
              _user_name(user), now, now))
-        conn.commit()
         new_id = cur.lastrowid
+        for u in manual_people:
+            conn.execute(
+                "INSERT INTO bonus_item_people (bonus_item_id, username, created_at)"
+                " VALUES (?,?,?)", (new_id, u, now))
+        conn.commit()
     finally:
         conn.close()
     _audit(_tok(authorization), "bonus.item.create", "bonus_items",
@@ -346,6 +373,29 @@ def remove_bonus_group_member(group_id: int, username: str,
     _audit(_tok(authorization), "bonus.group.remove_member", "bonus_groups",
            str(group_id), "移出成員：%s" % username)
     return {"ok": True}
+
+
+def _attach_manual_people(conn, items):
+    """`BN3`：幫每個 `person_source == "manual"` 的項目補上 `_manual_people`
+    （**只含在職帳號**，`users.active = 1`）。同 `_attach_group_people()`：
+    `people_for_item()` 維持純函式，查詢放在呼叫端、一次查完。
+
+    ⚠️ 停用的人**不在名單裡** ⇒ 新的獎金分潤單不會再發給他；已經產生的單
+    存的是當時的明細列，不受影響（`SPEC-BN2-BN5 §2` ③）。
+    """
+    manual = [it for it in items if it.get("person_source") == "manual"]
+    ids = {it["id"] for it in manual if it.get("id") is not None}
+    if not ids:
+        return
+    ph = ",".join("?" for _ in ids)
+    by_item = {}
+    for r in conn.execute(
+            "SELECT p.bonus_item_id, p.username FROM bonus_item_people p"
+            " JOIN users u ON u.username = p.username AND u.active = 1"
+            " WHERE p.bonus_item_id IN (%s) ORDER BY p.username" % ph, tuple(ids)):
+        by_item.setdefault(r["bonus_item_id"], []).append(r["username"])
+    for it in manual:
+        it["_manual_people"] = by_item.get(it.get("id"), [])
 
 
 def _attach_group_people(conn, items):
@@ -516,6 +566,7 @@ def plan_award(quote_no: str, authorization: str = Header(None)):
             "SELECT * FROM bonus_items WHERE is_active = 1"
             " ORDER BY sort_order, id")]
         _attach_group_people(conn, items)
+        _attach_manual_people(conn, items)
         live = conn.execute(
             "SELECT id FROM bonus_awards WHERE quote_no = ? AND voided_at = ''",
             (quote_no,)).fetchone()
@@ -873,6 +924,7 @@ def _plan_allocations(conn, quote_no, allocations):
     items = {r["id"]: dict(r) for r in conn.execute(
         "SELECT * FROM bonus_items WHERE is_active = 1")}
     _attach_group_people(conn, items.values())
+    _attach_manual_people(conn, items.values())
 
     planned = []
     for alloc in allocations:

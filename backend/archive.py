@@ -1651,6 +1651,9 @@ def _daily_backup_tables() -> dict:
         #    敏感度類別**（不是「比較不敏感」，是類別本身沒變）。
         "獎金群組":         "SELECT * FROM bonus_groups ORDER BY id",
         "獎金群組成員":     "SELECT * FROM bonus_group_members ORDER BY id",
+        # 🔑 `v108`（BN3）：`manual` 項目指定的帳號清單。少了它，還原之後那些項目
+        #    「有項目、沒有人」⇒ 產生獎金分潤單時靜默發不出去。無 id 欄（複合主鍵）。
+        "獎金項目人員":     "SELECT * FROM bonus_item_people ORDER BY bonus_item_id, username",
     }
 
 

@@ -409,6 +409,44 @@ def test_bn3_an_unknown_username_is_refused_and_named(client, make_user):
         "訊息沒說出是哪一個帳號：%s" % r.text[:200])
 
 
+def test_bn3_a_deactivated_person_is_not_paid_on_a_new_award(client, make_user):
+    """🔴 **`SPEC-BN2-BN5 §2` ③：停用的人員，新的獎金分潤單不可以再發給他。**
+
+    ⚙️ 觀測點走下游（`bonus_award_lines`）；⚙️ 對照組是同一個項目裡**仍在職**的那一位
+    —— 他必須還領得到，否則「停用的人沒領到」可能只是整個項目壞了。
+    """
+    _seed_case("MQ-BN3-OFF", 1000000)
+    a, _ = _hdr(client, make_user, "bn3_on")
+    b, _ = _hdr(client, make_user, "bn3_off")
+    _u, hdr = _hdr(client, make_user, "bn3_off_sup")
+    r = client.post(ITEMS, headers=hdr, json={
+        "name": "停用測試", "person_source": "manual", "people": [a, b]})
+    assert r.status_code == 200, r.text[:200]
+    item_id = r.json()["id"]
+
+    import db
+    conn = db.get_db()
+    try:
+        conn.execute("UPDATE users SET active = 0 WHERE username = ?", (b,))
+        conn.commit()
+    finally:
+        conn.close()
+
+    ar = client.post("/api/bonus/awards", headers=hdr, json={
+        "quote_no": "MQ-BN3-OFF",
+        "allocations": [{"bonus_item_id": item_id, "total_pct": 1000,
+                         "person_pct": {a: 10000}}]})
+    assert ar.status_code == 200, ar.text[:200]
+    conn = db.get_db()
+    try:
+        paid = {r_["username"] for r_ in conn.execute(
+            "SELECT DISTINCT username FROM bonus_award_lines WHERE bonus_item_id = ?",
+            (item_id,))}
+    finally:
+        conn.close()
+    assert paid == {a}, "停用之後的新單發給了 %r（預期只有仍在職的 %r）" % (paid, a)
+
+
 def test_bn3_the_existing_sources_do_not_change_behaviour(client, make_user):
     """⚙️ **正對照：既有四個來源不可以因為多了 `manual` 而改變行為。**
 

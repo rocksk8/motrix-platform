@@ -123,7 +123,9 @@ DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR = os.path.join(
 #      bonus_awards＋**部分**唯一索引／bonus_award_lines）
 # v98: FN4 編寫紀錄 —— bonus_award_edit_log ＋ 兩張共同的 retention 欄
 # v99: JV2 簽核三格各自的「誰」與「什麼時候」（送審／覆核／主管）
-CURRENT_VERSION = 107
+# v108: BN3 bonus_item_people（manual 人員來源指定的帳號清單）
+# v109: JV22 §3／BN17 兩張編寫紀錄表的 BEFORE DELETE TRIGGER（資料庫層不可刪）
+CURRENT_VERSION = 109
 
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
 # execution model) whenever the current request is authenticated as the 'demo'
@@ -259,6 +261,17 @@ def reset_demo_db() -> None:
             present = {r["name"] for r in conn.execute(
                 "SELECT name FROM sqlite_master WHERE type='table'")}
             conn.execute("PRAGMA foreign_keys=OFF")
+            # 🔴 `v109`：兩張編寫紀錄表有 BEFORE DELETE TRIGGER（正式庫刪不掉），
+            #    而展示重置要**整張清空**它們 ⇒ 先把 TRIGGER 拿掉、清完**照原樣建回**。
+            #    ⚠️ 建回用的是 `sqlite_master` 裡**那一份定義本身**，不是另抄一份 SQL
+            #       —— 兩份的話會漂移，而展示庫的保護會悄悄和正式庫不一樣。
+            #    ⚠️ `PRAGMA foreign_keys=OFF` 對 TRIGGER 無效（見上面 account_items 那段）。
+            saved_triggers = [(r["name"], r["sql"]) for r in conn.execute(
+                "SELECT name, sql FROM sqlite_master WHERE type='trigger'"
+                " AND name IN ('voucher_edit_log_no_delete',"
+                " 'bonus_award_edit_log_no_delete')")]
+            for name, _sql in saved_triggers:
+                conn.execute(f"DROP TRIGGER IF EXISTS {name}")
             # ⚠️ 跳過不存在的表：這段 DELETE 跑在 `init_db()` **之前**，
             #    而一個舊的 `demo.db` 可能還沒有比較新的那幾張表。
             for t in DEMO_CLEARED_TABLES:
@@ -267,6 +280,8 @@ def reset_demo_db() -> None:
             for t, where in DEMO_FILTERED_CLEARS.items():
                 if t in present:
                     conn.execute(f"DELETE FROM {t} WHERE {where}")
+            for _name, sql in saved_triggers:
+                conn.execute(sql)
             conn.commit()
             conn.execute("VACUUM")
         finally:
@@ -380,7 +395,7 @@ DEMO_CLEARED_TABLES = frozenset((
     #    ⇒ 那是**使用者建的**，不是我們預載的。
     "bonus_award_edit_log", "bonus_award_lines", "bonus_awards",
     # `BN14` 的群組與成員由最高管理者建立（不是預載）⇒ 使用者資料，整張清（DM1）。
-    "bonus_group_members", "bonus_groups", "bonus_items",
+    "bonus_group_members", "bonus_groups", "bonus_item_people", "bonus_items",
     "bonus_template_versions", "bonus_templates",
     # 🔑 `voucher_attachments` 整張清：附件是**使用者上傳的憑證**，
     #    demo 重置要讓每個客戶從乾淨開始。
@@ -4310,6 +4325,49 @@ def _m094_load_account_items(conn):
              it.get("name_en", ""), it["parent_code"]))
 
 
+def _m109_edit_log_no_delete(conn):
+    """v109（2026-09-24 `JV22 §3`／`BN17`）：兩張編寫紀錄表在**資料庫層**刪不掉。
+
+    使用者：「長期記憶，這個不能刪除」。在此之前的保護是「沒有人寫刪除」——
+    而「沒有人寫」與「刪不掉」是兩件事：哪天有人比照 `_prune_audit_log()`
+    寫一支保留期清理，今天沒有任何機制擋得住。
+    ⇒ 照 `account_items` 既有 TRIGGER 的形狀：`BEFORE DELETE -> RAISE(ABORT)`。
+
+    ⚠️ SQL 全部寫成字面值、不呼叫任何 helper（凍住的歷史不呼叫活的程式碼）。
+    ⚠️ `reset_demo_db()` 會整張清這兩張表（展示資料庫）⇒ 它自己先 DROP、清完再建
+       同一段 SQL；`test_edit_log_no_delete_trigger_2026_09_24.py` 驗重置後仍在、
+       且與正式庫的定義逐字相同。
+    """
+    conn.execute(
+        "CREATE TRIGGER IF NOT EXISTS voucher_edit_log_no_delete"
+        " BEFORE DELETE ON voucher_edit_log"
+        " BEGIN SELECT RAISE(ABORT, '傳票編寫紀錄是長期記憶，不可刪除'); END")
+    conn.execute(
+        "CREATE TRIGGER IF NOT EXISTS bonus_award_edit_log_no_delete"
+        " BEFORE DELETE ON bonus_award_edit_log"
+        " BEGIN SELECT RAISE(ABORT, '獎金分潤單編寫紀錄是長期記憶，不可刪除'); END")
+
+
+def _m108_bonus_item_people(conn):
+    """v108（2026-09-24 `BN3`）：`manual` 人員來源——項目直接掛一份帳號清單。
+
+    `SPEC-BN2-BN5.md §2`：新表，不用 `bonus_items` 的 JSON 欄——
+    ① 要能回答「這個人被哪些項目指定」（JSON 查不動）
+    ② 綁的是 `users.username`（UNIQUE、不在可改欄位白名單裡），不是顯示名稱或自由文字：
+       打錯一個字那個人就領不到，而畫面上一切正常。
+    ⚠️ 只新增，不動既有表；既有兩個來源（sales_person／case_stages.assigned_to）不讀這張表。
+    """
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS bonus_item_people ("
+        " bonus_item_id INTEGER NOT NULL REFERENCES bonus_items(id),"
+        " username      TEXT    NOT NULL,"
+        " created_at    TEXT    NOT NULL DEFAULT '',"
+        " PRIMARY KEY (bonus_item_id, username))")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_bonus_item_people_username"
+        " ON bonus_item_people(username)")
+
+
 def _m107_deactivate_legacy_demo_account(conn):
     """v107（2026-09-23 `IA2` §3③）：既有安裝的 `demo` 展示帳號停用，不刪除。
 
@@ -5418,6 +5476,8 @@ _MIGRATIONS = [
     _m105_bonus_award_lines_manual_basis,           # v105
     _m106_company_profile_identity_backfill,        # v106
     _m107_deactivate_legacy_demo_account,           # v107
+    _m108_bonus_item_people,                        # v108
+    _m109_edit_log_no_delete,                       # v109
 ]
 
 

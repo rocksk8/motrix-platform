@@ -305,7 +305,7 @@
               <!-- 🔴 來源清單由**後端**給（PERSON_SOURCES），不在這裡寫死：
                    寫死的話，後端加一個來源而這裡不會跟。 -->
               <select id="bn-new-src" x-model="newItem.person_source"
-                      @change="newItem.person_source_ref = null">
+                      @change="newItem.person_source_ref = null; newItem.people = []">
                 <option value="">請選擇…</option>
                 <template x-for="s in personSources" :key="s">
                   <option :value="s" x-text="srcLabel(s)"></option>
@@ -326,9 +326,25 @@
                 目前沒有啟用中的群組，請先在上方「獎金群組」建立。
               </span>
             </div>
+            <!-- `BN3`：來源選「手動指定人員」時，直接勾要發給誰。清單只列**在職**
+                 帳號（`loadUsers()` 已濾掉停用的）；綁的是帳號，不是顯示名稱——
+                 後端也會再驗一次，說得出是哪一個帳號不存在或已停用。 -->
+            <div class="bn-fld" x-show="newItem.person_source === 'manual'" data-testid="bonus-item-manual-people">
+              <label>發給哪些人</label>
+              <div style="display:flex;flex-wrap:wrap;gap:4px 14px">
+                <template x-for="u in allUsers" :key="u.username">
+                  <label class="bn-unit" style="display:flex;align-items:center;gap:4px">
+                    <input type="checkbox" :value="u.username" x-model="newItem.people">
+                    <span x-text="(u.display_name || u.username) + '（' + u.username + '）'"></span>
+                  </label>
+                </template>
+              </div>
+              <span class="bn-unit" x-show="!allUsers.length">人員清單載入中，或目前沒有可指定的在職帳號。</span>
+            </div>
             <button class="bn-btn" @click="createItem()"
                     :disabled="savingItem || !newItem.name || !newItem.person_source
-                      || (newItem.person_source === 'group' && !newItem.person_source_ref)"
+                      || (newItem.person_source === 'group' && !newItem.person_source_ref)
+                      || (newItem.person_source === 'manual' && !newItem.people.length)"
                     x-text="savingItem ? '新增中…' : '新增獎金項目'"></button>
           </div>
         </template>

@@ -24,6 +24,7 @@ var BN_SOURCE_LABEL = {
   'sales_person': '業務（案件負責業務）',
   'case_stages.assigned_to': '各執行階段負責人',
   'group': '群組（後勤等複數人員）',
+  'manual': '手動指定人員',
 }
 
 function bonusPage() {
@@ -60,7 +61,8 @@ function bonusPage() {
     items: [],
     itemsLoaded: false,
     personSources: [],
-    newItem: { name: '', person_source: '', person_source_ref: null },
+    // `BN3`：`people` 只在來源是 manual 時才送得到後端有意義（其餘來源後端不讀它）。
+    newItem: { name: '', person_source: '', person_source_ref: null, people: [] },
     itemMsg: '',
     itemErr: '',
     savingItem: false,
@@ -433,7 +435,7 @@ function bonusPage() {
         })
         const d = await r.json().catch(function () { return {} })
         if (!r.ok) throw new Error(d.detail || ('HTTP ' + r.status))
-        this.newItem = { name: '', person_source: '', person_source_ref: null }
+        this.newItem = { name: '', person_source: '', person_source_ref: null, people: [] }
         this.itemMsg = '已新增獎金項目。'
         await this.loadItems()
       } catch (e) {
