@@ -130,6 +130,106 @@ quotations.py:4266 「請**請**申請人收回並重新送審」  疑似贅字
 
 ---
 
+## §2b 🔴 三欄定案（A-2 重掃，`19bb94c`）—— **要改的是 6 條，不是 21**
+
+### 前置判準（它排在「讀者是誰」**之前**）
+
+> **先問「使用者到不到得了這個錯誤」，再問「這一條的讀者是誰」。**
+
+☠️ 我第一遍與第二遍**都沒問這一句** —— 一直在問「這些字給誰看」，
+**而沒有問「這句話有沒有機會被看到」**。重掃之後：**21 條裡有 6 條到不了**。
+🔑 而它**可判定**，不是主觀：去讀消費端有沒有把 `detail` 放到畫面上。
+
+⚠️ 它與 `EM8` **方向相反、處置也相反**：
+```
+EM8      **有人看得到，而照做不到**（指向不存在的出路）  => **要修**
+這一種   **沒有人看得到**                                => **不要動**
+☠️ 兩者在「掃描命中」那一層長得一模一樣 => 只能往消費端查
+```
+
+### ① 要改：**6 條**（reachable ＋ 讀者錯了）
+
+```
+1 case_action_items.py:206  project_approve_eng
+     消費端 case-management.js:1479  alert('確認失敗：' + detail)   ✅ 看得到
+     畫面標籤 users.html:820 「**案件代辦－工程主管確認**」
+2 case_action_items.py:211  project_approve_biz
+     畫面標籤 users.html:821 「**案件代辦－業務確認**」
+3 system.py:487  log_date / user_id / content
+     消費端 case-management.js:3063  alert('新增工作日誌失敗：' + detail)  ✅
+     畫面三格：**日期** ／ **記錄對象** ／ **工作內容**
+     => 「請填寫日期、記錄對象與工作內容。」
+4 system.py:1785  backend 需為 local_drive 或 s3
+     消費端 _saveSetting():882  `d.detail || '儲存失敗'`            ✅
+     畫面（company-profile-settings.html:694-697）標籤「**備份目標**」，選項逐字
+       「**本機磁碟機（Google 雲端硬碟掛載資料夾）**」／「**S3 相容物件儲存**」
+     => 「備份目標請選「本機磁碟機」或「S3 相容物件儲存」。」
+5 vendor_contractors.py:734  pending_acceptance / accepted
+     消費端 case-management.js:4612  alert(detail || '操作失敗')      ✅
+     畫面（audit-log.html:552）「**派工待確認**」
+6 helpers/startup.py:42（D 撈到）「請至『系統設定 → **Edge 執行檔路徑**』」
+     而實際欄位 company-profile-settings.html:647 是「**Edge 瀏覽器路徑**」
+     🔑 **地方存在而名字對不上** —— 使用者在正確的頁面上，看著正確的欄位，而不認得它
+```
+
+### ② 已查而不改：**6 條**（使用者到不了）
+
+⚠️ **要明著列著，不要從清單裡消失** —— 否則下一次掃描會把它們撈回來，
+而**下一個人會以為那是漏掉的**。
+
+```
+daily_tasks.py:345   year_month   前端自己用 yearMonthStr() 組（daily-tasks.html:2614）
+                                  => 使用者**沒有輸入框可以打錯它**
+system.py:2363       doc_type/doc_id
+                     static/edit-presence.js **自動背景呼叫**，且
+                     `.catch(function(){ /* 靜默重試下一輪 */ })` => **失敗被吞掉**
+inventory.py:614     void / return_to_stock / edit_note
+                     inventory.html:748 `if (r.ok) {…}` ＋ `} catch {}`
+                     => **失敗時什麼都不做** => 那句話到不了
+                     🔴 而它另外暴露一個缺陷 —— 見 §2c
+map_points.py:333    X-Map-Position 格式
+map_points.py:429    座標不可以放在網址上（**132 字**）
+                     map.html:665 失敗時只顯示 `'…（HTTP ' + r.status + '）'`
+                     => **不顯示 detail** => 兩條都到不了
+                     📌 而 :429 那段設計理由**仍然該搬進註解**（程式碼衛生，不是 EM1）
+system.py:1537       cycle_start_day
+                     saveGoogleQuota() 在呼叫後端**之前**就先擋，而它的訊息是
+                     「**帳單週期起算日** 需為 1～28 之間的整數」
+                     🔑 **正確的措辭前端已經有了** => 後端那句是開發者的後衛
+```
+
+### ③ 分出去（`EM8`）與排除
+
+```
+EM8   dashboard.py:108   gcis_daily_limit —— 前端命中 0，**那句指示照做不到**
+      inventory.py:614 的 edit_note —— 畫面上**沒有入口**
+排除  WebAuthn ×8（讀者是 superadmin，而畫面上那一格就叫 RP ID／Origin）
+      system.py:936 `loc_1`（**假陽性**：使用者正在輸入一個 id，例值用英文正是他要的）
+```
+
+```
+21 − 8(WebAuthn) − 1(假陽性) − 2(EM8) − 6(到不了) ＋ 1(Edge 路徑) = **6**
+⚠️ 每一個減項都**獨立數過**（`§5v`），不是從等式推的
+```
+
+---
+
+## §2c 🔴 順帶查到：庫存調整失敗是**完全靜默**的（建議另開編號）
+
+```
+inventory.html:744-750
+  const label = action === 'void' ? '報廢' : '退回庫存'
+  if (!confirm(`確認將序號「…」設為「${label}」？`)) return
+  try { const r = await fetch(…)
+        if (r.ok) { …重新載入… } }        <= **沒有 else**
+  catch {}                                <= **沒有訊息**
+```
+☠️ 使用者按下「報廢」、確認、**而畫面什麼都不做** ——
+🔑 他分不出「成功了而畫面沒更新」與「失敗了」。
+📌 那不是文字問題 ⇒ **不在 `EM1`**，而它是查 `EM1` 時撞到的，**要有一個編號**。
+
+---
+
 ## §3 驗收
 
 ```
