@@ -123,7 +123,7 @@ DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR = os.path.join(
 #      bonus_awards＋**部分**唯一索引／bonus_award_lines）
 # v98: FN4 編寫紀錄 —— bonus_award_edit_log ＋ 兩張共同的 retention 欄
 # v99: JV2 簽核三格各自的「誰」與「什麼時候」（送審／覆核／主管）
-CURRENT_VERSION = 104
+CURRENT_VERSION = 105
 
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
 # execution model) whenever the current request is authenticated as the 'demo'
@@ -4302,6 +4302,31 @@ def _m094_load_account_items(conn):
              it.get("name_en", ""), it["parent_code"]))
 
 
+def _m105_bonus_award_lines_manual_basis(conn):
+    """v105（2026-09-23 `BN18`）：手動指定人員時，記一筆「本來是哪個來源」。
+
+    使用者原話：「產生獎金單時能手動指定人」——解決「案件資料裡沒有執行人
+    而我知道是誰該領」這個洞（`case_stages.assigned_to` 今天 100% 是空的）。
+
+    ## 🔴 手動指定是**完全取代**，不是「在來源之上加減」（`SPEC-BN18.md §4c`）
+
+    「在來源之上加減」會把「這一次的例外」變成一個結構（`excluded`／
+    `added` 欄位），而結構會被重用——下一個人會拿它去做「永久排除」，
+    變成一份沒有人維護的第二份群組定義。
+
+    ⇒ `manual_basis` 只存**覆寫前這個項目原本宣告的來源**（例如
+    `"group"`／`"sales_person"`），**一筆紀錄，不是可查詢／可篩選的
+    結構**——不記「原本解析出誰」（那份資訊在很多情況下根本算不出來：
+    案件沒有執行人才需要手動指定，而那正是 `people_for_item()` 沒東西
+    可回的狀態）。
+    """
+    if not _col_exists(conn, "bonus_award_lines", "manual_basis"):
+        conn.execute(
+            "ALTER TABLE bonus_award_lines ADD COLUMN"
+            " manual_basis TEXT NOT NULL DEFAULT ''")
+    conn.commit()
+
+
 def _m104_bonus_groups(conn):
     """v104（2026-09-23 `BN14`）：獎金人員來源加「群組」。
 
@@ -5219,6 +5244,7 @@ _MIGRATIONS = [
     _m102_bonus_award_approval,                     # v102
     _m103_bonus_award_lines_username,               # v103
     _m104_bonus_groups,                              # v104
+    _m105_bonus_award_lines_manual_basis,           # v105
 ]
 
 

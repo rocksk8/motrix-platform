@@ -513,13 +513,16 @@
             <template x-for="it in (plan && plan.items) || []" :key="it.bonus_item_id">
               <div class="bn-alloc">
                 <div class="bn-alloc__hd">
-                  <!-- 🔴 ok=false 的項目**留在清單裡並說出為什麼**，不可以濾掉。 -->
+                  <!-- 🔴 ok=false 的項目**留在清單裡並說出為什麼**，不可以濾掉。
+                       `BN18`：勾選欄位在**手動指定開啟時也放行**——
+                       那正是這個功能要解決的情況（案件沒有執行人）。 -->
                   <input type="checkbox" :id="'bn-use-' + it.bonus_item_id"
-                         x-model="alloc[it.bonus_item_id].use" :disabled="!it.ok">
+                         x-model="alloc[it.bonus_item_id].use"
+                         :disabled="!it.ok && !alloc[it.bonus_item_id].override">
                   <label :for="'bn-use-' + it.bonus_item_id" x-text="it.name" style="font-weight:600"></label>
                   <span class="bn-item" x-text="srcLabel(it.person_source)"></span>
                   <span class="bn-alloc__no" x-show="!it.ok" x-text="it.note"></span>
-                  <template x-if="it.ok">
+                  <template x-if="it.ok || alloc[it.bonus_item_id].override">
                     <span style="margin-left:auto">
                       發放比例
                       <input type="number" min="0" max="100" step="0.01" style="width:88px;text-align:right"
@@ -529,14 +532,54 @@
                   </template>
                 </div>
 
-                <template x-for="p in it.people" :key="p">
-                  <div class="bn-person">
-                    <span style="min-width:110px" x-text="displayNameOf(p)"></span>
-                    <input type="number" min="0" max="100" step="0.01" x-model="alloc[it.bonus_item_id].people[p]">
-                    <span class="bn-unit">% 的本項獎金池</span>
+                <!-- `BN18`：手動指定人員——硬性要求「從清單選，不是輸入」。
+                     一律提供這個切換（不只在 !it.ok 時才出現），因為
+                     `§4c` 的情境（群組 5 人只發 3 人）是「來源本來就
+                     解得出來，這一次要手動換掉」，不是只有「解不出來」
+                     才需要。 -->
+                <label class="bn-unit" style="display:flex;align-items:center;gap:6px;margin:6px 0">
+                  <input type="checkbox" x-model="alloc[it.bonus_item_id].override">
+                  手動指定人員（不使用「<span x-text="srcLabel(it.person_source)"></span>」這個來源）
+                </label>
+
+                <!-- `§5b` A 裁乙：提示不可以變成阻擋，只在「這個項目原本
+                     解不出人」時才需要提醒去補案件執行人；能正常解析的
+                     項目改用手動指定不需要這句話。 -->
+                <div class="bn-unit" x-show="alloc[it.bonus_item_id].override && !it.ok" style="color:#B45309">
+                  這個案件沒有指派執行人，要不要順便去案件管理補上？（不影響現在手動指定）
+                </div>
+
+                <template x-if="!alloc[it.bonus_item_id].override">
+                  <template x-for="p in it.people" :key="p">
+                    <div class="bn-person">
+                      <span style="min-width:110px" x-text="displayNameOf(p)"></span>
+                      <input type="number" min="0" max="100" step="0.01" x-model="alloc[it.bonus_item_id].people[p]">
+                      <span class="bn-unit">% 的本項獎金池</span>
+                    </div>
+                  </template>
+                </template>
+
+                <template x-if="alloc[it.bonus_item_id].override">
+                  <div class="bn-person-picker" style="max-height:160px;overflow-y:auto;border:1px solid var(--border-light);border-radius:6px;padding:6px 8px;margin-bottom:6px">
+                    <template x-for="u in allUsers" :key="u.username">
+                      <div class="bn-person" style="padding:2px 0">
+                        <label style="display:flex;align-items:center;gap:6px;min-width:140px">
+                          <input type="checkbox"
+                                 :checked="!!alloc[it.bonus_item_id].manualPeople[u.username]"
+                                 @change="toggleManualPerson(it.bonus_item_id, u.username)">
+                          <span x-text="u.displayName || u.username"></span>
+                        </label>
+                        <input type="number" min="0" max="100" step="0.01"
+                               x-show="alloc[it.bonus_item_id].manualPeople[u.username]"
+                               x-model="alloc[it.bonus_item_id].people[u.username]">
+                        <span class="bn-unit" x-show="alloc[it.bonus_item_id].manualPeople[u.username]">% 的本項獎金池</span>
+                      </div>
+                    </template>
+                    <div class="bn-unit" x-show="!allUsers.length">帳號清單載入中或載入失敗，請重新整理再試。</div>
                   </div>
                 </template>
-                <div class="bn-sum" x-show="it.ok"
+
+                <div class="bn-sum" x-show="it.ok || alloc[it.bonus_item_id].override"
                      x-text="'人員比例合計 ' + personSum(it.bonus_item_id) + '%（未滿 100% 的部分歸公司留存）'"></div>
               </div>
             </template>

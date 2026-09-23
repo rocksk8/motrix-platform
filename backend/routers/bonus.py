@@ -820,6 +820,33 @@ def _last_reject_of(conn, award_id, award):
     return None
 
 
+def _validate_manual_people(conn, usernames):
+    """`BN18 §3`：手動指定人員的資料層驗證。**硬性要求：挑人只能從清單
+    選，送 username，不是打字輸入**——這裡是那條界線最後一道防線：查不到
+    或已停用的帳號**整批 400**，不寫入任何一列（〈拒絕的路徑上不可以留
+    下副作用〉，同 `resolve_picks()` 的做法）。
+
+    ⚠️ 不可以用 `display_name` 當鍵去反查——那正是 `_m010` 回填失敗的
+    那條路（同名或改過名就查不到，而它不會報錯）。
+    """
+    names = []
+    for u in (usernames or ()):
+        u = str(u or "").strip()
+        if u and u not in names:
+            names.append(u)
+    if not names:
+        raise HTTPException(400, "手動指定至少要選一個人。")
+    placeholders = ",".join("?" for _ in names)
+    valid = {r["username"] for r in conn.execute(
+        "SELECT username FROM users WHERE username IN (%s) AND active = 1"
+        % placeholders, tuple(names))}
+    missing = [n for n in names if n not in valid]
+    if missing:
+        raise HTTPException(
+            400, "手動指定的帳號查不到或已停用：%s。" % "、".join(missing))
+    return names
+
+
 def _plan_allocations(conn, quote_no, allocations):
     """`allocations` -> `(settle, base, planned)`，`planned` 是
     `[(item, total_pct, lines)]`。擋不過就直接 `raise HTTPException`。
@@ -852,9 +879,29 @@ def _plan_allocations(conn, quote_no, allocations):
         item = items.get(int(alloc.get("bonus_item_id") or 0))
         if item is None:
             raise HTTPException(400, "獎金項目不存在或已停用。")
-        good, people, note = people_for_item(item, case)
-        if not good:
-            raise HTTPException(400, "「%s」%s。" % (item["name"], note))
+        # `BN18`：使用者原話「產生獎金單時能手動指定人」——給「案件資料裡
+        # 沒有執行人，而我知道是誰該領」一條出路（`case_stages.assigned_to`
+        # 今天 100% 是空的，這條路目前是唯一走得通的方式）。**不是拿掉
+        # 既有的拒絕**：沒有明著宣告覆寫時，解析出 0 人一樣被擋。
+        #
+        # 🔴 判斷式**只能看這個明著宣告的旗標**，不可以寫成
+        # `if alloc.get("people"):`——那是〈null 不等於 0〉的另一個形狀：
+        # 「沒送這個鍵」與「送了一個空清單」是兩件事，合併之後會安靜地
+        # 蓋掉正確的解析結果（金額照算、總額照樣對得起來，沒有人發現）。
+        if alloc.get("person_source_override"):
+            people = _validate_manual_people(conn, alloc.get("people"))
+            source_snapshot = "manual"
+            # `§4c`：完全取代，不是在來源之上加減——`manual_basis` 只記
+            # 「這個項目原本宣告的來源型別」這一筆事實，不記「原本解析
+            # 出誰」（案件沒有執行人才需要手動指定，那份資訊很多時候
+            # 根本算不出來）。一筆紀錄，不是可查詢／可篩選的結構。
+            manual_basis = item.get("person_source") or ""
+        else:
+            good, people, note = people_for_item(item, case)
+            if not good:
+                raise HTTPException(400, "「%s」%s。" % (item["name"], note))
+            source_snapshot = item["person_source"]
+            manual_basis = ""
         total_pct = int(alloc.get("total_pct") or 0)
         shares = alloc.get("person_pct") or {}
         # `BN14`：使用者原話「如有複數人員自動計算比例」——群組來源且
@@ -906,7 +953,8 @@ def _plan_allocations(conn, quote_no, allocations):
                 400, "「%s」的人員比例合計 %s%% 超過 100%%，"
                      "公司留存會變成負數。"
                      % (item["name"], _pct_text(person_sum)))
-        planned.append((item, total_pct, split_award(base, total_pct, pairs)))
+        planned.append((item, total_pct, split_award(base, total_pct, pairs),
+                       source_snapshot, manual_basis))
     return settle, base, planned
 
 
@@ -957,15 +1005,16 @@ def create_award(body: dict = Body(...), authorization: str = Header(None)):
                          "若要重發，請先作廢原本那一張。" % quote_no)
             raise
         award_id = cur.lastrowid
-        for item, total_pct, lines in planned:
+        for item, total_pct, lines, source_snapshot, manual_basis in planned:
             for ln in lines:
                 conn.execute(
                     "INSERT INTO bonus_award_lines (award_id, bonus_item_id,"
                     " item_name_snapshot, username, person_source_snapshot,"
-                    " total_pct, person_pct, amount) VALUES (?,?,?,?,?,?,?,?)",
+                    " total_pct, person_pct, amount, manual_basis)"
+                    " VALUES (?,?,?,?,?,?,?,?,?)",
                     (award_id, item["id"], item["name"], ln["username"],
-                     item["person_source"], total_pct, ln["person_pct"],
-                     ln["amount"]))
+                     source_snapshot, total_pct, ln["person_pct"],
+                     ln["amount"], manual_basis))
         conn.commit()
     finally:
         conn.close()
@@ -1002,13 +1051,14 @@ def preview_award(quote_no: str, body: dict = Body(default={}),
 
         lines_out = []
         remainder = 0
-        for item, total_pct, lines in planned:
+        for item, total_pct, lines, source_snapshot, manual_basis in planned:
             remainder += remainder_of(base, total_pct, lines)
             for ln in lines:
                 lines_out.append({
                     "bonus_item_id": item["id"],
                     "username": ln["username"],
-                    "person_source_snapshot": item["person_source"],
+                    "person_source_snapshot": source_snapshot,
+                    "manual_basis": manual_basis,
                     "total_pct": total_pct,
                     "person_pct": ln["person_pct"],
                     "amount": ln["amount"],

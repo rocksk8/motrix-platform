@@ -65,6 +65,13 @@ function bonusPage() {
     //: 共用一個字串的話，展開第二個群組會蓋掉第一個正在打的字。
     newMemberInput: {},
     savingMember: {},
+
+    // ── `BN18`：產生獎金單時手動指定人員 ──
+    //: 使用者原話「產生獎金單時能手動指定人」——`case_stages.assigned_to`
+    //: 今天 100% 是空的，這條路是目前唯一走得通的方式（見規格 §5b）。
+    //: 挑人**只能從清單選**（`§3` 硬性要求），不是打字輸入。
+    allUsers: [],
+    allUsersLoaded: false,
     //: 能不能在本頁新增獎金項目。**來自後端**（`GET /items` 的 `can_edit`
     //: ＝ `role === 'superadmin'`），不是在這裡判 `role` 算出來的。
     //: 📌 名字不照抄 `can_edit`：那個名字說不出「edit 什麼」，
@@ -131,6 +138,26 @@ function bonusPage() {
       // _is_manager），不是 isManager——admin 按得到「產生」，
       // 他也要看得到下拉可以選什麼。
       if (this.canCreateAward) await this.loadCandidates()
+      // `BN18`：手動指定的挑人清單，同一道閘（會用到這份清單的按鈕
+      // 也是 canCreateAward 那一批人）。
+      if (this.canCreateAward) await this.loadUsers()
+    },
+
+    async loadUsers() {
+      try {
+        const r = await fetch('/api/users', { headers: this._auth() })
+        if (!r.ok) throw new Error('HTTP ' + r.status)
+        const d = await r.json()
+        // 只給挑得到的人——已停用的帳號不該出現在清單裡讓人誤選
+        // （後端 `_validate_manual_people()` 也會擋，這裡先幫忙濾掉，
+        // 兩層各自的道理見〈不可以只在前端擋〉那條規則：這層是體驗，
+        // 後端那層才是真正擋住的）。
+        this.allUsers = (d || []).filter(function (u) { return u.active })
+        this.allUsersLoaded = true
+      } catch (e) {
+        // 挑人清單載入失敗不擋整頁——只是手動指定這個功能用不了，
+        // 其餘照常的來源仍然可以用。
+      }
     },
 
     async loadCandidates() {
@@ -442,7 +469,12 @@ function bonusPage() {
           for (const p of it.people || []) {
             people[p] = n ? Number((100 / n).toFixed(2)) : 0
           }
-          a[it.bonus_item_id] = { use: false, total: '', people: people }
+          // `BN18`：override 預設關——沒有明著打開的話一律走正常解析，
+          // 不是「有沒有填 people」決定要不要覆寫（同後端那條規則）。
+          a[it.bonus_item_id] = {
+            use: false, total: '', people: people,
+            override: false, manualPeople: {},
+          }
         }
         this.alloc = a
         this.plan = d
@@ -466,9 +498,26 @@ function bonusPage() {
       const out = []
       for (const it of (this.plan && this.plan.items) || []) {
         const a = this.alloc[it.bonus_item_id]
-        if (a && a.use && it.ok) out.push(it)
+        // `BN18`：手動指定時不要求 `it.ok`——那正是這個功能要解決的情況
+        // （案件沒有執行人，`people_for_item()` 本來就會回 `ok=false`）。
+        if (a && a.use && (it.ok || a.override)) out.push(it)
       }
       return out
+    },
+
+    // `BN18`：手動挑人清單裡勾選／取消一個人——用索引不用布林陣列，
+    // 同時維護 `manualPeople`（誰被勾選）與 `people`（他的比例），
+    // 取消勾選要把比例一起清掉，不留一個看不到卻還在送出去的數字。
+    toggleManualPerson(itemId, username) {
+      const a = this.alloc[itemId]
+      if (!a) return
+      if (a.manualPeople[username]) {
+        delete a.manualPeople[username]
+        delete a.people[username]
+      } else {
+        a.manualPeople[username] = true
+        if (a.people[username] === undefined) a.people[username] = 0
+      }
     },
 
     // 送出前先講的那些。
@@ -487,6 +536,11 @@ function bonusPage() {
       if (!picked.length) return '請至少勾選一個獎金項目。'
       for (const it of picked) {
         const a = this.alloc[it.bonus_item_id]
+        // `BN18`：手動指定時檢查勾選的人數，不是 `it.people`（那是正常
+        // 解析出來的名單，覆寫時本來就可能是空的或不相關）。
+        if (a.override && !Object.keys(a.manualPeople || {}).length) {
+          return '「' + it.name + '」手動指定至少要選一個人。'
+        }
         const t = Number(a.total)
         if (!(t > 0)) return '「' + it.name + '」的發放比例要大於 0。'
         if (t > 100) return '「' + it.name + '」的發放比例超過 100%，獎金池會大於案件淨利。'
@@ -507,13 +561,27 @@ function bonusPage() {
       for (const it of this.chosen()) {
         const a = this.alloc[it.bonus_item_id]
         const person_pct = {}
-        // 📌 只送 `plan` 回的那些人，不送畫面上殘留的任何名字。
-        for (const p of it.people) person_pct[p] = this.toBp(a.people[p])
-        allocations.push({
-          bonus_item_id: it.bonus_item_id,
-          total_pct: this.toBp(a.total),
-          person_pct: person_pct,
-        })
+        // `BN18`：明著宣告才送覆寫旗標——不是「有沒有填 people」決定，
+        // 同後端那條規則（同一個判準，兩邊都要用旗標，不是真假值）。
+        if (a.override) {
+          const people = Object.keys(a.manualPeople || {})
+          for (const p of people) person_pct[p] = this.toBp(a.people[p])
+          allocations.push({
+            bonus_item_id: it.bonus_item_id,
+            total_pct: this.toBp(a.total),
+            person_pct: person_pct,
+            person_source_override: true,
+            people: people,
+          })
+        } else {
+          // 📌 只送 `plan` 回的那些人，不送畫面上殘留的任何名字。
+          for (const p of it.people) person_pct[p] = this.toBp(a.people[p])
+          allocations.push({
+            bonus_item_id: it.bonus_item_id,
+            total_pct: this.toBp(a.total),
+            person_pct: person_pct,
+          })
+        }
       }
       return allocations
     },
