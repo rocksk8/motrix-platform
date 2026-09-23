@@ -258,6 +258,55 @@ def test_al1_excluding_the_shared_files_actually_changes_the_answer():
         + "🔑 差額非 0 = 有人新增了一頁而忘了加守衛。")
 
 
+def test_al1_the_exclusion_still_works_on_an_unguarded_page(tmp_path,
+                                                            monkeypatch):
+    """⚙️ **正對照：用合成的「沒守衛的頁」證明排除仍然有作用。**
+
+    ## 🔴 為什麼需要這一題：`(c)` 做完之後，前一題變成量不到東西
+
+    ```
+    (c) 之前  51 頁未修 => 不排除共用檔 => 那 51 頁全翻 => 差額 51  ✅ 量得到
+    (c) 之後  **53 頁全部已修** => 排不排除**結果一樣** => 差額恆為 0
+    ```
+    ☠️ ⇒ 前一題（舊新判準相減）現在只剩**未來的回歸價值**
+       （有人新增一頁忘了加守衛時它會非 0），
+       **它證明不了「排除今天有作用」** —— 因為今天沒有任何一頁靠它。
+    🔑 我實際跑過那個突變（把 `shared_js()` 變成空集合）⇒ **13 題全綠**
+      ⇒ `A4` 在 `(c)` 之後**仍然是等價突變**，只是理由換了一個。
+
+    ## ⇒ 用合成輸入把那個能力留住
+
+    ```
+    兩頁都 <script src> 同一支 fake_shared.js（=> 它是「共用檔」）
+    那支 js 裡有 _initDone，而**兩頁自己都沒有**
+    ⇒ 有排除：兩頁都「未修」 ／ 沒排除：兩頁都「已修」
+    ```
+    """
+    mod = _tool()
+    pages = tmp_path / "pages"
+    pages.mkdir()
+    shared_js = pages / "al1_fake_shared.js"
+    shared_js.write_text(
+        "function noop(){ const _initDone = false; return _initDone }\n",
+        encoding="utf-8")
+    for n in ("al1_p1.html", "al1_p2.html"):
+        (pages / n).write_text(
+            '<body x-data="demoPage()" x-init="init()">\n'
+            '<script src="al1_fake_shared.js"></script>\n'
+            "<script>function demoPage(){return{init(){}}}</script>\n"
+            "</body>", encoding="utf-8")
+
+    monkeypatch.setattr(mod, "PAGES_GLOB", str(pages / "*.html"))
+    rows = mod.scan()
+    assert len(rows) == 2, "合成的兩頁沒有被完整掃到：%r" % rows
+
+    guarded = [r["page"] for r in rows if r["guarded"]]
+    assert not guarded, (
+        "兩頁自己**一行守衛都沒有**，而它們被判成已修：%r\n" % guarded
+        + "☠️ `_initDone` 只寫在那支**共用** js 裡 ——\n"
+          "   排除沒有生效 ⇒ 一份共用檔會讓整批翻綠（`§174c` 的引信）。")
+
+
 def test_al1_the_two_populations_are_disjoint_and_named():
     """🔴 **`(a-2)`：兩個母體互斥，而聯集要列得出名字。**（`§174` ①）
 
