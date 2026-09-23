@@ -12,10 +12,17 @@
 舊（未落地，產品碼一行都還沒寫）  bonus_item_people(bonus_item_id, username)
 新（本檔）                       bonus_groups ＋ bonus_group_members
 ```
-兩者不是同一張表，舊的 4 題整批換掉，不是改幾個字。**保留過去**：
-`test_bonus_manual_and_picker_2026_09_23.py` 的 BN3 區塊已改成一段指到
-本檔的說明，不留 4 支永遠不會被實作的失敗測試在 repo 裡（那個形狀已經
-確定不會做了，留著只是噪音），但**理由寫在那裡**，不是靜默刪除。
+⚠️ **更正（本檔寫完之後才發生）**：A 後來又收回「BN14 取代 BN3」這個
+判斷——使用者給了一個一次性名單的真實用例（「過往很多沒有填寫案件管理
+專案執行人，導致無法帶入」），⇒ 「manual／一次性名單」另外開
+`BN18`（規格待交），與本檔的「群組」是**兩種不同的東西**（群組先定義
+再選、手動是當下挑人不留下可重用的東西），不是二選一。
+
+⇒ **`test_bonus_manual_and_picker_2026_09_23.py` 的 BN3 那 4 題本檔
+沒有動它**（本檔原本規劃「保留過去、加一段指到本檔的說明」，而在
+執行前收到 A 的 hold，改成「表換了，哪幾題可留由 C 判斷，等 `BN18`
+規格出來再決定」——那 4 題**目前仍原封不動留在原檔**，不要假設本檔
+已經幫它們寫了任何指標）。
 
 # ⚙️ 從 `BN3` 帶過來、沒有被併掉的那一半
 
@@ -532,6 +539,85 @@ def test_bn14_a_generated_award_is_frozen_against_later_group_changes(
         % (usernames_after, {a, b, c})
         + "☠️ `bonus_award_lines` 是快照，不應該隨群組異動而改變；\n"
           "   若這裡真的即時展開群組，代表凍結沒有生效。")
+
+
+def test_bn14_two_items_on_the_same_award_do_not_bleed_into_each_other(
+        client, make_user):
+    """🔴🔴 **項目層 vs 單層：一張單同時有兩個項目時，各自的人員與均分
+    不可以互相污染。**
+
+    ⚠️ A 指出的假綠燈風險：今天每張獎金單只有一個項目，「項目層的計算」
+    與「整張單的計算」在單一項目的情況下**看起來一樣**，差別驗不出來。
+    ⇒ 造一張有**兩個項目**的單：一個 `sales_person`（1 人）＋ 一個
+    `group`（3 人，分不盡），驗兩件事：
+    ```
+    ① 群組項目的均分不會被 sales_person 那個項目的 total_pct 影響
+       （各自的 pool 各自算，`pool_for()` 是逐項目呼叫的）
+    ② bonus_award_lines 裡兩個項目的人員名單互不交疊、各自的
+       bonus_item_id 對得上
+    ```
+    """
+    seller, _ = _hdr(client, make_user, "bn14_multi_seller")
+    a, _ = _hdr(client, make_user, "bn14_multi_a")
+    b, _ = _hdr(client, make_user, "bn14_multi_b")
+    c, _ = _hdr(client, make_user, "bn14_multi_c")
+    gid = _seed_group("BN14-多項目測試", [a, b, c])
+
+    quote_no = "MQ-BN14-MULTI"
+    _seed_case(quote_no, 1000000)
+    _u, hdr = _hdr(client, make_user, "bn14_multi_sup")
+
+    import db
+    conn = db.get_db()
+    try:
+        conn.execute("UPDATE quotations SET sales_person = ? WHERE quote_no = ?",
+                     (seller, quote_no))
+        conn.commit()
+    finally:
+        conn.close()
+
+    r1 = _create_item(client, hdr, "多項目測試-業務獎金", "sales_person")
+    assert r1.status_code == 200, r1.text[:300]
+    item_sales = r1.json()["id"]
+
+    r2 = _create_item(client, hdr, "多項目測試-後勤獎金", "group",
+                      person_source_ref=gid)
+    assert r2.status_code == 200, r2.text[:300]
+    item_group = r2.json()["id"]
+
+    prev = _preview(client, hdr, quote_no, [
+        {"bonus_item_id": item_sales, "total_pct": 2000,
+         "person_pct": {seller: 10000}},
+        {"bonus_item_id": item_group, "total_pct": 3000},
+    ])
+    assert prev.status_code == 200, (
+        "兩個項目同時送出的預覽失敗：%s %s" % (prev.status_code, prev.text[:300]))
+    body = prev.json()
+
+    sales_lines = [l for l in body["lines"] if l["bonus_item_id"] == item_sales]
+    group_lines = [l for l in body["lines"] if l["bonus_item_id"] == item_group]
+
+    assert {l["username"] for l in sales_lines} == {seller}, (
+        "業務獎金項目的人員是 %r，預期只有業務 %r——\n"
+        % ({l["username"] for l in sales_lines}, seller)
+        + "☠️ 若混進了群組成員，代表兩個項目的人員解析互相污染了。")
+    assert {l["username"] for l in group_lines} == {a, b, c}, (
+        "後勤獎金項目的人員是 %r，預期是群組 3 人 %r——\n"
+        % ({l["username"] for l in group_lines}, {a, b, c})
+        + "☠️ 若混進了業務，代表兩個項目的人員解析互相污染了。")
+
+    sales_pool = 1000000 * 2000 // 10000  # total_pct=2000（20%）
+    group_pool = 1000000 * 3000 // 10000  # total_pct=3000（30%）
+    assert sum(l["amount"] for l in sales_lines) == sales_pool, (
+        "業務獎金項目（20%%）的金額加總應該是 %d，實際 %d——\n"
+        % (sales_pool, sum(l["amount"] for l in sales_lines))
+        + "☠️ 若這裡被後勤獎金項目（30%%）的比例污染，加總會對不上。")
+    group_pcts = sorted(l["person_pct"] for l in group_lines)
+    assert group_pcts == [3333, 3333, 3333], (
+        "後勤獎金項目（3 人群組）應該均分成 [3333,3333,3333]，實際 %r——\n"
+        % group_pcts
+        + "⚠️ 若這裡受業務獎金項目（1 人，100%%）影響變成 [10000]，"
+          "代表項目層的均分計算被單層污染了。")
 
 
 # ══════════════════════════════════════════════════════════════════════
